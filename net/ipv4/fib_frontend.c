@@ -74,11 +74,13 @@ fail:
 }
 #else
 
+//创建指定编号的fib表
 struct fib_table *fib_new_table(struct net *net, u32 id)
 {
 	struct fib_table *tb, *alias = NULL;
 	unsigned int h;
 
+	//main表特殊处理
 	if (id == 0)
 		id = RT_TABLE_MAIN;
 	tb = fib_get_table(net, id);
@@ -92,6 +94,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	if (!tb)
 		return NULL;
 
+	//设置常用的表指针
 	switch (id) {
 	case RT_TABLE_MAIN:
 		rcu_assign_pointer(net->ipv4.fib_main, tb);
@@ -103,6 +106,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 		break;
 	}
 
+	//将表注册在hash表中
 	h = id & (FIB_TABLE_HASHSZ - 1);
 	hlist_add_head_rcu(&tb->tb_hlist, &net->ipv4.fib_table_hash[h]);
 	return tb;
@@ -110,6 +114,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 EXPORT_SYMBOL_GPL(fib_new_table);
 
 /* caller must hold either rtnl or rcu read lock */
+//检查指定id的fib表是否存在
 struct fib_table *fib_get_table(struct net *net, u32 id)
 {
 	struct fib_table *tb;
@@ -129,6 +134,7 @@ struct fib_table *fib_get_table(struct net *net, u32 id)
 }
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 
+//替换fib表
 static void fib_replace_table(struct net *net, struct fib_table *old,
 			      struct fib_table *new)
 {
@@ -181,6 +187,7 @@ int fib_unmerge(struct net *net)
 	return 0;
 }
 
+//flush指定net中的，0-FIB_TABLE_HASHSZ的表
 static void fib_flush(struct net *net)
 {
 	int flushed = 0;
@@ -411,6 +418,7 @@ int fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	return __fib_validate_source(skb, src, dst, tos, oif, dev, r, idev, itag);
 }
 
+//取sockaddr_in结构体中的地址
 static inline __be32 sk_extract_addr(struct sockaddr *addr)
 {
 	return ((struct sockaddr_in *) addr)->sin_addr.s_addr;
@@ -428,6 +436,7 @@ static int put_rtax(struct nlattr *mx, int len, int type, u32 value)
 	return len + nla_total_size(4);
 }
 
+//将rt结构转换为cfg结构
 static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 				 struct fib_config *cfg)
 {
@@ -437,6 +446,7 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 	memset(cfg, 0, sizeof(*cfg));
 	cfg->fc_nlinfo.nl_net = net;
 
+	//只支持af_inet格式
 	if (rt->rt_dst.sa_family != AF_INET)
 		return -EAFNOSUPPORT;
 
@@ -444,6 +454,7 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 	 * Check mask for validity:
 	 * a) it must be contiguous.
 	 * b) destination must have all host bits clear.
+	 *    目标地址的所有主机位必须为0
 	 * c) if application forgot to set correct family (AF_INET),
 	 *    reject request unless it is absolutely clear i.e.
 	 *    both family and mask are zero.
@@ -451,9 +462,12 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 	plen = 32;
 	addr = sk_extract_addr(&rt->rt_dst);
 	if (!(rt->rt_flags & RTF_HOST)) {
+		//非主机地址情况，取target对应的mask
 		__be32 mask = sk_extract_addr(&rt->rt_genmask);
 
 		if (rt->rt_genmask.sa_family != AF_INET) {
+			//如果fa不相同，则仅能是mask（0）无值且fa未赋值（0）
+			//否则不支持
 			if (mask || rt->rt_genmask.sa_family)
 				return -EAFNOSUPPORT;
 		}
@@ -464,6 +478,7 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 		plen = inet_mask_len(mask);
 	}
 
+	//设置目标地址的掩码长度，目标地址，
 	cfg->fc_dst_len = plen;
 	cfg->fc_dst = addr;
 
@@ -484,24 +499,27 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 	cfg->fc_scope = RT_SCOPE_NOWHERE;
 	cfg->fc_type = RTN_UNICAST;
 
+	//如果路由指定了设备名称
 	if (rt->rt_dev) {
 		char *colon;
 		struct net_device *dev;
 		char devname[IFNAMSIZ];
 
+		//取传入的设备名称
 		if (copy_from_user(devname, rt->rt_dev, IFNAMSIZ-1))
 			return -EFAULT;
 
 		devname[IFNAMSIZ-1] = 0;
 		colon = strchr(devname, ':');
 		if (colon)
-			*colon = 0;
+			*colon = 0;//有':'号，将':'号置为'\0'查设备
 		dev = __dev_get_by_name(net, devname);
 		if (!dev)
 			return -ENODEV;
 		cfg->fc_oif = dev->ifindex;
 		cfg->fc_table = l3mdev_fib_table(dev);
 		if (colon) {
+			//需要将设备名称中':'号还原
 			struct in_ifaddr *ifa;
 			struct in_device *in_dev = __in_dev_get_rtnl(dev);
 			if (!in_dev)
@@ -520,7 +538,7 @@ static int rtentry_to_fib_config(struct net *net, int cmd, struct rtentry *rt,
 	if (rt->rt_gateway.sa_family == AF_INET && addr) {
 		unsigned int addr_type;
 
-		cfg->fc_gw = addr;
+		cfg->fc_gw = addr;//网关地址
 		addr_type = inet_addr_type_table(net, addr, cfg->fc_table);
 		if (rt->rt_flags & RTF_GATEWAY &&
 		    addr_type == RTN_UNICAST)
@@ -591,8 +609,10 @@ int ip_rt_ioctl(struct net *net, unsigned int cmd, void __user *arg)
 				else
 					err = -ESRCH;
 			} else {
+				//构造对应的表
 				tb = fib_new_table(net, cfg.fc_table);
 				if (tb)
+					//将cfg配置应用到表tb中
 					err = fib_table_insert(net, tb, &cfg);
 				else
 					err = -ENOBUFS;

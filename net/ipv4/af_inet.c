@@ -1588,6 +1588,7 @@ static const struct net_protocol tcp_protocol = {
 	.icmp_strict_tag_validation = 1,
 };
 
+//注册udp协议
 static const struct net_protocol udp_protocol = {
 	.early_demux =	udp_v4_early_demux,
 	.handler =	udp_rcv,
@@ -1596,6 +1597,7 @@ static const struct net_protocol udp_protocol = {
 	.netns_ok =	1,
 };
 
+//icmp协议注册
 static const struct net_protocol icmp_protocol = {
 	.handler =	icmp_rcv,
 	.err_handler =	icmp_err,
@@ -1760,7 +1762,7 @@ fs_initcall(ipv4_offload_init);
 
 static struct packet_type ip_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_IP),
-	.func = ip_rcv,
+	.func = ip_rcv,//收到ip报文时处理
 };
 
 static int __init inet_init(void)
@@ -1801,6 +1803,7 @@ static int __init inet_init(void)
 	 *	Add all the base protocols.
 	 */
 
+	//注册igmp协议
 	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
 		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
 	if (inet_add_protocol(&udp_protocol, IPPROTO_UDP) < 0)
@@ -1872,7 +1875,7 @@ static int __init inet_init(void)
 
 	ipfrag_init();
 
-	dev_add_pack(&ip_packet_type);
+	dev_add_pack(&ip_packet_type);//ipv4报文处理器注册
 
 	ip_tunnel_core_init();
 

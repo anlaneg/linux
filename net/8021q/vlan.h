@@ -63,6 +63,7 @@ static inline struct net_device *vlan_group_get_device(struct vlan_group *vg,
 						       __be16 vlan_proto,
 						       u16 vlan_id)
 {
+	//通过vlan id,以及vlan协议号查找对应的设备
 	return __vlan_group_get_device(vg, vlan_proto_idx(vlan_proto), vlan_id);
 }
 

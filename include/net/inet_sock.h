@@ -44,7 +44,7 @@
 struct ip_options {
 	__be32		faddr;
 	__be32		nexthop;
-	unsigned char	optlen;
+	unsigned char	optlen;//报文内的ip选项总长度
 	unsigned char	srr;
 	unsigned char	rr;
 	unsigned char	ts;

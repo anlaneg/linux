@@ -1585,7 +1585,7 @@ EXPORT_SYMBOL(tcp_filter);
 /*
  *	From tcp_input.c
  */
-
+//tcp报文处理入口
 int tcp_v4_rcv(struct sk_buff *skb)
 {
 	struct net *net = dev_net(skb->dev);

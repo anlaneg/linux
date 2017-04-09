@@ -1477,6 +1477,7 @@ make_route:
 	rt->dst.output = dn_rt_bug_out;
 	switch (res.type) {
 	case RTN_UNICAST:
+		//单播处理
 		rt->dst.input = dn_forward;
 		break;
 	case RTN_LOCAL:

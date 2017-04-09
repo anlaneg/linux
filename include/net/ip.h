@@ -35,8 +35,9 @@
 
 struct sock;
 
+//这个结构，存放在skb的cb块里，用于ip层存放自已的私有数据
 struct inet_skb_parm {
-	int			iif;
+	int			iif;//入接口ifindex
 	struct ip_options	opt;		/* Compiled IP options		*/
 	u16			flags;
 
@@ -284,6 +285,7 @@ void ip_static_sysctl_init(void);
 #define IP4_REPLY_MARK(net, mark) \
 	((net)->ipv4.sysctl_fwmark_reflect ? (mark) : 0)
 
+//检查是否为分片报文
 static inline bool ip_is_fragment(const struct iphdr *iph)
 {
 	return (iph->frag_off & htons(IP_MF | IP_OFFSET)) != 0;

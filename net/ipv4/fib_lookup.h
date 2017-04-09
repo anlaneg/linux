@@ -11,8 +11,8 @@ struct fib_alias {
 	u8			fa_tos;
 	u8			fa_type;
 	u8			fa_state;
-	u8			fa_slen;
-	u32			tb_id;
+	u8			fa_slen;//后缀长度
+	u32			tb_id;//哪张路由表
 	s16			fa_default;
 	struct rcu_head		rcu;
 };

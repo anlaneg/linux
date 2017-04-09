@@ -160,6 +160,7 @@ static struct fib_table *fib_empty_table(struct net *net)
 
 	for (id = 1; id <= RT_TABLE_MAX; id++)
 		if (!fib_get_table(net, id))
+			//不存在，则创建
 			return fib_new_table(net, id);
 	return NULL;
 }

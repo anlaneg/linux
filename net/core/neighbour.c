@@ -1343,6 +1343,7 @@ int neigh_connected_output(struct neighbour *neigh, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(neigh_connected_output);
 
+//直接输出
 int neigh_direct_output(struct neighbour *neigh, struct sk_buff *skb)
 {
 	return dev_queue_xmit(skb);

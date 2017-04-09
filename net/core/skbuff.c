@@ -301,6 +301,7 @@ EXPORT_SYMBOL(__alloc_skb);
  *  before giving packet to stack.
  *  RX rings only contains data buffers, not full skbs.
  */
+//构造一个空的skb_buff
 struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 {
 	struct skb_shared_info *shinfo;
@@ -313,6 +314,7 @@ struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 
 	size -= SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 
+	//将skb->tail之前的数据全部清0
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	skb->truesize = SKB_TRUESIZE(size);
 	atomic_set(&skb->users, 1);
@@ -320,10 +322,12 @@ struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 	skb->data = data;
 	skb_reset_tail_pointer(skb);
 	skb->end = skb->tail + size;
+	//将偏移量清0
 	skb->mac_header = (typeof(skb->mac_header))~0U;
 	skb->transport_header = (typeof(skb->transport_header))~0U;
 
 	/* make sure we initialize shinfo sequentially */
+	//取skb_shared_info空间，并初始化shinfo
 	shinfo = skb_shinfo(skb);
 	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);
@@ -413,6 +417,7 @@ EXPORT_SYMBOL(napi_alloc_frag);
  *
  *	%NULL is returned if there is no free memory.
  */
+//申请一个skb,并指明skb为dev的文
 struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 				   gfp_t gfp_mask)
 {
@@ -428,6 +433,7 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA))) {
 		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
 		if (!skb)
+			//申请skb失败
 			goto skb_fail;
 		goto skb_success;
 	}
@@ -451,6 +457,7 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 
 	skb = __build_skb(data, len);
 	if (unlikely(!skb)) {
+		//构造skb失败，需要释放data
 		skb_free_frag(data);
 		return NULL;
 	}
@@ -700,8 +707,10 @@ void kfree_skb(struct sk_buff *skb)
 	if (likely(atomic_read(&skb->users) == 1))
 		smp_rmb();
 	else if (likely(!atomic_dec_and_test(&skb->users)))
+		//引用计数没有减为0，直接返回
 		return;
 	trace_kfree_skb(skb, __builtin_return_address(0));
+	//释放skb
 	__kfree_skb(skb);
 }
 EXPORT_SYMBOL(kfree_skb);
@@ -752,8 +761,10 @@ void consume_skb(struct sk_buff *skb)
 	if (likely(atomic_read(&skb->users) == 1))
 		smp_rmb();
 	else if (likely(!atomic_dec_and_test(&skb->users)))
+		//引用计数未减为0，不释放
 		return;
 	trace_consume_skb(skb);
+	//释放skb
 	__kfree_skb(skb);
 }
 EXPORT_SYMBOL(consume_skb);
@@ -891,6 +902,7 @@ static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
  */
 static struct sk_buff *__skb_clone(struct sk_buff *n, struct sk_buff *skb)
 {
+//定义copy宏
 #define C(x) n->x = skb->x
 
 	n->next = n->prev = NULL;
@@ -1013,6 +1025,7 @@ EXPORT_SYMBOL_GPL(skb_copy_ubufs);
 
 struct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)
 {
+	//由skb结构，获取sk_buff_fclones结构（取skb1字段）
 	struct sk_buff_fclones *fclones = container_of(skb,
 						       struct sk_buff_fclones,
 						       skb1);
@@ -1029,6 +1042,7 @@ struct sk_buff *skb_clone(struct sk_buff *skb, gfp_t gfp_mask)
 		if (skb_pfmemalloc(skb))
 			gfp_mask |= __GFP_MEMALLOC;
 
+		//申请一个skb
 		n = kmem_cache_alloc(skbuff_head_cache, gfp_mask);
 		if (!n)
 			return NULL;
@@ -1427,6 +1441,7 @@ EXPORT_SYMBOL_GPL(pskb_put);
  *	exceed the total buffer size the kernel will panic. A pointer to the
  *	first byte of the extra data is returned.
  */
+//移动tail指针，并设置len(添加数据到skb_buff)
 unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 {
 	unsigned char *tmp = skb_tail_pointer(skb);
@@ -1434,6 +1449,7 @@ unsigned char *skb_put(struct sk_buff *skb, unsigned int len)
 	skb->tail += len;
 	skb->len  += len;
 	if (unlikely(skb->tail > skb->end))
+		//此情况发生时，肯定bug,tail不能移出至end之外
 		skb_over_panic(skb, len, __builtin_return_address(0));
 	return tmp;
 }
@@ -4469,6 +4485,7 @@ struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 	struct vlan_hdr *vhdr;
 	u16 vlan_tci;
 
+	//检查是否已解析
 	if (unlikely(skb_vlan_tag_present(skb))) {
 		/* vlan_tci is already set-up so leave this for another time */
 		return skb;

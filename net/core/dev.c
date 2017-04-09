@@ -394,7 +394,7 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
  *	guarantee all CPU's that are in middle of receiving packets
  *	will see the new packet type (until the next received packet).
  */
-
+//添加packet handler（注册2层协议）
 void dev_add_pack(struct packet_type *pt)
 {
 	struct list_head *head = ptype_head(pt);
@@ -418,6 +418,7 @@ EXPORT_SYMBOL(dev_add_pack);
  *	and must not be freed until after all the CPU's have gone
  *	through a quiescent state.
  */
+//移除packet handler
 void __dev_remove_pack(struct packet_type *pt)
 {
 	struct list_head *head = ptype_head(pt);
@@ -722,7 +723,7 @@ EXPORT_SYMBOL_GPL(dev_fill_metadata_dst);
  *	reference counters are not incremented so the caller must be
  *	careful with locks.
  */
-
+//通过设备名称查找设备
 struct net_device *__dev_get_by_name(struct net *net, const char *name)
 {
 	struct net_device *dev;
@@ -1806,7 +1807,9 @@ static inline int deliver_skb(struct sk_buff *skb,
 {
 	if (unlikely(skb_orphan_frags(skb, GFP_ATOMIC)))
 		return -ENOMEM;
+	//增加引用计数
 	atomic_inc(&skb->users);
+	//执行回调
 	return pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 }
 
@@ -4084,6 +4087,7 @@ another_round:
 
 	if (skb->protocol == cpu_to_be16(ETH_P_8021Q) ||
 	    skb->protocol == cpu_to_be16(ETH_P_8021AD)) {
+		//vlan处理
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
@@ -4099,12 +4103,14 @@ another_round:
 	if (pfmemalloc)
 		goto skip_taps;
 
+	//遍历ptype_all链，处理此报文
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 		pt_prev = ptype;
 	}
 
+	//遍历skb->dev上的ptype_all链，处理此报文
 	list_for_each_entry_rcu(ptype, &skb->dev->ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
@@ -4134,6 +4140,7 @@ ncls:
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
 		}
+		//vlan处理
 		if (vlan_do_receive(&skb))
 			goto another_round;
 		else if (unlikely(!skb))
@@ -4146,6 +4153,7 @@ ncls:
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
 		}
+		//如果虚设备有rx_handle可以处理，则调用rx_handler处理
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
 			ret = NET_RX_SUCCESS;
@@ -4175,25 +4183,30 @@ ncls:
 
 	/* deliver only exact match when indicated */
 	if (likely(!deliver_exact)) {
+		//通过上层协议查找报文处理者(如ip层处理）
 		deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 				       &ptype_base[ntohs(type) &
 						   PTYPE_HASH_MASK]);
 	}
 
+	//考虑原始设备的ptype_specific查找报文处理者
 	deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 			       &orig_dev->ptype_specific);
 
+	//考虑当前设备的ptype_specific查找报文处理者
 	if (unlikely(skb->dev != orig_dev)) {
 		deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 				       &skb->dev->ptype_specific);
 	}
 
+	//最后一项handler处理
 	if (pt_prev) {
 		if (unlikely(skb_orphan_frags(skb, GFP_ATOMIC)))
 			goto drop;
 		else
 			ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 	} else {
+		//我们实在找不到此报文的处理者
 drop:
 		if (!deliver_exact)
 			atomic_long_inc(&skb->dev->rx_dropped);
@@ -4278,6 +4291,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
  *	NET_RX_SUCCESS: no congestion
  *	NET_RX_DROP: packet was dropped
  */
+//处理自网络层收到的报文
 int netif_receive_skb(struct sk_buff *skb)
 {
 	trace_netif_receive_skb_entry(skb);

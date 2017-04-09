@@ -182,11 +182,13 @@ static __inline__ bool inet_ifa_match(__be32 addr, struct in_ifaddr *ifa)
  
 static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 {
+	//传入的mask应为0x000000ff格式，按位取反后为0xffffff00
 	__u32 hmask;
-	if (addr & (mask = ~mask))
+	if (addr & (mask = ~mask)) //取mask按位取反与addr与后，如果非0，则返回true
+		//用于限制必须为非0网段
 		return true;
 	hmask = ntohl(mask);
-	if (hmask & (hmask+1))
+	if (hmask & (hmask+1))//用于限制hmask从高位开始，不能有'0'，必须是一组连续的'1'
 		return true;
 	return false;
 }
@@ -249,11 +251,12 @@ static __inline__ __be32 inet_make_mask(int logmask)
 	return 0;
 }
 
+//取掩码长度
 static __inline__ int inet_mask_len(__be32 mask)
 {
 	__u32 hmask = ntohl(mask);
 	if (!hmask)
-		return 0;
+		return 0;//掩码长度为0
 	return 32 - ffz(~hmask);
 }
 

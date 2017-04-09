@@ -1683,7 +1683,7 @@ struct net_device {
 	netdev_features_t	mpls_features;
 	netdev_features_t	gso_partial_features;
 
-	int			ifindex;
+	int			ifindex;//接口编号
 	int			group;
 
 	struct net_device_stats	stats;
@@ -2193,6 +2193,7 @@ static inline struct sk_buff **call_gro_receive_sk(gro_receive_sk_t cb,
 }
 
 struct packet_type {
+	//按以太头类型进行处理
 	__be16			type;	/* This is really htons(ether_type). */
 	struct net_device	*dev;	/* NULL is wildcarded here	     */
 	int			(*func) (struct sk_buff *,

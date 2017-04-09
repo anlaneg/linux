@@ -26,10 +26,10 @@ struct flowi_tunnel {
 };
 
 struct flowi_common {
-	int	flowic_oif;
-	int	flowic_iif;
+	int	flowic_oif;//出接口
+	int	flowic_iif;//入接口
 	__u32	flowic_mark;
-	__u8	flowic_tos;
+	__u8	flowic_tos;//tos取值
 	__u8	flowic_scope;
 	__u8	flowic_proto;
 	__u8	flowic_flags;
@@ -79,8 +79,8 @@ struct flowi4 {
 #define flowi4_uid		__fl_common.flowic_uid
 
 	/* (saddr,daddr) must be grouped, same order as in IP header */
-	__be32			saddr;
-	__be32			daddr;
+	__be32			saddr;//源地址
+	__be32			daddr;//目的地址
 
 	union flowi_uli		uli;
 #define fl4_sport		uli.ports.sport

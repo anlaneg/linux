@@ -153,6 +153,7 @@ EXPORT_SYMBOL(eth_get_headlen);
  * assume 802.3 if the type field is short enough to be a length.
  * This is normal practice and works for any 'now in use' protocol.
  */
+//区分pkt_type,并获知上层proto
 __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 {
 	unsigned short _service_access_point;
@@ -163,16 +164,21 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	skb_reset_mac_header(skb);
 
 	eth = (struct ethhdr *)skb->data;
+	//移动到以太头之后
 	skb_pull_inline(skb, ETH_HLEN);
 
 	if (unlikely(is_multicast_ether_addr_64bits(eth->h_dest))) {
+		//目的mac地址为广播mac或者组播mac
 		if (ether_addr_equal_64bits(eth->h_dest, dev->broadcast))
+			//如果是广播报文，指明类型为广播报文
 			skb->pkt_type = PACKET_BROADCAST;
 		else
+			//组播报文
 			skb->pkt_type = PACKET_MULTICAST;
 	}
 	else if (unlikely(!ether_addr_equal_64bits(eth->h_dest,
 						   dev->dev_addr)))
+		//目的mac地址与当前设备mac地址不同
 		skb->pkt_type = PACKET_OTHERHOST;
 
 	/*
@@ -184,6 +190,7 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	if (unlikely(netdev_uses_dsa(dev)))
 		return htons(ETH_P_XDSA);
 
+	//如果是802.3以太帧，则返回以太头的proto
 	if (likely(eth_proto_is_802_3(eth->h_proto)))
 		return eth->h_proto;
 

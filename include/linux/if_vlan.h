@@ -80,6 +80,7 @@ static inline bool is_vlan_dev(const struct net_device *dev)
 
 #define skb_vlan_tag_present(__skb)	((__skb)->vlan_tci & VLAN_TAG_PRESENT)
 #define skb_vlan_tag_get(__skb)		((__skb)->vlan_tci & ~VLAN_TAG_PRESENT)
+//提取vlan id
 #define skb_vlan_tag_get_id(__skb)	((__skb)->vlan_tci & VLAN_VID_MASK)
 #define skb_vlan_tag_get_prio(__skb)	((__skb)->vlan_tci & VLAN_PRIO_MASK)
 
@@ -538,6 +539,7 @@ static inline void vlan_set_encap_proto(struct sk_buff *skb,
 	 * three protocols care about.
 	 */
 
+	//检查vlan头内层protocol
 	proto = vhdr->h_vlan_encapsulated_proto;
 	if (eth_proto_is_802_3(proto)) {
 		skb->protocol = proto;

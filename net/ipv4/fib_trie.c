@@ -216,19 +216,20 @@ static int call_fib_entry_notifiers(struct net *net,
 #define KEYLENGTH	(8*sizeof(t_key))
 #define KEY_MAX		((t_key)~0)
 
-typedef unsigned int t_key;
+typedef unsigned int t_key;//无符号整数被义定为t_key(32位）
 
 #define IS_TRIE(n)	((n)->pos >= KEYLENGTH)
 #define IS_TNODE(n)	((n)->bits)
 #define IS_LEAF(n)	(!(n)->bits)
 
 struct key_vector {
-	t_key key;
-	unsigned char pos;		/* 2log(KEYLENGTH) bits needed */
-	unsigned char bits;		/* 2log(KEYLENGTH) bits needed */
-	unsigned char slen;
+	t_key key;//检测位取值（如果是叶子，则为目的网段）
+	unsigned char pos;		/* 2log(KEYLENGTH) bits needed */ //检测位起始位置（如果是叶子，则为0）
+	unsigned char bits;		/* 2log(KEYLENGTH) bits needed */ //检测位长度（如果是叶子，则为0）
+	unsigned char slen;//后缀长度（如果非叶子，则与pos相同）
 	union {
 		/* This list pointer if valid if (pos | bits) == 0 (LEAF) */
+		//这个注释指明了，如何分辨当前节点是叶子，还是tnode
 		struct hlist_head leaf;
 		/* This array is valid if (pos | bits) > 0 (TNODE) */
 		struct key_vector __rcu *tnode[0];
@@ -422,6 +423,7 @@ static void __node_free_rcu(struct rcu_head *head)
 
 #define node_free(n) call_rcu(&tn_info(n)->rcu, __node_free_rcu)
 
+//申请一个tnode结构
 static struct tnode *tnode_alloc(int bits)
 {
 	size_t size;
@@ -449,11 +451,13 @@ static inline void empty_child_dec(struct key_vector *n)
 	tn_info(n)->empty_children-- ? : tn_info(n)->full_children--;
 }
 
+//新建叶子节点
 static struct key_vector *leaf_new(t_key key, struct fib_alias *fa)
 {
 	struct key_vector *l;
 	struct tnode *kv;
 
+	//生成一个kv节点
 	kv = kmem_cache_alloc(trie_leaf_kmem, GFP_KERNEL);
 	if (!kv)
 		return NULL;
@@ -461,6 +465,7 @@ static struct key_vector *leaf_new(t_key key, struct fib_alias *fa)
 	/* initialize key vector */
 	l = kv->kv;
 	l->key = key;
+	//用两个0表明是叶子节点
 	l->pos = 0;
 	l->bits = 0;
 	l->slen = fa->fa_slen;
@@ -472,6 +477,7 @@ static struct key_vector *leaf_new(t_key key, struct fib_alias *fa)
 	return l;
 }
 
+//非叶子节点创建
 static struct key_vector *tnode_new(t_key key, int pos, int bits)
 {
 	unsigned int shift = pos + bits;
@@ -516,7 +522,7 @@ static inline int tnode_full(struct key_vector *tn, struct key_vector *n)
 static void put_child(struct key_vector *tn, unsigned long i,
 		      struct key_vector *n)
 {
-	struct key_vector *chi = get_child(tn, i);
+	struct key_vector *chi = get_child(tn, i);//取tn中的第i个元素
 	int isfull, wasfull;
 
 	BUG_ON(i >= child_length(tn));
@@ -539,7 +545,7 @@ static void put_child(struct key_vector *tn, unsigned long i,
 	if (n && (tn->slen < n->slen))
 		tn->slen = n->slen;
 
-	rcu_assign_pointer(tn->tnode[i], n);
+	rcu_assign_pointer(tn->tnode[i], n);//赋值
 }
 
 static void update_children(struct key_vector *tn)
@@ -1025,8 +1031,8 @@ static void node_pull_suffix(struct key_vector *tn, unsigned char slen)
 static void node_push_suffix(struct key_vector *tn, unsigned char slen)
 {
 	while (tn->slen < slen) {
-		tn->slen = slen;
-		tn = node_parent(tn);
+		tn->slen = slen;//更新为大的slen
+		tn = node_parent(tn);//取父节点，一路向上更新
 	}
 }
 
@@ -1115,9 +1121,11 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 
 	l = leaf_new(key, new);
 	if (!l)
+		//申请叶子节点失败
 		goto noleaf;
 
 	/* retrieve child from parent node */
+	//从父节点中取指定index的node
 	n = get_child(tp, get_index(key, tp));
 
 	/* Case 2: n is a LEAF or a TNODE and the key doesn't match.
@@ -1163,6 +1171,7 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 			    struct fib_alias *fa, t_key key)
 {
 	if (!l)
+		//没有对应的tnode，创建它，并在其下插入key(叶子节点）
 		return fib_insert_node(t, tp, new, key);
 
 	if (fa) {
@@ -1198,24 +1207,27 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 int fib_table_insert(struct net *net, struct fib_table *tb,
 		     struct fib_config *cfg)
 {
-	struct trie *t = (struct trie *)tb->tb_data;
+	struct trie *t = (struct trie *)tb->tb_data;//trie根节点
 	struct fib_alias *fa, *new_fa;
 	struct key_vector *l, *tp;
 	u16 nlflags = NLM_F_EXCL;
 	struct fib_info *fi;
-	u8 plen = cfg->fc_dst_len;
-	u8 slen = KEYLENGTH - plen;
+	u8 plen = cfg->fc_dst_len;//前缀长度
+	u8 slen = KEYLENGTH - plen;//后缀长度(suffix)
 	u8 tos = cfg->fc_tos;
 	u32 key;
 	int err;
 
+	//前缀长度不能超过keylength
 	if (plen > KEYLENGTH)
 		return -EINVAL;
 
 	key = ntohl(cfg->fc_dst);
 
+	//打出debug,向表tb_id中插入 target为key,掩码长度为plen的的路由
 	pr_debug("Insert table=%u %08x/%d\n", tb->tb_id, key, plen);
 
+	//key掩码之后的值必须为0
 	if ((plen < KEYLENGTH) && (key << plen))
 		return -EINVAL;
 
@@ -1225,6 +1237,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 		goto err;
 	}
 
+	//在trie表中，查找key,出参为tp(指向l的父节点），l为能存放key的节点
 	l = fib_find_node(t, &tp, key);
 	fa = l ? fib_find_alias(&l->leaf, slen, tos, fi->fib_priority,
 				tb->tb_id) : NULL;
@@ -1330,6 +1343,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 
 	nlflags |= NLM_F_CREATE;
 	err = -ENOBUFS;
+	//为new_fa申请节点空间
 	new_fa = kmem_cache_alloc(fn_alias_kmem, GFP_KERNEL);
 	if (!new_fa)
 		goto out;
@@ -1374,10 +1388,11 @@ static inline t_key prefix_mismatch(t_key key, struct key_vector *n)
 }
 
 /* should be called with rcu_read_lock */
+//trie表查询
 int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		     struct fib_result *res, int fib_flags)
 {
-	struct trie *t = (struct trie *) tb->tb_data;
+	struct trie *t = (struct trie *) tb->tb_data;//取trie树
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 	struct trie_use_stats __percpu *stats = t->stats;
 #endif
@@ -1389,9 +1404,10 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 
 	trace_fib_table_lookup(tb->tb_id, flp);
 
-	pn = t->kv;
+	pn = t->kv;//取trie树的key_vector
 	cindex = 0;
 
+	//trie树上的pn只有1个空间。
 	n = get_child_rcu(pn, cindex);
 	if (!n)
 		return -EAGAIN;
@@ -1402,7 +1418,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 
 	/* Step 1: Travel to the longest prefix match in the trie */
 	for (;;) {
-		index = get_cindex(key, n);
+		index = get_cindex(key, n);//取n与key的不同位
 
 		/* This bit of code is a bit tricky but it combines multiple
 		 * checks into a single check.  The prefix consists of the
@@ -1419,11 +1435,11 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		 * long is greater than 32 bits.
 		 */
 		if (index >= (1ul << n->bits))
-			break;
+			break;//当前key与n不现有前缀不一致
 
 		/* we have found a leaf. Prefixes have already been compared */
 		if (IS_LEAF(n))
-			goto found;
+			goto found;//前缀相等，是一个叶子，找到了
 
 		/* only record pn and cindex if we are going to be chopping
 		 * bits later.  Otherwise we are just wasting cycles.
@@ -1433,9 +1449,10 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 			cindex = index;
 		}
 
+		//取n的下一层，index内部
 		n = get_child_rcu(n, index);
 		if (unlikely(!n))
-			goto backtrace;
+			goto backtrace;//下一层，没有找到，回朔
 	}
 
 	/* Step 2: Sort out leaves and begin backtracing for longest prefix */
@@ -1460,7 +1477,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		 */
 
 		while ((n = rcu_dereference(*cptr)) == NULL) {
-backtrace:
+backtrace://回朔处理
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 			if (!n)
 				this_cpu_inc(stats->null_node_hit);
@@ -2160,14 +2177,16 @@ struct fib_table *fib_trie_table(u32 id, struct fib_table *alias)
 	size_t sz = sizeof(*tb);
 
 	if (!alias)
+		//如果不共享，则需要多申请一个trie节点
 		sz += sizeof(struct trie);
 
 	tb = kzalloc(sz, GFP_KERNEL);
 	if (!tb)
 		return NULL;
 
-	tb->tb_id = id;
+	tb->tb_id = id;//表编号
 	tb->tb_num_default = 0;
+	//如果另名存在，则直接指向别名的数据，否则指向tb结构的结尾
 	tb->tb_data = (alias ? alias->__data : tb->__data);
 
 	if (alias)

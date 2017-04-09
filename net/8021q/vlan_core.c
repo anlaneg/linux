@@ -15,13 +15,15 @@ bool vlan_do_receive(struct sk_buff **skbp)
 
 	vlan_dev = vlan_find_dev(skb->dev, vlan_proto, vlan_id);
 	if (!vlan_dev)
+		//没有设备处理此vlan
 		return false;
 
 	skb = *skbp = skb_share_check(skb, GFP_ATOMIC);
 	if (unlikely(!skb))
 		return false;
 
-	skb->dev = vlan_dev;
+	skb->dev = vlan_dev;//更改设备
+	//刚换了设备，重新看一下，是否是发给自已的了？
 	if (unlikely(skb->pkt_type == PACKET_OTHERHOST)) {
 		/* Our lower layer thinks this is not local, let's make sure.
 		 * This allows the VLAN to have a different MAC than the

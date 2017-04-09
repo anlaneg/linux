@@ -1444,10 +1444,12 @@ static int __netdev_rx(struct net_device *dev, int *quota)
 			pci_dma_sync_single_for_cpu(np->pci_dev,
 						    np->rx_info[entry].mapping,
 						    pkt_len, PCI_DMA_FROMDEVICE);
+			//向skb指向的报文缓冲中注入数据
 			skb_copy_to_linear_data(skb, np->rx_info[entry].skb->data, pkt_len);
 			pci_dma_sync_single_for_device(np->pci_dev,
 						       np->rx_info[entry].mapping,
 						       pkt_len, PCI_DMA_FROMDEVICE);
+			//在skb中标明，数据已注入
 			skb_put(skb, pkt_len);
 		} else {
 			pci_unmap_single(np->pci_dev, np->rx_info[entry].mapping, np->rx_buf_sz, PCI_DMA_FROMDEVICE);

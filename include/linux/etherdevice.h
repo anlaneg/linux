@@ -111,6 +111,7 @@ static inline bool is_zero_ether_addr(const u8 *addr)
  * Return true if the address is a multicast address.
  * By definition the broadcast address is also a multicast address.
  */
+//检查是否为组播mac地址
 static inline bool is_multicast_ether_addr(const u8 *addr)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
@@ -201,6 +202,7 @@ static inline bool is_valid_ether_addr(const u8 *addr)
  *
  * Return true if the valid is an 802.3 supported Ethertype.
  */
+//检查当前协议是否为802.3支持的以太网协议（>=0x0600)
 static inline bool eth_proto_is_802_3(__be16 proto)
 {
 #ifndef __BIG_ENDIAN

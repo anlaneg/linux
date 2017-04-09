@@ -202,6 +202,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 	resubmit:
 		raw = raw_local_deliver(skb, protocol);
 
+		//按ip头协议查找协议处理函数
 		ipprot = rcu_dereference(inet_protos[protocol]);
 		if (ipprot) {
 			int ret;
@@ -213,6 +214,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 				}
 				nf_reset(skb);
 			}
+			//协议报文处理
 			ret = ipprot->handler(skb);
 			if (ret < 0) {
 				protocol = -ret;
@@ -247,6 +249,7 @@ int ip_local_deliver(struct sk_buff *skb)
 	/*
 	 *	Reassemble IP fragments.
 	 */
+	//分片组装
 	struct net *net = dev_net(skb->dev);
 
 	if (ip_is_fragment(ip_hdr(skb))) {
@@ -254,11 +257,13 @@ int ip_local_deliver(struct sk_buff *skb)
 			return 0;
 	}
 
+	//往本地协议栈钩子点
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_IN,
 		       net, NULL, skb, skb->dev, NULL,
 		       ip_local_deliver_finish);
 }
 
+//ip层选项处理
 static inline bool ip_rcv_options(struct sk_buff *skb)
 {
 	struct ip_options *opt;
@@ -279,6 +284,7 @@ static inline bool ip_rcv_options(struct sk_buff *skb)
 
 	iph = ip_hdr(skb);
 	opt = &(IPCB(skb)->opt);
+	//设置Ip层选项总长度，含补齐
 	opt->optlen = iph->ihl*4 - sizeof(struct iphdr);
 
 	if (ip_options_compile(dev_net(dev), opt, skb)) {
@@ -341,6 +347,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 *	how the packet travels inside Linux networking.
 	 */
 	if (!skb_valid_dst(skb)) {
+		//传入目的地址，源地址，tos,报文入口设备
 		int err = ip_route_input_noref(skb, iph->daddr, iph->saddr,
 					       iph->tos, dev);
 		if (unlikely(err)) {
@@ -361,6 +368,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 #endif
 
+	//ip有选项，处理ip选项
 	if (iph->ihl > 5 && ip_rcv_options(skb))
 		goto drop;
 
@@ -382,6 +390,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		 *   A host SHOULD silently discard a datagram that is received
 		 *   via a link-layer broadcast (see Section 2.4) but does not
 		 *   specify an IP multicast or broadcast destination address.
+		 *   主机应安静的丢弃，链路层广播，但ip目的地址不是广播或者组播的报文。
 		 *
 		 * This doesn't explicitly say L2 *broadcast*, but broadcast is
 		 * in a way a form of multicast and the most common use case for
@@ -393,7 +402,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 			goto drop;
 	}
 
-	return dst_input(skb);
+	return dst_input(skb);//单播在查到路由后，在此处走ip_forward
 
 drop:
 	kfree_skb(skb);
@@ -403,6 +412,7 @@ drop:
 /*
  * 	Main IP Receive routine.
  */
+//ip报文接收入口(主要做了ip头部合法性校验）
 int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
 {
 	const struct iphdr *iph;
@@ -413,10 +423,12 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	 * that it receives, do not try to analyse it.
 	 */
 	if (skb->pkt_type == PACKET_OTHERHOST)
+		//现在我们在处理三层，故如果mac不是我们的单播报文不处理
 		goto drop;
 
 
 	net = dev_net(dev);
+	//统计入口包数，入口字节数
 	__IP_UPD_PO_STATS(net, IPSTATS_MIB_IN, skb->len);
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
@@ -425,6 +437,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 		goto out;
 	}
 
+	//报文长度检查
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto inhdr_error;
 
@@ -440,7 +453,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	 *	3.	Checksums correctly. [Speed optimisation for later, skip loopback checksums]
 	 *	4.	Doesn't have a bogus length
 	 */
-
+	//ip头部长度至少20字节，此函数仅处理ipv4
 	if (iph->ihl < 5 || iph->version != 4)
 		goto inhdr_error;
 
@@ -451,19 +464,24 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 		       IPSTATS_MIB_NOECTPKTS + (iph->tos & INET_ECN_MASK),
 		       max_t(unsigned short, 1, skb_shinfo(skb)->gso_segs));
 
+	//通过ip总头长度，再检查一遍
 	if (!pskb_may_pull(skb, iph->ihl*4))
 		goto inhdr_error;
 
 	iph = ip_hdr(skb);
 
+	//ip头部校验
 	if (unlikely(ip_fast_csum((u8 *)iph, iph->ihl)))
 		goto csum_error;
 
+	//ip层总长度
 	len = ntohs(iph->tot_len);
 	if (skb->len < len) {
+		//待分析的报文长度小于len,报文格式有误
 		__IP_INC_STATS(net, IPSTATS_MIB_INTRUNCATEDPKTS);
 		goto drop;
 	} else if (len < (iph->ihl*4))
+		//total length比ip头部长度还要小，报文格式有误
 		goto inhdr_error;
 
 	/* Our transport medium may have padded the buffer out. Now we know it
@@ -475,6 +493,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 		goto drop;
 	}
 
+	//设置传输层偏移量
 	skb->transport_header = skb->network_header + iph->ihl*4;
 
 	/* Remove any debris in the socket control block */
@@ -484,6 +503,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 	/* Must drop socket now because of tproxy. */
 	skb_orphan(skb);
 
+	//路由前钩子点
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
 		       ip_rcv_finish);

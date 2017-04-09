@@ -46,7 +46,7 @@ struct netns_ipv4 {
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	int			fib_num_tclassid_users;
 #endif
-	struct hlist_head	*fib_table_hash;
+	struct hlist_head	*fib_table_hash;//fib哈希表
 	bool			fib_offload_disabled;
 	struct sock		*fibnl;
 

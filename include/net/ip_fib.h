@@ -25,16 +25,16 @@
 #include <linux/notifier.h>
 
 struct fib_config {
-	u8			fc_dst_len;
+	u8			fc_dst_len;//目的地址的掩码长度
 	u8			fc_tos;
 	u8			fc_protocol;
 	u8			fc_scope;
 	u8			fc_type;
 	/* 3 bytes unused */
-	u32			fc_table;
-	__be32			fc_dst;
-	__be32			fc_gw;
-	int			fc_oif;
+	u32			fc_table;//路由要下发到哪张表里
+	__be32			fc_dst;//目的地址
+	__be32			fc_gw;//下一跳地址（网关地址）
+	int			fc_oif;//出口设备的ifindex
 	u32			fc_flags;
 	u32			fc_priority;
 	__be32			fc_prefsrc;
@@ -228,12 +228,12 @@ int call_fib_notifiers(struct net *net, enum fib_event_type event_type,
 		       struct fib_notifier_info *info);
 
 struct fib_table {
-	struct hlist_node	tb_hlist;
-	u32			tb_id;
+	struct hlist_node	tb_hlist;//用于挂接在hash表上
+	u32			tb_id;//表编号
 	int			tb_num_default;
 	struct rcu_head		rcu;
-	unsigned long 		*tb_data;
-	unsigned long		__data[0];
+	unsigned long 		*tb_data;//struct trie类型
+	unsigned long		__data[0];//从此地址开始是一个struct trie类型
 };
 
 int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
@@ -252,17 +252,20 @@ void fib_free_table(struct fib_table *tb);
 #define TABLE_LOCAL_INDEX	(RT_TABLE_LOCAL & (FIB_TABLE_HASHSZ - 1))
 #define TABLE_MAIN_INDEX	(RT_TABLE_MAIN  & (FIB_TABLE_HASHSZ - 1))
 
+//不支持多表格时，仅有两张表，local与main表
 static inline struct fib_table *fib_get_table(struct net *net, u32 id)
 {
 	struct hlist_node *tb_hlist;
 	struct hlist_head *ptr;
 
+	//如果未指明用local表，则默认用main表
 	ptr = id == RT_TABLE_LOCAL ?
 		&net->ipv4.fib_table_hash[TABLE_LOCAL_INDEX] :
 		&net->ipv4.fib_table_hash[TABLE_MAIN_INDEX];
 
 	tb_hlist = rcu_dereference_rtnl(hlist_first_rcu(ptr));
 
+	//由tb_hlist获得struct fib_table结构
 	return hlist_entry(tb_hlist, struct fib_table, tb_hlist);
 }
 
@@ -281,6 +284,7 @@ static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 
 	tb = fib_get_table(net, RT_TABLE_MAIN);
 	if (tb)
+		//查表
 		err = fib_table_lookup(tb, flp, res, flags | FIB_LOOKUP_NOREF);
 
 	if (err == -EAGAIN)
@@ -317,6 +321,7 @@ static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 
 	tb = rcu_dereference_rtnl(net->ipv4.fib_main);
 	if (tb)
+		//查main表
 		err = fib_table_lookup(tb, flp, res, flags);
 
 	if (!err)
@@ -324,6 +329,7 @@ static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 
 	tb = rcu_dereference_rtnl(net->ipv4.fib_default);
 	if (tb)
+		//查default表
 		err = fib_table_lookup(tb, flp, res, flags);
 
 out:

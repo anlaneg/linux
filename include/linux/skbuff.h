@@ -222,7 +222,9 @@
 /* Maximum value in skb->csum_level */
 #define SKB_MAX_CSUM_LEVEL	3
 
+//将x按cacheline对齐
 #define SKB_DATA_ALIGN(X)	ALIGN(X, SMP_CACHE_BYTES)
+//x的大小，减去skb-shared-info按cacheline对齐
 #define SKB_WITH_OVERHEAD(X)	\
 	((X) - SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 #define SKB_MAX_ORDER(X, ORDER) \
@@ -660,7 +662,7 @@ struct sk_buff {
 	 * want to keep them across layers you have to do a skb_clone()
 	 * first. This is owned by whoever has the skb queued ATM.
 	 */
-	char			cb[48] __aligned(8);
+	char			cb[48] __aligned(8);//给各层提供的免申请控制缓冲，计划放各层的私有信息
 
 	unsigned long		_skb_refdst;
 	void			(*destructor)(struct sk_buff *skb);
@@ -675,7 +677,7 @@ struct sk_buff {
 #endif
 	unsigned int		len,
 				data_len;
-	__u16			mac_len,
+	__u16			mac_len,//二层长度
 				hdr_len;
 
 	/* Following fields are _not_ copied in __copy_skb_header()
@@ -766,9 +768,9 @@ struct sk_buff {
 		};
 	};
 	__u32			priority;
-	int			skb_iif;
+	int			skb_iif;//入接口ifindex
 	__u32			hash;
-	__be16			vlan_proto;
+	__be16			vlan_proto;//哪种vlan协议
 	__u16			vlan_tci;
 #if defined(CONFIG_NET_RX_BUSY_POLL) || defined(CONFIG_XPS)
 	union {
@@ -794,22 +796,22 @@ struct sk_buff {
 	__u16			inner_network_header;
 	__u16			inner_mac_header;
 
-	__be16			protocol;
-	__u16			transport_header;
-	__u16			network_header;
-	__u16			mac_header;
+	__be16			protocol;//链路层指明的协议，如arp,ip协议等
+	__u16			transport_header;//到传输层的偏移量
+	__u16			network_header;//到网络头的偏移量
+	__u16			mac_header;//到mac头的偏移量
 
 	/* private: */
 	__u32			headers_end[0];
 	/* public: */
 
 	/* These elements must be at the end, see alloc_skb() for details.  */
-	sk_buff_data_t		tail;
-	sk_buff_data_t		end;
-	unsigned char		*head,
-				*data;
+	sk_buff_data_t		tail;//指向报文结尾
+	sk_buff_data_t		end;//end的后面是skb_shared_info
+	unsigned char		*head,//指向报文buffer的起始位置
+				*data;//指向当前解析的起始位置
 	unsigned int		truesize;
-	atomic_t		users;
+	atomic_t		users;//引用计数，防报文被释放
 };
 
 #ifdef __KERNEL__
@@ -1423,15 +1425,19 @@ static inline int skb_shared(const struct sk_buff *skb)
  *
  *	NULL is returned on a memory allocation failure.
  */
+//如果skb是共享的，则copy,如果不是，则用此skb
 static inline struct sk_buff *skb_share_check(struct sk_buff *skb, gfp_t pri)
 {
 	might_sleep_if(gfpflags_allow_blocking(pri));
 	if (skb_shared(skb)) {
+		//这个报文被共享了,申请一个skb
 		struct sk_buff *nskb = skb_clone(skb, pri);
 
 		if (likely(nskb))
+			//如果申请成功，则丢掉旧skb的引用计数
 			consume_skb(skb);
 		else
+			//如果申请失败，则丢掉引用计数，返回null
 			kfree_skb(skb);
 		skb = nskb;
 	}
@@ -1801,6 +1807,7 @@ static inline bool skb_is_nonlinear(const struct sk_buff *skb)
 	return skb->data_len;
 }
 
+//头部空闲长度
 static inline unsigned int skb_headlen(const struct sk_buff *skb)
 {
 	return skb->len - skb->data_len;
@@ -1901,6 +1908,7 @@ static inline unsigned char *skb_tail_pointer(const struct sk_buff *skb)
 	return skb->tail;
 }
 
+//使tail与data同值
 static inline void skb_reset_tail_pointer(struct sk_buff *skb)
 {
 	skb->tail = skb->data;
@@ -1938,9 +1946,9 @@ static inline unsigned char *__skb_push(struct sk_buff *skb, unsigned int len)
 unsigned char *skb_pull(struct sk_buff *skb, unsigned int len);
 static inline unsigned char *__skb_pull(struct sk_buff *skb, unsigned int len)
 {
-	skb->len -= len;
+	skb->len -= len;//跳过已解析的长度
 	BUG_ON(skb->len < skb->data_len);
-	return skb->data += len;
+	return skb->data += len;//数据头
 }
 
 static inline unsigned char *skb_pull_inline(struct sk_buff *skb, unsigned int len)
@@ -1969,6 +1977,7 @@ static inline int pskb_may_pull(struct sk_buff *skb, unsigned int len)
 	if (likely(len <= skb_headlen(skb)))
 		return 1;
 	if (unlikely(len > skb->len))
+		//需要的长度比数据长度还要长，肯定搞不定
 		return 0;
 	return __pskb_pull_tail(skb, len - skb_headlen(skb)) != NULL;
 }
@@ -2020,6 +2029,7 @@ static inline int skb_availroom(const struct sk_buff *skb)
  *	Increase the headroom of an empty &sk_buff by reducing the tail
  *	room. This is only allowed for an empty buffer.
  */
+//预支出headroom长度len字节
 static inline void skb_reserve(struct sk_buff *skb, int len)
 {
 	skb->data += len;
@@ -3172,6 +3182,7 @@ static inline void skb_copy_from_linear_data_offset(const struct sk_buff *skb,
 	memcpy(to, skb->data + offset, len);
 }
 
+//向skb的data中置入数据，长度为len
 static inline void skb_copy_to_linear_data(struct sk_buff *skb,
 					   const void *from,
 					   const unsigned int len)
@@ -3215,6 +3226,7 @@ static inline void skb_get_timestampns(const struct sk_buff *skb,
 	*stamp = ktime_to_timespec(skb->tstamp);
 }
 
+//设置skb上的时间
 static inline void __net_timestamp(struct sk_buff *skb)
 {
 	skb->tstamp = ktime_get_real();

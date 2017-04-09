@@ -217,11 +217,14 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	}
 
 	rcu_read_lock_bh();
+	//确定下一跳，网关或者报文里的目的ip
 	nexthop = (__force u32) rt_nexthop(rt, ip_hdr(skb)->daddr);
+	//查下一跳对应的领居表项
 	neigh = __ipv4_neigh_lookup_noref(dev, nexthop);
 	if (unlikely(!neigh))
 		neigh = __neigh_create(&arp_tbl, &nexthop, dev, false);
 	if (!IS_ERR(neigh)) {
+		//借助目的地址，输出
 		int res = dst_neigh_output(dst, neigh, skb);
 
 		rcu_read_unlock_bh();
@@ -307,6 +310,7 @@ static int ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *sk
 	if (skb_is_gso(skb))
 		return ip_finish_output_gso(net, sk, skb, mtu);
 
+	//分片
 	if (skb->len > mtu || (IPCB(skb)->flags & IPSKB_FRAG_PMTU))
 		return ip_fragment(net, sk, skb, mtu, ip_finish_output2);
 
@@ -389,6 +393,7 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 
+//输出回调
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb_dst(skb)->dev;

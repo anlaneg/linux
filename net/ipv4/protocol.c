@@ -32,8 +32,10 @@ const struct net_protocol __rcu *inet_protos[MAX_INET_PROTOS] __read_mostly;
 const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;
 EXPORT_SYMBOL(inet_offloads);
 
+//添加协议（注册3层协议）
 int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 {
+	//注册的协议必须支持namespace
 	if (!prot->netns_ok) {
 		pr_err("Protocol %u is not namespace aware, cannot register.\n",
 			protocol);
@@ -52,6 +54,7 @@ int inet_add_offload(const struct net_offload *prot, unsigned char protocol)
 }
 EXPORT_SYMBOL(inet_add_offload);
 
+//协议移除
 int inet_del_protocol(const struct net_protocol *prot, unsigned char protocol)
 {
 	int ret;

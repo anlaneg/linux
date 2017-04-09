@@ -1420,7 +1420,7 @@ static void rt_set_nexthop(struct rtable *rt, __be32 daddr,
 		struct fib_nh *nh = &FIB_RES_NH(*res);
 
 		if (nh->nh_gw && nh->nh_scope == RT_SCOPE_LINK) {
-			rt->rt_gateway = nh->nh_gw;
+			rt->rt_gateway = nh->nh_gw;//设置gateway
 			rt->rt_uses_gateway = 1;
 		}
 		dst_init_metrics(&rt->dst, fi->fib_metrics, true);
@@ -1477,7 +1477,7 @@ struct rtable *rt_dst_alloc(struct net_device *dev,
 		rt->rt_table_id = 0;
 		INIT_LIST_HEAD(&rt->rt_uncached);
 
-		rt->dst.output = ip_output;
+		rt->dst.output = ip_output;//普通的输出
 		if (flags & RTCF_LOCAL)
 			rt->dst.input = ip_local_deliver;
 	}
@@ -1631,6 +1631,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	u32 itag = 0;
 
 	/* get a working reference to the output device */
+	//获得出接口设备
 	out_dev = __in_dev_get_rcu(FIB_RES_DEV(*res));
 	if (!out_dev) {
 		net_crit_ratelimited("Bug in ip_route_input_slow(). Please report.\n");
@@ -1703,6 +1704,7 @@ rt_cache:
 		rth->rt_table_id = res->table->tb_id;
 	RT_CACHE_STAT_INC(in_slow_tot);
 
+	//ip转发回调
 	rth->dst.input = ip_forward;
 
 	rt_set_nexthop(rth, daddr, res, fnhe, res->fi, res->type, itag);
@@ -1735,6 +1737,7 @@ static int ip_multipath_icmp_hash(struct sk_buff *skb)
 	if (!icmph)
 		goto standard_hash;
 
+	//除目的不可达，重定向，等这款报文外，其它均标准化处理
 	if (icmph->type != ICMP_DEST_UNREACH &&
 	    icmph->type != ICMP_REDIRECT &&
 	    icmph->type != ICMP_TIME_EXCEEDED &&
@@ -1742,6 +1745,7 @@ static int ip_multipath_icmp_hash(struct sk_buff *skb)
 		goto standard_hash;
 	}
 
+	//上面4种报文，需要提取内部的ip头
 	inner_iph = skb_header_pointer(skb,
 				       outer_iph->ihl * 4 + sizeof(_icmph),
 				       sizeof(_inner_iph), &_inner_iph);
@@ -1766,6 +1770,7 @@ static int ip_mkroute_input(struct sk_buff *skb,
 	if (res->fi && res->fi->fib_nhs > 1) {
 		int h;
 
+		//报文时icmp报文时，需要分辨是否需要用内部ip头信息
 		if (unlikely(ip_hdr(skb)->protocol == IPPROTO_ICMP))
 			h = ip_multipath_icmp_hash(skb);
 		else
@@ -1800,6 +1805,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	u32		itag = 0;
 	struct rtable	*rth;
 	int		err = -EINVAL;
+	//确定入接口设备对应的namespace
 	struct net    *net = dev_net(dev);
 	bool do_cache;
 
@@ -1819,26 +1825,32 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		fl4.flowi4_tun_key.tun_id = 0;
 	skb_dst_drop(skb);
 
+	//如果源是组播，广播地址。则执行错误处理
 	if (ipv4_is_multicast(saddr) || ipv4_is_lbcast(saddr))
 		goto martian_source;
 
 	res.fi = NULL;
 	res.table = NULL;
+	//如果目地地址是受限广播地址，或者源目的地址均为0，
 	if (ipv4_is_lbcast(daddr) || (saddr == 0 && daddr == 0))
 		goto brd_input;
 
 	/* Accept zero addresses only to limited broadcast;
 	 * I even do not know to fix it or not. Waiting for complains :-)
 	 */
+	//:-),对于受限广播，接受了源，目的地址为0网段，其它报文不接受，
+	//检查出来后直接按错误处理
 	if (ipv4_is_zeronet(saddr))
 		goto martian_source;
 
+	//目的地址不能为0网段
 	if (ipv4_is_zeronet(daddr))
 		goto martian_destination;
 
 	/* Following code try to avoid calling IN_DEV_NET_ROUTE_LOCALNET(),
 	 * and call it once if daddr or/and saddr are loopback addresses
 	 */
+	//源目的地址为loopback地址的情况处理
 	if (ipv4_is_loopback(daddr)) {
 		if (!IN_DEV_NET_ROUTE_LOCALNET(in_dev, net))
 			goto martian_destination;
@@ -1858,6 +1870,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	fl4.flowi4_flags = 0;
 	fl4.daddr = daddr;
 	fl4.saddr = saddr;
+	//传入flow,查询fib表
 	err = fib_lookup(net, &fl4, &res, 0);
 	if (err != 0) {
 		if (!IN_DEV_FORWARD(in_dev))
@@ -1883,14 +1896,17 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	if (res.type != RTN_UNICAST)
 		goto martian_destination;
 
+	//单播构造路由
 	err = ip_mkroute_input(skb, &res, &fl4, in_dev, daddr, saddr, tos);
 out:	return err;
 
 brd_input:
+    //非ip协议，则置参数无效
 	if (skb->protocol != htons(ETH_P_IP))
 		goto e_inval;
 
 	if (!ipv4_is_zeronet(saddr)) {
+		//源ip地址为非0
 		err = fib_validate_source(skb, saddr, 0, tos, 0, dev,
 					  in_dev, &itag);
 		if (err < 0)
@@ -2003,7 +2019,9 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	   Note, that multicast routers are not affected, because
 	   route cache entry is created eventually.
 	 */
+	//目的地址是组播地址
 	if (ipv4_is_multicast(daddr)) {
+		//组播路由查询
 		struct in_device *in_dev = __in_dev_get_rcu(dev);
 		int our = 0;
 
@@ -2035,6 +2053,7 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		rcu_read_unlock();
 		return res;
 	}
+	//单播路由查询
 	res = ip_route_input_slow(skb, daddr, saddr, tos, dev);
 	rcu_read_unlock();
 	return res;

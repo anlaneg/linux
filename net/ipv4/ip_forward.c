@@ -74,6 +74,7 @@ static int ip_forward_finish(struct net *net, struct sock *sk, struct sk_buff *s
 	return dst_output(net, sk, skb);
 }
 
+//路由查找到出接口后将设置此回调
 int ip_forward(struct sk_buff *skb)
 {
 	u32 mtu;
@@ -83,6 +84,7 @@ int ip_forward(struct sk_buff *skb)
 	struct net *net;
 
 	/* that should never happen */
+	//可路由转发时，目的mac当时填充的是我们
 	if (skb->pkt_type != PACKET_HOST)
 		goto drop;
 
@@ -106,6 +108,7 @@ int ip_forward(struct sk_buff *skb)
 	 *	that reaches zero, we must reply an ICMP control message telling
 	 *	that the packet's lifetime expired.
 	 */
+	//ttl不足
 	if (ip_hdr(skb)->ttl <= 1)
 		goto too_many_hops;
 
@@ -119,8 +122,10 @@ int ip_forward(struct sk_buff *skb)
 
 	IPCB(skb)->flags |= IPSKB_FORWARDED;
 	mtu = ip_dst_mtu_maybe_forward(&rt->dst, true);
+	//检查是否可以分片
 	if (ip_exceeds_mtu(skb, mtu)) {
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
+		//发送无法送达，需要分片
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(mtu));
 		goto drop;
@@ -132,6 +137,7 @@ int ip_forward(struct sk_buff *skb)
 	iph = ip_hdr(skb);
 
 	/* Decrease ttl after skb cow done */
+	//减ttl
 	ip_decrease_ttl(iph);
 
 	/*
@@ -144,6 +150,7 @@ int ip_forward(struct sk_buff *skb)
 
 	skb->priority = rt_tos2priority(iph->tos);
 
+	//走forward钩子点
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_FORWARD,
 		       net, NULL, skb, skb->dev, rt->dst.dev,
 		       ip_forward_finish);
@@ -156,6 +163,7 @@ sr_failed:
 	 goto drop;
 
 too_many_hops:
+    //构造icmp报文，回复ttl不足
 	/* Tell the sender its packet died... */
 	__IP_INC_STATS(net, IPSTATS_MIB_INHDRERRORS);
 	icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);

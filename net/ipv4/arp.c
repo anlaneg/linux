@@ -897,7 +897,7 @@ static void parp_redo(struct sk_buff *skb)
 /*
  *	Receive an arp request from the device layer.
  */
-
+//收到arp报处理
 static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -1248,7 +1248,7 @@ void __init arp_init(void)
 {
 	neigh_table_init(NEIGH_ARP_TABLE, &arp_tbl);
 
-	dev_add_pack(&arp_packet_type);
+	dev_add_pack(&arp_packet_type);//arp报文处理器注册
 	arp_proc_init();
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_register(NULL, &arp_tbl.parms, NULL);
