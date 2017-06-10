@@ -33,6 +33,8 @@
 #include <net/flow.h>
 #include <net/flow_dissector.h>
 
+#define IPV4_MAX_PMTU		65535U		/* RFC 2675, Section 5.1 */
+
 struct sock;
 
 //这个结构，存放在skb的cb块里，用于ip层存放自已的私有数据
