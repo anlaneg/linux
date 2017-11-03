@@ -39,6 +39,7 @@ __udp_manip_pkt(struct sk_buff *skb,
 {
 	__be16 *portptr, newport;
 
+	//依据不同类型，修改port(源port或者目的port)
 	if (maniptype == NF_NAT_MANIP_SRC) {
 		/* Get rid of src port */
 		newport = tuple->src.u.udp.port;
@@ -49,16 +50,20 @@ __udp_manip_pkt(struct sk_buff *skb,
 		portptr = &hdr->dest;
 	}
 	if (do_csum) {
+		//更新checksum
 		l3proto->csum_update(skb, iphdroff, &hdr->check,
 				     tuple, maniptype);
+		//l4层checksum更新
 		inet_proto_csum_replace2(&hdr->check, skb, *portptr, newport,
 					 false);
 		if (!hdr->check)
 			hdr->check = CSUM_MANGLED_0;
 	}
+	//更新port
 	*portptr = newport;
 }
 
+//udp报文修改
 static bool udp_manip_pkt(struct sk_buff *skb,
 			  const struct nf_nat_l3proto *l3proto,
 			  unsigned int iphdroff, unsigned int hdroff,
@@ -71,6 +76,7 @@ static bool udp_manip_pkt(struct sk_buff *skb,
 	if (!skb_make_writable(skb, hdroff + sizeof(*hdr)))
 		return false;
 
+	//偏移至udp头部
 	hdr = (struct udphdr *)(skb->data + hdroff);
 	do_csum = hdr->check || skb->ip_summed == CHECKSUM_PARTIAL;
 

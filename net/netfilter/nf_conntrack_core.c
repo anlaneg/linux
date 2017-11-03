@@ -281,6 +281,7 @@ bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff,
 }
 EXPORT_SYMBOL_GPL(nf_ct_get_tuplepr);
 
+//构造反向的inverse
 bool
 nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 		   const struct nf_conntrack_tuple *orig,
@@ -293,9 +294,11 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 	if (l3proto->invert_tuple(inverse, orig) == 0)
 		return false;
 
+	//反向的方向
 	inverse->dst.dir = !orig->dst.dir;
 
 	inverse->dst.protonum = orig->dst.protonum;
+	//构造反向tuple
 	return l4proto->invert_tuple(inverse, orig);
 }
 EXPORT_SYMBOL_GPL(nf_ct_invert_tuple);

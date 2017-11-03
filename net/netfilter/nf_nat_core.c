@@ -474,6 +474,7 @@ nf_nat_alloc_null_binding(struct nf_conn *ct, unsigned int hooknum)
 EXPORT_SYMBOL_GPL(nf_nat_alloc_null_binding);
 
 /* Do packet manipulations according to nf_nat_setup_info. */
+//按ct修改报文实现nat
 unsigned int nf_nat_packet(struct nf_conn *ct,
 			   enum ip_conntrack_info ctinfo,
 			   unsigned int hooknum,
@@ -499,13 +500,14 @@ unsigned int nf_nat_packet(struct nf_conn *ct,
 		struct nf_conntrack_tuple target;
 
 		/* We are aiming to look like inverse of other direction. */
+		//获取自已向方向的反方向。
 		nf_ct_invert_tuplepr(&target, &ct->tuplehash[!dir].tuple);
 
 		l3proto = __nf_nat_l3proto_find(target.src.l3num);
 		//提取l4层协议
 		l4proto = __nf_nat_l4proto_find(target.src.l3num,
 						target.dst.protonum);
-		//报文修改
+		//依据target,实现报文修改
 		if (!l3proto->manip_pkt(skb, 0, l4proto, &target, mtype))
 			return NF_DROP;
 	}

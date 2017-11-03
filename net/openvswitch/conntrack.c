@@ -878,6 +878,8 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 	} else {
 		return NF_ACCEPT; /* Connection is not NATed. */
 	}
+
+	//nat执行
 	err = ovs_ct_nat_execute(skb, ct, ctinfo, &info->range, maniptype);
 
 	/* Mark NAT done if successful and update the flow key. */

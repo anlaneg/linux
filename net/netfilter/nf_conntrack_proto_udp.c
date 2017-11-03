@@ -55,6 +55,7 @@ static bool udp_pkt_to_tuple(const struct sk_buff *skb,
 	return true;
 }
 
+//将udp更改为反向元组
 static bool udp_invert_tuple(struct nf_conntrack_tuple *tuple,
 			     const struct nf_conntrack_tuple *orig)
 {
