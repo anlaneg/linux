@@ -36,12 +36,11 @@
 #include <rdma/ib_addr.h>
 #include <linux/qed/qed_if.h>
 #include <linux/qed/qed_chain.h>
-#include <linux/qed/qed_roce_if.h>
-#include <linux/qed/qede_roce.h>
+#include <linux/qed/qed_rdma_if.h>
+#include <linux/qed/qede_rdma.h>
 #include <linux/qed/roce_common.h>
 #include "qedr_hsi_rdma.h"
 
-#define QEDR_MODULE_VERSION	"8.10.10.0"
 #define QEDR_NODE_DESC "QLogic 579xx RoCE HCA"
 #define DP_NAME(dev) ((dev)->ibdev.name)
 
@@ -58,7 +57,10 @@
 #define QEDR_MSG_QP   "  QP"
 #define QEDR_MSG_GSI  " GSI"
 
-#define QEDR_CQ_MAGIC_NUMBER   (0x11223344)
+#define QEDR_CQ_MAGIC_NUMBER	(0x11223344)
+
+#define FW_PAGE_SIZE		(RDMA_RING_PAGE_SIZE)
+#define FW_PAGE_SHIFT		(12)
 
 struct qedr_dev;
 
@@ -150,6 +152,8 @@ struct qedr_dev {
 	u32			dp_module;
 	u8			dp_level;
 	u8			num_hwfns;
+	u8			gsi_ll2_handle;
+
 	uint			wq_multiplier;
 	u8			gsi_ll2_mac_address[ETH_ALEN];
 	int			gsi_qp_created;
@@ -158,6 +162,8 @@ struct qedr_dev {
 	struct qedr_qp		*gsi_qp;
 
 	unsigned long enet_state;
+
+	u8 user_dpm_enabled;
 };
 
 #define QEDR_MAX_SQ_PBL			(0x8000)
@@ -381,7 +387,7 @@ struct qedr_qp {
 		u8 wqe_size;
 
 		u8 smac[ETH_ALEN];
-		u16 vlan_id;
+		u16 vlan;
 		int rc;
 	} *rqe_wr_id;
 

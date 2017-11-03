@@ -73,7 +73,7 @@ inline int _rtw_netif_rx(_nic_hdl ndev, struct sk_buff *skb)
 
 void rtw_init_timer(_timer *ptimer, void *padapter, void *pfunc)
 {
-	struct adapter *adapter = (struct adapter *)padapter;
+	struct adapter *adapter = padapter;
 
 	_init_timer(ptimer, adapter->pnetdev, pfunc, adapter);
 }
@@ -160,7 +160,7 @@ static int isFileReadable(char *path)
 		oldfs = get_fs(); set_fs(get_ds());
 
 		if (1!=readFile(fp, &buf, 1))
-			ret = PTR_ERR(fp);
+			ret = -EINVAL;
 
 		set_fs(oldfs);
 		filp_close(fp, NULL);

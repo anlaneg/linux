@@ -44,7 +44,6 @@
 MODULE_AUTHOR("Steve Wise");
 MODULE_DESCRIPTION("Chelsio T4/T5 RDMA Driver");
 MODULE_LICENSE("Dual BSD/GPL");
-MODULE_VERSION(DRV_VERSION);
 
 static int allow_db_fc_on_t5;
 module_param(allow_db_fc_on_t5, int, 0644);
@@ -767,7 +766,7 @@ void c4iw_release_dev_ucontext(struct c4iw_rdev *rdev,
 		kfree(entry);
 	}
 
-	list_for_each_safe(pos, nxt, &uctx->qpids) {
+	list_for_each_safe(pos, nxt, &uctx->cqids) {
 		entry = list_entry(pos, struct c4iw_qid_list, entry);
 		list_del_init(&entry->entry);
 		kfree(entry);
@@ -880,13 +879,15 @@ static int c4iw_rdev_open(struct c4iw_rdev *rdev)
 	rdev->free_workq = create_singlethread_workqueue("iw_cxgb4_free");
 	if (!rdev->free_workq) {
 		err = -ENOMEM;
-		goto err_free_status_page;
+		goto err_free_status_page_and_wr_log;
 	}
 
 	rdev->status_page->db_off = 0;
 
 	return 0;
-err_free_status_page:
+err_free_status_page_and_wr_log:
+	if (c4iw_wr_log && rdev->wr_log)
+		kfree(rdev->wr_log);
 	free_page((unsigned long)rdev->status_page);
 destroy_ocqp_pool:
 	c4iw_ocqp_pool_destroy(rdev);
@@ -903,9 +904,11 @@ static void c4iw_rdev_close(struct c4iw_rdev *rdev)
 {
 	destroy_workqueue(rdev->free_workq);
 	kfree(rdev->wr_log);
+	c4iw_release_dev_ucontext(rdev, &rdev->uctx);
 	free_page((unsigned long)rdev->status_page);
 	c4iw_pblpool_destroy(rdev);
 	c4iw_rqtpool_destroy(rdev);
+	c4iw_ocqp_pool_destroy(rdev);
 	c4iw_destroy_resource(&rdev->resource);
 }
 
