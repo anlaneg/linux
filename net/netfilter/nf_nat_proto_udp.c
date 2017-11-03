@@ -119,6 +119,7 @@ const struct nf_nat_l4proto nf_nat_l4proto_udplite = {
 };
 #endif /* CONFIG_NF_NAT_PROTO_UDPLITE */
 
+//udp报文修改
 const struct nf_nat_l4proto nf_nat_l4proto_udp = {
 	.l4proto		= IPPROTO_UDP,
 	.manip_pkt		= udp_manip_pkt,

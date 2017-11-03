@@ -5,21 +5,21 @@
    extension. */
 enum ip_conntrack_info {
 	/* Part of an established connection (either direction). */
-	IP_CT_ESTABLISHED,
+	IP_CT_ESTABLISHED,//连接已经建立，当前数据包在原始方向。
 
 	/* Like NEW, but related to an existing connection, or ICMP error
 	   (in either direction). */
-	IP_CT_RELATED,
+	IP_CT_RELATED,//也是新连接，不过是一个期待连接
 
 	/* Started a new connection to track (only
            IP_CT_DIR_ORIGINAL); may be a retransmission. */
-	IP_CT_NEW,
+	IP_CT_NEW,//新连接
 
 	/* >= this indicates reply direction */
-	IP_CT_IS_REPLY,
+	IP_CT_IS_REPLY,//反方向的连接
 
-	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,
-	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,
+	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,//连接已经建立，数据包在回复方向。
+	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,//期待连接开始，同时数据包在回复方向。
 	/* No NEW in reply direction. */
 
 	/* Number of distinct IP_CT types. */

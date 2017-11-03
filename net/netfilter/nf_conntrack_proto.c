@@ -222,6 +222,7 @@ int nf_ct_l3proto_register(struct nf_conntrack_l3proto *proto)
 	old = rcu_dereference_protected(nf_ct_l3protos[proto->l3proto],
 					lockdep_is_held(&nf_ct_proto_mutex));
 	if (old != &nf_conntrack_l3proto_generic) {
+		//如果proto->l3proto已被设置，则返回失败
 		ret = -EBUSY;
 		goto out_unlock;
 	}
@@ -229,6 +230,7 @@ int nf_ct_l3proto_register(struct nf_conntrack_l3proto *proto)
 	if (proto->nlattr_tuple_size)
 		proto->nla_size = 3 * proto->nlattr_tuple_size();
 
+	//注册l3层协议
 	rcu_assign_pointer(nf_ct_l3protos[proto->l3proto], proto);
 
 out_unlock:

@@ -33,6 +33,7 @@
 static DEFINE_MUTEX(nf_nat_proto_mutex);
 static const struct nf_nat_l3proto __rcu *nf_nat_l3protos[NFPROTO_NUMPROTO]
 						__read_mostly;
+//注册４层协议
 static const struct nf_nat_l4proto __rcu **nf_nat_l4protos[NFPROTO_NUMPROTO]
 						__read_mostly;
 
@@ -526,8 +527,10 @@ unsigned int nf_nat_packet(struct nf_conn *ct,
 		nf_ct_invert_tuplepr(&target, &ct->tuplehash[!dir].tuple);
 
 		l3proto = __nf_nat_l3proto_find(target.src.l3num);
+		//提取l4层协议
 		l4proto = __nf_nat_l4proto_find(target.src.l3num,
 						target.dst.protonum);
+		//报文修改
 		if (!l3proto->manip_pkt(skb, 0, l4proto, &target, mtype))
 			return NF_DROP;
 	}
@@ -613,6 +616,7 @@ int nf_nat_l4proto_register(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 
 	mutex_lock(&nf_nat_proto_mutex);
 	if (nf_nat_l4protos[l3proto] == NULL) {
+		//如果l3层协议没有指定，则创建l3层空间
 		l4protos = kmalloc(IPPROTO_MAX * sizeof(struct nf_nat_l4proto *),
 				   GFP_KERNEL);
 		if (l4protos == NULL) {
@@ -620,6 +624,7 @@ int nf_nat_l4proto_register(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 			goto out;
 		}
 
+		//初始化l4层协议为unkown
 		for (i = 0; i < IPPROTO_MAX; i++)
 			RCU_INIT_POINTER(l4protos[i], &nf_nat_l4proto_unknown);
 
@@ -628,9 +633,11 @@ int nf_nat_l4proto_register(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 		 */
 		smp_wmb();
 
+		//初始化l3proto对应的空协议表
 		nf_nat_l4protos[l3proto] = l4protos;
 	}
 
+	//检查l4层协议是否已被注册
 	if (rcu_dereference_protected(
 			nf_nat_l4protos[l3proto][l4proto->l4proto],
 			lockdep_is_held(&nf_nat_proto_mutex)
@@ -638,6 +645,7 @@ int nf_nat_l4proto_register(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 		ret = -EBUSY;
 		goto out;
 	}
+	//注册l4层协议
 	RCU_INIT_POINTER(nf_nat_l4protos[l3proto][l4proto->l4proto], l4proto);
  out:
 	mutex_unlock(&nf_nat_proto_mutex);
@@ -658,6 +666,7 @@ void nf_nat_l4proto_unregister(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 }
 EXPORT_SYMBOL_GPL(nf_nat_l4proto_unregister);
 
+//在注册l3协议时，默认会注册tcp,udp,sctp等l4层协议
 int nf_nat_l3proto_register(const struct nf_nat_l3proto *l3proto)
 {
 	int err;
@@ -667,6 +676,7 @@ int nf_nat_l3proto_register(const struct nf_nat_l3proto *l3proto)
 		return err;
 
 	mutex_lock(&nf_nat_proto_mutex);
+	//在nf_nat_l4protos中，采用l3proto->l3proto中注册tcp,udp协议
 	RCU_INIT_POINTER(nf_nat_l4protos[l3proto->l3proto][IPPROTO_TCP],
 			 &nf_nat_l4proto_tcp);
 	RCU_INIT_POINTER(nf_nat_l4protos[l3proto->l3proto][IPPROTO_UDP],
@@ -685,6 +695,7 @@ int nf_nat_l3proto_register(const struct nf_nat_l3proto *l3proto)
 #endif
 	mutex_unlock(&nf_nat_proto_mutex);
 
+	//注册l3协议
 	RCU_INIT_POINTER(nf_nat_l3protos[l3proto->l3proto], l3proto);
 	return 0;
 }

@@ -75,6 +75,7 @@ static u32 nf_nat_ipv4_secure_port(const struct nf_conntrack_tuple *t,
 	return secure_ipv4_port_ephemeral(t->src.u3.ip, t->dst.u3.ip, dport);
 }
 
+//ipv4 nat报文修改函数
 static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 				  unsigned int iphdroff,
 				  const struct nf_nat_l4proto *l4proto,
@@ -87,7 +88,9 @@ static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 	if (!skb_make_writable(skb, iphdroff + sizeof(*iph)))
 		return false;
 
+	//定位到ip头部
 	iph = (void *)skb->data + iphdroff;
+	//定位到l4层头部
 	hdroff = iphdroff + iph->ihl * 4;
 
 	if (!l4proto->manip_pkt(skb, &nf_nat_l3proto_ipv4, iphdroff, hdroff,
@@ -96,11 +99,12 @@ static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 	iph = (void *)skb->data + iphdroff;
 
 	if (maniptype == NF_NAT_MANIP_SRC) {
+		//修正checksum
 		csum_replace4(&iph->check, iph->saddr, target->src.u3.ip);
-		iph->saddr = target->src.u3.ip;
+		iph->saddr = target->src.u3.ip;//变更报文源ip
 	} else {
 		csum_replace4(&iph->check, iph->daddr, target->dst.u3.ip);
-		iph->daddr = target->dst.u3.ip;
+		iph->daddr = target->dst.u3.ip;//变更报文目ip
 	}
 	return true;
 }
@@ -430,9 +434,11 @@ static int __init nf_nat_l3proto_ipv4_init(void)
 {
 	int err;
 
+	//icmp注册到ipv4中
 	err = nf_nat_l4proto_register(NFPROTO_IPV4, &nf_nat_l4proto_icmp);
 	if (err < 0)
 		goto err1;
+	//注册ipv4为3层协议
 	err = nf_nat_l3proto_register(&nf_nat_l3proto_ipv4);
 	if (err < 0)
 		goto err2;
