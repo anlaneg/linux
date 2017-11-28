@@ -703,8 +703,7 @@ EXPORT_SYMBOL(skb_tx_error);
  */
 void consume_skb(struct sk_buff *skb)
 {
-	if (!skb_unref(skb))
-		//引用计数未减为0，不释放
+	if (!skb_unref(skb))//引用计数未减为0，不释放
 		return;
 
 	trace_consume_skb(skb);

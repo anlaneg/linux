@@ -730,6 +730,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 		if (IS_ENABLED(CONFIG_NF_NAT_IPV4) &&
 		    skb->protocol == htons(ETH_P_IP) &&
 		    ip_hdr(skb)->protocol == IPPROTO_ICMP) {
+			//ipv4报文，且为icmp协议
 			if (!nf_nat_icmp_reply_translation(skb, ct, ctinfo,
 							   hooknum))
 				err = NF_DROP;
@@ -779,6 +780,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 		goto push;
 	}
 
+	//调用kernel中的nat处理函数
 	err = nf_nat_packet(ct, ctinfo, hooknum, skb);
 push:
 	skb_push(skb, nh_off);
@@ -877,6 +879,8 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 	} else {
 		return NF_ACCEPT; /* Connection is not NATed. */
 	}
+
+	//nat执行
 	err = ovs_ct_nat_execute(skb, ct, ctinfo, &info->range, maniptype);
 
 	/* Mark NAT done if successful and update the flow key. */

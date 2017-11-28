@@ -2153,7 +2153,6 @@ int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		}
 		return err;
 	}
-
 	//单播路由查询
 	return ip_route_input_slow(skb, daddr, saddr, tos, dev, res);
 }

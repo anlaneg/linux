@@ -1146,6 +1146,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 	if (!fib_valid_key_len(key, plen, extack))
 		return -EINVAL;
 
+	//打出debug,向表tb_id中插入 target为key,掩码长度为plen的的路由
 	pr_debug("Insert table=%u %08x/%d\n", tb->tb_id, key, plen);
 
 	fi = fib_create_info(cfg, extack);

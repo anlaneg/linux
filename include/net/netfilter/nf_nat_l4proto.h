@@ -10,11 +10,12 @@ struct nf_nat_l3proto;
 
 struct nf_nat_l4proto {
 	/* Protocol number. */
-	u8 l4proto;
+	u8 l4proto;//4层协议编号
 
 	/* Translate a packet to the target according to manip type.
 	 * Return true if succeeded.
 	 */
+	//报文构造
 	bool (*manip_pkt)(struct sk_buff *skb,
 			  const struct nf_nat_l3proto *l3proto,
 			  unsigned int iphdroff, unsigned int hdroff,
