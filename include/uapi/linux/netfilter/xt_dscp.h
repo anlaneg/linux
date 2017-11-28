@@ -1,4 +1,5 @@
-/* x_tables module for setting the IPv4/IPv6 DSCP field
+/* SPDX-License-Identifier: GPL-2.0 WITH Linux-syscall-note */
+/* x_tables module for matching the IPv4/IPv6 DSCP field
  *
  * (C) 2002 Harald Welte <laforge@gnumonks.org>
  * based on ipt_FTOS.c (C) 2000 by Matthew G. Marsh <mgm@paktronix.com>

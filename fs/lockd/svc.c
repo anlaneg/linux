@@ -369,6 +369,7 @@ static int lockd_start_svc(struct svc_serv *serv)
 		printk(KERN_WARNING
 			"lockd_up: svc_rqst allocation failed, error=%d\n",
 			error);
+		lockd_unregister_notifiers();
 		goto out_rqst;
 	}
 
@@ -396,7 +397,7 @@ out_rqst:
 	return error;
 }
 
-static struct svc_serv_ops lockd_sv_ops = {
+static const struct svc_serv_ops lockd_sv_ops = {
 	.svo_shutdown		= svc_rpcb_cleanup,
 	.svo_enqueue_xprt	= svc_xprt_do_enqueue,
 };
@@ -459,13 +460,16 @@ int lockd_up(struct net *net)
 	}
 
 	error = lockd_up_net(serv, net);
-	if (error < 0)
-		goto err_net;
+	if (error < 0) {
+		lockd_unregister_notifiers();
+		goto err_put;
+	}
 
 	error = lockd_start_svc(serv);
-	if (error < 0)
-		goto err_start;
-
+	if (error < 0) {
+		lockd_down_net(serv, net);
+		goto err_put;
+	}
 	nlmsvc_users++;
 	/*
 	 * Note: svc_serv structures have an initial use count of 1,
@@ -476,12 +480,6 @@ err_put:
 err_create:
 	mutex_unlock(&nlmsvc_mutex);
 	return error;
-
-err_start:
-	lockd_down_net(serv, net);
-err_net:
-	lockd_unregister_notifiers();
-	goto err_put;
 }
 EXPORT_SYMBOL_GPL(lockd_up);
 
@@ -602,7 +600,7 @@ static struct ctl_table nlm_sysctl_root[] = {
  */
 
 #define param_set_min_max(name, type, which_strtol, min, max)		\
-static int param_set_##name(const char *val, struct kernel_param *kp)	\
+static int param_set_##name(const char *val, const struct kernel_param *kp) \
 {									\
 	char *endp;							\
 	__typeof__(type) num = which_strtol(val, &endp, 0);		\
@@ -739,27 +737,33 @@ module_exit(exit_nlm);
 /*
  * Define NLM program and procedures
  */
-static struct svc_version	nlmsvc_version1 = {
-		.vs_vers	= 1,
-		.vs_nproc	= 17,
-		.vs_proc	= nlmsvc_procedures,
-		.vs_xdrsize	= NLMSVC_XDRSIZE,
+static unsigned int nlmsvc_version1_count[17];
+static const struct svc_version	nlmsvc_version1 = {
+	.vs_vers	= 1,
+	.vs_nproc	= 17,
+	.vs_proc	= nlmsvc_procedures,
+	.vs_count	= nlmsvc_version1_count,
+	.vs_xdrsize	= NLMSVC_XDRSIZE,
 };
-static struct svc_version	nlmsvc_version3 = {
-		.vs_vers	= 3,
-		.vs_nproc	= 24,
-		.vs_proc	= nlmsvc_procedures,
-		.vs_xdrsize	= NLMSVC_XDRSIZE,
+static unsigned int nlmsvc_version3_count[24];
+static const struct svc_version	nlmsvc_version3 = {
+	.vs_vers	= 3,
+	.vs_nproc	= 24,
+	.vs_proc	= nlmsvc_procedures,
+	.vs_count	= nlmsvc_version3_count,
+	.vs_xdrsize	= NLMSVC_XDRSIZE,
 };
 #ifdef CONFIG_LOCKD_V4
-static struct svc_version	nlmsvc_version4 = {
-		.vs_vers	= 4,
-		.vs_nproc	= 24,
-		.vs_proc	= nlmsvc_procedures4,
-		.vs_xdrsize	= NLMSVC_XDRSIZE,
+static unsigned int nlmsvc_version4_count[24];
+static const struct svc_version	nlmsvc_version4 = {
+	.vs_vers	= 4,
+	.vs_nproc	= 24,
+	.vs_proc	= nlmsvc_procedures4,
+	.vs_count	= nlmsvc_version4_count,
+	.vs_xdrsize	= NLMSVC_XDRSIZE,
 };
 #endif
-static struct svc_version *	nlmsvc_version[] = {
+static const struct svc_version *nlmsvc_version[] = {
 	[1] = &nlmsvc_version1,
 	[3] = &nlmsvc_version3,
 #ifdef CONFIG_LOCKD_V4

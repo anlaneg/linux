@@ -111,8 +111,8 @@ static int mesh_path_sel_frame_tx(enum mpath_frame_type action, u8 flags,
 	struct sk_buff *skb;
 	struct ieee80211_mgmt *mgmt;
 	u8 *pos, ie_len;
-	int hdr_len = offsetof(struct ieee80211_mgmt, u.action.u.mesh_action) +
-		      sizeof(mgmt->u.action.u.mesh_action);
+	int hdr_len = offsetofend(struct ieee80211_mgmt,
+				  u.action.u.mesh_action);
 
 	skb = dev_alloc_skb(local->tx_headroom +
 			    hdr_len +
@@ -120,8 +120,7 @@ static int mesh_path_sel_frame_tx(enum mpath_frame_type action, u8 flags,
 	if (!skb)
 		return -1;
 	skb_reserve(skb, local->tx_headroom);
-	mgmt = (struct ieee80211_mgmt *) skb_put(skb, hdr_len);
-	memset(mgmt, 0, hdr_len);
+	mgmt = skb_put_zero(skb, hdr_len);
 	mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
 					  IEEE80211_STYPE_ACTION);
 
@@ -243,8 +242,8 @@ int mesh_path_error_tx(struct ieee80211_sub_if_data *sdata,
 	struct ieee80211_if_mesh *ifmsh = &sdata->u.mesh;
 	struct ieee80211_mgmt *mgmt;
 	u8 *pos, ie_len;
-	int hdr_len = offsetof(struct ieee80211_mgmt, u.action.u.mesh_action) +
-		      sizeof(mgmt->u.action.u.mesh_action);
+	int hdr_len = offsetofend(struct ieee80211_mgmt,
+				  u.action.u.mesh_action);
 
 	if (time_before(jiffies, ifmsh->next_perr))
 		return -EAGAIN;
@@ -257,8 +256,7 @@ int mesh_path_error_tx(struct ieee80211_sub_if_data *sdata,
 	if (!skb)
 		return -1;
 	skb_reserve(skb, local->tx_headroom + sdata->encrypt_headroom);
-	mgmt = (struct ieee80211_mgmt *) skb_put(skb, hdr_len);
-	memset(mgmt, 0, hdr_len);
+	mgmt = skb_put_zero(skb, hdr_len);
 	mgmt->frame_control = cpu_to_le16(IEEE80211_FTYPE_MGMT |
 					  IEEE80211_STYPE_ACTION);
 
@@ -1196,9 +1194,9 @@ endlookup:
 	return err;
 }
 
-void mesh_path_timer(unsigned long data)
+void mesh_path_timer(struct timer_list *t)
 {
-	struct mesh_path *mpath = (void *) data;
+	struct mesh_path *mpath = from_timer(mpath, t, timer);
 	struct ieee80211_sub_if_data *sdata = mpath->sdata;
 	int ret;
 

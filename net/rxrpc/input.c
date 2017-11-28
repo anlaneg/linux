@@ -298,8 +298,6 @@ static bool rxrpc_end_tx_phase(struct rxrpc_call *call, bool reply_begun,
 
 	write_unlock(&call->state_lock);
 	if (call->state == RXRPC_CALL_CLIENT_AWAIT_REPLY) {
-		rxrpc_propose_ACK(call, RXRPC_ACK_IDLE, 0, 0, false, true,
-				  rxrpc_propose_ack_client_tx_end);
 		trace_rxrpc_transmit(call, rxrpc_transmit_await_reply);
 	} else {
 		trace_rxrpc_transmit(call, rxrpc_transmit_end);
@@ -1125,6 +1123,7 @@ void rxrpc_data_ready(struct sock *udp_sk)
 	case RXRPC_PACKET_TYPE_BUSY:
 		if (sp->hdr.flags & RXRPC_CLIENT_INITIATED)
 			goto discard;
+		/* Fall through */
 
 	case RXRPC_PACKET_TYPE_DATA:
 		if (sp->hdr.callNumber == 0)
@@ -1142,6 +1141,13 @@ void rxrpc_data_ready(struct sock *udp_sk)
 		if (sp->hdr.securityIndex != conn->security_ix)
 			goto wrong_security;
 
+		if (sp->hdr.serviceId != conn->service_id) {
+			if (!test_bit(RXRPC_CONN_PROBING_FOR_UPGRADE, &conn->flags) ||
+			    conn->service_id != conn->params.service_id)
+				goto reupgrade;
+			conn->service_id = sp->hdr.serviceId;
+		}
+		
 		if (sp->hdr.callNumber == 0) {
 			/* Connection-level packet */
 			_debug("CONN %p {%d}", conn, conn->debug_id);
@@ -1194,6 +1200,9 @@ void rxrpc_data_ready(struct sock *udp_sk)
 				rxrpc_input_implicit_end_call(conn, call);
 			call = NULL;
 		}
+
+		if (call && sp->hdr.serviceId != call->service_id)
+			call->service_id = sp->hdr.serviceId;
 	} else {
 		skew = 0;
 		call = NULL;
@@ -1237,11 +1246,18 @@ wrong_security:
 	skb->priority = RXKADINCONSISTENCY;
 	goto post_abort;
 
+reupgrade:
+	rcu_read_unlock();
+	trace_rxrpc_abort("UPG", sp->hdr.cid, sp->hdr.callNumber, sp->hdr.seq,
+			  RX_PROTOCOL_ERROR, EBADMSG);
+	goto protocol_error;
+
 bad_message_unlock:
 	rcu_read_unlock();
 bad_message:
 	trace_rxrpc_abort("BAD", sp->hdr.cid, sp->hdr.callNumber, sp->hdr.seq,
 			  RX_PROTOCOL_ERROR, EBADMSG);
+protocol_error:
 	skb->priority = RX_PROTOCOL_ERROR;
 post_abort:
 	skb->mark = RXRPC_SKB_MARK_LOCAL_ABORT;
