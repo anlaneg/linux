@@ -3348,6 +3348,7 @@ int __init ip_mr_init(void)
 	if (err)
 		goto reg_notif_fail;
 #ifdef CONFIG_IP_PIMSM_V2
+	//注册pim协议处理
 	if (inet_add_protocol(&pim_protocol, IPPROTO_PIM) < 0) {
 		pr_err("%s: can't add PIM protocol\n", __func__);
 		err = -EAGAIN;

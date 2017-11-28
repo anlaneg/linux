@@ -305,20 +305,22 @@ static inline struct sock *
 static inline struct sock *__inet_lookup(struct net *net,
 					 struct inet_hashinfo *hashinfo,
 					 struct sk_buff *skb, int doff,
-					 const __be32 saddr, const __be16 sport,
-					 const __be32 daddr, const __be16 dport,
+					 const __be32 saddr, const __be16 sport,//源ip,源端口
+					 const __be32 daddr, const __be16 dport,//目的ip,目的端口
 					 const int dif, const int sdif,
 					 bool *refcounted)
 {
-	u16 hnum = ntohs(dport);
+	u16 hnum = ntohs(dport);//将目的源口转为本地值
 	struct sock *sk;
 
+	//先查询已建立起连接的
 	sk = __inet_lookup_established(net, hashinfo, saddr, sport,
 				       daddr, hnum, dif, sdif);
 	*refcounted = true;
 	if (sk)
 		return sk;
 	*refcounted = false;
+	//再查询已被监听的端口
 	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
 				      sport, daddr, hnum, dif, sdif);
 }
@@ -333,6 +335,7 @@ static inline struct sock *inet_lookup(struct net *net,
 	struct sock *sk;
 	bool refcounted;
 
+	//检查是否可以创建socket
 	sk = __inet_lookup(net, hashinfo, skb, doff, saddr, sport, daddr,
 			   dport, dif, 0, &refcounted);
 

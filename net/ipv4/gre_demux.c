@@ -176,6 +176,7 @@ static int __init gre_init(void)
 {
 	pr_info("GRE over IPv4 demultiplexor driver\n");
 
+	//注册gre协议
 	if (inet_add_protocol(&net_gre_protocol, IPPROTO_GRE) < 0) {
 		pr_err("can't add protocol\n");
 		return -EAGAIN;

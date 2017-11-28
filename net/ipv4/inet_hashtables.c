@@ -215,6 +215,7 @@ struct sock *__inet_lookup_listener(struct net *net,
 				    const int dif, const int sdif)
 {
 	unsigned int hash = inet_lhashfn(net, hnum);
+	//查询端口监听表
 	struct inet_listen_hashbucket *ilb = &hashinfo->listening_hash[hash];
 	int score, hiscore = 0, matches = 0, reuseport = 0;
 	bool exact_dif = inet_exact_dif_match(net, skb);
@@ -282,6 +283,7 @@ struct sock *__inet_lookup_established(struct net *net,
 	/* Optimize here for direct hit, only listening connections can
 	 * have wildcards anyways.
 	 */
+	//查询稳定连接哈希表
 	unsigned int hash = inet_ehashfn(net, daddr, hnum, saddr, sport);
 	unsigned int slot = hash & hashinfo->ehash_mask;
 	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
@@ -290,6 +292,7 @@ begin:
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
 		if (sk->sk_hash != hash)
 			continue;
+		//hash值相等，与sk内部成员进行比对
 		if (likely(INET_MATCH(sk, net, acookie,
 				      saddr, daddr, ports, dif, sdif))) {
 			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))

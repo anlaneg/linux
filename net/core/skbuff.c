@@ -701,6 +701,7 @@ EXPORT_SYMBOL(skb_tx_error);
  *	Functions identically to kfree_skb, but kfree_skb assumes that the frame
  *	is being dropped after a failure and notes that
  */
+//报文释放
 void consume_skb(struct sk_buff *skb)
 {
 	if (!skb_unref(skb))//引用计数未减为0，不释放

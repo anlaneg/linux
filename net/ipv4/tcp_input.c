@@ -5803,14 +5803,16 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
+		//listen状态下，ack不能有值
 		if (th->ack)
 			return 1;
-
+		//有rst时，报文丢弃即可
 		if (th->rst)
 			goto discard;
 
 		if (th->syn) {
 			if (th->fin)
+				//有syn标记，但也有fin标记，则直接丢包
 				goto discard;
 			/* It is possible that we process SYN packets from backlog,
 			 * so we need to make sure to disable BH right there.
@@ -5824,6 +5826,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			consume_skb(skb);
 			return 0;
 		}
+		//其它标记的报文需要丢弃
 		goto discard;
 
 	case TCP_SYN_SENT:

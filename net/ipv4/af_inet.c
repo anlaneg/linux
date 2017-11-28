@@ -1609,6 +1609,7 @@ static const struct net_protocol igmp_protocol = {
 /* thinking of making this const? Don't.
  * early_demux can change based on sysctl.
  */
+//tcp协议处理
 static struct net_protocol tcp_protocol = {
 	.early_demux	=	tcp_v4_early_demux,
 	.early_demux_handler =  tcp_v4_early_demux,
@@ -1859,11 +1860,14 @@ static int __init inet_init(void)
 	//注册igmp协议
 	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
 		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
+	//注册udp协议处理
 	if (inet_add_protocol(&udp_protocol, IPPROTO_UDP) < 0)
 		pr_crit("%s: Cannot add UDP protocol\n", __func__);
+	//注册tcp协议处理
 	if (inet_add_protocol(&tcp_protocol, IPPROTO_TCP) < 0)
 		pr_crit("%s: Cannot add TCP protocol\n", __func__);
 #ifdef CONFIG_IP_MULTICAST
+	//注册igmp协议处理
 	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
 		pr_crit("%s: Cannot add IGMP protocol\n", __func__);
 #endif

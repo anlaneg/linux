@@ -1516,6 +1516,7 @@ struct rtable *rt_dst_alloc(struct net_device *dev,
 
 		rt->dst.output = ip_output;//普通的输出
 		if (flags & RTCF_LOCAL)
+			//输出到本机
 			rt->dst.input = ip_local_deliver;
 	}
 

@@ -74,7 +74,7 @@ void dst_init(struct dst_entry *dst, struct dst_ops *ops,
 #ifdef CONFIG_XFRM
 	dst->xfrm = NULL;
 #endif
-	dst->input = dst_discard;
+	dst->input = dst_discard;//默认初始化为丢包
 	dst->output = dst_discard_out;
 	dst->error = 0;
 	dst->obsolete = initial_obsolete;

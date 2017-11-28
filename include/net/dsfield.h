@@ -12,7 +12,7 @@
 #include <linux/ipv6.h>
 #include <asm/byteorder.h>
 
-
+//取ip头中的tos
 static inline __u8 ipv4_get_dsfield(const struct iphdr *iph)
 {
 	return iph->tos;

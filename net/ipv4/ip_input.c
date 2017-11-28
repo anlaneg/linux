@@ -195,6 +195,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 
 	rcu_read_lock();
 	{
+		//取出ip层协议
 		int protocol = ip_hdr(skb)->protocol;
 		const struct net_protocol *ipprot;
 		int raw;
@@ -205,6 +206,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 		//按ip头协议查找协议处理函数
 		ipprot = rcu_dereference(inet_protos[protocol]);
 		if (ipprot) {
+			//协议栈上有对应的协议处理模块
 			int ret;
 
 			if (!ipprot->no_policy) {
@@ -222,6 +224,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 			}
 			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 		} else {
+			//当前linux kernel没有对应的协议栈处理些协议
 			if (!raw) {
 				if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 					__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);

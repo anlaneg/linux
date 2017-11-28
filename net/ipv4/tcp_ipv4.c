@@ -1469,6 +1469,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	//tcp checksum校验
 	if (tcp_checksum_complete(skb))
 		goto csum_err;
 
@@ -1487,13 +1488,16 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	} else
 		sock_rps_save_rxhash(sk, skb);
 
+	//检查tcp状态，是否可接受此报文
 	if (tcp_rcv_state_process(sk, skb)) {
+		//不合适的报文，回复rest
 		rsk = sk;
 		goto reset;
 	}
 	return 0;
 
 reset:
+	//向对端发送rest报文
 	tcp_v4_send_reset(rsk, skb);
 discard:
 	kfree_skb(skb);
@@ -1605,6 +1609,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	struct sock *sk;
 	int ret;
 
+	//非到主机报文
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1612,14 +1617,14 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
 
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
-		goto discard_it;
+		goto discard_it;//报文长度不足tcp头长度，丢包
 
 	th = (const struct tcphdr *)skb->data;
 
 	if (unlikely(th->doff < sizeof(struct tcphdr) / 4))
-		goto bad_packet;
+		goto bad_packet;//tcp头部非4字节对齐
 	if (!pskb_may_pull(skb, th->doff * 4))
-		goto discard_it;
+		goto discard_it;//报文长度不足tcp头长度（含选项）
 
 	/* An explanation is required here, I think.
 	 * Packet length and doff are validated by header prediction,
@@ -1627,7 +1632,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	 * So, we defer the checks. */
 
 	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo))
-		goto csum_error;
+		goto csum_error;//checksum校验
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
@@ -1642,9 +1647,9 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
 				    skb->len - th->doff * 4);
 	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
-	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);
+	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);//提取th[13]字节
 	TCP_SKB_CB(skb)->tcp_tw_isn = 0;
-	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
+	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);//取ip中的tos
 	TCP_SKB_CB(skb)->sacked	 = 0;
 	TCP_SKB_CB(skb)->has_rxtstamp =
 			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
@@ -1657,6 +1662,9 @@ lookup:
 
 process:
 	if (sk->sk_state == TCP_TIME_WAIT)
+		//当前已转为time_wait状态，但仍收到报文
+		//如果是syn则可能创建新的socket
+		//如果是其它报文，则可能是之前重发的报文，丢弃
 		goto do_time_wait;
 
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
@@ -1695,6 +1703,8 @@ process:
 			return 0;
 		}
 	}
+
+	//ttl检查
 	if (unlikely(iph->ttl < inet_sk(sk)->min_ttl)) {
 		__NET_INC_STATS(net, LINUX_MIB_TCPMINTTLDROP);
 		goto discard_and_relse;
@@ -1715,6 +1725,8 @@ process:
 
 	skb->dev = NULL;
 
+	//当前处于listen状态，收到报文
+	//客户端主动打开连接，此时只收取syn报文
 	if (sk->sk_state == TCP_LISTEN) {
 		ret = tcp_v4_do_rcv(sk, skb);
 		goto put_and_return;
@@ -1748,6 +1760,7 @@ csum_error:
 bad_packet:
 		__TCP_INC_STATS(net, TCP_MIB_INERRS);
 	} else {
+		//本地没有监听目的接口，回复rst
 		tcp_v4_send_reset(NULL, skb);
 	}
 
