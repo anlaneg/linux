@@ -1286,6 +1286,7 @@ static inline int tcp_win_from_space(const struct sock *sk, int space)
 {
 	int tcp_adv_win_scale = sock_net(sk)->ipv4.sysctl_tcp_adv_win_scale;
 
+	//移位负数位，其值等于（１.int位宽为３２位，位移时移位数生效的仅７位生效;2.负数将被设置为正数取反加１）
 	return tcp_adv_win_scale <= 0 ?
 		(space>>(-tcp_adv_win_scale)) :
 		space - (space>>tcp_adv_win_scale);

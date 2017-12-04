@@ -31,6 +31,7 @@ struct proto;
 struct request_sock_ops {
 	int		family;
 	unsigned int	obj_size;
+	//申请空间用的slab
 	struct kmem_cache	*slab;
 	char		*slab_name;
 	int		(*rtx_syn_ack)(const struct sock *sk,
@@ -85,6 +86,7 @@ reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
 {
 	struct request_sock *req;
 
+	//申请request_sock空间
 	req = kmem_cache_alloc(ops->slab, GFP_ATOMIC | __GFP_NOWARN);
 	if (!req)
 		return NULL;

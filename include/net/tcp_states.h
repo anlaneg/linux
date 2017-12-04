@@ -25,7 +25,7 @@ enum {
 	TCP_LAST_ACK,
 	TCP_LISTEN,
 	TCP_CLOSING,	/* Now a valid state */
-	TCP_NEW_SYN_RECV,
+	TCP_NEW_SYN_RECV,//收到syn报文
 
 	TCP_MAX_STATES	/* Leave at the end! */
 };

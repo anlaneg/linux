@@ -1271,7 +1271,9 @@ static void tcp_v4_init_req(struct request_sock *req,
 	struct inet_request_sock *ireq = inet_rsk(req);
 	struct net *net = sock_net(sk_listener);
 
+	//置rcv方的源ip为报文中的目的ip
 	sk_rcv_saddr_set(req_to_sk(req), ip_hdr(skb)->daddr);
+	//置报文中的源ip为目的ip
 	sk_daddr_set(req_to_sk(req), ip_hdr(skb)->saddr);
 	RCU_INIT_POINTER(ireq->ireq_opt, tcp_v4_save_options(net, skb));
 }

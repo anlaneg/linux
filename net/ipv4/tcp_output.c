@@ -201,6 +201,7 @@ void tcp_select_initial_window(const struct sock *sk, int __space, __u32 mss,
 	space = min(*window_clamp, space);
 
 	/* Quantize space offering to a multiple of mss if possible. */
+	//实现按mss对齐
 	if (space > mss)
 		space = rounddown(space, mss);
 
@@ -212,6 +213,7 @@ void tcp_select_initial_window(const struct sock *sk, int __space, __u32 mss,
 	 * which we interpret as a sign the remote TCP is not
 	 * misinterpreting the window field as a signed quantity.
 	 */
+	//检查是否需要照顾buggy的tcp协议栈
 	if (sock_net(sk)->ipv4.sysctl_tcp_workaround_signed_windows)
 		(*rcv_wnd) = min(space, MAX_TCP_WINDOW);
 	else
@@ -224,7 +226,7 @@ void tcp_select_initial_window(const struct sock *sk, int __space, __u32 mss,
 		space = max_t(u32, space, sysctl_rmem_max);
 		space = min_t(u32, space, *window_clamp);
 		while (space > U16_MAX && (*rcv_wscale) < TCP_MAX_WSCALE) {
-			space >>= 1;
+			space >>= 1;//除２后，计算接受缓冲的窗口扩展
 			(*rcv_wscale)++;
 		}
 	}
