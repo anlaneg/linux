@@ -1474,9 +1474,11 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto csum_err;
 
 	if (sk->sk_state == TCP_LISTEN) {
+		//socket处于listen状态上
 		struct sock *nsk = tcp_v4_cookie_check(sk, skb);
 
 		if (!nsk)
+			//syn cookie检查不通过，丢包
 			goto discard;
 		if (nsk != sk) {
 			if (tcp_child_process(sk, nsk, skb)) {
@@ -1490,7 +1492,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 
 	//检查tcp状态，是否可接受此报文
 	if (tcp_rcv_state_process(sk, skb)) {
-		//不合适的报文，回复rest
+		//协议不合适的报文，回复rest
 		rsk = sk;
 		goto reset;
 	}

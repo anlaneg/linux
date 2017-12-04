@@ -124,7 +124,7 @@ struct inet_hashinfo {
 	 *          TCP_ESTABLISHED <= sk->sk_state < TCP_CLOSE
 	 *
 	 */
-	struct inet_ehash_bucket	*ehash;
+	struct inet_ehash_bucket	*ehash;//已建立稳定连接的sockets表
 	spinlock_t			*ehash_locks;
 	unsigned int			ehash_mask;
 	unsigned int			ehash_locks_mask;
@@ -150,7 +150,7 @@ struct inet_hashinfo {
 	 * is just local port number.
 	 */
 	struct inet_listen_hashbucket	listening_hash[INET_LHTABLE_SIZE]
-					____cacheline_aligned_in_smp;
+					____cacheline_aligned_in_smp;//已监听sockets表
 };
 
 static inline struct inet_ehash_bucket *inet_ehash_bucket(
@@ -340,6 +340,7 @@ static inline struct sock *inet_lookup(struct net *net,
 			   dport, dif, 0, &refcounted);
 
 	if (sk && !refcounted && !refcount_inc_not_zero(&sk->sk_refcnt))
+		//如果找到监听的sockets，则将sk更改为ＮＵＬＬ,并返回
 		sk = NULL;
 	return sk;
 }

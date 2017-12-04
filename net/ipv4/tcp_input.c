@@ -5803,7 +5803,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
-		//listen状态下，ack不能有值
+		//listen状态下，ack标记不能有值
 		if (th->ack)
 			return 1;
 		//有rst时，报文丢弃即可
@@ -5818,6 +5818,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			 * so we need to make sure to disable BH right there.
 			 */
 			local_bh_disable();
+			//走tcp_ipv4.c文件　ipv4_specific结构体的tcp_v4_conn_request
 			acceptable = icsk->icsk_af_ops->conn_request(sk, skb) >= 0;
 			local_bh_enable();
 

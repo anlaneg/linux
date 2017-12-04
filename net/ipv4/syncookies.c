@@ -280,6 +280,7 @@ EXPORT_SYMBOL(cookie_ecn_ok);
  * Output is listener if incoming packet would not create a child
  *           NULL if memory could not be allocated.
  */
+//syn　cookie检查，用于解决syn flood问题
 struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 {
 	struct ip_options *opt = &TCP_SKB_CB(skb)->header.h4.opt;
