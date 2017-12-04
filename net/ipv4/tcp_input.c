@@ -5823,6 +5823,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			local_bh_enable();
 
 			if (!acceptable)
+				//不能接受此连接
 				return 1;
 			consume_skb(skb);
 			return 0;
