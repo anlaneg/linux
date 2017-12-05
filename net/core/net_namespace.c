@@ -31,6 +31,7 @@ static LIST_HEAD(pernet_list);
 static struct list_head *first_device = &pernet_list;
 DEFINE_MUTEX(net_mutex);
 
+//所有的namespace将串在此链上
 LIST_HEAD(net_namespace_list);
 EXPORT_SYMBOL_GPL(net_namespace_list);
 
@@ -419,6 +420,7 @@ struct net *copy_net_ns(unsigned long flags,
 	rv = setup_net(net, user_ns);
 	if (rv == 0) {
 		rtnl_lock();
+		//将net串在所有name对应的链上
 		list_add_tail_rcu(&net->list, &net_namespace_list);
 		rtnl_unlock();
 	}

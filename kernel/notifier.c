@@ -21,6 +21,7 @@ BLOCKING_NOTIFIER_HEAD(reboot_notifier_list);
 static int notifier_chain_register(struct notifier_block **nl,
 		struct notifier_block *n)
 {
+	//按优先级排放，优先低的回调，放在后面
 	while ((*nl) != NULL) {
 		if (n->priority > (*nl)->priority)
 			break;
@@ -347,6 +348,7 @@ EXPORT_SYMBOL_GPL(blocking_notifier_call_chain);
 int raw_notifier_chain_register(struct raw_notifier_head *nh,
 		struct notifier_block *n)
 {
+	//实现通知块的注册
 	return notifier_chain_register(&nh->head, n);
 }
 EXPORT_SYMBOL_GPL(raw_notifier_chain_register);

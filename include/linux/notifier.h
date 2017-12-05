@@ -54,9 +54,9 @@ typedef	int (*notifier_fn_t)(struct notifier_block *nb,
 			unsigned long action, void *data);
 
 struct notifier_block {
-	notifier_fn_t notifier_call;
-	struct notifier_block __rcu *next;
-	int priority;
+	notifier_fn_t notifier_call;//通知回调
+	struct notifier_block __rcu *next;//用于串连通知
+	int priority;//优先级
 };
 
 struct atomic_notifier_head {
