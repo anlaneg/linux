@@ -1517,7 +1517,7 @@ struct rtable *rt_dst_alloc(struct net_device *dev,
 		rt->dst.output = ip_output;//普通的输出
 		if (flags & RTCF_LOCAL)
 			//输出到本机
-			rt->dst.input = ip_local_deliver;
+			rt->dst.input = ip_local_deliver;//输出到本机
 	}
 
 	return rt;
@@ -1863,6 +1863,7 @@ static int ip_mkroute_input(struct sk_buff *skb,
 			    __be32 daddr, __be32 saddr, u32 tos)
 {
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
+	//等价路由处理？
 	if (res->fi && res->fi->fib_nhs > 1) {
 		int h = fib_multipath_hash(res->fi, NULL, skb);
 
@@ -1974,6 +1975,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto brd_input;
 
 	if (res->type == RTN_LOCAL) {
+		//主机路由
 		err = fib_validate_source(skb, saddr, daddr, tos,
 					  0, dev, in_dev, &itag);
 		if (err < 0)
@@ -1982,6 +1984,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	}
 
 	if (!IN_DEV_FORWARD(in_dev)) {
+		//如果是直接或者网关，但入接口设备不支持转发模式，则按无route处理
 		err = -EHOSTUNREACH;
 		goto no_route;
 	}
@@ -2091,6 +2094,7 @@ martian_source:
 	goto out;
 }
 
+//传入报文(skb),目的地址(daddr),源地址(saddr),tos,入接口（dev)
 int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 			 u8 tos, struct net_device *dev)
 {
@@ -2099,6 +2103,7 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	tos &= IPTOS_RT_MASK;
 	rcu_read_lock();
+	//加锁查询
 	err = ip_route_input_rcu(skb, daddr, saddr, tos, dev, &res);
 	rcu_read_unlock();
 
@@ -2149,6 +2154,7 @@ int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		     IN_DEV_MFORWARD(in_dev))
 #endif
 		   ) {
+			//组播表查询
 			err = ip_route_input_mc(skb, daddr, saddr,
 						tos, dev, our);
 		}

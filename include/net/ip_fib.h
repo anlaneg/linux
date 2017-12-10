@@ -269,6 +269,7 @@ static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 
 	rcu_read_lock();
 
+	//取main表
 	tb = fib_get_table(net, RT_TABLE_MAIN);
 	if (tb)
 		//查表

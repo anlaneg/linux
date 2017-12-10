@@ -2555,6 +2555,7 @@ done:
 /*
  * check if a multicast source filter allows delivery for a given <src,dst,intf>
  */
+//检查是否容许收取此组播地址
 int ip_mc_sf_allow(struct sock *sk, __be32 loc_addr, __be32 rmt_addr,
 		   int dif, int sdif)
 {
@@ -2565,11 +2566,13 @@ int ip_mc_sf_allow(struct sock *sk, __be32 loc_addr, __be32 rmt_addr,
 	int ret;
 
 	ret = 1;
+	//本端地址是否为组播地址（如不是，则退出认为容许）
 	if (!ipv4_is_multicast(loc_addr))
 		goto out;
 
 	rcu_read_lock();
 	for_each_pmc_rcu(inet, pmc) {
+		//检查能否在对应接口上查到找此组播源的记录
 		if (pmc->multi.imr_multiaddr.s_addr == loc_addr &&
 		    (pmc->multi.imr_ifindex == dif ||
 		     (sdif && pmc->multi.imr_ifindex == sdif)))
@@ -2577,10 +2580,13 @@ int ip_mc_sf_allow(struct sock *sk, __be32 loc_addr, __be32 rmt_addr,
 	}
 	ret = inet->mc_all;
 	if (!pmc)
+		//如果没有找到，检查是否容许all
 		goto unlock;
 	psl = rcu_dereference(pmc->sflist);
 	ret = (pmc->sfmode == MCAST_EXCLUDE);
 	if (!psl)
+		//如果找到，且没有对应的源地址表，则
+		//检查其模式是否为exclude,如是，则容许(相当于exclude未生效？）
 		goto unlock;
 
 	for (i = 0; i < psl->sl_count; i++) {
@@ -2589,9 +2595,13 @@ int ip_mc_sf_allow(struct sock *sk, __be32 loc_addr, __be32 rmt_addr,
 	}
 	ret = 0;
 	if (pmc->sfmode == MCAST_INCLUDE && i >= psl->sl_count)
+		//未找到，且为include,则不容许
 		goto unlock;
 	if (pmc->sfmode == MCAST_EXCLUDE && i < psl->sl_count)
+		//找到了，且为exclude，则不容许
 		goto unlock;
+
+	//include找到了，exclude未找到，见容许
 	ret = 1;
 unlock:
 	rcu_read_unlock();
@@ -2638,6 +2648,7 @@ int ip_check_mc_rcu(struct in_device *in_dev, __be32 mc_addr, __be32 src_addr, u
 
 	mc_hash = rcu_dereference(in_dev->mc_hash);
 	if (mc_hash) {
+		//有hash，采用hash进行查询
 		u32 hash = hash_32((__force u32)mc_addr, MC_HASH_SZ_LOG);
 
 		for (im = rcu_dereference(mc_hash[hash]);
@@ -2647,6 +2658,7 @@ int ip_check_mc_rcu(struct in_device *in_dev, __be32 mc_addr, __be32 src_addr, u
 				break;
 		}
 	} else {
+		//无hash直接遍历
 		for_each_pmc_rcu(in_dev, im) {
 			if (im->multiaddr == mc_addr)
 				break;

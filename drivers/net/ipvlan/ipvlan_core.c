@@ -116,6 +116,7 @@ bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
 	return false;
 }
 
+//分析报文找出三层协议头，并返回arp头，ip头（用type返回对应的协议）
 static void *ipvlan_get_L3_hdr(struct ipvl_port *port, struct sk_buff *skb, int *type)
 {
 	void *lyr3h = NULL;
@@ -331,6 +332,7 @@ out:
 	return ret;
 }
 
+//检查接口上是否存在与lyr3h指出的地址相同的地址
 static struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port,
 					    void *lyr3h, int addr_type,
 					    bool use_dest)
@@ -362,6 +364,7 @@ static struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port,
 
 		ip4h = (struct iphdr *)lyr3h;
 		i4addr = use_dest ? &ip4h->daddr : &ip4h->saddr;
+		//查找接口上是否有与此i4addr相同的ipv4地址,如果有则返回，如果无，返回NULL
 		addr = ipvlan_ht_addr_lookup(port, i4addr, false);
 	} else if (addr_type == IPVL_ARP) {
 		struct arphdr *arph;
@@ -729,7 +732,7 @@ static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
 	int addr_type;
 
 	if (!dev || !netif_is_ipvlan_port(dev))
-		goto out;
+		goto out;//非ipvlan设备，无法处理
 
 	port = ipvlan_port_get_rcu(dev);
 	if (!port || port->mode != IPVLAN_MODE_L3S)
@@ -737,8 +740,9 @@ static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
 
 	lyr3h = ipvlan_get_L3_hdr(port, skb, &addr_type);
 	if (!lyr3h)
-		goto out;
+		goto out;//无法处理的报文
 
+	//默认采用目的地址，检查port上是否有对应的ip地址
 	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
 out:
 	return addr;
@@ -750,10 +754,12 @@ struct sk_buff *ipvlan_l3_rcv(struct net_device *dev, struct sk_buff *skb,
 	struct ipvl_addr *addr;
 	struct net_device *sdev;
 
+	//dev上没有skb中指定的目的地址，则返回NULL
 	addr = ipvlan_skb_to_addr(skb, dev);
 	if (!addr)
 		goto out;
 
+	//切换至master设备
 	sdev = addr->master->dev;
 	switch (proto) {
 	case AF_INET:

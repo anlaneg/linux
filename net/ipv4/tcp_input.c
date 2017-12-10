@@ -3694,40 +3694,58 @@ void tcp_parse_options(const struct net *net,
 {
 	const unsigned char *ptr;
 	const struct tcphdr *th = tcp_hdr(skb);
+	//取得tcp选项长度
 	int length = (th->doff * 4) - sizeof(struct tcphdr);
 
+	//tcp选项首地址
 	ptr = (const unsigned char *)(th + 1);
 	opt_rx->saw_tstamp = 0;
 
 	while (length > 0) {
-		int opcode = *ptr++;
+		int opcode = *ptr++;//提取选项类型
 		int opsize;
 
 		switch (opcode) {
-		case TCPOPT_EOL:
+		case TCPOPT_EOL://选项结束
 			return;
 		case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
-			length--;
+			length--;//空选项，用于补长度
 			continue;
 		default:
-			opsize = *ptr++;
+			opsize = *ptr++;//提取选项长度
 			if (opsize < 2) /* "silly options" */
 				return;
 			if (opsize > length)
 				return;	/* don't parse partial options */
 			switch (opcode) {
-			case TCPOPT_MSS:
+			case TCPOPT_MSS://mss只能在syn包中存在，否则不生效
 				if (opsize == TCPOLEN_MSS && th->syn && !estab) {
 					u16 in_mss = get_unaligned_be16(ptr);
 					if (in_mss) {
 						if (opt_rx->user_mss &&
 						    opt_rx->user_mss < in_mss)
 							in_mss = opt_rx->user_mss;
-						opt_rx->mss_clamp = in_mss;
+						opt_rx->mss_clamp = in_mss;//设置较小的mss
 					}
 				}
 				break;
 			case TCPOPT_WINDOW:
+				/*
+				 *  TCP Window Scale Option (WSopt):   Kind: 3 Length: 3 bytes
+                 +---------+---------+-------------+
+                 | Kind=3  |Length=3 | shift.cnt   |
+                 +---------+---------+-------------+
+				3.工作过程
+				①要启用窗口扩大选项，通讯双方必须在各自的SYN报文中发送这个选项。
+				主动建立连接的一方在SYN报文中发送这个选项；而被动建立连接的一方只有
+				在收到带窗口扩大选项的SYN报文之后才能发送这个选项。
+
+				②这个选项只在一个SYN报文中有意义（<SYN>或<SYN,ACK>），包含窗口
+				扩大选项的报文如果没有SYN位，则会被忽略掉。当连接建立起来后，
+				在每个方向的扩大因子是固定的。注意：在SYN报文本身的窗口字段始终
+				不做任何的扩大（The Window field in a SYN (i.e., a <SYN> or <SYN,ACK>)
+				segment itself is never scaled.）。
+				 */
 				if (opsize == TCPOLEN_WINDOW && th->syn &&
 				    !estab && net->ipv4.sysctl_tcp_window_scaling) {
 					__u8 snd_wscale = *(__u8 *)ptr;
@@ -3834,7 +3852,7 @@ static bool tcp_fast_parse_options(const struct net *net,
 	 */
 	if (th->doff == (sizeof(*th) / 4)) {
 		tp->rx_opt.saw_tstamp = 0;
-		return false;
+		return false;//此报文无tcp选项
 	} else if (tp->rx_opt.tstamp_ok &&
 		   th->doff == ((sizeof(*th) + TCPOLEN_TSTAMP_ALIGNED) / 4)) {
 		if (tcp_parse_aligned_timestamp(tp, th))
@@ -5423,10 +5441,10 @@ no_ack:
 
 slow_path:
 	if (len < (th->doff << 2) || tcp_checksum_complete(skb))
-		goto csum_error;
+		goto csum_error;//tcp头部不完整或者checksum不正确
 
 	if (!th->ack && !th->rst && !th->syn)
-		goto discard;
+		goto discard;//标记不正确
 
 	/*
 	 *	Standard slow path.

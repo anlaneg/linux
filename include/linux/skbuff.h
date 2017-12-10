@@ -284,10 +284,11 @@ struct nf_bridge_info {
 
 struct sk_buff_head {
 	/* These two members must be first. */
+	//双向链表
 	struct sk_buff	*next;
 	struct sk_buff	*prev;
 
-	__u32		qlen;
+	__u32		qlen;//队列长度
 	spinlock_t	lock;
 };
 

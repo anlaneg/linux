@@ -588,12 +588,14 @@ EXPORT_SYMBOL_GPL(udp4_lib_lookup);
 #endif
 
 static inline bool __udp_is_mcast_sock(struct net *net, struct sock *sk,
-				       __be16 loc_port, __be32 loc_addr,
-				       __be16 rmt_port, __be32 rmt_addr,
+				       __be16 loc_port, __be32 loc_addr,//本地port,本地ip
+				       __be16 rmt_port, __be32 rmt_addr,//远端port,远端ip
 				       int dif, int sdif, unsigned short hnum)
 {
 	struct inet_sock *inet = inet_sk(sk);
 
+	//需要net相同，本端ip,远端ip,本端port,远端port，
+	//hash,srcif,dstif相同
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
 	    (inet->inet_daddr && inet->inet_daddr != rmt_addr) ||
@@ -603,6 +605,7 @@ static inline bool __udp_is_mcast_sock(struct net *net, struct sock *sk,
 	    (sk->sk_bound_dev_if && sk->sk_bound_dev_if != dif &&
 	     sk->sk_bound_dev_if != sdif))
 		return false;
+	//检查本地是否容许接受此组播地址（igmp协议负责此块）
 	if (!ip_mc_sf_allow(sk, loc_addr, rmt_addr, dif, sdif))
 		return false;
 	return true;
@@ -1296,6 +1299,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	rmem = atomic_read(&sk->sk_rmem_alloc);
 	if (rmem > sk->sk_rcvbuf)
+		//超过接受缓冲区门限rcvbuf，丢包
 		goto drop;
 
 	/* Under mem pressure, it might be helpful to help udp_recvmsg()
@@ -1304,19 +1308,23 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 * - Less cache line misses at copyout() time
 	 * - Less work at consume_skb() (less alien page frag freeing)
 	 */
+	//超过按收缓冲区门限的一半
 	if (rmem > (sk->sk_rcvbuf >> 1)) {
 		skb_condense(skb);
 
 		busy = busylock_acquire(sk);
 	}
+	//记录报文有多少字节
 	size = skb->truesize;
 	udp_set_dev_scratch(skb);
 
 	/* we drop only if the receive buf is full and the receive
 	 * queue contains some other skb
 	 */
+	//尝试原子加，并在加后进行检查（由于上面的检查不是原子的）
 	rmem = atomic_add_return(size, &sk->sk_rmem_alloc);
 	if (rmem > (size + sk->sk_rcvbuf))
+		//超过门限，且超过自身，说明有线程在我们之前，已超，我们竞争失败
 		goto uncharge_drop;
 
 	spin_lock(&list->lock);
@@ -1339,6 +1347,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	sock_skb_set_dropcount(sk, skb);
 
+	//将skb放置在报文接受队列上。
 	__skb_queue_tail(list, skb);
 	spin_unlock(&list->lock);
 
@@ -1837,6 +1846,7 @@ static int udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		goto drop;
 	nf_reset(skb);
 
+	//检查是否需要encap处理
 	if (static_key_false(&udp_encap_needed) && up->encap_type) {
 		int (*encap_rcv)(struct sock *sk, struct sk_buff *skb);
 
@@ -1956,7 +1966,8 @@ static int __udp4_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 				    int proto)
 {
 	struct sock *sk, *first = NULL;
-	unsigned short hnum = ntohs(uh->dest);
+	unsigned short hnum = ntohs(uh->dest);//目的端口
+	//用net,dstport查对应的hash桶
 	struct udp_hslot *hslot = udp_hashslot(udptable, net, hnum);
 	unsigned int hash2 = 0, hash2_any = 0, use_hash2 = (hslot->count > 10);
 	unsigned int offset = offsetof(typeof(*sk), sk_node);
@@ -1965,6 +1976,7 @@ static int __udp4_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 	struct hlist_node *node;
 	struct sk_buff *nskb;
 
+	//当桶中冲突数目大于10时，使用hash2
 	if (use_hash2) {
 		hash2_any = udp4_portaddr_hash(net, htonl(INADDR_ANY), hnum) &
 			    udptable->mask;
@@ -1974,18 +1986,21 @@ start_lookup:
 		offset = offsetof(typeof(*sk), __sk_common.skc_portaddr_node);
 	}
 
+	//遍历冲突链
 	sk_for_each_entry_offset_rcu(sk, node, &hslot->head, offset) {
 		if (!__udp_is_mcast_sock(net, sk, uh->dest, daddr,
 					 uh->source, saddr, dif, sdif, hnum))
 			continue;
 
 		if (!first) {
-			first = sk;
+			first = sk;//记录首个
 			continue;
 		}
+		//非首个时进入
 		nskb = skb_clone(skb, GFP_ATOMIC);
 
 		if (unlikely(!nskb)) {
+			//没有copy成功
 			atomic_inc(&sk->sk_drops);
 			__UDP_INC_STATS(net, UDP_MIB_RCVBUFERRORS,
 					IS_UDPLITE(sk));
@@ -1993,20 +2008,24 @@ start_lookup:
 					IS_UDPLITE(sk));
 			continue;
 		}
+		//处理非first情况，有监听者，处理
 		if (udp_queue_rcv_skb(sk, nskb) > 0)
 			consume_skb(nskb);
 	}
 
 	/* Also lookup *:port if we are using hash2 and haven't done so yet. */
+	//由于有两种hash故再查一次
 	if (use_hash2 && hash2 != hash2_any) {
 		hash2 = hash2_any;
 		goto start_lookup;
 	}
 
 	if (first) {
+		//处理first情况
 		if (udp_queue_rcv_skb(first, skb) > 0)
 			consume_skb(skb);
 	} else {
+		//未找到收取的，丢包
 		kfree_skb(skb);
 		__UDP_INC_STATS(net, UDP_MIB_IGNOREDMULTI,
 				proto == IPPROTO_UDPLITE);
@@ -2072,6 +2091,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		/* UDP validates ulen. */
 		if (ulen < sizeof(*uh) || pskb_trim_rcsum(skb, ulen))
 			goto short_packet;
+		//偏移至udp头
 		uh = udp_hdr(skb);
 	}
 
@@ -2096,6 +2116,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		return 0;
 	}
 
+	//组播广播投递
 	if (rt->rt_flags & (RTCF_BROADCAST|RTCF_MULTICAST))
 		return __udp4_lib_mcast_deliver(net, skb, uh,
 						saddr, daddr, udptable, proto);
@@ -2284,6 +2305,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 	return 0;
 }
 
+//udp协议处理
 int udp_rcv(struct sk_buff *skb)
 {
 	return __udp4_lib_rcv(skb, &udp_table, IPPROTO_UDP);

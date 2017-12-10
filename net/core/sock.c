@@ -2617,6 +2617,7 @@ static void sock_def_error_report(struct sock *sk)
 	rcu_read_unlock();
 }
 
+//引发通知poll_in
 static void sock_def_readable(struct sock *sk)
 {
 	struct socket_wq *wq;
@@ -2626,6 +2627,7 @@ static void sock_def_readable(struct sock *sk)
 	if (skwq_has_sleeper(wq))
 		wake_up_interruptible_sync_poll(&wq->wait, POLLIN | POLLPRI |
 						POLLRDNORM | POLLRDBAND);
+	//触发poll_in事件
 	sk_wake_async(sk, SOCK_WAKE_WAITD, POLL_IN);
 	rcu_read_unlock();
 }
@@ -2647,6 +2649,7 @@ static void sock_def_write_space(struct sock *sk)
 
 		/* Should agree with poll, otherwise some programs break */
 		if (sock_writeable(sk))
+			//触发poll_out事件
 			sk_wake_async(sk, SOCK_WAKE_SPACE, POLL_OUT);
 	}
 

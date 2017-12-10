@@ -853,6 +853,7 @@ unsigned int datagram_poll(struct file *file, struct socket *sock,
 		mask |= POLLHUP;
 
 	/* readable? */
+	//队列中有包，mask设置为pollin
 	if (!skb_queue_empty(&sk->sk_receive_queue))
 		mask |= POLLIN | POLLRDNORM;
 

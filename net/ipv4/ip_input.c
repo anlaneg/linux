@@ -216,7 +216,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 				}
 				nf_reset(skb);
 			}
-			//协议报文处理
+			//协议报文处理(交给ip上层进行处理）
 			ret = ipprot->handler(skb);
 			if (ret < 0) {
 				protocol = -ret;
@@ -247,6 +247,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 /*
  * 	Deliver IP Packets to the higher protocol layers.
  */
+//本地报文处理
 int ip_local_deliver(struct sk_buff *skb)
 {
 	/*
@@ -260,7 +261,7 @@ int ip_local_deliver(struct sk_buff *skb)
 			return 0;
 	}
 
-	//往本地协议栈钩子点
+	//往本地协议栈钩子点（local_in)
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_LOCAL_IN,
 		       net, NULL, skb, skb->dev, NULL,
 		       ip_local_deliver_finish);
@@ -317,6 +318,7 @@ drop:
 	return true;
 }
 
+//查路由
 static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	const struct iphdr *iph = ip_hdr(skb);
@@ -328,7 +330,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
-	skb = l3mdev_ip_rcv(skb);
+	skb = l3mdev_ip_rcv(skb);//channel口收包吗？
 	if (!skb)
 		return NET_RX_SUCCESS;
 

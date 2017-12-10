@@ -499,10 +499,11 @@ struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 	}
 
 	memcpy(n->primary_key, pkey, key_len);
-	n->dev = dev;
+	n->dev = dev;//指定出接口
 	dev_hold(dev);
 
 	/* Protocol specific setup. */
+	//按arp,igmpv6协议进行构造
 	if (tbl->constructor &&	(error = tbl->constructor(n)) < 0) {
 		rc = ERR_PTR(error);
 		goto out_neigh_release;
@@ -529,6 +530,7 @@ struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 	nht = rcu_dereference_protected(tbl->nht,
 					lockdep_is_held(&tbl->lock));
 
+	//hash表增长
 	if (atomic_read(&tbl->entries) > (1 << nht->hash_shift))
 		nht = neigh_hash_grow(tbl, nht->hash_shift + 1);
 
@@ -545,6 +547,7 @@ struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 	     n1 = rcu_dereference_protected(n1->next,
 			lockdep_is_held(&tbl->lock))) {
 		if (dev == n1->dev && !memcmp(n1->primary_key, pkey, key_len)) {
+			//在表项中找到已自已相同的项，准备释放本次创建的n
 			if (want_ref)
 				neigh_hold(n1);
 			rc = n1;
@@ -555,6 +558,7 @@ struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 	n->dead = 0;
 	if (want_ref)
 		neigh_hold(n);
+	//将n置于hash表的链头部，完成插入
 	rcu_assign_pointer(n->next,
 			   rcu_dereference_protected(nht->hash_buckets[hash_val],
 						     lockdep_is_held(&tbl->lock)));

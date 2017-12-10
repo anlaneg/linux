@@ -188,7 +188,8 @@ struct neigh_hash_table {
 	struct rcu_head		rcu;
 };
 
-
+//创建一个领居表项时，constructor将首先被调用
+//
 struct neigh_table {
 	int			family;
 	unsigned int		entry_size;
@@ -476,6 +477,7 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb)
 {
 	const struct hh_cache *hh = &n->hh;
 
+	//如果arp已完全，则直接输出
 	if ((n->nud_state & NUD_CONNECTED) && hh->hh_len)
 		return neigh_hh_output(hh, skb);
 	else

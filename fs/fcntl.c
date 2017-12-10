@@ -789,6 +789,7 @@ void send_sigio(struct fown_struct *fown, int fd, int band)
 	
 	read_lock(&tasklist_lock);
 	do_each_pid_task(pid, type, p) {
+		//发给具体的进程
 		send_sigio_to_task(p, fown, fd, band, group);
 	} while_each_pid_task(pid, type, p);
 	read_unlock(&tasklist_lock);

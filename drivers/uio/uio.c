@@ -438,6 +438,7 @@ static int uio_open(struct inode *inode, struct file *filep)
 	idev = idr_find(&uio_idr, iminor(inode));
 	mutex_unlock(&minor_lock);
 	if (!idev) {
+		//没有查找到对应的设备
 		ret = -ENODEV;
 		goto out;
 	}

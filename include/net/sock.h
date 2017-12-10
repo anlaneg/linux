@@ -356,6 +356,7 @@ struct sock {
 	atomic_t		sk_drops;
 	int			sk_rcvlowat;
 	struct sk_buff_head	sk_error_queue;
+	//接受到的报文缓冲在此队列
 	struct sk_buff_head	sk_receive_queue;
 	/*
 	 * The backlog queue is special, it is always used with
@@ -371,6 +372,7 @@ struct sock {
 		struct sk_buff	*head;
 		struct sk_buff	*tail;
 	} sk_backlog;
+//已接受到的字节数
 #define sk_rmem_alloc sk_backlog.rmem_alloc
 
 	int			sk_forward_alloc;
@@ -379,7 +381,7 @@ struct sock {
 	/* ===== mostly read cache line ===== */
 	unsigned int		sk_napi_id;
 #endif
-	int			sk_rcvbuf;
+	int			sk_rcvbuf;//接受缓冲区大小
 
 	struct sk_filter __rcu	*sk_filter;
 	union {
@@ -392,7 +394,7 @@ struct sock {
 	struct dst_entry	*sk_rx_dst;
 	struct dst_entry __rcu	*sk_dst_cache;
 	atomic_t		sk_omem_alloc;
-	int			sk_sndbuf;
+	int			sk_sndbuf;//发送缓冲区大小
 
 	/* ===== cache line for TX ===== */
 	int			sk_wmem_queued;

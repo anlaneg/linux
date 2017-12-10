@@ -223,6 +223,7 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	//查下一跳对应的领居表项
 	neigh = __ipv4_neigh_lookup_noref(dev, nexthop);
 	if (unlikely(!neigh))
+		//查找不到邻居表项，创建领居表项
 		neigh = __neigh_create(&arp_tbl, &nexthop, dev, false);
 	if (!IS_ERR(neigh)) {
 		int res;
@@ -314,10 +315,11 @@ static int ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *sk
 	if (skb_is_gso(skb))
 		return ip_finish_output_gso(net, sk, skb, mtu);
 
-	//分片
+	//分片处理
 	if (skb->len > mtu || (IPCB(skb)->flags & IPSKB_FRAG_PMTU))
 		return ip_fragment(net, sk, skb, mtu, ip_finish_output2);
 
+	//普通非分片报文输出
 	return ip_finish_output2(net, sk, skb);
 }
 
@@ -404,9 +406,10 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	IP_UPD_PO_STATS(net, IPSTATS_MIB_OUT, skb->len);
 
-	skb->dev = dev;
+	skb->dev = dev;//设置出口设备
 	skb->protocol = htons(ETH_P_IP);
 
+	//路由后钩子点执行
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, NULL, dev,
 			    ip_finish_output,

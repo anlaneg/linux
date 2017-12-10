@@ -1180,6 +1180,7 @@ call_kill:
 		kill_fasync(&wq->fasync_list, SIGIO, band);
 		break;
 	case SOCK_WAKE_URG:
+		//紧急数据
 		kill_fasync(&wq->fasync_list, SIGURG, band);
 	}
 
