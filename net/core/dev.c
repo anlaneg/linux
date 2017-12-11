@@ -4477,6 +4477,7 @@ skip_classify:
 		if (unlikely(skb_orphan_frags_rx(skb, GFP_ATOMIC)))
 			goto drop;
 		else
+			//使指定的以太网类型处理此报文，例如(ip_rcv)
 			ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 	} else {
 		//我们实在找不到此报文的处理者

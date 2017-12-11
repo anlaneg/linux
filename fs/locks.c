@@ -1300,6 +1300,7 @@ int locks_mandatory_locked(struct file *file)
  *
  * Searches the inode's list of locks to find any POSIX locks which conflict.
  */
+//对文件start,end位置进行加锁，锁类型由type规定
 int locks_mandatory_area(struct inode *inode, struct file *filp, loff_t start,
 			 loff_t end, unsigned char type)
 {
@@ -1321,6 +1322,7 @@ int locks_mandatory_area(struct inode *inode, struct file *filp, loff_t start,
 		if (filp) {
 			fl.fl_owner = filp;
 			fl.fl_flags &= ~FL_SLEEP;
+			//尝试着把锁加入到链表，如果冲突，则加入链表将失败
 			error = posix_lock_inode(inode, &fl, NULL);
 			if (!error)
 				break;

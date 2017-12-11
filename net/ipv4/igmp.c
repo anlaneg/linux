@@ -1928,7 +1928,7 @@ out_unlock:
  * Add multicast single-source filter to the interface list
  */
 static int ip_mc_add1_src(struct ip_mc_list *pmc, int sfmode,
-	__be32 *psfsrc)
+	__be32 *psfsrc)//先pmc中添加指定mode的psfsrc
 {
 	struct ip_sf_list *psf, *psf_prev;
 
@@ -2045,7 +2045,7 @@ static int ip_mc_add_src(struct in_device *in_dev, __be32 *pmca, int sfmode,
 	rcu_read_lock();
 	for_each_pmc_rcu(in_dev, pmc) {
 		if (*pmca == pmc->multiaddr)
-			break;
+			break;//区配，跳出
 	}
 	if (!pmc) {
 		/* MCA not found?? bug */

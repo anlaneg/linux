@@ -16,6 +16,7 @@
 /*
  * Convert from filesystem to in-memory representation.
  */
+//将ext2的acl转换为posix_acl
 static struct posix_acl *
 ext2_acl_from_disk(const void *value, size_t size)
 {
@@ -88,6 +89,7 @@ fail:
 /*
  * Convert from in-memory to filesystem representation.
  */
+//将posix_acl转换为ext2_acl,size为转换后大小
 static void *
 ext2_acl_to_disk(const struct posix_acl *acl, size_t *size)
 {
@@ -99,8 +101,11 @@ ext2_acl_to_disk(const struct posix_acl *acl, size_t *size)
 	ext_acl = kmalloc(sizeof(ext2_acl_header) + acl->a_count *
 			sizeof(ext2_acl_entry), GFP_KERNEL);
 	if (!ext_acl)
+		//申请ext_acl内存失败
 		return ERR_PTR(-ENOMEM);
-	ext_acl->a_version = cpu_to_le32(EXT2_ACL_VERSION);
+	ext_acl->a_version = cpu_to_le32(EXT2_ACL_VERSION);//填充版本
+
+	//采用posix_acl_entry填充ext2_acl_entry(统一小端）
 	e = (char *)ext_acl + sizeof(ext2_acl_header);
 	for (n=0; n < acl->a_count; n++) {
 		const struct posix_acl_entry *acl_e = &acl->a_entries[n];
@@ -199,11 +204,12 @@ __ext2_set_acl(struct inode *inode, struct posix_acl *acl, int type)
 			return -EINVAL;
 	}
  	if (acl) {
-		value = ext2_acl_to_disk(acl, &size);
+		value = ext2_acl_to_disk(acl, &size);//转换acl到ext2格式
 		if (IS_ERR(value))
 			return (int)PTR_ERR(value);
 	}
 
+ 	//设置属性
 	error = ext2_xattr_set(inode, name_index, "", value, size, 0);
 
 	kfree(value);
@@ -249,6 +255,7 @@ ext2_init_acl(struct inode *inode, struct inode *dir)
 	struct posix_acl *default_acl, *acl;
 	int error;
 
+	//初始化default_acl或acl
 	error = posix_acl_create(dir, &inode->i_mode, &default_acl, &acl);
 	if (error)
 		return error;

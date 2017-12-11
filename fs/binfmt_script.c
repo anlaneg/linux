@@ -21,6 +21,7 @@ static int load_script(struct linux_binprm *bprm)
 	struct file *file;
 	int retval;
 
+	//如果不以"#!"开头，则无法处理
 	if ((bprm->buf[0] != '#') || (bprm->buf[1] != '!'))
 		return -ENOEXEC;
 
@@ -42,22 +43,26 @@ static int load_script(struct linux_binprm *bprm)
 	fput(bprm->file);
 	bprm->file = NULL;
 
-	bprm->buf[BINPRM_BUF_SIZE - 1] = '\0';
+	bprm->buf[BINPRM_BUF_SIZE - 1] = '\0';//转换为一串字符串
 	if ((cp = strchr(bprm->buf, '\n')) == NULL)
-		cp = bprm->buf+BINPRM_BUF_SIZE-1;
-	*cp = '\0';
+		cp = bprm->buf+BINPRM_BUF_SIZE-1;//如果在字符串结尾前没有找到'\n'，则采用此串
+	*cp = '\0';//防止找到'\n'，将'\n'转换为'\0'
 	while (cp > bprm->buf) {
 		cp--;
 		if ((*cp == ' ') || (*cp == '\t'))
-			*cp = '\0';
+			*cp = '\0';//移除掉字符串尾部的空格或者制表符
 		else
 			break;
 	}
+	//跳过'#!'后面的空格或者制表符
 	for (cp = bprm->buf+2; (*cp == ' ') || (*cp == '\t'); cp++);
 	if (*cp == '\0')
+		//未指定path
 		return -ENOEXEC; /* No interpreter name found */
 	i_name = cp;
 	i_arg = NULL;
+	//查找下一个空格，将其后的内容认为参数
+	//例如 #! /bin/env python
 	for ( ; *cp && (*cp != ' ') && (*cp != '\t'); cp++)
 		/* nothing */ ;
 	while ((*cp == ' ') || (*cp == '\t'))
@@ -111,9 +116,10 @@ static int load_script(struct linux_binprm *bprm)
 
 static struct linux_binfmt script_format = {
 	.module		= THIS_MODULE,
-	.load_binary	= load_script,
+	.load_binary	= load_script,//脚本加载
 };
 
+//注册可解析的格式
 static int __init init_script_binfmt(void)
 {
 	register_binfmt(&script_format);

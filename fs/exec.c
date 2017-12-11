@@ -77,12 +77,14 @@ int suid_dumpable = 0;
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
 
+//注册二进制格式
 void __register_binfmt(struct linux_binfmt * fmt, int insert)
 {
 	BUG_ON(!fmt);
 	if (WARN_ON(!fmt->load_binary))
 		return;
 	write_lock(&binfmt_lock);
+	//如果insert为真，则将fmt放置在formats之后，否则放在formats链的结尾
 	insert ? list_add(&fmt->lh, &formats) :
 		 list_add_tail(&fmt->lh, &formats);
 	write_unlock(&binfmt_lock);
@@ -90,6 +92,7 @@ void __register_binfmt(struct linux_binfmt * fmt, int insert)
 
 EXPORT_SYMBOL(__register_binfmt);
 
+//解注册二进制格式
 void unregister_binfmt(struct linux_binfmt * fmt)
 {
 	write_lock(&binfmt_lock);
@@ -1559,6 +1562,7 @@ int prepare_binprm(struct linux_binprm *bprm)
 	bprm->called_set_creds = 1;
 
 	memset(bprm->buf, 0, BINPRM_BUF_SIZE);
+	//从pos（０）位置开始读文件file,将读的内容存入buf,读取BINPRM_BUF_SIZE
 	return kernel_read(bprm->file, bprm->buf, BINPRM_BUF_SIZE, &pos);
 }
 
@@ -1626,11 +1630,13 @@ int search_binary_handler(struct linux_binprm *bprm)
 	retval = -ENOENT;
  retry:
 	read_lock(&binfmt_lock);
+	//遍历formats
 	list_for_each_entry(fmt, &formats, lh) {
 		if (!try_module_get(fmt->module))
 			continue;
 		read_unlock(&binfmt_lock);
 		bprm->recursion_depth++;
+		//尝试采用fmt进行加载
 		retval = fmt->load_binary(bprm);
 		read_lock(&binfmt_lock);
 		put_binfmt(fmt);
@@ -1641,6 +1647,7 @@ int search_binary_handler(struct linux_binprm *bprm)
 			force_sigsegv(SIGSEGV, current);
 			return retval;
 		}
+		//如果解析成功则返回
 		if (retval != -ENOEXEC || !bprm->file) {
 			read_unlock(&binfmt_lock);
 			return retval;
@@ -1648,6 +1655,7 @@ int search_binary_handler(struct linux_binprm *bprm)
 	}
 	read_unlock(&binfmt_lock);
 
+	//如果可以请求加载模块的话，则尝试加载模块，并重试
 	if (need_retry) {
 		if (printable(bprm->buf[0]) && printable(bprm->buf[1]) &&
 		    printable(bprm->buf[2]) && printable(bprm->buf[3]))
@@ -1673,6 +1681,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 	old_vpid = task_pid_nr_ns(current, task_active_pid_ns(current->parent));
 	rcu_read_unlock();
 
+	//查找解析器
 	ret = search_binary_handler(bprm);
 	if (ret >= 0) {
 		audit_bprm(bprm);
@@ -1721,6 +1730,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (retval)
 		goto out_ret;
 
+	//申请bprm空间并进行初始化
 	retval = -ENOMEM;
 	bprm = kzalloc(sizeof(*bprm), GFP_KERNEL);
 	if (!bprm)
@@ -1744,6 +1754,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if (fd == AT_FDCWD || filename->name[0] == '/') {
 		bprm->filename = filename->name;
 	} else {
+		//没有指出文件名称的，直接构造文件名称(对应当前进程打开的文件）
 		if (filename->name[0] == '\0')
 			pathbuf = kasprintf(GFP_KERNEL, "/dev/fd/%d", fd);
 		else
@@ -1776,6 +1787,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	if ((retval = bprm->envc) < 0)
 		goto out;
 
+	//预读一定字节
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		goto out;
@@ -1795,6 +1807,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 
 	would_dump(bprm, bprm->file);
 
+	//尝试执行
 	retval = exec_binprm(bprm);
 	if (retval < 0)
 		goto out;

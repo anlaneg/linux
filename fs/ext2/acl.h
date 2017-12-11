@@ -21,7 +21,7 @@ typedef struct {
 } ext2_acl_entry_short;
 
 typedef struct {
-	__le32		a_version;
+	__le32		a_version;//版本（用于升级兼容）
 } ext2_acl_header;
 
 static inline size_t ext2_acl_size(int count)

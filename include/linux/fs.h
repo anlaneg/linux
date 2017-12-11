@@ -864,9 +864,9 @@ struct file {
 	 */
 	spinlock_t		f_lock;
 	enum rw_hint		f_write_hint;
-	atomic_long_t		f_count;
+	atomic_long_t		f_count;//引用计数
 	unsigned int 		f_flags;
-	fmode_t			f_mode;
+	fmode_t			f_mode;//文件模式位（offset是否为无符号的等）
 	struct mutex		f_pos_lock;
 	loff_t			f_pos;
 	struct fown_struct	f_owner;

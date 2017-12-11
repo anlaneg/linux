@@ -1480,15 +1480,18 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 		ei->i_data[n] = raw_inode->i_block[n];
 
 	if (S_ISREG(inode->i_mode)) {
+		//ext2 文件　inode　操作集
 		inode->i_op = &ext2_file_inode_operations;
 		if (test_opt(inode->i_sb, NOBH)) {
 			inode->i_mapping->a_ops = &ext2_nobh_aops;
+			//ext2 文件操作集
 			inode->i_fop = &ext2_file_operations;
 		} else {
 			inode->i_mapping->a_ops = &ext2_aops;
 			inode->i_fop = &ext2_file_operations;
 		}
 	} else if (S_ISDIR(inode->i_mode)) {
+		//ext2 目录 inode　操作集
 		inode->i_op = &ext2_dir_inode_operations;
 		inode->i_fop = &ext2_dir_operations;
 		if (test_opt(inode->i_sb, NOBH))
