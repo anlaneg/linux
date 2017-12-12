@@ -177,6 +177,7 @@ static void ext2_put_super (struct super_block * sb)
 
 static struct kmem_cache * ext2_inode_cachep;
 
+//自inode池中申请有inode
 static struct inode *ext2_alloc_inode(struct super_block *sb)
 {
 	struct ext2_inode_info *ei;
@@ -192,6 +193,7 @@ static struct inode *ext2_alloc_inode(struct super_block *sb)
 	return &ei->vfs_inode;
 }
 
+//归还inode
 static void ext2_i_callback(struct rcu_head *head)
 {
 	struct inode *inode = container_of(head, struct inode, i_rcu);
@@ -218,6 +220,7 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
+//生成inode池
 static int __init init_inodecache(void)
 {
 	ext2_inode_cachep = kmem_cache_create("ext2_inode_cache",
@@ -351,8 +354,8 @@ static const struct quotactl_ops ext2_quotactl_ops = {
 #endif
 
 static const struct super_operations ext2_sops = {
-	.alloc_inode	= ext2_alloc_inode,
-	.destroy_inode	= ext2_destroy_inode,
+	.alloc_inode	= ext2_alloc_inode,//申请inode
+	.destroy_inode	= ext2_destroy_inode,//释放inode
 	.write_inode	= ext2_write_inode,
 	.evict_inode	= ext2_evict_inode,
 	.put_super	= ext2_put_super,
@@ -1635,9 +1638,11 @@ static int __init init_ext2_fs(void)
 {
 	int err;
 
+	//初始化inode池
 	err = init_inodecache();
 	if (err)
 		return err;
+		//注册文件系统
         err = register_filesystem(&ext2_fs_type);
 	if (err)
 		goto out;

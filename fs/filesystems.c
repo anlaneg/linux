@@ -29,7 +29,8 @@
  *	returned 0 we must skip the element, otherwise we got the reference.
  *	Once the reference is obtained we can drop the spinlock.
  */
-
+//记录系统所有filesystem，其为一个指针变量，每一个文件系统均有一个next
+//指针，通过next指针，我们可以将所有文件系统串成一个链
 static struct file_system_type *file_systems;
 static DEFINE_RWLOCK(file_systems_lock);
 
@@ -45,6 +46,7 @@ void put_filesystem(struct file_system_type *fs)
 	module_put(fs->owner);
 }
 
+//给定名称查找对应的文件系统(如果未找到，返回指向空）
 static struct file_system_type **find_filesystem(const char *name, unsigned len)
 {
 	struct file_system_type **p;
@@ -75,11 +77,11 @@ int register_filesystem(struct file_system_type * fs)
 
 	BUG_ON(strchr(fs->name, '.'));
 	if (fs->next)
-		return -EBUSY;
+		return -EBUSY;//已被挂接在文件系统链上
 	write_lock(&file_systems_lock);
 	p = find_filesystem(fs->name, strlen(fs->name));
 	if (*p)
-		res = -EBUSY;
+		res = -EBUSY;//加锁后确认，已存在
 	else
 		*p = fs;
 	write_unlock(&file_systems_lock);
@@ -108,8 +110,8 @@ int unregister_filesystem(struct file_system_type * fs)
 	tmp = &file_systems;
 	while (*tmp) {
 		if (fs == *tmp) {
-			*tmp = fs->next;
-			fs->next = NULL;
+			*tmp = fs->next;//指向下一个
+			fs->next = NULL;//将自已摘掉
 			write_unlock(&file_systems_lock);
 			synchronize_rcu();
 			return 0;
@@ -124,6 +126,7 @@ int unregister_filesystem(struct file_system_type * fs)
 EXPORT_SYMBOL(unregister_filesystem);
 
 #ifdef CONFIG_SYSFS_SYSCALL
+//取给定名称的文件系统的index
 static int fs_index(const char __user * __name)
 {
 	struct file_system_type * tmp;
@@ -148,6 +151,7 @@ static int fs_index(const char __user * __name)
 	return err;
 }
 
+//沿file_systems链取第index个文件系统的名称
 static int fs_name(unsigned int index, char __user * buf)
 {
 	struct file_system_type * tmp;
@@ -168,6 +172,7 @@ static int fs_name(unsigned int index, char __user * buf)
 	return res;
 }
 
+//取当前注册的文件系统总数
 static int fs_maxindex(void)
 {
 	struct file_system_type * tmp;
@@ -189,21 +194,22 @@ SYSCALL_DEFINE3(sysfs, int, option, unsigned long, arg1, unsigned long, arg2)
 
 	switch (option) {
 		case 1:
-			retval = fs_index((const char __user *) arg1);
+			retval = fs_index((const char __user *) arg1);//取给定名称的文件系统索引号
 			break;
 
 		case 2:
-			retval = fs_name(arg1, (char __user *) arg2);
+			retval = fs_name(arg1, (char __user *) arg2);//取第n个的名称
 			break;
 
 		case 3:
-			retval = fs_maxindex();
+			retval = fs_maxindex();//求总数
 			break;
 	}
 	return retval;
 }
 #endif
 
+//生成当前已注册的文件系统名称列表（返回大小不超过page_size)
 int __init get_filesystem_list(char *buf)
 {
 	int len = 0;
@@ -222,6 +228,7 @@ int __init get_filesystem_list(char *buf)
 }
 
 #ifdef CONFIG_PROC_FS
+//通过proc显示文件系统列表，无内存大小限制
 static int filesystems_proc_show(struct seq_file *m, void *v)
 {
 	struct file_system_type * tmp;
@@ -250,6 +257,7 @@ static const struct file_operations filesystems_proc_fops = {
 	.release	= single_release,
 };
 
+//注册filesystem的proc
 static int __init proc_filesystems_init(void)
 {
 	proc_create("filesystems", 0, NULL, &filesystems_proc_fops);
@@ -265,6 +273,7 @@ static struct file_system_type *__get_fs_type(const char *name, int len)
 	read_lock(&file_systems_lock);
 	fs = *(find_filesystem(name, len));
 	if (fs && !try_module_get(fs->owner))
+		//有文件系统，但没有拿到此模块对应的计数，返回NULL
 		fs = NULL;
 	read_unlock(&file_systems_lock);
 	return fs;
@@ -276,8 +285,9 @@ struct file_system_type *get_fs_type(const char *name)
 	const char *dot = strchr(name, '.');
 	int len = dot ? dot - name : strlen(name);
 
-	fs = __get_fs_type(name, len);
+	fs = __get_fs_type(name, len);//采用名称取得filesystem
 	if (!fs && (request_module("fs-%.*s", len, name) == 0)) {
+		//没有此fs,请求加载其对应模块，并于模块加载后再查
 		fs = __get_fs_type(name, len);
 		WARN_ONCE(!fs, "request_module fs-%.*s succeeded, but still no fs?\n", len, name);
 	}
