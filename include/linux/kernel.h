@@ -116,6 +116,7 @@
 	(((x) + (__y - 1)) / __y) * __y;		\
 }							\
 )
+//将x按y对齐，返回对齐后的数值
 #define rounddown(x, y) (				\
 {							\
 	typeof(x) __x = (x);				\

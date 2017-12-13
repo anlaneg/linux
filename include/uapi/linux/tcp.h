@@ -29,11 +29,11 @@ struct tcphdr {
 	__be32	ack_seq;
 #if defined(__LITTLE_ENDIAN_BITFIELD)
 	__u16	res1:4,
-		doff:4,
+		doff:4,//dataoffset,指出头部大小
 		fin:1,
 		syn:1,
 		rst:1,
-		psh:1,
+		psh:1,//push标记
 		ack:1,
 		urg:1,
 		ece:1,

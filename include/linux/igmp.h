@@ -73,9 +73,9 @@ struct ip_sf_list {
 
 struct ip_mc_list {
 	struct in_device	*interface;
-	__be32			multiaddr;
-	unsigned int		sfmode;
-	struct ip_sf_list	*sources;
+	__be32			multiaddr;//组播地址
+	unsigned int		sfmode;//include,exclude
+	struct ip_sf_list	*sources;//组播源地址列表
 	struct ip_sf_list	*tomb;
 	unsigned long		sfcount[2];
 	union {

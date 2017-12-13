@@ -79,7 +79,7 @@ struct net {
 	struct sock 		*rtnl;			/* rtnetlink socket */
 	struct sock		*genl_sock;
 
-	struct list_head 	dev_base_head;
+	struct list_head 	dev_base_head;//属于同一个net下的设备均挂接在此链上
 	struct hlist_head 	*dev_name_head;//通过名称找设备的hash表
 	struct hlist_head	*dev_index_head;//通过index找设备的hash表
 	unsigned int		dev_base_seq;	/* protected by rtnl_mutex */
@@ -272,6 +272,8 @@ static inline struct net *read_pnet(const possible_net_t *pnet)
 	return &init_net;
 #endif
 }
+
+//遍历系统中所有的namespace
 
 #define for_each_net(VAR)				\
 	list_for_each_entry(VAR, &net_namespace_list, list)

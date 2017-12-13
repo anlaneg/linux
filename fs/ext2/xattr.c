@@ -392,7 +392,7 @@ ext2_xattr_set(struct inode *inode, int name_index, const char *name,
 		return -EINVAL;
 	name_len = strlen(name);
 	if (name_len > 255 || value_len > sb->s_blocksize)
-		return -ERANGE;
+		return -ERANGE;//属性名称或者属性值过大
 	down_write(&EXT2_I(inode)->xattr_sem);
 	if (EXT2_I(inode)->i_file_acl) {
 		/* The inode already has an extended attribute block. */

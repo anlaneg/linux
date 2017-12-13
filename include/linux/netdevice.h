@@ -2219,6 +2219,7 @@ struct packet_type {
 	//按以太头类型进行处理
 	__be16			type;	/* This is really htons(ether_type). */
 	struct net_device	*dev;	/* NULL is wildcarded here	     */
+	//报文处理入口函数
 	int			(*func) (struct sk_buff *,
 					 struct net_device *,
 					 struct packet_type *,

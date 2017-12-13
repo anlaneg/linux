@@ -110,6 +110,7 @@ static int ext2_create (struct inode * dir, struct dentry * dentry, umode_t mode
 	inode->i_op = &ext2_file_inode_operations;
 	if (test_opt(inode->i_sb, NOBH)) {
 		inode->i_mapping->a_ops = &ext2_nobh_aops;
+		//设置文件操作集
 		inode->i_fop = &ext2_file_operations;
 	} else {
 		inode->i_mapping->a_ops = &ext2_aops;

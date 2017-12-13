@@ -564,6 +564,7 @@ static int igmpv3_send_report(struct in_device *in_dev, struct ip_mc_list *pmc)
 			     !net->ipv4.sysctl_igmp_llm_reports)
 				continue;
 			spin_lock_bh(&pmc->lock);
+			//除非标明exclude，否则采用include进行发送
 			if (pmc->sfcount[MCAST_EXCLUDE])
 				type = IGMPV3_MODE_IS_EXCLUDE;
 			else
@@ -578,6 +579,7 @@ static int igmpv3_send_report(struct in_device *in_dev, struct ip_mc_list *pmc)
 			type = IGMPV3_MODE_IS_EXCLUDE;
 		else
 			type = IGMPV3_MODE_IS_INCLUDE;
+		//添加组播记录信息
 		skb = add_grec(skb, pmc, type, 0, 0);
 		spin_unlock_bh(&pmc->lock);
 	}
@@ -694,15 +696,19 @@ static int igmp_send_report(struct in_device *in_dev, struct ip_mc_list *pmc,
 	__be32	dst;
 	int hlen, tlen;
 
+	//按igmpv3进行report
 	if (type == IGMPV3_HOST_MEMBERSHIP_REPORT)
 		return igmpv3_send_report(in_dev, pmc);
 
+	//link local地址不report,跳过
 	if (ipv4_is_local_multicast(group) && !net->ipv4.sysctl_igmp_llm_reports)
 		return 0;
 
+	//leave消息发送给所有router
 	if (type == IGMP_HOST_LEAVE_MESSAGE)
 		dst = IGMP_ALL_ROUTER;
 	else
+		//其它报文发送给对应的group
 		dst = group;
 
 	rt = ip_route_output_ports(net, &fl4, NULL, dst, 0,
@@ -724,6 +730,7 @@ static int igmp_send_report(struct in_device *in_dev, struct ip_mc_list *pmc,
 
 	skb_reserve(skb, hlen);
 
+	//填充报文ip层
 	skb_reset_network_header(skb);
 	iph = ip_hdr(skb);
 	skb_put(skb, sizeof(struct iphdr) + 4);
@@ -737,11 +744,13 @@ static int igmp_send_report(struct in_device *in_dev, struct ip_mc_list *pmc,
 	iph->saddr    = fl4.saddr;
 	iph->protocol = IPPROTO_IGMP;
 	ip_select_ident(net, skb, NULL);
+	//ip头选项
 	((u8 *)&iph[1])[0] = IPOPT_RA;
 	((u8 *)&iph[1])[1] = 4;
 	((u8 *)&iph[1])[2] = 0;
 	((u8 *)&iph[1])[3] = 0;
 
+	//v1,v2格式的及v3的leave等报文
 	ih = skb_put(skb, sizeof(struct igmphdr));
 	ih->type = type;
 	ih->code = 0;
@@ -749,6 +758,7 @@ static int igmp_send_report(struct in_device *in_dev, struct ip_mc_list *pmc,
 	ih->group = group;
 	ih->csum = ip_compute_csum((void *)ih, sizeof(struct igmphdr));
 
+	//local　out 发出
 	return ip_local_out(net, skb->sk, skb);
 }
 
@@ -1003,6 +1013,7 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 }
 
 /* called in rcu_read_lock() section */
+//收到igmp报文
 int igmp_rcv(struct sk_buff *skb)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */
@@ -1022,17 +1033,21 @@ int igmp_rcv(struct sk_buff *skb)
 	if (!in_dev)
 		goto drop;
 
+	//报文长度及checksum检查
 	if (!pskb_may_pull(skb, sizeof(struct igmphdr)))
 		goto drop;
 
 	if (skb_checksum_simple_validate(skb))
 		goto drop;
 
+	//取得igmp头
 	ih = igmp_hdr(skb);
 	switch (ih->type) {
+	//收到成员关系查询报文
 	case IGMP_HOST_MEMBERSHIP_QUERY:
 		dropped = igmp_heard_query(in_dev, skb, len);
 		break;
+		//收到v1,v2的成员关系report报文
 	case IGMP_HOST_MEMBERSHIP_REPORT:
 	case IGMPV2_HOST_MEMBERSHIP_REPORT:
 		/* Is it our report looped back? */
@@ -1047,6 +1062,7 @@ int igmp_rcv(struct sk_buff *skb)
 #ifdef CONFIG_IP_PIMSM_V1
 		return pim_rcv_v1(skb);
 #endif
+		//不处理v3的report,不处理其它类型的报文（我也不知道这些都是啥）
 	case IGMPV3_HOST_MEMBERSHIP_REPORT:
 	case IGMP_DVMRP:
 	case IGMP_TRACE:
@@ -1585,7 +1601,15 @@ static void ip_mc_rejoin_groups(struct in_device *in_dev)
 
 	for_each_pmc_rtnl(in_dev, im) {
 		if (im->multiaddr == IGMP_ALL_HOSTS)
+			//指代所有主机（此地址默认为本网内路由器发送）
+			//用于要求所有收到的主机回复igmp report
 			continue;
+		//igmp_link_local_mcast_reports - BOOLEAN
+		//Enable IGMP reports for link local multicast groups in the
+		//224.0.0.X range.
+		//Default TRUE
+		//如果是link local地址，且link local地址不需要report
+		//则不处理
 		if (ipv4_is_local_multicast(im->multiaddr) &&
 		    !net->ipv4.sysctl_igmp_llm_reports)
 			continue;
@@ -1593,12 +1617,14 @@ static void ip_mc_rejoin_groups(struct in_device *in_dev)
 		/* a failover is happening and switches
 		 * must be notified immediately
 		 */
+		//检查配置确定需要回复那种版本的report
 		if (IGMP_V1_SEEN(in_dev))
 			type = IGMP_HOST_MEMBERSHIP_REPORT;
 		else if (IGMP_V2_SEEN(in_dev))
 			type = IGMPV2_HOST_MEMBERSHIP_REPORT;
 		else
 			type = IGMPV3_HOST_MEMBERSHIP_REPORT;
+		//发送针对im的report
 		igmp_send_report(in_dev, im, type);
 	}
 #endif
@@ -1902,7 +1928,7 @@ out_unlock:
  * Add multicast single-source filter to the interface list
  */
 static int ip_mc_add1_src(struct ip_mc_list *pmc, int sfmode,
-	__be32 *psfsrc)
+	__be32 *psfsrc)//先pmc中添加指定mode的psfsrc
 {
 	struct ip_sf_list *psf, *psf_prev;
 
@@ -2019,7 +2045,7 @@ static int ip_mc_add_src(struct in_device *in_dev, __be32 *pmca, int sfmode,
 	rcu_read_lock();
 	for_each_pmc_rcu(in_dev, pmc) {
 		if (*pmca == pmc->multiaddr)
-			break;
+			break;//区配，跳出
 	}
 	if (!pmc) {
 		/* MCA not found?? bug */
@@ -3017,6 +3043,7 @@ static struct pernet_operations igmp_net_ops = {
 };
 #endif
 
+//igmp事件处理（工作内容是：发送igmp report)
 static int igmp_netdev_event(struct notifier_block *this,
 			     unsigned long event, void *ptr)
 {
@@ -3056,6 +3083,7 @@ reg_notif_fail:
 	unregister_pernet_subsys(&igmp_net_ops);
 	return err;
 #else
+	//注册igmp需要处理的设备事件
 	return register_netdevice_notifier(&igmp_notifier);
 #endif
 }

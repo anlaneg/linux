@@ -369,12 +369,12 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 	pos = *ppos;
 	if (unlikely(pos < 0)) {
 		if (!unsigned_offsets(file))
-			return retval;
+			return retval;//如果offset不是无符号的，则报错
 		if (count >= -pos) /* both values are in 0..LLONG_MAX */
-			return -EOVERFLOW;
+			return -EOVERFLOW;//范围超过LLONG_MAX
 	} else if (unlikely((loff_t) (pos + count) < 0)) {
 		if (!unsigned_offsets(file))
-			return retval;
+			return retval;//读越界
 	}
 
 	if (unlikely(inode->i_flctx && mandatory_lock(inode))) {
@@ -404,6 +404,7 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 	return ret;
 }
 
+//调用读回调
 ssize_t __vfs_read(struct file *file, char __user *buf, size_t count,
 		   loff_t *pos)
 {
@@ -429,6 +430,7 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 }
 EXPORT_SYMBOL(kernel_read);
 
+//vfs实现数据读取
 ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
@@ -437,9 +439,11 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 		return -EBADF;
 	if (!(file->f_mode & FMODE_CAN_READ))
 		return -EINVAL;
+	//检查buf规定的长度是否可读取（通过检查进程的地址范围获得结论）
 	if (unlikely(!access_ok(VERIFY_WRITE, buf, count)))
 		return -EFAULT;
 
+	//读范围检查
 	ret = rw_verify_area(READ, file, pos, count);
 	if (!ret) {
 		if (count > MAX_RW_COUNT)

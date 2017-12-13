@@ -247,7 +247,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 /*
  * 	Deliver IP Packets to the higher protocol layers.
  */
-//本地报文处理
+//本地报文处理（向高层协议去处理）
 int ip_local_deliver(struct sk_buff *skb)
 {
 	/*
@@ -257,6 +257,7 @@ int ip_local_deliver(struct sk_buff *skb)
 	struct net *net = dev_net(skb->dev);
 
 	if (ip_is_fragment(ip_hdr(skb))) {
+		//分片报文，处理分片重组
 		if (ip_defrag(net, skb, IP_DEFRAG_LOCAL_DELIVER))
 			return 0;
 	}
@@ -318,7 +319,7 @@ drop:
 	return true;
 }
 
-//查路由
+//准备进行路由处理
 static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	const struct iphdr *iph = ip_hdr(skb);

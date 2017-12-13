@@ -732,6 +732,7 @@ static int do_dentry_open(struct file *f,
 	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))
 		f->f_mode |= FMODE_ATOMIC_POS;
 
+	//设置文件对应的操作集
 	f->f_op = fops_get(inode->i_fop);
 	if (unlikely(WARN_ON(!f->f_op))) {
 		error = -ENODEV;

@@ -662,6 +662,7 @@ out_fail:
 	return err;
 }
 
+//分片重组
 /* Process an incoming IP datagram fragment. */
 int ip_defrag(struct net *net, struct sk_buff *skb, u32 user)
 {

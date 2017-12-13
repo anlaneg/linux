@@ -1271,7 +1271,9 @@ static void tcp_v4_init_req(struct request_sock *req,
 	struct inet_request_sock *ireq = inet_rsk(req);
 	struct net *net = sock_net(sk_listener);
 
+	//置rcv方的源ip为报文中的目的ip
 	sk_rcv_saddr_set(req_to_sk(req), ip_hdr(skb)->daddr);
+	//置报文中的源ip为目的ip
 	sk_daddr_set(req_to_sk(req), ip_hdr(skb)->saddr);
 	RCU_INIT_POINTER(ireq->ireq_opt, tcp_v4_save_options(net, skb));
 }
@@ -1474,9 +1476,11 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto csum_err;
 
 	if (sk->sk_state == TCP_LISTEN) {
+		//socket处于listen状态上
 		struct sock *nsk = tcp_v4_cookie_check(sk, skb);
 
 		if (!nsk)
+			//syn cookie检查不通过，丢包
 			goto discard;
 		if (nsk != sk) {
 			if (tcp_child_process(sk, nsk, skb)) {
@@ -1490,7 +1494,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 
 	//检查tcp状态，是否可接受此报文
 	if (tcp_rcv_state_process(sk, skb)) {
-		//不合适的报文，回复rest
+		//协议不合适的报文，回复rest
 		rsk = sk;
 		goto reset;
 	}
@@ -1595,6 +1599,34 @@ int tcp_filter(struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(tcp_filter);
 
+static void tcp_v4_restore_cb(struct sk_buff *skb)
+{
+	memmove(IPCB(skb), &TCP_SKB_CB(skb)->header.h4,
+		sizeof(struct inet_skb_parm));
+}
+
+static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
+			   const struct tcphdr *th)
+{
+	/* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
+	 * barrier() makes sure compiler wont play fool^Waliasing games.
+	 */
+	memmove(&TCP_SKB_CB(skb)->header.h4, IPCB(skb),
+		sizeof(struct inet_skb_parm));
+	barrier();
+
+	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
+				    skb->len - th->doff * 4);
+	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
+	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);
+	TCP_SKB_CB(skb)->tcp_tw_isn = 0;
+	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
+	TCP_SKB_CB(skb)->sacked	 = 0;
+	TCP_SKB_CB(skb)->has_rxtstamp =
+			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
+}
+
 /*
  *	From tcp_input.c
  */
@@ -1636,24 +1668,6 @@ int tcp_v4_rcv(struct sk_buff *skb)
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
-	/* This is tricky : We move IPCB at its correct location into TCP_SKB_CB()
-	 * barrier() makes sure compiler wont play fool^Waliasing games.
-	 */
-	memmove(&TCP_SKB_CB(skb)->header.h4, IPCB(skb),
-		sizeof(struct inet_skb_parm));
-	barrier();
-
-	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
-	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
-				    skb->len - th->doff * 4);
-	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
-	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);//提取th[13]字节
-	TCP_SKB_CB(skb)->tcp_tw_isn = 0;
-	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);//取ip中的tos
-	TCP_SKB_CB(skb)->sacked	 = 0;
-	TCP_SKB_CB(skb)->has_rxtstamp =
-			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
-
 lookup:
 	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th), th->source,
 			       th->dest, sdif, &refcounted);
@@ -1687,14 +1701,19 @@ process:
 		sock_hold(sk);
 		refcounted = true;
 		nsk = NULL;
-		if (!tcp_filter(sk, skb))
+		if (!tcp_filter(sk, skb)) {
+			th = (const struct tcphdr *)skb->data;
+			iph = ip_hdr(skb);
+			tcp_v4_fill_cb(skb, iph, th);
 			nsk = tcp_check_req(sk, skb, req, false);
+		}
 		if (!nsk) {
 			reqsk_put(req);
 			goto discard_and_relse;
 		}
 		if (nsk == sk) {
 			reqsk_put(req);
+			tcp_v4_restore_cb(skb);
 		} else if (tcp_child_process(sk, nsk, skb)) {
 			tcp_v4_send_reset(nsk, skb);
 			goto discard_and_relse;
@@ -1722,6 +1741,7 @@ process:
 		goto discard_and_relse;
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
+	tcp_v4_fill_cb(skb, iph, th);
 
 	skb->dev = NULL;
 
@@ -1754,6 +1774,8 @@ no_tcp_socket:
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
+	tcp_v4_fill_cb(skb, iph, th);
+
 	if (tcp_checksum_complete(skb)) {
 csum_error:
 		__TCP_INC_STATS(net, TCP_MIB_CSUMERRORS);
@@ -1781,6 +1803,8 @@ do_time_wait:
 		goto discard_it;
 	}
 
+	tcp_v4_fill_cb(skb, iph, th);
+
 	if (tcp_checksum_complete(skb)) {
 		inet_twsk_put(inet_twsk(sk));
 		goto csum_error;
@@ -1797,6 +1821,7 @@ do_time_wait:
 		if (sk2) {
 			inet_twsk_deschedule_put(inet_twsk(sk));
 			sk = sk2;
+			tcp_v4_restore_cb(skb);
 			refcounted = false;
 			goto process;
 		}

@@ -1107,7 +1107,7 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 	 * when the name is long and there isn't enough space left
 	 * for the digits, or if all bits are used.
 	 */
-	return p ? -ENFILE : -EEXIST;
+	return -ENFILE;
 }
 
 static int dev_alloc_name_ns(struct net *net,
@@ -1577,11 +1577,13 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	int err;
 
 	rtnl_lock();
+	//完成通知块的添加
 	err = raw_notifier_chain_register(&netdev_chain, nb);
 	if (err)
 		goto unlock;
 	if (dev_boot_phase)
 		goto unlock;
+	//通知所有net下所有dev，netdev_register事件
 	for_each_net(net) {
 		for_each_netdev(net, dev) {
 			err = call_netdevice_notifier(nb, NETDEV_REGISTER, dev);
@@ -1592,6 +1594,7 @@ int register_netdevice_notifier(struct notifier_block *nb)
 			if (!(dev->flags & IFF_UP))
 				continue;
 
+			//如果设备处于up状态，则通知netdev_up事件
 			call_netdevice_notifier(nb, NETDEV_UP, dev);
 		}
 	}
@@ -1605,8 +1608,11 @@ rollback:
 	for_each_net(net) {
 		for_each_netdev(net, dev) {
 			if (dev == last)
-				goto outroll;
+				goto outroll;//rollback完成（到达出事点）
 
+			//如果之前通知过NETDEV_UP事件，则回退时通知netdev_going_down,
+			//netdev_down事件
+			//否则仅通知netdev_unregister事件
 			if (dev->flags & IFF_UP) {
 				call_netdevice_notifier(nb, NETDEV_GOING_DOWN,
 							dev);
@@ -1617,6 +1623,7 @@ rollback:
 	}
 
 outroll:
+	//如果发生过通知失败的情况，则此通知链注册失败
 	raw_notifier_chain_unregister(&netdev_chain, nb);
 	goto unlock;
 }
@@ -4470,6 +4477,7 @@ skip_classify:
 		if (unlikely(skb_orphan_frags_rx(skb, GFP_ATOMIC)))
 			goto drop;
 		else
+			//使指定的以太网类型处理此报文，例如(ip_rcv)
 			ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 	} else {
 		//我们实在找不到此报文的处理者

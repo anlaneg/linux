@@ -579,6 +579,7 @@ void tcp_rcv_space_adjust(struct sock *sk)
 	int time;
 	int copied;
 
+	tcp_mstamp_refresh(tp);
 	time = tcp_stamp_us_delta(tp->tcp_mstamp, tp->rcvq_space.time);
 	if (time < (tp->rcv_rtt_est.rtt_us >> 3) || tp->rcv_rtt_est.rtt_us == 0)
 		return;
@@ -1941,6 +1942,8 @@ void tcp_enter_loss(struct sock *sk)
 	if (is_reneg) {
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPSACKRENEGING);
 		tp->sacked_out = 0;
+		/* Mark SACK reneging until we recover from this loss event. */
+		tp->is_sack_reneg = 1;
 	}
 	tcp_clear_all_retrans_hints(tp);
 
@@ -2326,6 +2329,7 @@ static void tcp_undo_cwnd_reduction(struct sock *sk, bool unmark_loss)
 	}
 	tp->snd_cwnd_stamp = tcp_jiffies32;
 	tp->undo_marker = 0;
+	tp->rack.advanced = 1; /* Force RACK to re-exam losses */
 }
 
 static inline bool tcp_may_undo(const struct tcp_sock *tp)
@@ -2364,6 +2368,7 @@ static bool tcp_try_undo_recovery(struct sock *sk)
 		return true;
 	}
 	tcp_set_ca_state(sk, TCP_CA_Open);
+	tp->is_sack_reneg = 0;
 	return false;
 }
 
@@ -2397,8 +2402,10 @@ static bool tcp_try_undo_loss(struct sock *sk, bool frto_undo)
 			NET_INC_STATS(sock_net(sk),
 					LINUX_MIB_TCPSPURIOUSRTOS);
 		inet_csk(sk)->icsk_retransmits = 0;
-		if (frto_undo || tcp_is_sack(tp))
+		if (frto_undo || tcp_is_sack(tp)) {
 			tcp_set_ca_state(sk, TCP_CA_Open);
+			tp->is_sack_reneg = 0;
+		}
 		return true;
 	}
 	return false;
@@ -3495,6 +3502,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	struct tcp_sacktag_state sack_state;
 	struct rate_sample rs = { .prior_delivered = 0 };
 	u32 prior_snd_una = tp->snd_una;
+	bool is_sack_reneg = tp->is_sack_reneg;
 	u32 ack_seq = TCP_SKB_CB(skb)->seq;
 	u32 ack = TCP_SKB_CB(skb)->ack_seq;
 	bool is_dupack = false;
@@ -3611,7 +3619,7 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 
 	delivered = tp->delivered - delivered;	/* freshly ACKed or SACKed */
 	lost = tp->lost - lost;			/* freshly marked lost */
-	tcp_rate_gen(sk, delivered, lost, sack_state.rate);
+	tcp_rate_gen(sk, delivered, lost, is_sack_reneg, sack_state.rate);
 	tcp_cong_control(sk, ack, delivered, flag, sack_state.rate);
 	tcp_xmit_recovery(sk, rexmit);
 	return 1;
@@ -5821,7 +5829,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
-		//listen状态下，ack不能有值
+		//listen状态下，ack标记不能有值
 		if (th->ack)
 			return 1;
 		//有rst时，报文丢弃即可
@@ -5836,6 +5844,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			 * so we need to make sure to disable BH right there.
 			 */
 			local_bh_disable();
+			//走tcp_ipv4.c文件　ipv4_specific结构体的tcp_v4_conn_request
 			acceptable = icsk->icsk_af_ops->conn_request(sk, skb) >= 0;
 			local_bh_enable();
 
@@ -6142,6 +6151,7 @@ static void tcp_openreq_init(struct request_sock *req,
 #endif
 }
 
+//申请inet_request_sock,置为syn_recv状态
 struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 				      struct sock *sk_listener,
 				      bool attach_listener)
@@ -6157,6 +6167,7 @@ struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 		ireq->pktopts = NULL;
 #endif
 		atomic64_set(&ireq->ir_cookie, 0);
+		//置状态为syn_recv
 		ireq->ireq_state = TCP_NEW_SYN_RECV;
 		write_pnet(&ireq->ireq_net, sock_net(sk_listener));
 		ireq->ireq_family = sk_listener->sk_family;
@@ -6234,12 +6245,14 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	 */
 	if ((net->ipv4.sysctl_tcp_syncookies == 2 ||
 	     inet_csk_reqsk_queue_is_full(sk)) && !isn) {
+		//检查是否有必要回复syn cookie
 		want_cookie = tcp_syn_flood_action(sk, skb, rsk_ops->slab_name);
 		if (!want_cookie)
 			goto drop;
 	}
 
 	if (sk_acceptq_is_full(sk)) {
+		//超过backlog要求数目，丢包
 		NET_INC_STATS(sock_net(sk), LINUX_MIB_LISTENOVERFLOWS);
 		goto drop;
 	}
@@ -6254,6 +6267,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tcp_clear_options(&tmp_opt);
 	tmp_opt.mss_clamp = af_ops->mss_clamp;
 	tmp_opt.user_mss  = tp->rx_opt.user_mss;
+	//解析tcp选项
 	tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0,
 			  want_cookie ? NULL : &foc);
 

@@ -687,11 +687,7 @@ static inline void sk_add_node_rcu(struct sock *sk, struct hlist_head *list)
 
 static inline void __sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_head *list)
 {
-	if (IS_ENABLED(CONFIG_IPV6) && sk->sk_reuseport &&
-	    sk->sk_family == AF_INET6)
-		hlist_nulls_add_tail_rcu(&sk->sk_nulls_node, list);
-	else
-		hlist_nulls_add_head_rcu(&sk->sk_nulls_node, list);
+	hlist_nulls_add_head_rcu(&sk->sk_nulls_node, list);
 }
 
 static inline void sk_nulls_add_node_rcu(struct sock *sk, struct hlist_nulls_head *list)
@@ -2384,6 +2380,7 @@ void sk_get_meminfo(const struct sock *sk, u32 *meminfo);
 #define _SK_MEM_PACKETS		256
 #define _SK_MEM_OVERHEAD	SKB_TRUESIZE(256)
 #define SK_WMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
+//>= 256*256 即占用空间大于64k
 #define SK_RMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
 
 extern __u32 sysctl_wmem_max;

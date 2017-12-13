@@ -2103,7 +2103,7 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	tos &= IPTOS_RT_MASK;
 	rcu_read_lock();
-	//加锁查询
+	//加锁,进行路由查询
 	err = ip_route_input_rcu(skb, daddr, saddr, tos, dev, &res);
 	rcu_read_unlock();
 
