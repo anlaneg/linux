@@ -429,6 +429,7 @@ static inline void virtio_cwrite64(struct virtio_device *vdev,
 	vdev->config->set(vdev, offset, &val, sizeof(val));
 }
 
+//检查virtio是否支持功能fbit,如果支持，则读取此功能配置
 /* Conditional config space accessors. */
 #define virtio_cread_feature(vdev, fbit, structname, member, ptr)	\
 	({								\

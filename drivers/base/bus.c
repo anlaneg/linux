@@ -858,6 +858,7 @@ int bus_register(struct bus_type *bus)
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&priv->bus_notifier);
 
+	//设置对应的subsys的名称
 	retval = kobject_set_name(&priv->subsys.kobj, "%s", bus->name);
 	if (retval)
 		goto out;
@@ -866,6 +867,7 @@ int bus_register(struct bus_type *bus)
 	priv->subsys.kobj.ktype = &bus_ktype;
 	priv->drivers_autoprobe = 1;
 
+	//创建必要的sysfs目录
 	retval = kset_register(&priv->subsys);
 	if (retval)
 		goto out;

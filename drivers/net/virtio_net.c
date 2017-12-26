@@ -1297,6 +1297,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 			return num_sg;
 		num_sg++;
 	}
+  //将报文存入到虚拟化队列中
 	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
 
@@ -2517,6 +2518,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	int mtu;
 
 	/* Find if host supports multiqueue virtio_net device */
+  //如果支持多队列，则读取多队列配置到max_queue_pairs
 	err = virtio_cread_feature(vdev, VIRTIO_NET_F_MQ,
 				   struct virtio_net_config,
 				   max_virtqueue_pairs, &max_queue_pairs);
@@ -2528,19 +2530,21 @@ static int virtnet_probe(struct virtio_device *vdev)
 		max_queue_pairs = 1;
 
 	/* Allocate ourselves a network device with room for our info */
+  //申请多队列设备（rx与tx队列数均为max_queue_pairs)
 	dev = alloc_etherdev_mq(sizeof(struct virtnet_info), max_queue_pairs);
 	if (!dev)
 		return -ENOMEM;
 
 	/* Set up network device as normal. */
 	dev->priv_flags |= IFF_UNICAST_FLT | IFF_LIVE_ADDR_CHANGE;
-	dev->netdev_ops = &virtnet_netdev;
+	dev->netdev_ops = &virtnet_netdev;//为此虚拟dev设置操作集
 	dev->features = NETIF_F_HIGHDMA;
 
 	dev->ethtool_ops = &virtnet_ethtool_ops;
 	SET_NETDEV_DEV(dev, &vdev->dev);
 
 	/* Do we support "hardware" checksums? */
+  //是否支持度算硬件checksum
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CSUM)) {
 		/* This opens up the world of extra features. */
 		dev->hw_features |= NETIF_F_HW_CSUM | NETIF_F_SG;
@@ -2575,6 +2579,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	dev->max_mtu = MAX_MTU;
 
 	/* Configuration may specify what MAC to use.  Otherwise random. */
+  //是否支持配置mac地址
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MAC))
 		virtio_cread_bytes(vdev,
 				   offsetof(struct virtio_net_config, mac),
@@ -2653,9 +2658,10 @@ static int virtnet_probe(struct virtio_device *vdev)
 		vi->curr_queue_pairs = max_queue_pairs;
 	else
 		vi->curr_queue_pairs = num_online_cpus();
-	vi->max_queue_pairs = max_queue_pairs;
+	vi->max_queue_pairs = max_queue_pairs;//最大队列数
 
 	/* Allocate/initialize the rx/tx queues, and invoke find_vqs */
+  //收发队列空间申请
 	err = init_vqs(vi);
 	if (err)
 		goto free_stats;
@@ -2669,6 +2675,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	virtnet_init_settings(dev);
 
+  //在kernel中注册此网络设备
 	err = register_netdev(dev);
 	if (err) {
 		pr_debug("virtio_net: registering device failed\n");

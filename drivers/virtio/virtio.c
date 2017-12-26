@@ -190,6 +190,8 @@ EXPORT_SYMBOL_GPL(virtio_finalize_features);
 static int virtio_dev_probe(struct device *_d)
 {
 	int err, i;
+ //device类型，实际上是virtio的父类，而dev->dev.driver也是virtio_driver的
+ //父类，通过相应函数进行转换
 	struct virtio_device *dev = dev_to_virtio(_d);
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	u64 device_features;
@@ -197,12 +199,15 @@ static int virtio_dev_probe(struct device *_d)
 	u64 driver_features_legacy;
 
 	/* We have a driver! */
+  //指明此设备已找到匹配的driver
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
+  //获得当前设备支持的功能
 	device_features = dev->config->get_features(dev);
 
 	/* Figure out what features the driver supports. */
+  //获得当前驱动支持的功能
 	driver_features = 0;
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
@@ -222,6 +227,7 @@ static int virtio_dev_probe(struct device *_d)
 		driver_features_legacy = driver_features;
 	}
 
+  //取功能最小集
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
@@ -242,6 +248,7 @@ static int virtio_dev_probe(struct device *_d)
 	if (err)
 		goto err;
 
+  //驱动探测设备(例如virtio_net_driver)
 	err = drv->probe(dev);
 	if (err)
 		goto err;
@@ -250,6 +257,7 @@ static int virtio_dev_probe(struct device *_d)
 	if (!(dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK))
 		virtio_device_ready(dev);
 
+  //如果驱动支持扫描，则调用scan回调
 	if (drv->scan)
 		drv->scan(dev);
 
