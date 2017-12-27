@@ -55,6 +55,7 @@ static inline int virtio_net_hdr_to_skb(struct sk_buff *skb,
 	return 0;
 }
 
+//gso,checksum准备
 static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 					  struct virtio_net_hdr *hdr,
 					  bool little_endian,

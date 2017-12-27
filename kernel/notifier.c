@@ -91,6 +91,7 @@ static int notifier_call_chain(struct notifier_block **nl,
 			continue;
 		}
 #endif
+		//按通知链进行通知
 		ret = nb->notifier_call(nb, val, v);
 
 		if (nr_calls)

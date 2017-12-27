@@ -282,6 +282,7 @@ static inline __virtio64 cpu_to_virtio64(struct virtio_device *vdev, u64 val)
 }
 
 /* Config space accessors. */
+//按成员的字节大小进行配置读取
 #define virtio_cread(vdev, structname, member, ptr)			\
 	do {								\
 		/* Must match the member's type, and be integer */	\

@@ -365,7 +365,7 @@ ixgb_set_features(struct net_device *netdev, netdev_features_t features)
 static const struct net_device_ops ixgb_netdev_ops = {
 	.ndo_open 		= ixgb_open,
 	.ndo_stop		= ixgb_close,
-	.ndo_start_xmit		= ixgb_xmit_frame,
+	.ndo_start_xmit		= ixgb_xmit_frame,//硬件发包入口
 	.ndo_set_rx_mode	= ixgb_set_multi,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address	= ixgb_set_mac,
@@ -374,7 +374,7 @@ static const struct net_device_ops ixgb_netdev_ops = {
 	.ndo_vlan_rx_add_vid	= ixgb_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= ixgb_vlan_rx_kill_vid,
 #ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller	= ixgb_netpoll,
+	.ndo_poll_controller	= ixgb_netpoll,//驱动通过触发软件中断来收包
 #endif
 	.ndo_fix_features       = ixgb_fix_features,
 	.ndo_set_features       = ixgb_set_features,

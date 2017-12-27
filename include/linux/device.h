@@ -135,7 +135,7 @@ struct bus_type {
 
 	const struct iommu_ops *iommu_ops;
 
-	struct subsys_private *p;
+	struct subsys_private *p;//bus的私有数据
 	struct lock_class_key lock_key;
 
 	bool force_dma;
@@ -269,7 +269,7 @@ enum probe_type {
  */
 struct device_driver {
 	const char		*name;
-	struct bus_type		*bus;
+	struct bus_type		*bus;//此驱动对应设备从属的bus
 
 	struct module		*owner;
 	const char		*mod_name;	/* used for built-in modules */
@@ -889,7 +889,7 @@ struct device {
 
 	struct device_private	*p;
 
-	struct kobject kobj;
+	struct kobject kobj;//device的sysfs属性
 	const char		*init_name; /* initial name of the device */
 	const struct device_type *type;
 

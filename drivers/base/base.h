@@ -37,7 +37,7 @@ struct subsys_private {
 	struct klist klist_drivers;
 	struct blocking_notifier_head bus_notifier;
 	unsigned int drivers_autoprobe:1;
-	struct bus_type *bus;
+	struct bus_type *bus;//与其相关的bus互指
 
 	struct kset glue_dirs;
 	struct class *class;
@@ -49,7 +49,7 @@ struct driver_private {
 	struct klist klist_devices;
 	struct klist_node knode_bus;
 	struct module_kobject *mkobj;
-	struct device_driver *driver;
+	struct device_driver *driver;//与device_driver互指
 };
 #define to_driver(obj) container_of(obj, struct driver_private, kobj)
 
@@ -115,6 +115,7 @@ extern void device_release_driver_internal(struct device *dev,
 extern void driver_detach(struct device_driver *drv);
 extern int driver_probe_device(struct device_driver *drv, struct device *dev);
 extern void driver_deferred_probe_del(struct device *dev);
+//通过bus的匹配函数检查驱动是否可以与device匹配
 static inline int driver_match_device(struct device_driver *drv,
 				      struct device *dev)
 {

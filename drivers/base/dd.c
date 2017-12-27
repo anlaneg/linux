@@ -294,6 +294,7 @@ static int driver_sysfs_add(struct device *dev)
 	int ret;
 
 	if (dev->bus)
+		//触发通知
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_BIND_DRIVER, dev);
 
@@ -420,11 +421,13 @@ re_probe:
 	 */
 	devices_kset_move_last(dev);
 
+	//如果dev所属的bus具有probe能力，则调用bus的probe
 	if (dev->bus->probe) {
 		ret = dev->bus->probe(dev);
 		if (ret)
 			goto probe_failed;
 	} else if (drv->probe) {
+		//否则调用驱动的probe
 		ret = drv->probe(dev);
 		if (ret)
 			goto probe_failed;
@@ -796,6 +799,7 @@ static int __driver_attach(struct device *dev, void *data)
 	if (dev->parent)	/* Needed for USB */
 		device_lock(dev->parent);
 	device_lock(dev);
+	//此设备还未绑定driver
 	if (!dev->driver)
 		driver_probe_device(drv, dev);
 	device_unlock(dev);

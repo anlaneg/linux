@@ -389,6 +389,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		vq->free_head = i;
 
 	/* Store token and indirect buffer state. */
+	//设置要发送的报文
 	vq->desc_state[head].data = data;
 	if (indirect)
 		vq->desc_state[head].indir_desc = desc;

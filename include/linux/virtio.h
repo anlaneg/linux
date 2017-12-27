@@ -137,6 +137,7 @@ struct virtio_device {
 	void *priv;
 };
 
+//由device获得virtio_device
 static inline struct virtio_device *dev_to_virtio(struct device *_dev)
 {
 	return container_of(_dev, struct virtio_device, dev);
@@ -177,7 +178,7 @@ int virtio_device_restore(struct virtio_device *dev);
 struct virtio_driver {
 	struct device_driver driver;
 	const struct virtio_device_id *id_table;
-	const unsigned int *feature_table;
+	const unsigned int *feature_table;//驱动提供了哪些功能
 	unsigned int feature_table_size;
 	const unsigned int *feature_table_legacy;
 	unsigned int feature_table_size_legacy;

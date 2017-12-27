@@ -309,6 +309,7 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 
 	klist_iter_init_node(&bus->p->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
+	//如果error为0，则继续匹配，否则停止匹配
 	while ((dev = next_device(&i)) && !error)
 		error = fn(dev, data);
 	klist_iter_exit(&i);
@@ -492,6 +493,7 @@ int bus_add_device(struct device *dev)
 				&dev->bus->p->subsys.kobj, "subsystem");
 		if (error)
 			goto out_subsys;
+		//将此dev添加到bus对应的设备列表中
 		klist_add_tail(&dev->p->knode_bus, &bus->p->klist_devices);
 	}
 	return 0;
@@ -633,6 +635,7 @@ static void driver_attach_async(void *_drv, async_cookie_t cookie)
  * bus_add_driver - Add a driver to the bus.
  * @drv: driver.
  */
+//添加一个driver到bus
 int bus_add_driver(struct device_driver *drv)
 {
 	struct bus_type *bus;
@@ -651,16 +654,18 @@ int bus_add_driver(struct device_driver *drv)
 		goto out_put_bus;
 	}
 	klist_init(&priv->klist_devices, NULL, NULL);
+	//实现driver与driver_private互指
 	priv->driver = drv;
 	drv->p = priv;
 	priv->kobj.kset = bus->p->drivers_kset;
 	error = kobject_init_and_add(&priv->kobj, &driver_ktype, NULL,
-				     "%s", drv->name);
+				     "%s", drv->name);//创建driver对应的kobject
 	if (error)
 		goto out_unregister;
 
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
+		//对于virtio_bus其驱动容许自动探测
 		if (driver_allows_async_probing(drv)) {
 			pr_debug("bus: '%s': probing driver %s asynchronously\n",
 				drv->bus->name, drv->name);
@@ -849,10 +854,12 @@ int bus_register(struct bus_type *bus)
 	struct subsys_private *priv;
 	struct lock_class_key *key = &bus->lock_key;
 
+	//申请私有数据
 	priv = kzalloc(sizeof(struct subsys_private), GFP_KERNEL);
 	if (!priv)
 		return -ENOMEM;
 
+	//实现bus_type与subsys_private之间的互指
 	priv->bus = bus;
 	bus->p = priv;
 
@@ -899,6 +906,7 @@ int bus_register(struct bus_type *bus)
 	if (retval)
 		goto bus_probe_files_fail;
 
+	//添加此bus提供的基础group(如:device,vendor,status,modalias等)
 	retval = bus_add_groups(bus, bus->bus_groups);
 	if (retval)
 		goto bus_groups_fail;

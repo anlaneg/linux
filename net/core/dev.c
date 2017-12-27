@@ -2450,7 +2450,7 @@ static void __netif_reschedule(struct Qdisc *q)
 	q->next_sched = NULL;
 	*sd->output_queue_tailp = q;
 	sd->output_queue_tailp = &q->next_sched;
-	raise_softirq_irqoff(NET_TX_SOFTIRQ);
+	raise_softirq_irqoff(NET_TX_SOFTIRQ);//触发tx软中断
 	local_irq_restore(flags);
 }
 
@@ -3559,7 +3559,9 @@ int dev_tx_weight __read_mostly = 64;
 static inline void ____napi_schedule(struct softnet_data *sd,
 				     struct napi_struct *napi)
 {
+	//将napi加入到sd->poll_list中，以便在软中断处理时进行循环收取
 	list_add_tail(&napi->poll_list, &sd->poll_list);
+	//触发软中断
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 }
 
@@ -4110,6 +4112,7 @@ int netif_rx_ni(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_rx_ni);
 
+//软件中断，处理报文发送
 static __latent_entropy void net_tx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
@@ -4524,6 +4527,7 @@ int netif_receive_skb_core(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_receive_skb_core);
 
+//处理收到的报文
 static int __netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
@@ -4980,6 +4984,7 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 {
 	switch (ret) {
 	case GRO_NORMAL:
+		//报文收取完成，使其走协议栈
 		if (netif_receive_skb_internal(skb))
 			ret = GRO_DROP;
 		break;
@@ -5557,7 +5562,7 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 	napi->gro_count = 0;
 	napi->gro_list = NULL;
 	napi->skb = NULL;
-	napi->poll = poll;
+	napi->poll = poll;//设置napi的poll
 	if (weight > NAPI_POLL_WEIGHT)
 		pr_err_once("netif_napi_add() called with weight %d on device %s\n",
 			    weight, dev->name);
@@ -5622,6 +5627,7 @@ static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 	 */
 	work = 0;
 	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
+		//调用对应的poll函数
 		work = n->poll(n, weight);
 		trace_napi_poll(n, work, weight);
 	}
@@ -5665,6 +5671,7 @@ out_unlock:
 	return work;
 }
 
+//收到软件中断，尝试收包
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
@@ -5681,12 +5688,14 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	for (;;) {
 		struct napi_struct *n;
 
+		//list为空，将跳出循环
 		if (list_empty(&list)) {
 			if (!sd_has_rps_ipi_waiting(sd) && list_empty(&repoll))
 				goto out;
 			break;
 		}
 
+		//按顺序遍历poll_list，提取n进行收包
 		n = list_first_entry(&list, struct napi_struct, poll_list);
 		budget -= napi_poll(n, &repoll);
 
@@ -5697,7 +5706,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 		if (unlikely(budget <= 0 ||
 			     time_after_eq(jiffies, time_limit))) {
 			sd->time_squeeze++;
-			break;
+			break;//执行时间过长，跳出
 		}
 	}
 
@@ -8858,6 +8867,7 @@ static int __init net_dev_init(void)
 	if (register_pernet_device(&default_device_ops))
 		goto out;
 
+	//定义两个软件中断（1，tx，2.rx)
 	open_softirq(NET_TX_SOFTIRQ, net_tx_action);
 	open_softirq(NET_RX_SOFTIRQ, net_rx_action);
 

@@ -8,21 +8,25 @@
 /* Unique numbering for virtio devices. */
 static DEFINE_IDA(virtio_index_ida);
 
+//显示device
 static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
 	return sprintf(buf, "0x%04x\n", dev->id.device);
 }
+
+//定义变量指出采用device_show回调（定义device属性）
 static DEVICE_ATTR_RO(device);
 
+//显示vendor
 static ssize_t vendor_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
 	return sprintf(buf, "0x%04x\n", dev->id.vendor);
 }
-static DEVICE_ATTR_RO(vendor);
+static DEVICE_ATTR_RO(vendor);//定义vendor属性
 
 static ssize_t status_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
@@ -30,7 +34,7 @@ static ssize_t status_show(struct device *_d,
 	struct virtio_device *dev = dev_to_virtio(_d);
 	return sprintf(buf, "0x%08x\n", dev->config->get_status(dev));
 }
-static DEVICE_ATTR_RO(status);
+static DEVICE_ATTR_RO(status);//定义status属性
 
 static ssize_t modalias_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
@@ -39,7 +43,7 @@ static ssize_t modalias_show(struct device *_d,
 	return sprintf(buf, "virtio:d%08Xv%08X\n",
 		       dev->id.device, dev->id.vendor);
 }
-static DEVICE_ATTR_RO(modalias);
+static DEVICE_ATTR_RO(modalias);//模块别名
 
 static ssize_t features_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
@@ -56,8 +60,9 @@ static ssize_t features_show(struct device *_d,
 	len += sprintf(buf+len, "\n");
 	return len;
 }
-static DEVICE_ATTR_RO(features);
+static DEVICE_ATTR_RO(features);//功能属性
 
+//定义virtio的属性数组
 static struct attribute *virtio_dev_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_vendor.attr,
@@ -71,9 +76,11 @@ ATTRIBUTE_GROUPS(virtio_dev);
 static inline int virtio_id_match(const struct virtio_device *dev,
 				  const struct virtio_device_id *id)
 {
+	//如果id的device不为any,且id与dev的device不相等，则匹配失败
 	if (id->device != dev->id.device && id->device != VIRTIO_DEV_ANY_ID)
 		return 0;
 
+	//检查vendor是否相等
 	return id->vendor == VIRTIO_DEV_ANY_ID || id->vendor == dev->id.vendor;
 }
 
@@ -85,10 +92,11 @@ static int virtio_dev_match(struct device *_dv, struct device_driver *_dr)
 	struct virtio_device *dev = dev_to_virtio(_dv);
 	const struct virtio_device_id *ids;
 
+	//检查drv支持的id_table是否与之匹配
 	ids = drv_to_virtio(_dr)->id_table;
 	for (i = 0; ids[i].device; i++)
 		if (virtio_id_match(dev, &ids[i]))
-			return 1;
+			return 1;//实现匹配，返回1
 	return 0;
 }
 
@@ -100,6 +108,7 @@ static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
 			      dev->id.device, dev->id.vendor);
 }
 
+//如果未提供fbit功能，则挂掉
 void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
 					 unsigned int fbit)
 {
@@ -130,6 +139,7 @@ static void __virtio_config_changed(struct virtio_device *dev)
 		drv->config_changed(dev);
 }
 
+//指明配置改变
 void virtio_config_changed(struct virtio_device *dev)
 {
 	unsigned long flags;
@@ -190,8 +200,8 @@ EXPORT_SYMBOL_GPL(virtio_finalize_features);
 static int virtio_dev_probe(struct device *_d)
 {
 	int err, i;
- //device类型，实际上是virtio的父类，而dev->dev.driver也是virtio_driver的
- //父类，通过相应函数进行转换
+    //device类型，实际上是virtio的父类，而dev->dev.driver也是virtio_driver的
+    //父类，通过相应函数进行转换
 	struct virtio_device *dev = dev_to_virtio(_d);
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	u64 device_features;
@@ -227,7 +237,7 @@ static int virtio_dev_probe(struct device *_d)
 		driver_features_legacy = driver_features;
 	}
 
-  //取功能最小集
+    //取功能最小集
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
@@ -248,7 +258,7 @@ static int virtio_dev_probe(struct device *_d)
 	if (err)
 		goto err;
 
-  //驱动探测设备(例如virtio_net_driver)
+    //驱动探测设备(例如virtio_net_driver)
 	err = drv->probe(dev);
 	if (err)
 		goto err;
@@ -257,7 +267,7 @@ static int virtio_dev_probe(struct device *_d)
 	if (!(dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK))
 		virtio_device_ready(dev);
 
-  //如果驱动支持扫描，则调用scan回调
+    //如果驱动支持扫描，则调用scan回调
 	if (drv->scan)
 		drv->scan(dev);
 
@@ -270,6 +280,7 @@ err:
 
 }
 
+//调用driver的remove函数移除设备
 static int virtio_dev_remove(struct device *_d)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
@@ -296,21 +307,24 @@ static struct bus_type virtio_bus = {
 	.remove = virtio_dev_remove,
 };
 
+//virtio驱动注册(这些驱动均从属于virtio_bus)
 int register_virtio_driver(struct virtio_driver *driver)
 {
 	/* Catch this early. */
 	BUG_ON(driver->feature_table_size && !driver->feature_table);
-	driver->driver.bus = &virtio_bus;
+	driver->driver.bus = &virtio_bus;//指明驱动支持的设备从属于virtio_bus
 	return driver_register(&driver->driver);
 }
 EXPORT_SYMBOL_GPL(register_virtio_driver);
 
+//驱动解注册
 void unregister_virtio_driver(struct virtio_driver *driver)
 {
 	driver_unregister(&driver->driver);
 }
 EXPORT_SYMBOL_GPL(unregister_virtio_driver);
 
+//virtio设备注册
 int register_virtio_device(struct virtio_device *dev)
 {
 	int err;
