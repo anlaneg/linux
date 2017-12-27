@@ -454,6 +454,7 @@ ixgb_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		}
 	}
 
+	//设置设备的操作集
 	netdev->netdev_ops = &ixgb_netdev_ops;
 	ixgb_set_ethtool_ops(netdev);
 	netdev->watchdog_timeo = 5 * HZ;

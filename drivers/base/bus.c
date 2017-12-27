@@ -482,6 +482,7 @@ int bus_add_device(struct device *dev)
 
 	if (bus) {
 		pr_debug("bus: '%s': add device %s\n", bus->name, dev_name(dev));
+		//将bus的group复制一份给dev
 		error = device_add_groups(dev, bus->dev_groups);
 		if (error)
 			goto out_put;
