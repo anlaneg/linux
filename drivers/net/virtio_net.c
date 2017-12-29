@@ -1222,6 +1222,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 	return received;
 }
 
+//设备打开回调，如果打开成功，设备将被置上up标记
 static int virtnet_open(struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
@@ -2112,14 +2113,14 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
 	.ndo_start_xmit      = start_xmit,//发包函数回调（这个回调在软中断被触发后调用）
-	.ndo_validate_addr   = eth_validate_addr,
+	.ndo_validate_addr   = eth_validate_addr,//校验mac地址是否正确
 	.ndo_set_mac_address = virtnet_set_mac_address,
 	.ndo_set_rx_mode     = virtnet_set_rx_mode,
 	.ndo_get_stats64     = virtnet_stats,
 	.ndo_vlan_rx_add_vid = virtnet_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid = virtnet_vlan_rx_kill_vid,
 #ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller = virtnet_netpoll,
+	.ndo_poll_controller = virtnet_netpoll,//触发收包的软中断
 #endif
 	.ndo_bpf		= virtnet_xdp,
 	.ndo_xdp_xmit		= virtnet_xdp_xmit,
@@ -2530,6 +2531,7 @@ static int virtnet_validate(struct virtio_device *vdev)
 	return 0;
 }
 
+//驱动探测virtio_device产生net_device设备
 static int virtnet_probe(struct virtio_device *vdev)
 {
 	int i, err;
@@ -2545,13 +2547,14 @@ static int virtnet_probe(struct virtio_device *vdev)
 				   max_virtqueue_pairs, &max_queue_pairs);
 
 	/* We need at least 2 queue's */
+	//至少需要1个收队列一个发队列
 	if (err || max_queue_pairs < VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MIN ||
 	    max_queue_pairs > VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX ||
 	    !virtio_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ))
 		max_queue_pairs = 1;
 
 	/* Allocate ourselves a network device with room for our info */
-    //申请多队列设备（rx与tx队列数均为max_queue_pairs)
+    //申请net_device设备，后续我们将对dev进行open，rx,tx等操作（rx与tx队列数均为max_queue_pairs)
 	dev = alloc_etherdev_mq(sizeof(struct virtnet_info), max_queue_pairs);
 	if (!dev)
 		return -ENOMEM;

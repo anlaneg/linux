@@ -336,6 +336,7 @@ int eth_change_mtu(struct net_device *dev, int new_mtu)
 }
 EXPORT_SYMBOL(eth_change_mtu);
 
+//检查设备地址是否为合法的mac地址
 int eth_validate_addr(struct net_device *dev)
 {
 	if (!is_valid_ether_addr(dev->dev_addr))
@@ -364,14 +365,15 @@ void ether_setup(struct net_device *dev)
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len 	= ETH_HLEN;
 	dev->min_header_len	= ETH_HLEN;
-	dev->mtu		= ETH_DATA_LEN;
+	dev->mtu		= ETH_DATA_LEN;//设置mtu为1500
 	dev->min_mtu		= ETH_MIN_MTU;
 	dev->max_mtu		= ETH_DATA_LEN;
 	dev->addr_len		= ETH_ALEN;
 	dev->tx_queue_len	= DEFAULT_TX_QUEUE_LEN;
-	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;
+	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;//支持广播组播
 	dev->priv_flags		|= IFF_TX_SKB_SHARING;
 
+	//设置广播地址
 	eth_broadcast_addr(dev->broadcast);
 
 }
@@ -391,10 +393,12 @@ EXPORT_SYMBOL(ether_setup);
  * size (sizeof_priv).  A 32-byte (not bit) alignment is enforced for
  * this private data area.
  */
-
+//sizeof_priv为私有数据的大小，txqs为发送队列数，rxqs为收取队列数
+//申请以太网设备
 struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
 				      unsigned int rxqs)
 {
+	//规定设备名称为eth%d
 	return alloc_netdev_mqs(sizeof_priv, "eth%d", NET_NAME_UNKNOWN,
 				ether_setup, txqs, rxqs);
 }

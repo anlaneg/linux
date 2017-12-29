@@ -81,6 +81,7 @@ static int notifier_call_chain(struct notifier_block **nl,
 
 	nb = rcu_dereference_raw(*nl);
 
+	//遍历通知链，逐个通知（同时通知数受nr_to_call限制）
 	while (nb && nr_to_call) {
 		next_nb = rcu_dereference_raw(nb->next);
 
@@ -94,13 +95,15 @@ static int notifier_call_chain(struct notifier_block **nl,
 		//按通知链进行通知
 		ret = nb->notifier_call(nb, val, v);
 
+		//记录有多少个被通知到了
 		if (nr_calls)
 			(*nr_calls)++;
 
+		//如果要求停止通知
 		if (ret & NOTIFY_STOP_MASK)
 			break;
 		nb = next_nb;
-		nr_to_call--;
+		nr_to_call--;//通知数减1
 	}
 	return ret;
 }
@@ -401,6 +404,7 @@ EXPORT_SYMBOL_GPL(__raw_notifier_call_chain);
 int raw_notifier_call_chain(struct raw_notifier_head *nh,
 		unsigned long val, void *v)
 {
+	//不限制通制数，不记录通知数
 	return __raw_notifier_call_chain(nh, val, v, -1, NULL);
 }
 EXPORT_SYMBOL_GPL(raw_notifier_call_chain);
