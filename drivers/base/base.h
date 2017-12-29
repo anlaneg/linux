@@ -33,8 +33,8 @@ struct subsys_private {
 	struct mutex mutex;
 
 	struct kset *drivers_kset;
-	struct klist klist_devices;
-	struct klist klist_drivers;
+	struct klist klist_devices;//挂接从属于子系统的device
+	struct klist klist_drivers;//挂接从属于子系统的driver
 	struct blocking_notifier_head bus_notifier;
 	unsigned int drivers_autoprobe:1;
 	struct bus_type *bus;//与其相关的bus互指

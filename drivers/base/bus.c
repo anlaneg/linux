@@ -267,11 +267,12 @@ static ssize_t store_drivers_probe(struct bus_type *bus,
 
 static struct device *next_device(struct klist_iter *i)
 {
-	struct klist_node *n = klist_next(i);
+	struct klist_node *n = klist_next(i);//取i的下一个元素
 	struct device *dev = NULL;
 	struct device_private *dev_prv;
 
 	if (n) {
+        //存在下一个元素，则由private数值获得device
 		dev_prv = to_device_private_bus(n);
 		dev = dev_prv->device;
 	}
@@ -297,6 +298,7 @@ static struct device *next_device(struct klist_iter *i)
  * to retain this data, it should do so, and increment the reference
  * count in the supplied callback.
  */
+//遍历bus中所有device,执行回调fn
 int bus_for_each_dev(struct bus_type *bus, struct device *start,
 		     void *data, int (*fn)(struct device *, void *))
 {
@@ -309,7 +311,7 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 
 	klist_iter_init_node(&bus->p->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
-	//如果error为0，则继续匹配，否则停止匹配
+	//如果error为0 且仍有dev未遍历，则继续执行回调，否则停止
 	while ((dev = next_device(&i)) && !error)
 		error = fn(dev, data);
 	klist_iter_exit(&i);
@@ -448,6 +450,7 @@ static struct device_driver *next_driver(struct klist_iter *i)
  * in the callback. It must also be sure to increment the refcount
  * so it doesn't disappear before returning to the caller.
  */
+//针对bus上已有的driver进行遍历并执行回调
 int bus_for_each_drv(struct bus_type *bus, struct device_driver *start,
 		     void *data, int (*fn)(struct device_driver *, void *))
 {
@@ -461,6 +464,7 @@ int bus_for_each_drv(struct bus_type *bus, struct device_driver *start,
 	klist_iter_init_node(&bus->p->klist_drivers, &i,
 			     start ? &start->p->knode_bus : NULL);
 	while ((drv = next_driver(&i)) && !error)
+        //针对每个driver调用fn回调
 		error = fn(drv, data);
 	klist_iter_exit(&i);
 	return error;
@@ -643,6 +647,7 @@ int bus_add_driver(struct device_driver *drv)
 	struct driver_private *priv;
 	int error = 0;
 
+    //引用此driver对应的bus
 	bus = bus_get(drv->bus);
 	if (!bus)
 		return -EINVAL;
@@ -655,6 +660,7 @@ int bus_add_driver(struct device_driver *drv)
 		goto out_put_bus;
 	}
 	klist_init(&priv->klist_devices, NULL, NULL);
+
 	//实现driver与driver_private互指
 	priv->driver = drv;
 	drv->p = priv;
@@ -743,8 +749,10 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
 	int ret = 0;
 
 	if (!dev->driver) {
+        //此dev还没有绑定driver
 		if (dev->parent)	/* Needed for USB */
 			device_lock(dev->parent);
+        //此device尝试绑定驱动
 		ret = device_attach(dev);
 		if (dev->parent)
 			device_unlock(dev->parent);
@@ -762,6 +770,7 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
  */
 int bus_rescan_devices(struct bus_type *bus)
 {
+    //针对bus中所有devices,执行回调bus_rescan....helper
 	return bus_for_each_dev(bus, NULL, NULL, bus_rescan_devices_helper);
 }
 EXPORT_SYMBOL_GPL(bus_rescan_devices);
@@ -953,12 +962,14 @@ void bus_unregister(struct bus_type *bus)
 }
 EXPORT_SYMBOL_GPL(bus_unregister);
 
+//bus注册通知链
 int bus_register_notifier(struct bus_type *bus, struct notifier_block *nb)
 {
 	return blocking_notifier_chain_register(&bus->p->bus_notifier, nb);
 }
 EXPORT_SYMBOL_GPL(bus_register_notifier);
 
+//bus解注册通知链
 int bus_unregister_notifier(struct bus_type *bus, struct notifier_block *nb)
 {
 	return blocking_notifier_chain_unregister(&bus->p->bus_notifier, nb);

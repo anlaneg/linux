@@ -197,6 +197,7 @@ struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn)
 	WARN_ON(in_interrupt());
 	down_read(&pci_bus_sem);
 
+    //遍历bus上的所有devices，如果有与devfn相同的，则返回
 	list_for_each_entry(dev, &bus->devices, bus_list) {
 		if (dev->devfn == devfn)
 			goto out;

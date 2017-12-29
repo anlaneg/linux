@@ -1922,6 +1922,7 @@ static void pci_release_dev(struct device *dev)
 	kfree(pci_dev);
 }
 
+//申请pci设备内存
 struct pci_dev *pci_alloc_dev(struct pci_bus *bus)
 {
 	struct pci_dev *dev;
@@ -1940,7 +1941,7 @@ EXPORT_SYMBOL(pci_alloc_dev);
 
 static bool pci_bus_crs_vendor_id(u32 l)
 {
-	return (l & 0xffff) == 0x0001;
+	return (l & 0xffff) == 0x0001;//vendor_id==1是revert的，不参与分配
 }
 
 static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
@@ -1972,9 +1973,11 @@ static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
 				pci_domain_nr(bus), bus->number,
 				PCI_SLOT(devfn), PCI_FUNC(devfn), delay - 1);
 
+        //等待一段时间再读
 		msleep(delay);
 		delay *= 2;
 
+        //重新读取
 		if (pci_bus_read_config_dword(bus, devfn, PCI_VENDOR_ID, l))
 			return false;
 	}
@@ -1987,9 +1990,11 @@ static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
 	return true;
 }
 
+//尝试读取指定slot上的vendor_id
 bool pci_bus_read_dev_vendor_id(struct pci_bus *bus, int devfn, u32 *l,
 				int timeout)
 {
+    //读取32bit的vendor_id
 	if (pci_bus_read_config_dword(bus, devfn, PCI_VENDOR_ID, l))
 		return false;
 
@@ -1999,6 +2004,7 @@ bool pci_bus_read_dev_vendor_id(struct pci_bus *bus, int devfn, u32 *l,
 		return false;
 
 	if (pci_bus_crs_vendor_id(*l))
+        //延迟后重读
 		return pci_bus_wait_crs(bus, devfn, l, timeout);
 
 	return true;
@@ -2009,11 +2015,13 @@ EXPORT_SYMBOL(pci_bus_read_dev_vendor_id);
  * Read the config data for a PCI device, sanity-check it
  * and fill in the dev structure...
  */
+//扫描设备，并创建pci_dev
 static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 {
 	struct pci_dev *dev;
 	u32 l;
 
+    //尝试读取vendor_id,超时时间为6s,读取的内存存放在l中
 	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
 		return NULL;
 
@@ -2022,8 +2030,8 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 		return NULL;
 
 	dev->devfn = devfn;
-	dev->vendor = l & 0xffff;
-	dev->device = (l >> 16) & 0xffff;
+	dev->vendor = l & 0xffff;//vendor_id的低16位为vendor
+	dev->device = (l >> 16) & 0xffff;//vendor_id的高16位为device
 
 	pci_set_of_node(dev);
 
@@ -2116,6 +2124,7 @@ static void pci_set_msi_domain(struct pci_dev *dev)
 	dev_set_msi_domain(&dev->dev, d);
 }
 
+//添加pci设备
 void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 {
 	int ret;
@@ -2161,7 +2170,7 @@ void pci_device_add(struct pci_dev *dev, struct pci_bus *bus)
 
 	/* Notifier could use PCI capabilities */
 	dev->match_driver = false;
-	ret = device_add(&dev->dev);
+	ret = device_add(&dev->dev);//一般设备添加
 	WARN_ON(ret < 0);
 }
 
@@ -2169,12 +2178,14 @@ struct pci_dev *pci_scan_single_device(struct pci_bus *bus, int devfn)
 {
 	struct pci_dev *dev;
 
+    //先在bus的设备列表中查找，如果找到，则直接返回
 	dev = pci_get_slot(bus, devfn);
 	if (dev) {
 		pci_dev_put(dev);
 		return dev;
 	}
 
+    //扫描并创建对应设备
 	dev = pci_scan_device(bus, devfn);
 	if (!dev)
 		return NULL;
@@ -2255,10 +2266,11 @@ int pci_scan_slot(struct pci_bus *bus, int devfn)
 
 	dev = pci_scan_single_device(bus, devfn);
 	if (!dev)
-		return 0;
+		return 0;//没有扫出来device,退出
 	if (!dev->is_added)
 		nr++;
 
+    //扫描下一个fn
 	for (fn = next_fn(bus, dev, 0); fn > 0; fn = next_fn(bus, dev, fn)) {
 		dev = pci_scan_single_device(bus, devfn + fn);
 		if (dev) {
@@ -2272,7 +2284,7 @@ int pci_scan_slot(struct pci_bus *bus, int devfn)
 	if (bus->self && nr)
 		pcie_aspm_init_link_state(bus->self);
 
-	return nr;
+	return nr;//返回扫出来的设备数
 }
 EXPORT_SYMBOL(pci_scan_slot);
 
@@ -2461,6 +2473,7 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 	dev_dbg(&bus->dev, "scanning bus\n");
 
 	/* Go find them, Rover! */
+    //最多支持0x100(256)个dev-function,每个pci_san_slot尝试扫8个
 	for (devfn = 0; devfn < 0x100; devfn += 8)
 		pci_scan_slot(bus, devfn);
 
@@ -2565,6 +2578,7 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
  * Scans devices below @bus including subordinate buses. Returns new
  * subordinate number including all the found devices.
  */
+//扫描pci 指定bus下的所有设备
 unsigned int pci_scan_child_bus(struct pci_bus *bus)
 {
 	return pci_scan_child_bus_extend(bus, 0);

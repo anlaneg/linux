@@ -1734,6 +1734,7 @@ int device_private_init(struct device *dev)
  * if it returned an error! Always use put_device() to give up your
  * reference instead.
  */
+//设备添加
 int device_add(struct device *dev)
 {
 	struct device *parent;

@@ -262,6 +262,7 @@ bool device_is_bound(struct device *dev)
 static void driver_bound(struct device *dev)
 {
 	if (device_is_bound(dev)) {
+        //如果已绑定，则不处理
 		printk(KERN_WARNING "%s: device %s already bound\n",
 			__func__, kobject_name(&dev->kobj));
 		return;
@@ -279,10 +280,12 @@ static void driver_bound(struct device *dev)
 	 * Make sure the device is no longer in one of the deferred lists and
 	 * kick off retrying all pending devices
 	 */
+    //防止driver被加入到延迟probe队列中
 	driver_deferred_probe_del(dev);
 	driver_deferred_probe_trigger();
 
 	if (dev->bus)
+        //知会dev已完成绑定
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_BOUND_DRIVER, dev);
 
@@ -368,6 +371,7 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 			   !drv->suppress_bind_attrs;
 
 	if (defer_all_probes) {
+        //如果需要延迟所有probe，则将此dev加入
 		/*
 		 * Value of defer_all_probes can be set only by
 		 * device_defer_all_probes_enable() which, in turn, will call
@@ -390,13 +394,14 @@ static int really_probe(struct device *dev, struct device_driver *drv)
 	WARN_ON(!list_empty(&dev->devres_head));
 
 re_probe:
-	dev->driver = drv;
+	dev->driver = drv;//使dev的驱动指向drv
 
 	/* If using pinctrl, bind pins now before probing */
 	ret = pinctrl_bind_pins(dev);
 	if (ret)
 		goto pinctrl_bind_failed;
 
+    //配置dma
 	ret = dma_configure(dev);
 	if (ret)
 		goto dma_failed;
@@ -553,6 +558,7 @@ EXPORT_SYMBOL_GPL(wait_for_device_probe);
  */
 int driver_probe_device(struct device_driver *drv, struct device *dev)
 {
+    //驱动drv与设备dev匹配成功，尝试进行绑定
 	int ret = 0;
 
 	if (!device_is_registered(dev))
@@ -566,6 +572,7 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 		pm_runtime_get_sync(dev->parent);
 
 	pm_runtime_barrier(dev);
+    //进行具体probe
 	ret = really_probe(dev, drv);
 	pm_request_idle(dev);
 
@@ -576,6 +583,7 @@ int driver_probe_device(struct device_driver *drv, struct device *dev)
 	return ret;
 }
 
+//由dirver的probe_type来决定是否采用async方式来probe
 bool driver_allows_async_probing(struct device_driver *drv)
 {
 	switch (drv->probe_type) {
@@ -626,10 +634,11 @@ struct device_attach_data {
 	bool have_async;
 };
 
+//尝试将data->dev设备attach到drv驱动上
 static int __device_attach_driver(struct device_driver *drv, void *_data)
 {
 	struct device_attach_data *data = _data;
-	struct device *dev = data->dev;
+	struct device *dev = data->dev;//要尝试attach的设备
 	bool async_allowed;
 	int ret;
 
@@ -640,20 +649,25 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	 * multiple threads.
 	 */
 	if (dev->driver)
+        //此设备已绑定驱动
 		return -EBUSY;
 
+    //检查drv是否与device匹配(采用的方法是通过driver所属bus的匹配方法来进行匹配）
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {
 		/* no match */
 		return 0;
 	} else if (ret == -EPROBE_DEFER) {
+        //需要延迟匹配,将设备加入
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
 	} else if (ret < 0) {
+        //匹配时出错
 		dev_dbg(dev, "Bus failed to match device: %d", ret);
 		return ret;
 	} /* ret > 0 means positive match */
 
+    //成功匹配
 	async_allowed = driver_allows_async_probing(drv);
 
 	if (async_allowed)
@@ -698,6 +712,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 
 	device_lock(dev);
 	if (dev->driver) {
+        //此设备已有驱动
 		if (device_is_bound(dev)) {
 			ret = 1;
 			goto out_unlock;
@@ -710,6 +725,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 			ret = 0;
 		}
 	} else {
+        //此设备无驱动情况下处理：
 		struct device_attach_data data = {
 			.dev = dev,
 			.check_async = allow_async,
@@ -719,6 +735,7 @@ static int __device_attach(struct device *dev, bool allow_async)
 		if (dev->parent)
 			pm_runtime_get_sync(dev->parent);
 
+        //遍历设备bus上的所有驱动,尝试将device绑定到指定驱动
 		ret = bus_for_each_drv(dev->bus, NULL, &data,
 					__device_attach_driver);
 		if (!ret && allow_async && data.have_async) {
@@ -758,6 +775,7 @@ out_unlock:
  *
  * When called for a USB interface, @dev->parent lock must be held.
  */
+//如注释所言，尝试将当前设备固定到一个驱动
 int device_attach(struct device *dev)
 {
 	return __device_attach(dev, false);

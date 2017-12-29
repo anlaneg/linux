@@ -380,13 +380,16 @@ struct klist_node *klist_next(struct klist_iter *i)
 
 	spin_lock(&i->i_klist->k_lock);
 
+    //如果last不为空，则下一个来自于last->next
 	if (last) {
 		next = to_klist_node(last->n_node.next);
 		if (!klist_dec_and_del(last))
 			put = NULL;
 	} else
+        //last为空时，next来自于i枚举的链表的首个元素
 		next = to_klist_node(i->i_klist->k_list.next);
 
+    //检查是否已遍历完成，如果未遍历完成，则使i->i_cur为NULL
 	i->i_cur = NULL;
 	while (next != to_klist_node(&i->i_klist->k_list)) {
 		if (likely(!knode_dead(next))) {

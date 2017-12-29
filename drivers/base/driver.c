@@ -161,11 +161,13 @@ int driver_register(struct device_driver *drv)
 	//检查自身是否已注册在对应的bus上
 	other = driver_find(drv->name, drv->bus);
 	if (other) {
+        //已存在，重复注册
 		printk(KERN_ERR "Error: Driver '%s' is already registered, "
 			"aborting...\n", drv->name);
 		return -EBUSY;
 	}
 
+    //将此driver加入到此driver对应的bus中
 	ret = bus_add_driver(drv);
 	if (ret)
 		return ret;

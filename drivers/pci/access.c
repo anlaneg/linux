@@ -33,6 +33,8 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 # define pci_unlock_config(f)	raw_spin_unlock_irqrestore(&pci_lock, f)
 #endif
 
+//定义pci操作函数(读，写指定大小字节）
+//通过执行pci的操作集中写义的read,write函数来完成
 #define PCI_OP_READ(size, type, len) \
 int pci_bus_read_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type *value)	\
@@ -61,6 +63,7 @@ int pci_bus_write_config_##size \
 	return res;							\
 }
 
+//定义不同长度的数据读写函数(名称后续,返回值,输入值类型，读取,写入字节数）
 PCI_OP_READ(byte, u8, 1)
 PCI_OP_READ(word, u16, 2)
 PCI_OP_READ(dword, u32, 4)
