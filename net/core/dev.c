@@ -1358,6 +1358,7 @@ static int __dev_open(struct net_device *dev)
 
 	ASSERT_RTNL();
 
+	//检查设备是否已被移除
 	if (!netif_device_present(dev))
 		return -ENODEV;
 
@@ -1367,6 +1368,7 @@ static int __dev_open(struct net_device *dev)
 	 */
 	netpoll_poll_disable(dev);
 
+	//触发通知NETDEV_PRE_UP
 	ret = call_netdevice_notifiers(NETDEV_PRE_UP, dev);
 	ret = notifier_to_errno(ret);
 	if (ret)
@@ -1374,18 +1376,21 @@ static int __dev_open(struct net_device *dev)
 
 	set_bit(__LINK_STATE_START, &dev->state);
 
+	//校验mac地址是否有效
 	if (ops->ndo_validate_addr)
 		ret = ops->ndo_validate_addr(dev);
 
+	//调用open回调打开设备
 	if (!ret && ops->ndo_open)
 		ret = ops->ndo_open(dev);
 
 	netpoll_poll_enable(dev);
 
 	if (ret)
+		//如果open失败或者validate失败，则清除掉start标记
 		clear_bit(__LINK_STATE_START, &dev->state);
 	else {
-		dev->flags |= IFF_UP;
+		dev->flags |= IFF_UP;//置link up状态
 		dev_set_rx_mode(dev);
 		dev_activate(dev);
 		add_device_randomness(dev->dev_addr, dev->addr_len);
@@ -1418,6 +1423,7 @@ int dev_open(struct net_device *dev)
 		return ret;
 
 	rtmsg_ifinfo(RTM_NEWLINK, dev, IFF_UP|IFF_RUNNING, GFP_KERNEL);
+	//触发netdev的NETDEV_UP通知
 	call_netdevice_notifiers(NETDEV_UP, dev);
 
 	return ret;
@@ -3561,7 +3567,7 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 {
 	//将napi加入到sd->poll_list中，以便在软中断处理时进行循环收取
 	list_add_tail(&napi->poll_list, &sd->poll_list);
-	//触发软中断
+	//触发收包的软中断
 	__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 }
 
@@ -4340,6 +4346,7 @@ static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 	return 0;
 }
 
+//将报文按上层协议进行处理
 static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
 {
 	struct packet_type *ptype, *pt_prev;
@@ -6810,7 +6817,7 @@ EXPORT_SYMBOL(dev_get_flags);
 
 int __dev_change_flags(struct net_device *dev, unsigned int flags)
 {
-	unsigned int old_flags = dev->flags;
+	unsigned int old_flags = dev->flags;//取原dev中存储的flag，认为为旧flag
 	int ret;
 
 	ASSERT_RTNL();
@@ -6842,9 +6849,12 @@ int __dev_change_flags(struct net_device *dev, unsigned int flags)
 
 	ret = 0;
 	if ((old_flags ^ flags) & IFF_UP) {
+		//旧的flgas与新的flags就IFF_UP标记存在不同
 		if (old_flags & IFF_UP)
+			//由的flags中是UP状态，故新状态变更为down
 			__dev_close(dev);
 		else
+			//旧状态为down,新状态为up,执行为open
 			ret = __dev_open(dev);
 	}
 
@@ -7544,6 +7554,7 @@ void netif_stacked_transfer_operstate(const struct net_device *rootdev,
 EXPORT_SYMBOL(netif_stacked_transfer_operstate);
 
 #ifdef CONFIG_SYSFS
+//申请rx队列所需要的内存
 static int netif_alloc_rx_queues(struct net_device *dev)
 {
 	unsigned int i, count = dev->num_rx_queues;
@@ -7583,6 +7594,7 @@ static void netif_free_tx_queues(struct net_device *dev)
 	kvfree(dev->_tx);
 }
 
+//申请并初始化tx队列
 static int netif_alloc_netdev_queues(struct net_device *dev)
 {
 	unsigned int count = dev->num_tx_queues;
@@ -7592,12 +7604,14 @@ static int netif_alloc_netdev_queues(struct net_device *dev)
 	if (count < 1 || count > 0xffff)
 		return -EINVAL;
 
+	//申请count个netdev_queue做为tx队列
 	tx = kvzalloc(sz, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!tx)
 		return -ENOMEM;
 
 	dev->_tx = tx;
 
+	//初始化每个tx队列
 	netdev_for_each_tx_queue(dev, netdev_init_one_queue, NULL);
 	spin_lock_init(&dev->tx_global_lock);
 
@@ -8118,6 +8132,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 
 	BUG_ON(strlen(name) >= sizeof(dev->name));
 
+	//tx队列数检查至少必须有一个
 	if (txqs < 1) {
 		pr_err("alloc_netdev: Unable to allocate device with zero queues\n");
 		return NULL;
@@ -8130,6 +8145,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	}
 #endif
 
+	//算上net_device的私有数据来申请空间（考虑内存对齐问题）
 	alloc_size = sizeof(struct net_device);
 	if (sizeof_priv) {
 		/* ensure 32-byte alignment of private area */
@@ -8139,10 +8155,13 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	/* ensure 32-byte alignment of whole construct */
 	alloc_size += NETDEV_ALIGN - 1;
 
+	//申请net_device的内存空间
 	p = kvzalloc(alloc_size, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!p)
+		//申请失败，报错
 		return NULL;
 
+	//保证dev头部对齐
 	dev = PTR_ALIGN(p, NETDEV_ALIGN);
 	dev->padded = (char *)dev - (char *)p;
 
@@ -8173,19 +8192,21 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	hash_init(dev->qdisc_hash);
 #endif
 	dev->priv_flags = IFF_XMIT_DST_RELEASE | IFF_XMIT_DST_RELEASE_PERM;
-	setup(dev);
+	setup(dev);//调用setup回调
 
 	if (!dev->tx_queue_len) {
 		dev->priv_flags |= IFF_NO_QUEUE;
 		dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
 	}
 
+	//tx队列初始化
 	dev->num_tx_queues = txqs;
 	dev->real_num_tx_queues = txqs;
 	if (netif_alloc_netdev_queues(dev))
 		goto free_all;
 
 #ifdef CONFIG_SYSFS
+	//rx队列申请（队列未初始化）
 	dev->num_rx_queues = rxqs;
 	dev->real_num_rx_queues = rxqs;
 	if (netif_alloc_rx_queues(dev))
@@ -8196,6 +8217,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	dev->name_assign_type = name_assign_type;
 	dev->group = INIT_NETDEV_GROUP;
 	if (!dev->ethtool_ops)
+		//设置默认的ethtool操作集
 		dev->ethtool_ops = &default_ethtool_ops;
 
 	nf_hook_ingress_init(dev);
@@ -8477,7 +8499,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	struct softnet_data *sd, *oldsd, *remsd = NULL;
 
 	local_irq_disable();
-	cpu = smp_processor_id();
+	cpu = smp_processor_id();//当前运行的cpu id
 	sd = &per_cpu(softnet_data, cpu);
 	oldsd = &per_cpu(softnet_data, oldcpu);
 
@@ -8505,10 +8527,13 @@ static int dev_cpu_dead(unsigned int oldcpu)
 							    struct napi_struct,
 							    poll_list);
 
+		//将这个napi自poll_list中移除掉
 		list_del_init(&napi->poll_list);
+		//如果poll的方法不是process_backlog，则触发中断方式进行收包
 		if (napi->poll == process_backlog)
 			napi->state = 0;
 		else
+			//触发rx软中断
 			____napi_schedule(sd, napi);
 	}
 

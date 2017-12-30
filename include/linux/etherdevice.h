@@ -99,6 +99,7 @@ static inline bool is_link_local_ether_addr(const u8 *addr)
  *
  * Please note: addr must be aligned to u16.
  */
+//检查是否为全0地址
 static inline bool is_zero_ether_addr(const u8 *addr)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
@@ -193,6 +194,7 @@ static inline bool is_unicast_ether_addr(const u8 *addr)
  *
  * Please note: addr must be aligned to u16.
  */
+//检查是否为合法的mac地址（只要不是全0地址，不是组播地址，就为合法的mac地址）
 static inline bool is_valid_ether_addr(const u8 *addr)
 {
 	/* FF:FF:FF:FF:FF:FF is a multicast address so we don't need to

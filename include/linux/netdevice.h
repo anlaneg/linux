@@ -280,8 +280,8 @@ struct header_ops {
  */
 
 enum netdev_state_t {
-	__LINK_STATE_START,
-	__LINK_STATE_PRESENT,
+	__LINK_STATE_START,//设备已开启
+	__LINK_STATE_PRESENT,//设备存在且有效未被删除
 	__LINK_STATE_NOCARRIER,
 	__LINK_STATE_LINKWATCH_PENDING,
 	__LINK_STATE_DORMANT,
@@ -552,7 +552,7 @@ struct netdev_queue {
 /*
  * read-mostly part
  */
-	struct net_device	*dev;
+	struct net_device	*dev;//此队列属于哪个网络设备
 	struct Qdisc __rcu	*qdisc;
 	struct Qdisc		*qdisc_sleeping;
 #ifdef CONFIG_SYSFS
@@ -1657,6 +1657,7 @@ enum netdev_priv_flags {
  */
 
 struct net_device {
+	//设备名称
 	char			name[IFNAMSIZ];
 	struct hlist_node	name_hlist;
 	struct dev_ifalias	__rcu *ifalias;
@@ -1734,6 +1735,7 @@ struct net_device {
 	unsigned int		priv_flags;
 
 	unsigned short		gflags;
+	//dev指针是内存对齐的，此字段记录了实际内存到dev指针的偏移，以便进行内存释放
 	unsigned short		padded;
 
 	unsigned char		operstate;
@@ -1742,12 +1744,12 @@ struct net_device {
 	unsigned char		if_port;
 	unsigned char		dma;
 
-	unsigned int		mtu;
-	unsigned int		min_mtu;
-	unsigned int		max_mtu;
+	unsigned int		mtu;//设置的mtu
+	unsigned int		min_mtu;//设置最小mtu
+	unsigned int		max_mtu;//设置最大mtu
 	unsigned short		type;
-	unsigned short		hard_header_len;
-	unsigned char		min_header_len;
+	unsigned short		hard_header_len;//协议头部长度（例如以太头为14）
+	unsigned char		min_header_len;//最小协议头部长度
 
 	unsigned short		needed_headroom;
 	unsigned short		needed_tailroom;
@@ -1755,7 +1757,7 @@ struct net_device {
 	/* Interface address info. */
 	unsigned char		perm_addr[MAX_ADDR_LEN];
 	unsigned char		addr_assign_type;
-	unsigned char		addr_len;
+	unsigned char		addr_len;//设备地址长度（如以太网6字节）
 	unsigned short		neigh_priv_len;
 	unsigned short          dev_id;
 	unsigned short          dev_port;
@@ -1802,6 +1804,7 @@ struct net_device {
 	unsigned char		*dev_addr;
 
 #ifdef CONFIG_SYSFS
+	//rx队列（rx队列数为num_rx_queues)
 	struct netdev_rx_queue	*_rx;
 
 	unsigned int		num_rx_queues;
@@ -1821,7 +1824,7 @@ struct net_device {
 	struct nf_hook_entries __rcu *nf_hooks_ingress;
 #endif
 
-	unsigned char		broadcast[MAX_ADDR_LEN];
+	unsigned char		broadcast[MAX_ADDR_LEN];//广播地址
 #ifdef CONFIG_RFS_ACCEL
 	struct cpu_rmap		*rx_cpu_rmap;
 #endif
@@ -1830,14 +1833,15 @@ struct net_device {
 /*
  * Cache lines mostly used on transmit path
  */
+	//tx队列（其数量为num_tx_queues个）
 	struct netdev_queue	*_tx ____cacheline_aligned_in_smp;
-	unsigned int		num_tx_queues;
-	unsigned int		real_num_tx_queues;
+	unsigned int		num_tx_queues;//tx队列数
+	unsigned int		real_num_tx_queues;//有效的tx队列数
 	struct Qdisc		*qdisc;
 #ifdef CONFIG_NET_SCHED
 	DECLARE_HASHTABLE	(qdisc_hash, 4);
 #endif
-	unsigned int		tx_queue_len;
+	unsigned int		tx_queue_len;//tx队列大小
 	spinlock_t		tx_global_lock;
 	int			watchdog_timeo;
 
@@ -1978,6 +1982,7 @@ static inline struct netdev_queue *skb_get_tx_queue(const struct net_device *dev
 	return netdev_get_tx_queue(dev, skb_get_queue_mapping(skb));
 }
 
+//针对每个tx队列调用f回调
 static inline void netdev_for_each_tx_queue(struct net_device *dev,
 					    void (*f)(struct net_device *,
 						      struct netdev_queue *,
@@ -2778,7 +2783,7 @@ extern int netdev_flow_limit_table_len;
  * Incoming packets are placed on per-CPU queues
  */
 struct softnet_data {
-	struct list_head	poll_list;
+	struct list_head	poll_list;//用于挂接可轮循的dev
 	struct sk_buff_head	process_queue;
 
 	/* stats */

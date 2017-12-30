@@ -435,7 +435,9 @@ extern bool force_irqthreads;
 #endif
 
 #ifndef __ARCH_SET_SOFTIRQ_PENDING
+//设置软中断
 #define set_softirq_pending(x) (local_softirq_pending() = (x))
+//采用or的方式设置软中断标记位
 #define or_softirq_pending(x)  (local_softirq_pending() |= (x))
 #endif
 

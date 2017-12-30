@@ -366,6 +366,7 @@ int dev_addr_init(struct net_device *dev)
 
 	/* rtnl_mutex must be held here */
 
+	//初始化一个纯0的mac地址
 	__hw_addr_init(&dev->dev_addrs);
 	memset(addr, 0, sizeof(addr));
 	err = __hw_addr_add(&dev->dev_addrs, addr, sizeof(addr),

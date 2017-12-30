@@ -239,11 +239,12 @@ static inline bool lockdep_softirq_start(void) { return false; }
 static inline void lockdep_softirq_end(bool in_hardirq) { }
 #endif
 
+//执行当前cpu上的所有软中断
 asmlinkage __visible void __softirq_entry __do_softirq(void)
 {
 	unsigned long end = jiffies + MAX_SOFTIRQ_TIME;
 	unsigned long old_flags = current->flags;
-	int max_restart = MAX_SOFTIRQ_RESTART;
+	int max_restart = MAX_SOFTIRQ_RESTART;//最多处理次数
 	struct softirq_action *h;
 	bool in_hardirq;
 	__u32 pending;
@@ -256,6 +257,7 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 	 */
 	current->flags &= ~PF_MEMALLOC;
 
+	//拷一份未决的软中断
 	pending = local_softirq_pending();
 	account_irq_enter_time(current);
 
@@ -264,25 +266,27 @@ asmlinkage __visible void __softirq_entry __do_softirq(void)
 
 restart:
 	/* Reset the pending bitmask before enabling irqs */
-	set_softirq_pending(0);
+	set_softirq_pending(0);//由于已完成copy，则本地cpu的软中断可以清0了
 
-	local_irq_enable();
+	local_irq_enable();//已完成copy与赋值，开启本地硬件中断响应
 
 	h = softirq_vec;
 
+	//ffs(0x1)==1,ffs(0x10)==5,ffs(0x100)==9
+	//返回最高位所在的比特数
 	while ((softirq_bit = ffs(pending))) {
 		unsigned int vec_nr;
 		int prev_count;
 
-		h += softirq_bit - 1;
+		h += softirq_bit - 1;//从0开始编号，故需要减1（这句将h指向对应的中断）
 
-		vec_nr = h - softirq_vec;
+		vec_nr = h - softirq_vec;//获得对应的中断号
 		prev_count = preempt_count();
 
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
-		h->action(h);
+		h->action(h);//执行软件中断的回调函数
 		trace_softirq_exit(vec_nr);
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
@@ -290,15 +294,17 @@ restart:
 			       prev_count, preempt_count());
 			preempt_count_set(prev_count);
 		}
-		h++;
-		pending >>= softirq_bit;
+		h++;//h移到0号位置（与下句一起配合）
+		pending >>= softirq_bit;//将pending向右移
 	}
 
 	rcu_bh_qs();
-	local_irq_disable();
+	local_irq_disable();//需要在不变更的情况下检查，故关闭本地硬件中断
 
+	//检查上面在触发过程中是否有新的软中断出现
 	pending = local_softirq_pending();
 	if (pending) {
+		//如果处理时间并不长，则再处理一次
 		if (time_before(jiffies, end) && !need_resched() &&
 		    --max_restart)
 			goto restart;
@@ -429,6 +435,7 @@ inline void raise_softirq_irqoff(unsigned int nr)
 		wakeup_softirqd();
 }
 
+//触发nr号软件中断
 void raise_softirq(unsigned int nr)
 {
 	unsigned long flags;
@@ -438,12 +445,14 @@ void raise_softirq(unsigned int nr)
 	local_irq_restore(flags);
 }
 
+//通过标记nr号位来标记对应软件中断触发
 void __raise_softirq_irqoff(unsigned int nr)
 {
 	trace_softirq_raise(nr);
 	or_softirq_pending(1UL << nr);
 }
 
+//设置软件中断的action
 void open_softirq(int nr, void (*action)(struct softirq_action *))
 {
 	softirq_vec[nr].action = action;
@@ -655,10 +664,12 @@ static int ksoftirqd_should_run(unsigned int cpu)
 	return local_softirq_pending();
 }
 
+//执行cpu对应的软中断
 static void run_ksoftirqd(unsigned int cpu)
 {
 	local_irq_disable();
 	if (local_softirq_pending()) {
+		//本机必须要有未绝的软中断才能进来
 		/*
 		 * We can safely run softirq on inline stack, as we are not deep
 		 * in the task stack here.
@@ -733,6 +744,7 @@ static int takeover_tasklets(unsigned int cpu)
 #define takeover_tasklets	NULL
 #endif /* CONFIG_HOTPLUG_CPU */
 
+//各cpu上的软中断处理线程
 static struct smp_hotplug_thread softirq_threads = {
 	.store			= &ksoftirqd,
 	.thread_should_run	= ksoftirqd_should_run,
