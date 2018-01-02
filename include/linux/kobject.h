@@ -120,6 +120,7 @@ extern char *kobject_get_path(struct kobject *kobj, gfp_t flag);
 struct kobj_type {
 	void (*release)(struct kobject *kobj);
 	const struct sysfs_ops *sysfs_ops;
+    //所有默认属性
 	struct attribute **default_attrs;
 	const struct kobj_ns_type_operations *(*child_ns_type)(struct kobject *kobj);
 	const void *(*namespace)(struct kobject *kobj);

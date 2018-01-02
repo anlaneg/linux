@@ -268,6 +268,7 @@ static inline void eth_zero_addr(u8 *addr)
  * and set addr_assign_type so the state can be read by sysfs and be
  * used by userspace.
  */
+//产生随机mac地址
 static inline void eth_hw_addr_random(struct net_device *dev)
 {
 	dev->addr_assign_type = NET_ADDR_RANDOM;

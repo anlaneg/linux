@@ -194,46 +194,56 @@ void sysfs_notify(struct kobject *kobj, const char *dir, const char *attr)
 }
 EXPORT_SYMBOL_GPL(sysfs_notify);
 
+//不可读，不可写的操作集
 static const struct kernfs_ops sysfs_file_kfops_empty = {
 };
 
+//文本只读操作集
 static const struct kernfs_ops sysfs_file_kfops_ro = {
 	.seq_show	= sysfs_kf_seq_show,
 };
 
+//文本只写操作集
 static const struct kernfs_ops sysfs_file_kfops_wo = {
 	.write		= sysfs_kf_write,
 };
 
+//文本读写操作集
 static const struct kernfs_ops sysfs_file_kfops_rw = {
 	.seq_show	= sysfs_kf_seq_show,
 	.write		= sysfs_kf_write,
 };
 
+//预申请读操作集
 static const struct kernfs_ops sysfs_prealloc_kfops_ro = {
 	.read		= sysfs_kf_read,
 	.prealloc	= true,
 };
 
+//预申请写操作集
 static const struct kernfs_ops sysfs_prealloc_kfops_wo = {
 	.write		= sysfs_kf_write,
 	.prealloc	= true,
 };
 
+//预申请读写操作集
 static const struct kernfs_ops sysfs_prealloc_kfops_rw = {
 	.read		= sysfs_kf_read,
 	.write		= sysfs_kf_write,
 	.prealloc	= true,
 };
 
+//二进制读
 static const struct kernfs_ops sysfs_bin_kfops_ro = {
 	.read		= sysfs_kf_bin_read,
 };
 
+//二进制写
 static const struct kernfs_ops sysfs_bin_kfops_wo = {
 	.write		= sysfs_kf_bin_write,
 };
 
+//二进制读写
 static const struct kernfs_ops sysfs_bin_kfops_rw = {
 	.read		= sysfs_kf_bin_read,
 	.write		= sysfs_kf_bin_write,
@@ -265,25 +275,30 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 			return -EINVAL;
 
 		if (sysfs_ops->show && sysfs_ops->store) {
+            //可读可写
 			if (mode & SYSFS_PREALLOC)
 				ops = &sysfs_prealloc_kfops_rw;
 			else
 				ops = &sysfs_file_kfops_rw;
 		} else if (sysfs_ops->show) {
+            //可读
 			if (mode & SYSFS_PREALLOC)
 				ops = &sysfs_prealloc_kfops_ro;
 			else
 				ops = &sysfs_file_kfops_ro;
 		} else if (sysfs_ops->store) {
+            //仅可写
 			if (mode & SYSFS_PREALLOC)
 				ops = &sysfs_prealloc_kfops_wo;
 			else
 				ops = &sysfs_file_kfops_wo;
 		} else
+            //不可读，不可写
 			ops = &sysfs_file_kfops_empty;
 
 		size = PAGE_SIZE;
 	} else {
+        //二进制属性,考虑读写权限
 		struct bin_attribute *battr = (void *)attr;
 
 		if (battr->mmap)
@@ -304,6 +319,8 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 	if (!attr->ignore_lockdep)
 		key = attr->key ?: (struct lock_class_key *)&attr->skey;
 #endif
+    //调用文件创建,使mode仅9个bit生效
+    //使用“操作集","属性“
 	kn = __kernfs_create_file(parent, attr->name, mode & 0777, size, ops,
 				  (void *)attr, ns, key);
 	if (IS_ERR(kn)) {

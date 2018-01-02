@@ -2609,6 +2609,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 				   offsetof(struct virtio_net_config, mac),
 				   dev->dev_addr, dev->addr_len);
 	else
+        //如果不支持配置mac地址，则产生随机mac地址
 		eth_hw_addr_random(dev);
 
 	/* Set up our device-specific information */

@@ -344,6 +344,7 @@ static int kernfs_sd_compare(const struct kernfs_node *left,
  *	RETURNS:
  *	0 on susccess -EEXIST on failure.
  */
+//采用红黑树方式插入树
 static int kernfs_link_sibling(struct kernfs_node *kn)
 {
 	struct rb_node **node = &kn->parent->dir.children.rb_node;
@@ -365,7 +366,7 @@ static int kernfs_link_sibling(struct kernfs_node *kn)
 	}
 
 	/* add new node and rebalance the tree */
-	rb_link_node(&kn->rb, parent, node);
+	rb_link_node(&kn->rb, parent, node);//将节点加入到parent中
 	rb_insert_color(&kn->rb, &kn->parent->dir.children);
 
 	/* successfully added, account subdir number */
@@ -759,6 +760,7 @@ int kernfs_add_one(struct kernfs_node *kn)
 		 has_ns ? "required" : "invalid", parent->name, kn->name))
 		goto out_unlock;
 
+    //父节点必须是一个目录
 	if (kernfs_type(parent) != KERNFS_DIR)
 		goto out_unlock;
 

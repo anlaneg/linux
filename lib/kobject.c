@@ -53,6 +53,7 @@ static int populate_dir(struct kobject *kobj)
 	int error = 0;
 	int i;
 
+    //有默认属性，遍历所有默认属性(将其处理为文件）
 	if (t && t->default_attrs) {
 		for (i = 0; (attr = t->default_attrs[i]) != NULL; i++) {
 			error = sysfs_create_file(kobj, attr);
@@ -68,10 +69,12 @@ static int create_dir(struct kobject *kobj)
 	const struct kobj_ns_type_operations *ops;
 	int error;
 
+    //创建目录
 	error = sysfs_create_dir_ns(kobj, kobject_namespace(kobj));
 	if (error)
 		return error;
 
+    //创建属性文件
 	error = populate_dir(kobj);
 	if (error) {
 		sysfs_remove_dir(kobj);
@@ -100,6 +103,7 @@ static int create_dir(struct kobject *kobj)
 	return 0;
 }
 
+//返回kobj到顶层目录的文件路径长度
 static int get_kobj_path_length(struct kobject *kobj)
 {
 	int length = 1;
@@ -110,6 +114,8 @@ static int get_kobj_path_length(struct kobject *kobj)
 	 * Add 1 to strlen for leading '/' of each level.
 	 */
 	do {
+        //通过递归调用kobject_name来计算从当前文件到
+        //父节点的名称长度以（每过一次+1来表示'/')
 		if (kobject_name(parent) == NULL)
 			return 0;
 		length += strlen(kobject_name(parent)) + 1;
@@ -118,11 +124,13 @@ static int get_kobj_path_length(struct kobject *kobj)
 	return length;
 }
 
+//填充kobj的路径，这个函数要求path足够大
 static void fill_kobj_path(struct kobject *kobj, char *path, int length)
 {
 	struct kobject *parent;
 
-	--length;
+	--length;//跳过'\0'
+    //由于自底向上遍历，故填充时，自尾向头填充字符串
 	for (parent = kobj; parent; parent = parent->parent) {
 		int cur = strlen(kobject_name(parent));
 		/* back up enough to print this name with '/' */
@@ -148,19 +156,24 @@ char *kobject_get_path(struct kobject *kobj, gfp_t gfp_mask)
 	char *path;
 	int len;
 
+    //取kobj路径长度
 	len = get_kobj_path_length(kobj);
 	if (len == 0)
 		return NULL;
+    //申请足够内存
 	path = kzalloc(len, gfp_mask);
 	if (!path)
 		return NULL;
+    //填充kobj路径到path
 	fill_kobj_path(kobj, path, len);
 
+    //返回填充后结果
 	return path;
 }
 EXPORT_SYMBOL_GPL(kobject_get_path);
 
 /* add the kobject to its kset's list */
+//将kobj加入到它所属的kset
 static void kobj_kset_join(struct kobject *kobj)
 {
 	if (!kobj->kset)
@@ -173,6 +186,7 @@ static void kobj_kset_join(struct kobject *kobj)
 }
 
 /* remove the kobject from its kset's list */
+//将kobj自其所属的kset上移除
 static void kobj_kset_leave(struct kobject *kobj)
 {
 	if (!kobj->kset)
@@ -193,7 +207,7 @@ static void kobject_init_internal(struct kobject *kobj)
 	kobj->state_in_sysfs = 0;
 	kobj->state_add_uevent_sent = 0;
 	kobj->state_remove_uevent_sent = 0;
-	kobj->state_initialized = 1;
+	kobj->state_initialized = 1;//标记已初始化
 }
 
 
@@ -205,6 +219,7 @@ static int kobject_add_internal(struct kobject *kobj)
 	if (!kobj)
 		return -ENOENT;
 
+    //kobj必须要有名称
 	if (!kobj->name || !kobj->name[0]) {
 		WARN(1, "kobject: (%p): attempted to be registered with empty "
 			 "name!\n", kobj);
@@ -226,6 +241,7 @@ static int kobject_add_internal(struct kobject *kobj)
 		 parent ? kobject_name(parent) : "<NULL>",
 		 kobj->kset ? kobject_name(&kobj->kset->kobj) : "<NULL>");
 
+    //创建kobj所属的目录
 	error = create_dir(kobj);
 	if (error) {
 		kobj_kset_leave(kobj);
@@ -262,6 +278,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
 	if (kobj->name && !fmt)
 		return 0;
 
+    //格式化字符串
 	s = kvasprintf_const(GFP_KERNEL, fmt, vargs);
 	if (!s)
 		return -ENOMEM;
@@ -272,6 +289,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
 	 * allocated copy to modify, since kvasprintf_const may have
 	 * returned something from .rodata.
 	 */
+    //如果字符串含有'/',则将其更换为'!'
 	if (strchr(s, '/')) {
 		char *t;
 
@@ -283,7 +301,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
 		s = t;
 	}
 	kfree_const(kobj->name);
-	kobj->name = s;
+	kobj->name = s;//设置kobj的名称
 
 	return 0;
 }
@@ -299,6 +317,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
  */
 int kobject_set_name(struct kobject *kobj, const char *fmt, ...)
 {
+    //采用格式化串设置kobject名称
 	va_list vargs;
 	int retval;
 
@@ -326,6 +345,7 @@ void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 {
 	char *err_str;
 
+    //参数检查
 	if (!kobj) {
 		err_str = "invalid kobject pointer!";
 		goto error;
@@ -334,6 +354,8 @@ void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 		err_str = "must have a ktype to be initialized properly!\n";
 		goto error;
 	}
+
+    //已初始化，报错
 	if (kobj->state_initialized) {
 		/* do not error out as sometimes we can recover */
 		printk(KERN_ERR "kobject (%p): tried to init an initialized "
@@ -357,6 +379,7 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 {
 	int retval;
 
+    //格式化kobj的name
 	retval = kobject_set_name_vargs(kobj, fmt, vargs);
 	if (retval) {
 		printk(KERN_ERR "kobject: can not set name properly!\n");
@@ -400,6 +423,7 @@ int kobject_add(struct kobject *kobj, struct kobject *parent,
 	if (!kobj)
 		return -EINVAL;
 
+    //必须已初始化
 	if (!kobj->state_initialized) {
 		printk(KERN_ERR "kobject '%s' (%p): tried to add an "
 		       "uninitialized object, something is seriously wrong.\n",
@@ -407,6 +431,7 @@ int kobject_add(struct kobject *kobj, struct kobject *parent,
 		dump_stack();
 		return -EINVAL;
 	}
+    //格式化名称
 	va_start(args, fmt);
 	retval = kobject_add_varg(kobj, parent, fmt, args);
 	va_end(args);
@@ -774,6 +799,7 @@ void kset_init(struct kset *k)
 	spin_lock_init(&k->list_lock);
 }
 
+//显示属性
 /* default kobject attribute operations */
 static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
 			      char *buf)
@@ -787,6 +813,7 @@ static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
 	return ret;
 }
 
+//设置属性
 static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
 			       const char *buf, size_t count)
 {
