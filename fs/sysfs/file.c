@@ -245,6 +245,7 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 	.mmap		= sysfs_kf_bin_mmap,
 };
 
+//向sysfs添加一个文件
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 			   const struct attribute *attr, bool is_bin,
 			   umode_t mode, const void *ns)

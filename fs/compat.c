@@ -167,17 +167,17 @@ COMPAT_SYSCALL_DEFINE5(mount, const char __user *, dev_name,
 	char *kernel_dev;
 	int retval;
 
-	kernel_type = copy_mount_string(type);
+	kernel_type = copy_mount_string(type);//文件系统类型
 	retval = PTR_ERR(kernel_type);
 	if (IS_ERR(kernel_type))
 		goto out;
 
-	kernel_dev = copy_mount_string(dev_name);
+	kernel_dev = copy_mount_string(dev_name);//要挂载的设备名称
 	retval = PTR_ERR(kernel_dev);
 	if (IS_ERR(kernel_dev))
 		goto out1;
 
-	options = copy_mount_options(data);
+	options = copy_mount_options(data);//挂载选项
 	retval = PTR_ERR(options);
 	if (IS_ERR(options))
 		goto out2;

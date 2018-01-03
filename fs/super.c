@@ -1216,6 +1216,7 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 			goto out_free_secdata;
 	}
 
+	//调用对应文件系统的mount函数，实现对文件系统的挂载，挂载点为name
 	root = type->mount(type, flags, name, data);
 	if (IS_ERR(root)) {
 		error = PTR_ERR(root);

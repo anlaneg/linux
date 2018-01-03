@@ -79,15 +79,15 @@ enum kernfs_root_flag {
 
 /* type-specific structures for kernfs_node union members */
 struct kernfs_elem_dir {
-	unsigned long		subdirs;
+	unsigned long		subdirs;//有多少个子目录
 	/* children rbtree starts here and goes through kn->rb */
-	struct rb_root		children;
+	struct rb_root		children;//用于包含属于自已的文件目录
 
 	/*
 	 * The kernfs hierarchy this directory belongs to.  This fits
 	 * better directly in kernfs_node but is here to save space.
 	 */
-	struct kernfs_root	*root;
+	struct kernfs_root	*root;//根节点
 };
 
 struct kernfs_elem_symlink {
@@ -145,15 +145,15 @@ struct kernfs_node {
 	const void		*ns;	/* namespace tag */
 	unsigned int		hash;	/* ns + name hash */
 	union {
-		struct kernfs_elem_dir		dir;
-		struct kernfs_elem_symlink	symlink;
-		struct kernfs_elem_attr		attr;
+		struct kernfs_elem_dir		dir;//目录
+		struct kernfs_elem_symlink	symlink;//链接
+		struct kernfs_elem_attr		attr;//文件属性
 	};
 
 	void			*priv;
 
 	union kernfs_node_id	id;
-	unsigned short		flags;
+	unsigned short		flags;//指出此节点的能力(例如文件）
 	umode_t			mode;
 	struct kernfs_iattrs	*iattr;
 };

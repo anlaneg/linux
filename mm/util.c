@@ -20,6 +20,7 @@
 
 #include "internal.h"
 
+//检查是否为只读数据
 static inline int is_kernel_rodata(unsigned long addr)
 {
 	return addr >= (unsigned long)__start_rodata &&
@@ -44,7 +45,7 @@ EXPORT_SYMBOL(kfree_const);
  * @s: the string to duplicate
  * @gfp: the GFP mask used in the kmalloc() call when allocating memory
  */
-char *kstrdup(const char *s, gfp_t gfp)
+char *kstrdup(const char *s, gfp_t gfp)//实现s字符串的copy
 {
 	size_t len;
 	char *buf;
@@ -53,9 +54,9 @@ char *kstrdup(const char *s, gfp_t gfp)
 		return NULL;
 
 	len = strlen(s) + 1;
-	buf = kmalloc_track_caller(len, gfp);
+	buf = kmalloc_track_caller(len, gfp);//申请内存
 	if (buf)
-		memcpy(buf, s, len);
+		memcpy(buf, s, len);//内存copy
 	return buf;
 }
 EXPORT_SYMBOL(kstrdup);
@@ -71,6 +72,7 @@ EXPORT_SYMBOL(kstrdup);
  */
 const char *kstrdup_const(const char *s, gfp_t gfp)
 {
+	//对于只读数据直接返回s
 	if (is_kernel_rodata((unsigned long)s))
 		return s;
 

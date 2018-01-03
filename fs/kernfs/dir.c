@@ -344,8 +344,10 @@ static int kernfs_sd_compare(const struct kernfs_node *left,
  *	RETURNS:
  *	0 on susccess -EEXIST on failure.
  */
+//将kn放入kn所属的目录中，目录内按rb树进行维护
 static int kernfs_link_sibling(struct kernfs_node *kn)
 {
+	//取父节点的根
 	struct rb_node **node = &kn->parent->dir.children.rb_node;
 	struct rb_node *parent = NULL;
 
@@ -353,22 +355,26 @@ static int kernfs_link_sibling(struct kernfs_node *kn)
 		struct kernfs_node *pos;
 		int result;
 
-		pos = rb_to_kn(*node);
+		pos = rb_to_kn(*node);//由rb_node到kernfs_node
 		parent = *node;
+		//比较kn与pos,如果kn大则比对右树，如果kn小，则比对左树
 		result = kernfs_sd_compare(kn, pos);
 		if (result < 0)
 			node = &pos->rb.rb_left;
 		else if (result > 0)
 			node = &pos->rb.rb_right;
 		else
+			//恰好相等，说明元素已存在，报错
 			return -EEXIST;
 	}
 
 	/* add new node and rebalance the tree */
+	//将node放入，并尝试平衡
 	rb_link_node(&kn->rb, parent, node);
 	rb_insert_color(&kn->rb, &kn->parent->dir.children);
 
 	/* successfully added, account subdir number */
+	//如果kn是目录，则父目录中包含的子目录加一
 	if (kernfs_type(kn) == KERNFS_DIR)
 		kn->parent->dir.subdirs++;
 
@@ -626,10 +632,12 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	int cursor;
 	int ret;
 
+	//复制名称
 	name = kstrdup_const(name, GFP_KERNEL);
 	if (!name)
 		return NULL;
 
+	//申请一个node
 	kn = kmem_cache_zalloc(kernfs_node_cache, GFP_KERNEL);
 	if (!kn)
 		goto err_out1;
@@ -759,10 +767,12 @@ int kernfs_add_one(struct kernfs_node *kn)
 		 has_ns ? "required" : "invalid", parent->name, kn->name))
 		goto out_unlock;
 
+	//父节点必须为目录
 	if (kernfs_type(parent) != KERNFS_DIR)
 		goto out_unlock;
 
 	ret = -ENOENT;
+	//父节点要求为空目录
 	if (parent->flags & KERNFS_EMPTY_DIR)
 		goto out_unlock;
 
@@ -771,11 +781,13 @@ int kernfs_add_one(struct kernfs_node *kn)
 
 	kn->hash = kernfs_name_hash(kn->name, kn->ns);
 
+	//将kn加入其所属的目录（kn->parent)
 	ret = kernfs_link_sibling(kn);
 	if (ret)
 		goto out_unlock;
 
 	/* Update timestamps on the parent */
+	//更新时间
 	ps_iattr = parent->iattr;
 	if (ps_iattr) {
 		struct iattr *ps_iattrs = &ps_iattr->ia_iattr;
@@ -931,6 +943,7 @@ struct kernfs_node *kernfs_walk_and_get_ns(struct kernfs_node *parent,
  * Returns the root of the new hierarchy on success, ERR_PTR() value on
  * failure.
  */
+//创建根节点
 struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 				       unsigned int flags, void *priv)
 {
@@ -945,6 +958,7 @@ struct kernfs_root *kernfs_create_root(struct kernfs_syscall_ops *scops,
 	INIT_LIST_HEAD(&root->supers);
 	root->next_generation = 1;
 
+	//创建第一个节点
 	kn = __kernfs_new_node(root, "", S_IFDIR | S_IRUGO | S_IXUGO,
 			       KERNFS_DIR);
 	if (!kn) {
@@ -989,6 +1003,7 @@ void kernfs_destroy_root(struct kernfs_root *root)
  *
  * Returns the created node on success, ERR_PTR() value on failure.
  */
+//目录创建
 struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
 					 const char *name, umode_t mode,
 					 void *priv, const void *ns)
@@ -1001,6 +1016,7 @@ struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
 
+	//继承parent的root
 	kn->dir.root = parent->dir.root;
 	kn->ns = ns;
 	kn->priv = priv;
@@ -1021,6 +1037,7 @@ struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
  *
  * Returns the created node on success, ERR_PTR() value on failure.
  */
+//创建总为空的目录
 struct kernfs_node *kernfs_create_empty_dir(struct kernfs_node *parent,
 					    const char *name)
 {

@@ -67,16 +67,18 @@ static int find_dynamic_major(void)
 	int i;
 	struct char_device_struct *cd;
 
+	//检查chrdevs中是否存在空的设备位置（234到255之间）
 	for (i = ARRAY_SIZE(chrdevs)-1; i > CHRDEV_MAJOR_DYN_END; i--) {
 		if (chrdevs[i] == NULL)
 			return i;
 	}
 
+	//384到511之间的为动态扩展
 	for (i = CHRDEV_MAJOR_DYN_EXT_START;
 	     i > CHRDEV_MAJOR_DYN_EXT_END; i--) {
 		for (cd = chrdevs[major_to_index(i)]; cd; cd = cd->next)
 			if (cd->major == i)
-				break;
+				break;//如果major相同，则跳出
 
 		if (cd == NULL || cd->major != i)
 			return i;
@@ -104,12 +106,14 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	int ret = 0;
 	int i;
 
+	//为char设备申请内存
 	cd = kzalloc(sizeof(struct char_device_struct), GFP_KERNEL);
 	if (cd == NULL)
 		return ERR_PTR(-ENOMEM);
 
 	mutex_lock(&chrdevs_lock);
 
+	//如果major为0，则选用动态的major
 	if (major == 0) {
 		ret = find_dynamic_major();
 		if (ret < 0) {
@@ -117,9 +121,11 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 			       name);
 			goto out;
 		}
+		//为其申请一个major
 		major = ret;
 	}
 
+	//给的值有误，报错
 	if (major >= CHRDEV_MAJOR_MAX) {
 		pr_err("CHRDEV \"%s\" major requested (%d) is greater than the maximum (%d)\n",
 		       name, major, CHRDEV_MAJOR_MAX);
@@ -135,13 +141,16 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	i = major_to_index(major);
 
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
+		//按major进行排序，如果major相等，按baseminor进行排序
+		//如果baseminor小与我们，则检查baseminor＋minorct是否小于我们的baseminor
 		if ((*cp)->major > major ||
 		    ((*cp)->major == major &&
 		     (((*cp)->baseminor >= baseminor) ||
 		      ((*cp)->baseminor + (*cp)->minorct > baseminor))))
-			break;
+			break;//我们需要排在cp前面
 
 	/* Check for overlapping minor ranges.  */
+	//检查是否发生了范围重叠，如果有重叠，则报错
 	if (*cp && (*cp)->major == major) {
 		int old_min = (*cp)->baseminor;
 		int old_max = (*cp)->baseminor + (*cp)->minorct - 1;
@@ -161,6 +170,7 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		}
 	}
 
+	//实现cd排在cp前面的逻辑
 	cd->next = *cp;
 	*cp = cd;
 	mutex_unlock(&chrdevs_lock);
@@ -239,6 +249,7 @@ fail:
 int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 			const char *name)
 {
+	//注册char设备，并设置dev_t
 	struct char_device_struct *cd;
 	cd = __register_chrdev_region(0, baseminor, count, name);
 	if (IS_ERR(cd))

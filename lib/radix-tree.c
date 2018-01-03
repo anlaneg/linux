@@ -463,6 +463,7 @@ radix_tree_node_free(struct radix_tree_node *node)
  * To make use of this facility, the radix tree must be initialised without
  * __GFP_DIRECT_RECLAIM being passed to INIT_RADIX_TREE().
  */
+//提前申请nr个节点
 static __must_check int __radix_tree_preload(gfp_t gfp_mask, unsigned nr)
 {
 	struct radix_tree_preload *rtp;
@@ -476,18 +477,19 @@ static __must_check int __radix_tree_preload(gfp_t gfp_mask, unsigned nr)
 	gfp_mask &= ~__GFP_ACCOUNT;
 
 	preempt_disable();
-	rtp = this_cpu_ptr(&radix_tree_preloads);
+	rtp = this_cpu_ptr(&radix_tree_preloads);//各cpu上进行申请
 	while (rtp->nr < nr) {
 		preempt_enable();
 		node = kmem_cache_alloc(radix_tree_node_cachep, gfp_mask);
 		if (node == NULL)
+			//申请失败退出
 			goto out;
 		preempt_disable();
 		rtp = this_cpu_ptr(&radix_tree_preloads);
 		if (rtp->nr < nr) {
 			node->parent = rtp->nodes;
 			rtp->nodes = node;
-			rtp->nr++;
+			rtp->nr++;//预申请数
 		} else {
 			kmem_cache_free(radix_tree_node_cachep, node);
 		}

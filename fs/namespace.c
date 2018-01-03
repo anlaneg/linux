@@ -2505,6 +2505,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!fstype)
 		return -EINVAL;
 
+	//要挂载此文件系统，先查找是否认识此文件系统
 	type = get_fs_type(fstype);
 	if (!type)
 		return -ENODEV;

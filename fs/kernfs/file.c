@@ -986,6 +986,7 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 
 	flags = KERNFS_FILE;
 
+	//申请一个kernfs_node
 	kn = kernfs_new_node(parent, name, (mode & S_IALLUGO) | S_IFREG, flags);
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
