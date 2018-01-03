@@ -35,6 +35,7 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 			return ERR_PTR(-EPERM);
 	}
 
+	//获取namespace
 	ns = kobj_ns_grab_current(KOBJ_NS_TYPE_NET);
 	root = kernfs_mount_ns(fs_type, flags, sysfs_root,
 				SYSFS_MAGIC, &new_sb, ns);
@@ -56,7 +57,7 @@ static void sysfs_kill_sb(struct super_block *sb)
 
 static struct file_system_type sysfs_fs_type = {
 	.name		= "sysfs",
-	.mount		= sysfs_mount,
+	.mount		= sysfs_mount,//挂载sysfs时调用
 	.kill_sb	= sysfs_kill_sb,
 	.fs_flags	= FS_USERNS_MOUNT,
 };
@@ -72,6 +73,7 @@ int __init sysfs_init(void)
 
 	sysfs_root_kn = sysfs_root->kn;
 
+	//注册sysfs文件系统
 	err = register_filesystem(&sysfs_fs_type);
 	if (err) {
 		kernfs_destroy_root(sysfs_root);

@@ -14,9 +14,9 @@ struct module;
 struct cdev {
 	struct kobject kobj;
 	struct module *owner;
-	const struct file_operations *ops;
+	const struct file_operations *ops;//操作集
 	struct list_head list;
-	dev_t dev;
+	dev_t dev;//设备编号
 	unsigned int count;
 } __randomize_layout;
 

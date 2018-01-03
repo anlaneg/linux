@@ -428,6 +428,7 @@ struct uio_listener {
 	s32 event_count;
 };
 
+//uio设备被打开时执行
 static int uio_open(struct inode *inode, struct file *filep)
 {
 	struct uio_device *idev;
@@ -738,12 +739,13 @@ static int uio_major_init(void)
 		goto out;
 
 	result = -ENOMEM;
-	cdev = cdev_alloc();
+	cdev = cdev_alloc();//申请字符设备内存
 	if (!cdev)
 		goto out_unregister;
 
 	cdev->owner = THIS_MODULE;
-	cdev->ops = &uio_fops;
+	cdev->ops = &uio_fops;//设置uio的操作集
+	//设置cdev的名称为"uio"
 	kobject_set_name(&cdev->kobj, "%s", name);
 
 	result = cdev_add(cdev, uio_dev, UIO_MAX_DEVICES);
