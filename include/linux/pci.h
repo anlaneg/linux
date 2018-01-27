@@ -1770,6 +1770,7 @@ void pci_resource_to_user(const struct pci_dev *dev, int bar,
 			  const struct resource *rsrc,
 			  resource_size_t *start, resource_size_t *end);
 #else
+//将rsrc->start赋值给start,end赋给end
 static inline void pci_resource_to_user(const struct pci_dev *dev, int bar,
 		const struct resource *rsrc, resource_size_t *start,
 		resource_size_t *end)
