@@ -36,6 +36,7 @@
 static int sysfs_initialized;	/* = 0 */
 
 /* show configuration fields */
+//定义show函数（指定字段名称，指定字段的格式化字符串）
 #define pci_config_attr(field, format_string)				\
 static ssize_t								\
 field##_show(struct device *dev, struct device_attribute *attr, char *buf)				\
@@ -129,6 +130,7 @@ static ssize_t cpulistaffinity_show(struct device *dev,
 static DEVICE_ATTR_RO(cpulistaffinity);
 
 /* show resources */
+//显示pci的resource信息
 static ssize_t resource_show(struct device *dev, struct device_attribute *attr,
 			     char *buf)
 {
@@ -145,7 +147,9 @@ static ssize_t resource_show(struct device *dev, struct device_attribute *attr,
 
 	for (i = 0; i < max; i++) {
 		struct resource *res =  &pci_dev->resource[i];
+		//在x86_64上，直接设置start,end
 		pci_resource_to_user(pci_dev, i, res, &start, &end);
+		//格式化后输出start,end,flags
 		str += sprintf(str, "0x%016llx 0x%016llx 0x%016llx\n",
 			       (unsigned long long)start,
 			       (unsigned long long)end,
