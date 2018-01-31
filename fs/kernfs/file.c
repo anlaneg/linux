@@ -52,6 +52,7 @@ struct kernfs_open_node {
 static DEFINE_SPINLOCK(kernfs_notify_lock);
 static struct kernfs_node *kernfs_notify_list = KERNFS_NOTIFY_EOL;
 
+//由file获得kernfs_open_file
 static struct kernfs_open_file *kernfs_of(struct file *file)
 {
 	return ((struct seq_file *)file->private_data)->private;
@@ -61,6 +62,7 @@ static struct kernfs_open_file *kernfs_of(struct file *file)
  * Determine the kernfs_ops for the given kernfs_node.  This function must
  * be called while holding an active reference.
  */
+//取操作集
 static const struct kernfs_ops *kernfs_ops(struct kernfs_node *kn)
 {
 	if (kn->flags & KERNFS_LOCKDEP)
@@ -159,6 +161,7 @@ static void kernfs_seq_stop(struct seq_file *sf, void *v)
 	mutex_unlock(&of->mutex);
 }
 
+//调用kernfs_node的seq_show回调
 static int kernfs_seq_show(struct seq_file *sf, void *v)
 {
 	struct kernfs_open_file *of = sf->private;
@@ -633,6 +636,7 @@ static int kernfs_fop_open(struct inode *inode, struct file *file)
 	has_mmap = ops->mmap;
 
 	/* see the flag definition for details */
+	//权限检查
 	if (root->flags & KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK) {
 		if ((file->f_mode & FMODE_WRITE) &&
 		    (!(inode->i_mode & S_IWUGO) || !has_write))
@@ -701,12 +705,14 @@ static int kernfs_fop_open(struct inode *inode, struct file *file)
 	 * and readable regular files are the vast majority anyway.
 	 */
 	if (ops->seq_show)
+		//初始化seq_file
 		error = seq_open(file, &kernfs_seq_ops);
 	else
 		error = seq_open(file, NULL);
 	if (error)
 		goto err_free;
 
+	//file的private_data指向seq_file
 	of->seq_file = file->private_data;
 	of->seq_file->private = of;
 
@@ -992,6 +998,7 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
 
+	//设置kn
 	kn->attr.ops = ops;
 	kn->attr.size = size;
 	kn->ns = ns;
@@ -1016,6 +1023,7 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 	if (ops->release)
 		kn->flags |= KERNFS_HAS_RELEASE;
 
+	//将其加入到父目录
 	rc = kernfs_add_one(kn);
 	if (rc) {
 		kernfs_put(kn);

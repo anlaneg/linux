@@ -29,15 +29,18 @@ struct kernfs_node *kernfs_create_link(struct kernfs_node *parent,
 	struct kernfs_node *kn;
 	int error;
 
+	//指明创建的是一个链接文件
 	kn = kernfs_new_node(parent, name, S_IFLNK|S_IRWXUGO, KERNFS_LINK);
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
 
 	if (kernfs_ns_enabled(parent))
 		kn->ns = target->ns;
+	//指向目标文件
 	kn->symlink.target_kn = target;
 	kernfs_get(target);	/* ref owned by symlink */
 
+	//将链接文件加入
 	error = kernfs_add_one(kn);
 	if (!error)
 		return kn;

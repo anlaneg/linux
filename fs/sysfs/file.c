@@ -25,6 +25,7 @@
  * Determine ktype->sysfs_ops for the given kernfs_node.  This function
  * must be called while holding an active reference.
  */
+//采用kernfs_node来返回sysfs_ops
 static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 {
 	struct kobject *kobj = kn->parent->priv;
@@ -50,9 +51,12 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	/* acquire buffer and ensure that it's >= PAGE_SIZE and clear */
 	count = seq_get_buf(sf, &buf);
 	if (count < PAGE_SIZE) {
+		//变更为页的整数倍
 		seq_commit(sf, -1);
 		return 0;
 	}
+
+	//可用内存大于一个page_size，先将此页清0
 	memset(buf, 0, PAGE_SIZE);
 
 	/*
@@ -60,8 +64,10 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	 * if @ops->show() isn't implemented.
 	 */
 	if (ops->show) {
+		//调用sysfs_ops的show方向，将内容格式化到buf中
 		count = ops->show(kobj, of->kn->priv, buf);
 		if (count < 0)
+			//写失败，返回错误信息
 			return count;
 	}
 
@@ -69,12 +75,14 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	 * The code works fine with PAGE_SIZE return but it's likely to
 	 * indicate truncated result or overflow in normal use cases.
 	 */
+	//写的内容大于一个页
 	if (count >= (ssize_t)PAGE_SIZE) {
 		print_symbol("fill_read_buffer: %s returned bad count\n",
 			(unsigned long)ops->show);
 		/* Try to struggle along */
 		count = PAGE_SIZE - 1;
 	}
+	//提交剩余数据
 	seq_commit(sf, count);
 	return 0;
 }
@@ -99,6 +107,7 @@ static ssize_t sysfs_kf_bin_read(struct kernfs_open_file *of, char *buf,
 	if (!battr->read)
 		return -EIO;
 
+	//通过二进制属性的read函数进行处理
 	return battr->read(of->file, kobj, battr, buf, pos, count);
 }
 
@@ -116,6 +125,7 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 	 */
 	if (WARN_ON_ONCE(buf != of->prealloc_buf))
 		return 0;
+	//先要全部的数据（不支持offset的情况）
 	len = ops->show(kobj, of->kn->priv, buf);
 	if (len < 0)
 		return len;
@@ -123,6 +133,7 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 		if (len <= pos)
 			return 0;
 		len -= pos;
+		//然后将pos位置向后的数据向前移
 		memmove(buf, buf + pos, len);
 	}
 	return min_t(ssize_t, count, len);
@@ -160,6 +171,7 @@ static ssize_t sysfs_kf_bin_write(struct kernfs_open_file *of, char *buf,
 	if (!battr->write)
 		return -EIO;
 
+	//二进制调用battr的write进行写
 	return battr->write(of->file, kobj, battr, buf, pos, count);
 }
 
@@ -169,9 +181,11 @@ static int sysfs_kf_bin_mmap(struct kernfs_open_file *of,
 	struct bin_attribute *battr = of->kn->priv;
 	struct kobject *kobj = of->kn->parent->priv;
 
+	//二进制调用mmap来进行读写
 	return battr->mmap(of->file, kobj, battr, vma);
 }
 
+//支持notify接口
 void sysfs_notify(struct kobject *kobj, const char *dir, const char *attr)
 {
 	struct kernfs_node *kn = kobj->sd, *tmp;
@@ -354,6 +368,7 @@ int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
 }
 EXPORT_SYMBOL_GPL(sysfs_create_file_ns);
 
+//创建多个文件
 int sysfs_create_files(struct kobject *kobj, const struct attribute **ptr)
 {
 	int err = 0;
@@ -362,6 +377,7 @@ int sysfs_create_files(struct kobject *kobj, const struct attribute **ptr)
 	for (i = 0; ptr[i] && !err; i++)
 		err = sysfs_create_file(kobj, ptr[i]);
 	if (err)
+		//如果创建有失败，则删除掉已创建成功的文件
 		while (--i >= 0)
 			sysfs_remove_file(kobj, ptr[i]);
 	return err;
@@ -381,8 +397,10 @@ int sysfs_add_file_to_group(struct kobject *kobj,
 	int error;
 
 	if (group) {
+		//在kobj下查找名称为group的目录
 		parent = kernfs_find_and_get(kobj->sd, group);
 	} else {
+		//未提定group，则直接使用kobj
 		parent = kobj->sd;
 		kernfs_get(parent);
 	}
@@ -390,6 +408,7 @@ int sysfs_add_file_to_group(struct kobject *kobj,
 	if (!parent)
 		return -ENOENT;
 
+	//将文件存入parent中（非2进程文件）
 	error = sysfs_add_file(parent, attr, false);
 	kernfs_put(parent);
 
@@ -407,6 +426,7 @@ EXPORT_SYMBOL_GPL(sysfs_add_file_to_group);
 int sysfs_chmod_file(struct kobject *kobj, const struct attribute *attr,
 		     umode_t mode)
 {
+	//文件权限变更
 	struct kernfs_node *kn;
 	struct iattr newattrs;
 	int rc;
@@ -415,9 +435,11 @@ int sysfs_chmod_file(struct kobject *kobj, const struct attribute *attr,
 	if (!kn)
 		return -ENOENT;
 
-	newattrs.ia_mode = (mode & S_IALLUGO) | (kn->mode & ~S_IALLUGO);
+	//构造新属性
+	newattrs.ia_mode = (mode & S_IALLUGO) | (kn->mode & ~S_IALLUGO);//只容许修改权限位＋sticky+有效用户＋有效位位
 	newattrs.ia_valid = ATTR_MODE;
 
+	//使新的属性生效
 	rc = kernfs_setattr(kn, &newattrs);
 
 	kernfs_put(kn);
@@ -465,6 +487,7 @@ bool sysfs_remove_file_self(struct kobject *kobj, const struct attribute *attr)
 	return ret;
 }
 
+//一次移除多个文件
 void sysfs_remove_files(struct kobject *kobj, const struct attribute **ptr)
 {
 	int i;
@@ -485,6 +508,7 @@ void sysfs_remove_file_from_group(struct kobject *kobj,
 	struct kernfs_node *parent;
 
 	if (group) {
+		//如果指定了group，则在kobj下查找对应的目录
 		parent = kernfs_find_and_get(kobj->sd, group);
 	} else {
 		parent = kobj->sd;
@@ -492,6 +516,7 @@ void sysfs_remove_file_from_group(struct kobject *kobj,
 	}
 
 	if (parent) {
+		//将指定名称自parent中移除
 		kernfs_remove_by_name(parent, attr->name);
 		kernfs_put(parent);
 	}
@@ -508,6 +533,7 @@ int sysfs_create_bin_file(struct kobject *kobj,
 {
 	BUG_ON(!kobj || !kobj->sd || !attr);
 
+	//创建二进制文件
 	return sysfs_add_file(kobj->sd, &attr->attr, true);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_bin_file);
@@ -520,6 +546,7 @@ EXPORT_SYMBOL_GPL(sysfs_create_bin_file);
 void sysfs_remove_bin_file(struct kobject *kobj,
 			   const struct bin_attribute *attr)
 {
+	//移除二进制文件
 	kernfs_remove_by_name(kobj->sd, attr->attr.name);
 }
 EXPORT_SYMBOL_GPL(sysfs_remove_bin_file);

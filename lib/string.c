@@ -422,6 +422,7 @@ EXPORT_SYMBOL(strrchr);
  */
 char *strnchr(const char *s, size_t count, int c)
 {
+	//在s中查找c，如果s长度超过count，则查询必须在count前结束，如果不能结束返回NULL
 	for (; count-- && *s != '\0'; ++s)
 		if (*s == (char)c)
 			return (char *)s;

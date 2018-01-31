@@ -104,6 +104,7 @@ static ssize_t bus_attr_show(struct kobject *kobj, struct attribute *attr,
 	struct subsys_private *subsys_priv = to_subsys_private(kobj);
 	ssize_t ret = 0;
 
+	//调用bus_attr的show方法（如果不存在show方法，则直接返回0）
 	if (bus_attr->show)
 		ret = bus_attr->show(subsys_priv->bus, buf);
 	return ret;
@@ -116,11 +117,13 @@ static ssize_t bus_attr_store(struct kobject *kobj, struct attribute *attr,
 	struct subsys_private *subsys_priv = to_subsys_private(kobj);
 	ssize_t ret = 0;
 
+	//调用bus_attr的store（如果不存在store方法，则直接返回0）
 	if (bus_attr->store)
 		ret = bus_attr->store(subsys_priv->bus, buf, count);
 	return ret;
 }
 
+//bus在sysfs中的两个显示，存储回调
 static const struct sysfs_ops bus_sysfs_ops = {
 	.show	= bus_attr_show,
 	.store	= bus_attr_store,
@@ -871,7 +874,7 @@ int bus_register(struct bus_type *bus)
 
 	//实现bus_type与subsys_private之间的互指
 	priv->bus = bus;
-	bus->p = priv;
+	bus->p = priv;//初始化bus的私有数据，使其指向应的priv
 
 	BLOCKING_INIT_NOTIFIER_HEAD(&priv->bus_notifier);
 
@@ -881,7 +884,7 @@ int bus_register(struct bus_type *bus)
 		goto out;
 
 	priv->subsys.kobj.kset = bus_kset;
-	priv->subsys.kobj.ktype = &bus_ktype;
+	priv->subsys.kobj.ktype = &bus_ktype;//此句将设备bus的sysfs_ops
 	priv->drivers_autoprobe = 1;
 
 	//创建必要的sysfs目录

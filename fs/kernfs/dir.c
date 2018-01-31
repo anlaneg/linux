@@ -839,6 +839,7 @@ static struct kernfs_node *kernfs_find_ns(struct kernfs_node *parent,
 		return NULL;
 	}
 
+	//在parent节点下查找名称为name的节点（red-black树）
 	hash = kernfs_name_hash(name, ns);
 	while (node) {
 		struct kernfs_node *kn;
@@ -1269,6 +1270,7 @@ void kernfs_activate(struct kernfs_node *kn)
 	mutex_unlock(&kernfs_mutex);
 }
 
+//文件移除
 static void __kernfs_remove(struct kernfs_node *kn)
 {
 	struct kernfs_node *pos;
@@ -1502,9 +1504,9 @@ int kernfs_remove_by_name_ns(struct kernfs_node *parent, const char *name,
 
 	mutex_lock(&kernfs_mutex);
 
-	kn = kernfs_find_ns(parent, name, ns);
+	kn = kernfs_find_ns(parent, name, ns);//先找到此kn
 	if (kn)
-		__kernfs_remove(kn);
+		__kernfs_remove(kn);//再移除它
 
 	mutex_unlock(&kernfs_mutex);
 
@@ -1541,10 +1543,11 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 
 	error = 0;
 	if ((kn->parent == new_parent) && (kn->ns == new_ns) &&
-	    (strcmp(kn->name, new_name) == 0))
+	    (strcmp(kn->name, new_name) == 0))//名称相同不需要重命名
 		goto out;	/* nothing to rename */
 
 	error = -EEXIST;
+	//检查新名称是否存在
 	if (kernfs_find_ns(new_parent, new_name, new_ns))
 		goto out;
 
@@ -1561,6 +1564,7 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 	/*
 	 * Move to the appropriate place in the appropriate directories rbtree.
 	 */
+	//先将旧的删除
 	kernfs_unlink_sibling(kn);
 	kernfs_get(new_parent);
 
@@ -1578,6 +1582,7 @@ int kernfs_rename_ns(struct kernfs_node *kn, struct kernfs_node *new_parent,
 
 	spin_unlock_irq(&kernfs_rename_lock);
 
+	//再将新的插入
 	kn->hash = kernfs_name_hash(kn->name, kn->ns);
 	kernfs_link_sibling(kn);
 

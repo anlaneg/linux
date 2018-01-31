@@ -45,7 +45,9 @@ struct iommu_fwspec;
 
 struct bus_attribute {
 	struct attribute	attr;
+	//对此属性进行读时，调用此回调
 	ssize_t (*show)(struct bus_type *bus, char *buf);
+	//对此属性进行写时，调用此回调
 	ssize_t (*store)(struct bus_type *bus, const char *buf, size_t count);
 };
 

@@ -44,6 +44,7 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 
 	BUG_ON(!kobj);
 
+	//有父节点取父节点，无父节点，则父节点为sysfs的根节点
 	if (kobj->parent)
 		parent = kobj->parent->sd;
 	else
@@ -52,10 +53,12 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 	if (!parent)
 		return -ENOENT;
 
+	//创建目录，mode为rxw权限（user),所有人读权限，所有人执行权限
 	kn = kernfs_create_dir_ns(parent, kobject_name(kobj),
 				  S_IRWXU | S_IRUGO | S_IXUGO, kobj, ns);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
+			//报错，目录已存在
 			sysfs_warn_dup(parent, kobject_name(kobj));
 		return PTR_ERR(kn);
 	}
@@ -94,10 +97,11 @@ void sysfs_remove_dir(struct kobject *kobj)
 
 	if (kn) {
 		WARN_ON_ONCE(kernfs_type(kn) != KERNFS_DIR);
-		kernfs_remove(kn);
+		kernfs_remove(kn);//目录删除
 	}
 }
 
+//目录重命名
 int sysfs_rename_dir_ns(struct kobject *kobj, const char *new_name,
 			const void *new_ns)
 {
@@ -110,6 +114,7 @@ int sysfs_rename_dir_ns(struct kobject *kobj, const char *new_name,
 	return ret;
 }
 
+//目录移动其实现与目录重命名相同
 int sysfs_move_dir_ns(struct kobject *kobj, struct kobject *new_parent_kobj,
 		      const void *new_ns)
 {
@@ -131,6 +136,7 @@ int sysfs_create_mount_point(struct kobject *parent_kobj, const char *name)
 {
 	struct kernfs_node *kn, *parent = parent_kobj->sd;
 
+	//创建一个总为空的目录
 	kn = kernfs_create_empty_dir(parent, name);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
@@ -152,6 +158,7 @@ void sysfs_remove_mount_point(struct kobject *parent_kobj, const char *name)
 {
 	struct kernfs_node *parent = parent_kobj->sd;
 
+	//实现为目录删除
 	kernfs_remove_by_name_ns(parent, name, NULL);
 }
 EXPORT_SYMBOL_GPL(sysfs_remove_mount_point);

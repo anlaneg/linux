@@ -408,9 +408,11 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 ssize_t __vfs_read(struct file *file, char __user *buf, size_t count,
 		   loff_t *pos)
 {
+	//通过file的f_op的read函数进行读取
 	if (file->f_op->read)
 		return file->f_op->read(file, buf, count, pos);
 	else if (file->f_op->read_iter)
+		//通过file的f_op的read_iter函数进行读取
 		return new_sync_read(file, buf, count, pos);
 	else
 		return -EINVAL;
@@ -450,6 +452,7 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 			count =  MAX_RW_COUNT;
 		ret = __vfs_read(file, buf, count, pos);
 		if (ret > 0) {
+			//通知文件被访问
 			fsnotify_access(file);
 			add_rchar(current, ret);
 		}
@@ -557,11 +560,13 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	return ret;
 }
 
+//获取上次读到哪个位置了
 static inline loff_t file_pos_read(struct file *file)
 {
 	return file->f_pos;
 }
 
+//更新当前读到哪个位置了
 static inline void file_pos_write(struct file *file, loff_t pos)
 {
 	file->f_pos = pos;
@@ -569,11 +574,13 @@ static inline void file_pos_write(struct file *file, loff_t pos)
 
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
+	//由文件描述符编号获得fd结构体
 	struct fd f = fdget_pos(fd);
 	ssize_t ret = -EBADF;
 
 	if (f.file) {
 		loff_t pos = file_pos_read(f.file);
+		//实现读（自file文件的pos位置读，计划读取count个）
 		ret = vfs_read(f.file, buf, count, &pos);
 		if (ret >= 0)
 			file_pos_write(f.file, pos);

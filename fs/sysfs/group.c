@@ -17,7 +17,7 @@
 #include <linux/err.h>
 #include "sysfs.h"
 
-
+//移除一组文件
 static void remove_files(struct kernfs_node *parent,
 			 const struct attribute_group *grp)
 {
@@ -32,6 +32,7 @@ static void remove_files(struct kernfs_node *parent,
 			kernfs_remove_by_name(parent, (*bin_attr)->attr.name);
 }
 
+//分类型，创建一组文本文件和一组二进制文件
 static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			const struct attribute_group *grp, int update)
 {

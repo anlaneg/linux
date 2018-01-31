@@ -1115,6 +1115,7 @@ again:
 		return inode;
 	}
 
+	//申请inode
 	inode = alloc_inode(sb);
 	if (inode) {
 		struct inode *old;

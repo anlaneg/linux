@@ -56,6 +56,8 @@ static const char *kobject_actions[] = {
 	[KOBJ_UNBIND] =		"unbind",
 };
 
+//解析输出的buf,分析其指定的action及action对应的参数，返回0表示解析成功
+//否则参数有误
 static int kobject_action_type(const char *buf, size_t count,
 			       enum kobject_action *type,
 			       const char **args)
@@ -66,23 +68,24 @@ static int kobject_action_type(const char *buf, size_t count,
 	int ret = -EINVAL;
 
 	if (count && (buf[count-1] == '\n' || buf[count-1] == '\0'))
-		count--;
+		count--;//换行与'\0'相同看待，将count减小
 
 	if (!count)
-		goto out;
+		goto out;//count为0时无法配置
 
 	args_start = strnchr(buf, count, ' ');
 	if (args_start) {
-		count_first = args_start - buf;
-		args_start = args_start + 1;
+		count_first = args_start - buf;//到空格需要跳count_first个字节
+		args_start = args_start + 1;//参数起始位置
 	} else
-		count_first = count;
+		count_first = count;//无参数
 
 	for (action = 0; action < ARRAY_SIZE(kobject_actions); action++) {
 		if (strncmp(kobject_actions[action], buf, count_first) != 0)
 			continue;
+		//到找输出与约定的命令字相配了。
 		if (kobject_actions[action][count_first] != '\0')
-			continue;
+			continue;//需要保证长度相配，即命令字完全匹配
 		if (args)
 			*args = args_start;
 		*type = action;
@@ -197,11 +200,13 @@ int kobject_synth_uevent(struct kobject *kobj, const char *buf, size_t count)
 
 	r = kobject_action_type(buf, count, &action, &action_args);
 	if (r) {
+		//解析失败，传入的参数有误
 		msg = "unknown uevent action string\n";
 		goto out;
 	}
 
 	if (!action_args) {
+		//先处理没有参数的情况
 		r = kobject_uevent_env(kobj, action, no_uuid_envp);
 		goto out;
 	}
@@ -507,6 +512,14 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		break;
 	}
 
+	//Uevent是Kobject的一部分，用于在Kobject状态发生改变时，例如增加、移除等，通知用户空间程序。用户空间程序收到这样的事件后，
+	//会做相应的处理。
+	//该机制通常是用来支持热拔插设备的，例如U盘插入后，USB相关的驱动软件会动态创建用于表示该U盘的device结构（相应的也包括其中的kobject），
+	//并告知用户空间程序，为该U盘动态的创建/dev/目录下的设备节点，更进一步，可以通知其它的应用程序，将该U盘设备mount到系统中，从而动态的支持该设备。
+	//Uevent的机制是比较简单的，设备模型中任何设备有事件需要上报时，会触发Uevent提供的接口。Uevent模块准备好上报事件的格式后，
+	//可以通过两个途径把事件上报到用户空间：一种是通过kmod模块，直接调用用户空间的可执行文件；另一种是通过netlink通信机制，
+	//将事件从内核空间传递给用户空间。
+	//如果采用调用用户空间文件的方式，有个缺点，如果两个事件先后发生，实际上在用户空间里可能无法获知两个事件的先后顺序。
 	mutex_lock(&uevent_sock_mutex);
 	/* we will send an event, so request a new sequence number */
 	retval = add_uevent_var(env, "SEQNUM=%llu", (unsigned long long)++uevent_seqnum);
@@ -514,11 +527,13 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		mutex_unlock(&uevent_sock_mutex);
 		goto exit;
 	}
+	//通过netlink进行通知
 	retval = kobject_uevent_net_broadcast(kobj, env, action_string,
 					      devpath);
 	mutex_unlock(&uevent_sock_mutex);
 
 #ifdef CONFIG_UEVENT_HELPER
+	//通过调用脚本或者应用程序来实现通知
 	/* call uevent_helper, usually only enabled during early boot */
 	if (uevent_helper[0] && !kobj_usermode_filter(kobj)) {
 		struct subprocess_info *info;

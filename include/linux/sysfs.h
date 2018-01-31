@@ -98,6 +98,7 @@ struct attribute_group {
 
 #define SYSFS_PREALLOC 010000
 
+//设置attr中的name,mode，设置show,store两个回调
 #define __ATTR(_name, _mode, _show, _store) {				\
 	.attr = {.name = __stringify(_name),				\
 		 .mode = VERIFY_OCTAL_PERMISSIONS(_mode) },		\
@@ -112,6 +113,7 @@ struct attribute_group {
 	.store	= _store,						\
 }
 
+//只设置读回调
 #define __ATTR_RO(_name) {						\
 	.attr	= { .name = __stringify(_name), .mode = S_IRUGO },	\
 	.show	= _name##_show,						\
@@ -214,7 +216,9 @@ struct bin_attribute bin_attr_##_name = __BIN_ATTR_RO(_name, _size)
 struct bin_attribute bin_attr_##_name = __BIN_ATTR_RW(_name, _size)
 
 struct sysfs_ops {
+	//显示某属性时回调
 	ssize_t	(*show)(struct kobject *, struct attribute *, char *);
+	//为某属性设置值时回调
 	ssize_t	(*store)(struct kobject *, struct attribute *, const char *, size_t);
 };
 
@@ -495,6 +499,7 @@ static inline void sysfs_enable_ns(struct kernfs_node *kn)
 
 #endif /* CONFIG_SYSFS */
 
+//在sysfs中创建文件
 static inline int __must_check sysfs_create_file(struct kobject *kobj,
 						 const struct attribute *attr)
 {

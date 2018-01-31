@@ -201,10 +201,10 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
  */
 struct iattr {
 	unsigned int	ia_valid;
-	umode_t		ia_mode;
-	kuid_t		ia_uid;
-	kgid_t		ia_gid;
-	loff_t		ia_size;
+	umode_t		ia_mode;//文件权限
+	kuid_t		ia_uid;//owner id
+	kgid_t		ia_gid;//组id
+	loff_t		ia_size;//文件大小
 	struct timespec	ia_atime;
 	struct timespec	ia_mtime;
 	struct timespec	ia_ctime;
@@ -856,7 +856,7 @@ struct file {
 	} f_u;
 	struct path		f_path;
 	struct inode		*f_inode;	/* cached value */
-	const struct file_operations	*f_op;
+	const struct file_operations	*f_op;//文件操作对应的函数集（例如读写）
 
 	/*
 	 * Protects f_ep_links, f_flags.
@@ -868,7 +868,7 @@ struct file {
 	unsigned int 		f_flags;
 	fmode_t			f_mode;//文件模式位（offset是否为无符号的等）
 	struct mutex		f_pos_lock;
-	loff_t			f_pos;
+	loff_t			f_pos;//当前读到哪个位置了
 	struct fown_struct	f_owner;
 	const struct cred	*f_cred;
 	struct file_ra_state	f_ra;
@@ -1340,7 +1340,7 @@ struct super_block {
 	unsigned char		s_blocksize_bits;
 	unsigned long		s_blocksize;
 	loff_t			s_maxbytes;	/* Max file size */
-	struct file_system_type	*s_type;
+	struct file_system_type	*s_type;//属于那种文件系统
 	const struct super_operations	*s_op;
 	const struct dquot_operations	*dq_op;
 	const struct quotactl_ops	*s_qcop;
@@ -1370,7 +1370,7 @@ struct super_block {
 
 	struct sb_writers	s_writers;
 
-	char			s_id[32];	/* Informational name */
+	char			s_id[32];	/* Informational name */ //文件系统名称
 	uuid_t			s_uuid;		/* UUID */
 
 	void 			*s_fs_info;	/* Filesystem private info */
@@ -1692,10 +1692,10 @@ struct iov_iter;
 struct file_operations {
 	struct module *owner;
 	loff_t (*llseek) (struct file *, loff_t, int);
-	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
-	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
-	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
-	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
+	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//读
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//写
+	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的读
+	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的写
 	int (*iterate) (struct file *, struct dir_context *);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	unsigned int (*poll) (struct file *, struct poll_table_struct *);
@@ -1703,7 +1703,7 @@ struct file_operations {
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
-	int (*open) (struct inode *, struct file *);
+	int (*open) (struct inode *, struct file *);//打开
 	int (*flush) (struct file *, fl_owner_t id);
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
@@ -2082,7 +2082,7 @@ struct file_system_type {
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
 	struct file_system_type * next;//用于将文件系统串成链表
-	struct hlist_head fs_supers;
+	struct hlist_head fs_supers;//已被实际的super_block统一挂在这个链上
 
 	struct lock_class_key s_lock_key;
 	struct lock_class_key s_umount_key;

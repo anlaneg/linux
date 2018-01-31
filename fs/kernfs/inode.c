@@ -75,6 +75,7 @@ static int __kernfs_setattr(struct kernfs_node *kn, const struct iattr *iattr)
 
 	iattrs = &attrs->ia_iattr;
 
+	//自ia_valid字段获知要配置的字段，更应对应的字段
 	if (ia_valid & ATTR_UID)
 		iattrs->ia_uid = iattr->ia_uid;
 	if (ia_valid & ATTR_GID)
@@ -226,6 +227,7 @@ static void kernfs_init_inode(struct kernfs_node *kn, struct inode *inode)
 	kernfs_refresh_inode(kn, inode);
 
 	/* initialize inode according to type */
+	//针对不同的kernfs_node类型，初始化不同的ops
 	switch (kernfs_type(kn)) {
 	case KERNFS_DIR:
 		inode->i_op = &kernfs_dir_iops;

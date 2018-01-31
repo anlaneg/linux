@@ -37,6 +37,7 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 
 	//获取namespace
 	ns = kobj_ns_grab_current(KOBJ_NS_TYPE_NET);
+	//通过kernfs来进行挂载
 	root = kernfs_mount_ns(fs_type, flags, sysfs_root,
 				SYSFS_MAGIC, &new_sb, ns);
 	if (IS_ERR(root) || !new_sb)

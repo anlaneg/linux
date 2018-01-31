@@ -3493,6 +3493,7 @@ static struct file *path_openat(struct nameidata *nd,
 	int opened = 0;
 	int error;
 
+	//申请一个空的file
 	file = get_empty_filp();
 	if (IS_ERR(file))
 		return file;
@@ -3551,6 +3552,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	struct file *filp;
 
 	set_nameidata(&nd, dfd, pathname);
+	//调用path_openat来进行打开
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(filp == ERR_PTR(-ECHILD)))
 		filp = path_openat(&nd, op, flags);

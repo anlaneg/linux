@@ -1055,6 +1055,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
 
+	//获取一个未用的文件描述符
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
 		struct file *f = do_filp_open(dfd, tmp, &op);
@@ -1062,6 +1063,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 			put_unused_fd(fd);
 			fd = PTR_ERR(f);
 		} else {
+			//通知打开事件
 			fsnotify_open(f);
 			fd_install(fd, f);
 		}
@@ -1070,10 +1072,11 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	return fd;
 }
 
+//实现open系统调用
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	if (force_o_largefile())
-		flags |= O_LARGEFILE;
+		flags |= O_LARGEFILE;//强制加上大文件标记
 
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }

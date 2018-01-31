@@ -41,8 +41,8 @@ static inline struct kernfs_root *kernfs_root(struct kernfs_node *kn)
 {
 	/* if parent exists, it's always a dir; otherwise, @sd is a dir */
 	if (kn->parent)
-		kn = kn->parent;
-	return kn->dir.root;
+		kn = kn->parent;//有父节点，则取父节点，则一定是目录
+	return kn->dir.root;//取目录对应的root
 }
 
 /*

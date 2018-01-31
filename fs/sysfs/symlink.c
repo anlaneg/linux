@@ -41,6 +41,7 @@ static int sysfs_do_create_link_sd(struct kernfs_node *parent,
 	if (!target)
 		return -ENOENT;
 
+	//通过kernfs来创建链接
 	kn = kernfs_create_link(parent, name, target);
 	kernfs_put(target);
 

@@ -227,7 +227,7 @@ static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
 	info->sb = sb;
 	/* Userspace would break if executables or devices appear on sysfs */
 	sb->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
-	sb->s_blocksize = PAGE_SIZE;
+	sb->s_blocksize = PAGE_SIZE;//设置块大小
 	sb->s_blocksize_bits = PAGE_SHIFT;
 	sb->s_magic = magic;
 	sb->s_op = &kernfs_sops;
@@ -238,6 +238,7 @@ static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
 
 	/* get root inode, initialize and unlock it */
 	mutex_lock(&kernfs_mutex);
+	//初始化根inode
 	inode = kernfs_get_inode(sb, info->root->kn);
 	mutex_unlock(&kernfs_mutex);
 	if (!inode) {
@@ -256,6 +257,7 @@ static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
 	return 0;
 }
 
+//检查是否重复挂载
 static int kernfs_test_super(struct super_block *sb, void *data)
 {
 	struct kernfs_super_info *sb_info = kernfs_info(sb);
@@ -302,6 +304,7 @@ const void *kernfs_super_ns(struct super_block *sb)
  *
  * The return value can be passed to the vfs layer verbatim.
  */
+//kernfs的挂载函数
 struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
 				struct kernfs_root *root, unsigned long magic,
 				bool *new_sb_created, const void *ns)
@@ -317,6 +320,7 @@ struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
 	info->root = root;
 	info->ns = ns;
 
+	//创建一个super_block
 	sb = sget_userns(fs_type, kernfs_test_super, kernfs_set_super, flags,
 			 &init_user_ns, info);
 	if (IS_ERR(sb) || sb->s_fs_info != info)

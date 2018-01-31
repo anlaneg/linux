@@ -1751,6 +1751,7 @@ static struct attribute veth_active_attr;
 static struct attribute veth_num_attr;
 static struct attribute veth_size_attr;
 
+//将kobj中的数据填充到buf中
 static ssize_t veth_pool_show(struct kobject *kobj,
 			      struct attribute *attr, char *buf)
 {
@@ -1767,6 +1768,7 @@ static ssize_t veth_pool_show(struct kobject *kobj,
 	return 0;
 }
 
+//分析buf中的数据，将其解析为内部数据
 static ssize_t veth_pool_store(struct kobject *kobj, struct attribute *attr,
 			       const char *buf, size_t count)
 {

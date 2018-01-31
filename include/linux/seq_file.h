@@ -14,19 +14,19 @@
 struct seq_operations;
 
 struct seq_file {
-	char *buf;
-	size_t size;
-	size_t from;
-	size_t count;
+	char *buf;//用于缓存文件内容
+	size_t size;//用于记录buf的长度
+	size_t from;//buf中有效数据起点
+	size_t count;//buf中自from有效数据数量
 	size_t pad_until;
 	loff_t index;
 	loff_t read_pos;
 	u64 version;
 	struct mutex lock;
-	const struct seq_operations *op;
+	const struct seq_operations *op;//操作集
 	int poll_event;
-	const struct file *file;
-	void *private;
+	const struct file *file;//指向file,file的private_data指向seq_file,实现互指
+	void *private;//指向struct kernfs_open_file
 };
 
 struct seq_operations {
@@ -61,15 +61,17 @@ static inline bool seq_has_overflowed(struct seq_file *m)
  * Return the number of bytes available in the buffer, or zero if
  * there's no space.
  */
+//获取seq_file中可写书的buf长度，可书写的buf起始位置
 static inline size_t seq_get_buf(struct seq_file *m, char **bufp)
 {
+	//seq_file中的已读取的数据长度一定小于缓冲区可提供的数据长度
 	BUG_ON(m->count > m->size);
 	if (m->count < m->size)
-		*bufp = m->buf + m->count;
+		*bufp = m->buf + m->count;//可以填充的区域
 	else
-		*bufp = NULL;
+		*bufp = NULL;//走不到
 
-	return m->size - m->count;
+	return m->size - m->count;//可以填充的区域的大小
 }
 
 /**
@@ -84,10 +86,10 @@ static inline size_t seq_get_buf(struct seq_file *m, char **bufp)
 static inline void seq_commit(struct seq_file *m, int num)
 {
 	if (num < 0) {
-		m->count = m->size;
+		m->count = m->size;//如果num小于0，将有效数据变更为m->size,即页的整数倍
 	} else {
 		BUG_ON(m->count + num > m->size);
-		m->count += num;
+		m->count += num;//如果num大于0，则有效数据增加m字节
 	}
 }
 

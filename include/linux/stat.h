@@ -6,10 +6,15 @@
 #include <asm/stat.h>
 #include <uapi/linux/stat.h>
 
+//所有权限位：读写执行
 #define S_IRWXUGO	(S_IRWXU|S_IRWXG|S_IRWXO)
+//权限位＋sticky位+用效用户＋有效组
 #define S_IALLUGO	(S_ISUID|S_ISGID|S_ISVTX|S_IRWXUGO)
+//所有读权限位（ower读，g读，o读)
 #define S_IRUGO		(S_IRUSR|S_IRGRP|S_IROTH)
+//所有写权限位
 #define S_IWUGO		(S_IWUSR|S_IWGRP|S_IWOTH)
+//所有执行权限位
 #define S_IXUGO		(S_IXUSR|S_IXGRP|S_IXOTH)
 
 #define UTIME_NOW	((1l << 30) - 1l)

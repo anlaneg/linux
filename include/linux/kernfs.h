@@ -40,13 +40,13 @@ enum kernfs_node_type {
 enum kernfs_node_flag {
 	KERNFS_ACTIVATED	= 0x0010,
 	KERNFS_NS		= 0x0020,
-	KERNFS_HAS_SEQ_SHOW	= 0x0040,
-	KERNFS_HAS_MMAP		= 0x0080,
+	KERNFS_HAS_SEQ_SHOW	= 0x0040,//有show回调
+	KERNFS_HAS_MMAP		= 0x0080,//有mmap回调
 	KERNFS_LOCKDEP		= 0x0100,
 	KERNFS_SUICIDAL		= 0x0400,
 	KERNFS_SUICIDED		= 0x0800,
-	KERNFS_EMPTY_DIR	= 0x1000,
-	KERNFS_HAS_RELEASE	= 0x2000,
+	KERNFS_EMPTY_DIR	= 0x1000,//必须是一个空目录
+	KERNFS_HAS_RELEASE	= 0x2000,//有release回调
 };
 
 /* @flags for kernfs_create_root() */
@@ -482,6 +482,7 @@ static inline int kernfs_path(struct kernfs_node *kn, char *buf, size_t buflen)
 	return kernfs_path_from_node(kn, NULL, buf, buflen);
 }
 
+//在kn目录下，查找名称为name的文件或者目录
 static inline struct kernfs_node *
 kernfs_find_and_get(struct kernfs_node *kn, const char *name)
 {

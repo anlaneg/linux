@@ -47,6 +47,7 @@ static void *seq_buf_alloc(unsigned long size)
  */
 int seq_open(struct file *file, const struct seq_operations *op)
 {
+	//创建一个seq_file
 	struct seq_file *p;
 
 	WARN_ON(file->private_data);
@@ -55,6 +56,8 @@ int seq_open(struct file *file, const struct seq_operations *op)
 	if (!p)
 		return -ENOMEM;
 
+	//使file的private_data指向seq_file
+	//后面通过p->file指向file实现双向互指
 	file->private_data = p;
 
 	mutex_init(&p->lock);
@@ -98,6 +101,8 @@ static int traverse(struct seq_file *m, loff_t offset)
 		m->index = index;
 		return 0;
 	}
+
+	//如果没有buf，则申请buf
 	if (!m->buf) {
 		m->buf = seq_buf_alloc(m->size = PAGE_SIZE);
 		if (!m->buf)
@@ -108,6 +113,7 @@ static int traverse(struct seq_file *m, loff_t offset)
 		error = PTR_ERR(p);
 		if (IS_ERR(p))
 			break;
+		//调用show回调
 		error = m->op->show(m, p);
 		if (error < 0)
 			break;
@@ -201,22 +207,25 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 	}
 
 	/* grab buffer if we didn't have one */
+	//如果m还没有buf，则为其申请buf
 	if (!m->buf) {
 		m->buf = seq_buf_alloc(m->size = PAGE_SIZE);
 		if (!m->buf)
 			goto Enomem;
 	}
 	/* if not empty - flush it first */
+	//缓冲内已存在一些数据未读取
 	if (m->count) {
 		n = min(m->count, size);
+		//自from位置copy n个字节到buf中
 		err = copy_to_user(buf, m->buf + m->from, n);
 		if (err)
 			goto Efault;
-		m->count -= n;
-		m->from += n;
-		size -= n;
-		buf += n;
-		copied += n;
+		m->count -= n;//未读取字节数减少
+		m->from += n;//可读取字节偏移量增大
+		size -= n;//待收取数量减少n
+		buf += n;//buf前移n(为了copy_to_user使用方便）
+		copied += n;//完成了n个copy
 		if (!m->count) {
 			m->from = 0;
 			m->index++;

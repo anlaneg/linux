@@ -38,6 +38,7 @@
 #include "internal.h"
 
 
+//用于维护所有super_blocks
 static LIST_HEAD(super_blocks);
 static DEFINE_SPINLOCK(sb_lock);
 
@@ -182,6 +183,7 @@ static void destroy_unused_super(struct super_block *s)
 static struct super_block *alloc_super(struct file_system_type *type, int flags,
 				       struct user_namespace *user_ns)
 {
+	//申请super_block内存
 	struct super_block *s = kzalloc(sizeof(struct super_block),  GFP_USER);
 	static const struct super_operations default_op;
 	int i;
@@ -483,6 +485,7 @@ struct super_block *sget_userns(struct file_system_type *type,
 retry:
 	spin_lock(&sb_lock);
 	if (test) {
+		//当此文件系统有多个实例时，fs_supers将有多个，每个old均是一个超级块
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
 			if (!test(old, data))
 				continue;
@@ -505,6 +508,7 @@ retry:
 		goto retry;
 	}
 
+	//为super_block设置data(通过set回调实现）
 	err = set(s, data);
 	if (err) {
 		spin_unlock(&sb_lock);
@@ -513,7 +517,7 @@ retry:
 	}
 	s->s_type = type;
 	strlcpy(s->s_id, type->name, sizeof(s->s_id));
-	list_add_tail(&s->s_list, &super_blocks);
+	list_add_tail(&s->s_list, &super_blocks);//将s串连到super_blocks上
 	hlist_add_head(&s->s_instances, &type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(type);
