@@ -1983,7 +1983,9 @@ void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
 	if (S_ISCHR(mode)) {
+		//设置字符设备对应的操作集
 		inode->i_fop = &def_chr_fops;
+		//设置设备dev_t
 		inode->i_rdev = rdev;
 	} else if (S_ISBLK(mode)) {
 		inode->i_fop = &def_blk_fops;

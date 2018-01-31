@@ -105,10 +105,12 @@ static inline u64 get_jiffies_64(void)
 	 ((long)((b) - (a)) < 0))
 #define time_before(a,b)	time_after(b,a)
 
+//检查时间a是否>=b
 #define time_after_eq(a,b)	\
 	(typecheck(unsigned long, a) && \
 	 typecheck(unsigned long, b) && \
 	 ((long)((a) - (b)) >= 0))
+//检查时间a是否<=b
 #define time_before_eq(a,b)	time_after_eq(b,a)
 
 /*

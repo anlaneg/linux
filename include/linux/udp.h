@@ -22,6 +22,7 @@
 #include <net/netns/hash.h>
 #include <uapi/linux/udp.h>
 
+//取报文的udp头部
 static inline struct udphdr *udp_hdr(const struct sk_buff *skb)
 {
 	return (struct udphdr *)skb_transport_header(skb);

@@ -17,7 +17,7 @@ struct timer_list {
 	 */
 	struct hlist_node	entry;
 	unsigned long		expires;
-	void			(*function)(struct timer_list *);
+	void			(*function)(struct timer_list *);//timer回调函数
 	u32			flags;
 
 #ifdef CONFIG_LOCKDEP

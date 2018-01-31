@@ -32,7 +32,7 @@ static DEFINE_MUTEX(chrdevs_lock);
 #define CHRDEV_MAJOR_HASH_SIZE 255
 
 static struct char_device_struct {
-	struct char_device_struct *next;
+	struct char_device_struct *next;//用于串连位于同一个index中的其它字符设备
 	unsigned int major;
 	unsigned int baseminor;
 	int minorct;
@@ -62,6 +62,7 @@ void chrdev_show(struct seq_file *f, off_t offset)
 
 #endif /* CONFIG_PROC_FS */
 
+//获取空闲的major
 static int find_dynamic_major(void)
 {
 	int i;
@@ -80,6 +81,7 @@ static int find_dynamic_major(void)
 			if (cd->major == i)
 				break;//如果major相同，则跳出
 
+		//查找到了可用的chardev
 		if (cd == NULL || cd->major != i)
 			return i;
 	}
@@ -98,6 +100,7 @@ static int find_dynamic_major(void)
  *
  * Returns a -ve errno on failure.
  */
+//申请一个major的字符设备，同时占用[baseminor,baseminor+minor)之间的minor
 static struct char_device_struct *
 __register_chrdev_region(unsigned int major, unsigned int baseminor,
 			   int minorct, const char *name)
@@ -125,7 +128,7 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		major = ret;
 	}
 
-	//给的值有误，报错
+	//给的值有误，报错(major不能超过512)
 	if (major >= CHRDEV_MAJOR_MAX) {
 		pr_err("CHRDEV \"%s\" major requested (%d) is greater than the maximum (%d)\n",
 		       name, major, CHRDEV_MAJOR_MAX);
@@ -140,9 +143,11 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 
 	i = major_to_index(major);
 
+	//准备将cd存放入chrdevs中
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
 		//按major进行排序，如果major相等，按baseminor进行排序
-		//如果baseminor小与我们，则检查baseminor＋minorct是否小于我们的baseminor
+		//如果baseminor小与我们，则检查baseminor＋minorct是否大于我们的baseminor
+		//如果大于我们的baseminor，则我们需要排在其前面
 		if ((*cp)->major > major ||
 		    ((*cp)->major == major &&
 		     (((*cp)->baseminor >= baseminor) ||
@@ -151,12 +156,14 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 
 	/* Check for overlapping minor ranges.  */
 	//检查是否发生了范围重叠，如果有重叠，则报错
+	//cp->baseminor+cp->minorct　不能与我们的baseminor＋minorct重复
 	if (*cp && (*cp)->major == major) {
 		int old_min = (*cp)->baseminor;
 		int old_max = (*cp)->baseminor + (*cp)->minorct - 1;
-		int new_min = baseminor;
+		int new_min = baseminor;//要插入的cd对应的baseminor
 		int new_max = baseminor + minorct - 1;
 
+		//已知：cp->baseminor >= baseminor
 		/* New driver overlaps from the left.  */
 		if (new_max >= old_min && new_max <= old_max) {
 			ret = -EBUSY;
@@ -246,14 +253,16 @@ fail:
  * chosen dynamically, and returned (along with the first minor number)
  * in @dev.  Returns zero or a negative error code.
  */
+//申请一段char设备，major动态申请，minor占用[baseminor,baseminor+count)
 int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 			const char *name)
 {
-	//注册char设备，并设置dev_t
+	//注册char设备(major采用动态申请，自baseminor开始，占用count个），并设置dev_t
 	struct char_device_struct *cd;
 	cd = __register_chrdev_region(0, baseminor, count, name);
 	if (IS_ERR(cd))
 		return PTR_ERR(cd);
+	//构造dev_t
 	*dev = MKDEV(cd->major, cd->baseminor);
 	return 0;
 }
@@ -397,15 +406,18 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 		struct kobject *kobj;
 		int idx;
 		spin_unlock(&cdev_lock);
+		//查找注册到cdev_map中的kobj
 		kobj = kobj_lookup(cdev_map, inode->i_rdev, &idx);
 		if (!kobj)
 			return -ENXIO;
+		//自kobj获得其对应的cdev (例如至此获得uio对应的cdev)
 		new = container_of(kobj, struct cdev, kobj);
 		spin_lock(&cdev_lock);
 		/* Check i_cdev again in case somebody beat us to it while
 		   we dropped the lock. */
 		p = inode->i_cdev;
 		if (!p) {
+			//设置此inode对应的字符设备
 			inode->i_cdev = p = new;
 			list_add(&inode->i_devices, &p->list);
 			new = NULL;
@@ -490,6 +502,7 @@ static int exact_lock(dev_t dev, void *data)
  * cdev_add() adds the device represented by @p to the system, making it
  * live immediately.  A negative error code is returned on failure.
  */
+//添加cdev到cdev_map
 int cdev_add(struct cdev *p, dev_t dev, unsigned count)
 {
 	int error;
@@ -586,6 +599,7 @@ void cdev_device_del(struct cdev *cdev, struct device *dev)
 		cdev_del(cdev);
 }
 
+//移除dev
 static void cdev_unmap(dev_t dev, unsigned count)
 {
 	kobj_unmap(cdev_map, dev, count);
@@ -675,6 +689,7 @@ static struct kobject *base_probe(dev_t dev, int *part, void *data)
 	return NULL;
 }
 
+//初始化cdev_map
 void __init chrdev_init(void)
 {
 	cdev_map = kobj_map_init(base_probe, &chrdevs_lock);

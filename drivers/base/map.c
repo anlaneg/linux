@@ -18,7 +18,7 @@
 
 struct kobj_map {
 	struct probe {
-		struct probe *next;
+		struct probe *next;//挂接多个probe,各probe之前按range自小向大排列
 		dev_t dev;
 		unsigned long range;
 		struct module *owner;
@@ -29,22 +29,25 @@ struct kobj_map {
 	struct mutex *lock;
 };
 
+//向domain中加入dev
 int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	     struct module *module, kobj_probe_t *probe,
 	     int (*lock)(dev_t, void *), void *data)
 {
+	//需要占用多少个major
 	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
-	unsigned index = MAJOR(dev);
+	unsigned index = MAJOR(dev);//起始的major
 	unsigned i;
 	struct probe *p;
 
 	if (n > 255)
-		n = 255;
+		n = 255;//最多容许占用255个major
 
 	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
 	if (p == NULL)
 		return -ENOMEM;
 
+	//初始化n个probe
 	for (i = 0; i < n; i++, p++) {
 		p->owner = module;
 		p->get = probe;
@@ -56,8 +59,10 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	mutex_lock(domain->lock);
 	for (i = 0, p -= n; i < n; i++, p++, index++) {
 		struct probe **s = &domain->probes[index % 255];
+		//插入p,使得probes链上按range自小向大排列
 		while (*s && (*s)->range < range)
 			s = &(*s)->next;
+		//将p插入到s前面
 		p->next = *s;
 		*s = p;
 	}
@@ -65,6 +70,7 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	return 0;
 }
 
+//自domain中删除dev及其range对应的段
 void kobj_unmap(struct kobj_map *domain, dev_t dev, unsigned long range)
 {
 	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
@@ -106,9 +112,9 @@ retry:
 		void *data;
 
 		if (p->dev > dev || p->dev + p->range - 1 < dev)
-			continue;
+			continue;//跳过不匹配的
 		if (p->range - 1 >= best)
-			break;
+			break;//如果range为０或者其大于best，忽略
 		if (!try_module_get(p->owner))
 			continue;
 		owner = p->owner;
@@ -144,6 +150,7 @@ struct kobj_map *kobj_map_init(kobj_probe_t *base_probe, struct mutex *lock)
 		return NULL;
 	}
 
+	//初始每个probes为base
 	base->dev = 1;
 	base->range = ~0;
 	base->get = base_probe;

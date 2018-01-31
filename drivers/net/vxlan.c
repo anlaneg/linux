@@ -465,6 +465,7 @@ static struct vxlan_fdb *vxlan_find_mac(struct vxlan_dev *vxlan,
 
 	f = __vxlan_find_mac(vxlan, mac, vni);
 	if (f)
+		//更新转发项
 		f->used = jiffies;
 
 	return f;
@@ -836,6 +837,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 }
 
 /* Add static entry (via netlink) */
+//vxlan转发表项添加
 static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			 struct net_device *dev,
 			 const unsigned char *addr, u16 vid, u16 flags)
@@ -1328,6 +1330,7 @@ static bool vxlan_ecn_decapsulate(struct vxlan_sock *vs, void *oiph,
 }
 
 /* Callback from net/ipv4/udp.c to receive packets */
+//收到vxlan报文处理
 static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct pcpu_sw_netstats *stats;
@@ -1342,11 +1345,15 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	__be32 vni = 0;
 
 	/* Need UDP and VXLAN header to be present */
+	//报文需要有完整的udp,vxlan头（从长度上保证）
 	if (!pskb_may_pull(skb, VXLAN_HLEN))
 		goto drop;
 
+	//定位到vxlan头部
 	unparsed = *vxlan_hdr(skb);
 	/* VNI flag always required to be set */
+	//当前vxlan标准要求首字节的第４位必须置１（linux 查int32型的第27位）
+	//如果未置位，则丢包（不合法的vxlan报文）
 	if (!(unparsed.vx_flags & VXLAN_HF_VNI)) {
 		netdev_dbg(skb->dev, "invalid vxlan flags=%#x vni=%#x\n",
 			   ntohl(vxlan_hdr(skb)->vx_flags),
@@ -1354,8 +1361,10 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		/* Return non vxlan pkt */
 		goto drop;
 	}
+
+	//提取vxlan的其它标记位
 	unparsed.vx_flags &= ~VXLAN_HF_VNI;
-	unparsed.vx_vni &= ~VXLAN_VNI_MASK;
+	unparsed.vx_vni &= ~VXLAN_VNI_MASK;//提取vxlan id号
 
 	vs = rcu_dereference_sk_user_data(sk);
 	if (!vs)
@@ -1363,6 +1372,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 
 	vni = vxlan_vni(vxlan_hdr(skb)->vx_vni);
 
+	//检查是否有能收取此vni的vxlan设备
 	vxlan = vxlan_vs_find_vni(vs, skb->dev->ifindex, vni);
 	if (!vxlan)
 		goto drop;
@@ -1370,6 +1380,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	/* For backwards compatibility, only allow reserved fields to be
 	 * used by VXLAN extensions if explicitly requested.
 	 */
+	//vxlan扩展处理
 	if (vs->flags & VXLAN_F_GPE) {
 		if (!vxlan_parse_gpe_hdr(&unparsed, &protocol, skb, vs->flags))
 			goto drop;
@@ -2287,7 +2298,9 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 #endif
 	}
 
+	//取skb的以太头
 	eth = eth_hdr(skb);
+	//通过目的mac,vni查找转发项
 	f = vxlan_find_mac(vxlan, eth->h_dest, vni);
 	did_rsc = false;
 
@@ -2312,19 +2325,23 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
+	//按转发表，给每个remotes发送一份
 	list_for_each_entry_rcu(rdst, &f->remotes, list) {
 		struct sk_buff *skb1;
 
 		if (!fdst) {
+			//优化：第一个发送，不需要copy报文
 			fdst = rdst;
 			continue;
 		}
 		skb1 = skb_clone(skb, GFP_ATOMIC);
 		if (skb1)
+			//向rdst发送此报文
 			vxlan_xmit_one(skb1, dev, vni, rdst, did_rsc);
 	}
 
 	if (fdst)
+		//向第一接口发送此报文
 		vxlan_xmit_one(skb, dev, vni, fdst, did_rsc);
 	else
 		kfree_skb(skb);
@@ -2332,19 +2349,24 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 }
 
 /* Walk the forwarding table and purge stale entries */
+//vxlan转发表项周期性检查(timer)过期回调
 static void vxlan_cleanup(struct timer_list *t)
 {
+	//由timer获得其对应设备
 	struct vxlan_dev *vxlan = from_timer(vxlan, t, age_timer);
+	//设置定时器下次到期时间
 	unsigned long next_timer = jiffies + FDB_AGE_INTERVAL;
 	unsigned int h;
 
 	if (!netif_running(vxlan->dev))
-		return;
+		return;//如果此设备未运行，则退出（定时器体眠时设备被停止）
 
+	//遍历转发用哈希表
 	for (h = 0; h < FDB_HASH_SIZE; ++h) {
 		struct hlist_node *p, *n;
 
 		spin_lock_bh(&vxlan->hash_lock);
+		//遍历h号桶
 		hlist_for_each_safe(p, n, &vxlan->fdb_head[h]) {
 			struct vxlan_fdb *f
 				= container_of(p, struct vxlan_fdb, hlist);
@@ -2356,19 +2378,23 @@ static void vxlan_cleanup(struct timer_list *t)
 			if (f->flags & NTF_EXT_LEARNED)
 				continue;
 
+			//检查此表项过期时间
 			timeout = f->used + vxlan->cfg.age_interval * HZ;
 			if (time_before_eq(timeout, jiffies)) {
+				//timeout时间已过
 				netdev_dbg(vxlan->dev,
 					   "garbage collect %pM\n",
 					   f->eth_addr);
-				f->state = NUD_STALE;
-				vxlan_fdb_destroy(vxlan, f);
+				f->state = NUD_STALE;//置为过期
+				vxlan_fdb_destroy(vxlan, f);//销毁vxlan fdb表项
 			} else if (time_before(timeout, next_timer))
+				//如果此表项是有效的，则获取下次timer触发时间
 				next_timer = timeout;
 		}
 		spin_unlock_bh(&vxlan->hash_lock);
 	}
 
+	//重新设置定时器及其触发时间
 	mod_timer(&vxlan->age_timer, next_timer);
 }
 
@@ -2654,12 +2680,14 @@ static void vxlan_setup(struct net_device *dev)
 	INIT_LIST_HEAD(&vxlan->next);
 	spin_lock_init(&vxlan->hash_lock);
 
+	//初始化转发表项过期定时器
 	timer_setup(&vxlan->age_timer, vxlan_cleanup, TIMER_DEFERRABLE);
 
 	vxlan->dev = dev;
 
 	gro_cells_init(&vxlan->gro_cells, dev);
 
+	//初始化转发表
 	for (h = 0; h < FDB_HASH_SIZE; ++h)
 		INIT_HLIST_HEAD(&vxlan->fdb_head[h]);
 }

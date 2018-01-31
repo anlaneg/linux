@@ -776,6 +776,7 @@ static inline void debug_assert_init(struct timer_list *timer)
 	debug_timer_assert_init(timer);
 }
 
+//初始化timer
 static void do_init_timer(struct timer_list *timer,
 			  void (*func)(struct timer_list *),
 			  unsigned int flags,

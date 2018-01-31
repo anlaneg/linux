@@ -17,8 +17,8 @@
  * I = VXLAN Network Identifier (VNI) present.
  */
 struct vxlanhdr {
-	__be32 vx_flags;
-	__be32 vx_vni;
+	__be32 vx_flags;//前8bit为标记为，目前仅第4bit被使用
+	__be32 vx_vni;//vxlan id号
 };
 
 /* VXLAN header flags. */
@@ -236,13 +236,14 @@ struct vxlan_dev {
 	struct net	  *net;		/* netns for packet i/o */
 	struct vxlan_rdst default_dst;	/* default destination */
 
-	struct timer_list age_timer;
+	struct timer_list age_timer;//用于老化fdb表项
 	spinlock_t	  hash_lock;
 	unsigned int	  addrcnt;
 	struct gro_cells  gro_cells;
 
 	struct vxlan_config	cfg;
 
+	//vxlan设备转发表
 	struct hlist_head fdb_head[FDB_HASH_SIZE];
 };
 
@@ -321,6 +322,7 @@ static inline netdev_features_t vxlan_features_check(struct sk_buff *skb,
 /* IPv6 header + UDP + VXLAN + Ethernet header */
 #define VXLAN6_HEADROOM (40 + 8 + 8 + 14)
 
+//取vxlan头部
 static inline struct vxlanhdr *vxlan_hdr(struct sk_buff *skb)
 {
 	return (struct vxlanhdr *)(udp_hdr(skb) + 1);

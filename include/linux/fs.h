@@ -600,7 +600,7 @@ struct inode {
 		const unsigned int i_nlink;
 		unsigned int __i_nlink;
 	};
-	dev_t			i_rdev;
+	dev_t			i_rdev;//指向对应的设备编号
 	loff_t			i_size;
 	struct timespec		i_atime;
 	struct timespec		i_mtime;
@@ -653,7 +653,7 @@ struct inode {
 	union {
 		struct pipe_inode_info	*i_pipe;
 		struct block_device	*i_bdev;
-		struct cdev		*i_cdev;
+		struct cdev		*i_cdev;//指向对应的字符设备
 		char			*i_link;
 		unsigned		i_dir_seq;
 	};
@@ -806,11 +806,13 @@ static inline void i_size_write(struct inode *inode, loff_t i_size)
 #endif
 }
 
+//取dev_t中的minor
 static inline unsigned iminor(const struct inode *inode)
 {
 	return MINOR(inode->i_rdev);
 }
 
+//取dev_t中的major
 static inline unsigned imajor(const struct inode *inode)
 {
 	return MAJOR(inode->i_rdev);
@@ -1707,7 +1709,7 @@ struct file_operations {
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
-	int (*open) (struct inode *, struct file *);//打开
+	int (*open) (struct inode *, struct file *);//文件打开
 	int (*flush) (struct file *, fl_owner_t id);
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);

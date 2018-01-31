@@ -28,8 +28,8 @@
 
 #define UIO_MAX_DEVICES		(1U << MINORBITS)
 
-static int uio_major;
-static struct cdev *uio_cdev;
+static int uio_major;//记录uio设备的major
+static struct cdev *uio_cdev;//记录uio的cdev
 static DEFINE_IDR(uio_idr);
 static const struct file_operations uio_fops;
 
@@ -439,7 +439,7 @@ static int uio_open(struct inode *inode, struct file *filep)
 	idev = idr_find(&uio_idr, iminor(inode));
 	mutex_unlock(&minor_lock);
 	if (!idev) {
-		//没有查找到对应的设备
+		//没有查找到对应的设备，说明设备未注册，返回失败
 		ret = -ENODEV;
 		goto out;
 	}
@@ -459,6 +459,7 @@ static int uio_open(struct inode *inode, struct file *filep)
 	listener->event_count = atomic_read(&idev->event);
 	filep->private_data = listener;
 
+	//调用上层注册的open函数
 	if (idev->info->open) {
 		ret = idev->info->open(idev->info, inode);
 		if (ret)
@@ -676,6 +677,7 @@ static int uio_mmap_physical(struct vm_area_struct *vma)
 			       vma->vm_page_prot);
 }
 
+//uio内存映射处理
 static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
 {
 	struct uio_listener *listener = filep->private_data;
@@ -699,6 +701,7 @@ static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
 	if (requested_pages > actual_pages)
 		return -EINVAL;
 
+	//调用上层提供的mmap
 	if (idev->info->mmap) {
 		ret = idev->info->mmap(idev->info, vma);
 		return ret;
@@ -734,12 +737,13 @@ static int uio_major_init(void)
 	dev_t uio_dev = 0;
 	int result;
 
+	//申请一个chardev，占用自０开始到UIO_MAX_DEVICES个minor
 	result = alloc_chrdev_region(&uio_dev, 0, UIO_MAX_DEVICES, name);
 	if (result)
 		goto out;
 
 	result = -ENOMEM;
-	cdev = cdev_alloc();//申请字符设备内存
+	cdev = cdev_alloc();//申请cdev
 	if (!cdev)
 		goto out_unregister;
 
@@ -831,6 +835,7 @@ int __uio_register_device(struct module *owner,
 	if (ret)
 		return ret;
 
+	//为设备创建uio%d设备名称（igb_uio模块即使用uio来完成此事情）
 	idev->dev = device_create(&uio_class, parent,
 				  MKDEV(uio_major, idev->minor), idev,
 				  "uio%d", idev->minor);
