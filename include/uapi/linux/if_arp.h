@@ -142,10 +142,15 @@ struct arpreq_old {
  */
 
 struct arphdr {
+	//硬件地址类型
 	__be16		ar_hrd;		/* format of hardware address	*/
+	//协议地址类型
 	__be16		ar_pro;		/* format of protocol address	*/
+	//硬件地址长度
 	unsigned char	ar_hln;		/* length of hardware address	*/
+	//协议地址长度
 	unsigned char	ar_pln;		/* length of protocol address	*/
+	//操作符
 	__be16		ar_op;		/* ARP opcode (command)		*/
 
 #if 0

@@ -183,6 +183,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	u8 *data;
 	bool pfmemalloc;
 
+	//从flag来决定自哪个cache中获取
 	cache = (flags & SKB_ALLOC_FCLONE)
 		? skbuff_fclone_cache : skbuff_head_cache;
 
@@ -190,6 +191,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 		gfp_mask |= __GFP_MEMALLOC;
 
 	/* Get the HEAD */
+	//首先申请一个skb
 	skb = kmem_cache_alloc_node(cache, gfp_mask & ~__GFP_DMA, node);
 	if (!skb)
 		goto out;
@@ -200,6 +202,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * aligned memory blocks, unless SLUB/SLAB debug is enabled.
 	 * Both skb->head and skb_shared_info are cache line aligned.
 	 */
+	//接着申请skb 需要存放报文的缓冲区（需要在其后加一个skb_shared_info结构体）
 	size = SKB_DATA_ALIGN(size);
 	size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 	data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
@@ -209,6 +212,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * Put skb_shared_info exactly at the end of allocated zone,
 	 * to allow max possible filling before reallocation.
 	 */
+	//我们可以知道data的实际大小为ksize(data),除去skb_shared_info后，我们可用的空间是size
 	size = SKB_WITH_OVERHEAD(ksize(data));
 	prefetchw(data + size);
 
@@ -217,22 +221,23 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * actually initialise below. Hence, don't put any more fields after
 	 * the tail pointer in struct sk_buff!
 	 */
+	//将skb结构体中tail之前的成员全赋为0
 	memset(skb, 0, offsetof(struct sk_buff, tail));
 	/* Account for allocated memory : skb + skb->head */
 	skb->truesize = SKB_TRUESIZE(size);
 	skb->pfmemalloc = pfmemalloc;
 	refcount_set(&skb->users, 1);
-	skb->head = data;
+	skb->head = data;//指向申请的内存（后续释放时使用）
 	skb->data = data;
-	skb_reset_tail_pointer(skb);
-	skb->end = skb->tail + size;
-	skb->mac_header = (typeof(skb->mac_header))~0U;
-	skb->transport_header = (typeof(skb->transport_header))~0U;
+	skb_reset_tail_pointer(skb);//此时还没有放报文，故tail与data等值
+	skb->end = skb->tail + size;//使end指向buffer的结尾
+	skb->mac_header = (typeof(skb->mac_header))~0U;//初始化为最大值
+	skb->transport_header = (typeof(skb->transport_header))~0U;//初始化为最大值
 
 	/* make sure we initialize shinfo sequentially */
-	shinfo = skb_shinfo(skb);
-	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
-	atomic_set(&shinfo->dataref, 1);
+	shinfo = skb_shinfo(skb);//由end指针得到shinfo
+	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));//初始化shinfo
+	atomic_set(&shinfo->dataref, 1);//引用计数为１
 
 	if (flags & SKB_ALLOC_FCLONE) {
 		struct sk_buff_fclones *fclones;
@@ -554,6 +559,7 @@ static void skb_free_head(struct sk_buff *skb)
 	if (skb->head_frag)
 		skb_free_frag(head);
 	else
+		//将head指向的内存释放掉
 		kfree(head);
 }
 
@@ -1468,17 +1474,22 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 
 	if (skb_pfmemalloc(skb))
 		gfp_mask |= __GFP_MEMALLOC;
+	//在计算出skb的缓冲大小后，再在其缓冲后面多申请一个skb_shared_info的结构体长度
 	data = kmalloc_reserve(size + SKB_DATA_ALIGN(sizeof(struct skb_shared_info)),
 			       gfp_mask, NUMA_NO_NODE, NULL);
 	if (!data)
 		goto nodata;
+	//我们成功申请了一块buffer,采用ksize(data)获知此块buffer的实际大小，然后减去skb_shared_info后
+	//为我们可使用的最大size
 	size = SKB_WITH_OVERHEAD(ksize(data));
 
 	/* Copy only real data... and, alas, header. This should be
 	 * optimized for the cases when header is void.
 	 */
+	//将skb的报文内容copy到data中
 	memcpy(data + nhead, skb->head, skb_tail_pointer(skb) - skb->head);
 
+	//如果有nr_frags个frags，则会copy skb_shared_info　frags及相应分片之前的数据
 	memcpy((struct skb_shared_info *)(data + size),
 	       skb_shinfo(skb),
 	       offsetof(struct skb_shared_info, frags[skb_shinfo(skb)->nr_frags]));
@@ -1699,7 +1710,8 @@ EXPORT_SYMBOL_GPL(pskb_put);
  *	exceed the total buffer size the kernel will panic. A pointer to the
  *	first byte of the extra data is returned.
  */
-//移动tail指针，并设置len(添加数据到skb_buff)
+//移动tail指针，并设置len(添加数据到skb_buff)，
+//在tail后面空出一个len长度的区域，移动tail（预分配一个len长度的空间）
 void *skb_put(struct sk_buff *skb, unsigned int len)
 {
 	void *tmp = skb_tail_pointer(skb);

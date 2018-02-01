@@ -240,6 +240,7 @@ static inline unsigned int __inet_dev_addr_type(struct net *net,
 	table = fib_get_table(net, tb_id);
 	if (table) {
 		ret = RTN_UNICAST;
+		//查路由表
 		if (!fib_table_lookup(table, &fl4, &res, FIB_LOOKUP_NOREF)) {
 			if (!dev || dev == res.fi->fib_dev)
 				ret = res.type;
@@ -280,6 +281,7 @@ unsigned int inet_addr_type_dev_table(struct net *net,
 {
 	u32 rt_table = l3mdev_fib_table(dev) ? : RT_TABLE_LOCAL;
 
+	//查local路由表
 	return __inet_dev_addr_type(net, NULL, addr, rt_table);
 }
 EXPORT_SYMBOL(inet_addr_type_dev_table);

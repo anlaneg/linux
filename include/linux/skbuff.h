@@ -839,10 +839,10 @@ struct sk_buff {
 	/* public: */
 
 	/* These elements must be at the end, see alloc_skb() for details.  */
-	sk_buff_data_t		tail;//指向报文结尾
-	sk_buff_data_t		end;//end的后面是skb_shared_info
-	unsigned char		*head,//指向报文buffer的起始位置
-				*data;//指向当前解析的起始位置
+	sk_buff_data_t		tail;//指向报文结束位置
+	sk_buff_data_t		end;//指向buffer的结束位置，注：实际上在end的后面还有skb_shared_info结构
+	unsigned char		*head,//指向buffer的起始位置
+				*data;//指向报文的起始位置
 	unsigned int		truesize;
 	refcount_t		users;//引用计数，防报文被释放
 };
@@ -2117,6 +2117,7 @@ void skb_condense(struct sk_buff *skb);
  *
  *	Return the number of bytes of free space at the head of an &sk_buff.
  */
+//返回当前skb的headroom
 static inline unsigned int skb_headroom(const struct sk_buff *skb)
 {
 	return skb->data - skb->head;
@@ -2128,6 +2129,7 @@ static inline unsigned int skb_headroom(const struct sk_buff *skb)
  *
  *	Return the number of bytes of free space at the tail of an sk_buff
  */
+//返回当前skb的tailroom
 static inline int skb_tailroom(const struct sk_buff *skb)
 {
 	return skb_is_nonlinear(skb) ? 0 : skb->end - skb->tail;
@@ -2300,6 +2302,7 @@ static inline unsigned char *skb_network_header(const struct sk_buff *skb)
 	return skb->head + skb->network_header;
 }
 
+//设置网络层头部长度
 static inline void skb_reset_network_header(struct sk_buff *skb)
 {
 	skb->network_header = skb->data - skb->head;
@@ -2888,10 +2891,12 @@ static inline int __skb_cow(struct sk_buff *skb, unsigned int headroom,
 {
 	int delta = 0;
 
+	//如果当前要求的headroom大于skb可提供的headroom,计算需要扩大量delta
 	if (headroom > skb_headroom(skb))
 		delta = headroom - skb_headroom(skb);
 
 	if (delta || cloned)
+		//如果delta不为０，或者需要clone,则扩充skb的head
 		return pskb_expand_head(skb, ALIGN(delta, NET_SKB_PAD), 0,
 					GFP_ATOMIC);
 	return 0;

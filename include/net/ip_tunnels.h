@@ -37,7 +37,7 @@
 	 FIELD_SIZEOF(struct ip_tunnel_key, u.ipv4))
 
 struct ip_tunnel_key {
-	__be64			tun_id;
+	__be64			tun_id;//隧道id号（例如vni)
 	union {
 		struct {
 			__be32	src;
@@ -149,6 +149,7 @@ struct ip_tunnel {
 #define TUNNEL_REC		__cpu_to_be16(0x20)
 #define TUNNEL_VERSION		__cpu_to_be16(0x40)
 #define TUNNEL_NO_KEY		__cpu_to_be16(0x80)
+//不容许tunnel的报文分片
 #define TUNNEL_DONT_FRAGMENT    __cpu_to_be16(0x0100)
 #define TUNNEL_OAM		__cpu_to_be16(0x0200)
 #define TUNNEL_CRIT_OPT		__cpu_to_be16(0x0400)

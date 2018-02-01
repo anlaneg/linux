@@ -522,6 +522,7 @@ static inline int arp_fwd_pvlan(struct in_device *in_dev,
  *	Create an arp packet. If dest_hw is not set, we create a broadcast
  *	message.
  */
+//创建arp报文（请求报文或者响应报文）
 struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 			   struct net_device *dev, __be32 src_ip,
 			   const unsigned char *dest_hw,
@@ -537,24 +538,28 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 	/*
 	 *	Allocate a buffer
 	 */
-
+	//申请一个skb buffer
 	skb = alloc_skb(arp_hdr_len(dev) + hlen + tlen, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
 
 	skb_reserve(skb, hlen);
 	skb_reset_network_header(skb);
+	//在skb上分配一个arp头部空间
 	arp = skb_put(skb, arp_hdr_len(dev));
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_ARP);
+	//如果未指定src硬件地址，则采用dev的硬件地址
 	if (!src_hw)
 		src_hw = dev->dev_addr;
+	//如果未指定目标方硬件地址，则采用dev的广播地址
 	if (!dest_hw)
 		dest_hw = dev->broadcast;
 
 	/*
 	 *	Fill the device header for the ARP frame
 	 */
+	//填充以太头
 	if (dev_hard_header(skb, dev, ptype, dest_hw, src_hw, skb->len) < 0)
 		goto out;
 
@@ -568,6 +573,7 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 	 *	Exceptions everywhere. AX.25 uses the AX.25 PID value not the
 	 *	DIX code for the protocol. Make these device structure fields.
 	 */
+	//填充arp报文中的硬件类型，协议类型
 	switch (dev->type) {
 	default:
 		arp->ar_hrd = htons(dev->type);
@@ -596,14 +602,17 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 #endif
 	}
 
+	//硬件地址长度，协议地址长度，操作符
 	arp->ar_hln = dev->addr_len;
 	arp->ar_pln = 4;
 	arp->ar_op = htons(type);
 
 	arp_ptr = (unsigned char *)(arp + 1);
 
+	//设置硬件地址（发送方硬件地址）
 	memcpy(arp_ptr, src_hw, dev->addr_len);
 	arp_ptr += dev->addr_len;
+	//设置协议地址（发送方协议地址）
 	memcpy(arp_ptr, &src_ip, 4);
 	arp_ptr += 4;
 
@@ -613,12 +622,14 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 		break;
 #endif
 	default:
+		//如果知道目标方硬件地址，则设置，否则直接设置为０
 		if (target_hw)
 			memcpy(arp_ptr, target_hw, dev->addr_len);
 		else
 			memset(arp_ptr, 0, dev->addr_len);
 		arp_ptr += dev->addr_len;
 	}
+	//设置arp中的目标方ip地址
 	memcpy(arp_ptr, &dest_ip, 4);
 
 	return skb;
@@ -676,6 +687,7 @@ static bool arp_is_garp(struct net *net, struct net_device *dev,
  *	Process an arp request.
  */
 
+//arp报文处理
 static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
@@ -703,6 +715,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	switch (dev_type) {
 	default:
+		//报文中指定的硬件类型与设备不匹配，丢包
 		if (arp->ar_pro != htons(ETH_P_IP) ||
 		    htons(dev_type) != arp->ar_hrd)
 			goto out_free_skb;
@@ -737,7 +750,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Understand only these message types */
-
+	//如果是不认识的arp操作符，则丢包
 	if (arp->ar_op != htons(ARPOP_REPLY) &&
 	    arp->ar_op != htons(ARPOP_REQUEST))
 		goto out_free_skb;
@@ -745,10 +758,11 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 /*
  *	Extract fields
  */
+	//解arp负载
 	arp_ptr = (unsigned char *)(arp + 1);
-	sha	= arp_ptr;
+	sha	= arp_ptr;//发送方地址
 	arp_ptr += dev->addr_len;
-	memcpy(&sip, arp_ptr, 4);
+	memcpy(&sip, arp_ptr, 4);//发送方ip
 	arp_ptr += 4;
 	switch (dev_type) {
 #if IS_ENABLED(CONFIG_FIREWIRE_NET)
@@ -756,14 +770,15 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		break;
 #endif
 	default:
-		tha = arp_ptr;
+		tha = arp_ptr;//目标方mac
 		arp_ptr += dev->addr_len;
 	}
-	memcpy(&tip, arp_ptr, 4);
+	memcpy(&tip, arp_ptr, 4);//目标方ip
 /*
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.
  */
+	//目标ip不能是组播ip,目标ip不能是loopback ip,否则丢包
 	if (ipv4_is_multicast(tip) ||
 	    (!IN_DEV_ROUTE_LOCALNET(in_dev) && ipv4_is_loopback(tip)))
 		goto out_free_skb;
@@ -773,6 +788,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
   *	there will be an ARP proxy and gratuitous ARP frames are attacks
   *	and thus should not be accepted.
   */
+	//收到免费arp报文，且配置为丢，则丢包
 	if (sip == tip && IN_DEV_ORCONF(in_dev, DROP_GRATUITOUS_ARP))
 		goto out_free_skb;
 
@@ -805,10 +821,12 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 						    GFP_ATOMIC);
 
 	/* Special case: IPv4 duplicate address detection packet (RFC2131) */
+	//源ip为０，（特殊情况：ipv4　地址重突检测）
 	if (sip == 0) {
 		if (arp->ar_op == htons(ARPOP_REQUEST) &&
 		    inet_addr_type_dev_table(net, dev, tip) == RTN_LOCAL &&
 		    !arp_ignore(in_dev, sip, tip))
+			//与对方发生冲突，响应arp
 			arp_send_dst(ARPOP_REPLY, ETH_P_ARP, sip, dev, tip,
 				     sha, dev->dev_addr, sha, reply_dst);
 		goto out_consume_skb;
@@ -936,7 +954,7 @@ static void parp_redo(struct sk_buff *skb)
 /*
  *	Receive an arp request from the device layer.
  */
-//收到arp报处理
+//收到arp报，并开始处理
 static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -956,12 +974,16 @@ static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (!pskb_may_pull(skb, arp_hdr_len(dev)))
 		goto freeskb;
 
+	//偏移到arp头部
 	arp = arp_hdr(skb);
+	//当前设备不支持此arp报文
 	if (arp->ar_hln != dev->addr_len || arp->ar_pln != 4)
 		goto freeskb;
 
+	//当skb的cb置为空
 	memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
 
+	//走ARP钩子点
 	return NF_HOOK(NFPROTO_ARP, NF_ARP_IN,
 		       dev_net(dev), NULL, skb, dev, NULL,
 		       arp_process);

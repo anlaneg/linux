@@ -208,18 +208,22 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 
 u32 udp_flow_hashrnd(void);
 
+//针对skb,返回一个src-port
 static inline __be16 udp_flow_src_port(struct net *net, struct sk_buff *skb,
 				       int min, int max, bool use_eth)
 {
 	u32 hash;
 
 	if (min >= max) {
+		//传入的参数不正确，变更参数为默认值
 		/* Use default range */
 		inet_get_local_port_range(net, &min, &max);
 	}
 
+	//取报文对应的hash值
 	hash = skb_get_hash(skb);
 	if (unlikely(!hash)) {
+		//如果hash值为０，且要求采用eth,则采用srcmac,dstmac及链路层协议号来hash
 		if (use_eth) {
 			/* Can't find a normal hash, caller has indicated an
 			 * Ethernet packet so use that to compute a hash.
@@ -227,6 +231,7 @@ static inline __be16 udp_flow_src_port(struct net *net, struct sk_buff *skb,
 			hash = jhash(skb->data, 2 * ETH_ALEN,
 				     (__force u32) skb->protocol);
 		} else {
+			//还不让用eth,这时就针对所有调用本函数的，返回一个随机值（固定的）
 			/* Can't derive any sort of hash for the packet, set
 			 * to some consistent random value.
 			 */
@@ -234,6 +239,9 @@ static inline __be16 udp_flow_src_port(struct net *net, struct sk_buff *skb,
 		}
 	}
 
+	//（注意，这个值可能大于max，也可能小于min)
+	//大于max是因为min加上的是任意一个值，这个值无法控制其少于(max-min)
+	//小于min时因为htons时，我们仅取当２字节，这两个字节也不能保证恰大于min
 	/* Since this is being sent on the wire obfuscate hash a bit
 	 * to minimize possbility that any useful information to an
 	 * attacker is leaked. Only upper 16 bits are relevant in the

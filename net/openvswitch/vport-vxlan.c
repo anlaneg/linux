@@ -164,6 +164,7 @@ static struct vport_ops ovs_vxlan_netdev_vport_ops = {
 	.send			= dev_queue_xmit,
 };
 
+//创建vxlan　port
 static int __init ovs_vxlan_tnl_init(void)
 {
 	return ovs_vport_ops_register(&ovs_vxlan_netdev_vport_ops);

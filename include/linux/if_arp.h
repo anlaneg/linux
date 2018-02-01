@@ -31,6 +31,7 @@ static inline struct arphdr *arp_hdr(const struct sk_buff *skb)
 	return (struct arphdr *)skb_network_header(skb);
 }
 
+//计算arp头部长度
 static inline unsigned int arp_hdr_len(const struct net_device *dev)
 {
 	switch (dev->type) {

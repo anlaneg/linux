@@ -45,6 +45,7 @@
  * The IANA assigned port is 4789, but the Linux default is 8472
  * for compatibility with early adopters.
  */
+//vxlan端口号
 static unsigned short vxlan_port __read_mostly = 8472;
 module_param_named(udp_port, vxlan_port, ushort, 0444);
 MODULE_PARM_DESC(udp_port, "Destination UDP port");
@@ -1822,6 +1823,7 @@ static int vxlan_build_skb(struct sk_buff *skb, struct dst_entry *dst,
 			type |= SKB_GSO_TUNNEL_REMCSUM;
 	}
 
+	//iphdr_len指出ip头部长度,VXLAN_HLEN指出udp,vxlan头疗长度
 	min_headroom = LL_RESERVED_SPACE(dst->dev) + dst->header_len
 			+ VXLAN_HLEN + iphdr_len;
 
@@ -2055,6 +2057,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 	return 0;
 }
 
+//向接口rdst发送报文skb
 static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			   __be32 default_vni, struct vxlan_rdst *rdst,
 			   bool did_rsc)
@@ -2080,7 +2083,9 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	info = skb_tunnel_info(skb);
 
 	if (rdst) {
+		//出接口已知的情况处理:assert(rdst!=NULL)
 		dst = &rdst->remote_ip;
+		//目的ip是全０
 		if (vxlan_addr_any(dst)) {
 			if (did_rsc) {
 				/* short-circuited back to local bridge */
@@ -2090,6 +2095,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			goto drop;
 		}
 
+		//取隧道目的端port
 		dst_port = rdst->remote_port ? rdst->remote_port : vxlan->cfg.dst_port;
 		vni = (rdst->remote_vni) ? : default_vni;
 		ifindex = rdst->remote_ifindex;
@@ -2097,6 +2103,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		dst_cache = &rdst->dst_cache;
 		md->gbp = skb->mark;
 		ttl = vxlan->cfg.ttl;
+		//目的ip为组播地址或者ttl为０时，默认将ttl修改为１
 		if (!ttl && vxlan_addr_multicast(dst))
 			ttl = 1;
 
@@ -2110,11 +2117,14 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			udp_sum = !(flags & VXLAN_F_UDP_ZERO_CSUM6_TX);
 		label = vxlan->cfg.label;
 	} else {
+		//出接口未知的情况处理:assert(rdst==NULL)
+		//此时需要进行组播封装或者点到点发给对端
 		if (!info) {
 			WARN_ONCE(1, "%s: Missing encapsulation instructions\n",
 				  dev->name);
 			goto drop;
 		}
+		//由info来填充remote_ip,local_ip
 		remote_ip.sa.sa_family = ip_tunnel_info_af(info);
 		if (remote_ip.sa.sa_family == AF_INET) {
 			remote_ip.sin.sin_addr.s_addr = info->key.u.ipv4.dst;
@@ -2124,6 +2134,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			local_ip.sin6.sin6_addr = info->key.u.ipv6.src;
 		}
 		dst = &remote_ip;
+		//设置对端目的port,及vni
 		dst_port = info->key.tp_dst ? : vxlan->cfg.dst_port;
 		vni = tunnel_id_to_key32(info->key.tun_id);
 		ifindex = 0;
@@ -2135,6 +2146,8 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		label = info->key.label;
 		udp_sum = !!(info->key.tun_flags & TUNNEL_CSUM);
 	}
+
+	//依据流特征生成一个src_port
 	src_port = udp_flow_src_port(dev_net(dev), skb, vxlan->cfg.port_min,
 				     vxlan->cfg.port_max, true);
 
@@ -2144,6 +2157,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		struct rtable *rt;
 		__be16 df = 0;
 
+		//查路由
 		rt = vxlan_get_route(vxlan, dev, sock4, skb, ifindex, tos,
 				     dst->sin.sin_addr.s_addr,
 				     &local_ip.sin.sin_addr.s_addr,
@@ -3778,6 +3792,7 @@ static int __init vxlan_init_module(void)
 {
 	int rc;
 
+	//为vxlan_salt生成随机值（用于防止转发表可期待）
 	get_random_bytes(&vxlan_salt, sizeof(vxlan_salt));
 
 	rc = register_pernet_subsys(&vxlan_net_ops);

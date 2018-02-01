@@ -189,9 +189,9 @@ union vxlan_addr {
 };
 
 struct vxlan_rdst {
-	union vxlan_addr	 remote_ip;
-	__be16			 remote_port;
-	__be32			 remote_vni;
+	union vxlan_addr	 remote_ip;//隧道远端地址
+	__be16			 remote_port;//隧道远端port
+	__be32			 remote_vni;//远端vni编号
 	u32			 remote_ifindex;
 	struct list_head	 list;
 	struct rcu_head		 rcu;
@@ -200,7 +200,7 @@ struct vxlan_rdst {
 
 struct vxlan_config {
 	union vxlan_addr	remote_ip;
-	union vxlan_addr	saddr;
+	union vxlan_addr	saddr;//vxlan隧道本端的ip地址
 	__be32			vni;
 	int			remote_ifindex;
 	int			mtu;
@@ -208,7 +208,7 @@ struct vxlan_config {
 	u16			port_min;
 	u16			port_max;
 	u8			tos;
-	u8			ttl;
+	u8			ttl;//隧道封装时使用的ttl
 	__be32			label;
 	u32			flags;
 	unsigned long		age_interval;
@@ -241,7 +241,7 @@ struct vxlan_dev {
 	unsigned int	  addrcnt;
 	struct gro_cells  gro_cells;
 
-	struct vxlan_config	cfg;
+	struct vxlan_config	cfg;//配置信息（如本端ip，vni等）
 
 	//vxlan设备转发表
 	struct hlist_head fdb_head[FDB_HASH_SIZE];
