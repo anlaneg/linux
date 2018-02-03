@@ -277,7 +277,7 @@ EXPORT_SYMBOL(__alloc_skb);
  *  before giving packet to stack.
  *  RX rings only contains data buffers, not full skbs.
  */
-//构造一个空的skb_buff
+//构造一个空的skb_buff (skb已完成申请，通过此函数为skb注入其缓冲用的buffer)
 struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 {
 	struct skb_shared_info *shinfo;
@@ -1915,6 +1915,7 @@ void *__pskb_pull_tail(struct sk_buff *skb, int delta)
 	/* Estimate size of pulled pages. */
 	eat = delta;
 	for (i = 0; i < skb_shinfo(skb)->nr_frags; i++) {
+		//取第i个分片的大小
 		int size = skb_frag_size(&skb_shinfo(skb)->frags[i]);
 
 		if (size >= eat)

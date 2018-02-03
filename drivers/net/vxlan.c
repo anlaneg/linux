@@ -1801,6 +1801,7 @@ static int vxlan_build_gpe_hdr(struct vxlanhdr *vxh, u32 vxflags,
 	return 0;
 }
 
+//完成vxlan头部的添加
 static int vxlan_build_skb(struct sk_buff *skb, struct dst_entry *dst,
 			   int iphdr_len, __be32 vni,
 			   struct vxlan_metadata *md, u32 vxflags,
@@ -1836,6 +1837,7 @@ static int vxlan_build_skb(struct sk_buff *skb, struct dst_entry *dst,
 	if (err)
 		return err;
 
+	//data指针前移，空出一个vxlan头部，设置vxlan头部，放入vni
 	vxh = __skb_push(skb, sizeof(*vxh));
 	vxh->vx_flags = VXLAN_HF_VNI;
 	vxh->vx_vni = vxlan_vni_field(vni);
@@ -2193,6 +2195,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (err < 0)
 			goto tx_error;
 
+		//走udp封装隧道方式，将报文传出去
 		udp_tunnel_xmit_skb(rt, sock4->sock->sk, skb, local_ip.sin.sin_addr.s_addr,
 				    dst->sin.sin_addr.s_addr, tos, ttl, df,
 				    src_port, dst_port, xnet, !udp_sum);

@@ -73,11 +73,13 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 
 	/* Push down and install the IP header. */
+	//空出ip头部
 	skb_push(skb, sizeof(struct iphdr));
 	skb_reset_network_header(skb);
 
 	iph = ip_hdr(skb);
 
+	//填充ip头部
 	iph->version	=	4;
 	iph->ihl	=	sizeof(struct iphdr) >> 2;
 	iph->frag_off	=	df;
@@ -86,8 +88,10 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 	iph->daddr	=	dst;
 	iph->saddr	=	src;
 	iph->ttl	=	ttl;
+	//填充ip层的ip->id字段
 	__ip_select_ident(net, iph, skb_shinfo(skb)->gso_segs ?: 1);
 
+	//ip层向外发送
 	err = ip_local_out(net, sk, skb);
 	if (unlikely(net_xmit_eval(err)))
 		pkt_len = 0;

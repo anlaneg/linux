@@ -493,7 +493,7 @@ int skb_zerocopy_iter_stream(struct sock *sk, struct sk_buff *skb,
 struct skb_shared_info {
 	__u8		__unused;
 	__u8		meta_len;
-	__u8		nr_frags;
+	__u8		nr_frags;//有多少个分片
 	__u8		tx_flags;
 	unsigned short	gso_size;
 	/* Warning: this field is not always filled in (UFO)! */
@@ -707,7 +707,7 @@ struct sk_buff {
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	struct nf_bridge_info	*nf_bridge;
 #endif
-	unsigned int		len,
+	unsigned int		len,//报文总长度
 				data_len;
 	__u16			mac_len,//二层长度
 				hdr_len;
@@ -2063,6 +2063,7 @@ static inline void skb_put_u8(struct sk_buff *skb, u8 val)
 }
 
 void *skb_push(struct sk_buff *skb, unsigned int len);
+//skb　data前移（增加skb长度）
 static inline void *__skb_push(struct sk_buff *skb, unsigned int len)
 {
 	skb->data -= len;

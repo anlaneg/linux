@@ -171,6 +171,7 @@ void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb
 	skb_reset_transport_header(skb);
 	uh = udp_hdr(skb);
 
+	//填充udp头部
 	uh->dest = dst_port;
 	uh->source = src_port;
 	uh->len = htons(skb->len);
@@ -179,6 +180,7 @@ void udp_tunnel_xmit_skb(struct rtable *rt, struct sock *sk, struct sk_buff *skb
 
 	udp_set_csum(nocheck, skb, src, dst, skb->len);
 
+	//使下层完成ip封装，并发送
 	iptunnel_xmit(sk, rt, skb, src, dst, IPPROTO_UDP, tos, ttl, df, xnet);
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_xmit_skb);
