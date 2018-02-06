@@ -688,7 +688,8 @@ struct sk_buff {
 	 * want to keep them across layers you have to do a skb_clone()
 	 * first. This is owned by whoever has the skb queued ATM.
 	 */
-	char			cb[48] __aligned(8);//给各层提供的免申请控制缓冲，计划放各层的私有信息
+	//给各层提供的免申请控制缓冲，计划放各层的私有信息，含驱动层
+	char			cb[48] __aligned(8);
 
 	union {
 		struct {
@@ -715,7 +716,7 @@ struct sk_buff {
 	/* Following fields are _not_ copied in __copy_skb_header()
 	 * Note that queue_mapping is here mostly to fill a hole.
 	 */
-	__u16			queue_mapping;
+	__u16			queue_mapping;//标明报文自哪个队列来
 
 /* if you move cloned around you also must adapt those constants */
 #ifdef __BIG_ENDIAN_BITFIELD
@@ -750,7 +751,7 @@ struct sk_buff {
 #define PKT_TYPE_OFFSET()	offsetof(struct sk_buff, __pkt_type_offset)
 
 	__u8			__pkt_type_offset[0];
-	__u8			pkt_type:3;
+	__u8			pkt_type:3;//指出报文去向（见if_packet.h中PACKET_MULTICAST等定义）
 	__u8			pfmemalloc:1;
 	__u8			ignore_df:1;
 
@@ -802,9 +803,9 @@ struct sk_buff {
 	};
 	__u32			priority;
 	int			skb_iif;//入接口ifindex
-	__u32			hash;
+	__u32			hash;//报文对应的hash值，例如rss hash
 	__be16			vlan_proto;//哪种vlan协议
-	__u16			vlan_tci;
+	__u16			vlan_tci;//指出vlan id
 #if defined(CONFIG_NET_RX_BUSY_POLL) || defined(CONFIG_XPS)
 	union {
 		unsigned int	napi_id;
@@ -2072,6 +2073,7 @@ static inline void *__skb_push(struct sk_buff *skb, unsigned int len)
 }
 
 void *skb_pull(struct sk_buff *skb, unsigned int len);
+//使报文的data头部后移（减少SKB长度）
 static inline void *__skb_pull(struct sk_buff *skb, unsigned int len)
 {
 	skb->len -= len;//跳过已解析的长度
@@ -2079,6 +2081,7 @@ static inline void *__skb_pull(struct sk_buff *skb, unsigned int len)
 	return skb->data += len;//数据头
 }
 
+//尝试着直接pull报文，如果要求的长度大于报文长度，直接返回NULL
 static inline void *skb_pull_inline(struct sk_buff *skb, unsigned int len)
 {
 	return unlikely(len > skb->len) ? NULL : __skb_pull(skb, len);

@@ -194,6 +194,7 @@ static DEFINE_MUTEX(ifalias_mutex);
 static DEFINE_SPINLOCK(napi_hash_lock);
 
 static unsigned int napi_gen_id = NR_CPUS;
+//用于保存系统中所有napi
 static DEFINE_READ_MOSTLY_HASHTABLE(napi_hash, 8);
 
 static seqcount_t devnet_rename_seq;
@@ -3585,6 +3586,7 @@ int dev_rx_weight __read_mostly = 64;
 int dev_tx_weight __read_mostly = 64;
 
 /* Called with irq disabled */
+//将napi加入到sd->poll_list中，并触发网络收包软中断
 static inline void ____napi_schedule(struct softnet_data *sd,
 				     struct napi_struct *napi)
 {
@@ -5323,6 +5325,7 @@ bool napi_schedule_prep(struct napi_struct *n)
 
 	do {
 		val = READ_ONCE(n->state);
+		//n被禁止调度，返回False
 		if (unlikely(val & NAPIF_STATE_DISABLE))
 			return false;
 		new = val | NAPIF_STATE_SCHED;
@@ -5333,11 +5336,13 @@ bool napi_schedule_prep(struct napi_struct *n)
 		 * if (val & NAPIF_STATE_SCHED)
 		 *     new |= NAPIF_STATE_MISSED;
 		 */
+		//产生的效果，如上示，用于将一个if语句转换为一个表达式
+		//如果value已含有NAPIF_STATE_SCHED标记，则会为其打上missed标记
 		new |= (val & NAPIF_STATE_SCHED) / NAPIF_STATE_SCHED *
 						   NAPIF_STATE_MISSED;
 	} while (cmpxchg(&n->state, val, new) != val);
 
-	return !(val & NAPIF_STATE_SCHED);
+	return !(val & NAPIF_STATE_SCHED);//如果原val上没有sched，则返回True
 }
 EXPORT_SYMBOL(napi_schedule_prep);
 
@@ -5583,6 +5588,7 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+//为dev设置napi,设置其poll函数及weight
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 		    int (*poll)(struct napi_struct *, int), int weight)
 {
@@ -5602,6 +5608,7 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
+	//指明采用poll方式
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	napi_hash_add(napi);
 }
@@ -5643,6 +5650,7 @@ static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 	void *have;
 	int work, weight;
 
+	//将n自链表中摘离
 	list_del_init(&n->poll_list);
 
 	have = netpoll_poll_lock(n);
@@ -5657,15 +5665,17 @@ static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 	 */
 	work = 0;
 	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
-		//调用对应的poll函数
+		//调用对应的poll函数（采用n中定义的weight来确定需要收取多少个）
+		//例如nfp_net_poll
 		work = n->poll(n, weight);
 		trace_napi_poll(n, work, weight);
 	}
 
+	//收到的报文数一定小于等于weight,否则报错
 	WARN_ON_ONCE(work > weight);
 
 	if (likely(work < weight))
-		goto out_unlock;
+		goto out_unlock;//网卡上的报文被我们收完了
 
 	/* Drivers must not modify the NAPI state if they
 	 * consume the entire weight.  In such cases this code
@@ -5687,12 +5697,14 @@ static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 	/* Some drivers may have called napi_schedule
 	 * prior to exhausting their budget.
 	 */
+	//如果n->poll_list有值，则报错（说明部分驱动将其加入了）
 	if (unlikely(!list_empty(&n->poll_list))) {
 		pr_warn_once("%s: Budget exhausted after napi rescheduled\n",
 			     n->dev ? n->dev->name : "backlog");
 		goto out_unlock;
 	}
 
+	//由于在收包时，n返回的包与我们需要包数相等，则说明此n可能还有包需要收取，故将n加入到repoll中
 	list_add_tail(&n->poll_list, repoll);
 
 out_unlock:
@@ -5712,9 +5724,12 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	LIST_HEAD(repoll);
 
 	local_irq_disable();
+	//采用局部变量list来保存sd->poll_list,减小锁的粒度
 	list_splice_init(&sd->poll_list, &list);
 	local_irq_enable();
 
+	//在for循环中，我们遍历每一个list成员，如果某个成员没有收满包，则不会再被加
+	//入到repoll列表中。
 	for (;;) {
 		struct napi_struct *n;
 
@@ -5733,18 +5748,25 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 		 * Allow this to run for 2 jiffies since which will allow
 		 * an average latency of 1.5/HZ.
 		 */
-		if (unlikely(budget <= 0 ||
+		if (unlikely(budget <= 0 || //收到足够的包了
 			     time_after_eq(jiffies, time_limit))) {
 			sd->time_squeeze++;
-			break;//执行时间过长，跳出
+			break;//或者执行时间过长，跳出
 		}
 	}
 
 	local_irq_disable();
 
+	//因为我们在收包期间可能有其它过程又存放了新的poll_t在pll_list
+	//故按顺序，它们应在list后面（list中包含的是还没有来得及调度的）
 	list_splice_tail_init(&sd->poll_list, &list);
+	//repoll中包含的是本次收包时，其返回了请求数目个包（所以极有可能其还含有
+	//报文需要收取，故将其加入list中（但位于poll_list之后,以便公平调度）
 	list_splice_tail(&repoll, &list);
+	//将list写回到poll_list中
 	list_splice(&list, &sd->poll_list);
+
+	//如果poll_list上仍有节点需要收取，则主动触发网络收包软中断
 	if (!list_empty(&sd->poll_list))
 		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 
@@ -8514,6 +8536,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(dev_change_net_namespace);
 
+//oldcpu下线后，将oldcpu中相关的数据移挂到当前新cpu上。
 static int dev_cpu_dead(unsigned int oldcpu)
 {
 	struct sk_buff **list_skb;
@@ -8523,18 +8546,19 @@ static int dev_cpu_dead(unsigned int oldcpu)
 
 	local_irq_disable();
 	cpu = smp_processor_id();//当前运行的cpu id
-	sd = &per_cpu(softnet_data, cpu);
-	oldsd = &per_cpu(softnet_data, oldcpu);
+	sd = &per_cpu(softnet_data, cpu);//取此cpu对应的softnet_data
+	oldsd = &per_cpu(softnet_data, oldcpu);//取旧cpu对应的softnet_data
 
 	/* Find end of our completion_queue. */
 	list_skb = &sd->completion_queue;
 	while (*list_skb)
 		list_skb = &(*list_skb)->next;
 	/* Append completion queue from offline CPU. */
-	*list_skb = oldsd->completion_queue;
-	oldsd->completion_queue = NULL;
+	*list_skb = oldsd->completion_queue;//将下线cpu的oldsd->competion_queue加入到当前cpu上
+	oldsd->completion_queue = NULL;//旧cpu的completion_queue置为空
 
 	/* Append output queue from offline CPU. */
+	//合并oldsd->output_queue
 	if (oldsd->output_queue) {
 		*sd->output_queue_tailp = oldsd->output_queue;
 		sd->output_queue_tailp = oldsd->output_queue_tailp;
@@ -8545,6 +8569,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	 * process_backlog() must be called by cpu owning percpu backlog.
 	 * We properly handle process_queue & input_pkt_queue later.
 	 */
+	//将oldsd->poll_list中的每一个napi摘除，并将其添加到sd->poll_list上，并触发收包软中断
 	while (!list_empty(&oldsd->poll_list)) {
 		struct napi_struct *napi = list_first_entry(&oldsd->poll_list,
 							    struct napi_struct,

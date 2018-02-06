@@ -313,8 +313,10 @@ struct napi_struct {
 	struct list_head	poll_list;
 
 	unsigned long		state;
+	//最多一次可以收取多少个
 	int			weight;
 	unsigned int		gro_count;
+	//轮循函数，参数2为最多收取x个，来源于weight
 	int			(*poll)(struct napi_struct *, int);
 #ifdef CONFIG_NETPOLL
 	int			poll_owner;
@@ -341,7 +343,7 @@ enum {
 enum {
 	NAPIF_STATE_SCHED	 = BIT(NAPI_STATE_SCHED),
 	NAPIF_STATE_MISSED	 = BIT(NAPI_STATE_MISSED),
-	NAPIF_STATE_DISABLE	 = BIT(NAPI_STATE_DISABLE),
+	NAPIF_STATE_DISABLE	 = BIT(NAPI_STATE_DISABLE),//禁止调度
 	NAPIF_STATE_NPSVC	 = BIT(NAPI_STATE_NPSVC),
 	NAPIF_STATE_HASHED	 = BIT(NAPI_STATE_HASHED),
 	NAPIF_STATE_NO_BUSY_POLL = BIT(NAPI_STATE_NO_BUSY_POLL),
@@ -425,6 +427,7 @@ bool napi_schedule_prep(struct napi_struct *n);
  * Schedule NAPI poll routine to be called if it is not already
  * running.
  */
+//n会被加入到poll列表，并进行轮循
 static inline void napi_schedule(struct napi_struct *n)
 {
 	if (napi_schedule_prep(n))

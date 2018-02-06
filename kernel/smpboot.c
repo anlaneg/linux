@@ -109,9 +109,11 @@ static int smpboot_thread_fn(void *data)
 	struct smp_hotplug_thread *ht = td->ht;
 
 	while (1) {
+		//将当前进程状态置为D状态
 		set_current_state(TASK_INTERRUPTIBLE);
 		preempt_disable();
 		if (kthread_should_stop()) {
+			//如果需要退出，则执行cleanup回调后退出
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
 			/* cleanup must mirror setup */
@@ -161,6 +163,7 @@ static int smpboot_thread_fn(void *data)
 		} else {
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
+			//做ht对应的工作
 			ht->thread_fn(td->cpu);
 		}
 	}
@@ -181,6 +184,7 @@ __smpboot_create_thread(struct smp_hotplug_thread *ht, unsigned int cpu)
 	td->cpu = cpu;
 	td->ht = ht;
 
+	//在$cpu上创建一个执行线程
 	tsk = kthread_create_on_cpu(smpboot_thread_fn, td, cpu,
 				    ht->thread_comm);
 	if (IS_ERR(tsk)) {

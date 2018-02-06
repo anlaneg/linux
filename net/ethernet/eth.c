@@ -164,7 +164,7 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	skb_reset_mac_header(skb);
 
 	eth = (struct ethhdr *)skb->data;
-	//移动到以太头之后
+	//使data移动到以太头之后
 	skb_pull_inline(skb, ETH_HLEN);
 
 	if (unlikely(is_multicast_ether_addr_64bits(eth->h_dest))) {

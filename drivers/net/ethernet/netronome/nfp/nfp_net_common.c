@@ -1239,6 +1239,7 @@ static void *nfp_net_napi_alloc_one(struct nfp_net_dp *dp, dma_addr_t *dma_addr)
  * @frag:	page fragment buffer
  * @dma_addr:	DMA address of skb mapping
  */
+//将新申请的交换空间放入到队列，以便网卡下次收包
 static void nfp_net_rx_give_one(const struct nfp_net_dp *dp,
 				struct nfp_net_rx_ring *rx_ring,
 				void *frag, dma_addr_t dma_addr)
@@ -1394,7 +1395,7 @@ static void nfp_net_rx_csum(struct nfp_net_dp *dp,
 	skb_checksum_none_assert(skb);
 
 	if (!(dp->netdev->features & NETIF_F_RXCSUM))
-		return;
+		return;//未使能checksum
 
 	if (meta->csum_type) {
 		skb->ip_summed = meta->csum_type;
@@ -1600,6 +1601,7 @@ nfp_net_tx_xdp_buf(struct nfp_net_dp *dp, struct nfp_net_rx_ring *rx_ring,
  *
  * Return: Number of packets received.
  */
+//收包函数
 static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 {
 	struct nfp_net_r_vector *r_vec = rx_ring->r_vec;
@@ -1627,22 +1629,26 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 		u32 meta_len_xdp = 0;
 		void *new_frag;
 
+		//取当前的读指针（rx_ring->rd_p,由于rd_p可能会回绕，故取与)
 		idx = D_IDX(rx_ring, rx_ring->rd_p);
 
+		//取收包描述符
 		rxd = &rx_ring->rxds[idx];
 		if (!(rxd->rxd.meta_len_dd & PCIE_DESC_RX_DD))
-			break;
+			break;//这个描述符还没有置为有效，收包结束
 
 		/* Memory barrier to ensure that we won't do other reads
 		 * before the DD bit.
 		 */
-		dma_rmb();
+		dma_rmb();//防止编译乱序
 
 		memset(&meta, 0, sizeof(meta));
 
+		//读指针前移，报文数增加
 		rx_ring->rd_p++;
 		pkts_polled++;
 
+		//取收到的报文
 		rxbuf =	&rx_ring->rxbufs[idx];
 		/*         < meta_len >
 		 *  <-- [rx_offset] -->
@@ -1656,10 +1662,12 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 		 * (_RX_OFFSET_DYNAMIC) metadata starts at the beginning of the
 		 * buffer and is immediately followed by the packet (no [XX]).
 		 */
+		//取报文长度
 		meta_len = rxd->rxd.meta_len_dd & PCIE_DESC_RX_META_LEN_MASK;
 		data_len = le16_to_cpu(rxd->rxd.data_len);
 		pkt_len = data_len - meta_len;
 
+		//取报文起始位置，metadata起始位置
 		pkt_off = NFP_NET_RX_BUF_HEADROOM + dp->rx_dma_off;
 		if (dp->rx_offset == NFP_NET_CFG_RX_OFFSET_DYNAMIC)
 			pkt_off += meta_len;
@@ -1668,11 +1676,13 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 		meta_off = pkt_off - meta_len;
 
 		/* Stats update */
+		//更新统计状态（防止32位系统中发生64位计数变化，造成多条指令）
 		u64_stats_update_begin(&r_vec->rx_sync);
 		r_vec->rx_pkts++;
 		r_vec->rx_bytes += pkt_len;
 		u64_stats_update_end(&r_vec->rx_sync);
 
+		//防出错处理
 		if (unlikely(meta_len > NFP_NET_MAX_PREPEND ||
 			     (dp->rx_offset && meta_len > dp->rx_offset))) {
 			nn_dp_warn(dp, "oversized RX packet metadata %u\n",
@@ -1684,6 +1694,7 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 		nfp_net_dma_sync_cpu_rx(dp, rxbuf->dma_addr + meta_off,
 					data_len);
 
+		//取报文相关的源数据
 		if (!dp->chained_metadata_format) {
 			nfp_net_set_hash_desc(dp->netdev, &meta,
 					      rxbuf->frag + meta_off, rxd);
@@ -1745,19 +1756,24 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 			}
 		}
 
+		//创建skb,存放我们收取的报文rxbuf->frag
 		skb = build_skb(rxbuf->frag, true_bufsz);
 		if (unlikely(!skb)) {
 			nfp_net_rx_drop(dp, r_vec, rx_ring, rxbuf, NULL);
 			continue;
 		}
+		//我们从网卡队列中拿走了一个报文，现在我们补一个给frag给队列
+		//方便其后续收取，并获取其对应的dma_addr地址，方便dma操作
 		new_frag = nfp_net_napi_alloc_one(dp, &new_dma_addr);
 		if (unlikely(!new_frag)) {
 			nfp_net_rx_drop(dp, r_vec, rx_ring, rxbuf, skb);
 			continue;
 		}
 
+		//dma地址unmap
 		nfp_net_dma_unmap_rx(dp, rxbuf->dma_addr);
 
+		//向网卡队列归还一个frag
 		nfp_net_rx_give_one(dp, rx_ring, new_frag, new_dma_addr);
 
 		if (likely(!meta.portid)) {
@@ -1774,23 +1790,28 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
 			nfp_repr_inc_rx_stats(netdev, pkt_len);
 		}
 
+		//使skb指向报文起始位置
 		skb_reserve(skb, pkt_off);
-		skb_put(skb, pkt_len);
+		skb_put(skb, pkt_len);//指出报文长度
 
 		skb->mark = meta.mark;
+		//设置报文的哈希
 		skb_set_hash(skb, meta.hash, meta.hash_type);
 
 		skb_record_rx_queue(skb, rx_ring->idx);
+		//解析mac层，确定报文协议（例如：0x800)
 		skb->protocol = eth_type_trans(skb, netdev);
 
 		nfp_net_rx_csum(dp, r_vec, rxd, &meta, skb);
 
 		if (rxd->rxd.flags & PCIE_DESC_RX_VLAN)
+			//如果使能vlan,则0x8100的vlan将会被缷载
 			__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q),
 					       le16_to_cpu(rxd->rxd.vlan));
 		if (meta_len_xdp)
 			skb_metadata_set(skb, meta_len_xdp);
 
+		//这个函数比较重要
 		napi_gro_receive(&rx_ring->r_vec->napi, skb);
 	}
 
@@ -1814,8 +1835,10 @@ static int nfp_net_rx(struct nfp_net_rx_ring *rx_ring, int budget)
  *
  * Return: number of packets polled.
  */
+//nfp报文轮循收取
 static int nfp_net_poll(struct napi_struct *napi, int budget)
 {
+	//由napi获得net_r_vector
 	struct nfp_net_r_vector *r_vec =
 		container_of(napi, struct nfp_net_r_vector, napi);
 	unsigned int pkts_polled = 0;
@@ -1823,9 +1846,11 @@ static int nfp_net_poll(struct napi_struct *napi, int budget)
 	if (r_vec->tx_ring)
 		nfp_net_tx_complete(r_vec->tx_ring);
 	if (r_vec->rx_ring)
+		//执行报文收取，返回收取到的报文数
 		pkts_polled = nfp_net_rx(r_vec->rx_ring, budget);
 
 	if (pkts_polled < budget)
+		//收取到的报文不足数，说明环形队列中的报文数量不多
 		if (napi_complete_done(napi, pkts_polled))
 			nfp_net_irq_unmask(r_vec->nfp_net, r_vec->irq_entry);
 

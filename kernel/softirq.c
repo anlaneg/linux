@@ -567,6 +567,7 @@ static __latent_entropy void tasklet_hi_action(struct softirq_action *a)
 	}
 }
 
+//初始化一个tasklet,设置其对应的回调函数
 void tasklet_init(struct tasklet_struct *t,
 		  void (*func)(unsigned long), unsigned long data)
 {
@@ -674,7 +675,7 @@ static void run_ksoftirqd(unsigned int cpu)
 		 * We can safely run softirq on inline stack, as we are not deep
 		 * in the task stack here.
 		 */
-		__do_softirq();
+		__do_softirq();//做当前cpu上的软中断处理
 		local_irq_enable();
 		cond_resched();
 		return;
@@ -747,7 +748,7 @@ static int takeover_tasklets(unsigned int cpu)
 //各cpu上的软中断处理线程
 static struct smp_hotplug_thread softirq_threads = {
 	.store			= &ksoftirqd,
-	.thread_should_run	= ksoftirqd_should_run,
+	.thread_should_run	= ksoftirqd_should_run,//检查是否有软中断发生
 	.thread_fn		= run_ksoftirqd,
 	.thread_comm		= "ksoftirqd/%u",
 };

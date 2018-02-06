@@ -285,6 +285,7 @@ static inline void list_cut_position(struct list_head *list,
 		__list_cut_position(list, head, entry);
 }
 
+//将list链表放在prev,next之间
 static inline void __list_splice(const struct list_head *list,
 				 struct list_head *prev,
 				 struct list_head *next)
@@ -292,9 +293,11 @@ static inline void __list_splice(const struct list_head *list,
 	struct list_head *first = list->next;
 	struct list_head *last = list->prev;
 
+	//将first加入到prev后面
 	first->prev = prev;
 	prev->next = first;
 
+	//使last加入到next的前面
 	last->next = next;
 	next->prev = last;
 }
@@ -333,6 +336,7 @@ static inline void list_splice_tail(struct list_head *list,
 static inline void list_splice_init(struct list_head *list,
 				    struct list_head *head)
 {
+	//如果list不为空，则将list置于head,head->next之间，将list置为空
 	if (!list_empty(list)) {
 		__list_splice(list, head, head->next);
 		INIT_LIST_HEAD(list);

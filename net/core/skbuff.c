@@ -277,7 +277,7 @@ EXPORT_SYMBOL(__alloc_skb);
  *  before giving packet to stack.
  *  RX rings only contains data buffers, not full skbs.
  */
-//构造一个空的skb_buff (skb已完成申请，通过此函数为skb注入其缓冲用的buffer)
+//构造一个空的skb_buff (申请skb，通过此函数为skb注入其缓冲用的buffer,报文)
 struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 {
 	struct skb_shared_info *shinfo;

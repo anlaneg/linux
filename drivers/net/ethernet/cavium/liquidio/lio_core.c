@@ -613,6 +613,7 @@ static void liquidio_napi_drv_callback(void *arg)
 		csd->info = &droq->napi;
 		csd->flags = 0;
 
+		//调用此函数，检查是否可以进行napi调度
 		smp_call_function_single_async(droq->cpu_id, csd);
 	}
 }
@@ -737,6 +738,7 @@ int liquidio_setup_io_queues(struct octeon_device *octeon_dev, int ifidx,
 		napi = &droq->napi;
 		dev_dbg(&octeon_dev->pci_dev->dev, "netif_napi_add netdev:%llx oct:%llx\n",
 			(u64)netdev, (u64)octeon_dev);
+		//注册驱动的轮循接口liquidio_napi_poll
 		netif_napi_add(netdev, napi, liquidio_napi_poll, 64);
 
 		/* designate a CPU for this droq */
@@ -794,6 +796,7 @@ int liquidio_schedule_msix_droq_pkt_handler(struct octeon_droq *droq, u64 ret)
 	    (struct octeon_device_priv *)oct->priv;
 
 	if (droq->ops.poll_mode) {
+		//当前是轮循模式，尝试进行napi轮循
 		droq->ops.napi_fn(droq);
 	} else {
 		if (ret & MSIX_PO_INT) {
@@ -861,6 +864,7 @@ static void liquidio_schedule_droq_pkt_handlers(struct octeon_device *oct)
  * @param irq unused
  * @param dev octeon device
  */
+//中断处理函数
 static
 irqreturn_t liquidio_legacy_intr_handler(int irq __attribute__((unused)),
 					 void *dev)
@@ -975,6 +979,7 @@ int octeon_setup_interrupt(struct octeon_device *oct, u32 num_ioqs)
 			snprintf(aux_irq_name, INTRNAMSIZ,
 				 "LiquidIO%u-pf%u-aux", oct->octeon_id,
 				 oct->pf_num);
+			//注册中断，及中断处理函数
 			irqret = request_irq(
 					msix_entries[num_ioq_vectors].vector,
 					liquidio_legacy_intr_handler, 0,
