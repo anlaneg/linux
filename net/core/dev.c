@@ -4415,14 +4415,16 @@ another_round:
 	if (pfmemalloc)
 		goto skip_taps;
 
-	//遍历ptype_all链，处理此报文
+	//遍历ptype_all链，处理此报文（通过pt_prev延后一个pt来进行处理）
+	//当此循环结束时，pt_prev指向的那个ptype的回调还没有指行
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 		pt_prev = ptype;
 	}
 
-	//遍历skb->dev上的ptype_all链，处理此报文
+	//遍历skb->dev上的ptype_all链，处理此报文（通过pt_prev延后一个pt来进行处理）
+	//当此循环结束时，pt_prev指向的那个ptype的回调还没有指行
 	list_for_each_entry_rcu(ptype, &skb->dev->ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
@@ -4446,6 +4448,7 @@ skip_classify:
 		goto drop;
 
 	if (skb_vlan_tag_present(skb)) {
+		//先执行未执行packet_type回调
 		if (pt_prev) {
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
@@ -4457,8 +4460,10 @@ skip_classify:
 			goto out;
 	}
 
+	//如果报文所属设备有rx_handler,执行rx_handler回调
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {
+		//执行未执行的packet_type处理
 		if (pt_prev) {
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
@@ -4489,6 +4494,7 @@ skip_classify:
 		skb->vlan_tci = 0;
 	}
 
+	//按报文的协议（arp,ip,ipv6等来检查上层钩子进行处理，例如ip_rcv)
 	type = skb->protocol;
 
 	/* deliver only exact match when indicated */
@@ -8911,6 +8917,7 @@ static int __init net_dev_init(void)
 	if (netdev_kobject_init())
 		goto out;
 
+	//初始化ptype_all,初始化ptype_base为报文处理加钩子
 	INIT_LIST_HEAD(&ptype_all);
 	for (i = 0; i < PTYPE_HASH_SIZE; i++)
 		INIT_LIST_HEAD(&ptype_base[i]);

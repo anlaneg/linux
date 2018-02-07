@@ -209,18 +209,21 @@ static const struct file_operations softnet_seq_fops = {
 	.release = seq_release,
 };
 
+//给一个偏移，查找对应的packet_type
 static void *ptype_get_idx(loff_t pos)
 {
 	struct packet_type *pt = NULL;
 	loff_t i = 0;
 	int t;
 
+	//每个ptype计一个数(先排ptype_all)
 	list_for_each_entry_rcu(pt, &ptype_all, list) {
 		if (i == pos)
 			return pt;
 		++i;
 	}
 
+	//每个ptype计一个数（后排ptype_base)
 	for (t = 0; t < PTYPE_HASH_SIZE; t++) {
 		list_for_each_entry_rcu(pt, &ptype_base[t], list) {
 			if (i == pos)
@@ -231,6 +234,7 @@ static void *ptype_get_idx(loff_t pos)
 	return NULL;
 }
 
+//自pos位置开始，如果pos有值，则返回pos处对应的packet_type,否则返回start_token
 static void *ptype_seq_start(struct seq_file *seq, loff_t *pos)
 	__acquires(RCU)
 {
@@ -238,6 +242,7 @@ static void *ptype_seq_start(struct seq_file *seq, loff_t *pos)
 	return *pos ? ptype_get_idx(*pos - 1) : SEQ_START_TOKEN;
 }
 
+//返回v对应的下一个packet_type,出参pos,设置对应的偏移量
 static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	struct packet_type *pt;
@@ -245,25 +250,29 @@ static void *ptype_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 	int hash;
 
 	++*pos;
+	//返回第0个,处理start_token
 	if (v == SEQ_START_TOKEN)
 		return ptype_get_idx(0);
 
-	pt = v;
-	nxt = pt->list.next;
+	pt = v;//取出传入的start情况
+	nxt = pt->list.next;//start的下一个
 	if (pt->type == htons(ETH_P_ALL)) {
 		if (nxt != &ptype_all)
-			goto found;
+			goto found;//如果没有到达链表尾，则意味着找到了，跳found
+		//已到达ptype_all的链表尾，跳ptype_base的首个
 		hash = 0;
 		nxt = ptype_base[0].next;
 	} else
 		hash = ntohs(pt->type) & PTYPE_HASH_MASK;
 
+	//检查对应hash的首个nxt,如果相等，说明需要切换hash通（已遍历达到桶结尾）
 	while (nxt == &ptype_base[hash]) {
 		if (++hash >= PTYPE_HASH_SIZE)
 			return NULL;
-		nxt = ptype_base[hash].next;
+		nxt = ptype_base[hash].next;//置为下一个樋的首个元素
 	}
 found:
+    //返回对应的packet_type
 	return list_entry(nxt, struct packet_type, list);
 }
 
@@ -273,6 +282,7 @@ static void ptype_seq_stop(struct seq_file *seq, void *v)
 	rcu_read_unlock();
 }
 
+//显示ptype文件内容
 static int ptype_seq_show(struct seq_file *seq, void *v)
 {
 	struct packet_type *pt = v;
@@ -292,6 +302,7 @@ static int ptype_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
+//ptype_seq文件操作集
 static const struct seq_operations ptype_seq_ops = {
 	.start = ptype_seq_start,
 	.next  = ptype_seq_next,
@@ -299,12 +310,14 @@ static const struct seq_operations ptype_seq_ops = {
 	.show  = ptype_seq_show,
 };
 
+//ptype_seq文件打开操作
 static int ptype_seq_open(struct inode *inode, struct file *file)
 {
 	return seq_open_net(inode, file, &ptype_seq_ops,
 			sizeof(struct seq_net_private));
 }
 
+//ptype文件操作集
 static const struct file_operations ptype_seq_fops = {
 	.owner	 = THIS_MODULE,
 	.open    = ptype_seq_open,
@@ -323,6 +336,7 @@ static int __net_init dev_proc_net_init(struct net *net)
 	if (!proc_create("softnet_stat", S_IRUGO, net->proc_net,
 			 &softnet_seq_fops))
 		goto out_dev;
+	//创建ptype文件
 	if (!proc_create("ptype", S_IRUGO, net->proc_net, &ptype_seq_fops))
 		goto out_softnet;
 

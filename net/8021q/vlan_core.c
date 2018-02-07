@@ -6,6 +6,7 @@
 #include <linux/export.h>
 #include "vlan.h"
 
+//vlan报文处理
 bool vlan_do_receive(struct sk_buff **skbp)
 {
 	struct sk_buff *skb = *skbp;
