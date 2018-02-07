@@ -159,6 +159,7 @@ static DEFINE_SPINLOCK(ptype_lock);
 static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 struct list_head ptype_all __read_mostly;	/* Taps */
+//不同的协议可向此链表注册其相关的gro功能
 static struct list_head offload_base __read_mostly;
 
 static int netif_rx_internal(struct sk_buff *skb);
@@ -483,6 +484,7 @@ EXPORT_SYMBOL(dev_remove_pack);
  *	guarantee all CPU's that are in middle of receiving packets
  *	will see the new offload handlers (until the next received packet).
  */
+//注册gro,gso缷载功能
 void dev_add_offload(struct packet_offload *po)
 {
 	struct packet_offload *elem;
@@ -490,7 +492,7 @@ void dev_add_offload(struct packet_offload *po)
 	spin_lock(&offload_lock);
 	list_for_each_entry(elem, &offload_base, list) {
 		if (po->priority < elem->priority)
-			break;
+			break;//优先级越小越靠前
 	}
 	list_add_rcu(&po->list, elem->list.prev);
 	spin_unlock(&offload_lock);
@@ -4627,6 +4629,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 	if (skb_defer_rx_timestamp(skb))
 		return NET_RX_SUCCESS;
 
+	//xdp处理
 	if (static_key_false(&generic_xdp_needed)) {
 		int ret;
 
@@ -4794,6 +4797,8 @@ void napi_gro_flush(struct napi_struct *napi, bool flush_old)
 }
 EXPORT_SYMBOL(napi_gro_flush);
 
+//检查skb与napi中缓存的gro_list中的某一个报文是否为相同流
+//这个检查相对比较粗，更精细的检查需要各层的gro分别完成
 static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 {
 	struct sk_buff *p;
@@ -4805,11 +4810,13 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 
 		NAPI_GRO_CB(p)->flush = 0;
 
+		//当前报文skb与p不是同一条流，则尝试下gro报文
 		if (hash != skb_get_hash_raw(p)) {
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
 		}
 
+		//比对入接口设备，vlan,？？？，mac层
 		diffs = (unsigned long)p->dev ^ (unsigned long)skb->dev;
 		diffs |= p->vlan_tci ^ skb->vlan_tci;
 		diffs |= skb_metadata_dst_cmp(p, skb);
@@ -4821,6 +4828,7 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 			diffs = memcmp(skb_mac_header(p),
 				       skb_mac_header(skb),
 				       maclen);
+		//标记是否与skb为相同流
 		NAPI_GRO_CB(p)->same_flow = !diffs;
 	}
 }
@@ -4875,6 +4883,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	enum gro_result ret;
 	int grow;
 
+	//网卡已完成gso的就直接走normal了
 	if (netif_elide_gro(skb->dev))
 		goto normal;
 
@@ -4882,6 +4891,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 
 	rcu_read_lock();
 	list_for_each_entry_rcu(ptype, head, list) {
+		//遍历协议，如果协议相等，且有gro_receive才能处理此报文，否则不处理
 		if (ptype->type != type || !ptype->callbacks.gro_receive)
 			continue;
 
@@ -4912,11 +4922,13 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 			NAPI_GRO_CB(skb)->csum_valid = 0;
 		}
 
+		//调本层的gro_receive函数进行gro处理
 		pp = ptype->callbacks.gro_receive(&napi->gro_list, skb);
 		break;
 	}
 	rcu_read_unlock();
 
+	//for循环没进去情况，即没有相应的offload
 	if (&ptype->list == head)
 		goto normal;
 
@@ -4938,11 +4950,13 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	}
 
 	if (same_flow)
-		goto ok;
+		goto ok;//可合并，或者可释放
 
+	//需要输出，则走normal
 	if (NAPI_GRO_CB(skb)->flush)
 		goto normal;
 
+	//缓存的量过多，这里直接调用napi_gro_complete向协议栈上送skb
 	if (unlikely(napi->gro_count >= MAX_GRO_SKBS)) {
 		struct sk_buff *nskb = napi->gro_list;
 
@@ -4955,6 +4969,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 		nskb->next = NULL;
 		napi_gro_complete(nskb);
 	} else {
+		//缓存此skb
 		napi->gro_count++;
 	}
 	NAPI_GRO_CB(skb)->count = 1;
@@ -4963,7 +4978,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	skb_shinfo(skb)->gso_size = skb_gro_len(skb);
 	skb->next = napi->gro_list;
 	napi->gro_list = skb;
-	ret = GRO_HELD;
+	ret = GRO_HELD;//报文将已被hold
 
 pull:
 	grow = skb_gro_offset(skb) - skb_headlen(skb);
@@ -4973,10 +4988,12 @@ ok:
 	return ret;
 
 normal:
+	//normal情况下，报文将被直接送向协议栈
 	ret = GRO_NORMAL;
 	goto pull;
 }
 
+//给定协议类型，获得其对应的gro offload回调
 struct packet_offload *gro_find_receive_by_type(__be16 type)
 {
 	struct list_head *offload_head = &offload_base;
@@ -5012,6 +5029,7 @@ static void napi_skb_free_stolen_head(struct sk_buff *skb)
 	kmem_cache_free(skbuff_head_cache, skb);
 }
 
+//依据gro的结果处理报文（或者缓存等待合并，或者释放，或者上送）
 static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 {
 	switch (ret) {
@@ -5022,9 +5040,11 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 		break;
 
 	case GRO_DROP:
+		//丢包
 		kfree_skb(skb);
 		break;
 
+		//需要释放报文
 	case GRO_MERGED_FREE:
 		if (NAPI_GRO_CB(skb)->free == NAPI_GRO_FREE_STOLEN_HEAD)
 			napi_skb_free_stolen_head(skb);
@@ -5032,6 +5052,7 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 			__kfree_skb(skb);
 		break;
 
+	//报文被缓存，不处理
 	case GRO_HELD:
 	case GRO_MERGED:
 	case GRO_CONSUMED:

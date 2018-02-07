@@ -1316,6 +1316,7 @@ out:
 }
 EXPORT_SYMBOL(inet_gso_segment);
 
+//ip层的gro收包处理
 struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 {
 	const struct net_offload *ops;
@@ -1337,17 +1338,21 @@ struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 			goto out;
 	}
 
+	//取ip层协议号（例如tcp,icmp,udp等）
 	proto = iph->protocol;
 
 	rcu_read_lock();
+	//查上层协议对应的ops
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive)
 		goto out_unlock;
 
 	if (*(u8 *)iph != 0x45)
+		//如果ip头长度有协议，则直接向上传递
 		goto out_unlock;
 
 	if (ip_is_fragment(iph))
+		//如果是分片，也直接向上传递
 		goto out_unlock;
 
 	if (unlikely(ip_fast_csum((u8 *)iph, 5)))
@@ -1357,6 +1362,7 @@ struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 	flush = (u16)((ntohl(*(__be32 *)iph) ^ skb_gro_len(skb)) | (id & ~IP_DF));
 	id >>= 16;
 
+	//排除掉原来认为是同一条流的报文（现在这一层看的会更精确）
 	for (p = *head; p; p = p->next) {
 		struct iphdr *iph2;
 		u16 flush_id;
@@ -1373,11 +1379,13 @@ struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 		if ((iph->protocol ^ iph2->protocol) |
 		    ((__force u32)iph->saddr ^ (__force u32)iph2->saddr) |
 		    ((__force u32)iph->daddr ^ (__force u32)iph2->daddr)) {
+			//不是同一条流
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
 		}
 
 		/* All fields must match except length and checksum. */
+		//ttl,tos,相同时，定义flush为1
 		NAPI_GRO_CB(p)->flush |=
 			(iph->ttl ^ iph2->ttl) |
 			(iph->tos ^ iph2->tos) |
@@ -1425,6 +1433,7 @@ struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 	skb_gro_pull(skb, sizeof(*iph));
 	skb_set_transport_header(skb, skb_gro_offset(skb));
 
+	//调用ip上层的协议gro处理
 	pp = call_gro_receive(ops->callbacks.gro_receive, head, skb);
 
 out_unlock:
@@ -1808,6 +1817,7 @@ static int __init ipv4_offload_init(void)
 	if (ipip_offload_init() < 0)
 		pr_crit("%s: Cannot add IPIP protocol offload\n", __func__);
 
+	//添加ip对应的缷载
 	dev_add_offload(&ip_packet_offload);
 	return 0;
 }

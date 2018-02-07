@@ -29,6 +29,7 @@
 #include <net/protocol.h>
 
 struct net_protocol __rcu *inet_protos[MAX_INET_PROTOS] __read_mostly;
+//ip层offload函数注册表（gro,gso)
 const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;
 EXPORT_SYMBOL(inet_offloads);
 
@@ -47,6 +48,7 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 }
 EXPORT_SYMBOL(inet_add_protocol);
 
+//添加ip层offload功能
 int inet_add_offload(const struct net_offload *prot, unsigned char protocol)
 {
 	return !cmpxchg((const struct net_offload **)&inet_offloads[protocol],
@@ -68,6 +70,7 @@ int inet_del_protocol(const struct net_protocol *prot, unsigned char protocol)
 }
 EXPORT_SYMBOL(inet_del_protocol);
 
+//移除ip层offload功能
 int inet_del_offload(const struct net_offload *prot, unsigned char protocol)
 {
 	int ret;

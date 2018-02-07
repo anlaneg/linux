@@ -666,7 +666,7 @@ struct sk_buff {
 			struct sk_buff		*prev;
 
 			union {
-				struct net_device	*dev;
+				struct net_device	*dev;//报文从属于那个设备
 				/* Some protocols might use this space to store information,
 				 * while device pointer would be NULL.
 				 * UDP receive path is one user.
@@ -710,7 +710,7 @@ struct sk_buff {
 #endif
 	unsigned int		len,//报文总长度
 				data_len;
-	__u16			mac_len,//二层长度
+	__u16			mac_len,//二层长度（整个mac层的长度）
 				hdr_len;
 
 	/* Following fields are _not_ copied in __copy_skb_header()

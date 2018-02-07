@@ -449,8 +449,8 @@ struct sk_buff **eth_gro_receive(struct sk_buff **head,
 	int flush = 1;
 
 	off_eth = skb_gro_offset(skb);
-	hlen = off_eth + sizeof(*eh);
-	eh = skb_gro_header_fast(skb, off_eth);
+	hlen = off_eth + sizeof(*eh);//获得以太头负载部分
+	eh = skb_gro_header_fast(skb, off_eth);//取skb的以太头指针
 	if (skb_gro_header_hard(skb, hlen)) {
 		eh = skb_gro_header_slow(skb, hlen, off_eth);
 		if (unlikely(!eh))
@@ -459,17 +459,20 @@ struct sk_buff **eth_gro_receive(struct sk_buff **head,
 
 	flush = 0;
 
+	//修改same_flow,如果不是同一条流，则设置为0
 	for (p = *head; p; p = p->next) {
 		if (!NAPI_GRO_CB(p)->same_flow)
-			continue;
+			continue;//不是同一条流，则忽略
 
 		eh2 = (struct ethhdr *)(p->data + off_eth);
 		if (compare_ether_header(eh, eh2)) {
+			//比较两者以太头，发现不相等，忽略，指定为非同一条流
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
 		}
 	}
 
+	//取skb的上层协议号（例如arp,ip 等)
 	type = eh->h_proto;
 
 	rcu_read_lock();
@@ -481,6 +484,7 @@ struct sk_buff **eth_gro_receive(struct sk_buff **head,
 
 	skb_gro_pull(skb, sizeof(*eh));
 	skb_gro_postpull_rcsum(skb, eh, sizeof(*eh));
+	//触发上层协议的gro_receive
 	pp = call_gro_receive(ptype->callbacks.gro_receive, head, skb);
 
 out_unlock:
@@ -522,6 +526,7 @@ static struct packet_offload eth_packet_offload __read_mostly = {
 	},
 };
 
+//注册eth对应的gro
 static int __init eth_offload_init(void)
 {
 	dev_add_offload(&eth_packet_offload);

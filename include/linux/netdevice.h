@@ -1695,7 +1695,7 @@ struct net_device {
 		struct list_head lower;
 	} adj_list;
 
-	netdev_features_t	features;
+	netdev_features_t	features;//网卡开启的功能
 	netdev_features_t	hw_features;
 	netdev_features_t	wanted_features;
 	netdev_features_t	vlan_features;
@@ -1939,6 +1939,7 @@ struct net_device {
 static inline bool netif_elide_gro(const struct net_device *dev)
 {
 	if (!(dev->features & NETIF_F_GRO) || dev->xdp_prog)
+		//如果网卡已完成GRO
 		return true;
 	return false;
 }
@@ -2130,10 +2131,10 @@ struct napi_gro_cb {
 	unsigned int frag0_len;
 
 	/* This indicates where we are processing relative to skb->data. */
-	int	data_offset;
+	int	data_offset;//当前处理函数取数据的offset (例如ip处理时，其可保证偏移到ip头）
 
 	/* This is non-zero if the packet cannot be merged with the new skb. */
-	u16	flush;
+	u16	flush;//如注释所言
 
 	/* Save the IP ID here and check when we get to the transport layer */
 	u16	flush_id;
@@ -2151,7 +2152,7 @@ struct napi_gro_cb {
 	u16	proto;
 
 	/* This is non-zero if the packet may be of the same flow. */
-	u8	same_flow:1;
+	u8	same_flow:1;//如果为1，标明此报与之为同一条流
 
 	/* Used in tunnel GRO receive */
 	u8	encap_mark:1;
@@ -2177,7 +2178,7 @@ struct napi_gro_cb {
 	u8	is_atomic:1;
 
 	/* Number of gro_receive callbacks this packet already went through */
-	u8 recursion_counter:4;
+	u8 recursion_counter:4;//递归层数，用于一直回调(交协议上层处理）
 
 	/* 1 bit hole */
 
@@ -2196,16 +2197,19 @@ static inline int gro_recursion_inc_test(struct sk_buff *skb)
 	return ++NAPI_GRO_CB(skb)->recursion_counter == GRO_RECURSION_LIMIT;
 }
 
+//触发cb回调
 typedef struct sk_buff **(*gro_receive_t)(struct sk_buff **, struct sk_buff *);
 static inline struct sk_buff **call_gro_receive(gro_receive_t cb,
 						struct sk_buff **head,
 						struct sk_buff *skb)
 {
 	if (unlikely(gro_recursion_inc_test(skb))) {
+		//如果递归层数超限，则置flush等于1
 		NAPI_GRO_CB(skb)->flush |= 1;
 		return NULL;
 	}
 
+	//触发回调
 	return cb(head, skb);
 }
 
@@ -2249,9 +2253,9 @@ struct offload_callbacks {
 
 struct packet_offload {
 	__be16			 type;	/* This is really htons(ether_type). */
-	u16			 priority;
+	u16			 priority;//优先级，串成链时按优先级自小向大顺序排列
 	struct offload_callbacks callbacks;
-	struct list_head	 list;
+	struct list_head	 list;//用于串成链
 };
 
 /* often modified stats are per-CPU, other are shared (netdev->stats) */
