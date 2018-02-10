@@ -26,7 +26,7 @@
 #include <net/netfilter/ipv4/nf_conntrack_ipv4.h>
 #include <net/netfilter/ipv6/nf_conntrack_ipv6.h>
 
-static unsigned int udp_timeouts[UDP_CT_MAX] = {
+static const unsigned int udp_timeouts[UDP_CT_MAX] = {
 	[UDP_CT_UNREPLIED]	= 30*HZ,
 	[UDP_CT_REPLIED]	= 180*HZ,
 };
@@ -297,7 +297,7 @@ static struct nf_proto_net *udp_get_net_proto(struct net *net)
 	return &net->ct.nf_ct_proto.udp.pn;
 }
 
-struct nf_conntrack_l4proto nf_conntrack_l4proto_udp4 __read_mostly =
+const struct nf_conntrack_l4proto nf_conntrack_l4proto_udp4 =
 {
 	.l3proto		= PF_INET,
 	.l4proto		= IPPROTO_UDP,
@@ -329,7 +329,7 @@ struct nf_conntrack_l4proto nf_conntrack_l4proto_udp4 __read_mostly =
 EXPORT_SYMBOL_GPL(nf_conntrack_l4proto_udp4);
 
 #ifdef CONFIG_NF_CT_PROTO_UDPLITE
-struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite4 __read_mostly =
+const struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite4 =
 {
 	.l3proto		= PF_INET,
 	.l4proto		= IPPROTO_UDPLITE,
@@ -361,7 +361,7 @@ struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite4 __read_mostly =
 EXPORT_SYMBOL_GPL(nf_conntrack_l4proto_udplite4);
 #endif
 
-struct nf_conntrack_l4proto nf_conntrack_l4proto_udp6 __read_mostly =
+const struct nf_conntrack_l4proto nf_conntrack_l4proto_udp6 =
 {
 	.l3proto		= PF_INET6,
 	.l4proto		= IPPROTO_UDP,
@@ -393,7 +393,7 @@ struct nf_conntrack_l4proto nf_conntrack_l4proto_udp6 __read_mostly =
 EXPORT_SYMBOL_GPL(nf_conntrack_l4proto_udp6);
 
 #ifdef CONFIG_NF_CT_PROTO_UDPLITE
-struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite6 __read_mostly =
+const struct nf_conntrack_l4proto nf_conntrack_l4proto_udplite6 =
 {
 	.l3proto		= PF_INET6,
 	.l4proto		= IPPROTO_UDPLITE,
