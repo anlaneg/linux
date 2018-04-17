@@ -406,7 +406,7 @@ int sysfs_add_file_to_group(struct kobject *kobj,
 	if (!parent)
 		return -ENOENT;
 
-	//将文件存入parent中（非2进程文件）
+	//将文件存入parent中（非2进制文件）
 	error = sysfs_add_file(parent, attr, false);
 	kernfs_put(parent);
 
@@ -531,7 +531,7 @@ int sysfs_create_bin_file(struct kobject *kobj,
 {
 	BUG_ON(!kobj || !kobj->sd || !attr);
 
-	//创建二进制文件
+	//添加二进制文件到kobj->sd
 	return sysfs_add_file(kobj->sd, &attr->attr, true);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_bin_file);

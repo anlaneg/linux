@@ -62,18 +62,18 @@ enum kobject_action {
 };
 
 struct kobject {
-	const char		*name;
+	const char		*name;/* kobject对象的名字，对应sysfs中的目录名 */
 	struct list_head	entry;
-	struct kobject		*parent;
+	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
 	struct kset		*kset;
 	struct kobj_type	*ktype;
 	struct kernfs_node	*sd; /* sysfs directory entry */
-	struct kref		kref;
+	struct kref		kref;/* kobject的引用计数，初始值为1 */
 #ifdef CONFIG_DEBUG_KOBJECT_RELEASE
 	struct delayed_work	release;
 #endif
-	unsigned int state_initialized:1;
-	unsigned int state_in_sysfs:1;
+	unsigned int state_initialized:1;/* kobject是否初始化，由kobject_init()设置 */
+	unsigned int state_in_sysfs:1;/* 是否已添加到sysfs层次结构中 */
 	unsigned int state_add_uevent_sent:1;
 	unsigned int state_remove_uevent_sent:1;
 	unsigned int uevent_suppress:1;

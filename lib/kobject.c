@@ -196,6 +196,7 @@ static void kobj_kset_leave(struct kobject *kobj)
 	kset_put(kobj->kset);
 }
 
+//做kobject初始化
 static void kobject_init_internal(struct kobject *kobj)
 {
 	if (!kobj)
@@ -208,7 +209,7 @@ static void kobject_init_internal(struct kobject *kobj)
 	kobj->state_initialized = 1;//标记已初始化
 }
 
-
+//kobject加入sysfs系统时的内部实现
 static int kobject_add_internal(struct kobject *kobj)
 {
 	int error = 0;
@@ -242,6 +243,7 @@ static int kobject_add_internal(struct kobject *kobj)
     //创建kobj所属的目录
 	error = create_dir(kobj);
 	if (error) {
+		//创建失败，告警
 		kobj_kset_leave(kobj);
 		kobject_put(parent);
 		kobj->parent = NULL;
@@ -257,6 +259,7 @@ static int kobject_add_internal(struct kobject *kobj)
 			     __func__, kobject_name(kobj), error,
 			     parent ? kobject_name(parent) : "'none'");
 	} else
+		//标明此kobj已被加入到sysfs中了
 		kobj->state_in_sysfs = 1;
 
 	return error;
@@ -339,6 +342,7 @@ EXPORT_SYMBOL(kobject_set_name);
  * to kobject_put(), not by a call to kfree directly to ensure that all of
  * the memory is cleaned up properly.
  */
+//初始化一个kobj
 void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 {
 	char *err_str;
@@ -348,12 +352,13 @@ void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 		err_str = "invalid kobject pointer!";
 		goto error;
 	}
+	//必须指定type
 	if (!ktype) {
 		err_str = "must have a ktype to be initialized properly!\n";
 		goto error;
 	}
 
-    //已初始化，报错
+    //已执行过初始化，报错
 	if (kobj->state_initialized) {
 		/* do not error out as sometimes we can recover */
 		printk(KERN_ERR "kobject (%p): tried to init an initialized "
@@ -361,6 +366,7 @@ void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 		dump_stack();
 	}
 
+	//进行初始化
 	kobject_init_internal(kobj);
 	kobj->ktype = ktype;
 	return;
@@ -383,6 +389,7 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 		printk(KERN_ERR "kobject: can not set name properly!\n");
 		return retval;
 	}
+	//设置obj对应的父节点
 	kobj->parent = parent;
 	return kobject_add_internal(kobj);
 }
@@ -412,6 +419,12 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
  * kobject_uevent() with the UEVENT_ADD parameter to ensure that
  * userspace is properly notified of this kobject's creation.
  */
+//初始化之后，通过kobject_add()将kobj添加到系统中
+//这个函数给kobj指定一个名字，这个名字也就是其在sysfs中的目录名，
+//parent用来指明kobj的父节点，即指定了kobj的目录在sysfs中创建的位置。
+//如果这个kobj要加入到一个特定的kset中，则在kobject_add()必须给kobj->kset赋值，
+//此时parent可以设置为NULL，这样kobj会自动将kobj->kset对应的对象作为自己的parent。
+//如果parent设置为NULL，且没有加入到一个kset中，kobject会被创建到/sys顶层目录下。
 int kobject_add(struct kobject *kobj, struct kobject *parent,
 		const char *fmt, ...)
 {
@@ -421,7 +434,7 @@ int kobject_add(struct kobject *kobj, struct kobject *parent,
 	if (!kobj)
 		return -EINVAL;
 
-    //必须已初始化
+    //必须已初始化,否则报错
 	if (!kobj->state_initialized) {
 		printk(KERN_ERR "kobject '%s' (%p): tried to add an "
 		       "uninitialized object, something is seriously wrong.\n",
@@ -611,6 +624,7 @@ EXPORT_SYMBOL(kobject_del);
  * kobject_get - increment refcount for object.
  * @kobj: object.
  */
+//增加引用计数（如果kobj不为NULL时）
 struct kobject *kobject_get(struct kobject *kobj)
 {
 	if (kobj) {
@@ -714,6 +728,7 @@ void kobject_put(struct kobject *kobj)
 			WARN(1, KERN_WARNING "kobject: '%s' (%p): is not "
 			       "initialized, yet kobject_put() is being "
 			       "called.\n", kobject_name(kobj), kobj);
+		//如果引用计数减为0，则调用kobject_release完成对象释放
 		kref_put(&kobj->kref, kobject_release);
 	}
 }
