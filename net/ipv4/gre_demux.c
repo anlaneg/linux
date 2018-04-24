@@ -32,6 +32,7 @@
 
 static const struct gre_protocol __rcu *gre_proto[GREPROTO_MAX] __read_mostly;
 
+//注册指定版本的gre协议处理
 int gre_add_protocol(const struct gre_protocol *proto, u8 version)
 {
 	if (version >= GREPROTO_MAX)
@@ -42,6 +43,7 @@ int gre_add_protocol(const struct gre_protocol *proto, u8 version)
 }
 EXPORT_SYMBOL_GPL(gre_add_protocol);
 
+//删除指定版本的gre协议处理
 int gre_del_protocol(const struct gre_protocol *proto, u8 version)
 {
 	int ret;
@@ -71,10 +73,12 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	if (unlikely(!pskb_may_pull(skb, nhs + sizeof(struct gre_base_hdr))))
 		return -EINVAL;
 
+	//取gre协议头
 	greh = (struct gre_base_hdr *)(skb->data + nhs);
 	if (unlikely(greh->flags & (GRE_VERSION | GRE_ROUTING)))
 		return -EINVAL;
 
+	//依据gre协议头的flags字段，决定gre头部的长度
 	tpi->flags = gre_flags_to_tnl_flags(greh->flags);
 	hdr_len = gre_calc_hlen(tpi->flags);
 
@@ -86,6 +90,7 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 
 	options = (__be32 *)(greh + 1);
 	if (greh->flags & GRE_CSUM) {
+		//有checksum标记，校验gre checksum
 		if (skb_checksum_simple_validate(skb)) {
 			*csum_err = true;
 			return -EINVAL;
@@ -96,12 +101,15 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 		options++;
 	}
 
+	//有key标记，提取key
 	if (greh->flags & GRE_KEY) {
 		tpi->key = *options;
 		options++;
 	} else {
 		tpi->key = 0;
 	}
+
+	//有seq标记，提取seq
 	if (unlikely(greh->flags & GRE_SEQ)) {
 		tpi->seq = *options;
 		options++;
@@ -122,6 +130,8 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 }
 EXPORT_SYMBOL(gre_parse_header);
 
+//如果ip的上层协议为gre，则此函数将被调用，用于解析处理gre报文
+//此函数会根据gre协议的版本号，调用对应版本的gre处理函数
 static int gre_rcv(struct sk_buff *skb)
 {
 	const struct gre_protocol *proto;
@@ -133,12 +143,14 @@ static int gre_rcv(struct sk_buff *skb)
 
 	ver = skb->data[1]&0x7f;
 	if (ver >= GREPROTO_MAX)
-		goto drop;
+		goto drop;//遇到不支持的gre版本，丢包
 
+	//取解析ver版本的gre处理函数
 	rcu_read_lock();
 	proto = rcu_dereference(gre_proto[ver]);
 	if (!proto || !proto->handler)
-		goto drop_unlock;
+		goto drop_unlock;//没有此版本gre协议的处理函数，丢包
+	//gre报文处理
 	ret = proto->handler(skb);
 	rcu_read_unlock();
 	return ret;
@@ -150,6 +162,7 @@ drop:
 	return NET_RX_DROP;
 }
 
+//依据不同版本的gre，处理相应的gre_err
 static void gre_err(struct sk_buff *skb, u32 info)
 {
 	const struct gre_protocol *proto;
@@ -176,7 +189,7 @@ static int __init gre_init(void)
 {
 	pr_info("GRE over IPv4 demultiplexor driver\n");
 
-	//注册gre协议
+	//为ip层注册gre协议的处理回调，收到gre协议报文后gre_rcv将被调用
 	if (inet_add_protocol(&net_gre_protocol, IPPROTO_GRE) < 0) {
 		pr_err("can't add protocol\n");
 		return -EAGAIN;

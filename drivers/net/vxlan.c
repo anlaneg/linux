@@ -2892,7 +2892,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	memset(&tunnel_cfg, 0, sizeof(tunnel_cfg));
 	tunnel_cfg.sk_user_data = vs;
 	tunnel_cfg.encap_type = 1;
-	tunnel_cfg.encap_rcv = vxlan_rcv;
+	tunnel_cfg.encap_rcv = vxlan_rcv;//注册vxlan的解析处理函数
 	tunnel_cfg.encap_destroy = NULL;
 	tunnel_cfg.gro_receive = vxlan_gro_receive;
 	tunnel_cfg.gro_complete = vxlan_gro_complete;

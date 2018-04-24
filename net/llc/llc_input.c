@@ -151,6 +151,7 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
  *	the frame is related to a busy connection (a connection is sending
  *	data now), it queues this frame in the connection's backlog.
  */
+//802.2报文处理
 int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	    struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -181,6 +182,7 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	pdu = llc_pdu_sn_hdr(skb);
 	if (unlikely(!pdu->dsap)) /* NULL DSAP, refer to station */
 	       goto handle_station;
+	//依据目的sap，取其对应的报文处理函数
 	sap = llc_sap_find(pdu->dsap);
 	if (unlikely(!sap)) {/* unknown SAP */
 		dprintk("%s: llc_sap_find(%02X) failed!\n", __func__,
@@ -191,6 +193,7 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	 * First the upper layer protocols that don't need the full
 	 * LLC functionality
 	 */
+	//使用收包函数处理llc报文(例如stp)
 	rcv = rcu_dereference(sap->rcv_func);
 	dest = llc_pdu_type(skb);
 	sap_handler = dest ? READ_ONCE(llc_type_handlers[dest - 1]) : NULL;

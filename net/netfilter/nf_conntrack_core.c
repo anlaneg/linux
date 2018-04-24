@@ -1199,6 +1199,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_free);
 
 /* Allocate a new conntrack: we return -ENOMEM if classification
    failed due to stress.  Otherwise it really is unclassifiable. */
+//初始化连接跟踪
 static noinline struct nf_conntrack_tuple_hash *
 init_conntrack(struct net *net, struct nf_conn *tmpl,
 	       const struct nf_conntrack_tuple *tuple,
@@ -1290,6 +1291,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		spin_unlock(&nf_conntrack_expect_lock);
 	}
 	if (!exp)
+		//设置helper
 		__nf_ct_try_assign_helper(ct, tmpl, GFP_ATOMIC);
 
 	/* Now it is inserted into the unconfirmed list, bump refcount */

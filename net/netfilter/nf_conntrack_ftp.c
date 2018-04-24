@@ -67,11 +67,12 @@ static int try_epsv_response(const char *, size_t, struct nf_conntrack_man *,
 			     char, unsigned int *);
 
 static struct ftp_search {
-	const char *pattern;
-	size_t plen;
-	char skip;
+	const char *pattern;//需要匹配的模式串，来识别是哪类ftp
+	size_t plen;//模式串长度
+	char skip;//匹配后需要跳过多少字节，然后解析port
 	char term;
 	enum nf_ct_ftp_type ftptype;
+	//端口提取回调
 	int (*getnum)(const char *, size_t, struct nf_conntrack_man *, char, unsigned int *);
 } search[IP_CT_DIR_MAX][2] = {
 	[IP_CT_DIR_ORIGINAL] = {
@@ -81,7 +82,7 @@ static struct ftp_search {
 			.skip		= ' ',
 			.term		= '\r',
 			.ftptype	= NF_CT_FTP_PORT,
-			.getnum		= try_rfc959,
+			.getnum		= try_rfc959,//提取端口的回调
 		},
 		{
 			.pattern	= "EPRT",
@@ -302,22 +303,24 @@ static int find_pattern(const char *data, size_t dlen,
 
 	pr_debug("find_pattern `%s': dlen = %zu\n", pattern, dlen);
 
+	//报文长度，比我们需匹配的小
 	if (dlen <= plen) {
 		/* Short packet: try for partial? */
 		if (strncasecmp(data, pattern, dlen) == 0)
-			return -1;
-		else return 0;
+			return -1;//匹配失败
+		else return 0;//由于报文小，采用半匹配模式，且匹配成功
 	}
 
 	if (strncasecmp(data, pattern, plen) != 0)
-		return 0;
+		return 0;//匹配失败
 
 	pr_debug("Pattern matches!\n");
 	/* Now we've found the constant string, try to skip
 	   to the 'skip' character */
+	//如果需要，在匹配的模式串后面我们需要跳过skip个字节
 	if (skip) {
 		for (i = plen; data[i] != skip; i++)
-			if (i == dlen - 1) return -1;
+			if (i == dlen - 1) return -1;//数据不够，返回匹配失败（实际上这里不应返回-1,而应缓存报文）
 
 		/* Skip over the last character */
 		i++;
@@ -325,8 +328,8 @@ static int find_pattern(const char *data, size_t dlen,
 
 	pr_debug("Skipped up to `%c'!\n", skip);
 
-	*numoff = i;
-	*numlen = getnum(data + i, dlen - i, cmd, term, numoff);
+	*numoff = i;//记录port的提取位置
+	*numlen = getnum(data + i, dlen - i, cmd, term, numoff);//提取port
 	if (!*numlen)
 		return -1;
 
@@ -399,6 +402,7 @@ static int help(struct sk_buff *skb,
 		return NF_ACCEPT;
 	}
 
+	//指向tcp头部
 	th = skb_header_pointer(skb, protoff, sizeof(_tcph), &_tcph);
 	if (th == NULL)
 		return NF_ACCEPT;
@@ -444,6 +448,7 @@ skip_nl_seq:
 	memcpy(cmd.u3.all, &ct->tuplehash[dir].tuple.src.u3.all,
 	       sizeof(cmd.u3.all));
 
+	//在负载中查找指定的pattern
 	for (i = 0; i < ARRAY_SIZE(search[dir]); i++) {
 		found = find_pattern(fb_ptr, datalen,
 				     search[dir][i].pattern,
@@ -453,9 +458,10 @@ skip_nl_seq:
 				     &matchoff, &matchlen,
 				     &cmd,
 				     search[dir][i].getnum);
-		if (found) break;
+		if (found) break;//找到pattern,退出
 	}
 	if (found == -1) {
+		//匹配失败，返回NF_DROP
 		/* We don't usually drop packets.  After all, this is
 		   connection tracking, not packet filtering.
 		   However, it is necessary for accurate tracking in
@@ -465,6 +471,7 @@ skip_nl_seq:
 		ret = NF_DROP;
 		goto out;
 	} else if (found == 0) { /* No match */
+		//也是匹配失败
 		ret = NF_ACCEPT;
 		goto out_update_nl;
 	}
@@ -473,6 +480,7 @@ skip_nl_seq:
 		 matchlen, fb_ptr + matchoff,
 		 matchlen, ntohl(th->seq) + matchoff);
 
+	//创建一个期待
 	exp = nf_ct_expect_alloc(ct);
 	if (exp == NULL) {
 		nf_ct_helper_log(skb, ct, "cannot alloc expectation");
@@ -514,6 +522,7 @@ skip_nl_seq:
 		daddr = &cmd.u3;
 	}
 
+	//初始化期待
 	nf_ct_expect_init(exp, NF_CT_EXPECT_CLASS_DEFAULT, cmd.l3num,
 			  &ct->tuplehash[!dir].tuple.src.u3, daddr,
 			  IPPROTO_TCP, NULL, &cmd.u.tcp.port);
@@ -589,6 +598,7 @@ static int __init nf_conntrack_ftp_init(void)
 	/* FIXME should be configurable whether IPv4 and IPv6 FTP connections
 		 are tracked or not - YK */
 	for (i = 0; i < ports_c; i++) {
+		//注册help回调，初始化ftp
 		nf_ct_helper_init(&ftp[2 * i], AF_INET, IPPROTO_TCP, "ftp",
 				  FTP_PORT, ports[i], ports[i], &ftp_exp_policy,
 				  0, help, nf_ct_ftp_from_nlattr, THIS_MODULE);

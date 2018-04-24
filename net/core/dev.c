@@ -385,6 +385,7 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
  *							--ANK (980803)
  */
 
+//针对类型区分不同的报文类型（二层报文协议，例如0x800为Ip,0x806为arp....)
 static inline struct list_head *ptype_head(const struct packet_type *pt)
 {
 	if (pt->type == htons(ETH_P_ALL))
@@ -4443,7 +4444,7 @@ static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 	return 0;
 }
 
-//将报文按上层协议进行处理
+//将报文按上层协议(三层协议）进行处理，送（桥设备）进行处理
 static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
 {
 	struct packet_type *ptype, *pt_prev;

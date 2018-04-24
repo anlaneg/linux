@@ -112,6 +112,7 @@ static unsigned int helper_hash(const struct nf_conntrack_tuple *tuple)
 		(__force __u16)tuple->src.u.all) % nf_ct_helper_hsize;
 }
 
+//通过元组找helper（用于找到可分析此协议的helper)
 static struct nf_conntrack_helper *
 __nf_ct_helper_find(const struct nf_conntrack_tuple *tuple)
 {
@@ -254,6 +255,7 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 	help = nfct_help(ct);
 
 	if (helper == NULL) {
+		//查找helper
 		helper = nf_ct_lookup_helper(ct, net);
 		if (helper == NULL) {
 			if (help)
@@ -406,6 +408,7 @@ int nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 		return -EINVAL;
 
 	mutex_lock(&nf_ct_helper_mutex);
+	//遍历所有hash桶，确保不存在，如果存在就报错
 	for (i = 0; i < nf_ct_helper_hsize; i++) {
 		hlist_for_each_entry(cur, &nf_ct_helper_hash[i], hnode) {
 			if (!strcmp(cur->name, me->name) &&
@@ -429,6 +432,7 @@ int nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 		}
 	}
 	refcount_set(&me->refcnt, 1);
+	//添加到hash表
 	hlist_add_head_rcu(&me->hnode, &nf_ct_helper_hash[h]);
 	nf_ct_helper_count++;
 out:
@@ -468,6 +472,7 @@ void nf_conntrack_helper_unregister(struct nf_conntrack_helper *me)
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_unregister);
 
+//初始化helper,为其注册help回调
 void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 		       u16 l3num, u16 protonum, const char *name,
 		       u16 default_port, u16 spec_port, u32 id,
@@ -496,6 +501,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 }
 EXPORT_SYMBOL_GPL(nf_ct_helper_init);
 
+//注册helper
 int nf_conntrack_helpers_register(struct nf_conntrack_helper *helper,
 				  unsigned int n)
 {
@@ -542,6 +548,7 @@ void nf_conntrack_helper_pernet_fini(struct net *net)
 	nf_conntrack_helper_fini_sysctl(net);
 }
 
+//连接跟踪的helper表初始化
 int nf_conntrack_helper_init(void)
 {
 	int ret;
