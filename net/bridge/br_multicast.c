@@ -1789,6 +1789,7 @@ static void br_multicast_pim(struct net_bridge *br,
 	br_multicast_mark_router(br, port);
 }
 
+//桥处理ipv4的组播报文
 static int br_multicast_ipv4_rcv(struct net_bridge *br,
 				 struct net_bridge_port *port,
 				 struct sk_buff *skb,
@@ -1802,6 +1803,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 	err = ip_mc_check_igmp(skb, &skb_trimmed);
 
 	if (err == -ENOMSG) {
+		//此报文不为igmp报文
 		if (!ipv4_is_local_multicast(ip_hdr(skb)->daddr)) {
 			BR_INPUT_SKB_CB(skb)->mrouters_only = 1;
 		} else if (pim_ipv4_all_pim_routers(ip_hdr(skb)->daddr)) {
@@ -1819,17 +1821,21 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 	BR_INPUT_SKB_CB(skb)->igmp = ih->type;
 
 	switch (ih->type) {
+	//v1,v2的report报文学习
 	case IGMP_HOST_MEMBERSHIP_REPORT:
 	case IGMPV2_HOST_MEMBERSHIP_REPORT:
 		BR_INPUT_SKB_CB(skb)->mrouters_only = 1;
 		err = br_ip4_multicast_add_group(br, port, ih->group, vid, src);
 		break;
+		//v3 report报文学习
 	case IGMPV3_HOST_MEMBERSHIP_REPORT:
 		err = br_ip4_multicast_igmp3_report(br, port, skb_trimmed, vid);
 		break;
+		//路由口学习
 	case IGMP_HOST_MEMBERSHIP_QUERY:
 		err = br_ip4_multicast_query(br, port, skb_trimmed, vid);
 		break;
+		//leave消息学习，删除snopping表项
 	case IGMP_HOST_LEAVE_MESSAGE:
 		br_ip4_multicast_leave_group(br, port, ih->group, vid, src);
 		break;
@@ -1898,6 +1904,7 @@ static int br_multicast_ipv6_rcv(struct net_bridge *br,
 }
 #endif
 
+//按协议处理收到的组播报文
 int br_multicast_rcv(struct net_bridge *br, struct net_bridge_port *port,
 		     struct sk_buff *skb, u16 vid)
 {

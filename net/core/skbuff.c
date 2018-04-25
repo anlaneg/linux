@@ -5065,7 +5065,7 @@ struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 	struct vlan_hdr *vhdr;
 	u16 vlan_tci;
 
-	//检查是否已解析
+	//检查vlan是否已解析
 	if (unlikely(skb_vlan_tag_present(skb))) {
 		/* vlan_tci is already set-up so leave this for another time */
 		return skb;
@@ -5075,6 +5075,7 @@ struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 	if (unlikely(!skb))
 		goto err_free;
 
+	//检查报文是否够一个vlan头
 	if (unlikely(!pskb_may_pull(skb, VLAN_HLEN)))
 		goto err_free;
 
