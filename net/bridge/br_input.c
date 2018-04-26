@@ -92,6 +92,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	nbp_switchdev_frame_mark(p, skb);
 
 	/* insert into forwarding database after filtering to avoid spoofing */
+	//brdige fdb学习
 	br = p->br;
 	if (p->flags & BR_LEARNING)
 		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, false);
@@ -207,6 +208,7 @@ static int br_handle_local_finish(struct net *net, struct sock *sk, struct sk_bu
  * Return NULL if skb is handled
  * note: already called with rcu_read_lock
  */
+//桥设备接口收到报文回调
 rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 {
 	struct net_bridge_port *p;
@@ -231,6 +233,7 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			goto drop;
 	}
 
+	//如果是local链路以太地址（二层协议），则处理
 	if (unlikely(is_link_local_ether_addr(dest))) {
 		u16 fwd_mask = p->br->group_fwd_mask_required;
 
@@ -278,6 +281,7 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		}
 
 		/* Deliver packet to local host only */
+		//bridge的local in hook点触发
 		NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN, dev_net(skb->dev),
 			NULL, skb, skb->dev, NULL, br_handle_local_finish);
 		return RX_HANDLER_CONSUMED;
@@ -299,6 +303,7 @@ forward:
 		if (ether_addr_equal(p->br->dev->dev_addr, dest))
 			skb->pkt_type = PACKET_HOST;
 
+		//触发bridge路由前hook点
 		NF_HOOK(NFPROTO_BRIDGE, NF_BR_PRE_ROUTING,
 			dev_net(skb->dev), NULL, skb, skb->dev, NULL,
 			br_handle_frame_finish);

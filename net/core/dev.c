@@ -4367,6 +4367,7 @@ EXPORT_SYMBOL_GPL(netdev_is_rx_handler_busy);
  *
  *	For a general description of rx_handler, see enum rx_handler_result.
  */
+//注册设备的rx_handler
 int netdev_rx_handler_register(struct net_device *dev,
 			       rx_handler_func_t *rx_handler,
 			       void *rx_handler_data)
@@ -4539,16 +4540,17 @@ skip_classify:
 			pt_prev = NULL;
 		}
 		//如果虚设备有rx_handle可以处理，则调用rx_handler处理
+		//bridge设备就注册有rx_handle,其指向br_handle_frame
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
-			ret = NET_RX_SUCCESS;
+			ret = NET_RX_SUCCESS;//已成功处理，不再向上层传递
 			goto out;
 		case RX_HANDLER_ANOTHER:
 			goto another_round;
 		case RX_HANDLER_EXACT:
 			deliver_exact = true;
 		case RX_HANDLER_PASS:
-			break;
+			break;//handle放通了此报文，跳过处理
 		default:
 			BUG();
 		}

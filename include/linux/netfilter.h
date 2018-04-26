@@ -207,6 +207,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 #endif
 
 	rcu_read_lock();
+	//取各hook点的回调链表
 	switch (pf) {
 	case NFPROTO_IPV4:
 		hook_head = rcu_dereference(net->nf.hooks_ipv4[hook]);
@@ -236,10 +237,11 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 
 	if (hook_head) {
 		struct nf_hook_state state;
-
+		//将各参数封装在state中
 		nf_hook_state_init(&state, hook, pf, indev, outdev,
 				   sk, net, okfn);
 
+		//按序执行hook_head中对应的回调
 		ret = nf_hook_slow(skb, &state, hook_head, 0);
 	}
 	rcu_read_unlock();
@@ -352,6 +354,7 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
 	struct sk_buff *skb, struct net_device *in, struct net_device *out,
 	int (*okfn)(struct net *, struct sock *, struct sk_buff *))
 {
+	//在不使能netfilter时，直接调用回调
 	return okfn(net, sk, skb);
 }
 

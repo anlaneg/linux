@@ -479,6 +479,8 @@ int nf_hook_slow(struct sk_buff *skb, struct nf_hook_state *state,
 	unsigned int verdict;
 	int ret;
 
+	//遍历执行e指向的nf_hook点（NF_ACCEPT时将继续执行后续hook，NF_DROP时需要丢包
+	//NF_QUEUE时报文将被调用nf_queue进行入队）
 	for (; s < e->num_hook_entries; s++) {
 		verdict = nf_hook_entry_hookfn(&e->hooks[s], skb, state);
 		switch (verdict & NF_VERDICT_MASK) {

@@ -77,6 +77,7 @@ static const u8 eth_reserved_addr_base[ETH_ALEN] __aligned(2) =
  *
  * Please note: addr must be aligned to u16.
  */
+//检查是否为link local预留地址（预留地址为01:80:c2:00:00:0X),X为任意值（即15个地址）
 static inline bool is_link_local_ether_addr(const u8 *addr)
 {
 	__be16 *a = (__be16 *)addr;

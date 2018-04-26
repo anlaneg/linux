@@ -159,6 +159,7 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 	return tab[msgtype];
 }
 
+//消息回调注册(doit 请求处理回调，dumpit 消息dump回调）
 static int rtnl_register_internal(struct module *owner,
 				  int protocol, int msgtype,
 				  rtnl_doit_func doit, rtnl_dumpit_func dumpit,
@@ -170,11 +171,12 @@ static int rtnl_register_internal(struct module *owner,
 	int ret = -ENOBUFS;
 
 	BUG_ON(protocol < 0 || protocol > RTNL_FAMILY_MAX);
-	msgindex = rtm_msgindex(msgtype);
+	msgindex = rtm_msgindex(msgtype);//从消息类型映射为index准备注册消息回调
 
 	rtnl_lock();
-	tab = rtnl_msg_handlers[protocol];
+	tab = rtnl_msg_handlers[protocol];//取各协议对应的tab
 	if (tab == NULL) {
+		//此tab为空时，创建空表
 		tab = kcalloc(RTM_NR_MSGTYPES, sizeof(void *), GFP_KERNEL);
 		if (!tab)
 			goto unlock;
@@ -183,6 +185,7 @@ static int rtnl_register_internal(struct module *owner,
 		rcu_assign_pointer(rtnl_msg_handlers[protocol], tab);
 	}
 
+	//构造link并填充到tab的相应索引下（msgindex)
 	old = rtnl_dereference(tab[msgindex]);
 	if (old) {
 		link = kmemdup(old, sizeof(*old), GFP_KERNEL);
@@ -207,7 +210,7 @@ static int rtnl_register_internal(struct module *owner,
 	link->flags |= flags;
 
 	/* publish protocol:msgtype */
-	rcu_assign_pointer(tab[msgindex], link);
+	rcu_assign_pointer(tab[msgindex], link);//设置
 	ret = 0;
 	if (old)
 		kfree_rcu(old, rcu);
@@ -254,6 +257,7 @@ EXPORT_SYMBOL_GPL(rtnl_register_module);
  * function pointers for the case when no entry for the specific protocol
  * family exists.
  */
+//注册netlink消息处理函数
 void rtnl_register(int protocol, int msgtype,
 		   rtnl_doit_func doit, rtnl_dumpit_func dumpit,
 		   unsigned int flags)
@@ -332,8 +336,10 @@ void rtnl_unregister_all(int protocol)
 }
 EXPORT_SYMBOL_GPL(rtnl_unregister_all);
 
+//用于串接注册的rtnl_link_ops
 static LIST_HEAD(link_ops);
 
+//给定kind获取rtnl_link_ops
 static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
 {
 	const struct rtnl_link_ops *ops;
@@ -355,8 +361,10 @@ static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
  *
  * Returns 0 on success or a negative error code.
  */
+//注册（无锁）
 int __rtnl_link_register(struct rtnl_link_ops *ops)
 {
+	//已存在检测
 	if (rtnl_link_ops_get(ops->kind))
 		return -EEXIST;
 
@@ -368,6 +376,7 @@ int __rtnl_link_register(struct rtnl_link_ops *ops)
 	if (ops->setup && !ops->dellink)
 		ops->dellink = unregister_netdevice_queue;
 
+	//将ops加入到link_ops链表
 	list_add_tail(&ops->list, &link_ops);
 	return 0;
 }
@@ -379,6 +388,7 @@ EXPORT_SYMBOL_GPL(__rtnl_link_register);
  *
  * Returns 0 on success or a negative error code.
  */
+//注册（含锁）
 int rtnl_link_register(struct rtnl_link_ops *ops)
 {
 	int err;
@@ -451,6 +461,7 @@ static void rtnl_lock_unregistering_all(void)
  * rtnl_link_unregister - Unregister rtnl_link_ops from rtnetlink.
  * @ops: struct rtnl_link_ops * to unregister
  */
+//解注册（含锁）
 void rtnl_link_unregister(struct rtnl_link_ops *ops)
 {
 	/* Close the race with cleanup_net() */
@@ -4736,7 +4747,7 @@ void __init rtnetlink_init(void)
 	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
 		      rtnl_dump_ifinfo, 0);
 	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);//new消息回调
 	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
 
 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
