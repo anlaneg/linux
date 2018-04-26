@@ -28,6 +28,7 @@ int __init pci_legacy_init(void)
 		return 1;
 
 	pr_info("PCI: Probing PCI hardware\n");
+	//从0号bus开启扫描pci设备
 	pcibios_scan_root(0);
 	return 0;
 }

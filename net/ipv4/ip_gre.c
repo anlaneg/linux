@@ -341,10 +341,12 @@ static int __ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 	struct ip_tunnel *tunnel;
 
 	iph = ip_hdr(skb);
+	//查找报文对应的tunnel,通过报文入接口，gre的标记，隧道外层的源目的ip及key值
 	tunnel = ip_tunnel_lookup(itn, skb->dev->ifindex, tpi->flags,
 				  iph->saddr, iph->daddr, tpi->key);
 
 	if (tunnel) {
+		//有报文相关的tunnel,开始处理报文
 		if (__iptunnel_pull_header(skb, hdr_len, tpi->proto,
 					   raw_proto, false) < 0)
 			goto drop;
@@ -1656,6 +1658,7 @@ static int __init ipgre_init(void)
 	if (err < 0)
 		goto pnet_erspan_failed;
 
+	//注册版本为GREPROTO_CISCO的gre解析处理函数
 	err = gre_add_protocol(&ipgre_protocol, GREPROTO_CISCO);
 	if (err < 0) {
 		pr_info("%s: can't add protocol\n", __func__);

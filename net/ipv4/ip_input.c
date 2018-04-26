@@ -189,6 +189,7 @@ bool ip_call_ra_chain(struct sk_buff *skb)
 	return false;
 }
 
+//处理要送往本机的ip报文
 static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	__skb_pull(skb, skb_network_header_len(skb));
@@ -216,15 +217,18 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 				}
 				nf_reset(skb);
 			}
+
 			//协议报文处理(交给ip上层进行处理）
 			ret = ipprot->handler(skb);
 			if (ret < 0) {
+				//如果handle返回负数，则取abs后会得到相应的协议，并将
+				//用指定的协议进行重新处理。
 				protocol = -ret;
 				goto resubmit;
 			}
 			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 		} else {
-			//当前linux kernel没有对应的协议栈处理些协议
+			//当前linux kernel没有对应的协议栈处理此协议
 			if (!raw) {
 				if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 					__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
@@ -247,7 +251,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 /*
  * 	Deliver IP Packets to the higher protocol layers.
  */
-//本地报文处理（向高层协议去处理）
+//本地报文处理（送高层协议去处理）
 int ip_local_deliver(struct sk_buff *skb)
 {
 	/*

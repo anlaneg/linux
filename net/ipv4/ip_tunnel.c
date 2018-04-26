@@ -73,12 +73,14 @@ static bool ip_tunnel_key_match(const struct ip_tunnel_parm *p,
 				__be16 flags, __be32 key)
 {
 	if (p->i_flags & TUNNEL_KEY) {
+		//针对隧道有key标记的，需要保证两者均有key标记，且key值一致
 		if (flags & TUNNEL_KEY)
 			return key == p->i_key;
 		else
 			/* key expected, none present */
 			return false;
 	} else
+		//如果隧道未配置key标记，如果报文也没有key标记，则为true
 		return !(flags & TUNNEL_KEY);
 }
 
@@ -109,23 +111,27 @@ struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_net *itn,
 		if (local != t->parms.iph.saddr ||
 		    remote != t->parms.iph.daddr ||
 		    !(t->dev->flags & IFF_UP))
-			continue;
+			continue;//隧道是点到点的，故检查源，目的
 
+		//如果两者key不能匹配，则跳过
 		if (!ip_tunnel_key_match(&t->parms, flags, key))
 			continue;
 
+		//收包接口与隧道关联接口需要一致
 		if (t->parms.link == link)
 			return t;
 		else
-			cand = t;
+			cand = t;//记录为备选
 	}
 
+	//非点到点隧道情况
 	hlist_for_each_entry_rcu(t, head, hash_node) {
 		if (remote != t->parms.iph.daddr ||
 		    t->parms.iph.saddr != 0 ||
 		    !(t->dev->flags & IFF_UP))
-			continue;
+			continue;//不再关注源（非点到点隧道情况）
 
+		//如果两者key不能匹配，则跳过
 		if (!ip_tunnel_key_match(&t->parms, flags, key))
 			continue;
 
@@ -135,6 +141,7 @@ struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_net *itn,
 			cand = t;
 	}
 
+	//仅以key为hashcode,不再以remote为key,再查一遍（但考虑key情况）
 	hash = ip_tunnel_hash(key, 0);
 	head = &itn->tunnels[hash];
 

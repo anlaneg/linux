@@ -22,7 +22,10 @@
 #define GARP_ADDR_MAX	0x2F
 #define GARP_ADDR_RANGE	(GARP_ADDR_MAX - GARP_ADDR_MIN)
 
+//注册二层link local 协议的处理函数
 static const struct stp_proto __rcu *garp_protos[GARP_ADDR_RANGE + 1] __read_mostly;
+
+//注册stp协议的收包函数
 static const struct stp_proto __rcu *stp_proto __read_mostly;
 
 static struct llc_sap *sap __read_mostly;
@@ -30,6 +33,7 @@ static unsigned int sap_registered;
 static DEFINE_MUTEX(stp_proto_mutex);
 
 /* Called under rcu_read_lock from LLC */
+//检查2层报文，通过检查将其送给stp或者2层link local协议钩子处理
 static int stp_pdu_rcv(struct sk_buff *skb, struct net_device *dev,
 		       struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -45,15 +49,18 @@ static int stp_pdu_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (eh->h_dest[5] >= GARP_ADDR_MIN && eh->h_dest[5] <= GARP_ADDR_MAX) {
 		proto = rcu_dereference(garp_protos[eh->h_dest[5] -
 						    GARP_ADDR_MIN]);
+		//检查这些地址是否为link local地址，如果是，取对应协议
 		if (proto &&
 		    !ether_addr_equal(eh->h_dest, proto->group_address))
 			goto err;
 	} else
+		//如果不是，则认为是stp协议
 		proto = rcu_dereference(stp_proto);
 
 	if (!proto)
 		goto err;
 
+	//使对应协议处理此报文
 	proto->rcv(proto, skb, dev);
 	return 0;
 
@@ -68,15 +75,18 @@ int stp_proto_register(const struct stp_proto *proto)
 
 	mutex_lock(&stp_proto_mutex);
 	if (sap_registered++ == 0) {
+		//首次注册时，进行初始化
 		sap = llc_sap_open(LLC_SAP_BSPAN, stp_pdu_rcv);
 		if (!sap) {
 			err = -ENOMEM;
 			goto out;
 		}
 	}
+	//如果组mac为0，则直接将proto赋给stp_proto
 	if (is_zero_ether_addr(proto->group_address))
 		rcu_assign_pointer(stp_proto, proto);
 	else
+		//否则将地址赋给对应的garp_protos(link local protocols)
 		rcu_assign_pointer(garp_protos[proto->group_address[5] -
 					       GARP_ADDR_MIN], proto);
 out:
@@ -85,6 +95,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(stp_proto_register);
 
+//解注册
 void stp_proto_unregister(const struct stp_proto *proto)
 {
 	mutex_lock(&stp_proto_mutex);

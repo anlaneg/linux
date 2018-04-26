@@ -200,12 +200,14 @@ static int __init br_init(void)
 
 	BUILD_BUG_ON(sizeof(struct br_input_skb_cb) > FIELD_SIZEOF(struct sk_buff, cb));
 
+	//注册stp协议处理
 	err = stp_proto_register(&br_stp_proto);
 	if (err < 0) {
 		pr_err("bridge: can't register sap for STP\n");
 		return err;
 	}
 
+	//fdb表初始化
 	err = br_fdb_init();
 	if (err)
 		goto err_out;

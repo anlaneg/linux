@@ -67,6 +67,7 @@ out:
  *	a llc_sap_put after use.
  *	Returns the sap or %NULL if not found.
  */
+//给定sap_value查找对应的sap处理函数
 struct llc_sap *llc_sap_find(unsigned char sap_value)
 {
 	struct llc_sap *sap;
@@ -99,11 +100,13 @@ struct llc_sap *llc_sap_open(unsigned char lsap,
 	spin_lock_bh(&llc_sap_list_lock);
 	if (__llc_sap_find(lsap)) /* SAP already exists */
 		goto out;
+	//申请并填充节点
 	sap = llc_sap_alloc();
 	if (!sap)
 		goto out;
 	sap->laddr.lsap = lsap;
-	sap->rcv_func	= func;
+	sap->rcv_func	= func;//注册报文处理函数
+	//将节点挂接在llc_sap_list上
 	list_add_tail_rcu(&sap->node, &llc_sap_list);
 out:
 	spin_unlock_bh(&llc_sap_list_lock);
@@ -132,6 +135,7 @@ void llc_sap_close(struct llc_sap *sap)
 	kfree(sap);
 }
 
+//注册802.2协议处理函数
 static struct packet_type llc_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_802_2),
 	.func = llc_rcv,
@@ -144,7 +148,7 @@ static struct packet_type llc_tr_packet_type __read_mostly = {
 
 static int __init llc_init(void)
 {
-	dev_add_pack(&llc_packet_type);
+	dev_add_pack(&llc_packet_type);//802.2类型帧注册
 	dev_add_pack(&llc_tr_packet_type);
 	return 0;
 }

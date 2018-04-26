@@ -28,6 +28,7 @@
 #include <linux/spinlock.h>
 #include <net/protocol.h>
 
+//注层ip层的负载协议（为相应负载协议提供解析处理，框架应用在ip_input.c文件，回调例如gre_rcv)
 struct net_protocol __rcu *inet_protos[MAX_INET_PROTOS] __read_mostly;
 //ip层offload函数注册表（gro,gso)
 const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;
@@ -43,6 +44,7 @@ int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 		return -EINVAL;
 	}
 
+	//按协议号注册相应的解析处理回调
 	return !cmpxchg((const struct net_protocol **)&inet_protos[protocol],
 			NULL, prot) ? 0 : -1;
 }

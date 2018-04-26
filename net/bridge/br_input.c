@@ -83,6 +83,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge *br;
 	u16 vid = 0;
 
+	//接口处于disable状态，丢包
 	if (!p || p->state == BR_STATE_DISABLED)
 		goto drop;
 
@@ -95,6 +96,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	//brdige fdb学习
 	br = p->br;
 	if (p->flags & BR_LEARNING)
+		//fdb学习
 		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, false);
 
 	local_rcv = !!(br->dev->flags & IFF_PROMISC);
@@ -106,6 +108,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			local_rcv = true;
 		} else {
 			pkt_type = BR_PKT_MULTICAST;
+			//igmp snooping表项学习，pim snooping,mld表项学习
+			//如果非ipv4的igmp,非ipv6的mld协议，则会返回0，而不合法igmp,mld会在此丢包
 			if (br_multicast_rcv(br, p, skb, vid))
 				goto drop;
 		}
@@ -168,6 +172,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		if (!mcast_hit)
 			br_flood(br, skb, pkt_type, local_rcv, false);
 		else
+			//按mdst中对应的一组出接口进行flood
 			br_multicast_flood(mdst, skb, local_rcv, false);
 	}
 
@@ -208,7 +213,7 @@ static int br_handle_local_finish(struct net *net, struct sock *sk, struct sk_bu
  * Return NULL if skb is handled
  * note: already called with rcu_read_lock
  */
-//桥设备接口收到报文回调
+//桥接口收到报文时此接口将被调用
 rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 {
 	struct net_bridge_port *p;
@@ -282,11 +287,13 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 
 		/* Deliver packet to local host only */
 		//bridge的local in hook点触发
+		//二层link local报文进来,设备直接处理
 		NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN, dev_net(skb->dev),
 			NULL, skb, skb->dev, NULL, br_handle_local_finish);
 		return RX_HANDLER_CONSUMED;
 	}
 
+	//桥转发流量处理
 forward:
 	switch (p->state) {
 	case BR_STATE_FORWARDING:

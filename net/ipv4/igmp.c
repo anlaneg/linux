@@ -1450,6 +1450,7 @@ out:
 }
 EXPORT_SYMBOL(ip_mc_inc_group);
 
+//ip头检查（版本，报文长度，checksum)
 static int ip_mc_check_iphdr(struct sk_buff *skb)
 {
 	const struct iphdr *iph;
@@ -1471,6 +1472,7 @@ static int ip_mc_check_iphdr(struct sk_buff *skb)
 
 	iph = ip_hdr(skb);
 
+	//checksum校验
 	if (unlikely(ip_fast_csum((u8 *)iph, iph->ihl)))
 		return -EINVAL;
 
@@ -1608,9 +1610,11 @@ int ip_mc_check_igmp(struct sk_buff *skb, struct sk_buff **skb_trimmed)
 	if (ret < 0)
 		return ret;
 
+	//如果不为igmp报文，则返回失败
 	if (ip_hdr(skb)->protocol != IPPROTO_IGMP)
 		return -ENOMSG;
 
+	//对Igmp报文进行校验
 	return __ip_mc_check_igmp(skb, skb_trimmed);
 }
 EXPORT_SYMBOL(ip_mc_check_igmp);

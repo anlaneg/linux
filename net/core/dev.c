@@ -385,6 +385,7 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
  *							--ANK (980803)
  */
 
+//针对类型区分不同的报文类型（二层报文协议，例如0x800为Ip,0x806为arp....)
 static inline struct list_head *ptype_head(const struct packet_type *pt)
 {
 	if (pt->type == htons(ETH_P_ALL))
@@ -1904,6 +1905,7 @@ int dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(dev_forward_skb);
 
+//通过Func直接处理skb
 static inline int deliver_skb(struct sk_buff *skb,
 			      struct packet_type *pt_prev,
 			      struct net_device *orig_dev)
@@ -4444,7 +4446,7 @@ static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 	return 0;
 }
 
-//将报文按上层协议进行处理
+//将报文按上层协议(三层协议）进行处理，送（桥设备）进行处理
 static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
 {
 	struct packet_type *ptype, *pt_prev;
@@ -4474,7 +4476,7 @@ another_round:
 
 	if (skb->protocol == cpu_to_be16(ETH_P_8021Q) ||
 	    skb->protocol == cpu_to_be16(ETH_P_8021AD)) {
-		//vlan处理
+		//vlan在skb上进行设置，包括协议，vlan编号
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
@@ -4519,12 +4521,12 @@ skip_classify:
 		goto drop;
 
 	if (skb_vlan_tag_present(skb)) {
-		//先执行未执行packet_type回调
+		//先执行未执行的packet_type回调
 		if (pt_prev) {
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
 		}
-		//vlan处理
+		//vlan报文处理,查vlan对应的逻辑设备，更新入接口，并重执行
 		if (vlan_do_receive(&skb))
 			goto another_round;
 		else if (unlikely(!skb))
