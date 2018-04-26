@@ -245,6 +245,7 @@ out_assign:
 	return old;
 }
 
+//取对应的hook链表头指针
 static struct nf_hook_entries __rcu **
 nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum,
 		   struct net_device *dev)
@@ -421,6 +422,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 {
 	int err;
 
+	//如果是ip，则分别注册ipv4,ipv6两类hook点
 	if (reg->pf == NFPROTO_INET) {
 		err = __nf_register_net_hook(net, NFPROTO_IPV4, reg);
 		if (err < 0)
@@ -432,6 +434,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 			return err;
 		}
 	} else {
+		//注册hook中指明的pf
 		err = __nf_register_net_hook(net, reg->pf, reg);
 		if (err < 0)
 			return err;
@@ -441,6 +444,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 }
 EXPORT_SYMBOL(nf_register_net_hook);
 
+//注册一组nf hook钩子
 int nf_register_net_hooks(struct net *net, const struct nf_hook_ops *reg,
 			  unsigned int n)
 {
