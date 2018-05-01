@@ -3191,6 +3191,7 @@ static int req_prot_init(const struct proto *prot)
 	return 0;
 }
 
+//协议注册
 int proto_register(struct proto *prot, int alloc_slab)
 {
 	if (alloc_slab) {
@@ -3227,6 +3228,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 	}
 
 	mutex_lock(&proto_list_mutex);
+	//将prot添加到proto_list
 	list_add(&prot->node, &proto_list);
 	assign_proto_idx(prot);
 	mutex_unlock(&proto_list_mutex);
@@ -3269,6 +3271,7 @@ static void *proto_seq_start(struct seq_file *seq, loff_t *pos)
 	__acquires(proto_list_mutex)
 {
 	mutex_lock(&proto_list_mutex);
+	//遍历proto_list
 	return seq_list_start_head(&proto_list, *pos);
 }
 
@@ -3335,6 +3338,7 @@ static void proto_seq_printf(struct seq_file *seq, struct proto *proto)
 static int proto_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == &proto_list)
+		//输出文件标题行
 		seq_printf(seq, "%-9s %-4s %-8s %-6s %-5s %-7s %-4s %-10s %s",
 			   "protocol",
 			   "size",
@@ -3346,6 +3350,7 @@ static int proto_seq_show(struct seq_file *seq, void *v)
 			   "module",
 			   "cl co di ac io in de sh ss gs se re sp bi br ha uh gp em\n");
 	else
+		//输出protocol文件内容
 		proto_seq_printf(seq, list_entry(v, struct proto, node));
 	return 0;
 }
@@ -3354,11 +3359,12 @@ static const struct seq_operations proto_seq_ops = {
 	.start  = proto_seq_start,
 	.next   = proto_seq_next,
 	.stop   = proto_seq_stop,
-	.show   = proto_seq_show,
+	.show   = proto_seq_show,//显示协议内容
 };
 
 static int proto_seq_open(struct inode *inode, struct file *file)
 {
+	//注册文件遍历操作集，例如proto_seq_start
 	return seq_open_net(inode, file, &proto_seq_ops,
 			    sizeof(struct seq_net_private));
 }
@@ -3372,6 +3378,7 @@ static const struct file_operations proto_seq_fops = {
 
 static __net_init int proto_init_net(struct net *net)
 {
+	//创建protocols文件，并关联其对应的操作
 	if (!proc_create("protocols", S_IRUGO, net->proc_net, &proto_seq_fops))
 		return -ENOMEM;
 

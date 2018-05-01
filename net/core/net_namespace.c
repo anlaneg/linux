@@ -909,7 +909,7 @@ static int __register_pernet_operations(struct list_head *list,
 	int error;
 	LIST_HEAD(net_exit_list);
 
-	list_add_tail(&ops->list, list);
+	list_add_tail(&ops->list, list);//将ops加入到list中
 	if (ops->init || (ops->id && ops->size)) {
 		for_each_net(net) {
 			error = ops_init(ops, net);
@@ -986,6 +986,7 @@ again:
 		}
 		max_gen_ptrs = max(max_gen_ptrs, *ops->id + 1);
 	}
+	//调用注册函数
 	error = __register_pernet_operations(list, ops);
 	if (error) {
 		rcu_barrier();
@@ -1024,6 +1025,7 @@ static void unregister_pernet_operations(struct pernet_operations *ops)
  *	are called in the reverse of the order with which they were
  *	registered.
  */
+//注册一个网络namespace子系统，当一个name被创建时调用init,销毁时调用exit
 int register_pernet_subsys(struct pernet_operations *ops)
 {
 	int error;
