@@ -104,7 +104,6 @@
 #include <linux/ipv6_route.h>
 #include <linux/route.h>
 #include <linux/sockios.h>
-#include <linux/atalk.h>
 #include <net/busy_poll.h>
 #include <linux/errqueue.h>
 
@@ -234,7 +233,7 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 	return __put_user(klen, ulen);
 }
 
-static struct kmem_cache *sock_inode_cachep __read_mostly;
+static struct kmem_cache *sock_inode_cachep __ro_after_init;
 
 static struct inode *sock_alloc_inode(struct super_block *sb)
 {
@@ -991,10 +990,11 @@ static long sock_do_ioctl(struct net *net, struct socket *sock,
  *	what to do with it - that's up to the protocol still.
  */
 
-static struct ns_common *get_net_ns(struct ns_common *ns)
+struct ns_common *get_net_ns(struct ns_common *ns)
 {
 	return &get_net(container_of(ns, struct net, ns))->ns;
 }
+EXPORT_SYMBOL_GPL(get_net_ns);
 
 static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 {
@@ -1333,7 +1333,7 @@ int sock_create_kern(struct net *net, int family, int type, int protocol, struct
 }
 EXPORT_SYMBOL(sock_create_kern);
 
-SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+int __sys_socket(int family, int type, int protocol)
 {
 	int retval;
 	struct socket *sock;
@@ -1360,12 +1360,16 @@ SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 	return sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
 }
 
+SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
+{
+	return __sys_socket(family, type, protocol);
+}
+
 /*
  *	Create a pair of connected sockets.
  */
 
-SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
-		int __user *, usockvec)
+int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 {
 	struct socket *sock1, *sock2;
 	int fd1, fd2, err;
@@ -1450,6 +1454,12 @@ out:
 	return err;
 }
 
+SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
+		int __user *, usockvec)
+{
+	return __sys_socketpair(family, type, protocol, usockvec);
+}
+
 /*
  *	Bind a name to a socket. Nothing much to do here since it's
  *	the protocol's responsibility to handle the local address.
@@ -1458,7 +1468,7 @@ out:
  *	the protocol layer (having also checked the address is ok).
  */
 
-SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
+int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
@@ -1481,13 +1491,18 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 	return err;
 }
 
+SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
+{
+	return __sys_bind(fd, umyaddr, addrlen);
+}
+
 /*
  *	Perform a listen. Basically, we allow the protocol to do anything
  *	necessary for a listen, and if that works, we mark the socket as
  *	ready for listening.
  */
 
-SYSCALL_DEFINE2(listen, int, fd, int, backlog)
+int __sys_listen(int fd, int backlog)
 {
 	struct socket *sock;
 	int err, fput_needed;
@@ -1508,6 +1523,11 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 	return err;
 }
 
+SYSCALL_DEFINE2(listen, int, fd, int, backlog)
+{
+	return __sys_listen(fd, backlog);
+}
+
 /*
  *	For accept, we attempt to create a new socket, set up the link
  *	with the client, wake up the client, then return the new
@@ -1517,11 +1537,11 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
  *
  *	1003.1g adds the ability to recvmsg() to query connection pending
  *	status to recvmsg. We need to add that support in a way thats
- *	clean when we restucture accept also.
+ *	clean when we restructure accept also.
  */
 
-SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
-		int __user *, upeer_addrlen, int, flags)
+int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
+		  int __user *upeer_addrlen, int flags)
 {
 	struct socket *sock, *newsock;
 	struct file *newfile;
@@ -1574,8 +1594,9 @@ SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		goto out_fd;
 
 	if (upeer_sockaddr) {
-		if (newsock->ops->getname(newsock, (struct sockaddr *)&address,
-					  &len, 2) < 0) {
+		len = newsock->ops->getname(newsock,
+					(struct sockaddr *)&address, 2);
+		if (len < 0) {
 			err = -ECONNABORTED;
 			goto out_fd;
 		}
@@ -1600,10 +1621,16 @@ out_fd:
 	goto out_put;
 }
 
+SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
+		int __user *, upeer_addrlen, int, flags)
+{
+	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, flags);
+}
+
 SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		int __user *, upeer_addrlen)
 {
-	return sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0);
+	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0);
 }
 
 /*
@@ -1618,8 +1645,7 @@ SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
  *	include the -EINPROGRESS status for such sockets.
  */
 
-SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
-		int, addrlen)
+int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
@@ -1645,17 +1671,23 @@ out:
 	return err;
 }
 
+SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
+		int, addrlen)
+{
+	return __sys_connect(fd, uservaddr, addrlen);
+}
+
 /*
  *	Get the local address ('name') of a socket object. Move the obtained
  *	name to user space.
  */
 
-SYSCALL_DEFINE3(getsockname, int, fd, struct sockaddr __user *, usockaddr,
-		int __user *, usockaddr_len)
+int __sys_getsockname(int fd, struct sockaddr __user *usockaddr,
+		      int __user *usockaddr_len)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
-	int len, err, fput_needed;
+	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
@@ -1665,10 +1697,11 @@ SYSCALL_DEFINE3(getsockname, int, fd, struct sockaddr __user *, usockaddr,
 	if (err)
 		goto out_put;
 
-	err = sock->ops->getname(sock, (struct sockaddr *)&address, &len, 0);
-	if (err)
+	err = sock->ops->getname(sock, (struct sockaddr *)&address, 0);
+	if (err < 0)
 		goto out_put;
-	err = move_addr_to_user(&address, len, usockaddr, usockaddr_len);
+        /* "err" is actually length in this case */
+	err = move_addr_to_user(&address, err, usockaddr, usockaddr_len);
 
 out_put:
 	fput_light(sock->file, fput_needed);
@@ -1676,17 +1709,23 @@ out:
 	return err;
 }
 
+SYSCALL_DEFINE3(getsockname, int, fd, struct sockaddr __user *, usockaddr,
+		int __user *, usockaddr_len)
+{
+	return __sys_getsockname(fd, usockaddr, usockaddr_len);
+}
+
 /*
  *	Get the remote address ('name') of a socket object. Move the obtained
  *	name to user space.
  */
 
-SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
-		int __user *, usockaddr_len)
+int __sys_getpeername(int fd, struct sockaddr __user *usockaddr,
+		      int __user *usockaddr_len)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
-	int len, err, fput_needed;
+	int err, fput_needed;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock != NULL) {
@@ -1696,15 +1735,20 @@ SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
 			return err;
 		}
 
-		err =
-		    sock->ops->getname(sock, (struct sockaddr *)&address, &len,
-				       1);
-		if (!err)
-			err = move_addr_to_user(&address, len, usockaddr,
+		err = sock->ops->getname(sock, (struct sockaddr *)&address, 1);
+		if (err >= 0)
+			/* "err" is actually length in this case */
+			err = move_addr_to_user(&address, err, usockaddr,
 						usockaddr_len);
 		fput_light(sock->file, fput_needed);
 	}
 	return err;
+}
+
+SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
+		int __user *, usockaddr_len)
+{
+	return __sys_getpeername(fd, usockaddr, usockaddr_len);
 }
 
 /*
@@ -1712,10 +1756,8 @@ SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
  *	space and check the user space data area is readable before invoking
  *	the protocol.
  */
-
-SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
-		unsigned int, flags, struct sockaddr __user *, addr,
-		int, addr_len)
+int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
+		 struct sockaddr __user *addr,  int addr_len)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
@@ -1753,6 +1795,13 @@ out:
 	return err;
 }
 
+SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int, addr_len)
+{
+	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
+}
+
 /*
  *	Send a datagram down a socket.
  */
@@ -1760,7 +1809,7 @@ out:
 SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 		unsigned int, flags)
 {
-	return sys_sendto(fd, buff, len, flags, NULL, 0);
+	return __sys_sendto(fd, buff, len, flags, NULL, 0);
 }
 
 /*
@@ -1768,10 +1817,8 @@ SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
  *	sender. We verify the buffers are writable and if needed move the
  *	sender address from kernel to user space.
  */
-
-SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
-		unsigned int, flags, struct sockaddr __user *, addr,
-		int __user *, addr_len)
+int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
+		   struct sockaddr __user *addr, int __user *addr_len)
 {
 	struct socket *sock;
 	struct iovec iov;
@@ -1811,6 +1858,13 @@ out:
 	return err;
 }
 
+SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
+		unsigned int, flags, struct sockaddr __user *, addr,
+		int __user *, addr_len)
+{
+	return __sys_recvfrom(fd, ubuf, size, flags, addr, addr_len);
+}
+
 /*
  *	Receive a datagram from a socket.
  */
@@ -1818,7 +1872,7 @@ out:
 SYSCALL_DEFINE4(recv, int, fd, void __user *, ubuf, size_t, size,
 		unsigned int, flags)
 {
-	return sys_recvfrom(fd, ubuf, size, flags, NULL, NULL);
+	return __sys_recvfrom(fd, ubuf, size, flags, NULL, NULL);
 }
 
 /*
@@ -1826,8 +1880,8 @@ SYSCALL_DEFINE4(recv, int, fd, void __user *, ubuf, size_t, size,
  *	to pass the user mode parameter for the protocols to sort out.
  */
 
-SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
-		char __user *, optval, int, optlen)
+static int __sys_setsockopt(int fd, int level, int optname,
+			    char __user *optval, int optlen)
 {
 	int err, fput_needed;
 	struct socket *sock;
@@ -1855,13 +1909,19 @@ out_put:
 	return err;
 }
 
+SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
+		char __user *, optval, int, optlen)
+{
+	return __sys_setsockopt(fd, level, optname, optval, optlen);
+}
+
 /*
  *	Get a socket option. Because we don't know the option lengths we have
  *	to pass a user mode parameter for the protocols to sort out.
  */
 
-SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
-		char __user *, optval, int __user *, optlen)
+static int __sys_getsockopt(int fd, int level, int optname,
+			    char __user *optval, int __user *optlen)
 {
 	int err, fput_needed;
 	struct socket *sock;
@@ -1886,11 +1946,17 @@ out_put:
 	return err;
 }
 
+SYSCALL_DEFINE5(getsockopt, int, fd, int, level, int, optname,
+		char __user *, optval, int __user *, optlen)
+{
+	return __sys_getsockopt(fd, level, optname, optval, optlen);
+}
+
 /*
  *	Shutdown a socket.
  */
 
-SYSCALL_DEFINE2(shutdown, int, fd, int, how)
+int __sys_shutdown(int fd, int how)
 {
 	int err, fput_needed;
 	struct socket *sock;
@@ -1903,6 +1969,11 @@ SYSCALL_DEFINE2(shutdown, int, fd, int, how)
 		fput_light(sock->file, fput_needed);
 	}
 	return err;
+}
+
+SYSCALL_DEFINE2(shutdown, int, fd, int, how)
+{
+	return __sys_shutdown(fd, how);
 }
 
 /* A couple of helpful macros for getting the address of the 32/64 bit
@@ -2068,11 +2139,15 @@ out_freeiov:
  *	BSD sendmsg interface
  */
 
-long __sys_sendmsg(int fd, struct user_msghdr __user *msg, unsigned flags)
+long __sys_sendmsg(int fd, struct user_msghdr __user *msg, unsigned int flags,
+		   bool forbid_cmsg_compat)
 {
 	int fput_needed, err;
 	struct msghdr msg_sys;
 	struct socket *sock;
+
+	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
+		return -EINVAL;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
@@ -2087,9 +2162,7 @@ out:
 
 SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, unsigned int, flags)
 {
-	if (flags & MSG_CMSG_COMPAT)
-		return -EINVAL;
-	return __sys_sendmsg(fd, msg, flags);
+	return __sys_sendmsg(fd, msg, flags, true);
 }
 
 /*
@@ -2097,7 +2170,7 @@ SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, unsigned int
  */
 
 int __sys_sendmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
-		   unsigned int flags)
+		   unsigned int flags, bool forbid_cmsg_compat)
 {
 	int fput_needed, err, datagrams;
 	struct socket *sock;
@@ -2106,6 +2179,9 @@ int __sys_sendmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 	struct msghdr msg_sys;
 	struct used_address used_address;
 	unsigned int oflags = flags;
+
+	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
+		return -EINVAL;
 
 	if (vlen > UIO_MAXIOV)
 		vlen = UIO_MAXIOV;
@@ -2163,9 +2239,7 @@ int __sys_sendmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 SYSCALL_DEFINE4(sendmmsg, int, fd, struct mmsghdr __user *, mmsg,
 		unsigned int, vlen, unsigned int, flags)
 {
-	if (flags & MSG_CMSG_COMPAT)
-		return -EINVAL;
-	return __sys_sendmmsg(fd, mmsg, vlen, flags);
+	return __sys_sendmmsg(fd, mmsg, vlen, flags, true);
 }
 
 static int ___sys_recvmsg(struct socket *sock, struct user_msghdr __user *msg,
@@ -2238,11 +2312,15 @@ out_freeiov:
  *	BSD recvmsg interface
  */
 
-long __sys_recvmsg(int fd, struct user_msghdr __user *msg, unsigned flags)
+long __sys_recvmsg(int fd, struct user_msghdr __user *msg, unsigned int flags,
+		   bool forbid_cmsg_compat)
 {
 	int fput_needed, err;
 	struct msghdr msg_sys;
 	struct socket *sock;
+
+	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
+		return -EINVAL;
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
@@ -2258,9 +2336,7 @@ out:
 SYSCALL_DEFINE3(recvmsg, int, fd, struct user_msghdr __user *, msg,
 		unsigned int, flags)
 {
-	if (flags & MSG_CMSG_COMPAT)
-		return -EINVAL;
-	return __sys_recvmsg(fd, msg, flags);
+	return __sys_recvmsg(fd, msg, flags, true);
 }
 
 /*
@@ -2289,10 +2365,12 @@ int __sys_recvmmsg(int fd, struct mmsghdr __user *mmsg, unsigned int vlen,
 	if (!sock)
 		return err;
 
-	err = sock_error(sock->sk);
-	if (err) {
-		datagrams = err;
-		goto out_put;
+	if (likely(!(flags & MSG_ERRQUEUE))) {
+		err = sock_error(sock->sk);
+		if (err) {
+			datagrams = err;
+			goto out_put;
+		}
 	}
 
 	entry = mmsg;
@@ -2376,9 +2454,9 @@ out_put:
 	return datagrams;
 }
 
-SYSCALL_DEFINE5(recvmmsg, int, fd, struct mmsghdr __user *, mmsg,
-		unsigned int, vlen, unsigned int, flags,
-		struct timespec __user *, timeout)
+static int do_sys_recvmmsg(int fd, struct mmsghdr __user *mmsg,
+			   unsigned int vlen, unsigned int flags,
+			   struct timespec __user *timeout)
 {
 	int datagrams;
 	struct timespec timeout_sys;
@@ -2399,6 +2477,13 @@ SYSCALL_DEFINE5(recvmmsg, int, fd, struct mmsghdr __user *, mmsg,
 		datagrams = -EFAULT;
 
 	return datagrams;
+}
+
+SYSCALL_DEFINE5(recvmmsg, int, fd, struct mmsghdr __user *, mmsg,
+		unsigned int, vlen, unsigned int, flags,
+		struct timespec __user *, timeout)
+{
+	return do_sys_recvmmsg(fd, mmsg, vlen, flags, timeout);
 }
 
 #ifdef __ARCH_WANT_SYS_SOCKETCALL
@@ -2448,76 +2533,82 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
 
 	switch (call) {
 	case SYS_SOCKET:
-		err = sys_socket(a0, a1, a[2]);
+		err = __sys_socket(a0, a1, a[2]);
 		break;
 	case SYS_BIND:
-		err = sys_bind(a0, (struct sockaddr __user *)a1, a[2]);
+		err = __sys_bind(a0, (struct sockaddr __user *)a1, a[2]);
 		break;
 	case SYS_CONNECT:
-		err = sys_connect(a0, (struct sockaddr __user *)a1, a[2]);
+		err = __sys_connect(a0, (struct sockaddr __user *)a1, a[2]);
 		break;
 	case SYS_LISTEN:
-		err = sys_listen(a0, a1);
+		err = __sys_listen(a0, a1);
 		break;
 	case SYS_ACCEPT:
-		err = sys_accept4(a0, (struct sockaddr __user *)a1,
-				  (int __user *)a[2], 0);
+		err = __sys_accept4(a0, (struct sockaddr __user *)a1,
+				    (int __user *)a[2], 0);
 		break;
 	case SYS_GETSOCKNAME:
 		err =
-		    sys_getsockname(a0, (struct sockaddr __user *)a1,
-				    (int __user *)a[2]);
+		    __sys_getsockname(a0, (struct sockaddr __user *)a1,
+				      (int __user *)a[2]);
 		break;
 	case SYS_GETPEERNAME:
 		err =
-		    sys_getpeername(a0, (struct sockaddr __user *)a1,
-				    (int __user *)a[2]);
+		    __sys_getpeername(a0, (struct sockaddr __user *)a1,
+				      (int __user *)a[2]);
 		break;
 	case SYS_SOCKETPAIR:
-		err = sys_socketpair(a0, a1, a[2], (int __user *)a[3]);
+		err = __sys_socketpair(a0, a1, a[2], (int __user *)a[3]);
 		break;
 	case SYS_SEND:
-		err = sys_send(a0, (void __user *)a1, a[2], a[3]);
+		err = __sys_sendto(a0, (void __user *)a1, a[2], a[3],
+				   NULL, 0);
 		break;
 	case SYS_SENDTO:
-		err = sys_sendto(a0, (void __user *)a1, a[2], a[3],
-				 (struct sockaddr __user *)a[4], a[5]);
+		err = __sys_sendto(a0, (void __user *)a1, a[2], a[3],
+				   (struct sockaddr __user *)a[4], a[5]);
 		break;
 	case SYS_RECV:
-		err = sys_recv(a0, (void __user *)a1, a[2], a[3]);
+		err = __sys_recvfrom(a0, (void __user *)a1, a[2], a[3],
+				     NULL, NULL);
 		break;
 	case SYS_RECVFROM:
-		err = sys_recvfrom(a0, (void __user *)a1, a[2], a[3],
-				   (struct sockaddr __user *)a[4],
-				   (int __user *)a[5]);
+		err = __sys_recvfrom(a0, (void __user *)a1, a[2], a[3],
+				     (struct sockaddr __user *)a[4],
+				     (int __user *)a[5]);
 		break;
 	case SYS_SHUTDOWN:
-		err = sys_shutdown(a0, a1);
+		err = __sys_shutdown(a0, a1);
 		break;
 	case SYS_SETSOCKOPT:
-		err = sys_setsockopt(a0, a1, a[2], (char __user *)a[3], a[4]);
+		err = __sys_setsockopt(a0, a1, a[2], (char __user *)a[3],
+				       a[4]);
 		break;
 	case SYS_GETSOCKOPT:
 		err =
-		    sys_getsockopt(a0, a1, a[2], (char __user *)a[3],
-				   (int __user *)a[4]);
+		    __sys_getsockopt(a0, a1, a[2], (char __user *)a[3],
+				     (int __user *)a[4]);
 		break;
 	case SYS_SENDMSG:
-		err = sys_sendmsg(a0, (struct user_msghdr __user *)a1, a[2]);
+		err = __sys_sendmsg(a0, (struct user_msghdr __user *)a1,
+				    a[2], true);
 		break;
 	case SYS_SENDMMSG:
-		err = sys_sendmmsg(a0, (struct mmsghdr __user *)a1, a[2], a[3]);
+		err = __sys_sendmmsg(a0, (struct mmsghdr __user *)a1, a[2],
+				     a[3], true);
 		break;
 	case SYS_RECVMSG:
-		err = sys_recvmsg(a0, (struct user_msghdr __user *)a1, a[2]);
+		err = __sys_recvmsg(a0, (struct user_msghdr __user *)a1,
+				    a[2], true);
 		break;
 	case SYS_RECVMMSG:
-		err = sys_recvmmsg(a0, (struct mmsghdr __user *)a1, a[2], a[3],
-				   (struct timespec __user *)a[4]);
+		err = do_sys_recvmmsg(a0, (struct mmsghdr __user *)a1, a[2],
+				      a[3], (struct timespec __user *)a[4]);
 		break;
 	case SYS_ACCEPT4:
-		err = sys_accept4(a0, (struct sockaddr __user *)a1,
-				  (int __user *)a[2], a[3]);
+		err = __sys_accept4(a0, (struct sockaddr __user *)a1,
+				    (int __user *)a[2], a[3]);
 		break;
 	default:
 		err = -EINVAL;
@@ -2587,6 +2678,11 @@ void sock_unregister(int family)
 	pr_info("NET: Unregistered protocol family %d\n", family);
 }
 EXPORT_SYMBOL(sock_unregister);
+
+bool sock_is_registered(int family)
+{
+	return family < NPROTO && rcu_access_pointer(net_families[family]);
+}
 
 static int __init sock_init(void)
 {
@@ -3167,17 +3263,15 @@ int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
 }
 EXPORT_SYMBOL(kernel_connect);
 
-int kernel_getsockname(struct socket *sock, struct sockaddr *addr,
-			 int *addrlen)
+int kernel_getsockname(struct socket *sock, struct sockaddr *addr)
 {
-	return sock->ops->getname(sock, addr, addrlen, 0);
+	return sock->ops->getname(sock, addr, 0);
 }
 EXPORT_SYMBOL(kernel_getsockname);
 
-int kernel_getpeername(struct socket *sock, struct sockaddr *addr,
-			 int *addrlen)
+int kernel_getpeername(struct socket *sock, struct sockaddr *addr)
 {
-	return sock->ops->getname(sock, addr, addrlen, 1);
+	return sock->ops->getname(sock, addr, 1);
 }
 EXPORT_SYMBOL(kernel_getpeername);
 

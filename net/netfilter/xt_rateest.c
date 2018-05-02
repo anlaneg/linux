@@ -126,34 +126,24 @@ static int xt_rateest_tg_checkentry(const struct xt_tgchk_param *par)
 		return 0;
 	}
 
-	ret = -ENOMEM;
-	est = kzalloc(sizeof(*est), GFP_KERNEL);
-	if (!est)
+	ret  = -ENOENT;
+	est1 = xt_rateest_lookup(par->net, info->name1);
+	if (!est1)
 		goto err1;
 
-	strlcpy(est->name, info->name, sizeof(est->name));
-	spin_lock_init(&est->lock);
-	est->refcnt		= 1;
-	est->params.interval	= info->interval;
-	est->params.ewma_log	= info->ewma_log;
+	est2 = NULL;
+	if (info->flags & XT_RATEEST_MATCH_REL) {
+		est2 = xt_rateest_lookup(par->net, info->name2);
+		if (!est2)
+			goto err2;
+	}
 
-	cfg.opt.nla_len		= nla_attr_size(sizeof(cfg.est));
-	cfg.opt.nla_type	= TCA_STATS_RATE_EST;
-	cfg.est.interval	= info->interval;
-	cfg.est.ewma_log	= info->ewma_log;
-
-	ret = gen_new_estimator(&est->bstats, NULL, &est->rate_est,
-				&est->lock, NULL, &cfg.opt);
-	if (ret < 0)
-		goto err2;
-
-	info->est = est;
-	xt_rateest_hash_insert(est);
-	mutex_unlock(&xt_rateest_mutex);
+	info->est1 = est1;
+	info->est2 = est2;
 	return 0;
 
 err2:
-	kfree(est);
+	xt_rateest_put(par->net, est1);
 err1:
 	mutex_unlock(&xt_rateest_mutex);
 	return ret;
@@ -163,7 +153,9 @@ static void xt_rateest_tg_destroy(const struct xt_tgdtor_param *par)
 {
 	struct xt_rateest_target_info *info = par->targinfo;
 
-	xt_rateest_put(info->est);
+	xt_rateest_put(par->net, info->est1);
+	if (info->est2)
+		xt_rateest_put(par->net, info->est2);
 }
 
 static struct xt_target xt_rateest_tg_reg __read_mostly = {

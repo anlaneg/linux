@@ -69,20 +69,20 @@ static int find_dynamic_major(void)
 	struct char_device_struct *cd;
 
 	//检查chrdevs中是否存在空的设备位置（234到255之间）
-	for (i = ARRAY_SIZE(chrdevs)-1; i > CHRDEV_MAJOR_DYN_END; i--) {
+	for (i = ARRAY_SIZE(chrdevs)-1; i >= CHRDEV_MAJOR_DYN_END; i--) {
 		if (chrdevs[i] == NULL)
 			return i;
 	}
 
 	//384到511之间的为动态扩展
 	for (i = CHRDEV_MAJOR_DYN_EXT_START;
-	     i > CHRDEV_MAJOR_DYN_EXT_END; i--) {
+	     i >= CHRDEV_MAJOR_DYN_EXT_END; i--) {
 		for (cd = chrdevs[major_to_index(i)]; cd; cd = cd->next)
 			if (cd->major == i)
 				break;//如果major相同，则跳出
 
 		//查找到了可用的chardev
-		if (cd == NULL || cd->major != i)
+		if (cd == NULL)
 			return i;
 	}
 
@@ -130,8 +130,8 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 
 	//给的值有误，报错(major不能超过512)
 	if (major >= CHRDEV_MAJOR_MAX) {
-		pr_err("CHRDEV \"%s\" major requested (%d) is greater than the maximum (%d)\n",
-		       name, major, CHRDEV_MAJOR_MAX);
+		pr_err("CHRDEV \"%s\" major requested (%u) is greater than the maximum (%u)\n",
+		       name, major, CHRDEV_MAJOR_MAX-1);
 		ret = -EINVAL;
 		goto out;
 	}
