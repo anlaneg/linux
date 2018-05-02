@@ -334,7 +334,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
-	skb = l3mdev_ip_rcv(skb);//channel口收包吗？
+	skb = l3mdev_ip_rcv(skb);
 	if (!skb)
 		return NET_RX_SUCCESS;
 

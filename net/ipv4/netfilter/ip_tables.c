@@ -1783,6 +1783,7 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 	/* set res now, will see skbs right after nf_register_net_hooks */
 	WRITE_ONCE(*res, new_table);
 
+	//注册一组hook点ops
 	ret = nf_register_net_hooks(net, ops, hweight32(table->valid_hooks));
 	if (ret != 0) {
 		__ipt_unregister_table(net, new_table);

@@ -32,6 +32,7 @@ static int __net_init iptable_mangle_table_init(struct net *net);
 
 static const struct xt_table packet_mangler = {
 	.name		= "mangle",
+	//指明注册点为pre_routeing,local_in,forward,local_out,post_routing
 	.valid_hooks	= MANGLE_VALID_HOOKS,
 	.me		= THIS_MODULE,
 	.af		= NFPROTO_IPV4,

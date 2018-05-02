@@ -1762,6 +1762,7 @@ struct nf_hook_ops *
 xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 {
 	unsigned int hook_mask = table->valid_hooks;
+	//取有多少个hook点
 	uint8_t i, num_hooks = hweight32(hook_mask);
 	uint8_t hooknum;
 	struct nf_hook_ops *ops;
@@ -1769,6 +1770,7 @@ xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 	if (!num_hooks)
 		return ERR_PTR(-EINVAL);
 
+	//申请num_hooks个ops
 	ops = kcalloc(num_hooks, sizeof(*ops), GFP_KERNEL);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -1777,7 +1779,7 @@ xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 	     hook_mask >>= 1, ++hooknum) {
 		if (!(hook_mask & 1))
 			continue;
-		ops[i].hook     = fn;
+		ops[i].hook     = fn;//注册所有hook实现函数为fn
 		ops[i].pf       = table->af;
 		ops[i].hooknum  = hooknum;
 		ops[i].priority = table->priority;
