@@ -708,7 +708,7 @@ struct sk_buff {
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	struct nf_bridge_info	*nf_bridge;
 #endif
-	unsigned int		len,//报文总长度
+	unsigned int		len,//报文总长度(解析时指报文待解析长度）
 				data_len;
 	__u16			mac_len,//二层长度（整个mac层的长度）
 				hdr_len;
@@ -843,7 +843,7 @@ struct sk_buff {
 	sk_buff_data_t		tail;//指向报文结束位置
 	sk_buff_data_t		end;//指向buffer的结束位置，注：实际上在end的后面还有skb_shared_info结构
 	unsigned char		*head,//指向buffer的起始位置
-				*data;//指向报文的起始位置
+				*data;//指向报文位置（解析时表示当前分析位置）
 	unsigned int		truesize;
 	refcount_t		users;//引用计数，防报文被释放
 };
@@ -2306,17 +2306,19 @@ static inline void skb_set_transport_header(struct sk_buff *skb,
 	skb->transport_header += offset;
 }
 
+//获取网络头指针（网络层）
 static inline unsigned char *skb_network_header(const struct sk_buff *skb)
 {
 	return skb->head + skb->network_header;
 }
 
-//设置网络层头部长度
+//设置网络层头部长度（指定当前skb->data位置为网络头位置）
 static inline void skb_reset_network_header(struct sk_buff *skb)
 {
 	skb->network_header = skb->data - skb->head;
 }
 
+//增加或者减少到报文网络头的偏移
 static inline void skb_set_network_header(struct sk_buff *skb, const int offset)
 {
 	skb_reset_network_header(skb);
@@ -2344,6 +2346,7 @@ static inline int skb_mac_header_was_set(const struct sk_buff *skb)
 	return skb->mac_header != (typeof(skb->mac_header))~0U;
 }
 
+//定义当前skb->data所指向的位置为以太头位置
 static inline void skb_reset_mac_header(struct sk_buff *skb)
 {
 	skb->mac_header = skb->data - skb->head;

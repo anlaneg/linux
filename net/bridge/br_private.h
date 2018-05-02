@@ -179,7 +179,7 @@ struct net_bridge_fdb_entry {
 
 	struct net_bridge_fdb_key	key;
 	struct hlist_node		fdb_node;
-	unsigned char			is_local:1,
+	unsigned char			is_local:1,//是否为local fdb表项（即本机接口）
 					is_static:1,
 					added_by_user:1,
 					added_by_external_learn:1,
@@ -320,7 +320,7 @@ struct net_bridge {
 	struct net_bridge_vlan_group	__rcu *vlgrp;
 #endif
 
-	struct rhashtable		fdb_hash_tbl;
+	struct rhashtable		fdb_hash_tbl;//fdb表
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	union {
 		struct rtable		fake_rtable;

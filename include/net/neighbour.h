@@ -150,6 +150,7 @@ struct neighbour {
 	__u8			type;
 	__u8			dead;
 	seqlock_t		ha_lock;
+	//硬件地址
 	unsigned char		ha[ALIGN(MAX_ADDR_LEN, sizeof(unsigned long))];
 	struct hh_cache		hh;
 	int			(*output)(struct neighbour *, struct sk_buff *);

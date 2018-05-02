@@ -63,6 +63,7 @@ static bool ipv4_invert_tuple(struct nf_conntrack_tuple *tuple,
 	return true;
 }
 
+//获取4层的offset及4层的协议号
 static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 			    unsigned int *dataoff, u_int8_t *protonum)
 {
@@ -76,13 +77,16 @@ static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 	/* Conntrack defragments packets, we might still see fragments
 	 * inside ICMP packets though. */
 	if (iph->frag_off & htons(IP_OFFSET))
-		return -NF_ACCEPT;
+		return -NF_ACCEPT;//不接受分片包
 
+	//4层的协议头offset
 	*dataoff = nhoff + (iph->ihl << 2);
+	//4层协议号
 	*protonum = iph->protocol;
 
 	/* Check bogus IP headers */
 	if (*dataoff > skb->len) {
+		//报文格式有误
 		pr_debug("nf_conntrack_ipv4: bogus IPv4 packet: "
 			 "nhoff %u, ihl %u, skblen %u\n",
 			 nhoff, iph->ihl << 2, skb->len);
@@ -367,6 +371,7 @@ MODULE_ALIAS("nf_conntrack-" __stringify(AF_INET));
 MODULE_ALIAS("ip_conntrack");
 MODULE_LICENSE("GPL");
 
+//4层连接连接跟踪协议
 static const struct nf_conntrack_l4proto * const builtin_l4proto4[] = {
 	&nf_conntrack_l4proto_tcp4,
 	&nf_conntrack_l4proto_udp4,
@@ -424,11 +429,13 @@ static int __init nf_conntrack_l3proto_ipv4_init(void)
 		goto cleanup_sockopt;
 	}
 
+	//注册4层连接跟踪处理
 	ret = nf_ct_l4proto_register(builtin_l4proto4,
 				     ARRAY_SIZE(builtin_l4proto4));
 	if (ret < 0)
 		goto cleanup_pernet;
 
+	//注册PF_INET
 	ret = nf_ct_l3proto_register(&nf_conntrack_l3proto_ipv4);
 	if (ret < 0) {
 		pr_err("nf_conntrack_ipv4: can't register ipv4 proto.\n");

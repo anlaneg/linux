@@ -166,6 +166,7 @@ static inline bool is_local_ether_addr(const u8 *addr)
  *
  * Please note: addr must be aligned to u16.
  */
+//检查所给mac地址是否为广播地址
 static inline bool is_broadcast_ether_addr(const u8 *addr)
 {
 	return (*(const u16 *)(addr + 0) &
@@ -229,6 +230,7 @@ static inline bool eth_proto_is_802_3(__be16 proto)
  * Generate a random Ethernet address (MAC) that is not multicast
  * and has the local assigned bit set.
  */
+//随机生成以太网地址
 static inline void eth_random_addr(u8 *addr)
 {
 	get_random_bytes(addr, ETH_ALEN);

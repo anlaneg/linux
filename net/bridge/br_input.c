@@ -58,7 +58,7 @@ static int br_pass_frame_up(struct sk_buff *skb)
 	}
 
 	indev = skb->dev;
-	skb->dev = brdev;
+	skb->dev = brdev;//更新入接口为桥上连口，准备送三层
 	skb = br_handle_vlan(br, NULL, vg, skb);
 	if (!skb)
 		return NET_RX_DROP;
@@ -66,6 +66,7 @@ static int br_pass_frame_up(struct sk_buff *skb)
 	br_multicast_count(br, NULL, skb, br_multicast_igmp_type(skb),
 			   BR_MCAST_DIR_TX);
 
+	//送本机处理
 	return NF_HOOK(NFPROTO_BRIDGE, NF_BR_LOCAL_IN,
 		       dev_net(indev), NULL, skb, indev, NULL,
 		       br_netif_receive_skb);
@@ -102,6 +103,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	local_rcv = !!(br->dev->flags & IFF_PROMISC);
 	dest = eth_hdr(skb)->h_dest;
 	if (is_multicast_ether_addr(dest)) {
+		//广播报文，组播报文标记处理
 		/* by definition the broadcast is also a multicast address */
 		if (is_broadcast_ether_addr(dest)) {
 			pkt_type = BR_PKT_BROADCAST;
@@ -116,7 +118,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	}
 
 	if (p->state == BR_STATE_LEARNING)
-		goto drop;
+		goto drop;//当前不转发报文，但学习fdb
 
 	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
 
@@ -154,6 +156,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		}
 		break;
 	case BR_PKT_UNICAST:
+		//给定vlan,目的mac查fdb表
 		dst = br_fdb_find_rcu(br, dest, vid);
 	default:
 		break;
@@ -163,6 +166,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		unsigned long now = jiffies;
 
 		if (dst->is_local)
+			//local口，送三层处理
 			return br_pass_frame_up(skb);
 
 		if (now != dst->used)
@@ -218,18 +222,18 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 {
 	struct net_bridge_port *p;
 	struct sk_buff *skb = *pskb;
-	const unsigned char *dest = eth_hdr(skb)->h_dest;
+	const unsigned char *dest = eth_hdr(skb)->h_dest;//指向目的mac
 	br_should_route_hook_t *rhook;
 
 	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
-		return RX_HANDLER_PASS;
+		return RX_HANDLER_PASS;//桥放通此报文，使之不被桥可见
 
 	if (!is_valid_ether_addr(eth_hdr(skb)->h_source))
 		goto drop;
 
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
-		return RX_HANDLER_CONSUMED;
+		return RX_HANDLER_CONSUMED;//clone失败，报文已释放
 
 	p = br_port_get_rcu(skb->dev);
 	if (p->flags & BR_VLAN_TUNNEL) {
@@ -276,7 +280,7 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 				goto forward;
 			*pskb = skb;
 			__br_handle_local_finish(skb);
-			return RX_HANDLER_PASS;
+			return RX_HANDLER_PASS;//放通lldp协议报文
 
 		default:
 			/* Allow selective forwarding for most other protocols */
@@ -293,10 +297,11 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		return RX_HANDLER_CONSUMED;
 	}
 
-	//桥转发流量处理
+	//按端口状态，处理流量
 forward:
 	switch (p->state) {
 	case BR_STATE_FORWARDING:
+		//执行br_should_route钩子，确认报文是否需要自bridge中过滤掉
 		rhook = rcu_dereference(br_should_route_hook);
 		if (rhook) {
 			if ((*rhook)(skb)) {
@@ -308,7 +313,7 @@ forward:
 		/* fall through */
 	case BR_STATE_LEARNING:
 		if (ether_addr_equal(p->br->dev->dev_addr, dest))
-			skb->pkt_type = PACKET_HOST;
+			skb->pkt_type = PACKET_HOST;//目的地址与br上连口mac一致，送3层
 
 		//触发bridge路由前hook点
 		NF_HOOK(NFPROTO_BRIDGE, NF_BR_PRE_ROUTING,

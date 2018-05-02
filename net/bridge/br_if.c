@@ -377,11 +377,13 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	return p;
 }
 
+//创建桥设备
 int br_add_bridge(struct net *net, const char *name)
 {
 	struct net_device *dev;
 	int res;
 
+	//创建名称为$name的网络设备，并调用br_dev_setup初始化它
 	dev = alloc_netdev(sizeof(struct net_bridge), name, NET_NAME_UNKNOWN,
 			   br_dev_setup);
 

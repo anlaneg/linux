@@ -203,9 +203,9 @@ struct sk_buff;
 
 struct netdev_hw_addr {
 	struct list_head	list;
-	unsigned char		addr[MAX_ADDR_LEN];
-	unsigned char		type;
-#define NETDEV_HW_ADDR_T_LAN		1
+	unsigned char		addr[MAX_ADDR_LEN];//硬件地址
+	unsigned char		type;//硬件地址类型
+#define NETDEV_HW_ADDR_T_LAN		1 //以太网地址
 #define NETDEV_HW_ADDR_T_SAN		2
 #define NETDEV_HW_ADDR_T_SLAVE		3
 #define NETDEV_HW_ADDR_T_UNICAST	4
@@ -219,7 +219,7 @@ struct netdev_hw_addr {
 
 struct netdev_hw_addr_list {
 	struct list_head	list;
-	int			count;
+	int			count;//list长度
 };
 
 #define netdev_hw_addr_list_count(l) ((l)->count)
@@ -238,7 +238,7 @@ struct netdev_hw_addr_list {
 	netdev_hw_addr_list_for_each(ha, &(dev)->mc)
 
 struct hh_cache {
-	unsigned int	hh_len;
+	unsigned int	hh_len;//头长度
 	seqlock_t	hh_lock;
 
 	/* cached hardware header; allow for machine alignment needs.        */
@@ -264,11 +264,15 @@ struct hh_cache {
 	((((dev)->hard_header_len+(dev)->needed_headroom+(extra))&~(HH_DATA_MOD - 1)) + HH_DATA_MOD)
 
 struct header_ops {
+	//在skb->data所在位置的前面创建一个协议头
 	int	(*create) (struct sk_buff *skb, struct net_device *dev,
 			   unsigned short type, const void *daddr,
 			   const void *saddr, unsigned int len);
+	//解析硬件地址
 	int	(*parse)(const struct sk_buff *skb, unsigned char *haddr);
+	//缓存
 	int	(*cache)(const struct neighbour *neigh, struct hh_cache *hh, __be16 type);
+	//更新缓存内容
 	void	(*cache_update)(struct hh_cache *hh,
 				const struct net_device *dev,
 				const unsigned char *haddr);
@@ -1168,13 +1172,17 @@ struct dev_ifalias {
 struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
 	void			(*ndo_uninit)(struct net_device *dev);
+	//将设备置于up状态
 	int			(*ndo_open)(struct net_device *dev);
+	//将设备置于down状态
 	int			(*ndo_stop)(struct net_device *dev);
+	//发送报文时调用
 	netdev_tx_t		(*ndo_start_xmit)(struct sk_buff *skb,
 						  struct net_device *dev);
 	netdev_features_t	(*ndo_features_check)(struct sk_buff *skb,
 						      struct net_device *dev,
 						      netdev_features_t features);
+	//多队列时决定采用哪个队列
 	u16			(*ndo_select_queue)(struct net_device *dev,
 						    struct sk_buff *skb,
 						    void *accel_priv,
@@ -1746,7 +1754,7 @@ struct net_device {
 	const struct xfrmdev_ops *xfrmdev_ops;
 #endif
 
-	const struct header_ops *header_ops;
+	const struct header_ops *header_ops;//针对以太头的操作（例如增加以太头，解析以太头等）
 
 	unsigned int		flags;
 	unsigned int		priv_flags;
@@ -1773,7 +1781,7 @@ struct net_device {
 
 	/* Interface address info. */
 	unsigned char		perm_addr[MAX_ADDR_LEN];
-	unsigned char		addr_assign_type;
+	unsigned char		addr_assign_type;//设备地址如何产生，例如“随机生成”，
 	unsigned char		addr_len;//设备地址长度（如以太网6字节）
 	unsigned short		neigh_priv_len;
 	unsigned short          dev_id;
@@ -1783,7 +1791,7 @@ struct net_device {
 	bool			uc_promisc;
 	struct netdev_hw_addr_list	uc;
 	struct netdev_hw_addr_list	mc;
-	struct netdev_hw_addr_list	dev_addrs;
+	struct netdev_hw_addr_list	dev_addrs;//设备硬件地址列表
 
 #ifdef CONFIG_SYSFS
 	struct kset		*queues_kset;
@@ -1818,7 +1826,7 @@ struct net_device {
  * Cache lines mostly used on receive path (including eth_type_trans())
  */
 	/* Interface address info used in eth_type_trans() */
-	unsigned char		*dev_addr;
+	unsigned char		*dev_addr;//接口mac地址
 
 	//rx队列（rx队列数为num_rx_queues)
 	struct netdev_rx_queue	*_rx;
@@ -3773,6 +3781,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 int dev_get_valid_name(struct net *net, struct net_device *dev,
 		       const char *name);
 
+//申请名称为name的网络设备，默认rx,tx队列数均为1
 #define alloc_netdev(sizeof_priv, name, name_assign_type, setup) \
 	alloc_netdev_mqs(sizeof_priv, name, name_assign_type, setup, 1, 1)
 

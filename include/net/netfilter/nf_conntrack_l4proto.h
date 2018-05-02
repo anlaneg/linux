@@ -50,12 +50,14 @@ struct nf_conntrack_l4proto {
 
 	/* Called when a new connection for this protocol found;
 	 * returns TRUE if it's OK.  If so, packet() called next. */
+	//新建连接跟踪
 	bool (*new)(struct nf_conn *ct, const struct sk_buff *skb,
 		    unsigned int dataoff, unsigned int *timeouts);
 
 	/* Called when a conntrack entry is destroyed */
 	void (*destroy)(struct nf_conn *ct);
 
+	//报文合法性检查
 	int (*error)(struct net *net, struct nf_conn *tmpl, struct sk_buff *skb,
 		     unsigned int dataoff,
 		     u_int8_t pf, unsigned int hooknum);
@@ -64,6 +66,7 @@ struct nf_conntrack_l4proto {
 	bool (*can_early_drop)(const struct nf_conn *ct);
 
 	/* Return the array of timeouts for this protocol. */
+	//返回这个协议的超时数组
 	unsigned int *(*get_timeouts)(struct net *net);
 
 	/* convert protoinfo to nfnetink attributes */

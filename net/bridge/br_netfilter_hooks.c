@@ -980,6 +980,7 @@ static struct notifier_block brnf_notifier __read_mostly = {
  *
  * Called with rcu read lock held.
  */
+//跳过<NF_BR_PRI_BRNF的hook点，自NF_BR_PRI_BRNF+1继续执行
 int br_nf_hook_thresh(unsigned int hook, struct net *net,
 		      struct sock *sk, struct sk_buff *skb,
 		      struct net_device *indev,
@@ -997,11 +998,13 @@ int br_nf_hook_thresh(unsigned int hook, struct net *net,
 	if (!e)
 		return okfn(net, sk, skb);
 
+	//跳过已经执行过的hooks,即NF_BR_PRI_BRNF
 	ops = nf_hook_entries_get_hook_ops(e);
 	for (i = 0; i < e->num_hook_entries &&
 	      ops[i]->priority <= NF_BR_PRI_BRNF; i++)
 		;
 
+	//自NF_BR_PRI_BRNF+1继续执行
 	nf_hook_state_init(&state, hook, NFPROTO_BRIDGE, indev, outdev,
 			   sk, net, okfn);
 

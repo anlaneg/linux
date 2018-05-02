@@ -143,6 +143,7 @@ nf_hook_entries_grow(const struct nf_hook_entries *old,
 			return ERR_PTR(-EBUSY);
 		}
 
+		//按优先级自小向大排列
 		if (inserted || reg->priority > orig_ops[i]->priority) {
 			new_ops[nhooks] = (void *)orig_ops[i];
 			new->hooks[nhooks] = old->hooks[i];
@@ -316,9 +317,11 @@ static int __nf_register_net_hook(struct net *net, int pf,
 
 	mutex_lock(&nf_hook_mutex);
 
+	//构造一个hook的副本，并为其添加reg，并返回（按从小到大顺序排列）
 	p = nf_entry_dereference(*pp);
 	new_hooks = nf_hook_entries_grow(p, reg);
 
+	//设置新的回调
 	if (!IS_ERR(new_hooks))
 		rcu_assign_pointer(*pp, new_hooks);
 

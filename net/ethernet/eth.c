@@ -79,12 +79,14 @@ __setup("ether=", netdev_boot_setup);
  * Set the protocol type. For a packet of type ETH_P_802_3/2 we put the length
  * in here instead.
  */
+//创建以太头，在skb->data处向前插入一层struct ethhdr
 int eth_header(struct sk_buff *skb, struct net_device *dev,
 	       unsigned short type,
 	       const void *daddr, const void *saddr, unsigned int len)
 {
 	struct ethhdr *eth = skb_push(skb, ETH_HLEN);
 
+	//802.3,802.2帧的协议字段指出的是报文长度
 	if (type != ETH_P_802_3 && type != ETH_P_802_2)
 		eth->h_proto = htons(type);
 	else
@@ -94,10 +96,12 @@ int eth_header(struct sk_buff *skb, struct net_device *dev,
 	 *      Set the source hardware address.
 	 */
 
+	//如果未指定saddr，则直接用dev的mac地址
 	if (!saddr)
 		saddr = dev->dev_addr;
 	memcpy(eth->h_source, saddr, ETH_ALEN);
 
+	//如果指定了daddr,则填充h_dest并直接返回
 	if (daddr) {
 		memcpy(eth->h_dest, daddr, ETH_ALEN);
 		return ETH_HLEN;
@@ -107,6 +111,7 @@ int eth_header(struct sk_buff *skb, struct net_device *dev,
 	 *      Anyway, the loopback-device should never use this function...
 	 */
 
+	//针对loopback及noarp类型接口，直接设置目的mac为0
 	if (dev->flags & (IFF_LOOPBACK | IFF_NOARP)) {
 		eth_zero_addr(eth->h_dest);
 		return ETH_HLEN;
@@ -216,6 +221,7 @@ EXPORT_SYMBOL(eth_type_trans);
  * @skb: packet to extract header from
  * @haddr: destination buffer
  */
+//自skb->data指向的ethhdr处提取srcmac
 int eth_header_parse(const struct sk_buff *skb, unsigned char *haddr)
 {
 	const struct ethhdr *eth = eth_hdr(skb);
@@ -232,20 +238,23 @@ EXPORT_SYMBOL(eth_header_parse);
  *
  * Create an Ethernet header template from the neighbour.
  */
+//缓存以太头信息到hh中
 int eth_header_cache(const struct neighbour *neigh, struct hh_cache *hh, __be16 type)
 {
 	struct ethhdr *eth;
 	const struct net_device *dev = neigh->dev;
 
+	//填充hh->hh_data(保证16字节对齐）
 	eth = (struct ethhdr *)
 	    (((u8 *) hh->hh_data) + (HH_DATA_OFF(sizeof(*eth))));
 
 	if (type == htons(ETH_P_802_3))
 		return -1;
 
+	//设置协议，源mac,dstmac
 	eth->h_proto = type;
-	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);
-	memcpy(eth->h_dest, neigh->ha, ETH_ALEN);
+	memcpy(eth->h_source, dev->dev_addr, ETH_ALEN);//srcmac表项为设备mac
+	memcpy(eth->h_dest, neigh->ha, ETH_ALEN);//dstmac表项来源于邻居表项的硬件地址
 	hh->hh_len = ETH_HLEN;
 	return 0;
 }
@@ -259,6 +268,7 @@ EXPORT_SYMBOL(eth_header_cache);
  *
  * Called by Address Resolution module to notify changes in address.
  */
+//更新缓冲的以太头目的mac
 void eth_header_cache_update(struct hh_cache *hh,
 			     const struct net_device *dev,
 			     const unsigned char *haddr)
@@ -347,9 +357,13 @@ int eth_validate_addr(struct net_device *dev)
 EXPORT_SYMBOL(eth_validate_addr);
 
 const struct header_ops eth_header_ops ____cacheline_aligned = {
+	//增加以太头
 	.create		= eth_header,
+	//提取以太头中的srcmac
 	.parse		= eth_header_parse,
+	//缓存以太头
 	.cache		= eth_header_cache,
+	//更新缓存（这里是更件目的mac)
 	.cache_update	= eth_header_cache_update,
 };
 
@@ -370,7 +384,7 @@ void ether_setup(struct net_device *dev)
 	dev->max_mtu		= ETH_DATA_LEN;
 	dev->addr_len		= ETH_ALEN;
 	dev->tx_queue_len	= DEFAULT_TX_QUEUE_LEN;
-	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;//支持广播组播
+	dev->flags		= IFF_BROADCAST|IFF_MULTICAST;//支持广播，组播
 	dev->priv_flags		|= IFF_TX_SKB_SHARING;
 
 	//设置广播地址

@@ -31,6 +31,7 @@ EXPORT_SYMBOL_GPL(nf_br_ops);
 static struct lock_class_key bridge_netdev_addr_lock_key;
 
 /* net device transmit always called with BH disabled */
+//桥设备向外发送报文
 netdev_tx_t br_dev_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct net_bridge *br = netdev_priv(dev);
@@ -370,6 +371,7 @@ static const struct ethtool_ops br_ethtool_ops = {
 	.get_link	= ethtool_op_get_link,
 };
 
+//brdige网络设备操作函数集
 static const struct net_device_ops br_netdev_ops = {
 	.ndo_open		 = br_dev_open,
 	.ndo_stop		 = br_dev_stop,
@@ -405,6 +407,7 @@ static struct device_type br_type = {
 
 void br_dev_setup(struct net_device *dev)
 {
+	//指向dev的私有数据段
 	struct net_bridge *br = netdev_priv(dev);
 
 	eth_hw_addr_random(dev);

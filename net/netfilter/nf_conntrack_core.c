@@ -568,6 +568,7 @@ begin:
 }
 
 /* Find a connection corresponding to a tuple. */
+//查询对应的连接跟踪
 static struct nf_conntrack_tuple_hash *
 __nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 			const struct nf_conntrack_tuple *tuple, u32 hash)
@@ -1234,6 +1235,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	//取超时时间列表
 	timeout_ext = tmpl ? nf_ct_timeout_find(tmpl) : NULL;
 	if (timeout_ext) {
 		timeouts = nf_ct_timeout_data(timeout_ext);
@@ -1339,6 +1341,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	hash = hash_conntrack_raw(&tuple, net);
 	h = __nf_conntrack_find_get(net, zone, &tuple, hash);
 	if (!h) {
+		//没有找到对应的连接，创建此连接
 		h = init_conntrack(net, tmpl, &tuple, l3proto, l4proto,
 				   skb, dataoff, hash);
 		if (!h)
@@ -1393,6 +1396,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 	}
 
 	/* rcu_read_lock()ed by nf_hook_thresh */
+	//由l3协议获取4层的头部偏移量，获取4层协议号
 	l3proto = __nf_ct_l3proto_find(pf);
 	ret = l3proto->get_l4proto(skb, skb_network_offset(skb),
 				   &dataoff, &protonum);
@@ -1404,14 +1408,17 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 		goto out;
 	}
 
+	//取3层为PF,4层为protonum对应的4层处理函数
 	l4proto = __nf_ct_l4proto_find(pf, protonum);
 
 	/* It may be an special packet, error, unclean...
 	 * inverse of the return code tells to the netfilter
 	 * core what to do with the packet. */
+	//如果有error回调，则先调用error回调，用于检查报文是否有错
 	if (l4proto->error != NULL) {
 		ret = l4proto->error(net, tmpl, skb, dataoff, pf, hooknum);
 		if (ret <= 0) {
+			//报文有误，跳出
 			NF_CT_STAT_INC_ATOMIC(net, error);
 			NF_CT_STAT_INC_ATOMIC(net, invalid);
 			ret = -ret;

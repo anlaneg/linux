@@ -411,9 +411,11 @@ struct inet_frag_queue *inet_frag_find(struct netns_frags *nf,
 	}
 	spin_unlock(&hb->chain_lock);
 
+	//分片hash表的冲突元素还不多，创建并返回
 	if (depth <= INETFRAGS_MAXDEPTH)
 		return inet_frag_create(nf, f, key);
 
+	//重突较多，需要重新build 分片表
 	if (inet_frag_may_rebuild(f)) {
 		if (!f->rebuild)
 			f->rebuild = true;

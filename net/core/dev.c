@@ -766,8 +766,10 @@ EXPORT_SYMBOL(__dev_get_by_name);
 struct net_device *dev_get_by_name_rcu(struct net *net, const char *name)
 {
 	struct net_device *dev;
+	//取出$name对应的hash桶
 	struct hlist_head *head = dev_name_hash(net, name);
 
+	//查找名称为name的设备，如果找不到返回NULL
 	hlist_for_each_entry_rcu(dev, head, name_hlist)
 		if (!strncmp(dev->name, name, IFNAMSIZ))
 			return dev;
@@ -787,7 +789,7 @@ EXPORT_SYMBOL(dev_get_by_name_rcu);
  *	release it when it is no longer needed. %NULL is returned if no
  *	matching device is found.
  */
-
+//查找名称为name的网络设备，找到后增加引用计数
 struct net_device *dev_get_by_name(struct net *net, const char *name)
 {
 	struct net_device *dev;
@@ -3598,6 +3600,7 @@ out:
 	return rc;
 }
 
+//报文发送
 int dev_queue_xmit(struct sk_buff *skb)
 {
 	return __dev_queue_xmit(skb, NULL);
@@ -3925,7 +3928,7 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 
 	rps_lock(sd);
 	if (!netif_running(skb->dev))
-		goto drop;
+		goto drop;//如果skb->dev未在运行状态，则丢包
 	qlen = skb_queue_len(&sd->input_pkt_queue);
 	if (qlen <= netdev_max_backlog && !skb_flow_limit(skb, qlen)) {
 		if (qlen) {
@@ -4545,14 +4548,14 @@ skip_classify:
 		//bridge设备就注册有rx_handle,其指向br_handle_frame
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
-			ret = NET_RX_SUCCESS;//已成功处理，不再向上层传递
+			ret = NET_RX_SUCCESS;//已成功处理，不再向上层传递，处理完成
 			goto out;
 		case RX_HANDLER_ANOTHER:
-			goto another_round;
+			goto another_round;//已更换入口设备，重新执行
 		case RX_HANDLER_EXACT:
 			deliver_exact = true;
 		case RX_HANDLER_PASS:
-			break;//handle放通了此报文，跳过处理
+			break;//继续向下处理（此handle放通了此报文）
 		default:
 			BUG();
 		}
@@ -7917,6 +7920,7 @@ int register_netdevice(struct net_device *dev)
 
 	/* Init, if this function is available */
 	if (dev->netdev_ops->ndo_init) {
+		//初始化设备
 		ret = dev->netdev_ops->ndo_init(dev);
 		if (ret) {
 			if (ret > 0)
@@ -8367,6 +8371,7 @@ void netdev_freemem(struct net_device *dev)
  * Allocates a struct net_device with private data area for driver use
  * and performs basic initialization.  Also allocates subqueue structs
  * for each queue on the device.
+ * 申请网络设备
  */
 struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 		unsigned char name_assign_type,
@@ -8385,6 +8390,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 		return NULL;
 	}
 
+	//rx队列数必须指少有一个
 	if (rxqs < 1) {
 		pr_err("alloc_netdev: Unable to allocate device with zero RX queues\n");
 		return NULL;
@@ -8414,6 +8420,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	if (!dev->pcpu_refcnt)
 		goto free_dev;
 
+	//初始化设备硬件地址
 	if (dev_addr_init(dev))
 		goto free_pcpu;
 
@@ -8437,7 +8444,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	hash_init(dev->qdisc_hash);
 #endif
 	dev->priv_flags = IFF_XMIT_DST_RELEASE | IFF_XMIT_DST_RELEASE_PERM;
-	setup(dev);//调用setup回调
+	setup(dev);//调用设备的setup回调
 
 	if (!dev->tx_queue_len) {
 		dev->priv_flags |= IFF_NO_QUEUE;
@@ -8456,6 +8463,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	if (netif_alloc_rx_queues(dev))
 		goto free_all;
 
+	//设置设备名称
 	strcpy(dev->name, name);
 	dev->name_assign_type = name_assign_type;
 	dev->group = INIT_NETDEV_GROUP;

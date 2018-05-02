@@ -34,8 +34,9 @@ static int __hw_addr_create_ex(struct netdev_hw_addr_list *list,
 	ha = kmalloc(alloc_size, GFP_ATOMIC);
 	if (!ha)
 		return -ENOMEM;
+	//构造硬件地址，并将其添加在list中
 	memcpy(ha->addr, addr, addr_len);
-	ha->type = addr_type;
+	ha->type = addr_type;//地址类型
 	ha->refcount = 1;
 	ha->global_use = global;
 	ha->synced = sync ? 1 : 0;
@@ -59,6 +60,7 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 	list_for_each_entry(ha, &list->list, list) {
 		if (!memcmp(ha->addr, addr, addr_len) &&
 		    ha->type == addr_type) {
+			//如果类型一致且硬件地址一致，则进入
 			if (global) {
 				/* check if addr is already used as global */
 				if (ha->global_use)
@@ -72,11 +74,12 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 				else
 					ha->synced++;
 			}
-			ha->refcount++;
+			ha->refcount++;//引用数加1，并返回成功添加
 			return 0;
 		}
 	}
 
+	//没有与之重复的，构造新的hardware address 并加入
 	return __hw_addr_create_ex(list, addr, addr_len, addr_type, global,
 				   sync);
 }
@@ -358,6 +361,7 @@ EXPORT_SYMBOL(dev_addr_flush);
  *
  *	The caller must hold the rtnl_mutex.
  */
+//初始化dev的地址列表
 int dev_addr_init(struct net_device *dev)
 {
 	unsigned char addr[MAX_ADDR_LEN];
@@ -367,8 +371,9 @@ int dev_addr_init(struct net_device *dev)
 	/* rtnl_mutex must be held here */
 
 	//初始化一个纯0的mac地址
-	__hw_addr_init(&dev->dev_addrs);
+	__hw_addr_init(&dev->dev_addrs);//初始化地址链表
 	memset(addr, 0, sizeof(addr));
+	//加入全0地址
 	err = __hw_addr_add(&dev->dev_addrs, addr, sizeof(addr),
 			    NETDEV_HW_ADDR_T_LAN);
 	if (!err) {
@@ -376,6 +381,7 @@ int dev_addr_init(struct net_device *dev)
 		 * Get the first (previously created) address from the list
 		 * and set dev_addr pointer to this location.
 		 */
+		//取首个地址，并将其赋给设备
 		ha = list_first_entry(&dev->dev_addrs.list,
 				      struct netdev_hw_addr, list);
 		dev->dev_addr = ha->addr;

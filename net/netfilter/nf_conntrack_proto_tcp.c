@@ -748,6 +748,7 @@ static void tcp_error_log(const struct sk_buff *skb, struct net *net,
 }
 
 /* Protect conntrack agaist broken packets. Code taken from ipt_unclean.c.  */
+//tcp报文格式合法性检查
 static int tcp_error(struct net *net, struct nf_conn *tmpl,
 		     struct sk_buff *skb,
 		     unsigned int dataoff,
@@ -760,6 +761,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 	u_int8_t tcpflags;
 
 	/* Smaller that minimal TCP header? */
+	//取出tcp头部
 	th = skb_header_pointer(skb, dataoff, sizeof(_tcph), &_tcph);
 	if (th == NULL) {
 		tcp_error_log(skb, net, pf, "short packet");
@@ -767,6 +769,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 	}
 
 	/* Not whole TCP header or malformed packet */
+	//检查报文是否被截短
 	if (th->doff*4 < sizeof(struct tcphdr) || tcplen < th->doff*4) {
 		tcp_error_log(skb, net, pf, "truncated packet");
 		return -NF_ACCEPT;
@@ -777,6 +780,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 	 * because the checksum is assumed to be correct.
 	 */
 	/* FIXME: Source route IP option packets --RR */
+	//checksum检查
 	if (net->ct.sysctl_checksum && hooknum == NF_INET_PRE_ROUTING &&
 	    nf_checksum(skb, hooknum, dataoff, IPPROTO_TCP, pf)) {
 		tcp_error_log(skb, net, pf, "bad checksum");
@@ -784,6 +788,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 	}
 
 	/* Check TCP flags. */
+	//tcp flag不能有错误的组合
 	tcpflags = (tcp_flag_byte(th) & ~(TCPHDR_ECE|TCPHDR_CWR|TCPHDR_PSH));
 	if (!tcp_valid_flags[tcpflags]) {
 		tcp_error_log(skb, net, pf, "invalid tcp flag combination");
@@ -793,6 +798,7 @@ static int tcp_error(struct net *net, struct nf_conn *tmpl,
 	return NF_ACCEPT;
 }
 
+//返回tcp的超时数组
 static unsigned int *tcp_get_timeouts(struct net *net)
 {
 	return tcp_pernet(net)->timeouts;

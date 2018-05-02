@@ -2892,6 +2892,7 @@ replay:
 		memset(linkinfo, 0, sizeof(linkinfo));
 
 	if (linkinfo[IFLA_INFO_KIND]) {
+		//自linkinfo[IFLA_INFO_KIND]中提取字符串值，并进行link_ops查询
 		nla_strlcpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
 		ops = rtnl_link_ops_get(kind);
 	} else {

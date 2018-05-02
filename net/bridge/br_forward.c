@@ -64,6 +64,7 @@ EXPORT_SYMBOL_GPL(br_dev_queue_push_xmit);
 
 int br_forward_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+	//直接触发post_routing钩子点
 	return NF_HOOK(NFPROTO_BRIDGE, NF_BR_POST_ROUTING,
 		       net, sk, skb, NULL, skb->dev,
 		       br_dev_queue_push_xmit);
@@ -87,6 +88,7 @@ static void __br_forward(const struct net_bridge_port *to,
 	indev = skb->dev;
 	skb->dev = to->dev;
 	if (!local_orig) {
+		//非本机来源，则触发forward钩子点
 		if (skb_warn_if_lro(skb)) {
 			kfree_skb(skb);
 			return;
@@ -95,6 +97,7 @@ static void __br_forward(const struct net_bridge_port *to,
 		skb_forward_csum(skb);
 		net = dev_net(indev);
 	} else {
+		//本机为报文来源，故触发local_out钩子点
 		if (unlikely(netpoll_tx_running(to->br->dev))) {
 			if (!is_skb_forwardable(skb->dev, skb)) {
 				kfree_skb(skb);
@@ -109,6 +112,7 @@ static void __br_forward(const struct net_bridge_port *to,
 		indev = NULL;
 	}
 
+	//此处统一触发forward或者local_out钩子点
 	NF_HOOK(NFPROTO_BRIDGE, br_hook,
 		net, NULL, skb, indev, skb->dev,
 		br_forward_finish);
@@ -145,6 +149,7 @@ void br_forward(const struct net_bridge_port *to,
 		if (local_rcv)
 			deliver_clone(to, skb, local_orig);
 		else
+			//自to接口向外发送报文
 			__br_forward(to, skb, local_orig);
 		return;
 	}
