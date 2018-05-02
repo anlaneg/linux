@@ -1868,6 +1868,7 @@ static int __init inet_init(void)
 
 	sock_skb_cb_check_size(sizeof(struct inet_skb_parm));
 
+	//注册tcp协议
 	rc = proto_register(&tcp_prot, 1);
 	if (rc)
 		goto out;

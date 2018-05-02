@@ -206,6 +206,7 @@ static inline void dev_base_seq_inc(struct net *net)
 		;
 }
 
+//按名称hash
 static inline struct hlist_head *dev_name_hash(struct net *net, const char *name)
 {
 	unsigned int hash = full_name_hash(net, name, strnlen(name, IFNAMSIZ));
@@ -213,6 +214,7 @@ static inline struct hlist_head *dev_name_hash(struct net *net, const char *name
 	return &net->dev_name_head[hash_32(hash, NETDEV_HASHBITS)];
 }
 
+//按ifindex值进行hash
 static inline struct hlist_head *dev_index_hash(struct net *net, int ifindex)
 {
 	return &net->dev_index_head[ifindex & (NETDEV_HASHENTRIES - 1)];
@@ -232,6 +234,7 @@ static inline void rps_unlock(struct softnet_data *sd)
 #endif
 }
 
+//将设备insert到链表
 /* Device list insertion */
 static void list_netdevice(struct net_device *dev)
 {
@@ -240,10 +243,10 @@ static void list_netdevice(struct net_device *dev)
 	ASSERT_RTNL();
 
 	write_lock_bh(&dev_base_lock);
-	list_add_tail_rcu(&dev->dev_list, &net->dev_base_head);
-	hlist_add_head_rcu(&dev->name_hlist, dev_name_hash(net, dev->name));
+	list_add_tail_rcu(&dev->dev_list, &net->dev_base_head);//加入dev链表
+	hlist_add_head_rcu(&dev->name_hlist, dev_name_hash(net, dev->name));//加入name索引的链表
 	hlist_add_head_rcu(&dev->index_hlist,
-			   dev_index_hash(net, dev->ifindex));
+			   dev_index_hash(net, dev->ifindex));//加入ifindex索引的链表
 	write_unlock_bh(&dev_base_lock);
 
 	dev_base_seq_inc(net);
@@ -252,6 +255,7 @@ static void list_netdevice(struct net_device *dev)
 /* Device list removal
  * caller must respect a RCU grace period before freeing/reusing dev
  */
+//自相关链表中摘除dev
 static void unlist_netdevice(struct net_device *dev)
 {
 	ASSERT_RTNL();
@@ -577,6 +581,7 @@ static int netdev_boot_setup_add(char *name, struct ifmap *map)
 
 	s = dev_boot_setup;
 	for (i = 0; i < NETDEV_BOOT_SETUP_MAX; i++) {
+		//找一个空的s空间，将name及其map存入
 		if (s[i].name[0] == '\0' || s[i].name[0] == ' ') {
 			memset(s[i].name, 0, sizeof(s[i].name));
 			strlcpy(s[i].name, name, IFNAMSIZ);
@@ -920,12 +925,14 @@ int netdev_get_name(struct net *net, char *name, int ifindex)
 retry:
 	seq = raw_seqcount_begin(&devnet_rename_seq);
 	rcu_read_lock();
+	//利用ifindex查找到dev
 	dev = dev_get_by_index_rcu(net, ifindex);
 	if (!dev) {
 		rcu_read_unlock();
 		return -ENODEV;
 	}
 
+	//复制dev->name到name
 	strcpy(name, dev->name);
 	rcu_read_unlock();
 	if (read_seqcount_retry(&devnet_rename_seq, seq)) {
@@ -955,6 +962,7 @@ struct net_device *dev_getbyhwaddr_rcu(struct net *net, unsigned short type,
 {
 	struct net_device *dev;
 
+	//通过设备地址查找设备
 	for_each_netdev_rcu(net, dev)
 		if (dev->type == type &&
 		    !memcmp(dev->dev_addr, ha, dev->addr_len))
@@ -1033,12 +1041,13 @@ EXPORT_SYMBOL(__dev_get_by_flags);
 bool dev_valid_name(const char *name)
 {
 	if (*name == '\0')
-		return false;
+		return false;//名称不能为空串
 	if (strlen(name) >= IFNAMSIZ)
-		return false;
+		return false;//名称不能超过最大长度
 	if (!strcmp(name, ".") || !strcmp(name, ".."))
-		return false;
+		return false;//名称不能为'.','..'
 
+	//名称不能包含'/',':',' '
 	while (*name) {
 		if (*name == '/' || *name == ':' || isspace(*name))
 			return false;
@@ -1075,14 +1084,14 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 		return -EINVAL;
 
 	p = strchr(name, '%');
-	if (p) {
+	if (p) {//存在%号，有变量需要展开
 		/*
 		 * Verify the string as this thing may have come from
 		 * the user.  There must be either one "%d" and no other "%"
 		 * characters.
 		 */
 		if (p[1] != 'd' || strchr(p + 2, '%'))
-			return -EINVAL;
+			return -EINVAL;//不能%d或者不是%%(转议）则报错
 
 		/* Use one page as a bit array of possible slots */
 		inuse = (unsigned long *) get_zeroed_page(GFP_ATOMIC);
@@ -1098,16 +1107,17 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 			/*  avoid cases where sscanf is not exact inverse of printf */
 			snprintf(buf, IFNAMSIZ, name, i);
 			if (!strncmp(buf, d->name, IFNAMSIZ))
-				set_bit(i, inuse);
+				set_bit(i, inuse);//标记%d不能展开为i
 		}
 
+		//找一个可以转换的i
 		i = find_first_zero_bit(inuse, max_netdevices);
 		free_page((unsigned long) inuse);
 	}
 
 	snprintf(buf, IFNAMSIZ, name, i);
 	if (!__dev_get_by_name(net, buf))
-		return i;
+		return i;//名称可能使用
 
 	/* It is possible to run out of possible slots
 	 * when the name is long and there isn't enough space left
@@ -1159,10 +1169,13 @@ int dev_get_valid_name(struct net *net, struct net_device *dev,
 		return -EINVAL;
 
 	if (strchr(name, '%'))
+		//查找一个不存在的ifindex来生成名称
 		return dev_alloc_name_ns(net, dev, name);
+	//不需要%号展开，检查是否已存在，如已存在报错
 	else if (__dev_get_by_name(net, name))
 		return -EEXIST;
 	else if (dev->name != name)
+		//设备名称可以使用，更新设备名
 		strlcpy(dev->name, name, IFNAMSIZ);
 
 	return 0;

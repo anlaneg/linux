@@ -2660,6 +2660,7 @@ int netlink_unregister_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(netlink_unregister_notifier);
 
+//socket操作集
 static const struct proto_ops netlink_ops = {
 	.family =	PF_NETLINK,
 	.owner =	THIS_MODULE,
@@ -2748,6 +2749,7 @@ static const struct rhashtable_params netlink_rhashtable_params = {
 static int __init netlink_proto_init(void)
 {
 	int i;
+	//注册netlink协议（这个目前主要是给/proc/protocols文件显示用）
 	int err = proto_register(&netlink_proto, 0);
 
 	if (err != 0)
