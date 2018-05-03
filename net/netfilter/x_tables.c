@@ -1758,31 +1758,33 @@ static const struct file_operations xt_target_ops = {
  * This function will create the nf_hook_ops that the x_table needs
  * to hand to xt_hook_link_net().
  */
+//构造hook数组
 struct nf_hook_ops *
 xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 {
 	unsigned int hook_mask = table->valid_hooks;
 	//取有多少个hook点
-	uint8_t i, num_hooks = hweight32(hook_mask);
+	uint8_t i, num_hooks = hweight32(hook_mask);//计算含多少个的bit '1'
 	uint8_t hooknum;
 	struct nf_hook_ops *ops;
 
 	if (!num_hooks)
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);//参数有误，没有注册hook
 
 	//申请num_hooks个ops
 	ops = kcalloc(num_hooks, sizeof(*ops), GFP_KERNEL);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
 
+	//注册所有hook实现函数为fn
 	for (i = 0, hooknum = 0; i < num_hooks && hook_mask != 0;
 	     hook_mask >>= 1, ++hooknum) {
 		if (!(hook_mask & 1))
 			continue;
-		ops[i].hook     = fn;//注册所有hook实现函数为fn
+		ops[i].hook     = fn;//填充fn
 		ops[i].pf       = table->af;
 		ops[i].hooknum  = hooknum;
-		ops[i].priority = table->priority;
+		ops[i].priority = table->priority;//填充优先级
 		++i;
 	}
 

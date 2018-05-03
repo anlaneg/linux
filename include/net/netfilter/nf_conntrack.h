@@ -142,7 +142,7 @@ int nf_conntrack_tuple_taken(const struct nf_conntrack_tuple *tuple,
 #define NFCT_PTRMASK	~(NFCT_INFOMASK)
 
 /* Return conntrack_info and tuple hash for given skb. */
-//返回报文的连接跟踪信息
+//返回报文的连接跟踪信息指针（见set函数）
 static inline struct nf_conn *
 nf_ct_get(const struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 {

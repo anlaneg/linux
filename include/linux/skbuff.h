@@ -1893,7 +1893,9 @@ static inline bool skb_is_nonlinear(const struct sk_buff *skb)
 	return skb->data_len;
 }
 
-//头部空闲长度
+//其中skb->len是数据包长度，在IPv4中就是单个完整IP包的总长，但这些数据并不一定都在当前内存页；
+//skb->data_len表示在其他页的数据长度（包括本skb在其他页中的数据以及分片skb中的数据），
+//因此skb->len - skb->data_len表示在当前页的数据大小。
 static inline unsigned int skb_headlen(const struct sk_buff *skb)
 {
 	return skb->len - skb->data_len;
@@ -2415,6 +2417,7 @@ static inline u32 skb_inner_network_header_len(const struct sk_buff *skb)
 	return skb->inner_transport_header - skb->inner_network_header;
 }
 
+//获取到network指针的偏移量
 static inline int skb_network_offset(const struct sk_buff *skb)
 {
 	return skb_network_header(skb) - skb->data;
@@ -3351,6 +3354,8 @@ static inline void * __must_check
 __skb_header_pointer(const struct sk_buff *skb, int offset,
 		     int len, void *data, int hlen, void *buffer)
 {
+	//先判断要处理的数据是否都在当前页面内，如果是，则返回可以直接对数据处理，
+	//返回所求数据指针，否则用skb_copy_bits()函数进行拷贝
 	if (hlen - offset >= len)
 		return data + offset;
 

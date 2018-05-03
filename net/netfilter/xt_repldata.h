@@ -16,6 +16,7 @@
 
 #define xt_alloc_initial_table(type, typ2) ({ \
 	unsigned int hook_mask = info->valid_hooks; \
+	/*注册了多少hook*/                            \
 	unsigned int nhooks = hweight32(hook_mask); \
 	unsigned int bytes = 0, hooknum = 0, i = 0; \
 	struct { \
@@ -28,6 +29,7 @@
 	tbl = kzalloc(term_offset + sizeof(*term), GFP_KERNEL); \
 	if (tbl == NULL) \
 		return NULL; \
+	/*使term指向tbl的hook点结尾*/                                \
 	term = (struct type##_error *)&(((char *)tbl)[term_offset]); \
 	strncpy(tbl->repl.name, info->name, sizeof(tbl->repl.name)); \
 	*term = (struct type##_error)typ2##_ERROR_INIT;  \

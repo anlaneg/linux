@@ -224,7 +224,7 @@ struct xt_table {
 	struct list_head list;
 
 	/* What hooks you will enter on */
-	unsigned int valid_hooks;
+	unsigned int valid_hooks;//有效的hook点（1<<X进行标记）
 
 	/* Man behind the curtain... */
 	struct xt_table_info *private;
@@ -232,14 +232,14 @@ struct xt_table {
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;
 
-	u_int8_t af;		/* address/protocol family */
+	u_int8_t af;		/* address/protocol family */ //协议族
 	int priority;		/* hook order */
 
 	/* called when table is needed in the given netns */
 	int (*table_init)(struct net *net);
 
 	/* A unique name... */
-	const char name[XT_TABLE_MAXNAMELEN];
+	const char name[XT_TABLE_MAXNAMELEN];//名称
 };
 
 #include <linux/netfilter_ipv4.h>
