@@ -180,7 +180,7 @@ static unsigned int ipv4_conntrack_local(void *priv,
    make it the first hook. */
 static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 	{
-		.hook		= ipv4_conntrack_in,
+		.hook		= ipv4_conntrack_in,//连接跟踪入口
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK,

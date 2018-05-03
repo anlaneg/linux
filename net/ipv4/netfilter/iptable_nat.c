@@ -70,7 +70,7 @@ static unsigned int iptable_nat_ipv4_local_fn(void *priv,
 static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	/* Before packet filtering, change destination */
 	{
-		.hook		= iptable_nat_ipv4_in,
+		.hook		= iptable_nat_ipv4_in,//做dnat
 		.pf		= NFPROTO_IPV4,
 		.nat_hook	= true,
 		.hooknum	= NF_INET_PRE_ROUTING,
@@ -78,7 +78,7 @@ static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	},
 	/* After packet filtering, change source */
 	{
-		.hook		= iptable_nat_ipv4_out,
+		.hook		= iptable_nat_ipv4_out,//做snat
 		.pf		= NFPROTO_IPV4,
 		.nat_hook	= true,
 		.hooknum	= NF_INET_POST_ROUTING,
@@ -86,7 +86,7 @@ static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	},
 	/* Before packet filtering, change destination */
 	{
-		.hook		= iptable_nat_ipv4_local_fn,
+		.hook		= iptable_nat_ipv4_local_fn,//本机收包前dnat
 		.pf		= NFPROTO_IPV4,
 		.nat_hook	= true,
 		.hooknum	= NF_INET_LOCAL_OUT,
@@ -94,7 +94,7 @@ static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	},
 	/* After packet filtering, change source */
 	{
-		.hook		= iptable_nat_ipv4_fn,
+		.hook		= iptable_nat_ipv4_fn,//本机出包前snat
 		.pf		= NFPROTO_IPV4,
 		.nat_hook	= true,
 		.hooknum	= NF_INET_LOCAL_IN,

@@ -1329,6 +1329,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	struct nf_conn *ct;
 	u32 hash;
 
+	//提取元组
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb),
 			     dataoff, l3num, protonum, net, &tuple, l3proto,
 			     l4proto)) {
@@ -1339,6 +1340,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	/* look for tuple match */
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 	hash = hash_conntrack_raw(&tuple, net);
+	//查找是否存在对应的连接跟踪
 	h = __nf_conntrack_find_get(net, zone, &tuple, hash);
 	if (!h) {
 		//没有找到对应的连接，创建此连接
@@ -1349,7 +1351,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 		if (IS_ERR(h))
 			return PTR_ERR(h);
 	}
-	ct = nf_ct_tuplehash_to_ctrack(h);
+	ct = nf_ct_tuplehash_to_ctrack(h);//映射到连接跟踪
 
 	/* It exists; we have (non-exclusive) reference. */
 	if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
@@ -1367,10 +1369,12 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 			ctinfo = IP_CT_NEW;
 		}
 	}
+	//为skb设置上其对应的连接跟踪
 	nf_ct_set(skb, ct, ctinfo);
 	return 0;
 }
 
+//连接跟踪入口函数（由netfilter hook点进入）
 unsigned int
 nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 		struct sk_buff *skb)
@@ -1386,6 +1390,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 
 	tmpl = nf_ct_get(skb, &ctinfo);
 	if (tmpl || ctinfo == IP_CT_UNTRACKED) {
+		//防止重复查询或者明确不进行跟踪的报文
 		/* Previously seen (loopback or untracked)?  Ignore. */
 		if ((tmpl && !nf_ct_is_template(tmpl)) ||
 		     ctinfo == IP_CT_UNTRACKED) {
@@ -1396,7 +1401,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 	}
 
 	/* rcu_read_lock()ed by nf_hook_thresh */
-	//由l3协议解析，并获取4层的头部偏移量，获取4层协议号
+	//获得l3协议解析，并获取到4层的头部偏移量，获取4层协议号
 	l3proto = __nf_ct_l3proto_find(pf);
 	ret = l3proto->get_l4proto(skb, skb_network_offset(skb),
 				   &dataoff, &protonum);
@@ -1408,7 +1413,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 		goto out;
 	}
 
-	//取3层为PF,4层为protonum对应的4层处理函数
+	//取4层处理函数
 	l4proto = __nf_ct_l4proto_find(pf, protonum);
 
 	/* It may be an special packet, error, unclean...
@@ -1418,7 +1423,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 	if (l4proto->error != NULL) {
 		ret = l4proto->error(net, tmpl, skb, dataoff, pf, hooknum);
 		if (ret <= 0) {
-			//报文有误，跳出
+			//报文有误，直接跳出
 			NF_CT_STAT_INC_ATOMIC(net, error);
 			NF_CT_STAT_INC_ATOMIC(net, invalid);
 			ret = -ret;
@@ -1429,6 +1434,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 			goto out;
 	}
 repeat:
+	//如果已存在此skb对应的连接跟踪，则查询，否则创建
 	ret = resolve_normal_ct(net, tmpl, skb, dataoff, pf, protonum,
 				l3proto, l4proto);
 	if (ret < 0) {
@@ -1438,6 +1444,7 @@ repeat:
 		goto out;
 	}
 
+	//对出skb对应的连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct) {
 		/* Not valid part of a connection */

@@ -481,6 +481,7 @@ find_check_match(struct xt_entry_match *m, struct xt_mtchk_param *par)
 	struct xt_match *match;
 	int ret;
 
+	//查询对应的match
 	match = xt_request_find_match(NFPROTO_IPV4, m->u.user.name,
 				      m->u.user.revision);
 	if (IS_ERR(match))
@@ -549,6 +550,8 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 		ret = PTR_ERR(target);
 		goto cleanup_matches;
 	}
+
+	//设置查询到的target
 	t->u.kernel.target = target;
 
 	ret = check_target(e, net, name);

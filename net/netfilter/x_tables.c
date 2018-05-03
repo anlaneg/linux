@@ -70,6 +70,7 @@ static const char *const xt_prefix[NFPROTO_NUMPROTO] = {
 };
 
 /* Registration hooks for targets. */
+//注册单个target,将target存放在xt[af].target链表上
 int xt_register_target(struct xt_target *target)
 {
 	u_int8_t af = target->family;
@@ -81,6 +82,7 @@ int xt_register_target(struct xt_target *target)
 }
 EXPORT_SYMBOL(xt_register_target);
 
+//自xt[af]上移除某个target
 void
 xt_unregister_target(struct xt_target *target)
 {
@@ -92,6 +94,7 @@ xt_unregister_target(struct xt_target *target)
 }
 EXPORT_SYMBOL(xt_unregister_target);
 
+//注册一组target
 int
 xt_register_targets(struct xt_target *target, unsigned int n)
 {
@@ -120,6 +123,7 @@ xt_unregister_targets(struct xt_target *target, unsigned int n)
 }
 EXPORT_SYMBOL(xt_unregister_targets);
 
+//注册单个match,将match存放在xt[af].match链表上
 int xt_register_match(struct xt_match *match)
 {
 	u_int8_t af = match->family;
@@ -142,6 +146,7 @@ xt_unregister_match(struct xt_match *match)
 }
 EXPORT_SYMBOL(xt_unregister_match);
 
+//注册一组matchs
 int
 xt_register_matches(struct xt_match *match, unsigned int n)
 {
@@ -178,6 +183,7 @@ EXPORT_SYMBOL(xt_unregister_matches);
  */
 
 /* Find match, grabs ref.  Returns ERR_PTR() on error. */
+//查找指定名称，revision版本号，指定af的match
 struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 {
 	struct xt_match *m;
@@ -210,11 +216,14 @@ xt_request_find_match(uint8_t nfproto, const char *name, uint8_t revision)
 {
 	struct xt_match *match;
 
+	//名称检查
 	if (strnlen(name, XT_EXTENSION_MAXNAMELEN) == XT_EXTENSION_MAXNAMELEN)
 		return ERR_PTR(-EINVAL);
 
+	//查找对应的match
 	match = xt_find_match(nfproto, name, revision);
 	if (IS_ERR(match)) {
+		//未找到，尝试加载模块
 		request_module("%st_%s", xt_prefix[nfproto], name);
 		match = xt_find_match(nfproto, name, revision);
 	}
@@ -224,6 +233,7 @@ xt_request_find_match(uint8_t nfproto, const char *name, uint8_t revision)
 EXPORT_SYMBOL_GPL(xt_request_find_match);
 
 /* Find target, grabs ref.  Returns ERR_PTR() on error. */
+//给定af,name,revison查找对应的target
 struct xt_target *xt_find_target(u8 af, const char *name, u8 revision)
 {
 	struct xt_target *t;
@@ -243,6 +253,7 @@ struct xt_target *xt_find_target(u8 af, const char *name, u8 revision)
 	}
 	mutex_unlock(&xt[af].mutex);
 
+	//如果没有找到，且af不为unspecal,则令af为unsepcal继续查询
 	if (af != NFPROTO_UNSPEC)
 		/* Try searching again in the family-independent list */
 		return xt_find_target(NFPROTO_UNSPEC, name, revision);
@@ -255,11 +266,14 @@ struct xt_target *xt_request_find_target(u8 af, const char *name, u8 revision)
 {
 	struct xt_target *target;
 
+	//名称长度检查
 	if (strnlen(name, XT_EXTENSION_MAXNAMELEN) == XT_EXTENSION_MAXNAMELEN)
 		return ERR_PTR(-EINVAL);
 
+	//查找指定target
 	target = xt_find_target(af, name, revision);
 	if (IS_ERR(target)) {
+		//未找到，请求相应模块
 		request_module("%st_%s", xt_prefix[af], name);
 		target = xt_find_target(af, name, revision);
 	}

@@ -259,6 +259,7 @@ nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 	/* maniptype == SRC for postrouting. */
 	enum nf_nat_manip_type maniptype = HOOK2MANIP(state->hook);
 
+	//取连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	/* Can't track?  It's not due to stress, or conntrack would
 	 * have dropped it.  Hence it's the user's responsibilty to
