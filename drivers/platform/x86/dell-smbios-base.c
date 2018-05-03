@@ -514,7 +514,7 @@ static int build_tokens_sysfs(struct platform_device *dev)
 		continue;
 
 loop_fail_create_value:
-		kfree(value_name);
+		kfree(location_name);
 		goto out_unwind_strings;
 	}
 	smbios_attribute_group.attrs = token_attrs;
@@ -525,7 +525,7 @@ loop_fail_create_value:
 	return 0;
 
 out_unwind_strings:
-	for (i = i-1; i > 0; i--) {
+	while (i--) {
 		kfree(token_location_attrs[i].attr.name);
 		kfree(token_value_attrs[i].attr.name);
 	}
@@ -637,7 +637,7 @@ static void __exit dell_smbios_exit(void)
 	mutex_unlock(&smbios_mutex);
 }
 
-subsys_initcall(dell_smbios_init);
+module_init(dell_smbios_init);
 module_exit(dell_smbios_exit);
 
 MODULE_AUTHOR("Matthew Garrett <mjg@redhat.com>");

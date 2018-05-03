@@ -27,6 +27,7 @@ static int __net_init iptable_filter_table_init(struct net *net);
 
 static const struct xt_table packet_filter = {
 	.name		= "filter",
+	//filter注册local_in,forward,local_out三个hook点
 	.valid_hooks	= FILTER_VALID_HOOKS,
 	.me		= THIS_MODULE,
 	.af		= NFPROTO_IPV4,
@@ -34,6 +35,8 @@ static const struct xt_table packet_filter = {
 	.table_init	= iptable_filter_table_init,
 };
 
+//为local_in,forward,local_out三个hook点注册的hook实现函数，实现报文过滤
+//其中local_in,forward为路由查询后，local_out为主机向上发送时
 static unsigned int
 iptable_filter_hook(void *priv, struct sk_buff *skb,
 		    const struct nf_hook_state *state)
@@ -55,6 +58,7 @@ static int __net_init iptable_filter_table_init(struct net *net)
 	if (net->ipv4.iptable_filter)
 		return 0;
 
+	//依据xt_table申请初始化表
 	repl = ipt_alloc_initial_table(&packet_filter);
 	if (repl == NULL)
 		return -ENOMEM;
@@ -62,6 +66,8 @@ static int __net_init iptable_filter_table_init(struct net *net)
 	((struct ipt_standard *)repl->entries)[1].target.verdict =
 		forward ? -NF_ACCEPT - 1 : -NF_DROP - 1;
 
+	//注filter_ops为hook点钩子实现函数
+	//初始化net->ipv4.iptable_filter指针
 	err = ipt_register_table(net, &packet_filter, repl, filter_ops,
 				 &net->ipv4.iptable_filter);
 	kfree(repl);
@@ -93,6 +99,7 @@ static int __init iptable_filter_init(void)
 {
 	int ret;
 
+	//用iptable_filter_hook函数来初始化filter_ops
 	filter_ops = xt_hook_ops_alloc(&packet_filter, iptable_filter_hook);
 	if (IS_ERR(filter_ops))
 		return PTR_ERR(filter_ops);
