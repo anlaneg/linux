@@ -30,6 +30,7 @@
 #include <net/netfilter/nf_log.h>
 
 static struct nf_conntrack_l4proto __rcu **nf_ct_protos[NFPROTO_NUMPROTO] __read_mostly;
+//记录l3层协议连接跟踪
 struct nf_conntrack_l3proto __rcu *nf_ct_l3protos[NFPROTO_NUMPROTO] __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_l3protos);
 

@@ -703,7 +703,7 @@ struct sk_buff {
 	struct	sec_path	*sp;
 #endif
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)
-	unsigned long		 _nfct;
+	unsigned long		 _nfct;//记录连接跟踪指针及方向
 #endif
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	struct nf_bridge_info	*nf_bridge;

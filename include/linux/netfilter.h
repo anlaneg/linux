@@ -285,8 +285,10 @@ NF_HOOK(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk, struct 
 	struct net_device *in, struct net_device *out,
 	int (*okfn)(struct net *, struct sock *, struct sk_buff *))
 {
+	//先触发hook
 	int ret = nf_hook(pf, hook, net, sk, skb, in, out, okfn);
 	if (ret == 1)
+		//调用okfn
 		ret = okfn(net, sk, skb);
 	return ret;
 }

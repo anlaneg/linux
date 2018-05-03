@@ -334,7 +334,7 @@ nf_nat_ipv4_in(void *priv, struct sk_buff *skb,
 					 struct nf_conn *ct))
 {
 	unsigned int ret;
-	__be32 daddr = ip_hdr(skb)->daddr;
+	__be32 daddr = ip_hdr(skb)->daddr;//取目的ip
 
 	ret = nf_nat_ipv4_fn(priv, skb, state, do_chain);
 	if (ret != NF_DROP && ret != NF_STOLEN &&

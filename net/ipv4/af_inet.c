@@ -1902,12 +1902,15 @@ static int __init inet_init(void)
 	//注册igmp协议
 	if (inet_add_protocol(&icmp_protocol, IPPROTO_ICMP) < 0)
 		pr_crit("%s: Cannot add ICMP protocol\n", __func__);
+
 	//注册udp协议处理
 	if (inet_add_protocol(&udp_protocol, IPPROTO_UDP) < 0)
 		pr_crit("%s: Cannot add UDP protocol\n", __func__);
+
 	//注册tcp协议处理
 	if (inet_add_protocol(&tcp_protocol, IPPROTO_TCP) < 0)
 		pr_crit("%s: Cannot add TCP protocol\n", __func__);
+
 #ifdef CONFIG_IP_MULTICAST
 	//注册igmp协议处理
 	if (inet_add_protocol(&igmp_protocol, IPPROTO_IGMP) < 0)
@@ -1970,7 +1973,7 @@ static int __init inet_init(void)
 
 	ipv4_proc_init();
 
-	ipfrag_init();
+	ipfrag_init();//分片表初始化
 
 	dev_add_pack(&ip_packet_type);//ipv4报文处理器注册
 

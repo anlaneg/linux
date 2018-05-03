@@ -2035,7 +2035,7 @@ local_input:
 	}
 
 	rth = rt_dst_alloc(l3mdev_master_dev_rcu(dev) ? : net->loopback_dev,
-			   flags | RTCF_LOCAL, res->type,
+			   flags | RTCF_LOCAL, res->type,//标记local flag
 			   IN_DEV_CONF_GET(in_dev, NOPOLICY), false, do_cache);
 	if (!rth)
 		goto e_nobufs;
@@ -2104,6 +2104,7 @@ martian_source:
 }
 
 //传入报文(skb),目的地址(daddr),源地址(saddr),tos,入接口（dev)
+//进行路由查询
 int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 			 u8 tos, struct net_device *dev)
 {

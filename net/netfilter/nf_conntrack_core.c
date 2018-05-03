@@ -1396,7 +1396,7 @@ nf_conntrack_in(struct net *net, u_int8_t pf, unsigned int hooknum,
 	}
 
 	/* rcu_read_lock()ed by nf_hook_thresh */
-	//由l3协议获取4层的头部偏移量，获取4层协议号
+	//由l3协议解析，并获取4层的头部偏移量，获取4层协议号
 	l3proto = __nf_ct_l3proto_find(pf);
 	ret = l3proto->get_l4proto(skb, skb_network_offset(skb),
 				   &dataoff, &protonum);

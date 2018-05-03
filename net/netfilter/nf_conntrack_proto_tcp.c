@@ -821,6 +821,7 @@ static int tcp_packet(struct nf_conn *ct,
 	unsigned long timeout;
 	unsigned int index;
 
+	//取tcp头部
 	th = skb_header_pointer(skb, dataoff, sizeof(_tcph), &_tcph);
 	BUG_ON(th == NULL);
 
@@ -828,7 +829,7 @@ static int tcp_packet(struct nf_conn *ct,
 	old_state = ct->proto.tcp.state;
 	dir = CTINFO2DIR(ctinfo);
 	index = get_conntrack_index(th);
-	new_state = tcp_conntracks[dir][index][old_state];
+	new_state = tcp_conntracks[dir][index][old_state];//依据方便映射tcp新状态
 	tuple = &ct->tuplehash[dir].tuple;
 
 	switch (new_state) {
