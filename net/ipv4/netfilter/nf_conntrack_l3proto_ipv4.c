@@ -38,6 +38,7 @@ struct conntrack4_net {
 	unsigned int users;
 };
 
+//取ip头中的元组，源ip,目的ip
 static bool ipv4_pkt_to_tuple(const struct sk_buff *skb, unsigned int nhoff,
 			      struct nf_conntrack_tuple *tuple)
 {
@@ -54,6 +55,7 @@ static bool ipv4_pkt_to_tuple(const struct sk_buff *skb, unsigned int nhoff,
 	return true;
 }
 
+//利用orig颠倒来填充tuple
 static bool ipv4_invert_tuple(struct nf_conntrack_tuple *tuple,
 			      const struct nf_conntrack_tuple *orig)
 {
@@ -63,7 +65,7 @@ static bool ipv4_invert_tuple(struct nf_conntrack_tuple *tuple,
 	return true;
 }
 
-//获取4层的offset及4层的协议号
+//获取到4层的offset及4层的协议号
 static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 			    unsigned int *dataoff, u_int8_t *protonum)
 {
@@ -119,6 +121,7 @@ static unsigned int ipv4_helper(void *priv,
 	if (!helper)
 		return NF_ACCEPT;
 
+	//期待分析
 	return helper->help(skb, skb_network_offset(skb) + ip_hdrlen(skb),
 			    ct, ctinfo);
 }
@@ -173,6 +176,7 @@ static unsigned int ipv4_conntrack_local(void *priv,
 		return NF_ACCEPT;
 	}
 
+	//本机报文下发时连接跟踪创建
 	return nf_conntrack_in(state->net, PF_INET, state->hook, skb);
 }
 
@@ -186,13 +190,13 @@ static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_conntrack_local,
+		.hook		= ipv4_conntrack_local,//本机报文连接跟踪
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_helper,
+		.hook		= ipv4_helper,//期待检查helper
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_POST_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK_HELPER,
@@ -204,7 +208,7 @@ static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 		.priority	= NF_IP_PRI_CONNTRACK_CONFIRM,
 	},
 	{
-		.hook		= ipv4_helper,
+		.hook		= ipv4_helper,//期待helper检查
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_CONNTRACK_HELPER,
@@ -332,12 +336,14 @@ static int ipv4_hooks_register(struct net *net)
 	if (cnet->users > 1)
 		goto out_unlock;
 
+	//开启分片重组功能
 	err = nf_defrag_ipv4_enable(net);
 	if (err) {
 		cnet->users = 0;
 		goto out_unlock;
 	}
 
+	//注册连接跟踪操作集
 	err = nf_register_net_hooks(net, ipv4_conntrack_ops,
 				    ARRAY_SIZE(ipv4_conntrack_ops));
 
@@ -361,9 +367,9 @@ static void ipv4_hooks_unregister(struct net *net)
 
 const struct nf_conntrack_l3proto nf_conntrack_l3proto_ipv4 = {
 	.l3proto	 = PF_INET,
-	.pkt_to_tuple	 = ipv4_pkt_to_tuple,
-	.invert_tuple	 = ipv4_invert_tuple,
-	.get_l4proto	 = ipv4_get_l4proto,
+	.pkt_to_tuple	 = ipv4_pkt_to_tuple,//取ip头中的源目的ip
+	.invert_tuple	 = ipv4_invert_tuple,//直接颠倒元组产生新元组
+	.get_l4proto	 = ipv4_get_l4proto,//获取到4层的offset及4层的协议号
 #if IS_ENABLED(CONFIG_NF_CT_NETLINK)
 	.tuple_to_nlattr = ipv4_tuple_to_nlattr,
 	.nlattr_to_tuple = ipv4_nlattr_to_tuple,

@@ -490,7 +490,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 	helper->tuple.src.u.all = htons(spec_port);
 	helper->expect_policy = exp_pol;
 	helper->expect_class_max = expect_class_max;
-	helper->help = help;
+	helper->help = help;//注册helper函数
 	helper->from_nlattr = from_nlattr;
 	helper->me = module;
 

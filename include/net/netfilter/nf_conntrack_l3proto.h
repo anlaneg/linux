@@ -28,6 +28,7 @@ struct nf_conntrack_l3proto {
 	 * Try to fill in the third arg: nhoff is offset of l3 proto
          * hdr.  Return true if possible.
 	 */
+	//取三层协议的信息并填充元组
 	bool (*pkt_to_tuple)(const struct sk_buff *skb, unsigned int nhoff,
 			     struct nf_conntrack_tuple *tuple);
 
@@ -35,6 +36,7 @@ struct nf_conntrack_l3proto {
 	 * Invert the per-proto part of the tuple: ie. turn xmit into reply.
 	 * Some packets can't be inverted: return 0 in that case.
 	 */
+	//实现三层协议元组的反转
 	bool (*invert_tuple)(struct nf_conntrack_tuple *inverse,
 			     const struct nf_conntrack_tuple *orig);
 

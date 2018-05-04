@@ -2033,6 +2033,7 @@ EXPORT_SYMBOL(__pskb_pull_tail);
  *		check arch/{*}/net/{*}.S files,
  *		since it is called from BPF assembly code.
  */
+//将不连续的skb数据自offset处copy到to中，copy长度为len
 int skb_copy_bits(const struct sk_buff *skb, int offset, void *to, int len)
 {
 	int start = skb_headlen(skb);

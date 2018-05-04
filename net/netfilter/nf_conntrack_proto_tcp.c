@@ -100,11 +100,11 @@ static const unsigned int tcp_timeouts[TCP_CONNTRACK_TIMEOUT_MAX] = {
 
 /* What TCP flags are set from RST/SYN/FIN/ACK. */
 enum tcp_bit_set {
-	TCP_SYN_SET,
-	TCP_SYNACK_SET,
-	TCP_FIN_SET,
-	TCP_ACK_SET,
-	TCP_RST_SET,
+	TCP_SYN_SET,//仅包含syn标记
+	TCP_SYNACK_SET,//包含syn与ack
+	TCP_FIN_SET,//包含fin标记
+	TCP_ACK_SET,//仅有ack标记
+	TCP_RST_SET,//有rst标记的报文
 	TCP_NONE_SET,
 };
 
@@ -283,10 +283,12 @@ static bool tcp_pkt_to_tuple(const struct sk_buff *skb, unsigned int dataoff,
 	struct tcphdr _hdr;
 
 	/* Actually only need first 4 bytes to get ports. */
+	//取tcp头部
 	hp = skb_header_pointer(skb, dataoff, 4, &_hdr);
 	if (hp == NULL)
 		return false;
 
+	//填充端口号
 	tuple->src.u.tcp.port = hp->source;
 	tuple->dst.u.tcp.port = hp->dest;
 
@@ -314,10 +316,15 @@ static void tcp_print_conntrack(struct seq_file *s, struct nf_conn *ct)
 
 static unsigned int get_conntrack_index(const struct tcphdr *tcph)
 {
+	//有rst标记，返回rst标记
 	if (tcph->rst) return TCP_RST_SET;
+	//有syn标记，如果有ack，则synack_set,否则仅syn_set
 	else if (tcph->syn) return (tcph->ack ? TCP_SYNACK_SET : TCP_SYN_SET);
+	//有fin标记，
 	else if (tcph->fin) return TCP_FIN_SET;
+	//仅有ack标记
 	else if (tcph->ack) return TCP_ACK_SET;
+	//其它情况
 	else return TCP_NONE_SET;
 }
 
@@ -1101,10 +1108,12 @@ static bool tcp_new(struct nf_conn *ct, const struct sk_buff *skb,
 	const struct ip_ct_tcp_state *sender = &ct->proto.tcp.seen[0];
 	const struct ip_ct_tcp_state *receiver = &ct->proto.tcp.seen[1];
 
+	//取tcp头部
 	th = skb_header_pointer(skb, dataoff, sizeof(_tcph), &_tcph);
 	BUG_ON(th == NULL);
 
 	/* Don't need lock here: this conntrack not in circulation yet */
+	//由于是新创建，故方向是源方向，之前的状态为CONNTRACK_NONE
 	new_state = tcp_conntracks[0][get_conntrack_index(th)][TCP_CONNTRACK_NONE];
 
 	/* Invalid: delete conntrack */
@@ -1555,15 +1564,15 @@ const struct nf_conntrack_l4proto nf_conntrack_l4proto_tcp4 =
 {
 	.l3proto		= PF_INET,
 	.l4proto 		= IPPROTO_TCP,
-	.pkt_to_tuple 		= tcp_pkt_to_tuple,
-	.invert_tuple 		= tcp_invert_tuple,
+	.pkt_to_tuple 		= tcp_pkt_to_tuple,//取4层协议元组
+	.invert_tuple 		= tcp_invert_tuple,//颠倒元组来构造反方向
 #ifdef CONFIG_NF_CONNTRACK_PROCFS
 	.print_conntrack 	= tcp_print_conntrack,
 #endif
-	.packet 		= tcp_packet,
+	.packet 		= tcp_packet,//报文经过时进行回调
 	.get_timeouts		= tcp_get_timeouts,
-	.new 			= tcp_new,
-	.error			= tcp_error,
+	.new 			= tcp_new,//新建连接时调用
+	.error			= tcp_error,//tcp报文合法性检查
 	.can_early_drop		= tcp_can_early_drop,
 #if IS_ENABLED(CONFIG_NF_CT_NETLINK)
 	.to_nlattr		= tcp_to_nlattr,

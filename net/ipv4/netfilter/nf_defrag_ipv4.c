@@ -25,6 +25,7 @@
 
 static DEFINE_MUTEX(defrag4_mutex);
 
+//实现分片重组
 static int nf_ct_ipv4_gather_frags(struct net *net, struct sk_buff *skb,
 				   u_int32_t user)
 {
@@ -83,9 +84,11 @@ static unsigned int ipv4_conntrack_defrag(void *priv,
 #endif
 	/* Gather fragments. */
 	if (ip_is_fragment(ip_hdr(skb))) {
+		//skb是分片报文
 		enum ip_defrag_users user =
 			nf_ct_defrag_user(state->hook, skb);
 
+		//完成分片重组
 		if (nf_ct_ipv4_gather_frags(state->net, skb, user))
 			return NF_STOLEN;
 	}
@@ -94,13 +97,13 @@ static unsigned int ipv4_conntrack_defrag(void *priv,
 
 static const struct nf_hook_ops ipv4_defrag_ops[] = {
 	{
-		.hook		= ipv4_conntrack_defrag,
+		.hook		= ipv4_conntrack_defrag,//完成分片重组
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK_DEFRAG,
 	},
 	{
-		.hook           = ipv4_conntrack_defrag,
+		.hook           = ipv4_conntrack_defrag,//完成分片重组
 		.pf             = NFPROTO_IPV4,
 		.hooknum        = NF_INET_LOCAL_OUT,
 		.priority       = NF_IP_PRI_CONNTRACK_DEFRAG,
@@ -130,6 +133,7 @@ static void __exit nf_defrag_fini(void)
 	unregister_pernet_subsys(&defrag4_net_ops);
 }
 
+//开启分片重组
 int nf_defrag_ipv4_enable(struct net *net)
 {
 	int err = 0;

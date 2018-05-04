@@ -66,7 +66,7 @@ struct nf_conn {
 #endif
 	/* XXX should I move this to the tail ? - Y.K */
 	/* These are my tuples; original and reply */
-	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];
+	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的元组（1。源方向;2.目的方向）
 
 	/* Have we seen traffic both ways yet? (bitset) */
 	unsigned long status;

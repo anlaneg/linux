@@ -1019,14 +1019,15 @@ int rhashtable_init(struct rhashtable *ht,
 
 	ht->key_len = ht->p.key_len;
 	if (!params->hashfn) {
-		ht->p.hashfn = jhash;
+		ht->p.hashfn = jhash;//默认使用jhash
 
 		if (!(ht->key_len & (sizeof(u32) - 1))) {
 			ht->key_len /= sizeof(u32);
-			ht->p.hashfn = rhashtable_jhash2;
+			ht->p.hashfn = rhashtable_jhash2;//或者rhashtable_jhash2
 		}
 	}
 
+	//申请hash桶
 	tbl = bucket_table_alloc(ht, size, GFP_KERNEL);
 	if (tbl == NULL)
 		return -ENOMEM;

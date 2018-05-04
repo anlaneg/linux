@@ -3359,6 +3359,7 @@ __skb_header_pointer(const struct sk_buff *skb, int offset,
 	if (hlen - offset >= len)
 		return data + offset;
 
+	//不连续，将数据copy到buffer中
 	if (!skb ||
 	    skb_copy_bits(skb, offset, buffer, len) < 0)
 		return NULL;

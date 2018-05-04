@@ -136,7 +136,7 @@ struct rhashtable;
  */
 struct rhashtable_params {
 	u16			nelem_hint;
-	u16			key_len;
+	u16			key_len;//key的长度
 	u16			key_offset;
 	u16			head_offset;
 	unsigned int		max_size;
@@ -144,9 +144,9 @@ struct rhashtable_params {
 	bool			automatic_shrinking;
 	u8			locks_mul;
 	u32			nulls_base;
-	rht_hashfn_t		hashfn;
-	rht_obj_hashfn_t	obj_hashfn;
-	rht_obj_cmpfn_t		obj_cmpfn;
+	rht_hashfn_t		hashfn;//计算hash函数
+	rht_obj_hashfn_t	obj_hashfn;//利用obj来计算hash函数
+	rht_obj_cmpfn_t		obj_cmpfn;//对象比对函数
 };
 
 /**
@@ -617,6 +617,7 @@ static inline struct rhash_head *__rhashtable_lookup(
 	struct rhashtable *ht, const void *key,
 	const struct rhashtable_params params)
 {
+	//构造比对参数
 	struct rhashtable_compare_arg arg = {
 		.ht = ht,
 		.key = key,
@@ -627,6 +628,7 @@ static inline struct rhash_head *__rhashtable_lookup(
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
 restart:
+	//计算hash值
 	hash = rht_key_hashfn(ht, tbl, key, params);
 	rht_for_each_rcu(he, tbl, hash) {
 		if (params.obj_cmpfn ?

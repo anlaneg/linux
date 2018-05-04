@@ -199,20 +199,21 @@ static struct ipq *ip_find(struct net *net, struct iphdr *iph,
 			   u32 user, int vif)
 {
 	struct frag_v4_compare_key key = {
-		.saddr = iph->saddr,
-		.daddr = iph->daddr,
+		.saddr = iph->saddr,//源ip
+		.daddr = iph->daddr,//目的ip
 		.user = user,
-		.vif = vif,
-		.id = iph->id,
-		.protocol = iph->protocol,
+		.vif = vif,//接口
+		.id = iph->id,//报文id号
+		.protocol = iph->protocol,//协议相同
 	};
 	struct inet_frag_queue *q;
 
-	//查询分片表
+	//查询分片表，找出对应的队列
 	q = inet_frag_find(&net->ipv4.frags, &key);
 	if (!q)
 		return NULL;
 
+	//转换到struct ipq
 	return container_of(q, struct ipq, q);
 }
 
@@ -297,29 +298,30 @@ static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 	}
 
 	ecn = ip4_frag_ecn(ip_hdr(skb)->tos);
-	offset = ntohs(ip_hdr(skb)->frag_off);
+	offset = ntohs(ip_hdr(skb)->frag_off);//取分片offset
 	flags = offset & ~IP_OFFSET;
 	offset &= IP_OFFSET;
 	offset <<= 3;		/* offset is in 8-byte chunks */
-	ihl = ip_hdrlen(skb);
+	ihl = ip_hdrlen(skb);//计算ip头部长度
 
 	/* Determine the position of this fragment. */
-	end = offset + skb->len - skb_network_offset(skb) - ihl;
+	end = offset + skb->len - skb_network_offset(skb) - ihl;//分片结束点（ip负载结束位置）
 	err = -EINVAL;
 
 	/* Is this the final fragment? */
 	if ((flags & IP_MF) == 0) {
+		//此报文是最后一片
 		/* If we already have some bits beyond end
 		 * or have different end, the segment is corrupted.
 		 */
 		if (end < qp->q.len ||
 		    ((qp->q.flags & INET_FRAG_LAST_IN) && end != qp->q.len))
 			goto err;
-		qp->q.flags |= INET_FRAG_LAST_IN;
-		qp->q.len = end;
+		qp->q.flags |= INET_FRAG_LAST_IN;//标记最后一片已到达
+		qp->q.len = end;//指出报文总长度
 	} else {
 		if (end&7) {
-			end &= ~7;
+			end &= ~7;//end没有对齐
 			if (skb->ip_summed != CHECKSUM_UNNECESSARY)
 				skb->ip_summed = CHECKSUM_NONE;
 		}
@@ -345,15 +347,18 @@ static int ip_frag_queue(struct ipq *qp, struct sk_buff *skb)
 	 * in the chain of fragments so far.  We must know where to put
 	 * this fragment, right?
 	 */
+	//从尾部找，如果最后一片比我们小，则我们需要在其后面
 	prev = qp->q.fragments_tail;
 	if (!prev || prev->ip_defrag_offset < offset) {
 		next = NULL;
 		goto found;
 	}
+
+	//从头上找
 	prev = NULL;
 	for (next = qp->q.fragments; next != NULL; next = next->next) {
 		if (next->ip_defrag_offset >= offset)
-			break;	/* bingo! */
+			break;	/* bingo! */ //找到了一个offset在本片offset之前的，故这片需要在我们之后
 		prev = next;
 	}
 
@@ -366,10 +371,11 @@ found:
 		int i = (prev->ip_defrag_offset + prev->len) - offset;
 
 		if (i > 0) {
+			//有重合
 			offset += i;
 			err = -EINVAL;
 			if (end <= offset)
-				goto err;
+				goto err;//完全重合，丢包
 			err = -ENOMEM;
 			if (!pskb_pull(skb, i))
 				goto err;
@@ -617,6 +623,7 @@ int ip_defrag(struct net *net, struct sk_buff *skb, u32 user)
 
 		spin_lock(&qp->q.lock);
 
+		//对相应的队列加锁，并将skb入队
 		ret = ip_frag_queue(qp, skb);
 
 		spin_unlock(&qp->q.lock);
@@ -846,6 +853,7 @@ static u32 ip4_obj_hashfn(const void *data, u32 len, u32 seed)
 		      sizeof(struct frag_v4_compare_key) / sizeof(u32), seed);
 }
 
+//对象间比对
 static int ip4_obj_cmpfn(struct rhashtable_compare_arg *arg, const void *ptr)
 {
 	const struct frag_v4_compare_key *key = arg->key;
@@ -858,14 +866,15 @@ static const struct rhashtable_params ip4_rhash_params = {
 	.head_offset		= offsetof(struct inet_frag_queue, node),
 	.key_offset		= offsetof(struct inet_frag_queue, key),
 	.key_len		= sizeof(struct frag_v4_compare_key),
-	.hashfn			= ip4_key_hashfn,
-	.obj_hashfn		= ip4_obj_hashfn,
-	.obj_cmpfn		= ip4_obj_cmpfn,
+	.hashfn			= ip4_key_hashfn,//通过key计算hash
+	.obj_hashfn		= ip4_obj_hashfn,//通过obj计算hash
+	.obj_cmpfn		= ip4_obj_cmpfn,//对象间比对
 	.automatic_shrinking	= true,
 };
 
 void __init ipfrag_init(void)
 {
+	//分片表参数初始化
 	ip4_frags.constructor = ip4_frag_init;
 	ip4_frags.destructor = ip4_frag_free;
 	ip4_frags.qsize = sizeof(struct ipq);

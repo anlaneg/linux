@@ -226,12 +226,13 @@ static u32 hash_conntrack(const struct net *net,
 	return scale_hash(hash_conntrack_raw(tuple, net));
 }
 
+//提取3层，4层的元组
 bool
 nf_ct_get_tuple(const struct sk_buff *skb,
-		unsigned int nhoff,
+		unsigned int nhoff,//到网络层的offset
 		unsigned int dataoff,
-		u_int16_t l3num,
-		u_int8_t protonum,
+		u_int16_t l3num,//3层协议号
+		u_int8_t protonum,//4层协议号
 		struct net *net,
 		struct nf_conntrack_tuple *tuple,
 		const struct nf_conntrack_l3proto *l3proto,
@@ -239,6 +240,7 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 {
 	memset(tuple, 0, sizeof(*tuple));
 
+	//取三层协议元组信息
 	tuple->src.l3num = l3num;
 	if (l3proto->pkt_to_tuple(skb, nhoff, tuple) == 0)
 		return false;
@@ -246,6 +248,7 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 	tuple->dst.protonum = protonum;
 	tuple->dst.dir = IP_CT_DIR_ORIGINAL;
 
+	//取四层协议元组信息
 	return l4proto->pkt_to_tuple(skb, dataoff, net, tuple);
 }
 EXPORT_SYMBOL_GPL(nf_ct_get_tuple);
@@ -289,6 +292,7 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 	memset(inverse, 0, sizeof(*inverse));
 
 	inverse->src.l3num = orig->src.l3num;
+	//构造3层反向的元组
 	if (l3proto->invert_tuple(inverse, orig) == 0)
 		return false;
 
@@ -551,6 +555,7 @@ begin:
 		if (nf_ct_is_dying(ct))
 			continue;
 
+		//检查元组是否一致
 		if (nf_ct_key_equal(h, tuple, zone, net))
 			return h;
 	}
@@ -1115,11 +1120,12 @@ static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
 	gc_work->exiting = false;
 }
 
+//申请元组空间，并填充
 static struct nf_conn *
 __nf_conntrack_alloc(struct net *net,
 		     const struct nf_conntrack_zone *zone,
-		     const struct nf_conntrack_tuple *orig,
-		     const struct nf_conntrack_tuple *repl,
+		     const struct nf_conntrack_tuple *orig,//正方向元组
+		     const struct nf_conntrack_tuple *repl,//反方向元组
 		     gfp_t gfp, u32 hash)
 {
 	struct nf_conn *ct;
@@ -1147,6 +1153,7 @@ __nf_conntrack_alloc(struct net *net,
 		goto out;
 
 	spin_lock_init(&ct->lock);
+	//设置源方向，反方向的元组
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple = *orig;
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode.pprev = NULL;
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *repl;
@@ -1200,7 +1207,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_free);
 
 /* Allocate a new conntrack: we return -ENOMEM if classification
    failed due to stress.  Otherwise it really is unclassifiable. */
-//初始化连接跟踪
+//创建连接跟踪，并初始化
 static noinline struct nf_conntrack_tuple_hash *
 init_conntrack(struct net *net, struct nf_conn *tmpl,
 	       const struct nf_conntrack_tuple *tuple,
@@ -1219,11 +1226,13 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	struct nf_conntrack_zone tmp;
 	unsigned int *timeouts;
 
+	//初始化反向的元组
 	if (!nf_ct_invert_tuple(&repl_tuple, tuple, l3proto, l4proto)) {
 		pr_debug("Can't invert tuple.\n");
 		return NULL;
 	}
 
+	//申请并填充元组
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 	ct = __nf_conntrack_alloc(net, zone, tuple, &repl_tuple, GFP_ATOMIC,
 				  hash);
@@ -1267,6 +1276,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	local_bh_disable();
 	if (net->ct.expect_count) {
 		spin_lock(&nf_conntrack_expect_lock);
+		//查找期待
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
 			pr_debug("expectation arrives ct=%p exp=%p\n",
@@ -1316,8 +1326,8 @@ static int
 resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 		  struct sk_buff *skb,
 		  unsigned int dataoff,
-		  u_int16_t l3num,
-		  u_int8_t protonum,
+		  u_int16_t l3num,//3层协议
+		  u_int8_t protonum,//4层协议
 		  const struct nf_conntrack_l3proto *l3proto,
 		  const struct nf_conntrack_l4proto *l4proto)
 {
@@ -1329,7 +1339,7 @@ resolve_normal_ct(struct net *net, struct nf_conn *tmpl,
 	struct nf_conn *ct;
 	u32 hash;
 
-	//提取元组
+	//提取3层，4层元组
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb),
 			     dataoff, l3num, protonum, net, &tuple, l3proto,
 			     l4proto)) {
@@ -1456,6 +1466,7 @@ repeat:
 	/* Decide what timeout policy we want to apply to this flow. */
 	timeouts = nf_ct_timeout_lookup(net, ct, l4proto);
 
+	//依据报文更新连接
 	ret = l4proto->packet(ct, skb, dataoff, ctinfo, timeouts);
 	if (ret <= 0) {
 		/* Invalid: inverse of the return code tells
