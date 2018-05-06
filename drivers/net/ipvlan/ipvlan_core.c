@@ -801,6 +801,7 @@ struct sk_buff *ipvlan_l3_rcv(struct net_device *dev, struct sk_buff *skb,
 		int err;
 		struct iphdr *ip4h = ip_hdr(skb);
 
+		//查路由，入接口取master dev
 		err = ip_route_input_noref(skb, ip4h->daddr, ip4h->saddr,
 					   ip4h->tos, sdev);
 		if (unlikely(err))

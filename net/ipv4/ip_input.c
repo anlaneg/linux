@@ -360,7 +360,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 *	how the packet travels inside Linux networking.
 	 */
 	if (!skb_valid_dst(skb)) {
-		//传入目的地址，源地址，tos,报文入口设备
+		//传入目的地址，源地址，tos,报文入口设备,查询路由（单播时ip_forword将被设置）
 		err = ip_route_input_noref(skb, iph->daddr, iph->saddr,
 					   iph->tos, dev);
 		if (unlikely(err))
@@ -384,11 +384,14 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	rt = skb_rtable(skb);
 	if (rt->rt_type == RTN_MULTICAST) {
+		//组播转发
 		__IP_UPD_PO_STATS(net, IPSTATS_MIB_INMCAST, skb->len);
 	} else if (rt->rt_type == RTN_BROADCAST) {
+		//广播转发
 		__IP_UPD_PO_STATS(net, IPSTATS_MIB_INBCAST, skb->len);
 	} else if (skb->pkt_type == PACKET_BROADCAST ||
 		   skb->pkt_type == PACKET_MULTICAST) {
+		//二层采用的是广播或者组播mac
 		struct in_device *in_dev = __in_dev_get_rcu(dev);
 
 		/* RFC 1122 3.3.6:
@@ -396,6 +399,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		 *   When a host sends a datagram to a link-layer broadcast
 		 *   address, the IP destination address MUST be a legal IP
 		 *   broadcast or IP multicast address.
+		 *   当一个主机采用链路层广播地址发送一个报文，ip目的地址必须是一个合法的广播或者组播ip
 		 *
 		 *   A host SHOULD silently discard a datagram that is received
 		 *   via a link-layer broadcast (see Section 2.4) but does not
@@ -409,6 +413,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		 */
 		if (in_dev &&
 		    IN_DEV_ORCONF(in_dev, DROP_UNICAST_IN_L2_MULTICAST))
+			//如果接口配直了丢弃，则丢弃，否则忽略
 			goto drop;
 	}
 
