@@ -151,6 +151,7 @@ static inline int rtm_msgindex(int msgtype)
 	return msgindex;
 }
 
+//返回指定协议，指定消息类型对应的rtnl_link
 static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 {
 	struct rtnl_link **tab;
@@ -4593,9 +4594,11 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		link = rtnl_get_link(family, type);
 		if (!link || !link->dumpit) {
+			//如果通过family没有找到，则置为unspec来查找
 			family = PF_UNSPEC;
 			link = rtnl_get_link(family, type);
 			if (!link || !link->dumpit)
+				//仍没有找到，报错
 				goto err_unlock;
 		}
 		owner = link->owner;
@@ -4646,6 +4649,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		doit = link->doit;
 		rcu_read_unlock();
 		if (doit)
+			//调用doit处理此消息
 			err = doit(skb, nlh, extack);
 		module_put(owner);
 		return err;

@@ -1247,6 +1247,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 *	the protocol is 0, the family is instructed to select an appropriate
 	 *	default.
 	 */
+	//申请sock内存
 	sock = sock_alloc();
 	if (!sock) {
 		net_warn_ratelimited("socket: no more sockets\n");
@@ -1263,6 +1264,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 * requested real, full-featured networking support upon configuration.
 	 * Otherwise module support will break!
 	 */
+	//如果还未注册此协议，则请求载入对应的module
 	if (rcu_access_pointer(net_families[family]) == NULL)
 		request_module("net-pf-%d", family);
 #endif
@@ -1283,6 +1285,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	/* Now protected by module ref count */
 	rcu_read_unlock();
 
+	//调用create创建对应的sock
 	err = pf->create(net, sock, protocol, kern);
 	if (err < 0)
 		goto out_module_put;
@@ -2642,6 +2645,7 @@ int sock_register(const struct net_proto_family *ops)
 				      lockdep_is_held(&net_family_lock)))
 		err = -EEXIST;
 	else {
+		//完成对应协议族的注册
 		rcu_assign_pointer(net_families[ops->family], ops);
 		err = 0;
 	}

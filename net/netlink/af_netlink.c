@@ -637,8 +637,10 @@ static int __netlink_create(struct net *net, struct socket *sock,
 	struct sock *sk;
 	struct netlink_sock *nlk;
 
+	//设置netlink的socket操作集
 	sock->ops = &netlink_ops;
 
+	//申请私有数据
 	sk = sk_alloc(net, PF_NETLINK, GFP_KERNEL, &netlink_proto, kern);
 	if (!sk)
 		return -ENOMEM;
@@ -662,6 +664,7 @@ static int __netlink_create(struct net *net, struct socket *sock,
 	return 0;
 }
 
+//通过填充sock完成netlink socket的构造
 static int netlink_create(struct net *net, struct socket *sock, int protocol,
 			  int kern)
 {
@@ -674,9 +677,11 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 
 	sock->state = SS_UNCONNECTED;
 
+	//当前仅支持sock_raw,sock_dgram两种类型
 	if (sock->type != SOCK_RAW && sock->type != SOCK_DGRAM)
 		return -ESOCKTNOSUPPORT;
 
+	//protocol检查
 	if (protocol < 0 || protocol >= MAX_LINKS)
 		return -EPROTONOSUPPORT;
 
@@ -2419,6 +2424,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 }
 EXPORT_SYMBOL(netlink_ack);
 
+//收取消息并处理
 int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 						   struct nlmsghdr *,
 						   struct netlink_ext_ack *))
@@ -2431,7 +2437,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 		int msglen;
 
 		memset(&extack, 0, sizeof(extack));
-		nlh = nlmsg_hdr(skb);
+		nlh = nlmsg_hdr(skb);//取消息头
 		err = 0;
 
 		if (nlh->nlmsg_len < NLMSG_HDRLEN || skb->len < nlh->nlmsg_len)
@@ -2439,12 +2445,12 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 
 		/* Only requests are handled by the kernel */
 		if (!(nlh->nlmsg_flags & NLM_F_REQUEST))
-			goto ack;
+			goto ack;//kernel仅处理request
 
 		/* Skip control messages */
 		if (nlh->nlmsg_type < NLMSG_MIN_TYPE)
 			goto ack;
-
+		//调用回调处理消息
 		err = cb(skb, nlh, &extack);
 		if (err == -EINTR)
 			goto skip;
@@ -2664,7 +2670,7 @@ int netlink_unregister_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL(netlink_unregister_notifier);
 
-//socket操作集
+//netlink socket操作集
 static const struct proto_ops netlink_ops = {
 	.family =	PF_NETLINK,
 	.owner =	THIS_MODULE,
@@ -2688,7 +2694,7 @@ static const struct proto_ops netlink_ops = {
 
 static const struct net_proto_family netlink_family_ops = {
 	.family = PF_NETLINK,
-	.create = netlink_create,
+	.create = netlink_create,//负载构造netlink的socket
 	.owner	= THIS_MODULE,	/* for consistency 8) */
 };
 
@@ -2761,10 +2767,12 @@ static int __init netlink_proto_init(void)
 
 	BUILD_BUG_ON(sizeof(struct netlink_skb_parms) > FIELD_SIZEOF(struct sk_buff, cb));
 
+	//申请nl_table
 	nl_table = kcalloc(MAX_LINKS, sizeof(*nl_table), GFP_KERNEL);
 	if (!nl_table)
 		goto panic;
 
+	//初始化所有nl_table表中的hash
 	for (i = 0; i < MAX_LINKS; i++) {
 		if (rhashtable_init(&nl_table[i].hash,
 				    &netlink_rhashtable_params) < 0) {
@@ -2777,6 +2785,7 @@ static int __init netlink_proto_init(void)
 
 	netlink_add_usersock_entry();
 
+	//注册netlink协议的socket创建ops
 	sock_register(&netlink_family_ops);
 	register_pernet_subsys(&netlink_net_ops);
 	register_pernet_subsys(&netlink_tap_net_ops);
