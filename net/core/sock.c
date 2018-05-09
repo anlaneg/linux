@@ -1471,6 +1471,7 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		if (priority & __GFP_ZERO)
 			sk_prot_clear_nulls(sk, prot->obj_size);
 	} else
+		//未指出slab时，直接申请obj_size大小做为sk
 		sk = kmalloc(prot->obj_size, priority);
 
 	if (sk != NULL) {

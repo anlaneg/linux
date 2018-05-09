@@ -86,7 +86,7 @@ static void __br_forward(const struct net_bridge_port *to,
 		return;
 
 	indev = skb->dev;
-	skb->dev = to->dev;
+	skb->dev = to->dev;//指定出接口
 	if (!local_orig) {
 		//非本机来源，则触发forward钩子点
 		if (skb_warn_if_lro(skb)) {

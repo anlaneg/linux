@@ -1099,6 +1099,7 @@ int sock_create_lite(int family, int type, int protocol, struct socket **res)
 		goto out;
 	}
 
+	//指定socket类型，例如SOCK_DGRAM
 	sock->type = type;
 	err = security_socket_post_create(sock, family, type, protocol, 1);
 	if (err)
