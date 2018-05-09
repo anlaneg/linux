@@ -4578,7 +4578,7 @@ skip_classify:
 		goto drop;
 
 	if (skb_vlan_tag_present(skb)) {
-		//先执行未执行的packet_type回调
+		//先处理前面未执行的packet_type回调
 		if (pt_prev) {
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;

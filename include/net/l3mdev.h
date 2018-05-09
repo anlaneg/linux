@@ -140,11 +140,13 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 {
 	struct net_device *master = NULL;
 
+	//检查设备是否为slave,取对应的master设备
 	if (netif_is_l3_slave(skb->dev))
 		master = netdev_master_upper_dev_get_rcu(skb->dev);
 	else if (netif_is_l3_master(skb->dev))
 		master = skb->dev;
 
+	//如果有master的ops中有l3mdev_l3_rcv回调，则调用
 	if (master && master->l3mdev_ops->l3mdev_l3_rcv)
 		skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
 

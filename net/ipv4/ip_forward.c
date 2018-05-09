@@ -147,7 +147,7 @@ int ip_forward(struct sk_buff *skb)
 	 */
 	if (IPCB(skb)->flags & IPSKB_DOREDIRECT && !opt->srr &&
 	    !skb_sec_path(skb))
-		ip_rt_send_redirect(skb);
+		ip_rt_send_redirect(skb);//发送重定向
 
 	skb->priority = rt_tos2priority(iph->tos);
 

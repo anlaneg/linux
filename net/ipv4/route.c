@@ -1535,7 +1535,7 @@ struct rtable *rt_dst_alloc(struct net_device *dev,
 
 		rt->dst.output = ip_output;//普通的输出
 		if (flags & RTCF_LOCAL)
-			//输出到本机
+			//如果路由为主机路由，则输出到本机
 			rt->dst.input = ip_local_deliver;//输出到本机
 	}
 
@@ -1752,7 +1752,7 @@ rt_cache:
 	rth->rt_is_input = 1;
 	RT_CACHE_STAT_INC(in_slow_tot);
 
-	//ip转发回调
+	//设置走ip_forward
 	rth->dst.input = ip_forward;
 
 	rt_set_nexthop(rth, daddr, res, fnhe, res->fi, res->type, itag,
@@ -1991,7 +1991,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto brd_input;
 
 	if (res->type == RTN_LOCAL) {
-		//主机路由
+		//路由为主机路由，需要送往本机
 		err = fib_validate_source(skb, saddr, daddr, tos,
 					  0, dev, in_dev, &itag);
 		if (err < 0)
@@ -2005,6 +2005,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto no_route;
 	}
 	if (res->type != RTN_UNICAST)
+		//非单播路由，报错
 		goto martian_destination;
 
 	//单播构造路由
@@ -2041,6 +2042,7 @@ local_input:
 		}
 	}
 
+	//此处将设置input为ip_local_deliver,报文将送往本地
 	rth = rt_dst_alloc(l3mdev_master_dev_rcu(dev) ? : net->loopback_dev,
 			   flags | RTCF_LOCAL, res->type,//标记local flag
 			   IN_DEV_CONF_GET(in_dev, NOPOLICY), false, do_cache);
@@ -2055,6 +2057,7 @@ local_input:
 
 	RT_CACHE_STAT_INC(in_slow_tot);
 	if (res->type == RTN_UNREACHABLE) {
+		//不可达时，送ip_error，触发icmp
 		rth->dst.input= ip_error;
 		rth->dst.error= -err;
 		rth->rt_flags 	&= ~RTCF_LOCAL;
@@ -2078,6 +2081,7 @@ local_input:
 	goto out;
 
 no_route:
+	//没有查找相应的路由，指明不可达
 	RT_CACHE_STAT_INC(in_no_route);
 	res->type = RTN_UNREACHABLE;
 	res->fi = NULL;
@@ -2143,7 +2147,7 @@ int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	 */
 	//目的地址是组播地址
 	if (ipv4_is_multicast(daddr)) {
-		//组播路由查询
+		//进行组播路由查询
 		struct in_device *in_dev = __in_dev_get_rcu(dev);
 		int our = 0;
 		int err = -EINVAL;
