@@ -3075,6 +3075,7 @@ netdev_features_t netif_skb_features(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_skb_features);
 
+//通过dev发送一个skb
 static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    struct netdev_queue *txq, bool more)
 {
@@ -3098,6 +3099,7 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *de
 	struct sk_buff *skb = first;
 	int rc = NETDEV_TX_OK;
 
+	//循环发送报文（底层调用ndo_start_xmit完成dev设备单个skb的发送）
 	while (skb) {
 		struct sk_buff *next = skb->next;
 
@@ -3585,6 +3587,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, void *accel_priv)
 
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
+		//如果有入队函数，则调用enqueue并完成发送
 		rc = __dev_xmit_skb(skb, q, dev, txq);
 		goto out;
 	}

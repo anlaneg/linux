@@ -4103,6 +4103,7 @@ int __init dev_proc_init(void);
 #define dev_proc_init() 0
 #endif
 
+//调用ndo_start_xmit回调，完成发送
 static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
 					      struct sk_buff *skb, struct net_device *dev,
 					      bool more)
@@ -4111,6 +4112,7 @@ static inline netdev_tx_t __netdev_start_xmit(const struct net_device_ops *ops,
 	return ops->ndo_start_xmit(skb, dev);
 }
 
+//通过ops完成dev设备的报文发送
 static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_device *dev,
 					    struct netdev_queue *txq, bool more)
 {
