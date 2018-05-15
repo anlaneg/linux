@@ -502,13 +502,13 @@ static int genl_lock_done(struct netlink_callback *cb)
 //采用指定的family来解析此msg
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
-			       struct nlmsghdr *nlh,
+			       struct nlmsghdr *nlh,//netlink消息头
 			       struct netlink_ext_ack *extack)
 {
 	const struct genl_ops *ops;
 	struct net *net = sock_net(skb->sk);
 	struct genl_info info;
-	struct genlmsghdr *hdr = nlmsg_data(nlh);
+	struct genlmsghdr *hdr = nlmsg_data(nlh);//指向netlink消息头后
 	struct nlattr **attrbuf;
 	int hdrlen, err;
 
@@ -571,11 +571,13 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 		return -EOPNOTSUPP;
 
 	if (family->maxattr && family->parallel_ops) {
+		//申请属性buffer
 		attrbuf = kmalloc((family->maxattr+1) *
 					sizeof(struct nlattr *), GFP_KERNEL);
 		if (attrbuf == NULL)
 			return -ENOMEM;
 	} else
+		//使用family对应的属性buffer
 		attrbuf = family->attrbuf;
 
 	if (attrbuf) {
@@ -1021,7 +1023,7 @@ static void genl_unbind(struct net *net, int group)
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
-		.input		= genl_rcv,
+		.input		= genl_rcv,//Generic netlink类消息处理
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
 		.unbind		= genl_unbind,
