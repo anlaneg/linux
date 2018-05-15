@@ -2877,9 +2877,11 @@ replay:
 
 	ifm = nlmsg_data(nlh);
 	if (ifm->ifi_index > 0)
+		//如果指定了ifidx,则通过ifidx查找对应的dev
 		dev = __dev_get_by_index(net, ifm->ifi_index);
 	else {
 		if (ifname[0])
+			//如果指出了接口名称，则提取接口名称
 			dev = __dev_get_by_name(net, ifname);
 		else
 			dev = NULL;
@@ -2906,6 +2908,7 @@ replay:
 
 	if (linkinfo[IFLA_INFO_KIND]) {
 		//自linkinfo[IFLA_INFO_KIND]中提取字符串值，并进行link_ops查询
+		//查找kind对应的ops
 		nla_strlcpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
 		ops = rtnl_link_ops_get(kind);
 	} else {
@@ -3036,6 +3039,7 @@ replay:
 				goto out;
 		}
 
+		//创建指定名称dev
 		dev = rtnl_create_link(link_net ? : dest_net, ifname,
 				       name_assign_type, ops, tb);
 		if (IS_ERR(dev)) {
@@ -4765,7 +4769,7 @@ void __init rtnetlink_init(void)
 	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
 		      rtnl_dump_ifinfo, 0);
 	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);//new消息回调(创建link处理？）
+	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);//创建网络设备
 	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
 
 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
