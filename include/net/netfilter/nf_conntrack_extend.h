@@ -7,7 +7,7 @@
 #include <net/netfilter/nf_conntrack.h>
 
 enum nf_ct_ext_id {
-	NF_CT_EXT_HELPER,
+	NF_CT_EXT_HELPER,//helper类型
 #if defined(CONFIG_NF_NAT) || defined(CONFIG_NF_NAT_MODULE)
 	NF_CT_EXT_NAT,
 #endif

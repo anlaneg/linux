@@ -113,10 +113,12 @@ static unsigned int helper_hash(const struct nf_conntrack_tuple *tuple)
 }
 
 //通过元组找helper（用于找到可分析此协议的helper)
+//注，我们总是匹配此方向的源port
 static struct nf_conntrack_helper *
 __nf_ct_helper_find(const struct nf_conntrack_tuple *tuple)
 {
 	struct nf_conntrack_helper *helper;
+	//仅比对port,其它mask为０
 	struct nf_conntrack_tuple_mask mask = { .src.u.all = htons(0xFFFF) };
 	unsigned int h;
 
@@ -216,6 +218,7 @@ nf_ct_lookup_helper(struct nf_conn *ct, struct net *net)
 			return NULL;
 		if (!__nf_ct_helper_find(&ct->tuplehash[IP_CT_DIR_REPLY].tuple))
 			return NULL;
+		//告警
 		pr_info("nf_conntrack: default automatic helper assignment "
 			"has been turned off for security reasons and CT-based "
 			" firewall rule not found. Use the iptables CT target "
@@ -224,6 +227,8 @@ nf_ct_lookup_helper(struct nf_conn *ct, struct net *net)
 		return NULL;
 	}
 
+	//取反方向的元组，进行匹配，但我们匹配的是src port,故相当于正方向的目的port
+	//正方向的目的port可以是做了nat的。
 	return __nf_ct_helper_find(&ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 }
 
@@ -280,6 +285,7 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 		}
 	}
 
+	//填充helper
 	rcu_assign_pointer(help->helper, helper);
 
 	return 0;
@@ -395,6 +401,7 @@ EXPORT_SYMBOL_GPL(nf_ct_helper_log);
 
 int nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 {
+	//仅进行端口匹配
 	struct nf_conntrack_tuple_mask mask = { .src.u.all = htons(0xFFFF) };
 	unsigned int h = helper_hash(&me->tuple);
 	struct nf_conntrack_helper *cur;
@@ -485,8 +492,8 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 					  struct nf_conn *ct),
 		       struct module *module)
 {
-	helper->tuple.src.l3num = l3num;
-	helper->tuple.dst.protonum = protonum;
+	helper->tuple.src.l3num = l3num;//３层协议类型
+	helper->tuple.dst.protonum = protonum;//4层协议类型
 	helper->tuple.src.u.all = htons(spec_port);
 	helper->expect_policy = exp_pol;
 	helper->expect_class_max = expect_class_max;
@@ -494,6 +501,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 	helper->from_nlattr = from_nlattr;
 	helper->me = module;
 
+	//如果与默认port不一致，则名称上进行体现
 	if (spec_port == default_port)
 		snprintf(helper->name, sizeof(helper->name), "%s", name);
 	else

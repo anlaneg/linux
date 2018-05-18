@@ -31,6 +31,7 @@ tcp_unique_tuple(const struct nf_nat_l3proto *l3proto,
 				    &tcp_port_rover);
 }
 
+//修改tcp的源或目的端口（做nat)
 static bool
 tcp_manip_pkt(struct sk_buff *skb,
 	      const struct nf_nat_l3proto *l3proto,
@@ -51,24 +52,29 @@ tcp_manip_pkt(struct sk_buff *skb,
 	if (!skb_make_writable(skb, hdroff + hdrsize))
 		return false;
 
+	//取tcp头部
 	hdr = (struct tcphdr *)(skb->data + hdroff);
 
+	//改源地址
 	if (maniptype == NF_NAT_MANIP_SRC) {
 		/* Get rid of src port */
 		newport = tuple->src.u.tcp.port;
 		portptr = &hdr->source;
 	} else {
+		//改目的地址
 		/* Get rid of dst port */
 		newport = tuple->dst.u.tcp.port;
 		portptr = &hdr->dest;
 	}
 
+	//保存旧地址，设置新地址
 	oldport = *portptr;
 	*portptr = newport;
 
 	if (hdrsize < sizeof(*hdr))
 		return true;
 
+	//更新checksum
 	l3proto->csum_update(skb, iphdroff, &hdr->check, tuple, maniptype);
 	inet_proto_csum_replace2(&hdr->check, skb, oldport, newport, false);
 	return true;

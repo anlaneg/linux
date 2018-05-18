@@ -502,7 +502,7 @@ unsigned int nf_nat_packet(struct nf_conn *ct,
 		struct nf_conntrack_tuple target;
 
 		/* We are aiming to look like inverse of other direction. */
-		//获取自已向方向的反方向。
+		//获取自已方向的反方向的元组
 		nf_ct_invert_tuplepr(&target, &ct->tuplehash[!dir].tuple);
 
 		l3proto = __nf_nat_l3proto_find(target.src.l3num);
@@ -642,7 +642,7 @@ void nf_nat_l4proto_unregister(u8 l3proto, const struct nf_nat_l4proto *l4proto)
 }
 EXPORT_SYMBOL_GPL(nf_nat_l4proto_unregister);
 
-//在注册l3协议时，默认会注册tcp,udp,sctp等l4层协议
+//在注册l3协议nat处理时，默认会注册tcp,udp,sctp等l4层协议的nat处理
 int nf_nat_l3proto_register(const struct nf_nat_l3proto *l3proto)
 {
 	int err;

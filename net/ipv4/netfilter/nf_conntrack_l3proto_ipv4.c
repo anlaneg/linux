@@ -112,6 +112,7 @@ static unsigned int ipv4_helper(void *priv,
 	if (!ct || ctinfo == IP_CT_RELATED_REPLY)
 		return NF_ACCEPT;
 
+	//取出记录在连接跟踪里的结构，进行期待分析
 	help = nfct_help(ct);
 	if (!help)
 		return NF_ACCEPT;
@@ -196,7 +197,7 @@ static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_helper,//期待检查helper
+		.hook		= ipv4_helper,//分析报文，产生期待
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_POST_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK_HELPER,

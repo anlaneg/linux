@@ -4583,7 +4583,7 @@ skip_classify:
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
 		}
-		//vlan报文处理,查vlan对应的逻辑设备，更新入接口，并重执行
+		//vlan报文处理,查vlan对应的逻辑设备，更新对应的入接口，并重执行
 		if (vlan_do_receive(&skb))
 			goto another_round;
 		else if (unlikely(!skb))
@@ -4652,6 +4652,10 @@ skip_classify:
 			goto drop;
 		else
 			//使指定的以太网类型处理此报文，例如(ip_rcv)
+			//skb为要处理的报文
+			//skb->dev为报文逻辑上当前所属于的设备（在哪个设备内转发）
+			//pt_prev　报文命中了哪种类型（例如ip,ipv6,arp等）
+			//orig_dev 报文在进行本函数时是属于那个设备的
 			ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 	} else {
 		//我们实在找不到此报文的处理者
@@ -8386,6 +8390,7 @@ EXPORT_SYMBOL(netdev_stats_to_stats64);
  *	dev->netdev_ops->get_stats64 or dev->netdev_ops->get_stats;
  *	otherwise the internal statistics structure is used.
  */
+//取网络设备统计信息
 struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 					struct rtnl_link_stats64 *storage)
 {
@@ -8509,7 +8514,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 	dev_mc_init(dev);
 	dev_uc_init(dev);
 
-	dev_net_set(dev, &init_net);
+	dev_net_set(dev, &init_net);//设置设备所属的namespace
 
 	dev->gso_max_size = GSO_MAX_SIZE;
 	dev->gso_max_segs = GSO_MAX_SEGS;

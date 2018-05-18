@@ -136,9 +136,10 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 		return -ENODEV;
 
 	if (data[IFLA_VLAN_PROTOCOL])
+		//使用用户指定的协议号
 		proto = nla_get_be16(data[IFLA_VLAN_PROTOCOL]);
 	else
-		proto = htons(ETH_P_8021Q);
+		proto = htons(ETH_P_8021Q);//默认使用8100协议号
 
 	vlan->vlan_proto = proto;
 	vlan->vlan_id	 = nla_get_u16(data[IFLA_VLAN_ID]);
@@ -150,12 +151,13 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 	if (err < 0)
 		return err;
 
+	//如果mtu可变更，则mtu应不大于真实设备的mtu减去vlan头
 	max_mtu = netif_reduces_vlan_mtu(real_dev) ? real_dev->mtu - VLAN_HLEN :
 						     real_dev->mtu;
 	if (!tb[IFLA_MTU])
 		dev->mtu = max_mtu;
 	else if (dev->mtu > max_mtu)
-		return -EINVAL;
+		return -EINVAL;//前面用户配置错误（mtu不能大于max_mtu)
 
 	err = vlan_changelink(dev, tb, data, extack);
 	if (err < 0)
@@ -253,6 +255,7 @@ static struct net *vlan_get_link_net(const struct net_device *dev)
 	return dev_net(real_dev);
 }
 
+//提供vlan的link类型
 struct rtnl_link_ops vlan_link_ops __read_mostly = {
 	.kind		= "vlan",
 	.maxtype	= IFLA_VLAN_MAX,
@@ -260,7 +263,7 @@ struct rtnl_link_ops vlan_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct vlan_dev_priv),
 	.setup		= vlan_setup,
 	.validate	= vlan_validate,
-	.newlink	= vlan_newlink,
+	.newlink	= vlan_newlink,//netlink创建此dev后，调用newlink回调直接初始化及注册dev给系统
 	.changelink	= vlan_changelink,
 	.dellink	= unregister_vlan_dev,
 	.get_size	= vlan_get_size,

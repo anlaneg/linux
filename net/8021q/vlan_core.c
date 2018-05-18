@@ -15,22 +15,24 @@ bool vlan_do_receive(struct sk_buff **skbp)
 	struct net_device *vlan_dev;
 	struct vlan_pcpu_stats *rx_stats;
 
+	//找vlan对应的设备
 	vlan_dev = vlan_find_dev(skb->dev, vlan_proto, vlan_id);
 	if (!vlan_dev)
-		//没有设备处理此vlan
+		//没有设备处理对应此vlan
 		return false;
 
 	skb = *skbp = skb_share_check(skb, GFP_ATOMIC);
 	if (unlikely(!skb))
 		return false;
 
+	//接口未up
 	if (unlikely(!(vlan_dev->flags & IFF_UP))) {
 		kfree_skb(skb);
 		*skbp = NULL;
 		return false;
 	}
 
-	skb->dev = vlan_dev;//更改设备
+	skb->dev = vlan_dev;//更改为对应的vlan设备（这一句实际上就完成了vlan的转发）
 	//刚换了设备，重新看一下，是否是发给自已的了？
 	if (unlikely(skb->pkt_type == PACKET_OTHERHOST)) {
 		/* Our lower layer thinks this is not local, let's make sure.
@@ -40,6 +42,7 @@ bool vlan_do_receive(struct sk_buff **skbp)
 			skb->pkt_type = PACKET_HOST;
 	}
 
+	//以下三种情况的报文重新填回vlan头
 	if (!(vlan_dev_priv(vlan_dev)->flags & VLAN_FLAG_REORDER_HDR) &&
 	    !netif_is_macvlan_port(vlan_dev) &&
 	    !netif_is_bridge_port(vlan_dev)) {
@@ -50,15 +53,16 @@ bool vlan_do_receive(struct sk_buff **skbp)
 		 * So change skb->data before calling it and change back to
 		 * original position later
 		 */
-		skb_push(skb, offset);
+		skb_push(skb, offset);//重新指回以太头
 		skb = *skbp = vlan_insert_inner_tag(skb, skb->vlan_proto,
-						    skb->vlan_tci, skb->mac_len);
+						    skb->vlan_tci, skb->mac_len);//重新还原vlan头
 		if (!skb)
 			return false;
 		skb_pull(skb, offset + VLAN_HLEN);
 		skb_reset_mac_len(skb);
 	}
 
+	//vlan转发已完成，没有必要记录vlan id了
 	skb->priority = vlan_get_ingress_priority(vlan_dev, skb->vlan_tci);
 	skb->vlan_tci = 0;
 
@@ -163,8 +167,8 @@ static struct vlan_info *vlan_info_alloc(struct net_device *dev)
 
 struct vlan_vid_info {
 	struct list_head list;
-	__be16 proto;
-	u16 vid;
+	__be16 proto;//vlan协议
+	u16 vid;//vlan编号
 	int refcount;
 };
 
@@ -191,6 +195,7 @@ static struct vlan_vid_info *vlan_vid_info_get(struct vlan_info *vlan_info,
 	return NULL;
 }
 
+//申请一个vlan_vid_info空间，并填充它
 static struct vlan_vid_info *vlan_vid_info_alloc(__be16 proto, u16 vid)
 {
 	struct vlan_vid_info *vid_info;
@@ -210,6 +215,7 @@ static int vlan_add_rx_filter_info(struct net_device *dev, __be16 proto, u16 vid
 		return 0;
 
 	if (netif_device_present(dev))
+		//为硬件添加vlan过滤
 		return dev->netdev_ops->ndo_vlan_rx_add_vid(dev, proto, vid);
 	else
 		return -ENODEV;
@@ -267,6 +273,7 @@ void vlan_filter_drop_vids(struct vlan_info *vlan_info, __be16 proto)
 }
 EXPORT_SYMBOL(vlan_filter_drop_vids);
 
+//添加vlan,创建对应的vlan_vid_info结构
 static int __vlan_vid_add(struct vlan_info *vlan_info, __be16 proto, u16 vid,
 			  struct vlan_vid_info **pvid_info)
 {
@@ -299,9 +306,10 @@ int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid)
 
 	ASSERT_RTNL();
 
+	//取设备的vlan_info
 	vlan_info = rtnl_dereference(dev->vlan_info);
 	if (!vlan_info) {
-		vlan_info = vlan_info_alloc(dev);
+		vlan_info = vlan_info_alloc(dev);//首个vlan添加，申请空间
 		if (!vlan_info)
 			return -ENOMEM;
 		vlan_info_created = true;
@@ -315,6 +323,7 @@ int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid)
 	vid_info->refcount++;
 
 	if (vlan_info_created)
+		//首次加入时为vlan_info赋值
 		rcu_assign_pointer(dev->vlan_info, vlan_info);
 
 	return 0;

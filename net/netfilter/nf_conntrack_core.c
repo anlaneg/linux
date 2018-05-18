@@ -1254,6 +1254,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		timeouts = l4proto->get_timeouts(net);
 	}
 
+	//4层创建连接跟踪
 	if (!l4proto->new(ct, skb, dataoff, timeouts)) {
 		nf_conntrack_free(ct);
 		pr_debug("can't track with proto module\n");
@@ -1276,7 +1277,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	local_bh_disable();
 	if (net->ct.expect_count) {
 		spin_lock(&nf_conntrack_expect_lock);
-		//查找期待
+		//刚刚创建了连接期待，需要查找期待
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
 			pr_debug("expectation arrives ct=%p exp=%p\n",
@@ -1303,7 +1304,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		spin_unlock(&nf_conntrack_expect_lock);
 	}
 	if (!exp)
-		//设置helper
+		//没有查找到期待，设置helper
 		__nf_ct_try_assign_helper(ct, tmpl, GFP_ATOMIC);
 
 	/* Now it is inserted into the unconfirmed list, bump refcount */

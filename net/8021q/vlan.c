@@ -122,11 +122,13 @@ int vlan_check_real_dev(struct net_device *real_dev,
 {
 	const char *name = real_dev->name;
 
+	//首先设备必须支持vlan
 	if (real_dev->features & NETIF_F_VLAN_CHALLENGED) {
 		pr_info("VLANs not supported on %s\n", name);
 		return -EOPNOTSUPP;
 	}
 
+	//其次设备上对应协议的vlan还没有分配出去
 	if (vlan_find_dev(real_dev, protocol, vlan_id) != NULL)
 		return -EEXIST;
 

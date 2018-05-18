@@ -37,6 +37,7 @@ struct nf_conntrack_helper {
 
 	/* Function to call when data passes; return verdict, or -1 to
            invalidate. */
+	//报文的期待helper函数
 	int (*help)(struct sk_buff *skb,
 		    unsigned int protoff,
 		    struct nf_conn *ct,
@@ -112,6 +113,7 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 
 void nf_ct_helper_destroy(struct nf_conn *ct);
 
+//取helper的结构体
 static inline struct nf_conn_help *nfct_help(const struct nf_conn *ct)
 {
 	return nf_ct_ext_find(ct, NF_CT_EXT_HELPER);

@@ -159,15 +159,18 @@ nf_ct_tuple_src_mask_cmp(const struct nf_conntrack_tuple *t1,
 {
 	int count;
 
+	//源地址匹配（合上掩码）
 	for (count = 0; count < NF_CT_TUPLE_L3SIZE; count++) {
 		if ((t1->src.u3.all[count] ^ t2->src.u3.all[count]) &
 		    mask->src.u3.all[count])
 			return false;
 	}
 
+	//端口匹配（合上掩码）
 	if ((t1->src.u.all ^ t2->src.u.all) & mask->src.u.all)
 		return false;
 
+	//３层协议号，４层协议号匹配
 	if (t1->src.l3num != t2->src.l3num ||
 	    t1->dst.protonum != t2->dst.protonum)
 		return false;

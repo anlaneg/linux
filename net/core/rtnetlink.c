@@ -3049,6 +3049,7 @@ replay:
 
 		dev->ifindex = ifm->ifi_index;
 
+		//如果ops中有newlink,则创建dev后调用newlink
 		if (ops->newlink) {
 			err = ops->newlink(link_net ? : net, dev, tb, data,
 					   extack);
@@ -3063,6 +3064,7 @@ replay:
 				goto out;
 			}
 		} else {
+			//没有newlink回调，直接在系统中注册此dev
 			err = register_netdevice(dev);
 			if (err < 0) {
 				free_netdev(dev);
