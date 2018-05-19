@@ -515,6 +515,7 @@ static unsigned int br_nf_pre_routing(void *priv,
 
 	skb->protocol = htons(ETH_P_IP);
 
+	//使其走ipv4的钩子点
 	NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING, state->net, state->sk, skb,
 		skb->dev, NULL,
 		br_nf_pre_routing_finish);

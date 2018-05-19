@@ -31,8 +31,8 @@ struct vlan_info {
 					    * the vlan is attached to.
 					    */
 	struct vlan_group	grp;
-	struct list_head	vid_list;
-	unsigned int		nr_vids;
+	struct list_head	vid_list;//用于串连vlan_vid_info
+	unsigned int		nr_vids;//vlan数（即vid_list链上有多少个vlan_vid_info)
 	struct rcu_head		rcu;
 };
 

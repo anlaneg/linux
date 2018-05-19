@@ -95,6 +95,7 @@ static const struct genl_family *genl_family_find_byid(unsigned int id)
 	return idr_find(&genl_fam_idr, id);
 }
 
+//通过name查找对应的genl_family
 static const struct genl_family *genl_family_find_byname(char *name)
 {
 	const struct genl_family *family;
@@ -291,10 +292,10 @@ static int genl_validate_ops(const struct genl_family *family)
 	int i, j;
 
 	if (WARN_ON(n_ops && !ops))
-		return -EINVAL;
+		return -EINVAL;//参数有误，有ops计数，但无ops指针
 
 	if (!n_ops)
-		return 0;
+		return 0;//如果无ops，则不再校验
 
 	for (i = 0; i < n_ops; i++) {
 		if (ops[i].dumpit == NULL && ops[i].doit == NULL)
@@ -324,12 +325,14 @@ int genl_register_family(struct genl_family *family)
 	int err, i;
 	int start = GENL_START_ALLOC, end = GENL_MAX_ID;
 
+	//参数校验
 	err = genl_validate_ops(family);
 	if (err)
 		return err;
 
 	genl_lock_all();
 
+	//检查是否已存在
 	if (genl_family_find_byname(family->name)) {
 		err = -EEXIST;
 		goto errout_locked;
@@ -496,15 +499,16 @@ static int genl_lock_done(struct netlink_callback *cb)
 	return rc;
 }
 
+//采用指定的family来解析此msg
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
-			       struct nlmsghdr *nlh,
+			       struct nlmsghdr *nlh,//netlink消息头
 			       struct netlink_ext_ack *extack)
 {
 	const struct genl_ops *ops;
 	struct net *net = sock_net(skb->sk);
 	struct genl_info info;
-	struct genlmsghdr *hdr = nlmsg_data(nlh);
+	struct genlmsghdr *hdr = nlmsg_data(nlh);//指向netlink消息头后
 	struct nlattr **attrbuf;
 	int hdrlen, err;
 
@@ -516,6 +520,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen))
 		return -EINVAL;
 
+	//根据头部的cmd查找family中对应的ops
 	ops = genl_get_cmd(hdr->cmd, family);
 	if (ops == NULL)
 		return -EOPNOTSUPP;
@@ -566,11 +571,13 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 		return -EOPNOTSUPP;
 
 	if (family->maxattr && family->parallel_ops) {
+		//申请属性buffer
 		attrbuf = kmalloc((family->maxattr+1) *
 					sizeof(struct nlattr *), GFP_KERNEL);
 		if (attrbuf == NULL)
 			return -ENOMEM;
 	} else
+		//使用family对应的属性buffer
 		attrbuf = family->attrbuf;
 
 	if (attrbuf) {
@@ -590,14 +597,17 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 	genl_info_net_set(&info, net);
 	memset(&info.user_ptr, 0, sizeof(info.user_ptr));
 
+	//如果有pre_doit回调，则调用
 	if (family->pre_doit) {
 		err = family->pre_doit(ops, skb, &info);
 		if (err)
 			goto out;
 	}
 
+	//直接采用ops的回调处理此消息
 	err = ops->doit(skb, &info);
 
+	//如果有post_doit回调，则调用
 	if (family->post_doit)
 		family->post_doit(ops, skb, &info);
 
@@ -614,6 +624,7 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	const struct genl_family *family;
 	int err;
 
+	//通过id找到family
 	family = genl_family_find_byid(nlh->nlmsg_type);
 	if (family == NULL)
 		return -ENOENT;
@@ -850,12 +861,14 @@ static int ctrl_getfamily(struct sk_buff *skb, struct genl_info *info)
 	const struct genl_family *res = NULL;
 	int err = -EINVAL;
 
+	//如果指出了family_id，则采用id查询family
 	if (info->attrs[CTRL_ATTR_FAMILY_ID]) {
 		u16 id = nla_get_u16(info->attrs[CTRL_ATTR_FAMILY_ID]);
 		res = genl_family_find_byid(id);
 		err = -ENOENT;
 	}
 
+	//如果指出了family_name,则采用name查询family
 	if (info->attrs[CTRL_ATTR_FAMILY_NAME]) {
 		char *name;
 
@@ -863,6 +876,7 @@ static int ctrl_getfamily(struct sk_buff *skb, struct genl_info *info)
 		res = genl_family_find_byname(name);
 #ifdef CONFIG_MODULES
 		if (res == NULL) {
+			//如果仍未查询到，则采用名称请求module
 			genl_unlock();
 			up_read(&cb_lock);
 			request_module("net-pf-%d-proto-%d-family-%s",
@@ -901,6 +915,7 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 	if (!init_net.genl_sock)
 		return 0;
 
+	//按event构造netlink消息
 	switch (event) {
 	case CTRL_CMD_NEWFAMILY:
 	case CTRL_CMD_DELFAMILY:
@@ -1008,7 +1023,7 @@ static void genl_unbind(struct net *net, int group)
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
-		.input		= genl_rcv,
+		.input		= genl_rcv,//Generic netlink类消息处理
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
 		.unbind		= genl_unbind,

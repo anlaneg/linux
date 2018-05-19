@@ -49,9 +49,9 @@
 #define ETH_P_PUPAT	0x0201		/* Xerox PUP Addr Trans packet	*/
 #define ETH_P_TSN	0x22F0		/* TSN (IEEE 1722) packet	*/
 #define ETH_P_ERSPAN2	0x22EB		/* ERSPAN version 2 (type III)	*/
-#define ETH_P_IP	0x0800		/* Internet Protocol packet	*/
+#define ETH_P_IP	0x0800		/* Internet Protocol packet	*/ //ip报文
 #define ETH_P_X25	0x0805		/* CCITT X.25			*/
-#define ETH_P_ARP	0x0806		/* Address Resolution packet	*/
+#define ETH_P_ARP	0x0806		/* Address Resolution packet	*/　//arp报文
 #define	ETH_P_BPQ	0x08FF		/* G8BPQ AX.25 Ethernet Packet	[ NOT AN OFFICIALLY REGISTERED ID ] */
 #define ETH_P_IEEEPUP	0x0a00		/* Xerox IEEE802.3 PUP packet */
 #define ETH_P_IEEEPUPAT	0x0a01		/* Xerox IEEE802.3 PUP Addr Trans packet */
@@ -68,10 +68,10 @@
 #define ETH_P_RARP      0x8035		/* Reverse Addr Res packet	*/
 #define ETH_P_ATALK	0x809B		/* Appletalk DDP		*/
 #define ETH_P_AARP	0x80F3		/* Appletalk AARP		*/
-#define ETH_P_8021Q	0x8100          /* 802.1Q VLAN Extended Header  */
+#define ETH_P_8021Q	0x8100          /* 802.1Q VLAN Extended Header  */ //vlan报文
 #define ETH_P_ERSPAN	0x88BE		/* ERSPAN type II		*/
 #define ETH_P_IPX	0x8137		/* IPX over DIX			*/
-#define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/
+#define ETH_P_IPV6	0x86DD		/* IPv6 over bluebook		*/　　//ipv6报文
 #define ETH_P_PAUSE	0x8808		/* IEEE Pause frames. See 802.3 31B */
 #define ETH_P_SLOW	0x8809		/* Slow Protocol. See 802.3ad 43B */
 #define ETH_P_WCCP	0x883E		/* Web-cache coordination protocol
@@ -105,7 +105,7 @@
 #define ETH_P_HSR	0x892F		/* IEC 62439-3 HSRv1	*/
 #define ETH_P_NSH	0x894F		/* Network Service Header */
 #define ETH_P_LOOPBACK	0x9000		/* Ethernet loopback packet, per IEEE 802.3 */
-#define ETH_P_QINQ1	0x9100		/* deprecated QinQ VLAN [ NOT AN OFFICIALLY REGISTERED ID ] */
+#define ETH_P_QINQ1	0x9100		/* deprecated QinQ VLAN [ NOT AN OFFICIALLY REGISTERED ID ] */　//双vlan(not officially)
 #define ETH_P_QINQ2	0x9200		/* deprecated QinQ VLAN [ NOT AN OFFICIALLY REGISTERED ID ] */
 #define ETH_P_QINQ3	0x9300		/* deprecated QinQ VLAN [ NOT AN OFFICIALLY REGISTERED ID ] */
 #define ETH_P_EDSA	0xDADA		/* Ethertype DSA [ NOT AN OFFICIALLY REGISTERED ID ] */

@@ -395,7 +395,7 @@ EXPORT_SYMBOL_GPL(__rtnl_link_register);
  *
  * Returns 0 on success or a negative error code.
  */
-//注册（含锁）
+//注册link类型的操作函数（含锁）
 int rtnl_link_register(struct rtnl_link_ops *ops)
 {
 	int err;
@@ -2792,7 +2792,7 @@ struct net_device *rtnl_create_link(struct net *net,
 	if (!dev)
 		return ERR_PTR(-ENOMEM);
 
-	dev_net_set(dev, net);
+	dev_net_set(dev, net);//设置设备所属的namespace
 	dev->rtnl_link_ops = ops;
 	dev->rtnl_link_state = RTNL_LINK_INITIALIZING;
 
@@ -2877,9 +2877,11 @@ replay:
 
 	ifm = nlmsg_data(nlh);
 	if (ifm->ifi_index > 0)
+		//如果指定了ifidx,则通过ifidx查找对应的dev
 		dev = __dev_get_by_index(net, ifm->ifi_index);
 	else {
 		if (ifname[0])
+			//如果指出了接口名称，则提取接口名称
 			dev = __dev_get_by_name(net, ifname);
 		else
 			dev = NULL;
@@ -2906,6 +2908,7 @@ replay:
 
 	if (linkinfo[IFLA_INFO_KIND]) {
 		//自linkinfo[IFLA_INFO_KIND]中提取字符串值，并进行link_ops查询
+		//查找kind对应的ops
 		nla_strlcpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
 		ops = rtnl_link_ops_get(kind);
 	} else {
@@ -3036,6 +3039,7 @@ replay:
 				goto out;
 		}
 
+		//创建指定名称dev
 		dev = rtnl_create_link(link_net ? : dest_net, ifname,
 				       name_assign_type, ops, tb);
 		if (IS_ERR(dev)) {
@@ -3045,6 +3049,7 @@ replay:
 
 		dev->ifindex = ifm->ifi_index;
 
+		//如果ops中有newlink,则创建dev后调用newlink
 		if (ops->newlink) {
 			err = ops->newlink(link_net ? : net, dev, tb, data,
 					   extack);
@@ -3059,6 +3064,7 @@ replay:
 				goto out;
 			}
 		} else {
+			//没有newlink回调，直接在系统中注册此dev
 			err = register_netdevice(dev);
 			if (err < 0) {
 				free_netdev(dev);
@@ -4679,6 +4685,7 @@ err_unlock:
 
 static void rtnetlink_rcv(struct sk_buff *skb)
 {
+	//rt netlink消息接收处理
 	netlink_rcv_skb(skb, &rtnetlink_rcv_msg);
 }
 
@@ -4731,7 +4738,7 @@ static int __net_init rtnetlink_net_init(struct net *net)
 	struct sock *sk;
 	struct netlink_kernel_cfg cfg = {
 		.groups		= RTNLGRP_MAX,
-		.input		= rtnetlink_rcv,
+		.input		= rtnetlink_rcv,//rt netlink类消息接收处理
 		.cb_mutex	= &rtnl_mutex,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= rtnetlink_bind,
@@ -4765,8 +4772,8 @@ void __init rtnetlink_init(void)
 	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
 		      rtnl_dump_ifinfo, 0);
 	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
-	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);//new消息回调(创建link处理？）
-	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
+	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);//创建网络设备
+	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);//删除网络设备
 
 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETROUTE, NULL, rtnl_dump_all, 0);

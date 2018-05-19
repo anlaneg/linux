@@ -2437,11 +2437,11 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 		int msglen;
 
 		memset(&extack, 0, sizeof(extack));
-		nlh = nlmsg_hdr(skb);//取消息头
+		nlh = nlmsg_hdr(skb);//取netlink消息头
 		err = 0;
 
 		if (nlh->nlmsg_len < NLMSG_HDRLEN || skb->len < nlh->nlmsg_len)
-			return 0;
+			return 0;//错误的消息，直接忽略
 
 		/* Only requests are handled by the kernel */
 		if (!(nlh->nlmsg_flags & NLM_F_REQUEST))

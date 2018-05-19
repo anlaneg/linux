@@ -79,7 +79,7 @@ static u32 nf_nat_ipv4_secure_port(const struct nf_conntrack_tuple *t,
 static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 				  unsigned int iphdroff,
 				  const struct nf_nat_l4proto *l4proto,
-				  const struct nf_conntrack_tuple *target,
+				  const struct nf_conntrack_tuple *target,//要设置的变换后的目标
 				  enum nf_nat_manip_type maniptype)
 {
 	struct iphdr *iph;
@@ -93,6 +93,7 @@ static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 	//定位到l4层头部
 	hdroff = iphdroff + iph->ihl * 4;
 
+	//调用manip_pkt实现对４层协议的报文更新，按maniptype类型进行变更
 	if (!l4proto->manip_pkt(skb, &nf_nat_l3proto_ipv4, iphdroff, hdroff,
 				target, maniptype))
 		return false;
@@ -167,7 +168,7 @@ static const struct nf_nat_l3proto nf_nat_l3proto_ipv4 = {
 	.l3proto		= NFPROTO_IPV4,
 	.in_range		= nf_nat_ipv4_in_range,
 	.secure_port		= nf_nat_ipv4_secure_port,
-	.manip_pkt		= nf_nat_ipv4_manip_pkt,
+	.manip_pkt		= nf_nat_ipv4_manip_pkt,//ipv4报文处理nat
 	.csum_update		= nf_nat_ipv4_csum_update,
 	.csum_recalc		= nf_nat_ipv4_csum_recalc,
 #if IS_ENABLED(CONFIG_NF_CT_NETLINK)
@@ -245,6 +246,7 @@ int nf_nat_icmp_reply_translation(struct sk_buff *skb,
 }
 EXPORT_SYMBOL_GPL(nf_nat_icmp_reply_translation);
 
+//对ipv4报文进行nat处理
 unsigned int
 nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 	       const struct nf_hook_state *state,
@@ -257,6 +259,7 @@ nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn_nat *nat;
 	/* maniptype == SRC for postrouting. */
+	//依据不同的hook点来做snat或者dnat,故本函数每次只需要修改一个src地址或者修改dst地址。
 	enum nf_nat_manip_type maniptype = HOOK2MANIP(state->hook);
 
 	//取连接跟踪
@@ -267,8 +270,9 @@ nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 	 * protocol. 8) --RR
 	 */
 	if (!ct)
-		return NF_ACCEPT;
+		return NF_ACCEPT;//连接跟踪不存在，无法做nat
 
+	//取连接跟踪中对应的nat控制
 	nat = nfct_nat(ct);
 
 	switch (ctinfo) {
@@ -290,10 +294,12 @@ nf_nat_ipv4_fn(void *priv, struct sk_buff *skb,
 		if (!nf_nat_initialized(ct, maniptype)) {
 			unsigned int ret;
 
+			//创建时查chain用于分配nat资源
 			ret = do_chain(priv, skb, state, ct);
 			if (ret != NF_ACCEPT)
 				return ret;
 
+			//如果需要做nat，则跳出
 			if (nf_nat_initialized(ct, HOOK2MANIP(state->hook)))
 				break;
 
@@ -338,6 +344,7 @@ nf_nat_ipv4_in(void *priv, struct sk_buff *skb,
 	__be32 daddr = ip_hdr(skb)->daddr;//取目的ip
 
 	ret = nf_nat_ipv4_fn(priv, skb, state, do_chain);
+	//报文没缓存和丢弃，但daddr被修改了，则丢包
 	if (ret != NF_DROP && ret != NF_STOLEN &&
 	    daddr != ip_hdr(skb)->daddr)
 		skb_dst_drop(skb);
@@ -426,11 +433,11 @@ static int __init nf_nat_l3proto_ipv4_init(void)
 {
 	int err;
 
-	//icmp注册到ipv4中
+	//icmp的nat处理注册到ipv4中
 	err = nf_nat_l4proto_register(NFPROTO_IPV4, &nf_nat_l4proto_icmp);
 	if (err < 0)
 		goto err1;
-	//注册ipv4为3层协议
+	//注册ipv4协议的nat处理
 	err = nf_nat_l3proto_register(&nf_nat_l3proto_ipv4);
 	if (err < 0)
 		goto err2;

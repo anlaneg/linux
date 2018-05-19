@@ -389,6 +389,7 @@ void __init mount_block_root(char *name, int flags)
 	const char *b = name;
 #endif
 
+	//返回已注册的所有文件系统名称
 	get_fs_names(fs_names);
 retry:
 	for (p = fs_names; *p; p += strlen(p)+1) {

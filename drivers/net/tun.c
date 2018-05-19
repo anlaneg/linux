@@ -3442,6 +3442,7 @@ static int __init tun_init(void)
 
 	pr_info("%s, %s\n", DRV_DESCRIPTION, DRV_VERSION);
 
+	//注册通过rt netlink创建tun口
 	ret = rtnl_link_register(&tun_link_ops);
 	if (ret) {
 		pr_err("Can't register link_ops\n");

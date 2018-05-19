@@ -78,7 +78,7 @@ static inline bool is_vlan_dev(const struct net_device *dev)
         return dev->priv_flags & IFF_802_1Q_VLAN;
 }
 
-//检查是否有效vlan
+//检查是否有vlan
 #define skb_vlan_tag_present(__skb)	((__skb)->vlan_tci & VLAN_TAG_PRESENT)
 #define skb_vlan_tag_get(__skb)		((__skb)->vlan_tci & ~VLAN_TAG_PRESENT)
 //提取vlan id
@@ -174,11 +174,11 @@ struct vlan_dev_priv {
 	unsigned int				nr_egress_mappings;
 	struct vlan_priority_tci_mapping	*egress_priority_map[16];
 
-	__be16					vlan_proto;
-	u16					vlan_id;
+	__be16					vlan_proto;//使用的vlan协议号（例如：0x8100)
+	u16					vlan_id;//vlan编号
 	u16					flags;
 
-	struct net_device			*real_dev;
+	struct net_device			*real_dev;//vlan dev对应的底层设备:underlying
 	unsigned char				real_dev_addr[ETH_ALEN];
 
 	struct proc_dir_entry			*dent;

@@ -1221,6 +1221,7 @@ struct net_device_ops {
 							 void *attr_data);
 	struct net_device_stats* (*ndo_get_stats)(struct net_device *dev);
 
+	//如果设备支持vlan接受过滤的话，在上层添加vlan时将被调用
 	int			(*ndo_vlan_rx_add_vid)(struct net_device *dev,
 						       __be16 proto, u16 vid);
 	int			(*ndo_vlan_rx_kill_vid)(struct net_device *dev,
@@ -1423,7 +1424,7 @@ enum netdev_priv_flags {
 	IFF_DONT_BRIDGE			= 1<<6,
 	IFF_DISABLE_NETPOLL		= 1<<7,
 	IFF_MACVLAN_PORT		= 1<<8,
-	IFF_BRIDGE_PORT			= 1<<9,
+	IFF_BRIDGE_PORT			= 1<<9, //标记设备从属于桥
 	IFF_OVS_DATAPATH		= 1<<10,
 	IFF_TX_SKB_SHARING		= 1<<11,
 	IFF_UNICAST_FLT			= 1<<12,
@@ -1811,7 +1812,7 @@ struct net_device {
 	/* Protocol-specific pointers */
 
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
-	struct vlan_info __rcu	*vlan_info;
+	struct vlan_info __rcu	*vlan_info;//用于记录vlan信息（设备首次添加vlan时申请空间）
 #endif
 #if IS_ENABLED(CONFIG_NET_DSA)
 	struct dsa_port		*dsa_ptr;
@@ -1918,7 +1919,7 @@ struct net_device {
 	struct netpoll_info __rcu	*npinfo;
 #endif
 
-	possible_net_t			nd_net;
+	possible_net_t			nd_net;//设备从属于那个namespace
 
 	/* mid-layer private */
 	union {
@@ -2077,12 +2078,14 @@ static inline void netdev_reset_rx_headroom(struct net_device *dev)
 /*
  * Net namespace inlines
  */
+//取设备所属的namespace
 static inline
 struct net *dev_net(const struct net_device *dev)
 {
 	return read_pnet(&dev->nd_net);
 }
 
+//设置设备所属的namespace
 static inline
 void dev_net_set(struct net_device *dev, struct net *net)
 {
@@ -4294,6 +4297,7 @@ static inline bool netif_is_bridge_master(const struct net_device *dev)
 	return dev->priv_flags & IFF_EBRIDGE;
 }
 
+//接口是否从属于桥
 static inline bool netif_is_bridge_port(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_BRIDGE_PORT;

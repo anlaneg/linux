@@ -3814,6 +3814,7 @@ static int __init vxlan_init_module(void)
 	if (rc)
 		goto out2;
 
+	//注册vxlan对应的ip link类型
 	rc = rtnl_link_register(&vxlan_link_ops);
 	if (rc)
 		goto out3;
