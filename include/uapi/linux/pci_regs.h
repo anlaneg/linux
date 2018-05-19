@@ -36,9 +36,9 @@
  * of which the first 64 bytes are standardized as follows:
  */
 #define PCI_STD_HEADER_SIZEOF	64
-#define PCI_VENDOR_ID		0x00	/* 16 bits */
-#define PCI_DEVICE_ID		0x02	/* 16 bits */
-#define PCI_COMMAND		0x04	/* 16 bits */
+#define PCI_VENDOR_ID		0x00	/* 16 bits */ //vendor寄存器偏移量
+#define PCI_DEVICE_ID		0x02	/* 16 bits */ //device寄存器偏移量
+#define PCI_COMMAND		0x04	/* 16 bits */     //command寄存器偏移量
 #define  PCI_COMMAND_IO		0x1	/* Enable response in I/O space */
 #define  PCI_COMMAND_MEMORY	0x2	/* Enable response in Memory space */
 #define  PCI_COMMAND_MASTER	0x4	/* Enable bus mastering */
@@ -51,7 +51,7 @@
 #define  PCI_COMMAND_FAST_BACK	0x200	/* Enable back-to-back writes */
 #define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
 
-#define PCI_STATUS		0x06	/* 16 bits */
+#define PCI_STATUS		0x06	/* 16 bits */ //状态寄存器偏移量
 #define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
 #define  PCI_STATUS_CAP_LIST	0x10	/* Support Capability List */
 #define  PCI_STATUS_66MHZ	0x20	/* Support 66 MHz PCI 2.1 bus */
@@ -68,19 +68,19 @@
 #define  PCI_STATUS_SIG_SYSTEM_ERROR	0x4000 /* Set when we drive SERR */
 #define  PCI_STATUS_DETECTED_PARITY	0x8000 /* Set on parity error */
 
-#define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */
+#define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */ //class寄存器偏移量
 #define PCI_REVISION_ID		0x08	/* Revision ID */
 #define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */
 #define PCI_CLASS_DEVICE	0x0a	/* Device class */
 
 #define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
-#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
-#define PCI_HEADER_TYPE		0x0e	/* 8 bits */
+#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */  //timer寄存器偏移
+#define PCI_HEADER_TYPE		0x0e	/* 8 bits */ //看配置space中header_type的偏移为0x0e
 #define  PCI_HEADER_TYPE_NORMAL		0
 #define  PCI_HEADER_TYPE_BRIDGE		1
 #define  PCI_HEADER_TYPE_CARDBUS	2
 
-#define PCI_BIST		0x0f	/* 8 bits */
+#define PCI_BIST		0x0f	/* 8 bits */  //bist寄存器偏移
 #define  PCI_BIST_CODE_MASK	0x0f	/* Return result */
 #define  PCI_BIST_START		0x40	/* 1 to start BIST, 2 secs or less */
 #define  PCI_BIST_CAPABLE	0x80	/* 1 if BIST capable */

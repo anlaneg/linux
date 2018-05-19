@@ -45,6 +45,7 @@ field##_show(struct device *dev, struct device_attribute *attr, char *buf)				\
 }									\
 static DEVICE_ATTR_RO(field)
 
+//定义PCI设备对应的属性显示方法
 pci_config_attr(vendor, "0x%04x\n");
 pci_config_attr(device, "0x%04x\n");
 pci_config_attr(subsystem_vendor, "0x%04x\n");
@@ -75,6 +76,7 @@ static ssize_t broken_parity_status_store(struct device *dev,
 
 	return count;
 }
+//定义broken_parity_status属性的显示及属性的设置
 static DEVICE_ATTR_RW(broken_parity_status);
 
 static ssize_t pci_dev_show_local_cpu(struct device *dev, bool list,
@@ -96,6 +98,8 @@ static ssize_t local_cpus_show(struct device *dev,
 {
 	return pci_dev_show_local_cpu(dev, false, attr, buf);
 }
+
+//定义只读的local_cpus属性
 static DEVICE_ATTR_RO(local_cpus);
 
 static ssize_t local_cpulist_show(struct device *dev,
@@ -103,6 +107,7 @@ static ssize_t local_cpulist_show(struct device *dev,
 {
 	return pci_dev_show_local_cpu(dev, true, attr, buf);
 }
+//定义local_cpulist属性
 static DEVICE_ATTR_RO(local_cpulist);
 
 /*

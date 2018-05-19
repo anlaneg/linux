@@ -1357,6 +1357,7 @@ int __sys_socket(int family, int type, int protocol)
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
+	//创建sock
 	retval = sock_create(family, type, protocol, &sock);
 	if (retval < 0)
 		return retval;
@@ -1366,6 +1367,7 @@ int __sys_socket(int family, int type, int protocol)
 
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
+	//创建socket
 	return __sys_socket(family, type, protocol);
 }
 

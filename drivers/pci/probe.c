@@ -534,6 +534,7 @@ static void pci_release_host_bridge_dev(struct device *dev)
 	pci_free_host_bridge(to_pci_host_bridge(dev));
 }
 
+//申请并创建host_bridge
 struct pci_host_bridge *pci_alloc_host_bridge(size_t priv)
 {
 	struct pci_host_bridge *bridge;
@@ -1444,6 +1445,7 @@ static u8 pci_hdr_type(struct pci_dev *dev)
 	if (dev->is_virtfn)
 		return dev->physfn->sriov->hdr_type;
 #endif
+	//取配置空间PCI_HEADER_TYPE
 	pci_read_config_byte(dev, PCI_HEADER_TYPE, &hdr_type);
 	return hdr_type;
 }
@@ -1571,6 +1573,7 @@ int pci_setup_device(struct pci_dev *dev)
 	dev->broken_intx_masking = pci_intx_mask_broken(dev);
 
 	switch (dev->hdr_type) {		    /* header type */
+	//‘0’型头部用于一般的pci设备
 	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
 		if (class == PCI_CLASS_BRIDGE_PCI)
 			goto bad;
@@ -1593,6 +1596,7 @@ int pci_setup_device(struct pci_dev *dev)
 				region.end = 0x1F7;
 				res = &dev->resource[0];
 				res->flags = LEGACY_IO_RESOURCE;
+				//设置资源
 				pcibios_bus_to_resource(dev->bus, res, &region);
 				pci_info(dev, "legacy IDE quirk: reg 0x10: %pR\n",
 					 res);
@@ -1623,6 +1627,7 @@ int pci_setup_device(struct pci_dev *dev)
 		}
 		break;
 
+	//'1'型头部用于PCI桥
 	case PCI_HEADER_TYPE_BRIDGE:		    /* bridge header */
 		if (class != PCI_CLASS_BRIDGE_PCI)
 			goto bad;
@@ -2100,7 +2105,7 @@ static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
 	return true;
 }
 
-//尝试读取指定slot上的vendor_id
+//尝试读取指定slot上的device_id,vendor_id(读32bit)
 bool pci_bus_read_dev_vendor_id(struct pci_bus *bus, int devfn, u32 *l,
 				int timeout)
 {
@@ -2131,7 +2136,7 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	struct pci_dev *dev;
 	u32 l;
 
-    //尝试读取vendor_id,超时时间为6s,读取的内存存放在l中
+    //尝试读取device_id,vendor_id,超时时间为6s,读取的内存存放在l中
 	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
 		return NULL;
 
@@ -2139,7 +2144,7 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 	if (!dev)
 		return NULL;
 
-	dev->devfn = devfn;
+	dev->devfn = devfn;//设置function_id
 	dev->vendor = l & 0xffff;//vendor_id的低16位为vendor
 	dev->device = (l >> 16) & 0xffff;//vendor_id的高16位为device
 
@@ -2758,6 +2763,7 @@ struct pci_bus *pci_create_root_bus(struct device *parent, int bus,
 	if (!bridge)
 		return NULL;
 
+	//指明其父设备
 	bridge->dev.parent = parent;
 
 	list_splice_init(resources, &bridge->windows);
@@ -2926,6 +2932,7 @@ struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 			break;
 		}
 
+	//创建根桥
 	b = pci_create_root_bus(parent, bus, ops, sysdata, resources);
 	if (!b)
 		return NULL;
@@ -2937,6 +2944,7 @@ struct pci_bus *pci_scan_root_bus(struct device *parent, int bus,
 		pci_bus_insert_busn_res(b, bus, 255);
 	}
 
+	//扫描b上的设备
 	max = pci_scan_child_bus(b);
 
 	if (!found)

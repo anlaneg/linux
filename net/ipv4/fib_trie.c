@@ -1333,7 +1333,7 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 	struct trie_use_stats __percpu *stats = t->stats;
 #endif
-	const t_key key = ntohl(flp->daddr);
+	const t_key key = ntohl(flp->daddr);//取目的地址
 	struct key_vector *n, *pn;
 	struct fib_alias *fa;
 	unsigned long index;

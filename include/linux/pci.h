@@ -281,19 +281,19 @@ struct pci_ats;
 /* The pci_dev structure describes PCI devices */
 struct pci_dev {
 	struct list_head bus_list;	/* Node in per-bus list */
-	struct pci_bus	*bus;		/* Bus this device is on */
+	struct pci_bus	*bus;		/* Bus this device is on */ //设备所属的BUS
 	struct pci_bus	*subordinate;	/* Bus this device bridges to */
 
 	void		*sysdata;	/* Hook for sys-specific extension */
 	struct proc_dir_entry *procent;	/* Device entry in /proc/bus/pci */
 	struct pci_slot	*slot;		/* Physical slot this device is in */
 
-	unsigned int	devfn;		/* Encoded device & function index */
-	unsigned short	vendor;
-	unsigned short	device;
+	unsigned int	devfn;		/* Encoded device & function index */ //设备function_id
+	unsigned short	vendor;//设备vendor信息
+	unsigned short	device;//设备类型编号
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;
-	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
+	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */ //设备类型，例如nic
 	u8		revision;	/* PCI revision, low byte of class word */
 	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
 #ifdef CONFIG_PCIEAER

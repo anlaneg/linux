@@ -206,13 +206,16 @@ static struct inode *alloc_inode(struct super_block *sb)
 	struct inode *inode;
 
 	if (sb->s_op->alloc_inode)
+		//如果有alloc_inode，则采用alloc_inode进行申请
 		inode = sb->s_op->alloc_inode(sb);
 	else
+		//自inode的cache中申请node
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
 
 	if (!inode)
 		return NULL;
 
+	//inode初始化
 	if (unlikely(inode_init_always(sb, inode))) {
 		if (inode->i_sb->s_op->destroy_inode)
 			inode->i_sb->s_op->destroy_inode(inode);

@@ -449,7 +449,7 @@ struct inode *ext2_new_inode(struct inode *dir, umode_t mode,
 		return ERR_PTR(-ENOMEM);
 
 	ei = EXT2_I(inode);
-	sbi = EXT2_SB(sb);
+	sbi = EXT2_SB(sb);//转为ext2的superblock
 	es = sbi->s_es;
 	if (S_ISDIR(mode)) {
 		if (test_opt(sb, OLDALLOC))
