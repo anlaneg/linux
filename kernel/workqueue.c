@@ -152,7 +152,7 @@ struct worker_pool {
 
 	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
 
-	struct list_head	worklist;	/* L: list of pending works */
+	struct list_head	worklist;	/* L: list of pending works */　//待执行工作队列
 
 	int			nr_workers;	/* L: total number of workers */ //worker数目
 	int			nr_idle;	/* L: currently idle workers */
@@ -162,7 +162,7 @@ struct worker_pool {
 	struct timer_list	mayday_timer;	/* L: SOS timer for workers */
 
 	/* a workers is either on busy_hash or idle_list, or the manager */
-	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);
+	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);//一个worker准备运行时将在此链上出现
 						/* L: hash of busy workers */
 
 	struct worker		*manager;	/* L: purely informational */
@@ -206,7 +206,7 @@ struct pool_workqueue {
 						/* L: nr of in_flight works */
 	int			nr_active;	/* L: nr of active works */
 	int			max_active;	/* L: max active works */
-	struct list_head	delayed_works;	/* L: delayed works */
+	struct list_head	delayed_works;	/* L: delayed works */　//当pool中的活跃太多时，将存入此处
 	struct list_head	pwqs_node;	/* WR: node on wq->pwqs */
 	struct list_head	mayday_node;	/* MD: node on wq->maydays */
 
@@ -1389,12 +1389,15 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 		return;
 retry:
 	if (req_cpu == WORK_CPU_UNBOUND)
+		//如果未绑定cpu,则获取一个cpu
 		cpu = wq_select_unbound_cpu(raw_smp_processor_id());
 
 	/* pwq which will be used unless @work is executing elsewhere */
+	//如果队列已绑定，则取此队列在$cpu上的pwd
 	if (!(wq->flags & WQ_UNBOUND))
 		pwq = per_cpu_ptr(wq->cpu_pwqs, cpu);
 	else
+		//如果未绑定，则按$cpu所属的node来取队列
 		pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
 
 	/*
@@ -1408,6 +1411,7 @@ retry:
 
 		spin_lock(&last_pool->lock);
 
+		//找此work是否存在worker
 		worker = find_worker_executing_work(last_pool, work);
 
 		if (worker && worker->current_pwq->wq == wq) {
@@ -1451,6 +1455,7 @@ retry:
 	pwq->nr_in_flight[pwq->work_color]++;
 	work_flags = work_color_to_flags(pwq->work_color);
 
+	//活跃的较少，直接存入
 	if (likely(pwq->nr_active < pwq->max_active)) {
 		trace_workqueue_activate_work(work);
 		pwq->nr_active++;
@@ -1498,6 +1503,7 @@ EXPORT_SYMBOL(queue_work_on);
 
 void delayed_work_timer_fn(struct timer_list *t)
 {
+	//定时器到期，将dwork入队
 	struct delayed_work *dwork = from_timer(dwork, t, timer);
 
 	/* should have been called from irqsafe timer with irq already off */
@@ -4029,6 +4035,7 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
+//创建一个工作队列
 struct workqueue_struct *__alloc_workqueue_key(const char *fmt,
 					       unsigned int flags,
 					       int max_active,

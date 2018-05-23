@@ -114,7 +114,7 @@ struct work_struct {
 
 struct delayed_work {
 	struct work_struct work;
-	struct timer_list timer;
+	struct timer_list timer;//延迟用定时器
 
 	/* target workqueue and CPU ->timer uses to queue ->work */
 	struct workqueue_struct *wq;
@@ -252,10 +252,11 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 #define INIT_WORK_ONSTACK(_work, _func)					\
 	__INIT_WORK((_work), (_func), 1)
 
+//初始化延迟work
 #define __INIT_DELAYED_WORK(_work, _func, _tflags)			\
 	do {								\
 		INIT_WORK(&(_work)->work, (_func));			\
-		/*设置_work的timer回调用delayed_work_timer_fn*/\
+		/*设置_work的timer回调用delayed_work_timer_fn,定时器到期后直接将work入队*/\
 		__init_timer(&(_work)->timer,				\
 			     delayed_work_timer_fn,			\
 			     (_tflags) | TIMER_IRQSAFE);		\
@@ -520,6 +521,7 @@ static inline bool queue_work(struct workqueue_struct *wq,
  *
  * Equivalent to queue_delayed_work_on() but tries to use the local CPU.
  */
+//在指定延迟后将work加入队列（未指定运行在那个cpu上）
 static inline bool queue_delayed_work(struct workqueue_struct *wq,
 				      struct delayed_work *dwork,
 				      unsigned long delay)
