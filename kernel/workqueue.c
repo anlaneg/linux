@@ -145,8 +145,8 @@ enum {
 
 struct worker_pool {
 	spinlock_t		lock;		/* the pool lock */
-	int			cpu;		/* I: the associated cpu */
-	int			node;		/* I: the associated node ID */
+	int			cpu;		/* I: the associated cpu */ //pool关联的cpu
+	int			node;		/* I: the associated node ID */ //pool关联的cpu所属的numa节点
 	int			id;		/* I: pool ID */
 	unsigned int		flags;		/* X: flags */
 
@@ -154,7 +154,7 @@ struct worker_pool {
 
 	struct list_head	worklist;	/* L: list of pending works */
 
-	int			nr_workers;	/* L: total number of workers */
+	int			nr_workers;	/* L: total number of workers */ //worker数目
 	int			nr_idle;	/* L: currently idle workers */
 
 	struct list_head	idle_list;	/* X: list of idle workers */
@@ -167,10 +167,10 @@ struct worker_pool {
 
 	struct worker		*manager;	/* L: purely informational */
 	struct mutex		attach_mutex;	/* attach/detach exclusion */
-	struct list_head	workers;	/* A: attached workers */
+	struct list_head	workers;	/* A: attached workers */ //从属于本pool的workers
 	struct completion	*detach_completion; /* all workers detached */
 
-	struct ida		worker_ida;	/* worker IDs for task name */
+	struct ida		worker_ida;	/* worker IDs for task name */ //为worker分配id
 
 	struct workqueue_attrs	*attrs;		/* I: worker attributes */
 	struct hlist_node	hash_node;	/* PL: unbound_pool_hash node */
@@ -321,6 +321,7 @@ static bool wq_debug_force_rr_cpu = false;
 #endif
 module_param_named(debug_force_rr_cpu, wq_debug_force_rr_cpu, bool, 0644);
 
+//为每个cpu定义worker-pool
 /* the per-cpu worker pools */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], cpu_worker_pools);
 
@@ -372,6 +373,7 @@ static void workqueue_sysfs_unregister(struct workqueue_struct *wq);
 			 !lockdep_is_held(&wq_pool_mutex),		\
 			 "sched RCU, wq->mutex or wq_pool_mutex should be held")
 
+//遍历当前cpu上每个worker_pool
 #define for_each_cpu_worker_pool(pool, cpu)				\
 	for ((pool) = &per_cpu(cpu_worker_pools, cpu)[0];		\
 	     (pool) < &per_cpu(cpu_worker_pools, cpu)[NR_STD_WORKER_POOLS]; \
@@ -536,6 +538,7 @@ static int worker_pool_assign_id(struct worker_pool *pool)
 
 	lockdep_assert_held(&wq_pool_mutex);
 
+	//为pool申请id并赋给他
 	ret = idr_alloc(&worker_pool_idr, pool, 0, WORK_OFFQ_POOL_NONE,
 			GFP_KERNEL);
 	if (ret >= 0) {
@@ -1348,6 +1351,7 @@ static int wq_select_unbound_cpu(int cpu)
 	if (cpumask_empty(wq_unbound_cpumask))
 		return cpu;
 
+	//先取出上次一次选择的cpu
 	new_cpu = __this_cpu_read(wq_rr_cpu_last);
 	new_cpu = cpumask_next_and(new_cpu, wq_unbound_cpumask, cpu_online_mask);
 	if (unlikely(new_cpu >= nr_cpu_ids)) {
@@ -1508,6 +1512,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	struct work_struct *work = &dwork->work;
 
 	WARN_ON_ONCE(!wq);
+	//确保回调为延迟加入timer到队列
 	WARN_ON_ONCE(timer->function != delayed_work_timer_fn);
 	WARN_ON_ONCE(timer_pending(timer));
 	WARN_ON_ONCE(!list_empty(&work->entry));
@@ -1519,10 +1524,12 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	 * on that there's no such delay when @delay is 0.
 	 */
 	if (!delay) {
+		//如果不需要延迟，则直接加入
 		__queue_work(cpu, wq, &dwork->work);
 		return;
 	}
 
+	//如果需要延迟，则启动timer
 	dwork->wq = wq;
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
@@ -1697,6 +1704,7 @@ static void worker_leave_idle(struct worker *worker)
 	list_del_init(&worker->entry);
 }
 
+//自指定numa节点申请worker内存，并初始化
 static struct worker *alloc_worker(int node)
 {
 	struct worker *worker;
@@ -1791,10 +1799,12 @@ static struct worker *create_worker(struct worker_pool *pool)
 	char id_buf[16];
 
 	/* ID is needed to determine kthread name */
+	//申请一个id号
 	id = ida_simple_get(&pool->worker_ida, 0, 0, GFP_KERNEL);
 	if (id < 0)
 		goto fail;
 
+	//自pool所在的node上申请worker内存,填充worker所属的pool,id
 	worker = alloc_worker(pool->node);
 	if (!worker)
 		goto fail;
@@ -1808,6 +1818,7 @@ static struct worker *create_worker(struct worker_pool *pool)
 	else
 		snprintf(id_buf, sizeof(id_buf), "u%d:%d", pool->id, id);
 
+	//产生worker线程
 	worker->task = kthread_create_on_node(worker_thread, worker, pool->node,
 					      "kworker/%s", id_buf);
 	if (IS_ERR(worker->task))
@@ -1867,6 +1878,7 @@ static void destroy_worker(struct worker *worker)
 
 static void idle_worker_timeout(struct timer_list *t)
 {
+	//由idle_timer获得对应的pool
 	struct worker_pool *pool = from_timer(pool, t, idle_timer);
 
 	spin_lock_irq(&pool->lock);
@@ -2086,7 +2098,7 @@ __acquires(&pool->lock)
 	worker->current_pwq = pwq;
 	work_color = get_work_color(work);
 
-	list_del_init(&work->entry);
+	list_del_init(&work->entry);//work已调度，自调度链上移除
 
 	/*
 	 * CPU intensive works don't participate in concurrency management.
@@ -2142,7 +2154,7 @@ __acquires(&pool->lock)
 	 */
 	lockdep_invariant_state(true);
 	trace_workqueue_execute_start(work);
-	worker->current_func(work);
+	worker->current_func(work);//执行work的工作函数
 	/*
 	 * While we must be careful to not use "work" after this, the trace
 	 * point will only record its address.
@@ -2200,6 +2212,7 @@ __acquires(&pool->lock)
 static void process_scheduled_works(struct worker *worker)
 {
 	while (!list_empty(&worker->scheduled)) {
+		//如果已调度的队列不为空，则提取first_entry进行处理
 		struct work_struct *work = list_first_entry(&worker->scheduled,
 						struct work_struct, entry);
 		process_one_work(worker, work);
@@ -5649,7 +5662,7 @@ int __init workqueue_init_early(void)
 
 			/* alloc pool ID */
 			mutex_lock(&wq_pool_mutex);
-			BUG_ON(worker_pool_assign_id(pool));
+			BUG_ON(worker_pool_assign_id(pool));//申请pool id
 			mutex_unlock(&wq_pool_mutex);
 		}
 	}
@@ -5737,6 +5750,7 @@ int __init workqueue_init(void)
 	mutex_unlock(&wq_pool_mutex);
 
 	/* create the initial workers */
+	//针对每个在线的cpu,每个在线cpu上的worker_pool创建此pool对应的worker
 	for_each_online_cpu(cpu) {
 		for_each_cpu_worker_pool(pool, cpu) {
 			pool->flags &= ~POOL_DISASSOCIATED;

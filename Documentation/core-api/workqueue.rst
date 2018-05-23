@@ -77,7 +77,8 @@ wants a function to be executed asynchronously it has to set up a work
 item pointing to that function and queue that work item on a
 workqueue.
 
-Special purpose threads, called worker threads, execute the functions
+//worker threads负责执行work的函数，如果无work,则worker threads空闲，它受worker-pools管理
+Special purpose threads, called worker threads, execute the functions　　　　　
 off of the queue, one after the other.  If no work is queued, the
 worker threads become idle.  These worker threads are managed in so
 called worker-pools.
@@ -112,6 +113,7 @@ tries to keep the concurrency at a minimal but sufficient level.
 Minimal to save resources and sufficient in that the system is used at
 its full capacity.
 
+//每个worker-pool通过借助调度器绑定到一个实际的cpu来实现并发管理
 Each worker-pool bound to an actual CPU implements concurrency
 management by hooking into the scheduler.  The worker-pool is notified
 whenever an active worker wakes up or sleeps and keeps track of the

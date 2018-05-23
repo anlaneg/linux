@@ -534,6 +534,7 @@ static int calc_wheel_index(unsigned long expires, unsigned long clk)
 static void enqueue_timer(struct timer_base *base, struct timer_list *timer,
 			  unsigned int idx)
 {
+	//timer入队
 	hlist_add_head(&timer->entry, base->vectors + idx);
 	__set_bit(idx, base->pending_map);
 	timer_set_idx(timer, idx);
