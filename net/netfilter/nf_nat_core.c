@@ -417,9 +417,9 @@ nf_nat_setup_info(struct nf_conn *ct,
 
 		/* Non-atomic: we own this at the moment. */
 		if (maniptype == NF_NAT_MANIP_SRC)
-			ct->status |= IPS_SRC_NAT;
+			ct->status |= IPS_SRC_NAT;//标记需要做snat
 		else
-			ct->status |= IPS_DST_NAT;
+			ct->status |= IPS_DST_NAT;//标记需要做dnat
 
 		if (nfct_help(ct) && !nfct_seqadj(ct))
 			if (!nfct_seqadj_ext_add(ct))

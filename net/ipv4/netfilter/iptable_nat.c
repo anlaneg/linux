@@ -36,6 +36,7 @@ static unsigned int iptable_nat_do_chain(void *priv,
 					 const struct nf_hook_state *state,
 					 struct nf_conn *ct)
 {
+	//查询此net对应的ipv4 nat表
 	return ipt_do_table(skb, state, state->net->ipv4.nat_table);
 }
 

@@ -74,6 +74,7 @@ bool lockdep_nfnl_is_held(u8 subsys_id)
 EXPORT_SYMBOL_GPL(lockdep_nfnl_is_held);
 #endif
 
+//注册subsys
 int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 {
 	nfnl_lock(n->subsys_id);
@@ -98,8 +99,10 @@ int nfnetlink_subsys_unregister(const struct nfnetlink_subsystem *n)
 }
 EXPORT_SYMBOL_GPL(nfnetlink_subsys_unregister);
 
+//依据类型查找对应的netfilter定义的netlink子系统
 static inline const struct nfnetlink_subsystem *nfnetlink_get_subsys(u16 type)
 {
+	//用于type的高8位做为subsys
 	u8 subsys_id = NFNL_SUBSYS_ID(type);
 
 	if (subsys_id >= NFNL_SUBSYS_COUNT)
@@ -111,6 +114,7 @@ static inline const struct nfnetlink_subsystem *nfnetlink_get_subsys(u16 type)
 static inline const struct nfnl_callback *
 nfnetlink_find_client(u16 type, const struct nfnetlink_subsystem *ss)
 {
+	//利用type的低8位做为回调的id号
 	u8 cb_id = NFNL_MSG_TYPE(type);
 
 	if (cb_id >= ss->cb_count)
@@ -146,6 +150,7 @@ int nfnetlink_unicast(struct sk_buff *skb, struct net *net, u32 portid,
 EXPORT_SYMBOL_GPL(nfnetlink_unicast);
 
 /* Process one complete nfnetlink message. */
+//处理一个完整的netlink消息
 static int nfnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 			     struct netlink_ext_ack *extack)
 {
@@ -161,6 +166,8 @@ static int nfnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	type = nlh->nlmsg_type;
 replay:
 	rcu_read_lock();
+
+	//利用消息类型查找对应subsystem(type高8位为subsys_id)
 	ss = nfnetlink_get_subsys(type);
 	if (!ss) {
 #ifdef CONFIG_MODULES
@@ -176,6 +183,7 @@ replay:
 		}
 	}
 
+	//利用消息类型查找callback数组（type的低8位为subsys_id)
 	nc = nfnetlink_find_client(type, ss);
 	if (!nc) {
 		rcu_read_unlock();
@@ -197,12 +205,14 @@ replay:
 			return err;
 		}
 
+		//如果有call_rcu，则调用call_rcu回调
 		if (nc->call_rcu) {
 			err = nc->call_rcu(net, net->nfnl, skb, nlh,
 					   (const struct nlattr **)cda,
 					   extack);
 			rcu_read_unlock();
 		} else {
+			//否则使用call回调
 			rcu_read_unlock();
 			nfnl_lock(subsys_id);
 			if (nfnl_dereference_protected(subsys_id) != ss ||
@@ -388,6 +398,7 @@ replay:
 			if (err < 0)
 				goto ack;
 
+			//如果有call_batch回调，则调用
 			if (nc->call_batch) {
 				err = nc->call_batch(net, net->nfnl, skb, nlh,
 						     (const struct nlattr **)cda,
@@ -493,6 +504,7 @@ static void nfnetlink_rcv_skb_batch(struct sk_buff *skb, struct nlmsghdr *nlh)
 	nfnetlink_rcv_batch(skb, nlh, res_id, gen_id);
 }
 
+//netfilter的netlink消息接受及处理
 static void nfnetlink_rcv(struct sk_buff *skb)
 {
 	struct nlmsghdr *nlh = nlmsg_hdr(skb);
@@ -508,8 +520,10 @@ static void nfnetlink_rcv(struct sk_buff *skb)
 	}
 
 	if (nlh->nlmsg_type == NFNL_MSG_BATCH_BEGIN)
+		//batch处理
 		nfnetlink_rcv_skb_batch(skb, nlh);
 	else
+		//非batch处理
 		netlink_rcv_skb(skb, nfnetlink_rcv_msg);
 }
 
@@ -538,7 +552,7 @@ static int __net_init nfnetlink_net_init(struct net *net)
 	struct sock *nfnl;
 	struct netlink_kernel_cfg cfg = {
 		.groups	= NFNLGRP_MAX,
-		.input	= nfnetlink_rcv,
+		.input	= nfnetlink_rcv,//指出netfilter的netlink消息收取函数
 #ifdef CONFIG_MODULES
 		.bind	= nfnetlink_bind,
 #endif

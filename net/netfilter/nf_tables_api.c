@@ -380,6 +380,7 @@ static int nft_delflowtable(struct nft_ctx *ctx,
  * Tables
  */
 
+//在指定namespace中查找相应的table
 static struct nft_table *nft_table_lookup(const struct net *net,
 					  const struct nlattr *nla,
 					  u8 family, u8 genmask)
@@ -921,6 +922,7 @@ static void nf_tables_table_destroy(struct nft_ctx *ctx)
 	kfree(ctx->table);
 }
 
+//注册链类型
 void nft_register_chain_type(const struct nft_chain_type *ctype)
 {
 	if (WARN_ON(ctype->family >= NFPROTO_NUMPROTO))
@@ -931,6 +933,7 @@ void nft_register_chain_type(const struct nft_chain_type *ctype)
 		nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 		return;
 	}
+	//为指定协议指定类型设置chain_type
 	chain_type[ctype->family][ctype->type] = ctype;
 	nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 }
@@ -1325,6 +1328,7 @@ static int nft_chain_parse_hook(struct net *net,
 	hook->num = ntohl(nla_get_be32(ha[NFTA_HOOK_HOOKNUM]));
 	hook->priority = ntohl(nla_get_be32(ha[NFTA_HOOK_PRIORITY]));
 
+	//提取对应的链类型
 	type = chain_type[family][NFT_CHAIN_T_DEFAULT];
 	if (nla[NFTA_CHAIN_TYPE]) {
 		type = nf_tables_chain_type_lookup(nla[NFTA_CHAIN_TYPE],
@@ -1579,7 +1583,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 	table = nf_tables_table_lookup(net, nla[NFTA_CHAIN_TABLE], family,
 				       genmask);
 	if (IS_ERR(table))
-		return PTR_ERR(table);
+		return PTR_ERR(table);//未找到指明的table,报错
 
 	chain = NULL;
 	name = nla[NFTA_CHAIN_NAME];
@@ -1590,6 +1594,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 		if (IS_ERR(chain))
 			return PTR_ERR(chain);
 	} else {
+		//查找对应的链
 		chain = nf_tables_chain_lookup(table, name, genmask);
 		if (IS_ERR(chain)) {
 			if (PTR_ERR(chain) != -ENOENT)
@@ -1628,6 +1633,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 		return nf_tables_updchain(&ctx, genmask, policy, create);
 	}
 
+	//为table添加新的链
 	return nf_tables_addchain(&ctx, family, genmask, policy, create);
 }
 
@@ -2265,11 +2271,13 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 
 	create = nlh->nlmsg_flags & NLM_F_CREATE ? true : false;
 
+	//找到对应的表
 	table = nf_tables_table_lookup(net, nla[NFTA_RULE_TABLE], family,
 				       genmask);
 	if (IS_ERR(table))
 		return PTR_ERR(table);
 
+	//找到对应的链
 	chain = nf_tables_chain_lookup(table, nla[NFTA_RULE_CHAIN], genmask);
 	if (IS_ERR(chain))
 		return PTR_ERR(chain);
@@ -2295,6 +2303,7 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 			return -EOVERFLOW;
 	}
 
+	//位置查询
 	if (nla[NFTA_RULE_POSITION]) {
 		if (!(nlh->nlmsg_flags & NLM_F_CREATE))
 			return -EOPNOTSUPP;
@@ -5641,7 +5650,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.policy		= nft_table_policy,
 	},
 	[NFT_MSG_NEWCHAIN] = {
-		.call_batch	= nf_tables_newchain,
+		.call_batch	= nf_tables_newchain,//新建chain
 		.attr_count	= NFTA_CHAIN_MAX,
 		.policy		= nft_chain_policy,
 	},
@@ -5656,7 +5665,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.policy		= nft_chain_policy,
 	},
 	[NFT_MSG_NEWRULE] = {
-		.call_batch	= nf_tables_newrule,
+		.call_batch	= nf_tables_newrule,//规则新建
 		.attr_count	= NFTA_RULE_MAX,
 		.policy		= nft_rule_policy,
 	},
@@ -6689,6 +6698,7 @@ static int __init nf_tables_module_init(void)
 	if (err < 0)
 		goto err2;
 
+	//注册子系统类型为NFNL_SUBSYS_NFTABLES的netlink
 	err = nfnetlink_subsys_register(&nf_tables_subsys);
 	if (err < 0)
 		goto err3;
