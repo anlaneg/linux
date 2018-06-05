@@ -1325,7 +1325,7 @@ static inline t_key prefix_mismatch(t_key key, struct key_vector *n)
 }
 
 /* should be called with rcu_read_lock */
-//trie表查询
+//trie表查询(负责实现路由表查询）
 int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 		     struct fib_result *res, int fib_flags)
 {

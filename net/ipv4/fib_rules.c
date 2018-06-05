@@ -132,6 +132,7 @@ static int fib4_rule_action(struct fib_rule *rule, struct flowi *flp,
 	tb_id = fib_rule_get_table(rule, arg);
 	tbl = fib_get_table(rule->fr_net, tb_id);
 	if (tbl)
+		//在tbl中查找路由
 		err = fib_table_lookup(tbl, &flp->u.ip4,
 				       (struct fib_result *)arg->result,
 				       arg->flags);
@@ -300,6 +301,7 @@ static int fib4_rule_compare(struct fib_rule *rule, struct fib_rule_hdr *frh,
 {
 	struct fib4_rule *rule4 = (struct fib4_rule *) rule;
 
+	//如果frh有src_len，则比对src_len
 	if (frh->src_len && (rule4->src_len != frh->src_len))
 		return 0;
 

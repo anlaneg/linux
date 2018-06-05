@@ -1897,7 +1897,7 @@ static int ip_mkroute_input(struct sk_buff *skb,
  *	2. IP spoofing attempts are filtered with 100% of guarantee.
  *	called with rcu_read_lock()
  */
-
+//单播路由查找
 static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 			       u8 tos, struct net_device *dev,
 			       struct fib_result *res)
@@ -1916,7 +1916,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	/* IP on this device is disabled. */
 
 	if (!in_dev)
-		goto out;
+		goto out;//入接口被删除，将被丢包
 
 	/* Check for the most weird martians, which can be not detected
 	   by fib_lookup.
@@ -1929,7 +1929,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		fl4.flowi4_tun_key.tun_id = 0;
 	skb_dst_drop(skb);
 
-	//如果源是组播，广播地址。则执行错误处理
+	//如果源是组播，广播地址。则执行错误处理,将返回错误，被丢包
 	if (ipv4_is_multicast(saddr) || ipv4_is_lbcast(saddr))
 		goto martian_source;
 
@@ -2013,7 +2013,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 out:	return err;
 
 brd_input:
-    //非ip协议，则置参数无效
+    //非ip协议，则置参数无效，将被丢包
 	if (skb->protocol != htons(ETH_P_IP))
 		goto e_inval;
 
@@ -2121,8 +2121,8 @@ int ip_route_input_noref(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	int err;
 
 	tos &= IPTOS_RT_MASK;
+	//添加rcu读锁，查询路由表
 	rcu_read_lock();
-	//加锁,进行路由查询
 	err = ip_route_input_rcu(skb, daddr, saddr, tos, dev, &res);
 	rcu_read_unlock();
 

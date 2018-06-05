@@ -467,6 +467,7 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 	return 0;
 }
 
+//产生一条新的fib规则
 int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		   struct netlink_ext_ack *extack)
 {
@@ -480,6 +481,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*frh)))
 		goto errout;
 
+	//依据协议族，获取对应的ops
 	ops = lookup_rules_ops(net, frh->family);
 	if (ops == NULL) {
 		err = -EAFNOSUPPORT;
@@ -494,6 +496,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		goto errout;
 
+	//构造规则
 	rule = kzalloc(ops->rule_size, GFP_KERNEL);
 	if (rule == NULL) {
 		err = -ENOMEM;
@@ -509,6 +512,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		nla_get_u8(tb[FRA_PROTOCOL]) : RTPROT_UNSPEC;
 
 	if (tb[FRA_IIFNAME]) {
+		//如果指定的inport 名称，则设置iifindex,iifname
 		struct net_device *dev;
 
 		rule->iifindex = -1;
@@ -519,6 +523,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	if (tb[FRA_OIFNAME]) {
+		//如果指定了outport名称，则设置oifindex,oifname
 		struct net_device *dev;
 
 		rule->oifindex = -1;
@@ -529,6 +534,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	if (tb[FRA_FWMARK]) {
+		//如果指定了mark,则设置mark及mark_mask
 		rule->mark = nla_get_u32(tb[FRA_FWMARK]);
 		if (rule->mark)
 			/* compatibility: if the mark value is non-zero all bits
@@ -541,6 +547,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		rule->mark_mask = nla_get_u32(tb[FRA_FWMASK]);
 
 	if (tb[FRA_TUN_ID])
+		//设置rule对应的隧道id
 		rule->tun_id = nla_get_be64(tb[FRA_TUN_ID]);
 
 	err = -EINVAL;
