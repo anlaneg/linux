@@ -2045,6 +2045,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	sk->sk_data_ready = netlink_data_ready;
 	if (cfg && cfg->input)
+		//如果cfg拥有input回调，则将其命名为netlink_rcv的回调函数
 		nlk_sk(sk)->netlink_rcv = cfg->input;
 
 	if (netlink_insert(sk, 0))
@@ -2424,7 +2425,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 }
 EXPORT_SYMBOL(netlink_ack);
 
-//收取消息并处理
+//netlink收取消息并处理
 int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 						   struct nlmsghdr *,
 						   struct netlink_ext_ack *))

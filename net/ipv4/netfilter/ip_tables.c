@@ -52,22 +52,26 @@ ip_packet_match(const struct iphdr *ip,
 {
 	unsigned long ret;
 
+	//校验src,dst的ip地址
 	if (NF_INVF(ipinfo, IPT_INV_SRCIP,
 		    (ip->saddr & ipinfo->smsk.s_addr) != ipinfo->src.s_addr) ||
 	    NF_INVF(ipinfo, IPT_INV_DSTIP,
 		    (ip->daddr & ipinfo->dmsk.s_addr) != ipinfo->dst.s_addr))
 		return false;
 
+	//入接口匹配
 	ret = ifname_compare_aligned(indev, ipinfo->iniface, ipinfo->iniface_mask);
 
 	if (NF_INVF(ipinfo, IPT_INV_VIA_IN, ret != 0))
 		return false;
 
+	//出接口匹配
 	ret = ifname_compare_aligned(outdev, ipinfo->outiface, ipinfo->outiface_mask);
 
 	if (NF_INVF(ipinfo, IPT_INV_VIA_OUT, ret != 0))
 		return false;
 
+	//协议匹配
 	/* Check specific protocol */
 	if (ipinfo->proto &&
 	    NF_INVF(ipinfo, IPT_INV_PROTO, ip->protocol != ipinfo->proto))
@@ -75,6 +79,7 @@ ip_packet_match(const struct iphdr *ip,
 
 	/* If we have a fragment rule but the packet is not a fragment
 	 * then we return zero */
+	//分片标记匹配
 	if (NF_INVF(ipinfo, IPT_INV_FRAG,
 		    (ipinfo->flags & IPT_F_FRAG) && !isfrag))
 		return false;
@@ -243,7 +248,7 @@ ipt_do_table(struct sk_buff *skb,
 
 	/* Initialization */
 	stackidx = 0;
-	ip = ip_hdr(skb);
+	ip = ip_hdr(skb);//取报文ip头
 	indev = state->in ? state->in->name : nulldevname;
 	outdev = state->out ? state->out->name : nulldevname;
 	/* We handle fragments by dealing with the first fragment as
@@ -286,6 +291,7 @@ ipt_do_table(struct sk_buff *skb,
 		if (!ip_packet_match(ip, indev, outdev,
 		    &e->ip, acpar.fragoff)) {
  no_match:
+ 	 	    //如果未匹配，则尝试下一项
 			e = ipt_next_entry(e);
 			continue;
 		}

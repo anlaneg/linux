@@ -1309,7 +1309,7 @@ static int erspan_tunnel_init(struct net_device *dev)
 static const struct net_device_ops erspan_netdev_ops = {
 	.ndo_init		= erspan_tunnel_init,
 	.ndo_uninit		= ip_tunnel_uninit,
-	.ndo_start_xmit		= erspan_xmit,
+	.ndo_start_xmit		= erspan_xmit,//发包回调
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_change_mtu		= ip_tunnel_change_mtu,
@@ -1537,7 +1537,7 @@ static struct rtnl_link_ops ipgre_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct ip_tunnel),
 	.setup		= ipgre_tunnel_setup,
 	.validate	= ipgre_tunnel_validate,
-	.newlink	= ipgre_newlink,
+	.newlink	= ipgre_newlink,//gre类型的link
 	.changelink	= ipgre_changelink,
 	.dellink	= ip_tunnel_dellink,
 	.get_size	= ipgre_get_size,
@@ -1560,6 +1560,7 @@ static struct rtnl_link_ops ipgre_tap_ops __read_mostly = {
 	.get_link_net	= ip_tunnel_get_link_net,
 };
 
+//定义相应link设备erspan
 static struct rtnl_link_ops erspan_link_ops __read_mostly = {
 	.kind		= "erspan",
 	.maxtype	= IFLA_GRE_MAX,
