@@ -18,27 +18,27 @@ struct fib_kuid_range {
 
 struct fib_rule {
 	struct list_head	list;
-	int			iifindex;
-	int			oifindex;
-	u32			mark;
-	u32			mark_mask;
+	int			iifindex;//inport对应的ifindex
+	int			oifindex;//outport对应的ifindex
+	u32			mark;//mark
+	u32			mark_mask;//mark的掩码
 	u32			flags;
-	u32			table;
-	u8			action;
+	u32			table;//规则从属于那个路由表
+	u8			action;//规则的action
 	u8			l3mdev;
 	u8                      proto;
 	u8			ip_proto;
 	u32			target;
-	__be64			tun_id;
+	__be64			tun_id;//隧道id号
 	struct fib_rule __rcu	*ctarget;
-	struct net		*fr_net;
+	struct net		*fr_net;//从属于那个namespace
 
 	refcount_t		refcnt;
 	u32			pref;
 	int			suppress_ifgroup;
 	int			suppress_prefixlen;
-	char			iifname[IFNAMSIZ];
-	char			oifname[IFNAMSIZ];
+	char			iifname[IFNAMSIZ];//inport名称
+	char			oifname[IFNAMSIZ];//outport名称
 	struct fib_kuid_range	uid_range;
 	struct fib_rule_port_range	sport_range;
 	struct fib_rule_port_range	dport_range;
@@ -119,6 +119,7 @@ struct fib_rule_notifier_info {
 	[FRA_DPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) }
 
 
+//引用fib规则
 static inline void fib_rule_get(struct fib_rule *rule)
 {
 	refcount_inc(&rule->refcnt);
@@ -137,6 +138,7 @@ static inline u32 fib_rule_get_table(struct fib_rule *rule,
 	return rule->l3mdev ? arg->table : rule->table;
 }
 #else
+//由fib_rule获取其对应的fib表编号
 static inline u32 fib_rule_get_table(struct fib_rule *rule,
 				     struct fib_lookup_arg *arg)
 {

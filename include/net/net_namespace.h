@@ -124,7 +124,7 @@ struct net {
 	struct netns_ct		ct;
 #endif
 #if defined(CONFIG_NF_TABLES) || defined(CONFIG_NF_TABLES_MODULE)
-	struct netns_nftables	nft;
+	struct netns_nftables	nft;//netfilter相关
 #endif
 #if IS_ENABLED(CONFIG_NF_DEFRAG_IPV6)
 	struct netns_nf_frag	nf_frag;

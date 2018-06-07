@@ -316,6 +316,7 @@ struct fib_table *fib_get_table(struct net *net, u32 id);
 int __fib_lookup(struct net *net, struct flowi4 *flp,
 		 struct fib_result *res, unsigned int flags);
 
+//路由表查询
 static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 			     struct fib_result *res, unsigned int flags)
 {
@@ -323,6 +324,7 @@ static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 	int err = -ENETUNREACH;
 
 	flags |= FIB_LOOKUP_NOREF;
+	//如果有策略路由，则进行查询
 	if (net->ipv4.fib_has_custom_rules)
 		return __fib_lookup(net, flp, res, flags);
 

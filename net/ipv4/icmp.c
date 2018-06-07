@@ -1113,7 +1113,7 @@ void icmp_err(struct sk_buff *skb, u32 info)
  */
 static const struct icmp_control icmp_pointers[NR_ICMP_TYPES + 1] = {
 	[ICMP_ECHOREPLY] = {
-		.handler = ping_rcv,
+		.handler = ping_rcv,//收到icmp reply消息后调用
 	},
 	[1] = {
 		.handler = icmp_discard,

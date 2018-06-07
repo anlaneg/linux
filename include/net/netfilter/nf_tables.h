@@ -857,7 +857,7 @@ enum nft_chain_flags {
  *	@name: name of the chain
  */
 struct nft_chain {
-	struct list_head		rules;
+	struct list_head		rules;//链上的规则
 	struct list_head		list;
 	struct nft_table		*table;
 	u64				handle;
@@ -961,7 +961,7 @@ unsigned int nft_do_chain(struct nft_pktinfo *pkt, void *priv);
  */
 struct nft_table {
 	struct list_head		list;
-	struct list_head		chains;
+	struct list_head		chains;//记录匹配链
 	struct list_head		sets;
 	struct list_head		objects;
 	struct list_head		flowtables;

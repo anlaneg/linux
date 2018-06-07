@@ -78,7 +78,7 @@ static u32 nf_nat_ipv4_secure_port(const struct nf_conntrack_tuple *t,
 //ipv4 nat报文修改函数
 static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 				  unsigned int iphdroff,
-				  const struct nf_nat_l4proto *l4proto,
+				  const struct nf_nat_l4proto *l4proto,//4层协议
 				  const struct nf_conntrack_tuple *target,//要设置的变换后的目标
 				  enum nf_nat_manip_type maniptype)
 {

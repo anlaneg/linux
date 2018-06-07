@@ -966,7 +966,7 @@ EXPORT_SYMBOL_GPL(ping_queue_rcv_skb);
 /*
  *	All we need to do is get the socket.
  */
-
+//收到ping报文
 bool ping_rcv(struct sk_buff *skb)
 {
 	struct sock *sk;
@@ -979,7 +979,7 @@ bool ping_rcv(struct sk_buff *skb)
 		 skb, ntohs(icmph->un.echo.id), ntohs(icmph->un.echo.sequence));
 
 	/* Push ICMP header back */
-	skb_push(skb, skb->data - (u8 *)icmph);
+	skb_push(skb, skb->data - (u8 *)icmph);//跳到icmp头部
 
 	sk = ping_lookup(net, skb, ntohs(icmph->un.echo.id));
 	if (sk) {
