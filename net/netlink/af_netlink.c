@@ -640,13 +640,15 @@ static int __netlink_create(struct net *net, struct socket *sock,
 	//设置netlink的socket操作集
 	sock->ops = &netlink_ops;
 
-	//申请私有数据
+	//申请netlink的socket私有数据
 	sk = sk_alloc(net, PF_NETLINK, GFP_KERNEL, &netlink_proto, kern);
 	if (!sk)
 		return -ENOMEM;
 
+	//私有数据公共部分初始化
 	sock_init_data(sock, sk);
 
+	//私有部分初始化
 	nlk = nlk_sk(sk);
 	if (cb_mutex) {
 		nlk->cb_mutex = cb_mutex;
@@ -677,7 +679,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 
 	sock->state = SS_UNCONNECTED;
 
-	//当前仅支持sock_raw,sock_dgram两种类型
+	//当前netlink仅支持sock_raw,sock_dgram两种类型
 	if (sock->type != SOCK_RAW && sock->type != SOCK_DGRAM)
 		return -ESOCKTNOSUPPORT;
 
@@ -688,6 +690,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	netlink_lock_table();
 #ifdef CONFIG_MODULES
 	if (!nl_table[protocol].registered) {
+		//如果对应的protocol未注册，则请求加载相应module
 		netlink_unlock_table();
 		request_module("net-pf-%d-proto-%d", PF_NETLINK, protocol);
 		netlink_lock_table();
@@ -2024,8 +2027,9 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	BUG_ON(!nl_table);
 
 	if (unit < 0 || unit >= MAX_LINKS)
-		return NULL;
+		return NULL;//参数校验
 
+	//创建sock(仅指明type)
 	if (sock_create_lite(PF_NETLINK, SOCK_DGRAM, unit, &sock))
 		return NULL;
 
@@ -2056,6 +2060,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	netlink_table_grab();
 	if (!nl_table[unit].registered) {
+		//注册此协议
 		nl_table[unit].groups = groups;
 		rcu_assign_pointer(nl_table[unit].listeners, listeners);
 		nl_table[unit].cb_mutex = cb_mutex;
@@ -2695,7 +2700,7 @@ static const struct proto_ops netlink_ops = {
 
 static const struct net_proto_family netlink_family_ops = {
 	.family = PF_NETLINK,
-	.create = netlink_create,//负载构造netlink的socket
+	.create = netlink_create,//负责构造netlink的socket
 	.owner	= THIS_MODULE,	/* for consistency 8) */
 };
 
@@ -2798,4 +2803,5 @@ panic:
 	panic("netlink_init: Cannot allocate nl_table\n");
 }
 
+//定义变量指向netlink_proto_init
 core_initcall(netlink_proto_init);

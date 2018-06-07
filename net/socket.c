@@ -1213,6 +1213,7 @@ call_kill:
 }
 EXPORT_SYMBOL(sock_wake_async);
 
+//根据family查找对应的net_proto_family,然后调用对应的协议句柄创建相应的socket
 int __sock_create(struct net *net, int family, int type, int protocol,
 			 struct socket **res, int kern)
 {
@@ -1256,6 +1257,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 				   closest posix thing */
 	}
 
+	//设置socket类型，例如tcp,udp等
 	sock->type = type;
 
 #ifdef CONFIG_MODULES
@@ -1271,6 +1273,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 #endif
 
 	rcu_read_lock();
+	//取出此协议对应的socket操作集
 	pf = rcu_dereference(net_families[family]);
 	err = -EAFNOSUPPORT;
 	if (!pf)
@@ -1286,7 +1289,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	/* Now protected by module ref count */
 	rcu_read_unlock();
 
-	//调用create创建对应的sock
+	//调用create创建对应的sock，例如通过netlink_create创建netlink的socket
 	err = pf->create(net, sock, protocol, kern);
 	if (err < 0)
 		goto out_module_put;
@@ -1306,7 +1309,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	err = security_socket_post_create(sock, family, type, protocol, kern);
 	if (err)
 		goto out_sock_release;
-	*res = sock;
+	*res = sock;//设置出参
 
 	return 0;
 
@@ -2634,6 +2637,7 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
  *	socket interface. The value ops->family corresponds to the
  *	socket system call protocol family.
  */
+//为某一协议注册其socket操作集
 int sock_register(const struct net_proto_family *ops)
 {
 	int err;
@@ -2644,6 +2648,7 @@ int sock_register(const struct net_proto_family *ops)
 	}
 
 	spin_lock(&net_family_lock);
+	//检查是否已注册
 	if (rcu_dereference_protected(net_families[ops->family],
 				      lockdep_is_held(&net_family_lock)))
 		err = -EEXIST;

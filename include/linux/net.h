@@ -108,7 +108,7 @@ struct socket_wq {
  *  @wq: wait queue for several uses
  */
 struct socket {
-	socket_state		state;
+	socket_state		state;//socket状态（未连接，连接中，已连接，断开中）
 
 	short			type;
 

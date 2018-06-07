@@ -3193,6 +3193,7 @@ core_initcall(net_inuse_init);
 
 static void assign_proto_idx(struct proto *prot)
 {
+	//找一个空闲的idx
 	prot->inuse_idx = find_first_zero_bit(proto_inuse_idx, PROTO_INUSE_NR);
 
 	if (unlikely(prot->inuse_idx == PROTO_INUSE_NR - 1)) {
@@ -3200,6 +3201,7 @@ static void assign_proto_idx(struct proto *prot)
 		return;
 	}
 
+	//占用此bit
 	set_bit(prot->inuse_idx, proto_inuse_idx);
 }
 
@@ -3293,7 +3295,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 	}
 
 	mutex_lock(&proto_list_mutex);
-	//将prot添加到proto_list
+	//将prot添加到proto_list，用于/proc/net/protocols文件
 	list_add(&prot->node, &proto_list);
 	assign_proto_idx(prot);
 	mutex_unlock(&proto_list_mutex);
@@ -3387,6 +3389,7 @@ static char *sock_prot_memory_pressure(struct proto *proto)
 	proto_memory_pressure(proto) ? "yes" : "no" : "NI";
 }
 
+//显示protocols文件中的内容
 static void proto_seq_printf(struct seq_file *seq, struct proto *proto)
 {
 

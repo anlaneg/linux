@@ -558,6 +558,7 @@ static int __net_init nfnetlink_net_init(struct net *net)
 #endif
 	};
 
+	//注册NETFILTER的netlink子系统
 	nfnl = netlink_kernel_create(net, NETLINK_NETFILTER, &cfg);
 	if (!nfnl)
 		return -ENOMEM;

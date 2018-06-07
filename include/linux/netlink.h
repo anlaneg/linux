@@ -54,6 +54,7 @@ struct netlink_kernel_cfg {
 extern struct sock *__netlink_kernel_create(struct net *net, int unit,
 					    struct module *module,
 					    struct netlink_kernel_cfg *cfg);
+//此函数用于完成netlink中子系统注册（及router,netlink等子系统）
 static inline struct sock *
 netlink_kernel_create(struct net *net, int unit, struct netlink_kernel_cfg *cfg)
 {

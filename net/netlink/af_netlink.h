@@ -38,6 +38,7 @@ struct netlink_sock {
 	struct netlink_callback	cb;
 	struct mutex		*cb_mutex;
 	struct mutex		cb_def_mutex;
+	//负责收取netlink消息（每个protocol一个对应的netlink_rcv)
 	void			(*netlink_rcv)(struct sk_buff *skb);
 	int			(*netlink_bind)(struct net *net, int group);
 	void			(*netlink_unbind)(struct net *net, int group);

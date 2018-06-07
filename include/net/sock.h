@@ -449,7 +449,7 @@ struct sock {
 				sk_no_check_tx : 1,
 				sk_no_check_rx : 1,
 				sk_userlocks : 4,
-				sk_protocol  : 8,
+				sk_protocol  : 8,//指明协议
 				sk_type      : 16;
 #define SK_PROTOCOL_MAX U8_MAX
 	u16			sk_gso_max_segs;

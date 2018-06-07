@@ -122,6 +122,7 @@ unsigned long find_first_zero_bit(const unsigned long *addr, unsigned long size)
 	unsigned long idx;
 
 	for (idx = 0; idx * BITS_PER_LONG < size; idx++) {
+		//addr[idx]不为全1，则可以从中找到个为0的bit
 		if (addr[idx] != ~0UL)
 			return min(idx * BITS_PER_LONG + ffz(addr[idx]), size);
 	}

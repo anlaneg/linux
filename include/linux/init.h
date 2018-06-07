@@ -166,7 +166,7 @@ extern bool initcall_debug;
  * and remove that completely, so the initcall sections have to be marked
  * as KEEP() in the linker script.
  */
-
+//定义init函数指针__initcall_$fn$id__used在.initcall$id.init段里
 #define __define_initcall(fn, id) \
 	static initcall_t __initcall_##fn##id __used \
 	__attribute__((__section__(".initcall" #id ".init"))) = fn;

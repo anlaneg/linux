@@ -6,6 +6,7 @@
 #include <linux/socket.h> /* for __kernel_sa_family_t */
 #include <linux/types.h>
 
+//定义netlink的protocol类型
 #define NETLINK_ROUTE		0	/* Routing/device hook				*/
 #define NETLINK_UNUSED		1	/* Unused number				*/
 #define NETLINK_USERSOCK	2	/* Reserved for user mode socket protocols 	*/
