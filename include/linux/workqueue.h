@@ -510,6 +510,7 @@ extern void show_workqueue_state(void);
 static inline bool queue_work(struct workqueue_struct *wq,
 			      struct work_struct *work)
 {
+	//将work入队到wq队列中，CPU未指定
 	return queue_work_on(WORK_CPU_UNBOUND, wq, work);
 }
 
