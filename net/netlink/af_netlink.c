@@ -524,6 +524,7 @@ static int __netlink_insert(struct netlink_table *table, struct sock *sk)
 
 static struct sock *netlink_lookup(struct net *net, int protocol, u32 portid)
 {
+	//取出对应protocol对应的table信息
 	struct netlink_table *table = &nl_table[protocol];
 	struct sock *sk;
 
@@ -700,6 +701,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 	    try_module_get(nl_table[protocol].module))
 		module = nl_table[protocol].module;
 	else
+		//要求的协议未注册，返回不支持
 		err = -EPROTONOSUPPORT;
 	cb_mutex = nl_table[protocol].cb_mutex;
 	bind = nl_table[protocol].bind;
@@ -1028,6 +1030,7 @@ static int netlink_bind(struct socket *sock, struct sockaddr *addr,
 
 	netlink_lock_table();
 	if (nlk->netlink_bind && groups) {
+		//有netlink_bind回调时
 		int group;
 
 		for (group = 0; group < nlk->ngroups; group++) {
@@ -1145,6 +1148,7 @@ static int netlink_ioctl(struct socket *sock, unsigned int cmd,
 	return -ENOIOCTLCMD;
 }
 
+//通过portid找对应的sock
 static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 {
 	struct sock *sock;
@@ -1315,9 +1319,11 @@ static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
 		netlink_skb_set_owner_r(skb, sk);
 		NETLINK_CB(skb).sk = ssk;
 		netlink_deliver_tap_kernel(sk, ssk, skb);
+		//交给对应的netlink子系统去处理消息
 		nlk->netlink_rcv(skb);
 		consume_skb(skb);
 	} else {
+		//无netlink_rcv回调，丢包
 		kfree_skb(skb);
 	}
 	sock_put(sk);
@@ -1341,6 +1347,7 @@ retry:
 		return PTR_ERR(sk);
 	}
 	if (netlink_is_kernel(sk))
+		//目标sk属于kernel,报文将被kernel接受,送给kernel
 		return netlink_unicast_kernel(sk, skb, ssk);
 
 	if (sk_filter(sk, skb)) {
@@ -2012,7 +2019,7 @@ static void netlink_data_ready(struct sock *sk)
  *	complete set of kernel non-blocking support for message
  *	queueing.
  */
-
+//注册kernel的netlink支持的protocol(unit)
 struct sock *
 __netlink_kernel_create(struct net *net, int unit, struct module *module,
 			struct netlink_kernel_cfg *cfg)
@@ -2681,7 +2688,7 @@ static const struct proto_ops netlink_ops = {
 	.family =	PF_NETLINK,
 	.owner =	THIS_MODULE,
 	.release =	netlink_release,
-	.bind =		netlink_bind,
+	.bind =		netlink_bind,//对应系统调用bind
 	.connect =	netlink_connect,
 	.socketpair =	sock_no_socketpair,
 	.accept =	sock_no_accept,
@@ -2692,8 +2699,8 @@ static const struct proto_ops netlink_ops = {
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	netlink_setsockopt,
 	.getsockopt =	netlink_getsockopt,
-	.sendmsg =	netlink_sendmsg,
-	.recvmsg =	netlink_recvmsg,
+	.sendmsg =	netlink_sendmsg,//对应系统调用sendmsg
+	.recvmsg =	netlink_recvmsg,//对应系统调用recvmsg
 	.mmap =		sock_no_mmap,
 	.sendpage =	sock_no_sendpage,
 };

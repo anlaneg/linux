@@ -192,6 +192,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 }
 
 #else
+//不支持ftrace情况下，定义为空
 #define SYSCALL_METADATA(sname, nb, ...)
 
 static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
@@ -200,6 +201,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 }
 #endif
 
+//0参数的系统调用
 #ifndef SYSCALL_DEFINE0
 #define SYSCALL_DEFINE0(sname)					\
 	SYSCALL_METADATA(_##sname, 0);				\
@@ -208,6 +210,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	asmlinkage long sys_##sname(void)
 #endif /* SYSCALL_DEFINE0 */
 
+//不同参数的系统调用
 #define SYSCALL_DEFINE1(name, ...) SYSCALL_DEFINEx(1, _##name, __VA_ARGS__)
 #define SYSCALL_DEFINE2(name, ...) SYSCALL_DEFINEx(2, _##name, __VA_ARGS__)
 #define SYSCALL_DEFINE3(name, ...) SYSCALL_DEFINEx(3, _##name, __VA_ARGS__)
@@ -235,13 +238,17 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 	ALLOW_ERROR_INJECTION(sys##name, ERRNO);			\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
 	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
+	/*这里相当于每个系统调用对内都有一个__se_sys##name的名称可被调起*/\
 	asmlinkage long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
 	{								\
+		/*完成系统函数调用封装*/\
 		long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
 		__MAP(x,__SC_TEST,__VA_ARGS__);				\
+		/*由于__VA_ARGS__中参数类型与参数是按逗号分隔来传递的，故采用__MAP函数将其划分开*/\
 		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
 		return ret;						\
 	}								\
+	/*开始系统函数定义*/\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 #endif /* __SYSCALL_DEFINEx */
 

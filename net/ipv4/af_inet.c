@@ -1923,6 +1923,7 @@ static int __init inet_init(void)
 	 *	Tell SOCKET that we are alive...
 	 */
 
+	//注册inet的socket创建
 	(void)sock_register(&inet_family_ops);
 
 #ifdef CONFIG_SYSCTL

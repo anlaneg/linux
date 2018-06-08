@@ -431,7 +431,7 @@ static int sock_map_fd(struct socket *sock, int flags)
 	int fd = get_unused_fd_flags(flags);
 	if (unlikely(fd < 0)) {
 		sock_release(sock);
-		return fd;
+		return fd;//申请fd失败
 	}
 
 	newfile = sock_alloc_file(sock, flags, NULL);
@@ -565,6 +565,7 @@ struct socket *sock_alloc(void)
 	if (!inode)
 		return NULL;
 
+	//由inode转换出sock
 	sock = SOCKET_I(inode);
 
 	inode->i_ino = get_next_ino();
@@ -796,6 +797,7 @@ void __sock_recv_ts_and_drops(struct msghdr *msg, struct sock *sk,
 }
 EXPORT_SYMBOL_GPL(__sock_recv_ts_and_drops);
 
+//调用sock对应的ops的recvmsg
 static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
 				     int flags)
 {
@@ -1273,7 +1275,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 #endif
 
 	rcu_read_lock();
-	//取出此协议对应的socket操作集
+	//取出此family对应的socket操作集
 	pf = rcu_dereference(net_families[family]);
 	err = -EAFNOSUPPORT;
 	if (!pf)
@@ -1330,6 +1332,7 @@ EXPORT_SYMBOL(__sock_create);
 
 int sock_create(int family, int type, int protocol, struct socket **res)
 {
+	//创建socket,传入namespace
 	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
 }
 EXPORT_SYMBOL(sock_create);
@@ -1352,7 +1355,7 @@ int __sys_socket(int family, int type, int protocol)
 	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
 	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
 
-	flags = type & ~SOCK_TYPE_MASK;
+	flags = type & ~SOCK_TYPE_MASK;//type检查
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
 		return -EINVAL;
 	type &= SOCK_TYPE_MASK;
@@ -1365,12 +1368,13 @@ int __sys_socket(int family, int type, int protocol)
 	if (retval < 0)
 		return retval;
 
+	//将socket映射到fd
 	return sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
 }
 
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
-	//创建socket
+	//socket系统调用
 	return __sys_socket(family, type, protocol);
 }
 
@@ -1483,6 +1487,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	struct sockaddr_storage address;
 	int err, fput_needed;
 
+	//依据fd,查找到对应的sock
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
 		err = move_addr_to_kernel(umyaddr, addrlen, &address);
@@ -1491,6 +1496,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 						   (struct sockaddr *)&address,
 						   addrlen);
 			if (!err)
+				//调用sock操作集中的bind函数
 				err = sock->ops->bind(sock,
 						      (struct sockaddr *)
 						      &address, addrlen);
@@ -1500,6 +1506,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	return err;
 }
 
+//定义bind系统调用
 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 {
 	return __sys_bind(fd, umyaddr, addrlen);
@@ -2331,6 +2338,7 @@ long __sys_recvmsg(int fd, struct user_msghdr __user *msg, unsigned int flags,
 	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
 		return -EINVAL;
 
+	//由fd获得sock
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
 		goto out;

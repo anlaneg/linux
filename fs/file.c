@@ -542,6 +542,7 @@ static int alloc_fd(unsigned start, unsigned flags)
 
 int get_unused_fd_flags(unsigned flags)
 {
+	//申请一个未用的fd
 	return __alloc_fd(current->files, 0, rlimit(RLIMIT_NOFILE), flags);
 }
 EXPORT_SYMBOL(get_unused_fd_flags);

@@ -34,7 +34,7 @@ struct nsproxy {
 	struct ipc_namespace *ipc_ns;
 	struct mnt_namespace *mnt_ns;
 	struct pid_namespace *pid_ns_for_children;
-	struct net 	     *net_ns;
+	struct net 	     *net_ns;//network的namespace
 	struct cgroup_namespace *cgroup_ns;
 };
 extern struct nsproxy init_nsproxy;
