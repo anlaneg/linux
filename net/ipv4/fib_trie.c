@@ -1339,15 +1339,15 @@ int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
 	unsigned long index;
 	t_key cindex;
 
-	trace_fib_table_lookup(tb->tb_id, flp);
-
 	pn = t->kv;//取trie树的key_vector
 	cindex = 0;
 
 	//trie树上的pn只有1个空间。
 	n = get_child_rcu(pn, cindex);
-	if (!n)
+	if (!n) {
+		trace_fib_table_lookup(tb->tb_id, flp, NULL, -EAGAIN);
 		return -EAGAIN;
+	}
 
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 	this_cpu_inc(stats->gets);
@@ -1431,8 +1431,11 @@ backtrace://回朔处理
 				 * nothing for us to do as we do not have any
 				 * further nodes to parse.
 				 */
-				if (IS_TRIE(pn))
+				if (IS_TRIE(pn)) {
+					trace_fib_table_lookup(tb->tb_id, flp,
+							       NULL, -EAGAIN);
 					return -EAGAIN;
+				}
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 				this_cpu_inc(stats->backtrack);
 #endif
@@ -1474,6 +1477,7 @@ found:
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 			this_cpu_inc(stats->semantic_match_passed);
 #endif
+			trace_fib_table_lookup(tb->tb_id, flp, NULL, err);
 			return err;
 		}
 		if (fi->fib_flags & RTNH_F_DEAD)
@@ -1509,7 +1513,7 @@ found:
 #ifdef CONFIG_IP_FIB_TRIE_STATS
 			this_cpu_inc(stats->semantic_match_passed);
 #endif
-			trace_fib_table_lookup_nh(nh);
+			trace_fib_table_lookup(tb->tb_id, flp, nh, err);
 
 			return err;
 		}
@@ -2365,18 +2369,6 @@ static int fib_triestat_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
-static int fib_triestat_seq_open(struct inode *inode, struct file *file)
-{
-	return single_open_net(inode, file, fib_triestat_seq_show);
-}
-
-static const struct file_operations fib_triestat_fops = {
-	.open	= fib_triestat_seq_open,
-	.read	= seq_read,
-	.llseek	= seq_lseek,
-	.release = single_release_net,
-};
-
 static struct key_vector *fib_trie_get_idx(struct seq_file *seq, loff_t pos)
 {
 	struct fib_trie_iter *iter = seq->private;
@@ -2548,19 +2540,6 @@ static const struct seq_operations fib_trie_seq_ops = {
 	.next   = fib_trie_seq_next,
 	.stop   = fib_trie_seq_stop,
 	.show   = fib_trie_seq_show,
-};
-
-static int fib_trie_seq_open(struct inode *inode, struct file *file)
-{
-	return seq_open_net(inode, file, &fib_trie_seq_ops,
-			    sizeof(struct fib_trie_iter));
-}
-
-static const struct file_operations fib_trie_fops = {
-	.open   = fib_trie_seq_open,
-	.read   = seq_read,
-	.llseek = seq_lseek,
-	.release = seq_release_net,
 };
 
 struct fib_route_iter {
@@ -2743,29 +2722,18 @@ static const struct seq_operations fib_route_seq_ops = {
 	.show   = fib_route_seq_show,
 };
 
-static int fib_route_seq_open(struct inode *inode, struct file *file)
-{
-	return seq_open_net(inode, file, &fib_route_seq_ops,
-			    sizeof(struct fib_route_iter));
-}
-
-static const struct file_operations fib_route_fops = {
-	.open   = fib_route_seq_open,
-	.read   = seq_read,
-	.llseek = seq_lseek,
-	.release = seq_release_net,
-};
-
 int __net_init fib_proc_init(struct net *net)
 {
-	if (!proc_create("fib_trie", 0444, net->proc_net, &fib_trie_fops))
+	if (!proc_create_net("fib_trie", 0444, net->proc_net, &fib_trie_seq_ops,
+			sizeof(struct fib_trie_iter)))
 		goto out1;
 
-	if (!proc_create("fib_triestat", 0444, net->proc_net,
-			 &fib_triestat_fops))
+	if (!proc_create_net_single("fib_triestat", 0444, net->proc_net,
+			fib_triestat_seq_show, NULL))
 		goto out2;
 
-	if (!proc_create("route", 0444, net->proc_net, &fib_route_fops))
+	if (!proc_create_net("route", 0444, net->proc_net, &fib_route_seq_ops,
+			sizeof(struct fib_route_iter)))
 		goto out3;
 
 	return 0;

@@ -187,10 +187,10 @@ static ssize_t unbind_store(struct device_driver *drv, const char *buf,
 
 	dev = bus_find_device_by_name(bus, NULL, buf);
 	if (dev && dev->driver == drv) {
-		if (dev->parent)	/* Needed for USB */
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_lock(dev->parent);
 		device_release_driver(dev);
-		if (dev->parent)
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_unlock(dev->parent);
 		err = count;
 	}
@@ -214,12 +214,12 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 
 	dev = bus_find_device_by_name(bus, NULL, buf);
 	if (dev && dev->driver == NULL && driver_match_device(drv, dev)) {
-		if (dev->parent)	/* Needed for USB */
+		if (dev->parent && bus->need_parent_lock)
 			device_lock(dev->parent);
 		device_lock(dev);
 		err = driver_probe_device(drv, dev);
 		device_unlock(dev);
-		if (dev->parent)
+		if (dev->parent && bus->need_parent_lock)
 			device_unlock(dev->parent);
 
 		if (err > 0) {
@@ -751,11 +751,11 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
 
 	if (!dev->driver) {
         //此dev还没有绑定driver
-		if (dev->parent)	/* Needed for USB */
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_lock(dev->parent);
         //此device尝试绑定驱动
 		ret = device_attach(dev);
-		if (dev->parent)
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_unlock(dev->parent);
 	}
 	return ret < 0 ? ret : 0;
@@ -788,10 +788,10 @@ EXPORT_SYMBOL_GPL(bus_rescan_devices);
 int device_reprobe(struct device *dev)
 {
 	if (dev->driver) {
-		if (dev->parent)        /* Needed for USB */
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_lock(dev->parent);
 		device_release_driver(dev);
-		if (dev->parent)
+		if (dev->parent && dev->bus->need_parent_lock)
 			device_unlock(dev->parent);
 	}
 	return bus_rescan_devices_helper(dev, NULL);
