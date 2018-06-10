@@ -37,6 +37,7 @@
 static LIST_HEAD(vport_ops_list);
 
 /* Protected by RCU read lock for reading, ovs_mutex for writing. */
+//记录以dev名称为索引的vport哈希表
 static struct hlist_head *dev_table;
 #define VPORT_HASH_BUCKETS 1024
 
@@ -81,6 +82,7 @@ int __ovs_vport_ops_register(struct vport_ops *ops)
 		if (ops->type == o->type)
 			goto errout;
 
+	//将ops注册到vport_ops_list
 	list_add_tail(&ops->list, &vport_ops_list);
 	err = 0;
 errout:
@@ -140,10 +142,12 @@ struct vport *ovs_vport_alloc(int priv_size, const struct vport_ops *ops,
 		alloc_size += priv_size;
 	}
 
+	//申请vport
 	vport = kzalloc(alloc_size, GFP_KERNEL);
 	if (!vport)
 		return ERR_PTR(-ENOMEM);
 
+	//设置vport对应的datapath,port-number,port操作集
 	vport->dp = parms->dp;
 	vport->port_no = parms->port_no;
 	vport->ops = ops;
@@ -178,6 +182,7 @@ void ovs_vport_free(struct vport *vport)
 }
 EXPORT_SYMBOL_GPL(ovs_vport_free);
 
+//匹配相同类理型的type
 static struct vport_ops *ovs_vport_lookup(const struct vport_parms *parms)
 {
 	struct vport_ops *ops;
@@ -202,6 +207,7 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 	struct vport_ops *ops;
 	struct vport *vport;
 
+	//取类型为parms->type的ops
 	ops = ovs_vport_lookup(parms);
 	if (ops) {
 		struct hlist_head *bucket;
@@ -209,6 +215,7 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 		if (!try_module_get(ops->owner))
 			return ERR_PTR(-EAFNOSUPPORT);
 
+		//创建port
 		vport = ops->create(parms);
 		if (IS_ERR(vport)) {
 			module_put(ops->owner);

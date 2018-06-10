@@ -1110,6 +1110,7 @@ static int netlink_connect(struct socket *sock, struct sockaddr *addr,
 		err = netlink_autobind(sock);
 
 	if (err == 0) {
+		//状态变更为已连接
 		sk->sk_state	= NETLINK_CONNECTED;
 		nlk->dst_portid = nladdr->nl_pid;
 		nlk->dst_group  = ffs(nladdr->nl_groups);
@@ -1863,7 +1864,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 			goto out;
 		if (addr->nl_family != AF_NETLINK)
 			goto out;
-		dst_portid = addr->nl_pid;
+		dst_portid = addr->nl_pid;//取目的进程pid,做为dst_port_id
 		dst_group = ffs(addr->nl_groups);
 		err =  -EPERM;
 		if ((dst_group || dst_portid) &&

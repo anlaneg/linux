@@ -562,6 +562,7 @@ static int parse_nsh(struct sk_buff *skb, struct sw_flow_key *key)
  *    - skb->protocol: the type of the data starting at skb->network_header.
  *      Equals to key->eth.type.
  */
+//解开报文中的内容
 static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 {
 	int error;

@@ -157,6 +157,7 @@ static int get_dpifindex(const struct datapath *dp)
 
 	rcu_read_lock();
 
+	//取dp中的local dev
 	local = ovs_vport_rcu(dp, OVSP_LOCAL);
 	if (local)
 		ifindex = local->dev->ifindex;
@@ -179,6 +180,7 @@ static void destroy_dp_rcu(struct rcu_head *rcu)
 	kfree(dp);
 }
 
+//找到port_no对应的hash桶
 static struct hlist_head *vport_hash_bucket(const struct datapath *dp,
 					    u16 port_no)
 {
@@ -191,6 +193,7 @@ struct vport *ovs_lookup_vport(const struct datapath *dp, u16 port_no)
 	struct vport *vport;
 	struct hlist_head *head;
 
+	//查找对应的hash桶
 	head = vport_hash_bucket(dp, port_no);
 	hlist_for_each_entry_rcu(vport, head, dp_hash_node) {
 		if (vport->port_no == port_no)
@@ -239,8 +242,10 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 	stats = this_cpu_ptr(dp->stats_percpu);
 
 	/* Look up flow. */
+	//查询table
 	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, &n_mask_hit);
 	if (unlikely(!flow)) {
+		//没有找到flow,upcall由用户态进行处理
 		struct dp_upcall_info upcall;
 		int error;
 
@@ -259,7 +264,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 
 	ovs_flow_stats_update(flow, key->tp.flags, skb);
 	sf_acts = rcu_dereference(flow->sf_acts);
-	ovs_execute_actions(dp, skb, sf_acts, key);
+	ovs_execute_actions(dp, skb, sf_acts, key);//执行action
 
 	stats_counter = &stats->n_hit;
 
@@ -514,6 +519,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 
 	((struct nlmsghdr *) user_skb->data)->nlmsg_len = user_skb->len;
 
+	//将报文通过netlink发送给用户态(upcall_info指出了发送给哪个进程）
 	err = genlmsg_unicast(ovs_dp_get_net(dp), user_skb, upcall_info->portid);
 	user_skb = NULL;
 out:
@@ -1805,7 +1811,7 @@ static const struct genl_ops dp_datapath_genl_ops[] = {
 	{ .cmd = OVS_DP_CMD_NEW,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .policy = datapath_policy,
-	  .doit = ovs_dp_cmd_new
+	  .doit = ovs_dp_cmd_new //接收相应的netlink消息处理port创建
 	},
 	{ .cmd = OVS_DP_CMD_DEL,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */

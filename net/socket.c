@@ -1679,6 +1679,7 @@ int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 	if (err)
 		goto out_put;
 
+	//调用sock的ops实现connect
 	err = sock->ops->connect(sock, (struct sockaddr *)&address, addrlen,
 				 sock->file->f_flags);
 out_put:

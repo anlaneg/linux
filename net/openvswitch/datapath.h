@@ -82,7 +82,7 @@ struct datapath {
 	struct flow_table table;
 
 	/* Switch ports. */
-	struct hlist_head *ports;
+	struct hlist_head *ports;//以port_no为索引的vport表
 
 	/* Stats. */
 	struct dp_stats_percpu __percpu *stats_percpu;
@@ -177,6 +177,7 @@ static inline void ovs_dp_set_net(struct datapath *dp, struct net *net)
 
 struct vport *ovs_lookup_vport(const struct datapath *dp, u16 port_no);
 
+//给定port number找到对应的vport
 static inline struct vport *ovs_vport_rcu(const struct datapath *dp, int port_no)
 {
 	WARN_ON_ONCE(!rcu_read_lock_held());

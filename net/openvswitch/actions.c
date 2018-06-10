@@ -942,6 +942,7 @@ err:
 	kfree_skb(skb);
 }
 
+//将报文自out_port口输出
 static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port,
 		      struct sw_flow_key *key)
 {
@@ -1187,6 +1188,7 @@ static int execute_recirc(struct datapath *dp, struct sk_buff *skb,
 }
 
 /* Execute a list of actions against 'skb'. */
+//ovs action执行
 static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			      struct sw_flow_key *key,
 			      const struct nlattr *attr, int len)
@@ -1199,8 +1201,9 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		int err = 0;
 
 		switch (nla_type(a)) {
+		//output action执行
 		case OVS_ACTION_ATTR_OUTPUT: {
-			int port = nla_get_u32(a);
+			int port = nla_get_u32(a);//取输出的端口号
 			struct sk_buff *clone;
 
 			/* Every output action needs a separate clone
@@ -1208,6 +1211,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			 * last action, cloning can be avoided.
 			 */
 			if (nla_is_last(a, rem)) {
+				//最后一个port不用clone
 				do_output(dp, skb, port, key);
 				/* 'skb' has been used for output.
 				 */
@@ -1216,12 +1220,13 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 
 			clone = skb_clone(skb, GFP_ATOMIC);
 			if (clone)
+				//完成clone后将报文自port接口输出
 				do_output(dp, clone, port, key);
 			OVS_CB(skb)->cutlen = 0;
 			break;
 		}
 
-		case OVS_ACTION_ATTR_TRUNC: {
+		case OVS_ACTION_ATTR_TRUNC: {//实现报文截断（仅更新cutlen)
 			struct ovs_action_trunc *trunc = nla_data(a);
 
 			if (skb->len > trunc->max_len)
@@ -1229,7 +1234,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 		}
 
-		case OVS_ACTION_ATTR_USERSPACE:
+		case OVS_ACTION_ATTR_USERSPACE://输出到userspace
 			output_userspace(dp, skb, key, a, attr,
 						     len, OVS_CB(skb)->cutlen);
 			OVS_CB(skb)->cutlen = 0;
