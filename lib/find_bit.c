@@ -40,13 +40,13 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 	if (unlikely(start >= nbits))
 		return nbits;
 
-	tmp = addr1[start / BITS_PER_LONG];
+	tmp = addr1[start / BITS_PER_LONG];//取start对应的位置
 	if (addr2)
 		tmp &= addr2[start / BITS_PER_LONG];
 	tmp ^= invert;
 
 	/* Handle 1st word. */
-	tmp &= BITMAP_FIRST_WORD_MASK(start);
+	tmp &= BITMAP_FIRST_WORD_MASK(start);//将start位以下的bit置为0
 	start = round_down(start, BITS_PER_LONG);
 
 	while (!tmp) {

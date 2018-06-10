@@ -1,4 +1,3 @@
-/*
  * NET		An implementation of the SOCKET network access protocol.
  *
  * Version:	@(#)socket.c	1.1.93	18/02/95
@@ -432,19 +431,20 @@ EXPORT_SYMBOL(sock_alloc_file);
 static int sock_map_fd(struct socket *sock, int flags)
 {
 	struct file *newfile;
-	int fd = get_unused_fd_flags(flags);
+	int fd = get_unused_fd_flags(flags);//申请一个fd
 	if (unlikely(fd < 0)) {
 		sock_release(sock);
 		return fd;//申请fd失败
 	}
 
+	//指明fd对应的file
 	newfile = sock_alloc_file(sock, flags, NULL);
 	if (likely(!IS_ERR(newfile))) {
 		fd_install(fd, newfile);
 		return fd;
 	}
 
-	put_unused_fd(fd);
+	put_unused_fd(fd);//还原不再占用的fd
 	return PTR_ERR(newfile);
 }
 

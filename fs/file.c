@@ -173,10 +173,10 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	}
 	cur_fdt = files_fdtable(files);
 	BUG_ON(nr < cur_fdt->max_fds);
-	copy_fdtable(new_fdt, cur_fdt);
+	copy_fdtable(new_fdt, cur_fdt);//填充旧的数据
 	rcu_assign_pointer(files->fdt, new_fdt);
 	if (cur_fdt != &files->fdtab)
-		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);
+		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);//调用rcu对旧数据进行施放
 	/* coupled with smp_rmb() in __fd_install() */
 	smp_wmb();
 	return 1;
@@ -209,6 +209,7 @@ repeat:
 		return -EMFILE;
 
 	if (unlikely(files->resize_in_progress)) {
+		//已在扩展，等待其完成后重试
 		spin_unlock(&files->file_lock);
 		expanded = 1;
 		wait_event(files->resize_wait, !files->resize_in_progress);
@@ -221,6 +222,7 @@ repeat:
 	expanded = expand_fdtable(files, nr);
 	files->resize_in_progress = false;
 
+	//防止存在等待者，将其唤醒
 	wake_up_all(&files->resize_wait);
 	return expanded;
 }
@@ -462,14 +464,14 @@ struct files_struct init_files = {
 static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 {
 	unsigned int maxfd = fdt->max_fds;
-	unsigned int maxbit = maxfd / BITS_PER_LONG;
+	unsigned int maxbit = maxfd / BITS_PER_LONG;//将bit索引换算为long类型索引
 	unsigned int bitbit = start / BITS_PER_LONG;
 
 	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;
 	if (bitbit > maxfd)
-		return maxfd;
+		return maxfd;//规范为maxfd
 	if (bitbit > start)
-		start = bitbit;
+		start = bitbit;//
 	return find_next_zero_bit(fdt->open_fds, maxfd, start);
 }
 
@@ -486,6 +488,7 @@ int __alloc_fd(struct files_struct *files,
 
 	spin_lock(&files->file_lock);
 repeat:
+	//取fdt
 	fdt = files_fdtable(files);
 	fd = start;
 	if (fd < files->next_fd)
@@ -500,9 +503,9 @@ repeat:
 	 */
 	error = -EMFILE;
 	if (fd >= end)
-		goto out;
+		goto out;//超限，申请失败
 
-	error = expand_files(files, fd);
+	error = expand_files(files, fd);//扩大内存
 	if (error < 0)
 		goto out;
 

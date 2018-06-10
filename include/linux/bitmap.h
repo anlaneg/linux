@@ -193,6 +193,7 @@ extern unsigned int bitmap_ord_to_pos(const unsigned long *bitmap, unsigned int 
 extern int bitmap_print_to_pagebuf(bool list, char *buf,
 				   const unsigned long *maskp, int nmaskbits);
 
+//低位为0号bit位，故start起始的mask实际上是start位以下均为0
 #define BITMAP_FIRST_WORD_MASK(start) (~0UL << ((start) & (BITS_PER_LONG - 1)))
 #define BITMAP_LAST_WORD_MASK(nbits) (~0UL >> (-(nbits) & (BITS_PER_LONG - 1)))
 
