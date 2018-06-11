@@ -498,8 +498,8 @@ static void kernfs_drain(struct kernfs_node *kn)
 void kernfs_get(struct kernfs_node *kn)
 {
 	if (kn) {
-		WARN_ON(!atomic_read(&kn->count));
-		atomic_inc(&kn->count);
+		WARN_ON(!atomic_read(&kn->count));//不能为0
+		atomic_inc(&kn->count);//增加其引用计数
 	}
 }
 EXPORT_SYMBOL_GPL(kernfs_get);
@@ -520,7 +520,7 @@ void kernfs_put(struct kernfs_node *kn)
 	 * depends on this to filter reused stale node
 	 */
 	if (!kn || !atomic_dec_and_test(&kn->count))
-		return;
+		return;//引用计数未减为0，不释放
 	root = kernfs_root(kn);
  repeat:
 	/*
@@ -662,7 +662,7 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	 * kernfs_find_and_get_node_by_ino
 	 */
 	smp_mb__before_atomic();
-	atomic_set(&kn->count, 1);
+	atomic_set(&kn->count, 1);//将此节点引用为1
 	atomic_set(&kn->active, KN_DEACTIVATED_BIAS);
 	RB_CLEAR_NODE(&kn->rb);
 
@@ -687,6 +687,7 @@ struct kernfs_node *kernfs_new_node(struct kernfs_node *parent,
 
 	kn = __kernfs_new_node(kernfs_root(parent), name, mode, flags);
 	if (kn) {
+		//节点申请成功，增加parent的引用
 		kernfs_get(parent);
 		kn->parent = parent;
 	}
@@ -719,6 +720,7 @@ struct kernfs_node *kernfs_find_and_get_node_by_ino(struct kernfs_root *root,
 	 * filter out such node.
 	 */
 	if (!atomic_inc_not_zero(&kn->count)) {
+		//引用计数已减为0
 		kn = NULL;
 		goto out;
 	}
@@ -753,9 +755,10 @@ out:
  *	0 on success, -EEXIST if entry with the given name already
  *	exists.
  */
+//将kn放入其父节点中
 int kernfs_add_one(struct kernfs_node *kn)
 {
-	struct kernfs_node *parent = kn->parent;
+	struct kernfs_node *parent = kn->parent;//节点的父节点
 	struct kernfs_iattrs *ps_iattr;
 	bool has_ns;
 	int ret;
@@ -773,7 +776,7 @@ int kernfs_add_one(struct kernfs_node *kn)
 		goto out_unlock;
 
 	ret = -ENOENT;
-	//父节点要求为空目录
+	//父节点要求为空目录，现在要加入，不满足退出
 	if (parent->flags & KERNFS_EMPTY_DIR)
 		goto out_unlock;
 

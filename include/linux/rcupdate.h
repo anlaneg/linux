@@ -358,6 +358,8 @@ static inline void rcu_preempt_sleep_check(void) { }
 	rcu_dereference_sparse(p, space); \
 	((typeof(*p) __force __kernel *)(p)); \
 })
+
+//得到p的一份copy
 #define rcu_dereference_raw(p) \
 ({ \
 	/* Dependency order vs. p above. */ \

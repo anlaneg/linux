@@ -76,6 +76,7 @@ const char *kstrdup_const(const char *s, gfp_t gfp)
 	if (is_kernel_rodata((unsigned long)s))
 		return s;
 
+	//非只读数据，复制一份
 	return kstrdup(s, gfp);
 }
 EXPORT_SYMBOL(kstrdup_const);

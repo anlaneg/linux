@@ -68,6 +68,7 @@ struct kernfs_super_info {
 	/* anchored at kernfs_root->supers, protected by kernfs_mutex */
 	struct list_head	node;
 };
+//取超级块的私有数据
 #define kernfs_info(SB) ((struct kernfs_super_info *)(SB->s_fs_info))
 
 static inline struct kernfs_node *kernfs_dentry_node(struct dentry *dentry)

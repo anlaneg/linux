@@ -825,6 +825,7 @@ static struct inode *find_inode_fast(struct super_block *sb,
 
 repeat:
 	hlist_for_each_entry(inode, head, i_hash) {
+		//跳过编号与superblock不相等的inode
 		if (inode->i_ino != ino)
 			continue;
 		if (inode->i_sb != sb)
@@ -1124,6 +1125,7 @@ EXPORT_SYMBOL(iget5_locked);
  */
 struct inode *iget_locked(struct super_block *sb, unsigned long ino)
 {
+	//找到合适的hash桶
 	struct hlist_head *head = inode_hashtable + hash(sb, ino);
 	struct inode *inode;
 again:

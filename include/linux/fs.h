@@ -1350,17 +1350,17 @@ struct super_block {
 	struct list_head	s_list;		/* Keep this first */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_blocksize_bits;
-	unsigned long		s_blocksize;
-	loff_t			s_maxbytes;	/* Max file size */
+	unsigned long		s_blocksize;//文件系统的块大小
+	loff_t			s_maxbytes;	/* Max file size */ //文件系统支持的最大文件大小
 	struct file_system_type	*s_type;//属于那种文件系统
-	const struct super_operations	*s_op;
+	const struct super_operations	*s_op;//super block操作函数
 	const struct dquot_operations	*dq_op;
 	const struct quotactl_ops	*s_qcop;
 	const struct export_operations *s_export_op;
 	unsigned long		s_flags;
 	unsigned long		s_iflags;	/* internal SB_I_* flags */
-	unsigned long		s_magic;
-	struct dentry		*s_root;
+	unsigned long		s_magic;//每个文件系统均有一个magic
+	struct dentry		*s_root;//文件系统根目录项
 	struct rw_semaphore	s_umount;
 	int			s_count;
 	atomic_t		s_active;
@@ -1385,6 +1385,7 @@ struct super_block {
 	char			s_id[32];	/* Informational name */ //文件系统名称
 	uuid_t			s_uuid;		/* UUID */
 
+	//文件系统的私有数据
 	void 			*s_fs_info;	/* Filesystem private info */
 	unsigned int		s_max_links;
 	fmode_t			s_mode;
