@@ -240,8 +240,10 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 	/* entering_irq() tells RCU that we're not quiescent.  Check it. */
 	RCU_LOCKDEP_WARN(!rcu_is_watching(), "IRQ failed to wake up RCU");
 
+	//取得中断向量对应的中断描述信息
 	desc = __this_cpu_read(vector_irq[vector]);
 
+	//处理中断
 	if (!handle_irq(desc, regs)) {
 		ack_APIC_irq();
 
@@ -254,6 +256,7 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 		}
 	}
 
+	//中断退出，还原寄存器
 	exiting_irq();
 
 	set_irq_regs(old_regs);

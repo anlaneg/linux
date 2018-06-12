@@ -510,7 +510,7 @@ static inline void napi_enable(struct napi_struct *n)
 {
 	BUG_ON(!test_bit(NAPI_STATE_SCHED, &n->state));
 	smp_mb__before_atomic();
-	clear_bit(NAPI_STATE_SCHED, &n->state);
+	clear_bit(NAPI_STATE_SCHED, &n->state);//开启napi调度
 	clear_bit(NAPI_STATE_NPSVC, &n->state);
 }
 
@@ -526,7 +526,7 @@ static inline void napi_synchronize(const struct napi_struct *n)
 {
 	if (IS_ENABLED(CONFIG_SMP))
 		while (test_bit(NAPI_STATE_SCHED, &n->state))
-			msleep(1);
+			msleep(1);//等待被标记为state_sched,等待可运行
 	else
 		barrier();
 }

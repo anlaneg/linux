@@ -210,6 +210,7 @@ ixgb_up(struct ixgb_adapter *adapter)
 		/* proceed to try to request regular interrupt */
 	}
 
+	//注册中断处理函数（触发软中断，使其收包）
 	err = request_irq(adapter->pdev->irq, ixgb_intr, irq_flags,
 	                  netdev->name, netdev);
 	if (err) {
@@ -1747,13 +1748,16 @@ ixgb_intr(int irq, void *data)
 		if (!test_bit(__IXGB_DOWN, &adapter->flags))
 			mod_timer(&adapter->watchdog_timer, jiffies);
 
+	//检查napi是否可被调度
 	if (napi_schedule_prep(&adapter->napi)) {
 
 		/* Disable interrupts and register for poll. The flush
 		  of the posted write is intentionally left out.
 		*/
 
+		//关中断
 		IXGB_WRITE_REG(&adapter->hw, IMC, ~0);
+		//触发软中断
 		__napi_schedule(&adapter->napi);
 	}
 	return IRQ_HANDLED;

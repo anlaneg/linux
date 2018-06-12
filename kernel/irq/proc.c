@@ -315,11 +315,13 @@ void register_handler_proc(unsigned int irq, struct irqaction *action)
 
 	if (!desc->dir || action->dir || !action->name ||
 					!name_unique(irq, action))
+		//desc没有创建成功目录，action已有目录，action没有名称或者action名称不唯一，均直接返回
 		return;
 
 	snprintf(name, MAX_NAMELEN, "%s", action->name);
 
 	/* create /proc/irq/1234/handler/ */
+	//创建action对应的名称，在此中断对应的/proc目录下
 	action->dir = proc_mkdir(name, desc->dir);
 }
 
@@ -333,6 +335,7 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 	void __maybe_unused *irqp = (void *)(unsigned long) irq;
 	char name [MAX_NAMELEN];
 
+	//如果未创建irq目录，则退出
 	if (!root_irq_dir || (desc->irq_data.chip == &no_irq_chip))
 		return;
 
@@ -343,12 +346,14 @@ void register_irq_proc(unsigned int irq, struct irq_desc *desc)
 	 */
 	mutex_lock(&register_lock);
 
+	//已有目录（加锁后重查，防止多个线程进入）
 	if (desc->dir)
 		goto out_unlock;
 
 	sprintf(name, "%d", irq);
 
 	/* create /proc/irq/1234 */
+	//在/proc/irq目录下，创建相应中断目录
 	desc->dir = proc_mkdir(name, root_irq_dir);
 	if (!desc->dir)
 		goto out_unlock;
@@ -425,6 +430,7 @@ void init_irq_proc(void)
 	struct irq_desc *desc;
 
 	/* create /proc/irq */
+	//创建目录/proc/irq
 	root_irq_dir = proc_mkdir("irq", NULL);
 	if (!root_irq_dir)
 		return;

@@ -56,7 +56,7 @@ struct irq_desc {
 	struct irq_common_data	irq_common_data;
 	struct irq_data		irq_data;
 	unsigned int __percpu	*kstat_irqs;
-	irq_flow_handler_t	handle_irq;
+	irq_flow_handler_t	handle_irq;//中断处理回调
 #ifdef CONFIG_IRQ_PREFLOW_FASTEOI
 	irq_preflow_handler_t	preflow_handler;
 #endif
@@ -90,7 +90,7 @@ struct irq_desc {
 	unsigned int		force_resume_depth;
 #endif
 #ifdef CONFIG_PROC_FS
-	struct proc_dir_entry	*dir;
+	struct proc_dir_entry	*dir;//中断对应的/proc目录
 #endif
 #ifdef CONFIG_GENERIC_IRQ_DEBUGFS
 	struct dentry		*debugfs_file;

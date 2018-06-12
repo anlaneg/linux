@@ -108,19 +108,19 @@ typedef irqreturn_t (*irq_handler_t)(int, void *);
  * @dir:	pointer to the proc/irq/NN/name entry
  */
 struct irqaction {
-	irq_handler_t		handler;
+	irq_handler_t		handler;//中断处理回调
 	void			*dev_id;
 	void __percpu		*percpu_dev_id;
 	struct irqaction	*next;
 	irq_handler_t		thread_fn;
 	struct task_struct	*thread;
 	struct irqaction	*secondary;
-	unsigned int		irq;
+	unsigned int		irq;//中断编号
 	unsigned int		flags;
 	unsigned long		thread_flags;
 	unsigned long		thread_mask;
-	const char		*name;
-	struct proc_dir_entry	*dir;
+	const char		*name;//可以是设备名称
+	struct proc_dir_entry	*dir;// 中断对应的设备名，例如/proc/irq/123/enp0s31f6
 } ____cacheline_internodealigned_in_smp;
 
 extern irqreturn_t no_action(int cpl, void *dev_id);
@@ -140,6 +140,7 @@ request_threaded_irq(unsigned int irq, irq_handler_t handler,
 		     irq_handler_t thread_fn,
 		     unsigned long flags, const char *name, void *dev);
 
+//定义中断回调（irq 中断号，handler 中断处理回调，）
 static inline int __must_check
 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
 	    const char *name, void *dev)
