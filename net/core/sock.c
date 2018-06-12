@@ -469,11 +469,11 @@ int __sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 	spin_lock_irqsave(&list->lock, flags);
 	sock_skb_set_dropcount(sk, skb);
-	__skb_queue_tail(list, skb);
+	__skb_queue_tail(list, skb);//将报文挂接在收队列中
 	spin_unlock_irqrestore(&list->lock, flags);
 
 	if (!sock_flag(sk, SOCK_DEAD))
-		sk->sk_data_ready(sk);
+		sk->sk_data_ready(sk);//知会收到报文
 	return 0;
 }
 EXPORT_SYMBOL(__sock_queue_rcv_skb);

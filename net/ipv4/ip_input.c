@@ -201,6 +201,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 		int raw;
 
 	resubmit:
+		//raw socket传递
 		raw = raw_local_deliver(skb, protocol);
 
 		//按ip头协议查找协议处理函数
