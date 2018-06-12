@@ -267,11 +267,14 @@ lookup_protocol:
 
 		err = 0;
 		/* Check the non-wild match. */
+		//常见的，我们在创建socket时指定的protocol为0
+		//注：下文中IPPROTO_IP为0
 		if (protocol == answer->protocol) {
 			if (protocol != IPPROTO_IP)
 				break;
 		} else {
 			/* Check for the two wild cases. */
+			//如果协议为0，则将protocol更新为answer->protocol并认为匹配成功
 			if (IPPROTO_IP == protocol) {
 				protocol = answer->protocol;
 				break;
@@ -283,6 +286,7 @@ lookup_protocol:
 	}
 
 	if (unlikely(err)) {
+		//尝试加载module来支持
 		if (try_loading_module < 2) {
 			rcu_read_unlock();
 			/*
@@ -299,9 +303,9 @@ lookup_protocol:
 			else
 				request_module("net-pf-%d-proto-%d",
 					       PF_INET, protocol);
-			goto lookup_protocol;
+			goto lookup_protocol;//已加载，重查
 		} else
-			goto out_rcu_unlock;
+			goto out_rcu_unlock;//尝试后仍无法支持，返回错误
 	}
 
 	err = -EPERM;
@@ -309,7 +313,7 @@ lookup_protocol:
 	    !ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out_rcu_unlock;
 
-	sock->ops = answer->ops;
+	sock->ops = answer->ops;//设置socket操作集
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
 	rcu_read_unlock();
@@ -317,6 +321,7 @@ lookup_protocol:
 	WARN_ON(!answer_prot->slab);
 
 	err = -ENOBUFS;
+	//申请sk
 	sk = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
 		goto out;
@@ -325,6 +330,7 @@ lookup_protocol:
 	if (INET_PROTOSW_REUSE & answer_flags)
 		sk->sk_reuse = SK_CAN_REUSE;
 
+	//强转为inet的socket
 	inet = inet_sk(sk);
 	inet->is_icsk = (INET_PROTOSW_ICSK & answer_flags) != 0;
 
@@ -374,6 +380,7 @@ lookup_protocol:
 		}
 	}
 
+	//如果有init回调，则基于protocol来进行socket初始化
 	if (sk->sk_prot->init) {
 		err = sk->sk_prot->init(sk);
 		if (err) {
@@ -430,6 +437,7 @@ int inet_release(struct socket *sock)
 }
 EXPORT_SYMBOL(inet_release);
 
+//实现af_inet bind系统调用
 int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
@@ -437,8 +445,10 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 
 	/* If the socket has its own bind function then use it. (RAW) */
 	if (sk->sk_prot->bind) {
+		//如果协议有自已的bind函数，则调用bind
 		return sk->sk_prot->bind(sk, uaddr, addr_len);
 	}
+	//如果协议未提供自已的bind函数，则使用默认的bind函数
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
@@ -453,6 +463,7 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 }
 EXPORT_SYMBOL(inet_bind);
 
+//(实现udp,tcp的bind函数)
 int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 		bool force_bind_address_no_port, bool with_lock)
 {
@@ -493,6 +504,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	    chk_addr_ret != RTN_BROADCAST)
 		goto out;
 
+	//取出要bind的srcport
 	snum = ntohs(addr->sin_port);
 	err = -EACCES;
 	if (snum && snum < inet_prot_sock(net) &&
@@ -514,6 +526,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	if (sk->sk_state != TCP_CLOSE || inet->inet_num)
 		goto out_release_sock;
 
+	//设置bind的dstip
 	inet->inet_rcv_saddr = inet->inet_saddr = addr->sin_addr.s_addr;
 	if (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		inet->inet_saddr = 0;  /* Use device */
@@ -521,10 +534,11 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      force_bind_address_no_port)) {
+		//检查此srcport是否已占用
 		if (sk->sk_prot->get_port(sk, snum)) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
 			err = -EADDRINUSE;
-			goto out_release_sock;
+			goto out_release_sock;//已占用，报错
 		}
 		err = BPF_CGROUP_RUN_PROG_INET4_POST_BIND(sk);
 		if (err) {
@@ -827,6 +841,7 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 	if (likely(!(flags & MSG_ERRQUEUE)))
 		sock_rps_record_flow(sk);
 
+	//通过协议的recvmsg回调来完成
 	err = sk->sk_prot->recvmsg(sk, msg, size, flags & MSG_DONTWAIT,
 				   flags & ~MSG_DONTWAIT, &addr_len);
 	if (err >= 0)
@@ -977,6 +992,7 @@ static int inet_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned lon
 }
 #endif
 
+//tcp对应的socket操作集
 const struct proto_ops inet_stream_ops = {
 	.family		   = PF_INET,
 	.owner		   = THIS_MODULE,
@@ -1012,6 +1028,7 @@ const struct proto_ops inet_stream_ops = {
 };
 EXPORT_SYMBOL(inet_stream_ops);
 
+//udp对应的socket操作集
 const struct proto_ops inet_dgram_ops = {
 	.family		   = PF_INET,
 	.owner		   = THIS_MODULE,
@@ -1044,6 +1061,7 @@ EXPORT_SYMBOL(inet_dgram_ops);
  * For SOCK_RAW sockets; should be the same as inet_dgram_ops but without
  * udp_poll_mask
  */
+//raw对应的socket操作集
 static const struct proto_ops inet_sockraw_ops = {
 	.family		   = PF_INET,
 	.owner		   = THIS_MODULE,
@@ -1083,6 +1101,7 @@ static const struct net_proto_family inet_family_ops = {
 static struct inet_protosw inetsw_array[] =
 {
 	{
+		//注册tcp socket
 		.type =       SOCK_STREAM,
 		.protocol =   IPPROTO_TCP,
 		.prot =       &tcp_prot,
@@ -1092,14 +1111,16 @@ static struct inet_protosw inetsw_array[] =
 	},
 
 	{
+		//注册udp socket
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_UDP,
 		.prot =       &udp_prot,
-		.ops =        &inet_dgram_ops,
+		.ops =        &inet_dgram_ops,//udp协议对应的socket操作集
 		.flags =      INET_PROTOSW_PERMANENT,
        },
 
        {
+        //注册icmp socket
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_ICMP,
 		.prot =       &ping_prot,
@@ -1137,9 +1158,9 @@ void inet_register_protosw(struct inet_protosw *p)
 		answer = list_entry(lh, struct inet_protosw, list);
 		/* Check only the non-wild match. */
 		if ((INET_PROTOSW_PERMANENT & answer->flags) == 0)
-			break;
+			break;//无permanent标记,则忽略
 		if (protocol == answer->protocol)
-			goto out_permanent;
+			goto out_permanent;//已存在
 		last_perm = lh;
 	}
 
@@ -1149,7 +1170,7 @@ void inet_register_protosw(struct inet_protosw *p)
 	 * non-permanent entry.  This means that when we remove this entry, the
 	 * system automatically returns to the old behavior.
 	 */
-	list_add_rcu(&p->list, last_perm);
+	list_add_rcu(&p->list, last_perm);//将其加入
 out:
 	spin_unlock_bh(&inetsw_lock);
 
@@ -1961,6 +1982,7 @@ static int __init inet_init(void)
 	for (r = &inetsw[0]; r < &inetsw[SOCK_MAX]; ++r)
 		INIT_LIST_HEAD(r);
 
+	//注册tcp,udp,icmp socket,raw socket
 	for (q = inetsw_array; q < &inetsw_array[INETSW_ARRAY_LEN]; ++q)
 		inet_register_protosw(q);
 

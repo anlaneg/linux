@@ -204,7 +204,7 @@ static int raw_v4_input(struct sk_buff *skb, const struct iphdr *iph, int hash)
 				//走raw socket收包流程
 				raw_rcv(sk, clone);
 		}
-		//检查是否有其它socket
+		//检查是否有其它socket也关心此报文
 		sk = __raw_v4_lookup(net, sk_next(sk), iph->protocol,
 				     iph->saddr, iph->daddr,
 				     skb->dev->ifindex, sdif);

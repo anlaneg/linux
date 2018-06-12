@@ -951,6 +951,7 @@ static int __init inet6_init(void)
 	/* Register the family here so that the init calls below will
 	 * be able to create sockets. (?? is this dangerous ??)
 	 */
+	//注册ipv6 socket
 	err = sock_register(&inet6_family_ops);
 	if (err)
 		goto out_sock_register_fail;

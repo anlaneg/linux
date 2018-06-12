@@ -187,6 +187,7 @@ struct inet_sock {
 #endif
 	/* Socket demultiplex comparisons on incoming packets. */
 #define inet_daddr		sk.__sk_common.skc_daddr
+//设置接收的地址（报文中的目的ip,一般情况下我们在bind时设置的是0）
 #define inet_rcv_saddr		sk.__sk_common.skc_rcv_saddr
 #define inet_dport		sk.__sk_common.skc_dport
 #define inet_num		sk.__sk_common.skc_num
