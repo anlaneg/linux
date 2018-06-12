@@ -136,7 +136,7 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
-
+//文件操作集
 static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
 	.llseek =	no_llseek,
