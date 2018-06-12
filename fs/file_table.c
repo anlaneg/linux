@@ -119,10 +119,12 @@ struct file *get_empty_filp(void)
 			goto over;
 	}
 
+	//申请空的file
 	f = kmem_cache_zalloc(filp_cachep, GFP_KERNEL);
 	if (unlikely(!f))
 		return ERR_PTR(-ENOMEM);
 
+	//增加系统文件计数
 	percpu_counter_inc(&nr_files);
 	f->f_cred = get_cred(cred);
 	error = security_file_alloc(f);
@@ -310,8 +312,10 @@ void put_filp(struct file *file)
 
 void __init files_init(void)
 {
+	//创建file的cache
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
 			SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT, NULL);
+	//记录系统文件数为0
 	percpu_counter_init(&nr_files, 0, GFP_KERNEL);
 }
 

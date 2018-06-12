@@ -1077,6 +1077,7 @@ static void irq_release_resources(struct irq_desc *desc)
 		c->irq_release_resources(d);
 }
 
+//创建中断执行线程
 static int
 setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 {
@@ -1447,8 +1448,10 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	if (new->secondary)
 		wake_up_process(new->secondary->thread);
 
+	//创建此中断对应的/proc/irq/$irq目录下文件
 	register_irq_proc(irq, desc);
 	new->dir = NULL;
+	//创建名称为new->name的文件，例如设备名
 	register_handler_proc(irq, new);
 	return 0;
 
@@ -1775,6 +1778,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	    WARN_ON(irq_settings_is_per_cpu_devid(desc)))
 		return -EINVAL;
 
+	//handler不提供的情况，必须提供thread_fn,此时将handler设置为default回调
 	if (!handler) {
 		if (!thread_fn)
 			return -EINVAL;
@@ -1788,7 +1792,7 @@ int request_threaded_irq(unsigned int irq, irq_handler_t handler,
 	action->handler = handler;
 	action->thread_fn = thread_fn;
 	action->flags = irqflags;
-	action->name = devname;
+	action->name = devname;//将action名称定为设备名
 	action->dev_id = dev_id;
 
 	retval = irq_chip_pm_get(&desc->irq_data);

@@ -3914,6 +3914,7 @@ EXPORT_SYMBOL(rps_may_expire_flow);
 #endif /* CONFIG_RFS_ACCEL */
 
 /* Called from hardirq (IPI) context */
+//触发软中断
 static void rps_trigger_softirq(void *data)
 {
 	struct softnet_data *sd = data;
@@ -5504,6 +5505,7 @@ void __napi_schedule(struct napi_struct *n)
 	unsigned long flags;
 
 	local_irq_save(flags);
+	//将napi加入链表，并触发软中断收我
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	local_irq_restore(flags);
 }
@@ -5536,7 +5538,7 @@ bool napi_schedule_prep(struct napi_struct *n)
 		 *     new |= NAPIF_STATE_MISSED;
 		 */
 		//产生的效果，如上示，用于将一个if语句转换为一个表达式
-		//如果value已含有NAPIF_STATE_SCHED标记，则会为其打上missed标记
+		//如果value含有NAPIF_STATE_SCHED标记，则会为new打上missed标记
 		new |= (val & NAPIF_STATE_SCHED) / NAPIF_STATE_SCHED *
 						   NAPIF_STATE_MISSED;
 	} while (cmpxchg(&n->state, val, new) != val);

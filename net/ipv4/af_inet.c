@@ -1070,6 +1070,7 @@ static const struct proto_ops inet_sockraw_ops = {
 #endif
 };
 
+//ipv4 socket创建函数
 static const struct net_proto_family inet_family_ops = {
 	.family = PF_INET,
 	.create = inet_create,
@@ -1107,6 +1108,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
+    	   //定义ip raw
 	       .type =       SOCK_RAW,
 	       .protocol =   IPPROTO_IP,	/* wild card */
 	       .prot =       &raw_prot,

@@ -128,6 +128,8 @@ struct sock *__raw_v4_lookup(struct net *net, struct sock *sk,
 	sk_for_each_from(sk) {
 		struct inet_sock *inet = inet_sk(sk);
 
+		//namespace相等，协议num相等（ipv4/ipv6),目的地址相等，源地址相等，
+		//接口相等时认为找到对应socket
 		if (net_eq(sock_net(sk), net) && inet->inet_num == num	&&
 		    !(inet->inet_daddr && inet->inet_daddr != raddr) 	&&
 		    !(inet->inet_rcv_saddr && inet->inet_rcv_saddr != laddr) &&
@@ -191,6 +193,7 @@ static int raw_v4_input(struct sk_buff *skb, const struct iphdr *iph, int hash)
 
 	while (sk) {
 		delivered = 1;
+		//组播检查
 		if ((iph->protocol != IPPROTO_ICMP || !icmp_filter(sk, skb)) &&
 		    ip_mc_sf_allow(sk, iph->daddr, iph->saddr,
 				   skb->dev->ifindex, sdif)) {
@@ -198,8 +201,10 @@ static int raw_v4_input(struct sk_buff *skb, const struct iphdr *iph, int hash)
 
 			/* Not releasing hash table! */
 			if (clone)
+				//走raw socket收包流程
 				raw_rcv(sk, clone);
 		}
+		//检查是否有其它socket
 		sk = __raw_v4_lookup(net, sk_next(sk), iph->protocol,
 				     iph->saddr, iph->daddr,
 				     skb->dev->ifindex, sdif);
@@ -220,6 +225,7 @@ int raw_local_deliver(struct sk_buff *skb, int protocol)
 	/* If there maybe a raw socket we must check - if not we
 	 * don't care less
 	 */
+	//有raw_socket收取此协议，需要详细检查
 	if (raw_sk && !raw_v4_input(skb, ip_hdr(skb), hash))
 		raw_sk = NULL;
 
@@ -330,6 +336,7 @@ static int raw_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	return NET_RX_SUCCESS;
 }
 
+//raw socket收包入口
 int raw_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb)) {

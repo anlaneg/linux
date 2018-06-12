@@ -360,7 +360,7 @@ struct pci_dev {
 	 * Instead of touching interrupt line and base address registers
 	 * directly, use the values stored here. They might be different!
 	 */
-	unsigned int	irq;
+	unsigned int	irq;//中断号
 	struct resource resource[DEVICE_COUNT_RESOURCE]; /* I/O and memory regions + expansion ROMs */
 
 	bool		match_driver;		/* Skip attaching driver */

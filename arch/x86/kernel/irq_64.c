@@ -74,6 +74,7 @@ bool handle_irq(struct irq_desc *desc, struct pt_regs *regs)
 	if (IS_ERR_OR_NULL(desc))
 		return false;
 
+	//处理中断
 	generic_handle_irq_desc(desc);
 	return true;
 }

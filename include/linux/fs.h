@@ -863,7 +863,7 @@ struct file {
 		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
-	struct path		f_path;
+	struct path		f_path;//文件路径
 	struct inode		*f_inode;	/* cached value */
 	const struct file_operations	*f_op;//文件操作对应的函数集（例如读写）
 
