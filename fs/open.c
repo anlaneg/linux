@@ -1084,6 +1084,7 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
+//具体实现文件打开
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
@@ -1118,7 +1119,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 {
 	if (force_o_largefile())
-		flags |= O_LARGEFILE;//强制加上大文件标记
+		flags |= O_LARGEFILE;//针对64位系统，强制加上大文件标记
 
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }

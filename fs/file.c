@@ -614,6 +614,7 @@ void __fd_install(struct files_struct *files, unsigned int fd,
 
 void fd_install(unsigned int fd, struct file *file)
 {
+	//将此文件赋给当前进程
 	__fd_install(current->files, fd, file);
 }
 
@@ -734,6 +735,7 @@ EXPORT_SYMBOL(fget_raw);
  */
 static unsigned long __fget_light(unsigned int fd, fmode_t mask)
 {
+	//取当前进程打开的文件列表
 	struct files_struct *files = current->files;
 	struct file *file;
 
