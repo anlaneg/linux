@@ -230,16 +230,19 @@ static void kernfs_init_inode(struct kernfs_node *kn, struct inode *inode)
 	//针对不同的kernfs_node类型，初始化不同的ops
 	switch (kernfs_type(kn)) {
 	case KERNFS_DIR:
+		//目录
 		inode->i_op = &kernfs_dir_iops;
 		inode->i_fop = &kernfs_dir_fops;
 		if (kn->flags & KERNFS_EMPTY_DIR)
 			make_empty_dir_inode(inode);
 		break;
 	case KERNFS_FILE:
+		//文件
 		inode->i_size = kn->attr.size;
 		inode->i_fop = &kernfs_file_fops;
 		break;
 	case KERNFS_LINK:
+		//link
 		inode->i_op = &kernfs_symlink_iops;
 		break;
 	default:

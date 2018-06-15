@@ -20,6 +20,7 @@
 static struct kernfs_root *sysfs_root;
 struct kernfs_node *sysfs_root_kn;
 
+//传入当前文件系统指针，文件系统名称
 static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
@@ -27,6 +28,7 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 	void *ns;
 	bool new_sb = false;
 
+	//未传入SB_KERNMOUNT标记时检查
 	if (!(flags & SB_KERNMOUNT)) {
 		if (!kobj_ns_current_may_mount(KOBJ_NS_TYPE_NET))
 			return ERR_PTR(-EPERM);
@@ -64,6 +66,7 @@ int __init sysfs_init(void)
 {
 	int err;
 
+	//构造sysfs_root节点
 	sysfs_root = kernfs_create_root(NULL, KERNFS_ROOT_EXTRA_OPEN_PERM_CHECK,
 					NULL);
 	if (IS_ERR(sysfs_root))

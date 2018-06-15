@@ -201,7 +201,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	int i;
 
 	if (!s)
-		return NULL;
+		return NULL;//申请失败，报错
 
 	INIT_LIST_HEAD(&s->s_mounts);
 	s->s_user_ns = get_user_ns(user_ns);
@@ -499,7 +499,7 @@ struct super_block *sget_userns(struct file_system_type *type,
 retry:
 	spin_lock(&sb_lock);
 	if (test) {
-		//当此文件系统有多个实例时，fs_supers将有多个，每个old均是一个超级块
+		//type->fs_supers是类型super_block类型的s_instances指针，遍历所有super_block
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
 			if (!test(old, data))
 				continue;

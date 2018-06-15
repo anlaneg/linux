@@ -993,15 +993,15 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 
 	flags = KERNFS_FILE;
 
-	//申请一个kernfs_node
+	//创建一个规则文件节点，其父节点为parent,名称为name
 	kn = kernfs_new_node(parent, name, (mode & S_IALLUGO) | S_IFREG, flags);
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
 
 	//设置kn
-	kn->attr.ops = ops;
-	kn->attr.size = size;
-	kn->ns = ns;
+	kn->attr.ops = ops;//属性操作集
+	kn->attr.size = size;//文件大小
+	kn->ns = ns;//文件所属的namespace
 	kn->priv = priv;
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC

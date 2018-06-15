@@ -230,7 +230,7 @@ static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
 	sb->s_blocksize = PAGE_SIZE;//设置块大小
 	sb->s_blocksize_bits = PAGE_SHIFT;
 	sb->s_magic = magic;
-	sb->s_op = &kernfs_sops;
+	sb->s_op = &kernfs_sops;//设置超级块操作集
 	sb->s_xattr = kernfs_xattr_handlers;
 	if (info->root->flags & KERNFS_ROOT_SUPPORT_EXPORTOP)
 		sb->s_export_op = &kernfs_export_ops;
@@ -263,14 +263,17 @@ static int kernfs_test_super(struct super_block *sb, void *data)
 	struct kernfs_super_info *sb_info = kernfs_info(sb);
 	struct kernfs_super_info *info = data;
 
+	//如果根相同，且属于同个namepsace，则认定相同
 	return sb_info->root == info->root && sb_info->ns == info->ns;
 }
 
+//设置文件系统的私有数据
 static int kernfs_set_super(struct super_block *sb, void *data)
 {
 	int error;
 	error = set_anon_super(sb, data);
 	if (!error)
+		//设置私有数据
 		sb->s_fs_info = data;
 	return error;
 }
@@ -325,10 +328,11 @@ struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
 	sb = sget_userns(fs_type, kernfs_test_super, kernfs_set_super, flags,
 			 &init_user_ns, info);
 	if (IS_ERR(sb) || sb->s_fs_info != info)
-		kfree(info);
+		kfree(info);//如果创建失败，则返回
 	if (IS_ERR(sb))
 		return ERR_CAST(sb);
 
+	//如果没有设置sb->s_root，则为新创建的
 	if (new_sb_created)
 		*new_sb_created = !sb->s_root;
 

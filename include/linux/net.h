@@ -118,7 +118,7 @@ struct socket {
 
 	struct file		*file;
 	struct sock		*sk;
-	const struct proto_ops	*ops;
+	const struct proto_ops	*ops;//定义socket相关的函数，例如bind,accept
 };
 
 struct vm_area_struct;
@@ -130,6 +130,8 @@ struct sk_buff;
 typedef int (*sk_read_actor_t)(read_descriptor_t *, struct sk_buff *,
 			       unsigned int, size_t);
 
+//定义socket相关的函数，系统调用发生时，系统调用将依据不同的family调用对应的
+//proto_ops来完成工作
 struct proto_ops {
 	int		family;
 	struct module	*owner;
@@ -206,6 +208,7 @@ struct proto_ops {
 
 struct net_proto_family {
 	int		family;
+	//socket创建回调
 	int		(*create)(struct net *net, struct socket *sock,
 				  int protocol, int kern);
 	struct module	*owner;

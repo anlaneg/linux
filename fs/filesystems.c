@@ -46,7 +46,7 @@ void put_filesystem(struct file_system_type *fs)
 	module_put(fs->owner);
 }
 
-//给定名称查找对应的文件系统(如果未找到，返回指向空）
+//给定名称查找对应的文件系统(如果未找到，返回指向未尾文件系统元素的next指针的指针）
 static struct file_system_type **find_filesystem(const char *name, unsigned len)
 {
 	struct file_system_type **p;
@@ -75,7 +75,7 @@ int register_filesystem(struct file_system_type * fs)
 	int res = 0;
 	struct file_system_type ** p;
 
-	BUG_ON(strchr(fs->name, '.'));
+	BUG_ON(strchr(fs->name, '.'));//不容许名称中含'.'
 	if (fs->next)
 		return -EBUSY;//已被挂接在文件系统链上
 	write_lock(&file_systems_lock);
@@ -83,7 +83,7 @@ int register_filesystem(struct file_system_type * fs)
 	if (*p)
 		res = -EBUSY;//加锁后确认，已存在
 	else
-		*p = fs;
+		*p = fs;//将fs加入到链表中
 	write_unlock(&file_systems_lock);
 	return res;
 }

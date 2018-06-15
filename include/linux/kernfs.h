@@ -126,7 +126,7 @@ union kernfs_node_id {
  * active reference.
  */
 struct kernfs_node {
-	atomic_t		count;
+	atomic_t		count;//节点的引用计数
 	atomic_t		active;
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	struct lockdep_map	dep_map;
@@ -137,10 +137,10 @@ struct kernfs_node {
 	 * never moved to a different parent, it is safe to access the
 	 * parent directly.
 	 */
-	struct kernfs_node	*parent;
-	const char		*name;
+	struct kernfs_node	*parent;//指向父节点
+	const char		*name;//名称
 
-	struct rb_node		rb;
+	struct rb_node		rb;//用于将节点加入红黑树中
 
 	const void		*ns;	/* namespace tag */
 	unsigned int		hash;	/* ns + name hash */
@@ -154,7 +154,7 @@ struct kernfs_node {
 
 	union kernfs_node_id	id;
 	unsigned short		flags;//指出此节点的能力(例如文件）
-	umode_t			mode;
+	umode_t			mode;//权限
 	struct kernfs_iattrs	*iattr;
 };
 

@@ -1264,7 +1264,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	if (family == PF_INET && type == SOCK_PACKET) {
 		pr_info_once("%s uses obsolete (PF_INET,SOCK_PACKET)\n",
 			     current->comm);
-		family = PF_PACKET;
+		family = PF_PACKET;//将PF_INET,SOCK_PACKET更新为PF_PACKET
 	}
 
 	err = security_socket_create(family, type, protocol, kern);
@@ -1284,7 +1284,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 				   closest posix thing */
 	}
 
-	//设置socket类型，例如tcp,udp等
+	//设置socket类型，例如SOCK_STREAM,SOCK_DGRAM等
 	sock->type = type;
 
 #ifdef CONFIG_MODULES
@@ -1300,7 +1300,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 #endif
 
 	rcu_read_lock();
-	//取出此family对应的socket操作集
+	//取出此family对应的socket操作集,例如inet_family_ops
 	pf = rcu_dereference(net_families[family]);
 	err = -EAFNOSUPPORT;
 	if (!pf)
@@ -1380,15 +1380,15 @@ int __sys_socket(int family, int type, int protocol)
 	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
 	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
 
-	flags = type & ~SOCK_TYPE_MASK;//type检查
+	flags = type & ~SOCK_TYPE_MASK;//取封装在type内的flags(高28位）
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;
-	type &= SOCK_TYPE_MASK;
+		return -EINVAL;//当前仅支持两种flags
+	type &= SOCK_TYPE_MASK;//取封装在type内的真实type
 
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
-		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
+		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;//更新为非阻塞标记
 
-	//创建sock
+	//创建对应的socket
 	retval = sock_create(family, type, protocol, &sock);
 	if (retval < 0)
 		return retval;
@@ -1399,7 +1399,7 @@ int __sys_socket(int family, int type, int protocol)
 
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
-	//socket系统调用
+	//实现socket系统调用
 	return __sys_socket(family, type, protocol);
 }
 
@@ -1893,6 +1893,7 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 	msg.msg_flags = 0;
 	if (sock->file->f_flags & O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
+	//通过socket的recvmsg回调来完成任务
 	err = sock_recvmsg(sock, &msg, flags);
 
 	if (err >= 0 && addr != NULL) {
@@ -1911,6 +1912,7 @@ SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
 		unsigned int, flags, struct sockaddr __user *, addr,
 		int __user *, addr_len)
 {
+	//实现recvfrom系统调用
 	return __sys_recvfrom(fd, ubuf, size, flags, addr, addr_len);
 }
 
@@ -2678,7 +2680,7 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
  *	socket interface. The value ops->family corresponds to the
  *	socket system call protocol family.
  */
-//为某一协议注册其socket操作集
+//为某一协议注册socket操作集
 int sock_register(const struct net_proto_family *ops)
 {
 	int err;

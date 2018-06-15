@@ -1477,6 +1477,7 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 #endif
 }
 
+//申请sock空间
 static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		int family)
 {
@@ -1485,6 +1486,7 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 
 	slab = prot->slab;
 	if (slab != NULL) {
+		//有slab，自slab中申请
 		sk = kmem_cache_alloc(slab, priority & ~__GFP_ZERO);
 		if (!sk)
 			return sk;

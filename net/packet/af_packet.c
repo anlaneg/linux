@@ -4564,6 +4564,7 @@ static int __init packet_init(void)
 	if (rc != 0)
 		goto out;
 
+	//注册PF_PACKET
 	sock_register(&packet_family_ops);
 	register_pernet_subsys(&packet_net_ops);
 	register_netdevice_notifier(&packet_netdev_notifier);

@@ -245,6 +245,7 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 	struct net *net = sock_net(sk);
 
 	if (!snum) {
+		//未指定port的情况（或者提定的port为0）
 		int low, high, remaining;
 		unsigned int rand;
 		unsigned short first, last;
@@ -353,6 +354,7 @@ EXPORT_SYMBOL(udp_lib_get_port);
 
 int udp_v4_get_port(struct sock *sk, unsigned short snum)
 {
+	//算两个hash,一个bind地址按0算，一个绑定地址按填充的算
 	unsigned int hash2_nulladdr =
 		ipv4_portaddr_hash(sock_net(sk), htonl(INADDR_ANY), snum);
 	unsigned int hash2_partial =
@@ -1455,6 +1457,7 @@ void udp_destruct_sock(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(udp_destruct_sock);
 
+//udp的socket初始化函数，socket创建期间调用
 int udp_init_sock(struct sock *sk)
 {
 	skb_queue_head_init(&udp_sk(sk)->reader_queue);
@@ -1594,6 +1597,7 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 		*peeked = 0;
 		do {
 			spin_lock_bh(&queue->lock);
+			//自队列上收取skb
 			skb = __skb_try_recv_from_queue(sk, queue, flags,
 							udp_skb_destructor,
 							peeked, off, err,
@@ -1604,18 +1608,22 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			}
 
 			if (skb_queue_empty(sk_queue)) {
+				//收取列目前为空，可能需要阻塞等待报文来
 				spin_unlock_bh(&queue->lock);
 				goto busy_check;
 			}
 
+			//接收队列上有报文，将其交换到读取队列上
 			/* refill the reader queue and walk it again
 			 * keep both queues locked to avoid re-acquiring
 			 * the sk_receive_queue lock if fwd memory scheduling
 			 * is needed.
 			 */
 			spin_lock(&sk_queue->lock);
+			//sk_queue添加到queue队列尾部，并初始化sk_queue为空
 			skb_queue_splice_tail_init(sk_queue, queue);
 
+			//重新尝试读取
 			skb = __skb_try_recv_from_queue(sk, queue, flags,
 							udp_skb_dtor_locked,
 							peeked, off, err,
@@ -2667,7 +2675,7 @@ struct proto udp_prot = {
 	.setsockopt		= udp_setsockopt,
 	.getsockopt		= udp_getsockopt,
 	.sendmsg		= udp_sendmsg,
-	.recvmsg		= udp_recvmsg,
+	.recvmsg		= udp_recvmsg,//实现针对socket的recvfrom回调
 	.sendpage		= udp_sendpage,
 	.release_cb		= ip4_datagram_release_cb,
 	.hash			= udp_lib_hash,

@@ -3115,6 +3115,7 @@ int tipc_socket_init(void)
 		goto out;
 	}
 
+	//注册AF_TIPC
 	res = sock_register(&tipc_family_ops);
 	if (res) {
 		pr_err("Failed to register TIPC socket type\n");

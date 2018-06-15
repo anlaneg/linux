@@ -85,11 +85,13 @@ extern struct dentry_stat_t dentry_stat;
 
 #define d_lock	d_lockref.lock
 
+//定义目录项数据结构
 struct dentry {
 	/* RCU lookup touched fields */
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_t d_seq;		/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
+	//指向父目录项
 	struct dentry *d_parent;	/* parent directory */
 	struct qstr d_name;
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
@@ -98,7 +100,7 @@ struct dentry {
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
-	const struct dentry_operations *d_op;
+	const struct dentry_operations *d_op;//目录项操作集
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
 	void *d_fsdata;			/* fs-specific data */
@@ -107,7 +109,9 @@ struct dentry {
 		struct list_head d_lru;		/* LRU list */
 		wait_queue_head_t *d_wait;	/* in-lookup ones only */
 	};
+	//用于提供链连接给父dentry
 	struct list_head d_child;	/* child of parent list */
+	//所有子项，可以是目录，也可以是文件
 	struct list_head d_subdirs;	/* our children */
 	/*
 	 * d_alias and d_rcu can share memory

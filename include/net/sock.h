@@ -336,6 +336,7 @@ struct sock {
 #define sk_addrpair		__sk_common.skc_addrpair
 #define sk_daddr		__sk_common.skc_daddr
 #define sk_rcv_saddr		__sk_common.skc_rcv_saddr
+//family字段，例如AF_INET
 #define sk_family		__sk_common.skc_family
 #define sk_state		__sk_common.skc_state
 #define sk_reuse		__sk_common.skc_reuse
@@ -344,7 +345,9 @@ struct sock {
 #define sk_net_refcnt		__sk_common.skc_net_refcnt
 #define sk_bound_dev_if		__sk_common.skc_bound_dev_if
 #define sk_bind_node		__sk_common.skc_bind_node
+//设置协议ops,例如udp_prot
 #define sk_prot			__sk_common.skc_prot
+//设置socket对应的namespace
 #define sk_net			__sk_common.skc_net
 #define sk_v6_daddr		__sk_common.skc_v6_daddr
 #define sk_v6_rcv_saddr	__sk_common.skc_v6_rcv_saddr
@@ -445,7 +448,7 @@ struct sock {
 #endif
 
 	unsigned int		sk_padding : 1,
-				sk_kern_sock : 1,
+				sk_kern_sock : 1,//指明是否为kernel的socket
 				sk_no_check_tx : 1,
 				sk_no_check_rx : 1,
 				sk_userlocks : 4,
