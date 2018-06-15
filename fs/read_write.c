@@ -577,6 +577,7 @@ static inline void file_pos_write(struct file *file, loff_t pos)
 	file->f_pos = pos;
 }
 
+//实现系统调用read
 ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 {
 	//由文件描述符编号获得fd结构体
@@ -594,6 +595,7 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 	return ret;
 }
 
+//实现系统调用read
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
 	return ksys_read(fd, buf, count);

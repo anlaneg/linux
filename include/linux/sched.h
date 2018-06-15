@@ -853,7 +853,7 @@ struct task_struct {
 	struct fs_struct		*fs;
 
 	/* Open file information: */
-	struct files_struct		*files;
+	struct files_struct		*files;//记录当前进程已打开的文件列表
 
 	/* Namespaces: */
 	struct nsproxy			*nsproxy;

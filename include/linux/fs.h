@@ -2404,11 +2404,15 @@ static inline int break_layout(struct inode *inode, bool wait)
 /* fs/open.c */
 struct audit_names;
 struct filename {
+	//指向实际的文件名
 	const char		*name;	/* pointer to actual string */
+	//记录用户空间里传入的文件路径指针指针（我们从这里copy数据到的iname)
 	const __user char	*uptr;	/* original userland pointer */
 	int			refcnt;
+	//64位系统时，这里会有空隙
 	struct audit_names	*aname;
-	const char		iname[];
+	//由于aname总能保证8字节对齐，故iname也能保证
+	const char		iname[];//存储具体的文件名，并使name指向自已
 };
 
 extern long vfs_truncate(const struct path *, loff_t);

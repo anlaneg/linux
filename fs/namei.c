@@ -125,18 +125,25 @@
 
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
+//依据用户空间传入的文件名称，构造filename
+//empty 用于出参，指出文件名称是否为空
 struct filename *
 getname_flags(const char __user *filename, int flags, int *empty)
 {
 	struct filename *result;
 	char *kname;
 	int len;
+	//iname成员必须按sizeof(long)字节对齐
 	BUILD_BUG_ON(offsetof(struct filename, iname) % sizeof(long) != 0);
 
 	result = audit_reusename(filename);
 	if (result)
 		return result;
 
+	//申请一个cache
+	//注：cache的大小正好为PATH_MAX，含struct filename大小
+	//所以才有下文中当发现路径名称大于EMBEDDED_NAME_MAX时，直接申请一个
+	//offsetof(struct filename, iname[1]);结构来了事,猛一看，吓我一跳。
 	result = __getname();
 	if (unlikely(!result))
 		return ERR_PTR(-ENOMEM);
@@ -145,9 +152,11 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	 * First, try to embed the struct filename inside the names_cache
 	 * allocation
 	 */
+	//指向实际存储位置
 	kname = (char *)result->iname;
 	result->name = kname;
 
+	//用用户空来填充kname
 	len = strncpy_from_user(kname, filename, EMBEDDED_NAME_MAX);
 	if (unlikely(len < 0)) {
 		__putname(result);
@@ -161,8 +170,9 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	 * userland.
 	 */
 	if (unlikely(len == EMBEDDED_NAME_MAX)) {
+		//如果用户空间提供的文件名称大于EMBEDDED_NAME_MAX时处理
 		const size_t size = offsetof(struct filename, iname[1]);
-		kname = (char *)result;
+		kname = (char *)result;//使kname直接指向result（这个长度为PATH_MAX）
 
 		/*
 		 * size is chosen that way we to guarantee that
@@ -182,6 +192,7 @@ getname_flags(const char __user *filename, int flags, int *empty)
 			return ERR_PTR(len);
 		}
 		if (unlikely(len == PATH_MAX)) {
+			//这种情况下两边对PATH_MAX理解不一致
 			__putname(kname);
 			kfree(result);
 			return ERR_PTR(-ENAMETOOLONG);
@@ -191,6 +202,7 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	result->refcnt = 1;
 	/* The empty path is special. */
 	if (unlikely(!len)) {
+		//名称为空时做特别处理（需要flags参与）
 		if (empty)
 			*empty = 1;
 		if (!(flags & LOOKUP_EMPTY)) {
@@ -205,6 +217,7 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	return result;
 }
 
+//通过用户空间传入的文件名称，构造filename结构体
 struct filename *
 getname(const char __user * filename)
 {
