@@ -1084,7 +1084,7 @@ struct file *filp_clone_open(struct file *oldfile)
 }
 EXPORT_SYMBOL(filp_clone_open);
 
-//具体实现文件打开
+//具体实现文件打开(dfd指要打开的目录fd)
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
@@ -1098,9 +1098,10 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
 
-	//获取一个未用的文件描述符
+	//获取一个未用的文件描述符fd
 	fd = get_unused_fd_flags(flags);
 	if (fd >= 0) {
+		//申请fd成功，打开相应的file
 		struct file *f = do_filp_open(dfd, tmp, &op);
 		if (IS_ERR(f)) {
 			put_unused_fd(fd);

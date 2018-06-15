@@ -31,6 +31,8 @@
  *    searching it for one bits.
  *  - The optional "addr2", which is anded with "addr1" if present.
  */
+//找一个bit是1的，自start位置开始，最大有nbits位，addr是考虑了掩码情况
+//invert是考虑了bitmap中实现时，可以需要找‘0’的情况
 static inline unsigned long _find_next_bit(const unsigned long *addr1,
 		const unsigned long *addr2, unsigned long nbits,
 		unsigned long start, unsigned long invert)
@@ -38,18 +40,22 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 	unsigned long tmp;
 
 	if (unlikely(start >= nbits))
-		return nbits;
+		return nbits;//start已超限，返回最大值（无空闲）
 
 	tmp = addr1[start / BITS_PER_LONG];//取start对应的位置
 	if (addr2)
 		tmp &= addr2[start / BITS_PER_LONG];
-	tmp ^= invert;
+	tmp ^= invert;//如果invert为全1，则tmp会反转，否则tmp不反转
 
 	/* Handle 1st word. */
 	tmp &= BITMAP_FIRST_WORD_MASK(start);//将start位以下的bit置为0
+
+	//假如BITS_PER_LONG=64,则start的低5位被置为0（2^6=64)
 	start = round_down(start, BITS_PER_LONG);
 
 	while (!tmp) {
+		//如果tmp为0，则说明此段已完全分配出去了，则start向后移动一个
+		//BITS_PER_LONG长度，并继续查找
 		start += BITS_PER_LONG;
 		if (start >= nbits)
 			return nbits;
@@ -60,6 +66,8 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 		tmp ^= invert;
 	}
 
+	//此时要么查找了，要么查找失败（故最小返回）
+	//__ffs返回tmp中第一个1所在的位号
 	return min(start + __ffs(tmp), nbits);
 }
 #endif
@@ -77,6 +85,7 @@ EXPORT_SYMBOL(find_next_bit);
 #endif
 
 #ifndef find_next_zero_bit
+//addr是一个bit数组，size是数组的长度，offset是我们开始查找的起始点
 unsigned long find_next_zero_bit(const unsigned long *addr, unsigned long size,
 				 unsigned long offset)
 {

@@ -2172,6 +2172,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
+		//文件名称给出的是绝对路径
 		if (flags & LOOKUP_RCU)
 			rcu_read_lock();
 		set_root(nd);
@@ -2194,6 +2195,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
 		} else {
+			//取当前工作目录
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
@@ -3502,9 +3504,11 @@ static struct file *path_openat(struct nameidata *nd,
 	if (IS_ERR(file))
 		return file;
 
+	//设置文件打开时的flag
 	file->f_flags = op->open_flag;
 
 	if (unlikely(file->f_flags & __O_TMPFILE)) {
+		//创建临时文件
 		error = do_tmpfile(nd, flags, op, file, &opened);
 		goto out2;
 	}
@@ -3516,6 +3520,7 @@ static struct file *path_openat(struct nameidata *nd,
 		goto out2;
 	}
 
+	//取文件路径
 	s = path_init(nd, flags);
 	if (IS_ERR(s)) {
 		put_filp(file);
@@ -3555,6 +3560,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	int flags = op->lookup_flags;
 	struct file *filp;
 
+	//将dfd,pathname填充到nd中
 	set_nameidata(&nd, dfd, pathname);
 	//调用path_openat来进行打开
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);

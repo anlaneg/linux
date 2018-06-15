@@ -87,6 +87,7 @@
 //取y-1,使其强转为x类型（常用于2的N次方类数值）
 #define __round_mask(x, y) ((__typeof__(x))((y)-1))
 #define round_up(x, y) ((((x)-1) | __round_mask(x, y))+1)
+//将y减1，并按位取返后，与X取与
 #define round_down(x, y) ((x) & ~__round_mask(x, y))
 
 /**
