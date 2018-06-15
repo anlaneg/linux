@@ -22,6 +22,7 @@ static __always_inline unsigned long __ffs(unsigned long word)
 	}
 #endif
 	if ((word & 0xffff) == 0) {
+		//低16位中没有'1'
 		num += 16;
 		word >>= 16;
 	}
