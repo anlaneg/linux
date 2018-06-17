@@ -3837,6 +3837,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 SYSCALL_DEFINE3(init_module, void __user *, umod,
 		unsigned long, len, const char __user *, uargs)
 {
+	//实现module初始化系统调用
 	int err;
 	struct load_info info = { };
 

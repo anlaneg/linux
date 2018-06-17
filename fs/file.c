@@ -108,22 +108,25 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 	if (unlikely(nr > sysctl_nr_open))
 		nr = ((sysctl_nr_open - 1) | (BITS_PER_LONG - 1)) + 1;
 
+	//申请新的fdt
 	fdt = kmalloc(sizeof(struct fdtable), GFP_KERNEL_ACCOUNT);
 	if (!fdt)
 		goto out;
+	//设置最大fds,申请相应的fd数组
 	fdt->max_fds = nr;
 	data = kvmalloc_array(nr, sizeof(struct file *), GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_fdt;
 	fdt->fd = data;
 
+	//申请相应的open fd bitmap内存（close_on_exec + full_fds_bits + open_fds )
 	data = kvmalloc(max_t(size_t,
 				 2 * nr / BITS_PER_BYTE + BITBIT_SIZE(nr), L1_CACHE_BYTES),
 				 GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_arr;
 	fdt->open_fds = data;
-	data += nr / BITS_PER_BYTE;
+	data += nr / BITS_PER_BYTE;//
 	fdt->close_on_exec = data;
 	data += nr / BITS_PER_BYTE;
 	fdt->full_fds_bits = data;
@@ -145,6 +148,7 @@ out:
  * Return <0 error code on error; 1 on successful completion.
  * The files->file_lock should be held on entry, and will be held on exit.
  */
+//将files扩展到nr
 static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	__releases(files->file_lock)
 	__acquires(files->file_lock)
@@ -171,7 +175,7 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 		__free_fdtable(new_fdt);
 		return -EMFILE;
 	}
-	cur_fdt = files_fdtable(files);
+	cur_fdt = files_fdtable(files);//取当前fdt
 	BUG_ON(nr < cur_fdt->max_fds);
 	copy_fdtable(new_fdt, cur_fdt);//填充旧的数据
 	rcu_assign_pointer(files->fdt, new_fdt);
@@ -202,14 +206,14 @@ repeat:
 
 	/* Do we need to expand? */
 	if (nr < fdt->max_fds)
-		return expanded;
+		return expanded;//fd未超过max_fds,不需要扩展
 
 	/* Can we expand? */
 	if (nr >= sysctl_nr_open)
-		return -EMFILE;
+		return -EMFILE;//数量超限
 
 	if (unlikely(files->resize_in_progress)) {
-		//已在扩展，等待其完成后重试
+		//已在线程在扩展，等待其完成后重试
 		spin_unlock(&files->file_lock);
 		expanded = 1;
 		wait_event(files->resize_wait, !files->resize_in_progress);
@@ -218,6 +222,7 @@ repeat:
 	}
 
 	/* All good, so we try */
+	//指明我们开始扩展
 	files->resize_in_progress = true;
 	expanded = expand_fdtable(files, nr);
 	files->resize_in_progress = false;
@@ -240,9 +245,11 @@ static inline void __clear_close_on_exec(unsigned int fd, struct fdtable *fdt)
 
 static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt)
 {
+	//设置openfds占用
 	__set_bit(fd, fdt->open_fds);
 	fd /= BITS_PER_LONG;
 	if (!~fdt->open_fds[fd])
+		//无指针时，置full_fds_bits占用
 		__set_bit(fd, fdt->full_fds_bits);
 }
 
@@ -467,11 +474,12 @@ static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 	unsigned int maxbit = maxfd / BITS_PER_LONG;//将bit索引换算为long类型索引
 	unsigned int bitbit = start / BITS_PER_LONG;
 
-	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;
+	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;//计算结果，并换算为bit位数
 	if (bitbit > maxfd)
 		return maxfd;//规范为maxfd
 	if (bitbit > start)
-		start = bitbit;//
+		start = bitbit;
+	//在open_fds中找到
 	return find_next_zero_bit(fdt->open_fds, maxfd, start);
 }
 
@@ -519,14 +527,18 @@ repeat:
 	if (start <= files->next_fd)
 		files->next_fd = fd + 1;
 
+	//占用对应的fd
 	__set_open_fd(fd, fdt);
 	if (flags & O_CLOEXEC)
+		//有exec时close标记，则加入到close_fd_exec
 		__set_close_on_exec(fd, fdt);
 	else
+		//清除相应位标记
 		__clear_close_on_exec(fd, fdt);
 	error = fd;
 #if 1
 	/* Sanity check */
+	//fd对应的空间必须为空，如果不为空，报错，置为空
 	if (rcu_access_pointer(fdt->fd[fd]) != NULL) {
 		printk(KERN_WARNING "alloc_fd: slot %d not NULL!\n", fd);
 		rcu_assign_pointer(fdt->fd[fd], NULL);
@@ -538,11 +550,13 @@ out:
 	return error;
 }
 
+//申请一个未用的fd
 static int alloc_fd(unsigned start, unsigned flags)
 {
 	return __alloc_fd(current->files, start, rlimit(RLIMIT_NOFILE), flags);
 }
 
+//申请一个未用的fd(自0开始）
 int get_unused_fd_flags(unsigned flags)
 {
 	//申请一个未用的fd
