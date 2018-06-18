@@ -1415,7 +1415,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		hdr = skb_vnet_hdr(skb);
 
 	if (virtio_net_hdr_from_skb(skb, &hdr->hdr,
-				    virtio_is_little_endian(vi->vdev), false))
+				    virtio_is_little_endian(vi->vdev), false,
+				    0))
 		BUG();
 
 	if (vi->mergeable_rx_bufs)
@@ -2560,20 +2561,20 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 
 	/* Allocate space for find_vqs parameters */
 	//为存储各虚拟队列地址而申请空间（数组）
-	vqs = kzalloc(total_vqs * sizeof(*vqs), GFP_KERNEL);
+	vqs = kcalloc(total_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs)
 		goto err_vq;
 	//为各虚拟队列的回调申请空间（数组）
-	callbacks = kmalloc(total_vqs * sizeof(*callbacks), GFP_KERNEL);
+	callbacks = kmalloc_array(total_vqs, sizeof(*callbacks), GFP_KERNEL);
 	if (!callbacks)
 		goto err_callback;
 	//申请虚队列名称数组
-	names = kmalloc(total_vqs * sizeof(*names), GFP_KERNEL);
+	names = kmalloc_array(total_vqs, sizeof(*names), GFP_KERNEL);
 	if (!names)
 		goto err_names;
 
 	if (!vi->big_packets || vi->mergeable_rx_bufs) {
-		ctx = kzalloc(total_vqs * sizeof(*ctx), GFP_KERNEL);
+		ctx = kcalloc(total_vqs, sizeof(*ctx), GFP_KERNEL);
 		if (!ctx)
 			goto err_ctx;
 	} else {
@@ -2646,11 +2647,11 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	if (!vi->ctrl)
 		goto err_ctrl;
 	//申请max_queue_pairs个发队列
-	vi->sq = kzalloc(sizeof(*vi->sq) * vi->max_queue_pairs, GFP_KERNEL);
+	vi->sq = kcalloc(vi->max_queue_pairs, sizeof(*vi->sq), GFP_KERNEL);
 	if (!vi->sq)
 		goto err_sq;
 	//申请收队列
-	vi->rq = kzalloc(sizeof(*vi->rq) * vi->max_queue_pairs, GFP_KERNEL);
+	vi->rq = kcalloc(vi->max_queue_pairs, sizeof(*vi->rq), GFP_KERNEL);
 	if (!vi->rq)
 		goto err_rq;
 
