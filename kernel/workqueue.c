@@ -152,7 +152,7 @@ struct worker_pool {
 
 	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
 
-	struct list_head	worklist;	/* L: list of pending works */　//待执行工作队列
+	struct list_head	worklist;	/* L: list of pending works */　//待执行工作队列（worker线程将此其上提取work)
 
 	int			nr_workers;	/* L: total number of workers */ //worker数目
 	int			nr_idle;	/* L: currently idle workers */
@@ -272,7 +272,9 @@ struct workqueue_struct {
 
 	/* hot fields used during command issue, aligned to cacheline */
 	unsigned int		flags ____cacheline_aligned; /* WQ: WQ_* flags */
+	//此工作队列在每个cpu上的pool_workqueue(按cpu做索引）
 	struct pool_workqueue __percpu *cpu_pwqs; /* I: per-cpu pwqs */
+	//此工作队列在每个node上的pool_workqueue(非绑定情况下）
 	struct pool_workqueue __rcu *numa_pwq_tbl[]; /* PWR: unbound pwqs indexed by node */
 };
 
@@ -791,6 +793,7 @@ static bool may_start_working(struct worker_pool *pool)
 /* Do I need to keep working?  Called from currently running workers. */
 static bool keep_working(struct worker_pool *pool)
 {
+	//队列不为空，且pool->nr_running不大于1时继续工作
 	return !list_empty(&pool->worklist) &&
 		atomic_read(&pool->nr_running) <= 1;
 }
@@ -1004,6 +1007,7 @@ static struct worker *find_worker_executing_work(struct worker_pool *pool,
 {
 	struct worker *worker;
 
+	//遍历busy_hash上的每个worker,查找work是否已在其中有对应的worker,则就直接返回
 	hash_for_each_possible(pool->busy_hash, worker, hentry,
 			       (unsigned long)work)
 		if (worker->current_work == work &&
@@ -1040,6 +1044,7 @@ static void move_linked_works(struct work_struct *work, struct list_head *head,
 	 * use NULL for list head.
 	 */
 	list_for_each_entry_safe_from(work, n, NULL, entry) {
+		//将work移到head上
 		list_move_tail(&work->entry, head);
 		if (!(*work_data_bits(work) & WORK_STRUCT_LINKED))
 			break;
@@ -1118,7 +1123,9 @@ static void pwq_activate_delayed_work(struct work_struct *work)
 
 	trace_workqueue_activate_work(work);
 	if (list_empty(&pwq->pool->worklist))
+		//队列为空
 		pwq->pool->watchdog_ts = jiffies;
+	//将work移动到pwd->pool->worklist上，使其可被worker执行
 	move_linked_works(work, &pwq->pool->worklist, NULL);
 	__clear_bit(WORK_STRUCT_DELAYED_BIT, work_data_bits(work));
 	pwq->nr_active++;
@@ -1224,7 +1231,7 @@ static int try_to_grab_pending(struct work_struct *work, bool is_dwork,
 		 * running on the local CPU.
 		 */
 		if (likely(del_timer(&dwork->timer)))
-			return 1;
+			return 1;//通过停止timer完成了work停止，直接返回
 	}
 
 	/* try to claim PENDING the normal way */
@@ -1235,7 +1242,7 @@ static int try_to_grab_pending(struct work_struct *work, bool is_dwork,
 	 * The queueing is in progress, or it is already queued. Try to
 	 * steal it from ->worklist without clearing WORK_STRUCT_PENDING.
 	 */
-	pool = get_work_pool(work);
+	pool = get_work_pool(work);//取work对应的pool
 	if (!pool)
 		goto fail;
 
@@ -1248,7 +1255,7 @@ static int try_to_grab_pending(struct work_struct *work, bool is_dwork,
 	 * points to pwq which is associated with a locked pool, the work
 	 * item is currently queued on that pool.
 	 */
-	pwq = get_work_pwq(work);
+	pwq = get_work_pwq(work);//取work对应的pwq
 	if (pwq && pwq->pool == pool) {
 		debug_work_deactivate(work);
 
@@ -1364,6 +1371,7 @@ static int wq_select_unbound_cpu(int cpu)
 	return new_cpu;
 }
 
+//将work入队到工作队列
 static void __queue_work(int cpu, struct workqueue_struct *wq,
 			 struct work_struct *work)
 {
@@ -1393,11 +1401,11 @@ retry:
 		cpu = wq_select_unbound_cpu(raw_smp_processor_id());
 
 	/* pwq which will be used unless @work is executing elsewhere */
-	//如果队列已绑定，则取此队列在$cpu上的pwd
+	//如果队列已绑定，则取此队列在对应cpu上的pwq
 	if (!(wq->flags & WQ_UNBOUND))
 		pwq = per_cpu_ptr(wq->cpu_pwqs, cpu);
 	else
-		//如果未绑定，则按$cpu所属的node来取队列
+		//如果工作队列未绑定，则按$cpu所属的node来取队列
 		pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
 
 	/*
@@ -1455,18 +1463,20 @@ retry:
 	pwq->nr_in_flight[pwq->work_color]++;
 	work_flags = work_color_to_flags(pwq->work_color);
 
-	//活跃的较少，直接存入
 	if (likely(pwq->nr_active < pwq->max_active)) {
+		//活跃的较少，直接存入pwq->pool->worklist中
 		trace_workqueue_activate_work(work);
 		pwq->nr_active++;
 		worklist = &pwq->pool->worklist;
 		if (list_empty(worklist))
 			pwq->pool->watchdog_ts = jiffies;
 	} else {
+		//活跃的较多，将其存入到pwq->delayed_works中
 		work_flags |= WORK_STRUCT_DELAYED;
 		worklist = &pwq->delayed_works;
 	}
 
+	//将work移至worklist中
 	insert_work(pwq, work, worklist, work_flags);
 
 	spin_unlock(&pwq->pool->lock);
@@ -1511,6 +1521,7 @@ void delayed_work_timer_fn(struct timer_list *t)
 }
 EXPORT_SYMBOL(delayed_work_timer_fn);
 
+//work入队（支持延迟一段时间后入队执行）
 static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 				struct delayed_work *dwork, unsigned long delay)
 {
@@ -1535,7 +1546,8 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 		return;
 	}
 
-	//如果需要延迟，则启动timer
+	//如果需要延迟，则启动timer，此timer到期时将执行delayed_work_timer_fn回调
+	//那时，将会由此回调，调用__queue_work函数
 	dwork->wq = wq;
 	dwork->cpu = cpu;
 	timer->expires = jiffies + delay;
@@ -1821,9 +1833,11 @@ static struct worker *create_worker(struct worker_pool *pool)
 	worker->id = id;
 
 	if (pool->cpu >= 0)
+		//绑定在cpu上的kworker
 		snprintf(id_buf, sizeof(id_buf), "%d:%d%s", pool->cpu, id,
 			 pool->attrs->nice < 0  ? "H" : "");
 	else
+		//未绑定在cpu上的kworker
 		snprintf(id_buf, sizeof(id_buf), "u%d:%d", pool->id, id);
 
 	//产生worker线程
@@ -1840,6 +1854,7 @@ static struct worker *create_worker(struct worker_pool *pool)
 
 	/* start the newly created worker */
 	spin_lock_irq(&pool->lock);
+	//pool上的worker数量增加
 	worker->pool->nr_workers++;
 	worker_enter_idle(worker);
 	wake_up_process(worker->task);
@@ -2061,6 +2076,7 @@ static bool manage_workers(struct worker *worker)
  * CONTEXT:
  * spin_lock_irq(pool->lock) which is released and regrabbed.
  */
+//处理work
 static void process_one_work(struct worker *worker, struct work_struct *work)
 __releases(&pool->lock)
 __acquires(&pool->lock)
@@ -2092,15 +2108,20 @@ __acquires(&pool->lock)
 	 * already processing the work.  If so, defer the work to the
 	 * currently executing one.
 	 */
+	//如果当前cpu上已有work准备处理此work,则将其加入到scheduled中
 	collision = find_worker_executing_work(pool, work);
 	if (unlikely(collision)) {
+		//已有对应的worker,现在要求并发执行，这种延迟执行
+		//看后面代码知道并发执行
 		move_linked_works(work, &collision->scheduled, NULL);
 		return;
 	}
 
 	/* claim and dequeue */
 	debug_work_deactivate(work);
+	//将work加入到busy_hash表中
 	hash_add(pool->busy_hash, &worker->hentry, (unsigned long)work);
+	//设置worker
 	worker->current_work = work;
 	worker->current_func = work->func;
 	worker->current_pwq = pwq;
@@ -2131,6 +2152,7 @@ __acquires(&pool->lock)
 	 * UNBOUND and CPU_INTENSIVE ones.
 	 */
 	if (need_more_worker(pool))
+		//队列不为空，唤醒worker，使其运行其它任务
 		wake_up_worker(pool);
 
 	/*
@@ -2254,6 +2276,7 @@ static void set_pf_worker(bool val)
  *
  * Return: 0
  */
+//worker线程入口([kworkder]线程）
 static int worker_thread(void *__worker)
 {
 	struct worker *worker = __worker;
@@ -2266,6 +2289,7 @@ woke_up:
 
 	/* am I supposed to die? */
 	if (unlikely(worker->flags & WORKER_DIE)) {
+		//停止worker线程
 		spin_unlock_irq(&pool->lock);
 		WARN_ON_ONCE(!list_empty(&worker->entry));
 		set_pf_worker(false);
@@ -2304,6 +2328,7 @@ recheck:
 	worker_clr_flags(worker, WORKER_PREP | WORKER_REBOUND);
 
 	do {
+		//处理为worker分配的工作
 		struct work_struct *work =
 			list_first_entry(&pool->worklist,
 					 struct work_struct, entry);
@@ -2312,10 +2337,13 @@ recheck:
 
 		if (likely(!(*work_data_bits(work) & WORK_STRUCT_LINKED))) {
 			/* optimization path, not strictly necessary */
+			//处理此work
 			process_one_work(worker, work);
+			//存在已调度的，但因为并发未及时执行，这里直接取下来执行scheduled队列上的
 			if (unlikely(!list_empty(&worker->scheduled)))
 				process_scheduled_works(worker);
 		} else {
+			//将work移动到scheduled中，并执行
 			move_linked_works(work, &worker->scheduled, NULL);
 			process_scheduled_works(worker);
 		}
@@ -2982,6 +3010,7 @@ static bool __cancel_work_timer(struct work_struct *work, bool is_dwork)
 		 * wait and wakeup.
 		 */
 		if (unlikely(ret == -ENOENT)) {
+			//等其执行完成后，才能取消
 			struct cwt_wait cwait;
 
 			init_wait(&cwait.wait);
@@ -3137,6 +3166,7 @@ EXPORT_SYMBOL(cancel_delayed_work);
  */
 bool cancel_delayed_work_sync(struct delayed_work *dwork)
 {
+	//指明在取消延迟work
 	return __cancel_work_timer(&dwork->work, true);
 }
 EXPORT_SYMBOL(cancel_delayed_work_sync);
@@ -5643,7 +5673,7 @@ static void __init wq_numa_init(void)
 	int node, cpu;
 
 	if (num_possible_nodes() <= 1)
-		return;
+		return;//非numa机器退出
 
 	if (wq_disable_numa) {
 		pr_info("workqueue: NUMA affinity support disabled\n");
@@ -5666,7 +5696,7 @@ static void __init wq_numa_init(void)
 				node_online(node) ? node : NUMA_NO_NODE));
 
 	for_each_possible_cpu(cpu) {
-		node = cpu_to_node(cpu);
+		node = cpu_to_node(cpu);//cpu对应的node
 		if (WARN_ON(node == NUMA_NO_NODE)) {
 			pr_warn("workqueue: NUMA node mapping not available for cpu%d, disabling NUMA support\n", cpu);
 			/* happens iff arch is bonkers, let's just proceed */

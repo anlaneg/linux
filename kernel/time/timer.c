@@ -1200,11 +1200,13 @@ int del_timer(struct timer_list *timer)
 	debug_assert_init(timer);
 
 	if (timer_pending(timer)) {
+		//timer 未触发时，尝试摘掉timer
 		base = lock_timer_base(timer, &flags);
 		ret = detach_if_pending(timer, base, true);
 		raw_spin_unlock_irqrestore(&base->lock, flags);
 	}
 
+	//如果timer已正在触发或者未加入，则返回0
 	return ret;
 }
 EXPORT_SYMBOL(del_timer);

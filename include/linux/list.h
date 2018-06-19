@@ -117,6 +117,7 @@ static inline void __list_del_entry(struct list_head *entry)
 	if (!__list_del_entry_valid(entry))
 		return;
 
+	//将entry自链表上移除
 	__list_del(entry->prev, entry->next);
 }
 
@@ -179,7 +180,9 @@ static inline void list_move(struct list_head *list, struct list_head *head)
 static inline void list_move_tail(struct list_head *list,
 				  struct list_head *head)
 {
+	//先将list自原链上移除
 	__list_del_entry(list);
+	//将list节点添加到head的尾部（head->prev与head之间）
 	list_add_tail(list, head);
 }
 

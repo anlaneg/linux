@@ -1023,6 +1023,7 @@ SYSCALL_DEFINE2(delete_module, const char __user *, name_user,
 	async_synchronize_full();
 
 	/* Store the name of the last unloaded module for diagnostic purposes */
+	//记录最近哪个module被移除
 	strlcpy(last_unloaded_module, mod->name, sizeof(last_unloaded_module));
 
 	free_module(mod);
@@ -4365,6 +4366,7 @@ void print_modules(void)
 	printk(KERN_DEFAULT "Modules linked in:");
 	/* Most callers should already have preempt disabled, but make sure */
 	preempt_disable();
+	//显示当前装载有哪些modules
 	list_for_each_entry_rcu(mod, &modules, list) {
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
@@ -4372,6 +4374,7 @@ void print_modules(void)
 	}
 	preempt_enable();
 	if (last_unloaded_module[0])
+		//显示最近被移除的module
 		pr_cont(" [last unloaded: %s]", last_unloaded_module);
 	pr_cont("\n");
 }

@@ -1120,7 +1120,7 @@ static noinline void __init kernel_init_freeable(void)
 
 	smp_prepare_cpus(setup_max_cpus);
 
-	workqueue_init();
+	workqueue_init();//工作队列初始化
 
 	init_mm_internals();
 

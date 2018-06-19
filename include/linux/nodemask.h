@@ -430,6 +430,7 @@ static inline int num_node_state(enum node_states state)
 	return nodes_weight(node_states[state]);
 }
 
+//遍历numa节点
 #define for_each_node_state(__node, __state) \
 	for_each_node_mask((__node), node_states[__state])
 
