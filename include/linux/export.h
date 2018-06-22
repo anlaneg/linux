@@ -25,6 +25,7 @@ struct kernel_symbol
 };
 
 #ifdef MODULE
+//引用__this_module(ld时产生的变量)
 extern struct module __this_module;
 #define THIS_MODULE (&__this_module)
 #else
@@ -38,6 +39,7 @@ extern struct module __this_module;
 /* Mark the CRC weak since genksyms apparently decides not to
  * generate a checksums for some symbols */
 #if defined(CONFIG_MODULE_REL_CRCS)
+//版本控制信息
 #define __CRC_SYMBOL(sym, sec)						\
 	asm("	.section \"___kcrctab" sec "+" #sym "\", \"a\"	\n"	\
 	    "	.weak	__crc_" #sym "				\n"	\
@@ -58,6 +60,7 @@ extern struct module __this_module;
 #define ___EXPORT_SYMBOL(sym, sec)					\
 	extern typeof(sym) sym;						\
 	__CRC_SYMBOL(sym, sec)						\
+	/*将符号名称存入到__ksymtab_strings中*/\
 	static const char __kstrtab_##sym[]				\
 	__attribute__((section("__ksymtab_strings"), aligned(1)))	\
 	= #sym;								\
@@ -94,9 +97,11 @@ extern struct module __this_module;
 #define __EXPORT_SYMBOL ___EXPORT_SYMBOL
 #endif
 
+//导出符号sym
 #define EXPORT_SYMBOL(sym)					\
 	__EXPORT_SYMBOL(sym, "")
 
+//采用_gpl协议导出符号sym
 #define EXPORT_SYMBOL_GPL(sym)					\
 	__EXPORT_SYMBOL(sym, "_gpl")
 
