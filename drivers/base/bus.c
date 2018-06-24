@@ -462,6 +462,7 @@ int bus_for_each_drv(struct bus_type *bus, struct device_driver *start,
 	if (!bus)
 		return -EINVAL;
 
+	//遍历此bus上所有的driver,并针对每个driver调用fn
 	klist_iter_init_node(&bus->p->klist_drivers, &i,
 			     start ? &start->p->knode_bus : NULL);
 	while ((drv = next_driver(&i)) && !error)
@@ -671,6 +672,7 @@ int bus_add_driver(struct device_driver *drv)
 	if (error)
 		goto out_unregister;
 
+	//将driver加入到bus集合中
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
 		//对于virtio_bus其驱动容许自动探测
@@ -686,6 +688,7 @@ int bus_add_driver(struct device_driver *drv)
 	}
 	module_add_driver(drv->owner, drv);
 
+	//创建driver对应的文件
 	error = driver_create_file(drv, &driver_attr_uevent);
 	if (error) {
 		printk(KERN_ERR "%s: uevent attr (%s) failed\n",

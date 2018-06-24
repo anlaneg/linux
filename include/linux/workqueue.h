@@ -555,6 +555,7 @@ static inline bool mod_delayed_work(struct workqueue_struct *wq,
  */
 static inline bool schedule_work_on(int cpu, struct work_struct *work)
 {
+	//将work直接安排在system_wq队列的cpu上进行执行
 	return queue_work_on(cpu, system_wq, work);
 }
 

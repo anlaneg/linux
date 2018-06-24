@@ -322,6 +322,7 @@ void pci_bus_add_device(struct pci_dev *dev)
 	pci_bridge_d3_update(dev);
 
 	dev->match_driver = true;
+	//为设备查找驱动程序
 	retval = device_attach(&dev->dev);
 	if (retval < 0 && retval != -EPROBE_DEFER) {
 		pci_warn(dev, "device attach failed (%d)\n", retval);

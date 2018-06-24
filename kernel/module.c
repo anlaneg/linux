@@ -96,6 +96,7 @@
  * (delete and add uses RCU list operations). */
 DEFINE_MUTEX(module_mutex);
 EXPORT_SYMBOL_GPL(module_mutex);
+//记录系统中所有module
 static LIST_HEAD(modules);
 
 #ifdef CONFIG_MODULES_TREE_LOOKUP
@@ -468,6 +469,7 @@ bool each_symbol_section(bool (*fn)(const struct symsearch *arr,
 	if (each_symbol_in_section(arr, ARRAY_SIZE(arr), NULL, fn, data))
 		return true;
 
+	//遍历所有modules
 	list_for_each_entry_rcu(mod, &modules, list) {
 		struct symsearch arr[] = {
 			{ mod->syms, mod->syms + mod->num_syms, mod->crcs,
@@ -618,6 +620,7 @@ static struct module *find_module_all(const char *name, size_t len,
 	return NULL;
 }
 
+//查找名称为name的module
 struct module *find_module(const char *name)
 {
 	module_assert_mutex();
@@ -3545,6 +3548,7 @@ fail:
 
 static int may_init_module(void)
 {
+	//如果module被禁用，则返回错误
 	if (!capable(CAP_SYS_MODULE) || modules_disabled)
 		return -EPERM;
 
@@ -3654,6 +3658,7 @@ static int unknown_module_param_cb(char *param, char *val, const char *modname,
 
 /* Allocate and load the module: note that size of section 0 is always
    zero, and we rely on this for optional sections. */
+//实现module载入内存
 static int load_module(struct load_info *info, const char __user *uargs,
 		       int flags)
 {
@@ -3847,6 +3852,7 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 	pr_debug("init_module: umod=%p, len=%lu, uargs=%p\n",
 	       umod, len, uargs);
 
+	//自用户态载入传来的数据
 	err = copy_module_from_user(umod, len, &info);
 	if (err)
 		return err;
