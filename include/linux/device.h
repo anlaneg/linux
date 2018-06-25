@@ -280,7 +280,8 @@ struct device_driver {
 	const char		*name;
 	struct bus_type		*bus;//此驱动对应设备从属的bus
 
-	struct module		*owner;
+	struct module		*owner;//驱动从属于那个模块
+	//驱动从属的模块的模块名称
 	const char		*mod_name;	/* used for built-in modules */
 
 	bool suppress_bind_attrs;	/* disables bind/unbind via sysfs */

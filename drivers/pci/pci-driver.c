@@ -250,6 +250,7 @@ static const struct pci_device_id pci_device_id_any = {
  * system is in its list of supported devices.  Returns the matching
  * pci_device_id structure or %NULL if there is no match.
  */
+//用于实现pci bus上驱动与设备之间的匹配定义
 static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 						    struct pci_dev *dev)
 {
@@ -1624,13 +1625,13 @@ static int pci_dma_configure(struct device *dev)
 
 struct bus_type pci_bus_type = {
 	.name		= "pci",
-	.match		= pci_bus_match,
+	.match		= pci_bus_match,//定义pci总线如何实现驱动与bus之间的匹配
 	.uevent		= pci_uevent,
 	//定义pci设备的probe函数
 	.probe		= pci_device_probe,
 	.remove		= pci_device_remove,
 	.shutdown	= pci_device_shutdown,
-	.dev_groups	= pci_dev_groups,
+	.dev_groups	= pci_dev_groups,//设备属性组
 	.bus_groups	= pci_bus_groups,
 	.drv_groups	= pci_drv_groups,
 	.pm		= PCI_PM_OPS_PTR,
@@ -1661,6 +1662,7 @@ static int pcie_port_bus_match(struct device *dev, struct device_driver *drv)
 	return 1;
 }
 
+//pcie对应的bus
 struct bus_type pcie_port_bus_type = {
 	.name		= "pci_express",
 	.match		= pcie_port_bus_match,
@@ -1668,15 +1670,18 @@ struct bus_type pcie_port_bus_type = {
 EXPORT_SYMBOL_GPL(pcie_port_bus_type);
 #endif
 
+//pci驱动初始化，创建/sys/bus/pci目录，方便其它drvier引用bus
 static int __init pci_driver_init(void)
 {
 	int ret;
 
+	//为pci创建相应的/sys/bus/pci目录
 	ret = bus_register(&pci_bus_type);
 	if (ret)
 		return ret;
 
 #ifdef CONFIG_PCIEPORTBUS
+	//为pcie创建相应的sysfs目录
 	ret = bus_register(&pcie_port_bus_type);
 	if (ret)
 		return ret;

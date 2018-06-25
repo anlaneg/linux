@@ -127,6 +127,7 @@ static const struct sysfs_ops bus_sysfs_ops = {
 	.store	= bus_attr_store,
 };
 
+//创建bus下的属性文件
 int bus_create_file(struct bus_type *bus, struct bus_attribute *attr)
 {
 	int error;
@@ -175,7 +176,7 @@ static const struct kset_uevent_ops bus_uevent_ops = {
 	.filter = bus_uevent_filter,
 };
 
-static struct kset *bus_kset;
+static struct kset *bus_kset;//所有bus从属于此集合
 
 /* Manually detach a device from its associated driver. */
 static ssize_t unbind_store(struct device_driver *drv, const char *buf,
@@ -308,7 +309,7 @@ int bus_for_each_dev(struct bus_type *bus, struct device *start,
 	int error = 0;
 
 	if (!bus || !bus->p)
-		return -EINVAL;
+		return -EINVAL;//bus未注册，报错
 
 	klist_iter_init_node(&bus->p->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
@@ -602,10 +603,12 @@ static int add_probe_files(struct bus_type *bus)
 {
 	int retval;
 
+	//创建/sys/bus/$bus/drivers_probe文件
 	retval = bus_create_file(bus, &bus_attr_drivers_probe);
 	if (retval)
 		goto out;
 
+	//创建/sys/bus/$bus/drivers_autoprobe文件
 	retval = bus_create_file(bus, &bus_attr_drivers_autoprobe);
 	if (retval)
 		bus_remove_file(bus, &bus_attr_drivers_probe);
@@ -643,6 +646,8 @@ static void driver_attach_async(void *_drv, async_cookie_t cookie)
  * @drv: driver.
  */
 //添加一个driver到bus
+//从这个流程下去，即会出现驱动查找bus上未识别的设备，并尝试为这些设备提供驱动的过程
+//存在另一个流程为，当设备发现时，会查询bus上存在的驱动，检查哪个驱动适配自已的流程。
 int bus_add_driver(struct device_driver *drv)
 {
 	struct bus_type *bus;
@@ -666,7 +671,7 @@ int bus_add_driver(struct device_driver *drv)
 	//实现driver与driver_private互指
 	priv->driver = drv;
 	drv->p = priv;
-	priv->kobj.kset = bus->p->drivers_kset;
+	priv->kobj.kset = bus->p->drivers_kset;//指明驱动从属于bus下的drivers kset
 	error = kobject_init_and_add(&priv->kobj, &driver_ktype, NULL,
 				     "%s", drv->name);//创建driver对应的kobject
 	if (error)
@@ -675,12 +680,13 @@ int bus_add_driver(struct device_driver *drv)
 	//将driver加入到bus集合中
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
-		//对于virtio_bus其驱动容许自动探测
+		//对于virtio_bus其驱动容许自动探测，默认pci bus上drivers_autoprobe均为真
 		if (driver_allows_async_probing(drv)) {
 			pr_debug("bus: '%s': probing driver %s asynchronously\n",
 				drv->bus->name, drv->name);
 			async_schedule(driver_attach_async, drv);
 		} else {
+			//执行同步探测
 			error = driver_attach(drv);
 			if (error)
 				goto out_unregister;
@@ -862,6 +868,7 @@ static BUS_ATTR(uevent, S_IWUSR, NULL, bus_uevent_store);
  * infrastructure, then register the children subsystems it has:
  * the devices and drivers that belong to the subsystem.
  */
+//注册驱动所属的bus(主要是为sysfs中添加必要的目录及文件）
 int bus_register(struct bus_type *bus)
 {
 	int retval;
@@ -884,19 +891,21 @@ int bus_register(struct bus_type *bus)
 	if (retval)
 		goto out;
 
-	priv->subsys.kobj.kset = bus_kset;
+	priv->subsys.kobj.kset = bus_kset;//设置此bus对应的kset
 	priv->subsys.kobj.ktype = &bus_ktype;//此句将设备bus的sysfs_ops
-	priv->drivers_autoprobe = 1;
+	priv->drivers_autoprobe = 1;//指明支持自动probe
 
-	//创建必要的sysfs目录
-	retval = kset_register(&priv->subsys);
+	//创建必要的sysfs目录（例如创建/sys/bus/pci 目录）
+	retval = kset_register(&priv->subsys);//将priv加入到kset
 	if (retval)
 		goto out;
 
+	//创建uevent文件
 	retval = bus_create_file(bus, &bus_attr_uevent);
 	if (retval)
 		goto bus_uevent_fail;
 
+	//在$bus下创建'devices' kset，及目录
 	priv->devices_kset = kset_create_and_add("devices", NULL,
 						 &priv->subsys.kobj);
 	if (!priv->devices_kset) {
@@ -904,6 +913,7 @@ int bus_register(struct bus_type *bus)
 		goto bus_devices_fail;
 	}
 
+	//在$bus下创建'drivers' kset及目上录
 	priv->drivers_kset = kset_create_and_add("drivers", NULL,
 						 &priv->subsys.kobj);
 	if (!priv->drivers_kset) {
@@ -916,6 +926,7 @@ int bus_register(struct bus_type *bus)
 	klist_init(&priv->klist_devices, klist_devices_get, klist_devices_put);
 	klist_init(&priv->klist_drivers, NULL, NULL);
 
+	//创建drivers_autoprobe，drivers_probe文件
 	retval = add_probe_files(bus);
 	if (retval)
 		goto bus_probe_files_fail;

@@ -195,6 +195,7 @@ static async_cookie_t __async_schedule(async_func_t func, void *data, struct asy
 	current->flags |= PF_USED_ASYNC;
 
 	/* schedule for execution */
+	//将work加入到system_unbond_wq，并立即运行
 	queue_work(system_unbound_wq, &entry->work);
 
 	return newcookie;

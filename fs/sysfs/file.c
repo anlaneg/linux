@@ -361,6 +361,7 @@ int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
 {
 	BUG_ON(!kobj || !kobj->sd || !attr);
 
+	//创建文件（非二进制文件）
 	return sysfs_add_file_mode_ns(kobj->sd, attr, false, attr->mode, ns);
 
 }

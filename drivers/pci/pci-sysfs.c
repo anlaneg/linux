@@ -450,6 +450,7 @@ static const struct attribute_group pci_bus_group = {
 	.attrs = pci_bus_attrs,
 };
 
+//定义pci bus的属性组
 const struct attribute_group *pci_bus_groups[] = {
 	&pci_bus_group,
 	NULL,
@@ -1672,6 +1673,7 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 	return 0;
 }
 
+//定义pci设备的属性组
 static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };
