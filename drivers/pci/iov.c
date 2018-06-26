@@ -195,7 +195,7 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 
 	kobject_uevent(&virtfn->dev.kobj, KOBJ_CHANGE);
 
-	pci_bus_add_device(virtfn);
+	pci_bus_add_device(virtfn);//将设备添加到pci bus上
 
 	return 0;
 
@@ -269,6 +269,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	if (iov->num_VFs)
 		return -EINVAL;
 
+	//需要多少个虚设备
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_INITIAL_VF, &initial);
 	if (initial > iov->total_VFs ||
 	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs)))
@@ -337,6 +338,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	pci_cfg_access_unlock(dev);
 
 	for (i = 0; i < initial; i++) {
+		//添加sriov的虚设备$i
 		rc = pci_iov_add_virtfn(dev, i);
 		if (rc)
 			goto failed;

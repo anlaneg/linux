@@ -32,7 +32,7 @@ struct subsys_private {
 	struct list_head interfaces;
 	struct mutex mutex;
 
-	struct kset *drivers_kset;
+	struct kset *drivers_kset;//kset,用于收集属于同一个bus下的drivers
 	struct klist klist_devices;//挂接从属于子系统的device
 	struct klist klist_drivers;//挂接从属于子系统的driver
 	struct blocking_notifier_head bus_notifier;

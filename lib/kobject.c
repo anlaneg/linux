@@ -209,7 +209,7 @@ static void kobject_init_internal(struct kobject *kobj)
 	kobj->state_initialized = 1;//标记已初始化
 }
 
-//kobject加入sysfs系统时的内部实现
+//kobject加入sysfs系统时的内部实现（将为kobj创建目录）
 static int kobject_add_internal(struct kobject *kobj)
 {
 	int error = 0;
@@ -230,6 +230,7 @@ static int kobject_add_internal(struct kobject *kobj)
 
 	/* join kset if set, use it as parent if we do not already have one */
 	if (kobj->kset) {
+		//如果kobj从属于kset,则其父节点为kobj->kset本身
 		if (!parent)
 			parent = kobject_get(&kobj->kset->kobj);
 		kobj_kset_join(kobj);
@@ -390,6 +391,7 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 	}
 	//设置obj对应的父节点
 	kobj->parent = parent;
+	//为obj创建目录
 	return kobject_add_internal(kobj);
 }
 
@@ -845,6 +847,7 @@ EXPORT_SYMBOL_GPL(kobj_sysfs_ops);
  * kset_register - initialize and add a kset.
  * @k: kset.
  */
+//会导致创建kset对应的目录，并通知kobj_add事件
 int kset_register(struct kset *k)
 {
 	int err;
@@ -973,6 +976,7 @@ static struct kset *kset_create(const char *name,
  *
  * If the kset was not able to be created, NULL will be returned.
  */
+//创建名称为$name的keyset
 struct kset *kset_create_and_add(const char *name,
 				 const struct kset_uevent_ops *uevent_ops,
 				 struct kobject *parent_kobj)
@@ -980,9 +984,11 @@ struct kset *kset_create_and_add(const char *name,
 	struct kset *kset;
 	int error;
 
+	//创建名称为name的keyset,指明其父kobj
 	kset = kset_create(name, uevent_ops, parent_kobj);
 	if (!kset)
 		return NULL;
+	//创建$name的目录
 	error = kset_register(kset);
 	if (error) {
 		kfree(kset);

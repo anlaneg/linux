@@ -678,6 +678,7 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {
 		/* no match */
+		//无法匹配
 		return 0;
 	} else if (ret == -EPROBE_DEFER) {
         //需要延迟匹配,将设备加入
@@ -728,6 +729,7 @@ static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 	put_device(dev);
 }
 
+//为设备bind相应的驱动（是否容许异步绑定?)
 static int __device_attach(struct device *dev, bool allow_async)
 {
 	int ret = 0;
@@ -798,17 +800,25 @@ out_unlock:
  * When called for a USB interface, @dev->parent lock must be held.
  */
 //如注释所言，尝试将当前设备固定到一个驱动
+//当一个设备被发现后，自此设备从属的bus上，我们可知道众多的驱动
+//一个一个遍历这些驱动，检查这些驱动是否与此设备可匹配，如果可匹配，则
+//为此设备绑定相应驱动。
+//应还有一个流程，当一个驱动被载入时，需要检查bus上是否有设备未绑定，如果
+//未绑定，则检查被载入的驱动能否匹配设备
 int device_attach(struct device *dev)
 {
+	//不容许异步attach到相应驱动
 	return __device_attach(dev, false);
 }
 EXPORT_SYMBOL_GPL(device_attach);
 
 void device_initial_probe(struct device *dev)
 {
+	//容许异步attach到相应驱动
 	__device_attach(dev, true);
 }
 
+//检查驱动data是否可匹配dev设备
 static int __driver_attach(struct device *dev, void *data)
 {
 	struct device_driver *drv = data;
@@ -827,19 +837,23 @@ static int __driver_attach(struct device *dev, void *data)
 	ret = driver_match_device(drv, dev);
 	if (ret == 0) {
 		/* no match */
+		//不匹配时返回0
 		return 0;
 	} else if (ret == -EPROBE_DEFER) {
+		//需要延迟探测
 		dev_dbg(dev, "Device match requests probe deferral\n");
 		driver_deferred_probe_add(dev);
 	} else if (ret < 0) {
+		//匹配时失败
 		dev_dbg(dev, "Bus failed to match device: %d", ret);
 		return ret;
 	} /* ret > 0 means positive match */
 
+	//明确匹配上此驱动
 	if (dev->parent && dev->bus->need_parent_lock)
 		device_lock(dev->parent);
 	device_lock(dev);
-	//此设备还未绑定driver
+	//如果此设备还未绑定driver，则为此设备绑定此驱动
 	if (!dev->driver)
 		driver_probe_device(drv, dev);
 	device_unlock(dev);
@@ -860,6 +874,8 @@ static int __driver_attach(struct device *dev, void *data)
  */
 int driver_attach(struct device_driver *drv)
 {
+	//遍历driver所属bus上的每一个device,针对每一个device,调用__driver_attach为其绑定
+	//驱动，传入的参数为drv，如果__driver_attach返回0，则会继续尝试下一个设备
 	return bus_for_each_dev(drv->bus, NULL, drv, __driver_attach);
 }
 EXPORT_SYMBOL_GPL(driver_attach);

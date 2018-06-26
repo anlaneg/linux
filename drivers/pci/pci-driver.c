@@ -222,12 +222,14 @@ const struct pci_device_id *pci_match_id(const struct pci_device_id *ids,
 					 struct pci_dev *dev)
 {
 	if (ids) {
+		//如果有ids,则匹配ids中指定的vendor,subvendor等
 		while (ids->vendor || ids->subvendor || ids->class_mask) {
 			if (pci_match_one_device(ids, dev))
 				return ids;
 			ids++;
 		}
 	}
+	//无ids时，直接返回NULL
 	return NULL;
 }
 EXPORT_SYMBOL(pci_match_id);
@@ -248,6 +250,7 @@ static const struct pci_device_id pci_device_id_any = {
  * system is in its list of supported devices.  Returns the matching
  * pci_device_id structure or %NULL if there is no match.
  */
+//用于实现pci bus上驱动与设备之间的匹配定义
 static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 						    struct pci_dev *dev)
 {
@@ -275,7 +278,7 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 	if (!found_id && dev->driver_override)
 		found_id = &pci_device_id_any;
 
-	return found_id;
+	return found_id;//返回匹配到的pci id
 }
 
 struct drv_dev_and_id {
@@ -287,9 +290,9 @@ struct drv_dev_and_id {
 static long local_pci_probe(void *_ddi)
 {
 	struct drv_dev_and_id *ddi = _ddi;
-	struct pci_dev *pci_dev = ddi->dev;
-	struct pci_driver *pci_drv = ddi->drv;
-	struct device *dev = &pci_dev->dev;
+	struct pci_dev *pci_dev = ddi->dev;//探测的设备
+	struct pci_driver *pci_drv = ddi->drv;//用来尝试的驱动
+	struct device *dev = &pci_dev->dev;//更一般形式的驱动
 	int rc;
 
 	/*
@@ -302,11 +305,12 @@ static long local_pci_probe(void *_ddi)
 	 * its remove routine.
 	 */
 	pm_runtime_get_sync(dev);
-	pci_dev->driver = pci_drv;
-	rc = pci_drv->probe(pci_dev, ddi->id);
+	pci_dev->driver = pci_drv;//设置此设备对应驱动，并执行probe函数
+	rc = pci_drv->probe(pci_dev, ddi->id);//传入dev,传入id(匹配id)
 	if (!rc)
-		return rc;
+		return rc;//成功匹配
 	if (rc < 0) {
+		//匹配失败
 		pci_dev->driver = NULL;
 		pm_runtime_put_sync(dev);
 		return rc;
@@ -339,7 +343,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	 * attached.  This way the driver likely allocates its local memory
 	 * on the right node.
 	 */
-	node = dev_to_node(&dev->dev);
+	node = dev_to_node(&dev->dev);//取设备所处的numa节点
 	dev->is_probed = 1;
 
 	cpu_hotplug_disable();
@@ -352,9 +356,11 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 	    pci_physfn_is_probed(dev))
 		cpu = nr_cpu_ids;
 	else
+		//取node所属的一个在线cpu
 		cpu = cpumask_any_and(cpumask_of_node(node), cpu_online_mask);
 
 	if (cpu < nr_cpu_ids)
+		//在$cpu上执行local_pci_probe
 		error = work_on_cpu(cpu, local_pci_probe, &ddi);
 	else
 		error = local_pci_probe(&ddi);
@@ -372,6 +378,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
  * returns 0 on success, else error.
  * side-effect: pci_dev->driver is set to drv when drv claims pci_dev.
  */
+//检查drv是否匹配设备pci_dev
 static int __pci_device_probe(struct pci_driver *drv, struct pci_dev *pci_dev)
 {
 	const struct pci_device_id *id;
@@ -384,6 +391,7 @@ static int __pci_device_probe(struct pci_driver *drv, struct pci_dev *pci_dev)
 		if (id)
 			error = pci_call_probe(drv, pci_dev, id);
 	}
+	//未命中时，返回error
 	return error;
 }
 
@@ -408,9 +416,11 @@ static inline bool pci_device_can_probe(struct pci_dev *pdev)
 }
 #endif
 
+//为探测dev的驱动dev->driver（检查两者是否可匹配）
 static int pci_device_probe(struct device *dev)
 {
 	int error;
+	//当前是pci bus,故要探测的设备为pci设备
 	struct pci_dev *pci_dev = to_pci_dev(dev);
 	struct pci_driver *drv = to_pci_driver(dev->driver);
 
@@ -421,7 +431,9 @@ static int pci_device_probe(struct device *dev)
 		return error;
 
 	pci_dev_get(pci_dev);
+	//检查测试是否可探测
 	if (pci_device_can_probe(pci_dev)) {
+		//具体执行设备probe
 		error = __pci_device_probe(drv, pci_dev);
 		if (error) {
 			pcibios_free_irq(pci_dev);
@@ -1387,13 +1399,14 @@ static const struct dev_pm_ops pci_dev_pm_ops = {
  * If no error occurred, the driver remains registered even if
  * no device was claimed during registration.
  */
+//注册一个新的pci设备驱动
 int __pci_register_driver(struct pci_driver *drv, struct module *owner,
 			  const char *mod_name)
 {
 	/* initialize common driver fields */
 	drv->driver.name = drv->name;
-	drv->driver.bus = &pci_bus_type;
-	drv->driver.owner = owner;
+	drv->driver.bus = &pci_bus_type;//使driver指向pci bus
+	drv->driver.owner = owner;//从属于那个模块
 	drv->driver.mod_name = mod_name;
 	drv->driver.groups = drv->groups;
 
@@ -1401,6 +1414,7 @@ int __pci_register_driver(struct pci_driver *drv, struct module *owner,
 	INIT_LIST_HEAD(&drv->dynids.list);
 
 	/* register with core */
+	//驱动注册
 	return driver_register(&drv->driver);
 }
 EXPORT_SYMBOL(__pci_register_driver);
@@ -1611,12 +1625,13 @@ static int pci_dma_configure(struct device *dev)
 
 struct bus_type pci_bus_type = {
 	.name		= "pci",
-	.match		= pci_bus_match,
+	.match		= pci_bus_match,//定义pci总线如何实现驱动与bus之间的匹配
 	.uevent		= pci_uevent,
+	//定义pci设备的probe函数
 	.probe		= pci_device_probe,
 	.remove		= pci_device_remove,
 	.shutdown	= pci_device_shutdown,
-	.dev_groups	= pci_dev_groups,
+	.dev_groups	= pci_dev_groups,//设备属性组
 	.bus_groups	= pci_bus_groups,
 	.drv_groups	= pci_drv_groups,
 	.pm		= PCI_PM_OPS_PTR,
@@ -1647,6 +1662,7 @@ static int pcie_port_bus_match(struct device *dev, struct device_driver *drv)
 	return 1;
 }
 
+//pcie对应的bus
 struct bus_type pcie_port_bus_type = {
 	.name		= "pci_express",
 	.match		= pcie_port_bus_match,
@@ -1654,15 +1670,18 @@ struct bus_type pcie_port_bus_type = {
 EXPORT_SYMBOL_GPL(pcie_port_bus_type);
 #endif
 
+//pci驱动初始化，创建/sys/bus/pci目录，方便其它drvier引用bus
 static int __init pci_driver_init(void)
 {
 	int ret;
 
+	//为pci创建相应的/sys/bus/pci目录
 	ret = bus_register(&pci_bus_type);
 	if (ret)
 		return ret;
 
 #ifdef CONFIG_PCIEPORTBUS
+	//为pcie创建相应的sysfs目录
 	ret = bus_register(&pcie_port_bus_type);
 	if (ret)
 		return ret;

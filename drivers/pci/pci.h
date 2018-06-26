@@ -194,6 +194,7 @@ extern const struct attribute_group *pci_bus_groups[];
 static inline const struct pci_device_id *
 pci_match_one_device(const struct pci_device_id *id, const struct pci_dev *dev)
 {
+	//驱动与设备进行匹配（vendor,device,subvendor,subdevice,class
 	if ((id->vendor == PCI_ANY_ID || id->vendor == dev->vendor) &&
 	    (id->device == PCI_ANY_ID || id->device == dev->device) &&
 	    (id->subvendor == PCI_ANY_ID || id->subvendor == dev->subsystem_vendor) &&

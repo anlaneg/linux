@@ -4923,6 +4923,7 @@ static void work_for_cpu_fn(struct work_struct *work)
  *
  * Return: The value @fn returns.
  */
+//在cpu上运行函数fn(采用工作了列实现）
 long work_on_cpu(int cpu, long (*fn)(void *), void *arg)
 {
 	struct work_for_cpu wfc = { .fn = fn, .arg = arg };

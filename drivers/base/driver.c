@@ -143,24 +143,28 @@ void driver_remove_groups(struct device_driver *drv,
  * since most of the things we have to do deal with the bus
  * structures.
  */
+//驱动注册
 int driver_register(struct device_driver *drv)
 {
 	int ret;
 	struct device_driver *other;
 
-	if (!drv->bus->p) {//要求bus已初始化
+	if (!drv->bus->p) {
+		//驱动注册时，要求其所属的bus已指出，且要求bus已初始化
+		//即bus已在sysfs中创建
 		pr_err("Driver '%s' was unable to register with bus_type '%s' because the bus was not initialized.\n",
 			   drv->name, drv->bus->name);
 		return -EINVAL;
 	}
 
+	//driver与bus中方法重复检查
 	if ((drv->bus->probe && drv->probe) ||
 	    (drv->bus->remove && drv->remove) ||
 	    (drv->bus->shutdown && drv->shutdown))
 		printk(KERN_WARNING "Driver '%s' needs updating - please use "
 			"bus_type methods\n", drv->name);
 
-	//检查自身是否已注册在对应的bus上
+	//检查驱动自身是否已注册在对应的bus上
 	other = driver_find(drv->name, drv->bus);
 	if (other) {
         //已存在，重复注册
