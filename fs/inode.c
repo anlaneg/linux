@@ -1973,16 +1973,19 @@ void __init inode_init(void)
 					0);
 }
 
+//为indoe设置对应的i_fop及i_rdev
 void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
 	if (S_ISCHR(mode)) {
-		//设置字符设备对应的操作集
+		//设备是字符设备，设置字符设备的默认fops,自此fops进入后将具体到对应的chardev
 		inode->i_fop = &def_chr_fops;
-		//设置设备dev_t
+		//设置字符设备的dev_t
 		inode->i_rdev = rdev;
 	} else if (S_ISBLK(mode)) {
+		//设置块设备对应的操作集
 		inode->i_fop = &def_blk_fops;
+		//设置块设备
 		inode->i_rdev = rdev;
 	} else if (S_ISFIFO(mode))
 		inode->i_fop = &pipefifo_fops;

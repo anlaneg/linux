@@ -2192,7 +2192,9 @@ mount_pseudo(struct file_system_type *fs_type, char *name,
 #define replace_fops(f, fops) \
 	do {	\
 		struct file *__file = (f); \
+		/*释放旧的f_op的引用计数*/\
 		fops_put(__file->f_op); \
+		/*设置新的f_op,并断言设置的fops不为NULL*/\
 		BUG_ON(!(__file->f_op = (fops))); \
 	} while(0)
 

@@ -8,6 +8,7 @@ static int devinfo_show(struct seq_file *f, void *v)
 {
 	int i = *(loff_t *) v;
 
+	//当i<chardev_major_max时显示字符设备
 	if (i < CHRDEV_MAJOR_MAX) {
 		if (i == 0)
 			seq_puts(f, "Character devices:\n");
@@ -15,8 +16,10 @@ static int devinfo_show(struct seq_file *f, void *v)
 	}
 #ifdef CONFIG_BLOCK
 	else {
+		//大于chardev_major_max时显示块设备
 		i -= CHRDEV_MAJOR_MAX;
 		if (i == 0)
+			//显示块设备title
 			seq_puts(f, "\nBlock devices:\n");
 		blkdev_show(f, i);
 	}
@@ -53,6 +56,7 @@ static const struct seq_operations devinfo_ops = {
 
 static int __init proc_devices_init(void)
 {
+	//创建/proc/devices文件，并用于显示字符设备及块设备
 	proc_create_seq("devices", 0, NULL, &devinfo_ops);
 	return 0;
 }

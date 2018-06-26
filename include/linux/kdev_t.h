@@ -7,8 +7,11 @@
 #define MINORBITS	20
 #define MINORMASK	((1U << MINORBITS) - 1)
 
+//取major
 #define MAJOR(dev)	((unsigned int) ((dev) >> MINORBITS))
+//取minor
 #define MINOR(dev)	((unsigned int) ((dev) & MINORMASK))
+//当前minor占用MINORBITS个bit位
 #define MKDEV(ma,mi)	(((ma) << MINORBITS) | (mi))
 
 #define print_dev_t(buffer, dev)					\

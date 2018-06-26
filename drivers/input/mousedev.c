@@ -772,6 +772,7 @@ static __poll_t mousedev_poll(struct file *file, poll_table *wait)
 	return mask;
 }
 
+//mousedev的文件操作集
 static const struct file_operations mousedev_fops = {
 	.owner		= THIS_MODULE,
 	.read		= mousedev_read,
@@ -904,6 +905,7 @@ static struct mousedev *mousedev_create(struct input_dev *dev,
 			goto err_free_mousedev;
 	}
 
+	//初始化cdev及设置对应的fops
 	cdev_init(&mousedev->cdev, &mousedev_fops);
 
 	error = cdev_device_add(&mousedev->cdev, &mousedev->dev);

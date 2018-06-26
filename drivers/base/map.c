@@ -43,6 +43,7 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	if (n > 255)
 		n = 255;//最多容许占用255个major
 
+	//申请n个probe
 	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
 	if (p == NULL)
 		return -ENOMEM;

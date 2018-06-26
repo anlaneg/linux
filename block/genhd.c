@@ -297,6 +297,7 @@ static struct blk_major_name {
 	int major;
 	char name[16];
 } *major_names[BLKDEV_MAJOR_HASH_SIZE];
+//用于记录所有块设备
 
 /* index in the above - for now: assume no multimajor ranges */
 static inline int major_to_index(unsigned major)
@@ -305,6 +306,7 @@ static inline int major_to_index(unsigned major)
 }
 
 #ifdef CONFIG_PROC_FS
+//显示系统中所有块设备
 void blkdev_show(struct seq_file *seqf, off_t offset)
 {
 	struct blk_major_name *dp;
