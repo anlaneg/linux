@@ -241,6 +241,7 @@ static struct attribute *uio_attrs[] = {
 	&dev_attr_event.attr,
 	NULL,
 };
+//设置uio_attrs为一个uio_group，且uio_group为uio_groups中的唯一成员
 ATTRIBUTE_GROUPS(uio);
 
 /* UIO class infrastructure */
@@ -403,6 +404,7 @@ void uio_event_notify(struct uio_info *info)
 
 	atomic_inc(&idev->event);
 	wake_up_interruptible(&idev->wait);
+	//信号发送
 	kill_fasync(&idev->async_queue, SIGIO, POLL_IN);
 }
 EXPORT_SYMBOL_GPL(uio_event_notify);
@@ -418,6 +420,7 @@ static irqreturn_t uio_interrupt(int irq, void *dev_id)
 	irqreturn_t ret = idev->info->handler(irq, idev->info);
 
 	if (ret == IRQ_HANDLED)
+		//如果返回值为IRQ_HANDLED，则事件需要通知给用户态（通过信号触发）
 		uio_event_notify(idev->info);
 
 	return ret;
@@ -493,6 +496,7 @@ static int uio_fasync(int fd, struct file *filep, int on)
 	return fasync_helper(fd, filep, on, &idev->async_queue);
 }
 
+//uio设备关闭时调用
 static int uio_release(struct inode *inode, struct file *filep)
 {
 	int ret = 0;
@@ -511,6 +515,7 @@ static int uio_release(struct inode *inode, struct file *filep)
 	return ret;
 }
 
+//uio设备poll调用
 static __poll_t uio_poll(struct file *filep, poll_table *wait)
 {
 	struct uio_listener *listener = filep->private_data;
@@ -532,6 +537,7 @@ static __poll_t uio_poll(struct file *filep, poll_table *wait)
 	return 0;
 }
 
+//uio设备read调用
 static ssize_t uio_read(struct file *filep, char __user *buf,
 			size_t count, loff_t *ppos)
 {
@@ -588,6 +594,7 @@ static ssize_t uio_read(struct file *filep, char __user *buf,
 	return retval;
 }
 
+//uio设备write调用
 static ssize_t uio_write(struct file *filep, const char __user *buf,
 			size_t count, loff_t *ppos)
 {
@@ -755,6 +762,7 @@ static int uio_mmap(struct file *filep, struct vm_area_struct *vma)
 	}
 }
 
+//uio设备的文件操作函数集
 static const struct file_operations uio_fops = {
 	.owner		= THIS_MODULE,
 	.open		= uio_open,
@@ -767,6 +775,7 @@ static const struct file_operations uio_fops = {
 	.llseek		= noop_llseek,
 };
 
+//初始化uio字符设备
 static int uio_major_init(void)
 {
 	static const char name[] = "uio";
@@ -785,14 +794,17 @@ static int uio_major_init(void)
 		goto out_unregister;
 
 	cdev->owner = THIS_MODULE;
-	cdev->ops = &uio_fops;//设置uio的操作集
+	//设置uio的字符设备的操作集
+	cdev->ops = &uio_fops;
 	//设置cdev的名称为"uio"
 	kobject_set_name(&cdev->kobj, "%s", name);
 
+	//将uio字符设备加入到当前系统
 	result = cdev_add(cdev, uio_dev, UIO_MAX_DEVICES);
 	if (result)
 		goto out_put;
 
+	//记录uio的major编号，记录uio字符设备
 	uio_major = MAJOR(uio_dev);
 	uio_cdev = cdev;
 	return 0;
@@ -804,6 +816,7 @@ out:
 	return result;
 }
 
+//取消字符设备注册，删除uio_cdev设备
 static void uio_major_cleanup(void)
 {
 	unregister_chrdev_region(MKDEV(uio_major, 0), UIO_MAX_DEVICES);
@@ -815,10 +828,12 @@ static int init_uio_class(void)
 	int ret;
 
 	/* This is the first time in here, set everything up properly */
+	//初始化uio字符设备
 	ret = uio_major_init();
 	if (ret)
 		goto exit;
 
+	//注册uio的/sys/class/uio
 	ret = class_register(&uio_class);
 	if (ret) {
 		printk(KERN_ERR "class_register failed for uio\n");
@@ -853,6 +868,7 @@ static void uio_device_release(struct device *dev)
  *
  * returns zero on success or a negative error code.
  */
+//注册设备及其对应的uio信息
 int __uio_register_device(struct module *owner,
 			  struct device *parent,
 			  struct uio_info *info)
@@ -910,6 +926,7 @@ int __uio_register_device(struct module *owner,
 		 * FDs at the time of unregister and therefore may not be
 		 * freed until they are released.
 		 */
+		//为设备定义中断执行函数
 		ret = request_irq(info->irq, uio_interrupt,
 				  info->irq_flags, info->name, idev);
 		if (ret)
@@ -960,6 +977,7 @@ void uio_unregister_device(struct uio_info *info)
 }
 EXPORT_SYMBOL_GPL(uio_unregister_device);
 
+//uio模块初始化
 static int __init uio_init(void)
 {
 	return init_uio_class();

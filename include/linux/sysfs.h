@@ -113,7 +113,7 @@ struct attribute_group {
 	.store	= _store,						\
 }
 
-//只设置读回调
+//设置只读回调
 #define __ATTR_RO(_name) {						\
 	.attr	= { .name = __stringify(_name), .mode = 0444 },		\
 	.show	= _name##_show,						\
@@ -152,9 +152,11 @@ static const struct attribute_group *_name##_groups[] = {	\
 }
 
 #define ATTRIBUTE_GROUPS(_name)					\
+		/*设置group*/\
 static const struct attribute_group _name##_group = {		\
 	.attrs = _name##_attrs,					\
 };								\
+	/*将_group设置为groups数组中的一个且唯一的成员*/\
 __ATTRIBUTE_GROUPS(_name)
 
 struct file;

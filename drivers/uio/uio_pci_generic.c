@@ -47,12 +47,13 @@ static irqreturn_t irqhandler(int irq, struct uio_info *info)
 	struct uio_pci_generic_dev *gdev = to_uio_pci_generic_dev(info);
 
 	if (!pci_check_and_mask_intx(gdev->pdev))
-		return IRQ_NONE;
+		return IRQ_NONE;//中断不需要通知给用户态
 
 	/* UIO core will signal the user process. */
-	return IRQ_HANDLED;
+	return IRQ_HANDLED;//中断需要通知给用户态
 }
 
+//待匹配的pci设备，检查其与uio_pci_generic是否匹配（id为匹配时的id号，本函数不使用）
 static int probe(struct pci_dev *pdev,
 			   const struct pci_device_id *id)
 {
@@ -83,7 +84,7 @@ static int probe(struct pci_dev *pdev,
 	if (pdev->irq) {
 		gdev->info.irq = pdev->irq;
 		gdev->info.irq_flags = IRQF_SHARED;
-		gdev->info.handler = irqhandler;
+		gdev->info.handler = irqhandler;//处理中断的回调函数
 	} else {
 		dev_warn(&pdev->dev, "No IRQ assigned to device: "
 			 "no support for interrupts?\n");
@@ -112,9 +113,11 @@ static void remove(struct pci_dev *pdev)
 	kfree(gdev);
 }
 
+//uio_pci_driver 为pic驱动
 static struct pci_driver uio_pci_driver = {
 	.name = "uio_pci_generic",
 	.id_table = NULL, /* only dynamic id's */
+	//用于检查uio_pci_driver具体与某一个pci_device能否匹配时调用
 	.probe = probe,
 	.remove = remove,
 };

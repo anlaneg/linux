@@ -306,6 +306,7 @@ static long local_pci_probe(void *_ddi)
 	 */
 	pm_runtime_get_sync(dev);
 	pci_dev->driver = pci_drv;//设置此设备对应驱动，并执行probe函数
+	//调用驱动的probe函数对设备pci_dev按pci_drv进行探测，检查是否可以匹配
 	rc = pci_drv->probe(pci_dev, ddi->id);//传入dev,传入id(匹配id)
 	if (!rc)
 		return rc;//成功匹配
@@ -363,6 +364,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		//在$cpu上执行local_pci_probe
 		error = work_on_cpu(cpu, local_pci_probe, &ddi);
 	else
+		//在本cpu上执行local_pci_probe
 		error = local_pci_probe(&ddi);
 
 	dev->is_probed = 0;
