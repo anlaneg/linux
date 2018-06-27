@@ -1389,6 +1389,7 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 	 * (e.g. if the device really is in D0 at enable time).
 	 */
 	if (dev->pm_cap) {
+		//pm为电源管理
 		u16 pmcsr;
 		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 		dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
@@ -1397,6 +1398,7 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 	if (atomic_inc_return(&dev->enable_cnt) > 1)
 		return 0;		/* already enabled */
 
+	//取dev对应的上游的桥
 	bridge = pci_upstream_bridge(dev);
 	if (bridge)
 		pci_enable_bridge(bridge);
