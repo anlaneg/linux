@@ -11,12 +11,15 @@
 #define S_IALLUGO	(S_ISUID|S_ISGID|S_ISVTX|S_IRWXUGO)
 #endif
 #ifndef S_IRUGO
+//user,group,other读权限
 #define S_IRUGO         (S_IRUSR|S_IRGRP|S_IROTH)
 #endif
 #ifndef S_IWUGO
+//user,group,other写权限
 #define S_IWUGO         (S_IWUSR|S_IWGRP|S_IWOTH)
 #endif
 #ifndef S_IXUGO
+//user,group,other执行权限
 #define S_IXUGO         (S_IXUSR|S_IXGRP|S_IXOTH)
 #endif
 
