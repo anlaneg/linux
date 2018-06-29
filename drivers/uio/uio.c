@@ -46,6 +46,7 @@ struct uio_map {
 };
 #define to_map(map) container_of(map, struct uio_map, kobj)
 
+//显示了内存区域名称
 static ssize_t map_name_show(struct uio_mem *mem, char *buf)
 {
 	if (unlikely(!mem->name))
@@ -54,16 +55,19 @@ static ssize_t map_name_show(struct uio_mem *mem, char *buf)
 	return sprintf(buf, "%s\n", mem->name);
 }
 
+//显示内存地址
 static ssize_t map_addr_show(struct uio_mem *mem, char *buf)
 {
 	return sprintf(buf, "%pa\n", &mem->addr);
 }
 
+//显示内存尺寸
 static ssize_t map_size_show(struct uio_mem *mem, char *buf)
 {
 	return sprintf(buf, "%pa\n", &mem->size);
 }
 
+//显示offset(内存的起始位）
 static ssize_t map_offset_show(struct uio_mem *mem, char *buf)
 {
 	return sprintf(buf, "0x%llx\n", (unsigned long long)mem->offs);
@@ -84,6 +88,7 @@ static struct map_sysfs_entry size_attribute =
 static struct map_sysfs_entry offset_attribute =
 	__ATTR(offset, S_IRUGO, map_offset_show, NULL);
 
+//uio$i目录下的文件
 static struct attribute *attrs[] = {
 	&name_attribute.attr,
 	&addr_attribute.attr,
@@ -120,6 +125,7 @@ static const struct sysfs_ops map_sysfs_ops = {
 static struct kobj_type map_attr_type = {
 	.release	= map_release,
 	.sysfs_ops	= &map_sysfs_ops,
+	//指明map$i下的属性，看/sys/class/uio/uio0/maps/map0/*
 	.default_attrs	= attrs,
 };
 
@@ -241,7 +247,9 @@ static struct attribute *uio_attrs[] = {
 	&dev_attr_event.attr,
 	NULL,
 };
+
 //设置uio_attrs为一个uio_group，且uio_group为uio_groups中的唯一成员
+//提供/sys/class/uio/uio$i下的公共的属性文件，name,version,event
 ATTRIBUTE_GROUPS(uio);
 
 /* UIO class infrastructure */
@@ -270,6 +278,7 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 			break;
 		if (!map_found) {
 			map_found = 1;
+			//添加并创建map目录，例如：/sys/class/uio/uio0/maps
 			idev->map_dir = kobject_create_and_add("maps",
 							&idev->dev.kobj);
 			if (!idev->map_dir) {
@@ -285,9 +294,11 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 		kobject_init(&map->kobj, &map_attr_type);
 		map->mem = mem;
 		mem->map = map;
+		//构造并添加目录，例如：/sys/class/uio/uio0/maps/map0
 		ret = kobject_add(&map->kobj, idev->map_dir, "map%d", mi);
 		if (ret)
 			goto err_map_kobj;
+		//通知用户态obj添加
 		ret = kobject_uevent(&map->kobj, KOBJ_ADD);
 		if (ret)
 			goto err_map_kobj;
@@ -296,6 +307,7 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 	for (pi = 0; pi < MAX_UIO_PORT_REGIONS; pi++) {
 		port = &idev->info->port[pi];
 		if (port->size == 0)
+			//如果无port,则跳过portio的创建
 			break;
 		if (!portio_found) {
 			portio_found = 1;
@@ -889,7 +901,7 @@ int __uio_register_device(struct module *owner,
 	idev->owner = owner;
 	idev->info = info;
 	spin_lock_init(&idev->info_lock);
-	init_waitqueue_head(&idev->wait);
+	init_waitqueue_head(&idev->wait);//初始化等待队列
 	atomic_set(&idev->event, 0);
 
 	ret = uio_get_minor(idev);
@@ -907,6 +919,8 @@ int __uio_register_device(struct module *owner,
 	if (ret)
 		goto err_device_create;
 
+	//设备注册
+	//将产生例如：/sys/class/uio/uio0
 	ret = device_register(&idev->dev);
 	if (ret)
 		goto err_device_create;

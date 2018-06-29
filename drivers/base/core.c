@@ -1787,6 +1787,7 @@ int device_add(struct device *dev)
 	 * some day, we need to initialize the name. We prevent reading back
 	 * the name, and force the use of dev_name()
 	 */
+	//设置设备名称
 	if (dev->init_name) {
 		dev_set_name(dev, "%s", dev->init_name);
 		dev->init_name = NULL;
@@ -1828,6 +1829,7 @@ int device_add(struct device *dev)
 	if (platform_notify)
 		platform_notify(dev);
 
+	//创建设备文件
 	error = device_create_file(dev, &dev_attr_uevent);
 	if (error)
 		goto attrError;
