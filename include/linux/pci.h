@@ -289,14 +289,14 @@ struct pci_dev {
 	struct proc_dir_entry *procent;	/* Device entry in /proc/bus/pci */
 	struct pci_slot	*slot;		/* Physical slot this device is in */
 
-	unsigned int	devfn;		/* Encoded device & function index */ //设备function_id
-	unsigned short	vendor;//设备vendor信息
-	unsigned short	device;//设备类型编号
+	unsigned int	devfn;		/* Encoded device & function index */ //设备deviceid+function_id
+	unsigned short	vendor;//设备vendor_id信息,来自pci配置空间
+	unsigned short	device;//设备类型编号(device_id)，来自pci配置空间
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;
 	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */ //设备类型，例如nic
-	u8		revision;	/* PCI revision, low byte of class word */
-	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
+	u8		revision;	/* PCI revision, low byte of class word */ //记录设备的版本号
+	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */ //pci设备的头标类型（不含multi标记）
 #ifdef CONFIG_PCIEAER
 	u16		aer_cap;	/* AER capability offset */
 #endif
@@ -366,7 +366,7 @@ struct pci_dev {
 	bool		match_driver;		/* Skip attaching driver */
 
 	unsigned int	transparent:1;		/* Subtractive decode bridge */
-	unsigned int	multifunction:1;	/* Multi-function device */
+	unsigned int	multifunction:1;	/* Multi-function device */ //标记是此设备是否为多功能设备
 
 	unsigned int	is_added:1;
 	unsigned int	is_busmaster:1;		/* Is busmaster */
@@ -438,6 +438,7 @@ struct pci_dev {
 	size_t		romlen;		/* Length if not from BAR */
 	char		*driver_override; /* Driver name to force a match */
 
+	//0号bit位被置上时表示设备未连接
 	unsigned long	priv_flags;	/* Private flags for the PCI driver */
 };
 

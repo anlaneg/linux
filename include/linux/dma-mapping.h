@@ -201,7 +201,9 @@ static inline int dma_mmap_from_global_coherent(struct vm_area_struct *vma,
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
 	if (dev && dev->dma_ops)
+		//如果dev有dma_ops，则返回dev对应的dma_ops
 		return dev->dma_ops;
+	//否则尝试体系结构的dma ops
 	return get_arch_dma_ops(dev ? dev->bus : NULL);
 }
 
@@ -550,6 +552,7 @@ static inline void dma_free_attrs(struct device *dev, size_t size,
 	ops->free(dev, size, cpu_addr, dma_handle, attrs);
 }
 
+//一致性dma内存申请
 static inline void *dma_alloc_coherent(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t flag)
 {

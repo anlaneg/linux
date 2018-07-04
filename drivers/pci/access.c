@@ -43,6 +43,7 @@ int pci_bus_read_config_##size \
 	u32 data = 0;							\
 	if (PCI_##size##_BAD) return PCIBIOS_BAD_REGISTER_NUMBER;	\
 	pci_lock_config(flags);						\
+	/*调用bus的read函数完成寄存器读取*/\
 	res = bus->ops->read(bus, devfn, pos, len, &data);		\
 	*value = (type)data;						\
 	pci_unlock_config(flags);					\
@@ -536,12 +537,15 @@ int pcie_capability_clear_and_set_dword(struct pci_dev *dev, int pos,
 }
 EXPORT_SYMBOL(pcie_capability_clear_and_set_dword);
 
+//读取pci配置寄存器
 int pci_read_config_byte(const struct pci_dev *dev, int where, u8 *val)
 {
+	//设备未连接时，报错
 	if (pci_dev_is_disconnected(dev)) {
 		*val = ~0;
 		return PCIBIOS_DEVICE_NOT_FOUND;
 	}
+
 	return pci_bus_read_config_byte(dev->bus, dev->devfn, where, val);
 }
 EXPORT_SYMBOL(pci_read_config_byte);
