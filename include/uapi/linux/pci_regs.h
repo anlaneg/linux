@@ -32,13 +32,79 @@
 #define PCI_CFG_SPACE_EXP_SIZE	4096
 
 /*
+ * pci配置空间格式（注：这张图的右侧是低位，故第一行3,2,1,0,第二行是7,6,5,4)
+ * pci配置空间共有256字节，这256字节的空间又分为64字节的头标区和192字节的设备相关区两部分。
+ * 头标区的各个寄存器用来唯一地识别设备；设备相关区则保存一些与设备相关的数据。
+ * 配置空间的头标区又分为两部分：前16个字节的定义在各种类型的PCI设备中都是一样的；
+ * 剩余的字节随设备类型不同而有所不同。位于偏移地址0EH处的头标类型字段规定了头标区的布局结构。目前，规范定义了三种头标类型。
+ *
+ * 头标类型（Header type字段）如下表示
+ * ------------------
+ * 头标类型	设备
+ * 2		PCI-CardBus桥
+ * 1		PCI-PCI桥
+ * 0		除上述桥外的所有设备
+ * --------------------
+ *
+ *
+		DW |    Byte3    |    Byte2    |    Byte1    |     Byte0     | Addr
+		---+---------------------------------------------------------+-----
+		 0 | 　　　　Device ID 　　　　　　　　　　　　| 　　　　Vendor ID 　　　　　　　　　　　　　　|　00
+		---+---------------------------------------------------------+-----
+		 1 | 　　　　　Status　　　　　　　　　　　　　　　| 　　　　 Command　　　　　　　　　　　　　　　　|　04
+		---+---------------------------------------------------------+-----
+		 2 | 　　　　　　　Class Code　　　　　　　　　　　　　　　　　　　　　　　|　　Revision ID　　|　08
+		---+---------------------------------------------------------+-----
+		 3 | 　　BIST　　　　　　| Header Type |Latency Timer| Cache Line  　　|　0C
+		---+---------------------------------------------------------+-----
+		 4 | 　　　　　　　　　　Base Address 0　　　　　　　　　　　                     |　10
+		---+---------------------------------------------------------+-----
+		 5 | 　　　　　　　　　　Base Address 1　　　　　　　　　　　                     |　14
+		---+---------------------------------------------------------+-----
+		 6 | 　　　　　　　　　　Base Address 2　　　　　　　　　　　                     |　18
+		---+---------------------------------------------------------+-----
+		 7 | 　　　　　　　　　　Base Address 3　　　　　　　　　　　                     |　1C
+		---+---------------------------------------------------------+-----
+		 8 | 　　　　　　　　　　Base Address 4　　　　　　　　　　　                     |　20
+		---+---------------------------------------------------------+-----
+		 9 | 　　　　　　　　　　Base Address 5　　　　　　　　　　　                     |　24
+		---+---------------------------------------------------------+-----
+		10 | 　　　　　　　　　CardBus CIS pointer　　　　　　　　　                   |　28
+		---+---------------------------------------------------------+-----
+		11 |　　Subsystem Device ID　　    | 　　Subsystem Vendor ID　　     |　2C
+		---+---------------------------------------------------------+-----
+		12 | 　　　　　　　            Expansion ROM Base Address　　　　　　　　   |　30
+		---+---------------------------------------------------------+-----
+		13 | 　　　　　　　Reserved　　　　                     |Capability ptr |　34
+		---+---------------------------------------------------------+-----
+		14 | 　　　　　　　　　　　Reserved　　　　　　　　　　　　　                        |　38
+		---+---------------------------------------------------------+-----
+		15 | 　Max_Lat　   | 　Min_Gnt　   | 　IRQ Pin　   | 　IRQ Line　　   |　3C
+		-------------------------------------------------------------------
+
+		Vendor ID，Device ID：标记了一个设备的生产厂商和具体的设备，
+			比如Intel的设备Vendor ID通常是0x8086，Device ID就需要厂家自定义了。
+		Header Type（8bits) :该字段的第7位为“1”表示该设备是多功能设备，
+			为“0”表示为单功能设备；该字段的0～6位就是上文表中所述的头标类型。
+		Class Code(24bits)。用来标识设备的总体功能和特定的寄存器级编程接口。
+		Revision ID:该寄存器用来定义指定设备的版本信息。
+		上面5个字段均为只读类型，所有的PCI设备都必须实现其功能。
+
+		配置空间访问
+		PCI规范使用从0CF8H~0CFFH 这8个I/O地址来访问所有设备的PCI配置空间。
+		这8个字节实际上构成了两个32位寄存器：0CF8H寄存器叫做“配置地址寄存器”；
+		0CFCH叫做“配置数据寄存器”。当要访问配置空间的寄存器时，先向地址寄存器写上目标地址，
+		然后就可以从数据寄存器中读写数据了。
+*/
+
+/*
  * Under PCI, each device has 256 bytes of configuration address space,
  * of which the first 64 bytes are standardized as follows:
  */
 #define PCI_STD_HEADER_SIZEOF	64
-#define PCI_VENDOR_ID		0x00	/* 16 bits */ //vendor寄存器偏移量
-#define PCI_DEVICE_ID		0x02	/* 16 bits */ //device寄存器偏移量
-#define PCI_COMMAND		0x04	/* 16 bits */     //command寄存器偏移量
+#define PCI_VENDOR_ID		0x00	/* 16 bits */ //vendor寄存器偏移量0,长16bits
+#define PCI_DEVICE_ID		0x02	/* 16 bits */ //device寄存器偏移量2byte,长16bits
+#define PCI_COMMAND		0x04 /* 16 bits */ //command 寄存器偏移量4byte,长16bits
 #define  PCI_COMMAND_IO		0x1	/* Enable response in I/O space */
 #define  PCI_COMMAND_MEMORY	0x2	/* Enable response in Memory space */
 #define  PCI_COMMAND_MASTER	0x4	/* Enable bus mastering */
@@ -51,7 +117,7 @@
 #define  PCI_COMMAND_FAST_BACK	0x200	/* Enable back-to-back writes */
 #define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
 
-#define PCI_STATUS		0x06	/* 16 bits */ //状态寄存器偏移量
+#define PCI_STATUS		0x06	/* 16 bits */ //status寄存器偏移量为6byte,长16bits
 #define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
 #define  PCI_STATUS_CAP_LIST	0x10	/* Support Capability List */
 #define  PCI_STATUS_66MHZ	0x20	/* Support 66 MHz PCI 2.1 bus */
@@ -68,12 +134,12 @@
 #define  PCI_STATUS_SIG_SYSTEM_ERROR	0x4000 /* Set when we drive SERR */
 #define  PCI_STATUS_DETECTED_PARITY	0x8000 /* Set on parity error */
 
-#define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */ //class寄存器偏移量
-#define PCI_REVISION_ID		0x08	/* Revision ID */
-#define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */
+#define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */
+#define PCI_REVISION_ID		0x08	/* Revision ID */ //revision_id寄存器偏移量８byte,长8位
+#define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */ //class寄存器偏移量9byte,长24bits
 #define PCI_CLASS_DEVICE	0x0a	/* Device class */
 
-#define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
+#define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */　　//cacheline寄存器偏移量0xc,长8bits
 #define PCI_LATENCY_TIMER	0x0d	/* 8 bits */  //timer寄存器偏移
 #define PCI_HEADER_TYPE		0x0e	/* 8 bits */ //看配置space中header_type的偏移为0x0e
 #define  PCI_HEADER_TYPE_NORMAL		0
@@ -91,12 +157,14 @@
  * 0xffffffff to the register, and reading it back.  Only
  * 1 bits are decoded.
  */
+//６个base address的偏移量
 #define PCI_BASE_ADDRESS_0	0x10	/* 32 bits */
 #define PCI_BASE_ADDRESS_1	0x14	/* 32 bits [htype 0,1 only] */
 #define PCI_BASE_ADDRESS_2	0x18	/* 32 bits [htype 0 only] */
 #define PCI_BASE_ADDRESS_3	0x1c	/* 32 bits */
 #define PCI_BASE_ADDRESS_4	0x20	/* 32 bits */
 #define PCI_BASE_ADDRESS_5	0x24	/* 32 bits */
+//base address值的０号bit位，如果是０则使用memory space,否则使用i/o　space
 #define  PCI_BASE_ADDRESS_SPACE		0x01	/* 0 = memory, 1 = I/O */
 #define  PCI_BASE_ADDRESS_SPACE_IO	0x01
 #define  PCI_BASE_ADDRESS_SPACE_MEMORY	0x00
@@ -125,6 +193,7 @@
 #define PCI_MIN_GNT		0x3e	/* 8 bits */
 #define PCI_MAX_LAT		0x3f	/* 8 bits */
 
+//１类消息头部
 /* Header type 1 (PCI-to-PCI bridges) */
 #define PCI_PRIMARY_BUS		0x18	/* Primary bus number */
 #define PCI_SECONDARY_BUS	0x19	/* Secondary bus number */

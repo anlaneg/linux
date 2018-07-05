@@ -1467,6 +1467,7 @@ int pci_cfg_space_size(struct pci_dev *dev)
 	return PCI_CFG_SPACE_SIZE;
 }
 
+//读取Pci设备的class code 与revision
 static u32 pci_class(struct pci_dev *dev)
 {
 	u32 class;
@@ -1500,7 +1501,8 @@ static u8 pci_hdr_type(struct pci_dev *dev)
 	if (dev->is_virtfn)
 		return dev->physfn->sriov->hdr_type;
 #endif
-	//取配置空间PCI_HEADER_TYPE
+	//取配置空间PCI_HEADER_TYPE，即pci设备的头标类型（目前有三类设备0，普通pci设备;1.pci桥设备;2PCI-CardBus桥)
+	//注第7bit位用来标明是否为多功能设备，1表示多功能设备，0表示为单功能设备
 	pci_read_config_byte(dev, PCI_HEADER_TYPE, &hdr_type);
 	return hdr_type;
 }
@@ -1575,8 +1577,8 @@ int pci_setup_device(struct pci_dev *dev)
 	dev->sysdata = dev->bus->sysdata;
 	dev->dev.parent = dev->bus->bridge;
 	dev->dev.bus = &pci_bus_type;
-	dev->hdr_type = hdr_type & 0x7f;
-	dev->multifunction = !!(hdr_type & 0x80);
+	dev->hdr_type = hdr_type & 0x7f;//指出头标类型
+	dev->multifunction = !!(hdr_type & 0x80);//检查是否为多功能设备
 	dev->error_state = pci_channel_io_normal;
 	set_pcie_port_type(dev);
 
@@ -1592,6 +1594,7 @@ int pci_setup_device(struct pci_dev *dev)
 		     dev->bus->number, PCI_SLOT(dev->devfn),
 		     PCI_FUNC(dev->devfn));
 
+	//提取设备的class类型与与revision
 	class = pci_class(dev);
 
 	dev->revision = class & 0xff;
@@ -1703,6 +1706,7 @@ int pci_setup_device(struct pci_dev *dev)
 		}
 		break;
 
+	//2号类型用于PCI-CardBus桥 （不常见）
 	case PCI_HEADER_TYPE_CARDBUS:		    /* CardBus bridge header */
 		if (class != PCI_CLASS_BRIDGE_CARDBUS)
 			goto bad;
@@ -2168,14 +2172,14 @@ static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
 bool pci_bus_read_dev_vendor_id(struct pci_bus *bus, int devfn, u32 *l,
 				int timeout)
 {
-    //读取32bit的vendor_id
+    //尝试读取32bit的vendor_id + device_id,将读取的值存在l中
 	if (pci_bus_read_config_dword(bus, devfn, PCI_VENDOR_ID, l))
 		return false;
 
 	/* Some broken boards return 0 or ~0 if a slot is empty: */
 	if (*l == 0xffffffff || *l == 0x00000000 ||
 	    *l == 0x0000ffff || *l == 0xffff0000)
-		return false;
+		return false;//设备不存在
 
 	if (pci_bus_crs_vendor_id(*l))
         //延迟后重读
@@ -2197,13 +2201,14 @@ static struct pci_dev *pci_scan_device(struct pci_bus *bus, int devfn)
 
     //尝试读取device_id,vendor_id,超时时间为6s,读取的内存存放在l中
 	if (!pci_bus_read_dev_vendor_id(bus, devfn, &l, 60*1000))
-		return NULL;
+		return NULL;//如果设备不存在，则返回NULL
 
+	//此设备存在，为其创建dev
 	dev = pci_alloc_dev(bus);
 	if (!dev)
 		return NULL;
 
-	dev->devfn = devfn;//设置function_id
+	dev->devfn = devfn;//设置devcieid＋function_id
 	dev->vendor = l & 0xffff;//vendor_id的低16位为vendor
 	dev->device = (l >> 16) & 0xffff;//vendor_id的高16位为device
 
@@ -2438,6 +2443,7 @@ static int only_one_child(struct pci_bus *bus)
  *
  * Returns the number of new devices found.
  */
+//在$bus上扫描devfn(这里dev和fn被和在一起了，每个设备最多有８个fn）
 int pci_scan_slot(struct pci_bus *bus, int devfn)
 {
 	unsigned fn, nr = 0;
