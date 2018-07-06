@@ -305,7 +305,7 @@ struct pci_dev {
 	u8		msix_cap;	/* MSI-X capability offset */
 	u8		pcie_mpss:3;	/* PCIe Max Payload Size Supported */
 	u8		rom_base_reg;	/* Config register controlling ROM */
-	u8		pin;		/* Interrupt pin this device uses */
+	u8		pin;		/* Interrupt pin this device uses */ //中断引脚
 	u16		pcie_flags_reg;	/* Cached PCIe Capabilities Register */
 	unsigned long	*dma_alias_mask;/* Mask of enabled devfn aliases */
 
@@ -354,7 +354,7 @@ struct pci_dev {
 	pci_channel_state_t error_state;	/* Current connectivity state */
 	struct device	dev;			/* Generic device interface */
 
-	int		cfg_size;		/* Size of config space */
+	int		cfg_size;		/* Size of config space */ //设备的配置space大小
 
 	/*
 	 * Instead of touching interrupt line and base address registers

@@ -9,6 +9,7 @@
 #define typecheck(type,x) \
 ({	type __dummy; \
 	typeof(x) __dummy2; \
+	/*如果x不是type类型，则这里编译器会触发不同类型指针对比警告*/\
 	(void)(&__dummy == &__dummy2); \
 	1; \
 })

@@ -1681,6 +1681,7 @@ int dev_set_name(struct device *dev, const char *fmt, ...)
 	va_list vargs;
 	int err;
 
+	//设置设备名称
 	va_start(vargs, fmt);
 	err = kobject_set_name_vargs(&dev->kobj, fmt, vargs);
 	va_end(vargs);

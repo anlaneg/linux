@@ -108,7 +108,7 @@ static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
 			      dev->id.device, dev->id.vendor);
 }
 
-//如果未提供fbit功能，则挂掉
+//必提供的功能bit,如果未提供则直接挂掉
 void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
 					 unsigned int fbit)
 {
@@ -125,6 +125,7 @@ void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
 				return;
 	}
 
+	//如果未提供fbit功能，则挂掉
 	BUG();
 }
 EXPORT_SYMBOL_GPL(virtio_check_driver_offered_feature);
@@ -298,6 +299,7 @@ static int virtio_dev_remove(struct device *_d)
 	return 0;
 }
 
+//虚拟virtio_bus
 static struct bus_type virtio_bus = {
 	.name  = "virtio",
 	.match = virtio_dev_match,

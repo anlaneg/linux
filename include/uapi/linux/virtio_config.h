@@ -64,6 +64,7 @@
 #endif /* VIRTIO_CONFIG_NO_LEGACY */
 
 /* v1.0 compliant. */
+//标记为virtio 1.0版本
 #define VIRTIO_F_VERSION_1		32
 
 /*

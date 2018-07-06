@@ -40,6 +40,7 @@ int raw_pci_read(unsigned int domain, unsigned int bus, unsigned int devfn,
 						int reg, int len, u32 *val)
 {
 	if (domain == 0 && reg < 256 && raw_pci_ops)
+		//当domain是0，且寄存器位置小于256字节时，采用raw_pci_ops方式读取
 		return raw_pci_ops->read(domain, bus, devfn, reg, len, val);
 	if (raw_pci_ext_ops)
 		return raw_pci_ext_ops->read(domain, bus, devfn, reg, len, val);
@@ -56,8 +57,10 @@ int raw_pci_write(unsigned int domain, unsigned int bus, unsigned int devfn,
 	return -EINVAL;
 }
 
+//pci读取bus,devfn的偏移为where的寄存器，读取字节数为size，读取后内容存入到value中
 static int pci_read(struct pci_bus *bus, unsigned int devfn, int where, int size, u32 *value)
 {
+	//传入domain,bus_id,deviceid+function_id获取指定寄存器数值
 	return raw_pci_read(pci_domain_nr(bus), bus->number,
 				 devfn, where, size, value);
 }
@@ -68,6 +71,7 @@ static int pci_write(struct pci_bus *bus, unsigned int devfn, int where, int siz
 				  devfn, where, size, value);
 }
 
+//pci 读写寄存器函数
 struct pci_ops pci_root_ops = {
 	.read = pci_read,
 	.write = pci_write,
@@ -469,6 +473,7 @@ void pcibios_scan_root(int busnum)
 	sd->node = x86_pci_root_bus_node(busnum);
 	x86_pci_root_bus_resources(busnum, &resources);
 	printk(KERN_DEBUG "PCI: Probing PCI hardware (bus %02x)\n", busnum);
+	//扫描根bus
 	bus = pci_scan_root_bus(NULL, busnum, &pci_root_ops, sd, &resources);
 	if (!bus) {
 		pci_free_resource_list(&resources);

@@ -19,8 +19,8 @@
 struct resource {
 	resource_size_t start;
 	resource_size_t end;
-	const char *name;
-	unsigned long flags;
+	const char *name;//资源属于那个设备（设备名称）
+	unsigned long flags;//设置资源的flag（见IORESOURCE_XX)
 	unsigned long desc;
 	struct resource *parent, *sibling, *child;
 };
@@ -34,14 +34,14 @@ struct resource {
 #define IORESOURCE_BITS		0x000000ff	/* Bus-specific bits */
 
 #define IORESOURCE_TYPE_BITS	0x00001f00	/* Resource type */
-#define IORESOURCE_IO		0x00000100	/* PCI/ISA I/O ports */
-#define IORESOURCE_MEM		0x00000200
+#define IORESOURCE_IO		0x00000100	/* PCI/ISA I/O ports */ //指明采用io space
+#define IORESOURCE_MEM		0x00000200  //指明采用mem space
 #define IORESOURCE_REG		0x00000300	/* Register offsets */
 #define IORESOURCE_IRQ		0x00000400
 #define IORESOURCE_DMA		0x00000800
 #define IORESOURCE_BUS		0x00001000
 
-#define IORESOURCE_PREFETCH	0x00002000	/* No side effects */
+#define IORESOURCE_PREFETCH	0x00002000	/* No side effects */  //是否可预取
 #define IORESOURCE_READONLY	0x00004000
 #define IORESOURCE_CACHEABLE	0x00008000
 #define IORESOURCE_RANGELENGTH	0x00010000
@@ -50,7 +50,7 @@ struct resource {
 #define IORESOURCE_SIZEALIGN	0x00040000	/* size indicates alignment */
 #define IORESOURCE_STARTALIGN	0x00080000	/* start field is alignment */
 
-#define IORESOURCE_MEM_64	0x00100000
+#define IORESOURCE_MEM_64	0x00100000 //指明64位地址
 #define IORESOURCE_WINDOW	0x00200000	/* forwarded by bridge */
 #define IORESOURCE_MUXED	0x00400000	/* Resource is software muxed */
 

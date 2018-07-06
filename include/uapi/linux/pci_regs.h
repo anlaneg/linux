@@ -28,8 +28,8 @@
  * configuration space.  PCI-X Mode 2 and PCIe devices have 4096 bytes of
  * configuration space.
  */
-#define PCI_CFG_SPACE_SIZE	256
-#define PCI_CFG_SPACE_EXP_SIZE	4096
+#define PCI_CFG_SPACE_SIZE	256 //pci配置space大小
+#define PCI_CFG_SPACE_EXP_SIZE	4096 //pcie配置space大小
 
 /*
  * pci配置空间格式（注：这张图的右侧是低位，故第一行3,2,1,0,第二行是7,6,5,4)
@@ -189,7 +189,7 @@
 
 /* 0x35-0x3b are reserved */
 #define PCI_INTERRUPT_LINE	0x3c	/* 8 bits */
-#define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
+#define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */ //中断引脚reg偏移量
 #define PCI_MIN_GNT		0x3e	/* 8 bits */
 #define PCI_MAX_LAT		0x3f	/* 8 bits */
 

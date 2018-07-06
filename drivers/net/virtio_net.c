@@ -2143,6 +2143,7 @@ static void virtnet_update_settings(struct virtnet_info *vi)
 		vi->duplex = duplex;
 }
 
+//virtio_net的ethtool操作集
 static const struct ethtool_ops virtnet_ethtool_ops = {
 	.get_drvinfo = virtnet_get_drvinfo,
 	.get_link = ethtool_op_get_link,
@@ -2374,6 +2375,7 @@ static int virtnet_get_phys_port_name(struct net_device *dev, char *buf,
 	return 0;
 }
 
+//virtio_net驱动的操作集
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
@@ -2816,6 +2818,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	/* Find if host supports multiqueue virtio_net device */
     //如果支持多队列，则读取多队列配置到max_queue_pairs
+	//找出设备支持的最大虚队列数（组数，rx+tx算一组）
 	err = virtio_cread_feature(vdev, VIRTIO_NET_F_MQ,
 				   struct virtio_net_config,
 				   max_virtqueue_pairs, &max_queue_pairs);
@@ -2842,22 +2845,25 @@ static int virtnet_probe(struct virtio_device *vdev)
 	SET_NETDEV_DEV(dev, &vdev->dev);
 
 	/* Do we support "hardware" checksums? */
-    //是否支持度算硬件checksum
+    //是否支持硬件checksum
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CSUM)) {
 		/* This opens up the world of extra features. */
 		dev->hw_features |= NETIF_F_HW_CSUM | NETIF_F_SG;
 		if (csum)
 			dev->features |= NETIF_F_HW_CSUM | NETIF_F_SG;
 
+		//是否支持GSO
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_GSO)) {
 			dev->hw_features |= NETIF_F_TSO
 				| NETIF_F_TSO_ECN | NETIF_F_TSO6;
 		}
 		/* Individual feature bits: what can host handle? */
+		//是否支持TSO
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_TSO4))
 			dev->hw_features |= NETIF_F_TSO;
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_TSO6))
 			dev->hw_features |= NETIF_F_TSO6;
+		//????
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_ECN))
 			dev->hw_features |= NETIF_F_TSO_ECN;
 
@@ -3132,6 +3138,7 @@ static struct virtio_driver virtio_net_driver = {
 #endif
 };
 
+//virtio-net驱动初始化
 static __init int virtio_net_driver_init(void)
 {
 	int ret;

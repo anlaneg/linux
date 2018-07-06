@@ -63,8 +63,10 @@ struct irq_affinity;
  */
 typedef void vq_callback_t(struct virtqueue *);
 struct virtio_config_ops {
+	//配置项获取
 	void (*get)(struct virtio_device *vdev, unsigned offset,
 		    void *buf, unsigned len);
+	//配置项设置
 	void (*set)(struct virtio_device *vdev, unsigned offset,
 		    const void *buf, unsigned len);
 	u32 (*generation)(struct virtio_device *vdev);
@@ -99,11 +101,13 @@ static inline bool __virtio_test_bit(const struct virtio_device *vdev,
 				     unsigned int fbit)
 {
 	/* Did you forget to fix assumptions on max features? */
+	//校验bit位小于64
 	if (__builtin_constant_p(fbit))
 		BUILD_BUG_ON(fbit >= 64);
 	else
 		BUG_ON(fbit >= 64);
 
+	//检查vdev中fbit位是否开启
 	return vdev->features & BIT_ULL(fbit);
 }
 
@@ -149,9 +153,11 @@ static inline void __virtio_clear_bit(struct virtio_device *vdev,
 static inline bool virtio_has_feature(const struct virtio_device *vdev,
 				      unsigned int fbit)
 {
+	//28以下的bit功能位是必须提供的，如果未提供，则直接挂掉
 	if (fbit < VIRTIO_TRANSPORT_F_START)
 		virtio_check_driver_offered_feature(vdev, fbit);
 
+	//检查bit位是否提供
 	return __virtio_test_bit(vdev, fbit);
 }
 
@@ -244,6 +250,7 @@ int virtqueue_set_affinity(struct virtqueue *vq, int cpu)
 	return 0;
 }
 
+//virtio规定的是小端类型
 static inline bool virtio_is_little_endian(struct virtio_device *vdev)
 {
 	return virtio_has_feature(vdev, VIRTIO_F_VERSION_1) ||
@@ -291,6 +298,7 @@ static inline __virtio64 cpu_to_virtio64(struct virtio_device *vdev, u64 val)
 									\
 		switch (sizeof(*ptr)) {					\
 		case 1:							\
+		/*成员为1byte,故调用virtio_read8*/\
 			*(ptr) = virtio_cread8(vdev,			\
 					       offsetof(structname, member)); \
 			break;						\
@@ -356,6 +364,7 @@ static inline void __virtio_cread_many(struct virtio_device *vdev,
 	do {
 		old = gen;
 
+		//完成读取count个bytes字节的工作，并调读取的值填充到buf中
 		for (i = 0; i < count; i++)
 			vdev->config->get(vdev, offset + bytes * i,
 					  buf + i * bytes, bytes);
@@ -365,6 +374,7 @@ static inline void __virtio_cread_many(struct virtio_device *vdev,
 	} while (gen != old);
 }
 
+//读取len长度的字节（内部采用read_many实现）
 static inline void virtio_cread_bytes(struct virtio_device *vdev,
 				      unsigned int offset,
 				      void *buf, size_t len)
@@ -372,6 +382,7 @@ static inline void virtio_cread_bytes(struct virtio_device *vdev,
 	__virtio_cread_many(vdev, offset, buf, len, 1);
 }
 
+//采用vdev->config的get函数来进行读取，读取到的值存入&ret中，读取长度为sizeof(ret)来定
 static inline u8 virtio_cread8(struct virtio_device *vdev, unsigned int offset)
 {
 	u8 ret;
@@ -379,6 +390,7 @@ static inline u8 virtio_cread8(struct virtio_device *vdev, unsigned int offset)
 	return ret;
 }
 
+//采用vdev->config的set函数来设置，要设置的值存入在val中，要写入长度为sizeof(val)来定
 static inline void virtio_cwrite8(struct virtio_device *vdev,
 				  unsigned int offset, u8 val)
 {
@@ -390,6 +402,7 @@ static inline u16 virtio_cread16(struct virtio_device *vdev,
 {
 	u16 ret;
 	vdev->config->get(vdev, offset, &ret, sizeof(ret));
+	//将获取到的数据，转换为cpu序返回
 	return virtio16_to_cpu(vdev, (__force __virtio16)ret);
 }
 
@@ -438,6 +451,7 @@ static inline void virtio_cwrite64(struct virtio_device *vdev,
 		if (!virtio_has_feature(vdev, fbit))			\
 			_r = -ENOENT;					\
 		else							\
+		/*对应的功能位被置上了，读取其配置structname类型的member成员，读到的值存在ptr中*/\
 			virtio_cread((vdev), structname, member, ptr);	\
 		_r;							\
 	})

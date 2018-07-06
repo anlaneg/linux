@@ -133,7 +133,7 @@ struct virtio_device {
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
 	struct list_head vqs;
-	u64 features;
+	u64 features;//virtio的bit位（用于指代功能)
 	void *priv;
 };
 

@@ -139,17 +139,23 @@ static inline unsigned long decode_bar(struct pci_dev *dev, u32 bar)
 	u32 mem_type;
 	unsigned long flags;
 
+	//如果bar值的0号bit为1，则表示其要求使用io space,为其置io标记
+	//当采用io时，其0bit为1，1bit reverted且为0
 	if ((bar & PCI_BASE_ADDRESS_SPACE) == PCI_BASE_ADDRESS_SPACE_IO) {
-		flags = bar & ~PCI_BASE_ADDRESS_IO_MASK;
+		flags = bar & ~PCI_BASE_ADDRESS_IO_MASK;//提取io的flag
 		flags |= IORESOURCE_IO;
 		return flags;
 	}
 
-	flags = bar & ~PCI_BASE_ADDRESS_MEM_MASK;
+	//此时bar的0号bit为0，bit1,bit2合起来表示4种状态，其中00表示32位地址;
+	//01，11 reverted,10表示采用64位地址;bit3表示是否可预取
+	//由下面代码可知如果为01时按1M mem处理
+	flags = bar & ~PCI_BASE_ADDRESS_MEM_MASK;//取flag
 	flags |= IORESOURCE_MEM;
 	if (flags & PCI_BASE_ADDRESS_MEM_PREFETCH)
 		flags |= IORESOURCE_PREFETCH;
 
+	//检查地址类型
 	mem_type = bar & PCI_BASE_ADDRESS_MEM_TYPE_MASK;
 	switch (mem_type) {
 	case PCI_BASE_ADDRESS_MEM_TYPE_32:
@@ -158,7 +164,7 @@ static inline unsigned long decode_bar(struct pci_dev *dev, u32 bar)
 		/* 1M mem BAR treated as 32-bit BAR */
 		break;
 	case PCI_BASE_ADDRESS_MEM_TYPE_64:
-		flags |= IORESOURCE_MEM_64;
+		flags |= IORESOURCE_MEM_64;//采用64位地址
 		break;
 	default:
 		/* mem unknown type treated as 32-bit BAR */
@@ -178,6 +184,7 @@ static inline unsigned long decode_bar(struct pci_dev *dev, u32 bar)
  *
  * Returns 1 if the BAR is 64-bit, or 0 if 32-bit.
  */
+//读取pci的base address register
 int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 		    struct resource *res, unsigned int pos)
 {
@@ -186,6 +193,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	u16 orig_cmd;
 	struct pci_bus_region region, inverted_region;
 
+	//当type为pci_bar_unknown时，mask为全1
 	mask = type ? PCI_ROM_ADDRESS_MASK : ~0;
 
 	/* No printks while decoding is disabled! */
@@ -199,9 +207,13 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 
 	res->name = pci_name(dev);
 
+	//读pos对应的base address register(4字节），备份旧值
 	pci_read_config_dword(dev, pos, &l);
+	//向pos中写入l|mask (在type为0时，写入为全1）
 	pci_write_config_dword(dev, pos, l | mask);
+	//自pos对应的bar中再读出
 	pci_read_config_dword(dev, pos, &sz);
+	//还原寄存器中旧值
 	pci_write_config_dword(dev, pos, l);
 
 	/*
@@ -224,10 +236,12 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 		res->flags = decode_bar(dev, l);
 		res->flags |= IORESOURCE_SIZEALIGN;
 		if (res->flags & IORESOURCE_IO) {
+			//取io的base地址
 			l64 = l & PCI_BASE_ADDRESS_IO_MASK;
 			sz64 = sz & PCI_BASE_ADDRESS_IO_MASK;
 			mask64 = PCI_BASE_ADDRESS_IO_MASK & (u32)IO_SPACE_LIMIT;
 		} else {
+			//取memory的base地址
 			l64 = l & PCI_BASE_ADDRESS_MEM_MASK;
 			sz64 = sz & PCI_BASE_ADDRESS_MEM_MASK;
 			mask64 = (u32)PCI_BASE_ADDRESS_MEM_MASK;
@@ -241,6 +255,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	}
 
 	if (res->flags & IORESOURCE_MEM_64) {
+		//如果采用的是64位地址，我们还需要再读取4个字节
 		pci_read_config_dword(dev, pos + 4, &l);
 		pci_write_config_dword(dev, pos + 4, ~0);
 		pci_read_config_dword(dev, pos + 4, &sz);
@@ -257,6 +272,7 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 	if (!sz64)
 		goto fail;
 
+	//获得bar的大小
 	sz64 = pci_size(l64, sz64, mask64);
 	if (!sz64) {
 		pci_info(dev, FW_BUG "reg 0x%x: invalid BAR (can't size)\n",
@@ -286,9 +302,11 @@ int __pci_read_base(struct pci_dev *dev, enum pci_bar_type type,
 		}
 	}
 
+	//记录起始地址，结束地址
 	region.start = l64;
 	region.end = l64 + sz64;
 
+	//设置资源的start,end地址
 	pcibios_bus_to_resource(dev->bus, res, &region);
 	pcibios_resource_to_bus(dev->bus, &inverted_region, res);
 
@@ -331,11 +349,15 @@ static void pci_read_bases(struct pci_dev *dev, unsigned int howmany, int rom)
 		return;
 
 	/* Per PCIe r4.0, sec 9.3.4.1.11, the VF BARs are all RO Zero */
+	//vf的base address registers均为0，如上示见相关手册，故不获取
 	if (dev->is_virtfn)
 		return;
 
+	//读取每个base address register
 	for (pos = 0; pos < howmany; pos++) {
 		struct resource *res = &dev->resource[pos];
+		//由于每个base address register的长度为4字节，故自base address 0开始，总是增加pos*4
+		//取得reg对应的offset
 		reg = PCI_BASE_ADDRESS_0 + (pos << 2);
 		pos += __pci_read_base(dev, pci_bar_unknown, res, reg);
 	}
@@ -1432,6 +1454,7 @@ static int pci_cfg_space_size_ext(struct pci_dev *dev)
 	u32 status;
 	int pos = PCI_CFG_SPACE_SIZE;
 
+	//尝试读取256字节处，如果读取失败，则配置space只有256字节
 	if (pci_read_config_dword(dev, pos, &status) != PCIBIOS_SUCCESSFUL)
 		return PCI_CFG_SPACE_SIZE;
 	if (status == 0xffffffff || pci_ext_cfg_is_aliased(dev))
@@ -1440,6 +1463,7 @@ static int pci_cfg_space_size_ext(struct pci_dev *dev)
 	return PCI_CFG_SPACE_EXP_SIZE;
 }
 
+//获取dev的配置space大小
 int pci_cfg_space_size(struct pci_dev *dev)
 {
 	int pos;
@@ -1453,7 +1477,9 @@ int pci_cfg_space_size(struct pci_dev *dev)
 	if (class == PCI_CLASS_BRIDGE_HOST)
 		return pci_cfg_space_size_ext(dev);
 
+	//检查此设备是否为pcie设备
 	if (pci_is_pcie(dev))
+		//返回配置space大小
 		return pci_cfg_space_size_ext(dev);
 
 	pos = pci_find_capability(dev, PCI_CAP_ID_PCIX);
@@ -1493,6 +1519,7 @@ static void pci_subsystem_ids(struct pci_dev *dev, u16 *vendor, u16 *device)
 	pci_read_config_word(dev, PCI_SUBSYSTEM_ID, device);
 }
 
+//读取pci设备dev的头标类型
 static u8 pci_hdr_type(struct pci_dev *dev)
 {
 	u8 hdr_type;
@@ -1590,16 +1617,18 @@ int pci_setup_device(struct pci_dev *dev)
 	 */
 	dev->dma_mask = 0xffffffff;
 
+	//设置设备名称，domain:bus:device：function
 	dev_set_name(&dev->dev, "%04x:%02x:%02x.%d", pci_domain_nr(dev->bus),
 		     dev->bus->number, PCI_SLOT(dev->devfn),
 		     PCI_FUNC(dev->devfn));
 
-	//提取设备的class类型与与revision
+	//提取设备的class类型与revision
 	class = pci_class(dev);
 
 	dev->revision = class & 0xff;
 	dev->class = class >> 8;		    /* upper 3 bytes */
 
+	//在dmesg中显示发现的设备
 	pci_printk(KERN_DEBUG, dev, "[%04x:%04x] type %02x class %#08x\n",
 		   dev->vendor, dev->device, dev->hdr_type, dev->class);
 
@@ -1635,7 +1664,7 @@ int pci_setup_device(struct pci_dev *dev)
 	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
 		if (class == PCI_CLASS_BRIDGE_PCI)
 			goto bad;
-		pci_read_irq(dev);
+		pci_read_irq(dev);//读取中断引脚等寄存器
 		pci_read_bases(dev, 6, PCI_ROM_ADDRESS);
 
 		pci_subsystem_ids(dev, &dev->subsystem_vendor, &dev->subsystem_device);
@@ -2452,6 +2481,7 @@ int pci_scan_slot(struct pci_bus *bus, int devfn)
 	if (only_one_child(bus) && (devfn > 0))
 		return 0; /* Already scanned the entire slot */
 
+	//扫描一个设备，function为0
 	dev = pci_scan_single_device(bus, devfn);
 	if (!dev)
 		return 0;//没有扫出来device,退出

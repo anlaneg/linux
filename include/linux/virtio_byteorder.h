@@ -4,6 +4,7 @@
 #include <linux/types.h>
 #include <uapi/linux/virtio_types.h>
 
+//检查当前是否为小端机器
 static inline bool virtio_legacy_is_little_endian(void)
 {
 #ifdef __LITTLE_ENDIAN
@@ -13,6 +14,7 @@ static inline bool virtio_legacy_is_little_endian(void)
 #endif
 }
 
+//val的大小端顺序由little_endian指定，本函数将其由little_endian变换为cpu序
 static inline u16 __virtio16_to_cpu(bool little_endian, __virtio16 val)
 {
 	if (little_endian)
