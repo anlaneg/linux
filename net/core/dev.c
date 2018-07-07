@@ -8023,7 +8023,7 @@ EXPORT_SYMBOL(netif_tx_stop_all_queues);
  *	The locking appears insufficient to guarantee two parallel registers
  *	will not get the same name.
  */
-
+//为系统添加网络设备
 int register_netdevice(struct net_device *dev)
 {
 	int ret;

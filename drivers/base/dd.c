@@ -268,6 +268,7 @@ static void driver_bound(struct device *dev)
 	pr_debug("driver: '%s': %s: bound to device '%s'\n", dev->driver->name,
 		 __func__, dev_name(dev));
 
+	//记录此驱动使能了此dev
 	klist_add_tail(&dev->p->knode_driver, &dev->driver->p->klist_devices);
 	device_links_driver_bound(dev);
 
@@ -484,6 +485,7 @@ re_probe:
 	if (dev->pm_domain && dev->pm_domain->sync)
 		dev->pm_domain->sync(dev);
 
+	//probe成功，为此设备绑定驱动
 	driver_bound(dev);
 	ret = 1;
 	pr_debug("bus: '%s': %s: bound device %s to driver %s\n",
@@ -491,9 +493,11 @@ re_probe:
 	goto done;
 
 probe_failed:
+	//probe失败，dma解配置
 	dma_deconfigure(dev);
 dma_failed:
 	if (dev->bus)
+		//probe失败，通知未绑定成功事件
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_DRIVER_NOT_BOUND, dev);
 pinctrl_bind_failed:
@@ -690,7 +694,7 @@ static int __device_attach_driver(struct device_driver *drv, void *_data)
 		return ret;
 	} /* ret > 0 means positive match */
 
-    //成功匹配
+    //成功匹配，检查驱动是否容许异步probe
 	async_allowed = driver_allows_async_probing(drv);
 
 	if (async_allowed)
@@ -729,7 +733,7 @@ static void __device_attach_async_helper(void *_dev, async_cookie_t cookie)
 	put_device(dev);
 }
 
-//为设备bind相应的驱动（是否容许异步绑定?)
+//为设备bind相应的驱动，如果bind成功返回1
 static int __device_attach(struct device *dev, bool allow_async)
 {
 	int ret = 0;
@@ -759,10 +763,11 @@ static int __device_attach(struct device *dev, bool allow_async)
 		if (dev->parent)
 			pm_runtime_get_sync(dev->parent);
 
-        //遍历设备bus上的所有驱动,尝试将device绑定到指定驱动
+        //遍历设备bus上的所有驱动,尝试将device绑定到指定驱动（如果probe成功，则停止循环）
 		ret = bus_for_each_drv(dev->bus, NULL, &data,
 					__device_attach_driver);
 		if (!ret && allow_async && data.have_async) {
+			//没有probe成功，如果容许异步绑定，则加入到工作队列中进行调度，并执行异步attach设备
 			/*
 			 * If we could not find appropriate driver
 			 * synchronously and we are allowed to do

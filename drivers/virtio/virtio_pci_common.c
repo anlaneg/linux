@@ -494,6 +494,8 @@ static const struct dev_pm_ops virtio_pci_pm_ops = {
 
 /* Qumranet donated their vendor ID for devices 0x1000 thru 0x10FF. */
 static const struct pci_device_id virtio_pci_id_table[] = {
+	//只匹配vendor(Qumranet把他们的vendor id中0x1000到0x10ff的设备号给了redhat）
+	//故这个匹配命中之后，仍然需要检查deice id是否在0x1000与0x10ff之间
 	{ PCI_DEVICE(PCI_VENDOR_ID_REDHAT_QUMRANET, PCI_ANY_ID) },
 	{ 0 }
 };
@@ -511,6 +513,7 @@ static void virtio_pci_release_dev(struct device *_d)
 	kfree(vp_dev);
 }
 
+
 static int virtio_pci_probe(struct pci_dev *pci_dev,
 			    const struct pci_device_id *id)
 {
@@ -518,6 +521,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 	int rc;
 
 	/* allocate our structure and fill it out */
+	//申请virtio pci设备
 	vp_dev = kzalloc(sizeof(struct virtio_pci_device), GFP_KERNEL);
 	if (!vp_dev)
 		return -ENOMEM;
@@ -551,6 +555,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 
 	pci_set_master(pci_dev);
 
+	//注册创建的virtio设备
 	rc = register_virtio_device(&vp_dev->vdev);
 	reg_dev = vp_dev;
 	if (rc)
@@ -620,7 +625,10 @@ static int virtio_pci_sriov_configure(struct pci_dev *pci_dev, int num_vfs)
 
 static struct pci_driver virtio_pci_driver = {
 	.name		= "virtio-pci",
+	//用于pci设备与driver间的match,只要vendor是redhat，则就能匹配
 	.id_table	= virtio_pci_id_table,
+	//virtio-pic是pci bus的一个驱动，故当pci bus probe一个设备时，首先pci bus的probe函数将被调用
+	//然后pci bus的probe函数会调用本函数完成probe过程
 	.probe		= virtio_pci_probe,
 	.remove		= virtio_pci_remove,
 #ifdef CONFIG_PM_SLEEP
@@ -629,6 +637,7 @@ static struct pci_driver virtio_pci_driver = {
 	.sriov_configure = virtio_pci_sriov_configure,
 };
 
+//注册pci驱动
 module_pci_driver(virtio_pci_driver);
 
 MODULE_AUTHOR("Anthony Liguori <aliguori@us.ibm.com>");

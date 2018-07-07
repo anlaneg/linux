@@ -130,6 +130,7 @@ struct virtio_device {
 	spinlock_t config_lock;
 	struct device dev;
 	struct virtio_device_id id;
+	//virtio-pci驱动创建的virtio设备会有一种可能，指向virtio_pci_config_ops
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
 	struct list_head vqs;
@@ -181,7 +182,7 @@ int virtio_device_restore(struct virtio_device *dev);
 struct virtio_driver {
 	struct device_driver driver;
 	const struct virtio_device_id *id_table;
-	const unsigned int *feature_table;//驱动提供了哪些功能
+	const unsigned int *feature_table;//驱动提供了哪些功能（记录了flag占用哪位）
 	unsigned int feature_table_size;
 	const unsigned int *feature_table_legacy;
 	unsigned int feature_table_size_legacy;

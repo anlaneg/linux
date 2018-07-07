@@ -333,6 +333,7 @@ static bool pci_physfn_is_probed(struct pci_dev *dev)
 #endif
 }
 
+//通过driver->probe实现设备的probe
 static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 			  const struct pci_device_id *id)
 {
@@ -361,7 +362,7 @@ static int pci_call_probe(struct pci_driver *drv, struct pci_dev *dev,
 		cpu = cpumask_any_and(cpumask_of_node(node), cpu_online_mask);
 
 	if (cpu < nr_cpu_ids)
-		//在$cpu上执行local_pci_probe
+		//在$cpu上直接执行local_pci_probe
 		error = work_on_cpu(cpu, local_pci_probe, &ddi);
 	else
 		//在本cpu上执行local_pci_probe
@@ -1629,7 +1630,7 @@ struct bus_type pci_bus_type = {
 	.name		= "pci",
 	.match		= pci_bus_match,//定义pci总线如何实现驱动与bus之间的匹配
 	.uevent		= pci_uevent,
-	//定义pci设备的probe函数
+	//定义pci设备的probe函数(由于pci定义了probe函数，故此函数将先与pci driver先调用）
 	.probe		= pci_device_probe,
 	.remove		= pci_device_remove,
 	.shutdown	= pci_device_shutdown,

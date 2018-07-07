@@ -45,7 +45,7 @@ struct virtio_pci_vq_info {
 /* Our device structure */
 struct virtio_pci_device {
 	struct virtio_device vdev;
-	struct pci_dev *pci_dev;
+	struct pci_dev *pci_dev;//记录virtio pci设备对应的pci设备
 
 	/* In legacy mode, these two point to within ->legacy. */
 	/* Where to read and clear interrupt */
@@ -97,6 +97,7 @@ struct virtio_pci_device {
 	/* Whether we have vector per vq */
 	bool per_vq_vectors;
 
+	//创建virtqueue
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,
 				      struct virtio_pci_vq_info *info,
 				      unsigned idx,
@@ -104,6 +105,7 @@ struct virtio_pci_device {
 				      const char *name,
 				      bool ctx,
 				      u16 msix_vec);
+	//销毁virtqueue
 	void (*del_vq)(struct virtio_pci_vq_info *info);
 
 	u16 (*config_vector)(struct virtio_pci_device *vp_dev, u16 vector);

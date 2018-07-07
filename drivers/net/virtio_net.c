@@ -125,7 +125,7 @@ struct send_queue {
 /* Internal representation of a receive virtqueue */
 struct receive_queue {
 	/* Virtqueue associated with this receive_queue */
-	struct virtqueue *vq;
+	struct virtqueue *vq;//虚队列
 
 	struct napi_struct napi;
 
@@ -1323,6 +1323,7 @@ static void virtnet_poll_cleantx(struct receive_queue *rq)
 		netif_tx_wake_queue(txq);
 }
 
+//virtnet的napi收包函数
 static int virtnet_poll(struct napi_struct *napi, int budget)
 {
 	struct receive_queue *rq =
@@ -1852,6 +1853,7 @@ static void virtnet_set_affinity(struct virtnet_info *vi)
 
 	i = 0;
 	for_each_online_cpu(cpu) {
+		//设置收队列i,发队列i绑定到cpu
 		virtqueue_set_affinity(vi->rq[i].vq, cpu);
 		virtqueue_set_affinity(vi->sq[i].vq, cpu);
 		netif_set_xps_queue(vi->dev, cpumask_of(cpu), i);
@@ -2671,6 +2673,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 		//设置收包队列的处理函数（virtnet_poll)
 		netif_napi_add(vi->dev, &vi->rq[i].napi, virtnet_poll,
 			       napi_weight);
+		//设置发包队列的处理函数（virtnet_poll_tx)
 		netif_tx_napi_add(vi->dev, &vi->sq[i].napi, virtnet_poll_tx,
 				  napi_tx ? napi_weight : 0);
 
@@ -3121,14 +3124,17 @@ static unsigned int features_legacy[] = {
 
 //virtio网络驱动
 static struct virtio_driver virtio_net_driver = {
+	//驱动当前支持的功能表
 	.feature_table = features,
+	//功能表大小
 	.feature_table_size = ARRAY_SIZE(features),
+	//legacy功能表
 	.feature_table_legacy = features_legacy,
 	.feature_table_size_legacy = ARRAY_SIZE(features_legacy),
 	.driver.name =	KBUILD_MODNAME,
 	.driver.owner =	THIS_MODULE,
 	.id_table =	id_table,
-	.validate =	virtnet_validate,
+	.validate =	virtnet_validate,//在probe之前此函数将被调用
 	.probe =	virtnet_probe,
 	.remove =	virtnet_remove,
 	.config_changed = virtnet_config_changed,
@@ -3154,7 +3160,8 @@ static __init int virtio_net_driver_init(void)
 	if (ret)
 		goto err_dead;
 
-		//注册virtio的net类驱动
+		//注册virtio-net类驱动(virtio-net可以驱动virtio 设备，而virtio设备是由
+		//virtio-pci驱动在使能pci设备时动态创建出来的）
         ret = register_virtio_driver(&virtio_net_driver);
 	if (ret)
 		goto err_virtio;

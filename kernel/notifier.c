@@ -318,6 +318,7 @@ int __blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 	 * is, we re-check the list after having taken the lock anyway:
 	 */
 	if (rcu_access_pointer(nh->head)) {
+		//采用信号量对nh进行保护
 		down_read(&nh->rwsem);
 		ret = notifier_call_chain(&nh->head, val, v, nr_to_call,
 					nr_calls);

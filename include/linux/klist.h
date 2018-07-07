@@ -17,6 +17,9 @@
 #include <linux/list.h>
 
 struct klist_node;
+//通过list_head来产现klist,与list_head相同，此实现仅为一个链表
+//与list_head不同，存放在list中的元素通过get,put函数会增加减少每个
+//元素的引用计数，不会出现被误删除的情况
 struct klist {
 	spinlock_t		k_lock;
 	struct list_head	k_list;
@@ -54,8 +57,8 @@ extern int klist_node_attached(struct klist_node *n);
 
 
 struct klist_iter {
-	struct klist		*i_klist;
-	struct klist_node	*i_cur;
+	struct klist		*i_klist;//遍历的链表
+	struct klist_node	*i_cur;//当前指向哪个位置
 };
 
 

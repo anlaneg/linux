@@ -333,6 +333,7 @@ void dma_common_free_remap(void *cpu_addr, size_t size, unsigned long vm_flags)
  */
 int dma_configure(struct device *dev)
 {
+	//如果bus有dma_configure，则调用
 	if (dev->bus->dma_configure)
 		return dev->bus->dma_configure(dev);
 	return 0;

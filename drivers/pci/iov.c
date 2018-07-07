@@ -135,6 +135,7 @@ static void pci_read_vf_config_common(struct pci_dev *virtfn)
 			     &physfn->sriov->subsystem_device);
 }
 
+//添加sriov第i个虚设备
 int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 {
 	int i;

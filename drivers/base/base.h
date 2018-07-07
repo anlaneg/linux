@@ -33,9 +33,9 @@ struct subsys_private {
 	struct mutex mutex;
 
 	struct kset *drivers_kset;//kset,用于收集属于同一个bus下的drivers
-	struct klist klist_devices;//挂接从属于子系统的device
-	struct klist klist_drivers;//挂接从属于子系统的driver
-	struct blocking_notifier_head bus_notifier;
+	struct klist klist_devices;//挂接从属于bus的device
+	struct klist klist_drivers;//挂接从属于bus的driver
+	struct blocking_notifier_head bus_notifier;//注册在此bus上的通知链，此bus上有设备事件发生时通知用
 	unsigned int drivers_autoprobe:1;
 	struct bus_type *bus;//与其相关的bus互指
 
@@ -46,7 +46,7 @@ struct subsys_private {
 
 struct driver_private {
 	struct kobject kobj;
-	struct klist klist_devices;
+	struct klist klist_devices;//用于指向此驱动适配的所有设备
 	struct klist_node knode_bus;
 	struct module_kobject *mkobj;
 	struct device_driver *driver;//与device_driver互指
@@ -70,12 +70,12 @@ struct driver_private {
  * Nothing outside of the driver core should ever touch these fields.
  */
 struct device_private {
-	struct klist klist_children;
-	struct klist_node knode_parent;
-	struct klist_node knode_driver;
-	struct klist_node knode_bus;
+	struct klist klist_children;//通过遍历此链可知道知已有哪些子设备
+	struct klist_node knode_parent;//用于提供挂接点给klist_children(使父设备知道自已有哪些子设备）
+	struct klist_node knode_driver;//用于提供挂接点给driver(使drver知道自已适配了哪些设备）
+	struct klist_node knode_bus;//用于提供挂接点给bus(使bus知道自已上有哪些设备）
 	struct list_head deferred_probe;
-	struct device *device;
+	struct device *device;//指向对应的设备
 };
 #define to_device_private_parent(obj)	\
 	container_of(obj, struct device_private, knode_parent)

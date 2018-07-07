@@ -887,6 +887,7 @@ EXPORT_SYMBOL(kset_unregister);
  * looking for a matching kobject. If matching object is found
  * take a reference and return the object.
  */
+//实现kset中元素查找（通过名称查找）
 struct kobject *kset_find_obj(struct kset *kset, const char *name)
 {
 	struct kobject *k;
