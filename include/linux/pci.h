@@ -318,6 +318,7 @@ struct pci_dev {
 
 	struct device_dma_parameters dma_parms;
 
+	//设备的电源状态
 	pci_power_t	current_state;	/* Current operating state. In ACPI,
 					   this is D0-D3, D0 being fully
 					   functional, and D3 being off. */
@@ -443,6 +444,7 @@ struct pci_dev {
 	unsigned long	priv_flags;	/* Private flags for the PCI driver */
 };
 
+//取dev的物理设备
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
 {
 #ifdef CONFIG_PCI_IOV

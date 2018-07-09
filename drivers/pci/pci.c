@@ -192,18 +192,30 @@ EXPORT_SYMBOL_GPL(pci_ioremap_wc_bar);
 #endif
 
 
+//自pos位置开始，遍历查找cap特性，最多遍历ttl个节点
 static int __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 				   u8 pos, int cap, int *ttl)
 {
 	u8 id;
 	u16 ent;
 
+	//自pos处读取存放capability的位置
+	//以下内容摘自pci spec,用于说明下面的代码
+	//Each capability in the list consists of an 8-bit ID field assigned by the PCI SIG, an 8 bit
+	//pointer in configuration space to the next capability, and some number of additional
+	//registers immediately following the pointer to implement that capability. Each capability
+	//must be DWORD aligned. The bottom two bits of all pointers (including the initial pointer
+	//at 34h) are reserved and must be implemented as 00b although software must mask them to
+	//allow for future uses of these bits. A pointer value of 00h is used to indicate the last
+	//capability in the list.
 	pci_bus_read_config_byte(bus, devfn, pos, &pos);
 
 	while ((*ttl)--) {
 		if (pos < 0x40)
-			break;
+			break;//不能在0x40空间内
 		pos &= ~3;
+		//读取pos位置的capability项及next值
+		//其中capability项在低8位，next值在高8位
 		pci_bus_read_config_word(bus, devfn, pos, &ent);
 
 		id = ent & 0xff;
@@ -216,6 +228,7 @@ static int __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 	return 0;
 }
 
+//自pos位置查找cap，如果找到返回其对应的索引号
 static int __pci_find_next_cap(struct pci_bus *bus, unsigned int devfn,
 			       u8 pos, int cap)
 {
@@ -231,11 +244,14 @@ int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
 }
 EXPORT_SYMBOL_GPL(pci_find_next_capability);
 
+//返回devfn的capbility list的起始offset
 static int __pci_bus_find_cap_start(struct pci_bus *bus,
 				    unsigned int devfn, u8 hdr_type)
 {
 	u16 status;
 
+	//读取配置空间status寄存器，检查是否有0x10标记，如果没有返回0，否则
+	//返回capability_list的offset
 	pci_bus_read_config_word(bus, devfn, PCI_STATUS, &status);
 	if (!(status & PCI_STATUS_CAP_LIST))
 		return 0;
@@ -271,11 +287,13 @@ static int __pci_bus_find_cap_start(struct pci_bus *bus,
  *  %PCI_CAP_ID_PCIX         PCI-X
  *  %PCI_CAP_ID_EXP          PCI Express
  */
+//检查设备是否支持cap能力
 int pci_find_capability(struct pci_dev *dev, int cap)
 {
 	int pos;
 
 	pos = __pci_bus_find_cap_start(dev->bus, dev->devfn, dev->hdr_type);
+	//pos必须非0，否则无效
 	if (pos)
 		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
 
@@ -305,6 +323,7 @@ int pci_bus_find_capability(struct pci_bus *bus, unsigned int devfn, int cap)
 
 	pos = __pci_bus_find_cap_start(bus, devfn, hdr_type & 0x7f);
 	if (pos)
+		//查找cap所在的capability list中的索引，查不到返回0
 		pos = __pci_find_next_cap(bus, devfn, pos, cap);
 
 	return pos;
@@ -1390,12 +1409,13 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 	 * (e.g. if the device really is in D0 at enable time).
 	 */
 	if (dev->pm_cap) {
-		//pm为电源管理
+		//pm为电源管理，这里获取电源状态d0,d1,d2,d3 4种状态
 		u16 pmcsr;
 		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 		dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
 	}
 
+	//如果设备已enable，则直接返回
 	if (atomic_inc_return(&dev->enable_cnt) > 1)
 		return 0;		/* already enabled */
 
@@ -1457,6 +1477,7 @@ EXPORT_SYMBOL(pci_enable_device_mem);
  *  Note we don't actually enable the device many times if we call
  *  this function repeatedly (we just increment the count).
  */
+//设备在被驱动使用前进行初始化
 int pci_enable_device(struct pci_dev *dev)
 {
 	return pci_enable_device_flags(dev, IORESOURCE_MEM | IORESOURCE_IO);
@@ -2459,8 +2480,10 @@ void pci_pm_init(struct pci_dev *dev)
 	/* find PCI PM capability in list */
 	pm = pci_find_capability(dev, PCI_CAP_ID_PM);
 	if (!pm)
+		//设备不具有电源管理能务，跳出
 		return;
 	/* Check device's ability to generate PME# */
+	//参见pci power management spec可知pm+2是跳过 capability id + next item ptr
 	pci_read_config_word(dev, pm + PCI_PM_PMC, &pmc);
 
 	if ((pmc & PCI_PM_CAP_VER_MASK) > 3) {
@@ -2469,6 +2492,7 @@ void pci_pm_init(struct pci_dev *dev)
 		return;
 	}
 
+	//设备电源管理能力配置区间的offset(自pci配置空间0位置算起的偏移）
 	dev->pm_cap = pm;
 	dev->d3_delay = PCI_PM_D3_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;

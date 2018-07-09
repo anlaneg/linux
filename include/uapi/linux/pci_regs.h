@@ -185,6 +185,7 @@
 #define  PCI_ROM_ADDRESS_ENABLE	0x01
 #define PCI_ROM_ADDRESS_MASK	(~0x7ffU)
 
+//capability列表的起始offset(能力指针起始位置）
 #define PCI_CAPABILITY_LIST	0x34	/* Offset of first capability list entry */
 
 /* 0x35-0x3b are reserved */
@@ -275,6 +276,7 @@
 /* Capability lists */
 
 #define PCI_CAP_LIST_ID		0	/* Capability ID */
+//与pci电源管理相关的spec，取名PCI Power Management Interface Specification.
 #define  PCI_CAP_ID_PM		0x01	/* Power Management */
 #define  PCI_CAP_ID_AGP		0x02	/* Accelerated Graphics Port */
 #define  PCI_CAP_ID_VPD		0x03	/* Vital Product Data */
