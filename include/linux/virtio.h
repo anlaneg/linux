@@ -26,11 +26,11 @@
  * sg element.
  */
 struct virtqueue {
-	struct list_head list;
+	struct list_head list;//用于串连属于同一virtio_device的virtqueue
 	void (*callback)(struct virtqueue *vq);
-	const char *name;
-	struct virtio_device *vdev;
-	unsigned int index;
+	const char *name;//名称
+	struct virtio_device *vdev;//队列属于那个vdev
+	unsigned int index;//队列编号
 	unsigned int num_free;
 	void *priv;
 };

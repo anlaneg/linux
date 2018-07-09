@@ -93,6 +93,7 @@ struct vring_virtqueue {
 	u16 avail_idx_shadow;
 
 	/* How to notify other side. FIXME: commonalize hcalls! */
+	//用于通知对端
 	bool (*notify)(struct virtqueue *vq);
 
 	/* DMA, allocation, and size information */
@@ -234,6 +235,7 @@ static int vring_mapping_error(const struct vring_virtqueue *vq,
 	return dma_mapping_error(vring_dma_dev(vq), addr);
 }
 
+//申请total_sg个vring_desc描述符，并将它们串成一串
 static struct vring_desc *alloc_indirect(struct virtqueue *_vq,
 					 unsigned int total_sg, gfp_t gfp)
 {
@@ -247,10 +249,12 @@ static struct vring_desc *alloc_indirect(struct virtqueue *_vq,
 	 */
 	gfp &= ~__GFP_HIGHMEM;
 
+	//申请total_sg个struct vring_desc结构体
 	desc = kmalloc_array(total_sg, sizeof(struct vring_desc), gfp);
 	if (!desc)
 		return NULL;
 
+	//将desc数组串起来，使next指向i+1
 	for (i = 0; i < total_sg; i++)
 		desc[i].next = cpu_to_virtio16(_vq->vdev, i + 1);
 	return desc;
@@ -412,6 +416,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 
 	/* This is very unlikely, but theoretically possible.  Kick
 	 * just in case. */
+	//当队列中含有的元素等于65535时，进行kick
 	if (unlikely(vq->num_added == (1 << 16) - 1))
 		virtqueue_kick(_vq);
 
@@ -598,6 +603,7 @@ bool virtqueue_notify(struct virtqueue *_vq)
 		return false;
 
 	/* Prod other side to tell it about changes. */
+	//告诉另一边队列变化
 	if (!vq->notify(_vq)) {
 		vq->broken = true;
 		return false;
@@ -620,6 +626,7 @@ EXPORT_SYMBOL_GPL(virtqueue_notify);
  */
 bool virtqueue_kick(struct virtqueue *vq)
 {
+	//如果需要kick,则进行通知
 	if (virtqueue_kick_prepare(vq))
 		return virtqueue_notify(vq);
 	return true;

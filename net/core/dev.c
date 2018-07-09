@@ -273,7 +273,7 @@ static void unlist_netdevice(struct net_device *dev)
 /*
  *	Our notifier list
  */
-
+//网络设备的通知链
 static RAW_NOTIFIER_HEAD(netdev_chain);
 
 /*
@@ -1776,7 +1776,7 @@ static int call_netdevice_notifiers_info(unsigned long val,
  *	Call all network notifier blocks.  Parameters and return value
  *	are as for raw_notifier_call_chain().
  */
-
+//通知dev的val事件
 int call_netdevice_notifiers(unsigned long val, struct net_device *dev)
 {
 	struct netdev_notifier_info info = {
@@ -8048,6 +8048,7 @@ int register_netdevice(struct net_device *dev)
 		goto out;
 
 	/* Init, if this function is available */
+	//调用ndo_init初始化设备
 	if (dev->netdev_ops->ndo_init) {
 		//初始化设备
 		ret = dev->netdev_ops->ndo_init(dev);
@@ -8115,6 +8116,7 @@ int register_netdevice(struct net_device *dev)
 	 */
 	dev->mpls_features |= NETIF_F_SG;
 
+	//触发网络设备dev的NETDEV_POST_INIT事件
 	ret = call_netdevice_notifiers(NETDEV_POST_INIT, dev);
 	ret = notifier_to_errno(ret);
 	if (ret)
@@ -8149,6 +8151,7 @@ int register_netdevice(struct net_device *dev)
 		memcpy(dev->perm_addr, dev->dev_addr, dev->addr_len);
 
 	/* Notify protocols, that a new device appeared. */
+	//触发网络注册通知
 	ret = call_netdevice_notifiers(NETDEV_REGISTER, dev);
 	ret = notifier_to_errno(ret);
 	if (ret) {
