@@ -1873,12 +1873,15 @@ int device_add(struct device *dev)
 	 * after dpm_sysfs_add() and before kobject_uevent().
 	 */
 	if (dev->bus)
+		//通知此bus上有设备加入
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
 					     BUS_NOTIFY_ADD_DEVICE, dev);
 
 	kobject_uevent(&dev->kobj, KOBJ_ADD);
+	//为此设备控测驱动
 	bus_probe_device(dev);
 	if (parent)
+		//如果设备有parent,则将自身挂接在父设备的klist_children链上
 		klist_add_tail(&dev->p->knode_parent,
 			       &parent->p->klist_children);
 
@@ -1945,6 +1948,7 @@ EXPORT_SYMBOL_GPL(device_add);
  * if it returned an error! Always use put_device() to give up the
  * reference initialized in this function instead.
  */
+//为系统增加一个设备
 int device_register(struct device *dev)
 {
 	device_initialize(dev);
@@ -2081,6 +2085,7 @@ static struct device *prev_device(struct klist_iter *i)
 	return dev;
 }
 
+//取迭代器下一个元素
 static struct device *next_device(struct klist_iter *i)
 {
 	struct klist_node *n = klist_next(i);
@@ -2151,6 +2156,7 @@ const char *device_get_devnode(struct device *dev,
  * We check the return of @fn each time. If it returns anything
  * other than 0, we break out and return that value.
  */
+//遍历设备parent的所有子设备，并针对它们调用回调fn
 int device_for_each_child(struct device *parent, void *data,
 			  int (*fn)(struct device *dev, void *data))
 {
@@ -2161,6 +2167,7 @@ int device_for_each_child(struct device *parent, void *data,
 	if (!parent->p)
 		return 0;
 
+	//遍历klist_children，针对每个元素执行回调fn
 	klist_iter_init(&parent->p->klist_children, &i);
 	while (!error && (child = next_device(&i)))
 		error = fn(child, data);

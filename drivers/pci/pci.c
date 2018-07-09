@@ -243,6 +243,7 @@ static int __pci_bus_find_cap_start(struct pci_bus *bus,
 	switch (hdr_type) {
 	case PCI_HEADER_TYPE_NORMAL:
 	case PCI_HEADER_TYPE_BRIDGE:
+		//对于普通设备及桥设备，返回PCI_CAPABILITY_LIST
 		return PCI_CAPABILITY_LIST;
 	case PCI_HEADER_TYPE_CARDBUS:
 		return PCI_CB_CAPABILITY_LIST;

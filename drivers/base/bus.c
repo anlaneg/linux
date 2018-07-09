@@ -336,6 +336,7 @@ EXPORT_SYMBOL_GPL(bus_for_each_dev);
  * if it does.  If the callback returns non-zero, this function will
  * return to the caller and not iterate over any more devices.
  */
+//在bus上自start位置开始查找设备，通过match函数查找
 struct device *bus_find_device(struct bus_type *bus,
 			       struct device *start, void *data,
 			       int (*match)(struct device *dev, void *data))
@@ -390,6 +391,7 @@ EXPORT_SYMBOL_GPL(bus_find_device_by_name);
  * otherwise, fall back to a full list search. Either way a reference for
  * the returned object is taken.
  */
+//按id查找设备
 struct device *subsys_find_device_by_id(struct bus_type *subsys, unsigned int id,
 					struct device *hint)
 {
@@ -399,6 +401,7 @@ struct device *subsys_find_device_by_id(struct bus_type *subsys, unsigned int id
 	if (!subsys)
 		return NULL;
 
+	//优先从hint设备位开始查找
 	if (hint) {
 		klist_iter_init_node(&subsys->p->klist_devices, &i, &hint->p->knode_bus);
 		dev = next_device(&i);
@@ -409,6 +412,7 @@ struct device *subsys_find_device_by_id(struct bus_type *subsys, unsigned int id
 		klist_iter_exit(&i);
 	}
 
+	//自hint处查找未果，从头重查找一遍。
 	klist_iter_init_node(&subsys->p->klist_devices, &i, NULL);
 	while ((dev = next_device(&i))) {
 		if (dev->id == id && get_device(dev)) {
@@ -482,6 +486,7 @@ EXPORT_SYMBOL_GPL(bus_for_each_drv);
  * - Create links to device's bus.
  * - Add the device to its bus's list of devices.
  */
+//将dev添加到其对应的bus中（需要dev指向其所属的bus)
 int bus_add_device(struct device *dev)
 {
 	struct bus_type *bus = bus_get(dev->bus);
@@ -759,14 +764,15 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
 	int ret = 0;
 
 	if (!dev->driver) {
-        //此dev还没有绑定driver
+        //针对还没有绑定driver的dev,尝试为其绑定driver
 		if (dev->parent && dev->bus->need_parent_lock)
-			device_lock(dev->parent);
-        //此device尝试绑定驱动
+			device_lock(dev->parent);//如果有必要加锁，则加锁
+        //为device尝试绑定驱动
 		ret = device_attach(dev);
 		if (dev->parent && dev->bus->need_parent_lock)
 			device_unlock(dev->parent);
 	}
+	//除非ret为负数，否则总是返回0（返回0有助于上层for函数继续attach其它函数）
 	return ret < 0 ? ret : 0;
 }
 
@@ -778,6 +784,7 @@ static int __must_check bus_rescan_devices_helper(struct device *dev,
  * attached and rescan it against existing drivers to see if it matches
  * any by calling device_attach() for the unbound devices.
  */
+//重新为所给bus上所有devices尝试驱动（跳过已有驱动的设备）
 int bus_rescan_devices(struct bus_type *bus)
 {
     //针对bus中所有devices,执行回调bus_rescan....helper
@@ -913,7 +920,7 @@ int bus_register(struct bus_type *bus)
 		goto bus_devices_fail;
 	}
 
-	//在$bus下创建'drivers' kset及目上录
+	//在$bus下创建'drivers' kset及目上录，其中drivers_set用于存放bus下的驱动
 	priv->drivers_kset = kset_create_and_add("drivers", NULL,
 						 &priv->subsys.kobj);
 	if (!priv->drivers_kset) {
@@ -970,6 +977,7 @@ void bus_unregister(struct bus_type *bus)
 		device_unregister(bus->dev_root);
 	bus_remove_groups(bus, bus->bus_groups);
 	remove_probe_files(bus);
+	//将驱动自bus中的driver集合中移除
 	kset_unregister(bus->p->drivers_kset);
 	kset_unregister(bus->p->devices_kset);
 	bus_remove_file(bus, &bus_attr_uevent);

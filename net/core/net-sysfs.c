@@ -1570,6 +1570,7 @@ void netdev_unregister_kobject(struct net_device *ndev)
 	device_del(dev);
 }
 
+//为系统添加网络设备
 /* Create sysfs entries for network device. */
 int netdev_register_kobject(struct net_device *ndev)
 {
@@ -1601,7 +1602,7 @@ int netdev_register_kobject(struct net_device *ndev)
 #endif
 #endif /* CONFIG_SYSFS */
 
-	error = device_add(dev);
+	error = device_add(dev);//dev添加给系统
 	if (error)
 		return error;
 

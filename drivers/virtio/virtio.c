@@ -86,6 +86,7 @@ static inline int virtio_id_match(const struct virtio_device *dev,
 
 /* This looks through all the IDs a driver claims to support.  If any of them
  * match, we return 1 and the kernel will call virtio_dev_probe(). */
+//virtio设备匹配
 static int virtio_dev_match(struct device *_dv, struct device_driver *_dr)
 {
 	unsigned int i;
@@ -210,15 +211,15 @@ static int virtio_dev_probe(struct device *_d)
 	u64 driver_features_legacy;
 
 	/* We have a driver! */
-  //指明此设备已找到匹配的driver
+    //指明此设备已找到匹配的driver
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
-  //获得当前设备支持的功能
+    //获得当前设备支持的功能
 	device_features = dev->config->get_features(dev);
 
 	/* Figure out what features the driver supports. */
-  //获得当前驱动支持的功能
+	//获得当前驱动支持的功能
 	driver_features = 0;
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
@@ -238,13 +239,15 @@ static int virtio_dev_probe(struct device *_d)
 		driver_features_legacy = driver_features;
 	}
 
-    //取功能最小集
+    //如果使能v1.0,则取与操作计算两者合并获得的features
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
+		//非1。0版本，0.95版本认为是legacy
 		dev->features = driver_features_legacy & device_features;
 
 	/* Transport features always preserved to pass to finalize_features. */
+	//如果device_features有这些标记，则为dev加上此标记
 	for (i = VIRTIO_TRANSPORT_F_START; i < VIRTIO_TRANSPORT_F_END; i++)
 		if (device_features & (1ULL << i))
 			__virtio_set_bit(dev, i);
@@ -299,12 +302,13 @@ static int virtio_dev_remove(struct device *_d)
 	return 0;
 }
 
-//虚拟virtio_bus
+//虚拟的virtio bus
 static struct bus_type virtio_bus = {
 	.name  = "virtio",
 	.match = virtio_dev_match,
-	.dev_groups = virtio_dev_groups,
-	.uevent = virtio_uevent,
+	.dev_groups = virtio_dev_groups,//定义virtio的sysfs属性组
+	.uevent = virtio_uevent,//构造此设备的事件
+	//此probe将在探测virtio设备时首先被调用，然后由此函数负调用用类似virtio-net驱动的probe
 	.probe = virtio_dev_probe,
 	.remove = virtio_dev_remove,
 };
@@ -340,6 +344,7 @@ int register_virtio_device(struct virtio_device *dev)
 {
 	int err;
 
+	//virtio设备的bus为virtio_bus
 	dev->dev.bus = &virtio_bus;
 	device_initialize(&dev->dev);
 
@@ -368,6 +373,7 @@ int register_virtio_device(struct virtio_device *dev)
 	 * device_add() causes the bus infrastructure to look for a matching
 	 * driver.
 	 */
+	//将virtio设备注册给系统
 	err = device_add(&dev->dev);
 	if (err)
 		ida_simple_remove(&virtio_index_ida, dev->index);
@@ -450,6 +456,7 @@ err:
 EXPORT_SYMBOL_GPL(virtio_device_restore);
 #endif
 
+//注册virtio_bus
 static int virtio_init(void)
 {
 	if (bus_register(&virtio_bus) != 0)

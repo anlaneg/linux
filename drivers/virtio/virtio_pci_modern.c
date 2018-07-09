@@ -145,8 +145,10 @@ static u64 vp_get_features(struct virtio_device *vdev)
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	u64 features;
 
+	//向vp_dev->common->device_feature_select中写入0，并读取device_feature，做为低位
 	vp_iowrite32(0, &vp_dev->common->device_feature_select);
 	features = vp_ioread32(&vp_dev->common->device_feature);
+	//向vp_dev->common->device_feature_select中写入1，并读取device_feature，做为低位
 	vp_iowrite32(1, &vp_dev->common->device_feature_select);
 	features |= ((u64)vp_ioread32(&vp_dev->common->device_feature) << 32);
 
@@ -306,6 +308,7 @@ static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 	return vp_ioread16(&vp_dev->common->msix_config);
 }
 
+//创建virtqueue
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
 				  unsigned index,
@@ -462,6 +465,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.get_vq_affinity = vp_get_vq_affinity,
 };
 
+//virtio pci配置获取
 static const struct virtio_config_ops virtio_pci_config_ops = {
 	.get		= vp_get,
 	.set		= vp_set,
@@ -590,6 +594,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 
 	check_offsets();
 
+	//如match中所言，virtio只有0x1000到0x10ff之间的设备号可用，而本函数要求必须小于等于0x107f
 	/* We only own devices >= 0x1000 and <= 0x107f: leave the rest. */
 	if (pci_dev->device < 0x1000 || pci_dev->device > 0x107f)
 		return -ENODEV;
@@ -703,6 +708,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 
 		vp_dev->vdev.config = &virtio_pci_config_ops;
 	} else {
+		//无设备时的config_ops
 		vp_dev->vdev.config = &virtio_pci_config_nodev_ops;
 	}
 

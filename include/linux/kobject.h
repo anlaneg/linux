@@ -76,7 +76,7 @@ struct kobject {
 	unsigned int state_in_sysfs:1;/* 是否已添加到sysfs层次结构中 */
 	unsigned int state_add_uevent_sent:1;
 	unsigned int state_remove_uevent_sent:1;
-	unsigned int uevent_suppress:1;
+	unsigned int uevent_suppress:1;//此obj是否要求抑制uevent
 };
 
 extern __printf(2, 3)

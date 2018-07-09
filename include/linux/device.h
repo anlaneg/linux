@@ -121,8 +121,10 @@ struct bus_type {
 	const struct attribute_group **dev_groups;
 	const struct attribute_group **drv_groups;
 
+	//实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)
 	int (*match)(struct device *dev, struct device_driver *drv);
 	int (*uevent)(struct device *dev, struct kobj_uevent_env *env);
+	//使能驱动，使其探测设备（如果此函数为空，则调用驱动的probe进行探测）
 	int (*probe)(struct device *dev);
 	int (*remove)(struct device *dev);
 	void (*shutdown)(struct device *dev);
@@ -135,6 +137,7 @@ struct bus_type {
 
 	int (*num_vf)(struct device *dev);
 
+	//设备在控测之前采用此函数进行dma配置
 	int (*dma_configure)(struct device *dev);
 
 	const struct dev_pm_ops *pm;
@@ -144,7 +147,7 @@ struct bus_type {
 	struct subsys_private *p;//bus的私有数据
 	struct lock_class_key lock_key;
 
-	bool need_parent_lock;
+	bool need_parent_lock;//是否需要父设备加锁
 };
 
 extern int __must_check bus_register(struct bus_type *bus);
@@ -188,6 +191,7 @@ void bus_sort_breadthfirst(struct bus_type *bus,
  */
 struct notifier_block;
 
+//bus注册通知链
 extern int bus_register_notifier(struct bus_type *bus,
 				 struct notifier_block *nb);
 extern int bus_unregister_notifier(struct bus_type *bus,
@@ -202,11 +206,13 @@ extern int bus_unregister_notifier(struct bus_type *bus,
 #define BUS_NOTIFY_REMOVED_DEVICE	0x00000003 /* device removed */
 #define BUS_NOTIFY_BIND_DRIVER		0x00000004 /* driver about to be
 						      bound */
+//设备bond到驱动通知
 #define BUS_NOTIFY_BOUND_DRIVER		0x00000005 /* driver bound to device */
 #define BUS_NOTIFY_UNBIND_DRIVER	0x00000006 /* driver about to be
 						      unbound */
 #define BUS_NOTIFY_UNBOUND_DRIVER	0x00000007 /* driver is unbound
 						      from the device */
+//通知驱动未绑定事件
 #define BUS_NOTIFY_DRIVER_NOT_BOUND	0x00000008 /* driver fails to be bound */
 
 extern struct kset *bus_get_kset(struct bus_type *bus);
@@ -285,7 +291,7 @@ struct device_driver {
 	const char		*mod_name;	/* used for built-in modules */
 
 	bool suppress_bind_attrs;	/* disables bind/unbind via sysfs */
-	enum probe_type probe_type;
+	enum probe_type probe_type;//设备的probe类型
 
 	const struct of_device_id	*of_match_table;
 	const struct acpi_device_id	*acpi_match_table;
@@ -927,8 +933,9 @@ struct dev_links_info {
  * instead, that structure, like kobject structures, is usually embedded within
  * a higher-level representation of the device.
  */
+//提供设备的基础信息（是所有设备的子类）
 struct device {
-	struct device		*parent;
+	struct device		*parent;//所属的父设备
 
 	struct device_private	*p;
 
@@ -940,11 +947,13 @@ struct device {
 					 * its driver.
 					 */
 
-	struct bus_type	*bus;		/* type of bus device is on */
+	struct bus_type	*bus;		/* type of bus device is on */ //设备挂接在哪条总线上
+	//设备驱动
 	struct device_driver *driver;	/* which driver has allocated this
 					   device */
 	void		*platform_data;	/* Platform specific data, device
 					   core doesn't touch it */
+	//驱动的私有数据
 	void		*driver_data;	/* Driver data, set and get with
 					   dev_set/get_drvdata */
 	struct dev_links_info	links;
@@ -999,6 +1008,7 @@ struct device {
 	struct class		*class;
 	const struct attribute_group **groups;	/* optional groups */
 
+	//定义设备释放时的回调函数
 	void	(*release)(struct device *dev);
 	struct iommu_group	*iommu_group;
 	struct iommu_fwspec	*iommu_fwspec;
@@ -1549,6 +1559,7 @@ extern long sysfs_deprecated;
  * Use this macro to construct bus specific macros for registering
  * drivers, and do not use it on its own.
  */
+//提供初始化及clean函数
 #define module_driver(__driver, __register, __unregister, ...) \
 static int __init __driver##_init(void) \
 { \

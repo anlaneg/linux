@@ -627,6 +627,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 
 	dev->priv_flags |= IFF_NO_RX_HANDLER;
 
+	//创建ipvlan对应的虚拟设备
 	err = register_netdevice(dev);
 	if (err < 0)
 		return err;

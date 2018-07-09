@@ -82,6 +82,7 @@ static void knode_kill(struct klist_node *knode)
  * functions that take and release references on the embedding
  * objects.
  */
+//初台化klist
 void klist_init(struct klist *k, void (*get)(struct klist_node *),
 		void (*put)(struct klist_node *))
 {
@@ -284,7 +285,7 @@ void klist_iter_init_node(struct klist *k, struct klist_iter *i,
 	i->i_klist = k;
 	i->i_cur = NULL;
 	if (n && kref_get_unless_zero(&n->n_ref))
-		i->i_cur = n;
+		i->i_cur = n;//n存在且n引用计数可获得时，指向n
 }
 EXPORT_SYMBOL_GPL(klist_iter_init_node);
 
@@ -295,6 +296,7 @@ EXPORT_SYMBOL_GPL(klist_iter_init_node);
  *
  * Similar to klist_iter_init_node(), but start with the list head.
  */
+//初始化链表迭代器
 void klist_iter_init(struct klist *k, struct klist_iter *i)
 {
 	klist_iter_init_node(k, i, NULL);
@@ -389,8 +391,8 @@ struct klist_node *klist_next(struct klist_iter *i)
         //last为空时，next来自于i枚举的链表的首个元素
 		next = to_klist_node(i->i_klist->k_list.next);
 
-    //检查是否已遍历完成，如果未遍历完成，则使i->i_cur为NULL
 	i->i_cur = NULL;
+	//如果next不是首个元素，则检查next是否有效，如果有效，则返回，否则使用下一个。
 	while (next != to_klist_node(&i->i_klist->k_list)) {
 		if (likely(!knode_dead(next))) {
 			kref_get(&next->n_ref);
