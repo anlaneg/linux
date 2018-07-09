@@ -183,7 +183,7 @@ struct virtnet_info {
 	u16 xdp_queue_pairs;
 
 	/* I like... big packets and I cannot lie! */
-	bool big_packets;
+	bool big_packets;//使能大包
 
 	/* Host will merge rx buffers for big packets (shake it! shake it!) */
 	bool mergeable_rx_bufs;
@@ -1453,6 +1453,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
+	//选出要发送的队列
 	int qnum = skb_get_queue_mapping(skb);
 	struct send_queue *sq = &vi->sq[qnum];
 	int err;
@@ -1470,11 +1471,12 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_tx_timestamp(skb);
 
 	/* Try to transmit */
-	//发送skb
+	//发送skb到sq队列
 	err = xmit_skb(sq, skb);
 
 	/* This should not happen! */
 	if (unlikely(err)) {
+		//发送失败，失败计数
 		dev->stats.tx_fifo_errors++;
 		if (net_ratelimit())
 			dev_warn(&dev->dev,
@@ -2907,9 +2909,11 @@ static int virtnet_probe(struct virtio_device *vdev)
 	    virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_UFO))
 		vi->big_packets = true;
 
+	//如果有mrg_rxbuf标记，则标记mergeable_rx_bufs为True
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MRG_RXBUF))
 		vi->mergeable_rx_bufs = true;
 
+	//如果是version 1.0或者使能mergeable_rx，则头部为mrg_rxbuf
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MRG_RXBUF) ||
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		vi->hdr_len = sizeof(struct virtio_net_hdr_mrg_rxbuf);

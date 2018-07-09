@@ -404,7 +404,7 @@ EXPORT_SYMBOL_GPL(__raw_notifier_call_chain);
 int raw_notifier_call_chain(struct raw_notifier_head *nh,
 		unsigned long val, void *v)
 {
-	//不限制通制数，不记录通知数
+	//不限制通知数，不记录通知数
 	return __raw_notifier_call_chain(nh, val, v, -1, NULL);
 }
 EXPORT_SYMBOL_GPL(raw_notifier_call_chain);
