@@ -17,8 +17,8 @@
  * nesting etc..
  */
 struct resource {
-	resource_size_t start;
-	resource_size_t end;
+	resource_size_t start;//起始地址
+	resource_size_t end;//终止地址
 	const char *name;//资源属于那个设备（设备名称）
 	unsigned long flags;//设置资源的flag（见IORESOURCE_XX)
 	unsigned long desc;
@@ -219,6 +219,7 @@ static inline bool resource_contains(struct resource *r1, struct resource *r2)
 /* Convenience shorthand with allocation */
 #define request_region(start,n,name)		__request_region(&ioport_resource, (start), (n), (name), 0)
 #define request_muxed_region(start,n,name)	__request_region(&ioport_resource, (start), (n), (name), IORESOURCE_MUXED)
+//请求自start开始n长度的memory region
 #define __request_mem_region(start,n,name, excl) __request_region(&iomem_resource, (start), (n), (name), excl)
 #define request_mem_region(start,n,name) __request_region(&iomem_resource, (start), (n), (name), 0)
 #define request_mem_region_exclusive(start,n,name) \

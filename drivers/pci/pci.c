@@ -161,6 +161,7 @@ unsigned char pci_bus_max_busnr(struct pci_bus *bus)
 EXPORT_SYMBOL_GPL(pci_bus_max_busnr);
 
 #ifdef CONFIG_HAS_IOMEM
+//实现对bar对应的resource资源映射到cpu space,返回新映射的虚拟地址
 void __iomem *pci_ioremap_bar(struct pci_dev *pdev, int bar)
 {
 	struct resource *res = &pdev->resource[bar];
@@ -168,6 +169,7 @@ void __iomem *pci_ioremap_bar(struct pci_dev *pdev, int bar)
 	/*
 	 * Make sure the BAR is actually a memory resource, not an IO resource
 	 */
+	//必须是开启了memory space的bar
 	if (res->flags & IORESOURCE_UNSET || !(res->flags & IORESOURCE_MEM)) {
 		pci_warn(pdev, "can't ioremap BAR %d: %pR\n", bar, res);
 		return NULL;
@@ -192,18 +194,30 @@ EXPORT_SYMBOL_GPL(pci_ioremap_wc_bar);
 #endif
 
 
+//自pos位置开始，遍历查找cap特性，最多遍历ttl个节点
 static int __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 				   u8 pos, int cap, int *ttl)
 {
 	u8 id;
 	u16 ent;
 
+	//自pos处读取存放capability的位置
+	//以下内容摘自pci spec,用于说明下面的代码
+	//Each capability in the list consists of an 8-bit ID field assigned by the PCI SIG, an 8 bit
+	//pointer in configuration space to the next capability, and some number of additional
+	//registers immediately following the pointer to implement that capability. Each capability
+	//must be DWORD aligned. The bottom two bits of all pointers (including the initial pointer
+	//at 34h) are reserved and must be implemented as 00b although software must mask them to
+	//allow for future uses of these bits. A pointer value of 00h is used to indicate the last
+	//capability in the list.
 	pci_bus_read_config_byte(bus, devfn, pos, &pos);
 
 	while ((*ttl)--) {
 		if (pos < 0x40)
-			break;
+			break;//不能在0x40空间内
 		pos &= ~3;
+		//读取pos位置的capability项及next值
+		//其中capability项在低8位，next值在高8位
 		pci_bus_read_config_word(bus, devfn, pos, &ent);
 
 		id = ent & 0xff;
@@ -216,6 +230,7 @@ static int __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 	return 0;
 }
 
+//自pos位置查找cap，如果找到返回其对应的索引号
 static int __pci_find_next_cap(struct pci_bus *bus, unsigned int devfn,
 			       u8 pos, int cap)
 {
@@ -231,11 +246,14 @@ int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
 }
 EXPORT_SYMBOL_GPL(pci_find_next_capability);
 
+//返回devfn的capbility list的起始offset
 static int __pci_bus_find_cap_start(struct pci_bus *bus,
 				    unsigned int devfn, u8 hdr_type)
 {
 	u16 status;
 
+	//读取配置空间status寄存器，检查是否有0x10标记，如果没有返回0，否则
+	//返回capability_list的offset
 	pci_bus_read_config_word(bus, devfn, PCI_STATUS, &status);
 	if (!(status & PCI_STATUS_CAP_LIST))
 		return 0;
@@ -271,11 +289,13 @@ static int __pci_bus_find_cap_start(struct pci_bus *bus,
  *  %PCI_CAP_ID_PCIX         PCI-X
  *  %PCI_CAP_ID_EXP          PCI Express
  */
+//检查设备是否支持cap能力
 int pci_find_capability(struct pci_dev *dev, int cap)
 {
 	int pos;
 
 	pos = __pci_bus_find_cap_start(dev->bus, dev->devfn, dev->hdr_type);
+	//pos必须非0，否则无效
 	if (pos)
 		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
 
@@ -305,6 +325,7 @@ int pci_bus_find_capability(struct pci_bus *bus, unsigned int devfn, int cap)
 
 	pos = __pci_bus_find_cap_start(bus, devfn, hdr_type & 0x7f);
 	if (pos)
+		//查找cap所在的capability list中的索引，查不到返回0
 		pos = __pci_find_next_cap(bus, devfn, pos, cap);
 
 	return pos;
@@ -1306,6 +1327,7 @@ int __weak pcibios_enable_device(struct pci_dev *dev, int bars)
 	return pci_enable_resources(dev, bars);
 }
 
+//使能设备
 static int do_pci_enable_device(struct pci_dev *dev, int bars)
 {
 	int err;
@@ -1313,6 +1335,7 @@ static int do_pci_enable_device(struct pci_dev *dev, int bars)
 	u16 cmd;
 	u8 pin;
 
+	//设置设备power状态为最大power
 	err = pci_set_power_state(dev, PCI_D0);
 	if (err < 0 && err != -EIO)
 		return err;
@@ -1326,12 +1349,21 @@ static int do_pci_enable_device(struct pci_dev *dev, int bars)
 		return err;
 	pci_fixup_device(pci_fixup_enable, dev);
 
+	//如果未开启中断，则直接返
 	if (dev->msi_enabled || dev->msix_enabled)
 		return 0;
 
+	//读取中断引脚
 	pci_read_config_byte(dev, PCI_INTERRUPT_PIN, &pin);
 	if (pin) {
 		pci_read_config_word(dev, PCI_COMMAND, &cmd);
+		/*
+		 * 有中断引脚，开启中断
+		 * This bit disables the device/function from asserting INTx#. A value of
+			0 enables the assertion of its INTx# signal. A value of 1 disables the
+			assertion of its INTx# signal. This bit’s state after RST# is 0. Refer to
+			Section 6.8.1.3 for control of MSI.
+		 */
 		if (cmd & PCI_COMMAND_INTX_DISABLE)
 			pci_write_config_word(dev, PCI_COMMAND,
 					      cmd & ~PCI_COMMAND_INTX_DISABLE);
@@ -1377,6 +1409,7 @@ static void pci_enable_bridge(struct pci_dev *dev)
 	pci_set_master(dev);
 }
 
+//按flags使能设备（例如memory space ,io space)
 static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 {
 	struct pci_dev *bridge;
@@ -1390,12 +1423,13 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 	 * (e.g. if the device really is in D0 at enable time).
 	 */
 	if (dev->pm_cap) {
-		//pm为电源管理
+		//pm为电源管理，这里获取电源状态d0,d1,d2,d3 4种状态
 		u16 pmcsr;
 		pci_read_config_word(dev, dev->pm_cap + PCI_PM_CTRL, &pmcsr);
 		dev->current_state = (pmcsr & PCI_PM_CTRL_STATE_MASK);
 	}
 
+	//如果设备已enable，则直接返回
 	if (atomic_inc_return(&dev->enable_cnt) > 1)
 		return 0;		/* already enabled */
 
@@ -1405,6 +1439,7 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 		pci_enable_bridge(bridge);
 
 	/* only skip sriov related */
+	//获取哪些资源idx支持这些flags
 	for (i = 0; i <= PCI_ROM_RESOURCE; i++)
 		if (dev->resource[i].flags & flags)
 			bars |= (1 << i);
@@ -1412,6 +1447,7 @@ static int pci_enable_device_flags(struct pci_dev *dev, unsigned long flags)
 		if (dev->resource[i].flags & flags)
 			bars |= (1 << i);
 
+	//使能bars掩码指出的bars
 	err = do_pci_enable_device(dev, bars);
 	if (err < 0)
 		atomic_dec(&dev->enable_cnt);
@@ -1440,6 +1476,7 @@ EXPORT_SYMBOL(pci_enable_device_io);
  *  to enable Memory resources. Wake up the device if it was suspended.
  *  Beware, this function can fail.
  */
+//开启memory space
 int pci_enable_device_mem(struct pci_dev *dev)
 {
 	return pci_enable_device_flags(dev, IORESOURCE_MEM);
@@ -1457,6 +1494,7 @@ EXPORT_SYMBOL(pci_enable_device_mem);
  *  Note we don't actually enable the device many times if we call
  *  this function repeatedly (we just increment the count).
  */
+//设备在被驱动使用前进行初始化
 int pci_enable_device(struct pci_dev *dev)
 {
 	return pci_enable_device_flags(dev, IORESOURCE_MEM | IORESOURCE_IO);
@@ -1475,7 +1513,7 @@ struct pci_devres {
 	unsigned int orig_intx:1;
 	unsigned int restore_intx:1;
 	unsigned int mwi:1;
-	u32 region_mask;
+	u32 region_mask;//那些bar被启用了
 };
 
 static void pcim_release(struct device *gendev, void *res)
@@ -2459,8 +2497,10 @@ void pci_pm_init(struct pci_dev *dev)
 	/* find PCI PM capability in list */
 	pm = pci_find_capability(dev, PCI_CAP_ID_PM);
 	if (!pm)
+		//设备不具有电源管理能务，跳出
 		return;
 	/* Check device's ability to generate PME# */
+	//参见pci power management spec可知pm+2是跳过 capability id + next item ptr
 	pci_read_config_word(dev, pm + PCI_PM_PMC, &pmc);
 
 	if ((pmc & PCI_PM_CAP_VER_MASK) > 3) {
@@ -2469,6 +2509,7 @@ void pci_pm_init(struct pci_dev *dev)
 		return;
 	}
 
+	//设备电源管理能力配置区间的offset(自pci配置空间0位置算起的偏移）
 	dev->pm_cap = pm;
 	dev->d3_delay = PCI_PM_D3_WAIT;
 	dev->d3cold_delay = PCI_PM_D3COLD_WAIT;
@@ -3288,14 +3329,17 @@ static int __pci_request_region(struct pci_dev *pdev, int bar,
 {
 	struct pci_devres *dr;
 
+	//如果此BAR资源为0，则跳过
 	if (pci_resource_len(pdev, bar) == 0)
 		return 0;
 
+	//如果bar上有io标记时，优先使用io
 	if (pci_resource_flags(pdev, bar) & IORESOURCE_IO) {
 		if (!request_region(pci_resource_start(pdev, bar),
 			    pci_resource_len(pdev, bar), res_name))
 			goto err_out;
 	} else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM) {
+		//memory space region请求
 		if (!__request_mem_region(pci_resource_start(pdev, bar),
 					pci_resource_len(pdev, bar), res_name,
 					exclusive))
@@ -3377,6 +3421,7 @@ void pci_release_selected_regions(struct pci_dev *pdev, int bars)
 }
 EXPORT_SYMBOL(pci_release_selected_regions);
 
+//bars是base address register的索引掩码，按掩码请求region(memory或者io)
 static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
 					  const char *res_name, int excl)
 {
@@ -3384,6 +3429,7 @@ static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
 
 	for (i = 0; i < 6; i++)
 		if (bars & (1 << i))
+			//此BAR被要求了，处理
 			if (__pci_request_region(pdev, i, res_name, excl))
 				goto err_out;
 	return 0;
@@ -3668,10 +3714,13 @@ static void __pci_set_master(struct pci_dev *dev, bool enable)
 {
 	u16 old_cmd, cmd;
 
+	//读取command register
 	pci_read_config_word(dev, PCI_COMMAND, &old_cmd);
 	if (enable)
+		//如果enable，则置上master标记
 		cmd = old_cmd | PCI_COMMAND_MASTER;
 	else
+		//否则清掉master标记
 		cmd = old_cmd & ~PCI_COMMAND_MASTER;
 	if (cmd != old_cmd) {
 		pci_dbg(dev, "%s bus mastering\n",
@@ -3701,14 +3750,17 @@ char * __weak __init pcibios_setup(char *str)
  * implementation.  Architecture specific implementations can override
  * this if necessary.
  */
+//配置latency timer
 void __weak pcibios_set_master(struct pci_dev *dev)
 {
 	u8 lat;
 
 	/* The latency timer doesn't apply to PCIe (either Type 0 or Type 1) */
 	if (pci_is_pcie(dev))
+		//pcie设备直接退出
 		return;
 
+	//读取letency timer,并配置latency定时器为64或者pcibios_max_latency
 	pci_read_config_byte(dev, PCI_LATENCY_TIMER, &lat);
 	if (lat < 16)
 		lat = (64 <= pcibios_max_latency) ? 64 : pcibios_max_latency;
@@ -3729,6 +3781,7 @@ void __weak pcibios_set_master(struct pci_dev *dev)
  */
 void pci_set_master(struct pci_dev *dev)
 {
+	//为设备设置为master,设置latency timer寄存器
 	__pci_set_master(dev, true);
 	pcibios_set_master(dev);
 }
@@ -5305,6 +5358,7 @@ EXPORT_SYMBOL(pcie_print_link_status);
  *
  * This helper routine makes bar mask from the type of resource.
  */
+//检查dev中哪些资源具有flags,返回值是索引的掩码形式
 int pci_select_bars(struct pci_dev *dev, unsigned long flags)
 {
 	int i, bars = 0;

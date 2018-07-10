@@ -52,6 +52,7 @@ static void fixup_debug_report(struct pci_dev *dev, ktime_t calltime,
 		pci_info(dev, "%pF took %lld usecs\n", fn, duration);
 }
 
+//对dev设备执行f到end之间的hook(如果hook可匹配此设备）
 static void pci_do_fixups(struct pci_dev *dev, struct pci_fixup *f,
 			  struct pci_fixup *end)
 {
@@ -64,6 +65,7 @@ static void pci_do_fixups(struct pci_dev *dev, struct pci_fixup *f,
 		     f->vendor == (u16) PCI_ANY_ID) &&
 		    (f->device == dev->device ||
 		     f->device == (u16) PCI_ANY_ID)) {
+			//如果设备与hook可匹配，则执行相应hook
 			calltime = fixup_debug_start(dev, f->hook);
 			f->hook(dev);
 			fixup_debug_report(dev, calltime, f->hook);
@@ -89,6 +91,7 @@ extern struct pci_fixup __end_pci_fixups_suspend_late[];
 
 static bool pci_apply_fixup_final_quirks;
 
+//通过pass找到相应的Hooks,执行fixup hook
 void pci_fixup_device(enum pci_fixup_pass pass, struct pci_dev *dev)
 {
 	struct pci_fixup *start, *end;

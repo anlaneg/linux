@@ -221,6 +221,7 @@ static inline void set_dma_ops(struct device *dev,
  */
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
+	//平台无dma时，直接返回NULL
 	return NULL;
 }
 #endif

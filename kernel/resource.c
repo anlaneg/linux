@@ -1135,6 +1135,7 @@ struct resource * __request_region(struct resource *parent,
 		res->flags |= IORESOURCE_BUSY | flags;
 		res->desc = parent->desc;
 
+		//请求资源
 		conflict = __request_resource(parent, res);
 		if (!conflict)
 			break;

@@ -318,6 +318,7 @@ struct pci_dev {
 
 	struct device_dma_parameters dma_parms;
 
+	//设备的电源状态
 	pci_power_t	current_state;	/* Current operating state. In ACPI,
 					   this is D0-D3, D0 being fully
 					   functional, and D3 being off. */
@@ -375,8 +376,8 @@ struct pci_dev {
 	unsigned int	block_cfg_access:1;	/* Config space access blocked */
 	unsigned int	broken_parity_status:1;	/* Generates false positive parity */
 	unsigned int	irq_reroute_variant:2;	/* Needs IRQ rerouting variant */
-	unsigned int	msi_enabled:1;
-	unsigned int	msix_enabled:1;
+	unsigned int	msi_enabled:1;//是否开启消息信号中断
+	unsigned int	msix_enabled:1;//是否开启消息信号中断-x
 	unsigned int	ari_enabled:1;		/* ARI forwarding */
 	unsigned int	ats_enabled:1;		/* Address Translation Svc */
 	unsigned int	pasid_enabled:1;	/* Process Address Space ID */
@@ -443,6 +444,7 @@ struct pci_dev {
 	unsigned long	priv_flags;	/* Private flags for the PCI driver */
 };
 
+//取dev的物理设备
 static inline struct pci_dev *pci_physfn(struct pci_dev *dev)
 {
 #ifdef CONFIG_PCI_IOV
@@ -1738,7 +1740,9 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
  */
 #define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
 #define pci_resource_end(dev, bar)	((dev)->resource[(bar)].end)
+//取第bar个dev资源flags
 #define pci_resource_flags(dev, bar)	((dev)->resource[(bar)].flags)
+//如果start为0，且end也为0的情况下返回0，否则长度为end-（start+1）
 #define pci_resource_len(dev,bar) \
 	((pci_resource_start((dev), (bar)) == 0 &&	\
 	  pci_resource_end((dev), (bar)) ==		\
