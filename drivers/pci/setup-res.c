@@ -452,6 +452,10 @@ error_resize:
 }
 EXPORT_SYMBOL(pci_resize_resource);
 
+//开启设备对io space或者io memory的响应(通过command寄存器开启）
+//The Command register provides coarse control over a device's ability to generate and
+//respond to PCI cycles. When a 0 is written to this register, the device is logically
+//disconnected from the PCI bus for all accesses except configuration accesses.
 int pci_enable_resources(struct pci_dev *dev, int mask)
 {
 	u16 cmd, old_cmd;
@@ -463,15 +467,15 @@ int pci_enable_resources(struct pci_dev *dev, int mask)
 
 	for (i = 0; i < PCI_NUM_RESOURCES; i++) {
 		if (!(mask & (1 << i)))
-			continue;
+			continue;//跳过未使能的bar
 
 		r = &dev->resource[i];
 
 		if (!(r->flags & (IORESOURCE_IO | IORESOURCE_MEM)))
-			continue;
+			continue;//目前pci仅有mem或者io两种，其它的均为错误
 		if ((i == PCI_ROM_RESOURCE) &&
 				(!(r->flags & IORESOURCE_ROM_ENABLE)))
-			continue;
+			continue;//未开始rom资源时跳过
 
 		if (r->flags & IORESOURCE_UNSET) {
 			pci_err(dev, "can't enable device: BAR %d %pR not assigned\n",
@@ -485,12 +489,14 @@ int pci_enable_resources(struct pci_dev *dev, int mask)
 			return -EINVAL;
 		}
 
+		//如果有io或者mem标记，则为command打上
 		if (r->flags & IORESOURCE_IO)
 			cmd |= PCI_COMMAND_IO;
 		if (r->flags & IORESOURCE_MEM)
 			cmd |= PCI_COMMAND_MEMORY;
 	}
 
+	//开启设备对应的io space，memory space
 	if (cmd != old_cmd) {
 		pci_info(dev, "enabling device (%04x -> %04x)\n", old_cmd, cmd);
 		pci_write_config_word(dev, PCI_COMMAND, cmd);

@@ -278,6 +278,7 @@ err_free_memtype:
  *
  * Must be freed with iounmap.
  */
+//映射到cpu space,要映射的起始地址，size 要映射的长度
 void __iomem *ioremap_nocache(resource_size_t phys_addr, unsigned long size)
 {
 	/*

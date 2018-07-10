@@ -21,6 +21,7 @@ static const char e1000_copyright[] = "Copyright (c) 1999-2006 Intel Corporation
  * Macro expands to...
  *   {PCI_DEVICE(PCI_VENDOR_ID_INTEL, device_id)}
  */
+//支持e1000的设备列表
 static const struct pci_device_id e1000_pci_tbl[] = {
 	INTEL_E1000_ETHERNET_DEVICE(0x1000),
 	INTEL_E1000_ETHERNET_DEVICE(0x1001),
@@ -227,6 +228,7 @@ static int __init e1000_init_module(void)
 
 	pr_info("%s\n", e1000_copyright);
 
+	//注册e1000的为pci驱动
 	ret = pci_register_driver(&e1000_driver);
 	if (copybreak != COPYBREAK_DEFAULT) {
 		if (copybreak == 0)
@@ -865,8 +867,10 @@ static int e1000_init_hw_struct(struct e1000_adapter *adapter,
 	hw->subsystem_id = pdev->subsystem_device;
 	hw->revision_id = pdev->revision;
 
+	//读取command寄存器
 	pci_read_config_word(pdev, PCI_COMMAND, &hw->pci_cmd_word);
 
+	//最大帧，最小帧
 	hw->max_frame_size = adapter->netdev->mtu +
 			     ENET_HEADER_SIZE + ETHERNET_FCS_SIZE;
 	hw->min_frame_size = MINIMUM_ETHERNET_FRAME_SIZE;
@@ -935,25 +939,31 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* do not allocate ioport bars when not needed */
 	need_ioport = e1000_is_need_ioport(pdev);
 	if (need_ioport) {
+		//支持io port
 		bars = pci_select_bars(pdev, IORESOURCE_MEM | IORESOURCE_IO);
-		err = pci_enable_device(pdev);
+		err = pci_enable_device(pdev);//使能memory,io space
 	} else {
+		//仅支持mem方式的，选支持mem映射的bars
 		bars = pci_select_bars(pdev, IORESOURCE_MEM);
+		//使能设备
 		err = pci_enable_device_mem(pdev);
 	}
 	if (err)
 		return err;
 
+	//请求对应的region
 	err = pci_request_selected_regions(pdev, bars, e1000_driver_name);
 	if (err)
 		goto err_pci_reg;
 
+	//置为master
 	pci_set_master(pdev);
 	err = pci_save_state(pdev);
 	if (err)
 		goto err_alloc_etherdev;
 
 	err = -ENOMEM;
+	//创建网络设备，常见例如eth0
 	netdev = alloc_etherdev(sizeof(struct e1000_adapter));
 	if (!netdev)
 		goto err_alloc_etherdev;
@@ -972,6 +982,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	hw->back = adapter;
 
 	err = -EIO;
+	//对BAR_0 memory 进行映射到hw->hw_addr
 	hw->hw_addr = pci_ioremap_bar(pdev, BAR_0);
 	if (!hw->hw_addr)
 		goto err_ioremap;
