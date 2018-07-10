@@ -90,7 +90,7 @@ struct net {
 	struct hlist_head 	*dev_name_head;//通过名称找设备的hash表
 	struct hlist_head	*dev_index_head;//通过index找设备的hash表
 	unsigned int		dev_base_seq;	/* protected by rtnl_mutex */
-	int			ifindex;
+	int			ifindex;//此namespace中上次分配的ifindex
 	unsigned int		dev_unreg_count;
 
 	/* core fib_rules */

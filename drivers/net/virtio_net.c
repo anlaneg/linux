@@ -127,7 +127,7 @@ struct receive_queue {
 	/* Virtqueue associated with this receive_queue */
 	struct virtqueue *vq;//虚队列
 
-	struct napi_struct napi;
+	struct napi_struct napi;//接收队列中可调度的napi
 
 	struct bpf_prog __rcu *xdp_prog;
 
@@ -1323,7 +1323,7 @@ static void virtnet_poll_cleantx(struct receive_queue *rq)
 		netif_tx_wake_queue(txq);
 }
 
-//virtnet的napi收包函数
+//virtnet的napi收包函数（一次性收取budet个包）
 static int virtnet_poll(struct napi_struct *napi, int budget)
 {
 	struct receive_queue *rq =
@@ -1651,7 +1651,9 @@ static void virtnet_stats(struct net_device *dev,
 }
 
 #ifdef CONFIG_NET_POLL_CONTROLLER
-//实现virtnet设备收包(通过调用napi_schedule触发软中断来进行收包）
+//将virtnet设备加入到napi收包循环中，实现virtnet设备收包
+//(通过调用napi_schedule触发软中断来进行收包）
+//注：每个队列会有一个对应的napi
 static void virtnet_netpoll(struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
@@ -2391,7 +2393,7 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_vlan_rx_add_vid = virtnet_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid = virtnet_vlan_rx_kill_vid,
 #ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller = virtnet_netpoll,//触发收包的软中断
+	.ndo_poll_controller = virtnet_netpoll,//注册本设备到napi,交由napi poll来收包
 #endif
 	.ndo_bpf		= virtnet_xdp,
 	.ndo_xdp_xmit		= virtnet_xdp_xmit,
@@ -2702,6 +2704,7 @@ static int init_vqs(struct virtnet_info *vi)
 	int ret;
 
 	/* Allocate send & receive queues */
+	//申请收发队列，并设置各队列的napi_poll函数进行收发
 	ret = virtnet_alloc_queues(vi);
 	if (ret)
 		goto err;
@@ -2812,7 +2815,7 @@ static int virtnet_validate(struct virtio_device *vdev)
 	return 0;
 }
 
-//驱动探测virtio_device产生net_device设备
+//驱动探测virtio_device产生net_device设备,将net_device加入到napi_poll中，使其开始收包
 static int virtnet_probe(struct virtio_device *vdev)
 {
 	int i, err = -ENOMEM;
@@ -2843,7 +2846,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	/* Set up network device as normal. */
 	dev->priv_flags |= IFF_UNICAST_FLT | IFF_LIVE_ADDR_CHANGE;
-	dev->netdev_ops = &virtnet_netdev;//为此虚拟dev设置操作集
+	dev->netdev_ops = &virtnet_netdev;//设置网络设备dev操作集
 	dev->features = NETIF_F_HIGHDMA;
 
 	dev->ethtool_ops = &virtnet_ethtool_ops;
@@ -2986,7 +2989,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 		}
 	}
 
-        //在kernel中注册此网络设备
+    //在kernel中注册此网络设备
 	err = register_netdev(dev);
 	if (err) {
 		pr_debug("virtio_net: registering device failed\n");

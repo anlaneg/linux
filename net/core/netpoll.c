@@ -177,11 +177,15 @@ static void poll_one_napi(struct napi_struct *napi)
 static void poll_napi(struct net_device *dev)
 {
 	struct napi_struct *napi;
+	//取当前cpu
 	int cpu = smp_processor_id();
 
 	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+		//原子设备当前此dev的poll owner为当前cpu,如果已有其它cpu设置，则跳出
 		if (cmpxchg(&napi->poll_owner, -1, cpu) == -1) {
+			//设置成功，执行poll
 			poll_one_napi(napi);
+			//置owner为-1，释放对此设备的poll
 			smp_store_release(&napi->poll_owner, -1);
 		}
 	}
@@ -196,6 +200,9 @@ static void netpoll_poll_dev(struct net_device *dev)
 	 * the dev_open/close paths use this to block netpoll activity
 	 * while changing device state
 	 */
+	//准备poll此设备，先尝试down dev_lock,如果无法完成，则跳出
+	//通过对dev_lock执行down,可禁止此函数对设备进行收包处理（see
+	//netpoll_poll_disable 函数）
 	if (down_trylock(&ni->dev_lock))
 		return;
 

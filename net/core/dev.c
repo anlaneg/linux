@@ -819,7 +819,7 @@ EXPORT_SYMBOL(dev_get_by_name);
  *	about locking. The caller must hold either the RTNL semaphore
  *	or @dev_base_lock.
  */
-
+//通过ifndex查找对应的net_device
 struct net_device *__dev_get_by_index(struct net *net, int ifindex)
 {
 	struct net_device *dev;
@@ -1398,6 +1398,7 @@ static int __dev_open(struct net_device *dev)
 	 * If we don't do this there is a chance ndo_poll_controller
 	 * or ndo_poll may be running while we open the device
 	 */
+	//禁止对此设备收包
 	netpoll_poll_disable(dev);
 
 	//触发通知NETDEV_PRE_UP
@@ -1416,6 +1417,7 @@ static int __dev_open(struct net_device *dev)
 	if (!ret && ops->ndo_open)
 		ret = ops->ndo_open(dev);
 
+	//容许对此设备收包
 	netpoll_poll_enable(dev);
 
 	if (ret)
@@ -5241,6 +5243,7 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 	return ret;
 }
 
+//软件gro收包处理，处理后交给napi_skb_finish向上传递
 gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	skb_mark_napi_id(skb, napi);
@@ -7515,6 +7518,7 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
  *	number.  The caller must hold the rtnl semaphore or the
  *	dev_base_lock to be sure it remains unique.
  */
+//申请一个ifindex
 static int dev_new_index(struct net *net)
 {
 	int ifindex = net->ifindex;
@@ -7522,6 +7526,7 @@ static int dev_new_index(struct net *net)
 	for (;;) {
 		if (++ifindex <= 0)
 			ifindex = 1;
+		//找一个此namespace中空闲的ifindex
 		if (!__dev_get_by_index(net, ifindex))
 			return net->ifindex = ifindex;
 	}
@@ -7952,6 +7957,7 @@ static void netif_free_rx_queues(struct net_device *dev)
 	kvfree(dev->_rx);
 }
 
+//初始化单个网络设备队列
 static void netdev_init_one_queue(struct net_device *dev,
 				  struct netdev_queue *queue, void *_unused)
 {
@@ -8069,9 +8075,11 @@ int register_netdevice(struct net_device *dev)
 	}
 
 	ret = -EBUSY;
+	//如果未指定ifidex，则为其申请ifindex
 	if (!dev->ifindex)
 		dev->ifindex = dev_new_index(net);
 	else if (__dev_get_by_index(net, dev->ifindex))
+		//有ifindex情况下，设备不能存在
 		goto err_uninit;
 
 	/* Transfer changeable features to wanted_features and enable
@@ -8122,6 +8130,7 @@ int register_netdevice(struct net_device *dev)
 	if (ret)
 		goto err_uninit;
 
+	//添加此设备到sysfs
 	ret = netdev_register_kobject(dev);
 	if (ret)
 		goto err_uninit;
@@ -8140,7 +8149,7 @@ int register_netdevice(struct net_device *dev)
 
 	dev_init_scheduler(dev);
 	dev_hold(dev);
-	list_netdevice(dev);
+	list_netdevice(dev);//将设备加入链中
 	add_device_randomness(dev->dev_addr, dev->addr_len);
 
 	/* If the device has permanent device address, driver should
@@ -8162,6 +8171,7 @@ int register_netdevice(struct net_device *dev)
 	 *	Prevent userspace races by waiting until the network
 	 *	device is fully setup before sending notifications.
 	 */
+	//触发网络设备创建通知
 	if (!dev->rtnl_link_ops ||
 	    dev->rtnl_link_state == RTNL_LINK_INITIALIZED)
 		rtmsg_ifinfo(RTM_NEWLINK, dev, ~0U, GFP_KERNEL);

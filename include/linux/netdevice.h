@@ -1210,6 +1210,7 @@ struct dev_ifalias {
  *	no frames were xmit'ed and core-caller will free all frames.
  */
 struct net_device_ops {
+	//注册网络设备时，将调用此回调用于初始化
 	int			(*ndo_init)(struct net_device *dev);
 	void			(*ndo_uninit)(struct net_device *dev);
 	//将设备置于up状态
@@ -1748,7 +1749,7 @@ struct net_device {
 
 	unsigned long		state;
 
-	struct list_head	dev_list;
+	struct list_head	dev_list;//提供挂载点，使所有网络设备在一个hash表中
 	struct list_head	napi_list;
 	struct list_head	unreg_list;
 	struct list_head	close_list;
@@ -1907,7 +1908,7 @@ struct net_device {
 #ifdef CONFIG_RFS_ACCEL
 	struct cpu_rmap		*rx_cpu_rmap;
 #endif
-	struct hlist_node	index_hlist;
+	struct hlist_node	index_hlist;//提供挂载点，使设备可挂载在ifidx对应的hash表中
 
 /*
  * Cache lines mostly used on transmit path
