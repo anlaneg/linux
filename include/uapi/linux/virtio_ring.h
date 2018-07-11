@@ -71,31 +71,31 @@ struct vring_desc {
 	/* The flags as indicated above. */
 	__virtio16 flags;
 	/* We chain unused descriptors via this, too */
-	__virtio16 next;
+	__virtio16 next;//指向下一个vring_desc索引
 };
 
 struct vring_avail {
 	__virtio16 flags;
 	__virtio16 idx;
-	__virtio16 ring[];
+	__virtio16 ring[];//长度为num个（见vring)
 };
 
 /* u32 is used here for ids for padding reasons. */
 struct vring_used_elem {
 	/* Index of start of used descriptor chain. */
-	__virtio32 id;
+	__virtio32 id;//描述符索引
 	/* Total length of the descriptor chain which was used (written to) */
-	__virtio32 len;
+	__virtio32 len;//报文长度
 };
 
 struct vring_used {
 	__virtio16 flags;
 	__virtio16 idx;
-	struct vring_used_elem ring[];
+	struct vring_used_elem ring[];//长度为num（见vring)
 };
 
 struct vring {
-	unsigned int num;
+	unsigned int num;//队列大小
 
 	struct vring_desc *desc;
 
@@ -140,9 +140,15 @@ struct vring {
 #define vring_used_event(vr) ((vr)->avail->ring[(vr)->num])
 #define vring_avail_event(vr) (*(__virtio16 *)&(vr)->used->ring[(vr)->num])
 
+//初始化vring
 static inline void vring_init(struct vring *vr, unsigned int num, void *p,
 			      unsigned long align)
 {
+	//查看vring_size函数
+	//p分三部分：
+	//1为num*sizeof(vring_desc)为desc部分
+	//2为avail,其包含的ring有num个成员
+	//3为used,其包含的ring有num个成员
 	vr->num = num;
 	vr->desc = p;
 	vr->avail = p + num*sizeof(struct vring_desc);
@@ -152,6 +158,12 @@ static inline void vring_init(struct vring *vr, unsigned int num, void *p,
 
 static inline unsigned vring_size(unsigned int num, unsigned long align)
 {
+	//这块比dpdk写的不容易看懂多了
+	//num个vring_desc
+	//sizeof(__virtio16)*(3+num) 即用来表示 sizeof(vring_avail)+ num*sizeof(__virio16)
+	//也就是申请avail结构且数组大小为num
+	//sizeof(__vrrtio16)*3 + sizeof(struct vring_used_elem) * num
+	//也就是申请used结构且数组大小为num
 	return ((sizeof(struct vring_desc) * num + sizeof(__virtio16) * (3 + num)
 		 + align - 1) & ~(align - 1))
 		+ sizeof(__virtio16) * 3 + sizeof(struct vring_used_elem) * num;

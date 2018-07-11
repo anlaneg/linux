@@ -119,7 +119,7 @@ struct send_queue {
 
 	struct virtnet_sq_stats stats;
 
-	struct napi_struct napi;
+	struct napi_struct napi;//发送队列可调度的napi
 };
 
 /* Internal representation of a receive virtqueue */
@@ -688,6 +688,7 @@ static struct sk_buff *receive_small(struct net_device *dev,
 	skb_put(skb, len);
 	if (!delta) {
 		buf += header_offset;
+		//获取virtio_net_hdr_mrg_rxbuf头部
 		memcpy(skb_vnet_hdr(skb), buf, vi->hdr_len);
 	} /* keep zeroed vnet hdr since packet was changed by bpf */
 
@@ -854,6 +855,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 
 	truesize = mergeable_ctx_to_truesize(ctx);
 	if (unlikely(len > truesize)) {
+		//报文长度超过mergeable报文的规定长度，认为错误报文
 		pr_debug("%s: rx error: len %u exceeds truesize %lu\n",
 			 dev->name, len, (unsigned long)ctx);
 		dev->stats.rx_length_errors++;
@@ -868,8 +870,10 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 	while (--num_buf) {
 		int num_skb_frags;
 
+		//自队列中再收取一个报文
 		buf = virtqueue_get_buf_ctx(rq->vq, &len, &ctx);
 		if (unlikely(!buf)) {
+			//收取出错
 			pr_debug("%s: rx error: %d buffers out of %d missing\n",
 				 dev->name, num_buf,
 				 virtio16_to_cpu(vi->vdev,
@@ -882,6 +886,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 
 		truesize = mergeable_ctx_to_truesize(ctx);
 		if (unlikely(len > truesize)) {
+			//报文长度检查
 			pr_debug("%s: rx error: len %u exceeds truesize %lu\n",
 				 dev->name, len, (unsigned long)ctx);
 			dev->stats.rx_length_errors++;
@@ -943,7 +948,7 @@ xdp_xmit:
 	return NULL;
 }
 
-//自队列中提取报文，并组装成skb走协议栈
+//解析buf，并组装成skb,使其走kernel协议栈
 static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 		       void *buf, unsigned int len, void **ctx,
 		       unsigned int *xdp_xmit)
@@ -954,6 +959,7 @@ static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	int ret;
 
 	if (unlikely(len < vi->hdr_len + ETH_HLEN)) {
+		//报文过小，丢弃
 		pr_debug("%s: short packet %i\n", dev->name, len);
 		dev->stats.rx_length_errors++;
 		if (vi->mergeable_rx_bufs) {
@@ -971,6 +977,7 @@ static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	else if (vi->big_packets)
 		skb = receive_big(dev, vi, rq, buf, len);
 	else
+		//将buf转换成skb
 		skb = receive_small(dev, vi, rq, buf, ctx, len, xdp_xmit);
 
 	if (unlikely(!skb))
@@ -1240,6 +1247,7 @@ static void refill_work(struct work_struct *work)
 	}
 }
 
+//自rq上收取报文，并上送kernel协议栈
 static int virtnet_receive(struct receive_queue *rq, int budget,
 			   unsigned int *xdp_xmit)
 {
@@ -1250,6 +1258,7 @@ static int virtnet_receive(struct receive_queue *rq, int budget,
 	if (!vi->big_packets || vi->mergeable_rx_bufs) {
 		void *ctx;
 
+		//采用virtqueue_get_buf_ctx收取buf,buf长度为len
 		while (received < budget &&
 		       (buf = virtqueue_get_buf_ctx(rq->vq, &len, &ctx))) {
 			bytes += receive_buf(vi, rq, buf, len, ctx, xdp_xmit);
@@ -1268,6 +1277,7 @@ static int virtnet_receive(struct receive_queue *rq, int budget,
 			schedule_delayed_work(&vi->refill, 0);
 	}
 
+	//增加统计计数
 	u64_stats_update_begin(&rq->stats.syncp);
 	rq->stats.bytes += bytes;
 	rq->stats.packets += received;
@@ -1326,9 +1336,10 @@ static void virtnet_poll_cleantx(struct receive_queue *rq)
 //virtnet的napi收包函数（一次性收取budet个包）
 static int virtnet_poll(struct napi_struct *napi, int budget)
 {
+	//获取收队列
 	struct receive_queue *rq =
 		container_of(napi, struct receive_queue, napi);
-	struct virtnet_info *vi = rq->vq->vdev->priv;
+	struct virtnet_info *vi = rq->vq->vdev->priv;//队列对应的virtnet设备
 	struct send_queue *sq;
 	unsigned int received, qp;
 	unsigned int xdp_xmit = 0;
@@ -1419,6 +1430,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	/* Even if we can, don't push here yet as this would skew
 	 * csum_start offset below. */
 	if (can_push)
+		//在报文前空出一个hdr_len长度
 		hdr = (struct virtio_net_hdr_mrg_rxbuf *)(skb->data - hdr_len);
 	else
 		hdr = skb_vnet_hdr(skb);

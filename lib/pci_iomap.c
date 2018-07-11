@@ -25,6 +25,7 @@
  * @maxlen specifies the maximum length to map. If you want to get access to
  * the complete BAR from offset to the end, pass %0 here.
  * */
+//映射dev设备的第bar寄存器指向的地址内容（offset,maxlen指出偏移及长度)
 void __iomem *pci_iomap_range(struct pci_dev *dev,
 			      int bar,
 			      unsigned long offset,
@@ -36,13 +37,14 @@ void __iomem *pci_iomap_range(struct pci_dev *dev,
 
 	if (len <= offset || !start)
 		return NULL;
-	len -= offset;
-	start += offset;
+	len -= offset;//长度减少
+	start += offset;//偏移增加
 	if (maxlen && len > maxlen)
 		len = maxlen;
 	if (flags & IORESOURCE_IO)
 		return __pci_ioport_map(dev, start, len);
 	if (flags & IORESOURCE_MEM)
+		//memory space方式映射
 		return ioremap(start, len);
 	/* What? */
 	return NULL;

@@ -139,12 +139,14 @@ struct virtio_pci_common_cfg {
 	__le32 guest_feature_select;	/* read-write */
 	__le32 guest_feature;		/* read-write */
 	__le16 msix_config;		/* read-write */
+	//队列数
 	__le16 num_queues;		/* read-only */
 	__u8 device_status;		/* read-write */
 	__u8 config_generation;		/* read-only */
 
 	/* About a specific virtqueue. */
 	__le16 queue_select;		/* read-write */
+	//队列大小
 	__le16 queue_size;		/* read-write, power of 2. */
 	__le16 queue_msix_vector;	/* read-write */
 	__le16 queue_enable;		/* read-write */

@@ -28,10 +28,10 @@
 struct virtqueue {
 	struct list_head list;//用于串连属于同一virtio_device的virtqueue
 	void (*callback)(struct virtqueue *vq);
-	const char *name;//名称
+	const char *name;//队列名称
 	struct virtio_device *vdev;//队列属于那个vdev
 	unsigned int index;//队列编号
-	unsigned int num_free;
+	unsigned int num_free;//空闲描述符数量
 	void *priv;
 };
 
@@ -133,7 +133,7 @@ struct virtio_device {
 	//virtio-pci驱动创建的virtio设备会有一种可能，指向virtio_pci_config_ops
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
-	struct list_head vqs;
+	struct list_head vqs;//virtio设备的所有虚队列
 	u64 features;//virtio的bit位（用于指代功能)
 	void *priv;
 };

@@ -65,6 +65,9 @@ static void vp_iowrite64_twopart(u64 val,
 	vp_iowrite32(val >> 32, hi);
 }
 
+//映射capability对应的内存（offset是capability相对于pci config space的偏移）
+//minlen是capability结构体的最小长度，align是其的对齐方式
+//start是映射相对于这段数据的偏移量，size是要映射的大小,len是实际映射的大小
 static void __iomem *map_capability(struct pci_dev *dev, int off,
 				    size_t minlen,
 				    u32 align,
@@ -75,6 +78,8 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 	u32 offset, length;
 	void __iomem *p;
 
+	//读取bar,offset,length
+	//off指示的位置是一个virtio_pci_cap结构，自此结构中先读取bar,offset,length
 	pci_read_config_byte(dev, off + offsetof(struct virtio_pci_cap,
 						 bar),
 			     &bar);
@@ -83,6 +88,7 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 	pci_read_config_dword(dev, off + offsetof(struct virtio_pci_cap, length),
 			      &length);
 
+	//长度小于start指定，参数有误
 	if (length <= start) {
 		dev_err(&dev->dev,
 			"virtio_pci: bad capability len %u (>%u expected)\n",
@@ -90,6 +96,7 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 		return NULL;
 	}
 
+	//自start开始，没有minlen字节，参数有误
 	if (length - start < minlen) {
 		dev_err(&dev->dev,
 			"virtio_pci: bad capability len %u (>=%zu expected)\n",
@@ -97,6 +104,7 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 		return NULL;
 	}
 
+	//除去start
 	length -= start;
 
 	if (start + offset < offset) {
@@ -131,6 +139,7 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 		return NULL;
 	}
 
+	//映射bar内存到p
 	p = pci_iomap_range(dev, bar, offset, length);
 	if (!p)
 		dev_err(&dev->dev,
@@ -322,6 +331,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	u16 num, off;
 	int err;
 
+	//要创建的队列数不能超过硬件支持的最大队列数
 	if (index >= vp_ioread16(&cfg->num_queues))
 		return ERR_PTR(-ENOENT);
 
@@ -329,6 +339,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	vp_iowrite16(index, &cfg->queue_select);
 
 	/* Check if queue is either not available or already active. */
+	//取硬件支持的队列大小
 	num = vp_ioread16(&cfg->queue_size);
 	if (!num || vp_ioread16(&cfg->queue_enable))
 		return ERR_PTR(-ENOENT);
@@ -611,6 +622,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->vdev.id.vendor = pci_dev->subsystem_vendor;
 
 	/* check for a common config: if not, use legacy mode (bar 0). */
+	//找VIRTIO_PCI_CAP_COMMON_CFG cap的位置
 	common = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_COMMON_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &vp_dev->modern_bars);
@@ -621,9 +633,11 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	}
 
 	/* If common is there, these should be too... */
+	//找VIRTIO_PCI_CAP_ISR_CFG capability位置
 	isr = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_ISR_CFG,
 					 IORESOURCE_IO | IORESOURCE_MEM,
 					 &vp_dev->modern_bars);
+	//找VIRTIO_PCI_CAP_NOTIFY_CFG capability位置
 	notify = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_NOTIFY_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &vp_dev->modern_bars);
@@ -654,6 +668,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		return err;
 
 	err = -EINVAL;
+	//映射VIRTIO_PCI_CAP_COMMON_CFG capability对应的数据
 	vp_dev->common = map_capability(pci_dev, common,
 					sizeof(struct virtio_pci_common_cfg), 4,
 					0, sizeof(struct virtio_pci_common_cfg),
