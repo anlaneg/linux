@@ -174,10 +174,10 @@ error:
 	return err;
 }
 
-static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index,
-				     void (*callback)(struct virtqueue *vq),
-				     const char *name,
-				     bool ctx,
+static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index,//虚队列index
+				     void (*callback)(struct virtqueue *vq),//虚队列回调
+				     const char *name,//虚队列名称
+				     bool ctx,//虚队列是否有context
 				     u16 msix_vec)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);

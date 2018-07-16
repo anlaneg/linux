@@ -69,6 +69,12 @@
 #define VIRTIO_NET_S_LINK_UP	1	/* Link is up */
 #define VIRTIO_NET_S_ANNOUNCE	2	/* Announcement is needed */
 
+//按virtio 1.0 spec所言，目前共定义了三个驱动只读字段
+//mac字段，仅当VIRTIO_NET_F_MAC存在时有效，定义mac配置
+//status字段，仅当VIRTIO_NET_F_STATUS存在时有效，定义了二种状态
+//VIRTIO_NET_S_LINK_UP 与VIRTIO_NET_S_ANNOUNCE
+//max_virtqueue_pairs字段，仅当VIRTIO_NET_F_MQ存在时有效
+//定义设备最大接受发送队列数
 struct virtio_net_config {
 	/* The config defining mac address (if VIRTIO_NET_F_MAC) */
 	__u8 mac[ETH_ALEN];
@@ -123,6 +129,7 @@ struct virtio_net_hdr_v1 {
  * For legacy virtio, if VIRTIO_F_ANY_LAYOUT is not negotiated, it must
  * be the first element of the scatter-gather list.  If you don't
  * specify GSO or CSUM features, you can simply ignore the header. */
+//virtio_net报文的头部
 struct virtio_net_hdr {
 	/* See VIRTIO_NET_HDR_F_* */
 	__u8 flags;
@@ -136,6 +143,9 @@ struct virtio_net_hdr {
 
 /* This is the version of the header to use when the MRG_RXBUF
  * feature has been negotiated. */
+//标准virtio 1.0指出
+//The legacy driver only presented num_buffers in the struct virtio_net_hdr when VIRTIO_NET_F_MRG_-
+//RXBUF was negotiated; without that feature the structure was 2 bytes shorter.
 struct virtio_net_hdr_mrg_rxbuf {
 	struct virtio_net_hdr hdr;
 	__virtio16 num_buffers;	/* Number of merged rx buffers */
@@ -238,7 +248,7 @@ struct virtio_net_ctrl_mac {
  * specified.
  */
 struct virtio_net_ctrl_mq {
-	__virtio16 virtqueue_pairs;
+	__virtio16 virtqueue_pairs;//虚拟队列对数
 };
 
 #define VIRTIO_NET_CTRL_MQ   4

@@ -167,7 +167,7 @@ struct control_buf {
 
 struct virtnet_info {
 	struct virtio_device *vdev;
-	struct virtqueue *cvq;//控制队列
+	struct virtqueue *cvq;//指向控制队列
 	struct net_device *dev;
 	struct send_queue *sq;//发送队列数组
 	struct receive_queue *rq;//接收队列数组
@@ -210,7 +210,7 @@ struct virtnet_info {
 	struct hlist_node node;
 	struct hlist_node node_dead;
 
-	struct control_buf *ctrl;
+	struct control_buf *ctrl;//控制队列
 
 	/* Ethtool settings */
 	u8 duplex;
@@ -1430,7 +1430,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	/* Even if we can, don't push here yet as this would skew
 	 * csum_start offset below. */
 	if (can_push)
-		//在报文前空出一个hdr_len长度
+		//在报文前空出一个hdr_len长度,用于填充merge header
 		hdr = (struct virtio_net_hdr_mrg_rxbuf *)(skb->data - hdr_len);
 	else
 		hdr = skb_vnet_hdr(skb);
@@ -1679,6 +1679,7 @@ static void virtnet_netpoll(struct net_device *dev)
 static void virtnet_ack_link_announce(struct virtnet_info *vi)
 {
 	rtnl_lock();
+	//发送控制命令
 	if (!virtnet_send_command(vi, VIRTIO_NET_CTRL_ANNOUNCE,
 				  VIRTIO_NET_CTRL_ANNOUNCE_ACK, NULL))
 		dev_warn(&vi->dev->dev, "Failed to ack link announce.\n");
@@ -1690,12 +1691,18 @@ static int _virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 	struct scatterlist sg;
 	struct net_device *dev = vi->dev;
 
+	//无控制队列，或者无多队列协商，则直接返回
 	if (!vi->has_cvq || !virtio_has_feature(vi->vdev, VIRTIO_NET_F_MQ))
 		return 0;
 
 	vi->ctrl->mq.virtqueue_pairs = cpu_to_virtio16(vi->vdev, queue_pairs);
 	sg_init_one(&sg, &vi->ctrl->mq, sizeof(vi->ctrl->mq));
 
+	//如标准所言：
+	//4. Even with VIRTIO_NET_F_MQ, only receiveq1, transmitq1 and controlq are used by default. The
+	//driver would send the VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET command specifying the number
+	//of the transmit and receive queues to use.
+	//告知对端，使用的收发队列数
 	if (!virtnet_send_command(vi, VIRTIO_NET_CTRL_MQ,
 				  VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET, &sg)) {
 		dev_warn(&dev->dev, "Fail to set num of queue pairs to %d\n",
@@ -2413,16 +2420,19 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_get_phys_port_name	= virtnet_get_phys_port_name,
 };
 
+//设备链路状态处理
 static void virtnet_config_changed_work(struct work_struct *work)
 {
 	struct virtnet_info *vi =
 		container_of(work, struct virtnet_info, config_work);
 	u16 v;
 
+	//读取config获知当前link状态
 	if (virtio_cread_feature(vi->vdev, VIRTIO_NET_F_STATUS,
 				 struct virtio_net_config, status, &v) < 0)
 		return;
 
+	//link状态为announce,向对端通告
 	if (v & VIRTIO_NET_S_ANNOUNCE) {
 		netdev_notify_peers(vi->dev);
 		virtnet_ack_link_announce(vi);
@@ -2437,10 +2447,12 @@ static void virtnet_config_changed_work(struct work_struct *work)
 	vi->status = v;
 
 	if (vi->status & VIRTIO_NET_S_LINK_UP) {
+		//link置为up
 		virtnet_update_settings(vi);
 		netif_carrier_on(vi->dev);
 		netif_tx_wake_all_queues(vi->dev);
 	} else {
+		//link down处理
 		netif_carrier_off(vi->dev);
 		netif_tx_stop_all_queues(vi->dev);
 	}
@@ -2573,17 +2585,19 @@ static unsigned int mergeable_min_buf_len(struct virtnet_info *vi, struct virtqu
 
 static int virtnet_find_vqs(struct virtnet_info *vi)
 {
-	vq_callback_t **callbacks;
-	struct virtqueue **vqs;
+	vq_callback_t **callbacks;//各队列的回调函数（控制队列回调为NULL）
+	struct virtqueue **vqs;//各队列指针
 	int ret = -ENOMEM;
 	int i, total_vqs;
-	const char **names;
+	const char **names;//各队列名称
 	bool *ctx;
 
 	/* We expect 1 RX virtqueue followed by 1 TX virtqueue, followed by
 	 * possible N-1 RX/TX queue pairs used in multiqueue mode, followed by
 	 * possible control vq.
 	 */
+	//N个收队列，N个发队列，1个控制队列
+	//2. If the VIRTIO_NET_F_CTRL_VQ feature bit is negotiated, identify the control virtqueue.
 	total_vqs = vi->max_queue_pairs * 2 +
 		    virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ);
 
@@ -2592,15 +2606,18 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	vqs = kcalloc(total_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs)
 		goto err_vq;
+
 	//为各虚拟队列的回调申请空间（数组）
 	callbacks = kmalloc_array(total_vqs, sizeof(*callbacks), GFP_KERNEL);
 	if (!callbacks)
 		goto err_callback;
+
 	//申请虚队列名称数组
 	names = kmalloc_array(total_vqs, sizeof(*names), GFP_KERNEL);
 	if (!names)
 		goto err_names;
 
+	//初始化total_vqs个context
 	if (!vi->big_packets || vi->mergeable_rx_bufs) {
 		ctx = kcalloc(total_vqs, sizeof(*ctx), GFP_KERNEL);
 		if (!ctx)
@@ -2612,7 +2629,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	/* Parameters for control virtqueue, if any */
 	//最后一个队列为控制队列
 	if (vi->has_cvq) {
-		callbacks[total_vqs - 1] = NULL;
+		callbacks[total_vqs - 1] = NULL;//控制队列的callback为NULL
 		names[total_vqs - 1] = "control";
 	}
 
@@ -2626,7 +2643,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 		sprintf(vi->rq[i].name, "input.%d", i);
 		sprintf(vi->sq[i].name, "output.%d", i);
 
-		//收集各虚队列名称指针
+		//设置各虚队列名称指针
 		names[rxq2vq(i)] = vi->rq[i].name;
 		names[txq2vq(i)] = vi->sq[i].name;
 
@@ -2671,6 +2688,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 {
 	int i;
 
+	//申请1个控制队列
 	vi->ctrl = kzalloc(sizeof(*vi->ctrl), GFP_KERNEL);
 	if (!vi->ctrl)
 		goto err_ctrl;
@@ -2678,12 +2696,14 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	vi->sq = kcalloc(vi->max_queue_pairs, sizeof(*vi->sq), GFP_KERNEL);
 	if (!vi->sq)
 		goto err_sq;
-	//申请收队列
+	//申请max_queue_pairs个收队列
 	vi->rq = kcalloc(vi->max_queue_pairs, sizeof(*vi->rq), GFP_KERNEL);
 	if (!vi->rq)
 		goto err_rq;
 
+	//初始化延迟任务refill_work(延迟时间0）
 	INIT_DELAYED_WORK(&vi->refill, refill_work);
+	//初始化收发队列
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		vi->rq[i].pages = NULL;
 		//设置收包队列的处理函数（virtnet_poll)
@@ -2716,7 +2736,7 @@ static int init_vqs(struct virtnet_info *vi)
 	int ret;
 
 	/* Allocate send & receive queues */
-	//申请收发队列，并设置各队列的napi_poll函数进行收发
+	//申请控制，收发队列，并设置各队列的napi_poll函数进行收发
 	ret = virtnet_alloc_queues(vi);
 	if (ret)
 		goto err;
@@ -2844,7 +2864,15 @@ static int virtnet_probe(struct virtio_device *vdev)
 				   max_virtqueue_pairs, &max_queue_pairs);
 
 	/* We need at least 2 queue's */
-	//至少需要1个收队列一个发队列
+	//
+	//按标准规定：5.1.4.1
+	//Device Requirements: Device configuration layout
+	//The device MUST set max_virtqueue_pairs to between 1 and 0x8000 inclusive,
+	//if it offers VIRTIO_NET_-F_MQ.
+	//5.1.5
+	//Identify and initialize the receive and transmission virtqueues, up to N of each kind. If VIRTIO_NET_-
+	//F_MQ feature bit is negotiated, N=max_virtqueue_pairs, otherwise identify N=1.
+	//除非配置错误，否则使用配置值
 	if (err || max_queue_pairs < VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MIN ||
 	    max_queue_pairs > VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX ||
 	    !virtio_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ))
@@ -2866,6 +2894,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	/* Do we support "hardware" checksums? */
     //是否支持硬件checksum
+	//7. A performant driver would indicate that it will generate checksumless packets by negotating the VIR-
+	//TIO_NET_F_CSUM feature.
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CSUM)) {
 		/* This opens up the world of extra features. */
 		dev->hw_features |= NETIF_F_HW_CSUM | NETIF_F_SG;
@@ -2873,6 +2903,9 @@ static int virtnet_probe(struct virtio_device *vdev)
 			dev->features |= NETIF_F_HW_CSUM | NETIF_F_SG;
 
 		//是否支持GSO
+		//8. If that feature is negotiated, a driver can use TCP or UDP segmentation offload by negotiating the
+		//VIRTIO_NET_F_HOST_TSO4 (IPv4 TCP), VIRTIO_NET_F_HOST_TSO6 (IPv6 TCP) and VIRTIO_-
+		//NET_F_HOST_UFO (UDP fragmentation) features.
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_GSO)) {
 			dev->hw_features |= NETIF_F_TSO
 				| NETIF_F_TSO_ECN | NETIF_F_TSO6;
@@ -2883,7 +2916,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 			dev->hw_features |= NETIF_F_TSO;
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_TSO6))
 			dev->hw_features |= NETIF_F_TSO6;
-		//????
+
+		//是否支持显式拥塞控制
 		if (virtio_has_feature(vdev, VIRTIO_NET_F_HOST_ECN))
 			dev->hw_features |= NETIF_F_TSO_ECN;
 
@@ -2893,6 +2927,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 			dev->features |= dev->hw_features & NETIF_F_ALL_TSO;
 		/* (!csum && gso) case will be fixed by register_netdev() */
 	}
+
+	//是否由guest负载checksum
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_CSUM))
 		dev->features |= NETIF_F_RXCSUM;
 
@@ -2903,13 +2939,16 @@ static int virtnet_probe(struct virtio_device *vdev)
 	dev->max_mtu = MAX_MTU;
 
 	/* Configuration may specify what MAC to use.  Otherwise random. */
-    //是否支持配置mac地址
+	//按virtio 1.0 spc规定，仅当VIRTIO_NET_F_MAC标记存在时，virtio_net_config中的
+	//mac字段为有效，读取设备mac地址
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MAC))
 		virtio_cread_bytes(vdev,
 				   offsetof(struct virtio_net_config, mac),
 				   dev->dev_addr, dev->addr_len);
 	else
         //如果不支持配置mac地址，则产生随机mac地址
+		//标准规定：Otherwise, it SHOULD use a locally-administered MAC address
+		//(see IEEE 802, “9.2 48-bit universal LAN MAC addresses”).
 		eth_hw_addr_random(dev);
 
 	/* Set up our device-specific information */
@@ -2918,6 +2957,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	vi->vdev = vdev;
 	vdev->priv = vi;
 
+	//初始化设备链路状态
 	INIT_WORK(&vi->config_work, virtnet_config_changed_work);
 
 	/* If we can receive ANY GSO packets, we must allocate large ones. */
@@ -2942,6 +2982,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		vi->any_header_sg = true;
 
+	//协商出控制队列
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ))
 		vi->has_cvq = true;
 
@@ -2979,7 +3020,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	vi->max_queue_pairs = max_queue_pairs;//最大队列数
 
 	/* Allocate/initialize the rx/tx queues, and invoke find_vqs */
-    //收发队列空间申请
+    //收发队列，控制队列创建
 	err = init_vqs(vi);
 	if (err)
 		goto free;
@@ -3016,14 +3057,21 @@ static int virtnet_probe(struct virtio_device *vdev)
 		goto free_unregister_netdev;
 	}
 
+	//告知对端我们使用的队列对数
 	virtnet_set_queues(vi, vi->curr_queue_pairs);
 
 	/* Assume link up if device can't report link status,
 	   otherwise get link status from config. */
 	netif_carrier_off(dev);
 	if (virtio_has_feature(vi->vdev, VIRTIO_NET_F_STATUS)) {
+		//按virtio 1.0 spec规定：
+		/*
+		 * If the driver does not negotiate the VIRTIO_NET_F_STATUS feature, it SHOULD assume the link is active,
+		   otherwise it SHOULD read the link status from the bottom bit of status.
+		 */
 		schedule_work(&vi->config_work);
 	} else {
+		//没有协商virtio_net_f_status,假设其up
 		vi->status = VIRTIO_NET_S_LINK_UP;
 		virtnet_update_settings(vi);
 		netif_carrier_on(dev);
@@ -3114,6 +3162,7 @@ static __maybe_unused int virtnet_restore(struct virtio_device *vdev)
 }
 
 static struct virtio_device_id id_table[] = {
+	//virtio 1.0 spec规定device id为1的为网络设备
 	{ VIRTIO_ID_NET, VIRTIO_DEV_ANY_ID },
 	{ 0 },
 };

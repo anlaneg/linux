@@ -1088,10 +1088,10 @@ struct virtqueue *vring_create_virtqueue(
 	struct virtio_device *vdev,//所属设备
 	bool weak_barriers,
 	bool may_reduce_num,
-	bool context,
+	bool context,//队列是否有context
 	bool (*notify)(struct virtqueue *),
-	void (*callback)(struct virtqueue *),
-	const char *name)
+	void (*callback)(struct virtqueue *),//队列回调
+	const char *name)//队列名称
 {
 	struct virtqueue *vq;
 	void *queue = NULL;

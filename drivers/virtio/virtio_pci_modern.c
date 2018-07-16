@@ -320,10 +320,10 @@ static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 //创建virtqueue
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
-				  unsigned index,
-				  void (*callback)(struct virtqueue *vq),
-				  const char *name,
-				  bool ctx,
+				  unsigned index,//队列索引
+				  void (*callback)(struct virtqueue *vq),//队列回调
+				  const char *name,//队列名称
+				  bool ctx,//队列是否有context
 				  u16 msix_vec)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = vp_dev->common;
@@ -344,6 +344,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	if (!num || vp_ioread16(&cfg->queue_enable))
 		return ERR_PTR(-ENOENT);
 
+	//队列数必须为2的N次方
 	if (num & (num - 1)) {
 		dev_warn(&vp_dev->pci_dev->dev, "bad queue size %u", num);
 		return ERR_PTR(-EINVAL);
@@ -416,10 +417,11 @@ err_map_notify:
 	return ERR_PTR(err);
 }
 
-static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned nvqs,
-			      struct virtqueue *vqs[],
-			      vq_callback_t *callbacks[],
-			      const char * const names[], const bool *ctx,
+static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
+			      struct virtqueue *vqs[],//虚队列数组
+			      vq_callback_t *callbacks[],//指出各队列对应的callback
+			      const char * const names[],//指出各队列名称
+				  const bool *ctx,//指出各队列是否有context
 			      struct irq_affinity *desc)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
