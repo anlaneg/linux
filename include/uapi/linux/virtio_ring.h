@@ -76,7 +76,7 @@ struct vring_desc {
 
 struct vring_avail {
 	__virtio16 flags;
-	__virtio16 idx;
+	__virtio16 idx;//队列中目前有效位置（即可存放或可读取的极限位置）
 	__virtio16 ring[];//长度为num个（见vring)
 };
 

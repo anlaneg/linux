@@ -112,7 +112,7 @@ struct vring_virtqueue {
 #endif
 
 	/* Per-descriptor state. */
-	struct vring_desc_state desc_state[];
+	struct vring_desc_state desc_state[];//记录报文
 };
 
 #define to_vvq(_vq) container_of(_vq, struct vring_virtqueue, vq)
@@ -744,6 +744,7 @@ void *virtqueue_get_buf_ctx(struct virtqueue *_vq, unsigned int *len,
 		BAD_RING(vq, "id %u out of range\n", i);
 		return NULL;
 	}
+
 	if (unlikely(!vq->desc_state[i].data)) {
 		//无数据
 		BAD_RING(vq, "id %u is not a head!\n", i);

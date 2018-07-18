@@ -186,7 +186,7 @@ struct virtnet_info {
 	bool big_packets;//使能大包
 
 	/* Host will merge rx buffers for big packets (shake it! shake it!) */
-	bool mergeable_rx_bufs;
+	bool mergeable_rx_bufs;//支持merge rx buffers
 
 	/* Has control virtqueue */
 	bool has_cvq;//是否有控制虚队列
@@ -237,7 +237,7 @@ struct padded_vnet_hdr {
  */
 static int vq2txq(struct virtqueue *vq)
 {
-	return (vq->index - 1) / 2;
+	return (vq->index - 1) / 2;//转转发队列idx
 }
 
 static int txq2vq(int txq)
@@ -255,6 +255,7 @@ static int rxq2vq(int rxq)
 	return rxq * 2;
 }
 
+//取merge header
 static inline struct virtio_net_hdr_mrg_rxbuf *skb_vnet_hdr(struct sk_buff *skb)
 {
 	return (struct virtio_net_hdr_mrg_rxbuf *)skb->cb;
@@ -356,6 +357,7 @@ static struct sk_buff *page_to_skb(struct virtnet_info *vi,
 	p = page_address(page) + offset;
 
 	/* copy small packet so we can reuse these pages for small data */
+	//申请skb
 	skb = napi_alloc_skb(&rq->napi, GOOD_COPY_LEN);
 	if (unlikely(!skb))
 		return NULL;
