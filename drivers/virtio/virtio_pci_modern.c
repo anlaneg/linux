@@ -225,6 +225,7 @@ static void vp_get(struct virtio_device *vdev, unsigned offset,
 		memcpy(buf, &l, sizeof l);
 		break;
 	case 8:
+		//64字节时，按32字节读取两次
 		l = cpu_to_le32(ioread32(vp_dev->device + offset));
 		memcpy(buf, &l, sizeof l);
 		l = cpu_to_le32(ioread32(vp_dev->device + offset + sizeof l));
@@ -271,6 +272,7 @@ static void vp_set(struct virtio_device *vdev, unsigned offset,
 	}
 }
 
+//获取配置的版本号（用于保护配置读取的原子性）
 static u32 vp_generation(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);

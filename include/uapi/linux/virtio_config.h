@@ -31,6 +31,7 @@
  * store and access that space differently. */
 #include <linux/types.h>
 
+//看virtio 1.0规定的设备状态
 /* Status byte for guest to report progress, and synchronize features. */
 /* We have seen device and processed generic fields (VIRTIO_CONFIG_F_VIRTIO) */
 #define VIRTIO_CONFIG_S_ACKNOWLEDGE	1
@@ -45,6 +46,13 @@
 /* We've given up on this device. */
 #define VIRTIO_CONFIG_S_FAILED		0x80
 
+/*
+//按照virtio 1.0标准规定
+Feature bits are allocated as follows:
+0 to 23 Feature bits for the specific device type （0－23是设备类型相关的功能bit)
+24 to 32 Feature bits reserved for extensions to the queue and feature negotiation mechanisms
+33 and above Feature bits reserved for future extensions.
+*/
 /*
  * Virtio feature bits VIRTIO_TRANSPORT_F_START through
  * VIRTIO_TRANSPORT_F_END are reserved for the transport
@@ -64,7 +72,8 @@
 #endif /* VIRTIO_CONFIG_NO_LEGACY */
 
 /* v1.0 compliant. */
-//标记为virtio 1.0版本
+//标记为virtio 1.0版本(如果此标记没有被设备提供，则设备为legacy设备）
+//同相的，如果此标记没有被驱动提供，则驱动为legacy驱动
 #define VIRTIO_F_VERSION_1		32
 
 /*

@@ -63,19 +63,28 @@
 #define VIRTIO_RING_F_EVENT_IDX		29
 
 /* Virtio ring descriptors: 16 bytes.  These can chain together via "next". */
+//如virtio 1.0 spec所言
+//The descriptor table refers to the buffers the driver is using for the device. addr is a physical address, and
+//the buffers can be chained via next. Each descriptor describes a buffer which is read-only for the device
+//(“device-readable”) or write-only for the device (“device-writable”), but a chain of descriptors can contain
+//both device-readable and device-writable buffers.
 struct vring_desc {
 	/* Address (guest-physical). */
 	__virtio64 addr;
 	/* Length. */
 	__virtio32 len;
 	/* The flags as indicated above. */
-	__virtio16 flags;
+	__virtio16 flags;//见VRING_DESC_F_NEXT相关标记
 	/* We chain unused descriptors via this, too */
 	__virtio16 next;//指向下一个vring_desc索引
 };
 
 struct vring_avail {
 	__virtio16 flags;
+	//The driver uses the available ring to offer buffers to the device: each ring entry refers to the head of a
+	//descriptor chain. It is only written by the driver and read by the device.
+	//idx field indicates where the driver would put the next descriptor entry in the ring (modulo the queue size).
+	//This starts at 0, and increases.
 	__virtio16 idx;//队列中目前有效位置（即可存放或可读取的极限位置）
 	__virtio16 ring[];//长度为num个（见vring)
 };
@@ -94,10 +103,18 @@ struct vring_used {
 	struct vring_used_elem ring[];//长度为num（见vring)
 };
 
+//按virtio 1.0 spec所言
+//When the driver wants to send a buffer to the device, it fills in a slot
+//in the descriptor table (or chains several together), and writes the
+//descriptor index into the available ring. It then notifies the device.
+//When the device has finished a buffer, it writes the descriptor index
+//into the used ring, and sends an interrupt.
 struct vring {
+	//The number of descriptors in the table is defined by the queue size for this virtqueue: this is the maximum
+	//possible descriptor chain length.
 	unsigned int num;//队列大小
 
-	struct vring_desc *desc;
+	struct vring_desc *desc;//描述符表
 
 	struct vring_avail *avail;
 

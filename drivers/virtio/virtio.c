@@ -188,9 +188,11 @@ int virtio_finalize_features(struct virtio_device *dev)
 	if (!virtio_has_feature(dev, VIRTIO_F_VERSION_1))
 		return 0;
 
+	//置设备完成了功能协商
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
 	status = dev->config->get_status(dev);
 	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
+		//设备未成功置“功能协商"ok标记
 		dev_err(&dev->dev, "virtio: device refuses features: %x\n",
 			status);
 		return -ENODEV;
