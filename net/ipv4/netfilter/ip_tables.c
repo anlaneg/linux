@@ -782,6 +782,7 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	return ret;
 }
 
+//获取计数信息
 static void
 get_counters(const struct xt_table_info *t,
 	     struct xt_counters counters[])

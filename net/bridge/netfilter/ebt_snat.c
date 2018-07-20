@@ -28,6 +28,7 @@ ebt_snat_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	ether_addr_copy(eth_hdr(skb)->h_source, info->mac);
 	if (!(info->target & NAT_ARP_BIT) &&
 	    eth_hdr(skb)->h_proto == htons(ETH_P_ARP)) {
+		//仅处理arp协议
 		const struct arphdr *ap;
 		struct arphdr _ah;
 

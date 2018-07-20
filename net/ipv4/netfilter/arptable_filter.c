@@ -29,6 +29,7 @@ static const struct xt_table packet_filter = {
 };
 
 /* The work comes in here from netfilter.c */
+//处理arp filter
 static unsigned int
 arptable_filter_hook(void *priv, struct sk_buff *skb,
 		     const struct nf_hook_state *state)
