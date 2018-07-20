@@ -18,6 +18,7 @@ struct xt_entry_match {
 			__u8 revision;
 		} user;
 		struct {
+			//kernel情况下使用时结构
 			__u16 match_size;
 
 			/* Used inside the kernel */
@@ -25,7 +26,7 @@ struct xt_entry_match {
 		} kernel;
 
 		/* Total length */
-		__u16 match_size;
+		__u16 match_size;//匹配字段长度
 	} u;
 
 	unsigned char data[0];
@@ -41,6 +42,7 @@ struct xt_entry_target {
 			__u8 revision;
 		} user;
 		struct {
+			//kernel情况下使用时结构
 			__u16 target_size;
 
 			/* Used inside the kernel */

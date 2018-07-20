@@ -449,6 +449,7 @@ void nf_hook_entries_delete_raw(struct nf_hook_entries __rcu **pp,
 }
 EXPORT_SYMBOL_GPL(nf_hook_entries_delete_raw);
 
+//网络钩子点注册函数
 int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 {
 	int err;
@@ -461,6 +462,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 
 		err = __nf_register_net_hook(net, NFPROTO_IPV6, reg);
 		if (err < 0) {
+			//注册ipv6时解注册
 			__nf_unregister_net_hook(net, NFPROTO_IPV4, reg);
 			return err;
 		}
@@ -475,7 +477,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 }
 EXPORT_SYMBOL(nf_register_net_hook);
 
-//注册一组nf hook钩子
+//为net注册一组nf hook钩子
 int nf_register_net_hooks(struct net *net, const struct nf_hook_ops *reg,
 			  unsigned int n)
 {
@@ -483,6 +485,7 @@ int nf_register_net_hooks(struct net *net, const struct nf_hook_ops *reg,
 	int err = 0;
 
 	for (i = 0; i < n; i++) {
+		//注册单个hook
 		err = nf_register_net_hook(net, &reg[i]);
 		if (err)
 			goto err;
@@ -516,6 +519,7 @@ int nf_hook_slow(struct sk_buff *skb, struct nf_hook_state *state,
 
 	//遍历执行e指向的nf_hook点（NF_ACCEPT时将继续执行后续hook，NF_DROP时需要丢包
 	//NF_QUEUE时报文将被调用nf_queue进行入队）
+	//由于已按优先级顺序进行hook执行，故只需要遍历及可
 	for (; s < e->num_hook_entries; s++) {
 		verdict = nf_hook_entry_hookfn(&e->hooks[s], skb, state);
 		switch (verdict & NF_VERDICT_MASK) {

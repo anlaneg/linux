@@ -34,6 +34,7 @@ MODULE_LICENSE("GPL");
 #define GET_BITMASK(_BIT_MASK_) info->bitmask & _BIT_MASK_
 #define EXIT_ON_MISMATCH(_MATCH_,_MASK_) {if (!((info->_MATCH_ == _MATCH_)^!!(info->invflags & _MASK_))) return false; }
 
+//实现vlan相关字段的iptable匹配回调
 static bool
 ebt_vlan_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
@@ -86,12 +87,14 @@ ebt_vlan_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	return true;
 }
 
+//匹配参数合法性检查
 static int ebt_vlan_mt_check(const struct xt_mtchk_param *par)
 {
 	struct ebt_vlan_info *info = par->matchinfo;
 	const struct ebt_entry *e = par->entryinfo;
 
 	/* Is it 802.1Q frame checked? */
+	//以太网协议指定错误
 	if (e->ethproto != htons(ETH_P_8021Q)) {
 		pr_debug("passed entry proto %2.4X is not 802.1Q (8100)\n",
 			 ntohs(e->ethproto));
@@ -173,6 +176,7 @@ static struct xt_match ebt_vlan_mt_reg __read_mostly = {
 static int __init ebt_vlan_init(void)
 {
 	pr_debug("ebtables 802.1Q extension module v" MODULE_VERS "\n");
+	//注册vlan的iptable　match回调
 	return xt_register_match(&ebt_vlan_mt_reg);
 }
 

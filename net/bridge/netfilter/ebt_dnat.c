@@ -15,6 +15,7 @@
 #include <linux/netfilter_bridge/ebtables.h>
 #include <linux/netfilter_bridge/ebt_nat.h>
 
+//执行dnat处理
 static unsigned int
 ebt_dnat_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
@@ -66,6 +67,7 @@ static int ebt_dnat_tg_check(const struct xt_tgchk_param *par)
 	return 0;
 }
 
+//dnat规则target
 static struct xt_target ebt_dnat_tg_reg __read_mostly = {
 	.name		= "dnat",
 	.revision	= 0,
@@ -80,6 +82,7 @@ static struct xt_target ebt_dnat_tg_reg __read_mostly = {
 
 static int __init ebt_dnat_init(void)
 {
+	//注册dnat的规则target
 	return xt_register_target(&ebt_dnat_tg_reg);
 }
 

@@ -73,14 +73,14 @@ struct netns_ipv4 {
 	struct sock  * __percpu	*tcp_sk;
 	struct netns_frags	frags;//网络分片表
 #ifdef CONFIG_NETFILTER
-	struct xt_table		*iptable_filter;
-	struct xt_table		*iptable_mangle;
-	struct xt_table		*iptable_raw;
+	struct xt_table		*iptable_filter;//natfilter的filter表
+	struct xt_table		*iptable_mangle;//mangle表
+	struct xt_table		*iptable_raw;//raw表
 	struct xt_table		*arptable_filter;
 #ifdef CONFIG_SECURITY
 	struct xt_table		*iptable_security;
 #endif
-	struct xt_table		*nat_table;
+	struct xt_table		*nat_table;//nat表
 #endif
 
 	int sysctl_icmp_echo_ignore_all;

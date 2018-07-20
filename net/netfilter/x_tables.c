@@ -49,8 +49,8 @@ struct compat_delta {
 
 struct xt_af {
 	struct mutex mutex;
-	struct list_head match;
-	struct list_head target;
+	struct list_head match;//记录系统提供的match(例如vlan match)
+	struct list_head target;//记录系统提供的target
 #ifdef CONFIG_COMPAT
 	struct mutex compat_mutex;
 	struct compat_delta *compat_tab;
@@ -71,6 +71,8 @@ static const char *const xt_prefix[NFPROTO_NUMPROTO] = {
 
 /* Registration hooks for targets. */
 //注册单个target,将target存放在xt[af].target链表上
+//这此target是iptable在用户态填写名称，而kernel通过
+//查找注册的信息，确定使用那个回调的过程
 int xt_register_target(struct xt_target *target)
 {
 	u_int8_t af = target->family;
@@ -124,6 +126,8 @@ xt_unregister_targets(struct xt_target *target, unsigned int n)
 EXPORT_SYMBOL(xt_unregister_targets);
 
 //注册单个match,将match存放在xt[af].match链表上
+//这此match是iptable在用户态填写名称，而kernel通过
+//查找注册的信息，确定使用那个回调的过程
 int xt_register_match(struct xt_match *match)
 {
 	u_int8_t af = match->family;
@@ -198,7 +202,7 @@ struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 			if (m->revision == revision) {
 				if (try_module_get(m->me)) {
 					mutex_unlock(&xt[af].mutex);
-					return m;
+					return m;//名称相等，版本也一致，直接返回m
 				}
 			} else
 				err = -EPROTOTYPE; /* Found something. */
@@ -214,6 +218,7 @@ struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 }
 EXPORT_SYMBOL(xt_find_match);
 
+//找到给定协议族指定名称的match回调
 struct xt_match *
 xt_request_find_match(uint8_t nfproto, const char *name, uint8_t revision)
 {
@@ -593,11 +598,13 @@ int xt_check_table_hooks(const struct xt_table_info *info, unsigned int valid_ho
 		if (!(valid_hooks & (1 << i)))
 			continue;
 
+		//各hook对应链表的offset必须是已设置过的，否则有误
 		if (info->hook_entry[i] == 0xFFFFFFFF)
 			return -EINVAL;
 		if (info->underflow[i] == 0xFFFFFFFF)
 			return -EINVAL;
 
+		//offset内部要求某种顺序关系
 		if (check_hooks) {
 			if (max_uflow > info->underflow[i])
 				goto error;
@@ -919,16 +926,19 @@ int xt_check_entry_offsets(const void *base,
 	const char *e = base;
 
 	/* target start is within the ip/ip6/arpt_entry struct */
+	//target_offset不会出现在struct ipt_entry 结构体中
 	if (target_offset < size_of_base_struct)
 		return -EINVAL;
 
+	//target_offset指向的是xt_entry_target,它们不会超过next_offset
 	if (target_offset + sizeof(*t) > next_offset)
 		return -EINVAL;
 
 	t = (void *)(e + target_offset);
 	if (t->u.target_size < sizeof(*t))
-		return -EINVAL;
+		return -EINVAL;//target的大小不会小于xt_entry_target
 
+	//当前target的大小不会超过next_offset
 	if (target_offset + t->u.target_size > next_offset)
 		return -EINVAL;
 
@@ -977,6 +987,7 @@ EXPORT_SYMBOL(xt_alloc_entry_offsets);
  * @target: the jump target to search for
  * @size: entries in @offset
  */
+//二分法查找要跳转的规则是否合法（即是否在offset数组中,offset指出了所有规则）
 bool xt_find_jump_offset(const unsigned int *offsets,
 			 unsigned int target, unsigned int size)
 {
@@ -1184,11 +1195,13 @@ int xt_compat_target_to_user(const struct xt_entry_target *t,
 EXPORT_SYMBOL_GPL(xt_compat_target_to_user);
 #endif
 
+//创建并初始化table_info
 struct xt_table_info *xt_alloc_table_info(unsigned int size)
 {
 	struct xt_table_info *info = NULL;
 	size_t sz = sizeof(*info) + size;
 
+	//size最大512M(下面的sz < sizeof(*info)是无用的,这个可以提个patch）
 	if (sz < sizeof(*info) || sz >= XT_MAX_TABLE_SIZE)
 		return NULL;
 
@@ -1408,7 +1421,7 @@ xt_replace_table(struct xt_table *table,
 	 * private.
 	 */
 	smp_wmb();
-	table->private = newinfo;
+	table->private = newinfo;//替换新的规则表
 
 	/* make sure all cpus see new ->private value */
 	smp_wmb();
@@ -1463,6 +1476,7 @@ struct xt_table *xt_register_table(struct net *net,
 
 	mutex_lock(&xt[table->af].mutex);
 	/* Don't autoload: we'd eat our tail... */
+	//检查表是否已存在
 	list_for_each_entry(t, &net->xt.tables[table->af], list) {
 		if (strcmp(t->name, table->name) == 0) {
 			ret = -EEXIST;
@@ -1716,7 +1730,7 @@ static const struct seq_operations xt_target_seq_ops = {
  * This function will create the nf_hook_ops that the x_table needs
  * to hand to xt_hook_link_net().
  */
-//构造hook数组
+//通过table构造hooks数组,注册hook点以便执行xt_table规定的策略
 struct nf_hook_ops *
 xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 {

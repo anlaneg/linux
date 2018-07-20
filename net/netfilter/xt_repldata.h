@@ -24,13 +24,16 @@
 		struct type##_standard entries[]; \
 	} *tbl; \
 	struct type##_error *term; \
+	/*取typeof(*tbl)类型的结构体大小及考虑对齐*/\
 	size_t term_offset = (offsetof(typeof(*tbl), entries[nhooks]) + \
 		__alignof__(*term) - 1) & ~(__alignof__(*term) - 1); \
+	/*申请typeof(*tbl)+sizeof(*term)*/\
 	tbl = kzalloc(term_offset + sizeof(*term), GFP_KERNEL); \
 	if (tbl == NULL) \
 		return NULL; \
 	/*使term指向tbl的hook点结尾*/                                \
 	term = (struct type##_error *)&(((char *)tbl)[term_offset]); \
+	/*设置表名*/\
 	strncpy(tbl->repl.name, info->name, sizeof(tbl->repl.name)); \
 	*term = (struct type##_error)typ2##_ERROR_INIT;  \
 	tbl->repl.valid_hooks = hook_mask; \

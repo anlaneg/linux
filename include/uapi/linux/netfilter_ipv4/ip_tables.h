@@ -70,10 +70,14 @@
 /* Yes, Virginia, you have to zero the padding. */
 struct ipt_ip {
 	/* Source and destination IP addr */
+	//源地址，目的地址
 	struct in_addr src, dst;
+	//源地址，目的地址掩码
 	/* Mask for src and dest IP addr */
 	struct in_addr smsk, dmsk;
+	//接口名称
 	char iniface[IFNAMSIZ], outiface[IFNAMSIZ];
+	//接口名称掩码（字符串掩码用于表示，是否比对此字节）
 	unsigned char iniface_mask[IFNAMSIZ], outiface_mask[IFNAMSIZ];
 
 	/* Protocol, 0 = ANY */
@@ -110,18 +114,24 @@ struct ipt_entry {
 	unsigned int nfcache;
 
 	/* Size of ipt_entry + matches */
-	__u16 target_offset;
+	__u16 target_offset;//用于指出到target的偏移（隐含辅助指出match的总长度）
 	/* Size of ipt_entry + matches + target */
-	__u16 next_offset;
+	__u16 next_offset;//指出到下一个entry的偏移
 
 	/* Back pointer */
 	unsigned int comefrom;
 
 	/* Packet and byte counters. */
-	struct xt_counters counters;
+	struct xt_counters counters;//记录规则被匹配的字节数及包数
 
 	/* The matches (if any), then the target. */
-	unsigned char elems[0];
+	//注意match可以是多个，故用了s
+	//elems指向所有规则，其格式为matchs + target
+	//matchs为xt_entry_match结构，由其内的match_size指定单个的长度
+	//matchs的总长度为ipt中的target_offset字段隐含给出
+	//target为xt_entry_target结构，由其内的target_size指定其长度
+	//每个ipt_entry结构由其内的next_offset指向下一个ipt_entry
+	unsigned char elems[0];//matches+targets
 };
 
 /*
@@ -178,14 +188,14 @@ struct ipt_getinfo {
 /* The argument to IPT_SO_SET_REPLACE. */
 struct ipt_replace {
 	/* Which table. */
-	char name[XT_TABLE_MAXNAMELEN];
+	char name[XT_TABLE_MAXNAMELEN];//表名称
 
 	/* Which hook entry points are valid: bitmask.  You can't
            change this. */
-	unsigned int valid_hooks;
+	unsigned int valid_hooks;//需要挂接的hook点
 
 	/* Number of entries */
-	unsigned int num_entries;
+	unsigned int num_entries;//(表中ipt_entry数目）
 
 	/* Total size of new entries */
 	unsigned int size;

@@ -425,6 +425,7 @@ static struct xt_target xt_ct_tg_reg[] __read_mostly = {
 	},
 };
 
+//置为不进行连接跟踪
 static unsigned int
 notrack_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
@@ -452,7 +453,7 @@ static struct xt_target notrack_tg_reg __read_mostly = {
 	.revision	= 0,
 	.family		= NFPROTO_UNSPEC,
 	.checkentry	= notrack_chk,
-	.target		= notrack_tg,
+	.target		= notrack_tg,//不进行连接跟踪
 	.table		= "raw",
 	.me		= THIS_MODULE,
 };

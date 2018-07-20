@@ -1416,6 +1416,7 @@ static void tun_net_init(struct net_device *dev)
 		break;
 
 	case IFF_TAP:
+		//注册tap设备操作集
 		dev->netdev_ops = &tap_netdev_ops;
 		/* Ethernet TAP Device */
 		ether_setup(dev);

@@ -154,6 +154,7 @@ struct xt_match {
 		      struct xt_action_param *);
 
 	/* Called when user tries to insert an entry of this type. */
+	//用户参数检查
 	int (*checkentry)(const struct xt_mtchk_param *);
 
 	/* Called when entry of this type deleted. */
@@ -227,19 +228,19 @@ struct xt_table {
 	unsigned int valid_hooks;//有效的hook点（1<<X进行标记）
 
 	/* Man behind the curtain... */
-	struct xt_table_info *private;
+	struct xt_table_info *private;//窗纱
 
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;
 
-	u_int8_t af;		/* address/protocol family */ //协议族
-	int priority;		/* hook order */
+	u_int8_t af;		/* address/protocol family */ //hook点对应的协议族
+	int priority;		/* hook order */ //hook点的优先级
 
 	/* called when table is needed in the given netns */
 	int (*table_init)(struct net *net);
 
 	/* A unique name... */
-	const char name[XT_TABLE_MAXNAMELEN];//名称
+	const char name[XT_TABLE_MAXNAMELEN];//表名称
 };
 
 #include <linux/netfilter_ipv4.h>
@@ -247,15 +248,15 @@ struct xt_table {
 /* The table itself */
 struct xt_table_info {
 	/* Size per table */
-	unsigned int size;
+	unsigned int size;//entries表的大小（字节）
 	/* Number of entries: FIXME. --RR */
-	unsigned int number;
+	unsigned int number;//实体的数目
 	/* Initial number of entries. Needed for module usage count */
 	unsigned int initial_entries;
 
 	/* Entry points and underflows */
-	unsigned int hook_entry[NF_INET_NUMHOOKS];
-	unsigned int underflow[NF_INET_NUMHOOKS];
+	unsigned int hook_entry[NF_INET_NUMHOOKS];//记录到首个规则的offset(按hook类型分类）
+	unsigned int underflow[NF_INET_NUMHOOKS];//记录到兜底规则的offset(按hook类型分类）
 
 	/*
 	 * Number of user chains. Since tables cannot have loops, at most
@@ -264,6 +265,7 @@ struct xt_table_info {
 	unsigned int stacksize;
 	void ***jumpstack;
 
+	//存放规则结构
 	unsigned char entries[0] __aligned(8);
 };
 
@@ -409,7 +411,7 @@ static inline unsigned long ifname_compare_aligned(const char *_a,
 	const unsigned long *mask = (const unsigned long *)_mask;
 	unsigned long ret;
 
-	ret = (a[0] ^ b[0]) & mask[0];
+	ret = (a[0] ^ b[0]) & mask[0];//前８字节匹配
 	if (IFNAMSIZ > sizeof(unsigned long))
 		ret |= (a[1] ^ b[1]) & mask[1];
 	if (IFNAMSIZ > 2 * sizeof(unsigned long))

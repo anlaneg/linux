@@ -17,7 +17,9 @@ struct netns_nf {
 #ifdef CONFIG_SYSCTL
 	struct ctl_table_header *nf_log_dir_header;
 #endif
+	//ipv4的hooks
 	struct nf_hook_entries __rcu *hooks_ipv4[NF_INET_NUMHOOKS];
+	//ipv6的hooks
 	struct nf_hook_entries __rcu *hooks_ipv6[NF_INET_NUMHOOKS];
 #ifdef CONFIG_NETFILTER_FAMILY_ARP
 	struct nf_hook_entries __rcu *hooks_arp[NF_ARP_NUMHOOKS];

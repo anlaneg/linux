@@ -27,15 +27,15 @@ static int __net_init iptable_filter_table_init(struct net *net);
 
 static const struct xt_table packet_filter = {
 	.name		= "filter",
-	//filter注册local_in,forward,local_out三个hook点
+	//filter表需要注册local_in,forward,local_out三个hook点
 	.valid_hooks	= FILTER_VALID_HOOKS,
 	.me		= THIS_MODULE,
-	.af		= NFPROTO_IPV4,
+	.af		= NFPROTO_IPV4,//协议族为ipv4
 	.priority	= NF_IP_PRI_FILTER,
 	.table_init	= iptable_filter_table_init,
 };
 
-//为local_in,forward,local_out三个hook点注册的hook实现函数，实现报文过滤
+//实现报文过滤,为local_in,forward,local_out三个hook点注册的hook实现函数
 //其中local_in,forward为路由查询后，local_out为主机向上发送时
 static unsigned int
 iptable_filter_hook(void *priv, struct sk_buff *skb,
@@ -44,7 +44,7 @@ iptable_filter_hook(void *priv, struct sk_buff *skb,
 	return ipt_do_table(skb, state, state->net->ipv4.iptable_filter);
 }
 
-//要注册的hook数组
+//要注册的filter hook数组
 static struct nf_hook_ops *filter_ops __read_mostly;
 
 /* Default to forward because I got too much mail already. */
@@ -57,6 +57,7 @@ static int __net_init iptable_filter_table_init(struct net *net)
 	int err;
 
 	if (net->ipv4.iptable_filter)
+		//已注册时直接返回
 		return 0;
 
 	//依据xt_table申请初始化表
@@ -100,11 +101,12 @@ static int __init iptable_filter_init(void)
 {
 	int ret;
 
-	//用iptable_filter_hook函数来初始化filter_ops
+	//创建filter的netfilter的hook点
 	filter_ops = xt_hook_ops_alloc(&packet_filter, iptable_filter_hook);
 	if (IS_ERR(filter_ops))
 		return PTR_ERR(filter_ops);
 
+	//注册filter在namespace创建时的操作
 	ret = register_pernet_subsys(&iptable_filter_net_ops);
 	if (ret < 0)
 		kfree(filter_ops);

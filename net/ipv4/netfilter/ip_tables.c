@@ -53,7 +53,7 @@ ip_packet_match(const struct iphdr *ip,
 {
 	unsigned long ret;
 
-	//校验src,dst的ip地址
+	//校验src,dst的ip地址是否匹配(通过invflags可控制是否取反转结果)
 	if (NF_INVF(ipinfo, IPT_INV_SRCIP,
 		    (ip->saddr & ipinfo->smsk.s_addr) != ipinfo->src.s_addr) ||
 	    NF_INVF(ipinfo, IPT_INV_DSTIP,
@@ -62,13 +62,11 @@ ip_packet_match(const struct iphdr *ip,
 
 	//入接口匹配
 	ret = ifname_compare_aligned(indev, ipinfo->iniface, ipinfo->iniface_mask);
-
 	if (NF_INVF(ipinfo, IPT_INV_VIA_IN, ret != 0))
 		return false;
 
 	//出接口匹配
 	ret = ifname_compare_aligned(outdev, ipinfo->outiface, ipinfo->outiface_mask);
-
 	if (NF_INVF(ipinfo, IPT_INV_VIA_OUT, ret != 0))
 		return false;
 
@@ -80,7 +78,7 @@ ip_packet_match(const struct iphdr *ip,
 
 	/* If we have a fragment rule but the packet is not a fragment
 	 * then we return zero */
-	//分片标记匹配
+	//匹配是否分片报文
 	if (NF_INVF(ipinfo, IPT_INV_FRAG,
 		    (ipinfo->flags & IPT_F_FRAG) && !isfrag))
 		return false;
@@ -115,10 +113,12 @@ get_entry(const void *base, unsigned int offset)
 
 /* All zeroes == unconditional rule. */
 /* Mildly perf critical (only if packet tracing is on) */
+//无条件规则
 static inline bool unconditional(const struct ipt_entry *e)
 {
 	static const struct ipt_ip uncond;
 
+	//没有附加的match，且ip匹配any时返回真
 	return e->target_offset == sizeof(struct ipt_entry) &&
 	       memcmp(&e->ip, &uncond, sizeof(uncond)) == 0;
 }
@@ -229,12 +229,13 @@ struct ipt_entry *ipt_next_entry(const struct ipt_entry *entry)
 }
 
 /* Returns one of the generic firewall policies, like NF_ACCEPT. */
+//这个函数完成规则的match,及target的执行（属于iptables下的重要框架函数）
 unsigned int
 ipt_do_table(struct sk_buff *skb,
 	     const struct nf_hook_state *state,
 	     struct xt_table *table)
 {
-	unsigned int hook = state->hook;
+	unsigned int hook = state->hook;//当前执行table的hook点（决定了用哪些规则）
 	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	const struct iphdr *ip;
 	/* Initializing verdict to NF_DROP keeps gcc happy. */
@@ -250,16 +251,16 @@ ipt_do_table(struct sk_buff *skb,
 	/* Initialization */
 	stackidx = 0;
 	ip = ip_hdr(skb);//取报文ip头
-	indev = state->in ? state->in->name : nulldevname;
-	outdev = state->out ? state->out->name : nulldevname;
+	indev = state->in ? state->in->name : nulldevname;//入接口名称
+	outdev = state->out ? state->out->name : nulldevname;//出接名称
 	/* We handle fragments by dealing with the first fragment as
 	 * if it was a normal packet.  All other fragments are treated
 	 * normally, except that they will NEVER match rules that ask
 	 * things we don't know, ie. tcp syn flag or ports).  If the
 	 * rule is also a fragment-specific rule, non-fragments won't
 	 * match it. */
-	acpar.fragoff = ntohs(ip->frag_off) & IP_OFFSET;
-	acpar.thoff   = ip_hdrlen(skb);
+	acpar.fragoff = ntohs(ip->frag_off) & IP_OFFSET;//分片的offset
+	acpar.thoff   = ip_hdrlen(skb);//传输层offset
 	acpar.hotdrop = false;
 	acpar.state   = state;
 
@@ -283,6 +284,7 @@ ipt_do_table(struct sk_buff *skb,
 
 	e = get_entry(table_base, private->hook_entry[hook]);
 
+	//按顺序遍历所有规则，并执行
 	do {
 		const struct xt_entry_target *t;
 		const struct xt_entry_match *ematch;
@@ -297,13 +299,16 @@ ipt_do_table(struct sk_buff *skb,
 			continue;
 		}
 
+		//遍历所有match项（由于是kernel情况下，故直接使用ematch->u.kernel)
 		xt_ematch_foreach(ematch, e) {
 			acpar.match     = ematch->u.kernel.match;
 			acpar.matchinfo = ematch->data;
+			//检查是否可匹配
 			if (!acpar.match->match(skb, &acpar))
 				goto no_match;
 		}
 
+		//增加规则匹配的包数据字节数
 		counter = xt_get_this_cpu_counter(&e->counters);
 		ADD_COUNTER(*counter, skb->len, 1);
 
@@ -354,12 +359,13 @@ ipt_do_table(struct sk_buff *skb,
 
 		verdict = t->u.kernel.target->target(skb, &acpar);
 		if (verdict == XT_CONTINUE) {
+			//继续匹配
 			/* Target might have changed stuff. */
 			ip = ip_hdr(skb);
 			e = ipt_next_entry(e);
 		} else {
 			/* Verdict */
-			break;
+			break;//按verdict进行处理
 		}
 	} while (!acpar.hotdrop);
 
@@ -373,6 +379,7 @@ ipt_do_table(struct sk_buff *skb,
 
 /* Figures out from what hook each rule can be called: returns 0 if
    there are loops.  Puts hook bitmask in comefrom. */
+//链检查
 static int
 mark_source_chains(const struct xt_table_info *newinfo,
 		   unsigned int valid_hooks, void *entry0,
@@ -387,10 +394,10 @@ mark_source_chains(const struct xt_table_info *newinfo,
 		struct ipt_entry *e = entry0 + pos;
 
 		if (!(valid_hooks & (1 << hook)))
-			continue;
+			continue;//跳过未设置hook点
 
 		/* Set initial back pointer. */
-		e->counters.pcnt = pos;
+		e->counters.pcnt = pos;//注：当临时变量使
 
 		for (;;) {
 			const struct xt_standard_target *t
@@ -407,6 +414,7 @@ mark_source_chains(const struct xt_table_info *newinfo,
 			     (strcmp(t->target.u.user.name,
 				     XT_STANDARD_TARGET) == 0) &&
 			     t->verdict < 0) || visited) {
+				//兜底规则是最后一条规则，遇见则返回或者结束
 				unsigned int oldpos, size;
 
 				/* Return: backtrack through the last
@@ -428,24 +436,28 @@ mark_source_chains(const struct xt_table_info *newinfo,
 				size = e->next_offset;
 				e = entry0 + pos + size;
 				if (pos + size >= newinfo->size)
-					return 0;
+					return 0;//超过限制
 				e->counters.pcnt = pos;
 				pos += size;
 			} else {
 				int newpos = t->verdict;
 
+				//检查此target是否为跳转
 				if (strcmp(t->target.u.user.name,
 					   XT_STANDARD_TARGET) == 0 &&
 				    newpos >= 0) {
+					//跳规则的verdict>=0且target name为“”
 					/* This a jump; chase it. */
 					if (!xt_find_jump_offset(offsets, newpos,
 								 newinfo->number))
-						return 0;
+						return 0;//跳转无效，返回错误
 				} else {
+					//此target是fall through(如果上一条不能匹配，则会达到本条）
+					//检查其offset是否正确
 					/* ... this is a fallthru */
 					newpos = pos + e->next_offset;
 					if (newpos >= newinfo->size)
-						return 0;
+						return 0;//指出了下一条的offset，但是是错误的，返回错误
 				}
 				e = entry0 + newpos;
 				e->counters.pcnt = pos;
@@ -478,22 +490,24 @@ check_match(struct xt_entry_match *m, struct xt_mtchk_param *par)
 	par->match     = m->u.kernel.match;
 	par->matchinfo = m->data;
 
+	//检查用户配置的匹配参数
 	return xt_check_match(par, m->u.match_size - sizeof(*m),
 			      ip->proto, ip->invflags & IPT_INV_PROTO);
 }
 
+//查找并设置,校验match
 static int
 find_check_match(struct xt_entry_match *m, struct xt_mtchk_param *par)
 {
 	struct xt_match *match;
 	int ret;
 
-	//查询对应的match
+	//查询对应的扩展字段的match
 	match = xt_request_find_match(NFPROTO_IPV4, m->u.user.name,
 				      m->u.user.revision);
 	if (IS_ERR(match))
 		return PTR_ERR(match);
-	m->u.kernel.match = match;
+	m->u.kernel.match = match;//设置扩展字段match
 
 	ret = check_match(m, par);
 	if (ret)
@@ -534,6 +548,7 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 	struct xt_mtchk_param mtpar;
 	struct xt_entry_match *ematch;
 
+	//统计的percpu内存申请
 	if (!xt_percpu_counter_alloc(alloc_state, &e->counters))
 		return -ENOMEM;
 
@@ -544,6 +559,7 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 	mtpar.entryinfo = &e->ip;
 	mtpar.hook_mask = e->comefrom;
 	mtpar.family    = NFPROTO_IPV4;
+	//遍历e的所有matchs，为其找到kernel对应的回调（用户态需要通过名称来指定）
 	xt_ematch_foreach(ematch, e) {
 		ret = find_check_match(ematch, &mtpar);
 		if (ret != 0)
@@ -551,6 +567,7 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 		++j;
 	}
 
+	//查找并设置target
 	t = ipt_get_target(e);
 	target = xt_request_find_target(NFPROTO_IPV4, t->u.user.name,
 					t->u.user.revision);
@@ -559,7 +576,7 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 		goto cleanup_matches;
 	}
 
-	//设置查询到的target
+	//设置查询到的target,并进行target检查
 	t->u.kernel.target = target;
 
 	ret = check_target(e, net, name);
@@ -581,18 +598,20 @@ find_check_entry(struct ipt_entry *e, struct net *net, const char *name,
 	return ret;
 }
 
+//兜底规则
 static bool check_underflow(const struct ipt_entry *e)
 {
 	const struct xt_entry_target *t;
 	unsigned int verdict;
 
 	if (!unconditional(e))
-		return false;
-	t = ipt_get_target_c(e);
+		return false;//如果有匹配条件，则返回false
+	t = ipt_get_target_c(e);//取规则对应的target
 	if (strcmp(t->u.user.name, XT_STANDARD_TARGET) != 0)
-		return false;
+		return false;//target名称不为空，返回false
 	verdict = ((struct xt_standard_target *)t)->verdict;
 	verdict = -verdict - 1;
+	//无条件规则只容许drop或者accept
 	return verdict == NF_DROP || verdict == NF_ACCEPT;
 }
 
@@ -608,11 +627,13 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 	unsigned int h;
 	int err;
 
+	//e的有效性检测
 	if ((unsigned long)e % __alignof__(struct ipt_entry) != 0 ||
 	    (unsigned char *)e + sizeof(struct ipt_entry) >= limit ||
 	    (unsigned char *)e + e->next_offset > limit)
 		return -EINVAL;
 
+	//next_offset过小
 	if (e->next_offset
 	    < sizeof(struct ipt_entry) + sizeof(struct xt_entry_target))
 		return -EINVAL;
@@ -620,26 +641,31 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 	if (!ip_checkentry(&e->ip))
 		return -EINVAL;
 
+	//内部offset检查
 	err = xt_check_entry_offsets(e, e->elems, e->target_offset,
 				     e->next_offset);
 	if (err)
 		return err;
 
 	/* Check hooks & underflows */
+	//目前NF_INET为５，即“路由前”，“去往本机","转发“，”来自本机", "路由后“
 	for (h = 0; h < NF_INET_NUMHOOKS; h++) {
 		if (!(valid_hooks & (1 << h)))
-			continue;
+			continue;//跳过不存在的hook
 		if ((unsigned char *)e - base == hook_entries[h])
+			//如果e时h hook点的首个元素，则记录offset
 			newinfo->hook_entry[h] = hook_entries[h];
 		if ((unsigned char *)e - base == underflows[h]) {
 			if (!check_underflow(e))
-				return -EINVAL;
+				return -EINVAL;//e必须是合法的兜底规则（常见的网络设备中的默认规则）
 
+			//记录兜底规则的offset
 			newinfo->underflow[h] = underflows[h];
 		}
 	}
 
 	/* Clear counters and comefrom */
+	//初始化计数
 	e->counters = ((struct xt_counters) { 0, 0 });
 	e->comefrom = 0;
 	return 0;
@@ -688,22 +714,27 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 		newinfo->underflow[i] = 0xFFFFFFFF;
 	}
 
+	//申请offset数组
 	offsets = xt_alloc_entry_offsets(newinfo->number);
 	if (!offsets)
 		return -ENOMEM;
 	i = 0;
 	/* Walk through entries, checking offsets. */
+	//遍历entry,entry是一个iter结构的数组，数组大小为newinfo->size
+	//按next_offset指出下一个iter的位置
 	xt_entry_foreach(iter, entry0, newinfo->size) {
-		ret = check_entry_size_and_hooks(iter, newinfo, entry0,
-						 entry0 + repl->size,
+		ret = check_entry_size_and_hooks(iter, newinfo, entry0,//entry0数组头
+						 entry0 + repl->size,//entry0数组结尾
 						 repl->hook_entry,
 						 repl->underflow,
 						 repl->valid_hooks);
 		if (ret != 0)
 			goto out_free;
 		if (i < repl->num_entries)
+			//填充各ipt的offset
 			offsets[i] = (void *)iter - entry0;
 		++i;
+		//如果target的名称为"ERROR"时stacksize加１
 		if (strcmp(ipt_get_target(iter)->u.user.name,
 		    XT_ERROR_TARGET) == 0)
 			++newinfo->stacksize;
@@ -717,6 +748,7 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	if (ret)
 		goto out_free;
 
+	//检查发现chains会出现loop情况，报错
 	if (!mark_source_chains(newinfo, repl->valid_hooks, entry0, offsets)) {
 		ret = -ELOOP;
 		goto out_free;
@@ -724,6 +756,7 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	kvfree(offsets);
 
 	/* Finally, each sanity check must pass */
+	//遍历规则表中每个ipt_entry，设置match,target
 	i = 0;
 	xt_entry_foreach(iter, entry0, newinfo->size) {
 		ret = find_check_entry(iter, net, repl->name, repl->size,
@@ -733,6 +766,7 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 		++i;
 	}
 
+	//出错，进行错误恢复
 	if (ret != 0) {
 		xt_entry_foreach(iter, entry0, newinfo->size) {
 			if (i-- == 0)
@@ -1114,6 +1148,7 @@ __do_replace(struct net *net, const char *name, unsigned int valid_hooks,
 	return ret;
 }
 
+//替换规则表
 static int
 do_replace(struct net *net, const void __user *user, unsigned int len)
 {
@@ -1123,6 +1158,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
 	void *loc_cpu_entry;
 	struct ipt_entry *iter;
 
+	//采用user space数据填充tmp
 	if (copy_from_user(&tmp, user, sizeof(tmp)) != 0)
 		return -EFAULT;
 
@@ -1138,6 +1174,7 @@ do_replace(struct net *net, const void __user *user, unsigned int len)
 	if (!newinfo)
 		return -ENOMEM;
 
+	//采用user space数据填充规则表
 	loc_cpu_entry = newinfo->entries;
 	if (copy_from_user(loc_cpu_entry, user + sizeof(tmp),
 			   tmp.size) != 0) {
@@ -1778,6 +1815,7 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 	if (!newinfo)
 		return -ENOMEM;
 
+	//填充entries表
 	loc_cpu_entry = newinfo->entries;
 	memcpy(loc_cpu_entry, repl->entries, repl->size);
 
@@ -1796,7 +1834,7 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 	if (!ops)
 		return 0;
 
-	//注册一组hook点ops
+	//注册table关联的hooks
 	ret = nf_register_net_hooks(net, ops, hweight32(table->valid_hooks));
 	if (ret != 0) {
 		__ipt_unregister_table(net, new_table);

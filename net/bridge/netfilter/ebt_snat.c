@@ -16,6 +16,7 @@
 #include <linux/netfilter_bridge/ebtables.h>
 #include <linux/netfilter_bridge/ebt_nat.h>
 
+//处理snat规则执行（iptables)
 static unsigned int
 ebt_snat_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
@@ -59,6 +60,7 @@ static int ebt_snat_tg_check(const struct xt_tgchk_param *par)
 	return 0;
 }
 
+//snat规则处理target
 static struct xt_target ebt_snat_tg_reg __read_mostly = {
 	.name		= "snat",
 	.revision	= 0,
@@ -73,6 +75,7 @@ static struct xt_target ebt_snat_tg_reg __read_mostly = {
 
 static int __init ebt_snat_init(void)
 {
+	//注册snat规则处理target
 	return xt_register_target(&ebt_snat_tg_reg);
 }
 

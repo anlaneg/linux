@@ -3049,6 +3049,7 @@ static inline bool skb_can_coalesce(struct sk_buff *skb, int i,
 
 static inline int __skb_linearize(struct sk_buff *skb)
 {
+	//将整个报文
 	return __pskb_pull_tail(skb, skb->data_len) ? 0 : -ENOMEM;
 }
 
@@ -3061,6 +3062,7 @@ static inline int __skb_linearize(struct sk_buff *skb)
  */
 static inline int skb_linearize(struct sk_buff *skb)
 {
+	//将skb转换为线性内存
 	return skb_is_nonlinear(skb) ? __skb_linearize(skb) : 0;
 }
 

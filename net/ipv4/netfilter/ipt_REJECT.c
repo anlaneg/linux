@@ -36,6 +36,7 @@ reject_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	const struct ipt_reject_info *reject = par->targinfo;
 	int hook = xt_hooknum(par);
 
+	//通过不同策略，发送不同的icmp协议报文
 	switch (reject->with) {
 	case IPT_ICMP_NET_UNREACHABLE:
 		nf_send_unreach(skb, ICMP_NET_UNREACH, hook);
@@ -68,6 +69,7 @@ reject_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	return NF_DROP;
 }
 
+//匹配参数检查
 static int reject_tg_check(const struct xt_tgchk_param *par)
 {
 	const struct ipt_reject_info *rejinfo = par->targinfo;
@@ -87,6 +89,7 @@ static int reject_tg_check(const struct xt_tgchk_param *par)
 	return 0;
 }
 
+//实现reject target
 static struct xt_target reject_tg_reg __read_mostly = {
 	.name		= "REJECT",
 	.family		= NFPROTO_IPV4,

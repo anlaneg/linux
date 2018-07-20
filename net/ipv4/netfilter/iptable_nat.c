@@ -31,6 +31,7 @@ static const struct xt_table nf_nat_ipv4_table = {
 	.table_init	= iptable_nat_table_init,
 };
 
+//按规则处理nat
 static unsigned int iptable_nat_do_chain(void *priv,
 					 struct sk_buff *skb,
 					 const struct nf_hook_state *state)

@@ -624,6 +624,7 @@ int memcg_update_all_caches(int num_memcgs);
  * @size: element size.
  * @flags: the type of memory to allocate (see kmalloc).
  */
+//申请n个大小为size的内存单位
 static inline void *kmalloc_array(size_t n, size_t size, gfp_t flags)
 {
 	size_t bytes;
