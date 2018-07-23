@@ -37,9 +37,10 @@
 static spinlock_t nf_nat_locks[CONNTRACK_LOCKS];
 
 static DEFINE_MUTEX(nf_nat_proto_mutex);
+//注册的3层协议nat处理回调
 static const struct nf_nat_l3proto __rcu *nf_nat_l3protos[NFPROTO_NUMPROTO]
 						__read_mostly;
-//注册４层协议
+//注册４层协议nat处理回调
 static const struct nf_nat_l4proto __rcu **nf_nat_l4protos[NFPROTO_NUMPROTO]
 						__read_mostly;
 static unsigned int nat_net_id __read_mostly;
@@ -218,6 +219,7 @@ find_appropriate_src(struct net *net,
 	unsigned int h = hash_by_src(net, tuple);
 	const struct nf_conn *ct;
 
+	//遍历hash表nf_nat_bysource
 	hlist_for_each_entry_rcu(ct, &nf_nat_bysource[h], nat_bysource) {
 		if (same_src(ct, tuple) &&
 		    net_eq(net, nf_ct_net(ct)) &&
@@ -399,18 +401,20 @@ struct nf_conn_nat *nf_ct_nat_ext_add(struct nf_conn *ct)
 }
 EXPORT_SYMBOL_GPL(nf_ct_nat_ext_add);
 
+//标记需要做哪种nat
 unsigned int
 nf_nat_setup_info(struct nf_conn *ct,
 		  const struct nf_nat_range2 *range,
 		  enum nf_nat_manip_type maniptype)
 {
-	struct net *net = nf_ct_net(ct);
+	struct net *net = nf_ct_net(ct);//取连接跟踪对应的net
 	struct nf_conntrack_tuple curr_tuple, new_tuple;
 
 	/* Can't setup nat info for confirmed ct. */
 	if (nf_ct_is_confirmed(ct))
 		return NF_ACCEPT;
 
+	//nat只有两种，源或者目的ip修改
 	WARN_ON(maniptype != NF_NAT_MANIP_SRC &&
 		maniptype != NF_NAT_MANIP_DST);
 

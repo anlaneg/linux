@@ -58,14 +58,14 @@ enum ip_conntrack_status {
 
 	/* Connection needs src nat in orig dir.  This bit never changed. */
 	IPS_SRC_NAT_BIT = 4,
-	IPS_SRC_NAT = (1 << IPS_SRC_NAT_BIT),
+	IPS_SRC_NAT = (1 << IPS_SRC_NAT_BIT),//标记需要做snat
 
 	/* Connection needs dst nat in orig dir.  This bit never changed. */
 	IPS_DST_NAT_BIT = 5,
-	IPS_DST_NAT = (1 << IPS_DST_NAT_BIT),
+	IPS_DST_NAT = (1 << IPS_DST_NAT_BIT),//标记需要做dnt
 
 	/* Both together. */
-	IPS_NAT_MASK = (IPS_DST_NAT | IPS_SRC_NAT),
+	IPS_NAT_MASK = (IPS_DST_NAT | IPS_SRC_NAT),//标记需要做snat,dnat
 
 	/* Connection needs TCP sequence adjusted. */
 	IPS_SEQ_ADJUST_BIT = 6,
@@ -73,13 +73,13 @@ enum ip_conntrack_status {
 
 	/* NAT initialization bits. */
 	IPS_SRC_NAT_DONE_BIT = 7,
-	IPS_SRC_NAT_DONE = (1 << IPS_SRC_NAT_DONE_BIT),
+	IPS_SRC_NAT_DONE = (1 << IPS_SRC_NAT_DONE_BIT),//标记已完成snat初始化
 
 	IPS_DST_NAT_DONE_BIT = 8,
-	IPS_DST_NAT_DONE = (1 << IPS_DST_NAT_DONE_BIT),
+	IPS_DST_NAT_DONE = (1 << IPS_DST_NAT_DONE_BIT),//标记已完成dnat初始化
 
 	/* Both together */
-	IPS_NAT_DONE_MASK = (IPS_DST_NAT_DONE | IPS_SRC_NAT_DONE),
+	IPS_NAT_DONE_MASK = (IPS_DST_NAT_DONE | IPS_SRC_NAT_DONE),//标记已完成snat,dnat初始化
 
 	/* Connection is dying (removed from lists), can not be unset. */
 	IPS_DYING_BIT = 9,
