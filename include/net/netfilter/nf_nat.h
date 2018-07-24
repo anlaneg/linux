@@ -29,6 +29,7 @@ union nf_conntrack_nat_help {
 struct nf_conn;
 
 /* The structure embedded in the conntrack structure. */
+//nat在连接跟踪中的创建结构
 struct nf_conn_nat {
 	union nf_conntrack_nat_help help;
 #if IS_ENABLED(CONFIG_NF_NAT_MASQUERADE_IPV4) || \

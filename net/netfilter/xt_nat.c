@@ -76,11 +76,14 @@ xt_dnat_target_v0(struct sk_buff *skb, const struct xt_action_param *par)
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 
+	//取出此报文对应的连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	WARN_ON(!(ct != NULL &&
 		 (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED)));
 
+	//填充range
 	xt_nat_convert_range(&range, &mr->range[0]);
+	//标记连接跟踪需要做dnat
 	return nf_nat_setup_info(ct, &range, NF_NAT_MANIP_DST);
 }
 
@@ -153,7 +156,7 @@ xt_dnat_target_v2(struct sk_buff *skb, const struct xt_action_param *par)
 static struct xt_target xt_nat_target_reg[] __read_mostly = {
 	{
 		.name		= "SNAT",
-		.revision	= 0,
+		.revision	= 0,//版本为０的snat
 		.checkentry	= xt_nat_checkentry_v0,
 		.destroy	= xt_nat_destroy,
 		.target		= xt_snat_target_v0,
@@ -179,7 +182,7 @@ static struct xt_target xt_nat_target_reg[] __read_mostly = {
 	},
 	{
 		.name		= "SNAT",
-		.revision	= 1,
+		.revision	= 1,//版本为１的snat
 		.checkentry	= xt_nat_checkentry,
 		.destroy	= xt_nat_destroy,
 		.target		= xt_snat_target_v1,
@@ -203,7 +206,7 @@ static struct xt_target xt_nat_target_reg[] __read_mostly = {
 	},
 	{
 		.name		= "SNAT",
-		.revision	= 2,
+		.revision	= 2,//版本为２的snat
 		.checkentry	= xt_nat_checkentry,
 		.destroy	= xt_nat_destroy,
 		.target		= xt_snat_target_v2,

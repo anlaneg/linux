@@ -98,13 +98,13 @@ static unsigned int ipv4_conntrack_defrag(void *priv,
 
 static const struct nf_hook_ops ipv4_defrag_ops[] = {
 	{
-		.hook		= ipv4_conntrack_defrag,//完成分片重组
+		.hook		= ipv4_conntrack_defrag,//完成分片重组(查路由前）
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK_DEFRAG,
 	},
 	{
-		.hook           = ipv4_conntrack_defrag,//完成分片重组
+		.hook           = ipv4_conntrack_defrag,//完成分片重组（本机发送前）
 		.pf             = NFPROTO_IPV4,
 		.hooknum        = NF_INET_LOCAL_OUT,
 		.priority       = NF_IP_PRI_CONNTRACK_DEFRAG,
@@ -134,7 +134,7 @@ static void __exit nf_defrag_fini(void)
 	unregister_pernet_subsys(&defrag4_net_ops);
 }
 
-//开启分片重组
+//开启分片重组功能
 int nf_defrag_ipv4_enable(struct net *net)
 {
 	int err = 0;
@@ -148,6 +148,7 @@ int nf_defrag_ipv4_enable(struct net *net)
 	if (net->nf.defrag_ipv4)
 		goto out_unlock;
 
+	//注册分片重组业务到hook点
 	err = nf_register_net_hooks(net, ipv4_defrag_ops,
 				    ARRAY_SIZE(ipv4_defrag_ops));
 	if (err == 0)

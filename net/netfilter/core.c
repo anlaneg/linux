@@ -635,6 +635,7 @@ __netfilter_net_init(struct nf_hook_entries __rcu **e, int max)
 
 static int __net_init netfilter_net_init(struct net *net)
 {
+	//初始化net namespace中的netfilter的hook点为空
 	__netfilter_net_init(net->nf.hooks_ipv4, ARRAY_SIZE(net->nf.hooks_ipv4));
 	__netfilter_net_init(net->nf.hooks_ipv6, ARRAY_SIZE(net->nf.hooks_ipv6));
 #ifdef CONFIG_NETFILTER_FAMILY_ARP
@@ -675,6 +676,7 @@ int __init netfilter_init(void)
 {
 	int ret;
 
+	//注册各net namespace初始化函数
 	ret = register_pernet_subsys(&netfilter_net_ops);
 	if (ret < 0)
 		goto err;

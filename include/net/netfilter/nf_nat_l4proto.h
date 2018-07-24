@@ -23,6 +23,7 @@ struct nf_nat_l4proto {
 			  enum nf_nat_manip_type maniptype);
 
 	/* Is the manipable part of the tuple between min and max incl? */
+	//检查tuple中的port是否在min,max范围以内
 	bool (*in_range)(const struct nf_conntrack_tuple *tuple,
 			 enum nf_nat_manip_type maniptype,
 			 const union nf_conntrack_man_proto *min,
@@ -33,6 +34,7 @@ struct nf_nat_l4proto {
 	 * possible.  Per-protocol part of tuple is initialized to the
 	 * incoming packet.
 	 */
+	//分配唯一的tuple
 	void (*unique_tuple)(const struct nf_nat_l3proto *l3proto,
 			     struct nf_conntrack_tuple *tuple,
 			     const struct nf_nat_range2 *range,

@@ -44,9 +44,9 @@ enum nf_ct_ext_id {
 /* Extensions: optional stuff which isn't permanently in struct. */
 struct nf_ct_ext {
 	struct rcu_head rcu;
-	u8 offset[NF_CT_EXT_NUM];
-	u8 len;
-	char data[0];
+	u8 offset[NF_CT_EXT_NUM];//各扩展的内存起始位置
+	u8 len;//扩展内存的长度
+	char data[0];//扩展内存指针
 };
 
 static inline bool __nf_ct_ext_exist(const struct nf_ct_ext *ext, u8 id)
@@ -91,8 +91,8 @@ struct nf_ct_ext_type {
 	enum nf_ct_ext_id id;
 
 	/* Length and min alignment. */
-	u8 len;
-	u8 align;
+	u8 len;//扩展需要占用的内存大小
+	u8 align;//对齐方式
 };
 
 int nf_ct_extend_register(const struct nf_ct_ext_type *type);

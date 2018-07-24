@@ -1222,7 +1222,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	struct nf_conntrack_zone tmp;
 	unsigned int *timeouts;
 
-	//初始化反向的元组
+	//初始化反向的元组repl_tuple
 	if (!nf_ct_invert_tuple(&repl_tuple, tuple, l3proto, l4proto)) {
 		pr_debug("Can't invert tuple.\n");
 		return NULL;
@@ -1451,7 +1451,7 @@ repeat:
 		goto out;
 	}
 
-	//对出skb对应的连接跟踪
+	//取出skb对应的连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct) {
 		/* Not valid part of a connection */
@@ -1524,11 +1524,13 @@ void nf_conntrack_alter_reply(struct nf_conn *ct,
 	pr_debug("Altering reply tuple of %p to ", ct);
 	nf_ct_dump_tuple(newreply);
 
+	//设置新的replay方向的元组（由于做了nat,故反方向与正方向不同）
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *newreply;
 	if (ct->master || (help && !hlist_empty(&help->expectations)))
 		return;
 
 	rcu_read_lock();
+	//为当前ct尝试关联helper
 	__nf_ct_try_assign_helper(ct, NULL, GFP_ATOMIC);
 	rcu_read_unlock();
 }
@@ -1980,6 +1982,7 @@ i_see_dead_people:
 	}
 }
 
+//申请hash表
 void *nf_ct_alloc_hashtable(unsigned int *sizep, int nulls)
 {
 	struct hlist_nulls_head *hash;

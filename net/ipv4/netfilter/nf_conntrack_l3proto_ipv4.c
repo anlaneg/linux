@@ -139,8 +139,10 @@ static unsigned int ipv4_confirm(void *priv,
 		goto out;
 
 	/* adjust seqs for loopback traffic only in outgoing direction */
+	//包含seq调整标记，做seq调整
 	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
 	    !nf_is_loopback_packet(skb)) {
+		//处理seq调整
 		if (!nf_ct_seq_adjust(skb, ct, ctinfo, ip_hdrlen(skb))) {
 			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
 			return NF_DROP;
@@ -151,6 +153,7 @@ out:
 	return nf_conntrack_confirm(skb);
 }
 
+//连接跟踪入口
 static unsigned int ipv4_conntrack_in(void *priv,
 				      struct sk_buff *skb,
 				      const struct nf_hook_state *state)
@@ -185,19 +188,19 @@ static unsigned int ipv4_conntrack_local(void *priv,
    make it the first hook. */
 static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 	{
-		.hook		= ipv4_conntrack_in,//连接跟踪入口
+		.hook		= ipv4_conntrack_in,//连接跟踪入口（路由前）
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_conntrack_local,//本机报文连接跟踪
+		.hook		= ipv4_conntrack_local,//本机报文连接跟踪（本机发包前）
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_helper,//分析报文，产生期待
+		.hook		= ipv4_helper,//分析报文，产生期待（路由后）
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_POST_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK_HELPER,
@@ -209,7 +212,7 @@ static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 		.priority	= NF_IP_PRI_CONNTRACK_CONFIRM,
 	},
 	{
-		.hook		= ipv4_helper,//期待helper检查
+		.hook		= ipv4_helper,//期待helper检查（去本机前）
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_CONNTRACK_HELPER,
@@ -454,7 +457,7 @@ static int __init nf_conntrack_l3proto_ipv4_init(void)
 	if (ret < 0)
 		goto cleanup_pernet;
 
-	//注册PF_INET
+	//注册３层连接跟踪处理
 	ret = nf_ct_l3proto_register(&nf_conntrack_l3proto_ipv4);
 	if (ret < 0) {
 		pr_err("nf_conntrack_ipv4: can't register ipv4 proto.\n");

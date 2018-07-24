@@ -17,10 +17,12 @@
 #include <linux/skbuff.h>
 #include <net/netfilter/nf_conntrack_extend.h>
 
+//连接跟踪的扩展类型
 static struct nf_ct_ext_type __rcu *nf_ct_ext_types[NF_CT_EXT_NUM];
 static DEFINE_MUTEX(nf_ct_ext_type_mutex);
 #define NF_CT_EXT_PREALLOC	128u /* conntrack events are on by default */
 
+//连接跟踪销毁时各扩展类型需要销毁（遍历并销毁）
 void nf_ct_ext_destroy(struct nf_conn *ct)
 {
 	unsigned int i;
@@ -41,6 +43,7 @@ void nf_ct_ext_destroy(struct nf_conn *ct)
 }
 EXPORT_SYMBOL(nf_ct_ext_destroy);
 
+//在连接跟踪上创建扩展id需要的内存，并返回创建的内存指针
 void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 {
 	unsigned int newlen, newoff, oldlen, alloc;
@@ -53,6 +56,7 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	old = ct->ext;
 
 	if (old) {
+		//此id已有扩展时直接返回NULL
 		if (__nf_ct_ext_exist(old, id))
 			return NULL;
 		oldlen = old->len;
@@ -61,44 +65,50 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	}
 
 	rcu_read_lock();
-	t = rcu_dereference(nf_ct_ext_types[id]);
+	t = rcu_dereference(nf_ct_ext_types[id]);//取此扩展
 	if (!t) {
 		rcu_read_unlock();
 		return NULL;
 	}
 
+	//如果oldlen非０，则默认跟在旧的扩展后面，如果旧的扩展不存在，则默认在首位置
 	newoff = ALIGN(oldlen, t->align);
 	newlen = newoff + t->len;
 	rcu_read_unlock();
 
 	alloc = max(newlen, NF_CT_EXT_PREALLOC);
 	kmemleak_not_leak(old);
-	new = __krealloc(old, alloc, gfp);
+	new = __krealloc(old, alloc, gfp);//扩大内存或者申请内存
 	if (!new)
 		return NULL;
 
 	if (!old) {
+		//首次创建offset全置为０
 		memset(new->offset, 0, sizeof(new->offset));
 		ct->ext = new;
 	} else if (new != old) {
+		//需要释放旧扩展内存
 		kfree_rcu(old, rcu);
 		rcu_assign_pointer(ct->ext, new);
 	}
 
-	new->offset[id] = newoff;
-	new->len = newlen;
-	memset((void *)new + newoff, 0, newlen - newoff);
-	return (void *)new + newoff;
+	//记录自已的
+	new->offset[id] = newoff;//记录id扩展的内存位置
+	new->len = newlen;//记录扩展长度
+	memset((void *)new + newoff, 0, newlen - newoff);//初始化id扩展内存
+	return (void *)new + newoff;//返回id扩展内存
 }
 EXPORT_SYMBOL(nf_ct_ext_add);
 
 /* This MUST be called in process context. */
+//连接跟踪扩展注册
 int nf_ct_extend_register(const struct nf_ct_ext_type *type)
 {
 	int ret = 0;
 
 	mutex_lock(&nf_ct_ext_type_mutex);
 	if (nf_ct_ext_types[type->id]) {
+		//扩展已注册，报错
 		ret = -EBUSY;
 		goto out;
 	}
@@ -111,6 +121,7 @@ out:
 EXPORT_SYMBOL_GPL(nf_ct_extend_register);
 
 /* This MUST be called in process context. */
+//扩展解注册
 void nf_ct_extend_unregister(const struct nf_ct_ext_type *type)
 {
 	mutex_lock(&nf_ct_ext_type_mutex);

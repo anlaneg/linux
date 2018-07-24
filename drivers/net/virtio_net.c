@@ -1704,7 +1704,7 @@ static int _virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 	//4. Even with VIRTIO_NET_F_MQ, only receiveq1, transmitq1 and controlq are used by default. The
 	//driver would send the VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET command specifying the number
 	//of the transmit and receive queues to use.
-	//告知对端，使用的收发队列数
+	//通过ctrl消息告知对端，使用的收发队列数
 	if (!virtnet_send_command(vi, VIRTIO_NET_CTRL_MQ,
 				  VIRTIO_NET_CTRL_MQ_VQ_PAIRS_SET, &sg)) {
 		dev_warn(&dev->dev, "Fail to set num of queue pairs to %d\n",

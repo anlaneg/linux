@@ -69,7 +69,7 @@ enum ip_conntrack_status {
 
 	/* Connection needs TCP sequence adjusted. */
 	IPS_SEQ_ADJUST_BIT = 6,
-	IPS_SEQ_ADJUST = (1 << IPS_SEQ_ADJUST_BIT),
+	IPS_SEQ_ADJUST = (1 << IPS_SEQ_ADJUST_BIT),//需要调整tcp sequence标记
 
 	/* NAT initialization bits. */
 	IPS_SRC_NAT_DONE_BIT = 7,

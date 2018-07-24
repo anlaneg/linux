@@ -259,17 +259,20 @@ find_best_ips_proto(const struct nf_conntrack_zone *zone,
 	if (!(range->flags & NF_NAT_RANGE_MAP_IPS))
 		return;
 
+	//需要设置源ip还是目的ip(依据nat方式来决定）
 	if (maniptype == NF_NAT_MANIP_SRC)
 		var_ipp = &tuple->src.u3;
 	else
 		var_ipp = &tuple->dst.u3;
 
 	/* Fast path: only one choice. */
+	//是否仅有一个选择（即非ip段）
 	if (nf_inet_addr_cmp(&range->min_addr, &range->max_addr)) {
-		*var_ipp = range->min_addr;
+		*var_ipp = range->min_addr;//填充要设置的ip
 		return;
 	}
 
+	//在多个ip中选择一个（这个算法没看懂，感觉会算重）
 	if (nf_ct_l3num(ct) == NFPROTO_IPV4)
 		max = sizeof(var_ipp->ip) / sizeof(u32) - 1;
 	else
@@ -354,6 +357,7 @@ get_unique_tuple(struct nf_conntrack_tuple *tuple,
 		} else if (find_appropriate_src(net, zone, l3proto, l4proto,
 						orig_tuple, tuple, range)) {
 			pr_debug("get_unique_tuple: Found current src map\n");
+			//检查此port是否已被占用，如果已占用，则分配失败
 			if (!nf_nat_used_tuple(tuple, ct))
 				goto out;
 		}
@@ -361,13 +365,14 @@ get_unique_tuple(struct nf_conntrack_tuple *tuple,
 
 	/* 2) Select the least-used IP/proto combination in the given range */
 	*tuple = *orig_tuple;
-	find_best_ips_proto(zone, tuple, range, ct, maniptype);
+	find_best_ips_proto(zone, tuple, range, ct, maniptype);//自range中选出一个ip地址
 
 	/* 3) The per-protocol part of the manip is made to map into
 	 * the range to make a unique tuple.
 	 */
 
 	/* Only bother mapping if it's not already in range and unique */
+	//检查port是否在range->min_proto,range->max_proto范围以内
 	if (!(range->flags & NF_NAT_RANGE_PROTO_RANDOM_ALL)) {
 		if (range->flags & NF_NAT_RANGE_PROTO_SPECIFIED) {
 			if (!(range->flags & NF_NAT_RANGE_PROTO_OFFSET) &&
@@ -378,22 +383,27 @@ get_unique_tuple(struct nf_conntrack_tuple *tuple,
 			     !nf_nat_used_tuple(tuple, ct)))
 				goto out;
 		} else if (!nf_nat_used_tuple(tuple, ct)) {
+			//检查此port是否已被占用，如果已占用，则分配失败
 			goto out;
 		}
 	}
 
 	/* Last chance: get protocol to try to obtain unique tuple. */
+	//实现分配
 	l4proto->unique_tuple(l3proto, tuple, range, maniptype, ct);
 out:
 	rcu_read_unlock();
 }
 
+//在连接跟踪上创建nat扩展内存
 struct nf_conn_nat *nf_ct_nat_ext_add(struct nf_conn *ct)
 {
 	struct nf_conn_nat *nat = nfct_nat(ct);
 	if (nat)
+		//此连接上已创建nat扩展内存，直接返回
 		return nat;
 
+	//创建
 	if (!nf_ct_is_confirmed(ct))
 		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, GFP_ATOMIC);
 
@@ -419,24 +429,27 @@ nf_nat_setup_info(struct nf_conn *ct,
 		maniptype != NF_NAT_MANIP_DST);
 
 	if (WARN_ON(nf_nat_initialized(ct, maniptype)))
-		return NF_DROP;
+		return NF_DROP;//如果连接跟踪已完成nat,则跳出
 
 	/* What we've got will look like inverse of reply. Normally
 	 * this is what is in the conntrack, except for prior
 	 * manipulations (future optimization: if num_manips == 0,
 	 * orig_tp = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple)
 	 */
+	//取当前方向tuple(未转换）
 	nf_ct_invert_tuplepr(&curr_tuple,
 			     &ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 
+	//按range分配端口，ip
 	get_unique_tuple(&new_tuple, &curr_tuple, range, ct, maniptype);
 
 	if (!nf_ct_tuple_equal(&new_tuple, &curr_tuple)) {
+		//当前方向需要做nat
 		struct nf_conntrack_tuple reply;
 
 		/* Alter conntrack table so will recognize replies. */
 		nf_ct_invert_tuplepr(&reply, &new_tuple);
-		nf_conntrack_alter_reply(ct, &reply);
+		nf_conntrack_alter_reply(ct, &reply);//设置反方向的tuple
 
 		/* Non-atomic: we own this at the moment. */
 		if (maniptype == NF_NAT_MANIP_SRC)
@@ -498,6 +511,7 @@ nf_nat_alloc_null_binding(struct nf_conn *ct, unsigned int hooknum)
 }
 EXPORT_SYMBOL_GPL(nf_nat_alloc_null_binding);
 
+//实现对已建立起连接跟踪的nat转换
 static unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 				     enum nf_nat_manip_type mtype,
 				     enum ip_conntrack_dir dir)
@@ -507,11 +521,13 @@ static unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 	struct nf_conntrack_tuple target;
 
 	/* We are aiming to look like inverse of other direction. */
+	//取当前方向的转换结果
 	nf_ct_invert_tuplepr(&target, &ct->tuplehash[!dir].tuple);
 
 	l3proto = __nf_nat_l3proto_find(target.src.l3num);
 	l4proto = __nf_nat_l4proto_find(target.src.l3num,
 					target.dst.protonum);
+	//调用l3层进行报文的nat处理，将报文按target中的ip,port进行转换
 	if (!l3proto->manip_pkt(skb, 0, l4proto, &target, mtype))
 		return NF_DROP;
 
@@ -1056,7 +1072,7 @@ static struct nf_nat_hook nat_hook = {
 #ifdef CONFIG_XFRM
 	.decode_session		= __nf_nat_decode_session,
 #endif
-	.manip_pkt		= nf_nat_manip_pkt,
+	.manip_pkt		= nf_nat_manip_pkt,//实现连接跟踪建立起来后的报文转换
 };
 
 static int __init nf_nat_init(void)
@@ -1072,6 +1088,7 @@ static int __init nf_nat_init(void)
 	if (!nf_nat_bysource)
 		return -ENOMEM;
 
+	//注册nat连接跟踪扩展
 	ret = nf_ct_extend_register(&nat_extend);
 	if (ret < 0) {
 		nf_ct_free_hashtable(nf_nat_bysource, nf_nat_htable_size);
@@ -1079,6 +1096,7 @@ static int __init nf_nat_init(void)
 		return ret;
 	}
 
+	//初始化锁
 	for (i = 0; i < CONNTRACK_LOCKS; i++)
 		spin_lock_init(&nf_nat_locks[i]);
 

@@ -1023,7 +1023,7 @@ static void unregister_pernet_operations(struct pernet_operations *ops)
  *	are called in the reverse of the order with which they were
  *	registered.
  */
-//注册一个网络namespace子系统，当一个name被创建时调用init,销毁时调用exit
+//注册一个网络namespace子系统，当一个namespace被创建时调用init,销毁时调用exit
 int register_pernet_subsys(struct pernet_operations *ops)
 {
 	int error;
