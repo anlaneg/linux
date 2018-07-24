@@ -1981,6 +1981,7 @@ out_free:
 	return err;
 }
 
+//如果有bpf过滤条件，则执行过滤条件，检查是否需要丢包
 static unsigned int run_filter(struct sk_buff *skb,
 			       const struct sock *sk,
 			       unsigned int res)
@@ -2022,7 +2023,7 @@ static int packet_rcv_vnet(struct msghdr *msg, const struct sk_buff *skb,
  * sequencially, so that if we return skb to original state on exit,
  * we will not harm anyone.
  */
-
+//sockd_raw,sock_dage方式报文入口
 static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 		      struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -2035,11 +2036,12 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	bool is_drop_n_account = false;
 
 	if (skb->pkt_type == PACKET_LOOPBACK)
-		goto drop;
+		goto drop;//丢掉loopback口报文
 
-	sk = pt->af_packet_priv;
+	sk = pt->af_packet_priv;//取其对应的socket
 	po = pkt_sk(sk);
 
+	//非同一namespace,丢包
 	if (!net_eq(dev_net(dev), sock_net(sk)))
 		goto drop;
 
@@ -2054,7 +2056,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 		 * never delivered to user.
 		 */
 		if (sk->sk_type != SOCK_DGRAM)
-			skb_push(skb, skb->data - skb_mac_header(skb));
+			skb_push(skb, skb->data - skb_mac_header(skb));//还原以太头
 		else if (skb->pkt_type == PACKET_OUTGOING) {
 			/* Special case: outgoing packets have ll header at head */
 			skb_pull(skb, skb_network_offset(skb));
@@ -2063,11 +2065,12 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 
 	snaplen = skb->len;
 
+	//执行bpf过滤检查是否需要丢包
 	res = run_filter(skb, sk, snaplen);
 	if (!res)
 		goto drop_n_restore;
 	if (snaplen > res)
-		snaplen = res;
+		snaplen = res;//报文需要截短
 
 	if (atomic_read(&sk->sk_rmem_alloc) >= sk->sk_rcvbuf)
 		goto drop_n_acct;
@@ -2075,7 +2078,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	if (skb_shared(skb)) {
 		struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
 		if (nskb == NULL)
-			goto drop_n_acct;
+			goto drop_n_acct;//clone失败丢包
 
 		if (skb_head != skb->data) {
 			skb->data = skb_head;
@@ -2115,7 +2118,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	spin_lock(&sk->sk_receive_queue.lock);
 	po->stats.stats1.tp_packets++;
 	sock_skb_set_dropcount(sk, skb);
-	__skb_queue_tail(&sk->sk_receive_queue, skb);
+	__skb_queue_tail(&sk->sk_receive_queue, skb);//将skb置在收接入队列中
 	spin_unlock(&sk->sk_receive_queue.lock);
 	sk->sk_data_ready(sk);
 	return 0;
@@ -2916,6 +2919,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	if (unlikely(extra_len == 4))
 		skb->no_fcs = 1;
 
+	//调用xmit函数，完成报文发送
 	err = po->xmit(skb);
 	if (err > 0 && (err = net_xmit_errno(err)) != 0)
 		goto out_unlock;
@@ -3163,13 +3167,12 @@ static int packet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len
 static struct proto packet_proto = {
 	.name	  = "PACKET",
 	.owner	  = THIS_MODULE,
-	.obj_size = sizeof(struct packet_sock),
+	.obj_size = sizeof(struct packet_sock),//指明sock按packet_sock大小申请
 };
 
 /*
  *	Create a packet of type SOCK_PACKET.
  */
-
 static int packet_create(struct net *net, struct socket *sock, int protocol,
 			 int kern)
 {
@@ -3180,27 +3183,29 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 
 	if (!ns_capable(net->user_ns, CAP_NET_RAW))
 		return -EPERM;
+	//目前支持以下三种类型
 	if (sock->type != SOCK_DGRAM && sock->type != SOCK_RAW &&
 	    sock->type != SOCK_PACKET)
 		return -ESOCKTNOSUPPORT;
 
 	sock->state = SS_UNCONNECTED;
 
+	//申请packet_proto规定的socket大小
 	err = -ENOBUFS;
 	sk = sk_alloc(net, PF_PACKET, GFP_KERNEL, &packet_proto, kern);
 	if (sk == NULL)
 		goto out;
 
-	sock->ops = &packet_ops;
+	sock->ops = &packet_ops;//注册sock的操作集
 	if (sock->type == SOCK_PACKET)
-		sock->ops = &packet_ops_spkt;
+		sock->ops = &pcket_ops_spkt;
 
 	sock_init_data(sock, sk);
 
 	po = pkt_sk(sk);
 	sk->sk_family = PF_PACKET;
 	po->num = proto;
-	po->xmit = dev_queue_xmit;
+	po->xmit = dev_queue_xmit;//设置socket的报文发送函数
 
 	err = packet_alloc_pending(po);
 	if (err)
@@ -3214,17 +3219,20 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 	/*
 	 *	Attach a protocol block
 	 */
-
+	//实现报文获取
 	spin_lock_init(&po->bind_lock);
 	mutex_init(&po->pg_vec_lock);
 	po->rollover = NULL;
-	po->prot_hook.func = packet_rcv;
+	po->prot_hook.func = packet_rcv;//实现socket的报文收取
 
+	//sock_pack时使用的收包函数
 	if (sock->type == SOCK_PACKET)
 		po->prot_hook.func = packet_rcv_spkt;
 
 	po->prot_hook.af_packet_priv = sk;
 
+	//如果指明了协议，则注册协议号（all也在其中）
+	//注一个协议可以被注册多次，在函数__netif_receive_skb_core中负责按回调送包
 	if (proto) {
 		po->prot_hook.type = proto;
 		__register_prot_hook(sk);
@@ -4414,6 +4422,7 @@ out:
 	return err;
 }
 
+//SOCK_PACKET时的操作集
 static const struct proto_ops packet_ops_spkt = {
 	.family =	PF_PACKET,
 	.owner =	THIS_MODULE,
@@ -4435,6 +4444,7 @@ static const struct proto_ops packet_ops_spkt = {
 	.sendpage =	sock_no_sendpage,
 };
 
+//SOCK_RAW及SOCK_DGRAM时的操作集
 static const struct proto_ops packet_ops = {
 	.family =	PF_PACKET,
 	.owner =	THIS_MODULE,
@@ -4453,8 +4463,8 @@ static const struct proto_ops packet_ops = {
 #ifdef CONFIG_COMPAT
 	.compat_setsockopt = compat_packet_setsockopt,
 #endif
-	.sendmsg =	packet_sendmsg,
-	.recvmsg =	packet_recvmsg,
+	.sendmsg =	packet_sendmsg,//raw格式报文发送
+	.recvmsg =	packet_recvmsg,//raw格式报文接收
 	.mmap =		packet_mmap,
 	.sendpage =	sock_no_sendpage,
 };
@@ -4558,6 +4568,7 @@ static void __exit packet_exit(void)
 
 static int __init packet_init(void)
 {
+	//协议注册，注：不申请slab
 	int rc = proto_register(&packet_proto, 0);
 
 	if (rc != 0)

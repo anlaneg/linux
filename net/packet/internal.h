@@ -104,7 +104,7 @@ struct packet_rollover {
 
 struct packet_sock {
 	/* struct sock has to be the first member of packet_sock */
-	struct sock		sk;
+	struct sock		sk;//基类
 	struct packet_fanout	*fanout;
 	union  tpacket_stats_u	stats;
 	struct packet_ring_buffer	rx_ring;
@@ -112,6 +112,7 @@ struct packet_sock {
 	int			copy_thresh;
 	spinlock_t		bind_lock;
 	struct mutex		pg_vec_lock;
+	//用于指示是否已注册到protocol hook
 	unsigned int		running;	/* bind_lock must be held */
 	unsigned int		auxdata:1,	/* writer must hold sock lock */
 				origdev:1,
@@ -120,7 +121,7 @@ struct packet_sock {
 				tp_tx_has_off:1;
 	int			pressure;
 	int			ifindex;	/* bound device		*/
-	__be16			num;
+	__be16			num;//要通过socket 截取哪种协议的报文
 	struct packet_rollover	*rollover;
 	struct packet_mclist	*mclist;
 	atomic_t		mapped;
@@ -129,7 +130,7 @@ struct packet_sock {
 	unsigned int		tp_reserve;
 	unsigned int		tp_tstamp;
 	struct net_device __rcu	*cached_dev;
-	int			(*xmit)(struct sk_buff *skb);
+	int			(*xmit)(struct sk_buff *skb);//报文发送函数
 	struct packet_type	prot_hook ____cacheline_aligned_in_smp;
 };
 

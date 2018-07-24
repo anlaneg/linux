@@ -392,6 +392,7 @@ static inline void netdev_set_addr_lockdep_class(struct net_device *dev)
 //针对类型区分不同的报文类型（二层报文协议，例如0x800为Ip,0x806为arp....)
 static inline struct list_head *ptype_head(const struct packet_type *pt)
 {
+	//针对all,注册在不同的链上
 	if (pt->type == htons(ETH_P_ALL))
 		return pt->dev ? &pt->dev->ptype_all : &ptype_all;
 	else
@@ -417,7 +418,7 @@ void dev_add_pack(struct packet_type *pt)
 	struct list_head *head = ptype_head(pt);
 
 	spin_lock(&ptype_lock);
-	list_add_rcu(&pt->list, head);
+	list_add_rcu(&pt->list, head);//容许同一协议注册多个
 	spin_unlock(&ptype_lock);
 }
 EXPORT_SYMBOL(dev_add_pack);
@@ -1963,6 +1964,7 @@ static inline int deliver_skb(struct sk_buff *skb,
 	return pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 }
 
+//遍历执行ptype_list,针对每一种ptype，进行报文输送
 static inline void deliver_ptype_list_skb(struct sk_buff *skb,
 					  struct packet_type **pt,
 					  struct net_device *orig_dev,
@@ -4670,6 +4672,7 @@ skip_classify:
 	/* deliver only exact match when indicated */
 	if (likely(!deliver_exact)) {
 		//通过上层协议查找报文处理者(如ip层处理）
+		//注：由于ptype_base[i]是一个链，故需要遍历执行所有回调
 		deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 				       &ptype_base[ntohs(type) &
 						   PTYPE_HASH_MASK]);
