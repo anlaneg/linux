@@ -30,7 +30,7 @@ struct sock_filter {	/* Filter block */
 
 struct sock_fprog {	/* Required for SO_ATTACH_FILTER. */
 	unsigned short		len;	/* Number of filter blocks */
-	struct sock_filter __user *filter;
+	struct sock_filter __user *filter;//指针，指向filter数组
 };
 
 /* ret - BPF_K and BPF_X also apply */

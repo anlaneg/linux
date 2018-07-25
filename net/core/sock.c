@@ -693,7 +693,7 @@ EXPORT_SYMBOL(sk_mc_loop);
  *	This is meant for all protocols to use and covers goings on
  *	at the socket level. Everything here is generic.
  */
-
+//所有协议的socket选项设置函数
 int sock_setsockopt(struct socket *sock, int level, int optname,
 		    char __user *optval, unsigned int optlen)
 {
@@ -721,7 +721,7 @@ int sock_setsockopt(struct socket *sock, int level, int optname,
 	lock_sock(sk);
 
 	switch (optname) {
-	case SO_DEBUG:
+	case SO_DEBUG://开启socket调试用
 		if (val && !capable(CAP_NET_ADMIN))
 			ret = -EACCES;
 		else
@@ -923,15 +923,19 @@ set_rcvbuf:
 		ret = sock_set_timeout(&sk->sk_sndtimeo, optval, optlen);
 		break;
 
-	case SO_ATTACH_FILTER:
+	case SO_ATTACH_FILTER://为socket设置bpf过滤器
+		//ref https://www.cnblogs.com/rollenholt/articles/2585517.html
 		ret = -EINVAL;
 		if (optlen == sizeof(struct sock_fprog)) {
+			//参数必须是sock_fprog结构
 			struct sock_fprog fprog;
 
 			ret = -EFAULT;
 			if (copy_from_user(&fprog, optval, sizeof(fprog)))
 				break;
 
+			//转换filter为bpf的程序，并挂接在socket上，
+			//后面soket收到包时会进行执行，确认是否需要上送，还是丢包
 			ret = sk_attach_filter(&fprog, sk);
 		}
 		break;

@@ -83,6 +83,7 @@
 /* Define this to get the SOCK_DBG debugging facility. */
 #define SOCK_DEBUGGING
 #ifdef SOCK_DEBUGGING
+//如果对socket打上debug标记，则此socket处理时，会打debug日志
 #define SOCK_DEBUG(sk, msg...) do { if ((sk) && sock_flag((sk), SOCK_DBG)) \
 					printk(KERN_DEBUG msg); } while (0)
 #else
@@ -174,8 +175,8 @@ struct sock_common {
 
 	unsigned short		skc_family;
 	volatile unsigned char	skc_state;
-	unsigned char		skc_reuse:4;
-	unsigned char		skc_reuseport:1;
+	unsigned char		skc_reuse:4;//socket 地址reuse标记
+	unsigned char		skc_reuseport:1;//socket port reuse
 	unsigned char		skc_ipv6only:1;
 	unsigned char		skc_net_refcnt:1;
 	int			skc_bound_dev_if;
@@ -339,7 +340,9 @@ struct sock {
 //family字段，例如AF_INET
 #define sk_family		__sk_common.skc_family
 #define sk_state		__sk_common.skc_state
+//地址reuse
 #define sk_reuse		__sk_common.skc_reuse
+//port reuse
 #define sk_reuseport		__sk_common.skc_reuseport
 #define sk_ipv6only		__sk_common.skc_ipv6only
 #define sk_net_refcnt		__sk_common.skc_net_refcnt
@@ -771,7 +774,7 @@ enum sock_flags {
 	SOCK_TIMESTAMP,
 	SOCK_ZAPPED,
 	SOCK_USE_WRITE_QUEUE, /* whether to call sk->sk_write_space in sock_wfree */
-	SOCK_DBG, /* %SO_DEBUG setting */
+	SOCK_DBG, /* %SO_DEBUG setting */ //socket调试用
 	SOCK_RCVTSTAMP, /* %SO_TIMESTAMP setting */
 	SOCK_RCVTSTAMPNS, /* %SO_TIMESTAMPNS setting */
 	SOCK_LOCALROUTE, /* route locally only, %SO_DONTROUTE setting */
@@ -798,6 +801,7 @@ static inline void sock_copy_flags(struct sock *nsk, struct sock *osk)
 	nsk->sk_flags = osk->sk_flags;
 }
 
+//在sock上打上flag标记
 static inline void sock_set_flag(struct sock *sk, enum sock_flags flag)
 {
 	__set_bit(flag, &sk->sk_flags);

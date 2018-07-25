@@ -1101,6 +1101,7 @@ static int bpf_prog_store_orig_filter(struct bpf_prog *fp,
 	unsigned int fsize = bpf_classic_proglen(fprog);
 	struct sock_fprog_kern *fkprog;
 
+	//构造fprog的副本，存放在orig_prog中
 	fp->orig_prog = kmalloc(sizeof(*fkprog), GFP_KERNEL);
 	if (!fp->orig_prog)
 		return -ENOMEM;
@@ -1292,6 +1293,7 @@ static struct bpf_prog *bpf_prepare_filter(struct bpf_prog *fp,
 	 * needed on classic filters, f.e. in case of seccomp.
 	 */
 	if (trans) {
+		//如果有转换函数，则进行转换
 		err = trans(fp->insns, fp->len);
 		if (err) {
 			__bpf_prog_release(fp);
@@ -1474,10 +1476,12 @@ struct bpf_prog *__get_filter(struct sock_fprog *fprog, struct sock *sk)
 	struct bpf_prog *prog;
 	int err;
 
+	//必须要有sock_filter_locked标记
 	if (sock_flag(sk, SOCK_FILTER_LOCKED))
 		return ERR_PTR(-EPERM);
 
 	/* Make sure new filter is there and in the right amounts. */
+	//数据有效性检查
 	if (!bpf_check_basics_ok(fprog->filter, fprog->len))
 		return ERR_PTR(-EINVAL);
 
@@ -1485,6 +1489,7 @@ struct bpf_prog *__get_filter(struct sock_fprog *fprog, struct sock *sk)
 	if (!prog)
 		return ERR_PTR(-ENOMEM);
 
+	//将filter数组中的内容填充到prog->insns中
 	if (copy_from_user(prog->insns, fprog->filter, fsize)) {
 		__bpf_prog_free(prog);
 		return ERR_PTR(-EFAULT);
@@ -1516,6 +1521,7 @@ struct bpf_prog *__get_filter(struct sock_fprog *fprog, struct sock *sk)
  */
 int sk_attach_filter(struct sock_fprog *fprog, struct sock *sk)
 {
+	//依据filter,编译成jit,即programe
 	struct bpf_prog *prog = __get_filter(fprog, sk);
 	int err;
 

@@ -489,7 +489,7 @@ struct bpf_prog {
 				has_callchain_buf:1; /* callchain buffer allocated? */
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	enum bpf_attach_type	expected_attach_type; /* For some prog types */
-	u32			len;		/* Number of filter blocks */
+	u32			len;		/* Number of filter blocks */ //insns数组的大小
 	u32			jited_len;	/* Size of jited insns in bytes */
 	u8			tag[BPF_TAG_SIZE];
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
@@ -625,6 +625,7 @@ static inline u32 bpf_prog_tag_scratch_size(const struct bpf_prog *prog)
 			sizeof(__be64) + 1, SHA_MESSAGE_BYTES);
 }
 
+//如果申请bpf_prog结构＋proglen*sizeof(insns)
 static inline unsigned int bpf_prog_size(unsigned int proglen)
 {
 	return max(sizeof(struct bpf_prog),
@@ -671,6 +672,7 @@ bpf_ctx_narrow_access_ok(u32 off, u32 size, u32 size_default)
 	       size <= size_default && (size & (size - 1)) == 0;
 }
 
+//fprog是一个长度为len的filter数组
 #define bpf_classic_proglen(fprog) (fprog->len * sizeof(fprog->filter[0]))
 
 static inline void bpf_prog_lock_ro(struct bpf_prog *fp)

@@ -485,6 +485,7 @@ struct socket *sockfd_lookup(int fd, int *err)
 }
 EXPORT_SYMBOL(sockfd_lookup);
 
+//由fd转socket
 static struct socket *sockfd_lookup_light(int fd, int *err, int *fput_needed)
 {
 	struct fd f = fdget(fd);
@@ -1906,7 +1907,10 @@ SYSCALL_DEFINE4(recv, int, fd, void __user *, ubuf, size_t, size,
  *	Set a socket option. Because we don't know the option lengths we have
  *	to pass the user mode parameter for the protocols to sort out.
  */
-
+//optname：需设置的选项。
+//optval：指针，指向存放选项待设置的新值的缓冲区。
+//optlen：optval缓冲区长度。
+//level 选项定义的层次；支持SOL_SOCKET、IPPROTO_TCP、IPPROTO_IP和IPPROTO_IPV6
 static int __sys_setsockopt(int fd, int level, int optname,
 			    char __user *optval, int optlen)
 {
@@ -1923,10 +1927,12 @@ static int __sys_setsockopt(int fd, int level, int optname,
 			goto out_put;
 
 		if (level == SOL_SOCKET)
+			//实现socket层面的选项设置
 			err =
 			    sock_setsockopt(sock, level, optname, optval,
 					    optlen);
 		else
+			//其它level,直接采用ops设置
 			err =
 			    sock->ops->setsockopt(sock, level, optname, optval,
 						  optlen);
@@ -1939,6 +1945,7 @@ out_put:
 SYSCALL_DEFINE5(setsockopt, int, fd, int, level, int, optname,
 		char __user *, optval, int, optlen)
 {
+	//setsockopt系统调用实现
 	return __sys_setsockopt(fd, level, optname, optval, optlen);
 }
 
