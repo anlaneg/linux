@@ -100,7 +100,7 @@ struct vring_virtqueue {
 	/* DMA, allocation, and size information */
 	bool we_own_ring;
 	size_t queue_size_in_bytes;
-	dma_addr_t queue_dma_addr;
+	dma_addr_t queue_dma_addr;//设置vq起始地址的物理地址
 
 #ifdef DEBUG
 	/* They're supposed to lock for us. */
@@ -605,7 +605,7 @@ bool virtqueue_notify(struct virtqueue *_vq)
 		return false;
 
 	/* Prod other side to tell it about changes. */
-	//告诉另一边队列变化
+	//告诉后端队列_vq有变化
 	if (!vq->notify(_vq)) {
 		vq->broken = true;
 		return false;
@@ -752,7 +752,7 @@ void *virtqueue_get_buf_ctx(struct virtqueue *_vq, unsigned int *len,
 	}
 
 	/* detach_buf clears data, so grab it now. */
-	//取报文
+	//利用i获取描述符，并取报文
 	ret = vq->desc_state[i].data;
 	detach_buf(vq, i, ctx);//放回此报文对应的描述符
 	vq->last_used_idx++;

@@ -45,6 +45,7 @@ bool vp_notify(struct virtqueue *vq)
 {
 	/* we write the queue's selector into the notification register to
 	 * signal the other end */
+	//通知后端队列vq->index发生变化
 	iowrite16(vq->index, (void __iomem *)vq->priv);
 	return true;
 }
@@ -189,6 +190,7 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index,
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
+	//创建virtqueue
 	vq = vp_dev->setup_vq(vp_dev, info, index, callback, name, ctx,
 			      msix_vec);
 	if (IS_ERR(vq))
@@ -277,9 +279,9 @@ void vp_del_vqs(struct virtio_device *vdev)
 	vp_dev->vqs = NULL;
 }
 
-static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
+static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
 		struct virtqueue *vqs[], vq_callback_t *callbacks[],
-		const char * const names[], bool per_vq_vectors,
+		const char * const names[], bool per_vq_vectors,//是否每个队列一个msi-x向量
 		const bool *ctx,
 		struct irq_affinity *desc)
 {
@@ -287,6 +289,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 	u16 msix_vec;
 	int i, err, nvectors, allocated_vectors;
 
+	//创建nvqs个virtio_pci_vq_info指针
 	vp_dev->vqs = kcalloc(nvqs, sizeof(*vp_dev->vqs), GFP_KERNEL);
 	if (!vp_dev->vqs)
 		return -ENOMEM;
@@ -309,6 +312,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 
 	vp_dev->per_vq_vectors = per_vq_vectors;
 	allocated_vectors = vp_dev->msix_used_vectors;
+	//遍历创建各个队列
 	for (i = 0; i < nvqs; ++i) {
 		if (!names[i]) {
 			vqs[i] = NULL;
@@ -321,6 +325,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,
 			msix_vec = allocated_vectors++;
 		else
 			msix_vec = VP_MSIX_VQ_VECTOR;
+		//创建第i个虚队列
 		vqs[i] = vp_setup_vq(vdev, i, callbacks[i], names[i],
 				     ctx ? ctx[i] : false,
 				     msix_vec);
@@ -390,17 +395,20 @@ out_del_vqs:
 }
 
 /* the config->find_vqs() implementation */
-int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,
-		struct virtqueue *vqs[], vq_callback_t *callbacks[],
-		const char * const names[], const bool *ctx,
+int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
+		struct virtqueue *vqs[], vq_callback_t *callbacks[],//虚队列数组，指出各队列对应的callback
+		const char * const names[], const bool *ctx,//指出各队列名称,指出各队列是否有context
 		struct irq_affinity *desc)
 {
 	int err;
 
 	/* Try MSI-X with one vector per queue. */
+	//尝试为每个队列申请个msi-x向量
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, true, ctx, desc);
 	if (!err)
 		return 0;
+	//尝试失败，按virtio标准规定，至少２个，至多0x800个向量，故尝试２个
+	//A device that has an MSI-X capability SHOULD support at least 2 and at most 0x800 MSI-X vectors.
 	/* Fallback: MSI-X with one vector for config, one shared for queues. */
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, false, ctx, desc);
 	if (!err)

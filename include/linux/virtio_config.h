@@ -215,9 +215,11 @@ int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs,
  *
  * Note: vqs are enabled automatically after probe returns.
  */
+//设置设备状态达到DRIVER_OK
 static inline
 void virtio_device_ready(struct virtio_device *dev)
 {
+	//见virtio 1.0 sepc 3.1.1节，完成设备初始化
 	unsigned status = dev->config->get_status(dev);
 
 	BUG_ON(status & VIRTIO_CONFIG_S_DRIVER_OK);

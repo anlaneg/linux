@@ -338,10 +338,12 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 		return ERR_PTR(-ENOENT);
 
 	/* Select the queue we're interested in */
+	//告知硬件我们使用index号queue，看qemu代码（后面将针对此队列进行vp_io[read/write]操作）
 	vp_iowrite16(index, &cfg->queue_select);
 
 	/* Check if queue is either not available or already active. */
-	//取硬件支持的队列大小
+	//取硬件支持的index号队列大小，如果大小为０，查询此队列是否使能
+	//如果使能了，但返回num ==0，则硬件实现有误
 	num = vp_ioread16(&cfg->queue_size);
 	if (!num || vp_ioread16(&cfg->queue_enable))
 		return ERR_PTR(-ENOENT);
@@ -358,19 +360,24 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	info->msix_vector = msix_vec;
 
 	/* create the vring */
+	//创建vring
 	vq = vring_create_virtqueue(index, num,
 				    SMP_CACHE_BYTES, &vp_dev->vdev,
 				    true, true, ctx,
-				    vp_notify, callback, name);
+				    vp_notify, callback, name);//通过vp_notify通知后端
 	if (!vq)
 		return ERR_PTR(-ENOMEM);
 
 	/* activate the queue */
+	//设置队列大小
 	vp_iowrite16(virtqueue_get_vring_size(vq), &cfg->queue_size);
+	//设置desc的物理地址（dma地址）
 	vp_iowrite64_twopart(virtqueue_get_desc_addr(vq),
 			     &cfg->queue_desc_lo, &cfg->queue_desc_hi);
+	//设置avail的物理地址（dma地址）
 	vp_iowrite64_twopart(virtqueue_get_avail_addr(vq),
 			     &cfg->queue_avail_lo, &cfg->queue_avail_hi);
+	//设置use的物理地址（dma地址）
 	vp_iowrite64_twopart(virtqueue_get_used_addr(vq),
 			     &cfg->queue_used_lo, &cfg->queue_used_hi);
 
@@ -488,7 +495,7 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 	.get_status	= vp_get_status,
 	.set_status	= vp_set_status,
 	.reset		= vp_reset,
-	.find_vqs	= vp_modern_find_vqs,
+	.find_vqs	= vp_modern_find_vqs,//创建队列
 	.del_vqs	= vp_del_vqs,
 	.get_features	= vp_get_features,
 	.finalize_features = vp_finalize_features,
@@ -732,7 +739,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	}
 
 	vp_dev->config_vector = vp_config_vector;
-	vp_dev->setup_vq = setup_vq;
+	vp_dev->setup_vq = setup_vq;//设置virtqueue创建回调
 	vp_dev->del_vq = del_vq;
 
 	return 0;

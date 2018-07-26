@@ -146,7 +146,7 @@ struct receive_queue {
 	struct scatterlist sg[MAX_SKB_FRAGS + 2];
 
 	/* Min single buffer size for mergeable buffers case. */
-	unsigned int min_buf_len;
+	unsigned int min_buf_len;//最小buff长度（用于申请描述符的中数据段的最小长度）
 
 	/* Name of this receive queue: input.$index */
 	char name[40];
@@ -2573,14 +2573,20 @@ static void virtnet_del_vqs(struct virtnet_info *vi)
  * least one full packet?
  * Logic below assumes the mergeable buffer header is used.
  */
+//取每个元素所需要的最小buf_len
 static unsigned int mergeable_min_buf_len(struct virtnet_info *vi, struct virtqueue *vq)
 {
 	const unsigned int hdr_len = sizeof(struct virtio_net_hdr_mrg_rxbuf);
+	//取队列大小
 	unsigned int rq_size = virtqueue_get_vring_size(vq);
+	//如果使能大包，则包的大小为65535,否则按mtu计
 	unsigned int packet_len = vi->big_packets ? IP_MAX_MTU : vi->dev->max_mtu;
+	//buffer的长度（头长度+以太头+vlan头＋包长度）
 	unsigned int buf_len = hdr_len + ETH_HLEN + VLAN_HLEN + packet_len;
+	//每个队列的元素存放一块数据，则整个队列最小需要多少字节才能存放一个最大的报文，计算结果为min_buf_len
 	unsigned int min_buf_len = DIV_ROUND_UP(buf_len, rq_size);
 
+	//一般会返回GOOD_PACKET_LEN除非num非常小(<43时）
 	return max(max(min_buf_len, hdr_len) - hdr_len,
 		   (unsigned int)GOOD_PACKET_LEN);
 }
@@ -2653,6 +2659,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 			ctx[rxq2vq(i)] = true;
 	}
 
+	//创建队列并设置硬件使其了解desc,avail,used三个queue的起始地址
 	ret = vi->vdev->config->find_vqs(vi->vdev, total_vqs, vqs, callbacks,
 					 names, ctx, NULL);
 	if (ret)
@@ -2664,7 +2671,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 			vi->dev->features |= NETIF_F_HW_VLAN_CTAG_FILTER;
 	}
 
-	//设置收队列及发队列对应的底层虚队列
+	//设置收队列及发队列对应的底层虚队列（最小的buffer长度)
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		vi->rq[i].vq = vqs[rxq2vq(i)];
 		vi->rq[i].min_buf_len = mergeable_min_buf_len(vi, vi->rq[i].vq);
@@ -2738,17 +2745,18 @@ static int init_vqs(struct virtnet_info *vi)
 	int ret;
 
 	/* Allocate send & receive queues */
-	//申请控制，收发队列，并设置各队列的napi_poll函数进行收发
+	//申请控制，收发队列内存，并设置各队列的napi_poll函数进行收发
 	ret = virtnet_alloc_queues(vi);
 	if (ret)
 		goto err;
 
+	//映射并创建虚队列
 	ret = virtnet_find_vqs(vi);
 	if (ret)
 		goto err_free;
 
 	get_online_cpus();
-	virtnet_set_affinity(vi);
+	virtnet_set_affinity(vi);//为队列绑定cpu
 	put_online_cpus();
 
 	return 0;
@@ -3031,6 +3039,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	if (vi->mergeable_rx_bufs)
 		dev->sysfs_rx_queue_group = &virtio_net_mrg_rx_group;
 #endif
+	//设置收发队列数量（kernel netif相关）
 	netif_set_real_num_tx_queues(dev, vi->curr_queue_pairs);
 	netif_set_real_num_rx_queues(dev, vi->curr_queue_pairs);
 
@@ -3051,6 +3060,8 @@ static int virtnet_probe(struct virtio_device *vdev)
 		goto free_failover;
 	}
 
+	//The driver MUST NOT notify the device before setting DRIVER_OK.
+	//完成设备初始化
 	virtio_device_ready(vdev);
 
 	err = virtnet_cpu_notif_add(vi);
