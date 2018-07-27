@@ -25,10 +25,12 @@
 struct scatterlist *sg_next(struct scatterlist *sg)
 {
 	if (sg_is_last(sg))
-		return NULL;
+		return NULL;//如果为最后一个元素，返回NULL
 
+	//否则跳转到下一个
 	sg++;
 	if (unlikely(sg_is_chain(sg)))
+		//如果sg是chain,则sg的地址更新为page_link
 		sg = sg_chain_ptr(sg);
 
 	return sg;
@@ -123,6 +125,7 @@ EXPORT_SYMBOL(sg_last);
  *   used only on the last table part.
  *
  **/
+//初始化sgl表为nents个元素
 void sg_init_table(struct scatterlist *sgl, unsigned int nents)
 {
 	memset(sgl, 0, sizeof(*sgl) * nents);
@@ -137,9 +140,12 @@ EXPORT_SYMBOL(sg_init_table);
  * @buflen:	 IO length
  *
  **/
+//设置单个scatterlist,指定其使用的buf及buf长度
 void sg_init_one(struct scatterlist *sg, const void *buf, unsigned int buflen)
 {
+	//初始化sg为1个元素
 	sg_init_table(sg, 1);
+	//设置buffer
 	sg_set_buf(sg, buf, buflen);
 }
 EXPORT_SYMBOL(sg_init_one);

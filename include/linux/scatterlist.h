@@ -9,9 +9,9 @@
 #include <asm/io.h>
 
 struct scatterlist {
-	unsigned long	page_link;
-	unsigned int	offset;
-	unsigned int	length;
+	unsigned long	page_link;//指向物理页
+	unsigned int	offset;//此页的偏移量
+	unsigned int	length;//内存的长度
 	dma_addr_t	dma_address;
 #ifdef CONFIG_NEED_SG_DMA_LENGTH
 	unsigned int	dma_length;
@@ -69,7 +69,9 @@ struct sg_table {
  * a valid sg entry, or whether it points to the start of a new scatterlist.
  * Those low bits are there for everyone! (thanks mason :-)
  */
+//检查sg是否为链
 #define sg_is_chain(sg)		((sg)->page_link & SG_CHAIN)
+//检查sg是否为最后一个元素
 #define sg_is_last(sg)		((sg)->page_link & SG_END)
 #define sg_chain_ptr(sg)	\
 	((struct scatterlist *) ((sg)->page_link & ~(SG_CHAIN | SG_END)))
@@ -84,8 +86,10 @@ struct sg_table {
  *   variant.
  *
  **/
+//设置sg->page_link
 static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 {
+	//取标记位
 	unsigned long page_link = sg->page_link & (SG_CHAIN | SG_END);
 
 	/*
@@ -96,6 +100,7 @@ static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(sg_is_chain(sg));
 #endif
+	//设置page值
 	sg->page_link = page_link | (unsigned long) page;
 }
 
@@ -142,7 +147,7 @@ static inline void sg_set_buf(struct scatterlist *sg, const void *buf,
 #ifdef CONFIG_DEBUG_SG
 	BUG_ON(!virt_addr_valid(buf));
 #endif
-	sg_set_page(sg, virt_to_page(buf), buflen, offset_in_page(buf));
+	sg_set_page(sg, virt_to_page(buf), buflen, offset_in_page(buf));//取buf在页内的offset
 }
 
 /*
@@ -187,13 +192,14 @@ static inline void sg_chain(struct scatterlist *prv, unsigned int prv_nents,
  *   table. A call to sg_next() on this entry will return NULL.
  *
  **/
+//标记scatterlist结尾
 static inline void sg_mark_end(struct scatterlist *sg)
 {
 	/*
 	 * Set termination bit, clear potential chain bit
 	 */
-	sg->page_link |= SG_END;
-	sg->page_link &= ~SG_CHAIN;
+	sg->page_link |= SG_END;//标记为最后一个元素
+	sg->page_link &= ~SG_CHAIN;//标记为非chain
 }
 
 /**
@@ -248,6 +254,7 @@ static inline void *sg_virt(struct scatterlist *sg)
 static inline void sg_init_marker(struct scatterlist *sgl,
 				  unsigned int nents)
 {
+	//标记nents-1元素为最后一个元素
 	sg_mark_end(&sgl[nents - 1]);
 }
 

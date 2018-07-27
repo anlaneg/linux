@@ -38,7 +38,7 @@
 #include <linux/virtio_types.h>
 
 /* This marks a buffer as continuing via the next field. */
-#define VRING_DESC_F_NEXT	1
+#define VRING_DESC_F_NEXT	1 //标记其next指向下一个描述符
 /* This marks a buffer as write-only (otherwise read-only). */
 #define VRING_DESC_F_WRITE	2
 /* This means the buffer contains a list of buffer descriptors. */
@@ -94,13 +94,13 @@ struct vring_used_elem {
 	/* Index of start of used descriptor chain. */
 	__virtio32 id;//描述符索引
 	/* Total length of the descriptor chain which was used (written to) */
-	__virtio32 len;//报文长度
+	__virtio32 len;//描述符数目
 };
 
 struct vring_used {
 	__virtio16 flags;
 	__virtio16 idx;
-	struct vring_used_elem ring[];//长度为num（见vring)
+	struct vring_used_elem ring[];//长度为num（见vring)，已完成使用的索引符索引＋描述符数目
 };
 
 //按virtio 1.0 spec所言
@@ -114,11 +114,11 @@ struct vring {
 	//possible descriptor chain length.
 	unsigned int num;//队列大小
 
-	struct vring_desc *desc;//描述符表
+	struct vring_desc *desc;//描述符表(用于存放要发送给用户的信息）
 
-	struct vring_avail *avail;
+	struct vring_avail *avail;//avail表（写者维护，读者只读，用于知会读者目前哪些数据已可以进行读取）
 
-	struct vring_used *used;
+	struct vring_used *used;//已用表（写者只读，读者维护,用于知会写者，目前哪些数据已被读者完成读取）
 };
 
 /* Alignment requirements for vring elements.

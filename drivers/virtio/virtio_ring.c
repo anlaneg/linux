@@ -58,6 +58,7 @@
 struct vring_desc_state {
 	//临时保存报文
 	void *data;			/* Data for callback. */
+	//如果是indrect方式，则指向indirect时申请的desc数组
 	struct vring_desc *indir_desc;	/* Indirect descriptor, if any. */
 };
 
@@ -74,13 +75,13 @@ struct vring_virtqueue {
 	bool broken;
 
 	/* Host supports indirect buffers */
-	bool indirect;
+	bool indirect;//是否支持indirect buffers形式（即采用链表串起来的方式）
 
 	/* Host publishes avail event idx */
 	bool event;
 
 	/* Head of free buffer list. */
-	unsigned int free_head;//空闲描述符头指针
+	unsigned int free_head;//空闲描述符头指针（此指针对应的desc是空闲的）
 	/* Number we've added since last sync. */
 	unsigned int num_added;//队列中元素数
 
@@ -262,10 +263,10 @@ static struct vring_desc *alloc_indirect(struct virtqueue *_vq,
 }
 
 static inline int virtqueue_add(struct virtqueue *_vq,
-				struct scatterlist *sgs[],
-				unsigned int total_sg,
-				unsigned int out_sgs,
-				unsigned int in_sgs,
+				struct scatterlist *sgs[],//记录发送与接收的scatterlist
+				unsigned int total_sg,//scatterlist结构总数
+				unsigned int out_sgs,//要发送出去的scatterlist总数
+				unsigned int in_sgs,//要接受的scatterlist总数
 				void *data,//要发送的报文
 				void *ctx,
 				gfp_t gfp)
@@ -280,7 +281,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	START_USE(vq);
 
 	BUG_ON(data == NULL);
-	BUG_ON(ctx && vq->indirect);
+	BUG_ON(ctx && vq->indirect);//在indirect方式时，ctx必须为NULL
 
 	if (unlikely(vq->broken)) {
 		END_USE(vq);
@@ -302,14 +303,18 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 
 	BUG_ON(total_sg == 0);
 
-	head = vq->free_head;
+	head = vq->free_head;//取空闲描述符
 
 	/* If the host supports indirect descriptor tables, and we have multiple
 	 * buffers, then go indirect. FIXME: tune this threshold */
 	if (vq->indirect && total_sg > 1 && vq->vq.num_free)
+		//支持indirect方式，故需要一次性申请total_sg个desc,并将其串起来
+		//其next指向的是从0开始的序号
 		desc = alloc_indirect(_vq, total_sg, gfp);
 	else {
-		desc = NULL;//直接情况下为NULL
+		//直接情况下为NULL
+		desc = NULL;
+		//total_sg一定小于等于vq->vring.num，否则无法发送出去
 		WARN_ON_ONCE(total_sg > vq->vring.num && !vq->indirect);
 	}
 
@@ -318,12 +323,14 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		indirect = true;
 		/* Set up rest to use this indirect table. */
 		i = 0;
-		descs_used = 1;
+		descs_used = 1;//indirect情况下，仅会用掉一个描述符
 	} else {
 		indirect = false;
 		desc = vq->vring.desc;
-		i = head;//取空闲的desc头指针
-		descs_used = total_sg;//指出需要用多少desc
+		//取空闲的desc头指针
+		i = head;
+		//指出需要用多少desc
+		descs_used = total_sg;//非indirect情况下，会用掉total_sg个描述符
 	}
 
 	if (vq->vq.num_free < descs_used) {
@@ -334,6 +341,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		 * there are outgoing parts to the buffer.  Presumably the
 		 * host should service the ring ASAP. */
 		if (out_sgs)
+			//通知对端，快点收包，尽快释放desc
 			vq->notify(&vq->vq);
 		if (indirect)
 			kfree(desc);
@@ -341,21 +349,27 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		return -ENOSPC;
 	}
 
+	//处理待发送的sgs
 	for (n = 0; n < out_sgs; n++) {
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
+			//取sg中数据对应的dma地址
 			dma_addr_t addr = vring_map_one_sg(vq, sg, DMA_TO_DEVICE);
 			if (vring_mapping_error(vq, addr))
 				goto unmap_release;
 
+			//用sg填充描述符
 			desc[i].flags = cpu_to_virtio16(_vq->vdev, VRING_DESC_F_NEXT);
-			desc[i].addr = cpu_to_virtio64(_vq->vdev, addr);
-			desc[i].len = cpu_to_virtio32(_vq->vdev, sg->length);
+			desc[i].addr = cpu_to_virtio64(_vq->vdev, addr);//物理地址
+			desc[i].len = cpu_to_virtio32(_vq->vdev, sg->length);//地址长度
 			prev = i;
-			i = virtio16_to_cpu(_vq->vdev, desc[i].next);
+			i = virtio16_to_cpu(_vq->vdev, desc[i].next);//取下一个
 		}
 	}
+
+	//处理待接收的sgs
 	for (; n < (out_sgs + in_sgs); n++) {
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
+			//填充待接收的sgs
 			dma_addr_t addr = vring_map_one_sg(vq, sg, DMA_FROM_DEVICE);
 			if (vring_mapping_error(vq, addr))
 				goto unmap_release;
@@ -367,7 +381,9 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 			i = virtio16_to_cpu(_vq->vdev, desc[i].next);
 		}
 	}
+
 	/* Last one doesn't continue. */
+	//指明desc[prev]为最后一个描述符
 	desc[prev].flags &= cpu_to_virtio16(_vq->vdev, ~VRING_DESC_F_NEXT);
 
 	if (indirect) {
@@ -378,6 +394,8 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 		if (vring_mapping_error(vq, addr))
 			goto unmap_release;
 
+		//针对indirect方式，由addr指向的是由total_sg个描述符组成的desc list,现在使head描述符描述出它们
+		//并在flags中标明此描述符为indirect方式
 		vq->vring.desc[head].flags = cpu_to_virtio16(_vq->vdev, VRING_DESC_F_INDIRECT);
 		vq->vring.desc[head].addr = cpu_to_virtio64(_vq->vdev, addr);
 
@@ -385,9 +403,10 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	}
 
 	/* We're using some buffers from the free list. */
-	vq->vq.num_free -= descs_used;//减去要用的desc
+	vq->vq.num_free -= descs_used;//减去已使用的desc
 
 	/* Update free pointer */
+	//更新首个空闲desc的指针
 	if (indirect)
 		vq->free_head = virtio16_to_cpu(_vq->vdev, vq->vring.desc[head].next);
 	else
@@ -397,28 +416,32 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	//设置要发送的报文
 	vq->desc_state[head].data = data;
 	if (indirect)
+		//indirect方式时，使其指向申请的desc数组
 		vq->desc_state[head].indir_desc = desc;
 	else
+		//这种情况未阅读
 		vq->desc_state[head].indir_desc = ctx;
 
 	/* Put entry in available array (but don't update avail->idx until they
 	 * do sync). */
+	//将head指针放入到有效ring中
 	avail = vq->avail_idx_shadow & (vq->vring.num - 1);
 	vq->vring.avail->ring[avail] = cpu_to_virtio16(_vq->vdev, head);
 
 	/* Descriptors and available array need to be set before we expose the
 	 * new available array entries. */
+	//更新有效索引(avail->idx)
 	virtio_wmb(vq->weak_barriers);
 	vq->avail_idx_shadow++;
 	vq->vring.avail->idx = cpu_to_virtio16(_vq->vdev, vq->avail_idx_shadow);
-	vq->num_added++;
+	vq->num_added++;//队列中元素数增加
 
 	pr_debug("Added buffer head %i to %p\n", head, vq);
 	END_USE(vq);
 
 	/* This is very unlikely, but theoretically possible.  Kick
 	 * just in case. */
-	//当队列中含有的元素等于65535时，进行kick
+	//当队列中含有的元素数等于65535时，进行kick
 	if (unlikely(vq->num_added == (1 << 16) - 1))
 		virtqueue_kick(_vq);
 
@@ -456,6 +479,7 @@ unmap_release:
  *
  * Returns zero or a negative error (ie. ENOSPC, ENOMEM, EIO).
  */
+//将sgs及data填充到虚队列中
 int virtqueue_add_sgs(struct virtqueue *_vq,
 		      struct scatterlist *sgs[],
 		      unsigned int out_sgs,
@@ -466,6 +490,7 @@ int virtqueue_add_sgs(struct virtqueue *_vq,
 	unsigned int i, total_sg = 0;
 
 	/* Count them first. */
+	//先计算scatter总数量（list被展开计算）
 	for (i = 0; i < out_sgs + in_sgs; i++) {
 		struct scatterlist *sg;
 		for (sg = sgs[i]; sg; sg = sg_next(sg))

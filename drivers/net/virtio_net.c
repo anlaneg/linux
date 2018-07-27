@@ -1554,15 +1554,15 @@ static bool virtnet_send_command(struct virtnet_info *vi, u8 class, u8 cmd,
 	vi->ctrl->hdr.class = class;
 	vi->ctrl->hdr.cmd = cmd;
 	/* Add header */
-	sg_init_one(&hdr, &vi->ctrl->hdr, sizeof(vi->ctrl->hdr));
+	sg_init_one(&hdr, &vi->ctrl->hdr, sizeof(vi->ctrl->hdr));//添加hdr
 	sgs[out_num++] = &hdr;
 
 	if (out)
-		sgs[out_num++] = out;
+		sgs[out_num++] = out;//添加cmd负载
 
 	/* Add return status. */
 	sg_init_one(&stat, &vi->ctrl->status, sizeof(vi->ctrl->status));
-	sgs[out_num] = &stat;
+	sgs[out_num] = &stat;//添加status
 
 	BUG_ON(out_num + 1 > ARRAY_SIZE(sgs));
 	virtqueue_add_sgs(vi->cvq, sgs, out_num, 1, vi, GFP_ATOMIC);
@@ -1698,7 +1698,7 @@ static int _virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 		return 0;
 
 	vi->ctrl->mq.virtqueue_pairs = cpu_to_virtio16(vi->vdev, queue_pairs);
-	sg_init_one(&sg, &vi->ctrl->mq, sizeof(vi->ctrl->mq));
+	sg_init_one(&sg, &vi->ctrl->mq, sizeof(vi->ctrl->mq));//设置sg对应ctrl->mq中长度为sizeof(ctrl->mq)的内存段
 
 	//如标准所言：
 	//4. Even with VIRTIO_NET_F_MQ, only receiveq1, transmitq1 and controlq are used by default. The

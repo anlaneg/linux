@@ -41,6 +41,7 @@ void vp_synchronize_vectors(struct virtio_device *vdev)
 }
 
 /* the notify function used when creating a virt queue */
+//通过对vq->priv地址写虚队列的index完成队列通知
 bool vp_notify(struct virtqueue *vq)
 {
 	/* we write the queue's selector into the notification register to
