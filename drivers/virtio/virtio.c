@@ -171,6 +171,7 @@ void virtio_config_enable(struct virtio_device *dev)
 }
 EXPORT_SYMBOL_GPL(virtio_config_enable);
 
+//在设备旧的状态上设置新的status
 void virtio_add_status(struct virtio_device *dev, unsigned int status)
 {
 	dev->config->set_status(dev, dev->config->get_status(dev) | status);
@@ -189,6 +190,8 @@ int virtio_finalize_features(struct virtio_device *dev)
 		return 0;
 
 	//置设备完成了功能协商
+	//EATURES_OK (8) Indicates that the driver has acknowledged all the features it understands, and feature
+	//negotiation is complete.
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
 	status = dev->config->get_status(dev);
 	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
@@ -245,7 +248,7 @@ static int virtio_dev_probe(struct device *_d)
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
-		//非1。0版本，0.95版本认为是legacy
+		//非1.0版本时，采用legayc驱动功能号与上设备功能号
 		dev->features = driver_features_legacy & device_features;
 
 	/* Transport features always preserved to pass to finalize_features. */
@@ -351,6 +354,7 @@ int register_virtio_device(struct virtio_device *dev)
 	device_initialize(&dev->dev);
 
 	/* Assign a unique device index and hence name. */
+	//为virtio获取设备index
 	err = ida_simple_get(&virtio_index_ida, 0, 0, GFP_KERNEL);
 	if (err < 0)
 		goto out;
@@ -364,9 +368,13 @@ int register_virtio_device(struct virtio_device *dev)
 
 	/* We always start by resetting the device, in case a previous
 	 * driver messed it up.  This also tests that code path a little. */
+	//reset此设备
 	dev->config->reset(dev);
 
 	/* Acknowledge that we've seen the device. */
+	//标记此设备已被发现，且有效
+	//ACKNOWLEDGE (1) Indicates that the guest OS has found the device and recognized it as a valid virtio
+	//device
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
 
 	INIT_LIST_HEAD(&dev->vqs);
@@ -375,7 +383,7 @@ int register_virtio_device(struct virtio_device *dev)
 	 * device_add() causes the bus infrastructure to look for a matching
 	 * driver.
 	 */
-	//将virtio设备注册给系统
+	//将virtio设备注册给系统,将引发查找此设备对应的驱动的过程
 	err = device_add(&dev->dev);
 	if (err)
 		ida_simple_remove(&virtio_index_ida, dev->index);

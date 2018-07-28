@@ -149,6 +149,7 @@ static void __iomem *map_capability(struct pci_dev *dev, int off,
 }
 
 /* virtio config->get_features() implementation */
+//配合device_feature_select寄存器，完成设备支持的功能位读取
 static u64 vp_get_features(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
@@ -175,6 +176,7 @@ static void vp_transport_features(struct virtio_device *vdev, u64 features)
 }
 
 /* virtio config->finalize_features() implementation */
+//设置驱动与设备协商后确定的设备应支持功能位
 static int vp_finalize_features(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
@@ -201,6 +203,7 @@ static int vp_finalize_features(struct virtio_device *vdev)
 }
 
 /* virtio config->get() implementation */
+//读取配置信息（自配置的device映射段读取公共配置)
 static void vp_get(struct virtio_device *vdev, unsigned offset,
 		   void *buf, unsigned len)
 {
@@ -238,6 +241,7 @@ static void vp_get(struct virtio_device *vdev, unsigned offset,
 
 /* the config->set() implementation.  it's symmetric to the config->get()
  * implementation */
+//设置公共配置
 static void vp_set(struct virtio_device *vdev, unsigned offset,
 		   const void *buf, unsigned len)
 {
@@ -282,12 +286,14 @@ static u32 vp_generation(struct virtio_device *vdev)
 /* config->{get,set}_status() implementations */
 static u8 vp_get_status(struct virtio_device *vdev)
 {
+	//读取设备状态
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	return vp_ioread8(&vp_dev->common->device_status);
 }
 
 static void vp_set_status(struct virtio_device *vdev, u8 status)
 {
+	//设置设备状态
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	/* We should never be setting status to 0. */
 	BUG_ON(status == 0);
@@ -298,12 +304,14 @@ static void vp_reset(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	/* 0 status means a reset. */
+	//写此地址写0，reset设备
 	vp_iowrite8(0, &vp_dev->common->device_status);
 	/* After writing 0 to device_status, the driver MUST wait for a read of
 	 * device_status to return 0 before reinitializing the device.
 	 * This will flush out the status write, and flush in device writes,
 	 * including MSI-X interrupts, if any.
 	 */
+	//等待设备reset完成
 	while (vp_ioread8(&vp_dev->common->device_status))
 		msleep(1);
 	/* Flush pending VQ/configuration callbacks. */
@@ -393,6 +401,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 			err = -EINVAL;
 			goto err_map_notify;
 		}
+		//此队列对应的通知地址
 		vq->priv = (void __force *)vp_dev->notify_base +
 			off * vp_dev->notify_offset_multiplier;
 	} else {
@@ -451,11 +460,13 @@ static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队
 	return 0;
 }
 
+//virtqueue的删除回调
 static void del_vq(struct virtio_pci_vq_info *info)
 {
 	struct virtqueue *vq = info->vq;
 	struct virtio_pci_device *vp_dev = to_vp_device(vq->vdev);
 
+	//告知硬件准备操作队列vq->index
 	vp_iowrite16(vq->index, &vp_dev->common->queue_select);
 
 	if (vp_dev->msix_enabled) {
@@ -477,7 +488,7 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.generation	= vp_generation,
 	.get_status	= vp_get_status,
 	.set_status	= vp_set_status,
-	.reset		= vp_reset,
+	.reset		= vp_reset,//使设备reset
 	.find_vqs	= vp_modern_find_vqs,
 	.del_vqs	= vp_del_vqs,
 	.get_features	= vp_get_features,
@@ -515,27 +526,51 @@ static const struct virtio_config_ops virtio_pci_config_ops = {
 static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
 					     u32 ioresource_types, int *bars)
 {
+	/*
+	 * 见virtio 1.0 spec标准所言
+	 * The location of each structure is specified using a vendor-specific PCI capability located on the capability
+	   list in PCI configuration space of the device. This virtio structure capability uses little-endian format; all fields
+       are read-only for the driver unless stated otherwise:
+	 */
 	int pos;
 
+	//遍历Vendor-Specific cap
 	for (pos = pci_find_capability(dev, PCI_CAP_ID_VNDR);
 	     pos > 0;
 	     pos = pci_find_next_capability(dev, pos, PCI_CAP_ID_VNDR)) {
+		//读取cap对应的结构体类型
 		u8 type, bar;
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 cfg_type),
 				     &type);
+		//读取哪里可以找到此结构体
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 bar),
 				     &bar);
 
 		/* Ignore structures with reserved BAR values */
+		//按标准规定，目前有5种类型
+		/*
+		 * cfg_type identifies the structure, according to the following table:
+			//Common configuration
+			#define VIRTIO_PCI_CAP_COMMON_CFG 1
+			//Notifications
+			#define VIRTIO_PCI_CAP_NOTIFY_CFG 2
+			//ISR Status
+			#define VIRTIO_PCI_CAP_ISR_CFG  3
+			// Device specific configuration
+			#define VIRTIO_PCI_CAP_DEVICE_CFG 4
+			//PCI configuration access
+			#define VIRTIO_PCI_CAP_PCI_CFG 5
+		 */
 		if (bar > 0x5)
 			continue;
 
 		if (type == cfg_type) {
+			//找到需要的结构体bar且bar的类型与ioresource_type一致,则返回其结构体对应的位置
 			if (pci_resource_len(dev, bar) &&
 			    pci_resource_flags(dev, bar) & ioresource_types) {
-				*bars |= (1 << bar);
+				*bars |= (1 << bar);//设置对应的bar标记
 				return pos;
 			}
 		}
@@ -544,6 +579,7 @@ static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
 }
 
 /* This is part of the ABI.  Don't screw with it. */
+//校验各字段offset(需要前后端相互配合）
 static inline void check_offsets(void)
 {
 	/* Note: disk space was harmed in compilation of this function. */
@@ -607,6 +643,7 @@ static inline void check_offsets(void)
 }
 
 /* the PCI probing function */
+//modern方式probe
 int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 {
 	struct pci_dev *pci_dev = vp_dev->pci_dev;
@@ -617,10 +654,15 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	check_offsets();
 
 	//如match中所言，virtio只有0x1000到0x10ff之间的设备号可用，而本函数要求必须小于等于0x107f
+	//Any PCI device with PCI Vendor ID 0x1AF4, and PCI Device ID 0x1000 through 0x107F inclusive is a virtio
+	//device. The actual value within this range indicates which virtio device is supported by the device. The PCI
+	//Device ID is calculated by adding 0x1040 to the Virtio Device ID, as indicated in section 5. Additionally,
+	//devices MAY utilize a Transitional PCI Device ID range, 0x1000 to 0x103F depending on the device type.
 	/* We only own devices >= 0x1000 and <= 0x107f: leave the rest. */
 	if (pci_dev->device < 0x1000 || pci_dev->device > 0x107f)
 		return -ENODEV;
 
+	//设置设备的device_id 与vendor_id
 	if (pci_dev->device < 0x1040) {
 		/* Transitional devices: use the PCI subsystem device id as
 		 * virtio device id, same as legacy driver always did.
@@ -628,16 +670,19 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		vp_dev->vdev.id.device = pci_dev->subsystem_device;
 	} else {
 		/* Modern devices: simply use PCI device id, but start from 0x1040. */
+		//通过减去0x1040我们可以在virtio spce 1.0 的section 5找到每类设备对应的类型，例如1是网设设备
 		vp_dev->vdev.id.device = pci_dev->device - 0x1040;
 	}
 	vp_dev->vdev.id.vendor = pci_dev->subsystem_vendor;
 
 	/* check for a common config: if not, use legacy mode (bar 0). */
-	//找VIRTIO_PCI_CAP_COMMON_CFG cap的位置
+	//查找VIRTIO_PCI_CAP_COMMON_CFG cap的位置，其对应的是一个由硬件定义结构体
+	//见virtio 1.0 spec virtio_pci_common_cfg
 	common = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_COMMON_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &vp_dev->modern_bars);
 	if (!common) {
+		//硬件无virtio_pci_common_cfg结构，失败
 		dev_info(&pci_dev->dev,
 			 "virtio_pci: leaving for legacy driver\n");
 		return -ENODEV;
@@ -645,10 +690,14 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 
 	/* If common is there, these should be too... */
 	//找VIRTIO_PCI_CAP_ISR_CFG capability位置
+	//The VIRTIO_PCI_CAP_ISR_CFG capability refers to at least a single byte, which contains the 8-bit ISR
+	//status field to be used for INT#x interrupt handling.
 	isr = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_ISR_CFG,
 					 IORESOURCE_IO | IORESOURCE_MEM,
 					 &vp_dev->modern_bars);
 	//找VIRTIO_PCI_CAP_NOTIFY_CFG capability位置
+	//The notification location is found using the VIRTIO_PCI_CAP_NOTIFY_CFG capability. This capability is
+	//immediately followed by an additional field, like so:
 	notify = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_NOTIFY_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &vp_dev->modern_bars);
@@ -659,6 +708,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		return -EINVAL;
 	}
 
+	//设置dma掩码(先尝试64位，如果失败了尝试32位）
 	err = dma_set_mask_and_coherent(&pci_dev->dev, DMA_BIT_MASK(64));
 	if (err)
 		err = dma_set_mask_and_coherent(&pci_dev->dev,
@@ -669,23 +719,28 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	/* Device capability is only mandatory for devices that have
 	 * device-specific configuration.
 	 */
+	//The VIRTIO_PCI_CAP_PCI_CFG capability creates an alternative (and likely suboptimal) access method
+	//to the common configuration, notification, ISR and device-specific configuration regions.
 	device = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_DEVICE_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &vp_dev->modern_bars);
 
+	//前面我们处理了5块bar,这里将这些内存匹配映射出来？
 	err = pci_request_selected_regions(pci_dev, vp_dev->modern_bars,
 					   "virtio-pci-modern");
 	if (err)
 		return err;
 
 	err = -EINVAL;
-	//映射VIRTIO_PCI_CAP_COMMON_CFG capability对应的数据
+	//映射VIRTIO_PCI_CAP_COMMON_CFG capability对应的数据，其对应的是结构体
+	//virtio_pci_common_cfg,
 	vp_dev->common = map_capability(pci_dev, common,
 					sizeof(struct virtio_pci_common_cfg), 4,
 					0, sizeof(struct virtio_pci_common_cfg),
 					NULL);
 	if (!vp_dev->common)
 		goto err_map_common;
+	//映射中断状态字段（仅含有1个字节，目前使用了两个bit，0 bit是队列中断，1bit是配置中断）
 	vp_dev->isr = map_capability(pci_dev, isr, sizeof(u8), 1,
 				     0, 1,
 				     NULL);
@@ -693,16 +748,21 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		goto err_map_isr;
 
 	/* Read notify_off_multiplier from config space. */
+	//读取notify结构体中的notify_off_multiplier字段，通过此字段和common中的
+	//queue_notify_off 我们可以计算任意queue对应的通知地址
+	//cap.offset + queue_notify_off * notify_off_multiplier
 	pci_read_config_dword(pci_dev,
 			      notify + offsetof(struct virtio_pci_notify_cap,
 						notify_off_multiplier),
 			      &vp_dev->notify_offset_multiplier);
 	/* Read notify length and offset from config space. */
+	//读取ntify结构体中对length字段,即通知地址可使用长度
 	pci_read_config_dword(pci_dev,
 			      notify + offsetof(struct virtio_pci_notify_cap,
 						cap.length),
 			      &notify_length);
 
+	//读取notify结构体中的offset字段
 	pci_read_config_dword(pci_dev,
 			      notify + offsetof(struct virtio_pci_notify_cap,
 						cap.offset),
@@ -713,6 +773,8 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	 * Otherwise, map each VQ individually later.
 	 */
 	if ((u64)notify_length + (notify_offset % PAGE_SIZE) <= PAGE_SIZE) {
+		//map通知的base地址（针对一个队列通知时，采用cap.offset +
+		//queue_notify_off * notify_off_multiplier + vp_dev->notify_base进行通知）
 		vp_dev->notify_base = map_capability(pci_dev, notify, 2, 2,
 						     0, notify_length,
 						     &vp_dev->notify_len);
@@ -726,6 +788,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 	 * is more than enough for all existing devices.
 	 */
 	if (device) {
+		//映射设备的common configuration, notification, ISR and device-specific configuration regions
 		vp_dev->device = map_capability(pci_dev, device, 0, 4,
 						0, PAGE_SIZE,
 						&vp_dev->device_len);

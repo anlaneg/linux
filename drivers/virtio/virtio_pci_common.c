@@ -46,7 +46,7 @@ bool vp_notify(struct virtqueue *vq)
 {
 	/* we write the queue's selector into the notification register to
 	 * signal the other end */
-	//通知后端队列vq->index发生变化
+	//通知后端队列vq->index发生变化（vq->priv为此队列对应的通知地址）
 	iowrite16(vq->index, (void __iomem *)vq->priv);
 	return true;
 }
@@ -548,13 +548,16 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 		goto err_enable_device;
 
 	if (force_legacy) {
+		//如果强制按legacy设备probe，则执行legacy_probe
 		rc = virtio_pci_legacy_probe(vp_dev);
 		/* Also try modern mode if we can't map BAR0 (no IO space). */
 		if (rc == -ENODEV || rc == -ENOMEM)
+			//如果legacy_probe失败，则进行modern_probe
 			rc = virtio_pci_modern_probe(vp_dev);
 		if (rc)
 			goto err_probe;
 	} else {
+		//优先进行modern probe,如果失败再进行legacy_probe
 		rc = virtio_pci_modern_probe(vp_dev);
 		if (rc == -ENODEV)
 			rc = virtio_pci_legacy_probe(vp_dev);
@@ -564,7 +567,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 
 	pci_set_master(pci_dev);
 
-	//注册创建的virtio设备
+	//注册识别的virtio设备（例如引发virtio_net驱动probe此设备）
 	rc = register_virtio_device(&vp_dev->vdev);
 	reg_dev = vp_dev;
 	if (rc)

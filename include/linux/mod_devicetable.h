@@ -406,8 +406,8 @@ struct bcma_device_id {
 #define BCMA_ANY_CLASS		0xFF
 
 struct virtio_device_id {
-	__u32 device;
-	__u32 vendor;
+	__u32 device;//设备号
+	__u32 vendor;//厂商号
 };
 #define VIRTIO_DEV_ANY_ID	0xffffffff
 

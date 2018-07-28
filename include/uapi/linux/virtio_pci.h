@@ -134,14 +134,31 @@ struct virtio_pci_notify_cap {
 /* Fields in VIRTIO_PCI_CAP_COMMON_CFG: */
 struct virtio_pci_common_cfg {
 	/* About the whole device. */
+	//用于获取功能位的低32bit或者高32bit
+	//device_feature_select The driver uses this to select which feature bits device_feature shows. Value 0x0
+	//selects Feature Bits 0 to 31, 0x1 selects Feature Bits 32 to 63, etc.
 	__le32 device_feature_select;	/* read-write */
+	//只读寄存器，用于向驱动标明当前设备支持哪些功能位
+	//device_feature The device uses this to report which feature bits it is offering to the driver: the driver writes
+	//to device_feature_select to select which feature bits are presented.
 	__le32 device_feature;		/* read-only */
+	//用于获取driver功能位的低32bit或者高32bit
+	//driver_feature_select The driver uses this to select which feature bits driver_feature shows. Value 0x0
+	//selects Feature Bits 0 to 31, 0x1 selects Feature Bits 32 to 63, etc.
 	__le32 guest_feature_select;	/* read-write */
+	//驱动功能位，驱动与接受的设备功能位
+	//driver_feature The driver writes this to accept feature bits offered by the device. Driver Feature Bits se-
+	//lected by driver_feature_select.
 	__le32 guest_feature;		/* read-write */
 	__le16 msix_config;		/* read-write */
 	//队列数
 	__le16 num_queues;		/* read-only */
+	//驱动通过向此寄存器写0，来reset设备
+	//看virtio 1.0 spec 2.1节定义的设备状态
 	__u8 device_status;		/* read-write */
+	//用于保证配置原子的变量，设备每次在配置变更时会更改此值
+	//config_generation Configuration atomicity value. The device changes this every time the configuration
+	//noticeably changes.
 	__u8 config_generation;		/* read-only */
 
 	/* About a specific virtqueue. */
@@ -151,6 +168,7 @@ struct virtio_pci_common_cfg {
 	__le16 queue_msix_vector;	/* read-write */
 	__le16 queue_enable;		/* read-write */
 	__le16 queue_notify_off;	/* read-only */
+	//队列desc,avail,used的地址配置（来源于pci层）
 	__le32 queue_desc_lo;		/* read-write */
 	__le32 queue_desc_hi;		/* read-write */
 	__le32 queue_avail_lo;		/* read-write */

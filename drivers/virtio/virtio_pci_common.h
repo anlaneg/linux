@@ -49,14 +49,18 @@ struct virtio_pci_device {
 
 	/* In legacy mode, these two point to within ->legacy. */
 	/* Where to read and clear interrupt */
+	//映射中断状态字段（仅含有1个字节，目前使用了两个bit，0 bit是队列中断，1bit是配置中断）
 	u8 __iomem *isr;
 
 	/* Modern only fields */
 	/* The IO mapping for the PCI config space (non-legacy mode) */
+	//映射自设备（VIRTIO_PCI_CAP_COMMON_CFG capability）
 	struct virtio_pci_common_cfg __iomem *common;
 	/* Device-specific data (non-legacy mode)  */
 	void __iomem *device;
 	/* Base of vq notifications (non-legacy mode). */
+	//vq通知的基地址（自此地址开始，queue_notify_off * notify_off_multiplier）
+	//可以对应到每个queue对应的通知io
 	void __iomem *notify_base;
 
 	/* So we can sanity-check accesses. */
@@ -67,6 +71,7 @@ struct virtio_pci_device {
 	int notify_map_cap;
 
 	/* Multiply queue_notify_off by this value. (non-legacy mode). */
+	//每个队列对应的通知通知offset倍数
 	u32 notify_offset_multiplier;
 
 	int modern_bars;

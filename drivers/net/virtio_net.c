@@ -2858,6 +2858,7 @@ static int virtnet_validate(struct virtio_device *vdev)
 }
 
 //驱动探测virtio_device产生net_device设备,将net_device加入到napi_poll中，使其开始收包
+//在本函数执行前，virtio-bus的probe函数将调用，并设置vdev->feature标记位
 static int virtnet_probe(struct virtio_device *vdev)
 {
 	int i, err = -ENOMEM;
@@ -2867,7 +2868,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	int mtu;
 
 	/* Find if host supports multiqueue virtio_net device */
-    //如果支持多队列，则读取多队列配置到max_queue_pairs
+    //检查设备是否支持多队列功能，如果支持则读取多队列配置到max_queue_pairs
 	//找出设备支持的最大虚队列数（组数，rx+tx算一组）
 	err = virtio_cread_feature(vdev, VIRTIO_NET_F_MQ,
 				   struct virtio_net_config,
@@ -2903,9 +2904,9 @@ static int virtnet_probe(struct virtio_device *vdev)
 	SET_NETDEV_DEV(dev, &vdev->dev);
 
 	/* Do we support "hardware" checksums? */
-    //是否支持硬件checksum
 	//7. A performant driver would indicate that it will generate checksumless packets by negotating the VIR-
-	//TIO_NET_F_CSUM feature.
+	//TIO_NET_F_CSUM feature.net_f_csum功能
+	//检查驱动是否支持virtio_net_f_csum
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CSUM)) {
 		/* This opens up the world of extra features. */
 		dev->hw_features |= NETIF_F_HW_CSUM | NETIF_F_SG;
@@ -2992,10 +2993,11 @@ static int virtnet_probe(struct virtio_device *vdev)
 	    virtio_has_feature(vdev, VIRTIO_F_VERSION_1))
 		vi->any_header_sg = true;
 
-	//协商出控制队列
+	//如果driver支持控制队列，则标明有控制队列
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ))
 		vi->has_cvq = true;
 
+	//如果驱动支持mtu,则自配置中读取mtu
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_MTU)) {
 		mtu = virtio_cread16(vdev,
 				     offsetof(struct virtio_net_config,
@@ -3193,6 +3195,7 @@ static struct virtio_device_id id_table[] = {
 	VIRTIO_NET_F_MTU, VIRTIO_NET_F_CTRL_GUEST_OFFLOADS, \
 	VIRTIO_NET_F_SPEED_DUPLEX, VIRTIO_NET_F_STANDBY
 
+//virtio-net当前支持的功能表
 static unsigned int features[] = {
 	VIRTNET_FEATURES,
 };

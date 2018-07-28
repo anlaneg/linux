@@ -2127,9 +2127,11 @@ int ida_pre_get(struct ida *ida, gfp_t gfp)
 		preempt_enable();
 
 	if (!this_cpu_read(ida_bitmap)) {
+		//初始化per cpu "ida_bitmap"
 		struct ida_bitmap *bitmap = kzalloc(sizeof(*bitmap), gfp);
 		if (!bitmap)
 			return 0;
+		//防并发处理
 		if (this_cpu_cmpxchg(ida_bitmap, NULL, bitmap))
 			kfree(bitmap);
 	}

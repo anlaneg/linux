@@ -239,6 +239,7 @@ static int __pci_find_next_cap(struct pci_bus *bus, unsigned int devfn,
 	return __pci_find_next_cap_ttl(bus, devfn, pos, cap, &ttl);
 }
 
+//获取自pos位置开始查找下一个指定的cap
 int pci_find_next_capability(struct pci_dev *dev, u8 pos, int cap)
 {
 	return __pci_find_next_cap(dev->bus, dev->devfn,

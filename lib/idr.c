@@ -407,6 +407,7 @@ int ida_get_new_above(struct ida *ida, int start, int *id)
 			slot = radix_tree_next_slot(slot, &iter,
 						RADIX_TREE_ITER_TAGGED);
 		if (!slot) {
+			//首次进入时，自root处获取iter
 			slot = idr_get_free(root, &iter, GFP_NOWAIT, IDA_MAX);
 			if (IS_ERR(slot)) {
 				if (slot == ERR_PTR(-ENOMEM))
@@ -571,9 +572,11 @@ int ida_simple_get(struct ida *ida, unsigned int start, unsigned int end,
 	BUG_ON((int)end < 0);
 
 	if (end == 0)
+		//未指定最大值时，使用max
 		max = 0x80000000;
 	else {
 		BUG_ON(end < start);
+		//指定最大值时，max更新
 		max = end - 1;
 	}
 

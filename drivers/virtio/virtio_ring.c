@@ -95,7 +95,7 @@ struct vring_virtqueue {
 	u16 avail_idx_shadow;
 
 	/* How to notify other side. FIXME: commonalize hcalls! */
-	//用于通知对端
+	//用于通知对端,队列vq发生变化
 	bool (*notify)(struct virtqueue *vq);
 
 	/* DMA, allocation, and size information */

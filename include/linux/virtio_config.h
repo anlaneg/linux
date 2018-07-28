@@ -69,8 +69,11 @@ struct virtio_config_ops {
 	//配置项设置
 	void (*set)(struct virtio_device *vdev, unsigned offset,
 		    const void *buf, unsigned len);
+	//读取配置的版本，用于保证配置的原子性
 	u32 (*generation)(struct virtio_device *vdev);
+	//获取设备状态
 	u8 (*get_status)(struct virtio_device *vdev);
+	//设置设备状态
 	void (*set_status)(struct virtio_device *vdev, u8 status);
 	void (*reset)(struct virtio_device *vdev);
 	int (*find_vqs)(struct virtio_device *, unsigned nvqs,
@@ -78,7 +81,9 @@ struct virtio_config_ops {
 			const char * const names[], const bool *ctx,
 			struct irq_affinity *desc);
 	void (*del_vqs)(struct virtio_device *);
+	//获取设备功能位
 	u64 (*get_features)(struct virtio_device *vdev);
+	//设置驱动与设备在驱动时协商出来的设备应支持的功能位
 	int (*finalize_features)(struct virtio_device *vdev);
 	const char *(*bus_name)(struct virtio_device *vdev);
 	int (*set_vq_affinity)(struct virtqueue *vq, int cpu);
@@ -97,6 +102,7 @@ void virtio_check_driver_offered_feature(const struct virtio_device *vdev,
  * @vdev: the device
  * @fbit: the feature bit
  */
+//检查virtio_device是否支持某个功能号
 static inline bool __virtio_test_bit(const struct virtio_device *vdev,
 				     unsigned int fbit)
 {
@@ -153,11 +159,11 @@ static inline void __virtio_clear_bit(struct virtio_device *vdev,
 static inline bool virtio_has_feature(const struct virtio_device *vdev,
 				      unsigned int fbit)
 {
-	//28以下的bit功能位是必须提供的，如果未提供，则直接挂掉
+	//28以下的bit功能位是virio_dirver必须提供的，如果未提供，则直接挂掉
 	if (fbit < VIRTIO_TRANSPORT_F_START)
 		virtio_check_driver_offered_feature(vdev, fbit);
 
-	//检查bit位是否提供
+	//大于28的是virtio_device提供的功能，检查bit位是否提供
 	return __virtio_test_bit(vdev, fbit);
 }
 
@@ -360,6 +366,7 @@ static inline void __virtio_cread_many(struct virtio_device *vdev,
 				       unsigned int offset,
 				       void *buf, size_t count, size_t bytes)
 {
+	//读取配置的版本号
 	u32 old, gen = vdev->config->generation ?
 		vdev->config->generation(vdev) : 0;
 	int i;
@@ -372,8 +379,10 @@ static inline void __virtio_cread_many(struct virtio_device *vdev,
 			vdev->config->get(vdev, offset + bytes * i,
 					  buf + i * bytes, bytes);
 
+		//再读取一遍配置版本号
 		gen = vdev->config->generation ?
 			vdev->config->generation(vdev) : 0;
+	////如果配置版本号不一致，则说明在多次get之间配置发生过变化，则配置可能是个中间结果，需要重新读取
 	} while (gen != old);
 }
 
@@ -446,7 +455,7 @@ static inline void virtio_cwrite64(struct virtio_device *vdev,
 	vdev->config->set(vdev, offset, &val, sizeof(val));
 }
 
-//检查virtio是否支持功能fbit,如果支持，则读取此功能配置
+//检查virtio device是否支持功能fbit,如果支持，则读取此功能配置
 /* Conditional config space accessors. */
 #define virtio_cread_feature(vdev, fbit, structname, member, ptr)	\
 	({								\
