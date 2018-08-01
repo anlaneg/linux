@@ -294,7 +294,8 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 		kobject_init(&map->kobj, &map_attr_type);
 		map->mem = mem;
 		mem->map = map;
-		//构造并添加目录，例如：/sys/class/uio/uio0/maps/map0
+		//构造并添加目录，例如：/sys/class/uio/uio0/maps/map0 （见igb_uio可知在map->mem中存放的是
+		//pci设备的bar资源（memory space)
 		ret = kobject_add(&map->kobj, idev->map_dir, "map%d", mi);
 		if (ret)
 			goto err_map_kobj;

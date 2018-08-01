@@ -1738,7 +1738,9 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
  * These helpers provide future and backwards compatibility
  * for accessing popular PCI BAR info
  */
+//bar的起始地址
 #define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
+//bar的长度
 #define pci_resource_end(dev, bar)	((dev)->resource[(bar)].end)
 //取第bar个dev资源flags
 #define pci_resource_flags(dev, bar)	((dev)->resource[(bar)].flags)

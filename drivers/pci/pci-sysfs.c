@@ -1304,14 +1304,17 @@ static int pci_create_attr(struct pci_dev *pdev, int num, int write_combine)
 		sprintf(res_attr_name, "resource%d_wc", num);
 		res_attr->mmap = pci_mmap_resource_wc;
 	} else {
+		//生成pci下的resource%d文件
 		pdev->res_attr[num] = res_attr;
 		sprintf(res_attr_name, "resource%d", num);
 		if (pci_resource_flags(pdev, num) & IORESOURCE_IO) {
+			//io资源
 			res_attr->read = pci_read_resource_io;
 			res_attr->write = pci_write_resource_io;
 			if (arch_can_pci_mmap_io())
 				res_attr->mmap = pci_mmap_resource_uc;
 		} else {
+			//memroy资源时提供mmap函数
 			res_attr->mmap = pci_mmap_resource_uc;
 		}
 	}
@@ -1341,6 +1344,7 @@ static int pci_create_resource_files(struct pci_dev *pdev)
 	for (i = 0; i < PCI_ROM_RESOURCE; i++) {
 
 		/* skip empty resources */
+		//跳过空的资源文件
 		if (!pci_resource_len(pdev, i))
 			continue;
 
@@ -1504,11 +1508,13 @@ int __must_check pci_create_sysfs_dev_files(struct pci_dev *pdev)
 	if (retval)
 		goto err;
 
+	//创建resource文件
 	retval = pci_create_resource_files(pdev);
 	if (retval)
 		goto err_config_file;
 
 	/* If the device has a ROM, try to expose it in sysfs. */
+	//有rom资源
 	rom_size = pci_resource_len(pdev, PCI_ROM_RESOURCE);
 	if (rom_size) {
 		attr = kzalloc(sizeof(*attr), GFP_ATOMIC);
@@ -1522,7 +1528,7 @@ int __must_check pci_create_sysfs_dev_files(struct pci_dev *pdev)
 		attr->attr.mode = S_IRUSR | S_IWUSR;
 		attr->read = pci_read_rom;
 		attr->write = pci_write_rom;
-		retval = sysfs_create_bin_file(&pdev->dev.kobj, attr);
+		retval = sysfs_create_bin_file(&pdev->dev.kobj, attr);//创建rom文件
 		if (retval) {
 			kfree(attr);
 			goto err_resource_files;
