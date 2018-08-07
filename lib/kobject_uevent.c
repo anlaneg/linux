@@ -318,12 +318,15 @@ static int uevent_net_broadcast_untagged(struct kobj_uevent_env *env,
 	int retval = 0;
 
 	/* send netlink message */
+	//遍历所有关注uevent消息的socket
 	list_for_each_entry(ue_sk, &uevent_sock_list, list) {
 		struct sock *uevent_sock = ue_sk->sk;
 
+		//跳过未监听的
 		if (!netlink_has_listeners(uevent_sock, 1))
 			continue;
 
+		//构造消息对应的skb
 		if (!skb) {
 			retval = -ENOMEM;
 			skb = alloc_uevent_skb(env, action_string, devpath);
@@ -331,6 +334,7 @@ static int uevent_net_broadcast_untagged(struct kobj_uevent_env *env,
 				continue;
 		}
 
+		//广播通知uevent_sock（消息保存在skb中）
 		retval = netlink_broadcast(uevent_sock, skb_get(skb), 0, 1,
 					   GFP_KERNEL);
 		/* ENOBUFS should be handled in userspace */
@@ -381,6 +385,7 @@ static int uevent_net_broadcast_tagged(struct sock *usk,
 }
 #endif
 
+//uevent事件广播
 static int kobject_uevent_net_broadcast(struct kobject *kobj,
 					struct kobj_uevent_env *env,
 					const char *action_string,
@@ -456,6 +461,7 @@ static void zap_modalias_env(struct kobj_uevent_env *env)
  * Returns 0 if kobject_uevent_env() is completed with success or the
  * corresponding error when it fails.
  */
+//触发uevent消息
 int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		       char *envp_ext[])
 {
@@ -530,17 +536,21 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	}
 
 	/* default keys */
+	//添加action
 	retval = add_uevent_var(env, "ACTION=%s", action_string);
 	if (retval)
 		goto exit;
+	//添加devpath
 	retval = add_uevent_var(env, "DEVPATH=%s", devpath);
 	if (retval)
 		goto exit;
+	//添加subsystem
 	retval = add_uevent_var(env, "SUBSYSTEM=%s", subsystem);
 	if (retval)
 		goto exit;
 
 	/* keys passed in from the caller */
+	//添加扩展的环境变量
 	if (envp_ext) {
 		for (i = 0; envp_ext[i]; i++) {
 			retval = add_uevent_var(env, "%s", envp_ext[i]);
@@ -585,7 +595,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		break;
 	}
 
-	//Uevent是Kobject的一部分，用于在Kobject状态发生改变时，例如增加、移除等，通知用户空间程序。用户空间程序收到这样的事件后，
+	//uevent是Kobject的一部分，用于在Kobject状态发生改变时，例如增加、移除等，通知用户空间程序。用户空间程序收到这样的事件后，
 	//会做相应的处理。
 	//该机制通常是用来支持热拔插设备的，例如U盘插入后，USB相关的驱动软件会动态创建用于表示该U盘的device结构（相应的也包括其中的kobject），
 	//并告知用户空间程序，为该U盘动态的创建/dev/目录下的设备节点，更进一步，可以通知其它的应用程序，将该U盘设备mount到系统中，从而动态的支持该设备。
@@ -595,6 +605,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	//如果采用调用用户空间文件的方式，有个缺点，如果两个事件先后发生，实际上在用户空间里可能无法获知两个事件的先后顺序。
 	mutex_lock(&uevent_sock_mutex);
 	/* we will send an event, so request a new sequence number */
+	//添加seqnum序号
 	retval = add_uevent_var(env, "SEQNUM=%llu", (unsigned long long)++uevent_seqnum);
 	if (retval) {
 		mutex_unlock(&uevent_sock_mutex);
@@ -674,6 +685,7 @@ int add_uevent_var(struct kobj_uevent_env *env, const char *format, ...)
 	}
 
 	va_start(args, format);
+	//格式化字符串，并将其填充到env->buf中
 	len = vsnprintf(&env->buf[env->buflen],
 			sizeof(env->buf) - env->buflen,
 			format, args);
@@ -685,7 +697,7 @@ int add_uevent_var(struct kobj_uevent_env *env, const char *format, ...)
 	}
 
 	env->envp[env->envp_idx++] = &env->buf[env->buflen];
-	env->buflen += len + 1;
+	env->buflen += len + 1;//增加buf的已用空间
 	return 0;
 }
 EXPORT_SYMBOL_GPL(add_uevent_var);
@@ -695,17 +707,20 @@ static int uevent_net_broadcast(struct sock *usk, struct sk_buff *skb,
 				struct netlink_ext_ack *extack)
 {
 	/* u64 to chars: 2^64 - 1 = 21 chars */
+	//为了保存seqnum=xx
 	char buf[sizeof("SEQNUM=") + 21];
 	struct sk_buff *skbc;
 	int ret;
 
 	/* bump and prepare sequence number */
+	//构造并填充seqnum
 	ret = snprintf(buf, sizeof(buf), "SEQNUM=%llu", ++uevent_seqnum);
 	if (ret < 0 || (size_t)ret >= sizeof(buf))
 		return -ENOMEM;
 	ret++;
 
 	/* verify message does not overflow */
+	//udevent消息最大不能超过UEVENT_BUFFER_SIZE
 	if ((skb->len + ret) > UEVENT_BUFFER_SIZE) {
 		NL_SET_ERR_MSG(extack, "uevent message too big");
 		return -EINVAL;
@@ -717,12 +732,14 @@ static int uevent_net_broadcast(struct sock *usk, struct sk_buff *skb,
 		return -ENOMEM;
 
 	/* append sequence number */
+	//append序列号在skbc尾部
 	skb_put_data(skbc, buf, ret);
 
 	/* remove msg header */
 	skb_pull(skbc, NLMSG_HDRLEN);
 
 	/* set portid 0 to inform userspace message comes from kernel */
+	//知会用会态，此消息来源于kernel
 	NETLINK_CB(skbc).portid = 0;
 	NETLINK_CB(skbc).dst_group = 1;
 
@@ -755,6 +772,7 @@ static int uevent_net_rcv_skb(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	mutex_lock(&uevent_sock_mutex);
+	//向外发送uevent消息
 	ret = uevent_net_broadcast(net->uevent_sock->sk, skb, extack);
 	mutex_unlock(&uevent_sock_mutex);
 
@@ -763,6 +781,7 @@ static int uevent_net_rcv_skb(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 static void uevent_net_rcv(struct sk_buff *skb)
 {
+	//将收到的消息投递给uevent_net_rcv_skb处理
 	netlink_rcv_skb(skb, &uevent_net_rcv_skb);
 }
 
@@ -771,7 +790,7 @@ static int uevent_net_init(struct net *net)
 	struct uevent_sock *ue_sk;
 	struct netlink_kernel_cfg cfg = {
 		.groups	= 1,
-		.input = uevent_net_rcv,
+		.input = uevent_net_rcv,//NETLINK_KOBJECT_UEVENT类型消息处理
 		.flags	= NL_CFG_F_NONROOT_RECV
 	};
 
@@ -779,6 +798,7 @@ static int uevent_net_init(struct net *net)
 	if (!ue_sk)
 		return -ENOMEM;
 
+	//注册NETLINK_KOBJECT_UEVENT类型sk
 	ue_sk->sk = netlink_kernel_create(net, NETLINK_KOBJECT_UEVENT, &cfg);
 	if (!ue_sk->sk) {
 		printk(KERN_ERR
@@ -787,6 +807,7 @@ static int uevent_net_init(struct net *net)
 		return -ENODEV;
 	}
 
+	//记录负责kobject_uevent的socket
 	net->uevent_sock = ue_sk;
 
 	/* Restrict uevents to initial user namespace. */

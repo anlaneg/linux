@@ -84,6 +84,7 @@ struct net {
 	struct sock 		*rtnl;			/* rtnetlink socket */
 	struct sock		*genl_sock;
 
+	//负责同一个namespace下所有uevent事件的socket
 	struct uevent_sock	*uevent_sock;		/* uevent socket */
 
 	struct list_head 	dev_base_head;//属于同一个net下的设备均挂接在此链上

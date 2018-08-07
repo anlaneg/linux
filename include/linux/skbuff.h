@@ -2061,6 +2061,7 @@ static inline void *skb_put_zero(struct sk_buff *skb, unsigned int len)
 	return tmp;
 }
 
+//将数据data附加在skb结尾处
 static inline void *skb_put_data(struct sk_buff *skb, const void *data,
 				 unsigned int len)
 {
