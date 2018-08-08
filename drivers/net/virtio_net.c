@@ -588,7 +588,8 @@ static struct sk_buff *receive_small(struct net_device *dev,
 				     struct receive_queue *rq,
 				     void *buf, void *ctx,
 				     unsigned int len,
-				     unsigned int *xdp_xmit)
+				     unsigned int *xdp_xmit,
+				     unsigned int *rbytes)
 {
 	struct sk_buff *skb;
 	struct bpf_prog *xdp_prog;
@@ -603,6 +604,7 @@ static struct sk_buff *receive_small(struct net_device *dev,
 	int err;
 
 	len -= vi->hdr_len;
+	*rbytes += len;
 
 	rcu_read_lock();
 	xdp_prog = rcu_dereference(rq->xdp_prog);
@@ -709,11 +711,13 @@ static struct sk_buff *receive_big(struct net_device *dev,
 				   struct virtnet_info *vi,
 				   struct receive_queue *rq,
 				   void *buf,
-				   unsigned int len)
+				   unsigned int len,
+				   unsigned int *rbytes)
 {
 	struct page *page = buf;
 	struct sk_buff *skb = page_to_skb(vi, rq, page, 0, len, PAGE_SIZE);
 
+	*rbytes += len - vi->hdr_len;
 	if (unlikely(!skb))
 		goto err;
 
@@ -731,7 +735,8 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 					 void *buf,
 					 void *ctx,
 					 unsigned int len,
-					 unsigned int *xdp_xmit)
+					 unsigned int *xdp_xmit,
+					 unsigned int *rbytes)
 {
 	struct virtio_net_hdr_mrg_rxbuf *hdr = buf;
 	u16 num_buf = virtio16_to_cpu(vi->vdev, hdr->num_buffers);
@@ -744,6 +749,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 	int err;
 
 	head_skb = NULL;
+	*rbytes += len - vi->hdr_len;
 
 	rcu_read_lock();
 	xdp_prog = rcu_dereference(rq->xdp_prog);
@@ -884,6 +890,7 @@ static struct sk_buff *receive_mergeable(struct net_device *dev,
 			goto err_buf;
 		}
 
+		*rbytes += len;
 		page = virt_to_head_page(buf);
 
 		truesize = mergeable_ctx_to_truesize(ctx);
@@ -940,6 +947,7 @@ err_skb:
 			dev->stats.rx_length_errors++;
 			break;
 		}
+		*rbytes += len;
 		page = virt_to_head_page(buf);
 		put_page(page);
 	}
@@ -951,14 +959,13 @@ xdp_xmit:
 }
 
 //解析buf，并组装成skb,使其走kernel协议栈
-static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
-		       void *buf, unsigned int len, void **ctx,
-		       unsigned int *xdp_xmit)
+static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
+			void *buf, unsigned int len, void **ctx,
+			unsigned int *xdp_xmit, unsigned int *rbytes)
 {
 	struct net_device *dev = vi->dev;
 	struct sk_buff *skb;
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
-	int ret;
 
 	if (unlikely(len < vi->hdr_len + ETH_HLEN)) {
 		//报文过小，丢弃
@@ -971,24 +978,23 @@ static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 		} else {
 			put_page(virt_to_head_page(buf));
 		}
-		return 0;
+		return;
 	}
 
 	if (vi->mergeable_rx_bufs)
-		skb = receive_mergeable(dev, vi, rq, buf, ctx, len, xdp_xmit);
+		skb = receive_mergeable(dev, vi, rq, buf, ctx, len, xdp_xmit,
+					rbytes);
 	else if (vi->big_packets)
-		skb = receive_big(dev, vi, rq, buf, len);
+		skb = receive_big(dev, vi, rq, buf, len, rbytes);
 	else
 		//将buf转换成skb
-		skb = receive_small(dev, vi, rq, buf, ctx, len, xdp_xmit);
+		skb = receive_small(dev, vi, rq, buf, ctx, len, xdp_xmit, rbytes);
 
 	if (unlikely(!skb))
-		return 0;
+		return;
 
 	//提取virtio中skb的描述信息
 	hdr = skb_vnet_hdr(skb);
-
-	ret = skb->len;
 
 	if (hdr->hdr.flags & VIRTIO_NET_HDR_F_DATA_VALID)
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -1006,12 +1012,11 @@ static int receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 		 ntohs(skb->protocol), skb->len, skb->pkt_type);
 
 	napi_gro_receive(&rq->napi, skb);
-	return ret;
+	return;
 
 frame_err:
 	dev->stats.rx_frame_errors++;
 	dev_kfree_skb(skb);
-	return 0;
 }
 
 /* Unlike mergeable buffers, all buffers are allocated to the
@@ -1263,13 +1268,13 @@ static int virtnet_receive(struct receive_queue *rq, int budget,
 		//采用virtqueue_get_buf_ctx收取buf,buf长度为len
 		while (received < budget &&
 		       (buf = virtqueue_get_buf_ctx(rq->vq, &len, &ctx))) {
-			bytes += receive_buf(vi, rq, buf, len, ctx, xdp_xmit);
+			receive_buf(vi, rq, buf, len, ctx, xdp_xmit, &bytes);
 			received++;
 		}
 	} else {
 		while (received < budget &&
 		       (buf = virtqueue_get_buf(rq->vq, &len)) != NULL) {
-			bytes += receive_buf(vi, rq, buf, len, NULL, xdp_xmit);
+			receive_buf(vi, rq, buf, len, NULL, xdp_xmit, &bytes);
 			received++;
 		}
 	}

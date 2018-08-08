@@ -441,14 +441,6 @@ re_probe:
 			goto probe_failed;
 	}
 
-	/*
-	 * Ensure devices are listed in devices_kset in correct order
-	 * It's important to move Dev to the end of devices_kset before
-	 * calling .probe, because it could be recursive and parent Dev
-	 * should always go first
-	 */
-	devices_kset_move_last(dev);
-
 	//如果dev所属的bus具有probe能力，则调用bus的probe
 	if (dev->bus->probe) {
 		ret = dev->bus->probe(dev);
