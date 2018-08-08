@@ -242,7 +242,7 @@ EXPORT_SYMBOL(inet_listen);
 /*
  *	Create an inet socket.
  */
-
+//inet socket创建
 static int inet_create(struct net *net, struct socket *sock, int protocol,
 		       int kern)
 {
@@ -337,7 +337,7 @@ lookup_protocol:
 	inet->nodefrag = 0;
 
 	if (SOCK_RAW == sock->type) {
-		inet->inet_num = protocol;
+		inet->inet_num = protocol;//raw socket时指定为协议号
 		if (IPPROTO_RAW == protocol)
 			inet->hdrincl = 1;
 	}
@@ -373,6 +373,7 @@ lookup_protocol:
 		 */
 		inet->inet_sport = htons(inet->inet_num);
 		/* Add to protocol hash chains. */
+		//将socket添加到hash表中
 		err = sk->sk_prot->hash(sk);
 		if (err) {
 			sk_common_release(sk);
@@ -1129,7 +1130,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
-    	   //定义ip raw
+    	   //注册 ip raw socket
 	       .type =       SOCK_RAW,
 	       .protocol =   IPPROTO_IP,	/* wild card */
 	       .prot =       &raw_prot,

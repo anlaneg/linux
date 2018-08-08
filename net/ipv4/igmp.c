@@ -1041,7 +1041,7 @@ static bool igmp_heard_query(struct in_device *in_dev, struct sk_buff *skb,
 }
 
 /* called in rcu_read_lock() section */
-//收到igmp报文
+//收到igmp报文（igmp报文入口）
 int igmp_rcv(struct sk_buff *skb)
 {
 	/* This basically follows the spec line by line -- see RFC1112 */

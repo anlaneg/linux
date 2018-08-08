@@ -553,8 +553,10 @@ static int xt_check_entry_match(const char *match, const char *target,
 	if (length == 0) /* no matches */
 		return 0;
 
+	//指向首个match
 	pos = (struct xt_entry_match *)match;
 	do {
+		//match均需要以alignment对齐
 		if ((unsigned long)pos % alignment)
 			return -EINVAL;
 
@@ -564,10 +566,12 @@ static int xt_check_entry_match(const char *match, const char *target,
 		if (pos->u.match_size < sizeof(struct xt_entry_match))
 			return -EINVAL;
 
+		//match的大小必小于等于length
 		if (pos->u.match_size > length)
 			return -EINVAL;
 
 		length -= pos->u.match_size;
+		//切到下一个match
 		pos = ((void *)((char *)(pos) + (pos)->u.match_size));
 	} while (length > 0);
 
@@ -916,6 +920,7 @@ EXPORT_SYMBOL(xt_compat_check_entry_offsets);
  *
  * Return: 0 on success, negative errno on failure.
  */
+//检查ipt_entry结构体的合法性
 int xt_check_entry_offsets(const void *base,
 			   const char *elems,
 			   unsigned int target_offset,
@@ -926,7 +931,7 @@ int xt_check_entry_offsets(const void *base,
 	const char *e = base;
 
 	/* target start is within the ip/ip6/arpt_entry struct */
-	//target_offset不会出现在struct ipt_entry 结构体中
+	//target_offset不会出现在struct ipt_entry 结构体中空间内
 	if (target_offset < size_of_base_struct)
 		return -EINVAL;
 
@@ -934,9 +939,10 @@ int xt_check_entry_offsets(const void *base,
 	if (target_offset + sizeof(*t) > next_offset)
 		return -EINVAL;
 
+	//target的大小不会小于xt_entry_target
 	t = (void *)(e + target_offset);
 	if (t->u.target_size < sizeof(*t))
-		return -EINVAL;//target的大小不会小于xt_entry_target
+		return -EINVAL;
 
 	//当前target的大小不会超过next_offset
 	if (target_offset + t->u.target_size > next_offset)
@@ -944,10 +950,11 @@ int xt_check_entry_offsets(const void *base,
 
 	if (strcmp(t->u.user.name, XT_STANDARD_TARGET) == 0) {
 		const struct xt_standard_target *st = (const void *)t;
-
+		//此种情况下，target结束后就是下一个ipt_entry
 		if (XT_ALIGN(target_offset + sizeof(*st)) != next_offset)
 			return -EINVAL;
 
+		//检查action是否合法
 		if (!verdict_ok(st->verdict))
 			return -EINVAL;
 	} else if (strcmp(t->u.user.name, XT_ERROR_TARGET) == 0) {
@@ -958,6 +965,7 @@ int xt_check_entry_offsets(const void *base,
 			return -EINVAL;
 	}
 
+	//进行match的检查
 	return xt_check_entry_match(elems, base + target_offset,
 				    __alignof__(struct xt_entry_match));
 }
@@ -1201,7 +1209,7 @@ struct xt_table_info *xt_alloc_table_info(unsigned int size)
 	struct xt_table_info *info = NULL;
 	size_t sz = sizeof(*info) + size;
 
-	//size最大512M(下面的sz < sizeof(*info)是无用的,这个可以提个patch）
+	//size最大512M(下面的sz < sizeof(*info)是为了防止overflow）
 	if (sz < sizeof(*info) || sz >= XT_MAX_TABLE_SIZE)
 		return NULL;
 

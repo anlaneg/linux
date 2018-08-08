@@ -96,13 +96,14 @@ EXPORT_SYMBOL_GPL(raw_v4_hashinfo);
 
 int raw_hash_sk(struct sock *sk)
 {
+	//取存放raw socket的哈希表
 	struct raw_hashinfo *h = sk->sk_prot->h.raw_hash;
 	struct hlist_head *head;
 
 	head = &h->ht[inet_sk(sk)->inet_num & (RAW_HTABLE_SIZE - 1)];
 
 	write_lock_bh(&h->lock);
-	sk_add_node(sk, head);
+	sk_add_node(sk, head);//将raw socket加入到链表
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 	write_unlock_bh(&h->lock);
 
@@ -173,6 +174,7 @@ static int icmp_filter(const struct sock *sk, const struct sk_buff *skb)
  * RFC 1122: SHOULD pass TOS value up to the transport layer.
  * -> It does. And not only TOS, but all IP header.
  */
+//将报文送给inet的raw socket
 static int raw_v4_input(struct sk_buff *skb, const struct iphdr *iph, int hash)
 {
 	int sdif = inet_sdif(skb);
@@ -186,6 +188,7 @@ static int raw_v4_input(struct sk_buff *skb, const struct iphdr *iph, int hash)
 	if (hlist_empty(head))
 		goto out;
 
+	//查找收取此协议的raw socket
 	net = dev_net(skb->dev);
 	sk = __raw_v4_lookup(net, __sk_head(head), iph->protocol,
 			     iph->saddr, iph->daddr,
@@ -225,7 +228,7 @@ int raw_local_deliver(struct sk_buff *skb, int protocol)
 	/* If there maybe a raw socket we must check - if not we
 	 * don't care less
 	 */
-	//有raw_socket收取此协议，需要详细检查
+	//有raw_socket收取此协议，则检查，并送给相应的socket
 	if (raw_sk && !raw_v4_input(skb, ip_hdr(skb), hash))
 		raw_sk = NULL;
 
@@ -997,7 +1000,7 @@ struct proto raw_prot = {
 	.obj_size	   = sizeof(struct raw_sock),
 	.useroffset	   = offsetof(struct raw_sock, filter),
 	.usersize	   = sizeof_field(struct raw_sock, filter),
-	.h.raw_hash	   = &raw_v4_hashinfo,
+	.h.raw_hash	   = &raw_v4_hashinfo,//设置raw hash
 #ifdef CONFIG_COMPAT
 	.compat_setsockopt = compat_raw_setsockopt,
 	.compat_getsockopt = compat_raw_getsockopt,

@@ -529,6 +529,7 @@ static struct sock *netlink_lookup(struct net *net, int protocol, u32 portid)
 	struct sock *sk;
 
 	rcu_read_lock();
+	//自hash表中取出注册时创建的sk
 	sk = __netlink_lookup(table, portid, net);
 	if (sk)
 		sock_hold(sk);
@@ -638,10 +639,10 @@ static int __netlink_create(struct net *net, struct socket *sock,
 	struct sock *sk;
 	struct netlink_sock *nlk;
 
-	//设置netlink的socket操作集
+	//设置netlink的sock操作集
 	sock->ops = &netlink_ops;
 
-	//申请netlink的socket私有数据
+	//申请netlink的sock私有数据
 	sk = sk_alloc(net, PF_NETLINK, GFP_KERNEL, &netlink_proto, kern);
 	if (!sk)
 		return -ENOMEM;
@@ -699,6 +700,7 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 #endif
 	if (nl_table[protocol].registered &&
 	    try_module_get(nl_table[protocol].module))
+		//此协议已注册，依赖模块module
 		module = nl_table[protocol].module;
 	else
 		//要求的协议未注册，返回不支持
@@ -1266,6 +1268,7 @@ static int __netlink_sendskb(struct sock *sk, struct sk_buff *skb)
 
 	netlink_deliver_tap(sock_net(sk), skb);
 
+	//将报文存入接收队列，知会sk数据ready
 	skb_queue_tail(&sk->sk_receive_queue, skb);
 	sk->sk_data_ready(sk);
 	return len;
@@ -1312,6 +1315,7 @@ static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
 				  struct sock *ssk)
 {
 	int ret;
+	//由注册时产生的sk,获取对应的netlink_sock
 	struct netlink_sock *nlk = nlk_sk(sk);
 
 	ret = -ECONNREFUSED;
@@ -1324,7 +1328,7 @@ static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
 		nlk->netlink_rcv(skb);
 		consume_skb(skb);
 	} else {
-		//无netlink_rcv回调，丢包
+		//无netlink_rcv回调，丢包(可能正在移除）
 		kfree_skb(skb);
 	}
 	sock_put(sk);
@@ -1342,6 +1346,7 @@ int netlink_unicast(struct sock *ssk, struct sk_buff *skb,
 
 	timeo = sock_sndtimeo(ssk, nonblock);
 retry:
+	//通过portid找到需要知会哪个sk
 	sk = netlink_getsockbyportid(ssk, portid);
 	if (IS_ERR(sk)) {
 		kfree_skb(skb);
@@ -1368,6 +1373,8 @@ retry:
 }
 EXPORT_SYMBOL(netlink_unicast);
 
+//group参数用于表示，是否校验是否存在group
+//是否有监听者
 int netlink_has_listeners(struct sock *sk, unsigned int group)
 {
 	int res = 0;
@@ -1839,6 +1846,7 @@ static void netlink_cmsg_listen_all_nsid(struct sock *sk, struct msghdr *msg,
 		 &NETLINK_CB(skb).nsid);
 }
 
+//用户态请求kernel转发msg数据
 static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
@@ -1911,9 +1919,11 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	if (dst_group) {
+		//采用组播转发
 		refcount_inc(&skb->users);
 		netlink_broadcast(sk, skb, dst_portid, dst_group, GFP_KERNEL);
 	}
+	//采用单播转发
 	err = netlink_unicast(sk, skb, dst_portid, msg->msg_flags&MSG_DONTWAIT);
 
 out:
@@ -2020,7 +2030,8 @@ static void netlink_data_ready(struct sock *sk)
  *	complete set of kernel non-blocking support for message
  *	queueing.
  */
-//注册kernel的netlink支持的protocol(unit)
+//注册netlink支持的protocol（参数中叫unit)
+//注：nlk->flag均被打上了kernel标记，故用于注册kernel可处理的netlink消息
 struct sock *
 __netlink_kernel_create(struct net *net, int unit, struct module *module,
 			struct netlink_kernel_cfg *cfg)
@@ -2037,7 +2048,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (unit < 0 || unit >= MAX_LINKS)
 		return NULL;//参数校验
 
-	//创建sock(仅指明type)
+	//创建sock(仅指明type=SOCK_DGRAM)
 	if (sock_create_lite(PF_NETLINK, SOCK_DGRAM, unit, &sock))
 		return NULL;
 
@@ -2046,6 +2057,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	sk = sock->sk;
 
+	//最多支持多少组
 	if (!cfg || cfg->groups < 32)
 		groups = 32;
 	else
@@ -2068,7 +2080,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 
 	netlink_table_grab();
 	if (!nl_table[unit].registered) {
-		//注册此协议
+		//此协议未注册，在此注册此议
 		nl_table[unit].groups = groups;
 		rcu_assign_pointer(nl_table[unit].listeners, listeners);
 		nl_table[unit].cb_mutex = cb_mutex;
@@ -2082,6 +2094,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 		}
 		nl_table[unit].registered = 1;
 	} else {
+		//重复注册
 		kfree(listeners);
 		nl_table[unit].registered++;
 	}
@@ -2534,6 +2547,7 @@ static int netlink_walk_start(struct nl_seq_iter *iter)
 {
 	int err;
 
+	//遍历nl_table下的sk 哈希表
 	err = rhashtable_walk_init(&nl_table[iter->link].hash, &iter->hti,
 				   GFP_KERNEL);
 	if (err) {
@@ -2650,10 +2664,10 @@ static int netlink_seq_show(struct seq_file *seq, void *v)
 }
 
 static const struct seq_operations netlink_seq_ops = {
-	.start  = netlink_seq_start,
+	.start  = netlink_seq_start,//开始遍历
 	.next   = netlink_seq_next,
 	.stop   = netlink_seq_stop,
-	.show   = netlink_seq_show,
+	.show   = netlink_seq_show,//显示结果
 };
 #endif
 
@@ -2700,6 +2714,7 @@ static const struct net_proto_family netlink_family_ops = {
 static int __net_init netlink_net_init(struct net *net)
 {
 #ifdef CONFIG_PROC_FS
+	//注册/proc/net/netlink文件，用于显示当前系统注册的所有netlink协议sock
 	if (!proc_create_net("netlink", 0, net->proc_net, &netlink_seq_ops,
 			sizeof(struct nl_seq_iter)))
 		return -ENOMEM;

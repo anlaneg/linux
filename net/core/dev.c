@@ -3141,8 +3141,10 @@ static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device 
 		goto out_null;
 
 	if (netif_needs_gso(skb, features)) {
+		//检查是否需要处理gso
 		struct sk_buff *segs;
 
+		//软件处理gso分段
 		segs = skb_gso_segment(skb, features);
 		if (IS_ERR(segs)) {
 			goto out_kfree_skb;
@@ -3477,6 +3479,7 @@ static u16 __netdev_pick_tx(struct net_device *dev, struct sk_buff *skb)
 	return queue_index;
 }
 
+//返回要投递的队列
 struct netdev_queue *netdev_pick_tx(struct net_device *dev,
 				    struct sk_buff *skb,
 				    void *accel_priv)
@@ -3491,9 +3494,12 @@ struct netdev_queue *netdev_pick_tx(struct net_device *dev,
 #endif
 
 	if (dev->real_num_tx_queues != 1) {
+		//设置有多个发送队列，取设备驱动操作集
 		const struct net_device_ops *ops = dev->netdev_ops;
 
+		//选择采用哪个发送队列
 		if (ops->ndo_select_queue)
+			//通过驱动操作函数先择
 			queue_index = ops->ndo_select_queue(dev, skb, accel_priv,
 							    __netdev_pick_tx);
 		else
@@ -3594,6 +3600,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, void *accel_priv)
 	 *Either shot noqueue qdisc, it is even simpler 8)
 	 */
 	if (dev->flags & IFF_UP) {
+		//发送报文时，接口必须为up
 		int cpu = smp_processor_id(); /* ok because BHs are off */
 
 		if (txq->xmit_lock_owner != cpu) {
@@ -3609,6 +3616,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, void *accel_priv)
 
 			if (!netif_xmit_stopped(txq)) {
 				__this_cpu_inc(xmit_recursion);
+				//调用ndo_start_xmit完成dev设备单个skb的发送
 				skb = dev_hard_start_xmit(skb, dev, txq, &rc);
 				__this_cpu_dec(xmit_recursion);
 				if (dev_xmit_complete(rc)) {
@@ -4114,6 +4122,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	rxqueue = netif_get_rxqueue(skb);
 	xdp->rxq = &rxqueue->xdp_rxq;
 
+	//执行xdp program
 	act = bpf_prog_run_xdp(xdp_prog, xdp);
 
 	off = xdp->data - orig_data;
@@ -4149,7 +4158,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	case XDP_ABORTED:
 		trace_xdp_exception(skb->dev, xdp_prog, act);
 		/* fall through */
-	case XDP_DROP:
+	case XDP_DROP://action为丢包
 	do_drop:
 		kfree_skb(skb);
 		break;
@@ -4560,6 +4569,7 @@ static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc)
 
 	orig_dev = skb->dev;
 
+	//重置network头部偏移
 	skb_reset_network_header(skb);
 	if (!skb_transport_header_was_set(skb))
 		skb_reset_transport_header(skb);
@@ -4777,7 +4787,7 @@ static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 	int ret = 0;
 
 	switch (xdp->command) {
-	case XDP_SETUP_PROG:
+	case XDP_SETUP_PROG://设置新的xdp programme
 		rcu_assign_pointer(dev->xdp_prog, new);
 		if (old)
 			bpf_prog_put(old);
@@ -4819,6 +4829,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 
 		preempt_disable();
 		rcu_read_lock();
+		//skb->dev->xdp_prog的bpf_filter函数将被调用
 		ret = do_xdp_generic(rcu_dereference(skb->dev->xdp_prog), skb);
 		rcu_read_unlock();
 		preempt_enable();
@@ -8850,6 +8861,7 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 	dev_net_set(dev, net);
 	dev->ifindex = new_ifindex;
 
+	//发送netdev添加消息给用户态
 	/* Send a netdev-add uevent to the new namespace */
 	kobject_uevent(&dev->dev.kobj, KOBJ_ADD);
 	netdev_adjacent_add_links(dev);

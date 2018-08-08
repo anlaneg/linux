@@ -209,11 +209,12 @@ err:
 
 /* Packets leaving via this function must come back through nf_reinject(). */
 int nf_queue(struct sk_buff *skb, struct nf_hook_state *state,
-	     const struct nf_hook_entries *entries, unsigned int index,
+	     const struct nf_hook_entries *entries, unsigned int index,//index,hook索引号
 	     unsigned int verdict)
 {
 	int ret;
 
+	//将报文入队列指定队列
 	ret = __nf_queue(skb, state, entries, index, verdict >> NF_VERDICT_QBITS);
 	if (ret < 0) {
 		if (ret == -ESRCH &&

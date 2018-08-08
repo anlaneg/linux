@@ -424,6 +424,7 @@ bridged_dnat:
 	return 0;
 }
 
+//查找skb对应的vlanif(物理入接口为dev)
 static struct net_device *brnf_get_logical_dev(struct sk_buff *skb, const struct net_device *dev)
 {
 	struct net_device *vlan, *br;
@@ -449,7 +450,8 @@ struct net_device *setup_pre_routing(struct sk_buff *skb)
 	}
 
 	nf_bridge->in_prerouting = 1;
-	nf_bridge->physindev = skb->dev;
+	nf_bridge->physindev = skb->dev;//指明物理in设备
+	//如果有vlan找此skb对应的vlanif
 	skb->dev = brnf_get_logical_dev(skb, skb->dev);
 
 	if (skb->protocol == htons(ETH_P_8021Q))
@@ -836,6 +838,7 @@ static unsigned int ip_sabotage_in(void *priv,
 				   const struct nf_hook_state *state)
 {
 	if (skb->nf_bridge && !skb->nf_bridge->in_prerouting) {
+		//如果skb在bridge内转发，且当前不在prerouting阶段，则直接跳过此阶段执行
 		state->okfn(state->net, state->sk, skb);
 		return NF_STOLEN;
 	}
@@ -916,12 +919,14 @@ static const struct nf_hook_ops br_nf_ops[] = {
 		.priority = NF_BR_PRI_LAST,
 	},
 	{
+		//如果非nf_bridge，则继续执行hook,否则直接跳过其它hook点（ipv4)
 		.hook = ip_sabotage_in,
 		.pf = NFPROTO_IPV4,
 		.hooknum = NF_INET_PRE_ROUTING,
 		.priority = NF_IP_PRI_FIRST,
 	},
 	{
+		//如果非nf_bridge，则继续执行hook,否则直接跳过其它hook点（ipv6)
 		.hook = ip_sabotage_in,
 		.pf = NFPROTO_IPV6,
 		.hooknum = NF_INET_PRE_ROUTING,

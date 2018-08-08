@@ -4,6 +4,7 @@
 
 #include "../../../net/bridge/br_private.h"
 
+//申请nf_bridge内存
 static inline struct nf_bridge_info *nf_bridge_alloc(struct sk_buff *skb)
 {
 	skb->nf_bridge = kzalloc(sizeof(struct nf_bridge_info), GFP_ATOMIC);
@@ -22,6 +23,7 @@ int br_nf_hook_thresh(unsigned int hook, struct net *net, struct sock *sk,
 		      int (*okfn)(struct net *, struct sock *,
 				  struct sk_buff *));
 
+//返回skb对应的桥信息
 static inline struct nf_bridge_info *
 nf_bridge_info_get(const struct sk_buff *skb)
 {

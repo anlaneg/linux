@@ -49,13 +49,13 @@ struct nf_hook_ops;
 struct sock;
 
 struct nf_hook_state {
-	unsigned int hook;
-	u_int8_t pf;
-	struct net_device *in;
-	struct net_device *out;
+	unsigned int hook;//hook点
+	u_int8_t pf;//协议族
+	struct net_device *in;//入接口设备
+	struct net_device *out;//出接口设备
 	struct sock *sk;
-	struct net *net;
-	int (*okfn)(struct net *, struct sock *, struct sk_buff *);
+	struct net *net;//所属的net namespace
+	int (*okfn)(struct net *, struct sock *, struct sk_buff *);//hook完成后的回调
 };
 
 typedef unsigned int nf_hookfn(void *priv,
@@ -74,7 +74,7 @@ struct nf_hook_ops {
 
 struct nf_hook_entry {
 	nf_hookfn			*hook;
-	void				*priv;
+	void				*priv;//hook点私有数据
 };
 
 struct nf_hook_entries_rcu_head {
@@ -116,6 +116,7 @@ static inline int
 nf_hook_entry_hookfn(const struct nf_hook_entry *entry, struct sk_buff *skb,
 		     struct nf_hook_state *state)
 {
+	//传入hook点私有数据，skb,及上下文
 	return entry->hook(entry->priv, skb, state);
 }
 

@@ -318,11 +318,11 @@ static int uevent_net_broadcast_untagged(struct kobj_uevent_env *env,
 	int retval = 0;
 
 	/* send netlink message */
-	//遍历所有关注uevent消息的socket
+	//遍历所有uevent_sock_list(每个namespace有一个ue_sk,这里相当于遍历每个namepspace的ue)
 	list_for_each_entry(ue_sk, &uevent_sock_list, list) {
 		struct sock *uevent_sock = ue_sk->sk;
 
-		//跳过未监听的
+		//跳过未监听的uevent_sock
 		if (!netlink_has_listeners(uevent_sock, 1))
 			continue;
 
@@ -660,6 +660,7 @@ EXPORT_SYMBOL_GPL(kobject_uevent_env);
  * Returns 0 if kobject_uevent() is completed with success or the
  * corresponding error when it fails.
  */
+//通知用户态uevent
 int kobject_uevent(struct kobject *kobj, enum kobject_action action)
 {
 	return kobject_uevent_env(kobj, action, NULL);
@@ -781,7 +782,7 @@ static int uevent_net_rcv_skb(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 static void uevent_net_rcv(struct sk_buff *skb)
 {
-	//将收到的消息投递给uevent_net_rcv_skb处理
+	//将收到的消息投递给uevent_net_rcv_skb处理（此消息来源于kernel)
 	netlink_rcv_skb(skb, &uevent_net_rcv_skb);
 }
 

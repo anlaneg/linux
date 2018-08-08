@@ -519,24 +519,29 @@ int nf_hook_slow(struct sk_buff *skb, struct nf_hook_state *state,
 
 	//遍历执行e指向的nf_hook点（NF_ACCEPT时将继续执行后续hook，NF_DROP时需要丢包
 	//NF_QUEUE时报文将被调用nf_queue进行入队）
-	//由于已按优先级顺序进行hook执行，故只需要遍历及可
+	//由于已按优先级顺序排列，故进行hook执行，只需要遍历及可
 	for (; s < e->num_hook_entries; s++) {
+		//调用hook函数
 		verdict = nf_hook_entry_hookfn(&e->hooks[s], skb, state);
+		//取action
 		switch (verdict & NF_VERDICT_MASK) {
 		case NF_ACCEPT:
-			break;
+			break;//容许继续向下走
 		case NF_DROP:
+			//hook要求丢包
 			kfree_skb(skb);
 			ret = NF_DROP_GETERR(verdict);
 			if (ret == 0)
 				ret = -EPERM;
 			return ret;
 		case NF_QUEUE:
+			//hook要求包文入队，按要求入队到verdict指定的队列
 			ret = nf_queue(skb, state, e, s, verdict);
 			if (ret == 1)
 				continue;
 			return ret;
 		default:
+			//hook点已缓存报文
 			/* Implicit handling for NF_STOLEN, as well as any other
 			 * non conventional verdicts.
 			 */

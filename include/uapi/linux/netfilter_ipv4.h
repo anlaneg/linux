@@ -56,13 +56,13 @@
 #endif /* ! __KERNEL__ */
 
 enum nf_ip_hook_priorities {
-	NF_IP_PRI_FIRST = INT_MIN,
-	NF_IP_PRI_RAW_BEFORE_DEFRAG = -450,
-	NF_IP_PRI_CONNTRACK_DEFRAG = -400,
-	NF_IP_PRI_RAW = -300,
+	NF_IP_PRI_FIRST = INT_MIN,//第一优先级
+	NF_IP_PRI_RAW_BEFORE_DEFRAG = -450,//分片重组前
+	NF_IP_PRI_CONNTRACK_DEFRAG = -400,//执行分片重组
+	NF_IP_PRI_RAW = -300,//执行raw点
 	NF_IP_PRI_SELINUX_FIRST = -225,
 	NF_IP_PRI_CONNTRACK = -200,//连接跟踪在此点创建(此时创建出来的不考虑nat情况，正反向一致）
-	NF_IP_PRI_MANGLE = -150,
+	NF_IP_PRI_MANGLE = -150,//执行mangle点
 	NF_IP_PRI_NAT_DST = -100,//dnat点（这里会因为nat修改连接跟踪）
 	NF_IP_PRI_FILTER = 0,//执行filter
 	NF_IP_PRI_SECURITY = 50,

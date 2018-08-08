@@ -79,6 +79,7 @@ bool vlan_do_receive(struct sk_buff **skbp)
 }
 
 /* Must be invoked with rcu_read_lock. */
+//在dev设备上查找vlan_id对应的vlanif
 struct net_device *__vlan_find_dev_deep_rcu(struct net_device *dev,
 					__be16 vlan_proto, u16 vlan_id)
 {

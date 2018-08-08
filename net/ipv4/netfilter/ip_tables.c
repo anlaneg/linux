@@ -89,8 +89,10 @@ ip_packet_match(const struct iphdr *ip,
 static bool
 ip_checkentry(const struct ipt_ip *ip)
 {
+	//flag是否存在不认识的flag
 	if (ip->flags & ~IPT_F_MASK)
 		return false;
+	//invflags是否存在不认识的flag
 	if (ip->invflags & ~IPT_INV_MASK)
 		return false;
 	return true;
@@ -282,6 +284,7 @@ ipt_do_table(struct sk_buff *skb,
 	if (static_key_false(&xt_tee_enabled))
 		jumpstack += private->stacksize * __this_cpu_read(nf_skb_duplicated);
 
+	//取此hook点首个规则
 	e = get_entry(table_base, private->hook_entry[hook]);
 
 	//按顺序遍历所有规则，并执行
@@ -291,10 +294,11 @@ ipt_do_table(struct sk_buff *skb,
 		struct xt_counters *counter;
 
 		WARN_ON(!e);
+		//检查规则是否可匹配
 		if (!ip_packet_match(ip, indev, outdev,
 		    &e->ip, acpar.fragoff)) {
  no_match:
- 	 	    //如果未匹配，则尝试下一项
+ 	 	    //如果未匹配，则尝试下一条规则
 			e = ipt_next_entry(e);
 			continue;
 		}
@@ -308,10 +312,11 @@ ipt_do_table(struct sk_buff *skb,
 				goto no_match;
 		}
 
-		//增加规则匹配的包数据字节数
+		//规则匹配，增加规则匹配的包数据字节数
 		counter = xt_get_this_cpu_counter(&e->counters);
 		ADD_COUNTER(*counter, skb->len, 1);
 
+		//取此规则对应的target
 		t = ipt_get_target_c(e);
 		WARN_ON(!t->u.kernel.target);
 
@@ -357,6 +362,7 @@ ipt_do_table(struct sk_buff *skb,
 		acpar.target   = t->u.kernel.target;
 		acpar.targinfo = t->data;
 
+		//执行target对应的处理
 		verdict = t->u.kernel.target->target(skb, &acpar);
 		if (verdict == XT_CONTINUE) {
 			//继续匹配
@@ -618,8 +624,8 @@ static bool check_underflow(const struct ipt_entry *e)
 static int
 check_entry_size_and_hooks(struct ipt_entry *e,
 			   struct xt_table_info *newinfo,
-			   const unsigned char *base,
-			   const unsigned char *limit,
+			   const unsigned char *base,//内存基址
+			   const unsigned char *limit,//内存终点
 			   const unsigned int *hook_entries,
 			   const unsigned int *underflows,
 			   unsigned int valid_hooks)
@@ -627,7 +633,8 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 	unsigned int h;
 	int err;
 
-	//e的有效性检测
+	//e的有效性检测（1。必须对齐，2。必须在base,limit范围内;3.基next也必须在范围内）
+	//最后一个元素的next_offset指向的是limit
 	if ((unsigned long)e % __alignof__(struct ipt_entry) != 0 ||
 	    (unsigned char *)e + sizeof(struct ipt_entry) >= limit ||
 	    (unsigned char *)e + e->next_offset > limit)
@@ -638,10 +645,11 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 	    < sizeof(struct ipt_entry) + sizeof(struct xt_entry_target))
 		return -EINVAL;
 
+	//掩码必须有效
 	if (!ip_checkentry(&e->ip))
 		return -EINVAL;
 
-	//内部offset检查
+	//内部offset检查（防止数据有误）
 	err = xt_check_entry_offsets(e, e->elems, e->target_offset,
 				     e->next_offset);
 	if (err)
@@ -649,6 +657,7 @@ check_entry_size_and_hooks(struct ipt_entry *e,
 
 	/* Check hooks & underflows */
 	//目前NF_INET为５，即“路由前”，“去往本机","转发“，”来自本机", "路由后“
+	//检查更新hook点
 	for (h = 0; h < NF_INET_NUMHOOKS; h++) {
 		if (!(valid_hooks & (1 << h)))
 			continue;//跳过不存在的hook
@@ -709,6 +718,7 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	newinfo->number = repl->num_entries;
 
 	/* Init all hooks to impossible value. */
+	//初始化offset为不可能的值
 	for (i = 0; i < NF_INET_NUMHOOKS; i++) {
 		newinfo->hook_entry[i] = 0xFFFFFFFF;
 		newinfo->underflow[i] = 0xFFFFFFFF;
@@ -725,8 +735,8 @@ translate_table(struct net *net, struct xt_table_info *newinfo, void *entry0,
 	xt_entry_foreach(iter, entry0, newinfo->size) {
 		ret = check_entry_size_and_hooks(iter, newinfo, entry0,//entry0数组头
 						 entry0 + repl->size,//entry0数组结尾
-						 repl->hook_entry,
-						 repl->underflow,
+						 repl->hook_entry,//各hook首规则偏移量
+						 repl->underflow,//各hook兜底规则偏移量
 						 repl->valid_hooks);
 		if (ret != 0)
 			goto out_free;
@@ -1820,10 +1830,12 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 	loc_cpu_entry = newinfo->entries;
 	memcpy(loc_cpu_entry, repl->entries, repl->size);
 
+	//转换为kernel匹配用的表
 	ret = translate_table(net, newinfo, loc_cpu_entry, repl);
 	if (ret != 0)
 		goto out_free;
 
+	//用new_table替换,完成表注册
 	new_table = xt_register_table(net, table, &bootstrap, newinfo);
 	if (IS_ERR(new_table)) {
 		ret = PTR_ERR(new_table);
@@ -1831,6 +1843,7 @@ int ipt_register_table(struct net *net, const struct xt_table *table,
 	}
 
 	/* set res now, will see skbs right after nf_register_net_hooks */
+	//记录new_table指针（出参）
 	WRITE_ONCE(*res, new_table);
 	if (!ops)
 		return 0;

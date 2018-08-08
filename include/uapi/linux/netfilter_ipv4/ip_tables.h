@@ -173,10 +173,10 @@ struct ipt_getinfo {
 	unsigned int valid_hooks;
 
 	/* Hook entry points: one per netfilter hook. */
-	unsigned int hook_entry[NF_INET_NUMHOOKS];
+	unsigned int hook_entry[NF_INET_NUMHOOKS];//各hook点首个规则偏移量
 
 	/* Underflow points. */
-	unsigned int underflow[NF_INET_NUMHOOKS];
+	unsigned int underflow[NF_INET_NUMHOOKS];//各hook点兜底规则偏移量
 
 	/* Number of entries */
 	unsigned int num_entries;
@@ -192,13 +192,13 @@ struct ipt_replace {
 
 	/* Which hook entry points are valid: bitmask.  You can't
            change this. */
-	unsigned int valid_hooks;//需要挂接的hook点
+	unsigned int valid_hooks;//需要挂接的hook点（掩码形式）
 
 	/* Number of entries */
-	unsigned int num_entries;//(表中ipt_entry数目）
+	unsigned int num_entries;//(hook点数目，entries表数目）
 
 	/* Total size of new entries */
-	unsigned int size;
+	unsigned int size;//entries指向的内存大小
 
 	/* Hook entry points. */
 	unsigned int hook_entry[NF_INET_NUMHOOKS];

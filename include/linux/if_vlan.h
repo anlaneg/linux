@@ -627,6 +627,7 @@ static inline void vlan_set_encap_proto(struct sk_buff *skb,
 		return;
 	}
 
+	//更新非802.3的协议
 	rawp = (unsigned short *)(vhdr + 1);
 	if (*rawp == 0xFFFF)
 		/*

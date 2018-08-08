@@ -232,6 +232,7 @@ static int bq_xmit_all(struct bpf_dtab_netdev *obj,
 		prefetch(xdpf);
 	}
 
+	//通过ndo_xdp_xmit完成报文发送
 	sent = dev->netdev_ops->ndo_xdp_xmit(dev, bq->count, bq->q, flags);
 	if (sent < 0) {
 		err = sent;

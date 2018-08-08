@@ -248,7 +248,7 @@ struct xt_table {
 /* The table itself */
 struct xt_table_info {
 	/* Size per table */
-	unsigned int size;//entries表的大小（字节）
+	unsigned int size;//entries成员表的大小（字节）
 	/* Number of entries: FIXME. --RR */
 	unsigned int number;//实体的数目
 	/* Initial number of entries. Needed for module usage count */

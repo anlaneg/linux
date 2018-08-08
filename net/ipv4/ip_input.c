@@ -201,7 +201,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 		int raw;
 
 	resubmit:
-		//raw socket传递
+		//尝试raw socket传递
 		raw = raw_local_deliver(skb, protocol);
 
 		//按ip头协议查找协议处理函数
@@ -228,7 +228,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 			}
 			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 		} else {
-			//当前linux kernel没有对应的协议栈处理此协议
+			//当前linux kernel没有对应的协议栈处理此协议，或发送icmp丢弃
 			if (!raw) {
 				if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 					__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
@@ -526,7 +526,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, 
 
 	//路由前钩子点
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
-		       net, NULL, skb, dev, NULL,
+		       net, NULL/*sock为NULL*/, skb, dev/*入设备*/, NULL,//出设备为NULL
 		       ip_rcv_finish);
 
 csum_error:

@@ -7,16 +7,18 @@
  */
 
 /* tbl has the following structure equivalent, but is C99 compliant:
+ * 通过此宏产生如下所示的结构体
  * struct {
  *	struct type##_replace repl;
  *	struct type##_standard entries[nhooks];
  *	struct type##_error term;
  * } *tbl;
  */
-
+//注：宏要求在其可见区有info存在
 #define xt_alloc_initial_table(type, typ2) ({ \
+	/*注册的hook mask*/\
 	unsigned int hook_mask = info->valid_hooks; \
-	/*注册了多少hook*/                            \
+	/*获取注册了多少hook,自0开始计*/                            \
 	unsigned int nhooks = hweight32(hook_mask); \
 	unsigned int bytes = 0, hooknum = 0, i = 0; \
 	struct { \
@@ -24,27 +26,31 @@
 		struct type##_standard entries[]; \
 	} *tbl; \
 	struct type##_error *term; \
-	/*取typeof(*tbl)类型的结构体大小及考虑对齐*/\
+	/*取typeof(*tbl)类型的结构体大小及考虑使存放在其后的term内存对齐*/\
 	size_t term_offset = (offsetof(typeof(*tbl), entries[nhooks]) + \
 		__alignof__(*term) - 1) & ~(__alignof__(*term) - 1); \
 	/*申请typeof(*tbl)+sizeof(*term)*/\
 	tbl = kzalloc(term_offset + sizeof(*term), GFP_KERNEL); \
 	if (tbl == NULL) \
 		return NULL; \
-	/*使term指向tbl的hook点结尾*/                                \
+	/*使term指向上文专为term结构申请的位置（已对齐）*/                  \
 	term = (struct type##_error *)&(((char *)tbl)[term_offset]); \
-	/*设置表名*/\
+	/*通过info设置表名*/\
 	strncpy(tbl->repl.name, info->name, sizeof(tbl->repl.name)); \
+	/*填充term*/                                      \
 	*term = (struct type##_error)typ2##_ERROR_INIT;  \
+	/*需要挂接的hook点掩码*/\
 	tbl->repl.valid_hooks = hook_mask; \
+	/*nhooks是一个自0开始计的数，故hook的数目为nhooks+1*/\
 	tbl->repl.num_entries = nhooks + 1; \
 	tbl->repl.size = nhooks * sizeof(struct type##_standard) + \
 			 sizeof(struct type##_error); \
 	for (; hook_mask != 0; hook_mask >>= 1, ++hooknum) { \
 		if (!(hook_mask & 1)) \
-			continue; \
+			continue; /*跳过未指明的hook*/\
 		tbl->repl.hook_entry[hooknum] = bytes; \
 		tbl->repl.underflow[hooknum]  = bytes; \
+		/*填充entries*/\
 		tbl->entries[i++] = (struct type##_standard) \
 			typ2##_STANDARD_INIT(NF_ACCEPT); \
 		bytes += sizeof(struct type##_standard); \

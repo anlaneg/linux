@@ -34,7 +34,7 @@ struct net_protocol __rcu *inet_protos[MAX_INET_PROTOS] __read_mostly;
 const struct net_offload __rcu *inet_offloads[MAX_INET_PROTOS] __read_mostly;
 EXPORT_SYMBOL(inet_offloads);
 
-//添加协议（注册3层协议）
+//添加协议（注册3层协议），用于处理3层负载的报文（例如gre,tcp,udp,igmp)
 int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 {
 	//注册的协议必须支持namespace

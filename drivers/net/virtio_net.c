@@ -1415,6 +1415,7 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	return 0;
 }
 
+//发送报文到sq队列
 static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 {
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
@@ -1445,32 +1446,35 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	if (vi->mergeable_rx_bufs)
 		hdr->num_buffers = 0;
 
+	//每个分片一个sg,支持mrg_rxbuf时只需要多一个描述信息
 	sg_init_table(sq->sg, skb_shinfo(skb)->nr_frags + (can_push ? 1 : 2));
 	if (can_push) {
-		__skb_push(skb, hdr_len);
-		num_sg = skb_to_sgvec(skb, sq->sg, 0, skb->len);
+		__skb_push(skb, hdr_len);//空出hdr_len长度
+		num_sg = skb_to_sgvec(skb, sq->sg, 0, skb->len);//填充sg
 		if (unlikely(num_sg < 0))
-			return num_sg;
+			return num_sg;//填充sg失败
 		/* Pull header back to avoid skew in tx bytes calculations. */
 		__skb_pull(skb, hdr_len);
 	} else {
-		sg_set_buf(sq->sg, hdr, hdr_len);
-		num_sg = skb_to_sgvec(skb, sq->sg + 1, 0, skb->len);
+		sg_set_buf(sq->sg, hdr, hdr_len);//先填充hdr在一个sg中
+		num_sg = skb_to_sgvec(skb, sq->sg + 1, 0, skb->len);//再填充skb到sg中
 		if (unlikely(num_sg < 0))
 			return num_sg;
 		num_sg++;
 	}
-    //将报文存入到虚拟化队列中
+    //将报文存入（报文已存入sq->sg中，共计num_sg个分片）到虚拟化队列中
 	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
 
-//实现virio的报文发送
+//实现virio的报文发送(此函数已被virtio-net注册为.ndo_start_xmit)
 static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
+
 	//选出要发送的队列
 	int qnum = skb_get_queue_mapping(skb);
 	struct send_queue *sq = &vi->sq[qnum];
+
 	int err;
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, qnum);
 	bool kick = !skb->xmit_more;

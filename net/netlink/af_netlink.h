@@ -8,6 +8,7 @@
 #include <net/sock.h>
 
 /* flags */
+//属于kernel socket
 #define NETLINK_F_KERNEL_SOCKET		0x1
 #define NETLINK_F_RECV_PKTINFO		0x2
 #define NETLINK_F_BROADCAST_SEND_ERROR	0x4
@@ -61,11 +62,11 @@ struct netlink_table {
 	unsigned int		flags;
 	unsigned int		groups;
 	struct mutex		*cb_mutex;
-	struct module		*module;
+	struct module		*module;//协议属于那个模块
 	int			(*bind)(struct net *net, int group);
 	void			(*unbind)(struct net *net, int group);
 	bool			(*compare)(struct net *net, struct sock *sock);
-	int			registered;
+	int			registered;//此协议是否被注册（多次注册表示注册次数）
 };
 
 extern struct netlink_table *nl_table;

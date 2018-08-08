@@ -2051,6 +2051,7 @@ int netdev_get_num_tc(struct net_device *dev)
 	return dev->num_tc;
 }
 
+//给定队列索引，取队列
 static inline
 struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 					 unsigned int index)

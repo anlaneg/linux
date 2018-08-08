@@ -3108,6 +3108,7 @@ static int e1000_maybe_stop_tx(struct net_device *netdev,
 }
 
 #define TXD_USE_COUNT(S, X) (((S) + ((1 << (X)) - 1)) >> (X))
+//此函数被注册给ndo_start_xmit,完成报文发送
 static netdev_tx_t e1000_xmit_frame(struct sk_buff *skb,
 				    struct net_device *netdev)
 {

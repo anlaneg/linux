@@ -65,6 +65,7 @@ static int __net_init iptable_filter_table_init(struct net *net)
 	if (repl == NULL)
 		return -ENOMEM;
 	/* Entry 1 is the FORWARD hook */
+	//注册了三个hook点，其中第2个（即1）为FORWARD hook点
 	((struct ipt_standard *)repl->entries)[1].target.verdict =
 		forward ? -NF_ACCEPT - 1 : -NF_DROP - 1;
 

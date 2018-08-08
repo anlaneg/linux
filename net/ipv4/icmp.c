@@ -995,6 +995,7 @@ static bool icmp_discard(struct sk_buff *skb)
 /*
  *	Deal with incoming ICMP packets.
  */
+//icmp收包入口
 int icmp_rcv(struct sk_buff *skb)
 {
 	struct icmphdr *icmph;

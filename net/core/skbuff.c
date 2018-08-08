@@ -3503,7 +3503,7 @@ void *skb_pull_rcsum(struct sk_buff *skb, unsigned int len)
 	unsigned char *data = skb->data;
 
 	BUG_ON(len > skb->len);
-	__skb_pull(skb, len);
+	__skb_pull(skb, len);//更新data后置len长度
 	skb_postpull_rcsum(skb, data, len);
 	return skb->data;
 }
@@ -3991,6 +3991,7 @@ __skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg, int offset, int len,
 	if (copy > 0) {
 		if (copy > len)
 			copy = len;
+		//直接使用skb的buffer
 		sg_set_buf(sg, skb->data + offset, copy);
 		elt++;
 		if ((len -= copy) == 0)
@@ -5125,11 +5126,13 @@ struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 	if (unlikely(!pskb_may_pull(skb, VLAN_HLEN)))
 		goto err_free;
 
+	//指向vlan头部
 	vhdr = (struct vlan_hdr *)skb->data;
 	vlan_tci = ntohs(vhdr->h_vlan_TCI);
 	__vlan_hwaccel_put_tag(skb, skb->protocol, vlan_tci);
 
 	skb_pull_rcsum(skb, VLAN_HLEN);
+	//更新proto为内部proto
 	vlan_set_encap_proto(skb, vhdr);
 
 	skb = skb_reorder_vlan_header(skb);

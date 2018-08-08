@@ -33,7 +33,7 @@
 struct sk_buff;
 
 struct dst_entry {
-	struct net_device       *dev;
+	struct net_device       *dev;//目标设备
 	struct  dst_ops	        *ops;
 	unsigned long		_metrics;
 	unsigned long           expires;

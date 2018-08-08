@@ -13,6 +13,7 @@
 
 static int __net_init iptable_raw_table_init(struct net *net);
 
+//是否开启在分片重组前执行raw
 static bool raw_before_defrag __read_mostly;
 MODULE_PARM_DESC(raw_before_defrag, "Enable raw table before defrag");
 module_param(raw_before_defrag, bool, 0000);
@@ -31,7 +32,7 @@ static const struct xt_table packet_raw_before_defrag = {
 	.valid_hooks =  RAW_VALID_HOOKS,
 	.me = THIS_MODULE,
 	.af = NFPROTO_IPV4,
-	.priority = NF_IP_PRI_RAW_BEFORE_DEFRAG,
+	.priority = NF_IP_PRI_RAW_BEFORE_DEFRAG,//分片重组前
 	.table_init = iptable_raw_table_init,
 };
 
@@ -57,6 +58,7 @@ static int __net_init iptable_raw_table_init(struct net *net)
 	if (net->ipv4.iptable_raw)
 		return 0;
 
+	//初始化raw表
 	repl = ipt_alloc_initial_table(table);
 	if (repl == NULL)
 		return -ENOMEM;

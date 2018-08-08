@@ -1099,6 +1099,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	return err;
 }
 
+//创建sock,指定sock->type
 int sock_create_lite(int family, int type, int protocol, struct socket **res)
 {
 	int err;
@@ -1108,6 +1109,7 @@ int sock_create_lite(int family, int type, int protocol, struct socket **res)
 	if (err)
 		goto out;
 
+	//申请一个sock
 	sock = sock_alloc();
 	if (!sock) {
 		err = -ENOMEM;

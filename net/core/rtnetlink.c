@@ -4760,6 +4760,7 @@ static int __net_init rtnetlink_net_init(struct net *net)
 		.bind		= rtnetlink_bind,
 	};
 
+	//注册NETLINK_ROUTE消息处理
 	sk = netlink_kernel_create(net, NETLINK_ROUTE, &cfg);
 	if (!sk)
 		return -ENOMEM;
