@@ -161,11 +161,11 @@ struct net_bridge_vlan {
  *            if there're "real" entries in the bridge please test @num_vlans
  */
 struct net_bridge_vlan_group {
-	struct rhashtable		vlan_hash;
+	struct rhashtable		vlan_hash;//按vlanid保存net_bridge_vlan结构
 	struct rhashtable		tunnel_hash;
 	struct list_head		vlan_list;
-	u16				num_vlans;
-	u16				pvid;
+	u16				num_vlans;//子vlan数
+	u16				pvid;//vlan id号
 };
 
 struct net_bridge_fdb_key {
@@ -187,7 +187,7 @@ struct net_bridge_fdb_entry {
 
 	/* write-heavy members should not affect lookups */
 	unsigned long			updated ____cacheline_aligned_in_smp;
-	unsigned long			used;
+	unsigned long			used;//上次查询到的时间
 
 	struct rcu_head			rcu;
 };
@@ -383,11 +383,11 @@ struct net_bridge {
 	unsigned long			multicast_startup_query_interval;
 
 	spinlock_t			multicast_lock;
-	struct net_bridge_mdb_htable __rcu *mdb;
+	struct net_bridge_mdb_htable __rcu *mdb;//组播表
 	struct hlist_head		router_list;
 
 	struct timer_list		multicast_router_timer;
-	struct bridge_mcast_other_query	ip4_other_query;
+	struct bridge_mcast_other_query	ip4_other_query;//ipv4查询器
 	struct bridge_mcast_own_query	ip4_own_query;
 	struct bridge_mcast_querier	ip4_querier;
 	struct bridge_mcast_stats	__percpu *mcast_stats;
@@ -711,10 +711,12 @@ static inline bool br_multicast_querier_exists(struct net_bridge *br,
 {
 	switch (eth->h_proto) {
 	case (htons(ETH_P_IP)):
+		//ip报文
 		return __br_multicast_querier_exists(br,
 			&br->ip4_other_query, false);
 #if IS_ENABLED(CONFIG_IPV6)
 	case (htons(ETH_P_IPV6)):
+		//ipv6报文
 		return __br_multicast_querier_exists(br,
 			&br->ip6_other_query, true);
 #endif
@@ -884,11 +886,13 @@ static inline struct net_bridge_vlan_group *nbp_vlan_group_rcu(
 /* Since bridge now depends on 8021Q module, but the time bridge sees the
  * skb, the vlan tag will always be present if the frame was tagged.
  */
+//取报文的vlanid
 static inline int br_vlan_get_tag(const struct sk_buff *skb, u16 *vid)
 {
 	int err = 0;
 
 	if (skb_vlan_tag_present(skb)) {
+		//报文存在vlan,提取vlanid
 		*vid = skb_vlan_tag_get(skb) & VLAN_VID_MASK;
 	} else {
 		*vid = 0;

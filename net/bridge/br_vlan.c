@@ -415,21 +415,25 @@ static bool __allowed_ingress(const struct net_bridge *br,
 	struct net_bridge_vlan *v;
 	bool tagged;
 
-	BR_INPUT_SKB_CB(skb)->vlan_filtered = true;
+	BR_INPUT_SKB_CB(skb)->vlan_filtered = true;//vlan被开启了，需要执行vlan过滤
 	/* If vlan tx offload is disabled on bridge device and frame was
 	 * sent from vlan device on the bridge device, it does not have
 	 * HW accelerated vlan tag.
 	 */
 	if (unlikely(!skb_vlan_tag_present(skb) &&
 		     skb->protocol == br->vlan_proto)) {
+		//处理硬件未offload vlan的情况，将vlan剥离
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			return false;
 	}
 
 	if (!br_vlan_get_tag(skb, vid)) {
+		//存在vlanid,且提取成功
 		/* Tagged frame */
 		if (skb->vlan_proto != br->vlan_proto) {
+			//如果报文上的vlan协议号与桥设置的vlan协议号不一致，还原已经剥离的vlan头
+			//此时认为报文无vlan
 			/* Protocol-mismatch, empty out vlan_tci for new tag */
 			skb_push(skb, ETH_HLEN);
 			skb = vlan_insert_tag_set_proto(skb, skb->vlan_proto,
@@ -442,6 +446,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			*vid = 0;
 			tagged = false;
 		} else {
+			//报文上有vlan
 			tagged = true;
 		}
 	} else {
@@ -450,6 +455,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 	}
 
 	if (!*vid) {
+		//无vlan时，取默认vlan
 		u16 pvid = br_get_pvid(vg);
 
 		/* Frame had a tag with VID 0 or did not have a tag.
@@ -457,14 +463,16 @@ static bool __allowed_ingress(const struct net_bridge *br,
 		 * vlan untagged or priority-tagged traffic belongs to.
 		 */
 		if (!pvid)
-			goto drop;
+			goto drop;//无private vlan,接口有vlan,丢包
 
 		/* PVID is set on this port.  Any untagged or priority-tagged
 		 * ingress frame is considered to belong to this vlan.
 		 */
+		//有private vlan id,按private vlan id转发
 		*vid = pvid;
 		if (likely(!tagged))
 			/* Untagged Frame. */
+			//将其处理为加标签进入（这样处理会统一）
 			__vlan_hwaccel_put_tag(skb, br->vlan_proto, pvid);
 		else
 			/* Priority-tagged Frame.
@@ -472,16 +480,18 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			 * VLAN_TAG_PRESENT bit and its VID field was 0x000.
 			 * We update only VID field and preserve PCP field.
 			 */
-			skb->vlan_tci |= pvid;
+			skb->vlan_tci |= pvid;//更正vlanid(加标签了，但标签上的vlanid为0）
 
 		/* if stats are disabled we can avoid the lookup */
 		if (!br->vlan_stats_enabled)
-			return true;
+			return true;//不执行vlan统计时直接返回，不找对应的vlan统计项
 	}
+	//查vlan group
 	v = br_vlan_find(vg, *vid);
 	if (!v || !br_vlan_should_use(v))
 		goto drop;
 
+	//统计
 	if (br->vlan_stats_enabled) {
 		stats = this_cpu_ptr(v->stats);
 		u64_stats_update_begin(&stats->syncp);
@@ -504,6 +514,7 @@ bool br_allowed_ingress(const struct net_bridge *br,
 	/* If VLAN filtering is disabled on the bridge, all packets are
 	 * permitted.
 	 */
+	//如果br未开启vlan,则跳过vlan检查
 	if (!br->vlan_enabled) {
 		BR_INPUT_SKB_CB(skb)->vlan_filtered = false;
 		return true;

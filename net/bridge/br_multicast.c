@@ -152,6 +152,7 @@ static struct net_bridge_mdb_entry *br_mdb_ip6_get(
 }
 #endif
 
+//查组播表
 struct net_bridge_mdb_entry *br_mdb_get(struct net_bridge *br,
 					struct sk_buff *skb, u16 vid)
 {
@@ -1914,7 +1915,7 @@ int br_multicast_rcv(struct net_bridge *br, struct net_bridge_port *port,
 	BR_INPUT_SKB_CB(skb)->mrouters_only = 0;
 
 	if (br->multicast_disabled)
-		return 0;
+		return 0;//组播禁用
 
 	switch (skb->protocol) {
 	case htons(ETH_P_IP):

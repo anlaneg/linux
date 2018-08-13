@@ -23,6 +23,7 @@ ebt_redirect_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	if (!skb_make_writable(skb, 0))
 		return EBT_DROP;
 
+	//更新目的mac为par规定值
 	if (xt_hooknum(par) != NF_BR_BROUTING)
 		/* rcu_read_lock()ed by nf_hook_thresh */
 		ether_addr_copy(eth_hdr(skb)->h_dest,

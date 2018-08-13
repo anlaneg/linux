@@ -73,6 +73,7 @@ static int br_pass_frame_up(struct sk_buff *skb)
 }
 
 /* note: already called with rcu_read_lock */
+//pre routing钩子点执行完成后，此函数将被执行
 int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
@@ -126,6 +127,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (IS_ENABLED(CONFIG_INET) &&
 	    (skb->protocol == htons(ETH_P_ARP) ||
 	     skb->protocol == htons(ETH_P_RARP))) {
+		//arp抑制处理
 		br_do_proxy_suppress_arp(skb, br, vid, p);
 	} else if (IS_ENABLED(CONFIG_IPV6) &&
 		   skb->protocol == htons(ETH_P_IPV6) &&
@@ -133,8 +135,9 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		   pskb_may_pull(skb, sizeof(struct ipv6hdr) +
 				 sizeof(struct nd_msg)) &&
 		   ipv6_hdr(skb)->nexthdr == IPPROTO_ICMPV6) {
-			struct nd_msg *msg, _msg;
 
+		    //nd抑制处理
+			struct nd_msg *msg, _msg;
 			msg = br_is_nd_neigh_msg(skb, &_msg);
 			if (msg)
 				br_do_suppress_nd(skb, br, vid, p, msg);
@@ -142,7 +145,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	switch (pkt_type) {
 	case BR_PKT_MULTICAST:
-		mdst = br_mdb_get(br, skb, vid);
+		mdst = br_mdb_get(br, skb, vid);//组播表查询
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
 		    br_multicast_querier_exists(br, eth_hdr(skb))) {
 			if ((mdst && mdst->host_joined) ||
@@ -150,7 +153,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				local_rcv = true;
 				br->dev->stats.multicast++;
 			}
-			mcast_hit = true;
+			mcast_hit = true;//组播命中
 		} else {
 			local_rcv = true;
 			br->dev->stats.multicast++;
@@ -177,7 +180,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		if (!mcast_hit)
 			br_flood(br, skb, pkt_type, local_rcv, false);
 		else
-			//按mdst中对应的一组出接口进行flood
+			//组播命中，按mdst中对应的一组出接口进行flood
 			br_multicast_flood(mdst, skb, local_rcv, false);
 	}
 
@@ -229,6 +232,7 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 	if (unlikely(skb->pkt_type == PACKET_LOOPBACK))
 		return RX_HANDLER_PASS;//桥放通此报文，使之不被桥可见
 
+	//进行源mac校验，srcmac必须为单播mac,且全0mac是无效的
 	if (!is_valid_ether_addr(eth_hdr(skb)->h_source))
 		goto drop;
 
@@ -298,9 +302,9 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		return RX_HANDLER_CONSUMED;
 	}
 
-	//按端口状态，处理流量
 forward:
 	switch (p->state) {
+	//按端口状态，处理流量
 	case BR_STATE_FORWARDING:
 		//执行br_should_route钩子，确认报文是否需要自bridge中过滤掉
 		rhook = rcu_dereference(br_should_route_hook);

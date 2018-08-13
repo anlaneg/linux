@@ -299,6 +299,7 @@ static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb)
 }
 
 /* Create and send an arp packet. */
+//按参数构造arp报文，并自dev口送出
 static void arp_send_dst(int type, int ptype, __be32 dest_ip,
 			 struct net_device *dev, __be32 src_ip,
 			 const unsigned char *dest_hw,
@@ -547,7 +548,7 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 	skb_reset_network_header(skb);
 	//在skb上分配一个arp头部空间
 	arp = skb_put(skb, arp_hdr_len(dev));
-	skb->dev = dev;
+	skb->dev = dev;//指定出接口设备
 	skb->protocol = htons(ETH_P_ARP);
 	//如果未指定src硬件地址，则采用dev的硬件地址
 	if (!src_hw)

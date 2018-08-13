@@ -5108,6 +5108,7 @@ static struct sk_buff *skb_reorder_vlan_header(struct sk_buff *skb)
 	return skb;
 }
 
+//剥离vlan头
 struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 {
 	struct vlan_hdr *vhdr;
@@ -5127,15 +5128,16 @@ struct sk_buff *skb_vlan_untag(struct sk_buff *skb)
 	if (unlikely(!pskb_may_pull(skb, VLAN_HLEN)))
 		goto err_free;
 
-	//指向vlan头部
+	//指向vlan头部，为skb设置提取的vlan值，vlan_protocol
 	vhdr = (struct vlan_hdr *)skb->data;
 	vlan_tci = ntohs(vhdr->h_vlan_TCI);
 	__vlan_hwaccel_put_tag(skb, skb->protocol, vlan_tci);
 
 	skb_pull_rcsum(skb, VLAN_HLEN);
-	//更新proto为内部proto
+	//更新proto为vlan内层的proto
 	vlan_set_encap_proto(skb, vhdr);
 
+	//剥离vlan头
 	skb = skb_reorder_vlan_header(skb);
 	if (unlikely(!skb))
 		goto err_free;

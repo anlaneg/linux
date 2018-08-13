@@ -337,6 +337,7 @@ static inline bool vlan_hw_offload_capable(netdev_features_t features,
  *
  * Does not change skb->protocol so this function can be used during receive.
  */
+//在报文头部加入vlan头（vlan值为vlan_tci,vlan_proto为vlan协议号)
 static inline int __vlan_insert_inner_tag(struct sk_buff *skb,
 					  __be16 vlan_proto, u16 vlan_tci,
 					  unsigned int mac_len)
@@ -346,7 +347,7 @@ static inline int __vlan_insert_inner_tag(struct sk_buff *skb,
 	if (skb_cow_head(skb, VLAN_HLEN) < 0)
 		return -ENOMEM;
 
-	skb_push(skb, VLAN_HLEN);
+	skb_push(skb, VLAN_HLEN);//准备vlan头空间
 
 	/* Move the mac header sans proto to the beginning of the new header. */
 	if (likely(mac_len > ETH_TLEN))

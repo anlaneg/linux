@@ -138,19 +138,26 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 
 	parp = arp_hdr(skb);
 
+	//仅支持以太网arp
 	if (parp->ar_pro != htons(ETH_P_IP) ||
 	    parp->ar_hln != dev->addr_len ||
 	    parp->ar_pln != 4)
 		return;
 
+	//发送方mac地址
 	arpptr = (u8 *)parp + sizeof(struct arphdr);
 	sha = arpptr;
 	arpptr += dev->addr_len;	/* sha */
+	//发送方ip地址
 	memcpy(&sip, arpptr, sizeof(sip));
+
+	//target mac地址
 	arpptr += sizeof(sip);
 	arpptr += dev->addr_len;	/* tha */
+	//target ip地址
 	memcpy(&tip, arpptr, sizeof(tip));
 
+	//target ip必须不能是loopback地址，组播地址
 	if (ipv4_is_loopback(tip) ||
 	    ipv4_is_multicast(tip))
 		return;
@@ -168,6 +175,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 	if (parp->ar_op != htons(ARPOP_REQUEST))
 		return;
 
+	//取对应的vlan设备
 	if (vid != 0) {
 		vlandev = __vlan_find_dev_deep_rcu(br->dev, skb->vlan_proto,
 						   vid);
@@ -196,6 +204,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 		if (f) {
 			bool replied = false;
 
+			//如果需要代理，则回复arp响应
 			if ((p && (p->flags & BR_PROXYARP)) ||
 			    (f->dst && (f->dst->flags & (BR_PROXYARP_WIFI |
 							 BR_NEIGH_SUPPRESS)))) {

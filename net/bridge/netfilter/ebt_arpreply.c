@@ -15,6 +15,7 @@
 #include <linux/netfilter_bridge/ebtables.h>
 #include <linux/netfilter_bridge/ebt_arpreply.h>
 
+//拦截arp报文，并按par中指定的mac代答
 static unsigned int
 ebt_arpreply_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {
@@ -30,27 +31,32 @@ ebt_arpreply_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	if (ap == NULL)
 		return EBT_DROP;
 
+	//仅处理arp请求
 	if (ap->ar_op != htons(ARPOP_REQUEST) ||
 	    ap->ar_hln != ETH_ALEN ||
 	    ap->ar_pro != htons(ETH_P_IP) ||
 	    ap->ar_pln != 4)
 		return EBT_CONTINUE;
 
+	//取发送方ip地址
 	shp = skb_header_pointer(skb, sizeof(_ah), ETH_ALEN, &_sha);
 	if (shp == NULL)
 		return EBT_DROP;
 
+	//取发送方mac地址指针
 	siptr = skb_header_pointer(skb, sizeof(_ah) + ETH_ALEN,
 				   sizeof(_sip), &_sip);
 	if (siptr == NULL)
 		return EBT_DROP;
 
+	//取target ip地址
 	diptr = skb_header_pointer(skb,
 				   sizeof(_ah) + 2 * ETH_ALEN + sizeof(_sip),
 				   sizeof(_dip), &_dip);
 	if (diptr == NULL)
 		return EBT_DROP;
 
+	//构造对target ip的arp响应( mac地址来自于info)
 	arp_send(ARPOP_REPLY, ETH_P_ARP, *siptr,
 		 (struct net_device *)xt_in(par),
 		 *diptr, shp, info->mac, shp);
