@@ -21,6 +21,7 @@
 #include <linux/uaccess.h>
 #include "br_private.h"
 
+//遍历net下所有dev设备，如果其为bridge，则返回其对应的ifindex
 static int get_bridge_ifindices(struct net *net, int *indices, int num)
 {
 	struct net_device *dev;
@@ -93,10 +94,12 @@ static int add_del_if(struct net_bridge *br, int ifindex, int isadd)
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
+	//通过ifindex取对应的dev
 	dev = __dev_get_by_index(net, ifindex);
 	if (dev == NULL)
 		return -EINVAL;
 
+	//向/自 br中添加/删除 接口dev
 	if (isadd)
 		ret = br_add_if(br, dev, NULL);
 	else
@@ -312,6 +315,7 @@ static int old_deviceless(struct net *net, void __user *uarg)
 	case BRCTL_GET_VERSION:
 		return BRCTL_VERSION;
 
+	//返回所有bridge的ifindex
 	case BRCTL_GET_BRIDGES:
 	{
 		int *indices;
@@ -332,6 +336,7 @@ static int old_deviceless(struct net *net, void __user *uarg)
 		return ret;
 	}
 
+	//创建删除桥设备
 	case BRCTL_ADD_BRIDGE:
 	case BRCTL_DEL_BRIDGE:
 	{
@@ -355,6 +360,7 @@ static int old_deviceless(struct net *net, void __user *uarg)
 	return -EOPNOTSUPP;
 }
 
+//br对应的ioctl入口
 int br_ioctl_deviceless_stub(struct net *net, unsigned int cmd, void __user *uarg)
 {
 	switch (cmd) {
@@ -362,6 +368,7 @@ int br_ioctl_deviceless_stub(struct net *net, unsigned int cmd, void __user *uar
 	case SIOCSIFBR:
 		return old_deviceless(net, uarg);
 
+	//创建移除br处理
 	case SIOCBRADDBR:
 	case SIOCBRDELBR:
 	{
@@ -383,6 +390,7 @@ int br_ioctl_deviceless_stub(struct net *net, unsigned int cmd, void __user *uar
 	return -EOPNOTSUPP;
 }
 
+//定义设备的ioctl
 int br_dev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 {
 	struct net_bridge *br = netdev_priv(dev);
@@ -393,6 +401,7 @@ int br_dev_ioctl(struct net_device *dev, struct ifreq *rq, int cmd)
 
 	case SIOCBRADDIF:
 	case SIOCBRDELIF:
+		//为设备增加删除接口
 		return add_del_if(br, rq->ifr_ifindex, cmd == SIOCBRADDIF);
 
 	}

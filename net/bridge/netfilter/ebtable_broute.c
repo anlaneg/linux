@@ -57,18 +57,21 @@ static int ebt_broute(struct sk_buff *skb)
 			   NFPROTO_BRIDGE, skb->dev, NULL, NULL,
 			   dev_net(skb->dev), NULL);
 
+	//做规则表查询
 	ret = ebt_do_table(skb, &state, state.net->xt.broute_table);
 	if (ret == NF_DROP)
 		return 1; /* route it */
 	return 0; /* bridge it */
 }
 
+//为对应的namespace注册规则表
 static int __net_init broute_net_init(struct net *net)
 {
 	return ebt_register_table(net, &broute_table, NULL,
 				  &net->xt.broute_table);
 }
 
+//销毁对应的namespace注册规则表
 static void __net_exit broute_net_exit(struct net *net)
 {
 	ebt_unregister_table(net, net->xt.broute_table, NULL);

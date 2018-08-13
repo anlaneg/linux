@@ -404,6 +404,7 @@ int br_add_bridge(struct net *net, const char *name)
 	return res;
 }
 
+//删除桥设备
 int br_del_bridge(struct net *net, const char *name)
 {
 	struct net_device *dev;
@@ -520,6 +521,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 		return -EINVAL;
 
 	/* No bridging of bridges */
+	//不容将br加入到br中
 	if (dev->netdev_ops->ndo_start_xmit == br_dev_xmit) {
 		NL_SET_ERR_MSG(extack,
 			       "Can not enslave a bridge to a bridge");
@@ -527,6 +529,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	}
 
 	/* Device has master upper dev */
+	//存有master的设备不能加入.但加入其master时可以的。
 	if (netdev_master_upper_dev_get(dev))
 		return -EBUSY;
 
@@ -537,16 +540,19 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 		return -EOPNOTSUPP;
 	}
 
+	//新创建桥接口
 	p = new_nbp(br, dev);
 	if (IS_ERR(p))
 		return PTR_ERR(p);
 
+	//通知桥接事件
 	call_netdevice_notifiers(NETDEV_JOIN, dev);
 
 	err = dev_set_allmulti(dev, 1);
 	if (err)
 		goto put_back;
 
+	//kobj创建
 	err = kobject_init_and_add(&p->kobj, &brport_ktype, &(dev->dev.kobj),
 				   SYSFS_BRIDGE_PORT_ATTR);
 	if (err)
@@ -591,6 +597,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	else
 		netdev_set_rx_headroom(dev, br_hr);
 
+	//添加此接口对应的fdb表
 	if (br_fdb_insert(br, p, dev->dev_addr, 0))
 		netdev_err(dev, "failed insert local address bridge forwarding table\n");
 

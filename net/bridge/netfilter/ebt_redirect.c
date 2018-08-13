@@ -65,6 +65,7 @@ static struct xt_target ebt_redirect_tg_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+//注册redirect target
 static int __init ebt_redirect_init(void)
 {
 	return xt_register_target(&ebt_redirect_tg_reg);

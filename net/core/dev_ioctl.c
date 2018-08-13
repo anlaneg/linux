@@ -323,6 +323,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
 		    cmd == SIOCWANDEV) {
 			err = -EOPNOTSUPP;
 			if (ops->ndo_do_ioctl) {
+				//如果网络设备有ioctl回调，则执行网络设备的ioctl
 				if (netif_device_present(dev))
 					err = ops->ndo_do_ioctl(dev, ifr, cmd);
 				else
@@ -387,6 +388,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr, bool *need_c
 	if (need_copyout)
 		*need_copyout = true;
 	if (cmd == SIOCGIFNAME)
+		//返回取设备名称
 		return dev_ifname(net, ifr);
 
 	ifr->ifr_name[IFNAMSIZ-1] = 0;

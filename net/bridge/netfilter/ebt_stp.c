@@ -178,6 +178,7 @@ static struct xt_match ebt_stp_mt_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+//注册stp match
 static int __init ebt_stp_init(void)
 {
 	return xt_register_match(&ebt_stp_mt_reg);

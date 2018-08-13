@@ -307,6 +307,7 @@ forward:
 	//按端口状态，处理流量
 	case BR_STATE_FORWARDING:
 		//执行br_should_route钩子，确认报文是否需要自bridge中过滤掉
+		//执行规则
 		rhook = rcu_dereference(br_should_route_hook);
 		if (rhook) {
 			if ((*rhook)(skb)) {

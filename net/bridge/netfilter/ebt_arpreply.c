@@ -92,6 +92,7 @@ static struct xt_target ebt_arpreply_tg_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+//注册arpreply target
 static int __init ebt_arpreply_init(void)
 {
 	return xt_register_target(&ebt_arpreply_tg_reg);

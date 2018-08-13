@@ -146,6 +146,7 @@ static struct xt_match ebt_ip6_mt_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+//注册ip6 match
 static int __init ebt_ip6_init(void)
 {
 	return xt_register_match(&ebt_ip6_mt_reg);

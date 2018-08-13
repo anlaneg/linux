@@ -934,6 +934,7 @@ static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 static DEFINE_MUTEX(br_ioctl_mutex);
 static int (*br_ioctl_hook) (struct net *, unsigned int cmd, void __user *arg);
 
+//设置br的ioctl回调函数
 void brioctl_set(int (*hook) (struct net *, unsigned int, void __user *))
 {
 	mutex_lock(&br_ioctl_mutex);
@@ -1028,6 +1029,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 		bool need_copyout;
 		if (copy_from_user(&ifr, argp, sizeof(struct ifreq)))
 			return -EFAULT;
+		//执行设备的ioctl
 		err = dev_ioctl(net, cmd, &ifr, &need_copyout);
 		if (!err && need_copyout)
 			if (copy_to_user(argp, &ifr, sizeof(struct ifreq)))
@@ -1051,6 +1053,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			err = put_user(f_getown(sock->file),
 				       (int __user *)argp);
 			break;
+			//处理br相关的ioctl命令
 		case SIOCGIFBR:
 		case SIOCSIFBR:
 		case SIOCBRADDBR:
@@ -1061,6 +1064,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 
 			mutex_lock(&br_ioctl_mutex);
 			if (br_ioctl_hook)
+				//调用br对应的ioctl回调
 				err = br_ioctl_hook(net, cmd, argp);
 			mutex_unlock(&br_ioctl_mutex);
 			break;

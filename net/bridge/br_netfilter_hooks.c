@@ -75,6 +75,7 @@ static int brnf_pass_vlan_indev __read_mostly;
 #define IS_IPV6(skb) \
 	(!skb_vlan_tag_present(skb) && skb->protocol == htons(ETH_P_IPV6))
 
+//检查skb是否为arp报文
 #define IS_ARP(skb) \
 	(!skb_vlan_tag_present(skb) && skb->protocol == htons(ETH_P_ARP))
 
@@ -194,7 +195,7 @@ static inline void nf_bridge_pull_encap_header_rcsum(struct sk_buff *skb)
  * check whether we have a skb that is in the
  * expected format
  */
-
+//做ip层字段校验
 static int br_validate_ipv4(struct net *net, struct sk_buff *skb)
 {
 	const struct iphdr *iph;
@@ -522,6 +523,7 @@ static unsigned int br_nf_pre_routing(void *priv,
 		skb->dev, NULL,
 		br_nf_pre_routing_finish);
 
+	//通过返回stole使之停止执行后缀hook(将控制权交给了br_nf_pre_routing_finish)
 	return NF_STOLEN;
 }
 
@@ -601,12 +603,14 @@ static unsigned int br_nf_forward_ip(void *priv,
 	}
 
 	if (pf == NFPROTO_IPV4) {
+		//ipv4字段校验
 		if (br_validate_ipv4(state->net, skb))
 			return NF_DROP;
 		IPCB(skb)->frag_max_size = nf_bridge->frag_max_size;
 	}
 
 	if (pf == NFPROTO_IPV6) {
+		//ipv6字段校验
 		if (br_validate_ipv6(state->net, skb))
 			return NF_DROP;
 		IP6CB(skb)->frag_max_size = nf_bridge->frag_max_size;
@@ -895,25 +899,25 @@ EXPORT_SYMBOL_GPL(br_netfilter_enable);
  * br_dev_queue_push_xmit is called afterwards */
 static const struct nf_hook_ops br_nf_ops[] = {
 	{
-		.hook = br_nf_pre_routing,
+		.hook = br_nf_pre_routing,//复用已注册的inet(ipv4,ipv6)的pre_routing钩子点逻辑
 		.pf = NFPROTO_BRIDGE,
 		.hooknum = NF_BR_PRE_ROUTING,
 		.priority = NF_BR_PRI_BRNF,
 	},
 	{
-		.hook = br_nf_forward_ip,
+		.hook = br_nf_forward_ip,//复用已注册的inet(ipv4,ipv6)的forward钩子点逻辑
 		.pf = NFPROTO_BRIDGE,
 		.hooknum = NF_BR_FORWARD,
 		.priority = NF_BR_PRI_BRNF - 1,
 	},
 	{
-		.hook = br_nf_forward_arp,
+		.hook = br_nf_forward_arp,//复用已注册的arp的forward钩子点
 		.pf = NFPROTO_BRIDGE,
 		.hooknum = NF_BR_FORWARD,
 		.priority = NF_BR_PRI_BRNF,
 	},
 	{
-		.hook = br_nf_post_routing,
+		.hook = br_nf_post_routing,//复用已注册的inet(ipv4,ipv6)的post_routing钩子点逻辑
 		.pf = NFPROTO_BRIDGE,
 		.hooknum = NF_BR_POST_ROUTING,
 		.priority = NF_BR_PRI_LAST,
@@ -986,7 +990,8 @@ static struct notifier_block brnf_notifier __read_mostly = {
  *
  * Called with rcu read lock held.
  */
-//跳过<NF_BR_PRI_BRNF的hook点，自NF_BR_PRI_BRNF+1继续执行
+//跳过<NF_BR_PRI_BRNF的hook点，自NF_BR_PRI_BRNF+1继续执行,看br_nf_pre_routing函数可知道
+//为了将inet的过滤链的一部分插入到bridge的hook中执行，不得及原有的bridge需要拆成两半
 int br_nf_hook_thresh(unsigned int hook, struct net *net,
 		      struct sock *sk, struct sk_buff *skb,
 		      struct net_device *indev,
@@ -1014,6 +1019,7 @@ int br_nf_hook_thresh(unsigned int hook, struct net *net,
 	nf_hook_state_init(&state, hook, NFPROTO_BRIDGE, indev, outdev,
 			   sk, net, okfn);
 
+	//执行hook点函数
 	ret = nf_hook_slow(skb, &state, e, i);
 	if (ret == 1)
 		ret = okfn(net, sk, skb);

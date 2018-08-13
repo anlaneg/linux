@@ -152,6 +152,7 @@ static struct xt_match ebt_ip_mt_reg __read_mostly = {
 	.me		= THIS_MODULE,
 };
 
+//注册ip match
 static int __init ebt_ip_init(void)
 {
 	return xt_register_match(&ebt_ip_mt_reg);
