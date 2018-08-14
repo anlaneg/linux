@@ -2942,7 +2942,7 @@ struct softnet_data {
 	unsigned int		input_queue_tail;
 #endif
 	unsigned int		dropped;
-	struct sk_buff_head	input_pkt_queue;
+	struct sk_buff_head	input_pkt_queue;//处理设备间转发
 	struct napi_struct	backlog;
 
 };

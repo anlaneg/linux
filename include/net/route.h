@@ -129,6 +129,7 @@ struct rtable *ip_route_output_flow(struct net *, struct flowi4 *flp,
 struct dst_entry *ipv4_blackhole_route(struct net *net,
 				       struct dst_entry *dst_orig);
 
+//路由查询
 static inline struct rtable *ip_route_output_key(struct net *net, struct flowi4 *flp)
 {
 	return ip_route_output_flow(net, flp, NULL);

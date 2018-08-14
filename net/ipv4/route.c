@@ -2369,8 +2369,10 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	struct rtable *rth;
 	int err = -ENETUNREACH;
 
+	//要匹配源地址
 	if (fl4->saddr) {
 		rth = ERR_PTR(-EINVAL);
+		//源地址不得为组播，广播，以及network不能为0
 		if (ipv4_is_multicast(fl4->saddr) ||
 		    ipv4_is_lbcast(fl4->saddr) ||
 		    ipv4_is_zeronet(fl4->saddr))
@@ -2419,6 +2421,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	}
 
 
+	//要匹配出接口
 	if (fl4->flowi4_oif) {
 		dev_out = dev_get_by_index_rcu(net, fl4->flowi4_oif);
 		rth = ERR_PTR(-ENODEV);
@@ -2448,6 +2451,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		}
 	}
 
+	//没有指定目标地址
 	if (!fl4->daddr) {
 		fl4->daddr = fl4->saddr;
 		if (!fl4->daddr)

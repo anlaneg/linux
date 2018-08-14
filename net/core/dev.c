@@ -4002,6 +4002,11 @@ static bool skb_flow_limit(struct sk_buff *skb, unsigned int qlen)
  * enqueue_to_backlog is called to queue an skb to a per CPU backlog
  * queue (may be a remote CPU queue).
  */
+//将报文入队给指定cpu
+//在sangfor做开发时，遇到两个虚拟设备相连的情况，需要实现自a设备发送到b设备，
+//通过percore队列完成此功能，kernel也是一样的处理。（由于队列是定长的，故需要
+//检查是否可入队成功）
+//如果不采用入队方式继续转发，会导致栈长度不可预期。
 static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 			      unsigned int *qtail)
 {
@@ -4014,12 +4019,16 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 	local_irq_save(flags);
 
 	rps_lock(sd);
+	//如果skb->dev未在运行状态，则丢包
 	if (!netif_running(skb->dev))
-		goto drop;//如果skb->dev未在运行状态，则丢包
+		goto drop;
+
+	//检查是否可入队，如果无法入队，则丢包
 	qlen = skb_queue_len(&sd->input_pkt_queue);
 	if (qlen <= netdev_max_backlog && !skb_flow_limit(skb, qlen)) {
 		if (qlen) {
 enqueue:
+			//报文入队
 			__skb_queue_tail(&sd->input_pkt_queue, skb);
 			input_queue_tail_incr_save(sd, qtail);
 			rps_unlock(sd);
@@ -4030,6 +4039,7 @@ enqueue:
 		/* Schedule NAPI for backlog device
 		 * We can use non atomic operation since we own the queue lock
 		 */
+		//如有必要，触发软中断收包
 		if (!__test_and_set_bit(NAPI_STATE_SCHED, &sd->backlog.state)) {
 			if (!rps_ipi_queued(sd))
 				____napi_schedule(sd, &sd->backlog);
@@ -4271,6 +4281,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 	{
 		unsigned int qtail;
 
+		//在当前cpu上直接采用队列方式进行中转
 		ret = enqueue_to_backlog(skb, get_cpu(), &qtail);
 		put_cpu();
 	}
