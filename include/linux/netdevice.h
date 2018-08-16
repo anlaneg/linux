@@ -2844,6 +2844,7 @@ static inline void skb_gro_flush_final_remcsum(struct sk_buff *skb,
 }
 #endif
 
+//构造生成二层协议头
 static inline int dev_hard_header(struct sk_buff *skb, struct net_device *dev,
 				  unsigned short type,
 				  const void *daddr, const void *saddr,
@@ -2855,6 +2856,7 @@ static inline int dev_hard_header(struct sk_buff *skb, struct net_device *dev,
 	return dev->header_ops->create(skb, dev, type, daddr, saddr, len);
 }
 
+//解析二层协议头
 static inline int dev_parse_header(const struct sk_buff *skb,
 				   unsigned char *haddr)
 {

@@ -85,7 +85,7 @@ int ip_forward(struct sk_buff *skb)
 	struct net *net;
 
 	/* that should never happen */
-	//可路由转发时，目的mac当时填充的是我们
+	//路由为主机，直连，网关时，报文肯定是发送给我们的，故pkt_type为packet_host
 	if (skb->pkt_type != PACKET_HOST)
 		goto drop;
 
@@ -116,6 +116,7 @@ int ip_forward(struct sk_buff *skb)
 	if (!xfrm4_route_forward(skb))
 		goto drop;
 
+	//取路由查询结果
 	rt = skb_rtable(skb);
 
 	if (opt->is_strictroute && rt->rt_uses_gateway)
@@ -126,7 +127,7 @@ int ip_forward(struct sk_buff *skb)
 	//检查是否可以分片
 	if (ip_exceeds_mtu(skb, mtu)) {
 		IP_INC_STATS(net, IPSTATS_MIB_FRAGFAILS);
-		//发送无法送达，需要分片
+		//构造并回应icmp,发送无法送达，需要分片
 		icmp_send(skb, ICMP_DEST_UNREACH, ICMP_FRAG_NEEDED,
 			  htonl(mtu));
 		goto drop;

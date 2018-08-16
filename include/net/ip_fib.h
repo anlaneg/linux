@@ -90,7 +90,7 @@ struct fib_nh {
 	__u32			nh_tclassid;
 #endif
 	int			nh_oif;
-	__be32			nh_gw;
+	__be32			nh_gw;//下一跳gateway ip地址
 	__be32			nh_saddr;
 	int			nh_saddr_genid;
 	struct rtable __rcu * __percpu *nh_pcpu_rth_output;
@@ -122,10 +122,10 @@ struct fib_info {
 #define fib_window fib_metrics->metrics[RTAX_WINDOW-1]
 #define fib_rtt fib_metrics->metrics[RTAX_RTT-1]
 #define fib_advmss fib_metrics->metrics[RTAX_ADVMSS-1]
-	int			fib_nhs;
+	int			fib_nhs;//有多少个next hop
 	struct rcu_head		rcu;
-	struct fib_nh		fib_nh[0];
-#define fib_dev		fib_nh[0].nh_dev
+	struct fib_nh		fib_nh[0];//含多个next hop
+#define fib_dev		fib_nh[0].nh_dev //取第一个next hop做为出接口设备
 };
 
 
@@ -135,14 +135,14 @@ struct fib_rule;
 
 struct fib_table;
 struct fib_result {
-	__be32		prefix;
-	unsigned char	prefixlen;
+	__be32		prefix;//网络号
+	unsigned char	prefixlen;//网络号长度
 	unsigned char	nh_sel;
 	unsigned char	type;
 	unsigned char	scope;
 	u32		tclassid;
-	struct fib_info *fi;
-	struct fib_table *table;
+	struct fib_info *fi;//路由信息
+	struct fib_table *table;//属于哪张路由表
 	struct hlist_head *fa_head;
 };
 
@@ -262,6 +262,7 @@ static inline struct fib_table *fib_new_table(struct net *net, u32 id)
 	return fib_get_table(net, id);
 }
 
+//查询路由表（默认查询main表）
 static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 			     struct fib_result *res, unsigned int flags)
 {
@@ -273,7 +274,6 @@ static inline int fib_lookup(struct net *net, const struct flowi4 *flp,
 	//取main表
 	tb = fib_get_table(net, RT_TABLE_MAIN);
 	if (tb)
-		//查表
 		err = fib_table_lookup(tb, flp, res, flags | FIB_LOOKUP_NOREF);
 
 	if (err == -EAGAIN)

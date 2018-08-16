@@ -223,7 +223,7 @@ static void fib_flush(struct net *net)
  */
 static inline unsigned int __inet_dev_addr_type(struct net *net,
 						const struct net_device *dev,
-						__be32 addr, u32 tb_id)
+						__be32 addr, u32 tb_id)//tb_id指出要查询的路由表
 {
 	struct flowi4		fl4 = { .daddr = addr };
 	struct fib_result	res;
@@ -237,6 +237,7 @@ static inline unsigned int __inet_dev_addr_type(struct net *net,
 
 	rcu_read_lock();
 
+	//取出对应的路由表
 	table = fib_get_table(net, tb_id);
 	if (table) {
 		ret = RTN_UNICAST;//默认是单播地址

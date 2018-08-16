@@ -361,7 +361,10 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 *	how the packet travels inside Linux networking.
 	 */
 	if (!skb_valid_dst(skb)) {
-		//传入目的地址，源地址，tos,报文入口设备,查询路由（单播时ip_forword将被设置）
+		//传入目的地址，源地址，tos,报文入口设备,查询路由
+		//单播时:skb->dst.input=ip_forword将被设置
+		//组播时:skb->dst.input=ip_mr_input将被设置
+		//路由未命中时：skb->dst.input=ip_error将被设置
 		err = ip_route_input_noref(skb, iph->daddr, iph->saddr,
 					   iph->tos, dev);
 		if (unlikely(err))
@@ -383,6 +386,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	if (iph->ihl > 5 && ip_rcv_options(skb))
 		goto drop;
 
+	//取路由查询结果
 	rt = skb_rtable(skb);
 	if (rt->rt_type == RTN_MULTICAST) {
 		//组播转发
@@ -418,7 +422,11 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 			goto drop;
 	}
 
-	return dst_input(skb);//单播在查到路由后，在此处走ip_forward
+	//单播在查到路由后且非本机时，在此处走ip_forward
+	//单播在查到路由后且为本机时，在此处走ip_local_deliver
+	//组播在查到路由后，在此处走ip_mr_input
+	//路由未命中时，在此处走ip_error
+	return dst_input(skb);
 
 drop:
 	kfree_skb(skb);

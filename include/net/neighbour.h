@@ -111,6 +111,7 @@ static inline void neigh_parms_data_state_cleanall(struct neigh_parms *p)
 }
 
 struct neigh_statistics {
+	//有多少邻居表项被申请
 	unsigned long allocs;		/* number of allocated neighs */
 	unsigned long destroys;		/* number of destroyed neighs */
 	unsigned long hash_grows;	/* number of hash resizes */
@@ -118,6 +119,7 @@ struct neigh_statistics {
 	unsigned long res_failed;	/* number of failed resolutions */
 
 	unsigned long lookups;		/* number of lookups */
+	//查询命中次数
 	unsigned long hits;		/* number of hits (among lookups) */
 
 	unsigned long rcv_probes_mcast;	/* number of received mcast ipv6 */
@@ -130,16 +132,19 @@ struct neigh_statistics {
 	unsigned long table_fulls;      /* times even gc couldn't help */
 };
 
+//增加指定字段的统计计数
 #define NEIGH_CACHE_STAT_INC(tbl, field) this_cpu_inc((tbl)->stats->field)
 
 struct neighbour {
 	struct neighbour __rcu	*next;
+	//表项所属的邻居hash table
 	struct neigh_table	*tbl;
 	struct neigh_parms	*parms;
 	unsigned long		confirmed;
 	unsigned long		updated;
 	rwlock_t		lock;
-	refcount_t		refcnt;
+	refcount_t		refcnt;//表项引用计数
+	//用于挂接待发送的skb报文
 	struct sk_buff_head	arp_queue;
 	unsigned int		arp_queue_len_bytes;
 	struct timer_list	timer;
@@ -156,7 +161,7 @@ struct neighbour {
 	int			(*output)(struct neighbour *, struct sk_buff *);
 	const struct neigh_ops	*ops;
 	struct rcu_head		rcu;
-	struct net_device	*dev;
+	struct net_device	*dev;//出接口
 	u8			primary_key[0];
 } __randomize_layout;
 
@@ -194,11 +199,14 @@ struct neigh_hash_table {
 struct neigh_table {
 	int			family;
 	unsigned int		entry_size;
+	//邻居表key的大小（针对ipv4而言，key实际上就是ip地址，故为4）
 	unsigned int		key_len;
 	__be16			protocol;
+	//邻居hash表hashcode计算函数
 	__u32			(*hash)(const void *pkey,
 					const struct net_device *dev,
 					__u32 *hash_rnd);
+	//邻居hash表比对函数
 	bool			(*key_eq)(const struct neighbour *, const void *pkey);
 	int			(*constructor)(struct neighbour *);
 	int			(*pconstructor)(struct pneigh_entry *);
@@ -215,11 +223,15 @@ struct neigh_table {
 	struct delayed_work	gc_work;
 	struct timer_list 	proxy_timer;
 	struct sk_buff_head	proxy_queue;
+	//表中邻居表项的数目
 	atomic_t		entries;
 	rwlock_t		lock;
 	unsigned long		last_rand;
+	//邻居表统计计数
 	struct neigh_statistics	__percpu *stats;
+	//邻居hash表项
 	struct neigh_hash_table __rcu *nht;
+	//代理邻居hash表项
 	struct pneigh_entry	**phash_buckets;
 };
 
@@ -272,6 +284,7 @@ static inline bool neigh_key_eq128(const struct neighbour *n, const void *pkey)
 		(n32[2] ^ p32[2]) | (n32[3] ^ p32[3])) == 0;
 }
 
+//查找邻居表项
 static inline struct neighbour *___neigh_lookup_noref(
 	struct neigh_table *tbl,
 	bool (*key_eq)(const struct neighbour *n, const void *pkey),
@@ -285,7 +298,9 @@ static inline struct neighbour *___neigh_lookup_noref(
 	struct neighbour *n;
 	u32 hash_val;
 
+	//计算hashcode
 	hash_val = hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
+	//遍历对应hash桶，通过key_eq比对key值，要求出接口与key命中
 	for (n = rcu_dereference_bh(nht->hash_buckets[hash_val]);
 	     n != NULL;
 	     n = rcu_dereference_bh(n->next)) {
@@ -311,6 +326,7 @@ struct neighbour *neigh_lookup_nodev(struct neigh_table *tbl, struct net *net,
 				     const void *pkey);
 struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 				 struct net_device *dev, bool want_ref);
+//创建空的邻居表项
 static inline struct neighbour *neigh_create(struct neigh_table *tbl,
 					     const void *pkey,
 					     struct net_device *dev)
@@ -472,6 +488,7 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 	} while (read_seqretry(&hh->hh_lock, seq));
 
 	skb_push(skb, hh_len);
+	//直接发送报文
 	return dev_queue_xmit(skb);
 }
 
@@ -483,6 +500,7 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb)
 	if ((n->nud_state & NUD_CONNECTED) && hh->hh_len)
 		return neigh_hh_output(hh, skb);
 	else
+		//调用邻居表项的output进行处理（或缓存或丢弃）
 		return n->output(n, skb);
 }
 
@@ -491,9 +509,11 @@ __neigh_lookup(struct neigh_table *tbl, const void *pkey, struct net_device *dev
 {
 	struct neighbour *n = neigh_lookup(tbl, pkey, dev);
 
+	//如果命中或者未命中但不要求创建，则直接返回
 	if (n || !creat)
 		return n;
 
+	//未命中，且按要求需要创建邻居表项，则创建空的邻居表项
 	n = neigh_create(tbl, pkey, dev);
 	return IS_ERR(n) ? NULL : n;
 }

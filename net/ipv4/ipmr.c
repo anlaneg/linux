@@ -2006,6 +2006,8 @@ forward:
 		}
 		goto dont_forward;
 	}
+
+	//遍历并clone发送给各个接口
 	for (ct = c->_c.mfc_un.res.maxvif - 1;
 	     ct >= c->_c.mfc_un.res.minvif; ct--) {
 		/* For (*,G) entry, don't forward to the incoming interface */
@@ -2017,7 +2019,7 @@ forward:
 
 				if (skb2)
 					ipmr_queue_xmit(net, mrt, true_vifi,
-							skb2, c, psend);
+							skb2, c, psend);//psend为要发送的接口索引
 			}
 			psend = ct;
 		}
@@ -2068,6 +2070,7 @@ static struct mr_table *ipmr_rt_fib_lookup(struct net *net, struct sk_buff *skb)
 /* Multicast packets for forwarding arrive here
  * Called with rcu_read_lock();
  */
+//收到组播报文入口（查路由后命中组播路由）
 int ip_mr_input(struct sk_buff *skb)
 {
 	struct mfc_cache *cache;
@@ -2162,6 +2165,7 @@ int ip_mr_input(struct sk_buff *skb)
 	read_unlock(&mrt_lock);
 
 	if (local)
+		//需要送往本机的组播报文
 		return ip_local_deliver(skb);
 
 	return 0;

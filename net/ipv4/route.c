@@ -922,6 +922,7 @@ out_put_peer:
 	inet_putpeer(peer);
 }
 
+//路由不可达时，此函数将被调用
 static int ip_error(struct sk_buff *skb)
 {
 	struct rtable *rt = skb_rtable(skb);
@@ -1655,12 +1656,13 @@ static int ip_route_input_mc(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	rth->dst.tclassid = itag;
 #endif
+	//组播首次将dst.output置为丢包
 	rth->dst.output = ip_rt_bug;
 	rth->rt_is_input= 1;
 
 #ifdef CONFIG_IP_MROUTE
 	if (!ipv4_is_local_multicast(daddr) && IN_DEV_MFORWARD(in_dev))
-		rth->dst.input = ip_mr_input;
+		rth->dst.input = ip_mr_input;//设置组播的input
 #endif
 	RT_CACHE_STAT_INC(in_slow_mc);
 
@@ -1695,6 +1697,7 @@ static void ip_handle_martian_source(struct net_device *dev,
 }
 
 /* called in rcu_read_lock() section */
+//设置skb->dst
 static int __mkroute_input(struct sk_buff *skb,
 			   const struct fib_result *res,
 			   struct in_device *in_dev,
@@ -1708,9 +1711,10 @@ static int __mkroute_input(struct sk_buff *skb,
 	u32 itag = 0;
 
 	/* get a working reference to the output device */
-	//获得出接口设备
+	//获得出接口设备(将首个下一跳设备做为出接口设备）
 	out_dev = __in_dev_get_rcu(FIB_RES_DEV(*res));
 	if (!out_dev) {
+		//路由表里有bug
 		net_crit_ratelimited("Bug in ip_route_input_slow(). Please report.\n");
 		return -EINVAL;
 	}
@@ -1758,6 +1762,7 @@ static int __mkroute_input(struct sk_buff *skb,
 		}
 	}
 
+	//创建rth(默认的dst.output会被设置）
 	rth = rt_dst_alloc(out_dev->dev, 0, res->type,
 			   IN_DEV_CONF_GET(in_dev, NOPOLICY),
 			   IN_DEV_CONF_GET(out_dev, NOXFRM), do_cache);
@@ -1769,9 +1774,10 @@ static int __mkroute_input(struct sk_buff *skb,
 	rth->rt_is_input = 1;
 	RT_CACHE_STAT_INC(in_slow_tot);
 
-	//设置走ip_forward
+	//当前我们的报文已属于转发报文，故这里将input统一变更为ip_forward
 	rth->dst.input = ip_forward;
 
+	//设置下一跳
 	rt_set_nexthop(rth, daddr, res, fnhe, res->fi, res->type, itag,
 		       do_cache);
 	lwtunnel_set_redirect(&rth->dst);
@@ -1892,7 +1898,7 @@ static int ip_mkroute_input(struct sk_buff *skb,
 			    struct flow_keys *hkeys)
 {
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
-	//等价路由处理？
+	//等价路由处理,存在多个下一跳，选一个下一跳
 	if (res->fi && res->fi->fib_nhs > 1) {
 		int h = fib_multipath_hash(res->fi->fib_net, NULL, skb, hkeys);
 
@@ -1933,7 +1939,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	/* IP on this device is disabled. */
 
 	if (!in_dev)
-		goto out;//入接口被删除，将被丢包
+		goto out;//入接口为NULL，将被丢包
 
 	/* Check for the most weird martians, which can be not detected
 	   by fib_lookup.
@@ -2001,7 +2007,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		fl4.fl4_dport = 0;
 	}
 
-	//传入flow,查询fib表
+	//传入flow,查询fib表，获得结果res
 	err = fib_lookup(net, &fl4, res, 0);
 	if (err != 0) {
 		if (!IN_DEV_FORWARD(in_dev))
@@ -2022,15 +2028,15 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	}
 
 	if (!IN_DEV_FORWARD(in_dev)) {
-		//如果是直接或者网关，但入接口设备不支持转发模式，则按无route处理
+		//入接口设备不支持转发模式，则按无route处理
 		err = -EHOSTUNREACH;
 		goto no_route;
 	}
 	if (res->type != RTN_UNICAST)
-		//非单播路由，报错
+		//从以上处理可知，走到这里，非主机路由，也非直连路由，网关路由，报错
 		goto martian_destination;
 
-	//单播构造路由
+	//此时为网关路由或直接路由，构造skb->dst
 	err = ip_mkroute_input(skb, res, in_dev, daddr, saddr, tos, flkeys);
 out:	return err;
 
@@ -2050,6 +2056,7 @@ brd_input:
 	res->type = RTN_BROADCAST;
 	RT_CACHE_STAT_INC(in_brd);
 
+//处理报文送本机情况
 local_input:
 	do_cache = false;
 	if (res->fi) {
@@ -2064,7 +2071,7 @@ local_input:
 		}
 	}
 
-	//此处将设置input为ip_local_deliver,报文将送往本地
+	//此处通过调用rt_dst_alloc,将设置input为ip_local_deliver,报文将送往本地
 	rth = rt_dst_alloc(l3mdev_master_dev_rcu(dev) ? : net->loopback_dev,
 			   flags | RTCF_LOCAL, res->type,//标记local flag
 			   IN_DEV_CONF_GET(in_dev, NOPOLICY), false, do_cache);

@@ -311,8 +311,9 @@ static void arp_send_dst(int type, int ptype, __be32 dest_ip,
 
 	/* arp on this interface. */
 	if (dev->flags & IFF_NOARP)
-		return;
+		return;//接口不支持arp的直接返回
 
+	//按参数构造arp报文
 	skb = arp_create(type, ptype, dest_ip, dev, src_ip,
 			 dest_hw, src_hw, target_hw);
 	if (!skb)
@@ -431,6 +432,7 @@ static int arp_ignore(struct in_device *in_dev, __be32 sip, __be32 tip)
 	return !inet_confirm_addr(net, in_dev, sip, tip, scope);
 }
 
+//查路由，检查到sip的报文，出接口是否为dev设备
 static int arp_filter(__be32 sip, __be32 tip, struct net_device *dev)
 {
 	struct rtable *rt;
@@ -440,8 +442,9 @@ static int arp_filter(__be32 sip, __be32 tip, struct net_device *dev)
 
 	rt = ip_route_output(net, sip, tip, 0, l3mdev_master_ifindex_rcu(dev));
 	if (IS_ERR(rt))
-		return 1;
+		return 1;//查询不到路由，返回1，表示被过滤
 	if (rt->dst.dev != dev) {
+		//出接口非dev设备，返回1，表示被过滤
 		__NET_INC_STATS(net, LINUX_MIB_ARPFILTER);
 		flag = 1;
 	}
@@ -497,6 +500,7 @@ static inline int arp_fwd_proxy(struct in_device *in_dev,
  *    Ericsson call it MAC-Forced Forwarding (RFC Draft).
  *
  */
+//按注释所言，此代码用于处理private vlan的arp代理问题
 static inline int arp_fwd_pvlan(struct in_device *in_dev,
 				struct net_device *dev,	struct rtable *rt,
 				__be32 sip, __be32 tip)
@@ -523,7 +527,8 @@ static inline int arp_fwd_pvlan(struct in_device *in_dev,
  *	Create an arp packet. If dest_hw is not set, we create a broadcast
  *	message.
  */
-//创建arp报文（请求报文或者响应报文）
+//创建arp报文（type:报文类型，请求或者响应;src_ip 源ip;dest_ip 为target ip；src_hw 源mac地址;
+// target_hw 为target mac地址;dest_hw 以太头上目的mac;ptype 协议类型，例如0x806)
 struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 			   struct net_device *dev, __be32 src_ip,
 			   const unsigned char *dest_hw,
@@ -546,10 +551,12 @@ struct sk_buff *arp_create(int type, int ptype, __be32 dest_ip,
 
 	skb_reserve(skb, hlen);
 	skb_reset_network_header(skb);
+
 	//在skb上分配一个arp头部空间
 	arp = skb_put(skb, arp_hdr_len(dev));
 	skb->dev = dev;//指定出接口设备
 	skb->protocol = htons(ETH_P_ARP);
+
 	//如果未指定src硬件地址，则采用dev的硬件地址
 	if (!src_hw)
 		src_hw = dev->dev_addr;
@@ -652,23 +659,26 @@ static int arp_xmit_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 void arp_xmit(struct sk_buff *skb)
 {
 	/* Send it off, maybe filter it using firewalling first.  */
+	//触发arp的ARP_OUT钩子点
 	NF_HOOK(NFPROTO_ARP, NF_ARP_OUT,
 		dev_net(skb->dev), NULL, skb, NULL, skb->dev,
 		arp_xmit_finish);
 }
 EXPORT_SYMBOL(arp_xmit);
 
+//检查报文是否为免费arp表项
 static bool arp_is_garp(struct net *net, struct net_device *dev,
 			int *addr_type, __be16 ar_op,
 			__be32 sip, __be32 tip,
 			unsigned char *sha, unsigned char *tha)
 {
-	bool is_garp = tip == sip;
+	bool is_garp = tip == sip;//target ip与源ip必须相同
 
 	/* Gratuitous ARP _replies_ also require target hwaddr to be
 	 * the same as source.
 	 */
 	if (is_garp && ar_op == htons(ARPOP_REPLY))
+		//如果是响应报文，则要求源mac与target mac必须相同
 		is_garp =
 			/* IPv4 over IEEE 1394 doesn't provide target
 			 * hardware address field in its ARP payload.
@@ -677,6 +687,7 @@ static bool arp_is_garp(struct net *net, struct net_device *dev,
 			!memcmp(tha, sha, dev->addr_len);
 
 	if (is_garp) {
+		//到sip的路由必须是直接路由或者网关路由
 		*addr_type = inet_addr_type_dev_table(net, dev, sip);
 		if (*addr_type != RTN_UNICAST)
 			is_garp = false;
@@ -688,7 +699,7 @@ static bool arp_is_garp(struct net *net, struct net_device *dev,
  *	Process an arp request.
  */
 
-//arp报文处理
+//arp报文处理(ARP_IN钩子点已执行）
 static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
@@ -709,14 +720,16 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 * is ARP'able.
 	 */
 
+	//入口设备未指定，无法处理丢包
 	if (!in_dev)
 		goto out_free_skb;
 
 	arp = arp_hdr(skb);
 
+	//arp协议类型检查
 	switch (dev_type) {
 	default:
-		//报文中指定的硬件类型与设备不匹配，丢包
+		//本函数仅处理网络协议为ip的arp报文，或者设备类型与arp的碍件类型不一致的，也丢包
 		if (arp->ar_pro != htons(ETH_P_IP) ||
 		    htons(dev_type) != arp->ar_hrd)
 			goto out_free_skb;
@@ -761,7 +774,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
  */
 	//解arp负载
 	arp_ptr = (unsigned char *)(arp + 1);
-	sha	= arp_ptr;//发送方地址
+	sha	= arp_ptr;//发送方硬件地址
 	arp_ptr += dev->addr_len;
 	memcpy(&sip, arp_ptr, 4);//发送方ip
 	arp_ptr += 4;
@@ -822,7 +835,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 						    GFP_ATOMIC);
 
 	/* Special case: IPv4 duplicate address detection packet (RFC2131) */
-	//源ip为０，（特殊情况：ipv4　地址重突检测）
+	//源ip为０的arp请求报文，（特殊情况：ipv4　地址重突检测）
 	if (sip == 0) {
 		if (arp->ar_op == htons(ARPOP_REQUEST) &&
 		    inet_addr_type_dev_table(net, dev, tip) == RTN_LOCAL &&
@@ -833,35 +846,49 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		goto out_consume_skb;
 	}
 
+	//如果为请求报文，则进行路由查询
 	if (arp->ar_op == htons(ARPOP_REQUEST) &&
 	    ip_route_input_noref(skb, tip, sip, 0, dev) == 0) {
 
+		//取路由查询结果
 		rt = skb_rtable(skb);
 		addr_type = rt->rt_type;
 
 		if (addr_type == RTN_LOCAL) {
+			//查路由命中主机路由，则target ip是本机ip
 			int dont_send;
 
 			dont_send = arp_ignore(in_dev, sip, tip);
 			if (!dont_send && IN_DEV_ARPFILTER(in_dev))
+				//sip是arp请求中的源ip,如果需要进行arp响应，则此ip将为dstip
+				//故在此流程，首先检查报文去往sip时，是否出接口为dev,如果出接口
+				//不为dev，则不发送
 				dont_send = arp_filter(sip, tip, dev);
 			if (!dont_send) {
+				//查询sip对应的邻居表项
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n) {
+					//构造并发送arp响应
+					//target ip为sip；自dev设备出；tip为srcip;
 					arp_send_dst(ARPOP_REPLY, ETH_P_ARP,
 						     sip, dev, tip, sha,
 						     dev->dev_addr, sha,
 						     reply_dst);
+					//减少引用计数
 					neigh_release(n);
 				}
 			}
 			goto out_consume_skb;
 		} else if (IN_DEV_FORWARD(in_dev)) {
+			//入口设备处于转发状态，路由为网关或者直连路由
+			//如果开启了arp代理，或者开启了private vlan的arp代理功能
+			//且命中代理表项
 			if (addr_type == RTN_UNICAST  &&
 			    (arp_fwd_proxy(in_dev, dev, rt) ||
 			     arp_fwd_pvlan(in_dev, dev, rt, sip, tip) ||
 			     (rt->dst.dev != dev &&
 			      pneigh_lookup(&arp_tbl, net, &tip, dev, 0)))) {
+				//为arp代理表项，生成邻居表项
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n)
 					neigh_release(n);
@@ -874,6 +901,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 						     dev->dev_addr, sha,
 						     reply_dst);
 				} else {
+					//将请求入队？？入队的目的是什么？？？
 					pneigh_enqueue(&arp_tbl,
 						       in_dev->arp_parms, skb);
 					goto out_free_dst;
@@ -884,11 +912,12 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Update our ARP tables */
-
+	//更新自身的arp表项，先查出表项
 	n = __neigh_lookup(&arp_tbl, &sip, dev, 0);
 
 	addr_type = -1;
 	if (n || IN_DEV_ARP_ACCEPT(in_dev)) {
+		//检查是否为免费arp
 		is_garp = arp_is_garp(net, dev, &addr_type, arp->ar_op,
 				      sip, tip, sha, tha);
 	}
@@ -955,13 +984,15 @@ static void parp_redo(struct sk_buff *skb)
 /*
  *	Receive an arp request from the device layer.
  */
-//收到arp报，并开始处理
+//收到arp包，并开始处理
 static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *pt, struct net_device *orig_dev)
 {
 	const struct arphdr *arp;
 
 	/* do not tweak dropwatch on an ARP we will ignore */
+	//设置不支持arp,arp的目的mac非本机（即单播mac且非本接口收取），loopback口报文
+	//满足此条件，丢包
 	if (dev->flags & IFF_NOARP ||
 	    skb->pkt_type == PACKET_OTHERHOST ||
 	    skb->pkt_type == PACKET_LOOPBACK)
@@ -972,19 +1003,21 @@ static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 		goto out_of_mem;
 
 	/* ARP header, plus 2 device addresses, plus 2 IP addresses.  */
+	//不足arp协议所需字段，丢包
 	if (!pskb_may_pull(skb, arp_hdr_len(dev)))
 		goto freeskb;
 
 	//偏移到arp头部
 	arp = arp_hdr(skb);
-	//当前设备不支持此arp报文
+
+	//当前设备不支持此类型arp报文（以太网只支持硬件长度为6，协议地址长度为4的arp)
 	if (arp->ar_hln != dev->addr_len || arp->ar_pln != 4)
 		goto freeskb;
 
 	//当skb的cb置为空
 	memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
 
-	//走ARP钩子点
+	//走ARP钩子点,ARP_IN
 	return NF_HOOK(NFPROTO_ARP, NF_ARP_IN,
 		       dev_net(dev), NULL, skb, dev, NULL,
 		       arp_process);
@@ -1263,6 +1296,7 @@ out:
 	return err;
 }
 
+//arp表最关心设备mac地址变更事件，也关注哪个设备关闭arp
 static int arp_netdev_event(struct notifier_block *this, unsigned long event,
 			    void *ptr)
 {
@@ -1303,7 +1337,7 @@ void arp_ifdown(struct net_device *dev)
 /*
  *	Called once on startup.
  */
-
+//arp协议处理函数
 static struct packet_type arp_packet_type __read_mostly = {
 	.type =	cpu_to_be16(ETH_P_ARP),
 	.func =	arp_rcv,
@@ -1445,6 +1479,7 @@ static const struct seq_operations arp_seq_ops = {
 
 static int __net_init arp_net_init(struct net *net)
 {
+	//注册/proc/net/arp 文件，并提供arp表的显示
 	if (!proc_create_net("arp", 0444, net->proc_net, &arp_seq_ops,
 			sizeof(struct neigh_seq_state)))
 		return -ENOMEM;

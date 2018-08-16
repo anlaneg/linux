@@ -89,7 +89,7 @@ static const struct seq_operations neigh_stat_seq_ops;
    It is supposed, that dev->hard_header is simplistic and does
    not make callbacks to neighbour tables.
  */
-
+//邻居表项的blackhole输出（用于邻居表项不可用时）
 static int neigh_blackhole(struct neighbour *neigh, struct sk_buff *skb)
 {
 	kfree_skb(skb);
@@ -164,6 +164,7 @@ bool neigh_remove_one(struct neighbour *ndel, struct neigh_table *tbl)
 	return false;
 }
 
+//强制执行邻居表项回收
 static int neigh_forced_gc(struct neigh_table *tbl)
 {
 	int shrunk = 0;
@@ -302,12 +303,14 @@ int neigh_ifdown(struct neigh_table *tbl, struct net_device *dev)
 }
 EXPORT_SYMBOL(neigh_ifdown);
 
+//申请一个空的邻居表项
 static struct neighbour *neigh_alloc(struct neigh_table *tbl, struct net_device *dev)
 {
 	struct neighbour *n = NULL;
 	unsigned long now = jiffies;
 	int entries;
 
+	//首先尝试邻居表项回收
 	entries = atomic_inc_return(&tbl->entries) - 1;
 	if (entries >= tbl->gc_thresh3 ||
 	    (entries >= tbl->gc_thresh2 &&
@@ -321,6 +324,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl, struct net_device 
 		}
 	}
 
+	//申请并填充新的邻居表项
 	n = kzalloc(tbl->entry_size + dev->neigh_priv_len, GFP_ATOMIC);
 	if (!n)
 		goto out_entries;
@@ -330,6 +334,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl, struct net_device 
 	seqlock_init(&n->ha_lock);
 	n->updated	  = n->used = now;
 	n->nud_state	  = NUD_NONE;
+	//此表项的默认输出方式是丢包
 	n->output	  = neigh_blackhole;
 	seqlock_init(&n->hh.hh_lock);
 	n->parms	  = neigh_parms_clone(&tbl->parms);
@@ -435,6 +440,7 @@ static struct neigh_hash_table *neigh_hash_grow(struct neigh_table *tbl,
 	return new_nht;
 }
 
+//查询邻居表项
 struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
 			       struct net_device *dev)
 {
@@ -445,8 +451,10 @@ struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
 	rcu_read_lock_bh();
 	n = __neigh_lookup_noref(tbl, pkey, dev);
 	if (n) {
+		//增加此邻居表项的引用计数
 		if (!refcount_inc_not_zero(&n->refcnt))
 			n = NULL;
+		//增加查询的命中次数
 		NEIGH_CACHE_STAT_INC(tbl, hits);
 	}
 
@@ -486,6 +494,7 @@ struct neighbour *neigh_lookup_nodev(struct neigh_table *tbl, struct net *net,
 }
 EXPORT_SYMBOL(neigh_lookup_nodev);
 
+//创建邻居表项
 struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 				 struct net_device *dev, bool want_ref)
 {
@@ -615,6 +624,7 @@ struct pneigh_entry *__pneigh_lookup(struct neigh_table *tbl,
 }
 EXPORT_SYMBOL_GPL(__pneigh_lookup);
 
+//查询代理表项
 struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 				    struct net *net, const void *pkey,
 				    struct net_device *dev, int creat)
@@ -1229,6 +1239,7 @@ int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 
 	if (lladdr != neigh->ha) {
 		write_seqlock(&neigh->ha_lock);
+		//设置新的链路层地址（例如mac地址）
 		memcpy(&neigh->ha, lladdr, dev->addr_len);
 		write_sequnlock(&neigh->ha_lock);
 		neigh_update_hhs(neigh);
@@ -1315,6 +1326,7 @@ struct neighbour *neigh_event_ns(struct neigh_table *tbl,
 				 u8 *lladdr, void *saddr,
 				 struct net_device *dev)
 {
+	//查询邻居表项（最后一个参数用于确定是否在未查询到neighbour时创建）
 	struct neighbour *neigh = __neigh_lookup(tbl, saddr, dev,
 						 lladdr || !dev->addr_len);
 	if (neigh)
