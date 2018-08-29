@@ -657,6 +657,7 @@ static int br_mdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 			__br_mdb_notify(dev, p, entry, RTM_NEWMDB);
 		}
 	} else {
+		//将entry加入到br中
 		err = __br_mdb_add(net, br, entry);
 		if (!err)
 			__br_mdb_notify(dev, p, entry, RTM_NEWMDB);

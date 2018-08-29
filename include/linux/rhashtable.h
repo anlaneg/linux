@@ -634,7 +634,7 @@ static inline struct rhash_head *__rhashtable_lookup(
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
 restart:
-	//计算hash值
+	//计算hash值(查询不加锁）
 	hash = rht_key_hashfn(ht, tbl, key, params);
 	//采用函数params.obj_cmpfn遍历对应的桶
 	rht_for_each_rcu(he, tbl, hash) {
@@ -732,7 +732,7 @@ static inline struct rhlist_head *rhltable_lookup(
  * function returns the existing element already in hashes in there is a clash,
  * otherwise it returns an error via ERR_PTR().
  */
-//向hash表中添加元素obj
+//向hash表中添加元素obj（加锁）
 static inline void *__rhashtable_insert_fast(
 	struct rhashtable *ht, const void *key, struct rhash_head *obj,
 	const struct rhashtable_params params, bool rhlist)
@@ -1044,7 +1044,7 @@ static inline int __rhashtable_remove_fast_one(
 	hash = rht_head_hashfn(ht, tbl, obj, params);
 	lock = rht_bucket_lock(tbl, hash);
 
-	spin_lock_bh(lock);
+	spin_lock_bh(lock);//删除加锁处
 
 	pprev = rht_bucket_var(tbl, hash);
 	rht_for_each_continue(he, *pprev, tbl, hash) {
