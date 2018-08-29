@@ -629,6 +629,7 @@ static int br_mdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct net_bridge *br;
 	int err;
 
+	//解析出entry
 	err = br_mdb_parse(skb, nlh, &dev, &entry);
 	if (err < 0)
 		return err;

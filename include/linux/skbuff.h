@@ -738,7 +738,7 @@ struct sk_buff {
 				nohdr:1,
 				fclone:2,
 				peeked:1,
-				head_frag:1,
+				head_frag:1,//是否为首个片（非ip分片概念）
 				xmit_more:1,
 				pfmemalloc:1;
 
@@ -758,7 +758,7 @@ struct sk_buff {
 #define PKT_TYPE_OFFSET()	offsetof(struct sk_buff, __pkt_type_offset)
 
 	__u8			__pkt_type_offset[0];
-	__u8			pkt_type:3;//指出报文去向（见if_packet.h中PACKET_MULTICAST等定义）
+	__u8			pkt_type:3;//通过mac检查报文类别，例如组播等（见if_packet.h中PACKET_MULTICAST等定义）
 	__u8			ignore_df:1;
 	__u8			nf_trace:1;
 	__u8			ip_summed:2;
@@ -1276,6 +1276,7 @@ static inline unsigned char *skb_end_pointer(const struct sk_buff *skb)
 	return skb->end;
 }
 
+//可用的buffer大小
 static inline unsigned int skb_end_offset(const struct sk_buff *skb)
 {
 	return skb->end - skb->head;
@@ -1895,8 +1896,8 @@ static inline bool skb_is_nonlinear(const struct sk_buff *skb)
 	return skb->data_len;
 }
 
-//其中skb->len是数据包长度，在IPv4中就是单个完整IP包的总长，但这些数据并不一定都在当前内存页；
-//skb->data_len表示在其他页的数据长度（包括本skb在其他页中的数据以及分片skb中的数据），
+//其中skb->len是数据包长度，在IPv4中就是单个完整IP包的总长，但这些数据并不一定都在当前buffer页；
+//skb->data_len表示在其他buffer页的数据长度（包括本skb在其他页中的数据以及分片skb中的数据），
 //因此skb->len - skb->data_len表示在当前页的数据大小。
 static inline unsigned int skb_headlen(const struct sk_buff *skb)
 {
@@ -1998,6 +1999,7 @@ static inline void skb_set_tail_pointer(struct sk_buff *skb, const int offset)
 }
 
 #else /* NET_SKBUFF_DATA_USES_OFFSET */
+//获取报文的尾指针
 static inline unsigned char *skb_tail_pointer(const struct sk_buff *skb)
 {
 	return skb->tail;
@@ -2117,6 +2119,7 @@ static inline void *pskb_pull(struct sk_buff *skb, unsigned int len)
 	return unlikely(len > skb->len) ? NULL : __pskb_pull(skb, len);
 }
 
+//使skb中的buffer内存平坦（最小平坦长度为len)
 static inline int pskb_may_pull(struct sk_buff *skb, unsigned int len)
 {
 	if (likely(len <= skb_headlen(skb)))
@@ -2124,6 +2127,7 @@ static inline int pskb_may_pull(struct sk_buff *skb, unsigned int len)
 	if (unlikely(len > skb->len))
 		//需要的长度比数据长度还要长，肯定搞不定
 		return 0;
+	//len是我们要求的长度，skb_headlen是我们本端可提供的平坦内存长度，len-skb_headlen即为需要增加的平坦内存长度。
 	return __pskb_pull_tail(skb, len - skb_headlen(skb)) != NULL;
 }
 
@@ -2176,7 +2180,7 @@ static inline int skb_availroom(const struct sk_buff *skb)
  *	Increase the headroom of an empty &sk_buff by reducing the tail
  *	room. This is only allowed for an empty buffer.
  */
-//预支出headroom长度len字节
+//在head与data之间预留len长度的字节
 static inline void skb_reserve(struct sk_buff *skb, int len)
 {
 	skb->data += len;

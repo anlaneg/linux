@@ -4840,7 +4840,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 
 		preempt_disable();
 		rcu_read_lock();
-		//skb->dev->xdp_prog的bpf_filter函数将被调用
+		//skb->dev->xdp_prog的bpf_filter函数将被调用，实现bpf程序运行
 		ret = do_xdp_generic(rcu_dereference(skb->dev->xdp_prog), skb);
 		rcu_read_unlock();
 		preempt_enable();
@@ -5016,7 +5016,7 @@ static void gro_list_prepare(struct napi_struct *napi, struct sk_buff *skb)
 
 		NAPI_GRO_CB(p)->flush = 0;
 
-		//当前报文skb与p不是同一条流，则尝试下gro报文
+		//采用hash检查当前报文skb与p不是同一条流，则尝试下一个gro报文
 		if (hash != skb_get_hash_raw(p)) {
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
@@ -5089,7 +5089,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	enum gro_result ret;
 	int grow;
 
-	//网卡已完成gso的就直接走normal了
+	//网卡未开启gso功能的，直接走normal
 	if (netif_elide_gro(skb->dev))
 		goto normal;
 
@@ -5134,10 +5134,11 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	}
 	rcu_read_unlock();
 
-	//for循环没进去情况，即没有相应的offload
+	//for循环没进去情况，即没有相应的offload，走normal
 	if (&ptype->list == head)
 		goto normal;
 
+	//报文已被缓存，等待其它报文与组合
 	if (IS_ERR(pp) && PTR_ERR(pp) == -EINPROGRESS) {
 		ret = GRO_CONSUMED;
 		goto ok;

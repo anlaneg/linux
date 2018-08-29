@@ -166,7 +166,7 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	const struct ethhdr *eth;
 
 	skb->dev = dev;
-	skb_reset_mac_header(skb);
+	skb_reset_mac_header(skb);//定义当前data位置为以太头位置
 
 	eth = (struct ethhdr *)skb->data;
 	//使data移动到以太头之后

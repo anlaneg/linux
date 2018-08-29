@@ -88,10 +88,10 @@ struct rhlist_head {
  * @buckets: size * hash buckets
  */
 struct bucket_table {
-	unsigned int		size;
-	unsigned int		nest;
+	unsigned int		size;//桶的数目（必须为２的Ｎ次方）
+	unsigned int		nest;//是否为nest哈希表
 	unsigned int		rehash;
-	u32			hash_rnd;
+	u32			hash_rnd;//随机值（被合并到key的hash计算中，安全原因)
 	unsigned int		locks_mask;
 	spinlock_t		*locks;
 	struct list_head	walkers;
@@ -99,6 +99,7 @@ struct bucket_table {
 
 	struct bucket_table __rcu *future_tbl;
 
+	//hash桶
 	struct rhash_head __rcu *buckets[] ____cacheline_aligned_in_smp;
 };
 
@@ -162,8 +163,8 @@ struct rhashtable_params {
  * @nelems: Number of elements in table
  */
 struct rhashtable {
-	struct bucket_table __rcu	*tbl;
-	unsigned int			key_len;
+	struct bucket_table __rcu	*tbl;//哈希表
+	unsigned int			key_len;//hash表key的长度
 	unsigned int			max_elems;
 	struct rhashtable_params	p;
 	bool				rhlist;
@@ -228,12 +229,14 @@ static inline unsigned long rht_get_nulls_value(const struct rhash_head *ptr)
 	return ((unsigned long) ptr) >> 1;
 }
 
+//取对应的obj
 static inline void *rht_obj(const struct rhashtable *ht,
 			    const struct rhash_head *he)
 {
 	return (char *)he - ht->p.head_offset;
 }
 
+//通过hashcode找对应的桶索引
 static inline unsigned int rht_bucket_index(const struct bucket_table *tbl,
 					    unsigned int hash)
 {
@@ -270,10 +273,12 @@ static inline unsigned int rht_key_get_hash(struct rhashtable *ht,
 	return hash;
 }
 
+//返回对应的桶索引
 static inline unsigned int rht_key_hashfn(
 	struct rhashtable *ht, const struct bucket_table *tbl,
 	const void *key, const struct rhashtable_params params)
 {
+	//计算hashcode
 	unsigned int hash = rht_key_get_hash(ht, key, params, tbl->hash_rnd);
 
 	return rht_bucket_index(tbl, hash);
@@ -424,6 +429,7 @@ struct rhash_head __rcu **rht_bucket_nested_insert(struct rhashtable *ht,
 #define rht_entry(tpos, pos, member) \
 	({ tpos = container_of(pos, typeof(*tpos), member); 1; })
 
+//找对应的桶
 static inline struct rhash_head __rcu *const *rht_bucket(
 	const struct bucket_table *tbl, unsigned int hash)
 {
@@ -630,10 +636,11 @@ static inline struct rhash_head *__rhashtable_lookup(
 restart:
 	//计算hash值
 	hash = rht_key_hashfn(ht, tbl, key, params);
+	//采用函数params.obj_cmpfn遍历对应的桶
 	rht_for_each_rcu(he, tbl, hash) {
 		if (params.obj_cmpfn ?
 		    params.obj_cmpfn(&arg, rht_obj(ht, he)) :
-		    rhashtable_compare(&arg, rht_obj(ht, he)))
+		    rhashtable_compare(&arg, rht_obj(ht, he)))//默认为memcmp函数进行比对
 			continue;
 		return he;
 	}
@@ -643,7 +650,7 @@ restart:
 
 	tbl = rht_dereference_rcu(tbl->future_tbl, ht);
 	if (unlikely(tbl))
-		goto restart;
+		goto restart;//存在计划替换的表，查询替换的表
 
 	return NULL;
 }
@@ -665,6 +672,7 @@ static inline void *rhashtable_lookup(
 	struct rhashtable *ht, const void *key,
 	const struct rhashtable_params params)
 {
+	//查询，并返回对应的obj
 	struct rhash_head *he = __rhashtable_lookup(ht, key, params);
 
 	return he ? rht_obj(ht, he) : NULL;
@@ -724,6 +732,7 @@ static inline struct rhlist_head *rhltable_lookup(
  * function returns the existing element already in hashes in there is a clash,
  * otherwise it returns an error via ERR_PTR().
  */
+//向hash表中添加元素obj
 static inline void *__rhashtable_insert_fast(
 	struct rhashtable *ht, const void *key, struct rhash_head *obj,
 	const struct rhashtable_params params, bool rhlist)
@@ -743,8 +752,8 @@ static inline void *__rhashtable_insert_fast(
 	rcu_read_lock();
 
 	tbl = rht_dereference_rcu(ht->tbl, ht);
-	hash = rht_head_hashfn(ht, tbl, obj, params);
-	lock = rht_bucket_lock(tbl, hash);
+	hash = rht_head_hashfn(ht, tbl, obj, params);//计算hash值
+	lock = rht_bucket_lock(tbl, hash);//对bucket进行加锁
 	spin_lock_bh(lock);
 
 	if (unlikely(rht_dereference_bucket(tbl->future_tbl, tbl, hash))) {
@@ -755,6 +764,7 @@ slow_path:
 	}
 
 	elasticity = RHT_ELASTICITY;
+	//取出要加入的桶
 	pprev = rht_bucket_insert(ht, tbl, hash);
 	data = ERR_PTR(-ENOMEM);
 	if (!pprev)

@@ -328,7 +328,7 @@ struct napi_struct {
 	int			poll_owner;
 #endif
 	struct net_device	*dev;
-	struct sk_buff		*gro_list;
+	struct sk_buff		*gro_list;//gro功能缓存的报文
 	struct sk_buff		*skb;
 	struct hrtimer		timer;
 	struct list_head	dev_list;
@@ -2013,11 +2013,10 @@ struct net_device {
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
-//如果网卡没有GRO功能，则返回true
+//如果网卡没有开启GRO功能，则返回true
 static inline bool netif_elide_gro(const struct net_device *dev)
 {
 	if (!(dev->features & NETIF_F_GRO) || dev->xdp_prog)
-		//如果网卡已完成GRO
 		return true;
 	return false;
 }
@@ -2327,6 +2326,7 @@ struct packet_type {
 struct offload_callbacks {
 	struct sk_buff		*(*gso_segment)(struct sk_buff *skb,
 						netdev_features_t features);
+	//gro收包入口（检查是否可合并）
 	struct sk_buff		**(*gro_receive)(struct sk_buff **head,
 						 struct sk_buff *skb);
 	int			(*gro_complete)(struct sk_buff *skb, int nhoff);

@@ -99,9 +99,11 @@ static struct net_bridge_fdb_entry *fdb_find_rcu(struct rhashtable *tbl,
 
 	WARN_ON_ONCE(!rcu_read_lock_held());
 
+	//构造key
 	key.vlan_id = vid;
 	memcpy(key.addr.addr, addr, sizeof(key.addr.addr));
 
+	//返回fdb
 	return rhashtable_lookup(tbl, &key, br_fdb_rht_params);
 }
 
@@ -206,9 +208,11 @@ static void fdb_delete(struct net_bridge *br, struct net_bridge_fdb_entry *f,
 		fdb_del_hw_addr(br, f->key.addr.addr);
 
 	hlist_del_init_rcu(&f->fdb_node);
+	//自hash表中删除，保证不能看见
 	rhashtable_remove_fast(&br->fdb_hash_tbl, &f->rhnode,
 			       br_fdb_rht_params);
 	fdb_notify(br, f, RTM_DELNEIGH, swdev_notify);
+	//注册rcu回调，释放fdb表项
 	call_rcu(&f->rcu, fdb_rcu_free);
 }
 
@@ -336,6 +340,7 @@ out:
 
 void br_fdb_cleanup(struct work_struct *work)
 {
+	//由work得出从属于那个bridge
 	struct net_bridge *br = container_of(work, struct net_bridge,
 					     gc_work.work);
 	struct net_bridge_fdb_entry *f = NULL;
@@ -348,16 +353,21 @@ void br_fdb_cleanup(struct work_struct *work)
 	 * delayed freeing allowing us to continue traversing
 	 */
 	rcu_read_lock();
+	//遍历每个fdb表项
 	hlist_for_each_entry_rcu(f, &br->fdb_list, fdb_node) {
 		unsigned long this_timer;
 
+		//跳过静态表项
 		if (f->is_static || f->added_by_external_learn)
 			continue;
+		//老化时间
 		this_timer = f->updated + delay;
 		if (time_after(this_timer, now)) {
+			//计算下次执行work的时间
 			work_delay = min(work_delay, this_timer - now);
 		} else {
 			spin_lock_bh(&br->hash_lock);
+			//删除掉加入到链的fdb表项
 			if (!hlist_unhashed(&f->fdb_node))
 				fdb_delete(br, f, true);
 			spin_unlock_bh(&br->hash_lock);
@@ -366,6 +376,7 @@ void br_fdb_cleanup(struct work_struct *work)
 	rcu_read_unlock();
 
 	/* Cleanup minimum 10 milliseconds apart */
+	//重启worker
 	work_delay = max_t(unsigned long, work_delay, msecs_to_jiffies(10));
 	mod_delayed_work(system_long_wq, &br->gc_work, work_delay);
 }
@@ -494,6 +505,7 @@ static struct net_bridge_fdb_entry *fdb_create(struct net_bridge *br,
 {
 	struct net_bridge_fdb_entry *fdb;
 
+	//申请fdb表项
 	fdb = kmem_cache_alloc(br_fdb_cache, GFP_ATOMIC);
 	if (fdb) {
 		memcpy(fdb->key.addr.addr, addr, ETH_ALEN);
@@ -508,9 +520,11 @@ static struct net_bridge_fdb_entry *fdb_create(struct net_bridge *br,
 		if (rhashtable_lookup_insert_fast(&br->fdb_hash_tbl,
 						  &fdb->rhnode,
 						  br_fdb_rht_params)) {
+			//插入失败，返回NULL
 			kmem_cache_free(br_fdb_cache, fdb);
 			fdb = NULL;
 		} else {
+			//将fdb存在fdb_list中
 			hlist_add_head_rcu(&fdb->fdb_node, &br->fdb_list);
 		}
 	}
@@ -534,6 +548,7 @@ static int fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 			return 0;
 		br_warn(br, "adding interface %s with same address as a received packet (addr:%pM, vlan:%u)\n",
 		       source ? source->dev->name : br->dev->name, addr, vid);
+		//将旧的先删除掉
 		fdb_delete(br, fdb, true);
 	}
 
@@ -558,6 +573,7 @@ int br_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 	return ret;
 }
 
+//fdb学习
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 		   const unsigned char *addr, u16 vid, bool added_by_user)
 {
@@ -575,6 +591,7 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 
 	fdb = fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
 	if (likely(fdb)) {
+		//已存在对应的fdb表项，如果为用户配置的表项，则不容许更新
 		/* attempt to update an entry for a local interface */
 		if (unlikely(fdb->is_local)) {
 			if (net_ratelimit())
@@ -585,6 +602,7 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 
 			/* fastpath: update of existing entry */
 			if (unlikely(source != fdb->dst)) {
+				//更新出接口
 				fdb->dst = source;
 				fdb_modified = true;
 				/* Take over HW learned entry */
@@ -592,15 +610,17 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 					fdb->added_by_external_learn = 0;
 			}
 			if (now != fdb->updated)
-				fdb->updated = now;
+				fdb->updated = now;//更新时间
 			if (unlikely(added_by_user))
 				fdb->added_by_user = 1;
 			if (unlikely(fdb_modified)) {
+				//通知fdb更新
 				trace_br_fdb_update(br, source, addr, vid, added_by_user);
 				fdb_notify(br, fdb, RTM_NEWNEIGH, true);
 			}
 		}
 	} else {
+		//创建fdb表项
 		spin_lock(&br->hash_lock);
 		fdb = fdb_create(br, source, addr, vid, 0, 0);
 		if (fdb) {
@@ -711,6 +731,7 @@ static void fdb_notify(struct net_bridge *br,
 		kfree_skb(skb);
 		goto errout;
 	}
+	//通知fdb更新事件给用户态
 	rtnl_notify(skb, net, 0, RTNLGRP_NEIGH, NULL, GFP_ATOMIC);
 	return;
 errout:

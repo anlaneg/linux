@@ -1447,6 +1447,7 @@ struct sk_buff **inet_gro_receive(struct sk_buff **head, struct sk_buff *skb)
 		//如果是分片，也直接向上传递
 		goto out_unlock;
 
+	//checksum校验不通过，也直接向上传递
 	if (unlikely(ip_fast_csum((u8 *)iph, 5)))
 		goto out_unlock;
 

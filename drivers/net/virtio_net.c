@@ -682,13 +682,14 @@ static struct sk_buff *receive_small(struct net_device *dev,
 	}
 	rcu_read_unlock();
 
-	//设置收到的skb(收到的buf起始地址，收到的buf长度
+	//设置收到的skb(收到的buf起始地址，buf长度)
 	skb = build_skb(buf, buflen);
 	if (!skb) {
 		put_page(page);
 		goto err;
 	}
 	skb_reserve(skb, headroom - delta);
+	//build_skb只是引用了buffer并没有设置报文，这里指出报文长度为len
 	skb_put(skb, len);
 	if (!delta) {
 		buf += header_offset;

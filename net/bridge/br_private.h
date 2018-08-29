@@ -180,7 +180,7 @@ struct net_bridge_fdb_entry {
 	struct net_bridge_fdb_key	key;
 	struct hlist_node		fdb_node;
 	unsigned char			is_local:1,//是否为local fdb表项（即本机接口）
-					is_static:1,
+					is_static:1,//是否为静态fdb表项
 					added_by_user:1,
 					added_by_external_learn:1,
 					offloaded:1;

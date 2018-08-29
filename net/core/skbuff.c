@@ -284,6 +284,7 @@ struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 	struct sk_buff *skb;
 	unsigned int size = frag_size ? : ksize(data);
 
+	//申请skb结构体
 	skb = kmem_cache_alloc(skbuff_head_cache, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
@@ -296,8 +297,9 @@ struct sk_buff *__build_skb(void *data, unsigned int frag_size)
 	refcount_set(&skb->users, 1);
 	skb->head = data;
 	skb->data = data;
+	//使tail与data同值(即相当于报文为空）
 	skb_reset_tail_pointer(skb);
-	skb->end = skb->tail + size;
+	skb->end = skb->tail + size;//指明buffer结束位置
 	//将偏移量清0
 	skb->mac_header = (typeof(skb->mac_header))~0U;
 	skb->transport_header = (typeof(skb->transport_header))~0U;
@@ -1467,7 +1469,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 		     gfp_t gfp_mask)
 {
 	int i, osize = skb_end_offset(skb);
-	int size = osize + nhead + ntail;
+	int size = osize + nhead + ntail;//按要求扩展后总的buffer长度
 	long off;
 	u8 *data;
 
@@ -1475,15 +1477,17 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 
 	BUG_ON(skb_shared(skb));
 
-	size = SKB_DATA_ALIGN(size);
+	size = SKB_DATA_ALIGN(size);//实现数据对齐
 
 	if (skb_pfmemalloc(skb))
 		gfp_mask |= __GFP_MEMALLOC;
+
 	//在计算出skb的缓冲大小后，再在其缓冲后面多申请一个skb_shared_info的结构体长度
 	data = kmalloc_reserve(size + SKB_DATA_ALIGN(sizeof(struct skb_shared_info)),
 			       gfp_mask, NUMA_NO_NODE, NULL);
 	if (!data)
 		goto nodata;
+
 	//我们成功申请了一块buffer,采用ksize(data)获知此块buffer的实际大小，然后减去skb_shared_info后
 	//为我们可使用的最大size
 	size = SKB_WITH_OVERHEAD(ksize(data));
@@ -1491,7 +1495,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	/* Copy only real data... and, alas, header. This should be
 	 * optimized for the cases when header is void.
 	 */
-	//将skb的报文内容copy到data中
+	//将skb中的报文内容copy到data中（自data+nhead位置开始写）
 	memcpy(data + nhead, skb->head, skb_tail_pointer(skb) - skb->head);
 
 	//如果有nr_frags个frags，则会copy skb_shared_info　frags及相应分片之前的数据
@@ -1521,6 +1525,7 @@ int pskb_expand_head(struct sk_buff *skb, int nhead, int ntail,
 	}
 	off = (data + nhead) - skb->head;
 
+	//使skb指向新的buffer位置
 	skb->head     = data;
 	skb->head_frag = 0;
 	skb->data    += off;
@@ -1715,6 +1720,7 @@ EXPORT_SYMBOL_GPL(pskb_put);
  *	exceed the total buffer size the kernel will panic. A pointer to the
  *	first byte of the extra data is returned.
  */
+//在skb当前的数据尾部空出来一个len长度的区间，并返回此区间的首指针
 //移动tail指针，并设置len(添加数据到skb_buff)，
 //在tail后面空出一个len长度的区域，移动tail（预分配一个len长度的空间）
 void *skb_put(struct sk_buff *skb, unsigned int len)
@@ -1917,9 +1923,12 @@ void *__pskb_pull_tail(struct sk_buff *skb, int delta)
 	 * plus 128 bytes for future expansions. If we have enough
 	 * room at tail, reallocate without expansion only if skb is cloned.
 	 */
+	//用eat表示，在当前skb中如果要再容纳delta字节，则1.eat >0时，表示我们需要通过增大buffer eat字节可以做到。
+	//2. eat < 0时表示，当前buffer足够容纳delta的增量，无需增大buffer.
 	int i, k, eat = (skb->tail + delta) - skb->end;
 
 	if (eat > 0 || skb_cloned(skb)) {
+		//需要增大buffer （eat +128字节）
 		if (pskb_expand_head(skb, 0, eat > 0 ? eat + 128 : 0,
 				     GFP_ATOMIC))
 			return NULL;
