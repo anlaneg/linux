@@ -2015,8 +2015,11 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto no_route;
 	}
 
-	if (res->type == RTN_BROADCAST)
+	if (res->type == RTN_BROADCAST) {
+		if (IN_DEV_BFORWARD(in_dev))
+			goto make_route;
 		goto brd_input;
+	}
 
 	if (res->type == RTN_LOCAL) {
 		//路由为主机路由，需要送往本机
@@ -2037,6 +2040,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		goto martian_destination;
 
 	//此时为网关路由或直接路由，构造skb->dst
+make_route:
 	err = ip_mkroute_input(skb, res, in_dev, daddr, saddr, tos, flkeys);
 out:	return err;
 

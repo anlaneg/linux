@@ -32,6 +32,7 @@ static void remove_files(struct kernfs_node *parent,
 
 //分类型，创建一组文本文件和一组二进制文件
 static int create_files(struct kernfs_node *parent, struct kobject *kobj,
+			kuid_t uid, kgid_t gid,
 			const struct attribute_group *grp, int update)
 {
 	struct attribute *const *attr;
@@ -61,7 +62,7 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 
 			mode &= SYSFS_PREALLOC | 0664;
 			error = sysfs_add_file_mode_ns(parent, *attr, false,
-						       mode, NULL);
+						       mode, uid, gid, NULL);
 			if (unlikely(error))
 				break;
 		}
@@ -91,7 +92,8 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			mode &= SYSFS_PREALLOC | 0664;
 			error = sysfs_add_file_mode_ns(parent,
 					&(*bin_attr)->attr, true,
-					mode, NULL);
+					mode,
+					uid, gid, NULL);
 			if (error)
 				break;
 		}
@@ -107,6 +109,8 @@ static int internal_create_group(struct kobject *kobj, int update,
 				 const struct attribute_group *grp)
 {
 	struct kernfs_node *kn;
+	kuid_t uid;
+	kgid_t gid;
 	int error;
 
 	BUG_ON(!kobj || (!update && !kobj->sd));
@@ -119,23 +123,38 @@ static int internal_create_group(struct kobject *kobj, int update,
 			kobj->name, grp->name ?: "");
 		return -EINVAL;
 	}
+	kobject_get_ownership(kobj, &uid, &gid);
 	if (grp->name) {
-		kn = kernfs_create_dir(kobj->sd, grp->name,
-				       S_IRWXU | S_IRUGO | S_IXUGO, kobj);
-		if (IS_ERR(kn)) {
-			if (PTR_ERR(kn) == -EEXIST)
-				sysfs_warn_dup(kobj->sd, grp->name);
-			return PTR_ERR(kn);
+		if (update) {
+			kn = kernfs_find_and_get(kobj->sd, grp->name);
+			if (!kn) {
+				pr_warn("Can't update unknown attr grp name: %s/%s\n",
+					kobj->name, grp->name);
+				return -EINVAL;
+			}
+		} else {
+			kn = kernfs_create_dir_ns(kobj->sd, grp->name,
+						  S_IRWXU | S_IRUGO | S_IXUGO,
+						  uid, gid, kobj, NULL);
+			if (IS_ERR(kn)) {
+				if (PTR_ERR(kn) == -EEXIST)
+					sysfs_warn_dup(kobj->sd, grp->name);
+				return PTR_ERR(kn);
+			}
 		}
 	} else
 		kn = kobj->sd;
 	kernfs_get(kn);
-	error = create_files(kn, kobj, grp, update);
+	error = create_files(kn, kobj, uid, gid, grp, update);
 	if (error) {
 		if (grp->name)
 			kernfs_remove(kn);
 	}
 	kernfs_put(kn);
+
+	if (grp->name && update)
+		kernfs_put(kn);
+
 	return error;
 }
 
@@ -200,7 +219,8 @@ EXPORT_SYMBOL_GPL(sysfs_create_groups);
  * of the attribute files being created already exist.  Furthermore,
  * if the visibility of the files has changed through the is_visible()
  * callback, it will update the permissions and add or remove the
- * relevant files.
+ * relevant files. Changing a group's name (subdirectory name under
+ * kobj's directory in sysfs) is not allowed.
  *
  * The primary use for this function is to call it after making a change
  * that affects group visibility.
@@ -282,6 +302,8 @@ int sysfs_merge_group(struct kobject *kobj,
 		       const struct attribute_group *grp)
 {
 	struct kernfs_node *parent;
+	kuid_t uid;
+	kgid_t gid;
 	int error = 0;
 	struct attribute *const *attr;
 	int i;
@@ -290,8 +312,11 @@ int sysfs_merge_group(struct kobject *kobj,
 	if (!parent)
 		return -ENOENT;
 
+	kobject_get_ownership(kobj, &uid, &gid);
+
 	for ((i = 0, attr = grp->attrs); *attr && !error; (++i, ++attr))
-		error = sysfs_add_file(parent, *attr, false);
+		error = sysfs_add_file_mode_ns(parent, *attr, false,
+					       (*attr)->mode, uid, gid, NULL);
 	if (error) {
 		while (--i >= 0)
 			kernfs_remove_by_name(parent, (*--attr)->name);

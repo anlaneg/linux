@@ -28,7 +28,6 @@
 #include <net/netfilter/nf_nat_helper.h>
 #include <net/netfilter/nf_conntrack_helper.h>
 #include <net/netfilter/nf_conntrack_seqadj.h>
-#include <net/netfilter/nf_conntrack_l3proto.h>
 #include <net/netfilter/nf_conntrack_zones.h>
 #include <linux/netfilter/nf_nat.h>
 
@@ -110,6 +109,7 @@ int nf_xfrm_me_harder(struct net *net, struct sk_buff *skb, unsigned int family)
 	struct flowi fl;
 	unsigned int hh_len;
 	struct dst_entry *dst;
+	struct sock *sk = skb->sk;
 	int err;
 
 	err = xfrm_decode_session(skb, &fl, family);
@@ -121,7 +121,10 @@ int nf_xfrm_me_harder(struct net *net, struct sk_buff *skb, unsigned int family)
 		dst = ((struct xfrm_dst *)dst)->route;
 	dst_hold(dst);
 
-	dst = xfrm_lookup(net, dst, &fl, skb->sk, 0);
+	if (sk && !net_eq(net, sock_net(sk)))
+		sk = NULL;
+
+	dst = xfrm_lookup(net, dst, &fl, sk, 0);
 	if (IS_ERR(dst))
 		return PTR_ERR(dst);
 
@@ -767,12 +770,6 @@ EXPORT_SYMBOL_GPL(nf_nat_l4proto_unregister);
 //在注册l3协议nat处理时，默认会注册tcp,udp,sctp等l4层协议的nat处理
 int nf_nat_l3proto_register(const struct nf_nat_l3proto *l3proto)
 {
-	int err;
-
-	err = nf_ct_l3proto_try_module_get(l3proto->l3proto);
-	if (err < 0)
-		return err;
-
 	mutex_lock(&nf_nat_proto_mutex);
 	//在nf_nat_l4protos中，采用l3proto->l3proto中注册tcp,udp协议
 	RCU_INIT_POINTER(nf_nat_l4protos[l3proto->l3proto][IPPROTO_TCP],
@@ -807,7 +804,6 @@ void nf_nat_l3proto_unregister(const struct nf_nat_l3proto *l3proto)
 	synchronize_rcu();
 
 	nf_nat_l3proto_clean(l3proto->l3proto);
-	nf_ct_l3proto_module_put(l3proto->l3proto);
 }
 EXPORT_SYMBOL_GPL(nf_nat_l3proto_unregister);
 
@@ -1091,7 +1087,7 @@ static int __init nf_nat_init(void)
 	//注册nat连接跟踪扩展
 	ret = nf_ct_extend_register(&nat_extend);
 	if (ret < 0) {
-		nf_ct_free_hashtable(nf_nat_bysource, nf_nat_htable_size);
+		kvfree(nf_nat_bysource);
 		pr_err("Unable to register extension\n");
 		return ret;
 	}
@@ -1130,7 +1126,7 @@ static void __exit nf_nat_cleanup(void)
 	for (i = 0; i < NFPROTO_NUMPROTO; i++)
 		kfree(nf_nat_l4protos[i]);
 	synchronize_net();
-	nf_ct_free_hashtable(nf_nat_bysource, nf_nat_htable_size);
+	kvfree(nf_nat_bysource);
 	unregister_pernet_subsys(&nat_net_ops);
 }
 

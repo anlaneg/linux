@@ -1424,10 +1424,10 @@ static void br_multicast_query_received(struct net_bridge *br,
 	br_multicast_mark_router(br, port);
 }
 
-static int br_ip4_multicast_query(struct net_bridge *br,
-				  struct net_bridge_port *port,
-				  struct sk_buff *skb,
-				  u16 vid)
+static void br_ip4_multicast_query(struct net_bridge *br,
+				   struct net_bridge_port *port,
+				   struct sk_buff *skb,
+				   u16 vid)
 {
 	const struct iphdr *iph = ip_hdr(skb);
 	struct igmphdr *ih = igmp_hdr(skb);
@@ -1440,7 +1440,6 @@ static int br_ip4_multicast_query(struct net_bridge *br,
 	unsigned long now = jiffies;
 	unsigned int offset = skb_transport_offset(skb);
 	__be32 group;
-	int err = 0;
 
 	spin_lock(&br->multicast_lock);
 	if (!netif_running(br->dev) ||
@@ -1499,7 +1498,6 @@ static int br_ip4_multicast_query(struct net_bridge *br,
 
 out:
 	spin_unlock(&br->multicast_lock);
-	return err;
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1834,7 +1832,7 @@ static int br_multicast_ipv4_rcv(struct net_bridge *br,
 		break;
 		//路由口学习
 	case IGMP_HOST_MEMBERSHIP_QUERY:
-		err = br_ip4_multicast_query(br, port, skb_trimmed, vid);
+		br_ip4_multicast_query(br, port, skb_trimmed, vid);
 		break;
 		//leave消息学习，删除snopping表项
 	case IGMP_HOST_LEAVE_MESSAGE:
