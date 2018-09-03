@@ -1698,6 +1698,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	if (!(bond_dev->features & NETIF_F_LRO))
 		dev_disable_lro(slave_dev);
 
+	//设置slave_dev的rx_handler回调
 	res = netdev_rx_handler_register(slave_dev, bond_handle_frame,
 					 new_slave);
 	if (res) {
@@ -1892,7 +1893,7 @@ static int __bond_release_one(struct net_device *bond_dev,
 	/* unregister rx_handler early so bond_handle_frame wouldn't be called
 	 * for this slave anymore.
 	 */
-	netdev_rx_handler_unregister(slave_dev);
+	netdev_rx_handler_unregister(slave_dev);//移除slave_dev的收包函数
 
 	if (BOND_MODE(bond) == BOND_MODE_8023AD)
 		bond_3ad_unbind_slave(slave);
@@ -4131,6 +4132,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 	    !bond_slave_override(bond, skb))
 		return NETDEV_TX_OK;
 
+	//决定采用哪种mode
 	switch (BOND_MODE(bond)) {
 	case BOND_MODE_ROUNDROBIN:
 		return bond_xmit_roundrobin(skb, dev);
@@ -4154,6 +4156,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 	}
 }
 
+//bond的发送函数
 static netdev_tx_t bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bonding *bond = netdev_priv(dev);
@@ -4225,7 +4228,7 @@ static const struct net_device_ops bond_netdev_ops = {
 	.ndo_uninit		= bond_uninit,
 	.ndo_open		= bond_open,
 	.ndo_stop		= bond_close,
-	.ndo_start_xmit		= bond_start_xmit,
+	.ndo_start_xmit		= bond_start_xmit,//bond设备发送函数
 	.ndo_select_queue	= bond_select_queue,
 	.ndo_get_stats64	= bond_get_stats,
 	.ndo_do_ioctl		= bond_do_ioctl,
@@ -4259,6 +4262,7 @@ static void bond_destructor(struct net_device *bond_dev)
 		destroy_workqueue(bond->wq);
 }
 
+//构造bond设备
 void bond_setup(struct net_device *bond_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);

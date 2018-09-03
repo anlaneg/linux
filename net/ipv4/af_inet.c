@@ -1921,7 +1921,7 @@ fs_initcall(ipv4_offload_init);
 static struct packet_type ip_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_IP),
 	.func = ip_rcv,//收到ip报文时处理
-	.list_func = ip_list_rcv,
+	.list_func = ip_list_rcv,//支持收取一组ip
 };
 
 static int __init inet_init(void)

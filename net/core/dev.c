@@ -5010,6 +5010,7 @@ int netif_receive_skb_core(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_receive_skb_core);
 
+//将报文交给pt_prev进行处理
 static inline void __netif_receive_skb_list_ptype(struct list_head *head,
 						  struct packet_type *pt_prev,
 						  struct net_device *orig_dev)
@@ -5020,9 +5021,11 @@ static inline void __netif_receive_skb_list_ptype(struct list_head *head,
 		return;
 	if (list_empty(head))
 		return;
+	//如果报文支持处理链式处理，则直接传入
 	if (pt_prev->list_func != NULL)
 		pt_prev->list_func(head, pt_prev, orig_dev);
 	else
+		//否则遍历拆解后传入
 		list_for_each_entry_safe(skb, next, head, list)
 			pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 }

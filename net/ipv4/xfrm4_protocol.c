@@ -27,6 +27,7 @@ static struct xfrm4_protocol __rcu *ah4_handlers __read_mostly;
 static struct xfrm4_protocol __rcu *ipcomp4_handlers __read_mostly;
 static DEFINE_MUTEX(xfrm4_protocol_mutex);
 
+//查询esp,ah,comp的报文处理链
 static inline struct xfrm4_protocol __rcu **proto_handlers(u8 protocol)
 {
 	switch (protocol) {
@@ -50,6 +51,7 @@ int xfrm4_rcv_cb(struct sk_buff *skb, u8 protocol, int err)
 {
 	int ret;
 	struct xfrm4_protocol *handler;
+	//找对应协议的cb链，并逐个执行
 	struct xfrm4_protocol __rcu **head = proto_handlers(protocol);
 
 	if (!head)
@@ -115,6 +117,7 @@ static void xfrm4_esp_err(struct sk_buff *skb, u32 info)
 			break;
 }
 
+//kernel在ip_local_deliver_finish处检查发现ip->protocol为ah协议时，此函数将被调用
 static int xfrm4_ah_rcv(struct sk_buff *skb)
 {
 	int ret;
@@ -122,10 +125,12 @@ static int xfrm4_ah_rcv(struct sk_buff *skb)
 
 	XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip4 = NULL;
 
+	//遍历指定ah4 handler的handler函数，完成报文处理
 	for_each_protocol_rcu(ah4_handlers, handler)
 		if ((ret = handler->handler(skb)) != -EINVAL)
 			return ret;
 
+	//报文无效，发送目的不可达icmp报文
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 
 	kfree_skb(skb);
@@ -174,6 +179,7 @@ static const struct net_protocol esp4_protocol = {
 	.netns_ok	=	1,
 };
 
+//ah报文入口
 static const struct net_protocol ah4_protocol = {
 	.handler	=	xfrm4_ah_rcv,
 	.err_handler	=	xfrm4_ah_err,
@@ -193,6 +199,7 @@ static const struct xfrm_input_afinfo xfrm4_input_afinfo = {
 	.callback	=	xfrm4_rcv_cb,
 };
 
+//依据不同的protocol返回，esp,ah,comp协议的协议栈入理入口
 static inline const struct net_protocol *netproto(unsigned char protocol)
 {
 	switch (protocol) {
@@ -207,6 +214,7 @@ static inline const struct net_protocol *netproto(unsigned char protocol)
 	return NULL;
 }
 
+//按优先级将handler插入到合适的proto_handlers中
 int xfrm4_protocol_register(struct xfrm4_protocol *handler,
 			    unsigned char protocol)
 {
@@ -221,10 +229,12 @@ int xfrm4_protocol_register(struct xfrm4_protocol *handler,
 
 	mutex_lock(&xfrm4_protocol_mutex);
 
+	//如果此协议未注册，则要求将报文rcv函数注册inet协议报文处理
 	if (!rcu_dereference_protected(*proto_handlers(protocol),
 				       lockdep_is_held(&xfrm4_protocol_mutex)))
 		add_netproto = true;
 
+	//注册handler
 	for (pprev = proto_handlers(protocol);
 	     (t = rcu_dereference_protected(*pprev,
 			lockdep_is_held(&xfrm4_protocol_mutex))) != NULL;
@@ -243,6 +253,7 @@ int xfrm4_protocol_register(struct xfrm4_protocol *handler,
 err:
 	mutex_unlock(&xfrm4_protocol_mutex);
 
+	//需要添加到协议栈，则注册到４层协议栈中
 	if (add_netproto) {
 		if (inet_add_protocol(netproto(protocol), protocol)) {
 			pr_err("%s: can't add protocol\n", __func__);

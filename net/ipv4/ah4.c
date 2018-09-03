@@ -564,7 +564,7 @@ static const struct xfrm_type ah_type =
 };
 
 static struct xfrm4_protocol ah4_protocol = {
-	.handler	=	xfrm4_rcv,
+	.handler	=	xfrm4_rcv,//ah4协议收包与esp等统一走xfrm4_rcv
 	.input_handler	=	xfrm_input,
 	.cb_handler	=	ah4_rcv_cb,
 	.err_handler	=	ah4_err,
@@ -577,6 +577,7 @@ static int __init ah4_init(void)
 		pr_info("%s: can't add xfrm type\n", __func__);
 		return -EAGAIN;
 	}
+	//注册ah4协议
 	if (xfrm4_protocol_register(&ah4_protocol, IPPROTO_AH) < 0) {
 		pr_info("%s: can't add protocol\n", __func__);
 		xfrm_unregister_type(&ah_type, AF_INET);

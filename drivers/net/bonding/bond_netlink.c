@@ -440,6 +440,7 @@ static int bond_changelink(struct net_device *bond_dev, struct nlattr *tb[],
 	return 0;
 }
 
+//bond设备创建
 static int bond_newlink(struct net *src_net, struct net_device *bond_dev,
 			struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
@@ -683,7 +684,7 @@ struct rtnl_link_ops bond_link_ops __read_mostly = {
 	.maxtype		= IFLA_BOND_MAX,
 	.policy			= bond_policy,
 	.validate		= bond_validate,
-	.newlink		= bond_newlink,
+	.newlink		= bond_newlink,//bond口创建
 	.changelink		= bond_changelink,
 	.get_size		= bond_get_size,
 	.fill_info		= bond_fill_info,

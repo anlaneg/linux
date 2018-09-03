@@ -100,11 +100,13 @@ static int xfrm_rcv_cb(struct sk_buff *skb, unsigned int family, u8 protocol,
 		       int err)
 {
 	int ret;
+	//采用family找到对应的callback
 	const struct xfrm_input_afinfo *afinfo = xfrm_input_get_afinfo(family);
 
 	if (!afinfo)
 		return -EAFNOSUPPORT;
 
+	//执行协议对应的callback,完成报文处理
 	ret = afinfo->callback(skb, protocol, err);
 	rcu_read_unlock();
 

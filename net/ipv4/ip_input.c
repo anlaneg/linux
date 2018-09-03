@@ -204,7 +204,7 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 		//尝试raw socket传递
 		raw = raw_local_deliver(skb, protocol);
 
-		//按ip头协议查找协议处理函数
+		//按ip->protocol查找协议处理函数
 		ipprot = rcu_dereference(inet_protos[protocol]);
 		if (ipprot) {
 			//协议栈上有对应的协议处理模块
@@ -416,10 +416,6 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 			goto drop;
 	}
 
-	//单播在查到路由后且非本机时，在此处走ip_forward
-	//单播在查到路由后且为本机时，在此处走ip_local_deliver
-	//组播在查到路由后，在此处走ip_mr_input
-	//路由未命中时，在此处走ip_error
 	return NET_RX_SUCCESS;
 drop:
 	kfree_skb(skb);
@@ -444,6 +440,10 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	ret = ip_rcv_finish_core(net, sk, skb);
 	if (ret != NET_RX_DROP)
+		//单播在查到路由后且非本机时，在此处走ip_forward
+		//单播在查到路由后且为本机时，在此处走ip_local_deliver
+		//组播在查到路由后，在此处走ip_mr_input
+		//路由未命中时，在此处走ip_error
 		ret = dst_input(skb);
 	return ret;
 }
@@ -626,6 +626,7 @@ static void ip_sublist_rcv(struct list_head *head, struct net_device *dev,
 }
 
 /* Receive a list of IP packets */
+//收取到一组ip报文
 void ip_list_rcv(struct list_head *head, struct packet_type *pt,
 		 struct net_device *orig_dev)
 {

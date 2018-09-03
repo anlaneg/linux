@@ -782,6 +782,7 @@ out:
 	return addr;
 }
 
+//ipvlan收包函数
 struct sk_buff *ipvlan_l3_rcv(struct net_device *dev, struct sk_buff *skb,
 			      u16 proto)
 {
