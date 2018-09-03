@@ -389,7 +389,7 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.name = "slaves",
 		.desc = "Slave membership management",
 		.flags = BOND_OPTFLAG_RAWVAL,
-		.set = bond_option_slaves_set
+		.set = bond_option_slaves_set //设置slave
 	},
 	[BOND_OPT_TLB_DYNAMIC_LB] = {
 		.id = BOND_OPT_TLB_DYNAMIC_LB,

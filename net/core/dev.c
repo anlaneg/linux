@@ -4901,6 +4901,7 @@ skip_classify:
 		}
 		//如果虚设备有rx_handle可以处理，则调用rx_handler处理
 		//bridge设备就注册有rx_handle,其指向br_handle_frame
+		//bond设备就注册有bond_handle_frame
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
 			ret = NET_RX_SUCCESS;//已成功处理，不再向上层传递，处理完成

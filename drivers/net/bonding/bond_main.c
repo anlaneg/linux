@@ -1150,6 +1150,7 @@ static bool bond_should_deliver_exact_match(struct sk_buff *skb,
 	return false;
 }
 
+//主要是更换设备，处理bonding状态机
 static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
@@ -1165,9 +1166,11 @@ static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 
 	*pskb = skb;
 
+	//取bond设备
 	slave = bond_slave_get_rcu(skb->dev);
 	bond = slave->bond;
 
+	//如果有recv_probe，则调用，例如bond_3ad_lacpdu_recv
 	recv_probe = READ_ONCE(bond->recv_probe);
 	if (recv_probe) {
 		ret = recv_probe(skb, bond, slave);
@@ -1183,6 +1186,7 @@ static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 	if (bond_should_deliver_exact_match(skb, slave, bond))
 		return RX_HANDLER_EXACT;
 
+	//更新报文所属设备为bond设备
 	skb->dev = bond->dev;
 
 	if (BOND_MODE(bond) == BOND_MODE_ALB &&
@@ -1698,7 +1702,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	if (!(bond_dev->features & NETIF_F_LRO))
 		dev_disable_lro(slave_dev);
 
-	//设置slave_dev的rx_handler回调
+	//设置slave_dev的rx_handler回调（收包时将被调用）
 	res = netdev_rx_handler_register(slave_dev, bond_handle_frame,
 					 new_slave);
 	if (res) {
@@ -2526,6 +2530,7 @@ int bond_arp_rcv(const struct sk_buff *skb, struct bonding *bond,
 	struct slave *curr_active_slave, *curr_arp_slave;
 	unsigned char *arp_ptr;
 	__be32 sip, tip;
+	//是否arp报文
 	int is_arp = skb->protocol == __cpu_to_be16(ETH_P_ARP);
 	unsigned int alen;
 

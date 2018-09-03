@@ -2309,6 +2309,7 @@ tx_error:
  * Outer UDP destination is the VXLAN assigned port.
  *           source port is based on hash of flow
  */
+//vxlan报文发送
 static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -2648,7 +2649,7 @@ static const struct net_device_ops vxlan_netdev_ether_ops = {
 	.ndo_uninit		= vxlan_uninit,
 	.ndo_open		= vxlan_open,
 	.ndo_stop		= vxlan_stop,
-	.ndo_start_xmit		= vxlan_xmit,
+	.ndo_start_xmit		= vxlan_xmit,//vxlan报文发送
 	.ndo_get_stats64	= ip_tunnel_get_stats64,
 	.ndo_set_rx_mode	= vxlan_set_multicast_list,
 	.ndo_change_mtu		= vxlan_change_mtu,
@@ -2665,7 +2666,7 @@ static const struct net_device_ops vxlan_netdev_raw_ops = {
 	.ndo_uninit		= vxlan_uninit,
 	.ndo_open		= vxlan_open,
 	.ndo_stop		= vxlan_stop,
-	.ndo_start_xmit		= vxlan_xmit,
+	.ndo_start_xmit		= vxlan_xmit,//vxlan报文发送
 	.ndo_get_stats64	= ip_tunnel_get_stats64,
 	.ndo_change_mtu		= vxlan_change_mtu,
 	.ndo_fill_metadata_dst	= vxlan_fill_metadata_dst,

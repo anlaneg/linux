@@ -2376,7 +2376,7 @@ static int bond_3ad_rx_indication(struct lacpdu *lacpdu, struct slave *slave,
 				   slave->dev->name);
 			/* Protect against concurrent state machines */
 			spin_lock(&slave->bond->mode_lock);
-			ad_rx_machine(lacpdu, port);
+			ad_rx_machine(lacpdu, port);//使状态机发生变化
 			spin_unlock(&slave->bond->mode_lock);
 			break;
 
@@ -2633,12 +2633,15 @@ int bond_3ad_lacpdu_recv(const struct sk_buff *skb, struct bonding *bond,
 {
 	struct lacpdu *lacpdu, _lacpdu;
 
+	//非lacp报文，不处理
 	if (skb->protocol != PKT_TYPE_LACPDU)
 		return RX_HANDLER_ANOTHER;
 
+	//目的mac非lacp 目的mac
 	if (!MAC_ADDRESS_EQUAL(eth_hdr(skb)->h_dest, lacpdu_mcast_addr))
 		return RX_HANDLER_ANOTHER;
 
+	//指向lacpdu
 	lacpdu = skb_header_pointer(skb, 0, sizeof(_lacpdu), &_lacpdu);
 	if (!lacpdu)
 		return RX_HANDLER_ANOTHER;
