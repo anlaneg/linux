@@ -88,6 +88,7 @@ static netdev_tx_t loopback_xmit(struct sk_buff *skb,
 	lb_stats = this_cpu_ptr(dev->lstats);
 
 	len = skb->len;
+	//将此报文入队，促使kernel自skb_receive处获取此报文
 	if (likely(netif_rx(skb) == NET_RX_SUCCESS)) {
 		u64_stats_update_begin(&lb_stats->syncp);
 		lb_stats->bytes += len;
@@ -163,7 +164,7 @@ static void loopback_dev_free(struct net_device *dev)
 
 static const struct net_device_ops loopback_ops = {
 	.ndo_init        = loopback_dev_init,
-	.ndo_start_xmit  = loopback_xmit,
+	.ndo_start_xmit  = loopback_xmit,//loopback 发包函数（回环发出的报，又回到协议栈）
 	.ndo_get_stats64 = loopback_get_stats64,
 	.ndo_set_mac_address = eth_mac_addr,
 };
@@ -205,6 +206,7 @@ static __net_init int loopback_net_init(struct net *net)
 	struct net_device *dev;
 	int err;
 
+	//创建loopback口
 	err = -ENOMEM;
 	dev = alloc_netdev(0, "lo", NET_NAME_UNKNOWN, loopback_setup);
 	if (!dev)

@@ -20,6 +20,7 @@ static struct xfrm_tunnel __rcu *tunnel64_handlers __read_mostly;
 static struct xfrm_tunnel __rcu *tunnelmpls4_handlers __read_mostly;
 static DEFINE_MUTEX(tunnel4_mutex);
 
+//按family返回对应的链表头
 static inline struct xfrm_tunnel __rcu **fam_handlers(unsigned short family)
 {
 	return (family == AF_INET) ? &tunnel4_handlers :
@@ -27,6 +28,7 @@ static inline struct xfrm_tunnel __rcu **fam_handlers(unsigned short family)
 		&tunnelmpls4_handlers;
 }
 
+//注册tunnel的handler
 int xfrm4_tunnel_register(struct xfrm_tunnel *handler, unsigned short family)
 {
 	struct xfrm_tunnel __rcu **pprev;
@@ -42,9 +44,9 @@ int xfrm4_tunnel_register(struct xfrm_tunnel *handler, unsigned short family)
 			lockdep_is_held(&tunnel4_mutex))) != NULL;
 	     pprev = &t->next) {
 		if (t->priority > priority)
-			break;
+			break;//将handler按优先级自小向大放
 		if (t->priority == priority)
-			goto err;
+			goto err;//优先级已存在
 	}
 
 	handler->next = *pprev;
@@ -91,6 +93,7 @@ EXPORT_SYMBOL(xfrm4_tunnel_deregister);
 	     handler != NULL;				\
 	     handler = rcu_dereference(handler->next))	\
 
+//ipv4 tunnel收包入口
 static int tunnel4_rcv(struct sk_buff *skb)
 {
 	struct xfrm_tunnel *handler;
@@ -98,10 +101,12 @@ static int tunnel4_rcv(struct sk_buff *skb)
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto drop;
 
+	//遍历每个tunnel4的handler,尝试处理直到成功
 	for_each_tunnel_rcu(tunnel4_handlers, handler)
 		if (!handler->handler(skb))
 			return 0;
 
+	//无协议可以处理，port不可达
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 
 drop:
@@ -181,7 +186,7 @@ static void tunnelmpls4_err(struct sk_buff *skb, u32 info)
 #endif
 
 static const struct net_protocol tunnel4_protocol = {
-	.handler	=	tunnel4_rcv,
+	.handler	=	tunnel4_rcv,//ipip协议入口
 	.err_handler	=	tunnel4_err,
 	.no_policy	=	1,
 	.netns_ok	=	1,
@@ -207,6 +212,7 @@ static const struct net_protocol tunnelmpls4_protocol = {
 
 static int __init tunnel4_init(void)
 {
+	//注册ipip协议处理,使其走tunnel4_protocol
 	if (inet_add_protocol(&tunnel4_protocol, IPPROTO_IPIP))
 		goto err;
 #if IS_ENABLED(CONFIG_IPV6)

@@ -64,6 +64,7 @@ struct pcpu_dstats {
 	struct u64_stats_sync	syncp;
 };
 
+//设备收包计数
 static void vrf_rx_stats(struct net_device *dev, int len)
 {
 	struct pcpu_dstats *dstats = this_cpu_ptr(dev->dstats);
@@ -873,7 +874,7 @@ out_nomem:
 static const struct net_device_ops vrf_netdev_ops = {
 	.ndo_init		= vrf_dev_init,
 	.ndo_uninit		= vrf_dev_uninit,
-	.ndo_start_xmit		= vrf_xmit,
+	.ndo_start_xmit		= vrf_xmit,//vrf设备发包函数
 	.ndo_get_stats64	= vrf_get_stats64,
 	.ndo_add_slave		= vrf_add_slave,
 	.ndo_del_slave		= vrf_del_slave,
@@ -1028,10 +1029,11 @@ static struct sk_buff *vrf_ip6_rcv(struct net_device *vrf_dev,
 }
 #endif
 
+//vrf　ipv4报文处理（入口）
 static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 				  struct sk_buff *skb)
 {
-	skb->dev = vrf_dev;
+	skb->dev = vrf_dev;//将设备更新为vrf设备
 	skb->skb_iif = vrf_dev->ifindex;
 	IPCB(skb)->flags |= IPSKB_L3SLAVE;
 
@@ -1060,6 +1062,7 @@ out:
 }
 
 /* called with rcu lock held */
+//vrf收包函数
 static struct sk_buff *vrf_l3_rcv(struct net_device *vrf_dev,
 				  struct sk_buff *skb,
 				  u16 proto)
@@ -1235,7 +1238,7 @@ static void vrf_setup(struct net_device *dev)
 	ether_setup(dev);
 
 	/* Initialize the device structure. */
-	dev->netdev_ops = &vrf_netdev_ops;
+	dev->netdev_ops = &vrf_netdev_ops;//设置设备的操作集
 	dev->l3mdev_ops = &vrf_l3mdev_ops;
 	dev->ethtool_ops = &vrf_ethtool_ops;
 	dev->needs_free_netdev = true;
@@ -1291,6 +1294,7 @@ static void vrf_dellink(struct net_device *dev, struct list_head *head)
 	unregister_netdevice_queue(dev, head);
 }
 
+//vrf　link创建
 static int vrf_newlink(struct net *src_net, struct net_device *dev,
 		       struct nlattr *tb[], struct nlattr *data[],
 		       struct netlink_ext_ack *extack)
@@ -1368,6 +1372,7 @@ static const struct nla_policy vrf_nl_policy[IFLA_VRF_MAX + 1] = {
 	[IFLA_VRF_TABLE] = { .type = NLA_U32 },
 };
 
+//注册vrf link
 static struct rtnl_link_ops vrf_link_ops __read_mostly = {
 	.kind		= DRV_NAME,
 	.priv_size	= sizeof(struct net_vrf),
@@ -1380,9 +1385,9 @@ static struct rtnl_link_ops vrf_link_ops __read_mostly = {
 	.get_slave_size  = vrf_get_slave_size,
 	.fill_slave_info = vrf_fill_slave_info,
 
-	.newlink	= vrf_newlink,
+	.newlink	= vrf_newlink,//vrf link创建
 	.dellink	= vrf_dellink,
-	.setup		= vrf_setup,
+	.setup		= vrf_setup,//vrf link初始化
 	.maxtype	= IFLA_VRF_MAX,
 };
 

@@ -2510,7 +2510,7 @@ static int __init mpls_init(void)
 	if (err)
 		goto out_unregister_pernet;
 
-	dev_add_pack(&mpls_packet_type);
+	dev_add_pack(&mpls_packet_type);//mips报文处理注册
 
 	rtnl_af_register(&mpls_af_ops);
 

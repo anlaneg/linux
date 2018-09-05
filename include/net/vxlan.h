@@ -243,7 +243,7 @@ struct vxlan_dev {
 
 	struct vxlan_config	cfg;//配置信息（如本端ip，vni等）
 
-	//vxlan设备转发表
+	//vxlan设备转发表(fdb表）
 	struct hlist_head fdb_head[FDB_HASH_SIZE];
 };
 

@@ -215,6 +215,7 @@ static const struct tnl_ptk_info mplsip_tpi = {
 };
 #endif
 
+//收到隧道报文，ipproto指出协议
 static int ipip_tunnel_rcv(struct sk_buff *skb, u8 ipproto)
 {
 	struct net *net = dev_net(skb->dev);
@@ -223,10 +224,12 @@ static int ipip_tunnel_rcv(struct sk_buff *skb, u8 ipproto)
 	struct ip_tunnel *tunnel;
 	const struct iphdr *iph;
 
+	//找出隧道配置
 	iph = ip_hdr(skb);
 	tunnel = ip_tunnel_lookup(itn, skb->dev->ifindex, TUNNEL_NO_KEY,
 			iph->saddr, iph->daddr, 0);
 	if (tunnel) {
+		//有对应tunnel
 		const struct tnl_ptk_info *tpi;
 
 		if (tunnel->parms.iph.protocol != ipproto &&
@@ -258,6 +261,7 @@ drop:
 	return 0;
 }
 
+//指出ipip隧道报文收取
 static int ipip_rcv(struct sk_buff *skb)
 {
 	return ipip_tunnel_rcv(skb, IPPROTO_IPIP);
@@ -357,6 +361,7 @@ ipip_tunnel_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 	return 0;
 }
 
+//ipip设备操作集
 static const struct net_device_ops ipip_netdev_ops = {
 	.ndo_init       = ipip_tunnel_init,
 	.ndo_uninit     = ip_tunnel_uninit,
@@ -632,7 +637,7 @@ static struct rtnl_link_ops ipip_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct ip_tunnel),
 	.setup		= ipip_tunnel_setup,
 	.validate	= ipip_tunnel_validate,
-	.newlink	= ipip_newlink,
+	.newlink	= ipip_newlink,//创建ipip链路
 	.changelink	= ipip_changelink,
 	.dellink	= ip_tunnel_dellink,
 	.get_size	= ipip_get_size,
@@ -640,6 +645,7 @@ static struct rtnl_link_ops ipip_link_ops __read_mostly = {
 	.get_link_net	= ip_tunnel_get_link_net,
 };
 
+//注册ipip协议收取
 static struct xfrm_tunnel ipip_handler __read_mostly = {
 	.handler	=	ipip_rcv,
 	.err_handler	=	ipip_err,

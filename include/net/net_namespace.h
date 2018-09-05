@@ -101,6 +101,7 @@ struct net {
 	struct list_head	fib_notifier_ops;  /* Populated by
 						    * register_pernet_subsys()
 						    */
+	//指明此net namespace中的loopback设备
 	struct net_device       *loopback_dev;          /* The loopback */
 	struct netns_core	core;
 	struct netns_mib	mib;

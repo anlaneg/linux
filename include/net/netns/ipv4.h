@@ -76,7 +76,7 @@ struct netns_ipv4 {
 	struct xt_table		*iptable_filter;//natfilter的filter表
 	struct xt_table		*iptable_mangle;//mangle表
 	struct xt_table		*iptable_raw;//raw表
-	struct xt_table		*arptable_filter;
+	struct xt_table		*arptable_filter;//arp filter table
 #ifdef CONFIG_SECURITY
 	struct xt_table		*iptable_security;
 #endif

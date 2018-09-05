@@ -97,13 +97,14 @@ static bool ip_tunnel_key_match(const struct ip_tunnel_parm *p,
 */
 struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_net *itn,
 				   int link, __be16 flags,
-				   __be32 remote, __be32 local,
+				   __be32 remote,/*隧道对端ip*/ __be32 local,/*隧道本端ip*/
 				   __be32 key)
 {
 	unsigned int hash;
 	struct ip_tunnel *t, *cand = NULL;
 	struct hlist_head *head;
 
+	//通过(key,remote)查询相应隧道hash桶
 	hash = ip_tunnel_hash(key, remote);
 	head = &itn->tunnels[hash];
 
@@ -111,7 +112,7 @@ struct ip_tunnel *ip_tunnel_lookup(struct ip_tunnel_net *itn,
 		if (local != t->parms.iph.saddr ||
 		    remote != t->parms.iph.daddr ||
 		    !(t->dev->flags & IFF_UP))
-			continue;//隧道是点到点的，故检查源，目的
+			continue;//隧道是点到点的，故检查源，目的，检查是否设备up
 
 		//如果两者key不能匹配，则跳过
 		if (!ip_tunnel_key_match(&t->parms, flags, key))
@@ -378,6 +379,7 @@ err_dev_set_mtu:
 	return ERR_PTR(err);
 }
 
+//隧道报文收取（tunnel为对应的隧道设备）
 int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 		  const struct tnl_ptk_info *tpi, struct metadata_dst *tun_dst,
 		  bool log_ecn_error)
@@ -410,6 +412,7 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 		tunnel->i_seqno = ntohl(tpi->seq) + 1;
 	}
 
+	//将当前位置更新为network头部
 	skb_reset_network_header(skb);
 
 	err = IP_ECN_decapsulate(iph, skb);
@@ -424,6 +427,7 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 		}
 	}
 
+	//隧道统计计数
 	tstats = this_cpu_ptr(tunnel->dev->tstats);
 	u64_stats_update_begin(&tstats->syncp);
 	tstats->rx_packets++;
@@ -436,12 +440,14 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 		skb->protocol = eth_type_trans(skb, tunnel->dev);
 		skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
 	} else {
+		//更新设备为tunnel设备
 		skb->dev = tunnel->dev;
 	}
 
 	if (tun_dst)
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 
+	//将报文给tunnel设备
 	gro_cells_receive(&tunnel->gro_cells, skb);
 	return 0;
 

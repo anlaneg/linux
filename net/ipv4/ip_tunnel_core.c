@@ -105,9 +105,11 @@ int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 	if (unlikely(!pskb_may_pull(skb, hdr_len)))
 		return -ENOMEM;
 
+	//剥离隧道头
 	skb_pull_rcsum(skb, hdr_len);
 
 	if (!raw_proto && inner_proto == htons(ETH_P_TEB)) {
+		//内层协议为以太网报文
 		struct ethhdr *eh;
 
 		if (unlikely(!pskb_may_pull(skb, ETH_HLEN)))

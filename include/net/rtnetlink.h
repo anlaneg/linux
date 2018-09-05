@@ -62,6 +62,7 @@ struct rtnl_link_ops {
 	const char		*kind;
 
 	size_t			priv_size;
+	//完成新建link的初始化工作
 	void			(*setup)(struct net_device *dev);
 
 	unsigned int		maxtype;
@@ -70,6 +71,7 @@ struct rtnl_link_ops {
 					    struct nlattr *data[],
 					    struct netlink_ext_ack *extack);
 
+	//新建link时将被调用
 	int			(*newlink)(struct net *src_net,
 					   struct net_device *dev,
 					   struct nlattr *tb[],

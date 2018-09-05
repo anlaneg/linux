@@ -411,7 +411,7 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
  *	guarantee all CPU's that are in middle of receiving packets
  *	will see the new packet type (until the next received packet).
  */
-//添加packet handler（注册2层协议）
+//添加packet handler（注册３层协议）
 void dev_add_pack(struct packet_type *pt)
 {
 	struct list_head *head = ptype_head(pt);
@@ -4722,7 +4722,7 @@ EXPORT_SYMBOL_GPL(netdev_is_rx_handler_busy);
  *
  *	For a general description of rx_handler, see enum rx_handler_result.
  */
-//注册设备的rx_handler
+//注册设备的rx_handler（解决设备跳过原有协议栈收二层报文的问题）
 int netdev_rx_handler_register(struct net_device *dev,
 			       rx_handler_func_t *rx_handler,
 			       void *rx_handler_data)
@@ -4891,7 +4891,7 @@ skip_classify:
 			goto out;
 	}
 
-	//如果报文所属设备有rx_handler,执行rx_handler回调
+	//如果报文所属设备有rx_handler,执行rx_handler回调（解决二层设置跳过协议栈收包问题）
 	rx_handler = rcu_dereference(skb->dev->rx_handler);
 	if (rx_handler) {
 		//执行未执行的packet_type处理

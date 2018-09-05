@@ -176,6 +176,7 @@ static int veth_forward_skb(struct net_device *dev, struct sk_buff *skb,
 		netif_rx(skb);
 }
 
+//veth发包函数
 static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct veth_priv *rcv_priv, *priv = netdev_priv(dev);

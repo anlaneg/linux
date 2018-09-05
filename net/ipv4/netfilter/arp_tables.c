@@ -178,6 +178,7 @@ struct arpt_entry *arpt_next_entry(const struct arpt_entry *entry)
 	return (void *)entry + entry->next_offset;
 }
 
+//arp 表处理
 unsigned int arpt_do_table(struct sk_buff *skb,
 			   const struct nf_hook_state *state,
 			   struct xt_table *table)
@@ -1639,6 +1640,7 @@ static int __init arp_tables_init(void)
 		goto err1;
 
 	/* No one else will be downing sem now, so we won't sleep */
+	//注册target
 	ret = xt_register_targets(arpt_builtin_tg, ARRAY_SIZE(arpt_builtin_tg));
 	if (ret < 0)
 		goto err2;

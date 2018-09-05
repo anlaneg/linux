@@ -34,6 +34,8 @@
 #include <net/ip6_checksum.h>
 #endif
 
+//通过学习vxlan fdb表，来进行vxlan报文转发，支持通过vxlan fdb来进行arp reduce
+
 #define VXLAN_VERSION	"0.1"
 
 #define PORT_HASH_BITS	8
@@ -442,9 +444,11 @@ static inline struct hlist_head *vxlan_fdb_head(struct vxlan_dev *vxlan,
 static struct vxlan_fdb *__vxlan_find_mac(struct vxlan_dev *vxlan,
 					  const u8 *mac, __be32 vni)
 {
+	//取桶头
 	struct hlist_head *head = vxlan_fdb_head(vxlan, mac, vni);
 	struct vxlan_fdb *f;
 
+	//检查对应的fdb表项
 	hlist_for_each_entry_rcu(f, head, hlist) {
 		if (ether_addr_equal(mac, f->eth_addr)) {
 			if (vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA) {
@@ -459,6 +463,7 @@ static struct vxlan_fdb *__vxlan_find_mac(struct vxlan_dev *vxlan,
 	return NULL;
 }
 
+//查找vxlan fdb表
 static struct vxlan_fdb *vxlan_find_mac(struct vxlan_dev *vxlan,
 					const u8 *mac, __be32 vni)
 {
@@ -658,6 +663,7 @@ static struct vxlan_fdb *vxlan_fdb_alloc(struct vxlan_dev *vxlan,
 	return f;
 }
 
+//创建vxlan fdb表项
 static int vxlan_fdb_create(struct vxlan_dev *vxlan,
 			    const u8 *mac, union vxlan_addr *ip,
 			    __u16 state, __be16 port, __be32 src_vni,
@@ -756,6 +762,7 @@ static int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		notify = 1;
 	}
 
+	//通知产生vxlan fdb表项
 	if (notify) {
 		if (rd == NULL)
 			rd = first_remote_rtnl(f);
@@ -1001,6 +1008,7 @@ out:
 	return err;
 }
 
+//学习vxlan fdb表项
 /* Watch incoming packets to learn mapping between Ethernet address
  * and Tunnel endpoint.
  * Return true if packet is bogus and should be dropped.
@@ -1019,18 +1027,21 @@ static bool vxlan_snoop(struct net_device *dev,
 		ifindex = src_ifindex;
 #endif
 
+	//学习vxlan fdb表（源mac,vni),及来源ip
 	f = vxlan_find_mac(vxlan, src_mac, vni);
 	if (likely(f)) {
 		struct vxlan_rdst *rdst = first_remote_rcu(f);
 
+		//src_mac所在的主机未发生变更
 		if (likely(vxlan_addr_equal(&rdst->remote_ip, src_ip) &&
 			   rdst->remote_ifindex == ifindex))
-			return false;
+			return false;//之前已存在，不需要更新
 
 		/* Don't migrate static entries, drop packets */
 		if (f->state & (NUD_PERMANENT | NUD_NOARP))
 			return true;
 
+		//src_mac发生，更新fdb表项
 		if (net_ratelimit())
 			netdev_info(dev,
 				    "%pM migrated from %pIS to %pIS\n",
@@ -1040,6 +1051,7 @@ static bool vxlan_snoop(struct net_device *dev,
 		f->updated = jiffies;
 		vxlan_fdb_notify(vxlan, f, rdst, RTM_NEWNEIGH);
 	} else {
+		//没有查到，学习此表项
 		/* learned new entry */
 		spin_lock(&vxlan->hash_lock);
 
@@ -1319,10 +1331,12 @@ static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 	skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
 
 	/* Ignore packet loops (and multicast echo) */
+	//如果此报文就是vxlan设备发出的，则丢包（防止环路）
 	if (ether_addr_equal(eth_hdr(skb)->h_source, vxlan->dev->dev_addr))
 		return false;
 
 	/* Get address from the outer IP header */
+	//取外层源ip,用于fdb学习
 	if (vxlan_get_sk_family(vs) == AF_INET) {
 		saddr.sin.sin_addr.s_addr = ip_hdr(skb)->saddr;
 		saddr.sa.sa_family = AF_INET;
@@ -1333,6 +1347,7 @@ static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 #endif
 	}
 
+	//执行vxlan fdb学习（snooping)
 	if ((vxlan->cfg.flags & VXLAN_F_LEARN) &&
 	    vxlan_snoop(skb->dev, &saddr, eth_hdr(skb)->h_source, ifindex, vni))
 		return false;
@@ -1365,7 +1380,7 @@ static bool vxlan_ecn_decapsulate(struct vxlan_sock *vs, void *oiph,
 }
 
 /* Callback from net/ipv4/udp.c to receive packets */
-//收到vxlan报文处理
+//收到vxlan报文处理（解封装，回调将在udp收到报文后被触发）
 static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct pcpu_sw_netstats *stats;
@@ -1405,6 +1420,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	if (!vs)
 		goto drop;
 
+	//取vxlan id号
 	vni = vxlan_vni(vxlan_hdr(skb)->vx_vni);
 
 	//检查是否有能收取此vni的vxlan设备
@@ -1422,6 +1438,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		raw_proto = true;
 	}
 
+	//剥离vxlan隧道头
 	if (__iptunnel_pull_header(skb, VXLAN_HLEN, protocol, raw_proto,
 				   !net_eq(vxlan->net, dev_net(vxlan->dev))))
 			goto drop;
@@ -1487,6 +1504,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	stats->rx_bytes += skb->len;
 	u64_stats_update_end(&stats->syncp);
 
+	//vxlan设备的gro处理
 	gro_cells_receive(&vxlan->gro_cells, skb);
 	return 0;
 
@@ -1496,6 +1514,7 @@ drop:
 	return 0;
 }
 
+//查询vxlan fdb表，知道arp结果的回复arp
 static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -1532,6 +1551,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 	    ipv4_is_multicast(tip))
 		goto out;
 
+	//查询arp表，获知tip的邻居表项
 	n = neigh_lookup(&arp_tbl, &tip, dev);
 
 	if (n) {
@@ -1543,6 +1563,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 			goto out;
 		}
 
+		//查询tip所在物理主机（排除本机）
 		f = vxlan_find_mac(vxlan, n->ha, vni);
 		if (f && vxlan_addr_any(&(first_remote_rcu(f)->remote_ip))) {
 			/* bridge-local neighbor */
@@ -1550,6 +1571,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 			goto out;
 		}
 
+		//回复arp
 		reply = arp_create(ARPOP_REPLY, ETH_P_ARP, sip, dev, tip, sha,
 				n->ha, sha);
 
@@ -1571,6 +1593,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 			.sin.sin_family = AF_INET,
 		};
 
+		//通过netlink知会ip miss
 		vxlan_ip_miss(dev, &ipa);
 	}
 out:
@@ -2938,6 +2961,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	tunnel_cfg.gro_receive = vxlan_gro_receive;
 	tunnel_cfg.gro_complete = vxlan_gro_complete;
 
+	//设置vxlan的隧道配置
 	setup_udp_tunnel_sock(net, sock, &tunnel_cfg);
 
 	return vs;

@@ -67,7 +67,7 @@ void setup_udp_tunnel_sock(struct net *net, struct socket *sock,
 	rcu_assign_sk_user_data(sk, cfg->sk_user_data);
 
 	udp_sk(sk)->encap_type = cfg->encap_type;
-	udp_sk(sk)->encap_rcv = cfg->encap_rcv;
+	udp_sk(sk)->encap_rcv = cfg->encap_rcv;//设置隧道口封装后报文rcv函数
 	udp_sk(sk)->encap_destroy = cfg->encap_destroy;
 	udp_sk(sk)->gro_receive = cfg->gro_receive;
 	udp_sk(sk)->gro_complete = cfg->gro_complete;

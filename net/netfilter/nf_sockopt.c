@@ -44,6 +44,7 @@ int nf_register_sockopt(struct nf_sockopt_ops *reg)
 		}
 	}
 
+	//将reg注册到nf_sockopts
 	list_add(&reg->list, &nf_sockopts);
 out:
 	mutex_unlock(&nf_sockopt_mutex);
