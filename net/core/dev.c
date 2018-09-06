@@ -6213,6 +6213,7 @@ static void napi_hash_add(struct napi_struct *napi)
 	} while (napi_by_id(napi_gen_id));
 	napi->napi_id = napi_gen_id;
 
+	//将此napi加入到napi_hash的表中
 	hlist_add_head_rcu(&napi->napi_hash_node,
 			   &napi_hash[napi->napi_id % HASH_SIZE(napi_hash)]);
 

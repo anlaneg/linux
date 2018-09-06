@@ -2350,6 +2350,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 	iph = ip_hdr(skb);
 	uh = udp_hdr(skb);
 
+	//报文是广播或者组播报文
 	if (skb->pkt_type == PACKET_MULTICAST) {
 		in_dev = __in_dev_get_rcu(skb->dev);
 
@@ -2365,6 +2366,7 @@ int udp_v4_early_demux(struct sk_buff *skb)
 						   uh->source, iph->saddr,
 						   dif, sdif);
 	} else if (skb->pkt_type == PACKET_HOST) {
+		//报文是送给本机，查对应的socket
 		sk = __udp4_lib_demux_lookup(net, uh->dest, iph->daddr,
 					     uh->source, iph->saddr, dif, sdif);
 	}

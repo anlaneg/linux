@@ -395,6 +395,7 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 	}
 #endif
 
+	//checksum校验
 	if ((!(tpi->flags&TUNNEL_CSUM) &&  (tunnel->parms.i_flags&TUNNEL_CSUM)) ||
 	     ((tpi->flags&TUNNEL_CSUM) && !(tunnel->parms.i_flags&TUNNEL_CSUM))) {
 		tunnel->dev->stats.rx_crc_errors++;
@@ -402,6 +403,7 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 		goto drop;
 	}
 
+	//seq验证，报文上指明的seq之前已收取过，则丢弃
 	if (tunnel->parms.i_flags&TUNNEL_SEQ) {
 		if (!(tpi->flags&TUNNEL_SEQ) ||
 		    (tunnel->i_seqno && (s32)(ntohl(tpi->seq) - tunnel->i_seqno) < 0)) {
@@ -447,7 +449,7 @@ int ip_tunnel_rcv(struct ip_tunnel *tunnel, struct sk_buff *skb,
 	if (tun_dst)
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 
-	//将报文给tunnel设备
+	//将报文给tunnel设备，使之重走协议栈
 	gro_cells_receive(&tunnel->gro_cells, skb);
 	return 0;
 

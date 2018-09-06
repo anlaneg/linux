@@ -22,14 +22,23 @@
 #define SIOCDEL6RD      (SIOCDEVPRIVATE + 10)
 #define SIOCCHG6RD      (SIOCDEVPRIVATE + 11)
 
+//bit0 校验和标记位（此标记位为１时，checksum字段存在4bytes）
 #define GRE_CSUM	__cpu_to_be16(0x8000)
+//bit1 路由标记位（此标记为１时，校验和，偏移，路由８bytes出现在gre头部）
 #define GRE_ROUTING	__cpu_to_be16(0x4000)
+//bit2 key标记位(此标记存在时，key字段存在，占４bytes)
 #define GRE_KEY		__cpu_to_be16(0x2000)
+//bit3 seq标记位（此标记存在时，seq字段存在，占４bytes)
 #define GRE_SEQ		__cpu_to_be16(0x1000)
+//bit4 严格源路由标记位（此标记存在时，所有路由必须符合严格源路由）
 #define GRE_STRICT	__cpu_to_be16(0x0800)
+//bit5,bit6,bit7 递归控制，此字段需要为０
 #define GRE_REC		__cpu_to_be16(0x0700)
+//???rfc1701中无定义
 #define GRE_ACK		__cpu_to_be16(0x0080)
+//此字段在rfc1701中暂未定义
 #define GRE_FLAGS	__cpu_to_be16(0x0078)
+//标本号
 #define GRE_VERSION	__cpu_to_be16(0x0007)
 
 #define GRE_IS_CSUM(f)		((f) & GRE_CSUM)

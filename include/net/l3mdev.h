@@ -153,6 +153,7 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 	return skb;
 }
 
+//l3mdev ip收取入口，确定是哪个l3mdev收到报文
 static inline
 struct sk_buff *l3mdev_ip_rcv(struct sk_buff *skb)
 {

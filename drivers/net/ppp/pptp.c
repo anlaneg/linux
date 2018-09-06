@@ -341,6 +341,7 @@ drop:
 	return NET_RX_DROP;
 }
 
+//pptp　gre处理（gre版本为１）
 static int pptp_rcv(struct sk_buff *skb)
 {
 	struct pppox_sock *po;
@@ -652,6 +653,7 @@ static int __init pptp_init_module(void)
 	if (!callid_sock)
 		return -ENOMEM;
 
+	//ppp的gre版本
 	err = gre_add_protocol(&gre_pptp_protocol, GREPROTO_PPTP);
 	if (err) {
 		pr_err("PPTP: can't add gre protocol\n");

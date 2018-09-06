@@ -40,12 +40,14 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 bool is_gretap_dev(const struct net_device *dev);
 bool is_ip6gretap_dev(const struct net_device *dev);
 
+//计算gre头部长度
 static inline int gre_calc_hlen(__be16 o_flags)
 {
 	int addend = 4;
 
+	//不考虑routing标记问题
 	if (o_flags & TUNNEL_CSUM)
-		addend += 4;
+		addend += 4;//含checksum，加４字节
 	if (o_flags & TUNNEL_KEY)
 		addend += 4;
 	if (o_flags & TUNNEL_SEQ)
@@ -108,6 +110,7 @@ static inline __sum16 gre_checksum(struct sk_buff *skb)
 	return csum_fold(csum);
 }
 
+//构造gre头部
 static inline void gre_build_header(struct sk_buff *skb, int hdr_len,
 				    __be16 flags, __be16 proto,
 				    __be32 key, __be32 seq)

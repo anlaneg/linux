@@ -165,11 +165,11 @@ struct ip_tunnel {
 		(TUNNEL_GENEVE_OPT | TUNNEL_VXLAN_OPT | TUNNEL_ERSPAN_OPT)
 
 struct tnl_ptk_info {
-	__be16 flags;
-	__be16 proto;
+	__be16 flags;//隧道flags
+	__be16 proto;//内层封装的报文协议
 	__be32 key;
 	__be32 seq;
-	int hdr_len;
+	int hdr_len;//隧道头部长度
 };
 
 #define PACKET_RCVD	0

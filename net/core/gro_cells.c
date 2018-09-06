@@ -25,6 +25,7 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 		return NET_RX_DROP;
 	}
 
+	//报文入队
 	__skb_queue_tail(&cell->napi_skbs, skb);
 	if (skb_queue_len(&cell->napi_skbs) == 1)
 		napi_schedule(&cell->napi);

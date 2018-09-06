@@ -1242,6 +1242,7 @@ static __net_init int ipv4_sysctl_init_net(struct net *net)
 			table[i].data += (void *)net - (void *)&init_net;
 	}
 
+	//在/proc/sys/net/ipv4下注册此table
 	net->ipv4.ipv4_hdr = register_net_sysctl(net, "net/ipv4", table);
 	if (!net->ipv4.ipv4_hdr)
 		goto err_reg;

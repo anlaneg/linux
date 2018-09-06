@@ -341,12 +341,12 @@ static int __ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 	struct ip_tunnel *tunnel;
 
 	iph = ip_hdr(skb);
-	//查找报文对应的tunnel,通过报文入接口，gre的标记，隧道外层的源目的ip及key值
+	//查找报文对应的tunnel,通过报文入接口，标记，隧道外层的源目的ip及key值
 	tunnel = ip_tunnel_lookup(itn, skb->dev->ifindex, tpi->flags,
-				  iph->saddr, iph->daddr, tpi->key);
+				  iph->saddr, iph->daddr, tpi->key);//key值仅被用于确定隧道设备
 
 	if (tunnel) {
-		//有报文相关的tunnel,开始处理报文
+		//有报文相关的tunnel,解开隧道，开始处理报文
 		if (__iptunnel_pull_header(skb, hdr_len, tpi->proto,
 					   raw_proto, false) < 0)
 			goto drop;
@@ -376,6 +376,7 @@ drop:
 	return PACKET_RCVD;
 }
 
+//gre隧道解封装
 static int ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 		     int hdr_len)
 {
@@ -390,6 +391,7 @@ static int ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 
 	res = __ipgre_rcv(skb, tpi, itn, hdr_len, false);
 	if (res == PACKET_NEXT && tpi->proto == htons(ETH_P_TEB)) {
+		//没有找到隧道，且内层为以太网封装，换ipgre_net_id重新查itn
 		/* ipgre tunnels in collect metadata mode should receive
 		 * also ETH_P_TEB traffic.
 		 */
@@ -399,6 +401,7 @@ static int ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 	return res;
 }
 
+//0号版本gre收取函数
 static int gre_rcv(struct sk_buff *skb)
 {
 	struct tnl_ptk_info tpi;
@@ -413,10 +416,12 @@ static int gre_rcv(struct sk_buff *skb)
 	}
 #endif
 
+	//解析隧道，获得tpi　（这里没有使用上csum_err,csum_err为true时返回了<0的数）
 	hdr_len = gre_parse_header(skb, &tpi, &csum_err, htons(ETH_P_IP), 0);
 	if (hdr_len < 0)
 		goto drop;
 
+	//对一种不认识的封装的处理（业务上没遇到过）
 	if (unlikely(tpi.proto == htons(ETH_P_ERSPAN) ||
 		     tpi.proto == htons(ETH_P_ERSPAN2))) {
 		if (erspan_rcv(skb, &tpi, hdr_len) == PACKET_RCVD)
@@ -424,10 +429,12 @@ static int gre_rcv(struct sk_buff *skb)
 		goto out;
 	}
 
+	//其它封装处理（例如TEB)
 	if (ipgre_rcv(skb, &tpi, hdr_len) == PACKET_RCVD)
 		return 0;
 
 out:
+	//未找可处理的隧道口，发送目的不可达
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 drop:
 	kfree_skb(skb);
@@ -1045,6 +1052,7 @@ static int ipgre_tunnel_init(struct net_device *dev)
 	return ip_tunnel_init(dev);
 }
 
+//0号版本的gre协议
 static const struct gre_protocol ipgre_protocol = {
 	.handler     = gre_rcv,
 	.err_handler = gre_err,
@@ -1685,7 +1693,7 @@ static int __init ipgre_init(void)
 	if (err < 0)
 		goto pnet_erspan_failed;
 
-	//注册版本为GREPROTO_CISCO的gre解析处理函数
+	//注册版本为GREPROTO_CISCO的gre解析处理函数（版本为０）
 	err = gre_add_protocol(&ipgre_protocol, GREPROTO_CISCO);
 	if (err < 0) {
 		pr_info("%s: can't add protocol\n", __func__);

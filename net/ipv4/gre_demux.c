@@ -30,6 +30,7 @@
 #include <net/route.h>
 #include <net/xfrm.h>
 
+//注册不同gre协议处理函数
 static const struct gre_protocol __rcu *gre_proto[GREPROTO_MAX] __read_mostly;
 
 //注册指定版本的gre协议处理
@@ -73,8 +74,9 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	if (unlikely(!pskb_may_pull(skb, nhs + sizeof(struct gre_base_hdr))))
 		return -EINVAL;
 
-	//取gre协议头
+	//取gre协议头（nhs到头部的偏移量）
 	greh = (struct gre_base_hdr *)(skb->data + nhs);
+	//如果版本不为０，或者含路由标记则无法解析
 	if (unlikely(greh->flags & (GRE_VERSION | GRE_ROUTING)))
 		return -EINVAL;
 
@@ -82,12 +84,15 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	tpi->flags = gre_flags_to_tnl_flags(greh->flags);
 	hdr_len = gre_calc_hlen(tpi->flags);
 
+	//要求整个gre均在平坦内存中
 	if (!pskb_may_pull(skb, nhs + hdr_len))
 		return -EINVAL;
 
+	//记录封装协议
 	greh = (struct gre_base_hdr *)(skb->data + nhs);
 	tpi->proto = greh->protocol;
 
+	//指向选项
 	options = (__be32 *)(greh + 1);
 	if (greh->flags & GRE_CSUM) {
 		//有checksum标记，校验gre checksum
@@ -125,6 +130,7 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 		if ((*(u8 *)options & 0xF0) != 0x40)
 			hdr_len += 4;
 	}
+	//指明头部长度
 	tpi->hdr_len = hdr_len;
 	return hdr_len;
 }
@@ -141,15 +147,19 @@ static int gre_rcv(struct sk_buff *skb)
 	if (!pskb_may_pull(skb, 12))
 		goto drop;
 
+	//取gre协议版本号
 	ver = skb->data[1]&0x7f;
 	if (ver >= GREPROTO_MAX)
 		goto drop;//遇到不支持的gre版本，丢包
 
 	//取解析ver版本的gre处理函数
 	rcu_read_lock();
-	proto = rcu_dereference(gre_proto[ver]);
+	proto = rcu_dereference(gre_proto[ver]);//取对应版本的gre处理函数
+
+	//没有此版本gre协议的处理函数，丢包
 	if (!proto || !proto->handler)
-		goto drop_unlock;//没有此版本gre协议的处理函数，丢包
+		goto drop_unlock;
+
 	//gre报文处理
 	ret = proto->handler(skb);
 	rcu_read_unlock();
@@ -179,6 +189,7 @@ static void gre_err(struct sk_buff *skb, u32 info)
 	rcu_read_unlock();
 }
 
+//gre协议处理
 static const struct net_protocol net_gre_protocol = {
 	.handler     = gre_rcv,
 	.err_handler = gre_err,

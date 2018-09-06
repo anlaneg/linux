@@ -333,6 +333,7 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 	struct rtable *rt;
 	int err;
 
+	//默认情况下sysctl_ip_early_demux为１
 	if (net->ipv4.sysctl_ip_early_demux &&
 	    !skb_dst(skb) &&
 	    !skb->sk &&
@@ -340,6 +341,7 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 		const struct net_protocol *ipprot;
 		int protocol = iph->protocol;
 
+		//执行上层协议的early_demux回调（udp,tcp主要是提前查询对应的socket)
 		ipprot = rcu_dereference(inet_protos[protocol]);
 		if (ipprot && (edemux = READ_ONCE(ipprot->early_demux))) {
 			err = edemux(skb);
@@ -434,6 +436,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
+	//如果入接口设备从属于l3 master device,则更换设备
 	skb = l3mdev_ip_rcv(skb);
 	if (!skb)
 		return NET_RX_SUCCESS;
@@ -562,6 +565,7 @@ int ip_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt,
 	skb = ip_rcv_core(skb, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
+	//触发PRE_ROUTING钩子点
 	return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
 		       ip_rcv_finish);
