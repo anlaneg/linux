@@ -649,12 +649,13 @@ static struct xfrm_algo_desc *xfrm_find_algo(
 	struct xfrm_algo_desc *list = algo_list->algs;
 	int i, status;
 
+	//遍历每个algs
 	for (i = 0; i < algo_list->entries; i++) {
 		if (!match(list + i, data))
 			continue;
 
 		if (list[i].available)
-			return &list[i];
+			return &list[i];//返回找到的algo_desc
 
 		if (!probe)
 			break;
