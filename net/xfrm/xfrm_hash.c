@@ -17,6 +17,7 @@ struct hlist_head *xfrm_hash_alloc(unsigned int sz)
 {
 	struct hlist_head *n;
 
+	//按size小于PAGE_SIZE时，采用kzalloc
 	if (sz <= PAGE_SIZE)
 		n = kzalloc(sz, GFP_KERNEL);
 	else if (hashdist)

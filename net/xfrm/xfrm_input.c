@@ -41,6 +41,7 @@ struct xfrm_trans_cb {
 static struct kmem_cache *secpath_cachep __ro_after_init;
 
 static DEFINE_SPINLOCK(xfrm_input_afinfo_lock);
+//用于注册afinfo
 static struct xfrm_input_afinfo const __rcu *xfrm_input_afinfo[AF_INET6 + 1];
 
 static struct gro_cells gro_cells;
@@ -48,23 +49,28 @@ static struct net_device xfrm_napi_dev;
 
 static DEFINE_PER_CPU(struct xfrm_trans_tasklet, xfrm_trans_tasklet);
 
+//注册afinfo
 int xfrm_input_register_afinfo(const struct xfrm_input_afinfo *afinfo)
 {
 	int err = 0;
 
+	//要注册的family id过大，返回不支持
 	if (WARN_ON(afinfo->family >= ARRAY_SIZE(xfrm_input_afinfo)))
 		return -EAFNOSUPPORT;
 
 	spin_lock_bh(&xfrm_input_afinfo_lock);
+	//afinfo已注册
 	if (unlikely(xfrm_input_afinfo[afinfo->family] != NULL))
 		err = -EEXIST;
 	else
+		//设置afinfo
 		rcu_assign_pointer(xfrm_input_afinfo[afinfo->family], afinfo);
 	spin_unlock_bh(&xfrm_input_afinfo_lock);
 	return err;
 }
 EXPORT_SYMBOL(xfrm_input_register_afinfo);
 
+//解注册afinfo
 int xfrm_input_unregister_afinfo(const struct xfrm_input_afinfo *afinfo)
 {
 	int err = 0;
@@ -82,6 +88,7 @@ int xfrm_input_unregister_afinfo(const struct xfrm_input_afinfo *afinfo)
 }
 EXPORT_SYMBOL(xfrm_input_unregister_afinfo);
 
+//给出family,查找对应的afinfo
 static const struct xfrm_input_afinfo *xfrm_input_get_afinfo(unsigned int family)
 {
 	const struct xfrm_input_afinfo *afinfo;
@@ -96,6 +103,7 @@ static const struct xfrm_input_afinfo *xfrm_input_get_afinfo(unsigned int family
 	return afinfo;
 }
 
+//通过family找到afinfo,然后调用callback
 static int xfrm_rcv_cb(struct sk_buff *skb, unsigned int family, u8 protocol,
 		       int err)
 {
@@ -462,6 +470,7 @@ resume:
 		}
 	} while (!err);
 
+	//调用family中对应协议的callback
 	err = xfrm_rcv_cb(skb, family, x->type->proto, 0);
 	if (err)
 		goto drop;
