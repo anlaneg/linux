@@ -225,6 +225,7 @@ int xfrm4_protocol_register(struct xfrm4_protocol *handler,
 	int ret = -EEXIST;
 	int priority = handler->priority;
 
+	//xfrm如果不支持此协议，返回失败
 	if (!proto_handlers(protocol) || !netproto(protocol))
 		return -EINVAL;
 

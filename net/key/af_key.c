@@ -139,6 +139,7 @@ static struct proto key_proto = {
 	.obj_size = sizeof(struct pfkey_sock),
 };
 
+//pfkey socket创建函数
 static int pfkey_create(struct net *net, struct socket *sock, int protocol,
 			int kern)
 {
@@ -528,29 +529,31 @@ static int parse_exthdrs(struct sk_buff *skb, const struct sadb_msg *hdr, void *
 	int len = skb->len;
 
 	len -= sizeof(*hdr);
-	p += sizeof(*hdr);
+	p += sizeof(*hdr);//指向header结尾
 	while (len > 0) {
 		const struct sadb_ext *ehdr = (const struct sadb_ext *) p;
 		uint16_t ext_type;
 		int ext_len;
 
 		if (len < sizeof(*ehdr))
-			return -EINVAL;
+			return -EINVAL;//消息截断
 
 		ext_len  = ehdr->sadb_ext_len;
-		ext_len *= sizeof(uint64_t);
+		ext_len *= sizeof(uint64_t);//每个长度为６４bit为单位
 		ext_type = ehdr->sadb_ext_type;
 		if (ext_len < sizeof(uint64_t) ||
 		    ext_len > len ||
 		    ext_type == SADB_EXT_RESERVED)
-			return -EINVAL;
+			return -EINVAL;//长度类型检查
 
 		if (ext_type <= SADB_EXT_MAX) {
 			int min = (int) sadb_ext_min_len[ext_type];
 			if (ext_len < min)
-				return -EINVAL;
+				return -EINVAL;//按类型进行min_len校验
 			if (ext_hdrs[ext_type-1] != NULL)
-				return -EINVAL;
+				return -EINVAL;//此类型已被设置，报错
+
+			//按类型检查
 			switch (ext_type) {
 			case SADB_EXT_ADDRESS_SRC:
 			case SADB_EXT_ADDRESS_DST:
@@ -571,8 +574,10 @@ static int parse_exthdrs(struct sk_buff *skb, const struct sadb_msg *hdr, void *
 			default:
 				break;
 			}
+			//设置此类型对应的data
 			ext_hdrs[ext_type-1] = (void *) p;
 		}
+		//不认识的类型被跳过
 		p   += ext_len;
 		len -= ext_len;
 	}
@@ -2837,9 +2842,10 @@ static int pfkey_process(struct sock *sk, struct sk_buff *skb, const struct sadb
 			BROADCAST_PROMISC_ONLY, NULL, sock_net(sk));
 
 	memset(ext_hdrs, 0, sizeof(ext_hdrs));
-	err = parse_exthdrs(skb, hdr, ext_hdrs);
+	err = parse_exthdrs(skb, hdr, ext_hdrs);//解析skb中指出的tlv
 	if (!err) {
 		err = -EOPNOTSUPP;
+		//通过hdr的类型调用function
 		if (pfkey_funcs[hdr->sadb_msg_type])
 			err = pfkey_funcs[hdr->sadb_msg_type](sk, skb, hdr, ext_hdrs);
 	}
@@ -2851,6 +2857,7 @@ static struct sadb_msg *pfkey_get_base_msg(struct sk_buff *skb, int *errp)
 	struct sadb_msg *hdr = NULL;
 
 	if (skb->len < sizeof(*hdr)) {
+		//长度不足
 		*errp = -EMSGSIZE;
 	} else {
 		hdr = (struct sadb_msg *) skb->data;
@@ -3650,6 +3657,7 @@ static int pfkey_send_migrate(const struct xfrm_selector *sel, u8 dir, u8 type,
 }
 #endif
 
+//用户态通过write写下来的数据
 static int pfkey_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
 	struct sock *sk = sock->sk;
@@ -3666,6 +3674,7 @@ static int pfkey_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	if ((unsigned int)len > sk->sk_sndbuf - 32)
 		goto out;
 
+	//申请skb,并采用用户态来的msg来填充它
 	err = -ENOBUFS;
 	skb = alloc_skb(len, GFP_KERNEL);
 	if (skb == NULL)
@@ -3756,6 +3765,7 @@ static const struct proto_ops pfkey_ops = {
 	.recvmsg	=	pfkey_recvmsg,
 };
 
+//pfkey的socket创建函数
 static const struct net_proto_family pfkey_family_ops = {
 	.family	=	PF_KEY,
 	.create	=	pfkey_create,
