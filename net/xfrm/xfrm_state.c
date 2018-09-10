@@ -166,6 +166,7 @@ static void xfrm_hash_resize(struct work_struct *work)
 }
 
 static DEFINE_SPINLOCK(xfrm_state_afinfo_lock);
+//每个family有一个xfrm_state_afinfo
 static struct xfrm_state_afinfo __rcu *xfrm_state_afinfo[NPROTO];
 
 static DEFINE_SPINLOCK(xfrm_state_gc_lock);
@@ -188,6 +189,7 @@ int xfrm_register_type(const struct xfrm_type *type, unsigned short family)
 	typemap = afinfo->type_map;
 	spin_lock_bh(&xfrm_type_lock);
 
+	//如果typemap未设置，则设置其为type
 	if (likely(typemap[type->proto] == NULL))
 		typemap[type->proto] = type;
 	else
@@ -820,10 +822,13 @@ static struct xfrm_state *__xfrm_state_lookup(struct net *net, u32 mark,
 					      __be32 spi, u8 proto,
 					      unsigned short family)
 {
+	//计算hash（daddr,spi,proto,family)
 	unsigned int h = xfrm_spi_hash(net, daddr, spi, proto, family);
 	struct xfrm_state *x;
 
+	//遍历hash桶
 	hlist_for_each_entry_rcu(x, net->xfrm.state_byspi + h, byspi) {
+		//如果family,spi,proto,daddr，mark比对相待，则返回对应xfrm_state
 		if (x->props.family != family ||
 		    x->id.spi       != spi ||
 		    x->id.proto     != proto ||
@@ -2184,6 +2189,7 @@ struct xfrm_state_afinfo *xfrm_state_afinfo_get_rcu(unsigned int family)
 	return rcu_dereference(xfrm_state_afinfo[family]);
 }
 
+//取每个family对应的xfrm_state_afinfo
 struct xfrm_state_afinfo *xfrm_state_get_afinfo(unsigned int family)
 {
 	struct xfrm_state_afinfo *afinfo;

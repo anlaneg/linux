@@ -130,10 +130,12 @@ void __secpath_destroy(struct sec_path *sp)
 }
 EXPORT_SYMBOL(__secpath_destroy);
 
+//申请并构造sec_path的副本
 struct sec_path *secpath_dup(struct sec_path *src)
 {
 	struct sec_path *sp;
 
+	//申请sp
 	sp = kmem_cache_alloc(secpath_cachep, GFP_ATOMIC);
 	if (!sp)
 		return NULL;
@@ -155,6 +157,7 @@ struct sec_path *secpath_dup(struct sec_path *src)
 }
 EXPORT_SYMBOL(secpath_dup);
 
+//如果skb->sp不存在，或者skb->sp被多个引用，则更新sp
 int secpath_set(struct sk_buff *skb)
 {
 	struct sec_path *sp;
@@ -165,6 +168,7 @@ int secpath_set(struct sk_buff *skb)
 		if (!sp)
 			return -ENOMEM;
 
+		//设置sp
 		if (skb->sp)
 			secpath_put(skb->sp);
 		skb->sp = sp;
@@ -174,13 +178,14 @@ int secpath_set(struct sk_buff *skb)
 EXPORT_SYMBOL(secpath_set);
 
 /* Fetch spi and seq from ipsec header */
-
+//按nexthdr协议类型，提取spi,seq
 int xfrm_parse_spi(struct sk_buff *skb, u8 nexthdr, __be32 *spi, __be32 *seq)
 {
 	int offset, offset_seq;
 	int hlen;
 
 	switch (nexthdr) {
+	//在ipv4的proto中规定protocol=IPPROTO_AH,而在ah头中再指定其对应的4层协议
 	case IPPROTO_AH:
 		hlen = sizeof(struct ip_auth_hdr);
 		offset = offsetof(struct ip_auth_hdr, spi);
@@ -312,6 +317,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 
 	/* if tunnel is present override skb->mark value with tunnel i_key */
 	switch (family) {
+	//ipv4情况
 	case AF_INET:
 		if (XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip4)
 			mark = be32_to_cpu(XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip4->parms.i_key);
@@ -328,6 +334,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		goto drop;
 	}
 
+	//依据nexthdr提取spi,seq
 	seq = 0;
 	if (!spi && (err = xfrm_parse_spi(skb, nexthdr, &spi, &seq)) != 0) {
 		secpath_reset(skb);
@@ -335,6 +342,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		goto drop;
 	}
 
+	//提取目的ip
 	daddr = (xfrm_address_t *)(skb_network_header(skb) +
 				   XFRM_SPI_SKB_CB(skb)->daddroff);
 	do {
@@ -344,6 +352,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 			goto drop;
 		}
 
+		//查找对应的xfrm_state
 		x = xfrm_state_lookup(net, mark, daddr, spi, nexthdr, family);
 		if (x == NULL) {
 			secpath_reset(skb);
@@ -401,6 +410,7 @@ lock:
 		if (crypto_done)
 			nexthdr = x->type_offload->input_tail(x, skb);
 		else
+			//调用type->input回调
 			nexthdr = x->type->input(x, skb);
 
 		if (nexthdr == -EINPROGRESS)

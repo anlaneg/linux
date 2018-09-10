@@ -106,8 +106,9 @@ struct iphdr {
 };
 
 
+//ah协议头
 struct ip_auth_hdr {
-	__u8  nexthdr;
+	__u8  nexthdr;//上层协议类型
 	__u8  hdrlen;		/* This one is measured in 32 bit units! */
 	__be16 reserved;
 	__be32 spi;
@@ -115,6 +116,7 @@ struct ip_auth_hdr {
 	__u8  auth_data[0];	/* Variable len but >=4. Mind the 64 bit alignment! */
 };
 
+//esp协议头
 struct ip_esp_hdr {
 	__be32 spi;
 	__be32 seq_no;		/* Sequence number */

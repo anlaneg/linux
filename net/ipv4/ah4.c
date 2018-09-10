@@ -559,7 +559,7 @@ static const struct xfrm_type ah_type =
 	.flags		= XFRM_TYPE_REPLAY_PROT,
 	.init_state	= ah_init_state,
 	.destructor	= ah_destroy,
-	.input		= ah_input,
+	.input		= ah_input,//将被xfrm_input调起
 	.output		= ah_output
 };
 
@@ -573,6 +573,7 @@ static struct xfrm4_protocol ah4_protocol = {
 
 static int __init ah4_init(void)
 {
+	//注册ah_type
 	if (xfrm_register_type(&ah_type, AF_INET) < 0) {
 		pr_info("%s: can't add xfrm type\n", __func__);
 		return -EAGAIN;
