@@ -71,6 +71,7 @@ int xfrm4_extract_header(struct sk_buff *skb)
 	return 0;
 }
 
+//提供xfrm ipv4状态注册
 static struct xfrm_state_afinfo xfrm4_state_afinfo = {
 	.family			= AF_INET,
 	.proto			= IPPROTO_IPIP,
@@ -87,6 +88,7 @@ static struct xfrm_state_afinfo xfrm4_state_afinfo = {
 	.local_error		= xfrm4_local_error,
 };
 
+//ipv4 状态注册
 void __init xfrm4_state_init(void)
 {
 	xfrm_state_register_afinfo(&xfrm4_state_afinfo);

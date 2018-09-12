@@ -2144,6 +2144,7 @@ int xfrm_unregister_km(struct xfrm_mgr *km)
 }
 EXPORT_SYMBOL(xfrm_unregister_km);
 
+//xfrm 状态 info注册
 int xfrm_state_register_afinfo(struct xfrm_state_afinfo *afinfo)
 {
 	int err = 0;
@@ -2161,6 +2162,7 @@ int xfrm_state_register_afinfo(struct xfrm_state_afinfo *afinfo)
 }
 EXPORT_SYMBOL(xfrm_state_register_afinfo);
 
+//xfrm状态info解注册
 int xfrm_state_unregister_afinfo(struct xfrm_state_afinfo *afinfo)
 {
 	int err = 0, family = afinfo->family;
@@ -2234,6 +2236,7 @@ int xfrm_state_mtu(struct xfrm_state *x, int mtu)
 	return mtu - x->props.header_len;
 }
 
+//xfrm状态初始化
 int __xfrm_init_state(struct xfrm_state *x, bool init_replay, bool offload)
 {
 	struct xfrm_state_afinfo *afinfo;

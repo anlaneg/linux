@@ -74,6 +74,7 @@ __xfrm4_selector_match(const struct xfrm_selector *sel, const struct flowi *fl)
 {
 	const struct flowi4 *fl4 = &fl->u.ip4;
 
+	//目的ip,源ip,srcport,dstport(协议不同解析不同）,proto,ifindex均可被匹配
 	return  addr4_match(fl4->daddr, sel->daddr.a4, sel->prefixlen_d) &&
 		addr4_match(fl4->saddr, sel->saddr.a4, sel->prefixlen_s) &&
 		!((xfrm_flowi_dport(fl, &fl4->uli) ^ sel->dport) & sel->dport_mask) &&
@@ -107,6 +108,7 @@ bool xfrm_selector_match(const struct xfrm_selector *sel, const struct flowi *fl
 	return false;
 }
 
+//依据family查找policy info
 static const struct xfrm_policy_afinfo *xfrm_policy_get_afinfo(unsigned short family)
 {
 	const struct xfrm_policy_afinfo *afinfo;
@@ -2296,6 +2298,7 @@ int __xfrm_decode_session(struct sk_buff *skb, struct flowi *fl,
 	if (unlikely(afinfo == NULL))
 		return -EAFNOSUPPORT;
 
+	//解析skb的元组信息，并填充到fl
 	afinfo->decode_session(skb, fl, reverse);
 
 	err = security_xfrm_decode_session(skb, &fl->flowi_secid);
@@ -2345,6 +2348,7 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 	reverse = dir & ~XFRM_POLICY_MASK;
 	dir &= XFRM_POLICY_MASK;
 
+	//解析skb的元组信息，并填充到fl
 	if (__xfrm_decode_session(skb, &fl, family, reverse) < 0) {
 		XFRM_INC_STATS(net, LINUX_MIB_XFRMINHDRERROR);
 		return 0;
@@ -2708,17 +2712,19 @@ static void xfrm_confirm_neigh(const struct dst_entry *dst, const void *daddr)
 	path->ops->confirm_neigh(path, daddr);
 }
 
+//注册family对应的afinfo
 int xfrm_policy_register_afinfo(const struct xfrm_policy_afinfo *afinfo, int family)
 {
 	int err = 0;
 
 	if (WARN_ON(family >= ARRAY_SIZE(xfrm_policy_afinfo)))
-		return -EAFNOSUPPORT;
+		return -EAFNOSUPPORT;//不支持的family
 
 	spin_lock(&xfrm_policy_afinfo_lock);
 	if (unlikely(xfrm_policy_afinfo[family] != NULL))
-		err = -EEXIST;
+		err = -EEXIST;//已注册
 	else {
+		//默认值设置
 		struct dst_ops *dst_ops = afinfo->dst_ops;
 		if (likely(dst_ops->kmem_cachep == NULL))
 			dst_ops->kmem_cachep = xfrm_dst_cache;
@@ -2736,6 +2742,7 @@ int xfrm_policy_register_afinfo(const struct xfrm_policy_afinfo *afinfo, int fam
 			dst_ops->neigh_lookup = xfrm_neigh_lookup;
 		if (likely(!dst_ops->confirm_neigh))
 			dst_ops->confirm_neigh = xfrm_confirm_neigh;
+		//完成注册
 		rcu_assign_pointer(xfrm_policy_afinfo[family], afinfo);
 	}
 	spin_unlock(&xfrm_policy_afinfo_lock);
@@ -2744,6 +2751,7 @@ int xfrm_policy_register_afinfo(const struct xfrm_policy_afinfo *afinfo, int fam
 }
 EXPORT_SYMBOL(xfrm_policy_register_afinfo);
 
+//policy解注册
 void xfrm_policy_unregister_afinfo(const struct xfrm_policy_afinfo *afinfo)
 {
 	struct dst_ops *dst_ops = afinfo->dst_ops;

@@ -360,7 +360,7 @@ static int __ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 			__be64 tun_id;
 
 			flags = tpi->flags & (TUNNEL_CSUM | TUNNEL_KEY);
-			tun_id = key32_to_tunnel_id(tpi->key);
+			tun_id = key32_to_tunnel_id(tpi->key);//将key扩充为tunnel_id
 			tun_dst = ip_tun_rx_dst(skb, flags, tun_id, 0);
 			if (!tun_dst)
 				return PACKET_REJECT;

@@ -2357,7 +2357,7 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 	};
 	struct rtable *rth;
 
-	fl4->flowi4_iif = LOOPBACK_IFINDEX;
+	fl4->flowi4_iif = LOOPBACK_IFINDEX;//按入接口为lookback查询
 	fl4->flowi4_tos = tos & IPTOS_RT_MASK;
 	fl4->flowi4_scope = ((tos & RTO_ONLINK) ?
 			 RT_SCOPE_LINK : RT_SCOPE_UNIVERSE);

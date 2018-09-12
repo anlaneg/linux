@@ -53,6 +53,7 @@ static struct dst_entry *xfrm4_dst_lookup(struct net *net, int tos, int oif,
 	return __xfrm4_dst_lookup(net, &fl4, tos, oif, saddr, daddr, mark);
 }
 
+//获取目的地址为daddr时需要采用那个源地址
 static int xfrm4_get_saddr(struct net *net, int oif,
 			   xfrm_address_t *saddr, xfrm_address_t *daddr,
 			   u32 mark)
@@ -60,10 +61,12 @@ static int xfrm4_get_saddr(struct net *net, int oif,
 	struct dst_entry *dst;
 	struct flowi4 fl4;
 
+	//查询到daddr的路由
 	dst = __xfrm4_dst_lookup(net, &fl4, 0, oif, NULL, daddr, mark);
 	if (IS_ERR(dst))
 		return -EHOSTUNREACH;
 
+	//提取到daddr时需要采用的源地址
 	saddr->a4 = fl4.saddr;
 	dst_release(dst);
 	return 0;
@@ -74,6 +77,7 @@ static int xfrm4_get_tos(const struct flowi *fl)
 	return IPTOS_RT_MASK & fl->u.ip4.flowi4_tos; /* Strip ECN bits */
 }
 
+//ipv4 初始化path
 static int xfrm4_init_path(struct xfrm_dst *path, struct dst_entry *dst,
 			   int nfheader_len)
 {
@@ -107,10 +111,12 @@ static int xfrm4_fill_dst(struct xfrm_dst *xdst, struct net_device *dev,
 	return 0;
 }
 
+//提取skb的流信息，将其填充到fl中，reverse用于表示是否提取反向
 static void
 _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 {
 	const struct iphdr *iph = ip_hdr(skb);
+	//指向ipv4的运输层
 	u8 *xprth = skb_network_header(skb) + iph->ihl * 4;
 	struct flowi4 *fl4 = &fl->u.ip4;
 	int oif = 0;
@@ -129,6 +135,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 		case IPPROTO_TCP:
 		case IPPROTO_SCTP:
 		case IPPROTO_DCCP:
+			//提取srcport,dstport
 			if (xprth + 4 < skb->data ||
 			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
 				__be16 *ports;
@@ -142,6 +149,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 			break;
 
 		case IPPROTO_ICMP:
+			//icmp采用type,code
 			if (xprth + 2 < skb->data ||
 			    pskb_may_pull(skb, xprth + 2 - skb->data)) {
 				u8 *icmp;
@@ -155,6 +163,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 			break;
 
 		case IPPROTO_ESP:
+			//esp协议时，提取spi
 			if (xprth + 4 < skb->data ||
 			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
 				__be32 *ehdr;
@@ -167,6 +176,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 			break;
 
 		case IPPROTO_AH:
+			//ah协议时，提取spi
 			if (xprth + 8 < skb->data ||
 			    pskb_may_pull(skb, xprth + 8 - skb->data)) {
 				__be32 *ah_hdr;
@@ -191,6 +201,7 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 			break;
 
 		case IPPROTO_GRE:
+			//gre协议时，提取key值（即gre隧道id)
 			if (xprth + 12 < skb->data ||
 			    pskb_may_pull(skb, xprth + 12 - skb->data)) {
 				__be16 *greflags;
@@ -213,6 +224,8 @@ _decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
 			break;
 		}
 	}
+
+	//提取saddr,daddr,protocol,tos
 	fl4->flowi4_proto = iph->protocol;
 	fl4->daddr = reverse ? iph->saddr : iph->daddr;
 	fl4->saddr = reverse ? iph->daddr : iph->saddr;
@@ -267,13 +280,14 @@ static struct dst_ops xfrm4_dst_ops_template = {
 	.gc_thresh =		32768,
 };
 
+//ipv4 policy信息
 static const struct xfrm_policy_afinfo xfrm4_policy_afinfo = {
 	.dst_ops =		&xfrm4_dst_ops_template,
-	.dst_lookup =		xfrm4_dst_lookup,
-	.get_saddr =		xfrm4_get_saddr,
-	.decode_session =	_decode_session4,
+	.dst_lookup =		xfrm4_dst_lookup,//查路由
+	.get_saddr =		xfrm4_get_saddr,//获取源地址
+	.decode_session =	_decode_session4,//流特证提取
 	.get_tos =		xfrm4_get_tos,
-	.init_path =		xfrm4_init_path,
+	.init_path =		xfrm4_init_path,//path初始化函数
 	.fill_dst =		xfrm4_fill_dst,
 	.blackhole_route =	ipv4_blackhole_route,
 };
@@ -371,6 +385,7 @@ static struct pernet_operations __net_initdata xfrm4_net_ops = {
 
 static void __init xfrm4_policy_init(void)
 {
+	//注册ipv4 policy
 	xfrm_policy_register_afinfo(&xfrm4_policy_afinfo, AF_INET);
 }
 

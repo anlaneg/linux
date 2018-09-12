@@ -83,7 +83,7 @@ struct flowi4 {
 	__be32			saddr;//源地址
 	__be32			daddr;//目的地址
 
-	union flowi_uli		uli;
+	union flowi_uli		uli;//port信息
 #define fl4_sport		uli.ports.sport
 #define fl4_dport		uli.ports.dport
 #define fl4_icmp_type		uli.icmpt.type

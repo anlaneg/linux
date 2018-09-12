@@ -274,6 +274,8 @@ NF_HOOK_COND(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
 {
 	int ret;
 
+	//如果条件为真，则调用nf_hook，如果返回值为1，则调用okfn
+	//如果条件为假，则直接nkfn
 	if (!cond ||
 	    ((ret = nf_hook(pf, hook, net, sk, skb, in, out, okfn)) == 1))
 		ret = okfn(net, sk, skb);
@@ -360,6 +362,7 @@ struct nf_nat_hook {
 
 extern struct nf_nat_hook __rcu *nf_nat_hook;
 
+//调用nf_nat_hook对应的decode_session
 static inline void
 nf_nat_decode_session(struct sk_buff *skb, struct flowi *fl, u_int8_t family)
 {

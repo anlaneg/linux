@@ -235,6 +235,7 @@ int xfrm_prepare_input(struct xfrm_state *x, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(xfrm_prepare_input);
 
+//xfrm 报文收取入口（同时处理ipv6,ipv4协议）
 int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 {
 	struct net *net = dev_net(skb->dev);
@@ -342,10 +343,12 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		goto drop;
 	}
 
-	//提取目的ip
+	//采用偏移量提取目的ip
 	daddr = (xfrm_address_t *)(skb_network_header(skb) +
 				   XFRM_SPI_SKB_CB(skb)->daddroff);
+
 	do {
+		//深度超限，丢包
 		if (skb->sp->len == XFRM_MAX_DEPTH) {
 			secpath_reset(skb);
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINBUFFERERROR);
@@ -363,6 +366,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 
 		skb->mark = xfrm_smark_get(skb->mark, x);
 
+		//增加深度
 		skb->sp->xvec[skb->sp->len++] = x;
 
 lock:

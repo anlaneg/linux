@@ -306,19 +306,24 @@ struct xfrm_type;
 struct xfrm_dst;
 struct xfrm_policy_afinfo {
 	struct dst_ops		*dst_ops;
+	//查询路由
 	struct dst_entry	*(*dst_lookup)(struct net *net,
 					       int tos, int oif,
 					       const xfrm_address_t *saddr,
 					       const xfrm_address_t *daddr,
 					       u32 mark);
+	//提取到daddr时，需要采用哪个源地址，填充到saddr
 	int			(*get_saddr)(struct net *net, int oif,
 					     xfrm_address_t *saddr,
 					     xfrm_address_t *daddr,
 					     u32 mark);
+	//提取流特征（元组信息）填充到fl
 	void			(*decode_session)(struct sk_buff *skb,
 						  struct flowi *fl,
 						  int reverse);
+	//提取flowi中的tos信息
 	int			(*get_tos)(const struct flowi *fl);
+	//初始化path
 	int			(*init_path)(struct xfrm_dst *path,
 					     struct dst_entry *dst,
 					     int nfheader_len);
@@ -732,7 +737,7 @@ struct xfrm_mode_skb_cb {
 struct xfrm_spi_skb_cb {
 	struct xfrm_tunnel_skb_cb header;
 
-	unsigned int daddroff;
+	unsigned int daddroff;//到目的地址的偏移量
 	unsigned int family;
 	__be32 seq;
 };
@@ -1201,6 +1206,7 @@ static inline int xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *sk
 	return __xfrm_policy_check2(sk, dir, skb, family, 0);
 }
 
+//策略检查
 static inline int xfrm4_policy_check(struct sock *sk, int dir, struct sk_buff *skb)
 {
 	return xfrm_policy_check(sk, dir, skb, AF_INET);
@@ -1642,6 +1648,7 @@ int xfrm4_transport_finish(struct sk_buff *skb, int async);
 int xfrm4_rcv(struct sk_buff *skb);
 int xfrm_parse_spi(struct sk_buff *skb, u8 nexthdr, __be32 *spi, __be32 *seq);
 
+//xfrm ipv4报文收取（skb 收到的报文，nexthdr 4层协议类型，sip ????)
 static inline int xfrm4_rcv_spi(struct sk_buff *skb, int nexthdr, __be32 spi)
 {
 	XFRM_TUNNEL_SKB_CB(skb)->tunnel.ip4 = NULL;

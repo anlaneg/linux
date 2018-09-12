@@ -1879,6 +1879,7 @@ out:
  *
  * All the work is done in audit_log_vformat.
  */
+//输出日志到ab中
 void audit_log_format(struct audit_buffer *ab, const char *fmt, ...)
 {
 	va_list args;

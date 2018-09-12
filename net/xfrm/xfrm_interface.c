@@ -833,7 +833,7 @@ static struct xfrm4_protocol xfrmi_esp4_protocol __read_mostly = {
 };
 
 static struct xfrm4_protocol xfrmi_ah4_protocol __read_mostly = {
-	.handler	=	xfrm4_rcv,
+	.handler	=	xfrm4_rcv,//用于ip层收取报文时调用
 	.input_handler	=	xfrm_input,
 	.cb_handler	=	xfrmi_rcv_cb,
 	.err_handler	=	xfrmi4_err,
@@ -848,6 +848,7 @@ static struct xfrm4_protocol xfrmi_ipcomp4_protocol __read_mostly = {
 	.priority	=	10,
 };
 
+//ipv4 协议注册
 static int __init xfrmi4_init(void)
 {
 	int err;
@@ -879,6 +880,7 @@ static void xfrmi4_fini(void)
 	xfrm4_protocol_deregister(&xfrmi_esp4_protocol, IPPROTO_ESP);
 }
 
+//ipv6协议注册
 static int __init xfrmi6_init(void)
 {
 	int err;

@@ -169,6 +169,7 @@ drop:
 	return 0;
 }
 
+//xfrm ipv4报文入口
 int xfrm4_rcv(struct sk_buff *skb)
 {
 	return xfrm4_rcv_spi(skb, ip_hdr(skb)->protocol, 0);
