@@ -47,6 +47,7 @@ static inline struct xfrm4_protocol __rcu **proto_handlers(u8 protocol)
 	     handler != NULL;				\
 	     handler = rcu_dereference(handler->next))	\
 
+//xfm4 协议收包回调
 int xfrm4_rcv_cb(struct sk_buff *skb, u8 protocol, int err)
 {
 	int ret;
@@ -197,7 +198,7 @@ static const struct net_protocol ipcomp4_protocol = {
 
 static const struct xfrm_input_afinfo xfrm4_input_afinfo = {
 	.family		=	AF_INET,
-	.callback	=	xfrm4_rcv_cb,
+	.callback	=	xfrm4_rcv_cb,//ipv4收取入
 };
 
 //依据不同的protocol返回，esp,ah,comp协议的协议栈入理入口

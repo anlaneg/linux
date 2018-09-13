@@ -508,8 +508,9 @@ static int esp_output(struct xfrm_state *x, struct sk_buff *skb)
 		return esp.nfrags;
 
 	esph = esp.esph;
-	esph->spi = x->id.spi;
+	esph->spi = x->id.spi;//设置spi
 
+	//设置seq编号
 	esph->seq_no = htonl(XFRM_SKB_CB(skb)->seq.output.low);
 	esp.seqno = cpu_to_be64(XFRM_SKB_CB(skb)->seq.output.low +
 				 ((u64)XFRM_SKB_CB(skb)->seq.output.hi << 32));
@@ -625,6 +626,7 @@ int esp_input_done2(struct sk_buff *skb, int err)
 
 	skb_pull_rcsum(skb, hlen);
 	if (x->props.mode == XFRM_MODE_TUNNEL)
+		//隧道模式，剥离隧道
 		skb_reset_transport_header(skb);
 	else
 		skb_set_transport_header(skb, -ihl);
@@ -699,7 +701,7 @@ static int esp_input(struct xfrm_state *x, struct sk_buff *skb)
 	int err = -EINVAL;
 
 	if (!pskb_may_pull(skb, sizeof(*esph) + ivlen))
-		goto out;
+		goto out;//不足esp协议头固定长度＋
 
 	if (elen <= 0)
 		goto out;
@@ -762,6 +764,7 @@ skip_cow:
 	aead_request_set_crypt(req, sg, sg, elen + ivlen, iv);
 	aead_request_set_ad(req, assoclen);
 
+	//解密
 	err = crypto_aead_decrypt(req);
 	if (err == -EINPROGRESS)
 		goto out;

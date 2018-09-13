@@ -358,6 +358,7 @@ int xfrm_input(struct sk_buff *skb, int nexthdr, __be32 spi, int encap_type)
 		//查找对应的xfrm_state
 		x = xfrm_state_lookup(net, mark, daddr, spi, nexthdr, family);
 		if (x == NULL) {
+			//未查询到，丢包
 			secpath_reset(skb);
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINNOSTATES);
 			xfrm_audit_state_notfound(skb, family, spi, seq);
@@ -414,7 +415,7 @@ lock:
 		if (crypto_done)
 			nexthdr = x->type_offload->input_tail(x, skb);
 		else
-			//调用type->input回调
+			//调用type->input回调（执行报文收取）
 			nexthdr = x->type->input(x, skb);
 
 		if (nexthdr == -EINPROGRESS)
@@ -517,6 +518,7 @@ resume:
 drop_unlock:
 	spin_unlock(&x->lock);
 drop:
+	//x可以为NULL,此时传入nexthdr
 	xfrm_rcv_cb(skb, family, x && x->type ? x->type->proto : nexthdr, -1);
 	kfree_skb(skb);
 	return 0;

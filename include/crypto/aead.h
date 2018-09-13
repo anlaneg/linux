@@ -91,8 +91,8 @@ struct aead_request {
 
 	u8 *iv;
 
-	struct scatterlist *src;
-	struct scatterlist *dst;
+	struct scatterlist *src;//源数据
+	struct scatterlist *dst;//加工后数据
 
 	void *__ctx[] CRYPTO_MINALIGN_ATTR;
 };
@@ -357,6 +357,7 @@ static inline int crypto_aead_encrypt(struct aead_request *req)
  *	   integrity of the ciphertext or the associated data was violated);
  *	   < 0 if an error occurred.
  */
+//解密
 static inline int crypto_aead_decrypt(struct aead_request *req)
 {
 	struct crypto_aead *aead = crypto_aead_reqtfm(req);
