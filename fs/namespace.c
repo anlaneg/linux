@@ -951,6 +951,7 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (!type)
 		return ERR_PTR(-ENODEV);
 
+	//
 	mnt = alloc_vfsmnt(name);
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
@@ -2455,6 +2456,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!type)
 		return -ENODEV;
 
+	//将设备name按type文件系统进行挂载
 	mnt = vfs_kern_mount(type, sb_flags, name, data);
 	if (!IS_ERR(mnt) && (type->fs_flags & FS_HAS_SUBTYPE) &&
 	    !mnt->mnt_sb->s_subtype)
@@ -2725,6 +2727,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 		return -EINVAL;
 
 	/* ... and get the mountpoint */
+	//获得dir_name对应path
 	retval = user_path(dir_name, &path);
 	if (retval)
 		return retval;
@@ -2785,6 +2788,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	else if (flags & MS_MOVE)
 		retval = do_move_mount(&path, dev_name);
 	else
+		//处理普通挂载
 		retval = do_new_mount(&path, type_page, sb_flags, mnt_flags,
 				      dev_name, data_page);
 dput_out:
@@ -2986,21 +2990,25 @@ int ksys_mount(char __user *dev_name, char __user *dir_name, char __user *type,
 	char *kernel_dev;
 	void *options;
 
+	//type 参数copy
 	kernel_type = copy_mount_string(type);
 	ret = PTR_ERR(kernel_type);
 	if (IS_ERR(kernel_type))
 		goto out_type;
 
+	//dev参数copy
 	kernel_dev = copy_mount_string(dev_name);
 	ret = PTR_ERR(kernel_dev);
 	if (IS_ERR(kernel_dev))
 		goto out_dev;
 
+	//选项copy
 	options = copy_mount_options(data);
 	ret = PTR_ERR(options);
 	if (IS_ERR(options))
 		goto out_data;
 
+	//处理mount系统调用
 	ret = do_mount(kernel_dev, dir_name, kernel_type, flags, options);
 
 	kfree(options);
@@ -3015,6 +3023,7 @@ out_type:
 SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {
+	//处理mount系统调用
 	return ksys_mount(dev_name, dir_name, type, flags, data);
 }
 

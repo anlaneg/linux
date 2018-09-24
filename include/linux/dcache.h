@@ -404,6 +404,7 @@ static inline bool d_is_whiteout(const struct dentry *dentry)
 	return __d_entry_type(dentry) == DCACHE_WHITEOUT_TYPE;
 }
 
+//检查dentry是否为目录
 static inline bool d_can_lookup(const struct dentry *dentry)
 {
 	return __d_entry_type(dentry) == DCACHE_DIRECTORY_TYPE;
@@ -419,11 +420,13 @@ static inline bool d_is_dir(const struct dentry *dentry)
 	return d_can_lookup(dentry) || d_is_autodir(dentry);
 }
 
+//检查dentry是否为link
 static inline bool d_is_symlink(const struct dentry *dentry)
 {
 	return __d_entry_type(dentry) == DCACHE_SYMLINK_TYPE;
 }
 
+//检查dentry是否为文件
 static inline bool d_is_reg(const struct dentry *dentry)
 {
 	return __d_entry_type(dentry) == DCACHE_REGULAR_TYPE;

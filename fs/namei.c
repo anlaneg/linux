@@ -156,7 +156,7 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	kname = (char *)result->iname;
 	result->name = kname;
 
-	//用用户空来填充kname
+	//用用户空的filename来填充kname
 	len = strncpy_from_user(kname, filename, EMBEDDED_NAME_MAX);
 	if (unlikely(len < 0)) {
 		__putname(result);
@@ -1712,6 +1712,7 @@ static inline int may_lookup(struct nameidata *nd)
 		if (unlazy_walk(nd))
 			return -ECHILD;
 	}
+	//检查执行权限
 	return inode_permission(nd->inode, MAY_EXEC);
 }
 
@@ -2059,12 +2060,14 @@ static inline u64 hash_name(const void *salt, const char *name)
 	unsigned long hash = init_name_hash(salt);
 	unsigned long len = 0, c;
 
+	//计算这一层目录名称或者文件名称的hash值
 	c = (unsigned char)*name;
 	do {
 		len++;
 		hash = partial_name_hash(c, hash);
 		c = (unsigned char)name[len];
 	} while (c && c != '/');
+	//hash即包含本层目名名称（或文件名称），也包含名称对应的长度
 	return hashlen_create(end_name_hash(hash), len);
 }
 
@@ -2085,7 +2088,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 	while (*name=='/')
-		name++;
+		name++;//跳过目录分隔符
 	if (!*name)
 		return 0;
 
@@ -2094,26 +2097,33 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		u64 hash_len;
 		int type;
 
+		//权限确认
 		err = may_lookup(nd);
 		if (err)
 			return err;
 
+		//计算本层name的hashcode(即hash_len)
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
+		//区分'.','..'这种特殊名称
 		if (name[0] == '.') switch (hashlen_len(hash_len)) {
 			case 2:
+				//本层名称为'..'
 				if (name[1] == '.') {
 					type = LAST_DOTDOT;
 					nd->flags |= LOOKUP_JUMPED;
 				}
 				break;
 			case 1:
+				//本层名称为'.'
 				type = LAST_DOT;
 		}
 		if (likely(type == LAST_NORM)) {
+			//普通文件情况（非'..','.'这种）
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
+			//如果目录需要执行d_hash,则更新this
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
 				err = parent->d_op->d_hash(parent, &this);
@@ -2124,17 +2134,20 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 			}
 		}
 
+		//设置hash,len,name,type(即name哈希值，name长度，目录或文件名称，文件类型）
 		nd->last.hash_len = hash_len;
 		nd->last.name = name;
 		nd->last_type = type;
 
+		//跳到本层文件或目录结尾
 		name += hashlen_len(hash_len);
 		if (!*name)
-			goto OK;
+			goto OK;//分析结束,到达路径尾
 		/*
 		 * If it wasn't NUL, we know it was '/'. Skip that
 		 * slash, and continue until no more slashes.
 		 */
+		//跳过目录分隔符
 		do {
 			name++;
 		} while (unlikely(*name == '/'));
@@ -2184,6 +2197,7 @@ OK:
 /* must be paired with terminate_walk() */
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
+	//取路径
 	const char *s = nd->name->name;
 
 	if (!*s)
@@ -2217,12 +2231,13 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	nd->m_seq = read_seqbegin(&mount_lock);
 	if (*s == '/') {
-		//文件名称给出的是绝对路径
+		//文件名称给出的是绝对路径，设置nd->root为当前fs->root
 		set_root(nd);
 		if (likely(!nd_jump_root(nd)))
 			return s;
 		return ERR_PTR(-ECHILD);
 	} else if (nd->dfd == AT_FDCWD) {
+		//文件路径给出为相对路径，且相对于当前工作目录
 		if (flags & LOOKUP_RCU) {
 			struct fs_struct *fs = current->fs;
 			unsigned seq;
@@ -2234,26 +2249,29 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
 		} else {
-			//取当前工作目录
+			//取当前工作目录，设置nd->path
 			get_fs_pwd(current->fs, &nd->path);
 			nd->inode = nd->path.dentry->d_inode;
 		}
 		return s;
 	} else {
+		//文件路径给出为相对路径，相不是相对当前工作目录
 		/* Caller must check execute permissions on the starting path component */
-		struct fd f = fdget_raw(nd->dfd);
+		struct fd f = fdget_raw(nd->dfd);//对相对的目录fd
 		struct dentry *dentry;
 
 		if (!f.file)
 			return ERR_PTR(-EBADF);
 
-		dentry = f.file->f_path.dentry;
+		dentry = f.file->f_path.dentry;//取fd对应的目录项
 
+		//检查dentry是否为目录
 		if (*s && unlikely(!d_can_lookup(dentry))) {
 			fdput(f);
 			return ERR_PTR(-ENOTDIR);
 		}
 
+		//设置nd路径
 		nd->path = f.file->f_path;
 		if (flags & LOOKUP_RCU) {
 			nd->inode = nd->path.dentry->d_inode;
@@ -2263,6 +2281,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->inode = nd->path.dentry->d_inode;
 		}
 		fdput(f);
+		//返回相对的文件或路径名
 		return s;
 	}
 }
@@ -2320,6 +2339,7 @@ static int handle_lookup_down(struct nameidata *nd)
 /* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
+	//获取相对于nd->path或nd->root的路径或文件名
 	const char *s = path_init(nd, flags);
 	int err;
 
@@ -2359,7 +2379,9 @@ static int filename_lookup(int dfd, struct filename *name, unsigned flags,
 		nd.root = *root;
 		flags |= LOOKUP_ROOT;
 	}
+	//设置当前进程的nameidata(设置要查询的路径及其相对的目录fd)
 	set_nameidata(&nd, dfd, name);
+	//确认(dfd,name)对应的path
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))
 		retval = path_lookupat(&nd, flags, path);
@@ -2617,6 +2639,7 @@ int path_pts(struct path *path)
 }
 #endif
 
+//name 目录字符串，获得其对应的path
 int user_path_at_empty(int dfd, const char __user *name, unsigned flags,
 		 struct path *path, int *empty)
 {

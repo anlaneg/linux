@@ -69,6 +69,7 @@ extern unsigned int __pure full_name_hash(const void *salt, const char *, unsign
  * A hash_len is a u64 with the hash of a string in the low
  * half and the length in the high half.
  */
+//这一组函数，在一个u64中包含了name的hash,也包含了name的长度
 #define hashlen_hash(hashlen) ((u32)(hashlen))
 #define hashlen_len(hashlen)  ((u32)((hashlen) >> 32))
 #define hashlen_create(hash, len) ((u64)(len)<<32 | (u32)(hash))

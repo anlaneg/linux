@@ -59,6 +59,7 @@ static inline int user_path_at(int dfd, const char __user *name, unsigned flags,
 
 static inline int user_path(const char __user *name, struct path *path)
 {
+	//在当前工作目录，查找name路径
 	return user_path_at_empty(AT_FDCWD, name, LOOKUP_FOLLOW, path, NULL);
 }
 
