@@ -1248,7 +1248,7 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 }
 EXPORT_SYMBOL(mount_single);
 
-//实现文件系统挂载，返回目录项
+//实现文件系统挂载，返回被挂载设备的根dentry
 struct dentry *
 mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 {

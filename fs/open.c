@@ -1071,11 +1071,13 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 		//申请fd成功，打开相应的file
 		struct file *f = do_filp_open(dfd, tmp, &op);
 		if (IS_ERR(f)) {
+			//打开文件失败，归还fd
 			put_unused_fd(fd);
 			fd = PTR_ERR(f);
 		} else {
 			//通知打开事件
 			fsnotify_open(f);
+			//实现fd与file之间的映射
 			fd_install(fd, f);
 		}
 	}
@@ -1089,6 +1091,7 @@ SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;//针对64位系统，强制加上大文件标记
 
+	//在当前工作目录解析filename,并将其打开
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 
@@ -1138,6 +1141,7 @@ SYSCALL_DEFINE2(creat, const char __user *, pathname, umode_t, mode)
  * "id" is the POSIX thread ID. We use the
  * files pointer for this..
  */
+//实现file的关闭
 int filp_close(struct file *filp, fl_owner_t id)
 {
 	int retval = 0;
@@ -1147,6 +1151,7 @@ int filp_close(struct file *filp, fl_owner_t id)
 		return 0;
 	}
 
+	//文件关闭时，如果有flush回调，将缓冲区里的内容flush到磁盘
 	if (filp->f_op->flush)
 		retval = filp->f_op->flush(filp, id);
 
@@ -1165,6 +1170,7 @@ EXPORT_SYMBOL(filp_close);
  * releasing the fd. This ensures that one clone task can't release
  * an fd while another clone is opening it.
  */
+//close系统调用实现
 SYSCALL_DEFINE1(close, unsigned int, fd)
 {
 	int retval = __close_fd(current->files, fd);

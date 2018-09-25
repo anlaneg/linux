@@ -479,7 +479,7 @@ static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 		return maxfd;//规范为maxfd
 	if (bitbit > start)
 		start = bitbit;
-	//在open_fds中找到
+	//在open_fds中找到区间在maxfd,start的一个未占用fd
 	return find_next_zero_bit(fdt->open_fds, maxfd, start);
 }
 
@@ -515,7 +515,7 @@ repeat:
 
 	error = expand_files(files, fd);//扩大内存
 	if (error < 0)
-		goto out;
+		goto out;//expand失败
 
 	/*
 	 * If we needed to expand the fs array we
@@ -525,7 +525,7 @@ repeat:
 		goto repeat;
 
 	if (start <= files->next_fd)
-		files->next_fd = fd + 1;
+		files->next_fd = fd + 1;//下次优先尝试fd+1
 
 	//占用对应的fd
 	__set_open_fd(fd, fdt);
@@ -601,7 +601,7 @@ EXPORT_SYMBOL(put_unused_fd);
  * or really bad things will happen.  Normally you want to use
  * fd_install() instead.
  */
-
+//为fd安装其对应的file
 void __fd_install(struct files_struct *files, unsigned int fd,
 		struct file *file)
 {
@@ -622,13 +622,14 @@ void __fd_install(struct files_struct *files, unsigned int fd,
 	smp_rmb();
 	fdt = rcu_dereference_sched(files->fdt);
 	BUG_ON(fdt->fd[fd] != NULL);
+	//设置fd对应的file
 	rcu_assign_pointer(fdt->fd[fd], file);
 	rcu_read_unlock_sched();
 }
 
 void fd_install(unsigned int fd, struct file *file)
 {
-	//将此文件赋给当前进程
+	//实现fd到file之间的映射
 	__fd_install(current->files, fd, file);
 }
 
@@ -637,6 +638,7 @@ EXPORT_SYMBOL(fd_install);
 /*
  * The same warnings as for __alloc_fd()/__fd_install() apply here...
  */
+//通过fd找到file,解除fd与file之间的映射，并对其调用filp_close
 int __close_fd(struct files_struct *files, unsigned fd)
 {
 	struct file *file;

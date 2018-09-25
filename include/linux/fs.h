@@ -85,6 +85,7 @@ typedef int (get_block_t)(struct inode *inode, sector_t iblock,
 typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 			ssize_t bytes, void *private);
 
+//执行权限，写权限，读权限
 #define MAY_EXEC		0x00000001
 #define MAY_WRITE		0x00000002
 #define MAY_READ		0x00000004
@@ -1388,6 +1389,7 @@ struct super_block {
 	const struct fscrypt_operations	*s_cop;
 #endif
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
+	//用于串连某一文件系统的superblock被挂载在哪几个位置
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
 	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
@@ -1732,9 +1734,10 @@ struct iov_iter;
 
 struct file_operations {
 	struct module *owner;//fop所属的module
+	//实现lseek功能
 	loff_t (*llseek) (struct file *, loff_t, int);
-	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//读
-	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//写
+	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//文件读功能
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//文件写功能
 	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的读
 	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的写
 	int (*iterate) (struct file *, struct dir_context *);
@@ -1745,8 +1748,8 @@ struct file_operations {
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
 	int (*open) (struct inode *, struct file *);//文件打开函数
-	int (*flush) (struct file *, fl_owner_t id);
-	int (*release) (struct inode *, struct file *);
+	int (*flush) (struct file *, fl_owner_t id);//close时此回调将被先调用
+	int (*release) (struct inode *, struct file *);//通过release回调释放file
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);

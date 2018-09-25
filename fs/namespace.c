@@ -63,6 +63,7 @@ static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
 static struct hlist_head *mount_hashtable __read_mostly;
+//挂载点hash表
 static struct hlist_head *mountpoint_hashtable __read_mostly;
 static struct kmem_cache *mnt_cache __read_mostly;//挂载点cache
 static DECLARE_RWSEM(namespace_sem);
@@ -89,6 +90,7 @@ static inline struct hlist_head *m_hash(struct vfsmount *mnt, struct dentry *den
 	return &mount_hashtable[tmp & m_hash_mask];
 }
 
+//获取dentry对应的挂载点hash表桶头
 static inline struct hlist_head *mp_hash(struct dentry *dentry)
 {
 	unsigned long tmp = ((unsigned long)dentry / L1_CACHE_BYTES);
@@ -175,8 +177,10 @@ static void drop_mountpoint(struct fs_pin *p)
 	mntput(&m->mnt);
 }
 
+//申请并初始化mount
 static struct mount *alloc_vfsmnt(const char *name)
 {
+	//申请mnt节点
 	struct mount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
 	if (mnt) {
 		int err;
@@ -649,6 +653,7 @@ struct vfsmount *lookup_mnt(const struct path *path)
 	rcu_read_lock();
 	do {
 		seq = read_seqbegin(&mount_lock);
+		//检查path->mnt,path->dentry是否存在子挂载，如果存在，返回其对应的挂载信息
 		child_mnt = __lookup_mnt(path->mnt, path->dentry);
 		m = child_mnt ? &child_mnt->mnt : NULL;
 	} while (!legitimize_mnt(m, seq));
@@ -691,13 +696,16 @@ out:
 	return is_covered;
 }
 
+//查询dentry对应的mountpoint信息，如果不存在，则返回NULL
 static struct mountpoint *lookup_mountpoint(struct dentry *dentry)
 {
 	struct hlist_head *chain = mp_hash(dentry);
 	struct mountpoint *mp;
 
+	//遍历每个挂载点信息
 	hlist_for_each_entry(mp, chain, m_hash) {
 		if (mp->m_dentry == dentry) {
+			//如果两者dentry指针相同，则增加引用计数
 			/* might be worth a WARN_ON() */
 			if (d_unlinked(dentry))
 				return ERR_PTR(-ENOENT);
@@ -708,6 +716,7 @@ static struct mountpoint *lookup_mountpoint(struct dentry *dentry)
 	return NULL;
 }
 
+//获取dentry对应的mountpoint,如果存在则返回，如果不存在，则创建
 static struct mountpoint *get_mountpoint(struct dentry *dentry)
 {
 	struct mountpoint *mp, *new = NULL;
@@ -722,6 +731,7 @@ mountpoint:
 			goto done;
 	}
 
+	//如果没有查询到mountpoint,则创建一个针对dentry的mountpoint,并加入到hash表中
 	if (!new)
 		new = kmalloc(sizeof(struct mountpoint), GFP_KERNEL);
 	if (!new)
@@ -954,7 +964,7 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (!type)
 		return ERR_PTR(-ENODEV);
 
-	//
+	//申请并初始化mount
 	mnt = alloc_vfsmnt(name);
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
@@ -962,8 +972,10 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	if (flags & SB_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
+	//挂载指定文件系统，返回其对应的根目录
 	root = mount_fs(type, flags, name, data);
 	if (IS_ERR(root)) {
+		//返回文件系统根节点失败，挂载失败
 		mnt_free_id(mnt);
 		free_vfsmnt(mnt);
 		return ERR_CAST(root);
@@ -975,6 +987,7 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 	mnt->mnt_mountpoint = mnt->mnt.mnt_root;
 	mnt->mnt_parent = mnt;
 	lock_mount_hash();
+	//记录挂载情况
 	list_add_tail(&mnt->mnt_instance, &root->d_sb->s_mounts);
 	unlock_mount_hash();
 	return &mnt->mnt;
@@ -2024,6 +2037,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 	return err;
 }
 
+//获取path的挂载点信息
 static struct mountpoint *lock_mount(struct path *path)
 {
 	struct vfsmount *mnt;
@@ -2031,12 +2045,14 @@ static struct mountpoint *lock_mount(struct path *path)
 retry:
 	inode_lock(dentry->d_inode);
 	if (unlikely(cant_mount(dentry))) {
+		//不能mount,返回失败
 		inode_unlock(dentry->d_inode);
 		return ERR_PTR(-ENOENT);
 	}
 	namespace_lock();
-	mnt = lookup_mnt(path);
+	mnt = lookup_mnt(path);//检查path下是否有mnt信息
 	if (likely(!mnt)) {
+		//没有发现此path上对应的mnt
 		struct mountpoint *mp = get_mountpoint(dentry);
 		if (IS_ERR(mp)) {
 			namespace_unlock();
@@ -2045,10 +2061,12 @@ retry:
 		}
 		return mp;
 	}
+	//如果path上有mnt,则替换path的dentry为mnt的根dentry
 	namespace_unlock();
 	inode_unlock(path->dentry->d_inode);
 	path_put(path);
 	path->mnt = mnt;
+	//替换为mnt->mnt_root(被挂载设备的根dentry)
 	dentry = path->dentry = dget(mnt->mnt_root);
 	goto retry;
 }
@@ -2460,8 +2478,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!type)
 		return -ENODEV;
 
-	//将设备name按type文件系统进行挂载
-	//构造mnt,挂载type文件系统
+	//将设备name按type文件系统进行挂载，构造并返回mnt信息
 	mnt = vfs_kern_mount(type, sb_flags, name, data);
 	if (!IS_ERR(mnt) && (type->fs_flags & FS_HAS_SUBTYPE) &&
 	    !mnt->mnt_sb->s_subtype)

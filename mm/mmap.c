@@ -1540,6 +1540,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	return addr;
 }
 
+//实现mmap
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			      unsigned long prot, unsigned long flags,
 			      unsigned long fd, unsigned long pgoff)
@@ -1549,10 +1550,11 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 
 	if (!(flags & MAP_ANONYMOUS)) {
 		audit_mmap_fd(fd, flags);
-		file = fget(fd);
+		file = fget(fd);//由fd获得file
 		if (!file)
 			return -EBADF;
 		if (is_file_hugepages(file))
+			//是否为大页fs的文件
 			len = ALIGN(len, huge_page_size(hstate_file(file)));
 		retval = -EINVAL;
 		if (unlikely(flags & MAP_HUGETLB && !is_file_hugepages(file)))

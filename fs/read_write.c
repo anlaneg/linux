@@ -292,7 +292,9 @@ loff_t vfs_llseek(struct file *file, loff_t offset, int whence)
 {
 	loff_t (*fn)(struct file *, loff_t, int);
 
+	//默认是不支持llseek函数的
 	fn = no_llseek;
+	//如果文件支持lseek且有llseek回调，则调用llseek回调
 	if (file->f_mode & FMODE_LSEEK) {
 		if (file->f_op->llseek)
 			fn = file->f_op->llseek;
@@ -301,6 +303,7 @@ loff_t vfs_llseek(struct file *file, loff_t offset, int whence)
 }
 EXPORT_SYMBOL(vfs_llseek);
 
+//调用vfs_llseek完成lseek函数
 off_t ksys_lseek(unsigned int fd, off_t offset, unsigned int whence)
 {
 	off_t retval;
@@ -368,6 +371,7 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 	loff_t pos;
 	int retval = -EINVAL;
 
+	//取此文件对应的inode
 	inode = file_inode(file);
 	if (unlikely((ssize_t) count < 0))
 		return retval;

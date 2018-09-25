@@ -347,6 +347,7 @@ static inline int d_unlinked(const struct dentry *dentry)
 	return d_unhashed(dentry) && !IS_ROOT(dentry);
 }
 
+//检查dentry是否可被mount(可以mount,返回false)
 static inline int cant_mount(const struct dentry *dentry)
 {
 	return (dentry->d_flags & DCACHE_CANT_MOUNT);

@@ -26,7 +26,7 @@
 struct fdtable {
 	//最大fd数目（也是当前fd数组的大小）
 	unsigned int max_fds;
-	//记录struct file*的fd数组
+	//记录struct file*的fd数组(每个fd对应一个file)
 	struct file __rcu **fd;      /* current fd array */
 	unsigned long *close_on_exec;
 	unsigned long *open_fds;
@@ -61,7 +61,7 @@ struct files_struct {
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	unsigned int next_fd;
+	unsigned int next_fd;//优先尝试的fd
 	unsigned long close_on_exec_init[1];
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
