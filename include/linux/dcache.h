@@ -93,15 +93,16 @@ struct dentry {
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	//指向父目录项
 	struct dentry *d_parent;	/* parent directory */
-	struct qstr d_name;
+	struct qstr d_name;//此dentry的名称
+	//此dentry对应的inode
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
 					 * negative */
 	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
-	const struct dentry_operations *d_op;//目录项操作集
-	struct super_block *d_sb;	/* The root of the dentry tree */　//超级块指针
+	const struct dentry_operations *d_op;//dentry操作集
+	struct super_block *d_sb;	/* The root of the dentry tree */ //超级块指针
 	unsigned long d_time;		/* used by d_revalidate */
 	void *d_fsdata;			/* fs-specific data */
 

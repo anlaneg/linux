@@ -148,7 +148,7 @@ struct file *alloc_empty_file(int flags, const struct cred *cred)
 			goto over;
 	}
 
-	//申请空的file
+	//申请空的file（设置f的flags,mode)
 	f = __alloc_file(flags, cred);
 	if (!IS_ERR(f))
 		percpu_counter_inc(&nr_files);

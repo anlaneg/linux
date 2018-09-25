@@ -1404,12 +1404,15 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 	uid_t i_uid;
 	gid_t i_gid;
 
+	//获取ino对应的inode
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
+	//如果inode非new状态，则直接返回
 	if (!(inode->i_state & I_NEW))
 		return inode;
 
+	//inode处于new状态，自文件系统获取数据并填充
 	ei = EXT2_I(inode);
 	ei->i_block_alloc_info = NULL;
 
@@ -1485,6 +1488,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 		ei->i_data[n] = raw_inode->i_block[n];
 
 	if (S_ISREG(inode->i_mode)) {
+		//对于普通文件，设置其对应的i_op,i_fop
 		ext2_set_file_ops(inode);
 	} else if (S_ISDIR(inode->i_mode)) {
 		//ext2 目录 inode　操作集
@@ -1495,6 +1499,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 		else
 			inode->i_mapping->a_ops = &ext2_aops;
 	} else if (S_ISLNK(inode->i_mode)) {
+		//针对link文件，设置其i_op
 		if (ext2_inode_is_fast_symlink(inode)) {
 			inode->i_link = (char *)ei->i_data;
 			inode->i_op = &ext2_fast_symlink_inode_operations;
@@ -1509,6 +1514,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 				inode->i_mapping->a_ops = &ext2_aops;
 		}
 	} else {
+		//其它sepcial文件，设置i_op
 		inode->i_op = &ext2_special_inode_operations;
 		if (raw_inode->i_block[0])
 			init_special_inode(inode, inode->i_mode,

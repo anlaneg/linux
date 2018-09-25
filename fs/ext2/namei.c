@@ -61,9 +61,11 @@ static struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry, uns
 	if (dentry->d_name.len > EXT2_NAME_LEN)
 		return ERR_PTR(-ENAMETOOLONG);
 
+	//在目录dir下查询指定名称dentry->d_name的inode编号(ino)
 	ino = ext2_inode_by_name(dir, &dentry->d_name);
 	inode = NULL;
 	if (ino) {
+		//通过ino获取对应的inode
 		inode = ext2_iget(dir->i_sb, ino);
 		if (inode == ERR_PTR(-ESTALE)) {
 			ext2_error(dir->i_sb, __func__,
@@ -72,6 +74,7 @@ static struct dentry *ext2_lookup(struct inode * dir, struct dentry *dentry, uns
 			return ERR_PTR(-EIO);
 		}
 	}
+
 	return d_splice_alias(inode, dentry);
 }
 

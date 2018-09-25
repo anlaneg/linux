@@ -602,8 +602,10 @@ struct ext2_dir_entry {
 struct ext2_dir_entry_2 {
 	__le32	inode;			/* Inode number */
 	__le16	rec_len;		/* Directory entry length */
+	//文件名称长度
 	__u8	name_len;		/* Name length */
 	__u8	file_type;
+	//文件名称
 	char	name[];			/* File name, up to EXT2_NAME_LEN */
 };
 

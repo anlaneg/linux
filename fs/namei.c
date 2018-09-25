@@ -1508,7 +1508,7 @@ static int follow_dotdot(struct nameidata *nd)
 			break;
 	}
 	follow_mount(&nd->path);
-	nd->inode = nd->path.dentry->d_inode;
+	nd->inode = nd->path.dentry->d_inode;//更新inode(路径已上退，inode上退）
 	return 0;
 }
 
@@ -1571,6 +1571,7 @@ static int lookup_fast(struct nameidata *nd,
 		       unsigned *seqp)
 {
 	struct vfsmount *mnt = nd->path.mnt;
+	//dentry指出当前nd分析路径对应的dentry,parent指出分析位置的上一层dentry
 	struct dentry *dentry, *parent = nd->path.dentry;
 	int status = 1;
 	int err;
@@ -1629,8 +1630,10 @@ static int lookup_fast(struct nameidata *nd,
 			/* we'd been told to redo it in non-rcu mode */
 			status = d_revalidate(dentry, nd->flags);
 	} else {
+		//在parent中查找当前分析的文件或目录对应的dentry
 		dentry = __d_lookup(parent, &nd->last);
 		if (unlikely(!dentry))
+			//没有查找到，返回0
 			return 0;
 		status = d_revalidate(dentry, nd->flags);
 	}
@@ -1645,6 +1648,7 @@ static int lookup_fast(struct nameidata *nd,
 		return -ENOENT;
 	}
 
+	//找到对应的dentry,设置path对应的dentry,mnt,inode
 	path->mnt = mnt;
 	path->dentry = dentry;
 	err = follow_managed(path, nd);
@@ -1670,6 +1674,7 @@ again:
 	if (IS_ERR(dentry))
 		return dentry;
 	if (unlikely(!d_in_lookup(dentry))) {
+		//dentry没有in lookup标记，则说明已得到查询结果
 		if (!(flags & LOOKUP_NO_REVAL)) {
 			int error = d_revalidate(dentry, flags);
 			if (unlikely(error <= 0)) {
@@ -1683,6 +1688,7 @@ again:
 			}
 		}
 	} else {
+		//未获得dentry查询结果，调用inode->i_op的lookup函数完成查询
 		old = inode->i_op->lookup(inode, dentry, flags);
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
@@ -1718,6 +1724,7 @@ static inline int may_lookup(struct nameidata *nd)
 	return inode_permission(nd->inode, MAY_EXEC);
 }
 
+//处理'..','.'(对于'.'不需要处理）
 static inline int handle_dots(struct nameidata *nd, int type)
 {
 	if (type == LAST_DOTDOT) {
@@ -1789,6 +1796,7 @@ static inline int step_into(struct nameidata *nd, struct path *path,
 		put_link(nd);
 	if (likely(!d_is_symlink(path->dentry)) ||
 	   !(flags & WALK_FOLLOW || nd->flags & LOOKUP_FOLLOW)) {
+		//非link情况，直接设置inode
 		/* not a symlink or should not follow */
 		path_to_nameidata(path, nd);
 		nd->inode = inode;
@@ -1821,10 +1829,13 @@ static int walk_component(struct nameidata *nd, int flags)
 			put_link(nd);
 		return err;
 	}
+	//查找当前分析位置的文件对应的dentry,inode
 	err = lookup_fast(nd, &path, &inode, &seq);
 	if (unlikely(err <= 0)) {
 		if (err < 0)
-			return err;
+			return err;//查找时出错，返回
+		//err为０时表示未查找到，传入父节点对应的dentry(nd->path.dentry)
+		//查找nd->last对应的dentry
 		path.dentry = lookup_slow(&nd->last, nd->path.dentry,
 					  nd->flags);
 		if (IS_ERR(path.dentry))
@@ -1841,6 +1852,7 @@ static int walk_component(struct nameidata *nd, int flags)
 		}
 
 		seq = 0;	/* we are already out of RCU mode */
+		//取此path.dentry对应的inode
 		inode = d_backing_inode(path.dentry);
 	}
 
@@ -2086,6 +2098,7 @@ static inline u64 hash_name(const void *salt, const char *name)
  * Returns 0 and nd will have valid dentry and mnt on success.
  * Returns error and drops reference to input namei data on failure.
  */
+//名称解析，查找对应的dentry,inode
 static int link_path_walk(const char *name, struct nameidata *nd)
 {
 	int err;
@@ -2177,6 +2190,8 @@ OK:
 			/* last component of nested symlink */
 			err = walk_component(nd, WALK_FOLLOW);
 		} else {
+			//name层次之后还有目录或者文件（即分析的是路径中间的目录）
+			//分析本层的目录名，并更新对应的dentry,inode
 			/* not the last component */
 			err = walk_component(nd, WALK_FOLLOW | WALK_MORE);
 		}
@@ -2265,6 +2280,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		} else {
 			//取当前工作目录，设置nd->path
 			get_fs_pwd(current->fs, &nd->path);
+			//设置nd的inode为path路径所对应的inode
 			nd->inode = nd->path.dentry->d_inode;
 		}
 		return s;
@@ -3569,6 +3585,7 @@ static int do_o_path(struct nameidata *nd, unsigned flags, struct file *file)
 	return error;
 }
 
+//打开nd指定的文件
 static struct file *path_openat(struct nameidata *nd,
 			const struct open_flags *op, unsigned flags)
 {
