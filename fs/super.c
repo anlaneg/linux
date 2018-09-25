@@ -552,6 +552,7 @@ EXPORT_SYMBOL(sget_userns);
  *	@flags:	  mount flags
  *	@data:	  argument to each of them
  */
+//查找或者创建一个superblock
 struct super_block *sget(struct file_system_type *type,
 			int (*test)(struct super_block *,void *),
 			int (*set)(struct super_block *,void *),
@@ -1159,6 +1160,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		s->s_mode = mode;
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		sb_set_blocksize(s, block_size(bdev));
+		//填充超级块
 		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
