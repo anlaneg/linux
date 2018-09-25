@@ -29,7 +29,7 @@ enum {
 };
 
 struct iov_iter {
-	int type;
+	int type;//读操作或写操作
 	size_t iov_offset;
 	size_t count;
 	union {

@@ -14,7 +14,7 @@ enum { MAX_NESTED_LINKS = 8 };
 /*
  * Type of the last component on LOOKUP_PARENT
  */
-enum {LAST_NORM, LAST_ROOT, LAST_DOT, LAST_DOTDOT, LAST_BIND};
+enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, LAST_DOTDOT/*名称为'..'的文件*/, LAST_BIND};
 
 /*
  * The bitmask for a lookup event:
@@ -59,7 +59,7 @@ static inline int user_path_at(int dfd, const char __user *name, unsigned flags,
 
 static inline int user_path(const char __user *name, struct path *path)
 {
-	//在当前工作目录，查找name路径
+	//如果为相对地址，则依据当前工作路径进行路径查找（name为路径名称,path为出参，由name解析而成）
 	return user_path_at_empty(AT_FDCWD, name, LOOKUP_FOLLOW, path, NULL);
 }
 

@@ -253,6 +253,7 @@ void ida_destroy(struct ida *ida);
  */
 static inline int ida_alloc(struct ida *ida, gfp_t gfp)
 {
+	//申请id号
 	return ida_alloc_range(ida, 0, ~0, gfp);
 }
 

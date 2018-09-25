@@ -37,6 +37,7 @@ struct files_stat_struct files_stat = {
 };
 
 /* SLAB cache for file structures */
+//file结构体缓冲池
 static struct kmem_cache *filp_cachep __read_mostly;
 
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
@@ -147,7 +148,7 @@ struct file *alloc_empty_file(int flags, const struct cred *cred)
 			goto over;
 	}
 
-	//申请空的file
+	//申请空的file（设置f的flags,mode)
 	f = __alloc_file(flags, cred);
 	if (!IS_ERR(f))
 		percpu_counter_inc(&nr_files);

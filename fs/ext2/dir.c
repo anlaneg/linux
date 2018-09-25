@@ -220,6 +220,7 @@ fail:
  *
  * len <= EXT2_NAME_LEN and de != NULL are guaranteed by caller.
  */
+//检查de所对应的文件名是否name指出的文件名相等
 static inline int ext2_match (int len, const char * const name,
 					struct ext2_dir_entry_2 * de)
 {
@@ -233,6 +234,7 @@ static inline int ext2_match (int len, const char * const name,
 /*
  * p is at least 6 bytes before the end of page
  */
+//取下一个de
 static inline ext2_dirent *ext2_next_entry(ext2_dirent *p)
 {
 	return (ext2_dirent *)((char *)p +
@@ -363,6 +365,7 @@ ext2_readdir(struct file *file, struct dir_context *ctx)
 struct ext2_dir_entry_2 *ext2_find_entry (struct inode *dir,
 			const struct qstr *child, struct page **res_page)
 {
+	//文件名称，文件名称长度
 	const char *name = child->name;
 	int namelen = child->len;
 	unsigned reclen = EXT2_DIR_REC_LEN(namelen);
@@ -392,13 +395,16 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode *dir,
 			kaddr += ext2_last_byte(dir, n) - reclen;
 			while ((char *) de <= kaddr) {
 				if (de->rec_len == 0) {
+					//其下无记录，无法查询，返回NULL
 					ext2_error(dir->i_sb, __func__,
 						"zero-length directory entry");
 					ext2_put_page(page);
 					goto out;
 				}
+				//检查de是否与要查询的name要匹配
 				if (ext2_match (namelen, name, de))
 					goto found;
+				//获取下一个de项
 				de = ext2_next_entry(de);
 			}
 			ext2_put_page(page);
@@ -443,8 +449,10 @@ ino_t ext2_inode_by_name(struct inode *dir, const struct qstr *child)
 	struct ext2_dir_entry_2 *de;
 	struct page *page;
 	
+	//在目录下查找child指定子文件
 	de = ext2_find_entry (dir, child, &page);
 	if (de) {
+		//返回此文件对应的inode号
 		res = le32_to_cpu(de->inode);
 		ext2_put_page(page);
 	}

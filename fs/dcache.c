@@ -94,8 +94,10 @@ EXPORT_SYMBOL(slash_name);
 
 static unsigned int d_hash_shift __read_mostly;
 
+//缓存的dentry的hash表
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
 
+//利用hash对应的对应的桶
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
 {
 	return dentry_hashtable + (hash >> d_hash_shift);
@@ -1603,7 +1605,7 @@ EXPORT_SYMBOL(d_invalidate);
  * available. On a success the dentry is returned. The name passed in is
  * copied and the copy passed in may be reused after this call.
  */
- 
+//构造一个dcache实体
 struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 {
 	struct external_name *ext = NULL;
@@ -1640,6 +1642,7 @@ struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 		dname = dentry->d_iname;
 	}	
 
+	//设置dentry对应的目录名称
 	dentry->d_name.len = name->len;
 	dentry->d_name.hash = name->hash;
 	memcpy(dname, name->name, name->len);
@@ -2092,6 +2095,7 @@ static inline bool d_same_name(const struct dentry *dentry,
 				const struct qstr *name)
 {
 	if (likely(!(parent->d_flags & DCACHE_OP_COMPARE))) {
+		//比较名称是否相等
 		if (dentry->d_name.len != name->len)
 			return false;
 		return dentry_cmp(dentry, name->name, name->len) == 0;
@@ -2255,6 +2259,7 @@ EXPORT_SYMBOL(d_lookup);
  *
  * __d_lookup callers must be commented.
  */
+//在parent下查找name对应的dentry
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
@@ -2285,20 +2290,26 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 	 */
 	rcu_read_lock();
 	
+	//遍历b指出的hash链中挂载的每一个dentry
 	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
 
+		//跳过hash不相等的
 		if (dentry->d_name.hash != hash)
 			continue;
 
 		spin_lock(&dentry->d_lock);
+		//跳过非同一父节点的
 		if (dentry->d_parent != parent)
 			goto next;
+		//是否已自hash表中移除？？
 		if (d_unhashed(dentry))
 			goto next;
 
+		//如果dentry与name不相等，则跳过
 		if (!d_same_name(dentry, parent, name))
 			goto next;
 
+		//查找成功
 		dentry->d_lockref.count++;
 		found = dentry;
 		spin_unlock(&dentry->d_lock);
@@ -2422,7 +2433,7 @@ static void d_wait_lookup(struct dentry *dentry)
 {
 	if (d_in_lookup(dentry)) {
 		DECLARE_WAITQUEUE(wait, current);
-		add_wait_queue(dentry->d_wait, &wait);
+		add_wait_queue(dentry->d_wait, &wait);//将自身挂接在dentry->d_wait队列上，等待检查结果
 		do {
 			set_current_state(TASK_UNINTERRUPTIBLE);
 			spin_unlock(&dentry->d_lock);
@@ -2443,6 +2454,7 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	struct dentry *dentry;
 	unsigned seq, r_seq, d_seq;
 
+	//申请dentry节点失败
 	if (unlikely(!new))
 		return ERR_PTR(-ENOMEM);
 
@@ -2452,6 +2464,7 @@ retry:
 	r_seq = read_seqbegin(&rename_lock);
 	dentry = __d_lookup_rcu(parent, name, &d_seq);
 	if (unlikely(dentry)) {
+		//name对应的dentry已存在，释放掉new,并返回查询到的dentry
 		if (!lockref_get_not_dead(&dentry->d_lockref)) {
 			rcu_read_unlock();
 			goto retry;
@@ -2488,6 +2501,8 @@ retry:
 	 * we unlock the chain.  All fields are stable in everything
 	 * we encounter.
 	 */
+	//dcache哈希表中不存在，首先in_lookup_hashtable链上是否已存在待查找的dentry,
+	//如果存在，等待其查询结果，如果不存在，则新建并返回
 	hlist_bl_for_each_entry(dentry, node, b, d_u.d_in_lookup_hash) {
 		if (dentry->d_name.hash != hash)
 			continue;
@@ -2508,13 +2523,14 @@ retry:
 		 * wait for them to finish
 		 */
 		spin_lock(&dentry->d_lock);
-		d_wait_lookup(dentry);
+		d_wait_lookup(dentry);//已存在对dentry的查询，等待查询结果
 		/*
 		 * it's not in-lookup anymore; in principle we should repeat
 		 * everything from dcache lookup, but it's likely to be what
 		 * d_lookup() would've found anyway.  If it is, just return it;
 		 * otherwise we really have to repeat the whole thing.
 		 */
+		//完成dentry的查询等待，提取查询结果
 		if (unlikely(dentry->d_name.hash != hash))
 			goto mismatch;
 		if (unlikely(dentry->d_parent != parent))
@@ -2529,6 +2545,7 @@ retry:
 		return dentry;
 	}
 	rcu_read_unlock();
+	//将new加入到b中，表明new正在被查找,并返回new,此时d_flags上会有DCACHE_PAR_LOOKUP标记
 	/* we can't take ->d_lock here; it's OK, though. */
 	new->d_flags |= DCACHE_PAR_LOOKUP;
 	new->d_wait = wq;

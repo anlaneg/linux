@@ -55,6 +55,7 @@
 
 static unsigned int i_hash_mask __read_mostly;
 static unsigned int i_hash_shift __read_mostly;
+//inode哈希表
 static struct hlist_head *inode_hashtable __read_mostly;
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
 
@@ -829,12 +830,14 @@ static struct inode *find_inode_fast(struct super_block *sb,
 
 repeat:
 	hlist_for_each_entry(inode, head, i_hash) {
-		//跳过编号与superblock不相等的inode
+		//跳过编号不同的inode
 		if (inode->i_ino != ino)
 			continue;
+		//跳过超级块不同的inode
 		if (inode->i_sb != sb)
 			continue;
 		spin_lock(&inode->i_lock);
+		//inode状态检查
 		if (inode->i_state & (I_FREEING|I_WILL_FREE)) {
 			__wait_on_freeing_inode(inode);
 			goto repeat;
@@ -843,6 +846,7 @@ repeat:
 			spin_unlock(&inode->i_lock);
 			return ERR_PTR(-ESTALE);
 		}
+		//返回查找到的inode
 		__iget(inode);
 		spin_unlock(&inode->i_lock);
 		return inode;
@@ -1151,6 +1155,7 @@ EXPORT_SYMBOL(iget5_locked);
  * hashed, and with the I_NEW flag set.  The file system gets to fill it in
  * before unlocking it via unlock_new_inode().
  */
+//通过ino获得其对应的inode
 struct inode *iget_locked(struct super_block *sb, unsigned long ino)
 {
 	//找到合适的hash桶
@@ -1158,6 +1163,7 @@ struct inode *iget_locked(struct super_block *sb, unsigned long ino)
 	struct inode *inode;
 again:
 	spin_lock(&inode_hash_lock);
+	//尝试通过ino在inode_hashtable表中直接查找inode
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
 	if (inode) {
@@ -1171,15 +1177,19 @@ again:
 		return inode;
 	}
 
-	//申请inode
+	//未在inode_hashtable中查找到inode,现申请一个inode
 	inode = alloc_inode(sb);
 	if (inode) {
 		struct inode *old;
 
+		//加锁再查询一遍，如仍未查询到，则填充inode并插入
+		//这个实现并不好看，是否应改成，先查询，如果查询到，则解锁
+		//如果未查询到，再填充并插入。再解锁。（避免两次加锁＋查询）
 		spin_lock(&inode_hash_lock);
 		/* We released the lock, so.. */
 		old = find_inode_fast(sb, head, ino);
 		if (!old) {
+			//仍没有查询到，填充inode并插入到inode_hashtable哈希表
 			inode->i_ino = ino;
 			spin_lock(&inode->i_lock);
 			inode->i_state = I_NEW;

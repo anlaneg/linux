@@ -34,7 +34,7 @@ struct mountpoint {
 struct mount {
 	struct hlist_node mnt_hash;
 	struct mount *mnt_parent;
-	struct dentry *mnt_mountpoint;
+	struct dentry *mnt_mountpoint;//被挂载文件系统tree的根
 	struct vfsmount mnt;
 	union {
 		struct rcu_head mnt_rcu;

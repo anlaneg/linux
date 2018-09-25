@@ -195,6 +195,7 @@ static void destroy_unused_super(struct super_block *s)
  *	Allocates and initializes a new &struct super_block.  alloc_super()
  *	returns a pointer new superblock or %NULL if allocation had failed.
  */
+//申请超级块
 static struct super_block *alloc_super(struct file_system_type *type, int flags,
 				       struct user_namespace *user_ns)
 {
@@ -517,6 +518,7 @@ retry:
 			return old;
 		}
 	}
+	//无超级块，则申请超级块
 	if (!s) {
 		spin_unlock(&sb_lock);
 		s = alloc_super(type, (flags & ~SB_SUBMOUNT), user_ns);
@@ -535,7 +537,7 @@ retry:
 	s->s_type = type;
 	strlcpy(s->s_id, type->name, sizeof(s->s_id));
 	list_add_tail(&s->s_list, &super_blocks);//将s串连到super_blocks上
-	hlist_add_head(&s->s_instances, &type->fs_supers);
+	hlist_add_head(&s->s_instances, &type->fs_supers);//将超级块加入到type->fs_supers
 	spin_unlock(&sb_lock);
 	get_filesystem(type);
 	register_shrinker_prepared(&s->s_shrink);
@@ -1246,6 +1248,7 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 }
 EXPORT_SYMBOL(mount_single);
 
+//实现文件系统挂载，返回目录项
 struct dentry *
 mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 {
@@ -1264,7 +1267,7 @@ mount_fs(struct file_system_type *type, int flags, const char *name, void *data)
 			goto out_free_secdata;
 	}
 
-	//调用对应文件系统的mount函数，实现对文件系统的挂载，挂载点为name
+	//调用对应文件系统的mount函数，实现对文件系统的挂载，挂载点为name，返回的root为文件系统根目录
 	root = type->mount(type, flags, name, data);
 	if (IS_ERR(root)) {
 		error = PTR_ERR(root);

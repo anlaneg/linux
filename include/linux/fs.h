@@ -303,8 +303,8 @@ enum rw_hint {
 #define IOCB_NOWAIT		(1 << 7)
 
 struct kiocb {
-	struct file		*ki_filp;
-	loff_t			ki_pos;
+	struct file		*ki_filp;//要读写的文件
+	loff_t			ki_pos;//读写的偏移量
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
 	int			ki_flags;
@@ -887,7 +887,10 @@ struct file {
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
 	struct path		f_path;//文件路径
-	struct inode		*f_inode;	/* cached value */
+	struct inode		*f_inode;	/* cached value */ //文件对应的inode
+	//kernel向用户态展示的是fd,当用户态通过系统调用传递fd到kernel后，kernel将其转换为file
+	//通过file_operations来实现各底层差异.
+	//file的f_op取值一般在file open时来源于inode->i_fop成员
 	const struct file_operations	*f_op;//文件操作对应的函数集（例如读写）
 
 	/*
@@ -1362,7 +1365,7 @@ struct sb_writers {
 struct super_block {
 	struct list_head	s_list;		/* Keep this first */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
-	unsigned char		s_blocksize_bits;
+	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
 	unsigned long		s_blocksize;//文件系统的块大小
 	loff_t			s_maxbytes;	/* Max file size */ //文件系统支持的最大文件大小
 	struct file_system_type	*s_type;//属于那种文件系统
@@ -1728,7 +1731,7 @@ struct block_device_operations;
 struct iov_iter;
 
 struct file_operations {
-	struct module *owner;
+	struct module *owner;//fop所属的module
 	loff_t (*llseek) (struct file *, loff_t, int);
 	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//读
 	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//写
@@ -1741,7 +1744,7 @@ struct file_operations {
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
-	int (*open) (struct inode *, struct file *);//文件打开
+	int (*open) (struct inode *, struct file *);//文件打开函数
 	int (*flush) (struct file *, fl_owner_t id);
 	int (*release) (struct inode *, struct file *);
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
@@ -1766,9 +1769,11 @@ struct file_operations {
 			u64);
 	int (*dedupe_file_range)(struct file *, loff_t, struct file *, loff_t,
 			u64);
+	int (*fadvise)(struct file *, loff_t, loff_t, int);
 } __randomize_layout;
 
 struct inode_operations {
+	//在inode*下查询名称为struct dentry*的dentry,最后一个参数为flags
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
 	int (*permission) (struct inode *, int);
@@ -1798,18 +1803,21 @@ struct inode_operations {
 	int (*set_acl)(struct inode *, struct posix_acl *, int);
 } ____cacheline_aligned;
 
+//调用file的操作集read_iter
 static inline ssize_t call_read_iter(struct file *file, struct kiocb *kio,
 				     struct iov_iter *iter)
 {
 	return file->f_op->read_iter(kio, iter);
 }
 
+//调用file的操作函数write_iter
 static inline ssize_t call_write_iter(struct file *file, struct kiocb *kio,
 				      struct iov_iter *iter)
 {
 	return file->f_op->write_iter(kio, iter);
 }
 
+//调用file的操作函数mmap
 static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	return file->f_op->mmap(file, vma);
@@ -2043,6 +2051,7 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 #define I_DIRTY_DATASYNC	(1 << 1)
 #define I_DIRTY_PAGES		(1 << 2)
 #define __I_NEW			3
+//新增的inode处于此状态
 #define I_NEW			(1 << __I_NEW)
 #define I_WILL_FREE		(1 << 4)
 #define I_FREEING		(1 << 5)
@@ -2124,7 +2133,7 @@ struct file_system_type {
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
 	struct file_system_type * next;//用于将文件系统串成链表
-	struct hlist_head fs_supers;//已被实际的super_block统一挂在这个链上
+	struct hlist_head fs_supers;//已被实例化的super_block统一挂在这个链上
 
 	struct lock_class_key s_lock_key;
 	struct lock_class_key s_umount_key;
@@ -2200,6 +2209,7 @@ mount_pseudo(struct file_system_type *fs_type, char *name,
 }
 
 /* Alas, no aliases. Too much hassle with bringing module.h everywhere */
+//增加对fops所属owner模块的引用，防止fops释放
 #define fops_get(fops) \
 	(((fops) && try_module_get((fops)->owner) ? (fops) : NULL))
 #define fops_put(fops) \
@@ -3468,5 +3478,9 @@ static inline bool dir_relax_shared(struct inode *inode)
 
 extern bool path_noexec(const struct path *path);
 extern void inode_nohighmem(struct inode *inode);
+
+/* mm/fadvise.c */
+extern int vfs_fadvise(struct file *file, loff_t offset, loff_t len,
+		       int advice);
 
 #endif /* _LINUX_FS_H */

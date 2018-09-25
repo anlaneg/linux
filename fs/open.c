@@ -713,6 +713,7 @@ SYSCALL_DEFINE3(fchown, unsigned int, fd, uid_t, user, gid_t, group)
 	return ksys_fchown(fd, user, group);
 }
 
+//open函数，inode唯一对应了一个文件
 static int do_dentry_open(struct file *f,
 			  struct inode *inode,
 			  int (*open)(struct inode *, struct file *))
@@ -749,9 +750,10 @@ static int do_dentry_open(struct file *f,
 	if (S_ISREG(inode->i_mode) || S_ISDIR(inode->i_mode))
 		f->f_mode |= FMODE_ATOMIC_POS;
 
-	//设置文件对应的操作集
+	//通过inode的i_fop来设置文件对应的操作集
 	f->f_op = fops_get(inode->i_fop);
 	if (unlikely(WARN_ON(!f->f_op))) {
+		//此indoe无i_fop时，清理并返回
 		error = -ENODEV;
 		goto cleanup_all;
 	}
@@ -767,9 +769,10 @@ static int do_dentry_open(struct file *f,
 	/* normally all 3 are set; ->open() can clear them if needed */
 	f->f_mode |= FMODE_LSEEK | FMODE_PREAD | FMODE_PWRITE;
 	if (!open)
+		//如果未指定open函数，则调用f->f_op->open函数
 		open = f->f_op->open;
 	if (open) {
-		error = open(inode, f);
+		error = open(inode, f);//调用open完成文件打开
 		if (error)
 			goto cleanup_all;
 	}
@@ -878,6 +881,7 @@ EXPORT_SYMBOL(file_path);
 int vfs_open(const struct path *path, struct file *file)
 {
 	file->f_path = *path;
+	//通过path->dentry获取到其对应的inode
 	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
 }
 

@@ -413,11 +413,11 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 ssize_t __vfs_read(struct file *file, char __user *buf, size_t count,
 		   loff_t *pos)
 {
-	//通过file的f_op的read函数进行读取
+	//如果有read回调，则通过file的f_op的read函数进行读取
 	if (file->f_op->read)
 		return file->f_op->read(file, buf, count, pos);
 	else if (file->f_op->read_iter)
-		//通过file的f_op的read_iter函数进行读取
+		//如果有read_iter（例如ext2),则通过file的f_op的read_iter函数进行读取
 		return new_sync_read(file, buf, count, pos);
 	else
 		return -EINVAL;
@@ -455,6 +455,7 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 	if (!ret) {
 		if (count > MAX_RW_COUNT)
 			count =  MAX_RW_COUNT;
+		//调用文件系统层面，实现文件读取
 		ret = __vfs_read(file, buf, count, pos);
 		if (ret > 0) {
 			//通知文件被访问
@@ -485,11 +486,14 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 	return ret;
 }
 
+//调用写回调
 ssize_t __vfs_write(struct file *file, const char __user *p, size_t count,
 		    loff_t *pos)
 {
+	//如果有write回调，则通过file的f_op的write函数进行写入
 	if (file->f_op->write)
 		return file->f_op->write(file, p, count, pos);
+	//如果有write_iter回调，则通过file的f_op的write_iter函数进行写入
 	else if (file->f_op->write_iter)
 		return new_sync_write(file, p, count, pos);
 	else
@@ -537,14 +541,17 @@ ssize_t kernel_write(struct file *file, const void *buf, size_t count,
 }
 EXPORT_SYMBOL(kernel_write);
 
+//向文件file中写入count个字节，（起始位置pos)
 ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
 {
 	ssize_t ret;
 
+	//此文件不容许写
 	if (!(file->f_mode & FMODE_WRITE))
 		return -EBADF;
 	if (!(file->f_mode & FMODE_CAN_WRITE))
 		return -EINVAL;
+
 	if (unlikely(!access_ok(VERIFY_READ, buf, count)))
 		return -EFAULT;
 
@@ -607,7 +614,9 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 	ssize_t ret = -EBADF;
 
 	if (f.file) {
+		//存在fd对应的文件时进入，首先取文件pos
 		loff_t pos = file_pos_read(f.file);
+		//自pos文件读取file,最多读取count字节，并存入到buf中
 		ret = vfs_write(f.file, buf, count, &pos);
 		if (ret >= 0)
 			file_pos_write(f.file, pos);
@@ -617,6 +626,7 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 	return ret;
 }
 
+//实现系统调用write,自fd中尝试最多读取count字节，写入到buf中
 SYSCALL_DEFINE3(write, unsigned int, fd, const char __user *, buf,
 		size_t, count)
 {
