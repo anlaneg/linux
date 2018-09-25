@@ -1362,7 +1362,7 @@ struct sb_writers {
 struct super_block {
 	struct list_head	s_list;		/* Keep this first */
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
-	unsigned char		s_blocksize_bits;
+	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
 	unsigned long		s_blocksize;//文件系统的块大小
 	loff_t			s_maxbytes;	/* Max file size */ //文件系统支持的最大文件大小
 	struct file_system_type	*s_type;//属于那种文件系统
@@ -2124,7 +2124,7 @@ struct file_system_type {
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
 	struct file_system_type * next;//用于将文件系统串成链表
-	struct hlist_head fs_supers;//已被实际的super_block统一挂在这个链上
+	struct hlist_head fs_supers;//已被实例化的super_block统一挂在这个链上
 
 	struct lock_class_key s_lock_key;
 	struct lock_class_key s_umount_key;

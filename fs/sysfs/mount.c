@@ -20,7 +20,7 @@
 static struct kernfs_root *sysfs_root;
 struct kernfs_node *sysfs_root_kn;
 
-//传入当前文件系统指针，文件系统名称
+//传入当前文件系统指针，mount选项，文件系统名称
 static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
@@ -36,7 +36,7 @@ static struct dentry *sysfs_mount(struct file_system_type *fs_type,
 
 	//获取namespace
 	ns = kobj_ns_grab_current(KOBJ_NS_TYPE_NET);
-	//通过kernfs来进行挂载
+	//通过kernfs来进行挂载，返回文件系统根目录
 	root = kernfs_mount_ns(fs_type, flags, sysfs_root,
 				SYSFS_MAGIC, &new_sb, ns);
 	if (!new_sb)

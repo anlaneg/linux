@@ -228,7 +228,7 @@ static int kernfs_fill_super(struct super_block *sb, unsigned long magic)
 	/* Userspace would break if executables or devices appear on sysfs */
 	sb->s_iflags |= SB_I_NOEXEC | SB_I_NODEV;
 	sb->s_blocksize = PAGE_SIZE;//设置块大小
-	sb->s_blocksize_bits = PAGE_SHIFT;
+	sb->s_blocksize_bits = PAGE_SHIFT;//块的掩码数
 	sb->s_magic = magic;
 	sb->s_op = &kernfs_sops;//设置超级块操作集
 	sb->s_xattr = kernfs_xattr_handlers;
@@ -324,7 +324,7 @@ struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
 	info->ns = ns;
 	INIT_LIST_HEAD(&info->node);
 
-	//创建一个super_block
+	//创建一个super_block(通过kernfs_set_super设置sb的私有数据)
 	sb = sget_userns(fs_type, kernfs_test_super, kernfs_set_super, flags,
 			 &init_user_ns, info);
 	if (IS_ERR(sb) || sb->s_fs_info != info)
@@ -351,6 +351,7 @@ struct dentry *kernfs_mount_ns(struct file_system_type *fs_type, int flags,
 		mutex_unlock(&kernfs_mutex);
 	}
 
+	//返回root节点
 	return dget(sb->s_root);
 }
 

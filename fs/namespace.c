@@ -64,7 +64,7 @@ static DEFINE_IDA(mnt_group_ida);
 
 static struct hlist_head *mount_hashtable __read_mostly;
 static struct hlist_head *mountpoint_hashtable __read_mostly;
-static struct kmem_cache *mnt_cache __read_mostly;
+static struct kmem_cache *mnt_cache __read_mostly;//挂载点cache
 static DECLARE_RWSEM(namespace_sem);
 
 /* /sys/fs */
@@ -96,6 +96,7 @@ static inline struct hlist_head *mp_hash(struct dentry *dentry)
 	return &mountpoint_hashtable[tmp & mp_hash_mask];
 }
 
+//为mnt申请并填充编号
 static int mnt_alloc_id(struct mount *mnt)
 {
 	int res = ida_alloc(&mnt_id_ida, GFP_KERNEL);
@@ -180,10 +181,12 @@ static struct mount *alloc_vfsmnt(const char *name)
 	if (mnt) {
 		int err;
 
+		//申请挂载点编号
 		err = mnt_alloc_id(mnt);
 		if (err)
 			goto out_free_cache;
 
+		//填充挂载点设备名称
 		if (name) {
 			mnt->mnt_devname = kstrdup_const(name, GFP_KERNEL);
 			if (!mnt->mnt_devname)
@@ -966,6 +969,7 @@ vfs_kern_mount(struct file_system_type *type, int flags, const char *name, void 
 		return ERR_CAST(root);
 	}
 
+	//填充mnt(使之指向被挂载设备的根）
 	mnt->mnt.mnt_root = root;
 	mnt->mnt.mnt_sb = root->d_sb;
 	mnt->mnt_mountpoint = mnt->mnt.mnt_root;
@@ -2457,6 +2461,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 		return -ENODEV;
 
 	//将设备name按type文件系统进行挂载
+	//构造mnt,挂载type文件系统
 	mnt = vfs_kern_mount(type, sb_flags, name, data);
 	if (!IS_ERR(mnt) && (type->fs_flags & FS_HAS_SUBTYPE) &&
 	    !mnt->mnt_sb->s_subtype)
@@ -2689,6 +2694,7 @@ void *copy_mount_options(const void __user * data)
 	return copy;
 }
 
+//如果用户态提供了数据，则copy一份，否则直接返回NULL
 char *copy_mount_string(const void __user *data)
 {
 	return data ? strndup_user(data, PAGE_SIZE) : NULL;
@@ -2727,7 +2733,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 		return -EINVAL;
 
 	/* ... and get the mountpoint */
-	//获得dir_name对应path
+	//获取挂载点路径
 	retval = user_path(dir_name, &path);
 	if (retval)
 		return retval;
@@ -2778,6 +2784,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 			    SB_LAZYTIME |
 			    SB_I_VERSION);
 
+	//remount操作
 	if (flags & MS_REMOUNT)
 		retval = do_remount(&path, flags, sb_flags, mnt_flags,
 				    data_page);
@@ -2990,7 +2997,7 @@ int ksys_mount(char __user *dev_name, char __user *dir_name, char __user *type,
 	char *kernel_dev;
 	void *options;
 
-	//type 参数copy
+	//准备kernel_type,kernel_dev,options参数
 	kernel_type = copy_mount_string(type);
 	ret = PTR_ERR(kernel_type);
 	if (IS_ERR(kernel_type))

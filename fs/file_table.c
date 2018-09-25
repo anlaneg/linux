@@ -37,6 +37,7 @@ struct files_stat_struct files_stat = {
 };
 
 /* SLAB cache for file structures */
+//file结构体缓冲池
 static struct kmem_cache *filp_cachep __read_mostly;
 
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;

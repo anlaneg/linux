@@ -696,6 +696,7 @@ void do_close_on_exec(struct files_struct *files)
 	spin_unlock(&files->file_lock);
 }
 
+//通过fd，mode查找对应的file
 static struct file *__fget(unsigned int fd, fmode_t mask)
 {
 	struct files_struct *files = current->files;
@@ -703,6 +704,7 @@ static struct file *__fget(unsigned int fd, fmode_t mask)
 
 	rcu_read_lock();
 loop:
+	//查找fd对应的file
 	file = fcheck_files(files, fd);
 	if (file) {
 		/* File object ref couldn't be taken.
@@ -710,7 +712,8 @@ loop:
 		 * we loop to catch the new file (or NULL pointer)
 		 */
 		if (file->f_mode & mask)
-			file = NULL;
+			file = NULL;//如果mode不一致，则返回NULL
+		//防止文件获取时正在删除，增加引用计数失败，重查
 		else if (!get_file_rcu(file))
 			goto loop;
 	}
@@ -759,6 +762,7 @@ static unsigned long __fget_light(unsigned int fd, fmode_t mask)
 			return 0;
 		return (unsigned long)file;
 	} else {
+		//查找fd对应的file
 		file = __fget(fd, mask);
 		if (!file)
 			return 0;

@@ -24,7 +24,9 @@
 #define NR_OPEN_DEFAULT BITS_PER_LONG
 
 struct fdtable {
-	unsigned int max_fds;//最大fd数目（也是当前fd数组的大小）
+	//最大fd数目（也是当前fd数组的大小）
+	unsigned int max_fds;
+	//记录struct file*的fd数组
 	struct file __rcu **fd;      /* current fd array */
 	unsigned long *close_on_exec;
 	unsigned long *open_fds;
@@ -53,7 +55,7 @@ struct files_struct {
 	bool resize_in_progress;
 	wait_queue_head_t resize_wait;
 
-	struct fdtable __rcu *fdt;
+	struct fdtable __rcu *fdt;//提供通过fd编号查找file
 	struct fdtable fdtab;
   /*
    * written part on a separate cache line in SMP
@@ -84,12 +86,15 @@ static inline struct file *__fcheck_files(struct files_struct *files, unsigned i
 	struct fdtable *fdt = rcu_dereference_raw(files->fdt);
 
 	if (fd < fdt->max_fds) {
+		//提取fd对应的file
 		fd = array_index_nospec(fd, fdt->max_fds);
 		return rcu_dereference_raw(fdt->fd[fd]);
 	}
+	//给出的fd过大，返回NULL
 	return NULL;
 }
 
+//获取fd对应的files
 static inline struct file *fcheck_files(struct files_struct *files, unsigned int fd)
 {
 	RCU_LOCKDEP_WARN(!rcu_read_lock_held() &&

@@ -1280,6 +1280,7 @@ static inline long ksys_open(const char __user *filename, int flags,
 {
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
+	//在当前工作目录打开文件filename
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 

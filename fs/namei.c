@@ -502,8 +502,8 @@ EXPORT_SYMBOL(path_put);
 #define EMBEDDED_LEVELS 2
 struct nameidata {
 	struct path	path;
-	struct qstr	last;
-	struct path	root;
+	struct qstr	last;//记录分析位置（为了避免在路径分析过程中传递分析点文件名称指针及长度）
+	struct path	root;//记录根路径（１。为了避免'..'方式穿透根目录)
 	struct inode	*inode; /* path.dentry.d_inode */
 	unsigned int	flags;
 	unsigned	seq, m_seq;
@@ -1480,11 +1480,12 @@ static void follow_mount(struct path *path)
 	}
 }
 
+//取path的父目录路径
 static int path_parent_directory(struct path *path)
 {
 	struct dentry *old = path->dentry;
 	/* rare case of legitimate dget_parent()... */
-	path->dentry = dget_parent(path->dentry);
+	path->dentry = dget_parent(path->dentry);//取path目录的父目录
 	dput(old);
 	if (unlikely(!path_connected(path)))
 		return -ENOENT;
@@ -1495,8 +1496,9 @@ static int follow_dotdot(struct nameidata *nd)
 {
 	while(1) {
 		if (path_equal(&nd->path, &nd->root))
-			break;
+			break;//当前已到达根目录，不能再向上退了
 		if (nd->path.dentry != nd->path.mnt->mnt_root) {
+			//更新到父路径
 			int ret = path_parent_directory(&nd->path);
 			if (ret)
 				return ret;
@@ -1719,6 +1721,7 @@ static inline int may_lookup(struct nameidata *nd)
 static inline int handle_dots(struct nameidata *nd, int type)
 {
 	if (type == LAST_DOTDOT) {
+		//'..'文件
 		if (!nd->root.mnt)
 			set_root(nd);
 		if (nd->flags & LOOKUP_RCU) {
@@ -1812,6 +1815,7 @@ static int walk_component(struct nameidata *nd, int flags)
 	 * parent relationships.
 	 */
 	if (unlikely(nd->last_type != LAST_NORM)) {
+		//当前遇到的非普通文件，例如'.','..'
 		err = handle_dots(nd, nd->last_type);
 		if (!(flags & WALK_MORE) && nd->depth)
 			put_link(nd);
@@ -2068,6 +2072,7 @@ static inline u64 hash_name(const void *salt, const char *name)
 		c = (unsigned char)name[len];
 	} while (c && c != '/');
 	//hash即包含本层目名名称（或文件名称），也包含名称对应的长度
+	//将name长度合入到hashcode中
 	return hashlen_create(end_name_hash(hash), len);
 }
 
@@ -2085,10 +2090,15 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 {
 	int err;
 
+	//错误的路径名称
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+
+	//跳过文件路径分隔符（支持出现多个）
 	while (*name=='/')
 		name++;//跳过目录分隔符
+
+	//文件或者目录名为空，返回0
 	if (!*name)
 		return 0;
 
@@ -2106,7 +2116,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
-		//区分'.','..'这种特殊名称
+		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
 		if (name[0] == '.') switch (hashlen_len(hash_len)) {
 			case 2:
 				//本层名称为'..'
@@ -2129,12 +2139,14 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				err = parent->d_op->d_hash(parent, &this);
 				if (err < 0)
 					return err;
+				//完成hash_len,name更新
 				hash_len = this.hash_len;
 				name = this.name;
 			}
 		}
 
 		//设置hash,len,name,type(即name哈希值，name长度，目录或文件名称，文件类型）
+		//更新last字段
 		nd->last.hash_len = hash_len;
 		nd->last.name = name;
 		nd->last_type = type;
@@ -2147,10 +2159,12 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		 * If it wasn't NUL, we know it was '/'. Skip that
 		 * slash, and continue until no more slashes.
 		 */
-		//跳过目录分隔符
+		//跳过文件路径分隔符（支持出现多个）
 		do {
 			name++;
 		} while (unlikely(*name == '/'));
+
+		//检查路径是否结束（防止文件路径以'/'号结尾）
 		if (unlikely(!*name)) {
 OK:
 			/* pathname body, done */
@@ -2197,7 +2211,7 @@ OK:
 /* must be paired with terminate_walk() */
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
-	//取路径
+	//取路径名称
 	const char *s = nd->name->name;
 
 	if (!*s)
@@ -2237,7 +2251,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			return s;
 		return ERR_PTR(-ECHILD);
 	} else if (nd->dfd == AT_FDCWD) {
-		//文件路径给出为相对路径，且相对于当前工作目录
+		//文件名称非绝对路径（即相对路径）且相对当前工作目录
 		if (flags & LOOKUP_RCU) {
 			struct fs_struct *fs = current->fs;
 			unsigned seq;
@@ -2256,22 +2270,25 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		return s;
 	} else {
 		//文件路径给出为相对路径，相不是相对当前工作目录
+		//给出了相对目录的fd
 		/* Caller must check execute permissions on the starting path component */
 		struct fd f = fdget_raw(nd->dfd);//对相对的目录fd
 		struct dentry *dentry;
 
+		//未查找到dfd对应的file,文件描述符无效
 		if (!f.file)
 			return ERR_PTR(-EBADF);
 
-		dentry = f.file->f_path.dentry;//取fd对应的目录项
+		//取此文件对应的目录项
+		dentry = f.file->f_path.dentry;
 
-		//检查dentry是否为目录
+		//指定了s,但此目录不支持lookup
 		if (*s && unlikely(!d_can_lookup(dentry))) {
 			fdput(f);
 			return ERR_PTR(-ENOTDIR);
 		}
 
-		//设置nd路径
+		//找到了锚点，设置对应的path
 		nd->path = f.file->f_path;
 		if (flags & LOOKUP_RCU) {
 			nd->inode = nd->path.dentry->d_inode;
@@ -3564,10 +3581,12 @@ static struct file *path_openat(struct nameidata *nd,
 		return file;
 
 	if (unlikely(file->f_flags & __O_TMPFILE)) {
+		//临时文件
 		error = do_tmpfile(nd, flags, op, file);
 	} else if (unlikely(file->f_flags & O_PATH)) {
 		error = do_o_path(nd, flags, file);
 	} else {
+		//初始化nd,返回路径名称
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&
 			(error = do_last(nd, file, op)) > 0) {
