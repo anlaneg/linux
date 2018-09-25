@@ -1688,6 +1688,7 @@ struct block_device *blkdev_get_by_path(const char *path, fmode_t mode,
 	struct block_device *bdev;
 	int err;
 
+	//取path对应的块设备
 	bdev = lookup_bdev(path);
 	if (IS_ERR(bdev))
 		return bdev;
@@ -2075,6 +2076,7 @@ EXPORT_SYMBOL(ioctl_by_bdev);
  * namespace if possible and return it.  Return ERR_PTR(error)
  * otherwise.
  */
+//通过pathname查找其对应的块设备
 struct block_device *lookup_bdev(const char *pathname)
 {
 	struct block_device *bdev;
@@ -2082,17 +2084,20 @@ struct block_device *lookup_bdev(const char *pathname)
 	struct path path;
 	int error;
 
+	//pathname为空时，无法查询到对应的bdev
 	if (!pathname || !*pathname)
 		return ERR_PTR(-EINVAL);
 
+	//将pathname转换为path
 	error = kern_path(pathname, LOOKUP_FOLLOW, &path);
 	if (error)
 		return ERR_PTR(error);
 
+	//取此path对应的目录项所对应的inode
 	inode = d_backing_inode(path.dentry);
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))
-		goto fail;
+		goto fail;//inode指出，非块设备，跳出
 	error = -EACCES;
 	if (!may_open_dev(&path))
 		goto fail;

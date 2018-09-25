@@ -428,6 +428,7 @@ found:
 	return group;
 }
 
+//申请一个ext2 inode
 struct inode *ext2_new_inode(struct inode *dir, umode_t mode,
 			     const struct qstr *qstr)
 {
