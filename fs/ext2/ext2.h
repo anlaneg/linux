@@ -73,10 +73,12 @@ struct ext2_sb_info {
 	unsigned long s_inodes_per_block;/* Number of inodes per block */
 	unsigned long s_frags_per_group;/* Number of fragments in a group */
 	unsigned long s_blocks_per_group;/* Number of blocks in a group */
+	//每个group中有多少个inodes
 	unsigned long s_inodes_per_group;/* Number of inodes in a group */
 	unsigned long s_itb_per_group;	/* Number of inode table blocks per group */
 	unsigned long s_gdb_count;	/* Number of group descriptor blocks */
 	unsigned long s_desc_per_block;	/* Number of group descriptors per block */
+	//文件系统中有多少个group
 	unsigned long s_groups_count;	/* Number of groups in the fs */
 	unsigned long s_overhead_last;  /* Last calculated overhead */
 	unsigned long s_blocks_last;    /* Last seen block count */
@@ -166,6 +168,7 @@ sb_bgl_lock(struct ext2_sb_info *sbi, unsigned int block_group)
 /* First non-reserved inode for old ext2 filesystems */
 #define EXT2_GOOD_OLD_FIRST_INO	11
 
+//自超级块中取出ext2文件的私有数据信息
 static inline struct ext2_sb_info *EXT2_SB(struct super_block *sb)
 {
 	return sb->s_fs_info;

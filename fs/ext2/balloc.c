@@ -47,6 +47,7 @@ struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
 	struct ext2_group_desc * desc;
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
 
+	//非法的block_group编号，报错
 	if (block_group >= sbi->s_groups_count) {
 		ext2_error (sb, "ext2_get_group_desc",
 			    "block_group >= groups_count - "

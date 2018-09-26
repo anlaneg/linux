@@ -1328,10 +1328,12 @@ static struct ext2_inode *ext2_get_inode(struct super_block *sb, ino_t ino,
 	struct ext2_group_desc * gdp;
 
 	*p = NULL;
+	//检查ino是否合法
 	if ((ino != EXT2_ROOT_INO && ino < EXT2_FIRST_INO(sb)) ||
 	    ino > le32_to_cpu(EXT2_SB(sb)->s_es->s_inodes_count))
 		goto Einval;
 
+	//获取ino对应的group编号
 	block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
 	gdp = ext2_get_group_desc(sb, block_group, NULL);
 	if (!gdp)
@@ -1347,6 +1349,7 @@ static struct ext2_inode *ext2_get_inode(struct super_block *sb, ino_t ino,
 
 	*p = bh;
 	offset &= (EXT2_BLOCK_SIZE(sb) - 1);
+	//取ino对应的ext2_inode
 	return (struct ext2_inode *) (bh->b_data + offset);
 
 Einval:
@@ -1381,6 +1384,7 @@ void ext2_set_inode_flags(struct inode *inode)
 		inode->i_flags |= S_DAX;
 }
 
+//设置ext2的文件ops
 void ext2_set_file_ops(struct inode *inode)
 {
 	inode->i_op = &ext2_file_inode_operations;

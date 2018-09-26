@@ -2924,6 +2924,7 @@ EXPORT_SYMBOL(read_cache_page_gfp);
  * Returns appropriate error code that caller should return or
  * zero in case that write should be allowed.
  */
+//对要写入的位置及长度进行检查，返回规范后可写入的长度
 inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
@@ -2936,8 +2937,9 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 
 	/* FIXME: this is for backwards compatibility with 2.4 */
 	if (iocb->ki_flags & IOCB_APPEND)
-		iocb->ki_pos = i_size_read(inode);
+		iocb->ki_pos = i_size_read(inode);//实现append,将写位置更新到当前文件结尾
 
+	//取写位置
 	pos = iocb->ki_pos;
 
 	if ((iocb->ki_flags & IOCB_NOWAIT) && !(iocb->ki_flags & IOCB_DIRECT))
@@ -2945,12 +2947,15 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 
 	if (limit != RLIM_INFINITY) {
 		if (iocb->ki_pos >= limit) {
+			//当前要写的文件位置超过文件limit要求，触发信号SIGXFSZ
 			send_sig(SIGXFSZ, current, 0);
 			return -EFBIG;
 		}
+		//当前要写的文件起始位置没有超过limit，考虑写后是否会超过limit,如果会，则截短
 		iov_iter_truncate(from, limit - (unsigned long)pos);
 	}
 
+	//如果文件不支持largefile,则检查文件大小是否超过4G-1。
 	/*
 	 * LFS rule
 	 */
@@ -2958,6 +2963,7 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 				!(file->f_flags & O_LARGEFILE))) {
 		if (pos >= MAX_NON_LFS)
 			return -EFBIG;
+		//如果写后会超过，则截短
 		iov_iter_truncate(from, MAX_NON_LFS - (unsigned long)pos);
 	}
 
@@ -2969,9 +2975,11 @@ inline ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	 * Linus frestrict idea will clean these up nicely..
 	 */
 	if (unlikely(pos >= inode->i_sb->s_maxbytes))
-		return -EFBIG;
+		return -EFBIG;//检查是否超过文件系统要求
 
+	//考虑写后截短问题
 	iov_iter_truncate(from, inode->i_sb->s_maxbytes - pos);
+	//返回规范后要写入的长度
 	return iov_iter_count(from);
 }
 EXPORT_SYMBOL(generic_write_checks);
@@ -3289,8 +3297,10 @@ ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	ssize_t ret;
 
 	inode_lock(inode);
+	//检查写位置及返回可写入的长度，返回<0，则出错，返回０，则不可写入
 	ret = generic_write_checks(iocb, from);
 	if (ret > 0)
+		//实现文件写入
 		ret = __generic_file_write_iter(iocb, from);
 	inode_unlock(inode);
 

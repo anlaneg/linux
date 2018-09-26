@@ -405,6 +405,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 				struct page *page, void *fsdata);
 
 struct address_space {
+	//指向其对应的host
 	struct inode		*host;		/* owner: inode, block_device */
 	struct radix_tree_root	i_pages;	/* cached pages */
 	atomic_t		i_mmap_writable;/* count VM_SHARED mappings */
@@ -595,15 +596,15 @@ struct inode {
 #endif
 
 	const struct inode_operations	*i_op;
-	struct super_block	*i_sb;
-	struct address_space	*i_mapping;
+	struct super_block	*i_sb;//指向inode对应的super_block
+	struct address_space	*i_mapping;//指向此结构体的成员i_data
 
 #ifdef CONFIG_SECURITY
 	void			*i_security;
 #endif
 
 	/* Stat data, not accessed from path walking */
-	unsigned long		i_ino;
+	unsigned long		i_ino;//inode编号（每个文件系统内唯一）
 	/*
 	 * Filesystems may only read i_nlink directly.  They shall use the
 	 * following functions for modification:
@@ -616,7 +617,7 @@ struct inode {
 		unsigned int __i_nlink;
 	};
 	dev_t			i_rdev;//指向对应的设备编号
-	loff_t			i_size;
+	loff_t			i_size;//文件大小
 	struct timespec64	i_atime;
 	struct timespec64	i_mtime;
 	struct timespec64	i_ctime;
@@ -734,11 +735,13 @@ enum inode_i_mutex_lock_class
 	I_MUTEX_PARENT2,
 };
 
+//对inode加锁
 static inline void inode_lock(struct inode *inode)
 {
 	down_write(&inode->i_rwsem);
 }
 
+//对inode解锁
 static inline void inode_unlock(struct inode *inode)
 {
 	up_write(&inode->i_rwsem);
@@ -795,6 +798,7 @@ void unlock_two_nondirectories(struct inode *, struct inode*);
 static inline loff_t i_size_read(const struct inode *inode)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
+	//32位系统处理
 	loff_t i_size;
 	unsigned int seq;
 
@@ -1468,7 +1472,7 @@ struct super_block {
 
 	/* s_inode_list_lock protects s_inodes */
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
-	struct list_head	s_inodes;	/* all inodes */
+	struct list_head	s_inodes;	/* all inodes */ //记录此文件系统中所有inode
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
@@ -1750,7 +1754,7 @@ struct file_operations {
 	int (*open) (struct inode *, struct file *);//文件打开函数
 	int (*flush) (struct file *, fl_owner_t id);//close时此回调将被先调用
 	int (*release) (struct inode *, struct file *);//通过release回调释放file
-	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
+	int (*fsync) (struct file *, loff_t, loff_t, int datasync);//将指定范围内的数据刷至磁盘
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);
 	ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
@@ -1854,7 +1858,9 @@ extern int vfs_dedupe_file_range_one(struct file *src_file, loff_t src_pos,
 
 
 struct super_operations {
+	//通过此回调，申请并创建inode
    	struct inode *(*alloc_inode)(struct super_block *sb);
+   	//通过此回调，释放创建的inode
 	void (*destroy_inode)(struct inode *);
 
    	void (*dirty_inode) (struct inode *, int flags);

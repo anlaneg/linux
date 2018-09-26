@@ -55,8 +55,9 @@
 
 static unsigned int i_hash_mask __read_mostly;
 static unsigned int i_hash_shift __read_mostly;
-//inode哈希表
+//inode哈希表，负责保存系统用到的inode
 static struct hlist_head *inode_hashtable __read_mostly;
+//保护inode哈希表的锁
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
 
 /*
@@ -75,6 +76,7 @@ struct inodes_stat_t inodes_stat;
 static DEFINE_PER_CPU(unsigned long, nr_inodes);
 static DEFINE_PER_CPU(unsigned long, nr_unused);
 
+//提供cache,满足自此cache中申请inode
 static struct kmem_cache *inode_cachep __read_mostly;
 
 static long get_nr_inodes(void)
@@ -176,6 +178,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 
 	atomic_set(&inode->i_dio_count, 0);
 
+	//初始化mapping
 	mapping->a_ops = &empty_aops;
 	mapping->host = inode;
 	mapping->flags = 0;
@@ -203,6 +206,7 @@ out:
 }
 EXPORT_SYMBOL(inode_init_always);
 
+//申请并初始化inode
 static struct inode *alloc_inode(struct super_block *sb)
 {
 	struct inode *inode;
@@ -211,7 +215,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 		//如果有alloc_inode，则采用alloc_inode进行申请
 		inode = sb->s_op->alloc_inode(sb);
 	else
-		//自inode的cache中申请node
+		//如无alloc_inode回调，则自inode的cache中申请node
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
 
 	if (!inode)
@@ -219,6 +223,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 
 	//inode初始化
 	if (unlikely(inode_init_always(sb, inode))) {
+		//初始化失败，释放inode
 		if (inode->i_sb->s_op->destroy_inode)
 			inode->i_sb->s_op->destroy_inode(inode);
 		else
@@ -442,6 +447,7 @@ static void inode_lru_list_del(struct inode *inode)
  * inode_sb_list_add - add inode to the superblock list of inodes
  * @inode: inode to add
  */
+//将inode加入到sb对应的s_inodes链上
 void inode_sb_list_add(struct inode *inode)
 {
 	spin_lock(&inode->i_sb->s_inode_list_lock);
@@ -1193,7 +1199,7 @@ again:
 			inode->i_ino = ino;
 			spin_lock(&inode->i_lock);
 			inode->i_state = I_NEW;
-			hlist_add_head(&inode->i_hash, head);
+			hlist_add_head(&inode->i_hash, head);//将inode加入到inode_hashtable表
 			spin_unlock(&inode->i_lock);
 			inode_sb_list_add(inode);
 			spin_unlock(&inode_hash_lock);
@@ -1209,6 +1215,7 @@ again:
 		 * us. Use the old inode instead of the one we just
 		 * allocated.
 		 */
+		//已被创建，使用已创建的inode,释放新申请的
 		spin_unlock(&inode_hash_lock);
 		destroy_inode(inode);
 		if (IS_ERR(old))

@@ -31,7 +31,7 @@ enum {
 struct iov_iter {
 	int type;//读操作或写操作
 	size_t iov_offset;
-	size_t count;
+	size_t count;//要写入的长度
 	union {
 		const struct iovec *iov;
 		const struct kvec *kvec;
