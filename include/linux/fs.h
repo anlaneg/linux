@@ -1369,6 +1369,7 @@ struct sb_writers {
 
 struct super_block {
 	struct list_head	s_list;		/* Keep this first */
+	//所属的设备编号
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
 	unsigned long		s_blocksize;//文件系统的块大小
@@ -1395,7 +1396,7 @@ struct super_block {
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
 	//用于串连某一文件系统的superblock被挂载在哪几个位置
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
-	struct block_device	*s_bdev;
+	struct block_device	*s_bdev;//超级块所属的块设备
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
 	struct hlist_node	s_instances;
