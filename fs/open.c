@@ -784,6 +784,7 @@ static int do_dentry_open(struct file *f,
 		f->f_mode |= FMODE_CAN_READ;
 	if ((f->f_mode & FMODE_WRITE) &&
 	     likely(f->f_op->write || f->f_op->write_iter))
+		//如有write或write_iter回调，才能置write标记
 		f->f_mode |= FMODE_CAN_WRITE;
 
 	f->f_write_hint = WRITE_LIFE_NOT_SET;

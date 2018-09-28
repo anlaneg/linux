@@ -95,6 +95,7 @@ struct dentry *ext2_get_parent(struct dentry *child)
  * If the create succeeds, we fill in the inode information
  * with d_instantiate(). 
  */
+//在目录dir下创建dentry指定的inode
 static int ext2_create (struct inode * dir, struct dentry * dentry, umode_t mode, bool excl)
 {
 	struct inode *inode;
@@ -108,6 +109,7 @@ static int ext2_create (struct inode * dir, struct dentry * dentry, umode_t mode
 	if (IS_ERR(inode))
 		return PTR_ERR(inode);
 
+	//指定为file ops
 	ext2_set_file_ops(inode);
 	mark_inode_dirty(inode);
 	return ext2_add_nondir(dentry, inode);

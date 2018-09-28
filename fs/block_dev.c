@@ -2039,6 +2039,7 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 					     end >> PAGE_SHIFT);
 }
 
+//块设备的文件操作函数
 const struct file_operations def_blk_fops = {
 	.open		= blkdev_open,
 	.release	= blkdev_close,

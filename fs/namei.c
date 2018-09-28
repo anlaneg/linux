@@ -224,12 +224,14 @@ getname(const char __user * filename)
 	return getname_flags(filename, 0, NULL);
 }
 
+//通过kernel空间传入的文件名称，构造filename结构体
 struct filename *
 getname_kernel(const char * filename)
 {
 	struct filename *result;
 	int len = strlen(filename) + 1;
 
+	//获取一个filename对象
 	result = __getname();
 	if (unlikely(!result))
 		return ERR_PTR(-ENOMEM);
@@ -251,6 +253,7 @@ getname_kernel(const char * filename)
 		__putname(result);
 		return ERR_PTR(-ENAMETOOLONG);
 	}
+	//设置文件名称
 	memcpy((char *)result->name, filename, len);
 	result->uptr = NULL;
 	result->aname = NULL;
@@ -2167,6 +2170,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		//跳到本层文件或目录结尾
 		name += hashlen_len(hash_len);
 		if (!*name)
+			//（注：此时最后一层name还未分析,自这里直接跳出，防止用户执行的是文件新建，查肯定是没法查到文件的）
 			goto OK;//分析结束,到达路径尾
 		/*
 		 * If it wasn't NUL, we know it was '/'. Skip that
@@ -2501,6 +2505,7 @@ struct dentry *kern_path_locked(const char *name, struct path *path)
 
 int kern_path(const char *name, unsigned int flags, struct path *path)
 {
+	//在当前工作目录，查找filename,将其对应的路径信息填充在path中
 	return filename_lookup(AT_FDCWD, getname_kernel(name),
 			       flags, path, NULL);
 }
@@ -3212,9 +3217,11 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 		return -ENOENT;
 
 	file->f_mode &= ~FMODE_CREATED;
+	//在目录中查找nd->last文件
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
 		if (!dentry) {
+			//nd->last指出的文件不存在，创建此文件
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
 			if (IS_ERR(dentry))
 				return PTR_ERR(dentry);
@@ -3255,6 +3262,7 @@ static int lookup_open(struct nameidata *nd, struct path *path,
 				goto no_open;
 			/* No side effects, safe to clear O_CREAT */
 		} else {
+			//之前不存在，需要创建其对应的文件,检查能否创建
 			create_error = may_o_create(&nd->path, dentry, mode);
 			if (create_error) {
 				open_flag &= ~O_CREAT;
@@ -3302,6 +3310,7 @@ no_open:
 			error = -EACCES;
 			goto out_dput;
 		}
+		//调用dir类型的inode的create函数，完成文件创建
 		error = dir_inode->i_op->create(dir_inode, dentry, mode,
 						open_flag & O_EXCL);
 		if (error)
@@ -3349,6 +3358,7 @@ static int do_last(struct nameidata *nd,
 	}
 
 	if (!(open_flag & O_CREAT)) {
+		//open时未指明create标记，则要求最后一级文件必须存在
 		if (nd->last.name[nd->last.len])
 			nd->flags |= LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 		/* we _can_ be in RCU mode here */
@@ -3362,6 +3372,7 @@ static int do_last(struct nameidata *nd,
 		BUG_ON(nd->inode != dir->d_inode);
 		BUG_ON(nd->flags & LOOKUP_RCU);
 	} else {
+		//open时指明了容许文件不存在时，创建
 		/* create side of things */
 		/*
 		 * This will *only* deal with leaving RCU mode - LOOKUP_JUMPED
@@ -3605,8 +3616,8 @@ static struct file *path_openat(struct nameidata *nd,
 	} else {
 		//初始化nd,返回路径名称
 		const char *s = path_init(nd, flags);
-		while (!(error = link_path_walk(s, nd)) &&
-			(error = do_last(nd, file, op)) > 0) {
+		while (!(error = link_path_walk(s, nd)) && //先解决父目录的解析
+			(error = do_last(nd, file, op)) > 0) { //再通过do_last解决具体文件的解析
 			nd->flags &= ~(LOOKUP_OPEN|LOOKUP_CREATE|LOOKUP_EXCL);
 			s = trailing_symlink(nd);
 		}
@@ -3637,6 +3648,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 
 	//将dfd,pathname填充到nd中
 	set_nameidata(&nd, dfd, pathname);
+
 	//调用path_openat来进行打开
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(filp == ERR_PTR(-ECHILD)))

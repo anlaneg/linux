@@ -1108,6 +1108,7 @@ static int test_bdev_super(struct super_block *s, void *data)
 	return (void *)s->s_bdev == data;
 }
 
+//块设备挂载
 struct dentry *mount_bdev(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data,
 	int (*fill_super)(struct super_block *, void *, int))
@@ -1120,6 +1121,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	if (!(flags & SB_RDONLY))
 		mode |= FMODE_WRITE;
 
+	//查找dev_name对应的块设备
 	bdev = blkdev_get_by_path(dev_name, mode, fs_type);
 	if (IS_ERR(bdev))
 		return ERR_CAST(bdev);
@@ -1199,11 +1201,13 @@ void kill_block_super(struct super_block *sb)
 EXPORT_SYMBOL(kill_block_super);
 #endif
 
+//执行无设备挂载
 struct dentry *mount_nodev(struct file_system_type *fs_type,
 	int flags, void *data,
 	int (*fill_super)(struct super_block *, void *, int))
 {
 	int error;
+	//创建super block
 	struct super_block *s = sget(fs_type, NULL, set_anon_super, flags, NULL);
 
 	if (IS_ERR(s))
@@ -1235,6 +1239,7 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 	if (!s->s_root) {
+		//首次挂载
 		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
@@ -1242,6 +1247,7 @@ struct dentry *mount_single(struct file_system_type *fs_type,
 		}
 		s->s_flags |= SB_ACTIVE;
 	} else {
+		//重复挂载
 		do_remount_sb(s, flags, data, 0);
 	}
 	return dget(s->s_root);

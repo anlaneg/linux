@@ -38,6 +38,7 @@
 //检查b是否在[frist,first+len)范围以内
 #define in_range(b, first, len)	((b) >= (first) && (b) <= (first) + (len) - 1)
 
+//利用block_group取ext2_group_desc
 struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
 					     unsigned int block_group,
 					     struct buffer_head ** bh)
@@ -57,7 +58,9 @@ struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
 		return NULL;
 	}
 
+	//取描述组id号
 	group_desc = block_group >> EXT2_DESC_PER_BLOCK_BITS(sb);
+	//取在描述组中的偏移
 	offset = block_group & (EXT2_DESC_PER_BLOCK(sb) - 1);
 	if (!sbi->s_group_desc[group_desc]) {
 		ext2_error (sb, "ext2_get_group_desc",
@@ -67,8 +70,10 @@ struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
 		return NULL;
 	}
 
+	//通过block_group取group对应的ext2_group_desc
 	desc = (struct ext2_group_desc *) sbi->s_group_desc[group_desc]->b_data;
 	if (bh)
+		//如果要求出参，则返回其所处的group_desc的首地址
 		*bh = sbi->s_group_desc[group_desc];
 	return desc + offset;
 }

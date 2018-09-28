@@ -405,7 +405,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 				struct page *page, void *fsdata);
 
 struct address_space {
-	//指向其对应的host
+	//指向其对应的inode
 	struct inode		*host;		/* owner: inode, block_device */
 	struct radix_tree_root	i_pages;	/* cached pages */
 	atomic_t		i_mmap_writable;/* count VM_SHARED mappings */
@@ -1788,6 +1788,7 @@ struct inode_operations {
 
 	int (*readlink) (struct dentry *, char __user *,int);
 
+	//在inode下创建dentry执行
 	int (*create) (struct inode *,struct dentry *, umode_t, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);

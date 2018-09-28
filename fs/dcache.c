@@ -97,7 +97,7 @@ static unsigned int d_hash_shift __read_mostly;
 //缓存的dentry的hash表
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
 
-//利用hash对应的对应的桶
+//利用hash对应的桶
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
 {
 	return dentry_hashtable + (hash >> d_hash_shift);

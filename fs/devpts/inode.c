@@ -504,6 +504,7 @@ fail:
 static struct dentry *devpts_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
+	//执行无dev挂载
 	return mount_nodev(fs_type, flags, data, devpts_fill_super);
 }
 
@@ -581,6 +582,7 @@ struct dentry *devpts_pty_new(struct pts_fs_info *fsi, int index, void *priv)
 	inode->i_uid = opts->setuid ? opts->uid : current_fsuid();
 	inode->i_gid = opts->setgid ? opts->gid : current_fsgid();
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
+	//创建字符形设备
 	init_special_inode(inode, S_IFCHR|opts->mode, MKDEV(UNIX98_PTY_SLAVE_MAJOR, index));
 
 	sprintf(s, "%d", index);
@@ -629,6 +631,7 @@ void devpts_pty_kill(struct dentry *dentry)
 
 static int __init init_devpts_fs(void)
 {
+	//注册devpts文件系统
 	int err = register_filesystem(&devpts_fs_type);
 	if (!err) {
 		register_sysctl_table(pty_root_table);

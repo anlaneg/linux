@@ -453,11 +453,13 @@ struct inode *ext2_new_inode(struct inode *dir, umode_t mode,
 	sbi = EXT2_SB(sb);//转为ext2的superblock
 	es = sbi->s_es;
 	if (S_ISDIR(mode)) {
+		//要创建的为目录
 		if (test_opt(sb, OLDALLOC))
 			group = find_group_dir(sb, dir);
 		else
 			group = find_group_orlov(sb, dir);
-	} else 
+	} else
+		//要创建的为文件，校验group　id
 		group = find_group_other(sb, dir);
 
 	if (group == -1) {
@@ -558,6 +560,7 @@ got:
 
 	inode->i_ino = ino;
 	inode->i_blocks = 0;
+	//inode的创建时间，修改时间，访问时间均为当前时间
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
 	memset(ei->i_data, 0, sizeof(ei->i_data));
 	ei->i_flags =

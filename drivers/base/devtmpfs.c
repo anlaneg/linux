@@ -55,16 +55,19 @@ static int __init mount_param(char *str)
 }
 __setup("devtmpfs.mount=", mount_param);
 
+//devtmpfs文件系统mount回调
 static struct dentry *dev_mount(struct file_system_type *fs_type, int flags,
 		      const char *dev_name, void *data)
 {
 #ifdef CONFIG_TMPFS
 	return mount_single(fs_type, flags, data, shmem_fill_super);
 #else
+	//dev_name被丢弃，采用无dev方式挂载
 	return mount_single(fs_type, flags, data, ramfs_fill_super);
 #endif
 }
 
+//定义devtmpfs文件系统
 static struct file_system_type dev_fs_type = {
 	.name = "devtmpfs",
 	.mount = dev_mount,
@@ -356,6 +359,7 @@ int devtmpfs_mount(const char *mntdir)
 	if (!thread)
 		return 0;
 
+	//直接调用mount，将devtmpfs文件系统挂接在mntdir
 	err = ksys_mount("devtmpfs", (char *)mntdir, "devtmpfs", MS_SILENT,
 			 NULL);
 	if (err)

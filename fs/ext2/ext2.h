@@ -678,7 +678,7 @@ struct ext2_inode_info {
 	 * place a file's data blocks near its inode block, and new inodes
 	 * near to their parent directory's inode.
 	 */
-	__u32	i_block_group;
+	__u32	i_block_group;//用于定位结构体ext2_group_desc
 
 	/* block reservation info */
 	struct ext2_block_alloc_info *i_block_alloc_info;

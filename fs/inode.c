@@ -1455,6 +1455,7 @@ out:
 }
 EXPORT_SYMBOL(find_inode_nowait);
 
+//将inode插入到inode_hashtable中
 int insert_inode_locked(struct inode *inode)
 {
 	struct super_block *sb = inode->i_sb;
