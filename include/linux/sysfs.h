@@ -28,8 +28,8 @@ struct bin_attribute;
 enum kobj_ns_type;
 
 struct attribute {
-	const char		*name;
-	umode_t			mode;
+	const char		*name;//属性名（对应文件名）
+	umode_t			mode;//权限位（对应文件标记位）
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	bool			ignore_lockdep:1;
 	struct lock_class_key	*key;
@@ -82,13 +82,15 @@ do {							\
  *		Either attrs or bin_attrs or both must be provided.
  */
 struct attribute_group {
-	const char		*name;
+	const char		*name;//组名称（将被创建成目录）
+	//通过此回调，决定此文件是否对外可见
 	umode_t			(*is_visible)(struct kobject *,
 					      struct attribute *, int);
+	//通过此回调，决定此二进制文件是否对外可见
 	umode_t			(*is_bin_visible)(struct kobject *,
 						  struct bin_attribute *, int);
-	struct attribute	**attrs;
-	struct bin_attribute	**bin_attrs;
+	struct attribute	**attrs;//普通属性
+	struct bin_attribute	**bin_attrs;//二进制属性
 };
 
 /*
@@ -166,8 +168,10 @@ struct bin_attribute {
 	struct attribute	attr;
 	size_t			size;
 	void			*private;
+	//读属性
 	ssize_t (*read)(struct file *, struct kobject *, struct bin_attribute *,
 			char *, loff_t, size_t);
+	//写属性
 	ssize_t (*write)(struct file *, struct kobject *, struct bin_attribute *,
 			 char *, loff_t, size_t);
 	int (*mmap)(struct file *, struct kobject *, struct bin_attribute *attr,

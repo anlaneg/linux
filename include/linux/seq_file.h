@@ -20,7 +20,7 @@ struct seq_file {
 	size_t count;//buf中自from有效数据数量
 	size_t pad_until;
 	loff_t index;
-	loff_t read_pos;
+	loff_t read_pos;//读取的偏移量
 	u64 version;
 	struct mutex lock;
 	const struct seq_operations *op;//操作集
@@ -69,7 +69,7 @@ static inline size_t seq_get_buf(struct seq_file *m, char **bufp)
 	if (m->count < m->size)
 		*bufp = m->buf + m->count;//可以填充的区域
 	else
-		*bufp = NULL;//走不到
+		*bufp = NULL;//ｍ->count=m->size时
 
 	return m->size - m->count;//可以填充的区域的大小
 }

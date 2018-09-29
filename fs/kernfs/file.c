@@ -115,14 +115,17 @@ static void *kernfs_seq_start(struct seq_file *sf, loff_t *ppos)
 	if (!kernfs_get_active(of->kn))
 		return ERR_PTR(-ENODEV);
 
+	//取kernfs对应的ops
 	ops = kernfs_ops(of->kn);
 	if (ops->seq_start) {
+		//如果有seq_start回调，则调用
 		void *next = ops->seq_start(sf, ppos);
 		/* see the comment above kernfs_seq_stop_active() */
 		if (next == ERR_PTR(-ENODEV))
 			kernfs_seq_stop_active(sf, next);
 		return next;
 	} else {
+		//否则，如果*ppos为０，则返回１，如果*ppos不为０，则返回０
 		/*
 		 * The same behavior and code as single_open().  Returns
 		 * !NULL if pos is at the beginning; otherwise, NULL.
@@ -161,7 +164,7 @@ static void kernfs_seq_stop(struct seq_file *sf, void *v)
 	mutex_unlock(&of->mutex);
 }
 
-//调用kernfs_node的seq_show回调
+//调用kernfs_node的seq_show回调（seq_file的show方法入口，其将调用kernfs node的show)
 static int kernfs_seq_show(struct seq_file *sf, void *v)
 {
 	struct kernfs_open_file *of = sf->private;
@@ -171,6 +174,7 @@ static int kernfs_seq_show(struct seq_file *sf, void *v)
 	return of->kn->attr.ops->seq_show(sf, v);
 }
 
+/*seq_file针对文本文件提供的ops*/
 static const struct seq_operations kernfs_seq_ops = {
 	.start = kernfs_seq_start,
 	.next = kernfs_seq_next,
@@ -249,11 +253,14 @@ static ssize_t kernfs_file_direct_read(struct kernfs_open_file *of,
 static ssize_t kernfs_fop_read(struct file *file, char __user *user_buf,
 			       size_t count, loff_t *ppos)
 {
+	//自seq_file获得kernfs_open_file
 	struct kernfs_open_file *of = kernfs_of(file);
 
+	//有show方法
 	if (of->kn->flags & KERNFS_HAS_SEQ_SHOW)
 		return seq_read(file, user_buf, count, ppos);
 	else
+		//有read方法
 		return kernfs_file_direct_read(of, user_buf, count, ppos);
 }
 
@@ -705,7 +712,7 @@ static int kernfs_fop_open(struct inode *inode, struct file *file)
 	 * and readable regular files are the vast majority anyway.
 	 */
 	if (ops->seq_show)
-		//初始化seq_file
+		//有show回调，初始化seq_file
 		error = seq_open(file, &kernfs_seq_ops);
 	else
 		error = seq_open(file, NULL);
@@ -955,11 +962,14 @@ void kernfs_notify(struct kernfs_node *kn)
 }
 EXPORT_SYMBOL_GPL(kernfs_notify);
 
+//kernfs_file的文件ops
 const struct file_operations kernfs_file_fops = {
+	/*文件读操作入口*/
 	.read		= kernfs_fop_read,
 	.write		= kernfs_fop_write,
 	.llseek		= generic_file_llseek,
 	.mmap		= kernfs_fop_mmap,
+	/*文件打开时此回调将被调用*/
 	.open		= kernfs_fop_open,
 	.release	= kernfs_fop_release,
 	.poll		= kernfs_fop_poll,
@@ -986,8 +996,8 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 					 const char *name,
 					 umode_t mode, kuid_t uid, kgid_t gid,
 					 loff_t size,
-					 const struct kernfs_ops *ops,
-					 void *priv, const void *ns,
+					 const struct kernfs_ops *ops/*文件操作集*/,
+					 void *priv/*文件私有数据*/, const void *ns/*namespace*/,
 					 struct lock_class_key *key)
 {
 	struct kernfs_node *kn;
@@ -1002,8 +1012,7 @@ struct kernfs_node *__kernfs_create_file(struct kernfs_node *parent,
 	if (!kn)
 		return ERR_PTR(-ENOMEM);
 
-	//设置kn
-	kn->attr.ops = ops;//属性操作集
+	kn->attr.ops = ops;//文件，链接，目录操作集
 	kn->attr.size = size;//文件大小
 	kn->ns = ns;//文件所属的namespace
 	kn->priv = priv;

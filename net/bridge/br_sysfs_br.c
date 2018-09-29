@@ -63,6 +63,7 @@ static ssize_t forward_delay_show(struct device *d,
 	return sprintf(buf, "%lu\n", jiffies_to_clock_t(br->forward_delay));
 }
 
+//forward_delay属性写操作
 static ssize_t forward_delay_store(struct device *d,
 				   struct device_attribute *attr,
 				   const char *buf, size_t len)
@@ -859,7 +860,7 @@ static struct attribute *bridge_attrs[] = {
 };
 
 static const struct attribute_group bridge_group = {
-	.name = SYSFS_BRIDGE_ATTR,
+	.name = SYSFS_BRIDGE_ATTR,//创建名称为bridge的属性组
 	.attrs = bridge_attrs,
 };
 

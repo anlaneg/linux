@@ -96,9 +96,9 @@ struct kernfs_elem_symlink {
 };
 
 struct kernfs_elem_attr {
-	const struct kernfs_ops	*ops;
+	const struct kernfs_ops	*ops;//操作集（目录或文件，链接）
 	struct kernfs_open_node	*open;
-	loff_t			size;
+	loff_t			size;//文件大小
 	struct kernfs_node	*notify_next;	/* for kernfs_notify() */
 };
 
@@ -143,17 +143,17 @@ struct kernfs_node {
 
 	struct rb_node		rb;//用于将节点加入红黑树中
 
-	const void		*ns;	/* namespace tag */
-	unsigned int		hash;	/* ns + name hash */
+	const void		*ns;	/* namespace tag */ //从属于那个namespace
+	unsigned int		hash;	/* ns + name hash */ //节点对应的hashcode,用于查询
 	union {
 		struct kernfs_elem_dir		dir;//目录
 		struct kernfs_elem_symlink	symlink;//链接
 		struct kernfs_elem_attr		attr;//文件属性
 	};
 
-	void			*priv;
+	void			*priv;/*节点的私有数据*/
 
-	union kernfs_node_id	id;
+	union kernfs_node_id	id;//编号
 	unsigned short		flags;//指出此节点的能力(例如文件）
 	umode_t			mode;//权限
 	struct kernfs_iattrs	*iattr;
@@ -533,6 +533,7 @@ kernfs_create_file(struct kernfs_node *parent, const char *name, umode_t mode,
 				     size, ops, priv, NULL);
 }
 
+//删除名称为name的kernfs节点
 static inline int kernfs_remove_by_name(struct kernfs_node *parent,
 					const char *name)
 {

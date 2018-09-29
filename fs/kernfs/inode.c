@@ -18,6 +18,7 @@
 
 #include "kernfs-internal.h"
 
+//kernfs对应的aops
 static const struct address_space_operations kernfs_aops = {
 	.readpage	= simple_readpage,
 	.write_begin	= simple_write_begin,
@@ -237,7 +238,7 @@ static void kernfs_init_inode(struct kernfs_node *kn, struct inode *inode)
 			make_empty_dir_inode(inode);
 		break;
 	case KERNFS_FILE:
-		//文件
+		//文件(指定文件的大小，及文件的fops)
 		inode->i_size = kn->attr.size;
 		inode->i_fop = &kernfs_file_fops;
 		break;

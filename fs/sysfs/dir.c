@@ -79,6 +79,7 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
  *	the directory before we remove the directory, and we've inlined
  *	what used to be sysfs_rmdir() below, instead of calling separately.
  */
+//目录移除
 void sysfs_remove_dir(struct kobject *kobj)
 {
 	struct kernfs_node *kn = kobj->sd;

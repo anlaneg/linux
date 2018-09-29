@@ -68,6 +68,7 @@ struct kobject {
 	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
 	struct kset		*kset;
 	struct kobj_type	*ktype;
+	//其在sysfs中对应的node
 	struct kernfs_node	*sd; /* sysfs directory entry */
 	struct kref		kref;/* kobject的引用计数，初始值为1 */
 #ifdef CONFIG_DEBUG_KOBJECT_RELEASE

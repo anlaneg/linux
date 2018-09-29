@@ -33,13 +33,14 @@ static void remove_files(struct kernfs_node *parent,
 //分类型，创建一组文本文件和一组二进制文件
 static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			kuid_t uid, kgid_t gid,
-			const struct attribute_group *grp, int update)
+			const struct attribute_group *grp, int update/*如果此值为真，则先删除后添加*/)
 {
 	struct attribute *const *attr;
 	struct bin_attribute *const *bin_attr;
 	int error = 0, i;
 
 	if (grp->attrs) {
+		/*遍历group中所有属性，针对每一个属性，创建其对应的文件，并将其置于parent下*/
 		for (i = 0, attr = grp->attrs; *attr && !error; i++, attr++) {
 			umode_t mode = (*attr)->mode;
 
@@ -49,8 +50,10 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			 * re-adding (if required) the file.
 			 */
 			if (update)
+				//如果此值为真，则先删除后添加
 				kernfs_remove_by_name(parent, (*attr)->name);
 			if (grp->is_visible) {
+				//如果有visible回调，则调用is_visible,决定是否创建
 				mode = grp->is_visible(kobj, *attr, i);
 				if (!mode)
 					continue;
@@ -60,18 +63,21 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			     "Attribute %s: Invalid permissions 0%o\n",
 			     (*attr)->name, mode);
 
+			//规则化mode,并创建相就能文件
 			mode &= SYSFS_PREALLOC | 0664;
 			error = sysfs_add_file_mode_ns(parent, *attr, false,
 						       mode, uid, gid, NULL);
 			if (unlikely(error))
 				break;
 		}
+		//如果出错，则移除掉所有已创建的文件
 		if (error) {
 			remove_files(parent, grp);
 			goto exit;
 		}
 	}
 
+	//二进制属性处理
 	if (grp->bin_attrs) {
 		for (i = 0, bin_attr = grp->bin_attrs; *bin_attr; i++, bin_attr++) {
 			umode_t mode = (*bin_attr)->attr.mode;
@@ -104,7 +110,7 @@ exit:
 	return error;
 }
 
-
+//按组创建group目录及文件（ns=NULL)
 static int internal_create_group(struct kobject *kobj, int update,
 				 const struct attribute_group *grp)
 {
@@ -116,6 +122,7 @@ static int internal_create_group(struct kobject *kobj, int update,
 	BUG_ON(!kobj || (!update && !kobj->sd));
 
 	/* Updates may happen before the object has been instantiated */
+	//参数合法性检查
 	if (unlikely(update && !kobj->sd))
 		return -EINVAL;
 	if (!grp->attrs && !grp->bin_attrs) {
@@ -126,6 +133,7 @@ static int internal_create_group(struct kobject *kobj, int update,
 	kobject_get_ownership(kobj, &uid, &gid);
 	if (grp->name) {
 		if (update) {
+			/*如果update为真，则先查找此group是否已创建kernfs node,如果没有创建，则报错*/
 			kn = kernfs_find_and_get(kobj->sd, grp->name);
 			if (!kn) {
 				pr_warn("Can't update unknown attr grp name: %s/%s\n",
@@ -133,9 +141,10 @@ static int internal_create_group(struct kobject *kobj, int update,
 				return -EINVAL;
 			}
 		} else {
+			/*如果非update,则直接创建相应的group->name目录名*/
 			kn = kernfs_create_dir_ns(kobj->sd, grp->name,
 						  S_IRWXU | S_IRUGO | S_IXUGO,
-						  uid, gid, kobj, NULL);
+						  uid, gid, kobj/*kobj为目录的私有数据*/, NULL);
 			if (IS_ERR(kn)) {
 				if (PTR_ERR(kn) == -EEXIST)
 					sysfs_warn_dup(kobj->sd, grp->name);
@@ -143,8 +152,9 @@ static int internal_create_group(struct kobject *kobj, int update,
 			}
 		}
 	} else
-		kn = kobj->sd;
+		kn = kobj->sd;//如果未指定名称，则取kobj中对应的kernfs节点
 	kernfs_get(kn);
+	//创建group下所有文件
 	error = create_files(kn, kobj, uid, gid, grp, update);
 	if (error) {
 		if (grp->name)
@@ -168,9 +178,11 @@ static int internal_create_group(struct kobject *kobj, int update,
  *
  * Returns 0 on success or error code on failure.
  */
+//创建grp->name对应的目录，并创建其attr对应的所有文件
 int sysfs_create_group(struct kobject *kobj,
 		       const struct attribute_group *grp)
 {
+	//创建group(不更新）
 	return internal_create_group(kobj, 0, grp);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_group);
@@ -188,6 +200,7 @@ EXPORT_SYMBOL_GPL(sysfs_create_group);
  *
  * Returns 0 on success or error code from sysfs_create_group on failure.
  */
+//调用sysfs_create_group创建多个属性组（如果创建失败，则均会删除）
 int sysfs_create_groups(struct kobject *kobj,
 			const struct attribute_group **groups)
 {
@@ -230,6 +243,7 @@ EXPORT_SYMBOL_GPL(sysfs_create_groups);
 int sysfs_update_group(struct kobject *kobj,
 		       const struct attribute_group *grp)
 {
+	/*更新group,要求grp对应的目录已存在*/
 	return internal_create_group(kobj, 1, grp);
 }
 EXPORT_SYMBOL_GPL(sysfs_update_group);
@@ -242,6 +256,7 @@ EXPORT_SYMBOL_GPL(sysfs_update_group);
  * This function removes a group of attributes from a kobject.  The attributes
  * previously have to have been created for this group, otherwise it will fail.
  */
+//删除grop对应的所有属性组
 void sysfs_remove_group(struct kobject *kobj,
 			const struct attribute_group *grp)
 {
@@ -277,6 +292,7 @@ EXPORT_SYMBOL_GPL(sysfs_remove_group);
  *
  * If groups is not NULL, remove the specified groups from the kobject.
  */
+//一次性删除多个属性组
 void sysfs_remove_groups(struct kobject *kobj,
 			 const struct attribute_group **groups)
 {
@@ -298,6 +314,7 @@ EXPORT_SYMBOL_GPL(sysfs_remove_groups);
  * files already exist in that group, in which case none of the new files
  * are created.
  */
+//尝试着向kobj->sd中添加文件，如果添加失败，则全部移除
 int sysfs_merge_group(struct kobject *kobj,
 		       const struct attribute_group *grp)
 {
@@ -315,6 +332,7 @@ int sysfs_merge_group(struct kobject *kobj,
 	kobject_get_ownership(kobj, &uid, &gid);
 
 	for ((i = 0, attr = grp->attrs); *attr && !error; (++i, ++attr))
+		//在添加时，如果已存在，会返回失败，并继而导致将之前添加的删除
 		error = sysfs_add_file_mode_ns(parent, *attr, false,
 					       (*attr)->mode, uid, gid, NULL);
 	if (error) {
@@ -332,6 +350,7 @@ EXPORT_SYMBOL_GPL(sysfs_merge_group);
  * @kobj:	The kobject containing the group.
  * @grp:	The files to remove and the attribute group they belong to.
  */
+//删除kobj->sd中由grp指定的文件
 void sysfs_unmerge_group(struct kobject *kobj,
 		       const struct attribute_group *grp)
 {

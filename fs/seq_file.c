@@ -235,6 +235,7 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 		err = PTR_ERR(p);
 		if (!p || IS_ERR(p))
 			break;
+		//调用seq_file的show方法
 		err = m->op->show(m, p);
 		if (err < 0)
 			break;

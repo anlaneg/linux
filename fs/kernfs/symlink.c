@@ -23,6 +23,7 @@
  * Returns the created node on success, ERR_PTR() value on error.
  * Ownership of the link matches ownership of the target.
  */
+//创建link类型的kernfs_node
 struct kernfs_node *kernfs_create_link(struct kernfs_node *parent,
 				       const char *name,
 				       struct kernfs_node *target)

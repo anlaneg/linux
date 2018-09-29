@@ -624,6 +624,7 @@ struct kernfs_node *kernfs_node_from_dentry(struct dentry *dentry)
 	return NULL;
 }
 
+//创建kernfs_node
 static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 					     const char *name, umode_t mode,
 					     kuid_t uid, kgid_t gid,
@@ -639,7 +640,7 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	if (!name)
 		return NULL;
 
-	//申请一个node
+	//申请一个kernfs node
 	kn = kmem_cache_zalloc(kernfs_node_cache, GFP_KERNEL);
 	if (!kn)
 		goto err_out1;
@@ -671,6 +672,7 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	kn->mode = mode;
 	kn->flags = flags;
 
+	//uid,gid非root时，设置iattr
 	if (!uid_eq(uid, GLOBAL_ROOT_UID) || !gid_eq(gid, GLOBAL_ROOT_GID)) {
 		struct iattr iattr = {
 			.ia_valid = ATTR_UID | ATTR_GID,
@@ -694,6 +696,7 @@ static struct kernfs_node *__kernfs_new_node(struct kernfs_root *root,
 	return NULL;
 }
 
+//申请并填充新的kernfs节点
 struct kernfs_node *kernfs_new_node(struct kernfs_node *parent,
 				    const char *name, umode_t mode,
 				    kuid_t uid, kgid_t gid,
@@ -865,6 +868,7 @@ static struct kernfs_node *kernfs_find_ns(struct kernfs_node *parent,
 		struct kernfs_node *kn;
 		int result;
 
+		//red-black树上进行比较
 		kn = rb_to_kn(node);
 		result = kernfs_name_compare(hash, name, ns, kn);
 		if (result < 0)
@@ -1038,6 +1042,7 @@ struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
 	int rc;
 
 	/* allocate */
+	//申请节点
 	kn = kernfs_new_node(parent, name, mode | S_IFDIR,
 			     uid, gid, KERNFS_DIR);
 	if (!kn)
@@ -1049,6 +1054,7 @@ struct kernfs_node *kernfs_create_dir_ns(struct kernfs_node *parent,
 	kn->priv = priv;
 
 	/* link in */
+	//加入到red-black树中
 	rc = kernfs_add_one(kn);
 	if (!rc)
 		return kn;
@@ -1517,6 +1523,7 @@ bool kernfs_remove_self(struct kernfs_node *kn)
  * Look for the kernfs_node with @name and @ns under @parent and remove it.
  * Returns 0 on success, -ENOENT if such entry doesn't exist.
  */
+//删除名称为name的节点
 int kernfs_remove_by_name_ns(struct kernfs_node *parent, const char *name,
 			     const void *ns)
 {

@@ -215,9 +215,9 @@ struct iattr {
 	kuid_t		ia_uid;//owner id
 	kgid_t		ia_gid;//组id
 	loff_t		ia_size;//文件大小
-	struct timespec64 ia_atime;
-	struct timespec64 ia_mtime;
-	struct timespec64 ia_ctime;
+	struct timespec64 ia_atime;//访问时间
+	struct timespec64 ia_mtime;//修改时间
+	struct timespec64 ia_ctime;//创建时间
 
 	/*
 	 * Not an attribute, but an auxiliary info for filesystems wanting to

@@ -23,7 +23,7 @@
  * Determine ktype->sysfs_ops for the given kernfs_node.  This function
  * must be called while holding an active reference.
  */
-//采用kernfs_node来返回sysfs_ops
+//针对kernfs_node来返回sysfs_ops
 static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 {
 	struct kobject *kobj = kn->parent->priv;
@@ -49,7 +49,7 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	/* acquire buffer and ensure that it's >= PAGE_SIZE and clear */
 	count = seq_get_buf(sf, &buf);
 	if (count < PAGE_SIZE) {
-		//变更为页的整数倍
+		//可以写的长度小于一个页大小，使m->count=m->size
 		seq_commit(sf, -1);
 		return 0;
 	}
@@ -62,7 +62,7 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	 * if @ops->show() isn't implemented.
 	 */
 	if (ops->show) {
-		//调用sysfs_ops的show方向，将内容格式化到buf中
+		//调用sysfs_ops的show方法，将内容格式化到buf中
 		count = ops->show(kobj, of->kn->priv, buf);
 		if (count < 0)
 			//写失败，返回错误信息
@@ -80,7 +80,7 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 		/* Try to struggle along */
 		count = PAGE_SIZE - 1;
 	}
-	//提交剩余数据
+	//增加sf->count+=count
 	seq_commit(sf, count);
 	return 0;
 }
@@ -138,6 +138,7 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 }
 
 /* kernfs write callback for regular sysfs files */
+//调用store将buf中的内容设置到of对应的obj里
 static ssize_t sysfs_kf_write(struct kernfs_open_file *of, char *buf,
 			      size_t count, loff_t pos)
 {
@@ -269,8 +270,8 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 
 //向sysfs添加一个文件
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,
-			   const struct attribute *attr, bool is_bin,
-			   umode_t mode, kuid_t uid, kgid_t gid, const void *ns)
+			   const struct attribute *attr/*要创建的文件的私有数据*/, bool is_bin/*是否为二进制文件*/,
+			   umode_t mode/*文件的权限位*/, kuid_t uid/*用户id*/, kgid_t gid/*组id*/, const void *ns)
 {
 	struct lock_class_key *key = NULL;
 	const struct kernfs_ops *ops;
@@ -309,23 +310,27 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
             //不可读，不可写
 			ops = &sysfs_file_kfops_empty;
 
-		size = PAGE_SIZE;
+		size = PAGE_SIZE;/*文本类型占一个页*/
 	} else {
         //二进制属性,考虑读写权限
 		struct bin_attribute *battr = (void *)attr;
 
 		if (battr->mmap)
+			//支持map操作
 			ops = &sysfs_bin_kfops_mmap;
 		else if (battr->read && battr->write)
+			//支持读写操作
 			ops = &sysfs_bin_kfops_rw;
 		else if (battr->read)
+			//支持只读
 			ops = &sysfs_bin_kfops_ro;
 		else if (battr->write)
+			//支持只写
 			ops = &sysfs_bin_kfops_wo;
 		else
 			ops = &sysfs_file_kfops_empty;
 
-		size = battr->size;
+		size = battr->size;/*二进制类型占为属性大小*/
 	}
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
@@ -335,7 +340,7 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 	//调用文件创建,使mode仅9个bit生效
 	//使用“操作集","属性“
 	kn = __kernfs_create_file(parent, attr->name, mode & 0777, uid, gid,
-				  size, ops, (void *)attr, ns, key);
+				  size/*文件大小*/, ops/*文件操作集*/, (void *)attr/*文件私有数据*/, ns, key);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
 			sysfs_warn_dup(parent, attr->name);

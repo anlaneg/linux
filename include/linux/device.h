@@ -601,6 +601,9 @@ ssize_t device_store_bool(struct device *dev, struct device_attribute *attr,
 #define DEVICE_ATTR_PREALLOC(_name, _mode, _show, _store) \
 	struct device_attribute dev_attr_##_name = \
 		__ATTR_PREALLOC(_name, _mode, _show, _store)
+/**
+ * 定义读写的属性组
+ */
 #define DEVICE_ATTR_RW(_name) \
 	struct device_attribute dev_attr_##_name = __ATTR_RW(_name)
 //设置只读回调
