@@ -795,6 +795,7 @@ void unlock_two_nondirectories(struct inode *, struct inode*);
  * cmpxchg8b without the need of the lock prefix). For SMP compiles
  * and 64bit archs it makes no difference if preempt is enabled or not.
  */
+//取文件大小
 static inline loff_t i_size_read(const struct inode *inode)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_SMP)
