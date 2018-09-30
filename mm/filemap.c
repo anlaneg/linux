@@ -2052,7 +2052,7 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 {
 	struct file *filp = iocb->ki_filp;
 	struct address_space *mapping = filp->f_mapping;
-	struct inode *inode = mapping->host;
+	struct inode *inode = mapping->host;//文件对应的inode
 	struct file_ra_state *ra = &filp->f_ra;
 	loff_t *ppos = &iocb->ki_pos;
 	pgoff_t index;
@@ -2062,15 +2062,19 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	unsigned int prev_offset;
 	int error = 0;
 
+	//读取位置超过maxbytes,返回０
 	if (unlikely(*ppos >= inode->i_sb->s_maxbytes))
 		return 0;
+	//规范要读取的长度
 	iov_iter_truncate(iter, inode->i_sb->s_maxbytes);
 
+	//要读取的内容页标号（起始页标号）
 	index = *ppos >> PAGE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_SHIFT;
 	prev_offset = ra->prev_pos & (PAGE_SIZE-1);
+	//要读取的内容页标号（终止位置页标号）
 	last_index = (*ppos + iter->count + PAGE_SIZE-1) >> PAGE_SHIFT;
-	offset = *ppos & ~PAGE_MASK;
+	offset = *ppos & ~PAGE_MASK;//起始页标号内位置
 
 	for (;;) {
 		struct page *page;
@@ -2080,13 +2084,16 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 
 		cond_resched();
 find_page:
+		//有未绝信号，直接置中断
 		if (fatal_signal_pending(current)) {
 			error = -EINTR;
 			goto out;
 		}
 
+		//取index对应的页
 		page = find_get_page(mapping, index);
 		if (!page) {
+			//页不存在，先将此页读入，再重新获取index对应的page
 			if (iocb->ki_flags & IOCB_NOWAIT)
 				goto would_block;
 			page_cache_sync_readahead(mapping,
@@ -2330,6 +2337,7 @@ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 						   iocb->ki_pos + count - 1))
 				return -EAGAIN;
 		} else {
+			//可能还没有落盘，先要求落盘
 			retval = filemap_write_and_wait_range(mapping,
 						iocb->ki_pos,
 					        iocb->ki_pos + count - 1);

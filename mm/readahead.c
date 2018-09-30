@@ -111,7 +111,7 @@ int read_cache_pages(struct address_space *mapping, struct list_head *pages,
 EXPORT_SYMBOL(read_cache_pages);
 
 static int read_pages(struct address_space *mapping, struct file *filp,
-		struct list_head *pages, unsigned int nr_pages, gfp_t gfp)
+		struct list_head *pages/*一组需要填充的页链表*/, unsigned int nr_pages, gfp_t gfp)
 {
 	struct blk_plug plug;
 	unsigned page_idx;
@@ -119,6 +119,7 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 
 	blk_start_plug(&plug);
 
+	//通过mapping->a_ops读取多个页
 	if (mapping->a_ops->readpages) {
 		ret = mapping->a_ops->readpages(filp, mapping, pages, nr_pages);
 		/* Clean up the remaining pages */
@@ -126,6 +127,7 @@ static int read_pages(struct address_space *mapping, struct file *filp,
 		goto out;
 	}
 
+	//将page添加到page cache中（使用lru方式）
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
 		struct page *page = lru_to_page(pages);
 		list_del(&page->lru);
@@ -149,8 +151,10 @@ out:
  *
  * Returns the number of pages requested, or the maximum amount of I/O allowed.
  */
+//如上述，用于读取磁盘上一块数据，为了达到这个目的，先申请要预读所需要的内存，并借此方式
+//避免在读取时出现写虚存到磁盘的情况。
 unsigned int __do_page_cache_readahead(struct address_space *mapping,
-		struct file *filp, pgoff_t offset, unsigned long nr_to_read,
+		struct file *filp, pgoff_t offset/*自那个页开始读*/, unsigned long nr_to_read/*读取多少页*/,
 		unsigned long lookahead_size)
 {
 	struct inode *inode = mapping->host;
@@ -163,8 +167,9 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
 
 	if (isize == 0)
-		goto out;
+		goto out;//文件为空，直接返回
 
+	//文件内容可占用最大页
 	end_index = ((isize - 1) >> PAGE_SHIFT);
 
 	/*
@@ -173,9 +178,11 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 	for (page_idx = 0; page_idx < nr_to_read; page_idx++) {
 		pgoff_t page_offset = offset + page_idx;
 
+		//如果要读取的页文件中没有，直接跳出
 		if (page_offset > end_index)
 			break;
 
+		//先检查缓存中是否已拥有此页，如果有，则直接读取
 		rcu_read_lock();
 		page = radix_tree_lookup(&mapping->i_pages, page_offset);
 		rcu_read_unlock();
@@ -192,6 +199,7 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 			continue;
 		}
 
+		//页在缓存中不存在，申请此页，并将其添加到page_pool中，完成页内存申请
 		page = __page_cache_alloc(gfp_mask);
 		if (!page)
 			break;
@@ -207,6 +215,7 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 	 * uptodate then the caller will launch readpage again, and
 	 * will then handle the error.
 	 */
+	//如果存在无法自缓存中读取到的page,则自磁盘读取
 	if (nr_pages)
 		read_pages(mapping, filp, &page_pool, nr_pages, gfp_mask);
 	BUG_ON(!list_empty(&page_pool));
@@ -385,6 +394,7 @@ ondemand_readahead(struct address_space *mapping,
 		   bool hit_readahead_marker, pgoff_t offset,
 		   unsigned long req_size)
 {
+	//取inode对应的后端设备信息
 	struct backing_dev_info *bdi = inode_to_bdi(mapping->host);
 	unsigned long max_pages = ra->ra_pages;
 	unsigned long add_pages;
@@ -394,12 +404,14 @@ ondemand_readahead(struct address_space *mapping,
 	 * If the request exceeds the readahead window, allow the read to
 	 * be up to the optimal hardware IO size
 	 */
+	//规范可读取的最大页数
 	if (req_size > max_pages && bdi->io_pages > max_pages)
 		max_pages = min(req_size, bdi->io_pages);
 
 	/*
 	 * start of file
 	 */
+	//自０号页开始读
 	if (!offset)
 		goto initial_readahead;
 
@@ -509,7 +521,7 @@ readit:
  */
 void page_cache_sync_readahead(struct address_space *mapping,
 			       struct file_ra_state *ra, struct file *filp,
-			       pgoff_t offset, unsigned long req_size)
+			       pgoff_t offset/*预读offset号页*/, unsigned long req_size/*共预读req_size页*/)
 {
 	/* no read-ahead */
 	if (!ra->ra_pages)

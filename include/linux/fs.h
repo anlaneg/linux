@@ -868,11 +868,14 @@ struct fown_struct {
  * Track a single file's readahead state
  */
 struct file_ra_state {
+	//自哪个页开始读
 	pgoff_t start;			/* where readahead started */
+	//读取多少页
 	unsigned int size;		/* # of readahead pages */
 	unsigned int async_size;	/* do asynchronous readahead when
 					   there are only # of pages ahead */
 
+	//最大预读多少页
 	unsigned int ra_pages;		/* Maximum readahead window */
 	unsigned int mmap_miss;		/* Cache miss stat for mmap accesses */
 	loff_t prev_pos;		/* Cache last read() position */

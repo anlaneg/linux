@@ -160,9 +160,11 @@ static inline struct backing_dev_info *inode_to_bdi(struct inode *inode)
 
 	sb = inode->i_sb;
 #ifdef CONFIG_BLOCK
+	//由超级块取块设备
 	if (sb_is_blkdev_sb(sb))
 		return I_BDEV(inode)->bd_bdi;
 #endif
+	//否则返回后端设备信息
 	return sb->s_bdi;
 }
 

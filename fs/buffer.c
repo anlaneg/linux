@@ -3001,6 +3001,7 @@ void guard_bio_eod(int op, struct bio *bio)
 	struct hd_struct *part;
 
 	rcu_read_lock();
+	//取分区
 	part = __disk_get_part(bio->bi_disk, bio->bi_partno);
 	if (part)
 		maxsector = part_nr_sects_read(part);

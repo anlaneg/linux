@@ -277,7 +277,7 @@ typedef __u32 __bitwise blk_mq_req_flags_t;
 
 enum req_opf {
 	/* read sectors from the device */
-	REQ_OP_READ		= 0,
+	REQ_OP_READ		= 0,/*自设备上读取*/
 	/* write sectors to the device */
 	REQ_OP_WRITE		= 1,
 	/* flush the volatile write cache */

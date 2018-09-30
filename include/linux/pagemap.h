@@ -269,6 +269,7 @@ struct page *pagecache_get_page(struct address_space *mapping, pgoff_t offset,
 static inline struct page *find_get_page(struct address_space *mapping,
 					pgoff_t offset)
 {
+	//找offset对应的页
 	return pagecache_get_page(mapping, offset, 0, 0);
 }
 
