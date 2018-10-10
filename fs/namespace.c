@@ -3274,7 +3274,7 @@ void put_mnt_ns(struct mnt_namespace *ns)
 struct vfsmount *kern_mount_data(struct file_system_type *type, void *data)
 {
 	struct vfsmount *mnt;
-	//传入file_system,文件系统名称
+	//传入file_system,文件系统名称，调用mount
 	mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, data);
 	if (!IS_ERR(mnt)) {
 		/*

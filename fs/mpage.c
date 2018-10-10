@@ -407,6 +407,7 @@ mpage_readpages(struct address_space *mapping, struct list_head *pages,
 	}
 	BUG_ON(!list_empty(pages));
 	if (args.bio)
+		//处理块设备读
 		mpage_bio_submit(REQ_OP_READ, REQ_RAHEAD, args.bio);
 	return 0;
 }

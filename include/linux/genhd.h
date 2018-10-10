@@ -110,7 +110,7 @@ struct hd_struct {
 	 * partition while IO is happening to it and update of nr_sects
 	 * can be non-atomic on 32bit machines with 64bit sector_t.
 	 */
-	sector_t nr_sects;
+	sector_t nr_sects;//扇区总数
 	seqcount_t nr_sects_seq;
 	sector_t alignment_offset;
 	unsigned int discard_alignment;
@@ -151,9 +151,9 @@ enum {
 
 struct disk_part_tbl {
 	struct rcu_head rcu_head;
-	int len;
+	int len;//分区表大小
 	struct hd_struct __rcu *last_lookup;
-	struct hd_struct __rcu *part[];
+	struct hd_struct __rcu *part[];//各分区
 };
 
 struct disk_events;
@@ -191,10 +191,10 @@ struct gendisk {
 	 * non-critical accesses use RCU.  Always access through
 	 * helpers.
 	 */
-	struct disk_part_tbl __rcu *part_tbl;
+	struct disk_part_tbl __rcu *part_tbl;//分区表
 	struct hd_struct part0;
 
-	const struct block_device_operations *fops;
+	const struct block_device_operations *fops;//设备操作集
 	struct request_queue *queue;
 	void *private_data;
 
@@ -698,6 +698,7 @@ static inline void hd_free_part(struct hd_struct *part)
  * CONFIG_PREEMPT case optimizes the case of UP kernel with preemption
  * on.
  */
+//获取分区扇区总数
 static inline sector_t part_nr_sects_read(struct hd_struct *part)
 {
 #if BITS_PER_LONG==32 && defined(CONFIG_LBDAF) && defined(CONFIG_SMP)

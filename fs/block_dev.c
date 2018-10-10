@@ -657,6 +657,7 @@ EXPORT_SYMBOL(blkdev_fsync);
 int bdev_read_page(struct block_device *bdev, sector_t sector,
 			struct page *page)
 {
+	//取块设备操作集
 	const struct block_device_operations *ops = bdev->bd_disk->fops;
 	int result = -EOPNOTSUPP;
 
@@ -666,6 +667,7 @@ int bdev_read_page(struct block_device *bdev, sector_t sector,
 	result = blk_queue_enter(bdev->bd_queue, 0);
 	if (result)
 		return result;
+	//通过rw_page完成对bdev设备的读取，读取起始扇区sector+...,内容填充到page
 	result = ops->rw_page(bdev, sector + get_start_sect(bdev), page,
 			      REQ_OP_READ);
 	blk_queue_exit(bdev->bd_queue);
@@ -788,6 +790,7 @@ static const struct super_operations bdev_sops = {
 	.evict_inode = bdev_evict_inode,
 };
 
+//块设备挂载回调
 static struct dentry *bd_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
@@ -798,12 +801,14 @@ static struct dentry *bd_mount(struct file_system_type *fs_type,
 	return dent;
 }
 
+//块设备对应的文件系统
 static struct file_system_type bd_type = {
 	.name		= "bdev",
 	.mount		= bd_mount,
 	.kill_sb	= kill_anon_super,
 };
 
+//块设备文件系统super_block
 struct super_block *blockdev_superblock __read_mostly;
 EXPORT_SYMBOL_GPL(blockdev_superblock);
 
@@ -816,9 +821,11 @@ void __init bdev_cache_init(void)
 			0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 				SLAB_MEM_SPREAD|SLAB_ACCOUNT|SLAB_PANIC),
 			init_once);
+	//注册块设备文件系统
 	err = register_filesystem(&bd_type);
 	if (err)
 		panic("Cannot register bdev pseudo-fs");
+	//挂载块设备文件系统，并获得挂载点
 	bd_mnt = kern_mount(&bd_type);
 	if (IS_ERR(bd_mnt))
 		panic("Cannot create bdev pseudo-fs");

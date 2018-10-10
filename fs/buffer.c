@@ -3001,7 +3001,7 @@ void guard_bio_eod(int op, struct bio *bio)
 	struct hd_struct *part;
 
 	rcu_read_lock();
-	//取分区
+	//按分区号取分区
 	part = __disk_get_part(bio->bi_disk, bio->bi_partno);
 	if (part)
 		maxsector = part_nr_sects_read(part);
@@ -3010,7 +3010,7 @@ void guard_bio_eod(int op, struct bio *bio)
 	rcu_read_unlock();
 
 	if (!maxsector)
-		return;
+		return;//扇区数为０时，退出
 
 	/*
 	 * If the *whole* IO is past the end of the device,
@@ -3018,11 +3018,11 @@ void guard_bio_eod(int op, struct bio *bio)
 	 * an EIO.
 	 */
 	if (unlikely(bio->bi_iter.bi_sector >= maxsector))
-		return;
+		return;//要读取的扇区必须小于最大扇区数
 
 	maxsector -= bio->bi_iter.bi_sector;
 	if (likely((bio->bi_iter.bi_size >> 9) <= maxsector))
-		return;
+		return;//起始未超过，但读会超过扇区总数
 
 	/* Uhhuh. We've got a bio that straddles the device size! */
 	truncated_bytes = bio->bi_iter.bi_size - (maxsector << 9);

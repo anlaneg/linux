@@ -143,7 +143,7 @@ static inline void bio_issue_init(struct bio_issue *issue,
  */
 struct bio {
 	struct bio		*bi_next;	/* request queue link */
-	struct gendisk		*bi_disk;
+	struct gendisk		*bi_disk;//磁盘
 	unsigned int		bi_opf;		/* bottom bits req flags,
 						 * top bits REQ_OP. Use
 						 * accessors.
@@ -152,7 +152,7 @@ struct bio {
 	unsigned short		bi_ioprio;
 	unsigned short		bi_write_hint;
 	blk_status_t		bi_status;
-	u8			bi_partno;
+	u8			bi_partno;//分区号
 
 	/* Number of segments in this BIO after
 	 * physical address coalescing is performed.

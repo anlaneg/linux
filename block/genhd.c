@@ -94,10 +94,13 @@ void part_in_flight_rw(struct request_queue *q, struct hd_struct *part,
 	inflight[1] = atomic_read(&part->in_flight[1]);
 }
 
+//通过分区号，获取分区信息
 struct hd_struct *__disk_get_part(struct gendisk *disk, int partno)
 {
+	//取磁盘分区表
 	struct disk_part_tbl *ptbl = rcu_dereference(disk->part_tbl);
 
+	//分区号校验
 	if (unlikely(partno < 0 || partno >= ptbl->len))
 		return NULL;
 	return rcu_dereference(ptbl->part[partno]);
