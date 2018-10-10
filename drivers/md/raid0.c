@@ -790,6 +790,7 @@ static struct md_personality raid0_personality=
 	.congested	= raid0_congested,
 };
 
+//raid0初始化
 static int __init raid0_init (void)
 {
 	return register_md_personality (&raid0_personality);

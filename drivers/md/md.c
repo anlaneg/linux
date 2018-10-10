@@ -731,12 +731,15 @@ struct md_rdev *md_find_rdev_rcu(struct mddev *mddev, dev_t dev)
 }
 EXPORT_SYMBOL_GPL(md_find_rdev_rcu);
 
+//通过level,或者clevel来查找对应的raid类型
 static struct md_personality *find_pers(int level, char *clevel)
 {
 	struct md_personality *pers;
 	list_for_each_entry(pers, &pers_list, list) {
+		//如果指定了level，则比对level
 		if (level != LEVEL_NONE && pers->level == level)
 			return pers;
+		//如果未指定level,则比对clevel
 		if (strcmp(pers->name, clevel)==0)
 			return pers;
 	}
@@ -3665,6 +3668,7 @@ level_show(struct mddev *mddev, char *page)
 	return ret;
 }
 
+//转换用户配置的level
 static ssize_t
 level_store(struct mddev *mddev, const char *buf, size_t len)
 {
@@ -3676,6 +3680,7 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	void *priv, *oldpriv;
 	struct md_rdev *rdev;
 
+	//长度检查
 	if (slen == 0 || slen >= sizeof(clevel))
 		return -EINVAL;
 
@@ -3867,6 +3872,7 @@ out_unlock:
 	return rv;
 }
 
+//设置，显示raid级别(sysfs文件）
 static struct md_sysfs_entry md_level =
 __ATTR(level, S_IRUGO|S_IWUSR, level_show, level_store);
 
@@ -7844,6 +7850,7 @@ static int md_seq_show(struct seq_file *seq, void *v)
 		struct md_personality *pers;
 		seq_printf(seq, "Personalities : ");
 		spin_lock(&pers_lock);
+		//显示支持的raid类型
 		list_for_each_entry(pers, &pers_list, list)
 			seq_printf(seq, "[%s] ", pers->name);
 
@@ -7980,6 +7987,7 @@ static const struct file_operations md_seq_fops = {
 	.poll		= mdstat_poll,
 };
 
+//将p挂接在pers_list上
 int register_md_personality(struct md_personality *p)
 {
 	pr_debug("md: %s personality registered for level %d\n",

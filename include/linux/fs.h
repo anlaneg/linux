@@ -306,6 +306,7 @@ enum rw_hint {
 struct kiocb {
 	struct file		*ki_filp;//要读写的文件
 	loff_t			ki_pos;//读写的偏移量
+	//操作完成后回调
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
 	void			*private;
 	int			ki_flags;
@@ -313,6 +314,7 @@ struct kiocb {
 	u16			ki_ioprio; /* See linux/ioprio.h */
 } __randomize_layout;
 
+//如果ki_complete回调为ＮＵＬＬ，则为同步io
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
 {
 	return kiocb->ki_complete == NULL;
@@ -623,7 +625,7 @@ struct inode {
 	struct timespec64	i_ctime;
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
-	u8			i_blkbits;
+	u8			i_blkbits;//块占用的bits数
 	u8			i_write_hint;
 	blkcnt_t		i_blocks;
 

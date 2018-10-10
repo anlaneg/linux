@@ -279,7 +279,7 @@ enum req_opf {
 	/* read sectors from the device */
 	REQ_OP_READ		= 0,/*自设备上读取*/
 	/* write sectors to the device */
-	REQ_OP_WRITE		= 1,
+	REQ_OP_WRITE		= 1,//向设备上写
 	/* flush the volatile write cache */
 	REQ_OP_FLUSH		= 2,
 	/* discard sectors */

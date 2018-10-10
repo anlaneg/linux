@@ -532,7 +532,7 @@ struct md_personality
 {
 	char *name;
 	int level;
-	struct list_head list;
+	struct list_head list;//用于串连组成链表
 	struct module *owner;
 	bool (*make_request)(struct mddev *mddev, struct bio *bio);
 	/*

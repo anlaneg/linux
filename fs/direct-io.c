@@ -114,11 +114,11 @@ struct dio_submit {
 /* dio_state communicated between submission path and end_io */
 struct dio {
 	int flags;			/* doesn't change */
-	int op;
+	int op;//读或者写操作
 	int op_flags;
 	blk_qc_t bio_cookie;
 	struct gendisk *bio_disk;
-	struct inode *inode;
+	struct inode *inode;//dio操作对应的inode
 	loff_t i_size;			/* i_size when submitted */
 	dio_iodone_t *end_io;		/* IO completion function */
 
@@ -127,6 +127,7 @@ struct dio {
 	/* BIO completion state */
 	spinlock_t bio_lock;		/* protects BIO fields below */
 	int page_errors;		/* errno from get_user_pages() */
+	//是否为异步io
 	int is_async;			/* is IO async ? */
 	bool defer_completion;		/* defer AIO completion to workqueue? */
 	bool should_dirty;		/* if pages should be dirtied */
@@ -1175,11 +1176,11 @@ do_blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 {
 	unsigned i_blkbits = READ_ONCE(inode->i_blkbits);
 	unsigned blkbits = i_blkbits;
-	unsigned blocksize_mask = (1 << blkbits) - 1;
+	unsigned blocksize_mask = (1 << blkbits) - 1;//块掩码
 	ssize_t retval = -EINVAL;
 	const size_t count = iov_iter_count(iter);
 	loff_t offset = iocb->ki_pos;
-	const loff_t end = offset + count;
+	const loff_t end = offset + count;//读写的尾部
 	struct dio *dio;
 	struct dio_submit sdio = { 0, };
 	struct buffer_head map_bh = { 0, };
@@ -1191,18 +1192,19 @@ do_blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 	 * the early prefetch in the caller enough time.
 	 */
 
-	if (align & blocksize_mask) {
+	if (align & blocksize_mask) {//不按块对齐情况
 		if (bdev)
 			blkbits = blksize_bits(bdev_logical_block_size(bdev));
 		blocksize_mask = (1 << blkbits) - 1;
 		if (align & blocksize_mask)
-			goto out;
+			goto out;//仍不能对齐
 	}
 
 	/* watch out for a 0 len io from a tricksy fs */
 	if (iov_iter_rw(iter) == READ && !count)
-		return 0;
+		return 0;//读操作，且读０长度，直接返回
 
+	//申请dio
 	dio = kmem_cache_alloc(dio_cache, GFP_KERNEL);
 	retval = -ENOMEM;
 	if (!dio)
@@ -1236,6 +1238,7 @@ do_blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 	/* Once we sampled i_size check for reads beyond EOF */
 	dio->i_size = i_size_read(inode);
 	if (iov_iter_rw(iter) == READ && offset >= dio->i_size) {
+		//读操作，但offset要求的位置大于文件本身大小，返回
 		if (dio->flags & DIO_LOCKING)
 			inode_unlock(inode);
 		kmem_cache_free(dio_cache, dio);
