@@ -483,6 +483,7 @@ resume:
 			XFRM_INC_STATS(net, LINUX_MIB_XFRMINHDRERROR);
 			goto drop;
 		}
+		crypto_done = false;
 	} while (!err);
 
 	//调用family中对应协议的callback

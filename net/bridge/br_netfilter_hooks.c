@@ -842,8 +842,9 @@ static unsigned int ip_sabotage_in(void *priv,
 				   struct sk_buff *skb,
 				   const struct nf_hook_state *state)
 {
-	if (skb->nf_bridge && !skb->nf_bridge->in_prerouting) {
-		//如果skb在bridge内转发，且当前不在prerouting阶段，则直接跳过此阶段执行
+	//如果skb在bridge内转发，且当前不在prerouting阶段，则直接跳过此阶段执行
+	if (skb->nf_bridge && !skb->nf_bridge->in_prerouting &&
+	    !netif_is_l3_master(skb->dev)) {
 		state->okfn(state->net, state->sk, skb);
 		return NF_STOLEN;
 	}

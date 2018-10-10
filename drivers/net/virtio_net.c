@@ -1728,20 +1728,6 @@ static void virtnet_stats(struct net_device *dev,
 	tot->rx_frame_errors = dev->stats.rx_frame_errors;
 }
 
-#ifdef CONFIG_NET_POLL_CONTROLLER
-//将virtnet设备加入到napi收包循环中，实现virtnet设备收包
-//(通过调用napi_schedule触发软中断来进行收包）
-//注：每个队列会有一个对应的napi
-static void virtnet_netpoll(struct net_device *dev)
-{
-	struct virtnet_info *vi = netdev_priv(dev);
-	int i;
-
-	for (i = 0; i < vi->curr_queue_pairs; i++)
-		napi_schedule(&vi->rq[i].napi);
-}
-#endif
-
 static void virtnet_ack_link_announce(struct virtnet_info *vi)
 {
 	rtnl_lock();
@@ -2489,9 +2475,6 @@ static const struct net_device_ops virtnet_netdev = {
 	.ndo_get_stats64     = virtnet_stats,
 	.ndo_vlan_rx_add_vid = virtnet_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid = virtnet_vlan_rx_kill_vid,
-#ifdef CONFIG_NET_POLL_CONTROLLER
-	.ndo_poll_controller = virtnet_netpoll,//注册本设备到napi,交由napi poll来收包
-#endif
 	.ndo_bpf		= virtnet_xdp,
 	.ndo_xdp_xmit		= virtnet_xdp_xmit,
 	.ndo_features_check	= passthru_features_check,
