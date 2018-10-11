@@ -183,12 +183,18 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 		gfp = mapping_gfp_constraint(page->mapping, GFP_KERNEL);
 	}
 
+	//检查此页是否已存在缓存
 	if (page_has_buffers(page))
 		goto confused;
 
+	//页在文件中的块号(首个块号）
 	block_in_file = (sector_t)page->index << (PAGE_SHIFT - blkbits);
+	//要读取的尾页对应的块号（尾部块号）
 	last_block = block_in_file + args->nr_pages * blocks_per_page;
+	//文件实际大小可提供的尾页对应的块号
 	last_block_in_file = (i_size_read(inode) + blocksize - 1) >> blkbits;
+
+	//如果读取内容大于文件实际大小，则更新尾页块号
 	if (last_block > last_block_in_file)
 		last_block = last_block_in_file;
 	page_block = 0;

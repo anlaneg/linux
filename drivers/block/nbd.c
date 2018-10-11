@@ -2218,6 +2218,7 @@ static int __init nbd_init(void)
 	if (!recv_workqueue)
 		return -ENOMEM;
 
+	//注册块设备nbd
 	if (register_blkdev(NBD_MAJOR, "nbd")) {
 		destroy_workqueue(recv_workqueue);
 		return -EIO;

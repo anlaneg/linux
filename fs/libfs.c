@@ -229,6 +229,7 @@ const struct inode_operations simple_dir_inode_operations = {
 };
 EXPORT_SYMBOL(simple_dir_inode_operations);
 
+//默认super_operators
 static const struct super_operations simple_super_operations = {
 	.statfs		= simple_statfs,
 };
@@ -255,6 +256,7 @@ struct dentry *mount_pseudo_xattr(struct file_system_type *fs_type, char *name,
 	s->s_blocksize = PAGE_SIZE;
 	s->s_blocksize_bits = PAGE_SHIFT;
 	s->s_magic = magic;
+	//如果未指定super block ops,则置为simple_super_operations
 	s->s_op = ops ? ops : &simple_super_operations;
 	s->s_xattr = xattr;
 	s->s_time_gran = 1;
@@ -266,8 +268,9 @@ struct dentry *mount_pseudo_xattr(struct file_system_type *fs_type, char *name,
 	 * after this must take care not to collide with it (by passing
 	 * max_reserved of 1 to iunique).
 	 */
-	root->i_ino = 1;
+	root->i_ino = 1;//将super_block的ino置为１
 	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
+	//此节点的access time，modify time,create time置为相等
 	root->i_atime = root->i_mtime = root->i_ctime = current_time(root);
 	dentry = __d_alloc(s, &d_name);
 	if (!dentry) {

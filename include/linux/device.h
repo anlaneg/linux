@@ -1035,6 +1035,7 @@ struct device {
 	bool			of_node_reused:1;
 };
 
+//由kobj获取对应的device
 static inline struct device *kobj_to_dev(struct kobject *kobj)
 {
 	return container_of(kobj, struct device, kobj);

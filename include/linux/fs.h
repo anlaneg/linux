@@ -409,6 +409,7 @@ int pagecache_write_end(struct file *, struct address_space *mapping,
 struct address_space {
 	//指向其对应的inode
 	struct inode		*host;		/* owner: inode, block_device */
+	//page cache对应的树根
 	struct radix_tree_root	i_pages;	/* cached pages */
 	atomic_t		i_mmap_writable;/* count VM_SHARED mappings */
 	struct rb_root_cached	i_mmap;		/* tree of private and shared mappings */

@@ -817,6 +817,7 @@ void __init bdev_cache_init(void)
 	int err;
 	static struct vfsmount *bd_mnt;
 
+	//构造bdev　cache
 	bdev_cachep = kmem_cache_create("bdev_cache", sizeof(struct bdev_inode),
 			0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 				SLAB_MEM_SPREAD|SLAB_ACCOUNT|SLAB_PANIC),
@@ -825,7 +826,7 @@ void __init bdev_cache_init(void)
 	err = register_filesystem(&bd_type);
 	if (err)
 		panic("Cannot register bdev pseudo-fs");
-	//挂载块设备文件系统，并获得挂载点
+	//挂载块设备文件系统，并获得挂载点(促使bd_mount函数被调用）
 	bd_mnt = kern_mount(&bd_type);
 	if (IS_ERR(bd_mnt))
 		panic("Cannot create bdev pseudo-fs");
@@ -1068,6 +1069,7 @@ retry:
 	return 0;
 }
 
+//获取bdev对应的gendisk,并返回其对应的分区编号
 static struct gendisk *bdev_get_gendisk(struct block_device *bdev, int *partno)
 {
 	struct gendisk *disk = get_gendisk(bdev->bd_dev, partno);
@@ -1125,6 +1127,7 @@ static struct block_device *bd_start_claiming(struct block_device *bdev,
 	 * @bdev might not have been initialized properly yet, look up
 	 * and grab the outer block device the hard way.
 	 */
+	//取bdev对应的disk,及其对应的partno
 	disk = bdev_get_gendisk(bdev, &partno);
 	if (!disk)
 		return ERR_PTR(-ENXIO);
@@ -1137,6 +1140,7 @@ static struct block_device *bd_start_claiming(struct block_device *bdev,
 	 * tracking is broken for those devices but it has always been that
 	 * way.
 	 */
+	//取整块盘
 	if (partno)
 		whole = bdget_disk(disk, 0);
 	else
@@ -1613,6 +1617,7 @@ int blkdev_get(struct block_device *bdev, fmode_t mode, void *holder)
 
 	WARN_ON_ONCE((mode & FMODE_EXCL) && !holder);
 
+	//mode必须有FMODE_EXCL标记，holder必须非NULL,否则会告警
 	if ((mode & FMODE_EXCL) && holder) {
 		whole = bd_start_claiming(bdev, holder);
 		if (IS_ERR(whole)) {
@@ -2046,7 +2051,7 @@ static long blkdev_fallocate(struct file *file, int mode, loff_t start,
 					     end >> PAGE_SHIFT);
 }
 
-//块设备的文件操作函数
+//块设备的默认文件操作集
 const struct file_operations def_blk_fops = {
 	.open		= blkdev_open,
 	.release	= blkdev_close,

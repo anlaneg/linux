@@ -21,9 +21,9 @@ struct kobj_map {
 		struct probe *next;//挂接多个probe,各probe之前按range自小向大排列
 		dev_t dev;
 		unsigned long range;
-		struct module *owner;
-		kobj_probe_t *get;
-		int (*lock)(dev_t, void *);
+		struct module *owner;//依赖的module
+		kobj_probe_t *get;//获取kobj的回调函数
+		int (*lock)(dev_t, void *);//加锁函数
 		void *data;
 	} *probes[255];
 	struct mutex *lock;
@@ -99,6 +99,7 @@ void kobj_unmap(struct kobj_map *domain, dev_t dev, unsigned long range)
 	kfree(found);
 }
 
+//通过domain->probes中查找dev,获取对应的probe,并调用相应的probe回调，产生kobj,并通过出参，返回对应的index
 struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
 {
 	struct kobject *kobj;
@@ -107,27 +108,37 @@ struct kobject *kobj_lookup(struct kobj_map *domain, dev_t dev, int *index)
 
 retry:
 	mutex_lock(domain->lock);
+	//在domain的probes哈希表中查找dev
 	for (p = domain->probes[MAJOR(dev) % 255]; p; p = p->next) {
 		struct kobject *(*probe)(dev_t, int *, void *);
 		struct module *owner;
 		void *data;
 
+		//p的设备编号大于查找的，或者p的设备编号小于dev(不要范围内）
 		if (p->dev > dev || p->dev + p->range - 1 < dev)
-			continue;//跳过不匹配的
+			continue;
+
+		//要查找的dev在p范围以内
 		if (p->range - 1 >= best)
 			break;//如果range为０或者其大于best，忽略
+
+		//跳过无法引用对应module的
 		if (!try_module_get(p->owner))
 			continue;
+
 		owner = p->owner;
 		data = p->data;
 		probe = p->get;
 		best = p->range - 1;
-		*index = dev - p->dev;
+		*index = dev - p->dev;//所查找的dev在其所属设备中的索引号
+
+		//如果有lock函数，则进行加锁回调
 		if (p->lock && p->lock(dev, data) < 0) {
 			module_put(owner);
 			continue;
 		}
 		mutex_unlock(domain->lock);
+		//通过probe回调，获取对应的kobj
 		kobj = probe(dev, index, data);
 		/* Currently ->owner protects _only_ ->probe() itself. */
 		module_put(owner);

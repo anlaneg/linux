@@ -596,10 +596,12 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 	ssize_t ret = -EBADF;
 
 	if (f.file) {
+		//取文件当前的读取位置
 		loff_t pos = file_pos_read(f.file);
 		//实现读（自file文件的pos位置读，计划读取count个）
 		ret = vfs_read(f.file, buf, count, &pos);
 		if (ret >= 0)
+			//更新文件的读位置
 			file_pos_write(f.file, pos);
 		fdput_pos(f);
 	}

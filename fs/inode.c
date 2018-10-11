@@ -937,7 +937,7 @@ struct inode *new_inode_pseudo(struct super_block *sb)
  *	newly created inode's mapping
  *
  */
-//获取一个inode
+//通过super_block获取一个inode
 struct inode *new_inode(struct super_block *sb)
 {
 	struct inode *inode;

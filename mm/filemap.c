@@ -1428,8 +1428,10 @@ struct page *find_get_entry(struct address_space *mapping, pgoff_t offset)
 	rcu_read_lock();
 repeat:
 	page = NULL;
+	//查找offset对应的页
 	pagep = radix_tree_lookup_slot(&mapping->i_pages, offset);
 	if (pagep) {
+		//找到了对应的页
 		page = radix_tree_deref_slot(pagep);
 		if (unlikely(!page))
 			goto out;
@@ -2065,6 +2067,7 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	//读取位置超过maxbytes,返回０
 	if (unlikely(*ppos >= inode->i_sb->s_maxbytes))
 		return 0;
+
 	//规范要读取的长度
 	iov_iter_truncate(iter, inode->i_sb->s_maxbytes);
 
@@ -2090,7 +2093,7 @@ find_page:
 			goto out;
 		}
 
-		//取index对应的页
+		//在page cache中查index对应的页
 		page = find_get_page(mapping, index);
 		if (!page) {
 			//页不存在，先将此页读入，再重新获取index对应的page
@@ -2099,6 +2102,7 @@ find_page:
 			page_cache_sync_readahead(mapping,
 					ra, filp,
 					index, last_index - index);
+			//页被加载后，重新查询page
 			page = find_get_page(mapping, index);
 			if (unlikely(page == NULL))
 				goto no_cached_page;
@@ -2142,6 +2146,7 @@ find_page:
 			unlock_page(page);
 		}
 page_ok:
+		//页是存在的，且已为最新版本，直接将其copy到buffer中
 		/*
 		 * i_size must be checked after we know the page is Uptodate.
 		 *
@@ -2188,7 +2193,7 @@ page_ok:
 		 * Ok, we have the page, and it's up-to-date, so
 		 * now we can copy it to user space...
 		 */
-
+		//将页copy到用户态buffer中
 		ret = copy_page_to_iter(page, offset, nr, iter);
 		offset += ret;
 		index += offset >> PAGE_SHIFT;
@@ -2206,6 +2211,7 @@ page_ok:
 		continue;
 
 page_not_up_to_date:
+		//页是存在的，但非最新，需要更新后再copy到buffer
 		/* Get exclusive access to the page ... */
 		error = lock_page_killable(page);
 		if (unlikely(error))

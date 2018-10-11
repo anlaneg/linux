@@ -125,6 +125,7 @@ struct hd_struct *disk_get_part(struct gendisk *disk, int partno)
 	struct hd_struct *part;
 
 	rcu_read_lock();
+	//取分区partno对应的分区信息
 	part = __disk_get_part(disk, partno);
 	if (part)
 		get_device(part_to_dev(part));
@@ -544,6 +545,7 @@ void blk_register_region(dev_t devt, unsigned long range, struct module *module,
 			 struct kobject *(*probe)(dev_t, int *, void *),
 			 int (*lock)(dev_t, void *), void *data)
 {
+	//加入一个range范围的block dev
 	kobj_map(bdev_map, devt, range, module, probe, lock, data);
 }
 
@@ -827,6 +829,7 @@ struct gendisk *get_gendisk(dev_t devt, int *partno)
 	if (MAJOR(devt) != BLOCK_EXT_MAJOR) {
 		struct kobject *kobj;
 
+		//获取对应的kobj,并获取其对应的disk
 		kobj = kobj_lookup(bdev_map, devt, partno);
 		if (kobj)
 			disk = dev_to_disk(kobj_to_dev(kobj));
@@ -880,8 +883,10 @@ struct block_device *bdget_disk(struct gendisk *disk, int partno)
 	struct hd_struct *part;
 	struct block_device *bdev = NULL;
 
+	//通过disk获取partno号分区信息
 	part = disk_get_part(disk, partno);
 	if (part)
+		//由分区获取其对应的bdev
 		bdev = bdget(part_devt(part));
 	disk_put_part(part);
 
