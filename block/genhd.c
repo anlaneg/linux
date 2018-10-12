@@ -599,6 +599,7 @@ static void register_disk(struct device *parent, struct gendisk *disk)
 	/* delay uevents, until we scanned partition table */
 	dev_set_uevent_suppress(ddev, 1);
 
+	//添加设备并为其probe驱动
 	if (device_add(ddev))
 		return;
 	if (!sysfs_deprecated) {
@@ -729,6 +730,7 @@ static void __device_add_disk(struct device *parent, struct gendisk *disk,
 	blk_integrity_add(disk);
 }
 
+//磁盘添加
 void device_add_disk(struct device *parent, struct gendisk *disk)
 {
 	__device_add_disk(parent, disk, true);

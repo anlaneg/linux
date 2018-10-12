@@ -39,7 +39,7 @@ struct kmem_cache {
 	void (*ctor)(void *obj);
 
 /* 4) cache creation/removal */
-	const char *name;
+	const char *name;//cache名称
 	struct list_head list;
 	int refcount;
 	int object_size;

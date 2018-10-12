@@ -920,6 +920,7 @@ int blk_register_queue(struct gendisk *disk)
 	/* Prevent changes through sysfs until registration is completed. */
 	mutex_lock(&q->sysfs_lock);
 
+	//添加queue kobject
 	ret = kobject_add(&q->kobj, kobject_get(&dev->kobj), "%s", "queue");
 	if (ret < 0) {
 		blk_trace_remove_sysfs(dev);

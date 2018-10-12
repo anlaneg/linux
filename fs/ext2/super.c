@@ -206,6 +206,7 @@ static void ext2_destroy_inode(struct inode *inode)
 	call_rcu(&inode->i_rcu, ext2_i_callback);
 }
 
+//初始化inode节点
 static void init_once(void *foo)
 {
 	struct ext2_inode_info *ei = (struct ext2_inode_info *) foo;

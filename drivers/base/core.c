@@ -1900,6 +1900,7 @@ int device_add(struct device *dev)
 	error = device_add_attrs(dev);
 	if (error)
 		goto AttrsError;
+
 	//将设备添加到其对应的bus上
 	error = bus_add_device(dev);
 	if (error)

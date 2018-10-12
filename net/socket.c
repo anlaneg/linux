@@ -446,7 +446,7 @@ EXPORT_SYMBOL(sock_from_file);
  *
  *	On a success the socket object pointer is returned.
  */
-
+//通过fd查找其对应的socket
 struct socket *sockfd_lookup(int fd, int *err)
 {
 	struct file *file;
