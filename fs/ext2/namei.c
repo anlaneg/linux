@@ -224,6 +224,7 @@ static int ext2_link (struct dentry * old_dentry, struct inode * dir,
 	return err;
 }
 
+//ext2目录创建
 static int ext2_mkdir(struct inode * dir, struct dentry * dentry, umode_t mode)
 {
 	struct inode * inode;
@@ -241,6 +242,7 @@ static int ext2_mkdir(struct inode * dir, struct dentry * dentry, umode_t mode)
 	if (IS_ERR(inode))
 		goto out_dir;
 
+	//设置dir对应的ops
 	inode->i_op = &ext2_dir_inode_operations;
 	inode->i_fop = &ext2_dir_operations;
 	if (test_opt(inode->i_sb, NOBH))
@@ -415,7 +417,7 @@ const struct inode_operations ext2_dir_inode_operations = {
 	.link		= ext2_link,
 	.unlink		= ext2_unlink,
 	.symlink	= ext2_symlink,
-	.mkdir		= ext2_mkdir,
+	.mkdir		= ext2_mkdir,//目录创建
 	.rmdir		= ext2_rmdir,
 	.mknod		= ext2_mknod,
 	.rename		= ext2_rename,

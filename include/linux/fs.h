@@ -3069,6 +3069,7 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 			     dio_iodone_t end_io, dio_submit_t submit_io,
 			     int flags);
 
+//块设备的direct io
 static inline ssize_t blockdev_direct_IO(struct kiocb *iocb,
 					 struct inode *inode,
 					 struct iov_iter *iter,

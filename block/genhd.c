@@ -300,9 +300,9 @@ static struct blk_major_name {
 	struct blk_major_name *next;
 	int major;
 	char name[16];
-} *major_names[BLKDEV_MAJOR_HASH_SIZE];
-//用于记录所有块设备
+} *major_names[BLKDEV_MAJOR_HASH_SIZE];//用于记录所有块设备名称
 
+//通过major取hashcode
 /* index in the above - for now: assume no multimajor ranges */
 static inline int major_to_index(unsigned major)
 {
@@ -310,7 +310,7 @@ static inline int major_to_index(unsigned major)
 }
 
 #ifdef CONFIG_PROC_FS
-//显示系统中所有块设备
+//显示系统中所有块设备major,name
 void blkdev_show(struct seq_file *seqf, off_t offset)
 {
 	struct blk_major_name *dp;
@@ -343,6 +343,7 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
  * See Documentation/admin-guide/devices.txt for the list of allocated
  * major numbers.
  */
+//块设备注册
 int register_blkdev(unsigned int major, const char *name)
 {
 	struct blk_major_name **n, *p;
@@ -352,21 +353,25 @@ int register_blkdev(unsigned int major, const char *name)
 
 	/* temporary */
 	if (major == 0) {
+		//找一个空的major位置
 		for (index = ARRAY_SIZE(major_names)-1; index > 0; index--) {
 			if (major_names[index] == NULL)
 				break;
 		}
 
+		//未找到空闲的major,注册失败
 		if (index == 0) {
 			printk("register_blkdev: failed to get major for %s\n",
 			       name);
 			ret = -EBUSY;
 			goto out;
 		}
+		//更新major
 		major = index;
 		ret = major;
 	}
 
+	//合法性检查（不容许超过BLKDEV_MAJOR_MAX）
 	if (major >= BLKDEV_MAJOR_MAX) {
 		pr_err("register_blkdev: major requested (%u) is greater than the maximum (%u) for %s\n",
 		       major, BLKDEV_MAJOR_MAX-1, name);
@@ -375,26 +380,30 @@ int register_blkdev(unsigned int major, const char *name)
 		goto out;
 	}
 
+	//申请并填充blk_major_name结构体
 	p = kmalloc(sizeof(struct blk_major_name), GFP_KERNEL);
 	if (p == NULL) {
 		ret = -ENOMEM;
 		goto out;
 	}
 
-	p->major = major;
-	strlcpy(p->name, name, sizeof(p->name));
+	p->major = major;//填充major
+	strlcpy(p->name, name, sizeof(p->name));//填充名称
 	p->next = NULL;
+
+	//取hashcode,插入到对应的桶
 	index = major_to_index(major);
 
 	for (n = &major_names[index]; *n; n = &(*n)->next) {
 		if ((*n)->major == major)
-			break;
+			break;//存在与之相等的，跳出
 	}
 	if (!*n)
-		*n = p;
+		*n = p;//加入到结尾处
 	else
-		ret = -EBUSY;
+		ret = -EBUSY;//已存在的插入失败
 
+	//出错时，报错
 	if (ret < 0) {
 		printk("register_blkdev: cannot get major %u for %s\n",
 		       major, name);
@@ -407,6 +416,7 @@ out:
 
 EXPORT_SYMBOL(register_blkdev);
 
+//块设备解注册
 void unregister_blkdev(unsigned int major, const char *name)
 {
 	struct blk_major_name **n;

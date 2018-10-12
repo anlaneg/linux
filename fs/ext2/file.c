@@ -147,6 +147,7 @@ static int ext2_release_file (struct inode * inode, struct file * filp)
 	return 0;
 }
 
+//ext2文件同步
 int ext2_fsync(struct file *file, loff_t start, loff_t end, int datasync)
 {
 	int ret;
@@ -170,6 +171,7 @@ static ssize_t ext2_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	return generic_file_read_iter(iocb, to);
 }
 
+//ext2文件写入
 static ssize_t ext2_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 #ifdef CONFIG_FS_DAX

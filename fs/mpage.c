@@ -135,7 +135,7 @@ map_buffer_to_page(struct page *page, struct buffer_head *bh, int page_block)
 
 struct mpage_readpage_args {
 	struct bio *bio;
-	struct page *page;
+	struct page *page;//要填充的页
 	unsigned int nr_pages;
 	bool is_readahead;
 	sector_t last_block_in_bio;
@@ -305,6 +305,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 alloc_new:
 	if (args->bio == NULL) {
 		if (first_hole == blocks_per_page) {
+			//换算到扇区号
 			if (!bdev_read_page(bdev, blocks[0] << (blkbits - 9),
 								page))
 				goto out;
@@ -398,10 +399,10 @@ mpage_readpages(struct address_space *mapping, struct list_head *pages,
 	unsigned page_idx;
 
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
-		struct page *page = lru_to_page(pages);
+		struct page *page = lru_to_page(pages);//由pages获取其对应的page结构体
 
 		prefetchw(&page->flags);
-		list_del(&page->lru);
+		list_del(&page->lru);//将page自链中摘除
 		if (!add_to_page_cache_lru(page, mapping,
 					page->index,
 					readahead_gfp_mask(mapping))) {

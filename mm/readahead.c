@@ -167,9 +167,9 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 	gfp_t gfp_mask = readahead_gfp_mask(mapping);
 
 	if (isize == 0)
-		goto out;//文件为空，直接返回
+		goto out;//文件大小为０，直接返回
 
-	//文件内容可占用最大页
+	//文件内容可占用的最大页号
 	end_index = ((isize - 1) >> PAGE_SHIFT);
 
 	/*
@@ -187,6 +187,7 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 		page = radix_tree_lookup(&mapping->i_pages, page_offset);
 		rcu_read_unlock();
 		if (page && !radix_tree_exceptional_entry(page)) {
+			//page_offset对应的页已存在，
 			/*
 			 * Page already present?  Kick off the current batch of
 			 * contiguous pages before continuing with the next
@@ -203,7 +204,7 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 		page = __page_cache_alloc(gfp_mask);
 		if (!page)
 			break;
-		page->index = page_offset;
+		page->index = page_offset;//设置页号
 		list_add(&page->lru, &page_pool);
 		if (page_idx == nr_to_read - lookahead_size)
 			SetPageReadahead(page);
@@ -411,7 +412,7 @@ ondemand_readahead(struct address_space *mapping,
 	/*
 	 * start of file
 	 */
-	//自０号页开始读
+	//当前读操作自０号页开始读
 	if (!offset)
 		goto initial_readahead;
 
@@ -470,7 +471,7 @@ ondemand_readahead(struct address_space *mapping,
 	 * Query the page cache and look for the traces(cached history pages)
 	 * that a sequential stream would leave behind.
 	 */
-	if (try_context_readahead(mapping, ra, offset, req_size, max_pages))
+	if (try_context_readahead(mapping, ra, offset, req_size/*要读取多少页*/, max_pages))
 		goto readit;
 
 	/*
@@ -519,6 +520,7 @@ readit:
  * pages onto the read request if access patterns suggest it will improve
  * performance.
  */
+//同步预读
 void page_cache_sync_readahead(struct address_space *mapping,
 			       struct file_ra_state *ra, struct file *filp,
 			       pgoff_t offset/*预读offset号页*/, unsigned long req_size/*共预读req_size页*/)

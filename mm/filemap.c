@@ -2099,6 +2099,7 @@ find_page:
 			//页不存在，先将此页读入，再重新获取index对应的page
 			if (iocb->ki_flags & IOCB_NOWAIT)
 				goto would_block;
+			//同步预读
 			page_cache_sync_readahead(mapping,
 					ra, filp,
 					index, last_index - index);
