@@ -45,6 +45,7 @@ static int ext2_sync_fs(struct super_block *sb, int wait);
 static int ext2_freeze(struct super_block *sb);
 static int ext2_unfreeze(struct super_block *sb);
 
+//ext2出错处理，kernel输出错误信息，如果非只读挂载，则写入错误标记.
 void ext2_error(struct super_block *sb, const char *function,
 		const char *fmt, ...)
 {
@@ -53,6 +54,7 @@ void ext2_error(struct super_block *sb, const char *function,
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
 	struct ext2_super_block *es = sbi->s_es;
 
+	//如果sb非只读挂载，则在super block上标记错误
 	if (!sb_rdonly(sb)) {
 		spin_lock(&sbi->s_lock);
 		sbi->s_mount_state |= EXT2_ERROR_FS;
@@ -61,6 +63,7 @@ void ext2_error(struct super_block *sb, const char *function,
 		ext2_sync_super(sb, es, 1);
 	}
 
+	//显示错误信息
 	va_start(args, fmt);
 
 	vaf.fmt = fmt;
@@ -71,8 +74,10 @@ void ext2_error(struct super_block *sb, const char *function,
 
 	va_end(args);
 
+	//如果指明panic,则直接panic
 	if (test_opt(sb, ERRORS_PANIC))
 		panic("EXT2-fs: panic from previous error\n");
+	//如果未指定panic,则将sb更新为只读挂载
 	if (test_opt(sb, ERRORS_RO)) {
 		ext2_msg(sb, KERN_CRIT,
 			     "error: remounting filesystem read-only");
@@ -80,6 +85,7 @@ void ext2_error(struct super_block *sb, const char *function,
 	}
 }
 
+//ext2日志输出
 void ext2_msg(struct super_block *sb, const char *prefix,
 		const char *fmt, ...)
 {
@@ -103,6 +109,7 @@ void ext2_update_dynamic_rev(struct super_block *sb)
 {
 	struct ext2_super_block *es = EXT2_SB(sb)->s_es;
 
+	//如果版本已大于good_old_rev，则跳过
 	if (le32_to_cpu(es->s_rev_level) > EXT2_GOOD_OLD_REV)
 		return;
 
@@ -201,6 +208,7 @@ static void ext2_i_callback(struct rcu_head *head)
 	kmem_cache_free(ext2_inode_cachep, EXT2_I(inode));
 }
 
+//释放inode(考虑rcu)
 static void ext2_destroy_inode(struct inode *inode)
 {
 	call_rcu(&inode->i_rcu, ext2_i_callback);
@@ -237,6 +245,7 @@ static int __init init_inodecache(void)
 	return 0;
 }
 
+//inode cache销毁
 static void destroy_inodecache(void)
 {
 	/*
@@ -368,7 +377,7 @@ static const struct super_operations ext2_sops = {
 	.unfreeze_fs	= ext2_unfreeze,
 	.statfs		= ext2_statfs,
 	.remount_fs	= ext2_remount,
-	.show_options	= ext2_show_options,
+	.show_options	= ext2_show_options,//显示挂载选项
 #ifdef CONFIG_QUOTA
 	.quota_read	= ext2_quota_read,
 	.quota_write	= ext2_quota_write,
@@ -391,9 +400,11 @@ static struct inode *ext2_nfs_get_inode(struct super_block *sb,
 	 * However ext2_iget currently does appropriate checks to handle stale
 	 * inodes so everything is OK.
 	 */
+	//通过inode number获取inode
 	inode = ext2_iget(sb, ino);
 	if (IS_ERR(inode))
 		return ERR_CAST(inode);
+	//如果给定了generation,则generation必须一致
 	if (generation && inode->i_generation != generation) {
 		/* we didn't find the right inode.. */
 		iput(inode);
@@ -422,20 +433,27 @@ static const struct export_operations ext2_export_ops = {
 	.get_parent = ext2_get_parent,
 };
 
+//通过分析options，获取sb的位置
 static unsigned long get_sb_block(void **data)
 {
 	unsigned long 	sb_block;
-	char 		*options = (char *) *data;
+	char 		*options = (char *) *data;//取options
 
+	//如果未给定options,或者options没有以sb=开头，则返回１
 	if (!options || strncmp(options, "sb=", 3) != 0)
 		return 1;	/* Default location */
+
+	//取options中提取sb_block配置
 	options += 3;
 	sb_block = simple_strtoul(options, &options, 0);
 	if (*options && *options != ',') {
+		//如果options有值，则必须为','
 		printk("EXT2-fs: Invalid sb specification: %s\n",
 		       (char *) *data);
 		return 1;
 	}
+
+	//如果有','号，则跳过
 	if (*options == ',')
 		options++;
 	*data = (void *) options;
@@ -486,6 +504,7 @@ static const match_table_t tokens = {
 	{Opt_err, NULL}
 };
 
+//通过分析options,设置opts
 static int parse_options(char *options, struct super_block *sb,
 			 struct ext2_mount_options *opts)
 {

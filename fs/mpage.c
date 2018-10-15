@@ -136,7 +136,7 @@ map_buffer_to_page(struct page *page, struct buffer_head *bh, int page_block)
 struct mpage_readpage_args {
 	struct bio *bio;
 	struct page *page;//要填充的页
-	unsigned int nr_pages;
+	unsigned int nr_pages;//需要填充多少页
 	bool is_readahead;
 	sector_t last_block_in_bio;
 	struct buffer_head map_bh;
@@ -158,7 +158,9 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 	struct page *page = args->page;
 	struct inode *inode = page->mapping->host;
 	const unsigned blkbits = inode->i_blkbits;
+	//每页可以存放多少个块
 	const unsigned blocks_per_page = PAGE_SIZE >> blkbits;
+	//块大小
 	const unsigned blocksize = 1 << blkbits;
 	struct buffer_head *map_bh = &args->map_bh;
 	sector_t block_in_file;
@@ -228,6 +230,7 @@ static struct bio *do_mpage_readpage(struct mpage_readpage_args *args)
 	 * Then do more get_blocks calls until we are done with this page.
 	 */
 	map_bh->b_page = page;
+	//加载所有的block
 	while (page_block < blocks_per_page) {
 		map_bh->b_state = 0;
 		map_bh->b_size = 0;
