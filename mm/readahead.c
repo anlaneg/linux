@@ -111,7 +111,7 @@ int read_cache_pages(struct address_space *mapping, struct list_head *pages,
 EXPORT_SYMBOL(read_cache_pages);
 
 static int read_pages(struct address_space *mapping, struct file *filp,
-		struct list_head *pages/*一组需要填充的页链表*/, unsigned int nr_pages, gfp_t gfp)
+		struct list_head *pages/*一组需要填充的页链表*/, unsigned int nr_pages/*要填充的页链表长度*/, gfp_t gfp)
 {
 	struct blk_plug plug;
 	unsigned page_idx;
@@ -176,9 +176,10 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 	 * Preallocate as many pages as we will need.
 	 */
 	for (page_idx = 0; page_idx < nr_to_read; page_idx++) {
+		//要读取的页编号
 		pgoff_t page_offset = offset + page_idx;
 
-		//如果要读取的页文件中没有，直接跳出
+		//如果要读取的页文件中没有，直接跳出（已到达文件结尾）
 		if (page_offset > end_index)
 			break;
 
@@ -194,6 +195,7 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 			 * batch.
 			 */
 			if (nr_pages)
+				//尝试读page_pool中记录的不存在的页（前几次循环中不存在的页共有nr_pages个）
 				read_pages(mapping, filp, &page_pool, nr_pages,
 						gfp_mask);
 			nr_pages = 0;
@@ -205,8 +207,9 @@ unsigned int __do_page_cache_readahead(struct address_space *mapping,
 		if (!page)
 			break;
 		page->index = page_offset;//设置页号
-		list_add(&page->lru, &page_pool);
+		list_add(&page->lru, &page_pool);//将页串连在page_pool链表上
 		if (page_idx == nr_to_read - lookahead_size)
+			//设置预读页
 			SetPageReadahead(page);
 		nr_pages++;
 	}

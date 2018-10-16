@@ -873,12 +873,12 @@ static int ext2_readpage(struct file *file, struct page *page)
 	return mpage_readpage(page, ext2_get_block);
 }
 
-//读取文件内容，并填充一组pages
+//读取文件内容，并填充一组pages（用于填充cache)
 static int
 ext2_readpages(struct file *file, struct address_space *mapping,
 		struct list_head *pages, unsigned nr_pages)
 {
-	return mpage_readpages(mapping, pages/*用于填充的内存页*/, nr_pages/*要读取的页数*/, ext2_get_block);
+	return mpage_readpages(mapping, pages/*用于填充的内存页*/, nr_pages/*要填充的pages的数目*/, ext2_get_block);
 }
 
 static int

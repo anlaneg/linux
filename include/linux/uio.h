@@ -29,9 +29,9 @@ enum {
 };
 
 struct iov_iter {
-	int type;//读操作或写操作
-	size_t iov_offset;
-	size_t count;//要写入的长度
+	int type;//读操作或写操作(依据此类型取不同的union值）
+	size_t iov_offset;//iov的读写偏移量
+	size_t count;//要读写入的长度
 	union {
 		const struct iovec *iov;
 		const struct kvec *kvec;
@@ -39,7 +39,7 @@ struct iov_iter {
 		struct pipe_inode_info *pipe;
 	};
 	union {
-		unsigned long nr_segs;
+		unsigned long nr_segs;//iov的buffer数量
 		struct {
 			int idx;
 			int start_idx;

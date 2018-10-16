@@ -295,10 +295,14 @@ enum rw_hint {
 };
 
 #define IOCB_EVENTFD		(1 << 0)
+//append标记
 #define IOCB_APPEND		(1 << 1)
+//文件direct标记
 #define IOCB_DIRECT		(1 << 2)
 #define IOCB_HIPRI		(1 << 3)
+//仅data同步
 #define IOCB_DSYNC		(1 << 4)
+//同步
 #define IOCB_SYNC		(1 << 5)
 #define IOCB_WRITE		(1 << 6)
 #define IOCB_NOWAIT		(1 << 7)
@@ -1997,6 +2001,7 @@ static inline u16 ki_hint_validate(enum rw_hint hint)
 	return 0;
 }
 
+//初始化kiocb
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 {
 	*kiocb = (struct kiocb) {
@@ -3287,6 +3292,7 @@ static inline bool vma_is_fsdax(struct vm_area_struct *vma)
 	return true;
 }
 
+//依据file的flags,获取iocb的flags
 static inline int iocb_flags(struct file *file)
 {
 	int res = 0;

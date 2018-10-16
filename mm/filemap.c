@@ -2056,7 +2056,7 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	struct address_space *mapping = filp->f_mapping;
 	struct inode *inode = mapping->host;//文件对应的inode
 	struct file_ra_state *ra = &filp->f_ra;
-	loff_t *ppos = &iocb->ki_pos;
+	loff_t *ppos = &iocb->ki_pos;//要读取的起始偏移
 	pgoff_t index;
 	pgoff_t last_index;
 	pgoff_t prev_index;
@@ -2071,13 +2071,15 @@ static ssize_t generic_file_buffered_read(struct kiocb *iocb,
 	//规范要读取的长度
 	iov_iter_truncate(iter, inode->i_sb->s_maxbytes);
 
-	//要读取的内容页标号（起始页标号）
+	//文件要读取的起始位置对应的页标号
 	index = *ppos >> PAGE_SHIFT;
 	prev_index = ra->prev_pos >> PAGE_SHIFT;
 	prev_offset = ra->prev_pos & (PAGE_SIZE-1);
-	//要读取的内容页标号（终止位置页标号）
+
+	//文件要读取的终止位置对应的页标号
 	last_index = (*ppos + iter->count + PAGE_SIZE-1) >> PAGE_SHIFT;
-	offset = *ppos & ~PAGE_MASK;//起始页标号内位置
+	//文件要读取的起始位置对应起始页中的偏移
+	offset = *ppos & ~PAGE_MASK;
 
 	for (;;) {
 		struct page *page;
@@ -2096,13 +2098,15 @@ find_page:
 		//在page cache中查index对应的页
 		page = find_get_page(mapping, index);
 		if (!page) {
-			//页不存在，先将此页读入，再重新获取index对应的page
+			//页不存在，需要先将此页自磁盘中读入，再重新获取index对应的page
 			if (iocb->ki_flags & IOCB_NOWAIT)
-				goto would_block;
+				goto would_block;//设置不等待，直接返回
+
 			//同步预读
 			page_cache_sync_readahead(mapping,
 					ra, filp,
-					index, last_index - index);
+					index/*读取起始页*/, last_index - index/*读取多少页面*/);
+
 			//页被加载后，重新查询page
 			page = find_get_page(mapping, index);
 			if (unlikely(page == NULL))
@@ -2325,6 +2329,7 @@ out:
 ssize_t
 generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
+	//要读取的长度
 	size_t count = iov_iter_count(iter);
 	ssize_t retval = 0;
 

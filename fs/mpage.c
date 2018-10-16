@@ -63,7 +63,7 @@ static struct bio *mpage_bio_submit(int op, int op_flags, struct bio *bio)
 	bio->bi_end_io = mpage_end_io;
 	bio_set_op_attrs(bio, op, op_flags);
 	guard_bio_eod(op, bio);
-	submit_bio(bio);
+	submit_bio(bio);//自此函数进入磁盘读取
 	return NULL;
 }
 
@@ -353,7 +353,7 @@ confused:
  * @pages: The address of a list_head which contains the target pages.  These
  *   pages have their ->index populated and are otherwise uninitialised.
  *   The page at @pages->prev has the lowest file offset, and reads should be
- *   issued in @pages->prev to @pages->next order.
+ *   issued in @pages->prev to @pages->next order.(pages按页索引号从小到大排列，其->index即为索引号）
  * @nr_pages: The number of pages at *@pages
  * @get_block: The filesystem's block mapper function.
  *
@@ -402,10 +402,13 @@ mpage_readpages(struct address_space *mapping, struct list_head *pages,
 	unsigned page_idx;
 
 	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
-		struct page *page = lru_to_page(pages);//由pages获取其对应的page结构体
+		//由pages获取其对应的page结构体，用于获知要填充的page
+		struct page *page = lru_to_page(pages);
 
 		prefetchw(&page->flags);
-		list_del(&page->lru);//将page自链中摘除
+		//将page自pages链中摘除
+		list_del(&page->lru);
+
 		if (!add_to_page_cache_lru(page, mapping,
 					page->index,
 					readahead_gfp_mask(mapping))) {
