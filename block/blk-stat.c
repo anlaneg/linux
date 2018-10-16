@@ -191,6 +191,7 @@ void blk_stat_enable_accounting(struct request_queue *q)
 	spin_unlock(&q->stats->lock);
 }
 
+//为队列申请状态统计结构体
 struct blk_queue_stats *blk_alloc_queue_stats(void)
 {
 	struct blk_queue_stats *stats;

@@ -54,7 +54,7 @@ EXPORT_TRACEPOINT_SYMBOL_GPL(block_bio_complete);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_split);
 EXPORT_TRACEPOINT_SYMBOL_GPL(block_unplug);
 
-DEFINE_IDA(blk_queue_ida);
+DEFINE_IDA(blk_queue_ida);//负责request queue id的申请释放
 
 /*
  * For the allocated request tables
@@ -64,7 +64,7 @@ struct kmem_cache *request_cachep;
 /*
  * For queue allocation
  */
-struct kmem_cache *blk_requestq_cachep;
+struct kmem_cache *blk_requestq_cachep;//负责request queue申请释放
 
 /*
  * Controlling structure to kblockd
@@ -1000,6 +1000,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id,
 	struct request_queue *q;
 	int ret;
 
+	//alloc a request_queue
 	q = kmem_cache_alloc_node(blk_requestq_cachep,
 				gfp_mask | __GFP_ZERO, node_id);
 	if (!q)
@@ -1010,6 +1011,7 @@ struct request_queue *blk_alloc_queue_node(gfp_t gfp_mask, int node_id,
 	q->end_sector = 0;
 	q->boundary_rq = NULL;
 
+	//为队列申请相应id号
 	q->id = ida_simple_get(&blk_queue_ida, 0, 0, gfp_mask);
 	if (q->id < 0)
 		goto fail_q;

@@ -1435,11 +1435,12 @@ dev_t blk_lookup_devt(const char *name, int partno)
 }
 EXPORT_SYMBOL(blk_lookup_devt);
 
-struct gendisk *__alloc_disk_node(int minors, int node_id)
+struct gendisk *__alloc_disk_node(int minors, int node_id/*自哪个node上申请内存*/)
 {
 	struct gendisk *disk;
 	struct disk_part_tbl *ptbl;
 
+	//不能超过DISK_MAX_PARTS块
 	if (minors > DISK_MAX_PARTS) {
 		printk(KERN_ERR
 			"block: can't allocate more than %d partitions\n",
