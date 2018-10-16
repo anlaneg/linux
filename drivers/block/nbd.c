@@ -1548,6 +1548,7 @@ static const struct blk_mq_ops nbd_mq_ops = {
 	.timeout	= nbd_xmit_timeout,
 };
 
+//初始化并添加index号nbd设备
 static int nbd_dev_add(int index)
 {
 	struct nbd_device *nbd;

@@ -18,6 +18,7 @@
  * Firmware must be in binary "rbf" format.
  */
 
+//cvp = configuration via protocol(通过协议配置）
 #include <linux/delay.h>
 #include <linux/device.h>
 #include <linux/fpga/fpga-mgr.h>
@@ -385,18 +386,20 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 static void altera_cvp_remove(struct pci_dev *pdev);
 
 static struct pci_device_id altera_cvp_id_tbl[] = {
-	{ PCI_VDEVICE(ALTERA, PCI_ANY_ID) },
+	{ PCI_VDEVICE(ALTERA, PCI_ANY_ID) },//支持altera的所有设备
 	{ }
 };
 MODULE_DEVICE_TABLE(pci, altera_cvp_id_tbl);
 
+//注册altera的fpga驱动
 static struct pci_driver altera_cvp_driver = {
 	.name   = DRV_NAME,
 	.id_table = altera_cvp_id_tbl,
-	.probe  = altera_cvp_probe,
+	.probe  = altera_cvp_probe,//为设备探测驱动
 	.remove = altera_cvp_remove,
 };
 
+//为设备pdev探测此驱动
 static int altera_cvp_probe(struct pci_dev *pdev,
 			    const struct pci_device_id *dev_id)
 {

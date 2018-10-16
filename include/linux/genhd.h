@@ -208,7 +208,7 @@ struct gendisk {
 #ifdef  CONFIG_BLK_DEV_INTEGRITY
 	struct kobject integrity_kobj;
 #endif	/* CONFIG_BLK_DEV_INTEGRITY */
-	int node_id;
+	int node_id;/*属于哪个numa*/
 	struct badblocks *bb;
 	struct lockdep_map lockdep_map;
 };
@@ -652,6 +652,7 @@ extern ssize_t part_fail_store(struct device *dev,
 	__disk;								\
 })
 
+//申请disk
 #define alloc_disk(minors) alloc_disk_node(minors, NUMA_NO_NODE)
 
 static inline int hd_ref_init(struct hd_struct *part)
