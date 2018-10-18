@@ -257,6 +257,7 @@ static inline void in_dev_put(struct in_device *idev)
 
 #endif /* __KERNEL__ */
 
+//构造指定掩码长度的网络掩码
 static __inline__ __be32 inet_make_mask(int logmask)
 {
 	if (logmask)
