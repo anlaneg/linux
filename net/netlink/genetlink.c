@@ -597,9 +597,10 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 	info.attrs = attrbuf;
 	info.extack = extack;
 	genl_info_net_set(&info, net);
+	//默认将user_ptr初始化0
 	memset(&info.user_ptr, 0, sizeof(info.user_ptr));
 
-	//如果有pre_doit回调，则调用
+	//如果有fmaily->pre_doit回调，则调用,例如可提前做一些对info的准备工作
 	if (family->pre_doit) {
 		err = family->pre_doit(ops, skb, &info);
 		if (err)

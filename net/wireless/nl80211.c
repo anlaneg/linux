@@ -1,5 +1,6 @@
 /*
  * This is the new netlink-based wireless configuration interface.
+ * 基于netlink的无线配置接口
  *
  * Copyright 2006-2010	Johannes Berg <johannes@sipsolutions.net>
  * Copyright 2013-2014  Intel Mobile Communications GmbH
@@ -156,6 +157,7 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	}
 
 	if (attrs[NL80211_ATTR_IFINDEX]) {
+		//如果指定了ifindex,则通过ifindex获取netdev设备
 		int ifindex = nla_get_u32(attrs[NL80211_ATTR_IFINDEX]);
 
 		netdev = __dev_get_by_index(netns, ifindex);
@@ -3219,6 +3221,7 @@ static int nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
 	if (!msg)
 		return -ENOMEM;
 
+	//添加虚拟内部接口
 	wdev = rdev_add_virtual_intf(rdev,
 				nla_data(info->attrs[NL80211_ATTR_IFNAME]),
 				NET_NAME_USER, type, &params);
@@ -13918,10 +13921,10 @@ static struct genl_family nl80211_fam __ro_after_init = {
 	.version = 1,			/* no particular meaning now */
 	.maxattr = NL80211_ATTR_MAX,
 	.netnsok = true,
-	.pre_doit = nl80211_pre_doit,
+	.pre_doit = nl80211_pre_doit,//ops提供的netlink命令调用前，此函数总被调用
 	.post_doit = nl80211_post_doit,
 	.module = THIS_MODULE,
-	.ops = nl80211_ops,
+	.ops = nl80211_ops,//对外提供的netlink操作命令回调
 	.n_ops = ARRAY_SIZE(nl80211_ops),
 	.mcgrps = nl80211_mcgrps,
 	.n_mcgrps = ARRAY_SIZE(nl80211_mcgrps),
@@ -14092,6 +14095,7 @@ void nl80211_send_scan_start(struct cfg80211_registered_device *rdev,
 		return;
 	}
 
+	//知会开启扫描
 	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
 				NL80211_MCGRP_SCAN, GFP_KERNEL);
 }

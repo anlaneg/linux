@@ -2199,6 +2199,7 @@ static int ieee80211_resume(struct wiphy *wiphy)
 #define ieee80211_resume NULL
 #endif
 
+//设备扫描
 static int ieee80211_scan(struct wiphy *wiphy,
 			  struct cfg80211_scan_request *req)
 {
