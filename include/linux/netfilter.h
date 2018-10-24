@@ -196,6 +196,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 			  struct net_device *indev, struct net_device *outdev,
 			  int (*okfn)(struct net *, struct sock *, struct sk_buff *))
 {
+	//记录各pf对应的hooks链表指针
 	struct nf_hook_entries *hook_head = NULL;
 	int ret = 1;
 
@@ -216,6 +217,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 		hook_head = rcu_dereference(net->nf.hooks_ipv6[hook]);
 		break;
 	case NFPROTO_ARP:
+		//取arp对应的hook头指针
 #ifdef CONFIG_NETFILTER_FAMILY_ARP
 		if (WARN_ON_ONCE(hook >= ARRAY_SIZE(net->nf.hooks_arp)))
 			break;
@@ -223,6 +225,7 @@ static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
 #endif
 		break;
 	case NFPROTO_BRIDGE:
+		//取桥设备对应的hook头指针
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
 		hook_head = rcu_dereference(net->nf.hooks_bridge[hook]);
 #endif

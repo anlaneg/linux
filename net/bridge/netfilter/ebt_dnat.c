@@ -70,7 +70,7 @@ static int ebt_dnat_tg_check(const struct xt_tgchk_param *par)
 	return 0;
 }
 
-//dnat规则target
+//dnat规则target（其实现仅为修改报文的目的mac)
 static struct xt_target ebt_dnat_tg_reg __read_mostly = {
 	.name		= "dnat",
 	.revision	= 0,

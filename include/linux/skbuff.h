@@ -2425,6 +2425,7 @@ static inline int skb_transport_offset(const struct sk_buff *skb)
 	return skb_transport_header(skb) - skb->data;
 }
 
+//网络层头部长度（传输层首地址－网络层首地址）
 static inline u32 skb_network_header_len(const struct sk_buff *skb)
 {
 	return skb->transport_header - skb->network_header;

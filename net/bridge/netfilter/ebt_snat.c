@@ -25,7 +25,10 @@ ebt_snat_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	if (!skb_make_writable(skb, 0))
 		return EBT_DROP;
 
+	//更改报文的源mac
 	ether_addr_copy(eth_hdr(skb)->h_source, info->mac);
+
+	//如果未明确指出不修改arp,默认需要修复arp请求及响应中的发送方mac地址
 	if (!(info->target & NAT_ARP_BIT) &&
 	    eth_hdr(skb)->h_proto == htons(ETH_P_ARP)) {
 		//仅处理arp协议
@@ -61,7 +64,7 @@ static int ebt_snat_tg_check(const struct xt_tgchk_param *par)
 	return 0;
 }
 
-//snat规则处理target
+//snat规则target（其实现仅为修改报文的源mac)
 static struct xt_target ebt_snat_tg_reg __read_mostly = {
 	.name		= "snat",
 	.revision	= 0,

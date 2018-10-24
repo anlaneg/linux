@@ -81,7 +81,7 @@ struct ebt_table_info {
 	unsigned int entries_size;
 	unsigned int nentries;
 	/* pointers to the start of the chains */
-	struct ebt_entries *hook_entry[NF_BR_NUMHOOKS];
+	struct ebt_entries *hook_entry[NF_BR_NUMHOOKS];//指向各hook链的起始位置
 	/* room to maintain the stack used for jumping from and into udc */
 	struct ebt_chainstack **chainstack;
 	char *entries;

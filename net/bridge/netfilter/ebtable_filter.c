@@ -73,19 +73,19 @@ ebt_out_hook(void *priv, struct sk_buff *skb,
 
 static const struct nf_hook_ops ebt_ops_filter[] = {
 	{
-		.hook		= ebt_in_hook,
+		.hook		= ebt_in_hook,//本机入filter
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_LOCAL_IN,
 		.priority	= NF_BR_PRI_FILTER_BRIDGED,
 	},
 	{
-		.hook		= ebt_in_hook,
+		.hook		= ebt_in_hook,//本机出filter
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_FORWARD,
 		.priority	= NF_BR_PRI_FILTER_BRIDGED,
 	},
 	{
-		.hook		= ebt_out_hook,
+		.hook		= ebt_out_hook,//本机出的报文做filter
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_LOCAL_OUT,
 		.priority	= NF_BR_PRI_FILTER_OTHER,

@@ -26,14 +26,15 @@
 #define NF_BR_BROUTING		5
 #define NF_BR_NUMHOOKS		6
 
+//桥设备的优先级
 enum nf_br_hook_priorities {
 	NF_BR_PRI_FIRST = INT_MIN,
-	NF_BR_PRI_NAT_DST_BRIDGED = -300,
-	NF_BR_PRI_FILTER_BRIDGED = -200,
-	NF_BR_PRI_BRNF = 0,
-	NF_BR_PRI_NAT_DST_OTHER = 100,
-	NF_BR_PRI_FILTER_OTHER = 200,
-	NF_BR_PRI_NAT_SRC = 300,
+	NF_BR_PRI_NAT_DST_BRIDGED = -300,//做目的mac变更
+	NF_BR_PRI_FILTER_BRIDGED = -200,//forward报文filter处理
+	NF_BR_PRI_BRNF = 0,//复用inet的钩子点
+	NF_BR_PRI_NAT_DST_OTHER = 100,//对本机出去的报文做dnat(即目的mac变更）
+	NF_BR_PRI_FILTER_OTHER = 200,//对本机出去的报文做filter
+	NF_BR_PRI_NAT_SRC = 300,//做源mac变更
 	NF_BR_PRI_LAST = INT_MAX,
 };
 

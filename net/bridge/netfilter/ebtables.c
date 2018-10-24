@@ -111,17 +111,20 @@ ebt_dev_check(const char *entry, const struct net_device *device)
 	const char *devname;
 
 	if (*entry == '\0')
-		return 0;
+		return 0;//entry为空，表示与任意devname匹配
 	if (!device)
 		return 1;
 	devname = device->name;
 	/* 1 is the wildcard token */
+	//1被认为是通配符,检查devname是否已entry相匹配
 	while (entry[i] != '\0' && entry[i] != 1 && entry[i] == devname[i])
 		i++;
+	//返回１表示不匹配，返回０表示匹配
 	return devname[i] != entry[i] && entry[i] != 1;
 }
 
 /* process standard matches */
+//实现基本匹配（二层协议，入出接口，逻辑入出接口，源目的mac区配）
 static inline int
 ebt_basic_match(const struct ebt_entry *e, const struct sk_buff *skb,
 		const struct net_device *in, const struct net_device *out)
@@ -130,38 +133,50 @@ ebt_basic_match(const struct ebt_entry *e, const struct sk_buff *skb,
 	const struct net_bridge_port *p;
 	__be16 ethproto;
 
+	//取协议号
 	if (skb_vlan_tag_present(skb))
 		ethproto = htons(ETH_P_8021Q);
 	else
 		ethproto = h->h_proto;
 
 	if (e->bitmask & EBT_802_3) {
+		//802.3类型报文匹配
 		if (NF_INVF(e, EBT_IPROTO, eth_proto_is_802_3(ethproto)))
 			return 1;
 	} else if (!(e->bitmask & EBT_NOPROTO) &&
 		   NF_INVF(e, EBT_IPROTO, e->ethproto != ethproto))
+		//二层协议号匹配
 		return 1;
 
+	//入接口匹配
 	if (NF_INVF(e, EBT_IIN, ebt_dev_check(e->in, in)))
 		return 1;
+	//出接口匹配
 	if (NF_INVF(e, EBT_IOUT, ebt_dev_check(e->out, out)))
 		return 1;
+
 	/* rcu_read_lock()ed by nf_hook_thresh */
+	//逻辑入接口匹配（桥名称匹配）
 	if (in && (p = br_port_get_rcu(in)) != NULL &&
 	    NF_INVF(e, EBT_ILOGICALIN,
 		    ebt_dev_check(e->logical_in, p->br->dev)))
 		return 1;
+
+	//逻辑出接口匹配（桥名称匹配）
 	if (out && (p = br_port_get_rcu(out)) != NULL &&
 	    NF_INVF(e, EBT_ILOGICALOUT,
 		    ebt_dev_check(e->logical_out, p->br->dev)))
 		return 1;
 
+	//源mac匹配（支持mask方式）
 	if (e->bitmask & EBT_SOURCEMAC) {
 		if (NF_INVF(e, EBT_ISOURCE,
 			    !ether_addr_equal_masked(h->h_source, e->sourcemac,
 						     e->sourcemsk)))
 			return 1;
 	}
+
+	//目的mac匹配（支持mask方式）
 	if (e->bitmask & EBT_DESTMAC) {
 		if (NF_INVF(e, EBT_IDEST,
 			    !ether_addr_equal_masked(h->h_dest, e->destmac,
@@ -184,11 +199,12 @@ ebt_get_target_c(const struct ebt_entry *e)
 }
 
 /* Do some firewalling */
+//桥查表做target动作
 unsigned int ebt_do_table(struct sk_buff *skb,
 			  const struct nf_hook_state *state,
 			  struct ebt_table *table)
 {
-	unsigned int hook = state->hook;
+	unsigned int hook = state->hook;//当前hook点编号
 	int i, nentries;
 	struct ebt_entry *point;
 	struct ebt_counter *counter_base, *cb_base;
@@ -203,6 +219,7 @@ unsigned int ebt_do_table(struct sk_buff *skb,
 	acpar.state   = state;
 	acpar.hotdrop = false;
 
+	//对表进行加锁
 	read_lock_bh(&table->lock);
 	private = table->private;
 	cb_base = COUNTER_BASE(private->counters, private->nentries,
@@ -219,9 +236,11 @@ unsigned int ebt_do_table(struct sk_buff *skb,
 	base = private->entries;
 	i = 0;
 	while (i < nentries) {
+		//基本字段匹配
 		if (ebt_basic_match(point, skb, state->in, state->out))
 			goto letscontinue;
 
+		//自定义match函数调用
 		if (EBT_MATCH_ITERATE(point, ebt_do_match, skb, &acpar) != 0)
 			goto letscontinue;
 		if (acpar.hotdrop) {
@@ -229,11 +248,13 @@ unsigned int ebt_do_table(struct sk_buff *skb,
 			return NF_DROP;
 		}
 
+		//统计规则命中计数
 		ADD_COUNTER(*(counter_base + i), 1, skb->len);
 
 		/* these should only watch: not modify, nor tell us
 		 * what to do with the packet
 		 */
+		//执行target
 		EBT_WATCHER_ITERATE(point, ebt_do_watcher, skb, &acpar);
 
 		t = ebt_get_target_c(point);
@@ -245,6 +266,8 @@ unsigned int ebt_do_table(struct sk_buff *skb,
 			acpar.targinfo = t->data;
 			verdict = t->u.target->target(skb, &acpar);
 		}
+
+		//按target结果处理报文
 		if (verdict == EBT_ACCEPT) {
 			read_unlock_bh(&table->lock);
 			return NF_ACCEPT;

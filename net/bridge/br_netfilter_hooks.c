@@ -164,6 +164,7 @@ static inline struct nf_bridge_info *nf_bridge_unshare(struct sk_buff *skb)
 	return nf_bridge;
 }
 
+//依据封装protocol返回封装的头部长度
 unsigned int nf_bridge_encap_header_len(const struct sk_buff *skb)
 {
 	switch (skb->protocol) {
@@ -208,6 +209,7 @@ static int br_validate_ipv4(struct net *net, struct sk_buff *skb)
 	iph = ip_hdr(skb);
 
 	/* Basic sanity checks */
+	//版本检查
 	if (iph->ihl < 5 || iph->version != 4)
 		goto inhdr_error;
 
@@ -218,6 +220,7 @@ static int br_validate_ipv4(struct net *net, struct sk_buff *skb)
 	if (unlikely(ip_fast_csum((u8 *)iph, iph->ihl)))
 		goto csum_error;
 
+	//长度字段检查
 	len = ntohs(iph->tot_len);
 	if (skb->len < len) {
 		__IP_INC_STATS(net, IPSTATS_MIB_INTRUNCATEDPKTS);
@@ -489,6 +492,7 @@ static unsigned int br_nf_pre_routing(void *priv,
 		return NF_DROP;
 	br = p->br;
 
+	//ipv6处理
 	if (IS_IPV6(skb) || IS_VLAN_IPV6(skb) || IS_PPPOE_IPV6(skb)) {
 		if (!brnf_call_ip6tables && !br->nf_call_ip6tables)
 			return NF_ACCEPT;
@@ -500,9 +504,11 @@ static unsigned int br_nf_pre_routing(void *priv,
 	if (!brnf_call_iptables && !br->nf_call_iptables)
 		return NF_ACCEPT;
 
+	//仅处理ip,vlan封装的ip,pppoe封装的ip报文
 	if (!IS_IP(skb) && !IS_VLAN_IP(skb) && !IS_PPPOE_IP(skb))
 		return NF_ACCEPT;
 
+	//将隧道头算入network中，用于辅助后面的ip校验
 	nf_bridge_pull_encap_header_rcsum(skb);
 
 	if (br_validate_ipv4(state->net, skb))

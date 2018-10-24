@@ -22,9 +22,11 @@ struct netns_nf {
 	//ipv6的hooks
 	struct nf_hook_entries __rcu *hooks_ipv6[NF_INET_NUMHOOKS];
 #ifdef CONFIG_NETFILTER_FAMILY_ARP
+	//arp对应的hooks
 	struct nf_hook_entries __rcu *hooks_arp[NF_ARP_NUMHOOKS];
 #endif
 #ifdef CONFIG_NETFILTER_FAMILY_BRIDGE
+	//桥对应的hooks
 	struct nf_hook_entries __rcu *hooks_bridge[NF_INET_NUMHOOKS];
 #endif
 #if IS_ENABLED(CONFIG_DECNET)

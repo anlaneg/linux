@@ -85,7 +85,7 @@ struct ebt_entries {
 	/* one standard (accept, drop, return) per hook */
 	int policy;
 	/* nr. of entries */
-	unsigned int nentries;
+	unsigned int nentries;//entries数目(即data大小)
 	/* entry list */
 	char data[0] __attribute__ ((aligned (__alignof__(struct ebt_replace))));
 };
@@ -168,7 +168,7 @@ struct ebt_standard_target {
 struct ebt_entry {
 	/* this needs to be the first field */
 	unsigned int bitmask;
-	unsigned int invflags;
+	unsigned int invflags;//invert falgs
 	__be16 ethproto;
 	/* the physical in-dev */
 	char in[IFNAMSIZ];

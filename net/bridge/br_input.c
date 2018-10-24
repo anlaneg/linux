@@ -221,7 +221,7 @@ static int br_handle_local_finish(struct net *net, struct sock *sk, struct sk_bu
  * Return NULL if skb is handled
  * note: already called with rcu_read_lock
  */
-//桥接口收到报文时此接口将被调用
+//桥接口收到报文时此接口将被调用（此接口被置为bridge的rx_handler回调）
 rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 {
 	struct net_bridge_port *p;

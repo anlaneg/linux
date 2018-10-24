@@ -71,21 +71,22 @@ ebt_nat_out(void *priv, struct sk_buff *skb,
 	return ebt_do_table(skb, state, state->net->xt.frame_nat);
 }
 
+//nat钩子配置(参见ebt_dnat.c,ebt_snat.c等相关target实现，用于修改报文的源目的mac）
 static const struct nf_hook_ops ebt_ops_nat[] = {
 	{
-		.hook		= ebt_nat_out,
+		.hook		= ebt_nat_out,//对本机出去的报文做dnat
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_LOCAL_OUT,
 		.priority	= NF_BR_PRI_NAT_DST_OTHER,
 	},
 	{
-		.hook		= ebt_nat_out,
+		.hook		= ebt_nat_out,//对出去的报文做snat
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_POST_ROUTING,
 		.priority	= NF_BR_PRI_NAT_SRC,
 	},
 	{
-		.hook		= ebt_nat_in,
+		.hook		= ebt_nat_in,//对进来的报文做dnat
 		.pf		= NFPROTO_BRIDGE,
 		.hooknum	= NF_BR_PRE_ROUTING,
 		.priority	= NF_BR_PRI_NAT_DST_BRIDGED,
@@ -94,6 +95,7 @@ static const struct nf_hook_ops ebt_ops_nat[] = {
 
 static int __net_init frame_nat_net_init(struct net *net)
 {
+	//注册nat钩子
 	return ebt_register_table(net, &frame_nat, ebt_ops_nat,
 				  &net->xt.frame_nat);
 }
