@@ -486,10 +486,12 @@ re_probe:
 	if (ret)
 		goto pinctrl_bind_failed;
 
-    //配置dma
-	ret = dma_configure(dev);
-	if (ret)
-		goto dma_failed;
+        //配置dma
+	if (dev->bus->dma_configure) {
+		ret = dev->bus->dma_configure(dev);
+		if (ret)
+			goto dma_failed;
+	}
 
 	if (driver_sysfs_add(dev)) {
 		printk(KERN_ERR "%s: driver_sysfs_add(%s) failed\n",
@@ -548,7 +550,7 @@ re_probe:
 
 probe_failed:
 	//probe失败，dma解配置
-	dma_deconfigure(dev);
+	arch_teardown_dma_ops(dev);
 dma_failed:
 	if (dev->bus)
 		//probe失败，通知未绑定成功事件
@@ -1009,7 +1011,7 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 			drv->remove(dev);
 
 		device_links_driver_cleanup(dev);
-		dma_deconfigure(dev);
+		arch_teardown_dma_ops(dev);
 
 		devres_release_all(dev);
 		dev->driver = NULL;

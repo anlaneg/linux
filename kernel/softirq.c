@@ -305,7 +305,8 @@ restart:
 		pending >>= softirq_bit;//将pending向右移
 	}
 
-	rcu_bh_qs();
+	if (__this_cpu_read(ksoftirqd) == current)
+		rcu_softirq_qs();
 	local_irq_disable();//需要在不变更的情况下检查，故关闭本地硬件中断
 
 	//检查上面在触发过程中是否有新的软中断出现
