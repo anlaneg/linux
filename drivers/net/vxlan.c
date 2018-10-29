@@ -78,7 +78,7 @@ struct vxlan_fdb {
 	struct rcu_head	  rcu;
 	unsigned long	  updated;	/* jiffies */
 	unsigned long	  used;
-	struct list_head  remotes;
+	struct list_head  remotes;//fdb均添加在此链上
 	u8		  eth_addr[ETH_ALEN];
 	u16		  state;	/* see ndm_state */
 	__be32		  vni;
@@ -585,6 +585,7 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 {
 	struct vxlan_rdst *rd;
 
+	//如果已存在，直接返回
 	rd = vxlan_fdb_find_rdst(f, ip, port, vni, ifindex);
 	if (rd)
 		return 0;
@@ -604,6 +605,7 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 	rd->remote_vni = vni;
 	rd->remote_ifindex = ifindex;
 
+	//fdb加入list
 	list_add_tail_rcu(&rd->list, &f->remotes);
 
 	*rdp = rd;
@@ -740,6 +742,7 @@ static int vxlan_fdb_create(struct vxlan_dev *vxlan,
 		return -ENOSPC;
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
+	//申请fdb
 	f = vxlan_fdb_alloc(vxlan, mac, state, src_vni, ndm_flags);
 	if (!f)
 		return -ENOMEM;
@@ -2602,6 +2605,7 @@ static int vxlan_open(struct net_device *dev)
 	if (ret < 0)
 		return ret;
 
+	//如果配置有组播remote_ip,将其加入组播组
 	if (vxlan_addr_multicast(&vxlan->default_dst.remote_ip)) {
 		ret = vxlan_igmp_join(vxlan);
 		if (ret == -EADDRINUSE)
@@ -2730,7 +2734,7 @@ static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 static const struct net_device_ops vxlan_netdev_ether_ops = {
 	.ndo_init		= vxlan_init,
 	.ndo_uninit		= vxlan_uninit,
-	.ndo_open		= vxlan_open,
+	.ndo_open		= vxlan_open,//设置dev_ops
 	.ndo_stop		= vxlan_stop,
 	.ndo_start_xmit		= vxlan_xmit,//vxlan报文发送
 	.ndo_get_stats64	= ip_tunnel_get_stats64,
@@ -2791,6 +2795,7 @@ static void vxlan_offload_rx_ports(struct net_device *dev, bool push)
 }
 
 /* Initialize the device structure. */
+//vxlan设备初始化
 static void vxlan_setup(struct net_device *dev)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -2832,6 +2837,7 @@ static void vxlan_setup(struct net_device *dev)
 		INIT_HLIST_HEAD(&vxlan->fdb_head[h]);
 }
 
+//置ether的ops
 static void vxlan_ether_setup(struct net_device *dev)
 {
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
@@ -2994,6 +3000,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	for (h = 0; h < VNI_HASH_SIZE; ++h)
 		INIT_HLIST_HEAD(&vs->vni_list[h]);
 
+	//创建socket
 	sock = vxlan_create_sock(net, ipv6, port, flags);
 	if (IS_ERR(sock)) {
 		kfree(vs);
@@ -3321,6 +3328,7 @@ static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
 	return 0;
 }
 
+//vxlan　link创建对应设备
 static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 			      struct vxlan_config *conf,
 			      struct netlink_ext_ack *extack)
@@ -3350,6 +3358,7 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 			return err;
 	}
 
+	//注册netdev
 	err = register_netdevice(dev);
 	if (err)
 		goto errout;
@@ -3800,7 +3809,7 @@ static struct rtnl_link_ops vxlan_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct vxlan_dev),
 	.setup		= vxlan_setup,
 	.validate	= vxlan_validate,
-	.newlink	= vxlan_newlink,
+	.newlink	= vxlan_newlink,//link新建
 	.changelink	= vxlan_changelink,
 	.dellink	= vxlan_dellink,
 	.get_size	= vxlan_get_size,

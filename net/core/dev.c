@@ -7677,6 +7677,7 @@ void __dev_notify_flags(struct net_device *dev, unsigned int old_flags,
 	if (gchanges)
 		rtmsg_ifinfo(RTM_NEWLINK, dev, gchanges, GFP_ATOMIC);
 
+	//置dev的up/down
 	if (changes & IFF_UP) {
 		if (dev->flags & IFF_UP)
 			call_netdevice_notifiers(NETDEV_UP, dev);

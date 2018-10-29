@@ -1949,7 +1949,7 @@ static int udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		 */
 
 		/* if we're overly short, let UDP handle it */
-		//此报文对应的socket是一个封装socket,走解封装流程
+		//此报文对应的socket是一个封装socket,走解封装流程,例如vxlan报文收取
 		encap_rcv = READ_ONCE(up->encap_rcv);
 		if (encap_rcv) {
 			int ret;
