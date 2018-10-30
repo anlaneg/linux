@@ -955,7 +955,7 @@ struct dev_links_info {
 struct device {
 	struct device		*parent;//所属的父设备
 
-	struct device_private	*p;
+	struct device_private	*p;//设备的私有数据（从实现看目前已不能称之为私有数据了）
 
 	struct kobject kobj;//device的sysfs属性
 	const char		*init_name; /* initial name of the device */

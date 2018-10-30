@@ -6,6 +6,7 @@
 #include <linux/netdevice.h>
 
 #ifdef CONFIG_NETFILTER_INGRESS
+//检查ingress回调是否被激活
 static inline bool nf_hook_ingress_active(const struct sk_buff *skb)
 {
 #ifdef HAVE_JUMP_LABEL
@@ -28,9 +29,11 @@ static inline int nf_hook_ingress(struct sk_buff *skb)
 	if (unlikely(!e))
 		return 0;
 
+	//初始化hook状态
 	nf_hook_state_init(&state, NF_NETDEV_INGRESS,
-			   NFPROTO_NETDEV, skb->dev, NULL, NULL,
+			   NFPROTO_NETDEV, skb->dev/*入接口*/, NULL, NULL,
 			   dev_net(skb->dev), NULL);
+	//执行dev的nf_hooks_ingress回调
 	ret = nf_hook_slow(skb, &state, e, 0);
 	if (ret == 0)
 		return -1;
@@ -38,6 +41,7 @@ static inline int nf_hook_ingress(struct sk_buff *skb)
 	return ret;
 }
 
+//将ingress hook置为NULL
 static inline void nf_hook_ingress_init(struct net_device *dev)
 {
 	RCU_INIT_POINTER(dev->nf_hooks_ingress, NULL);

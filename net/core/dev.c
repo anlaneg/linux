@@ -741,7 +741,7 @@ EXPORT_SYMBOL_GPL(dev_fill_metadata_dst);
  *	reference counters are not incremented so the caller must be
  *	careful with locks.
  */
-//通过设备名称查找设备
+//通过设备名称在net范围内查找网络设备
 struct net_device *__dev_get_by_name(struct net *net, const char *name)
 {
 	struct net_device *dev;
@@ -1037,6 +1037,7 @@ EXPORT_SYMBOL(__dev_get_by_flags);
  *	to allow sysfs to work.  We also disallow any kind of
  *	whitespace.
  */
+//name是否为一个有效的名称
 bool dev_valid_name(const char *name)
 {
 	if (*name == '\0')
@@ -1070,7 +1071,7 @@ EXPORT_SYMBOL(dev_valid_name);
  *	Limited to bits_per_byte * page size devices (ie 32K on most platforms).
  *	Returns the number of the unit assigned or a negative errno code.
  */
-
+//为一个设备分配一个name前缀的编号名称，例如eth0,eth1...
 static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 {
 	int i = 0;
@@ -1093,20 +1094,22 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 			return -EINVAL;//不能%d或者不是%%(转议）则报错
 
 		/* Use one page as a bit array of possible slots */
+		//申请一块空白内存
 		inuse = (unsigned long *) get_zeroed_page(GFP_ATOMIC);
 		if (!inuse)
 			return -ENOMEM;
 
+		//遍历net下所有dev
 		for_each_netdev(net, d) {
 			if (!sscanf(d->name, name, &i))
-				continue;
+				continue;//名称非name前缀＋数字的，跳过
 			if (i < 0 || i >= max_netdevices)
-				continue;
+				continue;//数字过大或者为负数的跳过
 
 			/*  avoid cases where sscanf is not exact inverse of printf */
 			snprintf(buf, IFNAMSIZ, name, i);
 			if (!strncmp(buf, d->name, IFNAMSIZ))
-				set_bit(i, inuse);//标记%d不能展开为i
+				set_bit(i, inuse);//标记%d不能展开为i，i编号已被占用
 		}
 
 		//找一个可以转换的i
@@ -1114,6 +1117,7 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 		free_page((unsigned long) inuse);
 	}
 
+	//尝试name$i是否可占用
 	snprintf(buf, IFNAMSIZ, name, i);
 	if (!__dev_get_by_name(net, buf))
 		return i;//名称可能使用
@@ -1125,6 +1129,7 @@ static int __dev_alloc_name(struct net *net, const char *name, char *buf)
 	return -ENFILE;
 }
 
+//为设备申请name前缀的名称
 static int dev_alloc_name_ns(struct net *net,
 			     struct net_device *dev,
 			     const char *name)
@@ -1159,6 +1164,7 @@ int dev_alloc_name(struct net_device *dev, const char *name)
 }
 EXPORT_SYMBOL(dev_alloc_name);
 
+//检查名称是有可用
 int dev_get_valid_name(struct net *net, struct net_device *dev,
 		       const char *name)
 {
@@ -1167,9 +1173,11 @@ int dev_get_valid_name(struct net *net, struct net_device *dev,
 	if (!dev_valid_name(name))
 		return -EINVAL;
 
+	//包含%,需要申请一个ifindex来完成名称
 	if (strchr(name, '%'))
 		//查找一个不存在的ifindex来生成名称
 		return dev_alloc_name_ns(net, dev, name);
+
 	//不需要%号展开，检查是否已存在，如已存在报错
 	else if (__dev_get_by_name(net, name))
 		return -EEXIST;
@@ -4835,14 +4843,17 @@ static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 {
 #ifdef CONFIG_NETFILTER_INGRESS
 	if (nf_hook_ingress_active(skb)) {
+		//如果ingress　hook占被激活，进入
 		int ingress_retval;
 
 		if (*pt_prev) {
+			//调用pt_prev->func
 			*ret = deliver_skb(skb, *pt_prev, orig_dev);
 			*pt_prev = NULL;
 		}
 
 		rcu_read_lock();
+		//调用ingress hook点
 		ingress_retval = nf_hook_ingress(skb);
 		rcu_read_unlock();
 		return ingress_retval;
@@ -4918,6 +4929,7 @@ skip_taps:
 		if (!skb)
 			goto out;
 
+		//调用设备的ingress hook点
 		if (nf_ingress(skb, &pt_prev, &ret, orig_dev) < 0)
 			goto out;
 	}
@@ -8601,6 +8613,7 @@ int register_netdevice(struct net_device *dev)
 	might_sleep();
 
 	/* When net_device's are persistent, this will be fatal. */
+	//此时dev一定没有初始化
 	BUG_ON(dev->reg_state != NETREG_UNINITIALIZED);
 	BUG_ON(!net);
 
@@ -8609,7 +8622,7 @@ int register_netdevice(struct net_device *dev)
 
 	ret = dev_get_valid_name(net, dev, dev->name);
 	if (ret < 0)
-		goto out;
+		goto out;//名称不可用，失败
 
 	/* Init, if this function is available */
 	//调用ndo_init初始化设备
@@ -8633,11 +8646,12 @@ int register_netdevice(struct net_device *dev)
 	}
 
 	ret = -EBUSY;
+
 	//如果未指定ifidex，则为其申请ifindex
 	if (!dev->ifindex)
 		dev->ifindex = dev_new_index(net);
 	else if (__dev_get_by_index(net, dev->ifindex))
-		//有ifindex情况下，设备不能存在
+		//有ifindex情况下，由于是创建设备，故此ifindex不能被占用
 		goto err_uninit;
 
 	/* Transfer changeable features to wanted_features and enable
@@ -9170,6 +9184,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 		//设置默认的ethtool操作集
 		dev->ethtool_ops = &default_ethtool_ops;
 
+	//初始化设备的ingress　hook链表
 	nf_hook_ingress_init(dev);
 
 	return dev;

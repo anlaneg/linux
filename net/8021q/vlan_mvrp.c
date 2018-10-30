@@ -38,6 +38,7 @@ int vlan_mvrp_request_join(const struct net_device *dev)
 	const struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
 	__be16 vlan_id = htons(vlan->vlan_id);
 
+	//必须为0x8100
 	if (vlan->vlan_proto != htons(ETH_P_8021Q))
 		return 0;
 	return mrp_request_join(vlan->real_dev, &vlan_mrp_app,

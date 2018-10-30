@@ -1749,7 +1749,7 @@ int netdev_register_kobject(struct net_device *ndev)
 #endif
 #endif /* CONFIG_SYSFS */
 
-	error = device_add(dev);//dev添加给系统
+	error = device_add(dev);//dev添加给系统，并探测设备对应的驱动
 	if (error)
 		return error;
 

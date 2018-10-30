@@ -47,10 +47,13 @@ static int vlan_validate(struct nlattr *tb[], struct nlattr *data[],
 	int err;
 
 	if (tb[IFLA_ADDRESS]) {
+		//校验mac地址长度
 		if (nla_len(tb[IFLA_ADDRESS]) != ETH_ALEN) {
 			NL_SET_ERR_MSG_MOD(extack, "Invalid link address");
 			return -EINVAL;
 		}
+
+		//校验mac地址
 		if (!is_valid_ether_addr(nla_data(tb[IFLA_ADDRESS]))) {
 			NL_SET_ERR_MSG_MOD(extack, "Invalid link address");
 			return -EADDRNOTAVAIL;
@@ -62,6 +65,7 @@ static int vlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		return -EINVAL;
 	}
 
+	//目前支持0x8100,0x88a8
 	if (data[IFLA_VLAN_PROTOCOL]) {
 		switch (nla_get_be16(data[IFLA_VLAN_PROTOCOL])) {
 		case htons(ETH_P_8021Q):
@@ -73,6 +77,7 @@ static int vlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		}
 	}
 
+	//vlanid校验
 	if (data[IFLA_VLAN_ID]) {
 		id = nla_get_u16(data[IFLA_VLAN_ID]);
 		if (id >= VLAN_VID_MASK) {
@@ -114,6 +119,7 @@ static int vlan_changelink(struct net_device *dev, struct nlattr *tb[],
 
 	if (data[IFLA_VLAN_FLAGS]) {
 		flags = nla_data(data[IFLA_VLAN_FLAGS]);
+		//flags更新
 		vlan_dev_change_flags(dev, flags->flags, flags->mask);
 	}
 	if (data[IFLA_VLAN_INGRESS_QOS]) {
@@ -152,6 +158,7 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 		return -EINVAL;
 	}
 
+	//取vlan设备的父设备
 	real_dev = __dev_get_by_index(src_net, nla_get_u32(tb[IFLA_LINK]));
 	if (!real_dev) {
 		NL_SET_ERR_MSG_MOD(extack, "link does not exist");
@@ -170,6 +177,7 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 	dev->priv_flags |= (real_dev->priv_flags & IFF_XMIT_DST_RELEASE);
 	vlan->flags	 = VLAN_FLAG_REORDER_HDR;
 
+	//检查设备是否已创建
 	err = vlan_check_real_dev(real_dev, vlan->vlan_proto, vlan->vlan_id,
 				  extack);
 	if (err < 0)
@@ -187,6 +195,7 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 	if (err < 0)
 		return err;
 
+	//注册vlan设备
 	return register_vlan_dev(dev, extack);
 }
 

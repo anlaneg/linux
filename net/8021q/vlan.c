@@ -51,6 +51,7 @@ const char vlan_version[] = DRV_VERSION;
 
 /* End of global variables definitions. */
 
+//设置vlan_proto,vlan_id对应的array
 static int vlan_group_prealloc_vid(struct vlan_group *vg,
 				   __be16 vlan_proto, u16 vlan_id)
 {
@@ -60,17 +61,23 @@ static int vlan_group_prealloc_vid(struct vlan_group *vg,
 
 	ASSERT_RTNL();
 
+	//确定协议索引
 	pidx  = vlan_proto_idx(vlan_proto);
+	//确定桶id
 	vidx  = vlan_id / VLAN_GROUP_ARRAY_PART_LEN;
+	//取相应的桶
 	array = vg->vlan_devices_arrays[pidx][vidx];
+	//如果对应的桶已创建，则直接返回
 	if (array != NULL)
 		return 0;
 
+	//构造桶内存
 	size = sizeof(struct net_device *) * VLAN_GROUP_ARRAY_PART_LEN;
 	array = kzalloc(size, GFP_KERNEL);
 	if (array == NULL)
 		return -ENOBUFS;
 
+	//设置桶内存
 	vg->vlan_devices_arrays[pidx][vidx] = array;
 	return 0;
 }
@@ -139,6 +146,7 @@ int vlan_check_real_dev(struct net_device *real_dev,
 	return 0;
 }
 
+//注册vlan设备
 int register_vlan_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -148,6 +156,7 @@ int register_vlan_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 	struct vlan_group *grp;
 	int err;
 
+	//添加vlan_id
 	err = vlan_vid_add(real_dev, vlan->vlan_proto, vlan_id);
 	if (err)
 		return err;
@@ -166,11 +175,13 @@ int register_vlan_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 			goto out_uninit_gvrp;
 	}
 
+	//确保vlan->vlan_proto,vlan_id对应的array存在
 	err = vlan_group_prealloc_vid(grp, vlan->vlan_proto, vlan_id);
 	if (err < 0)
 		goto out_uninit_mvrp;
 
 	vlan->nest_level = dev_get_nest_level(real_dev) + 1;
+	//注册网络设备
 	err = register_netdevice(dev);
 	if (err < 0)
 		goto out_uninit_mvrp;
@@ -252,6 +263,7 @@ static int register_vlan_device(struct net_device *real_dev, u16 vlan_id)
 		snprintf(name, IFNAMSIZ, "vlan%.4i", vlan_id);
 	}
 
+	//申请网络设备
 	new_dev = alloc_netdev(sizeof(struct vlan_dev_priv), name,
 			       NET_NAME_UNKNOWN, vlan_setup);
 
@@ -264,6 +276,7 @@ static int register_vlan_device(struct net_device *real_dev, u16 vlan_id)
 	 */
 	new_dev->mtu = real_dev->mtu;
 
+	//初始化设备的私有数据
 	vlan = vlan_dev_priv(new_dev);
 	vlan->vlan_proto = htons(ETH_P_8021Q);
 	vlan->vlan_id = vlan_id;
@@ -272,6 +285,8 @@ static int register_vlan_device(struct net_device *real_dev, u16 vlan_id)
 	vlan->flags = VLAN_FLAG_REORDER_HDR;
 
 	new_dev->rtnl_link_ops = &vlan_link_ops;
+
+	//注册vlan设备
 	err = register_vlan_dev(new_dev, NULL);
 	if (err < 0)
 		goto out_free_newdev;
