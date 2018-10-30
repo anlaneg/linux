@@ -13,13 +13,15 @@
 extern struct list_head ptype_all __read_mostly;
 extern struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
 
+//pos是一个bucket_idx合上offset的结构，通过pos可以知道需要获取哪个桶的第几个元素
 static inline struct net_device *dev_from_same_bucket(struct seq_file *seq, loff_t *pos)
 {
-	struct net *net = seq_file_net(seq);
+	struct net *net = seq_file_net(seq);//取对应的net
 	struct net_device *dev;
 	struct hlist_head *h;
 	unsigned int count = 0, offset = get_offset(*pos);
 
+	//遍历所有网络设备，自get_bucket(*pos)链上找出第offset个元素返回
 	h = &net->dev_name_head[get_bucket(*pos)];
 	hlist_for_each_entry_rcu(dev, h, name_hlist) {
 		if (++count == offset)
@@ -29,21 +31,24 @@ static inline struct net_device *dev_from_same_bucket(struct seq_file *seq, loff
 	return NULL;
 }
 
+//返回seq对应的所有dev设备
 static inline struct net_device *dev_from_bucket(struct seq_file *seq, loff_t *pos)
 {
 	struct net_device *dev;
 	unsigned int bucket;
 
 	do {
+		//获取对应的dev
 		dev = dev_from_same_bucket(seq, pos);
 		if (dev)
 			return dev;
 
+		//这个桶上没有元素了，切换桶号
 		bucket = get_bucket(*pos) + 1;
-		*pos = set_bucket_offset(bucket, 1);
+		*pos = set_bucket_offset(bucket, 1);//置offset为１，重新获取
 	} while (bucket < NETDEV_HASHENTRIES);
 
-	return NULL;
+	return NULL;//所有桶已完成遍历，返回
 }
 
 /*
@@ -60,9 +65,11 @@ static void *dev_seq_start(struct seq_file *seq, loff_t *pos)
 	if (get_bucket(*pos) >= NETDEV_HASHENTRIES)
 		return NULL;
 
+	//取pos对应的设备（pos为１）
 	return dev_from_bucket(seq, pos);
 }
 
+//增加pos位置，获取下一个dev元素
 static void *dev_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	++*pos;
@@ -327,6 +334,7 @@ static struct pernet_operations __net_initdata dev_proc_ops = {
 	.exit = dev_proc_net_exit,
 };
 
+//显示指定网络设备的组播硬件地址
 static int dev_mc_seq_show(struct seq_file *seq, void *v)
 {
 	struct netdev_hw_addr *ha;
@@ -338,7 +346,7 @@ static int dev_mc_seq_show(struct seq_file *seq, void *v)
 	netif_addr_lock_bh(dev);
 	netdev_for_each_mc_addr(ha, dev) {
 		seq_printf(seq, "%-4d %-15s %-5d %-5d %*phN\n",
-			   dev->ifindex, dev->name,
+			   dev->ifindex/*设备ifindex*/, dev->name/*设备名称*/,
 			   ha->refcount, ha->global_use,
 			   (int)dev->addr_len, ha->addr);
 	}

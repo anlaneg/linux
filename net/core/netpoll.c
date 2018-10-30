@@ -204,6 +204,7 @@ void netpoll_poll_dev(struct net_device *dev)
 }
 EXPORT_SYMBOL(netpoll_poll_dev);
 
+//通过执行down操作，禁止对dev设备进行poll收包
 void netpoll_poll_disable(struct net_device *dev)
 {
 	struct netpoll_info *ni;
@@ -217,6 +218,7 @@ void netpoll_poll_disable(struct net_device *dev)
 }
 EXPORT_SYMBOL(netpoll_poll_disable);
 
+//通过执行up操作，容许对dev设备进行poll收包
 void netpoll_poll_enable(struct net_device *dev)
 {
 	struct netpoll_info *ni;
@@ -665,6 +667,7 @@ int netpoll_setup(struct netpoll *np)
 		goto put;
 	}
 
+	//设备仍未start,则通过dev_open函数使其up
 	if (!netif_running(ndev)) {
 		unsigned long atmost, atleast;
 

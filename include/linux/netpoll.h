@@ -36,7 +36,7 @@ struct netpoll {
 struct netpoll_info {
 	refcount_t refcnt;
 
-	struct semaphore dev_lock;
+	struct semaphore dev_lock;//通过此信号量来容许禁止对此设备收包
 
 	struct sk_buff_head txq;
 

@@ -49,7 +49,7 @@ static int __hw_addr_create_ex(struct netdev_hw_addr_list *list,
 
 static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 			    const unsigned char *addr, int addr_len,
-			    unsigned char addr_type, bool global, bool sync,
+			    unsigned char addr_type, bool global/*是否为全局唯一地址*/, bool sync,
 			    int sync_count)
 {
 	struct netdev_hw_addr *ha;
@@ -57,10 +57,11 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 	if (addr_len > MAX_ADDR_LEN)
 		return -EINVAL;
 
+	//遍历list上所有硬件地址
 	list_for_each_entry(ha, &list->list, list) {
 		if (ha->type == addr_type &&
 		    !memcmp(ha->addr, addr, addr_len)) {
-			//如果类型一致且硬件地址一致，则进入
+			//如果类型一致且硬件地址一致，则说明地址已添加
 			if (global) {
 				/* check if addr is already used as global */
 				if (ha->global_use)
@@ -79,16 +80,17 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 		}
 	}
 
-	//没有与之重复的，构造新的hardware address 并加入
+	//没有与之重复的，构造新的hardware address 并将其(addr,addr_len)加入
 	return __hw_addr_create_ex(list, addr, addr_len, addr_type, global,
 				   sync);
 }
 
+//在list链上添加addr_type类型的硬件地址
 static int __hw_addr_add(struct netdev_hw_addr_list *list,
 			 const unsigned char *addr, int addr_len,
 			 unsigned char addr_type)
 {
-	return __hw_addr_add_ex(list, addr, addr_len, addr_type, false, false,
+	return __hw_addr_add_ex(list/*地址要添加的链*/, addr/*要添加的硬件地址*/, addr_len/*硬件地址长度*/, addr_type/*要添加的地址类型*/, false, false,
 				0);
 }
 
@@ -203,6 +205,7 @@ int __hw_addr_sync(struct netdev_hw_addr_list *to_list,
 	int err = 0;
 	struct netdev_hw_addr *ha, *tmp;
 
+	//遍历from链上所有硬件地址
 	list_for_each_entry_safe(ha, tmp, &from_list->list, list) {
 		if (!ha->sync_cnt) {
 			err = __hw_addr_sync_one(to_list, ha, addr_len);
@@ -492,6 +495,7 @@ EXPORT_SYMBOL(dev_uc_add_excl);
  *	Add a secondary unicast address to the device or increase
  *	the reference count if it already exists.
  */
+//为设备dev添加从mac地址（单播）
 int dev_uc_add(struct net_device *dev, const unsigned char *addr)
 {
 	int err;
@@ -541,6 +545,7 @@ EXPORT_SYMBOL(dev_uc_del);
  *	function of layered software devices.  This function assumes that
  *	addresses will only ever be synced to the @to devices and no other.
  */
+//自from设备向to设备同步单播mac地址
 int dev_uc_sync(struct net_device *to, struct net_device *from)
 {
 	int err = 0;
@@ -762,14 +767,16 @@ EXPORT_SYMBOL(dev_mc_del_global);
  *	This function is intended to be called from the ndo_set_rx_mode
  *	function of layered software devices.
  */
+//同步from设备上的组播地址链表到to设备
 int dev_mc_sync(struct net_device *to, struct net_device *from)
 {
 	int err = 0;
 
 	if (to->addr_len != from->addr_len)
-		return -EINVAL;
+		return -EINVAL;//两个设备必须为同类设备
 
 	netif_addr_lock_nested(to);
+	//自from设备向to设备同步组播mac地址
 	err = __hw_addr_sync(&to->mc, &from->mc, to->addr_len);
 	if (!err)
 		__dev_set_rx_mode(to);

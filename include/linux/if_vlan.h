@@ -73,6 +73,7 @@ static inline struct vlan_ethhdr *vlan_eth_hdr(const struct sk_buff *skb)
 /* found in socket.c */
 extern void vlan_ioctl_set(int (*hook)(struct net *, void __user *));
 
+//检查是否为vlan设备
 static inline bool is_vlan_dev(const struct net_device *dev)
 {
         return dev->priv_flags & IFF_802_1Q_VLAN;
@@ -120,6 +121,7 @@ static inline void vlan_drop_rx_stag_filter_info(struct net_device *dev)
  *	@rx_errors: number of rx errors
  *	@tx_dropped: number of tx drops
  */
+//vlan设备的统计计数
 struct vlan_pcpu_stats {
 	u64			rx_packets;
 	u64			rx_bytes;
@@ -315,6 +317,7 @@ static inline bool eth_type_vlan(__be16 ethertype)
 	}
 }
 
+//硬件是否支持vlan的offload功能
 static inline bool vlan_hw_offload_capable(netdev_features_t features,
 					   __be16 proto)
 {

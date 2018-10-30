@@ -1397,7 +1397,7 @@ static int __dev_open(struct net_device *dev)
 	 * If we don't do this there is a chance ndo_poll_controller
 	 * or ndo_poll may be running while we open the device
 	 */
-	//禁止对此设备收包
+	//暂禁止对此设备收包
 	netpoll_poll_disable(dev);
 
 	//触发通知NETDEV_PRE_UP
@@ -7541,10 +7541,10 @@ void __dev_set_rx_mode(struct net_device *dev)
 
 	/* dev_open will call this function so the list will stay sane. */
 	if (!(dev->flags&IFF_UP))
-		return;
+		return;//设备未up,则跳出
 
 	if (!netif_device_present(dev))
-		return;
+		return;//设置被删除，则跳出
 
 	if (!(dev->priv_flags & IFF_UNICAST_FLT)) {
 		/* Unicast addresses changes may only happen under the rtnl,
@@ -9008,6 +9008,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 	const struct net_device_ops *ops = dev->netdev_ops;
 
 	if (ops->ndo_get_stats64) {
+		//当统计计数置为０，再获取（新设备均应优先提供ndo_get_stats64函数）
 		memset(storage, 0, sizeof(*storage));
 		ops->ndo_get_stats64(dev, storage);
 	} else if (ops->ndo_get_stats) {

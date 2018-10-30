@@ -59,6 +59,7 @@ static int vlan_dev_hard_header(struct sk_buff *skb, struct net_device *dev,
 	int rc;
 
 	if (!(vlan->flags & VLAN_FLAG_REORDER_HDR)) {
+		//生成vlan头
 		vhdr = skb_push(skb, VLAN_HLEN);
 
 		vlan_tci = vlan->vlan_id;
@@ -84,6 +85,7 @@ static int vlan_dev_hard_header(struct sk_buff *skb, struct net_device *dev,
 		saddr = dev->dev_addr;
 
 	/* Now make the underlying real hard header */
+	//交给real_dev生成以太头
 	dev = vlan->real_dev;
 	rc = dev_hard_header(skb, dev, type, daddr, saddr, len + vhdrlen);
 	if (rc > 0)
@@ -102,6 +104,7 @@ static inline netdev_tx_t vlan_netpoll_send_skb(struct vlan_dev_priv *vlan, stru
 	return NETDEV_TX_OK;
 }
 
+//更换为vlan父设备，并发包
 static netdev_tx_t vlan_dev_hard_start_xmit(struct sk_buff *skb,
 					    struct net_device *dev)
 {
@@ -115,6 +118,7 @@ static netdev_tx_t vlan_dev_hard_start_xmit(struct sk_buff *skb,
 	 * NOTE: THIS ASSUMES DIX ETHERNET, SPECIFICALLY NOT SUPPORTING
 	 * OTHER THINGS LIKE FDDI/TokenRing/802.3 SNAPs...
 	 */
+	//vlan头里的vlan协议号与设备的协议号不相等，更正为设备的vlan协议号
 	if (veth->h_vlan_proto != vlan->vlan_proto ||
 	    vlan->flags & VLAN_FLAG_REORDER_HDR) {
 		u16 vlan_tci;
@@ -123,6 +127,7 @@ static netdev_tx_t vlan_dev_hard_start_xmit(struct sk_buff *skb,
 		__vlan_hwaccel_put_tag(skb, vlan->vlan_proto, vlan_tci);
 	}
 
+	//替换为vlan对应的父设备，发包
 	skb->dev = vlan->real_dev;
 	len = skb->len;
 	if (unlikely(netpoll_tx_running(dev)))
@@ -145,6 +150,7 @@ static netdev_tx_t vlan_dev_hard_start_xmit(struct sk_buff *skb,
 	return ret;
 }
 
+//置设备上的mtu
 static int vlan_dev_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct net_device *real_dev = vlan_dev_priv(dev)->real_dev;
@@ -153,7 +159,7 @@ static int vlan_dev_change_mtu(struct net_device *dev, int new_mtu)
 	if (netif_reduces_vlan_mtu(real_dev))
 		max_mtu -= VLAN_HLEN;
 	if (max_mtu < new_mtu)
-		return -ERANGE;
+		return -ERANGE;//mtu不得小于real设备上的
 
 	dev->mtu = new_mtu;
 
@@ -261,6 +267,7 @@ bool vlan_dev_inherit_address(struct net_device *dev,
 	return true;
 }
 
+//置vlan设备up
 static int vlan_dev_open(struct net_device *dev)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(dev);
@@ -269,8 +276,9 @@ static int vlan_dev_open(struct net_device *dev)
 
 	if (!(real_dev->flags & IFF_UP) &&
 	    !(vlan->flags & VLAN_FLAG_LOOSE_BINDING))
-		return -ENETDOWN;
+		return -ENETDOWN;//父设备未up,返回失败
 
+	//vlan设备mac地址与real_dev地址不相同时，将其置与real_dev　mac地址相同
 	if (!ether_addr_equal(dev->dev_addr, real_dev->dev_addr) &&
 	    !vlan_dev_inherit_address(dev, real_dev)) {
 		err = dev_uc_add(real_dev, dev->dev_addr);
@@ -283,6 +291,8 @@ static int vlan_dev_open(struct net_device *dev)
 		if (err < 0)
 			goto del_unicast;
 	}
+
+	//子设备置为混杂，则父设备置为混杂
 	if (dev->flags & IFF_PROMISC) {
 		err = dev_set_promiscuity(real_dev, 1);
 		if (err < 0)
@@ -331,6 +341,7 @@ static int vlan_dev_stop(struct net_device *dev)
 	return 0;
 }
 
+//设置mac地址
 static int vlan_dev_set_mac_address(struct net_device *dev, void *p)
 {
 	struct net_device *real_dev = vlan_dev_priv(dev)->real_dev;
@@ -340,19 +351,23 @@ static int vlan_dev_set_mac_address(struct net_device *dev, void *p)
 	if (!is_valid_ether_addr(addr->sa_data))
 		return -EADDRNOTAVAIL;
 
+	//设备必须up
 	if (!(dev->flags & IFF_UP))
 		goto out;
 
+	//如果配置给vlan设备的mac地址与real_dev的mac地址不相等，则为real_dev添加此mac地址
 	if (!ether_addr_equal(addr->sa_data, real_dev->dev_addr)) {
 		err = dev_uc_add(real_dev, addr->sa_data);
 		if (err < 0)
 			return err;
 	}
 
+	//如果dev的mac地址与real_dev地址不同，则删除掉real_dev中之前添加的dev->dev_addr
 	if (!ether_addr_equal(dev->dev_addr, real_dev->dev_addr))
 		dev_uc_del(real_dev, dev->dev_addr);
 
 out:
+	//设置dev的mac地址
 	ether_addr_copy(dev->dev_addr, addr->sa_data);
 	return 0;
 }
@@ -483,7 +498,9 @@ static void vlan_dev_change_rx_flags(struct net_device *dev, int change)
 
 static void vlan_dev_set_rx_mode(struct net_device *vlan_dev)
 {
+	//同步组播地址
 	dev_mc_sync(vlan_dev_priv(vlan_dev)->real_dev, vlan_dev);
+	//同步单播地址
 	dev_uc_sync(vlan_dev_priv(vlan_dev)->real_dev, vlan_dev);
 }
 
@@ -517,6 +534,7 @@ static int vlan_dev_get_lock_subclass(struct net_device *dev)
 	return vlan_dev_priv(dev)->nest_level;
 }
 
+//real设备不支持生成vlan头的，软件方式来生成
 static const struct header_ops vlan_header_ops = {
 	.create	 = vlan_dev_hard_header,
 	.parse	 = eth_header_parse,
@@ -533,9 +551,11 @@ static int vlan_passthru_hard_header(struct sk_buff *skb, struct net_device *dev
 	if (saddr == NULL)
 		saddr = dev->dev_addr;
 
+	//交由real_dev生成相应的二层头
 	return dev_hard_header(skb, real_dev, type, daddr, saddr, len);
 }
 
+//硬件支持vlan的offload
 static const struct header_ops vlan_passthru_header_ops = {
 	.create	 = vlan_passthru_hard_header,
 	.parse	 = eth_header_parse,
@@ -547,6 +567,7 @@ static struct device_type vlan_type = {
 
 static const struct net_device_ops vlan_netdev_ops;
 
+//初始化vlan设备
 static int vlan_dev_init(struct net_device *dev)
 {
 	struct net_device *real_dev = vlan_dev_priv(dev)->real_dev;
@@ -554,8 +575,10 @@ static int vlan_dev_init(struct net_device *dev)
 	netif_carrier_off(dev);
 
 	/* IFF_BROADCAST|IFF_MULTICAST; ??? */
+	//除列出的标记外，其它标记均copy自real_dev
 	dev->flags  = real_dev->flags & ~(IFF_UP | IFF_PROMISC | IFF_ALLMULTI |
 					  IFF_MASTER | IFF_SLAVE);
+	//使用real_dev的３个状态
 	dev->state  = (real_dev->state & ((1<<__LINK_STATE_NOCARRIER) |
 					  (1<<__LINK_STATE_DORMANT))) |
 		      (1<<__LINK_STATE_PRESENT);
@@ -576,10 +599,13 @@ static int vlan_dev_init(struct net_device *dev)
 	/* ipv6 shared card related stuff */
 	dev->dev_id = real_dev->dev_id;
 
+	//如未设置dev的mac地址，则复用real_dev的
 	if (is_zero_ether_addr(dev->dev_addr)) {
 		ether_addr_copy(dev->dev_addr, real_dev->dev_addr);
 		dev->addr_assign_type = NET_ADDR_STOLEN;
 	}
+
+	//如未设置广播地址，则复用real_dev的
 	if (is_zero_ether_addr(dev->broadcast))
 		memcpy(dev->broadcast, real_dev->broadcast, dev->addr_len);
 
@@ -590,10 +616,13 @@ static int vlan_dev_init(struct net_device *dev)
 	dev->needed_headroom = real_dev->needed_headroom;
 	if (vlan_hw_offload_capable(real_dev->features,
 				    vlan_dev_priv(dev)->vlan_proto)) {
+		//如果real_dev可以offload　vlan,则置passthrough的ops
 		dev->header_ops      = &vlan_passthru_header_ops;
 		dev->hard_header_len = real_dev->hard_header_len;
 	} else {
+		//需要软件来做vlan的insert,remove
 		dev->header_ops      = &vlan_header_ops;
+		//设备头部长度
 		dev->hard_header_len = real_dev->hard_header_len + VLAN_HLEN;
 	}
 
@@ -603,6 +632,7 @@ static int vlan_dev_init(struct net_device *dev)
 
 	vlan_dev_set_lockdep_class(dev, vlan_dev_get_lock_subclass(dev));
 
+	//为dev申请per cpu的统计计数信息
 	vlan_dev_priv(dev)->vlan_pcpu_stats = netdev_alloc_pcpu_stats(struct vlan_pcpu_stats);
 	if (!vlan_dev_priv(dev)->vlan_pcpu_stats)
 		return -ENOMEM;
@@ -683,6 +713,7 @@ static int vlan_ethtool_get_ts_info(struct net_device *dev,
 	return 0;
 }
 
+//获取设备的统计计数
 static void vlan_dev_get_stats64(struct net_device *dev,
 				 struct rtnl_link_stats64 *stats)
 {
@@ -690,10 +721,12 @@ static void vlan_dev_get_stats64(struct net_device *dev,
 	u32 rx_errors = 0, tx_dropped = 0;
 	int i;
 
+	//获取每个cpu上的统计情况
 	for_each_possible_cpu(i) {
 		u64 rxpackets, rxbytes, rxmulticast, txpackets, txbytes;
 		unsigned int start;
 
+		//取cpu $i上的关于vlandev的统计计数
 		p = per_cpu_ptr(vlan_dev_priv(dev)->vlan_pcpu_stats, i);
 		do {
 			start = u64_stats_fetch_begin_irq(&p->syncp);
@@ -781,13 +814,13 @@ static const struct net_device_ops vlan_netdev_ops = {
 	.ndo_open		= vlan_dev_open,
 	.ndo_stop		= vlan_dev_stop,
 	.ndo_start_xmit =  vlan_dev_hard_start_xmit,//vlan设备发送
-	.ndo_validate_addr	= eth_validate_addr,
+	.ndo_validate_addr	= eth_validate_addr,//vlan　mac地址校验
 	.ndo_set_mac_address	= vlan_dev_set_mac_address,
 	.ndo_set_rx_mode	= vlan_dev_set_rx_mode,
 	.ndo_change_rx_flags	= vlan_dev_change_rx_flags,
 	.ndo_do_ioctl		= vlan_dev_ioctl,
 	.ndo_neigh_setup	= vlan_dev_neigh_setup,
-	.ndo_get_stats64	= vlan_dev_get_stats64,
+	.ndo_get_stats64	= vlan_dev_get_stats64,//获取vlan设备的统计信息
 #if IS_ENABLED(CONFIG_FCOE)
 	.ndo_fcoe_ddp_setup	= vlan_dev_fcoe_ddp_setup,
 	.ndo_fcoe_ddp_done	= vlan_dev_fcoe_ddp_done,

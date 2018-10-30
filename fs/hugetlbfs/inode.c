@@ -1286,7 +1286,7 @@ static struct dentry *hugetlbfs_mount(struct file_system_type *fs_type,
 
 static struct file_system_type hugetlbfs_fs_type = {
 	.name		= "hugetlbfs",
-	.mount		= hugetlbfs_mount,
+	.mount		= hugetlbfs_mount,//大页挂载函数
 	.kill_sb	= kill_litter_super,
 };
 
@@ -1372,6 +1372,7 @@ out:
 	return file;
 }
 
+//初始化大页文件系统
 static int __init init_hugetlbfs_fs(void)
 {
 	struct hstate *h;
@@ -1384,6 +1385,7 @@ static int __init init_hugetlbfs_fs(void)
 	}
 
 	error = -ENOMEM;
+	//申请inode
 	hugetlbfs_inode_cachep = kmem_cache_create("hugetlbfs_inode_cache",
 					sizeof(struct hugetlbfs_inode_info),
 					0, SLAB_ACCOUNT, init_once);

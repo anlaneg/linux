@@ -346,7 +346,7 @@ int eth_change_mtu(struct net_device *dev, int new_mtu)
 }
 EXPORT_SYMBOL(eth_change_mtu);
 
-//检查设备地址是否为合法的mac地址
+//检查设备配置的地址是否为合法的mac地址
 int eth_validate_addr(struct net_device *dev)
 {
 	if (!is_valid_ether_addr(dev->dev_addr))

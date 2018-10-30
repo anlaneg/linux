@@ -203,7 +203,7 @@ struct neigh_parms;
 struct sk_buff;
 
 struct netdev_hw_addr {
-	struct list_head	list;
+	struct list_head	list;//连接点
 	unsigned char		addr[MAX_ADDR_LEN];//硬件地址
 	unsigned char		type;//硬件地址类型
 #define NETDEV_HW_ADDR_T_LAN		1 //以太网地址
@@ -1266,7 +1266,7 @@ struct net_device_ops {
 	//注册网络设备时，将调用此回调用于初始化
 	int			(*ndo_init)(struct net_device *dev);
 	void			(*ndo_uninit)(struct net_device *dev);
-	//将设备置于up状态
+	//将设备置于up状态，返回非０，则置up失败
 	int			(*ndo_open)(struct net_device *dev);
 	//将设备置于down状态
 	int			(*ndo_stop)(struct net_device *dev);
@@ -1284,8 +1284,10 @@ struct net_device_ops {
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
+	//为dev设置mac地址
 	int			(*ndo_set_mac_address)(struct net_device *dev,
 						       void *addr);
+	//校验此网络设备上配置的地址是否有效
 	int			(*ndo_validate_addr)(struct net_device *dev);
 	int			(*ndo_do_ioctl)(struct net_device *dev,
 					        struct ifreq *ifr, int cmd);
@@ -1297,12 +1299,14 @@ struct net_device_ops {
 						   struct neigh_parms *);
 	void			(*ndo_tx_timeout) (struct net_device *dev);
 
+	//获取设备上的统计信息（64位长度，优先使用此函数）
 	void			(*ndo_get_stats64)(struct net_device *dev,
 						   struct rtnl_link_stats64 *storage);
 	bool			(*ndo_has_offload_stats)(const struct net_device *dev, int attr_id);
 	int			(*ndo_get_offload_stats)(int attr_id,
 							 const struct net_device *dev,
 							 void *attr_data);
+	//获取设备上的统计信息（非64位长度）
 	struct net_device_stats* (*ndo_get_stats)(struct net_device *dev);
 
 	//如果设备支持vlan接受过滤的话，在上层添加vlan时将被调用
@@ -1896,7 +1900,7 @@ struct net_device {
 	spinlock_t		addr_list_lock;
 	unsigned char		name_assign_type;
 	bool			uc_promisc;
-	struct netdev_hw_addr_list	uc;
+	struct netdev_hw_addr_list	uc;//此设备上配置的单播mac地址
 	struct netdev_hw_addr_list	mc;
 	struct netdev_hw_addr_list	dev_addrs;//设备硬件地址列表
 

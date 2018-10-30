@@ -22,11 +22,15 @@ enum vlan_protos {
 struct vlan_group {
 	unsigned int		nr_vlan_devs;
 	struct hlist_node	hlist;	/* linked list */
+	//每种vlan协议号对应一组vlan设备哈希表指针
+	//哈希表一共有VLAN_GROUP_ARRAY_SPLIT_PARTS个桶，每个桶长度为4096/VLAN_GROUP_ARRAY_SPLIT_PARTS个。
+	//用于存放net_device的指针
 	struct net_device **vlan_devices_arrays[VLAN_PROTO_NUM]
 					       [VLAN_GROUP_ARRAY_SPLIT_PARTS];
 };
 
 struct vlan_info {
+	//vlan设备所属的以太网设备
 	struct net_device	*real_dev; /* The ethernet(like) device
 					    * the vlan is attached to.
 					    */
@@ -68,6 +72,7 @@ static inline struct net_device *vlan_group_get_device(struct vlan_group *vg,
 	return __vlan_group_get_device(vg, vlan_proto_idx(vlan_proto), vlan_id);
 }
 
+//填充vlan_proto,vlan_id到vlan设备的映射表
 static inline void vlan_group_set_device(struct vlan_group *vg,
 					 __be16 vlan_proto, u16 vlan_id,
 					 struct net_device *dev)
@@ -81,6 +86,7 @@ static inline void vlan_group_set_device(struct vlan_group *vg,
 }
 
 /* Must be invoked with rcu_read_lock or with RTNL. */
+//获取real_dev设备上是注册的vlan_id对应的网络子设备
 static inline struct net_device *vlan_find_dev(struct net_device *real_dev,
 					       __be16 vlan_proto, u16 vlan_id)
 {

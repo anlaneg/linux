@@ -115,10 +115,12 @@ int __net_init vlan_proc_init(struct net *net)
 {
 	struct vlan_net *vn = net_generic(net, vlan_net_id);
 
+	//创建/proc/net/vlan目录
 	vn->proc_vlan_dir = proc_net_mkdir(net, name_root, net->proc_net);
 	if (!vn->proc_vlan_dir)
 		goto err;
 
+	//创建vlan目录下的config文件
 	vn->proc_vlan_conf = proc_create_net(name_conf, S_IFREG | 0600,
 			vn->proc_vlan_dir, &vlan_seq_ops,
 			sizeof(struct seq_net_private));
@@ -135,7 +137,7 @@ err:
 /*
  *	Add directory entry for VLAN device.
  */
-
+//添加vlan设备
 int vlan_proc_add_dev(struct net_device *vlandev)
 {
 	struct vlan_dev_priv *vlan = vlan_dev_priv(vlandev);
@@ -143,6 +145,7 @@ int vlan_proc_add_dev(struct net_device *vlandev)
 
 	if (!strcmp(vlandev->name, name_conf))
 		return -EINVAL;
+	//创建vlan设备名称对应的文件
 	vlan->dent = proc_create_single_data(vlandev->name, S_IFREG | 0600,
 			vn->proc_vlan_dir, vlandev_seq_show, vlandev);
 	if (!vlan->dent)
@@ -178,6 +181,7 @@ static void *vlan_seq_start(struct seq_file *seq, loff_t *pos)
 	if (*pos == 0)
 		return SEQ_START_TOKEN;
 
+	//遍历所有的vlan设备
 	for_each_netdev_rcu(net, dev) {
 		if (!is_vlan_dev(dev))
 			continue;
@@ -189,6 +193,7 @@ static void *vlan_seq_start(struct seq_file *seq, loff_t *pos)
 	return  NULL;
 }
 
+//返回指定的vlan设备
 static void *vlan_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	struct net_device *dev;
@@ -216,6 +221,7 @@ static void vlan_seq_stop(struct seq_file *seq, void *v)
 	rcu_read_unlock();
 }
 
+//显示vlan设备,其对应的vlan,及其对应的real_dev
 static int vlan_seq_show(struct seq_file *seq, void *v)
 {
 	struct net *net = seq_file_net(seq);
@@ -243,6 +249,7 @@ static int vlan_seq_show(struct seq_file *seq, void *v)
 
 static int vlandev_seq_show(struct seq_file *seq, void *offset)
 {
+	//取对应的vlan设备
 	struct net_device *vlandev = (struct net_device *) seq->private;
 	const struct vlan_dev_priv *vlan = vlan_dev_priv(vlandev);
 	struct rtnl_link_stats64 temp;
@@ -253,18 +260,21 @@ static int vlandev_seq_show(struct seq_file *seq, void *offset)
 	if (!is_vlan_dev(vlandev))
 		return 0;
 
+	//取设备统计信息
 	stats = dev_get_stats(vlandev, &temp);
 	seq_printf(seq,
 		   "%s  VID: %d	 REORDER_HDR: %i  dev->priv_flags: %hx\n",
 		   vlandev->name, vlan->vlan_id,
 		   (int)(vlan->flags & 1), vlandev->priv_flags);
 
+	//显示设备统计信息
 	seq_printf(seq, fmt64, "total frames received", stats->rx_packets);
 	seq_printf(seq, fmt64, "total bytes received", stats->rx_bytes);
 	seq_printf(seq, fmt64, "Broadcast/Multicast Rcvd", stats->multicast);
 	seq_puts(seq, "\n");
 	seq_printf(seq, fmt64, "total frames transmitted", stats->tx_packets);
 	seq_printf(seq, fmt64, "total bytes transmitted", stats->tx_bytes);
+	//显示设备名称
 	seq_printf(seq, "Device: %s", vlan->real_dev->name);
 	/* now show all PRIORITY mappings relating to this VLAN */
 	seq_printf(seq, "\nINGRESS priority mappings: "

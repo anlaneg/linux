@@ -612,16 +612,19 @@ static const struct file_operations proc_single_fops = {
 };
 
 struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
-		struct proc_dir_entry *parent,
+		struct proc_dir_entry *parent/*目录*/,
 		int (*show)(struct seq_file *, void *), void *data)
 {
 	struct proc_dir_entry *p;
 
+	//创建名称为name的规则文件
 	p = proc_create_reg(name, mode, &parent, data);
 	if (!p)
 		return NULL;
+	//设置单个文件的fops
 	p->proc_fops = &proc_single_fops;
 	p->single_show = show;
+	//添加文件
 	return proc_register(parent, p);
 }
 EXPORT_SYMBOL(proc_create_single_data);
