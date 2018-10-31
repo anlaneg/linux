@@ -4191,9 +4191,10 @@ void ieee80211_rx_napi(struct ieee80211_hw *hw, struct ieee80211_sta *sta,
  * @hw: the hardware this frame came in on
  * @skb: the buffer to receive, owned by mac80211 after this call
  */
+//收到802.11报文
 static inline void ieee80211_rx(struct ieee80211_hw *hw, struct sk_buff *skb)
 {
-	ieee80211_rx_napi(hw, NULL, skb, NULL);
+	ieee80211_rx_napi(hw, NULL, skb/*802.11报文*/, NULL);
 }
 
 /**

@@ -1443,6 +1443,7 @@ void device_remove_bin_file(struct device *dev,
 }
 EXPORT_SYMBOL_GPL(device_remove_bin_file);
 
+//获取节点引用
 static void klist_children_get(struct klist_node *n)
 {
 	struct device_private *p = to_device_private_parent(n);
@@ -1451,6 +1452,7 @@ static void klist_children_get(struct klist_node *n)
 	get_device(dev);
 }
 
+//释放节点引用
 static void klist_children_put(struct klist_node *n)
 {
 	struct device_private *p = to_device_private_parent(n);
@@ -1789,6 +1791,7 @@ static void device_remove_sys_dev_entry(struct device *dev)
 	}
 }
 
+//初始化device的私有数据
 static int device_private_init(struct device *dev)
 {
 	dev->p = kzalloc(sizeof(*dev->p), GFP_KERNEL);
@@ -1836,6 +1839,7 @@ int device_add(struct device *dev)
 	if (!dev)
 		goto done;
 
+	//如果dev未初始化基私有数据，则初始化
 	if (!dev->p) {
 		error = device_private_init(dev);
 		if (error)
@@ -1889,7 +1893,7 @@ int device_add(struct device *dev)
 	if (platform_notify)
 		platform_notify(dev);
 
-	//创建设备文件
+	//创建设备文件（uevent)
 	error = device_create_file(dev, &dev_attr_uevent);
 	if (error)
 		goto attrError;
@@ -1931,6 +1935,7 @@ int device_add(struct device *dev)
 					     BUS_NOTIFY_ADD_DEVICE, dev);
 
 	kobject_uevent(&dev->kobj, KOBJ_ADD);
+
 	//为此设备控测驱动
 	bus_probe_device(dev);
 	if (parent)
@@ -2019,6 +2024,7 @@ EXPORT_SYMBOL_GPL(device_register);
  */
 struct device *get_device(struct device *dev)
 {
+	//增加dev->kobj的引用计数
 	return dev ? kobj_to_dev(kobject_get(&dev->kobj)) : NULL;
 }
 EXPORT_SYMBOL_GPL(get_device);

@@ -856,7 +856,7 @@ void vlan_setup(struct net_device *dev)
 	dev->priv_flags		&= ~IFF_TX_SKB_SHARING;
 	netif_keep_dst(dev);
 
-	dev->netdev_ops		= &vlan_netdev_ops;
+	dev->netdev_ops		= &vlan_netdev_ops;//vlan操作集
 	dev->needs_free_netdev	= true;
 	dev->priv_destructor	= vlan_dev_free;
 	dev->ethtool_ops	= &vlan_ethtool_ops;

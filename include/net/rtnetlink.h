@@ -67,6 +67,7 @@ struct rtnl_link_ops {
 
 	unsigned int		maxtype;
 	const struct nla_policy	*policy;
+	//消息体校验
 	int			(*validate)(struct nlattr *tb[],
 					    struct nlattr *data[],
 					    struct netlink_ext_ack *extack);

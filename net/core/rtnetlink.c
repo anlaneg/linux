@@ -3070,6 +3070,8 @@ replay:
 					return err;
 				data = attr;
 			}
+
+			//如果有校验回调，则校验消息
 			if (ops->validate) {
 				err = ops->validate(tb, data, extack);
 				if (err < 0)

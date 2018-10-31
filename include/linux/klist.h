@@ -23,7 +23,9 @@ struct klist_node;
 struct klist {
 	spinlock_t		k_lock;
 	struct list_head	k_list;
+	//增加元素引用
 	void			(*get)(struct klist_node *);
+	//释放元素引用
 	void			(*put)(struct klist_node *);
 } __attribute__ ((aligned (sizeof(void *))));
 

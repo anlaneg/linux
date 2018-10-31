@@ -123,6 +123,7 @@ u16 vlan_dev_vlan_id(const struct net_device *dev)
 }
 EXPORT_SYMBOL(vlan_dev_vlan_id);
 
+//获取vlan设备的协议号
 __be16 vlan_dev_vlan_proto(const struct net_device *dev)
 {
 	return vlan_dev_priv(dev)->vlan_proto;
@@ -173,6 +174,7 @@ struct vlan_vid_info {
 	int refcount;
 };
 
+//检查硬件是否有filter能力
 static bool vlan_hw_filter_capable(const struct net_device *dev, __be16 proto)
 {
 	if (proto == htons(ETH_P_8021Q) &&
@@ -184,6 +186,7 @@ static bool vlan_hw_filter_capable(const struct net_device *dev, __be16 proto)
 	return false;
 }
 
+//查找proto,vid对应的vlan_vid_info
 static struct vlan_vid_info *vlan_vid_info_get(struct vlan_info *vlan_info,
 					       __be16 proto, u16 vid)
 {
@@ -212,6 +215,7 @@ static struct vlan_vid_info *vlan_vid_info_alloc(__be16 proto, u16 vid)
 
 static int vlan_add_rx_filter_info(struct net_device *dev, __be16 proto, u16 vid)
 {
+	//如果硬件无filter能力，则返回０
 	if (!vlan_hw_filter_capable(dev, proto))
 		return 0;
 
@@ -298,6 +302,7 @@ static int __vlan_vid_add(struct vlan_info *vlan_info, __be16 proto, u16 vid,
 	return 0;
 }
 
+//在设备上添加(proto,vid)
 int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid)
 {
 	struct vlan_info *vlan_info;
@@ -315,6 +320,8 @@ int vlan_vid_add(struct net_device *dev, __be16 proto, u16 vid)
 			return -ENOMEM;
 		vlan_info_created = true;
 	}
+
+	//取对应的info
 	vid_info = vlan_vid_info_get(vlan_info, proto, vid);
 	if (!vid_info) {
 		err = __vlan_vid_add(vlan_info, proto, vid, &vid_info);

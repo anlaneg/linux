@@ -303,6 +303,7 @@ nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum,
 	}
 
 #ifdef CONFIG_NETFILTER_INGRESS
+	//设备的ingress hook链表
 	if (hooknum == NF_NETDEV_INGRESS) {
 		if (dev && dev_net(dev) == net)
 			return &dev->nf_hooks_ingress;
