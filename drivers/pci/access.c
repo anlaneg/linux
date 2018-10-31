@@ -35,7 +35,7 @@ DEFINE_RAW_SPINLOCK(pci_lock);
 //定义pci操作函数(读，写指定大小字节）
 //通过执行pci的操作集中写义的read,write函数来完成
 #define PCI_OP_READ(size, type, len) \
-int pci_bus_read_config_##size \
+int noinline pci_bus_read_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type *value)	\
 {									\
 	int res;							\
@@ -51,7 +51,7 @@ int pci_bus_read_config_##size \
 }
 
 #define PCI_OP_WRITE(size, type, len) \
-int pci_bus_write_config_##size \
+int noinline pci_bus_write_config_##size \
 	(struct pci_bus *bus, unsigned int devfn, int pos, type value)	\
 {									\
 	int res;							\
