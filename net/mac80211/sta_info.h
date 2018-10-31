@@ -299,7 +299,7 @@ struct sta_ampdu_mlme {
 struct ieee80211_fast_tx {
 	struct ieee80211_key *key;
 	u8 hdr_len;
-	u8 sa_offs, da_offs, pn_offs;
+	u8 sa_offs/*源mac offset*/, da_offs/*目的mac offset*/, pn_offs;
 	u8 band;
 	u8 hdr[30 + 2 + IEEE80211_FAST_XMIT_MAX_IV +
 	       sizeof(rfc1042_header)] __aligned(2);

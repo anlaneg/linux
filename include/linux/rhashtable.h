@@ -276,6 +276,8 @@ struct rhash_head __rcu **rht_bucket_nested_insert(struct rhashtable *ht,
 #define rht_dereference_bucket_rcu(p, tbl, hash) \
 	rcu_dereference_check(p, lockdep_rht_bucket_is_held(tbl, hash))
 
+//*tpos变量对应的类型(即typeof(*tpos))，有一个成员名为member,
+//现有member的指针pos,求typeof(*tpos)类型的指针，并将其赋给tpos指针
 #define rht_entry(tpos, pos, member) \
 	({ tpos = container_of(pos, typeof(*tpos), member); 1; })
 
@@ -455,6 +457,7 @@ static inline struct rhash_head __rcu **rht_bucket_insert(
  * This hash chain list-traversal primitive should be used on the
  * list returned by rhltable_lookup.
  */
+//遍历list链表，每个元素为tpos
 #define rhl_for_each_entry_rcu(tpos, pos, list, member)			\
 	for (pos = list; pos && rht_entry(tpos, pos, member);		\
 	     pos = rcu_dereference_raw(pos->next))

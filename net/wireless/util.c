@@ -351,8 +351,9 @@ unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 	unsigned int hdrlen = 24;
 
 	if (ieee80211_is_data(fc)) {
+		//fc指出为数据帧，检查是否存在address4(只有from ds ,to ds全为１时才存在）
 		if (ieee80211_has_a4(fc))
-			hdrlen = 30;
+			hdrlen = 30;//增加address地址长度6后变更为30
 		if (ieee80211_is_data_qos(fc)) {
 			hdrlen += IEEE80211_QOS_CTL_LEN;
 			if (ieee80211_has_order(fc))
@@ -361,12 +362,14 @@ unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 		goto out;
 	}
 
+	//管理帧长度
 	if (ieee80211_is_mgmt(fc)) {
 		if (ieee80211_has_order(fc))
 			hdrlen += IEEE80211_HT_CTL_LEN;
 		goto out;
 	}
 
+	//控制帧长度
 	if (ieee80211_is_ctl(fc)) {
 		/*
 		 * ACK and CTS are 10 bytes, all others 16. To see how
@@ -441,7 +444,7 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 
 	hdrlen = ieee80211_hdrlen(hdr->frame_control) + data_offset;
 	if (skb->len < hdrlen + 8)
-		return -1;
+		return -1;//报文过短，直接返回
 
 	/* convert IEEE 802.11 header + possible LLC headers into Ethernet
 	 * header
@@ -452,6 +455,7 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 	 *   1     0   BSSID SA    DA    n/a
 	 *   1     1   RA    TA    DA    SA
 	 */
+	//按上表，设置源目的mac
 	memcpy(tmp.h_dest, ieee80211_get_DA(hdr), ETH_ALEN);
 	memcpy(tmp.h_source, ieee80211_get_SA(hdr), ETH_ALEN);
 
@@ -503,6 +507,7 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 		}
 		break;
 	case cpu_to_le16(0):
+		//检查接口类型，为０时，只支持以下接口
 		if (iftype != NL80211_IFTYPE_ADHOC &&
 		    iftype != NL80211_IFTYPE_STATION &&
 		    iftype != NL80211_IFTYPE_OCB)
@@ -510,8 +515,9 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 		break;
 	}
 
+	//将skb->data偏移hdrlen的数据copy一份到payload处
 	skb_copy_bits(skb, hdrlen, &payload, sizeof(payload));
-	tmp.h_proto = payload.proto;
+	tmp.h_proto = payload.proto;//复用payload的协议号
 
 	if (likely((ether_addr_equal(payload.hdr, rfc1042_header) &&
 		    tmp.h_proto != htons(ETH_P_AARP) &&
@@ -521,10 +527,13 @@ int ieee80211_data_to_8023_exthdr(struct sk_buff *skb, struct ethhdr *ehdr,
 		 * replace EtherType */
 		hdrlen += ETH_ALEN + 2;
 	else
+		//协议号为长度，更新长度
 		tmp.h_proto = htons(skb->len - hdrlen);
 
+	//剥离80211报文头
 	pskb_pull(skb, hdrlen);
 
+	//添加以太网头
 	if (!ehdr)
 		ehdr = skb_push(skb, sizeof(struct ethhdr));
 	memcpy(ehdr, &tmp, sizeof(tmp));

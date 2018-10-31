@@ -42,15 +42,20 @@
 
 #define FCS_LEN 4
 
-#define IEEE80211_FCTL_VERS		0x0003
-#define IEEE80211_FCTL_FTYPE		0x000c
-#define IEEE80211_FCTL_STYPE		0x00f0
+//frame control  字段中各数据项掩码
+#define IEEE80211_FCTL_VERS		0x0003 //802.11版本对应的mask
+#define IEEE80211_FCTL_FTYPE		0x000c //报文type对应的mask
+#define IEEE80211_FCTL_STYPE		0x00f0　//报文subtype对应的mask
+//ds = distribution system
+//from,to均是相对于AP来说的，from ds表示报文由station发送给ap
+//to ds表示报文由ap发送给station,from ds and to ds表示报文由ap转交给另一个ap
+//from,to均为０时，表示station内部通信（管理报文，控制报文均为０）
 #define IEEE80211_FCTL_TODS		0x0100
 #define IEEE80211_FCTL_FROMDS		0x0200
 #define IEEE80211_FCTL_MOREFRAGS	0x0400
-#define IEEE80211_FCTL_RETRY		0x0800
+#define IEEE80211_FCTL_RETRY		0x0800 //表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
 #define IEEE80211_FCTL_PM		0x1000
-#define IEEE80211_FCTL_MOREDATA		0x2000
+#define IEEE80211_FCTL_MOREDATA		0x2000 //more data标记
 #define IEEE80211_FCTL_PROTECTED	0x4000
 #define IEEE80211_FCTL_ORDER		0x8000
 #define IEEE80211_FCTL_CTL_EXT		0x0f00
@@ -58,8 +63,11 @@
 #define IEEE80211_SCTL_FRAG		0x000F
 #define IEEE80211_SCTL_SEQ		0xFFF0
 
+//管理报文
 #define IEEE80211_FTYPE_MGMT		0x0000
+//控制报文
 #define IEEE80211_FTYPE_CTL		0x0004
+//数据报文
 #define IEEE80211_FTYPE_DATA		0x0008
 #define IEEE80211_FTYPE_EXT		0x000c
 
@@ -266,6 +274,7 @@ struct ieee80211_qos_hdr {
  * ieee80211_has_tods - check if IEEE80211_FCTL_TODS is set
  * @fc: frame control bytes in little-endian byteorder
  */
+//报文由ap发送给station
 static inline bool ieee80211_has_tods(__le16 fc)
 {
 	return (fc & cpu_to_le16(IEEE80211_FCTL_TODS)) != 0;
@@ -284,6 +293,8 @@ static inline bool ieee80211_has_fromds(__le16 fc)
  * ieee80211_has_a4 - check if IEEE80211_FCTL_TODS and IEEE80211_FCTL_FROMDS are set
  * @fc: frame control bytes in little-endian byteorder
  */
+//如果fc标记中，to ds,from ds标记均存在，则存在address 4
+//如果存在address 4,则报文由ap中转给另一个ap
 static inline bool ieee80211_has_a4(__le16 fc)
 {
 	__le16 tmp = cpu_to_le16(IEEE80211_FCTL_TODS | IEEE80211_FCTL_FROMDS);
@@ -348,6 +359,7 @@ static inline bool ieee80211_has_order(__le16 fc)
  * ieee80211_is_mgmt - check if type is IEEE80211_FTYPE_MGMT
  * @fc: frame control bytes in little-endian byteorder
  */
+//检查所给类型是否为管理报文
 static inline bool ieee80211_is_mgmt(__le16 fc)
 {
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE)) ==
@@ -358,6 +370,7 @@ static inline bool ieee80211_is_mgmt(__le16 fc)
  * ieee80211_is_ctl - check if type is IEEE80211_FTYPE_CTL
  * @fc: frame control bytes in little-endian byteorder
  */
+//检查所给类型是否为控制报文
 static inline bool ieee80211_is_ctl(__le16 fc)
 {
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE)) ==
@@ -368,6 +381,7 @@ static inline bool ieee80211_is_ctl(__le16 fc)
  * ieee80211_is_data - check if type is IEEE80211_FTYPE_DATA
  * @fc: frame control bytes in little-endian byteorder
  */
+//检查所给类型是否为数据报文
 static inline bool ieee80211_is_data(__le16 fc)
 {
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE)) ==
@@ -448,6 +462,7 @@ static inline bool ieee80211_is_reassoc_resp(__le16 fc)
  */
 static inline bool ieee80211_is_probe_req(__le16 fc)
 {
+	//检查如果为管理报文，且subtype类型为probe请求，则返回真
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_PROBE_REQ);
 }
@@ -458,6 +473,7 @@ static inline bool ieee80211_is_probe_req(__le16 fc)
  */
 static inline bool ieee80211_is_probe_resp(__le16 fc)
 {
+	//检查如果为管理报文，且subtype类型为probe响应报文，则返回真
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_PROBE_RESP);
 }
@@ -468,6 +484,7 @@ static inline bool ieee80211_is_probe_resp(__le16 fc)
  */
 static inline bool ieee80211_is_beacon(__le16 fc)
 {
+	//检查如果为管理报文，且subtype类型为信标，则返回真
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_BEACON);
 }
@@ -3006,6 +3023,16 @@ static inline u8 ieee80211_get_tid(struct ieee80211_hdr *hdr)
  */
 static inline u8 *ieee80211_get_SA(struct ieee80211_hdr *hdr)
 {
+	//参见下表：
+	/* convert IEEE 802.11 header + possible LLC headers into Ethernet
+		 * header
+		 * IEEE 802.11 address fields:
+		 * ToDS FromDS Addr1 Addr2 Addr3 Addr4
+		 *   0     0   DA    SA    BSSID n/a
+		 *   0     1   DA    BSSID SA    n/a
+		 *   1     0   BSSID SA    DA    n/a
+		 *   1     1   RA    TA    DA    SA
+		 */
 	if (ieee80211_has_a4(hdr->frame_control))
 		return hdr->addr4;
 	if (ieee80211_has_fromds(hdr->frame_control))
@@ -3025,6 +3052,16 @@ static inline u8 *ieee80211_get_SA(struct ieee80211_hdr *hdr)
  */
 static inline u8 *ieee80211_get_DA(struct ieee80211_hdr *hdr)
 {
+	//参见下表：
+	/* convert IEEE 802.11 header + possible LLC headers into Ethernet
+		 * header
+		 * IEEE 802.11 address fields:
+		 * ToDS FromDS Addr1 Addr2 Addr3 Addr4
+		 *   0     0   DA    SA    BSSID n/a
+		 *   0     1   DA    BSSID SA    n/a
+		 *   1     0   BSSID SA    DA    n/a
+		 *   1     1   RA    TA    DA    SA
+		 */
 	if (ieee80211_has_tods(hdr->frame_control))
 		return hdr->addr3;
 	else

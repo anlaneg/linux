@@ -50,26 +50,32 @@ static u8 *ieee80211_get_bssid(struct ieee80211_hdr *hdr, size_t len,
 {
 	__le16 fc = hdr->frame_control;
 
+	//数据帧情况
 	if (ieee80211_is_data(fc)) {
 		if (len < 24) /* drop incorrect hdr len (data) */
 			return NULL;
 
+		//ap间中转情况，返回NULL
 		if (ieee80211_has_a4(fc))
 			return NULL;
+		//报文由ap发送给station时，取addr1
 		if (ieee80211_has_tods(fc))
 			return hdr->addr1;
+		//报文由station发送给ap时，取addr2
 		if (ieee80211_has_fromds(fc))
 			return hdr->addr2;
-
+		//非以上情况取addr3
 		return hdr->addr3;
 	}
 
+	//管理帧，from ds,to ds标记恒为０，故取addr3
 	if (ieee80211_is_mgmt(fc)) {
 		if (len < 24) /* drop incorrect hdr len (mgmt) */
 			return NULL;
 		return hdr->addr3;
 	}
 
+	//????
 	if (ieee80211_is_ctl(fc)) {
 		if (ieee80211_is_pspoll(fc))
 			return hdr->addr1;
@@ -1477,7 +1483,7 @@ ieee80211_rx_h_check(struct ieee80211_rx_data *rx)
 	return RX_CONTINUE;
 }
 
-
+//检查报文上是否有more标记，如果有，则向ap请求数据
 static ieee80211_rx_result debug_noinline
 ieee80211_rx_h_check_more_data(struct ieee80211_rx_data *rx)
 {
@@ -1505,6 +1511,7 @@ ieee80211_rx_h_check_more_data(struct ieee80211_rx_data *rx)
 		return RX_CONTINUE;
 	}
 
+	//有more data标记，向ap请求新的帧
 	/* more data bit is set, let's request a new frame from the AP */
 	ieee80211_send_pspoll(local, rx->sdata);
 
@@ -2328,6 +2335,7 @@ static int ieee80211_drop_unencrypted_mgmt(struct ieee80211_rx_data *rx)
 	return 0;
 }
 
+//实现802.11数据帧转换为802.3(ether-type字段给出的是length)
 static int
 __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
 {
@@ -2355,6 +2363,7 @@ __ieee80211_data_to_8023(struct ieee80211_rx_data *rx, bool *port_control)
 	    sdata->vif.type == NL80211_IFTYPE_AP_VLAN && sdata->u.vlan.sta)
 		return -1;
 
+	//将802.11数据报文转换为802.3报文
 	ret = ieee80211_data_to_8023(rx->skb, sdata->vif.addr, sdata->vif.type);
 	if (ret < 0)
 		return ret;
@@ -3558,6 +3567,7 @@ static void ieee80211_rx_handlers(struct ieee80211_rx_data *rx,
 	ieee80211_rx_result res = RX_DROP_MONITOR;
 	struct sk_buff *skb;
 
+	/*定义辅助函数，如果返回值非continue,则直接跳过后续处理*/
 #define CALL_RXH(rxh)			\
 	do {				\
 		res = rxh(rx);		\
@@ -3770,6 +3780,7 @@ static bool ieee80211_accept_frame(struct ieee80211_rx_data *rx)
 	struct sk_buff *skb = rx->skb;
 	struct ieee80211_hdr *hdr = (void *)skb->data;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
+	//取ap的mac地址
 	u8 *bssid = ieee80211_get_bssid(hdr, skb->len, sdata->vif.type);
 	bool multicast = is_multicast_ether_addr(hdr->addr1);
 
@@ -4081,6 +4092,7 @@ static bool ieee80211_invoke_fast_rx(struct ieee80211_rx_data *rx,
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
 	struct sta_info *sta = rx->sta;
 	int orig_len = skb->len;
+	//获取头部长度
 	int hdrlen = ieee80211_hdrlen(hdr->frame_control);
 	int snap_offs = hdrlen;
 	struct {
@@ -4218,13 +4230,17 @@ static bool ieee80211_invoke_fast_rx(struct ieee80211_rx_data *rx,
 	stats->packets++;
 
 	/* do the header conversion - first grab the addresses */
+	//按照fast_rx中的源目的mac地址offset填充源目的mac
 	ether_addr_copy(addrs.da, skb->data + fast_rx->da_offs);
 	ether_addr_copy(addrs.sa, skb->data + fast_rx->sa_offs);
 	/* remove the SNAP but leave the ethertype */
+	//跳到负载前(使ethertype保留）
 	skb_pull(skb, snap_offs + sizeof(rfc1042_header));
+	//在负载前添加目的mac,源mac
 	/* push the addresses in front */
 	memcpy(skb_push(skb, sizeof(addrs)), &addrs, sizeof(addrs));
 
+	//到此报文已变换为802.3型帧
 	skb->dev = fast_rx->dev;
 
 	ieee80211_rx_stats(fast_rx->dev, skb->len);
@@ -4266,6 +4282,7 @@ static bool ieee80211_invoke_fast_rx(struct ieee80211_rx_data *rx,
 			return true;
 	}
 
+	//将报文交给本地协议栈
 	/* deliver to local stack */
 	skb->protocol = eth_type_trans(skb, fast_rx->dev);
 	memset(skb->cb, 0, sizeof(skb->cb));
@@ -4310,10 +4327,12 @@ static bool ieee80211_prepare_and_rx_handle(struct ieee80211_rx_data *rx,
 			return true;
 	}
 
+	//检查帧是否合法
 	if (!ieee80211_accept_frame(rx))
 		return false;
 
 	if (!consume) {
+		//需要copy一份
 		skb = skb_copy(skb, GFP_ATOMIC);
 		if (!skb) {
 			if (net_ratelimit())
@@ -4348,6 +4367,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 	struct rhlist_head *tmp;
 	int err = 0;
 
+	//取报文的fc字段
 	fc = ((struct ieee80211_hdr *)skb->data)->frame_control;
 	memset(&rx, 0, sizeof(rx));
 	rx.skb = skb;
@@ -4357,10 +4377,11 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 	if (ieee80211_is_data(fc) || ieee80211_is_mgmt(fc))
 		I802_DEBUG_INC(local->dot11ReceivedFragmentCount);
 
+	//对报文头部进行线性化
 	if (ieee80211_is_mgmt(fc)) {
 		/* drop frame if too short for header */
 		if (skb->len < ieee80211_hdrlen(fc))
-			err = -ENOBUFS;
+			err = -ENOBUFS;//丢掉过短的报文
 		else
 			err = skb_linearize(skb);
 	} else {
@@ -4372,6 +4393,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		return;
 	}
 
+	//指向802.11报文头
 	hdr = (struct ieee80211_hdr *)skb->data;
 	ieee80211_parse_qos(&rx);
 	ieee80211_verify_alignment(&rx);
@@ -4381,6 +4403,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		ieee80211_scan_rx(local, skb);
 
 	if (ieee80211_is_data(fc)) {
+		//收到数据报文
 		struct sta_info *sta, *prev_sta;
 
 		if (pubsta) {
@@ -4434,12 +4457,12 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 
 		if (!prev) {
 			prev = sdata;
-			continue;
+			continue;//跳过首个，防止仅一个时，需要copy报文
 		}
 
 		rx.sta = sta_info_get_bss(prev, hdr->addr2);
 		rx.sdata = prev;
-		ieee80211_prepare_and_rx_handle(&rx, skb, false);
+		ieee80211_prepare_and_rx_handle(&rx, skb, false/*指明处理时报文需要copy*/);
 
 		prev = sdata;
 	}
@@ -4448,7 +4471,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 		rx.sta = sta_info_get_bss(prev, hdr->addr2);
 		rx.sdata = prev;
 
-		if (ieee80211_prepare_and_rx_handle(&rx, skb, true))
+		if (ieee80211_prepare_and_rx_handle(&rx, skb, true/*指明处理时报文不需要copy*/))
 			return;
 	}
 
