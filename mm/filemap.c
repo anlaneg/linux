@@ -1406,6 +1406,7 @@ EXPORT_SYMBOL(page_cache_prev_miss);
  */
 struct page *find_get_entry(struct address_space *mapping, pgoff_t offset)
 {
+	//定义xas变量，并给值
 	XA_STATE(xas, &mapping->i_pages, offset);
 	struct page *head, *page;
 
@@ -1545,6 +1546,7 @@ repeat:
 
 no_page:
 	if (!page && (fgp_flags & FGP_CREAT)) {
+		//如果没有找到，且容许创建，则创建对应的页
 		int err;
 		if ((fgp_flags & FGP_WRITE) && mapping_cap_account_dirty(mapping))
 			gfp_mask |= __GFP_WRITE;
@@ -1553,7 +1555,7 @@ no_page:
 
 		page = __page_cache_alloc(gfp_mask);
 		if (!page)
-			return NULL;
+			return NULL;//申请页内存失败
 
 		if (WARN_ON_ONCE(!(fgp_flags & FGP_LOCK)))
 			fgp_flags |= FGP_LOCK;

@@ -179,6 +179,7 @@ static void *xas_start(struct xa_state *xas)
 	if (xas_error(xas))
 		return NULL;
 
+	//返回xa中首个元素
 	entry = xa_head(xas->xa);
 	if (!xa_is_node(entry)) {
 		if (xas->xa_index)

@@ -317,6 +317,7 @@ check_suspended:
 	atomic_inc(&mddev->active_io);
 	rcu_read_unlock();
 
+	//提交bio
 	if (!mddev->pers->make_request(mddev, bio)) {
 		atomic_dec(&mddev->active_io);
 		wake_up(&mddev->sb_wait);
@@ -5333,6 +5334,7 @@ static int md_alloc(dev_t dev, char *name)
 		goto abort;
 	mddev->queue->queuedata = mddev;
 
+	//设置md设备对应的make_request回调
 	blk_queue_make_request(mddev->queue, md_make_request);
 	blk_set_stacking_limits(&mddev->queue->limits);
 
@@ -9170,9 +9172,11 @@ static int __init md_init(void)
 	if (!md_misc_wq)
 		goto err_misc_wq;
 
+	//注册md设备名称
 	if ((ret = register_blkdev(MD_MAJOR, "md")) < 0)
 		goto err_md;
 
+	//注册mdp设备名称
 	if ((ret = register_blkdev(0, "mdp")) < 0)
 		goto err_mdp;
 	mdp_major = ret;

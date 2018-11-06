@@ -201,6 +201,7 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 	struct page *page;
 	int all_mapped = 1;
 
+	//换算成需要读取的起始页号
 	index = block >> (PAGE_SHIFT - bd_inode->i_blkbits);
 	page = find_get_page_flags(bd_mapping, index, FGP_ACCESSED);
 	if (!page)
@@ -944,6 +945,7 @@ grow_dev_page(struct block_device *bdev, sector_t block,
 	 */
 	gfp_mask |= __GFP_NOFAIL;
 
+	//查找page,如果找不到，则创建page
 	page = find_or_create_page(inode->i_mapping, index, gfp_mask);
 
 	BUG_ON(!PageLocked(page));
@@ -1249,6 +1251,7 @@ static void bh_lru_install(struct buffer_head *bh)
 /*
  * Look up the bh in this cpu's LRU.  If it's there, move it to the head.
  */
+//在cpu的bh_lrus缓存表，检查是否有此设备指定块的信息
 static struct buffer_head *
 lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 {
@@ -1260,9 +1263,11 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 	for (i = 0; i < BH_LRU_SIZE; i++) {
 		struct buffer_head *bh = __this_cpu_read(bh_lrus.bhs[i]);
 
+		//块号相等，设备相等，大小相等时，认为匹配,由于采用lru算法，故将命中的移到链表头部
 		if (bh && bh->b_blocknr == block && bh->b_bdev == bdev &&
 		    bh->b_size == size) {
 			if (i) {
+				//如果i不等于０，即bh未在链表头，则需要将其移动
 				while (i) {
 					__this_cpu_write(bh_lrus.bhs[i],
 						__this_cpu_read(bh_lrus.bhs[i - 1]));
@@ -1289,8 +1294,10 @@ __find_get_block(struct block_device *bdev, sector_t block, unsigned size)
 {
 	struct buffer_head *bh = lookup_bh_lru(bdev, block, size);
 
+	//未在bh_lru中找到此块的信息（未缓存）
 	if (bh == NULL) {
 		/* __find_get_block_slow will mark the page accessed */
+		//尝试在块文件缓存中查找
 		bh = __find_get_block_slow(bdev, block);
 		if (bh)
 			bh_lru_install(bh);
@@ -1313,6 +1320,7 @@ struct buffer_head *
 __getblk_gfp(struct block_device *bdev, sector_t block,
 	     unsigned size, gfp_t gfp)
 {
+	//尝试在缓存中加载此块
 	struct buffer_head *bh = __find_get_block(bdev, block, size);
 
 	might_sleep();
@@ -1349,11 +1357,12 @@ EXPORT_SYMBOL(__breadahead);
  */
 struct buffer_head *
 __bread_gfp(struct block_device *bdev, sector_t block,
-		   unsigned size, gfp_t gfp)
+		   unsigned size/*要读取的大小*/, gfp_t gfp)
 {
 	struct buffer_head *bh = __getblk_gfp(bdev, block, size, gfp);
 
 	if (likely(bh) && !buffer_uptodate(bh))
+		//自硬件设备中读取
 		bh = __bread_slow(bh);
 	return bh;
 }
@@ -3066,6 +3075,8 @@ static int submit_bh_wbc(int op, int op_flags, struct buffer_head *bh,
 		wbc_account_io(wbc, bh->b_page, bh->b_size);
 	}
 
+	//bh->b_size >> 9相当于bh->b_size/512 换算成要读取的扇区数
+	//但bh->b_blocknr为起始的块号，两者相乘，？？？？？
 	bio->bi_iter.bi_sector = bh->b_blocknr * (bh->b_size >> 9);
 	bio_set_dev(bio, bh->b_bdev);
 	bio->bi_write_hint = write_hint;

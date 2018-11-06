@@ -444,13 +444,13 @@ static unsigned long get_sb_block(void **data)
 	options += 3;
 	sb_block = simple_strtoul(options, &options, 0);
 	if (*options && *options != ',') {
-		//如果options有值，则必须为','
+		//如果options有值，则必须为',',否则忽略配置，仍认为位置为１
 		printk("EXT2-fs: Invalid sb specification: %s\n",
 		       (char *) *data);
 		return 1;
 	}
 
-	//如果有','号，则跳过
+	//如果有','号，则跳过‘，‘号，更新data
 	if (*options == ',')
 		options++;
 	*data = (void *) options;
@@ -847,7 +847,9 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	struct ext2_super_block * es;
 	struct inode *root;
 	unsigned long block;
+	//sb所在块号
 	unsigned long sb_block = get_sb_block(&data);
+	//sb所在逻辑块号
 	unsigned long logic_sb_block;
 	unsigned long offset = 0;
 	unsigned long def_mount_opts;
@@ -893,6 +895,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	 * If the superblock doesn't start on a hardware sector boundary,
 	 * calculate the offset.  
 	 */
+	//sb块总是沿block_size对齐的，但现在硬件的块为blocksize,故需要知道在一个block中的偏移
 	if (blocksize != BLOCK_SIZE) {
 		logic_sb_block = (sb_block*BLOCK_SIZE) / blocksize;
 		offset = (sb_block*BLOCK_SIZE) % blocksize;

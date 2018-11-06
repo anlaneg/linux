@@ -126,6 +126,7 @@ int set_blocksize(struct block_device *bdev, int size)
 
 EXPORT_SYMBOL(set_blocksize);
 
+//设置sb对应的块大小
 int sb_set_blocksize(struct super_block *sb, int size)
 {
 	if (set_blocksize(sb->s_bdev, size))

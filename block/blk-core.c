@@ -2062,6 +2062,7 @@ get_rq:
 			bio->bi_status = BLK_STS_RESOURCE;
 		else
 			bio->bi_status = BLK_STS_IOERR;
+		//出错，直接调用error
 		bio_endio(bio);
 		goto out_unlock;
 	}
@@ -2408,6 +2409,7 @@ blk_qc_t generic_make_request(struct bio *bio)
 	 * it is non-NULL, then a make_request is active, and new requests
 	 * should be added at the tail
 	 */
+	//已存在其它请求，直接挂在链上等待
 	if (current->bio_list) {
 		bio_list_add(&current->bio_list[0], bio);
 		goto out;
@@ -2475,6 +2477,7 @@ blk_qc_t generic_make_request(struct bio *bio)
 			else
 				bio_io_error(bio);
 		}
+		//自bio_list_on_stack上提取串连的bio,继续处理
 		bio = bio_list_pop(&bio_list_on_stack[0]);
 	} while (bio);
 	current->bio_list = NULL; /* deactivate */
@@ -2529,6 +2532,7 @@ EXPORT_SYMBOL_GPL(direct_make_request);
  * interfaces; @bio must be presetup and ready for I/O.
  *
  */
+//向块设备层提交io请求
 blk_qc_t submit_bio(struct bio *bio)
 {
 	/*

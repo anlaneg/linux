@@ -297,9 +297,9 @@ EXPORT_SYMBOL_GPL(disk_map_sector_rcu);
  */
 #define BLKDEV_MAJOR_HASH_SIZE 255
 static struct blk_major_name {
-	struct blk_major_name *next;
-	int major;
-	char name[16];
+	struct blk_major_name *next;//指向下一个块设备
+	int major;//块设备major编号
+	char name[16];//块设备名称
 } *major_names[BLKDEV_MAJOR_HASH_SIZE];//用于记录所有块设备名称
 
 //通过major取hashcode
@@ -398,8 +398,10 @@ int register_blkdev(unsigned int major, const char *name)
 		if ((*n)->major == major)
 			break;//存在与之相等的，跳出
 	}
+
+	//没有找到与之相同的，则加入到结尾处
 	if (!*n)
-		*n = p;//加入到结尾处
+		*n = p;
 	else
 		ret = -EBUSY;//已存在的插入失败
 
@@ -551,7 +553,7 @@ static char *bdevt_str(dev_t devt, char *buf)
  * range must be nonzero
  * The hash chain is sorted on range, so that subranges can override.
  */
-void blk_register_region(dev_t devt, unsigned long range, struct module *module,
+void blk_register_region(dev_t devt, unsigned long range, struct module *module/*所属module*/,
 			 struct kobject *(*probe)(dev_t, int *, void *),
 			 int (*lock)(dev_t, void *), void *data)
 {

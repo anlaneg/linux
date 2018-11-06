@@ -623,6 +623,7 @@ static inline void bio_list_add_head(struct bio_list *bl, struct bio *bio)
 		bl->tail = bio;
 }
 
+//将bl2合入到bl中
 static inline void bio_list_merge(struct bio_list *bl, struct bio_list *bl2)
 {
 	if (!bl2->head)

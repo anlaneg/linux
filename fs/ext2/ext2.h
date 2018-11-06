@@ -86,7 +86,7 @@ struct ext2_sb_info {
 	struct ext2_super_block * s_es;	/* Pointer to the super block in the buffer */
 	struct buffer_head ** s_group_desc;
 	unsigned long  s_mount_opt;
-	unsigned long s_sb_block;
+	unsigned long s_sb_block;//sb所在块号
 	kuid_t s_resuid;
 	kgid_t s_resgid;
 	unsigned short s_mount_state;

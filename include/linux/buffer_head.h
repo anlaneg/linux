@@ -69,12 +69,13 @@ struct buffer_head {
 	size_t b_size;			/* size of mapping */
 	char *b_data;			/* pointer to data within the page */
 
-	struct block_device *b_bdev;
-	bh_end_io_t *b_end_io;		/* I/O completion */
+	struct block_device *b_bdev;//所属的块设备
+	bh_end_io_t *b_end_io;		/* I/O completion */　//io完成后的需要执行的回调
  	void *b_private;		/* reserved for b_end_io */
 	struct list_head b_assoc_buffers; /* associated with another mapping */
 	struct address_space *b_assoc_map;	/* mapping this buffer is
 						   associated with */
+	//引用计数
 	atomic_t b_count;		/* users using this buffer_head */
 };
 
@@ -301,10 +302,11 @@ static inline void bforget(struct buffer_head *bh)
 		__bforget(bh);
 }
 
+//自sb所属设备上读取block块
 static inline struct buffer_head *
-sb_bread(struct super_block *sb, sector_t block)
+sb_bread(struct super_block *sb, sector_t block/*块编号*/)
 {
-	return __bread_gfp(sb->s_bdev, block, sb->s_blocksize, __GFP_MOVABLE);
+	return __bread_gfp(sb->s_bdev/*超级块所属块设备*/, block, sb->s_blocksize, __GFP_MOVABLE);
 }
 
 static inline struct buffer_head *
