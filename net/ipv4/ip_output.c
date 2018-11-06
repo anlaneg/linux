@@ -340,6 +340,7 @@ static int ip_mc_finish_output(struct net *net, struct sock *sk,
 	return dev_loopback_xmit(net, sk, skb);
 }
 
+//组播报文输出回调
 int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct rtable *rt = skb_rtable(skb);
@@ -402,7 +403,7 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 
-//输出回调
+//非本机报文输出回调
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb_dst(skb)->dev;
@@ -415,7 +416,7 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	//路由后钩子点执行
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, NULL, dev,
-			    ip_finish_output,
+			    ip_finish_output/*总终报文发送*/,
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 

@@ -2297,6 +2297,7 @@ static struct rtable *__mkroute_output(const struct fib_result *res,
 	}
 
 add:
+	//申请dst
 	rth = rt_dst_alloc(dev_out, flags, type,
 			   IN_DEV_CONF_GET(in_dev, NOPOLICY),
 			   IN_DEV_CONF_GET(in_dev, NOXFRM),
@@ -2319,6 +2320,7 @@ add:
 			if (IN_DEV_MFORWARD(in_dev) &&
 			    !ipv4_is_local_multicast(fl4->daddr)) {
 				rth->dst.input = ip_mr_input;
+				//针对组播，将输出函数重置为ip_mc_output
 				rth->dst.output = ip_mc_output;
 			}
 		}

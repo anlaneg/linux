@@ -1653,7 +1653,7 @@ static int dev_boot_phase = 1;
  * to the new notifier to allow device to have a race free
  * view of the network device list.
  */
-
+//注册netdev的通知回调
 int register_netdevice_notifier(struct notifier_block *nb)
 {
 	struct net_device *dev;
@@ -1670,7 +1670,8 @@ int register_netdevice_notifier(struct notifier_block *nb)
 		goto unlock;
 	if (dev_boot_phase)
 		goto unlock;
-	//通知所有net下所有dev，netdev_register事件
+	//注册通知函数，
+	//先针对nb通知所有net下所有dev的，netdev_register事件,如果接口是up,则再通知netdev_up事件
 	for_each_net(net) {
 		for_each_netdev(net, dev) {
 			err = call_netdevice_notifier(nb, NETDEV_REGISTER, dev);

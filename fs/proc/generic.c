@@ -42,6 +42,7 @@ void pde_free(struct proc_dir_entry *pde)
 	kmem_cache_free(proc_dir_entry_cache, pde);
 }
 
+//比较de目录的名称与name是否相等
 static int proc_match(const char *name, struct proc_dir_entry *de, unsigned int len)
 {
 	if (len < de->namelen)
@@ -86,6 +87,7 @@ static struct proc_dir_entry *pde_subdir_find(struct proc_dir_entry *dir,
 	return NULL;
 }
 
+//将dir加入到de中
 static bool pde_subdir_insert(struct proc_dir_entry *dir,
 			      struct proc_dir_entry *de)
 {
@@ -99,12 +101,14 @@ static bool pde_subdir_insert(struct proc_dir_entry *dir,
 						       subdir_node);
 		int result = proc_match(de->name, this, de->namelen);
 
+		//依据大小，决定红黑树的走向
 		parent = *new;
 		if (result < 0)
 			new = &(*new)->rb_left;
 		else if (result > 0)
 			new = &(*new)->rb_right;
 		else
+			//如果名称相等，则直接返回false
 			return false;
 	}
 
@@ -356,6 +360,7 @@ struct proc_dir_entry *proc_register(struct proc_dir_entry *dir,
 	write_lock(&proc_subdir_lock);
 	dp->parent = dir;
 	if (pde_subdir_insert(dir, dp) == false) {
+		//已加入，有重复
 		WARN(1, "proc_dir_entry '%s/%s' already registered\n",
 		     dir->name, dp->name);
 		write_unlock(&proc_subdir_lock);
