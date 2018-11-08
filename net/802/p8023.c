@@ -32,6 +32,7 @@ static int p8023_request(struct datalink_proto *dl,
 {
 	struct net_device *dev = skb->dev;
 
+	//设置一个802.3的头部
 	dev_hard_header(skb, dev, ETH_P_802_3, dest_node, NULL, skb->len);
 	return dev_queue_xmit(skb);
 }

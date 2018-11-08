@@ -8936,6 +8936,7 @@ void netdev_run_todo(void)
 	if (!list_empty(&list))
 		rcu_barrier();
 
+	//遍历dev
 	while (!list_empty(&list)) {
 		struct net_device *dev
 			= list_first_entry(&list, struct net_device, todo_list);

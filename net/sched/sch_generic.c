@@ -483,6 +483,7 @@ void __netdev_watchdog_up(struct net_device *dev)
 	}
 }
 
+//启动dev的watchdog
 static void dev_watchdog_up(struct net_device *dev)
 {
 	__netdev_watchdog_up(dev);
@@ -1102,6 +1103,7 @@ static void transition_one_qdisc(struct net_device *dev,
 	}
 }
 
+//激活设备
 void dev_activate(struct net_device *dev)
 {
 	int need_watchdog;
@@ -1294,6 +1296,7 @@ void dev_init_scheduler(struct net_device *dev)
 	if (dev_ingress_queue(dev))
 		dev_init_scheduler_queue(dev, dev_ingress_queue(dev), &noop_qdisc);
 
+	//初始化watchdog定时器
 	timer_setup(&dev->watchdog_timer, dev_watchdog, 0);
 }
 

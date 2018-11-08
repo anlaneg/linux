@@ -144,6 +144,7 @@ static inline void list_replace(struct list_head *old,
 	new->prev->next = new;
 }
 
+//将old指向的list指向new
 static inline void list_replace_init(struct list_head *old,
 					struct list_head *new)
 {

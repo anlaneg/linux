@@ -4598,6 +4598,7 @@ void ieee80211_rx_napi(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
 			((struct ieee80211_hdr *)skb->data)->frame_control,
 			skb->len);
 
+	//处理80211报文
 	__ieee80211_rx_handle_packet(hw, pubsta, skb, napi);
 
 	rcu_read_unlock();

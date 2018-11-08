@@ -191,6 +191,7 @@ static void __linkwatch_run_queue(int urgent_only)
 
 	while (!list_empty(&wrk)) {
 
+		//自watch 链上查找一个需要处理的dev
 		dev = list_first_entry(&wrk, struct net_device, link_watch_list);
 		list_del_init(&dev->link_watch_list);
 
