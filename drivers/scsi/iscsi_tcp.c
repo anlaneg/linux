@@ -1025,6 +1025,7 @@ static struct iscsi_transport iscsi_sw_tcp_transport = {
 	.session_recovery_timedout = iscsi_session_recovery_timedout,
 };
 
+//模块初始化
 static int __init iscsi_sw_tcp_init(void)
 {
 	if (iscsi_max_lun < 1) {
