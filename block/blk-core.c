@@ -1984,6 +1984,7 @@ void blk_init_request_from_bio(struct request *req, struct bio *bio)
 }
 EXPORT_SYMBOL_GPL(blk_init_request_from_bio);
 
+//块设备bio入队
 static blk_qc_t blk_queue_bio(struct request_queue *q, struct bio *bio)
 {
 	struct blk_plug *plug;
@@ -2056,13 +2057,13 @@ get_rq:
 	blk_queue_enter_live(q);
 	req = get_request(q, bio->bi_opf, bio, 0, GFP_NOIO);
 	if (IS_ERR(req)) {
+		//出错，直接调用error
 		blk_queue_exit(q);
 		rq_qos_cleanup(q, bio);
 		if (PTR_ERR(req) == -ENOMEM)
 			bio->bi_status = BLK_STS_RESOURCE;
 		else
 			bio->bi_status = BLK_STS_IOERR;
-		//出错，直接调用error
 		bio_endio(bio);
 		goto out_unlock;
 	}
@@ -2099,6 +2100,7 @@ get_rq:
 				trace_block_plug(q);
 			}
 		}
+		//将队列加入到plug->list中
 		list_add_tail(&req->queuelist, &plug->list);
 		blk_account_io_start(req, true);
 	} else {
@@ -2454,6 +2456,7 @@ blk_qc_t generic_make_request(struct bio *bio)
 			/* Create a fresh bio_list for all subordinate requests */
 			bio_list_on_stack[1] = bio_list_on_stack[0];
 			bio_list_init(&bio_list_on_stack[0]);
+			//将bio入队给队列q,并处理io请求
 			ret = q->make_request_fn(q, bio);
 
 			/* sort new bios into those for a lower level

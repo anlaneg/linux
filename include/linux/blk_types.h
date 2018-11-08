@@ -363,6 +363,7 @@ enum stat_group {
 	NR_STAT_GROUPS
 };
 
+//取bio的操作
 #define bio_op(bio) \
 	((bio)->bi_opf & REQ_OP_MASK)
 #define req_op(req) \

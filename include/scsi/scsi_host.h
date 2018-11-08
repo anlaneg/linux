@@ -596,7 +596,7 @@ struct Scsi_Host {
 	 * For drivers that don't set this field, a value of 12 is
 	 * assumed.
 	 */
-	unsigned short max_cmd_len;
+	unsigned short max_cmd_len;//可接受的cmd最大长度
 
 	int this_id;
 	int can_queue;
