@@ -666,6 +666,8 @@ static netdev_tx_t fm10k_xmit_frame(struct sk_buff *skb, struct net_device *dev)
 				       htons(ETH_P_8021Q),
 				       ntohs(vhdr->h_vlan_TCI));
 		proto = vhdr->h_vlan_encapsulated_proto;
+		//1536=0x600大于0x600时，protocol中指定的是协议号，否则为报文长度
+		//故直接将报文的protocol指定为802.2帧类型
 		skb->protocol = (ntohs(proto) >= 1536) ? proto :
 							 htons(ETH_P_802_2);
 

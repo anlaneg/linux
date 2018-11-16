@@ -500,7 +500,7 @@ static int genl_lock_done(struct netlink_callback *cb)
 	return rc;
 }
 
-//采用指定的family来解析此msg
+//采用指定的family来解析处理此msg
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
 			       struct nlmsghdr *nlh,//netlink消息头
@@ -621,6 +621,7 @@ out:
 	return err;
 }
 
+//Generic netlink消息接受
 static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
@@ -643,6 +644,7 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	return err;
 }
 
+//Generic netlink类消息按收函数
 static void genl_rcv(struct sk_buff *skb)
 {
 	down_read(&cb_lock);
@@ -1026,7 +1028,8 @@ static void genl_unbind(struct net *net, int group)
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
-		.input		= genl_rcv,//Generic netlink类消息处理
+		//Generic netlink类消息按收函数
+		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= genl_bind,
 		.unbind		= genl_unbind,

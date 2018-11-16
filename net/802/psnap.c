@@ -101,6 +101,7 @@ static const char snap_err_msg[] __initconst =
 
 static int __init snap_init(void)
 {
+	//0xAA为SNAP协议
 	snap_sap = llc_sap_open(0xAA, snap_rcv);
 	if (!snap_sap) {
 		printk(snap_err_msg);

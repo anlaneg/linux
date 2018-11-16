@@ -824,6 +824,7 @@ ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
 		if (monskb) {
 			struct sk_buff *skb;
 
+			//除最后一个monitor设备外，其它均要clone报文
 			if (last_monitor) {
 				skb = monskb;
 				monskb = NULL;

@@ -75,7 +75,8 @@ int stp_proto_register(const struct stp_proto *proto)
 
 	mutex_lock(&stp_proto_mutex);
 	if (sap_registered++ == 0) {
-		//首次注册时，进行初始化
+		//首次注册时，进行初始化（注册llc协议对应的stp报文号）
+		//从而保证llc_rcv到报文后，依据sap可以送给stp进行解析
 		sap = llc_sap_open(LLC_SAP_BSPAN, stp_pdu_rcv);
 		if (!sap) {
 			err = -ENOMEM;

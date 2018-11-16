@@ -50,8 +50,15 @@
 #define LLC_PDU_TYPE_U_MASK    0x03	/* 8-bit control field */
 #define LLC_PDU_TYPE_MASK      0x03
 
+//I型帧
+//X-X-X-X-X-X-X-0 = I Frame
+
 #define LLC_PDU_TYPE_I	0	/* first bit */
+//S型帧
+//X-X-X-X-X-X-0-1 = Supervisory Frame
 #define LLC_PDU_TYPE_S	1	/* first two bits */
+//U型帧
+//X-X-X-X-X-X-1-1 = Unnumbered frame
 #define LLC_PDU_TYPE_U	3	/* first two bits */
 
 #define LLC_PDU_TYPE_IS_I(pdu) \
@@ -193,6 +200,16 @@
        (info->ind_bits = ( (info->ind_bits & 0xEF) | (((u8) ind) & 0x10)))
 
 /* Sequence-numbered PDU format (4 bytes in length) */
+//SSAP，DSAP 分别是源目服务接入点的地址，其中DSAP的格式（I/G|D|D|D|D|D|D|D）I/G=0表示地址无效，=1表明是组地址；
+//SSAP（C/R|S|S|S|S|S|S|S）C/R=0表明是一个命令，=1表明是一次响应。
+//最常用的一些SAP为：
+//- 04 - IBM SNA
+//- 06 - IP
+//- 80 - 3Com
+//- AA - SNAP
+//- BC - Banyan
+//- E0 - Novell
+//- F4 - Lan Manager FE -CLNS
 struct llc_pdu_sn {
 	u8 dsap;
 	u8 ssap;

@@ -846,7 +846,7 @@ struct sk_buff {
 	__u16			inner_network_header;
 	__u16			inner_mac_header;
 
-	__be16			protocol;//链路层指明的协议，如arp,ip协议等
+	__be16			protocol;//链路层指明的协议，如arp,ip协议,802.2等
 	__u16			transport_header;//到传输层的偏移量
 	__u16			network_header;//到网络头的偏移量
 	__u16			mac_header;//到mac头的偏移量

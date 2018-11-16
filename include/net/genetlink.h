@@ -56,9 +56,11 @@ struct genl_family {
 	unsigned int		maxattr;
 	bool			netnsok;
 	bool			parallel_ops;
+	//命令执行前回调
 	int			(*pre_doit)(const struct genl_ops *ops,
 					    struct sk_buff *skb,
 					    struct genl_info *info);
+	//命令执行后回调
 	void			(*post_doit)(const struct genl_ops *ops,
 					     struct sk_buff *skb,
 					     struct genl_info *info);
@@ -138,7 +140,7 @@ struct genl_ops {
 	int		       (*dumpit)(struct sk_buff *skb,
 					 struct netlink_callback *cb);
 	int		       (*done)(struct netlink_callback *cb);
-	u8			cmd;
+	u8			cmd;//命令字
 	u8			internal_flags;
 	u8			flags;
 };

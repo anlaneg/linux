@@ -122,7 +122,7 @@
 #define ETH_P_802_3	0x0001		/* Dummy type for 802.3 frames  */
 #define ETH_P_AX25	0x0002		/* Dummy protocol id for AX.25  */
 #define ETH_P_ALL	0x0003		/* Every packet (be careful!!!) */
-#define ETH_P_802_2	0x0004		/* 802.2 frames 		*/
+#define ETH_P_802_2	0x0004		/* 802.2 frames 		*/ //802.2协议帧
 #define ETH_P_SNAP	0x0005		/* Internal only		*/
 #define ETH_P_DDCMP     0x0006          /* DEC DDCMP: Internal only     */
 #define ETH_P_WAN_PPP   0x0007          /* Dummy type for WAN PPP frames*/

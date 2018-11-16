@@ -410,7 +410,7 @@ static inline struct list_head *ptype_head(const struct packet_type *pt)
  *	guarantee all CPU's that are in middle of receiving packets
  *	will see the new packet type (until the next received packet).
  */
-//添加packet handler（注册３层协议）
+//添加packet handler（注册３层协议,按协议号注册，例如0x800,0x806,0x4{802.2帧}）
 void dev_add_pack(struct packet_type *pt)
 {
 	struct list_head *head = ptype_head(pt);
@@ -4994,7 +4994,7 @@ skip_classify:
 
 	/* deliver only exact match when indicated */
 	if (likely(!deliver_exact)) {
-		//通过上层协议查找报文处理者(如ip层处理）
+		//通过上层协议查找报文处理者(如0x0800,按ip层处理）
 		//注：由于ptype_base[i]是一个链，故需要遍历执行所有回调
 		deliver_ptype_list_skb(skb, &pt_prev, orig_dev, type,
 				       &ptype_base[ntohs(type) &
@@ -5042,6 +5042,7 @@ static int __netif_receive_skb_one_core(struct sk_buff *skb, bool pfmemalloc)
 
 	ret = __netif_receive_skb_core(skb, pfmemalloc, &pt_prev);
 	if (pt_prev)
+		//处理最后一项的handle
 		ret = pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
 	return ret;
 }

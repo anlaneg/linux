@@ -108,26 +108,32 @@ out:
  *	by looking at the two lowest-order bits of the first control field
  *	byte; field is either 3 or 4 bytes long.
  */
+//使llc帧平坦，使data指向传输层
 static inline int llc_fixup_skb(struct sk_buff *skb)
 {
 	u8 llc_len = 2;
-	struct llc_pdu_un *pdu;
+	struct llc_pdu_un *pdu;//llc最小大为dasa,ssap,control共计３字节
 
 	if (unlikely(!pskb_may_pull(skb, sizeof(*pdu))))
 		return 0;
 
 	pdu = (struct llc_pdu_un *)skb->data;
 	if ((pdu->ctrl_1 & LLC_PDU_TYPE_MASK) == LLC_PDU_TYPE_U)
-		llc_len = 1;
-	llc_len += 2;
+		llc_len = 1;//U型帧仅有一个ctrl
+	llc_len += 2;//其它两型还存在一个ctrl
 
 	if (unlikely(!pskb_may_pull(skb, llc_len)))
 		return 0;
 
+	//增加到传输层的偏移
 	skb->transport_header += llc_len;
+	//使data跳到传输层
 	skb_pull(skb, llc_len);
+
 	if (skb->protocol == htons(ETH_P_802_2)) {
+		//此时为802.2帧，故h_proto表示的为长度
 		__be16 pdulen = eth_hdr(skb)->h_proto;
+		//计算出负载长度（h_proto中包含llc_len长度）
 		s32 data_size = ntohs(pdulen) - llc_len;
 
 		if (data_size < 0 ||
@@ -151,7 +157,10 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
  *	the frame is related to a busy connection (a connection is sending
  *	data now), it queues this frame in the connection's backlog.
  */
-//802.2报文处理
+//802.2数据帧接受处理处理
+//802.2帧格式：
+//[dstmac 6b,srcmac 6b,length 2b,LLC,data,FCS 4b]
+//LLC格式：[dsap 1b,ssap 1b,control-field 1b or 2b, information-field Nb]
 int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	    struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -170,6 +179,7 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	 * When the interface is in promisc. mode, drop all the crap that it
 	 * receives, do not try to analyse it.
 	 */
+	//丢掉非本接口的帧
 	if (unlikely(skb->pkt_type == PACKET_OTHERHOST)) {
 		dprintk("%s: PACKET_OTHERHOST\n", __func__);
 		goto drop;
@@ -177,11 +187,15 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (unlikely(!skb))
 		goto out;
+	//使data指向运输层，使报文平坦
 	if (unlikely(!llc_fixup_skb(skb)))
 		goto drop;
+
+	//取llc协议头
 	pdu = llc_pdu_sn_hdr(skb);
 	if (unlikely(!pdu->dsap)) /* NULL DSAP, refer to station */
 	       goto handle_station;
+
 	//依据目的sap，取其对应的报文处理函数
 	sap = llc_sap_find(pdu->dsap);
 	if (unlikely(!sap)) {/* unknown SAP */
@@ -208,6 +222,8 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 			if (cskb)
 				rcv(cskb, dev, pt, orig_dev);
 		}
+
+		//通过type获得llc对应的type的handler，并在此处调用
 		sap_handler(sap, skb);
 	}
 	llc_sap_put(sap);
