@@ -4988,6 +4988,8 @@ static unsigned int skb_gso_mac_seglen(const struct sk_buff *skb)
  *
  * This is a helper to do that correctly considering GSO_BY_FRAGS.
  *
+ * @skb: GSO skb
+ *
  * @seg_len: The segmented length (from skb_gso_*_seglen). In the
  *           GSO_BY_FRAGS case this will be [header sizes + GSO_BY_FRAGS].
  *
