@@ -793,6 +793,7 @@ static struct md_personality raid0_personality=
 //raid0初始化
 static int __init raid0_init (void)
 {
+	//向md注册raid0
 	return register_md_personality (&raid0_personality);
 }
 

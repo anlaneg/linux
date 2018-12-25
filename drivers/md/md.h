@@ -270,7 +270,7 @@ struct mddev {
 	struct md_personality		*pers;
 	dev_t				unit;
 	int				md_minor;
-	struct list_head		disks;
+	struct list_head		disks;//md设备的成员磁盘
 	unsigned long			flags;
 	unsigned long			sb_flags;
 

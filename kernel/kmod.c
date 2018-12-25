@@ -67,6 +67,7 @@ static void free_modprobe_argv(struct subprocess_info *info)
 	kfree(info->argv);
 }
 
+//启动modprobe,来加载模块
 static int call_modprobe(char *module_name, int wait)
 {
 	struct subprocess_info *info;
@@ -122,6 +123,7 @@ out:
  * If module auto-loading support is disabled then this function
  * becomes a no-operation.
  */
+//通过模拟用户态创建modprobe进程的方式加载module
 int __request_module(bool wait, const char *fmt, ...)
 {
 	va_list args;
@@ -139,12 +141,14 @@ int __request_module(bool wait, const char *fmt, ...)
 	if (!modprobe_path[0])
 		return 0;
 
+	//构造模块名称
 	va_start(args, fmt);
 	ret = vsnprintf(module_name, MODULE_NAME_LEN, fmt, args);
 	va_end(args);
 	if (ret >= MODULE_NAME_LEN)
 		return -ENAMETOOLONG;
 
+	//安全回调
 	ret = security_kernel_module_request(module_name);
 	if (ret)
 		return ret;
@@ -168,6 +172,7 @@ int __request_module(bool wait, const char *fmt, ...)
 
 	trace_module_request(module_name, wait, _RET_IP_);
 
+	//调用modprobe函数，加载module
 	ret = call_modprobe(module_name, wait ? UMH_WAIT_PROC : UMH_WAIT_EXEC);
 
 	atomic_inc(&kmod_concurrent_max);

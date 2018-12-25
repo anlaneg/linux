@@ -81,7 +81,9 @@ static void autostart_arrays(int part);
  * pers_lock does extra service to protect accesses to
  * mddev->thread when the mutex cannot be held.
  */
+//注册个性化raid方式（pers_lock保护其访问）
 static LIST_HEAD(pers_list);
+//spinlock,用于保护pers_list,md_cluster_ops,md_cluster_mod等
 static DEFINE_SPINLOCK(pers_lock);
 
 static struct kobj_type md_ktype;
@@ -734,7 +736,7 @@ struct md_rdev *md_find_rdev_rcu(struct mddev *mddev, dev_t dev)
 }
 EXPORT_SYMBOL_GPL(md_find_rdev_rcu);
 
-//通过level,或者clevel来查找对应的raid类型
+//优先通过level查询raid类型，如果level＝＝LEVEL_NONE,则明枪用clevel进行查询
 static struct md_personality *find_pers(int level, char *clevel)
 {
 	struct md_personality *pers;
@@ -742,6 +744,7 @@ static struct md_personality *find_pers(int level, char *clevel)
 		//如果指定了level，则比对level
 		if (level != LEVEL_NONE && pers->level == level)
 			return pers;
+
 		//如果未指定level,则比对clevel
 		if (strcmp(pers->name, clevel)==0)
 			return pers;
@@ -3735,8 +3738,10 @@ level_store(struct mddev *mddev, const char *buf, size_t len)
 	if (request_module("md-%s", clevel) != 0)
 		request_module("md-level-%s", clevel);
 	spin_lock(&pers_lock);
+	//查询指定的level或者clevel是否存在，如果不存在，则告警
 	pers = find_pers(level, clevel);
 	if (!pers || !try_module_get(pers->owner)) {
+		//未查找到模块或者获取模块引用失败，则告警
 		spin_unlock(&pers_lock);
 		pr_warn("md: personality %s not loaded\n", clevel);
 		rv = -EINVAL;
@@ -5465,6 +5470,7 @@ int md_run(struct mddev *mddev)
 		analyze_sbs(mddev);
 	}
 
+	//按level或者按名称加载对应module
 	if (mddev->level != LEVEL_NONE)
 		request_module("md-level-%d", mddev->level);
 	else if (mddev->clevel[0])
@@ -5547,6 +5553,7 @@ int md_run(struct mddev *mddev)
 	spin_lock(&pers_lock);
 	pers = find_pers(mddev->level, mddev->clevel);
 	if (!pers || !try_module_get(pers->owner)) {
+		//加载module或者获取module引用计数失败，告警
 		spin_unlock(&pers_lock);
 		if (mddev->level != LEVEL_NONE)
 			pr_warn("md: personality for level %d is not loaded!\n",
@@ -7991,7 +7998,7 @@ static const struct file_operations md_seq_fops = {
 	.poll		= mdstat_poll,
 };
 
-//将p挂接在pers_list上
+//将p挂接在pers_list上（注册raid level)
 int register_md_personality(struct md_personality *p)
 {
 	pr_debug("md: %s personality registered for level %d\n",
@@ -8003,6 +8010,7 @@ int register_md_personality(struct md_personality *p)
 }
 EXPORT_SYMBOL(register_md_personality);
 
+//解注册p
 int unregister_md_personality(struct md_personality *p)
 {
 	pr_debug("md: %s personality unregistered\n", p->name);
