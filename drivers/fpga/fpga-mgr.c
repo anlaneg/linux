@@ -665,6 +665,7 @@ struct fpga_manager *devm_fpga_mgr_create(struct device *dev, const char *name,
 	if (!ptr)
 		return NULL;
 
+	//创建manager
 	mgr = fpga_mgr_create(dev, name, mops, priv);
 	if (!mgr) {
 		devres_free(ptr);
@@ -694,6 +695,7 @@ int fpga_mgr_register(struct fpga_manager *mgr)
 	 */
 	mgr->state = mgr->mops->state(mgr);
 
+	//添加设备
 	ret = device_add(&mgr->dev);
 	if (ret)
 		goto error_device;

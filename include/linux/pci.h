@@ -1766,10 +1766,14 @@ int pci_iobar_pfn(struct pci_dev *pdev, int bar, struct vm_area_struct *vma);
  */
 //bar的起始地址
 #define pci_resource_start(dev, bar)	((dev)->resource[(bar)].start)
-//bar的长度
+
+//bar的结尾地址
 #define pci_resource_end(dev, bar)	((dev)->resource[(bar)].end)
+
 //取第bar个dev资源flags
 #define pci_resource_flags(dev, bar)	((dev)->resource[(bar)].flags)
+
+//获得dev[bar]内存的长度
 //如果start为0，且end也为0的情况下返回0，否则长度为end-（start+1）
 #define pci_resource_len(dev,bar) \
 	((pci_resource_start((dev), (bar)) == 0 &&	\

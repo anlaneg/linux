@@ -57,6 +57,7 @@ static DEFINE_RWLOCK(resource_lock);
  * by boot mem after the system is up. So for reusing the resource entry
  * we need to remember the resource.
  */
+//保存空闲的resource
 static struct resource *bootmem_resource_free;
 static DEFINE_SPINLOCK(bootmem_resource_lock);
 
@@ -161,10 +162,12 @@ static void free_resource(struct resource *res)
 	}
 }
 
+//申请一个resource
 static struct resource *alloc_resource(gfp_t flags)
 {
 	struct resource *res = NULL;
 
+	//加锁，获取一个resource
 	spin_lock(&bootmem_resource_lock);
 	if (bootmem_resource_free) {
 		res = bootmem_resource_free;
@@ -172,6 +175,7 @@ static struct resource *alloc_resource(gfp_t flags)
 	}
 	spin_unlock(&bootmem_resource_lock);
 
+	//获取resource成功，将其memset为0，如果获取失败，采用kzalloc申请一个
 	if (res)
 		memset(res, 0, sizeof(struct resource));
 	else
@@ -187,16 +191,21 @@ static struct resource * __request_resource(struct resource *root, struct resour
 	resource_size_t end = new->end;
 	struct resource *tmp, **p;
 
+	//错误的资源，直接返回root(end小于start)
 	if (end < start)
 		return root;
+
+	//start,end必须在root资源范围以内
 	if (start < root->start)
 		return root;
 	if (end > root->end)
 		return root;
+
 	p = &root->child;
 	for (;;) {
 		tmp = *p;
 		if (!tmp || tmp->start > end) {
+		    //不存在，直接插入到new中
 			new->sibling = tmp;
 			*p = new;
 			new->parent = root;
@@ -204,7 +213,9 @@ static struct resource * __request_resource(struct resource *root, struct resour
 		}
 		p = &tmp->sibling;
 		if (tmp->end < start)
+		    //tmp的终止位置小于start,继续向后找
 			continue;
+		//tmp已在其中包含
 		return tmp;
 	}
 }
@@ -1106,6 +1117,7 @@ static DECLARE_WAIT_QUEUE_HEAD(muxed_resource_wait);
  * @name: reserving caller's ID string
  * @flags: IO resource flags
  */
+//申请占用此段resource
 struct resource * __request_region(struct resource *parent,
 				   resource_size_t start, resource_size_t n,
 				   const char *name, int flags)
@@ -1113,9 +1125,11 @@ struct resource * __request_region(struct resource *parent,
 	DECLARE_WAITQUEUE(wait, current);
 	struct resource *res = alloc_resource(GFP_KERNEL);
 
+	//如果申请resource失败，返回NULL
 	if (!res)
 		return NULL;
 
+	//设置resource名称，内存起始位置，终止位置
 	res->name = name;
 	res->start = start;
 	res->end = start + n - 1;
@@ -1129,16 +1143,17 @@ struct resource * __request_region(struct resource *parent,
 		res->flags |= IORESOURCE_BUSY | flags;
 		res->desc = parent->desc;
 
-		//请求资源
+		//请求资源（将res添加进parent中）
 		conflict = __request_resource(parent, res);
 		if (!conflict)
-			break;
+			break;//未返回冲突，跳出
 		if (conflict != parent) {
 			if (!(conflict->flags & IORESOURCE_BUSY)) {
 				parent = conflict;
 				continue;
 			}
 		}
+		//等待资源可用
 		if (conflict->flags & flags & IORESOURCE_MUXED) {
 			add_wait_queue(&muxed_resource_wait, &wait);
 			write_unlock(&resource_lock);
@@ -1148,6 +1163,7 @@ struct resource * __request_region(struct resource *parent,
 			write_lock(&resource_lock);
 			continue;
 		}
+		//资源申请失败
 		/* Uhhuh, that didn't work out.. */
 		free_resource(res);
 		res = NULL;

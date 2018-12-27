@@ -362,11 +362,13 @@ static const struct fpga_manager_ops altera_cvp_ops = {
 	.write_complete	= altera_cvp_write_complete,
 };
 
+//显示
 static ssize_t chkcfg_show(struct device_driver *dev, char *buf)
 {
 	return snprintf(buf, 3, "%d\n", altera_cvp_chkcfg);
 }
 
+//修改
 static ssize_t chkcfg_store(struct device_driver *drv, const char *buf,
 			    size_t count)
 {
@@ -394,9 +396,9 @@ MODULE_DEVICE_TABLE(pci, altera_cvp_id_tbl);
 //注册altera的fpga驱动
 static struct pci_driver altera_cvp_driver = {
 	.name   = DRV_NAME,
-	.id_table = altera_cvp_id_tbl,
+	.id_table = altera_cvp_id_tbl,//支持所有alter设备
 	.probe  = altera_cvp_probe,//为设备探测驱动
-	.remove = altera_cvp_remove,
+	.remove = altera_cvp_remove,//驱动移除
 };
 
 //为设备pdev探测此驱动
@@ -413,6 +415,7 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 	 * space access works without enabling the PCI device, memory
 	 * space access is enabled further down.
 	 */
+	//检查pci扩展id号是否为预期编号
 	pci_read_config_word(pdev, VSE_PCIE_EXT_CAP_ID, &val);
 	if (val != VSE_PCIE_EXT_CAP_ID_VAL) {
 		dev_err(&pdev->dev, "Wrong EXT_CAP_ID value 0x%x\n", val);
@@ -438,6 +441,7 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 		pci_write_config_word(pdev, PCI_COMMAND, cmd);
 	}
 
+	//（申请cvp_bar对应的resource)
 	ret = pci_request_region(pdev, CVP_BAR, "CVP");
 	if (ret) {
 		dev_err(&pdev->dev, "Requesting CVP BAR region failed\n");
@@ -463,12 +467,14 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 		goto err_unmap;
 	}
 
+	//将driver_data置为mgr
 	pci_set_drvdata(pdev, mgr);
 
 	ret = fpga_mgr_register(mgr);
 	if (ret)
 		goto err_unmap;
 
+	//创建driver及其属性对应的sysfs
 	ret = driver_create_file(&altera_cvp_driver.driver,
 				 &driver_attr_chkcfg);
 	if (ret) {

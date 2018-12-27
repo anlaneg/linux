@@ -285,6 +285,7 @@ void __iomem *pci_iomap_range(struct pci_dev *pdev,
 	struct zpci_dev *zdev =	to_zpci(pdev);
 	int idx;
 
+	//长度为0时，直接返回NULL
 	if (!pci_resource_len(pdev, bar))
 		return NULL;
 

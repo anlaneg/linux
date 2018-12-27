@@ -3634,7 +3634,7 @@ static int __pci_request_region(struct pci_dev *pdev, int bar,
 {
 	struct pci_devres *dr;
 
-	//如果此BAR资源为0，则跳过
+	//如果dev[bar]资源为0，则跳过
 	if (pci_resource_len(pdev, bar) == 0)
 		return 0;
 
@@ -3644,7 +3644,7 @@ static int __pci_request_region(struct pci_dev *pdev, int bar,
 			    pci_resource_len(pdev, bar), res_name))
 			goto err_out;
 	} else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM) {
-		//memory space region请求
+		//memory space region请求(申请并占用对应的resource)
 		if (!__request_mem_region(pci_resource_start(pdev, bar),
 					pci_resource_len(pdev, bar), res_name,
 					exclusive))
