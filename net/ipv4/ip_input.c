@@ -204,12 +204,12 @@ static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_b
 		//尝试raw socket传递
 		raw = raw_local_deliver(skb, protocol);
 
-		//按ip->protocol查找协议处理函数
+		//按ip->protocol查找协议处理函数(例如：tcp_protocol，udp_protocol，igmp_protocol）
 		ipprot = rcu_dereference(inet_protos[protocol]);
 		if (ipprot) {
-			//协议栈上有对应的协议处理模块
 			int ret;
 
+			//协议栈上有对应的协议处理模块
 			if (!ipprot->no_policy) {
 				if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 					kfree_skb(skb);

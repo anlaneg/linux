@@ -582,6 +582,7 @@ struct fpga_manager *fpga_mgr_create(struct device *dev, const char *name,
 		return NULL;
 	}
 
+	//申请mgr
 	mgr = kzalloc(sizeof(*mgr), GFP_KERNEL);
 	if (!mgr)
 		return NULL;
@@ -605,6 +606,7 @@ struct fpga_manager *fpga_mgr_create(struct device *dev, const char *name,
 	mgr->dev.of_node = dev->of_node;
 	mgr->dev.id = id;
 
+	//设置设备名称
 	ret = dev_set_name(&mgr->dev, "fpga%d", id);
 	if (ret)
 		goto error_device;
@@ -670,6 +672,7 @@ struct fpga_manager *devm_fpga_mgr_create(struct device *dev, const char *name,
 	if (!mgr) {
 		devres_free(ptr);
 	} else {
+	    //记录fpga_mgr
 		*ptr = mgr;
 		devres_add(dev, ptr);
 	}

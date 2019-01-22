@@ -382,18 +382,21 @@ static int compute_score(struct sock *sk, struct net *net,
 	score = (sk->sk_family == PF_INET) ? 2 : 1;
 	inet = inet_sk(sk);
 
+	//检查daddr
 	if (inet->inet_rcv_saddr) {
 		if (inet->inet_rcv_saddr != daddr)
 			return -1;
 		score += 4;
 	}
 
+	//检查saddr
 	if (inet->inet_daddr) {
 		if (inet->inet_daddr != saddr)
 			return -1;
 		score += 4;
 	}
 
+	//检查sport
 	if (inet->inet_dport) {
 		if (inet->inet_dport != sport)
 			return -1;
@@ -508,6 +511,7 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
 begin:
 	result = NULL;
 	badness = 0;
+	//遍历选择得分最高的sock
 	sk_for_each_rcu(sk, &hslot->head) {
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif, exact_dif);
@@ -536,6 +540,7 @@ static inline struct sock *__udp4_lib_lookup_skb(struct sk_buff *skb,
 {
 	const struct iphdr *iph = ip_hdr(skb);
 
+	//查询udp对应的socket
 	return __udp4_lib_lookup(dev_net(skb->dev), iph->saddr, sport,
 				 iph->daddr, dport, inet_iif(skb),
 				 inet_sdif(skb), udptable, skb);
@@ -2207,6 +2212,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	/*
 	 *  Validate the packet.
 	 */
+	//校验报文长度
 	if (!pskb_may_pull(skb, sizeof(struct udphdr)))
 		goto drop;		/* No space for header. */
 
@@ -2215,6 +2221,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	saddr = ip_hdr(skb)->saddr;
 	daddr = ip_hdr(skb)->daddr;
 
+	//报文长度过小
 	if (ulen > skb->len)
 		goto short_packet;
 
@@ -2249,6 +2256,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 
 	sk = __udp4_lib_lookup_skb(skb, uh->source, uh->dest, udptable);
 	if (sk)
+	    //已有对应的sock,执行udp单播收包
 		return udp_unicast_rcv_skb(sk, skb, uh);
 
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
@@ -2259,6 +2267,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	if (udp_lib_checksum_complete(skb))
 		goto csum_error;
 
+	//无对应的socket,发送icmp目的不可达
 	__UDP_INC_STATS(net, UDP_MIB_NOPORTS, proto == IPPROTO_UDPLITE);
 	icmp_send(skb, ICMP_DEST_UNREACH, ICMP_PORT_UNREACH, 0);
 

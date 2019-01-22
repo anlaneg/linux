@@ -422,6 +422,7 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 		return -ENODEV;
 	}
 
+	//申请conf
 	conf = devm_kzalloc(&pdev->dev, sizeof(*conf), GFP_KERNEL);
 	if (!conf)
 		return -ENOMEM;
@@ -435,6 +436,7 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 	 * even if the concerned BAR is not needed for FPGA configuration
 	 * at all. Thus, enable the device via PCI config space command.
 	 */
+	//如果pci_command未有memory,则加上memory标记
 	pci_read_config_word(pdev, PCI_COMMAND, &cmd);
 	if (!(cmd & PCI_COMMAND_MEMORY)) {
 		cmd |= PCI_COMMAND_MEMORY;
@@ -448,6 +450,7 @@ static int altera_cvp_probe(struct pci_dev *pdev,
 		goto err_disable;
 	}
 
+	//设置conf
 	conf->pci_dev = pdev;
 	conf->write_data = altera_cvp_write_data_iomem;
 

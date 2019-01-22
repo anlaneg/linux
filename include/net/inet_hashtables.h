@@ -327,7 +327,7 @@ static inline struct sock *__inet_lookup(struct net *net,
 					 const int dif, const int sdif,
 					 bool *refcounted)
 {
-	u16 hnum = ntohs(dport);//将目的源口转为本地值
+	u16 hnum = ntohs(dport);//将目的端口转为本地值
 	struct sock *sk;
 
 	//先查询已建立起连接的
@@ -364,10 +364,10 @@ static inline struct sock *inet_lookup(struct net *net,
 
 static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 					     struct sk_buff *skb,
-					     int doff,
+					     int doff,//tcp头部长度
 					     const __be16 sport,
 					     const __be16 dport,
-					     const int sdif,
+					     const int sdif,//入接口
 					     bool *refcounted)
 {
 	struct sock *sk = skb_steal_sock(skb);

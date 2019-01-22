@@ -17,7 +17,7 @@
 
 struct devres_node {
 	struct list_head		entry;
-	dr_release_t			release;
+	dr_release_t			release;//节点free函数
 #ifdef CONFIG_DEBUG_DEVRES
 	const char			*name;
 	size_t				size;
@@ -83,6 +83,7 @@ static struct devres_group * node_to_group(struct devres_node *node)
 	return NULL;
 }
 
+//申请dr
 static __always_inline struct devres * alloc_dr(dr_release_t release,
 						size_t size, gfp_t gfp, int nid)
 {
@@ -222,6 +223,7 @@ EXPORT_SYMBOL_GPL(devres_free);
  */
 void devres_add(struct device *dev, void *res)
 {
+    //由res获得devres
 	struct devres *dr = container_of(res, struct devres, data);
 	unsigned long flags;
 

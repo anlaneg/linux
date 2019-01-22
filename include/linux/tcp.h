@@ -25,16 +25,19 @@
 #include <net/inet_timewait_sock.h>
 #include <uapi/linux/tcp.h>
 
+//取tcp头部
 static inline struct tcphdr *tcp_hdr(const struct sk_buff *skb)
 {
 	return (struct tcphdr *)skb_transport_header(skb);
 }
 
+//tcp头部长度
 static inline unsigned int __tcp_hdrlen(const struct tcphdr *th)
 {
 	return th->doff * 4;
 }
 
+//取tcp头部长度
 static inline unsigned int tcp_hdrlen(const struct sk_buff *skb)
 {
 	return __tcp_hdrlen(tcp_hdr(skb));
