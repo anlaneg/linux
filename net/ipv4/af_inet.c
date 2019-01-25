@@ -1299,6 +1299,7 @@ int inet_sk_rebuild_header(struct sock *sk)
 }
 EXPORT_SYMBOL(inet_sk_rebuild_header);
 
+//设置socket状态
 void inet_sk_set_state(struct sock *sk, int state)
 {
 	trace_inet_sock_set_state(sk, sk->sk_state, state);
@@ -1716,7 +1717,8 @@ static const struct net_protocol igmp_protocol = {
 static struct net_protocol tcp_protocol = {
 	.early_demux	=	tcp_v4_early_demux,
 	.early_demux_handler =  tcp_v4_early_demux,
-	.handler	=	tcp_v4_rcv,//指明tcp报文入口
+	//指明tcp报文入口
+	.handler	=	tcp_v4_rcv,
 	.err_handler	=	tcp_v4_err,
 	.no_policy	=	1,
 	.netns_ok	=	1,

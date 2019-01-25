@@ -345,7 +345,9 @@ struct sock {
 #define sk_num			__sk_common.skc_num
 #define sk_dport		__sk_common.skc_dport
 #define sk_addrpair		__sk_common.skc_addrpair
+//对端目的地址
 #define sk_daddr		__sk_common.skc_daddr
+//本端源ip地址
 #define sk_rcv_saddr		__sk_common.skc_rcv_saddr
 //family字段，例如AF_INET
 #define sk_family		__sk_common.skc_family
@@ -476,7 +478,7 @@ struct sock {
 	int			sk_err,
 				sk_err_soft;
 	u32			sk_ack_backlog;
-	u32			sk_max_ack_backlog;
+	u32			sk_max_ack_backlog;//配置的最大backlog
 	kuid_t			sk_uid;
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
@@ -865,6 +867,7 @@ static inline void sk_acceptq_added(struct sock *sk)
 	sk->sk_ack_backlog++;
 }
 
+//检查backlog数目是否已超限
 static inline bool sk_acceptq_is_full(const struct sock *sk)
 {
 	return sk->sk_ack_backlog > sk->sk_max_ack_backlog;
@@ -2392,6 +2395,7 @@ void sock_net_set(struct sock *sk, struct net *net)
 	write_pnet(&sk->sk_net, net);
 }
 
+//steal走skb对应的socket(如果有的话）
 static inline struct sock *skb_steal_sock(struct sk_buff *skb)
 {
 	if (skb->sk) {

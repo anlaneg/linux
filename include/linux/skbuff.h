@@ -688,7 +688,7 @@ struct sk_buff {
 	};
 
 	union {
-		struct sock		*sk;
+		struct sock		*sk;//对应的socket
 		int			ip_defrag_offset;
 	};
 

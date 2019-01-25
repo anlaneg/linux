@@ -3251,7 +3251,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	th->dest = ireq->ir_rmt_port;
 	skb->mark = ireq->ir_mark;
 	skb->ip_summed = CHECKSUM_PARTIAL;
-	th->seq = htonl(tcp_rsk(req)->snt_isn);
+	th->seq = htonl(tcp_rsk(req)->snt_isn);//填充seq
 	/* XXX data is queued and acked as is. No buffer/window check */
 	th->ack_seq = htonl(tcp_rsk(req)->rcv_nxt);
 

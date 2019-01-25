@@ -935,15 +935,19 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 	struct sk_buff *skb;
 
 	/* First, grab a route. */
+	//检查到对端的路由是否存在
 	if (!dst && (dst = inet_csk_route_req(sk, &fl4, req)) == NULL)
 		return -1;
 
+	//构造synack报文
 	skb = tcp_make_synack(sk, dst, req, foc, synack_type);
 
 	if (skb) {
+	    //如果skb构造成功，执行checksum计算
 		__tcp_v4_send_check(skb, ireq->ir_loc_addr, ireq->ir_rmt_addr);
 
 		rcu_read_lock();
+		//构造ip报文，并发送pkt到ip层
 		err = ip_build_and_send_pkt(skb, sk, ireq->ir_loc_addr,
 					    ireq->ir_rmt_addr,
 					    rcu_dereference(ireq->ireq_opt));
@@ -1367,14 +1371,14 @@ static const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 	.req_md5_lookup	=	tcp_v4_md5_lookup,
 	.calc_md5_hash	=	tcp_v4_md5_hash_skb,
 #endif
-	.init_req	=	tcp_v4_init_req,
+	.init_req	=	tcp_v4_init_req,//初始化流的源地址，目的地址
 #ifdef CONFIG_SYN_COOKIES
 	.cookie_init_seq =	cookie_v4_init_sequence,
 #endif
-	.route_req	=	tcp_v4_route_req,
-	.init_seq	=	tcp_v4_init_seq,
+	.route_req	=	tcp_v4_route_req,//查询到对应的路由
+	.init_seq	=	tcp_v4_init_seq,//生成seq号
 	.init_ts_off	=	tcp_v4_init_ts_off,
-	.send_synack	=	tcp_v4_send_synack,
+	.send_synack	=	tcp_v4_send_synack,//向外发送synack
 };
 
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
@@ -1503,6 +1507,7 @@ static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
 #ifdef CONFIG_SYN_COOKIES
 	const struct tcphdr *th = tcp_hdr(skb);
 
+	//进来的报文无syn标记，执行cookie检查
 	if (!th->syn)
 		sk = cookie_v4_check(sk, skb);
 #endif
@@ -1542,7 +1547,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		goto csum_err;
 
 	if (sk->sk_state == TCP_LISTEN) {
-		//socket处于listen状态上
+		//socket处于listen状态上，执行cookie检查
 		struct sock *nsk = tcp_v4_cookie_check(sk, skb);
 
 		if (!nsk)
@@ -1715,31 +1720,38 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	/* Count it even if it's bad */
 	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
 
+	//报文长度不足tcp头长度，丢包
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
-		goto discard_it;//报文长度不足tcp头长度，丢包
+		goto discard_it;
 
 	th = (const struct tcphdr *)skb->data;
 
+	//tcp头部非4字节对齐
 	if (unlikely(th->doff < sizeof(struct tcphdr) / 4))
-		goto bad_packet;//tcp头部非4字节对齐
+		goto bad_packet;
+
+	//报文长度不足tcp头长度（含选项）
 	if (!pskb_may_pull(skb, th->doff * 4))
-		goto discard_it;//报文长度不足tcp头长度（含选项）
+		goto discard_it;
 
 	/* An explanation is required here, I think.
 	 * Packet length and doff are validated by header prediction,
 	 * provided case of th->doff==0 is eliminated.
 	 * So, we defer the checks. */
 
+	//checksum校验
 	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo))
-		goto csum_error;//checksum校验
+		goto csum_error;
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
+
 lookup:
     //查询此报文对应的socket
-	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th), th->source,
+	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th)/*tcp头部长度*/, th->source,
 			       th->dest, sdif, &refcounted);
 	if (!sk)
+	    //不存在对应的socket,不存在对应的listen socket
 		goto no_tcp_socket;
 
 process:
@@ -1749,6 +1761,7 @@ process:
 		//如果是其它报文，则可能是之前重发的报文，丢弃
 		goto do_time_wait;
 
+	//socket已收到syn报文？？？？
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		struct request_sock *req = inet_reqsk(sk);
 		bool req_stolen = false;
@@ -1820,15 +1833,17 @@ process:
 
 	nf_reset(skb);
 
+	//tcp bpf处理(可通过此调整性能）
 	if (tcp_filter(sk, skb))
 		goto discard_and_relse;
+
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
 	tcp_v4_fill_cb(skb, iph, th);
 
 	skb->dev = NULL;
 
-	//当前处于listen状态，收到报文
+	//当前sock处于listen状态，收到报文
 	//客户端主动打开连接，此时只收取syn报文
 	if (sk->sk_state == TCP_LISTEN) {
 		ret = tcp_v4_do_rcv(sk, skb);
@@ -1853,6 +1868,7 @@ put_and_return:
 
 	return ret;
 
+	//没有查询到此流对应的socket
 no_tcp_socket:
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
@@ -2483,7 +2499,7 @@ struct proto tcp_prot = {
 	.sendpage		= tcp_sendpage,
 	.backlog_rcv		= tcp_v4_do_rcv,
 	.release_cb		= tcp_release_cb,
-	.hash			= inet_hash,
+	.hash			= inet_hash,//注册socket
 	.unhash			= inet_unhash,
 	.get_port		= inet_csk_get_port,
 	.enter_memory_pressure	= tcp_enter_memory_pressure,

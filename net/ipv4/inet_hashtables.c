@@ -232,9 +232,11 @@ static inline int compute_score(struct sock *sk, struct net *net,
 
 	if (net_eq(sock_net(sk), net) && inet->inet_num == hnum &&
 			!ipv6_only_sock(sk)) {
+	    //端口号必须一致且非ipv6　socket,否则继续匹配
 		__be32 rcv_saddr = inet->inet_rcv_saddr;
 		score = sk->sk_family == PF_INET ? 2 : 1;
 		if (rcv_saddr) {
+		    //如果绑定时指定了ip地址，则需要匹配ip地址
 			if (rcv_saddr != daddr)
 				return -1;
 			score += 4;
@@ -299,11 +301,13 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 struct sock *__inet_lookup_listener(struct net *net,
 				    struct inet_hashinfo *hashinfo,
 				    struct sk_buff *skb, int doff,
-				    const __be32 saddr, __be16 sport,
-				    const __be32 daddr, const unsigned short hnum,
+				    const __be32 saddr, __be16 sport,//源ip,源port
+				    const __be32 daddr, const unsigned short hnum,//目的ip,目的port
 				    const int dif, const int sdif)
 {
+    //取hashcode
 	unsigned int hash = inet_lhashfn(net, hnum);
+
 	//查询端口监听表
 	struct inet_listen_hashbucket *ilb = &hashinfo->listening_hash[hash];
 	bool exact_dif = inet_exact_dif_match(net, skb);
@@ -313,6 +317,7 @@ struct sock *__inet_lookup_listener(struct net *net,
 	unsigned int hash2;
 	u32 phash = 0;
 
+	//数量较少或者没有启用lhash2,则直接遍历
 	if (ilb->count <= 10 || !hashinfo->lhash2)
 		goto port_lookup;
 
@@ -344,6 +349,7 @@ struct sock *__inet_lookup_listener(struct net *net,
 	goto done;
 
 port_lookup:
+    //遍历ilb表执行socket匹配
 	sk_for_each_rcu(sk, &ilb->head) {
 		score = compute_score(sk, net, hnum, daddr,
 				      dif, sdif, exact_dif);
@@ -551,6 +557,7 @@ bool inet_ehash_nolisten(struct sock *sk, struct sock *osk)
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 	} else {
 		percpu_counter_inc(sk->sk_prot->orphan_count);
+		//置为TCP_CLOSE状态
 		inet_sk_set_state(sk, TCP_CLOSE);
 		sock_set_flag(sk, SOCK_DEAD);
 		inet_csk_destroy_sock(sk);
@@ -581,17 +588,20 @@ static int inet_reuseport_add_sock(struct sock *sk,
 	return reuseport_alloc(sk, inet_rcv_saddr_any(sk));
 }
 
+//将sock加入到listening哈希表
 int __inet_hash(struct sock *sk, struct sock *osk)
 {
 	struct inet_hashinfo *hashinfo = sk->sk_prot->h.hashinfo;
 	struct inet_listen_hashbucket *ilb;
 	int err = 0;
 
+	//非listen状态处理
 	if (sk->sk_state != TCP_LISTEN) {
 		inet_ehash_nolisten(sk, osk);
 		return 0;
 	}
 	WARN_ON(!sk_unhashed(sk));
+	//将sk加入到listening_hash表中
 	ilb = &hashinfo->listening_hash[inet_sk_listen_hashfn(sk)];
 
 	spin_lock(&ilb->lock);
@@ -604,6 +614,7 @@ int __inet_hash(struct sock *sk, struct sock *osk)
 		sk->sk_family == AF_INET6)
 		hlist_add_tail_rcu(&sk->sk_node, &ilb->head);
 	else
+	    //将sk加入到链表ilb->head
 		hlist_add_head_rcu(&sk->sk_node, &ilb->head);
 	inet_hash2(hashinfo, sk);
 	ilb->count++;
@@ -616,6 +627,7 @@ unlock:
 }
 EXPORT_SYMBOL(__inet_hash);
 
+//socket注册
 int inet_hash(struct sock *sk)
 {
 	int err = 0;
@@ -639,6 +651,7 @@ void inet_unhash(struct sock *sk)
 	if (sk_unhashed(sk))
 		return;
 
+	//socket为listen状态
 	if (sk->sk_state == TCP_LISTEN) {
 		ilb = &hashinfo->listening_hash[inet_sk_listen_hashfn(sk)];
 		lock = &ilb->lock;

@@ -111,8 +111,8 @@ struct inet_bind_hashbucket {
  */
 struct inet_listen_hashbucket {
 	spinlock_t		lock;
-	unsigned int		count;
-	struct hlist_head	head;
+	unsigned int		count;//已加入的socket数目
+	struct hlist_head	head;//hash表
 };
 
 /* This is for listening sockets, thus all sockets which possess wildcards. */
@@ -321,13 +321,14 @@ static inline struct sock *
 
 static inline struct sock *__inet_lookup(struct net *net,
 					 struct inet_hashinfo *hashinfo,
-					 struct sk_buff *skb, int doff,
+					 struct sk_buff *skb, int doff,//tcp头部长度
 					 const __be32 saddr, const __be16 sport,//源ip,源端口
 					 const __be32 daddr, const __be16 dport,//目的ip,目的端口
 					 const int dif, const int sdif,
 					 bool *refcounted)
 {
-	u16 hnum = ntohs(dport);//将目的端口转为本地值
+    //将目的端口转为本地值
+	u16 hnum = ntohs(dport);
 	struct sock *sk;
 
 	//先查询已建立起连接的
@@ -337,7 +338,8 @@ static inline struct sock *__inet_lookup(struct net *net,
 	if (sk)
 		return sk;
 	*refcounted = false;
-	//再查询已被监听的端口
+
+	//再查询是否有已被监听的端口
 	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
 				      sport, daddr, hnum, dif, sdif);
 }
@@ -365,8 +367,8 @@ static inline struct sock *inet_lookup(struct net *net,
 static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 					     struct sk_buff *skb,
 					     int doff,//tcp头部长度
-					     const __be16 sport,
-					     const __be16 dport,
+					     const __be16 sport,//源port
+					     const __be16 dport,//目的port
 					     const int sdif,//入接口
 					     bool *refcounted)
 {
@@ -374,9 +376,12 @@ static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 	const struct iphdr *iph = ip_hdr(skb);
 
 	*refcounted = true;
+
+	//如果skb有对应的socket,则返回
 	if (sk)
 		return sk;
 
+	//查询skb是否存在此流对应的socket
 	return __inet_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
 			     doff, iph->saddr, sport,
 			     iph->daddr, dport, inet_iif(skb), sdif,

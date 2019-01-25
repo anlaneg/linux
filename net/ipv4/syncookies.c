@@ -129,6 +129,7 @@ static __u32 check_tcp_syn_cookie(__u32 cookie, __be32 saddr, __be32 daddr,
 	/* Strip away the layers from the cookie */
 	cookie -= cookie_hash(saddr, daddr, sport, dport, 0, 0) + sseq;
 
+	//时间过长
 	/* Cookie is now reduced to (count * 2^24) ^ (hash % 2^24) */
 	diff = (count - (cookie >> COOKIEBITS)) & ((__u32) -1 >> COOKIEBITS);
 	if (diff >= MAX_SYNCOOKIE_AGE)
@@ -194,10 +195,12 @@ __u32 cookie_v4_init_sequence(const struct sk_buff *skb, __u16 *mssp)
 int __cookie_v4_check(const struct iphdr *iph, const struct tcphdr *th,
 		      u32 cookie)
 {
+    //假设cookie为真，取其对应的mss索引
 	__u32 seq = ntohl(th->seq) - 1;
 	__u32 mssind = check_tcp_syn_cookie(cookie, iph->saddr, iph->daddr,
 					    th->source, th->dest, seq);
 
+	//通过索引取对应的mss
 	return mssind < ARRAY_SIZE(msstab) ? msstab[mssind] : 0;
 }
 EXPORT_SYMBOL_GPL(__cookie_v4_check);
@@ -289,7 +292,7 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 	struct tcp_request_sock *treq;
 	struct tcp_sock *tp = tcp_sk(sk);
 	const struct tcphdr *th = tcp_hdr(skb);
-	__u32 cookie = ntohl(th->ack_seq) - 1;
+	__u32 cookie = ntohl(th->ack_seq) - 1;//取当初发送的seq做为cookie
 	struct sock *ret = sk;
 	struct request_sock *req;
 	int mss;
@@ -298,12 +301,14 @@ struct sock *cookie_v4_check(struct sock *sk, struct sk_buff *skb)
 	struct flowi4 fl4;
 	u32 tsoff = 0;
 
+	//未开启syncookie,不包含ack,或者包含rst,则直接跳出
 	if (!sock_net(sk)->ipv4.sysctl_tcp_syncookies || !th->ack || th->rst)
 		goto out;
 
 	if (tcp_synq_no_recent_overflow(sk))
 		goto out;
 
+	//提取对应的当时sync时的mss
 	mss = __cookie_v4_check(ip_hdr(skb), th, cookie);
 	if (mss == 0) {
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_SYNCOOKIESFAILED);

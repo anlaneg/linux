@@ -595,11 +595,13 @@ static inline u32 bpf_prog_run_save_cb(const struct bpf_prog *prog,
 	u8 cb_saved[BPF_SKB_CB_LEN];
 	u32 res;
 
+	//如果需要防止bpf_prog修改bpf_skb_cb
 	if (unlikely(prog->cb_access)) {
 		memcpy(cb_saved, cb_data, sizeof(cb_saved));
 		memset(cb_data, 0, sizeof(cb_saved));
 	}
 
+	//bpf程序运行
 	res = BPF_PROG_RUN(prog, skb);
 
 	if (unlikely(prog->cb_access))
