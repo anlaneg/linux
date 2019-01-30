@@ -189,60 +189,56 @@ bool ip_call_ra_chain(struct sk_buff *skb)
 }
 
 //处理要送往本机的ip报文
+void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
+{
+	const struct net_protocol *ipprot;
+	int raw, ret;
+
+resubmit:
+	//尝试raw socket传递
+	raw = raw_local_deliver(skb, protocol);
+
+	//按ip->protocol查找协议处理函数(例如：tcp_protocol，udp_protocol，igmp_protocol）
+	ipprot = rcu_dereference(inet_protos[protocol]);
+	if (ipprot) {
+		//协议栈上有对应的协议处理模块
+		if (!ipprot->no_policy) {
+			if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
+				kfree_skb(skb);
+				return;
+			}
+			nf_reset(skb);
+		}
+		//协议报文处理(交给ip上层进行处理）
+		ret = ipprot->handler(skb);
+		if (ret < 0) {
+			//如果handle返回负数，则取abs后会得到相应的协议，并将
+			//用指定的协议进行重新处理。
+			protocol = -ret;
+			goto resubmit;
+		}
+		__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
+	} else {
+		if (!raw) {
+			if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
+				__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
+				icmp_send(skb, ICMP_DEST_UNREACH,
+					  ICMP_PROT_UNREACH, 0);
+			}
+			kfree_skb(skb);
+		} else {
+			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
+			consume_skb(skb);
+		}
+	}
+}
+
 static int ip_local_deliver_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	__skb_pull(skb, skb_network_header_len(skb));
 
 	rcu_read_lock();
-	{
-		//取出ip层协议
-		int protocol = ip_hdr(skb)->protocol;
-		const struct net_protocol *ipprot;
-		int raw;
-
-	resubmit:
-		//尝试raw socket传递
-		raw = raw_local_deliver(skb, protocol);
-
-		//按ip->protocol查找协议处理函数(例如：tcp_protocol，udp_protocol，igmp_protocol）
-		ipprot = rcu_dereference(inet_protos[protocol]);
-		if (ipprot) {
-			int ret;
-
-			//协议栈上有对应的协议处理模块
-			if (!ipprot->no_policy) {
-				if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
-					kfree_skb(skb);
-					goto out;
-				}
-				nf_reset(skb);
-			}
-
-			//协议报文处理(交给ip上层进行处理）
-			ret = ipprot->handler(skb);
-			if (ret < 0) {
-				//如果handle返回负数，则取abs后会得到相应的协议，并将
-				//用指定的协议进行重新处理。
-				protocol = -ret;
-				goto resubmit;
-			}
-			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
-		} else {
-			//当前linux kernel没有对应的协议栈处理此协议，或发送icmp丢弃
-			if (!raw) {
-				if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
-					__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
-					icmp_send(skb, ICMP_DEST_UNREACH,
-						  ICMP_PROT_UNREACH, 0);
-				}
-				kfree_skb(skb);
-			} else {
-				__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
-				consume_skb(skb);
-			}
-		}
-	}
- out:
+	ip_protocol_deliver_rcu(net, skb, ip_hdr(skb)->protocol);
 	rcu_read_unlock();
 
 	return 0;
@@ -533,6 +529,7 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 		goto drop;
 	}
 
+	iph = ip_hdr(skb);
 	//设置传输层偏移量
 	skb->transport_header = skb->network_header + iph->ihl*4;
 
@@ -592,7 +589,7 @@ static void ip_list_rcv_finish(struct net *net, struct sock *sk,
 	list_for_each_entry_safe(skb, next, head, list) {
 		struct dst_entry *dst;
 
-		list_del(&skb->list);
+		skb_list_del_init(skb);
 		/* if ingress device is enslaved to an L3 master device pass the
 		 * skb to its handler for processing
 		 */
@@ -640,7 +637,7 @@ void ip_list_rcv(struct list_head *head, struct packet_type *pt,
 		struct net_device *dev = skb->dev;
 		struct net *net = dev_net(dev);
 
-		list_del(&skb->list);
+		skb_list_del_init(skb);
 		skb = ip_rcv_core(skb, net);
 		if (skb == NULL)
 			continue;

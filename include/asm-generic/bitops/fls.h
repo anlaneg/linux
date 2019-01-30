@@ -9,8 +9,9 @@
  * This is defined the same way as ffs.
  * Note fls(0) = 0, fls(1) = 1, fls(0x80000000) = 32.
  */
+
 //找最高位'１'的bit编号，自１开始编号，０表示没有‘１’
-static __always_inline int fls(int x)
+static __always_inline int fls(unsigned int x)
 {
 	int r = 32;
 

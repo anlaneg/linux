@@ -361,7 +361,8 @@ int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
 	kuid_t uid;
 	kgid_t gid;
 
-	BUG_ON(!kobj || !kobj->sd || !attr);
+	if (WARN_ON(!kobj || !kobj->sd || !attr))
+		return -EINVAL;
 
 	//创建文件（非二进制文件）
 	kobject_get_ownership(kobj, &uid, &gid);
@@ -371,7 +372,7 @@ int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
 EXPORT_SYMBOL_GPL(sysfs_create_file_ns);
 
 //创建多个文件
-int sysfs_create_files(struct kobject *kobj, const struct attribute **ptr)
+int sysfs_create_files(struct kobject *kobj, const struct attribute * const *ptr)
 {
 	int err = 0;
 	int i;
@@ -538,7 +539,7 @@ bool sysfs_remove_file_self(struct kobject *kobj, const struct attribute *attr)
 }
 
 //一次移除多个文件
-void sysfs_remove_files(struct kobject *kobj, const struct attribute **ptr)
+void sysfs_remove_files(struct kobject *kobj, const struct attribute * const *ptr)
 {
 	int i;
 	for (i = 0; ptr[i]; i++)
@@ -584,7 +585,8 @@ int sysfs_create_bin_file(struct kobject *kobj,
 	kuid_t uid;
 	kgid_t gid;
 
-	BUG_ON(!kobj || !kobj->sd || !attr);
+	if (WARN_ON(!kobj || !kobj->sd || !attr))
+		return -EINVAL;
 
 	kobject_get_ownership(kobj, &uid, &gid);
 	//添加二进制文件到kobj->sd

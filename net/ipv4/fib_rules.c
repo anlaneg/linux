@@ -199,12 +199,16 @@ static int fib4_rule_match(struct fib_rule *rule, struct flowi *fl, int flags)
 
 static struct fib_table *fib_empty_table(struct net *net)
 {
-	u32 id;
+	u32 id = 1;
 
-	for (id = 1; id <= RT_TABLE_MAX; id++)
+	while (1) {
 		if (!fib_get_table(net, id))
 			//不存在，则创建
 			return fib_new_table(net, id);
+
+		if (id++ == RT_TABLE_MAX)
+			break;
+	}
 	return NULL;
 }
 

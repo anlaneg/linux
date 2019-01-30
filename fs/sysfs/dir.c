@@ -43,7 +43,8 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 	kuid_t uid;
 	kgid_t gid;
 
-	BUG_ON(!kobj);
+	if (WARN_ON(!kobj))
+		return -EINVAL;
 
 	//有父节点取父节点，无父节点，则父节点为sysfs的根节点
 	if (kobj->parent)

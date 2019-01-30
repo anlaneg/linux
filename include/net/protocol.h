@@ -43,7 +43,10 @@ struct net_protocol {
 	int			(*early_demux_handler)(struct sk_buff *skb);
 	//处理收到的报文
 	int			(*handler)(struct sk_buff *skb);
-	void			(*err_handler)(struct sk_buff *skb, u32 info);
+
+	/* This returns an error if we weren't able to handle the error. */
+	int			(*err_handler)(struct sk_buff *skb, u32 info);
+
 	unsigned int		no_policy:1,
 				netns_ok:1,
 				/* does the protocol do more stringent
@@ -59,10 +62,12 @@ struct inet6_protocol {
 	void    (*early_demux_handler)(struct sk_buff *skb);
 	int	(*handler)(struct sk_buff *skb);
 
-	void	(*err_handler)(struct sk_buff *skb,
+	/* This returns an error if we weren't able to handle the error. */
+	int	(*err_handler)(struct sk_buff *skb,
 			       struct inet6_skb_parm *opt,
 			       u8 type, u8 code, int offset,
 			       __be32 info);
+
 	unsigned int	flags;	/* INET6_PROTO_xxx */
 };
 

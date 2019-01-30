@@ -753,6 +753,22 @@ static int vega12_init_smc_table(struct pp_hwmgr *hwmgr)
 	return 0;
 }
 
+static int vega12_run_acg_btc(struct pp_hwmgr *hwmgr)
+{
+	uint32_t result;
+
+	PP_ASSERT_WITH_CODE(
+		smum_send_msg_to_smc(hwmgr, PPSMC_MSG_RunAcgBtc) == 0,
+		"[Run_ACG_BTC] Attempt to run ACG BTC failed!",
+		return -EINVAL);
+
+	result = smum_get_argument(hwmgr);
+	PP_ASSERT_WITH_CODE(result == 1,
+			"Failed to run ACG BTC!", return -EINVAL);
+
+	return 0;
+}
+
 static int vega12_set_allowed_featuresmask(struct pp_hwmgr *hwmgr)
 {
 	struct vega12_hwmgr *data =
@@ -929,6 +945,11 @@ static int vega12_enable_dpm_tasks(struct pp_hwmgr *hwmgr)
 	tmp_result = vega12_init_smc_table(hwmgr);
 	PP_ASSERT_WITH_CODE(!tmp_result,
 			"Failed to initialize SMC table!",
+			result = tmp_result);
+
+	tmp_result = vega12_run_acg_btc(hwmgr);
+	PP_ASSERT_WITH_CODE(!tmp_result,
+			"Failed to run ACG BTC!",
 			result = tmp_result);
 
 	result = vega12_enable_all_smu_features(hwmgr);
@@ -2243,12 +2264,12 @@ static int vega12_get_sclk_od(struct pp_hwmgr *hwmgr)
 	struct vega12_single_dpm_table *sclk_table = &(data->dpm_table.gfx_table);
 	struct vega12_single_dpm_table *golden_sclk_table =
 			&(data->golden_dpm_table.gfx_table);
-	int value;
+	int value = sclk_table->dpm_levels[sclk_table->count - 1].value;
+	int golden_value = golden_sclk_table->dpm_levels
+			[golden_sclk_table->count - 1].value;
 
-	value = (sclk_table->dpm_levels[sclk_table->count - 1].value -
-			golden_sclk_table->dpm_levels[golden_sclk_table->count - 1].value) *
-			100 /
-			golden_sclk_table->dpm_levels[golden_sclk_table->count - 1].value;
+	value -= golden_value;
+	value = DIV_ROUND_UP(value * 100, golden_value);
 
 	return value;
 }
@@ -2264,15 +2285,12 @@ static int vega12_get_mclk_od(struct pp_hwmgr *hwmgr)
 	struct vega12_single_dpm_table *mclk_table = &(data->dpm_table.mem_table);
 	struct vega12_single_dpm_table *golden_mclk_table =
 			&(data->golden_dpm_table.mem_table);
-	int value;
-
-	value = (mclk_table->dpm_levels
-			[mclk_table->count - 1].value -
-			golden_mclk_table->dpm_levels
-			[golden_mclk_table->count - 1].value) *
-			100 /
-			golden_mclk_table->dpm_levels
+	int value = mclk_table->dpm_levels[mclk_table->count - 1].value;
+	int golden_value = golden_mclk_table->dpm_levels
 			[golden_mclk_table->count - 1].value;
+
+	value -= golden_value;
+	value = DIV_ROUND_UP(value * 100, golden_value);
 
 	return value;
 }
