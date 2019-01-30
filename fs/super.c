@@ -1139,6 +1139,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 		error = -EBUSY;
 		goto error_bdev;
 	}
+
 	//取块设备上的super block
 	s = sget(fs_type, test_bdev_super, set_bdev_super, flags | SB_NOSEC,
 		 bdev);

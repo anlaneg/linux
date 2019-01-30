@@ -32,13 +32,18 @@ static DEFINE_MUTEX(chrdevs_lock);
 #define CHRDEV_MAJOR_HASH_SIZE 255
 
 static struct char_device_struct {
-	struct char_device_struct *next;//用于串连位于同一个index中的其它字符设备
-	unsigned int major;//char设置的major编号
+    //用于串连位于同一个index中的其它字符设备
+	struct char_device_struct *next;
+	//char设置的major编号
+	unsigned int major;
 	unsigned int baseminor;
 	int minorct;
-	char name[64];//char设备名称
+	//char设备名称
+	char name[64];
+	//对应的字符设备
 	struct cdev *cdev;		/* will die */
 } *chrdevs[CHRDEV_MAJOR_HASH_SIZE];
+
 //chardevs用于存入系统中所有char设备，在chardevs中存放时，采用major_to_index定位到具体
 //的桶，然后按照baseminor进行排序，支持baseminor，minorct合起来指定多个char设备，故在插入时
 //需要检查(baseminor,baseminor+minorct)集合间是否有重叠，如果无重叠，则会按升序均放在冲突链上
@@ -149,13 +154,14 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	cd->minorct = minorct;
 	strlcpy(cd->name, name, sizeof(cd->name));
 
+	//计算hash
 	i = major_to_index(major);
 
 	//准备将cd存放入chrdevs中（采用hash方式存放）
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
 		//按major进行排序，如果major相等，按baseminor进行排序
-		//如果baseminor小与我们，则检查baseminor＋minorct是否大于我们的baseminor
-		//如果大于我们的baseminor，则我们需要排在其前面
+		//如果baseminor小于我们，则检查baseminor＋minorct是否大于我们的baseminor
+		//如果大于我们的baseminor，则我们需要排在其前面(此时不是重叠的吗？后面针对这种报错)
 		if ((*cp)->major > major ||
 		    ((*cp)->major == major &&
 		     (((*cp)->baseminor >= baseminor) ||
@@ -196,7 +202,7 @@ out:
 	return ERR_PTR(ret);
 }
 
-//归还major
+//归还major,返回其对应的char_dev
 static struct char_device_struct *
 __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
 {
@@ -204,17 +210,20 @@ __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
 	int i = major_to_index(major);
 
 	mutex_lock(&chrdevs_lock);
+	//查找对应的cp
 	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
 		if ((*cp)->major == major &&
 		    (*cp)->baseminor == baseminor &&
 		    (*cp)->minorct == minorct)
 			break;
 	if (*cp) {
+	    //有对应的cp,设置cd(准备返回）
 		cd = *cp;
+		//将此元素移除
 		*cp = cd->next;
 	}
 	mutex_unlock(&chrdevs_lock);
-	return cd;
+	return cd;//返回对应的cd
 }
 
 /**
@@ -226,7 +235,7 @@ __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
  *
  * Return value is zero on success, a negative error code on failure.
  */
-//注册一组chardev设备号
+//注册一组chardev设备号(静态注册)
 int register_chrdev_region(dev_t from, unsigned count, const char *name)
 {
 	struct char_device_struct *cd;
@@ -244,6 +253,7 @@ int register_chrdev_region(dev_t from, unsigned count, const char *name)
 	}
 	return 0;
 fail:
+    //注册失败，还原已成功的注册
 	to = n;
 	for (n = from; n < to; n = next) {
 		next = MKDEV(MAJOR(n)+1, 0);
@@ -263,7 +273,7 @@ fail:
  * chosen dynamically, and returned (along with the first minor number)
  * in @dev.  Returns zero or a negative error code.
  */
-//申请一组(count为1时申请一个）char设备，major动态申请，minor占用[baseminor,baseminor+count)
+//申请一组（count个）char设备，major动态申请，minor占用[baseminor,baseminor+count)
 int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
 			const char *name)
 {
@@ -298,7 +308,7 @@ int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
  * your module name has only one type of devices it's ok to use e.g. the name
  * of the module here.
  */
-//注册字符设备及设置其对应的fops
+//申请count个name字符设备，并字符设备注册对应的fops
 int __register_chrdev(unsigned int major, unsigned int baseminor,
 		      unsigned int count, const char *name,
 		      const struct file_operations *fops)
@@ -307,10 +317,12 @@ int __register_chrdev(unsigned int major, unsigned int baseminor,
 	struct cdev *cdev;
 	int err = -ENOMEM;
 
+	//申请count个字符设备
 	cd = __register_chrdev_region(major, baseminor, count, name);
 	if (IS_ERR(cd))
 		return PTR_ERR(cd);
 
+	//申请字符设备结构
 	cdev = cdev_alloc();
 	if (!cdev)
 		goto out2;
@@ -342,6 +354,7 @@ out2:
  * starting with @from.  The caller should normally be the one who
  * allocated those numbers in the first place...
  */
+//解注册字符设备
 void unregister_chrdev_region(dev_t from, unsigned count)
 {
 	dev_t to = from + count;
@@ -366,6 +379,7 @@ void unregister_chrdev_region(dev_t from, unsigned count)
  * @major, @baseminor and @count.  This function undoes what
  * __register_chrdev() did.
  */
+//释放(major,baseminor,count）对应的字符设备
 void __unregister_chrdev(unsigned int major, unsigned int baseminor,
 			 unsigned int count, const char *name)
 {
@@ -525,7 +539,7 @@ static int exact_lock(dev_t dev, void *data)
  * cdev_add() adds the device represented by @p to the system, making it
  * live immediately.  A negative error code is returned on failure.
  */
-//添加cdev到cdev_map
+//添加cdev到cdev_map（用于保证字符设备在打开时，进入chrdev_open函数，从而进入到用户定义的ops）
 int cdev_add(struct cdev *p, dev_t dev, unsigned count)
 {
 	int error;

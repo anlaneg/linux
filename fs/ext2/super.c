@@ -1498,7 +1498,7 @@ static int ext2_statfs (struct dentry * dentry, struct kstatfs * buf)
 
 //ext2文件系统挂载
 static struct dentry *ext2_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data)
+	int flags, const char *dev_name/*待挂载的设备*/, void *data)
 {
 	return mount_bdev(fs_type, flags, dev_name, data, ext2_fill_super);
 }
@@ -1670,8 +1670,9 @@ static int __init init_ext2_fs(void)
 	err = init_inodecache();
 	if (err)
 		return err;
-		//注册ext2文件系统
-        err = register_filesystem(&ext2_fs_type);
+
+	//注册ext2文件系统
+    err = register_filesystem(&ext2_fs_type);
 	if (err)
 		goto out;
 	return 0;

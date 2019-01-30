@@ -621,6 +621,7 @@ struct inode {
 	struct posix_acl	*i_default_acl;
 #endif
 
+	//inode对应的操作集
 	const struct inode_operations	*i_op;
 	struct super_block	*i_sb;//指向inode对应的super_block
 	struct address_space	*i_mapping;//指向此结构体的成员i_data
@@ -681,13 +682,17 @@ struct inode {
 		struct hlist_head	i_dentry;
 		struct rcu_head		i_rcu;
 	};
-	atomic64_t		i_version;//inode版本号
+
+	//inode版本号
+	atomic64_t		i_version;
 	atomic_t		i_count;
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
 #ifdef CONFIG_IMA
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
+
+	//对应的file操作符
 	const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 	struct file_lock_context	*i_flctx;
 	struct address_space	i_data;
@@ -695,7 +700,8 @@ struct inode {
 	union {
 		struct pipe_inode_info	*i_pipe;
 		struct block_device	*i_bdev;
-		struct cdev		*i_cdev;//指向对应的字符设备
+		//指向对应的字符设备
+		struct cdev		*i_cdev;
 		char			*i_link;
 		unsigned		i_dir_seq;
 	};

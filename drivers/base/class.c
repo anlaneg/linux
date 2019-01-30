@@ -131,6 +131,7 @@ static void klist_class_dev_put(struct klist_node *n)
 	put_device(dev);
 }
 
+//在class中添加groups，生成对应的文件
 static int class_add_groups(struct class *cls,
 			    const struct attribute_group **groups)
 {

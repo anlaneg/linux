@@ -875,7 +875,7 @@ static int uio_major_init(void)
 	//设置cdev的名称为"uio"
 	kobject_set_name(&cdev->kobj, "%s", name);
 
-	//将uio字符设备加入到当前系统
+	//将uio字符设备加入到当前系统，以便上层在open时进入chrdev_open
 	result = cdev_add(cdev, uio_dev, UIO_MAX_DEVICES);
 	if (result)
 		goto out_put;
@@ -896,6 +896,7 @@ out:
 static void uio_major_cleanup(void)
 {
 	unregister_chrdev_region(MKDEV(uio_major, 0), UIO_MAX_DEVICES);
+	//删除uio_cdev
 	cdev_del(uio_cdev);
 }
 
