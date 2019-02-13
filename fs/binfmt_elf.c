@@ -722,13 +722,18 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 	retval = -ENOEXEC;
 	/* First of all, some simple consistency checks */
+	//检查是否为elf文件对应的magic
 	if (memcmp(loc->elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
 		goto out;
 
+	//只处理exec文件或者动态库文件
 	if (loc->elf_ex.e_type != ET_EXEC && loc->elf_ex.e_type != ET_DYN)
 		goto out;
+
+	//检查是否为本体系对应的elf文件
 	if (!elf_check_arch(&loc->elf_ex))
 		goto out;
+
 	if (elf_check_fdpic(&loc->elf_ex))
 		goto out;
 	if (!bprm->file->f_op->mmap)
