@@ -414,30 +414,37 @@ static unsigned long total_mapping_size(struct elf_phdr *cmds, int nr)
  * header pointed to by elf_ex, into a newly allocated array. The caller is
  * responsible for freeing the allocated data. Returns an ERR_PTR upon failure.
  */
+//装载elf program header到内存
 static struct elf_phdr *load_elf_phdrs(struct elfhdr *elf_ex,
 				       struct file *elf_file)
 {
 	struct elf_phdr *elf_phdata = NULL;
 	int retval, size, err = -1;
+
+	//program header在文件偏移量
 	loff_t pos = elf_ex->e_phoff;
 
 	/*
 	 * If the size of this structure has changed, then punt, since
 	 * we will be doing the wrong thing.
 	 */
+	//phentsize一定等于elf_phdr结构体大小
 	if (elf_ex->e_phentsize != sizeof(struct elf_phdr))
 		goto out;
 
 	/* Sanity check the number of program headers... */
+	//program header number必须大于1，小于65536U
 	if (elf_ex->e_phnum < 1 ||
 		elf_ex->e_phnum > 65536U / sizeof(struct elf_phdr))
 		goto out;
 
 	/* ...and their total size. */
+	//头部不能过大（8192）
 	size = sizeof(struct elf_phdr) * elf_ex->e_phnum;
 	if (size > ELF_MIN_ALIGN)
 		goto out;
 
+	//申请program需要的内存，并自文件中读取它
 	elf_phdata = kmalloc(size, GFP_KERNEL);
 	if (!elf_phdata)
 		goto out;
@@ -694,7 +701,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	int load_addr_set = 0;
 	char * elf_interpreter = NULL;
 	unsigned long error;
-	struct elf_phdr *elf_ppnt, *elf_phdata, *interp_elf_phdata = NULL;
+	struct elf_phdr *elf_ppnt/*指向program header的指针*/, *elf_phdata, *interp_elf_phdata = NULL;
 	unsigned long elf_bss, elf_brk;
 	int bss_prot = 0;
 	int retval, i;
@@ -705,8 +712,8 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	int executable_stack = EXSTACK_DEFAULT;
 	struct pt_regs *regs = current_pt_regs();
 	struct {
-		struct elfhdr elf_ex;
-		struct elfhdr interp_elf_ex;
+		struct elfhdr elf_ex;//指向elf文件头部
+		struct elfhdr interp_elf_ex;//指向解析器对应的elf文件头部
 	} *loc;
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	loff_t pos;
@@ -739,6 +746,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	if (!bprm->file->f_op->mmap)
 		goto out;
 
+	//自文件中装载program header,并返回
 	elf_phdata = load_elf_phdrs(&loc->elf_ex, bprm->file);
 	if (!elf_phdata)
 		goto out;
@@ -752,6 +760,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	start_data = 0;
 	end_data = 0;
 
+	//遍历所有program header，找出解析器对应的segment，并处理
 	for (i = 0; i < loc->elf_ex.e_phnum; i++) {
 		if (elf_ppnt->p_type == PT_INTERP) {
 			/* This is the program interpreter used for
@@ -759,16 +768,19 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			 * is an a.out format binary
 			 */
 			retval = -ENOEXEC;
+			//校验不合法的解析器路径
 			if (elf_ppnt->p_filesz > PATH_MAX || 
 			    elf_ppnt->p_filesz < 2)
 				goto out_free_ph;
 
+			//申请解析器所需要的内存
 			retval = -ENOMEM;
 			elf_interpreter = kmalloc(elf_ppnt->p_filesz,
 						  GFP_KERNEL);
 			if (!elf_interpreter)
 				goto out_free_ph;
 
+			//读取解析器segment对应的路径，到elf_interpreter
 			pos = elf_ppnt->p_offset;
 			retval = kernel_read(bprm->file, elf_interpreter,
 					     elf_ppnt->p_filesz, &pos);
@@ -777,11 +789,13 @@ static int load_elf_binary(struct linux_binprm *bprm)
 					retval = -EIO;
 				goto out_free_interp;
 			}
+
 			/* make sure path is NULL terminated */
 			retval = -ENOEXEC;
 			if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
 				goto out_free_interp;
 
+			//打开解析器对应的文件（如果文件不存在，将出错）
 			interpreter = open_exec(elf_interpreter);
 			retval = PTR_ERR(interpreter);
 			if (IS_ERR(interpreter))
@@ -795,6 +809,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			would_dump(bprm, interpreter);
 
 			/* Get the exec headers */
+			//加载解析器的elf头部到loc->interp_elf_ex
 			pos = 0;
 			retval = kernel_read(interpreter, &loc->interp_elf_ex,
 					     sizeof(loc->interp_elf_ex), &pos);
@@ -804,11 +819,12 @@ static int load_elf_binary(struct linux_binprm *bprm)
 				goto out_free_dentry;
 			}
 
-			break;
+			break;//已发现并加载解析器，跳出
 		}
 		elf_ppnt++;
 	}
 
+	//再遍历一遍ph,确定栈是否可执行，检查segment类型为[PT_LOPROC,PT_HIPROC]范围内
 	elf_ppnt = elf_phdata;
 	for (i = 0; i < loc->elf_ex.e_phnum; i++, elf_ppnt++)
 		switch (elf_ppnt->p_type) {
@@ -829,6 +845,8 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		}
 
 	/* Some simple consistency checks for the interpreter */
+	//如果有解析器，则检查解析器程序是否合法，并装载解析器ph到interp_elf_phdata
+	//检查interp_elf ph类型的合法性
 	if (elf_interpreter) {
 		retval = -ELIBBAD;
 		/* Not an ELF interpreter */
@@ -846,6 +864,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			goto out_free_dentry;
 
 		/* Pass PT_LOPROC..PT_HIPROC headers to arch code */
+		//校验解析器的体系代码
 		elf_ppnt = interp_elf_phdata;
 		for (i = 0; i < loc->interp_elf_ex.e_phnum; i++, elf_ppnt++)
 			switch (elf_ppnt->p_type) {
@@ -904,6 +923,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		unsigned long k, vaddr;
 		unsigned long total_size = 0;
 
+		//忽略PT_LOAD类型的segment
 		if (elf_ppnt->p_type != PT_LOAD)
 			continue;
 
@@ -941,6 +961,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			elf_fixed = MAP_FIXED;
 		}
 
+		//解析此segment对应的RWX权限
 		if (elf_ppnt->p_flags & PF_R)
 			elf_prot |= PROT_READ;
 		if (elf_ppnt->p_flags & PF_W)
@@ -950,6 +971,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 
 		elf_flags = MAP_PRIVATE | MAP_DENYWRITE | MAP_EXECUTABLE;
 
+		//此segement对应的虚地址
 		vaddr = elf_ppnt->p_vaddr;
 		/*
 		 * If we are loading ET_EXEC or we have already performed
@@ -1013,6 +1035,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			}
 		}
 
+		//加载对应的segment到内存
 		error = elf_map(bprm->file, load_bias + vaddr, elf_ppnt,
 				elf_prot, elf_flags, total_size);
 		if (BAD_ADDR(error)) {
