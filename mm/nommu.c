@@ -555,6 +555,7 @@ static void validate_nommu_regions(void)
 /*
  * add a region into the global tree
  */
+//添加region到nommu_region树
 static void add_nommu_region(struct vm_region *region)
 {
 	struct vm_region *pregion;
@@ -568,15 +569,16 @@ static void add_nommu_region(struct vm_region *region)
 		parent = *p;
 		pregion = rb_entry(parent, struct vm_region, vm_rb);
 		if (region->vm_start < pregion->vm_start)
-			p = &(*p)->rb_left;
+			p = &(*p)->rb_left;//待加入的小于此节点，走左侧
 		else if (region->vm_start > pregion->vm_start)
-			p = &(*p)->rb_right;
+			p = &(*p)->rb_right;//走右侧
 		else if (pregion == region)
-			return;
+			return;//已存在
 		else
-			BUG();
+			BUG();//有重复（实现问题）
 	}
 
+	//将节点加入
 	rb_link_node(&region->vm_rb, parent, p);
 	rb_insert_color(&region->vm_rb, &nommu_region_tree);
 
@@ -586,6 +588,7 @@ static void add_nommu_region(struct vm_region *region)
 /*
  * delete a region from the global tree
  */
+//删除nommu_region树上的region节点
 static void delete_nommu_region(struct vm_region *region)
 {
 	BUG_ON(!nommu_region_tree.rb_node);
@@ -1202,6 +1205,7 @@ unsigned long do_mmap(struct file *file,
 	if (!region)
 		goto error_getting_region;
 
+	//申请记录此段内存必须的vma结构
 	vma = vm_area_alloc(current->mm);
 	if (!vma)
 		goto error_getting_vma;
@@ -1232,6 +1236,7 @@ unsigned long do_mmap(struct file *file,
 		struct vm_region *pregion;
 		unsigned long pglen, rpglen, pgend, rpgend, start;
 
+		//大小按页对齐
 		pglen = (len + PAGE_SIZE - 1) >> PAGE_SHIFT;
 		pgend = pgoff + pglen;
 
@@ -1242,6 +1247,7 @@ unsigned long do_mmap(struct file *file,
 				continue;
 
 			/* search for overlapping mappings on the same file */
+			//必须为同一文件
 			if (file_inode(pregion->vm_file) !=
 			    file_inode(file))
 				continue;
