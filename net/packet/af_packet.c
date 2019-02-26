@@ -3247,6 +3247,7 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 
 	//如果指明了协议，则注册协议号（all也在其中）
 	//注一个协议可以被注册多次，在函数__netif_receive_skb_core中负责按回调送包
+	//但这只是收方向，发方向是如何进入的？
 	if (proto) {
 		po->prot_hook.type = proto;
 		__register_prot_hook(sk);

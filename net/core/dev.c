@@ -2054,7 +2054,7 @@ EXPORT_SYMBOL_GPL(dev_nit_active);
  *	Support routine. Sends outgoing frames to any network
  *	taps currently in use.
  */
-
+//向所有ptype_all发送此报文
 void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct packet_type *ptype;
@@ -2064,16 +2064,20 @@ void dev_queue_xmit_nit(struct sk_buff *skb, struct net_device *dev)
 
 	rcu_read_lock();
 again:
+    //遍历ptype_list中给出的所有entry
 	list_for_each_entry_rcu(ptype, ptype_list, list) {
+	    //如果需要忽略tx方向，则忽略此ptype
 		if (ptype->ignore_outgoing)
 			continue;
 
 		/* Never send packets back to the socket
 		 * they originated from - MvS (miquels@drinkel.ow.org)
 		 */
+		//防止自发自收
 		if (skb_loop_sk(ptype, skb))
 			continue;
 
+		//调用deliver函数，完成报文送达
 		if (pt_prev) {
 			deliver_skb(skb2, pt_prev, skb->dev);
 			pt_prev = ptype;
@@ -2081,6 +2085,7 @@ again:
 		}
 
 		/* need to clone skb, done only once */
+		//需要向pt_prev投递，先clone报文
 		skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (!skb2)
 			goto out_unlock;
@@ -2106,6 +2111,7 @@ again:
 		pt_prev = ptype;
 	}
 
+	//上面处理的是ptype_all,现在开始处理dev->ptype_all
 	if (ptype_list == &ptype_all) {
 		ptype_list = &dev->ptype_all;
 		goto again;
@@ -3321,6 +3327,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	int rc;
 
 	if (dev_nit_active(dev))
+	    //报文将自此处传送给raw socket(tx方向capture报文）
 		dev_queue_xmit_nit(skb, dev);
 
 	len = skb->len;
