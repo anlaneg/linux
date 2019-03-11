@@ -478,7 +478,7 @@ __alloc_pages(gfp_t gfp_mask, unsigned int order, int preferred_nid)
  * online. For more general interface, see alloc_pages_node().
  */
 static inline struct page *
-__alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
+__alloc_pages_node(int nid/*申请内存的node*/, gfp_t gfp_mask, unsigned int order)
 {
     //校验node id及mask
 	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);
@@ -495,6 +495,7 @@ __alloc_pages_node(int nid, gfp_t gfp_mask, unsigned int order)
 static inline struct page *alloc_pages_node(int nid, gfp_t gfp_mask,
 						unsigned int order)
 {
+	//优先使用当前cpu对应的numa node id
 	if (nid == NUMA_NO_NODE)
 		nid = numa_mem_id();
 
@@ -515,6 +516,7 @@ extern struct page *alloc_pages_vma(gfp_t gfp_mask, int order,
 #define alloc_hugepage_vma(gfp_mask, vma, addr, order) \
 	alloc_pages_vma(gfp_mask, order, vma, addr, numa_node_id(), true)
 #else
+//按order,gfp_mask申请多页内存，使用当前cpu对应的numa node id
 #define alloc_pages(gfp_mask, order) \
 		alloc_pages_node(numa_node_id(), gfp_mask, order)
 #define alloc_pages_vma(gfp_mask, order, vma, addr, node, false)\
@@ -522,6 +524,7 @@ extern struct page *alloc_pages_vma(gfp_t gfp_mask, int order,
 #define alloc_hugepage_vma(gfp_mask, vma, addr, order) \
 	alloc_pages(gfp_mask, order)
 #endif
+//申请page,申请一页page,故传入0
 #define alloc_page(gfp_mask) alloc_pages(gfp_mask, 0)
 #define alloc_page_vma(gfp_mask, vma, addr)			\
 	alloc_pages_vma(gfp_mask, 0, vma, addr, numa_node_id(), false)

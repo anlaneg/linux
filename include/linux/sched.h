@@ -677,6 +677,7 @@ struct task_struct {
 	struct rb_node			pushable_dl_tasks;
 #endif
 
+	//进程对应的内存使用信息
 	struct mm_struct		*mm;
 	struct mm_struct		*active_mm;
 

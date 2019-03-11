@@ -95,7 +95,7 @@ extern int page_group_by_mobility_disabled;
 
 struct free_area {
 	struct list_head	free_list[MIGRATE_TYPES];
-	unsigned long		nr_free;
+	unsigned long		nr_free;//空闲的page数目
 };
 
 struct pglist_data;
