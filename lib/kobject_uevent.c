@@ -204,7 +204,7 @@ int kobject_synth_uevent(struct kobject *kobj, const char *buf, size_t count)
 	r = kobject_action_type(buf, count, &action, &action_args);
 	if (r) {
 		//解析失败，传入的参数有误
-		msg = "unknown uevent action string\n";
+		msg = "unknown uevent action string";
 		goto out;
 	}
 
@@ -217,7 +217,7 @@ int kobject_synth_uevent(struct kobject *kobj, const char *buf, size_t count)
 	r = kobject_action_args(action_args,
 				count - (action_args - buf), &env);
 	if (r == -EINVAL) {
-		msg = "incorrect uevent action arguments\n";
+		msg = "incorrect uevent action arguments";
 		goto out;
 	}
 
@@ -229,7 +229,7 @@ int kobject_synth_uevent(struct kobject *kobj, const char *buf, size_t count)
 out:
 	if (r) {
 		devpath = kobject_get_path(kobj, GFP_KERNEL);
-		printk(KERN_WARNING "synth uevent: %s: %s",
+		pr_warn("synth uevent: %s: %s\n",
 		       devpath ?: "unknown device",
 		       msg ?: "failed to send uevent");
 		kfree(devpath);
@@ -804,8 +804,7 @@ static int uevent_net_init(struct net *net)
 	//注册NETLINK_KOBJECT_UEVENT类型sk
 	ue_sk->sk = netlink_kernel_create(net, NETLINK_KOBJECT_UEVENT, &cfg);
 	if (!ue_sk->sk) {
-		printk(KERN_ERR
-		       "kobject_uevent: unable to create netlink socket!\n");
+		pr_err("kobject_uevent: unable to create netlink socket!\n");
 		kfree(ue_sk);
 		return -ENODEV;
 	}

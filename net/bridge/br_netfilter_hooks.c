@@ -845,7 +845,8 @@ static unsigned int ip_sabotage_in(void *priv,
 
 	//如果skb在bridge内转发，且当前不在prerouting阶段，则直接跳过此阶段执行
 	if (nf_bridge && !nf_bridge->in_prerouting &&
-	    !netif_is_l3_master(skb->dev)) {
+	    !netif_is_l3_master(skb->dev) &&
+	    !netif_is_l3_slave(skb->dev)) {
 		state->okfn(state->net, state->sk, skb);
 		return NF_STOLEN;
 	}
@@ -894,11 +895,6 @@ static int br_nf_dev_xmit(struct sk_buff *skb)
 static const struct nf_br_ops br_ops = {
 	.br_dev_xmit_hook =	br_nf_dev_xmit,
 };
-
-void br_netfilter_enable(void)
-{
-}
-EXPORT_SYMBOL_GPL(br_netfilter_enable);
 
 /* For br_nf_post_routing, we need (prio = NF_BR_PRI_LAST), because
  * br_dev_queue_push_xmit is called afterwards */

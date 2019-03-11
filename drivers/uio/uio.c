@@ -509,11 +509,11 @@ static int uio_open(struct inode *inode, struct file *filep)
 	if (!idev->info) {
 		mutex_unlock(&idev->info_lock);
 		ret = -EINVAL;
-		goto err_alloc_listener;
+		goto err_infoopen;
 	}
 
 	//调用上层注册的open函数
-	if (idev->info && idev->info->open)
+	if (idev->info->open)
 		ret = idev->info->open(idev->info, inode);
 	mutex_unlock(&idev->info_lock);
 	if (ret)
@@ -658,7 +658,7 @@ static ssize_t uio_write(struct file *filep, const char __user *buf,
 		goto out;
 	}
 
-	if (!idev->info || !idev->info->irq) {
+	if (!idev->info->irq) {
 		retval = -EIO;
 		goto out;
 	}
@@ -977,9 +977,12 @@ int __uio_register_device(struct module *owner,
 	atomic_set(&idev->event, 0);
 
 	ret = uio_get_minor(idev);
-	if (ret)
+	if (ret) {
+		kfree(idev);
 		return ret;
+	}
 
+	device_initialize(&idev->dev);
 	//为设备创建uio%d设备名称（igb_uio模块即使用uio来完成此事情）
 	idev->dev.devt = MKDEV(uio_major, idev->minor);
 	idev->dev.class = &uio_class;
@@ -993,7 +996,7 @@ int __uio_register_device(struct module *owner,
 
 	//设备注册
 	//将产生例如：/sys/class/uio/uio0
-	ret = device_register(&idev->dev);
+	ret = device_add(&idev->dev);
 	if (ret)
 		goto err_device_create;
 
@@ -1026,9 +1029,10 @@ int __uio_register_device(struct module *owner,
 err_request_irq:
 	uio_dev_del_attributes(idev);
 err_uio_dev_add_attributes:
-	device_unregister(&idev->dev);
+	device_del(&idev->dev);
 err_device_create:
 	uio_free_minor(idev);
+	put_device(&idev->dev);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(__uio_register_device);

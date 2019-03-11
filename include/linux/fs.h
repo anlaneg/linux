@@ -37,6 +37,9 @@
 #include <linux/uuid.h>
 #include <linux/errseq.h>
 #include <linux/ioprio.h>
+#include <linux/fs_types.h>
+#include <linux/build_bug.h>
+#include <linux/stddef.h>
 
 #include <asm/byteorder.h>
 #include <uapi/linux/fs.h>
@@ -309,6 +312,10 @@ enum rw_hint {
 
 struct kiocb {
 	struct file		*ki_filp;//要读写的文件
+
+	/* The 'ki_filp' pointer is shared in a union for aio */
+	randomized_struct_fields_start
+
 	loff_t			ki_pos;//读写的偏移量
 	//操作完成后回调
 	void (*ki_complete)(struct kiocb *iocb, long ret, long ret2);
@@ -316,7 +323,10 @@ struct kiocb {
 	int			ki_flags;
 	u16			ki_hint;
 	u16			ki_ioprio; /* See linux/ioprio.h */
-} __randomize_layout;
+	unsigned int		ki_cookie; /* for ->iopoll */
+
+	randomized_struct_fields_end
+};
 
 //如果ki_complete回调为ＮＵＬＬ，则为同步io
 static inline bool is_sync_kiocb(struct kiocb *kiocb)
@@ -713,7 +723,7 @@ struct inode {
 	struct fsnotify_mark_connector __rcu	*i_fsnotify_marks;
 #endif
 
-#if IS_ENABLED(CONFIG_FS_ENCRYPTION)
+#ifdef CONFIG_FS_ENCRYPTION
 	struct fscrypt_info	*i_crypt_info;
 #endif
 
@@ -978,7 +988,9 @@ static inline struct file *get_file(struct file *f)
 	atomic_long_inc(&f->f_count);
 	return f;
 }
-#define get_file_rcu(x) atomic_long_inc_not_zero(&(x)->f_count)
+#define get_file_rcu_many(x, cnt)	\
+	atomic_long_add_unless(&(x)->f_count, (cnt), 0)
+#define get_file_rcu(x) get_file_rcu_many((x), 1)
 #define fput_atomic(x)	atomic_long_add_unless(&(x)->f_count, -1, 1)
 #define file_count(x)	atomic_long_read(&(x)->f_count)
 
@@ -1431,7 +1443,7 @@ struct super_block {
 	void                    *s_security;
 #endif
 	const struct xattr_handler **s_xattr;
-#if IS_ENABLED(CONFIG_FS_ENCRYPTION)
+#ifdef CONFIG_FS_ENCRYPTION
 	const struct fscrypt_operations	*s_cop;
 #endif
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
@@ -1731,22 +1743,6 @@ int fiemap_fill_next_extent(struct fiemap_extent_info *info, u64 logical,
 int fiemap_check_flags(struct fiemap_extent_info *fieinfo, u32 fs_flags);
 
 /*
- * File types
- *
- * NOTE! These match bits 12..15 of stat.st_mode
- * (ie "(i_mode >> 12) & 15").
- */
-#define DT_UNKNOWN	0
-#define DT_FIFO		1
-#define DT_CHR		2
-#define DT_DIR		4
-#define DT_BLK		6
-#define DT_REG		8
-#define DT_LNK		10
-#define DT_SOCK		12
-#define DT_WHT		14
-
-/*
  * This is the "filldir" function type, used by readdir() to let
  * the kernel specify what kind of dirent layout it wants to have.
  * This allows the kernel to read directories into kernel space or
@@ -1818,6 +1814,7 @@ struct file_operations {
 	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//文件写功能
 	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的读
 	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的写
+	int (*iopoll)(struct kiocb *kiocb, bool spin);
 	int (*iterate) (struct file *, struct dir_context *);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
@@ -2127,7 +2124,7 @@ static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
  * I_WB_SWITCH		Cgroup bdi_writeback switching in progress.  Used to
  *			synchronize competing switching instances and to tell
  *			wb stat updates to grab the i_pages lock.  See
- *			inode_switch_wb_work_fn() for details.
+ *			inode_switch_wbs_work_fn() for details.
  *
  * I_OVL_INUSE		Used by overlayfs to get exclusive ownership on upper
  *			and work dirs among overlayfs mounts.
@@ -2538,6 +2535,7 @@ struct filename {
 	//由于aname总能保证8字节对齐，故iname也能保证
 	const char		iname[];//存储具体的文件名，并使name指向自已
 };
+static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
 
 extern long vfs_truncate(const struct path *, loff_t);
 extern int do_truncate(struct dentry *, loff_t start, unsigned int time_attrs,
@@ -3567,5 +3565,14 @@ extern void inode_nohighmem(struct inode *inode);
 /* mm/fadvise.c */
 extern int vfs_fadvise(struct file *file, loff_t offset, loff_t len,
 		       int advice);
+
+#if defined(CONFIG_IO_URING)
+extern struct sock *io_uring_get_socket(struct file *file);
+#else
+static inline struct sock *io_uring_get_socket(struct file *file)
+{
+	return NULL;
+}
+#endif
 
 #endif /* _LINUX_FS_H */

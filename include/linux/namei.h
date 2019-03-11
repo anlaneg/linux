@@ -24,6 +24,8 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
  *  - internal "there are more path components" flag
  *  - dentry cache is untrusted; force a real lookup
  *  - suppress terminal automount
+ *  - skip revalidation
+ *  - don't fetch xattrs on audit_inode
  */
 #define LOOKUP_FOLLOW		0x0001
 #define LOOKUP_DIRECTORY	0x0002
@@ -33,6 +35,7 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 #define LOOKUP_REVAL		0x0020
 #define LOOKUP_RCU		0x0040
 #define LOOKUP_NO_REVAL		0x0080
+#define LOOKUP_NO_EVAL		0x0100
 
 /*
  * Intent data

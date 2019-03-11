@@ -22,6 +22,7 @@ TARGETS += ir
 TARGETS += kcmp
 TARGETS += kvm
 TARGETS += lib
+TARGETS += livepatch
 TARGETS += membarrier
 TARGETS += memfd
 TARGETS += memory-hotplug
@@ -48,6 +49,7 @@ TARGETS += sysctl
 ifneq (1, $(quicktest))
 TARGETS += timers
 endif
+TARGETS += tmpfs
 TARGETS += user
 TARGETS += vm
 TARGETS += x86

@@ -1658,6 +1658,8 @@ int ksys_umount(char __user *name, int flags)
 	if (!(flags & UMOUNT_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
 
+	lookup_flags |= LOOKUP_NO_EVAL;
+
 	retval = user_path_mountpoint_at(AT_FDCWD, name, lookup_flags, &path);
 	if (retval)
 		goto out;
@@ -2723,7 +2725,6 @@ static long exact_copy_from_user(void *to, const void __user * from,
 	if (!access_ok(from, n))
 		return n;
 
-	current->kernel_uaccess_faults_ok++;
 	while (n) {
 		if (__get_user(c, f)) {
 			memset(t, 0, n);
@@ -2733,7 +2734,6 @@ static long exact_copy_from_user(void *to, const void __user * from,
 		f++;
 		n--;
 	}
-	current->kernel_uaccess_faults_ok--;
 	return n;
 }
 
@@ -2772,7 +2772,7 @@ void *copy_mount_options(const void __user * data)
 //如果用户态提供了数据，则copy一份，否则直接返回NULL
 char *copy_mount_string(const void __user *data)
 {
-	return data ? strndup_user(data, PAGE_SIZE) : NULL;
+	return data ? strndup_user(data, PATH_MAX) : NULL;
 }
 
 /*
