@@ -736,6 +736,7 @@ static inline void clear_page_guard(struct zone *zone, struct page *page,
 				unsigned int order, int migratetype) {}
 #endif
 
+//指明此page开始的一组页（大小为1<<order个）处于buddy中
 static inline void set_page_order(struct page *page, unsigned int order)
 {
 	set_page_private(page, order);
@@ -1886,15 +1887,18 @@ void __init init_cma_reserved_pageblock(struct page *page)
  * -- nyc
  */
 static inline void expand(struct zone *zone, struct page *page,
-	int low, int high, struct free_area *area,
+	int low, int high, struct free_area *area/*当前order对应的free_area*/,
 	int migratetype)
 {
 	unsigned long size = 1 << high;
 
 	while (high > low) {
+	    //相当于取high-1的free_area
 		area--;
 		high--;
+		//内存大小减一半（即本order对应的内存大小）
 		size >>= 1;
+		//&page[size]相当于取新分配page的后半段
 		VM_BUG_ON_PAGE(bad_range(zone, &page[size]), &page[size]);
 
 		/*
@@ -1906,9 +1910,14 @@ static inline void expand(struct zone *zone, struct page *page,
 		if (set_page_guard(zone, &page[size], high, migratetype))
 			continue;
 
+		//将后半段加入到area对应的free_list上
 		list_add(&page[size].lru, &area->free_list[migratetype]);
+		//空闲数目＋1
 		area->nr_free++;
+		//指明此段page存在buddy中
 		set_page_order(&page[size], high);
+
+		//接着我们需要继续循环下降order到low线上，并在每一级将当前页的一半存放相应的free_list上
 	}
 }
 
@@ -1984,6 +1993,7 @@ static bool check_new_pcp(struct page *page)
 static bool check_new_pages(struct page *page, unsigned int order)
 {
 	int i;
+	//遍历每个page
 	for (i = 0; i < (1 << order); i++) {
 		struct page *p = page + i;
 
@@ -1998,7 +2008,7 @@ inline void post_alloc_hook(struct page *page, unsigned int order,
 				gfp_t gfp_flags)
 {
 	set_page_private(page, 0);
-	set_page_refcounted(page);
+	set_page_refcounted(page);//设置页计数
 
 	arch_alloc_page(page, order);
 	kernel_map_pages(page, 1 << order, 1);
@@ -2037,6 +2047,7 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
  * Go through the free lists for the given migratetype and remove
  * the smallest available page from the freelists
  */
+//自给定zone上申请指定数目，指定migratetype的一组page
 static __always_inline
 struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 						int migratetype)
@@ -2046,8 +2057,11 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	struct page *page;
 
 	/* Find a page of the appropriate size in the preferred list */
+	//在指定zone中自order开始尝试是否有空闲区域可以分配，如果可分配，则返回对应的page
 	for (current_order = order; current_order < MAX_ORDER; ++current_order) {
+	    //取order对应的free area
 		area = &(zone->free_area[current_order]);
+		//依据migratetype获取空闲page
 		page = list_first_entry_or_null(&area->free_list[migratetype],
 							struct page, lru);
 		if (!page)
@@ -2055,7 +2069,9 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		list_del(&page->lru);
 		rmv_page_order(page);
 		area->nr_free--;
-		expand(zone, page, order, current_order, area, migratetype);
+		//我们找到了一组可用的page,现在将page拆分开放在order到current_order之间的链表上（拆分方法是每一个链上存后半段page)
+		expand(zone, page, order/*起始的order*/, current_order/*当前分配order*/, area/*当前order对应的free_area*/, migratetype);
+		//记录page业源的migratetype
 		set_pcppage_migratetype(page, migratetype);
 		return page;
 	}
@@ -2068,6 +2084,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
  * This array describes the order lists are fallen back to when
  * the free lists for the desirable migrate type are depleted
  */
+//定义各类型对应的可继续尝试migrate_types
 static int fallbacks[MIGRATE_TYPES][4] = {
 	[MIGRATE_UNMOVABLE]   = { MIGRATE_RECLAIMABLE, MIGRATE_MOVABLE,   MIGRATE_TYPES },
 	[MIGRATE_MOVABLE]     = { MIGRATE_RECLAIMABLE, MIGRATE_UNMOVABLE, MIGRATE_TYPES },
@@ -2081,6 +2098,7 @@ static int fallbacks[MIGRATE_TYPES][4] = {
 };
 
 #ifdef CONFIG_CMA
+//尝试migratetype为MIGRATE_CMA类型的页
 static __always_inline struct page *__rmqueue_cma_fallback(struct zone *zone,
 					unsigned int order)
 {
@@ -2349,10 +2367,12 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 
 	*can_steal = false;
 	for (i = 0;; i++) {
+	    //尝试migratetype的可选类型
 		fallback_mt = fallbacks[migratetype][i];
 		if (fallback_mt == MIGRATE_TYPES)
-			break;
+			break;//已尝试所有可选类型，跳出
 
+		//此类型已无pages可分配
 		if (list_empty(&area->free_list[fallback_mt]))
 			continue;
 
@@ -2526,6 +2546,7 @@ __rmqueue_fallback(struct zone *zone, int order, int start_migratetype,
 	for (current_order = MAX_ORDER - 1; current_order >= min_order;
 				--current_order) {
 		area = &(zone->free_area[current_order]);
+		//选择此area下一个合适的migratetype
 		fallback_mt = find_suitable_fallback(area, current_order,
 				start_migratetype, false, &can_steal);
 		if (fallback_mt == -1)
@@ -2565,6 +2586,7 @@ find_smallest:
 	VM_BUG_ON(current_order == MAX_ORDER);
 
 do_steal:
+    //在fallback_mt上执行page分配
 	page = list_first_entry(&area->free_list[fallback_mt],
 							struct page, lru);
 
@@ -2589,8 +2611,10 @@ __rmqueue(struct zone *zone, unsigned int order, int migratetype,
 	struct page *page;
 
 retry:
+    //分配page
 	page = __rmqueue_smallest(zone, order, migratetype);
 	if (unlikely(!page)) {
+	    //在指定migratetype上申请对应大小的页失败
 		if (migratetype == MIGRATE_MOVABLE)
 			page = __rmqueue_cma_fallback(zone, order);
 
@@ -3158,6 +3182,7 @@ struct page *rmqueue(struct zone *preferred_zone,
 				trace_mm_page_alloc_zone_locked(page, order, migratetype);
 		}
 		if (!page)
+		    //在当前zone通过buddy执行page分配
 			page = __rmqueue(zone, order, migratetype, alloc_flags);
 	} while (page && check_new_pages(page, order));
 	spin_unlock(&zone->lock);
@@ -3553,6 +3578,7 @@ retry:
 		}
 
 try_this_zone:
+        //自zone上申请page
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
@@ -4323,6 +4349,7 @@ retry_cpuset:
 	 * The adjusted alloc_flags might result in immediate success, so try
 	 * that first
 	 */
+	//已唤醒kswapd线程，重新尝试自freelist上申请
 	page = get_page_from_freelist(gfp_mask, order, alloc_flags, ac);
 	if (page)
 		goto got_pg;
@@ -4569,7 +4596,7 @@ static inline void finalise_ac(gfp_t gfp_mask, struct alloc_context *ac)
  * This is the 'heart' of the zoned buddy allocator.
  */
 struct page *
-__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
+__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid/*优先选择的node id*/,
 							nodemask_t *nodemask)
 {
 	struct page *page;
@@ -4605,7 +4632,7 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid,
 	//首先在freelist上尝试申请
 	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
 	if (likely(page))
-		goto out;
+		goto out;//自freelist上申请到，退出
 
 	/*
 	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS

@@ -75,7 +75,7 @@ static inline void set_page_refcounted(struct page *page)
 {
 	VM_BUG_ON_PAGE(PageTail(page), page);
 	VM_BUG_ON_PAGE(page_ref_count(page), page);
-	set_page_count(page, 1);
+	set_page_count(page, 1);//设置页的引用计数
 }
 
 extern unsigned long highest_memmap_pfn;

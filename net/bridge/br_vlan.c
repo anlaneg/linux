@@ -444,7 +444,8 @@ static bool __allowed_ingress(const struct net_bridge *br,
 	struct net_bridge_vlan *v;
 	bool tagged;
 
-	BR_INPUT_SKB_CB(skb)->vlan_filtered = true;//vlan被开启了，需要执行vlan过滤
+	//vlan被开启了，需要执行vlan过滤
+	BR_INPUT_SKB_CB(skb)->vlan_filtered = true;
 	/* If vlan tx offload is disabled on bridge device and frame was
 	 * sent from vlan device on the bridge device, it does not have
 	 * HW accelerated vlan tag.

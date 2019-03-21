@@ -33,23 +33,23 @@ struct notifier_block;		/* in notifier.h */
 
 struct vm_struct {
 	struct vm_struct	*next;
-	void			*addr;
-	unsigned long		size;
+	void			*addr;//内存起始地址
+	unsigned long		size;//内存大小
 	unsigned long		flags;
-	struct page		**pages;
-	unsigned int		nr_pages;
+	struct page		**pages;//本段内存所属的页
+	unsigned int		nr_pages;//本段内存所需要的页数
 	phys_addr_t		phys_addr;
 	const void		*caller;
 };
 
 struct vmap_area {
-	unsigned long va_start;
-	unsigned long va_end;
+	unsigned long va_start;//起始地址
+	unsigned long va_end;//终止地址
 	unsigned long flags;
-	struct rb_node rb_node;         /* address sorted rbtree */
-	struct list_head list;          /* address sorted list */
+	struct rb_node rb_node; /*用于挂载在树上*/        /* address sorted rbtree */
+	struct list_head list;/*用于挂载在链表上*/          /* address sorted list */
 	struct llist_node purge_list;    /* "lazy purge" list */
-	struct vm_struct *vm;
+	struct vm_struct *vm;//此段内存对应的vm_struct
 	struct rcu_head rcu_head;
 };
 
@@ -112,10 +112,11 @@ void vmalloc_sync_all(void);
 /*
  *	Lowlevel-APIs (not for driver use!)
  */
-
+//返回area对应的内存大小
 static inline size_t get_vm_area_size(const struct vm_struct *area)
 {
 	if (!(area->flags & VM_NO_GUARD))
+	    //针对无guard这种情况，减去guard page
 		/* return actual size without guard page */
 		return area->size - PAGE_SIZE;
 	else

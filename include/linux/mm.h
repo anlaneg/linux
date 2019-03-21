@@ -49,6 +49,7 @@ static inline void set_max_mapnr(unsigned long limit) { }
 #endif
 
 extern atomic_long_t _totalram_pages;
+//获取系统总ram页数
 static inline unsigned long totalram_pages(void)
 {
 	return (unsigned long)atomic_long_read(&_totalram_pages);
@@ -166,6 +167,7 @@ extern int overcommit_kbytes_handler(struct ctl_table *, int, void __user *,
 #define nth_page(page,n) pfn_to_page(page_to_pfn((page)) + (n))
 
 /* to align the pointer to the (next) page boundary */
+//将地址addr按页大小对齐
 #define PAGE_ALIGN(addr) ALIGN(addr, PAGE_SIZE)
 
 /* test whether an address (unsigned long or pointer) is aligned to PAGE_SIZE */
@@ -1327,6 +1329,7 @@ static inline void clear_page_pfmemalloc(struct page *page)
  */
 extern void pagefault_out_of_memory(void);
 
+//检查p在页内的offset
 #define offset_in_page(p)	((unsigned long)(p) & ~PAGE_MASK)
 
 /*

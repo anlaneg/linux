@@ -359,6 +359,7 @@ static struct vmap_area *__find_vmap_area(unsigned long addr)
 	return NULL;
 }
 
+//将vm area加入到树及链表
 static void __insert_vmap_area(struct vmap_area *va)
 {
 	struct rb_node **p = &vmap_area_root.rb_node;
@@ -378,6 +379,7 @@ static void __insert_vmap_area(struct vmap_area *va)
 			BUG();
 	}
 
+	//将va插入到树上
 	rb_link_node(&va->rb_node, parent, p);
 	rb_insert_color(&va->rb_node, &vmap_area_root);
 
@@ -411,6 +413,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	struct vmap_area *first;
 
 	BUG_ON(!size);
+	//size必须为页的整数倍
 	BUG_ON(offset_in_page(size));
 	BUG_ON(!is_power_of_2(align));
 
@@ -462,6 +465,7 @@ nocache:
 	} else {
 		addr = ALIGN(vstart, align);
 		if (addr + size < addr)
+		    //防止overflow
 			goto overflow;
 
 		n = vmap_area_root.rb_node;
@@ -473,7 +477,7 @@ nocache:
 			if (tmp->va_end >= addr) {
 				first = tmp;
 				if (tmp->va_start <= addr)
-					break;
+					break;//addr地址被tmp包含了
 				n = n->rb_left;
 			} else
 				n = n->rb_right;
@@ -505,6 +509,7 @@ found:
 	if (addr + size > vend || addr < vstart)
 		goto overflow;
 
+	//构造va
 	va->va_start = addr;
 	va->va_end = addr + size;
 	va->flags = 0;
@@ -1385,6 +1390,7 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	BUG_ON(in_interrupt());
 	size = PAGE_ALIGN(size);
 	if (unlikely(!size))
+	    //如果申请页数为0，则返回NULL
 		return NULL;
 
 	if (flags & VM_IOREMAP)
@@ -1395,15 +1401,18 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 	if (unlikely(!area))
 		return NULL;
 
+	//没有没有明确指出不开启guard，则默认增加一页
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
 
+	//构造对应的va结构体，并插入到合适位置
 	va = alloc_vmap_area(size, align, start, end, node, gfp_mask);
 	if (IS_ERR(va)) {
 		kfree(area);
 		return NULL;
 	}
 
+	//通过va构造并返回area
 	setup_vmalloc_vm(area, va, flags, caller);
 
 	return area;
@@ -1684,24 +1693,30 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 					0 :
 					__GFP_HIGHMEM;
 
+	//获得area所需要的页数目
 	nr_pages = get_vm_area_size(area) >> PAGE_SHIFT;
 	array_size = (nr_pages * sizeof(struct page *));
 
 	area->nr_pages = nr_pages;
+	//为pages指针数组准备内存
 	/* Please note that the recursion is strictly bounded. */
 	if (array_size > PAGE_SIZE) {
+	    //pages指针数组需要内存大于一页，为其申请相应的内存
 		pages = __vmalloc_node(array_size, 1, nested_gfp|highmem_mask,
 				PAGE_KERNEL, node, area->caller);
 	} else {
+	    //所需要的内存小于一页，通过kmalloc申请小块内存
 		pages = kmalloc_node(array_size, nested_gfp, node);
 	}
 	area->pages = pages;
 	if (!area->pages) {
+	    //申请pages指针数组失败
 		remove_vm_area(area->addr);
 		kfree(area);
 		return NULL;
 	}
 
+	//为每个page申请内存（通过alloc_page申请一个page页）
 	for (i = 0; i < area->nr_pages; i++) {
 		struct page *page;
 
@@ -1759,12 +1774,15 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 	void *addr;
 	unsigned long real_size = size;
 
+	//将size按页大小对齐
 	size = PAGE_ALIGN(size);
 	if (!size || (size >> PAGE_SHIFT) > totalram_pages())
+	    //页数为0或者页数过大
 		goto fail;
 
+	//产生area
 	area = __get_vm_area_node(size, align, VM_ALLOC | VM_UNINITIALIZED |
-				vm_flags, start, end, node, gfp_mask, caller);
+				vm_flags, start/*起始地址*/, end/*终止地址*/, node, gfp_mask, caller);
 	if (!area)
 		goto fail;
 

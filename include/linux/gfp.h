@@ -478,7 +478,7 @@ __alloc_pages(gfp_t gfp_mask, unsigned int order, int preferred_nid)
  * online. For more general interface, see alloc_pages_node().
  */
 static inline struct page *
-__alloc_pages_node(int nid/*申请内存的node*/, gfp_t gfp_mask, unsigned int order)
+__alloc_pages_node(int nid/*申请内存的node*/, gfp_t gfp_mask/*标记位*/, unsigned int order)
 {
     //校验node id及mask
 	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);
@@ -492,10 +492,10 @@ __alloc_pages_node(int nid/*申请内存的node*/, gfp_t gfp_mask, unsigned int 
  * prefer the current CPU's closest node. Otherwise node must be valid and
  * online.
  */
-static inline struct page *alloc_pages_node(int nid, gfp_t gfp_mask,
-						unsigned int order)
+static inline struct page *alloc_pages_node(int nid/*内存对应的node*/, gfp_t gfp_mask/*标记位*/,
+						unsigned int order/*内存大小的对数，log2(N)*/)
 {
-	//优先使用当前cpu对应的numa node id
+	//如未指定node,优先使用当前cpu对应的numa node id
 	if (nid == NUMA_NO_NODE)
 		nid = numa_mem_id();
 

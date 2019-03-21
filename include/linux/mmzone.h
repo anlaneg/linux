@@ -94,7 +94,7 @@ extern int page_group_by_mobility_disabled;
 			PB_migrate_end, MIGRATETYPE_MASK)
 
 struct free_area {
-	struct list_head	free_list[MIGRATE_TYPES];
+	struct list_head	free_list[MIGRATE_TYPES];//按不同类型划分的空闲链表
 	unsigned long		nr_free;//空闲的page数目
 };
 
@@ -457,7 +457,7 @@ struct zone {
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
-	struct free_area	free_area[MAX_ORDER];
+	struct free_area	free_area[MAX_ORDER];//不同大小的空间area
 
 	/* zone flags, see below */
 	unsigned long		flags;
