@@ -29,12 +29,12 @@
  * supports 3 memory models.
  */
 #if defined(CONFIG_FLATMEM)
-
+//平坦型内存模型
 #define __pfn_to_page(pfn)	(mem_map + ((pfn) - ARCH_PFN_OFFSET))
 #define __page_to_pfn(page)	((unsigned long)((page) - mem_map) + \
 				 ARCH_PFN_OFFSET)
 #elif defined(CONFIG_DISCONTIGMEM)
-
+//非连续型内存模型
 #define __pfn_to_page(pfn)			\
 ({	unsigned long __pfn = (pfn);		\
 	unsigned long __nid = arch_pfn_to_nid(__pfn);  \
@@ -75,10 +75,14 @@
 /*
  * Convert a physical address to a Page Frame Number and back
  */
+//由物理地址获得物理页帧（直接移除掉page offset字段即可）
 #define	__phys_to_pfn(paddr)	PHYS_PFN(paddr)
+//由物理页帧获得页首物理地址
 #define	__pfn_to_phys(pfn)	PFN_PHYS(pfn)
 
+//page地址到物理页帧编号
 #define page_to_pfn __page_to_pfn
+//页帧到page地址
 #define pfn_to_page __pfn_to_page
 
 #endif /* __ASSEMBLY__ */

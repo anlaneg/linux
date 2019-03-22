@@ -62,6 +62,7 @@ static inline void __page_ref_unfreeze(struct page *page, int v)
 
 #endif
 
+//获取页的引用计数
 static inline int page_ref_count(struct page *page)
 {
 	return atomic_read(&page->_refcount);
@@ -72,6 +73,7 @@ static inline int page_count(struct page *page)
 	return atomic_read(&compound_head(page)->_refcount);
 }
 
+//设置页的引用计数
 static inline void set_page_count(struct page *page, int v)
 {
 	atomic_set(&page->_refcount, v);
@@ -83,6 +85,7 @@ static inline void set_page_count(struct page *page, int v)
  * Setup the page count before being freed into the page allocator for
  * the first time (boot or memory hotplug)
  */
+//将页的引用计数置为1
 static inline void init_page_count(struct page *page)
 {
 	set_page_count(page, 1);

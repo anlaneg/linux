@@ -82,7 +82,7 @@ struct page {
 			 * pgdat->lru_lock.  Sometimes used as a generic list
 			 * by the page owner.
 			 */
-			struct list_head lru;
+			struct list_head lru;//页rcu节点
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
 			struct address_space *mapping;
 			//页编号（对应文件的页号）
@@ -187,7 +187,7 @@ struct page {
 	};
 
 	/* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */
-	atomic_t _refcount;
+	atomic_t _refcount;//页的引用计数
 
 #ifdef CONFIG_MEMCG
 	struct mem_cgroup *mem_cgroup;

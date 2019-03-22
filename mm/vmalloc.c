@@ -1720,6 +1720,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	for (i = 0; i < area->nr_pages; i++) {
 		struct page *page;
 
+		//申请一个page
 		if (node == NUMA_NO_NODE)
 			page = alloc_page(alloc_mask|highmem_mask);
 		else
@@ -1730,6 +1731,8 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 			area->nr_pages = i;
 			goto fail;
 		}
+
+		//设置申请到的page
 		area->pages[i] = page;
 		if (gfpflags_allow_blocking(gfp_mask|highmem_mask))
 			cond_resched();

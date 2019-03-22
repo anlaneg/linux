@@ -223,6 +223,7 @@ int sysctl_lowmem_reserve_ratio[MAX_NR_ZONES] = {
 
 EXPORT_SYMBOL(totalram_pages);
 
+//各zone索引对应的zone类型名称
 static char * const zone_names[MAX_NR_ZONES] = {
 #ifdef CONFIG_ZONE_DMA
 	 "DMA",
@@ -269,9 +270,9 @@ int user_min_free_kbytes = -1;
 int watermark_boost_factor __read_mostly = 15000;
 int watermark_scale_factor = 10;
 
-static unsigned long nr_kernel_pages __initdata;
-static unsigned long nr_all_pages __initdata;
-static unsigned long dma_reserve __initdata;
+static unsigned long nr_kernel_pages __initdata;//kernel可以使用的总页数
+static unsigned long nr_all_pages __initdata;//可使用的总页数
+static unsigned long dma_reserve __initdata;//dma需要预留的内存
 
 #ifdef CONFIG_HAVE_MEMBLOCK_NODE_MAP
 static unsigned long arch_zone_lowest_possible_pfn[MAX_NR_ZONES] __initdata;
@@ -1274,9 +1275,10 @@ static void free_one_page(struct zone *zone,
 static void __meminit __init_single_page(struct page *page, unsigned long pfn,
 				unsigned long zone, int nid)
 {
+    //page结构体清0
 	mm_zero_struct_page(page);
 	set_page_links(page, zone, nid, pfn);
-	init_page_count(page);
+	init_page_count(page);//初始化页的引用计数
 	page_mapcount_reset(page);
 	page_cpupid_reset_last(page);
 	page_kasan_tag_reset(page);
@@ -4596,7 +4598,7 @@ static inline void finalise_ac(gfp_t gfp_mask, struct alloc_context *ac)
  * This is the 'heart' of the zoned buddy allocator.
  */
 struct page *
-__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order, int preferred_nid/*优先选择的node id*/,
+__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order/*page数目-1*/, int preferred_nid/*优先选择的node id*/,
 							nodemask_t *nodemask)
 {
 	struct page *page;
@@ -5745,8 +5747,8 @@ overlap_memmap_init(unsigned long zone, unsigned long *pfn)
  * up by memblock_free_all() once the early boot process is
  * done. Non-atomic initialization, single-pass.
  */
-void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
-		unsigned long start_pfn, enum memmap_context context,
+void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone/*zone索引号*/,
+		unsigned long start_pfn/*zone起始页帧编号*/, enum memmap_context context,
 		struct vmem_altmap *altmap)
 {
 	unsigned long pfn, end_pfn = start_pfn + size;
@@ -5773,6 +5775,7 @@ void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 	}
 #endif
 
+	//初始化start_pfn,end_pfn对应的page结构体
 	for (pfn = start_pfn; pfn < end_pfn; pfn++) {
 		/*
 		 * There can be holes in boot-time mem_map[]s handed to this
@@ -5789,6 +5792,7 @@ void __meminit memmap_init_zone(unsigned long size, int nid, unsigned long zone,
 				break;
 		}
 
+		//由页帧号转为页首地址（page对应的内存是直接映射，故这里没有申请之类的操作）
 		page = pfn_to_page(pfn);
 		__init_single_page(page, pfn, zone, nid);
 		if (context == MEMMAP_HOTPLUG)
@@ -5891,14 +5895,15 @@ void __ref memmap_init_zone_device(struct zone *zone,
 static void __meminit zone_init_free_lists(struct zone *zone)
 {
 	unsigned int order, t;
+	//针对每种migratetype,order初始化zone的free_list
 	for_each_migratetype_order(order, t) {
 		INIT_LIST_HEAD(&zone->free_area[order].free_list[t]);
 		zone->free_area[order].nr_free = 0;
 	}
 }
 
-void __meminit __weak memmap_init(unsigned long size, int nid,
-				  unsigned long zone, unsigned long start_pfn)
+void __meminit __weak memmap_init(unsigned long size/*zone上spanned大小*/, int nid/*zone所属node id*/,
+				  unsigned long zone/*zone索引号*/, unsigned long start_pfn/*zone开始的页帧号*/)
 {
 	memmap_init_zone(size, nid, zone, start_pfn, MEMMAP_EARLY, NULL);
 }
@@ -6076,6 +6081,7 @@ static __meminit void zone_pcp_init(struct zone *zone)
 					 zone_batchsize(zone));
 }
 
+//初始化zone中各order area的free list
 void __meminit init_currently_empty_zone(struct zone *zone,
 					unsigned long zone_start_pfn,
 					unsigned long size)
@@ -6083,9 +6089,11 @@ void __meminit init_currently_empty_zone(struct zone *zone,
 	struct pglist_data *pgdat = zone->zone_pgdat;
 	int zone_idx = zone_idx(zone) + 1;
 
+	//zone索引号已大于pgdat记录的，故更新pgdat
 	if (zone_idx > pgdat->nr_zones)
 		pgdat->nr_zones = zone_idx;
 
+	//zone开始的页帧编号
 	zone->zone_start_pfn = zone_start_pfn;
 
 	mminit_dprintk(MMINIT_TRACE, "memmap_init",
@@ -6094,6 +6102,7 @@ void __meminit init_currently_empty_zone(struct zone *zone,
 			(unsigned long)zone_idx(zone),
 			zone_start_pfn, (zone_start_pfn + size));
 
+	//初始化zone中各order area的free_list
 	zone_init_free_lists(zone);
 	zone->initialized = 1;
 }
@@ -6525,6 +6534,7 @@ void __init set_pageblock_order(void)
 
 #endif /* CONFIG_HUGETLB_PAGE_SIZE_VARIABLE */
 
+//计算我们描述这些内存页信息（用page结构体）需要占用多少个内存页
 static unsigned long __init calc_memmap_size(unsigned long spanned_pages,
 						unsigned long present_pages)
 {
@@ -6542,6 +6552,7 @@ static unsigned long __init calc_memmap_size(unsigned long spanned_pages,
 	    IS_ENABLED(CONFIG_SPARSEMEM))
 		pages = present_pages;
 
+	//有pages个页，每个页需要使用一个struct page来描述它，计算这个描述所需占用的内存页数目
 	return PAGE_ALIGN(pages * sizeof(struct page)) >> PAGE_SHIFT;
 }
 
@@ -6583,6 +6594,7 @@ static void __meminit pgdat_init_internals(struct pglist_data *pgdat)
 static void __meminit zone_init_internals(struct zone *zone, enum zone_type idx, int nid,
 							unsigned long remaining_pages)
 {
+    //指出本zone受管理页数
 	atomic_long_set(&zone->managed_pages, remaining_pages);
 	zone_set_nid(zone, nid);
 	zone->name = zone_names[idx];
@@ -6629,6 +6641,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 	pgdat->per_cpu_nodestats = &boot_nodestats;
 
 	for (j = 0; j < MAX_NR_ZONES; j++) {
+	    //取pgdat中的指定索引的zone
 		struct zone *zone = pgdat->node_zones + j;
 		unsigned long size, freesize, memmap_pages;
 		unsigned long zone_start_pfn = zone->zone_start_pfn;
@@ -6641,26 +6654,31 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 		 * is used by this zone for memmap. This affects the watermark
 		 * and per-cpu initialisations
 		 */
+		//获得此zone需要memmap pages所占用的页数
 		memmap_pages = calc_memmap_size(size, freesize);
 		if (!is_highmem_idx(j)) {
 			if (freesize >= memmap_pages) {
+			    //可使用的内存比需要pages占用的内存大，通过减少可使用的内存，预留memap_pages内存
 				freesize -= memmap_pages;
 				if (memmap_pages)
 					printk(KERN_DEBUG
 					       "  %s zone: %lu pages used for memmap\n",
 					       zone_names[j], memmap_pages);
 			} else
+			    //这种情况下内存过小，不能使用
 				pr_warn("  %s zone: %lu pages exceeds freesize %lu\n",
 					zone_names[j], memmap_pages, freesize);
 		}
 
 		/* Account for reserved pages */
+		//针对dma zone,减去为dma预留一部分内存
 		if (j == 0 && freesize > dma_reserve) {
 			freesize -= dma_reserve;
 			printk(KERN_DEBUG "  %s zone: %lu pages reserved\n",
 					zone_names[0], dma_reserve);
 		}
 
+		//增加kernel可使用的页数
 		if (!is_highmem_idx(j))
 			nr_kernel_pages += freesize;
 		/* Charge for highmem memmap if there are enough kernel pages */
@@ -6673,6 +6691,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 		 * when the bootmem allocator frees pages into the buddy system.
 		 * And all highmem pages will be managed by the buddy system.
 		 */
+		//初始化zone锁，可管理页数等信息
 		zone_init_internals(zone, j, nid, freesize);
 
 		if (!size)
@@ -6681,6 +6700,7 @@ static void __init free_area_init_core(struct pglist_data *pgdat)
 		set_pageblock_order();
 		setup_usemap(pgdat, zone, zone_start_pfn, size);
 		init_currently_empty_zone(zone, zone_start_pfn, size);
+		//初始化zone中地址对应的page结构体
 		memmap_init(size, nid, j, zone_start_pfn);
 	}
 }
@@ -6749,6 +6769,7 @@ void __init free_area_init_node(int nid, unsigned long *zones_size,
 				   unsigned long node_start_pfn,
 				   unsigned long *zholes_size)
 {
+    //对指定node对应的pgdata
 	pg_data_t *pgdat = NODE_DATA(nid);
 	unsigned long start_pfn = 0;
 	unsigned long end_pfn = 0;

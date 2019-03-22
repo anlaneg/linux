@@ -380,9 +380,9 @@ struct zone {
 	long lowmem_reserve[MAX_NR_ZONES];
 
 #ifdef CONFIG_NUMA
-	int node;
+	int node;//本zone所属numa node编号
 #endif
-	struct pglist_data	*zone_pgdat;
+	struct pglist_data	*zone_pgdat;//此属所属的pglist_data
 	struct per_cpu_pageset __percpu *pageset;
 
 #ifndef CONFIG_SPARSEMEM
@@ -394,7 +394,7 @@ struct zone {
 #endif /* CONFIG_SPARSEMEM */
 
 	/* zone_start_pfn == zone_start_paddr >> PAGE_SHIFT */
-	unsigned long		zone_start_pfn;
+	unsigned long		zone_start_pfn;//此zone开始的页帧编号
 
 	/*
 	 * spanned_pages is the total pages spanned by the zone, including
@@ -431,11 +431,14 @@ struct zone {
 	 * mem_hotplug_begin/end(). Any reader who can't tolerant drift of
 	 * present_pages should get_online_mems() to get a stable value.
 	 */
+	//managed_pages是可被管理的页，通过present_pages减取reserved_pages后获得
 	atomic_long_t		managed_pages;
+	//spanned页数是通过end_pfn-start_pfn直接算得的，没有去除hole的情况
 	unsigned long		spanned_pages;
+	//present_pages页数是spanned_pages在去除hole占用页数之后的情况
 	unsigned long		present_pages;
 
-	const char		*name;
+	const char		*name;//zone类型名称，例如“DMA”
 
 #ifdef CONFIG_MEMORY_ISOLATION
 	/*
@@ -451,13 +454,13 @@ struct zone {
 	seqlock_t		span_seqlock;
 #endif
 
-	int initialized;
+	int initialized;//表明此zone已初始化
 
 	/* Write-intensive fields used from the page allocator */
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
-	struct free_area	free_area[MAX_ORDER];//不同大小的空间area
+	struct free_area	free_area[MAX_ORDER];//不同大小(order)的空间area
 
 	/* zone flags, see below */
 	unsigned long		flags;
@@ -633,9 +636,9 @@ extern struct page *mem_map;
  */
 struct bootmem_data;
 typedef struct pglist_data {
-	struct zone node_zones[MAX_NR_ZONES];
+	struct zone node_zones[MAX_NR_ZONES];//记录各个zone
 	struct zonelist node_zonelists[MAX_ZONELISTS];
-	int nr_zones;
+	int nr_zones;//zone数目
 #ifdef CONFIG_FLAT_NODE_MEM_MAP	/* means !SPARSEMEM */
 	struct page *node_mem_map;
 #ifdef CONFIG_PAGE_EXTENSION
@@ -659,7 +662,7 @@ typedef struct pglist_data {
 	unsigned long node_present_pages; /* total number of physical pages */
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
-	int node_id;
+	int node_id;//此pglist_dat属性哪个numa id
 	wait_queue_head_t kswapd_wait;
 	wait_queue_head_t pfmemalloc_wait;
 	struct task_struct *kswapd;	/* Protected by
@@ -800,6 +803,7 @@ static inline int local_memory_node(int node_id) { return node_id; };
 /*
  * zone_idx() returns 0 for the ZONE_DMA zone, 1 for the ZONE_NORMAL zone, etc.
  */
+//取给定zone的索引号
 #define zone_idx(zone)		((zone) - (zone)->zone_pgdat->node_zones)
 
 #ifdef CONFIG_ZONE_DEVICE

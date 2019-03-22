@@ -128,6 +128,7 @@ extern int mmap_rnd_compat_bits __read_mostly;
  * zeroing by defining this macro in <asm/pgtable.h>.
  */
 #ifndef mm_zero_struct_page
+//将page结构体清0
 #define mm_zero_struct_page(pp)  ((void)memset((pp), 0, sizeof(struct page)))
 #endif
 
@@ -863,7 +864,9 @@ vm_fault_t finish_mkwrite_fault(struct vm_fault *vmf);
 #error SECTIONS_WIDTH+NODES_WIDTH+ZONES_WIDTH > BITS_PER_LONG - NR_PAGEFLAGS
 #endif
 
+//zone占用的bit mask(与zone占用的bit数有关）
 #define ZONES_MASK		((1UL << ZONES_WIDTH) - 1)
+//node占用bit
 #define NODES_MASK		((1UL << NODES_WIDTH) - 1)
 #define SECTIONS_MASK		((1UL << SECTIONS_WIDTH) - 1)
 #define LAST_CPUPID_MASK	((1UL << LAST_CPUPID_SHIFT) - 1)
@@ -1184,16 +1187,21 @@ static inline unsigned long page_to_section(const struct page *page)
 
 static inline void set_page_zone(struct page *page, enum zone_type zone)
 {
+    //将zone对应的bit清0
 	page->flags &= ~(ZONES_MASK << ZONES_PGSHIFT);
+	//在zone对应的bit上设置zone
 	page->flags |= (zone & ZONES_MASK) << ZONES_PGSHIFT;
 }
 
 static inline void set_page_node(struct page *page, unsigned long node)
 {
+    //将node对应的bit清0
 	page->flags &= ~(NODES_MASK << NODES_PGSHIFT);
+	//在node对应的bit上设置node编号
 	page->flags |= (node & NODES_MASK) << NODES_PGSHIFT;
 }
 
+//使page记录其从属的zone,node,pfn
 static inline void set_page_links(struct page *page, enum zone_type zone,
 	unsigned long node, unsigned long pfn)
 {
