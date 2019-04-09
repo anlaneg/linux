@@ -1002,7 +1002,8 @@ int smb3_validate_negotiate(const unsigned int xid, struct cifs_tcon *tcon)
 
 	rc = SMB2_ioctl(xid, tcon, NO_FILE_ID, NO_FILE_ID,
 		FSCTL_VALIDATE_NEGOTIATE_INFO, true /* is_fsctl */,
-		(char *)pneg_inbuf, inbuflen, (char **)&pneg_rsp, &rsplen);
+		(char *)pneg_inbuf, inbuflen, CIFSMaxBufSize,
+		(char **)&pneg_rsp, &rsplen);
 	if (rc == -EOPNOTSUPP) {
 		/*
 		 * Old Windows versions or Netapp SMB server can return
@@ -1628,9 +1629,16 @@ SMB2_tcon(const unsigned int xid, struct cifs_ses *ses, const char *tree,
 	iov[1].iov_base = unc_path;
 	iov[1].iov_len = unc_path_len;
 
-	/* 3.11 tcon req must be signed if not encrypted. See MS-SMB2 3.2.4.1.1 */
+	/*
+	 * 3.11 tcon req must be signed if not encrypted. See MS-SMB2 3.2.4.1.1
+	 * unless it is guest or anonymous user. See MS-SMB2 3.2.5.3.1
+	 * (Samba servers don't always set the flag so also check if null user)
+	 */
 	if ((ses->server->dialect == SMB311_PROT_ID) &&
-	    !smb3_encryption_required(tcon))
+	    !smb3_encryption_required(tcon) &&
+	    !(ses->session_flags &
+		    (SMB2_SESSION_FLAG_IS_GUEST|SMB2_SESSION_FLAG_IS_NULL)) &&
+	    ((ses->user_name != NULL) || (ses->sectype == Kerberos)))
 		req->sync_hdr.Flags |= SMB2_FLAGS_SIGNED;
 
 	memset(&rqst, 0, sizeof(struct smb_rqst));
@@ -1797,9 +1805,10 @@ create_reconnect_durable_buf(struct cifs_fid *fid)
 	return buf;
 }
 
-static __u8
-parse_lease_state(struct TCP_Server_Info *server, struct smb2_create_rsp *rsp,
-		  unsigned int *epoch, char *lease_key)
+__u8
+smb2_parse_lease_state(struct TCP_Server_Info *server,
+		       struct smb2_create_rsp *rsp,
+		       unsigned int *epoch, char *lease_key)
 {
 	char *data_offset;
 	struct create_context *cc;
@@ -1850,8 +1859,9 @@ add_lease_context(struct TCP_Server_Info *server, struct kvec *iov,
 }
 
 static struct create_durable_v2 *
-create_durable_v2_buf(struct cifs_fid *pfid)
+create_durable_v2_buf(struct cifs_open_parms *oparms)
 {
+	struct cifs_fid *pfid = oparms->fid;
 	struct create_durable_v2 *buf;
 
 	buf = kzalloc(sizeof(struct create_durable_v2), GFP_KERNEL);
@@ -1865,7 +1875,14 @@ create_durable_v2_buf(struct cifs_fid *pfid)
 				(struct create_durable_v2, Name));
 	buf->ccontext.NameLength = cpu_to_le16(4);
 
-	buf->dcontext.Timeout = 0; /* Should this be configurable by workload */
+	/*
+	 * NB: Handle timeout defaults to 0, which allows server to choose
+	 * (most servers default to 120 seconds) and most clients default to 0.
+	 * This can be overridden at mount ("handletimeout=") if the user wants
+	 * a different persistent (or resilient) handle timeout for all opens
+	 * opens on a particular SMB3 mount.
+	 */
+	buf->dcontext.Timeout = cpu_to_le32(oparms->tcon->handle_timeout);
 	buf->dcontext.Flags = cpu_to_le32(SMB2_DHANDLE_FLAG_PERSISTENT);
 	generate_random_uuid(buf->dcontext.CreateGuid);
 	memcpy(pfid->create_guid, buf->dcontext.CreateGuid, 16);
@@ -1918,7 +1935,7 @@ add_durable_v2_context(struct kvec *iov, unsigned int *num_iovec,
 	struct smb2_create_req *req = iov[0].iov_base;
 	unsigned int num = *num_iovec;
 
-	iov[num].iov_base = create_durable_v2_buf(oparms->fid);
+	iov[num].iov_base = create_durable_v2_buf(oparms);
 	if (iov[num].iov_base == NULL)
 		return -ENOMEM;
 	iov[num].iov_len = sizeof(struct create_durable_v2);
@@ -2456,8 +2473,9 @@ SMB2_open(const unsigned int xid, struct cifs_open_parms *oparms, __le16 *path,
 	}
 
 	if (rsp->OplockLevel == SMB2_OPLOCK_LEVEL_LEASE)
-		*oplock = parse_lease_state(server, rsp, &oparms->fid->epoch,
-					    oparms->fid->lease_key);
+		*oplock = smb2_parse_lease_state(server, rsp,
+						 &oparms->fid->epoch,
+						 oparms->fid->lease_key);
 	else
 		*oplock = rsp->OplockLevel;
 creat_exit:
@@ -2466,26 +2484,105 @@ creat_exit:
 	return rc;
 }
 
+int
+SMB2_ioctl_init(struct cifs_tcon *tcon, struct smb_rqst *rqst,
+		u64 persistent_fid, u64 volatile_fid, u32 opcode,
+		bool is_fsctl, char *in_data, u32 indatalen,
+		__u32 max_response_size)
+{
+	struct smb2_ioctl_req *req;
+	struct kvec *iov = rqst->rq_iov;
+	unsigned int total_len;
+	int rc;
+
+	rc = smb2_plain_req_init(SMB2_IOCTL, tcon, (void **) &req, &total_len);
+	if (rc)
+		return rc;
+
+	req->CtlCode = cpu_to_le32(opcode);
+	req->PersistentFileId = persistent_fid;
+	req->VolatileFileId = volatile_fid;
+
+	iov[0].iov_base = (char *)req;
+	/*
+	 * If no input data, the size of ioctl struct in
+	 * protocol spec still includes a 1 byte data buffer,
+	 * but if input data passed to ioctl, we do not
+	 * want to double count this, so we do not send
+	 * the dummy one byte of data in iovec[0] if sending
+	 * input data (in iovec[1]).
+	 */
+	if (indatalen) {
+		req->InputCount = cpu_to_le32(indatalen);
+		/* do not set InputOffset if no input data */
+		req->InputOffset =
+		       cpu_to_le32(offsetof(struct smb2_ioctl_req, Buffer));
+		rqst->rq_nvec = 2;
+		iov[0].iov_len = total_len - 1;
+		iov[1].iov_base = in_data;
+		iov[1].iov_len = indatalen;
+	} else {
+		rqst->rq_nvec = 1;
+		iov[0].iov_len = total_len;
+	}
+
+	req->OutputOffset = 0;
+	req->OutputCount = 0; /* MBZ */
+
+	/*
+	 * In most cases max_response_size is set to 16K (CIFSMaxBufSize)
+	 * We Could increase default MaxOutputResponse, but that could require
+	 * more credits. Windows typically sets this smaller, but for some
+	 * ioctls it may be useful to allow server to send more. No point
+	 * limiting what the server can send as long as fits in one credit
+	 * We can not handle more than CIFS_MAX_BUF_SIZE yet but may want
+	 * to increase this limit up in the future.
+	 * Note that for snapshot queries that servers like Azure expect that
+	 * the first query be minimal size (and just used to get the number/size
+	 * of previous versions) so response size must be specified as EXACTLY
+	 * sizeof(struct snapshot_array) which is 16 when rounded up to multiple
+	 * of eight bytes.  Currently that is the only case where we set max
+	 * response size smaller.
+	 */
+	req->MaxOutputResponse = cpu_to_le32(max_response_size);
+
+	if (is_fsctl)
+		req->Flags = cpu_to_le32(SMB2_0_IOCTL_IS_FSCTL);
+	else
+		req->Flags = 0;
+
+	/* validate negotiate request must be signed - see MS-SMB2 3.2.5.5 */
+	if (opcode == FSCTL_VALIDATE_NEGOTIATE_INFO)
+		req->sync_hdr.Flags |= SMB2_FLAGS_SIGNED;
+
+	return 0;
+}
+
+void
+SMB2_ioctl_free(struct smb_rqst *rqst)
+{
+	if (rqst && rqst->rq_iov)
+		cifs_small_buf_release(rqst->rq_iov[0].iov_base); /* request */
+}
+
+
 /*
  *	SMB2 IOCTL is used for both IOCTLs and FSCTLs
  */
 int
 SMB2_ioctl(const unsigned int xid, struct cifs_tcon *tcon, u64 persistent_fid,
 	   u64 volatile_fid, u32 opcode, bool is_fsctl,
-	   char *in_data, u32 indatalen,
+	   char *in_data, u32 indatalen, u32 max_out_data_len,
 	   char **out_data, u32 *plen /* returned data len */)
 {
 	struct smb_rqst rqst;
-	struct smb2_ioctl_req *req;
-	struct smb2_ioctl_rsp *rsp;
+	struct smb2_ioctl_rsp *rsp = NULL;
 	struct cifs_ses *ses;
-	struct kvec iov[2];
-	struct kvec rsp_iov;
-	int resp_buftype;
-	int n_iov;
+	struct kvec iov[SMB2_IOCTL_IOV_SIZE];
+	struct kvec rsp_iov = {NULL, 0};
+	int resp_buftype = CIFS_NO_BUFFER;
 	int rc = 0;
 	int flags = 0;
-	unsigned int total_len;
 
 	cifs_dbg(FYI, "SMB2 IOCTL\n");
 
@@ -2504,75 +2601,21 @@ SMB2_ioctl(const unsigned int xid, struct cifs_tcon *tcon, u64 persistent_fid,
 	if (!ses || !(ses->server))
 		return -EIO;
 
-	rc = smb2_plain_req_init(SMB2_IOCTL, tcon, (void **) &req, &total_len);
-	if (rc)
-		return rc;
-
 	if (smb3_encryption_required(tcon))
 		flags |= CIFS_TRANSFORM_REQ;
 
-	req->CtlCode = cpu_to_le32(opcode);
-	req->PersistentFileId = persistent_fid;
-	req->VolatileFileId = volatile_fid;
-
-	if (indatalen) {
-		req->InputCount = cpu_to_le32(indatalen);
-		/* do not set InputOffset if no input data */
-		req->InputOffset =
-		       cpu_to_le32(offsetof(struct smb2_ioctl_req, Buffer));
-		iov[1].iov_base = in_data;
-		iov[1].iov_len = indatalen;
-		n_iov = 2;
-	} else
-		n_iov = 1;
-
-	req->OutputOffset = 0;
-	req->OutputCount = 0; /* MBZ */
-
-	/*
-	 * Could increase MaxOutputResponse, but that would require more
-	 * than one credit. Windows typically sets this smaller, but for some
-	 * ioctls it may be useful to allow server to send more. No point
-	 * limiting what the server can send as long as fits in one credit
-	 * Unfortunately - we can not handle more than CIFS_MAX_MSG_SIZE
-	 * (by default, note that it can be overridden to make max larger)
-	 * in responses (except for read responses which can be bigger.
-	 * We may want to bump this limit up
-	 */
-	req->MaxOutputResponse = cpu_to_le32(CIFSMaxBufSize);
-
-	if (is_fsctl)
-		req->Flags = cpu_to_le32(SMB2_0_IOCTL_IS_FSCTL);
-	else
-		req->Flags = 0;
-
-	iov[0].iov_base = (char *)req;
-
-	/*
-	 * If no input data, the size of ioctl struct in
-	 * protocol spec still includes a 1 byte data buffer,
-	 * but if input data passed to ioctl, we do not
-	 * want to double count this, so we do not send
-	 * the dummy one byte of data in iovec[0] if sending
-	 * input data (in iovec[1]).
-	 */
-
-	if (indatalen) {
-		iov[0].iov_len = total_len - 1;
-	} else
-		iov[0].iov_len = total_len;
-
-	/* validate negotiate request must be signed - see MS-SMB2 3.2.5.5 */
-	if (opcode == FSCTL_VALIDATE_NEGOTIATE_INFO)
-		req->sync_hdr.Flags |= SMB2_FLAGS_SIGNED;
-
 	memset(&rqst, 0, sizeof(struct smb_rqst));
+	memset(&iov, 0, sizeof(iov));
 	rqst.rq_iov = iov;
-	rqst.rq_nvec = n_iov;
+	rqst.rq_nvec = SMB2_IOCTL_IOV_SIZE;
+
+	rc = SMB2_ioctl_init(tcon, &rqst, persistent_fid, volatile_fid, opcode,
+			     is_fsctl, in_data, indatalen, max_out_data_len);
+	if (rc)
+		goto ioctl_exit;
 
 	rc = cifs_send_recv(xid, ses, &rqst, &resp_buftype, flags,
 			    &rsp_iov);
-	cifs_small_buf_release(req);
 	rsp = (struct smb2_ioctl_rsp *)rsp_iov.iov_base;
 
 	if (rc != 0)
@@ -2622,6 +2665,7 @@ SMB2_ioctl(const unsigned int xid, struct cifs_tcon *tcon, u64 persistent_fid,
 	}
 
 ioctl_exit:
+	SMB2_ioctl_free(&rqst);
 	free_rsp_buf(resp_buftype, rsp);
 	return rc;
 }
@@ -2644,7 +2688,8 @@ SMB2_set_compression(const unsigned int xid, struct cifs_tcon *tcon,
 	rc = SMB2_ioctl(xid, tcon, persistent_fid, volatile_fid,
 			FSCTL_SET_COMPRESSION, true /* is_fsctl */,
 			(char *)&fsctl_input /* data input */,
-			2 /* in data len */, &ret_data /* out data */, NULL);
+			2 /* in data len */, CIFSMaxBufSize /* max out data */,
+			&ret_data /* out data */, NULL);
 
 	cifs_dbg(FYI, "set compression rc %d\n", rc);
 

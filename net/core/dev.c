@@ -5129,8 +5129,10 @@ static inline void __netif_receive_skb_list_ptype(struct list_head *head,
 		pt_prev->list_func(head, pt_prev, orig_dev);
 	else
 		//否则遍历拆解后传入
-		list_for_each_entry_safe(skb, next, head, list)
+		list_for_each_entry_safe(skb, next, head, list) {
+			skb_list_del_init(skb);
 			pt_prev->func(skb, skb->dev, pt_prev, orig_dev);
+		}
 }
 
 static void __netif_receive_skb_list_core(struct list_head *head, bool pfmemalloc)

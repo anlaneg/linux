@@ -492,8 +492,8 @@ static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t 
 }
 
 //调用写回调
-ssize_t __vfs_write(struct file *file, const char __user *p, size_t count,
-		    loff_t *pos)
+static ssize_t __vfs_write(struct file *file, const char __user *p,
+			   size_t count, loff_t *pos)
 {
 	//如果有write回调，则通过file的f_op的write函数进行写入
 	if (file->f_op->write)
@@ -579,13 +579,14 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 //获取上次读到哪个位置了
 static inline loff_t file_pos_read(struct file *file)
 {
-	return file->f_pos;
+	return file->f_mode & FMODE_STREAM ? 0 : file->f_pos;
 }
 
 //更新当前读到哪个位置了
 static inline void file_pos_write(struct file *file, loff_t pos)
 {
-	file->f_pos = pos;
+	if ((file->f_mode & FMODE_STREAM) == 0)
+		file->f_pos = pos;
 }
 
 //实现系统调用read
@@ -1267,6 +1268,9 @@ COMPAT_SYSCALL_DEFINE5(preadv64v2, unsigned long, fd,
 		const struct compat_iovec __user *,vec,
 		unsigned long, vlen, loff_t, pos, rwf_t, flags)
 {
+	if (pos == -1)
+		return do_compat_readv(fd, vec, vlen, flags);
+
 	return do_compat_preadv64(fd, vec, vlen, pos, flags);
 }
 #endif
@@ -1373,6 +1377,9 @@ COMPAT_SYSCALL_DEFINE5(pwritev64v2, unsigned long, fd,
 		const struct compat_iovec __user *,vec,
 		unsigned long, vlen, loff_t, pos, rwf_t, flags)
 {
+	if (pos == -1)
+		return do_compat_writev(fd, vec, vlen, flags);
+
 	return do_compat_pwritev64(fd, vec, vlen, pos, flags);
 }
 #endif

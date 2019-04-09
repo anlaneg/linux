@@ -60,6 +60,12 @@
 #define CIFS_MAX_ACTIMEO (1 << 30)
 
 /*
+ * Max persistent and resilient handle timeout (milliseconds).
+ * Windows durable max was 960000 (16 minutes)
+ */
+#define SMB3_MAX_HANDLE_TIMEOUT 960000
+
+/*
  * MAX_REQ is the maximum number of requests that WE will send
  * on one socket concurrently.
  */
@@ -479,6 +485,14 @@ struct smb_version_operations {
 				struct cifs_tcon *tcon,
 				__le16 *path, int is_dir,
 				unsigned long p);
+	/* make unix special files (block, char, fifo, socket) */
+	int (*make_node)(unsigned int xid,
+			 struct inode *inode,
+			 struct dentry *dentry,
+			 struct cifs_tcon *tcon,
+			 char *full_path,
+			 umode_t mode,
+			 dev_t device_number);
 };
 
 struct smb_version_values {
@@ -578,6 +592,7 @@ struct smb_vol {
 	struct nls_table *local_nls;
 	unsigned int echo_interval; /* echo interval in secs */
 	__u64 snapshot_time; /* needed for timewarp tokens */
+	__u32 handle_timeout; /* persistent and durable handle timeout in ms */
 	unsigned int max_credits; /* smb3 max_credits 10 < credits < 60000 */
 };
 
@@ -735,13 +750,13 @@ in_flight(struct TCP_Server_Info *server)
 }
 
 static inline bool
-has_credits(struct TCP_Server_Info *server, int *credits)
+has_credits(struct TCP_Server_Info *server, int *credits, int num_credits)
 {
 	int num;
 	spin_lock(&server->req_lock);
 	num = *credits;
 	spin_unlock(&server->req_lock);
-	return num > 0;
+	return num >= num_credits;
 }
 
 static inline void
@@ -962,11 +977,14 @@ cap_unix(struct cifs_ses *ses)
 
 struct cached_fid {
 	bool is_valid:1;	/* Do we have a useable root fid */
+	bool file_all_info_is_valid:1;
+
 	struct kref refcount;
 	struct cifs_fid *fid;
 	struct mutex fid_mutex;
 	struct cifs_tcon *tcon;
 	struct work_struct lease_break;
+	struct smb2_file_all_info file_all_info;
 };
 
 /*
@@ -1047,6 +1065,7 @@ struct cifs_tcon {
 	__u32 vol_serial_number;
 	__le64 vol_create_time;
 	__u64 snapshot_time; /* for timewarp tokens - timestamp of snapshot */
+	__u32 handle_timeout; /* persistent and durable handle timeout in ms */
 	__u32 ss_flags;		/* sector size flags */
 	__u32 perf_sector_size; /* best sector size for perf */
 	__u32 max_chunks;
@@ -1735,6 +1754,7 @@ require use of the stronger protocol */
  *  GlobalMid_Lock protects:
  *	list operations on pending_mid_q and oplockQ
  *      updates to XID counters, multiplex id  and SMB sequence numbers
+ *      list operations on global DnotifyReqList
  *  tcp_ses_lock protects:
  *	list operations on tcp and SMB session lists
  *  tcon->open_file_lock protects the list of open files hanging off the tcon

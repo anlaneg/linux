@@ -16,6 +16,7 @@
 #include <linux/module.h>
 #include <linux/slab.h>
 #include <linux/uaccess.h>
+#include <linux/fs_parser.h>
 
 /*
  * Handling of filesystem drivers list.
@@ -75,7 +76,11 @@ int register_filesystem(struct file_system_type * fs)
 	int res = 0;
 	struct file_system_type ** p;
 
-	BUG_ON(strchr(fs->name, '.'));//不容许名称中含'.'
+	if (fs->parameters && !fs_validate_description(fs->parameters))
+		return -EINVAL;
+
+	//不容许名称中含'.'
+	BUG_ON(strchr(fs->name, '.'));
 	if (fs->next)
 		return -EBUSY;//已被挂接在文件系统链上
 	write_lock(&file_systems_lock);
