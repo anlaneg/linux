@@ -1179,9 +1179,6 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 	return err;
 }
 
-<<<<<<< HEAD
-//创建sock,指定sock->type
-=======
 /**
  *	sock_create_lite - creates a socket
  *	@family: protocol family (AF_INET, ...)
@@ -1195,7 +1192,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
  *	This function internally uses GFP_KERNEL.
  */
 
->>>>>>> upstream/master
+//创建sock,指定sock->type
 int sock_create_lite(int family, int type, int protocol, struct socket **res)
 {
 	int err;
@@ -1324,9 +1321,6 @@ call_kill:
 }
 EXPORT_SYMBOL(sock_wake_async);
 
-<<<<<<< HEAD
-//根据family查找对应的net_proto_family,然后调用对应的协议句柄创建相应的socket
-=======
 /**
  *	__sock_create - creates a socket
  *	@net: net namespace
@@ -1342,7 +1336,7 @@ EXPORT_SYMBOL(sock_wake_async);
  *	This function internally uses GFP_KERNEL.
  */
 
->>>>>>> upstream/master
+//根据family查找对应的net_proto_family,然后调用对应的协议句柄创建相应的socket
 int __sock_create(struct net *net, int family, int type, int protocol,
 			 struct socket **res, int kern)
 {
