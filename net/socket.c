@@ -1469,9 +1469,6 @@ int sock_create(int family, int type, int protocol, struct socket **res)
 }
 EXPORT_SYMBOL(sock_create);
 
-<<<<<<< HEAD
-//kernel创建socket
-=======
 /**
  *	sock_create_kern - creates a socket (kernel space)
  *	@net: net namespace
@@ -1484,7 +1481,7 @@ EXPORT_SYMBOL(sock_create);
  *	Returns 0 or an error. This function internally uses GFP_KERNEL.
  */
 
->>>>>>> upstream/master
+//kernel创建socket
 int sock_create_kern(struct net *net, int family, int type, int protocol, struct socket **res)
 {
 	return __sock_create(net, family, type, protocol, res, 1);
