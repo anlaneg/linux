@@ -30,7 +30,7 @@ struct nf_conntrack_man {
 	union nf_inet_addr u3;
 	union nf_conntrack_man_proto u;
 	/* Layer 3 protocol */
-	u_int16_t l3num;
+	u_int16_t l3num;//3层协议号
 };
 
 /* This contains the information to distinguish a connection. */
@@ -65,10 +65,10 @@ struct nf_conntrack_tuple {
 		} u;
 
 		/* The protocol. */
-		u_int8_t protonum;
+		u_int8_t protonum;//l4层协议号
 
 		/* The direction (for tuplehash) */
-		u_int8_t dir;
+		u_int8_t dir;//元组方向
 	} dst;
 };
 

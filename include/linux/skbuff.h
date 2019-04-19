@@ -3496,6 +3496,8 @@ __wsum __skb_checksum(const struct sk_buff *skb, int offset, int len,
 __wsum skb_checksum(const struct sk_buff *skb, int offset, int len,
 		    __wsum csum);
 
+//如果data指针对应的数据自offset开始长度为len的数据是连续的，则直接返回指针，否则将这段数据copy到
+//buffer中，并返回buffer
 static inline void * __must_check
 __skb_header_pointer(const struct sk_buff *skb, int offset,
 		     int len, void *data, int hlen, void *buffer)

@@ -82,13 +82,13 @@ struct vport_portids {
  */
 struct vport {
 	struct net_device *dev;
-	struct datapath	*dp;
+	struct datapath	*dp;//vport对应的datapath
 	struct vport_portids __rcu *upcall_portids;
 	u16 port_no;
 
 	struct hlist_node hash_node;
 	struct hlist_node dp_hash_node;
-	const struct vport_ops *ops;
+	const struct vport_ops *ops;/*vport对应的ops*/
 
 	struct list_head detach_list;
 	struct rcu_head rcu;
@@ -105,14 +105,14 @@ struct vport {
  * @port_no: New vport's port number.
  */
 struct vport_parms {
-	const char *name;
-	enum ovs_vport_type type;
+	const char *name;//vport名称
+	enum ovs_vport_type type;//vport类型
 	struct nlattr *options;
 
 	/* For ovs_vport_alloc(). */
-	struct datapath *dp;
+	struct datapath *dp;//vport所属的datapath
 	u16 port_no;
-	struct nlattr *upcall_portids;
+	struct nlattr *upcall_portids;//upcall时使用的portid?
 };
 
 /**
@@ -132,15 +132,16 @@ struct vport_parms {
  * zero for dropped packets or negative for error.
  */
 struct vport_ops {
-	enum ovs_vport_type type;
+	enum ovs_vport_type type;//类别
 
 	/* Called with ovs_mutex. */
-	struct vport *(*create)(const struct vport_parms *);
-	void (*destroy)(struct vport *);
+	struct vport *(*create)(const struct vport_parms *);//指定类型port创建
+	void (*destroy)(struct vport *);//指定类型port销毁
 
 	int (*set_options)(struct vport *, struct nlattr *);
 	int (*get_options)(const struct vport *, struct sk_buff *);
 
+	//完在报文自对应的vport发送出去
 	netdev_tx_t (*send) (struct sk_buff *skb);
 	struct module *owner;
 	struct list_head list;

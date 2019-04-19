@@ -151,6 +151,7 @@ static void __table_instance_destroy(struct table_instance *ti)
 	kfree(ti);
 }
 
+//申请并初始化table_instance
 static struct table_instance *table_instance_alloc(int new_size)
 {
 	struct table_instance *ti = kmalloc(sizeof(*ti), GFP_KERNEL);
@@ -159,6 +160,7 @@ static struct table_instance *table_instance_alloc(int new_size)
 	if (!ti)
 		return NULL;
 
+	//初始化桶
 	ti->buckets = kvmalloc_array(new_size, sizeof(struct hlist_head),
 				     GFP_KERNEL);
 	if (!ti->buckets) {
@@ -172,11 +174,13 @@ static struct table_instance *table_instance_alloc(int new_size)
 	ti->n_buckets = new_size;
 	ti->node_ver = 0;
 	ti->keep_flows = false;
+	//生成hash_seed
 	get_random_bytes(&ti->hash_seed, sizeof(u32));
 
 	return ti;
 }
 
+//ovs流表初始化
 int ovs_flow_tbl_init(struct flow_table *table)
 {
 	struct table_instance *ti, *ufid_ti;

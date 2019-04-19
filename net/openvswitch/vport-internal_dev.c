@@ -37,12 +37,15 @@ struct internal_dev {
 
 static struct vport_ops ovs_internal_vport_ops;
 
+//通过netdev获取对应的vport
 static struct internal_dev *internal_dev_priv(struct net_device *netdev)
 {
 	return netdev_priv(netdev);
 }
 
 /* Called with rcu_read_lock_bh. */
+//kernel将自internal_dev发出报文时，nod的xmit函数将促使其进入此函数，
+//并将报文送给datapath处理
 static netdev_tx_t
 internal_dev_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
@@ -50,6 +53,7 @@ internal_dev_xmit(struct sk_buff *skb, struct net_device *netdev)
 
 	len = skb->len;
 	rcu_read_lock();
+	//进入datapath进行处理
 	err = ovs_vport_receive(internal_dev_priv(netdev)->vport, skb, NULL);
 	rcu_read_unlock();
 
@@ -57,6 +61,7 @@ internal_dev_xmit(struct sk_buff *skb, struct net_device *netdev)
 		struct pcpu_sw_netstats *tstats = this_cpu_ptr(netdev->tstats);
 
 		u64_stats_update_begin(&tstats->syncp);
+		//记录报文的传输字节数及包数
 		tstats->tx_bytes += len;
 		tstats->tx_packets++;
 		u64_stats_update_end(&tstats->syncp);
@@ -129,8 +134,11 @@ internal_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
 static const struct net_device_ops internal_dev_netdev_ops = {
 	.ndo_open = internal_dev_open,
 	.ndo_stop = internal_dev_stop,
+	//ovs internal设备发包函数，实现为当kernel针对此接口向外发包时，
+	//使报文进入其所属的datapath，再进行转发
 	.ndo_start_xmit = internal_dev_xmit,
 	.ndo_set_mac_address = eth_mac_addr,
+	//返回报文的统计信息
 	.ndo_get_stats64 = internal_get_stats,
 };
 
@@ -144,6 +152,7 @@ static void do_setup(struct net_device *netdev)
 
 	netdev->max_mtu = ETH_MAX_MTU;
 
+	//置netdev的ops
 	netdev->netdev_ops = &internal_dev_netdev_ops;
 
 	netdev->priv_flags &= ~IFF_TX_SKB_SHARING;
@@ -163,9 +172,11 @@ static void do_setup(struct net_device *netdev)
 	netdev->features |= NETIF_F_HW_VLAN_CTAG_TX | NETIF_F_HW_VLAN_STAG_TX;
 	netdev->hw_features = netdev->features & ~NETIF_F_LLTX;
 
+	//为此设备生成随机mac地址
 	eth_hw_addr_random(netdev);
 }
 
+//internal-dev设备创建，其需要创建为一个link接口
 static struct vport *internal_dev_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -178,6 +189,7 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 		goto error;
 	}
 
+	//申请名称为parms->name的netdev,并通过do_setup初始化它
 	vport->dev = alloc_netdev(sizeof(struct internal_dev),
 				  parms->name, NET_NAME_USER, do_setup);
 	if (!vport->dev) {
@@ -191,6 +203,7 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 	}
 
 	dev_net_set(vport->dev, ovs_dp_get_net(vport->dp));
+	//设置private,使vport->dev可以找到vport结构
 	internal_dev = internal_dev_priv(vport->dev);
 	internal_dev->vport = vport;
 
@@ -199,6 +212,7 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 		vport->dev->features |= NETIF_F_NETNS_LOCAL;
 
 	rtnl_lock();
+	//网络设备注册
 	err = register_netdevice(vport->dev);
 	if (err)
 		goto error_unlock;
@@ -232,11 +246,13 @@ static void internal_dev_destroy(struct vport *vport)
 	rtnl_unlock();
 }
 
+//自internal_dev向外发送报文时，送给kernel协议栈
 static netdev_tx_t internal_dev_recv(struct sk_buff *skb)
 {
 	struct net_device *netdev = skb->dev;
 	struct pcpu_sw_netstats *stats;
 
+	//接口未up,直接丢包
 	if (unlikely(!(netdev->flags & IFF_UP))) {
 		kfree_skb(skb);
 		netdev->stats.rx_dropped++;
@@ -247,6 +263,7 @@ static netdev_tx_t internal_dev_recv(struct sk_buff *skb)
 	nf_reset(skb);
 	secpath_reset(skb);
 
+	//指明报文去往本机
 	skb->pkt_type = PACKET_HOST;
 	skb->protocol = eth_type_trans(skb, netdev);
 	skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
@@ -257,22 +274,26 @@ static netdev_tx_t internal_dev_recv(struct sk_buff *skb)
 	stats->rx_bytes += skb->len;
 	u64_stats_update_end(&stats->syncp);
 
+	//将报文扔给kernel协议栈
 	netif_rx(skb);
 	return NETDEV_TX_OK;
 }
 
 static struct vport_ops ovs_internal_vport_ops = {
 	.type		= OVS_VPORT_TYPE_INTERNAL,
-	.create		= internal_dev_create,
+	.create		= internal_dev_create,//创建对应的netdev
 	.destroy	= internal_dev_destroy,
+	//针对internal设备的报文，其自ovs向外发送时，会被丢给kernel,其入接口变更为vport->dev对应的设备
 	.send		= internal_dev_recv,
 };
 
+//检查所给netdev是否为internal_dev
 int ovs_is_internal_dev(const struct net_device *netdev)
 {
 	return netdev->netdev_ops == &internal_dev_netdev_ops;
 }
 
+//获取vport
 struct vport *ovs_internal_dev_get_vport(struct net_device *netdev)
 {
 	if (!ovs_is_internal_dev(netdev))
@@ -285,10 +306,12 @@ int ovs_internal_dev_rtnl_link_register(void)
 {
 	int err;
 
+	//注册link类型
 	err = rtnl_link_register(&internal_dev_link_ops);
 	if (err < 0)
 		return err;
 
+	//注册internal_vport的ops
 	err = ovs_vport_ops_register(&ovs_internal_vport_ops);
 	if (err < 0)
 		rtnl_link_unregister(&internal_dev_link_ops);

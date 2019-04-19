@@ -107,6 +107,7 @@ error:
 	return ERR_PTR(err);
 }
 
+//geneve类型port创建
 static struct vport *geneve_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -126,11 +127,13 @@ static struct vport_ops ovs_geneve_vport_ops = {
 	.send		= dev_queue_xmit,
 };
 
+//geneve vport ops添加
 static int __init ovs_geneve_tnl_init(void)
 {
 	return ovs_vport_ops_register(&ovs_geneve_vport_ops);
 }
 
+//geneve vport ops移除
 static void __exit ovs_geneve_tnl_exit(void)
 {
 	ovs_vport_ops_unregister(&ovs_geneve_vport_ops);

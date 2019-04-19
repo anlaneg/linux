@@ -564,6 +564,11 @@ out:
 	return err;
 }
 
+//ip报文对应的connect,用于给出目的地址（例如ping运行时，ping 8.8.8.8，系统在创建socket后
+//会调用connect拿到源ip地址）
+//socket(PF_INET, SOCK_DGRAM, IPPROTO_IP) = 3
+//connect(3, {sa_family=AF_INET, sin_port=htons(1025), sin_addr=inet_addr("8.8.8.8")}, 16) = 0
+//getsockname(3, {sa_family=AF_INET, sin_port=htons(13929), sin_addr=inet_addr("10.224.11.91")}, [16]) = 0
 int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 		       int addr_len, int flags)
 {

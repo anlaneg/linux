@@ -551,9 +551,10 @@ void tcf_idrinfo_destroy(const struct tc_action_ops *ops,
 }
 EXPORT_SYMBOL(tcf_idrinfo_destroy);
 
-static LIST_HEAD(act_base);
+static LIST_HEAD(act_base);//记录系统中注册的act ops
 static DEFINE_RWLOCK(act_mod_lock);
 
+//注册act ops及注册pernet对应的ops
 int tcf_register_action(struct tc_action_ops *act,
 			struct pernet_operations *ops)
 {
@@ -574,11 +575,13 @@ int tcf_register_action(struct tc_action_ops *act,
 	write_lock(&act_mod_lock);
 	list_for_each_entry(a, &act_base, head) {
 		if (act->id == a->id || (strcmp(act->kind, a->kind) == 0)) {
+			//已存在，注册失败
 			write_unlock(&act_mod_lock);
 			unregister_pernet_subsys(ops);
 			return -EEXIST;
 		}
 	}
+	//将注册信息添加进act_base中
 	list_add_tail(&act->head, &act_base);
 	write_unlock(&act_mod_lock);
 
@@ -608,6 +611,7 @@ int tcf_unregister_action(struct tc_action_ops *act,
 EXPORT_SYMBOL(tcf_unregister_action);
 
 /* lookup by name */
+//通过kind名称查找对应的tc_action_ops
 static struct tc_action_ops *tc_lookup_action_n(char *kind)
 {
 	struct tc_action_ops *a, *res = NULL;
@@ -885,8 +889,10 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 		}
 	}
 
+	//通过act name查找act ops
 	a_o = tc_lookup_action_n(act_name);
 	if (a_o == NULL) {
+		//尝试加载module，并重试
 #ifdef CONFIG_MODULES
 		if (rtnl_held)
 			rtnl_unlock();
@@ -913,6 +919,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	}
 
 	/* backward compatibility for policer */
+	//调用a_o->init
 	if (name == NULL)
 		err = a_o->init(net, tb[TCA_ACT_OPTIONS], est, &a, ovr, bind,
 				rtnl_held, tp, extack);
@@ -1112,6 +1119,7 @@ static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 	index = nla_get_u32(tb[TCA_ACT_INDEX]);
 
 	err = -EINVAL;
+	//查询action kind对应的ops
 	ops = tc_lookup_action(tb[TCA_ACT_KIND]);
 	if (!ops) { /* could happen in batch of actions */
 		NL_SET_ERR_MSG(extack, "Specified TC action kind not found");
@@ -1287,6 +1295,7 @@ tca_action_gd(struct net *net, struct nlattr *nla, struct nlmsghdr *n,
 		return ret;
 
 	if (event == RTM_DELACTION && n->nlmsg_flags & NLM_F_ROOT) {
+		//处理删除
 		if (tb[1])
 			return tca_action_flush(net, tb[1], n, portid, extack);
 
@@ -1294,6 +1303,7 @@ tca_action_gd(struct net *net, struct nlattr *nla, struct nlmsghdr *n,
 		return -EINVAL;
 	}
 
+	//处理get操作
 	for (i = 1; i <= TCA_ACT_MAX_PRIO && tb[i]; i++) {
 		act = tcf_action_get_1(net, tb[i], n, portid, extack);
 		if (IS_ERR(act)) {
@@ -1354,6 +1364,7 @@ static int tcf_action_add(struct net *net, struct nlattr *nla,
 	int ret = 0;
 	struct tc_action *actions[TCA_ACT_MAX_PRIO] = {};
 
+	//通过action kind查找到action ops,并action_ops->init
 	ret = tcf_action_init(net, NULL, nla, NULL, NULL, ovr, 0, actions,
 			      &attr_size, true, extack);
 	if (ret < 0)
@@ -1406,6 +1417,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 		if (n->nlmsg_flags & NLM_F_REPLACE)
 			ovr = 1;
 replay:
+		//处理tc new action
 		ret = tcf_action_add(net, tca[TCA_ACT_TAB], n, portid, ovr,
 				     extack);
 		if (ret == -EAGAIN)
@@ -1539,6 +1551,7 @@ out_module_put:
 
 static int __init tc_action_init(void)
 {
+	//注册tc的newaction,delaction,getaction三种msgtype
 	rtnl_register(PF_UNSPEC, RTM_NEWACTION, tc_ctl_action, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELACTION, tc_ctl_action, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETACTION, tc_ctl_action, tc_dump_action,

@@ -79,7 +79,7 @@ struct datapath {
 	struct list_head list_node;
 
 	/* Flow table. */
-	struct flow_table table;
+	struct flow_table table;//emc流表
 
 	/* Switch ports. */
 	struct hlist_head *ports;//以port_no为索引的vport表
@@ -95,7 +95,7 @@ struct datapath {
 	u32 max_headroom;
 
 	/* Switch meters. */
-	struct hlist_head *meters;
+	struct hlist_head *meters;//hash表
 };
 
 /**
@@ -108,7 +108,7 @@ struct datapath {
  * @cutlen: The number of bytes from the packet end to be removed.
  */
 struct ovs_skb_cb {
-	struct vport		*input_vport;
+	struct vport		*input_vport;//报文入接口
 	u16			mru;
 	u16			acts_origlen;
 	u32			cutlen;

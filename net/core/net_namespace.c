@@ -1151,6 +1151,7 @@ static int register_pernet_operations(struct list_head *list,
 	int error;
 
 	if (ops->id) {
+		//为其分配id号
 		error = ida_alloc_min(&net_generic_ids, MIN_PERNET_OPS_ID,
 				GFP_KERNEL);
 		if (error < 0)
@@ -1158,6 +1159,7 @@ static int register_pernet_operations(struct list_head *list,
 		*ops->id = error;
 		max_gen_ptrs = max(max_gen_ptrs, *ops->id + 1);
 	}
+
 	//调用注册函数
 	error = __register_pernet_operations(list, ops);
 	if (error) {

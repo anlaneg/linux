@@ -80,6 +80,7 @@ static struct vport *gre_tnl_create(const struct vport_parms *parms)
 	return vport;
 }
 
+//gre类型port创建
 static struct vport *gre_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -94,15 +95,18 @@ static struct vport *gre_create(const struct vport_parms *parms)
 static struct vport_ops ovs_gre_vport_ops = {
 	.type		= OVS_VPORT_TYPE_GRE,
 	.create		= gre_create,
+	//报文将被自vport对应的gre口送出
 	.send		= dev_queue_xmit,
 	.destroy	= ovs_netdev_tunnel_destroy,
 };
 
+//添加gre vport ops
 static int __init ovs_gre_tnl_init(void)
 {
 	return ovs_vport_ops_register(&ovs_gre_vport_ops);
 }
 
+//移除gre vport ops
 static void __exit ovs_gre_tnl_exit(void)
 {
 	ovs_vport_ops_unregister(&ovs_gre_vport_ops);

@@ -34,7 +34,7 @@
  */
 
 struct ovs_header {
-	int dp_ifindex;
+	int dp_ifindex;//dp_ifindex常常
 };
 
 /* Datapaths. */
@@ -95,6 +95,7 @@ struct ovs_dp_stats {
 	__u64 n_hit;             /* Number of flow table matches. */
 	__u64 n_missed;          /* Number of flow table misses. */
 	__u64 n_lost;            /* Number of misses not sent to userspace. */
+	//flow数量
 	__u64 n_flows;           /* Number of flows present */
 };
 

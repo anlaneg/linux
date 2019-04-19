@@ -846,13 +846,14 @@ EXPORT_SYMBOL(__dev_get_by_index);
  *	had its reference counter increased so the caller must be careful
  *	about locking. The caller must hold RCU lock.
  */
-
+//给定ifindex查找指定netnamespace中ifindex对应的net设备
 struct net_device *dev_get_by_index_rcu(struct net *net, int ifindex)
 {
 	struct net_device *dev;
 	struct hlist_head *head = dev_index_hash(net, ifindex);
 
 	hlist_for_each_entry_rcu(dev, head, index_hlist)
+		//索引匹配，返回对应的dev设备
 		if (dev->ifindex == ifindex)
 			return dev;
 
@@ -3888,12 +3889,13 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	else
 		skb_dst_force(skb);
 
+	//选择投递队列
 	txq = netdev_pick_tx(dev, skb, sb_dev);
 	q = rcu_dereference_bh(txq->qdisc);
 
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
-		//如果有入队函数，则调用enqueue并完成发送
+		//如果有入队函数，则调用enqueue并完成发送（qos入口）
 		rc = __dev_xmit_skb(skb, q, dev, txq);
 		goto out;
 	}

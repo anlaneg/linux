@@ -74,6 +74,7 @@ struct ovs_conntrack_info {
 	struct md_mark mark;
 	struct md_labels labels;
 #ifdef CONFIG_NF_NAT_NEEDED
+	//指出源目的mac如何分配
 	struct nf_nat_range2 range;  /* Only present for SRC NAT and DST NAT. */
 #endif
 };
@@ -245,6 +246,7 @@ static void ovs_ct_update_key(const struct sk_buff *skb,
 	struct nf_conn *ct;
 	u8 state = 0;
 
+	//取skb的连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct) {
 		state = ovs_ct_get_state(ctinfo);
@@ -478,6 +480,7 @@ static int ovs_ct_helper(struct sk_buff *skb, u16 proto)
 		return NF_DROP;
 	}
 
+	//执行期待分析
 	err = helper->help(skb, protoff, ct, ctinfo);
 	if (err != NF_ACCEPT)
 		return err;
@@ -502,6 +505,7 @@ static int handle_fragments(struct net *net, struct sw_flow_key *key,
 	int err;
 
 	if (key->eth.type == htons(ETH_P_IP)) {
+		//执行ipv4报文重组
 		enum ip_defrag_users user = IP_DEFRAG_CONNTRACK_IN + zone;
 
 		memset(IPCB(skb), 0, sizeof(struct inet_skb_parm));
@@ -602,6 +606,7 @@ ovs_ct_get_info(const struct nf_conntrack_tuple_hash *h)
  * On success, populates skb->_nfct and returns the connection.  Returns NULL
  * if there is no existing entry.
  */
+//查找已存在的ct
 static struct nf_conn *
 ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 		     u8 l3num, struct sk_buff *skb, bool natted)
@@ -612,6 +617,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 
 	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb), l3num,
 			       net, &tuple)) {
+		//解析报文的元组信息失败，返回NULL
 		pr_debug("ovs_ct_find_existing: Can't get tuple\n");
 		return NULL;
 	}
@@ -620,6 +626,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	if (natted) {
 		struct nf_conntrack_tuple inverse;
 
+		//利用tuple制做反向的元组，并将其赋值给tuple
 		if (!nf_ct_invert_tuple(&inverse, &tuple)) {
 			pr_debug("ovs_ct_find_existing: Inversion failed!\n");
 			return NULL;
@@ -627,6 +634,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 		tuple = inverse;
 	}
 
+	//查询此元组对应的contrack是否存在
 	/* look for tuple match */
 	h = nf_conntrack_find_get(net, zone, &tuple);
 	if (!h)
@@ -645,6 +653,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	return ct;
 }
 
+//返回已存在的ct
 static
 struct nf_conn *ovs_ct_executed(struct net *net,
 				const struct sw_flow_key *key,
@@ -660,9 +669,9 @@ struct nf_conn *ovs_ct_executed(struct net *net,
 	 * connection was not confirmed, it is not cached and needs to be run
 	 * through conntrack again.
 	 */
-	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED) &&
-		       !(key->ct_state & OVS_CS_F_INVALID) &&
-		       (key->ct_zone == info->zone.id);
+	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED) &&//ct状态处于跟踪状态
+		       !(key->ct_state & OVS_CS_F_INVALID) &&//ct状态有效
+		       (key->ct_zone == info->zone.id);//zone一致
 
 	if (*ct_executed || (!key->ct_state && info->force)) {
 		ct = ovs_ct_find_existing(net, &info->zone, info->family, skb,
@@ -683,6 +692,7 @@ static bool skb_nfct_cached(struct net *net,
 	struct nf_conn *ct;
 	bool ct_executed = true;
 
+	//取skb对应的连接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
 		ct = ovs_ct_executed(net, key, info, skb, &ct_executed);
@@ -690,7 +700,7 @@ static bool skb_nfct_cached(struct net *net,
 	if (ct)
 		nf_ct_get(skb, &ctinfo);
 	else
-		return false;
+		return false;//ct未创建，则返回
 
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
 		return false;
@@ -877,6 +887,7 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 	if (info->nat & OVS_CT_NAT && ctinfo != IP_CT_NEW &&
 	    ct->status & IPS_NAT_MASK &&
 	    (ctinfo != IP_CT_RELATED || info->commit)) {
+		//确定改源还是改目的
 		/* NAT an established or related connection like before. */
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY)
 			/* This is the REPLY direction for a connection
@@ -935,6 +946,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 	struct nf_conn *ct;
 
 	if (!cached) {
+		//构造hook state准备手动调入conntrack创建
 		struct nf_hook_state state = {
 			.hook = NF_INET_PRE_ROUTING,
 			.pf = info->family,
@@ -951,6 +963,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
 
+		//创建连接跟踪
 		err = nf_conntrack_in(skb, &state);
 		if (err != NF_ACCEPT)
 			return -ENOENT;
@@ -979,6 +992,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		 */
 		if (info->nat && !(key->ct_state & OVS_CS_F_NAT_MASK) &&
 		    (nf_ct_is_confirmed(ct) || info->commit) &&
+			/*执行nat分配，报文修改*/
 		    ovs_ct_nat(net, key, info, skb, ct, ctinfo) != NF_ACCEPT) {
 			return -EINVAL;
 		}
@@ -990,6 +1004,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		 */
 		if (!nf_ct_is_confirmed(ct) && info->commit &&
 		    info->helper && !nfct_help(ct)) {
+			//添加helper
 			int err = __nf_ct_try_assign_helper(ct, info->ct,
 							    GFP_ATOMIC);
 			if (err)
@@ -1026,6 +1041,7 @@ static int ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 	 */
 	exp = ovs_ct_expect_find(net, &info->zone, info->family, skb);
 	if (exp) {
+		//存在查找到的期待
 		u8 state;
 
 		/* NOTE: New connections are NATted and Helped only when
@@ -1270,6 +1286,7 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 		return err;
 
 	if (key->ip.frag != OVS_FRAG_TYPE_NONE) {
+		//分片报文，需要先执行分片重组
 		err = handle_fragments(net, key, info->zone.id, skb);
 		if (err)
 			return err;

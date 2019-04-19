@@ -37,10 +37,10 @@
 
 struct table_instance {
 	struct hlist_head *buckets;
-	unsigned int n_buckets;
+	unsigned int n_buckets;//桶数目
 	struct rcu_head rcu;
 	int node_ver;
-	u32 hash_seed;
+	u32 hash_seed;//随机数seed
 	bool keep_flows;
 };
 

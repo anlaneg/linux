@@ -355,11 +355,13 @@ static void clear_vlan(struct sw_flow_key *key)
 	key->eth.cvlan.tpid = 0;
 }
 
+//vlan解析，支持两层vlan
 static int parse_vlan(struct sk_buff *skb, struct sw_flow_key *key)
 {
 	int res;
 
 	if (skb_vlan_tag_present(skb)) {
+		//skb上已解析到vlan（已剥离）,则取skb解析到的
 		key->eth.vlan.tci = htons(skb->vlan_tci) | htons(VLAN_CFI_MASK);
 		key->eth.vlan.tpid = skb->vlan_proto;
 	} else {
@@ -569,6 +571,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 	/* Flags are always used as part of stats */
 	key->tp.flags = 0;
 
+	//指定当前data指定的头为以太头
 	skb_reset_mac_header(skb);
 
 	/* Link layer. */
@@ -588,7 +591,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 		/* We are going to push all headers that we pull, so no need to
 		* update skb->csum here.
 		*/
-
+		//解析vlan
 		if (unlikely(parse_vlan(skb, key)))
 			return -ENOMEM;
 
@@ -611,6 +614,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 	skb_reset_mac_len(skb);
 
 	/* Network layer. */
+	//网络层解析
 	if (key->eth.type == htons(ETH_P_IP)) {
 		struct iphdr *nh;
 		__be16 offset;
@@ -636,13 +640,17 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 
 		offset = nh->frag_off & htons(IP_OFFSET);
 		if (offset) {
+			//非首片
 			key->ip.frag = OVS_FRAG_TYPE_LATER;
 			return 0;
 		}
+
+		//offset为零，如果有IP_MF，则记为首片
 		if (nh->frag_off & htons(IP_MF) ||
 			skb_shinfo(skb)->gso_type & SKB_GSO_UDP)
 			key->ip.frag = OVS_FRAG_TYPE_FIRST;
 		else
+			//非分片
 			key->ip.frag = OVS_FRAG_TYPE_NONE;
 
 		/* Transport layer. */
@@ -849,6 +857,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 			key->tun_opts_len = 0;
 		}
 	} else  {
+		//将tunnel的metadata清空
 		key->tun_proto = 0;
 		key->tun_opts_len = 0;
 		memset(&key->tun_key, 0, sizeof(key->tun_key));
@@ -864,6 +873,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 	key->mac_proto = res;
 	key->recirc_id = 0;
 
+	//将报文内容解析到key中
 	err = key_extract(skb, key);
 	if (!err)
 		ovs_ct_fill_key(skb, key);   /* Must be after key_extract(). */

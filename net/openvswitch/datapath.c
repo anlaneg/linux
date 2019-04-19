@@ -150,6 +150,7 @@ const char *ovs_dp_name(const struct datapath *dp)
 	return ovs_vport_name(vport);
 }
 
+//获取并返回local dev对应的ifindex
 static int get_dpifindex(const struct datapath *dp)
 {
 	struct vport *local;
@@ -203,15 +204,18 @@ struct vport *ovs_lookup_vport(const struct datapath *dp, u16 port_no)
 }
 
 /* Called with ovs_mutex. */
+//按param为对应的datapath创建vport
 static struct vport *new_vport(const struct vport_parms *parms)
 {
 	struct vport *vport;
 
+	//通过param创建对应的vport
 	vport = ovs_vport_add(parms);
 	if (!IS_ERR(vport)) {
 		struct datapath *dp = parms->dp;
 		struct hlist_head *head = vport_hash_bucket(dp, vport->port_no);
 
+		//将vport挂接在datapath上
 		hlist_add_head_rcu(&vport->dp_hash_node, head);
 	}
 	return vport;
@@ -229,7 +233,7 @@ void ovs_dp_detach_port(struct vport *p)
 }
 
 /* Must be called with rcu_read_lock. */
-void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
+void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对应的key值*/)
 {
 	const struct vport *p = OVS_CB(skb)->input_vport;
 	struct datapath *dp = p->dp;
@@ -242,7 +246,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 	stats = this_cpu_ptr(dp->stats_percpu);
 
 	/* Look up flow. */
-	//查询table
+	//查询ovs emc流表
 	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, &n_mask_hit);
 	if (unlikely(!flow)) {
 		//没有找到flow,upcall由用户态进行处理
@@ -262,9 +266,12 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key)
 		goto out;
 	}
 
+	//flow查找成功，执行action
 	ovs_flow_stats_update(flow, key->tp.flags, skb);
 	sf_acts = rcu_dereference(flow->sf_acts);
-	ovs_execute_actions(dp, skb, sf_acts, key);//执行action
+
+	//执行action
+	ovs_execute_actions(dp, skb, sf_acts, key);
 
 	stats_counter = &stats->n_hit;
 
@@ -408,11 +415,13 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	unsigned int hlen;
 	int err, dp_ifindex;
 
+	//取datapath的ifindex
 	dp_ifindex = get_dpifindex(dp);
 	if (!dp_ifindex)
 		return -ENODEV;
 
 	if (skb_vlan_tag_present(skb)) {
+		//将vlan还原至skb中
 		nskb = skb_clone(skb, GFP_ATOMIC);
 		if (!nskb)
 			return -ENOMEM;
@@ -443,6 +452,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	else
 		hlen = skb->len;
 
+	//生成netlink消息
 	len = upcall_msg_size(upcall_info, hlen - cutlen,
 			      OVS_CB(skb)->acts_origlen);
 	user_skb = genlmsg_new(len, GFP_ATOMIC);
@@ -952,6 +962,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	ovs_flow_mask_key(&new_flow->key, &new_flow->key, true, &mask);
 
 	/* Validate actions. */
+	//填充action
 	error = ovs_nla_copy_actions(net, a[OVS_FLOW_ATTR_ACTIONS],
 				     &new_flow->key, &acts, log);
 	if (error) {
@@ -982,6 +993,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		rcu_assign_pointer(new_flow->sf_acts, acts);
 
 		/* Put flow in bucket. */
+		//向datapath的table中插入new_flow
 		error = ovs_flow_tbl_insert(&dp->table, new_flow, &mask);
 		if (unlikely(error)) {
 			acts = NULL;
@@ -1428,7 +1440,9 @@ static const struct nla_policy flow_policy[OVS_FLOW_ATTR_MAX + 1] = {
 };
 
 static const struct genl_ops dp_flow_genl_ops[] = {
-	{ .cmd = OVS_FLOW_CMD_NEW,
+	{
+	  //处理流的添加
+	  .cmd = OVS_FLOW_CMD_NEW,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .policy = flow_policy,
 	  .doit = ovs_flow_cmd_new
@@ -1491,8 +1505,10 @@ static int ovs_dp_cmd_fill_info(struct datapath *dp, struct sk_buff *skb,
 	if (!ovs_header)
 		goto error;
 
+	//获取并填充dpifindex
 	ovs_header->dp_ifindex = get_dpifindex(dp);
 
+	//设置datapath名称
 	err = nla_put_string(skb, OVS_DP_ATTR_NAME, ovs_dp_name(dp));
 	if (err)
 		goto nla_put_failure;
@@ -1554,12 +1570,14 @@ static void ovs_dp_reset_user_features(struct sk_buff *skb, struct genl_info *in
 	dp->user_features = 0;
 }
 
+//设置datapath的features标记位
 static void ovs_dp_change(struct datapath *dp, struct nlattr *a[])
 {
 	if (a[OVS_DP_ATTR_USER_FEATURES])
 		dp->user_features = nla_get_u32(a[OVS_DP_ATTR_USER_FEATURES]);
 }
 
+//处理openvswitch的datapath创建命令
 static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr **a = info->attrs;
@@ -1579,13 +1597,16 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 
 	err = -ENOMEM;
+	//为datapath申请空间
 	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
 	if (dp == NULL)
 		goto err_free_reply;
 
+	//设置datapath对应的net namespace
 	ovs_dp_set_net(dp, sock_net(skb->sk));
 
 	/* Allocate table. */
+	//申请并初始化流表
 	err = ovs_flow_tbl_init(&dp->table);
 	if (err)
 		goto err_free_dp;
@@ -1596,6 +1617,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		goto err_destroy_table;
 	}
 
+	//ports hash表申请，初始化
 	dp->ports = kmalloc_array(DP_VPORT_HASH_BUCKETS,
 				  sizeof(struct hlist_head),
 				  GFP_KERNEL);
@@ -1607,6 +1629,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++)
 		INIT_HLIST_HEAD(&dp->ports[i]);
 
+	//初始化meters表
 	err = ovs_meters_init(dp);
 	if (err)
 		goto err_destroy_ports_array;
@@ -1619,11 +1642,13 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	parms.port_no = OVSP_LOCAL;
 	parms.upcall_portids = a[OVS_DP_ATTR_UPCALL_PID];
 
+	//设置user的功能bit
 	ovs_dp_change(dp, a);
 
 	/* So far only local changes have been made, now need the lock. */
 	ovs_lock();
 
+	//创建internal类型port,并指定其port number
 	vport = new_vport(&parms);
 	if (IS_ERR(vport)) {
 		err = PTR_ERR(vport);
@@ -1824,7 +1849,7 @@ static const struct genl_ops dp_datapath_genl_ops[] = {
 	{ .cmd = OVS_DP_CMD_NEW,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .policy = datapath_policy,
-	  .doit = ovs_dp_cmd_new //接收相应的netlink消息处理port创建
+	  .doit = ovs_dp_cmd_new //接收相应的netlink消息处理datapath创建
 	},
 	{ .cmd = OVS_DP_CMD_DEL,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
@@ -1993,6 +2018,7 @@ static void update_headroom(struct datapath *dp)
 			netdev_set_rx_headroom(vport->dev, max_headroom);
 }
 
+//处理vport的新建netlink命令
 static int ovs_vport_cmd_new(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr **a = info->attrs;
@@ -2021,6 +2047,7 @@ static int ovs_vport_cmd_new(struct sk_buff *skb, struct genl_info *info)
 
 	ovs_lock();
 restart:
+	//通过dp_ifindex查找到对应的datapath
 	dp = get_dp(sock_net(skb->sk), ovs_header->dp_ifindex);
 	err = -ENODEV;
 	if (!dp)
@@ -2043,6 +2070,7 @@ restart:
 		}
 	}
 
+	//提取接口名称
 	parms.name = nla_data(a[OVS_VPORT_ATTR_NAME]);
 	parms.type = nla_get_u32(a[OVS_VPORT_ATTR_TYPE]);
 	parms.options = a[OVS_VPORT_ATTR_OPTIONS];
@@ -2054,6 +2082,7 @@ restart:
 	err = PTR_ERR(vport);
 	if (IS_ERR(vport)) {
 		if (err == -EAGAIN)
+			//重试
 			goto restart;
 		goto exit_unlock_free;
 	}

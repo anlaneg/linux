@@ -145,6 +145,7 @@ error:
 	return ERR_PTR(err);
 }
 
+//vxlan port创建
 static struct vport *vxlan_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -161,15 +162,17 @@ static struct vport_ops ovs_vxlan_netdev_vport_ops = {
 	.create			= vxlan_create,
 	.destroy		= ovs_netdev_tunnel_destroy,
 	.get_options		= vxlan_get_options,
+	//报文将自vxlan对应的dev送出
 	.send			= dev_queue_xmit,
 };
 
-//创建vxlan　port
+//注册vxlan　port ops
 static int __init ovs_vxlan_tnl_init(void)
 {
 	return ovs_vport_ops_register(&ovs_vxlan_netdev_vport_ops);
 }
 
+//解注册vxlan port ops
 static void __exit ovs_vxlan_tnl_exit(void)
 {
 	ovs_vport_ops_unregister(&ovs_vxlan_netdev_vport_ops);

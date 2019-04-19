@@ -809,6 +809,7 @@ static int set_sctp(struct sk_buff *skb, struct sw_flow_key *flow_key,
 	return 0;
 }
 
+//自指定的vport口将skb发送出去
 static int ovs_vport_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct ovs_frag_data *data = this_cpu_ptr(&ovs_frag_data_storage);
@@ -912,6 +913,7 @@ static void ovs_fragment(struct net *net, struct vport *vport,
 		skb_dst_set_noref(skb, &ovs_dst);
 		IPCB(skb)->frag_max_size = mru;
 
+		//完成分片，并调用ovs_vport_output发送出去
 		ip_do_fragment(net, skb->sk, skb, ovs_vport_output);
 		refdst_drop(orig_dst);
 	} else if (key->eth.type == htons(ETH_P_IPV6)) {
@@ -948,7 +950,7 @@ err:
 }
 
 //将报文自out_port口输出
-static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port,
+static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port/*报文出接口*/,
 		      struct sw_flow_key *key)
 {
 	struct vport *vport = ovs_vport_rcu(dp, out_port);
@@ -957,6 +959,7 @@ static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port,
 		u16 mru = OVS_CB(skb)->mru;
 		u32 cutlen = OVS_CB(skb)->cutlen;
 
+		//实现报文长度截短
 		if (unlikely(cutlen > 0)) {
 			if (skb->len - cutlen > ovs_mac_header_len(key))
 				pskb_trim(skb, skb->len - cutlen);
@@ -1230,7 +1233,8 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		switch (nla_type(a)) {
 		//output action执行
 		case OVS_ACTION_ATTR_OUTPUT: {
-			int port = nla_get_u32(a);//取输出的端口号
+			//取输出的端口号
+			int port = nla_get_u32(a);
 			struct sk_buff *clone;
 
 			/* Every output action needs a separate clone
@@ -1245,6 +1249,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 				return 0;
 			}
 
+			//非last port，需要clone后再output
 			clone = skb_clone(skb, GFP_ATOMIC);
 			if (clone)
 				//完成clone后将报文自port接口输出
@@ -1253,7 +1258,8 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 		}
 
-		case OVS_ACTION_ATTR_TRUNC: {//实现报文截断（仅更新cutlen)
+		case OVS_ACTION_ATTR_TRUNC: {
+			//实现报文截断（仅更新cutlen)
 			struct ovs_action_trunc *trunc = nla_data(a);
 
 			if (skb->len > trunc->max_len)
@@ -1261,13 +1267,15 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 		}
 
-		case OVS_ACTION_ATTR_USERSPACE://输出到userspace
+		case OVS_ACTION_ATTR_USERSPACE:
+			//输出到userspace
 			output_userspace(dp, skb, key, a, attr,
 						     len, OVS_CB(skb)->cutlen);
 			OVS_CB(skb)->cutlen = 0;
 			break;
 
 		case OVS_ACTION_ATTR_HASH:
+			//计算报文hash
 			execute_hash(skb, key, a);
 			break;
 
@@ -1321,6 +1329,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		}
 
 		case OVS_ACTION_ATTR_CT:
+			//执行ct action
 			if (!is_flow_key_valid(key)) {
 				err = ovs_flow_key_update(skb, key);
 				if (err)
@@ -1492,8 +1501,8 @@ static void process_deferred_actions(struct datapath *dp)
 
 /* Execute a list of actions against 'skb'. */
 int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
-			const struct sw_flow_actions *acts,
-			struct sw_flow_key *key)
+			const struct sw_flow_actions *acts/*skb对应的action*/,
+			struct sw_flow_key *key/*skb对应的key*/)
 {
 	int err, level;
 
@@ -1507,6 +1516,7 @@ int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
 	}
 
 	OVS_CB(skb)->acts_origlen = acts->orig_len;
+	//action执行
 	err = do_execute_actions(dp, skb, key,
 				 acts->actions, acts->actions_len);
 

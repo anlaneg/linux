@@ -221,6 +221,7 @@ static u32 hash_conntrack(const struct net *net,
 	return scale_hash(hash_conntrack_raw(tuple, net));
 }
 
+//提取skb的4层源端口，目的端口
 static bool nf_ct_get_tuple_ports(const struct sk_buff *skb,
 				  unsigned int dataoff,
 				  struct nf_conntrack_tuple *tuple)
@@ -234,6 +235,7 @@ static bool nf_ct_get_tuple_ports(const struct sk_buff *skb,
 	if (!inet_hdr)
 		return false;
 
+	//设置源目的端口
 	tuple->src.u.udp.port = inet_hdr->sport;
 	tuple->dst.u.udp.port = inet_hdr->dport;
 	return true;
@@ -243,11 +245,11 @@ static bool nf_ct_get_tuple_ports(const struct sk_buff *skb,
 static bool
 nf_ct_get_tuple(const struct sk_buff *skb,
 		unsigned int nhoff,//到网络层的offset
-		unsigned int dataoff,
+		unsigned int dataoff,//到l4层的offset
 		u_int16_t l3num,//3层协议号
 		u_int8_t protonum,//4层协议号
 		struct net *net,
-		struct nf_conntrack_tuple *tuple)
+		struct nf_conntrack_tuple *tuple/*出参，待填充的元组信息*/)
 {
 	unsigned int size;
 	const __be32 *ap;
@@ -270,6 +272,7 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 		return true;
 	}
 
+	//提取源地址，目的地址至_addrs中
 	ap = skb_header_pointer(skb, nhoff, size, _addrs);
 	if (!ap)
 		return false;
@@ -288,6 +291,7 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 	tuple->dst.protonum = protonum;
 	tuple->dst.dir = IP_CT_DIR_ORIGINAL;
 
+	//按l4协议号执行解析
 	switch (protonum) {
 #if IS_ENABLED(CONFIG_IPV6)
 	case IPPROTO_ICMPV6:
@@ -321,6 +325,7 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 	return true;
 }
 
+//返回到l4头部的偏移量
 static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 			    u_int8_t *protonum)
 {
@@ -336,18 +341,19 @@ static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 	 * inside ICMP packets though.
 	 */
 	if (iph->frag_off & htons(IP_OFFSET))
-		return -1;
+		return -1;//非首片
 
 	dataoff = nhoff + (iph->ihl << 2);
-	*protonum = iph->protocol;
+	*protonum = iph->protocol;//记录l4层协议号
 
 	/* Check bogus IP headers */
 	if (dataoff > skb->len) {
+		//报文过小
 		pr_debug("bogus IPv4 packet: nhoff %u, ihl %u, skblen %u\n",
 			 nhoff, iph->ihl << 2, skb->len);
 		return -1;
 	}
-	return dataoff;
+	return dataoff;//返回到l4层的偏移量
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -379,8 +385,9 @@ static int ipv6_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 }
 #endif
 
+//返回到l4层的offset
 static int get_l4proto(const struct sk_buff *skb,
-		       unsigned int nhoff, u8 pf, u8 *l4num)
+		       unsigned int nhoff, u8 pf, u8 *l4num/*出参,l4层协议号*/)
 {
 	switch (pf) {
 	case NFPROTO_IPV4:
@@ -396,6 +403,7 @@ static int get_l4proto(const struct sk_buff *skb,
 	return -1;
 }
 
+//解析skb，填充tuple
 bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff,
 		       u_int16_t l3num,
 		       struct net *net, struct nf_conntrack_tuple *tuple)
@@ -418,8 +426,8 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 {
 	memset(inverse, 0, sizeof(*inverse));
 
-	inverse->src.l3num = orig->src.l3num;
 	//构造3层反向的元组
+	inverse->src.l3num = orig->src.l3num;
 
 	switch (orig->src.l3num) {
 	case NFPROTO_IPV4:
@@ -434,11 +442,13 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 		break;
 	}
 
-	//反向的方向
+	//方向恰相反
 	inverse->dst.dir = !orig->dst.dir;
 
+	//构造4层的反向元组
 	inverse->dst.protonum = orig->dst.protonum;
 
+	//对icmp,icmpv6执行特殊处理
 	switch (orig->dst.protonum) {
 	case IPPROTO_ICMP:
 		return nf_conntrack_invert_icmp_tuple(inverse, orig);
@@ -718,6 +728,7 @@ begin:
 
 		ct = nf_ct_tuplehash_to_ctrack(h);
 		if (nf_ct_is_expired(ct)) {
+			//如果ct已过期，则直接gc,并继续
 			nf_ct_gc_expired(ct);
 			continue;
 		}
@@ -743,7 +754,7 @@ begin:
 }
 
 /* Find a connection corresponding to a tuple. */
-//查询对应的连接跟踪
+//通过元组tuple查询对应的连接跟踪
 static struct nf_conntrack_tuple_hash *
 __nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 			const struct nf_conntrack_tuple *tuple, u32 hash)
@@ -1530,7 +1541,7 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	/* look for tuple match */
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 	hash = hash_conntrack_raw(&tuple, state->net);
-	//查找是否存在对应的连接跟踪
+	//通过tuple查找是否存在对应的连接跟踪
 	h = __nf_conntrack_find_get(state->net, zone, &tuple, hash);
 	if (!h) {
 		//没有找到对应的连接，创建此连接
@@ -1676,7 +1687,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	}
 
 	/* rcu_read_lock()ed by nf_hook_thresh */
-	//获得l3协议解析，并获取到4层的头部偏移量，获取4层协议号
+	//获取到4层的头部偏移量，获取4层协议号
 	dataoff = get_l4proto(skb, skb_network_offset(skb), state->pf, &protonum);
 	if (dataoff <= 0) {
 		pr_debug("not prepared to track yet or error occurred\n");

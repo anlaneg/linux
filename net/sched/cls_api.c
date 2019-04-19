@@ -802,6 +802,7 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 	bo.binder_type = ei->binder_type;
 	bo.block = block;
 	bo.extack = extack;
+	//触发setup block
 	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_BLOCK, &bo);
 }
 

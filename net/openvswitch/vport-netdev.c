@@ -69,6 +69,7 @@ error:
 }
 
 /* Called with rcu_read_lock and bottom-halves disabled. */
+//netdev收包入口
 static rx_handler_result_t netdev_frame_hook(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
@@ -77,7 +78,7 @@ static rx_handler_result_t netdev_frame_hook(struct sk_buff **pskb)
 		return RX_HANDLER_PASS;
 
 	netdev_port_receive(skb);
-	return RX_HANDLER_CONSUMED;
+	return RX_HANDLER_CONSUMED;//知会kernel协议栈，报文已被消耗
 }
 
 //取ovs的local接口
@@ -89,6 +90,7 @@ static struct net_device *get_dpdev(const struct datapath *dp)
 	return local->dev;
 }
 
+//将vport对应的名称为$name的netdev收包修改为netdev_frame_hook
 struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 {
 	int err;
@@ -96,7 +98,7 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	//从vport所属datapath所属network中查找名称为name的dev
 	vport->dev = dev_get_by_name(ovs_dp_get_net(vport->dp), name);
 	if (!vport->dev) {
-		//不存在此接口，报错
+		//如果name对应的netdev不存在，则报错
 		err = -ENODEV;
 		goto error_free_vport;
 	}
@@ -117,6 +119,7 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 		goto error_unlock;
 
 	//为设备注册收报回调（bridge也采用相一致的机制）
+	//修改加入datapath的vport->dev设备的收包函数变更为netdev_frame_hook)
 	err = netdev_rx_handler_register(vport->dev, netdev_frame_hook,
 					 vport);
 	if (err)
@@ -141,6 +144,7 @@ error_free_vport:
 }
 EXPORT_SYMBOL_GPL(ovs_netdev_link);
 
+//netdev port创建
 static struct vport *netdev_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -204,6 +208,7 @@ EXPORT_SYMBOL_GPL(ovs_netdev_tunnel_destroy);
 /* Returns null if this device is not attached to a datapath. */
 struct vport *ovs_netdev_get_vport(struct net_device *dev)
 {
+	//由dev获得vport
 	if (likely(dev->priv_flags & IFF_OVS_DATAPATH))
 		return (struct vport *)
 			rcu_dereference_rtnl(dev->rx_handler_data);
@@ -215,16 +220,20 @@ static struct vport_ops ovs_netdev_vport_ops = {
 	.type		= OVS_VPORT_TYPE_NETDEV,
 	.create		= netdev_create,//接口创建
 	.destroy	= netdev_destroy,
+	//针对netdev类型的报文，其自ovs向外发送时，其将投递给vport->dev对应的那个口
 	.send		= dev_queue_xmit,
 };
 
+//添加netdev vport ops
 int __init ovs_netdev_init(void)
 {
 	//注册类型为ovs_vport_type_netdev的ops
 	return ovs_vport_ops_register(&ovs_netdev_vport_ops);
 }
 
+//移除netdev vport ops
 void ovs_netdev_exit(void)
 {
+	//netdev ops移除
 	ovs_vport_ops_unregister(&ovs_netdev_vport_ops);
 }

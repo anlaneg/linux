@@ -588,7 +588,7 @@ static int ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
  */
 
 int ip_do_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
-		   int (*output)(struct net *, struct sock *, struct sk_buff *))
+		   int (*output/*分片后报文的发送函数*/)(struct net *, struct sock *, struct sk_buff *))
 {
 	struct iphdr *iph;
 	int ptr;

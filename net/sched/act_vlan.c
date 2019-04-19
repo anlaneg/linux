@@ -47,17 +47,20 @@ static int tcf_vlan_act(struct sk_buff *skb, const struct tc_action *a,
 
 	switch (p->tcfv_action) {
 	case TCA_VLAN_ACT_POP:
+		//移除vlan信息
 		err = skb_vlan_pop(skb);
 		if (err)
 			goto drop;
 		break;
 	case TCA_VLAN_ACT_PUSH:
+		//添加vlan信息
 		err = skb_vlan_push(skb, p->tcfv_push_proto, p->tcfv_push_vid |
 				    (p->tcfv_push_prio << VLAN_PRIO_SHIFT));
 		if (err)
 			goto drop;
 		break;
 	case TCA_VLAN_ACT_MODIFY:
+		//移除再添加vlan信息，用于修改
 		/* No-op if no vlan tag (either hw-accel or in-payload) */
 		if (!skb_vlan_tagged(skb))
 			goto out;
@@ -310,6 +313,7 @@ static int tcf_vlan_search(struct net *net, struct tc_action **a, u32 index)
 }
 
 static struct tc_action_ops act_vlan_ops = {
+		//kind或id唯一确定一项
 	.kind		=	"vlan",
 	.id		=	TCA_ID_VLAN,
 	.owner		=	THIS_MODULE,
@@ -341,6 +345,7 @@ static struct pernet_operations vlan_net_ops = {
 	.size = sizeof(struct tc_action_net),
 };
 
+//注册net的ops,act的ops
 static int __init vlan_init_module(void)
 {
 	return tcf_register_action(&act_vlan_ops, &vlan_net_ops);

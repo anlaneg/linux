@@ -34,11 +34,13 @@
 #include "vport.h"
 #include "vport-internal_dev.h"
 
+//用于串连所有的ops的链表
 static LIST_HEAD(vport_ops_list);
 
 /* Protected by RCU read lock for reading, ovs_mutex for writing. */
 //记录以dev名称为索引的vport哈希表
 static struct hlist_head *dev_table;
+
 #define VPORT_HASH_BUCKETS 1024
 
 /**
@@ -78,6 +80,7 @@ int __ovs_vport_ops_register(struct vport_ops *ops)
 	struct vport_ops *o;
 
 	ovs_lock();
+	//遍历所有vport_ops检查ops	是否已存在，如果未存在，则注册
 	list_for_each_entry(o, &vport_ops_list, list)
 		if (ops->type == o->type)
 			goto errout;
@@ -91,6 +94,7 @@ errout:
 }
 EXPORT_SYMBOL_GPL(__ovs_vport_ops_register);
 
+//ops移除
 void ovs_vport_ops_unregister(struct vport_ops *ops)
 {
 	ovs_lock();
@@ -130,7 +134,8 @@ struct vport *ovs_vport_locate(const struct net *net, const char *name)
  * vport_priv().  vports that are no longer needed should be released with
  * vport_free().
  */
-struct vport *ovs_vport_alloc(int priv_size, const struct vport_ops *ops,
+//vport申请
+struct vport *ovs_vport_alloc(int priv_size, const struct vport_ops *ops/*vport对应的ops*/,
 			  const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -182,7 +187,7 @@ void ovs_vport_free(struct vport *vport)
 }
 EXPORT_SYMBOL_GPL(ovs_vport_free);
 
-//匹配相同类理型的type
+//匹配相同类型的type
 static struct vport_ops *ovs_vport_lookup(const struct vport_parms *parms)
 {
 	struct vport_ops *ops;
@@ -202,6 +207,7 @@ static struct vport_ops *ovs_vport_lookup(const struct vport_parms *parms)
  * Creates a new vport with the specified configuration (which is dependent on
  * device type).  ovs_mutex must be held.
  */
+//vport 添加
 struct vport *ovs_vport_add(const struct vport_parms *parms)
 {
 	struct vport_ops *ops;
@@ -215,18 +221,20 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 		if (!try_module_get(ops->owner))
 			return ERR_PTR(-EAFNOSUPPORT);
 
-		//创建port
+		//创建指定类型的port
 		vport = ops->create(parms);
 		if (IS_ERR(vport)) {
 			module_put(ops->owner);
 			return vport;
 		}
 
+		//将vport添加在hash表上
 		bucket = hash_bucket(ovs_dp_get_net(vport->dp),
 				     ovs_vport_name(vport));
 		hlist_add_head_rcu(&vport->hash_node, bucket);
 		return vport;
 	}
+	//创建失败，尝试加载module
 
 	/* Unlock to attempt module load and return -EAGAIN if load
 	 * was successful as we need to restart the port addition
@@ -270,8 +278,11 @@ void ovs_vport_del(struct vport *vport)
 {
 	ASSERT_OVSL();
 
+	//vport移除
 	hlist_del_rcu(&vport->hash_node);
+	//对应的module释放
 	module_put(vport->ops->owner);
+	//vport销毁
 	vport->ops->destroy(vport);
 }
 
@@ -443,7 +454,7 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport, struct sk_buff *skb)
  * Must be called with rcu_read_lock.  The packet cannot be shared and
  * skb->data should point to the Ethernet header.
  */
-int ovs_vport_receive(struct vport *vport, struct sk_buff *skb,
+int ovs_vport_receive(struct vport *vport/*报文入接口*/, struct sk_buff *skb/*指向以太头*/,
 		      const struct ip_tunnel_info *tun_info)
 {
 	struct sw_flow_key key;
@@ -513,6 +524,7 @@ void ovs_vport_send(struct vport *vport, struct sk_buff *skb, u8 mac_proto)
 
 	if (unlikely(packet_length(skb, vport->dev) > mtu &&
 		     !skb_is_gso(skb))) {
+		//未开启gso,报文的大小超过mtu,则丢包
 		net_warn_ratelimited("%s: dropped over-mtu packet: %d > %d\n",
 				     vport->dev->name,
 				     packet_length(skb, vport->dev), mtu);
@@ -520,6 +532,7 @@ void ovs_vport_send(struct vport *vport, struct sk_buff *skb, u8 mac_proto)
 		goto drop;
 	}
 
+	//更改报文所属的dev,并将报文自此设备发出
 	skb->dev = vport->dev;
 	vport->ops->send(skb);
 	return;

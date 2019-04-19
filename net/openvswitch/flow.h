@@ -58,6 +58,7 @@ struct ovs_tunnel_info {
 };
 
 struct vlan_head {
+	//vlan协议及vlanid
 	__be16 tpid; /* Vlan type. Generally 802.1q or 802.1ad.*/
 	__be16 tci;  /* 0 if no VLAN, VLAN_CFI_MASK set otherwise. */
 };
@@ -85,10 +86,12 @@ struct sw_flow_key {
 	u32 ovs_flow_hash;		/* Datapath computed hash value.  */
 	u32 recirc_id;			/* Recirculation ID.  */
 	struct {
+		//报文的源目的mac
 		u8     src[ETH_ALEN];	/* Ethernet source address. */
 		u8     dst[ETH_ALEN];	/* Ethernet destination address. */
-		struct vlan_head vlan;
-		struct vlan_head cvlan;
+		struct vlan_head vlan;//外层vlan
+		struct vlan_head cvlan;//内层vlan
+		//以太帧类型
 		__be16 type;		/* Ethernet frame type. */
 	} eth;
 	/* Filling a hole of two bytes. */
@@ -109,11 +112,13 @@ struct sw_flow_key {
 	};
 	u16 ct_zone;			/* Conntrack zone. */
 	struct {
+		//传输层port情况
 		__be16 src;		/* TCP/UDP/SCTP source port. */
 		__be16 dst;		/* TCP/UDP/SCTP destination port. */
 		__be16 flags;		/* TCP flags. */
 	} tp;
 	union {
+		//ip层地址情况
 		struct {
 			struct {
 				__be32 src;	/* IP source address. */
