@@ -1748,20 +1748,16 @@ int netdev_register_kobject(struct net_device *ndev)
 
 	error = device_add(dev);//dev添加给系统，并探测设备对应的驱动
 	if (error)
-		goto error_put_device;
+		return error;
 
 	error = register_queue_kobjects(ndev);
-	if (error)
-		goto error_device_del;
+	if (error) {
+		device_del(dev);
+		return error;
+	}
 
 	pm_runtime_set_memalloc_noio(dev, true);
 
-	return 0;
-
-error_device_del:
-	device_del(dev);
-error_put_device:
-	put_device(dev);
 	return error;
 }
 
