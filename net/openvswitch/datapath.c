@@ -257,6 +257,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 		upcall.cmd = OVS_PACKET_CMD_MISS;
 		upcall.portid = ovs_vport_find_upcall_portid(p, skb);
 		upcall.mru = OVS_CB(skb)->mru;
+		//执行upcall,指定cutlen为0
 		error = ovs_dp_upcall(dp, skb, key, &upcall, 0);
 		if (unlikely(error))
 			kfree_skb(skb);
@@ -284,7 +285,7 @@ out:
 }
 
 int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
-		  const struct sw_flow_key *key,
+		  const struct sw_flow_key *key,/*报文parser得到的key*/
 		  const struct dp_upcall_info *upcall_info,
 		  uint32_t cutlen)
 {
@@ -292,6 +293,7 @@ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
 	int err;
 
 	if (upcall_info->portid == 0) {
+		//0表示未连接
 		err = -ENOTCONN;
 		goto err;
 	}
@@ -467,11 +469,13 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 		err = -EINVAL;
 		goto out;
 	}
+	//指明upcall所属的datapath
 	upcall->dp_ifindex = dp_ifindex;
 
 	err = ovs_nla_put_key(key, key, OVS_PACKET_ATTR_KEY, false, user_skb);
 	BUG_ON(err);
 
+	//写簇userdata
 	if (upcall_info->userdata)
 		__nla_put(user_skb, OVS_PACKET_ATTR_USERDATA,
 			  nla_len(upcall_info->userdata),
@@ -489,6 +493,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 		nla_nest_end(user_skb, nla);
 	}
 
+	//写入actions
 	if (upcall_info->actions_len) {
 		nla = nla_nest_start(user_skb, OVS_PACKET_ATTR_ACTIONS);
 		if (!nla) {
@@ -552,6 +557,7 @@ out:
 	return err;
 }
 
+//从应用层传下报文及action,执行action修改报文并发出
 static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 {
 	struct ovs_header *ovs_header = info->userhdr;
@@ -1308,6 +1314,7 @@ unlock:
 	return err;
 }
 
+//自流表中移除flow
 static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr **a = info->attrs;
@@ -1447,6 +1454,7 @@ static const struct genl_ops dp_flow_genl_ops[] = {
 	  .policy = flow_policy,
 	  .doit = ovs_flow_cmd_new
 	},
+	//处理流移除
 	{ .cmd = OVS_FLOW_CMD_DEL,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .policy = flow_policy,
@@ -2087,6 +2095,7 @@ restart:
 		goto exit_unlock_free;
 	}
 
+	//构造vport 创建响应消息
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
 				      OVS_VPORT_CMD_NEW);

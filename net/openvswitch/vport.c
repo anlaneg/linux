@@ -436,9 +436,11 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport, struct sk_buff *skb)
 
 	ids = rcu_dereference(vport->upcall_portids);
 
+	//配置无效，返回0
 	if (ids->n_ids == 1 && ids->ids[0] == 0)
 		return 0;
 
+	//否则执行hash选取
 	hash = skb_get_hash(skb);
 	ids_index = hash - ids->n_ids * reciprocal_divide(hash, ids->rn_ids);
 	return ids->ids[ids_index];
@@ -478,6 +480,8 @@ int ovs_vport_receive(struct vport *vport/*报文入接口*/, struct sk_buff *sk
 		kfree_skb(skb);
 		return error;
 	}
+
+	//报文处理
 	ovs_dp_process_packet(skb, &key);
 	return 0;
 }
