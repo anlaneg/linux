@@ -1328,6 +1328,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		goto errout_mask_alloc;
 	}
 
+	//解析选项
 	err = nla_parse_nested(tb, TCA_FLOWER_MAX, tca[TCA_OPTIONS],
 			       fl_policy, NULL);
 	if (err < 0)
@@ -1348,6 +1349,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	if (err < 0)
 		goto errout;
 
+	//设置流的下发方式（不下发至硬件/不下发至软件）
 	if (tb[TCA_FLOWER_FLAGS]) {
 		fnew->flags = nla_get_u32(tb[TCA_FLOWER_FLAGS]);
 
@@ -1390,6 +1392,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		goto errout_idr;
 
 	if (!tc_skip_hw(fnew->flags)) {
+		//按要求下发给HW
 		err = fl_hw_replace_filter(tp, fnew, extack);
 		if (err)
 			goto errout_mask_ht;
@@ -2138,6 +2141,7 @@ static void fl_bind_class(void *fh, u32 classid, unsigned long cl)
 		f->res.class = cl;
 }
 
+//注册flower关键字对应的ops
 static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.kind		= "flower",
 	.classify	= fl_classify,
@@ -2156,6 +2160,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.owner		= THIS_MODULE,
 };
 
+//注册flower关键字对应的ops
 static int __init cls_fl_init(void)
 {
 	return register_tcf_proto_ops(&cls_fl_ops);

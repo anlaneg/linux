@@ -1138,6 +1138,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q,
 	rcu_read_lock();
 
 	/* Find link */
+	//获取到指定的网络设备
 	dev = dev_get_by_index_rcu(net, ifindex);
 	if (!dev) {
 		rcu_read_unlock();
@@ -1979,6 +1980,7 @@ static void tfilter_put(struct tcf_proto *tp, void *fh)
 		tp->ops->put(tp, fh);
 }
 
+//netlink收到tc新加filter的命令后，此函数将被调用
 static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 			  struct netlink_ext_ack *extack)
 {
@@ -2156,6 +2158,7 @@ replay:
 		goto errout;
 	}
 
+	//下发规则
 	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh,
 			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
 			      rtnl_held, extack);
@@ -3058,8 +3061,8 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		} else if (exts->action && tb[exts->action]) {
 			int err;
 
-			err = tcf_action_init(net, tp, tb[exts->action],
-					      rate_tlv, NULL, ovr, TCA_ACT_BIND,
+			err = tcf_action_init(net, tp, tb[exts->action]/*要解析的action*/,
+					      rate_tlv, NULL/*name置为NULL*/, ovr, TCA_ACT_BIND,
 					      exts->actions, &attr_size,
 					      rtnl_held, extack);
 			if (err < 0)
@@ -3186,6 +3189,7 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 		return 0;
 
 	j = 0;
+	//采用act遍历exts->actions
 	tcf_exts_for_each_action(i, act, exts) {
 		struct flow_action_entry *entry;
 
@@ -3203,6 +3207,7 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 			entry->id = FLOW_ACTION_REDIRECT;
 			entry->dev = tcf_mirred_dev(act);
 		} else if (is_tcf_mirred_egress_mirror(act)) {
+			//处理mirror
 			entry->id = FLOW_ACTION_MIRRED;
 			entry->dev = tcf_mirred_dev(act);
 		} else if (is_tcf_vlan(act)) {
@@ -3324,6 +3329,7 @@ static int __init tc_filter_init(void)
 	if (err)
 		goto err_rhash_setup_block_ht;
 
+	//注册tc的newfilter处理函数
 	rtnl_register(PF_UNSPEC, RTM_NEWTFILTER, tc_new_tfilter, NULL,
 		      RTNL_FLAG_DOIT_UNLOCKED);
 	rtnl_register(PF_UNSPEC, RTM_DELTFILTER, tc_del_tfilter, NULL,

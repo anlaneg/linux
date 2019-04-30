@@ -853,6 +853,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	int err;
 
 	if (name == NULL) {
+		//解析action
 		err = nla_parse_nested(tb, TCA_ACT_MAX, nla, NULL, extack);
 		if (err < 0)
 			goto err_out;
@@ -862,10 +863,13 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 			NL_SET_ERR_MSG(extack, "TC action kind must be specified");
 			goto err_out;
 		}
+
+		//提取action name
 		if (nla_strlcpy(act_name, kind, IFNAMSIZ) >= IFNAMSIZ) {
 			NL_SET_ERR_MSG(extack, "TC action name too long");
 			goto err_out;
 		}
+
 		if (tb[TCA_ACT_COOKIE]) {
 			int cklen = nla_len(tb[TCA_ACT_COOKIE]);
 

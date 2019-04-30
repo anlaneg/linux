@@ -730,10 +730,12 @@ static inline bool tc_skip_sw(u32 flags)
 /* SKIP_HW and SKIP_SW are mutually exclusive flags. */
 static inline bool tc_flags_valid(u32 flags)
 {
+	//flags仅容许三种flags(不下发至硬件，不下发至软件，详细的日志）
 	if (flags & ~(TCA_CLS_FLAGS_SKIP_HW | TCA_CLS_FLAGS_SKIP_SW |
 		      TCA_CLS_FLAGS_VERBOSE))
 		return false;
 
+	//仅容许(不下发至硬件或不下发至软件两个flags生效）
 	flags &= TCA_CLS_FLAGS_SKIP_HW | TCA_CLS_FLAGS_SKIP_SW;
 	if (!(flags ^ (TCA_CLS_FLAGS_SKIP_HW | TCA_CLS_FLAGS_SKIP_SW)))
 		return false;

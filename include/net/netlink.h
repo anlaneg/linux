@@ -861,6 +861,9 @@ static inline int nla_len(const struct nlattr *nla)
  */
 static inline int nla_ok(const struct nlattr *nla, int remaining)
 {
+	//检查给出的nla是否与其记录的数据一致（remaining肯定大于nla,仅在nla是最后一个nlattr时等于关系成立）
+	//nla->nla_len肯定大于sizeof(*nla),仅在nla没有vlaue时等于关系成立
+	//nla->nla_len 肯定小于remaining,仅在nla为最后一个nlattr时等于关系成立
 	return remaining >= (int) sizeof(*nla) &&
 	       nla->nla_len >= sizeof(*nla) &&
 	       nla->nla_len <= remaining;
@@ -876,6 +879,7 @@ static inline int nla_ok(const struct nlattr *nla, int remaining)
  */
 static inline struct nlattr *nla_next(const struct nlattr *nla, int *remaining)
 {
+	//nlattr数据存放时要对齐，故下一个nlattr即为 nla+NLA_ALIGN(nla->nla_len)
 	unsigned int totlen = NLA_ALIGN(nla->nla_len);
 
 	*remaining -= totlen;

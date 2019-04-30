@@ -168,6 +168,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 
 	BUG_ON(pt->type > NLA_TYPE_MAX);
 
+	//校验属性的长度
 	if ((nla_attr_len[pt->type] && attrlen != nla_attr_len[pt->type]) ||
 	    (pt->type == NLA_EXACT_LEN_WARN && attrlen != pt->len)) {
 		pr_warn_ratelimited("netlink: '%s': attribute type %d has an invalid length.\n",
@@ -391,8 +392,8 @@ EXPORT_SYMBOL(nla_policy_len);
  *
  * Returns 0 on success or a negative error code.
  */
-static int __nla_parse(struct nlattr **tb, int maxtype,
-		       const struct nlattr *head, int len,
+static int __nla_parse(struct nlattr **tb, int maxtype/*指出type最大值*/,
+		       const struct nlattr *head/*数据起始位置*/, int len,
 		       bool strict, const struct nla_policy *policy,
 		       struct netlink_ext_ack *extack)
 {
@@ -401,9 +402,11 @@ static int __nla_parse(struct nlattr **tb, int maxtype,
 
 	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
 
+	//遍历netlink属性，解析key,value
 	nla_for_each_attr(nla, head, len, rem) {
 		u16 type = nla_type(nla);
 
+		//type有效性检查
 		if (type == 0 || type > maxtype) {
 			if (strict) {
 				NL_SET_ERR_MSG(extack, "Unknown attribute type");
@@ -412,16 +415,19 @@ static int __nla_parse(struct nlattr **tb, int maxtype,
 			continue;
 		}
 		if (policy) {
+			//有policy,采用policy检查字段
 			int err = validate_nla(nla, maxtype, policy, extack);
 
 			if (err < 0)
 				return err;
 		}
 
+		//将type对应的(type,length,value)存入tb
 		tb[type] = (struct nlattr *)nla;
 	}
 
 	if (unlikely(rem > 0)) {
+		//未使用完所有数据，bug
 		pr_warn_ratelimited("netlink: %d bytes leftover after parsing attributes in process `%s'.\n",
 				    rem, current->comm);
 		NL_SET_ERR_MSG(extack, "bytes leftover after parsing attributes");
