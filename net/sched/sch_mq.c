@@ -21,7 +21,7 @@
 #include <net/sch_generic.h>
 
 struct mq_sched {
-	struct Qdisc		**qdiscs;
+	struct Qdisc		**qdiscs;//指出对应的每个队列
 };
 
 static int mq_offload(struct Qdisc *sch, enum tc_mq_command cmd)
@@ -83,6 +83,7 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 		return -EOPNOTSUPP;
 
 	/* pre-allocate qdiscs, attachment can't fail */
+	//申请dev->num_tx_queues个队列
 	priv->qdiscs = kcalloc(dev->num_tx_queues, sizeof(priv->qdiscs[0]),
 			       GFP_KERNEL);
 	if (!priv->qdiscs)

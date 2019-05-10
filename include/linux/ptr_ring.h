@@ -31,6 +31,7 @@
 #endif
 
 struct ptr_ring {
+	//生产者可存放的位置
 	int producer ____cacheline_aligned_in_smp;
 	spinlock_t producer_lock;
 	int consumer_head ____cacheline_aligned_in_smp; /* next valid entry */
@@ -38,6 +39,7 @@ struct ptr_ring {
 	spinlock_t consumer_lock;
 	/* Shared consumer/producer data */
 	/* Read-only by both the producer and the consumer */
+	//队列大小
 	int size ____cacheline_aligned_in_smp; /* max entries in queue */
 	int batch; /* number of entries to consume in a batch */
 	void **queue;
@@ -113,9 +115,10 @@ static inline int __ptr_ring_produce(struct ptr_ring *r, void *ptr)
 	/* Pairs with smp_read_barrier_depends in __ptr_ring_consume. */
 	smp_wmb();
 
+	//ptr入队
 	WRITE_ONCE(r->queue[r->producer++], ptr);
 	if (unlikely(r->producer >= r->size))
-		r->producer = 0;
+		r->producer = 0;//生产者指针绕回
 	return 0;
 }
 
@@ -169,6 +172,7 @@ static inline int ptr_ring_produce_bh(struct ptr_ring *r, void *ptr)
 	return ret;
 }
 
+//peek一个元素
 static inline void *__ptr_ring_peek(struct ptr_ring *r)
 {
 	if (likely(r->size))
@@ -487,13 +491,16 @@ static inline void __ptr_ring_set_size(struct ptr_ring *r, int size)
 		r->batch = 1;
 }
 
+//初始化ring
 static inline int ptr_ring_init(struct ptr_ring *r, int size, gfp_t gfp)
 {
+	//申请queue队列
 	r->queue = __ptr_ring_init_queue_alloc(size, gfp);
 	if (!r->queue)
 		return -ENOMEM;
 
 	__ptr_ring_set_size(r, size);
+	//生产者消费者指针初始化
 	r->producer = r->consumer_head = r->consumer_tail = 0;
 	spin_lock_init(&r->producer_lock);
 	spin_lock_init(&r->consumer_lock);
@@ -631,7 +638,7 @@ static inline int ptr_ring_resize_multiple(struct ptr_ring **rings,
 	queues = kmalloc_array(nrings, sizeof(*queues), gfp);
 	if (!queues)
 		goto noqueues;
-
+	//申请新的ring队列（新的大小）
 	for (i = 0; i < nrings; ++i) {
 		queues[i] = __ptr_ring_init_queue_alloc(size, gfp);
 		if (!queues[i])
@@ -641,6 +648,7 @@ static inline int ptr_ring_resize_multiple(struct ptr_ring **rings,
 	for (i = 0; i < nrings; ++i) {
 		spin_lock_irqsave(&(rings[i])->consumer_lock, flags);
 		spin_lock(&(rings[i])->producer_lock);
+		//将旧ring中的数据移至新的queues中
 		queues[i] = __ptr_ring_swap_queue(rings[i], queues[i],
 						  size, gfp, destroy);
 		spin_unlock(&(rings[i])->producer_lock);

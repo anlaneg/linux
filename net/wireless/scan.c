@@ -616,6 +616,7 @@ int cfg80211_stop_sched_scan_req(struct cfg80211_registered_device *rdev,
 			return err;
 	}
 
+	//知会用户态scan stop
 	nl80211_send_sched_scan(req, NL80211_CMD_SCHED_SCAN_STOPPED);
 
 	cfg80211_del_sched_scan_req(rdev, req);

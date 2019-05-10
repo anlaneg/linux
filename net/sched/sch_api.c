@@ -135,6 +135,7 @@ int register_qdisc(struct Qdisc_ops *qops)
 	int rc = -EEXIST;
 
 	write_lock(&qdisc_mod_lock);
+	//检查是否已注册
 	for (qp = &qdisc_base; (q = *qp) != NULL; qp = &q->next)
 		if (!strcmp(qops->id, q->id))
 			goto out;
@@ -161,7 +162,7 @@ int register_qdisc(struct Qdisc_ops *qops)
 	}
 
 	qops->next = NULL;
-	*qp = qops;
+	*qp = qops;//将ops注册到queues上
 	rc = 0;
 out:
 	write_unlock(&qdisc_mod_lock);

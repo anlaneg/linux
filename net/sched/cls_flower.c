@@ -2148,6 +2148,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.init		= fl_init,
 	.destroy	= fl_destroy,
 	.get		= fl_get,
+	//处理规则下发
 	.change		= fl_change,
 	.delete		= fl_delete,
 	.walk		= fl_walk,

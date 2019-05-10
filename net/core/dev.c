@@ -3544,6 +3544,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 			__qdisc_drop(skb, &to_free);
 			rc = NET_XMIT_DROP;
 		} else {
+			//报文入队
 			rc = q->enqueue(skb, q, &to_free) & NET_XMIT_MASK;
 			qdisc_run(q);
 		}

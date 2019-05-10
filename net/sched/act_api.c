@@ -631,6 +631,7 @@ static struct tc_action_ops *tc_lookup_action_n(char *kind)
 }
 
 /* lookup by nlattr */
+//通过kind值查找对应的ops
 static struct tc_action_ops *tc_lookup_action(struct nlattr *kind)
 {
 	struct tc_action_ops *a, *res = NULL;
@@ -646,7 +647,7 @@ static struct tc_action_ops *tc_lookup_action(struct nlattr *kind)
 		}
 		read_unlock(&act_mod_lock);
 	}
-	return res;
+	return res;/*给定action名称返回action对应的ops*/
 }
 
 /*TCA_ACT_MAX_PRIO is 32, there count upto 32 */
@@ -671,6 +672,7 @@ restart_act_graph:
 			continue;
 		}
 repeat:
+		//执行action对应的动作（例如执行nat资源分配）
 		ret = a->ops->act(skb, a, res);
 		if (ret == TC_ACT_REPEAT)
 			goto repeat;	/* we need a ttl - JHS */

@@ -191,6 +191,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 	if (!tp)
 		return ERR_PTR(-ENOBUFS);
 
+	//通过kind查出tp->ops对应的ops
 	tp->ops = tcf_proto_lookup_ops(kind, rtnl_held, extack);
 	if (IS_ERR(tp->ops)) {
 		err = PTR_ERR(tp->ops);
@@ -1654,6 +1655,7 @@ int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 reclassify:
 #endif
 	for (; tp; tp = rcu_dereference_bh(tp->next)) {
+		//取出报文对应的protocol(三层类型）
 		__be16 protocol = tc_skb_protocol(skb);
 		int err;
 
@@ -1661,6 +1663,7 @@ reclassify:
 		    tp->protocol != htons(ETH_P_ALL))
 			continue;
 
+		//使用tp进行分类
 		err = tp->classify(skb, tp, res);
 #ifdef CONFIG_NET_CLS_ACT
 		if (unlikely(err == TC_ACT_RECLASSIFY && !compat_mode)) {
@@ -2158,7 +2161,7 @@ replay:
 		goto errout;
 	}
 
-	//下发规则
+	//下发规则(例如flower对应的cls_fl_ops）
 	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh,
 			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
 			      rtnl_held, extack);

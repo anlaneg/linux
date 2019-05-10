@@ -7926,6 +7926,7 @@ static int nl80211_start_sched_scan(struct sk_buff *skb,
 
 	cfg80211_add_sched_scan_req(rdev, sched_scan_req);
 
+	//知会应用层开始扫描
 	nl80211_send_sched_scan(sched_scan_req, NL80211_CMD_START_SCHED_SCAN);
 	return 0;
 

@@ -91,6 +91,7 @@ struct Qdisc {
 	u32			handle;
 	u32			parent;
 
+	//队列所属的netdev
 	struct netdev_queue	*dev_queue;
 
 	struct net_rate_estimator __rcu *rate_est;
@@ -224,24 +225,31 @@ enum qdisc_class_ops_flags {
 struct Qdisc_ops {
 	struct Qdisc_ops	*next;
 	const struct Qdisc_class_ops	*cl_ops;
-	char			id[IFNAMSIZ];
+	char			id[IFNAMSIZ];//ops的唯一标识
 	int			priv_size;
 	unsigned int		static_flags;
 
+	//使报文入队
 	int 			(*enqueue)(struct sk_buff *skb,
 					   struct Qdisc *sch,
 					   struct sk_buff **to_free);
+	//出队一个报文
 	struct sk_buff *	(*dequeue)(struct Qdisc *);
+	//peek一个报文
 	struct sk_buff *	(*peek)(struct Qdisc *);
 
+	//队列初始化
 	int			(*init)(struct Qdisc *sch, struct nlattr *arg,
 					struct netlink_ext_ack *extack);
+	//清空队列
 	void			(*reset)(struct Qdisc *);
+	//队列销毁
 	void			(*destroy)(struct Qdisc *);
 	int			(*change)(struct Qdisc *sch,
 					  struct nlattr *arg,
 					  struct netlink_ext_ack *extack);
 	void			(*attach)(struct Qdisc *sch);
+	//更新队列长度
 	int			(*change_tx_queue_len)(struct Qdisc *, unsigned int);
 
 	int			(*dump)(struct Qdisc *, struct sk_buff *);

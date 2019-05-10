@@ -349,6 +349,7 @@ MODULE_LICENSE("GPL");
 
 static int __init nat_init_module(void)
 {
+	//注册 nat action
 	return tcf_register_action(&act_nat_ops, &nat_net_ops);
 }
 

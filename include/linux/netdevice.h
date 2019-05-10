@@ -1991,7 +1991,7 @@ struct net_device {
 	struct netdev_queue	*_tx ____cacheline_aligned_in_smp;
 	unsigned int		num_tx_queues;//tx队列数
 	unsigned int		real_num_tx_queues;//有效的tx队列数
-	struct Qdisc		*qdisc;
+	struct Qdisc		*qdisc;//队列
 #ifdef CONFIG_NET_SCHED
 	DECLARE_HASHTABLE	(qdisc_hash, 4);
 #endif
@@ -3572,6 +3572,7 @@ static inline int __netif_set_xps_queue(struct net_device *dev,
  */
 static inline bool netif_is_multiqueue(const struct net_device *dev)
 {
+	//检查设备是否为多队列设备
 	return dev->num_tx_queues > 1;
 }
 
