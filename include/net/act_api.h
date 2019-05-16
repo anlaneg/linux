@@ -79,10 +79,13 @@ static inline void tcf_tm_dump(struct tcf_t *dtm, const struct tcf_t *stm)
 
 struct tc_action_ops {
 	struct list_head head;
+	//action名称
 	char    kind[IFNAMSIZ];
 	enum tca_id  id; /* identifier should match kind */
+	//需要的tc_action结构体大小
 	size_t	size;
 	struct module		*owner;
+	//action执行函数
 	int     (*act)(struct sk_buff *, const struct tc_action *,
 		       struct tcf_result *); /* called under RCU BH lock*/
 	int     (*dump)(struct sk_buff *, struct tc_action *, int, int);

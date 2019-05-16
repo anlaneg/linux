@@ -611,7 +611,7 @@ int tcf_unregister_action(struct tc_action_ops *act,
 EXPORT_SYMBOL(tcf_unregister_action);
 
 /* lookup by name */
-//通过kind名称查找对应的tc_action_ops
+//通过kind名称查找对应的action的ops
 static struct tc_action_ops *tc_lookup_action_n(char *kind)
 {
 	struct tc_action_ops *a, *res = NULL;
@@ -652,8 +652,8 @@ static struct tc_action_ops *tc_lookup_action(struct nlattr *kind)
 
 /*TCA_ACT_MAX_PRIO is 32, there count upto 32 */
 #define TCA_ACT_MAX_PRIO_MASK 0x1FF
-int tcf_action_exec(struct sk_buff *skb, struct tc_action **actions,
-		    int nr_actions, struct tcf_result *res)
+int tcf_action_exec(struct sk_buff *skb, struct tc_action **actions/*动作数组*/,
+		    int nr_actions/*动作数目*/, struct tcf_result *res)
 {
 	u32 jmp_prgcnt = 0;
 	u32 jmp_ttl = TCA_ACT_MAX_PRIO; /*matches actions per filter */
@@ -675,6 +675,7 @@ repeat:
 		//执行action对应的动作（例如执行nat资源分配）
 		ret = a->ops->act(skb, a, res);
 		if (ret == TC_ACT_REPEAT)
+			//继续执行此action
 			goto repeat;	/* we need a ttl - JHS */
 
 		if (TC_ACT_EXT_CMP(ret, TC_ACT_JUMP)) {
@@ -862,6 +863,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 		err = -EINVAL;
 		kind = tb[TCA_ACT_KIND];
 		if (!kind) {
+			//未指定action名称，无法处理
 			NL_SET_ERR_MSG(extack, "TC action kind must be specified");
 			goto err_out;
 		}
@@ -895,10 +897,10 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 		}
 	}
 
-	//通过act name查找act ops
+	//通过actname查找act ops
 	a_o = tc_lookup_action_n(act_name);
 	if (a_o == NULL) {
-		//尝试加载module，并重试
+		//未找到对应的action,尝试加载module，并重试
 #ifdef CONFIG_MODULES
 		if (rtnl_held)
 			rtnl_unlock();
@@ -925,7 +927,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	}
 
 	/* backward compatibility for policer */
-	//调用a_o->init
+	//调用a_o->init,完成action结构体a初始化
 	if (name == NULL)
 		err = a_o->init(net, tb[TCA_ACT_OPTIONS], est, &a, ovr, bind,
 				rtnl_held, tp, extack);
@@ -952,6 +954,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 		return ERR_PTR(-EINVAL);
 	}
 
+	//返回对应的action
 	return a;
 
 err_mod:
@@ -968,7 +971,7 @@ err_out:
 
 int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 		    struct nlattr *est, char *name, int ovr, int bind,
-		    struct tc_action *actions[], size_t *attr_size,
+		    struct tc_action *actions[]/*出参，保存生成的action*/, size_t *attr_size,
 		    bool rtnl_held, struct netlink_ext_ack *extack)
 {
 	struct nlattr *tb[TCA_ACT_MAX_PRIO + 1];
@@ -991,6 +994,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 		act->order = i;
 		sz += tcf_action_fill_size(act);
 		/* Start from index 0 */
+		//存储生成的action
 		actions[i - 1] = act;
 	}
 

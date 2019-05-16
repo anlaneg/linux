@@ -36,6 +36,7 @@ enum {
 #define TC_ACT_PIPE		3
 #define TC_ACT_STOLEN		4
 #define TC_ACT_QUEUED		5
+//继续执行此action
 #define TC_ACT_REPEAT		6
 #define TC_ACT_REDIRECT		7
 #define TC_ACT_TRAP		8 /* For hw path, this means "trap to cpu"

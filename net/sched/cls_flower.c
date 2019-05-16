@@ -30,7 +30,7 @@
 #include <net/dst_metadata.h>
 
 struct fl_flow_key {
-	int	indev_ifindex;
+	int	indev_ifindex;//入接口
 	struct flow_dissector_key_control control;
 	struct flow_dissector_key_control enc_control;
 	struct flow_dissector_key_basic basic;
@@ -281,12 +281,14 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		/* skb_flow_dissect() does not set n_proto in case an unknown
 		 * protocol, so do it rather here.
 		 */
-		skb_key.basic.n_proto = skb->protocol;
+		skb_key.basic.n_proto = skb->protocol;//网络层协议ipv4/ipv6
 		skb_flow_dissect_tunnel_info(skb, &mask->dissector, &skb_key);
+		//解析skb中的mask->dissector提及的字段，并将解析结果存入到skb_key中
 		skb_flow_dissect(skb, &mask->dissector, &skb_key, 0);
 
 		fl_set_masked_key(&skb_mkey, &skb_key, mask);
 
+		//查询flow
 		f = fl_lookup(mask, &skb_mkey, &skb_key);
 		if (f && !tc_skip_sw(f->flags)) {
 			*res = f->res;
@@ -331,6 +333,7 @@ static bool fl_mask_put(struct cls_fl_head *head, struct fl_flow_mask *mask,
 	if (!list_empty(&mask->filters))
 		return false;
 
+	//删除mask节点
 	rhashtable_remove_fast(&head->ht, &mask->ht_node, mask_ht_params);
 	list_del_rcu(&mask->list);
 	if (async)
@@ -596,16 +599,20 @@ geneve_opt_policy[TCA_FLOWER_KEY_ENC_OPT_GENEVE_MAX + 1] = {
 						       .len = 128 },
 };
 
+//解析tb,填充val,mask
 static void fl_set_key_val(struct nlattr **tb,
 			   void *val, int val_type,
-			   void *mask, int mask_type, int len)
+			   void *mask, int mask_type, int len/*val长度*/)
 {
 	if (!tb[val_type])
 		return;
+	//自tb中提取val_type,填充val
 	memcpy(val, nla_data(tb[val_type]), len);
 	if (mask_type == TCA_FLOWER_UNSPEC || !tb[mask_type])
+		//仅支持全1的mask
 		memset(mask, 0xff, len);
 	else
+		//支持mask
 		memcpy(mask, nla_data(tb[mask_type]), len);
 }
 
@@ -891,8 +898,8 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 	return 0;
 }
 
-static int fl_set_key(struct net *net, struct nlattr **tb,
-		      struct fl_flow_key *key, struct fl_flow_key *mask,
+static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/,
+		      struct fl_flow_key *key/*出参，匹配key*/, struct fl_flow_key *mask/*出参，key对应的掩码*/,
 		      struct netlink_ext_ack *extack)
 {
 	__be16 ethertype;
@@ -1253,6 +1260,7 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 
 	fnew->mask = rhashtable_lookup_fast(&head->ht, mask, mask_ht_params);
 	if (!fnew->mask) {
+		//mask不存在，创建它
 		if (fold)
 			return -EINVAL;
 
@@ -1277,6 +1285,7 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 {
 	int err;
 
+	//解析action
 	err = tcf_exts_validate(net, tp, tb, est, &f->exts, ovr, true,
 				extack);
 	if (err < 0)
@@ -1287,6 +1296,7 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 		tcf_bind_filter(tp, &f->res, base);
 	}
 
+	//解析key,mask
 	err = fl_set_key(net, tb, &f->key, &mask->key, extack);
 	if (err)
 		return err;
@@ -2148,7 +2158,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.init		= fl_init,
 	.destroy	= fl_destroy,
 	.get		= fl_get,
-	//处理规则下发
+	//添加flower规则，向硬件下发
 	.change		= fl_change,
 	.delete		= fl_delete,
 	.walk		= fl_walk,
@@ -2161,7 +2171,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.owner		= THIS_MODULE,
 };
 
-//注册flower关键字对应的ops
+//注册flower关键字对应的分类器ops
 static int __init cls_fl_init(void)
 {
 	return register_tcf_proto_ops(&cls_fl_ops);

@@ -67,6 +67,7 @@ static const struct tcf_proto_ops *__tcf_proto_lookup_ops(const char *kind)
 	return res;
 }
 
+/*通过kind查找对应的分类器*/
 static const struct tcf_proto_ops *
 tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 		     struct netlink_ext_ack *extack)
@@ -204,6 +205,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 	spin_lock_init(&tp->lock);
 	refcount_set(&tp->refcnt, 1);
 
+	//初始化相应的分类器
 	err = tp->ops->init(tp);
 	if (err) {
 		module_put(tp->ops->owner);
@@ -320,6 +322,7 @@ static void tcf_chain_head_change_item(struct tcf_filter_chain_list_item *item,
 				       struct tcf_proto *tp_head)
 {
 	if (item->chain_head_change)
+		/*修改tp list*/
 		item->chain_head_change(tp_head, item->chain_head_change_priv);
 }
 
@@ -3064,6 +3067,7 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		} else if (exts->action && tb[exts->action]) {
 			int err;
 
+			//解析并生成action
 			err = tcf_action_init(net, tp, tb[exts->action]/*要解析的action*/,
 					      rate_tlv, NULL/*name置为NULL*/, ovr, TCA_ACT_BIND,
 					      exts->actions, &attr_size,

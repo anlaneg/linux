@@ -158,13 +158,14 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 			struct netlink_ext_ack *extack)
 {
 	const struct nla_policy *pt;
-	int minlen = 0, attrlen = nla_len(nla), type = nla_type(nla);
+	int minlen = 0, attrlen = nla_len(nla)/*取长度*/, type = nla_type(nla)/*取类型*/;
 	int err = -ERANGE;
 
 	if (type <= 0 || type > maxtype)
+		/*类型校验失败*/
 		return 0;
 
-	pt = &policy[type];
+	pt = &policy[type];/*取此类型的policy*/
 
 	BUG_ON(pt->type > NLA_TYPE_MAX);
 
@@ -182,6 +183,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		break;
 
 	case NLA_REJECT:
+		//不容许存在的属性
 		if (extack && pt->validation_data) {
 			NL_SET_BAD_ATTR(extack, nla);
 			extack->_msg = pt->validation_data;
@@ -394,12 +396,13 @@ EXPORT_SYMBOL(nla_policy_len);
  */
 static int __nla_parse(struct nlattr **tb, int maxtype/*指出type最大值*/,
 		       const struct nlattr *head/*数据起始位置*/, int len,
-		       bool strict, const struct nla_policy *policy,
+		       bool strict, const struct nla_policy *policy/*针对type的校验方式*/,
 		       struct netlink_ext_ack *extack)
 {
 	const struct nlattr *nla;
 	int rem;
 
+	//tb被清零
 	memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
 
 	//遍历netlink属性，解析key,value

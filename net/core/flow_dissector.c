@@ -742,11 +742,12 @@ bool __skb_flow_bpf_dissect(struct bpf_prog *prog,
  * Caller must take care of zeroing target container memory.
  */
 bool __skb_flow_dissect(const struct sk_buff *skb,
-			struct flow_dissector *flow_dissector,
+			struct flow_dissector *flow_dissector/*记录待解析各字段及其在container中存放的位置*/,
 			void *target_container,
-			void *data, __be16 proto, int nhoff, int hlen,
+			void *data/*报文起始位置*/, __be16 proto, int nhoff, int hlen,
 			unsigned int flags)
 {
+	//完成报文解析，并将解析的内容存放在target_container中
 	struct flow_dissector_key_control *key_control;
 	struct flow_dissector_key_basic *key_basic;
 	struct flow_dissector_key_addrs *key_addrs;
@@ -761,6 +762,7 @@ bool __skb_flow_dissect(const struct sk_buff *skb,
 	bool ret;
 
 	if (!data) {
+		//未指定报文起始位置，使用data
 		data = skb->data;
 		proto = skb_vlan_tag_present(skb) ?
 			 skb->vlan_proto : skb->protocol;
@@ -822,6 +824,7 @@ bool __skb_flow_dissect(const struct sk_buff *skb,
 
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
+		//解析源目的mac地址
 		struct ethhdr *eth = eth_hdr(skb);
 		struct flow_dissector_key_eth_addrs *key_eth_addrs;
 
@@ -855,15 +858,18 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_IPV4_ADDRS,
 							      target_container);
 
+			//解析源目的ip地址
 			memcpy(&key_addrs->v4addrs, &iph->saddr,
 			       sizeof(key_addrs->v4addrs));
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		}
 
 		if (ip_is_fragment(iph)) {
+			//分片报文
 			key_control->flags |= FLOW_DIS_IS_FRAGMENT;
 
 			if (iph->frag_off & htons(IP_OFFSET)) {
+				//非首片情况
 				fdret = FLOW_DISSECT_RET_OUT_GOOD;
 				break;
 			} else {

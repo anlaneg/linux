@@ -38,7 +38,7 @@ static const struct nla_policy nat_policy[TCA_NAT_MAX + 1] = {
 };
 
 static int tcf_nat_init(struct net *net, struct nlattr *nla, struct nlattr *est,
-			struct tc_action **a, int ovr, int bind,
+			struct tc_action **a/*出参，返回创建的action*/, int ovr, int bind,
 			bool rtnl_held,	struct tcf_proto *tp,
 			struct netlink_ext_ack *extack)
 {
@@ -56,8 +56,11 @@ static int tcf_nat_init(struct net *net, struct nlattr *nla, struct nlattr *est,
 	if (err < 0)
 		return err;
 
+	//必须包含 TCA_NAT_PARMS
 	if (tb[TCA_NAT_PARMS] == NULL)
 		return -EINVAL;
+
+	//nat参数
 	parm = nla_data(tb[TCA_NAT_PARMS]);
 
 	err = tcf_idr_check_alloc(tn, &parm->index, a, bind);
@@ -85,9 +88,12 @@ static int tcf_nat_init(struct net *net, struct nlattr *nla, struct nlattr *est,
 	p = to_tcf_nat(*a);
 
 	spin_lock_bh(&p->tcf_lock);
+	//记录nat前ip,记录nat后ip地址
 	p->old_addr = parm->old_addr;
 	p->new_addr = parm->new_addr;
+	//容许nat生效掩码
 	p->mask = parm->mask;
+	//记录做action的方向
 	p->flags = parm->flags;
 
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
@@ -140,19 +146,23 @@ static int tcf_nat_act(struct sk_buff *skb, const struct tc_action *a,
 
 	iph = ip_hdr(skb);
 
+	//egress时需要做snat,ingress时需要做dnat
 	if (egress)
 		addr = iph->saddr;
 	else
 		addr = iph->daddr;
 
 	if (!((old_addr ^ addr) & mask)) {
+		//old_addr 与addr相等情况下执行转换
 		if (skb_try_make_writable(skb, sizeof(*iph) + noff))
 			goto drop;
 
+		//仅修改mask给出的bit位为new_addr
 		new_addr &= mask;
 		new_addr |= addr & ~mask;
 
 		/* Rewrite IP header */
+		//完成修改，并重置checksum
 		iph = ip_hdr(skb);
 		if (egress)
 			iph->saddr = new_addr;
@@ -162,11 +172,13 @@ static int tcf_nat_act(struct sk_buff *skb, const struct tc_action *a,
 		csum_replace4(&iph->check, addr, new_addr);
 	} else if ((iph->frag_off & htons(IP_OFFSET)) ||
 		   iph->protocol != IPPROTO_ICMP) {
+		//报文为分片或者报文为icmp,不处理
 		goto out;
 	}
 
 	ihl = iph->ihl * 4;
 
+	//1.处理udp,tcp的psudo头部，2。处理icmp负载中有报文的情况
 	/* It would be nice to share code with stateful NAT. */
 	switch (iph->frag_off & htons(IP_OFFSET) ? 0 : iph->protocol) {
 	case IPPROTO_TCP:
@@ -217,8 +229,10 @@ static int tcf_nat_act(struct sk_buff *skb, const struct tc_action *a,
 					noff))
 			goto drop;
 
+		//处理icmp负载中的nat
 		icmph = (void *)(skb_network_header(skb) + ihl);
 		iph = (void *)(icmph + 1);
+		//由于为反向，故这里egress对应的是dnat,ingress对应的是snat
 		if (egress)
 			addr = iph->daddr;
 		else
@@ -317,6 +331,7 @@ static struct tc_action_ops act_nat_ops = {
 	.kind		=	"nat",
 	.id		=	TCA_ID_NAT,
 	.owner		=	THIS_MODULE,
+	//执行nat的action处理
 	.act		=	tcf_nat_act,
 	.dump		=	tcf_nat_dump,
 	.init		=	tcf_nat_init,

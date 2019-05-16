@@ -1183,6 +1183,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 		goto err_out;
 	}
 
+	//创建ops对应的qdisc
 	sch = qdisc_alloc(dev_queue, ops, extack);
 	if (IS_ERR(sch)) {
 		err = PTR_ERR(sch);
@@ -1224,6 +1225,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	if (err)
 		goto err_out3;
 
+	//初始化队列
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1520,6 +1522,7 @@ replay:
 				}
 				q = qdisc_leaf(p, clid);
 			} else if (dev_ingress_queue_create(dev)) {
+				//创建dev->ingress_queue成功
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
@@ -2246,6 +2249,7 @@ static int __init pktsched_init(void)
 	register_qdisc(&mq_qdisc_ops);
 	register_qdisc(&noqueue_qdisc_ops);
 
+	//qdisc修改操作
 	rtnl_register(PF_UNSPEC, RTM_NEWQDISC, tc_modify_qdisc, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELQDISC, tc_get_qdisc, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETQDISC, tc_get_qdisc, tc_dump_qdisc,

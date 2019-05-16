@@ -77,7 +77,7 @@ static u32 ingress_ingress_block_get(struct Qdisc *sch)
 	return q->block_info.block_index;
 }
 
-static int ingress_init(struct Qdisc *sch, struct nlattr *opt,
+static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {
 	struct ingress_sched_data *q = qdisc_priv(sch);
@@ -126,6 +126,7 @@ static const struct Qdisc_class_ops ingress_class_ops = {
 	.unbind_tcf	=	ingress_unbind_filter,
 };
 
+//ingress qdisc 操作集
 static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
 	.cl_ops			=	&ingress_class_ops,
 	.id			=	"ingress",
@@ -277,6 +278,7 @@ static int __init ingress_module_init(void)
 {
 	int ret;
 
+	//注册ingress的ops
 	ret = register_qdisc(&ingress_qdisc_ops);
 	if (!ret) {
 		ret = register_qdisc(&clsact_qdisc_ops);

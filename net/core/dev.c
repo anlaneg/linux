@@ -4957,6 +4957,7 @@ another_round:
 			goto out;
 	}
 
+	//检查是否需要跳过ingress的tc classify
 	if (skb_skip_tc_classify(skb))
 		goto skip_classify;
 
@@ -9258,6 +9259,7 @@ struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 #ifdef CONFIG_NET_CLS_ACT
 	if (queue)
 		return queue;
+	//创建dev->ingress_queue
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		return NULL;

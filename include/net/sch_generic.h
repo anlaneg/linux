@@ -226,6 +226,7 @@ struct Qdisc_ops {
 	struct Qdisc_ops	*next;
 	const struct Qdisc_class_ops	*cl_ops;
 	char			id[IFNAMSIZ];//ops的唯一标识
+	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小
 	int			priv_size;
 	unsigned int		static_flags;
 
@@ -286,6 +287,7 @@ struct tcf_chain;
 
 struct tcf_proto_ops {
 	struct list_head	head;
+	//分类器名称
 	char			kind[IFNAMSIZ];
 
 	int			(*classify)(struct sk_buff *,

@@ -297,11 +297,13 @@ static inline int tcf_exts_init(struct tcf_exts *exts, struct net *net,
 	exts->type = 0;
 	exts->nr_actions = 0;
 	exts->net = net;
+	//申请存放action的数组
 	exts->actions = kcalloc(TCA_ACT_MAX_PRIO, sizeof(struct tc_action *),
 				GFP_KERNEL);
 	if (!exts->actions)
 		return -ENOMEM;
 #endif
+	//设置action的数目
 	exts->action = action;
 	exts->police = police;
 	return 0;
@@ -687,6 +689,7 @@ struct tc_cls_u32_offload {
 	};
 };
 
+//检查dev是否可offload tc
 static inline bool tc_can_offload(const struct net_device *dev)
 {
 	return dev->features & NETIF_F_HW_TC;
