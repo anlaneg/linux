@@ -572,7 +572,7 @@ struct tcmsg {
 enum {
 	TCA_UNSPEC,
 	TCA_KIND,
-	TCA_OPTIONS,
+	TCA_OPTIONS,/*tc的选项字段*/
 	TCA_STATS,
 	TCA_XSTATS,
 	TCA_RATE,

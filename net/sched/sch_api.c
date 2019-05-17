@@ -1383,12 +1383,12 @@ check_loop_fn(struct Qdisc *q, unsigned long cl, struct qdisc_walker *w)
 }
 
 const struct nla_policy rtm_tca_policy[TCA_MAX + 1] = {
-	[TCA_KIND]		= { .type = NLA_STRING },
+	[TCA_KIND]		= { .type = NLA_STRING },//filter名称
 	[TCA_RATE]		= { .type = NLA_BINARY,
 				    .len = sizeof(struct tc_estimator) },
 	[TCA_STAB]		= { .type = NLA_NESTED },
 	[TCA_DUMP_INVISIBLE]	= { .type = NLA_FLAG },
-	[TCA_CHAIN]		= { .type = NLA_U32 },
+	[TCA_CHAIN]		= { .type = NLA_U32 },//chain的索引号
 	[TCA_INGRESS_BLOCK]	= { .type = NLA_U32 },
 	[TCA_EGRESS_BLOCK]	= { .type = NLA_U32 },
 };

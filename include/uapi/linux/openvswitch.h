@@ -469,8 +469,11 @@ struct ovs_key_ct_labels {
 #define OVS_CS_F_ESTABLISHED       0x02 /* Part of an existing connection. */
 #define OVS_CS_F_RELATED           0x04 /* Related to an established
 					 * connection. */
+//响应方向的流
 #define OVS_CS_F_REPLY_DIR         0x08 /* Flow is in the reply direction. */
+//链接跟踪无效
 #define OVS_CS_F_INVALID           0x10 /* Could not track connection. */
+//指明链接跟踪存在
 #define OVS_CS_F_TRACKED           0x20 /* Conntrack has occurred. */
 #define OVS_CS_F_SRC_NAT           0x40 /* Packet's source address/port was
 					 * mangled by NAT.

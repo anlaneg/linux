@@ -23,6 +23,7 @@ struct nf_conn_tstamp *nf_conn_tstamp_find(const struct nf_conn *ct)
 #endif
 }
 
+//添加NF_CT_EXT_TSTAMP扩展信息
 static inline
 struct nf_conn_tstamp *nf_ct_tstamp_ext_add(struct nf_conn *ct, gfp_t gfp)
 {

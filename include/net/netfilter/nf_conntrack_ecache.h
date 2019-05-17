@@ -38,6 +38,7 @@ nf_ct_ecache_find(const struct nf_conn *ct)
 #endif
 }
 
+//添加NF_CT_EXT_ECACHE扩展信息
 static inline struct nf_conntrack_ecache *
 nf_ct_ecache_ext_add(struct nf_conn *ct, u16 ctmask, u16 expmask, gfp_t gfp)
 {

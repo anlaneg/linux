@@ -27,8 +27,8 @@
 
 /* The manipulable part of the tuple. */
 struct nf_conntrack_man {
-	union nf_inet_addr u3;
-	union nf_conntrack_man_proto u;
+	union nf_inet_addr u3;//3层地址
+	union nf_conntrack_man_proto u;//4层端口
 	/* Layer 3 protocol */
 	u_int16_t l3num;//3层协议号
 };

@@ -575,6 +575,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 	skb_reset_mac_header(skb);
 
 	/* Link layer. */
+	//链路层解析
 	clear_vlan(key);
 	if (ovs_key_mac_proto(key) == MAC_PROTO_NONE) {
 		if (unlikely(eth_type_vlan(skb->protocol)))
@@ -654,6 +655,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 			key->ip.frag = OVS_FRAG_TYPE_NONE;
 
 		/* Transport layer. */
+		//传输层解析
 		if (key->ip.proto == IPPROTO_TCP) {
 			if (tcphdr_ok(skb)) {
 				struct tcphdr *tcp = tcp_hdr(skb);
@@ -695,6 +697,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 
 	} else if (key->eth.type == htons(ETH_P_ARP) ||
 		   key->eth.type == htons(ETH_P_RARP)) {
+		//arp报文解析
 		struct arp_eth_header *arp;
 		bool arp_available = arphdr_ok(skb);
 
@@ -721,6 +724,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 			memset(&key->ipv4, 0, sizeof(key->ipv4));
 		}
 	} else if (eth_p_mpls(key->eth.type)) {
+		//mpls报文解析
 		size_t stack_len = MPLS_HLEN;
 
 		skb_set_inner_network_header(skb, skb->mac_len);
@@ -743,6 +747,7 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 			stack_len += MPLS_HLEN;
 		}
 	} else if (key->eth.type == htons(ETH_P_IPV6)) {
+		//ipv6报文解析
 		int nh_len;             /* IPv6 Header + Extensions */
 
 		nh_len = parse_ipv6hdr(skb, key);
@@ -810,10 +815,12 @@ static int key_extract(struct sk_buff *skb, struct sw_flow_key *key)
 	return 0;
 }
 
+//完成报文解析，将解析内容置于key中，指定key有效
 int ovs_flow_key_update(struct sk_buff *skb, struct sw_flow_key *key)
 {
 	int res;
 
+	//实现skb的报文解析
 	res = key_extract(skb, key);
 	if (!res)
 		key->mac_proto &= ~SW_FLOW_KEY_INVALID;

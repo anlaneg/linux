@@ -1330,7 +1330,9 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 
 		case OVS_ACTION_ATTR_CT:
 			//执行ct action
+
 			if (!is_flow_key_valid(key)) {
+				//如果key无效，则执行key解析
 				err = ovs_flow_key_update(skb, key);
 				if (err)
 					return err;

@@ -69,7 +69,7 @@ static inline int ovs_ct_action_to_attr(const struct ovs_conntrack_info *info,
 
 static inline int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 				 struct sw_flow_key *key,
-				 const struct ovs_conntrack_info *info)
+				 const struct ovs_conntrack_info *info/*ct动作对应的参数*/)
 {
 	kfree_skb(skb);
 	return -ENOTSUPP;

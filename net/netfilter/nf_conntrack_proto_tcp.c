@@ -142,9 +142,16 @@ enum tcp_bit_set {
  * Packets marked as INVALID (sIV):
  *	if we regard them as truly invalid packets
  */
+//三维数组，从左到右，第一维指定方向，第二维指定标记位(看get_conntrack_index），第三维对应出相应的状态
+//举例说明，tcp_conntracks[0][0][0] 指，
+//发起方遇到一个syn标记，则原状态由none转为syn_send状态
+//tcp_conntracks[0][0][1]指，
+//发起方（tcp_conntracks[0]）遇到一个syn标记（tcp_conntracks[0][0]），则原状态由
+//syn_send(tcp_conntracks[0][0][1])转换为syn_send
 static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 	{
 /* ORIGINAL */
+//正方向状态
 /* 	     sNO, sSS, sSR, sES, sFW, sCW, sLA, sTW, sCL, sS2	*/
 /*syn*/	   { sSS, sSS, sIG, sIG, sIG, sIG, sIG, sSS, sSS, sS2 },
 /*
@@ -196,7 +203,7 @@ static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 /* 	     sNO, sSS, sSR, sES, sFW, sCW, sLA, sTW, sCL, sS2	*/
 /*ack*/	   { sES, sIV, sES, sES, sCW, sCW, sTW, sTW, sCL, sIV },
 /*
- *	sNO -> sES	Assumed.
+ *	sNO -> sES	Assumed. 之前状态为None,当前收到源方向的ack（仅含ack)，认为已建立连接
  *	sSS -> sIV	ACK is invalid: we haven't seen a SYN/ACK yet.
  *	sS2 -> sIV
  *	sSR -> sES	Established state is reached.
@@ -211,6 +218,7 @@ static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 /*rst*/    { sIV, sCL, sCL, sCL, sCL, sCL, sCL, sCL, sCL, sCL },
 /*none*/   { sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV }
 	},
+	//反方向状态
 	{
 /* REPLY */
 /* 	     sNO, sSS, sSR, sES, sFW, sCW, sLA, sTW, sCL, sS2	*/
@@ -287,12 +295,16 @@ static unsigned int get_conntrack_index(const struct tcphdr *tcph)
 {
 	//有rst标记，返回rst标记
 	if (tcph->rst) return TCP_RST_SET;
+
 	//有syn标记，如果有ack，则synack_set,否则仅syn_set
 	else if (tcph->syn) return (tcph->ack ? TCP_SYNACK_SET : TCP_SYN_SET);
+
 	//有fin标记，
 	else if (tcph->fin) return TCP_FIN_SET;
+
 	//仅有ack标记
 	else if (tcph->ack) return TCP_ACK_SET;
+
 	//其它情况
 	else return TCP_NONE_SET;
 }
@@ -772,19 +784,23 @@ static noinline bool tcp_new(struct nf_conn *ct, const struct sk_buff *skb,
 	enum tcp_conntrack new_state;
 	struct net *net = nf_ct_net(ct);
 	const struct nf_tcp_net *tn = nf_tcp_pernet(net);
+	//分别指向sender，receiver
 	const struct ip_ct_tcp_state *sender = &ct->proto.tcp.seen[0];
 	const struct ip_ct_tcp_state *receiver = &ct->proto.tcp.seen[1];
 
 	/* Don't need lock here: this conntrack not in circulation yet */
+	//源方向在none状态下，收到get_conntrack_index事件，获得转换后状态
 	new_state = tcp_conntracks[0][get_conntrack_index(th)][TCP_CONNTRACK_NONE];
 
 	/* Invalid: delete conntrack */
 	if (new_state >= TCP_CONNTRACK_MAX) {
+		//转为无效状态，返回False
 		pr_debug("nf_ct_tcp: invalid new deleting.\n");
 		return false;
 	}
 
 	if (new_state == TCP_CONNTRACK_SYN_SENT) {
+		//转为syn_send状态（清空tcp中记录的信息）
 		memset(&ct->proto.tcp, 0, sizeof(ct->proto.tcp));
 		/* SYN packet */
 		ct->proto.tcp.seen[0].td_end =
@@ -801,6 +817,8 @@ static noinline bool tcp_new(struct nf_conn *ct, const struct sk_buff *skb,
 		/* Don't try to pick up connections. */
 		return false;
 	} else {
+		//看状态转换表，认为源方向当前处理None,收到源方向发来的ACK（仅含），则认为
+		//之前历史我们不知道，假定为已建立稳定连接
 		memset(&ct->proto.tcp, 0, sizeof(ct->proto.tcp));
 		/*
 		 * We are in the middle of a connection,
@@ -846,7 +864,7 @@ static bool nf_conntrack_tcp_established(const struct nf_conn *ct)
 /* Returns verdict for packet, or -1 for invalid. */
 int nf_conntrack_tcp_packet(struct nf_conn *ct,
 			    struct sk_buff *skb,
-			    unsigned int dataoff,
+			    unsigned int dataoff/*到l4层的指针偏移量*/,
 			    enum ip_conntrack_info ctinfo,
 			    const struct nf_hook_state *state)
 {
@@ -865,9 +883,11 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 	if (th == NULL)
 		return -NF_ACCEPT;
 
+	//tcp常规检查
 	if (tcp_error(th, skb, dataoff, state))
 		return -NF_ACCEPT;
 
+	//tcp状态信息初始化
 	if (!nf_ct_is_confirmed(ct) && !tcp_new(ct, skb, dataoff, th))
 		return -NF_ACCEPT;
 
@@ -875,7 +895,8 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 	old_state = ct->proto.tcp.state;
 	dir = CTINFO2DIR(ctinfo);
 	index = get_conntrack_index(th);
-	new_state = tcp_conntracks[dir][index][old_state];//依据方便映射tcp新状态
+	//获得新的tcp状态
+	new_state = tcp_conntracks[dir][index][old_state];
 	tuple = &ct->tuplehash[dir].tuple;
 
 	switch (new_state) {

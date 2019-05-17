@@ -23,6 +23,7 @@ static inline struct nf_conn_labels *nf_ct_labels_find(const struct nf_conn *ct)
 #endif
 }
 
+//添加NF_CT_EXT_LABELS扩展信息
 static inline struct nf_conn_labels *nf_ct_labels_ext_add(struct nf_conn *ct)
 {
 #ifdef CONFIG_NF_CONNTRACK_LABELS

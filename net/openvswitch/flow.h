@@ -42,6 +42,8 @@ enum sw_flow_mac_proto {
 	MAC_PROTO_NONE = 0,
 	MAC_PROTO_ETHERNET,
 };
+
+//指明key目前是无效的，需要解析
 #define SW_FLOW_KEY_INVALID	0x80
 
 /* Store options at the end of the array if they are less than the

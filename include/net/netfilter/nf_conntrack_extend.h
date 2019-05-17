@@ -54,11 +54,13 @@ static inline bool __nf_ct_ext_exist(const struct nf_ct_ext *ext, u8 id)
 	return !!ext->offset[id];
 }
 
+//检查ct上指定扩展信息是否已设置
 static inline bool nf_ct_ext_exist(const struct nf_conn *ct, u8 id)
 {
 	return (ct->ext && __nf_ct_ext_exist(ct->ext, id));
 }
 
+//返回ct上指定的扩展信息
 static inline void *__nf_ct_ext_find(const struct nf_conn *ct, u8 id)
 {
 	if (!nf_ct_ext_exist(ct, id))

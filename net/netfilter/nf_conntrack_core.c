@@ -75,6 +75,7 @@ struct conntrack_gc_work {
 	long			next_gc_run;
 };
 
+//对外提供ct结构体
 static __read_mostly struct kmem_cache *nf_conntrack_cachep;
 static __read_mostly spinlock_t nf_conntrack_locks_all_lock;
 static __read_mostly DEFINE_SPINLOCK(nf_conntrack_locks_all_lock);
@@ -185,6 +186,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_max);
 seqcount_t nf_conntrack_generation __read_mostly;
 static unsigned int nf_conntrack_hash_rnd __read_mostly;
 
+//计算元组对应的hashcode
 static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple,
 			      const struct net *net)
 {
@@ -327,13 +329,14 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 }
 
 //返回到l4头部的偏移量
-static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
-			    u_int8_t *protonum)
+static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff/*到网络层头部的偏移量*/,
+			    u_int8_t *protonum/*出参，l4层协议类型*/)
 {
 	int dataoff = -1;
 	const struct iphdr *iph;
 	struct iphdr _iph;
 
+	//指向ipheader
 	iph = skb_header_pointer(skb, nhoff, sizeof(_iph), &_iph);
 	if (!iph)
 		return -1;
@@ -342,9 +345,11 @@ static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 	 * inside ICMP packets though.
 	 */
 	if (iph->frag_off & htons(IP_OFFSET))
-		return -1;//非首片
+		return -1;//非首片，无法完整解析，返回失败
 
+	//到网络层负载的偏移量（即l4层头部起始位置）
 	dataoff = nhoff + (iph->ihl << 2);
+
 	*protonum = iph->protocol;//记录l4层协议号
 
 	/* Check bogus IP headers */
@@ -395,6 +400,7 @@ static int get_l4proto(const struct sk_buff *skb,
 		return ipv4_get_l4proto(skb, nhoff, l4num);
 #if IS_ENABLED(CONFIG_IPV6)
 	case NFPROTO_IPV6:
+		//ipv6报文情况
 		return ipv6_get_l4proto(skb, nhoff, l4num);
 #endif
 	default:
@@ -405,12 +411,12 @@ static int get_l4proto(const struct sk_buff *skb,
 }
 
 //解析skb，填充tuple
-bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff,
+bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff/*到网络头的偏移量*/,
 		       u_int16_t l3num,
 		       struct net *net, struct nf_conntrack_tuple *tuple)
 {
-	u8 protonum;
-	int protoff;
+	u8 protonum;//记录l4层协议类型
+	int protoff;//记录到l4层头部的偏移量
 
 	protoff = get_l4proto(skb, nhoff, l3num, &protonum);
 	if (protoff <= 0)
@@ -531,7 +537,7 @@ static void nf_ct_add_to_unconfirmed_list(struct nf_conn *ct)
 	struct ct_pcpu *pcpu;
 
 	/* add this conntrack to the (per cpu) unconfirmed list */
-	ct->cpu = smp_processor_id();
+	ct->cpu = smp_processor_id();//指定创建ct的cpu
 	pcpu = per_cpu_ptr(nf_ct_net(ct)->ct.pcpu_lists, ct->cpu);
 
 	spin_lock(&pcpu->lock);
@@ -821,6 +827,7 @@ struct nf_conntrack_tuple_hash *
 nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 		      const struct nf_conntrack_tuple *tuple)
 {
+	//查找链接跟踪
 	return __nf_conntrack_find_get(net, zone, tuple,
 				       hash_conntrack_raw(tuple, net));
 }
@@ -1366,8 +1373,8 @@ static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
 static struct nf_conn *
 __nf_conntrack_alloc(struct net *net,
 		     const struct nf_conntrack_zone *zone,
-		     const struct nf_conntrack_tuple *orig,//正方向元组
-		     const struct nf_conntrack_tuple *repl,//反方向元组
+		     const struct nf_conntrack_tuple *orig,/*正方向元组*/
+		     const struct nf_conntrack_tuple *repl,/*反方向元组*/
 		     gfp_t gfp, u32 hash)
 {
 	struct nf_conn *ct;
@@ -1455,7 +1462,7 @@ static noinline struct nf_conntrack_tuple_hash *
 init_conntrack(struct net *net, struct nf_conn *tmpl,
 	       const struct nf_conntrack_tuple *tuple,
 	       struct sk_buff *skb,
-	       unsigned int dataoff, u32 hash)
+	       unsigned int dataoff/*到l4层头部的偏移量*/, u32 hash)
 {
 	struct nf_conn *ct;
 	struct nf_conn_help *help;
@@ -1466,7 +1473,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	struct nf_conn_timeout *timeout_ext;
 	struct nf_conntrack_zone tmp;
 
-	//初始化反向的元组repl_tuple
+	//构造反向的元组repl_tuple
 	if (!nf_ct_invert_tuple(&repl_tuple, tuple)) {
 		pr_debug("Can't invert tuple.\n");
 		return NULL;
@@ -1551,7 +1558,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 static int
 resolve_normal_ct(struct nf_conn *tmpl,
 		  struct sk_buff *skb,
-		  unsigned int dataoff,
+		  unsigned int dataoff/*到l4层的头部偏移量*/,
 		  u_int8_t protonum,//4层协议
 		  const struct nf_hook_state *state)
 {
@@ -1563,7 +1570,7 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	struct nf_conn *ct;
 	u32 hash;
 
-	//提取3层，4层元组
+	//提取元组
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb),
 			     dataoff, state->pf, protonum, state->net,
 			     &tuple)) {
@@ -1574,9 +1581,11 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	/* look for tuple match */
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 	hash = hash_conntrack_raw(&tuple, state->net);
+
 	//通过tuple查找是否存在对应的连接跟踪
 	h = __nf_conntrack_find_get(state->net, zone, &tuple, hash);
 	if (!h) {
+
 		//没有找到对应的连接，创建此连接
 		h = init_conntrack(state->net, tmpl, &tuple,
 				   skb, dataoff, hash);
@@ -1585,24 +1594,30 @@ resolve_normal_ct(struct nf_conn *tmpl,
 		if (IS_ERR(h))
 			return PTR_ERR(h);
 	}
+
 	ct = nf_ct_tuplehash_to_ctrack(h);//映射到连接跟踪
 
 	/* It exists; we have (non-exclusive) reference. */
 	if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
+		//当前流是响应方回包
 		ctinfo = IP_CT_ESTABLISHED_REPLY;
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
 		if (test_bit(IPS_SEEN_REPLY_BIT, &ct->status)) {
 			pr_debug("normal packet for %p\n", ct);
+			//响应方回包，得到稳定连接
 			ctinfo = IP_CT_ESTABLISHED;
 		} else if (test_bit(IPS_EXPECTED_BIT, &ct->status)) {
 			pr_debug("related packet for %p\n", ct);
+			//通过期待创建的连接
 			ctinfo = IP_CT_RELATED;
 		} else {
+			//新流
 			pr_debug("new packet for %p\n", ct);
 			ctinfo = IP_CT_NEW;
 		}
 	}
+
 	//为skb设置上其对应的连接跟踪
 	nf_ct_set(skb, ct, ctinfo);
 	return 0;
@@ -1656,12 +1671,13 @@ static int generic_packet(struct nf_conn *ct, struct sk_buff *skb,
 /* Returns verdict for packet, or -1 for invalid. */
 static int nf_conntrack_handle_packet(struct nf_conn *ct,
 				      struct sk_buff *skb,
-				      unsigned int dataoff,
+				      unsigned int dataoff/*到l4头部的指针偏移量*/,
 				      enum ip_conntrack_info ctinfo,
 				      const struct nf_hook_state *state)
 {
 	switch (nf_ct_protonum(ct)) {
 	case IPPROTO_TCP:
+		//连接跟踪tcp状态更新
 		return nf_conntrack_tcp_packet(ct, skb, dataoff,
 					       ctinfo, state);
 	case IPPROTO_UDP:
@@ -1709,7 +1725,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 
 	tmpl = nf_ct_get(skb, &ctinfo);
 	if (tmpl || ctinfo == IP_CT_UNTRACKED) {
-		//防止重复查询或者明确不进行跟踪的报文
+		//防止重复查询或者遇着明确标明不进行跟踪的报文
 		/* Previously seen (loopback or untracked)?  Ignore. */
 		if ((tmpl && !nf_ct_is_template(tmpl)) ||
 		     ctinfo == IP_CT_UNTRACKED) {
@@ -1731,6 +1747,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	}
 
 	if (protonum == IPPROTO_ICMP || protonum == IPPROTO_ICMPV6) {
+		//icmp，icmpv6报文连接跟踪处理
 		ret = nf_conntrack_handle_icmp(tmpl, skb, dataoff,
 					       protonum, state);
 		if (ret <= 0) {

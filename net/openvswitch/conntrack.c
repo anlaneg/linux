@@ -65,7 +65,7 @@ struct ovs_conntrack_info {
 	struct nf_conntrack_helper *helper;
 	struct nf_conntrack_zone zone;
 	struct nf_conn *ct;
-	u8 commit : 1;
+	u8 commit : 1;//如果不存在，则可以创建ct
 	u8 nat : 3;                 /* enum ovs_ct_nat */
 	u8 force : 1;
 	u8 have_eventmask : 1;
@@ -123,6 +123,7 @@ static u16 key_to_nfproto(const struct sw_flow_key *key)
 /* Map SKB connection state into the values used by flow definition. */
 static u8 ovs_ct_get_state(enum ip_conntrack_info ctinfo)
 {
+	//将ct状态转换为openvswitch状态
 	u8 ct_state = OVS_CS_F_TRACKED;
 
 	switch (ctinfo) {
@@ -196,6 +197,7 @@ static void __ovs_ct_update_key(struct sw_flow_key *key, u8 state,
 				const struct nf_conntrack_zone *zone,
 				const struct nf_conn *ct)
 {
+	//更新链接状态
 	key->ct_state = state;
 	key->ct_zone = zone->id;
 	key->ct.mark = ovs_ct_get_mark(ct);
@@ -207,6 +209,8 @@ static void __ovs_ct_update_key(struct sw_flow_key *key, u8 state,
 		/* Use the master if we have one. */
 		if (ct->master)
 			ct = ct->master;
+
+		//取源方向元组
 		orig = &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple;
 
 		/* IP version must match with the master connection. */
@@ -246,7 +250,7 @@ static void ovs_ct_update_key(const struct sk_buff *skb,
 	struct nf_conn *ct;
 	u8 state = 0;
 
-	//取skb的连接跟踪
+	//取skb的连接跟踪及连接状态
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct) {
 		state = ovs_ct_get_state(ctinfo);
@@ -272,6 +276,7 @@ static void ovs_ct_update_key(const struct sk_buff *skb,
 		if (info)
 			zone = &info->zone;
 	}
+	//更新key中flow的链接状态，
 	__ovs_ct_update_key(key, state, zone, ct);
 }
 
@@ -617,7 +622,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 
 	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb), l3num,
 			       net, &tuple)) {
-		//解析报文的元组信息失败，返回NULL
+		//解析报文的6元组信息失败，返回NULL
 		pr_debug("ovs_ct_find_existing: Can't get tuple\n");
 		return NULL;
 	}
@@ -638,6 +643,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	/* look for tuple match */
 	h = nf_conntrack_find_get(net, zone, &tuple);
 	if (!h)
+		//链接跟踪不存在，返回NULL
 		return NULL;   /* Not found. */
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
@@ -649,6 +655,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	if (natted)
 		h = &ct->tuplehash[!h->tuple.dst.dir];
 
+	//将ct设置在skb上
 	nf_ct_set(skb, ct, ovs_ct_get_info(h));
 	return ct;
 }
@@ -669,14 +676,15 @@ struct nf_conn *ovs_ct_executed(struct net *net,
 	 * connection was not confirmed, it is not cached and needs to be run
 	 * through conntrack again.
 	 */
-	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED) &&//ct状态处于跟踪状态
-		       !(key->ct_state & OVS_CS_F_INVALID) &&//ct状态有效
+	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED/*指明ct存在*/) &&
+		       !(key->ct_state & OVS_CS_F_INVALID/*ct状态有效*/) &&
 		       (key->ct_zone == info->zone.id);//zone一致
 
 	if (*ct_executed || (!key->ct_state && info->force)) {
-		ct = ovs_ct_find_existing(net, &info->zone, info->family, skb,
+		//执行连接跟踪查询
+		ct = ovs_ct_find_existing(net, &info->zone, info->family/*协议族*/, skb,
 					  !!(key->ct_state &
-					  OVS_CS_F_NAT_MASK));
+					  OVS_CS_F_NAT_MASK)/*如果ct做了snat或者dnat,则用其反方向元组查询，并返回本方向流*/);
 	}
 
 	return ct;
@@ -698,6 +706,7 @@ static bool skb_nfct_cached(struct net *net,
 		ct = ovs_ct_executed(net, key, info, skb, &ct_executed);
 
 	if (ct)
+		//获取链接状态信息
 		nf_ct_get(skb, &ctinfo);
 	else
 		return false;//ct未创建，则返回
@@ -706,13 +715,16 @@ static bool skb_nfct_cached(struct net *net,
 		return false;
 	if (!nf_ct_zone_equal_any(info->ct, nf_ct_zone(ct)))
 		return false;
+
 	if (info->helper) {
 		struct nf_conn_help *help;
 
+		//取help信息，检查ct与info指定的helper函数是否一致
 		help = nf_ct_ext_find(ct, NF_CT_EXT_HELPER);
 		if (help && rcu_access_pointer(help->helper) != info->helper)
 			return false;
 	}
+
 	/* Force conntrack entry direction to the current packet? */
 	if (info->force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		/* Delete the conntrack entry if confirmed, else just release
@@ -946,7 +958,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 	struct nf_conn *ct;
 
 	if (!cached) {
-		//构造hook state准备手动调入conntrack创建
+		//未查询到ct,构造hook state准备手动调用nf_conntrack_in创建ct
 		struct nf_hook_state state = {
 			.hook = NF_INET_PRE_ROUTING,
 			.pf = info->family,
@@ -978,6 +990,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		ovs_ct_update_key(skb, info, key, true, true);
 	}
 
+	//取ct
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct) {
 		/* Packets starting a new connection must be NATted before the
@@ -1160,14 +1173,15 @@ static int ovs_ct_check_limit(struct net *net,
 #endif
 
 /* Lookup connection and confirm if unconfirmed. */
-static int ovs_ct_commit(struct net *net, struct sw_flow_key *key,
-			 const struct ovs_conntrack_info *info,
+static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
+			 const struct ovs_conntrack_info *info/*ct动作对应的参数*/,
 			 struct sk_buff *skb)
 {
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 	int err;
 
+	//查询ct,如果ct不存在，则创建它
 	err = __ovs_ct_lookup(net, key, info, skb);
 	if (err)
 		return err;
@@ -1271,14 +1285,14 @@ static int ovs_skb_network_trim(struct sk_buff *skb)
  * value if 'skb' is freed.
  */
 int ovs_ct_execute(struct net *net, struct sk_buff *skb,
-		   struct sw_flow_key *key,
-		   const struct ovs_conntrack_info *info)
+		   struct sw_flow_key *key/*报文的key信息*/,
+		   const struct ovs_conntrack_info *info/*ct动作对应的参数*/)
 {
 	int nh_ofs;
 	int err;
 
 	/* The conntrack module expects to be working at L3. */
-	nh_ofs = skb_network_offset(skb);
+	nh_ofs = skb_network_offset(skb);//到l3的offset
 	skb_pull_rcsum(skb, nh_ofs);
 
 	err = ovs_skb_network_trim(skb);
@@ -1286,15 +1300,17 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 		return err;
 
 	if (key->ip.frag != OVS_FRAG_TYPE_NONE) {
-		//分片报文，需要先执行分片重组
+		//收到分片报文，需要先执行分片重组
 		err = handle_fragments(net, key, info->zone.id, skb);
 		if (err)
 			return err;
 	}
 
 	if (info->commit)
+		/*指明了commit,可以创建ct*/
 		err = ovs_ct_commit(net, key, info, skb);
 	else
+		/*未指明commit，仅执行ct查询*/
 		err = ovs_ct_lookup(net, key, info, skb);
 
 	skb_push(skb, nh_ofs);

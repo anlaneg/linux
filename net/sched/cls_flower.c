@@ -1369,6 +1369,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		}
 	}
 
+	//解析flow的key，mask及action
 	err = fl_set_parms(net, tp, fnew, mask, base, tb, tca[TCA_RATE], ovr,
 			   tp->chain->tmplt_priv, extack);
 	if (err)
@@ -1391,6 +1392,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		goto errout_mask;
 	fnew->handle = handle;
 
+	//执行flow查询
 	if (!fold && __fl_lookup(fnew->mask, &fnew->mkey)) {
 		err = -EEXIST;
 		goto errout_idr;
