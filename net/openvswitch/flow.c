@@ -146,6 +146,7 @@ void ovs_flow_stats_get(const struct sw_flow *flow,
 	memset(ovs_stats, 0, sizeof(*ovs_stats));
 
 	/* We open code this to make sure cpu 0 is always considered */
+	//合并合cpu对此flow的统计。
 	for (cpu = 0; cpu < nr_cpu_ids; cpu = cpumask_next(cpu, &flow->cpu_used_mask)) {
 		struct flow_stats *stats = rcu_dereference_ovsl(flow->stats[cpu]);
 
@@ -878,7 +879,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 	if (res < 0)
 		return res;
 	key->mac_proto = res;
-	key->recirc_id = 0;
+	key->recirc_id = 0;//将recirc_id置为0
 
 	//将报文内容解析到key中
 	err = key_extract(skb, key);

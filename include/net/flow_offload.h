@@ -180,6 +180,7 @@ struct flow_rule {
 
 struct flow_rule *flow_rule_alloc(unsigned int num_actions);
 
+//检查rule的match字段中是否有key
 static inline bool flow_rule_match_key(const struct flow_rule *rule,
 				       enum flow_dissector_key_id key)
 {

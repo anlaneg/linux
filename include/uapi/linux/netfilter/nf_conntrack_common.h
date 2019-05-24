@@ -6,21 +6,25 @@
    extension. */
 enum ip_conntrack_info {
 	/* Part of an established connection (either direction). */
-	IP_CT_ESTABLISHED,//连接已经建立，当前数据包在原始方向。
+	IP_CT_ESTABLISHED,//双方向的流均看到了，完整的ct。
 
 	/* Like NEW, but related to an existing connection, or ICMP error
 	   (in either direction). */
-	IP_CT_RELATED,//也是新连接，不过是一个期待连接
+	//标记本ct是通过期待创建的
+	IP_CT_RELATED,
 
 	/* Started a new connection to track (only
            IP_CT_DIR_ORIGINAL); may be a retransmission. */
-	IP_CT_NEW,//新连接
+	//新连接,只看到了单方向的flow
+	IP_CT_NEW,
 
 	/* >= this indicates reply direction */
-	IP_CT_IS_REPLY,//反方向的连接
+	//自此开始为反方向
+	//反方向的ct
+	IP_CT_IS_REPLY,
 
-	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,//连接已经建立，数据包在回复方向。
-	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,//期待连接开始，同时数据包在回复方向。
+	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,//连接已经建立，数据包在回包方向。
+	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,//期待创建的ct，同时数据包在回包方向。
 	/* No NEW in reply direction. */
 
 	/* Number of distinct IP_CT types. */
@@ -41,10 +45,12 @@ enum ip_conntrack_info {
 /* Bitset representing status of connection. */
 enum ip_conntrack_status {
 	/* It's an expected connection: bit 0 set.  This bit never changed */
+	//标记此ct依据期待创建
 	IPS_EXPECTED_BIT = 0,
 	IPS_EXPECTED = (1 << IPS_EXPECTED_BIT),
 
 	/* We've seen packets both ways: bit 1 set.  Can be set, not unset. */
+	//标记是否双向flow均看到了
 	IPS_SEEN_REPLY_BIT = 1,
 	IPS_SEEN_REPLY = (1 << IPS_SEEN_REPLY_BIT),
 
@@ -141,7 +147,9 @@ enum ip_conntrack_expect_events {
 };
 
 /* expectation flags */
+//永久性期待
 #define NF_CT_EXPECT_PERMANENT		0x1
+//无效期待
 #define NF_CT_EXPECT_INACTIVE		0x2
 #define NF_CT_EXPECT_USERSPACE		0x4
 

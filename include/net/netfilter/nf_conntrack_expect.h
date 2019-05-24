@@ -23,6 +23,7 @@ struct nf_conntrack_expect {
 	struct hlist_node hnode;
 
 	/* We expect this tuple, with the following mask */
+	//期待的元组与掩码
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_mask mask;
 
@@ -34,7 +35,7 @@ struct nf_conntrack_expect {
 	struct nf_conntrack_helper *helper;
 
 	/* The conntrack of the master connection */
-	struct nf_conn *master;
+	struct nf_conn *master;//父连接
 
 	/* Timer function; deletes the expectation. */
 	struct timer_list timeout;

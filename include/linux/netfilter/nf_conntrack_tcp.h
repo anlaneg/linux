@@ -16,6 +16,7 @@ struct ip_ct_tcp_state {
 
 struct ip_ct_tcp {
 	struct ip_ct_tcp_state seen[2];	/* connection parameters per direction */
+	//连接状态
 	u_int8_t	state;		/* state of the connection (enum tcp_conntrack) */
 	/* For detecting stale connections */
 	u_int8_t	last_dir;	/* Direction of the last packet (enum ip_conntrack_dir) */

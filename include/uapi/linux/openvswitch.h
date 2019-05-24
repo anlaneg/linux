@@ -34,7 +34,7 @@
  */
 
 struct ovs_header {
-	int dp_ifindex;//dp_ifindex常常
+	int dp_ifindex;
 };
 
 /* Datapaths. */
@@ -345,6 +345,7 @@ enum ovs_key_attr {
 	__OVS_KEY_ATTR_MAX
 };
 
+//key属性的最大值
 #define OVS_KEY_ATTR_MAX (__OVS_KEY_ATTR_MAX - 1)
 
 enum ovs_tunnel_key_attr {

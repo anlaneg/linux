@@ -39,17 +39,17 @@ struct table_instance {
 	struct hlist_head *buckets;
 	unsigned int n_buckets;//桶数目
 	struct rcu_head rcu;
-	int node_ver;
+	int node_ver;//此表使用的节点版本（借此实现表迁移时查询不加锁?rcu保证删除）
 	u32 hash_seed;//随机数seed
 	bool keep_flows;
 };
 
 struct flow_table {
-	struct table_instance __rcu *ti;
-	struct table_instance __rcu *ufid_ti;
-	struct list_head mask_list;
+	struct table_instance __rcu *ti;/*通过key查找flow*/
+	struct table_instance __rcu *ufid_ti;/*通过ufid查找的flow*/
+	struct list_head mask_list;//掩码list
 	unsigned long last_rehash;
-	unsigned int count;
+	unsigned int count;//表中的规则数
 	unsigned int ufid_count;
 };
 

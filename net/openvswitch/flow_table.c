@@ -57,7 +57,7 @@ static u16 range_n_bytes(const struct sw_flow_key_range *range)
 	return range->end - range->start;
 }
 
-void ovs_flow_mask_key(struct sw_flow_key *dst, const struct sw_flow_key *src,
+void ovs_flow_mask_key(struct sw_flow_key *dst/*出参，存放key&mask结果*/, const struct sw_flow_key *src,
 		       bool full, const struct sw_flow_mask *mask)
 {
 	int start = full ? 0 : mask->range.start;
@@ -73,9 +73,11 @@ void ovs_flow_mask_key(struct sw_flow_key *dst, const struct sw_flow_key *src,
 	 * operations on 'dst' only use contents within 'mask->range'.
 	 */
 	for (i = 0; i < len; i += sizeof(long))
+		//获得 与后的key
 		*d++ = *s++ & *m++;
 }
 
+//申请空的flow
 struct sw_flow *ovs_flow_alloc(void)
 {
 	struct sw_flow *flow;
@@ -296,6 +298,7 @@ static struct hlist_head *find_bucket(struct table_instance *ti, u32 hash)
 	return &ti->buckets[hash & (ti->n_buckets - 1)];
 }
 
+//将flow加入到flow_table
 static void table_instance_insert(struct table_instance *ti,
 				  struct sw_flow *flow)
 {
@@ -315,15 +318,17 @@ static void ufid_table_instance_insert(struct table_instance *ti,
 }
 
 static void flow_table_copy_flows(struct table_instance *old,
-				  struct table_instance *new, bool ufid)
+				  struct table_instance *new, bool ufid/*是否迁移ufid表*/)
 {
 	int old_ver;
 	int i;
 
+	//交换到另一个version上去
 	old_ver = old->node_ver;
 	new->node_ver = !old_ver;
 
 	/* Insert in new table. */
+	//遍历所有的桶，将ufid,flow表链接到新表上
 	for (i = 0; i < old->n_buckets; i++) {
 		struct sw_flow *flow;
 		struct hlist_head *head = &old->buckets[i];
@@ -341,6 +346,7 @@ static void flow_table_copy_flows(struct table_instance *old,
 	old->keep_flows = true;
 }
 
+//创建新表，并将旧表上的元素迁移到新表上
 static struct table_instance *table_instance_rehash(struct table_instance *ti,
 						    int n_buckets, bool ufid)
 {
@@ -449,12 +455,13 @@ static struct sw_flow *masked_flow_lookup(struct table_instance *ti,
 	u32 hash;
 	struct sw_flow_key masked_key;
 
+	//获取mask后的key
 	ovs_flow_mask_key(&masked_key, unmasked, false, mask);
 	hash = flow_hash(&masked_key, &mask->range);
 	head = find_bucket(ti, hash);
 	hlist_for_each_entry_rcu(flow, head, flow_table.node[ti->node_ver]) {
-		if (flow->mask == mask && flow->flow_table.hash == hash &&
-		    flow_cmp_masked_key(flow, &masked_key, &mask->range))
+		if (flow->mask == mask/*流mask必须一致*/ && flow->flow_table.hash == hash &&
+		    flow_cmp_masked_key(flow, &masked_key, &mask->range)/*比对key是否一致*/)
 			return flow;
 	}
 	return NULL;
@@ -469,6 +476,7 @@ struct sw_flow *ovs_flow_tbl_lookup_stats(struct flow_table *tbl,
 	struct sw_flow *flow;
 
 	*n_mask_hit = 0;
+	//遍历已知的所有mask,与报文获得的key与之后，检查是否与flow匹配
 	list_for_each_entry_rcu(mask, &tbl->mask_list, list) {
 		(*n_mask_hit)++;
 		flow = masked_flow_lookup(ti, key, mask);
@@ -478,12 +486,13 @@ struct sw_flow *ovs_flow_tbl_lookup_stats(struct flow_table *tbl,
 	return NULL;
 }
 
+//通过key查询flow
 struct sw_flow *ovs_flow_tbl_lookup(struct flow_table *tbl,
 				    const struct sw_flow_key *key)
 {
 	u32 __always_unused n_mask_hit;
 
-	return ovs_flow_tbl_lookup_stats(tbl, key, &n_mask_hit);
+	return ovs_flow_tbl_lookup_stats(tbl, key, &n_maskxx_hit);
 }
 
 struct sw_flow *ovs_flow_tbl_lookup_exact(struct flow_table *tbl,
@@ -525,6 +534,7 @@ bool ovs_flow_cmp(const struct sw_flow *flow, const struct sw_flow_match *match)
 	return ovs_flow_cmp_unmasked_key(flow, match);
 }
 
+//按ufid查找flow
 struct sw_flow *ovs_flow_tbl_lookup_ufid(struct flow_table *tbl,
 					 const struct sw_flow_id *ufid)
 {
@@ -534,8 +544,9 @@ struct sw_flow *ovs_flow_tbl_lookup_ufid(struct flow_table *tbl,
 	u32 hash;
 
 	hash = ufid_hash(ufid);
-	head = find_bucket(ti, hash);
+	head = find_bucket(ti, hash);/*找相应的桶*/
 	hlist_for_each_entry_rcu(flow, head, ufid_table.node[ti->node_ver]) {
+		//仅比对ufid是否相等，hash也是基于ufid生成的
 		if (flow->ufid_table.hash == hash &&
 		    ovs_flow_cmp_ufid(flow, ufid))
 			return flow;
@@ -554,6 +565,7 @@ int ovs_flow_tbl_num_masks(const struct flow_table *table)
 	return num;
 }
 
+//实现表扩展
 static struct table_instance *table_instance_expand(struct table_instance *ti,
 						    bool ufid)
 {
@@ -620,6 +632,7 @@ static bool mask_equal(const struct sw_flow_mask *a,
 		&& (memcmp(a_, b_, range_n_bytes(&a->range)) == 0);
 }
 
+//检查指定mask是否已在tbl->mask_list中存在
 static struct sw_flow_mask *flow_mask_find(const struct flow_table *tbl,
 					   const struct sw_flow_mask *mask)
 {
@@ -671,11 +684,14 @@ static void flow_key_insert(struct flow_table *table, struct sw_flow *flow)
 
 	/* Expand table, if necessary, to make room. */
 	if (table->count > ti->n_buckets)
+		//规则数大于桶数时，对table表执行扩展
 		new_ti = table_instance_expand(ti, false);
 	else if (time_after(jiffies, table->last_rehash + REHASH_INTERVAL))
+		//为什么要周期性重建？？？
 		new_ti = table_instance_rehash(ti, ti->n_buckets, false);
 
 	if (new_ti) {
+		//延迟删除
 		rcu_assign_pointer(table->ti, new_ti);
 		call_rcu(&ti->rcu, flow_tbl_destroy_rcu_cb);
 		table->last_rehash = jiffies;
@@ -683,6 +699,7 @@ static void flow_key_insert(struct flow_table *table, struct sw_flow *flow)
 }
 
 /* Must be called with OVS mutex held. */
+//ufid表插入
 static void flow_ufid_insert(struct flow_table *table, struct sw_flow *flow)
 {
 	struct table_instance *ti;

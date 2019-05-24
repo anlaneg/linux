@@ -79,7 +79,7 @@ struct datapath {
 	struct list_head list_node;
 
 	/* Flow table. */
-	struct flow_table table;//emc流表
+	struct flow_table table;
 
 	/* Switch ports. */
 	struct hlist_head *ports;//以port_no为索引的vport表

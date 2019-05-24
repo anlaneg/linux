@@ -272,6 +272,7 @@ static void ovs_ct_update_key(const struct sk_buff *skb,
 		}
 		zone = nf_ct_zone(ct);
 	} else if (post_ct) {
+		//未查询到ct，且当前为ct后，打上invalid标志
 		state = OVS_CS_F_TRACKED | OVS_CS_F_INVALID;
 		if (info)
 			zone = &info->zone;

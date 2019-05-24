@@ -36,6 +36,7 @@
 unsigned int nf_ct_expect_hsize __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_expect_hsize);
 
+//全局期待表（各namespace 算进hash中存入期待）
 struct hlist_head *nf_ct_expect_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_expect_hash);
 
@@ -99,6 +100,7 @@ nf_ct_exp_equal(const struct nf_conntrack_tuple *tuple,
 		const struct net *net)
 {
 	return nf_ct_tuple_mask_cmp(tuple, &i->tuple, &i->mask) &&
+			/*必须为同一个namespace*/
 	       net_eq(net, nf_ct_net(i->master)) &&
 	       nf_ct_zone_equal_any(i->master, zone);
 }
@@ -154,6 +156,7 @@ EXPORT_SYMBOL_GPL(nf_ct_expect_find_get);
 
 /* If an expectation for this connection is found, it gets delete from
  * global list then returned. */
+//用于查询期待
 struct nf_conntrack_expect *
 nf_ct_find_expectation(struct net *net,
 		       const struct nf_conntrack_zone *zone,
@@ -162,9 +165,11 @@ nf_ct_find_expectation(struct net *net,
 	struct nf_conntrack_expect *i, *exp = NULL;
 	unsigned int h;
 
+	//namespace无期待，则退出
 	if (!net->ct.expect_count)
 		return NULL;
 
+	//查找元组是否有匹配的期待
 	h = nf_ct_expect_dst_hash(net, tuple);
 	hlist_for_each_entry(i, &nf_ct_expect_hash[h], hnode) {
 		if (!(i->flags & NF_CT_EXPECT_INACTIVE) &&
@@ -181,6 +186,7 @@ nf_ct_find_expectation(struct net *net,
 	   Hence these are not the droids you are looking for (if
 	   master ct never got confirmed, we'd hold a reference to it
 	   and weird things would happen to future packets). */
+	//父连接生成了期待，但父连接自已还没有完成双向通信，故认为期待不匹配
 	if (!nf_ct_is_confirmed(exp->master))
 		return NULL;
 
@@ -196,14 +202,17 @@ nf_ct_find_expectation(struct net *net,
 		     !atomic_inc_not_zero(&exp->master->ct_general.use)))
 		return NULL;
 
+	//期待是永久性的，增加引用，并返回
 	if (exp->flags & NF_CT_EXPECT_PERMANENT) {
 		refcount_inc(&exp->use);
 		return exp;
+		//停止期待的timer
 	} else if (del_timer(&exp->timeout)) {
 		nf_ct_unlink_expect(exp);
 		return exp;
 	}
 	/* Undo exp->master refcnt increase, if del_timer() failed */
+	//期待已关联到ct,已准备删除，故先删除父连接引用
 	nf_ct_put(exp->master);
 
 	return NULL;

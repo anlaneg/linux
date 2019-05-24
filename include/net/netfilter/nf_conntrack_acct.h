@@ -29,7 +29,7 @@ struct nf_conn_acct *nf_conn_acct_find(const struct nf_conn *ct)
 	return nf_ct_ext_find(ct, NF_CT_EXT_ACCT);
 }
 
-//添加NF_CT_EXT_ACC扩展信息
+//添加NF_CT_EXT_ACC扩展信息（做什么用？）
 static inline
 struct nf_conn_acct *nf_ct_acct_ext_add(struct nf_conn *ct, gfp_t gfp)
 {

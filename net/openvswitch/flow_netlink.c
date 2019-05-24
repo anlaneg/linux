@@ -99,7 +99,7 @@ static bool actions_may_change_flow(const struct nlattr *actions)
 }
 
 static void update_range(struct sw_flow_match *match,
-			 size_t offset, size_t size, bool is_mask)
+			 size_t offset/*自match的offset位置开始*/, size_t size/*长度为size*/, bool is_mask)
 {
 	struct sw_flow_key_range *range;
 	size_t start = rounddown(offset, sizeof(long));
@@ -111,11 +111,13 @@ static void update_range(struct sw_flow_match *match,
 		range = &match->mask->range;
 
 	if (range->start == range->end) {
+		//初始化start,end
 		range->start = start;
 		range->end = end;
 		return;
 	}
 
+	//扩大范围
 	if (range->start > start)
 		range->start = start;
 
@@ -123,7 +125,7 @@ static void update_range(struct sw_flow_match *match,
 		range->end = end;
 }
 
-#define SW_FLOW_KEY_PUT(match, field, value, is_mask) \
+#define SW_FLOW_KEY_PUT(match, field/*字段名称*/, value/*字段取值*/, is_mask/*是否设置mask*/) \
 	do { \
 		update_range(match, offsetof(struct sw_flow_key, field),    \
 			     sizeof((match)->key->field), is_mask);	    \
@@ -413,6 +415,7 @@ ovs_nsh_key_attr_lens[OVS_NSH_KEY_ATTR_MAX + 1] = {
 };
 
 /* The size of the argument for each %OVS_KEY_ATTR_* Netlink attribute.  */
+//记录各openvswitch key的长度
 static const struct ovs_len_tbl ovs_key_lens[OVS_KEY_ATTR_MAX + 1] = {
 	[OVS_KEY_ATTR_ENCAP]	 = { .len = OVS_ATTR_NESTED },
 	[OVS_KEY_ATTR_PRIORITY]	 = { .len = sizeof(u32) },
@@ -450,11 +453,13 @@ static const struct ovs_len_tbl ovs_key_lens[OVS_KEY_ATTR_MAX + 1] = {
 
 static bool check_attr_len(unsigned int attr_len, unsigned int expected_len)
 {
+	//长度一致，或者长度可变
 	return expected_len == attr_len ||
 	       expected_len == OVS_ATTR_NESTED ||
 	       expected_len == OVS_ATTR_VARIABLE;
 }
 
+//检查fp数组全为0（数组长度为size)
 static bool is_all_zero(const u8 *fp, size_t size)
 {
 	int i;
@@ -469,9 +474,10 @@ static bool is_all_zero(const u8 *fp, size_t size)
 	return true;
 }
 
+//解析所有key的给值，将其填充到a中
 static int __parse_flow_nlattrs(const struct nlattr *attr,
 				const struct nlattr *a[],
-				u64 *attrsp, bool log, bool nz)
+				u64 *attrsp/*出参，记录哪些key被给出了*/, bool log, bool nz/*是否检查全0*/)
 {
 	const struct nlattr *nla;
 	u64 attrs;
@@ -482,6 +488,7 @@ static int __parse_flow_nlattrs(const struct nlattr *attr,
 		u16 type = nla_type(nla);
 		int expected_len;
 
+		//key类型过大，报文有误
 		if (type > OVS_KEY_ATTR_MAX) {
 			OVS_NLERR(log, "Key type %d is out of range max %d",
 				  type, OVS_KEY_ATTR_MAX);
@@ -489,17 +496,20 @@ static int __parse_flow_nlattrs(const struct nlattr *attr,
 		}
 
 		if (attrs & (1 << type)) {
+			//type对应的key已出现过了，重复出现，报错
 			OVS_NLERR(log, "Duplicate key (type %d).", type);
 			return -EINVAL;
 		}
 
 		expected_len = ovs_key_lens[type].len;
 		if (!check_attr_len(nla_len(nla), expected_len)) {
+			//key给出的长度有误
 			OVS_NLERR(log, "Key %d has unexpected len %d expected %d",
 				  type, nla_len(nla), expected_len);
 			return -EINVAL;
 		}
 
+		//设置type的取值
 		if (!nz || !is_all_zero(nla_data(nla), nla_len(nla))) {
 			attrs |= 1 << type;
 			a[type] = nla;
@@ -516,11 +526,12 @@ static int __parse_flow_nlattrs(const struct nlattr *attr,
 
 static int parse_flow_mask_nlattrs(const struct nlattr *attr,
 				   const struct nlattr *a[], u64 *attrsp,
-				   bool log)
+				   bool log/*是否显示log*/)
 {
-	return __parse_flow_nlattrs(attr, a, attrsp, log, true);
+	return __parse_flow_nlattrs(attr, a, attrsp, log, true/*跳过mask为0的key*/);
 }
 
+//解析flow的key属性
 int parse_flow_nlattrs(const struct nlattr *attr, const struct nlattr *a[],
 		       u64 *attrsp, bool log)
 {
@@ -968,12 +979,14 @@ static int encode_vlan_from_nlattrs(struct sw_flow_match *match,
 	return 0;
 }
 
+//vlan格式校验
 static int validate_vlan_from_nlattrs(const struct sw_flow_match *match,
 				      u64 key_attrs, bool inner,
 				      const struct nlattr **a, bool log)
 {
 	__be16 tci = 0;
 
+	//报文必须指出了以太类型为vlan帧
 	if (!((key_attrs & (1 << OVS_KEY_ATTR_ETHERNET)) &&
 	      (key_attrs & (1 << OVS_KEY_ATTR_ETHERTYPE)) &&
 	       eth_type_vlan(nla_get_be16(a[OVS_KEY_ATTR_ETHERTYPE])))) {
@@ -1133,6 +1146,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 {
 	u8 mac_proto = MAC_PROTO_ETHERNET;
 
+	//填充match
 	if (*attrs & (1 << OVS_KEY_ATTR_DP_HASH)) {
 		u32 hash_val = nla_get_u32(a[OVS_KEY_ATTR_DP_HASH]);
 
@@ -1493,6 +1507,7 @@ static int ovs_key_from_nlattrs(struct net *net, struct sw_flow_match *match,
 	if (attrs & (1 << OVS_KEY_ATTR_ETHERNET)) {
 		const struct ovs_key_ethernet *eth_key;
 
+		//填充源，目的mac
 		eth_key = nla_data(a[OVS_KEY_ATTR_ETHERNET]);
 		SW_FLOW_KEY_MEMCPY(match, eth.src,
 				eth_key->eth_src, ETH_ALEN, is_mask);
@@ -1750,14 +1765,16 @@ int ovs_nla_get_match(struct net *net, struct sw_flow_match *match,
 {
 	const struct nlattr *a[OVS_KEY_ATTR_MAX + 1];
 	struct nlattr *newmask = NULL;
-	u64 key_attrs = 0;
-	u64 mask_attrs = 0;
+	u64 key_attrs = 0;/*指出有哪些key出现了*/
+	u64 mask_attrs = 0/*指出有哪些mask出现了*/;
 	int err;
 
+	//解析key
 	err = parse_flow_nlattrs(nla_key, a, &key_attrs, log);
 	if (err)
 		return err;
 
+	//解析vlan
 	err = parse_vlan_from_nlattrs(match, &key_attrs, a, false, log);
 	if (err)
 		return err;
@@ -1796,6 +1813,7 @@ int ovs_nla_get_match(struct net *net, struct sw_flow_match *match,
 			nla_mask = newmask;
 		}
 
+		//解析mask
 		err = parse_flow_mask_nlattrs(nla_mask, a, &mask_attrs, log);
 		if (err)
 			goto free_newmask;
@@ -2507,6 +2525,7 @@ void ovs_match_init(struct sw_flow_match *match,
 		memset(key, 0, sizeof(*key));
 
 	if (mask) {
+		//初始化mask
 		memset(&mask->key, 0, sizeof(mask->key));
 		mask->range.start = mask->range.end = 0;
 	}

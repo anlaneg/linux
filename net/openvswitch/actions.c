@@ -97,6 +97,7 @@ static struct sw_flow_key *clone_key(const struct sw_flow_key *key_)
 	int level = this_cpu_read(exec_actions_level);
 	struct sw_flow_key *key = NULL;
 
+	//level大于OVS_DEFERRED_ACTION_THRESHOLD时，将返回NULL
 	if (level <= OVS_DEFERRED_ACTION_THRESHOLD) {
 		key = &keys->key[level - 1];
 		*key = *key_;
@@ -1207,12 +1208,14 @@ static int execute_recirc(struct datapath *dp, struct sk_buff *skb,
 	if (!is_flow_key_valid(key)) {
 		int err;
 
+		//key无效，重新解析
 		err = ovs_flow_key_update(skb, key);
 		if (err)
 			return err;
 	}
 	BUG_ON(!is_flow_key_valid(key));
 
+	//取recirc id号，clone key_flow
 	recirc_id = nla_get_u32(a);
 	return clone_execute(dp, skb, key, recirc_id, NULL, 0, last, true);
 }
@@ -1296,6 +1299,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_RECIRC: {
+			//处理recirc action
 			bool last = nla_is_last(a, rem);
 
 			err = execute_recirc(dp, skb, key, a, last);
@@ -1416,6 +1420,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 	struct deferred_action *da;
 	struct sw_flow_key *clone;
 
+	//clone报文？
 	skb = last ? skb : skb_clone(skb, GFP_ATOMIC);
 	if (!skb) {
 		/* Out of memory, skip this action.
@@ -1434,6 +1439,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 		int err = 0;
 
 		if (actions) { /* Sample action */
+			//后面仍有其它action,则继续执行
 			if (clone_flow_key)
 				__this_cpu_inc(exec_actions_level);
 
@@ -1443,13 +1449,16 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 			if (clone_flow_key)
 				__this_cpu_dec(exec_actions_level);
 		} else { /* Recirc action */
+			//更正recirc_id
 			clone->recirc_id = recirc_id;
+			//调用dp处理此次recirc
 			ovs_dp_process_packet(skb, clone);
 		}
 		return err;
 	}
 
 	/* Out of 'flow_keys' space. Defer actions */
+	//recirc次数达到限制，申请入队action_fifos
 	da = add_deferred_actions(skb, key, actions, len);
 	if (da) {
 		if (!actions) { /* Recirc action */
@@ -1477,6 +1486,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 
 static void process_deferred_actions(struct datapath *dp)
 {
+	//检查fifo队列是否为空
 	struct action_fifo *fifo = this_cpu_ptr(action_fifos);
 
 	/* Do not touch the FIFO in case there is no deferred actions. */
@@ -1484,6 +1494,7 @@ static void process_deferred_actions(struct datapath *dp)
 		return;
 
 	/* Finishing executing all deferred actions. */
+	//完成fifo中暂存的action,处理直到队列为空
 	do {
 		struct deferred_action *da = action_fifo_get(fifo);
 		struct sk_buff *skb = da->skb;
@@ -1522,6 +1533,7 @@ int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
 	err = do_execute_actions(dp, skb, key,
 				 acts->actions, acts->actions_len);
 
+	//处理暂存的skb
 	if (level == 1)
 		process_deferred_actions(dp);
 

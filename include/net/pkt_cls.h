@@ -773,13 +773,14 @@ enum tc_fl_command {
 
 struct tc_cls_flower_offload {
 	struct tc_cls_common_offload common;
-	enum tc_fl_command command;
+	enum tc_fl_command command;//flower操作符
 	unsigned long cookie;
-	struct flow_rule *rule;
+	struct flow_rule *rule;//操作的规则
 	struct flow_stats stats;
 	u32 classid;
 };
 
+//取offload的规则
 static inline struct flow_rule *
 tc_cls_flower_offload_flow_rule(struct tc_cls_flower_offload *tc_flow_cmd)
 {

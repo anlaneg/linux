@@ -267,11 +267,11 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 		goto out;
 	}
 
-	//flow查找成功，执行action
+	//更新flow的状态信息
 	ovs_flow_stats_update(flow, key->tp.flags, skb);
 	sf_acts = rcu_dereference(flow->sf_acts);
 
-	//执行action
+	//flow查找成功，执行action(注意忽略了(返回值）执行失败的skb)
 	ovs_execute_actions(dp, skb, sf_acts, key);
 
 	stats_counter = &stats->n_hit;
@@ -768,6 +768,7 @@ static int ovs_flow_cmd_fill_stats(const struct sw_flow *flow,
 			      OVS_FLOW_ATTR_PAD))
 		return -EMSGSIZE;
 
+	//如果报文数量为0，则就不append 状态数据了
 	if (stats.n_packets &&
 	    nla_put_64bit(skb, OVS_FLOW_ATTR_STATS,
 			  sizeof(struct ovs_flow_stats), &stats,
@@ -913,6 +914,7 @@ static struct sk_buff *ovs_flow_cmd_build_info(const struct sw_flow *flow,
 	return skb;
 }
 
+/*处理下发的flow规则*/
 static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net *net = sock_net(skb->sk);
@@ -949,6 +951,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	/* Extract key. */
+	//解析并注入key,mask
 	ovs_match_init(&match, &new_flow->key, false, &mask);
 	error = ovs_nla_get_match(net, &match, a[OVS_FLOW_ATTR_KEY],
 				  a[OVS_FLOW_ATTR_MASK], log);
@@ -968,7 +971,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	ovs_flow_mask_key(&new_flow->key, &new_flow->key, true, &mask);
 
 	/* Validate actions. */
-	//填充action
+	//解析并填充action到acts
 	error = ovs_nla_copy_actions(net, a[OVS_FLOW_ATTR_ACTIONS],
 				     &new_flow->key, &acts, log);
 	if (error) {
@@ -984,6 +987,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	ovs_lock();
+	//取flow对应的dp
 	dp = get_dp(net, ovs_header->dp_ifindex);
 	if (unlikely(!dp)) {
 		error = -ENODEV;
@@ -991,9 +995,11 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	/* Check if this is a duplicate flow */
+	//检查id是否重复
 	if (ovs_identifier_is_ufid(&new_flow->id))
 		flow = ovs_flow_tbl_lookup_ufid(&dp->table, &new_flow->id);
 	if (!flow)
+		//通过key再查一次flow(检查是否重复）
 		flow = ovs_flow_tbl_lookup(&dp->table, &new_flow->key);
 	if (likely(!flow)) {
 		rcu_assign_pointer(new_flow->sf_acts, acts);
@@ -1027,12 +1033,14 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		 */
 		if (unlikely(info->nlhdr->nlmsg_flags & (NLM_F_CREATE
 							 | NLM_F_EXCL))) {
+			//已存在，但非修改，报错
 			error = -EEXIST;
 			goto err_unlock_ovs;
 		}
 		/* The flow identifier has to be the same for flow updates.
 		 * Look for any overlapping flow.
 		 */
+		//查询出已存在的流，更新actions
 		if (unlikely(!ovs_flow_cmp(flow, &match))) {
 			if (ovs_identifier_is_key(&flow->id))
 				flow = ovs_flow_tbl_lookup_exact(&dp->table,
@@ -1463,7 +1471,7 @@ static const struct genl_ops dp_flow_genl_ops[] = {
 	{ .cmd = OVS_FLOW_CMD_GET,
 	  .flags = 0,		    /* OK for unprivileged users. */
 	  .policy = flow_policy,
-	  .doit = ovs_flow_cmd_get,
+	  .doit = ovs_flow_cmd_get,//获取datapath flow
 	  .dumpit = ovs_flow_cmd_dump
 	},
 	{ .cmd = OVS_FLOW_CMD_SET,
@@ -1555,11 +1563,13 @@ static struct datapath *lookup_datapath(struct net *net,
 {
 	struct datapath *dp;
 
+	//未给出名称，则使用ifindex
 	if (!a[OVS_DP_ATTR_NAME])
 		dp = get_dp(net, ovs_header->dp_ifindex);
 	else {
 		struct vport *vport;
 
+		//通过name获得vport,由vport获得datapath
 		vport = ovs_vport_locate(net, nla_data(a[OVS_DP_ATTR_NAME]));
 		dp = vport && vport->port_no == OVSP_LOCAL ? vport->dp : NULL;
 	}
@@ -1773,6 +1783,7 @@ static int ovs_dp_cmd_set(struct sk_buff *skb, struct genl_info *info)
 		return -ENOMEM;
 
 	ovs_lock();
+	//获取到指定的datapath
 	dp = lookup_datapath(sock_net(skb->sk), info->userhdr, info->attrs);
 	err = PTR_ERR(dp);
 	if (IS_ERR(dp))
@@ -1864,7 +1875,7 @@ static const struct genl_ops dp_datapath_genl_ops[] = {
 	  .policy = datapath_policy,
 	  .doit = ovs_dp_cmd_del
 	},
-	{ .cmd = OVS_DP_CMD_GET,
+	{ .cmd = OVS_DP_CMD_GET,//openvswitch通过此命令获取datapath信息
 	  .flags = 0,		    /* OK for unprivileged users. */
 	  .policy = datapath_policy,
 	  .doit = ovs_dp_cmd_get,
@@ -1873,7 +1884,7 @@ static const struct genl_ops dp_datapath_genl_ops[] = {
 	{ .cmd = OVS_DP_CMD_SET,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .policy = datapath_policy,
-	  .doit = ovs_dp_cmd_set,
+	  .doit = ovs_dp_cmd_set,//打开指定的datapath
 	},
 };
 

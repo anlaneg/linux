@@ -70,6 +70,7 @@ enum {
 	MLX5E_TC_FLOW_EGRESS	= MLX5E_TC_EGRESS,
 	MLX5E_TC_FLOW_ESWITCH	= MLX5E_TC_ESW_OFFLOAD,
 	MLX5E_TC_FLOW_NIC	= MLX5E_TC_NIC_OFFLOAD,
+	//标记流已被offloaded
 	MLX5E_TC_FLOW_OFFLOADED	= BIT(MLX5E_TC_FLOW_BASE),
 	MLX5E_TC_FLOW_HAIRPIN	= BIT(MLX5E_TC_FLOW_BASE + 1),
 	MLX5E_TC_FLOW_HAIRPIN_RSS = BIT(MLX5E_TC_FLOW_BASE + 2),
@@ -1476,6 +1477,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	      BIT(FLOW_DISSECTOR_KEY_TCP) |
 	      BIT(FLOW_DISSECTOR_KEY_IP)  |
 	      BIT(FLOW_DISSECTOR_KEY_ENC_IP))) {
+		//遇到不支持的key,报错
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported key");
 		netdev_warn(priv->netdev, "Unsupported key used: 0x%x\n",
 			    dissector->used_keys);
@@ -1511,6 +1513,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
+		//取key_basic的key及mask填充进match
 		flow_rule_match_basic(rule, &match);
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, ethertype,
 			 ntohs(match.mask->n_proto));
@@ -1847,6 +1850,7 @@ static int pedit_header_offsets[] = {
 	[FLOW_ACT_MANGLE_HDR_TYPE_UDP] = offsetof(struct pedit_headers, udp),
 };
 
+//获取_htype类型对应的header指针
 #define pedit_header(_ph, _htype) ((void *)(_ph) + pedit_header_offsets[_htype])
 
 static int set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
@@ -1857,6 +1861,7 @@ static int set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
 	curr_pmask = (u32 *)(pedit_header(&hdrs->masks, hdr_type) + offset);
 	curr_pval  = (u32 *)(pedit_header(&hdrs->vals, hdr_type) + offset);
 
+	//已设置，报错
 	if (*curr_pmask & mask)  /* disallow acting twice on the same location */
 		goto out_err;
 
@@ -2078,6 +2083,7 @@ static int parse_tc_pedit_action(struct mlx5e_priv *priv,
 	val = act->mangle.val;
 	offset = act->mangle.offset;
 
+	//填充hdrs[cmd]
 	err = set_pedit_val(htype, ~mask, val, offset, &hdrs[cmd]);
 	if (err)
 		goto out_err;
@@ -2796,6 +2802,7 @@ static bool is_peer_flow_needed(struct mlx5e_tc_flow *flow)
 	return false;
 }
 
+//创建的mlx5 evswitch tc flow
 static int
 mlx5e_alloc_flow(struct mlx5e_priv *priv, int attr_size,
 		 struct tc_cls_flower_offload *f, u16 flow_flags,
@@ -3055,6 +3062,7 @@ mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 	if (!tc_can_offload_extack(priv->netdev, f->common.extack))
 		return -EOPNOTSUPP;
 
+	//eswitch的mode为sriov_offloads，则add_fdb_flow
 	if (esw && esw->mode == SRIOV_OFFLOADS)
 		err = mlx5e_add_fdb_flow(priv, f, flow_flags,
 					 filter_dev, flow);
@@ -3073,6 +3081,7 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	struct mlx5e_tc_flow *flow;
 	int err = 0;
 
+	//flow已存在，则添加失败
 	flow = rhashtable_lookup_fast(tc_ht, &f->cookie, tc_ht_params);
 	if (flow) {
 		NL_SET_ERR_MSG_MOD(extack,
@@ -3083,7 +3092,8 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 		goto out;
 	}
 
-	err = mlx5e_tc_add_flow(priv, f, flags, dev, &flow);
+	//执行flow添加
+	err = mlx5e_tc_add_flow(priv, f/*要添加的flow*/, flags, dev, &flow);
 	if (err)
 		goto out;
 

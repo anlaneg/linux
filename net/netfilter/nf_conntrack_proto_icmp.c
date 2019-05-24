@@ -25,6 +25,7 @@
 
 static const unsigned int nf_ct_icmp_timeout = 30*HZ;
 
+//icmp type,code,id提取
 bool icmp_pkt_to_tuple(const struct sk_buff *skb, unsigned int dataoff,
 		       struct net *net, struct nf_conntrack_tuple *tuple)
 {
@@ -44,6 +45,7 @@ bool icmp_pkt_to_tuple(const struct sk_buff *skb, unsigned int dataoff,
 
 /* Add 1; spaces filled with 0. */
 static const u_int8_t invmap[] = {
+	//echo报文的响应type为0
 	[ICMP_ECHO] = ICMP_ECHOREPLY + 1,
 	[ICMP_ECHOREPLY] = ICMP_ECHO + 1,
 	[ICMP_TIMESTAMP] = ICMP_TIMESTAMPREPLY + 1,
@@ -62,6 +64,8 @@ bool nf_conntrack_invert_icmp_tuple(struct nf_conntrack_tuple *tuple,
 		return false;
 
 	tuple->src.u.icmp.id = orig->src.u.icmp.id;
+	//映射方向的（在sangfor时icmp的type,code被直接反转，故导致反向无法匹配
+	//，kernel的这个匹配解决问题）
 	tuple->dst.u.icmp.type = invmap[orig->dst.u.icmp.type] - 1;
 	tuple->dst.u.icmp.code = orig->dst.u.icmp.code;
 	return true;

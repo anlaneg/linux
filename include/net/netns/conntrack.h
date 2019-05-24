@@ -94,7 +94,7 @@ struct ct_pcpu {
 
 struct netns_ct {
 	atomic_t		count;
-	unsigned int		expect_count;
+	unsigned int		expect_count;//已和期待表项的总数目
 #ifdef CONFIG_NF_CONNTRACK_EVENTS
 	struct delayed_work ecache_dwork;
 	bool ecache_dwork_pending;

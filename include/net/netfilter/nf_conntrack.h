@@ -69,7 +69,7 @@ struct nf_conn {
 	struct nf_conntrack ct_general;
 
 	spinlock_t	lock;
-	u16		cpu;
+	u16		cpu;//ct由哪个cpu创建
 
 #ifdef CONFIG_NF_CONNTRACK_ZONES
 	struct nf_conntrack_zone zone;
@@ -80,7 +80,7 @@ struct nf_conn {
 	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的元组（1。源方向;2.目的方向）
 
 	/* Have we seen traffic both ways yet? (bitset) */
-	unsigned long status;
+	unsigned long status;//标记位
 
 	/* jiffies32 when this ct is considered dead */
 	u32 timeout;
@@ -94,7 +94,7 @@ struct nf_conn {
 	u8 __nfct_init_offset[0];
 
 	/* If we were expected by an expectation, this will be it */
-	struct nf_conn *master;
+	struct nf_conn *master;//指向父连接
 
 #if defined(CONFIG_NF_CONNTRACK_MARK)
 	u_int32_t mark;
@@ -108,7 +108,7 @@ struct nf_conn {
 	struct nf_ct_ext *ext;
 
 	/* Storage reserved for other modules, must be the last member */
-	union nf_conntrack_proto proto;
+	union nf_conntrack_proto proto;//协议相关的信息
 };
 
 static inline struct nf_conn *

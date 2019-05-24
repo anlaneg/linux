@@ -606,6 +606,7 @@ static int __init nf_conntrack_ftp_init(void)
 				  0, help, nf_ct_ftp_from_nlattr, THIS_MODULE);
 	}
 
+	//为ftp注册期待helper
 	ret = nf_conntrack_helpers_register(ftp, ports_c * 2);
 	if (ret < 0) {
 		pr_err("failed to register helpers\n");

@@ -31,10 +31,12 @@
 #include <net/netfilter/nf_log.h>
 
 static DEFINE_MUTEX(nf_ct_helper_mutex);
+//记录系统中已注册的ct helper
 struct hlist_head *nf_ct_helper_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_helper_hash);
 unsigned int nf_ct_helper_hsize __read_mostly;
 EXPORT_SYMBOL_GPL(nf_ct_helper_hsize);
+//记录系统中已注册ct helper的总数
 static unsigned int nf_ct_helper_count __read_mostly;
 
 static bool nf_ct_auto_assign_helper __read_mostly = false;
@@ -63,6 +65,7 @@ __nf_ct_helper_find(const struct nf_conntrack_tuple *tuple)
 	if (!nf_ct_helper_count)
 		return NULL;
 
+	//查表获得已注册的helper
 	h = helper_hash(tuple);
 	hlist_for_each_entry_rcu(helper, &nf_ct_helper_hash[h], hnode) {
 		if (nf_ct_tuple_src_mask_cmp(tuple, &helper->tuple, &mask))
@@ -133,6 +136,7 @@ void nf_conntrack_helper_put(struct nf_conntrack_helper *helper)
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_helper_put);
 
+//在ct上添加期待helper扩展
 struct nf_conn_help *
 nf_ct_helper_ext_add(struct nf_conn *ct, gfp_t gfp)
 {
@@ -153,6 +157,7 @@ nf_ct_lookup_helper(struct nf_conn *ct, struct net *net)
 	if (!net->ct.sysctl_auto_assign_helper) {
 		if (net->ct.auto_assign_helper_warned)
 			return NULL;
+		//通过reply方式的元组查询helper
 		if (!__nf_ct_helper_find(&ct->tuplehash[IP_CT_DIR_REPLY].tuple))
 			return NULL;
 		//告警
@@ -169,7 +174,7 @@ nf_ct_lookup_helper(struct nf_conn *ct, struct net *net)
 	return __nf_ct_helper_find(&ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 }
 
-
+//尝试着为ct关联合适的helper执行期待分析
 int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 			      gfp_t flags)
 {
@@ -206,6 +211,7 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 		}
 	}
 
+	//查询到了helper,但ct上还没有申请help空间，申请help空间，并填充
 	if (help == NULL) {
 		help = nf_ct_helper_ext_add(ct, flags);
 		if (help == NULL)
@@ -216,6 +222,7 @@ int __nf_ct_try_assign_helper(struct nf_conn *ct, struct nf_conn *tmpl,
 		 */
 		struct nf_conntrack_helper *tmp = rcu_dereference(help->helper);
 
+		//之前已有helper，但现在查找到helper与期不同，先删除掉，后面更新上去
 		if (tmp && tmp->help != helper->help) {
 			RCU_INIT_POINTER(help->helper, NULL);
 			return 0;
@@ -336,6 +343,7 @@ void nf_ct_helper_log(struct sk_buff *skb, const struct nf_conn *ct,
 }
 EXPORT_SYMBOL_GPL(nf_ct_helper_log);
 
+//向系统中注册helper
 int nf_conntrack_helper_register(struct nf_conntrack_helper *me)
 {
 	//仅进行端口匹配
@@ -451,7 +459,7 @@ void nf_ct_helper_init(struct nf_conntrack_helper *helper,
 }
 EXPORT_SYMBOL_GPL(nf_ct_helper_init);
 
-//注册helper
+//注册一组期待helper
 int nf_conntrack_helpers_register(struct nf_conntrack_helper *helper,
 				  unsigned int n)
 {

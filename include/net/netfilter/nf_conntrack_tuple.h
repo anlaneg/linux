@@ -112,6 +112,7 @@ static inline void nf_ct_dump_tuple(const struct nf_conntrack_tuple *t)
 }
 
 /* If we're the first tuple, it's the original dir. */
+//获得flow的方向
 #define NF_CT_DIRECTION(h)						\
 	((enum ip_conntrack_dir)(h)->tuple.dst.dir)
 

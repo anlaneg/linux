@@ -865,8 +865,8 @@ static bool nf_conntrack_tcp_established(const struct nf_conn *ct)
 int nf_conntrack_tcp_packet(struct nf_conn *ct,
 			    struct sk_buff *skb,
 			    unsigned int dataoff/*到l4层的指针偏移量*/,
-			    enum ip_conntrack_info ctinfo,
-			    const struct nf_hook_state *state)
+			    enum ip_conntrack_info ctinfo/*连接状态*/,
+			    const struct nf_hook_state *state/*hook状态*/)
 {
 	struct net *net = nf_ct_net(ct);
 	struct nf_tcp_net *tn = nf_tcp_pernet(net);
@@ -892,11 +892,15 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 		return -NF_ACCEPT;
 
 	spin_lock_bh(&ct->lock);
+	//取旧的状态
 	old_state = ct->proto.tcp.state;
+	//取ct方向
 	dir = CTINFO2DIR(ctinfo);
+	//取状态标记
 	index = get_conntrack_index(th);
 	//获得新的tcp状态
 	new_state = tcp_conntracks[dir][index][old_state];
+	//本方向flow
 	tuple = &ct->tuplehash[dir].tuple;
 
 	switch (new_state) {
