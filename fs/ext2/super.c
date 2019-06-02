@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 /*
  *  linux/fs/ext2/super.c
  *
@@ -201,16 +202,9 @@ static struct inode *ext2_alloc_inode(struct super_block *sb)
 }
 
 //归还inode
-static void ext2_i_callback(struct rcu_head *head)
+static void ext2_free_in_core_inode(struct inode *inode)
 {
-	struct inode *inode = container_of(head, struct inode, i_rcu);
 	kmem_cache_free(ext2_inode_cachep, EXT2_I(inode));
-}
-
-//释放inode(考虑rcu)
-static void ext2_destroy_inode(struct inode *inode)
-{
-	call_rcu(&inode->i_rcu, ext2_i_callback);
 }
 
 //初始化inode节点
@@ -364,7 +358,7 @@ static const struct quotactl_ops ext2_quotactl_ops = {
 
 static const struct super_operations ext2_sops = {
 	.alloc_inode	= ext2_alloc_inode,//申请inode
-	.destroy_inode	= ext2_destroy_inode,//释放inode
+	.free_inode	= ext2_free_in_core_inode,//释放inode
 	.write_inode	= ext2_write_inode,
 	.evict_inode	= ext2_evict_inode,
 	.put_super	= ext2_put_super,

@@ -12,7 +12,6 @@
 #include <linux/err.h>
 #include <linux/kernel.h>
 #include <linux/inetdevice.h>
-#include <linux/if_tunnel.h>
 #include <net/dst.h>
 #include <net/xfrm.h>
 #include <net/ip.h>
@@ -72,18 +71,6 @@ static int xfrm4_get_saddr(struct net *net, int oif,
 	return 0;
 }
 
-static int xfrm4_get_tos(const struct flowi *fl)
-{
-	return IPTOS_RT_MASK & fl->u.ip4.flowi4_tos; /* Strip ECN bits */
-}
-
-//ipv4 初始化path
-static int xfrm4_init_path(struct xfrm_dst *path, struct dst_entry *dst,
-			   int nfheader_len)
-{
-	return 0;
-}
-
 static int xfrm4_fill_dst(struct xfrm_dst *xdst, struct net_device *dev,
 			  const struct flowi *fl)
 {
@@ -101,135 +88,17 @@ static int xfrm4_fill_dst(struct xfrm_dst *xdst, struct net_device *dev,
 	xdst->u.rt.rt_flags = rt->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST |
 					      RTCF_LOCAL);
 	xdst->u.rt.rt_type = rt->rt_type;
-	xdst->u.rt.rt_gateway = rt->rt_gateway;
-	xdst->u.rt.rt_uses_gateway = rt->rt_uses_gateway;
+	xdst->u.rt.rt_gw_family = rt->rt_gw_family;
+	if (rt->rt_gw_family == AF_INET)
+		xdst->u.rt.rt_gw4 = rt->rt_gw4;
+	else if (rt->rt_gw_family == AF_INET6)
+		xdst->u.rt.rt_gw6 = rt->rt_gw6;
 	xdst->u.rt.rt_pmtu = rt->rt_pmtu;
 	xdst->u.rt.rt_mtu_locked = rt->rt_mtu_locked;
 	INIT_LIST_HEAD(&xdst->u.rt.rt_uncached);
 	rt_add_uncached_list(&xdst->u.rt);
 
 	return 0;
-}
-
-//提取skb的流信息，将其填充到fl中，reverse用于表示是否提取反向
-static void
-_decode_session4(struct sk_buff *skb, struct flowi *fl, int reverse)
-{
-	const struct iphdr *iph = ip_hdr(skb);
-	//指向ipv4的运输层
-	u8 *xprth = skb_network_header(skb) + iph->ihl * 4;
-	struct flowi4 *fl4 = &fl->u.ip4;
-	int oif = 0;
-
-	if (skb_dst(skb))
-		oif = skb_dst(skb)->dev->ifindex;
-
-	memset(fl4, 0, sizeof(struct flowi4));
-	fl4->flowi4_mark = skb->mark;
-	fl4->flowi4_oif = reverse ? skb->skb_iif : oif;
-
-	if (!ip_is_fragment(iph)) {
-		switch (iph->protocol) {
-		case IPPROTO_UDP:
-		case IPPROTO_UDPLITE:
-		case IPPROTO_TCP:
-		case IPPROTO_SCTP:
-		case IPPROTO_DCCP:
-			//提取srcport,dstport
-			if (xprth + 4 < skb->data ||
-			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
-				__be16 *ports;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				ports = (__be16 *)xprth;
-
-				fl4->fl4_sport = ports[!!reverse];
-				fl4->fl4_dport = ports[!reverse];
-			}
-			break;
-
-		case IPPROTO_ICMP:
-			//icmp采用type,code
-			if (xprth + 2 < skb->data ||
-			    pskb_may_pull(skb, xprth + 2 - skb->data)) {
-				u8 *icmp;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				icmp = xprth;
-
-				fl4->fl4_icmp_type = icmp[0];
-				fl4->fl4_icmp_code = icmp[1];
-			}
-			break;
-
-		case IPPROTO_ESP:
-			//esp协议时，提取spi
-			if (xprth + 4 < skb->data ||
-			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
-				__be32 *ehdr;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				ehdr = (__be32 *)xprth;
-
-				fl4->fl4_ipsec_spi = ehdr[0];
-			}
-			break;
-
-		case IPPROTO_AH:
-			//ah协议时，提取spi
-			if (xprth + 8 < skb->data ||
-			    pskb_may_pull(skb, xprth + 8 - skb->data)) {
-				__be32 *ah_hdr;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				ah_hdr = (__be32 *)xprth;
-
-				fl4->fl4_ipsec_spi = ah_hdr[1];
-			}
-			break;
-
-		case IPPROTO_COMP:
-			if (xprth + 4 < skb->data ||
-			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
-				__be16 *ipcomp_hdr;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				ipcomp_hdr = (__be16 *)xprth;
-
-				fl4->fl4_ipsec_spi = htonl(ntohs(ipcomp_hdr[1]));
-			}
-			break;
-
-		case IPPROTO_GRE:
-			//gre协议时，提取key值（即gre隧道id)
-			if (xprth + 12 < skb->data ||
-			    pskb_may_pull(skb, xprth + 12 - skb->data)) {
-				__be16 *greflags;
-				__be32 *gre_hdr;
-
-				xprth = skb_network_header(skb) + iph->ihl * 4;
-				greflags = (__be16 *)xprth;
-				gre_hdr = (__be32 *)xprth;
-
-				if (greflags[0] & GRE_KEY) {
-					if (greflags[0] & GRE_CSUM)
-						gre_hdr++;
-					fl4->fl4_gre_key = gre_hdr[1];
-				}
-			}
-			break;
-
-		default:
-			fl4->fl4_ipsec_spi = 0;
-			break;
-		}
-	}
-
-	//提取saddr,daddr,protocol,tos
-	fl4->flowi4_proto = iph->protocol;
-	fl4->daddr = reverse ? iph->saddr : iph->daddr;
-	fl4->saddr = reverse ? iph->daddr : iph->saddr;
-	fl4->flowi4_tos = iph->tos;
 }
 
 static void xfrm4_update_pmtu(struct dst_entry *dst, struct sock *sk,
@@ -285,9 +154,6 @@ static const struct xfrm_policy_afinfo xfrm4_policy_afinfo = {
 	.dst_ops =		&xfrm4_dst_ops_template,
 	.dst_lookup =		xfrm4_dst_lookup,//查路由
 	.get_saddr =		xfrm4_get_saddr,//获取源地址
-	.decode_session =	_decode_session4,//流特证提取
-	.get_tos =		xfrm4_get_tos,
-	.init_path =		xfrm4_init_path,//path初始化函数
 	.fill_dst =		xfrm4_fill_dst,
 	.blackhole_route =	ipv4_blackhole_route,
 };

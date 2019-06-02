@@ -497,7 +497,7 @@ re_probe:
 	if (dev->bus->dma_configure) {
 		ret = dev->bus->dma_configure(dev);
 		if (ret)
-			goto dma_failed;
+			goto probe_failed;
 	}
 
 	if (driver_sysfs_add(dev)) {
@@ -556,9 +556,6 @@ re_probe:
 	goto done;
 
 probe_failed:
-	//probe失败，dma解配置
-	arch_teardown_dma_ops(dev);
-dma_failed:
 	if (dev->bus)
 		//probe失败，通知未绑定成功事件
 		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
@@ -566,6 +563,7 @@ dma_failed:
 pinctrl_bind_failed:
 	device_links_no_driver(dev);
 	devres_release_all(dev);
+	arch_teardown_dma_ops(dev);
 	driver_sysfs_remove(dev);
 	dev->driver = NULL;
 	dev_set_drvdata(dev, NULL);

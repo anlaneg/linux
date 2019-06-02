@@ -104,22 +104,31 @@ static int find_dynamic_major(void)
 /*
  * Register a single major with a specified minor range.
  *
- * If major == 0 this functions will dynamically allocate a major and return
- * its number. 此时动态申请
+ * If major == 0 this function will dynamically allocate an unused major.
+ * If major > 0 this function will attempt to reserve the range of minors
+ * with given major.
  *
- * If major > 0 this function will attempt to reserve the passed range of
- * minors and will return zero on success. 此时静态指定
- *
- * Returns a -ve errno on failure.
  */
 //申请minorct个major的字符设备，同时占用[baseminor,baseminor+minor)之间的minor
 static struct char_device_struct *
 __register_chrdev_region(unsigned int major, unsigned int baseminor,
 			   int minorct, const char *name)
 {
-	struct char_device_struct *cd, **cp;
-	int ret = 0;
+	struct char_device_struct *cd, *curr, *prev = NULL;
+	int ret = -EBUSY;
 	int i;
+
+	if (major >= CHRDEV_MAJOR_MAX) {
+		pr_err("CHRDEV \"%s\" major requested (%u) is greater than the maximum (%u)\n",
+		       name, major, CHRDEV_MAJOR_MAX-1);
+		return ERR_PTR(-EINVAL);
+	}
+
+	if (minorct > MINORMASK + 1 - baseminor) {
+		pr_err("CHRDEV \"%s\" minor range requested (%u-%u) is out of range of maximum range (%u-%u) for a single major\n",
+			name, baseminor, baseminor + minorct - 1, 0, MINORMASK);
+		return ERR_PTR(-EINVAL);
+	}
 
 	//为char设备申请内存
 	cd = kzalloc(sizeof(struct char_device_struct), GFP_KERNEL);
@@ -141,11 +150,27 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		major = ret;
 	}
 
-	//用户可能指定了major的值，检查并报错(major不能超过512)
-	if (major >= CHRDEV_MAJOR_MAX) {
-		pr_err("CHRDEV \"%s\" major requested (%u) is greater than the maximum (%u)\n",
-		       name, major, CHRDEV_MAJOR_MAX-1);
-		ret = -EINVAL;
+	//计算hash
+	i = major_to_index(major);
+	//准备将curr存放入chrdevs中（采用hash方式存放）
+	for (curr = chrdevs[i]; curr; prev = curr, curr = curr->next) {
+		//按major进行排序，如果major相等，按baseminor进行排序
+		//如果baseminor小于我们，则检查baseminor＋minorct是否大于我们的baseminor
+		//如果大于我们的baseminor，则我们需要排在其前面(此时不是重叠的吗？后面针对这种报错)
+		if (curr->major < major)
+			continue;
+
+		if (curr->major > major)
+			break;
+
+		//检查是否发生了范围重叠，如果有重叠，则报错
+		//cp->baseminor+cp->minorct　不能与我们的baseminor＋minorct重复
+		if (curr->baseminor + curr->minorct <= baseminor)
+			continue;
+
+		if (curr->baseminor >= baseminor + minorct)
+			break;
+
 		goto out;
 	}
 
@@ -154,46 +179,14 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 	cd->minorct = minorct;
 	strlcpy(cd->name, name, sizeof(cd->name));
 
-	//计算hash
-	i = major_to_index(major);
-
-	//准备将cd存放入chrdevs中（采用hash方式存放）
-	for (cp = &chrdevs[i]; *cp; cp = &(*cp)->next)
-		//按major进行排序，如果major相等，按baseminor进行排序
-		//如果baseminor小于我们，则检查baseminor＋minorct是否大于我们的baseminor
-		//如果大于我们的baseminor，则我们需要排在其前面(此时不是重叠的吗？后面针对这种报错)
-		if ((*cp)->major > major ||
-		    ((*cp)->major == major &&
-		     (((*cp)->baseminor >= baseminor) ||
-		      ((*cp)->baseminor + (*cp)->minorct > baseminor))))
-			break;//我们需要排在cp前面
-
-	/* Check for overlapping minor ranges.  */
-	//检查是否发生了范围重叠，如果有重叠，则报错
-	//cp->baseminor+cp->minorct　不能与我们的baseminor＋minorct重复
-	if (*cp && (*cp)->major == major) {
-		int old_min = (*cp)->baseminor;
-		int old_max = (*cp)->baseminor + (*cp)->minorct - 1;
-		int new_min = baseminor;//要插入的cd对应的baseminor
-		int new_max = baseminor + minorct - 1;
-
-		//已知：cp->baseminor >= baseminor
-		/* New driver overlaps from the left.  */
-		if (new_max >= old_min && new_max <= old_max) {
-			ret = -EBUSY;
-			goto out;
-		}
-
-		/* New driver overlaps from the right.  */
-		if (new_min <= old_max && new_min >= old_min) {
-			ret = -EBUSY;
-			goto out;
-		}
+	if (!prev) {
+		cd->next = curr;
+		chrdevs[i] = cd;
+	} else {
+		cd->next = prev->next;
+		prev->next = cd;
 	}
 
-	//实现cd排在cp前面的逻辑
-	cd->next = *cp;
-	*cp = cd;
 	mutex_unlock(&chrdevs_lock);
 	return cd;
 out:

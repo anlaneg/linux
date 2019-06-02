@@ -327,6 +327,7 @@ loff_t seq_lseek(struct file *file, loff_t offset, int whence)
 	switch (whence) {
 	case SEEK_CUR:
 		offset += file->f_pos;
+		/* fall through */
 	case SEEK_SET:
 		if (offset < 0)
 			break;

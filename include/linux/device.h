@@ -990,19 +990,15 @@ struct dev_links_info {
  */
 //提供设备的基础信息（是所有设备的子类）
 struct device {
+	struct kobject kobj;//device的sysfs属性
 	struct device		*parent;//所属的父设备
 
 	struct device_private	*p;//设备的私有数据（从实现看目前已不能称之为私有数据了）
 
-	struct kobject kobj;//device的sysfs属性
 	const char		*init_name; /* initial name of the device */
 	const struct device_type *type;
-
-	struct mutex		mutex;	/* mutex to synchronize calls to
-					 * its driver.
-					 */
-
-	struct bus_type	*bus;		/* type of bus device is on */ //设备挂接在哪条总线上
+        //设备挂接在哪条总线上
+	struct bus_type	*bus;		/* type of bus device is on */
 	//设备驱动
 	struct device_driver *driver;	/* which driver has allocated this
 					   device */
@@ -1011,6 +1007,10 @@ struct device {
 	//驱动的私有数据
 	void		*driver_data;	/* Driver data, set and get with
 					   dev_set_drvdata/dev_get_drvdata */
+	struct mutex		mutex;	/* mutex to synchronize calls to
+					 * its driver.
+					 */
+
 	struct dev_links_info	links;
 	struct dev_pm_info	power;
 	struct dev_pm_domain	*pm_domain;
@@ -1025,9 +1025,6 @@ struct device {
 	struct list_head	msi_list;
 #endif
 
-#ifdef CONFIG_NUMA
-	int		numa_node;	/* NUMA node this device is close to */
-#endif
 	const struct dma_map_ops *dma_ops;
 	u64		*dma_mask;	/* dma mask (if dma'able device) */
 	u64		coherent_dma_mask;/* Like dma_mask, but for
@@ -1056,6 +1053,9 @@ struct device {
 	struct device_node	*of_node; /* associated device tree node */
 	struct fwnode_handle	*fwnode; /* firmware device node */
 
+#ifdef CONFIG_NUMA
+	int		numa_node;	/* NUMA node this device is close to */
+#endif
 	dev_t			devt;	/* dev_t, creates the sysfs "dev" */
 	u32			id;	/* device instance */
 
@@ -1247,7 +1247,7 @@ static inline void device_lock_assert(struct device *dev)
 
 static inline struct device_node *dev_of_node(struct device *dev)
 {
-	if (!IS_ENABLED(CONFIG_OF))
+	if (!IS_ENABLED(CONFIG_OF) || !dev)
 		return NULL;
 	return dev->of_node;
 }

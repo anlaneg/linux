@@ -1,3 +1,4 @@
+// SPDX-License-Identifier: GPL-2.0-only
 #include <linux/kdebug.h>
 #include <linux/kprobes.h>
 #include <linux/export.h>
@@ -23,6 +24,7 @@ static int notifier_chain_register(struct notifier_block **nl,
 {
 	//按优先级排放，优先低的回调，放在后面
 	while ((*nl) != NULL) {
+		WARN_ONCE(((*nl) == n), "double register detected");
 		if (n->priority > (*nl)->priority)
 			break;
 		nl = &((*nl)->next);
