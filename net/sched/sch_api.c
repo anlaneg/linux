@@ -1507,6 +1507,7 @@ replay:
 	clid = tcm->tcm_parent;
 	q = p = NULL;
 
+	//通过ifindex找到对应的dev
 	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
 	if (!dev)
 		return -ENODEV;
@@ -1515,6 +1516,7 @@ replay:
 	if (clid) {
 		if (clid != TC_H_ROOT) {
 			if (clid != TC_H_INGRESS) {
+				//非ingress情况
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find specified qdisc");

@@ -42,13 +42,13 @@
 extern const struct nla_policy rtm_tca_policy[TCA_MAX + 1];
 
 /* The list of all installed classifier types */
-static LIST_HEAD(tcf_proto_base);
+static LIST_HEAD(tcf_proto_base);//系统所有分类器ops均注册在此链上
 
 /* Protects list of registered TC modules. It is pure SMP lock. */
 static DEFINE_RWLOCK(cls_mod_lock);
 
 /* Find classifier type by string name */
-
+//通过分类器名称查找分类器ops
 static const struct tcf_proto_ops *__tcf_proto_lookup_ops(const char *kind)
 {
 	const struct tcf_proto_ops *t, *res = NULL;
@@ -78,11 +78,13 @@ tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 	if (ops)
 		return ops;
 #ifdef CONFIG_MODULES
+	//如果没有查找到，则动态请求加载指定module
 	if (rtnl_held)
 		rtnl_unlock();
 	request_module("cls_%s", kind);
 	if (rtnl_held)
 		rtnl_lock();
+	//加载module后再查询一遍
 	ops = __tcf_proto_lookup_ops(kind);
 	/* We dropped the RTNL semaphore in order to perform
 	 * the module load. So, even if we succeeded in loading
@@ -99,7 +101,7 @@ tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 }
 
 /* Register(unregister) new classifier type */
-
+//注册分类器ops
 int register_tcf_proto_ops(struct tcf_proto_ops *ops)
 {
 	struct tcf_proto_ops *t;
@@ -120,6 +122,7 @@ EXPORT_SYMBOL(register_tcf_proto_ops);
 
 static struct workqueue_struct *tc_filter_wq;
 
+//解注册分类器ops
 int unregister_tcf_proto_ops(struct tcf_proto_ops *ops)
 {
 	struct tcf_proto_ops *t;
@@ -180,7 +183,8 @@ static bool tcf_proto_is_unlocked(const char *kind)
 	return ret;
 }
 
-static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
+//创建tcf_proto对象
+static struct tcf_proto *tcf_proto_create(const char *kind/*分类过滤器名称*/, u32 protocol,
 					  u32 prio, struct tcf_chain *chain,
 					  bool rtnl_held,
 					  struct netlink_ext_ack *extack)
@@ -188,6 +192,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 	struct tcf_proto *tp;
 	int err;
 
+	//申请分类器
 	tp = kzalloc(sizeof(*tp), GFP_KERNEL);
 	if (!tp)
 		return ERR_PTR(-ENOBUFS);
@@ -198,7 +203,9 @@ static struct tcf_proto *tcf_proto_create(const char *kind, u32 protocol,
 		err = PTR_ERR(tp->ops);
 		goto errout;
 	}
+	//使用ops的分类函数
 	tp->classify = tp->ops->classify;
+	//指定要分类的协议
 	tp->protocol = protocol;
 	tp->prio = prio;
 	tp->chain = chain;
@@ -218,6 +225,7 @@ errout:
 	return ERR_PTR(err);
 }
 
+//计数增加
 static void tcf_proto_get(struct tcf_proto *tp)
 {
 	refcount_inc(&tp->refcnt);
@@ -298,6 +306,7 @@ struct tcf_filter_chain_list_item {
 	void *chain_head_change_priv;
 };
 
+//创建指定index的chain
 static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 					  u32 chain_index)
 {
@@ -308,6 +317,7 @@ static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 	chain = kzalloc(sizeof(*chain), GFP_KERNEL);
 	if (!chain)
 		return NULL;
+	//将新创建的chain挂在block上
 	list_add_tail(&chain->list, &block->chain_list);
 	mutex_init(&chain->filter_chain_lock);
 	chain->block = block;
@@ -393,6 +403,7 @@ static bool tcf_chain_held_by_acts_only(struct tcf_chain *chain)
 	return chain->refcnt == chain->action_refcnt;
 }
 
+//通过chain_index查找分类器chain
 static struct tcf_chain *tcf_chain_lookup(struct tcf_block *block,
 					  u32 chain_index)
 {
@@ -422,6 +433,7 @@ static struct tcf_chain *__tcf_chain_get(struct tcf_block *block,
 	if (chain) {
 		tcf_chain_hold(chain);
 	} else {
+		//如果没有查找到指定chain,如有必要，则创建此chain
 		if (!create)
 			goto errout;
 		chain = tcf_chain_create(block, chain_index);
@@ -450,6 +462,7 @@ errout:
 	return chain;
 }
 
+//查找（创建）指定index的chain
 static struct tcf_chain *tcf_chain_get(struct tcf_block *block, u32 chain_index,
 				       bool create)
 {
@@ -1128,8 +1141,8 @@ static void tcf_block_flush_all_chains(struct tcf_block *block, bool rtnl_held)
  * Set parent, if necessary.
  */
 
-static int __tcf_qdisc_find(struct net *net, struct Qdisc **q,
-			    u32 *parent, int ifindex, bool rtnl_held,
+static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的队列*/,
+			    u32 *parent, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
 			    struct netlink_ext_ack *extack)
 {
 	const struct Qdisc_class_ops *cops;
@@ -1151,6 +1164,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q,
 
 	/* Find qdisc */
 	if (!*parent) {
+		//dev对应的queue
 		*q = dev->qdisc;
 		*parent = (*q)->handle;
 	} else {
@@ -1657,6 +1671,7 @@ int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 
 reclassify:
 #endif
+	//遍历tp列表，检查哪条tp可对此报文进行分类（按协议划分）
 	for (; tp; tp = rcu_dereference_bh(tp->next)) {
 		//取出报文对应的protocol(三层类型）
 		__be16 protocol = tc_skb_protocol(skb);
@@ -1670,9 +1685,11 @@ reclassify:
 		err = tp->classify(skb, tp, res);
 #ifdef CONFIG_NET_CLS_ACT
 		if (unlikely(err == TC_ACT_RECLASSIFY && !compat_mode)) {
+			//执行重新分类
 			first_tp = orig_tp;
 			goto reset;
 		} else if (unlikely(TC_ACT_EXT_CMP(err, TC_ACT_GOTO_CHAIN))) {
+			//跳到指定chain并继续匹配
 			first_tp = res->goto_tp;
 			goto reset;
 		}
@@ -1684,6 +1701,7 @@ reclassify:
 	return TC_ACT_UNSPEC; /* signal: continue lookup */
 #ifdef CONFIG_NET_CLS_ACT
 reset:
+	//最多仅容许 max_reclassify_loop 次重查
 	if (unlikely(limit++ >= max_reclassify_loop)) {
 		net_notice_ratelimited("%u: reclassify loop, rule prio %u, protocol %02x\n",
 				       tp->chain->block->index,
@@ -1692,6 +1710,7 @@ reset:
 		return TC_ACT_SHOT;
 	}
 
+	//自first_tp开始重查
 	tp = first_tp;
 	goto reclassify;
 #endif
@@ -2069,12 +2088,15 @@ replay:
 		goto errout;
 	}
 
+	//取配置的chain索引
 	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
 		err = -EINVAL;
 		goto errout;
 	}
+
+	//创建或获取指定index的链
 	chain = tcf_chain_get(block, chain_index, true);
 	if (!chain) {
 		NL_SET_ERR_MSG(extack, "Cannot create specified filter chain");
@@ -2118,6 +2140,7 @@ replay:
 							       &chain_info));
 
 		mutex_unlock(&chain->filter_chain_lock);
+		/*按参数创建tc filter*/
 		tp_new = tcf_proto_create(nla_data(tca[TCA_KIND]),
 					  protocol, prio, chain, rtnl_held,
 					  extack);

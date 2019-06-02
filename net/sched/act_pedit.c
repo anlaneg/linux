@@ -136,6 +136,7 @@ nla_failure:
 	return -EINVAL;
 }
 
+//通过netlink消息建立action
 static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 			  struct nlattr *est, struct tc_action **a,
 			  int ovr, int bind, bool rtnl_held,
@@ -274,12 +275,13 @@ static bool offset_valid(struct sk_buff *skb, int offset)
 }
 
 static int pedit_skb_hdr_offset(struct sk_buff *skb,
-				enum pedit_header_type htype, int *hoffset)
+				enum pedit_header_type htype, int *hoffset/*出参，到htype的偏移量*/)
 {
 	int ret = -EINVAL;
 
 	switch (htype) {
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_ETH:
+		//取到以太头的偏移量
 		if (skb_mac_header_was_set(skb)) {
 			*hoffset = skb_mac_offset(skb);
 			ret = 0;
@@ -288,11 +290,13 @@ static int pedit_skb_hdr_offset(struct sk_buff *skb,
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_NETWORK:
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_IP4:
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_IP6:
+		//取到网络头的偏移量
 		*hoffset = skb_network_offset(skb);
 		ret = 0;
 		break;
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_TCP:
 	case TCA_PEDIT_KEY_EX_HDR_TYPE_UDP:
+		//取到传输层的偏移量
 		if (skb_transport_header_was_set(skb)) {
 			*hoffset = skb_transport_offset(skb);
 			ret = 0;
@@ -329,7 +333,7 @@ static int tcf_pedit_act(struct sk_buff *skb, const struct tc_action *a,
 		for (i = p->tcfp_nkeys; i > 0; i--, tkey++) {
 			u32 *ptr, hdata;
 			int offset = tkey->off;
-			int hoffset;
+			int hoffset/*到网络相应层头部的偏移量*/;
 			u32 val;
 			int rc;
 
@@ -340,8 +344,10 @@ static int tcf_pedit_act(struct sk_buff *skb, const struct tc_action *a,
 				tkey_ex++;
 			}
 
+			//取到到相应层的偏移量
 			rc = pedit_skb_hdr_offset(skb, htype, &hoffset);
 			if (rc) {
+				//获取失败
 				pr_info("tc action pedit bad header type specified (0x%x)\n",
 					htype);
 				goto bad;
@@ -373,6 +379,7 @@ static int tcf_pedit_act(struct sk_buff *skb, const struct tc_action *a,
 				goto bad;
 			}
 
+			//取对应的字段在报文中的指针
 			ptr = skb_header_pointer(skb, hoffset + offset,
 						 sizeof(hdata), &hdata);
 			if (!ptr)
@@ -391,6 +398,8 @@ static int tcf_pedit_act(struct sk_buff *skb, const struct tc_action *a,
 				goto bad;
 			}
 
+			//设置ptr值为val
+			//由于mask是采和反转方式存入的，故这里如些设置ptr的值
 			*ptr = ((*ptr & tkey->mask) ^ val);
 			if (ptr == &hdata)
 				skb_store_bits(skb, hoffset + offset, ptr, 4);
@@ -484,7 +493,7 @@ static struct tc_action_ops act_pedit_ops = {
 	.kind		=	"pedit",
 	.id		=	TCA_ID_PEDIT,
 	.owner		=	THIS_MODULE,
-	.act		=	tcf_pedit_act,
+	.act		=	tcf_pedit_act,//实现针对具体字段的修改
 	.dump		=	tcf_pedit_dump,
 	.cleanup	=	tcf_pedit_cleanup,
 	.init		=	tcf_pedit_init,

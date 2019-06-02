@@ -31,7 +31,9 @@ enum {
 
 #define TC_ACT_UNSPEC	(-1)
 #define TC_ACT_OK		0
+//执行重新分类
 #define TC_ACT_RECLASSIFY	1
+//报文将被free
 #define TC_ACT_SHOT		2
 #define TC_ACT_PIPE		3
 #define TC_ACT_STOLEN		4
@@ -61,6 +63,7 @@ enum {
 #define TC_ACT_EXT_CMP(combined, opcode) (TC_ACT_EXT_OPCODE(combined) == opcode)
 
 #define TC_ACT_JUMP __TC_ACT_EXT(1)
+//跳转到指定chain
 #define TC_ACT_GOTO_CHAIN __TC_ACT_EXT(2)
 #define TC_ACT_EXT_OPCODE_MAX	TC_ACT_GOTO_CHAIN
 

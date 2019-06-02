@@ -293,6 +293,7 @@ struct tcf_proto_ops {
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto *,
 					    struct tcf_result *);
+	//对新在创建的分类器进行初始化
 	int			(*init)(struct tcf_proto*);
 	void			(*destroy)(struct tcf_proto *tp, bool rtnl_held,
 					   struct netlink_ext_ack *extack);
@@ -335,6 +336,8 @@ enum tcf_proto_ops_flags {
 	TCF_PROTO_OPS_DOIT_UNLOCKED = 1,
 };
 
+//应该是tcf=traffic classify filter，流分类过滤
+//此实现为通过protocol执行分类过滤
 struct tcf_proto {
 	/* Fast access part */
 	struct tcf_proto __rcu	*next;
@@ -378,9 +381,10 @@ typedef void tcf_chain_head_change_t(struct tcf_proto *tp_head, void *priv);
 struct tcf_chain {
 	/* Protects filter_chain. */
 	struct mutex filter_chain_lock;
+	//用于挂接分类器
 	struct tcf_proto __rcu *filter_chain;
 	struct list_head list;
-	struct tcf_block *block;
+	struct tcf_block *block;//指向所属的block
 	u32 index; /* chain index */
 	unsigned int refcnt;
 	unsigned int action_refcnt;
@@ -396,7 +400,7 @@ struct tcf_block {
 	 * attached to the block (refcnt, action_refcnt, explicitly_created).
 	 */
 	struct mutex lock;
-	struct list_head chain_list;
+	struct list_head chain_list;//用于记录在此block下的chain
 	u32 index; /* block index for shared blocks */
 	refcount_t refcnt;
 	struct net *net;
@@ -1275,6 +1279,7 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 void mini_qdisc_pair_init(struct mini_Qdisc_pair *miniqp, struct Qdisc *qdisc,
 			  struct mini_Qdisc __rcu **p_miniq);
 
+//按res结果，报文或重新进入协议栈或者直接被发送出去
 static inline void skb_tc_reinsert(struct sk_buff *skb, struct tcf_result *res)
 {
 	struct gnet_stats_queue *stats = res->qstats;

@@ -652,6 +652,7 @@ static struct tc_action_ops *tc_lookup_action(struct nlattr *kind)
 
 /*TCA_ACT_MAX_PRIO is 32, there count upto 32 */
 #define TCA_ACT_MAX_PRIO_MASK 0x1FF
+//tcf action执行入口
 int tcf_action_exec(struct sk_buff *skb, struct tc_action **actions/*动作数组*/,
 		    int nr_actions/*动作数目*/, struct tcf_result *res)
 {
@@ -691,6 +692,7 @@ repeat:
 					return TC_ACT_OK;
 			}
 		} else if (TC_ACT_EXT_CMP(ret, TC_ACT_GOTO_CHAIN)) {
+			//跳到执行chain执行
 			if (unlikely(!rcu_access_pointer(a->goto_chain))) {
 				net_warn_ratelimited("can't go to NULL chain!\n");
 				return TC_ACT_SHOT;

@@ -12,7 +12,7 @@ struct tcf_pedit_key_ex {
 
 struct tcf_pedit {
 	struct tc_action	common;
-	unsigned char		tcfp_nkeys;
+	unsigned char		tcfp_nkeys;//tcfp_keys数目
 	unsigned char		tcfp_flags;
 	struct tc_pedit_key	*tcfp_keys;
 	struct tcf_pedit_key_ex	*tcfp_keys_ex;

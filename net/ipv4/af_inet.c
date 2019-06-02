@@ -1441,10 +1441,12 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	int flush = 1;
 	int proto;
 
+	//获取offset取得ip头部
 	off = skb_gro_offset(skb);
 	hlen = off + sizeof(*iph);
 	iph = skb_gro_header_fast(skb, off);
 	if (skb_gro_header_hard(skb, hlen)) {
+		//skb长度不足hlen,需要平坦化后，再获取iph
 		iph = skb_gro_header_slow(skb, hlen, off);
 		if (unlikely(!iph))
 			goto out;
@@ -1457,10 +1459,11 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	//查上层协议对应的ops
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive)
+		//此协议不支持offload,直接输出
 		goto out_unlock;
 
 	if (*(u8 *)iph != 0x45)
-		//如果ip头长度有协议，则直接向上传递
+		//如果ip头长度不为20(有选项），则直接向上传递，不offload
 		goto out_unlock;
 
 	if (ip_is_fragment(iph))
@@ -1903,6 +1906,7 @@ static int ipv4_proc_init(void);
  *	IP protocol layer initialiser
  */
 
+//ip层offload初始化
 static struct packet_offload ip_packet_offload __read_mostly = {
 	.type = cpu_to_be16(ETH_P_IP),
 	.callbacks = {
@@ -1937,7 +1941,7 @@ static int __init ipv4_offload_init(void)
 	if (ipip_offload_init() < 0)
 		pr_crit("%s: Cannot add IPIP protocol offload\n", __func__);
 
-	//添加ip对应的缷载
+	//添加ip层对应的缷载给dev
 	dev_add_offload(&ip_packet_offload);
 	return 0;
 }

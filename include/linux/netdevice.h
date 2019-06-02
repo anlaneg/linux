@@ -2416,6 +2416,7 @@ struct packet_type {
 };
 
 struct offload_callbacks {
+	//gso发包入口
 	struct sk_buff		*(*gso_segment)(struct sk_buff *skb,
 						netdev_features_t features);
 	//gro收包入口（检查是否可合并）
@@ -2946,6 +2947,7 @@ static inline void skb_gro_flush_final_remcsum(struct sk_buff *skb,
 	}
 }
 #else
+//指定skb的flush,控制报文是否需要一直向上传递
 static inline void skb_gro_flush_final(struct sk_buff *skb, struct sk_buff *pp, int flush)
 {
 	NAPI_GRO_CB(skb)->flush |= flush;

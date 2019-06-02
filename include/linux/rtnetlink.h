@@ -80,6 +80,7 @@ static inline bool lockdep_rtnl_is_held(void)
 #define rtnl_dereference(p)					\
 	rcu_dereference_protected(p, lockdep_rtnl_is_held())
 
+//取dev对应的ingress queue
 static inline struct netdev_queue *dev_ingress_queue(struct net_device *dev)
 {
 	return rtnl_dereference(dev->ingress_queue);

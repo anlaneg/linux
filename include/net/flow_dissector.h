@@ -35,7 +35,7 @@ enum flow_dissect_ret {
  * @ip_proto: Transport header protocol (eg. TCP/UDP)
  */
 struct flow_dissector_key_basic {
-	__be16	n_proto;
+	__be16	n_proto;//网络协议
 	u8	ip_proto;
 	u8	padding;
 };

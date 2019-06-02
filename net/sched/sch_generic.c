@@ -1404,6 +1404,7 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 	 * is done.
 	 */
 	rcu_barrier();
+	//设置filter_list
 	miniq->filter_list = tp_head;
 	rcu_assign_pointer(*miniqp->p_miniq, miniq);
 

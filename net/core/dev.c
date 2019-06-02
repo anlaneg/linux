@@ -3887,9 +3887,11 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	qdisc_pkt_len_init(skb);
 #ifdef CONFIG_NET_CLS_ACT
+	//报文正在发送，处于非ingress方向
 	skb->tc_at_ingress = 0;
 # ifdef CONFIG_NET_EGRESS
 	if (static_branch_unlikely(&egress_needed_key)) {
+		//tc处理gress方向业务
 		skb = sch_handle_egress(skb, &rc, dev);
 		if (!skb)
 			goto out;
@@ -4764,6 +4766,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 	if (!miniq)
 		return skb;
 
+	//处理上一个ptype的回调
 	if (*pt_prev) {
 		*ret = deliver_skb(skb, *pt_prev, orig_dev);
 		*pt_prev = NULL;
@@ -4796,6 +4799,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		skb_do_redirect(skb);
 		return NULL;
 	case TC_ACT_REINSERT:
+		//报文直接按cl_res结果重新加入到ingress或者egress发出
 		/* this does not scrub the packet, and updates stats on error */
 		skb_tc_reinsert(skb, &cl_res);
 		return NULL;
@@ -4982,6 +4986,7 @@ another_round:
 
 skip_taps:
 #ifdef CONFIG_NET_INGRESS
+	//执行报文的ingress处理
 	if (static_branch_unlikely(&ingress_needed_key)) {
 		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev);
 		if (!skb)
@@ -5284,6 +5289,7 @@ static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 	return ret;
 }
 
+//报文开始走协议栈处理
 static int netif_receive_skb_internal(struct sk_buff *skb)
 {
 	int ret;
@@ -5561,6 +5567,7 @@ static struct list_head *gro_list_prepare(struct napi_struct *napi,
 	struct list_head *head;
 	struct sk_buff *p;
 
+	//采用hash映射到head
 	head = &napi->gro_hash[hash & (GRO_HASH_BUCKETS - 1)].list;
 	list_for_each_entry(p, head, list) {
 		unsigned long diffs;
@@ -5573,7 +5580,7 @@ static struct list_head *gro_list_prepare(struct napi_struct *napi,
 			continue;
 		}
 
-		//比对入接口设备，vlan,？？？，mac层
+		//比对skb所属接口设备，vlan,？？？，mac层
 		diffs = (unsigned long)p->dev ^ (unsigned long)skb->dev;
 		diffs |= skb_vlan_tag_present(p) ^ skb_vlan_tag_present(skb);
 		if (skb_vlan_tag_present(p))
@@ -5708,7 +5715,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 			NAPI_GRO_CB(skb)->csum_valid = 0;
 		}
 
-		//调本层的gro_receive函数进行gro处理
+		//调本层的gro_receive函数进行gro处理（例如：看ip_packet_offload结构）
 		pp = INDIRECT_CALL_INET(ptype->callbacks.gro_receive,
 					ipv6_gro_receive, inet_gro_receive,
 					gro_head, skb);
@@ -5748,9 +5755,10 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	} else {
 		napi->gro_hash[hash].count++;
 	}
+
 	NAPI_GRO_CB(skb)->count = 1;
 	NAPI_GRO_CB(skb)->age = jiffies;
-	NAPI_GRO_CB(skb)->last = skb;
+	NAPI_GRO_CB(skb)->last = skb;/*报文将被hold*/
 	skb_shinfo(skb)->gso_size = skb_gro_len(skb);
 	//skb->next = napi->gro_list;
 	//napi->gro_list = skb;
@@ -5828,7 +5836,7 @@ static gro_result_t napi_skb_finish(gro_result_t ret, struct sk_buff *skb)
 		kfree_skb(skb);
 		break;
 
-		//需要释放报文
+		//需要释放报文(报文已被merge)
 	case GRO_MERGED_FREE:
 		if (NAPI_GRO_CB(skb)->free == NAPI_GRO_FREE_STOLEN_HEAD)
 			napi_skb_free_stolen_head(skb);

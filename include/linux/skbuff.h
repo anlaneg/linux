@@ -831,6 +831,7 @@ struct sk_buff {
 #ifdef CONFIG_NET_CLS_ACT
 	//是否跳过对此报文的分类
 	__u8			tc_skip_classify:1;
+	//tc处理ingress位置
 	__u8			tc_at_ingress:1;
 	__u8			tc_redirected:1;
 	__u8			tc_from_ingress:1;
@@ -840,6 +841,7 @@ struct sk_buff {
 #endif
 
 #ifdef CONFIG_NET_SCHED
+	//tc返回的分类id
 	__u16			tc_index;	/* traffic control index */
 #endif
 
@@ -1346,6 +1348,7 @@ static inline __u32 skb_get_hash_flowi6(struct sk_buff *skb, const struct flowi6
 
 __u32 skb_get_hash_perturb(const struct sk_buff *skb, u32 perturb);
 
+//取报文hash
 static inline __u32 skb_get_hash_raw(const struct sk_buff *skb)
 {
 	return skb->hash;
@@ -1381,7 +1384,7 @@ static inline unsigned int skb_end_offset(const struct sk_buff *skb)
 }
 #endif
 
-/* Internal */
+/* Internal 取skb对应的shared_info结构*/
 #define skb_shinfo(SKB)	((struct skb_shared_info *)(skb_end_pointer(SKB)))
 
 static inline struct skb_shared_hwtstamps *skb_hwtstamps(struct sk_buff *skb)
@@ -2373,7 +2376,7 @@ static inline void skb_reset_inner_headers(struct sk_buff *skb)
 	skb->inner_transport_header = skb->transport_header;
 }
 
-//mac头长度
+//获取以太头长度
 static inline void skb_reset_mac_len(struct sk_buff *skb)
 {
 	skb->mac_len = skb->network_header - skb->mac_header;
@@ -2477,7 +2480,7 @@ static inline void skb_set_network_header(struct sk_buff *skb, const int offset)
 	skb->network_header += offset;
 }
 
-//取报文的mac头
+//取报文的以太头指针
 static inline unsigned char *skb_mac_header(const struct sk_buff *skb)
 {
 	return skb->head + skb->mac_header;
@@ -3519,6 +3522,7 @@ __skb_header_pointer(const struct sk_buff *skb, int offset,
 static inline void * __must_check
 skb_header_pointer(const struct sk_buff *skb, int offset, int len, void *buffer)
 {
+	//自skb->data的offset位置取数据，长度为len,将报到的数据存入到buffer中
 	return __skb_header_pointer(skb, offset, len, skb->data,
 				    skb_headlen(skb), buffer);
 }

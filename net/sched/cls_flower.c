@@ -298,6 +298,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	return -1;
 }
 
+//flower类型tcf初始化
 static int fl_init(struct tcf_proto *tp)
 {
 	struct cls_fl_head *head;
