@@ -988,6 +988,7 @@ static int nl80211_parse_key_new(struct genl_info *info, struct nlattr *key,
 
 static int nl80211_parse_key_old(struct genl_info *info, struct key_parse *k)
 {
+	//解析传入的key
 	if (info->attrs[NL80211_ATTR_KEY_DATA]) {
 		k->p.key = nla_data(info->attrs[NL80211_ATTR_KEY_DATA]);
 		k->p.key_len = nla_len(info->attrs[NL80211_ATTR_KEY_DATA]);
