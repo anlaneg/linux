@@ -1041,6 +1041,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	   weird delay cases. */
 	ct->timeout += nfct_time_stamp;
 	atomic_inc(&ct->ct_general.use);
+	//标记ct已被确认
 	ct->status |= IPS_CONFIRMED;
 
 	/* set conntrack timestamp, if enabled. */

@@ -1246,6 +1246,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 			return err;
 	} else if (IS_ENABLED(CONFIG_NF_CONNTRACK_LABELS) &&
 		   labels_nonzero(&info->labels.mask)) {
+		//如果ct已确认，则修改labels
 		err = ovs_ct_set_labels(ct, key, &info->labels.value,
 					&info->labels.mask);
 		if (err)
@@ -1254,6 +1255,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 	/* This will take care of sending queued events even if the connection
 	 * is already confirmed.
 	 */
+	//ovs直接确认连接
 	if (nf_conntrack_confirm(skb) != NF_ACCEPT)
 		return -EINVAL;
 
