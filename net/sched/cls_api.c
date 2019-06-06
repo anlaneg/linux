@@ -98,7 +98,7 @@ tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 }
 
 /* Register(unregister) new classifier type */
-//注册分类器ops
+//注册filter分类器ops
 int register_tcf_proto_ops(struct tcf_proto_ops *ops)
 {
 	struct tcf_proto_ops *t;
@@ -194,7 +194,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind/*分类过滤器名�
 	if (!tp)
 		return ERR_PTR(-ENOBUFS);
 
-	//通过kind查出tp->ops对应的ops
+	//通过kind查出tc filter protocol对应的ops
 	tp->ops = tcf_proto_lookup_ops(kind, rtnl_held, extack);
 	if (IS_ERR(tp->ops)) {
 		err = PTR_ERR(tp->ops);
@@ -418,6 +418,7 @@ static struct tcf_chain *tcf_chain_lookup(struct tcf_block *block,
 static int tc_chain_notify(struct tcf_chain *chain, struct sk_buff *oskb,
 			   u32 seq, u16 flags, int event, bool unicast);
 
+//自block中获取或创建指定chain_index的链
 static struct tcf_chain *__tcf_chain_get(struct tcf_block *block,
 					 u32 chain_index, bool create,
 					 bool by_act)
@@ -1152,7 +1153,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 	rcu_read_lock();
 
 	/* Find link */
-	//获取到指定的网络设备
+	//通过ifindex获取到指定的网络设备
 	dev = dev_get_by_index_rcu(net, ifindex);
 	if (!dev) {
 		rcu_read_unlock();
@@ -1215,7 +1216,7 @@ errout_qdisc:
 	return err;
 }
 
-static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl,
+static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl/*出参，*/,
 			       int ifindex, struct netlink_ext_ack *extack)
 {
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK)
@@ -1235,6 +1236,7 @@ static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl,
 	return 0;
 }
 
+//查找tc filter block
 static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 					  unsigned long cl, int ifindex,
 					  u32 block_index,
@@ -1243,6 +1245,7 @@ static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 	struct tcf_block *block;
 
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK) {
+		//ifindex非netdev的ifindex时特殊值
 		block = tcf_block_refcnt_get(net, block_index);
 		if (!block) {
 			NL_SET_ERR_MSG(extack, "Block of given index was not found");
@@ -1715,8 +1718,8 @@ reset:
 EXPORT_SYMBOL(tcf_classify);
 
 struct tcf_chain_info {
-	struct tcf_proto __rcu **pprev;
-	struct tcf_proto __rcu *next;
+	struct tcf_proto __rcu **pprev;//链上指向某tp的前向指针
+	struct tcf_proto __rcu *next;//链上指向某tp的后向指针
 };
 
 static struct tcf_proto *tcf_chain_tp_prev(struct tcf_chain *chain,
@@ -1725,6 +1728,7 @@ static struct tcf_proto *tcf_chain_tp_prev(struct tcf_chain *chain,
 	return tcf_chain_dereference(*chain_info->pprev, chain);
 }
 
+//tp插入
 static int tcf_chain_tp_insert(struct tcf_chain *chain,
 			       struct tcf_chain_info *chain_info,
 			       struct tcf_proto *tp)
@@ -1733,9 +1737,12 @@ static int tcf_chain_tp_insert(struct tcf_chain *chain,
 		return -EAGAIN;
 
 	if (*chain_info->pprev == chain->filter_chain)
+		//chain->filter_chain上原来为空
 		tcf_chain0_head_change(chain, tp);
 	tcf_proto_get(tp);
+	//使tp->next指向*chain_info->prev
 	RCU_INIT_POINTER(tp->next, tcf_chain_tp_prev(chain, chain_info));
+	//修改*chain_info->prev指向tp,完成tp插入
 	rcu_assign_pointer(*chain_info->pprev, tp);
 
 	return 0;
@@ -1777,10 +1784,12 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 	tp = tcf_chain_tp_find(chain, &chain_info,
 			       protocol, prio, false);
 	if (!tp)
+		//原来没有tp,则插入新的
 		err = tcf_chain_tp_insert(chain, &chain_info, tp_new);
 	mutex_unlock(&chain->filter_chain_lock);
 
 	if (tp) {
+		//原来有tp,则销毁tp_new
 		tcf_proto_destroy(tp_new, rtnl_held, NULL);
 		tp_new = tp;
 	} else if (err) {
@@ -1832,7 +1841,7 @@ static void tcf_chain_tp_delete_empty(struct tcf_chain *chain,
 }
 
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
-					   struct tcf_chain_info *chain_info,
+					   struct tcf_chain_info *chain_info/*出参*/,
 					   u32 protocol, u32 prio,
 					   bool prio_allocate)
 {
@@ -1840,11 +1849,14 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 	struct tcf_proto *tp;
 
 	/* Check the chain for existence of proto-tcf with this priority */
+	//遍历filtr_chain链，链上每一个元素为一个tp
 	for (pprev = &chain->filter_chain;
 	     (tp = tcf_chain_dereference(*pprev, chain));
 	     pprev = &tp->next) {
+		//优先级必须查等，否则直接发返回NULL
 		if (tp->prio >= prio) {
 			if (tp->prio == prio) {
+				//如果要申请，则存在返失败，否则要求协议号必须相等
 				if (prio_allocate ||
 				    (tp->protocol != protocol && protocol))
 					return ERR_PTR(-EINVAL);
@@ -1854,6 +1866,8 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 			break;
 		}
 	}
+
+	//设置chain_info,使其指示tp的前一个，后一个
 	chain_info->pprev = pprev;
 	if (tp) {
 		chain_info->next = tp->next;
@@ -2079,6 +2093,7 @@ replay:
 	if (err)
 		goto errout;
 
+	//查找block
 	block = __tcf_block_find(net, q, cl, t->tcm_ifindex, t->tcm_block_index,
 				 extack);
 	if (IS_ERR(block)) {
@@ -2102,6 +2117,7 @@ replay:
 		goto errout;
 	}
 
+	//在链上查找指定的tc filter protocol分类器
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
 			       prio, prio_allocate);
@@ -2112,6 +2128,7 @@ replay:
 	}
 
 	if (tp == NULL) {
+		//未找到对应的tc filter protocol 分类器，创建它
 		struct tcf_proto *tp_new = NULL;
 
 		if (chain->flushing) {
@@ -2148,6 +2165,7 @@ replay:
 		}
 
 		tp_created = 1;
+		//将tp_new加入到chain中
 		tp = tcf_chain_tp_insert_unique(chain, tp_new, protocol, prio,
 						rtnl_held);
 		if (IS_ERR(tp)) {
@@ -3376,6 +3394,7 @@ static int __init tc_filter_init(void)
 		      RTNL_FLAG_DOIT_UNLOCKED);
 	rtnl_register(PF_UNSPEC, RTM_DELTFILTER, tc_del_tfilter, NULL,
 		      RTNL_FLAG_DOIT_UNLOCKED);
+	//注册tc的show或list filter处理函数
 	rtnl_register(PF_UNSPEC, RTM_GETTFILTER, tc_get_tfilter,
 		      tc_dump_tfilter, RTNL_FLAG_DOIT_UNLOCKED);
 	rtnl_register(PF_UNSPEC, RTM_NEWCHAIN, tc_ctl_chain, NULL, 0);

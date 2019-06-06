@@ -393,9 +393,9 @@ struct tcf_chain {
 	struct mutex filter_chain_lock;
 	//用于挂接分类器
 	struct tcf_proto __rcu *filter_chain;
-	struct list_head list;
+	struct list_head list;//用于串连至block->chain_list
 	struct tcf_block *block;//指向所属的block
-	u32 index; /* chain index */
+	u32 index; /* chain index 索引号*/
 	unsigned int refcnt;
 	unsigned int action_refcnt;
 	bool explicitly_created;
@@ -410,7 +410,7 @@ struct tcf_block {
 	 * attached to the block (refcnt, action_refcnt, explicitly_created).
 	 */
 	struct mutex lock;
-	struct list_head chain_list;//用于记录在此block下的chain
+	struct list_head chain_list;//用于记录在此block下所有的struct tcf_chain
 	u32 index; /* block index for shared blocks */
 	refcount_t refcnt;
 	struct net *net;
