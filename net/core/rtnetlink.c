@@ -2908,19 +2908,24 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 				    struct netlink_ext_ack *extack)
 {
 	struct net_device *dev;
+
+	//tx,rx队列默认数目
 	unsigned int num_tx_queues = 1;
 	unsigned int num_rx_queues = 1;
 
+	//tx队列数目
 	if (tb[IFLA_NUM_TX_QUEUES])
 		num_tx_queues = nla_get_u32(tb[IFLA_NUM_TX_QUEUES]);
 	else if (ops->get_num_tx_queues)
 		num_tx_queues = ops->get_num_tx_queues();
 
+	//rx队列数目
 	if (tb[IFLA_NUM_RX_QUEUES])
 		num_rx_queues = nla_get_u32(tb[IFLA_NUM_RX_QUEUES]);
 	else if (ops->get_num_rx_queues)
 		num_rx_queues = ops->get_num_rx_queues();
 
+	//队列数目校验
 	if (num_tx_queues < 1 || num_tx_queues > 4096) {
 		NL_SET_ERR_MSG(extack, "Invalid number of transmit queues");
 		return ERR_PTR(-EINVAL);
@@ -2941,26 +2946,39 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname,
 	dev->rtnl_link_ops = ops;
 	dev->rtnl_link_state = RTNL_LINK_INITIALIZING;
 
+	//mtu
 	if (tb[IFLA_MTU])
 		dev->mtu = nla_get_u32(tb[IFLA_MTU]);
+
+	//设备mac地址
 	if (tb[IFLA_ADDRESS]) {
 		memcpy(dev->dev_addr, nla_data(tb[IFLA_ADDRESS]),
 				nla_len(tb[IFLA_ADDRESS]));
 		dev->addr_assign_type = NET_ADDR_SET;
 	}
+
+	//设备广播地址
 	if (tb[IFLA_BROADCAST])
 		memcpy(dev->broadcast, nla_data(tb[IFLA_BROADCAST]),
 				nla_len(tb[IFLA_BROADCAST]));
+
+	//tx队列长度
 	if (tb[IFLA_TXQLEN])
 		dev->tx_queue_len = nla_get_u32(tb[IFLA_TXQLEN]);
 	if (tb[IFLA_OPERSTATE])
 		set_operstate(dev, nla_get_u8(tb[IFLA_OPERSTATE]));
+
+	//linkmode
 	if (tb[IFLA_LINKMODE])
 		dev->link_mode = nla_get_u8(tb[IFLA_LINKMODE]);
 	if (tb[IFLA_GROUP])
 		dev_set_group(dev, nla_get_u32(tb[IFLA_GROUP]));
+
+	//gso最大size
 	if (tb[IFLA_GSO_MAX_SIZE])
 		netif_set_gso_max_size(dev, nla_get_u32(tb[IFLA_GSO_MAX_SIZE]));
+
+	//gso最大分段数
 	if (tb[IFLA_GSO_MAX_SEGS])
 		dev->gso_max_segs = nla_get_u32(tb[IFLA_GSO_MAX_SEGS]);
 

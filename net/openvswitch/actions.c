@@ -1118,6 +1118,7 @@ static int execute_set_action(struct sk_buff *skb,
 
 		skb_dst_drop(skb);
 		dst_hold((struct dst_entry *)tun->tun_dst);
+		//将tunnel设置的内容放在skb目的上
 		skb_dst_set(skb, (struct dst_entry *)tun->tun_dst);
 		return 0;
 	}
@@ -1352,6 +1353,8 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		}
 
 		case OVS_ACTION_ATTR_SET:
+			//设置tunnel
+			//actions:set(tunnel(tun_id=0xbef,src=192.168.0.51,dst=192.168.0.53,ttl=64,tp_dst=4789,flags(key)))
 			err = execute_set_action(skb, key, nla_data(a));
 			break;
 

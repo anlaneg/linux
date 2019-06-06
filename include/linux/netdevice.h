@@ -597,7 +597,7 @@ struct netdev_queue {
  * read-mostly part
  */
 	struct net_device	*dev;//此队列属于哪个网络设备
-	struct Qdisc __rcu	*qdisc;
+	struct Qdisc __rcu	*qdisc;//队列调度器（qdisc = queueing discipline 排队规则)
 	struct Qdisc		*qdisc_sleeping;
 #ifdef CONFIG_SYSFS
 	struct kobject		kobj;
@@ -2035,8 +2035,10 @@ struct net_device {
 
 	/* for setting kernel sock attribute on TCP connection setup */
 #define GSO_MAX_SIZE		65536
+	//gso最大size
 	unsigned int		gso_max_size;
 #define GSO_MAX_SEGS		65535
+	//gso最大分段数
 	u16			gso_max_segs;
 
 #ifdef CONFIG_DCB

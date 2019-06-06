@@ -223,6 +223,7 @@ int nf_conntrack_icmpv4_error(struct nf_conn *tmpl,
 	}
 
 	/* See ip_conntrack_proto_tcp.c */
+	//如有必要执行checksum检查
 	if (state->net->ct.sysctl_checksum &&
 	    state->hook == NF_INET_PRE_ROUTING &&
 	    nf_ip_checksum(skb, state->hook, dataoff, 0)) {
@@ -237,6 +238,7 @@ int nf_conntrack_icmpv4_error(struct nf_conn *tmpl,
 	 *		  discarded.
 	 */
 	if (icmph->type > NR_ICMP_TYPES) {
+		//icmp type有误
 		icmp_error_log(skb, state, "invalid icmp type");
 		return -NF_ACCEPT;
 	}

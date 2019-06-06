@@ -8730,6 +8730,7 @@ static void netdev_init_one_queue(struct net_device *dev,
 	spin_lock_init(&queue->_xmit_lock);
 	netdev_set_xmit_lockdep_class(&queue->_xmit_lock, dev->type);
 	queue->xmit_lock_owner = -1;
+	//指定queue不从属于任何一个node
 	netdev_queue_numa_node_write(queue, NUMA_NO_NODE);
 	queue->dev = dev;
 #ifdef CONFIG_BQL
@@ -9236,20 +9237,26 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 }
 EXPORT_SYMBOL(dev_get_stats);
 
+//创建ingress队列
 struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 {
 	struct netdev_queue *queue = dev_ingress_queue(dev);
 
 #ifdef CONFIG_NET_CLS_ACT
 	if (queue)
+		//已创建，则返回
 		return queue;
-	//创建dev->ingress_queue
+
+	//创建queue,并设置dev->ingress_queue
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		return NULL;
+
 	netdev_init_one_queue(dev, queue, NULL);
+	//将排队规则定义为noop_qdisc(默认方式）
 	RCU_INIT_POINTER(queue->qdisc, &noop_qdisc);
 	queue->qdisc_sleeping = &noop_qdisc;
+	//设置dev对应的ingress_queue
 	rcu_assign_pointer(dev->ingress_queue, queue);
 #endif
 	return queue;
@@ -9286,10 +9293,10 @@ void netdev_freemem(struct net_device *dev)
  * for each queue on the device.
  * 申请网络设备
  */
-struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
+struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name/*接口名称*/,
 		unsigned char name_assign_type,
-		void (*setup)(struct net_device *),
-		unsigned int txqs, unsigned int rxqs)
+		void (*setup)(struct net_device *)/*初始化函数*/,
+		unsigned int txqs/*tx队列数目*/, unsigned int rxqs/*rx队列数目*/)
 {
 	struct net_device *dev;
 	unsigned int alloc_size;

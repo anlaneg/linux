@@ -321,10 +321,12 @@ static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 	chain->index = chain_index;
 	chain->refcnt = 1;
 	if (!chain->index)
+		//0号chain为首个chain
 		block->chain0.chain = chain;
 	return chain;
 }
 
+//修改tp_head为item->chain_head_change_priv的filter_list
 static void tcf_chain_head_change_item(struct tcf_filter_chain_list_item *item,
 				       struct tcf_proto *tp_head)
 {
@@ -883,6 +885,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 	struct tcf_filter_chain_list_item *item;
 	struct tcf_chain *chain0;
 
+	//申请item,并用ei构造item的函数及参数
 	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item) {
 		NL_SET_ERR_MSG(extack, "Memory allocation for head change callback item failed");
@@ -896,6 +899,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 	if (chain0)
 		tcf_chain_hold(chain0);
 	else
+		//将item加入到chain0.filter_chain_list中
 		list_add(&item->list, &block->chain0.filter_chain_list);
 	mutex_unlock(&block->lock);
 
@@ -1139,7 +1143,7 @@ static void tcf_block_flush_all_chains(struct tcf_block *block, bool rtnl_held)
  * Set parent, if necessary.
  */
 
-static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的队列*/,
+static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的调度器*/,
 			    u32 *parent, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
 			    struct netlink_ext_ack *extack)
 {
@@ -1162,7 +1166,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 
 	/* Find qdisc */
 	if (!*parent) {
-		//dev对应的queue
+		//取dev对应的root qdisc
 		*q = dev->qdisc;
 		*parent = (*q)->handle;
 	} else {
@@ -1660,6 +1664,7 @@ EXPORT_SYMBOL(tcf_block_cb_unregister);
  * to this qdisc, (optionally) tests for protocol and asks
  * specific classifiers.
  */
+//tc报文分类入口
 int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		 struct tcf_result *res, bool compat_mode)
 {
@@ -1737,7 +1742,8 @@ static int tcf_chain_tp_insert(struct tcf_chain *chain,
 		return -EAGAIN;
 
 	if (*chain_info->pprev == chain->filter_chain)
-		//chain->filter_chain上原来为空
+		//chain->filter_chain上原来为空,新需要插入tp,触发对filter_list更新，
+		//从而使tcf_classficy可以遍历tp
 		tcf_chain0_head_change(chain, tp);
 	tcf_proto_get(tp);
 	//使tp->next指向*chain_info->prev
@@ -1784,7 +1790,7 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 	tp = tcf_chain_tp_find(chain, &chain_info,
 			       protocol, prio, false);
 	if (!tp)
-		//原来没有tp,则插入新的
+		//原来没有tp,则插入新的tp
 		err = tcf_chain_tp_insert(chain, &chain_info, tp_new);
 	mutex_unlock(&chain->filter_chain_lock);
 
@@ -2045,12 +2051,14 @@ static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 replay:
 	tp_created = 0;
 
+	//消息解析及校验
 	err = nlmsg_parse_deprecated(n, sizeof(*t), tca, TCA_MAX,
 				     rtm_tca_policy, extack);
 	if (err < 0)
 		return err;
 
 	t = nlmsg_data(n);
+	//提取报文类型及优先级
 	protocol = TC_H_MIN(t->tcm_info);
 	prio = TC_H_MAJ(t->tcm_info);
 	prio_allocate = false;
@@ -2089,6 +2097,7 @@ replay:
 		rtnl_lock();
 	}
 
+	//查找cl,准备通过其找block
 	err = __tcf_qdisc_cl_find(q, parent, &cl, t->tcm_ifindex, extack);
 	if (err)
 		goto errout;

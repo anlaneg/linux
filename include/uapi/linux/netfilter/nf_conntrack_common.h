@@ -34,7 +34,7 @@ enum ip_conntrack_info {
 #ifndef __KERNEL__
 	IP_CT_NEW_REPLY = IP_CT_NUMBER,
 #else
-	IP_CT_UNTRACKED = 7,
+	IP_CT_UNTRACKED = 7,//指明不跟踪
 #endif
 };
 

@@ -38,10 +38,12 @@ static inline struct metadata_dst *skb_metadata_dst(const struct sk_buff *skb)
 static inline struct ip_tunnel_info *
 skb_tunnel_info(const struct sk_buff *skb)
 {
+	//取报文上包含的metadata数据
 	struct metadata_dst *md_dst = skb_metadata_dst(skb);
 	struct dst_entry *dst;
 
 	if (md_dst && md_dst->type == METADATA_IP_TUNNEL)
+		//指明tunnel，则返回tun_info
 		return &md_dst->u.tun_info;
 
 	dst = skb_dst(skb);

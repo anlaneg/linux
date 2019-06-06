@@ -978,6 +978,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	   which created connection will be IP_CT_NEW or for an
 	   expected connection, IP_CT_RELATED. */
 	if (CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL)
+		//仅发起方向可以执行confirm
 		return NF_ACCEPT;
 
 	zone = nf_ct_zone(ct);

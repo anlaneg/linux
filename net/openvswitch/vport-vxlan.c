@@ -84,6 +84,7 @@ static int vxlan_configure_exts(struct vport *vport, struct nlattr *attr,
 static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 {
 	struct net *net = ovs_dp_get_net(parms->dp);
+	//vxlan配置选项
 	struct nlattr *options = parms->options;
 	struct net_device *dev;
 	struct vport *vport;
@@ -101,6 +102,7 @@ static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 		goto error;
 	}
 
+	//设置隧道目的	port
 	a = nla_find_nested(options, OVS_TUNNEL_ATTR_DST_PORT);
 	if (a && nla_len(a) == sizeof(u16)) {
 		conf.dst_port = htons(nla_get_u16(a));
@@ -124,6 +126,7 @@ static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 	}
 
 	rtnl_lock();
+	//创建vxlan设备
 	dev = vxlan_dev_create(net, parms->name, NET_NAME_USER, &conf);
 	if (IS_ERR(dev)) {
 		rtnl_unlock();
@@ -131,6 +134,7 @@ static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 		return ERR_CAST(dev);
 	}
 
+	//将设备置为up
 	err = dev_change_flags(dev, dev->flags | IFF_UP, NULL);
 	if (err < 0) {
 		rtnl_delete_link(dev);
@@ -150,6 +154,7 @@ static struct vport *vxlan_create(const struct vport_parms *parms)
 {
 	struct vport *vport;
 
+	//创建vxlan对应的vport及其底层的vxlan port
 	vport = vxlan_tnl_create(parms);
 	if (IS_ERR(vport))
 		return vport;

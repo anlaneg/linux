@@ -143,6 +143,7 @@ static unsigned int nf_confirm(struct sk_buff *skb,
 		}
 	}
 
+	//如果因为alg需要做seq调整，则执行seq调整
 	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
 	    !nf_is_loopback_packet(skb)) {
 		if (!nf_ct_seq_adjust(skb, ct, ctinfo, protoff)) {
@@ -183,6 +184,7 @@ static unsigned int ipv4_conntrack_local(void *priv,
 					 const struct nf_hook_state *state)
 {
 	if (ip_is_fragment(ip_hdr(skb))) { /* IP_NODEFRAG setsockopt set */
+		//分片报文不创建
 		enum ip_conntrack_info ctinfo;
 		struct nf_conn *tmpl;
 
@@ -197,6 +199,7 @@ static unsigned int ipv4_conntrack_local(void *priv,
 		return NF_ACCEPT;
 	}
 
+	//非分片报文创建ct
 	return nf_conntrack_in(skb, state);
 }
 
@@ -205,13 +208,13 @@ static unsigned int ipv4_conntrack_local(void *priv,
  */
 static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 	{
-		.hook		= ipv4_conntrack_in,
+		.hook		= ipv4_conntrack_in,//本机进来的流量做ct
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_CONNTRACK,
 	},
 	{
-		.hook		= ipv4_conntrack_local,
+		.hook		= ipv4_conntrack_local,//本机出去的流量做ct
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_CONNTRACK,
@@ -223,7 +226,7 @@ static const struct nf_hook_ops ipv4_conntrack_ops[] = {
 		.priority	= NF_IP_PRI_CONNTRACK_CONFIRM,
 	},
 	{
-		.hook		= ipv4_confirm,
+		.hook		= ipv4_confirm,//本机上来的流量做ct确认
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_CONNTRACK_CONFIRM,
@@ -455,12 +458,14 @@ static int nf_ct_netns_do_get(struct net *net, u8 nfproto)
 		cnet->users4++;
 		if (cnet->users4 > 1)
 			goto out_unlock;
+		//ct使能前，需要明确分片重组功能开启
 		err = nf_defrag_ipv4_enable(net);
 		if (err) {
 			cnet->users4 = 0;
 			goto out_unlock;
 		}
 
+		//注册ct的钩子点
 		err = nf_register_net_hooks(net, ipv4_conntrack_ops,
 					    ARRAY_SIZE(ipv4_conntrack_ops));
 		if (err)

@@ -797,12 +797,14 @@ EXPORT_SYMBOL(pfifo_fast_ops);
 static struct lock_class_key qdisc_tx_busylock;
 static struct lock_class_key qdisc_running_key;
 
+//申请空间并创建ops对应的Qdisc
 struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 			  const struct Qdisc_ops *ops,
 			  struct netlink_ext_ack *extack)
 {
 	void *p;
 	struct Qdisc *sch;
+
 	//准备Qdisc大小
 	unsigned int size = QDISC_ALIGN(sizeof(*sch)) + ops->priv_size;
 	int err = -ENOBUFS;
@@ -823,6 +825,8 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	sch = (struct Qdisc *) QDISC_ALIGN((unsigned long) p);
 	/* if we got non aligned memory, ask more and do alignment ourself */
 	if (sch != p) {
+		//申请的内存不对齐，释放掉，要求更多内存并自已对齐（为什么不直接要更多内存自已对齐？）
+		//代码上处理不更简单？
 		kfree(p);
 		p = kzalloc_node(size + QDISC_ALIGNTO - 1, GFP_KERNEL,
 				 netdev_queue_numa_node_read(dev_queue));
@@ -831,6 +835,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 		sch = (struct Qdisc *) QDISC_ALIGN((unsigned long) p);
 		sch->padded = (char *) sch - (char *) p;
 	}
+
 	__skb_queue_head_init(&sch->gso_skb);
 	__skb_queue_head_init(&sch->skb_bad_txq);
 	qdisc_skb_head_init(&sch->q);
@@ -1370,12 +1375,14 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 	struct mini_Qdisc *miniq;
 
 	if (!tp_head) {
+		//tp_head为NULL,将p_miniq等价赋空
 		RCU_INIT_POINTER(*miniqp->p_miniq, NULL);
 		/* Wait for flying RCU callback before it is freed. */
 		rcu_barrier();
 		return;
 	}
 
+	//切换着使用miniq1,miniq2
 	miniq = !miniq_old || miniq_old == &miniqp->miniq2 ?
 		&miniqp->miniq1 : &miniqp->miniq2;
 
@@ -1384,7 +1391,7 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 	 * is done.
 	 */
 	rcu_barrier();
-	//设置filter_list
+	//设置filter_list值为tp_head
 	miniq->filter_list = tp_head;
 	rcu_assign_pointer(*miniqp->p_miniq, miniq);
 

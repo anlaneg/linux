@@ -44,6 +44,7 @@ static void ingress_walk(struct Qdisc *sch, struct qdisc_walker *walker)
 {
 }
 
+//返回ingress对应的block
 static struct tcf_block *ingress_tcf_block(struct Qdisc *sch, unsigned long cl,
 					   struct netlink_ext_ack *extack)
 {
@@ -56,6 +57,7 @@ static void clsact_chain_head_change(struct tcf_proto *tp_head, void *priv)
 {
 	struct mini_Qdisc_pair *miniqp = priv;
 
+	//miniqp->filter_list指定为tp_head
 	mini_qdisc_pair_swap(miniqp, tp_head);
 };
 
@@ -81,6 +83,7 @@ static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr
 
 	net_inc_ingress_queue();
 
+	//使对miniqp的修改可以修改dev->miniq_ingress
 	mini_qdisc_pair_init(&q->miniqp, sch, &dev->miniq_ingress);
 
 	q->block_info.binder_type = TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS;
@@ -277,6 +280,7 @@ static int __init ingress_module_init(void)
 	//注册ingress的ops
 	ret = register_qdisc(&ingress_qdisc_ops);
 	if (!ret) {
+		//注册成功，注册clsact
 		ret = register_qdisc(&clsact_qdisc_ops);
 		if (ret)
 			unregister_qdisc(&ingress_qdisc_ops);

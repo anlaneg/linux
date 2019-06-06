@@ -124,7 +124,7 @@ static DEFINE_RWLOCK(qdisc_mod_lock);
 static struct Qdisc_ops *qdisc_base;
 
 /* Register/unregister queueing discipline */
-
+//qdisc_ops注册
 int register_qdisc(struct Qdisc_ops *qops)
 {
 	struct Qdisc_ops *q, **qp;
@@ -266,6 +266,7 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	    root->handle == handle)
 		return root;
 
+	//自root中查找的qdisc
 	hash_for_each_possible_rcu(qdisc_dev(root)->qdisc_hash, q, hash, handle) {
 		if (q->handle == handle)
 			return q;
@@ -344,7 +345,7 @@ static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
 }
 
 /* Find queueing discipline by name */
-
+//通过名称查询qdisc_ops
 static struct Qdisc_ops *qdisc_lookup_ops(struct nlattr *kind)
 {
 	struct Qdisc_ops *q = NULL;
@@ -1145,7 +1146,7 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 
    Parameters are passed via opt.
  */
-
+//qdisc创建
 static struct Qdisc *qdisc_create(struct net_device *dev,
 				  struct netdev_queue *dev_queue,
 				  struct Qdisc *p, u32 parent, u32 handle,
@@ -1158,6 +1159,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	struct Qdisc_ops *ops;
 	struct qdisc_size_table *stab;
 
+	//查找指定的qdisc_ops
 	ops = qdisc_lookup_ops(kind);
 #ifdef CONFIG_MODULES
 	if (ops == NULL && kind != NULL) {
@@ -1235,7 +1237,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	if (err)
 		goto err_out3;
 
-	//初始化队列
+	//初始化调度器sch
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1533,7 +1535,7 @@ replay:
 					return -ENOENT;
 				}
 				q = qdisc_leaf(p, clid);
-			} else if (dev_ingress_queue_create(dev)) {
+			} else if (/*ingress情况*/dev_ingress_queue_create(dev)) {
 				//创建dev->ingress_queue成功
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
@@ -1637,6 +1639,7 @@ create_n_graft:
 		return -ENOENT;
 	}
 	if (clid == TC_H_INGRESS) {
+		//创建ingress队列
 		if (dev_ingress_queue(dev)) {
 			q = qdisc_create(dev, dev_ingress_queue(dev), p,
 					 tcm->tcm_parent, tcm->tcm_parent,
@@ -2261,7 +2264,7 @@ static int __init pktsched_init(void)
 	register_qdisc(&mq_qdisc_ops);
 	register_qdisc(&noqueue_qdisc_ops);
 
-	//qdisc修改操作
+	//qdisc新建修改操作
 	rtnl_register(PF_UNSPEC, RTM_NEWQDISC, tc_modify_qdisc, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELQDISC, tc_get_qdisc, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETQDISC, tc_get_qdisc, tc_dump_qdisc,

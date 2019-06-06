@@ -208,7 +208,7 @@ struct vxlan_config {
 	__be32			vni;
 	int			remote_ifindex;
 	int			mtu;
-	__be16			dst_port;
+	__be16			dst_port;//隧道目的port
 	u16			port_min;
 	u16			port_max;
 	u8			tos;

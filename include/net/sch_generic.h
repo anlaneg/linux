@@ -63,6 +63,7 @@ struct Qdisc {
 	struct sk_buff *	(*dequeue)(struct Qdisc *sch);
 	unsigned int		flags;
 #define TCQ_F_BUILTIN		1
+//ingress队列标记
 #define TCQ_F_INGRESS		2
 #define TCQ_F_CAN_BYPASS	4
 #define TCQ_F_MQROOT		8
@@ -422,8 +423,8 @@ struct tcf_block {
 	unsigned int nooffloaddevcnt; /* Number of devs unable to do offload */
 	struct {
 		struct tcf_chain *chain;
-		struct list_head filter_chain_list;
-	} chain0;
+		struct list_head filter_chain_list;//用于串多个item
+	} chain0;//首个chain
 	struct rcu_head rcu;
 };
 
@@ -1313,9 +1314,10 @@ static inline void mini_qdisc_qstats_cpu_drop(struct mini_Qdisc *miniq)
 }
 
 struct mini_Qdisc_pair {
+	//切换着使用以下变量，p_miniq指向本次生效的miniq,另一个为上次生效的miniq
 	struct mini_Qdisc miniq1;
 	struct mini_Qdisc miniq2;
-	struct mini_Qdisc __rcu **p_miniq;
+	struct mini_Qdisc __rcu **p_miniq;//本次生效的miniq
 };
 
 void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,

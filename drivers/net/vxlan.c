@@ -2428,7 +2428,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 	return 0;
 }
 
-//向接口rdst发送报文skb
+//向接口dev发送报文vxlan skb
 static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			   __be32 default_vni, struct vxlan_rdst *rdst,
 			   bool did_rsc)
@@ -2493,12 +2493,12 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		label = vxlan->cfg.label;
 	} else {
 		//出接口未知的情况处理:assert(rdst==NULL)
-		//此时需要进行组播封装或者点到点发给对端
 		if (!info) {
 			WARN_ONCE(1, "%s: Missing encapsulation instructions\n",
 				  dev->name);
 			goto drop;
 		}
+
 		//由info来填充remote_ip,local_ip
 		remote_ip.sa.sa_family = ip_tunnel_info_af(info);
 		if (remote_ip.sa.sa_family == AF_INET) {
@@ -2509,6 +2509,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			local_ip.sin6.sin6_addr = info->key.u.ipv6.src;
 		}
 		dst = &remote_ip;
+
 		//设置对端目的port,及vni
 		dst_port = info->key.tp_dst ? : vxlan->cfg.dst_port;
 		vni = tunnel_id_to_key32(info->key.tun_id);
@@ -2538,11 +2539,12 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 		//查路由
 		rt = vxlan_get_route(vxlan, dev, sock4, skb, ifindex, tos,
-				     dst->sin.sin_addr.s_addr,
-				     &local_ip.sin.sin_addr.s_addr,
+				     dst->sin.sin_addr.s_addr,/*目的地址*/
+				     &local_ip.sin.sin_addr.s_addr,/*源地址*/
 				     dst_port, src_port,
 				     dst_cache, info);
 		if (IS_ERR(rt)) {
+			//路由查找失败
 			err = PTR_ERR(rt);
 			goto tx_error;
 		}
@@ -2566,14 +2568,17 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 					df = htons(IP_DF);
 			}
 		} else if (info->key.tun_flags & TUNNEL_DONT_FRAGMENT) {
+			//如果下发了不分片标记，则打上禁止分片标记
 			df = htons(IP_DF);
 		}
 
+		//确认下一跳地址
 		ndst = &rt->dst;
 		skb_tunnel_check_pmtu(skb, ndst, VXLAN_HEADROOM);
 
 		tos = ip_tunnel_ecn_encap(tos, old_iph, skb);
 		ttl = ttl ? : ip4_dst_hoplimit(&rt->dst);
+		//完成vxlan头部封装（vni,flags)
 		err = vxlan_build_skb(skb, ndst, sizeof(struct iphdr),
 				      vni, md, flags, udp_sum);
 		if (err < 0)
@@ -2669,6 +2674,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	skb_reset_mac_header(skb);
 
 	if (vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA) {
+		//如果配置有collect metadata,则进入（ovs vxlan口就配置了）
 		if (info && info->mode & IP_TUNNEL_INFO_BRIDGE &&
 		    info->mode & IP_TUNNEL_INFO_TX) {
 			vni = tunnel_id_to_key32(info->key.tun_id);
@@ -3553,6 +3559,7 @@ static void vxlan_config_apply(struct net_device *dev,
 		if (conf->flags & VXLAN_F_GPE)
 			vxlan_raw_setup(dev);
 		else
+			//不含GPE标记，创建以太网类型
 			vxlan_ether_setup(dev);
 
 		if (conf->mtu)
@@ -4177,7 +4184,7 @@ static struct rtnl_link_ops vxlan_link_ops __read_mostly = {
 	.maxtype	= IFLA_VXLAN_MAX,
 	.policy		= vxlan_policy,
 	.priv_size	= sizeof(struct vxlan_dev),
-	.setup		= vxlan_setup,
+	.setup		= vxlan_setup,//netdev初始化函数
 	.validate	= vxlan_validate,
 	.newlink	= vxlan_newlink,//link新建
 	.changelink	= vxlan_changelink,
@@ -4187,6 +4194,7 @@ static struct rtnl_link_ops vxlan_link_ops __read_mostly = {
 	.get_link_net	= vxlan_get_link_net,
 };
 
+//vxlan设备创建
 struct net_device *vxlan_dev_create(struct net *net, const char *name,
 				    u8 name_assign_type,
 				    struct vxlan_config *conf)
@@ -4197,7 +4205,8 @@ struct net_device *vxlan_dev_create(struct net *net, const char *name,
 
 	memset(&tb, 0, sizeof(tb));
 
-	dev = rtnl_create_link(net, name, name_assign_type,
+	//创建link(tb为0）
+	dev = rtnl_create_link(net, name/*link名称*/, name_assign_type,
 			       &vxlan_link_ops, tb, NULL);
 	if (IS_ERR(dev))
 		return dev;

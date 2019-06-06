@@ -560,7 +560,7 @@ struct tcmsg {
  * in case tcm_ifindex == TCM_IFINDEX_MAGIC_BLOCK
  */
 #define tcm_block_index tcm_parent
-	__u32		tcm_info;
+	__u32		tcm_info;//优先级及报文类型
 };
 
 /* For manipulation of filters in shared block, tcm_ifindex is set to

@@ -700,6 +700,7 @@ static inline int nlmsg_parse_deprecated(const struct nlmsghdr *nlh, int hdrlen,
 					 const struct nla_policy *policy,
 					 struct netlink_ext_ack *extack)
 {
+	//解析，校验报文
 	return __nlmsg_parse(nlh, hdrlen, tb, maxtype, policy,
 			     NL_VALIDATE_LIBERAL, extack);
 }
