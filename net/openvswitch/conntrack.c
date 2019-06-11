@@ -67,6 +67,7 @@ struct ovs_conntrack_info {
 	struct nf_conntrack_zone zone;
 	struct nf_conn *ct;
 	u8 commit : 1;//如果不存在，则可以创建ct
+	//nat方式
 	u8 nat : 3;                 /* enum ovs_ct_nat */
 	u8 force : 1;
 	u8 have_eventmask : 1;
@@ -760,6 +761,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	skb_pull_rcsum(skb, nh_off);
 
 	/* See HOOK2MANIP(). */
+	//依据不同的nat,设置不同的hooknum(为调用nf_nat_packet做准备）
 	if (maniptype == NF_NAT_MANIP_SRC)
 		hooknum = NF_INET_LOCAL_IN; /* Source NAT */
 	else
@@ -800,12 +802,13 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 		 * or local packets.
 		 */
 		if (!nf_nat_initialized(ct, maniptype)) {
+			//ct中相应的nat方式未初始化完成，完成初始化
 			/* Initialize according to the NAT action. */
 			err = (range && range->flags & NF_NAT_RANGE_MAP_IPS)
 				/* Action is set up to establish a new
 				 * mapping.
 				 */
-				? nf_nat_setup_info(ct, range, maniptype)
+				? nf_nat_setup_info(ct, range, maniptype)/*分配nat资源记录在ct上*/
 				: nf_nat_alloc_null_binding(ct, hooknum);
 			if (err != NF_ACCEPT)
 				goto push;
@@ -821,7 +824,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 		goto push;
 	}
 
-	//调用kernel中的nat处理函数
+	//调用kernel中的nat处理函数,完成nat修改
 	err = nf_nat_packet(ct, ctinfo, hooknum, skb);
 push:
 	skb_push(skb, nh_off);
@@ -830,6 +833,7 @@ push:
 	return err;
 }
 
+//更新key值，使用nat后的值
 static void ovs_nat_update_key(struct sw_flow_key *key,
 			       const struct sk_buff *skb,
 			       enum nf_nat_manip_type maniptype)
@@ -837,7 +841,10 @@ static void ovs_nat_update_key(struct sw_flow_key *key,
 	if (maniptype == NF_NAT_MANIP_SRC) {
 		__be16 src;
 
+		//设置key标明完成src_nat设置
 		key->ct_state |= OVS_CS_F_SRC_NAT;
+
+		//更新key为nat后的ip地址，及端口
 		if (key->eth.type == htons(ETH_P_IP))
 			key->ipv4.addr.src = ip_hdr(skb)->saddr;
 		else if (key->eth.type == htons(ETH_P_IPV6))
@@ -859,6 +866,7 @@ static void ovs_nat_update_key(struct sw_flow_key *key,
 	} else {
 		__be16 dst;
 
+		//设置key标明完成dst_nat设置
 		key->ct_state |= OVS_CS_F_DST_NAT;
 		if (key->eth.type == htons(ETH_P_IP))
 			key->ipv4.addr.dst = ip_hdr(skb)->daddr;
@@ -899,10 +907,11 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 	 * Make sure new expected connections (IP_CT_RELATED) are NATted only
 	 * when committing.
 	 */
+	//确定改源还是改目的
 	if (info->nat & OVS_CT_NAT && ctinfo != IP_CT_NEW &&
 	    ct->status & IPS_NAT_MASK &&
 	    (ctinfo != IP_CT_RELATED || info->commit)) {
-		//确定改源还是改目的
+		//自ct中拿需要做srcnat,还是dnat
 		/* NAT an established or related connection like before. */
 		if (CTINFO2DIR(ctinfo) == IP_CT_DIR_REPLY)
 			/* This is the REPLY direction for a connection
@@ -915,8 +924,10 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 			maniptype = ct->status & IPS_SRC_NAT
 				? NF_NAT_MANIP_SRC : NF_NAT_MANIP_DST;
 	} else if (info->nat & OVS_CT_SRC_NAT) {
+		//自info中拿需要做snat
 		maniptype = NF_NAT_MANIP_SRC;
 	} else if (info->nat & OVS_CT_DST_NAT) {
+		//自info中拿需要做dnat
 		maniptype = NF_NAT_MANIP_DST;
 	} else {
 		return NF_ACCEPT; /* Connection is not NATed. */
@@ -927,6 +938,7 @@ static int ovs_ct_nat(struct net *net, struct sw_flow_key *key,
 
 	/* Mark NAT done if successful and update the flow key. */
 	if (err == NF_ACCEPT)
+		//更新key标记，key的值，使其使用nat后的值
 		ovs_nat_update_key(key, skb, maniptype);
 
 	return err;
@@ -1006,7 +1018,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		 * once per packet (per zone), as guarded by the NAT bits in
 		 * the key->ct_state.
 		 */
-		if (info->nat && !(key->ct_state & OVS_CS_F_NAT_MASK) &&
+		if (info->nat/*需要做nat*/ && !(key->ct_state & OVS_CS_F_NAT_MASK) &&
 		    (nf_ct_is_confirmed(ct) || info->commit) &&
 			/*执行nat分配，报文修改*/
 		    ovs_ct_nat(net, key, info, skb, ct, ctinfo) != NF_ACCEPT) {

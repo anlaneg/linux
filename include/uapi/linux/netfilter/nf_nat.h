@@ -5,6 +5,7 @@
 #include <linux/netfilter.h>
 #include <linux/netfilter/nf_conntrack_tuple_common.h>
 
+//ip映射（一个，或者多个）
 #define NF_NAT_RANGE_MAP_IPS			(1 << 0)
 #define NF_NAT_RANGE_PROTO_SPECIFIED		(1 << 1)
 #define NF_NAT_RANGE_PROTO_RANDOM		(1 << 2)

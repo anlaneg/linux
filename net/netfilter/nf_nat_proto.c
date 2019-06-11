@@ -38,6 +38,7 @@ static void nf_csum_update(struct sk_buff *skb,
 			   const struct nf_conntrack_tuple *t,
 			   enum nf_nat_manip_type maniptype);
 
+//udp协议port修改
 static void
 __udp_manip_pkt(struct sk_buff *skb,
 	        unsigned int iphdroff, struct udphdr *hdr,
@@ -142,14 +143,16 @@ sctp_manip_pkt(struct sk_buff *skb,
 	return true;
 }
 
+//tcp协议的srcport,dstport修改
 static bool
 tcp_manip_pkt(struct sk_buff *skb,
-	      unsigned int iphdroff, unsigned int hdroff,
+	      unsigned int iphdroff/*ip头起始位置*/, unsigned int hdroff/*4层头起始位置*/,
 	      const struct nf_conntrack_tuple *tuple,
 	      enum nf_nat_manip_type maniptype)
 {
 	struct tcphdr *hdr;
 	__be16 *portptr, newport, oldport;
+	//防止tcp头部不全的情况
 	int hdrsize = 8; /* TCP connection tracking guarantees this much */
 
 	/* this could be a inner header returned in icmp packet; in such
@@ -163,6 +166,7 @@ tcp_manip_pkt(struct sk_buff *skb,
 
 	hdr = (struct tcphdr *)(skb->data + hdroff);
 
+	//自元组的取出newport,设置报文中的port
 	if (maniptype == NF_NAT_MANIP_SRC) {
 		/* Get rid of src port */
 		newport = tuple->src.u.tcp.port;
@@ -173,12 +177,15 @@ tcp_manip_pkt(struct sk_buff *skb,
 		portptr = &hdr->dest;
 	}
 
+	//记录修改前port,设置新port
 	oldport = *portptr;
 	*portptr = newport;
 
+	//这种情况下checksum就不要想了
 	if (hdrsize < sizeof(*hdr))
 		return true;
 
+	//更新checksum
 	nf_csum_update(skb, iphdroff, &hdr->check, tuple, maniptype);
 	inet_proto_csum_replace2(&hdr->check, skb, oldport, newport, false);
 	return true;
@@ -306,8 +313,9 @@ gre_manip_pkt(struct sk_buff *skb,
 	return true;
 }
 
+//做l4层协议的srcport,dstport转换（一次仅做一种）
 static bool l4proto_manip_pkt(struct sk_buff *skb,
-			      unsigned int iphdroff, unsigned int hdroff,
+			      unsigned int iphdroff/*ip头起始位置*/, unsigned int hdroff/*4层头起始位置*/,
 			      const struct nf_conntrack_tuple *tuple,
 			      enum nf_nat_manip_type maniptype)
 {
@@ -353,13 +361,15 @@ static bool nf_nat_ipv4_manip_pkt(struct sk_buff *skb,
 	if (!skb_make_writable(skb, iphdroff + sizeof(*iph)))
 		return false;
 
-	iph = (void *)skb->data + iphdroff;
-	hdroff = iphdroff + iph->ihl * 4;
+	iph = (void *)skb->data + iphdroff;//ip头起始位置
+	hdroff = iphdroff + iph->ihl * 4;//ip头结束位置
 
+	//l4层nat处理
 	if (!l4proto_manip_pkt(skb, iphdroff, hdroff, target, maniptype))
 		return false;
 	iph = (void *)skb->data + iphdroff;
 
+	//l3层nat处理（一次仅做一种）
 	if (maniptype == NF_NAT_MANIP_SRC) {
 		csum_replace4(&iph->check, iph->saddr, target->src.u3.ip);
 		iph->saddr = target->src.u3.ip;
@@ -408,6 +418,7 @@ manip_addr:
 	return true;
 }
 
+//snat,dnat报文修改（一次仅支持一种，nat的目标来源于元组中设置好的值）
 unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 			      enum nf_nat_manip_type mtype,
 			      enum ip_conntrack_dir dir)
@@ -415,6 +426,7 @@ unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 	struct nf_conntrack_tuple target;
 
 	/* We are aiming to look like inverse of other direction. */
+	//取与当前方向相反方向的元组，nat转换的目标来源于元组取值
 	nf_ct_invert_tuple(&target, &ct->tuplehash[!dir].tuple);
 
 	switch (target.src.l3num) {
@@ -423,6 +435,7 @@ unsigned int nf_nat_manip_pkt(struct sk_buff *skb, struct nf_conn *ct,
 			return NF_ACCEPT;
 		break;
 	case NFPROTO_IPV4:
+		//ipv4 nat处理（一次仅做一种）
 		if (nf_nat_ipv4_manip_pkt(skb, 0, &target, mtype))
 			return NF_ACCEPT;
 		break;

@@ -6090,7 +6090,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (th->ack)
 			return 1;
 
-		//有rst时，报文丢弃即可
+		//有rst标记时，报文丢弃即可
 		if (th->rst)
 			goto discard;
 
@@ -6527,7 +6527,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tmp_opt.user_mss  = tp->rx_opt.user_mss;
 
 	//解析tcp选项
-	tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0,
+	tcp_parse_optiomns(sock_net(sk), skb, &tmp_opt, 0,
 			  want_cookie ? NULL : &foc);
 
 	if (want_cookie && !tmp_opt.saw_tstamp)

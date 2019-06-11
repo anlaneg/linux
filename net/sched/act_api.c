@@ -22,11 +22,14 @@
 #include <net/act_api.h>
 #include <net/netlink.h>
 
+//填充要跳转到的chain
 static void tcf_action_goto_chain_exec(const struct tc_action *a,
 				       struct tcf_result *res)
 {
+	//获取要跳转到的chain
 	const struct tcf_chain *chain = rcu_dereference_bh(a->goto_chain);
 
+	//取chain对应的filter_chain(此值有可能为空）
 	res->goto_tp = rcu_dereference_bh(chain->filter_chain);
 }
 
@@ -49,12 +52,13 @@ static void tcf_set_action_cookie(struct tc_cookie __rcu **old_cookie,
 }
 
 int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
-			     struct tcf_chain **newchain,
-			     struct netlink_ext_ack *extack)
+			     struct tcf_chain **newchain/*出参，如goto chain,则获取对应的chain*/,
+			     struct netlink_ext_ack *extack/*出参，错误信息*/)
 {
 	int opcode = TC_ACT_EXT_OPCODE(action), ret = -EINVAL;
 	u32 chain_index;
 
+	//opcode检查
 	if (!opcode)
 		ret = action > TC_ACT_VALUE_MAX ? -EINVAL : 0;
 	else if (opcode <= TC_ACT_EXT_OPCODE_MAX || action == TC_ACT_UNSPEC)
@@ -64,7 +68,9 @@ int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
 		goto end;
 	}
 
+	//action属于goto chain
 	if (TC_ACT_EXT_CMP(action, TC_ACT_GOTO_CHAIN)) {
+		//提取action对应的chain_index
 		chain_index = action & TC_ACT_EXT_VAL_MASK;
 		if (!tp || !newchain) {
 			ret = -EINVAL;
@@ -72,6 +78,8 @@ int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
 				       "can't goto NULL proto/chain");
 			goto end;
 		}
+
+		//确保chain_index对应的chain存在
 		*newchain = tcf_chain_get_by_act(tp->chain->block, chain_index);
 		if (!*newchain) {
 			ret = -ENOMEM;
@@ -84,6 +92,7 @@ end:
 }
 EXPORT_SYMBOL(tcf_action_check_ctrlact);
 
+//设置action的goto_chain
 struct tcf_chain *tcf_action_set_ctrlact(struct tc_action *a, int action,
 					 struct tcf_chain *goto_chain)
 {
@@ -686,8 +695,9 @@ repeat:
 					return TC_ACT_OK;
 			}
 		} else if (TC_ACT_EXT_CMP(ret, TC_ACT_GOTO_CHAIN)) {
-			//跳到执行chain执行
+			//goto chain跳到执行chain执行
 			if (unlikely(!rcu_access_pointer(a->goto_chain))) {
+				//如果goto_chain为NULL,则直接返回act_shot
 				net_warn_ratelimited("can't go to NULL chain!\n");
 				return TC_ACT_SHOT;
 			}
@@ -1372,7 +1382,7 @@ static int tcf_action_add(struct net *net, struct nlattr *nla,
 	int ret = 0;
 	struct tc_action *actions[TCA_ACT_MAX_PRIO] = {};
 
-	//通过action kind查找到action ops,并action_ops->init
+	//通过action kind查找到action ops,并调用action_ops->init初始化action
 	ret = tcf_action_init(net, NULL, nla, NULL, NULL, ovr, 0, actions,
 			      &attr_size, true, extack);
 	if (ret < 0)

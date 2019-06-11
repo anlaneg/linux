@@ -35,6 +35,7 @@ enum {
 #define TC_ACT_RECLASSIFY	1
 //报文将被free
 #define TC_ACT_SHOT		2
+//执行下一个action ???
 #define TC_ACT_PIPE		3
 #define TC_ACT_STOLEN		4
 #define TC_ACT_QUEUED		5
@@ -567,7 +568,9 @@ enum {
 		(__TCA_FLOWER_KEY_ENC_OPT_GENEVE_MAX - 1)
 
 enum {
+	//分片报文
 	TCA_FLOWER_KEY_FLAGS_IS_FRAGMENT = (1 << 0),
+	//首片报文
 	TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST = (1 << 1),
 };
 

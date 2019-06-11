@@ -108,6 +108,7 @@ nf_nat_inet_fn(void *priv, struct sk_buff *skb,
 
 int nf_xfrm_me_harder(struct net *n, struct sk_buff *s, unsigned int family);
 
+//检查ct上是否已完成snat或dnat初始化
 static inline int nf_nat_initialized(struct nf_conn *ct,
 				     enum nf_nat_manip_type manip)
 {

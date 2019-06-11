@@ -220,6 +220,7 @@ nf_nat_used_tuple(const struct nf_conntrack_tuple *tuple,
 	return nf_conntrack_tuple_taken(&reply, ignored_conntrack);
 }
 
+//检查tuple中的src地址是否在range给定的范围以内
 static bool nf_nat_inet_in_range(const struct nf_conntrack_tuple *t,
 				 const struct nf_nat_range2 *range)
 {
@@ -278,6 +279,7 @@ static int in_range(const struct nf_conntrack_tuple *tuple,
 	if (!(range->flags & NF_NAT_RANGE_PROTO_SPECIFIED))
 		return 1;
 
+	//检查tuple的l4层port是否在range给定的范围以内
 	return l4proto_in_range(tuple, NF_NAT_MANIP_SRC,
 				&range->min_proto, &range->max_proto);
 }
@@ -360,8 +362,10 @@ find_best_ips_proto(const struct nf_conntrack_zone *zone,
 
 	//在多个ip中选择一个（这个算法没看懂，感觉会算重）
 	if (nf_ct_l3num(ct) == NFPROTO_IPV4)
+		//max=0
 		max = sizeof(var_ipp->ip) / sizeof(u32) - 1;
 	else
+		//max=3
 		max = sizeof(var_ipp->ip6) / sizeof(u32) - 1;
 
 	/* Hashing source and destination IPs gives a fairly even
@@ -528,7 +532,7 @@ another_round:
  * At worst (or if we race), we will end up with a final duplicate in
  * __ip_conntrack_confirm and drop the packet. */
 static void
-get_unique_tuple(struct nf_conntrack_tuple *tuple,
+get_unique_tuple(struct nf_conntrack_tuple *tuple/*出参，记录nat后的元组信息*/,
 		 const struct nf_conntrack_tuple *orig_tuple,
 		 const struct nf_nat_range2 *range,
 		 struct nf_conn *ct,
@@ -551,6 +555,7 @@ get_unique_tuple(struct nf_conntrack_tuple *tuple,
 	    !(range->flags & NF_NAT_RANGE_PROTO_RANDOM_ALL)) {
 		/* try the original tuple first */
 		if (in_range(orig_tuple, range)) {
+			//orig_tuple在range给定范围以内
 			if (!nf_nat_used_tuple(orig_tuple, ct)) {
 				*tuple = *orig_tuple;
 				return;
@@ -615,7 +620,8 @@ nf_nat_setup_info(struct nf_conn *ct,
 		  const struct nf_nat_range2 *range,
 		  enum nf_nat_manip_type maniptype)
 {
-	struct net *net = nf_ct_net(ct);//取连接跟踪对应的net
+	//取连接跟踪对应的net
+	struct net *net = nf_ct_net(ct);
 	struct nf_conntrack_tuple curr_tuple, new_tuple;
 
 	/* Can't setup nat info for confirmed ct. */
@@ -626,15 +632,16 @@ nf_nat_setup_info(struct nf_conn *ct,
 	WARN_ON(maniptype != NF_NAT_MANIP_SRC &&
 		maniptype != NF_NAT_MANIP_DST);
 
+	//如果连接跟踪已完成nat,则跳出
 	if (WARN_ON(nf_nat_initialized(ct, maniptype)))
-		return NF_DROP;//如果连接跟踪已完成nat,则跳出
+		return NF_DROP;
 
 	/* What we've got will look like inverse of reply. Normally
 	 * this is what is in the conntrack, except for prior
 	 * manipulations (future optimization: if num_manips == 0,
 	 * orig_tp = ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple)
 	 */
-	//取当前方向tuple(未转换）
+	//取反方向tuple(未转换），当前为正方向
 	nf_ct_invert_tuple(&curr_tuple,
 			   &ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 
@@ -674,6 +681,7 @@ nf_nat_setup_info(struct nf_conn *ct,
 	}
 
 	/* It's done. */
+	//标明ct已完成src,dnat资源分配
 	if (maniptype == NF_NAT_MANIP_DST)
 		ct->status |= IPS_DST_NAT_DONE;
 	else
@@ -703,7 +711,7 @@ __nf_nat_alloc_null_binding(struct nf_conn *ct, enum nf_nat_manip_type manip)
 }
 
 unsigned int
-nf_nat_alloc_null_binding(struct nf_conn *ct, unsigned int hooknum)
+nf_nat_alloc_null_binding(struct nf_conn *ct, unsigned int hooknum/*通过hook决定做哪种nat*/)
 {
 	return __nf_nat_alloc_null_binding(ct, HOOK2MANIP(hooknum));
 }
@@ -711,11 +719,12 @@ EXPORT_SYMBOL_GPL(nf_nat_alloc_null_binding);
 
 /* Do packet manipulations according to nf_nat_setup_info. */
 //按ct修改报文实现nat
-unsigned int nf_nat_packet(struct nf_conn *ct,
+unsigned int nf_nat_packet(struct nf_conn *ct/*nat转换值来源于ct*/,
 			   enum ip_conntrack_info ctinfo,
 			   unsigned int hooknum,
 			   struct sk_buff *skb)
 {
+	//依据hook点的不同，做不同的nat
 	enum nf_nat_manip_type mtype = HOOK2MANIP(hooknum);
 	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
 	unsigned int verdict = NF_ACCEPT;
@@ -727,11 +736,13 @@ unsigned int nf_nat_packet(struct nf_conn *ct,
 		statusbit = IPS_DST_NAT;
 
 	/* Invert if this is reply dir. */
+	//如果是反向方流，则反转相应的mask(snat转dnat,dnat转snat)
 	if (dir == IP_CT_DIR_REPLY)
 		statusbit ^= IPS_NAT_MASK;
 
 	/* Non-atomic: these bits don't change. */
 	if (ct->status & statusbit)
+		//如果需要做snat或dnat
 		verdict = nf_nat_manip_pkt(skb, ct, mtype, dir);
 
 	return verdict;

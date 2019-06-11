@@ -477,9 +477,11 @@ struct ovs_key_ct_labels {
 #define OVS_CS_F_INVALID           0x10 /* Could not track connection. */
 //指明链接跟踪存在
 #define OVS_CS_F_TRACKED           0x20 /* Conntrack has occurred. */
+//指明key完成了srcnat转换设置
 #define OVS_CS_F_SRC_NAT           0x40 /* Packet's source address/port was
 					 * mangled by NAT.
 					 */
+//指明key完成了dstnat转换设置
 #define OVS_CS_F_DST_NAT           0x80 /* Packet's destination address/port
 					 * was mangled by NAT.
 					 */

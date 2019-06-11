@@ -1386,6 +1386,7 @@ static const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	/* Never answer to SYNs send to broadcast or multicast */
+	//目的地址为组播或者广播的tcp报文，直接丢弃
 	if (skb_rtable(skb)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
 		goto drop;
 
@@ -1574,7 +1575,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	return 0;
 
 reset:
-	//向对端发送rest报文
+	//向对端发送reset报文
 	tcp_v4_send_reset(rsk, skb);
 discard:
 	kfree_skb(skb);
@@ -1928,7 +1929,7 @@ process:
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
-	tcp_v4_fill_cb(skb, iph, th);
+	tcp_v4_fill_cb(skb, iph, th);//skb cb初始化
 
 	skb->dev = NULL;
 

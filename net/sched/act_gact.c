@@ -74,6 +74,7 @@ static int tcf_gact_init(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		return err;
 
+	//gact必须要用TCA_GACT_PARMS参数
 	if (tb[TCA_GACT_PARMS] == NULL)
 		return -EINVAL;
 	parm = nla_data(tb[TCA_GACT_PARMS]);
@@ -114,12 +115,14 @@ static int tcf_gact_init(struct net *net, struct nlattr *nla,
 		return err;
 	}
 
+	//gact action校验,确保goto_ch存在
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0)
 		goto release_idr;
 	gact = to_gact(*a);
 
 	spin_lock_bh(&gact->tcf_lock);
+	//填充goto_chain,tcfa_action
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
 #ifdef CONFIG_GACT_PROB
 	if (p_parm) {
@@ -145,6 +148,7 @@ release_idr:
 	return err;
 }
 
+//返回goto chain
 static int tcf_gact_act(struct sk_buff *skb, const struct tc_action *a,
 			struct tcf_result *res)
 {

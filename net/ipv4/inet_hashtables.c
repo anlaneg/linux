@@ -292,8 +292,8 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 struct sock *__inet_lookup_listener(struct net *net,
 				    struct inet_hashinfo *hashinfo,
 				    struct sk_buff *skb, int doff,
-				    const __be32 saddr, __be16 sport,//源ip,源port
-				    const __be32 daddr, const unsigned short hnum,//目的ip,目的port
+				    const __be32 saddr/*源ip*/, __be16 sport,/*源port*/
+				    const __be32 daddr/*目的ip*/, const unsigned short hnum,/*目的port*/
 				    const int dif, const int sdif)
 {
 	struct inet_listen_hashbucket *ilb2;

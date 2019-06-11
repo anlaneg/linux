@@ -816,6 +816,7 @@ static void fl_set_key_flag(u32 flower_key, u32 flower_mask,
 			    u32 *dissector_key, u32 *dissector_mask,
 			    u32 flower_flag_bit, u32 dissector_flag_bit)
 {
+	//如果mask及key有flower_flag_bit字段，则打上dissector_flag_bit为key,mask
 	if (flower_mask & flower_flag_bit) {
 		*dissector_mask |= dissector_flag_bit;
 		if (flower_key & flower_flag_bit)
@@ -824,7 +825,7 @@ static void fl_set_key_flag(u32 flower_key, u32 flower_mask,
 }
 
 static int fl_set_key_flags(struct nlattr **tb,
-			    u32 *flags_key, u32 *flags_mask)
+			    u32 *flags_key/*出参，解析出key*/, u32 *flags_mask/*出参，解析出mask*/)
 {
 	u32 key, mask;
 
