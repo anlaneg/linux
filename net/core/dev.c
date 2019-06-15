@@ -4764,6 +4764,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		skb->tc_index = TC_H_MIN(cl_res.classid);
 		break;
 	case TC_ACT_SHOT:
+		//报文引用减1
 		mini_qdisc_qstats_cpu_drop(miniq);
 		kfree_skb(skb);
 		return NULL;

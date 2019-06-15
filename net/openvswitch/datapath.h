@@ -196,6 +196,7 @@ static inline struct vport *ovs_vport_ovsl_rcu(const struct datapath *dp, int po
 static inline struct vport *ovs_vport_ovsl(const struct datapath *dp, int port_no)
 {
 	ASSERT_OVSL();
+	//给定port number查找对应的vport
 	return ovs_lookup_vport(dp, port_no);
 }
 

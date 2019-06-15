@@ -34,7 +34,7 @@
  */
 
 struct ovs_header {
-	int dp_ifindex;
+	int dp_ifindex;//datapath对应的ifindex
 };
 
 /* Datapaths. */

@@ -80,7 +80,7 @@ struct vxlan_fdb {
 	unsigned long	  updated;	/* jiffies */
 	unsigned long	  used;
 	struct list_head  remotes;//fdb均添加在此链上
-	u8		  eth_addr[ETH_ALEN];
+	u8		  eth_addr[ETH_ALEN];//mac地址（外层源mac)
 	u16		  state;	/* see ndm_state */
 	__be32		  vni;
 	u16		  flags;	/* see ndm_flags and below */
@@ -515,7 +515,7 @@ static struct vxlan_fdb *vxlan_find_mac(struct vxlan_dev *vxlan,
 
 	f = __vxlan_find_mac(vxlan, mac, vni);
 	if (f && f->used != jiffies)
-	        //更新转发项
+	    //更新转发项
 		f->used = jiffies;
 
 	return f;
@@ -680,6 +680,7 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 	if (rd)
 		return 0;
 
+	//创建vm mac对应的fdb表项
 	rd = kmalloc(sizeof(*rd), GFP_ATOMIC);
 	if (rd == NULL)
 		return -ENOBUFS;
@@ -689,7 +690,7 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 		return -ENOBUFS;
 	}
 
-	rd->remote_ip = *ip;
+	rd->remote_ip = *ip;//隧道外层ip地址
 	rd->remote_port = port;
 	rd->offloaded = false;
 	rd->remote_vni = vni;
@@ -969,7 +970,7 @@ err_notify:
 }
 
 static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
-				   const u8 *mac, union vxlan_addr *ip,
+				   const u8 *mac/*vm mac地址*/, union vxlan_addr *ip/*vm ip地址*/,
 				   __u16 state, __u16 flags,
 				   __be16 port, __be32 src_vni, __be32 vni,
 				   __u32 ifindex, __u16 ndm_flags,
@@ -981,10 +982,12 @@ static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
 	int rc;
 
 	/* Disallow replace to add a multicast entry */
+	//不容许更新全0（默认转发项），组播mac项
 	if ((flags & NLM_F_REPLACE) &&
 	    (is_multicast_ether_addr(mac) || is_zero_ether_addr(mac)))
 		return -EOPNOTSUPP;
 
+	//创建vxlan fdb表项
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
 	rc = vxlan_fdb_create(vxlan, mac, ip, state, port, src_vni,
 			      vni, ifindex, fdb_flags, &f);
@@ -1005,9 +1008,9 @@ err_notify:
 
 /* Add new entry to forwarding table -- assumes lock held */
 static int vxlan_fdb_update(struct vxlan_dev *vxlan,
-			    const u8 *mac, union vxlan_addr *ip,
+			    const u8 *mac/*vm源mac*/, union vxlan_addr *ip/*隧道外层ip*/,
 			    __u16 state, __u16 flags,
-			    __be16 port, __be32 src_vni, __be32 vni,
+			    __be16 port/*隧道目的port*/, __be32 src_vni/*收到报文内的vni*/, __be32 vni,
 			    __u32 ifindex, __u16 ndm_flags,
 			    bool swdev_notify,
 			    struct netlink_ext_ack *extack)
@@ -1022,6 +1025,7 @@ static int vxlan_fdb_update(struct vxlan_dev *vxlan,
 			return -EEXIST;
 		}
 
+		//fdb表项存在，仅更新
 		return vxlan_fdb_update_existing(vxlan, ip, state, flags, port,
 						 vni, ifindex, ndm_flags, f,
 						 swdev_notify, extack);
@@ -1029,6 +1033,7 @@ static int vxlan_fdb_update(struct vxlan_dev *vxlan,
 		if (!(flags & NLM_F_CREATE))
 			return -ENOENT;
 
+		//不存在，完成创建
 		return vxlan_fdb_update_create(vxlan, mac, ip, state, flags,
 					       port, src_vni, vni, ifindex,
 					       ndm_flags, swdev_notify, extack);
@@ -1108,7 +1113,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 }
 
 /* Add static entry (via netlink) */
-//vxlan转发表项添加
+//vxlan转发表项添加（静态表项）
 static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 			 struct net_device *dev,
 			 const unsigned char *addr, u16 vid, u16 flags,
@@ -1292,15 +1297,14 @@ static bool vxlan_snoop(struct net_device *dev,
 		ifindex = src_ifindex;
 #endif
 
-	//学习vxlan fdb表（源mac,vni),及来源ip
+	//学习vxlan fdb表（通过vm源mac,及vni查询)
 	f = vxlan_find_mac(vxlan, src_mac, vni);
 	if (likely(f)) {
 		struct vxlan_rdst *rdst = first_remote_rcu(f);
 
-		//src_mac所在的主机未发生变更
 		if (likely(vxlan_addr_equal(&rdst->remote_ip, src_ip) &&
 			   rdst->remote_ifindex == ifindex))
-			return false;//之前已存在，不需要更新
+			return false;//不需要更新
 
 		/* Don't migrate static entries, drop packets */
 		if (f->state & (NUD_PERMANENT | NUD_NOARP))
@@ -1322,11 +1326,11 @@ static bool vxlan_snoop(struct net_device *dev,
 
 		/* close off race between vxlan_flush and incoming packets */
 		if (netif_running(dev))
-			vxlan_fdb_update(vxlan, src_mac, src_ip,
+			vxlan_fdb_update(vxlan, src_mac/*vm mac地址*/, src_ip/*隧道外层源ip地址*/,
 					 NUD_REACHABLE,
 					 NLM_F_EXCL|NLM_F_CREATE,
-					 vxlan->cfg.dst_port,
-					 vni,
+					 vxlan->cfg.dst_port,/*默认port地址*/
+					 vni,/*实际报文中记录的vxlan id*/
 					 vxlan->default_dst.remote_vni,
 					 ifindex, NTF_SELF, true, NULL);
 		spin_unlock(&vxlan->hash_lock);
@@ -1586,11 +1590,12 @@ static bool vxlan_parse_gpe_hdr(struct vxlanhdr *unparsed,
 
 static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 			  struct vxlan_sock *vs,
-			  struct sk_buff *skb, __be32 vni)
+			  struct sk_buff *skb, __be32 vni/*报文中对应的vxlan*/)
 {
 	union vxlan_addr saddr;
 	u32 ifindex = skb->dev->ifindex;
 
+	//定义data当前位置为以太头位置
 	skb_reset_mac_header(skb);
 	skb->protocol = eth_type_trans(skb, vxlan->dev);
 	skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
@@ -1603,6 +1608,8 @@ static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 	/* Get address from the outer IP header */
 	//取外层源ip,用于fdb学习
 	if (vxlan_get_sk_family(vs) == AF_INET) {
+		//注意此处network_head并没有更新，故仍指向的是vxlan隧道外层ip头，故这里取到的是外层源mac
+		//即对端主机源ip
 		saddr.sin.sin_addr.s_addr = ip_hdr(skb)->saddr;
 		saddr.sa.sa_family = AF_INET;
 #if IS_ENABLED(CONFIG_IPV6)
@@ -1614,7 +1621,7 @@ static bool vxlan_set_mac(struct vxlan_dev *vxlan,
 
 	//执行vxlan fdb学习（snooping)
 	if ((vxlan->cfg.flags & VXLAN_F_LEARN) &&
-	    vxlan_snoop(skb->dev, &saddr, eth_hdr(skb)->h_source, ifindex, vni))
+	    vxlan_snoop(skb->dev, &saddr/*外层ip*/, eth_hdr(skb)->h_source/*内层源mac*/, ifindex/*入接口*/, vni/*报文指定的vxlan id*/))
 		return false;
 
 	return true;
@@ -1660,6 +1667,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	__be32 vni = 0;
 
 	/* Need UDP and VXLAN header to be present */
+	//此时skb->head指向以太头,data指向UDP头部
 	//报文需要有完整的udp,vxlan头（从长度上保证）
 	if (!pskb_may_pull(skb, VXLAN_HLEN))
 		goto drop;
@@ -1703,12 +1711,13 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		raw_proto = true;
 	}
 
-	//剥离vxlan隧道头
+	//剥离vxlan隧道头（自此开始data指向vxlan负载报文）
 	if (__iptunnel_pull_header(skb, VXLAN_HLEN, protocol, raw_proto,
 				   !net_eq(vxlan->net, dev_net(vxlan->dev))))
 			goto drop;
 
 	if (vxlan_collect_metadata(vs)) {
+		//如有必要为skb收集metadata信息
 		struct metadata_dst *tun_dst;
 
 		tun_dst = udp_tun_rx_dst(skb, vxlan_get_sk_family(vs), TUNNEL_KEY,
@@ -1749,6 +1758,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		if (!vxlan_set_mac(vxlan, vs, skb, vni))
 			goto drop;
 	} else {
+		//内层为自定义格式报文，例如ip...
 		skb_reset_mac_header(skb);
 		skb->dev = vxlan->dev;
 		skb->pkt_type = PACKET_HOST;
@@ -2198,8 +2208,9 @@ static int vxlan_build_skb(struct sk_buff *skb, struct dst_entry *dst,
 	if (err)
 		return err;
 
-	//data指针前移，空出一个vxlan头部，设置vxlan头部，放入vni
+	//data指针前移，空出一个vxlan头部
 	vxh = __skb_push(skb, sizeof(*vxh));
+	//设置vxlan头部flag，放入vni
 	vxh->vx_flags = VXLAN_HF_VNI;
 	vxh->vx_vni = vxlan_vni_field(vni);
 
@@ -2455,7 +2466,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 	if (rdst) {
 		//出接口已知的情况处理:assert(rdst!=NULL)
-		dst = &rdst->remote_ip;
+		dst = &rdst->remote_ip;//对端外层ip
 		//目的ip是全０
 		if (vxlan_addr_any(dst)) {
 			if (did_rsc) {
@@ -2468,11 +2479,16 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 		//取隧道目的端port
 		dst_port = rdst->remote_port ? rdst->remote_port : vxlan->cfg.dst_port;
+		//取使用的vxlan id
 		vni = (rdst->remote_vni) ? : default_vni;
+		//使用的出接口ifindex
 		ifindex = rdst->remote_ifindex;
+		//使用的隧道本端源ip
 		local_ip = vxlan->cfg.saddr;
 		dst_cache = &rdst->dst_cache;
 		md->gbp = skb->mark;
+
+		//使用的ttl
 		if (flags & VXLAN_F_TTL_INHERIT) {
 			ttl = ip_tunnel_get_ttl(old_iph, skb);
 		} else {
@@ -2482,6 +2498,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 				ttl = 1;
 		}
 
+		//使用的tos
 		tos = vxlan->cfg.tos;
 		if (tos == 1)
 			tos = ip_tunnel_get_dsfield(old_iph, skb);
@@ -2537,9 +2554,9 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (!ifindex)
 			ifindex = sock4->sock->sk->sk_bound_dev_if;
 
-		//查路由
-		rt = vxlan_get_route(vxlan, dev, sock4, skb, ifindex, tos,
-				     dst->sin.sin_addr.s_addr,/*目的地址*/
+		//查路由确定下一跳
+		rt = vxlan_get_route(vxlan, dev, sock4, skb, ifindex/*出接口*/, tos,
+				     dst->sin.sin_addr.s_addr,/*隧道对端目的地址*/
 				     &local_ip.sin.sin_addr.s_addr,/*源地址*/
 				     dst_port, src_port,
 				     dst_cache, info);
@@ -2585,8 +2602,8 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 			goto tx_error;
 
 		//走udp封装隧道方式，将报文传出去
-		udp_tunnel_xmit_skb(rt, sock4->sock->sk, skb, local_ip.sin.sin_addr.s_addr,
-				    dst->sin.sin_addr.s_addr, tos, ttl, df,
+		udp_tunnel_xmit_skb(rt, sock4->sock->sk, skb, local_ip.sin.sin_addr.s_addr/*ip报文源ip*/,
+				    dst->sin.sin_addr.s_addr/*ip报文目的ip*/, tos, ttl, df,
 				    src_port, dst_port, xnet, !udp_sum);
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
@@ -2707,7 +2724,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	//取skb的以太头
 	eth = eth_hdr(skb);
-	//通过目的mac,vni查找转发项
+	//通过vm目的mac,vni查找转发项
 	f = vxlan_find_mac(vxlan, eth->h_dest, vni);
 	did_rsc = false;
 
@@ -2720,6 +2737,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (f == NULL) {
+		//没有查找，尝试向默认remote转发
 		f = vxlan_find_mac(vxlan, all_zeros_mac, vni);
 		if (f == NULL) {
 			if ((vxlan->cfg.flags & VXLAN_F_L2MISS) &&
@@ -3008,6 +3026,7 @@ static const struct net_device_ops vxlan_netdev_ether_ops = {
 	.ndo_change_mtu		= vxlan_change_mtu,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address	= eth_mac_addr,
+	//实现vxlan fdb表项添加
 	.ndo_fdb_add		= vxlan_fdb_add,
 	.ndo_fdb_del		= vxlan_fdb_delete,
 	.ndo_fdb_dump		= vxlan_fdb_dump,
@@ -3110,6 +3129,7 @@ static void vxlan_ether_setup(struct net_device *dev)
 {
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_LIVE_ADDR_CHANGE;
+	//设置vxlan设备的操作集
 	dev->netdev_ops = &vxlan_netdev_ether_ops;
 }
 
@@ -3421,6 +3441,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 	}
 
 	if (vxlan_addr_multicast(&conf->saddr)) {
+		//防目将源地址配置为组播地址
 		NL_SET_ERR_MSG(extack, "Local address cannot be multicast");
 		return -EINVAL;
 	}
@@ -3468,6 +3489,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		return -EINVAL;
 	}
 
+	//如果指定了出口设备，则设备必须存在
 	if (conf->remote_ifindex) {
 		struct net_device *lowerdev;
 
@@ -3509,6 +3531,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		*lower = NULL;
 	}
 
+	//如未配置目的port,则设置默认的port
 	if (!conf->dst_port) {
 		if (conf->flags & VXLAN_F_GPE)
 			conf->dst_port = htons(4790); /* IANA VXLAN-GPE port */
@@ -3519,6 +3542,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 	if (!conf->age_interval)
 		conf->age_interval = FDB_AGE_DEFAULT;
 
+	//防止配置重复的vxlan(例如端口及vni已被占用）
 	list_for_each_entry(tmp, &vn->vxlan_list, next) {
 		if (tmp == old)
 			continue;
@@ -3601,6 +3625,7 @@ static void vxlan_config_apply(struct net_device *dev,
 	memcpy(&vxlan->cfg, conf, sizeof(*conf));
 }
 
+//配置vxlan设备
 static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
 			       struct vxlan_config *conf, bool changelink,
 			       struct netlink_ext_ack *extack)
@@ -3636,7 +3661,9 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 	dev->ethtool_ops = &vxlan_ethtool_ops;
 
 	/* create an fdb entry for a valid default destination */
+	//下发默认fdb
 	if (!vxlan_addr_any(&vxlan->default_dst.remote_ip)) {
+		//默认远端ip不等于any,添加全0mac完成到 remote_ip的封装（实现默认fdb添加）
 		err = vxlan_fdb_create(vxlan, all_zeros_mac,
 				       &vxlan->default_dst.remote_ip,
 				       NUD_REACHABLE | NUD_PERMANENT,

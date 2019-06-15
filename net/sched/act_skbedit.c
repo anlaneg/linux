@@ -23,6 +23,7 @@
 static unsigned int skbedit_net_id;
 static struct tc_action_ops act_skbedit_ops;
 
+//按参数修改skb中tos,mark,pkt_type
 static int tcf_skbedit_act(struct sk_buff *skb, const struct tc_action *a,
 			   struct tcf_result *res)
 {
@@ -38,6 +39,7 @@ static int tcf_skbedit_act(struct sk_buff *skb, const struct tc_action *a,
 
 	if (params->flags & SKBEDIT_F_PRIORITY)
 		skb->priority = params->priority;
+	//提取报文tos，填充skb->priority
 	if (params->flags & SKBEDIT_F_INHERITDSFIELD) {
 		int wlen = skb_network_offset(skb);
 
@@ -57,6 +59,8 @@ static int tcf_skbedit_act(struct sk_buff *skb, const struct tc_action *a,
 			break;
 		}
 	}
+
+	//置mark,queue_mapping,pkt_type
 	if (params->flags & SKBEDIT_F_QUEUE_MAPPING &&
 	    skb->dev->real_num_tx_queues > params->queue_mapping)
 		skb_set_queue_mapping(skb, params->queue_mapping);
@@ -111,16 +115,19 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 	if (tb[TCA_SKBEDIT_PARMS] == NULL)
 		return -EINVAL;
 
+	//要设置的优先级
 	if (tb[TCA_SKBEDIT_PRIORITY] != NULL) {
 		flags |= SKBEDIT_F_PRIORITY;
 		priority = nla_data(tb[TCA_SKBEDIT_PRIORITY]);
 	}
 
+	//queue_mapping
 	if (tb[TCA_SKBEDIT_QUEUE_MAPPING] != NULL) {
 		flags |= SKBEDIT_F_QUEUE_MAPPING;
 		queue_mapping = nla_data(tb[TCA_SKBEDIT_QUEUE_MAPPING]);
 	}
 
+	//设置ptype
 	if (tb[TCA_SKBEDIT_PTYPE] != NULL) {
 		ptype = nla_data(tb[TCA_SKBEDIT_PTYPE]);
 		if (!skb_pkt_type_ok(*ptype))

@@ -565,6 +565,7 @@ fail:
 	return 0;
 }
 
+//完成check sum更新
 static int tcf_csum_act(struct sk_buff *skb, const struct tc_action *a,
 			struct tcf_result *res)
 {

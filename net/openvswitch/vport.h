@@ -84,7 +84,7 @@ struct vport {
 	struct net_device *dev;
 	struct datapath	*dp;//vport对应的datapath
 	struct vport_portids __rcu *upcall_portids;
-	u16 port_no;
+	u16 port_no;//在datapath中的端口编号
 
 	struct hlist_node hash_node;
 	struct hlist_node dp_hash_node;
@@ -111,7 +111,7 @@ struct vport_parms {
 
 	/* For ovs_vport_alloc(). */
 	struct datapath *dp;//vport所属的datapath
-	u16 port_no;
+	u16 port_no;//port在dp中的编号
 	struct nlattr *upcall_portids;//upcall时使用的portid?
 };
 

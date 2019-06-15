@@ -135,7 +135,7 @@ struct vport *ovs_vport_locate(const struct net *net, const char *name)
  * vport_free().
  */
 //vport申请
-struct vport *ovs_vport_alloc(int priv_size, const struct vport_ops *ops/*vport对应的ops*/,
+struct vport *ovs_vport_alloc(int priv_size/*私有数据大小*/, const struct vport_ops *ops/*vport对应的ops*/,
 			  const struct vport_parms *parms)
 {
 	struct vport *vport;
@@ -234,7 +234,7 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 		hlist_add_head_rcu(&vport->hash_node, bucket);
 		return vport;
 	}
-	//创建失败，尝试加载module
+	//获取对应ops失败，尝试加载module
 
 	/* Unlock to attempt module load and return -EAGAIN if load
 	 * was successful as we need to restart the port addition

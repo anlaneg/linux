@@ -3522,7 +3522,7 @@ void *skb_pull_rcsum(struct sk_buff *skb, unsigned int len)
 	unsigned char *data = skb->data;
 
 	BUG_ON(len > skb->len);
-	__skb_pull(skb, len);//更新data后置len长度
+	__skb_pull(skb, len);//更新data后移len长度，减少skb长度
 	skb_postpull_rcsum(skb, data, len);
 	return skb->data;
 }

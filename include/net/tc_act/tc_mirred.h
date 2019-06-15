@@ -7,9 +7,9 @@
 
 struct tcf_mirred {
 	struct tc_action	common;
-	int			tcfm_eaction;
+	int			tcfm_eaction;//方向(ingress,egress)及动作（重定向，mirror)
 	bool			tcfm_mac_header_xmit;
-	struct net_device __rcu	*tcfm_dev;
+	struct net_device __rcu	*tcfm_dev;//要重定向的设备
 	struct list_head	tcfm_list;
 };
 #define to_mirred(a) ((struct tcf_mirred *)a)

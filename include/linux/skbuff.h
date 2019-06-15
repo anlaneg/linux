@@ -825,9 +825,11 @@ struct sk_buff {
 #ifdef CONFIG_NET_CLS_ACT
 	//是否跳过对此报文的分类
 	__u8			tc_skip_classify:1;
-	//tc处理ingress位置
+	//tc处于ingress位置
 	__u8			tc_at_ingress:1;
+	//skb被tc redirected到本设备
 	__u8			tc_redirected:1;
+	//skb来源于ingress(redirectd情况）
 	__u8			tc_from_ingress:1;
 #endif
 #ifdef CONFIG_TLS_DEVICE

@@ -149,7 +149,7 @@ error:
 	return ERR_PTR(err);
 }
 
-//vxlan port创建
+//vxlan vport创建
 static struct vport *vxlan_create(const struct vport_parms *parms)
 {
 	struct vport *vport;

@@ -123,6 +123,7 @@ static int tcf_mirred_init(struct net *net, struct nlattr *nla,
 	if (exists && bind)
 		return 0;
 
+	//仅支持以下4种
 	switch (parm->eaction) {
 	case TCA_EGRESS_MIRROR:
 	case TCA_EGRESS_REDIR:
@@ -167,6 +168,7 @@ static int tcf_mirred_init(struct net *net, struct nlattr *nla,
 	spin_lock_bh(&m->tcf_lock);
 
 	if (parm->ifindex) {
+		//获得ifindex指出的dev(报文需要操作后定向给dev)
 		dev = dev_get_by_index(net, parm->ifindex);
 		if (!dev) {
 			spin_unlock_bh(&m->tcf_lock);
@@ -203,6 +205,7 @@ release_idr:
 	return err;
 }
 
+//报文重定向至action指定的口（支持定向到多个口）
 static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 			  struct tcf_result *res)
 {
@@ -211,9 +214,9 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 	bool m_mac_header_xmit;
 	struct net_device *dev;
 	int retval, err = 0;
-	bool use_reinsert;
+	bool use_reinsert;/*是否改dev后直接置入协议栈*/
 	bool want_ingress;
-	bool is_redirect;
+	bool is_redirect;/*是否直接重定向，不clone*/
 	int m_eaction;
 	int mac_len;
 
@@ -223,12 +226,15 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 	m_mac_header_xmit = READ_ONCE(m->tcfm_mac_header_xmit);
 	m_eaction = READ_ONCE(m->tcfm_eaction);
 	retval = READ_ONCE(m->tcf_action);
+
+	//接口不存在，不处理
 	dev = rcu_dereference_bh(m->tcfm_dev);
 	if (unlikely(!dev)) {
 		pr_notice_once("tc mirred: target device is gone\n");
 		goto out;
 	}
 
+	//接口down，不处理
 	if (unlikely(!(dev->flags & IFF_UP))) {
 		net_notice_ratelimited("tc mirred to Houston: device %s is down\n",
 				       dev->name);
@@ -243,6 +249,7 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 	use_reinsert = skb_at_tc_ingress(skb) && is_redirect &&
 		       tcf_mirred_can_reinsert(retval);
 	if (!use_reinsert) {
+		//如果不能直接重新置入协议栈，则报文需要copy一份执行
 		skb2 = skb_clone(skb, GFP_ATOMIC);
 		if (!skb2)
 			goto out;
@@ -254,16 +261,20 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 	 */
 	want_ingress = tcf_mirred_act_wants_ingress(m_eaction);
 	if (skb_at_tc_ingress(skb) != want_ingress && m_mac_header_xmit) {
+		//当前在ingress，计划direct到egress或者egress到ingress
 		if (!skb_at_tc_ingress(skb)) {
+			//egress时，执行action使报文去ingress,去除以太头
 			/* caught at egress, act ingress: pull mac */
 			mac_len = skb_network_header(skb) - skb_mac_header(skb);
 			skb_pull_rcsum(skb2, mac_len);
 		} else {
 			/* caught at ingress, act egress: push mac */
+			//ingress去egress，添加以太头
 			skb_push_rcsum(skb2, skb->mac_len);
 		}
 	}
 
+	//将报文所属的设备进行变更（并没有变更in_port)
 	skb2->skb_iif = skb->dev->ifindex;
 	skb2->dev = dev;
 
@@ -281,6 +292,7 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 		}
 	}
 
+	//将skb重新加入
 	if (!want_ingress)
 		err = dev_queue_xmit(skb2);
 	else
@@ -290,6 +302,7 @@ static int tcf_mirred_act(struct sk_buff *skb, const struct tc_action *a,
 out:
 		qstats_overlimit_inc(this_cpu_ptr(m->common.cpu_qstats));
 		if (tcf_mirred_is_act_redirect(m_eaction))
+			//报文引用减1
 			retval = TC_ACT_SHOT;
 	}
 

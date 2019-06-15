@@ -189,6 +189,7 @@ static struct hlist_head *vport_hash_bucket(const struct datapath *dp,
 }
 
 /* Called with ovs_mutex or RCU read lock. */
+//通过port number查找对应的vport
 struct vport *ovs_lookup_vport(const struct datapath *dp, u16 port_no)
 {
 	struct vport *vport;
@@ -2061,6 +2062,7 @@ static int ovs_vport_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	if (a[OVS_VPORT_ATTR_IFINDEX])
 		return -EOPNOTSUPP;
 
+	//vport在datapath中的编号
 	port_no = a[OVS_VPORT_ATTR_PORT_NO]
 		? nla_get_u32(a[OVS_VPORT_ATTR_PORT_NO]) : 0;
 	if (port_no >= DP_MAX_PORTS)
@@ -2078,14 +2080,18 @@ restart:
 	if (!dp)
 		goto exit_unlock_free;
 
+	//通过port_number在datapath中查找对应的vport
 	if (port_no) {
 		vport = ovs_vport_ovsl(dp, port_no);
 		err = -EBUSY;
 		if (vport)
+			//port已存在报错
 			goto exit_unlock_free;
 	} else {
+		//未指定port_number,查找一个空闲的port number，完成port_no分配
 		for (port_no = 1; ; port_no++) {
 			if (port_no >= DP_MAX_PORTS) {
+				//所有port number均已分配出去，无空闲port number,报错
 				err = -EFBIG;
 				goto exit_unlock_free;
 			}
@@ -2103,6 +2109,7 @@ restart:
 	parms.port_no = port_no;
 	parms.upcall_portids = a[OVS_VPORT_ATTR_UPCALL_PID];
 
+	//新建vport
 	vport = new_vport(&parms);
 	err = PTR_ERR(vport);
 	if (IS_ERR(vport)) {
@@ -2322,7 +2329,7 @@ static const struct genl_ops dp_vport_genl_ops[] = {
 	{ .cmd = OVS_VPORT_CMD_NEW,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
-	  .doit = ovs_vport_cmd_new
+	  .doit = ovs_vport_cmd_new //处理vport新建消息
 	},
 	{ .cmd = OVS_VPORT_CMD_DEL,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,

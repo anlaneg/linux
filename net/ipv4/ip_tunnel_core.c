@@ -105,7 +105,7 @@ int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 	if (unlikely(!pskb_may_pull(skb, hdr_len)))
 		return -ENOMEM;
 
-	//剥离隧道头
+	//更新data指针剥离隧道头
 	skb_pull_rcsum(skb, hdr_len);
 
 	if (!raw_proto && inner_proto == htons(ETH_P_TEB)) {
@@ -122,13 +122,14 @@ int __iptunnel_pull_header(struct sk_buff *skb, int hdr_len,
 			skb->protocol = htons(ETH_P_802_2);
 
 	} else {
-		//内怪为inner_proto协议报文
+		//内层为inner_proto协议报文，例如ip报文
 		skb->protocol = inner_proto;
 	}
 
 	skb_clear_hash_if_not_l4(skb);
 	__vlan_hwaccel_clear_tag(skb);
-	skb_set_queue_mapping(skb, 0);//由于解了隧道,报文hash未计算，故直接映射到０
+	//由于解了隧道,报文hash未计算，故直接映射到０
+	skb_set_queue_mapping(skb, 0);
 	skb_scrub_packet(skb, xnet);
 
 	return iptunnel_pull_offloads(skb);

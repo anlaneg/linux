@@ -28,6 +28,7 @@
 static unsigned int connmark_net_id;
 static struct tc_action_ops act_connmark_ops;
 
+//为skb设置上ct上对应的mark
 static int tcf_connmark_act(struct sk_buff *skb, const struct tc_action *a,
 			    struct tcf_result *res)
 {
@@ -57,8 +58,10 @@ static int tcf_connmark_act(struct sk_buff *skb, const struct tc_action *a,
 		goto out;
 	}
 
+	//获取skb上的ct
 	c = nf_ct_get(skb, &ctinfo);
 	if (c) {
+		//如果ct存在，为skb置上ct对应的mark
 		skb->mark = c->mark;
 		/* using overlimits stats to count how many packets marked */
 		ca->tcf_qstats.overlimits++;
@@ -72,6 +75,7 @@ static int tcf_connmark_act(struct sk_buff *skb, const struct tc_action *a,
 	zone.id = ca->zone;
 	zone.dir = NF_CT_DEFAULT_ZONE_DIR;
 
+	//通过元组查找ct
 	thash = nf_conntrack_find_get(ca->net, &zone, &tuple);
 	if (!thash)
 		goto out;

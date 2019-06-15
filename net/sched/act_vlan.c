@@ -19,6 +19,7 @@
 static unsigned int vlan_net_id;
 static struct tc_action_ops act_vlan_ops;
 
+//vlan pop,vlan push处理过程
 static int tcf_vlan_act(struct sk_buff *skb, const struct tc_action *a,
 			struct tcf_result *res)
 {

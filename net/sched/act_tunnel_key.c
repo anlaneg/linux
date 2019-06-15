@@ -21,6 +21,7 @@
 static unsigned int tunnel_key_net_id;
 static struct tc_action_ops act_tunnel_key_ops;
 
+//隧道参数添加，或者隧道参数丢弃
 static int tunnel_key_act(struct sk_buff *skb, const struct tc_action *a,
 			  struct tcf_result *res)
 {
@@ -36,9 +37,11 @@ static int tunnel_key_act(struct sk_buff *skb, const struct tc_action *a,
 
 	switch (params->tcft_action) {
 	case TCA_TUNNEL_KEY_ACT_RELEASE:
+		//丢掉隧道参数
 		skb_dst_drop(skb);
 		break;
 	case TCA_TUNNEL_KEY_ACT_SET:
+		//为skb设置指定的隧道参数
 		skb_dst_drop(skb);
 		skb_dst_set(skb, dst_clone(&params->tcft_enc_metadata->dst));
 		break;

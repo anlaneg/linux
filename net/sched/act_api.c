@@ -655,9 +655,9 @@ static struct tc_action_ops *tc_lookup_action(struct nlattr *kind)
 
 /*TCA_ACT_MAX_PRIO is 32, there count upto 32 */
 #define TCA_ACT_MAX_PRIO_MASK 0x1FF
-//tcf action执行入口
+//tc filter action执行入口
 int tcf_action_exec(struct sk_buff *skb, struct tc_action **actions/*动作数组*/,
-		    int nr_actions/*动作数目*/, struct tcf_result *res)
+		    int nr_actions/*动作数目*/, struct tcf_result *res/*出参*/)
 {
 	u32 jmp_prgcnt = 0;
 	u32 jmp_ttl = TCA_ACT_MAX_PRIO; /*matches actions per filter */

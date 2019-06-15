@@ -107,6 +107,7 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	    (vport->dev->type != ARPHRD_ETHER &&
 	     vport->dev->type != ARPHRD_NONE) ||
 	    ovs_is_internal_dev(vport->dev)) {
+		//不容许internal,loopback口
 		err = -EINVAL;
 		goto error_put;
 	}
