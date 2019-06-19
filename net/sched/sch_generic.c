@@ -1070,6 +1070,8 @@ static void attach_one_default_qdisc(struct net_device *dev,
 		netdev_info(dev, "activation failed\n");
 		return;
 	}
+
+	//
 	if (!netif_is_multiqueue(dev))
 		qdisc->flags |= TCQ_F_ONETXQUEUE | TCQ_F_NOPARENT;
 	dev_queue->qdisc_sleeping = qdisc;

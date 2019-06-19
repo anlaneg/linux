@@ -644,13 +644,14 @@ static inline int ptr_ring_resize_multiple(struct ptr_ring **rings,
 	for (i = 0; i < nrings; ++i) {
 		spin_lock_irqsave(&(rings[i])->consumer_lock, flags);
 		spin_lock(&(rings[i])->producer_lock);
-		//将旧ring中的数据移至新的queues中
-		queues[i] = __ptr_ring_swap_queue(rings[i], queues[i],
+		//将旧ring中的数据移至新的queues中,交换指针
+		queues[i] = __ptr_ring_swap_queue(rings[i]/*旧queue*/, queues[i]/*新queue*/,
 						  size, gfp, destroy);
 		spin_unlock(&(rings[i])->producer_lock);
 		spin_unlock_irqrestore(&(rings[i])->consumer_lock, flags);
 	}
 
+	//将旧的释放掉
 	for (i = 0; i < nrings; ++i)
 		kvfree(queues[i]);
 
