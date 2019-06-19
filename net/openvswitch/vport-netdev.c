@@ -94,7 +94,7 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	    (vport->dev->type != ARPHRD_ETHER &&
 	     vport->dev->type != ARPHRD_NONE) ||
 	    ovs_is_internal_dev(vport->dev)) {
-		//不容许internal,loopback口
+		//不容许internal,loopback口以及非以太类网接口
 		err = -EINVAL;
 		goto error_put;
 	}
@@ -106,7 +106,7 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	if (err)
 		goto error_unlock;
 
-	//为设备注册收报回调（bridge也采用相一致的机制）
+	//为设备注册收包回调（bridge也采用相一致的机制）
 	//修改加入datapath的vport->dev设备的收包函数变更为netdev_frame_hook)
 	err = netdev_rx_handler_register(vport->dev, netdev_frame_hook,
 					 vport);
@@ -148,6 +148,7 @@ static void vport_netdev_free(struct rcu_head *rcu)
 {
 	struct vport *vport = container_of(rcu, struct vport, rcu);
 
+	//释放对dev的引用
 	if (vport->dev)
 		dev_put(vport->dev);
 	ovs_vport_free(vport);
@@ -206,7 +207,9 @@ struct vport *ovs_netdev_get_vport(struct net_device *dev)
 
 static struct vport_ops ovs_netdev_vport_ops = {
 	.type		= OVS_VPORT_TYPE_NETDEV,
-	.create		= netdev_create,//接口创建
+	//接口创建
+	.create		= netdev_create,
+	//接口销毁
 	.destroy	= netdev_destroy,
 	//针对netdev类型的报文，其自ovs向外发送时，其将投递给vport->dev对应的那个口
 	.send		= dev_queue_xmit,

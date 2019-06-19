@@ -111,6 +111,7 @@
  * Rounds @x up to next multiple of @y. If @y will always be a power
  * of 2, consider using the faster round_up().
  */
+//向上取整
 #define roundup(x, y) (					\
 {							\
 	typeof(y) __y = y;				\

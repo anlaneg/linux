@@ -111,6 +111,7 @@ void flow_rule_match_mpls(const struct flow_rule *rule,
 }
 EXPORT_SYMBOL(flow_rule_match_mpls);
 
+//解析 control 字段并填充到out
 void flow_rule_match_enc_control(const struct flow_rule *rule,
 				 struct flow_match_control *out)
 {
@@ -118,6 +119,7 @@ void flow_rule_match_enc_control(const struct flow_rule *rule,
 }
 EXPORT_SYMBOL(flow_rule_match_enc_control);
 
+//填充ipv4地址字段到out
 void flow_rule_match_enc_ipv4_addrs(const struct flow_rule *rule,
 				    struct flow_match_ipv4_addrs *out)
 {

@@ -27,7 +27,7 @@ int unregister_tcf_proto_ops(struct tcf_proto_ops *ops);
 
 enum tcf_block_binder_type {
 	TCF_BLOCK_BINDER_TYPE_UNSPEC,
-	TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS,
+	TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS,//ingress block binding
 	TCF_BLOCK_BINDER_TYPE_CLSACT_EGRESS,
 };
 
@@ -35,7 +35,7 @@ struct tcf_block_ext_info {
 	enum tcf_block_binder_type binder_type;
 	tcf_chain_head_change_t *chain_head_change;
 	void *chain_head_change_priv;
-	u32 block_index;
+	u32 block_index;//block index
 };
 
 struct tcf_block_cb;
@@ -284,14 +284,14 @@ tcf_unbind_filter(struct tcf_proto *tp, struct tcf_result *r)
 struct tcf_exts {
 #ifdef CONFIG_NET_CLS_ACT
 	__u32	type; /* for backward compat(TCA_OLD_COMPAT) */
-	int nr_actions;
-	struct tc_action **actions;
+	int nr_actions;//action数目
+	struct tc_action **actions;//记录action
 	struct net *net;
 #endif
 	/* Map to export classifier specific extension TLV types to the
 	 * generic extensions API. Unsupported extensions must be set to 0.
 	 */
-	int action;
+	int action;//action类别
 	int police;
 };
 
@@ -308,7 +308,7 @@ static inline int tcf_exts_init(struct tcf_exts *exts, struct net *net,
 	if (!exts->actions)
 		return -ENOMEM;
 #endif
-	//设置action的数目
+	//设置action的类别
 	exts->action = action;
 	exts->police = police;
 	return 0;
@@ -620,6 +620,7 @@ enum tc_block_command {
 	TC_BLOCK_UNBIND,
 };
 
+//块offload参数
 struct tc_block_offload {
 	enum tc_block_command command;
 	enum tcf_block_binder_type binder_type;

@@ -128,6 +128,7 @@ struct vport *ovs_vport_alloc(int priv_size/*私有数据大小*/, const struct 
 	struct vport *vport;
 	size_t alloc_size;
 
+	//vport申请大小
 	alloc_size = sizeof(struct vport);
 	if (priv_size) {
 		alloc_size = ALIGN(alloc_size, VPORT_ALIGN);

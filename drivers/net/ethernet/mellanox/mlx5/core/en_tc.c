@@ -1356,7 +1356,9 @@ static int parse_tunnel_attr(struct mlx5e_priv *priv,
 	if (enc_control.key->addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {
 		struct flow_match_ipv4_addrs match;
 
+		//取规则中的key_ipv4_address字段
 		flow_rule_match_enc_ipv4_addrs(rule, &match);
+		//填充src_ipv4_src_ipv6.ipv4_layout.ipv4到headers_c
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c,
 			 src_ipv4_src_ipv6.ipv4_layout.ipv4,
 			 ntohl(match.mask->src));
@@ -1499,7 +1501,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	      BIT(FLOW_DISSECTOR_KEY_TCP) |
 	      BIT(FLOW_DISSECTOR_KEY_IP)  |
 	      BIT(FLOW_DISSECTOR_KEY_ENC_IP))) {
-		//遇到不支持的key,报错
+		//遇到不支持的key,报错,不能offload到硬件
 		NL_SET_ERR_MSG_MOD(extack, "Unsupported key");
 		netdev_warn(priv->netdev, "Unsupported key used: 0x%x\n",
 			    dissector->used_keys);
@@ -1512,6 +1514,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	    flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_CONTROL)) {
 		struct flow_match_control match;
 
+		//填充match control
 		flow_rule_match_enc_control(rule, &match);
 		switch (match.key->addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
@@ -1836,6 +1839,7 @@ static int parse_cls_flower(struct mlx5e_priv *priv,
 	struct mlx5_eswitch_rep *rep;
 	int err;
 
+	//flower规则转换
 	err = __parse_cls_flower(priv, spec, f, filter_dev, &match_level, &tunnel_match_level);
 
 	if (!err && (flow->flags & MLX5E_TC_FLOW_ESWITCH)) {
@@ -2799,6 +2803,7 @@ static int add_vlan_pop_action(struct mlx5e_priv *priv,
 	return err;
 }
 
+//解析tc对应的action
 static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				struct flow_action *flow_action,
 				struct mlx5e_tc_flow *flow,
@@ -2815,15 +2820,18 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 	u32 action = 0;
 	int err, i;
 
+	//如果无action,则返回
 	if (!flow_action_has_entries(flow_action))
 		return -EINVAL;
 
 	attr->in_rep = rpriv->rep;
 	attr->in_mdev = priv->mdev;
 
+	//遍历所有action
 	flow_action_for_each(i, act, flow_action) {
 		switch (act->id) {
 		case FLOW_ACTION_DROP:
+			//drop action
 			action |= MLX5_FLOW_CONTEXT_ACTION_DROP |
 				  MLX5_FLOW_CONTEXT_ACTION_COUNT;
 			break;
@@ -2845,6 +2853,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			return -EOPNOTSUPP;
 		case FLOW_ACTION_REDIRECT:
 		case FLOW_ACTION_MIRRED: {
+			//处理redirect
 			struct mlx5e_priv *out_priv;
 			struct net_device *out_dev;
 
@@ -2857,6 +2866,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				return -EINVAL;
 			}
 
+			//output接口不能超过数量限制
 			if (attr->out_count >= MLX5_MAX_FLOW_FWD_VPORTS) {
 				NL_SET_ERR_MSG_MOD(extack,
 						   "can't support more output ports, can't offload forwarding");
@@ -3343,6 +3353,7 @@ out:
 	return err;
 }
 
+//添加flower规则
 static int
 mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 		  struct tc_cls_flower_offload *f,
@@ -3356,6 +3367,7 @@ mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 
 	get_flags(flags, &flow_flags);
 
+	//检查是否开启了dev的tc offload
 	if (!tc_can_offload_extack(priv->netdev, f->common.extack))
 		return -EOPNOTSUPP;
 
@@ -3370,6 +3382,7 @@ mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 	return err;
 }
 
+//处理flower规则配置
 int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 			   struct tc_cls_flower_offload *f, int flags)
 {
@@ -3395,6 +3408,7 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	if (err)
 		goto out;
 
+	//添加映射方便确定是否已添加
 	err = rhashtable_insert_fast(tc_ht, &flow->node, tc_ht_params);
 	if (err)
 		goto err_free;

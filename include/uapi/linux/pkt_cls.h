@@ -58,11 +58,16 @@ enum {
  * a combined opcode.
  */
 #define __TC_ACT_EXT_SHIFT 28
+//扩展位local对应的取值
 #define __TC_ACT_EXT(local) ((local) << __TC_ACT_EXT_SHIFT)
+//扩展位掩码
 #define TC_ACT_EXT_VAL_MASK ((1 << __TC_ACT_EXT_SHIFT) - 1)
+//清除扩展位bit值
 #define TC_ACT_EXT_OPCODE(combined) ((combined) & (~TC_ACT_EXT_VAL_MASK))
+//清除扩展位后combined是否与opcode相等？
 #define TC_ACT_EXT_CMP(combined, opcode) (TC_ACT_EXT_OPCODE(combined) == opcode)
 
+//
 #define TC_ACT_JUMP __TC_ACT_EXT(1)
 //跳转到指定chain
 #define TC_ACT_GOTO_CHAIN __TC_ACT_EXT(2)
@@ -172,6 +177,7 @@ enum {
 #define TCA_CLS_FLAGS_SKIP_HW	(1 << 0) /* don't offload filter to HW */
 #define TCA_CLS_FLAGS_SKIP_SW	(1 << 1) /* don't use filter in SW */
 #define TCA_CLS_FLAGS_IN_HW	(1 << 2) /* filter is offloaded to HW */
+//filter未下载到硬件
 #define TCA_CLS_FLAGS_NOT_IN_HW (1 << 3) /* filter isn't offloaded to HW */
 #define TCA_CLS_FLAGS_VERBOSE	(1 << 4) /* verbose logging */
 

@@ -90,7 +90,9 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 		return -ENOMEM;
 
 	for (ntx = 0; ntx < dev->num_tx_queues; ntx++) {
+		//取dev的tx队列
 		dev_queue = netdev_get_tx_queue(dev, ntx);
+		//创建dev_queue对应的qdisc
 		qdisc = qdisc_create_dflt(dev_queue, get_default_qdisc_ops(dev, ntx),
 					  TC_H_MAKE(TC_H_MAJ(sch->handle),
 						    TC_H_MIN(ntx + 1)),
@@ -103,6 +105,7 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 
 	sch->flags |= TCQ_F_MQROOT;
 
+	//offload 多队列的创建
 	mq_offload(sch, TC_MQ_CREATE);
 	return 0;
 }
@@ -174,13 +177,16 @@ static int mq_dump(struct Qdisc *sch, struct sk_buff *skb)
 	return mq_offload_stats(sch);
 }
 
+//给定分类号，获得此分类对应的队列
 static struct netdev_queue *mq_queue_get(struct Qdisc *sch, unsigned long cl)
 {
 	struct net_device *dev = qdisc_dev(sch);
 	unsigned long ntx = cl - 1;
 
 	if (ntx >= dev->num_tx_queues)
-		return NULL;
+		return NULL;//分类号不存在，则返回NULL
+
+	//取对应的tx队列
 	return netdev_get_tx_queue(dev, ntx);
 }
 
@@ -223,13 +229,14 @@ static struct Qdisc *mq_leaf(struct Qdisc *sch, unsigned long cl)
 	return dev_queue->qdisc_sleeping;
 }
 
+//查找classid对应的队列
 static unsigned long mq_find(struct Qdisc *sch, u32 classid)
 {
 	unsigned int ntx = TC_H_MIN(classid);
 
 	if (!mq_queue_get(sch, ntx))
-		return 0;
-	return ntx;
+		return 0;//默认返回0号队列
+	return ntx;//返回队列号
 }
 
 static int mq_dump_class(struct Qdisc *sch, unsigned long cl,
@@ -260,16 +267,18 @@ static void mq_walk(struct Qdisc *sch, struct qdisc_walker *arg)
 	struct net_device *dev = qdisc_dev(sch);
 	unsigned int ntx;
 
+	//停止检查
 	if (arg->stop)
 		return;
 
 	arg->count = arg->skip;
 	for (ntx = arg->skip; ntx < dev->num_tx_queues; ntx++) {
+		//通过回调，访问ntx号队列
 		if (arg->fn(sch, ntx + 1, arg) < 0) {
-			arg->stop = 1;
+			arg->stop = 1;//出错停止
 			break;
 		}
-		arg->count++;
+		arg->count++;//访问总数
 	}
 }
 

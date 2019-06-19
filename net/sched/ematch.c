@@ -89,6 +89,7 @@
 static LIST_HEAD(ematch_ops);
 static DEFINE_RWLOCK(ematch_mod_lock);
 
+//给定kind查找tcf_ematch_ops
 static struct tcf_ematch_ops *tcf_em_lookup(u16 kind)
 {
 	struct tcf_ematch_ops *e = NULL;
@@ -129,6 +130,7 @@ int tcf_em_register(struct tcf_ematch_ops *ops)
 
 	write_lock(&ematch_mod_lock);
 	list_for_each_entry(e, &ematch_ops, link)
+		//重复注册
 		if (ops->kind == e->kind)
 			goto errout;
 

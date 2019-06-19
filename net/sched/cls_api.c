@@ -182,7 +182,7 @@ static bool tcf_proto_is_unlocked(const char *kind)
 
 //创建tcf_proto对象
 static struct tcf_proto *tcf_proto_create(const char *kind/*分类过滤器名称*/, u32 protocol,
-					  u32 prio, struct tcf_chain *chain,
+					  u32 prio, struct tcf_chain *chain/*tp所属的chain*/,
 					  bool rtnl_held,
 					  struct netlink_ext_ack *extack)
 {
@@ -345,6 +345,7 @@ static void tcf_chain0_head_change(struct tcf_chain *chain,
 		return;
 
 	mutex_lock(&block->lock);
+	//触发已注册的所有回调
 	list_for_each_entry(item, &block->chain0.filter_chain_list, list)
 		tcf_chain_head_change_item(item, tp_head);
 	mutex_unlock(&block->lock);
@@ -831,6 +832,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 	struct net_device *dev = q->dev_queue->dev;
 	int err;
 
+	//跳过不支持的dev
 	if (!dev->netdev_ops->ndo_setup_tc)
 		goto no_offload_dev_inc;
 
@@ -842,6 +844,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 		return -EOPNOTSUPP;
 	}
 
+	//offload执行block bind命令
 	err = tcf_block_offload_cmd(block, dev, ei, TC_BLOCK_BIND, extack);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_inc;
@@ -892,6 +895,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 		NL_SET_ERR_MSG(extack, "Memory allocation for head change callback item failed");
 		return -ENOMEM;
 	}
+	//回调函数及其参数
 	item->chain_head_change = ei->chain_head_change;
 	item->chain_head_change_priv = ei->chain_head_change_priv;
 
@@ -911,9 +915,11 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 
 		tp_head = tcf_chain_dereference(chain0->filter_chain, chain0);
 		if (tp_head)
+			//先触发回调
 			tcf_chain_head_change_item(item, tp_head);
 
 		mutex_lock(&block->lock);
+		//再将item加入到filter_chain_list上
 		list_add(&item->list, &block->chain0.filter_chain_list);
 		mutex_unlock(&block->lock);
 
@@ -1007,6 +1013,7 @@ static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 	return block;
 }
 
+//通过block_index返回对应的tcf_block
 static struct tcf_block *tcf_block_lookup(struct net *net, u32 block_index)
 {
 	struct tcf_net *tn = net_generic(net, tcf_net_id);
@@ -1019,6 +1026,7 @@ static struct tcf_block *tcf_block_refcnt_get(struct net *net, u32 block_index)
 	struct tcf_block *block;
 
 	rcu_read_lock();
+	//查对应的block并增加引用计数
 	block = tcf_block_lookup(net, block_index);
 	if (block && !refcount_inc_not_zero(&block->refcnt))
 		block = NULL;
@@ -1145,7 +1153,7 @@ static void tcf_block_flush_all_chains(struct tcf_block *block, bool rtnl_held)
  */
 
 static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的调度器*/,
-			    u32 *parent, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
+			    u32 *parent/*队列index*/, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
 			    struct netlink_ext_ack *extack)
 {
 	const struct Qdisc_class_ops *cops;
@@ -1171,6 +1179,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 		*q = dev->qdisc;
 		*parent = (*q)->handle;
 	} else {
+		//取parent指定的q
 		*q = qdisc_lookup_rcu(dev, TC_H_MAJ(*parent));
 		if (!*q) {
 			NL_SET_ERR_MSG(extack, "Parent Qdisc doesn't exists");
@@ -1327,10 +1336,12 @@ static struct tcf_block *tcf_block_find(struct net *net, struct Qdisc **q,
 
 	ASSERT_RTNL();
 
+	//先查qdisc
 	err = __tcf_qdisc_find(net, q, parent, ifindex, true, extack);
 	if (err)
 		goto errout;
 
+	//确定对应的class
 	err = __tcf_qdisc_cl_find(*q, *parent, cl, ifindex, extack);
 	if (err)
 		goto errout_qdisc;
@@ -1432,15 +1443,18 @@ int tcf_block_get_ext(struct tcf_block **p_block, struct Qdisc *q,
 	struct tcf_block *block = NULL;
 	int err;
 
+	//已设置index,直接获取或者创建block
 	if (ei->block_index)
 		/* block_index not 0 means the shared block is requested */
 		block = tcf_block_refcnt_get(net, ei->block_index);
 
 	if (!block) {
+		//block不存在，需要创建block
 		block = tcf_block_create(net, q, ei->block_index, extack);
 		if (IS_ERR(block))
 			return PTR_ERR(block);
 		if (tcf_block_shared(block)) {
+			//针对共享block,直接加入
 			err = tcf_block_insert(block, net, extack);
 			if (err)
 				goto err_block_insert;
@@ -1600,6 +1614,7 @@ err_playback_remove:
 	return err;
 }
 
+//在block上注册对应的block_cb
 struct tcf_block_cb *__tcf_block_cb_register(struct tcf_block *block,
 					     tc_setup_cb_t *cb, void *cb_ident,
 					     void *cb_priv,
@@ -1615,19 +1630,22 @@ struct tcf_block_cb *__tcf_block_cb_register(struct tcf_block *block,
 	if (err)
 		return ERR_PTR(err);
 
+	//申请填充cb
 	block_cb = kzalloc(sizeof(*block_cb), GFP_KERNEL);
 	if (!block_cb)
 		return ERR_PTR(-ENOMEM);
 	block_cb->cb = cb;
 	block_cb->cb_ident = cb_ident;
 	block_cb->cb_priv = cb_priv;
+	//注册block_cb到对应block
 	list_add(&block_cb->list, &block->cb_list);
 	return block_cb;
 }
 EXPORT_SYMBOL(__tcf_block_cb_register);
 
+//为block上注册cb回调
 int tcf_block_cb_register(struct tcf_block *block,
-			  tc_setup_cb_t *cb, void *cb_ident,
+			  tc_setup_cb_t *cb/*block回调*/, void *cb_ident,
 			  void *cb_priv, struct netlink_ext_ack *extack)
 {
 	struct tcf_block_cb *block_cb;
@@ -1743,6 +1761,7 @@ static int tcf_chain_tp_insert(struct tcf_chain *chain,
 		return -EAGAIN;
 
 	if (*chain_info->pprev == chain->filter_chain)
+		//首个tp
 		//chain->filter_chain上原来为空,新需要插入tp,触发对filter_list更新，
 		//从而使tcf_classficy可以遍历tp
 		tcf_chain0_head_change(chain, tp);
@@ -2059,7 +2078,7 @@ replay:
 		return err;
 
 	t = nlmsg_data(n);
-	//提取报文类型及优先级
+	//提取filter对应报文类型及优先级
 	protocol = TC_H_MIN(t->tcm_info);
 	prio = TC_H_MAJ(t->tcm_info);
 	prio_allocate = false;
@@ -2119,7 +2138,7 @@ replay:
 		goto errout;
 	}
 
-	//创建或获取指定index的链
+	//创建或获取指定index的chain
 	chain = tcf_chain_get(block, chain_index, true);
 	if (!chain) {
 		NL_SET_ERR_MSG(extack, "Cannot create specified filter chain");
@@ -2132,6 +2151,7 @@ replay:
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
 			       prio, prio_allocate);
 	if (IS_ERR(tp)) {
+		//查找中出现错误（有冲突）
 		NL_SET_ERR_MSG(extack, "Filter with specified priority/protocol not found");
 		err = PTR_ERR(tp);
 		goto errout_locked;
@@ -2186,21 +2206,25 @@ replay:
 		mutex_unlock(&chain->filter_chain_lock);
 	}
 
+	//kind必须与tp->ops的kind一致
 	if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], tp->ops->kind)) {
 		NL_SET_ERR_MSG(extack, "Specified filter kind does not match existing one");
 		err = -EINVAL;
 		goto errout;
 	}
 
+	//在tp中查找指定filter
 	fh = tp->ops->get(tp, t->tcm_handle);
 
 	if (!fh) {
+		//没有找到对应的规则，但没有create标记，告错
 		if (!(n->nlmsg_flags & NLM_F_CREATE)) {
 			NL_SET_ERR_MSG(extack, "Need both RTM_NEWTFILTER and NLM_F_CREATE to create a new filter");
 			err = -ENOENT;
 			goto errout;
 		}
 	} else if (n->nlmsg_flags & NLM_F_EXCL) {
+		//找到了相应的规则，有exec标记，报错，规则已存在
 		tfilter_put(tp, fh);
 		NL_SET_ERR_MSG(extack, "Filter already exists");
 		err = -EEXIST;
@@ -2213,8 +2237,8 @@ replay:
 		goto errout;
 	}
 
-	//下发规则(例如flower对应的cls_fl_ops）
-	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh,
+	//新增规则或者改变规则(例如flower对应的cls_fl_ops）
+	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh/*旧规则*/,
 			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
 			      rtnl_held, extack);
 	if (err == 0) {
@@ -2848,6 +2872,7 @@ static void tc_chain_tmplt_del(const struct tcf_proto_ops *tmplt_ops,
 
 /* Add/delete/get a chain */
 
+//添加新的chain
 static int tc_ctl_chain(struct sk_buff *skb, struct nlmsghdr *n,
 			struct netlink_ext_ack *extack)
 {
@@ -2889,8 +2914,10 @@ replay:
 	}
 
 	mutex_lock(&block->lock);
+	//取chain_index对应的chain
 	chain = tcf_chain_lookup(block, chain_index);
 	if (n->nlmsg_type == RTM_NEWCHAIN) {
+		//当前新建chain
 		if (chain) {
 			if (tcf_chain_held_by_acts_only(chain)) {
 				/* The chain exists only because there is
@@ -2908,6 +2935,7 @@ replay:
 				err = -ENOENT;
 				goto errout_block_locked;
 			}
+			//创建chain
 			chain = tcf_chain_create(block, chain_index);
 			if (!chain) {
 				NL_SET_ERR_MSG(extack, "Failed to create filter chain");
@@ -3214,6 +3242,7 @@ int tcf_exts_dump_stats(struct sk_buff *skb, struct tcf_exts *exts)
 }
 EXPORT_SYMBOL(tcf_exts_dump_stats);
 
+//执行cb_list上挂接的所有callback
 int tc_setup_cb_call(struct tcf_block *block, enum tc_setup_type type,
 		     void *type_data, bool err_stop)
 {
@@ -3225,9 +3254,11 @@ int tc_setup_cb_call(struct tcf_block *block, enum tc_setup_type type,
 	if (block->nooffloaddevcnt && err_stop)
 		return -EOPNOTSUPP;
 
+	//遍历cb_list，逐个执行cb调用
 	list_for_each_entry(block_cb, &block->cb_list, list) {
 		err = block_cb->cb(type, type_data, block_cb->cb_priv);
 		if (err) {
+			//出错，如果出错需要停止，则返回error
 			if (err_stop)
 				return err;
 		} else {
@@ -3238,8 +3269,9 @@ int tc_setup_cb_call(struct tcf_block *block, enum tc_setup_type type,
 }
 EXPORT_SYMBOL(tc_setup_cb_call);
 
-int tc_setup_flow_action(struct flow_action *flow_action,
-			 const struct tcf_exts *exts)
+//实现tc规则action转换为flow_action
+int tc_setup_flow_action(struct flow_action *flow_action/*出参，记录转换后的tcf action*/,
+			 const struct tcf_exts *exts/*tc规则action*/)
 {
 	const struct tc_action *act;
 	int i, j, k;
@@ -3248,7 +3280,8 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 		return 0;
 
 	j = 0;
-	//采用act遍历exts->actions
+
+	//采用act遍历exts->actions,实现tc action向flow_action_entry转换
 	tcf_exts_for_each_action(i, act, exts) {
 		struct flow_action_entry *entry;
 
@@ -3260,9 +3293,11 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 		} else if (is_tcf_gact_trap(act)) {
 			entry->id = FLOW_ACTION_TRAP;
 		} else if (is_tcf_gact_goto_chain(act)) {
+			//转换gaction goto类型
 			entry->id = FLOW_ACTION_GOTO;
 			entry->chain_index = tcf_gact_goto_chain_index(act);
 		} else if (is_tcf_mirred_egress_redirect(act)) {
+			//转换egress方向的redirect
 			entry->id = FLOW_ACTION_REDIRECT;
 			entry->dev = tcf_mirred_dev(act);
 		} else if (is_tcf_mirred_egress_mirror(act)) {
@@ -3270,6 +3305,7 @@ int tc_setup_flow_action(struct flow_action *flow_action,
 			entry->id = FLOW_ACTION_MIRRED;
 			entry->dev = tcf_mirred_dev(act);
 		} else if (is_tcf_vlan(act)) {
+			//处理vlan修改
 			switch (tcf_vlan_action(act)) {
 			case TCA_VLAN_ACT_PUSH:
 				entry->id = FLOW_ACTION_VLAN_PUSH;
@@ -3343,6 +3379,7 @@ err_out:
 }
 EXPORT_SYMBOL(tc_setup_flow_action);
 
+//获得action的数目
 unsigned int tcf_exts_num_actions(struct tcf_exts *exts)
 {
 	unsigned int num_acts = 0;
@@ -3402,13 +3439,17 @@ static int __init tc_filter_init(void)
 	//注册tc的newfilter处理函数
 	rtnl_register(PF_UNSPEC, RTM_NEWTFILTER, tc_new_tfilter, NULL,
 		      RTNL_FLAG_DOIT_UNLOCKED);
+	//注册tc的delfilter处理函数
 	rtnl_register(PF_UNSPEC, RTM_DELTFILTER, tc_del_tfilter, NULL,
 		      RTNL_FLAG_DOIT_UNLOCKED);
 	//注册tc的show或list filter处理函数
 	rtnl_register(PF_UNSPEC, RTM_GETTFILTER, tc_get_tfilter,
 		      tc_dump_tfilter, RTNL_FLAG_DOIT_UNLOCKED);
+	//创建chain
 	rtnl_register(PF_UNSPEC, RTM_NEWCHAIN, tc_ctl_chain, NULL, 0);
+	//删除chain
 	rtnl_register(PF_UNSPEC, RTM_DELCHAIN, tc_ctl_chain, NULL, 0);
+	//list chain
 	rtnl_register(PF_UNSPEC, RTM_GETCHAIN, tc_ctl_chain,
 		      tc_dump_chain, 0);
 

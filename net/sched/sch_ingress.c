@@ -61,6 +61,7 @@ static void clsact_chain_head_change(struct tcf_proto *tp_head, void *priv)
 	mini_qdisc_pair_swap(miniqp, tp_head);
 };
 
+//设置block_index
 static void ingress_ingress_block_set(struct Qdisc *sch, u32 block_index)
 {
 	struct ingress_sched_data *q = qdisc_priv(sch);
@@ -142,8 +143,8 @@ static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
 struct clsact_sched_data {
 	struct tcf_block *ingress_block;
 	struct tcf_block *egress_block;
-	struct tcf_block_ext_info ingress_block_info;
-	struct tcf_block_ext_info egress_block_info;
+	struct tcf_block_ext_info ingress_block_info;//ingress信息
+	struct tcf_block_ext_info egress_block_info;//egress信息
 	struct mini_Qdisc_pair miniqp_ingress;
 	struct mini_Qdisc_pair miniqp_egress;
 };
@@ -155,6 +156,7 @@ static unsigned long clsact_find(struct Qdisc *sch, u32 classid)
 	case TC_H_MIN(TC_H_MIN_EGRESS):
 		return TC_H_MIN(classid);
 	default:
+		//默认返回分类0
 		return 0;
 	}
 }
@@ -165,6 +167,7 @@ static unsigned long clsact_bind_filter(struct Qdisc *sch,
 	return clsact_find(sch, classid);
 }
 
+//给定分类编号，获得相应block
 static struct tcf_block *clsact_tcf_block(struct Qdisc *sch, unsigned long cl,
 					  struct netlink_ext_ack *extack)
 {

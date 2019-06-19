@@ -138,35 +138,44 @@ enum flow_action_mangle_base {
 };
 
 struct flow_action_entry {
-	enum flow_action_id		id;
+	enum flow_action_id		id;//action id
 	union {
 		u32			chain_index;	/* FLOW_ACTION_GOTO */
+
 		struct net_device	*dev;		/* FLOW_ACTION_REDIRECT */
+
 		struct {				/* FLOW_ACTION_VLAN */
 			u16		vid;
 			__be16		proto;
 			u8		prio;
 		} vlan;
+
 		struct {				/* FLOW_ACTION_PACKET_EDIT */
 			enum flow_action_mangle_base htype;
 			u32		offset;
 			u32		mask;
 			u32		val;
 		} mangle;
+
 		const struct ip_tunnel_info *tunnel;	/* FLOW_ACTION_TUNNEL_ENCAP */
+
 		u32			csum_flags;	/* FLOW_ACTION_CSUM */
+
 		u32			mark;		/* FLOW_ACTION_MARK */
+
 		struct {				/* FLOW_ACTION_QUEUE */
 			u32		ctx;
 			u32		index;
 			u8		vf;
 		} queue;
+
 		struct {				/* FLOW_ACTION_SAMPLE */
 			struct psample_group	*psample_group;
 			u32			rate;
 			u32			trunc_size;
 			bool			truncate;
 		} sample;
+
 		struct {				/* FLOW_ACTION_POLICE */
 			s64			burst;
 			u64			rate_bytes_ps;
@@ -175,7 +184,7 @@ struct flow_action_entry {
 };
 
 struct flow_action {
-	unsigned int			num_entries;
+	unsigned int			num_entries;//action数目
 	struct flow_action_entry 	entries[0];
 };
 
@@ -205,7 +214,7 @@ struct flow_rule {
 
 struct flow_rule *flow_rule_alloc(unsigned int num_actions);
 
-//检查rule的match字段中是否有key
+//检查rule的match字段中是否有指定key
 static inline bool flow_rule_match_key(const struct flow_rule *rule,
 				       enum flow_dissector_key_id key)
 {

@@ -524,6 +524,7 @@ EXPORT_SYMBOL(netif_carrier_off);
 static int noop_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 			struct sk_buff **to_free)
 {
+	//将skb串给to_free链上
 	__qdisc_drop(skb, to_free);
 	return NET_XMIT_CN;
 }
@@ -533,12 +534,13 @@ static struct sk_buff *noop_dequeue(struct Qdisc *qdisc)
 	return NULL;
 }
 
+//丢包的ops
 struct Qdisc_ops noop_qdisc_ops __read_mostly = {
 	.id		=	"noop",
 	.priv_size	=	0,
-	.enqueue	=	noop_enqueue,
-	.dequeue	=	noop_dequeue,
-	.peek		=	noop_dequeue,
+	.enqueue	=	noop_enqueue,//所有入队报文将被丢弃
+	.dequeue	=	noop_dequeue,//出队报文为空
+	.peek		=	noop_dequeue,//前一个报文有为NULL
 	.owner		=	THIS_MODULE,
 };
 
@@ -581,6 +583,7 @@ static int noqueue_init(struct Qdisc *qdisc, struct nlattr *opt,
 	return 0;
 }
 
+//报文将被丢弃
 struct Qdisc_ops noqueue_qdisc_ops __read_mostly = {
 	.id		=	"noqueue",
 	.priv_size	=	0,
@@ -618,9 +621,10 @@ static inline struct skb_array *band2list(struct pfifo_fast_priv *priv,
 static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 			      struct sk_buff **to_free)
 {
+	//按tos分类到band
 	int band = prio2band[skb->priority & TC_PRIO_MAX];
 	struct pfifo_fast_priv *priv = qdisc_priv(qdisc);
-	struct skb_array *q = band2list(priv, band);
+	struct skb_array *q = band2list(priv, band);//取指定band对应的q
 	unsigned int pkt_len = qdisc_pkt_len(skb);
 	int err;
 
@@ -628,7 +632,7 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	err = skb_array_produce(q, skb);
 
 	if (unlikely(err))
-		return qdisc_drop_cpu(skb, qdisc, to_free);
+		return qdisc_drop_cpu(skb, qdisc, to_free/*出参，指明需要丢弃的报文*/);
 
 	//增加队列中有效数据长度
 	qdisc_update_stats_at_enqueue(qdisc, pkt_len);
@@ -641,7 +645,7 @@ static struct sk_buff *pfifo_fast_dequeue(struct Qdisc *qdisc)
 	struct sk_buff *skb = NULL;
 	int band;
 
-	//尝试所有队列，自中出一个报文
+	//尝试所有band队列，自基中出一个报文
 	for (band = 0; band < PFIFO_FAST_BANDS && !skb; band++) {
 		struct skb_array *q = band2list(priv, band);
 
@@ -650,6 +654,8 @@ static struct sk_buff *pfifo_fast_dequeue(struct Qdisc *qdisc)
 
 		skb = __skb_array_consume(q);
 	}
+
+	//更新统计
 	if (likely(skb)) {
 		qdisc_update_stats_at_dequeue(qdisc, skb);
 	} else {
@@ -715,9 +721,11 @@ nla_put_failure:
 	return -1;
 }
 
+//初始化队列
 static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 			   struct netlink_ext_ack *extack)
 {
+	//对应设备的tx_queue_len
 	unsigned int qlen = qdisc_dev(qdisc)->tx_queue_len;
 	struct pfifo_fast_priv *priv = qdisc_priv(qdisc);
 	int prio;
@@ -726,7 +734,7 @@ static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 	if (!qlen)
 		return -EINVAL;
 
-	//创建多个bands队列
+	//创建多个bands队列,指定band队列大小
 	for (prio = 0; prio < PFIFO_FAST_BANDS; prio++) {
 		struct skb_array *q = band2list(priv, prio);
 		int err;
@@ -741,6 +749,7 @@ static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 	return 0;
 }
 
+//销毁queue
 static void pfifo_fast_destroy(struct Qdisc *sch)
 {
 	struct pfifo_fast_priv *priv = qdisc_priv(sch);
@@ -761,6 +770,7 @@ static void pfifo_fast_destroy(struct Qdisc *sch)
 	}
 }
 
+//变更queue大小
 static int pfifo_fast_change_tx_queue_len(struct Qdisc *sch,
 					  unsigned int new_len)
 {
@@ -768,6 +778,7 @@ static int pfifo_fast_change_tx_queue_len(struct Qdisc *sch,
 	struct skb_array *bands[PFIFO_FAST_BANDS];
 	int prio;
 
+	//收集各queue队列指针数组
 	for (prio = 0; prio < PFIFO_FAST_BANDS; prio++) {
 		struct skb_array *q = band2list(priv, prio);
 
@@ -778,6 +789,7 @@ static int pfifo_fast_change_tx_queue_len(struct Qdisc *sch,
 					 GFP_KERNEL);
 }
 
+//定义先进先出型队列
 struct Qdisc_ops pfifo_fast_ops __read_mostly = {
 	.id		=	"pfifo_fast",
 	.priv_size	=	sizeof(struct pfifo_fast_priv),
@@ -886,7 +898,7 @@ errout:
 
 struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue,
 				const struct Qdisc_ops *ops,
-				unsigned int parentid,
+				unsigned int parentid/*父Qdisc*/,
 				struct netlink_ext_ack *extack)
 {
 	struct Qdisc *sch;
@@ -896,7 +908,7 @@ struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue,
 		return NULL;
 	}
 
-	//申请并初始化Qdisc
+	//申请并初始化dev_queue对应的Qdisc
 	sch = qdisc_alloc(dev_queue, ops, extack);
 	if (IS_ERR(sch)) {
 		module_put(ops->owner);
@@ -904,7 +916,7 @@ struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue,
 	}
 	sch->parent = parentid;
 
-	//初始化队列
+	//调用init初始化相应类型的队列
 	if (!ops->init || ops->init(sch, NULL, extack) == 0)
 		return sch;
 
@@ -923,11 +935,13 @@ void qdisc_reset(struct Qdisc *qdisc)
 	if (ops->reset)
 		ops->reset(qdisc);
 
+	//移除gso上挂接的skb
 	skb_queue_walk_safe(&qdisc->gso_skb, skb, tmp) {
 		__skb_unlink(skb, &qdisc->gso_skb);
 		kfree_skb_list(skb);
 	}
 
+	//移除skb_bad_txq上挂接的skb
 	skb_queue_walk_safe(&qdisc->skb_bad_txq, skb, tmp) {
 		__skb_unlink(skb, &qdisc->skb_bad_txq);
 		kfree_skb_list(skb);
@@ -1014,6 +1028,7 @@ void qdisc_put_unlocked(struct Qdisc *qdisc)
 EXPORT_SYMBOL(qdisc_put_unlocked);
 
 /* Attach toplevel qdisc to device queue. */
+//替换dev_queue对应的qdisc
 struct Qdisc *dev_graft_qdisc(struct netdev_queue *dev_queue,
 			      struct Qdisc *qdisc)
 {
@@ -1024,15 +1039,18 @@ struct Qdisc *dev_graft_qdisc(struct netdev_queue *dev_queue,
 	spin_lock_bh(root_lock);
 
 	/* ... and graft new one */
+	//新的为NULL时，使和noop_qdisc
 	if (qdisc == NULL)
 		qdisc = &noop_qdisc;
+
 	//替换 qdisc_sleeping
 	dev_queue->qdisc_sleeping = qdisc;
+	//将dev_queue->qdisc指为noop_qdisc
 	rcu_assign_pointer(dev_queue->qdisc, &noop_qdisc);
 
 	spin_unlock_bh(root_lock);
 
-	return oqdisc;
+	return oqdisc;/*返回旧的qdisc*/
 }
 EXPORT_SYMBOL(dev_graft_qdisc);
 
@@ -1041,6 +1059,7 @@ static void attach_one_default_qdisc(struct net_device *dev,
 				     void *_unused)
 {
 	struct Qdisc *qdisc;
+	//默认先进先出队列
 	const struct Qdisc_ops *ops = default_qdisc_ops;
 
 	if (dev->priv_flags & IFF_NO_QUEUE)

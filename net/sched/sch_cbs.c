@@ -86,7 +86,7 @@ struct cbs_sched_data {
 
 static int cbs_child_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			     struct Qdisc *child,
-			     struct sk_buff **to_free)
+			     struct sk_buff **to_free/*出参，入队失败需要释放的skb*/)
 {
 	unsigned int len = qdisc_pkt_len(skb);
 	int err;

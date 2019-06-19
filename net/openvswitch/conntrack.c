@@ -1652,6 +1652,7 @@ static int parse_ct(const struct nlattr *attr, struct ovs_conntrack_info *info,
 	return 0;
 }
 
+//是否为合法的ct字段
 bool ovs_ct_verify(struct net *net, enum ovs_key_attr attr)
 {
 	if (attr == OVS_KEY_ATTR_CT_STATE)

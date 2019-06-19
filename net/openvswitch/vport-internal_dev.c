@@ -32,7 +32,7 @@ static struct internal_dev *internal_dev_priv(struct net_device *netdev)
 
 /* Called with rcu_read_lock_bh. */
 //kernel将自internal_dev发出报文时，nod的xmit函数将促使其进入此函数，
-//并将报文送给datapath处理
+//并将报文送给datapath处理（kernel送报文至此函数，此函数送报文到ovs)
 static netdev_tx_t
 internal_dev_xmit(struct sk_buff *skb, struct net_device *netdev)
 {
@@ -133,6 +133,7 @@ static struct rtnl_link_ops internal_dev_link_ops __read_mostly = {
 	.kind = "openvswitch",
 };
 
+//internel类型设备初始化
 static void do_setup(struct net_device *netdev)
 {
 	ether_setup(netdev);
@@ -146,6 +147,7 @@ static void do_setup(struct net_device *netdev)
 	netdev->priv_flags |= IFF_LIVE_ADDR_CHANGE | IFF_OPENVSWITCH |
 			      IFF_NO_QUEUE;
 	netdev->needs_free_netdev = true;
+	//注册私有数据释放函数
 	netdev->priv_destructor = internal_dev_destructor;
 	netdev->ethtool_ops = &internal_dev_ethtool_ops;
 	netdev->rtnl_link_ops = &internal_dev_link_ops;
@@ -183,6 +185,7 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 		err = -ENOMEM;
 		goto error_free_vport;
 	}
+	//申请设备的统计内存
 	vport->dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!vport->dev->tstats) {
 		err = -ENOMEM;
@@ -268,7 +271,8 @@ static netdev_tx_t internal_dev_recv(struct sk_buff *skb)
 
 static struct vport_ops ovs_internal_vport_ops = {
 	.type		= OVS_VPORT_TYPE_INTERNAL,
-	.create		= internal_dev_create,//创建对应的netdev
+	//创建对应的netdev
+	.create		= internal_dev_create,
 	.destroy	= internal_dev_destroy,
 	//针对internal设备的报文，其自ovs向外发送时，会被丢给kernel,其入接口变更为vport->dev对应的设备
 	.send		= internal_dev_recv,

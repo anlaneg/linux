@@ -89,7 +89,7 @@ struct Qdisc {
 	u32			handle;
 	u32			parent;
 
-	//队列所属的netdev
+	//队列对应的netdev_queue
 	struct netdev_queue	*dev_queue;
 
 	struct net_rate_estimator __rcu *rate_est;
@@ -238,7 +238,7 @@ enum qdisc_class_ops_flags {
 
 struct Qdisc_ops {
 	struct Qdisc_ops	*next;
-	const struct Qdisc_class_ops	*cl_ops;
+	const struct Qdisc_class_ops	*cl_ops;//分类
 	char			id[IFNAMSIZ];//ops的唯一标识
 	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小
 	int			priv_size;
@@ -270,8 +270,10 @@ struct Qdisc_ops {
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 	int			(*dump_stats)(struct Qdisc *, struct gnet_dump *);
 
+	//设置ingress block
 	void			(*ingress_block_set)(struct Qdisc *sch,
 						     u32 block_index);
+	//设置egress block,使其与指定index关联
 	void			(*egress_block_set)(struct Qdisc *sch,
 						    u32 block_index);
 	u32			(*ingress_block_get)(struct Qdisc *sch);
@@ -311,7 +313,7 @@ struct tcf_proto_ops {
 	int			(*init)(struct tcf_proto*);
 	void			(*destroy)(struct tcf_proto *tp, bool rtnl_held,
 					   struct netlink_ext_ack *extack);
-
+	//获取指定规则
 	void*			(*get)(struct tcf_proto*, u32 handle);
 	void			(*put)(struct tcf_proto *tp, void *f);
 	int			(*change)(struct net *net, struct sk_buff *,
@@ -361,13 +363,13 @@ struct tcf_proto {
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto *,
 					    struct tcf_result *);
-	__be16			protocol;
+	__be16			protocol;//支持的协议
 
 	/* All the rest */
 	u32			prio;
 	void			*data;
 	const struct tcf_proto_ops	*ops;
-	struct tcf_chain	*chain;
+	struct tcf_chain	*chain;//tp所属的chain
 	/* Lock protects tcf_proto shared state and can be used by unlocked
 	 * classifiers to protect their private data.
 	 */
@@ -422,9 +424,10 @@ struct tcf_block {
 	unsigned int offloadcnt; /* Number of oddloaded filters */
 	unsigned int nooffloaddevcnt; /* Number of devs unable to do offload */
 	struct {
-		struct tcf_chain *chain;
-		struct list_head filter_chain_list;//用于串多个item
-	} chain0;//首个chain
+		struct tcf_chain *chain;//首个chain
+		//用于串多个tcf_filter_chain_list_item,记录回调函数及参数
+		struct list_head filter_chain_list;
+	} chain0;
 	struct rcu_head rcu;
 };
 
@@ -941,6 +944,7 @@ static inline void qdisc_qstats_drop(struct Qdisc *sch)
 	qstats_drop_inc(&sch->qstats);
 }
 
+//增加丢包数
 static inline void qdisc_qstats_cpu_drop(struct Qdisc *sch)
 {
 	this_cpu_inc(sch->cpu_qstats->drops);
@@ -1059,6 +1063,7 @@ static inline struct sk_buff *qdisc_dequeue_head(struct Qdisc *sch)
  */
 static inline void __qdisc_drop(struct sk_buff *skb, struct sk_buff **to_free)
 {
+	//将skb串在to_free链上
 	skb->next = *to_free;
 	*to_free = skb;
 }
@@ -1216,6 +1221,7 @@ static inline void rtnl_qdisc_drop(struct sk_buff *skb, struct Qdisc *sch)
 static inline int qdisc_drop_cpu(struct sk_buff *skb, struct Qdisc *sch,
 				 struct sk_buff **to_free)
 {
+	//指明skb需要丢弃
 	__qdisc_drop(skb, to_free);
 	qdisc_qstats_cpu_drop(sch);
 

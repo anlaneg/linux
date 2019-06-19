@@ -1171,12 +1171,15 @@ mlx5e_rep_setup_tc_cls_flower(struct mlx5e_priv *priv,
 {
 	switch (cls_flower->command) {
 	case TC_CLSFLOWER_REPLACE:
+		//tc flower规则替换 hw offload
 		return mlx5e_configure_flower(priv->netdev, priv, cls_flower,
 					      flags);
 	case TC_CLSFLOWER_DESTROY:
+		//tc flower 规则销毁
 		return mlx5e_delete_flower(priv->netdev, priv, cls_flower,
 					   flags);
 	case TC_CLSFLOWER_STATS:
+		//tc flower 规则状态统计
 		return mlx5e_stats_flower(priv->netdev, priv, cls_flower,
 					  flags);
 	default:
@@ -1191,6 +1194,7 @@ static int mlx5e_rep_setup_tc_cb(enum tc_setup_type type, void *type_data,
 
 	switch (type) {
 	case TC_SETUP_CLSFLOWER:
+		//处理flower setup
 		return mlx5e_rep_setup_tc_cls_flower(priv, type_data, MLX5E_TC_INGRESS |
 						     MLX5E_TC_ESW_OFFLOAD);
 	default:
@@ -1198,16 +1202,19 @@ static int mlx5e_rep_setup_tc_cb(enum tc_setup_type type, void *type_data,
 	}
 }
 
+//执行rep口 block offload
 static int mlx5e_rep_setup_tc_block(struct net_device *dev,
 				    struct tc_block_offload *f)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
 
+	//仅支持ingress block bind
 	if (f->binder_type != TCF_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
 		return -EOPNOTSUPP;
 
 	switch (f->command) {
 	case TC_BLOCK_BIND:
+		//为此block注册block_cb,用于响应cb_list回调
 		return tcf_block_cb_register(f->block, mlx5e_rep_setup_tc_cb,
 					     priv, priv, f->extack);
 	case TC_BLOCK_UNBIND:
@@ -1318,6 +1325,7 @@ static int mlx5e_uplink_rep_set_vf_vlan(struct net_device *dev, int vf, u16 vlan
 	return 0;
 }
 
+//represent口操作集
 static const struct net_device_ops mlx5e_netdev_ops_vf_rep = {
 	.ndo_open                = mlx5e_vf_rep_open,
 	.ndo_stop                = mlx5e_vf_rep_close,

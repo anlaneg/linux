@@ -14,6 +14,7 @@ struct tcf_mirred {
 };
 #define to_mirred(a) ((struct tcf_mirred *)a)
 
+//检查action是否mirred，且方向为egress的redirect类型
 static inline bool is_tcf_mirred_egress_redirect(const struct tc_action *a)
 {
 #ifdef CONFIG_NET_CLS_ACT
@@ -23,6 +24,7 @@ static inline bool is_tcf_mirred_egress_redirect(const struct tc_action *a)
 	return false;
 }
 
+//检查action是否为mirred,且方向为egress的mirror类型
 static inline bool is_tcf_mirred_egress_mirror(const struct tc_action *a)
 {
 #ifdef CONFIG_NET_CLS_ACT
@@ -32,6 +34,7 @@ static inline bool is_tcf_mirred_egress_mirror(const struct tc_action *a)
 	return false;
 }
 
+//取mirror action的目标dev
 static inline struct net_device *tcf_mirred_dev(const struct tc_action *a)
 {
 	return rtnl_dereference(to_mirred(a)->tcfm_dev);

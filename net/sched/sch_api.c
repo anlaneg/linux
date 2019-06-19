@@ -136,6 +136,7 @@ int register_qdisc(struct Qdisc_ops *qops)
 		if (!strcmp(qops->id, q->id))
 			goto out;
 
+	//提供默认的enqueue,dequeue,peek
 	if (qops->enqueue == NULL)
 		qops->enqueue = noop_qdisc_ops.enqueue;
 	if (qops->peek == NULL) {
@@ -170,6 +171,7 @@ out_einval:
 }
 EXPORT_SYMBOL(register_qdisc);
 
+//队列操作集解注册
 int unregister_qdisc(struct Qdisc_ops *qops)
 {
 	struct Qdisc_ops *q, **qp;
@@ -1107,12 +1109,14 @@ skip:
 	return 0;
 }
 
+//为sch中ingress,egress设置block_index
 static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 				   struct netlink_ext_ack *extack)
 {
 	u32 block_index;
 
 	if (tca[TCA_INGRESS_BLOCK]) {
+		//设置ingress block_index
 		block_index = nla_get_u32(tca[TCA_INGRESS_BLOCK]);
 
 		if (!block_index) {
@@ -1126,6 +1130,7 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 		sch->ops->ingress_block_set(sch, block_index);
 	}
 	if (tca[TCA_EGRESS_BLOCK]) {
+		//设置egress block
 		block_index = nla_get_u32(tca[TCA_EGRESS_BLOCK]);
 
 		if (!block_index) {
@@ -1162,6 +1167,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	//查找指定的qdisc_ops
 	ops = qdisc_lookup_ops(kind);
 #ifdef CONFIG_MODULES
+	//尝试加载
 	if (ops == NULL && kind != NULL) {
 		char name[IFNAMSIZ];
 		if (nla_strlcpy(name, kind, IFNAMSIZ) < IFNAMSIZ) {
@@ -1233,6 +1239,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 		netdev_info(dev, "Caught tx_queue_len zero misconfig\n");
 	}
 
+	//设置sch对应的block_index
 	err = qdisc_block_indexes_set(sch, tca, extack);
 	if (err)
 		goto err_out3;

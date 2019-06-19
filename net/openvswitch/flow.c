@@ -875,6 +875,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 	return err;
 }
 
+//解析userspace传送过来的报文及元数据
 int ovs_flow_key_extract_userspace(struct net *net, const struct nlattr *attr,
 				   struct sk_buff *skb,
 				   struct sw_flow_key *key, bool log)
@@ -888,6 +889,7 @@ int ovs_flow_key_extract_userspace(struct net *net, const struct nlattr *attr,
 		return -EINVAL;
 
 	/* Extract metadata from netlink attributes. */
+	//解析元数据
 	err = ovs_nla_get_flow_metadata(net, a, attrs, key, log);
 	if (err)
 		return err;
@@ -902,6 +904,7 @@ int ovs_flow_key_extract_userspace(struct net *net, const struct nlattr *attr,
 	 */
 
 	skb->protocol = key->eth.type;
+	//报文解析
 	err = key_extract(skb, key);
 	if (err)
 		return err;

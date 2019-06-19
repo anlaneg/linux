@@ -567,10 +567,12 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	bool log = !a[OVS_PACKET_ATTR_PROBE];
 
 	err = -EINVAL;
+	//packet,key,actions必须存在
 	if (!a[OVS_PACKET_ATTR_PACKET] || !a[OVS_PACKET_ATTR_KEY] ||
 	    !a[OVS_PACKET_ATTR_ACTIONS])
 		goto err;
 
+	//取报文大小，并填充skb
 	len = nla_len(a[OVS_PACKET_ATTR_PACKET]);
 	packet = __dev_alloc_skb(NET_IP_ALIGN + len, GFP_KERNEL);
 	err = -ENOMEM;
@@ -593,13 +595,15 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	if (IS_ERR(flow))
 		goto err_kfree_skb;
 
+	//解析报文及元数据
 	err = ovs_flow_key_extract_userspace(net, a[OVS_PACKET_ATTR_KEY],
 					     packet, &flow->key, log);
 	if (err)
 		goto err_flow_free;
 
+	//转换action
 	err = ovs_nla_copy_actions(net, a[OVS_PACKET_ATTR_ACTIONS],
-				   &flow->key, &acts, log);
+				   &flow->key, &acts/*出参，转换后action*/, log);
 	if (err)
 		goto err_flow_free;
 
@@ -613,6 +617,7 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	if (!dp)
 		goto err_unlock;
 
+	//取报文对应的inport
 	input_vport = ovs_vport_rcu(dp, flow->key.phy.in_port);
 	if (!input_vport)
 		input_vport = ovs_vport_rcu(dp, OVSP_LOCAL);
@@ -620,11 +625,13 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	if (!input_vport)
 		goto err_unlock;
 
+	//设置报文归属的dev
 	packet->dev = input_vport->dev;
 	OVS_CB(packet)->input_vport = input_vport;
 	sf_acts = rcu_dereference(flow->sf_acts);
 
 	local_bh_disable();
+	//针对此报文执行action
 	err = ovs_execute_actions(dp, packet, sf_acts, &flow->key);
 	local_bh_enable();
 	rcu_read_unlock();
@@ -650,6 +657,7 @@ static const struct nla_policy packet_policy[OVS_PACKET_ATTR_MAX + 1] = {
 	[OVS_PACKET_ATTR_MRU] = { .type = NLA_U16 },
 };
 
+//处理用户态发送下来的报文及action
 static const struct genl_ops dp_packet_genl_ops[] = {
 	{ .cmd = OVS_PACKET_CMD_EXECUTE,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,

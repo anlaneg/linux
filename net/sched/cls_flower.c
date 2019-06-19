@@ -131,12 +131,15 @@ static void fl_mask_update_range(struct fl_flow_mask *mask)
 	size_t size = sizeof(mask->key);
 	size_t i, first = 0, last;
 
+	//正向遍历找到起始range起始位置
 	for (i = 0; i < size; i++) {
 		if (bytes[i]) {
 			first = i;
 			break;
 		}
 	}
+
+	//反向遍历找到终止range位置
 	last = first;
 	for (i = size - 1; i != first; i--) {
 		if (bytes[i]) {
@@ -144,6 +147,8 @@ static void fl_mask_update_range(struct fl_flow_mask *mask)
 			break;
 		}
 	}
+
+	//记录起始及终止位置
 	mask->range.start = rounddown(first, sizeof(long));
 	mask->range.end = roundup(last + 1, sizeof(long));
 }
@@ -157,6 +162,7 @@ static void *fl_key_get_start(struct fl_flow_key *key,
 static void fl_set_masked_key(struct fl_flow_key *mkey, struct fl_flow_key *key,
 			      struct fl_flow_mask *mask)
 {
+	//依据mask确定key的有效起始位置及终止位置
 	const long *lkey = fl_key_get_start(key, mask);
 	const long *lmask = fl_key_get_start(&mask->key, mask);
 	long *lmkey = fl_key_get_start(mkey, mask);
@@ -403,12 +409,14 @@ static void fl_hw_destroy_filter(struct tcf_proto *tp, struct cls_fl_filter *f,
 		rtnl_unlock();
 }
 
+//替换硬件中的filter
 static int fl_hw_replace_filter(struct tcf_proto *tp,
 				struct cls_fl_filter *f, bool rtnl_held,
 				struct netlink_ext_ack *extack)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
 	struct tc_cls_flower_offload cls_flower = {};
+	//取出tp所属的block
 	struct tcf_block *block = tp->chain->block;
 	bool skip_sw = tc_skip_sw(f->flags);
 	int err = 0;
@@ -416,6 +424,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 	if (!rtnl_held)
 		rtnl_lock();
 
+	//准备统一的规则格式下发给硬件
 	cls_flower.rule = flow_rule_alloc(tcf_exts_num_actions(&f->exts));
 	if (!cls_flower.rule) {
 		err = -ENOMEM;
@@ -425,11 +434,13 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 	tc_cls_common_offload_init(&cls_flower.common, tp, f->flags, extack);
 	cls_flower.command = TC_CLSFLOWER_REPLACE;
 	cls_flower.cookie = (unsigned long) f;
+	//转换flow match,直接复用f中的数据
 	cls_flower.rule->match.dissector = &f->mask->dissector;
 	cls_flower.rule->match.mask = &f->mask->key;
 	cls_flower.rule->match.key = &f->mkey;
 	cls_flower.classid = f->res.classid;
 
+	//转换flow action到class flower对应的action
 	err = tc_setup_flow_action(&cls_flower.rule->action, &f->exts);
 	if (err) {
 		kfree(cls_flower.rule);
@@ -440,6 +451,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 		goto errout;
 	}
 
+	//知会硬件offload flower
 	err = tc_setup_cb_call(block, TC_SETUP_CLSFLOWER, &cls_flower, skip_sw);
 	kfree(cls_flower.rule);
 
@@ -504,6 +516,7 @@ static void __fl_put(struct cls_fl_filter *f)
 		__fl_destroy_filter(f);
 }
 
+//给定handle查找filter
 static struct cls_fl_filter *__fl_get(struct cls_fl_head *head, u32 handle)
 {
 	struct cls_fl_filter *f;
@@ -1429,6 +1442,7 @@ errout_cleanup:
 	return ret;
 }
 
+//解析流的match及action
 static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 			struct cls_fl_filter *f, struct fl_flow_mask *mask,
 			unsigned long base, struct nlattr **tb,
@@ -1453,11 +1467,12 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 			rtnl_unlock();
 	}
 
-	//解析key,mask
+	//解析flower规则中的key,mask
 	err = fl_set_key(net, tb, &f->key, &mask->key, extack);
 	if (err)
 		return err;
 
+	//确定mask的起始终止位置
 	fl_mask_update_range(mask);
 	fl_set_masked_key(&f->mkey, &f->key, mask);
 
@@ -1491,10 +1506,10 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 	return 0;
 }
 
-static int fl_change(struct net *net, struct sk_buff *in_skb,
+static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报文*/,
 		     struct tcf_proto *tp, unsigned long base,
-		     u32 handle, struct nlattr **tca,
-		     void **arg, bool ovr, bool rtnl_held,
+		     u32 handle/*规则对应的handle*/, struct nlattr **tca/*netlink消息*/,
+		     void **arg/*旧规则*/, bool ovr, bool rtnl_held,
 		     struct netlink_ext_ack *extack)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
@@ -1505,6 +1520,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	bool in_ht;
 	int err;
 
+	//filter均存在options中
 	if (!tca[TCA_OPTIONS]) {
 		err = -EINVAL;
 		goto errout_fold;
@@ -1522,12 +1538,13 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		goto errout_mask_alloc;
 	}
 
-	//解析选项
+	//解析flower规则
 	err = nla_parse_nested_deprecated(tb, TCA_FLOWER_MAX,
 					  tca[TCA_OPTIONS], fl_policy, NULL);
 	if (err < 0)
 		goto errout_tb;
 
+	//规则handle不相等，报错
 	if (fold && handle && fold->handle != handle) {
 		err = -EINVAL;
 		goto errout_tb;
@@ -1541,11 +1558,12 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	INIT_LIST_HEAD(&fnew->hw_list);
 	refcount_set(&fnew->refcnt, 1);
 
+	//初始化action
 	err = tcf_exts_init(&fnew->exts, net, TCA_FLOWER_ACT, 0);
 	if (err < 0)
 		goto errout;
 
-	//设置流的下发方式（不下发至硬件/不下发至软件）
+	//解析流的下发方式（不下发至硬件/不下发至软件）
 	if (tb[TCA_FLOWER_FLAGS]) {
 		fnew->flags = nla_get_u32(tb[TCA_FLOWER_FLAGS]);
 
@@ -1570,12 +1588,13 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 		goto errout_mask;
 
 	if (!tc_skip_hw(fnew->flags)) {
-		//按要求下发给HW
+		//按要求flower需要下发给HW
 		err = fl_hw_replace_filter(tp, fnew, rtnl_held, extack);
 		if (err)
 			goto errout_ht;
 	}
 
+	//标记规则未下载到硬件
 	if (!tc_in_hw(fnew->flags))
 		fnew->flags |= TCA_CLS_FLAGS_NOT_IN_HW;
 
@@ -1590,6 +1609,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb,
 	}
 
 	if (fold) {
+		//移除掉旧的规则
 		/* Fold filter was deleted concurrently. Retry lookup. */
 		if (fold->deleted) {
 			err = -EAGAIN;
@@ -2432,7 +2452,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.destroy	= fl_destroy,
 	.get		= fl_get,
 	.put		= fl_put,
-	//添加flower规则，向硬件下发
+	//添加flower规则，并触发向硬件下发
 	.change		= fl_change,
 	.delete		= fl_delete,
 	.walk		= fl_walk,

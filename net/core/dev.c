@@ -3529,6 +3529,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 				 struct netdev_queue *txq)
 {
 	spinlock_t *root_lock = qdisc_lock(q);
+	/*记录需要释放的报文*/
 	struct sk_buff *to_free = NULL;
 	bool contended;
 	int rc;
@@ -3554,6 +3555,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 			qdisc_run(q);
 		}
 
+		/*释放掉需要free的报文*/
 		if (unlikely(to_free))
 			kfree_skb_list(to_free);
 		return rc;

@@ -87,17 +87,21 @@ static bool actions_may_change_flow(const struct nlattr *actions)
 }
 
 static void update_range(struct sw_flow_match *match,
-			 size_t offset/*自match的offset位置开始*/, size_t size/*长度为size*/, bool is_mask)
+			 size_t offset/*feild在sw_flow_key的位置开始*/,
+			 size_t size/*feild占用的字节数*/, bool is_mask/*feild是否指mask*/)
 {
 	struct sw_flow_key_range *range;
+	//取字段起始位置，终止位置（向上向下取整）
 	size_t start = rounddown(offset, sizeof(long));
 	size_t end = roundup(offset + size, sizeof(long));
 
+	//确定要更新哪个range
 	if (!is_mask)
 		range = &match->range;
 	else
 		range = &match->mask->range;
 
+	//首次range更新
 	if (range->start == range->end) {
 		//初始化start,end
 		range->start = start;
@@ -115,11 +119,14 @@ static void update_range(struct sw_flow_match *match,
 
 #define SW_FLOW_KEY_PUT(match, field/*字段名称*/, value/*字段取值*/, is_mask/*是否设置mask*/) \
 	do { \
+		/*更新range记录有效位置*/\
 		update_range(match, offsetof(struct sw_flow_key, field),    \
 			     sizeof((match)->key->field), is_mask);	    \
 		if (is_mask)						    \
+			/*如果是mask,填充mask中field对应的value*/\
 			(match)->mask->key.field = value;		    \
 		else							    \
+			/*如果是key,填充key中field对应的value*/\
 			(match)->key->field = value;		            \
 	} while (0)
 
@@ -661,6 +668,7 @@ static int erspan_tun_opt_from_nlattr(const struct nlattr *a,
 	return 0;
 }
 
+//解析并填充match的tunnel
 static int ip_tun_from_nlattr(const struct nlattr *attr,
 			      struct sw_flow_match *match, bool is_mask,
 			      bool log)
@@ -1152,14 +1160,16 @@ static int parse_eth_type_from_nlattrs(struct sw_flow_match *match,
 	return 0;
 }
 
+//解析元数据
 static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
-				 u64 *attrs, const struct nlattr **a,
-				 bool is_mask, bool log)
+				 u64 *attrs/*掩码，指示a中包含有哪些字段*/, const struct nlattr **a,
+				 bool is_mask/*是否在解析mask*/, bool log)
 {
 	u8 mac_proto = MAC_PROTO_ETHERNET;
 
 	//填充match
 	if (*attrs & (1 << OVS_KEY_ATTR_DP_HASH)) {
+		//ovs_flow_hash
 		u32 hash_val = nla_get_u32(a[OVS_KEY_ATTR_DP_HASH]);
 
 		SW_FLOW_KEY_PUT(match, ovs_flow_hash, hash_val, is_mask);
@@ -1167,6 +1177,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 	}
 
 	if (*attrs & (1 << OVS_KEY_ATTR_RECIRC_ID)) {
+		//recirc_id
 		u32 recirc_id = nla_get_u32(a[OVS_KEY_ATTR_RECIRC_ID]);
 
 		SW_FLOW_KEY_PUT(match, recirc_id, recirc_id, is_mask);
@@ -1180,6 +1191,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 	}
 
 	if (*attrs & (1 << OVS_KEY_ATTR_IN_PORT)) {
+		//填充in_port
 		u32 in_port = nla_get_u32(a[OVS_KEY_ATTR_IN_PORT]);
 
 		if (is_mask) {
@@ -1193,6 +1205,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 		SW_FLOW_KEY_PUT(match, phy.in_port, in_port, is_mask);
 		*attrs &= ~(1 << OVS_KEY_ATTR_IN_PORT);
 	} else if (!is_mask) {
+		//用户示指定inport,定义为DP_MAX_PORTS
 		SW_FLOW_KEY_PUT(match, phy.in_port, DP_MAX_PORTS, is_mask);
 	}
 
@@ -1203,6 +1216,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 		*attrs &= ~(1 << OVS_KEY_ATTR_SKB_MARK);
 	}
 	if (*attrs & (1 << OVS_KEY_ATTR_TUNNEL)) {
+		//解析填充tunnel
 		if (ip_tun_from_nlattr(a[OVS_KEY_ATTR_TUNNEL], match,
 				       is_mask, log) < 0)
 			return -EINVAL;
@@ -1211,6 +1225,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 
 	if (*attrs & (1 << OVS_KEY_ATTR_CT_STATE) &&
 	    ovs_ct_verify(net, OVS_KEY_ATTR_CT_STATE)) {
+		//填充ct_state
 		u32 ct_state = nla_get_u32(a[OVS_KEY_ATTR_CT_STATE]);
 
 		if (ct_state & ~CT_SUPPORTED_MASK) {
@@ -1224,6 +1239,7 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 	}
 	if (*attrs & (1 << OVS_KEY_ATTR_CT_ZONE) &&
 	    ovs_ct_verify(net, OVS_KEY_ATTR_CT_ZONE)) {
+		//ct_zone
 		u16 ct_zone = nla_get_u16(a[OVS_KEY_ATTR_CT_ZONE]);
 
 		SW_FLOW_KEY_PUT(match, ct_zone, ct_zone, is_mask);
@@ -1245,6 +1261,8 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 				   sizeof(*cl), is_mask);
 		*attrs &= ~(1ULL << OVS_KEY_ATTR_CT_LABELS);
 	}
+
+	//v4元组原始情况
 	if (*attrs & (1ULL << OVS_KEY_ATTR_CT_ORIG_TUPLE_IPV4)) {
 		const struct ovs_key_ct_tuple_ipv4 *ct;
 
@@ -1257,6 +1275,8 @@ static int metadata_from_nlattrs(struct net *net, struct sw_flow_match *match,
 		SW_FLOW_KEY_PUT(match, ct_orig_proto, ct->ipv4_proto, is_mask);
 		*attrs &= ~(1ULL << OVS_KEY_ATTR_CT_ORIG_TUPLE_IPV4);
 	}
+
+	//v6元组原始情况
 	if (*attrs & (1ULL << OVS_KEY_ATTR_CT_ORIG_TUPLE_IPV6)) {
 		const struct ovs_key_ct_tuple_ipv6 *ct;
 
@@ -1924,7 +1944,7 @@ u32 ovs_nla_get_ufid_flags(const struct nlattr *attr)
  *
  * This must be called before the packet key fields are filled in 'key'.
  */
-
+//解析元数据
 int ovs_nla_get_flow_metadata(struct net *net,
 			      const struct nlattr *a[OVS_KEY_ATTR_MAX + 1],
 			      u64 attrs, struct sw_flow_key *key, bool log)
@@ -2954,6 +2974,7 @@ static int validate_and_copy_check_pkt_len(struct net *net,
 	return 0;
 }
 
+//完成acton复制
 static int copy_action(const struct nlattr *from,
 		       struct sw_flow_actions **sfa, bool log)
 {
@@ -2968,6 +2989,7 @@ static int copy_action(const struct nlattr *from,
 	return 0;
 }
 
+//解析并校验用户态传入的acton
 static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 				  const struct sw_flow_key *key,
 				  struct sw_flow_actions **sfa,
@@ -3006,6 +3028,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		int type = nla_type(a);
 		bool skip_copy;
 
+		//长度及类型校验
 		if (type > OVS_ACTION_ATTR_MAX ||
 		    (action_lens[type] != nla_len(a) &&
 		     action_lens[type] != (u32)-1))
@@ -3023,6 +3046,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			break;
 
 		case OVS_ACTION_ATTR_OUTPUT:
+			//校验output
 			if (nla_get_u32(a) >= DP_MAX_PORTS)
 				return -EINVAL;
 			break;
@@ -3219,6 +3243,8 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			OVS_NLERR(log, "Unknown Action type %d", type);
 			return -EINVAL;
 		}
+
+		//校验完成，处理acton copy
 		if (!skip_copy) {
 			err = copy_action(a, sfa, log);
 			if (err)
@@ -3233,17 +3259,20 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 }
 
 /* 'key' must be the masked key. */
+//action 转换
 int ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			 const struct sw_flow_key *key,
 			 struct sw_flow_actions **sfa, bool log)
 {
 	int err;
 
+	//申请action存放空间
 	*sfa = nla_alloc_flow_actions(min(nla_len(attr), MAX_ACTIONS_BUFSIZE));
 	if (IS_ERR(*sfa))
 		return PTR_ERR(*sfa);
 
 	(*sfa)->orig_len = nla_len(attr);
+	//解析并校验用户态传入的acton
 	err = __ovs_nla_copy_actions(net, attr, key, sfa, key->eth.type,
 				     key->eth.vlan.tci, log);
 	if (err)
