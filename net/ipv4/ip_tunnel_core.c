@@ -80,9 +80,12 @@ void iptunnel_xmit(struct sock *sk, struct rtable *rt, struct sk_buff *skb,
 
 	//ip层向外发送
 	err = ip_local_out(net, sk, skb);
-	if (unlikely(net_xmit_eval(err)))
-		pkt_len = 0;
-	iptunnel_xmit_stats(dev, pkt_len);
+
+	if (dev) {
+		if (unlikely(net_xmit_eval(err)))
+			pkt_len = 0;
+		iptunnel_xmit_stats(dev, pkt_len);
+	}
 }
 EXPORT_SYMBOL_GPL(iptunnel_xmit);
 

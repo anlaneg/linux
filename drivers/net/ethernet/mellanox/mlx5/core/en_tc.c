@@ -2824,9 +2824,6 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 	if (!flow_action_has_entries(flow_action))
 		return -EINVAL;
 
-	attr->in_rep = rpriv->rep;
-	attr->in_mdev = priv->mdev;
-
 	//遍历所有action
 	flow_action_for_each(i, act, flow_action) {
 		switch (act->id) {
