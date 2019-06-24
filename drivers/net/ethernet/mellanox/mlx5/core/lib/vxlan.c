@@ -49,7 +49,7 @@ struct mlx5_vxlan {
 struct mlx5_vxlan_port {
 	struct hlist_node hlist;
 	atomic_t refcount;
-	u16 udp_port;
+	u16 udp_port;//vxlan端口号
 };
 
 static inline u8 mlx5_vxlan_max_udp_ports(struct mlx5_core_dev *mdev)
@@ -79,6 +79,7 @@ static int mlx5_vxlan_core_del_port_cmd(struct mlx5_core_dev *mdev, u16 port)
 	return mlx5_cmd_exec(mdev, in, sizeof(in), out, sizeof(out));
 }
 
+//查看port是否已被包含在vxlan->htable中
 static struct mlx5_vxlan_port*
 mlx5_vxlan_lookup_port_locked(struct mlx5_vxlan *vxlan, u16 port)
 {

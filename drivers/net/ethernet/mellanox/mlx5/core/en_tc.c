@@ -987,16 +987,19 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_max_prio_chain;
 	}
 
+	//遍历需要forward的所有vport
 	for (out_index = 0; out_index < MLX5_MAX_FLOW_FWD_VPORTS; out_index++) {
 		int mirred_ifindex;
 
+		//跳过不需要encap的port
 		if (!(attr->dests[out_index].flags & MLX5_ESW_DEST_ENCAP))
 			continue;
 
+		//取出需要output的out_dev
 		mirred_ifindex = parse_attr->mirred_ifindex[out_index];
 		out_dev = __dev_get_by_index(dev_net(priv->netdev),
 					     mirred_ifindex);
-		err = mlx5e_attach_encap(priv, flow, out_dev, out_index,
+		err = mlx5e_attach_encap(priv, flow/*规则*/, out_dev/*对应的出接口*/, out_index/*output编号*/,
 					 extack, &encap_dev, &encap_valid);
 		if (err)
 			goto err_attach_encap;
@@ -2595,7 +2598,7 @@ static int parse_tc_nic_actions(struct mlx5e_priv *priv,
 
 struct encap_key {
 	struct ip_tunnel_key *ip_tun_key;
-	int tunnel_type;
+	int tunnel_type;//隧道类型
 };
 
 static inline int cmp_encap_info(struct encap_key *a,
@@ -2647,6 +2650,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	int err = 0;
 
 	parse_attr = attr->parse_attr;
+	//为mirred_dev准备的tunnel参数
 	tun_info = &parse_attr->tun_info[out_index];
 	family = ip_tunnel_info_af(tun_info);
 	key.ip_tun_key = &tun_info->key;
@@ -2654,6 +2658,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 
 	hash_key = hash_encap_info(&key);
 
+	//遍历esw->offloads.encap_tbl表，查看是否有此tunnel配置
 	hash_for_each_possible_rcu(esw->offloads.encap_tbl, e,
 				   encap_hlist, hash_key) {
 		e_key.ip_tun_key = &e->tun_info.key;
@@ -2666,8 +2671,10 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 
 	/* must verify if encap is valid or not */
 	if (found)
+		//发现已有tunnel,attach 此flow
 		goto attach_flow;
 
+	//未发现此tunnel，创建它
 	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (!e)
 		return -ENOMEM;
@@ -3211,6 +3218,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
+	//将解析好的内容添加进fdb
 	err = mlx5e_tc_add_fdb_flow(priv, flow, extack);
 	if (err) {
 		if (!(err == -ENETUNREACH && mlx5_lag_is_multipath(in_mdev)))

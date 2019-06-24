@@ -210,6 +210,7 @@ ip_tunnel_dst_cache_usable(const struct sk_buff *skb,
 	return true;
 }
 
+//ipv4的tunnel还是ipv6的tunnel
 static inline unsigned short ip_tunnel_info_af(const struct ip_tunnel_info
 					       *tun_info)
 {

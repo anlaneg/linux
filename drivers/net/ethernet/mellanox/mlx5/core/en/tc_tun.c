@@ -87,6 +87,7 @@ static int mlx5e_route_lookup_ipv4(struct mlx5e_priv *priv,
 
 	if (!(*out_ttl))
 		*out_ttl = ip4_dst_hoplimit(&rt->dst);
+	//查询邻居表项
 	n = dst_neigh_lookup(&rt->dst, &fl4->daddr);
 	ip_rt_put(rt);
 	if (!n)
@@ -142,36 +143,46 @@ static int mlx5e_route_lookup_ipv6(struct mlx5e_priv *priv,
 	return 0;
 }
 
+//构造对应的udp,vxlan头（udp srcport,length,checksum字段未填充）
 static int mlx5e_gen_vxlan_header(char buf[], struct ip_tunnel_key *tun_key)
 {
+	//vxlan id号
 	__be32 tun_id = tunnel_id_to_key32(tun_key->tun_id);
 	struct udphdr *udp = (struct udphdr *)(buf);
 	struct vxlanhdr *vxh = (struct vxlanhdr *)
 			       ((char *)udp + sizeof(struct udphdr));
 
+	//udp协议的srcport,length,checksum字段此处不填充（封装时填充）
 	udp->dest = tun_key->tp_dst;
+
+	//完成vxlan头部填充
 	vxh->vx_flags = VXLAN_HF_VNI;
 	vxh->vx_vni = vxlan_vni_field(tun_id);
 
 	return 0;
 }
 
+//构造并填充gre报文
 static int mlx5e_gen_gre_header(char buf[], struct ip_tunnel_key *tun_key)
 {
+	//gre对应的key
 	__be32 tun_id = tunnel_id_to_key32(tun_key->tun_id);
 	int hdr_len;
 	struct gre_base_hdr *greh = (struct gre_base_hdr *)(buf);
 
 	/* the HW does not calculate GRE csum or sequences */
+	//当前硬件不支持对checksum,seq进行填充
 	if (tun_key->tun_flags & (TUNNEL_CSUM | TUNNEL_SEQ))
 		return -EOPNOTSUPP;
 
+	//内部为以太帧
 	greh->protocol = htons(ETH_P_TEB);
 
 	/* GRE key */
 	hdr_len = gre_calc_hlen(tun_key->tun_flags);
 	greh->flags = gre_tnl_flags_to_gre_flags(tun_key->tun_flags);
 	if (tun_key->tun_flags & TUNNEL_KEY) {
+		//填充key
 		__be32 *ptr = (__be32 *)(((u8 *)greh) + hdr_len - 4);
 
 		*ptr = tun_id;
@@ -180,16 +191,19 @@ static int mlx5e_gen_gre_header(char buf[], struct ip_tunnel_key *tun_key)
 	return 0;
 }
 
-static int mlx5e_gen_ip_tunnel_header(char buf[], __u8 *ip_proto,
+//按协议填充隧道报文模板（部分字段由于未开始封装，故不填充）
+static int mlx5e_gen_ip_tunnel_header(char buf[], __u8 *ip_proto/*出参，ip层使用的协议号*/,
 				      struct mlx5e_encap_entry *e)
 {
 	int err = 0;
 	struct ip_tunnel_key *key = &e->tun_info.key;
 
 	if (e->tunnel_type == MLX5E_TC_TUNNEL_TYPE_VXLAN) {
+		//采用vxlan封装时，ip层协议为udp
 		*ip_proto = IPPROTO_UDP;
 		err = mlx5e_gen_vxlan_header(buf, key);
 	} else if  (e->tunnel_type == MLX5E_TC_TUNNEL_TYPE_GRETAP) {
+		//采用gre封装时，ip层协议为gre
 		*ip_proto = IPPROTO_GRE;
 		err = mlx5e_gen_gre_header(buf, key);
 	} else {
@@ -208,9 +222,12 @@ static char *gen_eth_tnl_hdr(char *buf, struct net_device *dev,
 	struct ethhdr *eth = (struct ethhdr *)buf;
 	char *ip;
 
+	//目的mac填充，下一跳地址或者隧道对端目的mac
 	ether_addr_copy(eth->h_dest, e->h_dest);
+	//源mac填充，对应设备的源mac
 	ether_addr_copy(eth->h_source, dev->dev_addr);
 	if (is_vlan_dev(dev)) {
+		//如果dev属于vlan设备，需要添加相应的vlan头
 		struct vlan_hdr *vlan = (struct vlan_hdr *)
 					((char *)eth + ETH_HLEN);
 		ip = (char *)vlan + VLAN_HLEN;
@@ -222,6 +239,7 @@ static char *gen_eth_tnl_hdr(char *buf, struct net_device *dev,
 		ip = (char *)eth + ETH_HLEN;
 	}
 
+	//返回ip头部
 	return ip;
 }
 
@@ -241,14 +259,15 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	int err;
 
 	/* add the IP fields */
+	//vxlan对应的目的ip及其源ip
 	fl4.flowi4_tos = tun_key->tos;
 	fl4.daddr = tun_key->u.ipv4.dst;
 	fl4.saddr = tun_key->u.ipv4.src;
 	ttl = tun_key->ttl;
 
 	//执行路由查询
-	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev, &route_dev,
-				      &fl4, &n, &ttl);
+	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev/*出接口设备*/, &route_dev,
+				      &fl4, &n/*下一跳对应的领居表项*/, &ttl);
 	if (err)
 		return err;
 
@@ -263,6 +282,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 		return -EOPNOTSUPP;
 	}
 
+	//申请encap报文头部模板
 	encap_header = kzalloc(ipv4_encap_size, GFP_KERNEL);
 	if (!encap_header)
 		return -ENOMEM;
@@ -287,14 +307,16 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 
 	read_lock_bh(&n->lock);
 	nud_state = n->nud_state;
-	ether_addr_copy(e->h_dest, n->ha);
+	ether_addr_copy(e->h_dest, n->ha);//设置下一跳对应的目的mac
 	read_unlock_bh(&n->lock);
 
 	/* add ethernet header */
+	//生成以太头，上层为ip协议
 	ip = (struct iphdr *)gen_eth_tnl_hdr(encap_header, route_dev, e,
 					     ETH_P_IP);
 
 	/* add ip header */
+	//vxlan封装对应的外层ip头部（此checksum,total_len,id,frag_off数据需要encap时填充)
 	ip->tos = tun_key->tos;
 	ip->version = 0x4;
 	ip->ihl = 0x5;
@@ -303,6 +325,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	ip->saddr = fl4.saddr;
 
 	/* add tunneling protocol header */
+	//添加对应的隧道报文模板，填充ip层协议字段
 	err = mlx5e_gen_ip_tunnel_header((char *)ip + sizeof(struct iphdr),
 					 &ip->protocol, e);
 	if (err)
@@ -457,6 +480,7 @@ out:
 	return err;
 }
 
+//取隧道设备对应的类型
 int mlx5e_tc_tun_get_type(struct net_device *tunnel_dev)
 {
 	if (netif_is_vxlan(tunnel_dev))
@@ -491,8 +515,10 @@ int mlx5e_tc_tun_init_encap_attr(struct net_device *tunnel_dev,
 	e->tunnel_type = mlx5e_tc_tun_get_type(tunnel_dev);
 
 	if (e->tunnel_type == MLX5E_TC_TUNNEL_TYPE_VXLAN) {
+		//处理vxlan类型的encap
 		int dst_port =  be16_to_cpu(e->tun_info.key.tp_dst);
 
+		//vxlan对应的目的port未被注册
 		if (!mlx5_vxlan_lookup_port(priv->mdev->vxlan, dst_port)) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "vxlan udp dport was not registered with the HW");
