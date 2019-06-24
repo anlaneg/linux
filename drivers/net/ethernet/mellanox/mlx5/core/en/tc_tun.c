@@ -246,6 +246,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	fl4.saddr = tun_key->u.ipv4.src;
 	ttl = tun_key->ttl;
 
+	//执行路由查询
 	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev, &route_dev,
 				      &fl4, &n, &ttl);
 	if (err)

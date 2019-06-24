@@ -8094,6 +8094,7 @@ int dev_get_port_parent_id(struct net_device *dev,
 	struct list_head *iter;
 	int err;
 
+	//采用cb获取ppid
 	if (ops->ndo_get_port_parent_id) {
 		err = ops->ndo_get_port_parent_id(dev, ppid);
 		if (err != -EOPNOTSUPP)

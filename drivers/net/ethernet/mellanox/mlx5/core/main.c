@@ -1542,8 +1542,10 @@ void mlx5_recover_device(struct mlx5_core_dev *dev)
 		mlx5_pci_resume(dev->pdev);
 }
 
+//定义pci driver
 static struct pci_driver mlx5_core_driver = {
 	.name           = DRIVER_NAME,
+	//支持的设备id
 	.id_table       = mlx5_core_pci_table,
 	.probe          = init_one,
 	.remove         = remove_one,
@@ -1573,6 +1575,7 @@ static int __init init(void)
 	mlx5_fpga_ipsec_build_fs_cmds();
 	mlx5_register_debugfs();
 
+	//注册pci驱动
 	err = pci_register_driver(&mlx5_core_driver);
 	if (err)
 		goto err_debug;

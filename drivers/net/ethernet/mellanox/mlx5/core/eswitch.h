@@ -201,8 +201,8 @@ struct mlx5_eswitch {
 	struct mlx5_eswitch_fdb fdb_table;
 	struct hlist_head       mc_table[MLX5_L2_ADDR_HASH_SIZE];
 	struct workqueue_struct *work_queue;
-	struct mlx5_vport       *vports;
-	int                     total_vports;
+	struct mlx5_vport       *vports;//vport数组
+	int                     total_vports;//vport总数
 	int                     enabled_vports;
 	/* Synchronize between vport change events
 	 * and async SRIOV admin state changes
@@ -404,6 +404,7 @@ static inline u16 mlx5_eswitch_manager_vport(struct mlx5_core_dev *dev)
 		MLX5_VPORT_ECPF : MLX5_VPORT_PF;
 }
 
+//uplink口的index
 static inline int mlx5_eswitch_uplink_idx(struct mlx5_eswitch *esw)
 {
 	/* Uplink always locate at the last element of the array.*/

@@ -2258,11 +2258,13 @@ static bool csum_offload_supported(struct mlx5e_priv *priv,
 				   u32 update_flags,
 				   struct netlink_ext_ack *extack)
 {
+	//目前支持ipv4hdr,tcp,udp的checksum更新
 	u32 prot_flags = TCA_CSUM_UPDATE_FLAG_IPV4HDR | TCA_CSUM_UPDATE_FLAG_TCP |
 			 TCA_CSUM_UPDATE_FLAG_UDP;
 
 	/*  The HW recalcs checksums only if re-writing headers */
 	if (!(action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR)) {
+		//仅执行了头部修改，才能启用checksum重算
 		NL_SET_ERR_MSG_MOD(extack,
 				   "TC csum action is only offloaded with pedit");
 		netdev_warn(priv->netdev,
@@ -2271,6 +2273,7 @@ static bool csum_offload_supported(struct mlx5e_priv *priv,
 	}
 
 	if (update_flags & ~prot_flags) {
+		//遇到了不支持的checksum更新
 		NL_SET_ERR_MSG_MOD(extack,
 				   "can't offload TC csum action for some header/s");
 		netdev_warn(priv->netdev,
@@ -2677,6 +2680,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	INIT_LIST_HEAD(&e->flows);
 
 	if (family == AF_INET)
+		//产生ipv4头部
 		err = mlx5e_tc_tun_create_header_ipv4(priv, mirred_dev, e);
 	else if (family == AF_INET6)
 		err = mlx5e_tc_tun_create_header_ipv6(priv, mirred_dev, e);
@@ -2718,6 +2722,7 @@ static int parse_tc_vlan_action(struct mlx5e_priv *priv,
 	switch (act->id) {
 	case FLOW_ACTION_VLAN_POP:
 		if (vlan_idx) {
+			//非0，vlan_idx已存在，直接pop
 			if (!mlx5_eswitch_vlan_actions_supported(priv->mdev,
 								 MLX5_FS_VLAN_DEPTH))
 				return -EOPNOTSUPP;
@@ -2728,6 +2733,7 @@ static int parse_tc_vlan_action(struct mlx5e_priv *priv,
 		}
 		break;
 	case FLOW_ACTION_VLAN_PUSH:
+		//设置指定vlan_idx的vlan信息（用于push)
 		attr->vlan_vid[vlan_idx] = act->vlan.vid;
 		attr->vlan_prio[vlan_idx] = act->vlan.prio;
 		attr->vlan_proto[vlan_idx] = act->vlan.proto;
@@ -2764,6 +2770,7 @@ static int add_vlan_push_action(struct mlx5e_priv *priv,
 				u32 *action)
 {
 	struct net_device *vlan_dev = *out_dev;
+	//添加vlan
 	struct flow_action_entry vlan_act = {
 		.id = FLOW_ACTION_VLAN_PUSH,
 		.vlan.vid = vlan_dev_vlan_id(vlan_dev),
@@ -2834,6 +2841,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			break;
 		case FLOW_ACTION_MANGLE:
 		case FLOW_ACTION_ADD:
+			//转换为头部修改
 			err = parse_tc_pedit_action(priv, act, MLX5_FLOW_NAMESPACE_FDB,
 						    parse_attr, hdrs, extack);
 			if (err)
@@ -2843,6 +2851,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			attr->split_count = attr->out_count;
 			break;
 		case FLOW_ACTION_CSUM:
+			//checksum不需要下发，执行检查
 			if (csum_offload_supported(priv, action,
 						   act->csum_flags, extack))
 				break;
@@ -2874,6 +2883,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 
 			action |= MLX5_FLOW_CONTEXT_ACTION_FWD_DEST |
 				  MLX5_FLOW_CONTEXT_ACTION_COUNT;
+			//out_dev与netdev属同一设备
 			if (netdev_port_same_parent_id(priv->netdev,
 						       out_dev) ||
 			    is_merged_eswitch_dev(priv, out_dev)) {
@@ -2887,6 +2897,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 					out_dev = uplink_dev;
 
 				if (is_vlan_dev(out_dev)) {
+					//出接口有vlan,添加vlan
 					err = add_vlan_push_action(priv, attr,
 								   &out_dev,
 								   &action);
@@ -3189,11 +3200,13 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 				 priv, parse_attr,
 				 f, in_rep, in_mdev);
 
+	//解析flower对应的key,mask
 	err = parse_cls_flower(flow->priv, flow, &parse_attr->spec,
 			       f, filter_dev);
 	if (err)
 		goto err_free;
 
+	//解析action
 	err = parse_tc_fdb_actions(priv, &rule->action, flow, extack);
 	if (err)
 		goto err_free;

@@ -1347,7 +1347,7 @@ static void esw_offloads_unload_all_reps(struct mlx5_eswitch *esw, int nvports)
 }
 
 static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
-				   struct mlx5_eswitch_rep *rep, u8 rep_type)
+				   struct mlx5_eswitch_rep *rep, u8 rep_type/*rep口类型*/)
 {
 	int err = 0;
 
@@ -1439,7 +1439,7 @@ err_reps:
 }
 
 static int __load_reps_all_vport(struct mlx5_eswitch *esw, int nvports,
-				 u8 rep_type)
+				 u8 rep_type/*接口类型*/)
 {
 	int err;
 
@@ -2210,6 +2210,7 @@ void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
 	struct mlx5_eswitch_rep *rep;
 	int i;
 
+	//设置esw上所有rep口
 	mlx5_esw_for_all_reps(esw, i, rep) {
 		rep_if = &rep->rep_if[rep_type];
 		rep_if->load   = __rep_if->load;

@@ -17,7 +17,7 @@ enum {
 };
 
 enum {
-	REP_ETH,
+	REP_ETH,//以太网设备
 	REP_IB,
 	NUM_REP_TYPES,
 };

@@ -1202,7 +1202,7 @@ static int mlx5e_rep_setup_tc_cb(enum tc_setup_type type, void *type_data,
 	}
 }
 
-//执行rep口 block offload
+//执行repersent口 block offload
 static int mlx5e_rep_setup_tc_block(struct net_device *dev,
 				    struct tc_block_offload *f)
 {
@@ -1329,8 +1329,10 @@ static int mlx5e_uplink_rep_set_vf_vlan(struct net_device *dev, int vf, u16 vlan
 static const struct net_device_ops mlx5e_netdev_ops_vf_rep = {
 	.ndo_open                = mlx5e_vf_rep_open,
 	.ndo_stop                = mlx5e_vf_rep_close,
+	//报文发送
 	.ndo_start_xmit          = mlx5e_xmit,
 	.ndo_get_phys_port_name  = mlx5e_rep_get_phys_port_name,
+	//tc offload处理
 	.ndo_setup_tc            = mlx5e_rep_setup_tc,
 	.ndo_get_stats64         = mlx5e_vf_rep_get_stats,
 	.ndo_has_offload_stats	 = mlx5e_rep_has_offload_stats,
@@ -1362,6 +1364,7 @@ static const struct net_device_ops mlx5e_netdev_ops_uplink_rep = {
 	.ndo_set_features        = mlx5e_set_features,
 };
 
+//是否为repersent口
 bool mlx5e_eswitch_rep(struct net_device *netdev)
 {
 	if (netdev->netdev_ops == &mlx5e_netdev_ops_vf_rep ||
