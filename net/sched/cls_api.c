@@ -2043,15 +2043,15 @@ static void tfilter_put(struct tcf_proto *tp, void *fh)
 }
 
 //netlink收到tc新加filter的命令后，此函数将被调用
-static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
-			  struct netlink_ext_ack *extack)
+static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n/*netlink消息头*/,
+			  struct netlink_ext_ack *extack/*出参，ack时使用*/)
 {
 	struct net *net = sock_net(skb->sk);
 	struct nlattr *tca[TCA_MAX + 1];
 	struct tcmsg *t;
 	u32 protocol;
 	u32 prio;
-	bool prio_allocate;
+	bool prio_allocate/*prio是否自动申请的*/;
 	u32 parent;
 	u32 chain_index;
 	struct Qdisc *q = NULL;
@@ -2072,12 +2072,13 @@ replay:
 	tp_created = 0;
 
 	//消息解析及校验
-	err = nlmsg_parse_deprecated(n, sizeof(*t), tca, TCA_MAX,
+	err = nlmsg_parse_deprecated(n, sizeof(*t)/*消息头部大小*/, tca/*按属性指向属性数组*/, TCA_MAX,
 				     rtm_tca_policy, extack);
 	if (err < 0)
 		return err;
 
 	t = nlmsg_data(n);
+
 	//提取filter对应报文类型及优先级
 	protocol = TC_H_MIN(t->tcm_info);
 	prio = TC_H_MAJ(t->tcm_info);
@@ -2092,6 +2093,7 @@ replay:
 		 * we allocate one.
 		 */
 		if (n->nlmsg_flags & NLM_F_CREATE) {
+			//构造一个prio
 			prio = TC_H_MAKE(0x80000000U, 0U);
 			prio_allocate = true;
 		} else {

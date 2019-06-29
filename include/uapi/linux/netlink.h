@@ -45,8 +45,9 @@ struct sockaddr_nl {
 
 //netlink消息头
 struct nlmsghdr {
+	//netlink消息通用头部
 	__u32		nlmsg_len;	/* Length of message including header */
-	__u16		nlmsg_type;	/* Message content */ //消息的family type
+	__u16		nlmsg_type;	/* Message content */ //消息的type
 	__u16		nlmsg_flags;	/* Additional flags */
 	__u32		nlmsg_seq;	/* Sequence number */
 	__u32		nlmsg_pid;	/* Sending process port ID */
@@ -54,8 +55,10 @@ struct nlmsghdr {
 
 /* Flags values */
 
+//请求类消息
 #define NLM_F_REQUEST		0x01	/* It is request message. 	*/
 #define NLM_F_MULTI		0x02	/* Multipart message, terminated by NLMSG_DONE */
+//消息需要执行明确响应
 #define NLM_F_ACK		0x04	/* Reply with ack, with zero or error code */
 #define NLM_F_ECHO		0x08	/* Echo this request 		*/
 #define NLM_F_DUMP_INTR		0x10	/* Dump was inconsistent due to sequence change */
@@ -107,6 +110,7 @@ struct nlmsghdr {
 #define NLMSG_DONE		0x3	/* End of a dump	*/
 #define NLMSG_OVERRUN		0x4	/* Data lost		*/
 
+//小于此值的消息为netlink控制类消息（预留）
 #define NLMSG_MIN_TYPE		0x10	/* < 0x10: reserved control messages */
 
 struct nlmsgerr {

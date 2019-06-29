@@ -58,10 +58,10 @@
 #define RTNL_SLAVE_MAX_TYPE	36
 
 struct rtnl_link {
-	rtnl_doit_func		doit;
+	rtnl_doit_func		doit;/*消息处理回调*/
 	rtnl_dumpit_func	dumpit;
-	struct module		*owner;
-	unsigned int		flags;
+	struct module		*owner;/*消息处理对应的module*/
+	unsigned int		flags;/*注册时传入的flag*/
 	struct rcu_head		rcu;
 };
 
@@ -139,8 +139,13 @@ bool lockdep_rtnl_is_held(void)
 EXPORT_SYMBOL(lockdep_rtnl_is_held);
 #endif /* #ifdef CONFIG_PROVE_LOCKING */
 
+//各protocol family对应的消息入口
+//rtnl_msg_handlers[protocol]为一个rtnl_link的数组指针，其大小由RTM_NR_MSGTYPES定义
+//对当需要处理某type的消息时，先由protocol获得相应的rtnl_link table,然后再由type映射到
+//对应的rtnl_link指针上，调用其对应的doit回调
 static struct rtnl_link *__rcu *rtnl_msg_handlers[RTNL_FAMILY_MAX + 1];
 
+//msgtype需要此函数映射，成为rtnl_link table的下标
 static inline int rtm_msgindex(int msgtype)
 {
 	int msgindex = msgtype - RTM_BASE;
@@ -155,7 +160,7 @@ static inline int rtm_msgindex(int msgtype)
 	return msgindex;
 }
 
-//返回指定协议，指定消息类型对应的rtnl_link
+//通过协议，消息类型获得对应的rtnl_link，看rtnl_msg_handlers说明
 static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 {
 	struct rtnl_link **tab;
@@ -165,6 +170,7 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 
 	tab = rcu_dereference_rtnl(rtnl_msg_handlers[protocol]);
 	if (!tab)
+		//如果protocol无对应的table,则使用protocol=PF_UNSPEC对应的tab
 		tab = rcu_dereference_rtnl(rtnl_msg_handlers[PF_UNSPEC]);
 
 	return tab[msgtype];
@@ -172,8 +178,8 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 
 //消息回调注册(doit 请求处理回调，dumpit 消息dump回调）
 static int rtnl_register_internal(struct module *owner,
-				  int protocol, int msgtype,
-				  rtnl_doit_func doit, rtnl_dumpit_func dumpit,
+				  int protocol, int msgtype/*消息类型*/,
+				  rtnl_doit_func doit/*消息处理函数*/, rtnl_dumpit_func dumpit,
 				  unsigned int flags)
 {
 	struct rtnl_link *link, *old;
@@ -182,12 +188,15 @@ static int rtnl_register_internal(struct module *owner,
 	int ret = -ENOBUFS;
 
 	BUG_ON(protocol < 0 || protocol > RTNL_FAMILY_MAX);
-	msgindex = rtm_msgindex(msgtype);//从消息类型映射为index准备注册消息回调
+	//从消息类型映射为index准备注册消息回调
+	msgindex = rtm_msgindex(msgtype);
 
 	rtnl_lock();
-	tab = rtnl_msg_handlers[protocol];//取各协议对应的tab
+
+	//取各协议对应的tab
+	tab = rtnl_msg_handlers[protocol];
 	if (tab == NULL) {
-		//此tab为空时，创建空表
+		//此protocol对应的tab为空时，初始化它
 		tab = kcalloc(RTM_NR_MSGTYPES, sizeof(void *), GFP_KERNEL);
 		if (!tab)
 			goto unlock;
@@ -199,10 +208,12 @@ static int rtnl_register_internal(struct module *owner,
 	//构造link并填充到tab的相应索引下（msgindex)
 	old = rtnl_dereference(tab[msgindex]);
 	if (old) {
+		//之前已有，需要更新，故先生成一个副本，再通过rcu使其生效
 		link = kmemdup(old, sizeof(*old), GFP_KERNEL);
 		if (!link)
 			goto unlock;
 	} else {
+		//之前没有，申请obj,通过rcu设置
 		link = kzalloc(sizeof(*link), GFP_KERNEL);
 		if (!link)
 			goto unlock;
@@ -275,7 +286,7 @@ void rtnl_register(int protocol, int msgtype,
 {
 	int err;
 
-	err = rtnl_register_internal(NULL, protocol, msgtype, doit, dumpit,
+	err = rtnl_register_internal(NULL/*无对应的module*/, protocol, msgtype, doit, dumpit,
 				     flags);
 	if (err)
 		pr_err("Unable to register rtnetlink message handler, "
@@ -289,6 +300,7 @@ void rtnl_register(int protocol, int msgtype,
  *
  * Returns 0 on success or a negative error code.
  */
+//解除对protocol,msgtype对应消息处理的注册
 int rtnl_unregister(int protocol, int msgtype)
 {
 	struct rtnl_link **tab, *link;
@@ -321,6 +333,7 @@ EXPORT_SYMBOL_GPL(rtnl_unregister);
  * Identical to calling rtnl_unregster() for all registered message types
  * of a certain protocol family.
  */
+//取消protocol所有类型消息的注册
 void rtnl_unregister_all(int protocol)
 {
 	struct rtnl_link **tab, *link;
@@ -5151,7 +5164,7 @@ out:
 
 /* Process one rtnetlink message. */
 
-static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
+static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息头部*/,
 			     struct netlink_ext_ack *extack)
 {
 	struct net *net = sock_net(skb->sk);
@@ -5171,6 +5184,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	type -= RTM_BASE;
 
 	/* All the messages must have at least 1 byte length */
+	//当前处理消息的要求负载为rtgenmsg类型，如果长度不足，则忽略
 	if (nlmsg_len(nlh) < sizeof(struct rtgenmsg))
 		return 0;
 
@@ -5181,6 +5195,8 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EPERM;
 
 	rcu_read_lock();
+
+	//kind为2的需要特殊对待
 	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
 		struct sock *rtnl;
 		rtnl_dumpit_func dumpit;
@@ -5224,6 +5240,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return err;
 	}
 
+	//通过family,type查找link
 	link = rtnl_get_link(family, type);
 	if (!link || !link->doit) {
 		family = PF_UNSPEC;
@@ -5234,6 +5251,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	owner = link->owner;
 	if (!try_module_get(owner)) {
+		//引用module失败
 		err = -EPROTONOSUPPORT;
 		goto out_unlock;
 	}
@@ -5243,13 +5261,14 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		doit = link->doit;
 		rcu_read_unlock();
 		if (doit)
-			//调用doit处理此消息
+			//解锁后，调用doit处理此消息
 			err = doit(skb, nlh, extack);
 		module_put(owner);
 		return err;
 	}
 	rcu_read_unlock();
 
+	//加rt锁的情况下执行回调调用
 	rtnl_lock();
 	link = rtnl_get_link(family, type);
 	if (link && link->doit)

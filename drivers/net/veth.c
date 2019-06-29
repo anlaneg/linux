@@ -253,6 +253,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	skb_tx_timestamp(skb);
+	//切换设备，完成peer收包
 	if (likely(veth_forward_skb(rcv, skb, rq, rcv_xdp) == NET_RX_SUCCESS)) {
 		if (!rcv_xdp) {
 			struct pcpu_lstats *stats = this_cpu_ptr(dev->lstats);
@@ -1127,6 +1128,7 @@ static const struct net_device_ops veth_netdev_ops = {
 	.ndo_init            = veth_dev_init,
 	.ndo_open            = veth_open,
 	.ndo_stop            = veth_close,
+	//veth发送
 	.ndo_start_xmit      = veth_xmit,
 	.ndo_get_stats64     = veth_get_stats64,
 	.ndo_set_rx_mode     = veth_set_multicast_list,

@@ -171,7 +171,7 @@ enum {
 	NLA_STRING,
 	NLA_FLAG,
 	NLA_MSECS,
-	NLA_NESTED,
+	NLA_NESTED,/*嵌套*/
 	NLA_NESTED_ARRAY,
 	NLA_NUL_STRING,
 	NLA_BINARY,
@@ -181,9 +181,9 @@ enum {
 	NLA_S64,
 	NLA_BITFIELD32,
 	NLA_REJECT,
-	NLA_EXACT_LEN,
-	NLA_EXACT_LEN_WARN,
-	NLA_MIN_LEN,
+	NLA_EXACT_LEN,/*有准确长度的属性*/
+	NLA_EXACT_LEN_WARN,/*有准确长度的属性，大于或小于对应length,将出错*/
+	NLA_MIN_LEN,/*len必须大于校验给出一个值*/
 	__NLA_TYPE_MAX,
 };
 
@@ -194,6 +194,7 @@ enum nla_policy_validation {
 	NLA_VALIDATE_RANGE,
 	NLA_VALIDATE_MIN,
 	NLA_VALIDATE_MAX,
+	//采用函数进行校验
 	NLA_VALIDATE_FUNCTION,
 };
 
@@ -289,13 +290,13 @@ enum nla_policy_validation {
  * };
  */
 struct nla_policy {
-	u8		type;
+	u8		type;//属性数据类型
 	u8		validation_type;
-	u16		len;
+	u16		len;//属性长度
 	union {
 		const void *validation_data;
 		struct {
-			s16 min, max;
+			s16 min, max;//取值范围校验
 		};
 		int (*validate)(const struct nlattr *attr,
 				struct netlink_ext_ack *extack);
@@ -648,17 +649,19 @@ static inline int nla_parse_deprecated_strict(struct nlattr **tb, int maxtype,
  *
  * See nla_parse()
  */
-static inline int __nlmsg_parse(const struct nlmsghdr *nlh, int hdrlen,
+static inline int __nlmsg_parse(const struct nlmsghdr *nlh/*消息头*/, int hdrlen,
 				struct nlattr *tb[], int maxtype,
 				const struct nla_policy *policy,
 				unsigned int validate,
 				struct netlink_ext_ack *extack)
 {
+	//长度校验
 	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen)) {
 		NL_SET_ERR_MSG(extack, "Invalid header length");
 		return -EINVAL;
 	}
 
+	//校验netlink消息，将内容存入到tb中，执行policy校验
 	return __nla_parse(tb, maxtype, nlmsg_attrdata(nlh, hdrlen),
 			   nlmsg_attrlen(nlh, hdrlen), policy, validate,
 			   extack);
@@ -696,7 +699,7 @@ static inline int nlmsg_parse(const struct nlmsghdr *nlh, int hdrlen,
  * See nla_parse_deprecated()
  */
 static inline int nlmsg_parse_deprecated(const struct nlmsghdr *nlh, int hdrlen,
-					 struct nlattr *tb[], int maxtype,
+					 struct nlattr *tb[]/*出参，解析各属性*/, int maxtype/*属性最大类型*/,
 					 const struct nla_policy *policy,
 					 struct netlink_ext_ack *extack)
 {

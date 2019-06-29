@@ -21,6 +21,7 @@
  * to the user that the command is sending invalid data and needs to be fixed.
  */
 static const u8 nla_attr_len[NLA_TYPE_MAX+1] = {
+		//各数据类型占用内存的字节大小
 	[NLA_U8]	= sizeof(u8),
 	[NLA_U16]	= sizeof(u16),
 	[NLA_U32]	= sizeof(u32),
@@ -154,6 +155,7 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	return 0;
 }
 
+//netlink类消息校验
 static int validate_nla(const struct nlattr *nla, int maxtype,
 			const struct nla_policy *policy, unsigned int validate,
 			struct netlink_ext_ack *extack)
@@ -175,7 +177,8 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 	BUG_ON(pt->type > NLA_TYPE_MAX);
 
 	//校验属性的长度
-	if ((nla_attr_len[pt->type] && attrlen != nla_attr_len[pt->type]) ||
+	if ((nla_attr_len[pt->type]/*此类型有目标的长度*/ && attrlen != nla_attr_len[pt->type]/*实际报文的大小与约定的长度不符*/) ||
+			/*此类型为严格长度属性，其长度必须与pt->len相等*/
 	    (pt->type == NLA_EXACT_LEN_WARN && attrlen != pt->len)) {
 		pr_warn_ratelimited("netlink: '%s': attribute type %d has an invalid length.\n",
 				    current->comm, type);
@@ -186,15 +189,18 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		}
 	}
 
+	//执行嵌套校验
 	if (validate & NL_VALIDATE_NESTED) {
 		if ((pt->type == NLA_NESTED || pt->type == NLA_NESTED_ARRAY) &&
 		    !(nla->nla_type & NLA_F_NESTED)) {
+			//无嵌套标记
 			NL_SET_ERR_MSG_ATTR(extack, nla,
 					    "NLA_F_NESTED is missing");
 			return -EINVAL;
 		}
 		if (pt->type != NLA_NESTED && pt->type != NLA_NESTED_ARRAY &&
 		    pt->type != NLA_UNSPEC && (nla->nla_type & NLA_F_NESTED)) {
+			//不支持嵌套标记，但message打了标记
 			NL_SET_ERR_MSG_ATTR(extack, nla,
 					    "NLA_F_NESTED not expected");
 			return -EINVAL;
@@ -203,12 +209,13 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 
 	switch (pt->type) {
 	case NLA_EXACT_LEN:
+		//精确长度校验
 		if (attrlen != pt->len)
 			goto out_err;
 		break;
 
 	case NLA_REJECT:
-		//不容许存在的属性
+		//需要reject掉的属性，如果有extack,则填充错误信息到extack
 		if (extack && pt->validation_data) {
 			NL_SET_BAD_ATTR(extack, nla);
 			extack->_msg = pt->validation_data;
@@ -218,6 +225,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		goto out_err;
 
 	case NLA_FLAG:
+		//flag时，长度为0
 		if (attrlen > 0)
 			goto out_err;
 		break;
@@ -232,6 +240,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		break;
 
 	case NLA_NUL_STRING:
+		//可空字符串类型校验
 		if (pt->len)
 			minlen = min_t(int, attrlen, pt->len + 1);
 		else
@@ -244,6 +253,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		/* fall through */
 
 	case NLA_STRING:
+		//不可空字符串
 		if (attrlen < 1)
 			goto out_err;
 
@@ -316,11 +326,13 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		}
 		/* fall through */
 	case NLA_MIN_LEN:
+		//校验必须大于pt->len
 		if (attrlen < pt->len)
 			goto out_err;
 		break;
 
 	default:
+		//校验最小长度
 		if (pt->len)
 			minlen = pt->len;
 		else
@@ -338,11 +350,13 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 	case NLA_VALIDATE_RANGE:
 	case NLA_VALIDATE_MIN:
 	case NLA_VALIDATE_MAX:
+		//取值范围校验
 		err = nla_validate_int_range(pt, nla, extack);
 		if (err)
 			return err;
 		break;
 	case NLA_VALIDATE_FUNCTION:
+		//调用函数完成校验
 		if (pt->validate) {
 			err = pt->validate(nla, extack);
 			if (err)
@@ -357,17 +371,17 @@ out_err:
 	return err;
 }
 
-static int __nla_validate_parse(const struct nlattr *head, int len, int maxtype,
+static int __nla_validate_parse(const struct nlattr *head/*属性起始指针*/, int len/*属性长度*/, int maxtype/*属性最大数*/,
 				const struct nla_policy *policy,
 				unsigned int validate,
 				struct netlink_ext_ack *extack,
-				struct nlattr **tb)
+				struct nlattr **tb/*出参，记录解析的各attr*/)
 {
 	const struct nlattr *nla;
 	int rem;
 
 	if (tb)
-		//tb被清零
+		//tb清零
 		memset(tb, 0, sizeof(struct nlattr *) * (maxtype + 1));
 
 	//遍历netlink属性，解析key,value
@@ -383,6 +397,7 @@ static int __nla_validate_parse(const struct nlattr *head, int len, int maxtype,
 			}
 			continue;
 		}
+
 		if (policy) {
 			//有policy,采用policy检查字段
 			int err = validate_nla(nla, maxtype, policy,
@@ -397,7 +412,7 @@ static int __nla_validate_parse(const struct nlattr *head, int len, int maxtype,
 			tb[type] = (struct nlattr *)nla;
 	}
 
-	//未使用完所有数据，bug
+	//未使用完所有数据，报错
 	if (unlikely(rem > 0)) {
 		pr_warn_ratelimited("netlink: %d bytes leftover after parsing attributes in process `%s'.\n",
 				    rem, current->comm);

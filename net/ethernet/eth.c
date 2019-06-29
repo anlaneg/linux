@@ -164,6 +164,7 @@ __be16 eth_type_trans(struct sk_buff *skb, struct net_device *dev)
 	const unsigned short *sap;
 	const struct ethhdr *eth;
 
+	//设置skb所属的设备
 	skb->dev = dev;
 	skb_reset_mac_header(skb);//定义当前data位置为以太头位置
 

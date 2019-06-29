@@ -2485,7 +2485,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 }
 EXPORT_SYMBOL(netlink_ack);
 
-//netlink收取消息并处理
+//简单解析并校验skb的netlink头部信息，调用cb处理message(支持一个skb中包含多个message)
 int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 						   struct nlmsghdr *,
 						   struct netlink_ext_ack *))
@@ -2498,29 +2498,36 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 		int msglen;
 
 		memset(&extack, 0, sizeof(extack));
-		nlh = nlmsg_hdr(skb);//取netlink消息头
+
+		//取netlink消息头
+		nlh = nlmsg_hdr(skb);
 		err = 0;
 
+		//消息长度有误，1。消息头部过小，2。消息头部大于skb，直接忽略
 		if (nlh->nlmsg_len < NLMSG_HDRLEN || skb->len < nlh->nlmsg_len)
-			return 0;//错误的消息，直接忽略
+			return 0;
 
 		/* Only requests are handled by the kernel */
+		//kernel仅处理request类型消息
 		if (!(nlh->nlmsg_flags & NLM_F_REQUEST))
-			goto ack;//kernel仅处理request
+			goto ack;
 
 		/* Skip control messages */
 		if (nlh->nlmsg_type < NLMSG_MIN_TYPE)
 			goto ack;
+
 		//调用回调处理消息
-		err = cb(skb, nlh, &extack);
+		err = cb(skb, nlh/*此netlink消息对应的头部*/, &extack);
 		if (err == -EINTR)
 			goto skip;
 
 ack:
+		//响应有ack标记的消息
 		if (nlh->nlmsg_flags & NLM_F_ACK || err)
 			netlink_ack(skb, nlh, err, &extack);
 
 skip:
+		//跳过此消息（容许一个skb中包含多个message)
 		msglen = NLMSG_ALIGN(nlh->nlmsg_len);
 		if (msglen > skb->len)
 			msglen = skb->len;
