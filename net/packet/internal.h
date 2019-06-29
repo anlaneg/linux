@@ -129,6 +129,7 @@ struct packet_sock {
 	unsigned int		tp_hdrlen;
 	unsigned int		tp_reserve;
 	unsigned int		tp_tstamp;
+	struct completion	skb_completion;
 	struct net_device __rcu	*cached_dev;
 	int			(*xmit)(struct sk_buff *skb);//报文发送函数
 	struct packet_type	prot_hook ____cacheline_aligned_in_smp;
