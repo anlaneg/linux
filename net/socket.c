@@ -1219,11 +1219,12 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
  */
 
 //创建sock,指定sock->type
-int sock_create_lite(int family, int type, int protocol, struct socket **res)
+int sock_create_lite(int family, int type, int protocol, struct socket **res/*出参，返回的socket*/)
 {
 	int err;
 	struct socket *sock = NULL;
 
+	//创建前hook点
 	err = security_socket_create(family, type, protocol, 1);
 	if (err)
 		goto out;
@@ -1237,6 +1238,8 @@ int sock_create_lite(int family, int type, int protocol, struct socket **res)
 
 	//指定socket类型，例如SOCK_DGRAM
 	sock->type = type;
+
+	//创建后hook点
 	err = security_socket_post_create(sock, family, type, protocol, 1);
 	if (err)
 		goto out_release;

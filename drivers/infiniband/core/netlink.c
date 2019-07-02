@@ -112,6 +112,7 @@ void rdma_nl_register(unsigned int index,
 	}
 
 	if (rdma_nl_types[index].cb_table) {
+		//己注册
 		mutex_unlock(&rdma_nl_mutex);
 		WARN(true,
 		     "The %u index is already registered in RDMA netlink\n",
@@ -119,6 +120,7 @@ void rdma_nl_register(unsigned int index,
 		return;
 	}
 
+	//注册netlink消息到cb_table
 	rdma_nl_types[index].cb_table = cb_table;
 	mutex_unlock(&rdma_nl_mutex);
 }
@@ -164,6 +166,7 @@ static int rdma_nl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (!is_nl_valid(index, op))
 		return -EINVAL;
 
+	//由index找到cb_table
 	cb_table = rdma_nl_types[index].cb_table;
 
 	if ((cb_table[op].flags & RDMA_NL_ADMIN_PERM) &&
@@ -189,6 +192,7 @@ static int rdma_nl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
+	//执行消息处理
 	if (cb_table[op].doit)
 		return cb_table[op].doit(skb, nlh, extack);
 
@@ -251,6 +255,7 @@ skip:
 	return 0;
 }
 
+//处理rdma的netlink消息
 static void rdma_nl_rcv(struct sk_buff *skb)
 {
 	mutex_lock(&rdma_nl_mutex);
@@ -282,8 +287,10 @@ int rdma_nl_multicast(struct sk_buff *skb, unsigned int group, gfp_t flags)
 }
 EXPORT_SYMBOL(rdma_nl_multicast);
 
+//rdma netlink消息配置
 int __init rdma_nl_init(void)
 {
+	//负责netlink消息处息
 	struct netlink_kernel_cfg cfg = {
 		.input	= rdma_nl_rcv,
 	};

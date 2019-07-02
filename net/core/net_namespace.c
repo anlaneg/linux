@@ -127,6 +127,7 @@ static int ops_init(const struct pernet_operations *ops, struct net *net)
 			goto cleanup;
 	}
 	err = 0;
+	//采用ops->init初始化指定net namepsace
 	if (ops->init)
 		err = ops->init(net);
 	if (!err)
@@ -1085,7 +1086,8 @@ static int __register_pernet_operations(struct list_head *list,
 	int error;
 	LIST_HEAD(net_exit_list);
 
-	list_add_tail(&ops->list, list);//将ops加入到list中
+	//将ops加入到list中
+	list_add_tail(&ops->list, list);
 	if (ops->init || (ops->id && ops->size)) {
 		/* We held write locked pernet_ops_rwsem, and parallel
 		 * setup_net() and cleanup_net() are not possible.
@@ -1155,7 +1157,7 @@ static int register_pernet_operations(struct list_head *list,
 	int error;
 
 	if (ops->id) {
-		//为其分配id号
+		//为ops分配id号
 		error = ida_alloc_min(&net_generic_ids, MIN_PERNET_OPS_ID,
 				GFP_KERNEL);
 		if (error < 0)

@@ -347,8 +347,9 @@ struct sock {
 #define sk_daddr		__sk_common.skc_daddr
 //本端源ip地址
 #define sk_rcv_saddr		__sk_common.skc_rcv_saddr
-//family字段，例如AF_INET
+//sock family字段，例如AF_INET
 #define sk_family		__sk_common.skc_family
+//sock状态字段，例如tcp_close
 #define sk_state		__sk_common.skc_state
 //地址reuse
 #define sk_reuse		__sk_common.skc_reuse
@@ -516,6 +517,7 @@ struct sock {
 							struct net_device *dev,
 							struct sk_buff *skb);
 #endif
+	//sock释放函数
 	void                    (*sk_destruct)(struct sock *sk);
 	struct sock_reuseport __rcu	*sk_reuseport_cb;
 #ifdef CONFIG_BPF_SYSCALL
@@ -2535,9 +2537,11 @@ void sk_get_meminfo(const struct sock *sk, u32 *meminfo);
  * not depend upon such differences.
  */
 #define _SK_MEM_PACKETS		256
+//skb实际占用内存
 #define _SK_MEM_OVERHEAD	SKB_TRUESIZE(256)
+//socket写内存最大长度 >= (256+x)*256 即占用空间大于64k
 #define SK_WMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
-//>= 256*256 即占用空间大于64k
+//socket读内存最大长度 >= (256+x)*256 即占用空间大于64k
 #define SK_RMEM_MAX		(_SK_MEM_OVERHEAD * _SK_MEM_PACKETS)
 
 extern __u32 sysctl_wmem_max;

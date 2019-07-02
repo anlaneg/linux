@@ -1606,6 +1606,7 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		sk = kmalloc(prot->obj_size, priority);
 
 	if (sk != NULL) {
+		//socket alloc hook点调用
 		if (security_sk_alloc(sk, family, priority))
 			goto out_free;
 
@@ -1657,6 +1658,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 {
 	struct sock *sk;
 
+	//申请sock空间
 	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
 	if (sk) {
 		sk->sk_family = family;
