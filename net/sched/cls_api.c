@@ -961,6 +961,7 @@ struct tcf_net {
 
 static unsigned int tcf_net_id;
 
+//block信息插入，分配block_index
 static int tcf_block_insert(struct tcf_block *block, struct net *net,
 			    struct netlink_ext_ack *extack)
 {
@@ -974,9 +975,11 @@ static int tcf_block_insert(struct tcf_block *block, struct net *net,
 	spin_unlock(&tn->idr_lock);
 	idr_preload_end();
 
+	/*分配index*/
 	return err;
 }
 
+//block信息移除
 static void tcf_block_remove(struct tcf_block *block, struct net *net)
 {
 	struct tcf_net *tn = net_generic(net, tcf_net_id);
@@ -986,6 +989,7 @@ static void tcf_block_remove(struct tcf_block *block, struct net *net)
 	spin_unlock(&tn->idr_lock);
 }
 
+//创建block
 static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 					  u32 block_index,
 					  struct netlink_ext_ack *extack)
@@ -1346,6 +1350,7 @@ static struct tcf_block *tcf_block_find(struct net *net, struct Qdisc **q,
 	if (err)
 		goto errout_qdisc;
 
+	//通过对应的分类找到相应的block
 	block = __tcf_block_find(net, *q, *cl, ifindex, block_index, extack);
 	if (IS_ERR(block)) {
 		err = PTR_ERR(block);
@@ -2240,7 +2245,7 @@ replay:
 	}
 
 	//新增规则或者改变规则(例如flower对应的cls_fl_ops）
-	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh/*旧规则*/,
+	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh/*入参旧规则，出参新规则*/,
 			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
 			      rtnl_held, extack);
 	if (err == 0) {
@@ -2903,11 +2908,13 @@ replay:
 	parent = t->tcm_parent;
 	cl = 0;
 
+	//先确认chain所属的block
 	block = tcf_block_find(net, &q, &parent, &cl,
 			       t->tcm_ifindex, t->tcm_block_index, extack);
 	if (IS_ERR(block))
 		return PTR_ERR(block);
 
+	//取出chain_index
 	chain_index = tca[TCA_CHAIN] ? nla_get_u32(tca[TCA_CHAIN]) : 0;
 	if (chain_index > TC_ACT_EXT_VAL_MASK) {
 		NL_SET_ERR_MSG(extack, "Specified chain index exceeds upper limit");
@@ -3127,7 +3134,7 @@ void tcf_exts_destroy(struct tcf_exts *exts)
 EXPORT_SYMBOL(tcf_exts_destroy);
 
 int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
-		      struct nlattr *rate_tlv, struct tcf_exts *exts, bool ovr,
+		      struct nlattr *rate_tlv, struct tcf_exts *exts/*规则对应的待填充action*/, bool ovr,
 		      bool rtnl_held, struct netlink_ext_ack *extack)
 {
 #ifdef CONFIG_NET_CLS_ACT
@@ -3151,8 +3158,8 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 
 			//解析并生成action
 			err = tcf_action_init(net, tp, tb[exts->action]/*要解析的action*/,
-					      rate_tlv, NULL/*name置为NULL*/, ovr, TCA_ACT_BIND,
-					      exts->actions, &attr_size,
+					      rate_tlv, NULL/*name置为NULL，自tb中解析*/, ovr, TCA_ACT_BIND,
+					      exts->actions/*待填充的action*/, &attr_size,
 					      rtnl_held, extack);
 			if (err < 0)
 				return err;

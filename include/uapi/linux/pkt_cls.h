@@ -152,7 +152,7 @@ struct tc_cnt {
 };
 
 #define tc_gen \
-	__u32                 index; \
+	__u32                 index;/*action对应的index*/ \
 	__u32                 capab; \
 	int                   action; \
 	int                   refcnt; \
@@ -176,6 +176,7 @@ enum {
 /* tca flags definitions */
 #define TCA_CLS_FLAGS_SKIP_HW	(1 << 0) /* don't offload filter to HW */
 #define TCA_CLS_FLAGS_SKIP_SW	(1 << 1) /* don't use filter in SW */
+//filter已下发至硬件
 #define TCA_CLS_FLAGS_IN_HW	(1 << 2) /* filter is offloaded to HW */
 //filter未下载到硬件
 #define TCA_CLS_FLAGS_NOT_IN_HW (1 << 3) /* filter isn't offloaded to HW */
@@ -580,6 +581,7 @@ enum {
 	TCA_FLOWER_KEY_FLAGS_FRAG_IS_FIRST = (1 << 1),
 };
 
+//标记此mask会要求port range匹配
 #define TCA_FLOWER_MASK_FLAGS_RANGE	(1 << 0) /* Range-based match */
 
 /* Match-all classifier */

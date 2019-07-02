@@ -1045,6 +1045,8 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 	unsigned int words, prefix;
 
 	if (bytes <= 16)
+		//检查start起始的长度为bytes的数组中，取值为c的元素对应的指针
+		//如不存在，返回NULL
 		return check_bytes8(start, value, bytes);
 
 	value64 = value;

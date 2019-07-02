@@ -592,6 +592,7 @@ tcf_change_indev(struct net *net, struct nlattr *indev_tlv,
 		NL_SET_ERR_MSG(extack, "Interface name too long");
 		return -EINVAL;
 	}
+	//通过名称查找dev,返回dev->ifindex
 	dev = __dev_get_by_name(net, indev);
 	if (!dev)
 		return -ENODEV;

@@ -215,6 +215,7 @@ struct Qdisc_class_ops {
 	void			(*walk)(struct Qdisc *, struct qdisc_walker * arg);
 
 	/* Filter manipulation */
+	//通过不同的分类编号(arg)返回对应的block
 	struct tcf_block *	(*tcf_block)(struct Qdisc *sch,
 					     unsigned long arg,
 					     struct netlink_ext_ack *extack);
@@ -302,10 +303,11 @@ struct tcf_result {
 struct tcf_chain;
 
 struct tcf_proto_ops {
+	//用于挂接tcf_proto_base
 	struct list_head	head;
 	//分类器名称
 	char			kind[IFNAMSIZ];
-
+	//对报文进行分类处理，返回报文类别
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto *,
 					    struct tcf_result *);
@@ -356,10 +358,11 @@ enum tcf_proto_ops_flags {
 //此实现为通过protocol执行分类过滤
 struct tcf_proto {
 	/* Fast access part */
-	struct tcf_proto __rcu	*next;
+	struct tcf_proto __rcu	*next;//串在chain->filter_chain链上
 	void __rcu		*root;
 
 	/* called under RCU BH lock*/
+	//实现报文分类
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto *,
 					    struct tcf_result *);
@@ -368,6 +371,7 @@ struct tcf_proto {
 	/* All the rest */
 	u32			prio;
 	void			*data;
+	//操作集
 	const struct tcf_proto_ops	*ops;
 	struct tcf_chain	*chain;//tp所属的chain
 	/* Lock protects tcf_proto shared state and can be used by unlocked
@@ -404,7 +408,7 @@ struct tcf_chain {
 	bool explicitly_created;
 	bool flushing;
 	const struct tcf_proto_ops *tmplt_ops;
-	void *tmplt_priv;
+	void *tmplt_priv;//mask模板
 	struct rcu_head rcu;
 };
 
@@ -414,10 +418,10 @@ struct tcf_block {
 	 */
 	struct mutex lock;
 	struct list_head chain_list;//用于记录在此block下所有的struct tcf_chain
-	u32 index; /* block index for shared blocks */
+	u32 index; /* block index for shared blocks */ //对应的id
 	refcount_t refcnt;
-	struct net *net;
-	struct Qdisc *q;
+	struct net *net;//所属net
+	struct Qdisc *q;//所属的Qdisc
 	struct list_head cb_list;
 	struct list_head owner_list;
 	bool keep_dst;

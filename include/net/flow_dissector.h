@@ -12,8 +12,8 @@
  */
 struct flow_dissector_key_control {
 	u16	thoff;
-	u16	addr_type;
-	u32	flags;
+	u16	addr_type;//地址类型（ipv4,ipv6)
+	u32	flags;//分片标记
 };
 
 #define FLOW_DIS_IS_FRAGMENT	BIT(0)
@@ -35,8 +35,8 @@ enum flow_dissect_ret {
  * @ip_proto: Transport header protocol (eg. TCP/UDP)
  */
 struct flow_dissector_key_basic {
-	__be16	n_proto;//网络协议
-	u8	ip_proto;
+	__be16	n_proto;//网络层协议（ipv4,ipv6,arp...)
+	u8	ip_proto;//网络层协议号（tcp,udp,icmp...)
 	u8	padding;
 };
 
@@ -48,7 +48,7 @@ struct flow_dissector_key_vlan {
 	u16	vlan_id:12,
 		vlan_dei:1,
 		vlan_priority:3;
-	__be16	vlan_tpid;
+	__be16	vlan_tpid;//vlan ethertype
 };
 
 struct flow_dissector_key_mpls {
@@ -131,11 +131,11 @@ struct flow_dissector_key_addrs {
  *		tpa: Target hardware address
  */
 struct flow_dissector_key_arp {
-	__u32 sip;
-	__u32 tip;
-	__u8 op;
-	unsigned char sha[ETH_ALEN];
-	unsigned char tha[ETH_ALEN];
+	__u32 sip;//源ip
+	__u32 tip;//目标方ip
+	__u8 op;//操作符
+	unsigned char sha[ETH_ALEN];//发送方mac
+	unsigned char tha[ETH_ALEN];//目标方mac
 };
 
 /**
@@ -203,7 +203,9 @@ struct flow_dissector_key_ip {
 enum flow_dissector_key_id {
 	FLOW_DISSECTOR_KEY_CONTROL, /* struct flow_dissector_key_control */
 	FLOW_DISSECTOR_KEY_BASIC, /* struct flow_dissector_key_basic */
+	//ipv4类型地址
 	FLOW_DISSECTOR_KEY_IPV4_ADDRS, /* struct flow_dissector_key_ipv4_addrs */
+	//ipv6类型地址
 	FLOW_DISSECTOR_KEY_IPV6_ADDRS, /* struct flow_dissector_key_ipv6_addrs */
 	FLOW_DISSECTOR_KEY_PORTS, /* struct flow_dissector_key_ports */
 	FLOW_DISSECTOR_KEY_ICMP, /* struct flow_dissector_key_icmp */
@@ -235,13 +237,17 @@ enum flow_dissector_key_id {
 #define FLOW_DISSECTOR_F_STOP_AT_ENCAP		BIT(3)
 
 struct flow_dissector_key {
+	//字段id
 	enum flow_dissector_key_id key_id;
+	//字段在fl_flow_key中的offset
 	size_t offset; /* offset of struct flow_dissector_key_*
 			  in target the struct */
 };
 
 struct flow_dissector {
+	//每个字段一个bit,用于指明哪个字段出现过
 	unsigned int used_keys; /* each bit repesents presence of one key id */
+	//指明此字段在fl_flow_key中的offset
 	unsigned short int offset[FLOW_DISSECTOR_KEY_MAX];
 };
 

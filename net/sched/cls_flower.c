@@ -29,29 +29,39 @@
 struct fl_flow_key {
 	int	indev_ifindex;//入接口
 	struct flow_dissector_key_control control;
-	struct flow_dissector_key_control enc_control;
-	struct flow_dissector_key_basic basic;
-	struct flow_dissector_key_eth_addrs eth;
-	struct flow_dissector_key_vlan vlan;
-	struct flow_dissector_key_vlan cvlan;
+	struct flow_dissector_key_control enc_control;//隧道方式control
+	struct flow_dissector_key_basic basic;//协议号相关
+	struct flow_dissector_key_eth_addrs eth;//以太头
+	struct flow_dissector_key_vlan vlan;//外层vlan
+	struct flow_dissector_key_vlan cvlan;//内层vlan
 	union {
+		//源目的地址
 		struct flow_dissector_key_ipv4_addrs ipv4;
 		struct flow_dissector_key_ipv6_addrs ipv6;
 	};
+	//源目的端口
 	struct flow_dissector_key_ports tp;
+	//icmp type与code
 	struct flow_dissector_key_icmp icmp;
+	//arp协议
 	struct flow_dissector_key_arp arp;
+	//隧道key,src,dst地址
 	struct flow_dissector_key_keyid enc_key_id;
 	union {
 		struct flow_dissector_key_ipv4_addrs enc_ipv4;
 		struct flow_dissector_key_ipv6_addrs enc_ipv6;
 	};
+	//隧道方式tp配置
 	struct flow_dissector_key_ports enc_tp;
 	struct flow_dissector_key_mpls mpls;
+	//tcp标记位
 	struct flow_dissector_key_tcp tcp;
-	struct flow_dissector_key_ip ip;
+	struct flow_dissector_key_ip ip;//tos,ttl支持
+	//隧道填充时ttl,tos
 	struct flow_dissector_key_ip enc_ip;
+	//隧道相关的选项
 	struct flow_dissector_key_enc_opts enc_opts;
+	//支持port-range方式
 	struct flow_dissector_key_ports tp_min;
 	struct flow_dissector_key_ports tp_max;
 } __aligned(BITS_PER_LONG / 8); /* Ensure that we can do comparisons as longs. */
@@ -63,13 +73,16 @@ struct fl_flow_mask_range {
 
 struct fl_flow_mask {
 	struct fl_flow_key key;
+	//key中有效值的起始终止位置
 	struct fl_flow_mask_range range;
+	//mask上的标记，例如需要执行port range检查
 	u32 flags;
-	struct rhash_head ht_node;
-	struct rhashtable ht;
+	struct rhash_head ht_node;//用于插入cls_fl_head->ht
+	struct rhashtable ht;//用于挂接filter规则（同属于相同mask,用于查询)
 	struct rhashtable_params filter_ht_params;
+	//mask相关的各key的offset
 	struct flow_dissector dissector;
-	struct list_head filters;
+	struct list_head filters;//用于挂接filter规则（同属于相同的mask，用于遍历)
 	struct rcu_work rwork;
 	struct list_head list;
 	refcount_t refcnt;
@@ -83,24 +96,26 @@ struct fl_flow_tmplt {
 };
 
 struct cls_fl_head {
-	struct rhashtable ht;
+	struct rhashtable ht;//用于保存不同的mask(查询）
 	spinlock_t masks_lock; /* Protect masks list */
-	struct list_head masks;
+	struct list_head masks;//用于挂接不同mask（遍历）
 	struct list_head hw_filters;
 	struct rcu_work rwork;
 	struct idr handle_idr;
 };
 
 struct cls_fl_filter {
-	struct fl_flow_mask *mask;
+	struct fl_flow_mask *mask;//规则对应的mask
 	struct rhash_head ht_node;
-	struct fl_flow_key mkey;
+	struct fl_flow_key mkey;//配合mask生在的key
 	struct tcf_exts exts;
 	struct tcf_result res;
-	struct fl_flow_key key;
+	struct fl_flow_key key;//match的key
 	struct list_head list;
 	struct list_head hw_list;
+	//filter的标识，通过handle可以在ht中查询到filter
 	u32 handle;
+	//filter对应的标记，例如已下发至硬件
 	u32 flags;
 	u32 in_hw_count;
 	struct rcu_work rwork;
@@ -110,7 +125,7 @@ struct cls_fl_filter {
 	 * synchronization. Use atomic reference counter to be concurrency-safe.
 	 */
 	refcount_t refcnt;
-	bool deleted;
+	bool deleted;//标明规则已被删除
 };
 
 static const struct rhashtable_params mask_ht_params = {
@@ -125,6 +140,7 @@ static unsigned short int fl_mask_range(const struct fl_flow_mask *mask)
 	return mask->range.end - mask->range.start;
 }
 
+//确定mask有效的起始终止位置
 static void fl_mask_update_range(struct fl_flow_mask *mask)
 {
 	const u8 *bytes = (const u8 *) &mask->key;
@@ -159,6 +175,7 @@ static void *fl_key_get_start(struct fl_flow_key *key,
 	return (u8 *) key + mask->range.start;
 }
 
+//填充mkey,使mkey=key&mask
 static void fl_set_masked_key(struct fl_flow_key *mkey, struct fl_flow_key *key,
 			      struct fl_flow_mask *mask)
 {
@@ -168,6 +185,7 @@ static void fl_set_masked_key(struct fl_flow_key *mkey, struct fl_flow_key *key,
 	long *lmkey = fl_key_get_start(mkey, mask);
 	int i;
 
+	//填充mkey,使key&mask后给其赋值
 	for (i = 0; i < fl_mask_range(mask); i += sizeof(long))
 		*lmkey++ = *lkey++ & *lmask++;
 }
@@ -175,6 +193,7 @@ static void fl_set_masked_key(struct fl_flow_key *mkey, struct fl_flow_key *key,
 static bool fl_mask_fits_tmplt(struct fl_flow_tmplt *tmplt,
 			       struct fl_flow_mask *mask)
 {
+	//mask有效起始位置
 	const long *lmask = fl_key_get_start(&mask->key, mask);
 	const long *ltmplt;
 	int i;
@@ -184,6 +203,7 @@ static bool fl_mask_fits_tmplt(struct fl_flow_tmplt *tmplt,
 	ltmplt = fl_key_get_start(&tmplt->mask, mask);
 	for (i = 0; i < fl_mask_range(mask); i += sizeof(long)) {
 		if (~*ltmplt++ & *lmask++)
+			/*ltmplt中原没有某位,本次lmask要求此位，故返回false*/
 			return false;
 	}
 	return true;
@@ -397,6 +417,7 @@ static void fl_destroy_filter_work(struct work_struct *work)
 	__fl_destroy_filter(f);
 }
 
+//自硬件中移除指定规则
 static void fl_hw_destroy_filter(struct tcf_proto *tp, struct cls_fl_filter *f,
 				 bool rtnl_held, struct netlink_ext_ack *extack)
 {
@@ -738,15 +759,15 @@ geneve_opt_policy[TCA_FLOWER_KEY_ENC_OPT_GENEVE_MAX + 1] = {
 
 //解析tb,填充val,mask
 static void fl_set_key_val(struct nlattr **tb,
-			   void *val, int val_type,
-			   void *mask, int mask_type, int len/*val长度*/)
+			   void *val/*出参，指定val_type对应的值*/, int val_type,
+			   void *mask/*出参，指定mask_type对应的值*/, int mask_type, int len/*val长度*/)
 {
 	if (!tb[val_type])
 		return;
 	//自tb中提取val_type,填充val
 	memcpy(val, nla_data(tb[val_type]), len);
 	if (mask_type == TCA_FLOWER_UNSPEC || !tb[mask_type])
-		//仅支持全1的mask
+		//如mask_type未指定，或tb不包含mask_type,则仅支持全1的mask
 		memset(mask, 0xff, len);
 	else
 		//支持mask
@@ -756,6 +777,7 @@ static void fl_set_key_val(struct nlattr **tb,
 static int fl_set_key_port_range(struct nlattr **tb, struct fl_flow_key *key,
 				 struct fl_flow_key *mask)
 {
+	//srcport range或者dstport range填充
 	fl_set_key_val(tb, &key->tp_min.dst,
 		       TCA_FLOWER_KEY_PORT_DST_MIN, &mask->tp_min.dst,
 		       TCA_FLOWER_UNSPEC, sizeof(key->tp_min.dst));
@@ -813,6 +835,7 @@ static int fl_set_key_mpls(struct nlattr **tb,
 	return 0;
 }
 
+//填充vlan匹配信息
 static void fl_set_key_vlan(struct nlattr **tb,
 			    __be16 ethertype,
 			    int vlan_id_key, int vlan_prio_key,
@@ -848,6 +871,7 @@ static void fl_set_key_flag(u32 flower_key, u32 flower_mask,
 	}
 }
 
+//分片标记解析
 static int fl_set_key_flags(struct nlattr **tb,
 			    u32 *flags_key/*出参，解析出key*/, u32 *flags_mask/*出参，解析出mask*/)
 {
@@ -872,6 +896,7 @@ static int fl_set_key_flags(struct nlattr **tb,
 	return 0;
 }
 
+//填充支持的tos,ttl
 static void fl_set_key_ip(struct nlattr **tb, bool encap,
 			  struct flow_dissector_key_ip *key,
 			  struct flow_dissector_key_ip *mask)
@@ -992,6 +1017,7 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 		if (err)
 			return err;
 
+		//封装使用的opts
 		nla_opt_msk = nla_data(tb[TCA_FLOWER_KEY_ENC_OPTS_MASK]);
 		msk_depth = nla_len(tb[TCA_FLOWER_KEY_ENC_OPTS_MASK]);
 	}
@@ -1000,6 +1026,7 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 			  nla_len(tb[TCA_FLOWER_KEY_ENC_OPTS]), key_depth) {
 		switch (nla_type(nla_opt_key)) {
 		case TCA_FLOWER_KEY_ENC_OPTS_GENEVE:
+			//目前支持geneve封装选项
 			option_len = 0;
 			key->enc_opts.dst_opt_type = TUNNEL_GENEVE_OPT;
 			option_len = fl_set_geneve_opt(nla_opt_key, key,
@@ -1037,6 +1064,7 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 	return 0;
 }
 
+//解析并填充key,mask
 static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/,
 		      struct fl_flow_key *key/*出参，匹配key*/, struct fl_flow_key *mask/*出参，key对应的掩码*/,
 		      struct netlink_ext_ack *extack)
@@ -1044,6 +1072,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 	__be16 ethertype;
 	int ret = 0;
 #ifdef CONFIG_NET_CLS_IND
+	//如果指定indev,则匹配报文所属入接口
 	if (tb[TCA_FLOWER_INDEV]) {
 		int err = tcf_change_indev(net, tb[TCA_FLOWER_INDEV], extack);
 		if (err < 0)
@@ -1053,6 +1082,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 	}
 #endif
 
+	//填充目的mac,源mac及其mask
 	fl_set_key_val(tb, key->eth.dst, TCA_FLOWER_KEY_ETH_DST,
 		       mask->eth.dst, TCA_FLOWER_KEY_ETH_DST_MASK,
 		       sizeof(key->eth.dst));
@@ -1060,14 +1090,17 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 		       mask->eth.src, TCA_FLOWER_KEY_ETH_SRC_MASK,
 		       sizeof(key->eth.src));
 
+	//如指定以太type
 	if (tb[TCA_FLOWER_KEY_ETH_TYPE]) {
 		ethertype = nla_get_be16(tb[TCA_FLOWER_KEY_ETH_TYPE]);
 
 		if (eth_type_vlan(ethertype)) {
+			//遇见vlan的ethertype,设置vlanid,prior,及vlan_tpid
 			fl_set_key_vlan(tb, ethertype, TCA_FLOWER_KEY_VLAN_ID,
 					TCA_FLOWER_KEY_VLAN_PRIO, &key->vlan,
 					&mask->vlan);
 
+			//填充内层vlan
 			if (tb[TCA_FLOWER_KEY_VLAN_ETH_TYPE]) {
 				ethertype = nla_get_be16(tb[TCA_FLOWER_KEY_VLAN_ETH_TYPE]);
 				if (eth_type_vlan(ethertype)) {
@@ -1075,22 +1108,26 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 							TCA_FLOWER_KEY_CVLAN_ID,
 							TCA_FLOWER_KEY_CVLAN_PRIO,
 							&key->cvlan, &mask->cvlan);
+					//填充网络层协议
 					fl_set_key_val(tb, &key->basic.n_proto,
 						       TCA_FLOWER_KEY_CVLAN_ETH_TYPE,
 						       &mask->basic.n_proto,
 						       TCA_FLOWER_UNSPEC,
 						       sizeof(key->basic.n_proto));
 				} else {
+					//填充网络层协议
 					key->basic.n_proto = ethertype;
 					mask->basic.n_proto = cpu_to_be16(~0);
 				}
 			}
 		} else {
+			//填充网络层协议
 			key->basic.n_proto = ethertype;
 			mask->basic.n_proto = cpu_to_be16(~0);
 		}
 	}
 
+	//ipv4,ipv6协议填充处理
 	if (key->basic.n_proto == htons(ETH_P_IP) ||
 	    key->basic.n_proto == htons(ETH_P_IPV6)) {
 		fl_set_key_val(tb, &key->basic.ip_proto, TCA_FLOWER_KEY_IP_PROTO,
@@ -1100,6 +1137,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 	}
 
 	if (tb[TCA_FLOWER_KEY_IPV4_SRC] || tb[TCA_FLOWER_KEY_IPV4_DST]) {
+		//ipv4地址填充
 		key->control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		mask->control.addr_type = ~0;
 		fl_set_key_val(tb, &key->ipv4.src, TCA_FLOWER_KEY_IPV4_SRC,
@@ -1109,6 +1147,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       &mask->ipv4.dst, TCA_FLOWER_KEY_IPV4_DST_MASK,
 			       sizeof(key->ipv4.dst));
 	} else if (tb[TCA_FLOWER_KEY_IPV6_SRC] || tb[TCA_FLOWER_KEY_IPV6_DST]) {
+		//ipv6地址填充
 		key->control.addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		mask->control.addr_type = ~0;
 		fl_set_key_val(tb, &key->ipv6.src, TCA_FLOWER_KEY_IPV6_SRC,
@@ -1120,16 +1159,19 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 	}
 
 	if (key->basic.ip_proto == IPPROTO_TCP) {
+		//tcp端口
 		fl_set_key_val(tb, &key->tp.src, TCA_FLOWER_KEY_TCP_SRC,
 			       &mask->tp.src, TCA_FLOWER_KEY_TCP_SRC_MASK,
 			       sizeof(key->tp.src));
 		fl_set_key_val(tb, &key->tp.dst, TCA_FLOWER_KEY_TCP_DST,
 			       &mask->tp.dst, TCA_FLOWER_KEY_TCP_DST_MASK,
 			       sizeof(key->tp.dst));
+		//tcp标记位
 		fl_set_key_val(tb, &key->tcp.flags, TCA_FLOWER_KEY_TCP_FLAGS,
 			       &mask->tcp.flags, TCA_FLOWER_KEY_TCP_FLAGS_MASK,
 			       sizeof(key->tcp.flags));
 	} else if (key->basic.ip_proto == IPPROTO_UDP) {
+		//udp端口
 		fl_set_key_val(tb, &key->tp.src, TCA_FLOWER_KEY_UDP_SRC,
 			       &mask->tp.src, TCA_FLOWER_KEY_UDP_SRC_MASK,
 			       sizeof(key->tp.src));
@@ -1137,6 +1179,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       &mask->tp.dst, TCA_FLOWER_KEY_UDP_DST_MASK,
 			       sizeof(key->tp.dst));
 	} else if (key->basic.ip_proto == IPPROTO_SCTP) {
+		//scp端口
 		fl_set_key_val(tb, &key->tp.src, TCA_FLOWER_KEY_SCTP_SRC,
 			       &mask->tp.src, TCA_FLOWER_KEY_SCTP_SRC_MASK,
 			       sizeof(key->tp.src));
@@ -1145,6 +1188,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       sizeof(key->tp.dst));
 	} else if (key->basic.n_proto == htons(ETH_P_IP) &&
 		   key->basic.ip_proto == IPPROTO_ICMP) {
+		//icmp type,code填充
 		fl_set_key_val(tb, &key->icmp.type, TCA_FLOWER_KEY_ICMPV4_TYPE,
 			       &mask->icmp.type,
 			       TCA_FLOWER_KEY_ICMPV4_TYPE_MASK,
@@ -1155,6 +1199,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       sizeof(key->icmp.code));
 	} else if (key->basic.n_proto == htons(ETH_P_IPV6) &&
 		   key->basic.ip_proto == IPPROTO_ICMPV6) {
+		//icmpv6的type,code填充
 		fl_set_key_val(tb, &key->icmp.type, TCA_FLOWER_KEY_ICMPV6_TYPE,
 			       &mask->icmp.type,
 			       TCA_FLOWER_KEY_ICMPV6_TYPE_MASK,
@@ -1170,6 +1215,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			return ret;
 	} else if (key->basic.n_proto == htons(ETH_P_ARP) ||
 		   key->basic.n_proto == htons(ETH_P_RARP)) {
+		//填充arp
 		fl_set_key_val(tb, &key->arp.sip, TCA_FLOWER_KEY_ARP_SIP,
 			       &mask->arp.sip, TCA_FLOWER_KEY_ARP_SIP_MASK,
 			       sizeof(key->arp.sip));
@@ -1187,6 +1233,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       sizeof(key->arp.tha));
 	}
 
+	//支持port range方式
 	if (key->basic.ip_proto == IPPROTO_TCP ||
 	    key->basic.ip_proto == IPPROTO_UDP ||
 	    key->basic.ip_proto == IPPROTO_SCTP) {
@@ -1195,8 +1242,10 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			return ret;
 	}
 
+	//支持隧道方式
 	if (tb[TCA_FLOWER_KEY_ENC_IPV4_SRC] ||
 	    tb[TCA_FLOWER_KEY_ENC_IPV4_DST]) {
+		//隧道源目的ip(ipv4)
 		key->enc_control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		mask->enc_control.addr_type = ~0;
 		fl_set_key_val(tb, &key->enc_ipv4.src,
@@ -1213,6 +1262,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 
 	if (tb[TCA_FLOWER_KEY_ENC_IPV6_SRC] ||
 	    tb[TCA_FLOWER_KEY_ENC_IPV6_DST]) {
+		//隧道源目的ip(ipv6)
 		key->enc_control.addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		mask->enc_control.addr_type = ~0;
 		fl_set_key_val(tb, &key->enc_ipv6.src,
@@ -1227,6 +1277,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 			       sizeof(key->enc_ipv6.dst));
 	}
 
+	//填充隧道key,传输层src,dst port情况
 	fl_set_key_val(tb, &key->enc_key_id.keyid, TCA_FLOWER_KEY_ENC_KEY_ID,
 		       &mask->enc_key_id.keyid, TCA_FLOWER_UNSPEC,
 		       sizeof(key->enc_key_id.keyid));
@@ -1239,14 +1290,17 @@ static int fl_set_key(struct net *net, struct nlattr **tb/*netlink属性数组*/
 		       &mask->enc_tp.dst, TCA_FLOWER_KEY_ENC_UDP_DST_PORT_MASK,
 		       sizeof(key->enc_tp.dst));
 
+	//隧道支持的tos,ttl
 	fl_set_key_ip(tb, true, &key->enc_ip, &mask->enc_ip);
 
+	//隧道封装相关选项
 	if (tb[TCA_FLOWER_KEY_ENC_OPTS]) {
 		ret = fl_set_enc_opt(tb, key, mask, extack);
 		if (ret)
 			return ret;
 	}
 
+	//分片标记填充
 	if (tb[TCA_FLOWER_KEY_FLAGS])
 		ret = fl_set_key_flags(tb, &key->control.flags, &mask->control.flags);
 
@@ -1272,13 +1326,16 @@ static const struct rhashtable_params fl_ht_params = {
 static int fl_init_mask_hashtable(struct fl_flow_mask *mask)
 {
 	mask->filter_ht_params = fl_ht_params;
+	//key长度，及key起始的offset
 	mask->filter_ht_params.key_len = fl_mask_range(mask);
 	mask->filter_ht_params.key_offset += mask->range.start;
 
 	return rhashtable_init(&mask->ht, &mask->filter_ht_params);
 }
 
+//成员member在fl_flow_key中的偏移量
 #define FL_KEY_MEMBER_OFFSET(member) offsetof(struct fl_flow_key, member)
+//成员member在fl_flow_key的size
 #define FL_KEY_MEMBER_SIZE(member) FIELD_SIZEOF(struct fl_flow_key, member)
 
 #define FL_KEY_IS_MASKED(mask, member)						\
@@ -1287,14 +1344,18 @@ static int fl_init_mask_hashtable(struct fl_flow_mask *mask)
 
 #define FL_KEY_SET(keys, cnt, id, member)					\
 	do {									\
+		/*设置字段id*/\
 		keys[cnt].key_id = id;						\
+		/*字段id对应的在fl_flow_key结构体中的offset*/\
 		keys[cnt].offset = FL_KEY_MEMBER_OFFSET(member);		\
+		/*准备填充下一个keys*/\
 		cnt++;								\
 	} while(0);
 
 #define FL_KEY_SET_IF_MASKED(mask, keys, cnt, id, member)			\
 	do {									\
 		if (FL_KEY_IS_MASKED(mask, member))				\
+			/*如果member在mask中已设置，将设置id对应的member*/\
 			FL_KEY_SET(keys, cnt, id, member);			\
 	} while(0);
 
@@ -1304,6 +1365,7 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 	struct flow_dissector_key keys[FLOW_DISSECTOR_KEY_MAX];
 	size_t cnt = 0;
 
+	//填充fl_flow_key中各成员的offset
 	FL_KEY_SET(keys, cnt, FLOW_DISSECTOR_KEY_CONTROL, control);
 	FL_KEY_SET(keys, cnt, FLOW_DISSECTOR_KEY_BASIC, basic);
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
@@ -1346,11 +1408,11 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_ENC_OPTS, enc_opts);
 
-	skb_flow_dissector_init(dissector, keys, cnt);
+	skb_flow_dissector_init(dissector, keys/*记录各成员的在fl_flow_key中的offset*/, cnt/*成员数*/);
 }
 
 static struct fl_flow_mask *fl_create_new_mask(struct cls_fl_head *head,
-					       struct fl_flow_mask *mask)
+					       struct fl_flow_mask *mask/*要创建的mask*/)
 {
 	struct fl_flow_mask *newmask;
 	int err;
@@ -1361,24 +1423,29 @@ static struct fl_flow_mask *fl_create_new_mask(struct cls_fl_head *head,
 
 	fl_mask_copy(newmask, mask);
 
+	//如果有port range匹配，则添加flag
 	if ((newmask->key.tp_min.dst && newmask->key.tp_max.dst) ||
 	    (newmask->key.tp_min.src && newmask->key.tp_max.src))
 		newmask->flags |= TCA_FLOWER_MASK_FLAGS_RANGE;
 
+	//初始化newmask用于挂接至hashtable
 	err = fl_init_mask_hashtable(newmask);
 	if (err)
 		goto errout_free;
 
+	//指明mask对应的offset
 	fl_init_dissector(&newmask->dissector, &newmask->key);
 
 	INIT_LIST_HEAD_RCU(&newmask->filters);
 
 	refcount_set(&newmask->refcnt, 1);
+	//用newmask替换旧的mask
 	err = rhashtable_replace_fast(&head->ht, &mask->ht_node,
 				      &newmask->ht_node, mask_ht_params);
 	if (err)
 		goto errout_destroy;
 
+	//将mask加入到newmask中
 	spin_lock(&head->masks_lock);
 	list_add_tail_rcu(&newmask->list, &head->masks);
 	spin_unlock(&head->masks_lock);
@@ -1393,6 +1460,7 @@ errout_free:
 	return ERR_PTR(err);
 }
 
+//为规则设置对应的mask
 static int fl_check_assign_mask(struct cls_fl_head *head,
 				struct cls_fl_filter *fnew,
 				struct cls_fl_filter *fold,
@@ -1411,14 +1479,16 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 						       &mask->ht_node,
 						       mask_ht_params);
 	if (!fnew->mask) {
+		//head->ht中不存在这种mask,需要新建它，例如之前规则均不配置dstip,而新增规则
+		//要求匹配dstip时，则出现mask在head->ht中不存在情况。
 		rcu_read_unlock();
 
-		//mask不存在，创建它
 		if (fold) {
 			ret = -EINVAL;
 			goto errout_cleanup;
 		}
 
+		//创建mask
 		newmask = fl_create_new_mask(head, mask);
 		if (IS_ERR(newmask)) {
 			ret = PTR_ERR(newmask);
@@ -1430,6 +1500,7 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 	} else if (IS_ERR(fnew->mask)) {
 		ret = PTR_ERR(fnew->mask);
 	} else if (fold && fold->mask != fnew->mask) {
+		//不容许变更mask
 		ret = -EINVAL;
 	} else if (!refcount_inc_not_zero(&fnew->mask->refcnt)) {
 		/* Mask was deleted concurrently, try again */
@@ -1446,7 +1517,7 @@ errout_cleanup:
 
 //解析流的match及action
 static int fl_set_parms(struct net *net, struct tcf_proto *tp,
-			struct cls_fl_filter *f, struct fl_flow_mask *mask,
+			struct cls_fl_filter *f/*filter规则*/, struct fl_flow_mask *mask/*掩码*/,
 			unsigned long base, struct nlattr **tb,
 			struct nlattr *est, bool ovr,
 			struct fl_flow_tmplt *tmplt, bool rtnl_held,
@@ -1476,9 +1547,11 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 
 	//确定mask的起始终止位置
 	fl_mask_update_range(mask);
+	//填充f->mkey,使f->mkey = f->key & mask
 	fl_set_masked_key(&f->mkey, &f->key, mask);
 
 	if (!fl_mask_fits_tmplt(tmplt, mask)) {
+		//mask与模板不一致，如果tmplt为NULL，则返回True
 		NL_SET_ERR_MSG_MOD(extack, "Mask does not fit the template");
 		return -EINVAL;
 	}
@@ -1486,6 +1559,7 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 	return 0;
 }
 
+//将filter加入到hashtable中
 static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 			       struct cls_fl_filter *fold,
 			       bool *in_ht)
@@ -1493,6 +1567,7 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 	struct fl_flow_mask *mask = fnew->mask;
 	int err;
 
+	//将filter加入到hashtable中
 	err = rhashtable_lookup_insert_fast(&mask->ht,
 					    &fnew->ht_node,
 					    mask->filter_ht_params);
@@ -1511,12 +1586,12 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报文*/,
 		     struct tcf_proto *tp, unsigned long base,
 		     u32 handle/*规则对应的handle*/, struct nlattr **tca/*netlink消息*/,
-		     void **arg/*旧规则*/, bool ovr, bool rtnl_held,
+		     void **arg/*入参旧规则，出参新规则*/, bool ovr, bool rtnl_held,
 		     struct netlink_ext_ack *extack)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
 	struct cls_fl_filter *fold = *arg;
-	struct cls_fl_filter *fnew;
+	struct cls_fl_filter *fnew/*新规则的内容来源于tca*/;
 	struct fl_flow_mask *mask;
 	struct nlattr **tb;
 	bool in_ht;
@@ -1528,6 +1603,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		goto errout_fold;
 	}
 
+	//规则mask对应的填充位置
 	mask = kzalloc(sizeof(struct fl_flow_mask), GFP_KERNEL);
 	if (!mask) {
 		err = -ENOBUFS;
@@ -1540,18 +1616,19 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		goto errout_mask_alloc;
 	}
 
-	//解析flower规则
+	//自tca[TCA_OPTIONS]中解析出flower规则
 	err = nla_parse_nested_deprecated(tb, TCA_FLOWER_MAX,
 					  tca[TCA_OPTIONS], fl_policy, NULL);
 	if (err < 0)
 		goto errout_tb;
 
-	//规则handle不相等，报错
+	//当前为change，要求规则handle相等，现在规则handle不相等，报错
 	if (fold && handle && fold->handle != handle) {
 		err = -EINVAL;
 		goto errout_tb;
 	}
 
+	//构造新规则
 	fnew = kzalloc(sizeof(*fnew), GFP_KERNEL);
 	if (!fnew) {
 		err = -ENOBUFS;
@@ -1560,7 +1637,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	INIT_LIST_HEAD(&fnew->hw_list);
 	refcount_set(&fnew->refcnt, 1);
 
-	//初始化action
+	//初始化action结构
 	err = tcf_exts_init(&fnew->exts, net, TCA_FLOWER_ACT, 0);
 	if (err < 0)
 		goto errout;
@@ -1581,16 +1658,18 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	if (err)
 		goto errout;
 
+	//规则与mask关联
 	err = fl_check_assign_mask(head, fnew, fold, mask);
 	if (err)
 		goto errout;
 
+	//将filter加入至其对应的mask中
 	err = fl_ht_insert_unique(fnew, fold, &in_ht);
 	if (err)
 		goto errout_mask;
 
 	if (!tc_skip_hw(fnew->flags)) {
-		//按要求flower需要下发给HW
+		//按要求filter需要下发给HW,执行hw的替换
 		err = fl_hw_replace_filter(tp, fnew, rtnl_held, extack);
 		if (err)
 			goto errout_ht;
@@ -1611,7 +1690,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	}
 
 	if (fold) {
-		//移除掉旧的规则
+		//有旧的规则，则移除掉旧的规则
 		/* Fold filter was deleted concurrently. Retry lookup. */
 		if (fold->deleted) {
 			err = -EAGAIN;
@@ -1621,6 +1700,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		fnew->handle = handle;
 
 		if (!in_ht) {
+			//如果不存hashtable中，则将其加入，再统一做删除（为了统一处理）
 			struct rhashtable_params params =
 				fnew->mask->filter_ht_params;
 
@@ -1633,9 +1713,11 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		}
 
 		refcount_inc(&fnew->refcnt);
+		//执行旧规则删除
 		rhashtable_remove_fast(&fold->mask->ht,
 				       &fold->ht_node,
 				       fold->mask->filter_ht_params);
+		//移除掉filter与handle之间的映射关系
 		idr_replace(&head->handle_idr, fnew, fnew->handle);
 		list_replace_rcu(&fold->list, &fnew->list);
 		fold->deleted = true;
@@ -1644,6 +1726,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 
 		fl_mask_put(head, fold->mask);
 		if (!tc_skip_hw(fold->flags))
+			/*自硬件中移除规则*/
 			fl_hw_destroy_filter(tp, fold, rtnl_held, NULL);
 		tcf_unbind_filter(tp, &fold->res);
 		/* Caller holds reference to fold, so refcnt is always > 0
@@ -1654,6 +1737,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	} else {
 		if (handle) {
 			/* user specifies a handle and it doesn't exist */
+			//用户指定了一个不存在的handle,申请一个
 			err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
 					    handle, GFP_ATOMIC);
 
@@ -1666,6 +1750,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 			if (err == -ENOSPC)
 				err = -EAGAIN;
 		} else {
+			//未指定handle,申请一个
 			handle = 1;
 			err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
 					    INT_MAX, GFP_ATOMIC);
@@ -1674,6 +1759,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 			goto errout_hw;
 
 		refcount_inc(&fnew->refcnt);
+		//用于挂接filter到mask->filters链上
 		fnew->handle = handle;
 		list_add_tail_rcu(&fnew->list, &fnew->mask->filters);
 		spin_unlock(&tp->lock);
@@ -2454,7 +2540,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.destroy	= fl_destroy,
 	.get		= fl_get,
 	.put		= fl_put,
-	//添加flower规则，并触发向硬件下发
+	//添加或修改flower规则，并触发向硬件下发
 	.change		= fl_change,
 	.delete		= fl_delete,
 	.walk		= fl_walk,

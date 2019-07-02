@@ -350,12 +350,14 @@ int tcf_generic_walker(struct tc_action_net *tn, struct sk_buff *skb,
 }
 EXPORT_SYMBOL(tcf_generic_walker);
 
+//给定index返回对应的action
 int tcf_idr_search(struct tc_action_net *tn, struct tc_action **a, u32 index)
 {
 	struct tcf_idrinfo *idrinfo = tn->idrinfo;
 	struct tc_action *p;
 
 	mutex_lock(&idrinfo->lock);
+	//通过指定action查询
 	p = idr_find(&idrinfo->action_idr, index);
 	if (IS_ERR(p))
 		p = NULL;
@@ -371,6 +373,7 @@ int tcf_idr_search(struct tc_action_net *tn, struct tc_action **a, u32 index)
 }
 EXPORT_SYMBOL(tcf_idr_search);
 
+//删除一个index对应的action
 static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 {
 	struct tc_action *p;
@@ -430,6 +433,7 @@ int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 			goto err3;
 	}
 	spin_lock_init(&p->tcfa_lock);
+	//指明此action对应的index
 	p->tcfa_index = index;
 	p->tcfa_tm.install = jiffies;
 	p->tcfa_tm.lastuse = jiffies;
@@ -847,6 +851,7 @@ static struct tc_cookie *nla_memdup_cookie(struct nlattr **tb)
 	return c;
 }
 
+//解析netlink消息构造action
 struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 				    struct nlattr *nla, struct nlattr *est,
 				    char *name, int ovr, int bind,
@@ -897,6 +902,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 			}
 		}
 	} else {
+		//如果调用时指定了name,执行name长度校验
 		if (strlcpy(act_name, name, IFNAMSIZ) >= IFNAMSIZ) {
 			NL_SET_ERR_MSG(extack, "TC action name too long");
 			err = -EINVAL;
@@ -944,6 +950,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	if (err < 0)
 		goto err_mod;
 
+	//设置cookie
 	if (!name && tb[TCA_ACT_COOKIE])
 		tcf_set_action_cookie(&a->act_cookie, cookie);
 
@@ -954,6 +961,7 @@ struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 	if (err != ACT_P_CREATED)
 		module_put(a_o->owner);
 
+	//action为goto_chain,但未指定a->goto_chain链表，报错
 	if (TC_ACT_EXT_CMP(a->tcfa_action, TC_ACT_GOTO_CHAIN) &&
 	    !rcu_access_pointer(a->goto_chain)) {
 		tcf_action_destroy_1(a, bind);
@@ -987,11 +995,13 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 	int err;
 	int i;
 
+	//解析action
 	err = nla_parse_nested_deprecated(tb, TCA_ACT_MAX_PRIO, nla, NULL,
 					  extack);
 	if (err < 0)
 		return err;
 
+	//按顺序解析每个action
 	for (i = 1; i <= TCA_ACT_MAX_PRIO && tb[i]; i++) {
 		act = tcf_action_init_1(net, tp, tb[i], est, name, ovr, bind,
 					rtnl_held, extack);
@@ -999,6 +1009,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 			err = PTR_ERR(act);
 			goto err;
 		}
+		//顺序为i
 		act->order = i;
 		sz += tcf_action_fill_size(act);
 		/* Start from index 0 */
@@ -1144,6 +1155,7 @@ static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 		goto err_out;
 	}
 	err = -ENOENT;
+	//依据对应的action index查找对应的action
 	if (ops->lookup(net, &a, index) == 0) {
 		NL_SET_ERR_MSG(extack, "TC action with specified index not found");
 		goto err_mod;
@@ -1478,6 +1490,7 @@ static struct nlattr *find_dump_kind(struct nlattr **nla)
 	return kind;
 }
 
+//dump action
 static int tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct net *net = sock_net(skb->sk);
@@ -1506,6 +1519,7 @@ static int tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 		return 0;
 	}
 
+	//确定dump指定的action ops
 	a_o = tc_lookup_action(kind);
 	if (a_o == NULL)
 		return 0;

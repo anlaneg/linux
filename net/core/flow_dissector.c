@@ -36,6 +36,7 @@ static void dissector_set_key(struct flow_dissector *flow_dissector,
 	flow_dissector->used_keys |= (1 << key_id);
 }
 
+//初始化key对应的各offset
 void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 			     const struct flow_dissector_key *key,
 			     unsigned int key_count)
@@ -52,6 +53,7 @@ void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 		BUG_ON(dissector_uses_key(flow_dissector,
 					  key->key_id));
 
+		//指明出现的key_id
 		dissector_set_key(flow_dissector, key->key_id);
 		flow_dissector->offset[key->key_id] = key->offset;
 	}

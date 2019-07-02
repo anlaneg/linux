@@ -141,8 +141,8 @@ static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
 };
 
 struct clsact_sched_data {
-	struct tcf_block *ingress_block;
-	struct tcf_block *egress_block;
+	struct tcf_block *ingress_block;//ingress使用block
+	struct tcf_block *egress_block;//egress使用block
 	struct tcf_block_ext_info ingress_block_info;//ingress信息
 	struct tcf_block_ext_info egress_block_info;//egress信息
 	struct mini_Qdisc_pair miniqp_ingress;
@@ -175,8 +175,10 @@ static struct tcf_block *clsact_tcf_block(struct Qdisc *sch, unsigned long cl,
 
 	switch (cl) {
 	case TC_H_MIN(TC_H_MIN_INGRESS):
+			//使用ingress对应block
 		return q->ingress_block;
 	case TC_H_MIN(TC_H_MIN_EGRESS):
+			//使用egress对应block
 		return q->egress_block;
 	default:
 		return NULL;
@@ -266,6 +268,7 @@ static struct Qdisc_ops clsact_qdisc_ops __read_mostly = {
 	.id			=	"clsact",
 	.priv_size		=	sizeof(struct clsact_sched_data),
 	.static_flags		=	TCQ_F_CPUSTATS,
+	//初始化qdisc
 	.init			=	clsact_init,
 	.destroy		=	clsact_destroy,
 	.dump			=	ingress_dump,

@@ -1500,7 +1500,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 /*
  * Create/change qdisc.
  */
-
+//创建或修改qdisc
 static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 			   struct netlink_ext_ack *extack)
 {
