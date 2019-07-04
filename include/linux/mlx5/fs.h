@@ -89,6 +89,7 @@ struct mlx5_flow_handle;
 
 struct mlx5_flow_spec {
 	u8   match_criteria_enable;
+	//相当于定义struct mlx5_ifc_fte_match_param_bits结构体（记录掩码）
 	u32  match_criteria[MLX5_ST_SZ_DW(fte_match_param)];
 	u32  match_value[MLX5_ST_SZ_DW(fte_match_param)];
 };

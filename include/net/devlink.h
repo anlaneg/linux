@@ -19,6 +19,7 @@
 struct devlink_ops;
 
 struct devlink {
+	//挂载至devlink_list
 	struct list_head list;
 	struct list_head port_list;
 	struct list_head sb_list;

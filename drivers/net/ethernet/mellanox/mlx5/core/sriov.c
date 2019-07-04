@@ -75,6 +75,7 @@ static int mlx5_device_enable_sriov(struct mlx5_core_dev *dev, int num_vfs)
 	int vf;
 
 	if (sriov->enabled_vfs) {
+		//需要先关闭所有vf,再开启vf
 		mlx5_core_warn(dev,
 			       "failed to enable SRIOV on device, already enabled with %d vfs\n",
 			       sriov->enabled_vfs);
@@ -144,17 +145,20 @@ out:
 		mlx5_core_warn(dev, "timeout reclaiming VFs pages\n");
 }
 
+//实现num_vfs个vf开启
 static int mlx5_sriov_enable(struct pci_dev *pdev, int num_vfs)
 {
 	struct mlx5_core_dev *dev  = pci_get_drvdata(pdev);
 	int err;
 
+	//设备开启
 	err = mlx5_device_enable_sriov(dev, num_vfs);
 	if (err) {
 		mlx5_core_warn(dev, "mlx5_device_enable_sriov failed : %d\n", err);
 		return err;
 	}
 
+	//pci开启
 	err = pci_enable_sriov(pdev, num_vfs);
 	if (err) {
 		mlx5_core_warn(dev, "pci_enable_sriov failed : %d\n", err);
@@ -182,6 +186,7 @@ int mlx5_core_sriov_configure(struct pci_dev *pdev, int num_vfs)
 	if (num_vfs)
 		err = mlx5_sriov_enable(pdev, num_vfs);
 	else
+		//num_vfs为0，用户要求禁止sriov
 		mlx5_sriov_disable(pdev);
 
 	if (!err)

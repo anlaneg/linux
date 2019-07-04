@@ -216,6 +216,7 @@ struct mlx5_eswitch {
 	} qos;
 
 	struct mlx5_esw_offload offloads;
+	//当前有SRIOV_LEGACY,SRIOV_OFFLOADS两种模式
 	int                     mode;
 	int                     nvports;
 	u16                     manager_vport;
@@ -308,6 +309,7 @@ enum mlx5_flow_match_level {
 	MLX5_MATCH_NONE	= MLX5_INLINE_MODE_NONE,
 	MLX5_MATCH_L2	= MLX5_INLINE_MODE_L2,
 	MLX5_MATCH_L3	= MLX5_INLINE_MODE_IP,
+	//匹配到4层
 	MLX5_MATCH_L4	= MLX5_INLINE_MODE_TCP_UDP,
 };
 
@@ -340,10 +342,10 @@ struct mlx5_esw_flow_attr {
 		u32 encap_id;
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];
 	u32	mod_hdr_id;
-	u8	match_level;
-	u8	tunnel_match_level;
+	u8	match_level;//非隧道解析层数（例如udp,tcp层）
+	u8	tunnel_match_level;//隧道解析层数
 	struct mlx5_fc *counter;
-	u32	chain;
+	u32	chain;//所属的chain索引
 	u16	prio;
 	u32	dest_chain;
 	struct mlx5e_tc_flow_parse_attr *parse_attr;

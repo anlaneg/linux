@@ -1218,6 +1218,7 @@ static int mlx5e_rep_setup_tc_block(struct net_device *dev,
 		return tcf_block_cb_register(f->block, mlx5e_rep_setup_tc_cb,
 					     priv, priv, f->extack);
 	case TC_BLOCK_UNBIND:
+		//实现对block的解绑定
 		tcf_block_cb_unregister(f->block, mlx5e_rep_setup_tc_cb, priv);
 		return 0;
 	default:

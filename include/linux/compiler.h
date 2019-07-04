@@ -212,6 +212,7 @@ void __read_once_size_nocheck(const volatile void *p, void *res, int size)
 	__READ_ONCE_SIZE;
 }
 
+//实现p的填充，使其与res相同，memcpy(p,res,size)
 static __always_inline void __write_once_size(volatile void *p, void *res, int size)
 {
 	switch (size) {

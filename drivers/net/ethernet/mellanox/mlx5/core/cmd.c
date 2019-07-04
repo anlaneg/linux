@@ -73,7 +73,7 @@ static struct mlx5_cmd_work_ent *alloc_cmd(struct mlx5_cmd *cmd,
 					   struct mlx5_cmd_msg *in,
 					   struct mlx5_cmd_msg *out,
 					   void *uout, int uout_size,
-					   mlx5_cmd_cbk_t cbk,
+					   mlx5_cmd_cbk_t cbk/*回调函数*/,
 					   void *context, int page_queue)
 {
 	gfp_t alloc_flags = cbk ? GFP_ATOMIC : GFP_KERNEL;
@@ -455,8 +455,10 @@ static int mlx5_internal_err_ret_value(struct mlx5_core_dev *dev, u16 op,
 	}
 }
 
+//将fw的cmd转换为字符串
 const char *mlx5_command_str(int command)
 {
+	//完整的cmd为mlx5_cmd_op_xxx
 #define MLX5_COMMAND_STR_CASE(__cmd) case MLX5_CMD_OP_ ## __cmd: return #__cmd
 
 	switch (command) {
@@ -748,8 +750,8 @@ static int mlx5_cmd_check(struct mlx5_core_dev *dev, void *in, void *out)
 	if (!uid && opcode != MLX5_CMD_OP_DESTROY_MKEY)
 		mlx5_core_err_rl(dev,
 			"%s(0x%x) op_mod(0x%x) failed, status %s(0x%x), syndrome (0x%x)\n",
-			mlx5_command_str(opcode), opcode, op_mod,
-			cmd_status_str(status), status, syndrome);
+			mlx5_command_str(opcode)/*命令*/, opcode, op_mod,
+			cmd_status_str(status)/*错误状态信息*/, status, syndrome);
 	else
 		mlx5_core_dbg(dev,
 		      "%s(0x%x) op_mod(0x%x) failed, status %s(0x%x), syndrome (0x%x)\n",
@@ -823,6 +825,7 @@ static u16 msg_to_opcode(struct mlx5_cmd_msg *in)
 
 static void mlx5_cmd_comp_handler(struct mlx5_core_dev *dev, u64 vec, bool forced);
 
+//超时未响应work处理函数
 static void cb_timeout_handler(struct work_struct *work)
 {
 	struct delayed_work *dwork = container_of(work, struct delayed_work,
@@ -833,7 +836,10 @@ static void cb_timeout_handler(struct work_struct *work)
 	struct mlx5_core_dev *dev = container_of(ent->cmd, struct mlx5_core_dev,
 						 cmd);
 
+	//fw处理消息超时
 	ent->ret = -ETIMEDOUT;
+
+	//显示cmd超时未响应警告
 	mlx5_core_warn(dev, "%s(0x%x) timeout. Will cause a leak of a command resource\n",
 		       mlx5_command_str(msg_to_opcode(ent->in)),
 		       msg_to_opcode(ent->in));
@@ -905,6 +911,7 @@ static void cmd_work_handler(struct work_struct *work)
 	cmd_mode = cmd->mode;
 
 	if (ent->callback)
+		//将ent->cb_timeout_work加入到work中，使其cb_timeout超时运行
 		schedule_delayed_work(&ent->cb_timeout_work, cb_timeout);
 
 	/* Skip sending command to fw if internal error */
@@ -1010,7 +1017,7 @@ static int mlx5_cmd_invoke(struct mlx5_core_dev *dev, struct mlx5_cmd_msg *in,
 	if (callback && page_queue)
 		return -EINVAL;
 
-	ent = alloc_cmd(cmd, in, out, uout, uout_size, callback, context,
+	ent = alloc_cmd(cmd, in, out, uout, uout_size, callback/*cmd回调*/, context,
 			page_queue);
 	if (IS_ERR(ent))
 		return PTR_ERR(ent);
@@ -1021,11 +1028,15 @@ static int mlx5_cmd_invoke(struct mlx5_core_dev *dev, struct mlx5_cmd_msg *in,
 	if (!callback)
 		init_completion(&ent->done);
 
+	//初始化cb超时work的处理函数，未使能
 	INIT_DELAYED_WORK(&ent->cb_timeout_work, cb_timeout_handler);
+	//初始化work处理函数
 	INIT_WORK(&ent->work, cmd_work_handler);
+
 	if (page_queue) {
 		cmd_work_handler(&ent->work);
 	} else if (!queue_work(cmd->wq, &ent->work)) {
+		/*入队work失败*/
 		mlx5_core_warn(dev, "failed to queue work\n");
 		err = -ENOMEM;
 		goto out_free;
@@ -1047,6 +1058,7 @@ static int mlx5_cmd_invoke(struct mlx5_core_dev *dev, struct mlx5_cmd_msg *in,
 		++stats->n;
 		spin_unlock_irq(&stats->lock);
 	}
+	//显示fw执行某cmd所用时间
 	mlx5_core_dbg_mask(dev, 1 << MLX5_CMD_TIME,
 			   "fw exec time for %s is %lld nsec\n",
 			   mlx5_command_str(op), ds);
@@ -1505,6 +1517,7 @@ static void mlx5_cmd_comp_handler(struct mlx5_core_dev *dev, u64 vec, bool force
 			}
 
 			if (ent->callback)
+				//取消cb的超时处理work
 				cancel_delayed_work(&ent->cb_timeout_work);
 			if (ent->page_queue)
 				sem = &cmd->pages_sem;
@@ -1748,6 +1761,7 @@ out_in:
 	return err;
 }
 
+//向firmware发送命令执行，处理其响应
 int mlx5_cmd_exec(struct mlx5_core_dev *dev, void *in, int in_size, void *out,
 		  int out_size)
 {

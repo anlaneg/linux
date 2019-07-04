@@ -284,6 +284,7 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 struct drv_dev_and_id {
 	struct pci_driver *drv;
 	struct pci_dev *dev;
+	//设备id信息
 	const struct pci_device_id *id;
 };
 
@@ -305,13 +306,15 @@ static long local_pci_probe(void *_ddi)
 	 * its remove routine.
 	 */
 	pm_runtime_get_sync(dev);
-	pci_dev->driver = pci_drv;//设置此设备对应驱动，并执行probe函数
+	//先假设此驱动为此设备对应的驱动，并执行probe函数
+	pci_dev->driver = pci_drv;
 	//调用驱动的probe函数对设备pci_dev按pci_drv进行探测，检查是否可以匹配
-	rc = pci_drv->probe(pci_dev, ddi->id);//传入dev,传入id(匹配id)
+	//传入dev,传入id(匹配id)
+	rc = pci_drv->probe(pci_dev, ddi->id);
 	if (!rc)
 		return rc;//成功匹配
 	if (rc < 0) {
-		//匹配失败
+		//匹配失败，消除假设
 		pci_dev->driver = NULL;
 		pm_runtime_put_sync(dev);
 		return rc;
@@ -1662,7 +1665,8 @@ static int pci_dma_configure(struct device *dev)
 
 struct bus_type pci_bus_type = {
 	.name		= "pci",
-	.match		= pci_bus_match,//定义pci总线如何实现驱动与bus之间的匹配
+	//定义pci总线如何实现驱动与bus之间的匹配
+	.match		= pci_bus_match,
 	.uevent		= pci_uevent,
 	//定义pci设备的probe函数(由于pci定义了probe函数，故此函数将先与pci driver先调用）
 	.probe		= pci_device_probe,

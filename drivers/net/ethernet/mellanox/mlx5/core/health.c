@@ -270,6 +270,7 @@ void mlx5_trigger_health_work(struct mlx5_core_dev *dev)
 	spin_unlock_irqrestore(&health->wq_lock, flags);
 }
 
+//周期性执行health检查
 static void poll_health(struct timer_list *t)
 {
 	struct mlx5_core_dev *dev = from_timer(dev, t, priv.health.timer);
@@ -305,6 +306,7 @@ void mlx5_start_health_poll(struct mlx5_core_dev *dev)
 {
 	struct mlx5_core_health *health = &dev->priv.health;
 
+	//初始化health检查回调
 	timer_setup(&health->timer, poll_health, 0);
 	health->sick = 0;
 	clear_bit(MLX5_DROP_NEW_HEALTH_WORK, &health->flags);
@@ -312,6 +314,7 @@ void mlx5_start_health_poll(struct mlx5_core_dev *dev)
 	health->health = &dev->iseg->health;
 	health->health_counter = &dev->iseg->health_counter;
 
+	//设置检查间隔，并使能timer
 	health->timer.expires = round_jiffies(jiffies + MLX5_HEALTH_POLL_INTERVAL);
 	add_timer(&health->timer);
 }

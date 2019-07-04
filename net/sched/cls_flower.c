@@ -99,7 +99,7 @@ struct cls_fl_head {
 	struct rhashtable ht;//用于保存不同的mask(查询）
 	spinlock_t masks_lock; /* Protect masks list */
 	struct list_head masks;//用于挂接不同mask（遍历）
-	struct list_head hw_filters;
+	struct list_head hw_filters;//已下发至hardware的filter规则
 	struct rcu_work rwork;
 	struct idr handle_idr;
 };
@@ -112,6 +112,7 @@ struct cls_fl_filter {
 	struct tcf_result res;
 	struct fl_flow_key key;//match的key
 	struct list_head list;
+	//挂接至hw_filters
 	struct list_head hw_list;
 	//filter的标识，通过handle可以在ht中查询到filter
 	u32 handle;
@@ -1829,6 +1830,7 @@ static void fl_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 	}
 }
 
+//用于获得已下发给hw的filter
 static struct cls_fl_filter *
 fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 {
@@ -1836,11 +1838,13 @@ fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 
 	spin_lock(&tp->lock);
 	if (list_empty(&head->hw_filters)) {
+		//下给hardware的filter为空，返回NULL
 		spin_unlock(&tp->lock);
 		return NULL;
 	}
 
 	if (!f)
+		/*未指定时，使用首个filter*/
 		f = list_entry(&head->hw_filters, struct cls_fl_filter,
 			       hw_list);
 	list_for_each_entry_continue(f, &head->hw_filters, hw_list) {
@@ -1854,8 +1858,9 @@ fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 	return NULL;
 }
 
-static int fl_reoffload(struct tcf_proto *tp, bool add, tc_setup_cb_t *cb,
-			void *cb_priv, struct netlink_ext_ack *extack)
+static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则更新*/,
+		tc_setup_cb_t *cb/*针对每条cls_flower执行TC_SETUP_CLSFLOWER*/,
+			void *cb_priv/*回调的私有数据*/, struct netlink_ext_ack *extack)
 {
 	struct tc_cls_flower_offload cls_flower = {};
 	struct tcf_block *block = tp->chain->block;
@@ -1868,7 +1873,9 @@ static int fl_reoffload(struct tcf_proto *tp, bool add, tc_setup_cb_t *cb,
 	 */
 	ASSERT_RTNL();
 
+	//遍历已下发到hardware的所有filter
 	while ((f = fl_get_next_hw_filter(tp, f, add))) {
+		//将filter构造成cls_flower
 		cls_flower.rule =
 			flow_rule_alloc(tcf_exts_num_actions(&f->exts));
 		if (!cls_flower.rule) {
@@ -1885,6 +1892,7 @@ static int fl_reoffload(struct tcf_proto *tp, bool add, tc_setup_cb_t *cb,
 		cls_flower.rule->match.mask = &f->mask->key;
 		cls_flower.rule->match.key = &f->mkey;
 
+		//实现action转换
 		err = tc_setup_flow_action(&cls_flower.rule->action, &f->exts);
 		if (err) {
 			kfree(cls_flower.rule);
@@ -1898,6 +1906,7 @@ static int fl_reoffload(struct tcf_proto *tp, bool add, tc_setup_cb_t *cb,
 
 		cls_flower.classid = f->res.classid;
 
+		//执行clsflower回调下发
 		err = cb(TC_SETUP_CLSFLOWER, &cls_flower, cb_priv);
 		kfree(cls_flower.rule);
 

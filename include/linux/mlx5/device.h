@@ -60,18 +60,22 @@
 #define __mlx5_dw_bit_off(typ, fld) (32 - __mlx5_bit_sz(typ, fld) - (__mlx5_bit_off(typ, fld) & 0x1f))
 //成员fld的掩码形式（全'1'格式）
 #define __mlx5_mask(typ, fld) ((u32)((1ull << __mlx5_bit_sz(typ, fld)) - 1))
+//成员fld所在位置的掩码形式
 #define __mlx5_dw_mask(typ, fld) (__mlx5_mask(typ, fld) << __mlx5_dw_bit_off(typ, fld))
 #define __mlx5_mask16(typ, fld) ((u16)((1ull << __mlx5_bit_sz(typ, fld)) - 1))
 #define __mlx5_16_mask(typ, fld) (__mlx5_mask16(typ, fld) << __mlx5_16_bit_off(typ, fld))
+//结构体大小
 #define __mlx5_st_sz_bits(typ) sizeof(struct mlx5_ifc_##typ##_bits)
 
 #define MLX5_FLD_SZ_BYTES(typ, fld) (__mlx5_bit_sz(typ, fld) / 8)
 #define MLX5_ST_SZ_BYTES(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 8)
+//结构体大小/32
 #define MLX5_ST_SZ_DW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 32)
 #define MLX5_ST_SZ_QW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 64)
 #define MLX5_UN_SZ_BYTES(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 8)
 #define MLX5_UN_SZ_DW(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 32)
 #define MLX5_BYTE_OFF(typ, fld) (__mlx5_bit_off(typ, fld) / 8)
+//获得typ结构中fld成员的指针地址（采用p指针获得）
 #define MLX5_ADDR_OF(typ, p, fld) ((void *)((uint8_t *)(p) + MLX5_BYTE_OFF(typ, fld)))
 
 /* insert a value to a struct */
@@ -94,9 +98,13 @@
 	MLX5_SET(typ, p, fld[idx], v); \
 } while (0)
 
+//将typ结构中的成员fld置为全1
 #define MLX5_SET_TO_ONES(typ, p, fld) do { \
+	/*结构体必须32字节对齐*/\
 	BUILD_BUG_ON(__mlx5_st_sz_bits(typ) % 32);             \
+	/*取typ中的fld字段*/\
 	*((__be32 *)(p) + __mlx5_dw_off(typ, fld)) = \
+	/*1.typ中的fld字段取值，由大端先转为cpu序 2.与fld以外的掩码与，使非fld的值保持 3.或上fld的mask，即设置上fld值*/\
 	cpu_to_be32((be32_to_cpu(*((__be32 *)(p) + __mlx5_dw_off(typ, fld))) & \
 		     (~__mlx5_dw_mask(typ, fld))) | ((__mlx5_mask(typ, fld)) \
 		     << __mlx5_dw_bit_off(typ, fld))); \

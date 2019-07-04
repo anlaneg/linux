@@ -296,6 +296,7 @@ void qdisc_hash_del(struct Qdisc *q)
 }
 EXPORT_SYMBOL(qdisc_hash_del);
 
+//通过handle查询qdisc
 struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 {
 	struct Qdisc *q;
@@ -1535,7 +1536,7 @@ replay:
 	if (clid) {
 		if (clid != TC_H_ROOT) {
 			if (clid != TC_H_INGRESS) {
-				//非ingress情况
+				//非ingress情况,取major来做为handle
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find specified qdisc");
@@ -1547,6 +1548,7 @@ replay:
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
+			//使用设备对应的qdisc
 			q = dev->qdisc;
 		}
 
@@ -1564,18 +1566,25 @@ replay:
 					NL_SET_ERR_MSG(extack, "Invalid minor handle");
 					return -EINVAL;
 				}
+
+				//通过handle查找q
 				q = qdisc_lookup(dev, tcm->tcm_handle);
 				if (!q)
 					goto create_n_graft;
+
 				if (n->nlmsg_flags & NLM_F_EXCL) {
+					//q已存在，报错
 					NL_SET_ERR_MSG(extack, "Exclusivity flag on, cannot override");
 					return -EEXIST;
 				}
+
 				if (tca[TCA_KIND] &&
 				    nla_strcmp(tca[TCA_KIND], q->ops->id)) {
+					//名称不一致
 					NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 					return -EINVAL;
 				}
+
 				if (q == p ||
 				    (p && check_loop(q, p, 0))) {
 					NL_SET_ERR_MSG(extack, "Qdisc parent/child loop detected");
@@ -1615,6 +1624,7 @@ replay:
 			}
 		}
 	} else {
+		//通过tcm->tcm_handle查找qdisc
 		if (!tcm->tcm_handle) {
 			NL_SET_ERR_MSG(extack, "Handle cannot be zero");
 			return -EINVAL;
@@ -1628,6 +1638,7 @@ replay:
 		return -ENOENT;
 	}
 	if (n->nlmsg_flags & NLM_F_EXCL) {
+		//q存在，按flag要求报错
 		NL_SET_ERR_MSG(extack, "Exclusivity flag on, cannot modify");
 		return -EEXIST;
 	}

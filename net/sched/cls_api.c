@@ -1039,14 +1039,17 @@ static struct tcf_block *tcf_block_refcnt_get(struct net *net, u32 block_index)
 	return block;
 }
 
+//取下一个chain
 static struct tcf_chain *
 __tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
 {
 	mutex_lock(&block->lock);
 	if (chain)
+		//如查给定了chain,取next_chain
 		chain = list_is_last(&chain->list, &block->chain_list) ?
 			NULL : list_next_entry(chain, list);
 	else
+		//未给定chain,则取首个chain
 		chain = list_first_entry_or_null(&block->chain_list,
 						 struct tcf_chain, list);
 
@@ -1083,6 +1086,7 @@ tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
 }
 EXPORT_SYMBOL(tcf_get_next_chain);
 
+//获取下一个tp(传入tp为NULL时，返回首个tp)
 static struct tcf_proto *
 __tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp)
 {
@@ -1092,6 +1096,7 @@ __tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp)
 	mutex_lock(&chain->filter_chain_lock);
 
 	if (!tp) {
+		//取首个tp
 		tp = tcf_chain_dereference(chain->filter_chain, chain);
 	} else if (tcf_proto_is_deleting(tp)) {
 		/* 'deleting' flag is set and chain->filter_chain_lock was
@@ -1105,6 +1110,7 @@ __tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp)
 			if (!tp->deleting && tp->prio >= prio)
 				break;
 	} else {
+		//取下一个tp
 		tp = tcf_chain_dereference(tp->next, chain);
 	}
 
@@ -1542,8 +1548,8 @@ void tcf_block_put(struct tcf_block *block)
 EXPORT_SYMBOL(tcf_block_put);
 
 struct tcf_block_cb {
-	struct list_head list;
-	tc_setup_cb_t *cb;
+	struct list_head list;//用于挂接到cb_list
+	tc_setup_cb_t *cb;//回调
 	void *cb_ident;
 	void *cb_priv;
 	unsigned int refcnt;
@@ -1578,24 +1584,27 @@ unsigned int tcf_block_cb_decref(struct tcf_block_cb *block_cb)
 }
 EXPORT_SYMBOL(tcf_block_cb_decref);
 
+//遍历block上所有chain,遍历chain上所有tp,针对单个tp调用tp->ops->reoffload
 static int
-tcf_block_playback_offloads(struct tcf_block *block, tc_setup_cb_t *cb,
-			    void *cb_priv, bool add, bool offload_in_use,
+tcf_block_playback_offloads(struct tcf_block *block, tc_setup_cb_t *cb/*回调函数*/,
+			    void *cb_priv/*回调的私有数据*/, bool add/*是否规则新增*/, bool offload_in_use,
 			    struct netlink_ext_ack *extack)
 {
 	struct tcf_chain *chain, *chain_prev;
 	struct tcf_proto *tp, *tp_prev;
 	int err;
 
-	for (chain = __tcf_get_next_chain(block, NULL);
+	for (chain = __tcf_get_next_chain(block, NULL);/*取首个chain*/
 	     chain;
-	     chain_prev = chain,
-		     chain = __tcf_get_next_chain(block, chain),
+	     chain_prev = chain,/*保存上一个chain*/
+		     chain = __tcf_get_next_chain(block, chain),/*取下一个chain*/
 		     tcf_chain_put(chain_prev)) {
-		for (tp = __tcf_get_next_proto(chain, NULL); tp;
-		     tp_prev = tp,
-			     tp = __tcf_get_next_proto(chain, tp),
+		//遍历此chain上所有tp
+		for (tp = __tcf_get_next_proto(chain, NULL)/*取首个tp*/; tp;
+		     tp_prev = tp,/*保存上一个tp*/
+			     tp = __tcf_get_next_proto(chain, tp),/*取下一个tp*/
 			     tcf_proto_put(tp_prev, true, NULL)) {
+			//调用reoffload，完成此tp的规则再下发
 			if (tp->ops->reoffload) {
 				err = tp->ops->reoffload(tp, add, cb, cb_priv,
 							 extack);
@@ -1629,6 +1638,7 @@ struct tcf_block_cb *__tcf_block_cb_register(struct tcf_block *block,
 	int err;
 
 	/* Replay any already present rules */
+	//新增cb,使block上所有chain(所有chain上所有tp,针对每个tp调用reoffload,以便触发新注册的cb)
 	err = tcf_block_playback_offloads(block, cb, cb_priv, true,
 					  tcf_block_offload_in_use(block),
 					  extack);
@@ -1664,8 +1674,9 @@ EXPORT_SYMBOL(tcf_block_cb_register);
 void __tcf_block_cb_unregister(struct tcf_block *block,
 			       struct tcf_block_cb *block_cb)
 {
+	//针对所有tp执行规则移除
 	tcf_block_playback_offloads(block, block_cb->cb, block_cb->cb_priv,
-				    false, tcf_block_offload_in_use(block),
+				    false/*指明为规则移除*/, tcf_block_offload_in_use(block),
 				    NULL);
 	list_del(&block_cb->list);
 	kfree(block_cb);
@@ -1677,9 +1688,11 @@ void tcf_block_cb_unregister(struct tcf_block *block,
 {
 	struct tcf_block_cb *block_cb;
 
+	//找出对应的block_cb
 	block_cb = tcf_block_cb_lookup(block, cb, cb_ident);
 	if (!block_cb)
 		return;
+	//移除此cb
 	__tcf_block_cb_unregister(block, block_cb);
 }
 EXPORT_SYMBOL(tcf_block_cb_unregister);

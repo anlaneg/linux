@@ -782,7 +782,9 @@ struct pci_error_handlers {
 struct module;
 struct pci_driver {
 	struct list_head	node;
+	//驱动名称
 	const char		*name;
+	//支持的设备列表
 	const struct pci_device_id *id_table;	/* Must be non-NULL for probe to be called */
 	int  (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
 	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
@@ -791,6 +793,7 @@ struct pci_driver {
 	int  (*resume_early)(struct pci_dev *dev);
 	int  (*resume)(struct pci_dev *dev);	/* Device woken up */
 	void (*shutdown)(struct pci_dev *dev);
+	//完成设备sriov的开启，num_vfs为0时，禁止sriov,>0时虚拟num_vfs个vf,返回成功虚拟的数目
 	int  (*sriov_configure)(struct pci_dev *dev, int num_vfs); /* On PF */
 	const struct pci_error_handlers *err_handler;
 	const struct attribute_group **groups;

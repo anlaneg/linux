@@ -648,6 +648,7 @@ struct mlx5_fw_tracer;
 struct mlx5_vxlan;
 
 struct mlx5_core_dev {
+	//对应的设备（一般的device,及pci设备pdev)
 	struct device *device;
 	struct pci_dev	       *pdev;
 	/* sync pci state */
@@ -669,6 +670,7 @@ struct mlx5_core_dev {
 	u64			sys_image_guid;
 	phys_addr_t		iseg_base;
 	struct mlx5_init_seg __iomem *iseg;
+	//bar0地址
 	phys_addr_t             bar_addr;
 	enum mlx5_device_state	state;
 	/* sync interface state */
@@ -1082,6 +1084,7 @@ enum {
 	MLX5_PCI_DEV_IS_VF		= 1 << 0,
 };
 
+//设备非vf，则为pf
 static inline int mlx5_core_is_pf(struct mlx5_core_dev *dev)
 {
 	return !(dev->priv.pci_dev_data & MLX5_PCI_DEV_IS_VF);

@@ -242,6 +242,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 		__init_work((_work), _onstack);				\
 		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		INIT_LIST_HEAD(&(_work)->entry);			\
+		/*设置work需要执行的func*/\
 		(_work)->func = (_func);				\
 	} while (0)
 #endif
@@ -255,6 +256,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 //初始化延迟work
 #define __INIT_DELAYED_WORK(_work, _func, _tflags)			\
 	do {								\
+		/*设置work的回调*/\
 		INIT_WORK(&(_work)->work, (_func));			\
 		/*设置_work的timer回调用delayed_work_timer_fn,定时器到期后直接将work入队*/\
 		__init_timer(&(_work)->timer,				\
@@ -508,7 +510,7 @@ static inline bool queue_work(struct workqueue_struct *wq,
 //在指定延迟后将work加入队列（未指定运行在那个cpu上）
 static inline bool queue_delayed_work(struct workqueue_struct *wq,
 				      struct delayed_work *dwork,
-				      unsigned long delay)
+				      unsigned long delay/*work需要延迟的时间*/)
 {
 	return queue_delayed_work_on(WORK_CPU_UNBOUND, wq, dwork, delay);
 }
@@ -611,7 +613,7 @@ static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
  */
 //将延迟work加入到system_wq中
 static inline bool schedule_delayed_work(struct delayed_work *dwork,
-					 unsigned long delay)
+					 unsigned long delay/*work延迟执行的时间*/)
 {
 	return queue_delayed_work(system_wq, dwork, delay);
 }

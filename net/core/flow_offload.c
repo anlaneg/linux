@@ -3,6 +3,7 @@
 #include <linux/slab.h>
 #include <net/flow_offload.h>
 
+//申请flow_rule
 struct flow_rule *flow_rule_alloc(unsigned int num_actions)
 {
 	struct flow_rule *rule;

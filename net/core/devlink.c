@@ -5316,6 +5316,7 @@ struct devlink *devlink_alloc(const struct devlink_ops *ops, size_t priv_size)
 	if (WARN_ON(!ops))
 		return NULL;
 
+	//申请并初始化devlink
 	devlink = kzalloc(sizeof(*devlink) + priv_size, GFP_KERNEL);
 	if (!devlink)
 		return NULL;
@@ -5342,6 +5343,7 @@ EXPORT_SYMBOL_GPL(devlink_alloc);
  */
 int devlink_register(struct devlink *devlink, struct device *dev)
 {
+	//将devlink注册到devlink_list
 	mutex_lock(&devlink_mutex);
 	devlink->dev = dev;
 	list_add_tail(&devlink->list, &devlink_list);

@@ -13,8 +13,8 @@ struct timer_list {
 	 * All fields that change during normal runtime grouped to the
 	 * same cacheline
 	 */
-	struct hlist_node	entry;
-	unsigned long		expires;
+	struct hlist_node	entry;//用于挂在list上
+	unsigned long		expires;//过期时间
 	void			(*function)(struct timer_list *);//timer回调函数
 	u32			flags;
 

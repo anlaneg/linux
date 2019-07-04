@@ -171,6 +171,7 @@ static struct mlx5_profile profile[] = {
 #define FW_INIT_WAIT_MS			2
 #define FW_PRE_INIT_TIMEOUT_MILI	10000
 
+//检查标记，确保fw完成初始化
 static int wait_fw_init(struct mlx5_core_dev *dev, u32 max_wait_mili)
 {
 	unsigned long end = jiffies + msecs_to_jiffies(max_wait_mili);
@@ -187,6 +188,7 @@ static int wait_fw_init(struct mlx5_core_dev *dev, u32 max_wait_mili)
 	return err;
 }
 
+//通过set_driver_version设置驱动版本号（见24.3.14节）
 static void mlx5_set_driver_version(struct mlx5_core_dev *dev)
 {
 	int driver_ver_sz = MLX5_FLD_SZ_BYTES(set_driver_version_in,
@@ -201,11 +203,17 @@ static void mlx5_set_driver_version(struct mlx5_core_dev *dev)
 
 	string = MLX5_ADDR_OF(set_driver_version_in, in, driver_version);
 
+	//驱动版本由三部分组成(按','号分隔）:1.os_name,2.driver_name,3,driver_version_number
+	//driver_version_number由三部分组成（按'.'号分隔）：1.main_version(3个数字），2。minor_version(3个数字）
+	//sub_minor_version(6个数字）
+
+	//os_name填充
 	strncpy(string, "Linux", remaining_size);
 
 	remaining_size = max_t(int, 0, driver_ver_sz - strlen(string));
 	strncat(string, ",", remaining_size);
 
+	//driver_name填充
 	remaining_size = max_t(int, 0, driver_ver_sz - strlen(string));
 	strncat(string, DRIVER_NAME, remaining_size);
 
@@ -1276,12 +1284,13 @@ static void mlx5_mdev_uninit(struct mlx5_core_dev *dev)
 }
 
 #define MLX5_IB_MOD "mlx5_ib"
-static int init_one(struct pci_dev *pdev, const struct pci_device_id *id)
+static int init_one(struct pci_dev *pdev/*待匹配的设备*/, const struct pci_device_id *id)
 {
 	struct mlx5_core_dev *dev;
 	struct devlink *devlink;
 	int err;
 
+	//申请devlink并初始化ops及私有数据
 	devlink = devlink_alloc(&mlx5_devlink_ops, sizeof(*dev));
 	if (!devlink) {
 		dev_err(&pdev->dev, "kzalloc failed\n");
@@ -1508,6 +1517,7 @@ static void shutdown(struct pci_dev *pdev)
 	mlx5_pci_disable_device(dev);
 }
 
+//mlx5驱动支持的设备列表
 static const struct pci_device_id mlx5_core_pci_table[] = {
 	{ PCI_VDEVICE(MELLANOX, PCI_DEVICE_ID_MELLANOX_CONNECTIB) },
 	{ PCI_VDEVICE(MELLANOX, 0x1012), MLX5_PCI_DEV_IS_VF},	/* Connect-IB VF */
@@ -1551,6 +1561,7 @@ static struct pci_driver mlx5_core_driver = {
 	.remove         = remove_one,
 	.shutdown	= shutdown,
 	.err_handler	= &mlx5_err_handler,
+	//支持mlx5的sriov配置
 	.sriov_configure   = mlx5_core_sriov_configure,
 };
 

@@ -161,9 +161,12 @@ static __always_inline void __write_once_size(volatile void *p, void *res, int s
 
 #define WRITE_ONCE(x, val)				\
 ({							\
+	/*使__u为val的副本*/\
 	union { typeof(x) __val; char __c[1]; } __u =	\
 		{ .__val = (val) }; 			\
+		/*将__u.val设置给x*/\
 	__write_once_size(&(x), __u.__c, sizeof(x));	\
+	/*返回设置的val*/\
 	__u.__val;					\
 })
 

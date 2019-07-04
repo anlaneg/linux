@@ -743,17 +743,22 @@ static inline int hlist_unhashed(const struct hlist_node *h)
 	return !h->pprev;
 }
 
+//检查链表是否为空
 static inline int hlist_empty(const struct hlist_head *h)
 {
 	return !READ_ONCE(h->first);
 }
 
+//将n自双链表中移除
 static inline void __hlist_del(struct hlist_node *n)
 {
 	struct hlist_node *next = n->next;
 	struct hlist_node **pprev = n->pprev;
 
+	//使前一个元素直接指向next,即将n元素自当前list中摘取
 	WRITE_ONCE(*pprev, next);
+
+	//使next指向前一个元素
 	if (next)
 		next->pprev = pprev;
 }
@@ -832,6 +837,7 @@ hlist_is_singular_node(struct hlist_node *n, struct hlist_head *h)
 static inline void hlist_move_list(struct hlist_head *old,
 				   struct hlist_head *new)
 {
+	//将old指向的元素，移到new链表上
 	new->first = old->first;
 	if (new->first)
 		new->first->pprev = &new->first;

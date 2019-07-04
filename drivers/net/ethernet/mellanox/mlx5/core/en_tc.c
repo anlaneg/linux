@@ -250,6 +250,7 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 	mh->key.num_actions = num_actions;
 	INIT_LIST_HEAD(&mh->flows);
 
+	//向fw申请对应的mod_hdr_id
 	err = mlx5_modify_header_alloc(priv->mdev, namespace,
 				       mh->key.num_actions,
 				       mh->key.actions,
@@ -1015,6 +1016,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_add_vlan;
 
 	if (attr->action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR) {
+		//需要修改报文头部
 		err = mlx5e_attach_mod_hdr(priv, flow, parse_attr);
 		kfree(parse_attr->mod_hdr_actions);
 		if (err)
@@ -1335,9 +1337,10 @@ static void mlx5e_tc_del_flow(struct mlx5e_priv *priv,
 static int parse_tunnel_attr(struct mlx5e_priv *priv,
 			     struct mlx5_flow_spec *spec,
 			     struct tc_cls_flower_offload *f,
-			     struct net_device *filter_dev, u8 *match_level)
+			     struct net_device *filter_dev, u8 *match_level/*出参，隧道匹配到哪一层？*/)
 {
 	struct netlink_ext_ack *extack = f->common.extack;
+	//当前解析隧道属性，故指向outer_headers（填充掩码）
 	void *headers_c = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 				       outer_headers);
 	void *headers_v = MLX5_ADDR_OF(fte_match_param, spec->match_value,
@@ -1445,12 +1448,15 @@ static int parse_tunnel_attr(struct mlx5e_priv *priv,
 	return 0;
 }
 
+//依据flags返回不同的match头部
 static void *get_match_headers_criteria(u32 flags,
 					struct mlx5_flow_spec *spec)
 {
 	return (flags & MLX5_FLOW_CONTEXT_ACTION_DECAP) ?
+			//隧道解封装，返回inner_headers
 		MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 			     inner_headers) :
+			//非隧道解封装，返回outer_headers
 		MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 			     outer_headers);
 }
@@ -1465,21 +1471,26 @@ static void *get_match_headers_value(u32 flags,
 			     outer_headers);
 }
 
+//解析f中的数据至spec
 static int __parse_cls_flower(struct mlx5e_priv *priv,
 			      struct mlx5_flow_spec *spec,
 			      struct tc_cls_flower_offload *f,
 			      struct net_device *filter_dev,
-			      u8 *match_level, u8 *tunnel_match_level)
+			      u8 *match_level/*出参，非隧道匹配到哪一层*/, u8 *tunnel_match_level/*出参，隧道匹配到哪一层*/)
 {
 	struct netlink_ext_ack *extack = f->common.extack;
+	//外层头部
 	void *headers_c = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 				       outer_headers);
 	void *headers_v = MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				       outer_headers);
+
+	//其它参数
 	void *misc_c = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 				    misc_parameters);
 	void *misc_v = MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				    misc_parameters);
+
 	struct flow_rule *rule = tc_cls_flower_offload_flow_rule(f);
 	struct flow_dissector *dissector = rule->match.dissector;
 	u16 addr_type = 0;
@@ -1511,17 +1522,19 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 		return -EOPNOTSUPP;
 	}
 
+	//如果有隧道报文匹配（ipaddr,keyid,ports,control字段），则填充outer_headers
 	if ((flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_IPV4_ADDRS) ||
 	     flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_KEYID) ||
 	     flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_PORTS)) &&
 	    flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_CONTROL)) {
 		struct flow_match_control match;
 
-		//填充match control
+		//填充隧道match control
 		flow_rule_match_enc_control(rule, &match);
 		switch (match.key->addr_type) {
 		case FLOW_DISSECTOR_KEY_IPV4_ADDRS:
 		case FLOW_DISSECTOR_KEY_IPV6_ADDRS:
+			//填充隧道ip地址,port及key
 			if (parse_tunnel_attr(priv, spec, f, filter_dev, tunnel_match_level))
 				return -EOPNOTSUPP;
 			break;
@@ -1532,6 +1545,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 		/* In decap flow, header pointers should point to the inner
 		 * headers, outer header were already set by parse_tunnel_attr
 		 */
+		//隧道已解析完，切换至inner_headers
 		headers_c = get_match_headers_criteria(MLX5_FLOW_CONTEXT_ACTION_DECAP,
 						       spec);
 		headers_v = get_match_headers_value(MLX5_FLOW_CONTEXT_ACTION_DECAP,
@@ -1541,7 +1555,7 @@ static int __parse_cls_flower(struct mlx5e_priv *priv,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
-		//取key_basic的key及mask填充进match
+		//取key_basic的key及mask填充进match(ethertype字段）
 		flow_rule_match_basic(rule, &match);
 		MLX5_SET(fte_match_set_lyr_2_4, headers_c, ethertype,
 			 ntohs(match.mask->n_proto));
@@ -1838,6 +1852,7 @@ static int parse_cls_flower(struct mlx5e_priv *priv,
 	struct mlx5_core_dev *dev = priv->mdev;
 	struct mlx5_eswitch *esw = dev->priv.eswitch;
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
+	//非隧道匹配到哪一层，隧道匹配到哪一层
 	u8 match_level, tunnel_match_level = MLX5_MATCH_NONE;
 	struct mlx5_eswitch_rep *rep;
 	int err;
@@ -1850,6 +1865,7 @@ static int parse_cls_flower(struct mlx5e_priv *priv,
 		if (rep->vport != MLX5_VPORT_UPLINK &&
 		    (esw->offloads.inline_mode != MLX5_INLINE_MODE_NONE &&
 		    esw->offloads.inline_mode < match_level)) {
+			//esw offload支持的解析层数不如match_level深，故报错
 			NL_SET_ERR_MSG_MOD(extack,
 					   "Flow is not offloaded due to min inline setting");
 			netdev_warn(priv->netdev,
@@ -2945,6 +2961,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				 */
 				return -EINVAL;
 			} else {
+				//非同一个switch hardware,无法forwarding
 				NL_SET_ERR_MSG_MOD(extack,
 						   "devices are not on same switch HW, can't offload forwarding");
 				pr_err("devices %s %s not on same switch HW, can't offload forwarding\n",
@@ -3128,13 +3145,14 @@ static bool is_peer_flow_needed(struct mlx5e_tc_flow *flow)
 static int
 mlx5e_alloc_flow(struct mlx5e_priv *priv, int attr_size,
 		 struct tc_cls_flower_offload *f, u16 flow_flags,
-		 struct mlx5e_tc_flow_parse_attr **__parse_attr,
-		 struct mlx5e_tc_flow **__flow)
+		 struct mlx5e_tc_flow_parse_attr **__parse_attr/*出参，申请的parse_attr*/,
+		 struct mlx5e_tc_flow **__flow/*出参，申请的flow*/)
 {
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
 	struct mlx5e_tc_flow *flow;
 	int err;
 
+	//申请flow内存及其私有数据大小
 	flow = kzalloc(sizeof(*flow) + attr_size, GFP_KERNEL);
 	parse_attr = kvzalloc(sizeof(*parse_attr), GFP_KERNEL);
 	if (!parse_attr || !flow) {
@@ -3196,6 +3214,8 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	int attr_size, err;
 
 	flow_flags |= MLX5E_TC_FLOW_ESWITCH;
+
+	//申请初始化flow,parse_attr
 	attr_size  = sizeof(struct mlx5_esw_flow_attr);
 	err = mlx5e_alloc_flow(priv, attr_size, f, flow_flags,
 			       &parse_attr, &flow);
@@ -3207,7 +3227,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 				 priv, parse_attr,
 				 f, in_rep, in_mdev);
 
-	//解析flower对应的key,mask
+	//解析flower对应的key,mask到parse_attr->spec中
 	err = parse_cls_flower(flow->priv, flow, &parse_attr->spec,
 			       f, filter_dev);
 	if (err)
@@ -3286,9 +3306,10 @@ out:
 	return err;
 }
 
+//驱动offload流入口
 static int
 mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
-		   struct tc_cls_flower_offload *f,
+		   struct tc_cls_flower_offload *f/*要offload的流*/,
 		   u16 flow_flags,
 		   struct net_device *filter_dev,
 		   struct mlx5e_tc_flow **__flow)
@@ -3385,7 +3406,7 @@ mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 
 	get_flags(flags, &flow_flags);
 
-	//检查是否开启了dev的tc offload
+	//检查dev是否开启了tc offload
 	if (!tc_can_offload_extack(priv->netdev, f->common.extack))
 		return -EOPNOTSUPP;
 
@@ -3402,7 +3423,7 @@ mlx5e_tc_add_flow(struct mlx5e_priv *priv,
 
 //处理flower规则配置
 int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
-			   struct tc_cls_flower_offload *f, int flags)
+			   struct tc_cls_flower_offload *f/*要offload的flower*/, int flags)
 {
 	struct netlink_ext_ack *extack = f->common.extack;
 	struct rhashtable *tc_ht = get_tc_ht(priv, flags);

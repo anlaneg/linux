@@ -422,7 +422,7 @@ struct tcf_block {
 	refcount_t refcnt;
 	struct net *net;//所属net
 	struct Qdisc *q;//所属的Qdisc
-	struct list_head cb_list;
+	struct list_head cb_list;//cb链表，挂接在tcf_block_cb上
 	struct list_head owner_list;
 	bool keep_dst;
 	unsigned int offloadcnt; /* Number of oddloaded filters */

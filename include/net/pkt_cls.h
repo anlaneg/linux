@@ -624,14 +624,16 @@ enum tc_block_command {
 //块offload参数
 struct tc_block_offload {
 	enum tc_block_command command;
+	//binder的方向
 	enum tcf_block_binder_type binder_type;
+	//command对应的block
 	struct tcf_block *block;
 	struct netlink_ext_ack *extack;
 };
 
 struct tc_cls_common_offload {
-	u32 chain_index;
-	__be16 protocol;
+	u32 chain_index;//属属的chain
+	__be16 protocol;//对应的分类协议
 	u32 prio;
 	struct netlink_ext_ack *extack;
 };
@@ -756,7 +758,7 @@ enum tc_fl_command {
 
 struct tc_cls_flower_offload {
 	struct tc_cls_common_offload common;
-	enum tc_fl_command command;//flower操作符
+	enum tc_fl_command command;//flower操作命令符
 	unsigned long cookie;
 	struct flow_rule *rule;//操作的规则
 	struct flow_stats stats;

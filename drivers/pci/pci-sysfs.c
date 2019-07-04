@@ -585,6 +585,7 @@ static ssize_t sriov_numvfs_show(struct device *dev,
  * Note: SRIOV spec doesn't allow partial VF
  *       disable, so it's all or none.
  */
+//用户写入numvfs,要求创建指定数量vf
 static ssize_t sriov_numvfs_store(struct device *dev,
 				  struct device_attribute *attr,
 				  const char *buf, size_t count)
@@ -593,25 +594,30 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 	int ret;
 	u16 num_vfs;
 
+	//获得用户录入的值
 	ret = kstrtou16(buf, 0, &num_vfs);
 	if (ret < 0)
 		return ret;
 
+	//检查是否超过接口限制
 	if (num_vfs > pci_sriov_get_totalvfs(pdev))
 		return -ERANGE;
 
 	device_lock(&pdev->dev);
 
+	//vf数量未变化，退出
 	if (num_vfs == pdev->sriov->num_VFs)
 		goto exit;
 
 	/* is PF driver loaded w/callback */
+	//未找到要应的setup回调
 	if (!pdev->driver || !pdev->driver->sriov_configure) {
 		pci_info(pdev, "Driver doesn't support SRIOV configuration via sysfs\n");
 		ret = -ENOENT;
 		goto exit;
 	}
 
+	//关闭所有vf
 	if (num_vfs == 0) {
 		/* disable VFs */
 		ret = pdev->driver->sriov_configure(pdev, 0);
@@ -619,6 +625,7 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 	}
 
 	/* enable VFs */
+	//之前已开始了vf,再设置需要先关闭再开启
 	if (pdev->sriov->num_VFs) {
 		pci_warn(pdev, "%d VFs already enabled. Disable before enabling %d VFs\n",
 			 pdev->sriov->num_VFs, num_vfs);
@@ -626,10 +633,12 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 		goto exit;
 	}
 
+	//通过回调使能sriov，返回启动的vf数目
 	ret = pdev->driver->sriov_configure(pdev, num_vfs);
 	if (ret < 0)
 		goto exit;
 
+	//未按要求全部开启
 	if (ret != num_vfs)
 		pci_warn(pdev, "%d VFs requested; only %d enabled\n",
 			 num_vfs, ret);

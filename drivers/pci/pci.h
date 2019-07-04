@@ -284,6 +284,7 @@ struct pci_sriov {
 	u16		ctrl;		/* SR-IOV Control */
 	u16		total_VFs;	/* Total VFs associated with the PF */
 	u16		initial_VFs;	/* Initial VFs associated with the PF */
+	//当前启用的vf数量
 	u16		num_VFs;	/* Number of VFs available */
 	u16		offset;		/* First VF Routing ID offset */
 	u16		stride;		/* Following VF stride */
@@ -291,6 +292,7 @@ struct pci_sriov {
 	u32		pgsz;		/* Page size for BAR alignment */
 	u8		link;		/* Function Dependency Link */
 	u8		max_VF_buses;	/* Max buses consumed by VFs */
+	//支持的最大vf数目
 	u16		driver_max_VFs;	/* Max num VFs driver supports */
 	struct pci_dev	*dev;		/* Lowest numbered PF */
 	struct pci_dev	*self;		/* This PF */

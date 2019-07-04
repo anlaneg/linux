@@ -195,7 +195,9 @@ EXPORT_SYMBOL(jiffies_64);
 
 struct timer_base {
 	raw_spinlock_t		lock;
+	//记录当前正在触发的timer
 	struct timer_list	*running_timer;
+	//当前指针，逻辑时间最小单位，每次增加1
 	unsigned long		clk;
 	unsigned long		next_expiry;
 	unsigned int		cpu;
@@ -490,8 +492,10 @@ static inline unsigned calc_index(unsigned expires, unsigned lvl)
 	return LVL_OFFS(lvl) + (expires & LVL_MASK);
 }
 
+//决定timer要存放的wheel位置
 static int calc_wheel_index(unsigned long expires, unsigned long clk)
 {
+	//过期时间与当前指针之间的差值（时间差）
 	unsigned long delta = expires - clk;
 	unsigned int idx;
 
@@ -512,12 +516,14 @@ static int calc_wheel_index(unsigned long expires, unsigned long clk)
 	} else if (LVL_DEPTH > 8 && delta < LVL_START(8)) {
 		idx = calc_index(expires, 7);
 	} else if ((long) delta < 0) {
+		//要加入的timer已过期
 		idx = clk & LVL_MASK;
 	} else {
 		/*
 		 * Force expire obscene large timeouts to expire at the
 		 * capacity limit of the wheel.
 		 */
+		//要存入的timer过期时间已超过timer的量程，按最大时间计
 		if (expires >= WHEEL_TIMEOUT_CUTOFF)
 			expires = WHEEL_TIMEOUT_MAX;
 
@@ -533,7 +539,7 @@ static int calc_wheel_index(unsigned long expires, unsigned long clk)
 static void enqueue_timer(struct timer_base *base, struct timer_list *timer,
 			  unsigned int idx)
 {
-	//timer入队
+	//将timer存放到指定的index中，实现timer入队
 	hlist_add_head(&timer->entry, base->vectors + idx);
 	__set_bit(idx, base->pending_map);
 	timer_set_idx(timer, idx);
@@ -546,6 +552,7 @@ __internal_add_timer(struct timer_base *base, struct timer_list *timer)
 {
 	unsigned int idx;
 
+	//计算要存放的位置idx
 	idx = calc_wheel_index(timer->expires, base->clk);
 	enqueue_timer(base, timer, idx);
 }
@@ -586,6 +593,7 @@ trigger_dyntick_cpu(struct timer_base *base, struct timer_list *timer)
 	wake_up_nohz_cpu(base->cpu);
 }
 
+//将timer加入到base中
 static void
 internal_add_timer(struct timer_base *base, struct timer_list *timer)
 {
@@ -810,9 +818,12 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 
 	debug_deactivate(timer);
 
+	//将entry自list中移除
 	__hlist_del(entry);
+	//按要求清楚entry的pprev
 	if (clear_pending)
 		entry->pprev = NULL;
+	//将entry的next置为一个magic number
 	entry->next = LIST_POISON2;
 }
 
@@ -831,6 +842,7 @@ static int detach_if_pending(struct timer_list *timer, struct timer_base *base,
 	return 1;
 }
 
+//取指定的timer_base
 static inline struct timer_base *get_timer_cpu_base(u32 tflags, u32 cpu)
 {
 	struct timer_base *base = per_cpu_ptr(&timer_bases[BASE_STD], cpu);
@@ -1169,6 +1181,7 @@ void add_timer_on(struct timer_list *timer, int cpu)
 	forward_timer_base(base);
 
 	debug_timer_activate(timer);
+	//将timer加入到指定base
 	internal_add_timer(base, timer);
 	raw_spin_unlock_irqrestore(&base->lock, flags);
 }
@@ -1323,6 +1336,7 @@ static void call_timer_fn(struct timer_list *timer,
 	lock_map_acquire(&lockdep_map);
 
 	trace_timer_expire_entry(timer, baseclk);
+	//触发timer回调
 	fn(timer);
 	trace_timer_expire_exit(timer);
 
@@ -1354,13 +1368,17 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 		struct timer_list *timer;
 		void (*fn)(struct timer_list *);
 
+		//取head上的一个timer
 		timer = hlist_entry(head->first, struct timer_list, entry);
 
+		//记录当前正在触发的timer
 		base->running_timer = timer;
+		//将timer自原待触发链表中移除
 		detach_timer(timer, true);
 
 		fn = timer->function;
 
+		//依flag不同，解除锁，并调用timer的回调函数
 		if (timer->flags & TIMER_IRQSAFE) {
 			raw_spin_unlock(&base->lock);
 			call_timer_fn(timer, fn, baseclk);
@@ -1386,6 +1404,7 @@ static int __collect_expired_timers(struct timer_base *base,
 
 		if (__test_and_clear_bit(idx, base->pending_map)) {
 			vec = base->vectors + idx;
+			//将vec移到heads中
 			hlist_move_list(vec, heads++);
 			levels++;
 		}
@@ -1625,6 +1644,7 @@ static int collect_expired_timers(struct timer_base *base,
 static inline int collect_expired_timers(struct timer_base *base,
 					 struct hlist_head *heads)
 {
+	//收集过期的timer到heads中，返回收集到的timer总数
 	return __collect_expired_timers(base, heads);
 }
 #endif
@@ -1659,6 +1679,7 @@ static inline void __run_timers(struct timer_base *base)
 	struct hlist_head heads[LVL_DEPTH];
 	int levels;
 
+	//如果jiffies < base->clk,则直接退出
 	if (!time_after_eq(jiffies, base->clk))
 		return;
 
@@ -1685,6 +1706,7 @@ static inline void __run_timers(struct timer_base *base)
 		levels = collect_expired_timers(base, heads);
 		base->clk++;
 
+		//执行levels个timer的过期触发
 		while (levels--)
 			expire_timers(base, heads + levels);
 	}
@@ -1697,6 +1719,7 @@ static inline void __run_timers(struct timer_base *base)
  */
 static __latent_entropy void run_timer_softirq(struct softirq_action *h)
 {
+	//取当前cpu对应的timer base,开始响应timer软中断
 	struct timer_base *base = this_cpu_ptr(&timer_bases[BASE_STD]);
 
 	__run_timers(base);
@@ -1948,6 +1971,7 @@ static void __init init_timer_cpus(void)
 void __init init_timers(void)
 {
 	init_timer_cpus();
+	//注册timer的软中断
 	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
 }
 

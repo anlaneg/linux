@@ -422,7 +422,7 @@ struct mlx5_ifc_fte_match_set_lyr_2_4_bits {
 	u8         smac_47_16[0x20];
 
 	u8         smac_15_0[0x10];
-	u8         ethertype[0x10];
+	u8         ethertype[0x10];//以网帧类型
 
 	u8         dmac_47_16[0x20];
 
@@ -1351,10 +1351,12 @@ union mlx5_ifc_dest_format_struct_flow_counter_list_auto_bits {
 };
 
 struct mlx5_ifc_fte_match_param_bits {
+	//外部头匹配
 	struct mlx5_ifc_fte_match_set_lyr_2_4_bits outer_headers;
 
 	struct mlx5_ifc_fte_match_set_misc_bits misc_parameters;
 
+	//内层头匹配
 	struct mlx5_ifc_fte_match_set_lyr_2_4_bits inner_headers;
 
 	struct mlx5_ifc_fte_match_set_misc2_bits misc_parameters_2;
@@ -2542,6 +2544,7 @@ enum {
 	MLX5_FLOW_CONTEXT_ACTION_FWD_DEST  = 0x4,
 	MLX5_FLOW_CONTEXT_ACTION_COUNT     = 0x8,
 	MLX5_FLOW_CONTEXT_ACTION_PACKET_REFORMAT = 0x10,
+	//隧道解封装
 	MLX5_FLOW_CONTEXT_ACTION_DECAP     = 0x20,
 	//修改头部
 	MLX5_FLOW_CONTEXT_ACTION_MOD_HDR   = 0x40,

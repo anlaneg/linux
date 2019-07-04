@@ -869,6 +869,7 @@ EXPORT_SYMBOL_GPL(pci_sriov_set_totalvfs);
  */
 int pci_sriov_get_totalvfs(struct pci_dev *dev)
 {
+	//仅pf支持sriov方式进行虚拟
 	if (!dev->is_physfn)
 		return 0;
 

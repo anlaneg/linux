@@ -540,11 +540,12 @@ int mlx5e_tc_tun_init_encap_attr(struct net_device *tunnel_dev,
 	return 0;
 }
 
+//解析并填充vxlan相关的掩码及key
 static int mlx5e_tc_tun_parse_vxlan(struct mlx5e_priv *priv,
 				    struct mlx5_flow_spec *spec,
 				    struct tc_cls_flower_offload *f,
-				    void *headers_c,
-				    void *headers_v)
+				    void *headers_c/*掩码*/,
+				    void *headers_v/*取值*/)
 {
 	struct flow_rule *rule = tc_cls_flower_offload_flow_rule(f);
 	struct netlink_ext_ack *extack = f->common.extack;
@@ -579,25 +580,31 @@ static int mlx5e_tc_tun_parse_vxlan(struct mlx5e_priv *priv,
 	}
 
 	/* dst UDP port is valid here */
+	//将ip_protocol的mask置为全1
 	MLX5_SET_TO_ONES(fte_match_set_lyr_2_4, headers_c, ip_protocol);
+	//匹配ip_protocol为udp协议
 	MLX5_SET(fte_match_set_lyr_2_4, headers_v, ip_protocol, IPPROTO_UDP);
 
+	//设置udp_dport(掩码及value)
 	MLX5_SET(fte_match_set_lyr_2_4, headers_c, udp_dport,
 		 ntohs(enc_ports.mask->dst));
 	MLX5_SET(fte_match_set_lyr_2_4, headers_v, udp_dport,
 		 ntohs(enc_ports.key->dst));
 
+	//设置udp_sport(掩码及value)
 	MLX5_SET(fte_match_set_lyr_2_4, headers_c, udp_sport,
 		 ntohs(enc_ports.mask->src));
 	MLX5_SET(fte_match_set_lyr_2_4, headers_v, udp_sport,
 		 ntohs(enc_ports.key->src));
 
 	/* match on VNI */
+	//如果匹配key,则填充key及其mask
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_KEYID)) {
 		struct flow_match_enc_keyid enc_keyid;
 
 		flow_rule_match_enc_keyid(rule, &enc_keyid);
 
+		//设置key的掩码及value
 		MLX5_SET(fte_match_set_misc, misc_c, vxlan_vni,
 			 be32_to_cpu(enc_keyid.mask->keyid));
 		MLX5_SET(fte_match_set_misc, misc_v, vxlan_vni,
@@ -647,18 +654,20 @@ static int mlx5e_tc_tun_parse_gretap(struct mlx5e_priv *priv,
 	return 0;
 }
 
+//tunnel解析
 int mlx5e_tc_tun_parse(struct net_device *filter_dev,
 		       struct mlx5e_priv *priv,
 		       struct mlx5_flow_spec *spec,
 		       struct tc_cls_flower_offload *f,
-		       void *headers_c,
-		       void *headers_v, u8 *match_level)
+		       void *headers_c/*掩码*/,
+		       void *headers_v, u8 *match_level/*出参，匹配到哪一层？*/)
 {
 	int tunnel_type;
 	int err = 0;
 
 	tunnel_type = mlx5e_tc_tun_get_type(filter_dev);
 	if (tunnel_type == MLX5E_TC_TUNNEL_TYPE_VXLAN) {
+		//采用vxlan封装，匹配到4层
 		*match_level = MLX5_MATCH_L4;
 		err = mlx5e_tc_tun_parse_vxlan(priv, spec, f,
 					       headers_c, headers_v);

@@ -1629,7 +1629,7 @@ EXPORT_SYMBOL_GPL(queue_work_node);
 
 void delayed_work_timer_fn(struct timer_list *t)
 {
-	//定时器到期，将dwork入队
+	//定时器到期，由timer_list取得delayed_work,并将dwork入队
 	struct delayed_work *dwork = from_timer(dwork, t, timer);
 
 	/* should have been called from irqsafe timer with irq already off */
@@ -1639,7 +1639,7 @@ EXPORT_SYMBOL(delayed_work_timer_fn);
 
 //work入队（支持延迟一段时间后入队执行）
 static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
-				struct delayed_work *dwork, unsigned long delay)
+				struct delayed_work *dwork, unsigned long delay/*work需要延迟的时间*/)
 {
 	struct timer_list *timer = &dwork->timer;
 	struct work_struct *work = &dwork->work;
@@ -1666,8 +1666,10 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
 	//那时，将会由此回调，调用__queue_work函数
 	dwork->wq = wq;
 	dwork->cpu = cpu;
+	//设置定时器超时时间
 	timer->expires = jiffies + delay;
 
+	//将timer加入系统，如果timer超时，则由timer软中断触发其执行
 	if (unlikely(cpu != WORK_CPU_UNBOUND))
 		add_timer_on(timer, cpu);
 	else
@@ -1686,7 +1688,7 @@ static void __queue_delayed_work(int cpu, struct workqueue_struct *wq,
  * execution.
  */
 bool queue_delayed_work_on(int cpu, struct workqueue_struct *wq,
-			   struct delayed_work *dwork, unsigned long delay)
+			   struct delayed_work *dwork, unsigned long delay/*work延迟执行的时间*/)
 {
 	struct work_struct *work = &dwork->work;
 	bool ret = false;
