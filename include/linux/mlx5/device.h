@@ -110,6 +110,7 @@
 		     << __mlx5_dw_bit_off(typ, fld))); \
 } while (0)
 
+//取typ结构体中的fld成员
 #define MLX5_GET(typ, p, fld) ((be32_to_cpu(*((__be32 *)(p) +\
 __mlx5_dw_off(typ, fld))) >> __mlx5_dw_bit_off(typ, fld)) & \
 __mlx5_mask(typ, fld))

@@ -6,7 +6,9 @@
 #include <linux/tc_act/tc_pedit.h>
 
 struct tcf_pedit_key_ex {
+	//修改的头部类型
 	enum pedit_header_type htype;
+	//修改方式
 	enum pedit_cmd cmd;
 };
 
@@ -14,6 +16,7 @@ struct tcf_pedit {
 	struct tc_action	common;
 	unsigned char		tcfp_nkeys;//tcfp_keys数目
 	unsigned char		tcfp_flags;
+	//要修改的key参数
 	struct tc_pedit_key	*tcfp_keys;
 	struct tcf_pedit_key_ex	*tcfp_keys_ex;
 };

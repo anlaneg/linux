@@ -337,6 +337,7 @@ static inline void tcf_exts_put_net(struct tcf_exts *exts)
 }
 
 #ifdef CONFIG_NET_CLS_ACT
+//遍历所有action
 #define tcf_exts_for_each_action(i, a, exts) \
 	for (i = 0; i < TCA_ACT_MAX_PRIO && ((a) = (exts)->actions[i]); i++)
 #else

@@ -502,6 +502,7 @@ int tcf_idr_check_alloc(struct tc_action_net *tn, u32 *index,
 again:
 	mutex_lock(&idrinfo->lock);
 	if (*index) {
+		//通过index找到其对应的action
 		p = idr_find(&idrinfo->action_idr, *index);
 		if (IS_ERR(p)) {
 			/* This means that another process allocated
@@ -518,6 +519,7 @@ again:
 			*a = p;
 			ret = 1;
 		} else {
+			//未找到，为其申请一个index
 			*a = NULL;
 			ret = idr_alloc_u32(&idrinfo->action_idr, NULL, index,
 					    *index, GFP_KERNEL);
@@ -526,6 +528,7 @@ again:
 					    ERR_PTR(-EBUSY), *index);
 		}
 	} else {
+		//未指定index,申请一个
 		*index = 1;
 		*a = NULL;
 		ret = idr_alloc_u32(&idrinfo->action_idr, NULL, index,

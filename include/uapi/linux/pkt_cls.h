@@ -113,6 +113,7 @@ enum tca_id {
 	TCA_ID_TUNNEL_KEY = TCA_ACT_TUNNEL_KEY,
 	TCA_ID_SIMP = TCA_ACT_SIMP,
 	TCA_ID_IFE = TCA_ACT_IFE,
+	//采样
 	TCA_ID_SAMPLE = TCA_ACT_SAMPLE,
 	/* other actions go here */
 	__TCA_ID_MAX = 255

@@ -103,18 +103,29 @@ void flow_rule_match_enc_opts(const struct flow_rule *rule,
 			      struct flow_match_enc_opts *out);
 
 enum flow_action_id {
+	//接受报文
 	FLOW_ACTION_ACCEPT		= 0,
+	//报文丢弃
 	FLOW_ACTION_DROP,
 	FLOW_ACTION_TRAP,
+	//chain跳转（需设置chain_index)
 	FLOW_ACTION_GOTO,
+	//报文重定向到设备（需要设置dev)
 	FLOW_ACTION_REDIRECT,
 	FLOW_ACTION_MIRRED,
+	//报文vlan添加(需要设置vlan)
 	FLOW_ACTION_VLAN_PUSH,
+	//报文vlan移除（无参数）
 	FLOW_ACTION_VLAN_POP,
+	//报文vlan修改（需要设置vlan)
 	FLOW_ACTION_VLAN_MANGLE,
+	//报文封装隧道（需要设置tunnel)
 	FLOW_ACTION_TUNNEL_ENCAP,
+	//报文解隧道（无参数）
 	FLOW_ACTION_TUNNEL_DECAP,
+	//直接修改某字段
 	FLOW_ACTION_MANGLE,
+	//在字段上加上某常量形成设置
 	FLOW_ACTION_ADD,
 	FLOW_ACTION_CSUM,
 	FLOW_ACTION_MARK,
@@ -138,27 +149,33 @@ enum flow_action_mangle_base {
 };
 
 struct flow_action_entry {
-	enum flow_action_id		id;//action id
+	enum flow_action_id		id;//action 类别
+	//action对应的参数
 	union {
+		//goto chain对应的chain_index
 		u32			chain_index;	/* FLOW_ACTION_GOTO */
 
+		//mirror,redirect对应的目标设备
 		struct net_device	*dev;		/* FLOW_ACTION_REDIRECT */
 
+		//vlan添加对应的参数
 		struct {				/* FLOW_ACTION_VLAN */
-			u16		vid;
-			__be16		proto;
-			u8		prio;
+			u16		vid;//vlan id
+			__be16		proto;//vlan对应的ethertype
+			u8		prio;//vlan优先级
 		} vlan;
 
 		struct {				/* FLOW_ACTION_PACKET_EDIT */
-			enum flow_action_mangle_base htype;
-			u32		offset;
+			enum flow_action_mangle_base htype;//修改的字段所处头部类型
+			u32		offset;//自头部位置到字段的偏移量
 			u32		mask;
-			u32		val;
+			u32		val;//设置的值
 		} mangle;
 
+		//隧道封装参数
 		const struct ip_tunnel_info *tunnel;	/* FLOW_ACTION_TUNNEL_ENCAP */
 
+		//指出需要更新哪些层的checksum
 		u32			csum_flags;	/* FLOW_ACTION_CSUM */
 
 		u32			mark;		/* FLOW_ACTION_MARK */

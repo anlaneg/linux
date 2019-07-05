@@ -130,8 +130,8 @@ struct mlx5e_tc_flow_parse_attr {
 	struct ip_tunnel_info tun_info[MLX5_MAX_FLOW_FWD_VPORTS];
 	struct net_device *filter_dev;
 	struct mlx5_flow_spec spec;
-	int num_mod_hdr_actions;
-	int max_mod_hdr_actions;
+	int num_mod_hdr_actions;//有效的mod_hdr_actions大小
+	int max_mod_hdr_actions;//mod_hdr_actions数组大小
 	void *mod_hdr_actions;
 	int mirred_ifindex[MLX5_MAX_FLOW_FWD_VPORTS];
 };
@@ -1900,6 +1900,7 @@ struct pedit_headers_action {
 	u32			pedits;
 };
 
+//各层可修改字段的offset
 static int pedit_header_offsets[] = {
 	[FLOW_ACT_MANGLE_HDR_TYPE_ETH] = offsetof(struct pedit_headers, eth),
 	[FLOW_ACT_MANGLE_HDR_TYPE_IP4] = offsetof(struct pedit_headers, ip4),
@@ -1911,11 +1912,12 @@ static int pedit_header_offsets[] = {
 //获取_htype类型对应的header指针
 #define pedit_header(_ph, _htype) ((void *)(_ph) + pedit_header_offsets[_htype])
 
-static int set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
-			 struct pedit_headers_action *hdrs)
+static int set_pedit_val(u8 hdr_type/*指定采用哪个layer*/, u32 mask, u32 val, u32 offset/*指定layer中的offset*/,
+			 struct pedit_headers_action *hdrs/*为指定字段设置修改后的值*/)
 {
 	u32 *curr_pmask, *curr_pval;
 
+	//取待修改字段的mask,val地起地址
 	curr_pmask = (u32 *)(pedit_header(&hdrs->masks, hdr_type) + offset);
 	curr_pval  = (u32 *)(pedit_header(&hdrs->vals, hdr_type) + offset);
 
@@ -1923,6 +1925,7 @@ static int set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
 	if (*curr_pmask & mask)  /* disallow acting twice on the same location */
 		goto out_err;
 
+	//为基填充要设置的值
 	*curr_pmask |= mask;
 	*curr_pval  |= (val & mask);
 
@@ -2065,9 +2068,11 @@ static int offload_pedit_fields(struct pedit_headers_action *hdrs,
 		memcpy(&s_mask, s_masks_p, f->size);
 		memcpy(&a_mask, a_masks_p, f->size);
 
+		//都没有，忽略此字段
 		if (!s_mask && !a_mask) /* nothing to offload here */
 			continue;
 
+		//都有，则配置有错
 		if (s_mask && a_mask) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "can't set and add to the same HW field");
@@ -2075,6 +2080,7 @@ static int offload_pedit_fields(struct pedit_headers_action *hdrs,
 			return -EOPNOTSUPP;
 		}
 
+		//起过支持的最大action数，报错
 		if (nactions == max_actions) {
 			NL_SET_ERR_MSG_MOD(extack,
 					   "too many pedit actions, can't offload");
@@ -2084,6 +2090,7 @@ static int offload_pedit_fields(struct pedit_headers_action *hdrs,
 
 		skip = false;
 		if (s_mask) {
+			//set方式offload
 			void *match_mask = headers_c + f->match_offset;
 			void *match_val = headers_v + f->match_offset;
 
@@ -2097,6 +2104,7 @@ static int offload_pedit_fields(struct pedit_headers_action *hdrs,
 			/* clear to denote we consumed this field */
 			memset(s_masks_p, 0, f->size);
 		} else {
+			//add offload方式
 			u32 zero = 0;
 
 			cmd  = MLX5_ACTION_TYPE_ADD;
@@ -2165,6 +2173,7 @@ static int mlx5e_flow_namespace_max_modify_action(struct mlx5_core_dev *mdev,
 		return MLX5_CAP_FLOWTABLE_NIC_RX(mdev, max_modify_header_actions);
 }
 
+//申请mod_hdr_actions空间
 static int alloc_mod_hdr_actions(struct mlx5e_priv *priv,
 				 struct pedit_headers_action *hdrs,
 				 int namespace,
@@ -2172,6 +2181,7 @@ static int alloc_mod_hdr_actions(struct mlx5e_priv *priv,
 {
 	int nkeys, action_size, max_actions;
 
+	//需修改的字段数
 	nkeys = hdrs[TCA_PEDIT_KEY_EX_CMD_SET].pedits +
 		hdrs[TCA_PEDIT_KEY_EX_CMD_ADD].pedits;
 	action_size = MLX5_UN_SZ_BYTES(set_action_in_add_action_in_auto);
@@ -2190,13 +2200,14 @@ static int alloc_mod_hdr_actions(struct mlx5e_priv *priv,
 
 static const struct pedit_headers zero_masks = {};
 
+//将act中的参数填充到hdrs中
 static int parse_tc_pedit_action(struct mlx5e_priv *priv,
 				 const struct flow_action_entry *act, int namespace,
 				 struct mlx5e_tc_flow_parse_attr *parse_attr,
 				 struct pedit_headers_action *hdrs,
 				 struct netlink_ext_ack *extack)
 {
-	u8 cmd = (act->id == FLOW_ACTION_MANGLE) ? 0 : 1;
+	u8 cmd = (act->id == FLOW_ACTION_MANGLE) ? 0/*报文内容修改*/ : 1/*报文字段增加固定值*/;
 	int err = -EOPNOTSUPP;
 	u32 mask, val, offset;
 	u8 htype;
@@ -2205,6 +2216,7 @@ static int parse_tc_pedit_action(struct mlx5e_priv *priv,
 	err = -EOPNOTSUPP; /* can't be all optimistic */
 
 	if (htype == FLOW_ACT_MANGLE_UNSPEC) {
+		//未指明修改的报文头部类型
 		NL_SET_ERR_MSG_MOD(extack, "legacy pedit isn't offloaded");
 		goto out_err;
 	}
@@ -2241,6 +2253,7 @@ static int alloc_tc_pedit_action(struct mlx5e_priv *priv, int namespace,
 	int err;
 	u8 cmd;
 
+	//如申请	mod_hdr_actions,则为其申请空间
 	if (!parse_attr->mod_hdr_actions) {
 		err = alloc_mod_hdr_actions(priv, hdrs, namespace, parse_attr);
 		if (err)
@@ -2839,6 +2852,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				struct mlx5e_tc_flow *flow,
 				struct netlink_ext_ack *extack)
 {
+	//共2个元素，0表示修改，1表示add
 	struct pedit_headers_action hdrs[2] = {};
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	struct mlx5_esw_flow_attr *attr = flow->esw_attr;
@@ -2866,7 +2880,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 		case FLOW_ACTION_ADD:
 			//转换为头部修改
 			err = parse_tc_pedit_action(priv, act, MLX5_FLOW_NAMESPACE_FDB,
-						    parse_attr, hdrs, extack);
+						    parse_attr, hdrs/*出参，要设置的值*/, extack);
 			if (err)
 				return err;
 
@@ -2980,6 +2994,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			break;
 		case FLOW_ACTION_VLAN_PUSH:
 		case FLOW_ACTION_VLAN_POP:
+			//vlan push 与 vlan pop
 			if (act->id == FLOW_ACTION_VLAN_PUSH &&
 			    (action & MLX5_FLOW_CONTEXT_ACTION_VLAN_POP)) {
 				/* Replace vlan pop+push with vlan modify */
@@ -2997,6 +3012,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			attr->split_count = attr->out_count;
 			break;
 		case FLOW_ACTION_VLAN_MANGLE:
+			//vlan 修改
 			err = add_vlan_rewrite_action(priv,
 						      MLX5_FLOW_NAMESPACE_FDB,
 						      act, parse_attr, hdrs,
@@ -3010,6 +3026,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			action |= MLX5_FLOW_CONTEXT_ACTION_DECAP;
 			break;
 		case FLOW_ACTION_GOTO: {
+			//跳转到指定chain
 			u32 dest_chain = act->chain_index;
 			u32 max_chain = mlx5_eswitch_get_chain_range(esw);
 
@@ -3043,6 +3060,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			return err;
 	}
 
+	//有报文修改或add操作
 	if (hdrs[TCA_PEDIT_KEY_EX_CMD_SET].pedits ||
 	    hdrs[TCA_PEDIT_KEY_EX_CMD_ADD].pedits) {
 		err = alloc_tc_pedit_action(priv, MLX5_FLOW_NAMESPACE_FDB,
@@ -3233,7 +3251,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
-	//解析action
+	//解析action（待分析）
 	err = parse_tc_fdb_actions(priv, &rule->action, flow, extack);
 	if (err)
 		goto err_free;

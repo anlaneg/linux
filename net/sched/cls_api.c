@@ -3307,6 +3307,7 @@ int tc_setup_flow_action(struct flow_action *flow_action/*出参，记录转换�
 	tcf_exts_for_each_action(i, act, exts) {
 		struct flow_action_entry *entry;
 
+		//待填充的entry
 		entry = &flow_action->entries[j];
 		if (is_tcf_gact_ok(act)) {
 			entry->id = FLOW_ACTION_ACCEPT;
@@ -3336,6 +3337,7 @@ int tc_setup_flow_action(struct flow_action *flow_action/*出参，记录转换�
 				entry->vlan.prio = tcf_vlan_push_prio(act);
 				break;
 			case TCA_VLAN_ACT_POP:
+				//vlan移除不要求参数
 				entry->id = FLOW_ACTION_VLAN_POP;
 				break;
 			case TCA_VLAN_ACT_MODIFY:
@@ -3353,6 +3355,7 @@ int tc_setup_flow_action(struct flow_action *flow_action/*出参，记录转换�
 		} else if (is_tcf_tunnel_release(act)) {
 			entry->id = FLOW_ACTION_TUNNEL_DECAP;
 		} else if (is_tcf_pedit(act)) {
+			//报文修改，遍历每个修改字段，将相应的	htype,mask等填充进flow_action
 			for (k = 0; k < tcf_pedit_nkeys(act); k++) {
 				switch (tcf_pedit_cmd(act, k)) {
 				case TCA_PEDIT_KEY_EX_CMD_SET:
@@ -3371,12 +3374,14 @@ int tc_setup_flow_action(struct flow_action *flow_action/*出参，记录转换�
 				entry = &flow_action->entries[++j];
 			}
 		} else if (is_tcf_csum(act)) {
+			//checksum action处理
 			entry->id = FLOW_ACTION_CSUM;
 			entry->csum_flags = tcf_csum_update_flags(act);
 		} else if (is_tcf_skbedit_mark(act)) {
 			entry->id = FLOW_ACTION_MARK;
 			entry->mark = tcf_skbedit_mark(act);
 		} else if (is_tcf_sample(act)) {
+			//sample action
 			entry->id = FLOW_ACTION_SAMPLE;
 			entry->sample.psample_group =
 				tcf_sample_psample_group(act);

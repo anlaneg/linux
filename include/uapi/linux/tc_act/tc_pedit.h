@@ -30,6 +30,7 @@ enum {
   * means no specific header type - offset is relative to the network layer
   */
 enum pedit_header_type {
+	//修改的头部类型
 	TCA_PEDIT_KEY_EX_HDR_TYPE_NETWORK = 0,
 	TCA_PEDIT_KEY_EX_HDR_TYPE_ETH = 1,
 	TCA_PEDIT_KEY_EX_HDR_TYPE_IP4 = 2,
@@ -43,6 +44,7 @@ enum pedit_header_type {
 
 enum pedit_cmd {
 	TCA_PEDIT_KEY_EX_CMD_SET = 0,
+	//add方式为在原基础上添加add value的方式设置值
 	TCA_PEDIT_KEY_EX_CMD_ADD = 1,
 	__PEDIT_CMD_MAX,
 };
@@ -53,6 +55,13 @@ struct tc_pedit_key {
 	__u32           mask;  /* AND */
 	__u32           val;   /*XOR */
 	__u32           off;  /*offset */
+	/**
+	 * act子句支持
+	 * at AT offmask MASK shift SHIFT
+This is an optional part of RAW_OP which allows to have a variable OFFSET depending on
+packet data at offset AT, which is binary ANDed with MASK and right-shifted
+by SHIFT before adding it to OFFSET.
+	 */
 	__u32           at;
 	__u32           offmask;
 	__u32           shift;

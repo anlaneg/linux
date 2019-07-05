@@ -60,6 +60,7 @@ static inline bool is_tcf_gact_goto_chain(const struct tc_action *a)
 	return __is_tcf_gact_act(a, TC_ACT_GOTO_CHAIN, true);
 }
 
+//获取goto action需要跳转至的chain_index
 static inline u32 tcf_gact_goto_chain_index(const struct tc_action *a)
 {
 	return READ_ONCE(a->tcfa_action) & TC_ACT_EXT_VAL_MASK;

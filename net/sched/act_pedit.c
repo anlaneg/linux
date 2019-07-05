@@ -34,6 +34,7 @@ static const struct nla_policy pedit_key_ex_policy[TCA_PEDIT_KEY_EX_MAX + 1] = {
 	[TCA_PEDIT_KEY_EX_CMD]	  = { .type = NLA_U16 },
 };
 
+//返回n个keys_ex,用于指出各个key修改位置及修改方式
 static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 							u8 n)
 {
@@ -46,6 +47,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 	if (!nla || !n)
 		return NULL;
 
+	//有n个key需要解析
 	keys_ex = kcalloc(n, sizeof(*k), GFP_KERNEL);
 	if (!keys_ex)
 		return ERR_PTR(-ENOMEM);
@@ -78,6 +80,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 			goto err_out;
 		}
 
+		//提取修改类型及修改方式
 		k->htype = nla_get_u16(tb[TCA_PEDIT_KEY_EX_HTYPE]);
 		k->cmd = nla_get_u16(tb[TCA_PEDIT_KEY_EX_CMD]);
 
@@ -134,7 +137,7 @@ nla_failure:
 	return -EINVAL;
 }
 
-//通过netlink消息建立action
+//通过netlink消息建立pedit action
 static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 			  struct nlattr *est, struct tc_action **a,
 			  int ovr, int bind, bool rtnl_held,
@@ -161,6 +164,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		return err;
 
+	//tca_pedit_parms如果不存在，则使用tca_pedit_parms_ex
 	pattr = tb[TCA_PEDIT_PARMS];
 	if (!pattr)
 		pattr = tb[TCA_PEDIT_PARMS_EX];
@@ -169,6 +173,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	//paramter长度校验
 	parm = nla_data(pattr);
 	ksize = parm->nkeys * sizeof(struct tc_pedit_key);
 	if (nla_len(pattr) < sizeof(*parm) + ksize) {
@@ -188,7 +193,8 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 			ret = -EINVAL;
 			goto out_free;
 		}
-		ret = tcf_idr_create(tn, parm->index, est, a,
+		//未关联，实现action与parm->index关联
+		ret = tcf_idr_create(tn, parm->index, est, a/*出参，构造action并关联index后返回*/,
 				     &act_pedit_ops, bind, false);
 		if (ret) {
 			tcf_idr_cleanup(tn, parm->index);
@@ -207,6 +213,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		goto out_free;
 	}
 
+	//取下一步action
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0) {
 		ret = err;
@@ -217,6 +224,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 
 	if (ret == ACT_P_CREATED ||
 	    (p->tcfp_nkeys && p->tcfp_nkeys != parm->nkeys)) {
+		//申请keys
 		keys = kmalloc(ksize, GFP_ATOMIC);
 		if (!keys) {
 			spin_unlock_bh(&p->tcf_lock);
@@ -227,6 +235,8 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		p->tcfp_keys = keys;
 		p->tcfp_nkeys = parm->nkeys;
 	}
+
+	//填充keys
 	memcpy(p->tcfp_keys, parm->keys, ksize);
 
 	p->tcfp_flags = parm->flags;
@@ -398,7 +408,7 @@ static int tcf_pedit_act(struct sk_buff *skb, const struct tc_action *a,
 			}
 
 			//设置ptr值为val
-			//由于mask是采和反转方式存入的，故这里如些设置ptr的值
+			//由于mask是采用反转方式存入的，故这里如些设置ptr的值
 			*ptr = ((*ptr & tkey->mask) ^ val);
 			if (ptr == &hdata)
 				skb_store_bits(skb, hoffset + offset, ptr, 4);

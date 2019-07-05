@@ -329,7 +329,7 @@ struct mlx5_esw_flow_attr {
 	int split_count;
 	int out_count;
 
-	int	action;
+	int	action;//要执行的action
 	__be16	vlan_proto[MLX5_FS_VLAN_DEPTH];
 	u16	vlan_vid[MLX5_FS_VLAN_DEPTH];
 	u8	vlan_prio[MLX5_FS_VLAN_DEPTH];
