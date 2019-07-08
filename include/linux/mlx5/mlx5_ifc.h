@@ -1350,6 +1350,8 @@ union mlx5_ifc_dest_format_struct_flow_counter_list_auto_bits {
 	u8         reserved_at_0[0x40];
 };
 
+//_bits后缀，用于说明各字段占用的bits数
+//主要说明各字段匹配情况
 struct mlx5_ifc_fte_match_param_bits {
 	//外部头匹配
 	struct mlx5_ifc_fte_match_set_lyr_2_4_bits outer_headers;

@@ -510,9 +510,10 @@ err_out:
 	return err;
 }
 
+/*新增flow table entry*/
 static int mlx5_cmd_create_fte(struct mlx5_flow_root_namespace *ns,
-			       struct mlx5_flow_table *ft,
-			       struct mlx5_flow_group *group,
+			       struct mlx5_flow_table *ft/*flow table*/,
+			       struct mlx5_flow_group *group/*flow group*/,
 			       struct fs_fte *fte)
 {
 	struct mlx5_core_dev *dev = ns->dev;
@@ -826,6 +827,7 @@ static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	.modify_flow_table = mlx5_cmd_modify_flow_table,
 	.create_flow_group = mlx5_cmd_create_flow_group,
 	.destroy_flow_group = mlx5_cmd_destroy_flow_group,
+	//增加flow to flow table
 	.create_fte = mlx5_cmd_create_fte,
 	.update_fte = mlx5_cmd_update_fte,
 	.delete_fte = mlx5_cmd_delete_fte,

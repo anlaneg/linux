@@ -54,8 +54,8 @@ enum fs_node_type {
 	FS_TYPE_PRIO,
 	FS_TYPE_PRIO_CHAINS,
 	FS_TYPE_FLOW_TABLE,
-	FS_TYPE_FLOW_GROUP,
-	FS_TYPE_FLOW_ENTRY,
+	FS_TYPE_FLOW_GROUP,//flow group表
+	FS_TYPE_FLOW_ENTRY,//flow表项
 	FS_TYPE_FLOW_DEST
 };
 
@@ -82,7 +82,9 @@ enum fs_fte_status {
 
 struct mlx5_flow_steering {
 	struct mlx5_core_dev *dev;
+	//用于申请flow group
 	struct kmem_cache               *fgs_cache;
+	//用于申请flow table entry
 	struct kmem_cache               *ftes_cache;
 	struct mlx5_flow_root_namespace *root_ns;
 	struct mlx5_flow_root_namespace *fdb_root_ns;
@@ -98,8 +100,8 @@ struct mlx5_flow_steering {
 struct fs_node {
 	struct list_head	list;
 	struct list_head	children;
-	enum fs_node_type	type;
-	struct fs_node		*parent;
+	enum fs_node_type	type;//node类型
+	struct fs_node		*parent;//node的父节接，例如fte的parent为flow group
 	struct fs_node		*root;
 	/* lock the node for writing and traversing */
 	struct rw_semaphore	lock;
@@ -144,6 +146,7 @@ struct mlx5_flow_table {
 	/* FWD rules that point on this flow table */
 	struct list_head		fwd_rules;
 	u32				flags;
+	//用于存储属于此flow table的flow groups
 	struct rhltable			fgs_hash;
 };
 
@@ -157,7 +160,9 @@ struct mlx5_ft_underlay_qp {
  * Make sure the reserved field is the last.
  */
 #define MLX5_ST_SZ_DW_MATCH_PARAM					    \
+	/*取MLX5_FTE_MATCH_PARAM_RESERVED成员起始offset*/\
 	((MLX5_BYTE_OFF(fte_match_param, MLX5_FTE_MATCH_PARAM_RESERVED) / sizeof(u32)) + \
+			/*编译时校验*/\
 	 BUILD_BUG_ON_ZERO(MLX5_ST_SZ_BYTES(fte_match_param) !=		     \
 			   MLX5_FLD_SZ_BYTES(fte_match_param,		     \
 					     MLX5_FTE_MATCH_PARAM_RESERVED) +\
@@ -167,12 +172,16 @@ struct mlx5_ft_underlay_qp {
 /* Type of children is mlx5_flow_rule */
 struct fs_fte {
 	struct fs_node			node;
+	//匹配字段
 	u32				val[MLX5_ST_SZ_DW_MATCH_PARAM];
 	u32				dests_size;
+	//索引号（id+group->start_index)
 	u32				index;
+	//flow table entry的对应的动作
 	struct mlx5_flow_act		action;
 	enum fs_fte_status		status;
 	struct mlx5_fc			*counter;
+	//挂接至hashtable
 	struct rhash_head		hash;
 	int				modify_mask;
 };
@@ -194,17 +203,23 @@ struct mlx5_flow_namespace {
 
 struct mlx5_flow_group_mask {
 	u8	match_criteria_enable;
+	//flow group下统一匹配掩码
 	u32	match_criteria[MLX5_ST_SZ_DW_MATCH_PARAM];
 };
 
 /* Type of children is fs_fte */
 struct mlx5_flow_group {
 	struct fs_node			node;
+	//flow group对应的mask
 	struct mlx5_flow_group_mask	mask;
+	//group中最小的index编号
 	u32				start_index;
+	//group中支持的最大fte数目
 	u32				max_ftes;
+	//负责此group中的id分配
 	struct ida			fte_allocator;
 	u32				id;
+	//记录此flow group下的所有fte
 	struct rhashtable		ftes_hash;
 	struct rhlist_head		hash;
 };
@@ -232,6 +247,7 @@ void mlx5_fc_update_sampling_interval(struct mlx5_core_dev *dev,
 int mlx5_init_fs(struct mlx5_core_dev *dev);
 void mlx5_cleanup_fs(struct mlx5_core_dev *dev);
 
+//将_node转换为typeof(*v)类型并返回 “_node为typeof(*v)中的node成员”
 #define fs_get_obj(v, _node)  {v = container_of((_node), typeof(*v), node); }
 
 #define fs_list_for_each_entry(pos, root)		\

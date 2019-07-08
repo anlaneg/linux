@@ -227,16 +227,21 @@ static void tree_init_node(struct fs_node *node,
 	node->active = false;
 }
 
+//更新node的parent,root
 static void tree_add_node(struct fs_node *node, struct fs_node *parent)
 {
+	//指向parent,parent引用增加
 	if (parent)
 		refcount_inc(&parent->refcount);
+	//指向父节点
 	node->parent = parent;
 
 	/* Parent is the root */
 	if (!parent)
+		//无父节点时，指向自已
 		node->root = node;
 	else
+		//使用父节点的root
 		node->root = parent->root;
 }
 
@@ -508,14 +513,19 @@ static void del_sw_fte(struct fs_node *node)
 	struct fs_fte *fte;
 	int err;
 
+	//转换为fte
 	fs_get_obj(fte, node);
+	//转换为fg
 	fs_get_obj(fg, fte->node.parent);
 
+	//自flow group中删除fte
 	err = rhashtable_remove_fast(&fg->ftes_hash,
 				     &fte->hash,
 				     rhash_fte);
 	WARN_ON(err);
+	//释放id号
 	ida_simple_remove(&fg->fte_allocator, fte->index - fg->start_index);
+	//释放fte
 	kmem_cache_free(steering->ftes_cache, fte);
 }
 
@@ -558,22 +568,26 @@ static void del_sw_flow_group(struct fs_node *node)
 	kmem_cache_free(steering->fgs_cache, fg);
 }
 
+//将fte添加进flow group中
 static int insert_fte(struct mlx5_flow_group *fg, struct fs_fte *fte)
 {
 	int index;
 	int ret;
 
+	//申请fte对应的index
 	index = ida_simple_get(&fg->fte_allocator, 0, fg->max_ftes, GFP_KERNEL);
 	if (index < 0)
 		return index;
 
 	fte->index = index + fg->start_index;
+	//将fte添加入flow group中的hashtable中
 	ret = rhashtable_insert_fast(&fg->ftes_hash,
 				     &fte->hash,
 				     rhash_fte);
 	if (ret)
 		goto err_ida_remove;
 
+	//fte指向fg,同一fg上fte串成一条线（兄弟树）
 	tree_add_node(&fte->node, &fg->node);
 	list_add_tail(&fte->node.list, &fg->node.children);
 	return 0;
@@ -583,6 +597,7 @@ err_ida_remove:
 	return ret;
 }
 
+//申请并初始化fte
 static struct fs_fte *alloc_fte(struct mlx5_flow_table *ft,
 				u32 *match_value,
 				struct mlx5_flow_act *flow_act)
@@ -590,10 +605,12 @@ static struct fs_fte *alloc_fte(struct mlx5_flow_table *ft,
 	struct mlx5_flow_steering *steering = get_steering(&ft->node);
 	struct fs_fte *fte;
 
+	//申请fte
 	fte = kmem_cache_zalloc(steering->ftes_cache, GFP_KERNEL);
 	if (!fte)
 		return ERR_PTR(-ENOMEM);
 
+	//将match_value填充到fte_val完成match字段填充
 	memcpy(fte->val, match_value, sizeof(fte->val));
 	fte->node.type =  FS_TYPE_FLOW_ENTRY;
 	fte->action = *flow_act;
@@ -610,19 +627,22 @@ static void dealloc_flow_group(struct mlx5_flow_steering *steering,
 	kmem_cache_free(steering->fgs_cache, fg);
 }
 
+//申请并初始化flow group
 static struct mlx5_flow_group *alloc_flow_group(struct mlx5_flow_steering *steering,
 						u8 match_criteria_enable,
 						void *match_criteria,
-						int start_index,
-						int end_index)
+						int start_index/*group首个index*/,
+						int end_index/*group末个index*/)
 {
 	struct mlx5_flow_group *fg;
 	int ret;
 
+	//申请flow group
 	fg = kmem_cache_zalloc(steering->fgs_cache, GFP_KERNEL);
 	if (!fg)
 		return ERR_PTR(-ENOMEM);
 
+	//初始化flow table entry 哈希表
 	ret = rhashtable_init(&fg->ftes_hash, &rhash_fte);
 	if (ret) {
 		kmem_cache_free(steering->fgs_cache, fg);
@@ -640,23 +660,26 @@ static struct mlx5_flow_group *alloc_flow_group(struct mlx5_flow_steering *steer
 	return fg;
 }
 
+//申请并加入flow group
 static struct mlx5_flow_group *alloc_insert_flow_group(struct mlx5_flow_table *ft,
-						       u8 match_criteria_enable,
-						       void *match_criteria,
-						       int start_index,
-						       int end_index,
+						       u8 match_criteria_enable/*开启标准mask匹配*/,
+						       void *match_criteria/*mask字段*/,
+						       int start_index/*flow group起始index*/,
+						       int end_index/*flow group结束index*/,
 						       struct list_head *prev)
 {
 	struct mlx5_flow_steering *steering = get_steering(&ft->node);
 	struct mlx5_flow_group *fg;
 	int ret;
 
+	//申请并初始化flow group
 	fg = alloc_flow_group(steering, match_criteria_enable, match_criteria,
 			      start_index, end_index);
 	if (IS_ERR(fg))
 		return fg;
 
 	/* initialize refcnt, add to parent list */
+	//将flow group加入到flow table
 	ret = rhltable_insert(&ft->fgs_hash,
 			      &fg->hash,
 			      rhash_fg);
@@ -1265,8 +1288,10 @@ add_rule_fte(struct fs_fte *fte,
 
 	fs_get_obj(ft, fg->node.parent);
 	root = find_root(&fg->node);
+	//如果fte不存在，则创建，否则修改
 	if (!(fte->status & FS_FTE_STATUS_EXISTING))
-		err = root->cmds->create_fte(root, ft, fg, fte);
+		err = root->cmds->create_fte(root, ft/*flow表项所属的flow table*/,
+				fg/*flow表项所属的flow group*/, fte/*要加入的flow表项*/);
 	else
 		err = root->cmds->update_fte(root, ft, fg, modify_mask, fte);
 	if (err)
@@ -1290,7 +1315,7 @@ static struct mlx5_flow_group *alloc_auto_flow_group(struct mlx5_flow_table  *ft
 	struct list_head *prev = &ft->node.children;
 	struct mlx5_flow_group *fg;
 	unsigned int candidate_index = 0;
-	unsigned int group_size = 0;
+	unsigned int group_size = 0;/*flow group的大小*/
 
 	if (!ft->autogroup.active)
 		return ERR_PTR(-ENOENT);
@@ -1788,12 +1813,14 @@ search_again_locked:
 	if (err)
 		goto err_release_fg;
 
+	//申请并构造flow table entry
 	fte = alloc_fte(ft, spec->match_value, flow_act);
 	if (IS_ERR(fte)) {
 		err = PTR_ERR(fte);
 		goto err_release_fg;
 	}
 
+	//将fte加入到group中
 	err = insert_fte(g, fte);
 	if (err) {
 		kmem_cache_free(steering->ftes_cache, fte);

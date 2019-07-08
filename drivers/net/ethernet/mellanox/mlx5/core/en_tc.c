@@ -3072,6 +3072,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 		 * pop/push. if there is no pop/push either, reset it too.
 		 */
 		if (parse_attr->num_mod_hdr_actions == 0) {
+			//所有modify均被跳过，清掉action
 			action &= ~MLX5_FLOW_CONTEXT_ACTION_MOD_HDR;
 			kfree(parse_attr->mod_hdr_actions);
 			if (!((action & MLX5_FLOW_CONTEXT_ACTION_VLAN_POP) ||
@@ -3251,7 +3252,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
-	//解析action（待分析）
+	//解析action
 	err = parse_tc_fdb_actions(priv, &rule->action, flow, extack);
 	if (err)
 		goto err_free;
