@@ -165,6 +165,7 @@ static int cls_bpf_offload_cmd(struct tcf_proto *tp, struct cls_bpf_prog *prog,
 	if (oldprog)
 		tcf_block_offload_dec(block, &oldprog->gen_flags);
 
+	//触发bpf offload到驱动
 	err = tc_setup_cb_call(block, TC_SETUP_CLSBPF, &cls_bpf, skip_sw);
 	if (prog) {
 		if (err < 0) {
@@ -502,6 +503,7 @@ static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 	if (ret < 0)
 		goto errout_idr;
 
+	//将bpf offload到硬件
 	ret = cls_bpf_offload(tp, prog, oldprog, extack);
 	if (ret)
 		goto errout_parms;
