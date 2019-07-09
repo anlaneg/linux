@@ -114,6 +114,7 @@ extern void bus_remove_file(struct bus_type *, struct bus_attribute *);
  * private data.
  */
 struct bus_type {
+	//bus名称
 	const char		*name;
 	const char		*dev_name;
 	struct device		*dev_root;
@@ -1100,6 +1101,7 @@ static inline bool device_iommu_mapped(struct device *dev)
 /* Get the wakeup routines, which depend on struct device */
 #include <linux/pm_wakeup.h>
 
+//取dev设备名称
 static inline const char *dev_name(const struct device *dev)
 {
 	/* Use the init name until the kobject becomes available */

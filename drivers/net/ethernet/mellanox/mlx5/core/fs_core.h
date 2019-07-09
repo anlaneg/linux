@@ -87,9 +87,12 @@ struct mlx5_flow_steering {
 	//用于申请flow table entry
 	struct kmem_cache               *ftes_cache;
 	struct mlx5_flow_root_namespace *root_ns;
+	//fdb对应的root_ns
 	struct mlx5_flow_root_namespace *fdb_root_ns;
 	struct mlx5_flow_namespace	**fdb_sub_ns;
+	//针对每个vport有一个egress_root_ns
 	struct mlx5_flow_root_namespace **esw_egress_root_ns;
+	//针对每个vport有一个ingress_root_ns
 	struct mlx5_flow_root_namespace **esw_ingress_root_ns;
 	struct mlx5_flow_root_namespace	*sniffer_tx_root_ns;
 	struct mlx5_flow_root_namespace	*sniffer_rx_root_ns;
@@ -226,12 +229,14 @@ struct mlx5_flow_group {
 
 struct mlx5_flow_root_namespace {
 	struct mlx5_flow_namespace	ns;
+	//表类型
 	enum   fs_flow_table_type	table_type;
 	struct mlx5_core_dev		*dev;
 	struct mlx5_flow_table		*root_ft;
 	/* Should be held when chaining flow tables */
 	struct mutex			chain_lock;
 	struct list_head		underlay_qpns;
+	//此table_type对应的flow_cmds
 	const struct mlx5_flow_cmds	*cmds;
 	enum mlx5_flow_table_miss_action def_miss_action;
 };

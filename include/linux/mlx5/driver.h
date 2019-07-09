@@ -553,6 +553,7 @@ struct mlx5_priv {
 	struct mutex            pgdir_mutex;
 	struct list_head        pgdir_list;
 	/* end: alloc staff */
+	//dbgfs中的根目录
 	struct dentry	       *dbg_root;
 
 	/* protect mkey key part */
@@ -648,8 +649,9 @@ struct mlx5_fw_tracer;
 struct mlx5_vxlan;
 
 struct mlx5_core_dev {
-	//对应的设备（一般的device,及pci设备pdev)
+	//对应的设备（一般的device)
 	struct device *device;
+	//对应的pci设备
 	struct pci_dev	       *pdev;
 	/* sync pci state */
 	struct mutex		pci_status_mutex;
@@ -676,6 +678,7 @@ struct mlx5_core_dev {
 	/* sync interface state */
 	struct mutex		intf_state_mutex;
 	unsigned long		intf_state;
+	//设备的私有数据
 	struct mlx5_priv	priv;
 	struct mlx5_profile	*profile;
 	atomic_t		num_qps;

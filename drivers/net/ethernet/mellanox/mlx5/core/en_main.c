@@ -5193,6 +5193,7 @@ static void mlx5e_remove(struct mlx5_core_dev *mdev, void *vpriv)
 }
 
 static struct mlx5_interface mlx5e_interface = {
+	//增加netdev
 	.add       = mlx5e_add,
 	.remove    = mlx5e_remove,
 	.attach    = mlx5e_attach,

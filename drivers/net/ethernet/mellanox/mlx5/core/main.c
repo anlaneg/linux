@@ -1218,6 +1218,7 @@ out:
 	return err;
 }
 
+//mlx5对应的devlink operators
 static const struct devlink_ops mlx5_devlink_ops = {
 #ifdef CONFIG_MLX5_ESWITCH
 	.eswitch_mode_set = mlx5_devlink_eswitch_mode_set,
@@ -1251,6 +1252,7 @@ static int mlx5_mdev_init(struct mlx5_core_dev *dev, int profile_idx)
 	INIT_LIST_HEAD(&priv->pgdir_list);
 	spin_lock_init(&priv->mkey_lock);
 
+	//创建此设备对应的目录
 	priv->dbg_root = debugfs_create_dir(dev_name(dev->device),
 					    mlx5_debugfs_root);
 	if (!priv->dbg_root) {
@@ -1284,7 +1286,7 @@ static void mlx5_mdev_uninit(struct mlx5_core_dev *dev)
 }
 
 #define MLX5_IB_MOD "mlx5_ib"
-static int init_one(struct pci_dev *pdev/*待匹配的设备*/, const struct pci_device_id *id)
+static int init_one(struct pci_dev *pdev/*待匹配的pci设备*/, const struct pci_device_id *id)
 {
 	struct mlx5_core_dev *dev;
 	struct devlink *devlink;
@@ -1321,6 +1323,7 @@ static int init_one(struct pci_dev *pdev/*待匹配的设备*/, const struct pci
 
 	request_module_nowait(MLX5_IB_MOD);
 
+	//注册devlink到系统
 	err = devlink_register(devlink, &pdev->dev);
 	if (err)
 		goto clean_load;
