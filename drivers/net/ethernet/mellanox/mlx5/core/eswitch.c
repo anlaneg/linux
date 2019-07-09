@@ -1160,6 +1160,7 @@ out:
 void esw_vport_cleanup_ingress_rules(struct mlx5_eswitch *esw,
 				     struct mlx5_vport *vport)
 {
+	//移除vport->ingress的drop_rule,allow_rule
 	if (!IS_ERR_OR_NULL(vport->ingress.drop_rule))
 		mlx5_del_flow_rules(vport->ingress.drop_rule);
 
@@ -1689,7 +1690,7 @@ static int eswitch_vport_event(struct notifier_block *nb,
 /* Public E-Switch API */
 #define ESW_ALLOWED(esw) ((esw) && MLX5_ESWITCH_MANAGER((esw)->dev))
 
-int mlx5_eswitch_enable_sriov(struct mlx5_eswitch *esw, int nvfs, int mode)
+int mlx5_eswitch_enable_sriov(struct mlx5_eswitch *esw, int nvfs/*开启的vf数目*/, int mode/*sriov模式*/)
 {
 	int vf_nvports = 0, total_nvports = 0;
 	struct mlx5_vport *vport;
@@ -1711,6 +1712,7 @@ int mlx5_eswitch_enable_sriov(struct mlx5_eswitch *esw, int nvfs, int mode)
 	esw_info(esw->dev, "E-Switch enable SRIOV: nvfs(%d) mode (%d)\n", nvfs, mode);
 
 	if (mode == SRIOV_OFFLOADS) {
+		//开启sriov_offloads模式
 		if (mlx5_core_is_ecpf_esw_manager(esw->dev)) {
 			err = mlx5_query_host_params_num_vfs(esw->dev, &vf_nvports);
 			if (err)
@@ -1801,6 +1803,7 @@ void mlx5_eswitch_disable_sriov(struct mlx5_eswitch *esw)
 	if (esw->mode == SRIOV_LEGACY)
 		mlx5_eq_notifier_unregister(esw->dev, &esw->nb);
 
+	//禁用所有vport
 	mlx5_esw_for_all_vports(esw, i, vport)
 		esw_disable_vport(esw, vport);
 

@@ -697,6 +697,7 @@ static struct mlx5_flow_group *alloc_insert_flow_group(struct mlx5_flow_table *f
 	return fg;
 }
 
+//申请并初始化flow table
 static struct mlx5_flow_table *alloc_flow_table(int level, u16 vport, int max_fte,
 						enum fs_flow_table_type table_type,
 						enum fs_flow_table_op_mod op_mod,
@@ -1023,6 +1024,7 @@ static struct mlx5_flow_table *__mlx5_create_flow_table(struct mlx5_flow_namespa
 	 * priority level range.
 	 */
 	ft_attr->level += fs_prio->start_level;
+	//创建flow table
 	ft = alloc_flow_table(ft_attr->level,
 			      vport,
 			      ft_attr->max_fte ? roundup_pow_of_two(ft_attr->max_fte) : 0,
@@ -1035,6 +1037,7 @@ static struct mlx5_flow_table *__mlx5_create_flow_table(struct mlx5_flow_namespa
 
 	tree_init_node(&ft->node, del_hw_flow_table, del_sw_flow_table);
 	log_table_sz = ft->max_fte ? ilog2(ft->max_fte) : 0;
+	//如果ft失配，则前往表next_ft执行匹配
 	next_ft = find_next_chained_ft(fs_prio);
 	err = root->cmds->create_flow_table(root, ft, log_table_sz, next_ft);
 	if (err)
@@ -1176,10 +1179,12 @@ static struct mlx5_flow_rule *alloc_rule(struct mlx5_flow_destination *dest)
 	return rule;
 }
 
+//申请可容纳num_rules个rule的handle
 static struct mlx5_flow_handle *alloc_handle(int num_rules)
 {
 	struct mlx5_flow_handle *handle;
 
+	//申请handle,并使handle中的成员rule拥有num_rules个元素
 	handle = kzalloc(struct_size(handle, rule, num_rules), GFP_KERNEL);
 	if (!handle)
 		return NULL;
@@ -1231,6 +1236,7 @@ create_flow_handle(struct fs_fte *fte,
 			}
 		}
 
+		//未找到对应的rule,创建rule
 		*new_rule = true;
 		rule = alloc_rule(dest + i);
 		if (!rule)
@@ -1253,6 +1259,7 @@ create_flow_handle(struct fs_fte *fte,
 			*modify_mask |= type ? count : dst;
 		}
 rule_found:
+		//填充handle对应的rule
 		handle->rule[i] = rule;
 	} while (++i < dest_num);
 
@@ -1288,7 +1295,8 @@ add_rule_fte(struct fs_fte *fte,
 
 	fs_get_obj(ft, fg->node.parent);
 	root = find_root(&fg->node);
-	//如果fte不存在，则创建，否则修改
+
+	//如果fte不存在，则创建，否则更新
 	if (!(fte->status & FS_FTE_STATUS_EXISTING))
 		err = root->cmds->create_fte(root, ft/*flow表项所属的flow table*/,
 				fg/*flow表项所属的flow group*/, fte/*要加入的flow表项*/);
@@ -2142,6 +2150,7 @@ struct mlx5_flow_namespace *mlx5_get_flow_vport_acl_namespace(struct mlx5_core_d
 	}
 }
 
+//申请并初始化fs_prio
 static struct fs_prio *_fs_create_prio(struct mlx5_flow_namespace *ns,
 				       unsigned int prio,
 				       int num_levels,
@@ -2158,6 +2167,7 @@ static struct fs_prio *_fs_create_prio(struct mlx5_flow_namespace *ns,
 	tree_add_node(&fs_prio->node, &ns->node);
 	fs_prio->num_levels = num_levels;
 	fs_prio->prio = prio;
+	//将fs_prio加入到ns中
 	list_add_tail(&fs_prio->node.list, &ns->node.children);
 
 	return fs_prio;

@@ -188,6 +188,7 @@ struct ftrace_likely_data {
 #endif
 
 /* Are two types/vars the same type (ignoring qualifiers)? */
+//检查两个类型是否一致
 #define __same_type(a, b) __builtin_types_compatible_p(typeof(a), typeof(b))
 
 /* Is this type a native word size -- useful for atomic operations */

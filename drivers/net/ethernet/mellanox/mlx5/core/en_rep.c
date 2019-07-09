@@ -1458,6 +1458,7 @@ static void mlx5e_build_rep_netdev(struct net_device *netdev)
 	netdev->features |= netdev->hw_features;
 }
 
+//repsentor口初始化
 static int mlx5e_init_rep(struct mlx5_core_dev *mdev,
 			  struct net_device *netdev,
 			  const struct mlx5e_profile *profile,
@@ -1727,6 +1728,7 @@ static void mlx5e_uplink_rep_disable(struct mlx5e_priv *priv)
 	mlx5_lag_remove(mdev);
 }
 
+//vf口对应的profile
 static const struct mlx5e_profile mlx5e_vf_rep_profile = {
 	.init			= mlx5e_init_rep,
 	.cleanup		= mlx5e_cleanup_rep,
@@ -1741,6 +1743,7 @@ static const struct mlx5e_profile mlx5e_vf_rep_profile = {
 	.max_tc			= 1,
 };
 
+//uplink口对应的profile
 static const struct mlx5e_profile mlx5e_uplink_rep_profile = {
 	.init			= mlx5e_init_rep,
 	.cleanup		= mlx5e_cleanup_rep,
@@ -1867,6 +1870,7 @@ void mlx5e_rep_register_vport_reps(struct mlx5_core_dev *mdev)
 	rep_if.unload = mlx5e_vport_rep_unload;
 	rep_if.get_proto_dev = mlx5e_vport_rep_get_proto_dev;
 
+	//注册以太类型接口的回调
 	mlx5_eswitch_register_vport_reps(esw, &rep_if, REP_ETH);
 }
 

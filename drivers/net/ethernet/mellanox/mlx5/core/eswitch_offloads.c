@@ -54,6 +54,7 @@
 
 #define UPLINK_REP_INDEX 0
 
+//给定vport_num取vport
 static struct mlx5_eswitch_rep *mlx5_eswitch_get_rep(struct mlx5_eswitch *esw,
 						     u16 vport_num)
 {
@@ -102,6 +103,7 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 	int j, i = 0;
 	void *misc;
 
+	//仅处理sriov_offloads模式
 	if (esw->mode != SRIOV_OFFLOADS)
 		return ERR_PTR(-EOPNOTSUPP);
 
@@ -121,6 +123,7 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 		}
 	}
 
+	//需要转发给指定的port
 	if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_FWD_DEST) {
 		if (attr->dest_chain) {
 			struct mlx5_flow_table *ft;
@@ -833,6 +836,7 @@ esw_get_prio_table(struct mlx5_eswitch *esw, u32 chain, u16 prio, int level)
 
 	mutex_lock(&esw->fdb_table.offloads.fdb_prio_lock);
 
+	//按{chain,prio,level}确定fdb
 	fdb = fdb_prio_table(esw, chain, prio, level).fdb;
 	if (fdb) {
 		/* take ref on earlier levels as well */
@@ -1229,7 +1233,9 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 		return -EINVAL;
 	}
 
+	//先关闭旧的sriov
 	mlx5_eswitch_disable_sriov(esw);
+	//再开启sriov
 	err = mlx5_eswitch_enable_sriov(esw, num_vfs, SRIOV_OFFLOADS);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack,
@@ -1351,10 +1357,12 @@ static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
 {
 	int err = 0;
 
+	//原来为registered状态，则更新为loaded
 	if (atomic_cmpxchg(&rep->rep_if[rep_type].state,
 			   REP_REGISTERED, REP_LOADED) == REP_REGISTERED) {
 		err = rep->rep_if[rep_type].load(esw->dev, rep);
 		if (err)
+			//load失败，还原为registered
 			atomic_set(&rep->rep_if[rep_type].state,
 				   REP_REGISTERED);
 	}
@@ -1367,6 +1375,7 @@ static int __load_reps_special_vport(struct mlx5_eswitch *esw, u8 rep_type)
 	struct mlx5_eswitch_rep *rep;
 	int err;
 
+	//创建uplink口
 	rep = mlx5_eswitch_get_rep(esw, MLX5_VPORT_UPLINK);
 	err = __esw_offloads_load_rep(esw, rep, rep_type);
 	if (err)
@@ -1406,6 +1415,7 @@ static int __load_reps_vf_vport(struct mlx5_eswitch *esw, int nvports,
 	struct mlx5_eswitch_rep *rep;
 	int err, i;
 
+	//加载rep口，创建相应的netdev
 	mlx5_esw_for_each_vf_rep(esw, i, rep, nvports) {
 		err = __esw_offloads_load_rep(esw, rep, rep_type);
 		if (err)
@@ -1591,6 +1601,7 @@ static int esw_vport_ingress_prio_tag_config(struct mlx5_eswitch *esw,
 	if (!MLX5_CAP_ESW_INGRESS_ACL(dev, ft_support))
 		return -EOPNOTSUPP;
 
+	//移除vport的ingress下的drop_rules,allow_rules
 	esw_vport_cleanup_ingress_rules(esw, vport);
 
 	err = esw_vport_enable_ingress_acl(esw, vport);
@@ -1743,6 +1754,7 @@ static int esw_offloads_steering_init(struct mlx5_eswitch *esw, int vf_nvports,
 {
 	int err;
 
+	//初始化offloads
 	memset(&esw->fdb_table.offloads, 0, sizeof(struct offloads_fdb));
 	mutex_init(&esw->fdb_table.offloads.fdb_prio_lock);
 
@@ -1835,8 +1847,8 @@ static int esw_host_params_event(struct notifier_block *nb,
 	return NOTIFY_OK;
 }
 
-int esw_offloads_init(struct mlx5_eswitch *esw, int vf_nvports,
-		      int total_nvports)
+int esw_offloads_init(struct mlx5_eswitch *esw, int vf_nvports/*创建的vf数目*/,
+		      int total_nvports/*包含special vports后的vf数目*/)
 {
 	int err;
 
@@ -1903,6 +1915,7 @@ void esw_offloads_cleanup(struct mlx5_eswitch *esw)
 	esw_offloads_steering_cleanup(esw);
 }
 
+//解析配置的mlx5_mode
 static int esw_mode_from_devlink(u16 mode, u16 *mlx5_mode)
 {
 	switch (mode) {
@@ -2012,10 +2025,12 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	if (esw_mode_from_devlink(mode, &mlx5_mode))
 		return -EINVAL;
 
+	/*mode无变化，直接返回*/
 	if (cur_mlx5_mode == mlx5_mode)
 		return 0;
 
 	if (mode == DEVLINK_ESWITCH_MODE_SWITCHDEV)
+		//将设备转换为switchdev
 		return esw_offloads_start(dev->priv.eswitch, extack);
 	else if (mode == DEVLINK_ESWITCH_MODE_LEGACY)
 		return esw_offloads_stop(dev->priv.eswitch, extack);
@@ -2210,7 +2225,7 @@ void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
 	struct mlx5_eswitch_rep *rep;
 	int i;
 
-	//设置esw上所有rep口
+	//设置esw上所有rep口,置状态为registered
 	mlx5_esw_for_all_reps(esw, i, rep) {
 		rep_if = &rep->rep_if[rep_type];
 		rep_if->load   = __rep_if->load;

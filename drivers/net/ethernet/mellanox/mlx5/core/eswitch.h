@@ -119,7 +119,7 @@ struct mlx5_vport {
 		u32             bw_share;
 	} qos;
 
-	bool                    enabled;
+	bool                    enabled;//标明此口被禁用
 	u16                     enabled_events;
 };
 
@@ -142,6 +142,7 @@ struct mlx5_eswitch_fdb {
 			struct mlx5_flow_handle *vepa_star_rule;
 		} legacy;
 
+		//sriov_offloads模式时使用此结构
 		struct offloads_fdb {
 			struct mlx5_flow_table *slow_fdb;
 			struct mlx5_flow_group *send_to_vport_grp;
@@ -157,7 +158,7 @@ struct mlx5_eswitch_fdb {
 				u32 num_rules;
 			} fdb_prio[FDB_MAX_CHAIN + 1][FDB_MAX_PRIO + 1][PRIO_LEVELS];
 			/* Protects fdb_prio table */
-			struct mutex fdb_prio_lock;
+			struct mutex fdb_prio_lock;//保存fdb_prio的锁
 
 			int fdb_left[ARRAY_SIZE(ESW_POOLS)];
 		} offloads;
@@ -216,7 +217,7 @@ struct mlx5_eswitch {
 	} qos;
 
 	struct mlx5_esw_offload offloads;
-	//当前有SRIOV_LEGACY,SRIOV_OFFLOADS两种模式
+	//sriov模式，当前有SRIOV_LEGACY,SRIOV_OFFLOADS两种模式
 	int                     mode;
 	int                     nvports;
 	u16                     manager_vport;
@@ -329,14 +330,16 @@ struct mlx5_esw_flow_attr {
 	int split_count;
 	int out_count;/*要输出的接口数，dests有效长度*/
 
-	int	action;//要执行的action
+	int	action;//要执行的action(看MLX5_FLOW_CONTEXT_ACTION）
+
+	//vlan相关
 	__be16	vlan_proto[MLX5_FS_VLAN_DEPTH];
 	u16	vlan_vid[MLX5_FS_VLAN_DEPTH];
 	u8	vlan_prio[MLX5_FS_VLAN_DEPTH];
-	u8	total_vlan;
+	u8	total_vlan;//vlan总数（外层vlan，内层vlan)
 	bool	vlan_handled;
 	struct {
-		u32 flags;
+		u32 flags;//接口标记，例如需要隧道封装
 		struct mlx5_eswitch_rep *rep;
 		struct mlx5_core_dev *mdev;
 		u32 encap_id;
@@ -379,6 +382,7 @@ static inline bool mlx5_eswitch_vlan_actions_supported(struct mlx5_core_dev *dev
 	if (vlan_depth == 1)
 		return ret;
 
+	//2层vlan操作
 	return  ret && MLX5_CAP_ESW_FLOWTABLE_FDB(dev, pop_vlan_2) &&
 		MLX5_CAP_ESW_FLOWTABLE_FDB(dev, push_vlan_2);
 }

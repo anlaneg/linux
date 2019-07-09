@@ -5110,6 +5110,7 @@ static const struct genl_ops devlink_nl_ops[] = {
 		.internal_flags = DEVLINK_NL_FLAG_NEED_DEVLINK,
 	},
 	{
+		//将devlink设备置为switch模式
 		.cmd = DEVLINK_CMD_ESWITCH_SET,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = devlink_nl_cmd_eswitch_set_doit,
@@ -6643,6 +6644,7 @@ int devlink_compat_switch_id_get(struct net_device *dev,
 	return 0;
 }
 
+//注册devlink的netlink消息
 static int __init devlink_init(void)
 {
 	return genl_register_family(&devlink_nl_family);

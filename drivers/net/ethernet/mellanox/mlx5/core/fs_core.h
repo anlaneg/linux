@@ -123,7 +123,7 @@ struct mlx5_flow_rule {
 };
 
 struct mlx5_flow_handle {
-	int num_rules;
+	int num_rules;//rule数组大小
 	struct mlx5_flow_rule *rule[];
 };
 
@@ -133,6 +133,7 @@ struct mlx5_flow_table {
 	u32				id;
 	u16				vport;
 	unsigned int			max_fte;
+	//flow table的level,flow table会被组织成层次式
 	unsigned int			level;
 	enum fs_flow_table_type		type;
 	enum fs_flow_table_op_mod	op_mod;

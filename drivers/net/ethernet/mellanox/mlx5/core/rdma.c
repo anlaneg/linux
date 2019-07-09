@@ -150,6 +150,7 @@ void mlx5_rdma_disable_roce(struct mlx5_core_dev *dev)
 	mlx5_nic_vport_disable_roce(dev);
 }
 
+//rdma的roce启动
 void mlx5_rdma_enable_roce(struct mlx5_core_dev *dev)
 {
 	int err;

@@ -35,7 +35,7 @@ struct mlx5_eswitch_rep_if {
 	void		       (*unload)(struct mlx5_eswitch_rep *rep);
 	void		       *(*get_proto_dev)(struct mlx5_eswitch_rep *rep);
 	void			*priv;
-	atomic_t		state;
+	atomic_t		state;//接口状态
 };
 
 struct mlx5_eswitch_rep {

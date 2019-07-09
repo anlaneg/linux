@@ -127,12 +127,16 @@ struct mlx5e_tc_flow {
 };
 
 struct mlx5e_tc_flow_parse_attr {
+	//第n个出接口对应的tunnel_info
 	struct ip_tunnel_info tun_info[MLX5_MAX_FLOW_FWD_VPORTS];
 	struct net_device *filter_dev;
 	struct mlx5_flow_spec spec;
-	int num_mod_hdr_actions;//有效的mod_hdr_actions大小
-	int max_mod_hdr_actions;//mod_hdr_actions数组大小
+	//有效的mod_hdr_actions大小
+	int num_mod_hdr_actions;
+	//mod_hdr_actions数组大小
+	int max_mod_hdr_actions;
 	void *mod_hdr_actions;
+	//第n个出接口对应的ifindex
 	int mirred_ifindex[MLX5_MAX_FLOW_FWD_VPORTS];
 };
 
@@ -177,9 +181,10 @@ struct mlx5e_mod_hdr_entry {
 	/* flows sharing the same mod_hdr entry */
 	struct list_head flows;
 
+	//修改对应的action
 	struct mod_hdr_key key;
 
-	u32 mod_hdr_id;
+	u32 mod_hdr_id;//修改id(由firmware申请获得）
 };
 
 #define MLX5_MH_ACT_SZ MLX5_UN_SZ_BYTES(set_action_in_add_action_in_auto)
@@ -220,6 +225,7 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 
 	if (flow->flags & MLX5E_TC_FLOW_ESWITCH) {
 		namespace = MLX5_FLOW_NAMESPACE_FDB;
+		//flow位于eswitch,在mod_hdr_tbl中查找对应的key
 		hash_for_each_possible(esw->offloads.mod_hdr_tbl, mh,
 				       mod_hdr_hlist, hash_key) {
 			if (!cmp_mod_hdr_info(&mh->key, &key)) {
@@ -228,6 +234,7 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 			}
 		}
 	} else {
+		//flow位于kernel，在mod_hdr_tbl中查找对应的key
 		namespace = MLX5_FLOW_NAMESPACE_KERNEL;
 		hash_for_each_possible(priv->fs.tc.mod_hdr_tbl, mh,
 				       mod_hdr_hlist, hash_key) {
@@ -239,12 +246,15 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 	}
 
 	if (found)
+		/*查找到此flow,执行attach*/
 		goto attach_flow;
 
+	//未查找到flow,执行创建
 	mh = kzalloc(sizeof(*mh) + actions_size, GFP_KERNEL);
 	if (!mh)
 		return -ENOMEM;
 
+	//填充actions
 	mh->key.actions = (void *)mh + sizeof(*mh);
 	memcpy(mh->key.actions, key.actions, actions_size);
 	mh->key.num_actions = num_actions;
@@ -258,6 +268,7 @@ static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 	if (err)
 		goto out_err;
 
+	//按类型，加入到不同的mod_hdr_tbl表中
 	if (flow->flags & MLX5E_TC_FLOW_ESWITCH)
 		hash_add(esw->offloads.mod_hdr_tbl, &mh->mod_hdr_hlist, hash_key);
 	else
@@ -1895,12 +1906,13 @@ struct pedit_headers {
 };
 
 struct pedit_headers_action {
+	//待修改字段key及mask
 	struct pedit_headers	vals;
 	struct pedit_headers	masks;
-	u32			pedits;
+	u32			pedits;//修改字段数目
 };
 
-//各层可修改字段的offset
+//各层可修改字段在pedit_headers中的offset
 static int pedit_header_offsets[] = {
 	[FLOW_ACT_MANGLE_HDR_TYPE_ETH] = offsetof(struct pedit_headers, eth),
 	[FLOW_ACT_MANGLE_HDR_TYPE_IP4] = offsetof(struct pedit_headers, ip4),
@@ -2232,7 +2244,7 @@ static int parse_tc_pedit_action(struct mlx5e_priv *priv,
 	offset = act->mangle.offset;
 
 	//填充hdrs[cmd]
-	err = set_pedit_val(htype, ~mask, val, offset, &hdrs[cmd]);
+	err = set_pedit_val(htype, ~mask/*原值mask是取的反码，这里更正过来*/, val, offset, &hdrs[cmd]);
 	if (err)
 		goto out_err;
 
@@ -2285,9 +2297,10 @@ out_err:
 	return err;
 }
 
+//检查要求的checksum更新当前是否支持
 static bool csum_offload_supported(struct mlx5e_priv *priv,
 				   u32 action,
-				   u32 update_flags,
+				   u32 update_flags/*要求的checksum更新*/,
 				   struct netlink_ext_ack *extack)
 {
 	//目前支持ipv4hdr,tcp,udp的checksum更新
@@ -2777,12 +2790,14 @@ static int parse_tc_vlan_action(struct mlx5e_priv *priv,
 			attr->vlan_proto[vlan_idx] = htons(ETH_P_8021Q);
 
 		if (vlan_idx) {
+			//非0，检查是否支持双层vlan操作
 			if (!mlx5_eswitch_vlan_actions_supported(priv->mdev,
 								 MLX5_FS_VLAN_DEPTH))
 				return -EOPNOTSUPP;
 
 			*action |= MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH_2;
 		} else {
+			//为0，push单层vlan情况
 			if (!mlx5_eswitch_vlan_actions_supported(priv->mdev, 1) &&
 			    (act->vlan.proto != htons(ETH_P_8021Q) ||
 			     act->vlan.prio))
@@ -2806,7 +2821,7 @@ static int add_vlan_push_action(struct mlx5e_priv *priv,
 				u32 *action)
 {
 	struct net_device *vlan_dev = *out_dev;
-	//添加vlan
+	//生成需添加vlan
 	struct flow_action_entry vlan_act = {
 		.id = FLOW_ACTION_VLAN_PUSH,
 		.vlan.vid = vlan_dev_vlan_id(vlan_dev),
@@ -2815,6 +2830,7 @@ static int add_vlan_push_action(struct mlx5e_priv *priv,
 	};
 	int err;
 
+	//解析vlan_act，并填充到attr中
 	err = parse_tc_vlan_action(priv, &vlan_act, attr, action);
 	if (err)
 		return err;
@@ -2872,7 +2888,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 	flow_action_for_each(i, act, flow_action) {
 		switch (act->id) {
 		case FLOW_ACTION_DROP:
-			//drop action
+			//添加drop action
 			action |= MLX5_FLOW_CONTEXT_ACTION_DROP |
 				  MLX5_FLOW_CONTEXT_ACTION_COUNT;
 			break;
@@ -2988,6 +3004,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			}
 			break;
 		case FLOW_ACTION_TUNNEL_ENCAP:
+			//隧道封装，记录下要封装的tunnel_info
 			info = act->tunnel;
 			if (info)
 				encap = true;

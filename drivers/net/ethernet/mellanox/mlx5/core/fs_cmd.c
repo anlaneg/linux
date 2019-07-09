@@ -143,6 +143,7 @@ static int mlx5_cmd_update_root_ft(struct mlx5_flow_root_namespace *ns,
 static int mlx5_cmd_create_flow_table(struct mlx5_flow_root_namespace *ns,
 				      struct mlx5_flow_table *ft,
 				      unsigned int log_size,
+					  /*如果非0,则ft表失配后，此表匹配，为0，则前往默认表项匹配*/
 				      struct mlx5_flow_table *next_ft)
 {
 	int en_encap = !!(ft->flags & MLX5_FLOW_TABLE_TUNNEL_EN_REFORMAT);
@@ -152,9 +153,11 @@ static int mlx5_cmd_create_flow_table(struct mlx5_flow_root_namespace *ns,
 	struct mlx5_core_dev *dev = ns->dev;
 	int err;
 
+	//请求firmware创建一个新的flow table,它会返回一个handle，用于将来操作这个flow table
 	MLX5_SET(create_flow_table_in, in, opcode,
 		 MLX5_CMD_OP_CREATE_FLOW_TABLE);
 
+	//table在转发中的角色，目前有0 NIC_RX 1 NIC_TX,4 Eswitch_fdb等
 	MLX5_SET(create_flow_table_in, in, table_type, ft->type);
 	MLX5_SET(create_flow_table_in, in, flow_table_context.level, ft->level);
 	MLX5_SET(create_flow_table_in, in, flow_table_context.log_size, log_size);
@@ -171,12 +174,15 @@ static int mlx5_cmd_create_flow_table(struct mlx5_flow_root_namespace *ns,
 	switch (ft->op_mod) {
 	case FS_FT_OP_MOD_NORMAL:
 		if (next_ft) {
+			//指定table miss后行为，1：跳载到指定的表执行匹配,见miss_table_id
 			MLX5_SET(create_flow_table_in, in,
 				 flow_table_context.table_miss_action,
 				 MLX5_FLOW_TABLE_MISS_ACTION_FWD);
+			//设置表项失配后，需要匹配的table
 			MLX5_SET(create_flow_table_in, in,
 				 flow_table_context.table_miss_id, next_ft->id);
 		} else {
+			//如果表项失配，前往default表进行匹配
 			MLX5_SET(create_flow_table_in, in,
 				 flow_table_context.table_miss_action,
 				 ns->def_miss_action);
@@ -849,6 +855,7 @@ void mlx5_modify_header_dealloc(struct mlx5_core_dev *dev, u32 modify_header_id)
 EXPORT_SYMBOL(mlx5_modify_header_dealloc);
 
 static const struct mlx5_flow_cmds mlx5_flow_cmds = {
+	//创建flow table
 	.create_flow_table = mlx5_cmd_create_flow_table,
 	.destroy_flow_table = mlx5_cmd_destroy_flow_table,
 	.modify_flow_table = mlx5_cmd_modify_flow_table,
