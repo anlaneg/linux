@@ -250,6 +250,7 @@ enum {
 	MLX5_CMD_OP_CREATE_FLOW_GROUP             = 0x933,
 	MLX5_CMD_OP_DESTROY_FLOW_GROUP            = 0x934,
 	MLX5_CMD_OP_QUERY_FLOW_GROUP              = 0x935,
+	//添加一条flow到flow table
 	MLX5_CMD_OP_SET_FLOW_TABLE_ENTRY          = 0x936,
 	MLX5_CMD_OP_QUERY_FLOW_TABLE_ENTRY        = 0x937,
 	MLX5_CMD_OP_DELETE_FLOW_TABLE_ENTRY       = 0x938,
@@ -3737,6 +3738,7 @@ struct mlx5_ifc_set_fte_out_bits {
 	u8         reserved_at_40[0x40];
 };
 
+//用于指出各成员占用的bit数（为了统一填充方式引入此类结构体）
 struct mlx5_ifc_set_fte_in_bits {
 	u8         opcode[0x10];
 	u8         reserved_at_10[0x10];

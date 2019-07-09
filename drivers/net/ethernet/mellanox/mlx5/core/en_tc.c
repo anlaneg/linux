@@ -988,7 +988,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_max_prio_chain;
 	}
 
-	//遍历需要forward的所有vport
+	//遍历需要forward的所有vport（仅处理隧道封装port)
 	for (out_index = 0; out_index < MLX5_MAX_FLOW_FWD_VPORTS; out_index++) {
 		int mirred_ifindex;
 
@@ -2860,7 +2860,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	const struct ip_tunnel_info *info = NULL;
 	const struct flow_action_entry *act;
-	bool encap = false;
+	bool encap = false;/*需要隧道封装*/
 	u32 action = 0;
 	int err, i;
 
@@ -2900,7 +2900,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			struct mlx5e_priv *out_priv;
 			struct net_device *out_dev;
 
-			out_dev = act->dev;
+			out_dev = act->dev;/*报文输出接口*/
 			if (!out_dev) {
 				/* out_dev is NULL when filters with
 				 * non-existing mirred device are replayed to
@@ -2920,7 +2920,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 
 			action |= MLX5_FLOW_CONTEXT_ACTION_FWD_DEST |
 				  MLX5_FLOW_CONTEXT_ACTION_COUNT;
-			//out_dev与netdev属同一设备
+			//out_dev与netdev属于同一设备
 			if (netdev_port_same_parent_id(priv->netdev,
 						       out_dev) ||
 			    is_merged_eswitch_dev(priv, out_dev)) {
@@ -2948,6 +2948,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 						return err;
 				}
 
+				//出接口设备必须为rep口
 				if (!mlx5e_eswitch_rep(out_dev))
 					return -EOPNOTSUPP;
 
@@ -2957,10 +2958,12 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				attr->dests[attr->out_count].mdev = out_priv->mdev;
 				attr->out_count++;
 			} else if (encap) {
+				//报文需要tunnel封装，记录封装信息
 				parse_attr->mirred_ifindex[attr->out_count] =
 					out_dev->ifindex;
 				parse_attr->tun_info[attr->out_count] = *info;
 				encap = false;
+				//指明输出时需要隧道封装
 				attr->dests[attr->out_count].flags |=
 					MLX5_ESW_DEST_ENCAP;
 				attr->out_count++;

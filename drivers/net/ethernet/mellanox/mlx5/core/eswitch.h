@@ -327,7 +327,7 @@ struct mlx5_esw_flow_attr {
 	struct mlx5_core_dev    *counter_dev;
 
 	int split_count;
-	int out_count;
+	int out_count;/*要输出的接口数，dests有效长度*/
 
 	int	action;//要执行的action
 	__be16	vlan_proto[MLX5_FS_VLAN_DEPTH];
@@ -340,14 +340,14 @@ struct mlx5_esw_flow_attr {
 		struct mlx5_eswitch_rep *rep;
 		struct mlx5_core_dev *mdev;
 		u32 encap_id;
-	} dests[MLX5_MAX_FLOW_FWD_VPORTS];
+	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
 	u32	mod_hdr_id;
 	u8	match_level;//非隧道解析层数（例如udp,tcp层）
 	u8	tunnel_match_level;//隧道解析层数
 	struct mlx5_fc *counter;
 	u32	chain;//所属的chain索引
 	u16	prio;
-	u32	dest_chain;
+	u32	dest_chain;/*跳转到的目的chain*/
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
 };
 
@@ -406,7 +406,7 @@ static inline u16 mlx5_eswitch_manager_vport(struct mlx5_core_dev *dev)
 		MLX5_VPORT_ECPF : MLX5_VPORT_PF;
 }
 
-//uplink口的index
+//uplink口的index（使用最后一个port)
 static inline int mlx5_eswitch_uplink_idx(struct mlx5_eswitch *esw)
 {
 	/* Uplink always locate at the last element of the array.*/
@@ -427,9 +427,11 @@ static inline int mlx5_eswitch_vport_num_to_index(struct mlx5_eswitch *esw,
 		return mlx5_eswitch_ecpf_idx(esw);
 	}
 
+	//uplink即为最后一个port
 	if (vport_num == MLX5_VPORT_UPLINK)
 		return mlx5_eswitch_uplink_idx(esw);
 
+	//其它port均使用vport_num本身
 	return vport_num;
 }
 

@@ -47,7 +47,7 @@
 
 /* helper macros */
 #define __mlx5_nullp(typ) ((struct mlx5_ifc_##typ##_bits *)0)
-//成员fld的字节数
+//成员fld的字节数（因为结构体关系，逻辑上是bits数）
 #define __mlx5_bit_sz(typ, fld) sizeof(__mlx5_nullp(typ)->fld)
 //字段fld在结构体typ中偏移量，字段offset
 #define __mlx5_bit_off(typ, fld) (offsetof(struct mlx5_ifc_##typ##_bits, fld))
@@ -67,28 +67,31 @@
 //结构体大小
 #define __mlx5_st_sz_bits(typ) sizeof(struct mlx5_ifc_##typ##_bits)
 
+//由于typ结构体用于指出各成员bits数，故/8换算成实际字节数
 #define MLX5_FLD_SZ_BYTES(typ, fld) (__mlx5_bit_sz(typ, fld) / 8)
+//由于typ结构体用于指出各成员的bits数，故/8换算成实际结构体字节数
 #define MLX5_ST_SZ_BYTES(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 8)
-//结构体大小/32
+//由bits数换算成double word(类型）索引
 #define MLX5_ST_SZ_DW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 32)
 #define MLX5_ST_SZ_QW(typ) (sizeof(struct mlx5_ifc_##typ##_bits) / 64)
 #define MLX5_UN_SZ_BYTES(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 8)
 #define MLX5_UN_SZ_DW(typ) (sizeof(union mlx5_ifc_##typ##_bits) / 32)
 #define MLX5_BYTE_OFF(typ, fld) (__mlx5_bit_off(typ, fld) / 8)
+
 //获得typ结构中fld成员的指针地址（采用p指针获得）
 #define MLX5_ADDR_OF(typ, p, fld) ((void *)((uint8_t *)(p) + MLX5_BYTE_OFF(typ, fld)))
 
 /* insert a value to a struct */
-//已知结构体typ的指针，设置fld字段的值
+//依据struct mlx5_ifc_##typ##_bits结构体填充消息体
 #define MLX5_SET(typ/*结构体名称*/, p/*结构体指针*/, fld/*结构体内字段名*/, v/*要设置的值*/) do { \
+	/*制作一个value副本*/\
 	u32 _v = v; \
-	/*类型必须4字节对齐*/\
+	/*结构体大小必须4字节对齐*/\
 	BUILD_BUG_ON(__mlx5_st_sz_bits(typ) % 32);             \
-	/*设置p指针，4字节偏多量位置的值为，*/\
+	/*设置typ->fld的值为_v*/\
 	*((__be32 *)(p) + __mlx5_dw_off(typ, fld)) = \
-	/*取对齐后的fld值，转为cpu序,首先与 ~mask与，移除对齐增加的bit,然后或上v（需要左移是因为存在未占满情况）*/\
-	/*最终再转换为大端，即完成字段fld的赋值*/\
-	cpu_to_be32((be32_to_cpu(*((__be32 *)(p) + __mlx5_dw_off(typ, fld))) & \
+	/*由于fld成员可能是32bits中的一部分，故在set时，需要保持其它bits的值，然后再设置*/\
+	cpu_to_be32((be32_to_cpu(*((__be32 *)(p) + __mlx5_dw_off(typ, fld)))/*typ->fld取值*/ & \
 		     (~__mlx5_dw_mask(typ, fld))) | (((_v) & __mlx5_mask(typ, fld)) \
 		     << __mlx5_dw_bit_off(typ, fld))); \
 } while (0)

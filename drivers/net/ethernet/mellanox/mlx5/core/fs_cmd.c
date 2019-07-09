@@ -349,6 +349,8 @@ static int mlx5_set_extended_dest(struct mlx5_core_dev *dev,
 
 	return 0;
 }
+
+//填充flow table entry表项，并与firmware进行通信
 static int mlx5_cmd_set_fte(struct mlx5_core_dev *dev,
 			    int opmod, int modify_mask,
 			    struct mlx5_flow_table *ft,
@@ -380,18 +382,42 @@ static int mlx5_cmd_set_fte(struct mlx5_core_dev *dev,
 		return -ENOMEM;
 
 	MLX5_SET(set_fte_in, in, opcode, MLX5_CMD_OP_SET_FLOW_TABLE_ENTRY);
+	/*0表示set new Entry;1表示修改entry*/
 	MLX5_SET(set_fte_in, in, op_mod, opmod);
+	/**
+	 * Bit Mask indicates which fields for already existing fields to modify Valid only when op_mod==modify
+		Bit 0: action
+		Bit 1: flow_tag
+		Bit 2: Destination_List - (Size and List)
+		Bit 3: Flow_Counters - (Size and List)
+		Bit 4: encap_id
+	 */
 	MLX5_SET(set_fte_in, in, modify_enable_mask, modify_mask);
+	/*
+	 * Table’s role in packet processing 0x0: NIC receive
+		0x1: NIC transmit
+		0x2: E-Switch egress ACL
+		0x3: E-Switch ingress ACL 0x4: E-Switch FDB
+		0x5: Nic Sniffer Rx
+		0x6: Nic Sniffer Tx
+		0x7: NIC_RX_RDMA 0x8: NIC_TX_RDMA
+	 * */
 	MLX5_SET(set_fte_in, in, table_type, ft->type);
+	/*flow所属的table*/
 	MLX5_SET(set_fte_in, in, table_id,   ft->id);
+	/*flow在group中的位置*/
 	MLX5_SET(set_fte_in, in, flow_index, fte->index);
 	if (ft->vport) {
 		MLX5_SET(set_fte_in, in, vport_number, ft->vport);
+		/*0 - access my vport - vport_number is reserved.
+          1 - access another vport determined by vport_number on my e- switch.
+          Allowed only if HCA_CAP.vport_group_manager=1*/
 		MLX5_SET(set_fte_in, in, other_vport, 1);
 	}
 
+	/*构造flow_context*/
 	in_flow_context = MLX5_ADDR_OF(set_fte_in, in, flow_context);
-	MLX5_SET(flow_context, in_flow_context, group_id, group_id);
+	MLX5_SET(flow_context, in_flow_context, group_id, group_id);/*flow所属的group*/
 
 	MLX5_SET(flow_context, in_flow_context, flow_tag, fte->action.flow_tag);
 	MLX5_SET(flow_context, in_flow_context, extended_destination,
@@ -504,6 +530,7 @@ static int mlx5_cmd_set_fte(struct mlx5_core_dev *dev,
 			 list_size);
 	}
 
+	//发给firmware进行处理
 	err = mlx5_cmd_exec(dev, in, inlen, out, sizeof(out));
 err_out:
 	kvfree(in);
@@ -519,7 +546,7 @@ static int mlx5_cmd_create_fte(struct mlx5_flow_root_namespace *ns,
 	struct mlx5_core_dev *dev = ns->dev;
 	unsigned int group_id = group->id;
 
-	return mlx5_cmd_set_fte(dev, 0, 0, ft, group_id, fte);
+	return mlx5_cmd_set_fte(dev, 0/*设置新的entry*/, 0/*表示不修改任何字段*/, ft, group_id, fte);
 }
 
 static int mlx5_cmd_update_fte(struct mlx5_flow_root_namespace *ns,

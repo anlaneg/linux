@@ -1342,6 +1342,7 @@ static const struct net_device_ops mlx5e_netdev_ops_vf_rep = {
 	.ndo_get_port_parent_id	 = mlx5e_rep_get_port_parent_id,
 };
 
+//uplink的repersent口
 static const struct net_device_ops mlx5e_netdev_ops_uplink_rep = {
 	.ndo_open                = mlx5e_open,
 	.ndo_stop                = mlx5e_close,
