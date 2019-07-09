@@ -1329,6 +1329,7 @@ static struct mlx5_flow_group *alloc_auto_flow_group(struct mlx5_flow_table  *ft
 		group_size = 1;
 
 	/* sorted by start_index */
+	//确定candidate_index
 	fs_for_each_fg(fg, ft) {
 		if (candidate_index + group_size > fg->start_index)
 			candidate_index = fg->start_index + fg->max_ftes;
@@ -1799,6 +1800,7 @@ search_again_locked:
 	    version != atomic_read(&ft->node.version))
 		goto search_again_locked;
 
+	//创建table group
 	g = alloc_auto_flow_group(ft, spec);
 	if (IS_ERR(g)) {
 		rule = ERR_CAST(g);
