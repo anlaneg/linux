@@ -930,6 +930,7 @@ static void esw_destroy_offloads_fast_fdb_tables(struct mlx5_eswitch *esw)
 #define MAX_PF_SQ 256
 #define MAX_SQ_NVPORTS 32
 
+//创建slow_path fdb并添加默认规则
 static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/*总的vport数目*/)
 {
 	int inlen = MLX5_ST_SZ_BYTES(create_flow_group_in);
@@ -1039,11 +1040,14 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/
 	match_criteria = MLX5_ADDR_OF(create_flow_group_in, flow_group_in,
 				      match_criteria);
 
+	//source_port置为全1
 	MLX5_SET_TO_ONES(fte_match_param, match_criteria,
 			 misc_parameters.source_port);
+	//
 	MLX5_SET_TO_ONES(fte_match_param, match_criteria,
 			 misc_parameters.source_eswitch_owner_vhca_id);
 
+	//
 	MLX5_SET(create_flow_group_in, flow_group_in,
 		 source_eswitch_owner_vhca_id_valid, 1);
 	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, ix);
