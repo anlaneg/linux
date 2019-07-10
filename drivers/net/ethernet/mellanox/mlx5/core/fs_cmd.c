@@ -854,6 +854,7 @@ void mlx5_modify_header_dealloc(struct mlx5_core_dev *dev, u32 modify_header_id)
 }
 EXPORT_SYMBOL(mlx5_modify_header_dealloc);
 
+//已支持的table type的cmds处理
 static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	//创建flow table
 	.create_flow_table = mlx5_cmd_create_flow_table,
@@ -868,6 +869,7 @@ static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	.update_root_ft = mlx5_cmd_update_root_ft,
 };
 
+//暂不支持的table type的cmds处理（打桩）
 static const struct mlx5_flow_cmds mlx5_flow_cmd_stubs = {
 	.create_flow_table = mlx5_cmd_stub_create_flow_table,
 	.destroy_flow_table = mlx5_cmd_stub_destroy_flow_table,
@@ -901,6 +903,7 @@ const struct mlx5_flow_cmds *mlx5_fs_cmd_get_default(enum fs_flow_table_type typ
 	case FS_FT_SNIFFER_TX:
 	case FS_FT_NIC_TX:
 	case FS_FT_RDMA_RX:
+		//对支持的table type返回对应的cmds
 		return mlx5_fs_cmd_get_fw_cmds();
 	default:
 		return mlx5_fs_cmd_get_stub_cmds();

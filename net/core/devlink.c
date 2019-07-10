@@ -81,6 +81,7 @@ EXPORT_SYMBOL(devlink_dpipe_header_ipv6);
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwmsg);
 EXPORT_TRACEPOINT_SYMBOL_GPL(devlink_hwerr);
 
+//用于串连所有devlink设备
 static LIST_HEAD(devlink_list);
 
 /* devlink_mutex
@@ -101,6 +102,7 @@ static void devlink_net_set(struct devlink *devlink, struct net *net)
 	write_pnet(&devlink->_net, net);
 }
 
+//通过busname,devname获取到对应的devlink
 static struct devlink *devlink_get_from_attrs(struct net *net,
 					      struct nlattr **attrs)
 {
@@ -111,11 +113,13 @@ static struct devlink *devlink_get_from_attrs(struct net *net,
 	if (!attrs[DEVLINK_ATTR_BUS_NAME] || !attrs[DEVLINK_ATTR_DEV_NAME])
 		return ERR_PTR(-EINVAL);
 
+	//取busname及devname
 	busname = nla_data(attrs[DEVLINK_ATTR_BUS_NAME]);
 	devname = nla_data(attrs[DEVLINK_ATTR_DEV_NAME]);
 
 	lockdep_assert_held(&devlink_mutex);
 
+	//遍历devlink_list查找指定的devlink
 	list_for_each_entry(devlink, &devlink_list, list) {
 		if (strcmp(devlink->dev->bus->name, busname) == 0 &&
 		    strcmp(dev_name(devlink->dev), devname) == 0 &&
@@ -126,6 +130,7 @@ static struct devlink *devlink_get_from_attrs(struct net *net,
 	return ERR_PTR(-ENODEV);
 }
 
+//通过info获得对应的devlink
 static struct devlink *devlink_get_from_info(struct genl_info *info)
 {
 	return devlink_get_from_attrs(genl_info_net(info), info->attrs);
@@ -378,6 +383,7 @@ static void devlink_region_snapshot_del(struct devlink_snapshot *snapshot)
 	kfree(snapshot);
 }
 
+//命令处理上下文需要devlink
 #define DEVLINK_NL_FLAG_NEED_DEVLINK	BIT(0)
 #define DEVLINK_NL_FLAG_NEED_PORT	BIT(1)
 #define DEVLINK_NL_FLAG_NEED_SB		BIT(2)
@@ -388,6 +394,7 @@ static void devlink_region_snapshot_del(struct devlink_snapshot *snapshot)
  */
 #define DEVLINK_NL_FLAG_NO_LOCK		BIT(3)
 
+//devlink消息处理前回调
 static int devlink_nl_pre_doit(const struct genl_ops *ops,
 			       struct sk_buff *skb, struct genl_info *info)
 {
@@ -397,12 +404,15 @@ static int devlink_nl_pre_doit(const struct genl_ops *ops,
 	mutex_lock(&devlink_mutex);
 	devlink = devlink_get_from_info(info);
 	if (IS_ERR(devlink)) {
+		//查找devlink失败
 		mutex_unlock(&devlink_mutex);
 		return PTR_ERR(devlink);
 	}
 	if (~ops->internal_flags & DEVLINK_NL_FLAG_NO_LOCK)
+		//未指明不需要锁，则加锁
 		mutex_lock(&devlink->lock);
 	if (ops->internal_flags & DEVLINK_NL_FLAG_NEED_DEVLINK) {
+		//如果处理上下文需要devlink,则设置它
 		info->user_ptr[0] = devlink;
 	} else if (ops->internal_flags & DEVLINK_NL_FLAG_NEED_PORT) {
 		struct devlink_port *devlink_port;
@@ -1622,6 +1632,7 @@ static int devlink_nl_cmd_eswitch_get_doit(struct sk_buff *skb,
 static int devlink_nl_cmd_eswitch_set_doit(struct sk_buff *skb,
 					   struct genl_info *info)
 {
+	//找出对应的devlink
 	struct devlink *devlink = info->user_ptr[0];
 	const struct devlink_ops *ops = devlink->ops;
 	u8 inline_mode, encap_mode;
@@ -1629,9 +1640,12 @@ static int devlink_nl_cmd_eswitch_set_doit(struct sk_buff *skb,
 	u16 mode;
 
 	if (info->attrs[DEVLINK_ATTR_ESWITCH_MODE]) {
+		//处理eswitch_mode
 		if (!ops->eswitch_mode_set)
 			return -EOPNOTSUPP;
+		//取出配置的mode
 		mode = nla_get_u16(info->attrs[DEVLINK_ATTR_ESWITCH_MODE]);
+		//调用相应ops完成调用
 		err = ops->eswitch_mode_set(devlink, mode, info->extack);
 		if (err)
 			return err;
@@ -4954,6 +4968,7 @@ devlink_nl_cmd_health_reporter_dump_clear_doit(struct sk_buff *skb,
 	return 0;
 }
 
+//devlink netlink policy参数
 static const struct nla_policy devlink_nl_policy[DEVLINK_ATTR_MAX + 1] = {
 	[DEVLINK_ATTR_BUS_NAME] = { .type = NLA_NUL_STRING },
 	[DEVLINK_ATTR_DEV_NAME] = { .type = NLA_NUL_STRING },
@@ -5115,6 +5130,7 @@ static const struct genl_ops devlink_nl_ops[] = {
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = devlink_nl_cmd_eswitch_set_doit,
 		.flags = GENL_ADMIN_PERM,
+		//指明需要devlink
 		.internal_flags = DEVLINK_NL_FLAG_NEED_DEVLINK |
 				  DEVLINK_NL_FLAG_NO_LOCK,
 	},
@@ -5292,9 +5308,11 @@ static struct genl_family devlink_nl_family __ro_after_init = {
 	.maxattr	= DEVLINK_ATTR_MAX,
 	.policy = devlink_nl_policy,
 	.netnsok	= true,
+	//netlink处理前调用
 	.pre_doit	= devlink_nl_pre_doit,
 	.post_doit	= devlink_nl_post_doit,
 	.module		= THIS_MODULE,
+	//对外提供各netlink cmd对应的ops
 	.ops		= devlink_nl_ops,
 	.n_ops		= ARRAY_SIZE(devlink_nl_ops),
 	.mcgrps		= devlink_nl_mcgrps,
@@ -5310,17 +5328,18 @@ static struct genl_family devlink_nl_family __ro_after_init = {
  *	Allocate new devlink instance resources, including devlink index
  *	and name.
  */
-struct devlink *devlink_alloc(const struct devlink_ops *ops, size_t priv_size)
+struct devlink *devlink_alloc(const struct devlink_ops *ops/*devlink对应的ops*/, size_t priv_size/*私有数据大小*/)
 {
 	struct devlink *devlink;
 
 	if (WARN_ON(!ops))
 		return NULL;
 
-	//申请并初始化devlink
+	//申请并初始化devlink（指定私有数据）
 	devlink = kzalloc(sizeof(*devlink) + priv_size, GFP_KERNEL);
 	if (!devlink)
 		return NULL;
+	//设置devlink对应的ops
 	devlink->ops = ops;
 	devlink_net_set(devlink, &init_net);
 	INIT_LIST_HEAD(&devlink->port_list);
@@ -5347,7 +5366,9 @@ int devlink_register(struct devlink *devlink, struct device *dev)
 	//将devlink注册到devlink_list
 	mutex_lock(&devlink_mutex);
 	devlink->dev = dev;
+	//将devlink添加到devlink_list链表
 	list_add_tail(&devlink->list, &devlink_list);
+	//通知devlink设备new事件
 	devlink_notify(devlink, DEVLINK_CMD_NEW);
 	mutex_unlock(&devlink_mutex);
 	return 0;

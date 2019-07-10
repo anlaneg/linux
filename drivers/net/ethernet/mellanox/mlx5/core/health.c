@@ -389,6 +389,7 @@ int mlx5_health_init(struct mlx5_core_dev *dev)
 	if (!health->wq)
 		return -ENOMEM;
 	spin_lock_init(&health->wq_lock);
+	//设置health->work的工作函数
 	INIT_WORK(&health->work, health_care);
 	INIT_DELAYED_WORK(&health->recover_work, health_recover);
 

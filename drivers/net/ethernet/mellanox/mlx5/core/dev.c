@@ -33,6 +33,7 @@
 #include <linux/mlx5/driver.h>
 #include "mlx5_core.h"
 
+//用于串连所有注册的interace
 static LIST_HEAD(intf_list);
 static LIST_HEAD(mlx5_dev_list);
 /* intf dev list mutex */
@@ -219,6 +220,7 @@ void mlx5_unregister_device(struct mlx5_core_dev *dev)
 	mutex_unlock(&mlx5_intf_mutex);
 }
 
+//接口注册
 int mlx5_register_interface(struct mlx5_interface *intf)
 {
 	struct mlx5_priv *priv;
@@ -227,6 +229,7 @@ int mlx5_register_interface(struct mlx5_interface *intf)
 		return -EINVAL;
 
 	mutex_lock(&mlx5_intf_mutex);
+	//将接口注册到intf_list中
 	list_add_tail(&intf->list, &intf_list);
 	list_for_each_entry(priv, &mlx5_dev_list, dev_list)
 		mlx5_add_device(intf, priv);

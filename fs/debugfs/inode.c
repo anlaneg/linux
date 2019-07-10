@@ -504,6 +504,7 @@ EXPORT_SYMBOL_GPL(debugfs_create_file_size);
  */
 struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 {
+	//在debugfs中创建一个目录项
 	struct dentry *dentry = start_creating(name, parent);
 	struct inode *inode;
 

@@ -91,6 +91,7 @@ EXPORT_SYMBOL(mlx5_debugfs_root);
 
 void mlx5_register_debugfs(void)
 {
+	//在debugfs中注册根目录
 	mlx5_debugfs_root = debugfs_create_dir("mlx5", NULL);
 	if (IS_ERR_OR_NULL(mlx5_debugfs_root))
 		mlx5_debugfs_root = NULL;

@@ -31,7 +31,9 @@ struct devlink {
 	struct list_head reporter_list;
 	struct mutex reporters_lock; /* protects reporter_list */
 	struct devlink_dpipe_headers *dpipe_headers;
+	//devlink对应的ops
 	const struct devlink_ops *ops;
+	//devlink对应的dev
 	struct device *dev;
 	possible_net_t _net;
 	struct mutex lock;

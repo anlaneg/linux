@@ -2068,6 +2068,7 @@ struct mlx5_flow_namespace *mlx5_get_fdb_sub_ns(struct mlx5_core_dev *dev,
 }
 EXPORT_SYMBOL(mlx5_get_fdb_sub_ns);
 
+//依据namespace_type返回相应的namespace
 struct mlx5_flow_namespace *mlx5_get_flow_namespace(struct mlx5_core_dev *dev,
 						    enum mlx5_flow_namespace_type type)
 {
@@ -2082,6 +2083,7 @@ struct mlx5_flow_namespace *mlx5_get_flow_namespace(struct mlx5_core_dev *dev,
 
 	switch (type) {
 	case MLX5_FLOW_NAMESPACE_FDB:
+		//fdb的返回fdb_root_ns
 		if (steering->fdb_root_ns)
 			return &steering->fdb_root_ns->ns;
 		return NULL;
@@ -2167,7 +2169,7 @@ static struct fs_prio *_fs_create_prio(struct mlx5_flow_namespace *ns,
 	tree_add_node(&fs_prio->node, &ns->node);
 	fs_prio->num_levels = num_levels;
 	fs_prio->prio = prio;
-	//将fs_prio加入到ns中
+	//fs_prio从属于ns
 	list_add_tail(&fs_prio->node.list, &ns->node.children);
 
 	return fs_prio;
@@ -2194,6 +2196,7 @@ static struct mlx5_flow_namespace *fs_init_namespace(struct mlx5_flow_namespace
 	return ns;
 }
 
+//创建flow_namespace，并使其归属于prio
 static struct mlx5_flow_namespace *fs_create_namespace(struct fs_prio *prio)
 {
 	struct mlx5_flow_namespace	*ns;
@@ -2310,10 +2313,12 @@ static int init_root_tree(struct mlx5_flow_steering *steering,
 	return 0;
 }
 
+//创建指定table_type的root_ns
 static struct mlx5_flow_root_namespace
 *create_root_ns(struct mlx5_flow_steering *steering,
 		enum fs_flow_table_type table_type)
 {
+	//取此类型table对应的flow_cmds
 	const struct mlx5_flow_cmds *cmds = mlx5_fs_cmd_get_default(table_type);
 	struct mlx5_flow_root_namespace *root_ns;
 	struct mlx5_flow_namespace *ns;
@@ -2337,6 +2342,7 @@ static struct mlx5_flow_root_namespace
 	fs_init_namespace(ns);
 	mutex_init(&root_ns->chain_lock);
 	tree_init_node(&ns->node, NULL, NULL);
+	//此ns为root_ns
 	tree_add_node(&ns->node, NULL);
 
 	return root_ns;
@@ -2546,6 +2552,8 @@ static int init_rdma_rx_root_ns(struct mlx5_flow_steering *steering)
 	prio = fs_create_prio(&steering->rdma_rx_root_ns->ns, 0, 1);
 	return PTR_ERR_OR_ZERO(prio);
 }
+
+//初始化fdb root namespace
 static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 {
 	struct mlx5_flow_namespace *ns;
@@ -2556,6 +2564,7 @@ static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 	int prio;
 	int err;
 
+	//创建fdb_root_ns
 	steering->fdb_root_ns = create_root_ns(steering, FS_FT_FDB);
 	if (!steering->fdb_root_ns)
 		return -ENOMEM;
@@ -2565,6 +2574,7 @@ static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 	if (!steering->fdb_sub_ns)
 		return -ENOMEM;
 
+	//创建1级bypass_path prio，归属于fdb_root_ns
 	maj_prio = fs_create_prio(&steering->fdb_root_ns->ns, FDB_BYPASS_PATH,
 				  1);
 	if (IS_ERR(maj_prio)) {
@@ -2572,6 +2582,7 @@ static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 		goto out_err;
 	}
 
+	//创建level级fdb_fast_path prio,归属于fdb_root_ns
 	levels = 2 * FDB_MAX_PRIO * (FDB_MAX_CHAIN + 1);
 	maj_prio = fs_create_prio_chained(&steering->fdb_root_ns->ns,
 					  FDB_FAST_PATH,
@@ -2588,6 +2599,7 @@ static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 			goto out_err;
 		}
 
+		//创建2级prio归属于ns
 		for (prio = 0; prio < FDB_MAX_PRIO * (chain + 1); prio++) {
 			min_prio = fs_create_prio(ns, prio, 2);
 			if (IS_ERR(min_prio)) {
@@ -2599,6 +2611,7 @@ static int init_fdb_root_ns(struct mlx5_flow_steering *steering)
 		steering->fdb_sub_ns[chain] = ns;
 	}
 
+	//创建1级fdb_slow_path prio归属于fdb_root_ns
 	maj_prio = fs_create_prio(&steering->fdb_root_ns->ns, FDB_SLOW_PATH, 1);
 	if (IS_ERR(maj_prio)) {
 		err = PTR_ERR(maj_prio);
@@ -2648,12 +2661,14 @@ static int init_egress_acls_root_ns(struct mlx5_core_dev *dev)
 	int err;
 	int i;
 
+	//创建egress_root_ns
 	steering->esw_egress_root_ns = kcalloc(MLX5_TOTAL_VPORTS(dev),
 					       sizeof(*steering->esw_egress_root_ns),
 					       GFP_KERNEL);
 	if (!steering->esw_egress_root_ns)
 		return -ENOMEM;
 
+	//针对每个vport创建一个egress_acl root namesapce
 	for (i = 0; i < MLX5_TOTAL_VPORTS(dev); i++) {
 		err = init_egress_acl_root_ns(steering, i);
 		if (err)
@@ -2766,6 +2781,7 @@ int mlx5_init_fs(struct mlx5_core_dev *dev)
 				goto err;
 		}
 		if (MLX5_CAP_ESW_INGRESS_ACL(dev, ft_support)) {
+			//针对每个vport创建一个ingress_acl root namespace
 			err = init_ingress_acls_root_ns(dev);
 			if (err)
 				goto err;
