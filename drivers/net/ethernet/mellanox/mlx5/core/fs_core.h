@@ -102,6 +102,7 @@ struct mlx5_flow_steering {
 
 struct fs_node {
 	struct list_head	list;
+	//指向子节点
 	struct list_head	children;
 	enum fs_node_type	type;//node类型
 	struct fs_node		*parent;//node的父节接，例如fte的parent为flow group
@@ -135,6 +136,7 @@ struct mlx5_flow_table {
 	struct fs_node			node;
 	u32				id;
 	u16				vport;
+	//支持的fte最大数
 	unsigned int			max_fte;
 	//flow table的level,flow table会被组织成层次式
 	unsigned int			level;

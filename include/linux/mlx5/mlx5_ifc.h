@@ -425,9 +425,9 @@ struct mlx5_ifc_fte_match_set_lyr_2_4_bits {
 	u8         smac_15_0[0x10];
 	u8         ethertype[0x10];//以网帧类型
 
-	u8         dmac_47_16[0x20];
+	u8         dmac_47_16[0x20];//目的mac的16-47bits
 
-	u8         dmac_15_0[0x10];
+	u8         dmac_15_0[0x10];//目的mac的0-15bits
 	u8         first_prio[0x3];
 	u8         first_cfi[0x1];
 	u8         first_vid[0xc];

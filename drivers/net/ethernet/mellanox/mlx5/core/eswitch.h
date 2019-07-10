@@ -149,7 +149,9 @@ struct mlx5_eswitch_fdb {
 			struct mlx5_flow_group *peer_miss_grp;
 			struct mlx5_flow_handle **peer_miss_rules;
 			struct mlx5_flow_group *miss_grp;
+			//单播报文失配时处理
 			struct mlx5_flow_handle *miss_rule_uni;
+			//组播报文失配时处理
 			struct mlx5_flow_handle *miss_rule_multi;
 			int vlan_push_pop_refcount;
 

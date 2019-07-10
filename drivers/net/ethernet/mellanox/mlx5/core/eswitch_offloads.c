@@ -691,6 +691,7 @@ static void esw_del_fdb_peer_miss_rules(struct mlx5_eswitch *esw)
 	kvfree(flows);
 }
 
+//添加两条单播miss流，组播miss流
 static int esw_add_fdb_miss_rule(struct mlx5_eswitch *esw)
 {
 	struct mlx5_flow_act flow_act = {0};
@@ -712,14 +713,17 @@ static int esw_add_fdb_miss_rule(struct mlx5_eswitch *esw)
 	spec->match_criteria_enable = MLX5_MATCH_OUTER_HEADERS;
 	headers_c = MLX5_ADDR_OF(fte_match_param, spec->match_criteria,
 				 outer_headers);
+	//指定匹配到组播mac(这里为什么不给掩码？）
 	dmac_c = MLX5_ADDR_OF(fte_match_param, headers_c,
 			      outer_headers.dmac_47_16);
 	dmac_c[0] = 0x01;
 
+	//指明action为送给esw->manager_vport
 	dest.type = MLX5_FLOW_DESTINATION_TYPE_VPORT;
 	dest.vport.num = esw->manager_vport;
 	flow_act.action = MLX5_FLOW_CONTEXT_ACTION_FWD_DEST;
 
+	//向flow table中加入此条规则
 	flow_rule = mlx5_add_flow_rules(esw->fdb_table.offloads.slow_fdb, spec,
 					&flow_act, &dest, 1);
 	if (IS_ERR(flow_rule)) {
@@ -728,8 +732,10 @@ static int esw_add_fdb_miss_rule(struct mlx5_eswitch *esw)
 		goto out;
 	}
 
+	//由于上面掩码为0，故通配所有mac,送esw->manager_vport处理
 	esw->fdb_table.offloads.miss_rule_uni = flow_rule;
 
+	//设置掩码
 	headers_v = MLX5_ADDR_OF(fte_match_param, spec->match_value,
 				 outer_headers);
 	dmac_v = MLX5_ADDR_OF(fte_match_param, headers_v,
@@ -744,6 +750,7 @@ static int esw_add_fdb_miss_rule(struct mlx5_eswitch *esw)
 		goto out;
 	}
 
+	//设置组播miss后规则（如果目的mac为组播，但miss,则按此条送给esw->manager_vport)
 	esw->fdb_table.offloads.miss_rule_multi = flow_rule;
 
 out:
@@ -923,7 +930,7 @@ static void esw_destroy_offloads_fast_fdb_tables(struct mlx5_eswitch *esw)
 #define MAX_PF_SQ 256
 #define MAX_SQ_NVPORTS 32
 
-static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports)
+static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/*总的vport数目*/)
 {
 	int inlen = MLX5_ST_SZ_BYTES(create_flow_group_in);
 	struct mlx5_flow_table_attr ft_attr = {};
@@ -942,6 +949,7 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports)
 	if (!flow_group_in)
 		return -ENOMEM;
 
+	//取fdb namespace
 	root_ns = mlx5_get_flow_namespace(dev, MLX5_FLOW_NAMESPACE_FDB);
 	if (!root_ns) {
 		esw_warn(dev, "Failed to get FDB flow namespace\n");
@@ -951,6 +959,7 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports)
 
 	max_flow_counter = (MLX5_CAP_GEN(dev, max_flow_counter_31_16) << 16) |
 			    MLX5_CAP_GEN(dev, max_flow_counter_15_0);
+	//取dev支持的最大fdb表数目
 	fdb_max = 1 << MLX5_CAP_ESW_FLOWTABLE_FDB(dev, log_max_ft_size);
 
 	esw_debug(dev, "Create offloads FDB table, min (max esw size(2^%d), max counters(%d), groups(%d), max flow table size(2^%d))\n",
@@ -958,10 +967,12 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports)
 		  max_flow_counter, ESW_OFFLOADS_NUM_GROUPS,
 		  fdb_max);
 
+	//初始化fdb_left数组（每个fdb_left[i]指可创建多少个ESW_POOLS[i])
 	for (i = 0; i < ARRAY_SIZE(ESW_POOLS); i++)
 		esw->fdb_table.offloads.fdb_left[i] =
 			ESW_POOLS[i] <= fdb_max ? ESW_SIZE / ESW_POOLS[i] : 0;
 
+	//flow table中最大的fte数目（）
 	table_size = nvports * MAX_SQ_NVPORTS + MAX_PF_SQ +
 		MLX5_ESW_MISS_FLOWS + esw->total_vports;
 
@@ -982,6 +993,8 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports)
 		esw_warn(dev, "Failed to create slow path FDB Table err %d\n", err);
 		goto slow_fdb_err;
 	}
+
+	//指定slow_path对应的fdb
 	esw->fdb_table.offloads.slow_fdb = fdb;
 
 	/* If lazy creation isn't supported, open the fast path tables now */
@@ -1235,6 +1248,7 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 
 	//先关闭旧的sriov
 	mlx5_eswitch_disable_sriov(esw);
+
 	//再开启sriov
 	err = mlx5_eswitch_enable_sriov(esw, num_vfs, SRIOV_OFFLOADS);
 	if (err) {
@@ -1750,7 +1764,7 @@ static void esw_prio_tag_acls_cleanup(struct mlx5_eswitch *esw)
 }
 
 static int esw_offloads_steering_init(struct mlx5_eswitch *esw, int vf_nvports,
-				      int nvports)
+				      int nvports/*总的vport数目，含vf*/)
 {
 	int err;
 

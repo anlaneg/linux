@@ -325,11 +325,13 @@ static int tree_remove_node(struct fs_node *node, bool locked)
 	return 0;
 }
 
+//返回指定prio的fs_prio
 static struct fs_prio *find_prio(struct mlx5_flow_namespace *ns,
 				 unsigned int prio)
 {
 	struct fs_prio *iter_prio;
 
+	//遍历ns->node.children，每一个元素为iter_prio
 	fs_for_each_prio(iter_prio, ns) {
 		if (iter_prio->prio == prio)
 			return iter_prio;
@@ -2113,10 +2115,12 @@ struct mlx5_flow_namespace *mlx5_get_flow_namespace(struct mlx5_core_dev *dev,
 	if (!root_ns)
 		return NULL;
 
+	//取对应的fs_prio
 	fs_prio = find_prio(&root_ns->ns, prio);
 	if (!fs_prio)
 		return NULL;
 
+	//取其下首个namespace
 	ns = list_first_entry(&fs_prio->node.children,
 			      typeof(*ns),
 			      node.list);
@@ -2165,16 +2169,19 @@ static struct fs_prio *_fs_create_prio(struct mlx5_flow_namespace *ns,
 		return ERR_PTR(-ENOMEM);
 
 	fs_prio->node.type = type;
+
 	tree_init_node(&fs_prio->node, NULL, del_sw_prio);
+	//将fs_prio指向ns
 	tree_add_node(&fs_prio->node, &ns->node);
 	fs_prio->num_levels = num_levels;
 	fs_prio->prio = prio;
-	//fs_prio从属于ns
+	//fs_prio加入ns
 	list_add_tail(&fs_prio->node.list, &ns->node.children);
 
 	return fs_prio;
 }
 
+//创建FS_TYPE_PRIO_CHAINS类型的fs_prio
 static struct fs_prio *fs_create_prio_chained(struct mlx5_flow_namespace *ns,
 					      unsigned int prio,
 					      int num_levels)
@@ -2182,6 +2189,7 @@ static struct fs_prio *fs_create_prio_chained(struct mlx5_flow_namespace *ns,
 	return _fs_create_prio(ns, prio, num_levels, FS_TYPE_PRIO_CHAINS);
 }
 
+//创建FS_TYPE_PRIO类型的fs_prio
 static struct fs_prio *fs_create_prio(struct mlx5_flow_namespace *ns,
 				      unsigned int prio, int num_levels)
 {
@@ -2219,6 +2227,7 @@ static int create_leaf_prios(struct mlx5_flow_namespace *ns, int prio,
 	struct fs_prio *fs_prio;
 	int i;
 
+	//创建多个fs_prio,优先级增加
 	for (i = 0; i < prio_metadata->num_leaf_prios; i++) {
 		fs_prio = fs_create_prio(ns, prio++, prio_metadata->num_levels);
 		if (IS_ERR(fs_prio))
@@ -2771,6 +2780,7 @@ int mlx5_init_fs(struct mlx5_core_dev *dev)
 
 	if (MLX5_ESWITCH_MANAGER(dev)) {
 		if (MLX5_CAP_ESW_FLOWTABLE_FDB(dev, ft_support)) {
+			//初始化fdb root ns
 			err = init_fdb_root_ns(steering);
 			if (err)
 				goto err;

@@ -1021,6 +1021,7 @@ enum {
 };
 
 enum {
+	//匹配外层头
 	MLX5_MATCH_OUTER_HEADERS	= 1 << 0,
 	MLX5_MATCH_MISC_PARAMETERS	= 1 << 1,
 	MLX5_MATCH_INNER_HEADERS	= 1 << 2,
