@@ -652,7 +652,7 @@ static void esw_apply_vport_addr_list(struct mlx5_eswitch *esw,
 	struct hlist_node *tmp;
 	int hi;
 
-	vport_addr_add = is_uc ? esw_add_uc_addr :
+	vport_addr_add = is_uc/*是否单播地址*/ ? esw_add_uc_addr :
 				 esw_add_mc_addr;
 	vport_addr_del = is_uc ? esw_del_uc_addr :
 				 esw_del_mc_addr;

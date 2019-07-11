@@ -44,6 +44,7 @@
  */
 static DEFINE_MUTEX(lag_mutex);
 
+//发送消息给firmware创建lag
 static int mlx5_cmd_create_lag(struct mlx5_core_dev *dev, u8 remap_port1,
 			       u8 remap_port2)
 {
