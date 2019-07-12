@@ -90,8 +90,11 @@ struct tcp_options_received {
 /*	PAWS/RTTM data	*/
 	int	ts_recent_stamp;/* Time we stored ts_recent (for aging) */
 	u32	ts_recent;	/* Time stamp to echo next		*/
+	//对方给报文的时间签
 	u32	rcv_tsval;	/* Time stamp value             	*/
+	//本端收到对方echo回来的时间签
 	u32	rcv_tsecr;	/* Time stamp echo reply        	*/
+	//上一个报文收到了时间签
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
 		dsack : 1,	/* D-SACK is scheduled			*/

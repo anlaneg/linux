@@ -272,6 +272,7 @@ static int mlx5_cmd_modify_flow_table(struct mlx5_flow_root_namespace *ns,
 	return mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 }
 
+//定义新的group
 static int mlx5_cmd_create_flow_group(struct mlx5_flow_root_namespace *ns,
 				      struct mlx5_flow_table *ft,
 				      u32 *in,
@@ -287,6 +288,7 @@ static int mlx5_cmd_create_flow_group(struct mlx5_flow_root_namespace *ns,
 	MLX5_SET(create_flow_group_in, in, table_type, ft->type);
 	MLX5_SET(create_flow_group_in, in, table_id, ft->id);
 	if (ft->vport) {
+		//other_vport为1时，需要通过vport_number访问另一个vport
 		MLX5_SET(create_flow_group_in, in, vport_number, ft->vport);
 		MLX5_SET(create_flow_group_in, in, other_vport, 1);
 	}
@@ -860,6 +862,7 @@ static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	.create_flow_table = mlx5_cmd_create_flow_table,
 	.destroy_flow_table = mlx5_cmd_destroy_flow_table,
 	.modify_flow_table = mlx5_cmd_modify_flow_table,
+	//flow group
 	.create_flow_group = mlx5_cmd_create_flow_group,
 	.destroy_flow_group = mlx5_cmd_destroy_flow_group,
 	//增加flow to flow table

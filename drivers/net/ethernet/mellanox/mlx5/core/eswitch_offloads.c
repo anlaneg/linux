@@ -927,7 +927,10 @@ static void esw_destroy_offloads_fast_fdb_tables(struct mlx5_eswitch *esw)
 	}
 }
 
+//pf的最大发送队列数
 #define MAX_PF_SQ 256
+
+//nvport的最大发送队列数
 #define MAX_SQ_NVPORTS 32
 
 //创建slow_path fdb并添加默认规则
@@ -1017,9 +1020,12 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/
 
 	match_criteria = MLX5_ADDR_OF(create_flow_group_in, flow_group_in, match_criteria);
 
+	//将sqn,port置为全'1' (sqn=SQ Context Number,SQ=Send Queue)
+	//srouce_port determines wire port
 	MLX5_SET_TO_ONES(fte_match_param, match_criteria, misc_parameters.source_sqn);
 	MLX5_SET_TO_ONES(fte_match_param, match_criteria, misc_parameters.source_port);
 
+	//指明flow group中首条flow_index,及最后一条flow_index
 	ix = nvports * MAX_SQ_NVPORTS + MAX_PF_SQ;
 	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, 0);
 	MLX5_SET(create_flow_group_in, flow_group_in, end_flow_index, ix - 1);
@@ -1034,6 +1040,14 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/
 
 	/* create peer esw miss group */
 	memset(flow_group_in, 0, inlen);
+	/**
+	 * Bitmask representing which of the headers and parameters in match_criteria
+	 * are used in defining the Flow. Unused parameters are reserved, and do not participate in matching packets to the Flow. Bit 0: outer_headers
+		Bit 1: misc_parameters
+		Bit 2: inner_headers
+		Bit 3: misc_parameters_2
+		other: reserved
+	 */
 	MLX5_SET(create_flow_group_in, flow_group_in, match_criteria_enable,
 		 MLX5_MATCH_MISC_PARAMETERS);
 
@@ -1063,16 +1077,18 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/
 	}
 	esw->fdb_table.offloads.peer_miss_grp = g;
 
-	/* create miss group */
+	/* create miss group 创建miss group并加入默认的rules*/
 	memset(flow_group_in, 0, inlen);
 	MLX5_SET(create_flow_group_in, flow_group_in, match_criteria_enable,
 		 MLX5_MATCH_OUTER_HEADERS);
 	match_criteria = MLX5_ADDR_OF(create_flow_group_in, flow_group_in,
 				      match_criteria);
+	//匹配目的mac
 	dmac = MLX5_ADDR_OF(fte_match_param, match_criteria,
 			    outer_headers.dmac_47_16);
 	dmac[0] = 0x01;
 
+	//定义共两条流
 	MLX5_SET(create_flow_group_in, flow_group_in, start_flow_index, ix);
 	MLX5_SET(create_flow_group_in, flow_group_in, end_flow_index,
 		 ix + MLX5_ESW_MISS_FLOWS);
@@ -1085,6 +1101,7 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw, int nvports/
 	}
 	esw->fdb_table.offloads.miss_grp = g;
 
+	//添加其对应的两条流
 	err = esw_add_fdb_miss_rule(esw);
 	if (err)
 		goto miss_rule_err;

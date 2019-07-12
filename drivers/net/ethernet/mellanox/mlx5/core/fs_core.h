@@ -68,6 +68,7 @@ enum fs_flow_table_type {
 	FS_FT_SNIFFER_RX	= 0X5,
 	FS_FT_SNIFFER_TX	= 0X6,
 	FS_FT_RDMA_RX		= 0X7,
+	//后面会添加FS_FT_RDMA_TX
 	FS_FT_MAX_TYPE = FS_FT_SNIFFER_TX,
 };
 
@@ -134,12 +135,14 @@ struct mlx5_flow_handle {
 /* Type of children is mlx5_flow_group */
 struct mlx5_flow_table {
 	struct fs_node			node;
+	//表号，用于指代
 	u32				id;
 	u16				vport;
 	//支持的fte最大数
 	unsigned int			max_fte;
 	//flow table的level,flow table会被组织成层次式
 	unsigned int			level;
+	//table类型
 	enum fs_flow_table_type		type;
 	enum fs_flow_table_op_mod	op_mod;
 	struct {

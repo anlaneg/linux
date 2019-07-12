@@ -3918,17 +3918,22 @@ void tcp_parse_options(const struct net *net,
 }
 EXPORT_SYMBOL(tcp_parse_options);
 
+//是否为特殊的timestamp选项
 static bool tcp_parse_aligned_timestamp(struct tcp_sock *tp, const struct tcphdr *th)
 {
+	//指向tcp选项
 	const __be32 *ptr = (const __be32 *)(th + 1);
 
+	//如果tcp选项为 {NOP,NOP,TIMESTAMP,10,$timestamp}则进入处理
 	if (*ptr == htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
 			  | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP)) {
+
 		tp->rx_opt.saw_tstamp = 1;
-		++ptr;
-		tp->rx_opt.rcv_tsval = ntohl(*ptr);
+		++ptr;//跳过{nop,nop,timestamp,10}
+		tp->rx_opt.rcv_tsval = ntohl(*ptr);//取第一个时间
 		++ptr;
 		if (*ptr)
+			//记录时间差（采用echo的时间，减去offset}
 			tp->rx_opt.rcv_tsecr = ntohl(*ptr) - tp->tsoffset;
 		else
 			tp->rx_opt.rcv_tsecr = 0;
@@ -3949,9 +3954,11 @@ static bool tcp_fast_parse_options(const struct net *net,
 	 */
 	if (th->doff == (sizeof(*th) / 4)) {
 		tp->rx_opt.saw_tstamp = 0;
-		return false;//此报文无tcp选项
+		//此报文无tcp选项
+		return false;
 	} else if (tp->rx_opt.tstamp_ok &&
 		   th->doff == ((sizeof(*th) + TCPOLEN_TSTAMP_ALIGNED) / 4)) {
+		//nop,nop,timestamp方式
 		if (tcp_parse_aligned_timestamp(tp, th))
 			return true;
 	}
@@ -5422,6 +5429,7 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 
 	/* Step 2: check RST bit */
 	if (th->rst) {
+		//报文本身包含rst报文
 		/* RFC 5961 3.2 (extend to match against (RCV.NXT - 1) after a
 		 * FIN and SACK too if available):
 		 * If seq num matches RCV.NXT or (RCV.NXT - 1) after a FIN, or
@@ -5561,6 +5569,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 		if (tcp_header_len == sizeof(struct tcphdr) + TCPOLEN_TSTAMP_ALIGNED) {
 			/* No? Slow path! */
 			if (!tcp_parse_aligned_timestamp(tp, th))
+				//非对齐的tmestamp选项，走慢路
 				goto slow_path;
 
 			/* If PAWS failed, check it more carefully in slow path */
@@ -5650,10 +5659,12 @@ no_ack:
 
 slow_path:
 	if (len < (th->doff << 2) || tcp_checksum_complete(skb))
-		goto csum_error;//tcp头部不完整或者checksum不正确
+		//tcp头部不完整或者checksum不正确
+		goto csum_error;
 
 	if (!th->ack && !th->rst && !th->syn)
-		goto discard;//标记不正确
+		//标记不正确
+		goto discard;
 
 	/*
 	 *	Standard slow path.
