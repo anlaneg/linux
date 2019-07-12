@@ -226,6 +226,7 @@ mlx5_eswitch_add_fwd_rule(struct mlx5_eswitch *esw,
 	void *misc;
 	int i;
 
+	//分别找level=0,level=1的flow table
 	fast_fdb = esw_get_prio_table(esw, attr->chain, attr->prio, 0);
 	if (IS_ERR(fast_fdb)) {
 		rule = ERR_CAST(fast_fdb);
@@ -829,6 +830,7 @@ create_next_size_table(struct mlx5_eswitch *esw,
 	return fdb;
 }
 
+//通过chain,proi,level查找对应的flow table
 static struct mlx5_flow_table *
 esw_get_prio_table(struct mlx5_eswitch *esw, u32 chain, u16 prio, int level)
 {
@@ -846,6 +848,7 @@ esw_get_prio_table(struct mlx5_eswitch *esw, u32 chain, u16 prio, int level)
 	//按{chain,prio,level}确定fdb
 	fdb = fdb_prio_table(esw, chain, prio, level).fdb;
 	if (fdb) {
+		//增加各级父level的ref
 		/* take ref on earlier levels as well */
 		while (level >= 0)
 			fdb_prio_table(esw, chain, prio, level--).num_rules++;

@@ -2830,7 +2830,7 @@ static int add_vlan_push_action(struct mlx5e_priv *priv,
 	};
 	int err;
 
-	//解析vlan_act，并填充到attr中
+	//解析vlan_act，并填充到attr中（添加push vlan)
 	err = parse_tc_vlan_action(priv, &vlan_act, attr, action);
 	if (err)
 		return err;
@@ -2843,6 +2843,7 @@ static int add_vlan_push_action(struct mlx5e_priv *priv,
 	return err;
 }
 
+//向attr中添加vlan pop action
 static int add_vlan_pop_action(struct mlx5e_priv *priv,
 			       struct mlx5_esw_flow_attr *attr,
 			       u32 *action)

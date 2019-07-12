@@ -144,6 +144,7 @@ struct mlx5_eswitch_fdb {
 
 		//sriov_offloads模式时使用此结构
 		struct offloads_fdb {
+			//FDB_SLOW_PATH_CHAIN chain对应的flow table
 			struct mlx5_flow_table *slow_fdb;
 			struct mlx5_flow_group *send_to_vport_grp;
 			struct mlx5_flow_group *peer_miss_grp;
@@ -157,7 +158,7 @@ struct mlx5_eswitch_fdb {
 
 			struct {
 				struct mlx5_flow_table *fdb;
-				u32 num_rules;
+				u32 num_rules;//规则条数
 			} fdb_prio[FDB_MAX_CHAIN + 1][FDB_MAX_PRIO + 1][PRIO_LEVELS];
 			/* Protects fdb_prio table */
 			struct mutex fdb_prio_lock;//保存fdb_prio的锁
@@ -171,6 +172,7 @@ struct mlx5_eswitch_fdb {
 struct mlx5_esw_offload {
 	struct mlx5_flow_table *ft_offloads;
 	struct mlx5_flow_group *vport_rx_group;
+	//按索引取对应的rep口
 	struct mlx5_eswitch_rep *vport_reps;
 	struct list_head peer_flows;
 	struct mutex peer_mutex;
@@ -334,7 +336,7 @@ struct mlx5_esw_flow_attr {
 
 	int	action;//要执行的action(看MLX5_FLOW_CONTEXT_ACTION）
 
-	//vlan相关
+	//存放要push的vlan信息
 	__be16	vlan_proto[MLX5_FS_VLAN_DEPTH];
 	u16	vlan_vid[MLX5_FS_VLAN_DEPTH];
 	u8	vlan_prio[MLX5_FS_VLAN_DEPTH];
@@ -342,7 +344,7 @@ struct mlx5_esw_flow_attr {
 	bool	vlan_handled;
 	struct {
 		u32 flags;//接口标记，例如需要隧道封装
-		struct mlx5_eswitch_rep *rep;
+		struct mlx5_eswitch_rep *rep;//目的端口
 		struct mlx5_core_dev *mdev;
 		u32 encap_id;
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
