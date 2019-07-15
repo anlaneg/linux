@@ -1838,8 +1838,8 @@ int tcp_v4_rcv(struct sk_buff *skb)
 
 lookup:
     //查询此报文对应的socket
-	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th)/*tcp头部长度*/, th->source,
-			       th->dest, sdif, &refcounted);
+	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th)/*tcp头部长度*/, th->source/*源端口*/,
+			       th->dest/*目的端口*/, sdif/*报文入接口*/, &refcounted);
 	if (!sk)
 	    //不存在对应的socket,不存在对应的listen socket
 		goto no_tcp_socket;

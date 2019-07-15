@@ -3801,15 +3801,17 @@ void tcp_parse_options(const struct net *net,
 		int opsize;
 
 		switch (opcode) {
-		case TCPOPT_EOL://选项结束
+		case TCPOPT_EOL://选项结束标记
 			return;
 		case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
 			length--;//空选项，用于补长度
 			continue;
 		default:
+			//采用tlv格式，故小于2是错误的报文
 			if (length < 2)
 				return;
-			opsize = *ptr++;//提取选项长度
+			//提取选项长度
+			opsize = *ptr++;
 			if (opsize < 2) /* "silly options" */
 				return;
 			if (opsize > length)
@@ -3817,12 +3819,15 @@ void tcp_parse_options(const struct net *net,
 			switch (opcode) {
 			case TCPOPT_MSS://mss只能在syn包中存在，否则不生效
 				if (opsize == TCPOLEN_MSS && th->syn && !estab) {
+					//取两字节的大端数字，用于对方给出的mss
 					u16 in_mss = get_unaligned_be16(ptr);
 					if (in_mss) {
+						//如果用户通过user_mss设置了mss且小于in_mss,则使用
+						//用户设置的mss
 						if (opt_rx->user_mss &&
 						    opt_rx->user_mss < in_mss)
 							in_mss = opt_rx->user_mss;
-						opt_rx->mss_clamp = in_mss;//设置较小的mss
+						opt_rx->mss_clamp = in_mss;//使能较小的mss
 					}
 				}
 				break;
@@ -3837,7 +3842,7 @@ void tcp_parse_options(const struct net *net,
 				主动建立连接的一方在SYN报文中发送这个选项；而被动建立连接的一方只有
 				在收到带窗口扩大选项的SYN报文之后才能发送这个选项。
 
-				②这个选项只在一个SYN报文中有意义（<SYN>或<SYN,ACK>），包含窗口
+				②这个选项只在SYN报文中有意义（<SYN>或<SYN,ACK>），包含窗口
 				扩大选项的报文如果没有SYN位，则会被忽略掉。当连接建立起来后，
 				在每个方向的扩大因子是固定的。注意：在SYN报文本身的窗口字段始终
 				不做任何的扩大（The Window field in a SYN (i.e., a <SYN> or <SYN,ACK>)
@@ -3848,6 +3853,7 @@ void tcp_parse_options(const struct net *net,
 					__u8 snd_wscale = *(__u8 *)ptr;
 					opt_rx->wscale_ok = 1;
 					if (snd_wscale > TCP_MAX_WSCALE) {
+						//窗口扩大因子过大，告警
 						net_info_ratelimited("%s: Illegal window scaling value %d > %u received\n",
 								     __func__,
 								     snd_wscale,
@@ -3861,6 +3867,7 @@ void tcp_parse_options(const struct net *net,
 				if ((opsize == TCPOLEN_TIMESTAMP) &&
 				    ((estab && opt_rx->tstamp_ok) ||
 				     (!estab && net->ipv4.sysctl_tcp_timestamps))) {
+					//时间签处理（收到的是大端4字节）
 					opt_rx->saw_tstamp = 1;
 					opt_rx->rcv_tsval = get_unaligned_be32(ptr);
 					opt_rx->rcv_tsecr = get_unaligned_be32(ptr + 4);
@@ -3869,6 +3876,7 @@ void tcp_parse_options(const struct net *net,
 			case TCPOPT_SACK_PERM:
 				if (opsize == TCPOLEN_SACK_PERM && th->syn &&
 				    !estab && net->ipv4.sysctl_tcp_sack) {
+					//收到有效的sack协商
 					opt_rx->sack_ok = TCP_SACK_SEEN;
 					tcp_sack_reset(opt_rx);
 				}
@@ -3890,6 +3898,7 @@ void tcp_parse_options(const struct net *net,
 				break;
 #endif
 			case TCPOPT_FASTOPEN:
+				//fastopen仅在syn标记下有效
 				tcp_parse_fastopen_option(
 					opsize - TCPOLEN_FASTOPEN_BASE,
 					ptr, th->syn, foc, false);
@@ -3911,6 +3920,8 @@ void tcp_parse_options(const struct net *net,
 				break;
 
 			}
+
+			//跳过（已解析或不认识的）选项
 			ptr += opsize-2;
 			length -= opsize;
 		}
@@ -5377,6 +5388,7 @@ static bool tcp_reset_check(const struct sock *sk, const struct sk_buff *skb)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
 
+	//seq == tp->rcv_nxt -1 并且状态为以下三种状态之一时
 	return unlikely(TCP_SKB_CB(skb)->seq == (tp->rcv_nxt - 1) &&
 			(1 << sk->sk_state) & (TCPF_CLOSE_WAIT | TCPF_LAST_ACK |
 					       TCPF_CLOSING));
@@ -5430,6 +5442,8 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 	/* Step 2: check RST bit */
 	if (th->rst) {
 		//报文本身包含rst报文
+		//因为安全问题，rfc 5961 3.2会检查rst报文的seq是否与rcv.nxt匹配，如果不
+		//匹配，会发送challenge ack
 		/* RFC 5961 3.2 (extend to match against (RCV.NXT - 1) after a
 		 * FIN and SACK too if available):
 		 * If seq num matches RCV.NXT or (RCV.NXT - 1) after a FIN, or
@@ -5443,6 +5457,7 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 		    tcp_reset_check(sk, skb)) {
 			rst_seq_match = true;
 		} else if (tcp_is_sack(tp) && tp->rx_opt.num_sacks > 0) {
+			//如果sack有效，则rst seq应在sack之后
 			struct tcp_sack_block *sp = &tp->selective_acks[0];
 			int max_sack = sp[0].end_seq;
 			int this_sack;
@@ -5458,6 +5473,7 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 				rst_seq_match = true;
 		}
 
+		//针对有效的seq的rst报文，执行tcp reset断掉连接,
 		if (rst_seq_match)
 			tcp_reset(sk);
 		else {
@@ -5468,6 +5484,7 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 			if (tp->syn_fastopen && !tp->data_segs_in &&
 			    sk->sk_state == TCP_ESTABLISHED)
 				tcp_fastopen_active_disable(sk);
+			//发送challenge ack进行校验
 			tcp_send_challenge_ack(sk, skb);
 		}
 		goto discard;

@@ -326,11 +326,12 @@ static inline struct sock *
 					 ntohs(dport), dif, 0);
 }
 
+//查询对应的此状态对应的sock
 static inline struct sock *__inet_lookup(struct net *net,
 					 struct inet_hashinfo *hashinfo,
 					 struct sk_buff *skb, int doff,//tcp头部长度
-					 const __be32 saddr, const __be16 sport,//源ip,源端口
-					 const __be32 daddr, const __be16 dport,//目的ip,目的端口
+					 const __be32 saddr/*源ip*/, const __be16 sport,/*源端口*/
+					 const __be32 daddr/*目的ip*/, const __be16 dport,/*目的端口*/
 					 const int dif, const int sdif,
 					 bool *refcounted)
 {
@@ -338,7 +339,7 @@ static inline struct sock *__inet_lookup(struct net *net,
 	u16 hnum = ntohs(dport);
 	struct sock *sk;
 
-	//先查询已建立起连接的
+	//先查询已建立起连接的sock
 	sk = __inet_lookup_established(net, hashinfo, saddr, sport,
 				       daddr, hnum, dif, sdif);
 	*refcounted = true;
@@ -346,7 +347,7 @@ static inline struct sock *__inet_lookup(struct net *net,
 		return sk;
 	*refcounted = false;
 
-	//再查询是否有已被监听的端口
+	//未命中，再查询是否有已被监听的端口sock
 	return __inet_lookup_listener(net, hashinfo, skb, doff, saddr,
 				      sport, daddr, hnum, dif, sdif);
 }
@@ -384,7 +385,7 @@ static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 
 	*refcounted = true;
 
-	//如果skb有对应的socket,则返回
+	//如果skb中已有对应的socket,则直接返回
 	if (sk)
 		return sk;
 

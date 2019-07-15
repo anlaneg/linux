@@ -258,8 +258,8 @@ static inline int compute_score(struct sock *sk, struct net *net,
 static struct sock *inet_lhash2_lookup(struct net *net,
 				struct inet_listen_hashbucket *ilb2,
 				struct sk_buff *skb, int doff,
-				const __be32 saddr, __be16 sport,
-				const __be32 daddr, const unsigned short hnum,
+				const __be32 saddr/*源ip地址*/, __be16 sport/*源端口*/,
+				const __be32 daddr/*目的ip地址*/, const unsigned short hnum/*目的端口*/,
 				const int dif, const int sdif)
 {
 	bool exact_dif = inet_exact_dif_match(net, skb);
@@ -289,31 +289,34 @@ static struct sock *inet_lhash2_lookup(struct net *net,
 	return result;
 }
 
+//查询本地监听端口的sock
 struct sock *__inet_lookup_listener(struct net *net,
 				    struct inet_hashinfo *hashinfo,
 				    struct sk_buff *skb, int doff,
 				    const __be32 saddr/*源ip*/, __be16 sport,/*源port*/
-				    const __be32 daddr/*目的ip*/, const unsigned short hnum,/*目的port*/
+				    const __be32 daddr/*目的ip*/, const unsigned short hnum,/*目的port,主机序*/
 				    const int dif, const int sdif)
 {
 	struct inet_listen_hashbucket *ilb2;
 	struct sock *result = NULL;
 	unsigned int hash2;
 
+	//通过目的port及目的ip计算hash
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+	result = inet_lhash2_lookup(net, ilb2/*待查询的hash桶*/, skb, doff,
 				    saddr, sport, daddr, hnum,
 				    dif, sdif);
 	if (result)
 		goto done;
 
 	/* Lookup lhash2 with INADDR_ANY */
+	//查询通过any绑定的socket
 	hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
 	ilb2 = inet_lhash2_bucket(hashinfo, hash2);
 
-	result = inet_lhash2_lookup(net, ilb2, skb, doff,
+	result = inet_lhash2_lookup(net, ilb2/*待查询的hash桶*/, skb, doff,
 				    saddr, sport, htonl(INADDR_ANY), hnum,
 				    dif, sdif);
 done:
@@ -344,12 +347,14 @@ void sock_edemux(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(sock_edemux);
 
+//查询稳定连接对应的sock
 struct sock *__inet_lookup_established(struct net *net,
 				  struct inet_hashinfo *hashinfo,
 				  const __be32 saddr, const __be16 sport,
-				  const __be32 daddr, const u16 hnum,
+				  const __be32 daddr, const u16 hnum/*目的端口，主机序*/,
 				  const int dif, const int sdif)
 {
+	//生成地址pair(acookie),端口pair(ports)
 	INET_ADDR_COOKIE(acookie, saddr, daddr);
 	const __portpair ports = INET_COMBINED_PORTS(sport, hnum);
 	struct sock *sk;
@@ -364,19 +369,24 @@ struct sock *__inet_lookup_established(struct net *net,
 
 begin:
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
+		//hash比对
 		if (sk->sk_hash != hash)
 			continue;
-		//hash值相等，与sk内部成员进行比对
+		//hash值相等，与sk内部成员进行比对（地址pair,port pair及接口匹配）
 		if (likely(INET_MATCH(sk, net, acookie,
 				      saddr, daddr, ports, dif, sdif))) {
 			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
 				goto out;
+
+			//这里为什么要反着再查一遍？
 			if (unlikely(!INET_MATCH(sk, net, acookie,
 						 saddr, daddr, ports,
 						 dif, sdif))) {
 				sock_gen_put(sk);
 				goto begin;
 			}
+
+			//找到匹配的sk
 			goto found;
 		}
 	}

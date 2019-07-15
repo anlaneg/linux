@@ -47,7 +47,7 @@ struct tcphdr {
 		ack:1,
 		psh:1,
 		rst:1,
-		syn:1,
+		syn:1,//syn标记
 		fin:1;
 #else
 #error	"Adjust your <asm/byteorder.h> defines"

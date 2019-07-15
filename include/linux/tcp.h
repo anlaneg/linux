@@ -98,13 +98,16 @@ struct tcp_options_received {
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
 		dsack : 1,	/* D-SACK is scheduled			*/
+		//窗口扩大选项在syn报文被发现
 		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
 		sack_ok : 3,	/* SACK seen on SYN packet		*/
 		smc_ok : 1,	/* SMC seen on SYN packet		*/
 		snd_wscale : 4,	/* Window scaling received from sender	*/
 		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
 	u8	num_sacks;	/* Number of SACK blocks		*/
+	//用户通过ioctl设置的mss
 	u16	user_mss;	/* mss requested by user in ioctl	*/
+	//协商的mss
 	u16	mss_clamp;	/* Maximal mss, negotiated at connection setup */
 };
 
