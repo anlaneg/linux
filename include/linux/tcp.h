@@ -102,6 +102,7 @@ struct tcp_options_received {
 		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
 		sack_ok : 3,	/* SACK seen on SYN packet		*/
 		smc_ok : 1,	/* SMC seen on SYN packet		*/
+		//窗口放大因子
 		snd_wscale : 4,	/* Window scaling received from sender	*/
 		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
 	u8	num_sacks;	/* Number of SACK blocks		*/
@@ -281,7 +282,7 @@ struct tcp_sock {
 /*
  *      Options received (usually on last packet, some only on SYN packets).
  */
-	struct tcp_options_received rx_opt;
+	struct tcp_options_received rx_opt;//接受到报文的选项
 
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)

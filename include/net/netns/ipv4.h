@@ -135,6 +135,7 @@ struct netns_ipv4 {
 	int sysctl_tcp_fin_timeout;
 	unsigned int sysctl_tcp_notsent_lowat;
 	int sysctl_tcp_tw_reuse;
+	//开启tcp sack
 	int sysctl_tcp_sack;
 	//开启tcp窗口扩大选项
 	int sysctl_tcp_window_scaling;
