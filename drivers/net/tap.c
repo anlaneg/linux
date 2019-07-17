@@ -1332,8 +1332,8 @@ static int tap_list_add(dev_t major, const char *device_name)
 	return 0;
 }
 
-int tap_create_cdev(struct cdev *tap_cdev, dev_t *tap_major,
-		    const char *device_name, struct module *module)
+int tap_create_cdev(struct cdev *tap_cdev/*出参，返回创建的cdev*/, dev_t *tap_major/*出参，返回创建的major*/,
+		    const char *device_name/*chardev设备名称*/, struct module *module/*chardev设备依赖的module*/)
 {
 	int err;
 
