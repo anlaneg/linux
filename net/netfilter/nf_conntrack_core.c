@@ -61,6 +61,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_locks);
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
+//保存ct的hashtable
 struct hlist_nulls_head *nf_conntrack_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_hash);
 
@@ -833,6 +834,7 @@ nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_find_get);
 
+//将正反两方的flow加入到ct表中
 static void __nf_conntrack_hash_insert(struct nf_conn *ct,
 				       unsigned int hash,
 				       unsigned int reply_hash)
@@ -1548,6 +1550,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		//没有查找到期待，尝试应用识别，设置helper
 		__nf_ct_try_assign_helper(ct, tmpl, GFP_ATOMIC);
 
+	//加入到unconfirmed链表上，并增加ct的引用计数
 	/* Now it is inserted into the unconfirmed list, bump refcount */
 	nf_conntrack_get(&ct->ct_general);
 	nf_ct_add_to_unconfirmed_list(ct);
