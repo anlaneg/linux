@@ -41,6 +41,7 @@ struct mlx5_vxlan {
 	struct mlx5_core_dev		*mdev;
 	spinlock_t			lock; /* protect vxlan table */
 	/* max_num_ports is usuallly 4, 16 buckets is more than enough */
+	//hashtable用于保存vxlan开启的ports信息（见结构mlx5_vxlan_port)
 	DECLARE_HASHTABLE(htable, 4);
 	int				num_ports;
 	struct mutex                    sync_lock; /* sync add/del port HW operations */

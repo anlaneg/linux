@@ -595,6 +595,7 @@ static int mlx5_cmd_delete_fte(struct mlx5_flow_root_namespace *ns,
 	return mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 }
 
+//向fw申请一个flow counter id
 int mlx5_cmd_fc_alloc(struct mlx5_core_dev *dev, u32 *id)
 {
 	u32 in[MLX5_ST_SZ_DW(alloc_flow_counter_in)]   = {0};
@@ -707,6 +708,7 @@ void mlx5_cmd_fc_bulk_get(struct mlx5_core_dev *dev,
 	*bytes = MLX5_GET64(traffic_counter, stats, octets);
 }
 
+//知会fw初始化encap_header,返回对应的encap_id
 int mlx5_packet_reformat_alloc(struct mlx5_core_dev *dev,
 			       int reformat_type,
 			       size_t size,
@@ -752,6 +754,7 @@ int mlx5_packet_reformat_alloc(struct mlx5_core_dev *dev,
 		 reformat_data_size, size);
 	MLX5_SET(packet_reformat_context_in, packet_reformat_context_in,
 		 reformat_type, reformat_type);
+	//填充encap头部格式
 	memcpy(reformat, reformat_data, size);
 
 	memset(out, 0, sizeof(out));

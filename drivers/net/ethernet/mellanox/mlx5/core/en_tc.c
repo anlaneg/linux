@@ -114,8 +114,10 @@ struct mlx5e_tc_flow {
 	 * The number of encaps is bounded by the number of supported
 	 * destinations.
 	 */
+	//用于挂接在输出port对应的encap信息上
 	struct encap_flow_item encaps[MLX5_MAX_FLOW_FWD_VPORTS];
 	struct mlx5e_tc_flow    *peer_flow;
+	//使相同的mod_hdr_id挂接在一起
 	struct list_head	mod_hdr; /* flows sharing the same mod hdr ID */
 	struct list_head	hairpin; /* flows sharing the same hairpin */
 	struct list_head	peer;    /* flows with peer flow */
@@ -130,6 +132,7 @@ struct mlx5e_tc_flow_parse_attr {
 	//第n个出接口对应的tunnel_info
 	struct ip_tunnel_info tun_info[MLX5_MAX_FLOW_FWD_VPORTS];
 	struct net_device *filter_dev;
+	//规则的match信息
 	struct mlx5_flow_spec spec;
 	//有效的mod_hdr_actions大小
 	int num_mod_hdr_actions;
@@ -204,6 +207,7 @@ static inline int cmp_mod_hdr_info(struct mod_hdr_key *a,
 	return memcmp(a->actions, b->actions, a->num_actions * MLX5_MH_ACT_SZ);
 }
 
+//向fw申请mod_hdr_id,用于使具有相同action的flow使用相同的mod_hdr_id
 static int mlx5e_attach_mod_hdr(struct mlx5e_priv *priv,
 				struct mlx5e_tc_flow *flow,
 				struct mlx5e_tc_flow_parse_attr *parse_attr)
@@ -999,7 +1003,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		goto err_max_prio_chain;
 	}
 
-	//遍历需要forward的所有vport（仅处理隧道封装port)
+	//遍历需要forward的所有vport（仅处理需要隧道封装port)
 	for (out_index = 0; out_index < MLX5_MAX_FLOW_FWD_VPORTS; out_index++) {
 		int mirred_ifindex;
 
@@ -1011,7 +1015,8 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		mirred_ifindex = parse_attr->mirred_ifindex[out_index];
 		out_dev = __dev_get_by_index(dev_net(priv->netdev),
 					     mirred_ifindex);
-		err = mlx5e_attach_encap(priv, flow/*规则*/, out_dev/*对应的出接口*/, out_index/*output编号*/,
+		//针对encap流，生成相应的encap header并使flow与其关联（通过fw生成encap_id来关联）
+		err = mlx5e_attach_encap(priv, flow/*规则*/, out_dev/*对应的出接口*/, out_index/*output port编号*/,
 					 extack, &encap_dev, &encap_valid);
 		if (err)
 			goto err_attach_encap;
@@ -1022,6 +1027,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 		attr->dests[out_index].mdev = out_priv->mdev;
 	}
 
+	//处理vlan相关的action
 	err = mlx5_eswitch_add_vlan_action(esw, attr);
 	if (err)
 		goto err_add_vlan;
@@ -1034,6 +1040,7 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 			goto err_mod_hdr;
 	}
 
+	//处理需要统计计数的action
 	if (attr->action & MLX5_FLOW_CONTEXT_ACTION_COUNT) {
 		counter = mlx5_fc_create(attr->counter_dev, true);
 		if (IS_ERR(counter)) {
@@ -1049,11 +1056,13 @@ mlx5e_tc_add_fdb_flow(struct mlx5e_priv *priv,
 	 * (2) there's an encap action and we don't have valid neigh
 	 */
 	if (!encap_valid) {
+		//隧道封装的失败的流，无有效neighbour信息
 		/* continue with goto slow path rule instead */
 		struct mlx5_esw_flow_attr slow_attr;
 
 		flow->rule[0] = mlx5e_tc_offload_to_slow_path(esw, flow, &parse_attr->spec, &slow_attr);
 	} else {
+		//执行下发
 		flow->rule[0] = mlx5e_tc_offload_fdb_rules(esw, flow, &parse_attr->spec, attr);
 	}
 
@@ -2671,14 +2680,14 @@ static bool is_merged_eswitch_dev(struct mlx5e_priv *priv,
 }
 
 
-
+//将flow attach到指定的encap_id上，如果此id不存在向fw申请
 static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 			      struct mlx5e_tc_flow *flow,
 			      struct net_device *mirred_dev,
 			      int out_index,
 			      struct netlink_ext_ack *extack,
 			      struct net_device **encap_dev,
-			      bool *encap_valid)
+			      bool *encap_valid/*出参，指定封装信息有效*/)
 {
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	struct mlx5_esw_flow_attr *attr = flow->esw_attr;
@@ -2692,7 +2701,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	int err = 0;
 
 	parse_attr = attr->parse_attr;
-	//为mirred_dev准备的tunnel参数
+	//为隧道准备的tunnel参数
 	tun_info = &parse_attr->tun_info[out_index];
 	family = ip_tunnel_info_af(tun_info);
 	key.ip_tun_key = &tun_info->key;
@@ -2716,7 +2725,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 		//发现已有tunnel,attach 此flow
 		goto attach_flow;
 
-	//未发现此tunnel，创建它
+	//未发现此tunnel，创建它并分配encap_id号，再实现挂接
 	e = kzalloc(sizeof(*e), GFP_KERNEL);
 	if (!e)
 		return -ENOMEM;
@@ -2740,6 +2749,7 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	hash_add_rcu(esw->offloads.encap_tbl, &e->encap_hlist, hash_key);
 
 attach_flow:
+	//挂接给对应的encap info上
 	list_add(&flow->encaps[out_index].list, &e->flows);
 	flow->encaps[out_index].index = out_index;
 	*encap_dev = e->out_dev;
@@ -3194,6 +3204,7 @@ mlx5e_alloc_flow(struct mlx5e_priv *priv, int attr_size,
 
 	//申请flow内存及其私有数据大小
 	flow = kzalloc(sizeof(*flow) + attr_size, GFP_KERNEL);
+	//申请flow对应的parse结果
 	parse_attr = kvzalloc(sizeof(*parse_attr), GFP_KERNEL);
 	if (!parse_attr || !flow) {
 		err = -ENOMEM;
@@ -3278,7 +3289,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
-	//将解析好的内容添加进fdb
+	//将解析好的内容（flow）添加进fdb
 	err = mlx5e_tc_add_fdb_flow(priv, flow, extack);
 	if (err) {
 		if (!(err == -ENETUNREACH && mlx5_lag_is_multipath(in_mdev)))
@@ -3473,6 +3484,7 @@ int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
 	//flow已存在，则添加失败
 	flow = rhashtable_lookup_fast(tc_ht, &f->cookie, tc_ht_params);
 	if (flow) {
+		//设置错误消息到ext_ack，以便netlink返回回去
 		NL_SET_ERR_MSG_MOD(extack,
 				   "flow cookie already exists, ignoring");
 		netdev_warn_once(priv->netdev,

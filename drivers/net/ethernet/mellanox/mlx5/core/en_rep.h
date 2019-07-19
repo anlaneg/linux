@@ -148,17 +148,22 @@ struct mlx5e_encap_entry {
 	 * entries
 	 */
 	struct hlist_node encap_hlist;
+	//需要执行encap的flow
 	struct list_head flows;
+	//唯一映射fw中encap_header数据
 	u32 encap_id;
 	struct ip_tunnel_info tun_info;
 	unsigned char h_dest[ETH_ALEN];	/* destination eth addr	*/
 
+	//encap后的输出设备
 	struct net_device *out_dev;
 	struct net_device *route_dev;
 	int tunnel_type;
 	int tunnel_hlen;
+	//隧道封装后，变更为vxlan类型
 	int reformat_type;
 	u8 flags;
+	//隧道封装时使用的头部格式
 	char *encap_header;
 	int encap_size;
 };

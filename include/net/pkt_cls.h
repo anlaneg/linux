@@ -633,10 +633,10 @@ struct tc_block_offload {
 };
 
 struct tc_cls_common_offload {
-	u32 chain_index;//属属的chain
+	u32 chain_index;//规则所属的chain
 	__be16 protocol;//对应的分类协议
 	u32 prio;
-	struct netlink_ext_ack *extack;
+	struct netlink_ext_ack *extack;//netlink消息错误消息缓存
 };
 
 struct tc_cls_u32_knode {

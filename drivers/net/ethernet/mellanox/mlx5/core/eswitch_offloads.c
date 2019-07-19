@@ -126,6 +126,7 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 	//需要转发给指定的port
 	if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_FWD_DEST) {
 		if (attr->dest_chain) {
+			//需要进行chain之间的跳转
 			struct mlx5_flow_table *ft;
 
 			ft = esw_get_prio_table(esw, attr->dest_chain, 1, 0);

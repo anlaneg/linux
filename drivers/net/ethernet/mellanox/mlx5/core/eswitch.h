@@ -176,7 +176,9 @@ struct mlx5_esw_offload {
 	struct mlx5_eswitch_rep *vport_reps;
 	struct list_head peer_flows;
 	struct mutex peer_mutex;
+	//hashtable,用于保存当前系统支持的隧道key及隧道类型
 	DECLARE_HASHTABLE(encap_tbl, 8);
+	//hashtable,用于保存当前系统遇到的actions
 	DECLARE_HASHTABLE(mod_hdr_tbl, 8);
 	u8 inline_mode;
 	u64 num_flows;
@@ -323,6 +325,7 @@ enum mlx5_flow_match_level {
 
 enum {
 	MLX5_ESW_DEST_ENCAP         = BIT(0),
+	//标记encap信息有效
 	MLX5_ESW_DEST_ENCAP_VALID   = BIT(1),
 };
 
@@ -343,18 +346,19 @@ struct mlx5_esw_flow_attr {
 	u8	total_vlan;//vlan总数（外层vlan，内层vlan)
 	bool	vlan_handled;
 	struct {
-		u32 flags;//接口标记，例如需要隧道封装
+		u32 flags;//接口标记，例如需要隧道封装，封装信息有效
 		struct mlx5_eswitch_rep *rep;//目的端口
 		struct mlx5_core_dev *mdev;
-		u32 encap_id;
+		u32 encap_id;//encap输出时的封装信息id
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
-	u32	mod_hdr_id;
+	u32	mod_hdr_id;//修改头部对应的action信息 id
 	u8	match_level;//非隧道解析层数（例如udp,tcp层）
 	u8	tunnel_match_level;//隧道解析层数
-	struct mlx5_fc *counter;
-	u32	chain;//所属的chain索引
+	struct mlx5_fc *counter;//统计信息（由fw进行分配）
+	u32	chain;//规则所属的chain索引
 	u16	prio;
 	u32	dest_chain;/*跳转到的目的chain*/
+	//flow的解析过程属性
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
 };
 
