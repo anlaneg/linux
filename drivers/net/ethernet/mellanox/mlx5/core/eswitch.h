@@ -334,7 +334,7 @@ struct mlx5_esw_flow_attr {
 	struct mlx5_core_dev	*in_mdev;
 	struct mlx5_core_dev    *counter_dev;
 
-	int split_count;
+	int split_count;//port与 action间可能有多个，需要split到多个表？？？？
 	int out_count;/*要输出的接口数，dests有效长度*/
 
 	int	action;//要执行的action(看MLX5_FLOW_CONTEXT_ACTION）

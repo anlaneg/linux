@@ -217,6 +217,7 @@ struct mlx5_flow_group_mask {
 };
 
 /* Type of children is fs_fte */
+//用于抽象mask(同一类flow的搞一个group)
 struct mlx5_flow_group {
 	struct fs_node			node;
 	//flow group对应的mask
