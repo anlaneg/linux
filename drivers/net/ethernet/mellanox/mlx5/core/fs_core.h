@@ -186,6 +186,7 @@ struct fs_fte {
 	u32				dests_size;
 	//索引号（id+group->start_index)
 	u32				index;
+	struct mlx5_flow_context	flow_context;
 	//flow table entry的对应的动作
 	struct mlx5_flow_act		action;
 	enum fs_fte_status		status;

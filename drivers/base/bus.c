@@ -331,8 +331,8 @@ EXPORT_SYMBOL_GPL(bus_for_each_dev);
  */
 //在bus上自start位置开始查找设备，通过match函数查找
 struct device *bus_find_device(struct bus_type *bus,
-			       struct device *start, void *data,
-			       int (*match)(struct device *dev, void *data))
+			       struct device *start, const void *data,
+			       int (*match)(struct device *dev, const void *data))
 {
 	struct klist_iter i;
 	struct device *dev;
@@ -350,7 +350,7 @@ struct device *bus_find_device(struct bus_type *bus,
 }
 EXPORT_SYMBOL_GPL(bus_find_device);
 
-static int match_name(struct device *dev, void *data)
+static int match_name(struct device *dev, const void *data)
 {
 	const char *name = data;
 

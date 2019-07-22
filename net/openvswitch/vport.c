@@ -264,8 +264,6 @@ int ovs_vport_set_options(struct vport *vport, struct nlattr *options)
  */
 void ovs_vport_del(struct vport *vport)
 {
-	ASSERT_OVSL();
-
 	//vport移除
 	hlist_del_rcu(&vport->hash_node);
 	//对应的module释放

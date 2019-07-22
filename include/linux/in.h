@@ -68,7 +68,7 @@ static inline bool ipv4_is_all_snoopers(__be32 addr)
 //ip地址首字节为0
 static inline bool ipv4_is_zeronet(__be32 addr)
 {
-	return (addr & htonl(0xff000000)) == htonl(0x00000000);
+	return (addr == 0);
 }
 
 /* Special-Use IPv4 Addresses (RFC3330) */
