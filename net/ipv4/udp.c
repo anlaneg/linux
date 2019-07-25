@@ -2015,6 +2015,7 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 			if (udp_lib_checksum_complete(skb))
 				goto csum_error;
 
+			//encap接口收到封装后报文
 			ret = encap_rcv(sk, skb);
 			if (ret <= 0) {
 				__UDP_INC_STATS(sock_net(sk),

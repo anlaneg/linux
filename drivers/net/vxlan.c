@@ -3349,7 +3349,8 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	memset(&tunnel_cfg, 0, sizeof(tunnel_cfg));
 	tunnel_cfg.sk_user_data = vs;
 	tunnel_cfg.encap_type = 1;
-	tunnel_cfg.encap_rcv = vxlan_rcv;//注册vxlan的解析处理函数
+	//注册vxlan的解析处理函数
+	tunnel_cfg.encap_rcv = vxlan_rcv;
 	tunnel_cfg.encap_err_lookup = vxlan_err_lookup;
 	tunnel_cfg.encap_destroy = NULL;
 	tunnel_cfg.gro_receive = vxlan_gro_receive;
@@ -3841,6 +3842,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	if (data[IFLA_VXLAN_LINK])
 		conf->remote_ifindex = nla_get_u32(data[IFLA_VXLAN_LINK]);
 
+	//配置tos
 	if (data[IFLA_VXLAN_TOS])
 		conf->tos  = nla_get_u8(data[IFLA_VXLAN_TOS]);
 

@@ -170,6 +170,7 @@ static int tcf_ct_handle_fragments(struct net *net, struct sk_buff *skb,
 
 	skb_get(skb);
 
+	//处理ipv4/ipv6分片重组
 	if (family == NFPROTO_IPV4) {
 		enum ip_defrag_users user = IP_DEFRAG_CONNTRACK_IN + zone;
 
@@ -406,6 +407,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	 */
 	nh_ofs = skb_network_offset(skb);
 	skb_pull_rcsum(skb, nh_ofs);
+	//处理分片重组
 	err = tcf_ct_handle_fragments(net, skb, family, p->zone);
 	if (err == -EINPROGRESS) {
 		retval = TC_ACT_STOLEN;
@@ -434,6 +436,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
 
+		//创建ct
 		state.hook = NF_INET_PRE_ROUTING;
 		state.net = net;
 		state.pf = family;
@@ -447,11 +450,13 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		goto out_push;
 	nf_ct_deliver_cached_events(ct);
 
+	//针对ct做报文nat
 	err = tcf_ct_act_nat(skb, ct, ctinfo, p->ct_action, &p->range, commit);
 	if (err != NF_ACCEPT)
 		goto drop;
 
 	if (commit) {
+		//设置package对应的mark,labels
 		tcf_ct_act_set_mark(ct, p->mark, p->mark_mask);
 		tcf_ct_act_set_labels(ct, p->labels, p->labels_mask);
 
@@ -964,6 +969,7 @@ static struct pernet_operations ct_net_ops = {
 	.size = sizeof(struct tc_ct_action_net),
 };
 
+//注册ct action
 static int __init ct_init_module(void)
 {
 	return tcf_register_action(&act_ct_ops, &ct_net_ops);
