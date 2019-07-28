@@ -830,6 +830,7 @@ static int key_extract_mac_proto(struct sk_buff *skb)
 	return -EINVAL;
 }
 
+//解析报文
 int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 			 struct sk_buff *skb, struct sw_flow_key *key)
 {
@@ -837,6 +838,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 
 	/* Extract metadata from packet. */
 	if (tun_info) {
+		//隧道报文
 		key->tun_proto = ip_tunnel_info_af(tun_info);
 		memcpy(&key->tun_key, &tun_info->key, sizeof(key->tun_key));
 
@@ -852,7 +854,7 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 			key->tun_opts_len = 0;
 		}
 	} else  {
-		//将tunnel的metadata清空
+		//非隧道报文，将tunnel的metadata清空
 		key->tun_proto = 0;
 		key->tun_opts_len = 0;
 		memset(&key->tun_key, 0, sizeof(key->tun_key));

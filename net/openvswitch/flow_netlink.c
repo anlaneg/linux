@@ -668,7 +668,7 @@ static int erspan_tun_opt_from_nlattr(const struct nlattr *a,
 	return 0;
 }
 
-//解析并填充match的tunnel
+//解析并填充match的key.tunnel_key
 static int ip_tun_from_nlattr(const struct nlattr *attr,
 			      struct sw_flow_match *match, bool is_mask,
 			      bool log)
@@ -2511,6 +2511,7 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 	return 0;
 }
 
+//构造clone对应的参数
 static int validate_and_copy_clone(struct net *net,
 				   const struct nlattr *attr,
 				   const struct sw_flow_key *key,
@@ -2592,8 +2593,9 @@ static int validate_geneve_opts(struct sw_flow_key *key)
 	return 0;
 }
 
+//填充OVS_KEY_ATTR_TUNNEL_INFO
 static int validate_and_copy_set_tun(const struct nlattr *attr,
-				     struct sw_flow_actions **sfa, bool log)
+				     struct sw_flow_actions **sfa/*待填充的action*/, bool log)
 {
 	struct sw_flow_match match;
 	struct sw_flow_key key;
@@ -2627,10 +2629,12 @@ static int validate_and_copy_set_tun(const struct nlattr *attr,
 		}
 	}
 
+	//添加attr_set
 	start = add_nested_action_start(sfa, OVS_ACTION_ATTR_SET, log);
 	if (start < 0)
 		return start;
 
+	//分配tun_dst
 	tun_dst = metadata_dst_alloc(key.tun_opts_len, METADATA_IP_TUNNEL,
 				     GFP_KERNEL);
 
@@ -2643,6 +2647,7 @@ static int validate_and_copy_set_tun(const struct nlattr *attr,
 		return err;
 	}
 
+	//分配ovs_tun空间
 	a = __add_action(sfa, OVS_KEY_ATTR_TUNNEL_INFO, NULL,
 			 sizeof(*ovs_tun), log);
 	if (IS_ERR(a)) {
@@ -2659,6 +2664,7 @@ static int validate_and_copy_set_tun(const struct nlattr *attr,
 		tun_info->mode |= IP_TUNNEL_INFO_IPV6;
 	else if (key.tun_proto == AF_INET && key.tun_key.u.ipv4.dst == 0)
 		tun_info->mode |= IP_TUNNEL_INFO_BRIDGE;
+	//填充tunnel_key
 	tun_info->key = key.tun_key;
 
 	/* We need to store the options in the action itself since
@@ -2702,7 +2708,7 @@ static bool validate_masked(u8 *data, int len)
 
 static int validate_set(const struct nlattr *a,
 			const struct sw_flow_key *flow_key,
-			struct sw_flow_actions **sfa, bool *skip_copy,
+			struct sw_flow_actions **sfa/*待填充的action*/, bool *skip_copy,
 			u8 mac_proto, __be16 eth_type, bool masked, bool log)
 {
 	const struct nlattr *ovs_key = nla_data(a);
@@ -2741,6 +2747,7 @@ static int validate_set(const struct nlattr *a,
 		break;
 
 	case OVS_KEY_ATTR_TUNNEL:
+		//tunnel属性设置
 		if (masked)
 			return -EINVAL; /* Masked tunnel set not supported. */
 
@@ -2989,10 +2996,10 @@ static int copy_action(const struct nlattr *from,
 	return 0;
 }
 
-//解析并校验用户态传入的acton
+//解析并校验用户态传入的acton（对各action先进行一遍预处理，将处理后的action存放在sfa中）
 static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 				  const struct sw_flow_key *key,
-				  struct sw_flow_actions **sfa,
+				  struct sw_flow_actions **sfa/*待填充的action*/,
 				  __be16 eth_type, __be16 vlan_tci, bool log)
 {
 	u8 mac_proto = ovs_key_mac_proto(key);
@@ -3001,6 +3008,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 
 	nla_for_each_nested(a, attr, rem) {
 		/* Expected argument lengths, (u32)-1 for variable length. */
+		//各action的长度
 		static const u32 action_lens[OVS_ACTION_ATTR_MAX + 1] = {
 			[OVS_ACTION_ATTR_OUTPUT] = sizeof(u32),
 			[OVS_ACTION_ATTR_RECIRC] = sizeof(u32),
@@ -3028,12 +3036,13 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		int type = nla_type(a);
 		bool skip_copy;
 
-		//长度及类型校验
+		//指定属性类型的长度校验
 		if (type > OVS_ACTION_ATTR_MAX ||
 		    (action_lens[type] != nla_len(a) &&
 		     action_lens[type] != (u32)-1))
 			return -EINVAL;
 
+		//默认将action copy到sfa中
 		skip_copy = false;
 		switch (type) {
 		case OVS_ACTION_ATTR_UNSPEC:
@@ -3046,12 +3055,13 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			break;
 
 		case OVS_ACTION_ATTR_OUTPUT:
-			//校验output
+			//校验output，其负载长度不能超过容许输出的port最大数目
 			if (nla_get_u32(a) >= DP_MAX_PORTS)
 				return -EINVAL;
 			break;
 
 		case OVS_ACTION_ATTR_TRUNC: {
+			//trunc的最大数目不能小于ETH_HLEN
 			const struct ovs_action_trunc *trunc = nla_data(a);
 
 			if (trunc->max_len < ETH_HLEN)
@@ -3060,6 +3070,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		}
 
 		case OVS_ACTION_ATTR_HASH: {
+			//目前仅支持alg_l4算法
 			const struct ovs_action_hash *act_hash = nla_data(a);
 
 			switch (act_hash->hash_alg) {
@@ -3129,6 +3140,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			break;
 
 		case OVS_ACTION_ATTR_SET:
+			//tunnel的校验，将由此进入
 			err = validate_set(a, key, sfa,
 					   &skip_copy, mac_proto, eth_type,
 					   false, log);
@@ -3157,6 +3169,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		}
 
 		case OVS_ACTION_ATTR_CT:
+			//构造ct action对应的ct_info
 			err = ovs_ct_copy_action(net, a, key, sfa, log);
 			if (err)
 				return err;
@@ -3259,7 +3272,7 @@ static int __ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 }
 
 /* 'key' must be the masked key. */
-//action 转换
+//用户态传入了action，将action进行转换，方便后续处理
 int ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 			 const struct sw_flow_key *key,
 			 struct sw_flow_actions **sfa, bool log)
@@ -3272,6 +3285,7 @@ int ovs_nla_copy_actions(struct net *net, const struct nlattr *attr,
 		return PTR_ERR(*sfa);
 
 	(*sfa)->orig_len = nla_len(attr);
+
 	//解析并校验用户态传入的acton
 	err = __ovs_nla_copy_actions(net, attr, key, sfa, key->eth.type,
 				     key->eth.vlan.tci, log);

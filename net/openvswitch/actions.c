@@ -80,6 +80,7 @@ static DEFINE_PER_CPU(int, exec_actions_level);
  */
 static struct sw_flow_key *clone_key(const struct sw_flow_key *key_)
 {
+	//实现flow_key的copy
 	struct action_flow_keys *keys = this_cpu_ptr(flow_keys);
 	int level = this_cpu_read(exec_actions_level);
 	struct sw_flow_key *key = NULL;
@@ -224,6 +225,7 @@ static int push_vlan(struct sk_buff *skb, struct sw_flow_key *key,
 	if (skb_vlan_tag_present(skb)) {
 		invalidate_flow_key(key);
 	} else {
+		//填充外层vlan
 		key->eth.vlan.tci = vlan->vlan_tci;
 		key->eth.vlan.tpid = vlan->vlan_tpid;
 	}
@@ -896,8 +898,10 @@ static void do_output(struct datapath *dp, struct sk_buff *skb, int out_port/*�
 
 		if (likely(!mru ||
 		           (skb->len <= mru + vport->dev->hard_header_len))) {
+			//直接发送
 			ovs_vport_send(vport, skb, ovs_key_mac_proto(key));
 		} else if (mru <= vport->dev->mtu) {
+			//分片后发送
 			struct net *net = read_pnet(&dp->net);
 
 			ovs_fragment(net, vport, skb, mru, key);
@@ -926,6 +930,7 @@ static int output_userspace(struct datapath *dp, struct sk_buff *skb,
 		 a = nla_next(a, &rem)) {
 		switch (nla_type(a)) {
 		case OVS_USERSPACE_ATTR_USERDATA:
+			//上送用户指定的data
 			upcall.userdata = a;
 			break;
 
@@ -999,7 +1004,7 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
  */
 static int clone(struct datapath *dp, struct sk_buff *skb,
 		 struct sw_flow_key *key, const struct nlattr *attr,
-		 bool last)
+		 bool last/*是否为最后一个action*/)
 {
 	struct nlattr *actions;
 	struct nlattr *clone_arg;
@@ -1030,6 +1035,7 @@ static void execute_hash(struct sk_buff *skb, struct sw_flow_key *key,
 	key->ovs_flow_hash = hash;
 }
 
+//为报文填充tunnel_info
 static int execute_set_action(struct sk_buff *skb,
 			      struct sw_flow_key *flow_key,
 			      const struct nlattr *a)
@@ -1059,22 +1065,27 @@ static int execute_masked_set_action(struct sk_buff *skb,
 
 	switch (nla_type(a)) {
 	case OVS_KEY_ATTR_PRIORITY:
+		//设置skb->priority(支持掩码形式）
 		OVS_SET_MASKED(skb->priority, nla_get_u32(a),
 			       *get_mask(a, u32 *));
+		//更新key中的priority
 		flow_key->phy.priority = skb->priority;
 		break;
 
 	case OVS_KEY_ATTR_SKB_MARK:
+		//更新skb->mark
 		OVS_SET_MASKED(skb->mark, nla_get_u32(a), *get_mask(a, u32 *));
 		flow_key->phy.skb_mark = skb->mark;
 		break;
 
 	case OVS_KEY_ATTR_TUNNEL_INFO:
+		//不支持通过掩码形式设置tunnel_info
 		/* Masked data not supported for tunnel. */
 		err = -EINVAL;
 		break;
 
 	case OVS_KEY_ATTR_ETHERNET:
+		//更新skb源目的mac
 		err = set_eth_addr(skb, flow_key, nla_data(a),
 				   get_mask(a, struct ovs_key_ethernet *));
 		break;
@@ -1084,6 +1095,7 @@ static int execute_masked_set_action(struct sk_buff *skb,
 		break;
 
 	case OVS_KEY_ATTR_IPV4:
+		//更新ipv4中的srcip,dstip,tos,ttl
 		err = set_ipv4(skb, flow_key, nla_data(a),
 			       get_mask(a, struct ovs_key_ipv4 *));
 		break;
@@ -1094,16 +1106,19 @@ static int execute_masked_set_action(struct sk_buff *skb,
 		break;
 
 	case OVS_KEY_ATTR_TCP:
+		//更新tcp的源目的port
 		err = set_tcp(skb, flow_key, nla_data(a),
 			      get_mask(a, struct ovs_key_tcp *));
 		break;
 
 	case OVS_KEY_ATTR_UDP:
+		//更新udp折源目的port
 		err = set_udp(skb, flow_key, nla_data(a),
 			      get_mask(a, struct ovs_key_udp *));
 		break;
 
 	case OVS_KEY_ATTR_SCTP:
+		//更新sctp的源目的port
 		err = set_sctp(skb, flow_key, nla_data(a),
 			       get_mask(a, struct ovs_key_sctp *));
 		break;
@@ -1113,6 +1128,7 @@ static int execute_masked_set_action(struct sk_buff *skb,
 								    __be32 *));
 		break;
 
+	//不支持以下字段的掩码形式set
 	case OVS_KEY_ATTR_CT_STATE:
 	case OVS_KEY_ATTR_CT_ZONE:
 	case OVS_KEY_ATTR_CT_MARK:
@@ -1128,7 +1144,7 @@ static int execute_masked_set_action(struct sk_buff *skb,
 
 static int execute_recirc(struct datapath *dp, struct sk_buff *skb,
 			  struct sw_flow_key *key,
-			  const struct nlattr *a, bool last)
+			  const struct nlattr *a, bool last/*是否为最后一个action*/)
 {
 	u32 recirc_id;
 
@@ -1144,7 +1160,7 @@ static int execute_recirc(struct datapath *dp, struct sk_buff *skb,
 
 	//取recirc id号，clone key_flow
 	recirc_id = nla_get_u32(a);
-	return clone_execute(dp, skb, key, recirc_id, NULL, 0, last, true);
+	return clone_execute(dp, skb, key, recirc_id, NULL, 0, last, true/*recirc时需要clone flow_key*/);
 }
 
 static int execute_check_pkt_len(struct datapath *dp, struct sk_buff *skb,
@@ -1252,15 +1268,19 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_PUSH_VLAN:
+			//添加vlan
 			err = push_vlan(skb, key, nla_data(a));
 			break;
 
 		case OVS_ACTION_ATTR_POP_VLAN:
+			//移除vlan
 			err = pop_vlan(skb, key);
 			break;
 
 		case OVS_ACTION_ATTR_RECIRC: {
-			//处理recirc action
+			//处理recirc action，变更recirc,并继续调用
+
+			//是否为最后一个action
 			bool last = nla_is_last(a, rem);
 
 			err = execute_recirc(dp, skb, key, a, last);
@@ -1297,7 +1317,6 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 
 		case OVS_ACTION_ATTR_CT:
 			//执行ct action
-
 			if (!is_flow_key_valid(key)) {
 				//如果key无效，则执行key解析
 				err = ovs_flow_key_update(skb, key);
@@ -1387,13 +1406,13 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
  */
 static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 			 struct sw_flow_key *key, u32 recirc_id,
-			 const struct nlattr *actions, int len,
-			 bool last, bool clone_flow_key)
+			 const struct nlattr *actions/*action指针*/, int len/*action长度*/,
+			 bool last/*是否最后一个action*/, bool clone_flow_key/*是否需要clone flow_key*/)
 {
 	struct deferred_action *da;
 	struct sw_flow_key *clone;
 
-	//clone报文？
+	//仅最后一个action,不clone报文
 	skb = last ? skb : skb_clone(skb, GFP_ATOMIC);
 	if (!skb) {
 		/* Out of memory, skip this action.
@@ -1409,20 +1428,23 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 	 */
 	clone = clone_flow_key ? clone_key(key) : key;
 	if (clone) {
+		//层数未超限，成功完成clone
 		int err = 0;
 
 		if (actions) { /* Sample action */
-			//后面仍有其它action,则继续执行
+			//后面仍有其它action,例如采样类clone(xxxx)样式命令，则继续执行
+			//注意会增加actions_level
 			if (clone_flow_key)
 				__this_cpu_inc(exec_actions_level);
 
+			//用clone的key执行指定的actions
 			err = do_execute_actions(dp, skb, clone,
 						 actions, len);
 
 			if (clone_flow_key)
 				__this_cpu_dec(exec_actions_level);
 		} else { /* Recirc action */
-			//更正recirc_id
+			//仅recirc类的action,仅更正recirc_id
 			clone->recirc_id = recirc_id;
 			//调用dp处理此次recirc
 			ovs_dp_process_packet(skb, clone);
@@ -1439,6 +1461,7 @@ static int clone_execute(struct datapath *dp, struct sk_buff *skb,
 			key->recirc_id = recirc_id;
 		}
 	} else {
+		//入队失败，丢包
 		/* Out of per CPU action FIFO space. Drop the 'skb' and
 		 * log an error.
 		 */
@@ -1492,6 +1515,7 @@ int ovs_execute_actions(struct datapath *dp, struct sk_buff *skb,
 {
 	int err, level;
 
+	//防止递归调用次数过多
 	level = __this_cpu_inc_return(exec_actions_level);
 	if (unlikely(level > OVS_RECURSION_LIMIT)) {
 		net_crit_ratelimited("ovs: recursion limit reached on datapath %s, probable configuration error\n",

@@ -42,7 +42,7 @@ struct ip_tunnel_key {
 		struct {
 			__be32	src;
 			__be32	dst;
-		} ipv4;
+		} ipv4;//隧道源目的地址
 		struct {
 			struct in6_addr src;
 			struct in6_addr dst;
@@ -52,8 +52,8 @@ struct ip_tunnel_key {
 	u8			tos;		/* TOS for IPv4, TC for IPv6 */
 	u8			ttl;		/* TTL for IPv4, HL for IPv6 */
 	__be32			label;		/* Flow Label for IPv6 */
-	__be16			tp_src;
-	__be16			tp_dst;
+	__be16			tp_src;//隧道传输层源port
+	__be16			tp_dst;//隧道传输层目的port
 };
 
 /* Flags for ip_tunnel_info mode. */

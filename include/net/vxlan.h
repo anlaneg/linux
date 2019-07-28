@@ -207,6 +207,7 @@ struct vxlan_config {
 	//vxlan隧道本端的ip地址
 	union vxlan_addr	saddr;
 	__be32			vni;
+	//出接口设备ifindex
 	int			remote_ifindex;
 	int			mtu;//隧道mtu
 	__be16			dst_port;//隧道目的port

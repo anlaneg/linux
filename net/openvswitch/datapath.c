@@ -273,7 +273,7 @@ out:
 }
 
 int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
-		  const struct sw_flow_key *key,/*报文parser得到的key*/
+		  const struct sw_flow_key *key/*报文parser得到的key*/,
 		  const struct dp_upcall_info *upcall_info,
 		  uint32_t cutlen)
 {
@@ -460,11 +460,12 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	//指明upcall所属的datapath
 	upcall->dp_ifindex = dp_ifindex;
 
+	//存入attr_key
 	err = ovs_nla_put_key(key, key, OVS_PACKET_ATTR_KEY, false, user_skb);
 	if (err)
 		goto out;
 
-	//写簇userdata
+	//写入userdata
 	if (upcall_info->userdata)
 		__nla_put(user_skb, OVS_PACKET_ATTR_USERDATA,
 			  nla_len(upcall_info->userdata),
@@ -1456,14 +1457,12 @@ static const struct nla_policy flow_policy[OVS_FLOW_ATTR_MAX + 1] = {
 };
 
 static const struct genl_ops dp_flow_genl_ops[] = {
-	  //处理流的添加
-	{ .cmd = OVS_FLOW_CMD_NEW,
+	{ .cmd = OVS_FLOW_CMD_NEW,//处理流的添加
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .doit = ovs_flow_cmd_new
 	},
-	//处理流移除
-	{ .cmd = OVS_FLOW_CMD_DEL,
+	{ .cmd = OVS_FLOW_CMD_DEL,//处理流移除
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
 	  .doit = ovs_flow_cmd_del

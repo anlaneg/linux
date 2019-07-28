@@ -3450,6 +3450,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		}
 	}
 
+	//默认使用ipv4地址
 	if (!conf->remote_ip.sa.sa_family && !conf->saddr.sa.sa_family) {
 		/* Unless IPv6 is explicitly requested, assume IPv4 */
 		conf->remote_ip.sa.sa_family = AF_INET;
@@ -3509,6 +3510,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		}
 	}
 
+	//label属性仅ipv6有效
 	if (conf->label && !use_ipv6) {
 		NL_SET_ERR_MSG(extack,
 			       "Label attribute only applies to IPv6 VXLAN devices");

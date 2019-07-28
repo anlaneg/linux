@@ -9238,7 +9238,7 @@ EXPORT_SYMBOL(netdev_stats_to_stats64);
  */
 //取网络设备统计信息
 struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
-					struct rtnl_link_stats64 *storage)
+					struct rtnl_link_stats64 *storage/*存储统计结果*/)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 

@@ -442,12 +442,12 @@ static struct sw_flow *masked_flow_lookup(struct table_instance *ti,
 	u32 hash;
 	struct sw_flow_key masked_key;
 
-	//获取mask后的key
+	//获取mask后的masked_key
 	ovs_flow_mask_key(&masked_key, unmasked, false, mask);
 	hash = flow_hash(&masked_key, &mask->range);
 	head = find_bucket(ti, hash);
 	hlist_for_each_entry_rcu(flow, head, flow_table.node[ti->node_ver]) {
-		if (flow->mask == mask/*流mask必须一致*/ && flow->flow_table.hash == hash &&
+		if (flow->mask == mask/*流mask必须一致*/ && flow->flow_table.hash == hash/*hashcode一致*/ &&
 		    flow_cmp_masked_key(flow, &masked_key, &mask->range)/*比对key是否一致*/)
 			return flow;
 	}

@@ -109,10 +109,11 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	//为设备注册收包回调（bridge也采用相一致的机制）
 	//修改加入datapath的vport->dev设备的收包函数变更为netdev_frame_hook)
 	err = netdev_rx_handler_register(vport->dev, netdev_frame_hook,
-					 vport);
+					 vport/*指明rx_handler_data为vport*/);
 	if (err)
 		goto error_master_upper_dev_unlink;
 
+	//禁止dev上的lro
 	dev_disable_lro(vport->dev);
 	dev_set_promiscuity(vport->dev, 1);
 	vport->dev->priv_flags |= IFF_OVS_DATAPATH;

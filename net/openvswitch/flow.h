@@ -68,10 +68,13 @@ struct sw_flow_key {
 	struct {
 		u32	priority;	/* Packet QoS priority. */
 		u32	skb_mark;	/* SKB mark. */
+		//入接口（datapath中编号）
 		u16	in_port;	/* Input switch port (or DP_MAX_PORTS). */
 	} __packed phy; /* Safe when right after 'tun_key'. */
 	u8 mac_proto;			/* MAC layer protocol (e.g. Ethernet). */
+	//隧道协议类型（ipv4,ipv6)
 	u8 tun_proto;			/* Protocol of encapsulating tunnel. */
+	//datapath计算的skb hash
 	u32 ovs_flow_hash;		/* Datapath computed hash value.  */
 	u32 recirc_id;			/* Recirculation ID.  */
 	struct {
