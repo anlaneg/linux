@@ -1926,8 +1926,7 @@ fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 	return NULL;
 }
 
-static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则更新*/,
-		tc_setup_cb_t *cb/*针对每条cls_flower执行TC_SETUP_CLSFLOWER*/,
+static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则更新*/, flow_setup_cb_t *cb/*针对每条cls_flower执行TC_SETUP_CLSFLOWER*/,
 			void *cb_priv/*回调的私有数据*/, struct netlink_ext_ack *extack)
 {
 	struct tcf_block *block = tp->chain->block;
