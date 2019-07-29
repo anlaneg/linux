@@ -3667,6 +3667,7 @@ static int __init tun_init(void)
 		goto err_linkops;
 	}
 
+	//注册tun类型cdev
 	ret = misc_register(&tun_miscdev);
 	if (ret) {
 		pr_err("Can't register misc device %d\n", TUN_MINOR);

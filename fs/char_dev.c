@@ -43,8 +43,7 @@ static struct char_device_struct {
 	//对应的字符设备
 	struct cdev *cdev;		/* will die */
 } *chrdevs[CHRDEV_MAJOR_HASH_SIZE];
-
-//chardevs用于存入系统中所有char设备，在chardevs中存放时，采用major_to_index定位到具体
+//*chardevs用于保存系统中所有char设备，在chardevs中存放时，采用major_to_index定位到具体
 //的桶，然后按照baseminor进行排序，支持baseminor，minorct合起来指定多个char设备，故在插入时
 //需要检查(baseminor,baseminor+minorct)集合间是否有重叠，如果无重叠，则会按升序均放在冲突链上
 
@@ -56,7 +55,7 @@ static inline int major_to_index(unsigned major)
 
 #ifdef CONFIG_PROC_FS
 
-//显示所有字符设备
+//用于显示所有字符设备
 void chrdev_show(struct seq_file *f, off_t offset)
 {
 	struct char_device_struct *cd;
