@@ -98,7 +98,7 @@ struct ovs_skb_cb {
 	struct vport		*input_vport;//报文入接口
 	u16			mru;
 	u16			acts_origlen;
-	u32			cutlen;
+	u32			cutlen;//报文需要丢弃掉的大小
 };
 #define OVS_CB(skb) ((struct ovs_skb_cb *)(skb)->cb)
 
@@ -118,6 +118,7 @@ struct dp_upcall_info {
 	const struct nlattr *userdata;
 	const struct nlattr *actions;
 	int actions_len;
+	//采用哪个portid发送消息（netlink消息）
 	u32 portid;
 	u8 cmd;//命令字
 	u16 mru;//可接受的最大分片大小
@@ -239,7 +240,9 @@ int action_fifos_init(void);
 void action_fifos_exit(void);
 
 /* 'KEY' must not have any bits set outside of the 'MASK' */
+//old中mask中非0部分将被清楚（并赋给其新值key)
 #define OVS_MASKED(OLD, KEY, MASK) ((KEY) | ((OLD) & ~(MASK)))
+//更新old,使其mask指定的位置变为key
 #define OVS_SET_MASKED(OLD, KEY, MASK) ((OLD) = OVS_MASKED(OLD, KEY, MASK))
 
 #define OVS_NLERR(logging_allowed, fmt, ...)			\

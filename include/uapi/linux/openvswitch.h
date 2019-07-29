@@ -136,7 +136,9 @@ enum ovs_packet_cmd {
 	OVS_PACKET_CMD_UNSPEC,
 
 	/* Kernel-to-user notifications. */
+	/*查询流表失败，则upcall*/
 	OVS_PACKET_CMD_MISS,    /* Flow table miss. */
+	/*按命令上送*/
 	OVS_PACKET_CMD_ACTION,  /* OVS_ACTION_ATTR_USERSPACE action. */
 
 	/* Userspace commands. */
@@ -658,6 +660,7 @@ enum ovs_userspace_attr {
 #define OVS_USERSPACE_ATTR_MAX (__OVS_USERSPACE_ATTR_MAX - 1)
 
 struct ovs_action_trunc {
+	//截断后的大小
 	__u32 max_len; /* Max packet size in bytes. */
 };
 

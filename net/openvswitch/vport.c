@@ -25,7 +25,7 @@
 static LIST_HEAD(vport_ops_list);
 
 /* Protected by RCU read lock for reading, ovs_mutex for writing. */
-//记录以dev名称为索引的vport哈希表
+//记录以dev名称为索引的openvswitch vport哈希表
 static struct hlist_head *dev_table;
 
 #define VPORT_HASH_BUCKETS 1024
@@ -55,6 +55,7 @@ void ovs_vport_exit(void)
 	kfree(dev_table);
 }
 
+//通过name,net查找对应的vport 桶
 static struct hlist_head *hash_bucket(const struct net *net, const char *name)
 {
 	unsigned int hash = jhash(name, strlen(name), (unsigned long) net);
@@ -175,7 +176,7 @@ void ovs_vport_free(struct vport *vport)
 }
 EXPORT_SYMBOL_GPL(ovs_vport_free);
 
-//匹配相同类型的type
+//匹配相同类型的parms->type
 static struct vport_ops *ovs_vport_lookup(const struct vport_parms *parms)
 {
 	struct vport_ops *ops;
@@ -222,8 +223,8 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 		hlist_add_head_rcu(&vport->hash_node, bucket);
 		return vport;
 	}
-	//获取对应ops失败，尝试加载module
 
+	//获取对应ops失败，尝试加载module
 	/* Unlock to attempt module load and return -EAGAIN if load
 	 * was successful as we need to restart the port addition
 	 * workflow.
@@ -235,6 +236,7 @@ struct vport *ovs_vport_add(const struct vport_parms *parms)
 	if (!ovs_vport_lookup(parms))
 		return ERR_PTR(-EAFNOSUPPORT);
 	else
+		//加载成功，要求上层再查一次
 		return ERR_PTR(-EAGAIN);
 }
 
@@ -264,8 +266,6 @@ int ovs_vport_set_options(struct vport *vport, struct nlattr *options)
  */
 void ovs_vport_del(struct vport *vport)
 {
-	ASSERT_OVSL();
-
 	//vport移除
 	hlist_del_rcu(&vport->hash_node);
 	//对应的module释放
@@ -286,6 +286,7 @@ void ovs_vport_del(struct vport *vport)
  */
 void ovs_vport_get_stats(struct vport *vport, struct ovs_vport_stats *stats)
 {
+	//取设备的收发包统计结果
 	const struct rtnl_link_stats64 *dev_stats;
 	struct rtnl_link_stats64 temp;
 
@@ -329,6 +330,7 @@ int ovs_vport_get_options(const struct vport *vport, struct sk_buff *skb)
 	if (!nla)
 		return -EMSGSIZE;
 
+	//调用vport获取options,并填充到skb
 	err = vport->ops->get_options(vport, skb);
 	if (err) {
 		nla_nest_cancel(skb, nla);
@@ -428,7 +430,7 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport, struct sk_buff *skb)
 	if (ids->n_ids == 1 && ids->ids[0] == 0)
 		return 0;
 
-	//否则执行hash选取
+	//否则采用skb->hash选取一个合适的portid
 	hash = skb_get_hash(skb);
 	ids_index = hash - ids->n_ids * reciprocal_divide(hash, ids->rn_ids);
 	return ids->ids[ids_index];
@@ -445,7 +447,7 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport, struct sk_buff *skb)
  * skb->data should point to the Ethernet header.
  */
 int ovs_vport_receive(struct vport *vport/*报文入接口*/, struct sk_buff *skb/*指向以太头*/,
-		      const struct ip_tunnel_info *tun_info)
+		      const struct ip_tunnel_info *tun_info/*隧道信息*/)
 {
 	struct sw_flow_key key;
 	int error;

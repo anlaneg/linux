@@ -72,7 +72,7 @@ struct netns_ipv4 {
 
 	struct inet_peer_base	*peers;
 	struct sock  * __percpu	*tcp_sk;
-	struct netns_frags	frags;//网络分片表
+	struct fqdir		*fqdir;//网络分片表?
 #ifdef CONFIG_NETFILTER
 	struct xt_table		*iptable_filter;//natfilter的filter表
 	struct xt_table		*iptable_mangle;//mangle表

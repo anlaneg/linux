@@ -109,10 +109,11 @@ struct vport *ovs_netdev_link(struct vport *vport, const char *name)
 	//为设备注册收包回调（bridge也采用相一致的机制）
 	//修改加入datapath的vport->dev设备的收包函数变更为netdev_frame_hook)
 	err = netdev_rx_handler_register(vport->dev, netdev_frame_hook,
-					 vport);
+					 vport/*指明rx_handler_data为vport*/);
 	if (err)
 		goto error_master_upper_dev_unlink;
 
+	//禁止dev上的lro
 	dev_disable_lro(vport->dev);
 	dev_set_promiscuity(vport->dev, 1);
 	vport->dev->priv_flags |= IFF_OVS_DATAPATH;
@@ -167,7 +168,7 @@ void ovs_netdev_detach_dev(struct vport *vport)
 static void netdev_destroy(struct vport *vport)
 {
 	rtnl_lock();
-	if (vport->dev->priv_flags & IFF_OVS_DATAPATH)
+	if (netif_is_ovs_port(vport->dev))
 		ovs_netdev_detach_dev(vport);
 	rtnl_unlock();
 
@@ -177,7 +178,7 @@ static void netdev_destroy(struct vport *vport)
 void ovs_netdev_tunnel_destroy(struct vport *vport)
 {
 	rtnl_lock();
-	if (vport->dev->priv_flags & IFF_OVS_DATAPATH)
+	if (netif_is_ovs_port(vport->dev))
 		ovs_netdev_detach_dev(vport);
 
 	/* We can be invoked by both explicit vport deletion and
@@ -198,7 +199,7 @@ EXPORT_SYMBOL_GPL(ovs_netdev_tunnel_destroy);
 struct vport *ovs_netdev_get_vport(struct net_device *dev)
 {
 	//由dev获得vport
-	if (likely(dev->priv_flags & IFF_OVS_DATAPATH))
+	if (likely(netif_is_ovs_port(dev)))
 		return (struct vport *)
 			rcu_dereference_rtnl(dev->rx_handler_data);
 	else

@@ -186,6 +186,7 @@ struct fs_fte {
 	u32				dests_size;
 	//索引号（id+group->start_index)
 	u32				index;
+	struct mlx5_flow_context	flow_context;
 	//flow table entry的对应的动作
 	struct mlx5_flow_act		action;
 	enum fs_fte_status		status;
@@ -217,6 +218,7 @@ struct mlx5_flow_group_mask {
 };
 
 /* Type of children is fs_fte */
+//用于抽象mask(同一类flow的搞一个group)
 struct mlx5_flow_group {
 	struct fs_node			node;
 	//flow group对应的mask

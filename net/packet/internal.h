@@ -133,6 +133,7 @@ struct packet_sock {
 	struct net_device __rcu	*cached_dev;
 	int			(*xmit)(struct sk_buff *skb);//报文发送函数
 	struct packet_type	prot_hook ____cacheline_aligned_in_smp;
+	atomic_t		tp_drops ____cacheline_aligned_in_smp;
 };
 
 static struct packet_sock *pkt_sk(struct sock *sk)

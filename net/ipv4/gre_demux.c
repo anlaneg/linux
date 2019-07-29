@@ -93,7 +93,7 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 	if (greh->flags & GRE_CSUM) {
 		//有checksum标记，校验gre checksum
 		if (!skb_checksum_simple_validate(skb)) {
-			skb_checksum_try_convert(skb, IPPROTO_GRE, 0,
+			skb_checksum_try_convert(skb, IPPROTO_GRE,
 						 null_compute_pseudo);
 		} else if (csum_err) {
 			*csum_err = true;

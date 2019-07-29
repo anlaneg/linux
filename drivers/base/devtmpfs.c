@@ -361,8 +361,7 @@ int devtmpfs_mount(const char *mntdir)
 		return 0;
 
 	//直接调用mount，将devtmpfs文件系统挂接在mntdir
-	err = ksys_mount("devtmpfs", (char *)mntdir, "devtmpfs", MS_SILENT,
-			 NULL);
+	err = ksys_mount("devtmpfs", mntdir, "devtmpfs", MS_SILENT, NULL);
 	if (err)
 		printk(KERN_INFO "devtmpfs: error mounting %i\n", err);
 	else

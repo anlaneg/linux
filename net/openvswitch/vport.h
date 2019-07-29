@@ -51,7 +51,8 @@ u32 ovs_vport_find_upcall_portid(const struct vport *, struct sk_buff *);
 struct vport_portids {
 	struct reciprocal_value rn_ids;
 	struct rcu_head rcu;
-	u32 n_ids;
+	u32 n_ids;//ids数据大小
+	//容许有多个portids,通过skb->hash进行负载均衡
 	u32 ids[];
 };
 
@@ -94,7 +95,7 @@ struct vport {
 struct vport_parms {
 	const char *name;//vport名称
 	enum ovs_vport_type type;//vport类型
-	struct nlattr *options;
+	struct nlattr *options;//vport配置选项
 
 	/* For ovs_vport_alloc(). */
 	struct datapath *dp;//vport所属的datapath

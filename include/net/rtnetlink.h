@@ -65,9 +65,10 @@ struct rtnl_link_ops {
 	//完成新建link的初始化工作
 	void			(*setup)(struct net_device *dev);
 
+	//link独有IFLA_INFO_DATA型数据的netlink type
 	unsigned int		maxtype;
 	const struct nla_policy	*policy;
-	//消息体校验
+	//link_info_data型消息数据体校验
 	int			(*validate)(struct nlattr *tb[],
 					    struct nlattr *data[],
 					    struct netlink_ext_ack *extack);

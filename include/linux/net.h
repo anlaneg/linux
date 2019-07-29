@@ -116,11 +116,12 @@ struct socket {
 
 	unsigned long		flags;
 
-	struct socket_wq	*wq;
-
 	struct file		*file;
 	struct sock		*sk;
-	const struct proto_ops	*ops;//定义socket相关的函数，例如bind,accept
+	//定义socket相关的函数，例如bind,accept
+	const struct proto_ops	*ops;
+
+	struct socket_wq	wq;
 };
 
 struct vm_area_struct;

@@ -207,6 +207,7 @@ struct vxlan_config {
 	//vxlan隧道本端的ip地址
 	union vxlan_addr	saddr;
 	__be32			vni;
+	//出接口设备ifindex
 	int			remote_ifindex;
 	int			mtu;//隧道mtu
 	__be16			dst_port;//隧道目的port
@@ -246,7 +247,7 @@ struct vxlan_dev {
 	struct vxlan_rdst default_dst;	/* default destination */
 
 	struct timer_list age_timer;//用于老化fdb表项
-	spinlock_t	  hash_lock;
+	spinlock_t	  hash_lock[FDB_HASH_SIZE];
 	unsigned int	  addrcnt;
 	struct gro_cells  gro_cells;
 

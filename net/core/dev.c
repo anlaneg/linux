@@ -2956,12 +2956,10 @@ static void skb_warn_bad_offload(const struct sk_buff *skb)
 		else
 			name = netdev_name(dev);
 	}
-	WARN(1, "%s: caps=(%pNF, %pNF) len=%d data_len=%d gso_size=%d "
-	     "gso_type=%d ip_summed=%d\n",
+	skb_dump(KERN_WARNING, skb, false);
+	WARN(1, "%s: caps=(%pNF, %pNF)\n",
 	     name, dev ? &dev->features : &null_features,
-	     skb->sk ? &skb->sk->sk_route_caps : &null_features,
-	     skb->len, skb->data_len, skb_shinfo(skb)->gso_size,
-	     skb_shinfo(skb)->gso_type, skb->ip_summed);
+	     skb->sk ? &skb->sk->sk_route_caps : &null_features);
 }
 
 /*
@@ -3180,13 +3178,7 @@ void netdev_rx_csum_fault(struct net_device *dev, struct sk_buff *skb)
 {
 	if (net_ratelimit()) {
 		pr_err("%s: hw csum failure\n", dev ? dev->name : "<unknown>");
-		if (dev)
-			pr_err("dev features: %pNF\n", &dev->features);
-		pr_err("skb len=%u data_len=%u pkt_type=%u gso_size=%u gso_type=%u nr_frags=%u ip_summed=%u csum=%x csum_complete_sw=%d csum_valid=%d csum_level=%u\n",
-		       skb->len, skb->data_len, skb->pkt_type,
-		       skb_shinfo(skb)->gso_size, skb_shinfo(skb)->gso_type,
-		       skb_shinfo(skb)->nr_frags, skb->ip_summed, skb->csum,
-		       skb->csum_complete_sw, skb->csum_valid, skb->csum_level);
+		skb_dump(KERN_ERR, skb, true);
 		dump_stack();
 	}
 }
@@ -4783,10 +4775,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		__skb_push(skb, skb->mac_len);
 		skb_do_redirect(skb);
 		return NULL;
-	case TC_ACT_REINSERT:
-		//报文直接按cl_res结果重新加入到ingress或者egress发出
-		/* this does not scrub the packet, and updates stats on error */
-		skb_tc_reinsert(skb, &cl_res);
+	case TC_ACT_CONSUMED:
 		return NULL;
 	default:
 		break;
@@ -9249,7 +9238,7 @@ EXPORT_SYMBOL(netdev_stats_to_stats64);
  */
 //取网络设备统计信息
 struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
-					struct rtnl_link_stats64 *storage)
+					struct rtnl_link_stats64 *storage/*存储统计结果*/)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 

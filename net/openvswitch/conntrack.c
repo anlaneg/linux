@@ -192,7 +192,7 @@ static void __ovs_ct_update_key(struct sw_flow_key *key, u8 state,
 				const struct nf_conntrack_zone *zone,
 				const struct nf_conn *ct)
 {
-	//更新链接状态
+	//更新链ct状态,zone_id,ct_mark,ct_labels
 	key->ct_state = state;
 	key->ct_zone = zone->id;
 	key->ct.mark = ovs_ct_get_mark(ct);
@@ -238,11 +238,12 @@ static void __ovs_ct_update_key(struct sw_flow_key *key, u8 state,
 static void ovs_ct_update_key(const struct sk_buff *skb,
 			      const struct ovs_conntrack_info *info,
 			      struct sw_flow_key *key, bool post_ct,
-			      bool keep_nat_flags)
+			      bool keep_nat_flags/*是否使用key->ct_status中的nat状态*/)
 {
 	const struct nf_conntrack_zone *zone = &nf_ct_zone_dflt;
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
+	//默认为末跟踪状态
 	u8 state = 0;
 
 	//取skb的连接跟踪及连接状态
@@ -1384,6 +1385,7 @@ static int ovs_ct_add_helper(struct ovs_conntrack_info *info, const char *name,
 }
 
 #if IS_ENABLED(CONFIG_NF_NAT)
+//解析nat信息
 static int parse_nat(const struct nlattr *attr,
 		     struct ovs_conntrack_info *info, bool log)
 {
@@ -1673,6 +1675,7 @@ bool ovs_ct_verify(struct net *net, enum ovs_key_attr attr)
 	return false;
 }
 
+//解析ct action，填充ct_info结构体
 int ovs_ct_copy_action(struct net *net, const struct nlattr *attr,
 		       const struct sw_flow_key *key,
 		       struct sw_flow_actions **sfa,  bool log)
@@ -1699,6 +1702,7 @@ int ovs_ct_copy_action(struct net *net, const struct nlattr *attr,
 		return err;
 
 	/* Set up template for tracking connections in specific zones. */
+	//构造临时ct
 	ct_info.ct = nf_ct_tmpl_alloc(net, &ct_info.zone, GFP_KERNEL);
 	if (!ct_info.ct) {
 		OVS_NLERR(log, "Failed to allocate conntrack template");
@@ -1718,11 +1722,13 @@ int ovs_ct_copy_action(struct net *net, const struct nlattr *attr,
 			goto err_free_ct;
 	}
 
+	//构造ct action
 	err = ovs_nla_add_action(sfa, OVS_ACTION_ATTR_CT, &ct_info,
 				 sizeof(ct_info), log);
 	if (err)
 		goto err_free_ct;
 
+	//添加confirmed标记
 	__set_bit(IPS_CONFIRMED_BIT, &ct_info.ct->status);
 	nf_conntrack_get(&ct_info.ct->ct_general);
 	return 0;
