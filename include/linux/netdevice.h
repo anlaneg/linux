@@ -283,7 +283,7 @@ struct header_ops {
  */
 
 enum netdev_state_t {
-	__LINK_STATE_START,//设备已开启
+	__LINK_STATE_START,//设备已开启,处于running状态
 	__LINK_STATE_PRESENT,//设备存在且有效未被删除
 	__LINK_STATE_NOCARRIER,
 	__LINK_STATE_LINKWATCH_PENDING,
@@ -1241,6 +1241,7 @@ struct tlsdev_ops;
 struct net_device_ops {
 	//注册网络设备时，将调用此回调用于初始化
 	int			(*ndo_init)(struct net_device *dev);
+	//ndo_init操作的反操作
 	void			(*ndo_uninit)(struct net_device *dev);
 	//将设备置于up状态，返回非０，则置up失败
 	int			(*ndo_open)(struct net_device *dev);
@@ -1272,6 +1273,7 @@ struct net_device_ops {
 						  int new_mtu);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
 						   struct neigh_parms *);
+	//tx发送超时处理
 	void			(*ndo_tx_timeout) (struct net_device *dev);
 
 	//获取设备上的统计信息（64位长度，优先使用此函数）
@@ -1366,8 +1368,10 @@ struct net_device_ops {
 						 struct netlink_ext_ack *extack);
 	int			(*ndo_del_slave)(struct net_device *dev,
 						 struct net_device *slave_dev);
+	//校验调备是否支持features指明的功能集，返回支持的功能集
 	netdev_features_t	(*ndo_fix_features)(struct net_device *dev,
 						    netdev_features_t features);
+	//为设备开启features指明的功能集，返回操作结果
 	int			(*ndo_set_features)(struct net_device *dev,
 						    netdev_features_t features);
 	int			(*ndo_neigh_construct)(struct net_device *dev,
@@ -2113,7 +2117,7 @@ static inline int netdev_get_sb_channel(struct net_device *dev)
 	return max_t(int, -dev->num_tc, 0);
 }
 
-//给定队列索引，取队列
+//给定队列索引，取tx队列
 static inline
 struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 					 unsigned int index)

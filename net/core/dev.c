@@ -1446,7 +1446,8 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 		//如果open失败或者validate失败，则清除掉start标记
 		clear_bit(__LINK_STATE_START, &dev->state);
 	else {
-		dev->flags |= IFF_UP;//置link up状态
+		//置link up状态
+		dev->flags |= IFF_UP;
 		dev_set_rx_mode(dev);
 		dev_activate(dev);
 		add_device_randomness(dev->dev_addr, dev->addr_len);
@@ -1470,8 +1471,10 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
  */
 int dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 {
+	//将设备由down转为up状态
 	int ret;
 
+	//已up,直接返回
 	if (dev->flags & IFF_UP)
 		return 0;
 
@@ -1479,6 +1482,7 @@ int dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (ret < 0)
 		return ret;
 
+	//触发RTM_NEWLINK消息
 	rtmsg_ifinfo(RTM_NEWLINK, dev, IFF_UP|IFF_RUNNING, GFP_KERNEL);
 	//触发netdev的NETDEV_UP通知
 	call_netdevice_notifiers(NETDEV_UP, dev);
@@ -7645,11 +7649,13 @@ void __dev_set_rx_mode(struct net_device *dev)
 	const struct net_device_ops *ops = dev->netdev_ops;
 
 	/* dev_open will call this function so the list will stay sane. */
+	//设备未up,则跳出
 	if (!(dev->flags&IFF_UP))
-		return;//设备未up,则跳出
+		return;
 
+	//设置被删除，则跳出
 	if (!netif_device_present(dev))
-		return;//设置被删除，则跳出
+		return;
 
 	if (!(dev->priv_flags & IFF_UNICAST_FLT)) {
 		/* Unicast addresses changes may only happen under the rtnl,
@@ -8467,6 +8473,7 @@ static void netdev_sync_lower_features(struct net_device *upper,
 	}
 }
 
+//去掉冲突的features
 static netdev_features_t netdev_fix_features(struct net_device *dev,
 	netdev_features_t features)
 {
@@ -8557,19 +8564,23 @@ int __netdev_update_features(struct net_device *dev)
 
 	features = netdev_get_wanted_features(dev);
 
+	//驱动移除掉不支持的feature列表
 	if (dev->netdev_ops->ndo_fix_features)
 		features = dev->netdev_ops->ndo_fix_features(dev, features);
 
 	/* driver might be less strict about feature dependencies */
+	//修复相互依赖的feature
 	features = netdev_fix_features(dev, features);
 
 	/* some features can't be enabled if they're off an an upper device */
+	//取除掉父设备未开启的功能
 	netdev_for_each_upper_dev_rcu(dev, upper, iter)
 		features = netdev_sync_upper_features(dev, upper, features);
 
 	if (dev->features == features)
 		goto sync_lower;
 
+	//feature集发生变换，执行ndo_set_features回调，设置features
 	netdev_dbg(dev, "Features changed: %pNF -> %pNF\n",
 		&dev->features, &features);
 
@@ -8874,6 +8885,7 @@ int register_netdevice(struct net_device *dev)
 	/* Transfer changeable features to wanted_features and enable
 	 * software offloads (GSO and GRO).
 	 */
+	//开启gro,gso
 	dev->hw_features |= NETIF_F_SOFT_FEATURES;
 	dev->features |= NETIF_F_SOFT_FEATURES;
 
@@ -8923,8 +8935,10 @@ int register_netdevice(struct net_device *dev)
 	ret = netdev_register_kobject(dev);
 	if (ret)
 		goto err_uninit;
+	//设备已注册
 	dev->reg_state = NETREG_REGISTERED;
 
+	//设置dev的feature集
 	__netdev_update_features(dev);
 
 	/*
@@ -8938,7 +8952,8 @@ int register_netdevice(struct net_device *dev)
 
 	dev_init_scheduler(dev);
 	dev_hold(dev);
-	list_netdevice(dev);//将设备加入链中
+	//将设备加入链中
+	list_netdevice(dev);
 	add_device_randomness(dev->dev_addr, dev->addr_len);
 
 	/* If the device has permanent device address, driver should

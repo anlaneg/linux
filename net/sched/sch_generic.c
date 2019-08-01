@@ -429,6 +429,8 @@ static void dev_watchdog(struct timer_list *t)
 
 				txq = netdev_get_tx_queue(dev, i);
 				trans_start = txq->trans_start;
+				//处于stopped状态，且watchdog_time超时，则记录有发送
+				//队列超时
 				if (netif_xmit_stopped(txq) &&
 				    time_after(jiffies, (trans_start +
 							 dev->watchdog_timeo))) {
@@ -438,12 +440,15 @@ static void dev_watchdog(struct timer_list *t)
 				}
 			}
 
+			//调用ndo_tx_timeout完成超时处理
 			if (some_queue_timedout) {
 				trace_net_dev_xmit_timeout(dev, i);
 				WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: %s (%s): transmit queue %u timed out\n",
 				       dev->name, netdev_drivername(dev), i);
 				dev->netdev_ops->ndo_tx_timeout(dev);
 			}
+
+			//重置下次定时器
 			if (!mod_timer(&dev->watchdog_timer,
 				       round_jiffies(jiffies +
 						     dev->watchdog_timeo)))
@@ -1311,7 +1316,11 @@ static void dev_init_scheduler_queue(struct net_device *dev,
 void dev_init_scheduler(struct net_device *dev)
 {
 	dev->qdisc = &noop_qdisc;
+	//通过dev_init_scheduler_queue初始化设备的每个tx队列
+	//将每个queue_dev->qdisc置为noop_qdisc
 	netdev_for_each_tx_queue(dev, dev_init_scheduler_queue, &noop_qdisc);
+
+	//初始化ingress_queue
 	if (dev_ingress_queue(dev))
 		dev_init_scheduler_queue(dev, dev_ingress_queue(dev), &noop_qdisc);
 

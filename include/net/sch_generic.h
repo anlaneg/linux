@@ -799,6 +799,7 @@ static inline bool qdisc_tx_changing(const struct net_device *dev)
 /* Is the device using the noop qdisc on all queues?  */
 static inline bool qdisc_tx_is_noop(const struct net_device *dev)
 {
+	//是否所有tx队列的qdisc均为noop_qdisc?
 	unsigned int i;
 
 	for (i = 0; i < dev->num_tx_queues; i++) {

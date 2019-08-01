@@ -44,6 +44,7 @@
 #define DRV_NAME	"dummy"
 #define DRV_VERSION	"1.0"
 
+//支持的dummy link数目
 static int numdummies = 1;
 
 /* fake multicast ability */
@@ -57,6 +58,7 @@ struct pcpu_dstats {
 	struct u64_stats_sync	syncp;
 };
 
+//接口统计
 static void dummy_get_stats64(struct net_device *dev,
 			      struct rtnl_link_stats64 *stats)
 {
@@ -78,6 +80,7 @@ static void dummy_get_stats64(struct net_device *dev,
 	}
 }
 
+//统计报文后，将报文丢弃
 static netdev_tx_t dummy_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct pcpu_dstats *dstats = this_cpu_ptr(dev->dstats);
@@ -92,6 +95,7 @@ static netdev_tx_t dummy_xmit(struct sk_buff *skb, struct net_device *dev)
 	return NETDEV_TX_OK;
 }
 
+//仅初始化统计计数
 static int dummy_dev_init(struct net_device *dev)
 {
 	dev->dstats = netdev_alloc_pcpu_stats(struct pcpu_dstats);
@@ -126,9 +130,11 @@ static const struct net_device_ops dummy_netdev_ops = {
 	.ndo_change_carrier	= dummy_change_carrier,
 };
 
+//获取接口的驱动信息
 static void dummy_get_drvinfo(struct net_device *dev,
 			      struct ethtool_drvinfo *info)
 {
+	//填充接口的驱动及版本
 	strlcpy(info->driver, DRV_NAME, sizeof(info->driver));
 	strlcpy(info->version, DRV_VERSION, sizeof(info->version));
 }
@@ -190,10 +196,12 @@ static int __init dummy_init_one(void)
 	struct net_device *dev_dummy;
 	int err;
 
+	//申请并创建dummy类型的接口
 	dev_dummy = alloc_netdev(0, "dummy%d", NET_NAME_ENUM, dummy_setup);
 	if (!dev_dummy)
 		return -ENOMEM;
 
+	//注册此网络设备
 	dev_dummy->rtnl_link_ops = &dummy_link_ops;
 	err = register_netdevice(dev_dummy);
 	if (err < 0)
@@ -211,6 +219,7 @@ static int __init dummy_init_module(void)
 
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock();
+	//注册dummy link类型
 	err = __rtnl_link_register(&dummy_link_ops);
 	if (err < 0)
 		goto out;
