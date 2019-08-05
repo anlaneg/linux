@@ -262,6 +262,7 @@ static void __ethtool_get_strings(struct net_device *dev,
 		ops->get_strings(dev, stringset, data);
 }
 
+//将ethtool command转换为feature掩码
 static netdev_features_t ethtool_get_feature_mask(u32 eth_cmd)
 {
 	/* feature masks of legacy discrete ethtool ops */
@@ -764,6 +765,7 @@ static noinline_for_stack int ethtool_get_drvinfo(struct net_device *dev,
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_GDRVINFO;
+	//取驱动信息
 	if (ops->get_drvinfo) {
 		ops->get_drvinfo(dev, &info);
 	} else if (dev->dev.parent && dev->dev.parent->driver) {
@@ -2558,6 +2560,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	int rc;
 	netdev_features_t old_features;
 
+	//dev不存在或者dev不可见时返错误
 	if (!dev || !netif_device_present(dev))
 		return -ENODEV;
 
@@ -2628,6 +2631,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SSET:
 		rc = ethtool_set_settings(dev, useraddr);
 		break;
+		//获取driver info信息
 	case ETHTOOL_GDRVINFO:
 		rc = ethtool_get_drvinfo(dev, useraddr);
 		break;
@@ -2830,6 +2834,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	if (dev->ethtool_ops->complete)
 		dev->ethtool_ops->complete(dev);
 
+	//如果dev功能发生变更，则执行feature更正事件通知
 	if (old_features != dev->features)
 		netdev_features_change(dev);
 

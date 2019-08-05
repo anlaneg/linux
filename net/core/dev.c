@@ -8553,6 +8553,7 @@ static netdev_features_t netdev_fix_features(struct net_device *dev,
 	return features;
 }
 
+//网络设备feature列表更新
 int __netdev_update_features(struct net_device *dev)
 {
 	struct net_device *upper, *lower;

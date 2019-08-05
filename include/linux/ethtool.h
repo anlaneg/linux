@@ -353,7 +353,9 @@ struct ethtool_ops {
 	int	(*set_phys_id)(struct net_device *, enum ethtool_phys_id_state);
 	void	(*get_ethtool_stats)(struct net_device *,
 				     struct ethtool_stats *, u64 *);
+	//ethtool命令行执行前调用
 	int	(*begin)(struct net_device *);
+	//ethtool命令执行后调用
 	void	(*complete)(struct net_device *);
 	u32	(*get_priv_flags)(struct net_device *);
 	int	(*set_priv_flags)(struct net_device *, u32);

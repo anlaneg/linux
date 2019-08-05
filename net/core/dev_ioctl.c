@@ -421,6 +421,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr, bool *need_c
 		return ret;
 
 	case SIOCETHTOOL:
+		//ethtool命令处理
 		dev_load(net, ifr->ifr_name);
 		rtnl_lock();
 		ret = dev_ethtool(net, ifr);
