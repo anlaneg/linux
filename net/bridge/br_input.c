@@ -29,6 +29,7 @@ br_netif_receive_skb(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return netif_receive_skb(skb);
 }
 
+//二层转三层处理
 static int br_pass_frame_up(struct sk_buff *skb)
 {
 	struct net_device *indev, *brdev = BR_INPUT_SKB_CB(skb)->brdev;
@@ -53,7 +54,8 @@ static int br_pass_frame_up(struct sk_buff *skb)
 	}
 
 	indev = skb->dev;
-	skb->dev = brdev;//更新入接口为桥上连口，准备送三层
+	//更新入接口为桥上连口，准备送三层
+	skb->dev = brdev;
 	skb = br_handle_vlan(br, NULL, vg, skb);
 	if (!skb)
 		return NET_RX_DROP;
@@ -138,7 +140,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	switch (pkt_type) {
 	case BR_PKT_MULTICAST:
-		mdst = br_mdb_get(br, skb, vid);//组播表查询
+		//组播表查询,执行组播转发
+		mdst = br_mdb_get(br, skb, vid);
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
 		    br_multicast_querier_exists(br, eth_hdr(skb))) {
 			if ((mdst && mdst->host_joined) ||
@@ -163,13 +166,16 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		unsigned long now = jiffies;
 
 		if (dst->is_local)
-			//local口，送三层处理
+			//dst为local口，送三层处理
 			return br_pass_frame_up(skb);
 
+		//fdb时间刷新
 		if (now != dst->used)
 			dst->used = now;
+		//执行单播报文转发
 		br_forward(dst->dst, skb, local_rcv, false);
 	} else {
+		//未查询到出接口且非组播报文，执行flood
 		if (!mcast_hit)
 			br_flood(br, skb, pkt_type, local_rcv, false);
 		else
@@ -188,6 +194,7 @@ drop:
 }
 EXPORT_SYMBOL_GPL(br_handle_frame_finish);
 
+//bridge执行local报文处理
 static void __br_handle_local_finish(struct sk_buff *skb)
 {
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
@@ -197,6 +204,7 @@ static void __br_handle_local_finish(struct sk_buff *skb)
 	if ((p->flags & BR_LEARNING) &&
 	    !br_opt_get(p->br, BROPT_NO_LL_LEARN) &&
 	    br_should_learn(p, skb, &vid))
+		//执行fdb更新
 		br_fdb_update(p->br, p, eth_hdr(skb)->h_source, vid, false);
 }
 
@@ -224,6 +232,7 @@ static int nf_hook_bridge_pre(struct sk_buff *skb, struct sk_buff **pskb)
 		goto frame_finish;
 #endif
 
+	//调用bridge的PRE_ROUTING钩子
 	e = rcu_dereference(net->nf.hooks_bridge[NF_BR_PRE_ROUTING]);
 	if (!e)
 		goto frame_finish;
@@ -317,8 +326,9 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			   then must forward to keep loop detection */
 			if (p->br->stp_enabled == BR_NO_STP ||
 			    fwd_mask & (1u << dest[5]))
-				goto forward;
+				goto forward;//转发此报文
 			*pskb = skb;
+			//将报文送给local执行fdb更新，并发通stp协议报文
 			__br_handle_local_finish(skb);
 			return RX_HANDLER_PASS;
 
@@ -330,8 +340,9 @@ rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 			if (fwd_mask & (1u << dest[5]))
 				goto forward;
 			*pskb = skb;
+			//放通lldp协议报文
 			__br_handle_local_finish(skb);
-			return RX_HANDLER_PASS;//放通lldp协议报文
+			return RX_HANDLER_PASS;
 
 		default:
 			/* Allow selective forwarding for most other protocols */
@@ -367,6 +378,7 @@ forward:
 		//触发bridge路由前hook点
 		return nf_hook_bridge_pre(skb, pskb);
 	default:
+		//端口处于其它状态，丢包
 drop:
 		kfree_skb(skb);
 	}

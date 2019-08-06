@@ -275,6 +275,7 @@ struct net_bridge_port {
 #ifdef CONFIG_NET_SWITCHDEV
 	int				offload_fwd_mark;
 #endif
+	//定义port是否转发link-layer的组播，看01-80-C2-00-00-00
 	u16				group_fwd_mask;
 	u16				backup_redirected_cnt;
 };
@@ -363,7 +364,9 @@ struct net_bridge {
 	u8				group_addr[ETH_ALEN];
 
 	enum {
+		//STP未开启
 		BR_NO_STP, 		/* no spanning tree */
+		//kernel实现的stp
 		BR_KERNEL_STP,		/* old STP in kernel */
 		BR_USER_STP,		/* new RSTP in userspace */
 	} stp_enabled;

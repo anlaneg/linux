@@ -184,6 +184,8 @@ static int store_group_fwd_mask(struct net_bridge_port *p,
 
 	return 0;
 }
+
+//定义group_fwd_mask,用于设置及显示
 static BRPORT_ATTR(group_fwd_mask, 0644, show_group_fwd_mask,
 		   store_group_fwd_mask);
 

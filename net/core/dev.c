@@ -5025,7 +5025,7 @@ skip_classify:
 		case RX_HANDLER_EXACT:
 			deliver_exact = true;
 		case RX_HANDLER_PASS:
-			break;//继续向下处理（此handle放通了此报文）
+			break;//继续向下处理（此handle放通了此报文）,例如lldp报文
 		default:
 			BUG();
 		}
