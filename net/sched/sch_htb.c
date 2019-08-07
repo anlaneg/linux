@@ -992,6 +992,7 @@ static void htb_work_func(struct work_struct *work)
 	rcu_read_unlock();
 }
 
+//层次令牌桶队列初始化
 static int htb_init(struct Qdisc *sch, struct nlattr *opt,
 		    struct netlink_ext_ack *extack)
 {

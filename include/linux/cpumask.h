@@ -178,6 +178,7 @@ static inline unsigned int cpumask_local_spread(unsigned int i, int node)
 	return 0;
 }
 
+//单cpu情况
 #define for_each_cpu(cpu, mask)			\
 	for ((cpu) = 0; (cpu) < 1; (cpu)++, (void)mask)
 #define for_each_cpu_not(cpu, mask)		\
@@ -237,6 +238,7 @@ unsigned int cpumask_local_spread(unsigned int i, int node);
  *
  * After the loop, cpu is >= nr_cpu_ids.
  */
+//遍历所有cpu
 #define for_each_cpu(cpu, mask)				\
 	for ((cpu) = -1;				\
 		(cpu) = cpumask_next((cpu), (mask)),	\

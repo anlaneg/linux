@@ -267,6 +267,7 @@ do {									\
 
 #endif	/* CONFIG_SMP */
 
+//var中cpu对应的变量
 #define per_cpu(var, cpu)	(*per_cpu_ptr(&(var), cpu))
 
 /*

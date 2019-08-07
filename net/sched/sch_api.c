@@ -276,8 +276,10 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	return NULL;
 }
 
+//将队列加入到net_device->qdisc_hash
 void qdisc_hash_add(struct Qdisc *q, bool invisible)
 {
+	//仅非根队列且非ingress队列国入到qdisc_hash表中
 	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
 		ASSERT_RTNL();
 		hash_add_rcu(qdisc_dev(q)->qdisc_hash, &q->hash, q->handle);
@@ -738,6 +740,7 @@ EXPORT_SYMBOL(qdisc_class_hash_remove);
 /* Allocate an unique handle from space managed by kernel
  * Possible range is [8000-FFFF]:0000 (0x8000 values)
  */
+//申请一个唯一的队列id号
 static u32 qdisc_alloc_handle(struct net_device *dev)
 {
 	int i = 0x8000;
@@ -747,6 +750,7 @@ static u32 qdisc_alloc_handle(struct net_device *dev)
 		autohandle += TC_H_MAKE(0x10000U, 0);
 		if (autohandle == TC_H_MAKE(TC_H_ROOT, 0))
 			autohandle = TC_H_MAKE(0x80000000U, 0);
+		//如果不存在此队列id,则使用此id,否则继续尝试
 		if (!qdisc_lookup(dev, autohandle))
 			return autohandle;
 		cond_resched();
@@ -1153,11 +1157,11 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
    Parameters are passed via opt.
  */
 //qdisc创建
-static struct Qdisc *qdisc_create(struct net_device *dev,
+static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 				  struct netdev_queue *dev_queue,
-				  struct Qdisc *p, u32 parent, u32 handle,
+				  struct Qdisc *p, u32 parent/*关联的父队列*/, u32 handle/*待创建队列关联的id*/,
 				  struct nlattr **tca, int *errp,
-				  struct netlink_ext_ack *extack)
+				  struct netlink_ext_ack *extack/*出参，保存出错信息*/)
 {
 	int err;
 	struct nlattr *kind = tca[TCA_KIND];
@@ -1202,7 +1206,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 		goto err_out;
 	}
 
-	//创建ops对应的qdisc
+	//创建ops对应的qdisc，并初始化
 	sch = qdisc_alloc(dev_queue, ops, extack);
 	if (IS_ERR(sch)) {
 		err = PTR_ERR(sch);
@@ -1212,10 +1216,12 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	sch->parent = parent;
 
 	if (handle == TC_H_INGRESS) {
+		//标记qdisc为ingress类型队列
 		sch->flags |= TCQ_F_INGRESS;
 		handle = TC_H_MAKE(TC_H_INGRESS, 0);
 	} else {
 		if (handle == 0) {
+			//未指定队列id，为队列申请id号
 			handle = qdisc_alloc_handle(dev);
 			if (handle == 0) {
 				NL_SET_ERR_MSG(extack, "Maximum number of qdisc handles was exceeded");
@@ -1223,6 +1229,8 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 				goto err_out3;
 			}
 		}
+
+		//指明此队列为单队列
 		if (!netif_is_multiqueue(dev))
 			sch->flags |= TCQ_F_ONETXQUEUE;
 	}
@@ -1245,7 +1253,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev,
 	if (err)
 		goto err_out3;
 
-	//初始化调度器sch
+	//具体子类队列初始化
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1548,7 +1556,7 @@ replay:
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
-			//使用设备对应的qdisc
+			//指明为根qdisc,则使用设备对应的qdisc
 			q = dev->qdisc;
 		}
 
@@ -1642,16 +1650,21 @@ replay:
 		NL_SET_ERR_MSG(extack, "Exclusivity flag on, cannot modify");
 		return -EEXIST;
 	}
+
+	//指定了qdisc类型，但队列现有类型与其不相符，报错
 	if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], q->ops->id)) {
 		NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 		return -EINVAL;
 	}
+
+	//qdisc队列配置变更
 	err = qdisc_change(q, tca, extack);
 	if (err == 0)
 		qdisc_notify(net, skb, n, clid, NULL, q);
 	return err;
 
 create_n_graft:
+	//qdisc队列不存在，创建检查
 	if (!(n->nlmsg_flags & NLM_F_CREATE)) {
 		NL_SET_ERR_MSG(extack, "Qdisc not found. To create specify NLM_F_CREATE flag");
 		return -ENOENT;
@@ -1667,6 +1680,7 @@ create_n_graft:
 			err = -ENOENT;
 		}
 	} else {
+		//创建非ingress队列
 		struct netdev_queue *dev_queue;
 
 		if (p && p->ops->cl_ops && p->ops->cl_ops->select_queue)
@@ -1674,6 +1688,7 @@ create_n_graft:
 		else if (p)
 			dev_queue = p->dev_queue;
 		else
+			//取0号tx队列
 			dev_queue = netdev_get_tx_queue(dev, 0);
 
 		q = qdisc_create(dev, dev_queue, p,
@@ -1976,6 +1991,8 @@ static void tc_bind_tclass(struct Qdisc *q, u32 portid, u32 clid,
 
 #endif
 
+//class创建及更新
+//例如：tc class add dev eth0 parent 1: classid 1:1 htb rate 40mbit ceil 40mbit
 static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 			 struct netlink_ext_ack *extack)
 {
@@ -2001,6 +2018,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 	if (err < 0)
 		return err;
 
+	//取关联的设备
 	dev = __dev_get_by_index(net, tcm->tcm_ifindex);
 	if (!dev)
 		return -ENODEV;
@@ -2049,6 +2067,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 	}
 
 	/* OK. Locate qdisc */
+	//取对应的qdisc
 	q = qdisc_lookup(dev, qid);
 	if (!q)
 		return -ENOENT;
@@ -2076,6 +2095,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 	} else {
 		switch (n->nlmsg_type) {
 		case RTM_NEWTCLASS:
+			//新建class
 			err = -EEXIST;
 			if (n->nlmsg_flags & NLM_F_EXCL)
 				goto out;
@@ -2275,6 +2295,7 @@ static int __init pktsched_init(void)
 		return err;
 	}
 
+	//注册内置的qdisc ops
 	register_qdisc(&pfifo_fast_ops);
 	register_qdisc(&pfifo_qdisc_ops);
 	register_qdisc(&bfifo_qdisc_ops);
@@ -2287,6 +2308,7 @@ static int __init pktsched_init(void)
 	rtnl_register(PF_UNSPEC, RTM_DELQDISC, tc_get_qdisc, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETQDISC, tc_get_qdisc, tc_dump_qdisc,
 		      0);
+	//class分类的新建修改操作定义
 	rtnl_register(PF_UNSPEC, RTM_NEWTCLASS, tc_ctl_tclass, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELTCLASS, tc_ctl_tclass, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETTCLASS, tc_ctl_tclass, tc_dump_tclass,

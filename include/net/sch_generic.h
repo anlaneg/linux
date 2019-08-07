@@ -55,9 +55,11 @@ struct qdisc_skb_head {
 };
 
 struct Qdisc {
+	//入队函数（来源于ops成员中的enqueue)
 	int 			(*enqueue)(struct sk_buff *skb,
 					   struct Qdisc *sch,
 					   struct sk_buff **to_free);
+	//出队函数（来源于ops成员的enqueue)
 	struct sk_buff *	(*dequeue)(struct Qdisc *sch);
 	unsigned int		flags;
 #define TCQ_F_BUILTIN		1
@@ -81,18 +83,24 @@ struct Qdisc {
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
 	u32			limit;
+	//队列操作集
 	const struct Qdisc_ops	*ops;
 	struct qdisc_size_table	__rcu *stab;
+	//用于将队列加入hashtable
 	struct hlist_node       hash;
+	//队列id号
 	u32			handle;
-	u32			parent;//父Qdisc
+	u32			parent;//父Qdisc id号
 
 	//队列对应的netdev_queue
 	struct netdev_queue	*dev_queue;
 
 	struct net_rate_estimator __rcu *rate_est;
+	//基本统计信息
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
+	//队列统计信息
 	struct gnet_stats_queue	__percpu *cpu_qstats;
+	//qdisc为了内存对齐，浪费了头部padded字节的内存（记录起来方便释放）
 	int			padded;
 	refcount_t		refcnt;
 
@@ -112,6 +120,7 @@ struct Qdisc {
 	spinlock_t		seqlock;
 
 	/* for NOLOCK qdisc, true if there are no enqueued skbs */
+	//标明队列为空
 	bool			empty;
 	struct rcu_head		rcu;
 };
@@ -237,7 +246,7 @@ enum qdisc_class_ops_flags {
 
 struct Qdisc_ops {
 	struct Qdisc_ops	*next;
-	const struct Qdisc_class_ops	*cl_ops;//分类
+	const struct Qdisc_class_ops	*cl_ops;//分类操作集
 	char			id[IFNAMSIZ];//ops的唯一标识
 	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小
 	int			priv_size;

@@ -2435,8 +2435,10 @@ struct pcpu_lstats {
 	typeof(type) __percpu *pcpu_stats = alloc_percpu_gfp(type, gfp);\
 	if (pcpu_stats)	{						\
 		int __cpu;						\
+		/*遍历每个cpu*/\
 		for_each_possible_cpu(__cpu) {				\
 			typeof(type) *stat;				\
+			/*取__cpu对应的stat信息，并进行初始化*/\
 			stat = per_cpu_ptr(pcpu_stats, __cpu);		\
 			u64_stats_init(&stat->syncp);			\
 		}							\

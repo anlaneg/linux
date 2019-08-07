@@ -834,6 +834,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	}
 
 	dev = dev_queue->dev;
+	//为qdisc申请空间
 	p = kzalloc_node(size, GFP_KERNEL,
 			 netdev_queue_numa_node_read(dev_queue));
 
@@ -842,7 +843,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	sch = (struct Qdisc *) QDISC_ALIGN((unsigned long) p);
 	/* if we got non aligned memory, ask more and do alignment ourself */
 	if (sch != p) {
-		//申请的内存不对齐，释放掉，要求更多内存并自已对齐（为什么不直接要更多内存自已对齐？）
+		//申请的内存不对齐，释放掉，要求更多内存并自已对齐（为什么不直接要求更多内存自已对齐？）
 		//代码上处理不更简单？
 		kfree(p);
 		p = kzalloc_node(size + QDISC_ALIGNTO - 1, GFP_KERNEL,
