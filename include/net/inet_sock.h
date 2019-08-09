@@ -213,6 +213,7 @@ struct inet_sock {
 	struct ip_options_rcu __rcu	*inet_opt;
 	int			rx_dst_ifindex;
 	__u8			tos;
+	//ttl小于此值，将被丢包
 	__u8			min_ttl;
 	__u8			mc_ttl;
 	__u8			pmtudisc;

@@ -5540,6 +5540,7 @@ discard:
  */
 void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 {
+	//tcp稳定状态下收到报文
 	const struct tcphdr *th = (const struct tcphdr *)skb->data;
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int len = skb->len;
@@ -6129,6 +6130,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 
 	switch (sk->sk_state) {
 	case TCP_CLOSE:
+		//close状态，直接丢包
 		goto discard;
 
 	case TCP_LISTEN:
@@ -6136,7 +6138,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		if (th->ack)
 			return 1;
 
-		//有rst标记时，报文丢弃即可
+		//listen状态下，有rst标记时，报文丢弃即可
 		if (th->rst)
 			goto discard;
 
@@ -6151,8 +6153,9 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			rcu_read_lock();
 			local_bh_disable();
 
+			//listen状态下，收到syn标记，检查连接是否可被接受
 			//走tcp_ipv4.c文件，ipv4_specific结构体的tcp_v4_conn_request
-			//
+			//返回>=0时，为可接收报文
 			acceptable = icsk->icsk_af_ops->conn_request(sk, skb) >= 0;
 			local_bh_enable();
 			rcu_read_unlock();
@@ -6170,6 +6173,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_SYN_SENT:
+		//之前对外发送了syn报文
 		tp->rx_opt.saw_tstamp = 0;
 		tcp_mstamp_refresh(tp);
 		queued = tcp_rcv_synsent_state_process(sk, skb, th);
@@ -6680,6 +6684,7 @@ drop_and_free:
 	__reqsk_free(req);
 drop:
 	tcp_listendrop(sk);
+	//返回0，报文是可接收的，不会触发reset
 	return 0;
 }
 EXPORT_SYMBOL(tcp_conn_request);

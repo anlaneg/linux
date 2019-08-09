@@ -1389,6 +1389,7 @@ static const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 	.send_synack	=	tcp_v4_send_synack,//向外发送synack
 };
 
+//收到syn标记，处理tcp连接请求
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	/* Never answer to SYNs send to broadcast or multicast */
@@ -1396,6 +1397,7 @@ int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 	if (skb_rtable(skb)->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST))
 		goto drop;
 
+	//处理tcp连接请求
 	return tcp_conn_request(&tcp_request_sock_ops,
 				&tcp_request_sock_ipv4_ops, sk, skb);
 
@@ -1516,7 +1518,7 @@ static struct sock *tcp_v4_cookie_check(struct sock *sk, struct sk_buff *skb)
 #ifdef CONFIG_SYN_COOKIES
 	const struct tcphdr *th = tcp_hdr(skb);
 
-	//进来的报文无syn标记，执行cookie检查
+	//进来的报文无syn标记（且未达到稳定状态），执行cookie检查
 	if (!th->syn)
 		sk = cookie_v4_check(sk, skb);
 #endif
@@ -1536,6 +1538,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	struct sock *rsk;
 
 	if (sk->sk_state == TCP_ESTABLISHED) { /* Fast path */
+		//双方已达到稳定连接状态，执行快路处理
 		struct dst_entry *dst = sk->sk_rx_dst;
 
 		sock_rps_save_rxhash(sk, skb);
@@ -1551,6 +1554,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	//未达到稳定状态，慢路径处理
 	//tcp checksum校验
 	if (tcp_checksum_complete(skb))
 		goto csum_err;
@@ -1857,7 +1861,7 @@ process:
 		//如果是其它报文，则可能是之前重发的报文，丢弃
 		goto do_time_wait;
 
-	//socket已收到syn报文？？？？
+	//socket已收到syn报文
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		struct request_sock *req = inet_reqsk(sk);
 		bool req_stolen = false;
@@ -1970,8 +1974,8 @@ put_and_return:
 
 	return ret;
 
-	//没有查询到此流对应的socket
 no_tcp_socket:
+//没有查询到此流对应的socket，未监听，如果checksum正确，则回复reset报文
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
@@ -2063,6 +2067,7 @@ const struct inet_connection_sock_af_ops ipv4_specific = {
 	.send_check	   = tcp_v4_send_check,
 	.rebuild_header	   = inet_sk_rebuild_header,
 	.sk_rx_dst_set	   = inet_sk_rx_dst_set,
+	//处理tcp连接请求
 	.conn_request	   = tcp_v4_conn_request,
 	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
 	.net_header_len	   = sizeof(struct iphdr),
