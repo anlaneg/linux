@@ -1825,6 +1825,7 @@ static inline __u32 skb_queue_len(const struct sk_buff_head *list_)
  */
 static inline void __skb_queue_head_init(struct sk_buff_head *list)
 {
+	//初始化queue队列
 	list->prev = list->next = (struct sk_buff *)list;
 	list->qlen = 0;
 }

@@ -3396,6 +3396,7 @@ static int mlx5e_setup_tc_mqprio(struct mlx5e_priv *priv,
 
 	mqprio->hw = TC_MQPRIO_HW_OFFLOAD_TCS;
 
+	//tc取值必须为8
 	if (tc && tc != MLX5E_MAX_NUM_TC)
 		return -EINVAL;
 
@@ -3471,6 +3472,7 @@ static int mlx5e_setup_tc(struct net_device *dev, enum tc_setup_type type,
 						  priv, priv, true);
 #endif
 	case TC_SETUP_QDISC_MQPRIO:
+		//setup mqprio
 		return mlx5e_setup_tc_mqprio(priv, type_data);
 	default:
 		return -EOPNOTSUPP;

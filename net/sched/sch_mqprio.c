@@ -77,6 +77,7 @@ static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt)
 	 * the option of overriding this later if they don't support the a
 	 * given offload type.
 	 */
+	//规则offload情况
 	if (qopt->hw > TC_MQPRIO_HW_OFFLOAD_MAX)
 		qopt->hw = TC_MQPRIO_HW_OFFLOAD_MAX;
 
@@ -86,6 +87,7 @@ static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt)
 	 * hardware doesn't support offload and we should return an error.
 	 */
 	if (qopt->hw)
+		//如果需要offload到硬件，则要求dev支持nod_setup_tc函数
 		return dev->netdev_ops->ndo_setup_tc ? 0 : -EINVAL;
 
 	for (i = 0; i < qopt->num_tc; i++) {
@@ -134,6 +136,7 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 		       struct netlink_ext_ack *extack)
 {
 	struct net_device *dev = qdisc_dev(sch);
+	//取qdisc对应的私有结构
 	struct mqprio_sched *priv = qdisc_priv(sch);
 	struct netdev_queue *dev_queue;
 	struct Qdisc *qdisc;
@@ -150,16 +153,19 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 	if (sch->parent != TC_H_ROOT)
 		return -EOPNOTSUPP;
 
+	//设备必须为多队列设备
 	if (!netif_is_multiqueue(dev))
 		return -EOPNOTSUPP;
 
 	/* make certain can allocate enough classids to handle queues */
+	//tx队列数目过大，报错（65504）
 	if (dev->num_tx_queues >= TC_H_MIN_PRIORITY)
 		return -ENOMEM;
 
 	if (!opt || nla_len(opt) < sizeof(*qopt))
 		return -EINVAL;
 
+	//mqprio对应的配置选项
 	qopt = nla_data(opt);
 	if (mqprio_parse_opt(dev, qopt))
 		return -EINVAL;
@@ -218,11 +224,13 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 	}
 
 	/* pre-allocate qdisc, attachment can't fail */
+	//申请dev->num_tx_queues个队列
 	priv->qdiscs = kcalloc(dev->num_tx_queues, sizeof(priv->qdiscs[0]),
 			       GFP_KERNEL);
 	if (!priv->qdiscs)
 		return -ENOMEM;
 
+	//创建dev->num_tx_queues个qdisc
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		dev_queue = netdev_get_tx_queue(dev, i);
 		qdisc = qdisc_create_dflt(dev_queue,
@@ -264,6 +272,8 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 		default:
 			return -EINVAL;
 		}
+
+		//触发驱动调用ndo_setup_tc
 		err = dev->netdev_ops->ndo_setup_tc(dev,
 						    TC_SETUP_QDISC_MQPRIO,
 						    &mqprio);
@@ -628,6 +638,7 @@ static struct Qdisc_ops mqprio_qdisc_ops __read_mostly = {
 
 static int __init mqprio_module_init(void)
 {
+	//注册mqprio队列
 	return register_qdisc(&mqprio_qdisc_ops);
 }
 

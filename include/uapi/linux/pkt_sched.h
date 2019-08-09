@@ -702,6 +702,7 @@ enum {
 struct tc_mqprio_qopt {
 	__u8	num_tc;
 	__u8	prio_tc_map[TC_QOPT_BITMASK + 1];
+	//是否支持硬件offload
 	__u8	hw;
 	__u16	count[TC_QOPT_MAX_QUEUE];
 	__u16	offset[TC_QOPT_MAX_QUEUE];

@@ -822,7 +822,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	void *p;
 	struct Qdisc *sch;
 
-	//准备Qdisc大小
+	//准备Qdisc大小（含ops需要的私有数据大小）
 	unsigned int size = QDISC_ALIGN(sizeof(*sch)) + ops->priv_size;
 	int err = -ENOBUFS;
 	struct net_device *dev;
