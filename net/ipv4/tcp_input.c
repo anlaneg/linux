@@ -6499,6 +6499,7 @@ static bool tcp_syn_flood_action(const struct sock *sk,
 #ifdef CONFIG_SYN_COOKIES
 	if (net->ipv4.sysctl_tcp_syncookies) {
 		msg = "Sending cookies";
+		//如果syncookie开启，则置为true
 		want_cookie = true;
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_TCPREQQFULLDOCOOKIES);
 	} else

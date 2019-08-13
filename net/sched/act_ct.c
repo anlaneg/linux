@@ -389,6 +389,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tmpl = p->tmpl;
 
 	if (clear) {
+		//如果需要清除ct,则将skb中的ct清除掉
 		ct = nf_ct_get(skb, &ctinfo);
 		if (ct) {
 			nf_conntrack_put(&ct->ct_general);
@@ -398,6 +399,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		goto out;
 	}
 
+	//目前支持对ipv4,ipv6进行ct创建
 	family = tcf_ct_skb_nf_family(skb);
 	if (family == NFPROTO_UNSPEC)
 		goto drop;
@@ -407,6 +409,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	 */
 	nh_ofs = skb_network_offset(skb);
 	skb_pull_rcsum(skb, nh_ofs);
+
 	//处理分片重组
 	err = tcf_ct_handle_fragments(net, skb, family, p->zone);
 	if (err == -EINPROGRESS) {
@@ -427,6 +430,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	 */
 	cached = tcf_ct_skb_nfct_cached(net, skb, p->zone, force);
 	if (!cached) {
+		//没有缓存，执行创建
 		/* Associate skb with specified zone. */
 		if (tmpl) {
 			ct = nf_ct_get(skb, &ctinfo);
@@ -456,7 +460,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		goto drop;
 
 	if (commit) {
-		//设置package对应的mark,labels
+		//设置packet对应的mark,labels
 		tcf_ct_act_set_mark(ct, p->mark, p->mark_mask);
 		tcf_ct_act_set_labels(ct, p->labels, p->labels_mask);
 

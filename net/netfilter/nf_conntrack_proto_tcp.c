@@ -337,11 +337,12 @@ static unsigned int get_conntrack_index(const struct tcphdr *tcph)
 
 static inline __u32 segment_seq_plus_len(__u32 seq,
 					 size_t len,
-					 unsigned int dataoff,
+					 unsigned int dataoff/*到l4层的指针偏移量*/,
 					 const struct tcphdr *tcph)
 {
 	/* XXX Should I use payload length field in IP/IPv6 header ?
 	 * - YK */
+	//获取本报文被确认时，seq编号（syn,fin均占用1个seq)
 	return (seq + len - dataoff - tcph->doff*4
 		+ (tcph->syn ? 1 : 0) + (tcph->fin ? 1 : 0));
 }
@@ -480,13 +481,16 @@ static bool tcp_in_window(const struct nf_conn *ct,
 			  enum ip_conntrack_dir dir,
 			  unsigned int index,
 			  const struct sk_buff *skb,
-			  unsigned int dataoff,
+			  unsigned int dataoff,/*到l4层的指针偏移量*/
 			  const struct tcphdr *tcph)
 {
 	struct net *net = nf_ct_net(ct);
 	struct nf_tcp_net *tn = nf_tcp_pernet(net);
+	//发送方状态
 	struct ip_ct_tcp_state *sender = &state->seen[dir];
+	//接收方状态
 	struct ip_ct_tcp_state *receiver = &state->seen[!dir];
+	//发送方flow
 	const struct nf_conntrack_tuple *tuple = &ct->tuplehash[dir].tuple;
 	__u32 seq, ack, sack, end, win, swin;
 	u16 win_raw;
@@ -496,16 +500,19 @@ static bool tcp_in_window(const struct nf_conn *ct,
 	/*
 	 * Get the required data from the packet.
 	 */
+	//自tcp头部获取seq,ack,win
 	seq = ntohl(tcph->seq);
 	ack = sack = ntohl(tcph->ack_seq);
 	win_raw = ntohs(tcph->window);
 	win = win_raw;
+	//取本报文对应的最大的seq
 	end = segment_seq_plus_len(seq, skb->len, dataoff, tcph);
 
 	if (receiver->flags & IP_CT_TCP_FLAG_SACK_PERM)
 		tcp_sack(skb, dataoff, tcph, &sack);
 
 	/* Take into account NAT sequence number mangling */
+	//做nat的seq调整
 	receiver_offset = nf_ct_seq_offset(ct, !dir, ack - 1);
 	ack -= receiver_offset;
 	sack -= receiver_offset;
@@ -1070,9 +1077,11 @@ int nf_conntrack_tcp_packet(struct nf_conn *ct,
 			new_state = TCP_CONNTRACK_ESTABLISHED;
 		break;
 	case TCP_CONNTRACK_CLOSE:
+		//进入close状态，如果报文不含rst,则跳出
 		if (index != TCP_RST_SET)
 			break;
 
+		//收到rst,使状态变更为TCP_CONNTRACK_CLOSE
 		if (ct->proto.tcp.seen[!dir].flags & IP_CT_TCP_FLAG_MAXACK_SET) {
 			u32 seq = ntohl(th->seq);
 

@@ -79,6 +79,7 @@ struct nf_conntrack_tuple_mask {
 	} src;
 };
 
+//dump元组ip
 static inline void nf_ct_dump_tuple_ip(const struct nf_conntrack_tuple *t)
 {
 #ifdef DEBUG
@@ -99,6 +100,7 @@ static inline void nf_ct_dump_tuple_ipv6(const struct nf_conntrack_tuple *t)
 #endif
 }
 
+//元组信息dump
 static inline void nf_ct_dump_tuple(const struct nf_conntrack_tuple *t)
 {
 	switch (t->src.l3num) {

@@ -29,6 +29,7 @@ enum {
 
 #define TCA_CT_ACT_COMMIT	(1 << 0)
 #define TCA_CT_ACT_FORCE	(1 << 1)
+//清除ct
 #define TCA_CT_ACT_CLEAR	(1 << 2)
 #define TCA_CT_ACT_NAT		(1 << 3)
 #define TCA_CT_ACT_NAT_SRC	(1 << 4)
