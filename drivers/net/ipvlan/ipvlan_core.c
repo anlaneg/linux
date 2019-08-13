@@ -134,7 +134,7 @@ bool ipvlan_addr_busy(struct ipvl_port *port, void *iaddr, bool is_v6)
 }
 
 //分析报文找出三层协议头，并返回arp头，ip头（用type返回对应的协议）
-void *ipvlan_get_L3_hdr(struct ipvl_port *port, struct sk_buff *skb, int *type)
+void *ipvlan_get_L3_hdr(struct ipvl_port *port, struct sk_buff *skb, int *type/*协议类型*/)
 {
 	void *lyr3h = NULL;
 
@@ -353,7 +353,7 @@ out:
 
 //检查接口上是否存在与lyr3h指出的地址相同的地址
 struct ipvl_addr *ipvlan_addr_lookup(struct ipvl_port *port, void *lyr3h,
-				     int addr_type, bool use_dest)
+				     int addr_type, bool use_dest/*是否使用目的地址*/)
 {
 	struct ipvl_addr *addr = NULL;
 
@@ -434,11 +434,13 @@ static int ipvlan_process_v4_outbound(struct sk_buff *skb)
 	if (IS_ERR(rt))
 		goto err;
 
+	//只支持本机，网关，直连三种方式
 	if (rt->rt_type != RTN_UNICAST && rt->rt_type != RTN_LOCAL) {
 		ip_rt_put(rt);
 		goto err;
 	}
 	skb_dst_set(skb, &rt->dst);
+	//走local向外发包流程
 	err = ip_local_out(net, skb->sk, skb);
 	if (unlikely(net_xmit_eval(err)))
 		dev->stats.tx_errors++;
@@ -503,6 +505,7 @@ static int ipvlan_process_outbound(struct sk_buff *skb)
 
 	/* In this mode we dont care about multicast and broadcast traffic */
 	if (is_multicast_ether_addr(ethh->h_dest)) {
+		//不容许对外发送组播（广播）报文
 		pr_debug_ratelimited("Dropped {multi|broad}cast of type=[%x]\n",
 				     ntohs(skb->protocol));
 		kfree_skb(skb);
@@ -522,6 +525,7 @@ static int ipvlan_process_outbound(struct sk_buff *skb)
 	if (skb->protocol == htons(ETH_P_IPV6))
 		ret = ipvlan_process_v6_outbound(skb);
 	else if (skb->protocol == htons(ETH_P_IP))
+		//对外发送ipv4报文
 		ret = ipvlan_process_v4_outbound(skb);
 	else {
 		pr_warn_ratelimited("Dropped outbound packet type=%x\n",
@@ -568,6 +572,7 @@ static int ipvlan_xmit_mode_l3(struct sk_buff *skb, struct net_device *dev)
 	struct ipvl_addr *addr;
 	int addr_type;
 
+	//解析报文，返回协议头
 	lyr3h = ipvlan_get_L3_hdr(ipvlan->port, skb, &addr_type);
 	if (!lyr3h)
 		goto out;
@@ -583,10 +588,12 @@ static int ipvlan_xmit_mode_l3(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 out:
+	//将报文归属于ipvlan->phy_dev
 	ipvlan_skb_crossing_ns(skb, ipvlan->phy_dev);
 	return ipvlan_process_outbound(skb);
 }
 
+//ipvlan 二层发包
 static int ipvlan_xmit_mode_l2(struct sk_buff *skb, struct net_device *dev)
 {
 	const struct ipvl_dev *ipvlan = netdev_priv(dev);

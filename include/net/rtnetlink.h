@@ -57,8 +57,10 @@ static inline int rtnl_msg_family(const struct nlmsghdr *nlh)
  *	@fill_linkxstats: Function to dump device-specific extended link stats
  */
 struct rtnl_link_ops {
+	//用于挂接在link类型注册链上
 	struct list_head	list;
 
+	//link名称
 	const char		*kind;
 
 	size_t			priv_size;
@@ -67,6 +69,7 @@ struct rtnl_link_ops {
 
 	//link独有IFLA_INFO_DATA型数据的netlink type
 	unsigned int		maxtype;
+	//各link中netlink type对应的数据类型
 	const struct nla_policy	*policy;
 	//link_info_data型消息数据体校验
 	int			(*validate)(struct nlattr *tb[],

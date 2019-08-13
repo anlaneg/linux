@@ -13,13 +13,16 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 
 	ASSERT_RTNL();
 	if (port->mode != nval) {
+		//mode与之前的值不同，执行更新dev flags,遍历port->ipvlans
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode) {
 			flags = ipvlan->dev->flags;
+			//更新为三层设备(不空许arp)
 			if (nval == IPVLAN_MODE_L3 || nval == IPVLAN_MODE_L3S) {
 				err = dev_change_flags(ipvlan->dev,
 						       flags | IFF_NOARP,
 						       extack);
 			} else {
+				//更新为二层（容许arp)
 				err = dev_change_flags(ipvlan->dev,
 						       flags & ~IFF_NOARP,
 						       extack);
@@ -201,6 +204,7 @@ static int ipvlan_stop(struct net_device *dev)
 	return 0;
 }
 
+//ipvlan执行发包
 static netdev_tx_t ipvlan_start_xmit(struct sk_buff *skb,
 				     struct net_device *dev)
 {
@@ -210,6 +214,7 @@ static netdev_tx_t ipvlan_start_xmit(struct sk_buff *skb,
 
 	ret = ipvlan_queue_xmit(skb, dev);
 	if (likely(ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN)) {
+		//成功发送后更新tx计数
 		struct ipvl_pcpu_stats *pcptr;
 
 		pcptr = this_cpu_ptr(ipvlan->pcpu_stats);
@@ -219,6 +224,7 @@ static netdev_tx_t ipvlan_start_xmit(struct sk_buff *skb,
 		pcptr->tx_bytes += skblen;
 		u64_stats_update_end(&pcptr->syncp);
 	} else {
+		//发送失败后更新tx_drops
 		this_cpu_inc(ipvlan->pcpu_stats->tx_drps);
 	}
 	return ret;
@@ -418,6 +424,7 @@ static const struct ethtool_ops ipvlan_ethtool_ops = {
 	.set_msglevel	= ipvlan_ethtool_set_msglevel,
 };
 
+//依据netlink消息，将消息配置更新到设备
 static int ipvlan_nl_changelink(struct net_device *dev,
 				struct nlattr *tb[], struct nlattr *data[],
 				struct netlink_ext_ack *extack)
@@ -462,18 +469,22 @@ static size_t ipvlan_nl_getsize(const struct net_device *dev)
 		);
 }
 
+//netlink消息检查
 static int ipvlan_nl_validate(struct nlattr *tb[], struct nlattr *data[],
 			      struct netlink_ext_ack *extack)
 {
 	if (!data)
 		return 0;
 
+	//给定了mode,提取mode，并检查
 	if (data[IFLA_IPVLAN_MODE]) {
 		u16 mode = nla_get_u16(data[IFLA_IPVLAN_MODE]);
 
 		if (mode >= IPVLAN_MODE_MAX)
 			return -EINVAL;
 	}
+
+	//提供不同的方式，vepa,bridge,private等，检验取值
 	if (data[IFLA_IPVLAN_FLAGS]) {
 		u16 flags = nla_get_u16(data[IFLA_IPVLAN_FLAGS]);
 
@@ -489,6 +500,7 @@ static int ipvlan_nl_validate(struct nlattr *tb[], struct nlattr *data[],
 	return 0;
 }
 
+//将ipvlan对应的信息填充到skb中（mode,及flags写入）
 static int ipvlan_nl_fillinfo(struct sk_buff *skb,
 			      const struct net_device *dev)
 {
@@ -663,6 +675,7 @@ void ipvlan_link_setup(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(ipvlan_link_setup);
 
+//定义netlink各type数据类型
 static const struct nla_policy ipvlan_nl_policy[IFLA_IPVLAN_MAX + 1] =
 {
 	[IFLA_IPVLAN_MODE] = { .type = NLA_U16 },
@@ -678,6 +691,7 @@ static struct rtnl_link_ops ipvlan_link_ops = {
 	.dellink	= ipvlan_link_delete,
 };
 
+//ipvlan link注册
 int ipvlan_link_register(struct rtnl_link_ops *ops)
 {
 	ops->get_size	= ipvlan_nl_getsize;
@@ -1014,6 +1028,7 @@ static int __init ipvlan_init_module(void)
 	if (err < 0)
 		goto error;
 
+	//注册ipvlan link
 	err = ipvlan_link_register(&ipvlan_link_ops);
 	if (err < 0) {
 		ipvlan_l3s_cleanup();

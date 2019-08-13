@@ -178,7 +178,7 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 
 //消息回调注册(doit 请求处理回调，dumpit 消息dump回调）
 static int rtnl_register_internal(struct module *owner,
-				  int protocol, int msgtype/*消息类型*/,
+				  int protocol/*地址族 af*/, int msgtype/*消息类型*/,
 				  rtnl_doit_func doit/*消息处理函数*/, rtnl_dumpit_func dumpit,
 				  unsigned int flags)
 {
@@ -3029,8 +3029,9 @@ static int rtnl_group_changelink(const struct sk_buff *skb,
 	return 0;
 }
 
+//link新建
 static int __rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
-			  struct nlattr **attr, struct netlink_ext_ack *extack)
+			  struct nlattr **attr/*待填充的属性*/, struct netlink_ext_ack *extack)
 {
 	struct nlattr *slave_attr[RTNL_SLAVE_MAX_TYPE + 1];
 	unsigned char name_assign_type = NET_NAME_USER;
@@ -3303,11 +3304,12 @@ static int rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct nlattr **attr;
 	int ret;
 
+	//申请attr数组（最多支持RTNL_MAX_TYPE个attr type)
 	attr = kmalloc_array(RTNL_MAX_TYPE + 1, sizeof(*attr), GFP_KERNEL);
 	if (!attr)
 		return -ENOMEM;
 
-	ret = __rtnl_newlink(skb, nlh, attr, extack);
+	ret = __rtnl_newlink(skb, nlh/*对应的netlink消息*/, attr/*待解析的属性数组*/, extack);
 	kfree(attr);
 	return ret;
 }
@@ -5391,9 +5393,9 @@ void __init rtnetlink_init(void)
 	rtnl_register(PF_UNSPEC, RTM_GETLINK, rtnl_getlink,
 		      rtnl_dump_ifinfo, 0);
 	rtnl_register(PF_UNSPEC, RTM_SETLINK, rtnl_setlink, NULL, 0);
-	//创建网络设备
-	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL, 0);
-	//删除网络设备
+	//创建net link
+	rtnl_register(PF_UNSPEC, RTM_NEWLINK, rtnl_newlink, NULL/*不支持dump*/, 0);
+	//删除net link
 	rtnl_register(PF_UNSPEC, RTM_DELLINK, rtnl_dellink, NULL, 0);
 
 	rtnl_register(PF_UNSPEC, RTM_GETADDR, NULL, rtnl_dump_all, 0);
