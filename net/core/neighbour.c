@@ -267,6 +267,7 @@ static void neigh_add_timer(struct neighbour *n, unsigned long when)
 	}
 }
 
+//停止neighbour的定时器
 static int neigh_del_timer(struct neighbour *n)
 {
 	if ((n->nud_state & NUD_IN_TIMER) &&
@@ -416,6 +417,7 @@ do_alloc:
 	n->output	  = neigh_blackhole;
 	seqlock_init(&n->hh.hh_lock);
 	n->parms	  = neigh_parms_clone(&tbl->parms);
+	//初始化邻居表项的timer
 	timer_setup(&n->timer, neigh_timer_handler, 0);
 
 	NEIGH_CACHE_STAT_INC(tbl, allocs);
@@ -441,6 +443,7 @@ static void neigh_get_hash_rnd(u32 *x)
 
 static struct neigh_hash_table *neigh_hash_alloc(unsigned int shift)
 {
+	//取neighbour表的桶大小
 	size_t size = (1 << shift) * sizeof(struct neighbour *);
 	struct neigh_hash_table *ret;
 	struct neighbour __rcu **buckets;
@@ -449,6 +452,8 @@ static struct neigh_hash_table *neigh_hash_alloc(unsigned int shift)
 	ret = kmalloc(sizeof(*ret), GFP_ATOMIC);
 	if (!ret)
 		return NULL;
+
+	//为hash桶申请空间
 	if (size <= PAGE_SIZE) {
 		buckets = kzalloc(size, GFP_ATOMIC);
 	} else {
@@ -461,8 +466,11 @@ static struct neigh_hash_table *neigh_hash_alloc(unsigned int shift)
 		kfree(ret);
 		return NULL;
 	}
+
 	ret->hash_buckets = buckets;
 	ret->hash_shift = shift;
+
+	//用随机数填充hash_rnd
 	for (i = 0; i < NEIGH_NUM_HASH_RND; i++)
 		neigh_get_hash_rnd(&ret->hash_rnd[i]);
 	return ret;
@@ -580,7 +588,7 @@ struct neighbour *neigh_lookup_nodev(struct neigh_table *tbl, struct net *net,
 }
 EXPORT_SYMBOL(neigh_lookup_nodev);
 
-//创建邻居表项
+//创建邻居表项(本函数最重要的是调用几个相关的setup回调,完成neighbour初始化）
 static struct neighbour *___neigh_create(struct neigh_table *tbl,
 					 const void *pkey,
 					 struct net_device *dev,
@@ -595,21 +603,23 @@ static struct neighbour *___neigh_create(struct neigh_table *tbl,
 	trace_neigh_create(tbl, dev, pkey, n, exempt_from_gc);
 
 	if (!n) {
+		//申请并初始化邻居表项失败
 		rc = ERR_PTR(-ENOBUFS);
 		goto out;
 	}
 
 	memcpy(n->primary_key, pkey, key_len);
-	n->dev = dev;//指定出接口
+	n->dev = dev;//neighbour关联的设备
 	dev_hold(dev);
 
 	/* Protocol specific setup. */
-	//按arp,igmpv6协议进行构造
+	//依据不同的邻居表，初始化邻居表项（例如arp,igmpv6协议进行构造）
 	if (tbl->constructor &&	(error = tbl->constructor(n)) < 0) {
 		rc = ERR_PTR(error);
 		goto out_neigh_release;
 	}
 
+	//完成此邻居表项设备相关的私有初始化
 	if (dev->netdev_ops->ndo_neigh_construct) {
 		error = dev->netdev_ops->ndo_neigh_construct(dev, n);
 		if (error < 0) {
@@ -631,12 +641,13 @@ static struct neighbour *___neigh_create(struct neigh_table *tbl,
 	nht = rcu_dereference_protected(tbl->nht,
 					lockdep_is_held(&tbl->lock));
 
-	//hash表增长
+	//如果表项数据过大，则执行hash表增长
 	if (atomic_read(&tbl->entries) > (1 << nht->hash_shift))
 		nht = neigh_hash_grow(tbl, nht->hash_shift + 1);
 
 	hash_val = tbl->hash(n->primary_key, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
 
+	//如果dead非0，则insert终止
 	if (n->parms->dead) {
 		rc = ERR_PTR(-EINVAL);
 		goto out_tbl_unlock;
@@ -648,7 +659,7 @@ static struct neighbour *___neigh_create(struct neigh_table *tbl,
 	     n1 = rcu_dereference_protected(n1->next,
 			lockdep_is_held(&tbl->lock))) {
 		if (dev == n1->dev && !memcmp(n1->primary_key, n->primary_key, key_len)) {
-			//在表项中找到已自已相同的项，准备释放本次创建的n
+			//在表项中找到与自已相同的项，释放本次计划insert的neighbour
 			if (want_ref)
 				neigh_hold(n1);
 			rc = n1;
@@ -662,6 +673,7 @@ static struct neighbour *___neigh_create(struct neigh_table *tbl,
 
 	if (want_ref)
 		neigh_hold(n);
+
 	//将n置于hash表的链头部，完成插入
 	rcu_assign_pointer(n->next,
 			   rcu_dereference_protected(nht->hash_buckets[hash_val],
@@ -681,6 +693,7 @@ out_neigh_release:
 	goto out;
 }
 
+//创建针对pkey的邻居表项，且邻居表项从属于dev设备
 struct neighbour *__neigh_create(struct neigh_table *tbl, const void *pkey,
 				 struct net_device *dev, bool want_ref)
 {
@@ -1030,7 +1043,7 @@ static void neigh_probe(struct neighbour *neigh)
 }
 
 /* Called when a timer expires for a neighbour entry. */
-
+//邻居表项定时器超时时将被调用
 static void neigh_timer_handler(struct timer_list *t)
 {
 	unsigned long now, next;
@@ -1476,6 +1489,7 @@ static void neigh_hh_init(struct neighbour *n)
 	/* Only one thread can come in here and initialize the
 	 * hh_cache entry.
 	 */
+	//将n中的hw保存在hh中
 	if (!hh->hh_len)
 		dev->header_ops->cache(n, hh, prot);
 
@@ -1493,17 +1507,20 @@ int neigh_resolve_output(struct neighbour *neigh, struct sk_buff *skb)
 		struct net_device *dev = neigh->dev;
 		unsigned int seq;
 
+		//有cache回调，但neighbour还未缓存，则缓存它
 		if (dev->header_ops->cache && !neigh->hh.hh_len)
 			neigh_hh_init(neigh);
 
 		do {
 			__skb_pull(skb, skb_network_offset(skb));
 			seq = read_seqbegin(&neigh->ha_lock);
+			//为skb构造并生成以太头，目的使用neigh->ha,源mac未给出，使用dev的源mac
 			err = dev_hard_header(skb, dev, ntohs(skb->protocol),
 					      neigh->ha, NULL, skb->len);
 		} while (read_seqretry(&neigh->ha_lock, seq));
 
 		if (err >= 0)
+			//发送报文
 			rc = dev_queue_xmit(skb);
 		else
 			goto out_kfree_skb;
@@ -1542,7 +1559,7 @@ int neigh_connected_output(struct neighbour *neigh, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(neigh_connected_output);
 
-//直接输出
+//适用于NUD_NOARP的邻居表项，直接输出
 int neigh_direct_output(struct neighbour *neigh, struct sk_buff *skb)
 {
 	return dev_queue_xmit(skb);

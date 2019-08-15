@@ -10,6 +10,7 @@
 
 extern struct neigh_table arp_tbl;
 
+//arp表neighbour查询时的hashcode 函数
 static inline u32 arp_hashfn(const void *pkey, const struct net_device *dev, u32 *hash_rnd)
 {
 	u32 key = *(const u32 *)pkey;
@@ -21,6 +22,7 @@ static inline u32 arp_hashfn(const void *pkey, const struct net_device *dev, u32
 #ifdef CONFIG_INET
 static inline struct neighbour *__ipv4_neigh_lookup_noref(struct net_device *dev, u32 key)
 {
+	//如果是loopback口或者是p2p口，则使用key=any
 	if (dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))
 		key = INADDR_ANY;
 

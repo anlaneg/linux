@@ -78,8 +78,8 @@ __setup("ether=", netdev_boot_setup);
  */
 //创建以太头，在skb->data处向前插入一层struct ethhdr
 int eth_header(struct sk_buff *skb, struct net_device *dev,
-	       unsigned short type,
-	       const void *daddr, const void *saddr, unsigned int len)
+	       unsigned short type/*帧类型*/,
+	       const void *daddr/*目的地址*/, const void *saddr/*源地址*/, unsigned int len/*帧长度*/)
 {
 	struct ethhdr *eth = skb_push(skb, ETH_HLEN);
 
@@ -375,7 +375,7 @@ int eth_validate_addr(struct net_device *dev)
 EXPORT_SYMBOL(eth_validate_addr);
 
 const struct header_ops eth_header_ops ____cacheline_aligned = {
-	//增加以太头
+	//为skb增加以太头
 	.create		= eth_header,
 	//提取以太头中的srcmac
 	.parse		= eth_header_parse,

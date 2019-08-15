@@ -136,8 +136,11 @@ static const struct neigh_ops arp_generic_ops = {
 
 static const struct neigh_ops arp_hh_ops = {
 	.family =		AF_INET,
+	//arp请求
 	.solicit =		arp_solicit,
+
 	.error_report =		arp_error_report,
+	//报文输出
 	.output =		neigh_resolve_output,
 	.connected_output =	neigh_resolve_output,
 };
@@ -148,6 +151,7 @@ static const struct neigh_ops arp_direct_ops = {
 	.connected_output =	neigh_direct_output,
 };
 
+//arp对应的neighbour表
 struct neigh_table arp_tbl = {
 	.family		= AF_INET,
 	.key_len	= 4,
@@ -181,12 +185,14 @@ struct neigh_table arp_tbl = {
 };
 EXPORT_SYMBOL(arp_tbl);
 
+//组播地址到mac地址映射
 int arp_mc_map(__be32 addr, u8 *haddr, struct net_device *dev, int dir)
 {
 	switch (dev->type) {
 	case ARPHRD_ETHER:
 	case ARPHRD_FDDI:
 	case ARPHRD_IEEE802:
+		//由ip地址直接映射组播地址
 		ip_eth_mc_map(addr, haddr);
 		return 0;
 	case ARPHRD_INFINIBAND:
@@ -217,6 +223,7 @@ static bool arp_key_eq(const struct neighbour *neigh, const void *pkey)
 	return neigh_key_eq32(neigh, pkey);
 }
 
+//做arp表项的初始化
 static int arp_constructor(struct neighbour *neigh)
 {
 	__be32 addr;
@@ -225,6 +232,7 @@ static int arp_constructor(struct neighbour *neigh)
 	struct neigh_parms *parms;
 	u32 inaddr_any = INADDR_ANY;
 
+	//针对loopback口，p2p口，将key初始化为any
 	if (dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))
 		memcpy(neigh->primary_key, &inaddr_any, arp_tbl.key_len);
 
@@ -238,12 +246,14 @@ static int arp_constructor(struct neighbour *neigh)
 
 	neigh->type = inet_addr_type_dev_table(dev_net(dev), dev, addr);
 
+	//使用in_dev的arp参数，释放前面来自table的parms
 	parms = in_dev->arp_parms;
 	__neigh_parms_put(neigh->parms);
 	neigh->parms = neigh_parms_clone(parms);
 	rcu_read_unlock();
 
 	if (!dev->header_ops) {
+		//设备不支持arp,直接输出
 		neigh->nud_state = NUD_NOARP;
 		neigh->ops = &arp_direct_ops;
 		neigh->output = neigh_direct_output;
@@ -264,17 +274,21 @@ static int arp_constructor(struct neighbour *neigh)
 		 */
 
 		if (neigh->type == RTN_MULTICAST) {
+			//针对组播neighbour直接映射对应的mac地址
 			neigh->nud_state = NUD_NOARP;
 			arp_mc_map(addr, neigh->ha, dev, 1);
 		} else if (dev->flags & (IFF_NOARP | IFF_LOOPBACK)) {
+			//针对noarp，loopback口直接使用设备的mac地址
 			neigh->nud_state = NUD_NOARP;
 			memcpy(neigh->ha, dev->dev_addr, dev->addr_len);
 		} else if (neigh->type == RTN_BROADCAST ||
 			   (dev->flags & IFF_POINTOPOINT)) {
+			//针对广播地址及点到设备，使用设备的广播地址
 			neigh->nud_state = NUD_NOARP;
 			memcpy(neigh->ha, dev->broadcast, dev->addr_len);
 		}
 
+		//如果dev支持cache,则使用arp_hh_ops(以太网类型支持cache)
 		if (dev->header_ops->cache)
 			neigh->ops = &arp_hh_ops;
 		else

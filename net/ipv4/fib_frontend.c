@@ -281,7 +281,7 @@ unsigned int inet_addr_type_dev_table(struct net *net,
 {
 	u32 rt_table = l3mdev_fib_table(dev) ? : RT_TABLE_LOCAL;
 
-	//查local路由表
+	//查local路由表，确定addr的地址类型
 	return __inet_dev_addr_type(net, NULL, addr, rt_table);
 }
 EXPORT_SYMBOL(inet_addr_type_dev_table);

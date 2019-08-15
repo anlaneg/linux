@@ -554,18 +554,18 @@ static inline __wsum inet_gro_compute_pseudo(struct sk_buff *skb, int proto)
 /*
  *	Map a multicast IP onto multicast MAC for type ethernet.
  */
-
+//由组播ip地址映射mac地址
 static inline void ip_eth_mc_map(__be32 naddr, char *buf)
 {
 	__u32 addr=ntohl(naddr);
 	buf[0]=0x01;
 	buf[1]=0x00;
 	buf[2]=0x5e;
-	buf[5]=addr&0xFF;
+	buf[5]=addr&0xFF;//低8
 	addr>>=8;
-	buf[4]=addr&0xFF;
+	buf[4]=addr&0xFF;//低16位
 	addr>>=8;
-	buf[3]=addr&0x7F;
+	buf[3]=addr&0x7F;//低23位
 }
 
 /*

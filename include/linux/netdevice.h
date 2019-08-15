@@ -240,10 +240,13 @@ struct hh_cache {
 
 	/* cached hardware header; allow for machine alignment needs.        */
 #define HH_DATA_MOD	16
+	//hh保存时，沿hh_data的尾部保存，故此宏计算hh_data需要空出多少字节
 #define HH_DATA_OFF(__len) \
 	(HH_DATA_MOD - (((__len - 1) & (HH_DATA_MOD - 1)) + 1))
+	//计算__len对齐后的长度
 #define HH_DATA_ALIGN(__len) \
 	(((__len)+(HH_DATA_MOD-1))&~(HH_DATA_MOD - 1))
+	//用于缓存硬件头
 	unsigned long	hh_data[HH_DATA_ALIGN(LL_MAX_HEADER) / sizeof(long)];
 };
 
@@ -267,13 +270,14 @@ struct header_ops {
 			   const void *saddr, unsigned int len);
 	//解析硬件地址
 	int	(*parse)(const struct sk_buff *skb, unsigned char *haddr);
-	//缓存
+	//缓存硬件地址到hardware header中
 	int	(*cache)(const struct neighbour *neigh, struct hh_cache *hh, __be16 type);
 	//更新缓存内容
 	void	(*cache_update)(struct hh_cache *hh,
 				const struct net_device *dev,
 				const unsigned char *haddr);
 	bool	(*validate)(const char *ll_header, unsigned int len);
+	//解析帧类型
 	__be16	(*parse_protocol)(const struct sk_buff *skb);
 };
 
@@ -1374,6 +1378,7 @@ struct net_device_ops {
 	//为设备开启features指明的功能集，返回操作结果
 	int			(*ndo_set_features)(struct net_device *dev,
 						    netdev_features_t features);
+	//每创建一个与此设备相关的邻居表项，则调用此函数完成邻居表项设备相关的私有实始化
 	int			(*ndo_neigh_construct)(struct net_device *dev,
 						       struct neighbour *n);
 	void			(*ndo_neigh_destroy)(struct net_device *dev,
@@ -1858,7 +1863,10 @@ struct net_device {
 	const struct tlsdev_ops *tlsdev_ops;
 #endif
 
-	const struct header_ops *header_ops;//针对以太头的操作（例如增加以太头，解析以太头等）
+	//针对以太头的操作（例如增加以太头，解析以太头等）
+	//如果此ops为NULL，则这类设备无arp，直接发送
+	//以太网络设备常用eth_header_ops
+	const struct header_ops *header_ops;
 
 	unsigned int		flags;
 	unsigned int		priv_flags;
@@ -1887,7 +1895,7 @@ struct net_device {
 	unsigned char		perm_addr[MAX_ADDR_LEN];
 	unsigned char		addr_assign_type;//设备地址如何产生，例如“随机生成”，
 	unsigned char		addr_len;//设备地址长度（如以太网6字节）
-	unsigned short		neigh_priv_len;
+	unsigned short		neigh_priv_len;//邻居表项私有数据大小
 	unsigned short          dev_id;
 	unsigned short          dev_port;
 	spinlock_t		addr_list_lock;

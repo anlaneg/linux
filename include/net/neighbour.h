@@ -71,13 +71,14 @@ struct neigh_parms {
 	possible_net_t net;
 	struct net_device *dev;
 	struct list_head list;
+	//容许在neighbour表项创建后执行初始化
 	int	(*neigh_setup)(struct neighbour *);
 	void	(*neigh_cleanup)(struct neighbour *);
 	struct neigh_table *tbl;
 
 	void	*sysctl_table;
 
-	int dead;
+	int dead;//neighbour在加入hashtable之前，如果非0，则insert取消
 	refcount_t refcnt;
 	struct rcu_head rcu_head;
 
@@ -92,6 +93,7 @@ static inline void neigh_var_set(struct neigh_parms *p, int index, int val)
 	p->data[index] = val;
 }
 
+//取neighbour指定属性值
 #define NEIGH_VAR(p, attr) ((p)->data[NEIGH_VAR_ ## attr])
 
 /* In ndo_neigh_setup, NEIGH_VAR_INIT should be used.
@@ -147,10 +149,12 @@ struct neighbour {
 	refcount_t		refcnt;//表项引用计数
 	unsigned int		arp_queue_len_bytes;
 	struct sk_buff_head	arp_queue;
+	//邻居表项的timer
 	struct timer_list	timer;
 	unsigned long		used;
 	atomic_t		probes;
 	__u8			flags;
+	//邻居表项的状态
 	__u8			nud_state;
 	__u8			type;
 	__u8			dead;
@@ -159,16 +163,18 @@ struct neighbour {
 	//硬件地址
 	unsigned char		ha[ALIGN(MAX_ADDR_LEN, sizeof(unsigned long))] __aligned(8);
 	struct hh_cache		hh;
+	//邻居表项对应的报文发送函数
 	int			(*output)(struct neighbour *, struct sk_buff *);
 	const struct neigh_ops	*ops;
 	struct list_head	gc_list;
 	struct rcu_head		rcu;
-	struct net_device	*dev;//出接口
+	struct net_device	*dev;//邻居表项关联的设备
 	u8			primary_key[0];//neighbor请求的协议目的地址
 } __randomize_layout;
 
 struct neigh_ops {
 	int			family;
+	//请求arp
 	void			(*solicit)(struct neighbour *, struct sk_buff *);
 	void			(*error_report)(struct neighbour *, struct sk_buff *);
 	int			(*output)(struct neighbour *, struct sk_buff *);
@@ -191,8 +197,12 @@ struct pneigh_entry {
 #define NEIGH_NUM_HASH_RND	4
 
 struct neigh_hash_table {
+	//neigh哈希表
 	struct neighbour __rcu	**hash_buckets;
+	//1<<hash_shift为hash桶大小
 	unsigned int		hash_shift;
+
+	//由随机数填充的 hash_rnd
 	__u32			hash_rnd[NEIGH_NUM_HASH_RND];
 	struct rcu_head		rcu;
 };
@@ -201,6 +211,7 @@ struct neigh_hash_table {
 //
 struct neigh_table {
 	int			family;
+	//表项的大小（不含私有数据大小，见dev->neigh_priv_len）
 	unsigned int		entry_size;
 	//邻居表key的大小（针对ipv4而言，key实际上就是ip地址，故为4）
 	unsigned int		key_len;
@@ -211,6 +222,7 @@ struct neigh_table {
 					__u32 *hash_rnd);
 	//邻居hash表比对函数
 	bool			(*key_eq)(const struct neighbour *, const void *pkey);
+	//每创建一个neighbour,由此函数进行私有的初始化
 	int			(*constructor)(struct neighbour *);
 	int			(*pconstructor)(struct pneigh_entry *);
 	void			(*pdestructor)(struct pneigh_entry *);
@@ -273,16 +285,19 @@ static inline void *neighbour_priv(const struct neighbour *n)
 
 extern const struct nla_policy nda_policy[];
 
+//neighbour表项的key比对函数（16位）
 static inline bool neigh_key_eq16(const struct neighbour *n, const void *pkey)
 {
 	return *(const u16 *)n->primary_key == *(const u16 *)pkey;
 }
 
+//neighbour表项的key比对函数（32位）
 static inline bool neigh_key_eq32(const struct neighbour *n, const void *pkey)
 {
 	return *(const u32 *)n->primary_key == *(const u32 *)pkey;
 }
 
+//neighbour表项的key比对函数（128位）
 static inline bool neigh_key_eq128(const struct neighbour *n, const void *pkey)
 {
 	const u32 *n32 = (const u32 *)n->primary_key;
@@ -294,11 +309,11 @@ static inline bool neigh_key_eq128(const struct neighbour *n, const void *pkey)
 
 //查找邻居表项
 static inline struct neighbour *___neigh_lookup_noref(
-	struct neigh_table *tbl,
-	bool (*key_eq)(const struct neighbour *n, const void *pkey),
+	struct neigh_table *tbl/*待查询的邻居表*/,
+	bool (*key_eq)(const struct neighbour *n, const void *pkey)/*neighbour关键字的匹配函数*/,
 	__u32 (*hash)(const void *pkey,
 		      const struct net_device *dev,
-		      __u32 *hash_rnd),
+		      __u32 *hash_rnd)/*neighbour key的hashcode计算函数*/,
 	const void *pkey,
 	struct net_device *dev)
 {
@@ -306,8 +321,9 @@ static inline struct neighbour *___neigh_lookup_noref(
 	struct neighbour *n;
 	u32 hash_val;
 
-	//计算hashcode
+	//计算hashcode(取hashcode的高nht->hash_shift位）
 	hash_val = hash(pkey, dev, nht->hash_rnd) >> (32 - nht->hash_shift);
+
 	//遍历对应hash桶，通过key_eq比对key值，要求出接口与key命中
 	for (n = rcu_dereference_bh(nht->hash_buckets[hash_val]);
 	     n != NULL;
@@ -457,6 +473,7 @@ static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
 {
 	unsigned long now = jiffies;
 	
+	//更新使用时间
 	if (neigh->used != now)
 		neigh->used = now;
 	if (!(neigh->nud_state&(NUD_CONNECTED|NUD_DELAY|NUD_PROBE)))
@@ -524,7 +541,7 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb,
 {
 	const struct hh_cache *hh = &n->hh;
 
-	//如果arp已完全，则直接输出
+	//如果arp已完全，则采用hh中的缓存直接输出
 	if ((n->nud_state & NUD_CONNECTED) && hh->hh_len && !skip_cache)
 		return neigh_hh_output(hh, skb);
 	else

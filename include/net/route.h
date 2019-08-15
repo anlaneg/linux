@@ -53,6 +53,7 @@ struct rtable {
 	unsigned int		rt_flags;
 	__u16			rt_type;
 	__u8			rt_is_input;
+	//网关地址family
 	u8			rt_gw_family;
 
 	int			rt_iif;
@@ -356,7 +357,7 @@ static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 }
 
 static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
-					     __be32 daddr)
+					     __be32 daddr/*目标ip*/)
 {
 	struct neighbour *neigh;
 
@@ -376,7 +377,7 @@ static inline struct neighbour *ip_neigh_for_gw(struct rtable *rt,
 	struct net_device *dev = rt->dst.dev;
 	struct neighbour *neigh;
 
-	//确定下一跳，网关或者报文里的目的ip
+	//确定取哪一个neighbour,下一跳网关或者报文里的目的ip
 	if (likely(rt->rt_gw_family == AF_INET)) {
 		neigh = ip_neigh_gw4(dev, rt->rt_gw4);
 	} else if (rt->rt_gw_family == AF_INET6) {

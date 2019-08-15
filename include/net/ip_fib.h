@@ -167,7 +167,7 @@ struct fib_result {
 	__be32			prefix;//网络号
 	unsigned char		prefixlen;//网络号长度
 	unsigned char		nh_sel;
-	unsigned char		type;
+	unsigned char		type;//地址类型（单播，广播，组播，本地地址）
 	unsigned char		scope;
 	u32			tclassid;
 	struct fib_nh_common	*nhc;

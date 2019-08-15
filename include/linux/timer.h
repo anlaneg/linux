@@ -137,6 +137,7 @@ static inline void init_timer_on_stack_key(struct timer_list *timer,
  * or timer_setup(). For timers on the stack, timer_setup_on_stack() must
  * be used and must be balanced with a call to destroy_timer_on_stack().
  */
+//初始化一个timer
 #define timer_setup(timer, callback, flags)			\
 	__init_timer((timer), (callback), (flags))
 
