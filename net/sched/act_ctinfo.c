@@ -33,13 +33,16 @@ static void tcf_ctinfo_dscp_set(struct nf_conn *ct, struct tcf_ctinfo *ca,
 {
 	u8 dscp, newdscp;
 
+	//ct中的dscap
 	newdscp = (((ct->mark & cp->dscpmask) >> cp->dscpmaskshift) << 2) &
 		     ~INET_ECN_MASK;
 
 	switch (proto) {
 	case NFPROTO_IPV4:
+		//取dscp
 		dscp = ipv4_get_dsfield(ip_hdr(skb)) & ~INET_ECN_MASK;
 		if (dscp != newdscp) {
+			//更改dscp
 			if (likely(!skb_try_make_writable(skb, wlen))) {
 				ipv4_change_dsfield(ip_hdr(skb),
 						    INET_ECN_MASK,
@@ -112,6 +115,7 @@ static int tcf_ctinfo_act(struct sk_buff *skb, const struct tc_action *a,
 		goto out;
 	}
 
+	//取skb关联的ct
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct) { /* look harder, usually ingress */
 		if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb),
@@ -127,6 +131,7 @@ static int tcf_ctinfo_act(struct sk_buff *skb, const struct tc_action *a,
 		ct = nf_ct_tuplehash_to_ctrack(thash);
 	}
 
+	//dscp修改
 	if (cp->mode & CTINFO_MODE_DSCP)
 		if (!cp->dscpstatemask || (ct->mark & cp->dscpstatemask))
 			tcf_ctinfo_dscp_set(ct, ca, cp, skb, wlen, proto);

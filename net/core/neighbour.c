@@ -1004,6 +1004,7 @@ static void neigh_invalidate(struct neighbour *neigh)
 
 	   So that, we try to be accurate and avoid dead loop. --ANK
 	 */
+	//neigh上挂载的这些报文因为arp无法解析成功，通知处理，例如响应目的不可达
 	while (neigh->nud_state == NUD_FAILED &&
 	       (skb = __skb_dequeue(&neigh->arp_queue)) != NULL) {
 		write_unlock(&neigh->lock);

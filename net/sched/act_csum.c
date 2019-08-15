@@ -182,6 +182,7 @@ static int tcf_csum_ipv4_igmp(struct sk_buff *skb,
 	return 1;
 }
 
+//ipv6 icmp checksum计算
 static int tcf_csum_ipv6_icmp(struct sk_buff *skb, unsigned int ihl,
 			      unsigned int ipl)
 {
@@ -210,6 +211,7 @@ static int tcf_csum_ipv4_tcp(struct sk_buff *skb, unsigned int ihl,
 	struct tcphdr *tcph;
 	const struct iphdr *iph;
 
+	//gso情况下直接返回
 	if (skb_is_gso(skb) && skb_shinfo(skb)->gso_type & SKB_GSO_TCPV4)
 		return 1;
 
@@ -219,7 +221,9 @@ static int tcf_csum_ipv4_tcp(struct sk_buff *skb, unsigned int ihl,
 
 	iph = ip_hdr(skb);
 	tcph->check = 0;
+	//计算tcp头部 checksum
 	skb->csum = csum_partial(tcph, ipl - ihl, 0);
+	//计算 pseudo checksum 与tcp负载checksum，加上tcp头部checksum
 	tcph->check = tcp_v4_check(ipl - ihl,
 				   iph->saddr, iph->daddr, skb->csum);
 

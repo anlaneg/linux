@@ -695,6 +695,8 @@ static bool tcp_in_window(const struct nf_conn *ct,
 		res = true;
 	} else {
 		res = false;
+		//通过配置kernel中的nf_conntrack_tcp_be_liberal，可避免netfilter检查
+		//报文是否在window范围内的问题。
 		if (sender->flags & IP_CT_TCP_FLAG_BE_LIBERAL ||
 		    tn->tcp_be_liberal)
 			res = true;

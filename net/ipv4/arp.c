@@ -296,11 +296,11 @@ static void arp_error_report(struct neighbour *neigh, struct sk_buff *skb)
 
 /* Create and send an arp packet. */
 //按参数构造arp报文，并自dev口送出
-static void arp_send_dst(int type, int ptype, __be32 dest_ip,
+static void arp_send_dst(int type/*arp报文类型*/, int ptype/*协议类型，例如0x806*/, __be32 dest_ip,
 			 struct net_device *dev, __be32 src_ip,
-			 const unsigned char *dest_hw,
-			 const unsigned char *src_hw,
-			 const unsigned char *target_hw,
+			 const unsigned char *dest_hw/*目的mac*/,
+			 const unsigned char *src_hw/*源mac*/,
+			 const unsigned char *target_hw/*请求的hw地址*/,
 			 struct dst_entry *dst)
 {
 	struct sk_buff *skb;
@@ -316,6 +316,7 @@ static void arp_send_dst(int type, int ptype, __be32 dest_ip,
 		return;
 
 	skb_dst_set(skb, dst_clone(dst));
+	//将arp发送出去
 	arp_xmit(skb);
 }
 
@@ -329,6 +330,7 @@ void arp_send(int type, int ptype, __be32 dest_ip,
 }
 EXPORT_SYMBOL(arp_send);
 
+//发送arp请求
 static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	__be32 saddr = 0;
@@ -388,6 +390,8 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 
 	if (skb && !(dev->priv_flags & IFF_XMIT_DST_RELEASE))
 		dst = skb_dst(skb);
+
+	//发送arp请求 target的mac地址
 	arp_send_dst(ARPOP_REQUEST, ETH_P_ARP, target, dev, saddr,
 		     dst_hw, dev->dev_addr, NULL, dst);
 }
@@ -644,6 +648,7 @@ out:
 }
 EXPORT_SYMBOL(arp_create);
 
+//arp报文入队完成发送
 static int arp_xmit_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	return dev_queue_xmit(skb);
@@ -836,7 +841,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		if (arp->ar_op == htons(ARPOP_REQUEST) &&
 		    inet_addr_type_dev_table(net, dev, tip) == RTN_LOCAL &&
 		    !arp_ignore(in_dev, sip, tip))
-			//与对方发生冲突，响应arp
+			//与对方发生冲突，响应arp reply
 			arp_send_dst(ARPOP_REPLY, ETH_P_ARP, sip, dev, tip,
 				     sha, dev->dev_addr, sha, reply_dst);
 		goto out_consume_skb;

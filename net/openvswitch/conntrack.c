@@ -273,7 +273,8 @@ static void ovs_ct_update_key(const struct sk_buff *skb,
 		if (info)
 			zone = &info->zone;
 	}
-	//更新key中flow的链接状态，
+
+	//更新key中flow的链接状态，准备下次match
 	__ovs_ct_update_key(key, state, zone, ct);
 }
 
@@ -673,12 +674,12 @@ struct nf_conn *ovs_ct_executed(struct net *net,
 	 * connection was not confirmed, it is not cached and needs to be run
 	 * through conntrack again.
 	 */
-	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED/*指明ct存在*/) &&
+	*ct_executed = (key->ct_state & OVS_CS_F_TRACKED/*指明ct被跟踪*/) &&
 		       !(key->ct_state & OVS_CS_F_INVALID/*ct状态有效*/) &&
 		       (key->ct_zone == info->zone.id);//zone一致
 
 	if (*ct_executed || (!key->ct_state && info->force)) {
-		//执行连接跟踪查询
+		//执行kernel连接跟踪查询
 		ct = ovs_ct_find_existing(net, &info->zone, info->family/*协议族*/, skb,
 					  !!(key->ct_state &
 					  OVS_CS_F_NAT_MASK)/*如果ct做了snat或者dnat,则用其反方向元组查询，并返回本方向流*/);
@@ -708,8 +709,11 @@ static bool skb_nfct_cached(struct net *net,
 	else
 		return false;//ct未创建，则返回
 
+	//net不相等，忽略此ct
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
 		return false;
+
+	//zone不相等，忽略此ct
 	if (!nf_ct_zone_equal_any(info->ct, nf_ct_zone(ct)))
 		return false;
 
@@ -723,6 +727,7 @@ static bool skb_nfct_cached(struct net *net,
 	}
 
 	/* Force conntrack entry direction to the current packet? */
+	//如果给定info,且本报文为源方向，则丢弃掉此ct
 	if (info->force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		/* Delete the conntrack entry if confirmed, else just release
 		 * the reference.
@@ -995,6 +1000,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		key->ct_state = 0;
 
 		/* Update the key, but keep the NAT flags. */
+		//更新ct的状态到key中
 		ovs_ct_update_key(skb, info, key, true, true);
 	}
 

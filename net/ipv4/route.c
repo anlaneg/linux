@@ -1218,6 +1218,7 @@ static void ipv4_send_dest_unreach(struct sk_buff *skb)
 		if (res)
 			return;
 	}
+	//响应icmp dst unreach报文给发送方
 	__icmp_send(skb, ICMP_DEST_UNREACH, ICMP_HOST_UNREACH, 0, &opt);
 }
 

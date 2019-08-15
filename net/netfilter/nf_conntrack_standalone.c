@@ -960,6 +960,7 @@ static void nf_conntrack_standalone_init_tcp_sysctl(struct net *net,
 	table[NF_SYSCTL_CT_PROTO_TCP_ ## XNAME].data = (rval)
 
 	XASSIGN(LOOSE, &tn->tcp_loose);
+	//设置tcp_be_liberal变量地址
 	XASSIGN(LIBERAL, &tn->tcp_be_liberal);
 	XASSIGN(MAX_RETRANS, &tn->tcp_max_retrans);
 #undef XASSIGN
@@ -1067,6 +1068,7 @@ static int nf_conntrack_standalone_init_sysctl(struct net *net)
 	if (!net_eq(&init_net, net))
 		table[NF_SYSCTL_CT_BUCKETS].mode = 0444;
 
+	//注册net/netfilter配置目录
 	net->ct.sysctl_header = register_net_sysctl(net, "net/netfilter", table);
 	if (!net->ct.sysctl_header)
 		goto out_unregister_netfilter;

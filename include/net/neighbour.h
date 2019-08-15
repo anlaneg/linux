@@ -141,6 +141,7 @@ struct neighbour {
 	struct neigh_table	*tbl;
 	struct neigh_parms	*parms;
 	unsigned long		confirmed;
+	//neighbour时间更新
 	unsigned long		updated;
 	rwlock_t		lock;
 	refcount_t		refcnt;//表项引用计数
@@ -163,7 +164,7 @@ struct neighbour {
 	struct list_head	gc_list;
 	struct rcu_head		rcu;
 	struct net_device	*dev;//出接口
-	u8			primary_key[0];
+	u8			primary_key[0];//neighbor请求的协议目的地址
 } __randomize_layout;
 
 struct neigh_ops {
