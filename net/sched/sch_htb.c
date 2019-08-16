@@ -182,12 +182,15 @@ static inline struct htb_class *htb_find(u32 handle, struct Qdisc *sch)
 	struct htb_sched *q = qdisc_priv(sch);
 	struct Qdisc_class_common *clc;
 
+	//找handle对应的class
 	clc = qdisc_class_find(&q->clhash, handle);
 	if (clc == NULL)
 		return NULL;
+	//返回htb_class
 	return container_of(clc, struct htb_class, common);
 }
 
+//返回handle对应的class
 static unsigned long htb_search(struct Qdisc *sch, u32 handle)
 {
 	return (unsigned long)htb_find(handle, sch);
@@ -221,6 +224,8 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 	 */
 	if (skb->priority == sch->handle)
 		return HTB_DIRECT;	/* X:0 (direct flow) selected */
+
+	//按skb优先映射class
 	cl = htb_find(skb->priority, sch);
 	if (cl) {
 		if (cl->level == 0)
@@ -272,20 +277,23 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
  * Make sure that class is not already on such list for given prio.
  */
 static void htb_add_to_id_tree(struct rb_root *root,
-			       struct htb_class *cl, int prio)
+			       struct htb_class *cl, int prio/*优先级*/)
 {
 	struct rb_node **p = &root->rb_node, *parent = NULL;
 
+	//确定cl的插入位置
 	while (*p) {
 		struct htb_class *c;
 		parent = *p;
 		c = rb_entry(parent, struct htb_class, node[prio]);
 
 		if (cl->common.classid > c->common.classid)
-			p = &parent->rb_right;
+			p = &parent->rb_right;//cl大时，加入到右侧
 		else
 			p = &parent->rb_left;
 	}
+
+	//将cl加入
 	rb_link_node(&cl->node[prio], parent, p);
 	rb_insert_color(&cl->node[prio], root);
 }

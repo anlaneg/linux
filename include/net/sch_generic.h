@@ -206,9 +206,11 @@ static inline int qdisc_avail_bulklimit(const struct netdev_queue *txq)
 struct Qdisc_class_ops {
 	unsigned int		flags;
 	/* Child qdisc manipulation */
+	//通过tcmsg获得qisc对应的具体netdev_queue队列
 	struct netdev_queue *	(*select_queue)(struct Qdisc *, struct tcmsg *);
+	//采用新队列替换旧队列
 	int			(*graft)(struct Qdisc *, unsigned long cl,
-					struct Qdisc *, struct Qdisc **,
+					struct Qdisc */*新的队列*/, struct Qdisc **/*出参，旧的队列*/,
 					struct netlink_ext_ack *extack);
 	struct Qdisc *		(*leaf)(struct Qdisc *, unsigned long cl);
 	void			(*qlen_notify)(struct Qdisc *, unsigned long);
@@ -638,6 +640,7 @@ static inline unsigned int qdisc_class_hash(u32 id, u32 mask)
 	return id & mask;
 }
 
+//返回id号class
 static inline struct Qdisc_class_common *
 qdisc_class_find(const struct Qdisc_class_hash *hash, u32 id)
 {
@@ -1215,13 +1218,13 @@ static inline struct Qdisc *qdisc_replace(struct Qdisc *sch, struct Qdisc *new,
 	struct Qdisc *old;
 
 	sch_tree_lock(sch);
-	old = *pold;
-	*pold = new;
+	old = *pold;//保存旧队列
+	*pold = new;//更新为new队列
 	if (old != NULL)
 		qdisc_tree_flush_backlog(old);
 	sch_tree_unlock(sch);
 
-	return old;
+	return old;//返回旧队列
 }
 
 static inline void rtnl_qdisc_drop(struct sk_buff *skb, struct Qdisc *sch)
