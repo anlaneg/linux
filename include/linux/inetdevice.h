@@ -218,6 +218,7 @@ static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 
 static inline struct in_device *__in_dev_get_rcu(const struct net_device *dev)
 {
+	//取in_device
 	return rcu_dereference(dev->ip_ptr);
 }
 

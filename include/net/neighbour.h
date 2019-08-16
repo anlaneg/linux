@@ -224,6 +224,7 @@ struct neigh_table {
 	bool			(*key_eq)(const struct neighbour *, const void *pkey);
 	//每创建一个neighbour,由此函数进行私有的初始化
 	int			(*constructor)(struct neighbour *);
+	//每创建一个proxy neighbour(静态arp),由此函数进行私有的初始化
 	int			(*pconstructor)(struct pneigh_entry *);
 	void			(*pdestructor)(struct pneigh_entry *);
 	void			(*proxy_redo)(struct sk_buff *skb);

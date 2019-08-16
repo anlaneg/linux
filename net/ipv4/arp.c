@@ -761,6 +761,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		 * however, to be more robust, we'll accept both 1 (Ethernet)
 		 * or 6 (IEEE 802.2)
 		 */
+		//针对以上dev,arp硬件类型必须为ether,协议类型必须是ip,否则丢包
 		if ((arp->ar_hrd != htons(ARPHRD_ETHER) &&
 		     arp->ar_hrd != htons(ARPHRD_IEEE802)) ||
 		    arp->ar_pro != htons(ETH_P_IP))
@@ -779,7 +780,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Understand only these message types */
-	//如果是不认识的arp操作符，则丢包
+	//如果是不认识的arp操作符，则丢包(只处理arp request,arp reply)
 	if (arp->ar_op != htons(ARPOP_REPLY) &&
 	    arp->ar_op != htons(ARPOP_REQUEST))
 		goto out_free_skb;
@@ -852,8 +853,8 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* Special case: IPv4 duplicate address detection packet (RFC2131) */
 	//源ip为０的arp请求报文，（特殊情况：ipv4　地址重突检测）
 	if (sip == 0) {
-		if (arp->ar_op == htons(ARPOP_REQUEST) &&
-		    inet_addr_type_dev_table(net, dev, tip) == RTN_LOCAL &&
+		if (arp->ar_op == htons(ARPOP_REQUEST) &&/*请求报文*/
+		    inet_addr_type_dev_table(net, dev, tip) == RTN_LOCAL/*tip为local地址*/ &&
 		    !arp_ignore(in_dev, sip, tip))
 			//与对方发生冲突，响应arp reply
 			arp_send_dst(ARPOP_REPLY, ETH_P_ARP, sip, dev, tip,
@@ -870,7 +871,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		addr_type = rt->rt_type;
 
 		if (addr_type == RTN_LOCAL) {
-			//查路由命中主机路由，则target ip是本机ip
+			//target ip是本机ip
 			int dont_send;
 
 			dont_send = arp_ignore(in_dev, sip, tip);
@@ -898,7 +899,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 			//入口设备处于转发状态，路由为网关或者直连路由
 			//如果开启了arp代理，或者开启了private vlan的arp代理功能
 			//且命中代理表项
-			if (addr_type == RTN_UNICAST  &&
+			if (addr_type == RTN_UNICAST /*单播地址*/ &&
 			    (arp_fwd_proxy(in_dev, dev, rt) ||
 			     arp_fwd_pvlan(in_dev, dev, rt, sip, tip) ||
 			     (rt->dst.dev != dev &&
@@ -973,7 +974,9 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		if (arp->ar_op != htons(ARPOP_REPLY) ||
 		    skb->pkt_type != PACKET_HOST)
 			state = NUD_STALE;
-		neigh_update(n, sha, state,
+
+		//更新neighbour
+		neigh_update(n, sha/*发送方硬件地址*/, state,
 			     override ? NEIGH_UPDATE_F_OVERRIDE : 0, 0);
 		neigh_release(n);
 	}
@@ -1364,6 +1367,7 @@ static int arp_proc_init(void);
 
 void __init arp_init(void)
 {
+	//初始化neighbour表
 	neigh_table_init(NEIGH_ARP_TABLE, &arp_tbl);
 
 	dev_add_pack(&arp_packet_type);//arp报文处理器注册

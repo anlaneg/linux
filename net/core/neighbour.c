@@ -711,6 +711,7 @@ static u32 pneigh_hash(const void *pkey, unsigned int key_len)
 	return hash_val;
 }
 
+//在neighbour链上查询静态neigh
 static struct pneigh_entry *__pneigh_lookup_1(struct pneigh_entry *n,
 					      struct net *net,
 					      const void *pkey,
@@ -718,9 +719,9 @@ static struct pneigh_entry *__pneigh_lookup_1(struct pneigh_entry *n,
 					      struct net_device *dev)
 {
 	while (n) {
-		if (!memcmp(n->key, pkey, key_len) &&
-		    net_eq(pneigh_net(n), net) &&
-		    (n->dev == dev || !n->dev))
+		if (!memcmp(n->key, pkey, key_len) &&/*地址相同*/
+		    net_eq(pneigh_net(n), net) &&/*net namespace相同*/
+		    (n->dev == dev || !n->dev))/*设备相同或者静态neighbour未指定dev*/
 			return n;
 		n = n->next;
 	}
@@ -741,7 +742,7 @@ EXPORT_SYMBOL_GPL(__pneigh_lookup);
 //查询代理表项
 struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 				    struct net *net, const void *pkey,
-				    struct net_device *dev, int creat)
+				    struct net_device *dev, int creat/*失配后，是否创建*/)
 {
 	struct pneigh_entry *n;
 	unsigned int key_len = tbl->key_len;
@@ -757,6 +758,7 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 
 	ASSERT_RTNL();
 
+	//未查询到，且要求create,执行创建
 	n = kmalloc(sizeof(*n) + key_len, GFP_KERNEL);
 	if (!n)
 		goto out;
@@ -768,6 +770,7 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 	if (dev)
 		dev_hold(dev);
 
+	//初始化
 	if (tbl->pconstructor && tbl->pconstructor(n)) {
 		if (dev)
 			dev_put(dev);
@@ -776,6 +779,7 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 		goto out;
 	}
 
+	//加入
 	write_lock_bh(&tbl->lock);
 	n->next = tbl->phash_buckets[hash_val];
 	tbl->phash_buckets[hash_val] = n;
@@ -1254,12 +1258,12 @@ static void neigh_update_hhs(struct neighbour *neigh)
    Caller MUST hold reference count on the entry.
  */
 
-static int __neigh_update(struct neighbour *neigh, const u8 *lladdr,
-			  u8 new, u32 flags, u32 nlmsg_pid,
+static int __neigh_update(struct neighbour *neigh, const u8 *lladdr/*链路地址*/,
+			  u8 new/*neighbour状态*/, u32 flags, u32 nlmsg_pid,
 			  struct netlink_ext_ack *extack)
 {
 	bool ext_learn_change = false;
-	u8 old;
+	u8 old;/*旧的neighbour状态*/
 	int err;
 	int notify = 0;
 	struct net_device *dev;
@@ -1276,6 +1280,7 @@ static int __neigh_update(struct neighbour *neigh, const u8 *lladdr,
 	if (!(flags & NEIGH_UPDATE_F_ADMIN) &&
 	    (old & (NUD_NOARP | NUD_PERMANENT)))
 		goto out;
+
 	if (neigh->dead) {
 		NL_SET_ERR_MSG(extack, "Neighbor entry is now dead");
 		goto out;
@@ -1439,6 +1444,7 @@ out:
 	return err;
 }
 
+//neighbour更新
 int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new,
 		 u32 flags, u32 nlmsg_pid)
 {

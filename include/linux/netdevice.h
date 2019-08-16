@@ -1884,7 +1884,7 @@ struct net_device {
 	unsigned int		mtu;//设置的mtu
 	unsigned int		min_mtu;//设置最小mtu
 	unsigned int		max_mtu;//设置最大mtu
-	unsigned short		type;
+	unsigned short		type;//设备类型（例如ARPHRD_ETHER）
 	unsigned short		hard_header_len;//协议头部长度（例如以太头为14）
 	unsigned char		min_header_len;//最小协议头部长度
 
