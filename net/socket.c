@@ -156,6 +156,11 @@ static const struct file_operations socket_file_ops = {
  */
 
 static DEFINE_SPINLOCK(net_family_lock);
+
+//各AF_FAMILY在此数组中注册其对应的socket创建回调
+//例如：
+//PF_NETLINK对应netlink_family_ops
+//PF_INET 对应 inet_family_ops
 static const struct net_proto_family __rcu *net_families[NPROTO] __read_mostly;
 
 /*
@@ -551,7 +556,7 @@ static const struct inode_operations sockfs_inode_ops = {
  *	and initialised. The socket is then returned. If we are out of inodes
  *	NULL is returned. This functions uses GFP_KERNEL internally.
  */
-
+//socket结构申请
 struct socket *sock_alloc(void)
 {
 	struct inode *inode;
@@ -1361,7 +1366,7 @@ EXPORT_SYMBOL(sock_wake_async);
 
 //根据family查找对应的net_proto_family,然后调用对应的协议句柄创建相应的socket
 int __sock_create(struct net *net, int family, int type, int protocol,
-			 struct socket **res, int kern)
+			 struct socket **res/*出参，返回创建的socket*/, int kern/*是否kernel socket*/)
 {
 	int err;
 	struct socket *sock;
@@ -1370,8 +1375,10 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	/*
 	 *      Check protocol is in range
 	 */
+	//地址族校验
 	if (family < 0 || family >= NPROTO)
 		return -EAFNOSUPPORT;
+
 	if (type < 0 || type >= SOCK_MAX)
 		return -EINVAL;
 
@@ -1383,7 +1390,8 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	if (family == PF_INET && type == SOCK_PACKET) {
 		pr_info_once("%s uses obsolete (PF_INET,SOCK_PACKET)\n",
 			     current->comm);
-		family = PF_PACKET;//将PF_INET,SOCK_PACKET更新为PF_PACKET
+		//兼容性考虑，将PF_INET,SOCK_PACKET更新为PF_PACKET
+		family = PF_PACKET;
 	}
 
 	err = security_socket_create(family, type, protocol, kern);
@@ -1485,7 +1493,7 @@ EXPORT_SYMBOL(__sock_create);
  *	Returns 0 or an error. This function internally uses GFP_KERNEL.
  */
 
-int sock_create(int family, int type, int protocol, struct socket **res)
+int sock_create(int family, int type, int protocol, struct socket **res/*出参，返回创建的socket*/)
 {
 	//创建socket,传入namespace
 	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
@@ -1511,6 +1519,7 @@ int sock_create_kern(struct net *net, int family, int type, int protocol, struct
 }
 EXPORT_SYMBOL(sock_create_kern);
 
+//socket系统调用实现
 int __sys_socket(int family, int type, int protocol)
 {
 	int retval;

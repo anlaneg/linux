@@ -110,9 +110,9 @@ struct socket_wq {
  *  @wq: wait queue for several uses
  */
 struct socket {
-	socket_state		state;//socket状态（未连接，连接中，已连接，断开中）
+	socket_state		state;//socket状态（空闲，未连接，连接中，已连接，断开中）
 
-	short			type;
+	short			type;//socket类型，例如SOCK_STREAM
 
 	unsigned long		flags;
 
@@ -212,7 +212,8 @@ struct proto_ops {
 
 struct net_proto_family {
 	int		family;
-	//socket创建回调
+	//kernel系统调用通过family参数找到对应的net_protto_family结构
+	//再通过此结构的create函数完成socket的创建
 	int		(*create)(struct net *net, struct socket *sock,
 				  int protocol, int kern);
 	struct module	*owner;

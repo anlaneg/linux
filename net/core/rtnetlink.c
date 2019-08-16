@@ -2153,10 +2153,12 @@ invalid_attr:
 static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 {
 	if (dev) {
+		//设备地址
 		if (tb[IFLA_ADDRESS] &&
 		    nla_len(tb[IFLA_ADDRESS]) < dev->addr_len)
 			return -EINVAL;
 
+		//广播hw地址
 		if (tb[IFLA_BROADCAST] &&
 		    nla_len(tb[IFLA_BROADCAST]) < dev->addr_len)
 			return -EINVAL;
@@ -2923,6 +2925,7 @@ int rtnl_configure_link(struct net_device *dev, const struct ifinfomsg *ifm)
 }
 EXPORT_SYMBOL(rtnl_configure_link);
 
+//link创建
 struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口名称*/,
 				    unsigned char name_assign_type,
 				    const struct rtnl_link_ops *ops,
@@ -2935,7 +2938,7 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 	unsigned int num_tx_queues = 1;
 	unsigned int num_rx_queues = 1;
 
-	//tx队列数目
+	//tx队列数目来自配置或通过函数获取
 	if (tb[IFLA_NUM_TX_QUEUES])
 		num_tx_queues = nla_get_u32(tb[IFLA_NUM_TX_QUEUES]);
 	else if (ops->get_num_tx_queues)
@@ -3122,7 +3125,7 @@ replay:
 				return err;
 			data = attr;
 		}
-		//如果有校验回调，则校验消息
+		//如果有校验回调，则校验有信息
 		if (ops->validate) {
 			err = ops->validate(tb, data, extack);
 			if (err < 0)
@@ -3151,12 +3154,16 @@ replay:
 	if (dev) {
 		int status = 0;
 
+		//dev已存在
 		if (nlh->nlmsg_flags & NLM_F_EXCL)
 			return -EEXIST;
+
+		//不支持对dev执行替换
 		if (nlh->nlmsg_flags & NLM_F_REPLACE)
 			return -EOPNOTSUPP;
 
 		if (linkinfo[IFLA_INFO_DATA]) {
+			//如包含IFLA_INFO_DATA,则执行link change
 			if (!ops || ops != dev->rtnl_link_ops ||
 			    !ops->changelink)
 				return -EOPNOTSUPP;
@@ -3178,9 +3185,13 @@ replay:
 			status |= DO_SETLINK_NOTIFY;
 		}
 
+		//做link的配置
 		return do_setlink(skb, dev, ifm, extack, tb, ifname, status);
 	}
 
+	//此情况下dev不存在
+
+	//如果不需要create，则报错
 	if (!(nlh->nlmsg_flags & NLM_F_CREATE)) {
 		if (ifm->ifi_index == 0 && tb[IFLA_GROUP])
 			return rtnl_group_changelink(skb, net,
@@ -3208,11 +3219,12 @@ replay:
 		return -EOPNOTSUPP;
 	}
 
+	//link创建，必须要有setup回调
 	if (!ops->setup)
 		return -EOPNOTSUPP;
 
 	if (!ifname[0]) {
-		//如果无接口名，则构造接口名称
+		//如果未给出接口名，则构造接口名称
 		snprintf(ifname, IFNAMSIZ, "%s%%d", ops->kind);
 		name_assign_type = NET_NAME_ENUM;
 	}
@@ -5178,7 +5190,7 @@ out:
 }
 
 /* Process one rtnetlink message. */
-
+//处理rtnetlink类消息
 static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息头部*/,
 			     struct netlink_ext_ack *extack)
 {
@@ -5255,7 +5267,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 		return err;
 	}
 
-	//通过family,type查找link
+	//通过family,type查找相应的结构体，调用doit完成消息处理
 	link = rtnl_get_link(family, type);
 	if (!link || !link->doit) {
 		family = PF_UNSPEC;
@@ -5352,13 +5364,14 @@ static struct notifier_block rtnetlink_dev_notifier = {
 	.notifier_call	= rtnetlink_event,
 };
 
-
+//rtnetlink类消息使用NETLINK_ROUTE
 static int __net_init rtnetlink_net_init(struct net *net)
 {
 	struct sock *sk;
 	struct netlink_kernel_cfg cfg = {
 		.groups		= RTNLGRP_MAX,
-		.input		= rtnetlink_rcv,//rt netlink类消息接收处理
+		//rt netlink类消息接收处理
+		.input		= rtnetlink_rcv,
 		.cb_mutex	= &rtnl_mutex,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 		.bind		= rtnetlink_bind,

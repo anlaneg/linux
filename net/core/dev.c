@@ -7720,7 +7720,8 @@ EXPORT_SYMBOL(dev_get_flags);
 int __dev_change_flags(struct net_device *dev, unsigned int flags,
 		       struct netlink_ext_ack *extack)
 {
-	unsigned int old_flags = dev->flags;//取原dev中存储的flag，认为为旧flag
+	//取原dev中存储的flag，认为为旧flag
+	unsigned int old_flags = dev->flags;
 	int ret;
 
 	ASSERT_RTNL();

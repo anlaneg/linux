@@ -2014,7 +2014,7 @@ struct net_device {
 	enum {
 		RTNL_LINK_INITIALIZED,
 		RTNL_LINK_INITIALIZING,
-	} rtnl_link_state:16;
+	} rtnl_link_state:16;//link状态
 
 	bool needs_free_netdev;
 	void (*priv_destructor)(struct net_device *dev);

@@ -92,6 +92,7 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 
 static const struct genl_family *genl_family_find_byid(unsigned int id)
 {
+	//给定id,获得genl_family
 	return idr_find(&genl_fam_idr, id);
 }
 
@@ -1054,6 +1055,7 @@ static void genl_unbind(struct net *net, int group)
 	up_read(&cb_lock);
 }
 
+//generic netlink消息注册
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {

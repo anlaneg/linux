@@ -64,7 +64,7 @@ struct rtnl_link_ops {
 	const char		*kind;
 
 	size_t			priv_size;
-	//完成新建link的初始化工作
+	//link初创建时，将通过此函数完成新建link的初始化工作
 	void			(*setup)(struct net_device *dev);
 
 	//link独有IFLA_INFO_DATA型数据的netlink type
@@ -76,12 +76,13 @@ struct rtnl_link_ops {
 					    struct nlattr *data[],
 					    struct netlink_ext_ack *extack);
 
-	//新建link时将被调用
+	//setup后，newlink将将被调用
 	int			(*newlink)(struct net *src_net,
 					   struct net_device *dev,
 					   struct nlattr *tb[],
 					   struct nlattr *data[],
 					   struct netlink_ext_ack *extack);
+	//link存在时，修改link配置时将被调用
 	int			(*changelink)(struct net_device *dev,
 					      struct nlattr *tb[],
 					      struct nlattr *data[],
@@ -96,7 +97,9 @@ struct rtnl_link_ops {
 	size_t			(*get_xstats_size)(const struct net_device *dev);
 	int			(*fill_xstats)(struct sk_buff *skb,
 					       const struct net_device *dev);
+	//取tx队列数目
 	unsigned int		(*get_num_tx_queues)(void);
+	//取rx队列数目
 	unsigned int		(*get_num_rx_queues)(void);
 
 	unsigned int		slave_maxtype;

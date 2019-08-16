@@ -103,7 +103,7 @@ struct mlx5_vport_info {
 
 struct mlx5_vport {
 	struct mlx5_core_dev    *dev;
-	int                     vport;
+	int                     vport;//port id号
 	struct hlist_head       uc_list[MLX5_L2_ADDR_HASH_SIZE];
 	struct hlist_head       mc_list[MLX5_L2_ADDR_HASH_SIZE];
 	struct mlx5_flow_handle *promisc_rule;
@@ -121,7 +121,7 @@ struct mlx5_vport {
 		u32             bw_share;
 	} qos;
 
-	bool                    enabled;//标明此口被禁用
+	bool                    enabled;//标明此口被启用
 	u16                     enabled_events;
 };
 
@@ -525,6 +525,7 @@ void mlx5e_tc_clean_fdb_peer_flows(struct mlx5_eswitch *esw);
 /* The vport getter/iterator are only valid after esw->total_vports
  * and vport->vport are initialized in mlx5_eswitch_init.
  */
+//遍历所有vports
 #define mlx5_esw_for_all_vports(esw, i, vport)		\
 	for ((i) = MLX5_VPORT_PF;			\
 	     (vport) = &(esw)->vports[i],		\

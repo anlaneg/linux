@@ -1032,6 +1032,7 @@ static void neigh_invalidate(struct neighbour *neigh)
 	neigh->arp_queue_len_bytes = 0;
 }
 
+//对外发送针对neigh的探测（通过solicit完成请求）
 static void neigh_probe(struct neighbour *neigh)
 	__releases(neigh->lock)
 {
@@ -1061,10 +1062,12 @@ static void neigh_timer_handler(struct timer_list *t)
 	now = jiffies;
 	next = now + HZ;
 
+	//neighbour状态已达到非定时器控制转态退出
 	if (!(state & NUD_IN_TIMER))
 		goto out;
 
 	if (state & NUD_REACHABLE) {
+		//当前处于reachable状态
 		if (time_before_eq(now,
 				   neigh->confirmed + neigh->parms->reachable_time)) {
 			neigh_dbg(2, "neigh %p is still alive\n", neigh);
@@ -1109,6 +1112,7 @@ static void neigh_timer_handler(struct timer_list *t)
 
 	if ((neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) &&
 	    atomic_read(&neigh->probes) >= neigh_max_probes(neigh)) {
+		//当前处于incomplete或者probe状态，且探测次数超阀值，置failed状态
 		neigh->nud_state = NUD_FAILED;
 		notify = 1;
 		neigh_invalidate(neigh);
@@ -1116,12 +1120,14 @@ static void neigh_timer_handler(struct timer_list *t)
 	}
 
 	if (neigh->nud_state & NUD_IN_TIMER) {
+		//设置下次触发定时器
 		if (time_before(next, jiffies + HZ/2))
 			next = jiffies + HZ/2;
 		if (!mod_timer(&neigh->timer, next))
 			neigh_hold(neigh);
 	}
 	if (neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) {
+		//当前处于incomplete或者probe状态，执行arp探测
 		neigh_probe(neigh);
 	} else {
 out:
@@ -1227,6 +1233,7 @@ static void neigh_update_hhs(struct neighbour *neigh)
 	if (neigh->dev->header_ops)
 		update = neigh->dev->header_ops->cache_update;
 
+	//更新hh中的缓存的hw address
 	if (update) {
 		hh = &neigh->hh;
 		if (hh->hh_len) {
@@ -1263,7 +1270,7 @@ static int __neigh_update(struct neighbour *neigh, const u8 *lladdr/*链路地�
 			  struct netlink_ext_ack *extack)
 {
 	bool ext_learn_change = false;
-	u8 old;/*旧的neighbour状态*/
+	u8 old;/*neighbour原状态*/
 	int err;
 	int notify = 0;
 	struct net_device *dev;
@@ -1297,6 +1304,7 @@ static int __neigh_update(struct neighbour *neigh, const u8 *lladdr/*链路地�
 		notify = old & NUD_VALID;
 		if ((old & (NUD_INCOMPLETE | NUD_PROBE)) &&
 		    (new & NUD_FAILED)) {
+			//旧状态为incomplete,新状态为failed,将neighbour置为无效
 			neigh_invalidate(neigh);
 			notify = 1;
 		}
@@ -1793,6 +1801,7 @@ int neigh_table_clear(int index, struct neigh_table *tbl)
 }
 EXPORT_SYMBOL(neigh_table_clear);
 
+//取各family对应的neighbour表
 static struct neigh_table *neigh_find_table(int family)
 {
 	struct neigh_table *tbl = NULL;
@@ -1890,6 +1899,7 @@ out:
 	return err;
 }
 
+//处理neighbour添加消息
 static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		     struct netlink_ext_ack *extack)
 {
@@ -1925,6 +1935,7 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 			goto out;
 		}
 
+		//链路地址长度有误
 		if (tb[NDA_LLADDR] && nla_len(tb[NDA_LLADDR]) < dev->addr_len) {
 			NL_SET_ERR_MSG(extack, "Invalid link address");
 			goto out;
@@ -1935,17 +1946,19 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (tbl == NULL)
 		return -EAFNOSUPPORT;
 
+	//key地址长度校验
 	if (nla_len(tb[NDA_DST]) < (int)tbl->key_len) {
 		NL_SET_ERR_MSG(extack, "Invalid network address");
 		goto out;
 	}
 
 	dst = nla_data(tb[NDA_DST]);
-	lladdr = tb[NDA_LLADDR] ? nla_data(tb[NDA_LLADDR]) : NULL;
+	lladdr/*链路地址*/ = tb[NDA_LLADDR] ? nla_data(tb[NDA_LLADDR]) : NULL;
 
 	if (tb[NDA_PROTOCOL])
 		protocol = nla_get_u8(tb[NDA_PROTOCOL]);
 
+	//查询代理表
 	if (ndm->ndm_flags & NTF_PROXY) {
 		struct pneigh_entry *pn;
 
@@ -1975,10 +1988,12 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		bool exempt_from_gc;
 
 		if (!(nlh->nlmsg_flags & NLM_F_CREATE)) {
+			//无此表项，无create标记，返回
 			err = -ENOENT;
 			goto out;
 		}
 
+		//有create标记，创建此表项
 		exempt_from_gc = ndm->ndm_state & NUD_PERMANENT ||
 				 ndm->ndm_flags & NTF_EXT_LEARNED;
 		neigh = ___neigh_create(tbl, dst, dev, exempt_from_gc, true);
@@ -1987,6 +2002,7 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 			goto out;
 		}
 	} else {
+		//表项已存在，有execl标记，报exist,并返回
 		if (nlh->nlmsg_flags & NLM_F_EXCL) {
 			err = -EEXIST;
 			neigh_release(neigh);
@@ -2008,6 +2024,7 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		neigh_event_send(neigh, NULL);
 		err = 0;
 	} else
+		//更新
 		err = __neigh_update(neigh, lladdr, ndm->ndm_state, flags,
 				     NETLINK_CB(skb).portid, extack);
 
@@ -3764,6 +3781,7 @@ EXPORT_SYMBOL(neigh_sysctl_unregister);
 
 static int __init neigh_init(void)
 {
+	//neighbour消息处理
 	rtnl_register(PF_UNSPEC, RTM_NEWNEIGH, neigh_add, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELNEIGH, neigh_delete, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETNEIGH, neigh_get, neigh_dump_info, 0);

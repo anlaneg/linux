@@ -5206,6 +5206,7 @@ void mlx5e_netdev_cleanup(struct net_device *netdev, struct mlx5e_priv *priv)
 	destroy_workqueue(priv->wq);
 }
 
+//mlx 创建网络设备
 struct net_device *mlx5e_create_netdev(struct mlx5_core_dev *mdev,
 				       const struct mlx5e_profile *profile,
 				       int nch,
@@ -5416,6 +5417,7 @@ static void mlx5e_remove(struct mlx5_core_dev *mdev, void *vpriv)
 static struct mlx5_interface mlx5e_interface = {
 	//增加以太网类型设备netdev
 	.add       = mlx5e_add,
+	//移除以太网类型设备
 	.remove    = mlx5e_remove,
 	.attach    = mlx5e_attach,
 	.detach    = mlx5e_detach,

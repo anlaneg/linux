@@ -735,7 +735,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 * is ARP'able.
 	 */
 
-	//入口设备未指定，无法处理丢包
+	//入口设备未指定，无法处理，丢包
 	if (!in_dev)
 		goto out_free_skb;
 
@@ -808,7 +808,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.
  */
-	//目标ip不能是组播ip,目标ip不能是loopback ip,否则丢包
+	//目的ip不能是组播ip,目标ip不能是loopback ip,否则丢包
 	if (ipv4_is_multicast(tip) ||
 	    (!IN_DEV_ROUTE_LOCALNET(in_dev) && ipv4_is_loopback(tip)))
 		goto out_free_skb;
@@ -928,7 +928,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	/* Update our ARP tables */
-	//更新自身的arp表项，先查出表项
+	//取sip对应的arp表项
 	n = __neigh_lookup(&arp_tbl, &sip, dev, 0);
 
 	addr_type = -1;
@@ -955,6 +955,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (n) {
+		//领居表项中存在sip对应的neigh表项，说明地址可达
 		int state = NUD_REACHABLE;
 		int override;
 
@@ -971,6 +972,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		/* Broadcast replies and request packets
 		   do not assert neighbour reachability.
 		 */
+		//目的ip为广播地址或者非arp响应报文，则置为stale状态
 		if (arp->ar_op != htons(ARPOP_REPLY) ||
 		    skb->pkt_type != PACKET_HOST)
 			state = NUD_STALE;

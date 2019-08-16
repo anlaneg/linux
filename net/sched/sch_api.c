@@ -1106,6 +1106,7 @@ skip:
 			return -ENOENT;
 		}
 
+		//采用new队列替代之前的old队列
 		err = cops->graft(parent, cl, new, &old, extack);
 		if (err)
 			return err;

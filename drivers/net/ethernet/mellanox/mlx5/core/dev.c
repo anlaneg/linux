@@ -41,7 +41,7 @@ static DEFINE_MUTEX(mlx5_intf_mutex);
 
 struct mlx5_device_context {
 	struct list_head	list;
-	struct mlx5_interface  *intf;
+	struct mlx5_interface  *intf;//指向其对应的interface
 	void		       *context;
 	unsigned long		state;
 };
@@ -81,6 +81,7 @@ void mlx5_add_device(struct mlx5_interface *intf, struct mlx5_priv *priv)
 		kfree(dev_ctx);
 }
 
+//获取此接口对应的device_context
 static struct mlx5_device_context *mlx5_get_device(struct mlx5_interface *intf,
 						   struct mlx5_priv *priv)
 {
@@ -102,12 +103,15 @@ void mlx5_remove_device(struct mlx5_interface *intf, struct mlx5_priv *priv)
 		return;
 
 	spin_lock_irq(&priv->ctx_lock);
+	//将dev_ctx自队列中移除
 	list_del(&dev_ctx->list);
 	spin_unlock_irq(&priv->ctx_lock);
 
+	//调用intf->remove,移除相应的netdev
 	if (test_bit(MLX5_INTERFACE_ADDED, &dev_ctx->state))
 		intf->remove(dev, dev_ctx->context);
 
+	//释放dev_ctx
 	kfree(dev_ctx);
 }
 
@@ -258,6 +262,7 @@ static bool mlx5_has_added_dev_by_protocol(struct mlx5_core_dev *mdev, int proto
 	struct mlx5_interface *intf;
 	bool found = false;
 
+	//遍历所有已注册的协议，如果protocol相等，取其对应的context，如果状态为added,则查找成功
 	list_for_each_entry(intf, &intf_list, list) {
 		if (intf->protocol == protocol) {
 			dev_ctx = mlx5_get_device(intf, &mdev->priv);
@@ -274,7 +279,11 @@ void mlx5_reload_interface(struct mlx5_core_dev *mdev, int protocol)
 {
 	mutex_lock(&mlx5_intf_mutex);
 	if (mlx5_has_added_dev_by_protocol(mdev, protocol)) {
+		//有已添加的protocol类型的dev
+
+		//先移除所有protocol对应的intf的dev_ctx
 		mlx5_remove_dev_by_protocol(mdev, protocol);
+		//再添加所有protocol对应的intf的dev_ctx
 		mlx5_add_dev_by_protocol(mdev, protocol);
 	}
 	mutex_unlock(&mlx5_intf_mutex);
@@ -293,6 +302,7 @@ void mlx5_add_dev_by_protocol(struct mlx5_core_dev *dev, int protocol)
 }
 
 /* Must be called with intf_mutex held */
+//移除掉intf_list中的所有protocol类型的intf
 void mlx5_remove_dev_by_protocol(struct mlx5_core_dev *dev, int protocol)
 {
 	struct mlx5_interface *intf;

@@ -1659,6 +1659,7 @@ static void esw_enable_vport(struct mlx5_eswitch *esw, struct mlx5_vport *vport,
 	mutex_unlock(&esw->state_lock);
 }
 
+//禁用指定的vport
 static void esw_disable_vport(struct mlx5_eswitch *esw,
 			      struct mlx5_vport *vport)
 {

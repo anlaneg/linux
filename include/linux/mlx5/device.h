@@ -113,7 +113,7 @@
 		     << __mlx5_dw_bit_off(typ, fld))); \
 } while (0)
 
-//取typ结构体中的fld成员
+//取typ类型结构体p中的fld成员
 #define MLX5_GET(typ, p, fld) ((be32_to_cpu(*((__be32 *)(p) +\
 __mlx5_dw_off(typ, fld))) >> __mlx5_dw_bit_off(typ, fld)) & \
 __mlx5_mask(typ, fld))
@@ -1149,6 +1149,7 @@ enum mlx5_qcam_feature_groups {
 };
 
 /* GET Dev Caps macros */
+//取struct mlx5_ifc_cmd_hca_cap_bits类型结构体mdev->caps.hca_cur[MLX5_CAP_GENERAL]的cap成员
 #define MLX5_CAP_GEN(mdev, cap) \
 	MLX5_GET(cmd_hca_cap, mdev->caps.hca_cur[MLX5_CAP_GENERAL], cap)
 

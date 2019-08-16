@@ -152,10 +152,12 @@ next_knode:
 			if (skb_headroom(skb) + toff > INT_MAX)
 				goto out;
 
+			//自toff位置取4字节
 			data = skb_header_pointer(skb, toff, 4, &hdata);
 			if (!data)
 				goto out;
 			if ((*data ^ key->val) & key->mask) {
+				//不相等，尝试下一个knode
 				n = rcu_dereference_bh(n->next);
 				goto next_knode;
 			}
@@ -165,6 +167,7 @@ next_knode:
 #endif
 		}
 
+		//与knode命中
 		ht = rcu_dereference_bh(n->ht_down);
 		if (!ht) {
 check_terminal:
@@ -178,6 +181,7 @@ check_terminal:
 #ifdef CONFIG_CLS_U32_PERF
 				__this_cpu_inc(n->pf->rhit);
 #endif
+				//执行knode对应的actions
 				r = tcf_exts_exec(skb, &n->exts, res);
 				if (r < 0) {
 					n = rcu_dereference_bh(n->next);

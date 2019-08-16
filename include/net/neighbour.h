@@ -152,7 +152,7 @@ struct neighbour {
 	//邻居表项的timer
 	struct timer_list	timer;
 	unsigned long		used;
-	atomic_t		probes;
+	atomic_t		probes;//表项的探测次数
 	__u8			flags;
 	//邻居表项的状态
 	__u8			nud_state;

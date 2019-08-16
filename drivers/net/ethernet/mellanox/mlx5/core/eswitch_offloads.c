@@ -2325,7 +2325,8 @@ static int mlx5_devlink_eswitch_check(struct devlink *devlink)
 	return 0;
 }
 
-int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
+//设置eswitch模式
+int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode/*要设置的模式*/,
 				  struct netlink_ext_ack *extack)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
@@ -2354,6 +2355,7 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 		return -EINVAL;
 }
 
+//获取eswitch模式
 int mlx5_devlink_eswitch_mode_get(struct devlink *devlink, u16 *mode)
 {
 	struct mlx5_core_dev *dev = devlink_priv(devlink);

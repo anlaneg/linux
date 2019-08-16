@@ -568,7 +568,7 @@ struct mlx5_priv {
 	u8			mkey_key;
 
 	struct list_head        dev_list;
-	struct list_head        ctx_list;
+	struct list_head        ctx_list;//用于串连不同intf的mlx5_device_context
 	spinlock_t              ctx_lock;
 	struct mlx5_events      *events;
 
@@ -1049,8 +1049,8 @@ struct mlx5_interface {
 	void			(*remove)(struct mlx5_core_dev *dev, void *context);
 	int			(*attach)(struct mlx5_core_dev *dev, void *context);
 	void			(*detach)(struct mlx5_core_dev *dev, void *context);
-	int			protocol;
-	struct list_head	list;
+	int			protocol;//接口协议
+	struct list_head	list;//用于连接不同的intf
 };
 
 int mlx5_register_interface(struct mlx5_interface *intf);

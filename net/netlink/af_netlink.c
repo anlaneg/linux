@@ -77,11 +77,15 @@ struct listeners {
 /* state bits */
 #define NETLINK_S_CONGESTED		0x0
 
+//检查此socket是否从属于kernel
 static inline int netlink_is_kernel(struct sock *sk)
 {
 	return nlk_sk(sk)->flags & NETLINK_F_KERNEL_SOCKET;
 }
 
+//此数组用于注册netlink的所有protocol
+//例如NETLINK_ROUTE
+//函数__netlink_kernel_create负责添加各protocol
 struct netlink_table *nl_table __read_mostly;
 EXPORT_SYMBOL_GPL(nl_table);
 
@@ -686,13 +690,14 @@ static int netlink_create(struct net *net, struct socket *sock, int protocol,
 		netlink_lock_table();
 	}
 #endif
+	//如果指定protocol已注册，则引用相应module
 	if (nl_table[protocol].registered &&
 	    try_module_get(nl_table[protocol].module))
-		//此协议已注册，依赖模块module
 		module = nl_table[protocol].module;
 	else
 		//要求的协议未注册，返回不支持
 		err = -EPROTONOSUPPORT;
+
 	cb_mutex = nl_table[protocol].cb_mutex;
 	bind = nl_table[protocol].bind;
 	unbind = nl_table[protocol].unbind;
@@ -2068,6 +2073,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (sock_create_lite(PF_NETLINK, SOCK_DGRAM, unit, &sock))
 		return NULL;
 
+	//创建socket,并指明此socket属于kernel
 	if (__netlink_create(net, sock, cb_mutex, unit, 1) < 0)
 		goto out_sock_release_nosk;
 
