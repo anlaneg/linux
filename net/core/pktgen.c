@@ -221,6 +221,7 @@ static char *pkt_flag_names[] = {
 #define T_STOP        (1<<0)	/* Stop run */
 #define T_RUN         (1<<1)	/* Start run */
 #define T_REMDEVALL   (1<<2)	/* Remove all devs */
+//标记此thread需要做pktgen_dev的删除
 #define T_REMDEV      (1<<3)	/* Remove one dev */
 
 /* Xmit modes */
@@ -259,7 +260,9 @@ struct pktgen_dev {
 	 * Try to keep frequent/infrequent used vars. separated.
 	 */
 	struct proc_dir_entry *entry;	/* proc file */
+	//指向此dev对应的thread
 	struct pktgen_thread *pg_thread;/* the owner */
+	//用于串连多个dev
 	struct list_head list;		/* chaining in the thread's run-queue */
 	struct rcu_head	 rcu;		/* freed by RCU */
 
@@ -274,6 +277,7 @@ struct pktgen_dev {
 	int max_pkt_size;
 	int pkt_overhead;	/* overhead for MPLS, VLANs, IPSEC etc */
 	int nfrags;
+	//标记此设备将被移除
 	int removal_mark;	/* non-zero => the device is marked for
 				 * removal by worker thread */
 
@@ -387,6 +391,7 @@ struct pktgen_dev {
 	struct sk_buff *skb;	/* skb we are to transmit next, used for when we
 				 * are transmitting the same one multiple times
 				 */
+	//对应的出口设备
 	struct net_device *odev; /* The out-going device.
 				  * Note that the device should have it's
 				  * pg_info pointer pointing back to this
@@ -395,7 +400,7 @@ struct pktgen_dev {
 				  * device name (not when the inject is
 				  * started as it used to do.)
 				  */
-	char odevname[32];
+	char odevname[32];//出接口设备名称
 	struct flow_state *flows;
 	unsigned int cflows;	/* Concurrent flows (config) */
 	unsigned int lflow;		/* Flow length  (config) */
@@ -431,13 +436,16 @@ static unsigned int pg_net_id __read_mostly;
 struct pktgen_net {
 	struct net		*net;
 	struct proc_dir_entry	*proc_dir;
+	//指向所有pktgen对应的threads
 	struct list_head	pktgen_threads;
 	bool			pktgen_exiting;
 };
 
 struct pktgen_thread {
 	struct mutex if_lock;		/* for list of devices */
+	//指向所有dev
 	struct list_head if_list;	/* All device here */
+	//用于将所有thread串连起来
 	struct list_head th_list;
 	struct task_struct *tsk;
 	char result[512];
@@ -733,6 +741,7 @@ static int count_trail_chars(const char __user * user_buffer,
 {
 	int i;
 
+	//自0位置开始查找'"\n\r\t ='字符，直到遇到非这些字符，才跳出
 	for (i = 0; i < maxlen; i++) {
 		char c;
 		if (get_user(c, &user_buffer[i]))
@@ -853,6 +862,7 @@ static __u32 pktgen_read_flag(const char *f, bool *disable)
 	return 0;
 }
 
+//配置pktgen接口
 static ssize_t pktgen_if_write(struct file *file,
 			       const char __user * user_buffer, size_t count,
 			       loff_t * offset)
@@ -883,6 +893,7 @@ static ssize_t pktgen_if_write(struct file *file,
 
 	/* Read variable name */
 
+	//读取变量名称
 	len = strn_len(&user_buffer[i], sizeof(name) - 1);
 	if (len < 0)
 		return len;
@@ -910,6 +921,7 @@ static ssize_t pktgen_if_write(struct file *file,
 		kfree(tp);
 	}
 
+	//配置min_pkt_size
 	if (!strcmp(name, "min_pkt_size")) {
 		len = num_arg(&user_buffer[i], 10, &value);
 		if (len < 0)
@@ -1029,6 +1041,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		sprintf(pg_result, "OK: rate=%lu", value);
 		return count;
 	}
+
+	//配置udp.src.min
 	if (!strcmp(name, "udp_src_min")) {
 		len = num_arg(&user_buffer[i], 10, &value);
 		if (len < 0)
@@ -1042,6 +1056,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		sprintf(pg_result, "OK: udp_src_min=%u", pkt_dev->udp_src_min);
 		return count;
 	}
+
+	//配置udp.dst.min
 	if (!strcmp(name, "udp_dst_min")) {
 		len = num_arg(&user_buffer[i], 10, &value);
 		if (len < 0)
@@ -1168,6 +1184,8 @@ static ssize_t pktgen_if_write(struct file *file,
 			sprintf(pg_result, "ERROR: node not possible");
 		return count;
 	}
+
+	//配置xmit_mode
 	if (!strcmp(name, "xmit_mode")) {
 		char f[32];
 
@@ -1210,6 +1228,8 @@ static ssize_t pktgen_if_write(struct file *file,
 		sprintf(pg_result, "OK: xmit_mode=%s", f);
 		return count;
 	}
+
+	//设置pkt flag
 	if (!strcmp(name, "flag")) {
 		__u32 flag;
 		char f[32];
@@ -1707,10 +1727,12 @@ static int pktgen_if_open(struct inode *inode, struct file *file)
 	return single_open(file, pktgen_if_show, PDE_DATA(inode));
 }
 
+//pktgen接口对应的配置文件
 static const struct file_operations pktgen_if_fops = {
 	.open    = pktgen_if_open,
 	.read    = seq_read,
 	.llseek  = seq_lseek,
+	//完成接口配置
 	.write   = pktgen_if_write,
 	.release = single_release,
 };
@@ -1745,6 +1767,7 @@ static int pktgen_thread_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
+//添加pktdev或者移除所有pktdev
 static ssize_t pktgen_thread_write(struct file *file,
 				   const char __user * user_buffer,
 				   size_t count, loff_t * offset)
@@ -1768,17 +1791,19 @@ static ssize_t pktgen_thread_write(struct file *file,
 	i = len;
 
 	/* Read variable name */
-
+	//读取变量名长度，变量名以'"\r\n\t '这些字符划分
 	len = strn_len(&user_buffer[i], sizeof(name) - 1);
 	if (len < 0)
 		return len;
 
+	//填充名称
 	memset(name, 0, sizeof(name));
 	if (copy_from_user(name, &user_buffer[i], len))
 		return -EFAULT;
 	i += len;
 
 	max = count - i;
+	//跳过分隔字符
 	len = count_trail_chars(&user_buffer[i], max);
 	if (len < 0)
 		return len;
@@ -1796,7 +1821,9 @@ static ssize_t pktgen_thread_write(struct file *file,
 
 	pg_result = &(t->result[0]);
 
+	//遇到添加设备命令
 	if (!strcmp(name, "add_device")) {
+		//取要添加的设备名称
 		char f[32];
 		memset(f, 0, 32);
 		len = strn_len(&user_buffer[i], sizeof(f) - 1);
@@ -1804,13 +1831,17 @@ static ssize_t pktgen_thread_write(struct file *file,
 			ret = len;
 			goto out;
 		}
+
+		//利用user_buffer[i]填充f
 		if (copy_from_user(f, &user_buffer[i], len))
 			return -EFAULT;
 		i += len;
 		mutex_lock(&pktgen_thread_lock);
+		//添加f对应的设备
 		ret = pktgen_add_device(t, f);
 		mutex_unlock(&pktgen_thread_lock);
 		if (!ret) {
+			//添加设备成功，回显
 			ret = count;
 			sprintf(pg_result, "OK: add_device=%s", f);
 		} else
@@ -1818,8 +1849,10 @@ static ssize_t pktgen_thread_write(struct file *file,
 		goto out;
 	}
 
+	//遇到移除所有设备名称
 	if (!strcmp(name, "rem_device_all")) {
 		mutex_lock(&pktgen_thread_lock);
+		//知会线程移除所有设备
 		t->control |= T_REMDEVALL;
 		mutex_unlock(&pktgen_thread_lock);
 		schedule_timeout_interruptible(msecs_to_jiffies(125));	/* Propagate thread->control  */
@@ -1853,6 +1886,7 @@ static const struct file_operations pktgen_thread_fops = {
 };
 
 /* Think find or remove for NN */
+//在所有threads上查询名称为ifname的pktgen,如果remove非零，则标记此pktgen需要移除
 static struct pktgen_dev *__pktgen_NN_threads(const struct pktgen_net *pn,
 					      const char *ifname, int remove)
 {
@@ -1864,6 +1898,7 @@ static struct pktgen_dev *__pktgen_NN_threads(const struct pktgen_net *pn,
 		pkt_dev = pktgen_find_dev(t, ifname, exact);
 		if (pkt_dev) {
 			if (remove) {
+				//如有必要，标记此thread需要移除pkt_dev
 				pkt_dev->removal_mark = 1;
 				t->control |= T_REMDEV;
 			}
@@ -1964,6 +1999,7 @@ static int pktgen_device_event(struct notifier_block *unused,
 	return NOTIFY_DONE;
 }
 
+//ifname是一个@划分的字符串，取@前的字符做为ifname查找对应的设备
 static struct net_device *pktgen_dev_get_by_name(const struct pktgen_net *pn,
 						 struct pktgen_dev *pkt_dev,
 						 const char *ifname)
@@ -1985,6 +2021,7 @@ static struct net_device *pktgen_dev_get_by_name(const struct pktgen_net *pn,
 
 /* Associate pktgen_dev with a device. */
 
+//设置pkt_dev->odev对应的netdev,其名称来自于ifname
 static int pktgen_setup_dev(const struct pktgen_net *pn,
 			    struct pktgen_dev *pkt_dev, const char *ifname)
 {
@@ -1992,21 +2029,25 @@ static int pktgen_setup_dev(const struct pktgen_net *pn,
 	int err;
 
 	/* Clean old setups */
+	//如果odev已存在，则释放odev
 	if (pkt_dev->odev) {
 		dev_put(pkt_dev->odev);
 		pkt_dev->odev = NULL;
 	}
 
+	//在pn对应的network中查找ifname对应的netdev
 	odev = pktgen_dev_get_by_name(pn, pkt_dev, ifname);
 	if (!odev) {
 		pr_err("no such netdevice: \"%s\"\n", ifname);
 		return -ENODEV;
 	}
 
+	//指定的netdev必须为ether设备
 	if (odev->type != ARPHRD_ETHER) {
 		pr_err("not an ethernet device: \"%s\"\n", ifname);
 		err = -EINVAL;
 	} else if (!netif_running(odev)) {
+		//指定的netdev必须是up的
 		pr_err("device is down: \"%s\"\n", ifname);
 		err = -ENETDOWN;
 	} else {
@@ -2378,6 +2419,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 				+ pkt_dev->udp_src_min;
 
 		else {
+			//每次递增1个进行变换
 			pkt_dev->cur_udp_src++;
 			if (pkt_dev->cur_udp_src >= pkt_dev->udp_src_max)
 				pkt_dev->cur_udp_src = pkt_dev->udp_src_min;
@@ -2390,6 +2432,7 @@ static void mod_cur_headers(struct pktgen_dev *pkt_dev)
 				(pkt_dev->udp_dst_max - pkt_dev->udp_dst_min)
 				+ pkt_dev->udp_dst_min;
 		} else {
+			//dst port递增
 			pkt_dev->cur_udp_dst++;
 			if (pkt_dev->cur_udp_dst >= pkt_dev->udp_dst_max)
 				pkt_dev->cur_udp_dst = pkt_dev->udp_dst_min;
@@ -2747,6 +2790,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	/* Update any of the values, used when we're incrementing various
 	 * fields.
 	 */
+	//修改字段，用于实现多流
 	mod_cur_headers(pkt_dev);
 	queue_map = pkt_dev->cur_queue_map;
 
@@ -3357,6 +3401,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		spin(pkt_dev, pkt_dev->next_tx);
 
 	if (pkt_dev->xmit_mode == M_NETIF_RECEIVE) {
+		//pkt_dev处理收模式，向本机发送
 		skb = pkt_dev->skb;
 		skb->protocol = eth_type_trans(skb, skb->dev);
 		refcount_add(burst, &skb->users);
@@ -3384,7 +3429,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		} while (--burst > 0);
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {
-		//执行报文发送
+		//执行报文发送，向外部发送（入队发送）
 		local_bh_disable();
 		refcount_inc(&pkt_dev->skb->users);
 
@@ -3416,6 +3461,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		goto out;
 	}
 
+	//执行burst发送
 	txq = skb_get_tx_queue(odev, pkt_dev->skb);
 
 	local_bh_disable();
@@ -3551,6 +3597,7 @@ static int pktgen_thread_worker(void *arg)
 	return 0;
 }
 
+//查找thread是否负责一个名称为ifname的pktgen_dev
 static struct pktgen_dev *pktgen_find_dev(struct pktgen_thread *t,
 					  const char *ifname, bool exact)
 {
@@ -3576,7 +3623,7 @@ static struct pktgen_dev *pktgen_find_dev(struct pktgen_thread *t,
 /*
  * Adds a dev at front of if_list.
  */
-
+//将pkt_dev加入到thread中
 static int add_dev_to_thread(struct pktgen_thread *t,
 			     struct pktgen_dev *pkt_dev)
 {
@@ -3590,6 +3637,7 @@ static int add_dev_to_thread(struct pktgen_thread *t,
 	 * updating the if_list */
 	if_lock(t);
 
+	//已被加入
 	if (pkt_dev->pg_thread) {
 		pr_err("ERROR: already assigned to a thread\n");
 		rv = -EBUSY;
@@ -3606,7 +3654,7 @@ out:
 }
 
 /* Called under thread lock */
-
+//将ifname对应的设备加入到thread
 static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 {
 	struct pktgen_dev *pkt_dev;
@@ -3614,13 +3662,14 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	int node = cpu_to_node(t->cpu);
 
 	/* We don't allow a device to be on several threads */
-
+	//确保此设备未被加入到任意一个thread
 	pkt_dev = __pktgen_NN_threads(t->net, ifname, FIND);
 	if (pkt_dev) {
 		pr_err("ERROR: interface already used\n");
 		return -EBUSY;
 	}
 
+	//申请pkt_dev
 	pkt_dev = kzalloc_node(sizeof(struct pktgen_dev), GFP_KERNEL, node);
 	if (!pkt_dev)
 		return -ENOMEM;
@@ -3652,12 +3701,14 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 	pkt_dev->burst = 1;
 	pkt_dev->node = NUMA_NO_NODE;
 
+	//设置pkt_dev对应的出口设备
 	err = pktgen_setup_dev(t->net, pkt_dev, ifname);
 	if (err)
 		goto out1;
 	if (pkt_dev->odev->priv_flags & IFF_TX_SKB_SHARING)
 		pkt_dev->clone_skb = pg_clone_skb_d;
 
+	//创建ifname对应的proc文件
 	pkt_dev->entry = proc_create_data(ifname, 0600, t->net->proc_dir,
 					  &pktgen_if_fops, pkt_dev);
 	if (!pkt_dev->entry) {
