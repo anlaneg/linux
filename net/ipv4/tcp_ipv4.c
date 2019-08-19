@@ -667,12 +667,14 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb)
 	struct net *net;
 
 	/* Never send a reset in response to a reset. */
+	//skb已是reset报文，不再发送rst
 	if (th->rst)
 		return;
 
 	/* If sk not NULL, it means we did a successful lookup and incoming
 	 * route had to be correct. prequeue might have dropped our dst.
 	 */
+	//只为本机回复rst
 	if (!sk && skb_rtable(skb)->rt_type != RTN_LOCAL)
 		return;
 
@@ -773,6 +775,8 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb)
 				   inet_twsk(sk)->tw_mark : sk->sk_mark;
 		transmit_time = tcp_transmit_time(sk);
 	}
+
+	//响应单播报文
 	ip_send_unicast_reply(ctl_sk,
 			      skb, &TCP_SKB_CB(skb)->header.h4.opt,
 			      ip_hdr(skb)->saddr, ip_hdr(skb)->daddr,

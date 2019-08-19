@@ -3431,6 +3431,7 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 		len = min_t(unsigned int, len, sizeof(info));
 		if (put_user(len, optlen))
 			return -EFAULT;
+		//将返回值copy到用户态指定的指针
 		if (copy_to_user(optval, &info, len))
 			return -EFAULT;
 		return 0;

@@ -204,7 +204,7 @@ enum tcp_ca_state {
 };
 
 struct tcp_info {
-	__u8	tcpi_state;
+	__u8	tcpi_state;//tcp状态
 	__u8	tcpi_ca_state;
 	__u8	tcpi_retransmits;
 	__u8	tcpi_probes;

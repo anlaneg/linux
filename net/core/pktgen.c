@@ -364,16 +364,16 @@ struct pktgen_dev {
 
 	__u32 cur_dst_mac_offset;
 	__u32 cur_src_mac_offset;
-	__be32 cur_saddr;
+	__be32 cur_saddr;//源ip
 	__be32 cur_daddr;
 	__u16 ip_id;
-	__u16 cur_udp_dst;
+	__u16 cur_udp_dst;//udp目的端口
 	__u16 cur_udp_src;
 	__u16 cur_queue_map;
-	__u32 cur_pkt_size;
+	__u32 cur_pkt_size;//报文长度
 	__u32 last_pkt_size;
 
-	__u8 hh[14];
+	__u8 hh[14];//填充以太头
 	/* = {
 	   0x00, 0x80, 0xC8, 0x79, 0xB3, 0xCB,
 
@@ -445,7 +445,7 @@ struct pktgen_thread {
 	/* Field for thread to receive "posted" events terminate,
 	   stop ifs etc. */
 
-	u32 control;
+	u32 control;//添加用户控制标记，例如stop
 	int cpu;
 
 	wait_queue_head_t queue;
@@ -2612,6 +2612,7 @@ static inline __be16 build_tci(unsigned int id, unsigned int cfi,
 	return htons(id | (cfi << 12) | (prio << 13));
 }
 
+//填充pktgen_hdr
 static void pktgen_finalize_skb(struct pktgen_dev *pkt_dev, struct sk_buff *skb,
 				int datalen)
 {
@@ -2670,9 +2671,11 @@ static void pktgen_finalize_skb(struct pktgen_dev *pkt_dev, struct sk_buff *skb,
 	/* Stamp the time, and sequence number,
 	 * convert them to network byte order
 	 */
+	//填充pktgen头部
 	pgh->pgh_magic = htonl(PKTGEN_MAGIC);
 	pgh->seq_num = htonl(pkt_dev->seq_num);
 
+	//是否记录时间
 	if (pkt_dev->flags & F_NO_TIMESTAMP) {
 		pgh->tv_sec = 0;
 		pgh->tv_usec = 0;
@@ -2718,6 +2721,7 @@ static struct sk_buff *pktgen_alloc_skb(struct net_device *dev,
 	return skb;
 }
 
+//udp in ipv4 报文填充
 static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 					struct pktgen_dev *pkt_dev)
 {
@@ -2746,6 +2750,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	mod_cur_headers(pkt_dev);
 	queue_map = pkt_dev->cur_queue_map;
 
+	//申请一个skb
 	skb = pktgen_alloc_skb(odev, pkt_dev);
 	if (!skb) {
 		sprintf(pkt_dev->result, "No memory");
@@ -2762,6 +2767,7 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 		mpls_push(mpls, pkt_dev);
 
 	if (pkt_dev->vlan_id != 0xffff) {
+		//有vlan,构造vlan
 		if (pkt_dev->svlan_id != 0xffff) {
 			svlan_tci = skb_put(skb, sizeof(__be16));
 			*svlan_tci = build_tci(pkt_dev->svlan_id,
@@ -2781,13 +2787,16 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 
 	skb_reset_mac_header(skb);
 	skb_set_network_header(skb, skb->len);
+	//指向ip头
 	iph = skb_put(skb, sizeof(struct iphdr));
 
 	skb_set_transport_header(skb, skb->len);
+	//指向udp头
 	udph = skb_put(skb, sizeof(struct udphdr));
 	skb_set_queue_mapping(skb, queue_map);
 	skb->priority = pkt_dev->skb_priority;
 
+	//填充以太头
 	memcpy(eth, pkt_dev->hh, 12);
 	*(__be16 *) & eth[12] = protocol;
 
@@ -2797,11 +2806,13 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	if (datalen < 0 || datalen < sizeof(struct pktgen_hdr))
 		datalen = sizeof(struct pktgen_hdr);
 
+	//填充udp报文头
 	udph->source = htons(pkt_dev->cur_udp_src);
 	udph->dest = htons(pkt_dev->cur_udp_dst);
 	udph->len = htons(datalen + 8);	/* DATA + udphdr */
 	udph->check = 0;
 
+	//填充ip头
 	iph->ihl = 5;
 	iph->version = 4;
 	iph->ttl = 32;
@@ -2819,8 +2830,10 @@ static struct sk_buff *fill_packet_ipv4(struct net_device *odev,
 	skb->dev = odev;
 	skb->pkt_type = PACKET_HOST;
 
+	//填充pktgen_hdr
 	pktgen_finalize_skb(pkt_dev, skb, datalen);
 
+	//ip checksum填充
 	if (!(pkt_dev->flags & F_UDPCSUM)) {
 		skb->ip_summed = CHECKSUM_NONE;
 	} else if (odev->features & (NETIF_F_HW_CSUM | NETIF_F_IP_CSUM)) {
@@ -2976,6 +2989,7 @@ static struct sk_buff *fill_packet_ipv6(struct net_device *odev,
 	return skb;
 }
 
+//申请并填充一个报文
 static struct sk_buff *fill_packet(struct net_device *odev,
 				   struct pktgen_dev *pkt_dev)
 {
@@ -3029,6 +3043,7 @@ static void pktgen_run(struct pktgen_thread *t)
 		t->control &= ~(T_STOP);
 }
 
+//通知停止所有发包线程
 static void pktgen_stop_all_threads_ifs(struct pktgen_net *pn)
 {
 	struct pktgen_thread *t;
@@ -3103,6 +3118,7 @@ static int pktgen_wait_all_threads_run(struct pktgen_net *pn)
 	return sig;
 }
 
+//通知所有thread开始运行
 static void pktgen_run_all_threads(struct pktgen_net *pn)
 {
 	struct pktgen_thread *t;
@@ -3368,6 +3384,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 		} while (--burst > 0);
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {
+		//执行报文发送
 		local_bh_disable();
 		refcount_inc(&pkt_dev->skb->users);
 
@@ -3498,6 +3515,7 @@ static int pktgen_thread_worker(void *arg)
 				cpu_relax();
 		}
 
+		//如果线程需要stop,则执行stop
 		if (t->control & T_STOP) {
 			pktgen_stop(t);
 			t->control &= ~(T_STOP);
@@ -3676,6 +3694,7 @@ out1:
 	return err;
 }
 
+//在指定cpu上创建kthread
 static int __net_init pktgen_create_thread(int cpu, struct pktgen_net *pn)
 {
 	struct pktgen_thread *t;
@@ -3697,6 +3716,7 @@ static int __net_init pktgen_create_thread(int cpu, struct pktgen_net *pn)
 	list_add_tail(&t->th_list, &pn->pktgen_threads);
 	init_completion(&t->start_done);
 
+	//创建kthread线程执行报文收发
 	p = kthread_create_on_node(pktgen_thread_worker,
 				   t,
 				   cpu_to_node(cpu),
@@ -3707,9 +3727,12 @@ static int __net_init pktgen_create_thread(int cpu, struct pktgen_net *pn)
 		kfree(t);
 		return PTR_ERR(p);
 	}
+
+	//将此kthread绑定在指定cpu上
 	kthread_bind(p, cpu);
 	t->tsk = p;
 
+	//为每个cpu创建相应的控制文件
 	pe = proc_create_data(t->tsk->comm, 0600, pn->proc_dir,
 			      &pktgen_thread_fops, t);
 	if (!pe) {
@@ -3782,6 +3805,7 @@ static int pktgen_remove_device(struct pktgen_thread *t,
 	return 0;
 }
 
+//pktgen 初始化
 static int __net_init pg_net_init(struct net *net)
 {
 	struct pktgen_net *pn = net_generic(net, pg_net_id);
@@ -3791,11 +3815,14 @@ static int __net_init pg_net_init(struct net *net)
 	pn->net = net;
 	INIT_LIST_HEAD(&pn->pktgen_threads);
 	pn->pktgen_exiting = false;
+	//创建pktgen目录
 	pn->proc_dir = proc_mkdir(PG_PROC_DIR, pn->net->proc_net);
 	if (!pn->proc_dir) {
 		pr_warn("cannot create /proc/net/%s\n", PG_PROC_DIR);
 		return -ENODEV;
 	}
+
+	//创建控制发包的proc文件
 	pe = proc_create(PGCTRL, 0600, pn->proc_dir, &pktgen_fops);
 	if (pe == NULL) {
 		pr_err("cannot create %s procfs entry\n", PGCTRL);
@@ -3803,6 +3830,7 @@ static int __net_init pg_net_init(struct net *net)
 		goto remove;
 	}
 
+	//为每个cpu创建pktgen线程
 	for_each_online_cpu(cpu) {
 		int err;
 

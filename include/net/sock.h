@@ -170,7 +170,7 @@ struct sock_common {
 	};
 
 	unsigned short		skc_family;
-	volatile unsigned char	skc_state;
+	volatile unsigned char	skc_state;//socket状态，例如syn_recv
 	unsigned char		skc_reuse:4;//socket 地址reuse标记
 	unsigned char		skc_reuseport:1;//socket port reuse
 	unsigned char		skc_ipv6only:1;
@@ -478,7 +478,7 @@ struct sock {
 	rwlock_t		sk_callback_lock;
 	int			sk_err,
 				sk_err_soft;
-	u32			sk_ack_backlog;
+	u32			sk_ack_backlog;//当前接受的backlog
 	u32			sk_max_ack_backlog;//配置的最大backlog
 	kuid_t			sk_uid;
 	struct pid		*sk_peer_pid;
