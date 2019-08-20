@@ -389,8 +389,8 @@ struct mlx5_esw_flow_attr {
 		struct mlx5_termtbl_handle *termtbl;
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
 	u32	mod_hdr_id;//修改头部对应的action信息 id
-	u8	match_level;//非隧道解析层数（例如udp,tcp层）
-	u8	tunnel_match_level;//隧道解析层数
+	u8	inner_match_level;//非隧道解析层数（例如udp,tcp层）
+	u8	outer_match_level;//隧道解析层数
 	struct mlx5_fc *counter;//统计信息（由fw进行分配）
 	u32	chain;//规则所属的chain索引
 	u16	prio;
