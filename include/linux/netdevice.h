@@ -309,6 +309,7 @@ int __init netdev_boot_setup(char *str);
 
 struct gro_list {
 	struct list_head	list;
+	//gro链上缓存的报文数
 	int			count;
 };
 
@@ -339,8 +340,9 @@ struct napi_struct {
 #ifdef CONFIG_NETPOLL
 	int			poll_owner;
 #endif
+	//对应的设备
 	struct net_device	*dev;
-        //gro功能缓存的报文
+    //gro功能缓存的报文
 	struct gro_list		gro_hash[GRO_HASH_BUCKETS];
 	struct sk_buff		*skb;
 	struct hrtimer		timer;
@@ -2316,6 +2318,7 @@ struct napi_gro_cb {
 	u8	encap_mark:1;
 
 	/* GRO checksum is valid */
+	//标记checksum是有效的
 	u8	csum_valid:1;
 
 	/* Number of checksums via CHECKSUM_UNNECESSARY */
@@ -2344,7 +2347,7 @@ struct napi_gro_cb {
 	__wsum	csum;
 
 	/* used in skb_gro_receive() slow path */
-	struct sk_buff *last;
+	struct sk_buff *last;/*上一次缓存的skb*/
 };
 
 #define NAPI_GRO_CB(skb) ((struct napi_gro_cb *)(skb)->cb)

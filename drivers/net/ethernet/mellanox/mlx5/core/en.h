@@ -412,9 +412,9 @@ struct mlx5e_txqsq {
 } ____cacheline_aligned_in_smp;
 
 struct mlx5e_dma_info {
-	dma_addr_t addr;
+	dma_addr_t addr;/*dma地址*/
 	union {
-		struct page *page;
+		struct page *page;/*dma地址对应的page*/
 		struct {
 			u64 handle;
 			void *data;

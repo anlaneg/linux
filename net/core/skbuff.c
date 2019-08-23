@@ -78,6 +78,7 @@
 
 #include "datagram.h"
 
+//负责分配skb(不含数据仅有描述信息）
 struct kmem_cache *skbuff_head_cache __ro_after_init;
 static struct kmem_cache *skbuff_fclone_cache __ro_after_init;
 #ifdef CONFIG_SKB_EXTENSIONS
@@ -206,8 +207,8 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * aligned memory blocks, unless SLUB/SLAB debug is enabled.
 	 * Both skb->head and skb_shared_info are cache line aligned.
 	 */
-	//接着申请skb 需要存放报文的缓冲区（需要在其后加一个skb_shared_info结构体）
-	size = SKB_DATA_ALIGN(size);
+	//接着申请需要存放报文的缓冲区（需要在其后加一个skb_shared_info结构体）
+	size = SKB_DATA_ALIGN(size);//size按cacheline对齐
 	size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 	data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
 	if (!data)
@@ -240,7 +241,8 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 
 	/* make sure we initialize shinfo sequentially */
 	shinfo = skb_shinfo(skb);//由end指针得到shinfo
-	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));//初始化shinfo
+	//初始化shinfo
+	memset(shinfo, 0, offsetof(struct skb_shared_info, dataref));
 	atomic_set(&shinfo->dataref, 1);//引用计数为１
 
 	if (flags & SKB_ALLOC_FCLONE) {
@@ -507,6 +509,7 @@ EXPORT_SYMBOL(__netdev_alloc_skb);
  *
  *	%NULL is returned if there is no free memory.
  */
+//为rx NAPI申请sk buffer，指定报文缓冲区大小len
 struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 				 gfp_t gfp_mask)
 {
@@ -518,6 +521,7 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 
 	if ((len > SKB_WITH_OVERHEAD(PAGE_SIZE)) ||
 	    (gfp_mask & (__GFP_DIRECT_RECLAIM | GFP_DMA))) {
+		//报文数据长度要求过大，采用__alloc_skb满足skb申请
 		skb = __alloc_skb(len, gfp_mask, SKB_ALLOC_RX, NUMA_NO_NODE);
 		if (!skb)
 			goto skb_fail;
@@ -530,6 +534,7 @@ struct sk_buff *__napi_alloc_skb(struct napi_struct *napi, unsigned int len,
 	if (sk_memalloc_socks())
 		gfp_mask |= __GFP_MEMALLOC;
 
+	//自napi上申请skb
 	data = page_frag_alloc(&nc->page, len, gfp_mask);
 	if (unlikely(!data))
 		return NULL;
@@ -4008,23 +4013,30 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	unsigned int headlen = skb_headlen(skb);
 	unsigned int len = skb_gro_len(skb);
 	unsigned int delta_truesize;
+	/*gro时，我们可能会缓存多个报文，此时p时我们缓冲的首个报文，skb是本次我们计划
+	 * 缓存的报文，而lp是我们上次缓存的报文*/
 	struct sk_buff *lp;
 
 	if (unlikely(p->len + len >= 65536 || NAPI_GRO_CB(skb)->flush))
 		return -E2BIG;
 
+	//取上一次缓存的报文及pinfo
 	lp = NAPI_GRO_CB(p)->last;
 	pinfo = skb_shinfo(lp);
 
 	if (headlen <= offset) {
 		skb_frag_t *frag;
 		skb_frag_t *frag2;
+		//本报文的分片数
 		int i = skbinfo->nr_frags;
+		//上一个报文的分片数+本报文的分片数
 		int nr_frags = pinfo->nr_frags + i;
 
+		//总的分片数过大，执行merge
 		if (nr_frags > MAX_SKB_FRAGS)
 			goto merge;
 
+		//将本报文的分片信息合并到上一个报文的分片信息中
 		offset -= headlen;
 		pinfo->nr_frags = nr_frags;
 		skbinfo->nr_frags = 0;
@@ -4077,6 +4089,7 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	}
 
 merge:
+	//skbinfo中的分片数组不足以存放这些frags,需要将frags合并
 	delta_truesize = skb->truesize;
 	if (offset > headlen) {
 		unsigned int eat = offset - headlen;

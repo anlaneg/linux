@@ -408,6 +408,7 @@ mlx5e_add_skb_frag(struct mlx5e_rq *rq, struct sk_buff *skb,
 		   struct mlx5e_dma_info *di, u32 frag_offset, u32 len,
 		   unsigned int truesize)
 {
+	//自设备向外执行dma操作
 	dma_sync_single_for_cpu(rq->pdev,
 				di->addr + frag_offset,
 				len, DMA_FROM_DEVICE);
@@ -425,6 +426,7 @@ mlx5e_copy_skb_header(struct device *pdev, struct sk_buff *skb,
 	/* Aligning len to sizeof(long) optimizes memcpy performance */
 	unsigned int len = ALIGN(headlen, sizeof(long));
 
+	//自设备中向外执行dma操作
 	dma_sync_single_for_cpu(pdev, dma_info->addr + offset_from, len,
 				DMA_FROM_DEVICE);
 	skb_copy_to_linear_data(skb, from, len);
@@ -1222,12 +1224,13 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 	struct mlx5e_dma_info *di = &wi->umr.dma_info[page_idx];
 	u32 frag_offset    = head_offset + headlen;
 	u32 byte_cnt       = cqe_bcnt - headlen;
-	struct mlx5e_dma_info *head_di = di;
+	struct mlx5e_dma_info *head_di = di;/*首片dma*/
 	struct sk_buff *skb;
 
 	skb = napi_alloc_skb(rq->cq.napi,
 			     ALIGN(MLX5E_RX_MAX_HEAD, sizeof(long)));
 	if (unlikely(!skb)) {
+		//申请失败，增加计数
 		rq->stats->buff_alloc_err++;
 		return NULL;
 	}
@@ -1245,13 +1248,15 @@ mlx5e_skb_from_cqe_mpwrq_nonlinear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *w
 		unsigned int truesize =
 			ALIGN(pg_consumed_bytes, BIT(rq->mpwqe.log_stride_sz));
 
+		//为skb增加分片
 		mlx5e_add_skb_frag(rq, skb, di, frag_offset,
 				   pg_consumed_bytes, truesize);
 		byte_cnt -= pg_consumed_bytes;
 		frag_offset = 0;
-		di++;
+		di++;/*指向下一个dma info*/
 	}
 	/* copy header */
+	//存放首片报文（MLX5E_RX_MAX_HEAD字节）
 	mlx5e_copy_skb_header(rq->pdev, skb, head_di, head_offset, headlen);
 	/* skb linear part was allocated with headlen and aligned to long */
 	skb->tail += headlen;

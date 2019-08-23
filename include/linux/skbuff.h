@@ -315,11 +315,12 @@ typedef struct skb_frag_struct skb_frag_t;
 
 struct skb_frag_struct {
 	struct {
+		//分片对应的页信息
 		struct page *p;
 	} page;
 #if (BITS_PER_LONG > 32) || (PAGE_SIZE >= 65536)
-	__u32 page_offset;
-	__u32 size;
+	__u32 page_offset;//分片起始位置在页中偏移量
+	__u32 size;//分片的大小
 #else
 	__u16 page_offset;
 	__u16 size;
@@ -855,6 +856,7 @@ struct sk_buff {
 	__u16			vlan_tci;//指出vlan id
 #if defined(CONFIG_NET_RX_BUSY_POLL) || defined(CONFIG_XPS)
 	union {
+		//skb由哪个napi收上来的
 		unsigned int	napi_id;
 		unsigned int	sender_cpu;
 	};
@@ -887,11 +889,11 @@ struct sk_buff {
 	/* public: */
 
 	/* These elements must be at the end, see alloc_skb() for details.  */
-	sk_buff_data_t		tail;//指向报文结束位置
+	sk_buff_data_t		tail;//指向报文结束位置（它与data是一对儿）
 	sk_buff_data_t		end;//指向buffer的结束位置，注：实际上在end的后面还有skb_shared_info结构
 	unsigned char		*head,//指向buffer的起始位置
 				*data;//指向报文位置（解析时表示当前分析位置）
-	unsigned int		truesize;
+	unsigned int		truesize;//缓冲逻辑的大小，看SKB_TRUESIZE
 	refcount_t		users;//引用计数，防报文被释放
 
 #ifdef CONFIG_SKB_EXTENSIONS
@@ -1061,6 +1063,7 @@ struct sk_buff *build_skb_around(struct sk_buff *skb,
 static inline struct sk_buff *alloc_skb(unsigned int size,
 					gfp_t priority)
 {
+	//申请skb及存放报文的buffer（buffer大小由size指定）
 	return __alloc_skb(size, priority, 0, NUMA_NO_NODE);
 }
 
@@ -2142,8 +2145,9 @@ static inline void __skb_fill_page_desc(struct sk_buff *skb, int i,
 static inline void skb_fill_page_desc(struct sk_buff *skb, int i,
 				      struct page *page, int off, int size)
 {
+	/*填充第i分片信息*/
 	__skb_fill_page_desc(skb, i, page, off, size);
-	skb_shinfo(skb)->nr_frags = i + 1;
+	skb_shinfo(skb)->nr_frags = i + 1;/*分片数增加*/
 }
 
 void skb_add_rx_frag(struct sk_buff *skb, int i, struct page *page, int off,
@@ -2847,6 +2851,8 @@ static inline void skb_free_frag(void *addr)
 void *napi_alloc_frag(unsigned int fragsz);
 struct sk_buff *__napi_alloc_skb(struct napi_struct *napi,
 				 unsigned int length, gfp_t gfp_mask);
+
+//为napi申请长度为length的sk buffer
 static inline struct sk_buff *napi_alloc_skb(struct napi_struct *napi,
 					     unsigned int length)
 {

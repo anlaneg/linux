@@ -189,13 +189,14 @@ struct sk_buff *tcp_gro_receive(struct list_head *head, struct sk_buff *skb)
 	unsigned int mss = 1;
 	unsigned int hlen;
 	unsigned int off;
-	int flush = 1;
+	int flush = 1;/*默认执行flush*/
 	int i;
 
 	off = skb_gro_offset(skb);
 	hlen = off + sizeof(*th);
 	th = skb_gro_header_fast(skb, off);
 	if (skb_gro_header_hard(skb, hlen)) {
+		//自skb->data+offset取tcp头部（不考虑选项）
 		th = skb_gro_header_slow(skb, hlen, off);
 		if (unlikely(!th))
 			goto out;
@@ -203,32 +204,39 @@ struct sk_buff *tcp_gro_receive(struct list_head *head, struct sk_buff *skb)
 
 	thlen = th->doff * 4;
 	if (thlen < sizeof(*th))
+		//tcp头部长度不同，flush
 		goto out;
 
 	hlen = off + thlen;
 	if (skb_gro_header_hard(skb, hlen)) {
+		//自skb->data+offset取tcp头部（考虑选项）
 		th = skb_gro_header_slow(skb, hlen, off);
 		if (unlikely(!th))
 			goto out;
 	}
 
+	//使data_offset指向tcp负载
 	skb_gro_pull(skb, thlen);
 
 	len = skb_gro_len(skb);
+	//取tcpflags
 	flags = tcp_flag_word(th);
 
+	//遍历head上缓存的skb,分辨当前skb是否与此链上的某一个skb是同一条流
 	list_for_each_entry(p, head, list) {
+		//跳过与本skb非同一条流的缓存
 		if (!NAPI_GRO_CB(p)->same_flow)
 			continue;
 
 		th2 = tcp_hdr(p);
 
+		//srcport不同，认为非同一条流
 		if (*(u32 *)&th->source ^ *(u32 *)&th2->source) {
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
 		}
 
-		goto found;
+		goto found;/*找到与本skb为同条流的skb2,下统称skb2*/
 	}
 	p = NULL;
 	goto out_check_final;
@@ -236,10 +244,14 @@ struct sk_buff *tcp_gro_receive(struct list_head *head, struct sk_buff *skb)
 found:
 	/* Include the IP ID check below from the inner most IP hdr */
 	flush = NAPI_GRO_CB(p)->flush;
+	//如果当前报文有cwr标记,则flush置为1
 	flush |= (__force int)(flags & TCP_FLAG_CWR);
+	//如果当前skb与skb2 flags不同，且不同的flags中有非(cwr,fin,psh)标记，则flush置1
 	flush |= (__force int)((flags ^ tcp_flag_word(th2)) &
 		  ~(TCP_FLAG_CWR | TCP_FLAG_FIN | TCP_FLAG_PSH));
+	//如果skb与skb2 ack的seq不同，则flush置1
 	flush |= (__force int)(th->ack_seq ^ th2->ack_seq);
+	//skb与skb2的选项不同，则flush置1
 	for (i = sizeof(*th); i < thlen; i += 4)
 		flush |= *(u32 *)((u8 *)th + i) ^
 			 *(u32 *)((u8 *)th2 + i);
@@ -263,7 +275,8 @@ found:
 	flush |= p->decrypted ^ skb->decrypted;
 #endif
 
-	if (flush || skb_gro_receive(p, skb)) {
+	//当flush=0时，gro尝试将skb合并到list
+	if (flush || skb_gro_receive(p/*与我们属同一条流的skb2*/, skb)) {
 		mss = 1;
 		goto out_check_final;
 	}
@@ -309,6 +322,7 @@ struct sk_buff *tcp4_gro_receive(struct list_head *head, struct sk_buff *skb)
 	if (!NAPI_GRO_CB(skb)->flush &&
 	    skb_gro_checksum_validate(skb, IPPROTO_TCP,
 				      inet_gro_compute_pseudo)) {
+		//checksum有误的报文，直接flush
 		NAPI_GRO_CB(skb)->flush = 1;
 		return NULL;
 	}
@@ -339,7 +353,7 @@ static const struct net_offload tcpv4_offload = {
 	},
 };
 
-//添加tcp层的offload功能
+//添加tcp层的gro,gso offload功能
 int __init tcpv4_offload_init(void)
 {
 	return inet_add_offload(&tcpv4_offload, IPPROTO_TCP);

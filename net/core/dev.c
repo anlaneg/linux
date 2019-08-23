@@ -5561,7 +5561,8 @@ static struct list_head *gro_list_prepare(struct napi_struct *napi,
 	struct list_head *head;
 	struct sk_buff *p;
 
-	//采用hash映射到head
+	//采用hash映射到head，遍历head上已缓存的所有skb p,如果与当前skb不是同一条流
+	//刚将p上的same_flow指为0
 	head = &napi->gro_hash[hash & (GRO_HASH_BUCKETS - 1)].list;
 	list_for_each_entry(p, head, list) {
 		unsigned long diffs;
@@ -5598,6 +5599,7 @@ static struct list_head *gro_list_prepare(struct napi_struct *napi,
 static void skb_gro_reset_offset(struct sk_buff *skb)
 {
 	const struct skb_shared_info *pinfo = skb_shinfo(skb);
+	//skb中的首片信息
 	const skb_frag_t *frag0 = &pinfo->frags[0];
 
 	NAPI_GRO_CB(skb)->data_offset = 0;
@@ -5607,6 +5609,8 @@ static void skb_gro_reset_offset(struct sk_buff *skb)
 	if (skb_mac_header(skb) == skb_tail_pointer(skb) &&
 	    pinfo->nr_frags &&
 	    !PageHighMem(skb_frag_page(frag0))) {
+		/*skb有多片，且以太头后面首片结束，且首片对应的页非高地址*/
+		//？？
 		NAPI_GRO_CB(skb)->frag0 = skb_frag_address(frag0);
 		NAPI_GRO_CB(skb)->frag0_len = min_t(unsigned int,
 						    skb_frag_size(frag0),
@@ -5696,11 +5700,13 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 		/* Setup for GRO checksum validation */
 		switch (skb->ip_summed) {
 		case CHECKSUM_COMPLETE:
+			//checksum已检查完，使用skb中的checksum
 			NAPI_GRO_CB(skb)->csum = skb->csum;
 			NAPI_GRO_CB(skb)->csum_valid = 1;
 			NAPI_GRO_CB(skb)->csum_cnt = 0;
 			break;
 		case CHECKSUM_UNNECESSARY:
+			//没必要检查checksum
 			NAPI_GRO_CB(skb)->csum_cnt = skb->csum_level + 1;
 			NAPI_GRO_CB(skb)->csum_valid = 0;
 			break;
@@ -5756,9 +5762,9 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	skb_shinfo(skb)->gso_size = skb_gro_len(skb);
 	//skb->next = napi->gro_list;
 	//napi->gro_list = skb;
-	//ret = GRO_HELD;//报文将已被hold
+	//ret = GRO_HELD;
 	list_add(&skb->list, gro_head);
-	ret = GRO_HELD;
+	ret = GRO_HELD;//报文将已被hold
 pull:
 	grow = skb_gro_offset(skb) - skb_headlen(skb);
 	if (grow > 0)

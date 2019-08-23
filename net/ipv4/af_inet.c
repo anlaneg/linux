@@ -1462,7 +1462,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	proto = iph->protocol;
 
 	rcu_read_lock();
-	//查上层协议对应的ops
+	//查上层协议对应的gro ops
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive)
 		//此协议不支持offload,直接输出
@@ -1489,6 +1489,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 		struct iphdr *iph2;
 		u16 flush_id;
 
+		//跳过已分辨不是同一条流的报文
 		if (!NAPI_GRO_CB(p)->same_flow)
 			continue;
 
@@ -1501,7 +1502,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 		if ((iph->protocol ^ iph2->protocol) |
 		    ((__force u32)iph->saddr ^ (__force u32)iph2->saddr) |
 		    ((__force u32)iph->daddr ^ (__force u32)iph2->daddr)) {
-			//不是同一条流
+			//协议，源目的ip地址有不同时，认为不是同一条流
 			NAPI_GRO_CB(p)->same_flow = 0;
 			continue;
 		}
@@ -1552,6 +1553,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	/* Note : No need to call skb_gro_postpull_rcsum() here,
 	 * as we already checked checksum over ipv4 header was 0
 	 */
+	//剥离ip头部
 	skb_gro_pull(skb, sizeof(*iph));
 	skb_set_transport_header(skb, skb_gro_offset(skb));
 

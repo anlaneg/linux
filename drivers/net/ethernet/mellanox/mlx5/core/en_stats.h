@@ -237,6 +237,7 @@ struct mlx5e_rq_stats {
 	u64 mpwqe_filler_cqes;
 	u64 mpwqe_filler_strides;
 	u64 oversize_pkts_sw_drop;
+	//申请sk buffer失败次数
 	u64 buff_alloc_err;
 	u64 cqe_compress_blks;
 	u64 cqe_compress_pkts;
