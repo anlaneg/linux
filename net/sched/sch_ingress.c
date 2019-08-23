@@ -25,6 +25,7 @@ static struct Qdisc *ingress_leaf(struct Qdisc *sch, unsigned long arg)
 	return NULL;
 }
 
+//通过classid返回class
 static unsigned long ingress_find(struct Qdisc *sch, u32 classid)
 {
 	return TC_H_MIN(classid) + 1;
@@ -285,10 +286,10 @@ static int __init ingress_module_init(void)
 {
 	int ret;
 
-	//注册ingress的ops
+	//注册ingress的排队规则
 	ret = register_qdisc(&ingress_qdisc_ops);
 	if (!ret) {
-		//注册成功，注册clsact
+		//注册成功，注册clsact排队规则
 		ret = register_qdisc(&clsact_qdisc_ops);
 		if (ret)
 			unregister_qdisc(&ingress_qdisc_ops);

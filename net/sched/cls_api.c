@@ -1692,9 +1692,9 @@ static int tcf_block_setup(struct tcf_block *block,
  * to this qdisc, (optionally) tests for protocol and asks
  * specific classifiers.
  */
-//tc报文分类入口
+//tc报文分类入口(过滤器分类）
 int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
-		 struct tcf_result *res, bool compat_mode)
+		 struct tcf_result *res/*分类结果*/, bool compat_mode)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	const int max_reclassify_loop = 4;

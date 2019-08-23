@@ -208,14 +208,17 @@ struct Qdisc_class_ops {
 	/* Child qdisc manipulation */
 	//通过tcmsg获得qisc对应的具体netdev_queue队列
 	struct netdev_queue *	(*select_queue)(struct Qdisc *, struct tcmsg *);
-	//采用新队列替换旧队列
-	int			(*graft)(struct Qdisc *, unsigned long cl,
+	//用于将一个排队规则绑定到一个类，并返回先前绑定到这个类的排队规则
+	int			(*graft)(struct Qdisc *, unsigned long cl/*类*/,
 					struct Qdisc */*新的队列*/, struct Qdisc **/*出参，旧的队列*/,
 					struct netlink_ext_ack *extack);
+	//获取当前绑定到指定类cl的排队规则
 	struct Qdisc *		(*leaf)(struct Qdisc *, unsigned long cl);
+	//队列长度发生变换时，调用
 	void			(*qlen_notify)(struct Qdisc *, unsigned long);
 
 	/* Class manipulation routines */
+	//给定classid，返回此队列上绑定的对应class
 	unsigned long		(*find)(struct Qdisc *, u32 classid);
 	int			(*change)(struct Qdisc *, u32, u32,
 					struct nlattr **, unsigned long *,
@@ -246,6 +249,7 @@ enum qdisc_class_ops_flags {
 	QDISC_CLASS_OPS_DOIT_UNLOCKED = 1,
 };
 
+//排队规则操作集
 struct Qdisc_ops {
 	struct Qdisc_ops	*next;
 	const struct Qdisc_class_ops	*cl_ops;//分类操作集
@@ -296,8 +300,8 @@ struct Qdisc_ops {
 struct tcf_result {
 	union {
 		struct {
-			unsigned long	class;
-			u32		classid;
+			unsigned long	class;//class地址
+			u32		classid;//class id号
 		};
 		const struct tcf_proto *goto_tp;
 

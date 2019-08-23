@@ -125,7 +125,7 @@ static struct Qdisc_ops *qdisc_base;
 
 /* Register/unregister queueing discipline */
 //qdisc_ops注册
-int register_qdisc(struct Qdisc_ops *qops)
+int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 {
 	struct Qdisc_ops *q, **qp;
 	int rc = -EEXIST;
@@ -342,10 +342,12 @@ static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
 
 	if (cops == NULL)
 		return NULL;
+	//通过classid找到对应的class
 	cl = cops->find(p, classid);
 
 	if (cl == 0)
 		return NULL;
+	//找指定class绑定的队列
 	return cops->leaf(p, cl);
 }
 
