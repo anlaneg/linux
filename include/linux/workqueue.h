@@ -101,8 +101,8 @@ enum {
 
 struct work_struct {
 	atomic_long_t data;
-	struct list_head entry;
-	work_func_t func;
+	struct list_head entry;//用于将work串起来
+	work_func_t func;//work函数
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map lockdep_map;
 #endif
@@ -126,7 +126,7 @@ struct rcu_work {
 	struct rcu_head rcu;
 
 	/* target workqueue ->rcu uses to queue ->work */
-	struct workqueue_struct *wq;
+	struct workqueue_struct *wq;//work对应的队列
 };
 
 /**

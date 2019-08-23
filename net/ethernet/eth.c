@@ -559,7 +559,7 @@ static struct packet_offload eth_packet_offload __read_mostly = {
 	},
 };
 
-//注册eth对应的gro
+//注册ether对应的gro
 static int __init eth_offload_init(void)
 {
 	dev_add_offload(&eth_packet_offload);

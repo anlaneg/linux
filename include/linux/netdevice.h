@@ -1979,7 +1979,7 @@ struct net_device {
 	struct netdev_queue	*_tx ____cacheline_aligned_in_smp;
 	unsigned int		num_tx_queues;//tx队列数
 	unsigned int		real_num_tx_queues;//有效的tx队列数
-	struct Qdisc		*qdisc;//队列
+	struct Qdisc		*qdisc;//根排队队列
 #ifdef CONFIG_NET_SCHED
 	DECLARE_HASHTABLE	(qdisc_hash, 4);
 #endif

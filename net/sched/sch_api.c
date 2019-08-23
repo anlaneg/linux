@@ -192,6 +192,7 @@ int unregister_qdisc(struct Qdisc_ops *qops)
 EXPORT_SYMBOL(unregister_qdisc);
 
 /* Get default qdisc if not otherwise specified */
+//取排队队列名称
 void qdisc_get_default(char *name, size_t len)
 {
 	read_lock(&qdisc_mod_lock);
@@ -199,6 +200,7 @@ void qdisc_get_default(char *name, size_t len)
 	read_unlock(&qdisc_mod_lock);
 }
 
+//通过名称查排队队列
 static struct Qdisc_ops *qdisc_lookup_default(const char *name)
 {
 	struct Qdisc_ops *q = NULL;
@@ -215,6 +217,7 @@ static struct Qdisc_ops *qdisc_lookup_default(const char *name)
 }
 
 /* Set new default qdisc to use */
+//设置默认排队队列default_qdisc_ops
 int qdisc_set_default(const char *name)
 {
 	const struct Qdisc_ops *ops;
@@ -225,6 +228,7 @@ int qdisc_set_default(const char *name)
 	write_lock(&qdisc_mod_lock);
 	ops = qdisc_lookup_default(name);
 	if (!ops) {
+		//未查询到对应的qdisc，尝试加载module,并重查
 		/* Not found, drop lock and try to load module */
 		write_unlock(&qdisc_mod_lock);
 		request_module("sch_%s", name);
@@ -256,7 +260,7 @@ late_initcall(sch_default_qdisc);
  * (root qdisc, all its children, children of children etc.)
  * Note: caller either uses rtnl or rcu_read_lock()
  */
-
+//给定排队队列handle,自根队列中获取对应队列
 static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 {
 	struct Qdisc *q;
@@ -289,6 +293,7 @@ void qdisc_hash_add(struct Qdisc *q, bool invisible)
 }
 EXPORT_SYMBOL(qdisc_hash_add);
 
+//除根队列，ingress队列外，删除指定队列
 void qdisc_hash_del(struct Qdisc *q)
 {
 	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
@@ -305,10 +310,12 @@ struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 
 	if (!handle)
 		return NULL;
+	//先尝试查询根队列中注册的
 	q = qdisc_match_from_root(dev->qdisc, handle);
 	if (q)
 		goto out;
 
+	//查询ingress队列的qdisc_sleeping
 	if (dev_ingress_queue(dev))
 		q = qdisc_match_from_root(
 			dev_ingress_queue(dev)->qdisc_sleeping,

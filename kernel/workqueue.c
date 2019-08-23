@@ -1751,6 +1751,7 @@ static void rcu_work_rcufn(struct rcu_head *rcu)
 
 	/* read the comment in __queue_work() */
 	local_irq_disable();
+	//将work入队
 	__queue_work(WORK_CPU_UNBOUND, rwork->wq, &rwork->work);
 	local_irq_enable();
 }
@@ -1771,6 +1772,7 @@ bool queue_rcu_work(struct workqueue_struct *wq, struct rcu_work *rwork)
 
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
 		rwork->wq = wq;
+		//注册rcu call,合适时机触发
 		call_rcu(&rwork->rcu, rcu_work_rcufn);
 		return true;
 	}

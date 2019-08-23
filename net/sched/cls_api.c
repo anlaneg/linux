@@ -65,7 +65,7 @@ static const struct tcf_proto_ops *__tcf_proto_lookup_ops(const char *kind)
 	return res;
 }
 
-/*通过kind查找对应的分类器*/
+/*通过kind查找对应的分类器,支持动态加载*/
 static const struct tcf_proto_ops *
 tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 		     struct netlink_ext_ack *extack)
@@ -145,6 +145,7 @@ int unregister_tcf_proto_ops(struct tcf_proto_ops *ops)
 }
 EXPORT_SYMBOL(unregister_tcf_proto_ops);
 
+//初始化rcu work,在合适时机将rwork加入队列统一处理
 bool tcf_queue_work(struct rcu_work *rwork, work_func_t func)
 {
 	INIT_RCU_WORK(rwork, func);
@@ -159,11 +160,13 @@ static inline u32 tcf_auto_prio(struct tcf_proto *tp)
 	u32 first = TC_H_MAKE(0xC0000000U, 0U);
 
 	if (tp)
+		//如有tp,则按tp获得优先级
 		first = tp->prio - 1;
 
 	return TC_H_MAJ(first);
 }
 
+//检查kind对应的ops->flags是否有TCF_PROTO_OPS_DOIT_UNLOCKED标记
 static bool tcf_proto_is_unlocked(const char *kind)
 {
 	const struct tcf_proto_ops *ops;
@@ -183,7 +186,7 @@ static bool tcf_proto_is_unlocked(const char *kind)
 
 //创建tcf_proto对象
 static struct tcf_proto *tcf_proto_create(const char *kind/*分类过滤器名称*/, u32 protocol,
-					  u32 prio, struct tcf_chain *chain/*tp所属的chain*/,
+					  u32 prio/*优先级*/, struct tcf_chain *chain/*tp所属的chain*/,
 					  bool rtnl_held,
 					  struct netlink_ext_ack *extack)
 {
@@ -223,7 +226,7 @@ errout:
 	return ERR_PTR(err);
 }
 
-//计数增加
+//分类器引用计数增加
 static void tcf_proto_get(struct tcf_proto *tp)
 {
 	refcount_inc(&tp->refcnt);
@@ -236,10 +239,11 @@ static void tcf_proto_destroy(struct tcf_proto *tp, bool rtnl_held,
 {
 	tp->ops->destroy(tp, rtnl_held, extack);
 	tcf_chain_put(tp->chain);
-	module_put(tp->ops->owner);
+	module_put(tp->ops->owner);//减少对module的引用
 	kfree_rcu(tp, rcu);
 }
 
+//分类器引用计数减少
 static void tcf_proto_put(struct tcf_proto *tp, bool rtnl_held,
 			  struct netlink_ext_ack *extack)
 {
@@ -284,6 +288,7 @@ static void tcf_proto_mark_delete(struct tcf_proto *tp)
 	spin_unlock(&tp->lock);
 }
 
+//检查分类器是否正在删除
 static bool tcf_proto_is_deleting(struct tcf_proto *tp)
 {
 	bool deleting;
@@ -823,6 +828,7 @@ static bool tcf_block_offload_in_use(struct tcf_block *block)
 	return block->offloadcnt;
 }
 
+//向驱动触发block offload
 static int tcf_block_offload_cmd(struct tcf_block *block,
 				 struct net_device *dev,
 				 struct tcf_block_ext_info *ei,
@@ -1062,7 +1068,7 @@ static struct tcf_block *tcf_block_refcnt_get(struct net *net, u32 block_index)
 	return block;
 }
 
-//取下一个chain
+//自block中依据chain获取next_chain
 static struct tcf_chain *
 __tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
 {
@@ -1096,7 +1102,7 @@ __tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
  * consistent dump because rtnl lock is released each time skb is filled with
  * data and sent to user-space.
  */
-
+//由chain获取next_chain,并减少对chain的引用
 struct tcf_chain *
 tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
 {
@@ -1109,7 +1115,7 @@ tcf_get_next_chain(struct tcf_block *block, struct tcf_chain *chain)
 }
 EXPORT_SYMBOL(tcf_get_next_chain);
 
-//获取下一个tp(传入tp为NULL时，返回首个tp)
+//在chain上获取下一个tp(传入tp为NULL时，返回首个tp)
 static struct tcf_proto *
 __tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp)
 {
@@ -1152,7 +1158,7 @@ __tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp)
  * consistent dump because rtnl lock is released each time skb is filled with
  * data and sent to user-space.
  */
-
+//自chain上，依据tp获取下一个分类器
 struct tcf_proto *
 tcf_get_next_proto(struct tcf_chain *chain, struct tcf_proto *tp,
 		   bool rtnl_held)
@@ -1273,6 +1279,7 @@ static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl/*�
 	if (TC_H_MIN(parent)) {
 		const struct Qdisc_class_ops *cops = q->ops->cl_ops;
 
+		/*依据classid查找对应class*/
 		*cl = cops->find(q, parent);
 		if (*cl == 0) {
 			NL_SET_ERR_MSG(extack, "Specified class doesn't exist");
@@ -1301,6 +1308,7 @@ static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 	} else {
 		const struct Qdisc_class_ops *cops = q->ops->cl_ops;
 
+		//通过不通class获取其对应的block
 		block = cops->tcf_block(q, cl, extack);
 		if (!block)
 			return ERR_PTR(-EINVAL);
@@ -1358,7 +1366,7 @@ static void tcf_block_refcnt_put(struct tcf_block *block, bool rtnl_held)
 /* Find tcf block.
  * Set q, parent, cl when appropriate.
  */
-
+//队列分绑定一个或多个class,class有一个或多个对应的block
 static struct tcf_block *tcf_block_find(struct net *net, struct Qdisc **q,
 					u32 *parent, unsigned long *cl,
 					int ifindex, u32 block_index,
@@ -1710,6 +1718,7 @@ reclassify:
 		__be16 protocol = tc_skb_protocol(skb);
 		int err;
 
+		//忽略掉protocol不匹配的tp
 		if (tp->protocol != protocol &&
 		    tp->protocol != htons(ETH_P_ALL))
 			continue;
@@ -1761,7 +1770,7 @@ static struct tcf_proto *tcf_chain_tp_prev(struct tcf_chain *chain,
 	return tcf_chain_dereference(*chain_info->pprev, chain);
 }
 
-//tp插入
+//向chain中插入分类器
 static int tcf_chain_tp_insert(struct tcf_chain *chain,
 			       struct tcf_chain_info *chain_info,
 			       struct tcf_proto *tp)
@@ -1783,15 +1792,21 @@ static int tcf_chain_tp_insert(struct tcf_chain *chain,
 	return 0;
 }
 
+//删除tp
 static void tcf_chain_tp_remove(struct tcf_chain *chain,
 				struct tcf_chain_info *chain_info,
 				struct tcf_proto *tp)
 {
+	//取下一个tp
 	struct tcf_proto *next = tcf_chain_dereference(chain_info->next, chain);
 
+	//标记删除
 	tcf_proto_mark_delete(tp);
+
+	//如果首个tp被删除，则执行tp变更通知
 	if (tp == chain->filter_chain)
 		tcf_chain0_head_change(chain, next);
+	//指针变更
 	RCU_INIT_POINTER(*chain_info->pprev, next);
 }
 

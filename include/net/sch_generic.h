@@ -326,6 +326,7 @@ struct tcf_proto_ops {
 					    struct tcf_result *);
 	//对新在创建的分类器进行初始化
 	int			(*init)(struct tcf_proto*);
+	//销毁分类器
 	void			(*destroy)(struct tcf_proto *tp, bool rtnl_held,
 					   struct netlink_ext_ack *extack);
 	//获取指定规则
@@ -375,14 +376,14 @@ struct tcf_proto {
 	void __rcu		*root;
 
 	/* called under RCU BH lock*/
-	//实现报文分类
+	//实现报文分类，来源于struct tcf_proto_ops
 	int			(*classify)(struct sk_buff *,
-					    const struct tcf_proto *,
-					    struct tcf_result *);
+					    const struct tcf_proto */*执行分类的分类器*/,
+					    struct tcf_result */*出参，分类结果*/);
 	__be16			protocol;//支持的协议
 
 	/* All the rest */
-	u32			prio;
+	u32			prio;//优先级
 	void			*data;
 	//操作集
 	const struct tcf_proto_ops	*ops;
@@ -392,7 +393,7 @@ struct tcf_proto {
 	 */
 	spinlock_t		lock;
 	bool			deleting;
-	refcount_t		refcnt;
+	refcount_t		refcnt;//引用计数
 	struct rcu_head		rcu;
 };
 

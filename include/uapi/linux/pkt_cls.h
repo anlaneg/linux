@@ -31,7 +31,7 @@ enum {
 
 #define TC_ACT_UNSPEC	(-1)
 #define TC_ACT_OK		0
-//执行重新分类
+//执行重新分类（自链头重新匹配）
 #define TC_ACT_RECLASSIFY	1
 //报文将被free
 #define TC_ACT_SHOT		2
