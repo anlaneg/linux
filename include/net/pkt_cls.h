@@ -26,8 +26,11 @@ int register_tcf_proto_ops(struct tcf_proto_ops *ops);
 int unregister_tcf_proto_ops(struct tcf_proto_ops *ops);
 
 struct tcf_block_ext_info {
+	//入方向，还是出方向
 	enum flow_block_binder_type binder_type;
+	/*回调，用于更换miniq变更新的chain_head*/
 	tcf_chain_head_change_t *chain_head_change;
+	/*回调的私有数据，目前指向miniq*/
 	void *chain_head_change_priv;
 	u32 block_index;//block index
 };
@@ -330,6 +333,7 @@ tcf_exts_exec(struct sk_buff *skb, struct tcf_exts *exts,
 	      struct tcf_result *res)
 {
 #ifdef CONFIG_NET_CLS_ACT
+	//返回filter action执行结果
 	return tcf_action_exec(skb, exts->actions, exts->nr_actions, res);
 #endif
 	return TC_ACT_OK;

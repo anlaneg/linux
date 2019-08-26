@@ -437,13 +437,14 @@ struct tcf_block {
 	struct net *net;//所属net
 	struct Qdisc *q;//所属的Qdisc
 	struct flow_block flow_block;
+	//用于挂接struct tcf_block_owner_item类型
 	struct list_head owner_list;
 	bool keep_dst;
 	unsigned int offloadcnt; /* Number of oddloaded filters */
 	unsigned int nooffloaddevcnt; /* Number of devs unable to do offload */
 	struct {
 		struct tcf_chain *chain;//首个chain
-		//用于串多个tcf_filter_chain_list_item,记录回调函数及参数
+		//用于串多个tcf_filter_chain_list_item,记录chain_head_change回调函数及参数
 		struct list_head filter_chain_list;
 	} chain0;
 	struct rcu_head rcu;
@@ -598,6 +599,7 @@ static inline seqcount_t *qdisc_root_sleeping_running(const struct Qdisc *qdisc)
 	return &root->running;
 }
 
+//排队规则对应的dev
 static inline struct net_device *qdisc_dev(const struct Qdisc *qdisc)
 {
 	return qdisc->dev_queue->dev;

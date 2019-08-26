@@ -266,6 +266,7 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	struct Qdisc *q;
 
 	if (!qdisc_dev(root))
+		/*root队列对应的dev不存在，检查是否root队列*/
 		return (root->handle == handle ? root : NULL);
 
 	if (!(root->flags & TCQ_F_BUILTIN) &&
@@ -303,19 +304,19 @@ void qdisc_hash_del(struct Qdisc *q)
 }
 EXPORT_SYMBOL(qdisc_hash_del);
 
-//通过handle查询qdisc
+//通过队列handle查询qdisc
 struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 {
 	struct Qdisc *q;
 
 	if (!handle)
 		return NULL;
-	//先尝试查询根队列中注册的
+	//先尝试查询根队列中注册的队列中查询
 	q = qdisc_match_from_root(dev->qdisc, handle);
 	if (q)
 		goto out;
 
-	//查询ingress队列的qdisc_sleeping
+	//再查询ingress队列的qdisc_sleeping
 	if (dev_ingress_queue(dev))
 		q = qdisc_match_from_root(
 			dev_ingress_queue(dev)->qdisc_sleeping,
@@ -1554,19 +1555,20 @@ replay:
 	if (clid) {
 		if (clid != TC_H_ROOT) {
 			if (clid != TC_H_INGRESS) {
-				//非ingress情况,取major来做为handle
+				//非根qdisc,非ingress qdisc情况,取major来做为handle(队列的minor必须为0）
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find specified qdisc");
 					return -ENOENT;
 				}
+				/*clid是一个由major:minor组成，现在查此class绑定的队列*/
 				q = qdisc_leaf(p, clid);
-			} else if (/*ingress情况*/dev_ingress_queue_create(dev)) {
+			} else if (/*指明为ingress qdisc情况,创建ingress qdisc*/dev_ingress_queue_create(dev)) {
 				//创建dev->ingress_queue成功
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
-			//指明为根qdisc,则使用设备对应的qdisc
+			//指明为根qdisc,则使用设备对应的根qdisc
 			q = dev->qdisc;
 		}
 
@@ -1574,13 +1576,16 @@ replay:
 		if (q && q->handle == 0)
 			q = NULL;
 
+		//队列未找到，或者队列handle与传的不同，或者未传入handle
 		if (!q || !tcm->tcm_handle || q->handle != tcm->tcm_handle) {
 			if (tcm->tcm_handle) {
+				//队列不存在，或者队列handle与tcm_handle不同
 				if (q && !(n->nlmsg_flags & NLM_F_REPLACE)) {
 					NL_SET_ERR_MSG(extack, "NLM_F_REPLACE needed to override");
 					return -EEXIST;
 				}
 				if (TC_H_MIN(tcm->tcm_handle)) {
+					//队列的minor必须为0
 					NL_SET_ERR_MSG(extack, "Invalid minor handle");
 					return -EINVAL;
 				}
@@ -1598,7 +1603,7 @@ replay:
 
 				if (tca[TCA_KIND] &&
 				    nla_strcmp(tca[TCA_KIND], q->ops->id)) {
-					//名称不一致
+					//队列类型名称不一致
 					NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 					return -EINVAL;
 				}
@@ -1674,7 +1679,7 @@ replay:
 	return err;
 
 create_n_graft:
-	//qdisc队列不存在，创建检查
+	//qdisc队列不存在，准备创建，先创建检查
 	if (!(n->nlmsg_flags & NLM_F_CREATE)) {
 		NL_SET_ERR_MSG(extack, "Qdisc not found. To create specify NLM_F_CREATE flag");
 		return -ENOENT;

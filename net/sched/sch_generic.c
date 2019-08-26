@@ -1395,8 +1395,9 @@ static void mini_qdisc_rcu_func(struct rcu_head *head)
 {
 }
 
+//设置miniqp对应的首个tp_proto
 void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
-			  struct tcf_proto *tp_head)
+			  struct tcf_proto *tp_head/*新的tp头部*/)
 {
 	/* Protected with chain0->filter_chain_lock.
 	 * Can't access chain directly because tp_head can be NULL.
@@ -1438,6 +1439,7 @@ EXPORT_SYMBOL(mini_qdisc_pair_swap);
 void mini_qdisc_pair_init(struct mini_Qdisc_pair *miniqp, struct Qdisc *qdisc,
 			  struct mini_Qdisc __rcu **p_miniq)
 {
+	//初始化miniqp,切换着使用miniq1,miniq2,本次生效的miniq为*p_miniq
 	miniqp->miniq1.cpu_bstats = qdisc->cpu_bstats;
 	miniqp->miniq1.cpu_qstats = qdisc->cpu_qstats;
 	miniqp->miniq2.cpu_bstats = qdisc->cpu_bstats;

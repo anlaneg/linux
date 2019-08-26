@@ -332,7 +332,7 @@ static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 	return chain;
 }
 
-//修改tp_head为item->chain_head_change_priv的filter_list
+//更改chain_list首个tp
 static void tcf_chain_head_change_item(struct tcf_filter_chain_list_item *item,
 				       struct tcf_proto *tp_head)
 {
@@ -341,6 +341,7 @@ static void tcf_chain_head_change_item(struct tcf_filter_chain_list_item *item,
 		item->chain_head_change(tp_head, item->chain_head_change_priv);
 }
 
+//chain的首个tp发生变更，触发相应回调，更新首个tp_head
 static void tcf_chain0_head_change(struct tcf_chain *chain,
 				   struct tcf_proto *tp_head)
 {
@@ -348,6 +349,7 @@ static void tcf_chain0_head_change(struct tcf_chain *chain,
 	struct tcf_block *block = chain->block;
 
 	if (chain->index)
+		//仅对chain0执行触发
 		return;
 
 	mutex_lock(&block->lock);
@@ -861,7 +863,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 	struct net_device *dev = q->dev_queue->dev;
 	int err;
 
-	//跳过不支持的dev
+	//跳过不支持offload的dev
 	if (!dev->netdev_ops->ndo_setup_tc)
 		goto no_offload_dev_inc;
 
@@ -924,6 +926,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 		NL_SET_ERR_MSG(extack, "Memory allocation for head change callback item failed");
 		return -ENOMEM;
 	}
+
 	//回调函数及其参数
 	item->chain_head_change = ei->chain_head_change;
 	item->chain_head_change_priv = ei->chain_head_change_priv;
@@ -944,7 +947,7 @@ tcf_chain0_head_change_cb_add(struct tcf_block *block,
 
 		tp_head = tcf_chain_dereference(chain0->filter_chain, chain0);
 		if (tp_head)
-			//先触发回调
+			//针对已知的tp_head,为了一致性，目前我们要加入change回调，故在加入前，先触发此回调
 			tcf_chain_head_change_item(item, tp_head);
 
 		mutex_lock(&block->lock);
@@ -971,6 +974,7 @@ tcf_chain0_head_change_cb_del(struct tcf_block *block,
 		    (item->chain_head_change == ei->chain_head_change &&
 		     item->chain_head_change_priv == ei->chain_head_change_priv)) {
 			if (block->chain0.chain)
+				//更改首个tp_head为NULL
 				tcf_chain_head_change_item(item, NULL);
 			list_del(&item->list);
 			mutex_unlock(&block->lock);
@@ -1020,7 +1024,7 @@ static void tcf_block_remove(struct tcf_block *block, struct net *net)
 
 //创建block
 static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
-					  u32 block_index,
+					  u32 block_index/*block索引*/,
 					  struct netlink_ext_ack *extack)
 {
 	struct tcf_block *block;
@@ -1041,6 +1045,7 @@ static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 	block->index = block_index;
 
 	/* Don't store q pointer for blocks which are shared */
+	//针对非share block,block指向queue
 	if (!tcf_block_shared(block))
 		block->q = q;
 	return block;
@@ -1446,6 +1451,7 @@ void tcf_block_netif_keep_dst(struct tcf_block *block)
 }
 EXPORT_SYMBOL(tcf_block_netif_keep_dst);
 
+//记录block从属的排除规则及绑定类型
 static int tcf_block_owner_add(struct tcf_block *block,
 			       struct Qdisc *q,
 			       enum flow_block_binder_type binder_type)
@@ -1455,6 +1461,7 @@ static int tcf_block_owner_add(struct tcf_block *block,
 	item = kmalloc(sizeof(*item), GFP_KERNEL);
 	if (!item)
 		return -ENOMEM;
+	//对应的排队规则，绑定类型
 	item->q = q;
 	item->binder_type = binder_type;
 	list_add(&item->list, &block->owner_list);
@@ -1477,15 +1484,15 @@ static void tcf_block_owner_del(struct tcf_block *block,
 	WARN_ON(1);
 }
 
-int tcf_block_get_ext(struct tcf_block **p_block, struct Qdisc *q,
-		      struct tcf_block_ext_info *ei,
+int tcf_block_get_ext(struct tcf_block **p_block/*出参，创建或查询好的block*/, struct Qdisc *q/*block对应的队列*/,
+		      struct tcf_block_ext_info *ei/*块扩展参数*/,
 		      struct netlink_ext_ack *extack)
 {
 	struct net *net = qdisc_net(q);
 	struct tcf_block *block = NULL;
 	int err;
 
-	//已设置index,直接获取或者创建block
+	//已设置index,直接获取block,如block不存在，则创建block
 	if (ei->block_index)
 		/* block_index not 0 means the shared block is requested */
 		block = tcf_block_refcnt_get(net, ei->block_index);
@@ -1503,12 +1510,14 @@ int tcf_block_get_ext(struct tcf_block **p_block, struct Qdisc *q,
 		}
 	}
 
+	//为block添加owner
 	err = tcf_block_owner_add(block, q, ei->binder_type);
 	if (err)
 		goto err_block_owner_add;
 
 	tcf_block_owner_netif_keep_dst(block, q, ei->binder_type);
 
+	//为block添加tp_head change回调
 	err = tcf_chain0_head_change_cb_add(block, ei, extack);
 	if (err)
 		goto err_chain0_head_change_cb_add;
@@ -1531,6 +1540,7 @@ err_block_insert:
 }
 EXPORT_SYMBOL(tcf_block_get_ext);
 
+//设置filter_chain=tp_head
 static void tcf_chain_head_change_dflt(struct tcf_proto *tp_head, void *priv)
 {
 	struct tcf_proto __rcu **p_filter_chain = priv;
@@ -1538,6 +1548,7 @@ static void tcf_chain_head_change_dflt(struct tcf_proto *tp_head, void *priv)
 	rcu_assign_pointer(*p_filter_chain, tp_head);
 }
 
+//创建block
 int tcf_block_get(struct tcf_block **p_block,
 		  struct tcf_proto __rcu **p_filter_chain, struct Qdisc *q,
 		  struct netlink_ext_ack *extack)
@@ -1548,6 +1559,7 @@ int tcf_block_get(struct tcf_block **p_block,
 	};
 
 	WARN_ON(!p_filter_chain);
+	//创建block
 	return tcf_block_get_ext(p_block, q, &ei, extack);
 }
 EXPORT_SYMBOL(tcf_block_get);
@@ -1723,7 +1735,7 @@ reclassify:
 		    tp->protocol != htons(ETH_P_ALL))
 			continue;
 
-		//使用tp进行分类
+		//使用tp进行分类(例如flower的classify函数）
 		err = tp->classify(skb, tp, res);
 #ifdef CONFIG_NET_CLS_ACT
 		if (unlikely(err == TC_ACT_RECLASSIFY && !compat_mode)) {

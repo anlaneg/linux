@@ -215,6 +215,7 @@ static u32 clsact_egress_block_get(struct Qdisc *sch)
 	return q->egress_block_info.block_index;
 }
 
+//ingress ,egress block创建
 static int clsact_init(struct Qdisc *sch, struct nlattr *opt,
 		       struct netlink_ext_ack *extack)
 {
@@ -225,23 +226,27 @@ static int clsact_init(struct Qdisc *sch, struct nlattr *opt,
 	net_inc_ingress_queue();
 	net_inc_egress_queue();
 
+	//初始化ingress
 	mini_qdisc_pair_init(&q->miniqp_ingress, sch, &dev->miniq_ingress);
 
 	q->ingress_block_info.binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS;
 	q->ingress_block_info.chain_head_change = clsact_chain_head_change;
 	q->ingress_block_info.chain_head_change_priv = &q->miniqp_ingress;
 
+	//创建ingress block
 	err = tcf_block_get_ext(&q->ingress_block, sch, &q->ingress_block_info,
 				extack);
 	if (err)
 		return err;
 
+	//初始化egress
 	mini_qdisc_pair_init(&q->miniqp_egress, sch, &dev->miniq_egress);
 
 	q->egress_block_info.binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_EGRESS;
 	q->egress_block_info.chain_head_change = clsact_chain_head_change;
 	q->egress_block_info.chain_head_change_priv = &q->miniqp_egress;
 
+	//创建egress block
 	return tcf_block_get_ext(&q->egress_block, sch, &q->egress_block_info, extack);
 }
 
@@ -271,7 +276,7 @@ static struct Qdisc_ops clsact_qdisc_ops __read_mostly = {
 	.id			=	"clsact",
 	.priv_size		=	sizeof(struct clsact_sched_data),
 	.static_flags		=	TCQ_F_CPUSTATS,
-	//初始化qdisc
+	//初始化ingress qdisc
 	.init			=	clsact_init,
 	.destroy		=	clsact_destroy,
 	.dump			=	ingress_dump,

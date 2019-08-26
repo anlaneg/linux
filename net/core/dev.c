@@ -3667,6 +3667,7 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 	/* qdisc_skb_cb(skb)->pkt_len was already set by the caller. */
 	mini_qdisc_bstats_cpu_update(miniq, skb);
 
+	//对skb执行分类
 	switch (tcf_classify(skb, miniq->filter_list, &cl_res, false)) {
 	case TC_ACT_OK:
 	case TC_ACT_RECLASSIFY:
@@ -3885,11 +3886,11 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	qdisc_pkt_len_init(skb);
 #ifdef CONFIG_NET_CLS_ACT
-	//报文正在发送，处于非ingress方向
+	//报文正在发送，处于egress方向
 	skb->tc_at_ingress = 0;
 # ifdef CONFIG_NET_EGRESS
 	if (static_branch_unlikely(&egress_needed_key)) {
-		//tc处理gress方向业务
+		//tc处理gress方向filter入口
 		skb = sch_handle_egress(skb, &rc, dev);
 		if (!skb)
 			goto out;
@@ -4740,6 +4741,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev)
 {
 #ifdef CONFIG_NET_CLS_ACT
+	//取ingress的miniq(它上面由tp_head_change会调更新了首个tp_head)
 	struct mini_Qdisc *miniq = rcu_dereference_bh(skb->dev->miniq_ingress);
 	struct tcf_result cl_res;
 
@@ -9294,7 +9296,7 @@ struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 
 #ifdef CONFIG_NET_CLS_ACT
 	if (queue)
-		//已创建，则返回
+		//ingress queue已存在，则返回
 		return queue;
 
 	//创建queue,并设置dev->ingress_queue

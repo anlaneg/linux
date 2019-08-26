@@ -604,7 +604,7 @@ struct netdev_queue {
  */
 	struct net_device	*dev;//此队列属于哪个网络设备
 	struct Qdisc __rcu	*qdisc;//队列调度器（qdisc = queueing discipline 排队规则)
-	struct Qdisc		*qdisc_sleeping;
+	struct Qdisc		*qdisc_sleeping;//ingress对应的qdisc
 #ifdef CONFIG_SYSFS
 	struct kobject		kobj;
 #endif
@@ -1981,6 +1981,7 @@ struct net_device {
 	unsigned int		real_num_tx_queues;//有效的tx队列数
 	struct Qdisc		*qdisc;//根排队队列
 #ifdef CONFIG_NET_SCHED
+	//hash表，记录此设备上创建的qdisc,按qdisc handle索引
 	DECLARE_HASHTABLE	(qdisc_hash, 4);
 #endif
 	unsigned int		tx_queue_len;//tx队列大小
