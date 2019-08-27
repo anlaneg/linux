@@ -3326,7 +3326,7 @@ netdev_features_t netif_skb_features(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(netif_skb_features);
 
-//通过dev发送一个skb
+//通过dev向外发送一个skb
 static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 		    struct netdev_queue *txq, bool more)
 {
@@ -3340,11 +3340,12 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	len = skb->len;
 	trace_net_dev_start_xmit(skb, dev);
 	rc = netdev_start_xmit(skb, dev, txq, more);
-	trace_net_dev_xmit(skb, rc, dev, len);
+	trace_net_dev_xmit(skb, rc, dev, len/*报文长度*/);
 
 	return rc;
 }
 
+//发送一组skb
 struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *dev,
 				    struct netdev_queue *txq, int *ret)
 {
@@ -3364,6 +3365,7 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *de
 
 		skb = next;
 		if (netif_tx_queue_stopped(txq) && skb) {
+			//tx 队列停止时，skb仍需要发送，则报错
 			rc = NETDEV_TX_BUSY;
 			break;
 		}

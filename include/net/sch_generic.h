@@ -188,6 +188,7 @@ static inline void qdisc_run_end(struct Qdisc *qdisc)
 		spin_unlock(&qdisc->seqlock);
 }
 
+//检查队列是否可以批量出队
 static inline bool qdisc_may_bulk(const struct Qdisc *qdisc)
 {
 	return qdisc->flags & TCQ_F_ONETXQUEUE;

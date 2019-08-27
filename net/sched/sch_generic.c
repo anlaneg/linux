@@ -155,6 +155,7 @@ static void try_bulk_dequeue_skb(struct Qdisc *q,
 	int bytelimit = qdisc_avail_bulklimit(txq) - skb->len;
 
 	while (bytelimit > 0) {
+		//出一个skb
 		struct sk_buff *nskb = q->dequeue(q);
 
 		if (!nskb)
@@ -350,7 +351,7 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
  *				>0 - queue is not empty.
  *
  */
-static inline bool qdisc_restart(struct Qdisc *q, int *packets)
+static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以出多少包*/)
 {
 	spinlock_t *root_lock = NULL;
 	struct netdev_queue *txq;
