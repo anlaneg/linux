@@ -68,6 +68,7 @@ struct ovs_conntrack_info {
 	struct md_mark mark;
 	struct md_labels labels;
 	char timeout[CTNL_TIMEOUT_NAME_MAX];
+	struct nf_ct_timeout *nf_ct_timeout;
 #if IS_ENABLED(CONFIG_NF_NAT)
 	//指出源目的mac如何分配
 	struct nf_nat_range2 range;  /* Only present for SRC NAT and DST NAT. */
@@ -723,6 +724,15 @@ static bool skb_nfct_cached(struct net *net,
 		//取help信息，检查ct与info指定的helper函数是否一致
 		help = nf_ct_ext_find(ct, NF_CT_EXT_HELPER);
 		if (help && rcu_access_pointer(help->helper) != info->helper)
+			return false;
+	}
+
+	if (info->nf_ct_timeout) {
+		struct nf_conn_timeout *timeout_ext;
+
+		timeout_ext = nf_ct_timeout_find(ct);
+		if (!timeout_ext || info->nf_ct_timeout !=
+		    rcu_dereference(timeout_ext->timeout))
 			return false;
 	}
 
@@ -1625,7 +1635,7 @@ static int parse_ct(const struct nlattr *attr, struct ovs_conntrack_info *info,
 		case OVS_CT_ATTR_TIMEOUT:
 			memcpy(info->timeout, nla_data(a), nla_len(a));
 			if (!memchr(info->timeout, '\0', nla_len(a))) {
-				OVS_NLERR(log, "Invalid conntrack helper");
+				OVS_NLERR(log, "Invalid conntrack timeout");
 				return -EINVAL;
 			}
 			break;
@@ -1720,6 +1730,10 @@ int ovs_ct_copy_action(struct net *net, const struct nlattr *attr,
 				      ct_info.timeout))
 			pr_info_ratelimited("Failed to associated timeout "
 					    "policy `%s'\n", ct_info.timeout);
+		else
+			ct_info.nf_ct_timeout = rcu_dereference(
+				nf_ct_timeout_find(ct_info.ct)->timeout);
+
 	}
 
 	if (helper) {
