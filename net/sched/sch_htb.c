@@ -897,6 +897,7 @@ next:
 	return skb;
 }
 
+//自htb中出队一个报文
 static struct sk_buff *htb_dequeue(struct Qdisc *sch)
 {
 	struct sk_buff *skb;

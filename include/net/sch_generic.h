@@ -171,11 +171,13 @@ static inline bool qdisc_run_begin(struct Qdisc *qdisc)
 			return false;
 		qdisc->empty = false;
 	} else if (qdisc_is_running(qdisc)) {
+		//如果此qdisc已被running,则直接返回
 		return false;
 	}
 	/* Variant of write_seqcount_begin() telling lockdep a trylock
 	 * was attempted.
 	 */
+	//此cpu获得权利进入，指明running,排除其它cpu
 	raw_write_seqcount_begin(&qdisc->running);
 	seqcount_acquire(&qdisc->running.dep_map, 0, 1, _RET_IP_);
 	return true;
@@ -876,8 +878,8 @@ static inline void bstats_update(struct gnet_stats_basic_packed *bstats,
 				 const struct sk_buff *skb)
 {
 	_bstats_update(bstats,
-		       qdisc_pkt_len(skb),
-		       skb_is_gso(skb) ? skb_shinfo(skb)->gso_segs : 1);
+		       qdisc_pkt_len(skb)/*报文字节数*/,
+		       skb_is_gso(skb) ? skb_shinfo(skb)->gso_segs/*报文数目*/ : 1);
 }
 
 static inline void _bstats_cpu_update(struct gnet_stats_basic_cpu *bstats,
@@ -1054,15 +1056,19 @@ static inline void __qdisc_enqueue_head(struct sk_buff *skb,
 	qh->qlen++;
 }
 
+//自qh队列中出一个skb
 static inline struct sk_buff *__qdisc_dequeue_head(struct qdisc_skb_head *qh)
 {
 	struct sk_buff *skb = qh->head;
 
 	if (likely(skb != NULL)) {
+		//将skb自qh->head上移除，队列长度减1
 		qh->head = skb->next;
 		qh->qlen--;
+		//队列为空情况
 		if (qh->head == NULL)
 			qh->tail = NULL;
+		//返回的skb其next为空
 		skb->next = NULL;
 	}
 

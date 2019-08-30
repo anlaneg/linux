@@ -119,6 +119,7 @@ void __qdisc_run(struct Qdisc *q);
 static inline void qdisc_run(struct Qdisc *q)
 {
 	if (qdisc_run_begin(q)) {
+		//如果此cpu获得运行权，则进入此处
 		__qdisc_run(q);
 		qdisc_run_end(q);
 	}

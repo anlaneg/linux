@@ -206,6 +206,7 @@ static struct sk_buff *dequeue_skb(struct Qdisc *q, bool *validate,
 
 	*packets = 1;
 	if (unlikely(!skb_queue_empty(&q->gso_skb))) {
+		//存在上一次没有发送完的gso数据包，将其取出
 		spinlock_t *lock = NULL;
 
 		if (q->flags & TCQ_F_NOLOCK) {
@@ -256,7 +257,7 @@ validate:
 	skb = qdisc_dequeue_skb_bad_txq(q);
 	if (unlikely(skb))
 		goto bulk;
-	//自队列中出一个报文
+	//自队列中出一个报文（这一过程可使能tc配置的qos)
 	skb = q->dequeue(q);
 	if (skb) {
 bulk:
@@ -280,7 +281,7 @@ trace:
  *				true   - feel free to send more pkts
  */
 bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
-		     struct net_device *dev, struct netdev_queue *txq,
+		     struct net_device *dev, struct netdev_queue *txq/*发送到指定txq队列*/,
 		     spinlock_t *root_lock, bool validate)
 {
 	int ret = NETDEV_TX_BUSY;
@@ -368,6 +369,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 		root_lock = qdisc_lock(q);
 
 	dev = qdisc_dev(q);
+	//为skb选择tx队列
 	txq = skb_get_tx_queue(dev, skb);
 
 	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
