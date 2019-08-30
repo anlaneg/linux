@@ -50,7 +50,7 @@ struct qdisc_size_table {
 struct qdisc_skb_head {
 	struct sk_buff	*head;
 	struct sk_buff	*tail;
-	__u32		qlen;
+	__u32		qlen;//队列长度
 	spinlock_t	lock;
 };
 

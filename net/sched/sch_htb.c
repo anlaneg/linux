@@ -916,6 +916,7 @@ ok:
 		return skb;
 	}
 
+	//队列中长度为0，直接返回
 	if (!sch->q.qlen)
 		goto fin;
 	q->now = ktime_get_ns();
