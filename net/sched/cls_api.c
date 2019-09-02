@@ -1972,6 +1972,7 @@ static int tcf_fill_node(struct net *net, struct sk_buff *skb,
 	if (!fh) {
 		tcm->tcm_handle = 0;
 	} else {
+		//执行filter的dump输出，并进行netlink封装
 		if (tp->ops->dump &&
 		    tp->ops->dump(net, tp, fh, skb, tcm, rtnl_held) < 0)
 			goto nla_put_failure;

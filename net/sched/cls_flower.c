@@ -2584,6 +2584,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh,
 	if (fl_dump_key(skb, net, key, mask))
 		goto nla_put_failure_locked;
 
+	//存入flower的标记
 	if (f->flags && nla_put_u32(skb, TCA_FLOWER_FLAGS, f->flags))
 		goto nla_put_failure_locked;
 

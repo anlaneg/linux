@@ -171,6 +171,7 @@ static int tunnel_key_opts_set(struct nlattr *nla, struct ip_tunnel_info *info,
 	info->options_len = opts_len;
 	switch (nla_type(nla_data(nla))) {
 	case TCA_TUNNEL_KEY_ENC_OPTS_GENEVE:
+		//填充geneve对应的选项
 #if IS_ENABLED(CONFIG_INET)
 		info->key.tun_flags |= TUNNEL_GENEVE_OPT;
 		return tunnel_key_copy_opts(nla, ip_tunnel_info_opts(info),
@@ -243,6 +244,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		return err;
 	}
 
+	//必须存在tunnel_key_parms
 	if (!tb[TCA_TUNNEL_KEY_PARMS]) {
 		NL_SET_ERR_MSG(extack, "Missing tunnel key parameters");
 		return -EINVAL;
@@ -261,6 +263,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 	case TCA_TUNNEL_KEY_ACT_RELEASE:
 		break;
 	case TCA_TUNNEL_KEY_ACT_SET:
+		//如果是set action,则使用netlink中包含的信息，填充
 		if (tb[TCA_TUNNEL_KEY_ENC_KEY_ID]) {
 			__be32 key32;
 
@@ -295,6 +298,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 
 		if (tb[TCA_TUNNEL_KEY_ENC_IPV4_SRC] &&
 		    tb[TCA_TUNNEL_KEY_ENC_IPV4_DST]) {
+			//填充收集到的metadata
 			__be32 saddr;
 			__be32 daddr;
 
@@ -302,7 +306,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			daddr = nla_get_in_addr(tb[TCA_TUNNEL_KEY_ENC_IPV4_DST]);
 
 			metadata = __ip_tun_set_dst(saddr, daddr, tos, ttl,
-						    dst_port, flags,
+						    dst_port, flags/*隧道标记*/,
 						    key_id, opts_len);
 		} else if (tb[TCA_TUNNEL_KEY_ENC_IPV6_SRC] &&
 			   tb[TCA_TUNNEL_KEY_ENC_IPV6_DST]) {
@@ -321,6 +325,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			goto err_out;
 		}
 
+		//申请metadata失败，则返回错误
 		if (!metadata) {
 			NL_SET_ERR_MSG(extack, "Cannot allocate tunnel metadata dst");
 			ret = -ENOMEM;
@@ -333,6 +338,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			goto release_tun_meta;
 #endif
 
+		//指定了选项长度，则设置tunnel选项
 		if (opts_len) {
 			ret = tunnel_key_opts_set(tb[TCA_TUNNEL_KEY_ENC_OPTS],
 						  &metadata->u.tun_info,
@@ -350,6 +356,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 	}
 
 	if (!exists) {
+		//创建action
 		ret = tcf_idr_create(tn, index, est, a,
 				     &act_tunnel_key_ops, bind, true);
 		if (ret) {
@@ -364,6 +371,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		goto release_tun_meta;
 	}
 
+	//对action进行检查
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0) {
 		ret = err;

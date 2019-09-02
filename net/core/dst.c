@@ -262,9 +262,10 @@ static void __metadata_dst_init(struct metadata_dst *md_dst,
 	struct dst_entry *dst;
 
 	dst = &md_dst->dst;
-	dst_init(dst, &md_dst_ops, NULL, 1, DST_OBSOLETE_NONE,
+	dst_init(dst, &md_dst_ops, NULL/*目标设备暂未知*/, 1, DST_OBSOLETE_NONE,
 		 DST_METADATA | DST_NOCOUNT);
 
+	//暂定为丢包输出
 	dst->input = dst_md_discard;
 	dst->output = dst_md_discard_out;
 
@@ -277,6 +278,7 @@ struct metadata_dst *metadata_dst_alloc(u8 optslen, enum metadata_type type,
 {
 	struct metadata_dst *md_dst;
 
+	//申请含opt长度的metadata_dst
 	md_dst = kmalloc(sizeof(*md_dst) + optslen, flags);
 	if (!md_dst)
 		return NULL;

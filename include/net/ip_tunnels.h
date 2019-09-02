@@ -48,9 +48,9 @@ struct ip_tunnel_key {
 			struct in6_addr dst;
 		} ipv6;
 	} u;
-	__be16			tun_flags;
-	u8			tos;		/* TOS for IPv4, TC for IPv6 */
-	u8			ttl;		/* TTL for IPv4, HL for IPv6 */
+	__be16			tun_flags;//标记
+	u8			tos;		/* TOS for IPv4, TC for IPv6 */ //tos信息
+	u8			ttl;		/* TTL for IPv4, HL for IPv6 */ //ttl信息
 	__be32			label;		/* Flow Label for IPv6 */
 	__be16			tp_src;//隧道传输层源port
 	__be16			tp_dst;//隧道传输层目的port
@@ -71,7 +71,7 @@ struct ip_tunnel_info {
 #ifdef CONFIG_DST_CACHE
 	struct dst_cache	dst_cache;
 #endif
-	u8			options_len;
+	u8			options_len;//选项长度
 	u8			mode;
 };
 

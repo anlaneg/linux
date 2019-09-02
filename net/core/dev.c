@@ -1198,6 +1198,7 @@ EXPORT_SYMBOL(dev_get_valid_name);
  *	Change name of a device, can pass format strings "eth%d".
  *	for wildcarding.
  */
+//设备名称修改
 int dev_change_name(struct net_device *dev, const char *newname)
 {
 	unsigned char old_assign_type;

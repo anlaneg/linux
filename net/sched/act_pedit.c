@@ -63,6 +63,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 		}
 		n--;
 
+		//每个元素必须为TCA_PEDIT_KEY_EX类型
 		if (nla_type(ka) != TCA_PEDIT_KEY_EX) {
 			err = -EINVAL;
 			goto err_out;
@@ -74,6 +75,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 		if (err)
 			goto err_out;
 
+		//必须这两个字段
 		if (!tb[TCA_PEDIT_KEY_EX_HTYPE] ||
 		    !tb[TCA_PEDIT_KEY_EX_CMD]) {
 			err = -EINVAL;
@@ -182,6 +184,7 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	//取需要修改的各字段cmd,及type
 	keys_ex = tcf_pedit_keys_ex_parse(tb[TCA_PEDIT_KEYS_EX], parm->nkeys);
 	if (IS_ERR(keys_ex))
 		return PTR_ERR(keys_ex);

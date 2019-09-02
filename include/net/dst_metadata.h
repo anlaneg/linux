@@ -20,6 +20,7 @@ struct metadata_dst {
 	struct dst_entry		dst;
 	enum metadata_type		type;
 	union {
+		//tunnel类型时填充此结构体
 		struct ip_tunnel_info	tun_info;
 		struct hw_port_info	port_info;
 	} u;
@@ -94,6 +95,7 @@ void metadata_dst_free_percpu(struct metadata_dst __percpu *md_dst);
 struct metadata_dst __percpu *
 metadata_dst_alloc_percpu(u8 optslen, enum metadata_type type, gfp_t flags);
 
+//申请tunnel类型的metadata_dst
 static inline struct metadata_dst *tun_rx_dst(int md_size)
 {
 	struct metadata_dst *tun_dst;
@@ -140,13 +142,13 @@ static inline struct ip_tunnel_info *skb_tunnel_info_unclone(struct sk_buff *skb
 	return &dst->u.tun_info;
 }
 
-static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr,
+static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr/*源ip*/,
 						    __be32 daddr,
 						    __u8 tos, __u8 ttl,
-						    __be16 tp_dst,
+						    __be16 tp_dst/*目的port*/,
 						    __be16 flags,
 						    __be64 tunnel_id,
-						    int md_size)
+						    int md_size/*选项长度*/)
 {
 	struct metadata_dst *tun_dst;
 
@@ -154,9 +156,10 @@ static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr,
 	if (!tun_dst)
 		return NULL;
 
+	//初始化tunnel.key信息
 	ip_tunnel_key_init(&tun_dst->u.tun_info.key,
 			   saddr, daddr, tos, ttl,
-			   0, 0, tp_dst, tunnel_id, flags);
+			   0, 0, tp_dst, tunnel_id, flags/*tunnel标记*/);
 	return tun_dst;
 }
 

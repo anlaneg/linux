@@ -409,10 +409,12 @@ static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 	return ret;
 }
 
+//创建并初始化action
 int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 		   struct tc_action **a, const struct tc_action_ops *ops,
 		   int bind, bool cpustats)
 {
+	//为action申请空间
 	struct tc_action *p = kzalloc(ops->size, GFP_KERNEL);
 	struct tcf_idrinfo *idrinfo = tn->idrinfo;
 	int err = -ENOMEM;
@@ -495,7 +497,7 @@ EXPORT_SYMBOL(tcf_idr_cleanup);
  */
 
 int tcf_idr_check_alloc(struct tc_action_net *tn, u32 *index,
-			struct tc_action **a, int bind)
+			struct tc_action **a/*出参，如果有*index对应的action，则非0*/, int bind)
 {
 	struct tcf_idrinfo *idrinfo = tn->idrinfo;
 	struct tc_action *p;
@@ -521,7 +523,7 @@ again:
 			*a = p;
 			ret = 1;
 		} else {
-			//未找到，为其申请一个index
+			//未找到，为其申请一个此index
 			*a = NULL;
 			ret = idr_alloc_u32(&idrinfo->action_idr, NULL, index,
 					    *index, GFP_KERNEL);
