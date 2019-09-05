@@ -1285,6 +1285,7 @@ static int mlx5e_uplink_rep_set_vf_vlan(struct net_device *dev, int vf, u16 vlan
 	return 0;
 }
 
+//获取dev对应的devlink_port
 static struct devlink_port *mlx5e_get_devlink_port(struct net_device *dev)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
@@ -1759,15 +1760,18 @@ static int register_devlink_port(struct mlx5_core_dev *dev,
 		return ret;
 
 	if (rep->vport == MLX5_VPORT_UPLINK)
+		//设置uplink对应的parent id
 		devlink_port_attrs_set(&rpriv->dl_port,
 				       DEVLINK_PORT_FLAVOUR_PHYSICAL,
 				       PCI_FUNC(dev->pdev->devfn), false, 0,
 				       &ppid.id[0], ppid.id_len);
 	else if (rep->vport == MLX5_VPORT_PF)
+		//设置pf对应的parent id
 		devlink_port_attrs_pci_pf_set(&rpriv->dl_port,
 					      &ppid.id[0], ppid.id_len,
 					      dev->pdev->devfn);
 	else if (mlx5_eswitch_is_vf_vport(dev->priv.eswitch, rpriv->rep->vport))
+		//设置此vf对应的parent id
 		devlink_port_attrs_pci_vf_set(&rpriv->dl_port,
 					      &ppid.id[0], ppid.id_len,
 					      dev->pdev->devfn,
@@ -1834,6 +1838,7 @@ mlx5e_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 		goto err_detach_netdev;
 	}
 
+	//注册devlink_port
 	err = register_devlink_port(dev, rpriv);
 	if (err) {
 		esw_warn(dev, "Failed to register devlink port %d\n",

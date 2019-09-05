@@ -1456,6 +1456,7 @@ struct net_device_ops {
 						u32 flags);
 	int			(*ndo_xsk_async_xmit)(struct net_device *dev,
 						      u32 queue_id);
+	//由dev获取devlink_port
 	struct devlink_port *	(*ndo_get_devlink_port)(struct net_device *dev);
 };
 

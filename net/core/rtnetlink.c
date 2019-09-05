@@ -3284,6 +3284,7 @@ replay:
 	if (err < 0)
 		goto out_unregister;
 	if (link_net) {
+		//
 		err = dev_change_net_namespace(dev, dest_net, ifname);
 		if (err < 0)
 			goto out_unregister;

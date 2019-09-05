@@ -61,7 +61,7 @@ struct devlink_port_pci_vf_attrs {
 struct devlink_port_attrs {
 	u8 set:1,
 	   split:1,
-	   switch_port:1;
+	   switch_port:1;/*指定为有效switch_port*/
 	enum devlink_port_flavour flavour;
 	struct netdev_phys_item_id switch_id;
 	union {

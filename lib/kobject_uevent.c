@@ -757,6 +757,7 @@ static int uevent_net_broadcast(struct sock *usk, struct sk_buff *skb,
 	return ret;
 }
 
+//收到kernel发送过来的消息，传递给用户态
 static int uevent_net_rcv_skb(struct sk_buff *skb, struct nlmsghdr *nlh,
 			      struct netlink_ext_ack *extack)
 {
@@ -787,7 +788,7 @@ static int uevent_net_rcv_skb(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 static void uevent_net_rcv(struct sk_buff *skb)
 {
-	//将收到的消息投递给uevent_net_rcv_skb处理（此消息来源于kernel)
+	//将收到的消息投递给uevent_net_rcv_skb处理（此消息来源于kernel，送用户态)
 	netlink_rcv_skb(skb, &uevent_net_rcv_skb);
 }
 
@@ -796,7 +797,8 @@ static int uevent_net_init(struct net *net)
 	struct uevent_sock *ue_sk;
 	struct netlink_kernel_cfg cfg = {
 		.groups	= 1,
-		.input = uevent_net_rcv,//NETLINK_KOBJECT_UEVENT类型消息处理
+		//NETLINK_KOBJECT_UEVENT类型消息处理
+		.input = uevent_net_rcv,
 		.flags	= NL_CFG_F_NONROOT_RECV
 	};
 
@@ -812,7 +814,7 @@ static int uevent_net_init(struct net *net)
 		return -ENODEV;
 	}
 
-	//记录负责kobject_uevent的socket
+	//记录负责kobject_uevent的socket（kernel端）
 	net->uevent_sock = ue_sk;
 
 	/* Restrict uevents to initial user namespace. */
@@ -825,6 +827,7 @@ static int uevent_net_init(struct net *net)
 	return 0;
 }
 
+//关闭uevent 要socket
 static void uevent_net_exit(struct net *net)
 {
 	struct uevent_sock *ue_sk = net->uevent_sock;

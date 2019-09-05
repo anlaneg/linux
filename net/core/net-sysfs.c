@@ -506,6 +506,7 @@ static ssize_t phys_switch_id_show(struct device *dev,
 
 	return ret;
 }
+//定义phys_switch_id属性
 static DEVICE_ATTR_RO(phys_switch_id);
 
 static struct attribute *net_class_attrs[] __ro_after_init = {
@@ -1451,9 +1452,12 @@ static struct kobj_type netdev_queue_ktype __ro_after_init = {
 	.get_ownership = netdev_queue_get_ownership,
 };
 
+//添加tx队列kobject
 static int netdev_queue_add_kobject(struct net_device *dev, int index)
 {
+	//取index号netdev_queue
 	struct netdev_queue *queue = dev->_tx + index;
+	/*queue对应的obj*/
 	struct kobject *kobj = &queue->kobj;
 	int error = 0;
 
@@ -1486,6 +1490,7 @@ netdev_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 	int i;
 	int error = 0;
 
+	//针对新加的queue,执行add
 	for (i = old_num; i < new_num; i++) {
 		error = netdev_queue_add_kobject(dev, i);
 		if (error) {
@@ -1494,6 +1499,7 @@ netdev_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 		}
 	}
 
+	//针对减少的queue,执行remove
 	while (--i >= new_num) {
 		struct netdev_queue *queue = dev->_tx + i;
 

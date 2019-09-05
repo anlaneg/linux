@@ -93,11 +93,13 @@ static LIST_HEAD(devlink_list);
  */
 static DEFINE_MUTEX(devlink_mutex);
 
+//devlink对应的namespace
 static struct net *devlink_net(const struct devlink *devlink)
 {
 	return read_pnet(&devlink->_net);
 }
 
+//将devlink置到对应的namespace
 static void devlink_net_set(struct devlink *devlink, struct net *net)
 {
 	write_pnet(&devlink->_net, net);
@@ -512,6 +514,7 @@ static void devlink_notify(struct devlink *devlink, enum devlink_command cmd)
 		return;
 	}
 
+	//通知message到DEVLINK_MCGRP_CONFIG组，devlink monitor可接收到
 	genlmsg_multicast_netns(&devlink_nl_family, devlink_net(devlink),
 				msg, 0, DEVLINK_MCGRP_CONFIG, GFP_KERNEL);
 }
@@ -5779,6 +5782,7 @@ void devlink_port_type_clear(struct devlink_port *devlink_port)
 }
 EXPORT_SYMBOL_GPL(devlink_port_type_clear);
 
+//为devlink_port设置switch_id
 static int __devlink_port_attrs_set(struct devlink_port *devlink_port,
 				    enum devlink_port_flavour flavour,
 				    const unsigned char *switch_id,
@@ -5791,6 +5795,7 @@ static int __devlink_port_attrs_set(struct devlink_port *devlink_port,
 	attrs->set = true;
 	attrs->flavour = flavour;
 	if (switch_id) {
+		//设置为switch_port,设置id,及id_len
 		attrs->switch_port = true;
 		if (WARN_ON(switch_id_len > MAX_PHYS_ITEM_ID_LEN))
 			switch_id_len = MAX_PHYS_ITEM_ID_LEN;

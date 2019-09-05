@@ -8098,7 +8098,7 @@ EXPORT_SYMBOL(dev_get_phys_port_name);
  *	Get the devices's port parent identifier
  */
 int dev_get_port_parent_id(struct net_device *dev,
-			   struct netdev_phys_item_id *ppid,
+			   struct netdev_phys_item_id *ppid/*父id号*/,
 			   bool recurse)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
@@ -8997,7 +8997,7 @@ int register_netdevice(struct net_device *dev)
 	//触发网络设备创建通知
 	if (!dev->rtnl_link_ops ||
 	    dev->rtnl_link_state == RTNL_LINK_INITIALIZED)
-		rtmsg_ifinfo(RTM_NEWLINK, dev, ~0U, GFP_KERNEL);
+		rtmsg_ifinfo(RTM_NEWLINK/*触发newlink事件*/, dev, ~0U, GFP_KERNEL);
 
 out:
 	return ret;
