@@ -325,7 +325,7 @@ static int find_pattern(const char *data, size_t dlen,
 		i++;
 	}
 
-	pr_debug("Skipped up to `%c'!\n", skip);
+	pr_debug("Skipped up to 0x%hhx delimiter!\n", skip);
 
 	*numoff = i;//记录port的提取位置
 	*numlen = getnum(data + i, dlen - i, cmd, term, numoff);//提取port

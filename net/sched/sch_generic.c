@@ -639,8 +639,12 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	//将skb存入q
 	err = skb_array_produce(q, skb);
 
-	if (unlikely(err))
-		return qdisc_drop_cpu(skb, qdisc, to_free/*出参，指明需要丢弃的报文*/);
+	if (unlikely(err)) {
+		if (qdisc_is_percpu_stats(qdisc))
+			return qdisc_drop_cpu(skb, qdisc, to_free/*出参，指明需要丢弃的报文*/);
+		else
+			return qdisc_drop(skb, qdisc, to_free);
+	}
 
 	//增加队列中有效数据长度
 	qdisc_update_stats_at_enqueue(qdisc, pkt_len);
@@ -708,11 +712,14 @@ static void pfifo_fast_reset(struct Qdisc *qdisc)
 			kfree_skb(skb);
 	}
 
-	for_each_possible_cpu(i) {
-		struct gnet_stats_queue *q = per_cpu_ptr(qdisc->cpu_qstats, i);
+	if (qdisc_is_percpu_stats(qdisc)) {
+		for_each_possible_cpu(i) {
+			struct gnet_stats_queue *q;
 
-		q->backlog = 0;
-		q->qlen = 0;
+			q = per_cpu_ptr(qdisc->cpu_qstats, i);
+			q->backlog = 0;
+			q->qlen = 0;
+		}
 	}
 }
 
