@@ -637,9 +637,9 @@ struct Qdisc_class_common {
 };
 
 struct Qdisc_class_hash {
-	struct hlist_head	*hash;
-	unsigned int		hashsize;
-	unsigned int		hashmask;
+	struct hlist_head	*hash;//桶指针
+	unsigned int		hashsize;//桶数
+	unsigned int		hashmask;//hash表hashcode对应的掩码
 	unsigned int		hashelems;
 };
 

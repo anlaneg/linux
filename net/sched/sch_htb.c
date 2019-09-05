@@ -100,10 +100,12 @@ struct htb_class {
 	u32			prio;		/* these two are used only by leaves... */
 	int			quantum;	/* but stored for parent-to-leaf return */
 
+	//非叶子节点上添加的filter_list,用于将报文分类到下层class
 	struct tcf_proto __rcu	*filter_list;	/* class attached filters */
 	struct tcf_block	*block;
 	int			filter_cnt;
 
+	//class的层次，只有level为0的才能对应缓存队列
 	int			level;		/* our level (see above) */
 	unsigned int		children;
 	struct htb_class	*parent;	/* parent class */
@@ -122,6 +124,7 @@ struct htb_class {
 
 	union {
 		struct htb_class_leaf {
+			//叶子class的队列，用于缓存报文
 			int		deficit[TC_HTB_MAXDEPTH];
 			struct Qdisc	*q;
 		} leaf;
@@ -146,7 +149,7 @@ struct htb_level {
 };
 
 struct htb_sched {
-	struct Qdisc_class_hash clhash;
+	struct Qdisc_class_hash clhash;//tos与class映射的hashtable
 	int			defcls;		/* class where unclassified flows go to */
 	int			rate2quantum;	/* quant = rate / rate2quantum */
 
@@ -209,6 +212,8 @@ static unsigned long htb_search(struct Qdisc *sch, u32 handle)
  */
 #define HTB_DIRECT ((struct htb_class *)-1L)
 
+//htb执行报文分类，如果报文分类成功，返回对应的叶子htb_class,针对非叶子htb_class,继续
+//执行非叶子节点上的filter_list进行再分类（层状分类，非叶子会有filter进行再分类）
 static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 				      int *qerr)
 {
@@ -222,21 +227,25 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 	 * note that nfmark can be used too by attaching filter fw with no
 	 * rules in it
 	 */
+	//报文tos值与队列的handle一致时，进direct队列
 	if (skb->priority == sch->handle)
 		return HTB_DIRECT;	/* X:0 (direct flow) selected */
 
-	//按skb优先映射class
+	//按skb优先映射class(通过tos在hashtable中查询）
 	cl = htb_find(skb->priority, sch);
 	if (cl) {
 		if (cl->level == 0)
+			//顶层level的class,直接返回
 			return cl;
 		/* Start with inner filter chain if a non-leaf class is selected */
 		tcf = rcu_dereference_bh(cl->filter_list);
 	} else {
+		//未找到对应的class,使用队列上的filter_list
 		tcf = rcu_dereference_bh(q->filter_list);
 	}
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
+	//通过tp执行分类
 	while (tcf && (result = tcf_classify(skb, tcf, &res, false)) >= 0) {
 #ifdef CONFIG_NET_CLS_ACT
 		switch (result) {
@@ -251,22 +260,28 @@ static struct htb_class *htb_classify(struct sk_buff *skb, struct Qdisc *sch,
 #endif
 		cl = (void *)res.class;
 		if (!cl) {
-			//未指定class,通过classid查询
+			//如果filter未查询到class,通过res.classid查询
 			if (res.classid == sch->handle)
 				return HTB_DIRECT;	/* X:0 (direct flow) */
 			cl = htb_find(res.classid, sch);
 			if (!cl)
+				//此报文无法分类
 				break;	/* filter selected invalid classid */
 		}
 		if (!cl->level)
+			//level 0，直接返回class
 			return cl;	/* we hit leaf; return it */
 
 		/* we have got inner class; apply inner filter chain */
+		//此class继续有filter_list,继续执行分类
 		tcf = rcu_dereference_bh(cl->filter_list);
 	}
+
+	//执行分类失败，使用默认class
 	/* classification failed; try to use default class */
 	cl = htb_find(TC_H_MAKE(TC_H_MAJ(sch->handle), q->defcls), sch);
 	if (!cl || cl->level)
+		//如果默认class非叶子节点或者默认class不存在，则返回direct队列
 		return HTB_DIRECT;	/* bad default .. this is safe bet */
 	return cl;
 }
@@ -590,17 +605,20 @@ static int htb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		       struct sk_buff **to_free)
 {
 	int uninitialized_var(ret);
+	//队列长度
 	unsigned int len = qdisc_pkt_len(skb);
 	struct htb_sched *q = qdisc_priv(sch);
-	//报文执行分类
+	//对报文执行分类
 	struct htb_class *cl = htb_classify(skb, sch, &ret);
 
 	if (cl == HTB_DIRECT) {
+		//分类为direct队列，直接进direct队列
 		/* enqueue to helper queue */
 		if (q->direct_queue.qlen < q->direct_qlen) {
 			__qdisc_enqueue_tail(skb, &q->direct_queue);
 			q->direct_pkts++;
 		} else {
+			//已入队的报文超过direct_qlen长度，将本报文串在to_free链上
 			return qdisc_drop(skb, sch, to_free);
 		}
 #ifdef CONFIG_NET_CLS_ACT
@@ -612,12 +630,14 @@ static int htb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 #endif
 	} else if ((ret = qdisc_enqueue(skb, cl->leaf.q,
 					to_free)) != NET_XMIT_SUCCESS) {
+		//找到了此skb对应的class,但将报文入到队列时，失败。
 		if (net_xmit_drop_count(ret)) {
 			qdisc_qstats_drop(sch);
 			cl->drops++;
 		}
 		return ret;
 	} else {
+		//报文入队成功
 		htb_activate(q, cl);
 	}
 
@@ -897,7 +917,7 @@ next:
 	return skb;
 }
 
-//自htb中出队一个报文
+//自htb队列中中出队一个报文
 static struct sk_buff *htb_dequeue(struct Qdisc *sch)
 {
 	struct sk_buff *skb;
@@ -907,6 +927,7 @@ static struct sk_buff *htb_dequeue(struct Qdisc *sch)
 	unsigned long start_at;
 
 	/* try to dequeue direct packets as high prio (!) to minimize cpu work */
+	//如果direct队列有值，则直接出包
 	skb = __qdisc_dequeue_head(&q->direct_queue);
 	if (skb != NULL) {
 ok:
@@ -916,9 +937,10 @@ ok:
 		return skb;
 	}
 
-	//队列中长度为0，直接返回
+	//队列中长度为0，无包，直接返回
 	if (!sch->q.qlen)
 		goto fin;
+
 	q->now = ktime_get_ns();
 	start_at = jiffies;
 
@@ -1587,7 +1609,9 @@ static struct Qdisc_ops htb_qdisc_ops __read_mostly = {
 	.cl_ops		=	&htb_class_ops,
 	.id		=	"htb",
 	.priv_size	=	sizeof(struct htb_sched),
+	//htb入队函数
 	.enqueue	=	htb_enqueue,
+	//htb出队函数
 	.dequeue	=	htb_dequeue,
 	.peek		=	qdisc_peek_dequeued,
 	.init		=	htb_init,
