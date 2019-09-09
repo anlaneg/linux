@@ -213,6 +213,7 @@ static int ethtool_set_features(struct net_device *dev, void __user *useraddr)
 	return ret;
 }
 
+//返回各string集合的成员数
 static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 {
 	const struct ethtool_ops *ops = dev->ethtool_ops;
@@ -239,12 +240,14 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 		return -EOPNOTSUPP;
 }
 
+//将stringset对应的字符串集合填充进data
 static void __ethtool_get_strings(struct net_device *dev,
 	u32 stringset, u8 *data)
 {
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 
 	if (stringset == ETH_SS_FEATURES)
+		//将功能名称数组记录到data
 		memcpy(data, netdev_features_strings,
 			sizeof(netdev_features_strings));
 	else if (stringset == ETH_SS_RSS_HASH_FUNCS)
@@ -830,6 +833,7 @@ static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 		return 0;
 
 	/* calculate size of return buffer */
+	//需要多少buffer
 	n_bits = hweight64(sset_mask);
 
 	memset(&info, 0, sizeof(info));
@@ -845,8 +849,10 @@ static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 	 */
 	for (i = 0; i < 64; i++) {
 		if (!(sset_mask & (1ULL << i)))
+			//跳过不关心的set集
 			continue;
 
+		//取i号set集的元素数
 		rc = __ethtool_get_sset_count(dev, i);
 		if (rc >= 0) {
 			info.sset_mask |= (1ULL << i);
@@ -858,6 +864,7 @@ static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 	if (copy_to_user(useraddr, &info, sizeof(info)))
 		goto out;
 
+	//填充各set集的元素数
 	useraddr += offsetof(struct ethtool_sset_info, data);
 	if (copy_to_user(useraddr, info_buf, idx * sizeof(u32)))
 		goto out;
@@ -1669,8 +1676,10 @@ static noinline_for_stack int ethtool_get_channels(struct net_device *dev,
 	if (!dev->ethtool_ops->get_channels)
 		return -EOPNOTSUPP;
 
+	//调用驱动回调，填充channels
 	dev->ethtool_ops->get_channels(dev, &channels);
 
+	//将channels填充给useraddr
 	if (copy_to_user(useraddr, &channels, sizeof(channels)))
 		return -EFAULT;
 	return 0;
@@ -1791,6 +1800,7 @@ static int ethtool_get_strings(struct net_device *dev, void __user *useraddr)
 	if (copy_from_user(&gstrings, useraddr, sizeof(gstrings)))
 		return -EFAULT;
 
+	//取指定string集合的数目
 	ret = __ethtool_get_sset_count(dev, gstrings.string_set);
 	if (ret < 0)
 		return ret;
@@ -1798,8 +1808,10 @@ static int ethtool_get_strings(struct net_device *dev, void __user *useraddr)
 		return -ENOMEM;
 	WARN_ON_ONCE(!ret);
 
+	//设置要返回的元素数
 	gstrings.len = ret;
 
+	//有字符串集合需要返回，申请data，并将字符串集合填充进data
 	if (gstrings.len) {
 		data = vzalloc(array_size(gstrings.len, ETH_GSTRING_LEN));
 		if (!data)
@@ -1811,6 +1823,7 @@ static int ethtool_get_strings(struct net_device *dev, void __user *useraddr)
 	}
 
 	ret = -EFAULT;
+	//返回结果给用户态
 	if (copy_to_user(useraddr, &gstrings, sizeof(gstrings)))
 		goto out;
 	useraddr += sizeof(gstrings);
@@ -2573,6 +2586,8 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	} else {
 		sub_cmd = ethcmd;
 	}
+
+	//支持的子命令
 	/* Allow some commands to be done by anyone */
 	switch (sub_cmd) {
 	case ETHTOOL_GSET:
@@ -2692,6 +2707,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		rc = ethtool_self_test(dev, useraddr);
 		break;
 	case ETHTOOL_GSTRINGS:
+		//取指定string集合
 		rc = ethtool_get_strings(dev, useraddr);
 		break;
 	case ETHTOOL_PHYS_ID:
@@ -2737,6 +2753,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		rc = ethtool_reset(dev, useraddr);
 		break;
 	case ETHTOOL_GSSET_INFO:
+		//获取string set的元素数目
 		rc = ethtool_get_sset_info(dev, useraddr);
 		break;
 	case ETHTOOL_GRXFHINDIR:
@@ -2751,6 +2768,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SRSSH:
 		rc = ethtool_set_rxfh(dev, useraddr);
 		break;
+		//一般性功能状态获取
 	case ETHTOOL_GFEATURES:
 		rc = ethtool_get_features(dev, useraddr);
 		break;
@@ -2773,6 +2791,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SGRO:
 		rc = ethtool_set_one_feature(dev, useraddr, ethcmd);
 		break;
+		//获取接口的channel数目
 	case ETHTOOL_GCHANNELS:
 		rc = ethtool_get_channels(dev, useraddr);
 		break;

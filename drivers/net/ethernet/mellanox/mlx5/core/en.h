@@ -177,6 +177,7 @@ static inline u16 mlx5_min_rx_wqes(int wq_type, u32 wq_size)
 /* Use this function to get max num channels (rxqs/txqs) only to create netdev */
 static inline int mlx5e_get_max_num_channels(struct mlx5_core_dev *mdev)
 {
+	/*针对kdump kernel返回1*/
 	return is_kdump_kernel() ?
 		MLX5E_MIN_NUM_CHANNELS :
 		min_t(int, mlx5_comp_vectors_count(mdev), MLX5E_MAX_NUM_CHANNELS);
@@ -242,7 +243,7 @@ struct mlx5e_params {
 	u8  log_sq_size;
 	u8  rq_wq_type;
 	u8  log_rq_mtu_frames;
-	u16 num_channels;
+	u16 num_channels;//生效的channel数目
 	u8  num_tc;
 	bool rx_cqe_compress_def;
 	bool tunneled_offload_en;
@@ -827,7 +828,7 @@ struct mlx5e_priv {
 	struct net_device         *netdev;
 	struct mlx5e_stats         stats;
 	struct mlx5e_channel_stats channel_stats[MLX5E_MAX_NUM_CHANNELS];
-	u16                        max_nch;
+	u16                        max_nch;//预设置的channel总数
 	u8                         max_opened_tc;
 	struct hwtstamp_config     tstamp;
 	u16                        q_counter;

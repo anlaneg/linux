@@ -254,6 +254,7 @@ struct ifreq {
 };
 #endif /* __UAPI_DEF_IF_IFREQ */
 
+//接口名称
 #define ifr_name	ifr_ifrn.ifrn_name	/* interface name 	*/
 #define ifr_hwaddr	ifr_ifru.ifru_hwaddr	/* MAC address 		*/
 #define	ifr_addr	ifr_ifru.ifru_addr	/* address		*/

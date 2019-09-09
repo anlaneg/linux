@@ -53,7 +53,7 @@
 
 #define UPLINK_REP_INDEX 0
 
-//给定vport_num取vport
+//给定vport_num取repsentor口
 static struct mlx5_eswitch_rep *mlx5_eswitch_get_rep(struct mlx5_eswitch *esw,
 						     u16 vport_num)
 {
@@ -1529,6 +1529,7 @@ static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
 	//原来为registered状态，则更新为loaded
 	if (atomic_cmpxchg(&rep->rep_data[rep_type].state,
 			   REP_REGISTERED, REP_LOADED) == REP_REGISTERED) {
+		//状态更新成功，触发rep_ops[rep_type]的load回调
 		err = esw->offloads.rep_ops[rep_type]->load(esw->dev, rep);
 		if (err)
 			//load失败，还原为registered
@@ -1539,6 +1540,7 @@ static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
 	return err;
 }
 
+//加载special vports
 static int __load_reps_special_vport(struct mlx5_eswitch *esw, u8 rep_type)
 {
 	struct mlx5_eswitch_rep *rep;
@@ -1598,11 +1600,13 @@ err_vf:
 	return err;
 }
 
+//加载指定类型的rep类型接口（例如eth类型，或者ib类型）
 static int __load_reps_all_vport(struct mlx5_eswitch *esw, u8 rep_type)
 {
 	int err;
 
 	/* Special vports must be loaded first, uplink rep creates mdev resource. */
+	//先加载special vport
 	err = __load_reps_special_vport(esw, rep_type);
 	if (err)
 		return err;
@@ -1642,6 +1646,7 @@ static int esw_offloads_load_all_reps(struct mlx5_eswitch *esw)
 	u8 rep_type = 0;
 	int err;
 
+	//加载多种类型的repersent口（以太，ib)
 	for (rep_type = 0; rep_type < NUM_REP_TYPES; rep_type++) {
 		err = __load_reps_all_vport(esw, rep_type);
 		if (err)
@@ -2178,6 +2183,7 @@ int esw_offloads_init(struct mlx5_eswitch *esw)
 			goto err_vport_metadata;
 	}
 
+	//装载所有rep口
 	err = esw_offloads_load_all_reps(esw);
 	if (err)
 		goto err_reps;

@@ -80,7 +80,7 @@ struct mlx5_rep_uplink_priv {
 };
 
 struct mlx5e_rep_priv {
-	struct mlx5_eswitch_rep *rep;
+	struct mlx5_eswitch_rep *rep;//所属的represent口
 	struct mlx5e_neigh_update_table neigh_update;
 	struct net_device      *netdev;
 	struct mlx5_flow_handle *vport_rx_rule;

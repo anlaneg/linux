@@ -386,6 +386,7 @@ static int mlx5e_set_ringparam(struct net_device *dev,
 	return mlx5e_ethtool_set_ringparam(priv, param);
 }
 
+//针填充max_combined,combined_count两项
 void mlx5e_ethtool_get_channels(struct mlx5e_priv *priv,
 				struct ethtool_channels *ch)
 {
@@ -425,6 +426,7 @@ int mlx5e_ethtool_set_channels(struct mlx5e_priv *priv,
 		return -EINVAL;
 	}
 
+	//已设置为指定channel,不变更
 	if (cur_params->num_channels == count)
 		return 0;
 
@@ -441,6 +443,7 @@ int mlx5e_ethtool_set_channels(struct mlx5e_priv *priv,
 	}
 
 	new_channels.params = priv->channels.params;
+	//设置channel
 	new_channels.params.num_channels = count;
 
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state)) {

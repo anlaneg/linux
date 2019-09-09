@@ -377,6 +377,7 @@ static const struct ethtool_ops mlx5e_uplink_rep_ethtool_ops = {
 	.get_ethtool_stats = mlx5e_rep_get_ethtool_stats,
 	.get_ringparam     = mlx5e_rep_get_ringparam,
 	.set_ringparam     = mlx5e_rep_set_ringparam,
+	//uplink channel数目获取
 	.get_channels      = mlx5e_rep_get_channels,
 	.set_channels      = mlx5e_rep_set_channels,
 	.get_coalesce      = mlx5e_rep_get_coalesce,
@@ -1389,15 +1390,18 @@ static void mlx5e_build_rep_netdev(struct net_device *netdev)
 
 	if (rep->vport == MLX5_VPORT_UPLINK) {
 		SET_NETDEV_DEV(netdev, mdev->device);
+		//设置uplink对应的设备操作函数
 		netdev->netdev_ops = &mlx5e_netdev_ops_uplink_rep;
 		/* we want a persistent mac for the uplink rep */
 		mlx5_query_mac_address(mdev, netdev->dev_addr);
+		//设置uplink对应的ethtool_ops
 		netdev->ethtool_ops = &mlx5e_uplink_rep_ethtool_ops;
 #ifdef CONFIG_MLX5_CORE_EN_DCB
 		if (MLX5_CAP_GEN(mdev, qos))
 			netdev->dcbnl_ops = &mlx5e_dcbnl_ops;
 #endif
 	} else {
+		//为其它rep口设置设备操作函数及对应的ethtool_ops
 		netdev->netdev_ops = &mlx5e_netdev_ops_rep;
 		eth_hw_addr_random(netdev);
 		netdev->ethtool_ops = &mlx5e_rep_ethtool_ops;
@@ -1424,7 +1428,7 @@ static void mlx5e_build_rep_netdev(struct net_device *netdev)
 	netdev->features |= netdev->hw_features;
 }
 
-//repsentor口初始化
+//represent口初始化
 static int mlx5e_init_rep(struct mlx5_core_dev *mdev,
 			  struct net_device *netdev,
 			  const struct mlx5e_profile *profile,
@@ -1437,6 +1441,7 @@ static int mlx5e_init_rep(struct mlx5_core_dev *mdev,
 	if (err)
 		return err;
 
+	//rep口对应的默认队列数
 	priv->channels.params.num_channels = MLX5E_REP_PARAMS_DEF_NUM_CHANNELS;
 
 	mlx5e_build_rep_params(netdev);
@@ -1796,6 +1801,7 @@ mlx5e_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 	struct net_device *netdev;
 	int nch, err;
 
+	//申请rep对应的私有数据
 	rpriv = kzalloc(sizeof(*rpriv), GFP_KERNEL);
 	if (!rpriv)
 		return -ENOMEM;
@@ -1804,8 +1810,9 @@ mlx5e_vport_rep_load(struct mlx5_core_dev *dev, struct mlx5_eswitch_rep *rep)
 	rpriv->rep = rep;
 
 	nch = mlx5e_get_max_num_channels(dev);
+	//创建rep对应的netdev
 	profile = (rep->vport == MLX5_VPORT_UPLINK) ?
-		  &mlx5e_uplink_rep_profile : &mlx5e_rep_profile;
+		  &mlx5e_uplink_rep_profile/*uplink对应的profile*/ : &mlx5e_rep_profile;
 	netdev = mlx5e_create_netdev(dev, profile, nch, rpriv);
 	if (!netdev) {
 		pr_warn("Failed to create representor netdev for vport %d\n",
@@ -1906,6 +1913,7 @@ static void *mlx5e_vport_rep_get_proto_dev(struct mlx5_eswitch_rep *rep)
 	return rpriv->netdev;
 }
 
+//以太对应的repsentor ops
 static const struct mlx5_eswitch_rep_ops rep_ops = {
 	.load = mlx5e_vport_rep_load,
 	.unload = mlx5e_vport_rep_unload,
@@ -1916,7 +1924,7 @@ void mlx5e_rep_register_vport_reps(struct mlx5_core_dev *mdev)
 {
 	struct mlx5_eswitch *esw = mdev->priv.eswitch;
 
-	//注册以太类型接口的回调
+	//注册以太类型接口的回调(rep类型口）
 	mlx5_eswitch_register_vport_reps(esw, &rep_ops, REP_ETH);
 }
 

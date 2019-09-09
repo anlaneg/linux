@@ -1772,6 +1772,7 @@ static void mlx5_eswitch_event_handlers_unregister(struct mlx5_eswitch *esw)
 /* Public E-Switch API */
 #define ESW_ALLOWED(esw) ((esw) && MLX5_ESWITCH_MANAGER((esw)->dev))
 
+//开启指定eswitch模式
 int mlx5_eswitch_enable(struct mlx5_eswitch *esw, int mode)
 {
 	struct mlx5_vport *vport;
@@ -1801,6 +1802,7 @@ int mlx5_eswitch_enable(struct mlx5_eswitch *esw, int mode)
 	} else {
 		mlx5_reload_interface(esw->dev, MLX5_INTERFACE_PROTOCOL_ETH);
 		mlx5_reload_interface(esw->dev, MLX5_INTERFACE_PROTOCOL_IB);
+		//eswitch offload模式初始化
 		err = esw_offloads_init(esw);
 	}
 

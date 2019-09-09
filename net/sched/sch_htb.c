@@ -427,9 +427,12 @@ static void htb_activate_prios(struct htb_sched *q, struct htb_class *cl)
 	long m, mask = cl->prio_activity;
 
 	while (cl->cmode == HTB_MAY_BORROW && p && mask) {
+		//按mask会加入多个prio对应的
 		m = mask;
 		while (m) {
+			//自~m中，find first zero
 			int prio = ffz(~m);
+			//清掉m中prio对应的'1'
 			m &= ~(1 << prio);
 
 			if (p->inner.clprio[prio].feed.rb_node)
@@ -438,12 +441,12 @@ static void htb_activate_prios(struct htb_sched *q, struct htb_class *cl)
 				 */
 				mask &= ~(1 << prio);
 
+			//加入到prio优化级对应的树上
 			htb_add_to_id_tree(&p->inner.clprio[prio].feed, cl, prio);
 		}
 		p->prio_activity |= mask;
 		cl = p;
-		p = cl->parent;
-
+		p = cl->parent;//向上移至父class
 	}
 	if (cl->cmode == HTB_CAN_SEND && mask)
 		htb_add_class_to_row(q, cl, mask);

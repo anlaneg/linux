@@ -280,7 +280,6 @@ void mlx5_reload_interface(struct mlx5_core_dev *mdev, int protocol)
 	mutex_lock(&mlx5_intf_mutex);
 	if (mlx5_has_added_dev_by_protocol(mdev, protocol)) {
 		//有已添加的protocol类型的dev
-
 		//先移除所有protocol对应的intf的dev_ctx
 		mlx5_remove_dev_by_protocol(mdev, protocol);
 		//再添加所有protocol对应的intf的dev_ctx

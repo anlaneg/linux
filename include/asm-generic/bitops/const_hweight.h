@@ -5,6 +5,7 @@
 /*
  * Compile time versions of __arch_hweightN()
  */
+//8bit中'1'的数目
 #define __const_hweight8(w)		\
 	((unsigned int)			\
 	 ((!!((w) & (1ULL << 0))) +	\
@@ -16,8 +17,11 @@
 	  (!!((w) & (1ULL << 6))) +	\
 	  (!!((w) & (1ULL << 7)))))
 
+//16bits中'1'的数目
 #define __const_hweight16(w) (__const_hweight8(w)  + __const_hweight8((w)  >> 8 ))
+//32bits中'1'的数目
 #define __const_hweight32(w) (__const_hweight16(w) + __const_hweight16((w) >> 16))
+//64bits中'1'的数目
 #define __const_hweight64(w) (__const_hweight32(w) + __const_hweight32((w) >> 32))
 
 /*

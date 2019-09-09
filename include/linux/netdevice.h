@@ -1824,9 +1824,9 @@ struct net_device {
 		struct list_head lower;
 	} adj_list;
 
-	netdev_features_t	features;//网卡开启的功能
-	netdev_features_t	hw_features;
-	netdev_features_t	wanted_features;
+	netdev_features_t	features;//网卡上当前开启的功能
+	netdev_features_t	hw_features;//网卡上可变更的功能
+	netdev_features_t	wanted_features;//被请求执行变更的功能（当前？）
 	netdev_features_t	vlan_features;
 	netdev_features_t	hw_enc_features;
 	netdev_features_t	mpls_features;

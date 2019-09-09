@@ -174,7 +174,7 @@ struct mlx5_eswitch_fdb {
 struct mlx5_esw_offload {
 	struct mlx5_flow_table *ft_offloads;
 	struct mlx5_flow_group *vport_rx_group;
-	//按索引取对应的rep口
+	//按索引取对应的rep口（uplink为最后一个）
 	struct mlx5_eswitch_rep *vport_reps;
 	struct list_head peer_flows;
 	struct mutex peer_mutex;

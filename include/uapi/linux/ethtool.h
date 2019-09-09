@@ -518,10 +518,12 @@ struct ethtool_ringparam {
 
 struct ethtool_channels {
 	__u32	cmd;
+	//预设置的rx,tx,other,combined数量
 	__u32	max_rx;
 	__u32	max_tx;
 	__u32	max_other;
 	__u32	max_combined;
+	//当前生效的rx,tx,other,combined数量
 	__u32	rx_count;
 	__u32	tx_count;
 	__u32	other_count;
@@ -1145,10 +1147,10 @@ struct ethtool_dump {
  * @never_changed: mask of features not changeable for any device
  */
 struct ethtool_get_features_block {
-	__u32	available;
-	__u32	requested;
-	__u32	active;
-	__u32	never_changed;
+	__u32	available;//指明可变更的功能
+	__u32	requested;//指明被请求且要求变更的功能
+	__u32	active;//指明被使能的功能
+	__u32	never_changed;//指明不容许变更的功能
 };
 
 /**

@@ -351,6 +351,7 @@ void dev_load(struct net *net, const char *name)
 	rcu_read_unlock();
 
 	no_module = !dev;
+	//设备不存在时，加载相应module
 	if (no_module && capable(CAP_NET_ADMIN))
 		no_module = request_module("netdev-%s", name);
 	if (no_module && capable(CAP_SYS_MODULE))

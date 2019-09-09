@@ -4955,6 +4955,7 @@ static int mlx5e_nic_init(struct mlx5_core_dev *mdev,
 	if (err)
 		return err;
 
+	//将设备的channel置为最大值priv->max_nch
 	mlx5e_build_nic_params(mdev, &priv->xsk, rss, &priv->channels.params,
 			       priv->max_nch, netdev->mtu);
 
@@ -5205,7 +5206,7 @@ void mlx5e_netdev_cleanup(struct net_device *netdev, struct mlx5e_priv *priv)
 	destroy_workqueue(priv->wq);
 }
 
-//mlx 创建网络设备
+//mlx依据profile创建网络设备
 struct net_device *mlx5e_create_netdev(struct mlx5_core_dev *mdev,
 				       const struct mlx5e_profile *profile,
 				       int nch,
@@ -5223,6 +5224,7 @@ struct net_device *mlx5e_create_netdev(struct mlx5_core_dev *mdev,
 		return NULL;
 	}
 
+	//初始化netdev设备
 	err = profile->init(mdev, netdev, profile, ppriv);
 	if (err) {
 		mlx5_core_err(mdev, "failed to init mlx5e profile %d\n", err);
@@ -5361,6 +5363,7 @@ static void *mlx5e_add(struct mlx5_core_dev *mdev)
 	}
 #endif
 
+	//按nic模式初始化netdev
 	nch = mlx5e_get_max_num_channels(mdev);
 	netdev = mlx5e_create_netdev(mdev, &mlx5e_nic_profile, nch, NULL);
 	if (!netdev) {
@@ -5414,7 +5417,7 @@ static void mlx5e_remove(struct mlx5_core_dev *mdev, void *vpriv)
 }
 
 static struct mlx5_interface mlx5e_interface = {
-	//增加以太网类型设备netdev
+	//增加以太网类型设备netdev(nic模式）
 	.add       = mlx5e_add,
 	//移除以太网类型设备
 	.remove    = mlx5e_remove,
