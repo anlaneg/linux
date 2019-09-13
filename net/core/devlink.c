@@ -5802,6 +5802,7 @@ static int __devlink_port_attrs_set(struct devlink_port *devlink_port,
 		memcpy(attrs->switch_id.id, switch_id, switch_id_len);
 		attrs->switch_id.id_len = switch_id_len;
 	} else {
+		//未设置
 		attrs->switch_port = false;
 	}
 	return 0;
@@ -6979,6 +6980,7 @@ int devlink_compat_switch_id_get(struct net_device *dev,
 	if (!devlink_port || !devlink_port->attrs.switch_port)
 		return -EOPNOTSUPP;
 
+	//提取switch_id
 	memcpy(ppid, &devlink_port->attrs.switch_id, sizeof(*ppid));
 
 	return 0;

@@ -686,7 +686,8 @@ static int takeover_tasklets(unsigned int cpu)
 //各cpu上的软中断处理线程
 static struct smp_hotplug_thread softirq_threads = {
 	.store			= &ksoftirqd,
-	.thread_should_run	= ksoftirqd_should_run,//检查是否有软中断发生
+	//检查是否有软中断发生
+	.thread_should_run	= ksoftirqd_should_run,
 	.thread_fn		= run_ksoftirqd,
 	.thread_comm		= "ksoftirqd/%u",
 };

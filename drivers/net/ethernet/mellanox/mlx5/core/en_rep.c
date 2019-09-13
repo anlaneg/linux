@@ -1102,6 +1102,7 @@ void mlx5e_rep_encap_entry_detach(struct mlx5e_priv *priv,
 	mlx5_tun_entropy_refcount_dec(tun_entropy, e->reformat_type);
 }
 
+//rep UP操作
 static int mlx5e_rep_open(struct net_device *dev)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);

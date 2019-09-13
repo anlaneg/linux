@@ -8114,6 +8114,7 @@ int dev_get_port_parent_id(struct net_device *dev,
 			return err;
 	}
 
+	//通过dev attr查询
 	err = devlink_compat_switch_id_get(dev, ppid);
 	if (!err || err != -EOPNOTSUPP)
 		return err;

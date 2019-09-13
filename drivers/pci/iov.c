@@ -195,7 +195,8 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 
 	kobject_uevent(&virtfn->dev.kobj, KOBJ_CHANGE);
 
-	pci_bus_add_device(virtfn);//将设备添加到pci bus上
+	//将虚拟出来的sriov设备添加到pci bus上,促使设备查找驱动
+	pci_bus_add_device(virtfn);
 
 	return 0;
 

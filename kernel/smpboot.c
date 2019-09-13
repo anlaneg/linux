@@ -298,6 +298,7 @@ int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 	get_online_cpus();
 	mutex_lock(&smpboot_threads_lock);
 	for_each_online_cpu(cpu) {
+		//为指定cpu创建thread
 		ret = __smpboot_create_thread(plug_thread, cpu);
 		if (ret) {
 			smpboot_destroy_threads(plug_thread);

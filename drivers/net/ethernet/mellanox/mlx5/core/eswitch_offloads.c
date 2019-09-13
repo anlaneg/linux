@@ -1522,7 +1522,7 @@ static void esw_offloads_unload_all_reps(struct mlx5_eswitch *esw)
 }
 
 static int __esw_offloads_load_rep(struct mlx5_eswitch *esw,
-				   struct mlx5_eswitch_rep *rep, u8 rep_type/*rep口类型*/)
+				   struct mlx5_eswitch_rep *rep/*rep对应的空间*/, u8 rep_type/*rep口类型*/)
 {
 	int err = 0;
 
