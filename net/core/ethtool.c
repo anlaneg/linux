@@ -51,9 +51,10 @@ int ethtool_op_get_ts_info(struct net_device *dev, struct ethtool_ts_info *info)
 EXPORT_SYMBOL(ethtool_op_get_ts_info);
 
 /* Handlers for each ethtool command */
-
+//dev feature数目占用的4字节数目
 #define ETHTOOL_DEV_FEATURE_WORDS	((NETDEV_FEATURE_COUNT + 31) / 32)
 
+//netdev功能bit对应的字符串名称
 static const char netdev_features_strings[NETDEV_FEATURE_COUNT][ETH_GSTRING_LEN] = {
 	[NETIF_F_SG_BIT] =               "tx-scatter-gather",
 	[NETIF_F_IP_CSUM_BIT] =          "tx-checksum-ipv4",
@@ -113,6 +114,7 @@ static const char netdev_features_strings[NETDEV_FEATURE_COUNT][ETH_GSTRING_LEN]
 	[NETIF_F_HW_TLS_RX_BIT] =	 "tls-hw-rx-offload",
 };
 
+//rssh hash算法名称
 static const char
 rss_hash_func_strings[ETH_RSS_HASH_FUNCS_COUNT][ETH_GSTRING_LEN] = {
 	[ETH_RSS_HASH_TOP_BIT] =	"toeplitz",
@@ -135,12 +137,15 @@ phy_tunable_strings[__ETHTOOL_PHY_TUNABLE_COUNT][ETH_GSTRING_LEN] = {
 	[ETHTOOL_PHY_FAST_LINK_DOWN] = "phy-fast-link-down",
 };
 
+//收集dev对应的功能集
 static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_gfeatures cmd = {
 		.cmd = ETHTOOL_GFEATURES,
 		.size = ETHTOOL_DEV_FEATURE_WORDS,
 	};
+
+	//每个元素是一个u32的dev feature（下面的实现导致这两者间不能填充其它变量）
 	struct ethtool_get_features_block features[ETHTOOL_DEV_FEATURE_WORDS];
 	u32 __user *sizeaddr;
 	u32 copy_size;
@@ -149,6 +154,7 @@ static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 	/* in case feature bits run out again */
 	BUILD_BUG_ON(ETHTOOL_DEV_FEATURE_WORDS * sizeof(u32) > sizeof(netdev_features_t));
 
+	//遍历所有支持的设备功能，收集到features中
 	for (i = 0; i < ETHTOOL_DEV_FEATURE_WORDS; ++i) {
 		features[i].available = (u32)(dev->hw_features >> (32 * i));
 		features[i].requested = (u32)(dev->wanted_features >> (32 * i));
@@ -157,6 +163,7 @@ static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 			(u32)(NETIF_F_NEVER_CHANGE >> (32 * i));
 	}
 
+	//偏移到features填充位置
 	sizeaddr = useraddr + offsetof(struct ethtool_gfeatures, size);
 	if (get_user(copy_size, sizeaddr))
 		return -EFAULT;
@@ -164,6 +171,7 @@ static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 	if (copy_size > ETHTOOL_DEV_FEATURE_WORDS)
 		copy_size = ETHTOOL_DEV_FEATURE_WORDS;
 
+	//填充收集到的dev功能项
 	if (copy_to_user(useraddr, &cmd, sizeof(cmd)))
 		return -EFAULT;
 	useraddr += sizeof(cmd);
@@ -1485,6 +1493,7 @@ static int ethtool_get_link(struct net_device *dev, char __user *useraddr)
 	if (!dev->ethtool_ops->get_link)
 		return -EOPNOTSUPP;
 
+	//只有接口时running状态时，才获取link状态（常用此方式检查是否插网线了）
 	edata.data = netif_running(dev) && dev->ethtool_ops->get_link(dev);
 
 	if (copy_to_user(useraddr, &edata, sizeof(edata)))
@@ -2677,6 +2686,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		rc = ethtool_nway_reset(dev);
 		break;
 	case ETHTOOL_GLINK:
+		//显示link状态，是否插线了
 		rc = ethtool_get_link(dev, useraddr);
 		break;
 	case ETHTOOL_GEEPROM:

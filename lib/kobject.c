@@ -50,6 +50,7 @@ void kobject_get_ownership(struct kobject *kobj, kuid_t *uid, kgid_t *gid)
 	*uid = GLOBAL_ROOT_UID;
 	*gid = GLOBAL_ROOT_GID;
 
+	//取kobj对应的uid,gid
 	if (kobj->ktype->get_ownership)
 		kobj->ktype->get_ownership(kobj, uid, gid);
 }
@@ -73,6 +74,7 @@ static int populate_dir(struct kobject *kobj)
     //有默认属性，遍历所有默认属性(将其处理为文件）
 	if (t && t->default_attrs) {
 		for (i = 0; (attr = t->default_attrs[i]) != NULL; i++) {
+			//创建attr对应的文件
 			error = sysfs_create_file(kobj, attr);
 			if (error)
 				break;
@@ -81,6 +83,7 @@ static int populate_dir(struct kobject *kobj)
 	return error;
 }
 
+//创建kobj对应的目录,kobj对应的ktype指明的属性及group
 static int create_dir(struct kobject *kobj)
 {
 	const struct kobj_type *ktype = get_ktype(kobj);
@@ -92,14 +95,16 @@ static int create_dir(struct kobject *kobj)
 	if (error)
 		return error;
 
-    //创建属性文件
+    //创建kobj->ktype->default_attr文件
 	error = populate_dir(kobj);
 	if (error) {
+		//出错，删除对应的attr文件
 		sysfs_remove_dir(kobj);
 		return error;
 	}
 
 	if (ktype) {
+		//创建ktype->default_groups对应的目录及属性
 		error = sysfs_create_groups(kobj, ktype->default_groups);
 		if (error) {
 			sysfs_remove_dir(kobj);
@@ -202,10 +207,12 @@ EXPORT_SYMBOL_GPL(kobject_get_path);
 static void kobj_kset_join(struct kobject *kobj)
 {
 	if (!kobj->kset)
+		//不属于kset，跳出
 		return;
 
 	kset_get(kobj->kset);
 	spin_lock(&kobj->kset->list_lock);
+	//kobj挂接到kset
 	list_add_tail(&kobj->entry, &kobj->kset->list);
 	spin_unlock(&kobj->kset->list_lock);
 }
@@ -253,6 +260,7 @@ static int kobject_add_internal(struct kobject *kobj)
 		return -EINVAL;
 	}
 
+	//kobj对应的父节点
 	parent = kobject_get(kobj->parent);
 
 	/* join kset if set, use it as parent if we do not already have one */
@@ -404,6 +412,7 @@ error:
 }
 EXPORT_SYMBOL(kobject_init);
 
+//kobj添加，通过格式化名称及父节点填加
 static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 					   struct kobject *parent,
 					   const char *fmt, va_list vargs)
@@ -418,7 +427,7 @@ static __printf(3, 0) int kobject_add_varg(struct kobject *kobj,
 	}
 	//设置obj对应的父节点
 	kobj->parent = parent;
-	//为obj创建目录
+	//创建obj对应的目录
 	return kobject_add_internal(kobj);
 }
 
@@ -477,7 +486,8 @@ int kobject_add(struct kobject *kobj, struct kobject *parent,
 		dump_stack();
 		return -EINVAL;
 	}
-    //格式化名称
+
+    //格式化kobj名称
 	va_start(args, fmt);
 	retval = kobject_add_varg(kobj, parent, fmt, args);
 	va_end(args);
@@ -993,7 +1003,7 @@ static struct kobj_type kset_ktype = {
  * If the kset was not able to be created, NULL will be returned.
  */
 static struct kset *kset_create(const char *name,
-				const struct kset_uevent_ops *uevent_ops,
+				const struct kset_uevent_ops *uevent_ops/*kset对应的uevent操作集*/,
 				struct kobject *parent_kobj)
 {
 	struct kset *kset;
@@ -1007,6 +1017,7 @@ static struct kset *kset_create(const char *name,
 		kfree(kset);
 		return NULL;
 	}
+	//kset对应的udevent操作集
 	kset->uevent_ops = uevent_ops;
 	kset->kobj.parent = parent_kobj;
 

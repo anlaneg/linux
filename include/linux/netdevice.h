@@ -289,7 +289,7 @@ struct header_ops {
 enum netdev_state_t {
 	__LINK_STATE_START,//设备已开启,处于running状态
 	__LINK_STATE_PRESENT,//设备存在且有效未被删除
-	__LINK_STATE_NOCARRIER,
+	__LINK_STATE_NOCARRIER,//物理层无法传输
 	__LINK_STATE_LINKWATCH_PENDING,
 	__LINK_STATE_DORMANT,
 };
@@ -2005,7 +2005,7 @@ struct net_device {
 
 	struct list_head	link_watch_list;
 
-	enum { NETREG_UNINITIALIZED=0,
+	enum { NETREG_UNINITIALIZED=0,/*链路断开时，处理未初始化状态*/
 	       NETREG_REGISTERED,	/* completed register_netdevice */
 	       NETREG_UNREGISTERING,	/* called unregister_netdevice */
 	       NETREG_UNREGISTERED,	/* completed unregister todo */
@@ -3819,6 +3819,7 @@ void linkwatch_forget_dev(struct net_device *dev);
  */
 static inline bool netif_carrier_ok(const struct net_device *dev)
 {
+	//检查网络断开还是链接
 	return !test_bit(__LINK_STATE_NOCARRIER, &dev->state);
 }
 

@@ -332,6 +332,7 @@ struct ethtool_ops {
 	u32	(*get_msglevel)(struct net_device *);
 	void	(*set_msglevel)(struct net_device *, u32);
 	int	(*nway_reset)(struct net_device *);
+	//获取link状态
 	u32	(*get_link)(struct net_device *);
 	int	(*get_eeprom_len)(struct net_device *);
 	int	(*get_eeprom)(struct net_device *,

@@ -64,9 +64,10 @@ enum kobject_action {
 
 struct kobject {
 	const char		*name;/* kobject对象的名字，对应sysfs中的目录名 */
-	struct list_head	entry;
+	struct list_head	entry;//用于挂接成链，例如挂接给kset
 	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
 	struct kset		*kset;
+	//kobj对应的ktype(可约定一组公共的attr,groups)
 	struct kobj_type	*ktype;
 	//其在sysfs中对应的node
 	struct kernfs_node	*sd; /* sysfs directory entry */
@@ -139,12 +140,16 @@ static inline bool kobject_has_children(struct kobject *kobj)
 
 struct kobj_type {
 	void (*release)(struct kobject *kobj);
+	//显示某个属性时，或者设置某个属性时的操作集
 	const struct sysfs_ops *sysfs_ops;
-        //所有默认属性
+    //所有默认属性
 	struct attribute **default_attrs;	/* use default_groups instead */
+	//所有默认group(会被处理成目录及子文件）
 	const struct attribute_group **default_groups;
+	//
 	const struct kobj_ns_type_operations *(*child_ns_type)(struct kobject *kobj);
 	const void *(*namespace)(struct kobject *kobj);
+	//获取kobj对应uid,gid
 	void (*get_ownership)(struct kobject *kobj, kuid_t *uid, kgid_t *gid);
 };
 
@@ -157,8 +162,11 @@ struct kobj_uevent_env {
 };
 
 struct kset_uevent_ops {
+	//检查kobj对应的event是否可以不向userspace通告（返回0，不通告）
 	int (* const filter)(struct kset *kset, struct kobject *kobj);
+	//返回kobject对应的subsystem
 	const char *(* const name)(struct kset *kset, struct kobject *kobj);
+	//返回kobject特别需要的env添加
 	int (* const uevent)(struct kset *kset, struct kobject *kobj,
 		      struct kobj_uevent_env *env);
 };
@@ -194,7 +202,7 @@ struct sock;
  */
 struct kset {
 	struct list_head list;
-	spinlock_t list_lock;
+	spinlock_t list_lock;//保护list成员
 	struct kobject kobj;
 	const struct kset_uevent_ops *uevent_ops;
 } __randomize_layout;
@@ -221,6 +229,7 @@ static inline void kset_put(struct kset *k)
 	kobject_put(&k->kobj);
 }
 
+//kobj对应的类别（一组kobj具有相同的type)
 static inline struct kobj_type *get_ktype(struct kobject *kobj)
 {
 	return kobj->ktype;

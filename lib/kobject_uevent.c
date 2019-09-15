@@ -388,7 +388,7 @@ static int uevent_net_broadcast_tagged(struct sock *usk,
 
 //uevent事件广播
 static int kobject_uevent_net_broadcast(struct kobject *kobj,
-					struct kobj_uevent_env *env,
+					struct kobj_uevent_env *env/*环境变量*/,
 					const char *action_string,
 					const char *devpath)
 {
@@ -465,9 +465,10 @@ static void zap_modalias_env(struct kobj_uevent_env *env)
  */
 //触发uevent消息
 int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
-		       char *envp_ext[])
+		       char *envp_ext[]/*附加的环境变量*/)
 {
 	struct kobj_uevent_env *env;
+	//udevent事件名称
 	const char *action_string = kobject_actions[action];
 	const char *devpath = NULL;
 	const char *subsystem;
@@ -520,6 +521,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		}
 
 	/* originating subsystem */
+	//取subsystem,或者来自name回调，或者来自obj name
 	if (uevent_ops && uevent_ops->name)
 		subsystem = uevent_ops->name(kset, kobj);
 	else
@@ -538,6 +540,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		return -ENOMEM;
 
 	/* complete object path */
+	//obj到顶层的路径名称
 	devpath = kobject_get_path(kobj, GFP_KERNEL);
 	if (!devpath) {
 		retval = -ENOENT;
@@ -545,11 +548,11 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	}
 
 	/* default keys */
-	//添加action
+	//添加action名称
 	retval = add_uevent_var(env, "ACTION=%s", action_string);
 	if (retval)
 		goto exit;
-	//添加devpath
+	//添加devpath，到kobj对应路径
 	retval = add_uevent_var(env, "DEVPATH=%s", devpath);
 	if (retval)
 		goto exit;
@@ -570,7 +573,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 
 	/* let the kset specific function add its stuff */
 	if (uevent_ops && uevent_ops->uevent) {
-		//让kset添加一些stuff
+		//让kset添加一些stuff，例如添加专有env
 		retval = uevent_ops->uevent(kset, kobj, env);
 		if (retval) {
 			pr_debug("kobject: '%s' (%p): %s: uevent() returned "

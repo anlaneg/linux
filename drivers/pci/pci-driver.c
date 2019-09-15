@@ -1574,10 +1574,12 @@ static int pci_uevent(struct device *dev, struct kobj_uevent_env *env)
 	if (add_uevent_var(env, "PCI_ID=%04X:%04X", pdev->vendor, pdev->device))
 		return -ENOMEM;
 
+	//填充subsystem_vendor,subsystem_device
 	if (add_uevent_var(env, "PCI_SUBSYS_ID=%04X:%04X", pdev->subsystem_vendor,
 			   pdev->subsystem_device))
 		return -ENOMEM;
 
+	//pci对应的slot名称
 	if (add_uevent_var(env, "PCI_SLOT_NAME=%s", pci_name(pdev)))
 		return -ENOMEM;
 
@@ -1663,6 +1665,7 @@ struct bus_type pci_bus_type = {
 	.name		= "pci",
 	//定义pci总线如何实现驱动与bus之间的匹配
 	.match		= pci_bus_match,
+	//pci bus在通知uevent时要添加的uevent env
 	.uevent		= pci_uevent,
 	//定义pci设备的probe函数(由于pci定义了probe函数，故此函数将先与pci driver先调用）
 	.probe		= pci_device_probe,

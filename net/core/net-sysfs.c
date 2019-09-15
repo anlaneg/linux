@@ -1610,6 +1610,7 @@ static int netdev_uevent(struct device *d, struct kobj_uevent_env *env)
 	int retval;
 
 	/* pass interface to uevent. */
+	//添加接口名称
 	retval = add_uevent_var(env, "INTERFACE=%s", dev->name);
 	if (retval)
 		goto exit;
@@ -1618,6 +1619,7 @@ static int netdev_uevent(struct device *d, struct kobj_uevent_env *env)
 	 * ifindex is useful as it won't change (interface name may change)
 	 * and is what RtNetlink uses natively.
 	 */
+	//添加接口索引
 	retval = add_uevent_var(env, "IFINDEX=%d", dev->ifindex);
 
 exit:
@@ -1660,6 +1662,7 @@ static struct class net_class __ro_after_init = {
 	.name = "net",
 	.dev_release = netdev_release,
 	.dev_groups = net_class_groups,
+	//net类型的dev在针对kobj发送uevent时，填充env
 	.dev_uevent = netdev_uevent,
 	.ns_type = &net_ns_type_operations,
 	.namespace = net_namespace,

@@ -127,10 +127,13 @@ static int internal_create_group(struct kobject *kobj, int update,
 	if (unlikely(update && !kobj->sd))
 		return -EINVAL;
 	if (!grp->attrs && !grp->bin_attrs) {
+		//只能是普通attr或者二进制attr
 		WARN(1, "sysfs: (bin_)attrs not set by subsystem for group: %s/%s\n",
 			kobj->name, grp->name ?: "");
 		return -EINVAL;
 	}
+
+	//取kobj对应的uid,gid
 	kobject_get_ownership(kobj, &uid, &gid);
 	if (grp->name) {
 		if (update) {
@@ -189,17 +192,19 @@ int sysfs_create_group(struct kobject *kobj,
 EXPORT_SYMBOL_GPL(sysfs_create_group);
 
 static int internal_create_groups(struct kobject *kobj, int update,
-				  const struct attribute_group **groups)
+				  const struct attribute_group **groups/*以NULL结尾的数组*/)
 {
 	int error = 0;
 	int i;
 
 	if (!groups)
+		//无需要创建的group,直接返回
 		return 0;
 
 	for (i = 0; groups[i]; i++) {
 		error = internal_create_group(kobj, update, groups[i]);
 		if (error) {
+			//出错，执行还原
 			while (--i >= 0)
 				sysfs_remove_group(kobj, groups[i]);
 			break;

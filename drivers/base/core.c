@@ -1120,6 +1120,7 @@ static const char *dev_uevent_name(struct kset *kset, struct kobject *kobj)
 	return NULL;
 }
 
+//增加dev uevent需要的通知env
 static int dev_uevent(struct kset *kset, struct kobject *kobj,
 		      struct kobj_uevent_env *env)
 {
@@ -1136,14 +1137,19 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 
 		add_uevent_var(env, "MAJOR=%u", MAJOR(dev->devt));
 		add_uevent_var(env, "MINOR=%u", MINOR(dev->devt));
+		//取设备名称，uid,gid
 		name = device_get_devnode(dev, &mode, &uid, &gid, &tmp);
 		if (name) {
+			//添加设备名称
 			add_uevent_var(env, "DEVNAME=%s", name);
 			if (mode)
+				//设备的mode
 				add_uevent_var(env, "DEVMODE=%#o", mode & 0777);
 			if (!uid_eq(uid, GLOBAL_ROOT_UID))
+				//dev对应的uid
 				add_uevent_var(env, "DEVUID=%u", from_kuid(&init_user_ns, uid));
 			if (!gid_eq(gid, GLOBAL_ROOT_GID))
+				//dev对应的gid
 				add_uevent_var(env, "DEVGID=%u", from_kgid(&init_user_ns, gid));
 			kfree(tmp);
 		}
@@ -1152,6 +1158,7 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	if (dev->type && dev->type->name)
 		add_uevent_var(env, "DEVTYPE=%s", dev->type->name);
 
+	//设备使用的驱动
 	if (dev->driver)
 		add_uevent_var(env, "DRIVER=%s", dev->driver->name);
 
@@ -1159,6 +1166,7 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	of_device_uevent(dev, env);
 
 	/* have the bus specific function add its stuff */
+	//添加bus对应uevent
 	if (dev->bus && dev->bus->uevent) {
 		retval = dev->bus->uevent(dev, env);
 		if (retval)
@@ -1167,6 +1175,7 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	}
 
 	/* have the class specific function add its stuff */
+	//添加dev->class对应的uevent
 	if (dev->class && dev->class->dev_uevent) {
 		retval = dev->class->dev_uevent(dev, env);
 		if (retval)
@@ -1176,6 +1185,7 @@ static int dev_uevent(struct kset *kset, struct kobject *kobj,
 	}
 
 	/* have the device type specific function add its stuff */
+	//dev->type对应的uevent填充函数
 	if (dev->type && dev->type->uevent) {
 		retval = dev->type->uevent(dev, env);
 		if (retval)

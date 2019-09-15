@@ -55,6 +55,7 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 	if (!parent)
 		return -ENOENT;
 
+	//取kobj对应的uid,gid
 	kobject_get_ownership(kobj, &uid, &gid);
 
 	//创建目录，mode为rxw权限（user),所有人读权限，所有人执行权限

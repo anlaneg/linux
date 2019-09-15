@@ -125,6 +125,7 @@ struct bus_type {
 
 	//实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)
 	int (*match)(struct device *dev, struct device_driver *drv);
+	//bus针对kobj通知的uevent时需要添加的env
 	int (*uevent)(struct device *dev, struct kobj_uevent_env *env);
 	//使能驱动，使其探测设备（如果此函数为空，则调用驱动的probe进行探测）
 	int (*probe)(struct device *dev);
@@ -1007,7 +1008,7 @@ struct device {
 
 	const char		*init_name; /* initial name of the device */
 	const struct device_type *type;
-        //设备挂接在哪条总线上
+    //设备挂接在哪条总线上
 	struct bus_type	*bus;		/* type of bus device is on */
 	//设备驱动
 	struct device_driver *driver;	/* which driver has allocated this
