@@ -54,10 +54,10 @@ struct rtable {
 	__u16			rt_type;//路由地址类型（本机RTN_LOCAL，单播，组播，...)
 	__u8			rt_is_input;
 	//网关地址family
-	u8			rt_gw_family;
-
+	__u8			rt_uses_gateway;
 	int			rt_iif;
 
+	u8			rt_gw_family;
 	/* Info on neighbour */
 	union {
 		__be32		rt_gw4;
