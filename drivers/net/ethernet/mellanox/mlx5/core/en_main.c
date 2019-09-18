@@ -3255,6 +3255,7 @@ int mlx5e_create_indirect_tirs(struct mlx5e_priv *priv, bool inner_ttc)
 	if (!in)
 		return -ENOMEM;
 
+	//填充priv->indir_tir
 	for (tt = 0; tt < MLX5E_NUM_INDIR_TIRS; tt++) {
 		memset(in, 0, inlen);
 		tir = &priv->indir_tir[tt];
@@ -3270,6 +3271,7 @@ int mlx5e_create_indirect_tirs(struct mlx5e_priv *priv, bool inner_ttc)
 	if (!inner_ttc || !mlx5e_tunnel_inner_ft_supported(priv->mdev))
 		goto out;
 
+	//填充priv->inner_indir_tirs
 	for (i = 0; i < MLX5E_NUM_INDIR_TIRS; i++) {
 		memset(in, 0, inlen);
 		tir = &priv->inner_indir_tir[i];
@@ -5261,6 +5263,7 @@ int mlx5e_attach_netdev(struct mlx5e_priv *priv)
 	if (err)
 		goto out;
 
+	//初始化rx队列相关
 	err = profile->init_rx(priv);
 	if (err)
 		goto err_cleanup_tx;

@@ -37,7 +37,7 @@
  */
 
 int mlx5e_create_tir(struct mlx5_core_dev *mdev,
-		     struct mlx5e_tir *tir, u32 *in, int inlen)
+		     struct mlx5e_tir *tir/*出参，fw返回的tir数据*/, u32 *in, int inlen)
 {
 	int err;
 
@@ -46,6 +46,7 @@ int mlx5e_create_tir(struct mlx5_core_dev *mdev,
 		return err;
 
 	mutex_lock(&mdev->mlx5e_res.td.list_lock);
+	//将新创建的tir加入到mdev对应的tirs_list上
 	list_add(&tir->list, &mdev->mlx5e_res.td.tirs_list);
 	mutex_unlock(&mdev->mlx5e_res.td.list_lock);
 
@@ -117,6 +118,7 @@ int mlx5e_create_mdev_resources(struct mlx5_core_dev *mdev)
 		goto err_destroy_mkey;
 	}
 
+	//mdev对应的tirs_list链表初始化
 	INIT_LIST_HEAD(&mdev->mlx5e_res.td.tirs_list);
 	mutex_init(&mdev->mlx5e_res.td.list_lock);
 
@@ -165,6 +167,7 @@ int mlx5e_refresh_tirs(struct mlx5e_priv *priv, bool enable_uc_lb)
 	MLX5_SET(modify_tir_in, in, bitmask.self_lb_en, 1);
 
 	mutex_lock(&mdev->mlx5e_res.td.list_lock);
+	//针对每一个tirs_list执行update
 	list_for_each_entry(tir, &mdev->mlx5e_res.td.tirs_list, list) {
 		tirn = tir->tirn;
 		err = mlx5_core_modify_tir(mdev, tirn, in, inlen);

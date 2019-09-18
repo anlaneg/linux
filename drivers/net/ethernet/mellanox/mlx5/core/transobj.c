@@ -184,7 +184,7 @@ EXPORT_SYMBOL_GPL(mlx5_core_query_sq_state);
 
 int mlx5_core_create_tir_out(struct mlx5_core_dev *dev,
 			     u32 *in, int inlen,
-			     u32 *out, int outlen)
+			     u32 *out/*出参，fw返回的创建结果*/, int outlen)
 {
 	MLX5_SET(create_tir_in, in, opcode, MLX5_CMD_OP_CREATE_TIR);
 

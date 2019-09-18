@@ -1411,6 +1411,7 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int ret;
 
+	//断言rtnl——mutex
 	ASSERT_RTNL();
 
 	//检查设备是否已被移除

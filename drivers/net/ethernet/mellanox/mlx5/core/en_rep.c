@@ -1705,10 +1705,11 @@ static void mlx5e_uplink_rep_disable(struct mlx5e_priv *priv)
 	mlx5_lag_remove(mdev);
 }
 
-//vf口对应的profile
+//rep口对应的profile
 static const struct mlx5e_profile mlx5e_rep_profile = {
 	.init			= mlx5e_init_rep,
 	.cleanup		= mlx5e_cleanup_rep,
+	//rep口对应的rx队列初始化
 	.init_rx		= mlx5e_init_rep_rx,
 	.cleanup_rx		= mlx5e_cleanup_rep_rx,
 	.init_tx		= mlx5e_init_rep_tx,
