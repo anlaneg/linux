@@ -856,6 +856,7 @@ static int ovs_flow_cmd_fill_info(const struct sw_flow *flow, int dp_ifindex,
 			goto error;
 	}
 
+	//获取flow状态
 	err = ovs_flow_cmd_fill_stats(flow, skb);
 	if (err)
 		goto error;

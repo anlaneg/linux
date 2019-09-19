@@ -114,6 +114,7 @@ void ovs_flow_stats_update(struct sw_flow *flow, __be16 tcp_flags,
 	}
 
 	stats->used = jiffies;
+	//更新flow规则匹配的包数及字节数
 	stats->packet_count++;
 	stats->byte_count += len;
 	stats->tcp_flags |= tcp_flags;
@@ -133,7 +134,7 @@ void ovs_flow_stats_get(const struct sw_flow *flow,
 	memset(ovs_stats, 0, sizeof(*ovs_stats));
 
 	/* We open code this to make sure cpu 0 is always considered */
-	//合并合cpu对此flow的统计。
+	//合并各cpu对此flow的统计。
 	for (cpu = 0; cpu < nr_cpu_ids; cpu = cpumask_next(cpu, &flow->cpu_used_mask)) {
 		struct sw_flow_stats *stats = rcu_dereference_ovsl(flow->stats[cpu]);
 
