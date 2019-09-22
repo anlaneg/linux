@@ -98,6 +98,7 @@ EXPORT_SYMBOL_GPL(ovs_vport_ops_unregister);
  *
  * Must be called with ovs or RCU read lock.
  */
+//通过名称查找对应的vport
 struct vport *ovs_vport_locate(const struct net *net, const char *name)
 {
 	struct hlist_head *bucket = hash_bucket(net, name);

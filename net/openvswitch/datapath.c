@@ -1989,8 +1989,10 @@ static struct vport *lookup_vport(struct net *net,
 	struct vport *vport;
 
 	if (a[OVS_VPORT_ATTR_IFINDEX])
+		//不支持指明ifindex属性
 		return ERR_PTR(-EOPNOTSUPP);
 	if (a[OVS_VPORT_ATTR_NAME]) {
+		//通过名称获取对应的port
 		vport = ovs_vport_locate(net, nla_data(a[OVS_VPORT_ATTR_NAME]));
 		if (!vport)
 			return ERR_PTR(-ENODEV);
@@ -1999,15 +2001,18 @@ static struct vport *lookup_vport(struct net *net,
 			return ERR_PTR(-ENODEV);
 		return vport;
 	} else if (a[OVS_VPORT_ATTR_PORT_NO]) {
+		//给出了接口对应的port number
 		u32 port_no = nla_get_u32(a[OVS_VPORT_ATTR_PORT_NO]);
 
 		if (port_no >= DP_MAX_PORTS)
 			return ERR_PTR(-EFBIG);
 
+		//取对应的datapath
 		dp = get_dp(net, ovs_header->dp_ifindex);
 		if (!dp)
 			return ERR_PTR(-ENODEV);
 
+		//通过port number获取vport
 		vport = ovs_vport_ovsl_rcu(dp, port_no);
 		if (!vport)
 			return ERR_PTR(-ENODEV);
@@ -2287,6 +2292,7 @@ exit_unlock_free:
 	return err;
 }
 
+//vport dump显示
 static int ovs_vport_cmd_dump(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct ovs_header *ovs_header = genlmsg_data(nlmsg_data(cb->nlh));
