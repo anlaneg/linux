@@ -1659,13 +1659,18 @@ static inline bool may_mount(void)
 	return ns_capable(current->nsproxy->mnt_ns->user_ns, CAP_SYS_ADMIN);
 }
 
+#ifdef	CONFIG_MANDATORY_FILE_LOCKING
 static inline bool may_mandlock(void)
 {
-#ifndef	CONFIG_MANDATORY_FILE_LOCKING
-	return false;
-#endif
 	return capable(CAP_SYS_ADMIN);
 }
+#else
+static inline bool may_mandlock(void)
+{
+	pr_warn("VFS: \"mand\" mount option not supported");
+	return false;
+}
+#endif
 
 /*
  * Now umount can handle mount points as well as block devices.
@@ -1690,8 +1695,6 @@ int ksys_umount(char __user *name, int flags)
 
 	if (!(flags & UMOUNT_NOFOLLOW))
 		lookup_flags |= LOOKUP_FOLLOW;
-
-	lookup_flags |= LOOKUP_NO_EVAL;
 
 	retval = user_path_mountpoint_at(AT_FDCWD, name, lookup_flags, &path);
 	if (retval)
@@ -2484,6 +2487,26 @@ static void set_mount_attributes(struct mount *mnt, unsigned int mnt_flags)
 	unlock_mount_hash();
 }
 
+static void mnt_warn_timestamp_expiry(struct path *mountpoint, struct vfsmount *mnt)
+{
+	struct super_block *sb = mnt->mnt_sb;
+
+	if (!__mnt_is_readonly(mnt) &&
+	   (ktime_get_real_seconds() + TIME_UPTIME_SEC_MAX > sb->s_time_max)) {
+		char *buf = (char *)__get_free_page(GFP_KERNEL);
+		char *mntpath = buf ? d_path(mountpoint, buf, PAGE_SIZE) : ERR_PTR(-ENOMEM);
+		struct tm tm;
+
+		time64_to_tm(sb->s_time_max, 0, &tm);
+
+		pr_warn("Mounted %s file system at %s supports timestamps until %04ld (0x%llx)\n",
+			sb->s_type->name, mntpath,
+			tm.tm_year+1900, (unsigned long long)sb->s_time_max);
+
+		free_page((unsigned long)buf);
+	}
+}
+
 /*
  * Handle reconfiguration of the mountpoint only without alteration of the
  * superblock it refers to.  This is triggered by specifying MS_REMOUNT|MS_BIND
@@ -2509,6 +2532,9 @@ static int do_reconfigure_mnt(struct path *path, unsigned int mnt_flags)
 	if (ret == 0)
 		set_mount_attributes(mnt, mnt_flags);
 	up_write(&sb->s_umount);
+
+	mnt_warn_timestamp_expiry(path, &mnt->mnt);
+
 	return ret;
 }
 
@@ -2549,6 +2575,9 @@ static int do_remount(struct path *path, int ms_flags, int sb_flags,
 		}
 		up_write(&sb->s_umount);
 	}
+
+	mnt_warn_timestamp_expiry(path, &mnt->mnt);
+
 	put_fs_context(fc);
 	return err;
 }
@@ -2757,8 +2786,13 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 		return PTR_ERR(mnt);
 
 	error = do_add_mount(real_mount(mnt), mountpoint, mnt_flags);
-	if (error < 0)
+	if (error < 0) {
 		mntput(mnt);
+		return error;
+	}
+
+	mnt_warn_timestamp_expiry(mountpoint, mnt);
+
 	return error;
 }
 
@@ -3070,7 +3104,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 
 	/* ... and get the mountpoint */
 	//获取挂载点路径
-	retval = user_path(dir_name, &path);
+	retval = user_path_at(AT_FDCWD, dir_name, LOOKUP_FOLLOW, &path);
 	if (retval)
 		return retval;
 
@@ -3624,11 +3658,13 @@ SYSCALL_DEFINE2(pivot_root, const char __user *, new_root,
 	if (!may_mount())
 		return -EPERM;
 
-	error = user_path_dir(new_root, &new);
+	error = user_path_at(AT_FDCWD, new_root,
+			     LOOKUP_FOLLOW | LOOKUP_DIRECTORY, &new);
 	if (error)
 		goto out0;
 
-	error = user_path_dir(put_old, &old);
+	error = user_path_at(AT_FDCWD, put_old,
+			     LOOKUP_FOLLOW | LOOKUP_DIRECTORY, &old);
 	if (error)
 		goto out1;
 

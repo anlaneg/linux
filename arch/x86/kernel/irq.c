@@ -244,12 +244,16 @@ __visible unsigned int __irq_entry do_IRQ(struct pt_regs *regs)
 
 	//取得中断向量对应的中断描述信息
 	desc = __this_cpu_read(vector_irq[vector]);
-
 	//处理中断
-	if (!handle_irq(desc, regs)) {
+	if (likely(!IS_ERR_OR_NULL(desc))) {
+		if (IS_ENABLED(CONFIG_X86_32))
+			handle_irq(desc, regs);
+		else
+			generic_handle_irq_desc(desc);
+	} else {
 		ack_APIC_irq();
 
-		if (desc != VECTOR_RETRIGGERED && desc != VECTOR_SHUTDOWN) {
+		if (desc == VECTOR_UNUSED) {
 			pr_emerg_ratelimited("%s: %d.%d No irq handler for vector\n",
 					     __func__, smp_processor_id(),
 					     vector);

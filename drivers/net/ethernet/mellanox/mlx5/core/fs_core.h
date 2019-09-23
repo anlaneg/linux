@@ -37,6 +37,24 @@
 #include <linux/mlx5/fs.h>
 #include <linux/rhashtable.h>
 #include <linux/llist.h>
+#include <steering/fs_dr.h>
+
+struct mlx5_modify_hdr {
+	enum mlx5_flow_namespace_type ns_type;
+	union {
+		struct mlx5_fs_dr_action action;
+		u32 id;
+	};
+};
+
+struct mlx5_pkt_reformat {
+	enum mlx5_flow_namespace_type ns_type;
+	int reformat_type; /* from mlx5_ifc */
+	union {
+		struct mlx5_fs_dr_action action;
+		u32 id;
+	};
+};
 
 /* FS_TYPE_PRIO_CHAINS is a PRIO that will have namespaces only,
  * and those are in parallel to one another when going over them to connect
@@ -80,10 +98,16 @@ enum fs_fte_status {
 	FS_FTE_STATUS_EXISTING = 1UL << 0,
 };
 
+enum mlx5_flow_steering_mode {
+	MLX5_FLOW_STEERING_MODE_DMFS,
+	MLX5_FLOW_STEERING_MODE_SMFS
+};
+
 struct mlx5_flow_steering {
 	struct mlx5_core_dev *dev;
+	enum   mlx5_flow_steering_mode	mode;
 	//用于申请flow group
-	struct kmem_cache               *fgs_cache;
+	struct kmem_cache		*fgs_cache;
 	//用于申请flow table entry
 	struct kmem_cache               *ftes_cache;
 	struct mlx5_flow_root_namespace *root_ns;
@@ -134,6 +158,7 @@ struct mlx5_flow_handle {
 /* Type of children is mlx5_flow_group */
 struct mlx5_flow_table {
 	struct fs_node			node;
+	struct mlx5_fs_dr_table		fs_dr_table;
 	//表号，用于指代
 	u32				id;
 	u16				vport;
@@ -156,6 +181,7 @@ struct mlx5_flow_table {
 	u32				flags;
 	//用于存储属于此flow table的flow groups
 	struct rhltable			fgs_hash;
+	enum mlx5_flow_table_miss_action def_miss_action;
 };
 
 struct mlx5_ft_underlay_qp {
@@ -180,6 +206,7 @@ struct mlx5_ft_underlay_qp {
 /* Type of children is mlx5_flow_rule */
 struct fs_fte {
 	struct fs_node			node;
+	struct mlx5_fs_dr_rule		fs_dr_rule;
 	//匹配字段
 	u32				val[MLX5_ST_SZ_DW_MATCH_PARAM];
 	u32				dests_size;
@@ -208,6 +235,7 @@ struct fs_prio {
 struct mlx5_flow_namespace {
 	/* parent == NULL => root ns */
 	struct	fs_node			node;
+	enum mlx5_flow_table_miss_action def_miss_action;
 };
 
 struct mlx5_flow_group_mask {
@@ -220,6 +248,7 @@ struct mlx5_flow_group_mask {
 //用于抽象mask(同一类flow的搞一个group)
 struct mlx5_flow_group {
 	struct fs_node			node;
+	struct mlx5_fs_dr_matcher	fs_dr_matcher;
 	//flow group对应的mask
 	struct mlx5_flow_group_mask	mask;
 	//group中最小的index编号
@@ -236,6 +265,8 @@ struct mlx5_flow_group {
 
 struct mlx5_flow_root_namespace {
 	struct mlx5_flow_namespace	ns;
+	enum   mlx5_flow_steering_mode	mode;
+	struct mlx5_fs_dr_domain	fs_dr_domain;
 	//表类型
 	enum   fs_flow_table_type	table_type;
 	struct mlx5_core_dev		*dev;
@@ -245,7 +276,6 @@ struct mlx5_flow_root_namespace {
 	struct list_head		underlay_qpns;
 	//此table_type对应的flow_cmds
 	const struct mlx5_flow_cmds	*cmds;
-	enum mlx5_flow_table_miss_action def_miss_action;
 };
 
 int mlx5_init_fc_stats(struct mlx5_core_dev *dev);
@@ -255,6 +285,14 @@ void mlx5_fc_queue_stats_work(struct mlx5_core_dev *dev,
 			      unsigned long delay);
 void mlx5_fc_update_sampling_interval(struct mlx5_core_dev *dev,
 				      unsigned long interval);
+
+const struct mlx5_flow_cmds *mlx5_fs_cmd_get_fw_cmds(void);
+
+int mlx5_flow_namespace_set_peer(struct mlx5_flow_root_namespace *ns,
+				 struct mlx5_flow_root_namespace *peer_ns);
+
+int mlx5_flow_namespace_set_mode(struct mlx5_flow_namespace *ns,
+				 enum mlx5_flow_steering_mode mode);
 
 int mlx5_init_fs(struct mlx5_core_dev *dev);
 void mlx5_cleanup_fs(struct mlx5_core_dev *dev);

@@ -162,19 +162,21 @@ static int cls_bpf_offload_cmd(struct tcf_proto *tp, struct cls_bpf_prog *prog,
 	cls_bpf.name = obj->bpf_name;
 	cls_bpf.exts_integrated = obj->exts_integrated;
 
-	if (oldprog)
-		tcf_block_offload_dec(block, &oldprog->gen_flags);
-
 	//触发bpf offload到驱动
-	err = tc_setup_cb_call(block, TC_SETUP_CLSBPF, &cls_bpf, skip_sw);
-	if (prog) {
-		if (err < 0) {
-			cls_bpf_offload_cmd(tp, oldprog, prog, extack);
-			return err;
-		} else if (err > 0) {
-			prog->in_hw_count = err;
-			tcf_block_offload_inc(block, &prog->gen_flags);
-		}
+	if (oldprog)
+		err = tc_setup_cb_replace(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
+					  skip_sw, &oldprog->gen_flags,
+					  &oldprog->in_hw_count,
+					  &prog->gen_flags, &prog->in_hw_count,
+					  true);
+	else
+		err = tc_setup_cb_add(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
+				      skip_sw, &prog->gen_flags,
+				      &prog->in_hw_count, true);
+
+	if (prog && err) {
+		cls_bpf_offload_cmd(tp, oldprog, prog, extack);
+		return err;
 	}
 
 	if (prog && skip_sw && !(prog->gen_flags & TCA_CLS_FLAGS_IN_HW))
@@ -231,7 +233,7 @@ static void cls_bpf_offload_update_stats(struct tcf_proto *tp,
 	cls_bpf.name = prog->bpf_name;
 	cls_bpf.exts_integrated = prog->exts_integrated;
 
-	tc_setup_cb_call(block, TC_SETUP_CLSBPF, &cls_bpf, false);
+	tc_setup_cb_call(block, TC_SETUP_CLSBPF, &cls_bpf, false, true);
 }
 
 static int cls_bpf_init(struct tcf_proto *tp)
@@ -675,15 +677,11 @@ static int cls_bpf_reoffload(struct tcf_proto *tp, bool add, flow_setup_cb_t *cb
 		cls_bpf.name = prog->bpf_name;
 		cls_bpf.exts_integrated = prog->exts_integrated;
 
-		err = cb(TC_SETUP_CLSBPF, &cls_bpf, cb_priv);
-		if (err) {
-			if (add && tc_skip_sw(prog->gen_flags))
-				return err;
-			continue;
-		}
-
-		tc_cls_offload_cnt_update(block, &prog->in_hw_count,
-					  &prog->gen_flags, add);
+		err = tc_setup_cb_reoffload(block, tp, add, cb, TC_SETUP_CLSBPF,
+					    &cls_bpf, cb_priv, &prog->gen_flags,
+					    &prog->in_hw_count);
+		if (err)
+			return err;
 	}
 
 	return 0;

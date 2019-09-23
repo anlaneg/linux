@@ -35,6 +35,7 @@
 
 #include <linux/if_ether.h>
 #include <linux/if_link.h>
+#include <linux/atomic.h>
 #include <net/devlink.h>
 #include <linux/mlx5/device.h>
 #include <linux/mlx5/eswitch.h>
@@ -68,7 +69,7 @@ struct vport_ingress {
 	struct mlx5_flow_group *allow_spoofchk_only_grp;
 	struct mlx5_flow_group *allow_untagged_only_grp;
 	struct mlx5_flow_group *drop_grp;
-	int modify_metadata_id;
+	struct mlx5_modify_hdr   *modify_metadata;
 	struct mlx5_flow_handle  *modify_metadata_rule;
 	struct mlx5_flow_handle  *allow_rule;
 	struct mlx5_flow_handle  *drop_rule;
@@ -101,6 +102,13 @@ struct mlx5_vport_info {
 	bool                    trusted;
 };
 
+/* Vport context events */
+enum mlx5_eswitch_vport_event {
+	MLX5_VPORT_UC_ADDR_CHANGE = BIT(0),
+	MLX5_VPORT_MC_ADDR_CHANGE = BIT(1),
+	MLX5_VPORT_PROMISC_CHANGE = BIT(3),
+};
+
 struct mlx5_vport {
 	struct mlx5_core_dev    *dev;
 	int                     vport;//port id号
@@ -122,7 +130,7 @@ struct mlx5_vport {
 	} qos;
 
 	bool                    enabled;//标明此口被启用
-	u16                     enabled_events;
+	enum mlx5_eswitch_vport_event enabled_events;
 };
 
 enum offloads_fdb_flags {
@@ -146,6 +154,7 @@ struct mlx5_eswitch_fdb {
 
 		//sriov_offloads模式时使用此结构
 		struct offloads_fdb {
+			struct mlx5_flow_namespace *ns;
 			//FDB_SLOW_PATH_CHAIN chain对应的flow table
 			struct mlx5_flow_table *slow_fdb;
 			struct mlx5_flow_group *send_to_vport_grp;
@@ -178,15 +187,16 @@ struct mlx5_esw_offload {
 	struct mlx5_eswitch_rep *vport_reps;
 	struct list_head peer_flows;
 	struct mutex peer_mutex;
+	struct mutex encap_tbl_lock; /* protects encap_tbl */
 	//hashtable,用于保存当前系统支持的隧道key及隧道类型
 	DECLARE_HASHTABLE(encap_tbl, 8);
 	//hashtable,用于保存当前系统遇到的actions
-	DECLARE_HASHTABLE(mod_hdr_tbl, 8);
+	struct mod_hdr_tbl mod_hdr;
 	DECLARE_HASHTABLE(termtbl_tbl, 8);
 	struct mutex termtbl_mutex; /* protects termtbl hash */
 	const struct mlx5_eswitch_rep_ops *rep_ops[NUM_REP_TYPES];
 	u8 inline_mode;
-	u64 num_flows;
+	atomic64_t num_flows;
 	enum devlink_eswitch_encap_mode encap;
 };
 
@@ -214,8 +224,11 @@ enum {
 struct mlx5_eswitch {
 	struct mlx5_core_dev    *dev;
 	struct mlx5_nb          nb;
+	/* legacy data structures */
 	struct mlx5_eswitch_fdb fdb_table;
 	struct hlist_head       mc_table[MLX5_L2_ADDR_HASH_SIZE];
+	struct esw_mc_addr mc_promisc;
+	/* end of legacy */
 	struct workqueue_struct *work_queue;
 	struct mlx5_vport       *vports;//vport数组
 	u32 flags;
@@ -225,7 +238,6 @@ struct mlx5_eswitch {
 	 * and async SRIOV admin state changes
 	 */
 	struct mutex            state_lock;
-	struct esw_mc_addr	mc_promisc;
 
 	struct {
 		bool            enabled;
@@ -241,8 +253,8 @@ struct mlx5_eswitch {
 	struct mlx5_esw_functions esw_funcs;
 };
 
-void esw_offloads_cleanup(struct mlx5_eswitch *esw);
-int esw_offloads_init(struct mlx5_eswitch *esw);
+void esw_offloads_disable(struct mlx5_eswitch *esw);
+int esw_offloads_enable(struct mlx5_eswitch *esw);
 void esw_offloads_cleanup_reps(struct mlx5_eswitch *esw);
 int esw_offloads_init_reps(struct mlx5_eswitch *esw);
 void esw_vport_cleanup_ingress_rules(struct mlx5_eswitch *esw,
@@ -259,6 +271,8 @@ void esw_vport_disable_ingress_acl(struct mlx5_eswitch *esw,
 				   struct mlx5_vport *vport);
 void esw_vport_del_ingress_acl_modify_metadata(struct mlx5_eswitch *esw,
 					       struct mlx5_vport *vport);
+int mlx5_esw_modify_vport_rate(struct mlx5_eswitch *esw, u16 vport_num,
+			       u32 rate_mbps);
 
 /* E-Switch API */
 int mlx5_eswitch_init(struct mlx5_core_dev *dev);
@@ -384,11 +398,11 @@ struct mlx5_esw_flow_attr {
 	struct {
 		u32 flags;//接口标记，例如需要隧道封装，封装信息有效
 		struct mlx5_eswitch_rep *rep;//目的端口
+		struct mlx5_pkt_reformat *pkt_reformat;
 		struct mlx5_core_dev *mdev;
-		u32 encap_id;//encap输出时的封装信息id
 		struct mlx5_termtbl_handle *termtbl;
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
-	u32	mod_hdr_id;//修改头部对应的action信息 id
+	struct  mlx5_modify_hdr *modify_hdr;//修改头部对应的action信息
 	u8	inner_match_level;//非隧道解析层数（例如udp,tcp层）
 	u8	outer_match_level;//隧道解析层数
 	struct mlx5_fc *counter;//统计信息（由fw进行分配）
@@ -531,6 +545,11 @@ void mlx5e_tc_clean_fdb_peer_flows(struct mlx5_eswitch *esw);
 	     (vport) = &(esw)->vports[i],		\
 	     (i) < (esw)->total_vports; (i)++)
 
+#define mlx5_esw_for_all_vports_reverse(esw, i, vport)	\
+	for ((i) = (esw)->total_vports - 1;		\
+	     (vport) = &(esw)->vports[i],		\
+	     (i) >= MLX5_VPORT_PF; (i)--)
+
 #define mlx5_esw_for_each_vf_vport(esw, i, vport, nvfs)	\
 	for ((i) = MLX5_VPORT_FIRST_VF;			\
 	     (vport) = &(esw)->vports[(i)],		\
@@ -591,6 +610,11 @@ bool mlx5_eswitch_is_vf_vport(const struct mlx5_eswitch *esw, u16 vport_num);
 
 void mlx5_eswitch_update_num_of_vfs(struct mlx5_eswitch *esw, const int num_vfs);
 int mlx5_esw_funcs_changed_handler(struct notifier_block *nb, unsigned long type, void *data);
+
+void
+mlx5_eswitch_enable_pf_vf_vports(struct mlx5_eswitch *esw,
+				 enum mlx5_eswitch_vport_event enabled_events);
+void mlx5_eswitch_disable_pf_vf_vports(struct mlx5_eswitch *esw);
 
 #else  /* CONFIG_MLX5_ESWITCH */
 /* eswitch API stubs */

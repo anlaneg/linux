@@ -861,6 +861,9 @@ static int key_extract_mac_proto(struct sk_buff *skb)
 int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 			 struct sk_buff *skb, struct sw_flow_key *key)
 {
+#if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
+	struct tc_skb_ext *tc_ext;
+#endif
 	int res, err;
 
 	/* Extract metadata from packet. */
@@ -895,7 +898,18 @@ int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 	if (res < 0)
 		return res;
 	key->mac_proto = res;
-	key->recirc_id = 0;//将recirc_id置为0
+
+#if IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
+	if (static_branch_unlikely(&tc_recirc_sharing_support)) {
+		tc_ext = skb_ext_find(skb, TC_SKB_EXT);
+		key->recirc_id = tc_ext ? tc_ext->chain : 0;
+	} else {
+		key->recirc_id = 0;
+	}
+#else
+    //将recirc_id置为0
+	key->recirc_id = 0;
+#endif
 
 	//将报文内容解析到key中
 	err = key_extract(skb, key);
