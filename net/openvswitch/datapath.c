@@ -1431,12 +1431,16 @@ static int ovs_flow_cmd_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		struct sw_flow *flow;
 		u32 bucket, obj;
 
+		//桶号
 		bucket = cb->args[0];
+		//索引号
 		obj = cb->args[1];
+		//取对应的flow,更新bucket,obj
 		flow = ovs_flow_tbl_dump_next(ti, &bucket, &obj);
 		if (!flow)
 			break;
 
+		//填充flow到skb
 		if (ovs_flow_cmd_fill_info(flow, ovs_header->dp_ifindex, skb,
 					   NETLINK_CB(cb->skb).portid,
 					   cb->nlh->nlmsg_seq, NLM_F_MULTI,
@@ -1475,7 +1479,7 @@ static const struct genl_ops dp_flow_genl_ops[] = {
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = 0,		    /* OK for unprivileged users. */
 	  .doit = ovs_flow_cmd_get,//获取datapath flow
-	  .dumpit = ovs_flow_cmd_dump
+	  .dumpit = ovs_flow_cmd_dump//datapath flow dump调用
 	},
 	{ .cmd = OVS_FLOW_CMD_SET,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,

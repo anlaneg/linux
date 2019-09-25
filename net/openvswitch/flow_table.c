@@ -252,8 +252,9 @@ void ovs_flow_tbl_destroy(struct flow_table *table)
 	table_instance_destroy(ti, ufid_ti, false);
 }
 
+/*取bucket桶上第last对应的flow*/
 struct sw_flow *ovs_flow_tbl_dump_next(struct table_instance *ti,
-				       u32 *bucket, u32 *last)
+				       u32 *bucket/*桶编号*/, u32 *last/*桶上的偏移*/)
 {
 	struct sw_flow *flow;
 	struct hlist_head *head;
