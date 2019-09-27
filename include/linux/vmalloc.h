@@ -53,15 +53,21 @@ struct vmap_area {
 	unsigned long va_start;//起始地址
 	unsigned long va_end;//终止地址
 
+	struct rb_node rb_node;         /* address sorted rbtree */ /*用于挂载在树上*/
+	struct list_head list;          /* address sorted list */ /*用于挂载在链表上*/
+
 	/*
-	 * Largest available free size in subtree.
+	 * The following three variables can be packed, because
+	 * a vmap_area object is always one of the three states:
+	 *    1) in "free" tree (root is vmap_area_root)
+	 *    2) in "busy" tree (root is free_vmap_area_root)
+	 *    3) in purge list  (head is vmap_purge_list)
 	 */
-	unsigned long subtree_max_size;
-	unsigned long flags;
-	struct rb_node rb_node; /*用于挂载在树上*/        /* address sorted rbtree */
-	struct list_head list;/*用于挂载在链表上*/          /* address sorted list */
-	struct llist_node purge_list;    /* "lazy purge" list */
-	struct vm_struct *vm;//此段内存对应的vm_struct
+	union {
+		unsigned long subtree_max_size; /* in "free" tree */
+		struct vm_struct *vm;           /* in "busy" tree */ //此段内存对应的vm_struct
+		struct llist_node purge_list;   /* in purge list */
+	};
 };
 
 /*
