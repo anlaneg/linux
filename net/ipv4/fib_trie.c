@@ -114,7 +114,9 @@ static int call_fib_entry_notifiers(struct net *net,
 typedef unsigned int t_key;//无符号整数被义定为t_key(32位）
 
 #define IS_TRIE(n)	((n)->pos >= KEYLENGTH)
+//检查是否非叶子节点
 #define IS_TNODE(n)	((n)->bits)
+//检查是否为叶子节点
 #define IS_LEAF(n)	(!(n)->bits)
 
 struct key_vector {
@@ -125,8 +127,10 @@ struct key_vector {
 	union {
 		/* This list pointer if valid if (pos | bits) == 0 (LEAF) */
 		//这个注释指明了，如何分辨当前节点是叶子，还是tnode
+		//leaf上串连路由项
 		struct hlist_head leaf;
 		/* This array is valid if (pos | bits) > 0 (TNODE) */
+		//中间节点，非叶子节点
 		struct key_vector __rcu *tnode[0];
 	};
 };
@@ -197,6 +201,7 @@ static inline struct tnode *tn_info(struct key_vector *kv)
 
 /* caller must hold RCU read lock or RTNL */
 #define node_parent_rcu(tn) rcu_dereference_rtnl(tn_info(tn)->parent)
+//取i号节点
 #define get_child_rcu(tn, i) rcu_dereference_rtnl((tn)->tnode[i])
 
 /* wrapper for rcu_assign_pointer */
@@ -216,12 +221,18 @@ static inline unsigned long child_length(const struct key_vector *tn)
 	return (1ul << tn->bits) & ~(1ul);
 }
 
+//子节点对应的index
+//key与kv->key的前缀是相同的，取^操作，可使得相同的前缀全为0，然后右移
+//忽略掉不关心的后缀字段，则为前缀不相等的位（比对的key总是0，故直接为索引）
+//这里key必须为无符号类型。
 #define get_cindex(key, kv) (((key) ^ (kv)->key) >> (kv)->pos)
 
+//等同与get_cindex
 static inline unsigned long get_index(t_key key, struct key_vector *kv)
 {
 	unsigned long index = key ^ kv->key;
 
+	//如果当前检测位为32位，则返回0
 	if ((BITS_PER_LONG <= KEYLENGTH) && (KEYLENGTH == kv->pos))
 		return 0;
 
@@ -940,6 +951,7 @@ static void node_push_suffix(struct key_vector *tn, unsigned char slen)
 }
 
 /* rcu_read_lock needs to be hold by caller from readside */
+//在trie中查找key,tp为出参，指向父节点
 static struct key_vector *fib_find_node(struct trie *t,
 					struct key_vector **tp, u32 key)
 {
@@ -951,8 +963,10 @@ static struct key_vector *fib_find_node(struct trie *t,
 		n = get_child_rcu(n, index);
 
 		if (!n)
+			/*查找key失败，退出，此时pn指向插入点位置的父节点*/
 			break;
 
+		//取key对应的子节点索引
 		index = get_cindex(key, n);
 
 		/* This bit of code is a bit tricky but it combines multiple
@@ -969,6 +983,7 @@ static struct key_vector *fib_find_node(struct trie *t,
 		 * fact that we can only allocate a node with 32 bits if a
 		 * long is greater than 32 bits.
 		 */
+		//index是一个不相等位上的值，如果其大于 1<<n->bits,则index是无效的，忽略掉
 		if (index >= (1ul << n->bits)) {
 			n = NULL;
 			break;
@@ -977,6 +992,7 @@ static struct key_vector *fib_find_node(struct trie *t,
 		/* keep searching until we find a perfect match leaf or NULL */
 	} while (IS_TNODE(n));
 
+	//查询失败或者查询成功，返回其对应父节点
 	*tp = pn;
 
 	return n;
@@ -985,25 +1001,32 @@ static struct key_vector *fib_find_node(struct trie *t,
 /* Return the first fib alias matching TOS with
  * priority less than or equal to PRIO.
  */
-static struct fib_alias *fib_find_alias(struct hlist_head *fah, u8 slen,
-					u8 tos, u32 prio, u32 tb_id)
+static struct fib_alias *fib_find_alias(struct hlist_head *fah, u8 slen/*后缀长度*/,
+					u8 tos/*tos配置*/, u32 prio/*优先级*/, u32 tb_id/*表号*/)
 {
 	struct fib_alias *fa;
 
 	if (!fah)
 		return NULL;
 
+	//遍历相同前缀的fib表
 	hlist_for_each_entry(fa, fah, fa_list) {
+		//按后缀长度自小到大排列
 		if (fa->fa_slen < slen)
 			continue;
 		if (fa->fa_slen != slen)
+			//失配
 			break;
+		//按表号，自大到小排列
 		if (fa->tb_id > tb_id)
 			continue;
 		if (fa->tb_id != tb_id)
+			//失配
 			break;
 		if (fa->fa_tos > tos)
+			//按tos自小向大排列
 			continue;
+		//优先级大于prio或者tos大于fa的tos,则匹配
 		if (fa->fa_info->fib_priority >= prio || fa->fa_tos < tos)
 			return fa;
 	}
@@ -1028,7 +1051,7 @@ static int fib_insert_node(struct trie *t, struct key_vector *tp,
 		goto noleaf;
 
 	/* retrieve child from parent node */
-	//从父节点中取指定index的node
+	//从父节点中取指定key对应的index
 	n = get_child(tp, get_index(key, tp));
 
 	/* Case 2: n is a LEAF or a TNODE and the key doesn't match.
@@ -1077,7 +1100,7 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 			    struct fib_alias *fa, t_key key)
 {
 	if (!l)
-		//没有对应的tnode，创建它，并在其下插入key(叶子节点）
+		//没有对应的叶子节点，创建它，并在其下插入key(叶子节点）
 		return fib_insert_node(t, tp, new, key);
 
 	if (fa) {
@@ -1116,6 +1139,7 @@ static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)
 		return false;
 	}
 
+	//key的前缀不能为0
 	if ((plen < KEYLENGTH) && (key << plen)) {
 		NL_SET_ERR_MSG(extack,
 			       "Invalid prefix for given prefix length");
@@ -1126,29 +1150,35 @@ static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)
 }
 
 /* Caller must hold RTNL. */
-int fib_table_insert(struct net *net, struct fib_table *tb,
+//fib表表项添加
+int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由表*/,
 		     struct fib_config *cfg, struct netlink_ext_ack *extack)
 {
 	enum fib_event_type event = FIB_EVENT_ENTRY_ADD;
-	struct trie *t = (struct trie *)tb->tb_data;//trie根节点
+	//trie根节点
+	struct trie *t = (struct trie *)tb->tb_data;
 	struct fib_alias *fa, *new_fa;
 	struct key_vector *l, *tp;
 	u16 nlflags = NLM_F_EXCL;
 	struct fib_info *fi;
-	u8 plen = cfg->fc_dst_len;//前缀长度
-	u8 slen = KEYLENGTH - plen;//后缀长度(suffix)
+	//前缀长度
+	u8 plen = cfg->fc_dst_len;
+	//后缀长度(suffix)
+	u8 slen = KEYLENGTH - plen;
 	u8 tos = cfg->fc_tos;
 	u32 key;
 	int err;
 
 	key = ntohl(cfg->fc_dst);
 
+	//参数校验
 	if (!fib_valid_key_len(key, plen, extack))
 		return -EINVAL;
 
 	//打出debug,向表tb_id中插入 target为key,掩码长度为plen的的路由
 	pr_debug("Insert table=%u %08x/%d\n", tb->tb_id, key, plen);
 
+	//生成fib info
 	fi = fib_create_info(cfg, extack);
 	if (IS_ERR(fi)) {
 		err = PTR_ERR(fi);
@@ -1157,6 +1187,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 
 	//在trie表中，查找key,出参为tp(指向l的父节点），l为能存放key的节点
 	l = fib_find_node(t, &tp, key);
+	//如果l不为空，则存在匹配的叶子节点，在叶子节点中查找
 	fa = l ? fib_find_alias(&l->leaf, slen, tos, fi->fib_priority,
 				tb->tb_id) : NULL;
 
@@ -1171,9 +1202,11 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 
 	if (fa && fa->fa_tos == tos &&
 	    fa->fa_info->fib_priority == fi->fib_priority) {
+		//查找到fa,且tos,prioirty相等，则与之前的表项重复
 		struct fib_alias *fa_first, *fa_match;
 
 		err = -EEXIST;
+		//如果存在时报错，则返回exist
 		if (cfg->fc_nlflags & NLM_F_EXCL)
 			goto out;
 
@@ -1261,10 +1294,13 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 			fa = fa_first;
 		}
 	}
+
+	//没有查找到表项，如果不容许创建，则返回noent
 	err = -ENOENT;
 	if (!(cfg->fc_nlflags & NLM_F_CREATE))
 		goto out;
 
+	//准备创建
 	nlflags |= NLM_F_CREATE;
 	err = -ENOBUFS;
 	//为new_fa申请节点空间
@@ -1285,7 +1321,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb,
 		goto out_free_new_fa;
 
 	/* Insert new entry to the list. */
-	err = fib_insert_alias(t, tp, l, new_fa, fa, key);
+	err = fib_insert_alias(t/*要加入的trie*/, tp/*父节点*/, l/*父节点下的叶子节点*/, new_fa/*新的fa*/, fa, key);
 	if (err)
 		goto out_fib_notif;
 
@@ -1324,7 +1360,7 @@ static inline t_key prefix_mismatch(t_key key, struct key_vector *n)
 
 /* should be called with rcu_read_lock */
 //trie表查询(负责实现路由表查询）
-int fib_table_lookup(struct fib_table *tb, const struct flowi4 *flp,
+int fib_table_lookup(struct fib_table *tb/*路由表*/, const struct flowi4 *flp,
 		     struct fib_result *res, int fib_flags)
 {
 	struct trie *t = (struct trie *) tb->tb_data;//取trie树
@@ -2247,16 +2283,19 @@ struct fib_table *fib_trie_table(u32 id, struct fib_table *alias)
 
 	tb->tb_id = id;//表编号
 	tb->tb_num_default = 0;
-	//如果另名存在，则直接指向别名的数据，否则指向tb结构的结尾
+	//如果别名存在，则直接指向别名的trie数据，否则指向tb结构的结尾对应的trie
 	tb->tb_data = (alias ? alias->__data : tb->__data);
 
 	if (alias)
+		//如果支持共享，trie已完成初始化，则直接返回
 		return tb;
 
+	//初始化table对应的trie
 	t = (struct trie *) tb->tb_data;
 	t->kv[0].pos = KEYLENGTH;
 	t->kv[0].slen = KEYLENGTH;
 #ifdef CONFIG_IP_FIB_TRIE_STATS
+	//申请percpu结构体，用于统计
 	t->stats = alloc_percpu(struct trie_use_stats);
 	if (!t->stats) {
 		kfree(tb);

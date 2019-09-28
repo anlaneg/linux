@@ -225,13 +225,16 @@ struct rtmsg {
 
 enum {
 	RTN_UNSPEC,
+	//网关或者直连路由
 	RTN_UNICAST,		/* Gateway or direct route	*/
+	//本机
 	RTN_LOCAL,		/* Accept locally		*/
 	RTN_BROADCAST,		/* Accept locally as broadcast,
 				   send as broadcast */
 	RTN_ANYCAST,		/* Accept locally as broadcast,
 				   but send as unicast */
 	RTN_MULTICAST,		/* Multicast route		*/
+	//黑洞路由，负责丢包
 	RTN_BLACKHOLE,		/* Drop				*/
 	RTN_UNREACHABLE,	/* Destination is unreachable   */
 	RTN_PROHIBIT,		/* Administratively prohibited	*/

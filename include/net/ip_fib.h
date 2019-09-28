@@ -23,11 +23,13 @@
 #include <linux/refcount.h>
 
 struct fib_config {
-	u8			fc_dst_len;//目的地址的掩码长度
-	u8			fc_tos;
-	u8			fc_protocol;
+	u8			fc_dst_len;//目的地址的掩码位长度
+	u8			fc_tos;//路由指定的tos值
+	u8			fc_protocol;//下发路由的协议，例如ospf,bgp
 	u8			fc_scope;
+	//路由类型
 	u8			fc_type;
+	//网关对应的协议族
 	u8			fc_gw_family;
 	/* 2 bytes unused */
 	u32			fc_table;//路由要下发到哪张表里
@@ -38,6 +40,7 @@ struct fib_config {
 	};
 	int			fc_oif;//出口设备的ifindex
 	u32			fc_flags;
+	//路由的优先级
 	u32			fc_priority;
 	__be32			fc_prefsrc;
 	u32			fc_nh_id;
@@ -235,10 +238,12 @@ void fib_notify(struct net *net, struct notifier_block *nb);
 struct fib_table {
 	struct hlist_node	tb_hlist;//用于挂接在hash表上
 	u32			tb_id;//表编号
-	int			tb_num_default;
+	int			tb_num_default;//规则数
 	struct rcu_head		rcu;
-	unsigned long 		*tb_data;//struct trie类型
-	unsigned long		__data[0];//从此地址开始是一个struct trie类型
+	//struct trie类型，属于trie根节点
+	unsigned long 		*tb_data;
+	//从此地址开始是一个struct trie类型
+	unsigned long		__data[0];
 };
 
 struct fib_dump_filter {
@@ -272,7 +277,7 @@ void fib_free_table(struct fib_table *tb);
 #define TABLE_LOCAL_INDEX	(RT_TABLE_LOCAL & (FIB_TABLE_HASHSZ - 1))
 #define TABLE_MAIN_INDEX	(RT_TABLE_MAIN  & (FIB_TABLE_HASHSZ - 1))
 
-//不支持多表格时，仅有两张表，local与main表
+//不支持多表格时，仅有两张表，local与main表，故不是local表即为main表
 static inline struct fib_table *fib_get_table(struct net *net, u32 id)
 {
 	struct hlist_node *tb_hlist;
@@ -289,6 +294,7 @@ static inline struct fib_table *fib_get_table(struct net *net, u32 id)
 	return hlist_entry(tb_hlist, struct fib_table, tb_hlist);
 }
 
+//新建或者获取编号为id的fib table
 static inline struct fib_table *fib_new_table(struct net *net, u32 id)
 {
 	return fib_get_table(net, id);

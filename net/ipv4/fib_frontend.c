@@ -86,13 +86,16 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	//main表特殊处理
 	if (id == 0)
 		id = RT_TABLE_MAIN;
+	//查找指定的table,如果存在，则直接返回
 	tb = fib_get_table(net, id);
 	if (tb)
 		return tb;
 
+	//针对local表，无custom_rules，则与main表共享trie
 	if (id == RT_TABLE_LOCAL && !net->ipv4.fib_has_custom_rules)
 		alias = fib_new_table(net, RT_TABLE_MAIN);
 
+	//初始化fib table
 	tb = fib_trie_table(id, alias);
 	if (!tb)
 		return NULL;
@@ -125,15 +128,19 @@ struct fib_table *fib_get_table(struct net *net, u32 id)
 	unsigned int h;
 
 	if (id == 0)
+		//未指定路由表id号，由使和main表
 		id = RT_TABLE_MAIN;
+	//确定使用哪个哈希桶，然后遍历hash桶，找需要的table
 	h = id & (FIB_TABLE_HASHSZ - 1);
 
 	head = &net->ipv4.fib_table_hash[h];
 	hlist_for_each_entry_rcu(tb, head, tb_hlist,
 				 lockdep_rtnl_is_held()) {
 		if (tb->tb_id == id)
+			//表号匹配，直接返回
 			return tb;
 	}
+	//查找表失败
 	return NULL;
 }
 
@@ -747,8 +754,9 @@ int fib_gw_from_via(struct fib_config *cfg, struct nlattr *nla,
 	return 0;
 }
 
+//将rtm数据转为cfg
 static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
-			     struct nlmsghdr *nlh, struct fib_config *cfg,
+			     struct nlmsghdr *nlh, struct fib_config *cfg/*出参*/,
 			     struct netlink_ext_ack *extack)
 {
 	bool has_gw = false, has_via = false;
@@ -756,6 +764,7 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	int err, remaining;
 	struct rtmsg *rtm;
 
+	//参数校验
 	err = nlmsg_validate_deprecated(nlh, sizeof(*rtm), RTA_MAX,
 					rtm_ipv4_policy, extack);
 	if (err < 0)
@@ -894,6 +903,7 @@ errout:
 	return err;
 }
 
+//ipv4路由添加
 static int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh,
 			     struct netlink_ext_ack *extack)
 {
@@ -902,16 +912,19 @@ static int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct fib_table *tb;
 	int err;
 
+	//将消息转为cfg结构配置
 	err = rtm_to_fib_config(net, skb, nlh, &cfg, extack);
 	if (err < 0)
 		goto errout;
 
+	//创建或获取对应的fib table
 	tb = fib_new_table(net, cfg.fc_table);
 	if (!tb) {
 		err = -ENOBUFS;
 		goto errout;
 	}
 
+	//向对应fib table中加入表项
 	err = fib_table_insert(net, tb, &cfg, extack);
 	if (!err && cfg.fc_type == RTN_LOCAL)
 		net->ipv4.fib_has_custom_local_routes = true;
@@ -1648,7 +1661,10 @@ void __init ip_fib_init(void)
 	register_netdevice_notifier(&fib_netdev_notifier);
 	register_inetaddr_notifier(&fib_inetaddr_notifier);
 
+	//路由添加消息注册
 	rtnl_register(PF_INET, RTM_NEWROUTE, inet_rtm_newroute, NULL, 0);
+	//路由删除消息注册
 	rtnl_register(PF_INET, RTM_DELROUTE, inet_rtm_delroute, NULL, 0);
+	//路由dump消息注册
 	rtnl_register(PF_INET, RTM_GETROUTE, NULL, inet_dump_fib, 0);
 }

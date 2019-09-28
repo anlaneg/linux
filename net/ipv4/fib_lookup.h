@@ -11,6 +11,7 @@ struct fib_alias {
 	struct hlist_node	fa_list;
 	struct fib_info		*fa_info;
 	u8			fa_tos;
+	//fib类型
 	u8			fa_type;
 	u8			fa_state;
 	u8			fa_slen;//后缀长度

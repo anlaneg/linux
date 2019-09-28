@@ -86,12 +86,19 @@ struct flowi4 {
 	__be32			daddr;//目的地址
 
 	union flowi_uli		uli;//port信息
+//源port
 #define fl4_sport		uli.ports.sport
+//目的port
 #define fl4_dport		uli.ports.dport
+//icmp对应type
 #define fl4_icmp_type		uli.icmpt.type
+//icmp对应code
 #define fl4_icmp_code		uli.icmpt.code
+//ipsec对应的si
 #define fl4_ipsec_spi		uli.spi
+//????
 #define fl4_mh_type		uli.mht.type
+//gre对应的key
 #define fl4_gre_key		uli.gre_key
 } __attribute__((__aligned__(BITS_PER_LONG/8)));
 
