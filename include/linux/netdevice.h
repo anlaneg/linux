@@ -1561,6 +1561,7 @@ enum netdev_priv_flags {
 #define IFF_XMIT_DST_RELEASE		IFF_XMIT_DST_RELEASE
 #define IFF_DONT_BRIDGE			IFF_DONT_BRIDGE
 #define IFF_DISABLE_NETPOLL		IFF_DISABLE_NETPOLL
+//macvlan类型设备
 #define IFF_MACVLAN_PORT		IFF_MACVLAN_PORT
 #define IFF_BRIDGE_PORT			IFF_BRIDGE_PORT
 #define IFF_OVS_DATAPATH		IFF_OVS_DATAPATH
@@ -2511,7 +2512,9 @@ struct netdev_lag_lower_state_info {
  * adding new types.
  */
 enum netdev_cmd {
+	//接口up
 	NETDEV_UP	= 1,	/* For now you can't veto a device up/down */
+	//接口down
 	NETDEV_DOWN,
 	NETDEV_REBOOT,		/* Tell a protocol stack a network interface
 				   detected a hardware crash and restarted
@@ -2520,7 +2523,9 @@ enum netdev_cmd {
 	NETDEV_CHANGE,		/* Notify device state change */
 	NETDEV_REGISTER,
 	NETDEV_UNREGISTER,
+	//mtu变更
 	NETDEV_CHANGEMTU,	/* notify after mtu change happened */
+	//接口地址变更
 	NETDEV_CHANGEADDR,	/* notify after the address change */
 	NETDEV_PRE_CHANGEADDR,	/* notify before the address change */
 	NETDEV_GOING_DOWN,
@@ -4639,6 +4644,7 @@ static inline bool netif_is_macvlan(const struct net_device *dev)
 	return dev->priv_flags & IFF_MACVLAN;
 }
 
+//网络设备是否为macvlan port
 static inline bool netif_is_macvlan_port(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_MACVLAN_PORT;

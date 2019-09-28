@@ -1979,6 +1979,7 @@ int __dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 	int ret = ____dev_forward_skb(dev, skb);
 
 	if (likely(!ret)) {
+		//变更skb所属的dev设备
 		skb->protocol = eth_type_trans(skb, dev);
 		skb_postpull_rcsum(skb, eth_hdr(skb), ETH_HLEN);
 	}
@@ -2007,6 +2008,7 @@ EXPORT_SYMBOL_GPL(__dev_forward_skb);
  */
 int dev_forward_skb(struct net_device *dev, struct sk_buff *skb)
 {
+	//发送给dev，实际上是dev收到报文
 	return __dev_forward_skb(dev, skb) ?: netif_rx_internal(skb);
 }
 EXPORT_SYMBOL_GPL(dev_forward_skb);
@@ -4817,6 +4819,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
  */
 bool netdev_is_rx_handler_busy(struct net_device *dev)
 {
+	//dev是否已设置了rx_handler
 	ASSERT_RTNL();
 	return dev && rtnl_dereference(dev->rx_handler);
 }

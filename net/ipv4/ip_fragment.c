@@ -511,33 +511,41 @@ struct sk_buff *ip_check_defrag(struct net *net, struct sk_buff *skb, u32 user)
 	int netoff;
 	u32 len;
 
+	//仅检查ip报文
 	if (skb->protocol != htons(ETH_P_IP))
 		return skb;
 
 	netoff = skb_network_offset(skb);
 
+	//取ip头
 	if (skb_copy_bits(skb, netoff, &iph, sizeof(iph)) < 0)
 		return skb;
 
+	//ip版本检查
 	if (iph.ihl < 5 || iph.version != 4)
 		return skb;
 
+	//ip total len检查
 	len = ntohs(iph.tot_len);
 	if (skb->len < netoff + len || len < (iph.ihl * 4))
 		return skb;
 
 	if (ip_is_fragment(&iph)) {
+		//ip分片报文检查
 		skb = skb_share_check(skb, GFP_ATOMIC);
 		if (skb) {
 			if (!pskb_may_pull(skb, netoff + iph.ihl * 4)) {
+				//必须有完整的ip头
 				kfree_skb(skb);
 				return NULL;
 			}
+			//ip层checksum检查
 			if (pskb_trim_rcsum(skb, netoff + len)) {
 				kfree_skb(skb);
 				return NULL;
 			}
 			memset(IPCB(skb), 0, sizeof(struct inet_skb_parm));
+			//ip分片重组
 			if (ip_defrag(net, skb, user))
 				return NULL;
 			skb_clear_hash(skb);
