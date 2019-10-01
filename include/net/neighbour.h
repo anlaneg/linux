@@ -141,12 +141,14 @@ struct neighbour {
 	struct neighbour __rcu	*next;
 	//表项所属的邻居hash table
 	struct neigh_table	*tbl;
+	//表项参数（先来自tbl->parms,后来自indev->arp_parms，
 	struct neigh_parms	*parms;
 	unsigned long		confirmed;
 	//neighbour时间更新
 	unsigned long		updated;
 	rwlock_t		lock;
-	refcount_t		refcnt;//表项引用计数
+	//表项引用计数
+	refcount_t		refcnt;
 	unsigned int		arp_queue_len_bytes;
 	struct sk_buff_head	arp_queue;
 	//邻居表项的timer
@@ -154,8 +156,9 @@ struct neighbour {
 	unsigned long		used;
 	atomic_t		probes;//表项的探测次数
 	__u8			flags;
-	//邻居表项的状态
+	//邻居表项的状态(例如NUD_NOARP）
 	__u8			nud_state;
+	//地址类型
 	__u8			type;
 	__u8			dead;
 	u8			protocol;
@@ -315,8 +318,8 @@ static inline struct neighbour *___neigh_lookup_noref(
 	__u32 (*hash)(const void *pkey,
 		      const struct net_device *dev,
 		      __u32 *hash_rnd)/*neighbour key的hashcode计算函数*/,
-	const void *pkey,
-	struct net_device *dev)
+	const void *pkey/*查询的key*/,
+	struct net_device *dev/*neighbour所属设备*/)
 {
 	struct neigh_hash_table *nht = rcu_dereference_bh(tbl->nht);
 	struct neighbour *n;

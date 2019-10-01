@@ -1686,6 +1686,7 @@ int inet_ctl_sock_create(struct sock **sk, unsigned short family,
 }
 EXPORT_SYMBOL_GPL(inet_ctl_sock_create);
 
+//返回当前cpu上mib在offt偏移量位置的统计信息
 u64 snmp_get_cpu_field(void __percpu *mib, int cpu, int offt)
 {
 	return  *(((unsigned long *)per_cpu_ptr(mib, cpu)) + offt);
@@ -1697,6 +1698,7 @@ unsigned long snmp_fold_field(void __percpu *mib, int offt)
 	unsigned long res = 0;
 	int i;
 
+	//汇总所有cpu上针对mib offt偏移上的统计信息
 	for_each_possible_cpu(i)
 		res += snmp_get_cpu_field(mib, i, offt);
 	return res;

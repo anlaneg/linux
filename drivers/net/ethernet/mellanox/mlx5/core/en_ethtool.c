@@ -222,6 +222,7 @@ int mlx5e_ethtool_get_sset_count(struct mlx5e_priv *priv, int sset)
 
 	switch (sset) {
 	case ETH_SS_STATS:
+		//获取统计状态字符串数目
 		for (i = 0; i < mlx5e_num_stats_grps; i++)
 			num_stats += mlx5e_stats_grps[i].get_num_stats(priv);
 		return num_stats;

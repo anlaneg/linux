@@ -42,6 +42,7 @@
 
 struct macvlan_port {
 	struct net_device	*dev;//macvlan所属的dev
+	//串连所有macvlan设备
 	struct hlist_head	vlan_hash[MACVLAN_HASH_SIZE];
 	struct list_head	vlans;
 	//需要处理的广播报文挂在此链上，会有专门的work处理
@@ -49,7 +50,7 @@ struct macvlan_port {
 	struct work_struct	bc_work;
 	u32			flags;
 	int			count;
-	//按mac地址维护的vlanport哈希表
+	//串连所有macvlan_source_entry，利用源mac地址进行查询
 	struct hlist_head	vlan_source_hash[MACVLAN_HASH_SIZE];
 	DECLARE_BITMAP(mc_filter, MACVLAN_MC_FILTER_SZ);
 	unsigned char           perm_addr[ETH_ALEN];
@@ -70,11 +71,13 @@ struct macvlan_skb_cb {
 
 static void macvlan_port_destroy(struct net_device *dev);
 
+//此port是否被passthru
 static inline bool macvlan_passthru(const struct macvlan_port *port)
 {
 	return port->flags & MACVLAN_F_PASSTHRU;
 }
 
+//设置此pot被passthru
 static inline void macvlan_set_passthru(struct macvlan_port *port)
 {
 	port->flags |= MACVLAN_F_PASSTHRU;
@@ -134,6 +137,7 @@ static struct macvlan_dev *macvlan_hash_lookup(const struct macvlan_port *port,
 	return NULL;
 }
 
+//通过srouce地址查询macvaln_source_entry
 static struct macvlan_source_entry *macvlan_hash_lookup_source(
 	const struct macvlan_dev *vlan,
 	const unsigned char *addr)
@@ -150,6 +154,7 @@ static struct macvlan_source_entry *macvlan_hash_lookup_source(
 	return NULL;
 }
 
+//新增addr对应的macvlan_source_entry
 static int macvlan_hash_add_source(struct macvlan_dev *vlan,
 				   const unsigned char *addr)
 {
@@ -159,6 +164,7 @@ static int macvlan_hash_add_source(struct macvlan_dev *vlan,
 
 	entry = macvlan_hash_lookup_source(vlan, addr);
 	if (entry)
+		//已存在，插入失败
 		return 0;
 
 	entry = kmalloc(sizeof(*entry), GFP_KERNEL);
@@ -174,6 +180,7 @@ static int macvlan_hash_add_source(struct macvlan_dev *vlan,
 	return 0;
 }
 
+//新增macvlan到hashtable
 static void macvlan_hash_add(struct macvlan_dev *vlan)
 {
 	struct macvlan_port *port = vlan->port;
@@ -183,12 +190,14 @@ static void macvlan_hash_add(struct macvlan_dev *vlan)
 	hlist_add_head_rcu(&vlan->hlist, &port->vlan_hash[idx]);
 }
 
+//删除macvlan_source_entry自hashtable中
 static void macvlan_hash_del_source(struct macvlan_source_entry *entry)
 {
 	hlist_del_rcu(&entry->hlist);
 	kfree_rcu(entry, rcu);
 }
 
+//自vlan_hash中移除指定macvlan_dev
 static void macvlan_hash_del(struct macvlan_dev *vlan, bool sync)
 {
 	hlist_del_rcu(&vlan->hlist);
@@ -447,7 +456,6 @@ static void macvlan_forward_source(struct sk_buff *skb,
 
 /* called under rcu_read_lock() from netif_receive_skb */
 //macvlan的lowerdev收包函数
-//这里为什么不是按目的mac来分类？
 static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 {
 	struct macvlan_port *port;
@@ -472,7 +480,7 @@ static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 			return RX_HANDLER_CONSUMED;
 		*pskb = skb;
 		eth = eth_hdr(skb);
-		//按源mac分流skb到相应的macvlan_dev
+		//检查是否有macvlan_source_entry可处理此报文，向其送一份副本
 		macvlan_forward_source(skb, port, eth->h_source);
 		src = macvlan_hash_lookup(port, eth->h_source);
 		if (src && src->mode != MACVLAN_MODE_VEPA &&
@@ -492,16 +500,20 @@ static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 		return RX_HANDLER_PASS;
 	}
 
-	//非广播报文，按源mac检查送给对应的macvlan_dev
+	//非广播报文，检查是否有macvlan_source_entry可处理此报文，向其送一个副本
 	macvlan_forward_source(skb, port, eth->h_source);
+
 	if (macvlan_passthru(port))
+		//passthru情况下，送给首个macvlan设备
 		vlan = list_first_or_null_rcu(&port->vlans,
 					      struct macvlan_dev, list);
 	else
+		//按目的mac查找对应的macvlan
 		vlan = macvlan_hash_lookup(port, eth->h_dest);
 	if (!vlan || vlan->mode == MACVLAN_MODE_SOURCE)
 		return RX_HANDLER_PASS;
 
+	//将报文对应的dev设置为相应macvlan dev
 	dev = vlan->dev;
 	if (unlikely(!(dev->flags & IFF_UP))) {
 		kfree_skb(skb);
@@ -520,6 +532,7 @@ static rx_handler_result_t macvlan_handle_frame(struct sk_buff **pskb)
 	skb->pkt_type = PACKET_HOST;
 
 	ret = NET_RX_SUCCESS;
+	//重新按macvlan设备再进入协议栈
 	handle_res = RX_HANDLER_ANOTHER;
 out:
 	macvlan_count_rx(vlan, len, ret == NET_RX_SUCCESS, false);

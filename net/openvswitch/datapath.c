@@ -2387,7 +2387,7 @@ static const struct genl_ops dp_vport_genl_ops[] = {
 	{ .cmd = OVS_VPORT_CMD_DEL,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
-	  .doit = ovs_vport_cmd_del
+	  .doit = ovs_vport_cmd_del //处理vport删除
 	},
 	{ .cmd = OVS_VPORT_CMD_GET,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,

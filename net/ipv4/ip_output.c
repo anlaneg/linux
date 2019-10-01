@@ -195,6 +195,7 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	struct neighbour *neigh;
 	bool is_v6gw = false;
 
+	//组播，广播报文统计
 	if (rt->rt_type == RTN_MULTICAST) {
 		IP_UPD_PO_STATS(net, IPSTATS_MIB_OUTMCAST, skb->len);
 	} else if (rt->rt_type == RTN_BROADCAST)
@@ -223,7 +224,8 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	}
 
 	rcu_read_lock_bh();
-	//查询对应的neighbour
+
+	//查询报文对应的neighbour表项
 	neigh = ip_neigh_for_gw(rt, skb, &is_v6gw);
 	if (!IS_ERR(neigh)) {
 		int res;
@@ -237,6 +239,7 @@ static int ip_finish_output2(struct net *net, struct sock *sk, struct sk_buff *s
 	}
 	rcu_read_unlock_bh();
 
+	//获取及创建邻居表项失败，丢包
 	net_dbg_ratelimited("%s: No header cache and no neighbour!\n",
 			    __func__);
 	kfree_skb(skb);
@@ -443,7 +446,7 @@ int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	//路由后钩子点执行
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, NULL, dev,
-			    ip_finish_output/*总终报文发送*/,
+			    ip_finish_output/*最终报文发送*/,
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 

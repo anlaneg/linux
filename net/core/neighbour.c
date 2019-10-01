@@ -385,6 +385,7 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl,
 	unsigned long now = jiffies;
 	int entries;
 
+	//是否跳过gc步骤
 	if (exempt_from_gc)
 		goto do_alloc;
 

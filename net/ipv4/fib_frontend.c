@@ -228,7 +228,7 @@ void fib_flush(struct net *net)
  */
 static inline unsigned int __inet_dev_addr_type(struct net *net,
 						const struct net_device *dev,
-						__be32 addr, u32 tb_id)//tb_id指出要查询的路由表
+						__be32 addr, u32 tb_id/*tb_id指出要查询的路由表*/)
 {
 	struct flowi4		fl4 = { .daddr = addr };
 	struct fib_result	res;

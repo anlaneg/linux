@@ -1917,9 +1917,11 @@ static int ethtool_get_stats(struct net_device *dev, void __user *useraddr)
 	if (!ops->get_ethtool_stats || !ops->get_sset_count)
 		return -EOPNOTSUPP;
 
+	//取集合数目
 	n_stats = ops->get_sset_count(dev, ETH_SS_STATS);
 	if (n_stats < 0)
 		return n_stats;
+	//集合数目过大
 	if (n_stats > S32_MAX / sizeof(u64))
 		return -ENOMEM;
 	WARN_ON_ONCE(!n_stats);
@@ -2730,6 +2732,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 		rc = ethtool_phys_id(dev, useraddr);
 		break;
 	case ETHTOOL_GSTATS:
+		//取网卡统计信息
 		rc = ethtool_get_stats(dev, useraddr);
 		break;
 	case ETHTOOL_GPERMADDR:

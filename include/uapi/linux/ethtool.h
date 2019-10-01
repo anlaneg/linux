@@ -703,7 +703,7 @@ struct ethtool_test {
  */
 struct ethtool_stats {
 	__u32	cmd;
-	__u32	n_stats;
+	__u32	n_stats;//stats数目
 	__u64	data[0];
 };
 

@@ -20,19 +20,23 @@ enum
 {
 	IPSTATS_MIB_NUM = 0,
 /* frequently written fields in fast path, kept in same cache line */
+	//收到的报文数
 	IPSTATS_MIB_INPKTS,			/* InReceives */
+	//收到的字节数
 	IPSTATS_MIB_INOCTETS,			/* InOctets */
 	IPSTATS_MIB_INDELIVERS,			/* InDelivers */
 	IPSTATS_MIB_OUTFORWDATAGRAMS,		/* OutForwDatagrams */
 	IPSTATS_MIB_OUTPKTS,			/* OutRequests */
 	IPSTATS_MIB_OUTOCTETS,			/* OutOctets */
 /* other fields */
+	//头部错误
 	IPSTATS_MIB_INHDRERRORS,		/* InHdrErrors */
 	IPSTATS_MIB_INTOOBIGERRORS,		/* InTooBigErrors */
 	IPSTATS_MIB_INNOROUTES,			/* InNoRoutes */
 	IPSTATS_MIB_INADDRERRORS,		/* InAddrErrors */
 	IPSTATS_MIB_INUNKNOWNPROTOS,		/* InUnknownProtos */
 	IPSTATS_MIB_INTRUNCATEDPKTS,		/* InTruncatedPkts */
+	//in方向丢包
 	IPSTATS_MIB_INDISCARDS,			/* InDiscards */
 	IPSTATS_MIB_OUTDISCARDS,		/* OutDiscards */
 	IPSTATS_MIB_OUTNOROUTES,		/* OutNoRoutes */

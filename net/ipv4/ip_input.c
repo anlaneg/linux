@@ -460,7 +460,7 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 	 * that it receives, do not try to analyse it.
 	 */
 	if (skb->pkt_type == PACKET_OTHERHOST)
-		//现在我们在处理三层，故如果mac不是我们的单播报文不处理
+		//现在我们在处理三层，故如果mac不是我们的,则不处理
 		goto drop;
 
 	//统计入口包数，入口字节数

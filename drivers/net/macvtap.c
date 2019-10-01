@@ -99,6 +99,7 @@ static int macvtap_newlink(struct net *src_net, struct net_device *dev,
 	vlantap->tap.count_rx_dropped = macvtap_count_rx_dropped;
 	vlantap->tap.update_features  = macvtap_update_features;
 
+	//macvtap注册收包函数
 	err = netdev_rx_handler_register(dev, tap_handle_frame, &vlantap->tap);
 	if (err)
 		return err;

@@ -471,10 +471,12 @@ static int netstat_seq_show(struct seq_file *seq, void *v)
 			   snmp_fold_field(net->mib.net_statistics,
 					   snmp4_net_list[i].entry));
 
+	//显示ip层统计计数名称
 	seq_puts(seq, "\nIpExt:");
 	for (i = 0; snmp4_ipextstats_list[i].name; i++)
 		seq_printf(seq, " %s", snmp4_ipextstats_list[i].name);
 
+	//显示ip层统计计数值
 	seq_puts(seq, "\nIpExt:");
 	for (i = 0; snmp4_ipextstats_list[i].name; i++)
 		seq_printf(seq, " %llu",

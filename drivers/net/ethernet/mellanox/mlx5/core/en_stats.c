@@ -35,6 +35,7 @@
 #include "en_accel/ipsec.h"
 #include "en_accel/tls.h"
 
+//各统计信息命名及各统计信息在结构体mlx5e_sw_stats中的offset
 static const struct counter_desc sw_stats_desc[] = {
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_packets) },
 	{ MLX5E_DECLARE_STAT(struct mlx5e_sw_stats, rx_bytes) },
@@ -150,6 +151,7 @@ static int mlx5e_grp_sw_get_num_stats(struct mlx5e_priv *priv)
 	return NUM_SW_COUNTERS;
 }
 
+//字符串名称填充
 static int mlx5e_grp_sw_fill_strings(struct mlx5e_priv *priv, u8 *data, int idx)
 {
 	int i;
@@ -1663,9 +1665,13 @@ static int mlx5e_grp_channels_fill_stats(struct mlx5e_priv *priv, u64 *data,
 /* The stats groups order is opposite to the update_stats() order calls */
 const struct mlx5e_stats_grp mlx5e_stats_grps[] = {
 	{
+		//统计字段数目
 		.get_num_stats = mlx5e_grp_sw_get_num_stats,
+		//统计字段名称填充
 		.fill_strings = mlx5e_grp_sw_fill_strings,
+		//自相应index填充stats字段
 		.fill_stats = mlx5e_grp_sw_fill_stats,
+		//提取统计信息到中转变量，后面fill_stats可直接获取
 		.update_stats = mlx5e_grp_sw_update_stats,
 	},
 	{

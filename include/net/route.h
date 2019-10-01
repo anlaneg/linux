@@ -356,6 +356,7 @@ static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 	return hoplimit;
 }
 
+//取daddr对应的邻居表项
 static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
 					     __be32 daddr/*目标ip*/)
 {
@@ -370,10 +371,12 @@ static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
 	return neigh;
 }
 
+//查询下一跳对应的邻居表项
 static inline struct neighbour *ip_neigh_for_gw(struct rtable *rt,
 						struct sk_buff *skb,
 						bool *is_v6gw)
 {
+	//出接口设备
 	struct net_device *dev = rt->dst.dev;
 	struct neighbour *neigh;
 

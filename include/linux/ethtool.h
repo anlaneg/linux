@@ -352,6 +352,7 @@ struct ethtool_ops {
 	void	(*self_test)(struct net_device *, struct ethtool_test *, u64 *);
 	void	(*get_strings)(struct net_device *, u32 stringset, u8 *);
 	int	(*set_phys_id)(struct net_device *, enum ethtool_phys_id_state);
+	//获取网卡的统计信息
 	void	(*get_ethtool_stats)(struct net_device *,
 				     struct ethtool_stats *, u64 *);
 	//ethtool命令行执行前调用
@@ -360,6 +361,7 @@ struct ethtool_ops {
 	void	(*complete)(struct net_device *);
 	u32	(*get_priv_flags)(struct net_device *);
 	int	(*set_priv_flags)(struct net_device *, u32);
+	//返回指定string_id的集合总数目
 	int	(*get_sset_count)(struct net_device *, int);
 	int	(*get_rxnfc)(struct net_device *,
 			     struct ethtool_rxnfc *, u32 *rule_locs);

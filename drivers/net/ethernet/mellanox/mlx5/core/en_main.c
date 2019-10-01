@@ -158,6 +158,7 @@ static void mlx5e_update_carrier_work(struct work_struct *work)
 	mutex_unlock(&priv->state_lock);
 }
 
+//cx5统计信息更新
 void mlx5e_update_stats(struct mlx5e_priv *priv)
 {
 	int i;

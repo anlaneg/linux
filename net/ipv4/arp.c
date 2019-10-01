@@ -227,6 +227,7 @@ static bool arp_key_eq(const struct neighbour *neigh, const void *pkey)
 static int arp_constructor(struct neighbour *neigh)
 {
 	__be32 addr;
+	//neighbour所属的设备
 	struct net_device *dev = neigh->dev;
 	struct in_device *in_dev;
 	struct neigh_parms *parms;
@@ -236,6 +237,7 @@ static int arp_constructor(struct neighbour *neigh)
 	if (dev->flags & (IFF_LOOPBACK | IFF_POINTOPOINT))
 		memcpy(neigh->primary_key, &inaddr_any, arp_tbl.key_len);
 
+	//arp表项对应的目标ip
 	addr = *(__be32 *)neigh->primary_key;
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(dev);
@@ -274,7 +276,7 @@ static int arp_constructor(struct neighbour *neigh)
 		 */
 
 		if (neigh->type == RTN_MULTICAST) {
-			//针对组播neighbour直接映射对应的mac地址
+			//针对组播地址，neighbour直接映射对应的mac地址
 			neigh->nud_state = NUD_NOARP;
 			arp_mc_map(addr, neigh->ha, dev, 1);
 		} else if (dev->flags & (IFF_NOARP | IFF_LOOPBACK)) {
@@ -283,7 +285,7 @@ static int arp_constructor(struct neighbour *neigh)
 			memcpy(neigh->ha, dev->dev_addr, dev->addr_len);
 		} else if (neigh->type == RTN_BROADCAST ||
 			   (dev->flags & IFF_POINTOPOINT)) {
-			//针对广播地址及点到设备，使用设备的广播地址
+			//针对广播地址及点到设备，使用设备的广播mac地址
 			neigh->nud_state = NUD_NOARP;
 			memcpy(neigh->ha, dev->broadcast, dev->addr_len);
 		}

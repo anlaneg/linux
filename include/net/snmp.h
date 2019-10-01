@@ -27,7 +27,9 @@
  *  - name of entries.
  */
 struct snmp_mib {
+	//统计字段名称
 	const char *name;
+	//统计字段索引
 	int entry;
 };
 
@@ -118,6 +120,7 @@ struct linux_xfrm_mib {
 #define DECLARE_SNMP_STAT(type, name)	\
 	extern __typeof__(type) __percpu *name
 
+//增加当前cpu上的field计数
 #define __SNMP_INC_STATS(mib, field)	\
 			__this_cpu_inc(mib->mibs[field])
 
@@ -135,12 +138,16 @@ struct linux_xfrm_mib {
 
 #define SNMP_ADD_STATS(mib, field, addend)	\
 			this_cpu_add(mib->mibs[field], addend)
+
+//统计basefield的报文数及字节数
 #define SNMP_UPD_PO_STATS(mib, basefield, addend)	\
 	do { \
 		__typeof__((mib->mibs) + 0) ptr = mib->mibs;	\
 		this_cpu_inc(ptr[basefield##PKTS]);		\
 		this_cpu_add(ptr[basefield##OCTETS], addend);	\
 	} while (0)
+
+//统计basefield的报文数及字节数
 #define __SNMP_UPD_PO_STATS(mib, basefield, addend)	\
 	do { \
 		__typeof__((mib->mibs) + 0) ptr = mib->mibs;	\
