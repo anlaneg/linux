@@ -465,7 +465,7 @@ static int __register_trace_kprobe(struct trace_kprobe *tk)
 	if (ret)
 		return ret;
 
-	if (trace_probe_is_registered(&tk->tp))
+	if (trace_kprobe_is_registered(tk))
 		return -EINVAL;
 
 	if (within_notrace_func(tk)) {

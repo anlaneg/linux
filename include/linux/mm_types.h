@@ -394,6 +394,16 @@ struct mm_struct {
 		atomic_t membarrier_state;
 #endif
 
+#ifdef CONFIG_MEMBARRIER
+		/**
+		 * @membarrier_state: Flags controlling membarrier behavior.
+		 *
+		 * This field is close to @pgd to hopefully fit in the same
+		 * cache-line, which needs to be touched by switch_mm().
+		 */
+		atomic_t membarrier_state;
+#endif
+
 		/**
 		 * @mm_users: The number of users including userspace.
 		 *

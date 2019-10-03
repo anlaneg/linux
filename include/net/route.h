@@ -55,6 +55,7 @@ struct rtable {
 	__u8			rt_is_input;
 	//网关地址family
 	__u8			rt_uses_gateway;
+
 	int			rt_iif;
 
 	u8			rt_gw_family;

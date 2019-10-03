@@ -2051,7 +2051,6 @@ config MODULE_SRCVERSION_ALL
 
 config MODULE_SIG
 	bool "Module signature verification"
-	depends on MODULES
 	select MODULE_SIG_FORMAT
 	help
 	  Check modules for valid signatures upon load: the signature
