@@ -3836,7 +3836,7 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 
 		//选择采用哪个发送队列
 		if (ops->ndo_select_queue)
-			//通过驱动操作函数先择
+			//通过驱动操作函数选择
 			queue_index = ops->ndo_select_queue(dev, skb, sb_dev);
 		else
 			queue_index = netdev_pick_tx(dev, skb, sb_dev);

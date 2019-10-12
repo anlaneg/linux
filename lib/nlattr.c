@@ -661,10 +661,12 @@ struct nlattr *__nla_reserve(struct sk_buff *skb, int attrtype, int attrlen)
 {
 	struct nlattr *nla;
 
+	//nlattr填充{len,type}
 	nla = skb_put(skb, nla_total_size(attrlen));
 	nla->nla_type = attrtype;
 	nla->nla_len = nla_attr_size(attrlen);
 
+	//格式化pading的区域为0
 	memset((unsigned char *) nla + nla->nla_len, 0, nla_padlen(attrlen));
 
 	return nla;
