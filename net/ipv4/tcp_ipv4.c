@@ -1954,7 +1954,7 @@ process:
 	if (tcp_v4_inbound_md5_hash(sk, skb))
 		goto discard_and_relse;
 
-	nf_reset(skb);
+	nf_reset_ct(skb);
 
 	//tcp bpf处理(可通过此调整性能）
 	if (tcp_filter(sk, skb))

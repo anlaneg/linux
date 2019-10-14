@@ -3189,7 +3189,7 @@ static int devlink_nl_cmd_param_get_dumpit(struct sk_buff *msg,
 						    NETLINK_CB(cb->skb).portid,
 						    cb->nlh->nlmsg_seq,
 						    NLM_F_MULTI);
-			if (err) {
+			if (err && err != -EOPNOTSUPP) {
 				mutex_unlock(&devlink->lock);
 				goto out;
 			}
@@ -3449,7 +3449,7 @@ static int devlink_nl_cmd_port_param_get_dumpit(struct sk_buff *msg,
 						NETLINK_CB(cb->skb).portid,
 						cb->nlh->nlmsg_seq,
 						NLM_F_MULTI);
-				if (err) {
+				if (err && err != -EOPNOTSUPP) {
 					mutex_unlock(&devlink->lock);
 					goto out;
 				}
@@ -4105,7 +4105,7 @@ static int devlink_nl_cmd_info_get_dumpit(struct sk_buff *msg,
 					   cb->nlh->nlmsg_seq, NLM_F_MULTI,
 					   cb->extack);
 		mutex_unlock(&devlink->lock);
-		if (err)
+		if (err && err != -EOPNOTSUPP)
 			break;
 		idx++;
 	}

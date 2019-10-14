@@ -256,7 +256,7 @@ static netdev_tx_t internal_dev_recv(struct sk_buff *skb)
 	}
 
 	skb_dst_drop(skb);
-	nf_reset(skb);
+	nf_reset_ct(skb);
 	secpath_reset(skb);
 
 	//指明报文去往本机

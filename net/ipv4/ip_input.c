@@ -203,7 +203,7 @@ resubmit:
 				kfree_skb(skb);
 				return;
 			}
-			nf_reset(skb);
+			nf_reset_ct(skb);
 		}
 		//协议报文处理(交给ip上层进行处理）
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v4_rcv, udp_rcv,
