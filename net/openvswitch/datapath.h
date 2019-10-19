@@ -66,18 +66,18 @@ struct datapath {
 	struct list_head list_node;
 
 	/* Flow table. */
-	struct flow_table table;
+	struct flow_table table;//流表
 
 	/* Switch ports. */
 	struct hlist_head *ports;//以port_no为索引的vport表
 
 	/* Stats. */
-	struct dp_stats_percpu __percpu *stats_percpu;
+	struct dp_stats_percpu __percpu *stats_percpu;//状态信息
 
 	/* Network namespace ref. */
 	possible_net_t net;
 
-	u32 user_features;
+	u32 user_features;//用户态支持的功能列表
 
 	u32 max_headroom;
 

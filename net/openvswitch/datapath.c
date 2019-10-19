@@ -1639,6 +1639,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	int err, i;
 
 	err = -EINVAL;
+	//必须指定datapath名称及 upcall_pid
 	if (!a[OVS_DP_ATTR_NAME] || !a[OVS_DP_ATTR_UPCALL_PID])
 		goto err;
 
@@ -1661,6 +1662,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	if (err)
 		goto err_free_dp;
 
+	//datapath状态字段
 	dp->stats_percpu = netdev_alloc_pcpu_stats(struct dp_stats_percpu);
 	if (!dp->stats_percpu) {
 		err = -ENOMEM;
@@ -1700,7 +1702,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	/* So far only local changes have been made, now need the lock. */
 	ovs_lock();
 
-	//创建internal类型port,并指定其port number
+	//创建与datapth同名的internal类型接口,并指定其port number
 	vport = new_vport(&parms);
 	if (IS_ERR(vport)) {
 		err = PTR_ERR(vport);
@@ -2340,6 +2342,8 @@ static int ovs_vport_cmd_dump(struct sk_buff *skb, struct netlink_callback *cb)
 		rcu_read_unlock();
 		return -ENODEV;
 	}
+
+	//遍历datapath上所有vport
 	for (i = bucket; i < DP_VPORT_HASH_BUCKETS; i++) {
 		struct vport *vport;
 
