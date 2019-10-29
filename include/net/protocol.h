@@ -43,7 +43,9 @@ struct net_protocol {
 	/* This returns an error if we weren't able to handle the error. */
 	int			(*err_handler)(struct sk_buff *skb, u32 info);
 
+	//协议是否跳过xfrm4_policy_check
 	unsigned int		no_policy:1,
+				//协议是否支持net namespace
 				netns_ok:1,
 				/* does the protocol do more stringent
 				 * icmp tag validation than simple

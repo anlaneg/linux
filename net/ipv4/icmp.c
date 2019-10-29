@@ -929,10 +929,12 @@ static bool icmp_echo(struct sk_buff *skb)
 	struct net *net;
 
 	net = dev_net(skb_dst(skb)->dev);
+	//如果未配置icmp echo忽略，则执行icmp reply
 	if (!net->ipv4.sysctl_icmp_echo_ignore_all) {
 		struct icmp_bxm icmp_param;
 
 		icmp_param.data.icmph	   = *icmp_hdr(skb);
+		//将type变更为reply
 		icmp_param.data.icmph.type = ICMP_ECHOREPLY;
 		icmp_param.skb		   = skb;
 		icmp_param.offset	   = 0;
@@ -1025,11 +1027,13 @@ int icmp_rcv(struct sk_buff *skb)
 	if (skb_checksum_simple_validate(skb))
 		goto csum_error;
 
+	//取icmp头部
 	if (!pskb_pull(skb, sizeof(*icmph)))
 		goto error;
 
 	icmph = icmp_hdr(skb);
 
+	//按icmp消息type进行统计
 	ICMPMSGIN_INC_STATS(net, icmph->type);
 	/*
 	 *	18 is the highest 'known' ICMP type. Anything else is a mystery
@@ -1037,6 +1041,7 @@ int icmp_rcv(struct sk_buff *skb)
 	 *	RFC 1122: 3.2.2  Unknown ICMP messages types MUST be silently
 	 *		  discarded.
 	 */
+	//icmp消息类型校验
 	if (icmph->type > NR_ICMP_TYPES)
 		goto error;
 
@@ -1065,6 +1070,7 @@ int icmp_rcv(struct sk_buff *skb)
 		}
 	}
 
+	//按icmp消息类型处理对应skb
 	success = icmp_pointers[icmph->type].handler(skb);
 
 	if (success)  {
@@ -1144,6 +1150,7 @@ static const struct icmp_control icmp_pointers[NR_ICMP_TYPES + 1] = {
 		.error = 1,
 	},
 	[ICMP_ECHO] = {
+		//收到icmp echo request报文
 		.handler = icmp_echo,
 	},
 	[9] = {

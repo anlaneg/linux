@@ -199,13 +199,14 @@ resubmit:
 	if (ipprot) {
 		//协议栈上有对应的协议处理模块
 		if (!ipprot->no_policy) {
+			//协议打未打上 no_policy标记，则执行xfrm4_policy_check
 			if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 				kfree_skb(skb);
 				return;
 			}
 			nf_reset_ct(skb);
 		}
-		//协议报文处理(交给ip上层进行处理）
+		//协议报文处理(交给ip上层协议进行处理）
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v4_rcv, udp_rcv,
 				      skb);
 		if (ret < 0) {

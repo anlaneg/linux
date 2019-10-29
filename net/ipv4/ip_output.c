@@ -1569,6 +1569,7 @@ out:
 	return skb;
 }
 
+//走local向外发送skb
 int ip_send_skb(struct net *net, struct sk_buff *skb)
 {
 	int err;
