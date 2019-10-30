@@ -2410,7 +2410,7 @@ error_free:
 }
 EXPORT_SYMBOL(__netlink_dump_start);
 
-void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
+void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误编码*/,
 		 const struct netlink_ext_ack *extack)
 {
 	struct sk_buff *skb;
@@ -2456,7 +2456,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err,
 	rep = __nlmsg_put(skb, NETLINK_CB(in_skb).portid, nlh->nlmsg_seq,
 			  NLMSG_ERROR, payload, flags);
 	errmsg = nlmsg_data(rep);
-	errmsg->error = err;
+	errmsg->error = err;/*设置error number*/
 	memcpy(&errmsg->msg, nlh, payload > sizeof(*errmsg) ? nlh->nlmsg_len : sizeof(*nlh));
 
 	if (nlk_has_extack && extack) {
@@ -2523,7 +2523,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 			goto skip;
 
 ack:
-		//响应有ack标记的消息
+		//如果cb返回错误，或者响应有ack标记的消息
 		if (nlh->nlmsg_flags & NLM_F_ACK || err)
 			netlink_ack(skb, nlh, err, &extack);
 

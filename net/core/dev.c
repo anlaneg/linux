@@ -7298,6 +7298,7 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 
 	ASSERT_RTNL();
 
+	//dev与upper_dev属同一个设备
 	if (dev == upper_dev)
 		return -EBUSY;
 
@@ -7309,8 +7310,10 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 		if (netdev_has_upper_dev(dev, upper_dev))
 			return -EEXIST;
 	} else {
+		//取dev对应的master_dev
 		master_dev = netdev_master_upper_dev_get(dev);
 		if (master_dev)
+			//如果dev对应的master_dev是upper_dev则返回EEXIST，否则BUSY
 			return master_dev == upper_dev ? -EEXIST : -EBUSY;
 	}
 

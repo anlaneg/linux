@@ -146,6 +146,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 		irqreturn_t res;
 
 		trace_irq_handler_entry(irq, action);
+		//中断action处理
 		res = action->handler(irq, action->dev_id);
 		trace_irq_handler_exit(irq, action, res);
 
@@ -153,6 +154,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc, unsigned int *flags
 			      irq, action->handler))
 			local_irq_disable();
 
+		//处理action结果
 		switch (res) {
 		case IRQ_WAKE_THREAD:
 			/*

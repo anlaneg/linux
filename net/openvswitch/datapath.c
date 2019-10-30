@@ -2180,6 +2180,7 @@ restart:
 	BUG_ON(err < 0);
 	ovs_unlock();
 
+	//向上通知创建port响应
 	ovs_notify(&dp_vport_genl_family, reply, info);
 	return 0;
 
@@ -2396,7 +2397,7 @@ static const struct genl_ops dp_vport_genl_ops[] = {
 	{ .cmd = OVS_VPORT_CMD_GET,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = 0,		    /* OK for unprivileged users. */
-	  .doit = ovs_vport_cmd_get,
+	  .doit = ovs_vport_cmd_get,//处理vport信息查询
 	  .dumpit = ovs_vport_cmd_dump
 	},
 	{ .cmd = OVS_VPORT_CMD_SET,

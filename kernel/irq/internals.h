@@ -160,6 +160,7 @@ static inline void chip_bus_sync_unlock(struct irq_desc *desc)
 #define IRQ_GET_DESC_CHECK_GLOBAL	(_IRQ_DESC_CHECK)
 #define IRQ_GET_DESC_CHECK_PERCPU	(_IRQ_DESC_CHECK | _IRQ_DESC_PERCPU)
 
+//遍历desc对应的所有action
 #define for_each_action_of_desc(desc, act)			\
 	for (act = desc->action; act; act = act->next)
 
