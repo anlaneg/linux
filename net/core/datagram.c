@@ -180,6 +180,7 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
 	}
 
 	*last = queue->prev;
+	//遍历queue上每个skb
 	skb_queue_walk(queue, skb) {
 		if (flags & MSG_PEEK) {
 			if (peek_at_off && _off >= skb->len &&
@@ -196,6 +197,7 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
 			}
 			refcount_inc(&skb->users);
 		} else {
+			//自queue上摘掉skb
 			__skb_unlink(skb, queue);
 			if (destructor)
 				destructor(sk, skb);
@@ -266,6 +268,7 @@ struct sk_buff *__skb_try_recv_datagram(struct sock *sk, unsigned int flags,
 		 * However, this function was correct in any case. 8)
 		 */
 		spin_lock_irqsave(&queue->lock, cpu_flags);
+		//自queue中移除一个skb
 		skb = __skb_try_recv_from_queue(sk, queue, flags, destructor,
 						off, &error, last);
 		spin_unlock_irqrestore(&queue->lock, cpu_flags);

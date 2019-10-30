@@ -245,6 +245,7 @@ enum flow_dissector_key_id {
 	FLOW_DISSECTOR_KEY_ENC_PORTS, /* struct flow_dissector_key_ports */
 	FLOW_DISSECTOR_KEY_MPLS, /* struct flow_dissector_key_mpls */
 	FLOW_DISSECTOR_KEY_TCP, /* struct flow_dissector_key_tcp */
+	//解析并填充ttl,tos
 	FLOW_DISSECTOR_KEY_IP, /* struct flow_dissector_key_ip */
 	FLOW_DISSECTOR_KEY_CVLAN, /* struct flow_dissector_key_vlan */
 	FLOW_DISSECTOR_KEY_ENC_IP, /* struct flow_dissector_key_ip */
@@ -329,7 +330,7 @@ static inline bool dissector_uses_key(const struct flow_dissector *flow_dissecto
 	return flow_dissector->used_keys & (1 << key_id);
 }
 
-//自flow_dissector中提取指定key_id的值
+//自flow_dissector中提取指定key_id的存储位置，为后面的解析提供存放空间
 static inline void *skb_flow_dissector_target(struct flow_dissector *flow_dissector,
 					      enum flow_dissector_key_id key_id,
 					      void *target_container)

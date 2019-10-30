@@ -292,10 +292,13 @@ enum {
 */
 
 enum rt_scope_t {
+	//全球地址
 	RT_SCOPE_UNIVERSE=0,
 /* User defined values  */
 	RT_SCOPE_SITE=200,
+	//直连地址（同网段）
 	RT_SCOPE_LINK=253,
+	//本机地址
 	RT_SCOPE_HOST=254,
 	RT_SCOPE_NOWHERE=255
 };

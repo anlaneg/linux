@@ -679,6 +679,7 @@ __skb_flow_dissect_tcp(const struct sk_buff *skb,
 	if (unlikely(__tcp_hdrlen(th) < sizeof(_th)))
 		return;
 
+	//解析tcp的flags
 	key_tcp = skb_flow_dissector_target(flow_dissector,
 					    FLOW_DISSECTOR_KEY_TCP,
 					    target_container);
@@ -692,6 +693,7 @@ __skb_flow_dissect_ipv4(const struct sk_buff *skb,
 {
 	struct flow_dissector_key_ip *key_ip;
 
+	//检查是否需要解析tos,ttl
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_IP))
 		return;
 
@@ -869,8 +871,10 @@ bool __skb_flow_dissect(const struct net *net,
 	if (!data) {
 		//未指定报文起始位置，使用data
 		data = skb->data;
+		//三层报文协议
 		proto = skb_vlan_tag_present(skb) ?
 			 skb->vlan_proto : skb->protocol;
+		//到三层的偏移量
 		nhoff = skb_network_offset(skb);
 		hlen = skb_headlen(skb);
 #if IS_ENABLED(CONFIG_NET_DSA)
@@ -944,6 +948,7 @@ bool __skb_flow_dissect(const struct net *net,
 		rcu_read_unlock();
 	}
 
+	//检查是否需要解析以太头
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
 		//解析源目的mac地址
@@ -970,8 +975,10 @@ proto_again:
 			break;
 		}
 
+		//指向4层起始位置
 		nhoff += iph->ihl * 4;
 
+		//提取4层协议编号
 		ip_proto = iph->protocol;
 
 		if (dissector_uses_key(flow_dissector,
@@ -980,14 +987,14 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_IPV4_ADDRS,
 							      target_container);
 
-			//解析源目的ip地址
+			//解析ipv4源目的ip地址
 			memcpy(&key_addrs->v4addrs, &iph->saddr,
 			       sizeof(key_addrs->v4addrs));
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		}
 
 		if (ip_is_fragment(iph)) {
-			//分片报文
+			//遇到分片报文
 			key_control->flags |= FLOW_DIS_IS_FRAGMENT;
 
 			if (iph->frag_off & htons(IP_OFFSET)) {
@@ -1010,6 +1017,7 @@ proto_again:
 		break;
 	}
 	case htons(ETH_P_IPV6): {
+		//ipv6报文解析
 		const struct ipv6hdr *iph;
 		struct ipv6hdr _iph;
 
@@ -1059,6 +1067,7 @@ proto_again:
 	}
 	case htons(ETH_P_8021AD):
 	case htons(ETH_P_8021Q): {
+		//vlan报文解析
 		const struct vlan_hdr *vlan = NULL;
 		struct vlan_hdr _vlan;
 		__be16 saved_vlan_tpid = proto;
@@ -1109,6 +1118,7 @@ proto_again:
 		break;
 	}
 	case htons(ETH_P_PPP_SES): {
+		//解析pppoe报文
 		struct {
 			struct pppoe_hdr hdr;
 			__be16 proto;
@@ -1137,6 +1147,7 @@ proto_again:
 		break;
 	}
 	case htons(ETH_P_TIPC): {
+		//解析tipc报文
 		struct tipc_basic_hdr *hdr, _hdr;
 
 		hdr = __skb_header_pointer(skb, nhoff, sizeof(_hdr),
@@ -1160,6 +1171,7 @@ proto_again:
 
 	case htons(ETH_P_MPLS_UC):
 	case htons(ETH_P_MPLS_MC):
+		//解析mpls报文
 		fdret = __skb_flow_dissect_mpls(skb, flow_dissector,
 						target_container, data,
 						nhoff, hlen);
@@ -1176,6 +1188,7 @@ proto_again:
 
 	case htons(ETH_P_ARP):
 	case htons(ETH_P_RARP):
+		//解析arp报文
 		fdret = __skb_flow_dissect_arp(skb, flow_dissector,
 					       target_container, data,
 					       nhoff, hlen);
@@ -1210,6 +1223,7 @@ proto_again:
 ip_proto_again:
 	fdret = FLOW_DISSECT_RET_CONTINUE;
 
+	//解析4层报文
 	switch (ip_proto) {
 	case IPPROTO_GRE:
 		fdret = __skb_flow_dissect_gre(skb, key_control, flow_dissector,
@@ -1299,6 +1313,7 @@ ip_proto_again:
 		break;
 
 	case IPPROTO_TCP:
+		//解析tcp报文
 		__skb_flow_dissect_tcp(skb, flow_dissector, target_container,
 				       data, nhoff, hlen);
 		break;
@@ -1307,6 +1322,7 @@ ip_proto_again:
 		break;
 	}
 
+	//port解析（非分片报文）
 	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_PORTS) &&
 	    !(key_control->flags & FLOW_DIS_IS_FRAGMENT)) {
 		key_ports = skb_flow_dissector_target(flow_dissector,

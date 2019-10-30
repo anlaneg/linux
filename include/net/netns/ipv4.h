@@ -54,6 +54,7 @@ struct netns_ipv4 {
 	struct mutex		ra_mutex;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
 	struct fib_rules_ops	*rules_ops;
+	//fib是否有custom配置的规则
 	bool			fib_has_custom_rules;
 	unsigned int		fib_rules_require_fldissect;
 	struct fib_table __rcu	*fib_main;

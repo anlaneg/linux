@@ -246,6 +246,7 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	pr_debug("sock=%p sk=%p len=%zu flags=%d\n", sock, sk, len, flags);
 
+	//自sk_receive_queue中摘取一个skb
 	skb = skb_recv_datagram(sk, flags, noblock, &rc);
 	if (!skb)
 		return rc;
@@ -256,6 +257,7 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		copied = len;
 	}
 
+	//利用skb填充msg,并返回
 	rc = skb_copy_datagram_msg(skb, 0, msg, copied);
 
 	skb_free_datagram(sk, skb);
@@ -263,6 +265,7 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	return rc ? : copied;
 }
 
+//SOCK_SEQPACKET类型socket对应的ops
 static const struct proto_ops rawsock_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,
@@ -283,23 +286,36 @@ static const struct proto_ops rawsock_ops = {
 	.mmap           = sock_no_mmap,
 };
 
+//SOCK_RAW类型socket对应的ops
 static const struct proto_ops rawsock_raw_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,
 	.release        = rawsock_release,
+	//不支持bind
 	.bind           = sock_no_bind,
+	//不支持connect
 	.connect        = sock_no_connect,
+	//不支持socketpair
 	.socketpair     = sock_no_socketpair,
+	//不支持accept
 	.accept         = sock_no_accept,
+	//不支持getname
 	.getname        = sock_no_getname,
-	.poll           = datagram_poll,
+	.poll           = datagram_poll,//检查socket可读取
+	//不支持ioctl
 	.ioctl          = sock_no_ioctl,
+	//不支持listen
 	.listen         = sock_no_listen,
+	//不支持shutdown
 	.shutdown       = sock_no_shutdown,
+	//不支持setsockopt
 	.setsockopt     = sock_no_setsockopt,
+	//不支持getsockopt
 	.getsockopt     = sock_no_getsockopt,
+	//不支持sendmsg
 	.sendmsg        = sock_no_sendmsg,
-	.recvmsg        = rawsock_recvmsg,
+	.recvmsg        = rawsock_recvmsg,//自socket中收取报文
+	//不支持mmap
 	.mmap           = sock_no_mmap,
 };
 
@@ -322,6 +338,7 @@ static void rawsock_destruct(struct sock *sk)
 	}
 }
 
+//nfc rawsocket 创建
 static int rawsock_create(struct net *net, struct socket *sock,
 			  const struct nfc_protocol *nfc_proto, int kern)
 {
@@ -329,6 +346,7 @@ static int rawsock_create(struct net *net, struct socket *sock,
 
 	pr_debug("sock=%p\n", sock);
 
+	//当前仅支持SOCK_RAW及SOCK_SEQPACKET两种类型
 	if ((sock->type != SOCK_SEQPACKET) && (sock->type != SOCK_RAW))
 		return -ESOCKTNOSUPPORT;
 
@@ -366,6 +384,7 @@ void nfc_send_to_raw_sock(struct nfc_dev *dev, struct sk_buff *skb,
 
 	sk_for_each(sk, &raw_sk_list.head) {
 		if (!skb_copy) {
+			//制作skb的一个副本
 			skb_copy = __pskb_copy_fclone(skb, NFC_RAW_HEADER_SIZE,
 						      GFP_ATOMIC, true);
 			if (!skb_copy)
@@ -378,16 +397,19 @@ void nfc_send_to_raw_sock(struct nfc_dev *dev, struct sk_buff *skb,
 			data[1] |= (payload_type << 1);
 		}
 
+		//制作skb_copy的副本，并交给对应的socket
 		nskb = skb_clone(skb_copy, GFP_ATOMIC);
 		if (!nskb)
 			continue;
 
+		//将报文nskb递交给socket
 		if (sock_queue_rcv_skb(sk, nskb))
 			kfree_skb(nskb);
 	}
 
 	read_unlock(&raw_sk_list.lock);
 
+	//释放skb_copy
 	kfree_skb(skb_copy);
 }
 EXPORT_SYMBOL(nfc_send_to_raw_sock);
@@ -398,6 +420,7 @@ static struct proto rawsock_proto = {
 	.obj_size = sizeof(struct nfc_rawsock),
 };
 
+//注册raw协议
 static const struct nfc_protocol rawsock_nfc_proto = {
 	.id	  = NFC_SOCKPROTO_RAW,
 	.proto    = &rawsock_proto,

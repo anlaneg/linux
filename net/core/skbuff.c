@@ -1916,7 +1916,7 @@ EXPORT_SYMBOL(skb_put);
  *	start. If this would exceed the total buffer headroom the kernel will
  *	panic. A pointer to the first byte of the extra data is returned.
  */
-//使data指针左移，空出一个len长度的空间，skb最长度增加len
+//使data指针左移，空出一个len长度的空间，skb总长度增加len
 void *skb_push(struct sk_buff *skb, unsigned int len)
 {
 	skb->data -= len;

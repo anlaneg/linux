@@ -147,6 +147,7 @@ int st_nci_probe(struct llt_ndlc *ndlc, int phy_headroom,
 		goto err_reg_dev;
 	}
 
+	//nci设备注册
 	r = nci_register_device(ndlc->ndev);
 	if (r) {
 		pr_err("Cannot register nfc device to nci core\n");

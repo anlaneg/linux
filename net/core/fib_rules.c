@@ -242,6 +242,7 @@ static int nla_put_port_range(struct sk_buff *skb, int attrtype,
 	return nla_put(skb, attrtype, sizeof(*range), range);
 }
 
+//检查是否可匹配规则
 static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 			  struct flowi *fl, int flags,
 			  struct fib_lookup_arg *arg)
@@ -280,11 +281,13 @@ int fib_rules_lookup(struct fib_rules_ops *ops, struct flowi *fl,
 
 	rcu_read_lock();
 
+	//遍历每条rule
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 jumped:
 		if (!fib_rule_match(rule, ops, fl, flags, arg))
 			continue;
 
+		//fl匹配了此条rule,执行rule对应的action
 		if (rule->action == FR_ACT_GOTO) {
 			struct fib_rule *target;
 
@@ -292,6 +295,7 @@ jumped:
 			if (target == NULL) {
 				continue;
 			} else {
+				//跳到指定rule继续匹配
 				rule = target;
 				goto jumped;
 			}

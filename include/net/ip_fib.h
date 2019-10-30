@@ -362,7 +362,7 @@ static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 	int err = -ENETUNREACH;
 
 	flags |= FIB_LOOKUP_NOREF;
-	//如果有策略路由，则进行查询
+	//如果有策略路由，则进行策略路由查询
 	if (net->ipv4.fib_has_custom_rules)
 		return __fib_lookup(net, flp, res, flags);
 
@@ -406,6 +406,7 @@ static inline bool fib4_rules_early_flow_dissect(struct net *net,
 	if (!net->ipv4.fib_rules_require_fldissect)
 		return false;
 
+	//解析报文获得port信息
 	skb_flow_dissect_flow_keys(skb, flkeys, flag);
 	fl4->fl4_sport = flkeys->ports.src;
 	fl4->fl4_dport = flkeys->ports.dst;

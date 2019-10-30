@@ -1186,12 +1186,14 @@ EXPORT_SYMBOL(nci_free_device);
  */
 int nci_register_device(struct nci_dev *ndev)
 {
+	//nci设备注册
 	int rc;
 	struct device *dev = &ndev->nfc_dev->dev;
 	char name[32];
 
 	ndev->flags = 0;
 
+	//初始化cmd线程
 	INIT_WORK(&ndev->cmd_work, nci_cmd_work);
 	snprintf(name, sizeof(name), "%s_nci_cmd_wq", dev_name(dev));
 	ndev->cmd_wq = create_singlethread_workqueue(name);
@@ -1319,6 +1321,7 @@ int nci_send_cmd(struct nci_dev *ndev, __u16 opcode, __u8 plen, void *payload)
 
 	pr_debug("opcode 0x%x, plen %d\n", opcode, plen);
 
+	//申请skb,并填充nci控制头部
 	skb = nci_skb_alloc(ndev, (NCI_CTRL_HDR_SIZE + plen), GFP_KERNEL);
 	if (!skb) {
 		pr_err("no memory for command\n");
@@ -1333,9 +1336,11 @@ int nci_send_cmd(struct nci_dev *ndev, __u16 opcode, __u8 plen, void *payload)
 	nci_mt_set((__u8 *)hdr, NCI_MT_CMD_PKT);
 	nci_pbf_set((__u8 *)hdr, NCI_PBF_LAST);
 
+	//填充payload
 	if (plen)
 		skb_put_data(skb, payload, plen);
 
+	//将skb添加到cmd_q中
 	skb_queue_tail(&ndev->cmd_q, skb);
 	queue_work(ndev->cmd_wq, &ndev->cmd_work);
 
@@ -1504,6 +1509,7 @@ static void nci_rx_work(struct work_struct *work)
 
 static void nci_cmd_work(struct work_struct *work)
 {
+	//取nci设备
 	struct nci_dev *ndev = container_of(work, struct nci_dev, cmd_work);
 	struct sk_buff *skb;
 

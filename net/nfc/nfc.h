@@ -17,9 +17,10 @@
 #define NFC_TARGET_MODE_SLEEP 1
 
 struct nfc_protocol {
-	int id;
+	int id;//协议编号
 	struct proto *proto;
 	struct module *owner;
+	//协议对应的socket创建
 	int (*create)(struct net *net, struct socket *sock,
 		      const struct nfc_protocol *nfc_proto, int kern);
 };

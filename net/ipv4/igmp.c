@@ -2744,7 +2744,7 @@ int ip_check_mc_rcu(struct in_device *in_dev, __be32 mc_addr, __be32 src_addr, u
 
 	mc_hash = rcu_dereference(in_dev->mc_hash);
 	if (mc_hash) {
-		//有hash，采用hash进行查询
+		//有mc_hash，采用hash进行查询
 		u32 hash = hash_32((__force u32)mc_addr, MC_HASH_SZ_LOG);
 
 		for (im = rcu_dereference(mc_hash[hash]);
@@ -2754,16 +2754,18 @@ int ip_check_mc_rcu(struct in_device *in_dev, __be32 mc_addr, __be32 src_addr, u
 				break;
 		}
 	} else {
-		//无hash直接遍历
+		//无hash直接遍历mc_list
 		for_each_pmc_rcu(in_dev, im) {
 			if (im->multiaddr == mc_addr)
 				break;
 		}
 	}
 	if (im && proto == IPPROTO_IGMP) {
+		//查找到关注此组播组，且为igmp报文，则收取此报文
 		rv = 1;
 	} else if (im) {
 		if (src_addr) {
+			//对源地址进行校验（igmp协议的include,exclude机制）
 			for (psf = im->sources; psf; psf = psf->sf_next) {
 				if (psf->sf_inaddr == src_addr)
 					break;
@@ -2775,6 +2777,7 @@ int ip_check_mc_rcu(struct in_device *in_dev, __be32 mc_addr, __be32 src_addr, u
 			else
 				rv = im->sfcount[MCAST_EXCLUDE] != 0;
 		} else
+			//未指明源，则直接收取
 			rv = 1; /* unspecified source; tentatively allow */
 	}
 	return rv;

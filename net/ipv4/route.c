@@ -2115,7 +2115,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	/*
 	 *	Now we are ready to route packet.
 	 */
-	fl4.flowi4_oif = 0;
+	fl4.flowi4_oif = 0;/*出接口指定为0*/
 	fl4.flowi4_iif = dev->ifindex;
 	fl4.flowi4_mark = skb->mark;
 	fl4.flowi4_tos = tos;
@@ -2125,7 +2125,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	fl4.saddr = saddr;
 	fl4.flowi4_uid = sock_net_uid(net, NULL);
 
-	if (fib4_rules_early_flow_dissect(net, skb, &fl4, &_flkeys)) {
+	if (fib4_rules_early_flow_dissect(net, skb, &fl4, &_flkeys/*解析报文获得的参数*/)) {
 		flkeys = &_flkeys;
 	} else {
 		fl4.flowi4_proto = 0;
@@ -2320,6 +2320,7 @@ int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 		/* check l3 master if no match yet */
 		if (!our && netif_is_l3_slave(dev)) {
+			//如果不收取此组播，且dev为slave接口，则检查master dev
 			struct in_device *l3_in_dev;
 
 			l3_in_dev = __in_dev_get_rcu(skb->dev);
@@ -2335,7 +2336,7 @@ int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 		     IN_DEV_MFORWARD(in_dev))
 #endif
 		   ) {
-			//组播表查询
+			//容许接受此组播报文，执行组播表查询
 			err = ip_route_input_mc(skb, daddr, saddr,
 						tos, dev, our);
 		}

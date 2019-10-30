@@ -2017,6 +2017,7 @@ void skb_queue_tail(struct sk_buff_head *list, struct sk_buff *newsk);
 void skb_unlink(struct sk_buff *skb, struct sk_buff_head *list);
 static inline void __skb_unlink(struct sk_buff *skb, struct sk_buff_head *list)
 {
+	//将skb自list中移除掉
 	struct sk_buff *next, *prev;
 
 	list->qlen--;
