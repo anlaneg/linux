@@ -1511,6 +1511,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	 */
 	raw_spin_unlock_irqrestore(&cpu_base->lock, flags);
 	trace_hrtimer_expire_entry(timer, now);
+	//调用timer的回调
 	restart = fn(timer);
 	trace_hrtimer_expire_exit(timer);
 	raw_spin_lock_irq(&cpu_base->lock);
@@ -1580,6 +1581,7 @@ static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
 	}
 }
 
+//HRTIMER_SOFTIRQ 软中断处理函数
 static __latent_entropy void hrtimer_run_softirq(struct softirq_action *h)
 {
 	struct hrtimer_cpu_base *cpu_base = this_cpu_ptr(&hrtimer_bases);
@@ -1590,6 +1592,7 @@ static __latent_entropy void hrtimer_run_softirq(struct softirq_action *h)
 	raw_spin_lock_irqsave(&cpu_base->lock, flags);
 
 	now = hrtimer_update_base(cpu_base);
+	//运行队列的hrtimer
 	__hrtimer_run_queues(cpu_base, now, flags, HRTIMER_ACTIVE_SOFT);
 
 	cpu_base->softirq_activated = 0;
@@ -1984,6 +1987,7 @@ SYSCALL_DEFINE2(nanosleep_time32, struct old_timespec32 __user *, rqtp,
  */
 int hrtimers_prepare_cpu(unsigned int cpu)
 {
+	//处理当前cpu上的hrtimers初始化
 	struct hrtimer_cpu_base *cpu_base = &per_cpu(hrtimer_bases, cpu);
 	int i;
 
@@ -2086,6 +2090,7 @@ int hrtimers_dead_cpu(unsigned int scpu)
 void __init hrtimers_init(void)
 {
 	hrtimers_prepare_cpu(smp_processor_id());
+	//设置HRTIMER软中断处理函数
 	open_softirq(HRTIMER_SOFTIRQ, hrtimer_run_softirq);
 }
 
