@@ -67,18 +67,21 @@ EXPORT_SYMBOL_GPL(lwtunnel_state_alloc);
 static const struct lwtunnel_encap_ops __rcu *
 		lwtun_encaps[LWTUNNEL_ENCAP_MAX + 1] __read_mostly;
 
+//设置轻量级tunnel的ops,lwtun_encaps[num]为ops
 int lwtunnel_encap_add_ops(const struct lwtunnel_encap_ops *ops,
 			   unsigned int num)
 {
 	if (num > LWTUNNEL_ENCAP_MAX)
 		return -ERANGE;
 
+	//将lwtun_encaps[num]设置为ops
 	return !cmpxchg((const struct lwtunnel_encap_ops **)
 			&lwtun_encaps[num],
 			NULL, ops) ? 0 : -1;
 }
 EXPORT_SYMBOL_GPL(lwtunnel_encap_add_ops);
 
+//设置lwtun_encaps[num]为NULL
 int lwtunnel_encap_del_ops(const struct lwtunnel_encap_ops *ops,
 			   unsigned int encap_type)
 {
@@ -116,12 +119,15 @@ int lwtunnel_build_state(u16 encap_type,
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+	//取encap_type对应的opss
 	ops = rcu_dereference(lwtun_encaps[encap_type]);
+	//找到对应的ops.且存在build_state回调，则found=true
 	if (likely(ops && ops->build_state && try_module_get(ops->owner)))
 		found = true;
 	rcu_read_unlock();
 
 	if (found) {
+	    //通过build_state执行调用
 		ret = ops->build_state(encap, family, cfg, lws, extack);
 		if (ret)
 			module_put(ops->owner);
@@ -153,6 +159,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 	rcu_read_unlock();
 #ifdef CONFIG_MODULES
 	if (!ops) {
+	    //加载对应的modules
 		const char *encap_type_str = lwtunnel_encap_str(encap_type);
 
 		if (encap_type_str) {
@@ -300,6 +307,7 @@ int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 		return 0;
 
 	rcu_read_lock();
+	//执行对应ops的cmp_encap
 	ops = rcu_dereference(lwtun_encaps[a->type]);
 	if (likely(ops && ops->cmp_encap))
 		ret = ops->cmp_encap(a, b);
@@ -326,6 +334,7 @@ int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+	//执行对应ops的output
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->output))
 		ret = ops->output(net, sk, skb);
@@ -361,6 +370,7 @@ int lwtunnel_xmit(struct sk_buff *skb)
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+	//执行对应ops的xmit
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->xmit))
 		ret = ops->xmit(skb);
@@ -395,6 +405,7 @@ int lwtunnel_input(struct sk_buff *skb)
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+	//执行对应ops的input
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->input))
 		ret = ops->input(skb);

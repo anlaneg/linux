@@ -57,7 +57,7 @@ struct ila_addr {
 	union {
 		struct in6_addr addr;
 		struct {
-			struct ila_locator loc;
+			struct ila_locator loc;//loc占用ipv6地址的高64bits
 			struct ila_identifier ident;
 		};
 	};
@@ -105,7 +105,7 @@ struct ila_net {
 		struct rhashtable rhash_table;
 		spinlock_t *locks; /* Bucket locks for entry manipulation */
 		unsigned int locks_mask;
-		bool hooks_registered;
+		bool hooks_registered;//netfilter hook点是否已注册
 	} xlat;
 };
 

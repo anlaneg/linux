@@ -555,11 +555,12 @@ struct warn_args {
 	va_list args;
 };
 
-void __warn(const char *file, int line, void *caller, unsigned taint,
+void __warn(const char *file, int line, void *caller/*警告函数的名称*/, unsigned taint,
 	    struct pt_regs *regs, struct warn_args *args)
 {
 	disable_trace_on_warning();
 
+	//有文件名，显示告警的文件名及行号
 	if (file)
 		pr_warn("WARNING: CPU: %d PID: %d at %s:%d %pS\n",
 			raw_smp_processor_id(), current->pid, file, line,
@@ -582,15 +583,18 @@ void __warn(const char *file, int line, void *caller, unsigned taint,
 		panic("panic_on_warn set ...\n");
 	}
 
+	//显示当前加载的所有modules
 	print_modules();
 
 	if (regs)
 		show_regs(regs);
 	else
+	    //显示调用栈
 		dump_stack();
 
 	print_irqtrace_events(current);
 
+	//显示trace结尾
 	print_oops_end_marker();
 
 	/* Just a warning, don't kill lockdep. */
@@ -603,6 +607,7 @@ void warn_slowpath_fmt(const char *file, int line, unsigned taint,
 {
 	struct warn_args args;
 
+	//显示cut line
 	pr_warn(CUT_HERE);
 
 	if (!fmt) {

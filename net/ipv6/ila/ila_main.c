@@ -91,6 +91,7 @@ static int __init ila_init(void)
 	if (ret)
 		goto register_device_fail;
 
+	//注册ila netlink消息
 	ret = genl_register_family(&ila_nl_family);
 	if (ret)
 		goto register_family_fail;

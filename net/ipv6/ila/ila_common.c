@@ -79,17 +79,21 @@ static void ila_csum_adjust_transport(struct sk_buff *skb,
 	__wsum diff;
 
 	switch (ip6h->nexthdr) {
+	//下一层头部为tcp时
 	case NEXTHDR_TCP:
 		if (likely(pskb_may_pull(skb, nhoff + sizeof(struct tcphdr)))) {
+		    //取tcp头部
 			struct tcphdr *th = (struct tcphdr *)
 					(skb_network_header(skb) + nhoff);
 
+			//更新tcp的checksum
 			diff = get_csum_diff(ip6h, p);
 			inet_proto_csum_replace_by_diff(&th->check, skb,
 							diff, true);
 		}
 		break;
 	case NEXTHDR_UDP:
+	    //更新udp checksum
 		if (likely(pskb_may_pull(skb, nhoff + sizeof(struct udphdr)))) {
 			struct udphdr *uh = (struct udphdr *)
 					(skb_network_header(skb) + nhoff);
@@ -104,6 +108,7 @@ static void ila_csum_adjust_transport(struct sk_buff *skb,
 		}
 		break;
 	case NEXTHDR_ICMP:
+	    //更新icmp checksum
 		if (likely(pskb_may_pull(skb,
 					 nhoff + sizeof(struct icmp6hdr)))) {
 			struct icmp6hdr *ih = (struct icmp6hdr *)
@@ -120,11 +125,13 @@ static void ila_csum_adjust_transport(struct sk_buff *skb,
 void ila_update_ipv6_locator(struct sk_buff *skb, struct ila_params *p,
 			     bool sir2ila)
 {
+    //源报文的ipv6头部及其目的地址
 	struct ipv6hdr *ip6h = ipv6_hdr(skb);
 	struct ila_addr *iaddr = ila_a2i(&ip6h->daddr);
 
 	switch (p->csum_mode) {
 	case ILA_CSUM_ADJUST_TRANSPORT:
+	    //直接调整传输层checksum
 		ila_csum_adjust_transport(skb, p);
 		break;
 	case ILA_CSUM_NEUTRAL_MAP:
@@ -151,5 +158,6 @@ void ila_update_ipv6_locator(struct sk_buff *skb, struct ila_params *p,
 	}
 
 	/* Now change destination address */
+	//更改ipv6目的地址为p->locator(仅变更locator部分）
 	iaddr->loc = p->locator;
 }

@@ -451,6 +451,7 @@ done:
 }
 #endif
 
+//nfc的usb驱动
 static struct usb_driver nfcmrvl_usb_driver = {
 	.name		= "nfcmrvl",
 	.probe		= nfcmrvl_probe,

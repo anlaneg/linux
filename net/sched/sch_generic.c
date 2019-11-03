@@ -451,6 +451,7 @@ static void dev_watchdog(struct timer_list *t)
 			//调用ndo_tx_timeout完成超时处理
 			if (some_queue_timedout) {
 				trace_net_dev_xmit_timeout(dev, i);
+				//显示网络设备第i个队列超时
 				WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: %s (%s): transmit queue %u timed out\n",
 				       dev->name, netdev_drivername(dev), i);
 				dev->netdev_ops->ndo_tx_timeout(dev);
@@ -470,6 +471,7 @@ static void dev_watchdog(struct timer_list *t)
 
 void __netdev_watchdog_up(struct net_device *dev)
 {
+    //设备必须要有ndo_tx_timeout才启用watchdog
 	if (dev->netdev_ops->ndo_tx_timeout) {
 		if (dev->watchdog_timeo <= 0)
 			dev->watchdog_timeo = 5*HZ;
@@ -1166,6 +1168,7 @@ void dev_activate(struct net_device *dev)
 		return;
 
 	need_watchdog = 0;
+	//只要有一个tx队列需要watchdog,则watchdog为1
 	netdev_for_each_tx_queue(dev, transition_one_qdisc, &need_watchdog);
 	if (dev_ingress_queue(dev))
 		transition_one_qdisc(dev, dev_ingress_queue(dev), NULL);

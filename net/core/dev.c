@@ -2846,6 +2846,7 @@ EXPORT_SYMBOL(netif_schedule_queue);
 
 void netif_tx_wake_queue(struct netdev_queue *dev_queue)
 {
+    //清除掉队列上的stop标记，并尝试调度tx软中断
 	if (test_and_clear_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state)) {
 		struct Qdisc *q;
 
@@ -3952,6 +3953,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 			HARD_TX_LOCK(dev, txq, cpu);
 
+			//如果txq没有stop,则执行报文发送
 			if (!netif_xmit_stopped(txq)) {
 				dev_xmit_recursion_inc();
 				//调用ndo_start_xmit完成dev设备单个skb的发送
@@ -3975,6 +3977,7 @@ recursion_alert:
 		}
 	}
 
+	//发送失败，报文丢弃
 	rc = -ENETDOWN;
 	rcu_read_unlock_bh();
 
@@ -8880,6 +8883,7 @@ static int netif_alloc_netdev_queues(struct net_device *dev)
 	return 0;
 }
 
+//停止所有队列
 void netif_tx_stop_all_queues(struct net_device *dev)
 {
 	unsigned int i;

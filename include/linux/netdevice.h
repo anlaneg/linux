@@ -3138,6 +3138,7 @@ static inline void netif_tx_schedule_all(struct net_device *dev)
 		netif_schedule_queue(netdev_get_tx_queue(dev, i));
 }
 
+//清除掉队列上的driver xmit off标记
 static __always_inline void netif_tx_start_queue(struct netdev_queue *dev_queue)
 {
 	clear_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state);
@@ -3151,9 +3152,11 @@ static __always_inline void netif_tx_start_queue(struct netdev_queue *dev_queue)
  */
 static inline void netif_start_queue(struct net_device *dev)
 {
+    //使能此设备的0 tx队列
 	netif_tx_start_queue(netdev_get_tx_queue(dev, 0));
 }
 
+//使能此设备的所有队列
 static inline void netif_tx_start_all_queues(struct net_device *dev)
 {
 	unsigned int i;
@@ -3188,6 +3191,7 @@ static inline void netif_tx_wake_all_queues(struct net_device *dev)
 	}
 }
 
+//设置queue为stop状态
 static __always_inline void netif_tx_stop_queue(struct netdev_queue *dev_queue)
 {
 	set_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state);
@@ -3202,11 +3206,13 @@ static __always_inline void netif_tx_stop_queue(struct netdev_queue *dev_queue)
  */
 static inline void netif_stop_queue(struct net_device *dev)
 {
+    //停止0号tx队列
 	netif_tx_stop_queue(netdev_get_tx_queue(dev, 0));
 }
 
 void netif_tx_stop_all_queues(struct net_device *dev);
 
+//检查指定tx队列是否off
 static inline bool netif_tx_queue_stopped(const struct netdev_queue *dev_queue)
 {
 	return test_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state);
@@ -3443,6 +3449,7 @@ static inline void netif_start_subqueue(struct net_device *dev, u16 queue_index)
 {
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, queue_index);
 
+	//使能tx队列，使可向此队列发包
 	netif_tx_start_queue(txq);
 }
 
@@ -3455,6 +3462,7 @@ static inline void netif_start_subqueue(struct net_device *dev, u16 queue_index)
  */
 static inline void netif_stop_subqueue(struct net_device *dev, u16 queue_index)
 {
+    //置指定队列为stop状态
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, queue_index);
 	netif_tx_stop_queue(txq);
 }
@@ -4048,6 +4056,7 @@ static inline void netif_tx_lock(struct net_device *dev)
 		 * checked the frozen bit.
 		 */
 		__netif_tx_lock(txq, cpu);
+		//冻结txq的状态
 		set_bit(__QUEUE_STATE_FROZEN, &txq->state);
 		__netif_tx_unlock(txq);
 	}
@@ -4110,6 +4119,7 @@ static inline void netif_tx_disable(struct net_device *dev)
 
 	local_bh_disable();
 	cpu = smp_processor_id();
+	//置dev的所有队列为stop状态
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
 

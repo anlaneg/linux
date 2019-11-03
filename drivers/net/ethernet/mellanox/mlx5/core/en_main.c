@@ -4333,6 +4333,7 @@ unlock:
 	rtnl_unlock();
 }
 
+//监测tx queue超时
 static void mlx5e_tx_timeout(struct net_device *dev)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);

@@ -12,7 +12,7 @@
 
 struct ila_xlat_params {
 	struct ila_params ip;
-	int ifindex;
+	int ifindex;//非0时为有效ifindex
 };
 
 struct ila_map {
@@ -82,6 +82,7 @@ static inline int ila_order(struct ila_map *ila)
 	return score;
 }
 
+//hash表参数
 static const struct rhashtable_params rht_params = {
 	.nelem_hint = 1024,
 	.head_offset = offsetof(struct ila_map, node),
@@ -125,16 +126,19 @@ static int parse_nl_config(struct genl_info *info,
 
 /* Must be called with rcu readlock */
 static inline struct ila_map *ila_lookup_wildcards(struct ila_addr *iaddr,
-						   int ifindex,
+						   int ifindex/*接口index*/,
 						   struct ila_net *ilan)
 {
 	struct ila_map *ila;
 
+	//通过loc查询ila
 	ila = rhashtable_lookup_fast(&ilan->xlat.rhash_table, &iaddr->loc,
 				     rht_params);
 	while (ila) {
+	    //如果ila没有指定ifindex,则匹配，或者ila指定的ifindex相等，则匹配
 		if (!ila_cmp_wildcards(ila, iaddr, ifindex))
 			return ila;
+		//尝试下一个
 		ila = rcu_access_pointer(ila->next);
 	}
 
@@ -192,6 +196,7 @@ ila_nf_input(void *priv,
 	return NF_ACCEPT;
 }
 
+//pre_routing时进入此hook点,完成目的ip地址的location转换
 static const struct nf_hook_ops ila_nf_hook_ops[] = {
 	{
 		.hook = ila_nf_input,
@@ -208,10 +213,12 @@ static int ila_add_mapping(struct net *net, struct ila_xlat_params *xp)
 	spinlock_t *lock = ila_get_lock(ilan, xp->ip.locator_match);
 	int err = 0, order;
 
+	//如果hook点未注册，则执行注册
 	if (!ilan->xlat.hooks_registered) {
 		/* We defer registering net hooks in the namespace until the
 		 * first mapping is added.
 		 */
+	    //注册ila对应的hook点
 		err = nf_register_net_hooks(net, ila_nf_hook_ops,
 					    ARRAY_SIZE(ila_nf_hook_ops));
 		if (err)
@@ -220,6 +227,7 @@ static int ila_add_mapping(struct net *net, struct ila_xlat_params *xp)
 		ilan->xlat.hooks_registered = true;
 	}
 
+	//构造待查询参数，并加入到xlat.rhash_table中
 	ila = kzalloc(sizeof(*ila), GFP_KERNEL);
 	if (!ila)
 		return -ENOMEM;
@@ -236,10 +244,12 @@ static int ila_add_mapping(struct net *net, struct ila_xlat_params *xp)
 				      &xp->ip.locator_match,
 				      rht_params);
 	if (!head) {
+	    //不存在，执行查询
 		/* New entry for the rhash_table */
 		err = rhashtable_lookup_insert_fast(&ilan->xlat.rhash_table,
 						    &ila->node, rht_params);
 	} else {
+	    //已存在，执行更新
 		struct ila_map *tila = head, *prev = NULL;
 
 		do {
@@ -348,10 +358,12 @@ int ila_xlat_nl_cmd_add_mapping(struct sk_buff *skb, struct genl_info *info)
 	struct ila_xlat_params p;
 	int err;
 
+	//执行消息解析，生成参数p
 	err = parse_nl_config(info, &p);
 	if (err)
 		return err;
 
+	//将p加入到表内，完成查询
 	return ila_add_mapping(net, &p);
 }
 
@@ -630,12 +642,16 @@ void ila_xlat_exit_net(struct net *net)
 					ARRAY_SIZE(ila_nf_hook_ops));
 }
 
+//依据ipv6的原始目的ip地址，查询表ilan->xlat.rhash_table，一旦有命中
+//则依据查询出来的参数，但改ipv6原始目的ip地址的loc部分（相当于做nat)
 static int ila_xlat_addr(struct sk_buff *skb, bool sir2ila)
 {
 	struct ila_map *ila;
+	//取ipv6头部
 	struct ipv6hdr *ip6h = ipv6_hdr(skb);
 	struct net *net = dev_net(skb->dev);
 	struct ila_net *ilan = net_generic(net, ila_net_id);
+	//取ipv6目的mac地址
 	struct ila_addr *iaddr = ila_a2i(&ip6h->daddr);
 
 	/* Assumes skb contains a valid IPv6 header that is pulled */
@@ -647,7 +663,7 @@ static int ila_xlat_addr(struct sk_buff *skb, bool sir2ila)
 
 	rcu_read_lock();
 
-	ila = ila_lookup_wildcards(iaddr, skb->dev->ifindex, ilan);
+	ila = ila_lookup_wildcards(iaddr/*目的ip*/, skb->dev->ifindex, ilan);
 	if (ila)
 		ila_update_ipv6_locator(skb, &ila->xp.ip, sir2ila);
 

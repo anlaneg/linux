@@ -5,6 +5,7 @@
 #include <linux/compiler.h>
 #include <stdio.h>
 
+//告警日志显示(显示到stderr中）
 #define __WARN_printf(arg...)	do { fprintf(stderr, arg); } while (0)
 
 #define WARN(condition, format...) ({		\
@@ -33,6 +34,7 @@
 	unlikely(__ret_warn_once);			\
 })
 
+//通过静态变量，实现仅告警一次
 #define WARN_ONCE(condition, format...)	({	\
 	static int __warned;			\
 	int __ret_warn_once = !!(condition);	\

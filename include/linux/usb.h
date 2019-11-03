@@ -1275,6 +1275,7 @@ extern int usb_register_driver(struct usb_driver *, struct module *,
 			       const char *);
 
 /* use a define to avoid include chaining to get THIS_MODULE & friends */
+//注册usb驱动
 #define usb_register(driver) \
 	usb_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
 
