@@ -1301,8 +1301,10 @@ static void mlx5e_tc_del_fdb_flow(struct mlx5e_priv *priv,
 	mlx5_eswitch_del_vlan_action(esw, attr);
 
 	for (out_index = 0; out_index < MLX5_MAX_FLOW_FWD_VPORTS; out_index++)
-		if (attr->dests[out_index].flags & MLX5_ESW_DEST_ENCAP)
+		if (attr->dests[out_index].flags & MLX5_ESW_DEST_ENCAP) {
 			mlx5e_detach_encap(priv, flow, out_index);
+			kfree(attr->parse_attr->tun_info[out_index]);
+		}
 	kvfree(attr->parse_attr);
 
 	if (attr->action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR)
@@ -1582,6 +1584,7 @@ static void mlx5e_encap_dealloc(struct mlx5e_priv *priv, struct mlx5e_encap_entr
 			mlx5_packet_reformat_dealloc(priv->mdev, e->pkt_reformat);
 	}
 
+	kfree(e->tun_info);
 	kfree(e->encap_header);
 	kfree_rcu(e, rcu);
 }
@@ -3032,6 +3035,13 @@ mlx5e_encap_get(struct mlx5e_priv *priv, struct encap_key *key,
 	return NULL;
 }
 
+static struct ip_tunnel_info *dup_tun_info(const struct ip_tunnel_info *tun_info)
+{
+	size_t tun_size = sizeof(*tun_info) + tun_info->options_len;
+
+	return kmemdup(tun_info, tun_size, GFP_KERNEL);
+}
+
 //将flow attach到指定的encap_id上，如果此id不存在向fw申请
 static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 			      struct mlx5e_tc_flow *flow,
@@ -3091,13 +3101,15 @@ static int mlx5e_attach_encap(struct mlx5e_priv *priv,
 	refcount_set(&e->refcnt, 1);
 	init_completion(&e->res_ready);
 
+	tun_info = dup_tun_info(tun_info);
+	if (!tun_info) {
+		err = -ENOMEM;
+		goto out_err_init;
+	}
 	e->tun_info = tun_info;
 	err = mlx5e_tc_tun_init_encap_attr(mirred_dev, priv, e, extack);
-	if (err) {
-		kfree(e);
-		e = NULL;
-		goto out_err;
-	}
+	if (err)
+		goto out_err_init;
 
 	INIT_LIST_HEAD(&e->flows);
 	hash_add_rcu(esw->offloads.encap_tbl, &e->encap_hlist, hash_key);
@@ -3139,6 +3151,12 @@ out_err:
 	mutex_unlock(&esw->offloads.encap_tbl_lock);
 	if (e)
 		mlx5e_encap_put(priv, e);
+	return err;
+
+out_err_init:
+	mutex_unlock(&esw->offloads.encap_tbl_lock);
+	kfree(tun_info);
+	kfree(e);
 	return err;
 }
 
@@ -3232,7 +3250,7 @@ static int add_vlan_pop_action(struct mlx5e_priv *priv,
 			       struct mlx5_esw_flow_attr *attr,
 			       u32 *action)
 {
-	int nest_level = vlan_get_encap_level(attr->parse_attr->filter_dev);
+	int nest_level = attr->parse_attr->filter_dev->lower_level;
 	struct flow_action_entry vlan_act = {
 		.id = FLOW_ACTION_VLAN_POP,
 	};
@@ -3380,7 +3398,9 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				//报文需要tunnel封装，记录封装信息
 				parse_attr->mirred_ifindex[attr->out_count] =
 					out_dev->ifindex;
-				parse_attr->tun_info[attr->out_count] = info;
+				parse_attr->tun_info[attr->out_count] = dup_tun_info(info);
+				if (!parse_attr->tun_info[attr->out_count])
+					return -ENOMEM;
 				encap = false;
 				//指明输出时需要隧道封装
 				attr->dests[attr->out_count].flags |=

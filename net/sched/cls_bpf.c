@@ -163,16 +163,20 @@ static int cls_bpf_offload_cmd(struct tcf_proto *tp, struct cls_bpf_prog *prog,
 	cls_bpf.exts_integrated = obj->exts_integrated;
 
 	//触发bpf offload到驱动
-	if (oldprog)
+	if (oldprog && prog)
 		err = tc_setup_cb_replace(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
 					  skip_sw, &oldprog->gen_flags,
 					  &oldprog->in_hw_count,
 					  &prog->gen_flags, &prog->in_hw_count,
 					  true);
-	else
+	else if (prog)
 		err = tc_setup_cb_add(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
 				      skip_sw, &prog->gen_flags,
 				      &prog->in_hw_count, true);
+	else
+		err = tc_setup_cb_destroy(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
+					  skip_sw, &oldprog->gen_flags,
+					  &oldprog->in_hw_count, true);
 
 	if (prog && err) {
 		cls_bpf_offload_cmd(tp, oldprog, prog, extack);

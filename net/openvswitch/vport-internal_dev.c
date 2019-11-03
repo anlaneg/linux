@@ -148,7 +148,7 @@ static void do_setup(struct net_device *netdev)
 			      IFF_NO_QUEUE;
 	netdev->needs_free_netdev = true;
 	//注册私有数据释放函数
-	netdev->priv_destructor = internal_dev_destructor;
+	netdev->priv_destructor = NULL;
 	netdev->ethtool_ops = &internal_dev_ethtool_ops;
 	netdev->rtnl_link_ops = &internal_dev_link_ops;
 
@@ -172,7 +172,6 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 	struct internal_dev *internal_dev;
 	struct net_device *dev;
 	int err;
-	bool free_vport = true;
 
 	vport = ovs_vport_alloc(0, &ovs_internal_vport_ops, parms);
 	if (IS_ERR(vport)) {
@@ -207,10 +206,9 @@ static struct vport *internal_dev_create(const struct vport_parms *parms)
 	rtnl_lock();
 	//网络设备注册
 	err = register_netdevice(vport->dev);
-	if (err) {
-		free_vport = false;
+	if (err)
 		goto error_unlock;
-	}
+	vport->dev->priv_destructor = internal_dev_destructor;
 
 	dev_set_promiscuity(vport->dev, 1);
 	rtnl_unlock();
@@ -224,8 +222,7 @@ error_unlock:
 error_free_netdev:
 	free_netdev(dev);
 error_free_vport:
-	if (free_vport)
-		ovs_vport_free(vport);
+	ovs_vport_free(vport);
 error:
 	return ERR_PTR(err);
 }
