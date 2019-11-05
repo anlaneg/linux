@@ -3243,7 +3243,7 @@ __tc_setup_cb_call(struct tcf_block *block, enum tc_setup_type type,
 
 	//遍历cb_list，逐个执行cb调用
 	list_for_each_entry(block_cb, &block->flow_block.cb_list, list) {
-		err = block_cb->cb(type, type_data, block_cb->cb_priv);
+		err = block_cb->cb(type/*type类型的setup*/, type_data, block_cb->cb_priv);
 		if (err) {
 			//出错，如果出错需要停止，则返回error
 			if (err_stop)

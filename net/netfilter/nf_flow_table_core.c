@@ -290,6 +290,7 @@ flow_offload_lookup(struct nf_flowtable *flow_table,
 }
 EXPORT_SYMBOL_GPL(flow_offload_lookup);
 
+//遍历nf_flowtable 针对其每一个元素，调用iter回调
 static int
 nf_flow_table_iterate(struct nf_flowtable *flow_table,
 		      void (*iter)(struct flow_offload *flow, void *data),
@@ -316,6 +317,7 @@ nf_flow_table_iterate(struct nf_flowtable *flow_table,
 
 		flow = container_of(tuplehash, struct flow_offload, tuplehash[0]);
 
+		//针对单个flow,调用iter回调
 		iter(flow, data);
 	}
 	rhashtable_walk_stop(&hti);
@@ -493,6 +495,8 @@ static void nf_flow_table_do_cleanup(struct flow_offload *flow, void *data)
 		flow_offload_teardown(flow);
 		return;
 	}
+
+	//存在流涉及到此dev,则dead流
 	if (net_eq(nf_ct_net(e->ct), dev_net(dev)) &&
 	    (flow->tuplehash[0].tuple.iifidx == dev->ifindex ||
 	     flow->tuplehash[1].tuple.iifidx == dev->ifindex))
@@ -502,6 +506,7 @@ static void nf_flow_table_do_cleanup(struct flow_offload *flow, void *data)
 static void nf_flow_table_iterate_cleanup(struct nf_flowtable *flowtable,
 					  struct net_device *dev)
 {
+	//针对flowtable，遍历每个元素，并调用nf_flow_table_do_cleanup
 	nf_flow_table_iterate(flowtable, nf_flow_table_do_cleanup, dev);
 	flush_delayed_work(&flowtable->gc_work);
 }
@@ -511,6 +516,7 @@ void nf_flow_table_cleanup(struct net_device *dev)
 	struct nf_flowtable *flowtable;
 
 	mutex_lock(&flowtable_lock);
+	//遍历所有flowtables表，
 	list_for_each_entry(flowtable, &flowtables, list)
 		nf_flow_table_iterate_cleanup(flowtable, dev);
 	mutex_unlock(&flowtable_lock);

@@ -118,13 +118,13 @@ struct rhashtable_walker {
  * @skip: Number of entries to skip in slot
  */
 struct rhashtable_iter {
-	struct rhashtable *ht;
+	struct rhashtable *ht;/*要遍历的hashtable*/
 	struct rhash_head *p;
 	struct rhlist_head *list;
 	struct rhashtable_walker walker;
 	unsigned int slot;
 	unsigned int skip;
-	bool end_of_table;
+	bool end_of_table;//是否遍历table结束
 };
 
 int rhashtable_init(struct rhashtable *ht,

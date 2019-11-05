@@ -84,6 +84,7 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 	if (nft_flow_offload_skip(pkt->skb, nft_pf(pkt)))
 		goto out;
 
+	//取skb对应的ct
 	ct = nf_ct_get(pkt->skb, &ctinfo);
 	if (!ct)
 		goto out;
@@ -101,10 +102,12 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 		goto out;
 	}
 
+	//有helper或者seq需要调整，则不能offload
 	if (nf_ct_ext_exist(ct, NF_CT_EXT_HELPER) ||
 	    ct->status & IPS_SEQ_ADJUST)
 		goto out;
 
+	//ct未confirm,不能offload
 	if (!nf_ct_is_confirmed(ct))
 		goto out;
 
@@ -242,6 +245,7 @@ static int flow_offload_netdev_event(struct notifier_block *this,
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
+	//仅处理netdev down事件，如果有dev down,则清理相应的flow
 	if (event != NETDEV_DOWN)
 		return NOTIFY_DONE;
 
