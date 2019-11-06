@@ -64,6 +64,7 @@ static bool udp_error(struct sk_buff *skb,
 	}
 
 	/* Packet with no checksum */
+	//udp的checksum字段为0，不执行checksum检查
 	if (!hdr->check)
 		return false;
 
@@ -72,7 +73,7 @@ static bool udp_error(struct sk_buff *skb,
 	 * because the checksum is assumed to be correct.
 	 * FIXME: Source route IP option packets --RR */
 	if (state->hook == NF_INET_PRE_ROUTING &&
-	    state->net->ct.sysctl_checksum &&
+	    state->net->ct.sysctl_checksum /*如果开启了checksum,则将checksum校验失败的报文丢掉*/&&
 	    nf_checksum(skb, state->hook, dataoff, IPPROTO_UDP, state->pf)) {
 		udp_error_log(skb, state, "bad checksum");
 		return true;
@@ -84,12 +85,13 @@ static bool udp_error(struct sk_buff *skb,
 /* Returns verdict for packet, and may modify conntracktype */
 int nf_conntrack_udp_packet(struct nf_conn *ct,
 			    struct sk_buff *skb,
-			    unsigned int dataoff,
-			    enum ip_conntrack_info ctinfo,
-			    const struct nf_hook_state *state)
+			    unsigned int dataoff/*到l4头部的偏移量*/,
+			    enum ip_conntrack_info ctinfo/*连接跟踪状态*/,
+			    const struct nf_hook_state *state/*hook上下文*/)
 {
 	unsigned int *timeouts;
 
+	//udp报文有效性检查
 	if (udp_error(skb, dataoff, state))
 		return -NF_ACCEPT;
 

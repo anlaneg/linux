@@ -627,6 +627,7 @@ static inline bool tc_flags_valid(u32 flags)
 	return true;
 }
 
+//检查tc规则是否在hardware中
 static inline bool tc_in_hw(u32 flags)
 {
 	return (flags & TCA_CLS_FLAGS_IN_HW) ? true : false;

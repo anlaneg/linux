@@ -156,6 +156,7 @@ unsigned int nf_confirm(struct sk_buff *skb, unsigned int protoff,
 }
 EXPORT_SYMBOL_GPL(nf_confirm);
 
+//confirm此ct
 static unsigned int ipv4_confirm(void *priv,
 				 struct sk_buff *skb,
 				 const struct nf_hook_state *state)
@@ -167,6 +168,7 @@ static unsigned int ipv4_confirm(void *priv,
 	if (!ct || ctinfo == IP_CT_RELATED_REPLY)
 		return nf_conntrack_confirm(skb);
 
+	//如果有ct即confirm此报文
 	return nf_confirm(skb,
 			  skb_network_offset(skb) + ip_hdrlen(skb),
 			  ct, ctinfo);

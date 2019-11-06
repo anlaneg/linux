@@ -61,7 +61,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_locks);
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
-//保存ct的hashtable
+//保存ct的hashtable（全局的）
 struct hlist_nulls_head *nf_conntrack_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_hash);
 
@@ -175,6 +175,7 @@ static void nf_conntrack_all_unlock(void)
 	spin_unlock(&nf_conntrack_locks_all_lock);
 }
 
+//系统连接跟踪表大小
 unsigned int nf_conntrack_htable_size __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 
@@ -289,8 +290,9 @@ nf_ct_get_tuple(const struct sk_buff *skb,
 		break;
 	}
 
+	//填充4层协议
 	tuple->dst.protonum = protonum;
-	tuple->dst.dir = IP_CT_DIR_ORIGINAL;
+	tuple->dst.dir = IP_CT_DIR_ORIGINAL;/*默认为发起方向*/
 
 	//按l4协议号执行解析
 	switch (protonum) {
@@ -342,8 +344,9 @@ static int ipv4_get_l4proto(const struct sk_buff *skb, unsigned int nhoff/*到�
 	/* Conntrack defragments packets, we might still see fragments
 	 * inside ICMP packets though.
 	 */
+	//非首片，无法完整解析，返回失败
 	if (iph->frag_off & htons(IP_OFFSET))
-		return -1;//非首片，无法完整解析，返回失败
+		return -1;
 
 	//到网络层负载的偏移量（即l4层头部起始位置）
 	dataoff = nhoff + (iph->ihl << 2);
@@ -389,7 +392,7 @@ static int ipv6_get_l4proto(const struct sk_buff *skb, unsigned int nhoff,
 }
 #endif
 
-//返回到l4层的offset
+//返回到l4层的offset，l4层协议号
 static int get_l4proto(const struct sk_buff *skb,
 		       unsigned int nhoff, u8 pf, u8 *l4num/*出参,l4层协议号*/)
 {
@@ -398,7 +401,7 @@ static int get_l4proto(const struct sk_buff *skb,
 		return ipv4_get_l4proto(skb, nhoff, l4num);
 #if IS_ENABLED(CONFIG_IPV6)
 	case NFPROTO_IPV6:
-		//ipv6报文情况
+		//解析ipv6报文情况
 		return ipv6_get_l4proto(skb, nhoff, l4num);
 #endif
 	default:
@@ -453,7 +456,7 @@ nf_ct_invert_tuple(struct nf_conntrack_tuple *inverse,
 	//构造4层的反向元组
 	inverse->dst.protonum = orig->dst.protonum;
 
-	//对icmp,icmpv6执行特殊处理（举个例如echo(8),需要reply(0)来构造反向）
+	//对icmp,icmpv6执行特殊处理（举个例子，如echo(8),需要reply(0)来构造反向）
 	switch (orig->dst.protonum) {
 	case IPPROTO_ICMP:
 		return nf_conntrack_invert_icmp_tuple(inverse, orig);
@@ -531,6 +534,7 @@ static void nf_ct_add_to_dying_list(struct nf_conn *ct)
 }
 
 /* must be called with local_bh_disable */
+//将ct添加到unconfirm链上
 static void nf_ct_add_to_unconfirmed_list(struct nf_conn *ct)
 {
 	struct ct_pcpu *pcpu;
@@ -540,7 +544,7 @@ static void nf_ct_add_to_unconfirmed_list(struct nf_conn *ct)
 	pcpu = per_cpu_ptr(nf_ct_net(ct)->ct.pcpu_lists, ct->cpu);
 
 	spin_lock(&pcpu->lock);
-	//记录本cpu上未双向通信的ct
+	//添加到本cpu上未实现双向通信的ct
 	hlist_nulls_add_head(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode,
 			     &pcpu->unconfirmed);
 	spin_unlock(&pcpu->lock);
@@ -556,6 +560,7 @@ static void nf_ct_del_from_dying_or_unconfirmed_list(struct nf_conn *ct)
 
 	spin_lock(&pcpu->lock);
 	BUG_ON(hlist_nulls_unhashed(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode));
+	//hnnode有可以挂接在confirmed链表上
 	hlist_nulls_del_rcu(&ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode);
 	spin_unlock(&pcpu->lock);
 }
@@ -718,7 +723,7 @@ nf_ct_key_equal(struct nf_conntrack_tuple_hash *h,
 	 */
 	return nf_ct_tuple_equal(tuple, &h->tuple) &&
 	       nf_ct_zone_equal(ct, zone, NF_CT_DIRECTION(h)) &&
-	       nf_ct_is_confirmed(ct) &&
+	       nf_ct_is_confirmed(ct) && /*必须为confirmed的ct*/
 	       net_eq(net, nf_ct_net(ct));
 }
 
@@ -761,6 +766,7 @@ ____nf_conntrack_find(struct net *net, const struct nf_conntrack_zone *zone,
 	unsigned int bucket, hsize;
 
 begin:
+    //取hash表并映射到桶,执行ct查询
 	nf_conntrack_get_ht(&ct_hash, &hsize);
 	bucket = reciprocal_scale(hash, hsize);
 
@@ -774,7 +780,7 @@ begin:
 			continue;
 		}
 
-		//检查元组是否一致
+		//检查元组是否一致(只考虑confirmed的ct)
 		if (nf_ct_key_equal(h, tuple, zone, net))
 			return h;
 	}
@@ -809,6 +815,7 @@ __nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 		 */
 		ct = nf_ct_tuplehash_to_ctrack(h);
 		if (likely(atomic_inc_not_zero(&ct->ct_general.use))) {
+		    //增加对此ct的引用，再检查一遍（为什么还需要再一遍确认？）
 			if (likely(nf_ct_key_equal(h, tuple, zone, net)))
 				goto found;
 
@@ -1004,6 +1011,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	 * unconfirmed conntrack.
 	 */
 	if (unlikely(nf_ct_is_confirmed(ct))) {
+	    //如果已confirm,则直接丢包
 		WARN_ON_ONCE(1);
 		nf_conntrack_double_unlock(hash, reply_hash);
 		local_bh_enable();
@@ -1026,7 +1034,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	/* See if there's one in the list already, including reverse:
 	   NAT could have grabbed it without realizing, since we're
 	   not in the hash.  If there is, we lost race. */
-	hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[hash], hnnode)
+	hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[hash/*正方向hash*/], hnnode)
 		if (nf_ct_key_equal(h, &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
 				    zone, net))
 			goto out;
@@ -1373,13 +1381,13 @@ static void conntrack_gc_work_init(struct conntrack_gc_work *gc_work)
 	gc_work->exiting = false;
 }
 
-//申请元组空间，并填充
+//申请元组空间，并填充正反元组信息（填充了反向元组的hnnode.pprev，使其为正向元组的hash值）
 static struct nf_conn *
 __nf_conntrack_alloc(struct net *net,
-		     const struct nf_conntrack_zone *zone,
+		     const struct nf_conntrack_zone *zone,/*ct对应的zone*/
 		     const struct nf_conntrack_tuple *orig,/*正方向元组*/
 		     const struct nf_conntrack_tuple *repl,/*反方向元组*/
-		     gfp_t gfp, u32 hash/*元组对应的hash*/)
+		     gfp_t gfp, u32 hash/*正方向元组对应的hash*/)
 {
 	struct nf_conn *ct;
 
@@ -1388,7 +1396,7 @@ __nf_conntrack_alloc(struct net *net,
 
 	if (nf_conntrack_max &&
 	    unlikely(atomic_read(&net->ct.count) > nf_conntrack_max)) {
-		//net namespace情况下ct数量超限
+		//要创建的ct数量超限
 		if (!early_drop(net, hash)) {
 			if (!conntrack_gc_work.early_drop)
 				conntrack_gc_work.early_drop = true;
@@ -1412,7 +1420,7 @@ __nf_conntrack_alloc(struct net *net,
 	ct->tuplehash[IP_CT_DIR_ORIGINAL].hnnode.pprev = NULL;
 	ct->tuplehash[IP_CT_DIR_REPLY].tuple = *repl;
 	/* save hash for reusing when confirming */
-	//在pprev中记录hash用于相互找到对端
+	//在pprev中记录正方向元组对应的hash用于相互找到对端
 	*(unsigned long *)(&ct->tuplehash[IP_CT_DIR_REPLY].hnnode.pprev) = hash;
 	ct->status = 0;
 	ct->timeout = 0;
@@ -1488,7 +1496,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 	//申请并填充元组
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 	ct = __nf_conntrack_alloc(net, zone, tuple, &repl_tuple, GFP_ATOMIC,
-				  hash);
+				  hash/*正方向元组对应的hash*/);
 	if (IS_ERR(ct))
 		return (struct nf_conntrack_tuple_hash *)ct;
 
@@ -1497,7 +1505,7 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 		return ERR_PTR(-ENOMEM);
 	}
 
-	//取超时时间列表
+	//取超时时间列表，如果有ct模板，则取ct模板的，否则使用NULL
 	timeout_ext = tmpl ? nf_ct_timeout_find(tmpl) : NULL;
 
 	if (timeout_ext)
@@ -1514,9 +1522,9 @@ init_conntrack(struct net *net, struct nf_conn *tmpl,
 			     GFP_ATOMIC);
 
 	local_bh_disable();
-	if (net->ct.expect_count) {
+	if (net->ct.expect_count/*有期待表项*/) {
 		spin_lock(&nf_conntrack_expect_lock);
-		//刚刚创建了ct，需要查找期待
+		//刚刚创建了ct，当前有期待表项，先查找期待
 		exp = nf_ct_find_expectation(net, zone, tuple);
 		if (exp) {
 			//查找了本流对应的期待，按期待创建ct
@@ -1584,10 +1592,10 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	struct nf_conn *ct;
 	u32 hash;
 
-	//提取元组信息
+	//提取元组信息准备查询ct
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb),
 			     dataoff, state->pf, protonum, state->net,
-			     &tuple/*出参*/)) {
+			     &tuple/*出参,skb对应的元组信息*/)) {
 		pr_debug("Can't get tuple\n");
 		return 0;
 	}
@@ -1597,10 +1605,10 @@ resolve_normal_ct(struct nf_conn *tmpl,
 	hash = hash_conntrack_raw(&tuple, state->net);
 
 	//通过tuple查找是否存在对应的连接跟踪
-	h = __nf_conntrack_find_get(state->net, zone, &tuple, hash);
+	h = __nf_conntrack_find_get(state->net, zone/*ct所属的zone*/, &tuple/*元组信息*/, hash/*元组hash*/);
 	if (!h) {
 
-		//没有找到对应的连接，创建此连接
+		//没有找到对应的连接跟踪，创建它
 		h = init_conntrack(state->net, tmpl, &tuple,
 				   skb, dataoff, hash);
 		if (!h)
@@ -1609,12 +1617,12 @@ resolve_normal_ct(struct nf_conn *tmpl,
 			return PTR_ERR(h);
 	}
 
-	//由源方向的flow映射到ct
+	//由h获得对应的ct
 	ct = nf_ct_tuplehash_to_ctrack(h);
 
 	/* It exists; we have (non-exclusive) reference. */
 	if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-		//当前flow是响应方回包
+		//命中的ct响应方向的元组（回包）
 		ctinfo = IP_CT_ESTABLISHED_REPLY;
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
@@ -1627,7 +1635,7 @@ resolve_normal_ct(struct nf_conn *tmpl,
 			//本ct是通过期待创建的
 			ctinfo = IP_CT_RELATED;
 		} else {
-			//新流
+			//新创建的ct
 			pr_debug("new packet for %p\n", ct);
 			ctinfo = IP_CT_NEW;
 		}
@@ -1750,6 +1758,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 			NF_CT_STAT_INC_ATOMIC(state->net, ignore);
 			return NF_ACCEPT;
 		}
+		//其它情况，直接忽略掉已有值（ct是template的，tmpl已指向模板）
 		skb->_nfct = 0;
 	}
 
@@ -1765,7 +1774,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	}
 
 	if (protonum == IPPROTO_ICMP || protonum == IPPROTO_ICMPV6) {
-		//icmp，icmpv6报文连接跟踪处理（处理error报文）
+		//icmp，icmpv6报文连接跟踪处理（例如端口不可达error报文）
 		ret = nf_conntrack_handle_icmp(tmpl, skb, dataoff,
 					       protonum, state);
 		if (ret <= 0) {
@@ -1778,7 +1787,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	}
 
 repeat:
-	//如果已存在此skb对应的连接跟踪，则查询，否则创建
+	//如果已存在此skb对应的连接跟踪，则获取，否则创建
 	ret = resolve_normal_ct(tmpl, skb, dataoff,
 				protonum, state);
 	if (ret < 0) {
@@ -1818,6 +1827,7 @@ repeat:
 		goto out;
 	}
 
+	//反方向的包上来，如果ct状态未加REPLY标记，加reply标记
 	if (ctinfo == IP_CT_ESTABLISHED_REPLY &&
 	    !test_and_set_bit(IPS_SEEN_REPLY_BIT, &ct->status))
 		nf_conntrack_event_cache(IPCT_REPLY, ct);
@@ -2597,6 +2607,7 @@ int nf_conntrack_init_net(struct net *net)
 		struct ct_pcpu *pcpu = per_cpu_ptr(net->ct.pcpu_lists, cpu);
 
 		spin_lock_init(&pcpu->lock);
+		//初始化confirm
 		INIT_HLIST_NULLS_HEAD(&pcpu->unconfirmed, UNCONFIRMED_NULLS_VAL);
 		INIT_HLIST_NULLS_HEAD(&pcpu->dying, DYING_NULLS_VAL);
 	}

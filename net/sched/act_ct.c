@@ -467,6 +467,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		/* This will take care of sending queued events
 		 * even if the connection is already confirmed.
 		 */
+		//confirm此ct
 		nf_conntrack_confirm(skb);
 	}
 
@@ -655,6 +656,8 @@ static int tcf_ct_fill_params(struct net *net,
 		NL_SET_ERR_MSG_MOD(extack, "Failed to allocate conntrack template");
 		return -ENOMEM;
 	}
+
+	//设置此ct confirmed
 	__set_bit(IPS_CONFIRMED_BIT, &tmpl->status);
 	nf_conntrack_get(&tmpl->ct_general);
 	p->tmpl = tmpl;

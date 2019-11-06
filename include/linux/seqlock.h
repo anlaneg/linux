@@ -112,6 +112,7 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 repeat:
 	ret = READ_ONCE(s->sequence);
 	if (unlikely(ret & 1)) {
+	    //读数为奇数时，继续repeat
 		cpu_relax();
 		goto repeat;
 	}
@@ -202,6 +203,7 @@ static inline unsigned raw_seqcount_begin(const seqcount_t *s)
  */
 static inline int __read_seqcount_retry(const seqcount_t *s, unsigned start)
 {
+    //检查sequence是否有变更
 	return unlikely(s->sequence != start);
 }
 

@@ -34,7 +34,7 @@ enum ip_conntrack_info {
 #ifndef __KERNEL__
 	IP_CT_NEW_REPLY = IP_CT_NUMBER,
 #else
-	IP_CT_UNTRACKED = 7,//指明不跟踪
+	IP_CT_UNTRACKED = 7,//指明不创建连接跟踪
 #endif
 };
 
@@ -59,6 +59,7 @@ enum ip_conntrack_status {
 	IPS_ASSURED = (1 << IPS_ASSURED_BIT),
 
 	/* Connection is confirmed: originating packet has left box */
+	//连接是否confirm了
 	IPS_CONFIRMED_BIT = 3,
 	IPS_CONFIRMED = (1 << IPS_CONFIRMED_BIT),
 
@@ -96,6 +97,7 @@ enum ip_conntrack_status {
 	IPS_FIXED_TIMEOUT = (1 << IPS_FIXED_TIMEOUT_BIT),
 
 	/* Conntrack is a template */
+	//连接跟踪是一个模板
 	IPS_TEMPLATE_BIT = 11,
 	IPS_TEMPLATE = (1 << IPS_TEMPLATE_BIT),
 

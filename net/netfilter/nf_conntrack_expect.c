@@ -101,6 +101,7 @@ nf_ct_exp_equal(const struct nf_conntrack_tuple *tuple,
 	return nf_ct_tuple_mask_cmp(tuple, &i->tuple, &i->mask) &&
 			/*必须为同一个namespace*/
 	       net_eq(net, nf_ct_net(i->master)) &&
+	       /*必须与master ct同属于同一个zone*/
 	       nf_ct_zone_equal_any(i->master, zone);
 }
 
@@ -155,7 +156,7 @@ EXPORT_SYMBOL_GPL(nf_ct_expect_find_get);
 
 /* If an expectation for this connection is found, it gets delete from
  * global list then returned. */
-//用于查询期待
+//用于查询对应的期待
 struct nf_conntrack_expect *
 nf_ct_find_expectation(struct net *net,
 		       const struct nf_conntrack_zone *zone,
@@ -171,6 +172,7 @@ nf_ct_find_expectation(struct net *net,
 	//查找元组是否有匹配的期待
 	h = nf_ct_expect_dst_hash(net, tuple);
 	hlist_for_each_entry(i, &nf_ct_expect_hash[h], hnode) {
+	    //必须为有效期待;
 		if (!(i->flags & NF_CT_EXPECT_INACTIVE) &&
 		    nf_ct_exp_equal(tuple, i, zone, net)) {
 			exp = i;
@@ -178,6 +180,7 @@ nf_ct_find_expectation(struct net *net,
 		}
 	}
 	if (!exp)
+	    /*没有命中期待*/
 		return NULL;
 
 	/* If master is not in hash table yet (ie. packet hasn't left

@@ -76,7 +76,7 @@ struct nf_conn {
 	/* XXX should I move this to the tail ? - Y.K */
 	/* These are my tuples; original and reply */
 	//nat情况下记录的是各方向转换后地址
-	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的元组（1。源方向;2.目的方向）
+	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的五元组信息（1。源方向;2.目的方向）
 
 	/* Have we seen traffic both ways yet? (bitset) */
 	unsigned long status;//标记位
@@ -108,6 +108,7 @@ struct nf_conn {
 	union nf_conntrack_proto proto;//协议相关的信息
 };
 
+//由hash节点获取ct
 static inline struct nf_conn *
 nf_ct_tuplehash_to_ctrack(const struct nf_conntrack_tuple_hash *hash)
 {
@@ -153,7 +154,9 @@ nf_ct_get(const struct sk_buff *skb, enum ip_conntrack_info *ctinfo)
 {
 	unsigned long nfct = skb_get_nfct(skb);
 
+	//连接跟踪信息
 	*ctinfo = nfct & NFCT_INFOMASK;
+	//连接跟踪地址
 	return (struct nf_conn *)(nfct & NFCT_PTRMASK);
 }
 
@@ -237,6 +240,7 @@ struct nf_conn *nf_conntrack_alloc(struct net *net,
 				   const struct nf_conntrack_tuple *repl,
 				   gfp_t gfp);
 
+//检查ct是否一个模板
 static inline int nf_ct_is_template(const struct nf_conn *ct)
 {
 	return test_bit(IPS_TEMPLATE_BIT, &ct->status);
@@ -259,6 +263,7 @@ static inline bool nf_is_loopback_packet(const struct sk_buff *skb)
 	return skb->dev && skb->skb_iif && skb->dev->flags & IFF_LOOPBACK;
 }
 
+
 #define nfct_time_stamp ((u32)(jiffies))
 
 /* jiffies until ct expires, 0 if already expired */
@@ -269,6 +274,7 @@ static inline unsigned long nf_ct_expires(const struct nf_conn *ct)
 	return timeout > 0 ? timeout : 0;
 }
 
+//ct是否已过期
 static inline bool nf_ct_is_expired(const struct nf_conn *ct)
 {
 	return (__s32)(ct->timeout - nfct_time_stamp) <= 0;
@@ -292,6 +298,7 @@ extern seqcount_t nf_conntrack_generation;
 extern unsigned int nf_conntrack_max;
 
 /* must be called with rcu read lock held */
+//取全局的ct hash表及table size
 static inline void
 nf_conntrack_get_ht(struct hlist_nulls_head **hash, unsigned int *hsize)
 {
@@ -299,9 +306,11 @@ nf_conntrack_get_ht(struct hlist_nulls_head **hash, unsigned int *hsize)
 	unsigned int sequence, hsz;
 
 	do {
+	    //读取nf_conntrack_generation
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hsz = nf_conntrack_htable_size;
 		hptr = nf_conntrack_hash;
+		//再次读取nf_conntrack_generation,如果seq无变更，则返回取得的值，否则继续
 	} while (read_seqcount_retry(&nf_conntrack_generation, sequence));
 
 	*hash = hptr;

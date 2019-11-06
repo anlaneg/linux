@@ -121,9 +121,10 @@ static inline void nf_ct_dump_tuple(const struct nf_conntrack_tuple *t)
 /* Connections have two entries in the hash table: one for each way */
 struct nf_conntrack_tuple_hash {
 	struct hlist_nulls_node hnnode;
-	struct nf_conntrack_tuple tuple;
+	struct nf_conntrack_tuple tuple;//流的五元组信息
 };
 
+//检查两个tuple src是否相等
 static inline bool __nf_ct_tuple_src_equal(const struct nf_conntrack_tuple *t1,
 					   const struct nf_conntrack_tuple *t2)
 {
@@ -132,6 +133,7 @@ static inline bool __nf_ct_tuple_src_equal(const struct nf_conntrack_tuple *t1,
 		t1->src.l3num == t2->src.l3num);
 }
 
+//检查两个tuple dst是否相等
 static inline bool __nf_ct_tuple_dst_equal(const struct nf_conntrack_tuple *t1,
 					   const struct nf_conntrack_tuple *t2)
 {
@@ -140,6 +142,7 @@ static inline bool __nf_ct_tuple_dst_equal(const struct nf_conntrack_tuple *t1,
 		t1->dst.protonum == t2->dst.protonum);
 }
 
+//检查t1,t2两个元组是否相等
 static inline bool nf_ct_tuple_equal(const struct nf_conntrack_tuple *t1,
 				     const struct nf_conntrack_tuple *t2)
 {
@@ -155,6 +158,7 @@ nf_ct_tuple_mask_equal(const struct nf_conntrack_tuple_mask *m1,
 		m1->src.u.all == m2->src.u.all);
 }
 
+//期待原比较
 static inline bool
 nf_ct_tuple_src_mask_cmp(const struct nf_conntrack_tuple *t1,
 			 const struct nf_conntrack_tuple *t2,
@@ -181,6 +185,7 @@ nf_ct_tuple_src_mask_cmp(const struct nf_conntrack_tuple *t1,
 	return true;
 }
 
+//实现期待含mask的元组比较(源支持mask)目的完全匹配
 static inline bool
 nf_ct_tuple_mask_cmp(const struct nf_conntrack_tuple *t,
 		     const struct nf_conntrack_tuple *tuple,

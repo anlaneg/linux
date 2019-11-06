@@ -1512,6 +1512,7 @@ static int tcf_block_bind(struct tcf_block *block,
 
 		i++;
 	}
+	//添加bo到block->flow_bloc上
 	list_splice(&bo->cb_list, &block->flow_block.cb_list);
 
 	return 0;
@@ -2004,12 +2005,12 @@ replay:
 	cl = 0;
 	block = NULL;
 
+	//如果未指定prio,有CREATE标记，则创建一个prio
 	if (prio == 0) {
 		/* If no priority is provided by the user,
 		 * we allocate one.
 		 */
 		if (n->nlmsg_flags & NLM_F_CREATE) {
-			//构造一个prio
 			prio = TC_H_MAKE(0x80000000U, 0U);
 			prio_allocate = true;
 		} else {
@@ -3210,6 +3211,7 @@ static void tc_cls_offload_cnt_update(struct tcf_block *block,
 	spin_lock(&tp->lock);
 	if (add) {
 		if (!*cnt)
+		    //设置in-hw
 			tcf_block_offload_inc(block, flags);
 		*cnt += diff;
 	} else {
@@ -3235,7 +3237,7 @@ tc_cls_offload_cnt_reset(struct tcf_block *block, struct tcf_proto *tp,
 //执行cb_list上挂接的所有callback
 static int
 __tc_setup_cb_call(struct tcf_block *block, enum tc_setup_type type,
-		   void *type_data, bool err_stop)
+		   void *type_data, bool err_stop/*出错时，是否需要停下来*/)
 {
 	struct flow_block_cb *block_cb;
 	int ok_count = 0;
@@ -3292,7 +3294,7 @@ EXPORT_SYMBOL(tc_setup_cb_call);
 
 int tc_setup_cb_add(struct tcf_block *block, struct tcf_proto *tp,
 		    enum tc_setup_type type, void *type_data, bool err_stop,
-		    u32 *flags, unsigned int *in_hw_count, bool rtnl_held)
+		    u32 *flags/*出参*/, unsigned int *in_hw_count, bool rtnl_held)
 {
 	bool take_rtnl = READ_ONCE(block->lockeddevcnt) && !rtnl_held;
 	int ok_count;
@@ -3324,8 +3326,9 @@ retry:
 	if (tp->ops->hw_add)
 		tp->ops->hw_add(tp, type_data);
 	if (ok_count > 0)
+	    //下发没有出错
 		tc_cls_offload_cnt_update(block, tp, in_hw_count, flags,
-					  ok_count, true);
+					  ok_count, true/*flow增加*/);
 err_unlock:
 	up_read(&block->cb_lock);
 	if (take_rtnl)

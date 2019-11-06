@@ -106,7 +106,7 @@ int nf_conntrack_icmp_packet(struct nf_conn *ct,
 
 /* Check inner header is related to any of the existing connections */
 int nf_conntrack_inet_error(struct nf_conn *tmpl, struct sk_buff *skb,
-			    unsigned int dataoff,
+			    unsigned int dataoff/*到负载数据的offset*/,
 			    const struct nf_hook_state *state,
 			    u8 l4proto, union nf_inet_addr *outer_daddr)
 {
@@ -123,15 +123,18 @@ int nf_conntrack_inet_error(struct nf_conn *tmpl, struct sk_buff *skb,
 	zone = nf_ct_zone_tmpl(tmpl, skb, &tmp);
 
 	/* Are they talking about one of our connections? */
+	//解析内层的元组
 	if (!nf_ct_get_tuplepr(skb, dataoff,
 			       state->pf, state->net, &origtuple))
 		return -NF_ACCEPT;
 
 	/* Ordinarily, we'd expect the inverted tupleproto, but it's
 	   been preserved inside the ICMP. */
+	//构造其对应的反向元组
 	if (!nf_ct_invert_tuple(&innertuple, &origtuple))
 		return -NF_ACCEPT;
 
+	//查询此元组对应的ct
 	h = nf_conntrack_find_get(state->net, zone, &innertuple);
 	if (!h)
 		return -NF_ACCEPT;
@@ -186,6 +189,7 @@ int nf_conntrack_inet_error(struct nf_conn *tmpl, struct sk_buff *skb,
 		return -NF_ACCEPT;
 	}
 
+	//更新此ct状态
 	ctinfo = IP_CT_RELATED;
 	if (dir == IP_CT_DIR_REPLY)
 		ctinfo += IP_CT_IS_REPLY;
@@ -241,6 +245,7 @@ int nf_conntrack_icmpv4_error(struct nf_conn *tmpl,
 	}
 
 	/* Need to track icmp error message? */
+	//只处理icmp错误信息，这些信息可以中止一些之前创建的ct
 	if (icmph->type != ICMP_DEST_UNREACH &&
 	    icmph->type != ICMP_SOURCE_QUENCH &&
 	    icmph->type != ICMP_TIME_EXCEEDED &&
@@ -252,7 +257,7 @@ int nf_conntrack_icmpv4_error(struct nf_conn *tmpl,
 	outer_daddr.ip = ip_hdr(skb)->daddr;
 
 	dataoff += sizeof(*icmph);
-	return nf_conntrack_inet_error(tmpl, skb, dataoff, state,
+	return nf_conntrack_inet_error(tmpl, skb, dataoff/*到icmp负载*/, state,
 				       IPPROTO_ICMP, &outer_daddr);
 }
 

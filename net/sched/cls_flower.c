@@ -1700,8 +1700,8 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	if (err)
 		goto errout_mask;
 
+	//如果规则不要求跳过hw,则按要求执行hw的替换
 	if (!tc_skip_hw(fnew->flags)) {
-		//按要求filter需要下发给HW,执行hw的替换
 		err = fl_hw_replace_filter(tp, fnew, rtnl_held, extack);
 		if (err)
 			goto errout_ht;

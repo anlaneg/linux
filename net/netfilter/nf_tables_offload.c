@@ -463,6 +463,7 @@ static struct notifier_block nft_offload_netdev_notifier = {
 	.notifier_call	= nft_offload_netdev_event,
 };
 
+//实现将netfilter table offload
 int nft_offload_init(void)
 {
 	int err;
