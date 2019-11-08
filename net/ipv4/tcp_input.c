@@ -6095,6 +6095,7 @@ discard:
 		tp->snd_wl1    = TCP_SKB_CB(skb)->seq;
 		tp->max_window = tp->snd_wnd;
 
+		//enc标记检测
 		tcp_ecn_rcv_syn(tp, th);
 
 		tcp_mtup_init(sk);
@@ -6463,6 +6464,7 @@ static void tcp_ecn_create_request(struct request_sock *req,
 {
 	const struct tcphdr *th = tcp_hdr(skb);
 	const struct net *net = sock_net(listen_sk);
+	//检查是否ecn-setup syn报文
 	bool th_ecn = th->ece && th->cwr;
 	bool ect, ecn_ok;
 	u32 ecn_ok_dst;

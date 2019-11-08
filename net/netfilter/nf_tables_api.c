@@ -2861,11 +2861,13 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 	if (net->nft.validate_state == NFT_VALIDATE_DO)
 		return nft_table_validate(net, table);
 
+	//如果此chain可offload,则将rule转换为可offload的flow
 	if (chain->flags & NFT_CHAIN_HW_OFFLOAD) {
 		flow = nft_flow_rule_create(net, rule);
 		if (IS_ERR(flow))
 			return PTR_ERR(flow);
 
+		//将flow添加transaction,后面由nft_flow_rule_offload_commit统一提交给硬件
 		nft_trans_flow_rule(trans) = flow;
 	}
 

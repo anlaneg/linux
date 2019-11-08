@@ -63,6 +63,7 @@ struct nft_flow_rule *nft_flow_rule_create(struct net *net,
 			err = -EOPNOTSUPP;
 			goto err_out;
 		}
+		//用expr匹配字段填充flow的match及action
 		err = expr->ops->offload(ctx, flow, expr);
 		if (err < 0)
 			goto err_out;
@@ -138,6 +139,7 @@ static int nft_setup_cb_call(struct nft_base_chain *basechain,
 	struct flow_block_cb *block_cb;
 	int err;
 
+	//遍历注册在此chain上的cb
 	list_for_each_entry(block_cb, &basechain->flow_block.cb_list, list) {
 		err = block_cb->cb(type, type_data, block_cb->cb_priv);
 		if (err < 0)
@@ -338,6 +340,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 				continue;
 
 			policy = nft_trans_chain_policy(trans);
+			//创建chain
 			err = nft_flow_offload_chain(trans->ctx.chain, &policy,
 						     FLOW_BLOCK_BIND);
 			break;
@@ -346,6 +349,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 				continue;
 
 			policy = nft_trans_chain_policy(trans);
+			//删除chain
 			err = nft_flow_offload_chain(trans->ctx.chain, &policy,
 						     FLOW_BLOCK_UNBIND);
 			break;
@@ -357,6 +361,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 			    !(trans->ctx.flags & NLM_F_APPEND))
 				return -EOPNOTSUPP;
 
+			//下发flow规则
 			err = nft_flow_offload_rule(trans->ctx.chain,
 						    nft_trans_rule(trans),
 						    nft_trans_flow_rule(trans),
@@ -366,7 +371,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 		case NFT_MSG_DELRULE:
 			if (!(trans->ctx.chain->flags & NFT_CHAIN_HW_OFFLOAD))
 				continue;
-
+			//删除的flow
 			err = nft_flow_offload_rule(trans->ctx.chain,
 						    nft_trans_rule(trans),
 						    nft_trans_flow_rule(trans),
