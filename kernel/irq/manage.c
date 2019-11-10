@@ -1974,7 +1974,7 @@ const void *free_nmi(unsigned int irq, void *dev_id)
  *	IRQF_TRIGGER_*		Specify active edge(s) or level
  *
  */
-int request_threaded_irq(unsigned int irq, irq_handler_t handler,
+int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler,
 			 irq_handler_t thread_fn, unsigned long irqflags,
 			 const char *devname, void *dev_id)
 {

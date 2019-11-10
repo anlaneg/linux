@@ -3121,6 +3121,7 @@ EXPORT_SYMBOL(skb_dequeue_tail);
  */
 void skb_queue_purge(struct sk_buff_head *list)
 {
+	//释放list上挂接的所有报文，将队列置为empty
 	struct sk_buff *skb;
 	while ((skb = skb_dequeue(list)) != NULL)
 		kfree_skb(skb);

@@ -29,11 +29,14 @@ enum nxp_nci_mode {
 };
 
 struct nxp_nci_phy_ops {
+	//打开关闭设备
 	int (*set_mode)(void *id, enum nxp_nci_mode mode);
+	//向设备传送数据
 	int (*write)(void *id, struct sk_buff *skb);
 };
 
 struct nxp_nci_fw_info {
+	//fw名称
 	char name[NFC_FIRMWARE_NAME_MAXSIZE + 1];
 	const struct firmware *fw;
 

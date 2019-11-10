@@ -581,6 +581,7 @@ static int nci_close_device(struct nci_dev *ndev)
 /* NCI command timer function */
 static void nci_cmd_timer(struct timer_list *t)
 {
+	//cmd timer到期后，上一个命令未响应，标记cmd可继续调度（未响应的cmd已丢弃）
 	struct nci_dev *ndev = from_timer(ndev, t, cmd_timer);
 
 	atomic_set(&ndev->cmd_cnt, 1);
@@ -1121,6 +1122,7 @@ struct nci_dev *nci_allocate_device(struct nci_ops *ops,
 
 	pr_debug("supported_protocols 0x%x\n", supported_protocols);
 
+	//必须有open,close,send回调
 	if (!ops->open || !ops->close || !ops->send)
 		return NULL;
 
@@ -1202,6 +1204,7 @@ int nci_register_device(struct nci_dev *ndev)
 		goto exit;
 	}
 
+	//初始化rx_work线程
 	INIT_WORK(&ndev->rx_work, nci_rx_work);
 	snprintf(name, sizeof(name), "%s_nci_rx_wq", dev_name(dev));
 	ndev->rx_wq = create_singlethread_workqueue(name);
@@ -1210,6 +1213,7 @@ int nci_register_device(struct nci_dev *ndev)
 		goto destroy_cmd_wq_exit;
 	}
 
+	//初始化tx_work线程
 	INIT_WORK(&ndev->tx_work, nci_tx_work);
 	snprintf(name, sizeof(name), "%s_nci_tx_wq", dev_name(dev));
 	ndev->tx_wq = create_singlethread_workqueue(name);
@@ -1281,11 +1285,13 @@ int nci_recv_frame(struct nci_dev *ndev, struct sk_buff *skb)
 
 	if (!ndev || (!test_bit(NCI_UP, &ndev->flags) &&
 	    !test_bit(NCI_INIT, &ndev->flags))) {
+		//设备不存在，或者设备没有up,或者设备未初始化，则丢包
 		kfree_skb(skb);
 		return -ENXIO;
 	}
 
 	/* Queue frame for rx worker thread */
+	//将skb挂接在ndev的rx队列上
 	skb_queue_tail(&ndev->rx_q, skb);
 	queue_work(ndev->rx_wq, &ndev->rx_work);
 
@@ -1293,6 +1299,7 @@ int nci_recv_frame(struct nci_dev *ndev, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(nci_recv_frame);
 
+//nci设备对外发送skb
 int nci_send_frame(struct nci_dev *ndev, struct sk_buff *skb)
 {
 	pr_debug("len %d\n", skb->len);
@@ -1309,6 +1316,7 @@ int nci_send_frame(struct nci_dev *ndev, struct sk_buff *skb)
 	nfc_send_to_raw_sock(ndev->nfc_dev, skb,
 			     RAW_PAYLOAD_NCI, NFC_DIRECTION_TX);
 
+	//通过ops向外send
 	return ndev->ops->send(ndev, skb);
 }
 EXPORT_SYMBOL(nci_send_frame);
@@ -1423,7 +1431,7 @@ int nci_core_ntf_packet(struct nci_dev *ndev, __u16 opcode,
 }
 
 /* ---- NCI TX Data worker thread ---- */
-
+//向ndev发送tx_q队列上的报文
 static void nci_tx_work(struct work_struct *work)
 {
 	struct nci_dev *ndev = container_of(work, struct nci_dev, tx_work);
@@ -1437,6 +1445,7 @@ static void nci_tx_work(struct work_struct *work)
 	pr_debug("credits_cnt %d\n", atomic_read(&conn_info->credits_cnt));
 
 	/* Send queued tx data */
+	//自tx_q上取报文，通过nci_send_frame发送出去
 	while (atomic_read(&conn_info->credits_cnt)) {
 		skb = skb_dequeue(&ndev->tx_q);
 		if (!skb)
@@ -1460,12 +1469,13 @@ static void nci_tx_work(struct work_struct *work)
 }
 
 /* ----- NCI RX worker thread (data & control) ----- */
-
+//处理ndev->rx_q上收到的报文
 static void nci_rx_work(struct work_struct *work)
 {
 	struct nci_dev *ndev = container_of(work, struct nci_dev, rx_work);
 	struct sk_buff *skb;
 
+	//自rx_q出一个skb，按报文类型交给不同的处理函数
 	while ((skb = skb_dequeue(&ndev->rx_q))) {
 
 		/* Send copy to sniffer */
@@ -1474,6 +1484,7 @@ static void nci_rx_work(struct work_struct *work)
 
 		/* Process frame */
 		switch (nci_mt(skb->data)) {
+		//cmd响应报文
 		case NCI_MT_RSP_PKT:
 			nci_rsp_packet(ndev, skb);
 			break;
@@ -1482,11 +1493,13 @@ static void nci_rx_work(struct work_struct *work)
 			nci_ntf_packet(ndev, skb);
 			break;
 
+			//数据报文
 		case NCI_MT_DATA_PKT:
 			nci_rx_data_packet(ndev, skb);
 			break;
 
 		default:
+			//收到不认识的报文
 			pr_err("unknown MT 0x%x\n", nci_mt(skb->data));
 			kfree_skb(skb);
 			break;
@@ -1506,7 +1519,7 @@ static void nci_rx_work(struct work_struct *work)
 }
 
 /* ----- NCI TX CMD worker thread ----- */
-
+//cmd线程工作函数(通过nci_send_frame将ndev->cmd_q上的一个skb发送出去）
 static void nci_cmd_work(struct work_struct *work)
 {
 	//取nci设备
@@ -1516,11 +1529,14 @@ static void nci_cmd_work(struct work_struct *work)
 	pr_debug("cmd_cnt %d\n", atomic_read(&ndev->cmd_cnt));
 
 	/* Send queued command */
+	//需要先检查cmd_cnt,如果cmd_cnt为0，则说明正在等响应，不能发送请求
 	if (atomic_read(&ndev->cmd_cnt)) {
+		//有ndev->cmd_cnt个cmd,这里先出队一个skb
 		skb = skb_dequeue(&ndev->cmd_q);
 		if (!skb)
 			return;
 
+		//已出队，减少cmd计数
 		atomic_dec(&ndev->cmd_cnt);
 
 		pr_debug("NCI TX: MT=cmd, PBF=%d, GID=0x%x, OID=0x%x, plen=%d\n",
@@ -1529,8 +1545,10 @@ static void nci_cmd_work(struct work_struct *work)
 			 nci_opcode_oid(nci_opcode(skb->data)),
 			 nci_plen(skb->data));
 
+		//执行此skb的send
 		nci_send_frame(ndev, skb);
 
+		//重置cmd_timer
 		mod_timer(&ndev->cmd_timer,
 			  jiffies + msecs_to_jiffies(NCI_CMD_TIMEOUT));
 	}

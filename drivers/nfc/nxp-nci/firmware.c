@@ -209,11 +209,13 @@ int nxp_nci_fw_download(struct nci_dev *ndev, const char *firmware_name)
 		goto fw_download_exit;
 	}
 
+	//firmware_name不能为空
 	if (!firmware_name || firmware_name[0] == '\0') {
 		r = -EINVAL;
 		goto fw_download_exit;
 	}
 
+	//填充fw名称
 	strcpy(fw_info->name, firmware_name);
 
 	r = request_firmware(&fw_info->fw, firmware_name,
@@ -221,6 +223,7 @@ int nxp_nci_fw_download(struct nci_dev *ndev, const char *firmware_name)
 	if (r < 0)
 		goto fw_download_exit;
 
+	//将mode置为fw
 	r = info->phy_ops->set_mode(info->phy_id, NXP_NCI_MODE_FW);
 	if (r < 0) {
 		release_firmware(fw_info->fw);
@@ -289,6 +292,7 @@ static u16 nxp_nci_fw_check_crc(struct sk_buff *skb)
 	return (crc ^ frame_crc);
 }
 
+//设备ndev收到一个fw模式下的skb
 void nxp_nci_fw_recv_frame(struct nci_dev *ndev, struct sk_buff *skb)
 {
 	struct nxp_nci_info *info = nci_get_drvdata(ndev);

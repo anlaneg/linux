@@ -88,6 +88,7 @@ static int nxp_nci_i2c_write(void *phy_id, struct sk_buff *skb)
 	return r;
 }
 
+//i2c物理ops
 static const struct nxp_nci_phy_ops i2c_phy_ops = {
 	.set_mode = nxp_nci_i2c_set_mode,
 	.write = nxp_nci_i2c_write,
@@ -101,6 +102,7 @@ static int nxp_nci_i2c_fw_read(struct nxp_nci_i2c_phy *phy,
 	size_t frame_len;
 	int r;
 
+	//读取fw头部
 	r = i2c_master_recv(client, (u8 *) &header, NXP_NCI_FW_HDR_LEN);
 	if (r < 0) {
 		goto fw_read_exit;
@@ -110,17 +112,21 @@ static int nxp_nci_i2c_fw_read(struct nxp_nci_i2c_phy *phy,
 		goto fw_read_exit;
 	}
 
+	//获得frame长度
 	frame_len = (be16_to_cpu(header) & NXP_NCI_FW_FRAME_LEN_MASK) +
 		    NXP_NCI_FW_CRC_LEN;
 
+	//申请可存放数据的skb
 	*skb = alloc_skb(NXP_NCI_FW_HDR_LEN + frame_len, GFP_KERNEL);
 	if (*skb == NULL) {
 		r = -ENOMEM;
 		goto fw_read_exit;
 	}
 
+	//存放fw头部
 	skb_put_data(*skb, &header, NXP_NCI_FW_HDR_LEN);
 
+	//收取fw头部指定的长度
 	r = i2c_master_recv(client, skb_put(*skb, frame_len), frame_len);
 	if (r != frame_len) {
 		nfc_err(&client->dev,
@@ -138,6 +144,7 @@ fw_read_exit:
 	return r;
 }
 
+//自phy中收取一个skb
 static int nxp_nci_i2c_nci_read(struct nxp_nci_i2c_phy *phy,
 				struct sk_buff **skb)
 {
@@ -145,6 +152,7 @@ static int nxp_nci_i2c_nci_read(struct nxp_nci_i2c_phy *phy,
 	struct i2c_client *client = phy->i2c_dev;
 	int r;
 
+	//先向设备收取数据头部
 	r = i2c_master_recv(client, (u8 *) &header, NCI_CTRL_HDR_SIZE);
 	if (r < 0) {
 		goto nci_read_exit;
@@ -154,14 +162,17 @@ static int nxp_nci_i2c_nci_read(struct nxp_nci_i2c_phy *phy,
 		goto nci_read_exit;
 	}
 
+	//申请可容纳数据的skb
 	*skb = alloc_skb(NCI_CTRL_HDR_SIZE + header.plen, GFP_KERNEL);
 	if (*skb == NULL) {
 		r = -ENOMEM;
 		goto nci_read_exit;
 	}
 
+	//将数据头部放入skb
 	skb_put_data(*skb, (void *)&header, NCI_CTRL_HDR_SIZE);
 
+	//按header中长度指定，收取数据，并填充进skb
 	r = i2c_master_recv(client, skb_put(*skb, header.plen), header.plen);
 	if (r != header.plen) {
 		nfc_err(&client->dev,
@@ -208,9 +219,11 @@ static irqreturn_t nxp_nci_i2c_irq_thread_fn(int irq, void *phy_id)
 
 	switch (info->mode) {
 	case NXP_NCI_MODE_NCI:
+		//接收skb
 		r = nxp_nci_i2c_nci_read(phy, &skb);
 		break;
 	case NXP_NCI_MODE_FW:
+		//fw模式，收取skb
 		r = nxp_nci_i2c_fw_read(phy, &skb);
 		break;
 	case NXP_NCI_MODE_COLD:
@@ -228,12 +241,15 @@ static irqreturn_t nxp_nci_i2c_irq_thread_fn(int irq, void *phy_id)
 
 	switch (info->mode) {
 	case NXP_NCI_MODE_NCI:
+		//使收到的skb走协议栈
 		nci_recv_frame(phy->ndev, skb);
 		break;
 	case NXP_NCI_MODE_FW:
+		//走fw收到报文
 		nxp_nci_fw_recv_frame(phy->ndev, skb);
 		break;
 	case NXP_NCI_MODE_COLD:
+		//设备是cold状态，不处理
 		break;
 	}
 
@@ -296,7 +312,7 @@ static int nxp_nci_i2c_probe(struct i2c_client *client,
 		return r;
 
 	r = request_threaded_irq(client->irq, NULL,
-				 nxp_nci_i2c_irq_thread_fn,
+				 nxp_nci_i2c_irq_thread_fn/*中断发生时，向skb收取报文*/,
 				 IRQF_TRIGGER_RISING | IRQF_ONESHOT,
 				 NXP_NCI_I2C_DRIVER_NAME, phy);
 	if (r < 0)
@@ -336,6 +352,7 @@ static const struct acpi_device_id acpi_id[] = {
 MODULE_DEVICE_TABLE(acpi, acpi_id);
 #endif
 
+//i2c驱动
 static struct i2c_driver nxp_nci_i2c_driver = {
 	.driver = {
 		   .name = NXP_NCI_I2C_DRIVER_NAME,

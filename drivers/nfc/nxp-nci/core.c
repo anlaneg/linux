@@ -34,11 +34,13 @@ static int nxp_nci_open(struct nci_dev *ndev)
 
 	mutex_lock(&info->info_lock);
 
+	//仅在cold模式下容许打开
 	if (info->mode != NXP_NCI_MODE_COLD) {
 		r = -EBUSY;
 		goto open_exit;
 	}
 
+	//通过设置mode为nci来打开设备
 	if (info->phy_ops->set_mode)
 		r = info->phy_ops->set_mode(info->phy_id, NXP_NCI_MODE_NCI);
 
@@ -49,6 +51,7 @@ open_exit:
 	return r;
 }
 
+//通过set_mode为cold关闭设备
 static int nxp_nci_close(struct nci_dev *ndev)
 {
 	struct nxp_nci_info *info = nci_get_drvdata(ndev);
@@ -56,6 +59,7 @@ static int nxp_nci_close(struct nci_dev *ndev)
 
 	mutex_lock(&info->info_lock);
 
+	//有set_mode，则调用mode为cold来关闭设备
 	if (info->phy_ops->set_mode)
 		r = info->phy_ops->set_mode(info->phy_id, NXP_NCI_MODE_COLD);
 
@@ -75,11 +79,13 @@ static int nxp_nci_send(struct nci_dev *ndev, struct sk_buff *skb)
 		goto send_exit;
 	}
 
+	//非nci模式，拒绝处理
 	if (info->mode != NXP_NCI_MODE_NCI) {
 		r = -EINVAL;
 		goto send_exit;
 	}
 
+	//通过write完成消息发送
 	r = info->phy_ops->write(info->phy_id, skb);
 	if (r < 0)
 		kfree_skb(skb);
@@ -96,7 +102,7 @@ static struct nci_ops nxp_nci_ops = {
 };
 
 int nxp_nci_probe(void *phy_id, struct device *pdev,
-		  const struct nxp_nci_phy_ops *phy_ops,
+		  const struct nxp_nci_phy_ops *phy_ops/*物理操作ops*/,
 		  unsigned int max_payload,
 		  struct nci_dev **ndev)
 {
@@ -134,6 +140,7 @@ int nxp_nci_probe(void *phy_id, struct device *pdev,
 
 	nci_set_parent_dev(info->ndev, pdev);
 	nci_set_drvdata(info->ndev, info);
+	//注册nci设备
 	r = nci_register_device(info->ndev);
 	if (r < 0)
 		goto probe_exit_free_nci;

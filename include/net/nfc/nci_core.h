@@ -65,6 +65,7 @@ struct nci_ops {
 	int   (*init)(struct nci_dev *ndev);
 	int   (*open)(struct nci_dev *ndev);
 	int   (*close)(struct nci_dev *ndev);
+	//向nci设备发送报文
 	int   (*send)(struct nci_dev *ndev, struct sk_buff *skb);
 	int   (*setup)(struct nci_dev *ndev);
 	int   (*post_setup)(struct nci_dev *ndev);
@@ -203,12 +204,13 @@ struct nci_dev {
 	atomic_t		state;
 	unsigned long		flags;
 
-	atomic_t		cmd_cnt;
+	atomic_t		cmd_cnt;/*需处理的cmd skb数目*/
 	__u8			cur_conn_id;
 
 	struct list_head	conn_info_list;
 	struct nci_conn_info	*rf_conn_info;
 
+	//命令执行timer（如果cmd在timer期内未响应，则此timer到期）
 	struct timer_list	cmd_timer;
 	struct timer_list	data_timer;
 
@@ -221,9 +223,9 @@ struct nci_dev {
 	struct workqueue_struct	*tx_wq;
 	struct work_struct	tx_work;
 
-	struct sk_buff_head	cmd_q;
-	struct sk_buff_head	rx_q;
-	struct sk_buff_head	tx_q;
+	struct sk_buff_head	cmd_q;//存放cmd skb在此队列上
+	struct sk_buff_head	rx_q;//设备的收包队列（nci_recv_frame负责向此队列上放包）
+	struct sk_buff_head	tx_q;//设备的发包队列
 
 	struct mutex		req_lock;
 	struct completion	req_completion;
