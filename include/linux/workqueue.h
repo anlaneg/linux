@@ -100,11 +100,11 @@ enum {
 };
 
 struct work_struct {
-	atomic_long_t data;
+	atomic_long_t data;//work函数func的参数
 	struct list_head entry;//用于将work串起来
 	work_func_t func;//work函数
 #ifdef CONFIG_LOCKDEP
-	struct lockdep_map lockdep_map;
+	struct lockdep_map lckdep_map;
 #endif
 };
 
@@ -436,6 +436,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 #define create_freezable_workqueue(name)				\
 	alloc_workqueue("%s", __WQ_LEGACY | WQ_FREEZABLE | WQ_UNBOUND |	\
 			WQ_MEM_RECLAIM, 1, (name))
+//创建单线程的workqueue
 #define create_singlethread_workqueue(name)				\
 	alloc_ordered_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, name)
 
