@@ -3169,10 +3169,13 @@ static long kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 		return KVM_ADDRESS_SPACE_NUM;
 #endif
 	case KVM_CAP_NR_MEMSLOTS:
+		//memslot的数目
 		return KVM_USER_MEM_SLOTS;
 	default:
 		break;
 	}
+
+	//各体系结构自已实现
 	return kvm_vm_ioctl_check_extension(kvm, arg);
 }
 
@@ -3487,11 +3490,13 @@ static long kvm_dev_ioctl(struct file *filp,
 	long r = -EINVAL;
 
 	switch (ioctl) {
+	//获取kvm api版本号，当前版本为12
 	case KVM_GET_API_VERSION:
 		if (arg)
 			goto out;
 		r = KVM_API_VERSION;
 		break;
+	//创建vm
 	case KVM_CREATE_VM:
 		r = kvm_dev_ioctl_create_vm(arg);
 		break;
