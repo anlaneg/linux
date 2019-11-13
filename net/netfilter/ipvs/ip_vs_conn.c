@@ -265,11 +265,13 @@ __ip_vs_conn_in_get(const struct ip_vs_conn_param *p)
 	unsigned int hash;
 	struct ip_vs_conn *cp;
 
+	//通过param执行正向查询
 	hash = ip_vs_conn_hashkey_param(p, false);
 
 	rcu_read_lock();
 
 	hlist_for_each_entry_rcu(cp, &ip_vs_conn_tab[hash], c_list) {
+	    //cport,vport,caddr,vaddr,protocol相等认为匹配
 		if (p->cport == cp->cport && p->vport == cp->vport &&
 		    cp->af == p->af &&
 		    ip_vs_addr_equal(p->af, p->caddr, &cp->caddr) &&
@@ -278,7 +280,9 @@ __ip_vs_conn_in_get(const struct ip_vs_conn_param *p)
 		    p->protocol == cp->protocol &&
 		    cp->ipvs == p->ipvs) {
 			if (!__ip_vs_conn_get(cp))
+			    //get cp失败，继续匹配
 				continue;
+			//匹配命令，直接返回cp
 			/* HIT */
 			rcu_read_unlock();
 			return cp;

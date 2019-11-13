@@ -203,6 +203,7 @@ ip_vs_sh_reassign(struct ip_vs_sh_state *s, struct ip_vs_service *svc)
 			}
 
 		}
+		//跳到下一个桶
 		b++;
 	}
 	return 0;

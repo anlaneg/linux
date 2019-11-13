@@ -249,6 +249,7 @@ ip_vs_use_count_dec(void)
 #define IP_VS_SVC_TAB_MASK (IP_VS_SVC_TAB_SIZE - 1)
 
 /* the service table hashed by <protocol, addr, port> */
+//serivce表
 static struct hlist_head ip_vs_svc_table[IP_VS_SVC_TAB_SIZE];
 /* the service table hashed by fwmark */
 static struct hlist_head ip_vs_svc_fwm_table[IP_VS_SVC_TAB_SIZE];
@@ -411,6 +412,7 @@ ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u32 fwmark, __u16 protocol
 	 *	Check the table hashed by fwmark first
 	 */
 	if (fwmark) {
+	    //通过fwmark查找对应的service
 		svc = __ip_vs_svc_fwm_find(ipvs, af, fwmark);
 		if (svc)
 			goto out;
@@ -420,6 +422,7 @@ ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u32 fwmark, __u16 protocol
 	 *	Check the table hashed by <protocol,addr,port>
 	 *	for "full" addressed entries
 	 */
+	//通过三元组直接查询
 	svc = __ip_vs_service_find(ipvs, af, protocol, vaddr, vport);
 
 	if (!svc && protocol == IPPROTO_TCP &&
@@ -435,6 +438,7 @@ ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u32 fwmark, __u16 protocol
 
 	if (svc == NULL
 	    && atomic_read(&ipvs->nullsvc_counter)) {
+	    //用不匹配port的方式进行查询service
 		/*
 		 * Check if the catch-all port (port zero) exists
 		 */

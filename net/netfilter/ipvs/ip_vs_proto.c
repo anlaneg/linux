@@ -73,10 +73,12 @@ register_ip_vs_proto_netns(struct netns_ipvs *ipvs, struct ip_vs_protocol *pp)
 		return -ENOMEM;
 
 	pd->pp = pp;	/* For speed issues */
+	//将pd加入到proto_data_table表中
 	pd->next = ipvs->proto_data_table[hash];
 	ipvs->proto_data_table[hash] = pd;
 	atomic_set(&pd->appcnt, 0);	/* Init app counter */
 
+	//如果pp有初始化回调，则调用它
 	if (pp->init_netns != NULL) {
 		int ret = pp->init_netns(ipvs, pd);
 		if (ret) {

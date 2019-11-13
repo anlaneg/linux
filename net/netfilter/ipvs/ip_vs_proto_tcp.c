@@ -31,6 +31,7 @@
 static int
 tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp);
 
+//调度新的tcp连接
 static int
 tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 		  struct ip_vs_proto_data *pd,
@@ -46,10 +47,13 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 	 * TCP packet for non-ICMP packets
 	 */
 	if (likely(!ip_vs_iph_icmp(iph))) {
+	    //取tcp头
 		th = skb_header_pointer(skb, iph->len, sizeof(_tcph), &_tcph);
 		if (th) {
+		    //有rst标记，或者松散tcp,或者syn标记，则返回1
 			if (th->rst || !(sysctl_sloppy_tcp(ipvs) || th->syn))
 				return 1;
+			//指向port
 			ports = &th->source;
 		}
 	} else {
@@ -64,6 +68,7 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 
 	/* No !th->ack check to allow scheduling on SYN+ACK for Active FTP */
 
+	//查找service
 	if (likely(!ip_vs_iph_inverse(iph)))
 		svc = ip_vs_service_find(ipvs, af, skb->mark, iph->protocol,
 					 &iph->daddr, ports[1]);
@@ -71,6 +76,7 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 		svc = ip_vs_service_find(ipvs, af, skb->mark, iph->protocol,
 					 &iph->saddr, ports[0]);
 
+	//查找到对应的service
 	if (svc) {
 		int ignored;
 
@@ -630,12 +636,15 @@ static int tcp_register_app(struct netns_ipvs *ipvs, struct ip_vs_app *inc)
 
 	hash = tcp_app_hashkey(port);
 
+	//检查inc指定的port是否已存在
 	list_for_each_entry(i, &ipvs->tcp_apps[hash], p_list) {
 		if (i->port == port) {
 			ret = -EEXIST;
 			goto out;
 		}
 	}
+
+	//将inc添加进app
 	list_add_rcu(&inc->p_list, &ipvs->tcp_apps[hash]);
 	atomic_inc(&pd->appcnt);
 
@@ -647,6 +656,7 @@ static int tcp_register_app(struct netns_ipvs *ipvs, struct ip_vs_app *inc)
 static void
 tcp_unregister_app(struct netns_ipvs *ipvs, struct ip_vs_app *inc)
 {
+    //移除掉inc
 	struct ip_vs_proto_data *pd = ip_vs_proto_data_get(ipvs, IPPROTO_TCP);
 
 	atomic_dec(&pd->appcnt);
@@ -715,10 +725,13 @@ void ip_vs_tcp_conn_listen(struct ip_vs_conn *cp)
 static int __ip_vs_tcp_init(struct netns_ipvs *ipvs, struct ip_vs_proto_data *pd)
 {
 	ip_vs_init_hash_table(ipvs->tcp_apps, TCP_APP_TAB_SIZE);
+	//复制timeout_table
 	pd->timeout_table = ip_vs_create_timeout_table((int *)tcp_timeouts,
 							sizeof(tcp_timeouts));
 	if (!pd->timeout_table)
 		return -ENOMEM;
+
+	//tcp状态表
 	pd->tcp_state_table = tcp_states;
 	return 0;
 }

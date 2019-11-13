@@ -124,6 +124,7 @@ const char *ip_vs_proto_name(unsigned int proto)
 	}
 }
 
+//初始化table表（rows行）
 void ip_vs_init_hash_table(struct list_head *table, int rows)
 {
 	while (--rows >= 0)

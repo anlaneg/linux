@@ -443,6 +443,7 @@ struct ip_vs_protocol {
 			     int *verdict, struct ip_vs_conn **cpp,
 			     struct ip_vs_iphdr *iph);
 
+	//查询skb对应的入方向连接
 	struct ip_vs_conn *
 	(*conn_in_get)(struct netns_ipvs *ipvs,
 		       int af,
@@ -718,13 +719,16 @@ struct ip_vs_scheduler {
 	/* scheduling service finish */
 	void (*done_service)(struct ip_vs_service *svc);
 	/* dest is linked */
+	//添加新的dest
 	int (*add_dest)(struct ip_vs_service *svc, struct ip_vs_dest *dest);
+	//移除指定的dest
 	/* dest is unlinked */
 	int (*del_dest)(struct ip_vs_service *svc, struct ip_vs_dest *dest);
 	/* dest is updated */
 	int (*upd_dest)(struct ip_vs_service *svc, struct ip_vs_dest *dest);
 
 	/* selecting a server from the given service */
+	//选择一个dest
 	struct ip_vs_dest* (*schedule)(struct ip_vs_service *svc,
 				       const struct sk_buff *skb,
 				       struct ip_vs_iphdr *iph);
@@ -1509,9 +1513,12 @@ int ip_vs_icmp_xmit_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
 static inline int ip_vs_todrop(struct netns_ipvs *ipvs)
 {
 	if (!ipvs->drop_rate)
+	    //drop_rate为0时不丢包
 		return 0;
 	if (--ipvs->drop_counter > 0)
+	    //drop_counter大于0时，不丢包
 		return 0;
+	//丢包
 	ipvs->drop_counter = ipvs->drop_rate;
 	return 1;
 }

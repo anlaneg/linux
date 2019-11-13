@@ -1399,6 +1399,7 @@ static int wq_select_unbound_cpu(int cpu)
 		if (unlikely(new_cpu >= nr_cpu_ids))
 			return cpu;
 	}
+	//记录本次选项的cpu
 	__this_cpu_write(wq_rr_cpu_last, new_cpu);
 
 	return new_cpu;
@@ -1431,7 +1432,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 	rcu_read_lock();
 retry:
 	if (req_cpu == WORK_CPU_UNBOUND)
-		//如果未绑定cpu,则获取一个cpu
+		//如果未明确cpu,则获取一个cpu
 		cpu = wq_select_unbound_cpu(raw_smp_processor_id());
 
 	/* pwq which will be used unless @work is executing elsewhere */
@@ -1439,7 +1440,7 @@ retry:
 	if (!(wq->flags & WQ_UNBOUND))
 		pwq = per_cpu_ptr(wq->cpu_pwqs, cpu);
 	else
-		//如果工作队列未绑定，则按$cpu所属的node来取队列
+		//如果工作队列未绑定，则取请求的$cpu所属的node对应的队列
 		pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
 
 	/*
@@ -1535,6 +1536,7 @@ bool queue_work_on(int cpu, struct workqueue_struct *wq,
 
 	local_irq_save(flags);
 
+	//置pending_bit
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
 		__queue_work(cpu, wq, work);
 		ret = true;
@@ -4271,8 +4273,8 @@ static int init_rescuer(struct workqueue_struct *wq)
 	return 0;
 }
 
-__printf(1, 4)
 //创建一个工作队列
+__printf(1, 4)
 struct workqueue_struct *alloc_workqueue(const char *fmt,
 					 unsigned int flags,
 					 int max_active, ...)
