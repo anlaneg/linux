@@ -300,6 +300,7 @@ struct ip_vs_conn *ip_vs_conn_in_get(const struct ip_vs_conn_param *p)
 
 	cp = __ip_vs_conn_in_get(p);
 	if (!cp && atomic_read(&ip_vs_conn_no_cport_cnt)) {
+	    //没有查询到，系统存在no_cport的情况，我们将cport赋为0，再查询一遍
 		struct ip_vs_conn_param cport_zero_p = *p;
 		cport_zero_p.cport = 0;
 		cp = __ip_vs_conn_in_get(&cport_zero_p);
