@@ -87,6 +87,7 @@ tcp_conn_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 		 * Let the virtual server select a real server for the
 		 * incoming connection, and create a connection entry.
 		 */
+		//自svc中选出一个real server,并创建连接
 		*cpp = ip_vs_schedule(svc, skb, pd, &ignored, iph);
 		if (!*cpp && ignored <= 0) {
 			if (!ignored)
@@ -142,10 +143,10 @@ tcp_partial_csum_update(int af, struct tcphdr *tcph,
 						csum_unfold(tcph->check))));
 }
 
-
+//对tcp做snat修改source port
 INDIRECT_CALLABLE_SCOPE int
 tcp_snat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
-		 struct ip_vs_conn *cp, struct ip_vs_iphdr *iph)
+		 struct ip_vs_conn *cp/*连接信息*/, struct ip_vs_iphdr *iph)
 {
 	struct tcphdr *tcph;
 	unsigned int tcphoff = iph->len;
@@ -159,6 +160,7 @@ tcp_snat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 	oldlen = skb->len - tcphoff;
 
 	/* csum_check requires unshared skb */
+	//tcp时，需要更改tcp头部，故确保tcp负载前可写
 	if (skb_ensure_writable(skb, tcphoff + sizeof(*tcph)))
 		return 0;
 
@@ -166,10 +168,12 @@ tcp_snat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 		int ret;
 
 		/* Some checks before mangling */
+		//tcp checksum不正确，丢包
 		if (!tcp_csum_check(cp->af, skb, pp))
 			return 0;
 
 		/* Call application helper if needed */
+		//未深入分析去向app的处理
 		if (!(ret = ip_vs_app_pkt_out(cp, skb, iph)))
 			return 0;
 		/* ret=2: csum update is needed after payload mangling */
@@ -179,10 +183,12 @@ tcp_snat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 			payload_csum = true;
 	}
 
+	//修改源port为连接指定的vport
 	tcph = (void *)skb_network_header(skb) + tcphoff;
 	tcph->source = cp->vport;
 
 	/* Adjust TCP checksums */
+	//调整tcp checksum(注意这里直接采用cp中的vaddr,实际上层还没有换ip)
 	if (skb->ip_summed == CHECKSUM_PARTIAL) {
 		tcp_partial_csum_update(cp->af, tcph, &cp->daddr, &cp->vaddr,
 					htons(oldlen),
@@ -260,6 +266,7 @@ tcp_dnat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 			payload_csum = true;
 	}
 
+	//对l4层协议tcp做dnat处理（修改dst port)
 	tcph = (void *)skb_network_header(skb) + tcphoff;
 	tcph->dest = cp->dport;
 
@@ -299,7 +306,7 @@ tcp_dnat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 	return 1;
 }
 
-
+//检查tcp checksum是否正确
 static int
 tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp)
 {
@@ -314,6 +321,7 @@ tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp)
 
 	switch (skb->ip_summed) {
 	case CHECKSUM_NONE:
+		//设备没有做checksum,软件做
 		skb->csum = skb_checksum(skb, tcphoff, skb->len - tcphoff, 0);
 		/* fall through */
 	case CHECKSUM_COMPLETE:
@@ -330,6 +338,7 @@ tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp)
 			}
 		} else
 #endif
+			//校验tcp checksum
 			if (csum_tcpudp_magic(ip_hdr(skb)->saddr,
 					      ip_hdr(skb)->daddr,
 					      skb->len - tcphoff,

@@ -25,13 +25,17 @@
 #define IP_VS_SVC_F_SCHED2	0x0010		/* scheduler flag 2 */
 #define IP_VS_SVC_F_SCHED3	0x0020		/* scheduler flag 3 */
 
+//按src hash执行选择时，可能会选择出来一个不可用的dest,此选项用于支持当dest不可用时，
+//可以继续fallback,直接选出一个可用的dest
 #define IP_VS_SVC_F_SCHED_SH_FALLBACK	IP_VS_SVC_F_SCHED1 /* SH fallback */
+//是否也使用port做hash
 #define IP_VS_SVC_F_SCHED_SH_PORT	IP_VS_SVC_F_SCHED2 /* SH use port */
 
 /*
  *      Destination Server Flags
  */
 #define IP_VS_DEST_F_AVAILABLE	0x0001		/* server is available */
+//server过载
 #define IP_VS_DEST_F_OVERLOAD	0x0002		/* server is overloaded */
 
 /*

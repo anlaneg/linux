@@ -46,13 +46,19 @@ extern int ip_vs_conn_tab_size;
 
 struct ip_vs_iphdr {
 	int hdr_flags;	/* ipvs flags */
+	//到ipv4头部的offset
 	__u32 off;	/* Where IP or IPv4 header starts */
+	//到L4层头部的offset
 	__u32 len;	/* IPv4 simply where L4 starts
 			 * IPv6 where L4 Transport Header starts */
+	//分片的offset
 	__u16 fragoffs; /* IPv6 fragment offset, 0 if first frag (or not frag)*/
+	//L4层协议编号
 	__s16 protocol;
 	__s32 flags;
+	//源地址
 	union nf_inet_addr saddr;
+	//目的地址
 	union nf_inet_addr daddr;
 };
 
@@ -122,6 +128,7 @@ ip_vs_fill_iph_skb_icmp(int af, const struct sk_buff *skb, int offset,
 	return ip_vs_fill_iph_skb_off(af, skb, offset, hdr_flags, iphdr);
 }
 
+//解析skb中的ip层信息，填充到iphdr中
 static inline int
 ip_vs_fill_iph_skb(int af, const struct sk_buff *skb, bool inverse,
 		   struct ip_vs_iphdr *iphdr)
@@ -173,6 +180,7 @@ static inline void ip_vs_addr_set(int af, union nf_inet_addr *dst,
 	dst->all[3] = 0;
 }
 
+//地址比对
 static inline int ip_vs_addr_equal(int af, const union nf_inet_addr *a,
 				   const union nf_inet_addr *b)
 {
@@ -419,7 +427,7 @@ struct ip_vs_protocol {
 	char			*name;
 	u16			protocol;
 	u16			num_states;
-	int			dont_defrag;
+	int			dont_defrag;/*不处理分片重组*/
 
 	void (*init)(struct ip_vs_protocol *pp);
 
@@ -441,15 +449,18 @@ struct ip_vs_protocol {
 		       const struct sk_buff *skb,
 		       const struct ip_vs_iphdr *iph);
 
+	//查询skb对应的出方向连接
 	struct ip_vs_conn *
 	(*conn_out_get)(struct netns_ipvs *ipvs,
 			int af,
 			const struct sk_buff *skb,
 			const struct ip_vs_iphdr *iph);
 
+	//对l4层协议做snat处理(修改src port)
 	int (*snat_handler)(struct sk_buff *skb, struct ip_vs_protocol *pp,
 			    struct ip_vs_conn *cp, struct ip_vs_iphdr *iph);
 
+	////对l4层协议做dnat处理(修改dst port)
 	int (*dnat_handler)(struct sk_buff *skb, struct ip_vs_protocol *pp,
 			    struct ip_vs_conn *cp, struct ip_vs_iphdr *iph);
 
@@ -488,12 +499,12 @@ struct ip_vs_proto_data *ip_vs_proto_data_get(struct netns_ipvs *ipvs,
 
 struct ip_vs_conn_param {
 	struct netns_ipvs		*ipvs;
-	const union nf_inet_addr	*caddr;
-	const union nf_inet_addr	*vaddr;
+	const union nf_inet_addr	*caddr;//client端地址
+	const union nf_inet_addr	*vaddr;//virtual server端地址
 	__be16				cport;
 	__be16				vport;
-	__u16				protocol;
-	u16				af;
+	__u16				protocol;//协议号
+	u16				af;//协议族
 
 	const struct ip_vs_pe		*pe;
 	char				*pe_data;
@@ -631,6 +642,7 @@ struct ip_vs_service {
 	struct ip_vs_stats      stats;         /* statistics for the service */
 
 	/* for scheduling */
+	//serivce对应的调度器
 	struct ip_vs_scheduler __rcu *scheduler; /* bound scheduler object */
 	spinlock_t		sched_lock;    /* lock sched_data */
 	void			*sched_data;   /* scheduler application data */
@@ -833,6 +845,7 @@ struct ipvs_sync_daemon_cfg {
 /* IPVS in network namespace */
 struct netns_ipvs {
 	int			gen;		/* Generation */
+	//ipvs是否开启
 	int			enable;		/* enable like nf_hooks do */
 	/* Hash table: for real service lookups */
 	#define IP_VS_RTAB_BITS 4
@@ -1178,6 +1191,7 @@ enum {
 	IP_VS_DIR_LAST,
 };
 
+//填充ip_vs_conn_param
 static inline void ip_vs_conn_fill_param(struct netns_ipvs *ipvs, int af, int protocol,
 					 const union nf_inet_addr *caddr,
 					 __be16 cport,

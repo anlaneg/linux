@@ -721,6 +721,7 @@ static inline enum ip_defrag_users ip_vs_defrag_user(unsigned int hooknum)
 	return IP_DEFRAG_VS_OUT;
 }
 
+//分片重组，并计算ip层checksum
 static inline int ip_vs_gather_frags(struct netns_ipvs *ipvs,
 				     struct sk_buff *skb, u_int32_t user)
 {
@@ -730,6 +731,7 @@ static inline int ip_vs_gather_frags(struct netns_ipvs *ipvs,
 	err = ip_defrag(ipvs->net, skb, user);
 	local_bh_enable();
 	if (!err)
+		//重新计算skb的ip层checksum
 		ip_send_check(ip_hdr(skb));
 
 	return err;
@@ -1090,6 +1092,7 @@ static inline int is_tcp_reset(const struct sk_buff *skb, int nh_len)
 	return th->rst;
 }
 
+//检查是否为新建连接
 static inline bool is_new_conn(const struct sk_buff *skb,
 			       struct ip_vs_iphdr *iph)
 {
@@ -1284,10 +1287,12 @@ handle_response(int af, struct sk_buff *skb, struct ip_vs_proto_data *pd,
 
 	IP_VS_DBG_PKT(11, af, pp, skb, iph->off, "Outgoing packet");
 
+	//要修改l4层头之前的内容，故保证l4层头前可写
 	if (skb_ensure_writable(skb, iph->len))
 		goto drop;
 
 	/* mangle the packet */
+	//修改l4层报文，做snat
 	if (pp->snat_handler &&
 	    !SNAT_CALL(pp->snat_handler, skb, pp, cp, iph))
 		goto drop;
@@ -1298,6 +1303,8 @@ handle_response(int af, struct sk_buff *skb, struct ip_vs_proto_data *pd,
 	else
 #endif
 	{
+		//修改src ip,做ip地址变换
+		//为了分层而不得不做的很难受，在snat时已更新这一步引发的checksum问题
 		ip_hdr(skb)->saddr = cp->vaddr.ip;
 		ip_send_check(ip_hdr(skb));
 	}
@@ -1331,6 +1338,7 @@ handle_response(int af, struct sk_buff *skb, struct ip_vs_proto_data *pd,
 		ip_vs_update_conntrack(skb, cp, 0);
 	ip_vs_conn_put(cp);
 
+	//修改完成，使其继续走其它钩子点
 	LeaveFunction(11);
 	return NF_ACCEPT;
 
@@ -1374,6 +1382,7 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 	if (!ipvs->enable)
 		return NF_ACCEPT;
 
+	//提取skb中iphdr信息填充到iph中
 	ip_vs_fill_iph_skb(af, skb, false, &iph);
 #ifdef CONFIG_IP_VS_IPV6
 	if (af == AF_INET6) {
@@ -1404,6 +1413,7 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 #ifdef CONFIG_IP_VS_IPV6
 	if (af == AF_INET)
 #endif
+		//遇到ip分片，且需要做分片重组，则做分片重启，并填充iph
 		if (unlikely(ip_is_fragment(ip_hdr(skb)) && !pp->dont_defrag)) {
 			if (ip_vs_gather_frags(ipvs, skb,
 					       ip_vs_defrag_user(hooknum)))
@@ -1415,12 +1425,15 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 	/*
 	 * Check if the packet belongs to an existing entry
 	 */
+	/*检查skb是否已存在一个已有的连接*/
 	cp = INDIRECT_CALL_1(pp->conn_out_get, ip_vs_conn_out_get_proto,
 			     ipvs, af, skb, &iph);
 
 	if (likely(cp)) {
+		//已存在创建好的连接
 		if (IP_VS_FWD_METHOD(cp) != IP_VS_CONN_F_MASQ)
 			goto ignore_cp;
+		//修改报文做snat
 		return handle_response(af, skb, pd, cp, &iph, hooknum);
 	}
 
@@ -1544,12 +1557,13 @@ ip_vs_local_reply6(void *priv, struct sk_buff *skb,
 static unsigned int
 ip_vs_try_to_schedule(struct netns_ipvs *ipvs, int af, struct sk_buff *skb,
 		      struct ip_vs_proto_data *pd,
-		      int *verdict, struct ip_vs_conn **cpp,
+		      int *verdict, struct ip_vs_conn **cpp/*出参，产生新的连接*/,
 		      struct ip_vs_iphdr *iph)
 {
 	struct ip_vs_protocol *pp = pd->pp;
 
 	if (!iph->fragoffs) {
+		//首片报文（可能为非分片）
 		/* No (second) fragments need to enter here, as nf_defrag_ipv6
 		 * replayed fragment zero will already have created the cp
 		 */
@@ -2008,6 +2022,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 	if (unlikely(sysctl_backup_only(ipvs) || !ipvs->enable))
 		return NF_ACCEPT;
 
+	//解析skb ip层信息，填充到iph中
 	ip_vs_fill_iph_skb(af, skb, false, &iph);
 
 	/* Bad... Do not break raw sockets */
@@ -2091,6 +2106,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 	}
 
 	if (unlikely(!cp)) {
+		//没有连接，尝试调度，选择一个realserver,产生连接
 		int v;
 
 		if (!ip_vs_try_to_schedule(ipvs, af, skb, pd, &v, &cp, &iph))

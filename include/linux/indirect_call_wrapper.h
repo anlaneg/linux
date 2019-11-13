@@ -14,6 +14,7 @@
  * eventually invoking directly the builtin function. The functions are check
  * in the given order. Fallback to the indirect call.
  */
+//通过避免回调来提高性能
 #define INDIRECT_CALL_1(f, f1, ...)					\
 	({								\
 		likely(f == f1) ? f1(__VA_ARGS__) : f(__VA_ARGS__);	\

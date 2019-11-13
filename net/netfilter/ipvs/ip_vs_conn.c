@@ -55,7 +55,7 @@ static int ip_vs_conn_tab_mask __read_mostly;
 /*
  *  Connection hash table: for input and output packets lookups of IPVS
  */
-static struct hlist_head *ip_vs_conn_tab __read_mostly;
+static struct hlist_head *ip_vs_conn_tab __read_mostly;//ip_vs连接表
 
 /*  SLAB cache for IPVS connections */
 static struct kmem_cache *ip_vs_conn_cachep __read_mostly;
@@ -318,10 +318,12 @@ ip_vs_conn_fill_param_proto(struct netns_ipvs *ipvs,
 {
 	__be16 _ports[2], *pptr;
 
+	//取l4层前4个字节（srcport,dstport/type,code)
 	pptr = frag_safe_skb_hp(skb, iph->len, sizeof(_ports), _ports);
 	if (pptr == NULL)
 		return 1;
 
+	//填充conn_param
 	if (likely(!ip_vs_iph_inverse(iph)))
 		ip_vs_conn_fill_param(ipvs, af, iph->protocol, &iph->saddr,
 				      pptr[0], &iph->daddr, pptr[1], p);
@@ -406,7 +408,7 @@ struct ip_vs_conn *ip_vs_conn_out_get(const struct ip_vs_conn_param *p)
 	/*
 	 *	Check for "full" addressed entries
 	 */
-	hash = ip_vs_conn_hashkey_param(p, true);
+	hash = ip_vs_conn_hashkey_param(p, true/*用反方向查询*/);
 
 	rcu_read_lock();
 
@@ -417,6 +419,7 @@ struct ip_vs_conn *ip_vs_conn_out_get(const struct ip_vs_conn_param *p)
 		    ip_vs_addr_equal(p->af, p->caddr, &cp->daddr) &&
 		    p->protocol == cp->protocol &&
 		    cp->ipvs == p->ipvs) {
+			//确认连接匹配，如果增加引用失败，则continue
 			if (!__ip_vs_conn_get(cp))
 				continue;
 			/* HIT */
@@ -443,6 +446,7 @@ ip_vs_conn_out_get_proto(struct netns_ipvs *ipvs, int af,
 {
 	struct ip_vs_conn_param p;
 
+	//解析l4层，填充conn_param
 	if (ip_vs_conn_fill_param_proto(ipvs, af, skb, iph, &p))
 		return NULL;
 

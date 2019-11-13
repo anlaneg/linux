@@ -5408,6 +5408,7 @@ err_free:
 }
 EXPORT_SYMBOL(skb_vlan_untag);
 
+//确保自data到write_len长度可写（1。需平坦的内存;2.会改报文，不能与他人共享skb)
 int skb_ensure_writable(struct sk_buff *skb, int write_len)
 {
 	if (!pskb_may_pull(skb, write_len))

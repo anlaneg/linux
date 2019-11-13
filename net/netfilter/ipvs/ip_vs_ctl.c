@@ -355,6 +355,7 @@ static inline struct ip_vs_service *
 __ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u16 protocol,
 		     const union nf_inet_addr *vaddr, __be16 vport)
 {
+	//通过vport,vaddr，proto查找一个对应的service
 	unsigned int hash;
 	struct ip_vs_service *svc;
 
@@ -424,6 +425,7 @@ ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u32 fwmark, __u16 protocol
 	if (!svc && protocol == IPPROTO_TCP &&
 	    atomic_read(&ipvs->ftpsvc_counter) &&
 	    (vport == FTPDATA || ntohs(vport) >= inet_prot_sock(ipvs->net))) {
+		//对ftp serive做特殊处理（ftp数据端口）
 		/*
 		 * Check if ftp service entry exists, the packet
 		 * might belong to FTP data connections.
@@ -440,6 +442,7 @@ ip_vs_service_find(struct netns_ipvs *ipvs, int af, __u32 fwmark, __u16 protocol
 	}
 
   out:
+  	//查询到相应在的serive
 	IP_VS_DBG_BUF(9, "lookup service: fwm %u %s %s:%u %s\n",
 		      fwmark, ip_vs_proto_name(protocol),
 		      IP_VS_DBG_ADDR(af, vaddr), ntohs(vport),

@@ -90,6 +90,7 @@ ip_fragment(struct net *net, struct sock *sk, struct sk_buff *skb,
 /* Generate a checksum for an outgoing IP datagram. */
 void ip_send_check(struct iphdr *iph)
 {
+	//更新ip层checksum
 	iph->check = 0;
 	iph->check = ip_fast_csum((unsigned char *)iph, iph->ihl);
 }

@@ -157,6 +157,7 @@ EXPORT_SYMBOL(ip_vs_proto_get);
 struct ip_vs_proto_data *
 ip_vs_proto_data_get(struct netns_ipvs *ipvs, unsigned short proto)
 {
+	//给定l4层协议号，取此协议对应的ip_vs_proto_data
 	struct ip_vs_proto_data *pd;
 	unsigned int hash = IP_VS_PROTO_HASH(proto);
 

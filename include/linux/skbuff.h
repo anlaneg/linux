@@ -217,7 +217,7 @@
  */
 
 /* Don't change this without changing skb_csum_unnecessary! */
-#define CHECKSUM_NONE		0
+#define CHECKSUM_NONE		0 //checksum没有被校验（设备没有做checksum校验）
 #define CHECKSUM_UNNECESSARY	1
 #define CHECKSUM_COMPLETE	2
 #define CHECKSUM_PARTIAL	3

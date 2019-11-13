@@ -67,12 +67,14 @@ struct ip_vs_sh_bucket {
 
 struct ip_vs_sh_state {
 	struct rcu_head			rcu_head;
+	//按源地址hash的hash表，每个hash桶放一个dst
 	struct ip_vs_sh_bucket		buckets[IP_VS_SH_TAB_SIZE];
 };
 
 /* Helper function to determine if server is unavailable */
 static inline bool is_unavailable(struct ip_vs_dest *dest)
 {
+	//server过载或者service权重小于0，则server不可用
 	return atomic_read(&dest->weight) <= 0 ||
 	       dest->flags & IP_VS_DEST_F_OVERLOAD;
 }
@@ -107,7 +109,7 @@ ip_vs_sh_get(struct ip_vs_service *svc, struct ip_vs_sh_state *s,
 	unsigned int hash = ip_vs_sh_hashkey(svc->af, addr, port, 0);
 	struct ip_vs_dest *dest = rcu_dereference(s->buckets[hash].dest);
 
-	return (!dest || is_unavailable(dest)) ? NULL : dest;
+	return (!dest/*没有选中dest*/ || is_unavailable(dest))/*服务器无效*/ ? NULL : dest;
 }
 
 
@@ -130,15 +132,18 @@ ip_vs_sh_get_fallback(struct ip_vs_service *svc, struct ip_vs_sh_state *s,
 	dest = rcu_dereference(s->buckets[ihash].dest);
 	if (!dest)
 		return NULL;
+	//如果hash到的dest是可用的，则直接返回
 	if (!is_unavailable(dest))
 		return dest;
 
+	//选出了一个不可用dest,执行fallback
 	IP_VS_DBG_BUF(6, "SH: selected unavailable server %s:%d, reselecting",
 		      IP_VS_DBG_ADDR(dest->af, &dest->addr), ntohs(dest->port));
 
 	/* if the original dest is unavailable, loop around the table
 	 * starting from ihash to find a new dest
 	 */
+	//重新hash选择，直接选出一个可用的dest
 	for (offset = 0; offset < IP_VS_SH_TAB_SIZE; offset++) {
 		roffset = (offset + ihash) % IP_VS_SH_TAB_SIZE;
 		hash = ip_vs_sh_hashkey(svc->af, addr, port, roffset);
@@ -305,6 +310,7 @@ ip_vs_sh_get_port(const struct sk_buff *skb, struct ip_vs_iphdr *iph)
 /*
  *      Source Hashing scheduling
  */
+//源地址调度模式（支持srcip,srcport)
 static struct ip_vs_dest *
 ip_vs_sh_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 		  struct ip_vs_iphdr *iph)
@@ -314,21 +320,25 @@ ip_vs_sh_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,
 	__be16 port = 0;
 	const union nf_inet_addr *hash_addr;
 
+	//取待hash的地址
 	hash_addr = ip_vs_iph_inverse(iph) ? &iph->daddr : &iph->saddr;
 
 	IP_VS_DBG(6, "ip_vs_sh_schedule(): Scheduling...\n");
 
+	//如果需要使用port做hash,则提取port
 	if (svc->flags & IP_VS_SVC_F_SCHED_SH_PORT)
 		port = ip_vs_sh_get_port(skb, iph);
 
 	s = (struct ip_vs_sh_state *) svc->sched_data;
 
+	//支持fallback的dest选择
 	if (svc->flags & IP_VS_SVC_F_SCHED_SH_FALLBACK)
 		dest = ip_vs_sh_get_fallback(svc, s, hash_addr, port);
 	else
 		dest = ip_vs_sh_get(svc, s, hash_addr, port);
 
 	if (!dest) {
+		//没有选出有效的dst,返回NULL
 		ip_vs_scheduler_err(svc, "no destination available");
 		return NULL;
 	}
