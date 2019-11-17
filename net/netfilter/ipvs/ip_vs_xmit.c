@@ -655,6 +655,7 @@ static inline int ip_vs_nat_send_or_cont(int pf, struct sk_buff *skb,
 
 	if (!local) {
 		skb_forward_csum(skb);
+		//调用local_out钩子点，返回stolen
 		NF_HOOK(pf, NF_INET_LOCAL_OUT, cp->ipvs->net, NULL, skb,
 			NULL, skb_dst(skb)->dev, dst_output);
 	} else
@@ -761,6 +762,7 @@ ip_vs_bypass_xmit_v6(struct sk_buff *skb, struct ip_vs_conn *cp,
  *      NAT transmitter (only for outside-to-inside nat forwarding)
  *      Not used for related ICMP
  */
+//对报文做dnat处理
 int
 ip_vs_nat_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 	       struct ip_vs_protocol *pp, struct ip_vs_iphdr *ipvsh)
@@ -823,9 +825,12 @@ ip_vs_nat_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		goto tx_error;
 
 	/* mangle the packet */
+	//对报文做l4层的dnat
 	if (pp->dnat_handler && !pp->dnat_handler(skb, pp, cp, ipvsh))
 		goto tx_error;
+	//对l3层做dnat
 	ip_hdr(skb)->daddr = cp->daddr.ip;
+	//更正l3层的checksum
 	ip_send_check(ip_hdr(skb));
 
 	IP_VS_DBG_PKT(10, AF_INET, pp, skb, ipvsh->off, "After DNAT");
@@ -945,9 +950,9 @@ tx_error:
  */
 static struct sk_buff *
 ip_vs_prepare_tunneled_skb(struct sk_buff *skb, int skb_af,
-			   unsigned int max_headroom, __u8 *next_protocol,
-			   __u32 *payload_len, __u8 *dsfield, __u8 *ttl,
-			   __be16 *df)
+			   unsigned int max_headroom, __u8 *next_protocol/*内层协议类型*/,
+			   __u32 *payload_len/*隧道负载长度*/, __u8 *dsfield/*隧道ip头中的tos字段*/, __u8 *ttl/*隧道封装后的ttl*/,
+			   __be16 *df/*是否有不容许分片标记*/)
 {
 	struct sk_buff *new_skb = NULL;
 	struct iphdr *old_iph = NULL;
@@ -958,6 +963,7 @@ ip_vs_prepare_tunneled_skb(struct sk_buff *skb, int skb_af,
 
 	ip_vs_drop_early_demux_sk(skb);
 
+	//headroom空间不足
 	if (skb_headroom(skb) < max_headroom || skb_cloned(skb)) {
 		new_skb = skb_realloc_headroom(skb, max_headroom);
 		if (!new_skb)
@@ -992,6 +998,7 @@ ip_vs_prepare_tunneled_skb(struct sk_buff *skb, int skb_af,
 		/* fix old IP header checksum */
 		ip_send_check(old_iph);
 		old_dsfield = ipv4_get_dsfield(old_iph);
+		//取隧道封装后的ttl
 		*ttl = old_iph->ttl;
 		if (payload_len)
 			*payload_len = ntohs(old_iph->tot_len);
@@ -1105,7 +1112,8 @@ ipvs_gre_encap(struct net *net, struct sk_buff *skb,
 		tflags |= TUNNEL_CSUM;
 
 	hdrlen = gre_calc_hlen(tflags);
-	gre_build_header(skb, hdrlen, tflags, proto, 0, 0);
+	//构造gre头
+	gre_build_header(skb, hdrlen, tflags, proto/*gre上层协议号*/, 0, 0);
 
 	*next_protocol = IPPROTO_GRE;
 }
@@ -1129,6 +1137,7 @@ ipvs_gre_encap(struct net *net, struct sk_buff *skb,
  *
  *   Used for ANY protocol
  */
+//隧道方式封装
 int
 ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		  struct ip_vs_protocol *pp, struct ip_vs_iphdr *ipvsh)
@@ -1186,6 +1195,7 @@ ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 		size_t gre_hdrlen;
 		__be16 tflags = 0;
 
+		//获得gre封装后大小
 		if (tun_flags & IP_VS_TUNNEL_ENCAP_FLAG_CSUM)
 			tflags |= TUNNEL_CSUM;
 		gre_hdrlen = gre_calc_hlen(tflags);
@@ -1201,6 +1211,7 @@ ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 	if (IS_ERR(skb))
 		goto tx_error;
 
+	//gso参数指定
 	gso_type = __tun_gso_type_mask(AF_INET, cp->af);
 	if (tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GUE) {
 		if ((tun_flags & IP_VS_TUNNEL_ENCAP_FLAG_CSUM) ||
@@ -1238,8 +1249,10 @@ ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 
 		udp_set_csum(!check, skb, saddr, cp->daddr.ip, skb->len);
 	} else if (tun_type == IP_VS_CONN_F_TUNNEL_TYPE_GRE)
+	    //完成gre封装
 		ipvs_gre_encap(net, skb, cp, &next_protocol);
 
+	//添加外层ip头部
 	skb_push(skb, sizeof(struct iphdr));
 	skb_reset_network_header(skb);
 	memset(&(IPCB(skb)->opt), 0, sizeof(IPCB(skb)->opt));
@@ -1263,6 +1276,7 @@ ip_vs_tunnel_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 
 	ret = ip_vs_tunnel_xmit_prepare(skb, cp);
 	if (ret == NF_ACCEPT)
+	    //报文向外发送
 		ip_local_out(net, skb->sk, skb);
 	else if (ret == NF_DROP)
 		kfree_skb(skb);

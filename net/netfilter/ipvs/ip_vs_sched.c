@@ -28,7 +28,7 @@ EXPORT_SYMBOL(ip_vs_scheduler_err);
 /*
  *  IPVS scheduler list
  */
-static LIST_HEAD(ip_vs_schedulers);
+static LIST_HEAD(ip_vs_schedulers);//注册所有调度算法
 
 /* semaphore for schedulers */
 static DEFINE_MUTEX(ip_vs_sched_mutex);
@@ -78,6 +78,7 @@ void ip_vs_unbind_scheduler(struct ip_vs_service *svc,
  */
 static struct ip_vs_scheduler *ip_vs_sched_getbyname(const char *sched_name)
 {
+    //给定scheduler名称查询相应的scheduler
 	struct ip_vs_scheduler *sched;
 
 	IP_VS_DBG(2, "%s(): sched_name \"%s\"\n", __func__, sched_name);
@@ -112,6 +113,7 @@ static struct ip_vs_scheduler *ip_vs_sched_getbyname(const char *sched_name)
  */
 struct ip_vs_scheduler *ip_vs_scheduler_get(const char *sched_name)
 {
+    //通过名称查找指定的scheduler
 	struct ip_vs_scheduler *sched;
 
 	/*
@@ -123,6 +125,7 @@ struct ip_vs_scheduler *ip_vs_scheduler_get(const char *sched_name)
 	 *  If scheduler not found, load the module and search again
 	 */
 	if (sched == NULL) {
+	    //加载module后再查询一次
 		request_module("ip_vs_%s", sched_name);
 		sched = ip_vs_sched_getbyname(sched_name);
 	}

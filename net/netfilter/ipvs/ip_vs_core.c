@@ -472,6 +472,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 		return NULL;
 
 	if (likely(!ip_vs_iph_inverse(iph))) {
+	    //非反向时，saddr为client addr,daddr为vip
 		cport = pptr[0];
 		caddr = &iph->saddr;
 		vport = pptr[1];
@@ -538,6 +539,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	if (sched) {
 		/* read svc->sched_data after svc->scheduler */
 		smp_rmb();
+		//选出一个real server
 		dest = sched->schedule(svc, skb, iph);
 	} else {
 		dest = NULL;
@@ -557,6 +559,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	{
 		struct ip_vs_conn_param p;
 
+		//创建一条连接
 		ip_vs_conn_fill_param(svc->ipvs, svc->af, iph->protocol,
 				      caddr, cport, vaddr, vport, &p);
 		cp = ip_vs_conn_new(&p, dest->af, &dest->addr,
@@ -1405,6 +1408,7 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 				return verdict;
 		}
 
+	//取l4层协议对应的proto data
 	pd = ip_vs_proto_data_get(ipvs, iph.protocol);
 	if (unlikely(!pd))
 		return NF_ACCEPT;
@@ -1426,7 +1430,7 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 	/*
 	 * Check if the packet belongs to an existing entry
 	 */
-	/*检查skb是否已存在一个已有的连接*/
+	/*检查skb是否已存在一个已有的连接(外送方向，执行dnat转换，采用目的ip及目的port查询)*/
 	cp = INDIRECT_CALL_1(pp->conn_out_get, ip_vs_conn_out_get_proto,
 			     ipvs, af, skb, &iph);
 
@@ -2059,6 +2063,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 	/* Protocol supported? */
 	pd = ip_vs_proto_data_get(ipvs, iph.protocol);
 	if (unlikely(!pd)) {
+	    //找不到proto data,可能是隧道报文
 		/* The only way we'll see this packet again is if it's
 		 * encapsulated, so mark it with ipvs_property=1 so we
 		 * skip it if we're ignoring tunneled packets
@@ -2097,6 +2102,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 		}
 
 		if (resched) {
+		    //需要重新调度，将cp置为NULL
 			if (!atomic_read(&cp->n_control))
 				ip_vs_conn_expire_now(cp);
 			__ip_vs_conn_put(cp);
@@ -2118,6 +2124,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 
 	/* Check the server status */
 	if (cp->dest && !(cp->dest->flags & IP_VS_DEST_F_AVAILABLE)) {
+	    //目的server目前不可用时，丢包
 		/* the destination server is not available */
 
 		__u32 flags = cp->flags;
@@ -2138,6 +2145,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 	}
 
 	ip_vs_in_stats(cp, skb);
+	//更新连接的状态
 	ip_vs_set_state(cp, IP_VS_DIR_INPUT, skb, pd);
 	if (cp->packet_xmit)
 		ret = cp->packet_xmit(skb, cp, pp, &iph);
@@ -2433,6 +2441,7 @@ static void __net_exit __ip_vs_cleanup(struct net *net)
 	net->ipvs = NULL;
 }
 
+//为当前net namespace注册netfilter hook点
 static int __net_init __ip_vs_dev_init(struct net *net)
 {
 	int ret;

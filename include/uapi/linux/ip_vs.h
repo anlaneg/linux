@@ -114,6 +114,7 @@
 				      IP_VS_CONN_F_SEQ_MASK)
 
 /* Flags that are not sent to backup server start from bit 16 */
+//不使用netfilter连接跟踪
 #define IP_VS_CONN_F_NFCT	(1 << 16)	/* use netfilter conntrack */
 
 /* Connection flags from destination that can be changed by user space */
@@ -132,6 +133,7 @@
 enum {
 	IP_VS_CONN_F_TUNNEL_TYPE_IPIP = 0,	/* IPIP */
 	IP_VS_CONN_F_TUNNEL_TYPE_GUE,		/* GUE */
+	//gre类型的隧道
 	IP_VS_CONN_F_TUNNEL_TYPE_GRE,		/* GRE */
 	IP_VS_CONN_F_TUNNEL_TYPE_MAX,
 };

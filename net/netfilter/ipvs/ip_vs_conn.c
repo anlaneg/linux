@@ -130,6 +130,7 @@ static unsigned int ip_vs_conn_hashkey_param(const struct ip_vs_conn_param *p,
 			ip_vs_conn_tab_mask;
 
 	if (likely(!inverse)) {
+	    //利用客户端地址查询
 		addr = p->caddr;
 		port = p->cport;
 	} else {
@@ -330,6 +331,7 @@ ip_vs_conn_fill_param_proto(struct netns_ipvs *ipvs,
 
 	//填充conn_param
 	if (likely(!ip_vs_iph_inverse(iph)))
+	    //使用目的addr
 		ip_vs_conn_fill_param(ipvs, af, iph->protocol, &iph->saddr,
 				      pptr[0], &iph->daddr, pptr[1], p);
 	else
@@ -413,7 +415,7 @@ struct ip_vs_conn *ip_vs_conn_out_get(const struct ip_vs_conn_param *p)
 	/*
 	 *	Check for "full" addressed entries
 	 */
-	hash = ip_vs_conn_hashkey_param(p, true/*用反方向查询*/);
+	hash = ip_vs_conn_hashkey_param(p, true/*用反方向查询，即vip,vport查询*/);
 
 	rcu_read_lock();
 

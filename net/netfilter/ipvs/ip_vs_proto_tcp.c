@@ -232,7 +232,7 @@ tcp_snat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 	return 1;
 }
 
-
+//对tcp做port的dnat及checksum调整
 static int
 tcp_dnat_handler(struct sk_buff *skb, struct ip_vs_protocol *pp,
 		 struct ip_vs_conn *cp, struct ip_vs_iphdr *iph)

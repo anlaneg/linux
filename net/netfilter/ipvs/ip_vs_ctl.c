@@ -651,6 +651,7 @@ struct ip_vs_dest *ip_vs_find_tunnel(struct netns_ipvs *ipvs, int af,
 /* Lookup destination by {addr,port} in the given service
  * Called under RCU lock.
  */
+//查询serivce中是否存在指定dest
 static struct ip_vs_dest *
 ip_vs_lookup_dest(struct ip_vs_service *svc, int dest_af,
 		  const union nf_inet_addr *daddr, __be16 dport)
@@ -1039,6 +1040,7 @@ ip_vs_add_dest(struct ip_vs_service *svc, struct ip_vs_dest_user_kern *udest)
 
 	EnterFunction(2);
 
+	//server的权重必须大于等于0
 	if (udest->weight < 0) {
 		pr_err("%s(): server weight less than zero\n", __func__);
 		return -ERANGE;
@@ -1057,10 +1059,12 @@ ip_vs_add_dest(struct ip_vs_service *svc, struct ip_vs_dest_user_kern *udest)
 		}
 	}
 
+	//填充udest的目的ip
 	ip_vs_addr_copy(udest->af, &daddr, &udest->addr);
 
 	/* We use function that requires RCU lock */
 	rcu_read_lock();
+	//查询real server是否已存在
 	dest = ip_vs_lookup_dest(svc, udest->af, &daddr, dport);
 	rcu_read_unlock();
 
@@ -1076,6 +1080,7 @@ ip_vs_add_dest(struct ip_vs_service *svc, struct ip_vs_dest_user_kern *udest)
 	dest = ip_vs_trash_get_dest(svc, udest->af, &daddr, dport);
 
 	if (dest != NULL) {
+	    //real server已存在，执行更新
 		IP_VS_DBG_BUF(3, "Get destination %s:%u from trash, "
 			      "dest->refcnt=%d, service %u/%s:%u\n",
 			      IP_VS_DBG_ADDR(udest->af, &daddr), ntohs(dport),
@@ -1087,6 +1092,7 @@ ip_vs_add_dest(struct ip_vs_service *svc, struct ip_vs_dest_user_kern *udest)
 		__ip_vs_update_dest(svc, dest, udest, 1);
 		ret = 0;
 	} else {
+	    //real server不存在，执行添加
 		/*
 		 * Allocate and initialize the dest structure
 		 */
@@ -1286,6 +1292,7 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 
 	/* Lookup the scheduler by 'u->sched_name' */
 	if (strcmp(u->sched_name, "none")) {
+	    //调度名称配置不为none,通过名称查找sched
 		sched = ip_vs_scheduler_get(u->sched_name);
 		if (!sched) {
 			pr_info("Scheduler module ip_vs_%s not found\n",
@@ -1295,6 +1302,7 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 		}
 	}
 
+	//如果设置了pe名称，则查找相应的pe
 	if (u->pe_name && *u->pe_name) {
 		pe = ip_vs_pe_getbyname(u->pe_name);
 		if (pe == NULL) {
@@ -1320,6 +1328,7 @@ ip_vs_add_service(struct netns_ipvs *ipvs, struct ip_vs_service_user_kern *u,
 	}
 #endif
 
+	//创建service
 	svc = kzalloc(sizeof(struct ip_vs_service), GFP_KERNEL);
 	if (svc == NULL) {
 		IP_VS_DBG(1, "%s(): no memory\n", __func__);
@@ -3158,9 +3167,9 @@ static bool ip_vs_is_af_valid(int af)
 }
 
 static int ip_vs_genl_parse_service(struct netns_ipvs *ipvs,
-				    struct ip_vs_service_user_kern *usvc,
+				    struct ip_vs_service_user_kern *usvc/*出参，userspace配置的serivce*/,
 				    struct nlattr *nla, bool full_entry,
-				    struct ip_vs_service **ret_svc)
+				    struct ip_vs_service **ret_svc/*出参，kernel中配置的service*/)
 {
 	struct nlattr *attrs[IPVS_SVC_ATTR_MAX + 1];
 	struct nlattr *nla_af, *nla_port, *nla_fwmark, *nla_protocol, *nla_addr;
@@ -3171,6 +3180,7 @@ static int ip_vs_genl_parse_service(struct netns_ipvs *ipvs,
 	    nla_parse_nested_deprecated(attrs, IPVS_SVC_ATTR_MAX, nla, ip_vs_svc_policy, NULL))
 		return -EINVAL;
 
+	//serivce内容解析
 	nla_af		= attrs[IPVS_SVC_ATTR_AF];
 	nla_protocol	= attrs[IPVS_SVC_ATTR_PROTOCOL];
 	nla_addr	= attrs[IPVS_SVC_ATTR_ADDR];
@@ -3197,13 +3207,14 @@ static int ip_vs_genl_parse_service(struct netns_ipvs *ipvs,
 	}
 
 	rcu_read_lock();
+	//通过解析出来的内容，查找service
 	if (usvc->fwmark)
 		svc = __ip_vs_svc_fwm_find(ipvs, usvc->af, usvc->fwmark);
 	else
 		svc = __ip_vs_service_find(ipvs, usvc->af, usvc->protocol,
 					   &usvc->addr, usvc->port);
 	rcu_read_unlock();
-	*ret_svc = svc;
+	*ret_svc = svc;/*返回查找到的内容*/
 
 	/* If a full entry was requested, check for the additional fields */
 	if (full_entry) {
@@ -3660,9 +3671,9 @@ static int ip_vs_genl_set_cmd(struct sk_buff *skb, struct genl_info *info)
 	if (cmd == IPVS_CMD_NEW_SERVICE || cmd == IPVS_CMD_SET_SERVICE)
 		need_full_svc = true;
 
-	ret = ip_vs_genl_parse_service(ipvs, &usvc,
+	ret = ip_vs_genl_parse_service(ipvs, &usvc/*出参，用户配置的service*/,
 				       info->attrs[IPVS_CMD_ATTR_SERVICE],
-				       need_full_svc, &svc);
+				       need_full_svc, &svc/*出参，kernel中的service*/);
 	if (ret)
 		goto out;
 
@@ -3723,9 +3734,12 @@ static int ip_vs_genl_set_cmd(struct sk_buff *skb, struct genl_info *info)
 
 	switch (cmd) {
 	case IPVS_CMD_NEW_SERVICE:
+	    //service创建
 		if (svc == NULL)
+		    //kernel中没有创建此service,现在利用usvc执行创建
 			ret = ip_vs_add_service(ipvs, &usvc, &svc);
 		else
+		    //kernel中已存在，执行删除
 			ret = -EEXIST;
 		break;
 	case IPVS_CMD_SET_SERVICE:
@@ -3736,6 +3750,7 @@ static int ip_vs_genl_set_cmd(struct sk_buff *skb, struct genl_info *info)
 		/* do not use svc, it can be freed */
 		break;
 	case IPVS_CMD_NEW_DEST:
+	    //添加real server
 		ret = ip_vs_add_dest(svc, &udest);
 		break;
 	case IPVS_CMD_SET_DEST:

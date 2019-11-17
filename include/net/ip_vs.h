@@ -38,6 +38,7 @@
 /* Generic access of ipvs struct */
 static inline struct netns_ipvs *net_ipvs(struct net* net)
 {
+    //取此net namespace对应的ipvs结构
 	return net->ipvs;
 }
 
@@ -437,6 +438,7 @@ struct ip_vs_protocol {
 
 	void (*exit_netns)(struct netns_ipvs *ipvs, struct ip_vs_proto_data *pd);
 
+	//选择一个real server并创建连接
 	int (*conn_schedule)(struct netns_ipvs *ipvs,
 			     int af, struct sk_buff *skb,
 			     struct ip_vs_proto_data *pd,
@@ -607,12 +609,14 @@ struct ip_vs_dest_user_kern {
 	int			weight;		/* destination weight */
 
 	/* thresholds for active connections */
+	//两个门限值的设定（分三个段）
 	u32			u_threshold;	/* upper threshold */
 	u32			l_threshold;	/* lower threshold */
 
 	/* Address family of addr */
 	u16			af;
 
+	//隧道类型及隧道端口，隧道flags
 	u16			tun_type;	/* tunnel type */
 	__be16			tun_port;	/* tunnel port */
 	u16			tun_flags;	/* tunnel flags */
@@ -1596,6 +1600,7 @@ static inline void ip_vs_notrack(struct sk_buff *skb)
 	struct nf_conn *ct = nf_ct_get(skb, &ctinfo);
 
 	if (ct) {
+	    //标记为不使用连接跟踪
 		nf_conntrack_put(&ct->ct_general);
 		nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
 	}

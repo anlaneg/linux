@@ -63,6 +63,7 @@ struct ip_vs_pe *ip_vs_pe_getbyname(const char *name)
 }
 
 /* Register a pe in the pe list */
+//pe注册
 int register_ip_vs_pe(struct ip_vs_pe *pe)
 {
 	struct ip_vs_pe *tmp;
