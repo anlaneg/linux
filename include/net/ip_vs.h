@@ -548,6 +548,7 @@ struct ip_vs_conn {
 	/* Control members */
 	struct ip_vs_conn       *control;       /* Master control connection */
 	atomic_t                n_control;      /* Number of controlled ones */
+	//对应的真实server
 	struct ip_vs_dest       *dest;          /* real server */
 	atomic_t                in_pkts;        /* incoming packet counter */
 
@@ -556,6 +557,7 @@ struct ip_vs_conn {
 	 * otherwise this must be changed to a sk_buff **.
 	 * NF_ACCEPT can be returned when destination is local.
 	 */
+	//报文传输函数
 	int (*packet_xmit)(struct sk_buff *skb, struct ip_vs_conn *cp,
 			   struct ip_vs_protocol *pp, struct ip_vs_iphdr *iph);
 

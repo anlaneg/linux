@@ -253,6 +253,7 @@ static inline bool ensure_mtu_is_adequate(struct netns_ipvs *ipvs, int skb_af,
 	return true;
 }
 
+//执行ttl减一操作
 static inline bool decrement_ttl(struct netns_ipvs *ipvs,
 				 int skb_af,
 				 struct sk_buff *skb)
@@ -285,6 +286,7 @@ static inline bool decrement_ttl(struct netns_ipvs *ipvs,
 #endif
 	{
 		if (ip_hdr(skb)->ttl <= 1) {
+			//ttl过小，发送ttl不足
 			/* Tell the sender its packet died... */
 			__IP_INC_STATS(net, IPSTATS_MIB_INHDRERRORS);
 			icmp_send(skb, ICMP_TIME_EXCEEDED, ICMP_EXC_TTL, 0);

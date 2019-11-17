@@ -510,6 +510,7 @@ void ip_vs_conn_fill_cport(struct ip_vs_conn *cp, __be16 cport)
  */
 static inline void ip_vs_bind_xmit(struct ip_vs_conn *cp)
 {
+	//按不同类型执行报文发送
 	switch (IP_VS_FWD_METHOD(cp)) {
 	case IP_VS_CONN_F_MASQ:
 		cp->packet_xmit = ip_vs_nat_xmit;
@@ -818,6 +819,7 @@ static void ip_vs_conn_rcu_free(struct rcu_head *head)
 	kmem_cache_free(ip_vs_conn_cachep, cp);
 }
 
+//连接过期回调
 static void ip_vs_conn_expire(struct timer_list *t)
 {
 	struct ip_vs_conn *cp = from_timer(cp, t, timer);
@@ -918,6 +920,7 @@ ip_vs_conn_new(const struct ip_vs_conn_param *p, int dest_af,
 	struct ip_vs_proto_data *pd = ip_vs_proto_data_get(p->ipvs,
 							   p->protocol);
 
+	//申请connect
 	cp = kmem_cache_alloc(ip_vs_conn_cachep, GFP_ATOMIC);
 	if (cp == NULL) {
 		IP_VS_ERR_RL("%s(): no memory\n", __func__);
@@ -930,15 +933,18 @@ ip_vs_conn_new(const struct ip_vs_conn_param *p, int dest_af,
 	cp->af		   = p->af;
 	cp->daf		   = dest_af;
 	cp->protocol	   = p->protocol;
+	//设置caddr
 	ip_vs_addr_set(p->af, &cp->caddr, p->caddr);
 	cp->cport	   = p->cport;
 	/* proto should only be IPPROTO_IP if p->vaddr is a fwmark */
 	ip_vs_addr_set(p->protocol == IPPROTO_IP ? AF_UNSPEC : p->af,
 		       &cp->vaddr, p->vaddr);
 	cp->vport	   = p->vport;
+	//设置daddr
 	ip_vs_addr_set(cp->daf, &cp->daddr, daddr);
 	cp->dport          = dport;
 	cp->flags	   = flags;
+	//设置的skb mark
 	cp->fwmark         = fwmark;
 	if (flags & IP_VS_CONN_F_TEMPLATE && p->pe) {
 		ip_vs_pe_get(p->pe);
@@ -990,6 +996,7 @@ ip_vs_conn_new(const struct ip_vs_conn_param *p, int dest_af,
 		ip_vs_bind_xmit_v6(cp);
 	else
 #endif
+		//为连接绑定xmit函数
 		ip_vs_bind_xmit(cp);
 
 	if (unlikely(pd && atomic_read(&pd->appcnt)))

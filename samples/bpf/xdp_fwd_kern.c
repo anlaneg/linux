@@ -34,6 +34,7 @@ struct bpf_map_def SEC("maps") xdp_tx_ports = {
 /* from include/net/ip.h */
 static __always_inline int ip_decrease_ttl(struct iphdr *iph)
 {
+	//ip层减少ttl并计算checksum
 	u32 check = (__force u32)iph->check;
 
 	check += (__force u32)htons(0x0100);

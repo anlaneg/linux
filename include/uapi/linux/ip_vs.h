@@ -86,6 +86,7 @@
 #define IP_VS_CONN_F_FWD_MASK	0x0007		/* mask for the fwd methods */
 #define IP_VS_CONN_F_MASQ	0x0000		/* masquerading/NAT */
 #define IP_VS_CONN_F_LOCALNODE	0x0001		/* local node */
+//执行隧道式封装
 #define IP_VS_CONN_F_TUNNEL	0x0002		/* tunneling */
 #define IP_VS_CONN_F_DROUTE	0x0003		/* direct routing */
 #define IP_VS_CONN_F_BYPASS	0x0004		/* cache bypass */

@@ -467,10 +467,12 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	/*
 	 * IPv6 frags, only the first hit here.
 	 */
+	//取l4 port信息
 	pptr = frag_safe_skb_hp(skb, iph->len, sizeof(_ports), _ports);
 	if (pptr == NULL)
 		return NULL;
 
+	//准备cport,caddr,vport,vaddr
 	if (likely(!ip_vs_iph_inverse(iph))) {
 	    //非反向时，saddr为client addr,daddr为vip
 		cport = pptr[0];
@@ -491,6 +493,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	 * with persistence the connection is created on SYN+ACK.
 	 */
 	if (cport == FTPDATA) {
+		//针对alg相关的ftp,不处理它
 		IP_VS_DBG_PKT(12, svc->af, pp, skb, iph->off,
 			      "Not scheduling FTPDATA");
 		return NULL;
@@ -500,6 +503,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	 *    Do not schedule replies from local real server.
 	 */
 	if ((!skb->dev || skb->dev->flags & IFF_LOOPBACK)) {
+		//从本机下来的流量
 		iph->hdr_flags ^= IP_VS_HDR_INVERSE;
 		cp = INDIRECT_CALL_1(pp->conn_in_get,
 				     ip_vs_conn_in_get_proto, svc->ipvs,
@@ -535,6 +539,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 		return NULL;
 	}
 
+	//依据service指定的调度算法，执行调度
 	sched = rcu_dereference(svc->scheduler);
 	if (sched) {
 		/* read svc->sched_data after svc->scheduler */
@@ -556,6 +561,7 @@ ip_vs_schedule(struct ip_vs_service *svc, struct sk_buff *skb,
 	/*
 	 *    Create a connection entry.
 	 */
+	//选择出了dest,执行连接创建，并返回
 	{
 		struct ip_vs_conn_param p;
 
