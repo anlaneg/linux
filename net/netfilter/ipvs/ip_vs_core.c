@@ -1417,7 +1417,7 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 	//取l4层协议对应的proto data
 	pd = ip_vs_proto_data_get(ipvs, iph.protocol);
 	if (unlikely(!pd))
-		return NF_ACCEPT;
+		return NF_ACCEPT;//无pd,不处理
 	pp = pd->pp;
 
 	/* reassemble IP fragments */
@@ -1444,7 +1444,8 @@ ip_vs_out(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, in
 		//已存在创建好的连接
 		if (IP_VS_FWD_METHOD(cp) != IP_VS_CONN_F_MASQ)
 			goto ignore_cp;
-		//修改报文做snat
+
+		//有连接，但仅处理nat方式，修改报文做snat
 		return handle_response(af, skb, pd, cp, &iph, hooknum);
 	}
 
@@ -2087,7 +2088,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 			     ipvs, af, skb, &iph);
 
 	conn_reuse_mode = sysctl_conn_reuse_mode(ipvs);
-	if (conn_reuse_mode && !iph.fragoffs && is_new_conn(skb, &iph) && cp) {
+	if (conn_reuse_mode && !iph.fragoffs/*首片或者非分片*/ && is_new_conn(skb, &iph) && cp) {
 		bool uses_ct = false, resched = false;
 
 		if (unlikely(sysctl_expire_nodest_conn(ipvs)) && cp->dest &&
@@ -2153,6 +2154,7 @@ ip_vs_in(struct netns_ipvs *ipvs, unsigned int hooknum, struct sk_buff *skb, int
 	ip_vs_in_stats(cp, skb);
 	//更新连接的状态
 	ip_vs_set_state(cp, IP_VS_DIR_INPUT, skb, pd);
+	//将报文发送出去
 	if (cp->packet_xmit)
 		ret = cp->packet_xmit(skb, cp, pp, &iph);
 		/* do not touch skb anymore */
@@ -2285,7 +2287,7 @@ ip_vs_forward_icmp_v6(void *priv, struct sk_buff *skb,
 static const struct nf_hook_ops ip_vs_ops[] = {
 	/* After packet filtering, change source only for VS/NAT */
 	{
-		.hook		= ip_vs_reply4,
+		.hook		= ip_vs_reply4,/*相当于vs_remote_request4的快路*/
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_NAT_SRC - 2,

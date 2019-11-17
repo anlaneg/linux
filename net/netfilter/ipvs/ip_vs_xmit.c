@@ -121,7 +121,7 @@ __mtu_check_toobig_v6(const struct sk_buff *skb, u32 mtu)
 
 /* Get route to daddr, update *saddr, optionally bind route to saddr */
 static struct rtable *do_output_route4(struct net *net, __be32 daddr,
-				       int rt_mode, __be32 *saddr)
+				       int rt_mode, __be32 *saddr/*出参，到目的需使用的源ip*/)
 {
 	struct flowi4 fl4;
 	struct rtable *rt;
@@ -307,8 +307,8 @@ static inline bool decrement_ttl(struct netns_ipvs *ipvs,
 /* Get route to destination or remote server */
 static int
 __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
-		   struct ip_vs_dest *dest,
-		   __be32 daddr, int rt_mode, __be32 *ret_saddr,
+		   struct ip_vs_dest *dest/*选出的real server*/,
+		   __be32 daddr, int rt_mode, __be32 *ret_saddr/*到目的地址时使用的源地址*/,
 		   struct ip_vs_iphdr *ipvsh)
 {
 	struct net *net = ipvs->net;
@@ -376,6 +376,7 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 		return local;
 	}
 
+	//报文需要转发，执行ttl减一
 	if (!decrement_ttl(ipvs, skb_af, skb))
 		goto err_put;
 
@@ -678,6 +679,7 @@ static inline int ip_vs_send_or_cont(int pf, struct sk_buff *skb,
 	if (!local) {
 		ip_vs_drop_early_demux_sk(skb);
 		skb_forward_csum(skb);
+		//执行本机报文外送流程
 		NF_HOOK(pf, NF_INET_LOCAL_OUT, cp->ipvs->net, NULL, skb,
 			NULL, skb_dst(skb)->dev, dst_output);
 	} else

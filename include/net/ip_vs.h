@@ -522,8 +522,11 @@ struct ip_vs_conn {
 	__be16                  dport;
 	__be16                  vport;
 	u16			af;		/* address family */
+	//发送方地址
 	union nf_inet_addr      caddr;          /* client address */
+	//去向vip地址
 	union nf_inet_addr      vaddr;          /* virtual address */
+	//转换后目的地址
 	union nf_inet_addr      daddr;          /* destination address */
 	volatile __u32          flags;          /* status flags */
 	__u16                   protocol;       /* Which protocol (TCP/UDP) */
@@ -665,7 +668,7 @@ struct ip_vs_service {
 struct ip_vs_dest_dst {
 	struct dst_entry	*dst_cache;	/* destination cache entry */
 	u32			dst_cookie;
-	union nf_inet_addr	dst_saddr;
+	union nf_inet_addr	dst_saddr;//到目的时使用的源ip
 	struct rcu_head		rcu_head;
 };
 

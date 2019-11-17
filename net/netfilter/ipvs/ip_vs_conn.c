@@ -513,6 +513,7 @@ static inline void ip_vs_bind_xmit(struct ip_vs_conn *cp)
 	//按不同类型执行报文发送
 	switch (IP_VS_FWD_METHOD(cp)) {
 	case IP_VS_CONN_F_MASQ:
+		//对报文做dnat转换
 		cp->packet_xmit = ip_vs_nat_xmit;
 		break;
 
@@ -522,10 +523,13 @@ static inline void ip_vs_bind_xmit(struct ip_vs_conn *cp)
 			cp->packet_xmit = ip_vs_tunnel_xmit_v6;
 		else
 #endif
+			//隧道模式，执行隧道封装
 			cp->packet_xmit = ip_vs_tunnel_xmit;
 		break;
 
 	case IP_VS_CONN_F_DROUTE:
+		//dr模式时，选出来的目的均是到real server下一跳ip,而
+		//real server本身的ip在各主机上均有配置，故不需要做特别处理，仅需要发送出去即可
 		cp->packet_xmit = ip_vs_dr_xmit;
 		break;
 
