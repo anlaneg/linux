@@ -70,7 +70,7 @@ struct miscdevice  {
 	struct device *parent;
 	struct device *this_device;
 	const struct attribute_group **groups;
-	const char *nodename;
+	const char *nodename;//节点名称
 	umode_t mode;
 };
 

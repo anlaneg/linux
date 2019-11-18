@@ -61,6 +61,8 @@ static DEFINE_MUTEX(misc_mtx);
  * Assigned numbers, used for dynamic minors
  */
 #define DYNAMIC_MINORS 64 /* like dynamic majors */
+
+//记录哪些动态minors已分配
 static DECLARE_BITMAP(misc_minors, DYNAMIC_MINORS);
 
 #ifdef CONFIG_PROC_FS
@@ -174,6 +176,7 @@ int misc_register(struct miscdevice *misc)
 {
 	dev_t dev;
 	int err = 0;
+	//使用动态编号
 	bool is_dynamic = (misc->minor == MISC_DYNAMIC_MINOR);
 
 	INIT_LIST_HEAD(&misc->list);
@@ -181,6 +184,7 @@ int misc_register(struct miscdevice *misc)
 	mutex_lock(&misc_mtx);
 
 	if (is_dynamic) {
+	    //为动态minor分配一个编号
 		int i = find_first_zero_bit(misc_minors, DYNAMIC_MINORS);
 
 		if (i >= DYNAMIC_MINORS) {
@@ -190,6 +194,7 @@ int misc_register(struct miscdevice *misc)
 		misc->minor = DYNAMIC_MINORS - i - 1;
 		set_bit(i, misc_minors);
 	} else {
+	    //指定了minor检查是否此minor是否已分配
 		struct miscdevice *c;
 
 		list_for_each_entry(c, &misc_list, list) {
@@ -206,6 +211,7 @@ int misc_register(struct miscdevice *misc)
 		device_create_with_groups(misc_class, misc->parent, dev,
 					  misc, misc->groups, "%s", misc->name);
 	if (IS_ERR(misc->this_device)) {
+	    //注册失败，回退动态minor占用的那个编号
 		if (is_dynamic) {
 			int i = DYNAMIC_MINORS - misc->minor - 1;
 
