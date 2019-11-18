@@ -25,9 +25,10 @@
 struct fib_config {
 	u8			fc_dst_len;//目的地址的掩码位长度
 	u8			fc_tos;//路由指定的tos值
-	u8			fc_protocol;//下发路由的协议，例如ospf,bgp
+	u8			fc_protocol;//下发路由的协议，例如ospf,bgp,kernel
+	//地址范围，看结构体rt_scope_t
 	u8			fc_scope;
-	//路由类型
+	//路由类型（看rtnetlink.h中RTN_LOCAL对应结构体）
 	u8			fc_type;
 	//网关对应的协议族
 	u8			fc_gw_family;
@@ -42,6 +43,7 @@ struct fib_config {
 	u32			fc_flags;
 	//路由的优先级
 	u32			fc_priority;
+	//优先选择的源地址（当存在secondary地址时，fc_prefsrc为primary地址）
 	__be32			fc_prefsrc;
 	u32			fc_nh_id;
 	struct nlattr		*fc_mx;

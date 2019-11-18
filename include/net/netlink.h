@@ -386,7 +386,7 @@ struct nla_policy {
  */
 struct nl_info {
 	struct nlmsghdr		*nlh;
-	struct net		*nl_net;
+	struct net		*nl_net;//从属于哪个network namespace
 	u32			portid;
 	u8			skip_notify:1,
 				skip_notify_kernel:1;

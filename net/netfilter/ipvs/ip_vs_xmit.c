@@ -127,6 +127,7 @@ static struct rtable *do_output_route4(struct net *net, __be32 daddr,
 	struct rtable *rt;
 	bool loop = false;
 
+	//仅填充目的ip地址，及falgs执行路由查询
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.daddr = daddr;
 	fl4.flowi4_flags = (rt_mode & IP_VS_RT_MODE_KNOWN_NH) ?
@@ -308,7 +309,7 @@ static inline bool decrement_ttl(struct netns_ipvs *ipvs,
 static int
 __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 		   struct ip_vs_dest *dest/*选出的real server*/,
-		   __be32 daddr, int rt_mode, __be32 *ret_saddr/*到目的地址时使用的源地址*/,
+		   __be32 daddr/*连接的目的地址*/, int rt_mode, __be32 *ret_saddr/*到目的地址时使用的源地址*/,
 		   struct ip_vs_iphdr *ipvsh)
 {
 	struct net *net = ipvs->net;
@@ -320,11 +321,16 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 	if (dest) {
 		dest_dst = __ip_vs_dst_check(dest);
 		if (likely(dest_dst))
+		    //已有有效的路由项，取缓存的路由项
 			rt = (struct rtable *) dest_dst->dst_cache;
 		else {
+		    //生成路由项缓存
+
+		    //1。申请缓存项内存
 			dest_dst = ip_vs_dest_dst_alloc();
 			spin_lock_bh(&dest->dst_lock);
 			if (!dest_dst) {
+			    //申请内存失败，置缓存路由项为NULL
 				__ip_vs_dst_set(dest, NULL, NULL, 0);
 				spin_unlock_bh(&dest->dst_lock);
 				goto err_unreach;
@@ -332,20 +338,26 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 			rt = do_output_route4(net, dest->addr.ip, rt_mode,
 					      &dest_dst->dst_saddr.ip);
 			if (!rt) {
+			    //路由不可达
 				__ip_vs_dst_set(dest, NULL, NULL, 0);
 				spin_unlock_bh(&dest->dst_lock);
 				ip_vs_dest_dst_free(dest_dst);
 				goto err_unreach;
 			}
-			__ip_vs_dst_set(dest, dest_dst, &rt->dst, 0);
+
+			//路由可达，设置路由项缓存
+			__ip_vs_dst_set(dest, dest_dst/*目标缓存*/, &rt->dst/*路由项*/, 0);
 			spin_unlock_bh(&dest->dst_lock);
 			IP_VS_DBG(10, "new dst %pI4, src %pI4, refcnt=%d\n",
 				  &dest->addr.ip, &dest_dst->dst_saddr.ip,
 				  atomic_read(&rt->dst.__refcnt));
 		}
+
+		//填充到目的地的源ip
 		if (ret_saddr)
 			*ret_saddr = dest_dst->dst_saddr.ip;
 	} else {
+	    /*没有选择出来real server,使用daddr直接路由*/
 		__be32 saddr = htonl(INADDR_ANY);
 
 		noref = 0;
@@ -369,6 +381,7 @@ __ip_vs_get_out_rt(struct netns_ipvs *ipvs, int skb_af, struct sk_buff *skb,
 		goto err_put;
 	}
 
+	//送本机
 	if (unlikely(local)) {
 		/* skb to local stack, preserve old route */
 		if (!noref)
@@ -669,7 +682,7 @@ static inline int ip_vs_nat_send_or_cont(int pf, struct sk_buff *skb,
 
 /* return NF_STOLEN (sent) or NF_ACCEPT if local=1 (not sent) */
 static inline int ip_vs_send_or_cont(int pf, struct sk_buff *skb,
-				     struct ip_vs_conn *cp, int local)
+				     struct ip_vs_conn *cp, int local/*送本机的报文*/)
 {
 	int ret = NF_STOLEN;
 
@@ -1464,6 +1477,7 @@ ip_vs_dr_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 	if (local < 0)
 		goto tx_error;
 	if (local)
+	    /*报文需要送本机，执行相应的hook点*/
 		return ip_vs_send_or_cont(NFPROTO_IPV4, skb, cp, 1);
 
 	ip_send_check(ip_hdr(skb));
@@ -1471,6 +1485,7 @@ ip_vs_dr_xmit(struct sk_buff *skb, struct ip_vs_conn *cp,
 	/* Another hack: avoid icmp_send in ip_fragment */
 	skb->ignore_df = 1;
 
+	//报文需要送出去
 	ip_vs_send_or_cont(NFPROTO_IPV4, skb, cp, 0);
 
 	LeaveFunction(10);

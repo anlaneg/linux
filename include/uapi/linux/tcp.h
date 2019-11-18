@@ -36,7 +36,7 @@ struct tcphdr {
 		psh:1,//push标记
 		ack:1,
 		urg:1,
-		ece:1,
+		ece:1,//ECN-echo
 		cwr:1;
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u16	doff:4,

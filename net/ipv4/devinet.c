@@ -94,7 +94,7 @@ static struct ipv4_devconf ipv4_devconf_dflt = {
 	IPV4_DEVCONF((*net->ipv4.devconf_dflt), attr)
 
 static const struct nla_policy ifa_ipv4_policy[IFA_MAX+1] = {
-	[IFA_LOCAL]     	= { .type = NLA_U32 },
+	[IFA_LOCAL]     	= { .type = NLA_U32 },//记录配置的地址
 	[IFA_ADDRESS]   	= { .type = NLA_U32 },
 	[IFA_BROADCAST] 	= { .type = NLA_U32 },
 	[IFA_LABEL]     	= { .type = NLA_STRING, .len = IFNAMSIZ - 1 },
@@ -116,6 +116,7 @@ struct inet_fill_args {
 #define IN4_ADDR_HSIZE_SHIFT	8
 #define IN4_ADDR_HSIZE		(1U << IN4_ADDR_HSIZE_SHIFT)
 
+//记录系统所有namespace中的inet addr
 static struct hlist_head inet_addr_lst[IN4_ADDR_HSIZE];
 
 static u32 inet_addr_hash(const struct net *net, __be32 addr)
@@ -193,7 +194,9 @@ struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr)
 
 static void rtmsg_ifa(int event, struct in_ifaddr *, struct nlmsghdr *, u32);
 
+//注册inet addr地址添加删除通知chain
 static BLOCKING_NOTIFIER_HEAD(inetaddr_chain);
+//注册inet addr 地址添加校验通知chain
 static BLOCKING_NOTIFIER_HEAD(inetaddr_validator_chain);
 static void inet_del_ifa(struct in_device *in_dev,
 			 struct in_ifaddr __rcu **ifap,
@@ -215,6 +218,7 @@ static void devinet_sysctl_unregister(struct in_device *idev)
 
 static struct in_ifaddr *inet_alloc_ifa(void)
 {
+    //申请inet接口地址内存
 	return kzalloc(sizeof(struct in_ifaddr), GFP_KERNEL);
 }
 
@@ -479,6 +483,7 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 
 	ASSERT_RTNL();
 
+	//未配置本端地址，返回0
 	if (!ifa->ifa_local) {
 		inet_free_ifa(ifa);
 		return 0;
@@ -494,19 +499,27 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 	ifa1 = rtnl_dereference(*ifap);
 
 	while (ifa1) {
+	    /*记录最后一个primary地址，secondary地址在所有primary地址之后*/
 		if (!(ifa1->ifa_flags & IFA_F_SECONDARY) &&
 		    ifa->ifa_scope <= ifa1->ifa_scope)
 			last_primary = &ifa1->ifa_next;
+
 		if (ifa1->ifa_mask == ifa->ifa_mask &&
 		    inet_ifa_match(ifa1->ifa_address, ifa)) {
+		    /*掩码相等，且配置的地址与ifa1在同一个子网下*/
 			if (ifa1->ifa_local == ifa->ifa_local) {
+			    //本端地址完全相等，报错，地址已存在
 				inet_free_ifa(ifa);
 				return -EEXIST;
 			}
+
+			//同一子网下，但scope不相等，参数无效
 			if (ifa1->ifa_scope != ifa->ifa_scope) {
 				inet_free_ifa(ifa);
 				return -EINVAL;
 			}
+
+			//指明新加入的地址为备地址
 			ifa->ifa_flags |= IFA_F_SECONDARY;
 		}
 
@@ -521,6 +534,7 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 	 * the assumption that validators are checking the address itself, and
 	 * not the flags.
 	 */
+	//检查设备ifa->ifa_dev是否可以使用ifa_address的remote(也可以是本端）地址
 	ivi.ivi_addr = ifa->ifa_address;
 	ivi.ivi_dev = ifa->ifa_dev;
 	ivi.extack = extack;
@@ -528,20 +542,25 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 					   NETDEV_UP, &ivi);
 	ret = notifier_to_errno(ret);
 	if (ret) {
+	    //校验失败，返回错误，地址不能加入
 		inet_free_ifa(ifa);
 		return ret;
 	}
 
+	//ifa不是一个secondary地址，将其加入到最后一个last_primary之后
 	if (!(ifa->ifa_flags & IFA_F_SECONDARY)) {
 		prandom_seed((__force u32) ifa->ifa_local);
 		ifap = last_primary;
 	}
 
+	//将ifa加入到*ifap之前（串连进ifa_list）
 	rcu_assign_pointer(ifa->ifa_next, *ifap);
 	rcu_assign_pointer(*ifap, ifa);
 
+	//记录ifa到系统
 	inet_hash_insert(dev_net(in_dev->dev), ifa);
 
+	//？？？？
 	cancel_delayed_work(&check_lifetime_work);
 	queue_delayed_work(system_power_efficient_wq, &check_lifetime_work, 0);
 
@@ -549,6 +568,8 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 	   Notifier will trigger FIB update, so that
 	   listeners of netlink will know about new ifaddr */
 	rtmsg_ifa(RTM_NEWADDR, ifa, nlh, portid);
+
+	//触发地址添加成功回调
 	blocking_notifier_call_chain(&inetaddr_chain, NETDEV_UP, ifa);
 
 	return 0;
@@ -600,6 +621,7 @@ EXPORT_SYMBOL(inetdev_by_index);
 
 /* Called only from RTNL semaphored context. No locks. */
 
+//通过前缀找第一个同网段的地址
 struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, __be32 prefix,
 				    __be32 mask)
 {
@@ -607,6 +629,7 @@ struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, __be32 prefix,
 
 	ASSERT_RTNL();
 
+	//此inet4接口上找到的第一个同网段地址即为primary地址
 	in_dev_for_each_ifa_rtnl(ifa, in_dev) {
 		if (ifa->ifa_mask == mask && inet_ifa_match(prefix, ifa))
 			return ifa;
@@ -813,6 +836,7 @@ static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
 		ifa->ifa_cstamp = ifa->ifa_tstamp;
 }
 
+//申请inet4_ifaddr,并采用netlink的值填充它
 static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 				       __u32 *pvalid_lft, __u32 *pprefered_lft,
 				       struct netlink_ext_ack *extack)
@@ -831,9 +855,11 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 
 	ifm = nlmsg_data(nlh);
 	err = -EINVAL;
+	//ipv4前缀必定小于等于32,必须指定要配置的地址
 	if (ifm->ifa_prefixlen > 32 || !tb[IFA_LOCAL])
 		goto errout;
 
+	//通过ifindex找到对应的dev
 	dev = __dev_get_by_index(net, ifm->ifa_index);
 	err = -ENODEV;
 	if (!dev)
@@ -844,6 +870,7 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 	if (!in_dev)
 		goto errout;
 
+	//申请地址内存空间
 	ifa = inet_alloc_ifa();
 	if (!ifa)
 		/*
@@ -856,6 +883,7 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 	neigh_parms_data_state_setall(in_dev->arp_parms);
 	in_dev_hold(in_dev);
 
+	//IFA_ADDRESS未指明，则使用IFA_LOCAL
 	if (!tb[IFA_ADDRESS])
 		tb[IFA_ADDRESS] = tb[IFA_LOCAL];
 
@@ -906,10 +934,12 @@ static struct in_ifaddr *find_matching_ifa(struct in_ifaddr *ifa)
 	struct in_device *in_dev = ifa->ifa_dev;
 	struct in_ifaddr *ifa1;
 
+	//此地址无本端地址，直接返回未查到
 	if (!ifa->ifa_local)
 		return NULL;
 
 	in_dev_for_each_ifa_rtnl(ifa1, in_dev) {
+	    //掩码相等，对端地址相等，本端地址相等，则匹配
 		if (ifa1->ifa_mask == ifa->ifa_mask &&
 		    inet_ifa_match(ifa1->ifa_address, ifa) &&
 		    ifa1->ifa_local == ifa->ifa_local)
@@ -918,6 +948,7 @@ static struct in_ifaddr *find_matching_ifa(struct in_ifaddr *ifa)
 	return NULL;
 }
 
+//ipv4处理地址添加，更新操作
 static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 			    struct netlink_ext_ack *extack)
 {
@@ -929,12 +960,14 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	ASSERT_RTNL();
 
+	//申请并填充接口地址
 	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &prefered_lft, extack);
 	if (IS_ERR(ifa))
 		return PTR_ERR(ifa);
 
 	ifa_existing = find_matching_ifa(ifa);
 	if (!ifa_existing) {
+	    //没有与要添加的ifa相同的地址配置
 		/* It would be best to check for !NLM_F_CREATE here but
 		 * userspace already relies on not having to provide this.
 		 */
@@ -951,6 +984,7 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return __inet_insert_ifa(ifa, nlh, NETLINK_CB(skb).portid,
 					 extack);
 	} else {
+	    //找到匹配的接口地址
 		u32 new_metric = ifa->ifa_rt_priority;
 
 		inet_free_ifa(ifa);
@@ -1444,16 +1478,19 @@ EXPORT_SYMBOL(inet_confirm_addr);
 
 int register_inetaddr_notifier(struct notifier_block *nb)
 {
+    //注册inetaddr地址add/delete事件链通知
 	return blocking_notifier_chain_register(&inetaddr_chain, nb);
 }
 EXPORT_SYMBOL(register_inetaddr_notifier);
 
 int unregister_inetaddr_notifier(struct notifier_block *nb)
 {
+    //解注册inetaddr地址add/delete事件链通知
 	return blocking_notifier_chain_unregister(&inetaddr_chain, nb);
 }
 EXPORT_SYMBOL(unregister_inetaddr_notifier);
 
+//注册回调到inet address校验通知，如果校验失败，则此地址不能被配置到设备
 int register_inetaddr_validator_notifier(struct notifier_block *nb)
 {
 	return blocking_notifier_chain_register(&inetaddr_validator_chain, nb);
@@ -2759,7 +2796,9 @@ void __init devinet_init(void)
 
 	rtnl_af_register(&inet_af_ops);
 
+	//ipv4地址的添加更新
 	rtnl_register(PF_INET, RTM_NEWADDR, inet_rtm_newaddr, NULL, 0);
+	//ipv4地址的删除
 	rtnl_register(PF_INET, RTM_DELADDR, inet_rtm_deladdr, NULL, 0);
 	rtnl_register(PF_INET, RTM_GETADDR, NULL, inet_dump_ifaddr, 0);
 	rtnl_register(PF_INET, RTM_GETNETCONF, inet_netconf_get_devconf,

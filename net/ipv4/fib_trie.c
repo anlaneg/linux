@@ -1329,6 +1329,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 		tb->tb_num_default++;
 
 	rt_cache_flush(cfg->fc_nlinfo.nl_net);
+
 	//触发路由新增事件
 	rtmsg_fib(RTM_NEWROUTE, htonl(key), new_fa, plen, new_fa->tb_id,
 		  &cfg->fc_nlinfo, nlflags);

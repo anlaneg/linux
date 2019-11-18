@@ -668,7 +668,7 @@ struct ip_vs_service {
 struct ip_vs_dest_dst {
 	struct dst_entry	*dst_cache;	/* destination cache entry */
 	u32			dst_cookie;
-	union nf_inet_addr	dst_saddr;//到目的时使用的源ip
+	union nf_inet_addr	dst_saddr;//到目的地时使用的源ip
 	struct rcu_head		rcu_head;
 };
 
@@ -679,9 +679,11 @@ struct ip_vs_dest {
 	struct list_head	n_list;   /* for the dests in the service */
 	struct hlist_node	d_list;   /* for table with all the dests */
 
+	//real server的地址信息
 	u16			af;		/* address family */
 	__be16			port;		/* port number of the server */
 	union nf_inet_addr	addr;		/* IP address of the server */
+
 	volatile unsigned int	flags;		/* dest status flags */
 	atomic_t		conn_flags;	/* flags to copy to conn */
 	atomic_t		weight;		/* server weight */
@@ -703,6 +705,7 @@ struct ip_vs_dest {
 
 	/* for destination cache */
 	spinlock_t		dst_lock;	/* lock of dst_cache */
+	//缓存的路由信息
 	struct ip_vs_dest_dst __rcu *dest_dst;	/* cached dst info */
 
 	/* for virtual service */

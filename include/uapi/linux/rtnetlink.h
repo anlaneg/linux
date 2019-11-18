@@ -222,13 +222,14 @@ struct rtmsg {
 };
 
 /* rtm_type */
-
+//路由项类型
 enum {
 	RTN_UNSPEC,
 	//网关或者直连路由
 	RTN_UNICAST,		/* Gateway or direct route	*/
-	//本机
+	//本机地址
 	RTN_LOCAL,		/* Accept locally		*/
+	//广播地址
 	RTN_BROADCAST,		/* Accept locally as broadcast,
 				   send as broadcast */
 	RTN_ANYCAST,		/* Accept locally as broadcast,
@@ -298,7 +299,7 @@ enum rt_scope_t {
 	RT_SCOPE_SITE=200,
 	//直连地址（同网段）
 	RT_SCOPE_LINK=253,
-	//本机地址
+	//本机范围内地址
 	RT_SCOPE_HOST=254,
 	RT_SCOPE_NOWHERE=255
 };

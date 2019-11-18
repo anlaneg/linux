@@ -971,14 +971,16 @@ static int ipvlan_addr4_validator_event(struct notifier_block *unused,
 	struct net_device *dev = (struct net_device *)ivi->ivi_dev->dev;
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
+	//仅校验ipvlan的设备
 	if (!ipvlan_is_valid_dev(dev))
 		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_UP:
-		if (ipvlan_addr_busy(ipvlan->port, &ivi->ivi_addr, false)) {
+		if (ipvlan_addr_busy(ipvlan->port, &ivi->ivi_addr, false/*非ipv6地址*/)) {
 			NL_SET_ERR_MSG(ivi->extack,
 				       "Address already assigned to an ipvlan device");
+			//地址正在使用
 			return notifier_from_errno(-EADDRINUSE);
 		}
 		break;
@@ -1021,6 +1023,7 @@ static int __init ipvlan_init_module(void)
 	    &ipvlan_addr6_vtor_notifier_block);
 #endif
 	register_inetaddr_notifier(&ipvlan_addr4_notifier_block);
+	//注册inet address校验类通知回调
 	register_inetaddr_validator_notifier(&ipvlan_addr4_vtor_notifier_block);
 
 	err = ipvlan_l3s_init();

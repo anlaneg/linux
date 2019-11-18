@@ -7,6 +7,7 @@
 
 struct ifaddrmsg {
 	__u8		ifa_family;
+	//地址前缀长度
 	__u8		ifa_prefixlen;	/* The prefix length		*/
 	__u8		ifa_flags;	/* Flags			*/
 	__u8		ifa_scope;	/* Address scope		*/
@@ -25,7 +26,7 @@ struct ifaddrmsg {
  */
 enum {
 	IFA_UNSPEC,
-	IFA_ADDRESS,
+	IFA_ADDRESS,/*存放remote,peer地址*/
 	IFA_LOCAL,
 	IFA_LABEL,
 	IFA_BROADCAST,
@@ -41,6 +42,7 @@ enum {
 #define IFA_MAX (__IFA_MAX - 1)
 
 /* ifa_flags */
+//备地址（存在一个与其在同一个子网，且scope相同的同接口地址）
 #define IFA_F_SECONDARY		0x01
 #define IFA_F_TEMPORARY		IFA_F_SECONDARY
 

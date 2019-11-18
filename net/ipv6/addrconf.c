@@ -7058,6 +7058,7 @@ int __init addrconf_init(void)
 	if (err < 0)
 		goto errout;
 
+    //ipv6的地址添加
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_NEWADDR,
 				   inet6_rtm_newaddr, NULL, 0);
 	if (err < 0)

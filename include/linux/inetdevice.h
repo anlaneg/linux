@@ -26,6 +26,7 @@ struct in_device {
 	struct net_device	*dev;
 	refcount_t		refcnt;
 	int			dead;
+	//inet4设备上所有ip地址列表
 	struct in_ifaddr	__rcu *ifa_list;/* IP ifaddr chain		*/
 
 	struct ip_mc_list __rcu	*mc_list;	/* IP multicast filter chain    */
@@ -134,17 +135,21 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 #define IN_DEV_ARP_IGNORE(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_IGNORE)
 #define IN_DEV_ARP_NOTIFY(in_dev)	IN_DEV_MAXCONF((in_dev), ARP_NOTIFY)
 
+//inet4接口地址（对inet4简写成in表示很无语）
 struct in_ifaddr {
 	struct hlist_node	hash;
+	//用于串连下一个inet4接口地址
 	struct in_ifaddr	__rcu *ifa_next;
-	struct in_device	*ifa_dev;
+	struct in_device	*ifa_dev;//地址对应的inet4设备
 	struct rcu_head		rcu_head;
-	__be32			ifa_local;
-	__be32			ifa_address;
+	__be32			ifa_local;//本端接口地址
+	__be32			ifa_address;//对端接口地址（如果未设置对端地址，则与ifa_local相同）
+	//地址前缀掩码形式
 	__be32			ifa_mask;
 	__u32			ifa_rt_priority;
-	__be32			ifa_broadcast;
+	__be32			ifa_broadcast;//广播地址
 	unsigned char		ifa_scope;
+	//地址前缀长度
 	unsigned char		ifa_prefixlen;
 	__u32			ifa_flags;
 	char			ifa_label[IFNAMSIZ];
@@ -186,6 +191,7 @@ __be32 inet_confirm_addr(struct net *net, struct in_device *in_dev, __be32 dst,
 struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, __be32 prefix,
 				    __be32 mask);
 struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr);
+//地址是否在同一个掩码下
 static inline bool inet_ifa_match(__be32 addr, const struct in_ifaddr *ifa)
 {
 	return !((addr^ifa->ifa_address)&ifa->ifa_mask);
@@ -208,6 +214,7 @@ static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 	return false;
 }
 
+//遍历此in_dev上所有ip地址列表
 #define in_dev_for_each_ifa_rtnl(ifa, in_dev)			\
 	for (ifa = rtnl_dereference((in_dev)->ifa_list); ifa;	\
 	     ifa = rtnl_dereference(ifa->ifa_next))

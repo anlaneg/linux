@@ -2505,9 +2505,9 @@ struct netdev_lag_lower_state_info {
  * adding new types.
  */
 enum netdev_cmd {
-	//接口up
+	//接口up/ifa地址配置添加
 	NETDEV_UP	= 1,	/* For now you can't veto a device up/down */
-	//接口down
+	//接口down/ifa地址配置移除
 	NETDEV_DOWN,
 	NETDEV_REBOOT,		/* Tell a protocol stack a network interface
 				   detected a hardware crash and restarted

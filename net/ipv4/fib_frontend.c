@@ -1090,8 +1090,8 @@ out_err:
  * to fib engine. It is legal, because all events occur
  * only when netlink is already locked.
  */
-static void fib_magic(int cmd, int type, __be32 dst, int dst_len,
-		      struct in_ifaddr *ifa, u32 rt_priority)
+static void fib_magic(int cmd/*fib表命令，添加/删除 */, int type/*路由项类型*/, __be32 dst/*目的地址*/, int dst_len/*目的地址长度*/,
+		      struct in_ifaddr *ifa/*主地址*/, u32 rt_priority)
 {
 	struct net *net = dev_net(ifa->ifa_dev->dev);
 	u32 tb_id = l3mdev_fib_table(ifa->ifa_dev->dev);
@@ -1110,9 +1110,11 @@ static void fib_magic(int cmd, int type, __be32 dst, int dst_len,
 		},
 	};
 
+	//如果无table id,则网关或者直连的路由，走main,否则走local表
 	if (!tb_id)
 		tb_id = (type == RTN_UNICAST) ? RT_TABLE_MAIN : RT_TABLE_LOCAL;
 
+	//取对应的路由表
 	tb = fib_new_table(net, tb_id);
 	if (!tb)
 		return;
@@ -1125,6 +1127,7 @@ static void fib_magic(int cmd, int type, __be32 dst, int dst_len,
 		cfg.fc_scope = RT_SCOPE_HOST;
 
 	if (cmd == RTM_NEWROUTE)
+	    //路由项添加
 		fib_table_insert(net, tb, &cfg, NULL);
 	else
 		fib_table_delete(net, tb, &cfg, NULL);
@@ -1134,11 +1137,12 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 {
 	struct in_device *in_dev = ifa->ifa_dev;
 	struct net_device *dev = in_dev->dev;
-	struct in_ifaddr *prim = ifa;
-	__be32 mask = ifa->ifa_mask;
-	__be32 addr = ifa->ifa_local;
-	__be32 prefix = ifa->ifa_address & mask;
+	struct in_ifaddr *prim = ifa;/*默认此ifa为primary地址*/
+	__be32 mask = ifa->ifa_mask;/*地址掩码*/
+	__be32 addr = ifa->ifa_local;/*本端地址*/
+	__be32 prefix = ifa->ifa_address & mask;/*地址前缀取值*/
 
+	//此地址为从地址，找其对应的primary地址，如果未找到，则报错
 	if (ifa->ifa_flags & IFA_F_SECONDARY) {
 		prim = inet_ifa_byprefix(in_dev, prefix, mask);
 		if (!prim) {
@@ -1147,9 +1151,11 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 		}
 	}
 
+	//添加/32的local路由项，优先级为0
 	fib_magic(RTM_NEWROUTE, RTN_LOCAL, addr, 32, prim, 0);
 
 	if (!(dev->flags & IFF_UP))
+	    /*设备没有up,不再继续操作下去*/
 		return;
 
 	/* Add broadcast address, if it is explicitly assigned. */
@@ -1460,6 +1466,7 @@ static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, 
 
 	switch (event) {
 	case NETDEV_UP:
+	    //接口地址新增
 		fib_add_ifaddr(ifa);
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 		fib_sync_up(dev, RTNH_F_DEAD);
@@ -1468,6 +1475,7 @@ static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, 
 		rt_cache_flush(dev_net(dev));
 		break;
 	case NETDEV_DOWN:
+	    //接口地址移除
 		fib_del_ifaddr(ifa, NULL);
 		atomic_inc(&net->ipv4.dev_addr_genid);
 		if (!ifa->ifa_dev->ifa_list) {
@@ -1542,6 +1550,7 @@ static int fib_netdev_event(struct notifier_block *this, unsigned long event, vo
 	return NOTIFY_DONE;
 }
 
+//接口地址状态发生变化时调用
 static struct notifier_block fib_inetaddr_notifier = {
 	.notifier_call = fib_inetaddr_event,
 };
@@ -1658,7 +1667,9 @@ void __init ip_fib_init(void)
 
 	register_pernet_subsys(&fib_net_ops);
 
+	//注册设备事件变更通知回调（路由项维护）
 	register_netdevice_notifier(&fib_netdev_notifier);
+	//注册接口地址变更事件通知回调（路由项维护）
 	register_inetaddr_notifier(&fib_inetaddr_notifier);
 
 	//路由添加消息注册

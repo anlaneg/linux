@@ -331,6 +331,7 @@ int __blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 }
 EXPORT_SYMBOL_GPL(__blocking_notifier_call_chain);
 
+//阻塞式chain通知
 int blocking_notifier_call_chain(struct blocking_notifier_head *nh,
 		unsigned long val, void *v)
 {
