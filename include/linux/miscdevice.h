@@ -63,12 +63,14 @@ struct device;
 struct attribute_group;
 
 struct miscdevice  {
+    //取值为MISC_DYNAMIC_MINOR时，采用动态minor方式
 	int minor;
-	const char *name;
+	const char *name;//设备名称
 	const struct file_operations *fops;
 	struct list_head list;
-	struct device *parent;
+	struct device *parent;/*父设备*/
 	struct device *this_device;
+	//设备的sys属性
 	const struct attribute_group **groups;
 	const char *nodename;//节点名称
 	umode_t mode;

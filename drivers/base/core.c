@@ -873,8 +873,11 @@ static void device_links_purge(struct device *dev)
 
 int (*platform_notify)(struct device *dev) = NULL;
 int (*platform_notify_remove)(struct device *dev) = NULL;
+// 路径/sys/dev 对应的kobject
 static struct kobject *dev_kobj;
+//路径 /sys/dev/char对应的kobject
 struct kobject *sysfs_dev_char_kobj;
+// 路径 /sys/dev/block对应的kobject
 struct kobject *sysfs_dev_block_kobj;
 
 static DEFINE_MUTEX(device_hotplug_lock);
@@ -1603,6 +1606,7 @@ int device_create_file(struct device *dev,
 		WARN(((attr->attr.mode & S_IRUGO) && !attr->show),
 			"Attribute %s: read permission without 'show'\n",
 			attr->attr.name);
+		//创建device对应的文件
 		error = sysfs_create_file(&dev->kobj, &attr->attr);
 	}
 
@@ -1734,6 +1738,7 @@ struct kobject *virtual_device_parent(struct device *dev)
 	static struct kobject *virtual_dir = NULL;
 
 	if (!virtual_dir)
+	    //为无parent的设备创建virtual,使其做为其父节点
 		virtual_dir = kobject_create_and_add("virtual",
 						     &devices_kset->kobj);
 
@@ -1791,6 +1796,7 @@ class_dir_create_and_add(struct class *class, struct kobject *parent_kobj)
 
 static DEFINE_MUTEX(gdp_mutex);
 
+//取dev的父parent kobj
 static struct kobject *get_device_parent(struct device *dev,
 					 struct device *parent)
 {
@@ -1814,6 +1820,7 @@ static struct kobject *get_device_parent(struct device *dev,
 		 * in a "glue" directory to prevent namespace collisions.
 		 */
 		if (parent == NULL)
+		    //无父设备时，创建virtual-device,做为其父节点
 			parent_kobj = virtual_device_parent(dev);
 		else if (parent->class && !dev->class->ns_type)
 			return &parent->kobj;
@@ -2045,6 +2052,8 @@ static struct kobject *device_to_dev_kobj(struct device *dev)
 	return kobj;
 }
 
+//创建链接，使其通过devt_str指向dev
+//例如看 /sys/dev/char 下的链接
 static int device_create_sys_dev_entry(struct device *dev)
 {
 	struct kobject *kobj = device_to_dev_kobj(dev);
@@ -2153,6 +2162,8 @@ int device_add(struct device *dev)
 	pr_debug("device: '%s': %s\n", dev_name(dev), __func__);
 
 	parent = get_device(dev->parent);
+
+	//取dev对应的parent kobj
 	kobj = get_device_parent(dev, parent);
 	if (IS_ERR(kobj)) {
 		error = PTR_ERR(kobj);
@@ -2162,11 +2173,13 @@ int device_add(struct device *dev)
 		dev->kobj.parent = kobj;
 
 	/* use parent numa_node */
+	//如果有parent,但本dev未指定numa,则设备dev对应的numa为parent的numa
 	if (parent && (dev_to_node(dev) == NUMA_NO_NODE))
 		set_dev_node(dev, dev_to_node(parent));
 
 	/* first, register with generic layer. */
 	/* we require the name to be set before, and pass NULL */
+	//在parent目录下创建本dev的子目录
 	error = kobject_add(&dev->kobj, dev->kobj.parent, NULL);
 	if (error) {
 		glue_dir = get_glue_dir(dev);
@@ -2199,11 +2212,15 @@ int device_add(struct device *dev)
 		goto DPMError;
 	device_pm_add(dev);
 
+	//设备有devt,为其创建device对应的文件
 	if (MAJOR(dev->devt)) {
+	    //创建dev属性文件
+	    //例如ls -al /sys/devices/virtual/misc/tun/dev
 		error = device_create_file(dev, &dev_attr_dev);
 		if (error)
 			goto DevAttrError;
 
+		//创建通过dev_str到dev的链接
 		error = device_create_sys_dev_entry(dev);
 		if (error)
 			goto SysEntryError;
@@ -2638,12 +2655,18 @@ int __init devices_init(void)
 	devices_kset = kset_create_and_add("devices", &device_uevent_ops, NULL);
 	if (!devices_kset)
 		return -ENOMEM;
+
+	//创建/sys/dev
 	dev_kobj = kobject_create_and_add("dev", NULL);
 	if (!dev_kobj)
 		goto dev_kobj_err;
+
+	//生成/sys/dev/block对应的kobject
 	sysfs_dev_block_kobj = kobject_create_and_add("block", dev_kobj);
 	if (!sysfs_dev_block_kobj)
 		goto block_kobj_err;
+
+	//生成/sys/dev/char对应的kobject
 	sysfs_dev_char_kobj = kobject_create_and_add("char", dev_kobj);
 	if (!sysfs_dev_char_kobj)
 		goto char_kobj_err;
@@ -2844,7 +2867,7 @@ static void device_create_release(struct device *dev)
 
 static __printf(6, 0) struct device *
 device_create_groups_vargs(struct class *class, struct device *parent,
-			   dev_t devt, void *drvdata,
+			   dev_t devt, void *drvdata/*驱动的私有数据*/,
 			   const struct attribute_group **groups,
 			   const char *fmt, va_list args)
 {

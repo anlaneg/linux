@@ -106,6 +106,7 @@ int devtmpfs_create_node(struct device *dev)
 	req.mode = 0;
 	req.uid = GLOBAL_ROOT_UID;
 	req.gid = GLOBAL_ROOT_GID;
+	//要创建的dev名称
 	req.name = device_get_devnode(dev, &req.mode, &req.uid, &req.gid, &tmp);
 	if (!req.name)
 		return -ENOMEM;
@@ -126,6 +127,7 @@ int devtmpfs_create_node(struct device *dev)
 	requests = &req;
 	spin_unlock(&req_lock);
 
+	//等待thread完成创建工作
 	wake_up_process(thread);
 	wait_for_completion(&req.done);
 
@@ -391,6 +393,7 @@ static int handle(const char *name, umode_t mode, kuid_t uid, kgid_t gid,
 		return handle_remove(name, dev);
 }
 
+//devtmpfs内核线程入口
 static int devtmpfsd(void *p)
 {
 	int *err = p;
@@ -443,6 +446,8 @@ int __init devtmpfs_init(void)
 				PTR_ERR(mnt));
 		return PTR_ERR(mnt);
 	}
+
+	//注册devfs文件系统
 	err = register_filesystem(&dev_fs_type);
 	if (err) {
 		printk(KERN_ERR "devtmpfs: unable to register devtmpfs "
@@ -450,6 +455,7 @@ int __init devtmpfs_init(void)
 		return err;
 	}
 
+	//创建kdevtmpfs内核线程
 	thread = kthread_run(devtmpfsd, &err, "kdevtmpfs");
 	if (!IS_ERR(thread)) {
 		wait_for_completion(&setup_done);

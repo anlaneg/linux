@@ -28,7 +28,7 @@
  *  - The optional "addr2", which is anded with "addr1" if present.
  */
 //找一个bit是1的，自start位置开始，最大有nbits位，addr是考虑了掩码情况
-//invert是考虑了bitmap中实现时，可以需要找‘0’的情况
+//invert是考虑了bitmap中实现时，支持需要找‘0’的情况
 static inline unsigned long _find_next_bit(const unsigned long *addr1,
 		const unsigned long *addr2, unsigned long nbits,
 		unsigned long start, unsigned long invert)

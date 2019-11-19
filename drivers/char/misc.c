@@ -62,7 +62,7 @@ static DEFINE_MUTEX(misc_mtx);
  */
 #define DYNAMIC_MINORS 64 /* like dynamic majors */
 
-//记录哪些动态minors已分配
+//记录哪些动态minors已分配（bitmap)
 static DECLARE_BITMAP(misc_minors, DYNAMIC_MINORS);
 
 #ifdef CONFIG_PROC_FS
@@ -188,13 +188,16 @@ int misc_register(struct miscdevice *misc)
 		int i = find_first_zero_bit(misc_minors, DYNAMIC_MINORS);
 
 		if (i >= DYNAMIC_MINORS) {
+		    //查找不到时，返回最大值
 			err = -EBUSY;
 			goto out;
 		}
+
+		//自最后一个位置开始分配，方便bitmap的查询更快速（起始情况下时）
 		misc->minor = DYNAMIC_MINORS - i - 1;
 		set_bit(i, misc_minors);
 	} else {
-	    //指定了minor检查是否此minor是否已分配
+	    //指定了minor，故先检查是否此minor是否已分配
 		struct miscdevice *c;
 
 		list_for_each_entry(c, &misc_list, list) {
@@ -209,7 +212,7 @@ int misc_register(struct miscdevice *misc)
 
 	misc->this_device =
 		device_create_with_groups(misc_class, misc->parent, dev,
-					  misc, misc->groups, "%s", misc->name);
+					  misc/*驱动的私有数据*/, misc->groups, "%s", misc->name);
 	if (IS_ERR(misc->this_device)) {
 	    //注册失败，回退动态minor占用的那个编号
 		if (is_dynamic) {

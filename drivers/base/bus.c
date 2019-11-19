@@ -501,6 +501,7 @@ void bus_probe_device(struct device *dev)
 	struct subsys_interface *sif;
 
 	if (!bus)
+	    /*无bus的设备直接返回*/
 		return;
 
 	if (bus->p->drivers_autoprobe)

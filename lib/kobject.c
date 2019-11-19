@@ -306,6 +306,7 @@ static int kobject_add_internal(struct kobject *kobj)
  * @fmt: format string used to build the name
  * @vargs: vargs to format the string.
  */
+//设置kobj名称
 int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
 				  va_list vargs)
 {
@@ -403,6 +404,7 @@ void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
 
 	//进行初始化
 	kobject_init_internal(kobj);
+	//指定kobj的ktype
 	kobj->ktype = ktype;
 	return;
 

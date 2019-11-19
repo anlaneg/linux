@@ -30,8 +30,10 @@ struct ptr_ring {
 	//生产者可存放的位置
 	int producer ____cacheline_aligned_in_smp;
 	spinlock_t producer_lock;
+	//消费者可读取的首位置
 	int consumer_head ____cacheline_aligned_in_smp; /* next valid entry */
 	int consumer_tail; /* next entry to invalidate */
+	//阻止多消费用户同时进入
 	spinlock_t consumer_lock;
 	/* Shared consumer/producer data */
 	/* Read-only by both the producer and the consumer */
@@ -247,6 +249,7 @@ static inline bool ptr_ring_empty_bh(struct ptr_ring *r)
 }
 
 /* Must only be called after __ptr_ring_peek returned !NULL */
+//出ring中的首个元素
 static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 {
 	/* Fundamentally, what we want to do is update consumer
@@ -265,7 +268,7 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 	 * to work correctly.
 	 */
 	int consumer_head = r->consumer_head;
-	int head = consumer_head++;
+	int head = consumer_head++;//消费头前移
 
 	/* Once we have processed enough entries invalidate them in
 	 * the ring all at once so producer can reuse their space in the ring.
@@ -288,6 +291,7 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 		r->consumer_tail = 0;
 	}
 	/* matching READ_ONCE in __ptr_ring_empty for lockless tests */
+	//更新消费头
 	WRITE_ONCE(r->consumer_head, consumer_head);
 }
 
@@ -301,6 +305,7 @@ static inline void *__ptr_ring_consume(struct ptr_ring *r)
 	 */
 	ptr = __ptr_ring_peek(r);
 	if (ptr)
+	    //队列中有元素，出队
 		__ptr_ring_discard_one(r);
 
 	return ptr;
@@ -329,6 +334,7 @@ static inline int __ptr_ring_consume_batched(struct ptr_ring *r,
  */
 static inline void *ptr_ring_consume(struct ptr_ring *r)
 {
+    //自队列中出一个元素
 	void *ptr;
 
 	spin_lock(&r->consumer_lock);

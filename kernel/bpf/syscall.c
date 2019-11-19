@@ -2834,6 +2834,7 @@ out:
 	return err;
 }
 
+//定义bpf系统调用
 SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, size)
 {
 	union bpf_attr attr = {};

@@ -40,7 +40,7 @@ struct task_struct *kthread_create_on_cpu(int (*threadfn)(void *data),
  * Description: Convenient wrapper for kthread_create() followed by
  * wake_up_process().  Returns the kthread or ERR_PTR(-ENOMEM).
  */
-#define kthread_run(threadfn, data, namefmt, ...)			   \
+#define kthread_run(threadfn/*内核线程运行函数*/, data, namefmt, ...)			   \
 ({									   \
 	struct task_struct *__k						   \
 		= kthread_create(threadfn, data, namefmt, ## __VA_ARGS__); \
