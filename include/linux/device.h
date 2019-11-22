@@ -623,6 +623,7 @@ extern void class_unregister(struct class *class);
 #define class_register(class)			\
 ({						\
 	static struct lock_class_key __key;	\
+	/*设备class注册*/\
 	__class_register(class, &__key);	\
 })
 
@@ -1318,7 +1319,7 @@ struct device {
 	spinlock_t		devres_lock;
 	struct list_head	devres_head;
 
-	struct class		*class;
+	struct class		*class;//设备所属的class
 	const struct attribute_group **groups;	/* optional groups */
 
 	//定义设备释放时的回调函数
@@ -1917,7 +1918,7 @@ extern long sysfs_deprecated;
  * Use this macro to construct bus specific macros for registering
  * drivers, and do not use it on its own.
  */
-//提供初始化及clean函数
+//提供模块初始化及反初始化函数
 #define module_driver(__driver, __register, __unregister, ...) \
 static int __init __driver##_init(void) \
 { \

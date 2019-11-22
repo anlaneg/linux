@@ -129,8 +129,8 @@ struct pn533 {
 	struct sk_buff_head fragment_skb;
 
 	struct workqueue_struct	*wq;
-	struct work_struct cmd_work;
-	struct work_struct cmd_complete_work;
+	struct work_struct cmd_work;/*向外发送cmd请求*/
+	struct work_struct cmd_complete_work;/*cmd complete回调调起入口*/
 	struct delayed_work poll_work;
 	struct work_struct mi_rx_work;
 	struct work_struct mi_tx_work;
@@ -140,7 +140,9 @@ struct pn533 {
 	struct work_struct rf_work;
 
 	struct list_head cmd_queue;
+	/*设备正在执行的cmd*/
 	struct pn533_cmd *cmd;
+	//待执行cmd
 	u8 cmd_pending;
 	struct mutex cmd_lock;  /* protects cmd queue */
 
@@ -177,27 +179,35 @@ struct pn533_cmd {
 	struct list_head queue;
 	u8 code;
 	int status;
-	struct sk_buff *req;
-	struct sk_buff *resp;
-	pn533_send_async_complete_t  complete_cb;
+	struct sk_buff *req;//请求报文
+	struct sk_buff *resp;//命令的响应报文
+	pn533_send_async_complete_t  complete_cb;//命令完成时的回调
 	void *complete_cb_context;
 };
 
 
 struct pn533_frame_ops {
+    //tx帧初始化（例如tx帧头部设置）
 	void (*tx_frame_init)(void *frame, u8 cmd_code);
 	void (*tx_frame_finish)(void *frame);
+	//设置tx帧payload长度
 	void (*tx_update_payload_len)(void *frame, int len);
+	//帧tx头部长度
 	int tx_header_len;
+	//帧rx尾部长度
 	int tx_tail_len;
 
+	//检查收到的帧是否有效
 	bool (*rx_is_frame_valid)(void *frame, struct pn533 *dev);
 	bool (*rx_frame_is_ack)(void *frame);
 	int (*rx_frame_size)(void *frame);
+	//帧rx头部长度
 	int rx_header_len;
+	//帧rx尾部长度
 	int rx_tail_len;
 
 	int max_payload_len;
+	//自帧中提取frame的code
 	u8 (*get_cmd_code)(void *frame);
 };
 

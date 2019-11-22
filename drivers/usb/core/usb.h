@@ -136,6 +136,7 @@ extern struct device_type usb_ep_device_type;
 extern struct device_type usb_port_device_type;
 extern struct usb_device_driver usb_generic_driver;
 
+//设备是否为usb设备
 static inline int is_usb_device(const struct device *dev)
 {
 	return dev->type == &usb_device_type;
@@ -156,6 +157,7 @@ static inline int is_usb_port(const struct device *dev)
 	return dev->type == &usb_port_device_type;
 }
 
+//是否usb root hub
 static inline int is_root_hub(struct usb_device *udev)
 {
 	return (udev->parent == NULL);

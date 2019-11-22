@@ -81,7 +81,7 @@ static void knode_kill(struct klist_node *knode)
  * functions that take and release references on the embedding
  * objects.
  */
-//初台化klist
+//初始化klist
 void klist_init(struct klist *k, void (*get)(struct klist_node *),
 		void (*put)(struct klist_node *))
 {
@@ -377,7 +377,7 @@ EXPORT_SYMBOL_GPL(klist_prev);
 struct klist_node *klist_next(struct klist_iter *i)
 {
 	void (*put)(struct klist_node *) = i->i_klist->put;
-	struct klist_node *last = i->i_cur;
+	struct klist_node *last = i->i_cur;/*上一次遍历的点*/
 	struct klist_node *next;
 	unsigned long flags;
 

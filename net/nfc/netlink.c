@@ -301,6 +301,7 @@ static int nfc_genl_setup_device_added(struct nfc_dev *dev, struct sk_buff *msg)
 	return 0;
 }
 
+//通过netlink通知用户态设备添加
 int nfc_genl_device_added(struct nfc_dev *dev)
 {
 	struct sk_buff *msg;
@@ -1655,6 +1656,7 @@ int nfc_vendor_cmd_reply(struct sk_buff *skb)
 }
 EXPORT_SYMBOL(nfc_vendor_cmd_reply);
 
+//nfc支持的netlink接口命令处理
 static const struct genl_ops nfc_genl_ops[] = {
 	{
 		.cmd = NFC_CMD_GET_DEVICE,

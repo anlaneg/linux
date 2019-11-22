@@ -91,11 +91,13 @@ static int rawsock_connect(struct socket *sock, struct sockaddr *_addr,
 
 	lock_sock(sk);
 
+	//已连接,报错
 	if (sock->state == SS_CONNECTED) {
 		rc = -EISCONN;
 		goto error;
 	}
 
+	//查找对端设备
 	dev = nfc_get_device(addr->dev_idx);
 	if (!dev) {
 		rc = -ENODEV;
@@ -114,6 +116,7 @@ static int rawsock_connect(struct socket *sock, struct sockaddr *_addr,
 
 	nfc_rawsock(sk)->dev = dev;
 	nfc_rawsock(sk)->target_idx = addr->target_idx;
+	//指明socket完成连接
 	sock->state = SS_CONNECTED;
 	sk->sk_state = TCP_ESTABLISHED;
 	sk->sk_state_change(sk);
@@ -128,6 +131,7 @@ error:
 	return rc;
 }
 
+//为skb增加NFC_HEADER,并初始化为0（一个字节）
 static int rawsock_add_header(struct sk_buff *skb)
 {
 	*(u8 *)skb_push(skb, NFC_HEADER_SIZE) = 0;
@@ -235,6 +239,7 @@ static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	return len;
 }
 
+//自socket中收取报文
 static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 			   int flags)
 {
@@ -270,20 +275,20 @@ static const struct proto_ops rawsock_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,
 	.release        = rawsock_release,
-	.bind           = sock_no_bind,
+	.bind           = sock_no_bind,//不支持bind
 	.connect        = rawsock_connect,
-	.socketpair     = sock_no_socketpair,
-	.accept         = sock_no_accept,
-	.getname        = sock_no_getname,
+	.socketpair     = sock_no_socketpair,//不支持socketpair
+	.accept         = sock_no_accept,//不支持accept
+	.getname        = sock_no_getname,//不支持getname
 	.poll           = datagram_poll,
-	.ioctl          = sock_no_ioctl,
-	.listen         = sock_no_listen,
-	.shutdown       = sock_no_shutdown,
-	.setsockopt     = sock_no_setsockopt,
-	.getsockopt     = sock_no_getsockopt,
+	.ioctl          = sock_no_ioctl,//不支持ioctl
+	.listen         = sock_no_listen,//不支持listen
+	.shutdown       = sock_no_shutdown,//不支持shutdown
+	.setsockopt     = sock_no_setsockopt,//不支持setsockopt
+	.getsockopt     = sock_no_getsockopt,//不支持getsockopt
 	.sendmsg        = rawsock_sendmsg,
 	.recvmsg        = rawsock_recvmsg,
-	.mmap           = sock_no_mmap,
+	.mmap           = sock_no_mmap,//不支持mmap
 };
 
 //SOCK_RAW类型socket对应的ops
@@ -291,32 +296,20 @@ static const struct proto_ops rawsock_raw_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,
 	.release        = rawsock_release,
-	//不支持bind
-	.bind           = sock_no_bind,
-	//不支持connect
-	.connect        = sock_no_connect,
-	//不支持socketpair
-	.socketpair     = sock_no_socketpair,
-	//不支持accept
-	.accept         = sock_no_accept,
-	//不支持getname
-	.getname        = sock_no_getname,
-	.poll           = datagram_poll,//检查socket可读取
-	//不支持ioctl
-	.ioctl          = sock_no_ioctl,
-	//不支持listen
-	.listen         = sock_no_listen,
-	//不支持shutdown
-	.shutdown       = sock_no_shutdown,
-	//不支持setsockopt
-	.setsockopt     = sock_no_setsockopt,
-	//不支持getsockopt
-	.getsockopt     = sock_no_getsockopt,
-	//不支持sendmsg
-	.sendmsg        = sock_no_sendmsg,
-	.recvmsg        = rawsock_recvmsg,//自socket中收取报文
-	//不支持mmap
-	.mmap           = sock_no_mmap,
+	.bind           = sock_no_bind,//不支持bind
+	.connect        = sock_no_connect,//不支持connect
+	.socketpair     = sock_no_socketpair,//不支持socketpair
+	.accept         = sock_no_accept,//不支持accept
+	.getname        = sock_no_getname,//不支持getname
+	.poll           = datagram_poll,
+	.ioctl          = sock_no_ioctl,//不支持ioctl
+	.listen         = sock_no_listen,//不支持listen
+	.shutdown       = sock_no_shutdown,//不支持shutdown
+	.setsockopt     = sock_no_setsockopt,//不支持setsockopt
+	.getsockopt     = sock_no_getsockopt,//不支持getsockopt
+	.sendmsg        = sock_no_sendmsg,//不支持sendmsg
+	.recvmsg        = rawsock_recvmsg,
+	.mmap           = sock_no_mmap,//不支持mmap
 };
 
 static void rawsock_destruct(struct sock *sk)
@@ -338,7 +331,7 @@ static void rawsock_destruct(struct sock *sk)
 	}
 }
 
-//nfc rawsocket 创建
+//af_nfc rawsocket 创建
 static int rawsock_create(struct net *net, struct socket *sock,
 			  const struct nfc_protocol *nfc_proto, int kern)
 {
@@ -350,6 +343,7 @@ static int rawsock_create(struct net *net, struct socket *sock,
 	if ((sock->type != SOCK_SEQPACKET) && (sock->type != SOCK_RAW))
 		return -ESOCKTNOSUPPORT;
 
+	//不同类型指向不同的ops
 	if (sock->type == SOCK_RAW)
 		sock->ops = &rawsock_raw_ops;
 	else
@@ -425,6 +419,7 @@ static const struct nfc_protocol rawsock_nfc_proto = {
 	.id	  = NFC_SOCKPROTO_RAW,
 	.proto    = &rawsock_proto,
 	.owner    = THIS_MODULE,
+	//raw方式socket创建
 	.create   = rawsock_create
 };
 
@@ -432,6 +427,7 @@ int __init rawsock_init(void)
 {
 	int rc;
 
+	//为af_nfc注册nfc_raw协议
 	rc = nfc_proto_register(&rawsock_nfc_proto);
 
 	return rc;

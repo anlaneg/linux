@@ -942,6 +942,7 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
  * specific device.
  */
 #define USB_DEVICE(vend, prod) \
+    /*匹配vendor与product*/\
 	.match_flags = USB_DEVICE_ID_MATCH_DEVICE, \
 	.idVendor = (vend), \
 	.idProduct = (prod)
@@ -1181,7 +1182,7 @@ struct usbdrv_wrap {
  * them as necessary, and blocking until the unlinks complete).
  */
 struct usb_driver {
-	const char *name;
+	const char *name;/*usb驱动名称*/
 
 	int (*probe) (struct usb_interface *intf,
 		      const struct usb_device_id *id);
@@ -1275,7 +1276,7 @@ extern int usb_register_driver(struct usb_driver *, struct module *,
 			       const char *);
 
 /* use a define to avoid include chaining to get THIS_MODULE & friends */
-//注册usb驱动
+//usb驱动注册函数
 #define usb_register(driver) \
 	usb_register_driver(driver, THIS_MODULE, KBUILD_MODNAME)
 
@@ -1289,9 +1290,10 @@ extern void usb_deregister(struct usb_driver *);
  * init/exit. This eliminates a lot of boilerplate. Each module may only
  * use this macro once, and calling it replaces module_init() and module_exit()
  */
+//usb驱动注册
 #define module_usb_driver(__usb_driver) \
-	module_driver(__usb_driver, usb_register, \
-		       usb_deregister)
+	module_driver(__usb_driver/*usb驱动结构*/, usb_register/*usb注册函数*/, \
+		       usb_deregister/*usb解注册函数*/)
 
 extern int usb_register_device_driver(struct usb_device_driver *,
 			struct module *);
@@ -1567,11 +1569,13 @@ struct urb {
 	unsigned int stream_id;		/* (in) stream ID */
 	int status;			/* (return) non-ISO status */
 	unsigned int transfer_flags;	/* (in) URB_SHORT_NOT_OK | ...*/
+	/*要传输的buffer起始地址*/
 	void *transfer_buffer;		/* (in) associated data buffer */
 	dma_addr_t transfer_dma;	/* (in) dma addr for transfer_buffer */
 	struct scatterlist *sg;		/* (in) scatter gather buffer list */
 	int num_mapped_sgs;		/* (internal) mapped sg entries */
 	int num_sgs;			/* (in) number of entries in the sg list */
+	/*要传输的buffer长度*/
 	u32 transfer_buffer_length;	/* (in) data buffer length */
 	u32 actual_length;		/* (return) actual transfer length */
 	unsigned char *setup_packet;	/* (in) setup packet (control only) */

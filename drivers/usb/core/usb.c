@@ -991,6 +991,7 @@ static int __init usb_init(void)
 	usb_debugfs_init();
 
 	usb_acpi_register();
+	//注册usb bus
 	retval = bus_register(&usb_bus_type);
 	if (retval)
 		goto bus_register_failed;

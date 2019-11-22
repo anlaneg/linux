@@ -194,8 +194,8 @@ struct nci_hci_dev {
 
 /* NCI Core structures */
 struct nci_dev {
-	struct nfc_dev		*nfc_dev;
-	struct nci_ops		*ops;
+	struct nfc_dev		*nfc_dev;/*nci设备对应的nfc设备*/
+	struct nci_ops		*ops;/*nci设备ops*/
 	struct nci_hci_dev	*hci_dev;
 
 	int			tx_headroom;

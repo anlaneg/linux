@@ -1089,6 +1089,7 @@ static int nci_fw_download(struct nfc_dev *nfc_dev, const char *firmware_name)
 	return ndev->ops->fw_download(ndev, firmware_name);
 }
 
+/*nci设备对应的nfc_dev操作集*/
 static struct nfc_ops nci_nfc_ops = {
 	.dev_up = nci_dev_up,
 	.dev_down = nci_dev_down,
@@ -1129,6 +1130,7 @@ struct nci_dev *nci_allocate_device(struct nci_ops *ops,
 	if (!supported_protocols)
 		return NULL;
 
+	//申请nci设备
 	ndev = kzalloc(sizeof(struct nci_dev), GFP_KERNEL);
 	if (!ndev)
 		return NULL;

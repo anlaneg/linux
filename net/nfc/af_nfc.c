@@ -30,6 +30,7 @@ static int nfc_sock_create(struct net *net, struct socket *sock, int proto/*协�
 
 	read_lock(&proto_tab_lock);
 	if (proto_tab[proto] &&	try_module_get(proto_tab[proto]->owner)) {
+	    //使用af_nfc对应proto的create函数
 		rc = proto_tab[proto]->create(net, sock, proto_tab[proto], kern);
 		module_put(proto_tab[proto]->owner);
 	}
@@ -45,7 +46,7 @@ static const struct net_proto_family nfc_sock_family_ops = {
 	.create = nfc_sock_create,
 };
 
-//为af_nfc注册协议
+//为af_nfc提供protocol注册,例如NFC_RAW
 int nfc_proto_register(const struct nfc_protocol *nfc_proto)
 {
 	int rc;
@@ -68,6 +69,7 @@ int nfc_proto_register(const struct nfc_protocol *nfc_proto)
 }
 EXPORT_SYMBOL(nfc_proto_register);
 
+//解注册af_nfc的指定protocol
 void nfc_proto_unregister(const struct nfc_protocol *nfc_proto)
 {
 	write_lock(&proto_tab_lock);

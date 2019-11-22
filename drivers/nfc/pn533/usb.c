@@ -56,12 +56,14 @@ struct pn533_usb_phy {
 	struct pn533 *priv;
 };
 
+/*pn533收到请求响应*/
 static void pn533_recv_response(struct urb *urb)
 {
 	struct pn533_usb_phy *phy = urb->context;
 	struct sk_buff *skb = NULL;
 
 	if (!urb->status) {
+	    //填充响应数据到skb
 		skb = alloc_skb(urb->actual_length, GFP_ATOMIC);
 		if (!skb) {
 			nfc_err(&phy->udev->dev, "failed to alloc memory\n");
@@ -71,6 +73,7 @@ static void pn533_recv_response(struct urb *urb)
 		}
 	}
 
+	//走pn533收到frame处理
 	pn533_recv_frame(phy->priv, skb, urb->status);
 }
 
@@ -81,6 +84,7 @@ static int pn533_submit_urb_for_response(struct pn533_usb_phy *phy, gfp_t flags)
 	return usb_submit_urb(phy->in_urb, flags);
 }
 
+/*pn533收到请求确认ack*/
 static void pn533_recv_ack(struct urb *urb)
 {
 	struct pn533_usb_phy *phy = urb->context;
@@ -109,12 +113,14 @@ static void pn533_recv_ack(struct urb *urb)
 
 	in_frame = phy->in_urb->transfer_buffer;
 
+	//检查收到的frame是否为ack
 	if (!pn533_rx_frame_is_ack(in_frame)) {
 		nfc_err(&phy->udev->dev, "Received an invalid ack\n");
 		cmd->status = -EIO;
 		goto sched_wq;
 	}
 
+	//注册usb回调，等待响应
 	rc = pn533_submit_urb_for_response(phy, GFP_ATOMIC);
 	if (rc) {
 		nfc_err(&phy->udev->dev,
@@ -143,18 +149,20 @@ static int pn533_usb_send_ack(struct pn533 *dev, gfp_t flags)
 	/* spec 7.1.1.3:  Preamble, SoPC (2), ACK Code (2), Postamble */
 
 	if (!phy->ack_buffer) {
+	    /*ack_buffer未初始化时，将其设置为ack buffer*/
 		phy->ack_buffer = kmemdup(ack, sizeof(ack), flags);
 		if (!phy->ack_buffer)
 			return -ENOMEM;
 	}
 
+	//响应ack buffer中的值给对方
 	phy->ack_urb->transfer_buffer = phy->ack_buffer;
 	phy->ack_urb->transfer_buffer_length = sizeof(ack);
 	return usb_submit_urb(phy->ack_urb, flags);
 }
 
 static int pn533_usb_send_frame(struct pn533 *dev,
-				struct sk_buff *out)
+				struct sk_buff *out/*要送出去的包*/)
 {
 	struct pn533_usb_phy *phy = dev->phy;
 	int rc;
@@ -168,6 +176,7 @@ static int pn533_usb_send_frame(struct pn533 *dev,
 	print_hex_dump_debug("PN533 TX: ", DUMP_PREFIX_NONE, 16, 1,
 			     out->data, out->len, false);
 
+	//向usb层提交usb reqeust block
 	rc = usb_submit_urb(phy->out_urb, GFP_KERNEL);
 	if (rc)
 		return rc;
@@ -204,6 +213,7 @@ static void pn533_usb_abort_cmd(struct pn533 *dev, gfp_t flags)
 		return;
 
 	/* An ack will cancel the last issued command */
+	//通过发送ack,取消上一次的cmd request
 	pn533_usb_send_ack(dev, flags);
 
 	/* cancel the urb request */
@@ -333,7 +343,9 @@ static struct pn533_frame_ops pn533_acr122_frame_ops = {
 	.tx_frame_init = pn533_acr122_tx_frame_init,
 	.tx_frame_finish = pn533_acr122_tx_frame_finish,
 	.tx_update_payload_len = pn533_acr122_tx_update_payload_len,
+	//tx帧头部大小
 	.tx_header_len = PN533_ACR122_TX_FRAME_HEADER_LEN,
+	//tx帧尾部大小
 	.tx_tail_len = PN533_ACR122_TX_FRAME_TAIL_LEN,
 
 	.rx_is_frame_valid = pn533_acr122_is_rx_frame_valid,
@@ -434,6 +446,7 @@ static void pn533_send_complete(struct urb *urb)
 }
 
 static struct pn533_phy_ops usb_phy_ops = {
+    /*向外发送帧*/
 	.send_frame = pn533_usb_send_frame,
 	.send_ack = pn533_usb_send_ack,
 	.abort_cmd = pn533_usb_abort_cmd,
@@ -601,6 +614,7 @@ static struct usb_driver pn533_usb_driver = {
 	.id_table =	pn533_usb_table,
 };
 
+/*注册pn533的usb驱动*/
 module_usb_driver(pn533_usb_driver);
 
 MODULE_AUTHOR("Lauro Ramos Venancio <lauro.venancio@openbossa.org>");

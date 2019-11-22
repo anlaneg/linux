@@ -46,7 +46,9 @@ typedef void (*se_io_cb_t)(void *context, u8 *apdu, size_t apdu_len, int err);
 struct nfc_target;
 
 struct nfc_ops {
+    //促使nfc设备up
 	int (*dev_up)(struct nfc_dev *dev);
+	//促使nfc设备down
 	int (*dev_down)(struct nfc_dev *dev);
 	int (*start_poll)(struct nfc_dev *dev,
 			  u32 im_protocols, u32 tm_protocols);
@@ -161,20 +163,20 @@ struct nfc_vendor_cmd {
 };
 
 struct nfc_dev {
-	int idx;
+	int idx;//nfc设备编号
 	u32 target_next_idx;
 	struct nfc_target *targets;
 	int n_targets;
 	int targets_generation;
 	struct device dev;
-	bool dev_up;
+	bool dev_up;//nfc设备是否up
 	bool fw_download_in_progress;
 	u8 rf_mode;
 	bool polling;
 	struct nfc_target *active_target;
 	bool dep_link_up;
 	struct nfc_genl_data genl_data;
-	u32 supported_protocols;
+	u32 supported_protocols;/*设备支持的protocols*/
 
 	struct list_head secure_elements;
 
@@ -191,7 +193,7 @@ struct nfc_dev {
 	struct nfc_vendor_cmd *vendor_cmds;
 	int n_vendor_cmds;
 
-	struct nfc_ops *ops;
+	struct nfc_ops *ops;/*nfc的ops指针*/
 	struct genl_info *cur_cmd_info;
 };
 #define to_nfc_dev(_dev) container_of(_dev, struct nfc_dev, dev)

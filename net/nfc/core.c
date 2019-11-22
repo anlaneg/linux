@@ -114,6 +114,7 @@ int nfc_dev_up(struct nfc_dev *dev)
 		goto error;
 	}
 
+	//使nfc设备up
 	if (dev->ops->dev_up)
 		rc = dev->ops->dev_up(dev);
 
@@ -147,6 +148,7 @@ int nfc_dev_down(struct nfc_dev *dev)
 		goto error;
 	}
 
+	//设备没有up,返回失败
 	if (!dev->dev_up) {
 		rc = -EALREADY;
 		goto error;
@@ -157,6 +159,7 @@ int nfc_dev_down(struct nfc_dev *dev)
 		goto error;
 	}
 
+	//使设备down
 	if (dev->ops->dev_down)
 		dev->ops->dev_down(dev);
 
@@ -1010,6 +1013,7 @@ static void nfc_check_pres_timeout(struct timer_list *t)
 	schedule_work(&dev->check_pres_work);
 }
 
+//注册nfc class
 struct class nfc_class = {
 	.name = "nfc",
 	.dev_release = nfc_release,
@@ -1024,14 +1028,17 @@ static int match_idx(struct device *d, const void *data)
 	return dev->idx == *idx;
 }
 
+//通过dev index查找nfc设备
 struct nfc_dev *nfc_get_device(unsigned int idx)
 {
 	struct device *d;
 
-	d = class_find_device(&nfc_class, NULL, &idx, match_idx);
+	d = class_find_device(&nfc_class, NULL, &idx, match_idx/*nfc匹配回调*/);
 	if (!d)
+	    /*设备未查找到*/
 		return NULL;
 
+	/*将device转换为nfc_dev*/
 	return to_nfc_dev(d);
 }
 
@@ -1048,6 +1055,7 @@ struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
 	struct nfc_dev *dev;
 	int rc;
 
+	//nfc设备必须提供以下回调
 	if (!ops->start_poll || !ops->stop_poll || !ops->activate_target ||
 	    !ops->deactivate_target || !ops->im_transceive)
 		return NULL;
@@ -1055,16 +1063,19 @@ struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
 	if (!supported_protocols)
 		return NULL;
 
+	//申请nfc设备空间
 	dev = kzalloc(sizeof(struct nfc_dev), GFP_KERNEL);
 	if (!dev)
 		return NULL;
 
+	/*申请设备编号*/
 	rc = ida_simple_get(&nfc_index_ida, 0, 0, GFP_KERNEL);
 	if (rc < 0)
 		goto err_free_dev;
 	dev->idx = rc;
 
 	dev->dev.class = &nfc_class;
+	/*设置设备名称*/
 	dev_set_name(&dev->dev, "nfc%d", dev->idx);
 	device_initialize(&dev->dev);
 
@@ -1102,6 +1113,7 @@ EXPORT_SYMBOL(nfc_allocate_device);
  */
 int nfc_register_device(struct nfc_dev *dev)
 {
+    //注册nfc设备到nfc subsytem
 	int rc;
 
 	pr_debug("dev_name=%s\n", dev_name(&dev->dev));
@@ -1118,6 +1130,7 @@ int nfc_register_device(struct nfc_dev *dev)
 	if (rc)
 		pr_err("Could not register llcp device\n");
 
+	//netlink通知设备添加
 	rc = nfc_genl_device_added(dev);
 	if (rc)
 		pr_debug("The userspace won't be notified that the device %s was added\n",
@@ -1180,10 +1193,12 @@ static int __init nfc_init(void)
 
 	pr_info("NFC Core ver %s\n", VERSION);
 
+	//nfc class注册
 	rc = class_register(&nfc_class);
 	if (rc)
 		return rc;
 
+	//nfc genric family初始化
 	rc = nfc_genl_init();
 	if (rc)
 		goto err_genl;
@@ -1191,14 +1206,17 @@ static int __init nfc_init(void)
 	/* the first generation must not be 0 */
 	nfc_devlist_generation = 1;
 
+	//注册raw protocol socket
 	rc = rawsock_init();
 	if (rc)
 		goto err_rawsock;
 
+	//注册llcp protocol socket
 	rc = nfc_llcp_init();
 	if (rc)
 		goto err_llcp_sock;
 
+	//注册af_nfc socket
 	rc = af_nfc_init();
 	if (rc)
 		goto err_af_nfc;

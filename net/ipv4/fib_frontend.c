@@ -86,6 +86,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	//main表特殊处理
 	if (id == 0)
 		id = RT_TABLE_MAIN;
+
 	//查找指定的table,如果存在，则直接返回
 	tb = fib_get_table(net, id);
 	if (tb)

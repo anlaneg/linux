@@ -282,7 +282,9 @@ static int usb_unbind_device(struct device *dev)
 /* called from driver core with dev locked */
 static int usb_probe_interface(struct device *dev)
 {
+    /*设备driver*/
 	struct usb_driver *driver = to_usb_driver(dev->driver);
+	/*设备usb interface*/
 	struct usb_interface *intf = to_usb_interface(dev);
 	struct usb_device *udev = interface_to_usbdev(intf);
 	const struct usb_device_id *id;
@@ -305,10 +307,12 @@ static int usb_probe_interface(struct device *dev)
 		return error;
 	}
 
+	/*interface匹配*/
 	id = usb_match_dynamic_id(intf, driver);
 	if (!id)
 		id = usb_match_id(intf, driver->id_table);
 	if (!id)
+	    /*匹配失败*/
 		return error;
 
 	dev_dbg(dev, "%s - got id\n", __func__);
@@ -358,6 +362,7 @@ static int usb_probe_interface(struct device *dev)
 		intf->needs_altsetting0 = 0;
 	}
 
+	//probe驱动
 	error = driver->probe(intf, id);
 	if (error)
 		goto err;
@@ -606,16 +611,19 @@ EXPORT_SYMBOL_GPL(usb_driver_release_interface);
 /* returns 0 if no match, 1 if match */
 int usb_match_device(struct usb_device *dev, const struct usb_device_id *id)
 {
+    //idVendor匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_VENDOR) &&
 	    id->idVendor != le16_to_cpu(dev->descriptor.idVendor))
 		return 0;
 
+	//idProduct匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_PRODUCT) &&
 	    id->idProduct != le16_to_cpu(dev->descriptor.idProduct))
 		return 0;
 
 	/* No need to test id->bcdDevice_lo != 0, since 0 is never
 	   greater than any unsigned number. */
+	//dev->descriptor.bcdDevice在id>cbdDevice_lo,id->bcdDevice_hi之间
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_LO) &&
 	    (id->bcdDevice_lo > le16_to_cpu(dev->descriptor.bcdDevice)))
 		return 0;
@@ -624,14 +632,17 @@ int usb_match_device(struct usb_device *dev, const struct usb_device_id *id)
 	    (id->bcdDevice_hi < le16_to_cpu(dev->descriptor.bcdDevice)))
 		return 0;
 
+	//bDeviceClass匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_CLASS) &&
 	    (id->bDeviceClass != dev->descriptor.bDeviceClass))
 		return 0;
 
+	//bDeviceSubClass匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_SUBCLASS) &&
 	    (id->bDeviceSubClass != dev->descriptor.bDeviceSubClass))
 		return 0;
 
+	//bDeviceProtocol匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_DEV_PROTOCOL) &&
 	    (id->bDeviceProtocol != dev->descriptor.bDeviceProtocol))
 		return 0;
@@ -655,18 +666,22 @@ int usb_match_one_id_intf(struct usb_device *dev,
 				USB_DEVICE_ID_MATCH_INT_NUMBER)))
 		return 0;
 
+	//interfaceclass匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_CLASS) &&
 	    (id->bInterfaceClass != intf->desc.bInterfaceClass))
 		return 0;
 
+	//interfacesubclass匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_SUBCLASS) &&
 	    (id->bInterfaceSubClass != intf->desc.bInterfaceSubClass))
 		return 0;
 
+	//interfaceprotocol匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_PROTOCOL) &&
 	    (id->bInterfaceProtocol != intf->desc.bInterfaceProtocol))
 		return 0;
 
+	//interfacenumber匹配
 	if ((id->match_flags & USB_DEVICE_ID_MATCH_INT_NUMBER) &&
 	    (id->bInterfaceNumber != intf->desc.bInterfaceNumber))
 		return 0;
@@ -675,6 +690,7 @@ int usb_match_one_id_intf(struct usb_device *dev,
 }
 
 /* returns 0 if no match, 1 if match */
+//检查interface是否与id匹配
 int usb_match_one_id(struct usb_interface *interface,
 		     const struct usb_device_id *id)
 {
@@ -688,6 +704,7 @@ int usb_match_one_id(struct usb_interface *interface,
 	intf = interface->cur_altsetting;
 	dev = interface_to_usbdev(interface);
 
+	//检查设备与id是否匹配
 	if (!usb_match_device(dev, id))
 		return 0;
 
@@ -768,6 +785,7 @@ EXPORT_SYMBOL_GPL(usb_match_one_id);
  * without vendor and product IDs; or specify a protocol without
  * its associated class and subclass.
  */
+//实现interface与table_id的匹配
 const struct usb_device_id *usb_match_id(struct usb_interface *interface,
 					 const struct usb_device_id *id)
 {
@@ -783,6 +801,7 @@ const struct usb_device_id *usb_match_id(struct usb_interface *interface,
 	for (; id->idVendor || id->idProduct || id->bDeviceClass ||
 	       id->bInterfaceClass || id->driver_info; id++) {
 		if (usb_match_one_id(interface, id))
+		    /*返回匹配的id*/
 			return id;
 	}
 
@@ -943,6 +962,7 @@ EXPORT_SYMBOL_GPL(usb_deregister_device_driver);
 int usb_register_driver(struct usb_driver *new_driver, struct module *owner,
 			const char *mod_name)
 {
+    //usb驱动注册
 	int retval = 0;
 
 	if (usb_disabled())
@@ -1919,6 +1939,7 @@ int usb_disable_usb2_hardware_lpm(struct usb_device *udev)
 
 #endif /* CONFIG_PM */
 
+//usb bus
 struct bus_type usb_bus_type = {
 	.name =		"usb",
 	.match =	usb_device_match,

@@ -160,10 +160,12 @@ int __class_register(struct class *cls, struct lock_class_key *key)
 	cp = kzalloc(sizeof(*cp), GFP_KERNEL);
 	if (!cp)
 		return -ENOMEM;
+	//将在cp的klist_devices上添加class,指明class的引用计数增加减少函数
 	klist_init(&cp->klist_devices, klist_class_dev_get, klist_class_dev_put);
 	INIT_LIST_HEAD(&cp->interfaces);
 	kset_init(&cp->glue_dirs);
 	__mutex_init(&cp->mutex, "subsys mutex", key);
+	//设置class名称
 	error = kobject_set_name(&cp->subsys.kobj, "%s", cls->name);
 	if (error) {
 		kfree(cp);
@@ -398,11 +400,12 @@ EXPORT_SYMBOL_GPL(class_for_each_device);
  */
 struct device *class_find_device(struct class *class, struct device *start,
 				 const void *data,
-				 int (*match)(struct device *, const void *))
+				 int (*match/*设备匹配回调*/)(struct device *, const void *))
 {
 	struct class_dev_iter iter;
 	struct device *dev;
 
+	//class未初始化，报错
 	if (!class)
 		return NULL;
 	if (!class->p) {

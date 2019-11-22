@@ -120,11 +120,13 @@ struct ieee1394_device_id {
  */
 struct usb_device_id {
 	/* which fields to match against? */
+    //匹配控制字段，指明哪些字段用于driver与device的匹配
 	__u16		match_flags;
 
 	/* Used for product specific matches; range is inclusive */
 	__u16		idVendor;
 	__u16		idProduct;
+	//lo,hi指定一个范围，与bcdDevice进行匹配
 	__u16		bcdDevice_lo;
 	__u16		bcdDevice_hi;
 
@@ -147,6 +149,7 @@ struct usb_device_id {
 };
 
 /* Some useful macros to use to create struct usb_device_id */
+//用于指明要匹配vendor
 #define USB_DEVICE_ID_MATCH_VENDOR		0x0001
 #define USB_DEVICE_ID_MATCH_PRODUCT		0x0002
 #define USB_DEVICE_ID_MATCH_DEV_LO		0x0004

@@ -323,6 +323,7 @@ static int genl_validate_ops(const struct genl_family *family)
  */
 int genl_register_family(struct genl_family *family)
 {
+    //注册netlink generic family
 	int err, i;
 	int start = GENL_START_ALLOC, end = GENL_MAX_ID;
 
@@ -366,6 +367,7 @@ int genl_register_family(struct genl_family *family)
 	} else
 		family->attrbuf = NULL;
 
+	/*申请family id号*/
 	family->id = idr_alloc_cyclic(&genl_fam_idr, family,
 				      start, end + 1, GFP_KERNEL);
 	if (family->id < 0) {
@@ -448,7 +450,7 @@ void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 	struct nlmsghdr *nlh;
 	struct genlmsghdr *hdr;
 
-	nlh = nlmsg_put(skb, portid, seq, family->id, GENL_HDRLEN +
+	nlh = nlmsg_put(skb, portid, seq, family->id/*用family id号做为消息type*/, GENL_HDRLEN +
 			family->hdrsize, flags);
 	if (nlh == NULL)
 		return NULL;

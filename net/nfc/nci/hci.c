@@ -780,6 +780,7 @@ exit:
 }
 EXPORT_SYMBOL(nci_hci_dev_session_init);
 
+//nci_hci设备申请
 struct nci_hci_dev *nci_hci_allocate(struct nci_dev *ndev)
 {
 	struct nci_hci_dev *hdev;

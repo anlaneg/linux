@@ -287,6 +287,7 @@ static bool pn533_std_rx_frame_is_valid(void *_frame, struct pn533 *dev)
 	return true;
 }
 
+//检查收到的是否为ack帧（00 FF 00 FF )为响应帧
 bool pn533_rx_frame_is_ack(void *_frame)
 {
 	struct pn533_std_frame *frame = _frame;
@@ -328,6 +329,7 @@ static u8 pn533_std_get_cmd_code(void *frame)
 		return PN533_FRAME_CMD(f);
 }
 
+//检查响应的帧是否为cmd response
 bool pn533_rx_frame_is_cmd_response(struct pn533 *dev, void *frame)
 {
 	return (dev->ops->get_cmd_code(frame) ==
@@ -359,10 +361,11 @@ static void pn533_build_cmd_frame(struct pn533 *dev, u8 cmd_code,
 	int payload_len = skb->len;
 	struct pn533_frame_ops *ops = dev->ops;
 
-
+	//头部空出tx_header_len,尾部空出tx_tail_len
 	skb_push(skb, ops->tx_header_len);
 	skb_put(skb, ops->tx_tail_len);
 
+	//设置tx帧，并合上用户传入的skb负载，构造成cmd frame
 	ops->tx_frame_init(skb->data, cmd_code);
 	ops->tx_update_payload_len(skb->data, payload_len);
 	ops->tx_frame_finish(skb->data);
@@ -375,16 +378,19 @@ static int pn533_send_async_complete(struct pn533 *dev)
 	int status, rc = 0;
 
 	if (!cmd) {
+	    /*设备上没有正在执行的cmd*/
 		dev_dbg(dev->dev, "%s: cmd not set\n", __func__);
 		goto done;
 	}
 
+	/*已收到响应报文，释放请求报文*/
 	dev_kfree_skb(cmd->req);
 
 	status = cmd->status;
 	resp = cmd->resp;
 
 	if (status < 0) {
+	    /*cmd执行失败，回调cmd complete_cb*/
 		rc = cmd->complete_cb(dev, cmd->complete_cb_context,
 				      ERR_PTR(status));
 		dev_kfree_skb(resp);
@@ -393,13 +399,16 @@ static int pn533_send_async_complete(struct pn533 *dev)
 
 	/* when no response is set we got interrupted */
 	if (!resp)
+	    /*无响应情况*/
 		resp = ERR_PTR(-EINTR);
 
 	if (!IS_ERR(resp)) {
+	    /*剥掉帧上的头部及尾部*/
 		skb_pull(resp, dev->ops->rx_header_len);
 		skb_trim(resp, resp->len - dev->ops->rx_tail_len);
 	}
 
+	//回调cmd complete回调
 	rc = cmd->complete_cb(dev, cmd->complete_cb_context, resp);
 
 done:
@@ -432,6 +441,7 @@ static int __pn533_send_async(struct pn533 *dev, u8 cmd_code,
 	mutex_lock(&dev->cmd_lock);
 
 	if (!dev->cmd_pending) {
+	    //没有pending的cmd,直接发送
 		dev->cmd = cmd;
 		rc = dev->phy_ops->send_frame(dev, req);
 		if (rc) {
@@ -443,6 +453,7 @@ static int __pn533_send_async(struct pn533 *dev, u8 cmd_code,
 		goto unlock;
 	}
 
+	//有pending的cmd,加入队列等待调度发送
 	dev_dbg(dev->dev, "%s Queueing command 0x%x\n",
 		__func__, cmd_code);
 
@@ -458,9 +469,9 @@ unlock:
 	return rc;
 }
 
-static int pn533_send_data_async(struct pn533 *dev, u8 cmd_code,
+static int pn533_send_data_async(struct pn533 *dev, u8 cmd_code/*数据code*/,
 				 struct sk_buff *req,
-				 pn533_send_async_complete_t complete_cb,
+				 pn533_send_async_complete_t complete_cb/*数据异步回调*/,
 				 void *complete_cb_context)
 {
 	int rc;
@@ -471,9 +482,9 @@ static int pn533_send_data_async(struct pn533 *dev, u8 cmd_code,
 	return rc;
 }
 
-static int pn533_send_cmd_async(struct pn533 *dev, u8 cmd_code,
+static int pn533_send_cmd_async(struct pn533 *dev, u8 cmd_code/*命令*/,
 				struct sk_buff *req,
-				pn533_send_async_complete_t complete_cb,
+				pn533_send_async_complete_t complete_cb/*命令异步cb*/,
 				void *complete_cb_context)
 {
 	int rc;
@@ -493,8 +504,8 @@ static int pn533_send_cmd_async(struct pn533 *dev, u8 cmd_code,
  * next cmd from the queue.
  */
 static int pn533_send_cmd_direct_async(struct pn533 *dev, u8 cmd_code,
-				       struct sk_buff *req,
-				       pn533_send_async_complete_t complete_cb,
+				       struct sk_buff *req/*请求报文*/,
+				       pn533_send_async_complete_t complete_cb/*请求被响应的回调*/,
 				       void *complete_cb_context)
 {
 	struct pn533_cmd *cmd;
@@ -504,11 +515,13 @@ static int pn533_send_cmd_direct_async(struct pn533 *dev, u8 cmd_code,
 	if (!cmd)
 		return -ENOMEM;
 
+	//构造cmd直接发送
 	cmd->code = cmd_code;
 	cmd->req = req;
 	cmd->complete_cb = complete_cb;
 	cmd->complete_cb_context = complete_cb_context;
 
+	//构造cmd对应的帧
 	pn533_build_cmd_frame(dev, cmd_code, req);
 
 	dev->cmd = cmd;
@@ -521,6 +534,7 @@ static int pn533_send_cmd_direct_async(struct pn533 *dev, u8 cmd_code,
 	return rc;
 }
 
+//cmd响应完成,调起cmd的complete回调
 static void pn533_wq_cmd_complete(struct work_struct *work)
 {
 	struct pn533 *dev = container_of(work, struct pn533, cmd_complete_work);
@@ -539,19 +553,25 @@ static void pn533_wq_cmd(struct work_struct *work)
 
 	mutex_lock(&dev->cmd_lock);
 
+	//cmd队列为空，直接返回
 	if (list_empty(&dev->cmd_queue)) {
 		dev->cmd_pending = 0;
 		mutex_unlock(&dev->cmd_lock);
 		return;
 	}
 
+	//自cmd_queue上提取一个cmd
 	cmd = list_first_entry(&dev->cmd_queue, struct pn533_cmd, queue);
 
+	//将此cmd自队列上删除
 	list_del(&cmd->queue);
 
 	mutex_unlock(&dev->cmd_lock);
 
+	//记录设备上正在执行的cmd
 	dev->cmd = cmd;
+
+	//通过phy_ops发送cmd请求
 	rc = dev->phy_ops->send_frame(dev, cmd->req);
 	if (rc < 0) {
 		dev->cmd = NULL;
@@ -567,6 +587,7 @@ struct pn533_sync_cmd_response {
 	struct completion done;
 };
 
+//pn533同步消息的complete回调
 static int pn533_send_sync_complete(struct pn533 *dev, void *_arg,
 				    struct sk_buff *resp)
 {
@@ -595,6 +616,7 @@ static int pn533_send_sync_complete(struct pn533 *dev, void *_arg,
  *  the returned pointer is valid.
  *
  */
+//pn533发送同步cmd请求
 static struct sk_buff *pn533_send_cmd_sync(struct pn533 *dev, u8 cmd_code,
 					       struct sk_buff *req)
 {
@@ -603,6 +625,7 @@ static struct sk_buff *pn533_send_cmd_sync(struct pn533 *dev, u8 cmd_code,
 
 	init_completion(&arg.done);
 
+	//异步发送请求
 	rc = pn533_send_cmd_async(dev, cmd_code, req,
 				  pn533_send_sync_complete, &arg);
 	if (rc) {
@@ -610,11 +633,14 @@ static struct sk_buff *pn533_send_cmd_sync(struct pn533 *dev, u8 cmd_code,
 		return ERR_PTR(rc);
 	}
 
+	//阻塞等待请求响应
 	wait_for_completion(&arg.done);
 
+	//返回响应
 	return arg.resp;
 }
 
+//skb申请（通信用buffer)
 static struct sk_buff *pn533_alloc_skb(struct pn533 *dev, unsigned int size)
 {
 	struct sk_buff *skb;
@@ -1171,6 +1197,7 @@ static void pn533_wq_tg_get_data(struct work_struct *work)
 	if (!skb)
 		return;
 
+	//发送PN533_CMD_TG_GET_DATA cmd
 	rc = pn533_send_data_async(dev, PN533_CMD_TG_GET_DATA, skb,
 				   pn533_tm_get_data_complete, NULL);
 
@@ -2011,24 +2038,28 @@ _error:
  * Receive an incoming pn533 frame. skb contains only header and payload.
  * If skb == NULL, it is a notification that the link below is dead.
  */
-void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
+void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb/* 收到的skb，可为NULL */, int status)
 {
 	if (!dev->cmd)
+	    //设备没有请求的cmd
 		goto sched_wq;
 
 	dev->cmd->status = status;
 
 	if (status != 0) {
+	    //状态有误
 		dev_dbg(dev->dev, "%s: Error received: %d\n", __func__, status);
 		goto sched_wq;
 	}
 
 	if (skb == NULL) {
+	    //收到空帧
 		pr_err("NULL Frame -> link is dead\n");
 		goto sched_wq;
 	}
 
 	if (pn533_rx_frame_is_ack(skb->data)) {
+	    //收到响应帧，丢弃
 		dev_dbg(dev->dev, "%s: Received ACK frame\n", __func__);
 		dev_kfree_skb(skb);
 		return;
@@ -2037,17 +2068,21 @@ void pn533_recv_frame(struct pn533 *dev, struct sk_buff *skb, int status)
 	print_hex_dump_debug("PN533 RX: ", DUMP_PREFIX_NONE, 16, 1, skb->data,
 			     dev->ops->rx_frame_size(skb->data), false);
 
+	//校验收到的帧是否有效
 	if (!dev->ops->rx_is_frame_valid(skb->data, dev)) {
 		nfc_err(dev->dev, "Received an invalid frame\n");
 		dev->cmd->status = -EIO;
 	} else if (!pn533_rx_frame_is_cmd_response(dev, skb->data)) {
+	    //收到的帧不为cmd的响应
 		nfc_err(dev->dev, "It it not the response to the last command\n");
 		dev->cmd->status = -EIO;
 	}
 
+	//记录收到的skb为当前请求的响应报文
 	dev->cmd->resp = skb;
 
 sched_wq:
+    //促使 dev->cmd_complete_work得到运行
 	queue_work(dev->wq, &dev->cmd_complete_work);
 }
 EXPORT_SYMBOL(pn533_recv_frame);
@@ -2254,6 +2289,7 @@ static void pn533_wq_mi_recv(struct work_struct *work)
 	switch (dev->device_type) {
 	case PN533_DEVICE_PASORI:
 		if (dev->tgt_active_prot == NFC_PROTO_FELICA) {
+		    //此时skb为空
 			rc = pn533_send_cmd_direct_async(dev,
 						PN533_CMD_IN_COMM_THRU,
 						skb,
@@ -2264,6 +2300,7 @@ static void pn533_wq_mi_recv(struct work_struct *work)
 		}
 		/* fall through */
 	default:
+	    //skb中存入1，并发送data_exchange
 		skb_put_u8(skb, 1); /*TG*/
 
 		rc = pn533_send_cmd_direct_async(dev,
@@ -2345,6 +2382,7 @@ error:
 	queue_work(dev->wq, &dev->cmd_work);
 }
 
+//pn533设置cfgitem的配置
 static int pn533_set_configuration(struct pn533 *dev, u8 cfgitem, u8 *cfgdata,
 								u8 cfgdata_len)
 {
@@ -2360,8 +2398,8 @@ static int pn533_set_configuration(struct pn533 *dev, u8 cfgitem, u8 *cfgdata,
 	if (!skb)
 		return -ENOMEM;
 
-	skb_put_u8(skb, cfgitem);
-	skb_put_data(skb, cfgdata, cfgdata_len);
+	skb_put_u8(skb, cfgitem/*配置项*/);
+	skb_put_data(skb, cfgdata/*配置值*/, cfgdata_len/*配置值长度*/);
 
 	resp = pn533_send_cmd_sync(dev, PN533_CMD_RF_CONFIGURATION, skb);
 	if (IS_ERR(resp))
@@ -2424,6 +2462,7 @@ static int pn533_rf_field(struct nfc_dev *nfc_dev, u8 rf)
 
 	rf_field |= PN533_CFGITEM_RF_FIELD_AUTO_RFCA;
 
+	//对pn533设置配置
 	rc = pn533_set_configuration(dev, PN533_CFGITEM_RF_FIELD,
 				     (u8 *)&rf_field, 1);
 	if (rc) {
@@ -2446,6 +2485,7 @@ static int pn532_sam_configuration(struct nfc_dev *nfc_dev)
 
 	skb_put_u8(skb, 0x01);
 
+	//发送同步消息请求配置设备
 	resp = pn533_send_cmd_sync(dev, PN533_CMD_SAM_CONFIGURATION, skb);
 	if (IS_ERR(resp))
 		return PTR_ERR(resp);
@@ -2454,6 +2494,7 @@ static int pn532_sam_configuration(struct nfc_dev *nfc_dev)
 	return 0;
 }
 
+//使pn533设备up
 static int pn533_dev_up(struct nfc_dev *nfc_dev)
 {
 	struct pn533 *dev = nfc_get_drvdata(nfc_dev);
@@ -2462,14 +2503,17 @@ static int pn533_dev_up(struct nfc_dev *nfc_dev)
 		int rc = pn532_sam_configuration(nfc_dev);
 
 		if (rc)
+		    /*配置失败*/
 			return rc;
 	}
 
+	//配置设备up
 	return pn533_rf_field(nfc_dev, 1);
 }
 
 static int pn533_dev_down(struct nfc_dev *nfc_dev)
 {
+    //配置设备down
 	return pn533_rf_field(nfc_dev, 0);
 }
 
@@ -2629,6 +2673,7 @@ struct pn533 *pn533_register_device(u32 device_type,
 
 	INIT_LIST_HEAD(&priv->cmd_queue);
 
+	//创建对应的nfc设备
 	priv->nfc_dev = nfc_allocate_device(&pn533_nfc_ops, protocols,
 					   priv->ops->tx_header_len +
 					   PN533_CMD_DATAEXCH_HEAD_LEN,
@@ -2641,6 +2686,7 @@ struct pn533 *pn533_register_device(u32 device_type,
 	nfc_set_parent_dev(priv->nfc_dev, parent);
 	nfc_set_drvdata(priv->nfc_dev, priv);
 
+	//驱动注册nfc设备
 	rc = nfc_register_device(priv->nfc_dev);
 	if (rc)
 		goto free_nfc_dev;

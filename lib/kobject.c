@@ -694,6 +694,7 @@ struct kobject *kobject_get(struct kobject *kobj)
 			WARN(1, KERN_WARNING
 				"kobject: '%s' (%p): is not initialized, yet kobject_get() is being called.\n",
 			     kobject_name(kobj), kobj);
+		//增加kobj的引用计数
 		kref_get(&kobj->kref);
 	}
 	return kobj;

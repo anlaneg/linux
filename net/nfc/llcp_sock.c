@@ -1028,12 +1028,13 @@ static const struct nfc_protocol llcp_nfc_proto = {
 	.id	  = NFC_SOCKPROTO_LLCP,
 	.proto    = &llcp_sock_proto,
 	.owner    = THIS_MODULE,
+	//llcp协议socket创建
 	.create   = llcp_sock_create
 };
 
 int __init nfc_llcp_sock_init(void)
 {
-	//注册llcp协议
+	//为af_nfc注册llcp协议
 	return nfc_proto_register(&llcp_nfc_proto);
 }
 

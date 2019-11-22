@@ -21,9 +21,9 @@ struct klist_node;
 struct klist {
 	spinlock_t		k_lock;
 	struct list_head	k_list;
-	//增加元素引用
+	//元素新加入到链上，通过get,增加klist上元素引用
 	void			(*get)(struct klist_node *);
-	//释放元素引用
+	//元素自链上释放，通过put,释放klist上元素引用
 	void			(*put)(struct klist_node *);
 } __attribute__ ((aligned (sizeof(void *))));
 
@@ -57,7 +57,7 @@ extern int klist_node_attached(struct klist_node *n);
 
 
 struct klist_iter {
-	struct klist		*i_klist;//遍历的链表
+	struct klist		*i_klist;//要遍历的链表
 	struct klist_node	*i_cur;//当前指向哪个位置
 };
 

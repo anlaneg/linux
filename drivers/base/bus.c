@@ -372,6 +372,7 @@ struct device *subsys_find_device_by_id(struct bus_type *subsys, unsigned int id
 
 	//优先从hint设备位开始查找
 	if (hint) {
+	    //初始化i,遍历klist_devices
 		klist_iter_init_node(&subsys->p->klist_devices, &i, &hint->p->knode_bus);
 		dev = next_device(&i);
 		if (dev && dev->id == id && get_device(dev)) {

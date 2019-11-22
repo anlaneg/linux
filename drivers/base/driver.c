@@ -229,6 +229,7 @@ struct device_driver *driver_find(const char *name, struct bus_type *bus)
 		/* Drop reference added by kset_find_obj() */
 		kobject_put(k);
 		priv = to_driver(k);
+		//由priv取driver
 		return priv->driver;
 	}
 	return NULL;
