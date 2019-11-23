@@ -6659,7 +6659,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tmp_opt.user_mss  = tp->rx_opt.user_mss;
 
 	//解析tcp选项
-	tcp_parse_optiomns(sock_net(sk), skb, &tmp_opt, 0,
+	tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0,
 			  want_cookie ? NULL : &foc);
 
 	if (want_cookie && !tmp_opt.saw_tstamp)

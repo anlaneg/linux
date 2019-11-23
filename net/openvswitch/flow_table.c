@@ -480,7 +480,7 @@ struct sw_flow *ovs_flow_tbl_lookup(struct flow_table *tbl,
 {
 	u32 __always_unused n_mask_hit;
 
-	return ovs_flow_tbl_lookup_stats(tbl, key, &n_maskxx_hit);
+	return ovs_flow_tbl_lookup_stats(tbl, key, &n_mask_hit);
 }
 
 struct sw_flow *ovs_flow_tbl_lookup_exact(struct flow_table *tbl,

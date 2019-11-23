@@ -8,14 +8,14 @@
 #include <linux/types.h>
 
 enum {
-	IPT_TTL_SET = 0,
-	IPT_TTL_INC,
-	IPT_TTL_DEC
+	IPT_TTL_EQ = 0,		/* equals */
+	IPT_TTL_NE,		/* not equals */
+	IPT_TTL_LT,		/* less than */
+	IPT_TTL_GT,		/* greater than */
 };
 
-#define IPT_TTL_MAXMODE	IPT_TTL_DEC
 
-struct ipt_TTL_info {
+struct ipt_ttl_info {
 	__u8	mode;
 	__u8	ttl;
 };
