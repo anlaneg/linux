@@ -1132,14 +1132,16 @@ static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 	return 0;
 }
 
+//key及前缀长度校验
 static bool fib_valid_key_len(u32 key, u8 plen, struct netlink_ext_ack *extack)
 {
+	//前缀长度不能大于KEYLENGTH
 	if (plen > KEYLENGTH) {
 		NL_SET_ERR_MSG(extack, "Invalid prefix length");
 		return false;
 	}
 
-	//key的前缀不能为0
+	//key的前缀，在左移前缀长度后一定为0
 	if ((plen < KEYLENGTH) && (key << plen)) {
 		NL_SET_ERR_MSG(extack,
 			       "Invalid prefix for given prefix length");
@@ -1187,6 +1189,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 
 	//在trie表中，查找key,出参为tp(指向l的父节点），l为能存放key的节点
 	l = fib_find_node(t, &tp, key);
+
 	//如果l不为空，则存在匹配的叶子节点，在叶子节点中查找
 	fa = l ? fib_find_alias(&l->leaf, slen, tos, fi->fib_priority,
 				tb->tb_id) : NULL;
@@ -1266,7 +1269,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 			if (err)
 				goto out_free_new_fa;
 
-			//指明路由新增
+			//指明路由新增，通知到用户态
 			rtmsg_fib(RTM_NEWROUTE, htonl(key), new_fa, plen,
 				  tb->tb_id, &cfg->fc_nlinfo, nlflags);
 

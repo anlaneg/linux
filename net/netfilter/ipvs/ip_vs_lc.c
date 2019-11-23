@@ -19,6 +19,7 @@
 
 /*
  *	Least Connection scheduling
+ *	最少连接调度
  */
 static struct ip_vs_dest *
 ip_vs_lc_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,

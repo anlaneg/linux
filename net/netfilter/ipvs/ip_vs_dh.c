@@ -208,6 +208,7 @@ static inline int is_overloaded(struct ip_vs_dest *dest)
 
 /*
  *      Destination hashing scheduling
+ *      按目的地址hash
  */
 static struct ip_vs_dest *
 ip_vs_dh_schedule(struct ip_vs_service *svc, const struct sk_buff *skb,

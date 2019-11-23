@@ -91,7 +91,8 @@ static struct hlist_head fib_info_devhash[DEVINDEX_HASHSIZE];
 
 #define endfor_nexthops(fi) }
 
-
+//每一个路由类型均有一个scop范围，小于scope范围是有效的scope，否则无效
+//例如：RTN_UNICAST路由类型情况下，scope必须只能小于等于RT_SCOPE_UNIVERSE
 const struct fib_prop fib_props[RTN_MAX + 1] = {
 	[RTN_UNSPEC] = {
 		.error	= 0,
@@ -1344,10 +1345,12 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 	int nhs = 1;
 	struct net *net = cfg->fc_nlinfo.nl_net;
 
+	//fc_type校验
 	if (cfg->fc_type > RTN_MAX)
 		goto err_inval;
 
 	/* Fast check to catch the most weird cases */
+	//scope范围检查
 	if (fib_props[cfg->fc_type].scope > cfg->fc_scope) {
 		NL_SET_ERR_MSG(extack, "Invalid scope");
 		goto err_inval;
