@@ -113,6 +113,7 @@
 #include <net/addrconf.h>
 #include <net/udp_tunnel.h>
 
+//记录udp协议的sockets
 struct udp_table udp_table __read_mostly;
 EXPORT_SYMBOL(udp_table);
 
@@ -361,25 +362,27 @@ static int compute_score(struct sock *sk, struct net *net,
 	struct inet_sock *inet;
 	bool dev_match;
 
+	/*net namespace与net不相等，或者udp_port不相等，或者仅使能ipv6,则不能匹配*/
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
 	    ipv6_only_sock(sk))
 		return -1;
 
+	/*socket指定的接收地址，非目的地址*/
 	if (sk->sk_rcv_saddr != daddr)
 		return -1;
 
 	score = (sk->sk_family == PF_INET) ? 2 : 1;
 
 	inet = inet_sk(sk);
-	//检查daddr
+	//socket,指定了daddr,检查daddr
 	if (inet->inet_daddr) {
 		if (inet->inet_daddr != saddr)
 			return -1;
 		score += 4;
 	}
 
-	//检查sport
+	//socket指定了sport,检查sport
 	if (inet->inet_dport) {
 		if (inet->inet_dport != sport)
 			return -1;
@@ -423,6 +426,8 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 
 	result = NULL;
 	badness = 0;
+
+	//遍历hslot2桶上的元素,选择最匹配的一个socket
 	udp_portaddr_for_each_entry_rcu(sk, &hslot2->head) {
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif);
@@ -446,23 +451,26 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 /* UDP is nearly always wildcards out the wazoo, it makes no sense to try
  * harder than this. -DaveM
  */
-struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr,
-		__be16 sport, __be32 daddr, __be16 dport, int dif,
-		int sdif, struct udp_table *udptable, struct sk_buff *skb)
+struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr/*源地址*/,
+		__be16 sport/*源端口*/, __be32 daddr, __be16 dport, int dif,
+		int sdif/*源接口*/, struct udp_table *udptable/*udp socket列表*/, struct sk_buff *skb)
 {
 	struct sock *result;
 	unsigned short hnum = ntohs(dport);
 	unsigned int hash2, slot2;
 	struct udp_hslot *hslot2;
 
+	//利用{目的地址,目的端口（主机序）}做为hash2
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	slot2 = hash2 & udptable->mask;
+	//确认hash2对应的bucket
 	hslot2 = &udptable->hash2[slot2];
 
 	result = udp4_lib_lookup2(net, saddr, sport,
 				  daddr, hnum, dif, sdif,
 				  hslot2, skb);
 	if (!result) {
+		//如果没有找到对应的socket,则目的地址更换为any,再执行一次查询
 		hash2 = ipv4_portaddr_hash(net, htonl(INADDR_ANY), hnum);
 		slot2 = hash2 & udptable->mask;
 		hslot2 = &udptable->hash2[slot2];
@@ -1498,6 +1506,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	__skb_queue_tail(list, skb);
 	spin_unlock(&list->lock);
 
+	//知会socket数据ready
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_data_ready(sk);
 
@@ -2109,6 +2118,7 @@ static int udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 
 	BUILD_BUG_ON(sizeof(struct udp_skb_cb) > SKB_SGO_CB_OFFSET);
 	__skb_push(skb, -skb_mac_offset(skb));
+	//取gro收到的一组segs,遍历segs逐个执行入队
 	segs = udp_rcv_segment(sk, skb, true);
 	for (skb = segs; skb; skb = next) {
 		next = skb->next;
@@ -2141,6 +2151,7 @@ EXPORT_SYMBOL(udp_sk_rx_dst_set);
  *
  *	Note: called only from the BH handler context.
  */
+//udp组播投递
 static int __udp4_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 				    struct udphdr  *uh,
 				    __be32 saddr, __be32 daddr,
@@ -2265,6 +2276,7 @@ static inline int udp4_csum_init(struct sk_buff *skb, struct udphdr *uh,
 /* wrapper for udp_queue_rcv_skb tacking care of csum conversion and
  * return code conversion for ip layer consumption
  */
+//socket sk收到单播报文
 static int udp_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb,
 			       struct udphdr *uh)
 {

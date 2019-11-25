@@ -169,7 +169,7 @@ struct sock_common {
 		};
 	};
 
-	unsigned short		skc_family;
+	unsigned short		skc_family;//sock family字段，例如AF_INET
 	volatile unsigned char	skc_state;//socket状态，例如syn_recv
 	unsigned char		skc_reuse:4;//socket 地址reuse标记
 	unsigned char		skc_reuseport:1;//socket port reuse
@@ -1167,7 +1167,9 @@ struct proto {
 	int			max_header;
 	bool			no_autobind;
 
+	//自指定slab中申请sock
 	struct kmem_cache	*slab;
+	//sock申请的空间大小
 	unsigned int		obj_size;
 	slab_flags_t		slab_flags;
 	unsigned int		useroffset;	/* Usercopy region offset */
@@ -1180,7 +1182,7 @@ struct proto {
 
 	union {
 		struct inet_hashinfo	*hashinfo;
-		struct udp_table	*udp_table;
+		struct udp_table	*udp_table;/*udp socket表，记录所有打开及监听的socket*/
 		struct raw_hashinfo	*raw_hash;
 		struct smc_hashinfo	*smc_hash;
 	} h;

@@ -287,7 +287,7 @@ lookup_protocol:
 	}
 
 	if (unlikely(err)) {
-		//尝试加载module来支持
+		//未找到对应的协议，尝试加载module来支持
 		if (try_loading_module < 2) {
 			rcu_read_unlock();
 			/*
@@ -1152,6 +1152,7 @@ static struct inet_protosw inetsw_array[] =
 
 #define INETSW_ARRAY_LEN ARRAY_SIZE(inetsw_array)
 
+//inet上层协议注册，例如tcp,udp,icmp,raw等格式
 void inet_register_protosw(struct inet_protosw *p)
 {
 	struct list_head *lh;
