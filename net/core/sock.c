@@ -2883,6 +2883,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	if (sock) {
 		sk->sk_type	=	sock->type;
 		RCU_INIT_POINTER(sk->sk_wq, &sock->wq);
+		//设置sock对应的sk
 		sock->sk	=	sk;
 		sk->sk_uid	=	SOCK_INODE(sock)->i_uid;
 	} else {

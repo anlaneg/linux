@@ -6647,6 +6647,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	}
 
 	//为此流申请request_sock(即listen fd对应的socket产生子socket)
+	//accept时，会自queue上提取此sock
 	req = inet_reqsk_alloc(rsk_ops, sk, !want_cookie);
 	if (!req)
 		goto drop;

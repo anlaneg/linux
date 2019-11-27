@@ -410,11 +410,13 @@ static int inet_csk_wait_for_connect(struct sock *sk, long timeo)
 		prepare_to_wait_exclusive(sk_sleep(sk), &wait,
 					  TASK_INTERRUPTIBLE);
 		release_sock(sk);
+		//请求队列为空，调度出去
 		if (reqsk_queue_empty(&icsk->icsk_accept_queue))
 			timeo = schedule_timeout(timeo);
 		sched_annotate_sleep();
 		lock_sock(sk);
 		err = 0;
+		//调度回来时，请求队列不为空，跳出
 		if (!reqsk_queue_empty(&icsk->icsk_accept_queue))
 			break;
 		err = -EINVAL;
@@ -448,11 +450,13 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 	 * and that it has something pending.
 	 */
 	error = -EINVAL;
+	//必须是listen状态
 	if (sk->sk_state != TCP_LISTEN)
 		goto out_err;
 
 	/* Find already established connection */
 	if (reqsk_queue_empty(queue)) {
+		//取接收超时时间
 		long timeo = sock_rcvtimeo(sk, flags & O_NONBLOCK);
 
 		/* If this is a non blocking socket don't sleep */
@@ -460,10 +464,13 @@ struct sock *inet_csk_accept(struct sock *sk, int flags, int *err, bool kern)
 		if (!timeo)
 			goto out_err;
 
+		//等待新的稳定连接，直到超时
 		error = inet_csk_wait_for_connect(sk, timeo);
 		if (error)
 			goto out_err;
 	}
+
+	//自队列中取一个请求
 	req = reqsk_queue_remove(queue, sk);
 	newsk = req->sk;
 
@@ -927,7 +934,7 @@ static void inet_child_forget(struct sock *sk, struct request_sock *req,
 }
 
 struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
-				      struct request_sock *req,
+				      struct request_sock *req/*添加请求的sock*/,
 				      struct sock *child)
 {
 	struct request_sock_queue *queue = &inet_csk(sk)->icsk_accept_queue;
@@ -939,11 +946,13 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 	} else {
 		req->sk = child;
 		req->dl_next = NULL;
+		//队列为空时，将其直接写入，不为空时存入队列尾部
 		if (queue->rskq_accept_head == NULL)
 			WRITE_ONCE(queue->rskq_accept_head, req);
 		else
 			queue->rskq_accept_tail->dl_next = req;
 		queue->rskq_accept_tail = req;
+		//增加accept队列的长度
 		sk_acceptq_added(sk);
 	}
 	spin_unlock(&queue->rskq_lock);

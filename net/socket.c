@@ -1379,6 +1379,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	if (family < 0 || family >= NPROTO)
 		return -EAFNOSUPPORT;
 
+	//socket类型校验
 	if (type < 0 || type >= SOCK_MAX)
 		return -EINVAL;
 
@@ -1403,7 +1404,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 *	the protocol is 0, the family is instructed to select an appropriate
 	 *	default.
 	 */
-	//申请sock内存
+	//申请socket
 	sock = sock_alloc();
 	if (!sock) {
 		net_warn_ratelimited("socket: no more sockets\n");
@@ -1437,6 +1438,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 * We will call the ->create function, that possibly is in a loadable
 	 * module, so we have to bump that loadable module refcnt first.
 	 */
+	//增加对module的引用
 	if (!try_module_get(pf->owner))
 		goto out_release;
 
@@ -1452,6 +1454,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 * Now to bump the refcnt of the [loadable] module that owns this
 	 * socket at sock_release time we decrement its refcnt.
 	 */
+	//增加对sock->ops对应module的引用
 	if (!try_module_get(sock->ops->owner))
 		goto out_module_busy;
 
@@ -1532,16 +1535,20 @@ int __sys_socket(int family, int type, int protocol)
 	BUILD_BUG_ON(SOCK_CLOEXEC & SOCK_TYPE_MASK);
 	BUILD_BUG_ON(SOCK_NONBLOCK & SOCK_TYPE_MASK);
 
-	flags = type & ~SOCK_TYPE_MASK;//取封装在type内的flags(高28位）
+	//取封装在type内的flags(高28位）
+	flags = type & ~SOCK_TYPE_MASK;
+	//当前仅支持两种flags
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
-		return -EINVAL;//当前仅支持两种flags
-	type &= SOCK_TYPE_MASK;//取封装在type内的真实type
+		return -EINVAL;
+
+	//取封装在type内的真实type
+	type &= SOCK_TYPE_MASK;
 
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;//更新为非阻塞标记
 
 	//创建对应的socket
-	retval = sock_create(family, type, protocol, &sock);
+	retval = sock_create(family, type, protocol, &sock/*出参，生成的socket*/);
 	if (retval < 0)
 		return retval;
 
@@ -1665,7 +1672,7 @@ SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
  *	the protocol layer (having also checked the address is ok).
  */
 
-int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
+int __sys_bind(int fd, struct sockaddr __user *umyaddr/*要绑定的地址*/, int addrlen)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
@@ -1674,6 +1681,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr, int addrlen)
 	//依据fd,查找到对应的sock
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
+		//将用户态sockaddr copy到address中
 		err = move_addr_to_kernel(umyaddr, addrlen, &address);
 		if (!err) {
 			err = security_socket_bind(sock,
@@ -1710,6 +1718,7 @@ int __sys_listen(int fd, int backlog)
 
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
+		//backlog不能大于somaxconn
 		somaxconn = sock_net(sock->sk)->core.sysctl_somaxconn;
 		if ((unsigned int)backlog > somaxconn)
 			backlog = somaxconn;
@@ -1748,6 +1757,7 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 	int err, len, newfd, fput_needed;
 	struct sockaddr_storage address;
 
+	//flags目前仅支持以下二种
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
 		return -EINVAL;
 
@@ -1759,10 +1769,12 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 		goto out;
 
 	err = -ENFILE;
+	//申请一个sock
 	newsock = sock_alloc();
 	if (!newsock)
 		goto out_put;
 
+	//新sock的类型,ops与原sock相同
 	newsock->type = sock->type;
 	newsock->ops = sock->ops;
 
@@ -1772,6 +1784,7 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 	 */
 	__module_get(newsock->ops->owner);
 
+	//申请一个未用的fd
 	newfd = get_unused_fd_flags(flags);
 	if (unlikely(newfd < 0)) {
 		err = newfd;
@@ -1789,6 +1802,7 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 	if (err)
 		goto out_fd;
 
+	//调用ops回调
 	err = sock->ops->accept(sock, newsock, sock->file->f_flags, false);
 	if (err < 0)
 		goto out_fd;
@@ -2993,9 +3007,11 @@ static int __init sock_init(void)
 
 	init_inodecache();
 
+	//注册文件系统sockfs
 	err = register_filesystem(&sock_fs_type);
 	if (err)
 		goto out_fs;
+	//挂载sockfs文件系统
 	sock_mnt = kern_mount(&sock_fs_type);
 	if (IS_ERR(sock_mnt)) {
 		err = PTR_ERR(sock_mnt);

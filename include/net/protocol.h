@@ -85,7 +85,9 @@ struct inet_protosw {
 	struct list_head list;
 
         /* These two fields form the lookup key.  */
+	//socket类型
 	unsigned short	 type;	   /* This is the 2nd argument to socket(2). */
+	//4层协议号，0时为通配
 	unsigned short	 protocol; /* This is the L4 protocol number.  */
 
 	struct proto	 *prot;

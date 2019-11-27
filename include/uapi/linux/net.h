@@ -22,6 +22,7 @@
 #include <linux/socket.h>
 #include <asm/socket.h>
 
+//地址族的最大值
 #define NPROTO		AF_MAX
 
 #define SYS_SOCKET	1		/* sys_socket(2)		*/

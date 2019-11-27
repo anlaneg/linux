@@ -153,6 +153,7 @@ struct sock_common {
 		__addrpair	skc_addrpair;
 		struct {
 			__be32	skc_daddr;
+			//设置接收的地址（报文中的目的ip,一般情况下我们在bind时设置的是0）
 			__be32	skc_rcv_saddr;
 		};
 	};
@@ -180,6 +181,7 @@ struct sock_common {
 		struct hlist_node	skc_bind_node;
 		struct hlist_node	skc_portaddr_node;
 	};
+	//设置协议ops,例如udp_prot
 	struct proto		*skc_prot;
 	possible_net_t		skc_net;
 
@@ -469,11 +471,12 @@ struct sock {
 				sk_no_check_rx : 1,
 				sk_userlocks : 4,
 				sk_protocol  : 8,//指明协议
-				sk_type      : 16;
+				sk_type      : 16;//socket类型
 #define SK_PROTOCOL_MAX U8_MAX
 	u16			sk_gso_max_segs;
 	u8			sk_pacing_shift;
 	unsigned long	        sk_lingertime;
+	//sock创建时的proto,例如udp_proto
 	struct proto		*sk_prot_creator;
 	rwlock_t		sk_callback_lock;
 	int			sk_err,
@@ -872,11 +875,13 @@ static inline gfp_t sk_gfp_mask(const struct sock *sk, gfp_t gfp_mask)
 	return gfp_mask | (sk->sk_allocation & __GFP_MEMALLOC);
 }
 
+//减少accept队列的长度
 static inline void sk_acceptq_removed(struct sock *sk)
 {
 	sk->sk_ack_backlog--;
 }
 
+//增加accept队列的长度
 static inline void sk_acceptq_added(struct sock *sk)
 {
 	sk->sk_ack_backlog++;
@@ -1090,6 +1095,7 @@ struct proto {
 					int addr_len);
 	int			(*disconnect)(struct sock *sk, int flags);
 
+	//协议自已的accept
 	struct sock *		(*accept)(struct sock *sk, int flags, int *err,
 					  bool kern);
 
@@ -1124,6 +1130,7 @@ struct proto {
 					   int *addr_len);
 	int			(*sendpage)(struct sock *sk, struct page *page,
 					int offset, size_t size, int flags);
+	//协议可以通过实现此函数，提供bind定制
 	int			(*bind)(struct sock *sk,
 					struct sockaddr *uaddr, int addr_len);
 
@@ -1136,6 +1143,7 @@ struct proto {
 	int			(*hash)(struct sock *sk);
 	void			(*unhash)(struct sock *sk);
 	void			(*rehash)(struct sock *sk);
+	//检查指定的端口号是否可用
 	int			(*get_port)(struct sock *sk, unsigned short snum);
 
 	/* Keeping track of sockets in use */
@@ -1377,6 +1385,7 @@ struct socket_alloc {
 	struct inode vfs_inode;
 };
 
+//由inode获得socket_alloc,然后返回socket_alloc->socket
 static inline struct socket *SOCKET_I(struct inode *inode)
 {
 	return &container_of(inode, struct socket_alloc, vfs_inode)->socket;

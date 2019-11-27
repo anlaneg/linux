@@ -244,8 +244,8 @@ EXPORT_SYMBOL(inet_listen);
  *	Create an inet socket.
  */
 //inet socket创建
-static int inet_create(struct net *net, struct socket *sock, int protocol,
-		       int kern)
+static int inet_create(struct net *net, struct socket *sock/*出参*/, int protocol,
+		       int kern/*是否创建kernel socket*/)
 {
 	struct sock *sk;
 	struct inet_protosw *answer;
@@ -264,6 +264,7 @@ static int inet_create(struct net *net, struct socket *sock, int protocol,
 lookup_protocol:
 	err = -ESOCKTNOSUPPORT;
 	rcu_read_lock();
+	//遍历inet已注册的socket创建信息表
 	list_for_each_entry_rcu(answer, &inetsw[sock->type], list) {
 
 		err = 0;
@@ -272,17 +273,22 @@ lookup_protocol:
 		//注：下文中IPPROTO_IP为0
 		if (protocol == answer->protocol) {
 			if (protocol != IPPROTO_IP)
+				//非0的protocol匹配，不再检查
 				break;
 		} else {
 			/* Check for the two wild cases. */
-			//如果协议为0，则将protocol更新为answer->protocol并认为匹配成功
+			//protocol未匹配，但指定的protocol如果协议为0，则将protocol更新为answer->protocol并认为匹配成功
 			if (IPPROTO_IP == protocol) {
 				protocol = answer->protocol;
 				break;
 			}
+
+			//如果answer->protocol为0，则通配成功，也返回
 			if (IPPROTO_IP == answer->protocol)
 				break;
 		}
+
+		//继续匹配前，链表可以会为空，认为可能不支持
 		err = -EPROTONOSUPPORT;
 	}
 
@@ -314,7 +320,8 @@ lookup_protocol:
 	    !ns_capable(net->user_ns, CAP_NET_RAW))
 		goto out_rcu_unlock;
 
-	sock->ops = answer->ops;//设置socket操作集
+	//匹配answer成功，设置socket操作集
+	sock->ops = answer->ops;
 	answer_prot = answer->prot;
 	answer_flags = answer->flags;
 	rcu_read_unlock();
@@ -322,7 +329,7 @@ lookup_protocol:
 	WARN_ON(!answer_prot->slab);
 
 	err = -ENOBUFS;
-	//申请sk
+	//自answer_prot->slab中申请sk
 	sk = sk_alloc(net, PF_INET, GFP_KERNEL, answer_prot, kern);
 	if (!sk)
 		goto out;
@@ -338,7 +345,8 @@ lookup_protocol:
 	inet->nodefrag = 0;
 
 	if (SOCK_RAW == sock->type) {
-		inet->inet_num = protocol;//raw socket时指定为协议号
+		//raw socket时指定为协议号
+		inet->inet_num = protocol;
 		if (IPPROTO_RAW == protocol)
 			inet->hdrincl = 1;
 	}
@@ -442,6 +450,7 @@ EXPORT_SYMBOL(inet_release);
 //实现af_inet bind系统调用
 int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
+	//取对应的sock
 	struct sock *sk = sock->sk;
 	int err;
 
@@ -450,6 +459,7 @@ int inet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 		//如果协议有自已的bind函数，则调用bind
 		return sk->sk_prot->bind(sk, uaddr, addr_len);
 	}
+
 	//如果协议未提供自已的bind函数，则使用默认的bind函数
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
@@ -529,6 +539,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 
 	//设置bind的dstip
 	inet->inet_rcv_saddr = inet->inet_saddr = addr->sin_addr.s_addr;
+	//针对组播地址，广播地址，inet_saddr采用0
 	if (chk_addr_ret == RTN_MULTICAST || chk_addr_ret == RTN_BROADCAST)
 		inet->inet_saddr = 0;  /* Use device */
 
@@ -751,6 +762,7 @@ int inet_accept(struct socket *sock, struct socket *newsock, int flags,
 {
 	struct sock *sk1 = sock->sk;
 	int err = -EINVAL;
+	//调用proto的accept获得新接入的sock
 	struct sock *sk2 = sk1->sk_prot->accept(sk1, flags, &err, kern);
 
 	if (!sk2)
@@ -1046,12 +1058,12 @@ const struct proto_ops inet_dgram_ops = {
 	.bind		   = inet_bind,
 	.connect	   = inet_dgram_connect,
 	.socketpair	   = sock_no_socketpair,
-	.accept		   = sock_no_accept,
+	.accept		   = sock_no_accept,//udp socket不支持accept
 	.getname	   = inet_getname,
 	.poll		   = udp_poll,
 	.ioctl		   = inet_ioctl,
 	.gettstamp	   = sock_gettstamp,
-	.listen		   = sock_no_listen,
+	.listen		   = sock_no_listen,//udp socket不支持监听
 	.shutdown	   = inet_shutdown,
 	.setsockopt	   = sock_common_setsockopt,
 	.getsockopt	   = sock_common_getsockopt,
@@ -1127,7 +1139,8 @@ static struct inet_protosw inetsw_array[] =
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_UDP,
 		.prot =       &udp_prot,
-		.ops =        &inet_dgram_ops,//udp协议对应的socket操作集
+		//udp协议对应的socket操作集
+		.ops =        &inet_dgram_ops,
 		.flags =      INET_PROTOSW_PERMANENT,
        },
 
@@ -1141,7 +1154,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
-    	   //注册 ip raw socket
+    		   //注册 ip raw socket
 	       .type =       SOCK_RAW,
 	       .protocol =   IPPROTO_IP,	/* wild card */
 	       .prot =       &raw_prot,
@@ -1166,14 +1179,16 @@ void inet_register_protosw(struct inet_protosw *p)
 		goto out_illegal;
 
 	/* If we are trying to override a permanent protocol, bail. */
+	//按socket类型选项不同的链表
 	last_perm = &inetsw[p->type];
 	list_for_each(lh, &inetsw[p->type]) {
 		answer = list_entry(lh, struct inet_protosw, list);
 		/* Check only the non-wild match. */
 		if ((INET_PROTOSW_PERMANENT & answer->flags) == 0)
-			break;//无permanent标记,则忽略
+			//无permanent标记,不再查询，有permanent标记总在最前
+			break;
 		if (protocol == answer->protocol)
-			goto out_permanent;//已存在
+			goto out_permanent;//永久的已存在
 		last_perm = lh;
 	}
 
@@ -2019,6 +2034,7 @@ static int __init inet_init(void)
 #endif
 
 	/* Register the socket-side information for inet_create. */
+	//初始化inetsw指针链表为空
 	for (r = &inetsw[0]; r < &inetsw[SOCK_MAX]; ++r)
 		INIT_LIST_HEAD(r);
 

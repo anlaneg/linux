@@ -117,7 +117,7 @@ struct socket {
 	unsigned long		flags;
 
 	struct file		*file;
-	struct sock		*sk;
+	struct sock		*sk;//指向它对应的sk
 	//定义socket相关的函数，例如bind,accept
 	const struct proto_ops	*ops;
 
@@ -139,6 +139,7 @@ struct proto_ops {
 	int		family;
 	struct module	*owner;
 	int		(*release)   (struct socket *sock);
+	//bind系统调用实现
 	int		(*bind)	     (struct socket *sock,
 				      struct sockaddr *myaddr,
 				      int sockaddr_len);
@@ -147,6 +148,7 @@ struct proto_ops {
 				      int sockaddr_len, int flags);
 	int		(*socketpair)(struct socket *sock1,
 				      struct socket *sock2);
+	//为新接入的链接返回newsock
 	int		(*accept)    (struct socket *sock,
 				      struct socket *newsock, int flags, bool kern);
 	int		(*getname)   (struct socket *sock,
@@ -162,6 +164,7 @@ struct proto_ops {
 #endif
 	int		(*gettstamp) (struct socket *sock, void __user *userstamp,
 				      bool timeval, bool time32);
+	//listen系统调用实现
 	int		(*listen)    (struct socket *sock, int len);
 	int		(*shutdown)  (struct socket *sock, int flags);
 	int		(*setsockopt)(struct socket *sock, int level,
@@ -212,7 +215,7 @@ struct proto_ops {
 
 struct net_proto_family {
 	int		family;
-	//kernel系统调用通过family参数找到对应的net_protto_family结构
+	//kernel系统调用通过family参数找到对应的net_proto_family结构
 	//再通过此结构的create函数完成socket的创建
 	int		(*create)(struct net *net, struct socket *sock,
 				  int protocol, int kern);
