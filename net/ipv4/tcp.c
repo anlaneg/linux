@@ -1943,7 +1943,7 @@ static int tcp_inq_hint(struct sock *sk)
  *	tricks with *seq access order and skb->users are not required.
  *	Probably, code can be easily improved even more.
  */
-
+//tcp层报文收取
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {
@@ -1971,6 +1971,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 	lock_sock(sk);
 
 	err = -ENOTCONN;
+	//不能自listen状态的socket收取报文
 	if (sk->sk_state == TCP_LISTEN)
 		goto out;
 

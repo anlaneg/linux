@@ -1709,7 +1709,7 @@ SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
  *	necessary for a listen, and if that works, we mark the socket as
  *	ready for listening.
  */
-
+//实现系统调用listen
 int __sys_listen(int fd, int backlog)
 {
 	struct socket *sock;
@@ -2045,6 +2045,8 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 	err = import_single_range(READ, ubuf, size, &iov, &msg.msg_iter);
 	if (unlikely(err))
 		return err;
+
+	//由fd找到对应socket
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
 		goto out;
@@ -2059,6 +2061,8 @@ int __sys_recvfrom(int fd, void __user *ubuf, size_t size, unsigned int flags,
 	msg.msg_flags = 0;
 	if (sock->file->f_flags & O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
+
+
 	//通过socket的recvmsg回调来完成任务
 	err = sock_recvmsg(sock, &msg, flags);
 
@@ -2089,6 +2093,7 @@ SYSCALL_DEFINE6(recvfrom, int, fd, void __user *, ubuf, size_t, size,
 SYSCALL_DEFINE4(recv, int, fd, void __user *, ubuf, size_t, size,
 		unsigned int, flags)
 {
+	//自socket中收取报文
 	return __sys_recvfrom(fd, ubuf, size, flags, NULL, NULL);
 }
 

@@ -1681,7 +1681,7 @@ ssize_t compat_import_iovec(int type,
 #endif
 
 int import_single_range(int rw, void __user *buf, size_t len,
-		 struct iovec *iov, struct iov_iter *i)
+		 struct iovec *iov/*出参，初始化要操纵的buffer*/, struct iov_iter *i)
 {
 	if (len > MAX_RW_COUNT)
 		len = MAX_RW_COUNT;
@@ -1690,6 +1690,7 @@ int import_single_range(int rw, void __user *buf, size_t len,
 
 	iov->iov_base = buf;
 	iov->iov_len = len;
+	//初始化iov_iter
 	iov_iter_init(i, rw, iov, 1, len);
 	return 0;
 }
