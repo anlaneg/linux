@@ -1282,6 +1282,7 @@ new_segment:
 					goto restart;
 			}
 			first_skb = tcp_rtx_and_write_queues_empty(sk);
+			/*申请skb准备写数据*/
 			skb = sk_stream_alloc_skb(sk, 0, sk->sk_allocation,
 						  first_skb);
 			if (!skb)
@@ -1428,6 +1429,7 @@ out_err:
 }
 EXPORT_SYMBOL_GPL(tcp_sendmsg_locked);
 
+//tcp数据发送入口
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	int ret;
@@ -1999,6 +2001,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 
 	seq = &tp->copied_seq;
 	if (flags & MSG_PEEK) {
+		/*有peek选项时，seq变更用于修改临时变量，不真实修改tp->copied_seq*/
 		peek_seq = tp->copied_seq;
 		seq = &peek_seq;
 	}
@@ -2026,6 +2029,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			/* Now that we have two receive queues this
 			 * shouldn't happen.
 			 */
+			//待copy的位置一次大于等于skb->seq
 			if (WARN(before(*seq, TCP_SKB_CB(skb)->seq),
 				 "TCP recvmsg seq # bug: copied %X, seq %X, rcvnxt %X, fl %X\n",
 				 *seq, TCP_SKB_CB(skb)->seq, tp->rcv_nxt,
@@ -2034,11 +2038,16 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 
 			offset = *seq - TCP_SKB_CB(skb)->seq;
 			if (unlikely(TCP_SKB_CB(skb)->tcp_flags & TCPHDR_SYN)) {
+				//syn报文不应含数据
 				pr_err_once("%s: found a SYN, please report !\n", __func__);
 				offset--;
 			}
+
 			if (offset < skb->len)
+				/*正常数据*/
 				goto found_ok_skb;
+
+			//遇到fin标记
 			if (TCP_SKB_CB(skb)->tcp_flags & TCPHDR_FIN)
 				goto found_fin_ok;
 			WARN(!(flags & MSG_PEEK),
@@ -2096,6 +2105,7 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 			release_sock(sk);
 			lock_sock(sk);
 		} else {
+			//等待队列中来数据
 			sk_wait_data(sk, &timeo, last);
 		}
 
@@ -2110,12 +2120,14 @@ int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 
 found_ok_skb:
 		/* Ok so how much can we use? */
+		//我们可以读的字节为used个，要读取的字节len小于used时，更新used为len
 		used = skb->len - offset;
 		if (len < used)
 			used = len;
 
 		/* Do we have urgent data here? */
 		if (tp->urg_data) {
+			//紧急数据处理
 			u32 urg_offset = tp->urg_seq - *seq;
 			if (urg_offset < used) {
 				if (!urg_offset) {
@@ -2133,6 +2145,7 @@ found_ok_skb:
 		}
 
 		if (!(flags & MSG_TRUNC)) {
+			//自skb的offset位置开始取数据，取used个
 			err = skb_copy_datagram_msg(skb, offset, msg, used);
 			if (err) {
 				/* Exception. Bailout! */
@@ -2142,8 +2155,11 @@ found_ok_skb:
 			}
 		}
 
+		//更新读写头
 		WRITE_ONCE(*seq, *seq + used);
+		//读取了多少字节
 		copied += used;
+		//需求长度减used
 		len -= used;
 
 		tcp_rcv_space_adjust(sk);

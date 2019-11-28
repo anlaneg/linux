@@ -426,6 +426,7 @@ struct sock {
 		struct rb_root	tcp_rtx_queue;
 	};
 	struct sk_buff		*sk_tx_skb_cache;
+	//socket写队列
 	struct sk_buff_head	sk_write_queue;
 	__s32			sk_peek_off;
 	int			sk_write_pending;

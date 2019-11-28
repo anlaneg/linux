@@ -2415,10 +2415,12 @@ long __sys_sendmsg(int fd, struct user_msghdr __user *msg, unsigned int flags,
 	if (forbid_cmsg_compat && (flags & MSG_CMSG_COMPAT))
 		return -EINVAL;
 
+	//由fd获取socket
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (!sock)
 		goto out;
 
+	//向socket发送msg
 	err = ___sys_sendmsg(sock, msg, &msg_sys, flags, NULL, 0);
 
 	fput_light(sock->file, fput_needed);
