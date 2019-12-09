@@ -172,6 +172,7 @@ struct mlx5_flow_table {
 	struct {
 		bool			active;
 		unsigned int		required_groups;
+		unsigned int		group_size;
 		unsigned int		num_groups;
 	} autogroup;
 	/* Protect fwd_rules */
@@ -219,6 +220,7 @@ struct fs_fte {
 	struct mlx5_fc			*counter;
 	//挂接至hashtable
 	struct rhash_head		hash;
+	struct rcu_head	rcu;
 	int				modify_mask;
 };
 

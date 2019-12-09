@@ -862,6 +862,7 @@ enum tc_setup_type {
 	TC_SETUP_ROOT_QDISC,
 	TC_SETUP_QDISC_GRED,
 	TC_SETUP_QDISC_TAPRIO,
+	TC_SETUP_FT,
 };
 
 /* These structures hold the attributes of bpf state that are being passed
@@ -939,6 +940,15 @@ struct dev_ifalias {
 struct devlink;
 struct tlsdev_ops;
 
+struct netdev_name_node {
+	struct hlist_node hlist;
+	struct list_head list;
+	struct net_device *dev;
+	const char *name;
+};
+
+int netdev_name_node_alt_create(struct net_device *dev, const char *name);
+int netdev_name_node_alt_destroy(struct net_device *dev, const char *name);
 
 /*
  * This structure defines the management hooks for network devices.
@@ -1343,6 +1353,10 @@ struct net_device_ops {
 						   struct nlattr *port[]);
 	int			(*ndo_get_vf_port)(struct net_device *dev,
 						   int vf, struct sk_buff *skb);
+	int			(*ndo_get_vf_guid)(struct net_device *dev,
+						   int vf,
+						   struct ifla_vf_guid *node_guid,
+						   struct ifla_vf_guid *port_guid);
 	int			(*ndo_set_vf_guid)(struct net_device *dev,
 						   int vf, u64 guid,
 						   int guid_type);
@@ -1596,7 +1610,7 @@ enum netdev_priv_flags {
  *		(i.e. as seen by users in the "Space.c" file).  It is the name
  *		of the interface.
  *
- *	@name_hlist: 	Device name hash chain, please keep it close to name[]
+ *	@name_node:	Name hashlist node
  *	@ifalias:	SNMP alias
  *	@mem_end:	Shared memory end
  *	@mem_start:	Shared memory start
@@ -1813,7 +1827,7 @@ enum netdev_priv_flags {
 struct net_device {
 	//设备名称
 	char			name[IFNAMSIZ];
-	struct hlist_node	name_hlist;
+	struct netdev_name_node	*name_node;
 	struct dev_ifalias	__rcu *ifalias;
 	/*
 	 *	I/O specific fields
@@ -1904,6 +1918,11 @@ struct net_device {
 	unsigned char		if_port;
 	unsigned char		dma;
 
+	/* Note : dev->mtu is often read without holding a lock.
+	 * Writers usually hold RTNL.
+	 * It is recommended to use READ_ONCE() to annotate the reads,
+	 * and to use WRITE_ONCE() to annotate the writes.
+	 */
 	unsigned int		mtu;//设置的mtu
 	unsigned int		min_mtu;//设置最小mtu
 	unsigned int		max_mtu;//设置最大mtu
@@ -2445,10 +2464,22 @@ struct pcpu_sw_netstats {
 } __aligned(4 * sizeof(u64));
 
 struct pcpu_lstats {
-	u64 packets;
-	u64 bytes;
+	u64_stats_t packets;
+	u64_stats_t bytes;
 	struct u64_stats_sync syncp;
 } __aligned(2 * sizeof(u64));
+
+void dev_lstats_read(struct net_device *dev, u64 *packets, u64 *bytes);
+
+static inline void dev_lstats_add(struct net_device *dev, unsigned int len)
+{
+	struct pcpu_lstats *lstats = this_cpu_ptr(dev->lstats);
+
+	u64_stats_update_begin(&lstats->syncp);
+	u64_stats_add(&lstats->bytes, len);
+	u64_stats_inc(&lstats->packets);
+	u64_stats_update_end(&lstats->syncp);
+}
 
 #define __netdev_alloc_pcpu_stats(type, gfp)				\
 ({									\
@@ -2551,6 +2582,9 @@ const char *netdev_cmd_to_name(enum netdev_cmd cmd);
 
 int register_netdevice_notifier(struct notifier_block *nb);
 int unregister_netdevice_notifier(struct notifier_block *nb);
+int register_netdevice_notifier_net(struct net *net, struct notifier_block *nb);
+int unregister_netdevice_notifier_net(struct net *net,
+				      struct notifier_block *nb);
 
 struct netdev_notifier_info {
 	struct net_device	*dev;
@@ -2621,6 +2655,9 @@ extern rwlock_t				dev_base_lock;		/* Device list lock */
 		list_for_each_entry_safe(d, n, &(net)->dev_base_head, dev_list)
 #define for_each_netdev_continue(net, d)		\
 		list_for_each_entry_continue(d, &(net)->dev_base_head, dev_list)
+#define for_each_netdev_continue_reverse(net, d)		\
+		list_for_each_entry_continue_reverse(d, &(net)->dev_base_head, \
+						     dev_list)
 #define for_each_netdev_continue_rcu(net, d)		\
 	list_for_each_entry_continue_rcu(d, &(net)->dev_base_head, dev_list)
 #define for_each_netdev_in_bond_rcu(bond, slave)	\
@@ -4160,9 +4197,6 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 				    unsigned char name_assign_type,
 				    void (*setup)(struct net_device *),
 				    unsigned int txqs, unsigned int rxqs);
-int dev_get_valid_name(struct net *net, struct net_device *dev,
-		       const char *name);
-
 //申请名称为name的网络设备，默认rx,tx队列数均为1
 #define alloc_netdev(sizeof_priv, name, name_assign_type, setup) \
 	alloc_netdev_mqs(sizeof_priv, name, name_assign_type, setup, 1, 1)

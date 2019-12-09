@@ -172,6 +172,16 @@ struct net_bridge_vlan_group {
 	u16				pvid;//vlan id号
 };
 
+/* bridge fdb flags */
+enum {
+	BR_FDB_LOCAL,
+	BR_FDB_STATIC,
+	BR_FDB_STICKY,
+	BR_FDB_ADDED_BY_USER,
+	BR_FDB_ADDED_BY_EXT_LEARN,
+	BR_FDB_OFFLOADED,
+};
+
 struct net_bridge_fdb_key {
 	mac_addr addr;
 	u16 vlan_id;
@@ -183,12 +193,9 @@ struct net_bridge_fdb_entry {
 
 	struct net_bridge_fdb_key	key;
 	struct hlist_node		fdb_node;
-	unsigned char			is_local:1,//是否为local fdb表项（即本机接口）
-					is_static:1,//是否为静态fdb表项
-					is_sticky:1,
-					added_by_user:1,
-					added_by_external_learn:1,
-					offloaded:1;
+	//是否为local fdb表项（即本机接口）
+	//是否为静态fdb表项
+	unsigned long			flags;
 
 	/* write-heavy members should not affect lookups */
 	unsigned long			updated ____cacheline_aligned_in_smp;
@@ -499,6 +506,11 @@ static inline bool br_vlan_should_use(const struct net_bridge_vlan *v)
 	return true;
 }
 
+static inline bool nbp_state_should_learn(const struct net_bridge_port *p)
+{
+	return p->state == BR_STATE_LEARNING || p->state == BR_STATE_FORWARDING;
+}
+
 static inline int br_opt_get(const struct net_bridge *br,
 			     enum net_bridge_opts opt)
 {
@@ -570,7 +582,7 @@ int br_fdb_fillbuf(struct net_bridge *br, void *buf, unsigned long count,
 int br_fdb_insert(struct net_bridge *br, struct net_bridge_port *source,
 		  const unsigned char *addr, u16 vid);
 void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
-		   const unsigned char *addr, u16 vid, bool added_by_user);
+		   const unsigned char *addr, u16 vid, unsigned long flags);
 
 int br_fdb_delete(struct ndmsg *ndm, struct nlattr *tb[],
 		  struct net_device *dev, const unsigned char *addr, u16 vid);

@@ -44,7 +44,7 @@ static struct tcf_pedit_key_ex *tcf_pedit_keys_ex_parse(struct nlattr *nla,
 	int err = -EINVAL;
 	int rem;
 
-	if (!nla || !n)
+	if (!nla)
 		return NULL;
 
 	//有n个key需要解析
@@ -143,7 +143,8 @@ nla_failure:
 static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 			  struct nlattr *est, struct tc_action **a,
 			  int ovr, int bind, bool rtnl_held,
-			  struct tcf_proto *tp, struct netlink_ext_ack *extack)
+			  struct tcf_proto *tp, u32 flags,
+			  struct netlink_ext_ack *extack)
 {
 	struct tc_action_net *tn = net_generic(net, pedit_net_id);
 	struct nlattr *tb[TCA_PEDIT_MAX + 1];
@@ -178,6 +179,10 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 
 	//paramter长度校验
 	parm = nla_data(pattr);
+	if (!parm->nkeys) {
+		NL_SET_ERR_MSG_MOD(extack, "Pedit requires keys to be passed");
+		return -EINVAL;
+	}
 	ksize = parm->nkeys * sizeof(struct tc_pedit_key);
 	if (nla_len(pattr) < sizeof(*parm) + ksize) {
 		NL_SET_ERR_MSG_ATTR(extack, pattr, "Length of TCA_PEDIT_PARMS or TCA_PEDIT_PARMS_EX pedit attribute is invalid");
@@ -192,15 +197,9 @@ static int tcf_pedit_init(struct net *net, struct nlattr *nla,
 	index = parm->index;
 	err = tcf_idr_check_alloc(tn, &index, a, bind);
 	if (!err) {
-		if (!parm->nkeys) {
-			tcf_idr_cleanup(tn, index);
-			NL_SET_ERR_MSG_MOD(extack, "Pedit requires keys to be passed");
-			ret = -EINVAL;
-			goto out_free;
-		}
 		//未关联，实现action与parm->index关联
 		ret = tcf_idr_create(tn, index, est, a/*出参，构造action并关联index后返回*/,
-				     &act_pedit_ops, bind, false);
+				     &act_pedit_ops, bind, false, 0);
 		if (ret) {
 			tcf_idr_cleanup(tn, index);
 			goto out_free;

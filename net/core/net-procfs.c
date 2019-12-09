@@ -22,8 +22,8 @@ static inline struct net_device *dev_from_same_bucket(struct seq_file *seq, loff
 	unsigned int count = 0, offset = get_offset(*pos);
 
 	//遍历所有网络设备，自get_bucket(*pos)链上找出第offset个元素返回
-	h = &net->dev_name_head[get_bucket(*pos)];
-	hlist_for_each_entry_rcu(dev, h, name_hlist) {
+	h = &net->dev_index_head[get_bucket(*pos)];
+	hlist_for_each_entry_rcu(dev, h, index_hlist) {
 		if (++count == offset)
 			return dev;
 	}

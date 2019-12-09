@@ -427,9 +427,10 @@ u32 ovs_vport_find_upcall_portid(const struct vport *vport, struct sk_buff *skb)
 
 	ids = rcu_dereference(vport->upcall_portids);
 
+	/* If there is only one portid, select it in the fast-path. */
 	//配置无效，返回0
-	if (ids->n_ids == 1 && ids->ids[0] == 0)
-		return 0;
+	if (ids->n_ids == 1)
+		return ids->ids[0];
 
 	//否则采用skb->hash选取一个合适的portid
 	hash = skb_get_hash(skb);

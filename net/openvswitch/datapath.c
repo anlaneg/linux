@@ -236,7 +236,8 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 
 	/* Look up flow. */
 	//查询ovs emc流表
-	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, &n_mask_hit);
+	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, skb_get_hash(skb),
+					 &n_mask_hit);
 	if (unlikely(!flow)) {
 		//没有找到flow,upcall由用户态进行处理
 		struct dp_upcall_info upcall;
@@ -363,7 +364,8 @@ static size_t upcall_msg_size(const struct dp_upcall_info *upcall_info,
 	size_t size = NLMSG_ALIGN(sizeof(struct ovs_header))
 		+ nla_total_size(hdrlen) /* OVS_PACKET_ATTR_PACKET */
 		+ nla_total_size(ovs_key_attr_size()) /* OVS_PACKET_ATTR_KEY */
-		+ nla_total_size(sizeof(unsigned int)); /* OVS_PACKET_ATTR_LEN */
+		+ nla_total_size(sizeof(unsigned int)) /* OVS_PACKET_ATTR_LEN */
+		+ nla_total_size(sizeof(u64)); /* OVS_PACKET_ATTR_HASH */
 
 	/* OVS_PACKET_ATTR_USERDATA */
 	if (upcall_info->userdata)
@@ -406,6 +408,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	size_t len;
 	unsigned int hlen;
 	int err, dp_ifindex;
+	u64 hash;
 
 	//取datapath的ifindex
 	dp_ifindex = get_dpifindex(dp);
@@ -505,23 +508,30 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	}
 
 	/* Add OVS_PACKET_ATTR_MRU */
-	if (upcall_info->mru) {
-		if (nla_put_u16(user_skb, OVS_PACKET_ATTR_MRU,
-				upcall_info->mru)) {
-			err = -ENOBUFS;
-			goto out;
-		}
-		pad_packet(dp, user_skb);
+	if (upcall_info->mru &&
+	    nla_put_u16(user_skb, OVS_PACKET_ATTR_MRU, upcall_info->mru)) {
+		err = -ENOBUFS;
+		goto out;
 	}
 
 	/* Add OVS_PACKET_ATTR_LEN when packet is truncated */
-	if (cutlen > 0) {
-		if (nla_put_u32(user_skb, OVS_PACKET_ATTR_LEN,
-				skb->len)) {
-			err = -ENOBUFS;
-			goto out;
-		}
-		pad_packet(dp, user_skb);
+	if (cutlen > 0 &&
+	    nla_put_u32(user_skb, OVS_PACKET_ATTR_LEN, skb->len)) {
+		err = -ENOBUFS;
+		goto out;
+	}
+
+	/* Add OVS_PACKET_ATTR_HASH */
+	hash = skb_get_hash_raw(skb);
+	if (skb->sw_hash)
+		hash |= OVS_PACKET_HASH_SW_BIT;
+
+	if (skb->l4_hash)
+		hash |= OVS_PACKET_HASH_L4_BIT;
+
+	if (nla_put(user_skb, OVS_PACKET_ATTR_HASH, sizeof (u64), &hash)) {
+		err = -ENOBUFS;
+		goto out;
 	}
 
 	/* Only reserve room for attribute header, packet data is added
@@ -565,6 +575,7 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 	struct datapath *dp;
 	struct vport *input_vport;
 	u16 mru = 0;
+	u64 hash;
 	int len;
 	int err;
 	bool log = !a[OVS_PACKET_ATTR_PROBE];
@@ -591,6 +602,14 @@ static int ovs_packet_cmd_execute(struct sk_buff *skb, struct genl_info *info)
 		packet->ignore_df = 1;
 	}
 	OVS_CB(packet)->mru = mru;
+
+	if (a[OVS_PACKET_ATTR_HASH]) {
+		hash = nla_get_u64(a[OVS_PACKET_ATTR_HASH]);
+
+		__skb_set_hash(packet, hash & 0xFFFFFFFFULL,
+			       !!(hash & OVS_PACKET_HASH_SW_BIT),
+			       !!(hash & OVS_PACKET_HASH_L4_BIT));
+	}
 
 	/* Build an sw_flow for sending this packet. */
 	flow = ovs_flow_alloc();
@@ -735,9 +754,13 @@ static size_t ovs_flow_cmd_msg_size(const struct sw_flow_actions *acts,
 {
 	size_t len = NLMSG_ALIGN(sizeof(struct ovs_header));
 
-	/* OVS_FLOW_ATTR_UFID */
+	/* OVS_FLOW_ATTR_UFID, or unmasked flow key as fallback
+	 * see ovs_nla_put_identifier()
+	 */
 	if (sfid && ovs_identifier_is_ufid(sfid))
 		len += nla_total_size(sfid->ufid_len);
+	else
+		len += nla_total_size(ovs_key_attr_size());
 
 	/* OVS_FLOW_ATTR_KEY */
 	if (!sfid || should_fill_key(sfid, ufid_flags))
@@ -915,7 +938,10 @@ static struct sk_buff *ovs_flow_cmd_build_info(const struct sw_flow *flow,
 	retval = ovs_flow_cmd_fill_info(flow, dp_ifindex, skb,
 					info->snd_portid, info->snd_seq, 0,
 					cmd, ufid_flags);
-	BUG_ON(retval < 0);
+	if (WARN_ON_ONCE(retval < 0)) {
+		kfree_skb(skb);
+		skb = ERR_PTR(retval);
+	}
 	return skb;
 }
 
@@ -1389,7 +1415,10 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 						     OVS_FLOW_CMD_DEL,
 						     ufid_flags);
 			rcu_read_unlock();
-			BUG_ON(err < 0);
+			if (WARN_ON_ONCE(err < 0)) {
+				kfree_skb(reply);
+				goto out_free;
+			}
 
 			ovs_notify(&dp_flow_genl_family, reply, info);
 		} else {
@@ -1397,6 +1426,7 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 		}
 	}
 
+out_free:
 	ovs_flow_free(flow, true);
 	return 0;
 unlock:
@@ -1627,6 +1657,31 @@ static int ovs_dp_change(struct datapath *dp, struct nlattr *a[])
 	return 0;
 }
 
+static int ovs_dp_stats_init(struct datapath *dp)
+{
+	dp->stats_percpu = netdev_alloc_pcpu_stats(struct dp_stats_percpu);
+	if (!dp->stats_percpu)
+		return -ENOMEM;
+
+	return 0;
+}
+
+static int ovs_dp_vport_init(struct datapath *dp)
+{
+	int i;
+
+	dp->ports = kmalloc_array(DP_VPORT_HASH_BUCKETS,
+				  sizeof(struct hlist_head),
+				  GFP_KERNEL);
+	if (!dp->ports)
+		return -ENOMEM;
+
+	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++)
+		INIT_HLIST_HEAD(&dp->ports[i]);
+
+	return 0;
+}
+
 //处理openvswitch的datapath创建命令
 static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 {
@@ -1636,7 +1691,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	struct datapath *dp;
 	struct vport *vport;
 	struct ovs_net *ovs_net;
-	int err, i;
+	int err;
 
 	err = -EINVAL;
 	//必须指定datapath名称及 upcall_pid
@@ -1651,7 +1706,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	//为datapath申请空间
 	dp = kzalloc(sizeof(*dp), GFP_KERNEL);
 	if (dp == NULL)
-		goto err_free_reply;
+		goto err_destroy_reply;
 
 	//设置datapath对应的net namespace
 	ovs_dp_set_net(dp, sock_net(skb->sk));
@@ -1660,31 +1715,22 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	//申请并初始化流表
 	err = ovs_flow_tbl_init(&dp->table);
 	if (err)
-		goto err_free_dp;
+		goto err_destroy_dp;
 
 	//datapath状态字段
-	dp->stats_percpu = netdev_alloc_pcpu_stats(struct dp_stats_percpu);
-	if (!dp->stats_percpu) {
-		err = -ENOMEM;
+	err = ovs_dp_stats_init(dp);
+	if (err)
 		goto err_destroy_table;
-	}
 
 	//ports hash表申请，初始化
-	dp->ports = kmalloc_array(DP_VPORT_HASH_BUCKETS,
-				  sizeof(struct hlist_head),
-				  GFP_KERNEL);
-	if (!dp->ports) {
-		err = -ENOMEM;
-		goto err_destroy_percpu;
-	}
-
-	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++)
-		INIT_HLIST_HEAD(&dp->ports[i]);
+	err = ovs_dp_vport_init(dp);
+	if (err)
+		goto err_destroy_stats;
 
 	//初始化meters表
 	err = ovs_meters_init(dp);
 	if (err)
-		goto err_destroy_ports_array;
+		goto err_destroy_ports;
 
 	/* Set up our datapath device. */
 	parms.name = nla_data(a[OVS_DP_ATTR_NAME]);
@@ -1718,6 +1764,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				ovs_dp_reset_user_features(skb, info);
 		}
 
+		ovs_unlock();
 		goto err_destroy_meters;
 	}
 
@@ -1734,17 +1781,16 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	return 0;
 
 err_destroy_meters:
-	ovs_unlock();
 	ovs_meters_exit(dp);
-err_destroy_ports_array:
+err_destroy_ports:
 	kfree(dp->ports);
-err_destroy_percpu:
+err_destroy_stats:
 	free_percpu(dp->stats_percpu);
 err_destroy_table:
 	ovs_flow_tbl_destroy(&dp->table);
-err_free_dp:
+err_destroy_dp:
 	kfree(dp);
-err_free_reply:
+err_destroy_reply:
 	kfree_skb(reply);
 err:
 	return err;

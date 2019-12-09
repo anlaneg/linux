@@ -36,6 +36,8 @@ void nf_ct_ext_destroy(struct nf_conn *ct)
 			t->destroy(ct);
 		rcu_read_unlock();
 	}
+
+	kfree(ct->ext);
 }
 EXPORT_SYMBOL(nf_ct_ext_destroy);
 
@@ -43,15 +45,16 @@ EXPORT_SYMBOL(nf_ct_ext_destroy);
 void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 {
 	unsigned int newlen, newoff, oldlen, alloc;
-	struct nf_ct_ext *old, *new;
 	struct nf_ct_ext_type *t;
+	struct nf_ct_ext *new;
 
 	/* Conntrack must not be confirmed to avoid races on reallocation. */
 	WARN_ON(nf_ct_is_confirmed(ct));
 
-	old = ct->ext;
 
-	if (old) {
+	if (ct->ext) {
+		const struct nf_ct_ext *old = ct->ext;
+
 		//此id已有扩展时直接返回NULL
 		if (__nf_ct_ext_exist(old, id))
 			return NULL;
@@ -73,25 +76,20 @@ void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)
 	rcu_read_unlock();
 
 	alloc = max(newlen, NF_CT_EXT_PREALLOC);
-	kmemleak_not_leak(old);
-	new = __krealloc(old, alloc, gfp);//扩大内存或者申请内存
+	new = krealloc(ct->ext, alloc, gfp);//扩大内存或者申请内存
 	if (!new)
 		return NULL;
 
-	if (!old) {
+	if (!ct->ext)
 		//首次创建offset全置为０
 		memset(new->offset, 0, sizeof(new->offset));
-		ct->ext = new;
-	} else if (new != old) {
-		//需要释放旧扩展内存
-		kfree_rcu(old, rcu);
-		rcu_assign_pointer(ct->ext, new);
-	}
 
 	//记录自已的
 	new->offset[id] = newoff;//记录id扩展的内存位置
 	new->len = newlen;//记录扩展长度
 	memset((void *)new + newoff, 0, newlen - newoff);//初始化id扩展内存
+
+	ct->ext = new;
 	return (void *)new + newoff;//返回id扩展内存
 }
 EXPORT_SYMBOL(nf_ct_ext_add);

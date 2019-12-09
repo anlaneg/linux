@@ -246,11 +246,7 @@ int nf_conntrack_icmpv4_error(struct nf_conn *tmpl,
 
 	/* Need to track icmp error message? */
 	//只处理icmp错误信息，这些信息可以中止一些之前创建的ct
-	if (icmph->type != ICMP_DEST_UNREACH &&
-	    icmph->type != ICMP_SOURCE_QUENCH &&
-	    icmph->type != ICMP_TIME_EXCEEDED &&
-	    icmph->type != ICMP_PARAMETERPROB &&
-	    icmph->type != ICMP_REDIRECT)
+	if (!icmp_is_err(icmph->type))
 		return NF_ACCEPT;
 
 	memset(&outer_daddr, 0, sizeof(outer_daddr));

@@ -70,11 +70,6 @@ fail:
 	fib_free_table(main_table);
 	return -ENOMEM;
 }
-
-static bool fib4_has_custom_rules(struct net *net)
-{
-	return false;
-}
 #else
 
 //创建指定编号的fib表
@@ -143,11 +138,6 @@ struct fib_table *fib_get_table(struct net *net, u32 id)
 	}
 	//查找表失败
 	return NULL;
-}
-
-static bool fib4_has_custom_rules(struct net *net)
-{
-	return net->ipv4.fib_has_custom_rules;
 }
 #endif /* CONFIG_IP_MULTIPLE_TABLES */
 

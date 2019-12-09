@@ -341,6 +341,8 @@ static int __ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 				  iph->saddr, iph->daddr, tpi->key);//key值仅被用于确定隧道设备
 
 	if (tunnel) {
+		const struct iphdr *tnl_params;
+
 		//有报文相关的tunnel,解开隧道，开始处理报文
 		if (__iptunnel_pull_header(skb, hdr_len, tpi->proto,
 					   raw_proto, false) < 0)
@@ -350,7 +352,9 @@ static int __ipgre_rcv(struct sk_buff *skb, const struct tnl_ptk_info *tpi,
 			skb_pop_mac_header(skb);
 		else
 			skb_reset_mac_header(skb);
-		if (tunnel->collect_md) {
+
+		tnl_params = &tunnel->parms.iph;
+		if (tunnel->collect_md || tnl_params->daddr == 0) {
 			__be16 flags;
 			__be64 tun_id;
 
