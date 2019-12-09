@@ -1225,7 +1225,7 @@ static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 	struct tcf_block *block;
 
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK) {
-		//ifindex非netdev的ifindex时特殊值
+		//仅ifindex为此值时，我们需要使用block_index获取block
 		block = tcf_block_refcnt_get(net, block_index);
 		if (!block) {
 			NL_SET_ERR_MSG(extack, "Block of given index was not found");
@@ -2079,7 +2079,7 @@ replay:
 	cl = 0;
 	block = NULL;
 
-	//如果未指定prio,有CREATE标记，则创建一个prio
+	//如果未指定prio,有CREATE标记，则创建一个priority
 	if (prio == 0) {
 		/* If no priority is provided by the user,
 		 * we allocate one.
@@ -2212,7 +2212,7 @@ replay:
 		goto errout;
 	}
 
-	//在tp中查找指定filter
+	//在tp中通过t->tcm_handle查找指定filter
 	fh = tp->ops->get(tp, t->tcm_handle);
 
 	if (!fh) {
@@ -2223,7 +2223,7 @@ replay:
 			goto errout;
 		}
 	} else if (n->nlmsg_flags & NLM_F_EXCL) {
-		//找到了相应的规则，有exec标记，报错，规则已存在
+		//找到了相应的规则，有excl标记，报错，规则已存在
 		tfilter_put(tp, fh);
 		NL_SET_ERR_MSG(extack, "Filter already exists");
 		err = -EEXIST;

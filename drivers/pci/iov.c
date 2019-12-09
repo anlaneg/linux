@@ -242,6 +242,7 @@ void pci_iov_remove_virtfn(struct pci_dev *dev, int id)
 	pci_dev_put(dev);
 }
 
+//显示sriov设备vf总数的显示
 static ssize_t sriov_totalvfs_show(struct device *dev,
 				   struct device_attribute *attr,
 				   char *buf)
@@ -251,6 +252,7 @@ static ssize_t sriov_totalvfs_show(struct device *dev,
 	return sprintf(buf, "%u\n", pci_sriov_get_totalvfs(pdev));
 }
 
+//显示sriov设备生效vf总数显示
 static ssize_t sriov_numvfs_show(struct device *dev,
 				 struct device_attribute *attr,
 				 char *buf)
@@ -385,7 +387,9 @@ static ssize_t sriov_drivers_autoprobe_store(struct device *dev,
 	return count;
 }
 
+//设置sriov vf总数量的读取
 static DEVICE_ATTR_RO(sriov_totalvfs);
+//提供sriov vf生效数量的设置/读取
 static DEVICE_ATTR_RW(sriov_numvfs);
 static DEVICE_ATTR_RO(sriov_offset);
 static DEVICE_ATTR_RO(sriov_stride);
@@ -625,6 +629,7 @@ static int sriov_init(struct pci_dev *dev, int pos)
 found:
 	pci_write_config_word(dev, pos + PCI_SRIOV_CTRL, ctrl);
 
+	//通过pci读取sriov的total_vf总数
 	pci_read_config_word(dev, pos + PCI_SRIOV_TOTAL_VF, &total);
 	if (!total)
 		return 0;
@@ -672,6 +677,7 @@ found:
 	iov->nres = nres;
 	iov->ctrl = ctrl;
 	iov->total_VFs = total;
+	/*设置最大支持的vf数量*/
 	iov->driver_max_VFs = total;
 	pci_read_config_word(dev, pos + PCI_SRIOV_VF_DID, &iov->vf_device);
 	iov->pgsz = pgsz;
@@ -760,6 +766,7 @@ int pci_iov_init(struct pci_dev *dev)
 	if (!pci_is_pcie(dev))
 		return -ENODEV;
 
+	//网卡有sriov能力，则初始化sriov
 	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_SRIOV);
 	if (pos)
 		return sriov_init(dev, pos);
@@ -1019,9 +1026,11 @@ EXPORT_SYMBOL_GPL(pci_vfs_assigned);
  */
 int pci_sriov_set_totalvfs(struct pci_dev *dev, u16 numvfs)
 {
+    //仅容许物理设备设置最大vf数目
 	if (!dev->is_physfn)
 		return -ENOSYS;
 
+	//设置的vf数量不得大于total_VFS
 	if (numvfs > dev->sriov->total_VFs)
 		return -EINVAL;
 
@@ -1029,6 +1038,7 @@ int pci_sriov_set_totalvfs(struct pci_dev *dev, u16 numvfs)
 	if (dev->sriov->ctrl & PCI_SRIOV_CTRL_VFE)
 		return -EBUSY;
 
+	/*设置当前driver支持的最大vf数量*/
 	dev->sriov->driver_max_VFs = numvfs;
 	return 0;
 }
@@ -1044,10 +1054,11 @@ EXPORT_SYMBOL_GPL(pci_sriov_set_totalvfs);
  */
 int pci_sriov_get_totalvfs(struct pci_dev *dev)
 {
-	//仅pf支持sriov方式进行虚拟
+	//仅pf支持sriov方式
 	if (!dev->is_physfn)
 		return 0;
 
+	//返回支持的最大vf
 	return dev->sriov->driver_max_VFs;
 }
 EXPORT_SYMBOL_GPL(pci_sriov_get_totalvfs);

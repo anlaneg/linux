@@ -401,7 +401,7 @@ struct pci_dev {
 	unsigned int	is_managed:1;
 	unsigned int	needs_freset:1;		/* Requires fundamental reset */
 	unsigned int	state_saved:1;
-	unsigned int	is_physfn:1;
+	unsigned int	is_physfn:1;//是否物理function
 	unsigned int	is_virtfn:1;
 	unsigned int	reset_fn:1;
 	unsigned int	is_hotplug_bridge:1;
@@ -449,6 +449,7 @@ struct pci_dev {
 	struct pci_vpd *vpd;
 #ifdef CONFIG_PCI_ATS
 	union {
+	    //设备sriov信息
 		struct pci_sriov	*sriov;		/* PF: SR-IOV info */
 		struct pci_dev		*physfn;	/* VF: related PF */
 	};

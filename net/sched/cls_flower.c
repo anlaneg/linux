@@ -80,12 +80,16 @@ struct fl_flow_mask {
 	struct fl_flow_mask_range range;
 	//mask上的标记，例如需要执行port range检查
 	u32 flags;
-	struct rhash_head ht_node;//用于插入cls_fl_head->ht
-	struct rhashtable ht;//用于挂接filter规则（同属于相同mask,用于查询)
+	//用于插入到cls_fl_head->ht表中
+	struct rhash_head ht_node;
+	//hash表，保存filter规则，挂接在此ht上的filter规则均具有相同的mask（用于查询)
+	struct rhashtable ht;
+	//filter hash表的参数
 	struct rhashtable_params filter_ht_params;
 	//mask相关的各key的offset
 	struct flow_dissector dissector;
-	struct list_head filters;//用于挂接filter规则（同属于相同的mask，用于遍历)
+	//链表，用于保存在ht中的所有filter规则（用于遍历)
+	struct list_head filters;
 	struct rcu_work rwork;
 	struct list_head list;
 	refcount_t refcnt;
@@ -99,21 +103,29 @@ struct fl_flow_tmplt {
 };
 
 struct cls_fl_head {
-	struct rhashtable ht;//用于保存不同的mask(查询）
+    //哈希表，用于保存不同的mask(用于哈希查询）
+	struct rhashtable ht;
 	spinlock_t masks_lock; /* Protect masks list */
-	struct list_head masks;//用于挂接不同mask（遍历）
-	struct list_head hw_filters;//已下发至hardware的filter规则
+	//链表，用于保存不同的mask（用于遍历）
+	struct list_head masks;
+	//已下发至hardware的filter规则
+	struct list_head hw_filters;
 	struct rcu_work rwork;
+	//存储handle与cls_fl_filter之间映射关系
 	struct idr handle_idr;
 };
 
 struct cls_fl_filter {
-	struct fl_flow_mask *mask;//规则对应的mask
+    //规则对应的mask
+	struct fl_flow_mask *mask;
+	//用于将规则挂接到其所属的mask hash表上
 	struct rhash_head ht_node;
-	struct fl_flow_key mkey;//配合mask生在的key
+	//配合mask生在的key
+	struct fl_flow_key mkey;
 	struct tcf_exts exts;
 	struct tcf_result res;
-	struct fl_flow_key key;//match的key
+	//match的key
+	struct fl_flow_key key;
 	struct list_head list;
 	//挂接至hw_filters
 	struct list_head hw_list;
@@ -363,7 +375,10 @@ static int fl_init(struct tcf_proto *tp)
 	spin_lock_init(&head->masks_lock);
 	INIT_LIST_HEAD_RCU(&head->masks);
 	INIT_LIST_HEAD(&head->hw_filters);
+
+	/*使tp指向head*/
 	rcu_assign_pointer(tp->root, head);
+	/*初始化filter与handle的映射*/
 	idr_init(&head->handle_idr);
 
 	return rhashtable_init(&head->ht, &mask_ht_params);
@@ -404,14 +419,17 @@ static bool fl_mask_put(struct cls_fl_head *head, struct fl_flow_mask *mask)
 	rhashtable_remove_fast(&head->ht, &mask->ht_node, mask_ht_params);
 
 	spin_lock(&head->masks_lock);
+	/*将mask自其所属的遍历链表上移除*/
 	list_del_rcu(&mask->list);
 	spin_unlock(&head->masks_lock);
 
+	//加入work执行free
 	tcf_queue_work(&mask->rwork, fl_mask_free_work);
 
 	return true;
 }
 
+//取flower对应的flow规则头指针
 static struct cls_fl_head *fl_head_dereference(struct tcf_proto *tp)
 {
 	/* Flower classifier only changes root pointer during init and destroy.
@@ -528,16 +546,18 @@ static void fl_hw_update_stats(struct tcf_proto *tp, struct cls_fl_filter *f,
 
 static void __fl_put(struct cls_fl_filter *f)
 {
+    //减少filter的引数
 	if (!refcount_dec_and_test(&f->refcnt))
 		return;
 
+	//filter计数减为0，执行销毁
 	if (tcf_exts_get_net(&f->exts))
 		tcf_queue_work(&f->rwork, fl_destroy_filter_work);
 	else
 		__fl_destroy_filter(f);
 }
 
-//给定handle查找filter
+//通过给定的handle查找cls_fl_filter
 static struct cls_fl_filter *__fl_get(struct cls_fl_head *head, u32 handle)
 {
 	struct cls_fl_filter *f;
@@ -566,13 +586,19 @@ static int __fl_delete(struct tcf_proto *tp, struct cls_fl_filter *f,
 	}
 
 	f->deleted = true;
+	/*将filter自其所属的mask对应的hash表上删除*/
 	rhashtable_remove_fast(&f->mask->ht, &f->ht_node,
 			       f->mask->filter_ht_params);
+	/*移除handle与filter之间的映射关系*/
 	idr_remove(&head->handle_idr, f->handle);
+	/*将filter自链表上移除（遍历链表）*/
 	list_del_rcu(&f->list);
 	spin_unlock(&tp->lock);
 
+	//释放filter对应的mask
 	*last = fl_mask_put(head, f->mask);
+
+	//自硬件中删除
 	if (!tc_skip_hw(f->flags))
 		fl_hw_destroy_filter(tp, f, rtnl_held, extack);
 	tcf_unbind_filter(tp, &f->res);
@@ -620,6 +646,7 @@ static void fl_put(struct tcf_proto *tp, void *arg)
 	__fl_put(f);
 }
 
+/*自tp->root中查找指定handle对应的元素*/
 static void *fl_get(struct tcf_proto *tp, u32 handle)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
@@ -1443,6 +1470,7 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 	skb_flow_dissector_init(dissector, keys/*记录各成员的在fl_flow_key中的offset*/, cnt/*成员数*/);
 }
 
+//创建mask并将其添加进head->ht中
 static struct fl_flow_mask *fl_create_new_mask(struct cls_fl_head *head,
 					       struct fl_flow_mask *mask/*要创建的mask*/)
 {
@@ -1507,6 +1535,7 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 	 * with same key. Any concurrent lookups with same key will return
 	 * -EAGAIN because mask's refcnt is zero.
 	 */
+	//检查系统中是否已有与mask相同的mask了
 	fnew->mask = rhashtable_lookup_get_insert_fast(&head->ht,
 						       &mask->ht_node,
 						       mask_ht_params);
@@ -1516,6 +1545,7 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 		rcu_read_unlock();
 
 		if (fold) {
+		    /*旧规则一定存在mask,不容许new与old规则间mask不同*/
 			ret = -EINVAL;
 			goto errout_cleanup;
 		}
@@ -1532,7 +1562,7 @@ static int fl_check_assign_mask(struct cls_fl_head *head,
 	} else if (IS_ERR(fnew->mask)) {
 		ret = PTR_ERR(fnew->mask);
 	} else if (fold && fold->mask != fnew->mask) {
-		//不容许变更mask
+		//有旧规则，不容许new与old规则间mask不同
 		ret = -EINVAL;
 	} else if (!refcount_inc_not_zero(&fnew->mask->refcnt)) {
 		/* Mask was deleted concurrently, try again */
@@ -1594,7 +1624,7 @@ static int fl_set_parms(struct net *net, struct tcf_proto *tp,
 //将filter加入到hashtable中
 static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 			       struct cls_fl_filter *fold,
-			       bool *in_ht)
+			       bool *in_ht/*出参，是否存入了hash表*/)
 {
 	struct fl_flow_mask *mask = fnew->mask;
 	int err;
@@ -1604,6 +1634,7 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 					    &fnew->ht_node,
 					    mask->filter_ht_params);
 	if (err) {
+	    /*加入出错，没有存放入hash表*/
 		*in_ht = false;
 		/* It is okay if filter with same key exists when
 		 * overwriting.
@@ -1622,7 +1653,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		     struct netlink_ext_ack *extack)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
-	struct cls_fl_filter *fold = *arg;
+	struct cls_fl_filter *fold = *arg;/*旧的规则*/
 	struct cls_fl_filter *fnew/*新规则的内容来源于tca*/;
 	struct fl_flow_mask *mask;
 	struct nlattr **tb;
@@ -1635,7 +1666,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		goto errout_fold;
 	}
 
-	//规则mask对应的填充位置
+	//申请填充规则mask
 	mask = kzalloc(sizeof(struct fl_flow_mask), GFP_KERNEL);
 	if (!mask) {
 		err = -ENOBUFS;
@@ -1648,7 +1679,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		goto errout_mask_alloc;
 	}
 
-	//自tca[TCA_OPTIONS]中解析出flower规则
+	//自tca[TCA_OPTIONS]中解析出flower规则,存入tb
 	err = nla_parse_nested_deprecated(tb, TCA_FLOWER_MAX,
 					  tca[TCA_OPTIONS], fl_policy, NULL);
 	if (err < 0)
@@ -1669,7 +1700,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	INIT_LIST_HEAD(&fnew->hw_list);
 	refcount_set(&fnew->refcnt, 1);
 
-	//初始化action结构
+	//初始化新规则的action结构
 	err = tcf_exts_init(&fnew->exts, net, TCA_FLOWER_ACT, 0);
 	if (err < 0)
 		goto errout;
@@ -1827,7 +1858,7 @@ errout_fold:
 	return err;
 }
 
-static int fl_delete(struct tcf_proto *tp, void *arg, bool *last,
+static int fl_delete(struct tcf_proto *tp, void *arg, bool *last/*出参，当前正在删除的flow是否最后一个*/,
 		     bool rtnl_held, struct netlink_ext_ack *extack)
 {
 	struct cls_fl_head *head = fl_head_dereference(tp);
@@ -1835,7 +1866,9 @@ static int fl_delete(struct tcf_proto *tp, void *arg, bool *last,
 	bool last_on_mask;
 	int err = 0;
 
+	//自tp中移除filter
 	err = __fl_delete(tp, f, &last_on_mask, rtnl_held, extack);
+	//通过检查mask链是否为空
 	*last = list_empty(&head->masks);
 	__fl_put(f);
 
@@ -2641,6 +2674,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.classify	= fl_classify,
 	.init		= fl_init,
 	.destroy	= fl_destroy,
+	//通过handle找对应的元素
 	.get		= fl_get,
 	.put		= fl_put,
 	//添加或修改flower规则，并触发向硬件下发
