@@ -839,6 +839,7 @@ EXPORT_SYMBOL_GPL(irq_set_parent);
  */
 static irqreturn_t irq_default_primary_handler(int irq, void *dev_id)
 {
+	//handler为NULL，必须采用thread_irq回调
 	return IRQ_WAKE_THREAD;
 }
 
@@ -1073,6 +1074,7 @@ static void irq_wake_secondary(struct irq_desc *desc, struct irqaction *action)
  */
 static int irq_thread(void *data)
 {
+	/*处理中断的线程*/
 	struct callback_head on_exit_work;
 	struct irqaction *action = data;
 	struct irq_desc *desc = irq_to_desc(action->irq);
@@ -1228,7 +1230,7 @@ static void irq_nmi_teardown(struct irq_desc *desc)
 		c->irq_nmi_teardown(d);
 }
 
-//创建中断执行线程
+//创建并启动中断执行线程
 static int
 setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 {
@@ -1238,9 +1240,11 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 	};
 
 	if (!secondary) {
+		/*主线程*/
 		t = kthread_create(irq_thread, new, "irq/%d-%s", irq,
 				   new->name);
 	} else {
+		/*从线程*/
 		t = kthread_create(irq_thread, new, "irq/%d-s-%s", irq,
 				   new->name);
 		param.sched_priority -= 1;
@@ -1285,7 +1289,7 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
  * request/free_irq().
  */
 static int
-__setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
+__setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中断描述符*/, struct irqaction *new)
 {
 	struct irqaction *old, **old_ptr;
 	unsigned long flags, thread_mask = 0;
@@ -1294,6 +1298,7 @@ __setup_irq(unsigned int irq, struct irq_desc *desc, struct irqaction *new)
 	if (!desc)
 		return -EINVAL;
 
+	/*中断无对应的chip,报错*/
 	if (desc->irq_data.chip == &no_irq_chip)
 		return -ENOSYS;
 	if (!try_module_get(desc->owner))
@@ -1974,9 +1979,9 @@ const void *free_nmi(unsigned int irq, void *dev_id)
  *	IRQF_TRIGGER_*		Specify active edge(s) or level
  *
  */
-int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler,
+int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler/*中断处理函数*/,
 			 irq_handler_t thread_fn, unsigned long irqflags,
-			 const char *devname, void *dev_id)
+			 const char *devname/*设备名称*/, void *dev_id)
 {
 	struct irqaction *action;
 	struct irq_desc *desc;
@@ -1999,6 +2004,7 @@ int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler,
 	    ((irqflags & IRQF_NO_SUSPEND) && (irqflags & IRQF_COND_SUSPEND)))
 		return -EINVAL;
 
+	/*由irq获取其对应的描述符*/
 	desc = irq_to_desc(irq);
 	if (!desc)
 		return -EINVAL;

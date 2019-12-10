@@ -175,7 +175,7 @@ struct irq_data {
 	unsigned int		irq;
 	unsigned long		hwirq;
 	struct irq_common_data	*common;
-	struct irq_chip		*chip;
+	struct irq_chip		*chip;/*中断对应的chip*/
 	struct irq_domain	*domain;
 #ifdef	CONFIG_IRQ_DOMAIN_HIERARCHY
 	struct irq_data		*parent_data;

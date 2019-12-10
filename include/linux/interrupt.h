@@ -89,6 +89,7 @@ enum {
 	IRQC_IS_NESTED,
 };
 
+/*定义中断处理函数*/
 typedef irqreturn_t (*irq_handler_t)(int, void *);
 
 /**

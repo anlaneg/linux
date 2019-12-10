@@ -55,6 +55,7 @@ struct pt_regs;
  */
 struct irq_desc {
 	struct irq_common_data	irq_common_data;
+	/*中断回调参数*/
 	struct irq_data		irq_data;
 	unsigned int __percpu	*kstat_irqs;
 	irq_flow_handler_t	handle_irq;//中断处理回调

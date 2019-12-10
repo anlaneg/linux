@@ -385,6 +385,7 @@ struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 	va_list args;
 
 	va_start(args, namefmt);
+	/*在node上创建kernel threads*/
 	task = __kthread_create_on_node(threadfn, data, node, namefmt, args);
 	va_end(args);
 

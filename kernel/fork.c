@@ -2498,6 +2498,7 @@ long do_fork(unsigned long clone_flags,
  */
 pid_t kernel_thread(int (*fn)(void *), void *arg, unsigned long flags)
 {
+	//启动一个内核线程
 	struct kernel_clone_args args = {
 		.flags		= ((flags | CLONE_VM | CLONE_UNTRACED) & ~CSIGNAL),
 		.exit_signal	= (flags & CSIGNAL),

@@ -14,6 +14,7 @@ enum irqreturn {
 	IRQ_WAKE_THREAD		= (1 << 1),
 };
 
+/*中断处理函数返回值*/
 typedef enum irqreturn irqreturn_t;
 #define IRQ_RETVAL(x)	((x) ? IRQ_HANDLED : IRQ_NONE)
 
