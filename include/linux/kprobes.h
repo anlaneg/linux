@@ -67,13 +67,13 @@ struct kprobe {
 	unsigned long nmissed;
 
 	/* location of the probe point */
-	kprobe_opcode_t *addr;
+	kprobe_opcode_t *addr;//要probe的地址（给出synmbol_name时不需要给出）
 
 	/* Allow user to indicate symbol name of the probe point */
-	const char *symbol_name;
+	const char *symbol_name;//要probe的名称
 
 	/* Offset into the symbol */
-	unsigned int offset;
+	unsigned int offset;//针对symbol或者addr的偏移量（指定addr)
 
 	/* Called before addr is executed. */
 	kprobe_pre_handler_t pre_handler;

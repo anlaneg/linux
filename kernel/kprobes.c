@@ -59,6 +59,7 @@ static struct {
 	raw_spinlock_t lock ____cacheline_aligned_in_smp;
 } kretprobe_table_locks[KPROBE_TABLE_SIZE];
 
+//查找符号对应的地址
 kprobe_opcode_t * __weak kprobe_lookup_name(const char *name,
 					unsigned int __unused)
 {
@@ -1451,15 +1452,18 @@ bool within_kprobe_blacklist(unsigned long addr)
 static kprobe_opcode_t *_kprobe_addr(kprobe_opcode_t *addr,
 			const char *symbol_name, unsigned int offset)
 {
+	/*符号名称及addr同时给出或者同时不给出，则报错*/
 	if ((symbol_name && addr) || (!symbol_name && !addr))
 		goto invalid;
 
 	if (symbol_name) {
+		/*给定符号名，查找符号对应的地址*/
 		addr = kprobe_lookup_name(symbol_name, offset);
 		if (!addr)
 			return ERR_PTR(-ENOENT);
 	}
 
+	//计算上offset,获得要probe的地址
 	addr = (kprobe_opcode_t *)(((char *)addr) + offset);
 	if (addr)
 		return addr;
@@ -1582,6 +1586,7 @@ int register_kprobe(struct kprobe *p)
 	kprobe_opcode_t *addr;
 
 	/* Adjust probe address from symbol */
+	//确定要probe的符号地址
 	addr = kprobe_addr(p);
 	if (IS_ERR(addr))
 		return PTR_ERR(addr);
@@ -1596,6 +1601,7 @@ int register_kprobe(struct kprobe *p)
 	p->nmissed = 0;
 	INIT_LIST_HEAD(&p->list);
 
+	//检查要probe的地址
 	ret = check_kprobe_address_safe(p, &probed_mod);
 	if (ret)
 		return ret;
@@ -1919,6 +1925,7 @@ int register_kretprobe(struct kretprobe *rp)
 		if (IS_ERR(addr))
 			return PTR_ERR(addr);
 
+		/*检查addr是否从属于blacklist*/
 		for (i = 0; kretprobe_blacklist[i].name != NULL; i++) {
 			if (kretprobe_blacklist[i].addr == addr)
 				return -EINVAL;

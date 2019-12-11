@@ -32,20 +32,20 @@
  */
 extern const unsigned long kallsyms_addresses[] __weak;
 extern const int kallsyms_offsets[] __weak;
-extern const u8 kallsyms_names[] __weak;
+extern const u8 kallsyms_names[] __weak;/*记录kernel内置的符号*/
 
 /*
  * Tell the compiler that the count isn't in the small data section if the arch
  * has one (eg: FRV).
  */
 extern const unsigned int kallsyms_num_syms
-__attribute__((weak, section(".rodata")));
+__attribute__((weak, section(".rodata")));/*记录kernel内置符号总数*/
 
 extern const unsigned long kallsyms_relative_base
 __attribute__((weak, section(".rodata")));
 
-extern const u8 kallsyms_token_table[] __weak;
-extern const u16 kallsyms_token_index[] __weak;
+extern const u8 kallsyms_token_table[] __weak;/*能过token编号获得token*/
+extern const u16 kallsyms_token_index[] __weak;/*通过token索引得到token编号*/
 
 extern const unsigned int kallsyms_markers[] __weak;
 
@@ -62,24 +62,26 @@ static unsigned int kallsyms_expand_symbol(unsigned int off,
 
 	/* Get the compressed symbol length from the first symbol byte. */
 	data = &kallsyms_names[off];
-	len = *data;
+	len = *data;/*首个字节，记录符号长度*/
 	data++;
 
 	/*
 	 * Update the offset to return the offset for the next symbol on
 	 * the compressed stream.
 	 */
-	off += len + 1;
+	off += len + 1;/*更新符号表的偏移量*/
 
 	/*
 	 * For every byte on the compressed symbol data, copy the table
 	 * entry for that byte.
 	 */
+	//这里是一个简单的符号解压过程
 	while (len) {
 		tptr = &kallsyms_token_table[kallsyms_token_index[*data]];
 		data++;
 		len--;
 
+		//将tptr(即token填充到result中）
 		while (*tptr) {
 			if (skipped_first) {
 				if (maxlen <= 1)
@@ -142,6 +144,7 @@ static unsigned int get_symbol_offset(unsigned long pos)
 	return name - kallsyms_names;
 }
 
+//返回idx号符号的地址
 static unsigned long kallsyms_sym_address(int idx)
 {
 	if (!IS_ENABLED(CONFIG_KALLSYMS_BASE_RELATIVE))
@@ -166,12 +169,17 @@ unsigned long kallsyms_lookup_name(const char *name)
 	unsigned long i;
 	unsigned int off;
 
+	//先查内置的symbol
 	for (i = 0, off = 0; i < kallsyms_num_syms; i++) {
+		//解压获得一个符号，返回offset（用于记录下个符号的起点）
 		off = kallsyms_expand_symbol(off, namebuf, ARRAY_SIZE(namebuf));
 
+		//如果符号名称匹配，则返回此符号对应的地址
 		if (strcmp(namebuf, name) == 0)
 			return kallsyms_sym_address(i);
 	}
+
+	//再查询module引入的符号
 	return module_kallsyms_lookup_name(name);
 }
 EXPORT_SYMBOL_GPL(kallsyms_lookup_name);
