@@ -572,6 +572,7 @@ struct bpf_trace_sample_data {
 
 static DEFINE_PER_CPU(struct bpf_trace_sample_data, bpf_trace_sds);
 static DEFINE_PER_CPU(int, bpf_trace_nest_level);
+//定义bpf_perf_event_output辅助函数
 BPF_CALL_5(bpf_perf_event_output, struct pt_regs *, regs, struct bpf_map *, map,
 	   u64, flags, void *, data, u64, size)
 {

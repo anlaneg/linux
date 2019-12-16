@@ -4180,15 +4180,18 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 	int i, err;
 
 	/* find function prototype */
+	/*校验func id是否有效*/
 	if (func_id < 0 || func_id >= __BPF_FUNC_MAX_ID) {
 		verbose(env, "invalid func %s#%d\n", func_id_name(func_id),
 			func_id);
 		return -EINVAL;
 	}
 
+	/*通过func id获取function指针*/
 	if (env->ops->get_func_proto)
 		fn = env->ops->get_func_proto(func_id, env->prog);
 	if (!fn) {
+	    /*对应的function不存在*/
 		verbose(env, "unknown func %s#%d\n", func_id_name(func_id),
 			func_id);
 		return -EINVAL;
@@ -7951,6 +7954,7 @@ static int do_check(struct bpf_verifier_env *env)
 
 			env->jmps_processed++;
 			if (opcode == BPF_CALL) {
+			    //call指令
 				if (BPF_SRC(insn->code) != BPF_K ||
 				    insn->off != 0 ||
 				    (insn->src_reg != BPF_REG_0 &&
@@ -7970,6 +7974,7 @@ static int do_check(struct bpf_verifier_env *env)
 				if (insn->src_reg == BPF_PSEUDO_CALL)
 					err = check_func_call(env, insn, &env->insn_idx);
 				else
+				    /*指令中的立即数保存的是系统函数id*/
 					err = check_helper_call(env, insn->imm, env->insn_idx);
 				if (err)
 					return err;

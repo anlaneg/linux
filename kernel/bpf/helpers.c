@@ -118,6 +118,7 @@ const struct bpf_func_proto bpf_get_prandom_u32_proto = {
 	.ret_type	= RET_INTEGER,
 };
 
+/*返回当前cpu id*/
 BPF_CALL_0(bpf_get_smp_processor_id)
 {
 	return smp_processor_id();

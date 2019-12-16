@@ -6135,6 +6135,7 @@ cg_skb_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	}
 }
 
+/*给出function id号，返回其对应的function*/
 static const struct bpf_func_proto *
 tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {

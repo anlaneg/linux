@@ -433,7 +433,9 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 		__size;						\
 	})
 
+//无参数的函数参数申明样式
 #define __BPF_MAP_0(m, v, ...) v
+//有一个参数的函数申明样式
 #define __BPF_MAP_1(m, v, t, a, ...) m(t, a)
 #define __BPF_MAP_2(m, v, t, a, ...) m(t, a), __BPF_MAP_1(m, v, __VA_ARGS__)
 #define __BPF_MAP_3(m, v, t, a, ...) m(t, a), __BPF_MAP_2(m, v, __VA_ARGS__)
@@ -447,17 +449,25 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 #define __BPF_REG_4(...) __BPF_MAP(4, __VA_ARGS__), __BPF_PAD(1)
 #define __BPF_REG_5(...) __BPF_MAP(5, __VA_ARGS__)
 
+/*按参数数目，展开用户给出的函数参数，前面几个参数，分别为:
+ * 1。生成参数样式的宏
+ * 2. void
+ * 3. 用户给定的一组{参数类型，函数名称}
+ * */
 #define __BPF_MAP(n, ...) __BPF_MAP_##n(__VA_ARGS__)
 #define __BPF_REG(n, ...) __BPF_REG_##n(__VA_ARGS__)
 
+/*参数强转*/
 #define __BPF_CAST(t, a)						       \
 	(__force t)							       \
 	(__force							       \
 	 typeof(__builtin_choose_expr(sizeof(t) == sizeof(unsigned long),      \
 				      (unsigned long)0, (t)0))) a
+/*定义void，表明无函数参数*/
 #define __BPF_V void
 #define __BPF_N
 
+//生成参数声明格式
 #define __BPF_DECL_ARGS(t, a) t   a
 #define __BPF_DECL_REGS(t, a) u64 a
 
@@ -465,15 +475,21 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 	__BPF_MAP(n, __BPF_DECL_ARGS, __BPF_N, u64, __ur_1, u64, __ur_2,       \
 		  u64, __ur_3, u64, __ur_4, u64, __ur_5)
 
-#define BPF_CALL_x(x, name, ...)					       \
+/*BPF api函数定义*/
+#define BPF_CALL_x(x/*参数数目*/, name/*函数名称*/, ...)					       \
+    /*声明函数名称*/\
 	static __always_inline						       \
-	u64 ____##name(__BPF_MAP(x, __BPF_DECL_ARGS, __BPF_V, __VA_ARGS__));   \
+	u64 ____##name(__BPF_MAP(x, __BPF_DECL_ARGS/*参数申明方式宏*/, __BPF_V/*无参数情况*/, __VA_ARGS__/*用户传入的参数*/));   \
+	/*定义一个名称为 btf_##name的函数指针*/\
 	typedef u64 (*btf_##name)(__BPF_MAP(x, __BPF_DECL_ARGS, __BPF_V, __VA_ARGS__)); \
+	/*声明name函数，传入用户指定的寄存器,以便使上面参数一致*/\
 	u64 name(__BPF_REG(x, __BPF_DECL_REGS, __BPF_N, __VA_ARGS__));	       \
 	u64 name(__BPF_REG(x, __BPF_DECL_REGS, __BPF_N, __VA_ARGS__))	       \
 	{								       \
+	    /*调用强转参数后的函数，以方便用户实现*/\
 		return ((btf_##name)____##name)(__BPF_MAP(x,__BPF_CAST,__BPF_N,__VA_ARGS__));\
 	}								       \
+	/*定义声明的函数名称，后面接用户实现*/\
 	static __always_inline						       \
 	u64 ____##name(__BPF_MAP(x, __BPF_DECL_ARGS, __BPF_V, __VA_ARGS__))
 

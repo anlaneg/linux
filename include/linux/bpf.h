@@ -332,7 +332,7 @@ struct bpf_prog_ops {
 struct bpf_verifier_ops {
 	/* return eBPF function prototype for verification */
 	const struct bpf_func_proto *
-	(*get_func_proto)(enum bpf_func_id func_id,
+	(*get_func_proto)(enum bpf_func_id func_id/*要获取的function id*/,
 			  const struct bpf_prog *prog);
 
 	/* return true if 'size' wide access at offset 'off' within bpf_context

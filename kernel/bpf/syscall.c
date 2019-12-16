@@ -43,6 +43,7 @@ static DEFINE_SPINLOCK(map_idr_lock);
 
 int sysctl_unprivileged_bpf_disabled __read_mostly;
 
+/*各种bpf map对应的ops*/
 static const struct bpf_map_ops * const bpf_map_types[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type)
 #define BPF_MAP_TYPE(_id, _ops) \
@@ -106,9 +107,12 @@ static struct bpf_map *find_and_alloc_map(union bpf_attr *attr)
 	struct bpf_map *map;
 	int err;
 
+	//type类型检查
 	if (type >= ARRAY_SIZE(bpf_map_types))
 		return ERR_PTR(-EINVAL);
 	type = array_index_nospec(type, ARRAY_SIZE(bpf_map_types));
+
+	//取这类type对应的ops,例如array_map_ops
 	ops = bpf_map_types[type];
 	if (!ops)
 		return ERR_PTR(-EINVAL);

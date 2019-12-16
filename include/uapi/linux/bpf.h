@@ -375,6 +375,7 @@ struct bpf_stack_build_id {
 
 union bpf_attr {
 	struct { /* anonymous struct used by BPF_MAP_CREATE command */
+	    //指定map的类别
 		__u32	map_type;	/* one of enum bpf_map_type */
 		__u32	key_size;	/* size of key in bytes */
 		__u32	value_size;	/* size of value in bytes */
