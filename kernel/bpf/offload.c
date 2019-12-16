@@ -62,6 +62,7 @@ static int bpf_dev_offload_check(struct net_device *netdev)
 {
 	if (!netdev)
 		return -EINVAL;
+	//设备必须支持ndo_bpf函数
 	if (!netdev->netdev_ops->ndo_bpf)
 		return -EOPNOTSUPP;
 	return 0;
@@ -96,6 +97,7 @@ int bpf_prog_offload_init(struct bpf_prog *prog, union bpf_attr *attr)
 
 	offload->prog = prog;
 
+	/*取bpf对应的netdev*/
 	offload->netdev = dev_get_by_index(current->nsproxy->net_ns,
 					   attr->prog_ifindex);
 	err = bpf_dev_offload_check(offload->netdev);

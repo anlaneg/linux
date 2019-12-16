@@ -3,6 +3,7 @@
 #define _UAPI__LINUX_BPF_COMMON_H__
 
 /* Instruction classes */
+//指令类别
 #define BPF_CLASS(code) ((code) & 0x07)
 #define		BPF_LD		0x00
 #define		BPF_LDX		0x01
@@ -14,6 +15,7 @@
 #define		BPF_MISC        0x07
 
 /* ld/ldx fields */
+//装载类指令操作位宽
 #define BPF_SIZE(code)  ((code) & 0x18)
 #define		BPF_W		0x00 /* 32-bit */
 #define		BPF_H		0x08 /* 16-bit */
@@ -28,6 +30,7 @@
 #define		BPF_MSH		0xa0
 
 /* alu/jmp fields */
+//数值运算类指令
 #define BPF_OP(code)    ((code) & 0xf0)
 #define		BPF_ADD		0x00
 #define		BPF_SUB		0x10
@@ -35,12 +38,13 @@
 #define		BPF_DIV		0x30
 #define		BPF_OR		0x40
 #define		BPF_AND		0x50
-#define		BPF_LSH		0x60
-#define		BPF_RSH		0x70
-#define		BPF_NEG		0x80
+#define		BPF_LSH		0x60 //左移
+#define		BPF_RSH		0x70 //右移
+#define		BPF_NEG		0x80 //????
 #define		BPF_MOD		0x90
 #define		BPF_XOR		0xa0
 
+//跳转类指令
 #define		BPF_JA		0x00
 #define		BPF_JEQ		0x10
 #define		BPF_JGT		0x20

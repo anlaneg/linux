@@ -7718,6 +7718,7 @@ static bool reg_type_mismatch(enum bpf_reg_type src, enum bpf_reg_type prev)
 static int do_check(struct bpf_verifier_env *env)
 {
 	struct bpf_verifier_state *state;
+	//取程序指令
 	struct bpf_insn *insns = env->prog->insnsi;
 	struct bpf_reg_state *regs;
 	int insn_cnt = env->prog->len;
@@ -7762,6 +7763,7 @@ static int do_check(struct bpf_verifier_env *env)
 		class = BPF_CLASS(insn->code);
 
 		if (++env->insn_processed > BPF_COMPLEXITY_LIMIT_INSNS) {
+		    /*指令数过大，报错*/
 			verbose(env,
 				"BPF program is too large. Processed %d insn\n",
 				env->insn_processed);
@@ -7827,11 +7829,13 @@ static int do_check(struct bpf_verifier_env *env)
 		prev_insn_idx = env->insn_idx;
 
 		if (class == BPF_ALU || class == BPF_ALU64) {
+		    //数值运算类指令
 			err = check_alu_op(env, insn);
 			if (err)
 				return err;
 
 		} else if (class == BPF_LDX) {
+		    //加载类指令
 			enum bpf_reg_type *prev_src_type, src_reg_type;
 
 			/* check for reserved fields is already done */
@@ -7878,6 +7882,7 @@ static int do_check(struct bpf_verifier_env *env)
 			}
 
 		} else if (class == BPF_STX) {
+		    //set类指令
 			enum bpf_reg_type *prev_dst_type, dst_reg_type;
 
 			if (BPF_MODE(insn->code) == BPF_XADD) {
@@ -7941,6 +7946,7 @@ static int do_check(struct bpf_verifier_env *env)
 				return err;
 
 		} else if (class == BPF_JMP || class == BPF_JMP32) {
+		    //跳转类指令
 			u8 opcode = BPF_OP(insn->code);
 
 			env->jmps_processed++;

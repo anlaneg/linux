@@ -48,6 +48,7 @@ struct ctl_table_header;
 #define BPF_REG_ARG4	BPF_REG_4
 #define BPF_REG_ARG5	BPF_REG_5
 #define BPF_REG_CTX	BPF_REG_6
+//栈指针
 #define BPF_REG_FP	BPF_REG_10
 
 /* Additional register mappings for converted user programs. */
@@ -542,10 +543,12 @@ struct bpf_prog {
 	u8			tag[BPF_TAG_SIZE];
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
-	unsigned int		(*bpf_func)(const void *ctx,
+	/*bpf程序运行入口*/
+	unsigned int		(*bpf_func)(const void *ctx/*指向参数1，会被存入ARG1寄存器*/,
 					    const struct bpf_insn *insn);
 	/* Instructions for interpreter */
 	union {
+	    //存放指令
 		struct sock_filter	insns[0];
 		struct bpf_insn		insnsi[0];
 	};
@@ -559,16 +562,21 @@ struct sk_filter {
 
 DECLARE_STATIC_KEY_FALSE(bpf_stats_enabled_key);
 
+//运行bpf程序
 #define BPF_PROG_RUN(prog, ctx)	({				\
 	u32 ret;						\
 	cant_sleep();						\
 	if (static_branch_unlikely(&bpf_stats_enabled_key)) {	\
 		struct bpf_prog_stats *stats;			\
 		u64 start = sched_clock();			\
+		/*通过bpf_func函数运行此程序*/\
 		ret = (*(prog)->bpf_func)(ctx, (prog)->insnsi);	\
+		/*取此cpu上本程序的统计变量*/\
 		stats = this_cpu_ptr(prog->aux->stats);		\
 		u64_stats_update_begin(&stats->syncp);		\
+		/*记录程序运行次数*/\
 		stats->cnt++;					\
+		/*记录程序运行的时长*/\
 		stats->nsecs += sched_clock() - start;		\
 		u64_stats_update_end(&stats->syncp);		\
 	} else {						\

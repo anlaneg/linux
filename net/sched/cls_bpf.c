@@ -35,7 +35,7 @@ struct cls_bpf_head {
 };
 
 struct cls_bpf_prog {
-	struct bpf_prog *filter;
+	struct bpf_prog *filter;/*指向ebpf程序*/
 	struct list_head link;
 	struct tcf_result res;
 	bool exts_integrated;
@@ -44,8 +44,8 @@ struct cls_bpf_prog {
 	struct tcf_exts exts;
 	u32 handle;
 	u16 bpf_num_ops;
-	struct sock_filter *bpf_ops;
-	const char *bpf_name;
+	struct sock_filter *bpf_ops;/*指向用户下发的cbpf指令*/
+	const char *bpf_name;//bpf程序名称
 	struct tcf_proto *tp;
 	struct rcu_work rwork;
 };
@@ -81,12 +81,14 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			    struct tcf_result *res)
 {
 	struct cls_bpf_head *head = rcu_dereference_bh(tp->root);
+	/*当前是否为ingress方向*/
 	bool at_ingress = skb_at_tc_ingress(skb);
 	struct cls_bpf_prog *prog;
 	int ret = -1;
 
 	/* Needed here for accessing maps. */
 	rcu_read_lock();
+	/*遍历所有的prog*/
 	list_for_each_entry_rcu(prog, &head->plist, link) {
 		int filter_res;
 
@@ -95,12 +97,14 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		if (tc_skip_sw(prog->gen_flags)) {
 			filter_res = prog->exts_integrated ? TC_ACT_UNSPEC : 0;
 		} else if (at_ingress) {
+		    /*ingress方向运行bpf*/
 			/* It is safe to push/pull even if skb_shared() */
-			__skb_push(skb, skb->mac_len);
+			__skb_push(skb, skb->mac_len);//使data指向mac头
 			bpf_compute_data_pointers(skb);
 			filter_res = BPF_PROG_RUN(prog->filter, skb);
-			__skb_pull(skb, skb->mac_len);
+			__skb_pull(skb, skb->mac_len);//使data跳过mac头
 		} else {
+		    /*egress方向运行bpf*/
 			bpf_compute_data_pointers(skb);
 			filter_res = BPF_PROG_RUN(prog->filter, skb);
 		}
@@ -170,10 +174,12 @@ static int cls_bpf_offload_cmd(struct tcf_proto *tp, struct cls_bpf_prog *prog,
 					  &prog->gen_flags, &prog->in_hw_count,
 					  true);
 	else if (prog)
+	    //bpf程序新增
 		err = tc_setup_cb_add(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
 				      skip_sw, &prog->gen_flags,
 				      &prog->in_hw_count, true);
 	else
+	    //bpf程序删除
 		err = tc_setup_cb_destroy(block, tp, TC_SETUP_CLSBPF, &cls_bpf,
 					  skip_sw, &oldprog->gen_flags,
 					  &oldprog->in_hw_count, true);
@@ -336,6 +342,7 @@ static void *cls_bpf_get(struct tcf_proto *tp, u32 handle)
 	return NULL;
 }
 
+/*cbpf方式指令下发路径*/
 static int cls_bpf_prog_from_ops(struct nlattr **tb, struct cls_bpf_prog *prog)
 {
 	struct sock_filter *bpf_ops;
@@ -344,14 +351,17 @@ static int cls_bpf_prog_from_ops(struct nlattr **tb, struct cls_bpf_prog *prog)
 	u16 bpf_size, bpf_num_ops;
 	int ret;
 
+	//给出了bpf指令的长度
 	bpf_num_ops = nla_get_u16(tb[TCA_BPF_OPS_LEN]);
 	if (bpf_num_ops > BPF_MAXINSNS || bpf_num_ops == 0)
 		return -EINVAL;
 
+	//获得指针所需要的buf大小
 	bpf_size = bpf_num_ops * sizeof(*bpf_ops);
 	if (bpf_size != nla_len(tb[TCA_BPF_OPS]))
 		return -EINVAL;
 
+	//自bpf_ops中提取指令
 	bpf_ops = kmemdup(nla_data(tb[TCA_BPF_OPS]), bpf_size, GFP_KERNEL);
 	if (bpf_ops == NULL)
 		return -ENOMEM;
@@ -373,6 +383,7 @@ static int cls_bpf_prog_from_ops(struct nlattr **tb, struct cls_bpf_prog *prog)
 	return 0;
 }
 
+//ebpf方式程序下发路径
 static int cls_bpf_prog_from_efd(struct nlattr **tb, struct cls_bpf_prog *prog,
 				 u32 gen_flags, const struct tcf_proto *tp)
 {
@@ -381,13 +392,16 @@ static int cls_bpf_prog_from_efd(struct nlattr **tb, struct cls_bpf_prog *prog,
 	bool skip_sw;
 	u32 bpf_fd;
 
+	//取bpf_fd
 	bpf_fd = nla_get_u32(tb[TCA_BPF_FD]);
 	skip_sw = gen_flags & TCA_CLS_FLAGS_SKIP_SW;
 
+	//通过bpf_fd获得对应的bpf_prog
 	fp = bpf_prog_get_type_dev(bpf_fd, BPF_PROG_TYPE_SCHED_CLS, skip_sw);
 	if (IS_ERR(fp))
 		return PTR_ERR(fp);
 
+	//取用户传入的程序名称
 	if (tb[TCA_BPF_NAME]) {
 		name = nla_memdup(tb[TCA_BPF_NAME], GFP_KERNEL);
 		if (!name) {
@@ -415,6 +429,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 	u32 gen_flags = 0;
 	int ret;
 
+	/*检查下发方式是bpf方式，还是ebpf方式*/
 	is_bpf = tb[TCA_BPF_OPS_LEN] && tb[TCA_BPF_OPS];
 	is_ebpf = tb[TCA_BPF_FD];
 	if ((!is_bpf && !is_ebpf) || (is_bpf && is_ebpf))
@@ -456,6 +471,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 	return 0;
 }
 
+//bpf类型filter的新增或修改
 static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 			  struct tcf_proto *tp, unsigned long base,
 			  u32 handle, struct nlattr **tca,
@@ -471,6 +487,7 @@ static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 	if (tca[TCA_OPTIONS] == NULL)
 		return -EINVAL;
 
+	//netlink消息解析
 	ret = nla_parse_nested_deprecated(tb, TCA_BPF_MAX, tca[TCA_OPTIONS],
 					  bpf_policy, NULL);
 	if (ret < 0)
@@ -491,6 +508,7 @@ static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 		}
 	}
 
+	/*动态handle申请*/
 	if (handle == 0) {
 		handle = 1;
 		ret = idr_alloc_u32(&head->handle_idr, prog, &handle,
@@ -504,6 +522,7 @@ static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 		goto errout;
 	prog->handle = handle;
 
+	//获得用户态指定的bpf程序
 	ret = cls_bpf_set_parms(net, tp, prog, base, tb, tca[TCA_RATE], ovr,
 				extack);
 	if (ret < 0)

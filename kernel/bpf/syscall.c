@@ -1583,6 +1583,7 @@ static struct bpf_prog *__bpf_prog_get(u32 ufd, enum bpf_prog_type *attach_type,
 	struct fd f = fdget(ufd);
 	struct bpf_prog *prog;
 
+	//通过fd取得对应的prog
 	prog = ____bpf_prog_get(f);
 	if (IS_ERR(prog))
 		return prog;
@@ -1730,6 +1731,7 @@ static int bpf_prog_load(union bpf_attr *attr, union bpf_attr __user *uattr)
 	/* eBPF programs must be GPL compatible to use GPL-ed functions */
 	is_gpl = license_is_gpl_compatible(license);
 
+	/*指令数检查*/
 	if (attr->insn_cnt == 0 ||
 	    attr->insn_cnt > (capable(CAP_SYS_ADMIN) ? BPF_COMPLEXITY_LIMIT_INSNS : BPF_MAXINSNS))
 		return -E2BIG;
@@ -1775,6 +1777,7 @@ static int bpf_prog_load(union bpf_attr *attr, union bpf_attr __user *uattr)
 	prog->len = attr->insn_cnt;
 
 	err = -EFAULT;
+	//填充用户传入的指令到prog->insns
 	if (copy_from_user(prog->insns, u64_to_user_ptr(attr->insns),
 			   bpf_prog_insn_size(prog)) != 0)
 		goto free_prog;
@@ -3010,6 +3013,7 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 
 	switch (cmd) {
 	case BPF_MAP_CREATE:
+	    /*bpf的map创建*/
 		err = map_create(&attr);
 		break;
 	case BPF_MAP_LOOKUP_ELEM:
@@ -3028,6 +3032,7 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		err = map_freeze(&attr);
 		break;
 	case BPF_PROG_LOAD:
+	    /*bpf程序加载*/
 		err = bpf_prog_load(&attr, uattr);
 		break;
 	case BPF_OBJ_PIN:
@@ -3073,6 +3078,7 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		err = bpf_raw_tracepoint_open(&attr);
 		break;
 	case BPF_BTF_LOAD:
+	    /*加载BTF段，用于bpf调试*/
 		err = bpf_btf_load(&attr);
 		break;
 	case BPF_BTF_GET_FD_BY_ID:

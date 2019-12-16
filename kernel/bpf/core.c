@@ -50,6 +50,7 @@
 /* Named registers */
 #define DST	regs[insn->dst_reg]
 #define SRC	regs[insn->src_reg]
+/*栈指针，指向栈底*/
 #define FP	regs[BPF_REG_FP]
 #define AX	regs[BPF_REG_AX]
 #define ARG1	regs[BPF_REG_ARG1]
@@ -119,6 +120,7 @@ struct bpf_prog *bpf_prog_alloc(unsigned int size, gfp_t gfp_extra_flags)
 		return NULL;
 	}
 
+	//初始化bpf程序统计信息
 	for_each_possible_cpu(cpu) {
 		struct bpf_prog_stats *pstats;
 
@@ -1358,12 +1360,16 @@ u64 __weak bpf_probe_read_kernel(void *dst, u32 size, const void *unsafe_ptr)
  *
  * Decode and execute eBPF instructions.
  */
-static u64 __no_fgcse ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn, u64 *stack)
+static u64 __no_fgcse ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct bpf_insn *insn/*待运行指令*/, u64 *stack/*栈底指针*/)
 {
+//定义二元操作符的goto lable
 #define BPF_INSN_2_LBL(x, y)    [BPF_##x | BPF_##y] = &&x##_##y
+//定义三元操作符的goto label
 #define BPF_INSN_3_LBL(x, y, z) [BPF_##x | BPF_##y | BPF_##z] = &&x##_##y##_##z
 	static const void * const jumptable[256] __annotate_jump_table = {
+	        //先将数组指向default_label
 		[0 ... 255] = &&default_label,
+		//再重写数组的goto lable
 		/* Now overwrite non-defaults ... */
 		BPF_INSN_MAP(BPF_INSN_2_LBL, BPF_INSN_3_LBL),
 		/* Non-UAPI available opcodes. */
@@ -1378,9 +1384,11 @@ static u64 __no_fgcse ___bpf_prog_run(u64 *regs, const struct bpf_insn *insn, u6
 #undef BPF_INSN_2_LBL
 	u32 tail_call_cnt = 0;
 
+	//指针移动，处理下一条指令
 #define CONT	 ({ insn++; goto select_insn; })
 #define CONT_JMP ({ insn++; goto select_insn; })
 
+	//每条指令的入口点
 select_insn:
 	goto *jumptable[insn->code];
 
@@ -1399,6 +1407,7 @@ select_insn:
 		DST = (u32) DST OP (u32) IMM;	\
 		CONT;
 
+	//定义可跳转的ALU点
 	ALU(ADD,  +)
 	ALU(SUB,  -)
 	ALU(AND,  &)
@@ -1507,11 +1516,13 @@ select_insn:
 		 * preserves BPF_R6-BPF_R9, and stores return value
 		 * into BPF_R0.
 		 */
+	    //__bpf_call_base是一个基地址，通过它加上一个立即数，获得需要调用的函数地址，并调用它
 		BPF_R0 = (__bpf_call_base + insn->imm)(BPF_R1, BPF_R2, BPF_R3,
 						       BPF_R4, BPF_R5);
 		CONT;
 
 	JMP_CALL_ARGS:
+	    //可传入下一条指针
 		BPF_R0 = (__bpf_call_base_args + insn->imm)(BPF_R1, BPF_R2,
 							    BPF_R3, BPF_R4,
 							    BPF_R5,
@@ -1519,6 +1530,7 @@ select_insn:
 		CONT;
 
 	JMP_TAIL_CALL: {
+	    //R2寄存器中存储的是bpf_map地址，R3中存放的是index
 		struct bpf_map *map = (struct bpf_map *) (unsigned long) BPF_R2;
 		struct bpf_array *array = container_of(map, struct bpf_array, map);
 		struct bpf_prog *prog;
@@ -1531,6 +1543,7 @@ select_insn:
 
 		tail_call_cnt++;
 
+		//取index中对应的prog,并加载它的指令开始执行
 		prog = READ_ONCE(array->ptrs[index]);
 		if (!prog)
 			goto out;
@@ -1549,6 +1562,7 @@ out:
 		insn += insn->off;
 		CONT;
 	JMP_EXIT:
+	    //执行EXIT指令，并返回R0寄存器中的值
 		return BPF_R0;
 	/* JMP */
 #define COND_JMP(SIGN, OPCODE, CMP_OP)				\
@@ -1637,14 +1651,20 @@ out:
 }
 
 #define PROG_NAME(stack_size) __bpf_prog_run##stack_size
+/*定义不同栈大小的bpf运行函数*/
 #define DEFINE_BPF_PROG_RUN(stack_size) \
 static unsigned int PROG_NAME(stack_size)(const void *ctx, const struct bpf_insn *insn) \
 { \
+    /*定义指定大小的栈*/\
 	u64 stack[stack_size / sizeof(u64)]; \
+	/*定义寄存器*/\
 	u64 regs[MAX_BPF_EXT_REG]; \
 \
+    /*初始化栈底指针，指向栈底*/\
 	FP = (u64) (unsigned long) &stack[ARRAY_SIZE(stack)]; \
+	/*初始化参数1*/\
 	ARG1 = (u64) (unsigned long) ctx; \
+	/*进入bpf程序运行*/\
 	return ___bpf_prog_run(regs, insn, stack); \
 }
 
@@ -1656,12 +1676,14 @@ static u64 PROG_NAME_ARGS(stack_size)(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5, \
 	u64 stack[stack_size / sizeof(u64)]; \
 	u64 regs[MAX_BPF_EXT_REG]; \
 \
+    /*指向栈底，分别给参数寄存器赋值，r1,r2,r3,r4,r5*/\
 	FP = (u64) (unsigned long) &stack[ARRAY_SIZE(stack)]; \
 	BPF_R1 = r1; \
 	BPF_R2 = r2; \
 	BPF_R3 = r3; \
 	BPF_R4 = r4; \
 	BPF_R5 = r5; \
+	/*开始运行bpf程序*/\
 	return ___bpf_prog_run(regs, insn, stack); \
 }
 
@@ -1785,6 +1807,7 @@ struct bpf_prog *bpf_prog_select_runtime(struct bpf_prog *fp, int *err)
 	if (fp->bpf_func)
 		goto finalize;
 
+	/*挂载fp的bpf代码执行函数*/
 	bpf_prog_select_func(fp);
 
 	/* eBPF JITs can rewrite the program in case constant
