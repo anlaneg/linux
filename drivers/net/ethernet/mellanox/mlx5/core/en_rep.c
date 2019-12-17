@@ -219,6 +219,7 @@ static int mlx5e_rep_get_sset_count(struct net_device *dev, int sset)
 	}
 }
 
+//获取rep接口的ring参数
 static void mlx5e_rep_get_ringparam(struct net_device *dev,
 				struct ethtool_ringparam *param)
 {

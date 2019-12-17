@@ -1644,6 +1644,7 @@ static noinline_for_stack int ethtool_set_coalesce(struct net_device *dev,
 	return dev->ethtool_ops->set_coalesce(dev, &coalesce);
 }
 
+/*获取网卡的ring参数 ethtool -g*/
 static int ethtool_get_ringparam(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_ringparam ringparam = { .cmd = ETHTOOL_GRINGPARAM };
@@ -2711,6 +2712,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_SCOALESCE:
 		rc = ethtool_set_coalesce(dev, useraddr);
 		break;
+		//获取网卡的ring参数
 	case ETHTOOL_GRINGPARAM:
 		rc = ethtool_get_ringparam(dev, useraddr);
 		break;

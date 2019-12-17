@@ -117,6 +117,7 @@ static struct bpf_map *find_and_alloc_map(union bpf_attr *attr)
 	if (!ops)
 		return ERR_PTR(-EINVAL);
 
+	//attr参数检查
 	if (ops->map_alloc_check) {
 		err = ops->map_alloc_check(attr);
 		if (err)

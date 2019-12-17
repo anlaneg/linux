@@ -36,7 +36,9 @@ extern spinlock_t btf_idr_lock;
 /* map is generic key/value storage optionally accesible by eBPF programs */
 struct bpf_map_ops {
 	/* funcs callable from userspace (via syscall) */
+    //map_alloc申请前check，参数attr校验
 	int (*map_alloc_check)(union bpf_attr *attr);
+	//map申请
 	struct bpf_map *(*map_alloc)(union bpf_attr *attr);
 	void (*map_release)(struct bpf_map *map, struct file *map_file);
 	void (*map_free)(struct bpf_map *map);
