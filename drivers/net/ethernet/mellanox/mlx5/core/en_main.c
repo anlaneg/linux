@@ -4490,6 +4490,7 @@ static u32 mlx5e_xdp_query(struct net_device *dev)
 	return prog_id;
 }
 
+//XDP程序处理
 static int mlx5e_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	switch (xdp->command) {

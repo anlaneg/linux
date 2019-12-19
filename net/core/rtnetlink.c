@@ -2820,6 +2820,7 @@ static int do_setlink(const struct sk_buff *skb,
 			}
 		}
 
+		/*用户为link指定的XDP bpf程序的fd*/
 		if (xdp[IFLA_XDP_FD]) {
 			err = dev_change_xdp_fd(dev, extack,
 						nla_get_s32(xdp[IFLA_XDP_FD]),

@@ -8768,6 +8768,7 @@ static int dev_xdp_install(struct net_device *dev, bpf_op_t bpf_op,
 	xdp.flags = flags;
 	xdp.prog = prog;
 
+	/*通过bpf_op完成bpf操作*/
 	return bpf_op(dev, &xdp);
 }
 
@@ -8823,6 +8824,7 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 	offload = flags & XDP_FLAGS_HW_MODE;
 	query = offload ? XDP_QUERY_PROG_HW : XDP_QUERY_PROG;
 
+	/*取netdev对应的ndo_bpf回调做为bpf操作函数*/
 	bpf_op = bpf_chk = ops->ndo_bpf;
 	if (!bpf_op && (flags & (XDP_FLAGS_DRV_MODE | XDP_FLAGS_HW_MODE))) {
 		NL_SET_ERR_MSG(extack, "underlying driver does not support XDP in native mode");
@@ -8868,6 +8870,7 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 			return 0;
 	}
 
+	//为设备安装xdp程序
 	err = dev_xdp_install(dev, bpf_op, extack, flags, prog);
 	if (err < 0 && prog)
 		bpf_prog_put(prog);
