@@ -1587,7 +1587,7 @@ static int fl_init_mask_hashtable(struct fl_flow_mask *mask)
 //成员member在fl_flow_key中的偏移量
 #define FL_KEY_MEMBER_OFFSET(member) offsetof(struct fl_flow_key, member)
 //成员member在fl_flow_key的size
-#define FL_KEY_MEMBER_SIZE(member) FIELD_SIZEOF(struct fl_flow_key, member)
+#define FL_KEY_MEMBER_SIZE(member) sizeof_field(struct fl_flow_key, member)
 
 #define FL_KEY_IS_MASKED(mask, member)						\
 	memchr_inv(((char *)mask) + FL_KEY_MEMBER_OFFSET(member),		\
