@@ -1659,6 +1659,7 @@ static int ethtool_get_ringparam(struct net_device *dev, void __user *useraddr)
 	return 0;
 }
 
+/*设置网卡的ring参数 ethtool -G*/
 static int ethtool_set_ringparam(struct net_device *dev, void __user *useraddr)
 {
 	struct ethtool_ringparam ringparam, max = { .cmd = ETHTOOL_GRINGPARAM };

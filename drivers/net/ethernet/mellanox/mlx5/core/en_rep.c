@@ -228,6 +228,7 @@ static void mlx5e_rep_get_ringparam(struct net_device *dev,
 	mlx5e_ethtool_get_ringparam(priv, param);
 }
 
+//设置rep接口的ring参数
 static int mlx5e_rep_set_ringparam(struct net_device *dev,
 			       struct ethtool_ringparam *param)
 {
