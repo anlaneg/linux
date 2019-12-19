@@ -119,7 +119,7 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 
 /* returns true if packet was consumed by xdp */
 bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
-		      void *va, u16 *rx_headroom, u32 *len, bool xsk)
+		      void *va, u16 *rx_headroom/*入出参，指定headroom大小*/, u32 *len/*入出参，指定报文大小*/, bool xsk)
 {
 	struct bpf_prog *prog = READ_ONCE(rq->xdp_prog);
 	struct xdp_umem *umem = rq->umem;
@@ -138,6 +138,7 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 		xdp.handle = di->xsk.handle;
 	xdp.rxq = &rq->xdp_rxq;
 
+	//运行xdp程序
 	act = bpf_prog_run_xdp(prog, &xdp);
 	if (xsk) {
 		u64 off = xdp.data - xdp.data_hard_start;
@@ -146,10 +147,12 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 	}
 	switch (act) {
 	case XDP_PASS:
+	    //上传协议栈
 		*rx_headroom = xdp.data - xdp.data_hard_start;
 		*len = xdp.data_end - xdp.data;
 		return false;
 	case XDP_TX:
+	    //自某个队列发出，不再上传协议栈
 		if (unlikely(!mlx5e_xmit_xdp_buff(rq->xdpsq, rq, di, &xdp)))
 			goto xdp_abort;
 		__set_bit(MLX5E_RQ_FLAG_XDP_XMIT, rq->flags); /* non-atomic */
@@ -169,6 +172,7 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 		bpf_warn_invalid_xdp_action(act);
 		/* fall through */
 	case XDP_ABORTED:
+	    //出现异常或者明确丢包，不再上送协议栈
 xdp_abort:
 		trace_xdp_exception(rq->netdev, prog, act);
 		/* fall through */

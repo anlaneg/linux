@@ -64,10 +64,10 @@ struct xdp_rxq_info {
 } ____cacheline_aligned; /* perf critical, avoid false-sharing */
 
 struct xdp_buff {
-	void *data;
-	void *data_end;
-	void *data_meta;
-	void *data_hard_start;
+	void *data;/*指向报文起始位置*/
+	void *data_end;/*指向报文结尾位置*/
+	void *data_meta;/*如果驱动不支持data_meta，则指向data+1,指向data_meta*/
+	void *data_hard_start;//buffer的起始位置
 	unsigned long handle;
 	struct xdp_rxq_info *rxq;
 };
@@ -159,6 +159,7 @@ void xdp_rxq_info_unreg_mem_model(struct xdp_rxq_info *xdp_rxq);
 static __always_inline void
 xdp_set_data_meta_invalid(struct xdp_buff *xdp)
 {
+    /*使xdp的data_meta指向data之后的一个指针，标明自已不支持data_meta*/
 	xdp->data_meta = xdp->data + 1;
 }
 

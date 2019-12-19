@@ -1479,6 +1479,7 @@ struct net_device_ops {
 	//用于ebpf offload相关
 	int			(*ndo_bpf)(struct net_device *dev,
 					   struct netdev_bpf *bpf);
+	//xdp报文发送
 	int			(*ndo_xdp_xmit)(struct net_device *dev, int n,
 						struct xdp_frame **xdp,
 						u32 flags);

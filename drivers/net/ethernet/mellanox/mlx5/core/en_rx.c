@@ -1037,10 +1037,11 @@ static inline void mlx5e_complete_rx_cqe(struct mlx5e_rq *rq,
 	mlx5e_build_rx_skb(cqe, cqe_bcnt, rq, skb);
 }
 
+//构造线性的skb
 static inline
-struct sk_buff *mlx5e_build_linear_skb(struct mlx5e_rq *rq, void *va,
-				       u32 frag_size, u16 headroom,
-				       u32 cqe_bcnt)
+struct sk_buff *mlx5e_build_linear_skb(struct mlx5e_rq *rq, void *va/*sk buffer起始地址*/,
+				       u32 frag_size/*sk buffer大小*/, u16 headroom/*va到数据，预留的空间*/,
+				       u32 cqe_bcnt/*报文的实际大小*/)
 {
 	struct sk_buff *skb = build_skb(va, frag_size);
 
@@ -1057,17 +1058,17 @@ struct sk_buff *mlx5e_build_linear_skb(struct mlx5e_rq *rq, void *va,
 
 struct sk_buff *
 mlx5e_skb_from_cqe_linear(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe,
-			  struct mlx5e_wqe_frag_info *wi, u32 cqe_bcnt)
+			  struct mlx5e_wqe_frag_info *wi, u32 cqe_bcnt/*报文的实际大小*/)
 {
 	struct mlx5e_dma_info *di = wi->di;
-	u16 rx_headroom = rq->buff.headroom;
+	u16 rx_headroom = rq->buff.headroom;//buffer前预留的空间大小
 	struct sk_buff *skb;
 	void *va, *data;
 	bool consumed;
 	u32 frag_size;
 
 	va             = page_address(di->page) + wi->offset;
-	data           = va + rx_headroom;
+	data           = va + rx_headroom;/*数据起始位置*/
 	frag_size      = MLX5_SKB_FRAG_SZ(rx_headroom + cqe_bcnt);
 
 	dma_sync_single_range_for_cpu(rq->pdev, di->addr, wi->offset,
@@ -1311,6 +1312,7 @@ mlx5e_skb_from_cqe_mpwrq_linear(struct mlx5e_rq *rq, struct mlx5e_mpw_info *wi,
 	prefetch(data);
 
 	rcu_read_lock();
+	//xdp程序处理
 	consumed = mlx5e_xdp_handle(rq, di, va, &rx_headroom, &cqe_bcnt32, false);
 	rcu_read_unlock();
 	if (consumed) {
