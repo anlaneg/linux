@@ -1312,7 +1312,7 @@ struct device {
 	struct list_head	msi_list;
 #endif
 
-	const struct dma_map_ops *dma_ops;
+	const struct dma_map_ops *dma_ops;//设备对应的dma_ops
 	u64		*dma_mask;	/* dma mask (if dma'able device) */
 	u64		coherent_dma_mask;/* Like dma_mask, but for
 					     alloc_coherent mappings as

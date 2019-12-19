@@ -3483,6 +3483,7 @@ static int __bpf_tx_xdp(struct net_device *dev,
 	if (unlikely(!xdpf))
 		return -EOVERFLOW;
 
+	//发送xdp报文
 	sent = dev->netdev_ops->ndo_xdp_xmit(dev, 1, &xdpf, XDP_XMIT_FLUSH);
 	if (sent <= 0)
 		return sent;

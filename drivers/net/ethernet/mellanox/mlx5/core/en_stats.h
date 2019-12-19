@@ -306,7 +306,7 @@ struct mlx5e_xdpsq_stats {
 
 struct mlx5e_ch_stats {
 	u64 events;
-	u64 poll;
+	u64 poll;/*channel poll的次数*/
 	u64 arm;
 	u64 aff_change;
 	u64 force_irq;

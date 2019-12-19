@@ -297,6 +297,7 @@ EXPORT_SYMBOL(dma_direct_sync_sg_for_device);
 void dma_direct_sync_single_for_cpu(struct device *dev,
 		dma_addr_t addr, size_t size, enum dma_data_direction dir)
 {
+    //dma地址转物理地址
 	phys_addr_t paddr = dma_to_phys(dev, addr);
 
 	if (!dev_is_dma_coherent(dev)) {

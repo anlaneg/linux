@@ -50,7 +50,7 @@ struct veth_rq_stats {
 struct veth_rq {
 	struct napi_struct	xdp_napi;
 	struct net_device	*dev;
-	struct bpf_prog __rcu	*xdp_prog;
+	struct bpf_prog __rcu	*xdp_prog;/*指向本队列对应的xdp程序*/
 	struct xdp_mem_info	xdp_mem;
 	struct veth_rq_stats	stats;
 	bool			rx_notify_masked;
@@ -59,9 +59,9 @@ struct veth_rq {
 };
 
 struct veth_priv {
-	struct net_device __rcu	*peer;
+	struct net_device __rcu	*peer;/*对端设备*/
 	atomic64_t		dropped;
-	struct bpf_prog		*_xdp_prog;
+	struct bpf_prog		*_xdp_prog;/*指向被设置的xdp程序*/
 	struct veth_rq		*rq;
 	unsigned int		requested_headroom;
 };
@@ -215,6 +215,7 @@ static void __veth_xdp_flush(struct veth_rq *rq)
 	}
 }
 
+//支持xdp的rx方式
 static int veth_xdp_rx(struct veth_rq *rq, struct sk_buff *skb)
 {
 	if (unlikely(ptr_ring_produce(&rq->xdp_ring, skb))) {
@@ -855,6 +856,7 @@ static int veth_enable_xdp(struct net_device *dev)
 			goto err_rxq_reg;
 	}
 
+	/*为每个rq队列设置xdp_prog*/
 	for (i = 0; i < dev->real_num_rx_queues; i++)
 		rcu_assign_pointer(priv->rq[i].xdp_prog, priv->_xdp_prog);
 
@@ -1058,6 +1060,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 
 	if (prog) {
 		if (!peer) {
+		    /*对端不存在，报错*/
 			NL_SET_ERR_MSG_MOD(extack, "Cannot set XDP when peer is detached");
 			err = -ENOTCONN;
 			goto err;
@@ -1094,6 +1097,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 
 	if (old_prog) {
 		if (!prog) {
+		    /*原来有prog,现在没有了，需要禁用*/
 			if (dev->flags & IFF_UP)
 				veth_disable_xdp(dev);
 
@@ -1115,6 +1119,7 @@ err:
 	return err;
 }
 
+//返回dev设备上对应的xdp程序id
 static u32 veth_xdp_query(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
@@ -1127,6 +1132,7 @@ static u32 veth_xdp_query(struct net_device *dev)
 	return 0;
 }
 
+//veth对xdp的处理
 static int veth_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	switch (xdp->command) {

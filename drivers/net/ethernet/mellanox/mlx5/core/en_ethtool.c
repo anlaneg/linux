@@ -363,7 +363,6 @@ int mlx5e_ethtool_set_ringparam(struct mlx5e_priv *priv,
 
 	mutex_lock(&priv->state_lock);
 
-	//
 	new_channels.params = priv->channels.params;
 	new_channels.params.log_rq_mtu_frames = log_rq_size;
 	new_channels.params.log_sq_size = log_sq_size;

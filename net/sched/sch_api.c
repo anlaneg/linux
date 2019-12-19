@@ -148,6 +148,7 @@ int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 	if (qops->dequeue == NULL)
 		qops->dequeue = noop_qdisc_ops.dequeue;
 
+	//检查分类器回调提供
 	if (qops->cl_ops) {
 		const struct Qdisc_class_ops *cops = qops->cl_ops;
 

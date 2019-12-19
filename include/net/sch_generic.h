@@ -255,19 +255,20 @@ enum qdisc_class_ops_flags {
 //排队规则操作集
 struct Qdisc_ops {
 	struct Qdisc_ops	*next;
-	const struct Qdisc_class_ops	*cl_ops;//分类操作集
+	//分类操作集
+	const struct Qdisc_class_ops	*cl_ops;
 	char			id[IFNAMSIZ];//ops的唯一标识
 	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小
 	int			priv_size;
 	unsigned int		static_flags;
 
-	//使报文入队
+	//使报文入队（如果不提供此回调，则给值为noop_qdisc_ops.enqueue）
 	int 			(*enqueue)(struct sk_buff *skb,
 					   struct Qdisc *sch,
 					   struct sk_buff **to_free);
-	//出队一个报文
+	//出队一个报文（如果不提供此回调，则给值为noop_qdisc_ops.dequeue）
 	struct sk_buff *	(*dequeue)(struct Qdisc *);
-	//peek一个报文
+	//peek一个报文（如果不提供此回调，则给值为noop_qdisc_ops.peek）
 	struct sk_buff *	(*peek)(struct Qdisc *);
 
 	//队列初始化

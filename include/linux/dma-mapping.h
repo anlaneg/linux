@@ -258,6 +258,7 @@ size_t dma_direct_max_mapping_size(struct device *dev);
 #ifdef CONFIG_HAS_DMA
 #include <asm/dma-mapping.h>
 
+//通过dev获得dev的dma_ops
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
 	if (dev->dma_ops)
