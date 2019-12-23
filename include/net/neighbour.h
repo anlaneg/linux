@@ -73,7 +73,6 @@ struct neigh_parms {
 	struct list_head list;
 	//容许在neighbour表项创建后执行初始化
 	int	(*neigh_setup)(struct neighbour *);
-	void	(*neigh_cleanup)(struct neighbour *);
 	struct neigh_table *tbl;
 
 	void	*sysctl_table;
