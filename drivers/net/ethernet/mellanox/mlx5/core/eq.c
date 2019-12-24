@@ -72,7 +72,7 @@ enum {
 static_assert(MLX5_EQ_POLLING_BUDGET <= MLX5_NUM_SPARE_EQE);
 
 struct mlx5_eq_table {
-	struct list_head        comp_eqs_list;
+	struct list_head        comp_eqs_list;//所有completion eq均挂接在此链上
 	struct mlx5_eq_async    pages_eq;
 	struct mlx5_eq_async    cmd_eq;
 	struct mlx5_eq_async    async_eq;
@@ -83,7 +83,7 @@ struct mlx5_eq_table {
 	struct mlx5_nb          cq_err_nb;
 
 	struct mutex            lock; /* sync async eqs creations */
-	int			num_comp_eqs;
+	int			num_comp_eqs;//completion EQ队列总数
 	struct mlx5_irq_table	*irq_table;
 };
 
@@ -118,6 +118,7 @@ static struct mlx5_core_cq *mlx5_eq_cq_get(struct mlx5_eq *eq, u32 cqn)
 	struct mlx5_core_cq *cq = NULL;
 
 	rcu_read_lock();
+	/*通过completion queue number号查找cq*/
 	cq = radix_tree_lookup(&table->tree, cqn);
 	if (likely(cq))
 		mlx5_cq_hold(cq);
@@ -126,6 +127,7 @@ static struct mlx5_core_cq *mlx5_eq_cq_get(struct mlx5_eq *eq, u32 cqn)
 	return cq;
 }
 
+//eq completion 中断处理
 static int mlx5_eq_comp_int(struct notifier_block *nb,
 			    __always_unused unsigned long action,
 			    __always_unused void *data)
@@ -134,9 +136,10 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 		container_of(nb, struct mlx5_eq_comp, irq_nb);
 	struct mlx5_eq *eq = &eq_comp->core;
 	struct mlx5_eqe *eqe;
-	int num_eqes = 0;
+	int num_eqes = 0;/*记录已处理的eqe数目*/
 	u32 cqn = -1;
 
+	//自eq队列中取下一个eqe
 	eqe = next_eqe_sw(eq);
 	if (!eqe)
 		goto out;
@@ -149,6 +152,7 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 		 */
 		dma_rmb();
 		/* Assume (eqe->type) is always MLX5_EVENT_TYPE_COMP */
+		//如以上注释所言，总认为是comp类型的event,而cq_number占24位
 		cqn = be32_to_cpu(eqe->data.comp.cqn) & 0xffffff;
 
 		cq = mlx5_eq_cq_get(eq, cqn);
@@ -160,8 +164,10 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 			mlx5_core_warn(eq->dev, "Completion event for bogus CQ 0x%x\n", cqn);
 		}
 
+		//eq消费指针前移
 		++eq->cons_index;
 
+		//继续循环直到eqe消费完，或者eqe已达到处理最大数
 	} while ((++num_eqes < MLX5_EQ_POLLING_BUDGET) && (eqe = next_eqe_sw(eq)));
 
 out:
@@ -229,6 +235,7 @@ out:
 	return 0;
 }
 
+//初始化每个eqe
 static void init_eq_buf(struct mlx5_eq *eq)
 {
 	struct mlx5_eqe *eqe;
@@ -266,8 +273,10 @@ create_map_eq(struct mlx5_core_dev *dev, struct mlx5_eq *eq,
 	if (err)
 		return err;
 
+	//初始化每个eqe
 	init_eq_buf(eq);
 
+	//准备数据与fw通信，创建eq
 	inlen = MLX5_ST_SZ_BYTES(create_eq_in) +
 		MLX5_FLD_SZ_BYTES(create_eq_in, pas[0]) * eq->buf.npages;
 
@@ -299,6 +308,7 @@ create_map_eq(struct mlx5_core_dev *dev, struct mlx5_eq *eq,
 	if (err)
 		goto err_in;
 
+	//fw创建eq成功
 	eq->vecidx = vecidx;
 	eq->eqn = MLX5_GET(create_eq_out, out, eq_number);
 	eq->irqn = pci_irq_vector(dev->pdev, vecidx);
@@ -381,6 +391,7 @@ static int destroy_unmap_eq(struct mlx5_core_dev *dev, struct mlx5_eq *eq)
 	return err;
 }
 
+/*向eq表对应的cq_table中添加cq*/
 int mlx5_eq_add_cq(struct mlx5_eq *eq, struct mlx5_core_cq *cq)
 {
 	struct mlx5_cq_table *table = &eq->cq_table;
@@ -393,6 +404,7 @@ int mlx5_eq_add_cq(struct mlx5_eq *eq, struct mlx5_core_cq *cq)
 	return err;
 }
 
+/*删除eq表对应的cq_table中添加的cq*/
 void mlx5_eq_del_cq(struct mlx5_eq *eq, struct mlx5_core_cq *cq)
 {
 	struct mlx5_cq_table *table = &eq->cq_table;
@@ -778,6 +790,7 @@ static void destroy_comp_eqs(struct mlx5_core_dev *dev)
 	}
 }
 
+//创建completion EQ队列
 static int create_comp_eqs(struct mlx5_core_dev *dev)
 {
 	struct mlx5_eq_table *table = dev->priv.eq_table;
@@ -790,6 +803,7 @@ static int create_comp_eqs(struct mlx5_core_dev *dev)
 	INIT_LIST_HEAD(&table->comp_eqs_list);
 	ncomp_eqs = table->num_comp_eqs;
 	nent = MLX5_COMP_EQ_SIZE;
+	//创建ncomp_eqs个EQs
 	for (i = 0; i < ncomp_eqs; i++) {
 		int vecidx = i + MLX5_IRQ_VEC_COMP_BASE;
 		struct mlx5_eq_param param = {};
@@ -806,6 +820,7 @@ static int create_comp_eqs(struct mlx5_core_dev *dev)
 		tasklet_init(&eq->tasklet_ctx.task, mlx5_cq_tasklet_cb,
 			     (unsigned long)&eq->tasklet_ctx);
 
+		/*设置eq的通知回调，其负责提取eq中的eqe,然后依据eqe中给定的cq_number调用对应cq的complete回调*/
 		eq->irq_nb.notifier_call = mlx5_eq_comp_int;
 		param = (struct mlx5_eq_param) {
 			.irq_index = vecidx,
@@ -816,6 +831,7 @@ static int create_comp_eqs(struct mlx5_core_dev *dev)
 			kfree(eq);
 			goto clean;
 		}
+		//为eq注册通知回调
 		err = mlx5_eq_enable(dev, &eq->core, &eq->irq_nb);
 		if (err) {
 			destroy_unmap_eq(dev, &eq->core);
@@ -835,6 +851,7 @@ clean:
 	return err;
 }
 
+/*取第vector号eq编号及其对应中断*/
 int mlx5_vector2eqn(struct mlx5_core_dev *dev, int vector, int *eqn,
 		    unsigned int *irqn)
 {
@@ -879,11 +896,13 @@ struct cpu_rmap *mlx5_eq_table_get_rmap(struct mlx5_core_dev *dev)
 }
 #endif
 
+//通过eq number获取相应的eq completion
 struct mlx5_eq_comp *mlx5_eqn2comp_eq(struct mlx5_core_dev *dev, int eqn)
 {
 	struct mlx5_eq_table *table = dev->priv.eq_table;
 	struct mlx5_eq_comp *eq;
 
+	//遍历completion eq查找给定编号的eq
 	list_for_each_entry(eq, &table->comp_eqs_list, list) {
 		if (eq->core.eqn == eqn)
 			return eq;
@@ -902,6 +921,7 @@ void mlx5_core_eq_free_irqs(struct mlx5_core_dev *dev)
 	mutex_unlock(&table->lock);
 }
 
+//创建eq表
 int mlx5_eq_table_create(struct mlx5_core_dev *dev)
 {
 	struct mlx5_eq_table *eq_table = dev->priv.eq_table;

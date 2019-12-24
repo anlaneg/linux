@@ -389,6 +389,7 @@ netdev_tx_t mlx5e_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct mlx5e_txqsq *sq;
 	u16 pi;
 
+	//通过tx队列号映射到txqsq
 	sq = priv->txq2sq[skb_get_queue_mapping(skb)];
 	wqe = mlx5e_sq_fetch_wqe(sq, sizeof(*wqe), &pi);
 

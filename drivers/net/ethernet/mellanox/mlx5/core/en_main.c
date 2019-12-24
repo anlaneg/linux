@@ -1519,6 +1519,7 @@ static int mlx5e_alloc_cq_common(struct mlx5_core_dev *mdev,
 	int err;
 	u32 i;
 
+	/*取eq对应的中断号*/
 	err = mlx5_vector2eqn(mdev, param->eq_ix, &eqn_not_used, &irqn);
 	if (err)
 		return err;
@@ -1604,6 +1605,7 @@ static int mlx5e_create_cq(struct mlx5e_cq *cq, struct mlx5e_cq_param *param)
 				  (__be64 *)MLX5_ADDR_OF(create_cq_in, in, pas));
 
 	MLX5_SET(cqc,   cqc, cq_period_mode, param->cq_period_mode);
+        /*指定此待创建cq对应的eq*/
 	MLX5_SET(cqc,   cqc, c_eqn,         eqn);
 	MLX5_SET(cqc,   cqc, uar_page,      mdev->priv.uar->index);
 	MLX5_SET(cqc,   cqc, log_page_size, cq->wq_ctrl.buf.page_shift -
@@ -1963,21 +1965,22 @@ static int mlx5e_open_channel(struct mlx5e_priv *priv, int ix,
 	c->priv     = priv;
 	c->mdev     = priv->mdev;
 	c->tstamp   = &priv->tstamp;
-	c->ix       = ix;
+	c->ix       = ix;/*channel索引号*/
 	c->cpu      = cpu;
 	c->pdev     = priv->mdev->device;
 	c->netdev   = priv->netdev;
 	c->mkey_be  = cpu_to_be32(priv->mdev->mlx5e_res.mkey.key);
-	c->num_tc   = params->num_tc;
+	c->num_tc   = params->num_tc;/*channel中tc的数量*/
 	c->xdp      = !!params->xdp_prog;
 	c->stats    = &priv->channel_stats[ix].ch;
-	c->irq_desc = irq_to_desc(irq);
+	c->irq_desc = irq_to_desc(irq);/*channel对应的中断描述符*/
 	c->lag_port = mlx5e_enumerate_lag_port(priv->mdev, ix);
 
 	err = mlx5e_alloc_xps_cpumask(c, params);
 	if (err)
 		goto err_free_channel;
 
+	//为此netdev的注册收包回调（软中断触发后被调用）
 	netif_napi_add(netdev, &c->napi, mlx5e_napi_poll, 64);
 
 	err = mlx5e_open_queues(c, params, cparam);
@@ -2329,8 +2332,10 @@ int mlx5e_open_channels(struct mlx5e_priv *priv,
 	int err = -ENOMEM;
 	int i;
 
+	/*设置channel数目*/
 	chs->num = chs->params.num_channels;
 
+	/*申请对应数目的channel*/
 	chs->c = kcalloc(chs->num, sizeof(struct mlx5e_channel *), GFP_KERNEL);
 	cparam = kvzalloc(sizeof(struct mlx5e_channel_param), GFP_KERNEL);
 	if (!chs->c || !cparam)
@@ -2343,7 +2348,8 @@ int mlx5e_open_channels(struct mlx5e_priv *priv,
 		if (chs->params.xdp_prog)
 			umem = mlx5e_xsk_get_umem(&chs->params, chs->params.xsk, i);
 
-		err = mlx5e_open_channel(priv, i, &chs->params, cparam, umem, &chs->c[i]);
+		/*打开第i个channel*/
+		err = mlx5e_open_channel(priv, i/*channel编号*/, &chs->params, cparam, umem, &chs->c[i]/*第i个channle*/);
 		if (err)
 			goto err_close_channels;
 	}

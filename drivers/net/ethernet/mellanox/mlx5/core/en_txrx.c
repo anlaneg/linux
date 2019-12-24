@@ -192,10 +192,12 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	return work_done;
 }
 
+//触发rx软中断，使kernel收包
 void mlx5e_completion_event(struct mlx5_core_cq *mcq, struct mlx5_eqe *eqe)
 {
 	struct mlx5e_cq *cq = container_of(mcq, struct mlx5e_cq, mcq);
 
+	//触发软中断，使kernel过来收包
 	napi_schedule(cq->napi);
 	cq->event_ctr++;
 	cq->channel->stats->events++;

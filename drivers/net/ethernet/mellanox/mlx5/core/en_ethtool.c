@@ -417,7 +417,7 @@ int mlx5e_ethtool_set_channels(struct mlx5e_priv *priv,
 			       struct ethtool_channels *ch)
 {
 	struct mlx5e_params *cur_params = &priv->channels.params;
-	unsigned int count = ch->combined_count;
+	unsigned int count = ch->combined_count;/*取要设置的channel数*/
 	struct mlx5e_channels new_channels = {};
 	bool arfs_enabled;
 	int err = 0;

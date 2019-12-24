@@ -6625,7 +6625,7 @@ static void init_gro_hash(struct napi_struct *napi)
 
 //为dev设置napi,设置其poll函数及weight
 void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
-		    int (*poll)(struct napi_struct *, int), int weight)
+		    int (*poll/*设备收包回调*/)(struct napi_struct *, int), int weight)
 {
 	INIT_LIST_HEAD(&napi->poll_list);
 	hrtimer_init(&napi->timer, CLOCK_MONOTONIC, HRTIMER_MODE_REL_PINNED);

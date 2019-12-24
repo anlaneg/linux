@@ -13,6 +13,7 @@
 #define MLX5_MAX_IRQ_NAME (32)
 
 struct mlx5_irq {
+    /*中断通知链*/
 	struct atomic_notifier_head nh;
 	cpumask_var_t mask;
 	char name[MLX5_MAX_IRQ_NAME];
@@ -55,6 +56,7 @@ static struct mlx5_irq *mlx5_irq_get(struct mlx5_core_dev *dev, int vecidx)
 	return &irq_table->irq[vecidx];
 }
 
+/*为vecidx号中断，添加通知回调*/
 int mlx5_irq_attach_nb(struct mlx5_irq_table *irq_table, int vecidx,
 		       struct notifier_block *nb)
 {
@@ -64,6 +66,7 @@ int mlx5_irq_attach_nb(struct mlx5_irq_table *irq_table, int vecidx,
 	return atomic_notifier_chain_register(&irq->nh, nb);
 }
 
+/*移除为vecidx号中断添加的nb通知回调*/
 int mlx5_irq_detach_nb(struct mlx5_irq_table *irq_table, int vecidx,
 		       struct notifier_block *nb)
 {
@@ -73,6 +76,7 @@ int mlx5_irq_detach_nb(struct mlx5_irq_table *irq_table, int vecidx,
 	return atomic_notifier_chain_unregister(&irq->nh, nb);
 }
 
+/*触发nh上所有回调，参数0，NULL*/
 static irqreturn_t mlx5_irq_int_handler(int irq, void *nh)
 {
 	atomic_notifier_call_chain(nh, 0, NULL);

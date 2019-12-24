@@ -38,7 +38,7 @@
 #include <linux/refcount.h>
 
 struct mlx5_core_cq {
-	u32			cqn;
+	u32			cqn;//cq编号
 	int			cqe_sz;
 	__be32		       *set_ci_db;
 	__be32		       *arm_db;
@@ -60,7 +60,7 @@ struct mlx5_core_cq {
 	} tasklet_ctx;
 	int			reset_notify_added;
 	struct list_head	reset_notify;
-	struct mlx5_eq_comp	*eq;
+	struct mlx5_eq_comp	*eq;//对应的completion EQ
 	u16 uid;
 };
 

@@ -1289,7 +1289,7 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
  * request/free_irq().
  */
 static int
-__setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中断描述符*/, struct irqaction *new)
+__setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中断描述符*/, struct irqaction *new/*中断对应的action*/)
 {
 	struct irqaction *old, **old_ptr;
 	unsigned long flags, thread_mask = 0;

@@ -63,8 +63,8 @@ static int notifier_chain_unregister(struct notifier_block **nl,
  *			last notifier function called.
  */
 static int notifier_call_chain(struct notifier_block **nl,
-			       unsigned long val, void *v,
-			       int nr_to_call, int *nr_calls)
+			       unsigned long val/*回调参数1*/, void *v/*回调参数2*/,
+			       int nr_to_call/*-1时不关心call的数目*/, int *nr_calls/*记录执行了多少通知函数*/)
 {
 	int ret = NOTIFY_DONE;
 	struct notifier_block *nb, *next_nb;
@@ -176,6 +176,7 @@ int __atomic_notifier_call_chain(struct atomic_notifier_head *nh,
 	int ret;
 
 	rcu_read_lock();
+	/*支持nr_to_call数量个通知回调的触发*/
 	ret = notifier_call_chain(&nh->head, val, v, nr_to_call, nr_calls);
 	rcu_read_unlock();
 	return ret;
@@ -186,6 +187,7 @@ NOKPROBE_SYMBOL(__atomic_notifier_call_chain);
 int atomic_notifier_call_chain(struct atomic_notifier_head *nh,
 			       unsigned long val, void *v)
 {
+    //触发nh上所有通知回调（参数为val,v)
 	return __atomic_notifier_call_chain(nh, val, v, -1, NULL);
 }
 EXPORT_SYMBOL_GPL(atomic_notifier_call_chain);

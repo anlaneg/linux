@@ -592,7 +592,7 @@ struct mlx5_init_seg {
 
 struct mlx5_eqe_comp {
 	__be32	reserved[6];
-	__be32	cqn;
+	__be32	cqn;//指明已完成事件的number
 };
 
 struct mlx5_eqe_qp_srq {
@@ -731,13 +731,14 @@ union ev_data {
 	struct mlx5_eqe_xrq_err		xrq_err;
 } __packed;
 
+//event queue中保存的entity
 struct mlx5_eqe {
 	u8		rsvd0;
-	u8		type;
+	u8		type;//事件类型
 	u8		rsvd1;
-	u8		sub_type;
+	u8		sub_type;//事件子类型
 	__be32		rsvd2[7];
-	union ev_data	data;
+	union ev_data	data;//事件的data（每个event自已解释）
 	__be16		rsvd3;
 	u8		signature;
 	u8		owner;

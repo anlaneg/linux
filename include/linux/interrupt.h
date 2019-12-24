@@ -157,7 +157,7 @@ request_threaded_irq(unsigned int irq, irq_handler_t handler,
 //定义中断回调（irq 中断号，handler 中断处理回调，）
 static inline int __must_check
 request_irq(unsigned int irq, irq_handler_t handler, unsigned long flags,
-	    const char *name, void *dev)
+	    const char *name/*中断名称*/, void *dev)
 {
 	return request_threaded_irq(irq, handler, NULL, flags, name, dev);
 }

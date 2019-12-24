@@ -96,11 +96,13 @@ int mlx5_core_create_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 	struct mlx5_eq_comp *eq;
 	int err;
 
+	//找到eqn对应的completion eq
 	eq = mlx5_eqn2comp_eq(dev, eqn);
 	if (IS_ERR(eq))
 		return PTR_ERR(eq);
 
 	memset(out, 0, outlen);
+	//发送cmd创建相应的CQ
 	MLX5_SET(create_cq_in, in, opcode, MLX5_CMD_OP_CREATE_CQ);
 	err = mlx5_cmd_exec(dev, in, inlen, out, outlen);
 	if (err)
@@ -178,6 +180,7 @@ int mlx5_core_destroy_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq)
 }
 EXPORT_SYMBOL(mlx5_core_destroy_cq);
 
+/*给定cq number获取对应的cq信息*/
 int mlx5_core_query_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 		       u32 *out, int outlen)
 {
@@ -189,6 +192,7 @@ int mlx5_core_query_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 }
 EXPORT_SYMBOL(mlx5_core_query_cq);
 
+/*实现cq配置修改*/
 int mlx5_core_modify_cq(struct mlx5_core_dev *dev, struct mlx5_core_cq *cq,
 			u32 *in, int inlen)
 {

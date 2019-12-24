@@ -709,7 +709,7 @@ struct mlx5e_channel {
 	struct mlx5e_xdpsq         rq_xdpsq;
 	struct mlx5e_txqsq         sq[MLX5E_MAX_NUM_TC];
 	struct mlx5e_icosq         icosq;   /* internal control operations */
-	bool                       xdp;
+	bool                       xdp;/*是否支持xdp*/
 	struct napi_struct         napi;
 	struct device             *pdev;
 	struct net_device         *netdev;
@@ -728,7 +728,7 @@ struct mlx5e_channel {
 	spinlock_t                 xskicosq_lock;
 
 	/* data path - accessed per napi poll */
-	struct irq_desc *irq_desc;
+	struct irq_desc *irq_desc;/*channel对应中断描述符*/
 	struct mlx5e_ch_stats     *stats;
 
 	/* control */
@@ -736,7 +736,7 @@ struct mlx5e_channel {
 	struct mlx5_core_dev      *mdev;
 	struct hwtstamp_config    *tstamp;
 	DECLARE_BITMAP(state, MLX5E_CHANNEL_NUM_STATES);
-	int                        ix;
+	int                        ix;/*channel编号*/
 	int                        cpu;
 	cpumask_var_t              xps_cpumask;
 };

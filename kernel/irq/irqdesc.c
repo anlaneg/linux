@@ -473,6 +473,7 @@ static int alloc_descs(unsigned int start, unsigned int cnt, int node,
 	/* Validate affinity mask(s) */
 	if (affinity) {
 		for (i = 0; i < cnt; i++) {
+		    //指定了cpu affinity,但没有为中断指定对应的mask,参数有误
 			if (cpumask_empty(&affinity[i].mask))
 				return -EINVAL;
 		}
