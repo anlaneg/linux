@@ -190,6 +190,7 @@ struct task_group;
 #define __set_current_state(state_value)				\
 	current->state = (state_value)
 
+/*设置当前进程状态*/
 #define set_current_state(state_value)					\
 	smp_store_mb(current->state, (state_value))
 

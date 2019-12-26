@@ -10608,6 +10608,7 @@ static void __net_exit rtnl_lock_unregistering(struct list_head *net_list)
 	for (;;) {
 		unregistering = false;
 		rtnl_lock();
+		/*遍历每个net namespace*/
 		list_for_each_entry(net, net_list, exit_list) {
 			if (net->dev_unreg_count > 0) {
 				unregistering = true;

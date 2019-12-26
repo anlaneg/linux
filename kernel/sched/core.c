@@ -2533,6 +2533,7 @@ try_to_wake_up(struct task_struct *p, unsigned int state, int wake_flags)
 		 *    it disabling IRQs (this allows not taking ->pi_lock).
 		 */
 		if (!(p->state & state))
+			/*非期待的状态，退出*/
 			goto out;
 
 		success = 1;

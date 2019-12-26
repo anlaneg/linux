@@ -76,6 +76,7 @@ static int nfc_hci_execute_cmd(struct nfc_hci_dev *hdev, u8 pipe, u8 cmd,
 	if (hcp_ew.exec_result < 0)
 		return hcp_ew.exec_result;
 
+	/*阻塞直到当前条件为真*/
 	wait_event(ew_wq, hcp_ew.exec_complete == true);
 
 	if (hcp_ew.exec_result == 0) {

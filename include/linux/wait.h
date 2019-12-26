@@ -19,11 +19,13 @@ int default_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int 
 /* wait_queue_entry::flags */
 #define WQ_FLAG_EXCLUSIVE	0x01
 #define WQ_FLAG_WOKEN		0x02
+/*为等待队列成员打标记，记录上次唤醒的位置*/
 #define WQ_FLAG_BOOKMARK	0x04
 
 /*
  * A single wait-queue entry structure:
  */
+/*等待队列成员节点，由head指向*/
 struct wait_queue_entry {
 	unsigned int		flags;
 	void			*private;
@@ -31,6 +33,7 @@ struct wait_queue_entry {
 	struct list_head	entry;
 };
 
+/*等待队列头节点*/
 struct wait_queue_head {
 	spinlock_t		lock;
 	struct list_head	head;
@@ -164,6 +167,7 @@ extern void add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_en
 extern void add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry);
 extern void remove_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry);
 
+/*添加元素进等待队列，加入队首*/
 static inline void __add_wait_queue(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	list_add(&wq_entry->entry, &wq_head->head);
@@ -179,6 +183,7 @@ __add_wait_queue_exclusive(struct wait_queue_head *wq_head, struct wait_queue_en
 	__add_wait_queue(wq_head, wq_entry);
 }
 
+/*添加元素进等待队列，加入队尾*/
 static inline void __add_wait_queue_entry_tail(struct wait_queue_head *wq_head, struct wait_queue_entry *wq_entry)
 {
 	list_add_tail(&wq_entry->entry, &wq_head->head);
@@ -206,6 +211,7 @@ void __wake_up_locked_sync_key(struct wait_queue_head *wq_head, unsigned int mod
 void __wake_up_locked(struct wait_queue_head *wq_head, unsigned int mode, int nr);
 void __wake_up_sync(struct wait_queue_head *wq_head, unsigned int mode);
 
+/*唤醒一个等待队列成员*/
 #define wake_up(x)			__wake_up(x, TASK_NORMAL, 1, NULL)
 #define wake_up_nr(x, nr)		__wake_up(x, TASK_NORMAL, nr, NULL)
 #define wake_up_all(x)			__wake_up(x, TASK_NORMAL, 0, NULL)
@@ -265,8 +271,10 @@ extern void init_wait_entry(struct wait_queue_entry *wq_entry, int flags);
 	struct wait_queue_entry __wq_entry;					\
 	long __ret = ret;	/* explicit shadow */				\
 										\
+	/*初始化一个本地的等待队列项*/\
 	init_wait_entry(&__wq_entry, exclusive ? WQ_FLAG_EXCLUSIVE : 0);	\
 	for (;;) {								\
+		/*将当前进程加入等待队列，并置进程状态为state*/\
 		long __int = prepare_to_wait_event(&wq_head, &__wq_entry, state);\
 										\
 		if (condition)							\
@@ -303,6 +311,7 @@ __out:	__ret;									\
 do {										\
 	might_sleep();								\
 	if (condition)								\
+		/*等待条件满足，退出*/\
 		break;								\
 	__wait_event(wq_head, condition);					\
 } while (0)
@@ -1131,6 +1140,7 @@ long wait_woken(struct wait_queue_entry *wq_entry, unsigned mode, long timeout);
 int woken_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key);
 int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int sync, void *key);
 
+/*定义当前进程为等待队列成员*/
 #define DEFINE_WAIT_FUNC(name, function)					\
 	struct wait_queue_entry name = {					\
 		.private	= current,					\
