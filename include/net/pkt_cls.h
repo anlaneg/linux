@@ -576,6 +576,7 @@ static inline bool tc_can_offload(const struct net_device *dev)
 	return dev->features & NETIF_F_HW_TC;
 }
 
+/*设备是否开启了tc offload*/
 static inline bool tc_can_offload_extack(const struct net_device *dev,
 					 struct netlink_ext_ack *extack)
 {
@@ -591,8 +592,10 @@ static inline bool
 tc_cls_can_offload_and_chain0(const struct net_device *dev,
 			      struct flow_cls_common_offload *common)
 {
+    /*没有开启tc offload,直接失败*/
 	if (!tc_can_offload_extack(dev, common->extack))
 		return false;
+	/*要求非chain0的offload,直接失败*/
 	if (common->chain_index) {
 		NL_SET_ERR_MSG(common->extack,
 			       "Driver supports only offload of chain 0");

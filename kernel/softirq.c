@@ -281,7 +281,7 @@ restart:
 	h = softirq_vec;
 
 	//ffs(0x1)==1,ffs(0x10)==5,ffs(0x100)==9
-	//返回最高位所在的比特数
+	//返回最低位‘1’所在的比特数
 	while ((softirq_bit = ffs(pending))) {
 		unsigned int vec_nr;
 		int prev_count;
@@ -291,6 +291,7 @@ restart:
 		vec_nr = h - softirq_vec;//获得对应的中断号
 		prev_count = preempt_count();
 
+		//vec_nr号中断发生次数加1
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
@@ -313,7 +314,7 @@ restart:
 	//检查上面在触发过程中是否有新的软中断出现
 	pending = local_softirq_pending();
 	if (pending) {
-		//如果处理时间并不长，则再处理一次
+		//如果处理时间并不长，且不需要重新调度，则再处理一次
 		if (time_before(jiffies, end) && !need_resched() &&
 		    --max_restart)
 			goto restart;
@@ -598,6 +599,7 @@ void __init softirq_init(void)
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
 }
 
+/*检查ksoftirqd是否有工作需要处理*/
 static int ksoftirqd_should_run(unsigned int cpu)
 {
 	return local_softirq_pending();
@@ -686,12 +688,13 @@ static int takeover_tasklets(unsigned int cpu)
 //各cpu上的软中断处理线程
 static struct smp_hotplug_thread softirq_threads = {
 	.store			= &ksoftirqd,
-	//检查是否有软中断发生
+	//检查ksoftirqd是否可执行（是否有软中断发生）
 	.thread_should_run	= ksoftirqd_should_run,
 	.thread_fn		= run_ksoftirqd,
 	.thread_comm		= "ksoftirqd/%u",
 };
 
+//为每个cpu创建一个softirq线程
 static __init int spawn_ksoftirqd(void)
 {
 	cpuhp_setup_state_nocalls(CPUHP_SOFTIRQ_DEAD, "softirq:dead", NULL,

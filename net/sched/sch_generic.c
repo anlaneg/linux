@@ -96,6 +96,7 @@ static inline struct sk_buff *qdisc_dequeue_skb_bad_txq(struct Qdisc *q)
 	return skb;
 }
 
+//将skb记录在bad_txq上
 static inline void qdisc_enqueue_skb_bad_txq(struct Qdisc *q,
 					     struct sk_buff *skb)
 {
@@ -106,6 +107,7 @@ static inline void qdisc_enqueue_skb_bad_txq(struct Qdisc *q,
 		spin_lock(lock);
 	}
 
+	/*将此skb加入到bad_txq中*/
 	__skb_queue_tail(&q->skb_bad_txq, skb);
 
 	if (qdisc_is_percpu_stats(q)) {
@@ -152,10 +154,11 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 	__netif_schedule(q);
 }
 
+//按bytelimit要求，出一组skb,采用skb->next串起来
 static void try_bulk_dequeue_skb(struct Qdisc *q,
 				 struct sk_buff *skb,
 				 const struct netdev_queue *txq,
-				 int *packets)
+				 int *packets/*出参，出队的报文数*/)
 {
 	int bytelimit = qdisc_avail_bulklimit(txq) - skb->len;
 
@@ -186,17 +189,22 @@ static void try_bulk_dequeue_skb_slow(struct Qdisc *q,
 	int cnt = 0;
 
 	do {
+	    /*出一个报文*/
 		nskb = q->dequeue(q);
 		if (!nskb)
 			break;
+		/*本次出的报文与之前的skb不是一个tx队列*/
 		if (unlikely(skb_get_queue_mapping(nskb) != mapping)) {
 			qdisc_enqueue_skb_bad_txq(q, nskb);
 			break;
 		}
+
+		//将与首包相同队列的skb串起来
 		skb->next = nskb;
 		skb = nskb;
-	} while (++cnt < 8);
+	} while (++cnt < 8);//最多出8个包
 	(*packets) += cnt;
+	/*将最后一个skb的next置为空*/
 	skb_mark_not_on_list(skb);
 }
 
@@ -378,7 +386,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 		root_lock = qdisc_lock(q);
 
 	dev = qdisc_dev(q);
-	//为skb选择tx队列
+	//为skb取其对应的tx队列
 	txq = skb_get_tx_queue(dev, skb);
 
 	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
@@ -556,7 +564,7 @@ struct Qdisc_ops noop_qdisc_ops __read_mostly = {
 	.priv_size	=	0,
 	.enqueue	=	noop_enqueue,//所有入队报文将被丢弃
 	.dequeue	=	noop_dequeue,//出队报文为空
-	.peek		=	noop_dequeue,//前一个报文有为NULL
+	.peek		=	noop_dequeue,//前一个报文为NULL
 	.owner		=	THIS_MODULE,
 };
 
@@ -589,6 +597,7 @@ struct Qdisc noop_qdisc = {
 };
 EXPORT_SYMBOL(noop_qdisc);
 
+/*初始化noqueue队列*/
 static int noqueue_init(struct Qdisc *qdisc, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {
@@ -634,13 +643,15 @@ static inline struct skb_array *band2list(struct pfifo_fast_priv *priv,
 	return &priv->q[band];
 }
 
+//报文按priority分类后，进band对应的ring
 static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 			      struct sk_buff **to_free)
 {
 	//按tos分类到band
 	int band = prio2band[skb->priority & TC_PRIO_MAX];
 	struct pfifo_fast_priv *priv = qdisc_priv(qdisc);
-	struct skb_array *q = band2list(priv, band);//取指定band对应的q
+	//取指定band对应的q
+	struct skb_array *q = band2list(priv, band);
 	unsigned int pkt_len = qdisc_pkt_len(skb);
 	int err;
 
@@ -648,7 +659,9 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	err = skb_array_produce(q, skb);
 
 	if (unlikely(err)) {
+	    /*存入q失败*/
 		if (qdisc_is_percpu_stats(qdisc))
+		    /*按percpu统计状态*/
 			return qdisc_drop_cpu(skb, qdisc, to_free/*出参，指明需要丢弃的报文*/);
 		else
 			return qdisc_drop(skb, qdisc, to_free);
@@ -665,7 +678,7 @@ static struct sk_buff *pfifo_fast_dequeue(struct Qdisc *qdisc)
 	struct sk_buff *skb = NULL;
 	int band;
 
-	//尝试所有band队列，自基中出一个报文
+	//尝试所有band队列（0号ring优先），出一个报文
 	for (band = 0; band < PFIFO_FAST_BANDS && !skb; band++) {
 		struct skb_array *q = band2list(priv, band);
 
@@ -679,13 +692,14 @@ static struct sk_buff *pfifo_fast_dequeue(struct Qdisc *qdisc)
 	if (likely(skb)) {
 		qdisc_update_stats_at_dequeue(qdisc, skb);
 	} else {
+	    /*指明队列为空*/
 		WRITE_ONCE(qdisc->empty, true);
 	}
 
 	return skb;
 }
 
-//尝试多个队列，peek一个报文
+//尝试所有band队列（0号ring优先），peek一个报文
 static struct sk_buff *pfifo_fast_peek(struct Qdisc *qdisc)
 {
 	struct pfifo_fast_priv *priv = qdisc_priv(qdisc);
@@ -701,6 +715,7 @@ static struct sk_buff *pfifo_fast_peek(struct Qdisc *qdisc)
 	return skb;
 }
 
+//清空所有band队列
 static void pfifo_fast_reset(struct Qdisc *qdisc)
 {
 	int i, band;
@@ -716,10 +731,12 @@ static void pfifo_fast_reset(struct Qdisc *qdisc)
 		if (!q->ring.queue)
 			continue;
 
+		//清空队列
 		while ((skb = __skb_array_consume(q)) != NULL)
 			kfree_skb(skb);
 	}
 
+	/*清空统计计数*/
 	if (qdisc_is_percpu_stats(qdisc)) {
 		for_each_possible_cpu(i) {
 			struct gnet_stats_queue *q;
@@ -733,8 +750,10 @@ static void pfifo_fast_reset(struct Qdisc *qdisc)
 
 static int pfifo_fast_dump(struct Qdisc *qdisc, struct sk_buff *skb)
 {
+    //设置固定的fifo_fast的bands
 	struct tc_prio_qopt opt = { .bands = PFIFO_FAST_BANDS };
 
+	//设置固定的prio2band
 	memcpy(&opt.priomap, prio2band, TC_PRIO_MAX + 1);
 	if (nla_put(skb, TCA_OPTIONS, sizeof(opt), &opt))
 		goto nla_put_failure;

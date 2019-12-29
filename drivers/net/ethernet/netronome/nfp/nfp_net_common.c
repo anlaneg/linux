@@ -280,7 +280,9 @@ int __nfp_net_reconfig(struct nfp_net *nn, u32 update)
 
 	nfp_net_reconfig_sync_enter(nn);
 
+	/*知会fw更新$update对应的配置*/
 	nfp_net_reconfig_start(nn, update);
+	/*等待fw完成更新*/
 	ret = nfp_net_reconfig_wait(nn, jiffies + HZ * NFP_NET_POLL_TIMEOUT);
 
 	spin_lock_bh(&nn->reconfig_lock);

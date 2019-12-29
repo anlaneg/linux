@@ -579,7 +579,7 @@ struct tcmsg {
 	unsigned char	tcm__pad1;
 	unsigned short	tcm__pad2;
 	int		tcm_ifindex;//操作的设备编号
-	__u32		tcm_handle;//唯一确定一条filter
+	__u32		tcm_handle;//唯一确定一条filter或者qdisc
 	__u32		tcm_parent;
 /* tcm_block_index is used instead of tcm_parent
  * in case tcm_ifindex == TCM_IFINDEX_MAGIC_BLOCK

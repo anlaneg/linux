@@ -111,18 +111,25 @@ static int nfp_bpf_setup_tc_block_cb(enum tc_setup_type type,
 	struct nfp_bpf_vnic *bv;
 	int err;
 
+	/*仅支持 clsbpf*/
 	if (type != TC_SETUP_CLSBPF) {
 		NL_SET_ERR_MSG_MOD(cls_bpf->common.extack,
 				   "only offload of BPF classifiers supported");
 		return -EOPNOTSUPP;
 	}
+
+	/*仅支持chain0的bpf offload*/
 	if (!tc_cls_can_offload_and_chain0(nn->dp.netdev, &cls_bpf->common))
 		return -EOPNOTSUPP;
+
+	/*设备必须支持ebpf offload功能*/
 	if (!nfp_net_ebpf_capable(nn)) {
 		NL_SET_ERR_MSG_MOD(cls_bpf->common.extack,
 				   "NFP firmware does not support eBPF offload");
 		return -EOPNOTSUPP;
 	}
+
+	/*协议必须为ETH_P_ALL*/
 	if (cls_bpf->common.protocol != htons(ETH_P_ALL)) {
 		NL_SET_ERR_MSG_MOD(cls_bpf->common.extack,
 				   "only ETH_P_ALL supported as filter protocol");
@@ -131,6 +138,7 @@ static int nfp_bpf_setup_tc_block_cb(enum tc_setup_type type,
 
 	/* Only support TC direct action */
 	if (!cls_bpf->exts_integrated ||
+	        /*不能有action*/
 	    tcf_exts_has_actions(cls_bpf->exts)) {
 		NL_SET_ERR_MSG_MOD(cls_bpf->common.extack,
 				   "only direct action with no legacy actions supported");

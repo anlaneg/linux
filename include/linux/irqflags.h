@@ -137,7 +137,9 @@ do {						\
 
 #else /* !CONFIG_TRACE_IRQFLAGS */
 
+ //开启本cpu所有中断
 #define local_irq_enable()	do { raw_local_irq_enable(); } while (0)
+ //关闭本cpu所有中断
 #define local_irq_disable()	do { raw_local_irq_disable(); } while (0)
 //保存旧用中断，禁用当前cpu上所有中断
 #define local_irq_save(flags)					\

@@ -106,6 +106,7 @@ static inline bool ptr_ring_full_bh(struct ptr_ring *r)
  */
 static inline int __ptr_ring_produce(struct ptr_ring *r, void *ptr)
 {
+    //无可用空间
 	if (unlikely(!r->size) || r->queue[r->producer])
 		return -ENOSPC;
 

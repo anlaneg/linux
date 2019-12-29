@@ -37,6 +37,7 @@ struct kernel_cpustat {
 
 struct kernel_stat {
 	unsigned long irqs_sum;
+	//各软中断发生的次数
 	unsigned int softirqs[NR_SOFTIRQS];
 };
 

@@ -114,7 +114,7 @@ static int smpboot_thread_fn(void *data)
 		set_current_state(TASK_INTERRUPTIBLE);
 		preempt_disable();
 		if (kthread_should_stop()) {
-			//如果需要退出，则执行cleanup回调后退出
+			//如果kthread需要退出，则先执行cleanup回调，然后再返回
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
 			/* cleanup must mirror setup */
@@ -125,6 +125,7 @@ static int smpboot_thread_fn(void *data)
 		}
 
 		if (kthread_should_park()) {
+		    /*如果thread需要park,则执行park回调，并切换到park状态*/
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
 			if (ht->park && td->status == HP_THREAD_ACTIVE) {
@@ -142,6 +143,7 @@ static int smpboot_thread_fn(void *data)
 		/* Check for state change setup */
 		switch (td->status) {
 		case HP_THREAD_NONE:
+		    /*none状态，变更为active状态，并调用ht->setup*/
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
 			if (ht->setup)
@@ -150,6 +152,7 @@ static int smpboot_thread_fn(void *data)
 			continue;
 
 		case HP_THREAD_PARKED:
+		    /*由park状态切换为active状态，并调用ht->unpark*/
 			__set_current_state(TASK_RUNNING);
 			preempt_enable();
 			if (ht->unpark)
@@ -159,6 +162,7 @@ static int smpboot_thread_fn(void *data)
 		}
 
 		if (!ht->thread_should_run(td->cpu)) {
+		    //此线程不得运行，调度切出
 			preempt_enable_no_resched();
 			schedule();
 		} else {
@@ -297,6 +301,7 @@ int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 
 	get_online_cpus();
 	mutex_lock(&smpboot_threads_lock);
+	//遍历所有在线cpu
 	for_each_online_cpu(cpu) {
 		//为指定cpu创建thread
 		ret = __smpboot_create_thread(plug_thread, cpu);

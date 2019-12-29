@@ -501,6 +501,7 @@ static inline int nlmsg_padlen(int payload)
  */
 static inline void *nlmsg_data(const struct nlmsghdr *nlh)
 {
+    /*跳至nlmsg对应的数据负载位置*/
 	return (unsigned char *) nlh + NLMSG_HDRLEN;
 }
 

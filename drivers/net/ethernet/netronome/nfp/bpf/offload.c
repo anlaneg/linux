@@ -516,12 +516,15 @@ nfp_net_bpf_load(struct nfp_net *nn, struct bpf_prog *prog,
 		return -ENOMEM;
 	}
 
+	/*填充fw epbf程序内容到dma内存*/
 	nn_writew(nn, NFP_NET_CFG_BPF_SIZE, nfp_prog->prog_len);
 	nn_writeq(nn, NFP_NET_CFG_BPF_ADDR, dma_addr);
 
 	/* Load up the JITed code */
+	/*使fw加载bpf程序*/
 	err = nfp_net_reconfig(nn, NFP_NET_CFG_UPDATE_BPF);
 	if (err)
+	    /*fw更新失败*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "FW command error while loading BPF");
 
@@ -557,7 +560,7 @@ static int nfp_net_bpf_stop(struct nfp_net *nn)
 	return nfp_net_reconfig(nn, NFP_NET_CFG_UPDATE_GEN);
 }
 
-int nfp_net_bpf_offload(struct nfp_net *nn, struct bpf_prog *prog,
+int nfp_net_bpf_offload(struct nfp_net *nn, struct bpf_prog *prog/*要offload的ebpf程序*/,
 			bool old_prog, struct netlink_ext_ack *extack)
 {
 	int err;

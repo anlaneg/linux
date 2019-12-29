@@ -263,6 +263,7 @@ const struct net_device_ops nfp_repr_netdev_ops = {
 	.ndo_has_offload_stats	= nfp_repr_has_offload_stats,
 	.ndo_get_offload_stats	= nfp_repr_get_offload_stats,
 	.ndo_get_phys_port_name	= nfp_port_get_phys_port_name,
+	/*rep口的tc接口setup*/
 	.ndo_setup_tc		= nfp_port_setup_tc,
 	.ndo_set_vf_mac		= nfp_app_set_vf_mac,
 	.ndo_set_vf_vlan	= nfp_app_set_vf_vlan,
@@ -315,6 +316,7 @@ int nfp_repr_init(struct nfp_app *app, struct net_device *netdev,
 	repr->dst->u.port_info.port_id = cmsg_port_id;
 	repr->dst->u.port_info.lower_dev = pf_netdev;
 
+	/*设置rep口的ops*/
 	netdev->netdev_ops = &nfp_repr_netdev_ops;
 	netdev->ethtool_ops = &nfp_port_ethtool_ops;
 

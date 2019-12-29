@@ -126,6 +126,7 @@ static inline void qdisc_run(struct Qdisc *q)
 		    likely(!test_bit(__QDISC_STATE_DEACTIVATED, &q->state)))
 		    //如果此cpu获得运行权，则进入此处
 			__qdisc_run(q);
+		//此cpu释放运行权
 		qdisc_run_end(q);
 	}
 }

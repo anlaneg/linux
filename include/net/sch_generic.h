@@ -62,6 +62,7 @@ struct Qdisc {
 	//出队函数（来源于ops成员的enqueue)
 	struct sk_buff *	(*dequeue)(struct Qdisc *sch);
 	unsigned int		flags;
+	//内建队列
 #define TCQ_F_BUILTIN		1
 //ingress队列标记
 #define TCQ_F_INGRESS		2
@@ -75,10 +76,12 @@ struct Qdisc {
 				      * multiqueue device.
 				      */
 #define TCQ_F_WARN_NONWC	(1 << 16)
+	//采用percpu的统计信息
 #define TCQ_F_CPUSTATS		0x20 /* run using percpu statistics */
 #define TCQ_F_NOPARENT		0x40 /* root of its hierarchy :
 				      * qdisc_tree_decrease_qlen() should stop.
 				      */
+	//dump不可见队列
 #define TCQ_F_INVISIBLE		0x80 /* invisible by default in dump */
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
@@ -152,6 +155,7 @@ static inline bool qdisc_is_running(struct Qdisc *qdisc)
 	return (raw_read_seqcount(&qdisc->running) & 1) ? true : false;
 }
 
+/*qdisc是否为percpu的状态统计*/
 static inline bool qdisc_is_percpu_stats(const struct Qdisc *q)
 {
 	return q->flags & TCQ_F_CPUSTATS;
@@ -254,6 +258,7 @@ enum qdisc_class_ops_flags {
 
 //排队规则操作集
 struct Qdisc_ops {
+    //用于将不同类型的qdisc ops串起来
 	struct Qdisc_ops	*next;
 	//分类操作集
 	const struct Qdisc_class_ops	*cl_ops;
@@ -278,13 +283,15 @@ struct Qdisc_ops {
 	void			(*reset)(struct Qdisc *);
 	//队列销毁
 	void			(*destroy)(struct Qdisc *);
+	//队列配置变更
 	int			(*change)(struct Qdisc *sch,
 					  struct nlattr *arg,
 					  struct netlink_ext_ack *extack);
 	void			(*attach)(struct Qdisc *sch);
-	//更新队列长度
+	//更新tx队列长度
 	int			(*change_tx_queue_len)(struct Qdisc *, unsigned int);
 
+	//负责dump内容到skb
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 	int			(*dump_stats)(struct Qdisc *, struct gnet_dump *);
 
@@ -294,7 +301,9 @@ struct Qdisc_ops {
 	//设置egress block,使其与指定index关联
 	void			(*egress_block_set)(struct Qdisc *sch,
 						    u32 block_index);
+	/*取sch对应的ingress block index*/
 	u32			(*ingress_block_get)(struct Qdisc *sch);
+	/*取sch对应的egress block index*/
 	u32			(*egress_block_get)(struct Qdisc *sch);
 
 	struct module		*owner;

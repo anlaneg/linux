@@ -252,7 +252,7 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       struct list_head *driver_block_list,
 			       flow_setup_cb_t *cb,
 			       void *cb_ident, void *cb_priv,
-			       bool ingress_only)
+			       bool ingress_only/*仅ingress方向*/)
 {
 	struct flow_block_cb *block_cb;
 
@@ -271,6 +271,7 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 		if (IS_ERR(block_cb))
 			return PTR_ERR(block_cb);
 
+		/*添加block的 flow cb*/
 		flow_block_cb_add(block_cb, f);
 		list_add_tail(&block_cb->driver_list, driver_block_list);
 		return 0;
@@ -279,6 +280,7 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 		if (!block_cb)
 			return -ENOENT;
 
+		/*解除block的flow cb*/
 		flow_block_cb_remove(block_cb, f);
 		list_del(&block_cb->driver_list);
 		return 0;

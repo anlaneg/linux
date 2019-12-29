@@ -97,6 +97,7 @@
  */
 #define in_irq()		(hardirq_count())
 #define in_softirq()		(softirq_count())
+//我们处于非屏避中断，中断请求，软中断上下文
 #define in_interrupt()		(irq_count())
 #define in_serving_softirq()	(softirq_count() & SOFTIRQ_OFFSET)
 #define in_nmi()		(preempt_count() & NMI_MASK)

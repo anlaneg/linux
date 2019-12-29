@@ -595,6 +595,7 @@ void __qdisc_calculate_pkt_len(struct sk_buff *skb,
 out:
 	if (unlikely(pkt_len < 1))
 		pkt_len = 1;
+	/*记录报文长度*/
 	qdisc_skb_cb(skb)->pkt_len = pkt_len;
 }
 EXPORT_SYMBOL(__qdisc_calculate_pkt_len);
@@ -884,7 +885,7 @@ static void qdisc_offload_graft_root(struct net_device *dev,
 				   TC_SETUP_ROOT_QDISC, &graft_offload, extack);
 }
 
-static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid,
+static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid/*qdisc的class id*/,
 			 u32 portid, u32 seq, u16 flags, int event)
 {
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats = NULL;
@@ -908,23 +909,33 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid,
 	tcm->tcm_ifindex = qdisc_dev(q)->ifindex;
 	tcm->tcm_parent = clid;
 	tcm->tcm_handle = q->handle;
+	//填充引用计数count
 	tcm->tcm_info = refcount_read(&q->refcnt);
+	/*填充qdisc类型*/
 	if (nla_put_string(skb, TCA_KIND, q->ops->id))
 		goto nla_put_failure;
+
+	/*填充ingress block index*/
 	if (q->ops->ingress_block_get) {
 		block_index = q->ops->ingress_block_get(q);
 		if (block_index &&
 		    nla_put_u32(skb, TCA_INGRESS_BLOCK, block_index))
 			goto nla_put_failure;
 	}
+
+	/*填充egress block index*/
 	if (q->ops->egress_block_get) {
 		block_index = q->ops->egress_block_get(q);
 		if (block_index &&
 		    nla_put_u32(skb, TCA_EGRESS_BLOCK, block_index))
 			goto nla_put_failure;
 	}
+
+	/*qdisc定制化dump*/
 	if (q->ops->dump && q->ops->dump(q, skb) < 0)
 		goto nla_put_failure;
+
+	/*qdisc是否offloaded*/
 	if (nla_put_u8(skb, TCA_HW_OFFLOAD, !!(q->flags & TCQ_F_OFFLOADED)))
 		goto nla_put_failure;
 	qlen = qdisc_qlen_sum(q);
@@ -963,6 +974,7 @@ nla_put_failure:
 	return -1;
 }
 
+/*忽略掉builtin队列，按需忽略掉dump_invisilbe队列*/
 static bool tc_qdisc_dump_ignore(struct Qdisc *q, bool dump_invisible)
 {
 	if (q->flags & TCQ_F_BUILTIN)
@@ -1738,6 +1750,7 @@ static int tc_dump_qdisc_root(struct Qdisc *root, struct sk_buff *skb,
 	int b;
 
 	if (!root)
+	    /*无qdisc退出*/
 		return 0;
 
 	q = root;
@@ -1782,6 +1795,7 @@ done:
 	goto out;
 }
 
+//响应用户态qdisc的dump请求
 static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct net *net = sock_net(skb->sk);
@@ -1792,7 +1806,7 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 	struct nlattr *tca[TCA_MAX + 1];
 	int err;
 
-	s_idx = cb->args[0];
+	s_idx = cb->args[0];/*自第X个设备开始*/
 	s_q_idx = q_idx = cb->args[1];
 
 	idx = 0;
@@ -1803,6 +1817,7 @@ static int tc_dump_qdisc(struct sk_buff *skb, struct netlink_callback *cb)
 	if (err < 0)
 		return err;
 
+	//遍历当前net namespace下所有dev
 	for_each_netdev(net, dev) {
 		struct netdev_queue *dev_queue;
 

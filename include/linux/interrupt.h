@@ -504,7 +504,7 @@ extern bool force_irqthreads;
 #endif
 
 #define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
-//设置软中断
+//设置x号软中断待处理
 #define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
 //采用or的方式设置软中断标记位
 #define or_softirq_pending(x)	(__this_cpu_or(local_softirq_pending_ref, (x)))

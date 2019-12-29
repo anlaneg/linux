@@ -32,6 +32,7 @@ struct task_struct *kthreadd_task;
 struct kthread_create_info
 {
 	/* Information passed to kthread() from kthreadd. */
+    /*kernel线程的运行函数*/
 	int (*threadfn)(void *data);
 	void *data;
 	int node;
@@ -100,12 +101,14 @@ void free_kthread_struct(struct task_struct *k)
  */
 bool kthread_should_stop(void)
 {
+    /*检查当前kthread是否需要停止*/
 	return test_bit(KTHREAD_SHOULD_STOP, &to_kthread(current)->flags);
 }
 EXPORT_SYMBOL(kthread_should_stop);
 
 bool __kthread_should_park(struct task_struct *k)
 {
+    /*检查当前thread是否需要进入park状态*/
 	return test_bit(KTHREAD_SHOULD_PARK, &to_kthread(k)->flags);
 }
 EXPORT_SYMBOL_GPL(__kthread_should_park);

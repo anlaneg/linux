@@ -47,7 +47,7 @@ struct sockaddr_nl {
 //netlink消息头
 struct nlmsghdr {
 	//netlink消息通用头部
-	__u32		nlmsg_len;	/* Length of message including header */
+	__u32		nlmsg_len;	/* Length of message including header */ //消息长度
 	__u16		nlmsg_type;	/* Message content */ //消息的type
 	__u16		nlmsg_flags;	/* Additional flags */
 	__u32		nlmsg_seq;	/* Sequence number */
