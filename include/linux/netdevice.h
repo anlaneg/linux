@@ -613,6 +613,7 @@ struct netdev_queue {
 #if defined(CONFIG_XPS) && defined(CONFIG_NUMA)
 	int			numa_node;
 #endif
+	//队列的最大发送速率
 	unsigned long		tx_maxrate;
 	/*
 	 * Number of TX timeouts for this queue

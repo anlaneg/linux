@@ -59,11 +59,13 @@ static inline struct sk_buff *__skb_dequeue_bad_txq(struct Qdisc *q)
 		spin_lock(lock);
 	}
 
+	//先自skb_bad_txq上取一个包，如果有包，则取此包对应的txq队列
 	skb = skb_peek(&q->skb_bad_txq);
 	if (skb) {
 		/* check the reason of requeuing without tx lock first */
 		txq = skb_get_tx_queue(txq->dev, skb);
 		if (!netif_xmit_frozen_or_stopped(txq)) {
+			//如果此队列没有frozen或者stopped,则将skb出队
 			skb = __skb_dequeue(&q->skb_bad_txq);
 			if (qdisc_is_percpu_stats(q)) {
 				qdisc_qstats_cpu_backlog_dec(q, skb);
@@ -83,6 +85,7 @@ static inline struct sk_buff *__skb_dequeue_bad_txq(struct Qdisc *q)
 	return skb;
 }
 
+//如果q->skb_bad_txq上有报文，则自skb_bad_txq上出报文
 static inline struct sk_buff *qdisc_dequeue_skb_bad_txq(struct Qdisc *q)
 {
 	struct sk_buff *skb = skb_peek(&q->skb_bad_txq);
@@ -256,6 +259,7 @@ validate:
 	    netif_xmit_frozen_or_stopped(txq))
 		return skb;
 
+	/*如果bad_txq上存在报文，则优先取bad_txq上的报文*/
 	skb = qdisc_dequeue_skb_bad_txq(q);
 	if (unlikely(skb)) {
 		if (skb == SKB_XOFF_MAGIC)

@@ -1082,6 +1082,7 @@ static ssize_t traffic_class_show(struct netdev_queue *queue,
 }
 
 #ifdef CONFIG_XPS
+//显示tx队列的最大速率
 static ssize_t tx_maxrate_show(struct netdev_queue *queue,
 			       char *buf)
 {
@@ -1098,6 +1099,7 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
+	//转换为无符号u32
 	err = kstrtou32(buf, 10, &rate);
 	if (err < 0)
 		return err;
@@ -1106,6 +1108,7 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 		return restart_syscall();
 
 	err = -EOPNOTSUPP;
+	/*调用驱动，设置tx的最大速率*/
 	if (dev->netdev_ops->ndo_set_tx_maxrate)
 		err = dev->netdev_ops->ndo_set_tx_maxrate(dev, index, rate);
 
