@@ -87,6 +87,7 @@ static void notify_rule_change(int event, struct fib_rule *rule,
 			       struct fib_rules_ops *ops, struct nlmsghdr *nlh,
 			       u32 pid);
 
+//查找family对应的ops
 static struct fib_rules_ops *lookup_rules_ops(struct net *net, int family)
 {
 	struct fib_rules_ops *ops;
@@ -128,16 +129,20 @@ static int __fib_rules_register(struct fib_rules_ops *ops)
 	if (ops->rule_size < sizeof(struct fib_rule))
 		return -EINVAL;
 
+	//ops必须实现以下回调
 	if (ops->match == NULL || ops->configure == NULL ||
 	    ops->compare == NULL || ops->fill == NULL ||
 	    ops->action == NULL)
 		return -EINVAL;
 
 	spin_lock(&net->rules_mod_lock);
+
+	//检查family对应的ops是否已注册
 	list_for_each_entry(o, &net->rules_ops, list)
 		if (ops->family == o->family)
 			goto errout;
 
+	//将ops注册到rules_ops中
 	list_add_tail_rcu(&ops->list, &net->rules_ops);
 	err = 0;
 errout:
@@ -242,7 +247,7 @@ static int nla_put_port_range(struct sk_buff *skb, int attrtype,
 	return nla_put(skb, attrtype, sizeof(*range), range);
 }
 
-//检查是否可匹配规则
+//检查是否可匹配fib规则
 static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 			  struct flowi *fl, int flags,
 			  struct fib_lookup_arg *arg)
@@ -268,6 +273,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 	    uid_gt(fl->flowi_uid, rule->uid_range.end))
 		goto out;
 
+	//尝试其它匹配项
 	ret = ops->match(rule, fl, flags);
 out:
 	return (rule->flags & FIB_RULE_INVERT) ? !ret : ret;
@@ -293,15 +299,17 @@ jumped:
 
 			target = rcu_dereference(rule->ctarget);
 			if (target == NULL) {
+				//target为空，继续
 				continue;
 			} else {
-				//跳到指定rule继续匹配
+				//执行goto指令，跳到指定rule继续匹配
 				rule = target;
 				goto jumped;
 			}
 		} else if (rule->action == FR_ACT_NOP)
 			continue;
 		else
+			//其它action执行
 			err = ops->action(rule, fl, flags, arg);
 
 		if (!err && ops->suppress && ops->suppress(rule, arg))

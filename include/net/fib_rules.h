@@ -18,13 +18,13 @@ struct fib_kuid_range {
 
 struct fib_rule {
 	struct list_head	list;
-	int			iifindex;//inport对应的ifindex
+	int			iifindex;//inport对应的ifindex(为0时不匹配）
 	int			oifindex;//outport对应的ifindex
 	u32			mark;//mark
 	u32			mark_mask;//mark的掩码
 	u32			flags;
 	u32			table;//规则从属于那个路由表
-	u8			action;//规则的action
+	u8			action;//规则的action（例如FR_ACT_GOTO）
 	u8			l3mdev;
 	u8                      proto;
 	u8			ip_proto;
@@ -65,6 +65,7 @@ struct fib_rules_ops {
 	int			nr_goto_rules;
 	unsigned int		fib_rules_seq;
 
+	//执行规则action
 	int			(*action)(struct fib_rule *,
 					  struct flowi *, int,
 					  struct fib_lookup_arg *);

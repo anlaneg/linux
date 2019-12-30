@@ -351,8 +351,10 @@ static void arp_solicit(struct neighbour *neigh, struct sk_buff *skb)
 {
 	__be32 saddr = 0;
 	u8 dst_ha[MAX_ADDR_LEN], *dst_hw = NULL;
+	//取邻居表项关联的设备
 	struct net_device *dev = neigh->dev;
 	__be32 target = *(__be32 *)neigh->primary_key;
+	//取邻居剩余探测次数
 	int probes = atomic_read(&neigh->probes);
 	struct in_device *in_dev;
 	struct dst_entry *dst = NULL;

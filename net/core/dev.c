@@ -4023,6 +4023,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	int rc = -ENOMEM;
 	bool again = false;
 
+	//设置当前data指针指向的位置为mac_header
 	skb_reset_mac_header(skb);
 
 	if (unlikely(skb_shinfo(skb)->tx_flags & SKBTX_SCHED_TSTAMP))
@@ -4037,11 +4038,11 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	qdisc_pkt_len_init(skb);
 #ifdef CONFIG_NET_CLS_ACT
-	//报文正在发送，处于egress方向
+	//报文正在发送，当前处于tc的egress方向
 	skb->tc_at_ingress = 0;
 # ifdef CONFIG_NET_EGRESS
 	if (static_branch_unlikely(&egress_needed_key)) {
-		//tc处理gress方向filter入口
+		//tc处理egress方向filter入口
 		skb = sch_handle_egress(skb, &rc, dev);
 		if (!skb)
 			goto out;

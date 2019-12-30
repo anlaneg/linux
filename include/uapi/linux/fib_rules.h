@@ -76,6 +76,7 @@ enum {
 	FR_ACT_UNSPEC,
 	FR_ACT_TO_TBL,		/* Pass to fixed table */
 	FR_ACT_GOTO,		/* Jump to another rule */
+	//遇到nop时，跳过rule对应的action,不做操作
 	FR_ACT_NOP,		/* No operation */
 	FR_ACT_RES3,
 	FR_ACT_RES4,

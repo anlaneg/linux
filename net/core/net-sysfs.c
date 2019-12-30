@@ -1089,6 +1089,7 @@ static ssize_t tx_maxrate_show(struct netdev_queue *queue,
 	return sprintf(buf, "%lu\n", queue->tx_maxrate);
 }
 
+//设置tx队列的最大发送速率
 static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 				const char *buf, size_t len)
 {
@@ -1120,6 +1121,7 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 	return err;
 }
 
+//读写tx_maxrate
 static struct netdev_queue_attribute queue_tx_maxrate __ro_after_init
 	= __ATTR_RW(tx_maxrate);
 #endif
@@ -1245,9 +1247,11 @@ static ssize_t xps_cpus_show(struct netdev_queue *queue,
 	cpumask_var_t mask;
 	unsigned long index;
 
+	//不支持单队列设备
 	if (!netif_is_multiqueue(dev))
 		return -ENOENT;
 
+	/*取队列索引*/
 	index = get_netdev_queue_index(queue);
 
 	if (dev->num_tc) {

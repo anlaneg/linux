@@ -76,6 +76,7 @@ unsigned int fib4_rules_seq_read(struct net *net)
 	return fib_rules_seq_read(net, AF_INET);
 }
 
+//策略路由查询
 int __fib_lookup(struct net *net, struct flowi4 *flp,
 		 struct fib_result *res, unsigned int flags)
 {
@@ -90,6 +91,7 @@ int __fib_lookup(struct net *net, struct flowi4 *flp,
 
 	err = fib_rules_lookup(net->ipv4.rules_ops, flowi4_to_flowi(flp), 0, &arg);
 #ifdef CONFIG_IP_ROUTE_CLASSID
+	/*通过路由确定命中哪条classid*/
 	if (arg.rule)
 		res->tclassid = ((struct fib4_rule *)arg.rule)->tclassid;
 	else
