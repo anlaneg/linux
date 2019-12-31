@@ -117,6 +117,7 @@ struct Qdisc {
 	struct gnet_stats_queue	qstats;
 	unsigned long		state;
 	struct Qdisc            *next_sched;
+	//已出队的报文，但其对应的txq与前面出队的报文不相等
 	struct sk_buff_head	skb_bad_txq;
 
 	spinlock_t		busylock ____cacheline_aligned_in_smp;

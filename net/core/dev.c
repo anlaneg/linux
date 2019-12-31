@@ -3971,7 +3971,7 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 #endif
 
 	if (dev->real_num_tx_queues != 1) {
-		//设置有多个发送队列，取设备驱动操作集
+		//有多个发送队列，取设备驱动操作集
 		const struct net_device_ops *ops = dev->netdev_ops;
 
 		//选择采用哪个发送队列
@@ -3979,6 +3979,7 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 			//通过驱动操作函数选择
 			queue_index = ops->ndo_select_queue(dev, skb, sb_dev);
 		else
+		    /*驱动未提供queue选择方式*/
 			queue_index = netdev_pick_tx(dev, skb, sb_dev);
 
 		queue_index = netdev_cap_txqueue(dev, queue_index);

@@ -644,6 +644,7 @@ INDIRECT_CALLABLE_DECLARE(int inet6_sendmsg(struct socket *, struct msghdr *,
 					    size_t));
 static inline int sock_sendmsg_nosec(struct socket *sock, struct msghdr *msg)
 {
+    //调用不同ops的sendmsg完成处理
 	int ret = INDIRECT_CALL_INET(sock->ops->sendmsg, inet6_sendmsg,
 				     inet_sendmsg, sock, msg,
 				     msg_data_left(msg));
@@ -661,9 +662,11 @@ static inline int sock_sendmsg_nosec(struct socket *sock, struct msghdr *msg)
  */
 int sock_sendmsg(struct socket *sock, struct msghdr *msg)
 {
+    /*安全钩子点*/
 	int err = security_socket_sendmsg(sock, msg,
 					  msg_data_left(msg));
 
+	/*执行消息发送*/
 	return err ?: sock_sendmsg_nosec(sock, msg);
 }
 EXPORT_SYMBOL(sock_sendmsg);
@@ -2004,8 +2007,8 @@ SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
  *	space and check the user space data area is readable before invoking
  *	the protocol.
  */
-int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
-		 struct sockaddr __user *addr,  int addr_len)
+int __sys_sendto(int fd, void __user *buff/*要发送的内容*/, size_t len/*数组长度*/, unsigned int flags,
+		 struct sockaddr __user *addr/*目标地址*/,  int addr_len/*地址长度*/)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
@@ -2026,6 +2029,7 @@ int __sys_sendto(int fd, void __user *buff, size_t len, unsigned int flags,
 	msg.msg_controllen = 0;
 	msg.msg_namelen = 0;
 	if (addr) {
+	    //填充目的地址address
 		err = move_addr_to_kernel(addr, addr_len, &address);
 		if (err < 0)
 			goto out_put;
@@ -2047,7 +2051,7 @@ SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
 		unsigned int, flags, struct sockaddr __user *, addr,
 		int, addr_len)
 {
-	return __sys_sendto(fd, buff, len, flags, addr, addr_len);
+	return __sys_sendto(fd, buff/*要发送的内容*/, len, flags, addr, addr_len);
 }
 
 /*

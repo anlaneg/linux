@@ -2530,6 +2530,7 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;//按入接口为lookback查询
 	fl4->flowi4_tos = tos & IPTOS_RT_MASK;
+	/*如果tos有onlink标记，则变更scope*/
 	fl4->flowi4_scope = ((tos & RTO_ONLINK) ?
 			 RT_SCOPE_LINK : RT_SCOPE_UNIVERSE);
 
@@ -2574,6 +2575,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		if (fl4->flowi4_oif == 0 &&
 		    (ipv4_is_multicast(fl4->daddr) ||
 		     ipv4_is_lbcast(fl4->daddr))) {
+		    /*目的地址是广播或组播，出接口未指定时进入*/
 			/* It is equivalent to inet_addr_type(saddr) == RTN_LOCAL */
 			dev_out = __ip_dev_find(net, fl4->saddr, false);
 			if (!dev_out)
@@ -2608,6 +2610,8 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 
 	//要匹配出接口
 	if (fl4->flowi4_oif) {
+
+	    //取出接口对应的设备
 		dev_out = dev_get_by_index_rcu(net, fl4->flowi4_oif);
 		rth = ERR_PTR(-ENODEV);
 		if (!dev_out)

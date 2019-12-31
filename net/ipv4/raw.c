@@ -505,6 +505,7 @@ static int raw_getfrag(void *from, char *to, int offset, int len, int odd,
 	return ip_generic_getfrag(rfv->msg, to, offset, len, odd, skb);
 }
 
+//raw socket向kernel发送消息入口
 static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -544,10 +545,15 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	 */
 
 	if (msg->msg_namelen) {
+	    /*取目的地址*/
 		DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
 		err = -EINVAL;
+
+		/*结构体长度有误*/
 		if (msg->msg_namelen < sizeof(*usin))
 			goto out;
+
+		/*此socket只考虑ipv4类型地址*/
 		if (usin->sin_family != AF_INET) {
 			pr_info_once("%s: %s forgot to set AF_INET. Fix it!\n",
 				     __func__, current->comm);
@@ -555,6 +561,8 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			if (usin->sin_family)
 				goto out;
 		}
+
+		/*取目的地址*/
 		daddr = usin->sin_addr.s_addr;
 		/* ANK: I did not forget to get protocol from port field.
 		 * I just do not know, who uses this weirdness.
@@ -579,6 +587,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 			free = 1;
 	}
 
+	/*取源地址*/
 	saddr = ipc.addr;
 	ipc.addr = daddr;
 
@@ -633,12 +642,12 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		}
 	}
 
-	flowi4_init_output(&fl4, ipc.oif, ipc.sockc.mark, tos,
+	flowi4_init_output(&fl4, ipc.oif/*出设备*/, ipc.sockc.mark, tos,
 			   RT_SCOPE_UNIVERSE,
 			   hdrincl ? IPPROTO_RAW : sk->sk_protocol,
 			   inet_sk_flowi_flags(sk) |
 			    (hdrincl ? FLOWI_FLAG_KNOWN_NH : 0),
-			   daddr, saddr, 0, 0, sk->sk_uid);
+			   daddr/*目的地址*/, saddr/*源地址*/, 0/*目的port*/, 0/*源port*/, sk->sk_uid);
 
 	if (!hdrincl) {
 		rfv.msg = msg;

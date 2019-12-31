@@ -77,6 +77,7 @@ struct flowi4 {
 #define flowi4_mark		__fl_common.flowic_mark
 	//报文tos
 #define flowi4_tos		__fl_common.flowic_tos
+	//地址scope
 #define flowi4_scope		__fl_common.flowic_scope
 	//4层的网络协议号
 #define flowi4_proto		__fl_common.flowic_proto
@@ -115,6 +116,7 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
 				      kuid_t uid)
 {
 	fl4->flowi4_oif = oif;
+	/*入接口指定为loopback口*/
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
 	fl4->flowi4_mark = mark;
 	fl4->flowi4_tos = tos;
@@ -124,7 +126,7 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
 	fl4->flowi4_secid = 0;
 	fl4->flowi4_tun_key.tun_id = 0;
 	fl4->flowi4_uid = uid;
-	fl4->daddr = daddr;
+	fl4->daddr = daddr;/*目的地址*/
 	fl4->saddr = saddr;
 	fl4->fl4_dport = dport;
 	fl4->fl4_sport = sport;

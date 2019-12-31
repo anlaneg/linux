@@ -1238,6 +1238,7 @@ static const struct attribute_group dql_group = {
 #endif /* CONFIG_BQL */
 
 #ifdef CONFIG_XPS
+// /sys/class/net/eth0/queues/tx-*/xps_cpus
 static ssize_t xps_cpus_show(struct netdev_queue *queue,
 			     char *buf)
 {
