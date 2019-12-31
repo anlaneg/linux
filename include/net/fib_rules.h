@@ -56,16 +56,20 @@ struct fib_lookup_arg {
 #define FIB_LOOKUP_IGNORE_LINKSTATE	2
 };
 
+//不同协议族通过此结构定义其适合的策略路由
 struct fib_rules_ops {
+	//指明ops属于哪个协议族
 	int			family;
 	struct list_head	list;
+	//规则大小（支持的规则结构体大小）
 	int			rule_size;
+	//此协议族地址大小
 	int			addr_size;
 	int			unresolved_rules;
 	int			nr_goto_rules;
 	unsigned int		fib_rules_seq;
 
-	//执行规则action
+	//用于执行规则action
 	int			(*action)(struct fib_rule *,
 					  struct flowi *, int,
 					  struct fib_lookup_arg *);

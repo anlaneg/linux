@@ -53,7 +53,7 @@ struct netns_ipv4 {
 	struct ip_ra_chain __rcu *ra_chain;
 	struct mutex		ra_mutex;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
-	//策略路由规则
+	//ipv4策略路由规则操作集
 	struct fib_rules_ops	*rules_ops;
 	//fib是否有custom配置的规则
 	bool			fib_has_custom_rules;

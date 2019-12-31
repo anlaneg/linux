@@ -87,7 +87,7 @@ static void notify_rule_change(int event, struct fib_rule *rule,
 			       struct fib_rules_ops *ops, struct nlmsghdr *nlh,
 			       u32 pid);
 
-//查找family对应的ops
+//查找路由策略family对应的ops
 static struct fib_rules_ops *lookup_rules_ops(struct net *net, int family)
 {
 	struct fib_rules_ops *ops;
@@ -118,6 +118,7 @@ static void flush_route_cache(struct fib_rules_ops *ops)
 		ops->flush_cache(ops);
 }
 
+//策略路由不同协议族ops注册
 static int __fib_rules_register(struct fib_rules_ops *ops)
 {
 	int err = -EEXIST;
@@ -157,6 +158,7 @@ fib_rules_register(const struct fib_rules_ops *tmpl, struct net *net)
 	struct fib_rules_ops *ops;
 	int err;
 
+	//复制一份ops内存
 	ops = kmemdup(tmpl, sizeof(*ops), GFP_KERNEL);
 	if (ops == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -164,6 +166,7 @@ fib_rules_register(const struct fib_rules_ops *tmpl, struct net *net)
 	INIT_LIST_HEAD(&ops->rules_list);
 	ops->fro_net = net;
 
+	//完成fib协议族ops注册
 	err = __fib_rules_register(ops);
 	if (err) {
 		kfree(ops);
@@ -502,6 +505,7 @@ static int fib_nl2rule_l3mdev(struct nlattr *nla, struct fib_rule *nlrule,
 }
 #endif
 
+//依据netlink消息填充fib规则
 static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		       struct netlink_ext_ack *extack,
 		       struct fib_rules_ops *ops,
@@ -744,6 +748,7 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 	return 0;
 }
 
+//策略添加入口
 int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		   struct netlink_ext_ack *extack)
 {
@@ -760,6 +765,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout;
 	}
 
+	/*这里依据匹配的不同协议族的rule,确定ops,例如AF_INET,AF_INET6等等*/
 	ops = lookup_rules_ops(net, frh->family);
 	if (!ops) {
 		err = -EAFNOSUPPORT;
@@ -767,7 +773,8 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout;
 	}
 
-	err = nlmsg_parse_deprecated(nlh, sizeof(*frh), tb, FRA_MAX,
+	//解析并校验消息
+	err = nlmsg_parse_deprecated(nlh, sizeof(*frh), tb/*出参，解析的内容*/, FRA_MAX,
 				     ops->policy, extack);
 	if (err < 0) {
 		NL_SET_ERR_MSG(extack, "Error parsing msg");

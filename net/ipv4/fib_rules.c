@@ -30,6 +30,7 @@
 #include <net/nexthop.h>
 #include <net/fib_rules.h>
 
+//ipv4策略路由规则
 struct fib4_rule {
 	struct fib_rule		common;
 	u8			dst_len;
@@ -105,6 +106,7 @@ int __fib_lookup(struct net *net, struct flowi4 *flp,
 }
 EXPORT_SYMBOL_GPL(__fib_lookup);
 
+//ipv4策略路由规则action执行
 static int fib4_rule_action(struct fib_rule *rule, struct flowi *flp,
 			    int flags, struct fib_lookup_arg *arg)
 {
@@ -372,6 +374,7 @@ static void fib4_rule_flush_cache(struct fib_rules_ops *ops)
 	rt_cache_flush(ops->fro_net);
 }
 
+//ipv4策略路由ops
 static const struct fib_rules_ops __net_initconst fib4_rules_ops_template = {
 	.family		= AF_INET,
 	.rule_size	= sizeof(struct fib4_rule),
@@ -390,6 +393,7 @@ static const struct fib_rules_ops __net_initconst fib4_rules_ops_template = {
 	.owner		= THIS_MODULE,
 };
 
+//创建三张默认的路由表 local,main,default
 static int fib_default_rules_init(struct fib_rules_ops *ops)
 {
 	int err;
@@ -411,6 +415,7 @@ int __net_init fib4_rules_init(struct net *net)
 	int err;
 	struct fib_rules_ops *ops;
 
+	/*注册ipv4策略路由ops*/
 	ops = fib_rules_register(&fib4_rules_ops_template, net);
 	if (IS_ERR(ops))
 		return PTR_ERR(ops);
@@ -418,6 +423,7 @@ int __net_init fib4_rules_init(struct net *net)
 	err = fib_default_rules_init(ops);
 	if (err < 0)
 		goto fail;
+	//指明ipv4策略路由操作集
 	net->ipv4.rules_ops = ops;
 	net->ipv4.fib_has_custom_rules = false;
 	net->ipv4.fib_rules_require_fldissect = 0;
