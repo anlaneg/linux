@@ -59,6 +59,7 @@ unsigned int fib6_rules_seq_read(struct net *net)
 }
 
 /* called with rcu lock held; no reference taken on fib6_info */
+//ipv6路由查询
 int fib6_lookup(struct net *net, int oif, struct flowi6 *fl6,
 		struct fib6_result *res, int flags)
 {
@@ -66,6 +67,7 @@ int fib6_lookup(struct net *net, int oif, struct flowi6 *fl6,
 
 	if (net->ipv6.fib6_has_custom_rules) {
 		struct fib_lookup_arg arg = {
+		     /*路由表查询*/
 			.lookup_ptr = fib6_table_lookup,
 			.lookup_data = &oif,
 			.result = res,
@@ -74,6 +76,7 @@ int fib6_lookup(struct net *net, int oif, struct flowi6 *fl6,
 
 		l3mdev_update_flow(net, flowi6_to_flowi(fl6));
 
+		//执行ipv6策略路由查询
 		err = fib_rules_lookup(net->ipv6.fib6_rules_ops,
 				       flowi6_to_flowi(fl6), flags, &arg);
 	} else {
@@ -103,6 +106,7 @@ struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 		/* update flow if oif or iif point to device enslaved to l3mdev */
 		l3mdev_update_flow(net, flowi6_to_flowi(fl6));
 
+		//执行ipv6策略路由查询
 		fib_rules_lookup(net->ipv6.fib6_rules_ops,
 				 flowi6_to_flowi(fl6), flags, &arg);
 

@@ -134,12 +134,12 @@ static struct devlink *devlink_get_from_attrs(struct net *net,
 
 	lockdep_assert_held(&devlink_mutex);
 
-	//遍历devlink_list查找指定的devlink
+	//遍历devlink_list通过busname,devname查找指定的devlink
 	list_for_each_entry(devlink, &devlink_list, list) {
 		if (strcmp(devlink->dev->bus->name, busname) == 0 &&
 		    strcmp(dev_name(devlink->dev), devname) == 0 &&
 		    net_eq(devlink_net(devlink), net))
-			return devlink;
+			return devlink;/*返回找到的devlink*/
 	}
 
 	return ERR_PTR(-ENODEV);
@@ -6066,7 +6066,7 @@ static const struct genl_ops devlink_nl_ops[] = {
 		.internal_flags = DEVLINK_NL_FLAG_NEED_DEVLINK,
 	},
 	{
-		//将devlink设备置为switch模式
+		//将devlink设备eswitch模式设置
 		.cmd = DEVLINK_CMD_ESWITCH_SET,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = devlink_nl_cmd_eswitch_set_doit,
@@ -6334,7 +6334,8 @@ EXPORT_SYMBOL_GPL(devlink_alloc);
  */
 int devlink_register(struct devlink *devlink, struct device *dev)
 {
-	//将devlink注册到devlink_list
+	//将devlink注册到devlink_list,以便支持devlink命令
+
 	mutex_lock(&devlink_mutex);
 	devlink->dev = dev;
 	devlink->registered = true;
@@ -6354,6 +6355,7 @@ EXPORT_SYMBOL_GPL(devlink_register);
  */
 void devlink_unregister(struct devlink *devlink)
 {
+    //devlink解注册
 	mutex_lock(&devlink_mutex);
 	WARN_ON(devlink_reload_supported(devlink) &&
 		devlink->reload_enabled);

@@ -272,6 +272,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 	if (rule->l3mdev && !l3mdev_fib_rule_match(rule->fr_net, fl, arg))
 		goto out;
 
+	//flow的用户传入uid必须在对应区间
 	if (uid_lt(fl->flowi_uid, rule->uid_range.start) ||
 	    uid_gt(fl->flowi_uid, rule->uid_range.end))
 		goto out;
@@ -282,7 +283,8 @@ out:
 	return (rule->flags & FIB_RULE_INVERT) ? !ret : ret;
 }
 
-int fib_rules_lookup(struct fib_rules_ops *ops, struct flowi *fl,
+//策略查询入口
+int fib_rules_lookup(struct fib_rules_ops *ops/*执行策略查询的协议族ops*/, struct flowi *fl,
 		     int flags, struct fib_lookup_arg *arg)
 {
 	struct fib_rule *rule;
@@ -293,6 +295,7 @@ int fib_rules_lookup(struct fib_rules_ops *ops, struct flowi *fl,
 	//遍历每条rule
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 jumped:
+        //尝试匹配规则
 		if (!fib_rule_match(rule, ops, fl, flags, arg))
 			continue;
 
@@ -300,6 +303,7 @@ jumped:
 		if (rule->action == FR_ACT_GOTO) {
 			struct fib_rule *target;
 
+			/*取规则对应的target rule*/
 			target = rcu_dereference(rule->ctarget);
 			if (target == NULL) {
 				//target为空，继续
@@ -312,15 +316,17 @@ jumped:
 		} else if (rule->action == FR_ACT_NOP)
 			continue;
 		else
-			//其它action执行
+			//执行规则指定的action
 			err = ops->action(rule, fl, flags, arg);
 
+		/*检查规则是否阻止此结果*/
 		if (!err && ops->suppress && ops->suppress(rule, arg))
 			continue;
 
 		if (err != -EAGAIN) {
 			if ((arg->flags & FIB_LOOKUP_NOREF) ||
 			    likely(refcount_inc_not_zero(&rule->refcnt))) {
+			    /*保存命中的策略*/
 				arg->rule = rule;
 				goto out;
 			}
@@ -510,10 +516,11 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		       struct netlink_ext_ack *extack,
 		       struct fib_rules_ops *ops,
 		       struct nlattr *tb[],
-		       struct fib_rule **rule,
+		       struct fib_rule **rule/*出参，返回填充好的规则*/,
 		       bool *user_priority)
 {
 	struct net *net = sock_net(skb->sk);
+	//fib规则头部
 	struct fib_rule_hdr *frh = nlmsg_data(nlh);
 	struct fib_rule *nlrule = NULL;
 	int err = -EINVAL;
@@ -545,8 +552,10 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (tb[FRA_PRIORITY]) {
 		nlrule->pref = nla_get_u32(tb[FRA_PRIORITY]);
+		/*指出用户指定了优先级*/
 		*user_priority = true;
 	} else {
+	    //使用默认的优先级
 		nlrule->pref = fib_default_rule_pref(ops);
 	}
 
@@ -582,9 +591,11 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 			/* compatibility: if the mark value is non-zero all bits
 			 * are compared unless a mask is explicitly specified.
 			 */
+		    //提供默认fwmark对应的mask
 			nlrule->mark_mask = 0xFFFFFFFF;
 	}
 
+	//掩码设置
 	if (tb[FRA_FWMASK])
 		nlrule->mark_mask = nla_get_u32(tb[FRA_FWMASK]);
 
@@ -619,6 +630,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		nlrule->target = nla_get_u32(tb[FRA_GOTO]);
 		/* Backward jumps are prohibited to avoid endless loops */
 		if (nlrule->target <= nlrule->pref) {
+		    //不支持跳到低优先级
 			NL_SET_ERR_MSG(extack, "Backward goto not supported");
 			goto errout_free;
 		}
@@ -632,6 +644,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout_free;
 	}
 
+	//uid range设置
 	if (tb[FRA_UID_RANGE]) {
 		if (current_user_ns() != net->user_ns) {
 			err = -EPERM;
@@ -653,6 +666,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (tb[FRA_IP_PROTO])
 		nlrule->ip_proto = nla_get_u8(tb[FRA_IP_PROTO]);
 
+	//源port范围
 	if (tb[FRA_SPORT_RANGE]) {
 		err = nla_get_port_range(tb[FRA_SPORT_RANGE],
 					 &nlrule->sport_range);
@@ -662,6 +676,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		}
 	}
 
+	//目的port范围
 	if (tb[FRA_DPORT_RANGE]) {
 		err = nla_get_port_range(tb[FRA_DPORT_RANGE],
 					 &nlrule->dport_range);
@@ -681,11 +696,13 @@ errout:
 	return err;
 }
 
+/*检查给定的规则rule是否已存在*/
 static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 		       struct nlattr **tb, struct fib_rule *rule)
 {
 	struct fib_rule *r;
 
+	//遍历此ops上所有规则
 	list_for_each_entry(r, &ops->rules_list, list) {
 		if (r->action != rule->action)
 			continue;
@@ -741,6 +758,7 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 						 &rule->dport_range))
 			continue;
 
+		//其它字段比对
 		if (!ops->compare(r, frh, tb))
 			continue;
 		return 1;
@@ -781,25 +799,29 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout;
 	}
 
-	err = fib_nl2rule(skb, nlh, extack, ops, tb, &rule, &user_priority);
+	err = fib_nl2rule(skb, nlh, extack, ops, tb, &rule/*出参，填充好的规则*/, &user_priority);
 	if (err)
 		goto errout;
 
+	/*检查规则是否已存在，如已存在，则报错*/
 	if ((nlh->nlmsg_flags & NLM_F_EXCL) &&
 	    rule_exists(ops, frh, tb, rule)) {
 		err = -EEXIST;
 		goto errout_free;
 	}
 
+	//完成规则设置
 	err = ops->configure(rule, skb, frh, tb, extack);
 	if (err < 0)
 		goto errout_free;
 
+	//通知fib规则添加事件
 	err = call_fib_rule_notifiers(net, FIB_EVENT_RULE_ADD, rule, ops,
 				      extack);
 	if (err < 0)
 		goto errout_free;
 
+	//查找target对应的rule,更新到rule对应的ctarget指针
 	list_for_each_entry(r, &ops->rules_list, list) {
 		if (r->pref == rule->target) {
 			RCU_INIT_POINTER(rule->ctarget, r);

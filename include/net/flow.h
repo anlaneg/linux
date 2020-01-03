@@ -38,7 +38,7 @@ struct flowi_common {
 #define FLOWI_FLAG_KNOWN_NH		0x02
 #define FLOWI_FLAG_SKIP_NH_OIF		0x04
 	__u32	flowic_secid;
-	kuid_t  flowic_uid;
+	kuid_t  flowic_uid;//用户传入的不透明id
 	struct flowi_tunnel flowic_tun_key;
 	__u32		flowic_multipath_hash;
 };

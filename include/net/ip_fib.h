@@ -363,7 +363,7 @@ struct fib_table *fib_get_table(struct net *net, u32 id);
 int __fib_lookup(struct net *net, struct flowi4 *flp,
 		 struct fib_result *res, unsigned int flags);
 
-//路由表查询
+//ipv4路由表查询
 static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 			     struct fib_result *res, unsigned int flags)
 {
@@ -377,6 +377,7 @@ static inline int fib_lookup(struct net *net, struct flowi4 *flp,
 
 	rcu_read_lock();
 
+	//未查询到策略路由，先查询main表，再查询default表
 	res->tclassid = 0;
 
 	tb = rcu_dereference_rtnl(net->ipv4.fib_main);

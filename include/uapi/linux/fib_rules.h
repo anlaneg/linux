@@ -7,6 +7,7 @@
 
 /* rule is permanent, and cannot be deleted */
 #define FIB_RULE_PERMANENT	0x00000001
+/*反规则，不匹配时命中，匹配时不命中*/
 #define FIB_RULE_INVERT		0x00000002
 #define FIB_RULE_UNRESOLVED	0x00000004
 #define FIB_RULE_IIF_DETACHED	0x00000008
@@ -18,8 +19,8 @@
 
 struct fib_rule_hdr {
 	__u8		family;
-	__u8		dst_len;
-	__u8		src_len;
+	__u8		dst_len;//目的地址长度
+	__u8		src_len;//源地址长度
 	__u8		tos;
 
 	__u8		table;

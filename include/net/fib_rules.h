@@ -20,26 +20,26 @@ struct fib_rule {
 	struct list_head	list;
 	int			iifindex;//inport对应的ifindex(为0时不匹配）
 	int			oifindex;//outport对应的ifindex
-	u32			mark;//mark
+	u32			mark;//mark，通过ip rule 中的fwmark指定
 	u32			mark_mask;//mark的掩码
 	u32			flags;
 	u32			table;//规则从属于那个路由表
 	u8			action;//规则的action（例如FR_ACT_GOTO）
 	u8			l3mdev;
-	u8                      proto;
-	u8			ip_proto;
-	u32			target;
+	u8                      proto;//路由协议类型
+	u8			ip_proto;//4层协议号
+	u32			target;//记录要跳转到哪个目标上继续查询
 	__be64			tun_id;//隧道id号
-	struct fib_rule __rcu	*ctarget;
+	struct fib_rule __rcu	*ctarget;//跳转动作对应的rule
 	struct net		*fr_net;//从属于那个namespace
 
 	refcount_t		refcnt;
-	u32			pref;
+	u32			pref;/*规则对应的优先级*/
 	int			suppress_ifgroup;
 	int			suppress_prefixlen;
 	char			iifname[IFNAMSIZ];//inport名称
 	char			oifname[IFNAMSIZ];//outport名称
-	struct fib_kuid_range	uid_range;
+	struct fib_kuid_range	uid_range;//记录用户传入的范围
 	struct fib_rule_port_range	sport_range;
 	struct fib_rule_port_range	dport_range;
 	struct rcu_head		rcu;
@@ -48,8 +48,8 @@ struct fib_rule {
 struct fib_lookup_arg {
 	void			*lookup_ptr;
 	const void		*lookup_data;
-	void			*result;
-	struct fib_rule		*rule;
+	void			*result;/*保存查询到的路由项*/
+	struct fib_rule		*rule;/*保存命中的策略*/
 	u32			table;
 	int			flags;
 #define FIB_LOOKUP_NOREF		1
@@ -63,7 +63,7 @@ struct fib_rules_ops {
 	struct list_head	list;
 	//规则大小（支持的规则结构体大小）
 	int			rule_size;
-	//此协议族地址大小
+	//此协议族地址大小（字节为单位）
 	int			addr_size;
 	int			unresolved_rules;
 	int			nr_goto_rules;
@@ -73,16 +73,19 @@ struct fib_rules_ops {
 	int			(*action)(struct fib_rule *,
 					  struct flowi *, int,
 					  struct fib_lookup_arg *);
+	//结果阻止，检查是否不想要的结果，如果是返回True
 	bool			(*suppress)(struct fib_rule *,
 					    struct fib_lookup_arg *);
 	int			(*match)(struct fib_rule *,
 					 struct flowi *, int);
+	//完成配置设置
 	int			(*configure)(struct fib_rule *,
 					     struct sk_buff *,
 					     struct fib_rule_hdr *,
 					     struct nlattr **,
 					     struct netlink_ext_ack *);
 	int			(*delete)(struct fib_rule *);
+	/*给定规则fib_rule及fib_rule_hdr,检查两者是否相等*/
 	int			(*compare)(struct fib_rule *,
 					   struct fib_rule_hdr *,
 					   struct nlattr **);
@@ -96,7 +99,7 @@ struct fib_rules_ops {
 
 	int			nlgroup;
 	const struct nla_policy	*policy;
-	struct list_head	rules_list;
+	struct list_head	rules_list;/*所有已配置的策略路由*/
 	struct module		*owner;
 	struct net		*fro_net;
 	struct rcu_head		rcu;
@@ -153,6 +156,7 @@ static inline u32 fib_rule_get_table(struct fib_rule *rule,
 }
 #endif
 
+//取fib rule配置的表号
 static inline u32 frh_get_table(struct fib_rule_hdr *frh, struct nlattr **nla)
 {
 	if (nla[FRA_TABLE])

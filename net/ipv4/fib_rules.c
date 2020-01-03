@@ -36,9 +36,9 @@ struct fib4_rule {
 	u8			dst_len;
 	u8			src_len;
 	u8			tos;
-	__be32			src;
+	__be32			src;//源地址
 	__be32			srcmask;
-	__be32			dst;
+	__be32			dst;//目的地址
 	__be32			dstmask;
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	u32			tclassid;
@@ -77,7 +77,7 @@ unsigned int fib4_rules_seq_read(struct net *net)
 	return fib_rules_seq_read(net, AF_INET);
 }
 
-//策略路由查询
+//ipv4策略路由查询
 int __fib_lookup(struct net *net, struct flowi4 *flp,
 		 struct fib_result *res, unsigned int flags)
 {
@@ -90,6 +90,7 @@ int __fib_lookup(struct net *net, struct flowi4 *flp,
 	/* update flow if oif or iif point to device enslaved to l3mdev */
 	l3mdev_update_flow(net, flowi4_to_flowi(flp));
 
+	//执行ipv4策略路由查询
 	err = fib_rules_lookup(net->ipv4.rules_ops, flowi4_to_flowi(flp), 0, &arg);
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	/*通过路由确定命中哪条classid*/
@@ -119,22 +120,26 @@ static int fib4_rule_action(struct fib_rule *rule, struct flowi *flp,
 		break;
 
 	case FR_ACT_UNREACHABLE:
+	    //直接返回不可达
 		return -ENETUNREACH;
 
 	case FR_ACT_PROHIBIT:
+	    //直接返回禁止返回
 		return -EACCES;
 
 	case FR_ACT_BLACKHOLE:
+	    //直接返回参数有误
 	default:
 		return -EINVAL;
 	}
 
 	rcu_read_lock();
 
+	//取要跳转的表
 	tb_id = fib_rule_get_table(rule, arg);
 	tbl = fib_get_table(rule->fr_net, tb_id);
 	if (tbl)
-		//在tbl中查找路由
+		//然后在此tbl中查找路由
 		err = fib_table_lookup(tbl, &flp->u.ip4,
 				       (struct fib_result *)arg->result,
 				       arg->flags);
@@ -174,6 +179,7 @@ suppress_route:
 	return true;
 }
 
+//fib ipv4规则匹配
 static int fib4_rule_match(struct fib_rule *rule, struct flowi *fl, int flags)
 {
 	struct fib4_rule *r = (struct fib4_rule *) rule;
@@ -185,12 +191,15 @@ static int fib4_rule_match(struct fib_rule *rule, struct flowi *fl, int flags)
 	    ((daddr ^ r->dst) & r->dstmask))
 		return 0;
 
+	//qos字段匹配
 	if (r->tos && (r->tos != fl4->flowi4_tos))
 		return 0;
 
+	//ip协议匹配
 	if (rule->ip_proto && (rule->ip_proto != fl4->flowi4_proto))
 		return 0;
 
+	//端目的port匹配
 	if (fib_rule_port_range_set(&rule->sport_range) &&
 	    !fib_rule_port_inrange(&rule->sport_range, fl4->fl4_sport))
 		return 0;
@@ -222,6 +231,7 @@ static const struct nla_policy fib4_rule_policy[FRA_MAX+1] = {
 	[FRA_FLOW]	= { .type = NLA_U32 },
 };
 
+//配置规则
 static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 			       struct fib_rule_hdr *frh,
 			       struct nlattr **tb,
@@ -229,8 +239,11 @@ static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 {
 	struct net *net = sock_net(skb->sk);
 	int err = -EINVAL;
+
+	//转为fib4的规则
 	struct fib4_rule *rule4 = (struct fib4_rule *) rule;
 
+	//校验tos值
 	if (frh->tos & ~IPTOS_TOS_MASK) {
 		NL_SET_ERR_MSG(extack, "Invalid tos");
 		goto errout;

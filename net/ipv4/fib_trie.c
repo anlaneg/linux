@@ -2289,6 +2289,7 @@ void __init fib_trie_init(void)
 					   0, SLAB_PANIC, NULL);
 }
 
+//创建编号为id的fib表
 struct fib_table *fib_trie_table(u32 id, struct fib_table *alias)
 {
 	struct fib_table *tb;
