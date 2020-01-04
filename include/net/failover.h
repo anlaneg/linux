@@ -19,6 +19,7 @@ struct failover_ops {
 				 struct net_device *failover_dev);
 	int (*slave_name_change)(struct net_device *slave_dev,
 				 struct net_device *failover_dev);
+	/*提供slave设备的rx_handle回调*/
 	rx_handler_result_t (*slave_handle_frame)(struct sk_buff **pskb);
 };
 

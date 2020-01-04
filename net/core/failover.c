@@ -23,8 +23,10 @@ static struct net_device *failover_get_bymac(u8 *mac, struct failover_ops **ops)
 	struct failover *failover;
 
 	spin_lock(&failover_lock);
+	//遍历failover_list
 	list_for_each_entry(failover, &failover_list, list) {
 		failover_dev = rtnl_dereference(failover->failover_dev);
+		//如果failover dev对应的mac为提供的mac,则匹配，返回此dev及对应ops
 		if (ether_addr_equal(failover_dev->perm_addr, mac)) {
 			*ops = rtnl_dereference(failover->ops);
 			spin_unlock(&failover_lock);
@@ -55,14 +57,17 @@ static int failover_slave_register(struct net_device *slave_dev)
 
 	ASSERT_RTNL();
 
+	/*查询slave_dev*/
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
 	if (!failover_dev)
 		goto done;
 
+	/*先调slave_pre_register回调*/
 	if (fops && fops->slave_pre_register &&
 	    fops->slave_pre_register(slave_dev, failover_dev))
 		goto done;
 
+	/*为slave_dev注册收包handle,rx_handle*/
 	err = netdev_rx_handler_register(slave_dev, fops->slave_handle_frame,
 					 failover_dev);
 	if (err) {

@@ -675,8 +675,10 @@ static inline void netdev_queue_numa_node_write(struct netdev_queue *q, int node
  * map is an array of CPUs.
  */
 struct rps_map {
+	//数长数组长度
 	unsigned int len;
 	struct rcu_head rcu;
+	/*变长数组，每个索引下存放一个cpu,负责队列收取*/
 	u16 cpus[0];
 };
 #define RPS_MAP_SIZE(_num) (sizeof(struct rps_map) + ((_num) * sizeof(u16)))

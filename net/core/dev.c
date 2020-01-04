@@ -4279,6 +4279,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		       struct rps_dev_flow **rflowp)
 {
 	const struct rps_sock_flow_table *sock_flow_table;
+	/*取设备的rx队列*/
 	struct netdev_rx_queue *rxqueue = dev->_rx;
 	struct rps_dev_flow_table *flow_table;
 	struct rps_map *map;
@@ -4287,6 +4288,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	u32 hash;
 
 	if (skb_rx_queue_recorded(skb)) {
+		/*skb中记录了rx queue的index,故取对应的rxqueue*/
 		u16 index = skb_get_rx_queue(skb);
 
 		if (unlikely(index >= dev->real_num_rx_queues)) {
@@ -4302,6 +4304,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	/* Avoid computing hash if RFS/RPS is not active for this rxqueue */
 
 	flow_table = rcu_dereference(rxqueue->rps_flow_table);
+	/*拿到rxqueuex上的rps map*/
 	map = rcu_dereference(rxqueue->rps_map);
 	if (!flow_table && !map)
 		goto done;
@@ -4359,6 +4362,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 try_rps:
 
 	if (map) {
+		/*有map,通过skb上的hashcode计算采用哪个cpu执行传递*/
 		tcpu = map->cpus[reciprocal_scale(hash, map->len)];
 		if (cpu_online(tcpu)) {
 			cpu = tcpu;
@@ -4748,6 +4752,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 	trace_netif_rx(skb);
 
 #ifdef CONFIG_RPS
+	//RPS是软件实现的RSS功能
 	if (static_branch_unlikely(&rps_needed)) {
 		struct rps_dev_flow voidflow, *rflow = &voidflow;
 		int cpu;
@@ -4755,10 +4760,12 @@ static int netif_rx_internal(struct sk_buff *skb)
 		preempt_disable();
 		rcu_read_lock();
 
+		/*获取skb对应的传输cpu*/
 		cpu = get_rps_cpu(skb->dev, skb, &rflow);
 		if (cpu < 0)
 			cpu = smp_processor_id();
 
+		/*将报文对应的此cpu对应的backlog上*/
 		ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 
 		rcu_read_unlock();
@@ -4768,7 +4775,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 	{
 		unsigned int qtail;
 
-		//在当前cpu上直接采用队列方式进行中转
+		//将此skb加入到在当前cpu的backlog
 		ret = enqueue_to_backlog(skb, get_cpu(), &qtail);
 		put_cpu();
 	}
@@ -5093,6 +5100,7 @@ static int __netif_receive_skb_core(struct sk_buff *skb, bool pfmemalloc,
 	pt_prev = NULL;
 
 another_round:
+	//记录接口的ifindex
 	skb->skb_iif = skb->dev->ifindex;
 
 	__this_cpu_inc(softnet_data.processed);
@@ -5386,7 +5394,7 @@ static void __netif_receive_skb_list_core(struct list_head *head, bool pfmemallo
 	__netif_receive_skb_list_ptype(&sublist, pt_curr, od_curr);
 }
 
-//处理收到的报文
+//协议栈处理收到的报文
 static int __netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;
@@ -6268,6 +6276,7 @@ static int process_backlog(struct napi_struct *napi, int quota)
 	while (again) {
 		struct sk_buff *skb;
 
+		//自process_queue上逐个提取报文，将收到的报文传给协议栈
 		while ((skb = __skb_dequeue(&sd->process_queue))) {
 			rcu_read_lock();
 			__netif_receive_skb(skb);
@@ -6292,6 +6301,8 @@ static int process_backlog(struct napi_struct *napi, int quota)
 			napi->state = 0;
 			again = false;
 		} else {
+			//input_pkt_queue不为空时，将其更新到process_queue上
+			//即backlog报文将被移到process_queue上
 			skb_queue_splice_tail_init(&sd->input_pkt_queue,
 						   &sd->process_queue);
 		}
@@ -10368,6 +10379,7 @@ static int dev_cpu_dead(unsigned int oldcpu)
 
 		//将这个napi自poll_list中移除掉
 		list_del_init(&napi->poll_list);
+
 		//如果poll的方法不是process_backlog，则触发中断方式进行收包
 		if (napi->poll == process_backlog)
 			napi->state = 0;

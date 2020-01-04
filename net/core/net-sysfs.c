@@ -684,6 +684,7 @@ static const struct sysfs_ops rx_queue_sysfs_ops = {
 };
 
 #ifdef CONFIG_RPS
+//显示rps映射
 static ssize_t show_rps_map(struct netdev_rx_queue *queue, char *buf)
 {
 	struct rps_map *map;
@@ -694,11 +695,15 @@ static ssize_t show_rps_map(struct netdev_rx_queue *queue, char *buf)
 		return -ENOMEM;
 
 	rcu_read_lock();
+	/*取queue当前的rps映射*/
 	map = rcu_dereference(queue->rps_map);
+
+	//收集映射中指定的cpu,并转换为mask
 	if (map)
 		for (i = 0; i < map->len; i++)
 			cpumask_set_cpu(map->cpus[i], mask);
 
+	//格式化此qeueue对应的mask列表
 	len = snprintf(buf, PAGE_SIZE, "%*pb\n", cpumask_pr_args(mask));
 	rcu_read_unlock();
 	free_cpumask_var(mask);
@@ -720,12 +725,14 @@ static ssize_t store_rps_map(struct netdev_rx_queue *queue,
 	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
 		return -ENOMEM;
 
+	/*填充cpu mask*/
 	err = bitmap_parse(buf, len, cpumask_bits(mask), nr_cpumask_bits);
 	if (err) {
 		free_cpumask_var(mask);
 		return err;
 	}
 
+	/*申请map*/
 	map = kzalloc(max_t(unsigned int,
 			    RPS_MAP_SIZE(cpumask_weight(mask)), L1_CACHE_BYTES),
 		      GFP_KERNEL);
@@ -735,10 +742,12 @@ static ssize_t store_rps_map(struct netdev_rx_queue *queue,
 	}
 
 	i = 0;
+	/*填充mask中指定的每一个cpu*/
 	for_each_cpu_and(cpu, mask, cpu_online_mask)
 		map->cpus[i++] = cpu;
 
 	if (i) {
+		/*指定了多个cpu,len记录cpu数目*/
 		map->len = i;
 	} else {
 		kfree(map);
@@ -746,6 +755,7 @@ static ssize_t store_rps_map(struct netdev_rx_queue *queue,
 	}
 
 	mutex_lock(&rps_map_mutex);
+	//更新queue中rps_map
 	old_map = rcu_dereference_protected(queue->rps_map,
 					    mutex_is_locked(&rps_map_mutex));
 	rcu_assign_pointer(queue->rps_map, map);
@@ -845,6 +855,7 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	return len;
 }
 
+//rps是软件实现的rss
 static struct rx_queue_attribute rps_cpus_attribute __ro_after_init
 	= __ATTR(rps_cpus, 0644, show_rps_map, store_rps_map);
 
