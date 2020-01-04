@@ -1495,7 +1495,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	//尝试原子加，并在加后进行检查（由于上面的检查不是原子的）
 	rmem = atomic_add_return(size, &sk->sk_rmem_alloc);
-	if (rmem > (size + sk->sk_rcvbuf))
+	if (rmem > (size + (unsigned int)sk->sk_rcvbuf))
 		//超过门限，且超过自身，说明有线程在我们之前，已超，我们竞争失败
 		goto uncharge_drop;
 
