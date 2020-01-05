@@ -720,6 +720,7 @@ static inline u32 bpf_prog_run_clear_cb(const struct bpf_prog *prog,
 		memset(cb_data, 0, BPF_SKB_CB_LEN);
 
 	preempt_disable();
+	//禁止抢占后，运行bpf程序
 	res = BPF_PROG_RUN(prog, skb);
 	preempt_enable();
 	return res;

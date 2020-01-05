@@ -627,6 +627,7 @@ int bus_add_driver(struct device_driver *drv)
 
 	pr_debug("bus: '%s': add driver %s\n", bus->name, drv->name);
 
+	//为driver申请private数据
 	priv = kzalloc(sizeof(*priv), GFP_KERNEL);
 	if (!priv) {
 		error = -ENOMEM;
@@ -646,7 +647,7 @@ int bus_add_driver(struct device_driver *drv)
 	//将driver加入到bus集合中
 	klist_add_tail(&priv->knode_bus, &bus->p->klist_drivers);
 	if (drv->bus->p->drivers_autoprobe) {
-	        //执行同步探测
+	    //如果bus自动probe,则执行同步探测
 		error = driver_attach(drv);
 		if (error)
 			goto out_unregister;
@@ -659,6 +660,8 @@ int bus_add_driver(struct device_driver *drv)
 		printk(KERN_ERR "%s: uevent attr (%s) failed\n",
 			__func__, drv->name);
 	}
+
+	//为driver添加bus规定的一组属性
 	error = driver_add_groups(drv, bus->drv_groups);
 	if (error) {
 		/* How the hell do we get out of this pickle? Give up */
@@ -666,6 +669,7 @@ int bus_add_driver(struct device_driver *drv)
 			__func__, drv->name);
 	}
 
+	//驱动没有禁止通过sysfs绑定设备，创建对应的unbind,bind文件
 	if (!drv->suppress_bind_attrs) {
 		error = add_bind_files(drv);
 		if (error) {

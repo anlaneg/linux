@@ -155,10 +155,11 @@ struct kobj_type {
 
 struct kobj_uevent_env {
 	char *argv[3];
-	char *envp[UEVENT_NUM_ENVP];
-	int envp_idx;
+	char *envp[UEVENT_NUM_ENVP];//记录环境变量各变量字符串起始位置
+	int envp_idx;//记录环境变量总数
+	//存放所有环境变量字符串
 	char buf[UEVENT_BUFFER_SIZE];
-	int buflen;
+	int buflen;//buffer的使用长度
 };
 
 struct kset_uevent_ops {

@@ -1092,6 +1092,8 @@ static netdev_tx_t tun_net_xmit(struct sk_buff *skb, struct net_device *dev)
 	    sk_filter(tfile->socket.sk, skb))
 		goto drop;
 
+	//运行ebpf程序，如果返回的长度为0，则drop掉报文
+	//否则截短报文
 	len = run_ebpf_filter(tun, skb, len);
 	if (len == 0 || pskb_trim(skb, len))
 		goto drop;
@@ -3745,6 +3747,7 @@ static int __init tun_init(void)
 		goto err_misc;
 	}
 
+	//注册tun通知块
 	ret = register_netdevice_notifier(&tun_notifier_block);
 	if (ret) {
 		pr_err("Can't register netdevice notifier\n");

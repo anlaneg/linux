@@ -1524,6 +1524,7 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 {
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
+	/*指向以太头目的mac*/
 	const unsigned char *dest = ((struct ethhdr *)skb->data)->h_dest;
 	struct virtnet_info *vi = sq->vq->vdev->priv;
 	int num_sg;
@@ -1554,7 +1555,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	//每个分片一个sg,支持mrg_rxbuf时只需要多一个描述信息
 	sg_init_table(sq->sg, skb_shinfo(skb)->nr_frags + (can_push ? 1 : 2));
 	if (can_push) {
-		__skb_push(skb, hdr_len);//空出hdr_len长度
+	    //空出hdr_len长度
+		__skb_push(skb, hdr_len);
 		num_sg = skb_to_sgvec(skb, sq->sg, 0, skb->len);//填充sg
 		if (unlikely(num_sg < 0))
 			return num_sg;//填充sg失败
@@ -1567,6 +1569,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 			return num_sg;
 		num_sg++;
 	}
+
     //将报文存入（报文已存入sq->sg中，共计num_sg个分片）到虚拟化队列中
 	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
@@ -1800,7 +1803,8 @@ static int _virtnet_set_queues(struct virtnet_info *vi, u16 queue_pairs)
 		return 0;
 
 	vi->ctrl->mq.virtqueue_pairs = cpu_to_virtio16(vi->vdev, queue_pairs);
-	sg_init_one(&sg, &vi->ctrl->mq, sizeof(vi->ctrl->mq));//设置sg对应ctrl->mq中长度为sizeof(ctrl->mq)的内存段
+	//设置sg对应ctrl->mq中长度为sizeof(ctrl->mq)的内存段
+	sg_init_one(&sg, &vi->ctrl->mq, sizeof(vi->ctrl->mq));
 
 	//如标准所言：
 	//4. Even with VIRTIO_NET_F_MQ, only receiveq1, transmitq1 and controlq are used by default. The
@@ -2332,7 +2336,7 @@ static void virtnet_update_settings(struct virtnet_info *vi)
 		vi->duplex = duplex;
 }
 
-//virtio_net的ethtool操作集
+//virtio网卡的ethtool操作集
 static const struct ethtool_ops virtnet_ethtool_ops = {
 	.get_drvinfo = virtnet_get_drvinfo,
 	.get_link = ethtool_op_get_link,
@@ -2616,11 +2620,11 @@ static int virtnet_set_features(struct net_device *dev,
 	return 0;
 }
 
-//virtio_net驱动的操作集
+//virtio网络设备驱动的操作集
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
-	.ndo_start_xmit      = start_xmit,//发包函数回调（这个回调在软中断被触发后调用）
+	.ndo_start_xmit      = start_xmit,//发包函数回调
 	.ndo_validate_addr   = eth_validate_addr,//校验mac地址是否正确
 	.ndo_set_mac_address = virtnet_set_mac_address,
 	.ndo_set_rx_mode     = virtnet_set_rx_mode,
@@ -3426,6 +3430,7 @@ static struct virtio_driver virtio_net_driver = {
 	.feature_table_size_legacy = ARRAY_SIZE(features_legacy),
 	.driver.name =	KBUILD_MODNAME,
 	.driver.owner =	THIS_MODULE,
+	//virtio-net驱动支持的id_table
 	.id_table =	id_table,
 	.validate =	virtnet_validate,//在probe之前此函数将被调用
 	.probe =	virtnet_probe,
@@ -3453,7 +3458,7 @@ static __init int virtio_net_driver_init(void)
 	if (ret)
 		goto err_dead;
 
-		//注册virtio-net类驱动(virtio-net可以驱动virtio 设备，而virtio设备是由
+		//注册virtio-net类驱动(virtio-net可以驱动virtio网络设备，而virtio设备是由
 		//virtio-pci驱动在使能pci设备时动态创建出来的）
         ret = register_virtio_driver(&virtio_net_driver);
 	if (ret)

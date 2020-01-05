@@ -685,6 +685,7 @@ EXPORT_SYMBOL_GPL(kobject_uevent);
  */
 int add_uevent_var(struct kobj_uevent_env *env, const char *format, ...)
 {
+    //格式化format,并将产生的evn添加到env->buf中
 	va_list args;
 	int len;
 

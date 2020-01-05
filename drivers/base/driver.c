@@ -167,7 +167,7 @@ int driver_register(struct device_driver *drv)
 	//检查驱动自身是否已注册在对应的bus上
 	other = driver_find(drv->name, drv->bus);
 	if (other) {
-        //已存在，重复注册
+        //已存在，重复注册,报错
 		printk(KERN_ERR "Error: Driver '%s' is already registered, "
 			"aborting...\n", drv->name);
 		return -EBUSY;

@@ -36,7 +36,7 @@ struct subsys_private {
 	struct klist klist_devices;//挂接从属于bus的device
 	struct klist klist_drivers;//挂接从属于bus的driver
 	struct blocking_notifier_head bus_notifier;//注册在此bus上的通知链，此bus上有设备事件发生时通知用
-	unsigned int drivers_autoprobe:1;
+	unsigned int drivers_autoprobe:1;//bus默认去绑定设备
 	struct bus_type *bus;//与其相关的bus互指
 
 	struct kset glue_dirs;
@@ -123,6 +123,7 @@ extern void device_release_driver_internal(struct device *dev,
 extern void driver_detach(struct device_driver *drv);
 extern int driver_probe_device(struct device_driver *drv, struct device *dev);
 extern void driver_deferred_probe_del(struct device *dev);
+
 //通过bus的匹配函数检查驱动是否可以与device匹配
 static inline int driver_match_device(struct device_driver *drv,
 				      struct device *dev)

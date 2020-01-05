@@ -48,7 +48,9 @@ int eth_validate_addr(struct net_device *dev);
 
 struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
 					    unsigned int rxqs);
+/*申请单队列以太设备*/
 #define alloc_etherdev(sizeof_priv) alloc_etherdev_mq(sizeof_priv, 1)
+/*申请多队列以太设备*/
 #define alloc_etherdev_mq(sizeof_priv, count) alloc_etherdev_mqs(sizeof_priv, count, count)
 
 struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv,

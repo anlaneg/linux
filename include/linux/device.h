@@ -126,8 +126,11 @@ struct bus_type {
 	const char		*name;
 	const char		*dev_name;
 	struct device		*dev_root;
+	//bus规定的一组属性
 	const struct attribute_group **bus_groups;
+	//bus为dev规定的一组属性
 	const struct attribute_group **dev_groups;
+	//bus为drv提供的一组属性
 	const struct attribute_group **drv_groups;
 
 	//实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)

@@ -345,7 +345,9 @@ struct napi_struct {
     //gro功能缓存的报文
 	struct gro_list		gro_hash[GRO_HASH_BUCKETS];
 	struct sk_buff		*skb;
+	//用于挂接GRO_NORMAL类型的skb
 	struct list_head	rx_list; /* Pending GRO_NORMAL skbs */
+	//rx_list中的报文数目
 	int			rx_count; /* length of rx_list */
 	struct hrtimer		timer;
 	struct list_head	dev_list;

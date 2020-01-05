@@ -1,4 +1,5 @@
 // SPDX-License-Identifier: GPL-2.0-only
+// 提供virtio bus
 #include <linux/virtio.h>
 #include <linux/spinlock.h>
 #include <linux/virtio_config.h>
@@ -9,7 +10,7 @@
 /* Unique numbering for virtio devices. */
 static DEFINE_IDA(virtio_index_ida);
 
-//显示device
+//显示/sys/bus/virtio/devices/virtio*/device
 static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
@@ -20,7 +21,7 @@ static ssize_t device_show(struct device *_d,
 //定义变量指出采用device_show回调（定义device属性）
 static DEVICE_ATTR_RO(device);
 
-//显示vendor
+//显示/sys/bus/virtio/devices/virtio*/vendor
 static ssize_t vendor_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
@@ -29,6 +30,7 @@ static ssize_t vendor_show(struct device *_d,
 }
 static DEVICE_ATTR_RO(vendor);//定义vendor属性
 
+//显示/sys/bus/virtio/devices/virtio*/status
 static ssize_t status_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
@@ -37,6 +39,7 @@ static ssize_t status_show(struct device *_d,
 }
 static DEVICE_ATTR_RO(status);//定义status属性
 
+//显示/sys/bus/virtio/devices/virtio*/modalias
 static ssize_t modalias_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
 {
@@ -46,6 +49,7 @@ static ssize_t modalias_show(struct device *_d,
 }
 static DEVICE_ATTR_RO(modalias);//模块别名
 
+//显示/sys/bus/virtio/devices/virtio*/features
 static ssize_t features_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
 {
@@ -102,6 +106,7 @@ static int virtio_dev_match(struct device *_dv, struct device_driver *_dr)
 	return 0;
 }
 
+//virtio添加的uevent环境变量
 static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
 {
 	struct virtio_device *dev = dev_to_virtio(_dv);
@@ -213,6 +218,7 @@ static int virtio_dev_probe(struct device *_d)
     //device类型，实际上是virtio的父类，而dev->dev.driver也是virtio_driver的
     //父类，通过相应函数进行转换
 	struct virtio_device *dev = dev_to_virtio(_d);
+	//设备的驱动
 	struct virtio_driver *drv = drv_to_virtio(dev->dev.driver);
 	u64 device_features;
 	u64 driver_features;
@@ -313,11 +319,15 @@ static int virtio_dev_remove(struct device *_d)
 //虚拟的virtio bus
 static struct bus_type virtio_bus = {
 	.name  = "virtio",
+	//virtio bus的设备匹配函数
 	.match = virtio_dev_match,
-	.dev_groups = virtio_dev_groups,//定义virtio的sysfs属性组
-	.uevent = virtio_uevent,//构造此设备的事件
-	//此probe将在探测virtio设备时首先被调用，然后由此函数负调用用类似virtio-net驱动的probe
+	//定义virtio bus的设置属性组
+	.dev_groups = virtio_dev_groups,
+	//virtio bus通知uevent时添加uevent环境变量
+	.uevent = virtio_uevent,
+	//virtio bus提供的设备probe函数
 	.probe = virtio_dev_probe,
+	//virtio bus提供设备的remove
 	.remove = virtio_dev_remove,
 };
 
@@ -472,6 +482,7 @@ EXPORT_SYMBOL_GPL(virtio_device_restore);
 //注册virtio_bus
 static int virtio_init(void)
 {
+    /*为系统注册virtio bus*/
 	if (bus_register(&virtio_bus) != 0)
 		panic("virtio bus registration failed");
 	return 0;

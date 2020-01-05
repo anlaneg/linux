@@ -4440,6 +4440,7 @@ static int rps_ipi_queued(struct softnet_data *sd)
 		sd->rps_ipi_next = mysd->rps_ipi_list;
 		mysd->rps_ipi_list = sd;
 
+		//触发rx软中断
 		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 		return 1;
 	}
@@ -4466,6 +4467,7 @@ static bool skb_flow_limit(struct sk_buff *skb, unsigned int qlen)
 	rcu_read_lock();
 	fl = rcu_dereference(sd->flow_limit);
 	if (fl) {
+	    /*确定桶索引*/
 		new_flow = skb_get_hash(skb) & (fl->num_buckets - 1);
 		old_flow = fl->history[fl->history_head];
 		fl->history[fl->history_head] = new_flow;
@@ -4513,6 +4515,7 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 		goto drop;
 
 	//检查是否可入队，如果无法入队，则丢包
+	//队列长度未超限，
 	qlen = skb_queue_len(&sd->input_pkt_queue);
 	if (qlen <= netdev_max_backlog && !skb_flow_limit(skb, qlen)) {
 		if (qlen) {
@@ -5517,8 +5520,10 @@ static void netif_receive_skb_list_internal(struct list_head *head)
 	struct list_head sublist;
 
 	INIT_LIST_HEAD(&sublist);
+	/*遍历head上的所有skb*/
 	list_for_each_entry_safe(skb, next, head, list) {
 		net_timestamp_check(netdev_tstamp_prequeue, skb);
+		//自head上移除
 		skb_list_del_init(skb);
 		if (!skb_defer_rx_timestamp(skb))
 			list_add_tail(&skb->list, &sublist);
@@ -5527,14 +5532,17 @@ static void netif_receive_skb_list_internal(struct list_head *head)
 
 	rcu_read_lock();
 #ifdef CONFIG_RPS
+	//通过rps确定报文送那个cpu执行软中断
 	if (static_branch_unlikely(&rps_needed)) {
 		list_for_each_entry_safe(skb, next, head, list) {
 			struct rps_dev_flow voidflow, *rflow = &voidflow;
+			/*确定是哪个cpu*/
 			int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 			if (cpu >= 0) {
 				/* Will be handled, remove from list */
 				skb_list_del_init(skb);
+				/*将skb入队到cpu对应的backlog中*/
 				enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			}
 		}
@@ -5830,6 +5838,8 @@ INDIRECT_CALLABLE_DECLARE(struct sk_buff *inet_gro_receive(struct list_head *,
 							   struct sk_buff *));
 INDIRECT_CALLABLE_DECLARE(struct sk_buff *ipv6_gro_receive(struct list_head *,
 							   struct sk_buff *));
+
+//gro 报文收取，通过返回不同的结果，标明报文在gro如何处理
 static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	u32 hash = skb_get_hash_raw(skb) & (GRO_HASH_BUCKETS - 1);
@@ -5987,6 +5997,7 @@ static void gro_normal_list(struct napi_struct *napi)
 {
 	if (!napi->rx_count)
 		return;
+	//将rx_list上所有skb清空，上送协议栈
 	netif_receive_skb_list_internal(&napi->rx_list);
 	INIT_LIST_HEAD(&napi->rx_list);
 	napi->rx_count = 0;
@@ -5999,6 +6010,7 @@ static void gro_normal_one(struct napi_struct *napi, struct sk_buff *skb)
 {
 	list_add_tail(&skb->list, &napi->rx_list);
 	if (++napi->rx_count >= gro_normal_batch)
+	    /*超过gro_normal_batch数量，上送协议栈*/
 		gro_normal_list(napi);
 }
 
@@ -6325,7 +6337,7 @@ void __napi_schedule(struct napi_struct *n)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	//将napi加入链表，并触发软中断收我
+	//将napi加入链表，并触发软中断收取报文
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	local_irq_restore(flags);
 }
@@ -6433,6 +6445,7 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 	} while (cmpxchg(&n->state, val, new) != val);
 
 	if (unlikely(val & NAPIF_STATE_MISSED)) {
+	    /*将n加入到当前cpu的napi list中，并触发rx软中断*/
 		__napi_schedule(n);
 		return false;
 	}
@@ -6777,7 +6790,7 @@ out_unlock:
 	return work;
 }
 
-//收到软件中断，尝试收包
+//收到NET_RX_SOFTIRQ软件中断，通过poll尝试收包
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
@@ -6830,7 +6843,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 	//将list写回到poll_list中
 	list_splice(&list, &sd->poll_list);
 
-	//如果poll_list上仍有节点需要收取，则主动触发网络收包软中断
+	//如果poll_list上仍有节点需要报文收取，则主动触发网络收包软中断
 	if (!list_empty(&sd->poll_list))
 		__raise_softirq_irqoff(NET_RX_SOFTIRQ);
 

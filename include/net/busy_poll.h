@@ -113,6 +113,7 @@ static inline void sk_busy_loop(struct sock *sk, int nonblock)
 static inline void skb_mark_napi_id(struct sk_buff *skb,
 				    struct napi_struct *napi)
 {
+    //标记skb是由哪个napi收取上来的
 #ifdef CONFIG_NET_RX_BUSY_POLL
 	skb->napi_id = napi->napi_id;
 #endif
