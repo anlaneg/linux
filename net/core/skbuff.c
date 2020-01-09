@@ -375,6 +375,7 @@ EXPORT_SYMBOL(build_skb_around);
 struct napi_alloc_cache {
 	struct page_frag_cache page;
 	unsigned int skb_count;
+	//缓存skb,用于申请
 	void *skb_cache[NAPI_SKB_CACHE_SIZE];
 };
 
@@ -906,6 +907,7 @@ static inline void _kfree_skb_defer(struct sk_buff *skb)
 
 	/* flush skb_cache if it is filled */
 	if (unlikely(nc->skb_count == NAPI_SKB_CACHE_SIZE)) {
+	    //数量过多，一次性释放到slab中
 		kmem_cache_free_bulk(skbuff_head_cache, NAPI_SKB_CACHE_SIZE,
 				     nc->skb_cache);
 		nc->skb_count = 0;
@@ -927,6 +929,7 @@ void napi_consume_skb(struct sk_buff *skb, int budget)
 		return;
 	}
 
+	//减少skb引用计数，如果不等于0，则返回
 	if (!skb_unref(skb))
 		return;
 

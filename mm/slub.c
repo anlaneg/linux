@@ -3024,11 +3024,11 @@ void kmem_cache_free(struct kmem_cache *s, void *x)
 EXPORT_SYMBOL(kmem_cache_free);
 
 struct detached_freelist {
-	struct page *page;
+	struct page *page;//要归还的首个元素对应的page
 	void *tail;
 	void *freelist;
 	int cnt;
-	struct kmem_cache *s;
+	struct kmem_cache *s;//要存入的cache
 };
 
 /*
@@ -3045,7 +3045,7 @@ struct detached_freelist {
  */
 static inline
 int build_detached_freelist(struct kmem_cache *s, size_t size,
-			    void **p, struct detached_freelist *df)
+			    void **p/*待释放的obj*/, struct detached_freelist *df)
 {
 	size_t first_skipped_index = 0;
 	int lookahead = 3;
@@ -3063,6 +3063,7 @@ int build_detached_freelist(struct kmem_cache *s, size_t size,
 	if (!object)
 		return 0;
 
+	//要归还的首个元素对应的page
 	page = virt_to_head_page(object);
 	if (!s) {
 		/* Handle kalloc'ed objects */
@@ -3076,6 +3077,7 @@ int build_detached_freelist(struct kmem_cache *s, size_t size,
 		/* Derive kmem_cache from object */
 		df->s = page->slab_cache;
 	} else {
+	    //指定了s,从object获得cachep，如果其与s不相同，则告警
 		df->s = cache_from_obj(s, object); /* Support for memcg */
 	}
 
@@ -3115,6 +3117,7 @@ int build_detached_freelist(struct kmem_cache *s, size_t size,
 }
 
 /* Note that interrupts must be enabled when calling this function. */
+//一次性释放掉size个obj
 void kmem_cache_free_bulk(struct kmem_cache *s, size_t size, void **p)
 {
 	if (WARN_ON(!size))

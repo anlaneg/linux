@@ -89,6 +89,7 @@ static inline void dql_queued(struct dql *dql, unsigned int count)
 /* Returns how many objects can be queued, < 0 indicates over limit. */
 static inline int dql_avail(const struct dql *dql)
 {
+    //有哪个字节可以发送
 	return READ_ONCE(dql->adj_limit) - READ_ONCE(dql->num_queued);
 }
 

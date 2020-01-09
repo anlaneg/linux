@@ -731,6 +731,7 @@ static inline int page_trans_huge_mapcount(struct page *page,
 
 static inline struct page *virt_to_head_page(const void *x)
 {
+    //取x地址对应的page
 	struct page *page = virt_to_page(x);
 
 	return compound_head(page);

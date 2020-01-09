@@ -30,6 +30,7 @@ static int pfifo_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	if (likely(sch->q.qlen < sch->limit))
 		return qdisc_enqueue_tail(skb, sch);
 
+	//存入队列中的报文长度超限时，报文将被丢弃
 	return qdisc_drop(skb, sch, to_free);
 }
 

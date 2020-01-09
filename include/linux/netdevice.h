@@ -3385,6 +3385,7 @@ static inline void netdev_tx_completed_queue(struct netdev_queue *dev_queue,
 	if (unlikely(!bytes))
 		return;
 
+	/*dql完成了bytes字节的传送*/
 	dql_completed(&dev_queue->dql, bytes);
 
 	/*

@@ -473,6 +473,7 @@ static inline struct kmem_cache *virt_to_cache(const void *obj)
 	if (WARN_ONCE(!PageSlab(page), "%s: Object is not a Slab page!\n",
 					__func__))
 		return NULL;
+	//返回此page对应的slab_cache
 	return page->slab_cache;
 }
 
@@ -501,6 +502,7 @@ static __always_inline void uncharge_slab_page(struct page *page, int order,
 	memcg_uncharge_slab(page, order, s);
 }
 
+//通过x获得其对应的cachep，如果其不与s相同，则告警
 static inline struct kmem_cache *cache_from_obj(struct kmem_cache *s, void *x)
 {
 	struct kmem_cache *cachep;
@@ -517,7 +519,10 @@ static inline struct kmem_cache *cache_from_obj(struct kmem_cache *s, void *x)
 	    !unlikely(s->flags & SLAB_CONSISTENCY_CHECKS))
 		return s;
 
+	//通过x找到page,通过page找到其对应的slab
 	cachep = virt_to_cache(x);
+
+	//检验x对应的slab是否与需要将其放入的slab相同
 	WARN_ONCE(cachep && !slab_equal_or_root(cachep, s),
 		  "%s: Wrong slab cache. %s but object is from %s\n",
 		  __func__, s->name, cachep->name);

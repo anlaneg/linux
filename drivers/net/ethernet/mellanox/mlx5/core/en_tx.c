@@ -511,6 +511,7 @@ bool mlx5e_poll_tx_cq(struct mlx5e_cq *cq, int napi_budget)
 				mlx5e_tx_dma_unmap(sq->pdev, dma);
 			}
 
+			//增加发送成功的报文数及字节数
 			npkts++;
 			nbytes += wi->num_bytes;
 			sqcc += wi->num_wqebbs;

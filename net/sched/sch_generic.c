@@ -142,6 +142,7 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 			qdisc_qstats_cpu_backlog_inc(q, skb);
 			qdisc_qstats_cpu_qlen_inc(q);
 		} else {
+		    /*记录了requeue次数*/
 			q->qstats.requeues++;
 			qdisc_qstats_backlog_inc(q, skb);
 			q->q.qlen++;
@@ -337,6 +338,7 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 	if (root_lock)
 		spin_lock(root_lock);
 
+	//设备发送未完成，重启将skb入队
 	if (!dev_xmit_complete(ret)) {
 		/* Driver returned NETDEV_TX_BUSY - requeue skb */
 		if (unlikely(ret != NETDEV_TX_BUSY))
