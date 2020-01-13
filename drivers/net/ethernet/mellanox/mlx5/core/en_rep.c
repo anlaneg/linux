@@ -1869,6 +1869,7 @@ vport_to_devlink_port_index(const struct mlx5_core_dev *dev, u16 vport_num)
 	return (MLX5_CAP_GEN(dev, vhca_id) << 16) | vport_num;
 }
 
+//向kernel注册devlink_port
 static int register_devlink_port(struct mlx5_core_dev *dev,
 				 struct mlx5e_rep_priv *rpriv)
 {
@@ -1890,14 +1891,14 @@ static int register_devlink_port(struct mlx5_core_dev *dev,
 				       &ppid.id[0], ppid.id_len);
 		dl_port_index = vport_to_devlink_port_index(dev, rep->vport);
 	} else if (rep->vport == MLX5_VPORT_PF) {
-		//设置pf对应的parent id
+		//设置devlink_port对应pf
 		devlink_port_attrs_pci_pf_set(&rpriv->dl_port,
 					      &ppid.id[0], ppid.id_len,
 					      dev->pdev->devfn);
 		dl_port_index = rep->vport;
 	} else if (mlx5_eswitch_is_vf_vport(dev->priv.eswitch,
 					    rpriv->rep->vport)) {
-		//设置此vf对应的parent id
+		//设置devlink_port对应vf
 		devlink_port_attrs_pci_vf_set(&rpriv->dl_port,
 					      &ppid.id[0], ppid.id_len,
 					      dev->pdev->devfn,
@@ -1905,7 +1906,7 @@ static int register_devlink_port(struct mlx5_core_dev *dev,
 		dl_port_index = vport_to_devlink_port_index(dev, rep->vport);
 	}
 
-	return devlink_port_register(devlink, &rpriv->dl_port, dl_port_index);
+	return devlink_port_register(devlink/*devlink_port所属的devlink*/, &rpriv->dl_port, dl_port_index);
 }
 
 static void unregister_devlink_port(struct mlx5_core_dev *dev,

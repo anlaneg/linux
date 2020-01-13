@@ -1409,7 +1409,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 *	the protocol is 0, the family is instructed to select an appropriate
 	 *	default.
 	 */
-	//申请socket
+	//申请socket结构
 	sock = sock_alloc();
 	if (!sock) {
 		net_warn_ratelimited("socket: no more sockets\n");
@@ -1520,7 +1520,7 @@ EXPORT_SYMBOL(sock_create);
  *	Returns 0 or an error. This function internally uses GFP_KERNEL.
  */
 
-//kernel创建socket
+//创建kernel socket
 int sock_create_kern(struct net *net, int family, int type, int protocol, struct socket **res)
 {
 	return __sock_create(net, family, type, protocol, res, 1);
@@ -3035,6 +3035,7 @@ int sock_register(const struct net_proto_family *ops)
 {
 	int err;
 
+	//协议族校验
 	if (ops->family >= NPROTO) {
 		pr_crit("protocol %d >= NPROTO(%d)\n", ops->family, NPROTO);
 		return -ENOBUFS;

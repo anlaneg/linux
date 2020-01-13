@@ -1008,6 +1008,7 @@ static u32 rhashtable_jhash2(const void *key, u32 length, u32 seed)
 int rhashtable_init(struct rhashtable *ht,
 		    const struct rhashtable_params *params)
 {
+	/*采用参数params初始化hashtable*/
 	struct bucket_table *tbl;
 	size_t size;
 
@@ -1020,6 +1021,7 @@ int rhashtable_init(struct rhashtable *ht,
 	spin_lock_init(&ht->lock);
 	memcpy(&ht->p, params, sizeof(*params));
 
+	//规范化min_size
 	if (params->min_size)
 		ht->p.min_size = roundup_pow_of_two(params->min_size);
 

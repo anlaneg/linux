@@ -2806,9 +2806,10 @@ static int __init netlink_proto_init(void)
 	if (err != 0)
 		goto out;
 
+	//skb中的cb空间必须大于struct netlink_skb_parms结构
 	BUILD_BUG_ON(sizeof(struct netlink_skb_parms) > sizeof_field(struct sk_buff, cb));
 
-	//申请nl_table
+	//申请nl_table，用于存放netlink支持的子protocol
 	nl_table = kcalloc(MAX_LINKS, sizeof(*nl_table), GFP_KERNEL);
 	if (!nl_table)
 		goto panic;
@@ -2826,11 +2827,13 @@ static int __init netlink_proto_init(void)
 
 	netlink_add_usersock_entry();
 
-	//注册netlink协议的socket创建ops
+	//注册netlink协议创建socket时使用的ops
 	sock_register(&netlink_family_ops);
 	register_pernet_subsys(&netlink_net_ops);
 	register_pernet_subsys(&netlink_tap_net_ops);
+
 	/* The netlink device handler may be needed early. */
+	//rtnetlink相关消息回调注册
 	rtnetlink_init();
 out:
 	return err;

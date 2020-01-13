@@ -82,7 +82,7 @@ struct rhashtable {
 	struct bucket_table __rcu	*tbl;
 	unsigned int			key_len;
 	unsigned int			max_elems;
-	struct rhashtable_params	p;
+	struct rhashtable_params	p;/*rhash对应的参数*/
 	bool				rhlist;
 	struct work_struct		run_work;
 	struct mutex                    mutex;

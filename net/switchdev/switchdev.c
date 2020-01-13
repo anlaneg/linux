@@ -19,6 +19,7 @@
 #include <linux/rtnetlink.h>
 #include <net/switchdev.h>
 
+//deferred链表及其锁
 static LIST_HEAD(deferred);
 static DEFINE_SPINLOCK(deferred_lock);
 
@@ -32,6 +33,7 @@ struct switchdev_deferred_item {
 	unsigned long data[0];
 };
 
+//移除deferred链表的首个元素
 static struct switchdev_deferred_item *switchdev_deferred_dequeue(void)
 {
 	struct switchdev_deferred_item *dfitem;
@@ -43,6 +45,7 @@ static struct switchdev_deferred_item *switchdev_deferred_dequeue(void)
 	}
 	dfitem = list_first_entry(&deferred,
 				  struct switchdev_deferred_item, list);
+	//自链表上移除
 	list_del(&dfitem->list);
 unlock:
 	spin_unlock_bh(&deferred_lock);
@@ -61,6 +64,7 @@ void switchdev_deferred_process(void)
 
 	ASSERT_RTNL();
 
+	//自deferred链表中出所有元素，并调用每个远程的func回调
 	while ((dfitem = switchdev_deferred_dequeue())) {
 		dfitem->func(dfitem->dev, dfitem->data);
 		dev_put(dfitem->dev);
@@ -69,6 +73,7 @@ void switchdev_deferred_process(void)
 }
 EXPORT_SYMBOL_GPL(switchdev_deferred_process);
 
+//deferred链表元素调用func回调
 static void switchdev_deferred_process_work(struct work_struct *work)
 {
 	rtnl_lock();
@@ -76,11 +81,13 @@ static void switchdev_deferred_process_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
+//定义worker
 static DECLARE_WORK(deferred_process_work, switchdev_deferred_process_work);
 
-static int switchdev_deferred_enqueue(struct net_device *dev,
-				      const void *data, size_t data_len,
-				      switchdev_deferred_func_t *func)
+//向deferred链表中添加元素及回调
+static int switchdev_deferred_enqueue(struct net_device *dev/*回调函数第一个参数*/,
+				      const void *data/*回调函数第二个参数*/, size_t data_len,
+				      switchdev_deferred_func_t *func/*设置回调函数*/)
 {
 	struct switchdev_deferred_item *dfitem;
 
@@ -94,6 +101,7 @@ static int switchdev_deferred_enqueue(struct net_device *dev,
 	spin_lock_bh(&deferred_lock);
 	list_add_tail(&dfitem->list, &deferred);
 	spin_unlock_bh(&deferred_lock);
+	//向deferred中添加了元素，并调度process_work
 	schedule_work(&deferred_process_work);
 	return 0;
 }
@@ -112,6 +120,7 @@ static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
 		.handled = false,
 	};
 
+	//触发blocking 通知链
 	rc = call_switchdev_blocking_notifiers(nt, dev,
 					       &attr_info.info, NULL);
 	err = notifier_to_errno(rc);
@@ -126,6 +135,7 @@ static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
 	return 0;
 }
 
+//触发switch_port_attr_set通知，通知分两遍，第一遍为ph_prepare=True
 static int switchdev_port_attr_set_now(struct net_device *dev,
 				       const struct switchdev_attr *attr)
 {
@@ -169,10 +179,12 @@ static void switchdev_port_attr_set_deferred(struct net_device *dev,
 	if (err && err != -EOPNOTSUPP)
 		netdev_err(dev, "failed (err=%d) to set attribute (id=%d)\n",
 			   err, attr->id);
+	/*有complete回调，调用complete*/
 	if (attr->complete)
 		attr->complete(dev, err, attr->complete_priv);
 }
 
+//为deferred链表添加元素，并置switchdev_port_attr_set_deferred回调
 static int switchdev_port_attr_set_defer(struct net_device *dev,
 					 const struct switchdev_attr *attr)
 {
@@ -196,9 +208,11 @@ static int switchdev_port_attr_set_defer(struct net_device *dev,
 int switchdev_port_attr_set(struct net_device *dev,
 			    const struct switchdev_attr *attr)
 {
+	/*有延迟标记，通过defered链表和，延迟回调完成*/
 	if (attr->flags & SWITCHDEV_F_DEFER)
 		return switchdev_port_attr_set_defer(dev, attr);
 	ASSERT_RTNL();
+	//直接调用
 	return switchdev_port_attr_set_now(dev, attr);
 }
 EXPORT_SYMBOL_GPL(switchdev_port_attr_set);
@@ -244,6 +258,7 @@ static int switchdev_port_obj_notify(enum switchdev_notifier_type nt,
 	return 0;
 }
 
+//触发switch_port_obj_add通知，通知分两遍，第一遍为ph_prepare=True
 static int switchdev_port_obj_add_now(struct net_device *dev,
 				      const struct switchdev_obj *obj,
 				      struct netlink_ext_ack *extack)
@@ -289,10 +304,12 @@ static void switchdev_port_obj_add_deferred(struct net_device *dev,
 	if (err && err != -EOPNOTSUPP)
 		netdev_err(dev, "failed (err=%d) to add object (id=%d)\n",
 			   err, obj->id);
+	/*有complete回调，调用complete*/
 	if (obj->complete)
 		obj->complete(dev, err, obj->complete_priv);
 }
 
+//switchdev port obj add延迟处理
 static int switchdev_port_obj_add_defer(struct net_device *dev,
 					const struct switchdev_obj *obj)
 {
@@ -318,6 +335,7 @@ int switchdev_port_obj_add(struct net_device *dev,
 			   const struct switchdev_obj *obj,
 			   struct netlink_ext_ack *extack)
 {
+	/*有延迟标记，通过defered链表和，延迟回调完成*/
 	if (obj->flags & SWITCHDEV_F_DEFER)
 		return switchdev_port_obj_add_defer(dev, obj);
 	ASSERT_RTNL();
@@ -346,6 +364,7 @@ static void switchdev_port_obj_del_deferred(struct net_device *dev,
 		obj->complete(dev, err, obj->complete_priv);
 }
 
+//switch port object delete延迟处理
 static int switchdev_port_obj_del_defer(struct net_device *dev,
 					const struct switchdev_obj *obj)
 {
@@ -366,6 +385,7 @@ static int switchdev_port_obj_del_defer(struct net_device *dev,
 int switchdev_port_obj_del(struct net_device *dev,
 			   const struct switchdev_obj *obj)
 {
+	/*有延迟标记，通过defered链表和，延迟回调完成*/
 	if (obj->flags & SWITCHDEV_F_DEFER)
 		return switchdev_port_obj_del_defer(dev, obj);
 	ASSERT_RTNL();
@@ -373,7 +393,9 @@ int switchdev_port_obj_del(struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(switchdev_port_obj_del);
 
+//switchdev通知链
 static ATOMIC_NOTIFIER_HEAD(switchdev_notif_chain);
+//switchdev块通知链
 static BLOCKING_NOTIFIER_HEAD(switchdev_blocking_notif_chain);
 
 /**
@@ -397,6 +419,7 @@ EXPORT_SYMBOL_GPL(register_switchdev_notifier);
  */
 int unregister_switchdev_notifier(struct notifier_block *nb)
 {
+	//解注册switchdev通知链
 	return atomic_notifier_chain_unregister(&switchdev_notif_chain, nb);
 }
 EXPORT_SYMBOL_GPL(unregister_switchdev_notifier);
@@ -420,6 +443,7 @@ int call_switchdev_notifiers(unsigned long val, struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(call_switchdev_notifiers);
 
+//switchdev blocking通知链注册
 int register_switchdev_blocking_notifier(struct notifier_block *nb)
 {
 	struct blocking_notifier_head *chain = &switchdev_blocking_notif_chain;
@@ -428,6 +452,7 @@ int register_switchdev_blocking_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(register_switchdev_blocking_notifier);
 
+//switchdev blocking通知链解注册
 int unregister_switchdev_blocking_notifier(struct notifier_block *nb)
 {
 	struct blocking_notifier_head *chain = &switchdev_blocking_notif_chain;
@@ -436,6 +461,7 @@ int unregister_switchdev_blocking_notifier(struct notifier_block *nb)
 }
 EXPORT_SYMBOL_GPL(unregister_switchdev_blocking_notifier);
 
+//触发switchdev blocking通知链
 int call_switchdev_blocking_notifiers(unsigned long val, struct net_device *dev,
 				      struct switchdev_notifier_info *info,
 				      struct netlink_ext_ack *extack)

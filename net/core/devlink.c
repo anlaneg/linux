@@ -96,7 +96,7 @@ static LIST_HEAD(devlink_list);
  */
 static DEFINE_MUTEX(devlink_mutex);
 
-//devlink对应的namespace
+//取devlink对应的namespace
 struct net *devlink_net(const struct devlink *devlink)
 {
 	return read_pnet(&devlink->_net);
@@ -109,7 +109,7 @@ static void __devlink_net_set(struct devlink *devlink, struct net *net)
 	write_pnet(&devlink->_net, net);
 }
 
-//通过busname,devname获取到对应的devlink
+//设置devlink对应的net namespace
 void devlink_net_set(struct devlink *devlink, struct net *net)
 {
 	if (WARN_ON(devlink->registered))
@@ -118,6 +118,7 @@ void devlink_net_set(struct devlink *devlink, struct net *net)
 }
 EXPORT_SYMBOL_GPL(devlink_net_set);
 
+//通过busname,devname获取到对应的devlink
 static struct devlink *devlink_get_from_attrs(struct net *net,
 					      struct nlattr **attrs)
 {
@@ -151,28 +152,33 @@ static struct devlink *devlink_get_from_info(struct genl_info *info)
 	return devlink_get_from_attrs(genl_info_net(info), info->attrs);
 }
 
+//通过devlink_port index获得指定devlink的devlink_port
 static struct devlink_port *devlink_port_get_by_index(struct devlink *devlink,
 						      unsigned int port_index)
 {
 	struct devlink_port *devlink_port;
 
 	list_for_each_entry(devlink_port, &devlink->port_list, list) {
+		//如果devlink port的index与参数所给一致，则返回
 		if (devlink_port->index == port_index)
 			return devlink_port;
 	}
 	return NULL;
 }
 
+//检查devlink上给定的port_index对应的devlink_port是否已存在
 static bool devlink_port_index_exists(struct devlink *devlink,
 				      unsigned int port_index)
 {
 	return devlink_port_get_by_index(devlink, port_index);
 }
 
+//通过attrs获得devlink对应的devlink_port
 static struct devlink_port *devlink_port_get_from_attrs(struct devlink *devlink,
 							struct nlattr **attrs)
 {
 	if (attrs[DEVLINK_ATTR_PORT_INDEX]) {
+		//提取devlink port index,并返回devlink_port
 		u32 port_index = nla_get_u32(attrs[DEVLINK_ATTR_PORT_INDEX]);
 		struct devlink_port *devlink_port;
 
@@ -184,6 +190,7 @@ static struct devlink_port *devlink_port_get_from_attrs(struct devlink *devlink,
 	return ERR_PTR(-EINVAL);
 }
 
+//通过参数，获得devlink_port
 static struct devlink_port *devlink_port_get_from_info(struct devlink *devlink,
 						       struct genl_info *info)
 {
@@ -205,12 +212,14 @@ static u16 devlink_sb_pool_count(struct devlink_sb *devlink_sb)
 	return devlink_sb->ingress_pools_count + devlink_sb->egress_pools_count;
 }
 
+//通过devlink,sb_index获得devlink_sb
 static struct devlink_sb *devlink_sb_get_by_index(struct devlink *devlink,
 						  unsigned int sb_index)
 {
 	struct devlink_sb *devlink_sb;
 
 	list_for_each_entry(devlink_sb, &devlink->sb_list, list) {
+		//查找指定sb_index
 		if (devlink_sb->index == sb_index)
 			return devlink_sb;
 	}
@@ -223,10 +232,12 @@ static bool devlink_sb_index_exists(struct devlink *devlink,
 	return devlink_sb_get_by_index(devlink, sb_index);
 }
 
+//通过参数，获得devlink_sb
 static struct devlink_sb *devlink_sb_get_from_attrs(struct devlink *devlink,
 						    struct nlattr **attrs)
 {
 	if (attrs[DEVLINK_ATTR_SB_INDEX]) {
+		//通过sb index获得devlink_sb
 		u32 sb_index = nla_get_u32(attrs[DEVLINK_ATTR_SB_INDEX]);
 		struct devlink_sb *devlink_sb;
 
@@ -238,6 +249,7 @@ static struct devlink_sb *devlink_sb_get_from_attrs(struct devlink *devlink,
 	return ERR_PTR(-EINVAL);
 }
 
+//由devlink获取devlink_sb
 static struct devlink_sb *devlink_sb_get_from_info(struct devlink *devlink,
 						   struct genl_info *info)
 {
@@ -392,13 +404,16 @@ devlink_region_snapshot_get_by_id(struct devlink_region *region, u32 id)
 
 //命令处理上下文需要devlink
 #define DEVLINK_NL_FLAG_NEED_DEVLINK	BIT(0)
+//命令处理上下文需要devlink port
 #define DEVLINK_NL_FLAG_NEED_PORT	BIT(1)
+//命令处理上下文需要devlink sb
 #define DEVLINK_NL_FLAG_NEED_SB		BIT(2)
 
 /* The per devlink instance lock is taken by default in the pre-doit
  * operation, yet several commands do not require this. The global
  * devlink lock is taken and protects from disruption by user-calls.
  */
+//当前没有指明不加锁
 #define DEVLINK_NL_FLAG_NO_LOCK		BIT(3)
 
 //devlink消息处理前回调
@@ -415,13 +430,16 @@ static int devlink_nl_pre_doit(const struct genl_ops *ops,
 		mutex_unlock(&devlink_mutex);
 		return PTR_ERR(devlink);
 	}
+
 	if (~ops->internal_flags & DEVLINK_NL_FLAG_NO_LOCK)
 		//未指明不需要锁，则加锁
 		mutex_lock(&devlink->lock);
+
 	if (ops->internal_flags & DEVLINK_NL_FLAG_NEED_DEVLINK) {
 		//如果处理上下文需要devlink,则设置它
 		info->user_ptr[0] = devlink;
 	} else if (ops->internal_flags & DEVLINK_NL_FLAG_NEED_PORT) {
+		//如果处理上下文需要devlink port,则设置它
 		struct devlink_port *devlink_port;
 
 		devlink_port = devlink_port_get_from_info(devlink, info);
@@ -431,6 +449,8 @@ static int devlink_nl_pre_doit(const struct genl_ops *ops,
 		}
 		info->user_ptr[0] = devlink_port;
 	}
+
+	//如果上下文处理需要devlink sb,则设置它
 	if (ops->internal_flags & DEVLINK_NL_FLAG_NEED_SB) {
 		struct devlink_sb *devlink_sb;
 
@@ -2808,6 +2828,7 @@ static int devlink_reload(struct devlink *devlink, struct net *dest_net,
 {
 	int err;
 
+	/*不支持devlink reload*/
 	if (!devlink->reload_enabled)
 		return -EOPNOTSUPP;
 
@@ -2977,6 +2998,7 @@ static int devlink_nl_cmd_flash_update(struct sk_buff *skb,
 					  info->extack);
 }
 
+//devlink parameter一般性参数定义
 static const struct devlink_param devlink_param_generic[] = {
 	{
 		.id = DEVLINK_PARAM_GENERIC_ID_INT_ERR_RESET,
@@ -3030,14 +3052,17 @@ static const struct devlink_param devlink_param_generic[] = {
 	},
 };
 
+//一般性参数校验
 static int devlink_param_generic_verify(const struct devlink_param *param)
 {
 	/* verify it match generic parameter by id and name */
 	if (param->id > DEVLINK_PARAM_GENERIC_ID_MAX)
 		return -EINVAL;
+	//一般性参数名称匹配
 	if (strcmp(param->name, devlink_param_generic[param->id].name))
 		return -ENOENT;
 
+	//一般性参数类型匹配
 	WARN_ON(param->type != devlink_param_generic[param->id].type);
 
 	return 0;
@@ -3047,8 +3072,11 @@ static int devlink_param_driver_verify(const struct devlink_param *param)
 {
 	int i;
 
+	//不得使用预定义的普通参数id
 	if (param->id <= DEVLINK_PARAM_GENERIC_ID_MAX)
 		return -EINVAL;
+
+	//不得使用预定义的普通参数名称
 	/* verify no such name in generic params */
 	for (i = 0; i <= DEVLINK_PARAM_GENERIC_ID_MAX; i++)
 		if (!strcmp(param->name, devlink_param_generic[i].name))
@@ -3057,6 +3085,7 @@ static int devlink_param_driver_verify(const struct devlink_param *param)
 	return 0;
 }
 
+//通过名称查找给定名称的paramter item
 static struct devlink_param_item *
 devlink_param_find_by_name(struct list_head *param_list,
 			   const char *param_name)
@@ -3266,6 +3295,7 @@ genlmsg_cancel:
 	return -EMSGSIZE;
 }
 
+//发起devlink参数操作通知
 static void devlink_param_notify(struct devlink *devlink,
 				 unsigned int port_index,
 				 struct devlink_param_item *param_item,
@@ -3509,6 +3539,7 @@ static int devlink_nl_cmd_param_set_doit(struct sk_buff *skb,
 					       info, DEVLINK_CMD_PARAM_NEW);
 }
 
+//devlink参数注册
 static int devlink_param_register_one(struct devlink *devlink,
 				      unsigned int port_index,
 				      struct list_head *param_list,
@@ -3517,6 +3548,7 @@ static int devlink_param_register_one(struct devlink *devlink,
 {
 	struct devlink_param_item *param_item;
 
+	//要添加的paramter名称不得已存在
 	if (devlink_param_find_by_name(param_list, param->name))
 		return -EEXIST;
 
@@ -3530,6 +3562,7 @@ static int devlink_param_register_one(struct devlink *devlink,
 		return -ENOMEM;
 	param_item->param = param;
 
+	//将param添加进param_list中
 	list_add_tail(&param_item->list, param_list);
 	devlink_param_notify(devlink, port_index, param_item, cmd);
 	return 0;
@@ -3556,7 +3589,7 @@ static int devlink_nl_cmd_port_param_get_dumpit(struct sk_buff *msg,
 	struct devlink_param_item *param_item;
 	struct devlink_port *devlink_port;
 	struct devlink *devlink;
-	int start = cb->args[0];
+	int start = cb->args[0];/*自哪个参数开始*/
 	int idx = 0;
 	int err = 0;
 
@@ -3565,9 +3598,12 @@ static int devlink_nl_cmd_port_param_get_dumpit(struct sk_buff *msg,
 		if (!net_eq(devlink_net(devlink), sock_net(msg->sk)))
 			continue;
 		mutex_lock(&devlink->lock);
+		//遍历所有devlink_port
 		list_for_each_entry(devlink_port, &devlink->port_list, list) {
+			//遍历此devlink_port上所有paramter
 			list_for_each_entry(param_item,
 					    &devlink_port->param_list, list) {
+				//跳过已遍历的部分
 				if (idx < start) {
 					idx++;
 					continue;
@@ -6335,12 +6371,12 @@ EXPORT_SYMBOL_GPL(devlink_alloc);
 int devlink_register(struct devlink *devlink, struct device *dev)
 {
 	//将devlink注册到devlink_list,以便支持devlink命令
-
 	mutex_lock(&devlink_mutex);
 	devlink->dev = dev;
 	devlink->registered = true;
 	//将devlink添加到devlink_list链表
 	list_add_tail(&devlink->list, &devlink_list);
+
 	//通知devlink设备new事件
 	devlink_notify(devlink, DEVLINK_CMD_NEW);
 	mutex_unlock(&devlink_mutex);
@@ -6481,6 +6517,7 @@ int devlink_port_register(struct devlink *devlink,
 	devlink_port->index = port_index;
 	devlink_port->registered = true;
 	spin_lock_init(&devlink_port->type_lock);
+	//添加devlink_port到devlink
 	list_add_tail(&devlink_port->list, &devlink->port_list);
 	INIT_LIST_HEAD(&devlink_port->param_list);
 	mutex_unlock(&devlink->lock);
@@ -6595,13 +6632,15 @@ EXPORT_SYMBOL_GPL(devlink_port_type_clear);
 //为devlink_port设置switch_id
 static int __devlink_port_attrs_set(struct devlink_port *devlink_port,
 				    enum devlink_port_flavour flavour,
-				    const unsigned char *switch_id,
+				    const unsigned char *switch_id/*devlink_port所属的switch-id*/,
 				    unsigned char switch_id_len)
 {
 	struct devlink_port_attrs *attrs = &devlink_port->attrs;
 
+	//不容许设置已注册的devlink_port
 	if (WARN_ON(devlink_port->registered))
 		return -EEXIST;
+
 	attrs->set = true;
 	attrs->flavour = flavour;
 	if (switch_id) {
@@ -6665,6 +6704,7 @@ void devlink_port_attrs_pci_pf_set(struct devlink_port *devlink_port,
 				   const unsigned char *switch_id,
 				   unsigned char switch_id_len, u16 pf)
 {
+	//设置从属于pf的devlink_port
 	struct devlink_port_attrs *attrs = &devlink_port->attrs;
 	int ret;
 
@@ -6746,6 +6786,7 @@ static int __devlink_port_phys_port_name_get(struct devlink_port *devlink_port,
 	return 0;
 }
 
+//为devlink添加devlink_sb
 int devlink_sb_register(struct devlink *devlink, unsigned int sb_index,
 			u32 size, u16 ingress_pools_count,
 			u16 egress_pools_count, u16 ingress_tc_count,
@@ -7129,21 +7170,24 @@ out:
 }
 EXPORT_SYMBOL_GPL(devlink_resource_occ_get_unregister);
 
+//参数有效性校验
 static int devlink_param_verify(const struct devlink_param *param)
 {
 	if (!param || !param->name || !param->supported_cmodes)
 		return -EINVAL;
 	if (param->generic)
+		/*一般性参数校验*/
 		return devlink_param_generic_verify(param);
 	else
+		/*driver自定义参数校验*/
 		return devlink_param_driver_verify(param);
 }
 
 static int __devlink_params_register(struct devlink *devlink,
 				     unsigned int port_index,
-				     struct list_head *param_list,
-				     const struct devlink_param *params,
-				     size_t params_count,
+				     struct list_head *param_list/*参数列表*/,
+				     const struct devlink_param *params/*要注册的参数数组*/,
+				     size_t params_count/*参数数组大小*/,
 				     enum devlink_command reg_cmd,
 				     enum devlink_command unreg_cmd)
 {
@@ -7153,10 +7197,12 @@ static int __devlink_params_register(struct devlink *devlink,
 
 	mutex_lock(&devlink->lock);
 	for (i = 0; i < params_count; i++, param++) {
+		//校验参数
 		err = devlink_param_verify(param);
 		if (err)
 			goto rollback;
 
+		//注册参数
 		err = devlink_param_register_one(devlink, port_index,
 						 param_list, param, reg_cmd);
 		if (err)
@@ -7170,6 +7216,7 @@ rollback:
 	if (!i)
 		goto unlock;
 	for (param--; i > 0; i--, param--)
+		//实现单个参数解注册
 		devlink_param_unregister_one(devlink, port_index, param_list,
 					     param, unreg_cmd);
 unlock:
@@ -7204,9 +7251,10 @@ static void __devlink_params_unregister(struct devlink *devlink,
  *	Register the configuration parameters supported by the driver.
  */
 int devlink_params_register(struct devlink *devlink,
-			    const struct devlink_param *params,
-			    size_t params_count)
+			    const struct devlink_param *params/*要注册的devlink参数数组*/,
+			    size_t params_count/*参数数组大小*/)
 {
+	//为devlink添加多个参数，注册成功发起param_new事件，否则回退时发起param_del事件
 	return __devlink_params_register(devlink, 0, &devlink->param_list,
 					 params, params_count,
 					 DEVLINK_CMD_PARAM_NEW,

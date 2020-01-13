@@ -139,6 +139,7 @@
 #include <net/busy_poll.h>
 
 static DEFINE_MUTEX(proto_list_mutex);
+//记录系统已注册的所有protocol
 static LIST_HEAD(proto_list);
 
 static void sock_inuse_add(struct net *net, int val);
@@ -3312,9 +3313,10 @@ static __init int net_inuse_init(void)
 
 core_initcall(net_inuse_init);
 
+//为prot分配空闲的protocol index
 static int assign_proto_idx(struct proto *prot)
 {
-	//找一个空闲的idx
+	//找一个空闲的protocol idx
 	prot->inuse_idx = find_first_zero_bit(proto_inuse_idx, PROTO_INUSE_NR);
 
 	if (unlikely(prot->inuse_idx == PROTO_INUSE_NR - 1)) {
@@ -3357,6 +3359,7 @@ static void req_prot_cleanup(struct request_sock_ops *rsk_prot)
 	rsk_prot->slab = NULL;
 }
 
+//为prot->rsk_prot创始slab
 static int req_prot_init(const struct proto *prot)
 {
 	struct request_sock_ops *rsk_prot = prot->rsk_prot;
@@ -3364,11 +3367,13 @@ static int req_prot_init(const struct proto *prot)
 	if (!rsk_prot)
 		return 0;
 
+	//构造slab名称
 	rsk_prot->slab_name = kasprintf(GFP_KERNEL, "request_sock_%s",
 					prot->name);
 	if (!rsk_prot->slab_name)
 		return -ENOMEM;
 
+	//构造slab
 	rsk_prot->slab = kmem_cache_create(rsk_prot->slab_name,
 					   rsk_prot->obj_size, 0,
 					   SLAB_ACCOUNT | prot->slab_flags,
@@ -3406,11 +3411,13 @@ int proto_register(struct proto *prot, int alloc_slab)
 			goto out_free_request_sock_slab;
 
 		if (prot->twsk_prot != NULL) {
+			//初始化twsk_prot
 			prot->twsk_prot->twsk_slab_name = kasprintf(GFP_KERNEL, "tw_sock_%s", prot->name);
 
 			if (prot->twsk_prot->twsk_slab_name == NULL)
 				goto out_free_request_sock_slab;
 
+			//创建twsk slab
 			prot->twsk_prot->twsk_slab =
 				kmem_cache_create(prot->twsk_prot->twsk_slab_name,
 						  prot->twsk_prot->twsk_obj_size,
@@ -3424,6 +3431,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 	}
 
 	mutex_lock(&proto_list_mutex);
+	//为prot查找一个空闲的protocol index
 	ret = assign_proto_idx(prot);
 	if (ret) {
 		mutex_unlock(&proto_list_mutex);

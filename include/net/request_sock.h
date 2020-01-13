@@ -29,6 +29,7 @@ struct request_sock_ops {
 	unsigned int	obj_size;
 	//申请空间用的slab
 	struct kmem_cache	*slab;
+	//request_sock slab名称
 	char		*slab_name;
 	int		(*rtx_syn_ack)(const struct sock *sk,
 				       struct request_sock *req);

@@ -214,11 +214,13 @@ struct proto_ops {
 	type dst = ({ __sockaddr_check_size(sizeof(*dst)); (type) src; })
 
 struct net_proto_family {
+	//协议所属的协议族
 	int		family;
 	//kernel系统调用通过family参数找到对应的net_proto_family结构
 	//再通过此结构的create函数完成socket的创建
 	int		(*create)(struct net *net, struct socket *sock,
 				  int protocol, int kern);
+	//所属的module
 	struct module	*owner;
 };
 

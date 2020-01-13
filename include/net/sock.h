@@ -1153,6 +1153,7 @@ struct proto {
 
 	/* Keeping track of sockets in use */
 #ifdef CONFIG_PROC_FS
+	//协议对应的protocol index
 	unsigned int		inuse_idx;
 #endif
 
@@ -1182,7 +1183,7 @@ struct proto {
 
 	//自指定slab中申请sock
 	struct kmem_cache	*slab;
-	//sock申请的空间大小
+	//sock slab的obj空间大小
 	unsigned int		obj_size;
 	slab_flags_t		slab_flags;
 	unsigned int		useroffset;	/* Usercopy region offset */
@@ -1200,10 +1201,13 @@ struct proto {
 		struct smc_hashinfo	*smc_hash;
 	} h;
 
+	//所属模块
 	struct module		*owner;
 
+	//协议名称
 	char			name[32];
 
+	//用于串连到proto_list
 	struct list_head	node;
 #ifdef SOCK_REFCNT_DEBUG
 	atomic_t		socks;

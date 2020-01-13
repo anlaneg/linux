@@ -23,7 +23,9 @@ struct devlink_ops;
 struct devlink {
 	//挂载至devlink_list
 	struct list_head list;
+	//用于串连devlink_port
 	struct list_head port_list;
+	//用于串连devlink_sb
 	struct list_head sb_list;
 	struct list_head dpipe_table_list;
 	struct list_head resource_list;
@@ -37,7 +39,7 @@ struct devlink {
 	struct list_head trap_group_list;
 	//devlink对应的ops
 	const struct devlink_ops *ops;
-	//devlink对应的dev
+	//devlink对应的dev设备
 	struct device *dev;
 	possible_net_t _net;
 	struct mutex lock;
@@ -69,20 +71,21 @@ struct devlink_port_attrs {
 	   split:1,
 	   switch_port:1;/*指定为有效switch_port*/
 	enum devlink_port_flavour flavour;
+	/*devport对应的switch id*/
 	struct netdev_phys_item_id switch_id;
 	union {
 		struct devlink_port_phys_attrs phys;
-		struct devlink_port_pci_pf_attrs pci_pf;
-		struct devlink_port_pci_vf_attrs pci_vf;
+		struct devlink_port_pci_pf_attrs pci_pf;//这个口关联哪个pf
+		struct devlink_port_pci_vf_attrs pci_vf;//这个口关联哪个pf,vf
 	};
 };
 
 struct devlink_port {
-	struct list_head list;
+	struct list_head list;//用于挂接到devlink
 	struct list_head param_list;
-	struct devlink *devlink;
-	unsigned int index;
-	bool registered;
+	struct devlink *devlink;//所属的devlink
+	unsigned int index;//devlink port的index
+	bool registered;//是否已注册
 	spinlock_t type_lock; /* Protects type and type_dev
 			       * pointer consistency.
 			       */
@@ -374,8 +377,8 @@ struct devlink_param_gset_ctx {
  */
 struct devlink_param {
 	u32 id;
-	const char *name;
-	bool generic;
+	const char *name;/*参数名称*/
+	bool generic;/*是否普通参数*/
 	enum devlink_param_type type;
 	unsigned long supported_cmodes;
 	int (*get)(struct devlink *devlink, u32 id,
