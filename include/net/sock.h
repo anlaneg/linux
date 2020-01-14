@@ -372,11 +372,12 @@ struct sock {
 #define sk_rxhash		__sk_common.skc_rxhash
 
 	socket_lock_t		sk_lock;
+	//增加socket收不及时丢包计数
 	atomic_t		sk_drops;
 	int			sk_rcvlowat;
 	struct sk_buff_head	sk_error_queue;
 	struct sk_buff		*sk_rx_skb_cache;
-	//接受到的报文缓冲在此队列
+	//接收到的报文缓冲在此队列
 	struct sk_buff_head	sk_receive_queue;
 	/*
 	 * The backlog queue is special, it is always used with
@@ -979,6 +980,7 @@ static inline void sk_incoming_cpu_update(struct sock *sk)
 {
 	int cpu = raw_smp_processor_id();
 
+	//如果sk记录的incoming_cpu与当前cpu不同，则更新记录
 	if (unlikely(READ_ONCE(sk->sk_incoming_cpu) != cpu))
 		WRITE_ONCE(sk->sk_incoming_cpu, cpu);
 }

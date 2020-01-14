@@ -96,12 +96,12 @@ struct iphdr {
 	__u8	tos;
 	__be16	tot_len;
 	__be16	id;
-	__be16	frag_off;
-	__u8	ttl;
-	__u8	protocol;
-	__sum16	check;
-	__be32	saddr;
-	__be32	daddr;
+	__be16	frag_off;//分片相关
+	__u8	ttl;//ttl
+	__u8	protocol;//协议
+	__sum16	check;//check sum
+	__be32	saddr;//源地址
+	__be32	daddr;//目的地址
 	/*The options start here. */
 };
 

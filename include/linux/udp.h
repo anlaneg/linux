@@ -44,6 +44,7 @@ struct udp_sock {
 #define udp_portaddr_node	inet.sk.__sk_common.skc_portaddr_node
 	int		 pending;	/* Any pending frames ? */
 	unsigned int	 corkflag;	/* Cork is required */
+	//是否为一个encap的socket类型
 	__u8		 encap_type;	/* Is this an Encapsulation socket? */
 	unsigned char	 no_check6_tx:1,/* Send zero UDP6 checksums on TX? */
 			 no_check6_rx:1,/* Allow zero UDP6 checksums on RX? */
@@ -73,6 +74,7 @@ struct udp_sock {
 	/*
 	 * For encapsulation sockets.
 	 */
+	//encap socket对应的encap回调
 	int (*encap_rcv)(struct sock *sk, struct sk_buff *skb);
 	int (*encap_err_lookup)(struct sock *sk, struct sk_buff *skb);
 	void (*encap_destroy)(struct sock *sk);

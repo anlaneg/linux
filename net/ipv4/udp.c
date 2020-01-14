@@ -362,27 +362,30 @@ static int compute_score(struct sock *sk, struct net *net,
 	struct inet_sock *inet;
 	bool dev_match;
 
-	/*net namespace与net不相等，或者udp_port不相等，或者仅使能ipv6,则不能匹配*/
+	/*net namespace与net不相等，或者udp_port不相等，或者socket仅使能了ipv6,则不能匹配*/
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
 	    ipv6_only_sock(sk))
 		return -1;
 
-	/*socket指定的接收地址，非目的地址*/
+	/*socket指定的接收地址，非本目的地址*/
 	if (sk->sk_rcv_saddr != daddr)
 		return -1;
 
+	//优先选inet的socket
 	score = (sk->sk_family == PF_INET) ? 2 : 1;
 
+	//以下每命中一项，则+4分
+
 	inet = inet_sk(sk);
-	//socket,指定了daddr,检查daddr
+	//socket指定了daddr,检查daddr是否匹配
 	if (inet->inet_daddr) {
 		if (inet->inet_daddr != saddr)
 			return -1;
 		score += 4;
 	}
 
-	//socket指定了sport,检查sport
+	//socket指定了sport,检查sport是否匹配
 	if (inet->inet_dport) {
 		if (inet->inet_dport != sport)
 			return -1;
@@ -395,11 +398,13 @@ static int compute_score(struct sock *sk, struct net *net,
 		return -1;
 	score += 4;
 
+	//如果socket入口的cpu与当前cpu相等，则加1分
 	if (READ_ONCE(sk->sk_incoming_cpu) == raw_smp_processor_id())
 		score++;
 	return score;
 }
 
+//udp 哈希计算函数
 static u32 udp_ehashfn(const struct net *net, const __be32 laddr,
 		       const __u16 lport, const __be32 faddr,
 		       const __be16 fport)
@@ -432,15 +437,20 @@ static struct sock *udp4_lib_lookup2(struct net *net,
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif);
 		if (score > badness) {
+			//得分大于之前匹配的socket,则优先使用此匹配
 			if (sk->sk_reuseport &&
 			    sk->sk_state != TCP_ESTABLISHED) {
+				//此socket容许port reuse,且状态不为EST状态
+				//计算hash，并自其中选一个socket出来
 				hash = udp_ehashfn(net, daddr, hnum,
 						   saddr, sport);
 				result = reuseport_select_sock(sk, hash, skb,
 							sizeof(struct udphdr));
+				//选出了一个sokcet,且此socket还没有连接，则直接返回（最优结果）
 				if (result && !reuseport_has_conns(sk, false))
 					return result;
 			}
+			//记录得分，继续查找
 			badness = score;
 			result = sk;
 		}
@@ -463,9 +473,10 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr/*源地址*/,
 	//利用{目的地址,目的端口（主机序）}做为hash2
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
 	slot2 = hash2 & udptable->mask;
-	//确认hash2对应的bucket
+	//确认hash2对应的bucket即hslot2
 	hslot2 = &udptable->hash2[slot2];
 
+	//通过得分方式，优先用非0的目地地址，在hslot2链表上选一个合适的socket
 	result = udp4_lib_lookup2(net, saddr, sport,
 				  daddr, hnum, dif, sdif,
 				  hslot2, skb);
@@ -485,6 +496,7 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr/*源地址*/,
 }
 EXPORT_SYMBOL_GPL(__udp4_lib_lookup);
 
+//通过源port,目的port查询skb对应的socket
 static inline struct sock *__udp4_lib_lookup_skb(struct sk_buff *skb,
 						 __be16 sport, __be16 dport,
 						 struct udp_table *udptable)
@@ -978,6 +990,7 @@ int udp_cmsg_send(struct sock *sk, struct msghdr *msg, u16 *gso_size)
 }
 EXPORT_SYMBOL_GPL(udp_cmsg_send);
 
+//udp报文发送
 int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -1523,7 +1536,7 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	__skb_queue_tail(list, skb);
 	spin_unlock(&list->lock);
 
-	//知会socket数据ready
+	//如果socket无dead标记，则知会socket数据ready
 	if (!sock_flag(sk, SOCK_DEAD))
 		sk->sk_data_ready(sk);
 
@@ -1994,6 +2007,7 @@ static int __udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		sk_mark_napi_id_once(sk, skb);
 	}
 
+	//将skb入队列socket中
 	rc = __udp_enqueue_schedule_skb(sk, skb);
 	if (rc < 0) {
 		int is_udplite = IS_UDPLITE(sk);
@@ -2293,7 +2307,7 @@ static inline int udp4_csum_init(struct sk_buff *skb, struct udphdr *uh,
 /* wrapper for udp_queue_rcv_skb tacking care of csum conversion and
  * return code conversion for ip layer consumption
  */
-//socket sk收到单播报文
+//收到udp skb,且查找到此skb对应的socket,处理此单播报文
 static int udp_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb,
 			       struct udphdr *uh)
 {
@@ -2371,11 +2385,15 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		return __udp4_lib_mcast_deliver(net, skb, uh,
 						saddr, daddr, udptable, proto);
 
+	//在udptable中查找此udp报文对应的socket
 	sk = __udp4_lib_lookup_skb(skb, uh->source, uh->dest, udptable);
 	if (sk)
-	    //已有对应的sock,执行udp单播收包
+	    //找到了此报文对应的sock,执行udp单播收包
 		return udp_unicast_rcv_skb(sk, skb, uh);
 
+	//未找到此skb对应的socket
+
+	//查policy_in
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto drop;
 	nf_reset_ct(skb);

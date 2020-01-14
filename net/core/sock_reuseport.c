@@ -286,8 +286,10 @@ struct sock *reuseport_select_sock(struct sock *sk,
 		smp_rmb();
 
 		if (!prog || !skb)
+			/*没有bpf程序或者skb为空，采用hash进行选择*/
 			goto select_by_hash;
 
+		//有bpf程序，采用bpf程序选择一个出来
 		if (prog->type == BPF_PROG_TYPE_SK_REUSEPORT)
 			sk2 = bpf_run_sk_reuseport(reuse, sk, prog, skb, hash);
 		else
