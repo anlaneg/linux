@@ -89,21 +89,23 @@ extern struct dentry_stat_t dentry_stat;
 //定义目录项数据结构
 struct dentry {
 	/* RCU lookup touched fields */
+	//看DCACHE_OP_*定义
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_t d_seq;		/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	//指向父目录项
 	struct dentry *d_parent;	/* parent directory */
-	struct qstr d_name;//此dentry的名称
+	struct qstr d_name;//指向此dentry的名称
 	//此dentry对应的inode
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
 					 * negative */
+	//内建的短名称空间
 	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
-	const struct dentry_operations *d_op;//dentry操作集
-	struct super_block *d_sb;	/* The root of the dentry tree */ //超级块指针
+	const struct dentry_operations *d_op;//dentry对应的操作集
+	struct super_block *d_sb;	/* The root of the dentry tree */ //所属的超级块指针
 	unsigned long d_time;		/* used by d_revalidate */
 	void *d_fsdata;			/* fs-specific data */
 
@@ -144,6 +146,7 @@ struct dentry_operations {
 	int (*d_compare)(const struct dentry *,
 			unsigned int, const char *, const struct qstr *);
 	int (*d_delete)(const struct dentry *);
+	//申请dentry后，用于初始化dentry
 	int (*d_init)(struct dentry *);
 	void (*d_release)(struct dentry *);
 	void (*d_prune)(struct dentry *);
@@ -163,10 +166,15 @@ struct dentry_operations {
  */
 
 /* d_flags entries */
+//标记有d_hash回调
 #define DCACHE_OP_HASH			0x00000001
+//标记有d_compare回调
 #define DCACHE_OP_COMPARE		0x00000002
+//标记有d_revalidate回调
 #define DCACHE_OP_REVALIDATE		0x00000004
+//标记有d_delete回调
 #define DCACHE_OP_DELETE		0x00000008
+//标记有d_prune回调
 #define DCACHE_OP_PRUNE			0x00000010
 
 #define	DCACHE_DISCONNECTED		0x00000020
@@ -186,6 +194,7 @@ struct dentry_operations {
 #define DCACHE_GENOCIDE			0x00000200
 #define DCACHE_SHRINK_LIST		0x00000400
 
+//标记有d_weak_revalidate回调
 #define DCACHE_OP_WEAK_REVALIDATE	0x00000800
 
 #define DCACHE_NFSFS_RENAMED		0x00001000
@@ -217,10 +226,12 @@ struct dentry_operations {
 #define DCACHE_MAY_FREE			0x00800000
 #define DCACHE_FALLTHRU			0x01000000 /* Fall through to lower layer */
 #define DCACHE_ENCRYPTED_NAME		0x02000000 /* Encrypted name (dir key was unavailable) */
+//标记有d_real回调
 #define DCACHE_OP_REAL			0x04000000
 
 #define DCACHE_PAR_LOOKUP		0x10000000 /* being looked up (with parent locked shared) */
 #define DCACHE_DENTRY_CURSOR		0x20000000
+//标记dentry释放时，不需要经过ruc等待
 #define DCACHE_NORCU			0x40000000 /* No RCU delay for freeing */
 
 extern seqlock_t rename_lock;

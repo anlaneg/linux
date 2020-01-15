@@ -15,7 +15,7 @@
 /*
  * When introducing new O_* bits, please check its uniqueness in fcntl_init().
  */
-
+//掩码：读写模式
 #define O_ACCMODE	00000003
 #define O_RDONLY	00000000
 #define O_WRONLY	00000001

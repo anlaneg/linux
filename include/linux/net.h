@@ -116,7 +116,7 @@ struct socket {
 
 	unsigned long		flags;
 
-	struct file		*file;
+	struct file		*file;//socket对应的struct file*结构
 	struct sock		*sk;//指向它对应的sk
 	//定义socket相关的函数，例如bind,accept
 	const struct proto_ops	*ops;

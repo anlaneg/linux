@@ -78,6 +78,7 @@ __cacheline_aligned_in_smp DEFINE_SEQLOCK(rename_lock);
 
 EXPORT_SYMBOL(rename_lock);
 
+//负责dentry结构体申请释放
 static struct kmem_cache *dentry_cache __read_mostly;
 
 const struct qstr empty_name = QSTR_INIT("", 0);
@@ -1683,8 +1684,8 @@ EXPORT_SYMBOL(d_invalidate);
  * copied and the copy passed in may be reused after this call.
  */
  
-//构造一个dcache实体
-static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
+//构造一个dentry实体
+static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dentry*/, const struct qstr *name)
 {
 	struct dentry *dentry;
 	char *dname;
@@ -1703,9 +1704,11 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	 */
 	dentry->d_iname[DNAME_INLINE_LEN-1] = 0;
 	if (unlikely(!name)) {
+		//未提供名称，使用slash_name做为名称，采用内建的空间
 		name = &slash_name;
 		dname = dentry->d_iname;
 	} else if (name->len > DNAME_INLINE_LEN-1) {
+		//提供的名称长度过大，使用external_name来存储名称
 		size_t size = offsetof(struct external_name, name[1]);
 		struct external_name *p = kmalloc(size + name->len,
 						  GFP_KERNEL_ACCOUNT |
@@ -1717,6 +1720,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 		atomic_set(&p->u.count, 1);
 		dname = p->name;
 	} else  {
+		//使用内建空间
 		dname = dentry->d_iname;
 	}	
 
@@ -1727,6 +1731,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	dname[name->len] = 0;
 
 	/* Make sure we always see the terminating NUL character */
+	//设置dentry名称
 	smp_store_release(&dentry->d_name.name, dname); /* ^^^ */
 
 	dentry->d_lockref.count = 1;
@@ -1735,6 +1740,7 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	seqcount_init(&dentry->d_seq);
 	dentry->d_inode = NULL;
 	dentry->d_parent = dentry;
+	/*设置所属的sb*/
 	dentry->d_sb = sb;
 	dentry->d_op = NULL;
 	dentry->d_fsdata = NULL;
@@ -1743,8 +1749,10 @@ static struct dentry *__d_alloc(struct super_block *sb, const struct qstr *name)
 	INIT_LIST_HEAD(&dentry->d_subdirs);
 	INIT_HLIST_NODE(&dentry->d_u.d_alias);
 	INIT_LIST_HEAD(&dentry->d_child);
+	//使用dentry对应super block的dentry_ops
 	d_set_d_op(dentry, dentry->d_sb->s_d_op);
 
+	//如有d_init回调，则对dentry进行初始化
 	if (dentry->d_op && dentry->d_op->d_init) {
 		err = dentry->d_op->d_init(dentry);
 		if (err) {
@@ -1821,6 +1829,7 @@ struct dentry *d_alloc_cursor(struct dentry * parent)
  */
 struct dentry *d_alloc_pseudo(struct super_block *sb, const struct qstr *name)
 {
+	//申请一个dentry,这种dentry不需要rcu释放
 	struct dentry *dentry = __d_alloc(sb, name);
 	if (likely(dentry))
 		dentry->d_flags |= DCACHE_NORCU;
@@ -1837,6 +1846,7 @@ struct dentry *d_alloc_name(struct dentry *parent, const char *name)
 }
 EXPORT_SYMBOL(d_alloc_name);
 
+/*设置dentry对应的ops*/
 void d_set_d_op(struct dentry *dentry, const struct dentry_operations *op)
 {
 	WARN_ON_ONCE(dentry->d_op);

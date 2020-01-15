@@ -1402,6 +1402,7 @@ static inline struct socket *SOCKET_I(struct inode *inode)
 	return &container_of(inode, struct socket_alloc, vfs_inode)->socket;
 }
 
+/*由socket获得socket_alloc,然后返回socket_alloc->indoe*/
 static inline struct inode *SOCK_INODE(struct socket *socket)
 {
 	return &container_of(socket, struct socket_alloc, socket)->vfs_inode;

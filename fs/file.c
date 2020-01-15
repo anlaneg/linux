@@ -82,6 +82,7 @@ static void copy_fdtable(struct fdtable *nfdt, struct fdtable *ofdt)
 	copy_fd_bitmaps(nfdt, ofdt, ofdt->max_fds);
 }
 
+//申请大小为nr的fdtable
 static struct fdtable * alloc_fdtable(unsigned int nr)
 {
 	struct fdtable *fdt;
@@ -94,6 +95,7 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 	 * the fdarray into comfortable page-tuned chunks: starting at 1024B
 	 * and growing in powers of two from there on.
 	 */
+	//保证至少有1024B会用于存放struct file*,64位时，可支持128个项
 	nr /= (1024 / sizeof(struct file *));
 	nr = roundup_pow_of_two(nr + 1);
 	nr *= (1024 / sizeof(struct file *));
@@ -114,6 +116,7 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 		goto out;
 	//设置最大fds,申请相应的fd数组
 	fdt->max_fds = nr;
+	/*申请nr个struct file指针*/
 	data = kvmalloc_array(nr, sizeof(struct file *), GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_fdt;
@@ -125,10 +128,13 @@ static struct fdtable * alloc_fdtable(unsigned int nr)
 				 GFP_KERNEL_ACCOUNT);
 	if (!data)
 		goto out_arr;
+	//指向open的fds bitmap
 	fdt->open_fds = data;
-	data += nr / BITS_PER_BYTE;//
+	data += nr / BITS_PER_BYTE;
+	//指向close_on_exec的fds bitmap
 	fdt->close_on_exec = data;
 	data += nr / BITS_PER_BYTE;
+	//指向full_fds的bitmaps
 	fdt->full_fds_bits = data;
 
 	return fdt;
@@ -148,14 +154,17 @@ out:
  * Return <0 error code on error; 1 on successful completion.
  * The files->file_lock should be held on entry, and will be held on exit.
  */
-//将files扩展到nr
+//将files大小扩展到nr个，更新files->fdtab
 static int expand_fdtable(struct files_struct *files, unsigned int nr)
 	__releases(files->file_lock)
 	__acquires(files->file_lock)
 {
 	struct fdtable *new_fdt, *cur_fdt;
 
+	//开始扩展files大小，释放掉锁
 	spin_unlock(&files->file_lock);
+
+	//申请一个nr大小的fdtable
 	new_fdt = alloc_fdtable(nr);
 
 	/* make sure all __fd_install() have seen resize_in_progress
@@ -166,21 +175,30 @@ static int expand_fdtable(struct files_struct *files, unsigned int nr)
 
 	spin_lock(&files->file_lock);
 	if (!new_fdt)
+		/*返回前需要持有锁，申请内存失败*/
 		return -ENOMEM;
 	/*
 	 * extremely unlikely race - sysctl_nr_open decreased between the check in
 	 * caller and alloc_fdtable().  Cheaper to catch it here...
 	 */
 	if (unlikely(new_fdt->max_fds <= nr)) {
+		//未申请到所需要的nr大小
 		__free_fdtable(new_fdt);
 		return -EMFILE;
 	}
-	cur_fdt = files_fdtable(files);//取当前fdt
+
+	//取当前fdtable
+	cur_fdt = files_fdtable(files);
 	BUG_ON(nr < cur_fdt->max_fds);
-	copy_fdtable(new_fdt, cur_fdt);//填充旧的数据
+	//将旧的数据填充copy到新申请的表里
+	copy_fdtable(new_fdt, cur_fdt);
+
+	//原子的完成fdtable的切换
 	rcu_assign_pointer(files->fdt, new_fdt);
+
+	//旧的fdt不是file->fdtab，则调用rcu对旧数据进行施放
 	if (cur_fdt != &files->fdtab)
-		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);//调用rcu对旧数据进行施放
+		call_rcu(&cur_fdt->rcu, free_fdtable_rcu);
 	/* coupled with smp_rmb() in __fd_install() */
 	smp_wmb();
 	return 1;
@@ -206,25 +224,31 @@ repeat:
 
 	/* Do we need to expand? */
 	if (nr < fdt->max_fds)
-		return expanded;//fd未超过max_fds,不需要扩展
+		//nr未超过max_fds,不需要再进行扩展
+		return expanded;
 
 	/* Can we expand? */
 	if (nr >= sysctl_nr_open)
-		return -EMFILE;//数量超限
+		//超过sysctl_nr_open,总数量超系统限制
+		return -EMFILE;
 
 	if (unlikely(files->resize_in_progress)) {
-		//已在线程在扩展，等待其完成后重试
+		//已有线程在扩展，等待其完成后重试
 		spin_unlock(&files->file_lock);
 		expanded = 1;
+		//将自身挂起，等待其它线程完成扩展
 		wait_event(files->resize_wait, !files->resize_in_progress);
+
+		//被唤醒，需要重新加锁再取fdtable再检查一次。
 		spin_lock(&files->file_lock);
 		goto repeat;
 	}
 
 	/* All good, so we try */
-	//指明我们开始扩展
+	//指明我们现在开始扩展
 	files->resize_in_progress = true;
 	expanded = expand_fdtable(files, nr);
+	//执行我们已完成size扩展
 	files->resize_in_progress = false;
 
 	//防止存在等待者，将其唤醒
@@ -232,11 +256,13 @@ repeat:
 	return expanded;
 }
 
+//指明fd对应的文件设置了close_exec标记
 static inline void __set_close_on_exec(unsigned int fd, struct fdtable *fdt)
 {
 	__set_bit(fd, fdt->close_on_exec);
 }
 
+//指明fd对应的文件没有设置close_exec标记
 static inline void __clear_close_on_exec(unsigned int fd, struct fdtable *fdt)
 {
 	if (test_bit(fd, fdt->close_on_exec))
@@ -245,9 +271,11 @@ static inline void __clear_close_on_exec(unsigned int fd, struct fdtable *fdt)
 
 static inline void __set_open_fd(unsigned int fd, struct fdtable *fdt)
 {
-	//设置openfds占用
+	//设置fd对应的文件struct file*已占用
 	__set_bit(fd, fdt->open_fds);
 	fd /= BITS_PER_LONG;
+	/*检查open_fds[fd]位置处向后sizeof(long)*8个fd是否均已分配
+	 *若均已分配，则置fd索引已满*/
 	if (!~fdt->open_fds[fd])
 		//无指针时，置full_fds_bits占用
 		__set_bit(fd, fdt->full_fds_bits);
@@ -469,18 +497,20 @@ struct files_struct init_files = {
 	.resize_wait	= __WAIT_QUEUE_HEAD_INITIALIZER(init_files.resize_wait),
 };
 
+//找一个未占用的fd
 static unsigned int find_next_fd(struct fdtable *fdt, unsigned int start)
 {
 	unsigned int maxfd = fdt->max_fds;
 	unsigned int maxbit = maxfd / BITS_PER_LONG;//将bit索引换算为long类型索引
 	unsigned int bitbit = start / BITS_PER_LONG;
 
-	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;//计算结果，并换算为bit位数
+	//自full_fds_bits中找出一个有空闲fd的区段，计算结果，并换算区间开始的fd编号
+	bitbit = find_next_zero_bit(fdt->full_fds_bits, maxbit, bitbit) * BITS_PER_LONG;
 	if (bitbit > maxfd)
 		return maxfd;//规范为maxfd
 	if (bitbit > start)
 		start = bitbit;
-	//在open_fds中找到区间在maxfd,start的一个未占用fd
+	//在open_fds的start,maxfd位置找一个未打开的fd空间
 	return find_next_zero_bit(fdt->open_fds, maxfd, start);
 }
 
@@ -499,7 +529,9 @@ int __alloc_fd(struct files_struct *files,
 repeat:
 	//取fdt
 	fdt = files_fdtable(files);
-	fd = start;
+	fd = start;/*从start位置开始申请（例如从0号fd开始）*/
+
+	/*如果start较小，则更新为next_fd*/
 	if (fd < files->next_fd)
 		fd = files->next_fd;
 
@@ -514,7 +546,8 @@ repeat:
 	if (fd >= end)
 		goto out;//超限，申请失败
 
-	error = expand_files(files, fd);//扩大内存
+	//扩大files的fdtable
+	error = expand_files(files, fd);
 	if (error < 0)
 		goto out;//expand失败
 
@@ -523,6 +556,8 @@ repeat:
 	 * might have blocked - try again.
 	 */
 	if (error)
+		/*在我们执行扩展时，我们被其它线程阻塞过了，
+		 * 此时fdtble地址，next_fd可能已发生变换，重新执行一次*/
 		goto repeat;
 
 	if (start <= files->next_fd)
@@ -539,7 +574,7 @@ repeat:
 	error = fd;
 #if 1
 	/* Sanity check */
-	//fd对应的空间必须为空，如果不为空，报错，置为空
+	//fd对应的空间必须为空，如果不为空，告警，并置为空
 	if (rcu_access_pointer(fdt->fd[fd]) != NULL) {
 		printk(KERN_WARNING "alloc_fd: slot %d not NULL!\n", fd);
 		rcu_assign_pointer(fdt->fd[fd], NULL);
@@ -548,6 +583,7 @@ repeat:
 
 out:
 	spin_unlock(&files->file_lock);
+	/*返回分配的fd*/
 	return error;
 }
 
@@ -561,7 +597,7 @@ static int alloc_fd(unsigned start, unsigned flags)
 int get_unused_fd_flags(unsigned flags)
 {
 	//申请一个未用的fd
-	return __alloc_fd(current->files, 0, rlimit(RLIMIT_NOFILE), flags);
+	return __alloc_fd(current->files/*当前进程已打开的文件*/, 0/*从0开始申请*/, rlimit(RLIMIT_NOFILE)/*最大此进程fd数目*/, flags);
 }
 EXPORT_SYMBOL(get_unused_fd_flags);
 
@@ -602,7 +638,7 @@ EXPORT_SYMBOL(put_unused_fd);
  * or really bad things will happen.  Normally you want to use
  * fd_install() instead.
  */
-//为fd安装其对应的file
+//为fd关联其对应的file
 void __fd_install(struct files_struct *files, unsigned int fd,
 		struct file *file)
 {
@@ -611,6 +647,9 @@ void __fd_install(struct files_struct *files, unsigned int fd,
 	rcu_read_lock_sched();
 
 	if (unlikely(files->resize_in_progress)) {
+		//有其它线程正在resize fdtable,取files->file_lock锁
+		//如果拿到锁，则通过fdt->fd[fd]=file要么写在旧的数据结构上
+		//resize的线程将其copy到新的fdtable,要么直接写在新的数据结构上
 		rcu_read_unlock_sched();
 		spin_lock(&files->file_lock);
 		fdt = files_fdtable(files);

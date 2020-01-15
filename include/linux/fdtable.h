@@ -26,10 +26,14 @@
 struct fdtable {
 	//最大fd数目（也是当前fd数组的大小）
 	unsigned int max_fds;
-	//记录struct file*的fd数组(每个fd对应一个file)
+	//记录struct file*的fd数组(每个fd对应一个struct file)
 	struct file __rcu **fd;      /* current fd array */
+	//指向close_on_exec的fds bitmap
 	unsigned long *close_on_exec;
+	//记录已经open的fd(bitmap形式,仅需要释放open_fds即可完成close_on_exec,full_fds_bits的释放）
 	unsigned long *open_fds;
+	//指向full_fds的bitmaps（用于表示open_fds[i]开始的sizeof(long)*8个fd均已分配出去）
+	//即[i*sizeof(long)*8,(i+1)*sizeof(long)*8]范围内的fd均已分配出去
 	unsigned long *full_fds_bits;
 	struct rcu_head rcu;
 };
@@ -52,16 +56,19 @@ struct files_struct {
    * read mostly part
    */
 	atomic_t count;
+	//指明当前正在执行fdtable的size调整
 	bool resize_in_progress;
+	//等待队列，用于等待其它线程的resize过程完成
 	wait_queue_head_t resize_wait;
 
-	struct fdtable __rcu *fdt;//提供通过fd编号查找file
-	struct fdtable fdtab;
+	//fdtable,提供通过fd编号查找struct file指针
+	struct fdtable __rcu *fdt;
+	struct fdtable fdtab;//提供静态大小的默认fdtable,但fdt仍可指向一个动态申请的内存
   /*
    * written part on a separate cache line in SMP
    */
 	spinlock_t file_lock ____cacheline_aligned_in_smp;
-	unsigned int next_fd;//优先尝试的fd
+	unsigned int next_fd;//需要优先尝试的fd，此fd之前的均已分配出去了
 	unsigned long close_on_exec_init[1];
 	unsigned long open_fds_init[1];
 	unsigned long full_fds_bits_init[1];
@@ -72,6 +79,7 @@ struct file_operations;
 struct vfsmount;
 struct dentry;
 
+//取当前files对应的fdtable
 #define rcu_dereference_check_fdtable(files, fdtfd) \
 	rcu_dereference_check((fdtfd), lockdep_is_held(&(files)->file_lock))
 

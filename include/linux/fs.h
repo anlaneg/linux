@@ -109,6 +109,7 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
  */
 
 /* file is open for reading */
+//文件读权限
 #define FMODE_READ		((__force fmode_t)0x1)
 /* file is open for writing */
 #define FMODE_WRITE		((__force fmode_t)0x2)
@@ -154,10 +155,13 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 /* Write access to underlying fs */
 #define FMODE_WRITER		((__force fmode_t)0x10000)
 /* Has read method(s) */
+//标记文件可读
 #define FMODE_CAN_READ          ((__force fmode_t)0x20000)
 /* Has write method(s) */
+//标记文件可写
 #define FMODE_CAN_WRITE         ((__force fmode_t)0x40000)
 
+//标记文件已打开
 #define FMODE_OPENED		((__force fmode_t)0x80000)
 #define FMODE_CREATED		((__force fmode_t)0x100000)
 
@@ -975,7 +979,7 @@ struct file {
 	enum rw_hint		f_write_hint;
 	atomic_long_t		f_count;//引用计数
 	unsigned int 		f_flags;
-	fmode_t			f_mode;//文件模式位（offset是否为无符号的等）
+	fmode_t			f_mode;//文件模式位（含offset是否为无符号的等）
 	struct mutex		f_pos_lock;
 	loff_t			f_pos;//当前读到哪个位置了
 	struct fown_struct	f_owner;
@@ -987,6 +991,7 @@ struct file {
 	void			*f_security;
 #endif
 	/* needed for tty driver, and maybe others */
+	//私有数据，例如socket对应的stuct file的此字段为socket
 	void			*private_data;
 
 #ifdef CONFIG_EPOLL
@@ -1851,6 +1856,7 @@ struct file_operations {
 	struct module *owner;//fop所属的module
 	//实现lseek功能
 	loff_t (*llseek) (struct file *, loff_t, int);
+	//read,read_iter两个函数实现其一，即可用于读文件
 	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//文件读功能
 	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//文件写功能
 	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的读

@@ -38,7 +38,7 @@ struct files_stat_struct files_stat = {
 };
 
 /* SLAB cache for file structures */
-//file结构体缓冲池
+//struct file结构体缓冲池
 static struct kmem_cache *filp_cachep __read_mostly;
 
 static struct percpu_counter nr_files __cacheline_aligned_in_smp;
@@ -99,6 +99,7 @@ static struct file *__alloc_file(int flags, const struct cred *cred)
 	struct file *f;
 	int error;
 
+	//申请struct file文件结构
 	f = kmem_cache_zalloc(filp_cachep, GFP_KERNEL);
 	if (unlikely(!f))
 		return ERR_PTR(-ENOMEM);
@@ -187,7 +188,7 @@ struct file *alloc_empty_file_noaccount(int flags, const struct cred *cred)
  * @flags: O_... flags with which the new file will be opened
  * @fop: the 'struct file_operations' for the new file
  */
-static struct file *alloc_file(const struct path *path, int flags,
+static struct file *alloc_file(const struct path *path/*文件路径*/, int flags,
 		const struct file_operations *fop)
 {
 	struct file *file;
@@ -200,22 +201,32 @@ static struct file *alloc_file(const struct path *path, int flags,
 	file->f_inode = path->dentry->d_inode;
 	file->f_mapping = path->dentry->d_inode->i_mapping;
 	file->f_wb_err = filemap_sample_wb_err(file->f_mapping);
+
+	//有读模式，且fop支持read,read_iter，则标记文件可读
 	if ((file->f_mode & FMODE_READ) &&
 	     likely(fop->read || fop->read_iter))
 		file->f_mode |= FMODE_CAN_READ;
+
+	//有写模式，且fop支持write,write_iter,则标记文件可写
 	if ((file->f_mode & FMODE_WRITE) &&
 	     likely(fop->write || fop->write_iter))
 		file->f_mode |= FMODE_CAN_WRITE;
+
+	//设置文件opened
 	file->f_mode |= FMODE_OPENED;
+
+	//设置文件读取ops
 	file->f_op = fop;
+
+	//使用只读模式打开的文件
 	if ((file->f_mode & (FMODE_READ | FMODE_WRITE)) == FMODE_READ)
 		i_readcount_inc(path->dentry->d_inode);
 	return file;
 }
 
 struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
-				const char *name, int flags,
-				const struct file_operations *fops)
+				const char *name/*dentry的名称*/, int flags,
+				const struct file_operations *fops/*文件对应的ops*/)
 {
 	static const struct dentry_operations anon_ops = {
 		.d_dname = simple_dname
@@ -224,10 +235,13 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 	struct path path;
 	struct file *file;
 
+	//申请名称为$name的dentry
 	path.dentry = d_alloc_pseudo(mnt->mnt_sb, &this);
 	if (!path.dentry)
 		return ERR_PTR(-ENOMEM);
+
 	if (!mnt->mnt_sb->s_d_op)
+		/*如果未提供dentry的ops,则使用anonymous ops*/
 		d_set_d_op(path.dentry, &anon_ops);
 	path.mnt = mntget(mnt);
 	d_instantiate(path.dentry, inode);

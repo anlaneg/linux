@@ -133,11 +133,14 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
-//文件操作集
+//socket对应的文件操作集
 static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
+	//socket对应的fd不支持llseek函数
 	.llseek =	no_llseek,
+	//socket对应fd的读函数
 	.read_iter =	sock_read_iter,
+	//socket对应fd的写函数
 	.write_iter =	sock_write_iter,
 	.poll =		sock_poll,
 	.unlocked_ioctl = sock_ioctl,
@@ -395,12 +398,14 @@ static struct file_system_type sock_fs_type = {
 
 struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 {
+	//如注释所言，将socket与一个struct file*进行映射
 	struct file *file;
 
 	if (!dname)
 		dname = sock->sk ? sock->sk->sk_prot_creator->name : "";
 
-	file = alloc_file_pseudo(SOCK_INODE(sock), sock_mnt, dname,
+	//为socket申请一个假的struct file
+	file = alloc_file_pseudo(SOCK_INODE(sock), sock_mnt/*socket对应的文件挂载点*/, dname/*dentry对应的名称*/,
 				O_RDWR | (flags & O_NONBLOCK),
 				&socket_file_ops);
 	if (IS_ERR(file)) {
@@ -415,10 +420,12 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 }
 EXPORT_SYMBOL(sock_alloc_file);
 
+//将socket映射到fd
 static int sock_map_fd(struct socket *sock, int flags)
 {
 	struct file *newfile;
-	int fd = get_unused_fd_flags(flags);//申请一个fd
+	//申请一个当前进程未占用的fd
+	int fd = get_unused_fd_flags(flags);
 	if (unlikely(fd < 0)) {
 		sock_release(sock);
 		return fd;//申请fd失败
@@ -427,6 +434,7 @@ static int sock_map_fd(struct socket *sock, int flags)
 	//指明fd对应的file
 	newfile = sock_alloc_file(sock, flags, NULL);
 	if (!IS_ERR(newfile)) {
+		//为此socket关联struct file*成功，现在实现fd与struct file*的关联
 		fd_install(fd, newfile);
 		return fd;
 	}
@@ -961,6 +969,7 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
 	return sock->ops->splice_read(sock, ppos, pipe, len, flags);
 }
 
+//socket对应的fd读操作
 static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
