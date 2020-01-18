@@ -668,13 +668,16 @@ static inline u32 __ipv6_addr_jhash(const struct in6_addr *a, const u32 initval)
 			    initval);
 }
 
+//检查所给地址是否为环回地址
 static inline bool ipv6_addr_loopback(const struct in6_addr *a)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) && BITS_PER_LONG == 64
 	const __be64 *be = (const __be64 *)a;
 
+	//第一个8字节必须为0,第二个8字节必须为1
 	return (be[0] | (be[1] ^ cpu_to_be64(1))) == 0UL;
 #else
+	//前3个4bytes必须为0，第4个bytes为1
 	return (a->s6_addr32[0] | a->s6_addr32[1] |
 		a->s6_addr32[2] | (a->s6_addr32[3] ^ cpu_to_be32(1))) == 0;
 #endif
@@ -726,8 +729,10 @@ static inline bool ipv6_addr_orchid(const struct in6_addr *a)
 	return (a->s6_addr32[0] & htonl(0xfffffff0)) == htonl(0x20010010);
 }
 
+//检查所给ipv6地址为组播地址
 static inline bool ipv6_addr_is_multicast(const struct in6_addr *addr)
 {
+    //ipv6首个字节为0XFF时为组播地址
 	return (addr->s6_addr32[0] & htonl(0xFF000000)) == htonl(0xFF000000);
 }
 
@@ -942,6 +947,7 @@ static inline void ip6_flow_hdr(struct ipv6hdr *hdr, unsigned int tclass,
 	*(__be32 *)hdr = htonl(0x60000000 | (tclass << 20)) | flowlabel;
 }
 
+//取ipv6流标签
 static inline __be32 ip6_flowinfo(const struct ipv6hdr *hdr)
 {
 	return *(__be32 *)hdr & IPV6_FLOWINFO_MASK;

@@ -116,7 +116,7 @@ static inline unsigned int ipv6_transport_len(const struct sk_buff *skb)
  */
 
 struct inet6_skb_parm {
-	int			iif;
+	int			iif;/*报文所属接口ifindex*/
 	__be16			ra;
 	__u16			dst0;
 	__u16			srcrt;

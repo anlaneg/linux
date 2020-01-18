@@ -149,6 +149,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	u32 pkt_len;
 	struct inet6_dev *idev;
 
+	//丢掉送其它主机的报文
 	if (skb->pkt_type == PACKET_OTHERHOST) {
 		kfree_skb(skb);
 		return NULL;
@@ -166,6 +167,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 		goto drop;
 	}
 
+	//清空控制块
 	memset(IP6CB(skb), 0, sizeof(struct inet6_skb_parm));
 
 	/*
@@ -181,11 +183,13 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	 */
 	IP6CB(skb)->iif = skb_valid_dst(skb) ? ip6_dst_idev(skb_dst(skb))->dev->ifindex : dev->ifindex;
 
+	//skb必须有完整的ipv6hdr
 	if (unlikely(!pskb_may_pull(skb, sizeof(*hdr))))
 		goto err;
 
 	hdr = ipv6_hdr(skb);
 
+	//版本必须为6
 	if (hdr->version != 6)
 		goto err;
 
@@ -243,6 +247,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	 * packets or appear in any Routing header.
 	 */
 	if (ipv6_addr_is_multicast(&hdr->saddr))
+	    //源地址不得为组播地址
 		goto err;
 
 	/* While RFC4291 is not explicit about v4mapped addresses
@@ -296,6 +301,7 @@ drop:
 	return NULL;
 }
 
+//实现ipv6报文收取
 int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt, struct net_device *orig_dev)
 {
 	struct net *net = dev_net(skb->dev);
@@ -303,6 +309,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	skb = ip6_rcv_core(skb, dev, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
+	//走pre routing钩子点
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
 		       ip6_rcv_finish);

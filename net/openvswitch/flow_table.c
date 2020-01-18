@@ -582,7 +582,7 @@ static bool ovs_flow_cmp_unmasked_key(const struct sw_flow *flow,
 }
 
 static struct sw_flow *masked_flow_lookup(struct table_instance *ti,
-					  const struct sw_flow_key *unmasked,
+					  const struct sw_flow_key *unmasked/*未加mask的数据，加了mask的数据*/,
 					  const struct sw_flow_mask *mask,
 					  u32 *n_mask_hit)
 {
@@ -628,6 +628,7 @@ static struct sw_flow *flow_lookup(struct flow_table *tbl,
 		}
 	}
 
+	//遍历所有mask，考虑采用哪个mask可以匹配到流
 	for (i = 0; i < ma->max; i++)  {
 
 		if (i == *index)
@@ -637,6 +638,7 @@ static struct sw_flow *flow_lookup(struct flow_table *tbl,
 		if (unlikely(!mask))
 			break;
 
+		//当前考虑key与mask配合，来查询规则
 		flow = masked_flow_lookup(ti, key, mask, n_mask_hit);
 		if (flow) { /* Found */
 			*index = i;

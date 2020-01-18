@@ -115,10 +115,13 @@ struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 	} else {
 		struct rt6_info *rt;
 
+		//查询local table
 		rt = lookup(net, net->ipv6.fib6_local_tbl, fl6, skb, flags);
 		if (rt != net->ipv6.ip6_null_entry && rt->dst.error != -EAGAIN)
 			return &rt->dst;
 		ip6_rt_put_flags(rt, flags);
+
+		//查询main 路由表
 		rt = lookup(net, net->ipv6.fib6_main_tbl, fl6, skb, flags);
 		if (rt->dst.error != -EAGAIN)
 			return &rt->dst;

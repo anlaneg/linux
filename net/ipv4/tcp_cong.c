@@ -25,6 +25,7 @@ static struct tcp_congestion_ops *tcp_ca_find(const char *name)
 {
 	struct tcp_congestion_ops *e;
 
+	//通过名称，查找TCP拥塞控制算法
 	list_for_each_entry_rcu(e, &tcp_cong_list, list) {
 		if (strcmp(e->name, name) == 0)
 			return e;
@@ -40,6 +41,7 @@ static struct tcp_congestion_ops *tcp_ca_find_autoload(struct net *net,
 	struct tcp_congestion_ops *ca = tcp_ca_find(name);
 
 #ifdef CONFIG_MODULES
+	/*如果拥塞控制未查找到，则尝试加载module后重试*/
 	if (!ca && capable(CAP_NET_ADMIN)) {
 		rcu_read_unlock();
 		request_module("tcp_%s", name);
@@ -339,7 +341,7 @@ out:
  * tcp_reinit_congestion_control (if the current congestion control was
  * already initialized.
  */
-int tcp_set_congestion_control(struct sock *sk, const char *name, bool load,
+int tcp_set_congestion_control(struct sock *sk, const char *name, bool load/*是否容许主动加载*/,
 			       bool reinit, bool cap_net_admin)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -350,6 +352,7 @@ int tcp_set_congestion_control(struct sock *sk, const char *name, bool load,
 		return -EPERM;
 
 	rcu_read_lock();
+	/*通过名称查询拥塞控制ops*/
 	if (!load)
 		ca = tcp_ca_find(name);
 	else

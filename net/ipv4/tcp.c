@@ -2814,12 +2814,14 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 
 	/* These are data/string values, all the others are ints */
 	switch (optname) {
+	//设置拥塞控制算法名
 	case TCP_CONGESTION: {
 		char name[TCP_CA_NAME_MAX];
 
 		if (optlen < 1)
 			return -EINVAL;
 
+		//取用户配置的名称
 		val = strncpy_from_user(name, optval,
 					min_t(long, TCP_CA_NAME_MAX-1, optlen));
 		if (val < 0)

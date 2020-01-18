@@ -29,7 +29,7 @@ struct mask_cache_entry {
 
 struct mask_array {
 	struct rcu_head rcu;
-	int count, max;
+	int count, max;//mask数组长度
 	struct sw_flow_mask __rcu *masks[];
 };
 

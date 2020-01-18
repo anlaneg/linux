@@ -115,19 +115,19 @@ struct ipv6_destopt_hao {
 
 struct ipv6hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8			priority:4,
-				version:4;
+	__u8			priority:4,//通信分类（占4bits)
+				version:4;//版本
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u8			version:4,
 				priority:4;
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
-	__u8			flow_lbl[3];
+	__u8			flow_lbl[3];//流标签（20bits)
 
-	__be16			payload_len;
-	__u8			nexthdr;
-	__u8			hop_limit;
+	__be16			payload_len;//负载大小（16bits)
+	__u8			nexthdr;//下一头部
+	__u8			hop_limit;//跳限制数
 
 	struct	in6_addr	saddr;
 	struct	in6_addr	daddr;

@@ -154,8 +154,8 @@ struct flowi6 {
 #define flowi6_secid		__fl_common.flowic_secid
 #define flowi6_tun_key		__fl_common.flowic_tun_key
 #define flowi6_uid		__fl_common.flowic_uid
-	struct in6_addr		daddr;
-	struct in6_addr		saddr;
+	struct in6_addr		daddr;//目的地址
+	struct in6_addr		saddr;//源地址
 	/* Note: flowi6_tos is encoded in flowlabel, too. */
 	__be32			flowlabel;
 	union flowi_uli		uli;

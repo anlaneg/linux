@@ -30,11 +30,15 @@
  */
 
 #if __UAPI_DEF_IN6_ADDR
+//ipv6地址
 struct in6_addr {
 	union {
+	    //8bits格式
 		__u8		u6_addr8[16];
 #if __UAPI_DEF_IN6_ADDR_ALT
+		//16bits格式
 		__be16		u6_addr16[8];
+		//32bits格式
 		__be32		u6_addr32[4];
 #endif
 	} in6_u;

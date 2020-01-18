@@ -235,7 +235,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 	stats = this_cpu_ptr(dp->stats_percpu);
 
 	/* Look up flow. */
-	//查询ovs emc流表
+	//查询ovs流表
 	flow = ovs_flow_tbl_lookup_stats(&dp->table, key, skb_get_hash(skb),
 					 &n_mask_hit);
 	if (unlikely(!flow)) {
@@ -708,6 +708,7 @@ static void get_dp_stats(const struct datapath *dp, struct ovs_dp_stats *stats,
 
 	memset(mega_stats, 0, sizeof(*mega_stats));
 
+	//取kernel中流表规则数
 	stats->n_flows = ovs_flow_tbl_count(&dp->table);
 	mega_stats->n_masks = ovs_flow_tbl_num_masks(&dp->table);
 
@@ -1568,6 +1569,7 @@ static int ovs_dp_cmd_fill_info(struct datapath *dp, struct sk_buff *skb,
 		goto nla_put_failure;
 
 	get_dp_stats(dp, &dp_stats, &dp_megaflow_stats);
+	//存放datapath状态统计信息
 	if (nla_put_64bit(skb, OVS_DP_ATTR_STATS, sizeof(struct ovs_dp_stats),
 			  &dp_stats, OVS_DP_ATTR_PAD))
 		goto nla_put_failure;
