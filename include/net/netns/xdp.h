@@ -7,6 +7,7 @@
 
 struct netns_xdp {
 	struct mutex		lock;
+	//负责挂接所有xdp socket
 	struct hlist_head	list;
 };
 

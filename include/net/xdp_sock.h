@@ -86,6 +86,7 @@ struct xsk_map_node {
 struct xdp_sock {
 	/* struct sock must be the first member of struct xdp_sock */
 	struct sock sk;
+	//socket对应的rx队列
 	struct xsk_queue *rx;
 	struct net_device *dev;
 	struct xdp_umem *umem;
@@ -99,6 +100,7 @@ struct xdp_sock {
 	} state;
 	/* Protects multiple processes in the control path */
 	struct mutex mutex;
+	//socket对应的tx队列
 	struct xsk_queue *tx ____cacheline_aligned_in_smp;
 	struct list_head list;
 	/* Mutual exclusion of NAPI TX thread and sendmsg error paths

@@ -1593,7 +1593,7 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 #endif
 }
 
-//申请sock空间
+//按prot约定申请sock空间
 static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 		int family)
 {
@@ -1668,6 +1668,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 	//申请sock空间
 	sk = sk_prot_alloc(prot, priority | __GFP_ZERO, family);
 	if (sk) {
+		//申请成功，做简单初始化
 		sk->sk_family = family;
 		/*
 		 * See comment in struct sock definition to understand
@@ -2656,6 +2657,7 @@ int sock_no_bind(struct socket *sock, struct sockaddr *saddr, int len)
 }
 EXPORT_SYMBOL(sock_no_bind);
 
+//xdp不支持connect调用
 int sock_no_connect(struct socket *sock, struct sockaddr *saddr,
 		    int len, int flags)
 {
@@ -2663,12 +2665,14 @@ int sock_no_connect(struct socket *sock, struct sockaddr *saddr,
 }
 EXPORT_SYMBOL(sock_no_connect);
 
+//xdp不支持socketpair调用
 int sock_no_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_socketpair);
 
+//xdp不支持accept系统调用
 int sock_no_accept(struct socket *sock, struct socket *newsock, int flags,
 		   bool kern)
 {
@@ -2676,6 +2680,7 @@ int sock_no_accept(struct socket *sock, struct socket *newsock, int flags,
 }
 EXPORT_SYMBOL(sock_no_accept);
 
+//xdp不支持getname调用
 int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
 		    int peer)
 {
@@ -2683,18 +2688,21 @@ int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
 }
 EXPORT_SYMBOL(sock_no_getname);
 
+//xdp不支持ioctl
 int sock_no_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_ioctl);
 
+//xdp不支持listen
 int sock_no_listen(struct socket *sock, int backlog)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_listen);
 
+//xdp不支持shutdown
 int sock_no_shutdown(struct socket *sock, int how)
 {
 	return -EOPNOTSUPP;
@@ -2727,6 +2735,7 @@ int sock_no_sendmsg_locked(struct sock *sk, struct msghdr *m, size_t len)
 }
 EXPORT_SYMBOL(sock_no_sendmsg_locked);
 
+//xdp不支持recvmsg
 int sock_no_recvmsg(struct socket *sock, struct msghdr *m, size_t len,
 		    int flags)
 {

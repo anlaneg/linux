@@ -490,6 +490,7 @@ static int xsk_init_queue(u32 entries, struct xsk_queue **queue,
 {
 	struct xsk_queue *q;
 
+	//队列数
 	if (entries == 0 || *queue || !is_power_of_2(entries))
 		return -EINVAL;
 
@@ -766,6 +767,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	struct xdp_sock *xs = xdp_sk(sk);
 	int err;
 
+	//level必须为SOL_XDP
 	if (level != SOL_XDP)
 		return -ENOPROTOOPT;
 
@@ -773,14 +775,17 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	case XDP_RX_RING:
 	case XDP_TX_RING:
 	{
+		//XDP socket对应的RX,TX RING的设置
 		struct xsk_queue **q;
 		int entries;
 
+		//提供的参数必须为int型
 		if (optlen < sizeof(entries))
 			return -EINVAL;
 		if (copy_from_user(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 
+		//socket必须处理ready状态
 		mutex_lock(&xs->mutex);
 		if (xs->state != XSK_READY) {
 			mutex_unlock(&xs->mutex);
@@ -1070,6 +1075,7 @@ static struct proto xsk_proto = {
 	.obj_size =	sizeof(struct xdp_sock),
 };
 
+//AF_XDP负责proto的操作ops
 static const struct proto_ops xsk_proto_ops = {
 	.family		= PF_XDP,
 	.owner		= THIS_MODULE,
@@ -1103,6 +1109,7 @@ static void xsk_destruct(struct sock *sk)
 	sk_refcnt_debug_dec(sk);
 }
 
+//负责xdp socket创建
 static int xsk_create(struct net *net, struct socket *sock, int protocol,
 		      int kern)
 {
@@ -1111,6 +1118,8 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	if (!ns_capable(net->user_ns, CAP_NET_RAW))
 		return -EPERM;
+
+	//仅支持raw格工
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
 
@@ -1134,6 +1143,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 
 	sock_set_flag(sk, SOCK_RCU_FREE);
 
+	//初始化af_xdp socket
 	xs = xdp_sk(sk);
 	xs->state = XSK_READY;
 	mutex_init(&xs->mutex);
@@ -1189,6 +1199,7 @@ static int __init xsk_init(void)
 	if (err)
 		goto out;
 
+	//注册AF_XDP协议族
 	err = sock_register(&xsk_family_ops);
 	if (err)
 		goto out_proto;

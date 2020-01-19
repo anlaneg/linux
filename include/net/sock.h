@@ -360,7 +360,7 @@ struct sock {
 #define sk_net_refcnt		__sk_common.skc_net_refcnt
 #define sk_bound_dev_if		__sk_common.skc_bound_dev_if
 #define sk_bind_node		__sk_common.skc_bind_node
-//设置协议ops,例如udp_prot
+//设置socket对应的struct proto,例如udp_prot
 #define sk_prot			__sk_common.skc_prot
 //设置socket对应的namespace
 #define sk_net			__sk_common.skc_net
@@ -719,6 +719,7 @@ static inline void sk_add_node(struct sock *sk, struct hlist_head *list)
 	__sk_add_node(sk, list);
 }
 
+//将sock挂接在链表list上
 static inline void sk_add_node_rcu(struct sock *sk, struct hlist_head *list)
 {
 	sock_hold(sk);
@@ -2508,6 +2509,7 @@ struct net *sock_net(const struct sock *sk)
 	return read_pnet(&sk->sk_net);
 }
 
+/*设置socket对应的namespace*/
 static inline
 void sock_net_set(struct sock *sk, struct net *net)
 {

@@ -138,6 +138,7 @@ typedef int (*sk_read_actor_t)(read_descriptor_t *, struct sk_buff *,
 struct proto_ops {
 	int		family;
 	struct module	*owner;
+	//释放socket
 	int		(*release)   (struct socket *sock);
 	//bind系统调用实现
 	int		(*bind)	     (struct socket *sock,
@@ -167,8 +168,9 @@ struct proto_ops {
 	//listen系统调用实现
 	int		(*listen)    (struct socket *sock, int len);
 	int		(*shutdown)  (struct socket *sock, int flags);
+	//setsockopt调用实现
 	int		(*setsockopt)(struct socket *sock, int level,
-				      int optname, char __user *optval, unsigned int optlen);
+				      int optname/*操作码*/, char __user *optval/*操作码对应数值*/, unsigned int optlen/*操作码对应参数长度*/);
 	int		(*getsockopt)(struct socket *sock, int level,
 				      int optname, char __user *optval, int __user *optlen);
 #ifdef CONFIG_COMPAT

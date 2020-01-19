@@ -35,7 +35,7 @@ struct xsk_queue {
 	u64 chunk_mask;
 	u64 size;
 	u32 ring_mask;
-	u32 nentries;
+	u32 nentries;//队列长度
 	u32 prod_head;
 	u32 prod_tail;
 	u32 cons_head;
