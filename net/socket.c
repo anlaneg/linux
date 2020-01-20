@@ -992,6 +992,7 @@ static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	return res;
 }
 
+//socket调用write时，标记位只有以下几种(见msg.msg_flags赋值）
 static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;

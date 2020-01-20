@@ -465,6 +465,7 @@ int dev_map_enqueue(struct bpf_dtab_netdev *dst, struct xdp_buff *xdp,
 	struct xdp_frame *xdpf;
 	int err;
 
+	//设备必须有nod_xdp_xmit才能redirect到相应dev
 	if (!dev->netdev_ops->ndo_xdp_xmit)
 		return -EOPNOTSUPP;
 

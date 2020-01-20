@@ -138,7 +138,7 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 		xdp.handle = di->xsk.handle;
 	xdp.rxq = &rq->xdp_rxq;
 
-	//运行xdp程序
+	//运行xdp程序,获得返回值act
 	act = bpf_prog_run_xdp(prog, &xdp);
 	if (xsk) {
 		u64 off = xdp.data - xdp.data_hard_start;

@@ -3642,6 +3642,7 @@ err:
 int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 		    struct bpf_prog *xdp_prog)
 {
+    //通过函数bpf_xdp_redirect_map，已经设置了bpf_redirect_info
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	struct bpf_map *map = READ_ONCE(ri->map);
 
@@ -3753,6 +3754,7 @@ static const struct bpf_func_proto bpf_xdp_redirect_proto = {
 BPF_CALL_3(bpf_xdp_redirect_map, struct bpf_map *, map, u32, ifindex,
 	   u64, flags)
 {
+    //取当前cpu对应的bpf_redirect_info变量
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 
 	/* Lower bits of the flags are used as return code on lookup failure */
@@ -3761,6 +3763,7 @@ BPF_CALL_3(bpf_xdp_redirect_map, struct bpf_map *, map, u32, ifindex,
 
 	ri->tgt_value = __xdp_map_lookup_elem(map, ifindex);
 	if (unlikely(!ri->tgt_value)) {
+	    //查询失败，则返回flags
 		/* If the lookup fails we want to clear out the state in the
 		 * redirect_info struct completely, so that if an eBPF program
 		 * performs multiple lookups, the last one always takes

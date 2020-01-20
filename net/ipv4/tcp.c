@@ -1190,6 +1190,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 	flags = msg->msg_flags;
 
 	if (flags & MSG_ZEROCOPY && size && sock_flag(sk, SOCK_ZEROCOPY)) {
+	    //有zero copy标记，且socket有zero copy标记，则进入
 		skb = tcp_write_queue_tail(sk);
 		uarg = sock_zerocopy_realloc(sk, size, skb_zcopy(skb));
 		if (!uarg) {
@@ -1433,6 +1434,7 @@ int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 	int ret;
 
 	lock_sock(sk);
+	//针对socket加锁后，执行发送
 	ret = tcp_sendmsg_locked(sk, msg, size);
 	release_sock(sk);
 
@@ -1760,6 +1762,7 @@ static int tcp_zerocopy_receive(struct sock *sk,
 	down_read(&current->mm->mmap_sem);
 
 	ret = -EINVAL;
+	//找此地址在kernel中的vma
 	vma = find_vma(current->mm, address);
 	if (!vma || vma->vm_start > address || vma->vm_ops != &tcp_vm_ops)
 		goto out;

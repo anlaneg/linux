@@ -838,6 +838,7 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	if (unlikely(inet_send_prepare(sk)))
 		return -EAGAIN;
 
+	//快速分辨tcp,udp的sendmsg
 	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			       sk, msg, size);
 }

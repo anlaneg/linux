@@ -901,7 +901,7 @@ struct netdev_bpf {
 		/* XDP_SETUP_PROG */
 		struct {
 			u32 flags;
-			struct bpf_prog *prog;
+			struct bpf_prog *prog;/*bpf程序*/
 			struct netlink_ext_ack *extack;
 		};
 		/* XDP_QUERY_PROG, XDP_QUERY_PROG_HW */

@@ -747,6 +747,7 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget, unsigned int *xdp_xmit,
 	return done;
 }
 
+//负责xdp ring队列收包
 static int veth_poll(struct napi_struct *napi, int budget)
 {
 	struct veth_rq *rq =
@@ -828,6 +829,7 @@ static void veth_napi_del(struct net_device *dev)
 	}
 }
 
+//为设备veth开启xdp
 static int veth_enable_xdp(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
@@ -1070,6 +1072,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 			  peer->hard_header_len -
 			  SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 		if (peer->mtu > max_mtu) {
+		    //对端的mtu大于本端mtu
 			NL_SET_ERR_MSG_MOD(extack, "Peer MTU is too large to set XDP");
 			err = -ERANGE;
 			goto err;
@@ -1082,6 +1085,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 		}
 
 		if (dev->flags & IFF_UP) {
+		    //设备接口已up,使能XDP
 			err = veth_enable_xdp(dev);
 			if (err) {
 				NL_SET_ERR_MSG_MOD(extack, "Setup for XDP failed");
@@ -1137,6 +1141,7 @@ static int veth_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	switch (xdp->command) {
 	case XDP_SETUP_PROG:
+	    //设置xdp程序
 		return veth_xdp_set(dev, xdp->prog, xdp->extack);
 	case XDP_QUERY_PROG:
 		xdp->prog_id = veth_xdp_query(dev);
@@ -1377,7 +1382,7 @@ static struct net *veth_get_link_net(const struct net_device *dev)
 	return peer ? dev_net(peer) : dev_net(dev);
 }
 
-//veth link 操人集
+//veth link 操作集
 static struct rtnl_link_ops veth_link_ops = {
 	.kind		= DRV_NAME,
 	.priv_size	= sizeof(struct veth_priv),

@@ -687,6 +687,7 @@ out:
 	return ret;
 }
 
+//按valbool的真假，为socket清或者设置相应的flags
 static inline void sock_valbool_flag(struct sock *sk, enum sock_flags bit,
 				     int valbool)
 {
@@ -1146,14 +1147,17 @@ set_rcvbuf:
 			       sk->sk_protocol == IPPROTO_TCP) ||
 			      (sk->sk_type == SOCK_DGRAM &&
 			       sk->sk_protocol == IPPROTO_UDP)))
+			    //目前仅支持inet,inet6的tcp,udp
 				ret = -ENOTSUPP;
 		} else if (sk->sk_family != PF_RDS) {
 			ret = -ENOTSUPP;
 		}
 		if (!ret) {
+		    //要设置的值必须为1，或者0
 			if (val < 0 || val > 1)
 				ret = -EINVAL;
 			else
+			    //为对应的socket设置此zerocopy标记
 				sock_valbool_flag(sk, SOCK_ZEROCOPY, valbool);
 		}
 		break;
