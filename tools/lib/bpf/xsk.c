@@ -45,9 +45,9 @@
 #endif
 
 struct xsk_umem {
-	struct xsk_ring_prod *fill;
-	struct xsk_ring_cons *comp;
-	char *umem_area;
+	struct xsk_ring_prod *fill;/*指向fill队列*/
+	struct xsk_ring_cons *comp;/*指向complete队列*/
+	char *umem_area;/*用户态内存起始地址*/
 	struct xsk_umem_config config;
 	int fd;
 	int refcount;
@@ -64,7 +64,7 @@ struct xsk_socket {
 	int prog_fd;
 	int xsks_map_fd;
 	__u32 queue_id;
-	char ifname[IFNAMSIZ];
+	char ifname[IFNAMSIZ];/*xdp socket对应的ifname*/
 };
 
 struct xsk_nl_info {
@@ -201,8 +201,8 @@ static int xsk_get_mmap_offsets(int fd, struct xdp_mmap_offsets *off)
 }
 
 int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
-			    __u64 size, struct xsk_ring_prod *fill,
-			    struct xsk_ring_cons *comp,
+			    __u64 size, struct xsk_ring_prod *fill/*出参，初始化好的fill队列*/,
+			    struct xsk_ring_cons *comp/*出参，初始化好的complete队列*/,
 			    const struct xsk_umem_config *usr_config)
 {
 	struct xdp_mmap_offsets off;
@@ -213,6 +213,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 
 	if (!umem_area || !umem_ptr || !fill || !comp)
 		return -EFAULT;
+	/*申请的buffer必须以页对齐*/
 	if (!size && !xsk_page_aligned(umem_area))
 		return -EINVAL;
 
@@ -220,6 +221,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 	if (!umem)
 		return -ENOMEM;
 
+	/*创建af_xdp socket*/
 	umem->fd = socket(AF_XDP, SOCK_RAW, 0);
 	if (umem->fd < 0) {
 		err = -errno;
@@ -229,18 +231,23 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 	umem->umem_area = umem_area;
 	xsk_set_umem_config(&umem->config, usr_config);
 
+	/*注册长度为size的用户态地址umem_area*/
 	memset(&mr, 0, sizeof(mr));
 	mr.addr = (uintptr_t)umem_area;
 	mr.len = size;
+	//chunk的大小为每个帧的大小
 	mr.chunk_size = umem->config.frame_size;
 	mr.headroom = umem->config.frame_headroom;
 	mr.flags = umem->config.flags;
 
+	//向kernel注册用户态的内存
 	err = setsockopt(umem->fd, SOL_XDP, XDP_UMEM_REG, &mr, sizeof(mr));
 	if (err) {
 		err = -errno;
 		goto out_socket;
 	}
+
+	//创建fill队列，队列长度为fill_size
 	err = setsockopt(umem->fd, SOL_XDP, XDP_UMEM_FILL_RING,
 			 &umem->config.fill_size,
 			 sizeof(umem->config.fill_size));
@@ -248,6 +255,8 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 		err = -errno;
 		goto out_socket;
 	}
+
+	//创建complete队列，队列长度为comp_size
 	err = setsockopt(umem->fd, SOL_XDP, XDP_UMEM_COMPLETION_RING,
 			 &umem->config.comp_size,
 			 sizeof(umem->config.comp_size));
@@ -256,12 +265,14 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 		goto out_socket;
 	}
 
+	//获取各成员的offset，用于与kernel对齐数据结构
 	err = xsk_get_mmap_offsets(umem->fd, &off);
 	if (err) {
 		err = -errno;
 		goto out_socket;
 	}
 
+	//映射fill队列
 	map = mmap(NULL, off.fr.desc + umem->config.fill_size * sizeof(__u64),
 		   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, umem->fd,
 		   XDP_UMEM_PGOFF_FILL_RING);
@@ -270,6 +281,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 		goto out_socket;
 	}
 
+	//初始化fill队列
 	umem->fill = fill;
 	fill->mask = umem->config.fill_size - 1;
 	fill->size = umem->config.fill_size;
@@ -279,6 +291,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 	fill->ring = map + off.fr.desc;
 	fill->cached_cons = umem->config.fill_size;
 
+	//映射complete队列
 	map = mmap(NULL, off.cr.desc + umem->config.comp_size * sizeof(__u64),
 		   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, umem->fd,
 		   XDP_UMEM_PGOFF_COMPLETION_RING);
@@ -287,6 +300,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 		goto out_mmap;
 	}
 
+	//初始化complete队列
 	umem->comp = comp;
 	comp->mask = umem->config.comp_size - 1;
 	comp->size = umem->config.comp_size;
@@ -330,6 +344,8 @@ int xsk_umem__create_v0_0_2(struct xsk_umem **umem_ptr, void *umem_area,
 COMPAT_VERSION(xsk_umem__create_v0_0_2, xsk_umem__create, LIBBPF_0.0.2)
 DEFAULT_VERSION(xsk_umem__create_v0_0_4, xsk_umem__create, LIBBPF_0.0.4)
 
+//加载xdp程序到对应的接口
+//通过queue_id查询xsks_map,并直接送给AF_XDP socket对应的fd
 static int xsk_load_xdp_prog(struct xsk_socket *xsk)
 {
 	static const int log_buf_size = 16 * 1024;
@@ -394,6 +410,7 @@ static int xsk_load_xdp_prog(struct xsk_socket *xsk)
 	};
 	size_t insns_cnt = sizeof(prog) / sizeof(struct bpf_insn);
 
+	//加载bpf程序到kernel
 	prog_fd = bpf_load_program(BPF_PROG_TYPE_XDP, prog, insns_cnt,
 				   "LGPL-2.1 or BSD-2-Clause", 0, log_buf,
 				   log_buf_size);
@@ -402,6 +419,7 @@ static int xsk_load_xdp_prog(struct xsk_socket *xsk)
 		return prog_fd;
 	}
 
+	//将此bpf关联到接口上
 	err = bpf_set_link_xdp_fd(xsk->ifindex, prog_fd, xsk->config.xdp_flags);
 	if (err) {
 		close(prog_fd);
@@ -412,6 +430,7 @@ static int xsk_load_xdp_prog(struct xsk_socket *xsk)
 	return 0;
 }
 
+/*通过ioctl获取channel数*/
 static int xsk_get_max_queues(struct xsk_socket *xsk)
 {
 	struct ethtool_channels channels = { .cmd = ETHTOOL_GCHANNELS };
@@ -449,6 +468,7 @@ out:
 	return ret;
 }
 
+/*为xdp_socket创建bpf map*/
 static int xsk_create_bpf_maps(struct xsk_socket *xsk)
 {
 	int max_queues;
@@ -532,6 +552,7 @@ out_map_ids:
 
 static int xsk_set_bpf_maps(struct xsk_socket *xsk)
 {
+    /*实现queueu_id与xdp fd映射*/
 	return bpf_map_update_elem(xsk->xsks_map_fd, &xsk->queue_id,
 				   &xsk->fd, 0);
 }
@@ -551,6 +572,7 @@ static int xsk_setup_xdp_prog(struct xsk_socket *xsk)
 		if (err)
 			return err;
 
+		//加载xdp程序到xsk
 		err = xsk_load_xdp_prog(xsk);
 		if (err) {
 			xsk_delete_bpf_maps(xsk);
@@ -567,6 +589,7 @@ static int xsk_setup_xdp_prog(struct xsk_socket *xsk)
 		}
 	}
 
+	/*设置bpf maps*/
 	if (xsk->rx)
 		err = xsk_set_bpf_maps(xsk);
 	if (err) {
@@ -629,6 +652,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 	xsk->ifname[IFNAMSIZ - 1] = '\0';
 
 	if (rx) {
+	    //创建并初始化kernel中的rx队列
 		err = setsockopt(xsk->fd, SOL_XDP, XDP_RX_RING,
 				 &xsk->config.rx_size,
 				 sizeof(xsk->config.rx_size));
@@ -638,6 +662,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 		}
 	}
 	if (tx) {
+	    //创建并初始化kernel中的tx队列
 		err = setsockopt(xsk->fd, SOL_XDP, XDP_TX_RING,
 				 &xsk->config.tx_size,
 				 sizeof(xsk->config.tx_size));
@@ -653,6 +678,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 		goto out_socket;
 	}
 
+	//映射rx队列
 	if (rx) {
 		rx_map = mmap(NULL, off.rx.desc +
 			      xsk->config.rx_size * sizeof(struct xdp_desc),
@@ -672,6 +698,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 	}
 	xsk->rx = rx;
 
+	//映射tx队列
 	if (tx) {
 		tx_map = mmap(NULL, off.tx.desc +
 			      xsk->config.tx_size * sizeof(struct xdp_desc),
@@ -702,6 +729,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 		sxdp.sxdp_flags = xsk->config.bind_flags;
 	}
 
+	//将队列xsk->queueu_id，设备xsk->ifindex关联到此socket
 	err = bind(xsk->fd, (struct sockaddr *)&sxdp, sizeof(sxdp));
 	if (err) {
 		err = -errno;
@@ -710,6 +738,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 
 	xsk->prog_fd = -1;
 
+	//为xsk加载bpf程序
 	if (!(xsk->config.libbpf_flags & XSK_LIBBPF_FLAGS__INHIBIT_PROG_LOAD)) {
 		err = xsk_setup_xdp_prog(xsk);
 		if (err)

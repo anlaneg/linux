@@ -285,14 +285,16 @@ static int xdp_umem_pin_pages(struct xdp_umem *umem)
 	long npgs;
 	int err;
 
+	/*申请一组page指针*/
 	umem->pgs = kcalloc(umem->npgs, sizeof(*umem->pgs),
 			    GFP_KERNEL | __GFP_NOWARN);
 	if (!umem->pgs)
 		return -ENOMEM;
 
 	down_read(&current->mm->mmap_sem);
+	/*获取用户内存的每个页指针*/
 	npgs = get_user_pages(umem->address, umem->npgs,
-			      gup_flags | FOLL_LONGTERM, &umem->pgs[0], NULL);
+			      gup_flags | FOLL_LONGTERM, &umem->pgs[0]/*出参，各页指针*/, NULL);
 	up_read(&current->mm->mmap_sem);
 
 	if (npgs != umem->npgs) {
@@ -337,6 +339,7 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 	return 0;
 }
 
+//注册用户态的内存
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
@@ -409,12 +412,14 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if (err)
 		goto out_account;
 
+	/*申请与umem相同的一组umem_page*/
 	umem->pages = kcalloc(umem->npgs, sizeof(*umem->pages), GFP_KERNEL);
 	if (!umem->pages) {
 		err = -ENOMEM;
 		goto out_pin;
 	}
 
+	/*映射umem_page与用户内存的映射*/
 	err = xdp_umem_map_pages(umem);
 	if (!err)
 		return 0;

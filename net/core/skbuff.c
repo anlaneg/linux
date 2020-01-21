@@ -953,6 +953,7 @@ EXPORT_SYMBOL(napi_consume_skb);
 	BUILD_BUG_ON(offsetof(struct sk_buff, field) >		\
 		     offsetof(struct sk_buff, headers_end));	\
 
+//skb元数据复制
 static void __copy_skb_header(struct sk_buff *new, const struct sk_buff *old)
 {
 	new->tstamp		= old->tstamp;

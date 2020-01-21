@@ -318,6 +318,7 @@ done:
 	return fd;
 }
 
+//加载bpf程序到kernel
 int bpf_load_program(enum bpf_prog_type type, const struct bpf_insn *insns,
 		     size_t insns_cnt, const char *license,
 		     __u32 kern_version, char *log_buf,

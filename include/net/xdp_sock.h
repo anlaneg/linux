@@ -24,7 +24,7 @@ struct xsk_queue;
 #define XSK_NEXT_PG_CONTIG_MASK (1ULL << XSK_NEXT_PG_CONTIG_SHIFT)
 
 struct xdp_umem_page {
-	void *addr;
+	void *addr;//页地址
 	dma_addr_t dma;
 };
 
@@ -42,19 +42,19 @@ struct xdp_umem_fq_reuse {
 #define XDP_UMEM_USES_NEED_WAKEUP (1 << 1)
 
 struct xdp_umem {
-	struct xsk_queue *fq;
-	struct xsk_queue *cq;
-	struct xdp_umem_page *pages;
+	struct xsk_queue *fq;//fill队列
+	struct xsk_queue *cq;//complete队列
+	struct xdp_umem_page *pages;/*自kernel申请的一组与umem相同页数的内存*/
 	u64 chunk_mask;
-	u64 size;
+	u64 size;/*用户内存大小*/
 	u32 headroom;
 	u32 chunk_size_nohr;
 	struct user_struct *user;
-	unsigned long address;
+	unsigned long address;/*用户内存起始地址*/
 	refcount_t users;
 	struct work_struct work;
-	struct page **pgs;
-	u32 npgs;
+	struct page **pgs;/*用户内存的各页指针*/
+	u32 npgs;/*内存页数目*/
 	u16 queue_id;
 	u8 need_wakeup;
 	u8 flags;
@@ -145,6 +145,7 @@ int __xsk_map_redirect(struct bpf_map *map, struct xdp_buff *xdp,
 		       struct xdp_sock *xs);
 void __xsk_map_flush(struct bpf_map *map);
 
+//通过key查询xdp_sock
 static inline struct xdp_sock *__xsk_map_lookup_elem(struct bpf_map *map,
 						     u32 key)
 {

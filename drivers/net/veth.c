@@ -67,7 +67,9 @@ struct veth_priv {
 };
 
 struct veth_xdp_tx_bq {
+    //缓存xdp_frame
 	struct xdp_frame *q[VETH_XDP_TX_BULK_SIZE];
+	//当前缓存的xdp_frame大小
 	unsigned int count;
 };
 
@@ -347,6 +349,7 @@ static void veth_set_multicast_list(struct net_device *dev)
 {
 }
 
+/*通过buffer构造skb*/
 static struct sk_buff *veth_build_skb(void *head, int headroom, int len,
 				      int buflen)
 {
@@ -371,8 +374,8 @@ static int veth_select_rxq(struct net_device *dev)
 	return smp_processor_id() % dev->real_num_rx_queues;
 }
 
-static int veth_xdp_xmit(struct net_device *dev, int n,
-			 struct xdp_frame **frames, u32 flags)
+static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目*/,
+			 struct xdp_frame **frames/*待发送报文*/, u32 flags)
 {
 	struct veth_priv *rcv_priv, *priv = netdev_priv(dev);
 	struct net_device *rcv;
@@ -385,12 +388,14 @@ static int veth_xdp_xmit(struct net_device *dev, int n,
 		goto drop;
 	}
 
+	/*取对端设备*/
 	rcv = rcu_dereference(priv->peer);
 	if (unlikely(!rcv)) {
 		ret = -ENXIO;
 		goto drop;
 	}
 
+	/*选择收包队列*/
 	rcv_priv = netdev_priv(rcv);
 	rq = &rcv_priv->rq[veth_select_rxq(rcv)];
 	/* Non-NULL xdp_prog ensures that xdp_ring is initialized on receive
@@ -478,9 +483,11 @@ static int veth_xdp_tx(struct net_device *dev, struct xdp_buff *xdp,
 	if (unlikely(!frame))
 		return -EOVERFLOW;
 
+	/*bq中存储了一批报文，已满，将其刷出*/
 	if (unlikely(bq->count == VETH_XDP_TX_BULK_SIZE))
 		veth_xdp_flush_bq(dev, bq);
 
+	/*将frame缓存在bq->q上*/
 	bq->q[bq->count++] = frame;
 
 	return 0;
@@ -587,37 +594,47 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq, struct sk_buff *skb,
 	rcu_read_lock();
 	xdp_prog = rcu_dereference(rq->xdp_prog);
 	if (unlikely(!xdp_prog)) {
+	    /*没有xdp程序，直接退出*/
 		rcu_read_unlock();
 		goto out;
 	}
 
+	/*当前解析位置为ip头部，获得mac头部长度*/
 	mac_len = skb->data - skb_mac_header(skb);
+	/*获得报文总长度*/
 	pktlen = skb->len + mac_len;
+	/*获得headroom可用长度*/
 	headroom = skb_headroom(skb) - mac_len;
 
 	if (skb_shared(skb) || skb_head_is_locked(skb) ||
 	    skb_is_nonlinear(skb) || headroom < XDP_PACKET_HEADROOM) {
+	    /*headroom不足xdp要求的headroom空间，或者与其它share skb,skb非线性*/
 		struct sk_buff *nskb;
 		int size, head_off;
 		void *head, *start;
 		struct page *page;
 
+		/*获得适合此skb的内存大小*/
 		size = SKB_DATA_ALIGN(VETH_XDP_HEADROOM + pktlen) +
 		       SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 		if (size > PAGE_SIZE)
 			goto drop;
 
+		/*申请一个内存页*/
 		page = alloc_page(GFP_ATOMIC | __GFP_NOWARN);
 		if (!page)
 			goto drop;
 
 		head = page_address(page);
-		start = head + VETH_XDP_HEADROOM;
+		start = head + VETH_XDP_HEADROOM;//可存放skb数据的起始位置
+
+		//自mac层起始位置开始，copy报文到申请的页中
 		if (skb_copy_bits(skb, -mac_len, start, pktlen)) {
 			page_frag_free(head);
 			goto drop;
 		}
 
+		/*构造新生成的skb*/
 		nskb = veth_build_skb(head,
 				      VETH_XDP_HEADROOM + mac_len, skb->len,
 				      PAGE_SIZE);
@@ -629,7 +646,9 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq, struct sk_buff *skb,
 		skb_copy_header(nskb, skb);
 		head_off = skb_headroom(nskb) - skb_headroom(skb);
 		skb_headers_offset_update(nskb, head_off);
+		/*不再引用此skb*/
 		consume_skb(skb);
+		/*使用新申请的skb*/
 		skb = nskb;
 	}
 
@@ -638,15 +657,19 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq, struct sk_buff *skb,
 	xdp.data_end = xdp.data + pktlen;
 	xdp.data_meta = xdp.data;
 	xdp.rxq = &rq->xdp_rxq;
+
+	/*记录报文原始的起始位置及终止位置*/
 	orig_data = xdp.data;
 	orig_data_end = xdp.data_end;
 
+	//执行此接收队列对应的bpf程序
 	act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
 	switch (act) {
 	case XDP_PASS:
 		break;
 	case XDP_TX:
+	    //将此报文自收接口扔回
 		get_page(virt_to_page(xdp.data));
 		consume_skb(skb);
 		xdp.rxq->mem = rq->xdp_mem;
@@ -667,6 +690,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq, struct sk_buff *skb,
 		rcu_read_unlock();
 		goto xdp_xmit;
 	default:
+	    //其它无效返回值，丢包
 		bpf_warn_invalid_xdp_action(act);
 		/* fall through */
 	case XDP_ABORTED:
@@ -677,18 +701,27 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq, struct sk_buff *skb,
 	}
 	rcu_read_unlock();
 
+	/*报文起始位置变换delta*/
 	delta = orig_data - xdp.data;
 	off = mac_len + delta;
+	//更新报文数据的起始位置
 	if (off > 0)
 		__skb_push(skb, off);
 	else if (off < 0)
 		__skb_pull(skb, -off);
+
+	/*更新到mac头偏移量长度*/
 	skb->mac_header -= delta;
+
+	/*更新报文终止位置*/
 	off = xdp.data_end - orig_data_end;
 	if (off != 0)
 		__skb_put(skb, off);
+
+	/*防止报文更改，重新解析报文协议*/
 	skb->protocol = eth_type_trans(skb, rq->dev);
 
+	/*更新报文metadata长度*/
 	metalen = xdp.data - xdp.data_meta;
 	if (metalen)
 		skb_metadata_set(skb, metalen);
@@ -724,6 +757,7 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget, unsigned int *xdp_xmit,
 			bytes += frame->len;
 			skb = veth_xdp_rcv_one(rq, frame, &xdp_xmit_one, bq);
 		} else {
+		    //普通skb报文
 			skb = ptr;
 			bytes += skb->len;
 			skb = veth_xdp_rcv_skb(rq, skb, &xdp_xmit_one, bq);
@@ -1388,6 +1422,7 @@ static struct rtnl_link_ops veth_link_ops = {
 	.priv_size	= sizeof(struct veth_priv),
 	.setup		= veth_setup,
 	.validate	= veth_validate,
+	//新建veth link
 	.newlink	= veth_newlink,
 	.dellink	= veth_dellink,
 	.policy		= veth_policy,

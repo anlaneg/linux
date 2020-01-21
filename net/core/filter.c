@@ -3543,6 +3543,7 @@ static int __bpf_tx_xdp_map(struct net_device *dev_rx, void *fwd,
 		break;
 	}
 	case BPF_MAP_TYPE_XSKMAP: {
+	    /*此情况下fwd为xdp_socket*/
 		struct xdp_sock *xs = fwd;
 
 		err = __xsk_map_redirect(map, xdp, xs);

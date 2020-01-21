@@ -66,9 +66,10 @@ struct xdp_rxq_info {
 struct xdp_buff {
 	void *data;/*指向报文起始位置*/
 	void *data_end;/*指向报文结尾位置*/
-	void *data_meta;/*如果驱动不支持data_meta，则指向data+1,指向data_meta*/
+	void *data_meta;/*如果驱动不支持data_meta，则指向data+1,否则指向data_meta*/
 	void *data_hard_start;//buffer的起始位置
 	unsigned long handle;
+	/*所属的接收队列信息*/
 	struct xdp_rxq_info *rxq;
 };
 

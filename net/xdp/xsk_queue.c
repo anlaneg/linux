@@ -28,12 +28,14 @@ static u32 xskq_rxtx_get_ring_size(struct xsk_queue *q)
 	return sizeof(struct xdp_ring) + q->nentries * sizeof(struct xdp_desc);
 }
 
+//创建指定大小的xsk队列
 struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 {
 	struct xsk_queue *q;
 	gfp_t gfp_flags;
 	size_t size;
 
+	/*申请队列*/
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		return NULL;
@@ -46,6 +48,7 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 	size = umem_queue ? xskq_umem_get_ring_size(q) :
 	       xskq_rxtx_get_ring_size(q);
 
+	/*为ring申请对应的内存*/
 	q->ring = (struct xdp_ring *)__get_free_pages(gfp_flags,
 						      get_order(size));
 	if (!q->ring) {

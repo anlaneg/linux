@@ -2081,6 +2081,7 @@ static inline struct sk_buff *__skb_dequeue_tail(struct sk_buff_head *list)
 struct sk_buff *skb_dequeue_tail(struct sk_buff_head *list);
 
 
+/*检查skb是否为线性的*/
 static inline bool skb_is_nonlinear(const struct sk_buff *skb)
 {
 	return skb->data_len;

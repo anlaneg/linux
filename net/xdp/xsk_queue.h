@@ -34,7 +34,7 @@ struct xdp_umem_ring {
 struct xsk_queue {
 	u64 chunk_mask;
 	u64 size;
-	u32 ring_mask;
+	u32 ring_mask;//队列长度掩码
 	u32 nentries;//队列长度
 	u32 prod_head;
 	u32 prod_tail;
@@ -335,6 +335,7 @@ static inline void xskq_discard_desc(struct xsk_queue *q)
 	q->cons_tail++;
 }
 
+//将xdp buffer入队
 static inline int xskq_produce_batch_desc(struct xsk_queue *q,
 					  u64 addr, u32 len)
 {
