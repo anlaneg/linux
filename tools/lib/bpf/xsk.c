@@ -62,7 +62,7 @@ struct xsk_socket {
 	int fd;
 	int ifindex;
 	int prog_fd;
-	int xsks_map_fd;
+	int xsks_map_fd;/*map对应的fd*/
 	__u32 queue_id;
 	char ifname[IFNAMSIZ];/*xdp socket对应的ifname*/
 };
@@ -478,6 +478,7 @@ static int xsk_create_bpf_maps(struct xsk_socket *xsk)
 	if (max_queues < 0)
 		return max_queues;
 
+	//创建类型为xsks_map类型的map
 	fd = bpf_create_map_name(BPF_MAP_TYPE_XSKMAP, "xsks_map",
 				 sizeof(int), sizeof(int), max_queues, 0);
 	if (fd < 0)
@@ -488,6 +489,7 @@ static int xsk_create_bpf_maps(struct xsk_socket *xsk)
 	return 0;
 }
 
+//删除map中的queue_id对应的项
 static void xsk_delete_bpf_maps(struct xsk_socket *xsk)
 {
 	bpf_map_delete_elem(xsk->xsks_map_fd, &xsk->queue_id);

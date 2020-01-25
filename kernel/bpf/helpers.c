@@ -25,10 +25,12 @@
  */
 BPF_CALL_2(bpf_map_lookup_elem, struct bpf_map *, map, void *, key)
 {
+    //调用map对应的map_lookup_elem
 	WARN_ON_ONCE(!rcu_read_lock_held());
 	return (unsigned long) map->ops->map_lookup_elem(map, key);
 }
 
+//bpf程序提供的 BPF_FUNC_map_lookup_elem 函数实现
 const struct bpf_func_proto bpf_map_lookup_elem_proto = {
 	.func		= bpf_map_lookup_elem,
 	.gpl_only	= false,

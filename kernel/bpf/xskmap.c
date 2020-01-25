@@ -158,6 +158,7 @@ static u32 xsk_map_gen_lookup(struct bpf_map *map, struct bpf_insn *insn_buf)
 	return insn - insn_buf;
 }
 
+//xdp socket对应的map查询
 static void *xsk_map_lookup_elem(struct bpf_map *map, void *key)
 {
 	WARN_ON_ONCE(!rcu_read_lock_held());
@@ -240,10 +241,12 @@ static int xsk_map_delete_elem(struct bpf_map *map, void *key)
 	struct xdp_sock *old_xs, **map_entry;
 	int k = *(u32 *)key;
 
+	/*要加入的k起过限制*/
 	if (k >= map->max_entries)
 		return -EINVAL;
 
 	spin_lock_bh(&m->lock);
+	//存放xdp socket
 	map_entry = &m->xsk_map[k];
 	old_xs = xchg(map_entry, NULL);
 	if (old_xs)
@@ -264,6 +267,7 @@ void xsk_map_try_sock_delete(struct xsk_map *map, struct xdp_sock *xs,
 	spin_unlock_bh(&map->lock);
 }
 
+//定义xdp socket对应的ops
 const struct bpf_map_ops xsk_map_ops = {
 	.map_alloc = xsk_map_alloc,
 	.map_free = xsk_map_free,

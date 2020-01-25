@@ -4193,7 +4193,7 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 		return -EINVAL;
 	}
 
-	/*通过func id获取function指针*/
+	/*通过func id获取function proto指针*/
 	if (env->ops->get_func_proto)
 		fn = env->ops->get_func_proto(func_id, env->prog);
 	if (!fn) {
@@ -4204,12 +4204,14 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 	}
 
 	/* eBPF programs must be GPL compatible to use GPL-ed functions */
+	//函数版本信息检查
 	if (!env->prog->gpl_compatible && fn->gpl_only) {
 		verbose(env, "cannot call GPL-restricted function from non-GPL compatible program\n");
 		return -EINVAL;
 	}
 
 	/* With LD_ABS/IND some JITs save/restore skb from r1. */
+	//检查函数是否会改报文
 	changes_data = bpf_helper_changes_pkt_data(fn->func);
 	if (changes_data && fn->arg1_type != ARG_PTR_TO_CTX) {
 		verbose(env, "kernel subsystem misconfigured func %s#%d: r1 != ctx\n",
@@ -4227,8 +4229,10 @@ static int check_helper_call(struct bpf_verifier_env *env, int func_id, int insn
 		return err;
 	}
 
+	//设置func_id
 	meta.func_id = func_id;
 	/* check args */
+	//检查function对应的参数
 	for (i = 0; i < 5; i++) {
 		err = btf_resolve_helper_id(&env->log, fn, i);
 		if (err > 0)
@@ -7980,7 +7984,7 @@ static int do_check(struct bpf_verifier_env *env)
 				if (insn->src_reg == BPF_PSEUDO_CALL)
 					err = check_func_call(env, insn, &env->insn_idx);
 				else
-				    /*指令中的立即数保存的是系统函数id*/
+				    /*指令中的立即数保存的是bpf heler函数的id号，来源于bpf_func_id枚举类型*/
 					err = check_helper_call(env, insn->imm, env->insn_idx);
 				if (err)
 					return err;

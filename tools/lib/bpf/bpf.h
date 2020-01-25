@@ -37,12 +37,12 @@ extern "C" {
 #endif
 
 struct bpf_create_map_attr {
-	const char *name;
-	enum bpf_map_type map_type;
+	const char *name;//map名称
+	enum bpf_map_type map_type;//map类型
 	__u32 map_flags;
 	__u32 key_size;
 	__u32 value_size;
-	__u32 max_entries;
+	__u32 max_entries;//最大元素数
 	__u32 numa_node;
 	__u32 btf_fd;
 	__u32 btf_key_type_id;

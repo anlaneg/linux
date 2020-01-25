@@ -38,7 +38,7 @@ struct bpf_map_ops {
 	/* funcs callable from userspace (via syscall) */
     //map_alloc申请前check，参数attr校验
 	int (*map_alloc_check)(union bpf_attr *attr);
-	//map申请
+	//map空间申请，初始化
 	struct bpf_map *(*map_alloc)(union bpf_attr *attr);
 	void (*map_release)(struct bpf_map *map, struct file *map_file);
 	void (*map_free)(struct bpf_map *map);
@@ -90,23 +90,29 @@ struct bpf_map {
 	/* The first two cachelines with read-mostly members of which some
 	 * are also accessed in fast-path (e.g. ops, max_entries).
 	 */
+    //map对应的ops
 	const struct bpf_map_ops *ops ____cacheline_aligned;
 	struct bpf_map *inner_map_meta;
 #ifdef CONFIG_SECURITY
 	void *security;
 #endif
+	//map类别
 	enum bpf_map_type map_type;
+	//map的key大小
 	u32 key_size;
+	//map的value大小
 	u32 value_size;
+	//map的最大数目
 	u32 max_entries;
 	u32 map_flags;
 	int spin_lock_off; /* >=0 valid offset, <0 error */
-	u32 id;
+	u32 id;//map的编号
 	int numa_node;
 	u32 btf_key_type_id;
 	u32 btf_value_type_id;
 	struct btf *btf;
 	struct bpf_map_memory memory;
+	//map名称
 	char name[BPF_OBJ_NAME_LEN];
 	bool unpriv_array;
 	bool frozen; /* write-once; write-protected by freeze_mutex */

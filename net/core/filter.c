@@ -3543,9 +3543,10 @@ static int __bpf_tx_xdp_map(struct net_device *dev_rx, void *fwd,
 		break;
 	}
 	case BPF_MAP_TYPE_XSKMAP: {
-	    /*此情况下fwd为xdp_socket*/
+	    /*map为XSKMAP情况下fwd为xdp_socket*/
 		struct xdp_sock *xs = fwd;
 
+		/*将文送给指定的xdp_socket*/
 		err = __xsk_map_redirect(map, xdp, xs);
 		return err;
 	}
@@ -3590,6 +3591,7 @@ static inline void *__xdp_map_lookup_elem(struct bpf_map *map, u32 index)
 	case BPF_MAP_TYPE_CPUMAP:
 		return __cpu_map_lookup_elem(map, index);
 	case BPF_MAP_TYPE_XSKMAP:
+	    //通过index查找到对应的xdp_socket
 		return __xsk_map_lookup_elem(map, index);
 	default:
 		return NULL;
@@ -3621,6 +3623,7 @@ static int xdp_do_redirect_map(struct net_device *dev, struct xdp_buff *xdp,
 	void *fwd = ri->tgt_value;
 	int err;
 
+	//将变量取值还原（每cpu一个此变量）
 	ri->tgt_index = 0;
 	ri->tgt_value = NULL;
 	WRITE_ONCE(ri->map, NULL);
@@ -3764,7 +3767,7 @@ BPF_CALL_3(bpf_xdp_redirect_map, struct bpf_map *, map, u32, ifindex,
 
 	ri->tgt_value = __xdp_map_lookup_elem(map, ifindex);
 	if (unlikely(!ri->tgt_value)) {
-	    //查询失败，则返回flags
+	    //查询失败，则直接返回flags
 		/* If the lookup fails we want to clear out the state in the
 		 * redirect_info struct completely, so that if an eBPF program
 		 * performs multiple lookups, the last one always takes
@@ -3781,6 +3784,7 @@ BPF_CALL_3(bpf_xdp_redirect_map, struct bpf_map *, map, u32, ifindex,
 	return XDP_REDIRECT;
 }
 
+//xdp情况下redirect_map调用
 static const struct bpf_func_proto bpf_xdp_redirect_map_proto = {
 	.func           = bpf_xdp_redirect_map,
 	.gpl_only       = false,
@@ -5953,6 +5957,7 @@ static const struct bpf_func_proto bpf_tcp_gen_syncookie_proto = {
 
 #endif /* CONFIG_INET */
 
+//检查所给函数是否会造成报文发生变化
 bool bpf_helper_changes_pkt_data(void *func)
 {
 	if (func == bpf_skb_vlan_push ||
@@ -5987,6 +5992,7 @@ bool bpf_helper_changes_pkt_data(void *func)
 	return false;
 }
 
+//bpf程序基本helper函数
 static const struct bpf_func_proto *
 bpf_base_func_proto(enum bpf_func_id func_id)
 {
@@ -6141,7 +6147,7 @@ cg_skb_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	}
 }
 
-/*给出function id号，返回其对应的function*/
+/*tc_cls_act helper函数查询，给出function id号，返回其对应的function*/
 static const struct bpf_func_proto *
 tc_cls_act_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
@@ -6266,6 +6272,7 @@ xdp_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 	case BPF_FUNC_redirect:
 		return &bpf_xdp_redirect_proto;
 	case BPF_FUNC_redirect_map:
+	    //bpf_redirect_map调用
 		return &bpf_xdp_redirect_map_proto;
 	case BPF_FUNC_xdp_adjust_tail:
 		return &bpf_xdp_adjust_tail_proto;
@@ -8501,6 +8508,7 @@ const struct bpf_prog_ops sk_filter_prog_ops = {
 	.test_run		= bpf_prog_test_run_skb,
 };
 
+//tc_cls_act类型程序提供的校验操作集
 const struct bpf_verifier_ops tc_cls_act_verifier_ops = {
 	.get_func_proto		= tc_cls_act_func_proto,
 	.is_valid_access	= tc_cls_act_is_valid_access,
@@ -8513,6 +8521,7 @@ const struct bpf_prog_ops tc_cls_act_prog_ops = {
 	.test_run		= bpf_prog_test_run_skb,
 };
 
+//xdp类型bpf程序提供的校验操作集
 const struct bpf_verifier_ops xdp_verifier_ops = {
 	.get_func_proto		= xdp_func_proto,
 	.is_valid_access	= xdp_is_valid_access,

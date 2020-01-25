@@ -2946,6 +2946,7 @@ union bpf_attr {
  */
 #define __BPF_ENUM_FN(x) BPF_FUNC_ ## x
 enum bpf_func_id {
+    //定义bpf提供的helper function的id号
 	__BPF_FUNC_MAPPER(__BPF_ENUM_FN)
 	__BPF_FUNC_MAX_ID,
 };

@@ -271,6 +271,7 @@ out_unlock:
 	return err;
 }
 
+//将报文送给指定的xdp socket
 int __xsk_map_redirect(struct bpf_map *map, struct xdp_buff *xdp,
 		       struct xdp_sock *xs)
 {

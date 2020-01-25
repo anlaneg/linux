@@ -97,6 +97,7 @@ int bpf_create_map_xattr(const struct bpf_create_map_attr *create_attr)
 	attr.map_ifindex = create_attr->map_ifindex;
 	attr.inner_map_fd = create_attr->inner_map_fd;
 
+	//通过bpf系统调用，创建map,返回map对应的fd
 	return sys_bpf(BPF_MAP_CREATE, &attr, sizeof(attr));
 }
 

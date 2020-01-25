@@ -123,6 +123,7 @@ static struct bpf_map *find_and_alloc_map(union bpf_attr *attr)
 		if (err)
 			return ERR_PTR(err);
 	}
+	/*指定map_ifindex,则采用bpf_map_offload_ops*/
 	if (attr->map_ifindex)
 		ops = &bpf_map_offload_ops;
 	map = ops->map_alloc(attr);
@@ -276,6 +277,7 @@ void bpf_map_uncharge_memlock(struct bpf_map *map, u32 pages)
 	map->memory.pages -= pages;
 }
 
+//为map申请编号
 static int bpf_map_alloc_id(struct bpf_map *map)
 {
 	int id;
@@ -513,6 +515,7 @@ out:
 	return err;
 }
 
+//bpf map对应的文件操作集
 const struct file_operations bpf_map_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= bpf_map_show_fdinfo,
@@ -531,6 +534,7 @@ int bpf_map_new_fd(struct bpf_map *map, int flags)
 	if (ret < 0)
 		return ret;
 
+	/*创建此map对应的fd*/
 	return anon_inode_getfd("bpf-map", &bpf_map_fops, map,
 				flags | O_CLOEXEC);
 }
@@ -633,7 +637,9 @@ static int map_check_btf(struct bpf_map *map, const struct btf *btf,
 }
 
 #define BPF_MAP_CREATE_LAST_FIELD btf_value_type_id
+
 /* called via syscall */
+//bpf的map创建,返回map对应的fd
 static int map_create(union bpf_attr *attr)
 {
 	int numa_node = bpf_map_attr_numa_node(attr);
@@ -660,6 +666,7 @@ static int map_create(union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
+	//设置map名称等
 	err = bpf_obj_name_cpy(map->name, attr->map_name);
 	if (err)
 		goto free_map;
