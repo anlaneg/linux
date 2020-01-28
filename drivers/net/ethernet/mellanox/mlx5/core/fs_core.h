@@ -220,7 +220,6 @@ struct fs_fte {
 	struct mlx5_fc			*counter;
 	//挂接至hashtable
 	struct rhash_head		hash;
-	struct rcu_head	rcu;
 	int				modify_mask;
 };
 

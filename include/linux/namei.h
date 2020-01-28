@@ -34,7 +34,6 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 
 /* internal use only */
 #define LOOKUP_PARENT		0x0010
-#define LOOKUP_NO_REVAL		0x0080
 #define LOOKUP_JUMPED		0x1000
 #define LOOKUP_ROOT		0x2000
 #define LOOKUP_ROOT_GRABBED	0x0008

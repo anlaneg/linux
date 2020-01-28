@@ -878,7 +878,7 @@ out:
  */
 #define ESW_SIZE (16 * 1024 * 1024)
 const unsigned int ESW_POOLS[4] = { 4 * 1024 * 1024, 1 * 1024 * 1024,
-				    64 * 1024, 4 * 1024 };
+				    64 * 1024, 128 };
 
 static int
 get_sz_from_pool(struct mlx5_eswitch *esw)
@@ -1409,7 +1409,7 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 	}
 
 	//先关闭旧的sriov
-	mlx5_eswitch_disable(esw, false);
+	mlx5_eswitch_disable(esw, true);
 	mlx5_eswitch_update_num_of_vfs(esw, esw->dev->priv.sriov.num_vfs);
 	//再开启sriov
 	err = mlx5_eswitch_enable(esw, MLX5_ESWITCH_OFFLOADS);
@@ -2263,7 +2263,8 @@ int mlx5_esw_funcs_changed_handler(struct notifier_block *nb, unsigned long type
 
 int esw_offloads_enable(struct mlx5_eswitch *esw)
 {
-	int err;
+	struct mlx5_vport *vport;
+	int err, i;
 
 	if (MLX5_CAP_ESW_FLOWTABLE_FDB(esw->dev, reformat) &&
 	    MLX5_CAP_ESW_FLOWTABLE_FDB(esw->dev, decap))
@@ -2279,6 +2280,10 @@ int esw_offloads_enable(struct mlx5_eswitch *esw)
 	err = esw_set_passing_vport_metadata(esw, true);
 	if (err)
 		goto err_vport_metadata;
+
+	/* Representor will control the vport link state */
+	mlx5_esw_for_each_vf_vport(esw, i, vport, esw->esw_funcs.num_vfs)
+		vport->info.link_state = MLX5_VPORT_ADMIN_STATE_DOWN;
 
 	err = mlx5_eswitch_enable_pf_vf_vports(esw, MLX5_VPORT_UC_ADDR_CHANGE);
 	if (err)
@@ -2310,7 +2315,7 @@ static int esw_offloads_stop(struct mlx5_eswitch *esw,
 {
 	int err, err1;
 
-	mlx5_eswitch_disable(esw, false);
+	mlx5_eswitch_disable(esw, true);
 	err = mlx5_eswitch_enable(esw, MLX5_ESWITCH_LEGACY);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack, "Failed setting eswitch to legacy");

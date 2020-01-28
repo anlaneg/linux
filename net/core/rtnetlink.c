@@ -3085,9 +3085,17 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 	dev->rtnl_link_state = RTNL_LINK_INITIALIZING;
 
 	//mtu
-	if (tb[IFLA_MTU])
-		dev->mtu = nla_get_u32(tb[IFLA_MTU]);
+	if (tb[IFLA_MTU]) {
+		u32 mtu = nla_get_u32(tb[IFLA_MTU]);
+		int err;
 
+		err = dev_validate_mtu(dev, mtu, extack);
+		if (err) {
+			free_netdev(dev);
+			return ERR_PTR(err);
+		}
+		dev->mtu = mtu;
+	}
 	//设备mac地址
 	if (tb[IFLA_ADDRESS]) {
 		memcpy(dev->dev_addr, nla_data(tb[IFLA_ADDRESS]),

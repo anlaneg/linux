@@ -2178,9 +2178,8 @@ replay:
 
 		mutex_unlock(&chain->filter_chain_lock);
 		/*按参数创建tc filter*/
-		tp_new = tcf_proto_create(nla_data(tca[TCA_KIND]),
-					  protocol, prio, chain, rtnl_held,
-					  extack);
+		tp_new = tcf_proto_create(name, protocol, prio, chain,
+					  rtnl_held, extack);
 		if (IS_ERR(tp_new)) {
 			err = PTR_ERR(tp_new);
 			goto errout_tp;
