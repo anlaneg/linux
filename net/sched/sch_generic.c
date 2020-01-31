@@ -463,7 +463,7 @@ static void dev_watchdog(struct timer_list *t)
 				//显示网络设备第i个队列超时
 				WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: %s (%s): transmit queue %u timed out\n",
 				       dev->name, netdev_drivername(dev), i);
-				dev->netdev_ops->ndo_tx_timeout(dev);
+				dev->netdev_ops->ndo_tx_timeout(dev, i);
 			}
 
 			//重置下次定时器

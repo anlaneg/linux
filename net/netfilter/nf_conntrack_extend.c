@@ -39,7 +39,6 @@ void nf_ct_ext_destroy(struct nf_conn *ct)
 
 	kfree(ct->ext);
 }
-EXPORT_SYMBOL(nf_ct_ext_destroy);
 
 //在连接跟踪上创建扩展id需要的内存，并返回创建的内存指针
 void *nf_ct_ext_add(struct nf_conn *ct, enum nf_ct_ext_id id, gfp_t gfp)

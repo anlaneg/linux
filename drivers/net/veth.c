@@ -383,6 +383,7 @@ static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目
 	unsigned int max_len;
 	struct veth_rq *rq;
 
+	rcu_read_lock();
 	if (unlikely(flags & ~XDP_XMIT_FLAGS_MASK)) {
 		ret = -EINVAL;
 		goto drop;
@@ -426,11 +427,14 @@ static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目
 	if (flags & XDP_XMIT_FLUSH)
 		__veth_xdp_flush(rq);
 
-	if (likely(!drops))
+	if (likely(!drops)) {
+		rcu_read_unlock();
 		return n;
+	}
 
 	ret = n - drops;
 drop:
+	rcu_read_unlock();
 	atomic64_add(drops, &priv->dropped);
 
 	return ret;
@@ -807,7 +811,7 @@ static int veth_poll(struct napi_struct *napi, int budget)
 	if (xdp_xmit & VETH_XDP_TX)
 		veth_xdp_flush(rq->dev, &bq);
 	if (xdp_xmit & VETH_XDP_REDIR)
-		xdp_do_flush_map();
+		xdp_do_flush();
 	xdp_clear_return_frame_no_direct();
 
 	return done;

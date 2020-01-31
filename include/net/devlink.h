@@ -491,6 +491,10 @@ enum devlink_param_generic_id {
 #define DEVLINK_INFO_VERSION_GENERIC_FW_UNDI	"fw.undi"
 /* NCSI support/handler version */
 #define DEVLINK_INFO_VERSION_GENERIC_FW_NCSI	"fw.ncsi"
+/* FW parameter set id */
+#define DEVLINK_INFO_VERSION_GENERIC_FW_PSID	"fw.psid"
+/* RoCE FW version */
+#define DEVLINK_INFO_VERSION_GENERIC_FW_ROCE	"fw.roce"
 
 struct devlink_region;
 struct devlink_info_req;
@@ -568,7 +572,7 @@ struct devlink_trap {
 };
 
 /* All traps must be documented in
- * Documentation/networking/devlink-trap.rst
+ * Documentation/networking/devlink/devlink-trap.rst
  */
 enum devlink_trap_generic_id {
 	DEVLINK_TRAP_GENERIC_ID_SMAC_MC,
@@ -595,6 +599,9 @@ enum devlink_trap_generic_id {
 	DEVLINK_TRAP_GENERIC_ID_REJECT_ROUTE,
 	DEVLINK_TRAP_GENERIC_ID_IPV4_LPM_UNICAST_MISS,
 	DEVLINK_TRAP_GENERIC_ID_IPV6_LPM_UNICAST_MISS,
+	DEVLINK_TRAP_GENERIC_ID_NON_ROUTABLE,
+	DEVLINK_TRAP_GENERIC_ID_DECAP_ERROR,
+	DEVLINK_TRAP_GENERIC_ID_OVERLAY_SMAC_MC,
 
 	/* Add new generic trap IDs above */
 	__DEVLINK_TRAP_GENERIC_ID_MAX,
@@ -602,12 +609,13 @@ enum devlink_trap_generic_id {
 };
 
 /* All trap groups must be documented in
- * Documentation/networking/devlink-trap.rst
+ * Documentation/networking/devlink/devlink-trap.rst
  */
 enum devlink_trap_group_generic_id {
 	DEVLINK_TRAP_GROUP_GENERIC_ID_L2_DROPS,
 	DEVLINK_TRAP_GROUP_GENERIC_ID_L3_DROPS,
 	DEVLINK_TRAP_GROUP_GENERIC_ID_BUFFER_DROPS,
+	DEVLINK_TRAP_GROUP_GENERIC_ID_TUNNEL_DROPS,
 
 	/* Add new generic trap group IDs above */
 	__DEVLINK_TRAP_GROUP_GENERIC_ID_MAX,
@@ -663,6 +671,12 @@ enum devlink_trap_group_generic_id {
 	"ipv4_lpm_miss"
 #define DEVLINK_TRAP_GENERIC_NAME_IPV6_LPM_UNICAST_MISS \
 	"ipv6_lpm_miss"
+#define DEVLINK_TRAP_GENERIC_NAME_NON_ROUTABLE \
+	"non_routable_packet"
+#define DEVLINK_TRAP_GENERIC_NAME_DECAP_ERROR \
+	"decap_error"
+#define DEVLINK_TRAP_GENERIC_NAME_OVERLAY_SMAC_MC \
+	"overlay_smac_is_mc"
 
 #define DEVLINK_TRAP_GROUP_GENERIC_NAME_L2_DROPS \
 	"l2_drops"
@@ -670,6 +684,8 @@ enum devlink_trap_group_generic_id {
 	"l3_drops"
 #define DEVLINK_TRAP_GROUP_GENERIC_NAME_BUFFER_DROPS \
 	"buffer_drops"
+#define DEVLINK_TRAP_GROUP_GENERIC_NAME_TUNNEL_DROPS \
+	"tunnel_drops"
 
 #define DEVLINK_TRAP_GENERIC(_type, _init_action, _id, _group, _metadata_cap) \
 	{								      \
@@ -1006,6 +1022,8 @@ int devlink_health_report(struct devlink_health_reporter *reporter,
 void
 devlink_health_reporter_state_update(struct devlink_health_reporter *reporter,
 				     enum devlink_health_reporter_state state);
+void
+devlink_health_reporter_recovery_done(struct devlink_health_reporter *reporter);
 
 bool devlink_is_reload_failed(const struct devlink *devlink);
 

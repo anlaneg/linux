@@ -30,11 +30,7 @@
 
 static struct task_struct *thread;
 
-#if defined CONFIG_DEVTMPFS_MOUNT
-static int mount_dev = 1;
-#else
-static int mount_dev;
-#endif
+static int __initdata mount_dev = IS_ENABLED(CONFIG_DEVTMPFS_MOUNT);
 
 static DEFINE_SPINLOCK(req_lock);
 
@@ -95,6 +91,23 @@ static inline int is_blockdev(struct device *dev)
 static inline int is_blockdev(struct device *dev) { return 0; }
 #endif
 
+static int devtmpfs_submit_req(struct req *req, const char *tmp)
+{
+	init_completion(&req->done);
+
+	spin_lock(&req_lock);
+	req->next = requests;
+	requests = req;
+	spin_unlock(&req_lock);
+
+	wake_up_process(thread);
+	wait_for_completion(&req->done);
+
+	kfree(tmp);
+
+	return req->err;
+}
+
 int devtmpfs_create_node(struct device *dev)
 {
 	const char *tmp = NULL;
@@ -120,20 +133,8 @@ int devtmpfs_create_node(struct device *dev)
 
 	req.dev = dev;
 
-	init_completion(&req.done);
-
-	spin_lock(&req_lock);
-	req.next = requests;
-	requests = &req;
-	spin_unlock(&req_lock);
-
 	//等待thread完成创建工作
-	wake_up_process(thread);
-	wait_for_completion(&req.done);
-
-	kfree(tmp);
-
-	return req.err;
+	return devtmpfs_submit_req(&req, tmp);
 }
 
 int devtmpfs_delete_node(struct device *dev)
@@ -151,18 +152,7 @@ int devtmpfs_delete_node(struct device *dev)
 	req.mode = 0;
 	req.dev = dev;
 
-	init_completion(&req.done);
-
-	spin_lock(&req_lock);
-	req.next = requests;
-	requests = &req;
-	spin_unlock(&req_lock);
-
-	wake_up_process(thread);
-	wait_for_completion(&req.done);
-
-	kfree(tmp);
-	return req.err;
+	return devtmpfs_submit_req(&req, tmp);
 }
 
 static int dev_mkdir(const char *name, umode_t mode)
@@ -363,7 +353,7 @@ static int handle_remove(const char *nodename, struct device *dev)
  * If configured, or requested by the commandline, devtmpfs will be
  * auto-mounted after the kernel mounted the root filesystem.
  */
-int devtmpfs_mount(void)
+int __init devtmpfs_mount(void)
 {
 	int err;
 
@@ -394,18 +384,30 @@ static int handle(const char *name, umode_t mode, kuid_t uid, kgid_t gid,
 }
 
 //devtmpfs内核线程入口
-static int devtmpfsd(void *p)
+static int devtmpfs_setup(void *p)
 {
-	int *err = p;
-	*err = ksys_unshare(CLONE_NEWNS);
-	if (*err)
+	int err;
+
+	err = ksys_unshare(CLONE_NEWNS);
+	if (err)
 		goto out;
-	*err = do_mount("devtmpfs", "/", "devtmpfs", MS_SILENT, NULL);
-	if (*err)
+	err = do_mount("devtmpfs", "/", "devtmpfs", MS_SILENT, NULL);
+	if (err)
 		goto out;
 	ksys_chdir("/.."); /* will traverse into overmounted root */
 	ksys_chroot(".");
+out:
+	*(int *)p = err;
 	complete(&setup_done);
+	return err;
+}
+
+static int devtmpfsd(void *p)
+{
+	int err = devtmpfs_setup(p);
+
+	if (err)
+		return err;
 	while (1) {
 		spin_lock(&req_lock);
 		while (requests) {
@@ -426,9 +428,6 @@ static int devtmpfsd(void *p)
 		schedule();
 	}
 	return 0;
-out:
-	complete(&setup_done);
-	return *err;
 }
 
 /*

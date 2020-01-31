@@ -2812,7 +2812,7 @@ static void sock_def_error_report(struct sock *sk)
 }
 
 //引发通知poll_in
-static void sock_def_readable(struct sock *sk)
+void sock_def_readable(struct sock *sk)
 {
 	struct socket_wq *wq;
 

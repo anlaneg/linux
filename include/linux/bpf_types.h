@@ -65,6 +65,12 @@ BPF_PROG_TYPE(BPF_PROG_TYPE_LIRC_MODE2, lirc_mode2,
 BPF_PROG_TYPE(BPF_PROG_TYPE_SK_REUSEPORT, sk_reuseport,
 	      struct sk_reuseport_md, struct sk_reuseport_kern)
 #endif
+#if defined(CONFIG_BPF_JIT)
+BPF_PROG_TYPE(BPF_PROG_TYPE_STRUCT_OPS, bpf_struct_ops,
+	      void *, void *)
+BPF_PROG_TYPE(BPF_PROG_TYPE_EXT, bpf_extension,
+	      void *, void *)
+#endif
 
 //定义各类map_type对应的ops
 BPF_MAP_TYPE(BPF_MAP_TYPE_ARRAY, array_map_ops)
@@ -107,3 +113,6 @@ BPF_MAP_TYPE(BPF_MAP_TYPE_REUSEPORT_SOCKARRAY, reuseport_array_ops)
 #endif
 BPF_MAP_TYPE(BPF_MAP_TYPE_QUEUE, queue_map_ops)
 BPF_MAP_TYPE(BPF_MAP_TYPE_STACK, stack_map_ops)
+#if defined(CONFIG_BPF_JIT)
+BPF_MAP_TYPE(BPF_MAP_TYPE_STRUCT_OPS, bpf_struct_ops_map_ops)
+#endif

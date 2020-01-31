@@ -12,6 +12,7 @@
 #ifndef _DEVICE_H_
 #define _DEVICE_H_
 
+#include <linux/dev_printk.h>
 #include <linux/ioport.h>
 #include <linux/kobject.h>
 #include <linux/klist.h>
@@ -22,10 +23,12 @@
 #include <linux/mutex.h>
 #include <linux/pm.h>
 #include <linux/atomic.h>
-#include <linux/ratelimit.h>
 #include <linux/uidgid.h>
 #include <linux/gfp.h>
 #include <linux/overflow.h>
+#include <linux/device/bus.h>
+#include <linux/device/class.h>
+#include <linux/device/driver.h>
 #include <asm/device.h>
 
 struct device;
@@ -35,7 +38,6 @@ struct driver_private;
 struct module;
 struct class;
 struct subsys_private;
-struct bus_type;
 struct device_node;
 struct fwnode_handle;
 struct iommu_ops;
@@ -43,504 +45,6 @@ struct iommu_group;
 struct iommu_fwspec;
 struct dev_pin_info;
 struct iommu_param;
-
-struct bus_attribute {
-	struct attribute	attr;
-	//对此属性进行读时，调用此回调
-	ssize_t (*show)(struct bus_type *bus, char *buf);
-	//对此属性进行写时，调用此回调
-	ssize_t (*store)(struct bus_type *bus, const char *buf, size_t count);
-};
-
-#define BUS_ATTR_RW(_name) \
-	struct bus_attribute bus_attr_##_name = __ATTR_RW(_name)
-#define BUS_ATTR_RO(_name) \
-	struct bus_attribute bus_attr_##_name = __ATTR_RO(_name)
-#define BUS_ATTR_WO(_name) \
-	struct bus_attribute bus_attr_##_name = __ATTR_WO(_name)
-
-extern int __must_check bus_create_file(struct bus_type *,
-					struct bus_attribute *);
-extern void bus_remove_file(struct bus_type *, struct bus_attribute *);
-
-/**
- * struct bus_type - The bus type of the device
- *
- * @name:	The name of the bus.
- * @dev_name:	Used for subsystems to enumerate devices like ("foo%u", dev->id).
- * @dev_root:	Default device to use as the parent.
- * @bus_groups:	Default attributes of the bus.
- * @dev_groups:	Default attributes of the devices on the bus.
- * @drv_groups: Default attributes of the device drivers on the bus.
- * @match:	Called, perhaps multiple times, whenever a new device or driver
- *		is added for this bus. It should return a positive value if the
- *		given device can be handled by the given driver and zero
- *		otherwise. It may also return error code if determining that
- *		the driver supports the device is not possible. In case of
- *		-EPROBE_DEFER it will queue the device for deferred probing.
- * @uevent:	Called when a device is added, removed, or a few other things
- *		that generate uevents to add the environment variables.
- * @probe:	Called when a new device or driver add to this bus, and callback
- *		the specific driver's probe to initial the matched device.
- * @sync_state:	Called to sync device state to software state after all the
- *		state tracking consumers linked to this device (present at
- *		the time of late_initcall) have successfully bound to a
- *		driver. If the device has no consumers, this function will
- *		be called at late_initcall_sync level. If the device has
- *		consumers that are never bound to a driver, this function
- *		will never get called until they do.
- * @remove:	Called when a device removed from this bus.
- * @shutdown:	Called at shut-down time to quiesce the device.
- *
- * @online:	Called to put the device back online (after offlining it).
- * @offline:	Called to put the device offline for hot-removal. May fail.
- *
- * @suspend:	Called when a device on this bus wants to go to sleep mode.
- * @resume:	Called to bring a device on this bus out of sleep mode.
- * @num_vf:	Called to find out how many virtual functions a device on this
- *		bus supports.
- * @dma_configure:	Called to setup DMA configuration on a device on
- *			this bus.
- * @pm:		Power management operations of this bus, callback the specific
- *		device driver's pm-ops.
- * @iommu_ops:  IOMMU specific operations for this bus, used to attach IOMMU
- *              driver implementations to a bus and allow the driver to do
- *              bus-specific setup
- * @p:		The private data of the driver core, only the driver core can
- *		touch this.
- * @lock_key:	Lock class key for use by the lock validator
- * @need_parent_lock:	When probing or removing a device on this bus, the
- *			device core should lock the device's parent.
- *
- * A bus is a channel between the processor and one or more devices. For the
- * purposes of the device model, all devices are connected via a bus, even if
- * it is an internal, virtual, "platform" bus. Buses can plug into each other.
- * A USB controller is usually a PCI device, for example. The device model
- * represents the actual connections between buses and the devices they control.
- * A bus is represented by the bus_type structure. It contains the name, the
- * default attributes, the bus' methods, PM operations, and the driver core's
- * private data.
- */
-struct bus_type {
-	//bus名称
-	const char		*name;
-	const char		*dev_name;
-	struct device		*dev_root;
-	//bus规定的一组属性
-	const struct attribute_group **bus_groups;
-	//bus为dev规定的一组属性
-	const struct attribute_group **dev_groups;
-	//bus为drv提供的一组属性
-	const struct attribute_group **drv_groups;
-
-	//实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)
-	int (*match)(struct device *dev, struct device_driver *drv);
-	//bus针对kobj通知的uevent时需要添加的env
-	int (*uevent)(struct device *dev, struct kobj_uevent_env *env);
-	//使能驱动，使其探测设备（如果此函数为空，则调用驱动的probe进行探测）
-	int (*probe)(struct device *dev);
-	void (*sync_state)(struct device *dev);
-	int (*remove)(struct device *dev);
-	void (*shutdown)(struct device *dev);
-
-	int (*online)(struct device *dev);
-	int (*offline)(struct device *dev);
-
-	int (*suspend)(struct device *dev, pm_message_t state);
-	int (*resume)(struct device *dev);
-
-	int (*num_vf)(struct device *dev);
-
-	//设备在控测之前采用此函数进行dma配置
-	int (*dma_configure)(struct device *dev);
-
-	const struct dev_pm_ops *pm;
-
-	const struct iommu_ops *iommu_ops;
-
-	struct subsys_private *p;//bus的私有数据
-	struct lock_class_key lock_key;
-
-	bool need_parent_lock;//是否需要父设备加锁
-};
-
-extern int __must_check bus_register(struct bus_type *bus);
-
-extern void bus_unregister(struct bus_type *bus);
-
-extern int __must_check bus_rescan_devices(struct bus_type *bus);
-
-/* iterator helpers for buses */
-struct subsys_dev_iter {
-	struct klist_iter		ki;
-	const struct device_type	*type;
-};
-void subsys_dev_iter_init(struct subsys_dev_iter *iter,
-			 struct bus_type *subsys,
-			 struct device *start,
-			 const struct device_type *type);
-struct device *subsys_dev_iter_next(struct subsys_dev_iter *iter);
-void subsys_dev_iter_exit(struct subsys_dev_iter *iter);
-
-int device_match_name(struct device *dev, const void *name);
-int device_match_of_node(struct device *dev, const void *np);
-int device_match_fwnode(struct device *dev, const void *fwnode);
-int device_match_devt(struct device *dev, const void *pdevt);
-int device_match_acpi_dev(struct device *dev, const void *adev);
-int device_match_any(struct device *dev, const void *unused);
-
-int bus_for_each_dev(struct bus_type *bus, struct device *start, void *data,
-		     int (*fn)(struct device *dev, void *data));
-struct device *bus_find_device(struct bus_type *bus, struct device *start,
-			       const void *data,
-			       int (*match)(struct device *dev, const void *data));
-/**
- * bus_find_device_by_name - device iterator for locating a particular device
- * of a specific name.
- * @bus: bus type
- * @start: Device to begin with
- * @name: name of the device to match
- */
-static inline struct device *bus_find_device_by_name(struct bus_type *bus,
-						     struct device *start,
-						     const char *name)
-{
-	return bus_find_device(bus, start, name, device_match_name);
-}
-
-/**
- * bus_find_device_by_of_node : device iterator for locating a particular device
- * matching the of_node.
- * @bus: bus type
- * @np: of_node of the device to match.
- */
-static inline struct device *
-bus_find_device_by_of_node(struct bus_type *bus, const struct device_node *np)
-{
-	return bus_find_device(bus, NULL, np, device_match_of_node);
-}
-
-/**
- * bus_find_device_by_fwnode : device iterator for locating a particular device
- * matching the fwnode.
- * @bus: bus type
- * @fwnode: fwnode of the device to match.
- */
-static inline struct device *
-bus_find_device_by_fwnode(struct bus_type *bus, const struct fwnode_handle *fwnode)
-{
-	return bus_find_device(bus, NULL, fwnode, device_match_fwnode);
-}
-
-/**
- * bus_find_device_by_devt : device iterator for locating a particular device
- * matching the device type.
- * @bus: bus type
- * @devt: device type of the device to match.
- */
-static inline struct device *bus_find_device_by_devt(struct bus_type *bus,
-						     dev_t devt)
-{
-	return bus_find_device(bus, NULL, &devt, device_match_devt);
-}
-
-/**
- * bus_find_next_device - Find the next device after a given device in a
- * given bus.
- * @bus: bus type
- * @cur: device to begin the search with.
- */
-static inline struct device *
-bus_find_next_device(struct bus_type *bus,struct device *cur)
-{
-	return bus_find_device(bus, cur, NULL, device_match_any);
-}
-
-#ifdef CONFIG_ACPI
-struct acpi_device;
-
-/**
- * bus_find_device_by_acpi_dev : device iterator for locating a particular device
- * matching the ACPI COMPANION device.
- * @bus: bus type
- * @adev: ACPI COMPANION device to match.
- */
-static inline struct device *
-bus_find_device_by_acpi_dev(struct bus_type *bus, const struct acpi_device *adev)
-{
-	return bus_find_device(bus, NULL, adev, device_match_acpi_dev);
-}
-#else
-static inline struct device *
-bus_find_device_by_acpi_dev(struct bus_type *bus, const void *adev)
-{
-	return NULL;
-}
-#endif
-
-struct device *subsys_find_device_by_id(struct bus_type *bus, unsigned int id,
-					struct device *hint);
-int bus_for_each_drv(struct bus_type *bus, struct device_driver *start,
-		     void *data, int (*fn)(struct device_driver *, void *));
-void bus_sort_breadthfirst(struct bus_type *bus,
-			   int (*compare)(const struct device *a,
-					  const struct device *b));
-/*
- * Bus notifiers: Get notified of addition/removal of devices
- * and binding/unbinding of drivers to devices.
- * In the long run, it should be a replacement for the platform
- * notify hooks.
- */
-struct notifier_block;
-
-//bus注册通知链
-extern int bus_register_notifier(struct bus_type *bus,
-				 struct notifier_block *nb);
-extern int bus_unregister_notifier(struct bus_type *bus,
-				   struct notifier_block *nb);
-
-/* All 4 notifers below get called with the target struct device *
- * as an argument. Note that those functions are likely to be called
- * with the device lock held in the core, so be careful.
- */
-#define BUS_NOTIFY_ADD_DEVICE		0x00000001 /* device added */
-#define BUS_NOTIFY_DEL_DEVICE		0x00000002 /* device to be removed */
-#define BUS_NOTIFY_REMOVED_DEVICE	0x00000003 /* device removed */
-#define BUS_NOTIFY_BIND_DRIVER		0x00000004 /* driver about to be
-						      bound */
-//设备bond到驱动通知
-#define BUS_NOTIFY_BOUND_DRIVER		0x00000005 /* driver bound to device */
-#define BUS_NOTIFY_UNBIND_DRIVER	0x00000006 /* driver about to be
-						      unbound */
-#define BUS_NOTIFY_UNBOUND_DRIVER	0x00000007 /* driver is unbound
-						      from the device */
-//通知驱动未绑定事件
-#define BUS_NOTIFY_DRIVER_NOT_BOUND	0x00000008 /* driver fails to be bound */
-
-extern struct kset *bus_get_kset(struct bus_type *bus);
-extern struct klist *bus_get_device_klist(struct bus_type *bus);
-
-/**
- * enum probe_type - device driver probe type to try
- *	Device drivers may opt in for special handling of their
- *	respective probe routines. This tells the core what to
- *	expect and prefer.
- *
- * @PROBE_DEFAULT_STRATEGY: Used by drivers that work equally well
- *	whether probed synchronously or asynchronously.
- * @PROBE_PREFER_ASYNCHRONOUS: Drivers for "slow" devices which
- *	probing order is not essential for booting the system may
- *	opt into executing their probes asynchronously.
- * @PROBE_FORCE_SYNCHRONOUS: Use this to annotate drivers that need
- *	their probe routines to run synchronously with driver and
- *	device registration (with the exception of -EPROBE_DEFER
- *	handling - re-probing always ends up being done asynchronously).
- *
- * Note that the end goal is to switch the kernel to use asynchronous
- * probing by default, so annotating drivers with
- * %PROBE_PREFER_ASYNCHRONOUS is a temporary measure that allows us
- * to speed up boot process while we are validating the rest of the
- * drivers.
- */
-enum probe_type {
-	PROBE_DEFAULT_STRATEGY,
-	PROBE_PREFER_ASYNCHRONOUS,
-	PROBE_FORCE_SYNCHRONOUS,
-};
-
-/**
- * struct device_driver - The basic device driver structure
- * @name:	Name of the device driver.
- * @bus:	The bus which the device of this driver belongs to.
- * @owner:	The module owner.
- * @mod_name:	Used for built-in modules.
- * @suppress_bind_attrs: Disables bind/unbind via sysfs.
- * @probe_type:	Type of the probe (synchronous or asynchronous) to use.
- * @of_match_table: The open firmware table.
- * @acpi_match_table: The ACPI match table.
- * @probe:	Called to query the existence of a specific device,
- *		whether this driver can work with it, and bind the driver
- *		to a specific device.
- * @sync_state:	Called to sync device state to software state after all the
- *		state tracking consumers linked to this device (present at
- *		the time of late_initcall) have successfully bound to a
- *		driver. If the device has no consumers, this function will
- *		be called at late_initcall_sync level. If the device has
- *		consumers that are never bound to a driver, this function
- *		will never get called until they do.
- * @remove:	Called when the device is removed from the system to
- *		unbind a device from this driver.
- * @shutdown:	Called at shut-down time to quiesce the device.
- * @suspend:	Called to put the device to sleep mode. Usually to a
- *		low power state.
- * @resume:	Called to bring a device from sleep mode.
- * @groups:	Default attributes that get created by the driver core
- *		automatically.
- * @dev_groups:	Additional attributes attached to device instance once the
- *		it is bound to the driver.
- * @pm:		Power management operations of the device which matched
- *		this driver.
- * @coredump:	Called when sysfs entry is written to. The device driver
- *		is expected to call the dev_coredump API resulting in a
- *		uevent.
- * @p:		Driver core's private data, no one other than the driver
- *		core can touch this.
- *
- * The device driver-model tracks all of the drivers known to the system.
- * The main reason for this tracking is to enable the driver core to match
- * up drivers with new devices. Once drivers are known objects within the
- * system, however, a number of other things become possible. Device drivers
- * can export information and configuration variables that are independent
- * of any specific device.
- */
-struct device_driver {
-	const char		*name;
-	struct bus_type		*bus;//此驱动对应设备从属的bus
-
-	struct module		*owner;//驱动从属于那个模块
-	//驱动从属的模块的模块名称
-	const char		*mod_name;	/* used for built-in modules */
-
-	bool suppress_bind_attrs;	/* disables bind/unbind via sysfs */
-	enum probe_type probe_type;//设备的probe类型
-
-	const struct of_device_id	*of_match_table;
-	const struct acpi_device_id	*acpi_match_table;
-
-	int (*probe) (struct device *dev);
-	void (*sync_state)(struct device *dev);
-	int (*remove) (struct device *dev);
-	void (*shutdown) (struct device *dev);
-	int (*suspend) (struct device *dev, pm_message_t state);
-	int (*resume) (struct device *dev);
-	const struct attribute_group **groups;
-	const struct attribute_group **dev_groups;
-
-	const struct dev_pm_ops *pm;
-	void (*coredump) (struct device *dev);
-
-	struct driver_private *p;
-};
-
-
-extern int __must_check driver_register(struct device_driver *drv);
-extern void driver_unregister(struct device_driver *drv);
-
-extern struct device_driver *driver_find(const char *name,
-					 struct bus_type *bus);
-extern int driver_probe_done(void);
-extern void wait_for_device_probe(void);
-
-/* sysfs interface for exporting driver attributes */
-
-struct driver_attribute {
-	struct attribute attr;
-	ssize_t (*show)(struct device_driver *driver, char *buf);
-	ssize_t (*store)(struct device_driver *driver, const char *buf,
-			 size_t count);
-};
-
-#define DRIVER_ATTR_RW(_name) \
-	struct driver_attribute driver_attr_##_name = __ATTR_RW(_name)
-#define DRIVER_ATTR_RO(_name) \
-	struct driver_attribute driver_attr_##_name = __ATTR_RO(_name)
-#define DRIVER_ATTR_WO(_name) \
-	struct driver_attribute driver_attr_##_name = __ATTR_WO(_name)
-
-extern int __must_check driver_create_file(struct device_driver *driver,
-					const struct driver_attribute *attr);
-extern void driver_remove_file(struct device_driver *driver,
-			       const struct driver_attribute *attr);
-
-extern int __must_check driver_for_each_device(struct device_driver *drv,
-					       struct device *start,
-					       void *data,
-					       int (*fn)(struct device *dev,
-							 void *));
-struct device *driver_find_device(struct device_driver *drv,
-				  struct device *start, const void *data,
-				  int (*match)(struct device *dev, const void *data));
-
-/**
- * driver_find_device_by_name - device iterator for locating a particular device
- * of a specific name.
- * @drv: the driver we're iterating
- * @name: name of the device to match
- */
-static inline struct device *driver_find_device_by_name(struct device_driver *drv,
-							const char *name)
-{
-	return driver_find_device(drv, NULL, name, device_match_name);
-}
-
-/**
- * driver_find_device_by_of_node- device iterator for locating a particular device
- * by of_node pointer.
- * @drv: the driver we're iterating
- * @np: of_node pointer to match.
- */
-static inline struct device *
-driver_find_device_by_of_node(struct device_driver *drv,
-			      const struct device_node *np)
-{
-	return driver_find_device(drv, NULL, np, device_match_of_node);
-}
-
-/**
- * driver_find_device_by_fwnode- device iterator for locating a particular device
- * by fwnode pointer.
- * @drv: the driver we're iterating
- * @fwnode: fwnode pointer to match.
- */
-static inline struct device *
-driver_find_device_by_fwnode(struct device_driver *drv,
-			     const struct fwnode_handle *fwnode)
-{
-	return driver_find_device(drv, NULL, fwnode, device_match_fwnode);
-}
-
-/**
- * driver_find_device_by_devt- device iterator for locating a particular device
- * by devt.
- * @drv: the driver we're iterating
- * @devt: devt pointer to match.
- */
-static inline struct device *driver_find_device_by_devt(struct device_driver *drv,
-							dev_t devt)
-{
-	return driver_find_device(drv, NULL, &devt, device_match_devt);
-}
-
-static inline struct device *driver_find_next_device(struct device_driver *drv,
-						     struct device *start)
-{
-	return driver_find_device(drv, start, NULL, device_match_any);
-}
-
-#ifdef CONFIG_ACPI
-/**
- * driver_find_device_by_acpi_dev : device iterator for locating a particular
- * device matching the ACPI_COMPANION device.
- * @drv: the driver we're iterating
- * @adev: ACPI_COMPANION device to match.
- */
-static inline struct device *
-driver_find_device_by_acpi_dev(struct device_driver *drv,
-			       const struct acpi_device *adev)
-{
-	return driver_find_device(drv, NULL, adev, device_match_acpi_dev);
-}
-#else
-static inline struct device *
-driver_find_device_by_acpi_dev(struct device_driver *drv, const void *adev)
-{
-	return NULL;
-}
-#endif
-
-void driver_deferred_probe_add(struct device *dev);
-int driver_deferred_probe_check_state(struct device *dev);
-int driver_deferred_probe_check_state_continue(struct device *dev);
 
 /**
  * struct subsys_interface - interfaces to device functions
@@ -571,6 +75,7 @@ int subsys_system_register(struct bus_type *subsys,
 int subsys_virtual_register(struct bus_type *subsys,
 			    const struct attribute_group **groups);
 
+<<<<<<< HEAD
 /**
  * struct class - device classes
  * @name:	Name of the class.
@@ -812,6 +317,8 @@ extern void class_destroy(struct class *cls);
 	__class_create(owner, name, &__key);	\
 })
 
+=======
+>>>>>>> upstream/master
 /*
  * The type of device, "struct device" is embedded in. A class
  * or bus can contain devices of different types
@@ -1546,8 +1053,6 @@ static inline struct device_node *dev_of_node(struct device *dev)
 	return dev->of_node;
 }
 
-void driver_init(void);
-
 /*
  * High level routines for use by the bus drivers
  */
@@ -1690,12 +1195,8 @@ extern void put_device(struct device *dev);
 extern bool kill_device(struct device *dev);
 
 #ifdef CONFIG_DEVTMPFS
-extern int devtmpfs_create_node(struct device *dev);
-extern int devtmpfs_delete_node(struct device *dev);
 extern int devtmpfs_mount(void);
 #else
-static inline int devtmpfs_create_node(struct device *dev) { return 0; }
-static inline int devtmpfs_delete_node(struct device *dev) { return 0; }
 static inline int devtmpfs_mount(void) { return 0; }
 #endif
 
@@ -1713,221 +1214,6 @@ void device_link_remove(void *consumer, struct device *supplier);
 void device_links_supplier_sync_state_pause(void);
 void device_links_supplier_sync_state_resume(void);
 
-#ifndef dev_fmt
-#define dev_fmt(fmt) fmt
-#endif
-
-#ifdef CONFIG_PRINTK
-
-__printf(3, 0) __cold
-int dev_vprintk_emit(int level, const struct device *dev,
-		     const char *fmt, va_list args);
-__printf(3, 4) __cold
-int dev_printk_emit(int level, const struct device *dev, const char *fmt, ...);
-
-__printf(3, 4) __cold
-void dev_printk(const char *level, const struct device *dev,
-		const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_emerg(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_alert(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_crit(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_err(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_warn(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_notice(const struct device *dev, const char *fmt, ...);
-__printf(2, 3) __cold
-void _dev_info(const struct device *dev, const char *fmt, ...);
-
-#else
-
-static inline __printf(3, 0)
-int dev_vprintk_emit(int level, const struct device *dev,
-		     const char *fmt, va_list args)
-{ return 0; }
-static inline __printf(3, 4)
-int dev_printk_emit(int level, const struct device *dev, const char *fmt, ...)
-{ return 0; }
-
-static inline void __dev_printk(const char *level, const struct device *dev,
-				struct va_format *vaf)
-{}
-static inline __printf(3, 4)
-void dev_printk(const char *level, const struct device *dev,
-		 const char *fmt, ...)
-{}
-
-static inline __printf(2, 3)
-void _dev_emerg(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_crit(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_alert(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_err(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_warn(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_notice(const struct device *dev, const char *fmt, ...)
-{}
-static inline __printf(2, 3)
-void _dev_info(const struct device *dev, const char *fmt, ...)
-{}
-
-#endif
-
-/*
- * #defines for all the dev_<level> macros to prefix with whatever
- * possible use of #define dev_fmt(fmt) ...
- */
-
-#define dev_emerg(dev, fmt, ...)					\
-	_dev_emerg(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_crit(dev, fmt, ...)						\
-	_dev_crit(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_alert(dev, fmt, ...)					\
-	_dev_alert(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_err(dev, fmt, ...)						\
-	_dev_err(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_warn(dev, fmt, ...)						\
-	_dev_warn(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_notice(dev, fmt, ...)					\
-	_dev_notice(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#define dev_info(dev, fmt, ...)						\
-	_dev_info(dev, dev_fmt(fmt), ##__VA_ARGS__)
-
-#if defined(CONFIG_DYNAMIC_DEBUG)
-#define dev_dbg(dev, fmt, ...)						\
-	dynamic_dev_dbg(dev, dev_fmt(fmt), ##__VA_ARGS__)
-#elif defined(DEBUG)
-#define dev_dbg(dev, fmt, ...)						\
-	dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__)
-#else
-#define dev_dbg(dev, fmt, ...)						\
-({									\
-	if (0)								\
-		dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__); \
-})
-#endif
-
-#ifdef CONFIG_PRINTK
-#define dev_level_once(dev_level, dev, fmt, ...)			\
-do {									\
-	static bool __print_once __read_mostly;				\
-									\
-	if (!__print_once) {						\
-		__print_once = true;					\
-		dev_level(dev, fmt, ##__VA_ARGS__);			\
-	}								\
-} while (0)
-#else
-#define dev_level_once(dev_level, dev, fmt, ...)			\
-do {									\
-	if (0)								\
-		dev_level(dev, fmt, ##__VA_ARGS__);			\
-} while (0)
-#endif
-
-#define dev_emerg_once(dev, fmt, ...)					\
-	dev_level_once(dev_emerg, dev, fmt, ##__VA_ARGS__)
-#define dev_alert_once(dev, fmt, ...)					\
-	dev_level_once(dev_alert, dev, fmt, ##__VA_ARGS__)
-#define dev_crit_once(dev, fmt, ...)					\
-	dev_level_once(dev_crit, dev, fmt, ##__VA_ARGS__)
-#define dev_err_once(dev, fmt, ...)					\
-	dev_level_once(dev_err, dev, fmt, ##__VA_ARGS__)
-#define dev_warn_once(dev, fmt, ...)					\
-	dev_level_once(dev_warn, dev, fmt, ##__VA_ARGS__)
-#define dev_notice_once(dev, fmt, ...)					\
-	dev_level_once(dev_notice, dev, fmt, ##__VA_ARGS__)
-#define dev_info_once(dev, fmt, ...)					\
-	dev_level_once(dev_info, dev, fmt, ##__VA_ARGS__)
-#define dev_dbg_once(dev, fmt, ...)					\
-	dev_level_once(dev_dbg, dev, fmt, ##__VA_ARGS__)
-
-#define dev_level_ratelimited(dev_level, dev, fmt, ...)			\
-do {									\
-	static DEFINE_RATELIMIT_STATE(_rs,				\
-				      DEFAULT_RATELIMIT_INTERVAL,	\
-				      DEFAULT_RATELIMIT_BURST);		\
-	if (__ratelimit(&_rs))						\
-		dev_level(dev, fmt, ##__VA_ARGS__);			\
-} while (0)
-
-#define dev_emerg_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_emerg, dev, fmt, ##__VA_ARGS__)
-#define dev_alert_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_alert, dev, fmt, ##__VA_ARGS__)
-#define dev_crit_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_crit, dev, fmt, ##__VA_ARGS__)
-#define dev_err_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_err, dev, fmt, ##__VA_ARGS__)
-#define dev_warn_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_warn, dev, fmt, ##__VA_ARGS__)
-#define dev_notice_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_notice, dev, fmt, ##__VA_ARGS__)
-#define dev_info_ratelimited(dev, fmt, ...)				\
-	dev_level_ratelimited(dev_info, dev, fmt, ##__VA_ARGS__)
-#if defined(CONFIG_DYNAMIC_DEBUG)
-/* descriptor check is first to prevent flooding with "callbacks suppressed" */
-#define dev_dbg_ratelimited(dev, fmt, ...)				\
-do {									\
-	static DEFINE_RATELIMIT_STATE(_rs,				\
-				      DEFAULT_RATELIMIT_INTERVAL,	\
-				      DEFAULT_RATELIMIT_BURST);		\
-	DEFINE_DYNAMIC_DEBUG_METADATA(descriptor, fmt);			\
-	if (DYNAMIC_DEBUG_BRANCH(descriptor) &&				\
-	    __ratelimit(&_rs))						\
-		__dynamic_dev_dbg(&descriptor, dev, dev_fmt(fmt),	\
-				  ##__VA_ARGS__);			\
-} while (0)
-#elif defined(DEBUG)
-#define dev_dbg_ratelimited(dev, fmt, ...)				\
-do {									\
-	static DEFINE_RATELIMIT_STATE(_rs,				\
-				      DEFAULT_RATELIMIT_INTERVAL,	\
-				      DEFAULT_RATELIMIT_BURST);		\
-	if (__ratelimit(&_rs))						\
-		dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__); \
-} while (0)
-#else
-#define dev_dbg_ratelimited(dev, fmt, ...)				\
-do {									\
-	if (0)								\
-		dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__); \
-} while (0)
-#endif
-
-#ifdef VERBOSE_DEBUG
-#define dev_vdbg	dev_dbg
-#else
-#define dev_vdbg(dev, fmt, ...)						\
-({									\
-	if (0)								\
-		dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__); \
-})
-#endif
-
-/*
- * dev_WARN*() acts like dev_printk(), but with the key difference of
- * using WARN/WARN_ONCE to include file/line information and a backtrace.
- */
-#define dev_WARN(dev, format, arg...) \
-	WARN(1, "%s %s: " format, dev_driver_string(dev), dev_name(dev), ## arg);
-
-#define dev_WARN_ONCE(dev, condition, format, arg...) \
-	WARN_ONCE(condition, "%s %s: " format, \
-			dev_driver_string(dev), dev_name(dev), ## arg)
-
 /* Create alias, so I can be autoloaded. */
 #define MODULE_ALIAS_CHARDEV(major,minor) \
 	MODULE_ALIAS("char-major-" __stringify(major) "-" __stringify(minor))
@@ -1940,6 +1226,7 @@ extern long sysfs_deprecated;
 #define sysfs_deprecated 0
 #endif
 
+<<<<<<< HEAD
 /**
  * module_driver() - Helper macro for drivers that don't do anything
  * special in module init/exit. This eliminates a lot of boilerplate.
@@ -1989,4 +1276,6 @@ static int __init __driver##_init(void) \
 } \
 device_initcall(__driver##_init);
 
+=======
+>>>>>>> upstream/master
 #endif /* _DEVICE_H_ */
