@@ -85,6 +85,7 @@ static int net_failover_close(struct net_device *dev)
 	return 0;
 }
 
+//释放报文，并增加计数
 static netdev_tx_t net_failover_drop_xmit(struct sk_buff *skb,
 					  struct net_device *dev)
 {
@@ -102,11 +103,14 @@ static netdev_tx_t net_failover_start_xmit(struct sk_buff *skb,
 	/* Try xmit via primary netdev followed by standby netdev */
 	xmit_dev = rcu_dereference_bh(nfo_info->primary_dev);
 	if (!xmit_dev || !net_failover_xmit_ready(xmit_dev)) {
+	    //主设备不存在或者未准备好，则尝试备设备
 		xmit_dev = rcu_dereference_bh(nfo_info->standby_dev);
 		if (!xmit_dev || !net_failover_xmit_ready(xmit_dev))
+		    //备设备不存在或者没有准备好，则丢包
 			return net_failover_drop_xmit(skb, dev);
 	}
 
+	/*更改报文所属设备*/
 	skb->dev = xmit_dev;
 	skb->queue_mapping = qdisc_skb_cb(skb)->slave_dev_queue_mapping;
 
@@ -123,6 +127,7 @@ static u16 net_failover_select_queue(struct net_device *dev,
 
 	primary_dev = rcu_dereference(nfo_info->primary_dev);
 	if (primary_dev) {
+	    //有主设备，通过主设备选择queue
 		const struct net_device_ops *ops = primary_dev->netdev_ops;
 
 		if (ops->ndo_select_queue)
@@ -135,6 +140,7 @@ static u16 net_failover_select_queue(struct net_device *dev,
 		return txq;
 	}
 
+	//无主设备情况
 	txq = skb_rx_queue_recorded(skb) ? skb_get_rx_queue(skb) : 0;
 
 	/* Save the original txq to restore before passing to the driver */
@@ -303,6 +309,7 @@ static int net_failover_vlan_rx_kill_vid(struct net_device *dev, __be16 proto,
 	return 0;
 }
 
+//failover设备对应的ops
 static const struct net_device_ops failover_dev_ops = {
 	.ndo_open		= net_failover_open,
 	.ndo_stop		= net_failover_close,
@@ -320,6 +327,7 @@ static const struct net_device_ops failover_dev_ops = {
 #define FAILOVER_NAME "net_failover"
 #define FAILOVER_VERSION "0.1"
 
+//failover对应的驱动名称及版本
 static void nfo_ethtool_get_drvinfo(struct net_device *dev,
 				    struct ethtool_drvinfo *drvinfo)
 {
@@ -348,6 +356,7 @@ static int nfo_ethtool_get_link_ksettings(struct net_device *dev,
 	return __ethtool_get_link_ksettings(slave_dev, cmd);
 }
 
+//failover设备对应的ethtool函数
 static const struct ethtool_ops failover_ethtool_ops = {
 	.get_drvinfo            = nfo_ethtool_get_drvinfo,
 	.get_link               = ethtool_op_get_link,
@@ -541,6 +550,7 @@ static int net_failover_slave_register(struct net_device *slave_dev,
 	slave_is_standby = slave_dev->dev.parent == failover_dev->dev.parent;
 
 	if (slave_is_standby) {
+	    /*slave_dev为standby设备*/
 		rcu_assign_pointer(nfo_info->standby_dev, slave_dev);
 		standby_dev = slave_dev;
 		dev_get_stats(standby_dev, &nfo_info->standby_stats);
@@ -683,6 +693,7 @@ static int net_failover_slave_name_change(struct net_device *slave_dev,
 	return 0;
 }
 
+//failover设备对应的ops
 static struct failover_ops net_failover_ops = {
 	.slave_pre_register	= net_failover_slave_pre_register,
 	.slave_register		= net_failover_slave_register,
@@ -708,6 +719,7 @@ static struct failover_ops net_failover_ops = {
  */
 struct failover *net_failover_create(struct net_device *standby_dev)
 {
+    //创建与standby_dev关联的failover_dev
 	struct device *dev = standby_dev->dev.parent;
 	struct net_device *failover_dev;
 	struct failover *failover;
@@ -716,12 +728,14 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	/* Alloc at least 2 queues, for now we are going with 16 assuming
 	 * that VF devices being enslaved won't have too many queues.
 	 */
+	//申请failover网络设备
 	failover_dev = alloc_etherdev_mq(sizeof(struct net_failover_info), 16);
 	if (!failover_dev) {
 		dev_err(dev, "Unable to allocate failover_netdev!\n");
 		return ERR_PTR(-ENOMEM);
 	}
 
+	//设置为与standby处于同一个net namespace,同一个父设备
 	dev_net_set(failover_dev, dev_net(standby_dev));
 	SET_NETDEV_DEV(failover_dev, dev);
 
@@ -747,9 +761,11 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	failover_dev->hw_features |= NETIF_F_GSO_ENCAP_ALL;
 	failover_dev->features |= failover_dev->hw_features;
 
+	//使failover_dev与standby_dev的mac地址相同
 	memcpy(failover_dev->dev_addr, standby_dev->dev_addr,
 	       failover_dev->addr_len);
 
+	//mtu范围相同
 	failover_dev->min_mtu = standby_dev->min_mtu;
 	failover_dev->max_mtu = standby_dev->max_mtu;
 
@@ -761,6 +777,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 
 	netif_carrier_off(failover_dev);
 
+	//注册failover设备
 	failover = failover_register(failover_dev, &net_failover_ops);
 	if (IS_ERR(failover)) {
 		err = PTR_ERR(failover);

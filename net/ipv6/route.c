@@ -2425,11 +2425,14 @@ void ip6_route_input(struct sk_buff *skb)
 	struct flowi6 fl6 = {
 	    /*流入接口*/
 		.flowi6_iif = skb->dev->ifindex,
+		/*目的地址*/
 		.daddr = iph->daddr,
+		/*源地址*/
 		.saddr = iph->saddr,
 		//取ipv6 flow标签
 		.flowlabel = ip6_flowinfo(iph),
 		.flowi6_mark = skb->mark,
+		/*下一层协议号*/
 		.flowi6_proto = iph->nexthdr,
 	};
 	struct flow_keys *flkeys = NULL, _flkeys;

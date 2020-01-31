@@ -38,10 +38,10 @@ struct cls_bpf_prog {
 	struct bpf_prog *filter;/*指向ebpf程序*/
 	struct list_head link;
 	struct tcf_result res;
-	bool exts_integrated;
+	bool exts_integrated;//action是否已集成进bpf
 	u32 gen_flags;
 	unsigned int in_hw_count;
-	struct tcf_exts exts;
+	struct tcf_exts exts;//bpf分类程序对应的action
 	u32 handle;
 	u16 bpf_num_ops;
 	struct sock_filter *bpf_ops;/*指向用户下发的cbpf指令*/
@@ -77,6 +77,7 @@ static int cls_bpf_exec_opcode(int code)
 	}
 }
 
+//执行bpf程序完成分类
 static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			    struct tcf_result *res)
 {
@@ -88,7 +89,7 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 
 	/* Needed here for accessing maps. */
 	rcu_read_lock();
-	/*遍历所有的prog*/
+	/*遍历所有的bpf prog*/
 	list_for_each_entry_rcu(prog, &head->plist, link) {
 		int filter_res;
 
@@ -99,29 +100,36 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		} else if (at_ingress) {
 		    /*ingress方向运行bpf*/
 			/* It is safe to push/pull even if skb_shared() */
-			__skb_push(skb, skb->mac_len);//使data指向mac头
+		    //使data指向mac头
+			__skb_push(skb, skb->mac_len);
 			bpf_compute_data_pointers(skb);
+			//调用bpf程序,返回filter_res
 			filter_res = BPF_PROG_RUN(prog->filter, skb);
-			__skb_pull(skb, skb->mac_len);//使data跳过mac头
+			//使data跳过mac头
+			__skb_pull(skb, skb->mac_len);
 		} else {
 		    /*egress方向运行bpf*/
 			bpf_compute_data_pointers(skb);
 			filter_res = BPF_PROG_RUN(prog->filter, skb);
 		}
 
+		//如果程序已集成了action,则检查返回值，直接返回
 		if (prog->exts_integrated) {
 			res->class   = 0;
 			res->classid = TC_H_MAJ(prog->res.classid) |
 				       qdisc_skb_cb(skb)->tc_classid;
 
+			//遇到不认识的ret，则继续执行后面的bpf程序
 			ret = cls_bpf_exec_opcode(filter_res);
 			if (ret == TC_ACT_UNSPEC)
 				continue;
 			break;
 		}
 
+		//如果返回值为0，则继续执行后面的bpf程序
 		if (filter_res == 0)
 			continue;
+
 		if (filter_res != -1) {
 			res->class   = 0;
 			res->classid = filter_res;
@@ -129,6 +137,7 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			*res = prog->res;
 		}
 
+		//执行prog对应的action,并返回执行结果，如果结果<0,则继续循环
 		ret = tcf_exts_exec(skb, &prog->exts, res);
 		if (ret < 0)
 			continue;
@@ -329,6 +338,7 @@ static void cls_bpf_destroy(struct tcf_proto *tp, bool rtnl_held,
 	kfree_rcu(head, rcu);
 }
 
+//给定handle获得对应的cls_bpf_prog
 static void *cls_bpf_get(struct tcf_proto *tp, u32 handle)
 {
 	struct cls_bpf_head *head = rtnl_dereference(tp->root);
@@ -446,6 +456,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 		if (bpf_flags & ~TCA_BPF_FLAG_ACT_DIRECT)
 			return -EINVAL;
 
+		/*如果有ACT_DIRECT标记，则包含actions*/
 		have_exts = bpf_flags & TCA_BPF_FLAG_ACT_DIRECT;
 	}
 	if (tb[TCA_BPF_FLAGS_GEN]) {
@@ -464,6 +475,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 		return ret;
 
 	if (tb[TCA_BPF_CLASSID]) {
+	    //设置指定的classid
 		prog->res.classid = nla_get_u32(tb[TCA_BPF_CLASSID]);
 		tcf_bind_filter(tp, &prog->res, base);
 	}
@@ -660,12 +672,14 @@ static void cls_bpf_bind_class(void *fh, u32 classid, unsigned long cl)
 		prog->res.class = cl;
 }
 
+//执行bpf程序遍历访问
 static void cls_bpf_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 			 bool rtnl_held)
 {
 	struct cls_bpf_head *head = rtnl_dereference(tp->root);
 	struct cls_bpf_prog *prog;
 
+	//遍历所有bpf程序，跳过arg->skip个，针对其它bpf程序执行arg给定的回调
 	list_for_each_entry(prog, &head->plist, link) {
 		if (arg->count < arg->skip)
 			goto skip;
@@ -725,6 +739,7 @@ static struct tcf_proto_ops cls_bpf_ops __read_mostly = {
 	.bind_class	=	cls_bpf_bind_class,
 };
 
+//注册bpf格式的分类器
 static int __init cls_bpf_init_mod(void)
 {
 	return register_tcf_proto_ops(&cls_bpf_ops);

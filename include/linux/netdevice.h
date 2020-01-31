@@ -1977,10 +1977,12 @@ struct net_device {
 #if IS_ENABLED(CONFIG_IRDA) || IS_ENABLED(CONFIG_ATALK)
 	void 			*atalk_ptr;
 #endif
+	//ipv4设备
 	struct in_device __rcu	*ip_ptr;
 #if IS_ENABLED(CONFIG_DECNET)
 	struct dn_dev __rcu     *dn_ptr;
 #endif
+	//ipv6设备
 	struct inet6_dev __rcu	*ip6_ptr;
 #if IS_ENABLED(CONFIG_AX25)
 	void			*ax25_ptr;

@@ -343,7 +343,7 @@ struct tcf_proto_ops {
 	//销毁分类器
 	void			(*destroy)(struct tcf_proto *tp, bool rtnl_held,
 					   struct netlink_ext_ack *extack);
-	//获取指定规则
+	//通过handle获取指定规则
 	void*			(*get)(struct tcf_proto*, u32 handle);
 	void			(*put)(struct tcf_proto *tp, void *f);
 	int			(*change)(struct net *net, struct sk_buff *,

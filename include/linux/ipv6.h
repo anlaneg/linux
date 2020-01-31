@@ -52,7 +52,7 @@ struct ipv6_devconf {
 #ifdef CONFIG_IPV6_MROUTE
 	__s32		mc_forwarding;
 #endif
-	__s32		disable_ipv6;
+	__s32		disable_ipv6;//禁止收取ipv6报文
 	__s32		drop_unicast_in_l2_multicast;
 	__s32		accept_dad;
 	__s32		force_tllao;

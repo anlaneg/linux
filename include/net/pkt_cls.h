@@ -14,11 +14,12 @@
 /* Basic packet classifier frontend definitions. */
 
 struct tcf_walker {
-	int	stop;
-	int	skip;
-	int	count;
+	int	stop;//是否需停止遍历（回调返回了失败）
+	int	skip;//需要跳过的数目
+	int	count;//当前已执行（或跳过）的数目
 	bool	nonempty;
 	unsigned long cookie;
+	//walker时针对指定的元素执行的回调
 	int	(*fn)(struct tcf_proto *, void *node, struct tcf_walker *);
 };
 
@@ -298,7 +299,7 @@ tcf_exts_exec(struct sk_buff *skb, struct tcf_exts *exts,
 	      struct tcf_result *res)
 {
 #ifdef CONFIG_NET_CLS_ACT
-	//返回filter action执行结果
+	//执行action，并返回执行结果
 	return tcf_action_exec(skb, exts->actions, exts->nr_actions, res);
 #endif
 	return TC_ACT_OK;

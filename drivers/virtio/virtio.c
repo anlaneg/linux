@@ -11,6 +11,7 @@
 static DEFINE_IDA(virtio_index_ida);
 
 //显示/sys/bus/virtio/devices/virtio*/device
+//显示设备编号
 static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
@@ -40,6 +41,7 @@ static ssize_t status_show(struct device *_d,
 static DEVICE_ATTR_RO(status);//定义status属性
 
 //显示/sys/bus/virtio/devices/virtio*/modalias
+//通过device与vendor合并出来的别名
 static ssize_t modalias_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
 {
@@ -59,6 +61,7 @@ static ssize_t features_show(struct device *_d,
 
 	/* We actually represent this as a bitstring, as it could be
 	 * arbitrary length in future. */
+	//遍历所有features位，列出当前支持的features
 	for (i = 0; i < sizeof(dev->features)*8; i++)
 		len += sprintf(buf+len, "%c",
 			       __virtio_test_bit(dev, i) ? '1' : '0');
@@ -67,7 +70,7 @@ static ssize_t features_show(struct device *_d,
 }
 static DEVICE_ATTR_RO(features);//功能属性
 
-//定义virtio的属性数组
+//定义virtio设备的通用属性数组
 static struct attribute *virtio_dev_attrs[] = {
 	&dev_attr_device.attr,
 	&dev_attr_vendor.attr,
@@ -91,7 +94,7 @@ static inline int virtio_id_match(const struct virtio_device *dev,
 
 /* This looks through all the IDs a driver claims to support.  If any of them
  * match, we return 1 and the kernel will call virtio_dev_probe(). */
-//virtio设备匹配
+//virtio bus设备匹配
 static int virtio_dev_match(struct device *_dv, struct device_driver *_dr)
 {
 	unsigned int i;
@@ -111,6 +114,7 @@ static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
 {
 	struct virtio_device *dev = dev_to_virtio(_dv);
 
+	//添加设备模块别名
 	return add_uevent_var(env, "MODALIAS=virtio:d%08Xv%08X",
 			      dev->id.device, dev->id.vendor);
 }
@@ -229,11 +233,11 @@ static int virtio_dev_probe(struct device *_d)
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
-    //获得当前设备支持的功能
+    //获得当前设备支持的功能列表
 	device_features = dev->config->get_features(dev);
 
 	/* Figure out what features the driver supports. */
-	//获得当前驱动支持的功能
+	//获得当前驱动支持的功能列表
 	driver_features = 0;
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];

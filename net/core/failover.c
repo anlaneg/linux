@@ -24,7 +24,7 @@ static struct net_device *failover_get_bymac(u8 *mac, struct failover_ops **ops)
 	struct failover *failover;
 
 	spin_lock(&failover_lock);
-	//遍历failover_list
+	//遍历所有failover_dev
 	list_for_each_entry(failover, &failover_list, list) {
 		failover_dev = rtnl_dereference(failover->failover_dev);
 		//如果failover dev对应的mac为提供的mac,则匹配，返回此dev及对应ops
@@ -53,12 +53,14 @@ static int failover_slave_register(struct net_device *slave_dev)
 	struct failover_ops *fops;
 	int err;
 
+	//不考虑非ether设备
 	if (slave_dev->type != ARPHRD_ETHER)
 		goto done;
 
+	//必须持有rtnl_lock
 	ASSERT_RTNL();
 
-	/*查询slave_dev*/
+	/*通过mac查询slave_dev，如果未查询到，则不处理*/
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
 	if (!failover_dev)
 		goto done;
@@ -86,12 +88,15 @@ static int failover_slave_register(struct net_device *slave_dev)
 		goto err_upper_link;
 	}
 
+	//指明为failover_slave设备
 	slave_dev->priv_flags |= (IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
 
+	//调用slave register回调
 	if (fops && fops->slave_register &&
 	    !fops->slave_register(slave_dev, failover_dev))
 		return NOTIFY_OK;
 
+	//处理失败，回退
 	netdev_upper_dev_unlink(slave_dev, failover_dev);
 	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
 err_upper_link:
@@ -112,11 +117,13 @@ int failover_slave_unregister(struct net_device *slave_dev)
 	struct net_device *failover_dev;
 	struct failover_ops *fops;
 
+	//设备必须为failover_slave
 	if (!netif_is_failover_slave(slave_dev))
 		goto done;
 
 	ASSERT_RTNL();
 
+	//通过mac地址找到failover_dev
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
 	if (!failover_dev)
 		goto done;
@@ -125,6 +132,7 @@ int failover_slave_unregister(struct net_device *slave_dev)
 	    fops->slave_pre_unregister(slave_dev, failover_dev))
 		goto done;
 
+	//解注册slave_dev
 	netdev_rx_handler_unregister(slave_dev);
 	netdev_upper_dev_unlink(slave_dev, failover_dev);
 	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
@@ -143,15 +151,18 @@ static int failover_slave_link_change(struct net_device *slave_dev)
 	struct net_device *failover_dev;
 	struct failover_ops *fops;
 
+	//必须为failover_slave
 	if (!netif_is_failover_slave(slave_dev))
 		goto done;
 
 	ASSERT_RTNL();
 
+	//找出failover_dev设备
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
 	if (!failover_dev)
 		goto done;
 
+	//如果failover_dev当前没有up,则不处理
 	if (!netif_running(failover_dev))
 		goto done;
 
@@ -170,18 +181,22 @@ static int failover_slave_name_change(struct net_device *slave_dev)
 	struct net_device *failover_dev;
 	struct failover_ops *fops;
 
+	//必须为failover_slave设备才处理
 	if (!netif_is_failover_slave(slave_dev))
 		goto done;
 
 	ASSERT_RTNL();
 
+	//找到对应的failover_dev
 	failover_dev = failover_get_bymac(slave_dev->perm_addr, &fops);
 	if (!failover_dev)
 		goto done;
 
+	//设备未运行时，不处理
 	if (!netif_running(failover_dev))
 		goto done;
 
+	//触发salve_name_change回调
 	if (fops && fops->slave_name_change &&
 	    !fops->slave_name_change(slave_dev, failover_dev))
 		return NOTIFY_OK;
@@ -196,6 +211,7 @@ failover_event(struct notifier_block *this, unsigned long event, void *ptr)
 	struct net_device *event_dev = netdev_notifier_info_to_dev(ptr);
 
 	/* Skip parent events */
+	//必烦为failover master device
 	if (netif_is_failover(event_dev))
 		return NOTIFY_DONE;
 
@@ -209,10 +225,10 @@ failover_event(struct notifier_block *this, unsigned long event, void *ptr)
 	case NETDEV_UP:
 	case NETDEV_DOWN:
 	case NETDEV_CHANGE:
-	    //链路状态变更
+	    //设备链路状态变更
 		return failover_slave_link_change(event_dev);
 	case NETDEV_CHANGENAME:
-	    //名称变更
+	    //设备名称变更
 		return failover_slave_name_change(event_dev);
 	default:
 		return NOTIFY_DONE;
@@ -224,6 +240,8 @@ static struct notifier_block failover_notifier = {
 	.notifier_call = failover_event,
 };
 
+//查找与failover_dev处于同一namespace中的dev设备，如果其perm_addr与failover_dev相同
+//则将其注册为slave设备
 static void
 failover_existing_slave_register(struct net_device *failover_dev)
 {
@@ -233,9 +251,9 @@ failover_existing_slave_register(struct net_device *failover_dev)
 	rtnl_lock();
 	for_each_netdev(net, dev) {
 		if (netif_is_failover(dev))
-		    //跳过已存在的failover设备
+		    //跳过failover设备
 			continue;
-		/*完成注册*/
+		/*自动注册当前namespace中与failover_dev有一致perm_addr设备为slave*/
 		if (ether_addr_equal(failover_dev->perm_addr, dev->perm_addr))
 			failover_slave_register(dev);
 	}
@@ -254,6 +272,7 @@ failover_existing_slave_register(struct net_device *failover_dev)
  *
  * Return: pointer to failover instance
  */
+//注册一个failover dev
 struct failover *failover_register(struct net_device *dev,
 				   struct failover_ops *ops)
 {
@@ -262,21 +281,26 @@ struct failover *failover_register(struct net_device *dev,
 	if (dev->type != ARPHRD_ETHER)
 		return ERR_PTR(-EINVAL);
 
+	//申请一个failover
 	failover = kzalloc(sizeof(*failover), GFP_KERNEL);
 	if (!failover)
 		return ERR_PTR(-ENOMEM);
 
+	//指定failover实例的ops及failover dev
 	rcu_assign_pointer(failover->ops, ops);
 	dev_hold(dev);
+	//指明设备是一个failover master device
 	dev->priv_flags |= IFF_FAILOVER;
 	rcu_assign_pointer(failover->failover_dev, dev);
 
 	spin_lock(&failover_lock);
+	//将此failover dev注册在failover_list上
 	list_add_tail(&failover->list, &failover_list);
 	spin_unlock(&failover_lock);
 
 	netdev_info(dev, "failover master:%s registered\n", dev->name);
 
+	//主动注册存在的slave设备
 	failover_existing_slave_register(dev);
 
 	return failover;
@@ -313,6 +337,7 @@ EXPORT_SYMBOL_GPL(failover_unregister);
 static __init int
 failover_init(void)
 {
+    //注册网络设备通知链
 	register_netdevice_notifier(&failover_notifier);
 
 	return 0;

@@ -9845,6 +9845,7 @@ void netdev_run_todo(void)
 		BUG_ON(netdev_refcnt_read(dev));
 		BUG_ON(!list_empty(&dev->ptype_all));
 		BUG_ON(!list_empty(&dev->ptype_specific));
+		//此时dev->ip_ptr,dev->ip6_ptr均未给值
 		WARN_ON(rcu_access_pointer(dev->ip_ptr));
 		WARN_ON(rcu_access_pointer(dev->ip6_ptr));
 #if IS_ENABLED(CONFIG_DECNET)

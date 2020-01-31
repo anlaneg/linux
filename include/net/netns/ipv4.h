@@ -49,6 +49,7 @@ struct netns_ipv4 {
 	struct ctl_table_header *xfrm4_hdr;
 #endif
 	struct ipv4_devconf	*devconf_all;
+	//ipv4 def的默认配置
 	struct ipv4_devconf	*devconf_dflt;
 	struct ip_ra_chain __rcu *ra_chain;
 	struct mutex		ra_mutex;

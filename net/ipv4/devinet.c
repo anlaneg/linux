@@ -253,6 +253,7 @@ void in_dev_finish_destroy(struct in_device *idev)
 }
 EXPORT_SYMBOL(in_dev_finish_destroy);
 
+//初始化ipv4设备
 static struct in_device *inetdev_init(struct net_device *dev)
 {
 	struct in_device *in_dev;
@@ -260,9 +261,11 @@ static struct in_device *inetdev_init(struct net_device *dev)
 
 	ASSERT_RTNL();
 
+	//申请ipv4设备内存
 	in_dev = kzalloc(sizeof(*in_dev), GFP_KERNEL);
 	if (!in_dev)
 		goto out;
+	//使用net namespace对应的dev default config来初始化配置
 	memcpy(&in_dev->cnf, dev_net(dev)->ipv4.devconf_dflt,
 			sizeof(in_dev->cnf));
 	in_dev->cnf.sysctl = NULL;
@@ -270,6 +273,7 @@ static struct in_device *inetdev_init(struct net_device *dev)
 	in_dev->arp_parms = neigh_parms_alloc(dev, &arp_tbl);
 	if (!in_dev->arp_parms)
 		goto out_kfree;
+	//设备未处于forwarding状态，禁止lro
 	if (IPV4_DEVCONF(in_dev->cnf, FORWARDING))
 		dev_disable_lro(dev);
 	/* Reference in_dev->dev */
@@ -289,6 +293,7 @@ static struct in_device *inetdev_init(struct net_device *dev)
 		ip_mc_up(in_dev);
 
 	/* we can receive as soon as ip_ptr is set -- do this last */
+	//设置inet4_dev给net_device
 	rcu_assign_pointer(dev->ip_ptr, in_dev);
 out:
 	return in_dev ?: ERR_PTR(err);
@@ -611,6 +616,7 @@ struct in_device *inetdev_by_index(struct net *net, int ifindex)
 	struct in_device *in_dev = NULL;
 
 	rcu_read_lock();
+	//通过ifindex获得net_device,并返回此net_device对应的inet4_dev
 	dev = dev_get_by_index_rcu(net, ifindex);
 	if (dev)
 		in_dev = rcu_dereference_rtnl(dev->ip_ptr);
@@ -865,6 +871,7 @@ static struct in_ifaddr *rtm_to_ifaddr(struct net *net, struct nlmsghdr *nlh,
 	if (!dev)
 		goto errout;
 
+	//取dev对应的inet4_dev
 	in_dev = __in_dev_get_rtnl(dev);
 	err = -ENOBUFS;
 	if (!in_dev)
@@ -1559,6 +1566,7 @@ static int inetdev_event(struct notifier_block *this, unsigned long event,
 
 	if (!in_dev) {
 		if (event == NETDEV_REGISTER) {
+		    //netdev被注册时，收到register事件，完成inet4_dev创建
 			in_dev = inetdev_init(dev);
 			if (IS_ERR(in_dev))
 				return notifier_from_errno(PTR_ERR(in_dev));
@@ -1643,6 +1651,7 @@ out:
 	return NOTIFY_DONE;
 }
 
+//netdev事件通知响应，用于创建inet4_dev
 static struct notifier_block ip_netdev_notifier = {
 	.notifier_call = inetdev_event,
 };
@@ -1967,6 +1976,7 @@ static int inet_fill_link_af(struct sk_buff *skb, const struct net_device *dev,
 	if (!in_dev)
 		return -ENODATA;
 
+	//预留inet_conf空间，并自in_dev中获取且填充到此空间
 	nla = nla_reserve(skb, IFLA_INET_CONF, IPV4_DEVCONF_MAX * 4);
 	if (!nla)
 		return -EMSGSIZE;
@@ -2785,6 +2795,7 @@ void __init devinet_init(void)
 	register_pernet_subsys(&devinet_ops);
 
 	register_gifconf(PF_INET, inet_gifconf);
+	//注册通知链，用于创建inet4_dev设备
 	register_netdevice_notifier(&ip_netdev_notifier);
 
 	queue_delayed_work(system_power_efficient_wq, &check_lifetime_work, 0);

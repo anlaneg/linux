@@ -7,16 +7,22 @@
 #include <linux/netdevice.h>
 
 struct failover_ops {
+    //slave_dev注册时触发(pre)
 	int (*slave_pre_register)(struct net_device *slave_dev,
 				  struct net_device *failover_dev);
+	//slave_dev注册时触发(post)
 	int (*slave_register)(struct net_device *slave_dev,
 			      struct net_device *failover_dev);
+	//slave_dev解注册时触发（pre)
 	int (*slave_pre_unregister)(struct net_device *slave_dev,
 				    struct net_device *failover_dev);
+	//slave_dev解注册时触发（post)
 	int (*slave_unregister)(struct net_device *slave_dev,
 				struct net_device *failover_dev);
+	//slave_dev link发生变更时触发
 	int (*slave_link_change)(struct net_device *slave_dev,
 				 struct net_device *failover_dev);
+	//slave_name发生变更时触发
 	int (*slave_name_change)(struct net_device *slave_dev,
 				 struct net_device *failover_dev);
 	/*提供slave设备的rx_handle回调*/

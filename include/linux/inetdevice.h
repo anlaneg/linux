@@ -22,8 +22,9 @@ struct ipv4_devconf {
 
 #define MC_HASH_SZ_LOG 9
 
+//inet4_dev结构体（ipv4设备结构体）
 struct in_device {
-	struct net_device	*dev;
+	struct net_device	*dev;//关联(所属）的net_device
 	refcount_t		refcnt;
 	int			dead;
 	//inet4设备上所有ip地址列表
@@ -47,6 +48,7 @@ struct in_device {
 	struct timer_list	mr_ifc_timer;	/* interface change timer */
 
 	struct neigh_parms	*arp_parms;
+	//ipv4设备配置
 	struct ipv4_devconf	cnf;
 	struct rcu_head		rcu_head;
 };

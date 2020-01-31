@@ -41,6 +41,7 @@ struct virtio_pci_vq_info {
 
 /* Our device structure */
 struct virtio_pci_device {
+    //virtio设备
 	struct virtio_device vdev;
 	struct pci_dev *pci_dev;//记录virtio pci设备对应的pci设备
 

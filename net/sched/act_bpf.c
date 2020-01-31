@@ -31,6 +31,7 @@ struct tcf_bpf_cfg {
 static unsigned int bpf_net_id;
 static struct tc_action_ops act_bpf_ops;
 
+//bpf action执行函数
 static int tcf_bpf_act(struct sk_buff *skb, const struct tc_action *act,
 		       struct tcf_result *res)
 {
@@ -45,6 +46,7 @@ static int tcf_bpf_act(struct sk_buff *skb, const struct tc_action *act,
 	rcu_read_lock();
 	filter = rcu_dereference(prog->filter);
 	if (at_ingress) {
+	    //指向mac头，并运行epbf程序，运行结束后，还原data指针
 		__skb_push(skb, skb->mac_len);
 		bpf_compute_data_pointers(skb);
 		filter_res = BPF_PROG_RUN(filter, skb);

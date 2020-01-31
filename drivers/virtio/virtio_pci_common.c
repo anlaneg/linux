@@ -520,7 +520,7 @@ static void virtio_pci_release_dev(struct device *_d)
 	kfree(vp_dev);
 }
 
-
+//virtio_pci设备probe
 static int virtio_pci_probe(struct pci_dev *pci_dev,
 			    const struct pci_device_id *id)
 {
@@ -606,6 +606,7 @@ static void virtio_pci_remove(struct pci_dev *pci_dev)
 	put_device(dev);
 }
 
+//virtio设备的sriov支持
 static int virtio_pci_sriov_configure(struct pci_dev *pci_dev, int num_vfs)
 {
 	struct virtio_pci_device *vp_dev = pci_get_drvdata(pci_dev);
@@ -622,10 +623,12 @@ static int virtio_pci_sriov_configure(struct pci_dev *pci_dev, int num_vfs)
 		return -EPERM;
 
 	if (num_vfs == 0) {
+	    //要求关闭virtio-pci设备的sriov功能
 		pci_disable_sriov(pci_dev);
 		return 0;
 	}
 
+	//开启virtio-pci设备的sriov功能
 	ret = pci_enable_sriov(pci_dev, num_vfs);
 	if (ret < 0)
 		return ret;

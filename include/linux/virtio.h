@@ -180,8 +180,9 @@ struct virtio_driver {
 	int (*freeze)(struct virtio_device *dev);
 	int (*restore)(struct virtio_device *dev);
 #endif
-};
+}
 
+/*获得对应的virtio驱动*/
 static inline struct virtio_driver *drv_to_virtio(struct device_driver *drv)
 {
 	return container_of(drv, struct virtio_driver, driver);

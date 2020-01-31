@@ -113,7 +113,7 @@ static inline bool __virtio_test_bit(const struct virtio_device *vdev,
 				     unsigned int fbit)
 {
 	/* Did you forget to fix assumptions on max features? */
-	//校验bit位小于64
+	//校验bit位必须小于64
 	if (__builtin_constant_p(fbit))
 		BUILD_BUG_ON(fbit >= 64);
 	else

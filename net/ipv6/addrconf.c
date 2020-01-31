@@ -3488,6 +3488,7 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 	switch (event) {
 	case NETDEV_REGISTER:
 		if (!idev && dev->mtu >= IPV6_MIN_MTU) {
+		    //inet6_dev创建
 			idev = ipv6_add_dev(dev);
 			if (IS_ERR(idev))
 				return notifier_from_errno(PTR_ERR(idev));
