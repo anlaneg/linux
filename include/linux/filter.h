@@ -939,8 +939,10 @@ static inline int xdp_ok_fwd_dev(const struct net_device *fwd,
 	unsigned int len;
 
 	if (unlikely(!(fwd->flags & IFF_UP)))
+	    /*设备已down*/
 		return -ENETDOWN;
 
+	/*报文长度超过mtu*/
 	len = fwd->mtu + fwd->hard_header_len + VLAN_HLEN;
 	if (pktlen > len)
 		return -EMSGSIZE;

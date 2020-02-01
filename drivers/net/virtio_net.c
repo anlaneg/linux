@@ -3259,7 +3259,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 
 	virtnet_init_settings(dev);
 
-	//如果virtio设备有standby功能，则为其创建failover设备
+	//如果virtio设备有standby功能，则为其创建failover dev实例
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_STANDBY)) {
 		vi->failover = net_failover_create(vi->dev);
 		if (IS_ERR(vi->failover)) {

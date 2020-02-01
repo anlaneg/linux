@@ -3611,26 +3611,31 @@ int xdp_do_generic_redirect(struct net_device *dev, struct sk_buff *skb,
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	struct bpf_map *map = READ_ONCE(ri->map);
-	u32 index = ri->tgt_index;
+	u32 index = ri->tgt_index;/*目标ifindex*/
 	struct net_device *fwd;
 	int err = 0;
 
 	if (map)
+	    /*有map表，按map表执行fwd*/
 		return xdp_do_generic_redirect_map(dev, skb, xdp, xdp_prog,
 						   map);
 	ri->tgt_index = 0;
+	//确定要发送到的设备
 	fwd = dev_get_by_index_rcu(dev_net(dev), index);
 	if (unlikely(!fwd)) {
 		err = -EINVAL;
 		goto err;
 	}
 
+	//检查报文是否可转发
 	err = xdp_ok_fwd_dev(fwd, skb->len);
 	if (unlikely(err))
 		goto err;
 
+	//将报文从属关系变更为fwd设备
 	skb->dev = fwd;
 	_trace_xdp_redirect(dev, xdp_prog, index);
+	//自skb->dev设备将报文送出
 	generic_xdp_tx(skb, xdp_prog);
 	return 0;
 err:

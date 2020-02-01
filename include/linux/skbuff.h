@@ -3748,7 +3748,7 @@ static inline void skb_get_new_timestampns(const struct sk_buff *skb,
 	stamp->tv_nsec = ts.tv_nsec;
 }
 
-//设置skb上的时间
+//设置skb的时间戳
 static inline void __net_timestamp(struct sk_buff *skb)
 {
 	skb->tstamp = ktime_get_real();

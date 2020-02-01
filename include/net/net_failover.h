@@ -9,19 +9,19 @@
 /* failover state */
 struct net_failover_info {
 	/* primary netdev with same MAC */
-	struct net_device __rcu *primary_dev;
+	struct net_device __rcu *primary_dev;//主设备
 
 	/* standby netdev */
-	struct net_device __rcu *standby_dev;
+	struct net_device __rcu *standby_dev;//从设备
 
 	/* primary netdev stats */
-	struct rtnl_link_stats64 primary_stats;
+	struct rtnl_link_stats64 primary_stats;//主设备统计
 
 	/* standby netdev stats */
-	struct rtnl_link_stats64 standby_stats;
+	struct rtnl_link_stats64 standby_stats;//从设备统计
 
 	/* aggregated stats */
-	struct rtnl_link_stats64 failover_stats;
+	struct rtnl_link_stats64 failover_stats;//failover设备状态
 
 	/* spinlock while updating stats */
 	spinlock_t stats_lock;

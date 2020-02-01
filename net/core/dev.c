@@ -154,6 +154,7 @@
 static DEFINE_SPINLOCK(ptype_lock);
 static DEFINE_SPINLOCK(offload_lock);
 struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
+//挂在此链上的ptype将收取所有报文
 struct list_head ptype_all __read_mostly;	/* Taps */
 //不同的协议可向此链表注册其相关的gro功能
 static struct list_head offload_base __read_mostly;
@@ -4600,6 +4601,7 @@ drop:
 	return NET_RX_DROP;
 }
 
+//取skb来源于那个rx queue
 static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
@@ -4607,6 +4609,7 @@ static struct netdev_rx_queue *netif_get_rxqueue(struct sk_buff *skb)
 
 	rxqueue = dev->_rx;
 
+	//如果skb上有queue_mapping,则使用其做为rx queue id,否则使用0号queue id
 	if (skb_rx_queue_recorded(skb)) {
 		u16 index = skb_get_rx_queue(skb);
 
@@ -4667,7 +4670,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	 */
 	mac_len = skb->data - skb_mac_header(skb);
 	hlen = skb_headlen(skb) + mac_len;
-	xdp->data = skb->data - mac_len;
+	xdp->data = skb->data - mac_len;//使xdp指向报文起始位置
 	xdp->data_meta = xdp->data;
 	xdp->data_end = xdp->data + hlen;
 	xdp->data_hard_start = skb->data - skb_headroom(skb);
@@ -4686,6 +4689,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	/* check if bpf_xdp_adjust_head was used */
 	off = xdp->data - orig_data;
 	if (off) {
+	    //报文的起始位置被调整了，更新外部的skb
 		if (off > 0)
 			__skb_pull(skb, off);
 		else if (off < 0)
@@ -4706,6 +4710,7 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 	}
 
 	/* check if XDP changed eth hdr such SKB needs update */
+	//以太头发生变更，重新解析以太头
 	eth = (struct ethhdr *)xdp->data;
 	if ((orig_eth_type != eth->h_proto) ||
 	    (orig_bcast != is_multicast_ether_addr_64bits(eth->h_dest))) {
@@ -4713,9 +4718,11 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 		skb->protocol = eth_type_trans(skb, skb->dev);
 	}
 
+	//处理xdp返回的action
 	switch (act) {
 	case XDP_REDIRECT:
 	case XDP_TX:
+	    //使data指向mac头部,返回act
 		__skb_push(skb, mac_len);
 		break;
 	case XDP_PASS:
@@ -4752,6 +4759,7 @@ void generic_xdp_tx(struct sk_buff *skb, struct bpf_prog *xdp_prog)
 	cpu = smp_processor_id();
 	HARD_TX_LOCK(dev, txq, cpu);
 	if (!netif_xmit_stopped(txq)) {
+	    /*将报文自dev的txq队列投递出去*/
 		rc = netdev_start_xmit(skb, dev, txq, 0);
 		if (dev_xmit_complete(rc))
 			free_skb = false;
@@ -4769,6 +4777,7 @@ static DEFINE_STATIC_KEY_FALSE(generic_xdp_needed_key);
 int do_xdp_generic(struct bpf_prog *xdp_prog, struct sk_buff *skb)
 {
 	if (xdp_prog) {
+	    //执行收包位置处的xdp程序
 		struct xdp_buff xdp;
 		u32 act;
 		int err;
@@ -4777,12 +4786,14 @@ int do_xdp_generic(struct bpf_prog *xdp_prog, struct sk_buff *skb)
 		if (act != XDP_PASS) {
 			switch (act) {
 			case XDP_REDIRECT:
+			    //自其它设备发出
 				err = xdp_do_generic_redirect(skb->dev, skb,
 							      &xdp, xdp_prog);
 				if (err)
 					goto out_redir;
 				break;
 			case XDP_TX:
+			    //自源设备直接发出
 				generic_xdp_tx(skb, xdp_prog);
 				break;
 			}
@@ -5160,6 +5171,7 @@ another_round:
 		int ret2;
 
 		preempt_disable();
+		/*执行通用收包情况下的xdp_prog*/
 		ret2 = do_xdp_generic(rcu_dereference(skb->dev->xdp_prog), skb);
 		preempt_enable();
 
@@ -5170,7 +5182,7 @@ another_round:
 
 	if (skb->protocol == cpu_to_be16(ETH_P_8021Q) ||
 	    skb->protocol == cpu_to_be16(ETH_P_8021AD)) {
-		//vlan在skb上进行设置，包括协议，vlan编号
+		//vlan剥离
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
@@ -5183,15 +5195,17 @@ another_round:
 	if (pfmemalloc)
 		goto skip_taps;
 
-	//遍历ptype_all链，处理此报文（通过pt_prev延后一个pt来进行处理）
-	//当此循环结束时，pt_prev指向的那个ptype的回调还没有指行
+	//ptype_all链上的ptype将处理收到的所有报文，这里遍历ptype_all链，
+	//处理此报文（tcpdump通过此回调获得报文）
+	//当此循环结束时，pt_prev指向的那个ptype的回调还没有执行
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 		pt_prev = ptype;
 	}
 
-	//遍历skb->dev上的ptype_all链，处理此报文（通过pt_prev延后一个pt来进行处理）
+	//skb->dev->ptype_all链上的ptype将处理此设备收到的所有报文，这里
+	//遍历skb->dev上的ptype_all链，处理此报文（tcpdump通过此回调获得指定设备的报文）
 	//当此循环结束时，pt_prev指向的那个ptype的回调还没有指行
 	list_for_each_entry_rcu(ptype, &skb->dev->ptype_all, list) {
 		if (pt_prev)
@@ -5501,6 +5515,7 @@ static void __netif_receive_skb_list(struct list_head *head)
 		memalloc_noreclaim_restore(noreclaim_flag);
 }
 
+//网卡驱动不支持ndo_bpf回调时，此函数将被用于安装更一般的xdp程序
 static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	struct bpf_prog *old = rtnl_dereference(dev->xdp_prog);
@@ -8932,6 +8947,8 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 		NL_SET_ERR_MSG(extack, "underlying driver does not support XDP in native mode");
 		return -EOPNOTSUPP;
 	}
+
+	/*如果驱动不支持ndo_bpf回调函数，或者flags指明为XDP_FLAGS_SKB_MODE，则更正为一般xdp操作函数*/
 	if (!bpf_op || (flags & XDP_FLAGS_SKB_MODE))
 		bpf_op = generic_xdp_install;
 	if (bpf_op == bpf_chk)
@@ -9770,6 +9787,7 @@ EXPORT_SYMBOL_GPL(init_dummy_netdev);
  */
 int register_netdev(struct net_device *dev)
 {
+    //网络设备注册
 	int err;
 
 	if (rtnl_lock_killable())
@@ -10049,7 +10067,7 @@ void netdev_freemem(struct net_device *dev)
  * for each queue on the device.
  * 申请网络设备
  */
-struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name/*接口名称*/,
+struct net_device *alloc_netdev_mqs(int sizeof_priv/*私有结构体大小*/, const char *name/*接口名称*/,
 		unsigned char name_assign_type,
 		void (*setup)(struct net_device *)/*初始化函数*/,
 		unsigned int txqs/*tx队列数目*/, unsigned int rxqs/*rx队列数目*/)

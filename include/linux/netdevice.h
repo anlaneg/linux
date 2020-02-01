@@ -1871,7 +1871,7 @@ struct net_device {
 	struct list_head	napi_list;
 	struct list_head	unreg_list;
 	struct list_head	close_list;
-	struct list_head	ptype_all;
+	struct list_head	ptype_all;//挂在此链上的ptype将收取此设备所有报文
 	struct list_head	ptype_specific;
 
 	struct {
@@ -2018,6 +2018,10 @@ struct net_device {
 	unsigned int		num_rx_queues;
 	unsigned int		real_num_rx_queues;
 
+	/*
+	 * 当驱动不支持ndo_bpf时，generic_xdp_install函数将安装bpf程度在此变量
+	 * 函数__netif_receive_skb_core将在收包时触发此bpf程序
+	 */
 	struct bpf_prog __rcu	*xdp_prog;
 	unsigned long		gro_flush_timeout;
 	rx_handler_func_t __rcu	*rx_handler;

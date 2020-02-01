@@ -302,6 +302,7 @@ static void __register_prot_hook(struct sock *sk)
 		if (po->fanout)
 			__fanout_link(sk, po);
 		else
+		    //添加packet handler注册
 			dev_add_pack(&po->prot_hook);
 
 		sock_hold(sk);
@@ -309,6 +310,7 @@ static void __register_prot_hook(struct sock *sk)
 	}
 }
 
+//注册protocol hook
 static void register_prot_hook(struct sock *sk)
 {
 	lockdep_assert_held_once(&pkt_sk(sk)->bind_lock);
@@ -323,6 +325,7 @@ static void register_prot_hook(struct sock *sk)
  */
 static void __unregister_prot_hook(struct sock *sk, bool sync)
 {
+    //解除socket添加的packet_type
 	struct packet_sock *po = pkt_sk(sk);
 
 	lockdep_assert_held_once(&po->bind_lock);
@@ -337,6 +340,7 @@ static void __unregister_prot_hook(struct sock *sk, bool sync)
 	__sock_put(sk);
 
 	if (sync) {
+	    //需要同步，则等待网络所有收完成
 		spin_unlock(&po->bind_lock);
 		synchronize_net();
 		spin_lock(&po->bind_lock);
@@ -1412,6 +1416,7 @@ static bool fanout_has_flag(struct packet_fanout *f, u16 flag)
 	return f->flags & (flag >> 8);
 }
 
+//支持散开的packet收取
 static int packet_rcv_fanout(struct sk_buff *skb, struct net_device *dev,
 			     struct packet_type *pt, struct net_device *orig_dev)
 {
@@ -1440,6 +1445,7 @@ static int packet_rcv_fanout(struct sk_buff *skb, struct net_device *dev,
 		idx = fanout_demux_lb(f, skb, num);
 		break;
 	case PACKET_FANOUT_CPU:
+	    /*按当前cpu散开到具体idx*/
 		idx = fanout_demux_cpu(f, skb, num);
 		break;
 	case PACKET_FANOUT_RND:
@@ -1460,6 +1466,7 @@ static int packet_rcv_fanout(struct sk_buff *skb, struct net_device *dev,
 	if (fanout_has_flag(f, PACKET_FANOUT_FLAG_ROLLOVER))
 		idx = fanout_demux_rollover(f, skb, idx, true, num);
 
+	/*取具体的po,并调用相应回调*/
 	po = pkt_sk(f->arr[idx]);
 	return po->prot_hook.func(skb, dev, &po->prot_hook, orig_dev);
 }
@@ -1631,15 +1638,17 @@ static bool fanout_find_new_id(struct sock *sk, u16 *new_id)
 	return false;
 }
 
-static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
+static int fanout_add(struct sock *sk, u16 id/*fanout group 编号*/, u16 type_flags)
 {
 	struct packet_rollover *rollover = NULL;
 	struct packet_sock *po = pkt_sk(sk);
 	struct packet_fanout *f, *match;
+	//type_flags由两部分组成，一部分为type,一部分为flags
 	u8 type = type_flags & 0xff;
 	u8 flags = type_flags >> 8;
 	int err;
 
+	//校验type是否合法
 	switch (type) {
 	case PACKET_FANOUT_ROLLOVER:
 		if (type_flags & PACKET_FANOUT_FLAG_ROLLOVER)
@@ -1660,6 +1669,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 
 	err = -EALREADY;
 	if (po->fanout)
+	    /*已配置fanout,退出*/
 		goto out;
 
 	if (type == PACKET_FANOUT_ROLLOVER ||
@@ -1698,6 +1708,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 	if (match && match->flags != flags)
 		goto out;
 	if (!match) {
+	    /*match不存在，创建match*/
 		err = -ENOMEM;
 		match = kzalloc(sizeof(*match), GFP_KERNEL);
 		if (!match)
@@ -1715,6 +1726,7 @@ static int fanout_add(struct sock *sk, u16 id, u16 type_flags)
 		match->prot_hook.func = packet_rcv_fanout;
 		match->prot_hook.af_packet_priv = match;
 		match->prot_hook.id_match = match_fanout_group;
+		/*将match加入到fanout_list中*/
 		list_add(&match->list, &fanout_list);
 	}
 	err = -EINVAL;
@@ -3097,12 +3109,14 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 	}
 
 	if (name) {
+	    //如果指定了net_device名称,则通过名称查询
 		dev = dev_get_by_name_rcu(sock_net(sk), name);
 		if (!dev) {
 			ret = -ENODEV;
 			goto out_unlock;
 		}
 	} else if (ifindex) {
+	    //如果指定了ifindex,则通过ifindex查询dev
 		dev = dev_get_by_index_rcu(sock_net(sk), ifindex);
 		if (!dev) {
 			ret = -ENODEV;
@@ -3113,18 +3127,22 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 	if (dev)
 		dev_hold(dev);
 
+	//通过type,dev检查是否发生变更，如变更则需要重新hook
 	proto_curr = po->prot_hook.type;
 	dev_curr = po->prot_hook.dev;
 
 	need_rehook = proto_curr != proto || dev_curr != dev;
 
 	if (need_rehook) {
+	    //如果需要重新hook，则检查是否已将packet_type添加，如已添加
+	    //则先删除再添加
 		if (po->running) {
 			rcu_read_unlock();
 			/* prevents packet_notifier() from calling
 			 * register_prot_hook()
 			 */
 			po->num = 0;
+			//移除
 			__unregister_prot_hook(sk, true);
 			rcu_read_lock();
 			dev_curr = po->prot_hook.dev;
@@ -3135,9 +3153,10 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 
 		BUG_ON(po->running);
 		po->num = proto;
-		po->prot_hook.type = proto;
+		po->prot_hook.type = proto;//指定要处理的proto
 
 		if (unlikely(unlisted)) {
+		    //dev不存在当前socket所在namespace时，清除dev
 			dev_put(dev);
 			po->prot_hook.dev = NULL;
 			po->ifindex = -1;
@@ -3148,6 +3167,8 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 			packet_cached_dev_assign(po, dev);
 		}
 	}
+
+	//释放上次占用的dev
 	if (dev_curr)
 		dev_put(dev_curr);
 
@@ -3155,8 +3176,10 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 		goto out_unlock;
 
 	if (!unlisted && (!dev || (dev->flags & IFF_UP))) {
+	    /*注册packet_type*/
 		register_prot_hook(sk);
 	} else {
+	    /*无法注册，向上通知*/
 		sk->sk_err = ENETDOWN;
 		if (!sock_flag(sk, SOCK_DEAD))
 			sk->sk_error_report(sk);
@@ -3850,6 +3873,7 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 	}
 	case PACKET_FANOUT:
 	{
+	    //设置报文散开方式
 		int val;
 
 		if (optlen != sizeof(val))
@@ -3857,6 +3881,7 @@ packet_setsockopt(struct socket *sock, int level, int optname, char __user *optv
 		if (copy_from_user(&val, optval, sizeof(val)))
 			return -EFAULT;
 
+		//参数由两部分组成，<fanout_type> <fanout_group_id>
 		return fanout_add(sk, val & 0xffff, val >> 16);
 	}
 	case PACKET_FANOUT_DATA:

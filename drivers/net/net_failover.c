@@ -94,6 +94,7 @@ static netdev_tx_t net_failover_drop_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
+//failover设备报文发送
 static netdev_tx_t net_failover_start_xmit(struct sk_buff *skb,
 					   struct net_device *dev)
 {
@@ -370,6 +371,7 @@ static const struct ethtool_ops failover_ethtool_ops = {
 static rx_handler_result_t net_failover_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
+	/*slave的handler_data为failover设备*/
 	struct net_device *dev = rcu_dereference(skb->dev->rx_handler_data);
 	struct net_failover_info *nfo_info = netdev_priv(dev);
 	struct net_device *primary_dev, *standby_dev;
@@ -377,11 +379,14 @@ static rx_handler_result_t net_failover_handle_frame(struct sk_buff **pskb)
 	primary_dev = rcu_dereference(nfo_info->primary_dev);
 	standby_dev = rcu_dereference(nfo_info->standby_dev);
 
+	/*主设备存在，但报文从属于从设备当返回值为RX_HANDLER_EXACT时,
+	 * netif_recive_skb不会将skb交给上层协议处理。*/
 	if (primary_dev && skb->dev == standby_dev)
 		return RX_HANDLER_EXACT;
 
 	skb->dev = dev;
 
+	//指明已更换入口设备，重新执行收包处理
 	return RX_HANDLER_ANOTHER;
 }
 
@@ -544,6 +549,7 @@ static int net_failover_slave_register(struct net_device *slave_dev,
 		goto err_vlan_add;
 	}
 
+	//取failover_dev
 	nfo_info = netdev_priv(failover_dev);
 	standby_dev = rtnl_dereference(nfo_info->standby_dev);
 	primary_dev = rtnl_dereference(nfo_info->primary_dev);
@@ -555,6 +561,7 @@ static int net_failover_slave_register(struct net_device *slave_dev,
 		standby_dev = slave_dev;
 		dev_get_stats(standby_dev, &nfo_info->standby_stats);
 	} else {
+	    /*设置slave_dev为primary_dev设备*/
 		rcu_assign_pointer(nfo_info->primary_dev, slave_dev);
 		primary_dev = slave_dev;
 		dev_get_stats(primary_dev, &nfo_info->primary_stats);
@@ -728,7 +735,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	/* Alloc at least 2 queues, for now we are going with 16 assuming
 	 * that VF devices being enslaved won't have too many queues.
 	 */
-	//申请failover网络设备
+	//创建failover网络设备
 	failover_dev = alloc_etherdev_mq(sizeof(struct net_failover_info), 16);
 	if (!failover_dev) {
 		dev_err(dev, "Unable to allocate failover_netdev!\n");
@@ -739,6 +746,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	dev_net_set(failover_dev, dev_net(standby_dev));
 	SET_NETDEV_DEV(failover_dev, dev);
 
+	//failover_dev的操作函数集及ethtool的操作函数集
 	failover_dev->netdev_ops = &failover_dev_ops;
 	failover_dev->ethtool_ops = &failover_ethtool_ops;
 
@@ -769,6 +777,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	failover_dev->min_mtu = standby_dev->min_mtu;
 	failover_dev->max_mtu = standby_dev->max_mtu;
 
+	//网络设备注册
 	err = register_netdev(failover_dev);
 	if (err) {
 		dev_err(dev, "Unable to register failover_dev!\n");
@@ -777,7 +786,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 
 	netif_carrier_off(failover_dev);
 
-	//注册failover设备
+	//注册failover dev实例，主动注册已存在的slave设备
 	failover = failover_register(failover_dev, &net_failover_ops);
 	if (IS_ERR(failover)) {
 		err = PTR_ERR(failover);
