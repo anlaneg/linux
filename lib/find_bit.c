@@ -17,9 +17,9 @@
 #include <linux/export.h>
 #include <linux/kernel.h>
 
-#if !defined(find_next_bit) || !defined(find_next_zero_bit) || \
-		!defined(find_next_and_bit)
-
+#if !defined(find_next_bit) || !defined(find_next_zero_bit) ||			\
+	!defined(find_next_bit_le) || !defined(find_next_zero_bit_le) ||	\
+	!defined(find_next_and_bit)
 /*
  * This is a common helper function for find_next_bit, find_next_zero_bit, and
  * find_next_and_bit. The differences are:
@@ -29,11 +29,11 @@
  */
 //找一个bit是1的，自start位置开始，最大有nbits位，addr是考虑了掩码情况
 //invert是考虑了bitmap中实现时，支持需要找‘0’的情况
-static inline unsigned long _find_next_bit(const unsigned long *addr1,
+static unsigned long _find_next_bit(const unsigned long *addr1,
 		const unsigned long *addr2, unsigned long nbits,
-		unsigned long start, unsigned long invert)
+		unsigned long start, unsigned long invert, unsigned long le)
 {
-	unsigned long tmp;
+	unsigned long tmp, mask;
 
 	if (unlikely(start >= nbits))
 		return nbits;//start已超限，返回最大值（无空闲）
@@ -44,7 +44,12 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 	tmp ^= invert;//如果invert为全1，则tmp会反转，否则tmp不反转
 
 	/* Handle 1st word. */
-	tmp &= BITMAP_FIRST_WORD_MASK(start);//将start位以下的bit置为0
+	//将start位以下的bit置为0
+	mask = BITMAP_FIRST_WORD_MASK(start);
+	if (le)
+		mask = swab(mask);
+
+	tmp &= mask;
 
 	//假如BITS_PER_LONG=64,则start的低5位被置为0（2^6=64)
 	start = round_down(start, BITS_PER_LONG);
@@ -62,6 +67,9 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 		tmp ^= invert;
 	}
 
+	if (le)
+		tmp = swab(tmp);
+
 	//此时要么查找了，要么查找失败（故最小返回）
 	//__ffs返回tmp中第一个1所在的位号
 	return min(start + __ffs(tmp), nbits);
@@ -75,7 +83,7 @@ static inline unsigned long _find_next_bit(const unsigned long *addr1,
 unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
 			    unsigned long offset)
 {
-	return _find_next_bit(addr, NULL, size, offset, 0UL);
+	return _find_next_bit(addr, NULL, size, offset, 0UL, 0);
 }
 EXPORT_SYMBOL(find_next_bit);
 #endif
@@ -85,7 +93,7 @@ EXPORT_SYMBOL(find_next_bit);
 unsigned long find_next_zero_bit(const unsigned long *addr, unsigned long size,
 				 unsigned long offset)
 {
-	return _find_next_bit(addr, NULL, size, offset, ~0UL);
+	return _find_next_bit(addr, NULL, size, offset, ~0UL, 0);
 }
 EXPORT_SYMBOL(find_next_zero_bit);
 #endif
@@ -95,7 +103,7 @@ unsigned long find_next_and_bit(const unsigned long *addr1,
 		const unsigned long *addr2, unsigned long size,
 		unsigned long offset)
 {
-	return _find_next_bit(addr1, addr2, size, offset, 0UL);
+	return _find_next_bit(addr1, addr2, size, offset, 0UL, 0);
 }
 EXPORT_SYMBOL(find_next_and_bit);
 #endif
@@ -159,57 +167,11 @@ EXPORT_SYMBOL(find_last_bit);
 
 #ifdef __BIG_ENDIAN
 
-/* include/linux/byteorder does not support "unsigned long" type */
-static inline unsigned long ext2_swab(const unsigned long y)
-{
-#if BITS_PER_LONG == 64
-	return (unsigned long) __swab64((u64) y);
-#elif BITS_PER_LONG == 32
-	return (unsigned long) __swab32((u32) y);
-#else
-#error BITS_PER_LONG not defined
-#endif
-}
-
-#if !defined(find_next_bit_le) || !defined(find_next_zero_bit_le)
-static inline unsigned long _find_next_bit_le(const unsigned long *addr1,
-		const unsigned long *addr2, unsigned long nbits,
-		unsigned long start, unsigned long invert)
-{
-	unsigned long tmp;
-
-	if (unlikely(start >= nbits))
-		return nbits;
-
-	tmp = addr1[start / BITS_PER_LONG];
-	if (addr2)
-		tmp &= addr2[start / BITS_PER_LONG];
-	tmp ^= invert;
-
-	/* Handle 1st word. */
-	tmp &= ext2_swab(BITMAP_FIRST_WORD_MASK(start));
-	start = round_down(start, BITS_PER_LONG);
-
-	while (!tmp) {
-		start += BITS_PER_LONG;
-		if (start >= nbits)
-			return nbits;
-
-		tmp = addr1[start / BITS_PER_LONG];
-		if (addr2)
-			tmp &= addr2[start / BITS_PER_LONG];
-		tmp ^= invert;
-	}
-
-	return min(start + __ffs(ext2_swab(tmp)), nbits);
-}
-#endif
-
 #ifndef find_next_zero_bit_le
 unsigned long find_next_zero_bit_le(const void *addr, unsigned
 		long size, unsigned long offset)
 {
-	return _find_next_bit_le(addr, NULL, size, offset, ~0UL);
+	return _find_next_bit(addr, NULL, size, offset, ~0UL, 1);
 }
 EXPORT_SYMBOL(find_next_zero_bit_le);
 #endif
@@ -218,7 +180,7 @@ EXPORT_SYMBOL(find_next_zero_bit_le);
 unsigned long find_next_bit_le(const void *addr, unsigned
 		long size, unsigned long offset)
 {
-	return _find_next_bit_le(addr, NULL, size, offset, 0UL);
+	return _find_next_bit(addr, NULL, size, offset, 0UL, 1);
 }
 EXPORT_SYMBOL(find_next_bit_le);
 #endif
