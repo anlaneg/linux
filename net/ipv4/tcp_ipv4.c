@@ -1895,7 +1895,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	struct sock *sk;
 	int ret;
 
-	//非到主机报文
+	//只处理到本机的tcp报文
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1925,6 +1925,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 	if (skb_checksum_init(skb, IPPROTO_TCP, inet_compute_pseudo))
 		goto csum_error;
 
+	/*取报文tcp头部，ip头部*/
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
 
@@ -2057,7 +2058,7 @@ put_and_return:
 	return ret;
 
 no_tcp_socket:
-//没有查询到此流对应的socket，未监听，如果checksum正确，则回复reset报文
+    //没有查询到此流对应的socket，未监听，如果checksum正确，则回复reset报文
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
@@ -2073,12 +2074,13 @@ bad_packet:
 		tcp_v4_send_reset(NULL, skb);
 	}
 
-discard_it:
+discard_it:/*直接丢包*/
 	/* Discard frame. */
 	kfree_skb(skb);
 	return 0;
 
 discard_and_relse:
+    /*增加socket丢包计数，释放socket并丢包*/
 	sk_drops_add(sk, skb);
 	if (refcounted)
 		sock_put(sk);

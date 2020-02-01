@@ -378,6 +378,7 @@ static inline struct sock *inet_lookup(struct net *net,
 	return sk;
 }
 
+//查询skb对应的socket
 static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 					     struct sk_buff *skb,
 					     int doff,//tcp头部长度

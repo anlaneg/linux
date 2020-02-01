@@ -191,7 +191,7 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 	int raw, ret;
 
 resubmit:
-	//尝试raw socket传递
+	//尝试raw socket传递(复制传递）
 	raw = raw_local_deliver(skb, protocol);
 
 	//按ip->protocol查找协议处理函数(例如：tcp_protocol，udp_protocol，igmp_protocol）
@@ -218,11 +218,14 @@ resubmit:
 		__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 	} else {
 		if (!raw) {
+		    //无raw socket收取情况
 			if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 				__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
+				//目的不可达，端口不可达
 				icmp_send(skb, ICMP_DEST_UNREACH,
 					  ICMP_PROT_UNREACH, 0);
 			}
+			//释放报文
 			kfree_skb(skb);
 		} else {
 			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);

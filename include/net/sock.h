@@ -2346,6 +2346,7 @@ sock_skb_set_dropcount(const struct sock *sk, struct sk_buff *skb)
 						atomic_read(&sk->sk_drops) : 0;
 }
 
+//增加socket的丢包计数
 static inline void sk_drops_add(struct sock *sk, const struct sk_buff *skb)
 {
 	int segs = max_t(u16, 1, skb_shinfo(skb)->gso_segs);

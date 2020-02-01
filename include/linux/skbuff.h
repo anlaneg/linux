@@ -4058,7 +4058,7 @@ static inline __wsum null_compute_pseudo(struct sk_buff *skb, int proto)
 	skb->csum_valid = 0;						\
 	if (__skb_checksum_validate_needed(skb, zero_okay, check))	\
 		__ret = __skb_checksum_validate_complete(skb,		\
-				complete, compute_pseudo(skb, proto));	\
+				complete, compute_pseudo(skb, proto)/*伪头对应的checksum*/);	\
 	__ret;								\
 })
 
