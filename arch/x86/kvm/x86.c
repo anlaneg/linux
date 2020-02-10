@@ -7288,11 +7288,14 @@ int kvm_arch_init(void *opaque)
 		goto out;
 	}
 
+	//cpu必须支持kvm
 	if (!ops->cpu_has_kvm_support()) {
 		printk(KERN_ERR "kvm: no hardware support\n");
 		r = -EOPNOTSUPP;
 		goto out;
 	}
+
+	//bios不能禁用kvm
 	if (ops->disabled_by_bios()) {
 		printk(KERN_ERR "kvm: disabled by bios\n");
 		r = -EOPNOTSUPP;
@@ -7329,6 +7332,7 @@ int kvm_arch_init(void *opaque)
 	if (r)
 		goto out_free_percpu;
 
+	/*设置kvm_x86对应的ops*/
 	kvm_x86_ops = ops;
 
 	kvm_mmu_set_mask_ptes(PT_USER_MASK, PT_ACCESSED_MASK,
@@ -9614,6 +9618,7 @@ void kvm_arch_sched_in(struct kvm_vcpu *vcpu, int cpu)
 int kvm_arch_init_vm(struct kvm *kvm, unsigned long type)
 {
 	if (type)
+	    /*只支持type为0的vm*/
 		return -EINVAL;
 
 	INIT_HLIST_HEAD(&kvm->arch.mask_notifier_list);

@@ -22,9 +22,11 @@
 /*
  * VMX functions:
  */
-
+//检查cpu是否有vmx标记
 static inline int cpu_has_vmx(void)
 {
+    //eax寄存器将被置为1后，执行cpuid指令，返回ecx寄存器的值
+    //ecx 寄存器中保存的为cpu Feature Flags
 	unsigned long ecx = cpuid_ecx(1);
 	return test_bit(5, &ecx); /* CPUID.1:ECX.VMX[bit 5] -> VT */
 }

@@ -244,11 +244,12 @@ EXPORT_SYMBOL(misc_register);
  *	Unregister a miscellaneous device that was previously
  *	successfully registered with misc_register().
  */
-
+//解注册misc类设备
 void misc_deregister(struct miscdevice *misc)
 {
 	int i = DYNAMIC_MINORS - misc->minor - 1;
 
+	//检查是否已被解注册
 	if (WARN_ON(list_empty(&misc->list)))
 		return;
 

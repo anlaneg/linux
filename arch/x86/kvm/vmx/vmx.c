@@ -2205,6 +2205,7 @@ static void vmx_cache_reg(struct kvm_vcpu *vcpu, enum kvm_reg reg)
 
 static __init int cpu_has_kvm_support(void)
 {
+    //如果cpu有vmx标记，则支持kvm
 	return cpu_has_vmx();
 }
 
@@ -3531,6 +3532,7 @@ out:
 	return r;
 }
 
+//申请一个空闲的vpid
 int allocate_vpid(void)
 {
 	int vpid;
@@ -3538,8 +3540,10 @@ int allocate_vpid(void)
 	if (!enable_vpid)
 		return 0;
 	spin_lock(&vmx_vpid_lock);
+	//申请一个未用的vpid
 	vpid = find_first_zero_bit(vmx_vpid_bitmap, VMX_NR_VPIDS);
 	if (vpid < VMX_NR_VPIDS)
+	    //标明vpid占用
 		__set_bit(vpid, vmx_vpid_bitmap);
 	else
 		vpid = 0;
@@ -6629,6 +6633,7 @@ static void vmx_vcpu_run(struct kvm_vcpu *vcpu)
 	vmx_complete_interrupts(vmx);
 }
 
+//申请kvm_vmx结构体
 static struct kvm *vmx_vm_alloc(void)
 {
 	struct kvm_vmx *kvm_vmx = __vmalloc(sizeof(struct kvm_vmx),
@@ -6654,6 +6659,7 @@ static void vmx_free_vcpu(struct kvm_vcpu *vcpu)
 	free_loaded_vmcs(vmx->loaded_vmcs);
 }
 
+//创建vcpu
 static int vmx_create_vcpu(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx;
@@ -7726,7 +7732,9 @@ static struct kvm_x86_ops vmx_x86_ops __ro_after_init = {
 	.has_emulated_msr = vmx_has_emulated_msr,
 
 	.vm_init = vmx_vm_init,
+	//kvm_vmx申请
 	.vm_alloc = vmx_vm_alloc,
+	//kvm_vmx释放
 	.vm_free = vmx_vm_free,
 
 	.vcpu_create = vmx_create_vcpu,
@@ -7977,4 +7985,6 @@ static int __init vmx_init(void)
 
 	return 0;
 }
+
+//vmx模块初始化
 module_init(vmx_init);

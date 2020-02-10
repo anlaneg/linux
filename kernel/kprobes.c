@@ -1493,6 +1493,7 @@ invalid:
 	return ERR_PTR(-EINVAL);
 }
 
+//返回要probe的地址
 static kprobe_opcode_t *kprobe_addr(struct kprobe *p)
 {
 	return _kprobe_addr(p->addr, p->symbol_name, p->offset);
@@ -1599,6 +1600,7 @@ out:
 	return ret;
 }
 
+//执行kprobe注册
 int register_kprobe(struct kprobe *p)
 {
 	int ret;

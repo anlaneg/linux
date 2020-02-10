@@ -631,6 +631,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, int fd)
 	if (!debugfs_initialized())
 		return 0;
 
+	//创建debugfs的dir
 	snprintf(dir_name, sizeof(dir_name), "%d-%d", task_pid_nr(current), fd);
 	kvm->debugfs_dentry = debugfs_create_dir(dir_name, kvm_debugfs_dir);
 
@@ -674,6 +675,7 @@ void __weak kvm_arch_pre_destroy_vm(struct kvm *kvm)
 
 static struct kvm *kvm_create_vm(unsigned long type)
 {
+    //各体系结构创建kvm
 	struct kvm *kvm = kvm_arch_alloc_vm();
 	int r = -ENOMEM;
 	int i;
@@ -683,6 +685,7 @@ static struct kvm *kvm_create_vm(unsigned long type)
 
 	spin_lock_init(&kvm->mmu_lock);
 	mmgrab(current->mm);
+	/*使用当前进程的mm信息*/
 	kvm->mm = current->mm;
 	kvm_eventfd_init(kvm);
 	mutex_init(&kvm->lock);
@@ -708,6 +711,7 @@ static struct kvm *kvm_create_vm(unsigned long type)
 		rcu_assign_pointer(kvm->memslots[i], slots);
 	}
 
+	//初始化io_bus
 	for (i = 0; i < KVM_NR_BUSES; i++) {
 		rcu_assign_pointer(kvm->buses[i],
 			kzalloc(sizeof(struct kvm_io_bus), GFP_KERNEL_ACCOUNT));
@@ -715,6 +719,7 @@ static struct kvm *kvm_create_vm(unsigned long type)
 			goto out_err_no_arch_destroy_vm;
 	}
 
+	//各系统结构初始化kvm
 	r = kvm_arch_init_vm(kvm, type);
 	if (r)
 		goto out_err_no_arch_destroy_vm;
@@ -2760,6 +2765,7 @@ static int create_vcpu_fd(struct kvm_vcpu *vcpu)
 	char name[8 + 1 + ITOA_MAX_LEN + 1];
 
 	snprintf(name, sizeof(name), "kvm-vcpu:%d", vcpu->vcpu_id);
+	/*构造一个假的文件fd,将vcpu做为file的私有数据*/
 	return anon_inode_getfd(name, &kvm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
 }
 
@@ -2782,28 +2788,33 @@ static void kvm_create_vcpu_debugfs(struct kvm_vcpu *vcpu)
 /*
  * Creates some virtual cpus.  Good luck creating more than one.
  */
-static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
+static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id/*vcpu编号*/)
 {
 	int r;
 	struct kvm_vcpu *vcpu;
 	struct page *page;
 
+	//id过大
 	if (id >= KVM_MAX_VCPU_ID)
 		return -EINVAL;
 
+	//创建的cpu数目过多，失败
 	mutex_lock(&kvm->lock);
 	if (kvm->created_vcpus == KVM_MAX_VCPUS) {
 		mutex_unlock(&kvm->lock);
 		return -EINVAL;
 	}
 
+	//创建的cpu数增加
 	kvm->created_vcpus++;
 	mutex_unlock(&kvm->lock);
 
+	//各体系结构创建vcpu前的操作
 	r = kvm_arch_vcpu_precreate(kvm, id);
 	if (r)
 		goto vcpu_decrement;
 
+	//创建vcpu
 	vcpu = kmem_cache_zalloc(kvm_vcpu_cache, GFP_KERNEL);
 	if (!vcpu) {
 		r = -ENOMEM;
@@ -2811,6 +2822,8 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 	}
 
 	BUILD_BUG_ON(sizeof(struct kvm_run) > PAGE_SIZE);
+
+	//申请一个page，做为vcpu的run对应的变量
 	page = alloc_page(GFP_KERNEL | __GFP_ZERO);
 	if (!page) {
 		r = -ENOMEM;
@@ -2820,6 +2833,7 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 
 	kvm_vcpu_init(vcpu, kvm, id);
 
+	//各体系结构创建vcpu
 	r = kvm_arch_vcpu_create(vcpu);
 	if (r)
 		goto vcpu_free_run_page;
@@ -2832,17 +2846,20 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 		goto unlock_vcpu_destroy;
 	}
 
+	/*当前在线的vcpu数做为其vcpu index*/
 	vcpu->vcpu_idx = atomic_read(&kvm->online_vcpus);
 	BUG_ON(kvm->vcpus[vcpu->vcpu_idx]);
 
 	/* Now it's all set up, let userspace reach it */
 	kvm_get_kvm(kvm);
+	/*创建一个与vcpu映射的fd*/
 	r = create_vcpu_fd(vcpu);
 	if (r < 0) {
 		kvm_put_kvm_no_destroy(kvm);
 		goto unlock_vcpu_destroy;
 	}
 
+	/*记录此vcpu*/
 	kvm->vcpus[vcpu->vcpu_idx] = vcpu;
 
 	/*
@@ -2853,6 +2870,7 @@ static int kvm_vm_ioctl_create_vcpu(struct kvm *kvm, u32 id)
 	atomic_inc(&kvm->online_vcpus);
 
 	mutex_unlock(&kvm->lock);
+	/*各体系结构处理vcpu创建post*/
 	kvm_arch_vcpu_postcreate(vcpu);
 	return r;
 
@@ -3219,11 +3237,13 @@ static const struct kvm_device_ops *kvm_device_ops_table[KVM_DEV_TYPE_MAX] = {
 #endif
 };
 
+//设置type对应的device ops
 int kvm_register_device_ops(const struct kvm_device_ops *ops, u32 type)
 {
 	if (type >= ARRAY_SIZE(kvm_device_ops_table))
 		return -ENOSPC;
 
+	//如果已注册， 则返回已存在
 	if (kvm_device_ops_table[type] != NULL)
 		return -EEXIST;
 
@@ -3328,7 +3348,7 @@ static long kvm_vm_ioctl_check_extension_generic(struct kvm *kvm, long arg)
 		return KVM_ADDRESS_SPACE_NUM;
 #endif
 	case KVM_CAP_NR_MEMSLOTS:
-		//memslot的数目
+		//memslot的数目的最大数
 		return KVM_USER_MEM_SLOTS;
 	default:
 		break;
@@ -3360,6 +3380,7 @@ static int kvm_vm_ioctl_enable_cap_generic(struct kvm *kvm,
 	}
 }
 
+//针对vm提供的ioctl函数
 static long kvm_vm_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
@@ -3371,6 +3392,7 @@ static long kvm_vm_ioctl(struct file *filp,
 		return -EIO;
 	switch (ioctl) {
 	case KVM_CREATE_VCPU:
+	    //创建vm对应的vcpu
 		r = kvm_vm_ioctl_create_vcpu(kvm, arg);
 		break;
 	case KVM_ENABLE_CAP: {
@@ -3540,9 +3562,11 @@ out_free_irq_routing:
 		break;
 	}
 	case KVM_CHECK_EXTENSION:
+	    //检查kvm扩展
 		r = kvm_vm_ioctl_check_extension_generic(kvm, arg);
 		break;
 	default:
+	    //各体系结构独有的ioctl处理
 		r = kvm_arch_vm_ioctl(filp, ioctl, arg);
 	}
 out:
@@ -3590,6 +3614,7 @@ static long kvm_vm_compat_ioctl(struct file *filp,
 }
 #endif
 
+//vm对应的文件操作集
 static struct file_operations kvm_vm_fops = {
 	.release        = kvm_vm_release,
 	.unlocked_ioctl = kvm_vm_ioctl,
@@ -3603,6 +3628,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	struct kvm *kvm;
 	struct file *file;
 
+	//创建并初始化kvm
 	kvm = kvm_create_vm(type);
 	if (IS_ERR(kvm))
 		return PTR_ERR(kvm);
@@ -3615,6 +3641,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	if (r < 0)
 		goto put_kvm;
 
+	//申请假的file,并使其与kvm映射起来，实现fd关联
 	file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
 	if (IS_ERR(file)) {
 		put_unused_fd(r);
@@ -3685,6 +3712,7 @@ out:
 	return r;
 }
 
+//kvm字符设备对应的ops
 static struct file_operations kvm_chardev_ops = {
 	.unlocked_ioctl = kvm_dev_ioctl,
 	.llseek		= noop_llseek,
@@ -4498,6 +4526,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	kvm_vm_fops.owner = module;
 	kvm_vcpu_fops.owner = module;
 
+	//注册kvm字符设备
 	r = misc_register(&kvm_dev);
 	if (r) {
 		pr_err("kvm: misc device register failed\n");
@@ -4539,6 +4568,7 @@ EXPORT_SYMBOL_GPL(kvm_init);
 void kvm_exit(void)
 {
 	debugfs_remove_recursive(kvm_debugfs_dir);
+	//解注册/dev/kvm设备
 	misc_deregister(&kvm_dev);
 	kmem_cache_destroy(kvm_vcpu_cache);
 	kvm_async_pf_deinit();

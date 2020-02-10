@@ -206,6 +206,8 @@ static inline int have_cpuid_p(void)
 	return 1;
 }
 #endif
+
+//调用cpuid
 static inline void native_cpuid(unsigned int *eax, unsigned int *ebx,
 				unsigned int *ecx, unsigned int *edx)
 {
@@ -623,6 +625,7 @@ static inline void cpuid(unsigned int op,
 			 unsigned int *eax, unsigned int *ebx,
 			 unsigned int *ecx, unsigned int *edx)
 {
+    //将eax寄存器指定为op,将ecx寄存器清0
 	*eax = op;
 	*ecx = 0;
 	__cpuid(eax, ebx, ecx, edx);
@@ -659,6 +662,7 @@ static inline unsigned int cpuid_ebx(unsigned int op)
 	return ebx;
 }
 
+//将eax置为op,并执行cpuid指令，并返回ecx寄存器中的值
 static inline unsigned int cpuid_ecx(unsigned int op)
 {
 	unsigned int eax, ebx, ecx, edx;

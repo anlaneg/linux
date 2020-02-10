@@ -224,6 +224,7 @@ static struct file *alloc_file(const struct path *path/*文件路径*/, int flag
 	return file;
 }
 
+//创建假的一个文件
 struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 				const char *name/*dentry的名称*/, int flags,
 				const struct file_operations *fops/*文件对应的ops*/)
@@ -245,6 +246,7 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 		d_set_d_op(path.dentry, &anon_ops);
 	path.mnt = mntget(mnt);
 	d_instantiate(path.dentry, inode);
+	/*申请file*/
 	file = alloc_file(&path, flags, fops);
 	if (IS_ERR(file)) {
 		ihold(inode);

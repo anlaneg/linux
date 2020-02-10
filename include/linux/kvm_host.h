@@ -442,7 +442,9 @@ struct kvm {
 	spinlock_t mmu_lock;
 	struct mutex slots_lock;
 	struct mm_struct *mm; /* userspace tied to this vm */
+	//vm对应的memslots
 	struct kvm_memslots __rcu *memslots[KVM_ADDRESS_SPACE_NUM];
+	//按vcpu_idx索引vcpu
 	struct kvm_vcpu *vcpus[KVM_MAX_VCPUS];
 
 	/*
@@ -451,8 +453,8 @@ struct kvm {
 	 * incremented after storing the kvm_vcpu pointer in vcpus,
 	 * and is accessed atomically.
 	 */
-	atomic_t online_vcpus;
-	int created_vcpus;
+	atomic_t online_vcpus;//当前在线的vcpu数
+	int created_vcpus;//创建的vcpu数
 	int last_boosted_vcpu;
 	struct list_head vm_list;
 	struct mutex lock;
@@ -550,6 +552,7 @@ static inline struct kvm_vcpu *kvm_get_vcpu(struct kvm *kvm, int i)
 	     (vcpup = kvm_get_vcpu(kvm, idx)) != NULL; \
 	     idx++)
 
+//通过id获取指定的kvm_vcpu
 static inline struct kvm_vcpu *kvm_get_vcpu_by_id(struct kvm *kvm, int id)
 {
 	struct kvm_vcpu *vcpu = NULL;

@@ -1033,7 +1033,9 @@ static inline u16 kvm_lapic_irq_dest_mode(bool dest_mode_logical)
 }
 
 struct kvm_x86_ops {
+    //检查cpu是否支持kvm
 	int (*cpu_has_kvm_support)(void);          /* __init */
+	//检查bios是否禁止kvm
 	int (*disabled_by_bios)(void);             /* __init */
 	int (*hardware_enable)(void);
 	void (*hardware_disable)(void);
@@ -1261,6 +1263,7 @@ extern struct kmem_cache *x86_fpu_cache;
 #define __KVM_HAVE_ARCH_VM_ALLOC
 static inline struct kvm *kvm_arch_alloc_vm(void)
 {
+    //申请一个kvm
 	return kvm_x86_ops->vm_alloc();
 }
 

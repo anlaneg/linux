@@ -89,12 +89,13 @@ struct file *anon_inode_getfile(const char *name,
 	 */
 	ihold(anon_inode_inode);
 	file = alloc_file_pseudo(anon_inode_inode, anon_inode_mnt, name,
-				 flags & (O_ACCMODE | O_NONBLOCK), fops);
+				 flags & (O_ACCMODE | O_NONBLOCK), fops/**/);
 	if (IS_ERR(file))
 		goto err;
 
 	file->f_mapping = anon_inode_inode->i_mapping;
 
+	//记录文件的私有数据
 	file->private_data = priv;
 
 	return file;
@@ -128,6 +129,7 @@ int anon_inode_getfd(const char *name, const struct file_operations *fops,
 	int error, fd;
 	struct file *file;
 
+	//申请未用的fd
 	error = get_unused_fd_flags(flags);
 	if (error < 0)
 		return error;

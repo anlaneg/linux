@@ -98,6 +98,7 @@ static int __init kprobe_init(void)
 	kp.post_handler = handler_post;
 	kp.fault_handler = handler_fault;
 
+	//注册kprobe点
 	ret = register_kprobe(&kp);
 	if (ret < 0) {
 		pr_err("register_kprobe failed, returned %d\n", ret);

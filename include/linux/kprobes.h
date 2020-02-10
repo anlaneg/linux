@@ -76,10 +76,10 @@ struct kprobe {
 	unsigned int offset;//针对symbol或者addr的偏移量（指定addr)
 
 	/* Called before addr is executed. */
-	kprobe_pre_handler_t pre_handler;
+	kprobe_pre_handler_t pre_handler;//地址被调用前执行回调
 
 	/* Called after addr is executed, unless... */
-	kprobe_post_handler_t post_handler;
+	kprobe_post_handler_t post_handler;//被执行后回调
 
 	/*
 	 * ... called if executing addr causes a fault (eg. page fault).
