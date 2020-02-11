@@ -769,9 +769,9 @@ void do_close_on_exec(struct files_struct *files)
 	spin_unlock(&files->file_lock);
 }
 
-//通过fd，mode查找对应的file
+//通过fd，mask查找对应的file
 static struct file *__fget_files(struct files_struct *files, unsigned int fd,
-				 fmode_t mask, unsigned int refs)
+				 fmode_t mask, unsigned int refs/*文件引用增加的计数数目*/)
 {
 	struct file *file;
 
@@ -784,8 +784,9 @@ loop:
 		 * dup2() atomicity guarantee is the reason
 		 * we loop to catch the new file (or NULL pointer)
 		 */
+	    //如果mode与mask与了之后，不为0，则返回NULL
 		if (file->f_mode & mask)
-			file = NULL;//如果mode不一致，则返回NULL
+			file = NULL;
 		//防止文件获取时正在删除，增加引用计数失败，重查
 		else if (!get_file_rcu_many(file, refs))
 			goto loop;
@@ -801,6 +802,7 @@ static inline struct file *__fget(unsigned int fd, fmode_t mask,
 	return __fget_files(current->files, fd, mask, refs);
 }
 
+//返回fd对应的文件，此文件不能以O_PATH方式打开，支持对此文件增加refs个引用计数
 struct file *fget_many(unsigned int fd, unsigned int refs)
 {
 	return __fget(fd, FMODE_PATH, refs);
@@ -808,6 +810,7 @@ struct file *fget_many(unsigned int fd, unsigned int refs)
 
 struct file *fget(unsigned int fd)
 {
+    //返回fd对应的文件，此文件不能是O_PATH方式打开的
 	return __fget(fd, FMODE_PATH, 1);
 }
 EXPORT_SYMBOL(fget);

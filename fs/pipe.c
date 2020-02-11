@@ -983,11 +983,13 @@ static int do_pipe2(int __user *fildes, int flags)
 	return error;
 }
 
+//pipe2系统调用实现
 SYSCALL_DEFINE2(pipe2, int __user *, fildes, int, flags)
 {
 	return do_pipe2(fildes, flags);
 }
 
+//pipe系统调用实现
 SYSCALL_DEFINE1(pipe, int __user *, fildes)
 {
 	return do_pipe2(fildes, 0);

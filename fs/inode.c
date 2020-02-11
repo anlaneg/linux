@@ -2063,6 +2063,7 @@ void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 		//设置块设备
 		inode->i_rdev = rdev;
 	} else if (S_ISFIFO(mode))
+	    //针对fifo类型文件，使用pipeops做为操作集
 		inode->i_fop = &pipefifo_fops;
 	else if (S_ISSOCK(mode))
 		;	/* leave it no_open_fops */

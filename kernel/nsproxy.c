@@ -257,6 +257,7 @@ void exit_task_namespaces(struct task_struct *p)
 	switch_task_namespaces(p, NULL);
 }
 
+//设置线程与namespace关联的系统调用
 SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 {
 	struct task_struct *tsk = current;
@@ -271,6 +272,7 @@ SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 
 	err = -EINVAL;
 	ns = get_proc_ns(file_inode(file));
+	//ns的type必须与入参一致
 	if (nstype && (ns->ops->type != nstype))
 		goto out;
 

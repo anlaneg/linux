@@ -247,6 +247,7 @@ long memfd_fcntl(struct file *file, unsigned int cmd, unsigned long arg)
 
 #define MFD_ALL_FLAGS (MFD_CLOEXEC | MFD_ALLOW_SEALING | MFD_HUGETLB)
 
+//定义系统调用memfd_create
 SYSCALL_DEFINE2(memfd_create,
 		const char __user *, uname,
 		unsigned int, flags)
@@ -274,6 +275,7 @@ SYSCALL_DEFINE2(memfd_create,
 	if (len > MFD_NAME_MAX_LEN + 1)
 		return -EINVAL;
 
+	//构造memfd:$uname
 	name = kmalloc(len + MFD_NAME_PREFIX_LEN, GFP_KERNEL);
 	if (!name)
 		return -ENOMEM;
@@ -290,6 +292,7 @@ SYSCALL_DEFINE2(memfd_create,
 		goto err_name;
 	}
 
+	//取一个未用的fd
 	fd = get_unused_fd_flags((flags & MFD_CLOEXEC) ? O_CLOEXEC : 0);
 	if (fd < 0) {
 		error = fd;

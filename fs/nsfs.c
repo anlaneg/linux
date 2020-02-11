@@ -233,10 +233,12 @@ struct file *proc_ns_fget(int fd)
 {
 	struct file *file;
 
+	//取fd对应的文件
 	file = fget(fd);
 	if (!file)
 		return ERR_PTR(-EBADF);
 
+	//此文件的操作集必须为ns_file_operations
 	if (file->f_op != &ns_file_operations)
 		goto out_invalid;
 
@@ -280,6 +282,7 @@ static struct file_system_type nsfs = {
 
 void __init nsfs_init(void)
 {
+    //挂载nsfs文件系统
 	nsfs_mnt = kern_mount(&nsfs);
 	if (IS_ERR(nsfs_mnt))
 		panic("can't set nsfs up\n");
