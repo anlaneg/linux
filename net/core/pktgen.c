@@ -543,12 +543,12 @@ static int pgctrl_open(struct inode *inode, struct file *file)
 	return single_open(file, pgctrl_show, PDE_DATA(inode));
 }
 
-static const struct file_operations pktgen_fops = {
-	.open    = pgctrl_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.write   = pgctrl_write,
-	.release = single_release,
+static const struct proc_ops pktgen_proc_ops = {
+	.proc_open	= pgctrl_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_write	= pgctrl_write,
+	.proc_release	= single_release,
 };
 
 static int pktgen_if_show(struct seq_file *seq, void *v)
@@ -1728,13 +1728,13 @@ static int pktgen_if_open(struct inode *inode, struct file *file)
 }
 
 //pktgen接口对应的配置文件
-static const struct file_operations pktgen_if_fops = {
-	.open    = pktgen_if_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
+static const struct proc_ops pktgen_if_proc_ops = {
+	.proc_open	= pktgen_if_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
 	//完成接口配置
-	.write   = pktgen_if_write,
-	.release = single_release,
+	.proc_write	= pktgen_if_write,
+	.proc_release	= single_release,
 };
 
 static int pktgen_thread_show(struct seq_file *seq, void *v)
@@ -1877,12 +1877,12 @@ static int pktgen_thread_open(struct inode *inode, struct file *file)
 	return single_open(file, pktgen_thread_show, PDE_DATA(inode));
 }
 
-static const struct file_operations pktgen_thread_fops = {
-	.open    = pktgen_thread_open,
-	.read    = seq_read,
-	.llseek  = seq_lseek,
-	.write   = pktgen_thread_write,
-	.release = single_release,
+static const struct proc_ops pktgen_thread_proc_ops = {
+	.proc_open	= pktgen_thread_open,
+	.proc_read	= seq_read,
+	.proc_lseek	= seq_lseek,
+	.proc_write	= pktgen_thread_write,
+	.proc_release	= single_release,
 };
 
 /* Think find or remove for NN */
@@ -1961,7 +1961,7 @@ static void pktgen_change_name(const struct pktgen_net *pn, struct net_device *d
 
 			pkt_dev->entry = proc_create_data(dev->name, 0600,
 							  pn->proc_dir,
-							  &pktgen_if_fops,
+							  &pktgen_if_proc_ops,
 							  pkt_dev);
 			if (!pkt_dev->entry)
 				pr_err("can't move proc entry for '%s'\n",
@@ -3707,7 +3707,7 @@ static int pktgen_add_device(struct pktgen_thread *t, const char *ifname)
 
 	//创建ifname对应的proc文件
 	pkt_dev->entry = proc_create_data(ifname, 0600, t->net->proc_dir,
-					  &pktgen_if_fops, pkt_dev);
+					  &pktgen_if_proc_ops, pkt_dev);
 	if (!pkt_dev->entry) {
 		pr_err("cannot create %s/%s procfs entry\n",
 		       PG_PROC_DIR, ifname);
@@ -3782,7 +3782,7 @@ static int __net_init pktgen_create_thread(int cpu, struct pktgen_net *pn)
 
 	//为每个cpu创建相应的控制文件
 	pe = proc_create_data(t->tsk->comm, 0600, pn->proc_dir,
-			      &pktgen_thread_fops, t);
+			      &pktgen_thread_proc_ops, t);
 	if (!pe) {
 		pr_err("cannot create %s/%s procfs entry\n",
 		       PG_PROC_DIR, t->tsk->comm);
@@ -3869,9 +3869,8 @@ static int __net_init pg_net_init(struct net *net)
 		pr_warn("cannot create /proc/net/%s\n", PG_PROC_DIR);
 		return -ENODEV;
 	}
-
 	//创建控制发包的proc文件
-	pe = proc_create(PGCTRL, 0600, pn->proc_dir, &pktgen_fops);
+	pe = proc_create(PGCTRL, 0600, pn->proc_dir, &pktgen_proc_ops);
 	if (pe == NULL) {
 		pr_err("cannot create %s procfs entry\n", PGCTRL);
 		ret = -EINVAL;
