@@ -47,6 +47,7 @@ struct nsproxy init_nsproxy = {
 #endif
 };
 
+//申请nsproxy对象
 static inline struct nsproxy *create_nsproxy(void)
 {
 	struct nsproxy *nsproxy;
@@ -62,6 +63,7 @@ static inline struct nsproxy *create_nsproxy(void)
  * Return the newly created nsproxy.  Do not attach this to the task,
  * leave it to the caller to do proper locking and attach it to task.
  */
+//按flags创建对应的nsproxy
 static struct nsproxy *create_new_namespaces(unsigned long flags,
 	struct task_struct *tsk, struct user_namespace *user_ns,
 	struct fs_struct *new_fs)
@@ -69,10 +71,12 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 	struct nsproxy *new_nsp;
 	int err;
 
+	//生成空的nsproxy
 	new_nsp = create_nsproxy();
 	if (!new_nsp)
 		return ERR_PTR(-ENOMEM);
 
+	//按flags 或使用当前进程的mnt_ns，或创建mnt_ns
 	new_nsp->mnt_ns = copy_mnt_ns(flags, tsk->nsproxy->mnt_ns, user_ns, new_fs);
 	if (IS_ERR(new_nsp->mnt_ns)) {
 		err = PTR_ERR(new_nsp->mnt_ns);
@@ -237,6 +241,7 @@ out:
 	return err;
 }
 
+//切换进程的namespace信息
 void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 {
 	struct nsproxy *ns;
@@ -244,6 +249,7 @@ void switch_task_namespaces(struct task_struct *p, struct nsproxy *new)
 	might_sleep();
 
 	task_lock(p);
+	//替换进程的nsproxy
 	ns = p->nsproxy;
 	p->nsproxy = new;
 	task_unlock(p);
@@ -257,9 +263,10 @@ void exit_task_namespaces(struct task_struct *p)
 	switch_task_namespaces(p, NULL);
 }
 
-//设置线程与namespace关联的系统调用
+//设置当前线程与指定类型namespace关联关系的系统调用
 SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 {
+    //所有操作针对当前线程
 	struct task_struct *tsk = current;
 	struct nsproxy *new_nsproxy;
 	struct file *file;
@@ -272,21 +279,26 @@ SYSCALL_DEFINE2(setns, int, fd, int, nstype)
 
 	err = -EINVAL;
 	ns = get_proc_ns(file_inode(file));
+
 	//ns的type必须与入参一致
 	if (nstype && (ns->ops->type != nstype))
 		goto out;
 
+	//生成新 的nsproxy,flags为0，使用原有进程的nsproxy
 	new_nsproxy = create_new_namespaces(0, tsk, current_user_ns(), tsk->fs);
 	if (IS_ERR(new_nsproxy)) {
 		err = PTR_ERR(new_nsproxy);
 		goto out;
 	}
 
+	//释放new_nsproxy中旧的ns,并使用此ns做为新的
 	err = ns->ops->install(new_nsproxy, ns);
 	if (err) {
 		free_nsproxy(new_nsproxy);
 		goto out;
 	}
+
+	//完成进程nsproxy切换
 	switch_task_namespaces(tsk, new_nsproxy);
 
 	perf_event_namespaces(tsk);

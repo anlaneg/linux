@@ -162,7 +162,7 @@ struct net {
 #ifdef CONFIG_WEXT_CORE
 	struct sk_buff_head	wext_nlevents;
 #endif
-	struct net_generic __rcu	*gen;
+	struct net_generic __rcu	*gen;//net的generic结构（其中存放私有数据）
 
 	struct bpf_prog __rcu	*flow_dissector_prog;
 
@@ -263,6 +263,7 @@ static inline void put_net(struct net *net)
 		__put_net(net);
 }
 
+//指针相等，则两个net namespace相等
 static inline
 int net_eq(const struct net *net1, const struct net *net2)
 {
@@ -379,11 +380,17 @@ struct pernet_operations {
 	 * be used, since a synchronize_rcu() is guaranteed between
 	 * the calls.
 	 */
+	//初始化函数（每个net namespace创建时调用）
 	int (*init)(struct net *net);
+	//释放函数调用前将被调用
 	void (*pre_exit)(struct net *net);
+	//释放函数（每个net namespace删除时调用）
 	void (*exit)(struct net *net);
+	//exit不存在时，此函数被调用，支持一组net释放
 	void (*exit_batch)(struct list_head *net_exit_list);
+	//编号（一个有包含的ops,才能包含私有数据，id即为其私有数据的索引）
 	unsigned int *id;
+	//需要分配的私有数据大小
 	size_t size;
 };
 

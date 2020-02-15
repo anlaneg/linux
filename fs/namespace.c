@@ -3212,6 +3212,7 @@ struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
 
 	BUG_ON(!ns);
 
+	//如果没有指明需要clone newns,则使用ns
 	if (likely(!(flags & CLONE_NEWNS))) {
 		get_mnt_ns(ns);
 		return ns;

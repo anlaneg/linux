@@ -94,6 +94,7 @@ struct uts_namespace *copy_utsname(unsigned long flags,
 	BUG_ON(!old_ns);
 	get_uts_ns(old_ns);
 
+	//如果flags没有指明创建newuts,则直接使用旧的ns
 	if (!(flags & CLONE_NEWUTS))
 		return old_ns;
 

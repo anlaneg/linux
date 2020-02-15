@@ -9,6 +9,7 @@
 #include <linux/user_namespace.h>
 
 #define UCOUNTS_HASHTABLE_BITS 10
+//存储ucount对应的哈希表
 static struct hlist_head ucounts_hashtable[(1 << UCOUNTS_HASHTABLE_BITS)];
 static DEFINE_SPINLOCK(ucounts_lock);
 
@@ -115,6 +116,7 @@ static struct ucounts *find_ucounts(struct user_namespace *ns, kuid_t uid, struc
 {
 	struct ucounts *ucounts;
 
+	//在hashent 哈希桶上查找(uid与ns)相同的ucounts
 	hlist_for_each_entry(ucounts, hashent, node) {
 		if (uid_eq(ucounts->uid, uid) && (ucounts->ns == ns))
 			return ucounts;
@@ -122,14 +124,17 @@ static struct ucounts *find_ucounts(struct user_namespace *ns, kuid_t uid, struc
 	return NULL;
 }
 
+/*返回ns,uid对应的ucounts,如果不存在，则创建*/
 static struct ucounts *get_ucounts(struct user_namespace *ns, kuid_t uid)
 {
+    //获得对应的hash桶
 	struct hlist_head *hashent = ucounts_hashentry(ns, uid);
 	struct ucounts *ucounts, *new;
 
 	spin_lock_irq(&ucounts_lock);
 	ucounts = find_ucounts(ns, uid, hashent);
 	if (!ucounts) {
+	    //解锁并创建new ucounts
 		spin_unlock_irq(&ucounts_lock);
 
 		new = kzalloc(sizeof(*new), GFP_KERNEL);
@@ -140,11 +145,14 @@ static struct ucounts *get_ucounts(struct user_namespace *ns, kuid_t uid)
 		new->uid = uid;
 		new->count = 0;
 
+		//加锁并再次查询ucounts
 		spin_lock_irq(&ucounts_lock);
 		ucounts = find_ucounts(ns, uid, hashent);
 		if (ucounts) {
+		    //已被其它线程创建，则释放new ucounts
 			kfree(new);
 		} else {
+		    //不存在，将新创建的new ucounts加入到桶上
 			hlist_add_head(&new->node, hashent);
 			ucounts = new;
 		}

@@ -79,6 +79,7 @@ fail:
 struct ipc_namespace *copy_ipcs(unsigned long flags,
 	struct user_namespace *user_ns, struct ipc_namespace *ns)
 {
+    //如果flags没有要求newipc,则使用旧的ns
 	if (!(flags & CLONE_NEWIPC))
 		return get_ipc_ns(ns);
 	return create_ipc_ns(user_ns, ns);

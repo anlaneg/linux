@@ -53,6 +53,7 @@ struct net init_net = {
 };
 EXPORT_SYMBOL(init_net);
 
+//标记init_net已初始化
 static bool init_net_initialized;
 /*
  * pernet_ops_rwsem: protects: pernet_list, net_generic_ids,
@@ -68,11 +69,13 @@ EXPORT_SYMBOL_GPL(pernet_ops_rwsem);
 
 #define INITIAL_NET_GEN_PTRS	13 /* +1 for len +2 for rcu_head */
 
+//私有数据数目（可被函数register_pernet_operations增大）
 static unsigned int max_gen_ptrs = INITIAL_NET_GEN_PTRS;
 
 static struct net_generic *net_alloc_generic(void)
 {
 	struct net_generic *ng;
+	//要分配的generic大小
 	unsigned int generic_size = offsetof(struct net_generic, ptr[max_gen_ptrs]);
 
 	ng = kzalloc(generic_size, GFP_KERNEL);
@@ -119,12 +122,14 @@ static int net_assign_generic(struct net *net, unsigned int id, void *data)
 	return 0;
 }
 
+//针对net namespace执行pernet操作的初始化
 static int ops_init(const struct pernet_operations *ops, struct net *net)
 {
 	int err = -ENOMEM;
 	void *data = NULL;
 
 	if (ops->id && ops->size) {
+	    //如果指明了id且指定私有数据大小，则分配此ops对应的私有数据
 		data = kzalloc(ops->size, GFP_KERNEL);
 		if (!data)
 			goto out;
@@ -188,6 +193,7 @@ static void ops_free_list(const struct pernet_operations *ops,
 }
 
 /* should be called with nsid_lock held */
+//为net namespace申请(或者设置）其对端peer net namespace对应的nsid
 static int alloc_netid(struct net *net, struct net *peer, int reqid)
 {
 	int min = 0, max = 0;
@@ -216,6 +222,7 @@ static int net_eq_idr(int id, void *net, void *peer)
 /* Must be called from RCU-critical section or with nsid_lock held */
 static int __peernet2id(const struct net *net, struct net *peer)
 {
+    //遍历netns_ids,相对net获取peer对应的netns_id
 	int id = idr_for_each(&net->netns_ids, net_eq_idr, peer);
 
 	/* Magic value for id 0. */
@@ -290,6 +297,7 @@ bool peernet_has_id(const struct net *net, struct net *peer)
 	return peernet2id(net, peer) >= 0;
 }
 
+//通过nsid找此net namespace对端的net namespace
 struct net *get_net_ns_by_id(const struct net *net, int id)
 {
 	struct net *peer;
@@ -298,6 +306,7 @@ struct net *get_net_ns_by_id(const struct net *net, int id)
 		return NULL;
 
 	rcu_read_lock();
+	//通过nsid找此net namespace对端的net namespace
 	peer = idr_find(&net->netns_ids, id);
 	if (peer)
 		peer = maybe_get_net(peer);
@@ -325,12 +334,14 @@ static __net_init int setup_net(struct net *net, struct user_namespace *user_ns)
 	spin_lock_init(&net->nsid_lock);
 	mutex_init(&net->ipv4.ra_mutex);
 
+	//已注册的pernet函数，触发pernet的init调用
 	list_for_each_entry(ops, &pernet_list, list) {
 		error = ops_init(ops, net);
 		if (error < 0)
 			goto out_undo;
 	}
 	down_write(&net_rwsem);
+	//将此net namespace加入到链表中
 	list_add_tail_rcu(&net->list, &net_namespace_list);
 	up_write(&net_rwsem);
 out:
@@ -393,6 +404,7 @@ static void dec_net_namespaces(struct ucounts *ucounts)
 static struct kmem_cache *net_cachep __ro_after_init;
 static struct workqueue_struct *netns_wq;
 
+//申请新的net namespace
 static struct net *net_alloc(void)
 {
 	struct net *net = NULL;
@@ -440,6 +452,7 @@ void net_drop_ns(void *p)
 		net_free(ns);
 }
 
+//由flags决定使用之前的old_net还是创建新的ns
 struct net *copy_net_ns(unsigned long flags,
 			struct user_namespace *user_ns, struct net *old_net)
 {
@@ -447,13 +460,18 @@ struct net *copy_net_ns(unsigned long flags,
 	struct net *net;
 	int rv;
 
+	//如果flags没有要求newnet,则使用之前旧的old_net
 	if (!(flags & CLONE_NEWNET))
 		return get_net(old_net);
 
+	//需要创建新的net namespace
+
+	//获得ucounts
 	ucounts = inc_net_namespaces(user_ns);
 	if (!ucounts)
 		return ERR_PTR(-ENOSPC);
 
+	//申请net namespace空间
 	net = net_alloc();
 	if (!net) {
 		rv = -ENOMEM;
@@ -467,6 +485,7 @@ struct net *copy_net_ns(unsigned long flags,
 	if (rv < 0)
 		goto put_userns;
 
+	//建立net namespace
 	rv = setup_net(net, user_ns);
 
 	up_read(&pernet_ops_rwsem);
@@ -637,16 +656,19 @@ void __put_net(struct net *net)
 }
 EXPORT_SYMBOL_GPL(__put_net);
 
+//通过net namespace的fd到的net namespace
 struct net *get_net_ns_by_fd(int fd)
 {
 	struct file *file;
 	struct ns_common *ns;
 	struct net *net;
 
+	//通过fd找到net namespace 对应的file
 	file = proc_ns_fget(fd);
 	if (IS_ERR(file))
 		return ERR_CAST(file);
 
+	//由file再找到net namespace
 	ns = get_proc_ns(file_inode(file));
 	if (ns->ops == &netns_operations)
 		net = get_net(container_of(ns, struct net, ns));
@@ -665,6 +687,7 @@ struct net *get_net_ns_by_fd(int fd)
 #endif
 EXPORT_SYMBOL_GPL(get_net_ns_by_fd);
 
+//通过进程id找到其对应的net namespace
 struct net *get_net_ns_by_pid(pid_t pid)
 {
 	struct task_struct *tsk;
@@ -673,10 +696,12 @@ struct net *get_net_ns_by_pid(pid_t pid)
 	/* Lookup the network namespace */
 	net = ERR_PTR(-ESRCH);
 	rcu_read_lock();
+	//通过pid找到进程
 	tsk = find_task_by_vpid(pid);
 	if (tsk) {
 		struct nsproxy *nsproxy;
 		task_lock(tsk);
+		//通过进程找到nsproxy,然后返回此进程对应的net namespace
 		nsproxy = tsk->nsproxy;
 		if (nsproxy)
 			net = get_net(nsproxy->net_ns);
@@ -687,6 +712,7 @@ struct net *get_net_ns_by_pid(pid_t pid)
 }
 EXPORT_SYMBOL_GPL(get_net_ns_by_pid);
 
+//为ns_common初始化ops
 static __net_init int net_ns_net_init(struct net *net)
 {
 #ifdef CONFIG_NET_NS
@@ -713,9 +739,11 @@ static const struct nla_policy rtnl_net_policy[NETNSA_MAX + 1] = {
 	[NETNSA_TARGET_NSID]	= { .type = NLA_S32 },
 };
 
+//nsid用于实现当前net ns与另一个peer net ns的关联（通过nsid可以利用当前net ns中找出peer ns)
 static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 			  struct netlink_ext_ack *extack)
 {
+    //取当前net namespace
 	struct net *net = sock_net(skb->sk);
 	struct nlattr *tb[NETNSA_MAX + 1];
 	struct nlattr *nla;
@@ -730,8 +758,10 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		NL_SET_ERR_MSG(extack, "nsid is missing");
 		return -EINVAL;
 	}
+	//要设置的nsid(>=0时为要求占用的nsid)
 	nsid = nla_get_s32(tb[NETNSA_NSID]);
 
+	//通过pid,fd找到peer的net namespace
 	if (tb[NETNSA_PID]) {
 		peer = get_net_ns_by_pid(nla_get_u32(tb[NETNSA_PID]));
 		nla = tb[NETNSA_PID];
@@ -739,9 +769,12 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		peer = get_net_ns_by_fd(nla_get_u32(tb[NETNSA_FD]));
 		nla = tb[NETNSA_FD];
 	} else {
+	    //目前仅支持这两个方式获取
 		NL_SET_ERR_MSG(extack, "Peer netns reference is missing");
 		return -EINVAL;
 	}
+
+	//如果获取不到peer的net namespace，则报错
 	if (IS_ERR(peer)) {
 		NL_SET_BAD_ATTR(extack, nla);
 		NL_SET_ERR_MSG(extack, "Peer netns reference is invalid");
@@ -750,6 +783,7 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	spin_lock(&net->nsid_lock);
 	if (__peernet2id(net, peer) >= 0) {
+	    //peer对应的nsid已存在
 		spin_unlock(&net->nsid_lock);
 		err = -EEXIST;
 		NL_SET_BAD_ATTR(extack, nla);
@@ -758,6 +792,7 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto out;
 	}
 
+	//为peer申请（或者设置指定的）nsid
 	err = alloc_netid(net, peer, nsid);
 	spin_unlock(&net->nsid_lock);
 	if (err >= 0) {
@@ -867,6 +902,8 @@ static int rtnl_net_getid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		.seq = nlh->nlmsg_seq,
 		.cmd = RTM_NEWNSID,
 	};
+
+	/*默认是找出当前net namespace中peer对应的nsid*/
 	struct net *peer, *target = net;
 	struct nlattr *nla;
 	struct sk_buff *msg;
@@ -875,6 +912,8 @@ static int rtnl_net_getid(struct sk_buff *skb, struct nlmsghdr *nlh,
 	err = rtnl_net_valid_getid_req(skb, nlh, tb, extack);
 	if (err < 0)
 		return err;
+
+	//找出对端ns
 	if (tb[NETNSA_PID]) {
 		peer = get_net_ns_by_pid(nla_get_u32(tb[NETNSA_PID]));
 		nla = tb[NETNSA_PID];
@@ -918,6 +957,7 @@ static int rtnl_net_getid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto out;
 	}
 
+	//相对target ns找出peer对应的nsid
 	fillargs.nsid = peernet2id(target, peer);
 	err = rtnl_net_fill(msg, &fillargs);
 	if (err < 0)
@@ -1007,6 +1047,7 @@ static int rtnl_valid_dump_net_req(const struct nlmsghdr *nlh, struct sock *sk,
 	return 0;
 }
 
+//指出当前net namespace与哪些peer net namespace相关联，这些关联的nsid是什么
 static int rtnl_net_dumpid(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct rtnl_net_dump_cb net_cb = {
@@ -1074,6 +1115,7 @@ static int __init net_ns_init(void)
 	struct net_generic *ng;
 
 #ifdef CONFIG_NET_NS
+	//负责分配net namespace结构体
 	net_cachep = kmem_cache_create("net_namespace", sizeof(struct net),
 					SMP_CACHE_BYTES,
 					SLAB_PANIC|SLAB_ACCOUNT, NULL);
@@ -1084,6 +1126,7 @@ static int __init net_ns_init(void)
 		panic("Could not create netns workq");
 #endif
 
+	//创建init_net对应的私有数据
 	ng = net_alloc_generic();
 	if (!ng)
 		panic("Could not allocate generic netns");
@@ -1091,12 +1134,14 @@ static int __init net_ns_init(void)
 	rcu_assign_pointer(init_net.gen, ng);
 
 	down_write(&pernet_ops_rwsem);
+	//针对init_net初始化pernet操作
 	if (setup_net(&init_net, &init_user_ns))
 		panic("Could not setup the initial network namespace");
 
 	init_net_initialized = true;
 	up_write(&pernet_ops_rwsem);
 
+	//注册net namespace的ns_common初始化
 	if (register_pernet_subsys(&net_ns_ops))
 		panic("Could not register network namespace subsystems");
 
@@ -1120,6 +1165,7 @@ static int __register_pernet_operations(struct list_head *list,
 
 	//将ops加入到list中
 	list_add_tail(&ops->list, list);
+	//如果ops有init回调，则针对现在已存在的net namespace执行初始化
 	if (ops->init || (ops->id && ops->size)) {
 		/* We held write locked pernet_ops_rwsem, and parallel
 		 * setup_net() and cleanup_net() are not possible.
@@ -1133,6 +1179,7 @@ static int __register_pernet_operations(struct list_head *list,
 	}
 	return 0;
 
+	//如果执行中遇到错误，通过net_exit_list链完成undo处理
 out_undo:
 	/* If I have an error cleanup all namespaces I initialized */
 	list_del(&ops->list);
@@ -1189,22 +1236,25 @@ static void __unregister_pernet_operations(struct pernet_operations *ops)
 
 static DEFINE_IDA(net_generic_ids);
 
+//注册pernet的操作
 static int register_pernet_operations(struct list_head *list,
 				      struct pernet_operations *ops)
 {
 	int error;
 
 	if (ops->id) {
-		//为ops分配id号
+		//如果给定的id号不为0，这种情况下ops需要分配私有数据，为ops分配固定id号
 		error = ida_alloc_min(&net_generic_ids, MIN_PERNET_OPS_ID,
 				GFP_KERNEL);
 		if (error < 0)
+		    //分配固定id号失败
 			return error;
 		*ops->id = error;
+		//增加可生成私有数据的大小
 		max_gen_ptrs = max(max_gen_ptrs, *ops->id + 1);
 	}
 
-	//调用注册函数
+	//注册pernet函数
 	error = __register_pernet_operations(list, ops);
 	if (error) {
 		rcu_barrier();
@@ -1321,6 +1371,7 @@ void unregister_pernet_device(struct pernet_operations *ops)
 EXPORT_SYMBOL_GPL(unregister_pernet_device);
 
 #ifdef CONFIG_NET_NS
+//获取net_ns
 static struct ns_common *netns_get(struct task_struct *task)
 {
 	struct net *net = NULL;
@@ -1340,11 +1391,13 @@ static inline struct net *to_net_ns(struct ns_common *ns)
 	return container_of(ns, struct net, ns);
 }
 
+//netns引用释放
 static void netns_put(struct ns_common *ns)
 {
 	put_net(to_net_ns(ns));
 }
 
+//设置nsproxy的netns
 static int netns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 {
 	struct net *net = to_net_ns(ns);
@@ -1353,16 +1406,20 @@ static int netns_install(struct nsproxy *nsproxy, struct ns_common *ns)
 	    !ns_capable(current_user_ns(), CAP_SYS_ADMIN))
 		return -EPERM;
 
+	//释放旧的net_ns
 	put_net(nsproxy->net_ns);
+	//设置新的net_ns
 	nsproxy->net_ns = get_net(net);
 	return 0;
 }
 
+//取当前ns对应的user_namespace
 static struct user_namespace *netns_owner(struct ns_common *ns)
 {
 	return to_net_ns(ns)->user_ns;
 }
 
+//指明clone_newnet类型的nstype文件操作集
 const struct proc_ns_operations netns_operations = {
 	.name		= "net",
 	.type		= CLONE_NEWNET,

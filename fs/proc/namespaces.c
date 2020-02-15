@@ -11,7 +11,7 @@
 #include <linux/user_namespace.h>
 #include "internal.h"
 
-
+//各nstype对应的文件操作集
 static const struct proc_ns_operations *ns_entries[] = {
 #ifdef CONFIG_NET_NS
 	&netns_operations,
@@ -125,6 +125,8 @@ static int proc_ns_dir_readdir(struct file *file, struct dir_context *ctx)
 
 	if (!dir_emit_dots(file, ctx))
 		goto out;
+
+	//超过最大数目，直接返回
 	if (ctx->pos >= 2 + ARRAY_SIZE(ns_entries))
 		goto out;
 	entry = ns_entries + (ctx->pos - 2);
@@ -142,6 +144,7 @@ out:
 	return 0;
 }
 
+//ns目录的文件操作集
 const struct file_operations proc_ns_dir_operations = {
 	.read		= generic_read_dir,
 	.iterate_shared	= proc_ns_dir_readdir,
@@ -176,6 +179,7 @@ out_no_task:
 	return res;
 }
 
+//ns目录的inode操作集
 const struct inode_operations proc_ns_dir_inode_operations = {
 	.lookup		= proc_ns_dir_lookup,
 	.getattr	= pid_getattr,

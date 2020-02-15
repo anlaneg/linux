@@ -14,12 +14,18 @@ struct task_struct;
 struct inode;
 
 struct proc_ns_operations {
+    //ns名称
 	const char *name;
 	const char *real_ns_name;
+	//ns类型
 	int type;
+	//增加引用
 	struct ns_common *(*get)(struct task_struct *task);
+	//释放引用
 	void (*put)(struct ns_common *ns);
+	//将nsproxy原有的ns->ops->type类型的ns释放掉，并设置新的此类型的ns
 	int (*install)(struct nsproxy *nsproxy, struct ns_common *ns);
+	//取ns对应的user_namespace
 	struct user_namespace *(*owner)(struct ns_common *ns);
 	struct ns_common *(*get_parent)(struct ns_common *ns);
 } __randomize_layout;

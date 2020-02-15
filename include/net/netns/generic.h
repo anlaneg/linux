@@ -32,6 +32,7 @@ struct net_generic {
 			struct rcu_head rcu;
 		} s;
 
+		//每个net namespace中可针对不同模块提供私有数据在此数组中
 		void *ptr[0];
 	};
 };
