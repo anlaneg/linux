@@ -597,8 +597,9 @@ static struct sw_flow *masked_flow_lookup(struct table_instance *ti,
 	head = find_bucket(ti, hash);
 	(*n_mask_hit)++;
 
-	hlist_for_each_entry_rcu(flow, head, flow_table.node[ti->node_ver]) {
-		if (flow->mask == mask/*流mask必须一致*/ && flow->flow_table.hash == hash/*hashcode一致*/ &&
+	hlist_for_each_entry_rcu(flow, head, flow_table.node[ti->node_ver],
+				lockdep_ovsl_is_held()) {
+		if (flow->mask == mask/*流mask必须一致*/ && flow->flow_table.hash == hash /*hashcode一致*/ &&
 		    flow_cmp_masked_key(flow, &masked_key, &mask->range)/*比对key是否一致*/)
 			return flow;
 	}
@@ -785,7 +786,8 @@ struct sw_flow *ovs_flow_tbl_lookup_ufid(struct flow_table *tbl,
 
 	hash = ufid_hash(ufid);
 	head = find_bucket(ti, hash);/*找相应的桶*/
-	hlist_for_each_entry_rcu(flow, head, ufid_table.node[ti->node_ver]) {
+	hlist_for_each_entry_rcu(flow, head, ufid_table.node[ti->node_ver],
+				lockdep_ovsl_is_held()) {
 		//仅比对ufid是否相等，hash也是基于ufid生成的
 		if (flow->ufid_table.hash == hash &&
 		    ovs_flow_cmp_ufid(flow, ufid))

@@ -1197,7 +1197,7 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 	}
 
 	//先关闭旧的sriov
-	mlx5_eswitch_disable(esw, true);
+	mlx5_eswitch_disable(esw, false);
 	mlx5_eswitch_update_num_of_vfs(esw, esw->dev->priv.sriov.num_vfs);
 	//再开启sriov
 	err = mlx5_eswitch_enable(esw, MLX5_ESWITCH_OFFLOADS);
@@ -2102,7 +2102,7 @@ static int esw_offloads_stop(struct mlx5_eswitch *esw,
 {
 	int err, err1;
 
-	mlx5_eswitch_disable(esw, true);
+	mlx5_eswitch_disable(esw, false);
 	err = mlx5_eswitch_enable(esw, MLX5_ESWITCH_LEGACY);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack, "Failed setting eswitch to legacy");
