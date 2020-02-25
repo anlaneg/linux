@@ -88,6 +88,7 @@ void kernel_restart_prepare(char *cmd)
  */
 int register_reboot_notifier(struct notifier_block *nb)
 {
+    //注册系统reboot时通知回调
 	return blocking_notifier_chain_register(&reboot_notifier_list, nb);
 }
 EXPORT_SYMBOL(register_reboot_notifier);

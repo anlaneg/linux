@@ -52,6 +52,7 @@ struct kvm_pic {
 	bool wakeup_needed;
 	unsigned pending_acks;
 	struct kvm *kvm;
+	//两个pic,0号为master,1号为slave
 	struct kvm_kpic_state pics[2]; /* 0 is master pic, 1 is slave pic */
 	int output;		/* intr from master PIC */
 	struct kvm_io_device dev_master;

@@ -169,6 +169,7 @@ struct kvm_io_range {
 #define NR_IOBUS_DEVS 1000
 
 struct kvm_io_bus {
+    //每个设备占用一个io_range,故也是range的数组
 	int dev_count;
 	int ioeventfd_count;
 	struct kvm_io_range range[];
@@ -430,7 +431,7 @@ static inline int kvm_arch_vcpu_memslots_id(struct kvm_vcpu *vcpu)
  * to get the memslot by its id.
  */
 struct kvm_memslots {
-	u64 generation;
+	u64 generation;//kvm_memslots的编号
 	struct kvm_memory_slot memslots[KVM_MEM_SLOTS_NUM];
 	/* The mapping table from slot id to the index in memslots[]. */
 	short id_to_index[KVM_MEM_SLOTS_NUM];
@@ -458,6 +459,7 @@ struct kvm {
 	int last_boosted_vcpu;
 	struct list_head vm_list;
 	struct mutex lock;
+	//vm对应的io_bus
 	struct kvm_io_bus __rcu *buses[KVM_NR_BUSES];
 #ifdef CONFIG_HAVE_KVM_EVENTFD
 	struct {
@@ -494,7 +496,7 @@ struct kvm {
 	long mmu_notifier_count;
 #endif
 	long tlbs_dirty;
-	struct list_head devices;
+	struct list_head devices;/*创建的kvm deivce列表*/
 	bool manual_dirty_log_protect;
 	struct dentry *debugfs_dentry;
 	struct kvm_stat_data **debugfs_stat_data;
@@ -1113,8 +1115,8 @@ struct kvm_stat_data {
 };
 
 struct kvm_stats_debugfs_item {
-	const char *name;
-	int offset;
+	const char *name;//属性名称
+	int offset;//属性对应的offset
 	enum kvm_stat_kind kind;
 	int mode;
 };

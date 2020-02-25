@@ -1201,8 +1201,11 @@ struct kvm_arm_device_addr {
 #define KVM_CREATE_DEVICE_TEST		1
 
 struct kvm_create_device {
+    //设备类型
 	__u32	type;	/* in: KVM_DEV_TYPE_xxx */
+	//出参，设备对应的fd
 	__u32	fd;	/* out: device handle */
+	//设备创建对应的flags
 	__u32	flags;	/* in: KVM_CREATE_DEVICE_xxx */
 };
 

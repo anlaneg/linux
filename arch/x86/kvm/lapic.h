@@ -39,7 +39,7 @@ struct kvm_timer {
 };
 
 struct kvm_lapic {
-	unsigned long base_address;
+	unsigned long base_address;//apic基地址（内容长度为LAPIC_MMIO_LENGTH）
 	struct kvm_io_device dev;
 	struct kvm_timer lapic_timer;
 	u32 divide_count;

@@ -398,6 +398,7 @@ static int kvm_vfio_create(struct kvm_device *dev, u32 type)
 	struct kvm_vfio *kv;
 
 	/* Only one VFIO "device" per VM */
+	//每个vm有一个vfio
 	list_for_each_entry(tmp, &dev->kvm->devices, vm_node)
 		if (tmp->ops == &kvm_vfio_ops)
 			return -EBUSY;
@@ -414,6 +415,7 @@ static int kvm_vfio_create(struct kvm_device *dev, u32 type)
 	return 0;
 }
 
+//注册vfio device对应
 int kvm_vfio_ops_init(void)
 {
 	return kvm_register_device_ops(&kvm_vfio_ops, KVM_DEV_TYPE_VFIO);

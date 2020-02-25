@@ -1389,6 +1389,7 @@ int kvm_lapic_reg_read(struct kvm_lapic *apic, u32 offset, int len,
 }
 EXPORT_SYMBOL_GPL(kvm_lapic_reg_read);
 
+//检查地址addr是否在apic地址范围内
 static int apic_mmio_in_range(struct kvm_lapic *apic, gpa_t addr)
 {
 	return addr >= apic->base_address &&
@@ -1882,6 +1883,7 @@ static void apic_manage_nmi_watchdog(struct kvm_lapic *apic, u32 lvt0_val)
 	}
 }
 
+//写lapic寄存器
 int kvm_lapic_reg_write(struct kvm_lapic *apic, u32 reg, u32 val)
 {
 	int ret = 0;
@@ -2029,9 +2031,11 @@ static int apic_mmio_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this,
 			    gpa_t address, int len, const void *data)
 {
 	struct kvm_lapic *apic = to_lapic(this);
+	//当前地址与base地址之间的offset
 	unsigned int offset = address - apic->base_address;
 	u32 val;
 
+	//地址不在apic范围内，返回不支持
 	if (!apic_mmio_in_range(apic, address))
 		return -EOPNOTSUPP;
 
@@ -2307,6 +2311,7 @@ void kvm_apic_nmi_wd_deliver(struct kvm_vcpu *vcpu)
 		kvm_apic_local_deliver(apic, APIC_LVT0);
 }
 
+//apic设备的mmio读写操作
 static const struct kvm_io_device_ops apic_mmio_ops = {
 	.read     = apic_mmio_read,
 	.write    = apic_mmio_write,
@@ -2327,6 +2332,9 @@ static enum hrtimer_restart apic_timer_fn(struct hrtimer *data)
 		return HRTIMER_NORESTART;
 }
 
+//kvm创建lapic (高级中断控制器 Advanced Programmable Interrupt Controller）
+//apic由两部分组成，一个称为lapic(本地高级中断控制器），一个称为ioapic,前者位于cpu中
+//后者通常位于外部设备芯片上。
 int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 {
 	struct kvm_lapic *apic;
@@ -2364,6 +2372,7 @@ int kvm_create_lapic(struct kvm_vcpu *vcpu, int timer_advance_ns)
 	 */
 	vcpu->arch.apic_base = MSR_IA32_APICBASE_ENABLE;
 	static_key_slow_inc(&apic_sw_disabled.key); /* sw disabled at reset */
+	//注册lapic设备的mmio ops
 	kvm_iodevice_init(&apic->dev, &apic_mmio_ops);
 
 	return 0;

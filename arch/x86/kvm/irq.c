@@ -124,6 +124,7 @@ static int kvm_cpu_get_extint(struct kvm_vcpu *v)
 			v->arch.pending_external_vector = -1;
 			return vector;
 		} else
+		    //读取中断号
 			return kvm_pic_read_irq(v->kvm); /* PIC */
 	} else
 		return -1;
@@ -142,6 +143,7 @@ int kvm_cpu_get_interrupt(struct kvm_vcpu *v)
 	vector = kvm_cpu_get_extint(v);
 
 	if (vector != -1)
+	    /*pic直接返回中断向量*/
 		return vector;			/* PIC */
 
 	return kvm_get_apic_interrupt(v);	/* APIC */

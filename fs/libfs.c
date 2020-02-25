@@ -889,7 +889,7 @@ struct simple_attr {
 /* simple_attr_open is called by an actual attribute open file operation
  * to set the attribute specific access operations. */
 int simple_attr_open(struct inode *inode, struct file *file,
-		     int (*get)(void *, u64 *), int (*set)(void *, u64),
+		     int (*get/*属性的读取函数*/)(void *, u64 *), int (*set/*属性的设置函数*/)(void *, u64),
 		     const char *fmt)
 {
 	struct simple_attr *attr;

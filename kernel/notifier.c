@@ -18,7 +18,7 @@ BLOCKING_NOTIFIER_HEAD(reboot_notifier_list);
  *	Notifier chain core routines.  The exported routines below
  *	are layered on top of these, with appropriate locking added.
  */
-
+//通知链注册
 static int notifier_chain_register(struct notifier_block **nl,
 		struct notifier_block *n)
 {

@@ -60,6 +60,7 @@ typedef struct vfsmount *(*debugfs_automount_t)(struct dentry *, void *);
 
 struct dentry *debugfs_lookup(const char *name, struct dentry *parent);
 
+//创建一个debug文件
 struct dentry *debugfs_create_file(const char *name, umode_t mode,
 				   struct dentry *parent, void *data,
 				   const struct file_operations *fops);
@@ -72,6 +73,7 @@ struct dentry *debugfs_create_file_size(const char *name, umode_t mode,
 					const struct file_operations *fops,
 					loff_t file_size);
 
+//
 struct dentry *debugfs_create_dir(const char *name, struct dentry *parent);
 
 struct dentry *debugfs_create_symlink(const char *name, struct dentry *parent,

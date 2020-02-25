@@ -57,7 +57,7 @@ static inline void kvm_queue_interrupt(struct kvm_vcpu *vcpu, u8 vector,
 {
 	vcpu->arch.interrupt.injected = true;
 	vcpu->arch.interrupt.soft = soft;
-	vcpu->arch.interrupt.nr = vector;
+	vcpu->arch.interrupt.nr = vector;/*记录中断向量号*/
 }
 
 static inline void kvm_clear_interrupt_queue(struct kvm_vcpu *vcpu)

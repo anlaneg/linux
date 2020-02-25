@@ -121,6 +121,7 @@ static inline int get_priority(struct kvm_kpic_state *s, int mask)
 	int priority;
 	if (mask == 0)
 		return 8;
+	//查找具体发生中断的位
 	priority = 0;
 	while ((mask & (1 << ((priority + s->priority_add) & 7))) == 0)
 		priority++;
@@ -130,6 +131,7 @@ static inline int get_priority(struct kvm_kpic_state *s, int mask)
 /*
  * return the pic wanted interrupt. return -1 if none
  */
+//读取指定8259的中断位
 static int pic_get_irq(struct kvm_kpic_state *s)
 {
 	int mask, cur_priority, priority;
@@ -137,6 +139,7 @@ static int pic_get_irq(struct kvm_kpic_state *s)
 	mask = s->irr & ~s->imr;
 	priority = get_priority(s, mask);
 	if (priority == 8)
+	    /*没有发现中断，返回-1*/
 		return -1;
 	/*
 	 * compute current priority. If special fully nested mode on the
@@ -216,6 +219,15 @@ void kvm_pic_clear_all(struct kvm_pic *s, int irq_source_id)
  */
 static inline void pic_intack(struct kvm_kpic_state *s, int irq)
 {
+    /**
+     * 3. The CPU acknowledges the INT and responds
+            with an INTA pulse.
+       4. Upon receiving an INTA from the CPU group, the
+          highest priority ISR bit is set, and the corresponding
+          IRR bit is reset. The 8259A will also release a
+          CALL instruction code (11001101) onto the 8-bit
+          Data Bus through its D7 –0 pins.
+     */
 	s->isr |= 1 << irq;
 	/*
 	 * We don't clear a level sensitive interrupt here
@@ -231,6 +243,7 @@ static inline void pic_intack(struct kvm_kpic_state *s, int irq)
 
 }
 
+/*读取具体发生的中断号*/
 int kvm_pic_read_irq(struct kvm *kvm)
 {
 	int irq, irq2, intno;
@@ -239,12 +252,18 @@ int kvm_pic_read_irq(struct kvm *kvm)
 	s->output = 0;
 
 	pic_lock(s);
+	//读取master pic的中断号
 	irq = pic_get_irq(&s->pics[0]);
 	if (irq >= 0) {
 		pic_intack(&s->pics[0], irq);
+		//如果master收到的中断号为2号中断（2号中断位与slave相连）
+		//则认为slave上收到了中断
 		if (irq == 2) {
+
+		    //读取slave pic的中断号
 			irq2 = pic_get_irq(&s->pics[1]);
 			if (irq2 >= 0)
+			    /*读取到slave的中断号，对slave进行应答*/
 				pic_intack(&s->pics[1], irq2);
 			else
 				/*
@@ -307,7 +326,10 @@ static void pic_ioport_write(void *opaque, u32 addr, u32 val)
 	struct kvm_kpic_state *s = opaque;
 	int priority, cmd, irq;
 
+	//addr的最后一位将被获取，其它位忽略（分两种情况）
 	addr &= 1;
+
+	//addr是0的情况
 	if (addr == 0) {
 		if (val & 0x10) {
 			s->init4 = val & 1;
@@ -436,12 +458,14 @@ static u32 pic_ioport_read(void *opaque, u32 addr)
 	return ret;
 }
 
+//填充elcr字段（elcr_mask字段控制可写部分）
 static void elcr_ioport_write(void *opaque, u32 addr, u32 val)
 {
 	struct kvm_kpic_state *s = opaque;
 	s->elcr = val & s->elcr_mask;
 }
 
+//返回elcr字段内容
 static u32 elcr_ioport_read(void *opaque, u32 addr1)
 {
 	struct kvm_kpic_state *s = opaque;
@@ -454,6 +478,7 @@ static int picdev_write(struct kvm_pic *s,
 	unsigned char data = *(unsigned char *)val;
 
 	if (len != 1) {
+	    /*长度不为1，不执行写操作,并返回*/
 		pr_pic_unimpl("non byte write\n");
 		return 0;
 	}
@@ -473,10 +498,12 @@ static int picdev_write(struct kvm_pic *s,
 	case 0x4d0:
 	case 0x4d1:
 		pic_lock(s);
+		//elcr字段的写
 		elcr_ioport_write(&s->pics[addr & 1], addr, data);
 		pic_unlock(s);
 		break;
 	default:
+	    //不支持其它地址的读取
 		return -EOPNOTSUPP;
 	}
 	return 0;
@@ -488,26 +515,29 @@ static int picdev_read(struct kvm_pic *s,
 	unsigned char *data = (unsigned char *)val;
 
 	if (len != 1) {
+	    /*长度不为1，直接填充0,并返回*/
 		memset(val, 0, len);
 		pr_pic_unimpl("non byte read\n");
 		return 0;
 	}
 	switch (addr) {
-	case 0x20:
-	case 0x21:
-	case 0xa0:
-	case 0xa1:
+	case 0x20://即0b 0010 0000
+	case 0x21://即0b 0010 0001
+	case 0xa0://即0b 1010 0000
+	case 0xa1://即0b 1010 0001
 		pic_lock(s);
 		*data = pic_ioport_read(&s->pics[addr >> 7], addr);
 		pic_unlock(s);
 		break;
-	case 0x4d0:
-	case 0x4d1:
+	case 0x4d0://即0b 0100 1101 0000
+	case 0x4d1://即0b 0100 1101 0001
 		pic_lock(s);
+		//elcr字段的读取
 		*data = elcr_ioport_read(&s->pics[addr & 1], addr);
 		pic_unlock(s);
 		break;
 	default:
+	    //不支持其它地址的读取
 		return -EOPNOTSUPP;
 	}
 	return 0;
@@ -592,8 +622,8 @@ int kvm_pic_init(struct kvm *kvm)
 		return -ENOMEM;
 	spin_lock_init(&s->lock);
 	s->kvm = kvm;
-	s->pics[0].elcr_mask = 0xf8;
-	s->pics[1].elcr_mask = 0xde;
+	s->pics[0].elcr_mask = 0xf8;//即 0b 1111 1000
+	s->pics[1].elcr_mask = 0xde;//即 0b 1101 1110
 	s->pics[0].pics_state = s;
 	s->pics[1].pics_state = s;
 

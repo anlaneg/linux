@@ -98,6 +98,7 @@ EXPORT_SYMBOL_GPL(halt_poll_ns_shrink);
 
 DEFINE_MUTEX(kvm_lock);
 static DEFINE_RAW_SPINLOCK(kvm_count_lock);
+//记录系统中所有vm,串成一个串
 LIST_HEAD(vm_list);
 
 static cpumask_var_t cpus_hardware_enabled;
@@ -623,6 +624,7 @@ static void kvm_destroy_vm_debugfs(struct kvm *kvm)
 	}
 }
 
+//创建vm对应的debugfs目录
 static int kvm_create_vm_debugfs(struct kvm *kvm, int fd)
 {
 	char dir_name[ITOA_MAX_LEN * 2];
@@ -632,7 +634,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, int fd)
 	if (!debugfs_initialized())
 		return 0;
 
-	//创建debugfs的dir
+	//创建vm对应的debugfs的dir，例如(2208737-21)
 	snprintf(dir_name, sizeof(dir_name), "%d-%d", task_pid_nr(current), fd);
 	kvm->debugfs_dentry = debugfs_create_dir(dir_name, kvm_debugfs_dir);
 
@@ -642,6 +644,7 @@ static int kvm_create_vm_debugfs(struct kvm *kvm, int fd)
 	if (!kvm->debugfs_stat_data)
 		return -ENOMEM;
 
+	//添加vm下支持的属性项
 	for (p = debugfs_entries; p->name; p++) {
 		stat_data = kzalloc(sizeof(*stat_data), GFP_KERNEL_ACCOUNT);
 		if (!stat_data)
@@ -702,6 +705,8 @@ static struct kvm *kvm_create_vm(unsigned long type)
 		goto out_err_no_irq_srcu;
 
 	refcount_set(&kvm->users_count, 1);
+
+	//申请memslots
 	for (i = 0; i < KVM_ADDRESS_SPACE_NUM; i++) {
 		struct kvm_memslots *slots = kvm_alloc_memslots();
 
@@ -742,6 +747,7 @@ static struct kvm *kvm_create_vm(unsigned long type)
 		goto out_err;
 
 	mutex_lock(&kvm_lock);
+	//将生成的vm加入到vm_list中
 	list_add(&kvm->vm_list, &vm_list);
 	mutex_unlock(&kvm_lock);
 
@@ -952,6 +958,7 @@ static int check_memory_region_flags(const struct kvm_userspace_memory_region *m
 	return 0;
 }
 
+//安装新的memslots
 static struct kvm_memslots *install_new_memslots(struct kvm *kvm,
 		int as_id, struct kvm_memslots *slots)
 {
@@ -2770,6 +2777,7 @@ static int create_vcpu_fd(struct kvm_vcpu *vcpu)
 	return anon_inode_getfd(name, &kvm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
 }
 
+//创建vcpu的debugfs
 static void kvm_create_vcpu_debugfs(struct kvm_vcpu *vcpu)
 {
 #ifdef __KVM_HAVE_ARCH_VCPU_DEBUGFS
@@ -3216,6 +3224,7 @@ static int kvm_device_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+//kvm device与fd关联的文件操作集
 static const struct file_operations kvm_device_fops = {
 	.unlocked_ioctl = kvm_device_ioctl,
 	.release = kvm_device_release,
@@ -3231,6 +3240,7 @@ struct kvm_device *kvm_device_from_filp(struct file *filp)
 	return filp->private_data;
 }
 
+//kvm device对应的ops注册表
 static const struct kvm_device_ops *kvm_device_ops_table[KVM_DEV_TYPE_MAX] = {
 #ifdef CONFIG_KVM_MPIC
 	[KVM_DEV_TYPE_FSL_MPIC_20]	= &kvm_mpic_ops,
@@ -3238,7 +3248,7 @@ static const struct kvm_device_ops *kvm_device_ops_table[KVM_DEV_TYPE_MAX] = {
 #endif
 };
 
-//设置type对应的device ops
+//设置kvm deivce 指定type对应的device ops
 int kvm_register_device_ops(const struct kvm_device_ops *ops, u32 type)
 {
 	if (type >= ARRAY_SIZE(kvm_device_ops_table))
@@ -3252,6 +3262,7 @@ int kvm_register_device_ops(const struct kvm_device_ops *ops, u32 type)
 	return 0;
 }
 
+//移除kvm device指定type对应的device ops
 void kvm_unregister_device_ops(u32 type)
 {
 	if (kvm_device_ops_table[type] != NULL)
@@ -3263,13 +3274,16 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 {
 	const struct kvm_device_ops *ops = NULL;
 	struct kvm_device *dev;
+	/*测试创建标记*/
 	bool test = cd->flags & KVM_CREATE_DEVICE_TEST;
 	int type;
 	int ret;
 
+	//要创建的type必须是已知的
 	if (cd->type >= ARRAY_SIZE(kvm_device_ops_table))
 		return -ENODEV;
 
+	//取出此type对应的ops
 	type = array_index_nospec(cd->type, ARRAY_SIZE(kvm_device_ops_table));
 	ops = kvm_device_ops_table[type];
 	if (ops == NULL)
@@ -3278,6 +3292,7 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	if (test)
 		return 0;
 
+	//创建kvm device
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL_ACCOUNT);
 	if (!dev)
 		return -ENOMEM;
@@ -3286,6 +3301,7 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	dev->kvm = kvm;
 
 	mutex_lock(&kvm->lock);
+	//通过ops完成设备创建
 	ret = ops->create(dev, type);
 	if (ret < 0) {
 		mutex_unlock(&kvm->lock);
@@ -3295,10 +3311,13 @@ static int kvm_ioctl_create_device(struct kvm *kvm,
 	list_add(&dev->vm_node, &kvm->devices);
 	mutex_unlock(&kvm->lock);
 
+	//完成设备初始化
 	if (ops->init)
 		ops->init(dev);
 
 	kvm_get_kvm(kvm);
+
+	//实现此kvm设备与fd关联
 	ret = anon_inode_getfd(ops->name, &kvm_device_fops, dev, O_RDWR | O_CLOEXEC);
 	if (ret < 0) {
 		kvm_put_kvm_no_destroy(kvm);
@@ -3548,9 +3567,11 @@ out_free_irq_routing:
 		struct kvm_create_device cd;
 
 		r = -EFAULT;
+		//要创建的device信息
 		if (copy_from_user(&cd, argp, sizeof(cd)))
 			goto out;
 
+		//按要求创建指定device
 		r = kvm_ioctl_create_device(kvm, &cd);
 		if (r)
 			goto out;
@@ -3623,6 +3644,7 @@ static struct file_operations kvm_vm_fops = {
 	KVM_COMPAT(kvm_vm_compat_ioctl),
 };
 
+//完成vm创建
 static int kvm_dev_ioctl_create_vm(unsigned long type)
 {
 	int r;
@@ -3656,6 +3678,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	 * cases it will be called by the final fput(file) and will take
 	 * care of doing kvm_put_kvm(kvm).
 	 */
+	//创建vm对应的debugfs信息
 	if (kvm_create_vm_debugfs(kvm, r) < 0) {
 		put_unused_fd(r);
 		fput(file);
@@ -3671,20 +3694,21 @@ put_kvm:
 	return r;
 }
 
+//针对设备/dev/kvm的所有ioctl函数实现
 static long kvm_dev_ioctl(struct file *filp,
 			  unsigned int ioctl, unsigned long arg)
 {
 	long r = -EINVAL;
 
 	switch (ioctl) {
-	//获取kvm api版本号，当前版本为12
 	case KVM_GET_API_VERSION:
+	    //获取kvm api版本号，当前版本为12
 		if (arg)
 			goto out;
 		r = KVM_API_VERSION;
 		break;
-	//创建vm
 	case KVM_CREATE_VM:
+	    //创建vm
 		r = kvm_dev_ioctl_create_vm(arg);
 		break;
 	case KVM_CHECK_EXTENSION:
@@ -3707,13 +3731,14 @@ static long kvm_dev_ioctl(struct file *filp,
 		r = -EOPNOTSUPP;
 		break;
 	default:
+	    //执行各体系相关的ioctl
 		return kvm_arch_dev_ioctl(filp, ioctl, arg);
 	}
 out:
 	return r;
 }
 
-//kvm字符设备对应的ops
+// /dev/kvm字符设备对应的ops
 static struct file_operations kvm_chardev_ops = {
 	.unlocked_ioctl = kvm_dev_ioctl,
 	.llseek		= noop_llseek,
@@ -3811,6 +3836,7 @@ static int hardware_enable_all(void)
 	return r;
 }
 
+//系统reboot时调用
 static int kvm_reboot(struct notifier_block *notifier, unsigned long val,
 		      void *v)
 {
@@ -3849,6 +3875,7 @@ static inline int kvm_io_bus_cmp(const struct kvm_io_range *r1,
 	gpa_t addr1 = r1->addr;
 	gpa_t addr2 = r2->addr;
 
+	//r1的起始地址小于r2，返回-1
 	if (addr1 < addr2)
 		return -1;
 
@@ -3862,17 +3889,21 @@ static inline int kvm_io_bus_cmp(const struct kvm_io_range *r1,
 		addr2 += r2->len;
 	}
 
+	//r1的起始地址大于等于r2,终止地址大于等于r2,返回1
 	if (addr1 > addr2)
 		return 1;
 
+	//r1与r2地址有交叉
 	return 0;
 }
 
+//range比对（p1,p2如果有交叉，则返回0）
 static int kvm_io_bus_sort_cmp(const void *p1, const void *p2)
 {
 	return kvm_io_bus_cmp(p1, p2);
 }
 
+//返回有交叉的第一个rang索引（也是dev index)
 static int kvm_io_bus_get_first_dev(struct kvm_io_bus *bus,
 			     gpa_t addr, int len)
 {
@@ -3884,11 +3915,13 @@ static int kvm_io_bus_get_first_dev(struct kvm_io_bus *bus,
 		.len = len,
 	};
 
+	//通过二分法查询range
 	range = bsearch(&key, bus->range, bus->dev_count,
 			sizeof(struct kvm_io_range), kvm_io_bus_sort_cmp);
 	if (range == NULL)
 		return -ENOENT;
 
+	//确定range的offset
 	off = range - bus->range;
 
 	while (off > 0 && kvm_io_bus_cmp(&key, &bus->range[off-1]) == 0)
@@ -3897,6 +3930,7 @@ static int kvm_io_bus_get_first_dev(struct kvm_io_bus *bus,
 	return off;
 }
 
+//io bus写操作
 static int __kvm_io_bus_write(struct kvm_vcpu *vcpu, struct kvm_io_bus *bus,
 			      struct kvm_io_range *range, const void *val)
 {
@@ -3973,15 +4007,18 @@ static int __kvm_io_bus_read(struct kvm_vcpu *vcpu, struct kvm_io_bus *bus,
 {
 	int idx;
 
+	//获取下一个可能的dev
 	idx = kvm_io_bus_get_first_dev(bus, range->addr, range->len);
 	if (idx < 0)
 		return -EOPNOTSUPP;
 
 	while (idx < bus->dev_count &&
 		kvm_io_bus_cmp(range, &bus->range[idx]) == 0) {
+	    /*如果自bus->range[idx].dev设备尝试读取成功，则填充内容，并返回设备索引*/
 		if (!kvm_iodevice_read(vcpu, bus->range[idx].dev, range->addr,
 				       range->len, val))
 			return idx;
+		//切换到下一个设备，再尝试
 		idx++;
 	}
 
@@ -3996,21 +4033,24 @@ int kvm_io_bus_read(struct kvm_vcpu *vcpu, enum kvm_bus bus_idx, gpa_t addr,
 	struct kvm_io_range range;
 	int r;
 
+	/*要读取的地址范围*/
 	range = (struct kvm_io_range) {
 		.addr = addr,
 		.len = len,
 	};
 
+	//给定bus_idx，取相应bus
 	bus = srcu_dereference(vcpu->kvm->buses[bus_idx], &vcpu->kvm->srcu);
 	if (!bus)
 		return -ENOMEM;
+	//vcpu读取bus对应的range
 	r = __kvm_io_bus_read(vcpu, bus, &range, val);
 	return r < 0 ? r : 0;
 }
 
 /* Caller must hold slots_lock. */
-int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
-			    int len, struct kvm_io_device *dev)
+int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr/*起始地址*/,
+			    int len, struct kvm_io_device *dev/*关联的设备*/)
 {
 	int i;
 	struct kvm_io_bus *new_bus, *bus;
@@ -4029,6 +4069,7 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 	if (!new_bus)
 		return -ENOMEM;
 
+	//新增bus的range
 	range = (struct kvm_io_range) {
 		.addr = addr,
 		.len = len,
@@ -4044,6 +4085,8 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr,
 	new_bus->range[i] = range;
 	memcpy(new_bus->range + i + 1, bus->range + i,
 		(bus->dev_count - i) * sizeof(struct kvm_io_range));
+
+	//完成新bus注册
 	rcu_assign_pointer(kvm->buses[bus_idx], new_bus);
 	synchronize_srcu_expedited(&kvm->srcu);
 	kfree(bus);
@@ -4152,6 +4195,7 @@ static int kvm_debugfs_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
+//取kvm结构体中第offset号字节，自此字节位置读取u64类型的数
 static int kvm_get_stat_per_vm(struct kvm *kvm, size_t offset, u64 *val)
 {
 	*val = *(ulong *)((void *)kvm + offset);
@@ -4197,10 +4241,12 @@ static int kvm_stat_data_get(void *data, u64 *val)
 
 	switch (stat_data->dbgfs_item->kind) {
 	case KVM_STAT_VM:
+	    //取vm状态
 		r = kvm_get_stat_per_vm(stat_data->kvm,
 					stat_data->dbgfs_item->offset, val);
 		break;
 	case KVM_STAT_VCPU:
+	    //取vcpu状态
 		r = kvm_get_stat_per_vcpu(stat_data->kvm,
 					  stat_data->dbgfs_item->offset, val);
 		break;
@@ -4257,7 +4303,7 @@ static int vm_stat_get(void *_offset, u64 *val)
 	mutex_lock(&kvm_lock);
 	list_for_each_entry(kvm, &vm_list, vm_list) {
 		kvm_get_stat_per_vm(kvm, offset, &tmp_val);
-		*val += tmp_val;
+		*val += tmp_val;/*val对读取到的值进行汇总*/
 	}
 	mutex_unlock(&kvm_lock);
 	return 0;
@@ -4280,8 +4326,10 @@ static int vm_stat_clear(void *_offset, u64 val)
 	return 0;
 }
 
+//提供vm状态的get,set,clear函数
 DEFINE_SIMPLE_ATTRIBUTE(vm_stat_fops, vm_stat_get, vm_stat_clear, "%llu\n");
 
+//汇总vcpu状态
 static int vcpu_stat_get(void *_offset, u64 *val)
 {
 	unsigned offset = (long)_offset;
@@ -4292,6 +4340,7 @@ static int vcpu_stat_get(void *_offset, u64 *val)
 	mutex_lock(&kvm_lock);
 	list_for_each_entry(kvm, &vm_list, vm_list) {
 		kvm_get_stat_per_vcpu(kvm, offset, &tmp_val);
+		/*对状态进行汇总*/
 		*val += tmp_val;
 	}
 	mutex_unlock(&kvm_lock);
@@ -4377,12 +4426,14 @@ static void kvm_init_debug(void)
 {
 	struct kvm_stats_debugfs_item *p;
 
+	//创建debugfs对应的‘kvm’目录(常见/sys/kernel/debug)
 	kvm_debugfs_dir = debugfs_create_dir("kvm", NULL);
 
 	kvm_debugfs_num_entries = 0;
 	for (p = debugfs_entries; p->name; ++p, kvm_debugfs_num_entries++) {
+	    //创建属性文件，并提供各属性的offset
 		debugfs_create_file(p->name, KVM_DBGFS_GET_MODE(p),
-				    kvm_debugfs_dir, (void *)(long)p->offset,
+				    kvm_debugfs_dir/*debugfs目录*/, (void *)(long)p->offset,
 				    stat_fops[p->kind]);
 	}
 }
@@ -4469,6 +4520,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	int r;
 	int cpu;
 
+	//kvm体系初始化
 	r = kvm_arch_init(opaque);
 	if (r)
 		goto out_fail;
@@ -4527,7 +4579,7 @@ int kvm_init(void *opaque, unsigned vcpu_size, unsigned vcpu_align,
 	kvm_vm_fops.owner = module;
 	kvm_vcpu_fops.owner = module;
 
-	//注册kvm字符设备
+	//注册/dev/kvm字符设备
 	r = misc_register(&kvm_dev);
 	if (r) {
 		pr_err("kvm: misc device register failed\n");
@@ -4589,7 +4641,7 @@ struct kvm_vm_worker_thread_context {
 	struct kvm *kvm;
 	struct task_struct *parent;
 	struct completion init_done;
-	kvm_vm_thread_fn_t thread_fn;
+	kvm_vm_thread_fn_t thread_fn;//线程要执行的函数
 	uintptr_t data;
 	int err;
 };
@@ -4648,7 +4700,7 @@ int kvm_vm_create_worker_thread(struct kvm *kvm, kvm_vm_thread_fn_t thread_fn,
 	*thread_ptr = NULL;
 	init_context.kvm = kvm;
 	init_context.parent = current;
-	init_context.thread_fn = thread_fn;
+	init_context.thread_fn = thread_fn;/*线程要执行的函数*/
 	init_context.data = data;
 	init_completion(&init_context.init_done);
 

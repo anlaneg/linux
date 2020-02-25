@@ -432,11 +432,12 @@ static struct dentry *__debugfs_create_file(const char *name, umode_t mode,
  * If debugfs is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *debugfs_create_file(const char *name, umode_t mode,
-				   struct dentry *parent, void *data,
-				   const struct file_operations *fops)
+struct dentry *debugfs_create_file(const char *name/*属性文件名称*/, umode_t mode,
+				   struct dentry *parent/*父目录*/, void *data,
+				   const struct file_operations *fops/*文件对应的ops*/)
 {
 
+    //为debugfs创建属性文件
 	return __debugfs_create_file(name, mode, parent, data,
 				fops ? &debugfs_full_proxy_file_operations :
 					&debugfs_noop_file_operations,

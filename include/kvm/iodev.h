@@ -15,11 +15,13 @@ struct kvm_vcpu;
  * or non-zero to have it passed to the next device.
  **/
 struct kvm_io_device_ops {
+    //读设备指定地址
 	int (*read)(struct kvm_vcpu *vcpu,
 		    struct kvm_io_device *this,
 		    gpa_t addr,
 		    int len,
 		    void *val);
+	//写设备指定地址
 	int (*write)(struct kvm_vcpu *vcpu,
 		     struct kvm_io_device *this,
 		     gpa_t addr,
@@ -33,12 +35,14 @@ struct kvm_io_device {
 	const struct kvm_io_device_ops *ops;
 };
 
+//为kvm io device设置ops
 static inline void kvm_iodevice_init(struct kvm_io_device *dev,
 				     const struct kvm_io_device_ops *ops)
 {
 	dev->ops = ops;
 }
 
+//向kvm io device请求读addr起始的数据，如果失败返回非0
 static inline int kvm_iodevice_read(struct kvm_vcpu *vcpu,
 				    struct kvm_io_device *dev, gpa_t addr,
 				    int l, void *v)
@@ -47,6 +51,7 @@ static inline int kvm_iodevice_read(struct kvm_vcpu *vcpu,
 				: -EOPNOTSUPP;
 }
 
+//kvm io设备写
 static inline int kvm_iodevice_write(struct kvm_vcpu *vcpu,
 				     struct kvm_io_device *dev, gpa_t addr,
 				     int l, const void *v)
