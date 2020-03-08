@@ -301,6 +301,7 @@ static struct nft_expr_type nft_tproxy_type __read_mostly = {
 
 static int __init nft_tproxy_module_init(void)
 {
+    //注册tproxy表达式
 	return nft_register_expr(&nft_tproxy_type);
 }
 

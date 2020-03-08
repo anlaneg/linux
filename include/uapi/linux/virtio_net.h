@@ -32,21 +32,32 @@
 #include <linux/if_ether.h>
 
 /* The feature bitmap for virtio net */
+//设备支持checksum offload
 #define VIRTIO_NET_F_CSUM	0	/* Host handles pkts w/ partial csum */
+//驱动支持checksum offload
 #define VIRTIO_NET_F_GUEST_CSUM	1	/* Guest handles pkts w/ partial csum */
 #define VIRTIO_NET_F_CTRL_GUEST_OFFLOADS 2 /* Dynamic offload configuration. */
 #define VIRTIO_NET_F_MTU	3	/* Initial MTU advice */
+//设备已给定mac地址
 #define VIRTIO_NET_F_MAC	5	/* Host has given MAC address. */
+//驱动支持tso v4
 #define VIRTIO_NET_F_GUEST_TSO4	7	/* Guest can handle TSOv4 in. */
+//驱动支持tso v6
 #define VIRTIO_NET_F_GUEST_TSO6	8	/* Guest can handle TSOv6 in. */
 #define VIRTIO_NET_F_GUEST_ECN	9	/* Guest can handle TSO[6] w/ ECN in. */
+//驱动支持ufo
 #define VIRTIO_NET_F_GUEST_UFO	10	/* Guest can handle UFO in. */
+//设备支持tso v4
 #define VIRTIO_NET_F_HOST_TSO4	11	/* Host can handle TSOv4 in. */
+//设备支持tso v6
 #define VIRTIO_NET_F_HOST_TSO6	12	/* Host can handle TSOv6 in. */
 #define VIRTIO_NET_F_HOST_ECN	13	/* Host can handle TSO[6] w/ ECN in. */
+//设备支持ufo
 #define VIRTIO_NET_F_HOST_UFO	14	/* Host can handle UFO in. */
+//驱动能合并收到的buffer
 #define VIRTIO_NET_F_MRG_RXBUF	15	/* Host can merge receive buffers. */
 #define VIRTIO_NET_F_STATUS	16	/* virtio_net_config.status available */
+//指明是否有ctrl_vq虚队列存在，负责与后端进行cmd通信
 #define VIRTIO_NET_F_CTRL_VQ	17	/* Control channel available */
 #define VIRTIO_NET_F_CTRL_RX	18	/* Control channel RX mode support */
 #define VIRTIO_NET_F_CTRL_VLAN	19	/* Control channel VLAN filtering */
@@ -75,18 +86,20 @@
 //VIRTIO_NET_S_LINK_UP 与VIRTIO_NET_S_ANNOUNCE
 //max_virtqueue_pairs字段，仅当VIRTIO_NET_F_MQ存在时有效
 //定义设备最大接受发送队列数
+
+//virtio-net设备的配置结构体
 struct virtio_net_config {
 	/* The config defining mac address (if VIRTIO_NET_F_MAC) */
 	__u8 mac[ETH_ALEN];
 	/* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
-	__u16 status;
+	__u16 status;//链路状态
 	/* Maximum number of each of transmit and receive queues;
 	 * see VIRTIO_NET_F_MQ and VIRTIO_NET_CTRL_MQ.
 	 * Legal values are between 1 and 0x8000
 	 */
-	__u16 max_virtqueue_pairs;
+	__u16 max_virtqueue_pairs;//最大队列数
 	/* Default maximum transmit unit advice */
-	__u16 mtu;
+	__u16 mtu;//默认mtu值
 	/*
 	 * speed, in units of 1Mb. All values 0 to INT_MAX are legal.
 	 * Any other value stands for unknown.

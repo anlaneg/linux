@@ -35,6 +35,9 @@
 #ifndef _LINUX_VIRTIO_MMIO_H
 #define _LINUX_VIRTIO_MMIO_H
 
+//virtio-pci mmio环境情况下设备资源会映射到一个配置结构体，
+//其格式在virtio-v1.1的 4.2.2节《MMIO Device Register Layout》
+//有定义，以下是各数据结构体成员的offset,各字段的注释，指明了其作用及读写权限等
 /*
  * Control registers
  */
@@ -125,6 +128,8 @@
 /* Configuration atomicity value */
 #define VIRTIO_MMIO_CONFIG_GENERATION	0x0fc
 
+//自此位置开始是具体设备提供的配置空间，它开始与0x100位置，按字节对齐
+//由设备与驱动具体解析其数值的作用
 /* The config space is defined by each driver as
  * the per-driver configuration space - Read Write */
 #define VIRTIO_MMIO_CONFIG		0x100

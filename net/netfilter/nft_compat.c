@@ -330,12 +330,14 @@ static void __nft_match_eval(const struct nft_expr *expr,
 			     const struct nft_pktinfo *pkt,
 			     void *info)
 {
+    //具体的表达式xt_match
 	struct xt_match *match = expr->ops->data;
 	struct sk_buff *skb = pkt->skb;
 	bool ret;
 
 	nft_compat_set_par((struct xt_action_param *)&pkt->xt, match, info);
 
+	//执行match的匹配回调，填充regs->verdict对应的返回值
 	ret = match->match(skb, (struct xt_action_param *)&pkt->xt);
 
 	if (pkt->xt.hotdrop) {
@@ -359,9 +361,11 @@ static void nft_match_large_eval(const struct nft_expr *expr,
 {
 	struct nft_xt_match_priv *priv = nft_expr_priv(expr);
 
+	//通过expr->ops->data指出的xt_match完成match执行
 	__nft_match_eval(expr, regs, pkt, priv->info);
 }
 
+//通过expr->ops->data指出的xt_match完成match执行
 static void nft_match_eval(const struct nft_expr *expr,
 			   struct nft_regs *regs,
 			   const struct nft_pktinfo *pkt)
@@ -422,7 +426,9 @@ static void match_compat_from_user(struct xt_match *m, void *in, void *out)
 {
 	int pad;
 
+	//填matchsize要求的大小
 	memcpy(out, in, m->matchsize);
+	//如果有pad,则填充pad
 	pad = XT_ALIGN(m->matchsize) - m->matchsize;
 	if (pad > 0)
 		memset(out + m->matchsize, 0, pad);
@@ -441,6 +447,7 @@ __nft_match_init(const struct nft_ctx *ctx, const struct nft_expr *expr,
 	union nft_entry e = {};
 	int ret;
 
+	//将match_info填充到info中
 	match_compat_from_user(match, nla_data(tb[NFTA_MATCH_INFO]), info);
 
 	if (ctx->nla[NFTA_RULE_COMPAT]) {
@@ -716,10 +723,13 @@ nft_match_select_ops(const struct nft_ctx *ctx,
 	    tb[NFTA_MATCH_INFO] == NULL)
 		return ERR_PTR(-EINVAL);
 
+	//取具体的match名称
 	mt_name = nla_data(tb[NFTA_MATCH_NAME]);
+	//取match的版本号
 	rev = ntohl(nla_get_be32(tb[NFTA_MATCH_REV]));
 	family = ctx->family;
 
+	//确定具体的xt_match
 	match = xt_request_find_match(family, mt_name, rev);
 	if (IS_ERR(match))
 		return ERR_PTR(-ENOENT);
@@ -729,6 +739,7 @@ nft_match_select_ops(const struct nft_ctx *ctx,
 		goto err;
 	}
 
+	//构造具体的match表达式
 	ops = kzalloc(sizeof(struct nft_expr_ops), GFP_KERNEL);
 	if (!ops) {
 		err = -ENOMEM;
@@ -851,8 +862,10 @@ static void nft_target_release_ops(const struct nft_expr_ops *ops)
 	kfree(ops);
 }
 
+//target表达式
 static struct nft_expr_type nft_target_type __read_mostly = {
 	.name		= "target",
+	//为target表达式选择ops
 	.select_ops	= nft_target_select_ops,
 	.release_ops	= nft_target_release_ops,
 	.policy		= nft_target_policy,
@@ -864,10 +877,12 @@ static int __init nft_compat_module_init(void)
 {
 	int ret;
 
+	//注册match表达式
 	ret = nft_register_expr(&nft_match_type);
 	if (ret < 0)
 		return ret;
 
+	//注册target表达式
 	ret = nft_register_expr(&nft_target_type);
 	if (ret < 0)
 		goto err_match;

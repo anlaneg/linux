@@ -200,9 +200,11 @@ static inline void pci_msix_clear_and_set_ctrl(struct pci_dev *dev, u16 clear, u
 {
 	u16 ctrl;
 
+	//读取当前配置
 	pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, &ctrl);
-	ctrl &= ~clear;
-	ctrl |= set;
+	ctrl &= ~clear;//清掉clear上的bits取值为0的位
+	ctrl |= set;//设置上新的值
+	//使ctrl生效
 	pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, ctrl);
 }
 

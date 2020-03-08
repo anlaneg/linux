@@ -13,8 +13,8 @@ enum {
 };
 
 struct xt_string_info {
-	__u16 from_offset;
-	__u16 to_offset;
+	__u16 from_offset;//报文的起始位置
+	__u16 to_offset;//报文的终止位置
 	char	  algo[XT_STRING_MAX_ALGO_NAME_SIZE];
 	char 	  pattern[XT_STRING_MAX_PATTERN_SIZE];
 	__u8  patlen;

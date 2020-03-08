@@ -325,6 +325,7 @@ static int __init nft_nat_module_init(void)
 	if (ret)
 		return ret;
 
+	//注册nat表达式
 	ret = nft_register_expr(&nft_nat_type);
 	if (ret)
 		nft_nat_inet_module_exit();

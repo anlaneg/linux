@@ -197,6 +197,7 @@ static struct nft_expr_type nft_fib4_type __read_mostly = {
 
 static int __init nft_fib4_module_init(void)
 {
+    //注册fib表达式
 	return nft_register_expr(&nft_fib4_type);
 }
 

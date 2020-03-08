@@ -55,6 +55,7 @@ struct xt_af {
 #endif
 };
 
+//每个address family一个xt_af,用于记录某一address family的match,target等信息
 static struct xt_af *xt;
 
 static const char *const xt_prefix[NFPROTO_NUMPROTO] = {
@@ -147,9 +148,9 @@ xt_unregister_match(struct xt_match *match)
 }
 EXPORT_SYMBOL(xt_unregister_match);
 
-//注册一组matchs
+//注册一组xt_match
 int
-xt_register_matches(struct xt_match *match, unsigned int n)
+xt_register_matches(struct xt_match *match, unsigned int n/*要注册的数目*/)
 {
 	unsigned int i;
 	int err = 0;
@@ -199,7 +200,8 @@ struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 			if (m->revision == revision) {
 				if (try_module_get(m->me)) {
 					mutex_unlock(&xt[af].mutex);
-					return m;//名称相等，版本也一致，直接返回m
+					//名称相等，版本也一致，直接返回m
+					return m;
 				}
 			} else
 				err = -EPROTOTYPE; /* Found something. */
@@ -207,6 +209,7 @@ struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 	}
 	mutex_unlock(&xt[af].mutex);
 
+	//未在指定af中找到，通过NFPROTO_UNSPEC再找一遍
 	if (af != NFPROTO_UNSPEC)
 		/* Try searching again in the family-independent list */
 		return xt_find_match(NFPROTO_UNSPEC, name, revision);

@@ -167,6 +167,7 @@ conntrack_mt(const struct sk_buff *skb, struct xt_action_param *par,
 	const struct nf_conn *ct;
 	unsigned int statebit;
 
+	//取skb的连接跟踪信息
 	ct = nf_ct_get(skb, &ctinfo);
 
 	if (ct)
@@ -255,6 +256,7 @@ conntrack_mt_v2(const struct sk_buff *skb, struct xt_action_param *par)
 	return conntrack_mt(skb, par, info->state_mask, info->status_mask);
 }
 
+//conntrack xt_match v3版本匹配回调
 static bool
 conntrack_mt_v3(const struct sk_buff *skb, struct xt_action_param *par)
 {

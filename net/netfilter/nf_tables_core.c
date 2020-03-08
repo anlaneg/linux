@@ -21,6 +21,7 @@
 #include <net/netfilter/nf_log.h>
 #include <net/netfilter/nft_meta.h>
 
+//有trace标记的报文，将被记录
 static noinline void __nft_trace_packet(struct nft_traceinfo *info,
 					const struct nft_chain *chain,
 					enum nft_trace_types type)
@@ -47,6 +48,7 @@ static inline void nft_trace_packet(struct nft_traceinfo *info,
 	}
 }
 
+//如果regs->data中的值与priv->data相等，则返回，否则置为nft_break
 static void nft_cmp_fast_eval(const struct nft_expr *expr,
 			      struct nft_regs *regs)
 {
@@ -120,13 +122,16 @@ struct nft_jumpstack {
 	struct nft_rule	*const *rules;
 };
 
+//执行表达式
 static void expr_call_ops_eval(const struct nft_expr *expr,
 			       struct nft_regs *regs,
 			       struct nft_pktinfo *pkt)
 {
 #ifdef CONFIG_RETPOLINE
+    //取ops的执行函数
 	unsigned long e = (unsigned long)expr->ops->eval;
 #define X(e, fun) \
+    /*如果e是指定的回调函数，则直接调用此函数，用于优化*/\
 	do { if ((e) == (unsigned long)(fun)) \
 		return fun(expr, regs, pkt); } while (0)
 
@@ -142,11 +147,13 @@ static void expr_call_ops_eval(const struct nft_expr *expr,
 	X(e, nft_bitwise_eval);
 #undef  X
 #endif /* CONFIG_RETPOLINE */
+	//通过ops的eval回调完成表达式执行
 	expr->ops->eval(expr, regs, pkt);
 }
 
+//进行chain的查询
 unsigned int
-nft_do_chain(struct nft_pktinfo *pkt, void *priv)
+nft_do_chain(struct nft_pktinfo *pkt, void *priv/*要执行规则的chain*/)
 {
 	const struct nft_chain *chain = priv, *basechain = chain;
 	const struct net *net = nft_net(pkt);
@@ -171,36 +178,48 @@ do_chain:
 next_rule:
 	rule = *rules;
 	regs.verdict.code = NFT_CONTINUE;
+	//遍历rules数组，针对每个rule的表达式进行执行
 	for (; *rules ; rules++) {
 		rule = *rules;
+		/*遍历rule中的所有表达式*/
 		nft_rule_for_each_expr(expr, last, rule) {
 			if (expr->ops == &nft_cmp_fast_ops)
+			    /*小于4字节的相等比对处理*/
 				nft_cmp_fast_eval(expr, &regs);
 			else if (expr->ops != &nft_payload_fast_ops ||
 				 !nft_payload_fast_eval(expr, &regs, pkt))
+			    /*执行表达式*/
 				expr_call_ops_eval(expr, &regs, pkt);
 
+			/*匹配结果不是continue,则直接break,停止规则匹配*/
 			if (regs.verdict.code != NFT_CONTINUE)
 				break;
 		}
 
+		//此规则所有表达式均执行完成，如果为break或者continue,
+		//则认为规则未匹配，继续遍历rule
 		switch (regs.verdict.code) {
 		case NFT_BREAK:
 			regs.verdict.code = NFT_CONTINUE;
 			continue;
 		case NFT_CONTINUE:
+		    //跟踪报文的命中情况
 			nft_trace_packet(&info, chain, rule,
 					 NFT_TRACETYPE_RULE);
 			continue;
 		}
+
+		//与规则匹配
 		break;
 	}
 
+	//检查对报文的结果
 	switch (regs.verdict.code & NF_VERDICT_MASK) {
 	case NF_ACCEPT:
 	case NF_DROP:
 	case NF_QUEUE:
 	case NF_STOLEN:
+	    //返回规则结果（入队，接受，丢包...)
 		nft_trace_packet(&info, chain, rule,
 				 NFT_TRACETYPE_RULE);
 		return regs.verdict.code;
@@ -209,12 +228,15 @@ next_rule:
 	switch (regs.verdict.code) {
 	case NFT_JUMP:
 		if (WARN_ON_ONCE(stackptr >= NFT_JUMP_STACK_SIZE))
+		    //栈超限
 			return NF_DROP;
+		//将当前chain及rule压栈
 		jumpstack[stackptr].chain = chain;
 		jumpstack[stackptr].rules = rules + 1;
 		stackptr++;
 		/* fall through */
 	case NFT_GOTO:
+	    //跳到指定chcain上运行
 		nft_trace_packet(&info, chain, rule,
 				 NFT_TRACETYPE_RULE);
 
@@ -222,6 +244,7 @@ next_rule:
 		goto do_chain;
 	case NFT_CONTINUE:
 	case NFT_RETURN:
+	    //退出匹配
 		nft_trace_packet(&info, chain, rule,
 				 NFT_TRACETYPE_RETURN);
 		break;
@@ -229,6 +252,7 @@ next_rule:
 		WARN_ON(1);
 	}
 
+	//弹出堆栈后，继续匹配
 	if (stackptr > 0) {
 		stackptr--;
 		chain = jumpstack[stackptr].chain;
@@ -241,10 +265,12 @@ next_rule:
 	if (static_branch_unlikely(&nft_counters_enabled))
 		nft_update_chain_stats(basechain, pkt);
 
+	//如果整个链都没有规则匹配，则使用链的policy做为结果
 	return nft_base_chain(basechain)->policy;
 }
 EXPORT_SYMBOL_GPL(nft_do_chain);
 
+//netfilter支持的基本表达式类型
 static struct nft_expr_type *nft_basic_types[] = {
 	&nft_imm_type,
 	&nft_cmp_type,
@@ -269,12 +295,14 @@ int __init nf_tables_core_module_init(void)
 {
 	int err, i, j = 0;
 
+	//注册netfilter object基础类型
 	for (i = 0; i < ARRAY_SIZE(nft_basic_objects); i++) {
 		err = nft_register_obj(nft_basic_objects[i]);
 		if (err)
 			goto err;
 	}
 
+	//注册netfilter的基本表达式type
 	for (j = 0; j < ARRAY_SIZE(nft_basic_types); j++) {
 		err = nft_register_expr(nft_basic_types[j]);
 		if (err)

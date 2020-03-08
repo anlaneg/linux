@@ -819,7 +819,7 @@ struct device {
 	struct dev_pin_info	*pins;
 #endif
 #ifdef CONFIG_GENERIC_MSI_IRQ
-	struct list_head	msi_list;
+	struct list_head	msi_list;/*记录此设备上关联的中断描述符*/
 #endif
 
 	const struct dma_map_ops *dma_ops;//设备对应的dma_ops

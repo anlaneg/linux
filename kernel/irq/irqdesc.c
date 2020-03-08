@@ -343,11 +343,13 @@ static void irq_sysfs_del(struct irq_desc *desc) {}
 
 static RADIX_TREE(irq_desc_tree, GFP_KERNEL);
 
+//添加中断irq对应的描述符
 static void irq_insert_desc(unsigned int irq, struct irq_desc *desc)
 {
 	radix_tree_insert(&irq_desc_tree, irq, desc);
 }
 
+//取irq对应的中断描述符
 struct irq_desc *irq_to_desc(unsigned int irq)
 {
 	return radix_tree_lookup(&irq_desc_tree, irq);
@@ -384,6 +386,7 @@ void irq_unlock_sparse(void)
 	mutex_unlock(&sparse_irq_lock);
 }
 
+//申请并初始化irq中断描述符
 static struct irq_desc *alloc_desc(int irq, int node, unsigned int flags,
 				   const struct cpumask *affinity,
 				   struct module *owner)
@@ -463,6 +466,7 @@ static void free_desc(unsigned int irq)
 	call_rcu(&desc->rcu, delayed_free_desc);
 }
 
+//自start位置开始，申请cnt个中断描述符
 static int alloc_descs(unsigned int start, unsigned int cnt, int node,
 		       const struct irq_affinity_desc *affinity,
 		       struct module *owner)
@@ -493,6 +497,7 @@ static int alloc_descs(unsigned int start, unsigned int cnt, int node,
 			affinity++;
 		}
 
+		//申请start+i号中断描述符
 		desc = alloc_desc(start + i, node, flags, mask, owner);
 		if (!desc)
 			goto err;

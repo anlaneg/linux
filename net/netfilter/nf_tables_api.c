@@ -24,12 +24,14 @@
 
 #define NFT_MODULE_AUTOLOAD_LIMIT (MODULE_NAME_LEN - sizeof("nft-expr-255-"))
 
+//记录netfilter tables支持的表达式
 static LIST_HEAD(nf_tables_expressions);
+//记录netfilter tables支持objects
 static LIST_HEAD(nf_tables_objects);
 static LIST_HEAD(nf_tables_flowtables);
 static LIST_HEAD(nf_tables_destroy_list);
 static DEFINE_SPINLOCK(nf_tables_destroy_list_lock);
-static u64 table_handle;
+static u64 table_handle;//负责为每个table分配handle
 
 enum {
 	NFT_VALIDATE_SKIP	= 0,
@@ -37,6 +39,7 @@ enum {
 	NFT_VALIDATE_DO,
 };
 
+//记录(table,object name)与object间的映射关系
 static struct rhltable nft_objname_ht;
 
 static u32 nft_chain_hash(const void *data, u32 len, u32 seed);
@@ -47,6 +50,7 @@ static u32 nft_objname_hash(const void *data, u32 len, u32 seed);
 static u32 nft_objname_hash_obj(const void *data, u32 len, u32 seed);
 static int nft_objname_hash_cmp(struct rhashtable_compare_arg *, const void *);
 
+//chain hashtable
 static const struct rhashtable_params nft_chain_ht_params = {
 	.head_offset		= offsetof(struct nft_chain, rhlhead),
 	.key_offset		= offsetof(struct nft_chain, name),
@@ -153,6 +157,7 @@ static void nft_set_trans_bind(const struct nft_ctx *ctx, struct nft_set *set)
 	}
 }
 
+//netdev类型的hook点注册
 static int nft_netdev_register_hooks(struct net *net,
 				     struct list_head *hook_list)
 {
@@ -161,6 +166,7 @@ static int nft_netdev_register_hooks(struct net *net,
 
 	j = 0;
 	list_for_each_entry(hook, hook_list, list) {
+	    //注册网络钩子点
 		err = nf_register_net_hook(net, &hook->ops);
 		if (err < 0)
 			goto err_register;
@@ -188,6 +194,7 @@ static void nft_netdev_unregister_hooks(struct net *net,
 		nf_unregister_net_hook(net, &hook->ops);
 }
 
+/*为basechain注册netfilter相应的钩子点*/
 static int nft_register_basechain_hooks(struct net *net, int family,
 					struct nft_base_chain *basechain)
 {
@@ -206,6 +213,7 @@ static void nft_unregister_basechain_hooks(struct net *net, int family,
 		nf_unregister_net_hook(net, &basechain->ops);
 }
 
+//注册hook
 static int nf_tables_register_hook(struct net *net,
 				   const struct nft_table *table,
 				   struct nft_chain *chain)
@@ -215,17 +223,22 @@ static int nf_tables_register_hook(struct net *net,
 
 	if (table->flags & NFT_TABLE_F_DORMANT ||
 	    !nft_is_base_chain(chain))
+	    /*非basechain,直接返回*/
 		return 0;
 
+	//由chain获取basechain
 	basechain = nft_base_chain(chain);
 	ops = &basechain->ops;
 
+	/*如有，则触发ops注册回调*/
 	if (basechain->type->ops_register)
 		return basechain->type->ops_register(net, ops);
 
+	/*basechain的hook函数挂接到netfilter的钩子点上*/
 	return nft_register_basechain_hooks(net, table->family, basechain);
 }
 
+//取除chain在netfilter钩子点上注册的函数
 static void nf_tables_unregister_hook(struct net *net,
 				      const struct nft_table *table,
 				      struct nft_chain *chain)
@@ -242,6 +255,7 @@ static void nf_tables_unregister_hook(struct net *net,
 	if (basechain->type->ops_unregister)
 		return basechain->type->ops_unregister(net, ops);
 
+	//解注册netfilter上的hook函数
 	nft_unregister_basechain_hooks(net, table->family, basechain);
 }
 
@@ -272,6 +286,7 @@ static int nft_deltable(struct nft_ctx *ctx)
 	return err;
 }
 
+//生成chain事务节点
 static struct nft_trans *nft_trans_chain_add(struct nft_ctx *ctx, int msg_type)
 {
 	struct nft_trans *trans;
@@ -514,7 +529,7 @@ static int nft_delflowtable(struct nft_ctx *ctx,
 //在指定namespace中查找相应的table
 static struct nft_table *nft_table_lookup(const struct net *net,
 					  const struct nlattr *nla,
-					  u8 family, u8 genmask)
+					  u8 family, u8 genmask/*下一代生效的mask*/)
 {
 	struct nft_table *table;
 
@@ -524,6 +539,7 @@ static struct nft_table *nft_table_lookup(const struct net *net,
 	list_for_each_entry_rcu(table, &net->nft.tables, list) {
 		if (!nla_strcmp(nla, table->name) &&
 		    table->family == family &&
+		    /*与下一代生效的mask一定不相等*/
 		    nft_active_genmask(table, genmask))
 			return table;
 	}
@@ -531,6 +547,7 @@ static struct nft_table *nft_table_lookup(const struct net *net,
 	return ERR_PTR(-ENOENT);
 }
 
+//通过handle,及genmask获取对应的nft_table
 static struct nft_table *nft_table_lookup_byhandle(const struct net *net,
 						   const struct nlattr *nla,
 						   u8 genmask)
@@ -556,13 +573,16 @@ static const struct nft_chain_type *chain_type[NFPROTO_NUMPROTO][NFT_CHAIN_T_MAX
 static const struct nft_chain_type *
 __nft_chain_type_get(u8 family, enum nft_chain_types type)
 {
+    //参数检查
 	if (family >= NFPROTO_NUMPROTO ||
 	    type >= NFT_CHAIN_T_MAX)
 		return NULL;
 
+	//返回family情况下指定type对应的chain
 	return chain_type[family][type];
 }
 
+//通过family及name查找对应的chain_type
 static const struct nft_chain_type *
 __nf_tables_chain_type_lookup(const struct nlattr *nla, u8 family)
 {
@@ -628,9 +648,10 @@ static void lockdep_nfnl_nft_mutex_not_held(void)
 #endif
 }
 
+//通过fmaily，chain名称查找chain对应的type
 static const struct nft_chain_type *
 nf_tables_chain_type_lookup(struct net *net, const struct nlattr *nla,
-			    u8 family, bool autoload)
+			    u8 family, bool autoload/*是否容许自动加载*/)
 {
 	const struct nft_chain_type *type;
 
@@ -641,6 +662,7 @@ nf_tables_chain_type_lookup(struct net *net, const struct nlattr *nla,
 	lockdep_nfnl_nft_mutex_not_held();
 #ifdef CONFIG_MODULES
 	if (autoload) {
+	    /*尝试动态加载chain type*/
 		if (nft_request_module(net, "nft-chain-%u-%.*s", family,
 				       nla_len(nla),
 				       (const char *)nla_data(nla)) == -EAGAIN)
@@ -925,6 +947,7 @@ static u32 nft_chain_hash_obj(const void *data, u32 len, u32 seed)
 	return nft_chain_hash(chain->name, 0, seed);
 }
 
+//通过chain名称查找chain
 static int nft_chain_hash_cmp(struct rhashtable_compare_arg *arg,
 			      const void *ptr)
 {
@@ -962,6 +985,7 @@ static int nft_objname_hash_cmp(struct rhashtable_compare_arg *arg,
 	return strcmp(obj->key.name, k->name);
 }
 
+//netfilter table创建
 static int nf_tables_newtable(struct net *net, struct sock *nlsk,
 			      struct sk_buff *skb, const struct nlmsghdr *nlh,
 			      const struct nlattr * const nla[],
@@ -977,12 +1001,14 @@ static int nf_tables_newtable(struct net *net, struct sock *nlsk,
 	int err;
 
 	lockdep_assert_held(&net->nft.commit_mutex);
-	attr = nla[NFTA_TABLE_NAME];
+	attr = nla[NFTA_TABLE_NAME];/*table名称*/
 	table = nft_table_lookup(net, attr, family, genmask);
 	if (IS_ERR(table)) {
 		if (PTR_ERR(table) != -ENOENT)
+		    /*查询表时出错，但不包括表不存在的情况，直接返回*/
 			return PTR_ERR(table);
 	} else {
+	    /*此情况下，同名表已存在，按flags情况进行相应处理*/
 		if (nlh->nlmsg_flags & NLM_F_EXCL) {
 			NL_SET_BAD_ATTR(extack, attr);
 			return -EEXIST;
@@ -990,6 +1016,7 @@ static int nf_tables_newtable(struct net *net, struct sock *nlsk,
 		if (nlh->nlmsg_flags & NLM_F_REPLACE)
 			return -EOPNOTSUPP;
 
+		//执行表更新
 		nft_ctx_init(&ctx, net, skb, nlh, family, table, NULL, nla);
 		return nf_tables_updtable(&ctx);
 	}
@@ -1000,6 +1027,7 @@ static int nf_tables_newtable(struct net *net, struct sock *nlsk,
 			return -EINVAL;
 	}
 
+	/*申请table*/
 	err = -ENOMEM;
 	table = kzalloc(sizeof(*table), GFP_KERNEL);
 	if (table == NULL)
@@ -1139,21 +1167,23 @@ static int nf_tables_deltable(struct net *net, struct sock *nlsk,
 			      struct netlink_ext_ack *extack)
 {
 	const struct nfgenmsg *nfmsg = nlmsg_data(nlh);
-	u8 genmask = nft_genmask_next(net);
+	u8 genmask = nft_genmask_next(net);/*下一代的mask*/
 	int family = nfmsg->nfgen_family;
 	const struct nlattr *attr;
 	struct nft_table *table;
 	struct nft_ctx ctx;
 
-	nft_ctx_init(&ctx, net, skb, nlh, 0, NULL, NULL, nla);
+	nft_ctx_init(&ctx, net, skb, nlh, 0/*AF_UNSPEC取值*/, NULL/*table为空*/, NULL/*chain为空*/, nla);
 	if (family == AF_UNSPEC ||
 	    (!nla[NFTA_TABLE_NAME] && !nla[NFTA_TABLE_HANDLE]))
 		return nft_flush(&ctx, family);
 
 	if (nla[NFTA_TABLE_HANDLE]) {
+	    /*通过handle,genmask获取对应table*/
 		attr = nla[NFTA_TABLE_HANDLE];
 		table = nft_table_lookup_byhandle(net, attr, genmask);
 	} else {
+	    //通过family,genmask,name 获取对应的table
 		attr = nla[NFTA_TABLE_NAME];
 		table = nft_table_lookup(net, attr, family, genmask);
 	}
@@ -1183,10 +1213,11 @@ static void nf_tables_table_destroy(struct nft_ctx *ctx)
 	kfree(ctx->table);
 }
 
-//注册链类型
+//注册family，type相应的chain类型
 void nft_register_chain_type(const struct nft_chain_type *ctype)
 {
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
+	//检查family对应的chain是否已定义
 	if (WARN_ON(__nft_chain_type_get(ctype->family, ctype->type))) {
 		nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 		return;
@@ -1197,6 +1228,7 @@ void nft_register_chain_type(const struct nft_chain_type *ctype)
 }
 EXPORT_SYMBOL_GPL(nft_register_chain_type);
 
+//解注册
 void nft_unregister_chain_type(const struct nft_chain_type *ctype)
 {
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
@@ -1234,7 +1266,7 @@ static bool lockdep_commit_lock_is_held(const struct net *net)
 
 static struct nft_chain *nft_chain_lookup(struct net *net,
 					  struct nft_table *table,
-					  const struct nlattr *nla, u8 genmask)
+					  const struct nlattr *nla/*chain名称*/, u8 genmask)
 {
 	char search[NFT_CHAIN_MAXNAMELEN + 1];
 	struct rhlist_head *tmp, *list;
@@ -1449,6 +1481,7 @@ err:
 	nfnetlink_set_err(ctx->net, ctx->portid, NFNLGRP_NFTABLES, -ENOBUFS);
 }
 
+//chain信息dump
 static int nf_tables_dump_chains(struct sk_buff *skb,
 				 struct netlink_callback *cb)
 {
@@ -1462,25 +1495,31 @@ static int nf_tables_dump_chains(struct sk_buff *skb,
 	rcu_read_lock();
 	cb->seq = net->nft.base_seq;
 
+	//遍历所有tables
 	list_for_each_entry_rcu(table, &net->nft.tables, list) {
+	    //跳过非匹配的family
 		if (family != NFPROTO_UNSPEC && family != table->family)
 			continue;
 
+		//遍历此table上所有chains
 		list_for_each_entry_rcu(chain, &table->chains, list) {
+		    //跳过已遍历的chain
 			if (idx < s_idx)
 				goto cont;
 			if (idx > s_idx)
 				memset(&cb->args[1], 0,
 				       sizeof(cb->args) - sizeof(cb->args[0]));
+			//跳过未active的chain
 			if (!nft_is_active(net, chain))
 				continue;
+			//填充chain信息
 			if (nf_tables_fill_chain_info(skb, net,
 						      NETLINK_CB(cb->skb).portid,
 						      cb->nlh->nlmsg_seq,
 						      NFT_MSG_NEWCHAIN,
 						      NLM_F_MULTI,
 						      table->family, table,
-						      chain) < 0)
+						      chain/*待填充的chain*/) < 0)
 				goto done;
 
 			nl_dump_check_consistent(cb, nlmsg_hdr(skb));
@@ -1563,9 +1602,11 @@ static struct nft_stats __percpu *nft_stats_alloc(const struct nlattr *attr)
 	if (err < 0)
 		return ERR_PTR(err);
 
+	//字节或者包数统计均未指定，出错
 	if (!tb[NFTA_COUNTER_BYTES] || !tb[NFTA_COUNTER_PACKETS])
 		return ERR_PTR(-EINVAL);
 
+	//申请percpu的统计信息
 	newstats = netdev_alloc_pcpu_stats(struct nft_stats);
 	if (newstats == NULL)
 		return ERR_PTR(-ENOMEM);
@@ -1574,6 +1615,7 @@ static struct nft_stats __percpu *nft_stats_alloc(const struct nlattr *attr)
 	 * are not exposed to userspace.
 	 */
 	preempt_disable();
+	//设置counter信息
 	stats = this_cpu_ptr(newstats);
 	stats->bytes = be64_to_cpu(nla_get_be64(tb[NFTA_COUNTER_BYTES]));
 	stats->pkts = be64_to_cpu(nla_get_be64(tb[NFTA_COUNTER_PACKETS]));
@@ -1659,12 +1701,14 @@ static struct nft_hook *nft_netdev_hook_alloc(struct net *net,
 		goto err_hook_alloc;
 	}
 
+	//通过传入的ifname获取其对应的net_device
 	nla_strlcpy(ifname, attr, IFNAMSIZ);
 	dev = __dev_get_by_name(net, ifname);
 	if (!dev) {
 		err = -ENOENT;
 		goto err_hook_dev;
 	}
+	/*hook点对应的设备*/
 	hook->ops.dev = dev;
 
 	return hook;
@@ -1688,6 +1732,7 @@ static bool nft_hook_list_find(struct list_head *hook_list,
 	return false;
 }
 
+//支持多个netdev的hooks
 static int nf_tables_parse_netdev_hooks(struct net *net,
 					const struct nlattr *attr,
 					struct list_head *hook_list)
@@ -1696,6 +1741,7 @@ static int nf_tables_parse_netdev_hooks(struct net *net,
 	const struct nlattr *tmp;
 	int rem, n = 0, err;
 
+	//遍历配置，创建多个hook
 	nla_for_each_nested(tmp, attr, rem) {
 		if (nla_type(tmp) != NFTA_DEVICE_NAME) {
 			err = -EINVAL;
@@ -1734,20 +1780,22 @@ err_hook:
 }
 
 struct nft_chain_hook {
-	u32				num;
-	s32				priority;
-	const struct nft_chain_type	*type;
-	struct list_head		list;
+	u32				num;//hook点编号
+	s32				priority;//hook优先级
+	const struct nft_chain_type	*type;//chain hook对应的chain type
+	struct list_head		list;//用于串连nft_hook类型
 };
 
+//解析hook_dev的配置
 static int nft_chain_parse_netdev(struct net *net,
 				  struct nlattr *tb[],
-				  struct list_head *hook_list)
+				  struct list_head *hook_list/*出参，生成配置构造的hook*/)
 {
 	struct nft_hook *hook;
 	int err;
 
 	if (tb[NFTA_HOOK_DEV]) {
+	    //按hook设备名称创建hook
 		hook = nft_netdev_hook_alloc(net, tb[NFTA_HOOK_DEV]);
 		if (IS_ERR(hook))
 			return PTR_ERR(hook);
@@ -1765,10 +1813,11 @@ static int nft_chain_parse_netdev(struct net *net,
 	return 0;
 }
 
+//解析hook信息
 static int nft_chain_parse_hook(struct net *net,
 				const struct nlattr * const nla[],
-				struct nft_chain_hook *hook, u8 family,
-				bool autoload)
+				struct nft_chain_hook *hook/*出参，解析产生的hook信息*/, u8 family,
+				bool autoload/*是否自动加载chain type模块*/)
 {
 	struct nlattr *ha[NFTA_HOOK_MAX + 1];
 	const struct nft_chain_type *type;
@@ -1777,6 +1826,7 @@ static int nft_chain_parse_hook(struct net *net,
 	lockdep_assert_held(&net->nft.commit_mutex);
 	lockdep_nfnl_nft_mutex_not_held();
 
+	//解析chain hook配置,hook number,优先级
 	err = nla_parse_nested_deprecated(ha, NFTA_HOOK_MAX,
 					  nla[NFTA_CHAIN_HOOK],
 					  nft_hook_policy, NULL);
@@ -1790,24 +1840,29 @@ static int nft_chain_parse_hook(struct net *net,
 	hook->num = ntohl(nla_get_be32(ha[NFTA_HOOK_HOOKNUM]));
 	hook->priority = ntohl(nla_get_be32(ha[NFTA_HOOK_PRIORITY]));
 
-	//提取对应的链类型
+	//提取family对应的default chain type
 	type = __nft_chain_type_get(family, NFT_CHAIN_T_DEFAULT);
 	if (!type)
 		return -EOPNOTSUPP;
 
 	if (nla[NFTA_CHAIN_TYPE]) {
+	    /*通过chain的type名称查找chain type*/
 		type = nf_tables_chain_type_lookup(net, nla[NFTA_CHAIN_TYPE],
-						   family, autoload);
+						   family, autoload/*是否自动加载模块*/);
 		if (IS_ERR(type))
 			return PTR_ERR(type);
 	}
+
+	/*检查hook点参数是否有效，检查此chain是否注册了此hook点*/
 	if (hook->num > NF_MAX_HOOKS || !(type->hook_mask & (1 << hook->num)))
 		return -EOPNOTSUPP;
 
+	/*nat型hook必须在链接跟踪创建后。检查优先级配置*/
 	if (type->type == NFT_CHAIN_T_NAT &&
 	    hook->priority <= NF_IP_PRI_CONNTRACK)
 		return -EOPNOTSUPP;
 
+	//增加对module的引用
 	if (!try_module_get(type->owner))
 		return -ENOENT;
 
@@ -1815,12 +1870,14 @@ static int nft_chain_parse_hook(struct net *net,
 
 	INIT_LIST_HEAD(&hook->list);
 	if (family == NFPROTO_NETDEV) {
+	    /*netdev类型的netfilter，可配置netdev*/
 		err = nft_chain_parse_netdev(net, ha, &hook->list);
 		if (err < 0) {
 			module_put(type->owner);
 			return err;
 		}
 	} else if (ha[NFTA_HOOK_DEV] || ha[NFTA_HOOK_DEVS]) {
+	    /*其它family暂不支持针对设备的配置*/
 		module_put(type->owner);
 		return -EOPNOTSUPP;
 	}
@@ -1844,6 +1901,8 @@ struct nft_rules_old {
 	struct nft_rule **start;
 };
 
+//申请alloc个nft_rule
+//内存部局：alloc个nft_rule*,nft_rules_old
 static struct nft_rule **nf_tables_chain_alloc_rules(const struct nft_chain *chain,
 						     unsigned int alloc)
 {
@@ -1854,20 +1913,25 @@ static struct nft_rule **nf_tables_chain_alloc_rules(const struct nft_chain *cha
 	if (sizeof(struct nft_rule *) > INT_MAX / alloc)
 		return NULL;
 
+	//申请alloc个nft_rule
 	alloc *= sizeof(struct nft_rule *);
+	//附送一个nft_rules_old
 	alloc += sizeof(struct nft_rules_old);
 
 	return kvmalloc(alloc, GFP_KERNEL);
 }
 
-static void nft_basechain_hook_init(struct nf_hook_ops *ops, u8 family,
+//初始化nf_hook_ops
+static void nft_basechain_hook_init(struct nf_hook_ops *ops/*出参，hook ops*/, u8 family,
 				    const struct nft_chain_hook *hook,
 				    struct nft_chain *chain)
 {
 	ops->pf		= family;
 	ops->hooknum	= hook->num;
 	ops->priority	= hook->priority;
+	/*将要查询的chain做为私有数据传入*/
 	ops->priv	= chain;
+	//自type中取此hook点对应的回调函数
 	ops->hook	= hook->type->hooks[ops->hooknum];
 }
 
@@ -1882,13 +1946,16 @@ static int nft_basechain_init(struct nft_base_chain *basechain, u8 family,
 	chain = &basechain->chain;
 
 	if (family == NFPROTO_NETDEV) {
+	    /*netdev方式的hook_list是有多个元素的（每个元素可指向一个设备）*/
 		list_splice_init(&hook->list, &basechain->hook_list);
 		list_for_each_entry(h, &basechain->hook_list, list)
+		    //初始化每个hook->ops
 			nft_basechain_hook_init(&h->ops, family, hook, chain);
 
 		basechain->ops.hooknum	= hook->num;
 		basechain->ops.priority	= hook->priority;
 	} else {
+	    /*其它方式hook仅一个，故采用basechain的ops直接初始化*/
 		nft_basechain_hook_init(&basechain->ops, family, hook, chain);
 	}
 
@@ -1903,6 +1970,7 @@ static int nft_basechain_init(struct nft_base_chain *basechain, u8 family,
 	return 0;
 }
 
+//向netfilter tables中添加chain
 static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 genmask,
 			      u8 policy, u32 flags)
 {
@@ -1922,35 +1990,42 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 genmask,
 	if (nla[NFTA_CHAIN_HOOK]) {
 		struct nft_chain_hook hook;
 
+		//解析hook信息
 		err = nft_chain_parse_hook(net, nla, &hook, family, true);
 		if (err < 0)
 			return err;
 
+		//申请basechain
 		basechain = kzalloc(sizeof(*basechain), GFP_KERNEL);
 		if (basechain == NULL) {
 			nft_chain_release_hook(&hook);
 			return -ENOMEM;
 		}
+		/*使用basechain中的chain*/
 		chain = &basechain->chain;
 
 		if (nla[NFTA_CHAIN_COUNTERS]) {
+		    /*申请counter统计结构体*/
 			stats = nft_stats_alloc(nla[NFTA_CHAIN_COUNTERS]);
 			if (IS_ERR(stats)) {
 				nft_chain_release_hook(&hook);
 				kfree(basechain);
 				return PTR_ERR(stats);
 			}
+			/*为chain设置counter统计*/
 			rcu_assign_pointer(basechain->stats, stats);
 			static_branch_inc(&nft_counters_enabled);
 		}
 
-		err = nft_basechain_init(basechain, family, &hook, flags);
+		//初始化basechain
+		err = nft_basechain_init(basechain/*出参*/, family, &hook, flags);
 		if (err < 0) {
 			nft_chain_release_hook(&hook);
 			kfree(basechain);
 			return err;
 		}
 	} else {
+	    /*直接申请一个chain*/
 		chain = kzalloc(sizeof(*chain), GFP_KERNEL);
 		if (chain == NULL)
 			return -ENOMEM;
@@ -1958,6 +2033,7 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 genmask,
 	ctx->chain = chain;
 
 	INIT_LIST_HEAD(&chain->rules);
+	//为chain生成handle
 	chain->handle = nf_tables_alloc_handle(table);
 	chain->table = table;
 	chain->name = nla_strdup(nla[NFTA_CHAIN_NAME], GFP_KERNEL);
@@ -1966,25 +2042,32 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 genmask,
 		goto err1;
 	}
 
+	//申请一个rule空间，加一个nft_rules_old结构
 	rules = nf_tables_chain_alloc_rules(chain, 0);
 	if (!rules) {
 		err = -ENOMEM;
 		goto err1;
 	}
 
+	//将申请的rules指针，指为NULL
 	*rules = NULL;
+
+	//使其指向rules
 	rcu_assign_pointer(chain->rules_gen_0, rules);
 	rcu_assign_pointer(chain->rules_gen_1, rules);
 
+	//注册hook到netfilter系统
 	err = nf_tables_register_hook(net, table, chain);
 	if (err < 0)
 		goto err1;
 
+	//将此chain加入hashtable
 	err = rhltable_insert_key(&table->chains_ht, chain->name,
 				  &chain->rhlhead, nft_chain_ht_params);
 	if (err)
 		goto err2;
 
+	//newchain事务节点生成
 	trans = nft_trans_chain_add(ctx, NFT_MSG_NEWCHAIN);
 	if (IS_ERR(trans)) {
 		err = PTR_ERR(trans);
@@ -1998,6 +2081,7 @@ static int nf_tables_addchain(struct nft_ctx *ctx, u8 family, u8 genmask,
 		nft_trans_chain_policy(trans) = policy;
 
 	table->use++;
+	//将chain添加到table->chains链表后面
 	list_add_tail_rcu(&chain->list, &table->chains);
 
 	return 0;
@@ -2028,6 +2112,7 @@ static bool nft_hook_list_equal(struct list_head *hook_list1,
 	return n == m;
 }
 
+//更新netfilter table中的chain
 static int nf_tables_updchain(struct nft_ctx *ctx, u8 genmask, u8 policy,
 			      u32 flags)
 {
@@ -2170,6 +2255,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 	attr = nla[NFTA_CHAIN_NAME];
 
 	if (nla[NFTA_CHAIN_HANDLE]) {
+	    /*给定了handle，通过handle查找对应的chain*/
 		handle = be64_to_cpu(nla_get_be64(nla[NFTA_CHAIN_HANDLE]));
 		chain = nft_chain_lookup_byhandle(table, handle, genmask);
 		if (IS_ERR(chain)) {
@@ -2178,7 +2264,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 		}
 		attr = nla[NFTA_CHAIN_HANDLE];
 	} else {
-		//查找对应的链
+		//通过chain名称查找对应的链
 		chain = nft_chain_lookup(net, table, attr, genmask);
 		if (IS_ERR(chain)) {
 			if (PTR_ERR(chain) != -ENOENT) {
@@ -2202,6 +2288,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 			return -EOPNOTSUPP;
 		}
 
+		//当前basechain仅支持drop,accept两种策略
 		policy = ntohl(nla_get_be32(nla[NFTA_CHAIN_POLICY]));
 		switch (policy) {
 		case NF_DROP:
@@ -2220,6 +2307,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 	nft_ctx_init(&ctx, net, skb, nlh, family, table, chain, nla);
 
 	if (chain != NULL) {
+	    /*chain已存在，按flags执行处理*/
 		if (nlh->nlmsg_flags & NLM_F_EXCL) {
 			NL_SET_BAD_ATTR(extack, attr);
 			return -EEXIST;
@@ -2227,6 +2315,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 		if (nlh->nlmsg_flags & NLM_F_REPLACE)
 			return -EOPNOTSUPP;
 
+		//执行chain更新
 		flags |= chain->flags & NFT_BASE_CHAIN;
 		return nf_tables_updchain(&ctx, genmask, policy, flags);
 	}
@@ -2310,12 +2399,16 @@ static int nf_tables_delchain(struct net *net, struct sock *nlsk,
  *	Registers the expr type for use with nf_tables. Returns zero on
  *	success or a negative errno code otherwise.
  */
+//netfilter 表达式类型注册
 int nft_register_expr(struct nft_expr_type *type)
 {
+    //netfilter table注册表达式
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
 	if (type->family == NFPROTO_UNSPEC)
+	    //将family无关的type添加到链表结尾
 		list_add_tail_rcu(&type->list, &nf_tables_expressions);
 	else
+	    //family相关的添加在链表前
 		list_add_rcu(&type->list, &nf_tables_expressions);
 	nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 	return 0;
@@ -2336,16 +2429,20 @@ void nft_unregister_expr(struct nft_expr_type *type)
 }
 EXPORT_SYMBOL_GPL(nft_unregister_expr);
 
+//选择指定family及name的netfilter table表达式类型
 static const struct nft_expr_type *__nft_expr_type_get(u8 family,
 						       struct nlattr *nla)
 {
 	const struct nft_expr_type *type, *candidate = NULL;
 
 	list_for_each_entry(type, &nf_tables_expressions, list) {
+	    /*表达式名称必须匹配*/
 		if (!nla_strcmp(nla, type->name)) {
 			if (!type->family && !candidate)
+			    /*未指定family,且无备选，则记录备选type*/
 				candidate = type;
 			else if (type->family == family)
+			    /*指定了对family进行匹配，则记录备选type*/
 				candidate = type;
 		}
 	}
@@ -2364,6 +2461,7 @@ static int nft_expr_type_request_module(struct net *net, u8 family,
 }
 #endif
 
+//获取给定名称及family的 netfilter 表达式type
 static const struct nft_expr_type *nft_expr_type_get(struct net *net,
 						     u8 family,
 						     struct nlattr *nla)
@@ -2375,11 +2473,13 @@ static const struct nft_expr_type *nft_expr_type_get(struct net *net,
 
 	type = __nft_expr_type_get(family, nla);
 	if (type != NULL && try_module_get(type->owner))
+	    /*表达式查找到，直接返回*/
 		return type;
 
 	lockdep_nfnl_nft_mutex_not_held();
 #ifdef CONFIG_MODULES
 	if (type == NULL) {
+	    /*尝试加载相关模块*/
 		if (nft_expr_type_request_module(net, family, nla) == -EAGAIN)
 			return ERR_PTR(-EAGAIN);
 
@@ -2438,31 +2538,36 @@ nla_put_failure:
 }
 
 struct nft_expr_info {
+    //表达式对应的ops
 	const struct nft_expr_ops	*ops;
+	//表达式对应的数组
 	struct nlattr			*tb[NFT_EXPR_MAXATTR + 1];
 };
 
+//解析表达式相关netlink属性，获取表达式对应的info
 static int nf_tables_expr_parse(const struct nft_ctx *ctx,
 				const struct nlattr *nla,
-				struct nft_expr_info *info)
+				struct nft_expr_info *info/*出参，指明表达式ops及其对应的数组*/)
 {
 	const struct nft_expr_type *type;
 	const struct nft_expr_ops *ops;
 	struct nlattr *tb[NFTA_EXPR_MAX + 1];
 	int err;
 
+	//解析传入的表达式策略
 	err = nla_parse_nested_deprecated(tb, NFTA_EXPR_MAX, nla,
 					  nft_expr_policy, NULL);
 	if (err < 0)
 		return err;
 
-	type = nft_expr_type_get(ctx->net, ctx->family, tb[NFTA_EXPR_NAME]);
+	//取表达式type
+	type = nft_expr_type_get(ctx->net, ctx->family, tb[NFTA_EXPR_NAME]/*表达式名称*/);
 	if (IS_ERR(type))
 		return PTR_ERR(type);
 
 	if (tb[NFTA_EXPR_DATA]) {
-		err = nla_parse_nested_deprecated(info->tb, type->maxattr,
-						  tb[NFTA_EXPR_DATA],
+		err = nla_parse_nested_deprecated(info->tb/*出参，解析好的属性值*/, type->maxattr,
+						  tb[NFTA_EXPR_DATA]/*表达式类型所需数据*/,
 						  type->policy, NULL);
 		if (err < 0)
 			goto err1;
@@ -2470,11 +2575,13 @@ static int nf_tables_expr_parse(const struct nft_ctx *ctx,
 		memset(info->tb, 0, sizeof(info->tb[0]) * (type->maxattr + 1));
 
 	if (type->select_ops != NULL) {
+	    /*有sekect_ops回调，使用此回调获取具体的type ops*/
 		ops = type->select_ops(ctx,
 				       (const struct nlattr * const *)info->tb);
 		if (IS_ERR(ops)) {
 			err = PTR_ERR(ops);
 #ifdef CONFIG_MODULES
+			//动态加载module
 			if (err == -EAGAIN)
 				if (nft_expr_type_request_module(ctx->net,
 								 ctx->family,
@@ -2494,16 +2601,17 @@ err1:
 	return err;
 }
 
+//通过info初始化nft_expr(表达式），通过init回调完成
 static int nf_tables_newexpr(const struct nft_ctx *ctx,
 			     const struct nft_expr_info *info,
-			     struct nft_expr *expr)
+			     struct nft_expr *expr/*出参，待初始化的表达式*/)
 {
 	const struct nft_expr_ops *ops = info->ops;
 	int err;
 
 	expr->ops = ops;
 	if (ops->init) {
-		err = ops->init(ctx, expr, (const struct nlattr **)info->tb);
+		err = ops->init(ctx, expr/*待初始化表达式*/, (const struct nlattr **)info->tb/*表达式配置数组*/);
 		if (err < 0)
 			goto err1;
 	}
@@ -2524,6 +2632,7 @@ static void nf_tables_expr_destroy(const struct nft_ctx *ctx,
 	module_put(type->owner);
 }
 
+//解析nla,并初始化对应的表达式
 struct nft_expr *nft_expr_init(const struct nft_ctx *ctx,
 			       const struct nlattr *nla)
 {
@@ -2541,7 +2650,7 @@ struct nft_expr *nft_expr_init(const struct nft_ctx *ctx,
 	if (expr == NULL)
 		goto err2;
 
-	err = nf_tables_newexpr(ctx, &info, expr);
+	err = nf_tables_newexpr(ctx, &info, expr/*待初始化的表达式*/);
 	if (err < 0)
 		goto err3;
 
@@ -2568,6 +2677,7 @@ void nft_expr_destroy(const struct nft_ctx *ctx, struct nft_expr *expr)
  * Rules
  */
 
+//通过handle在chain上查找相对应的nft_rule
 static struct nft_rule *__nft_rule_lookup(const struct nft_chain *chain,
 					  u64 handle)
 {
@@ -2706,14 +2816,16 @@ static int __nf_tables_dump_rules(struct sk_buff *skb,
 				  unsigned int *idx,
 				  struct netlink_callback *cb,
 				  const struct nft_table *table,
-				  const struct nft_chain *chain)
+				  const struct nft_chain *chain/*要dump规则的chain*/)
 {
 	struct net *net = sock_net(skb->sk);
 	const struct nft_rule *rule, *prule;
 	unsigned int s_idx = cb->args[0];
 
 	prule = NULL;
+	//遍历chain上所有rules
 	list_for_each_entry_rcu(rule, &chain->rules, list) {
+	    //跳过不活跃的rule
 		if (!nft_is_active(net, rule))
 			goto cont_skip;
 		if (*idx < s_idx)
@@ -2722,6 +2834,7 @@ static int __nf_tables_dump_rules(struct sk_buff *skb,
 			memset(&cb->args[1], 0,
 					sizeof(cb->args) - sizeof(cb->args[0]));
 		}
+		//填充rule到buffer
 		if (nf_tables_fill_rule_info(skb, net, NETLINK_CB(cb->skb).portid,
 					cb->nlh->nlmsg_seq,
 					NFT_MSG_NEWRULE,
@@ -2739,6 +2852,7 @@ cont_skip:
 	return 0;
 }
 
+//rule信息dump
 static int nf_tables_dump_rules(struct sk_buff *skb,
 				struct netlink_callback *cb)
 {
@@ -2753,24 +2867,28 @@ static int nf_tables_dump_rules(struct sk_buff *skb,
 	rcu_read_lock();
 	cb->seq = net->nft.base_seq;
 
+	//遍历所有tables,找到要dump的那张表
 	list_for_each_entry_rcu(table, &net->nft.tables, list) {
 		if (family != NFPROTO_UNSPEC && family != table->family)
 			continue;
 
+		//如果非dump的表，则跳过
 		if (ctx && ctx->table && strcmp(ctx->table, table->name) != 0)
 			continue;
 
 		if (ctx && ctx->table && ctx->chain) {
 			struct rhlist_head *list, *tmp;
 
-			list = rhltable_lookup(&table->chains_ht, ctx->chain,
+			list = rhltable_lookup(&table->chains_ht, ctx->chain/*要检查的chain*/,
 					       nft_chain_ht_params);
 			if (!list)
 				goto done;
 
 			rhl_for_each_entry_rcu(chain, tmp, list, rhlhead) {
+			    //跳过未活跃的chain
 				if (!nft_is_active(net, chain))
 					continue;
+				//进行chain上rule规则dump
 				__nf_tables_dump_rules(skb, &idx,
 						       cb, table, chain);
 				break;
@@ -2980,6 +3098,7 @@ static struct nft_rule *nft_rule_lookup_byid(const struct net *net,
 
 #define NFT_RULE_MAXEXPRS	128
 
+//netfilter表添加规则
 static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 			     struct sk_buff *skb, const struct nlmsghdr *nlh,
 			     const struct nlattr * const nla[],
@@ -3004,20 +3123,21 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 
 	lockdep_assert_held(&net->nft.commit_mutex);
 
-	//找到对应的表
+	//找到对应的netfilter table
 	table = nft_table_lookup(net, nla[NFTA_RULE_TABLE], family, genmask);
 	if (IS_ERR(table)) {
 		NL_SET_BAD_ATTR(extack, nla[NFTA_RULE_TABLE]);
 		return PTR_ERR(table);
 	}
 
-	//找到对应的链
+	//找到netfilter table待操作的链
 	chain = nft_chain_lookup(net, table, nla[NFTA_RULE_CHAIN], genmask);
 	if (IS_ERR(chain)) {
 		NL_SET_BAD_ATTR(extack, nla[NFTA_RULE_CHAIN]);
 		return PTR_ERR(chain);
 	}
 
+	//指定了rule handle,通过handle查找相应的rule
 	if (nla[NFTA_RULE_HANDLE]) {
 		handle = be64_to_cpu(nla_get_be64(nla[NFTA_RULE_HANDLE]));
 		rule = __nft_rule_lookup(chain, handle);
@@ -3062,6 +3182,7 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 
 	nft_ctx_init(&ctx, net, skb, nlh, family, table, chain, nla);
 
+	//如果指定了规则表达式，则进行表达式解析及初始化
 	n = 0;
 	size = 0;
 	if (nla[NFTA_RULE_EXPRESSIONS]) {
@@ -3071,13 +3192,17 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 		if (!info)
 			return -ENOMEM;
 
+		//遍历expressions
 		nla_for_each_nested(tmp, nla[NFTA_RULE_EXPRESSIONS], rem) {
 			err = -EINVAL;
+			//必须为list
 			if (nla_type(tmp) != NFTA_LIST_ELEM)
 				goto err1;
+			//防止表达式超限
 			if (n == NFT_RULE_MAXEXPRS)
 				goto err1;
-			err = nf_tables_expr_parse(&ctx, tmp, &info[n]);
+			//表达式解析
+			err = nf_tables_expr_parse(&ctx, tmp, &info[n]/*表达式对应的ops及数据*/);
 			if (err < 0)
 				goto err1;
 			size += info[n].ops->size;
@@ -3085,16 +3210,19 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 		}
 	}
 	/* Check for overflow of dlen field */
+	//防止表达式数据超限
 	err = -EFBIG;
 	if (size >= 1 << 12)
 		goto err1;
 
+	//如果有用户定义的关联数据，则一并合计上
 	if (nla[NFTA_RULE_USERDATA]) {
 		ulen = nla_len(nla[NFTA_RULE_USERDATA]);
 		if (ulen > 0)
 			usize = sizeof(struct nft_userdata) + ulen;
 	}
 
+	/*初始化rule*/
 	err = -ENOMEM;
 	rule = kzalloc(sizeof(*rule) + size + usize, GFP_KERNEL);
 	if (rule == NULL)
@@ -3112,8 +3240,10 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 		nla_memcpy(udata->data, nla[NFTA_RULE_USERDATA], ulen);
 	}
 
+	/*取首个表达式*/
 	expr = nft_expr_first(rule);
 	for (i = 0; i < n; i++) {
+	    //初始化expr
 		err = nf_tables_newexpr(&ctx, &info[i], expr);
 		if (err < 0)
 			goto err2;
@@ -3122,9 +3252,11 @@ static int nf_tables_newrule(struct net *net, struct sock *nlsk,
 			nft_validate_state_update(net, NFT_VALIDATE_NEED);
 
 		info[i].ops = NULL;
+		/*取下一个表达式*/
 		expr = nft_expr_next(expr);
 	}
 
+	//规则事务节点添加
 	if (nlh->nlmsg_flags & NLM_F_REPLACE) {
 		trans = nft_trans_rule_add(&ctx, NFT_MSG_NEWRULE, rule);
 		if (trans == NULL) {
@@ -3273,8 +3405,9 @@ static int nf_tables_delrule(struct net *net, struct sock *nlsk,
  * Sets
  */
 
-static LIST_HEAD(nf_tables_set_types);
+static LIST_HEAD(nf_tables_set_types);//记录系统中所有set类型
 
+//完成set类型注册
 int nft_register_set(struct nft_set_type *type)
 {
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
@@ -3321,6 +3454,7 @@ nft_select_set_ops(const struct nft_ctx *ctx,
 	lockdep_nfnl_nft_mutex_not_held();
 #ifdef CONFIG_MODULES
 	if (list_empty(&nf_tables_set_types)) {
+	    /*set types未加载，尝试加载module*/
 		if (nft_request_module(ctx->net, "nft-set") == -EAGAIN)
 			return ERR_PTR(-EAGAIN);
 	}
@@ -3333,6 +3467,7 @@ nft_select_set_ops(const struct nft_ctx *ctx,
 	best.lookup = ~0;
 	best.space  = ~0;
 
+	//遍历系统中已注册的所有set类型，选出当前set_ops
 	list_for_each_entry(type, &nf_tables_set_types, list) {
 		ops = &type->ops;
 
@@ -3429,6 +3564,7 @@ static int nft_ctx_init_from_setattr(struct nft_ctx *ctx, struct net *net,
 	return 0;
 }
 
+//在表table中查找指定名称的set
 static struct nft_set *nft_set_lookup(const struct nft_table *table,
 				      const struct nlattr *nla, u8 genmask)
 {
@@ -3477,9 +3613,10 @@ static struct nft_set *nft_set_lookup_byid(const struct net *net,
 	return ERR_PTR(-ENOENT);
 }
 
+/*执行set集合查询*/
 struct nft_set *nft_set_lookup_global(const struct net *net,
 				      const struct nft_table *table,
-				      const struct nlattr *nla_set_name,
+				      const struct nlattr *nla_set_name/*set名称*/,
 				      const struct nlattr *nla_set_id,
 				      u8 genmask)
 {
@@ -3490,6 +3627,7 @@ struct nft_set *nft_set_lookup_global(const struct net *net,
 		if (!nla_set_id)
 			return set;
 
+		/*未查找到set,按set_id执行查询*/
 		set = nft_set_lookup_byid(net, nla_set_id, genmask);
 	}
 	return set;
@@ -3908,6 +4046,7 @@ static int nf_tables_set_desc_parse(struct nft_set_desc *desc,
 	return err;
 }
 
+//负责set创建
 static int nf_tables_newset(struct net *net, struct sock *nlsk,
 			    struct sk_buff *skb, const struct nlmsghdr *nlh,
 			    const struct nlattr * const nla[],
@@ -4026,6 +4165,7 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 			return err;
 	}
 
+	//取表
 	table = nft_table_lookup(net, nla[NFTA_SET_TABLE], family, genmask);
 	if (IS_ERR(table)) {
 		NL_SET_BAD_ATTR(extack, nla[NFTA_SET_TABLE]);
@@ -4054,6 +4194,7 @@ static int nf_tables_newset(struct net *net, struct sock *nlsk,
 	if (!(nlh->nlmsg_flags & NLM_F_CREATE))
 		return -ENOENT;
 
+	/*取set对应的ops*/
 	ops = nft_select_set_ops(&ctx, nla, &desc, policy);
 	if (IS_ERR(ops))
 		return PTR_ERR(ops);
@@ -4668,6 +4809,7 @@ static int nft_get_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 	if (!nla[NFTA_SET_ELEM_KEY])
 		return -EINVAL;
 
+	//解析nft_set_elem
 	err = nft_setelem_parse_flags(set, nla[NFTA_SET_ELEM_FLAGS], &flags);
 	if (err < 0)
 		return err;
@@ -4879,6 +5021,7 @@ static void nf_tables_set_elem_destroy(const struct nft_ctx *ctx,
 	kfree(elem);
 }
 
+/*向set中添加elem*/
 static int nft_add_set_elem(struct nft_ctx *ctx, struct nft_set *set,
 			    const struct nlattr *attr, u32 nlmsg_flags)
 {
@@ -5403,6 +5546,7 @@ int nft_register_obj(struct nft_object_type *obj_type)
 		return -EINVAL;
 
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
+	//将obj类型挂接在nf_tables__objects上
 	list_add_rcu(&obj_type->list, &nf_tables_objects);
 	nfnl_unlock(NFNL_SUBSYS_NFTABLES);
 	return 0;
@@ -5423,9 +5567,10 @@ void nft_unregister_obj(struct nft_object_type *obj_type)
 }
 EXPORT_SYMBOL_GPL(nft_unregister_obj);
 
+//通过table,object-name,object-type查找对应object
 struct nft_object *nft_obj_lookup(const struct net *net,
 				  const struct nft_table *table,
-				  const struct nlattr *nla, u32 objtype,
+				  const struct nlattr *nla/*object名称*/, u32 objtype/*object类型*/,
 				  u8 genmask)
 {
 	struct nft_object_hash_key k = { .table = table };
@@ -5440,6 +5585,7 @@ struct nft_object *nft_obj_lookup(const struct net *net,
 		     !lockdep_commit_lock_is_held(net));
 
 	rcu_read_lock();
+	//通过table,object-name,object-type查找对应object
 	list = rhltable_lookup(&nft_objname_ht, &k, nft_objname_ht_params);
 	if (!list)
 		goto out;
@@ -5457,6 +5603,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(nft_obj_lookup);
 
+//在指定table,object-name,object-type情况下查询nft_object
 static struct nft_object *nft_obj_lookup_byhandle(const struct nft_table *table,
 						  const struct nlattr *nla,
 						  u32 objtype, u8 genmask)
@@ -5482,9 +5629,10 @@ static const struct nla_policy nft_obj_policy[NFTA_OBJ_MAX + 1] = {
 	[NFTA_OBJ_HANDLE]	= { .type = NLA_U64},
 };
 
+//初始化netfilter object
 static struct nft_object *nft_obj_init(const struct nft_ctx *ctx,
 				       const struct nft_object_type *type,
-				       const struct nlattr *attr)
+				       const struct nlattr *attr/*待解析的object数据*/)
 {
 	struct nlattr **tb;
 	const struct nft_object_ops *ops;
@@ -5496,6 +5644,7 @@ static struct nft_object *nft_obj_init(const struct nft_ctx *ctx,
 		goto err1;
 
 	if (attr) {
+	    //对object数组进行解析
 		err = nla_parse_nested_deprecated(tb, type->maxattr, attr,
 						  type->policy, NULL);
 		if (err < 0)
@@ -5504,6 +5653,7 @@ static struct nft_object *nft_obj_init(const struct nft_ctx *ctx,
 		memset(tb, 0, sizeof(tb[0]) * (type->maxattr + 1));
 	}
 
+	//如有select_ops则通过此回调确定ops
 	if (type->select_ops) {
 		ops = type->select_ops(ctx, (const struct nlattr * const *)tb);
 		if (IS_ERR(ops)) {
@@ -5514,6 +5664,7 @@ static struct nft_object *nft_obj_init(const struct nft_ctx *ctx,
 		ops = type->ops;
 	}
 
+	//构造obj所需要的内存
 	err = -ENOMEM;
 	obj = kzalloc(sizeof(*obj) + ops->size, GFP_KERNEL);
 	if (!obj)
@@ -5552,6 +5703,7 @@ nla_put_failure:
 	return -1;
 }
 
+//给定objtype,取object_type结构
 static const struct nft_object_type *__nft_obj_type_get(u32 objtype)
 {
 	const struct nft_object_type *type;
@@ -5563,6 +5715,7 @@ static const struct nft_object_type *__nft_obj_type_get(u32 objtype)
 	return NULL;
 }
 
+//给定objtype获取object_type结构体
 static const struct nft_object_type *
 nft_obj_type_get(struct net *net, u32 objtype)
 {
@@ -5574,6 +5727,7 @@ nft_obj_type_get(struct net *net, u32 objtype)
 
 	lockdep_nfnl_nft_mutex_not_held();
 #ifdef CONFIG_MODULES
+	//尝试加载对应modules后，重试
 	if (type == NULL) {
 		if (nft_request_module(net, "nft-obj-%u", objtype) == -EAGAIN)
 			return ERR_PTR(-EAGAIN);
@@ -5582,6 +5736,7 @@ nft_obj_type_get(struct net *net, u32 objtype)
 	return ERR_PTR(-ENOENT);
 }
 
+//object更新
 static int nf_tables_updobj(const struct nft_ctx *ctx,
 			    const struct nft_object_type *type,
 			    const struct nlattr *attr,
@@ -5634,6 +5789,7 @@ static int nf_tables_newobj(struct net *net, struct sock *nlsk,
 	    !nla[NFTA_OBJ_DATA])
 		return -EINVAL;
 
+	//取table
 	table = nft_table_lookup(net, nla[NFTA_OBJ_TABLE], family, genmask);
 	if (IS_ERR(table)) {
 		NL_SET_BAD_ATTR(extack, nla[NFTA_OBJ_TABLE]);
@@ -5643,12 +5799,14 @@ static int nf_tables_newobj(struct net *net, struct sock *nlsk,
 	objtype = ntohl(nla_get_be32(nla[NFTA_OBJ_TYPE]));
 	obj = nft_obj_lookup(net, table, nla[NFTA_OBJ_NAME], objtype, genmask);
 	if (IS_ERR(obj)) {
+	    /*查询出错，或未找到对应obj*/
 		err = PTR_ERR(obj);
 		if (err != -ENOENT) {
 			NL_SET_BAD_ATTR(extack, nla[NFTA_OBJ_NAME]);
 			return err;
 		}
 	} else {
+	    /*obj存在，按flags对obj执行更新或报错*/
 		if (nlh->nlmsg_flags & NLM_F_EXCL) {
 			NL_SET_BAD_ATTR(extack, nla[NFTA_OBJ_NAME]);
 			return -EEXIST;
@@ -5664,16 +5822,19 @@ static int nf_tables_newobj(struct net *net, struct sock *nlsk,
 
 	nft_ctx_init(&ctx, net, skb, nlh, family, table, NULL, nla);
 
+	//取object type结构体
 	type = nft_obj_type_get(net, objtype);
 	if (IS_ERR(type))
 		return PTR_ERR(type);
 
+	//初始化obj
 	obj = nft_obj_init(&ctx, type, nla[NFTA_OBJ_DATA]);
 	if (IS_ERR(obj)) {
 		err = PTR_ERR(obj);
 		goto err1;
 	}
 	obj->key.table = table;
+	//分配object的handle
 	obj->handle = nf_tables_alloc_handle(table);
 
 	obj->key.name = nla_strdup(nla[NFTA_OBJ_NAME], GFP_KERNEL);
@@ -5682,10 +5843,12 @@ static int nf_tables_newobj(struct net *net, struct sock *nlsk,
 		goto err2;
 	}
 
+	//创建object事务添加
 	err = nft_trans_obj_add(&ctx, NFT_MSG_NEWOBJ, obj);
 	if (err < 0)
 		goto err3;
 
+	//将object添加进objname_ht
 	err = rhltable_insert(&nft_objname_ht, &obj->rhlhead,
 			      nft_objname_ht_params);
 	if (err < 0)
@@ -5882,6 +6045,7 @@ static int nf_tables_getobj(struct net *net, struct sock *nlsk,
 		return PTR_ERR(table);
 	}
 
+	//查询指定的object
 	objtype = ntohl(nla_get_be32(nla[NFTA_OBJ_TYPE]));
 	obj = nft_obj_lookup(net, table, nla[NFTA_OBJ_NAME], objtype, genmask);
 	if (IS_ERR(obj)) {
@@ -6006,6 +6170,7 @@ static void nf_tables_obj_notify(const struct nft_ctx *ctx,
  */
 void nft_register_flowtable_type(struct nf_flowtable_type *type)
 {
+    //完成flowtable type注册
 	nfnl_lock(NFNL_SUBSYS_NFTABLES);
 	list_add_tail_rcu(&type->list, &nf_tables_flowtables);
 	nfnl_unlock(NFNL_SUBSYS_NFTABLES);
@@ -6125,6 +6290,7 @@ static int nf_tables_flowtable_parse_hook(const struct nft_ctx *ctx,
 	return err;
 }
 
+//通过family查找flowtable type
 static const struct nf_flowtable_type *__nft_flowtable_type_get(u8 family)
 {
 	const struct nf_flowtable_type *type;
@@ -6136,6 +6302,7 @@ static const struct nf_flowtable_type *__nft_flowtable_type_get(u8 family)
 	return NULL;
 }
 
+//通过fmaily查询flowtable type
 static const struct nf_flowtable_type *
 nft_flowtable_type_get(struct net *net, u8 family)
 {
@@ -6147,6 +6314,7 @@ nft_flowtable_type_get(struct net *net, u8 family)
 
 	lockdep_nfnl_nft_mutex_not_held();
 #ifdef CONFIG_MODULES
+	//加载指定类型的flow table
 	if (type == NULL) {
 		if (nft_request_module(net, "nf-flowtable-%u", family) == -EAGAIN)
 			return ERR_PTR(-EAGAIN);
@@ -6199,6 +6367,7 @@ static int nft_register_flowtable_net_hooks(struct net *net,
 		if (err < 0)
 			goto err_unregister_net_hooks;
 
+		//注册网络hook点
 		err = nf_register_net_hook(net, &hook->ops);
 		if (err < 0) {
 			flowtable->data.type->setup(&flowtable->data,
@@ -6246,6 +6415,7 @@ static int nf_tables_newflowtable(struct net *net, struct sock *nlsk,
 	    !nla[NFTA_FLOWTABLE_HOOK])
 		return -EINVAL;
 
+	//取指定名称的table
 	table = nft_table_lookup(net, nla[NFTA_FLOWTABLE_TABLE], family,
 				 genmask);
 	if (IS_ERR(table)) {
@@ -6253,6 +6423,7 @@ static int nf_tables_newflowtable(struct net *net, struct sock *nlsk,
 		return PTR_ERR(table);
 	}
 
+	/*在table中查找指定名称的flowtable*/
 	flowtable = nft_flowtable_lookup(table, nla[NFTA_FLOWTABLE_NAME],
 					 genmask);
 	if (IS_ERR(flowtable)) {
@@ -6272,6 +6443,7 @@ static int nf_tables_newflowtable(struct net *net, struct sock *nlsk,
 
 	nft_ctx_init(&ctx, net, skb, nlh, family, table, NULL, nla);
 
+	//创建flowtable
 	flowtable = kzalloc(sizeof(*flowtable), GFP_KERNEL);
 	if (!flowtable)
 		return -ENOMEM;
@@ -6286,6 +6458,7 @@ static int nf_tables_newflowtable(struct net *net, struct sock *nlsk,
 		goto err1;
 	}
 
+	//查询flowtable type
 	type = nft_flowtable_type_get(net, family);
 	if (IS_ERR(type)) {
 		err = PTR_ERR(type);
@@ -6301,6 +6474,8 @@ static int nf_tables_newflowtable(struct net *net, struct sock *nlsk,
 
 	write_pnet(&flowtable->data.net, net);
 	flowtable->data.type = type;
+
+	//初始化flowtable
 	err = type->init(&flowtable->data);
 	if (err < 0)
 		goto err3;
@@ -6761,7 +6936,7 @@ err:
 
 static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 	[NFT_MSG_NEWTABLE] = {
-		.call_batch	= nf_tables_newtable,
+		.call_batch	= nf_tables_newtable,//netfilter table创建
 		.attr_count	= NFTA_TABLE_MAX,
 		.policy		= nft_table_policy,
 	},
@@ -6806,7 +6981,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.policy		= nft_rule_policy,
 	},
 	[NFT_MSG_NEWSET] = {
-		.call_batch	= nf_tables_newset,
+		.call_batch	= nf_tables_newset,//set创建
 		.attr_count	= NFTA_SET_MAX,
 		.policy		= nft_set_policy,
 	},
@@ -6821,7 +6996,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.policy		= nft_set_policy,
 	},
 	[NFT_MSG_NEWSETELEM] = {
-		.call_batch	= nf_tables_newsetelem,
+		.call_batch	= nf_tables_newsetelem,//set的elem添加
 		.attr_count	= NFTA_SET_ELEM_LIST_MAX,
 		.policy		= nft_set_elem_list_policy,
 	},
@@ -6839,7 +7014,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.call_rcu	= nf_tables_getgen,
 	},
 	[NFT_MSG_NEWOBJ] = {
-		.call_batch	= nf_tables_newobj,
+		.call_batch	= nf_tables_newobj,//创建新的object
 		.attr_count	= NFTA_OBJ_MAX,
 		.policy		= nft_obj_policy,
 	},
@@ -6859,7 +7034,7 @@ static const struct nfnl_callback nf_tables_cb[NFT_MSG_MAX] = {
 		.policy		= nft_obj_policy,
 	},
 	[NFT_MSG_NEWFLOWTABLE] = {
-		.call_batch	= nf_tables_newflowtable,
+		.call_batch	= nf_tables_newflowtable,//添加flow table
 		.attr_count	= NFTA_FLOWTABLE_MAX,
 		.policy		= nft_flowtable_policy,
 	},
@@ -7212,6 +7387,7 @@ static int nf_tables_commit(struct net *net, struct sk_buff *skb)
 	if (nf_tables_validate(net) < 0)
 		return -EAGAIN;
 
+	//NFPROTO_NETDEV规则提交
 	err = nft_flow_rule_offload_commit(net);
 	if (err < 0)
 		return err;
@@ -7588,6 +7764,7 @@ static bool nf_tables_valid_genid(struct net *net, u32 genid)
 	return genid_ok;
 }
 
+//对应提供nf_tables接口
 static const struct nfnetlink_subsystem nf_tables_subsys = {
 	.name		= "nf_tables",
 	.subsys_id	= NFNL_SUBSYS_NFTABLES,
@@ -7881,6 +8058,7 @@ static const struct nla_policy nft_verdict_policy[NFTA_VERDICT_MAX + 1] = {
 				    .len = NFT_CHAIN_MAXNAMELEN - 1 },
 };
 
+//verdict类型data,desc填充
 static int nft_verdict_init(const struct nft_ctx *ctx, struct nft_data *data,
 			    struct nft_data_desc *desc, const struct nlattr *nla)
 {
@@ -7896,6 +8074,8 @@ static int nft_verdict_init(const struct nft_ctx *ctx, struct nft_data *data,
 
 	if (!tb[NFTA_VERDICT_CODE])
 		return -EINVAL;
+
+	//填充verdict_code
 	data->verdict.code = ntohl(nla_get_be32(tb[NFTA_VERDICT_CODE]));
 
 	switch (data->verdict.code) {
@@ -7917,6 +8097,7 @@ static int nft_verdict_init(const struct nft_ctx *ctx, struct nft_data *data,
 	case NFT_GOTO:
 		if (!tb[NFTA_VERDICT_CHAIN])
 			return -EINVAL;
+		/*使goto,jump到指定chain*/
 		chain = nft_chain_lookup(ctx->net, ctx->table,
 					 tb[NFTA_VERDICT_CHAIN], genmask);
 		if (IS_ERR(chain))
@@ -7969,9 +8150,10 @@ nla_put_failure:
 	return -1;
 }
 
+//填充data,desc
 static int nft_value_init(const struct nft_ctx *ctx,
-			  struct nft_data *data, unsigned int size,
-			  struct nft_data_desc *desc, const struct nlattr *nla)
+			  struct nft_data *data/*出参，value*/, unsigned int size/*data最大内存尺寸*/,
+			  struct nft_data_desc *desc/*出参，value的描述信息*/, const struct nlattr *nla)
 {
 	unsigned int len;
 
@@ -7981,6 +8163,7 @@ static int nft_value_init(const struct nft_ctx *ctx,
 	if (len > size)
 		return -EOVERFLOW;
 
+	//将value填充进data
 	nla_memcpy(data->data, nla, len);
 	desc->type = NFT_DATA_VALUE;
 	desc->len  = len;
@@ -8020,16 +8203,21 @@ int nft_data_init(const struct nft_ctx *ctx,
 	struct nlattr *tb[NFTA_DATA_MAX + 1];
 	int err;
 
+	//nft data解析
 	err = nla_parse_nested_deprecated(tb, NFTA_DATA_MAX, nla,
 					  nft_data_policy, NULL);
 	if (err < 0)
 		return err;
 
 	if (tb[NFTA_DATA_VALUE])
+	    /*填充data_value*/
 		return nft_value_init(ctx, data, size, desc,
 				      tb[NFTA_DATA_VALUE]);
+
+	/*填充data_verdict*/
 	if (tb[NFTA_DATA_VERDICT] && ctx != NULL)
 		return nft_verdict_init(ctx, data, desc, tb[NFTA_DATA_VERDICT]);
+	/*当前不支持其它情况*/
 	return -EINVAL;
 }
 EXPORT_SYMBOL_GPL(nft_data_init);
@@ -8207,6 +8395,7 @@ static int __init nf_tables_module_init(void)
 	if (err < 0)
 		goto err3;
 
+	//初始化存储object的hashtable
 	err = rhltable_init(&nft_objname_ht, &nft_objname_ht_params);
 	if (err < 0)
 		goto err4;
@@ -8216,6 +8405,7 @@ static int __init nf_tables_module_init(void)
 		goto err5;
 
 	/* must be last */
+	//注册nftables子系统
 	err = nfnetlink_subsys_register(&nf_tables_subsys);
 	if (err < 0)
 		goto err6;

@@ -242,6 +242,7 @@ static struct nft_expr_type nft_fib6_type __read_mostly = {
 
 static int __init nft_fib6_module_init(void)
 {
+    //注册ipv6的fib表达式
 	return nft_register_expr(&nft_fib6_type);
 }
 

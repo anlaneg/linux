@@ -44,6 +44,7 @@ static int nf_flow_rule_route_inet(struct net *net,
 	return err;
 }
 
+//inet类型的flowtable
 static struct nf_flowtable_type flowtable_inet = {
 	.family		= NFPROTO_INET,
 	.init		= nf_flow_table_init,
@@ -56,6 +57,7 @@ static struct nf_flowtable_type flowtable_inet = {
 
 static int __init nf_flow_inet_module_init(void)
 {
+    //注册inet类型的flowtable
 	nft_register_flowtable_type(&flowtable_inet);
 
 	return 0;

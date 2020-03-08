@@ -320,23 +320,28 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 
 	switch (priv->key) {
 	case NFT_META_LEN:
+	    //取报文长度
 		*dest = skb->len;
 		break;
 	case NFT_META_PROTOCOL:
+	    //取报文协议
 		nft_reg_store16(dest, (__force u16)skb->protocol);
 		break;
 	case NFT_META_NFPROTO:
 		nft_reg_store8(dest, nft_pf(pkt));
 		break;
 	case NFT_META_L4PROTO:
+	    //l4协议
 		if (!pkt->tprot_set)
 			goto err;
 		nft_reg_store8(dest, pkt->tprot);
 		break;
 	case NFT_META_PRIORITY:
+	    //报文priority
 		*dest = skb->priority;
 		break;
 	case NFT_META_MARK:
+	    //报文mark
 		*dest = skb->mark;
 		break;
 	case NFT_META_IIF:
@@ -347,6 +352,7 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 	case NFT_META_OIFTYPE:
 	case NFT_META_IIFGROUP:
 	case NFT_META_OIFGROUP:
+	    //接口名称获取
 		if (!nft_meta_get_eval_ifname(priv->key, dest, pkt))
 			goto err;
 		break;
@@ -385,6 +391,7 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 		break;
 #endif
 	case NFT_META_PRANDOM:
+	    /*获取随机数*/
 		*dest = nft_prandom_u32();
 		break;
 #ifdef CONFIG_XFRM
@@ -400,6 +407,7 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 	case NFT_META_TIME_NS:
 	case NFT_META_TIME_DAY:
 	case NFT_META_TIME_HOUR:
+	    /*时间获取*/
 		nft_meta_get_eval_time(priv->key, dest);
 		break;
 	case NFT_META_SDIF:
@@ -445,6 +453,7 @@ void nft_meta_set_eval(const struct nft_expr *expr,
 			skb->pkt_type = value8;
 		break;
 	case NFT_META_NFTRACE:
+	    //为报文设置trace
 		value8 = nft_reg_load8(sreg);
 
 		skb->nf_trace = !!value8;
@@ -791,6 +800,7 @@ nft_meta_select_ops(const struct nft_ctx *ctx,
 	return ERR_PTR(-EINVAL);
 }
 
+//提取报文meta信息匹配提取
 struct nft_expr_type nft_meta_type __read_mostly = {
 	.name		= "meta",
 	.select_ops	= nft_meta_select_ops,

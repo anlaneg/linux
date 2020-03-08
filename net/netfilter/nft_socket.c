@@ -142,6 +142,7 @@ static struct nft_expr_type nft_socket_type __read_mostly = {
 
 static int __init nft_socket_module_init(void)
 {
+    //注册socket表达式
 	return nft_register_expr(&nft_socket_type);
 }
 

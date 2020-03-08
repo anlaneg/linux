@@ -266,6 +266,7 @@ static int __init nft_flow_offload_module_init(void)
 	if (err)
 		goto err;
 
+	//注册flow_offload表达式
 	err = nft_register_expr(&nft_flow_offload_type);
 	if (err < 0)
 		goto register_expr;

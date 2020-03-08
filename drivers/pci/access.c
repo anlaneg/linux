@@ -541,6 +541,7 @@ int pci_read_config_byte(const struct pci_dev *dev, int where, u8 *val)
 }
 EXPORT_SYMBOL(pci_read_config_byte);
 
+//自dev的where位置读取16bits数组
 int pci_read_config_word(const struct pci_dev *dev, int where, u16 *val)
 {
 	if (pci_dev_is_disconnected(dev)) {

@@ -2217,6 +2217,7 @@ static const struct nfnl_callback ip_set_netlink_subsys_cb[IPSET_MSG_MAX] = {
 	},
 };
 
+//netlink ip-set子系统
 static struct nfnetlink_subsystem ip_set_netlink_subsys __read_mostly = {
 	.name		= "ip_set",
 	.subsys_id	= NFNL_SUBSYS_IPSET,
@@ -2413,6 +2414,7 @@ ip_set_init(void)
 		return ret;
 	}
 
+	//注册ip_set子系统
 	ret = nfnetlink_subsys_register(&ip_set_netlink_subsys);
 	if (ret != 0) {
 		pr_err("ip_set: cannot register with nfnetlink.\n");

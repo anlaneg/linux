@@ -180,6 +180,7 @@ static bool nft_trace_have_verdict_chain(struct nft_traceinfo *info)
 	return true;
 }
 
+//trace报文通知
 void nft_trace_notify(struct nft_traceinfo *info)
 {
 	const struct nft_pktinfo *pkt = info->pkt;
@@ -189,9 +190,11 @@ void nft_trace_notify(struct nft_traceinfo *info)
 	unsigned int size;
 	u16 event;
 
+	//检查是否有nftrace监听
 	if (!nfnetlink_has_listeners(nft_net(pkt), NFNLGRP_NFTRACE))
 		return;
 
+	//构造报文trace的netlink消息
 	size = nlmsg_total_size(sizeof(struct nfgenmsg)) +
 		nla_total_size(strlen(info->chain->table->name)) +
 		nla_total_size(strlen(info->chain->name)) +
@@ -237,9 +240,11 @@ void nft_trace_notify(struct nft_traceinfo *info)
 	if (trace_fill_id(skb, pkt->skb))
 		goto nla_put_failure;
 
+	//存放chain名称
 	if (nla_put_string(skb, NFTA_TRACE_CHAIN, info->chain->name))
 		goto nla_put_failure;
 
+	//存放table名称
 	if (nla_put_string(skb, NFTA_TRACE_TABLE, info->chain->table->name))
 		goto nla_put_failure;
 

@@ -13,6 +13,7 @@
 
 #define nft_objref_priv(expr)	*((struct nft_object **)nft_expr_priv(expr))
 
+//调用nft_object对应的eval函数
 static void nft_objref_eval(const struct nft_expr *expr,
 			    struct nft_regs *regs,
 			    const struct nft_pktinfo *pkt)
@@ -82,11 +83,12 @@ static void nft_objref_activate(const struct nft_ctx *ctx,
 	obj->use++;
 }
 
+//定义objref类表达式
 static struct nft_expr_type nft_objref_type;
 static const struct nft_expr_ops nft_objref_ops = {
 	.type		= &nft_objref_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_object *)),
-	.eval		= nft_objref_eval,
+	.eval		= nft_objref_eval,//调用obj的eval完成执行
 	.init		= nft_objref_init,
 	.activate	= nft_objref_activate,
 	.deactivate	= nft_objref_deactivate,
@@ -94,8 +96,8 @@ static const struct nft_expr_ops nft_objref_ops = {
 };
 
 struct nft_objref_map {
-	struct nft_set		*set;
-	enum nft_registers	sreg:8;
+	struct nft_set		*set;//objref的查询用集合
+	enum nft_registers	sreg:8;//查询用key对应的寄存器id
 	struct nft_set_binding	binding;
 };
 
@@ -228,6 +230,7 @@ static const struct nla_policy nft_objref_policy[NFTA_OBJREF_MAX + 1] = {
 	[NFTA_OBJREF_SET_ID]	= { .type = NLA_U32 },
 };
 
+//定义objref表达式，完成object的执行
 static struct nft_expr_type nft_objref_type __read_mostly = {
 	.name		= "objref",
 	.select_ops	= nft_objref_select_ops,
@@ -238,6 +241,7 @@ static struct nft_expr_type nft_objref_type __read_mostly = {
 
 static int __init nft_objref_module_init(void)
 {
+    //注册objref表达式，此表达式完成object的执行
 	return nft_register_expr(&nft_objref_type);
 }
 

@@ -19,7 +19,7 @@ struct module;
 #define NFT_JUMP_STACK_SIZE	16
 
 struct nft_pktinfo {
-	struct sk_buff			*skb;
+	struct sk_buff			*skb;/*报文信息*/
 	bool				tprot_set;
 	u8				tprot;
 	/* for x_tables compatibility */
@@ -342,20 +342,23 @@ struct nft_set_ops {
 						  const struct nft_set_ext **ext);
 	bool				(*delete)(const struct nft_set *set,
 						  const u32 *key);
-
+	//向set中添加元素
 	int				(*insert)(const struct net *net,
 						  const struct nft_set *set,
 						  const struct nft_set_elem *elem,
 						  struct nft_set_ext **ext);
+	//使元素在下一代有效
 	void				(*activate)(const struct net *net,
 						    const struct nft_set *set,
 						    const struct nft_set_elem *elem);
+	//使元素在下一代无效
 	void *				(*deactivate)(const struct net *net,
 						      const struct nft_set *set,
 						      const struct nft_set_elem *elem);
 	bool				(*flush)(const struct net *net,
 						 const struct nft_set *set,
 						 void *priv);
+	//将elem自set中移除
 	void				(*remove)(const struct net *net,
 						  const struct nft_set *set,
 						  const struct nft_set_elem *elem);
@@ -367,17 +370,21 @@ struct nft_set_ops {
 					       const struct nft_set_elem *elem,
 					       unsigned int flags);
 
+	//取私有数据大小
 	u64				(*privsize)(const struct nlattr * const nla[],
 						    const struct nft_set_desc *desc);
 	bool				(*estimate)(const struct nft_set_desc *desc,
 						    u32 features,
 						    struct nft_set_estimate *est);
+	//set初始化
 	int				(*init)(const struct nft_set *set,
 						const struct nft_set_desc *desc,
 						const struct nlattr * const nla[]);
+	//set销毁
 	void				(*destroy)(const struct nft_set *set);
 	void				(*gc_init)(const struct nft_set *set);
 
+	//set中elem的大小
 	unsigned int			elemsize;
 };
 
@@ -390,8 +397,8 @@ struct nft_set_ops {
  *      @features: features supported by the implementation
  */
 struct nft_set_type {
-	const struct nft_set_ops	ops;
-	struct list_head		list;
+	const struct nft_set_ops	ops;//set操作集
+	struct list_head		list;//用于串连不同set类型
 	struct module			*owner;
 	u32				features;
 };
@@ -455,7 +462,7 @@ struct nft_set {
 	const struct nft_set_ops	*ops ____cacheline_aligned;
 	u16				flags:14,
 					genmask:2;
-	u8				klen;
+	u8				klen;/*key的长度*/
 	u8				dlen;
 	unsigned char			data[]
 		__attribute__((aligned(__alignof__(u64))));
@@ -616,6 +623,7 @@ static inline void *nft_set_ext(const struct nft_set_ext *ext, u8 id)
 	return (void *)ext + ext->offset[id];
 }
 
+//取set的key
 static inline struct nft_data *nft_set_ext_key(const struct nft_set_ext *ext)
 {
 	return nft_set_ext(ext, NFT_SET_EXT_KEY);
@@ -751,17 +759,20 @@ struct nft_expr_ops;
  *	@family: address family for AF-specific types
  *	@flags: expression type flags
  */
+//定义表达式类型
 struct nft_expr_type {
+    //如有此回调，则通过此回调，进一步选择表达式的ops,否则直接使用此结构给出的ops
 	const struct nft_expr_ops	*(*select_ops)(const struct nft_ctx *,
 						       const struct nlattr * const tb[]);
 	void				(*release_ops)(const struct nft_expr_ops *ops);
+	//无select_ops时，供使用的默认ops
 	const struct nft_expr_ops	*ops;
-	struct list_head		list;
-	const char			*name;
-	struct module			*owner;
-	const struct nla_policy		*policy;
-	unsigned int			maxattr;
-	u8				family;
+	struct list_head		list;//用于将type串起来
+	const char			*name;//表达式类型名称
+	struct module			*owner;//所属的module
+	const struct nla_policy		*policy;//表达式netlink属性策略
+	unsigned int			maxattr;//表达式netlink属性最大size
+	u8				family;//所属的family
 	u8				flags;
 };
 
@@ -793,17 +804,19 @@ struct nft_offload_ctx;
  *	@data: extra data to attach to this expression operation
  */
 struct nft_expr;
+//netfilter表达式操作集
 struct nft_expr_ops {
 	void				(*eval)(const struct nft_expr *expr,
 						struct nft_regs *regs,
 						const struct nft_pktinfo *pkt);
 	int				(*clone)(struct nft_expr *dst,
 						 const struct nft_expr *src);
-	unsigned int			size;
+	unsigned int			size;//表达式占用的内存大小
 
+	//用于初始化表达式
 	int				(*init)(const struct nft_ctx *ctx,
-						const struct nft_expr *expr,
-						const struct nlattr * const tb[]);
+						const struct nft_expr *expr/*出参，待初始化的netfilter表达式*/,
+						const struct nlattr * const tb[]/*表达式配置数组*/);
 	void				(*activate)(const struct nft_ctx *ctx,
 						    const struct nft_expr *expr);
 	void				(*deactivate)(const struct nft_ctx *ctx,
@@ -839,7 +852,7 @@ struct nft_expr_ops {
  *	@data: expression private data
  */
 struct nft_expr {
-	const struct nft_expr_ops	*ops;
+	const struct nft_expr_ops	*ops;//表达式对应的ops
 	unsigned char			data[]
 		__attribute__((aligned(__alignof__(u64))));
 };
@@ -867,19 +880,21 @@ int nft_expr_dump(struct sk_buff *skb, unsigned int attr,
  */
 struct nft_rule {
 	struct list_head		list;
-	u64				handle:42,
+	u64				handle:42,//rule唯一编号
 					genmask:2,
 					dlen:12,
-					udata:1;
+					udata:1;/*是否有用户定义的数据*/
 	unsigned char			data[]
 		__attribute__((aligned(__alignof__(struct nft_expr))));
 };
 
+//取rule的首个表达式
 static inline struct nft_expr *nft_expr_first(const struct nft_rule *rule)
 {
 	return (struct nft_expr *)&rule->data[0];
 }
 
+//取rule的下一个表达式
 static inline struct nft_expr *nft_expr_next(const struct nft_expr *expr)
 {
 	return ((void *)expr) + expr->ops->size;
@@ -925,17 +940,18 @@ enum nft_chain_flags {
  *	@name: name of the chain
  */
 struct nft_chain {
+    //指向规则（用于生效性控制）
 	struct nft_rule			*__rcu *rules_gen_0;
 	struct nft_rule			*__rcu *rules_gen_1;
-	struct list_head		rules;//链上的规则
+	struct list_head		rules;//链上的规则(struct nft_rule类型）
 	struct list_head		list;
 	struct rhlist_head		rhlhead;
-	struct nft_table		*table;
-	u64				handle;
+	struct nft_table		*table;//chain所属的table
+	u64				handle;//chain唯一编号
 	u32				use;
 	u8				flags:6,
 					genmask:2;
-	char				*name;
+	char				*name;//chain名称
 
 	/* Only used during control plane commit phase: */
 	struct nft_rule			**rules_next;
@@ -963,13 +979,20 @@ enum nft_chain_types {
  *	@ops_unregister: base chain unregister function
  */
 struct nft_chain_type {
+    //chain类型名称，例如filter
 	const char			*name;
 	enum nft_chain_types		type;
+	//适用的地址族
 	int				family;
+	//从属的module
 	struct module			*owner;
+	//每个hook占一位（按编号占位），用于标明hook回调是否提供
 	unsigned int			hook_mask;
+	//各hook点回调函数指针
 	nf_hookfn			*hooks[NF_MAX_HOOKS];
+	//hook点函数回调注册时调用
 	int				(*ops_register)(struct net *net, const struct nf_hook_ops *ops);
+	//hook点函数回调解注册时调用
 	void				(*ops_unregister)(struct net *net, const struct nf_hook_ops *ops);
 };
 
@@ -1004,10 +1027,10 @@ struct nft_hook {
 struct nft_base_chain {
 	struct nf_hook_ops		ops;
 	struct list_head		hook_list;
-	const struct nft_chain_type	*type;
+	const struct nft_chain_type	*type;//chain类型
 	u8				policy;
 	u8				flags;
-	struct nft_stats __percpu	*stats;
+	struct nft_stats __percpu	*stats;//用于记录统计信息
 	struct nft_chain		chain;
 	struct flow_block		flow_block;
 };
@@ -1017,6 +1040,7 @@ static inline struct nft_base_chain *nft_base_chain(const struct nft_chain *chai
 	return container_of(chain, struct nft_base_chain, chain);
 }
 
+//检查chain是否为basechain
 static inline bool nft_is_base_chain(const struct nft_chain *chain)
 {
 	return chain->flags & NFT_BASE_CHAIN;
@@ -1045,18 +1069,19 @@ unsigned int nft_do_chain(struct nft_pktinfo *pkt, void *priv);
  */
 struct nft_table {
 	struct list_head		list;
-	struct rhltable			chains_ht;
-	struct list_head		chains;//记录匹配链
-	struct list_head		sets;
+	struct rhltable			chains_ht;//chain对应的hash表
+	struct list_head		chains;//记录从属于此table的匹配链
+	struct list_head		sets;//记录于从属于此table的set
+	//记录从属于此table的所有object(由objref表达式负责执行）
 	struct list_head		objects;
 	struct list_head		flowtables;
 	u64				hgenerator;
-	u64				handle;
-	u32				use;
+	u64				handle;//table的唯一标识
+	u32				use;//table被引用情况
 	u16				family:6,
 					flags:8,
-					genmask:2;
-	char				*name;
+					genmask:2;//记录generations mask,用于标记生效情况
+	char				*name;//netfilter 表名称
 };
 
 void nft_register_chain_type(const struct nft_chain_type *);
@@ -1094,11 +1119,13 @@ struct nft_object_hash_key {
 struct nft_object {
 	struct list_head		list;
 	struct rhlist_head		rhlhead;
+	//用于obj查询的key
 	struct nft_object_hash_key	key;
 	u32				genmask:2,
 					use:30;
 	u64				handle;
 	/* runtime data below here */
+	//object对应的ops
 	const struct nft_object_ops	*ops ____cacheline_aligned;
 	unsigned char			data[]
 		__attribute__((aligned(__alignof__(u64))));
@@ -1132,14 +1159,15 @@ void nft_obj_notify(struct net *net, const struct nft_table *table,
  *	@policy: netlink attribute policy
  */
 struct nft_object_type {
+    //如果未给出ops,则通过此回调确定具体的ops
 	const struct nft_object_ops	*(*select_ops)(const struct nft_ctx *,
 						       const struct nlattr * const tb[]);
 	const struct nft_object_ops	*ops;
-	struct list_head		list;
-	u32				type;
-	unsigned int                    maxattr;
+	struct list_head		list;//用于将object_type串连起来
+	u32				type;//type编号
+	unsigned int                    maxattr;//object属性最大数
 	struct module			*owner;
-	const struct nla_policy		*policy;
+	const struct nla_policy		*policy;//object解析策略
 };
 
 /**
@@ -1156,15 +1184,18 @@ struct nft_object_ops {
 	void				(*eval)(struct nft_object *obj,
 						struct nft_regs *regs,
 						const struct nft_pktinfo *pkt);
-	unsigned int			size;
+	unsigned int			size;/*一个nft_object有定制的数据，此定制数据的长度*/
+	//此回调用于解析object所对应的data数据，并初始化obj
 	int				(*init)(const struct nft_ctx *ctx,
-						const struct nlattr *const tb[],
-						struct nft_object *obj);
+						const struct nlattr *const tb[]/*已解析的object属性*/,
+						struct nft_object *obj/*出参，待填充的object*/);
+	//用于销毁object
 	void				(*destroy)(const struct nft_ctx *ctx,
 						   struct nft_object *obj);
 	int				(*dump)(struct sk_buff *skb,
 						struct nft_object *obj,
 						bool reset);
+	//用于更新object
 	void				(*update)(struct nft_object *obj,
 						  struct nft_object *newobj);
 	const struct nft_object_type	*type;
@@ -1275,20 +1306,24 @@ void nft_trace_notify(struct nft_traceinfo *info);
  */
 static inline unsigned int nft_gencursor_next(const struct net *net)
 {
+    //只有两种情况，占2个bits,当前是0，则更新为1,当前为1,则更新为0
 	return net->nft.gencursor + 1 == 1 ? 1 : 0;
 }
 
 static inline u8 nft_genmask_next(const struct net *net)
 {
+    //取next generations的mask
 	return 1 << nft_gencursor_next(net);
 }
 
+//当前generations的mask
 static inline u8 nft_genmask_cur(const struct net *net)
 {
 	/* Use READ_ONCE() to prevent refetching the value for atomicity */
 	return 1 << READ_ONCE(net->nft.gencursor);
 }
 
+//next generations或者cur generations的mask
 #define NFT_GENMASK_ANY		((1 << 0) | (1 << 1))
 
 /*
@@ -1296,6 +1331,7 @@ static inline u8 nft_genmask_cur(const struct net *net)
  */
 
 /* Check if this object is currently active. */
+//对象是否被active
 #define nft_is_active(__net, __obj)				\
 	(((__obj)->genmask & nft_genmask_cur(__net)) == 0)
 
@@ -1314,6 +1350,7 @@ static inline u8 nft_genmask_cur(const struct net *net)
 /* After committing the ruleset, clear the stale generation bit. */
 #define nft_clear(__net, __obj)					\
 	(__obj)->genmask &= ~nft_genmask_next(__net)
+//检查obj的genmask是否与 __genmask不相同
 #define nft_active_genmask(__obj, __genmask)			\
 	!((__obj)->genmask & __genmask)
 
@@ -1380,6 +1417,7 @@ static inline void nft_set_elem_clear_busy(struct nft_set_ext *ext)
  *	@ctx: transaction context
  *	@data: internal information related to the transaction
  */
+//netfilter事务
 struct nft_trans {
 	struct list_head		list;
 	int				msg_type;

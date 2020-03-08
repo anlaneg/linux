@@ -16,13 +16,14 @@
 #include <net/netfilter/nf_tables_core.h>
 
 struct nft_lookup {
-	struct nft_set			*set;
-	enum nft_registers		sreg:8;
-	enum nft_registers		dreg:8;
-	bool				invert;
+	struct nft_set			*set;/*要查询的集合*/
+	enum nft_registers		sreg:8;//查询用的源寄存器id
+	enum nft_registers		dreg:8;//查询存储结果的目的寄存器id
+	bool				invert;//是否反向选择
 	struct nft_set_binding		binding;
 };
 
+//基于set的lookup
 void nft_lookup_eval(const struct nft_expr *expr,
 		     struct nft_regs *regs,
 		     const struct nft_pktinfo *pkt)
@@ -32,9 +33,11 @@ void nft_lookup_eval(const struct nft_expr *expr,
 	const struct nft_set_ext *ext;
 	bool found;
 
+	//在set中执行lookup
 	found = set->ops->lookup(nft_net(pkt), set, &regs->data[priv->sreg],
 				 &ext) ^ priv->invert;
 	if (!found) {
+	    //没有查询到就break
 		regs->verdict.code = NFT_BREAK;
 		return;
 	}
@@ -215,6 +218,7 @@ static int nft_lookup_validate(const struct nft_ctx *ctx,
 	return 0;
 }
 
+//提供基于set的lookup
 static const struct nft_expr_ops nft_lookup_ops = {
 	.type		= &nft_lookup_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_lookup)),

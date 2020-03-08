@@ -133,7 +133,9 @@ nft_meta_bridge_select_ops(const struct nft_ctx *ctx,
 static struct nft_expr_type nft_meta_bridge_type __read_mostly = {
 	.family         = NFPROTO_BRIDGE,
 	.name           = "meta",
+	//meta表达式ops选择
 	.select_ops     = nft_meta_bridge_select_ops,
+	//meta表达式netlink policy指定
 	.policy         = nft_meta_policy,
 	.maxattr        = NFTA_META_MAX,
 	.owner          = THIS_MODULE,
@@ -141,6 +143,7 @@ static struct nft_expr_type nft_meta_bridge_type __read_mostly = {
 
 static int __init nft_meta_bridge_module_init(void)
 {
+    //注册meta表达式
 	return nft_register_expr(&nft_meta_bridge_type);
 }
 

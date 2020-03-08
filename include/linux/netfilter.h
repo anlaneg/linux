@@ -78,12 +78,18 @@ typedef unsigned int nf_hookfn(void *priv,
 			       const struct nf_hook_state *state);
 struct nf_hook_ops {
 	/* User fills in from here down. */
+    /*hook函数*/
 	nf_hookfn		*hook;
+	/*hook点关联的设备*/
 	struct net_device	*dev;
+	/*hook私有数据*/
 	void			*priv;
+	//协议family
 	u_int8_t		pf;
+	/*hook点编号*/
 	unsigned int		hooknum;
 	/* Hooks are ordered in ascending priority. */
+	//hook点优先级，例如nat肯定在ct创建后
 	int			priority;
 };
 

@@ -32,6 +32,7 @@ static const struct nft_chain_type nft_chain_filter_ipv4 = {
 			  (1 << NF_INET_FORWARD) |
 			  (1 << NF_INET_PRE_ROUTING) |
 			  (1 << NF_INET_POST_ROUTING),
+	//各hook点回调函数定义
 	.hooks		= {
 		[NF_INET_LOCAL_IN]	= nft_do_chain_ipv4,
 		[NF_INET_LOCAL_OUT]	= nft_do_chain_ipv4,
@@ -43,6 +44,7 @@ static const struct nft_chain_type nft_chain_filter_ipv4 = {
 
 static void nft_chain_filter_ipv4_init(void)
 {
+    //ipv4 filter chain注册
 	nft_register_chain_type(&nft_chain_filter_ipv4);
 }
 static void nft_chain_filter_ipv4_fini(void)
@@ -64,6 +66,7 @@ static unsigned int nft_do_chain_arp(void *priv, struct sk_buff *skb,
 	nft_set_pktinfo(&pkt, skb, state);
 	nft_set_pktinfo_unspec(&pkt, skb);
 
+	//执行chain上对应规则
 	return nft_do_chain(&pkt, priv);
 }
 
@@ -140,6 +143,7 @@ static inline void nft_chain_filter_ipv6_fini(void) {}
 #endif /* CONFIG_NF_TABLES_IPV6 */
 
 #ifdef CONFIG_NF_TABLES_INET
+//filter chain hook点入口(inet表）
 static unsigned int nft_do_chain_inet(void *priv, struct sk_buff *skb,
 				      const struct nf_hook_state *state)
 {
@@ -161,6 +165,7 @@ static unsigned int nft_do_chain_inet(void *priv, struct sk_buff *skb,
 	return nft_do_chain(&pkt, priv);
 }
 
+//inet filter chain类型
 static const struct nft_chain_type nft_chain_filter_inet = {
 	.name		= "filter",
 	.type		= NFT_CHAIN_T_DEFAULT,
@@ -181,6 +186,7 @@ static const struct nft_chain_type nft_chain_filter_inet = {
 
 static void nft_chain_filter_inet_init(void)
 {
+    //注册inet的chain filter类型
 	nft_register_chain_type(&nft_chain_filter_inet);
 }
 
@@ -283,6 +289,7 @@ static const struct nft_chain_type nft_chain_filter_netdev = {
 	},
 };
 
+//处理netdev_unregister事件，设备解注册时，将设备上注册的hook移除掉
 static void nft_netdev_event(unsigned long event, struct net_device *dev,
 			     struct nft_ctx *ctx)
 {
@@ -293,6 +300,7 @@ static void nft_netdev_event(unsigned long event, struct net_device *dev,
 	if (event != NETDEV_UNREGISTER)
 		return;
 
+	//检查此设备是否已有hook注册
 	list_for_each_entry(hook, &basechain->hook_list, list) {
 		if (hook->ops.dev == dev)
 			found = hook;
@@ -328,6 +336,8 @@ static int nf_tables_netdev_event(struct notifier_block *this,
 		.net	= dev_net(dev),
 	};
 
+	//仅关心netdev_changename,netdev_unregister事件
+	//但代码并没有对netdev_changename进行处理
 	if (event != NETDEV_UNREGISTER &&
 	    event != NETDEV_CHANGENAME)
 		return NOTIFY_DONE;
@@ -360,8 +370,10 @@ static int nft_chain_filter_netdev_init(void)
 {
 	int err;
 
+	//注册netdev对应的chain类型
 	nft_register_chain_type(&nft_chain_filter_netdev);
 
+	//注册事件通知，在netdev变更时，对hook进行操作
 	err = register_netdevice_notifier(&nf_tables_netdev_notifier);
 	if (err)
 		goto err_register_netdevice_notifier;
@@ -392,6 +404,7 @@ int __init nft_chain_filter_init(void)
 	if (err < 0)
 		return err;
 
+	//filter chain其础类型注册
 	nft_chain_filter_ipv4_init();
 	nft_chain_filter_ipv6_init();
 	nft_chain_filter_arp_init();

@@ -27,7 +27,7 @@
  */
 struct virtqueue {
 	struct list_head list;//用于串连属于同一virtio_device的virtqueue
-	void (*callback)(struct virtqueue *vq);
+	void (*callback)(struct virtqueue *vq);/*vq的中断回调，例如收/发包*/
 	const char *name;//队列名称
 	struct virtio_device *vdev;//队列属于那个vdev
 	unsigned int index;//队列编号
@@ -116,7 +116,7 @@ struct virtio_device {
 	//virtio-pci驱动创建的virtio设备会有一种可能，指向virtio_pci_config_ops
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
-	struct list_head vqs;//virtio设备的所有虚队列
+	struct list_head vqs;//virtio设备的所有虚队列链表
 	u64 features;//virtio的bit位（用于指代功能)
 	void *priv;
 };
@@ -166,12 +166,12 @@ size_t virtio_max_dma_size(struct virtio_device *vdev);
  */
 struct virtio_driver {
 	struct device_driver driver;
-	const struct virtio_device_id *id_table;
-	const unsigned int *feature_table;//驱动提供了哪些功能（记录了flag占用哪位）
-	unsigned int feature_table_size;
-	const unsigned int *feature_table_legacy;
-	unsigned int feature_table_size_legacy;
-	int (*validate)(struct virtio_device *dev);
+	const struct virtio_device_id *id_table;//支持的设备列表
+	const unsigned int *feature_table;//驱动提供了哪些功能
+	unsigned int feature_table_size;//feature_table大小
+	const unsigned int *feature_table_legacy;//legacy功能列表
+	unsigned int feature_table_size_legacy;//legacy_table大小
+	int (*validate)(struct virtio_device *dev);//probe设备之前驱动对设备进行校验
 	int (*probe)(struct virtio_device *dev);
 	void (*scan)(struct virtio_device *dev);
 	void (*remove)(struct virtio_device *dev);
@@ -180,7 +180,7 @@ struct virtio_driver {
 	int (*freeze)(struct virtio_device *dev);
 	int (*restore)(struct virtio_device *dev);
 #endif
-}
+};
 
 /*获得对应的virtio驱动*/
 static inline struct virtio_driver *drv_to_virtio(struct device_driver *drv)

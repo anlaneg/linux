@@ -37,6 +37,7 @@ static int em_text_match(struct sk_buff *skb, struct tcf_ematch *m,
 	to = tcf_get_base_ptr(skb, tm->to_layer) - skb->data;
 	to += tm->to_offset;
 
+	/*在skb中查询指定字符串*/
 	return skb_find_text(skb, from, to, tm->config) != UINT_MAX;
 }
 

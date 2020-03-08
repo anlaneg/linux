@@ -135,6 +135,7 @@ static struct nft_expr_type nft_reject_inet_type __read_mostly = {
 
 static int __init nft_reject_inet_module_init(void)
 {
+    //reject 表达式注册
 	return nft_register_expr(&nft_reject_inet_type);
 }
 

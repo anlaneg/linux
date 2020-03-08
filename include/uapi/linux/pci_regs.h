@@ -114,6 +114,7 @@
 #define  PCI_COMMAND_WAIT	0x80	/* Enable address/data stepping */
 #define  PCI_COMMAND_SERR	0x100	/* Enable SERR */
 #define  PCI_COMMAND_FAST_BACK	0x200	/* Enable back-to-back writes */
+//command标记，标记是否禁止中断
 #define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
 
 #define PCI_STATUS		0x06	/* 16 bits *///status寄存器偏移量为6byte,长16bits
@@ -391,11 +392,14 @@
 
 /* MSI-X registers (in MSI-X capability) */
 #define PCI_MSIX_FLAGS		2	/* Message Control */
-#define  PCI_MSIX_FLAGS_QSIZE	0x07FF	/* Table size */
+//message control由以下三部分组成
+#define  PCI_MSIX_FLAGS_QSIZE	0x07FF	/* Table size */ //表项大小
+//禁止此function的所有中断
 #define  PCI_MSIX_FLAGS_MASKALL	0x4000	/* Mask all vectors for this function */
-#define  PCI_MSIX_FLAGS_ENABLE	0x8000	/* MSI-X enable */
+#define  PCI_MSIX_FLAGS_ENABLE	0x8000	/* MSI-X enable */ //msi-x是否enable
 #define PCI_MSIX_TABLE		4	/* Table offset */
-#define  PCI_MSIX_TABLE_BIR	0x00000007 /* BAR index */
+#define  PCI_MSIX_TABLE_BIR	0x00000007 /* BAR index */ //msi-x table 所在的BAR索引
+//msi-x table在对应BAR中的offset
 #define  PCI_MSIX_TABLE_OFFSET	0xfffffff8 /* Offset into specified BAR */
 #define PCI_MSIX_PBA		8	/* Pending Bit Array offset */
 #define  PCI_MSIX_PBA_BIR	0x00000007 /* BAR index */
@@ -404,6 +408,7 @@
 #define PCI_CAP_MSIX_SIZEOF	12	/* size of MSIX registers */
 
 /* MSI-X Table entry format (in memory mapped by a BAR) */
+//msi-x 表项（16字节的结构）由4部分组成lower_addr,upper_addr,message_data,vector_ctrl,各占4字节
 #define PCI_MSIX_ENTRY_SIZE		16
 #define PCI_MSIX_ENTRY_LOWER_ADDR	0  /* Message Address */
 #define PCI_MSIX_ENTRY_UPPER_ADDR	4  /* Message Upper Address */

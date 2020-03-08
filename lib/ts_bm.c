@@ -189,6 +189,8 @@ static struct ts_ops bm_ops = {
 
 static int __init init_bm(void)
 {
+    //字符串匹配算法bm
+    //https://www.ruanyifeng.com/blog/2013/05/boyer-moore_string_search_algorithm.html
 	return textsearch_register(&bm_ops);
 }
 

@@ -76,11 +76,11 @@ struct virtio_pci_device {
 
 	/* Legacy only field */
 	/* the IO mapping for the PCI config space */
-	void __iomem *ioaddr;
+	void __iomem *ioaddr;/*legacy情况下，bar0对应的配置结构体*/
 
 	/* a list of queues so we can dispatch IRQs */
 	spinlock_t lock;
-	struct list_head virtqueues;
+	struct list_head virtqueues;//指出可调度队列（struct virtio_pci_vq_info）
 
 	/* array of all queues for house-keeping */
 	struct virtio_pci_vq_info **vqs;
@@ -88,14 +88,14 @@ struct virtio_pci_device {
 	/* MSI-X support */
 	int msix_enabled;
 	int intx_enabled;
-	cpumask_var_t *msix_affinity_masks;
+	cpumask_var_t *msix_affinity_masks;//中断cpu亲昵掩码
 	/* Name strings for interrupts. This size should be enough,
 	 * and I'm too lazy to allocate each name separately. */
-	char (*msix_names)[256];
+	char (*msix_names)[256];/*中断名称*/
 	/* Number of available vectors */
-	unsigned msix_vectors;
+	unsigned msix_vectors;/*有效中断数*/
 	/* Vectors allocated, excluding per-vq vectors if any */
-	unsigned msix_used_vectors;
+	unsigned msix_used_vectors;//已使用的中断数目
 
 	/* Whether we have vector per vq */
 	bool per_vq_vectors;
@@ -104,8 +104,8 @@ struct virtio_pci_device {
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,
 				      struct virtio_pci_vq_info *info,
 				      unsigned idx,
-				      void (*callback)(struct virtqueue *vq),
-				      const char *name,
+				      void (*callback/*中断通知回调*/)(struct virtqueue *vq),
+				      const char *name/**/,
 				      bool ctx,
 				      u16 msix_vec);
 	//销毁virtqueue

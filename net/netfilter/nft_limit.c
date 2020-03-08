@@ -349,6 +349,7 @@ static int __init nft_limit_module_init(void)
 	if (err < 0)
 		return err;
 
+	//注册limit表达式
 	err = nft_register_expr(&nft_limit_type);
 	if (err < 0)
 		goto err1;

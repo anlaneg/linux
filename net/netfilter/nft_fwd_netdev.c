@@ -231,6 +231,7 @@ static struct nft_expr_type nft_fwd_netdev_type __read_mostly = {
 
 static int __init nft_fwd_netdev_module_init(void)
 {
+    //注册netdev可用的fwd表达式
 	return nft_register_expr(&nft_fwd_netdev_type);
 }
 

@@ -18,6 +18,7 @@ static struct nf_flowtable_type flowtable_ipv4 = {
 
 static int __init nf_flow_ipv4_module_init(void)
 {
+    //注册ipv4的flowtable
 	nft_register_flowtable_type(&flowtable_ipv4);
 
 	return 0;

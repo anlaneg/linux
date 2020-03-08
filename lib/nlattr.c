@@ -371,6 +371,7 @@ out_err:
 	return err;
 }
 
+//netlink属性解析校验
 static int __nla_validate_parse(const struct nlattr *head/*属性起始指针*/, int len/*属性长度*/, int maxtype/*属性最大数*/,
 				const struct nla_policy *policy,
 				unsigned int validate,
@@ -628,6 +629,7 @@ EXPORT_SYMBOL(nla_memcmp);
  */
 int nla_strcmp(const struct nlattr *nla, const char *str)
 {
+    //比较nla指定的字符串与str是否相等
 	int len = strlen(str);
 	char *buf = nla_data(nla);
 	int attrlen = nla_len(nla);

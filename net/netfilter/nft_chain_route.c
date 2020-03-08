@@ -13,7 +13,7 @@
 #include <net/ip.h>
 
 #ifdef CONFIG_NF_TABLES_IPV4
-static unsigned int nf_route_table_hook4(void *priv,
+static unsigned int nf_route_table_hook4(void *priv/*要执行的chain*/,
 					 struct sk_buff *skb,
 					 const struct nf_hook_state *state)
 {
@@ -34,14 +34,17 @@ static unsigned int nf_route_table_hook4(void *priv,
 	daddr = iph->daddr;
 	tos = iph->tos;
 
+	/*ipv4做规则处理*/
 	ret = nft_do_chain(&pkt, priv);
 	if (ret == NF_ACCEPT) {
 		iph = ip_hdr(skb);
 
+		//报文被修改
 		if (iph->saddr != saddr ||
 		    iph->daddr != daddr ||
 		    skb->mark != mark ||
 		    iph->tos != tos) {
+		    //重新进行路由查找
 			err = ip_route_me_harder(state->net, skb, RTN_UNSPEC);
 			if (err < 0)
 				ret = NF_DROP_ERR(err);
@@ -50,6 +53,7 @@ static unsigned int nf_route_table_hook4(void *priv,
 	return ret;
 }
 
+//ipv4 route chain类型
 static const struct nft_chain_type nft_chain_route_ipv4 = {
 	.name		= "route",
 	.type		= NFT_CHAIN_T_ROUTE,
@@ -85,6 +89,7 @@ static unsigned int nf_route_table_hook6(void *priv,
 	/* flowlabel and prio (includes version, which shouldn't change either)*/
 	flowlabel = *((u32 *)ipv6_hdr(skb));
 
+	//执行规则处理（如果有报文变更且与路由相关，则重查路由）
 	ret = nft_do_chain(&pkt, priv);
 	if (ret == NF_ACCEPT &&
 	    (memcmp(&ipv6_hdr(skb)->saddr, &saddr, sizeof(saddr)) ||
@@ -128,6 +133,7 @@ static unsigned int nf_route_table_inet(void *priv,
 		break;
 	}
 
+	//执行chain上对应规则
 	return nft_do_chain(&pkt, priv);
 }
 

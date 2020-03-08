@@ -18,9 +18,10 @@
  * position @h. For example
  * GENMASK_ULL(39, 21) gives us the 64bit vector 0x000000ffffe00000.
  */
+/*保证l到h位全为1*/
 #define GENMASK(h, l) \
-	(((~UL(0)) - (UL(1) << (l)) + 1) & \
-	 (~UL(0) >> (BITS_PER_LONG - 1 - (h))))
+	(((~UL(0)) - (UL(1) << (l)) + 1)/*将l位后面全部清为0，l位前面全置为1*/ & \
+	 (~UL(0) >> (BITS_PER_LONG - 1 - (h)))/*将h位前面全置为0*/)
 
 #define GENMASK_ULL(h, l) \
 	(((~ULL(0)) - (ULL(1) << (l)) + 1) & \

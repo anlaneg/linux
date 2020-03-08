@@ -4,6 +4,7 @@
 
 static int __init nf_tables_set_module_init(void)
 {
+    //注册不同种类的set类型
 	nft_register_set(&nft_set_hash_fast_type);
 	nft_register_set(&nft_set_hash_type);
 	nft_register_set(&nft_set_rhash_type);

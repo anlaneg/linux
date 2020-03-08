@@ -1289,10 +1289,12 @@ static int __init nft_ct_module_init(void)
 
 	BUILD_BUG_ON(NF_CT_LABELS_MAX_SIZE > NFT_REG_SIZE);
 
+	//注册ct表达式
 	err = nft_register_expr(&nft_ct_type);
 	if (err < 0)
 		return err;
 
+	//注册no track表达式
 	err = nft_register_expr(&nft_notrack_type);
 	if (err < 0)
 		goto err1;

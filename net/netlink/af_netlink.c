@@ -2412,6 +2412,7 @@ error_free:
 }
 EXPORT_SYMBOL(__netlink_dump_start);
 
+//完成netlink消息应答
 void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误编码*/,
 		 const struct netlink_ext_ack *extack)
 {
@@ -2525,7 +2526,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 			goto skip;
 
 ack:
-		//如果cb返回错误，或者响应有ack标记的消息
+		//如果cb返回错误，或者消息有ack响应标记,则对请求进行响应
 		if (nlh->nlmsg_flags & NLM_F_ACK || err)
 			netlink_ack(skb, nlh, err, &extack);
 

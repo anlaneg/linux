@@ -48,12 +48,14 @@ static void vp_get(struct virtio_device *vdev, unsigned offset,
 		   void *buf, unsigned len)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
+	//取公共配置结构体结束位置（自此位置开始将由各功能自主定义），并向后偏移offset字段
 	void __iomem *ioaddr = vp_dev->ioaddr +
 			VIRTIO_PCI_CONFIG_OFF(vp_dev->msix_enabled) +
 			offset;
 	u8 *ptr = buf;
 	int i;
 
+	//读取ioaddr对应的偏移量的值
 	for (i = 0; i < len; i++)
 		ptr[i] = ioread8(ioaddr + i);
 }
@@ -101,6 +103,7 @@ static void vp_reset(struct virtio_device *vdev)
 	vp_synchronize_vectors(vdev);
 }
 
+//virtio-pci设备，开始指定vector的使用
 static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 {
 	/* Setup the vector used for configuration events */
@@ -110,13 +113,14 @@ static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 	return ioread16(vp_dev->ioaddr + VIRTIO_MSI_CONFIG_VECTOR);
 }
 
+//设置vq的中断，物理地址
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
 				  unsigned index,
 				  void (*callback)(struct virtqueue *vq),
 				  const char *name,
 				  bool ctx,
-				  u16 msix_vec)
+				  u16 msix_vec/*中断地址*/)
 {
 	struct virtqueue *vq;
 	u16 num;
@@ -124,9 +128,11 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	u64 q_pfn;
 
 	/* Select the queue we're interested in */
+	//设置选中队列index
 	iowrite16(index, vp_dev->ioaddr + VIRTIO_PCI_QUEUE_SEL);
 
 	/* Check if queue is either not available or already active. */
+	//取队列大小
 	num = ioread16(vp_dev->ioaddr + VIRTIO_PCI_QUEUE_NUM);
 	if (!num || ioread32(vp_dev->ioaddr + VIRTIO_PCI_QUEUE_PFN))
 		return ERR_PTR(-ENOENT);
@@ -141,6 +147,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	if (!vq)
 		return ERR_PTR(-ENOMEM);
 
+	//到页指针
 	q_pfn = virtqueue_get_desc_addr(vq) >> VIRTIO_PCI_QUEUE_ADDR_SHIFT;
 	if (q_pfn >> 32) {
 		dev_err(&vp_dev->pci_dev->dev,
@@ -151,11 +158,13 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	}
 
 	/* activate the queue */
+	//知会硬件此ring的物理地址
 	iowrite32(q_pfn, vp_dev->ioaddr + VIRTIO_PCI_QUEUE_PFN);
 
 	vq->priv = (void __force *)vp_dev->ioaddr + VIRTIO_PCI_QUEUE_NOTIFY;
 
 	if (msix_vec != VIRTIO_MSI_NO_VECTOR) {
+	    //知会硬件此ring对应的中断号
 		iowrite16(msix_vec, vp_dev->ioaddr + VIRTIO_MSI_QUEUE_VECTOR);
 		msix_vec = ioread16(vp_dev->ioaddr + VIRTIO_MSI_QUEUE_VECTOR);
 		if (msix_vec == VIRTIO_MSI_NO_VECTOR) {
@@ -194,7 +203,7 @@ static void del_vq(struct virtio_pci_vq_info *info)
 }
 
 static const struct virtio_config_ops virtio_pci_config_ops = {
-	.get		= vp_get,
+	.get		= vp_get,//针对legacy接口，设备的配置位于公共配置结构体后面
 	.set		= vp_set,
 	.get_status	= vp_get_status,
 	.set_status	= vp_set_status,

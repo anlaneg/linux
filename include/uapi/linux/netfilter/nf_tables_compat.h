@@ -13,9 +13,9 @@ enum nft_target_attributes {
 
 enum nft_match_attributes {
 	NFTA_MATCH_UNSPEC,
-	NFTA_MATCH_NAME,
-	NFTA_MATCH_REV,
-	NFTA_MATCH_INFO,
+	NFTA_MATCH_NAME,//match名称
+	NFTA_MATCH_REV,//match的版本号
+	NFTA_MATCH_INFO,//match提供的比较信息
 	__NFTA_MATCH_MAX
 };
 #define NFTA_MATCH_MAX		(__NFTA_MATCH_MAX - 1)

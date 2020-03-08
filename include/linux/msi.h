@@ -102,18 +102,18 @@ struct msi_desc {
 		struct {
 			u32 masked;
 			struct {
-				u8	is_msix		: 1;
+				u8	is_msix		: 1;/*是否msi-x类型中断*/
 				u8	multiple	: 3;
 				u8	multi_cap	: 3;
 				u8	maskbit		: 1;
-				u8	is_64		: 1;
-				u8	is_virtual	: 1;
-				u16	entry_nr;
+				u8	is_64		: 1;/*是否64位*/
+				u8	is_virtual	: 1;/*是否为虚拟的中断*/
+				u16	entry_nr;/*要请求的中断号*/
 				unsigned default_irq;
 			} msi_attrib;
 			union {
 				u8	mask_pos;
-				void __iomem *mask_base;
+				void __iomem *mask_base;/*指向msi-x表*/
 			};
 		};
 

@@ -495,9 +495,8 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 	.get_vq_affinity = vp_get_vq_affinity,
 };
 
-//virtio pci配置获取
 static const struct virtio_config_ops virtio_pci_config_ops = {
-	.get		= vp_get,
+	.get		= vp_get,//virtio pci配置获取
 	.set		= vp_set,
 	.generation	= vp_generation,
 	.get_status	= vp_get_status,

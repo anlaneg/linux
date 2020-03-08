@@ -18,6 +18,7 @@ struct nft_quota {
 	atomic64_t	consumed;
 };
 
+//检查quota是否足够
 static inline bool nft_overquota(struct nft_quota *priv,
 				 const struct sk_buff *skb)
 {
@@ -35,6 +36,7 @@ static inline void nft_quota_do_eval(struct nft_quota *priv,
 				     const struct nft_pktinfo *pkt)
 {
 	if (nft_overquota(priv, pkt->skb) ^ nft_quota_invert(priv))
+	    /*quota区配成功*/
 		regs->verdict.code = NFT_BREAK;
 }
 
@@ -231,6 +233,7 @@ static int __init nft_quota_module_init(void)
 	if (err < 0)
 		return err;
 
+	//注册quota表达式
 	err = nft_register_expr(&nft_quota_type);
 	if (err < 0)
 		goto err1;

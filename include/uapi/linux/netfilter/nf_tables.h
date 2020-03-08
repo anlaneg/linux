@@ -99,7 +99,7 @@ enum nft_verdicts {
  * @NFT_MSG_DELFLOWTABLE: delete flow table (enum nft_flowtable_attributes)
  */
 enum nf_tables_msg_types {
-	NFT_MSG_NEWTABLE,
+	NFT_MSG_NEWTABLE,//table新建
 	NFT_MSG_GETTABLE,
 	NFT_MSG_DELTABLE,
 	NFT_MSG_NEWCHAIN,
@@ -203,7 +203,7 @@ enum nft_chain_attributes {
 	NFTA_CHAIN_HANDLE,
 	NFTA_CHAIN_NAME,
 	NFTA_CHAIN_HOOK,
-	NFTA_CHAIN_POLICY,
+	NFTA_CHAIN_POLICY,//chain策略情况
 	NFTA_CHAIN_USE,
 	NFTA_CHAIN_TYPE,
 	NFTA_CHAIN_COUNTERS,
@@ -231,10 +231,10 @@ enum nft_rule_attributes {
 	NFTA_RULE_TABLE,
 	NFTA_RULE_CHAIN,
 	NFTA_RULE_HANDLE,
-	NFTA_RULE_EXPRESSIONS,
+	NFTA_RULE_EXPRESSIONS,//规则表达式列表
 	NFTA_RULE_COMPAT,
 	NFTA_RULE_POSITION,
-	NFTA_RULE_USERDATA,
+	NFTA_RULE_USERDATA,//用户定义的关联数据
 	NFTA_RULE_PAD,
 	NFTA_RULE_ID,
 	NFTA_RULE_POSITION_ID,
@@ -345,7 +345,7 @@ enum nft_set_field_attributes {
  */
 enum nft_set_attributes {
 	NFTA_SET_UNSPEC,
-	NFTA_SET_TABLE,
+	NFTA_SET_TABLE,//set所属表
 	NFTA_SET_NAME,
 	NFTA_SET_FLAGS,
 	NFTA_SET_KEY_TYPE,
@@ -717,7 +717,7 @@ enum nft_dynset_attributes {
  * @NFT_PAYLOAD_TRANSPORT_HEADER: transport header
  */
 enum nft_payload_bases {
-	NFT_PAYLOAD_LL_HEADER,
+	NFT_PAYLOAD_LL_HEADER,//链路层头部
 	NFT_PAYLOAD_NETWORK_HEADER,
 	NFT_PAYLOAD_TRANSPORT_HEADER,
 };
@@ -1542,7 +1542,7 @@ enum nft_object_attributes {
 	NFTA_OBJ_UNSPEC,
 	NFTA_OBJ_TABLE,
 	NFTA_OBJ_NAME,
-	NFTA_OBJ_TYPE,
+	NFTA_OBJ_TYPE,//记录object类型
 	NFTA_OBJ_DATA,
 	NFTA_OBJ_USE,
 	NFTA_OBJ_HANDLE,
@@ -1563,8 +1563,8 @@ enum nft_object_attributes {
  */
 enum nft_flowtable_attributes {
 	NFTA_FLOWTABLE_UNSPEC,
-	NFTA_FLOWTABLE_TABLE,
-	NFTA_FLOWTABLE_NAME,
+	NFTA_FLOWTABLE_TABLE,//flowtable对应的nft_table名称
+	NFTA_FLOWTABLE_NAME,//flowtable对应的名称
 	NFTA_FLOWTABLE_HOOK,
 	NFTA_FLOWTABLE_USE,
 	NFTA_FLOWTABLE_HANDLE,

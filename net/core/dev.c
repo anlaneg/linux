@@ -1462,6 +1462,7 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (ret)
 		return ret;
 
+	//置设备达到running状态
 	set_bit(__LINK_STATE_START, &dev->state);
 
 	//校验mac地址是否有效
@@ -6723,7 +6724,7 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
-	//指明采用poll方式
+	//指明napi可调度
 	set_bit(NAPI_STATE_SCHED, &napi->state);
 	napi_hash_add(napi);
 }

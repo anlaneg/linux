@@ -1232,6 +1232,7 @@ static inline bool kvm_request_pending(struct kvm_vcpu *vcpu)
 	return READ_ONCE(vcpu->requests);
 }
 
+/*检查指定req是否在vcpu->requests上已设置*/
 static inline bool kvm_test_request(int req, struct kvm_vcpu *vcpu)
 {
 	return test_bit(req & KVM_REQUEST_MASK, (void *)&vcpu->requests);
@@ -1242,6 +1243,7 @@ static inline void kvm_clear_request(int req, struct kvm_vcpu *vcpu)
 	clear_bit(req & KVM_REQUEST_MASK, (void *)&vcpu->requests);
 }
 
+/*如果req标记在vcpu上被请求，则清除此标记，并返回true,否则返回false*/
 static inline bool kvm_check_request(int req, struct kvm_vcpu *vcpu)
 {
 	if (kvm_test_request(req, vcpu)) {

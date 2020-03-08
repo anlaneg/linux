@@ -139,6 +139,8 @@ static struct ts_ops kmp_ops = {
 
 static int __init init_kmp(void)
 {
+    //字符串搜索算法KMP注册
+    //https://en.wikipedia.org/wiki/Knuth%E2%80%93Morris%E2%80%93Pratt_algorithm
 	return textsearch_register(&kmp_ops);
 }
 

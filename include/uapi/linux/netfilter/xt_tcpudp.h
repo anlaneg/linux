@@ -8,9 +8,13 @@
 struct xt_tcp {
 	__u16 spts[2];			/* Source port range. */
 	__u16 dpts[2];			/* Destination port range. */
+	//要检查的tcp选项kind
 	__u8 option;			/* TCP Option iff non-zero*/
+	//tcp flags掩码
 	__u8 flg_mask;			/* TCP flags mask byte */
+	//报文的tcp_flags & flg_mask,后目标数检查
 	__u8 flg_cmp;			/* TCP flags compare byte */
+	//是否反向选择
 	__u8 invflags;			/* Inverse flags */
 };
 

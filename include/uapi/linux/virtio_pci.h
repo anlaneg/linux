@@ -43,6 +43,10 @@
 
 #ifndef VIRTIO_PCI_NO_LEGACY
 
+//virtio-pci legacy interfaces情况下BAR0会指向一个公共的配置结构体，
+//其格式在virtio-v1.1的 4.1.4.8节《Legacy Interfaces: A Note on PCI Device Layout》
+//有定义，以下是各数据结构体成员的offset,各字段的注释，指明了其作用及读写权限等
+
 /* A 32-bit r/o bitmask of the features supported by the host */
 #define VIRTIO_PCI_HOST_FEATURES	0
 
@@ -70,6 +74,7 @@
 #define VIRTIO_PCI_ISR			19
 
 /* MSI-X registers: only enabled if MSI-X is enabled. */
+//如果msi-x被开启，则使用此子结构
 /* A 16-bit vector for configuration changes. */
 #define VIRTIO_MSI_CONFIG_VECTOR        20
 /* A 16-bit vector for selected queue notifications. */
@@ -77,6 +82,7 @@
 
 /* The remaining space is defined by each driver as the per-driver
  * configuration space */
+//此位置为公共配置结构体的结束
 #define VIRTIO_PCI_CONFIG_OFF(msix_enabled)	((msix_enabled) ? 24 : 20)
 /* Deprecated: please use VIRTIO_PCI_CONFIG_OFF instead */
 #define VIRTIO_PCI_CONFIG(dev)	VIRTIO_PCI_CONFIG_OFF((dev)->msix_enabled)
@@ -97,6 +103,7 @@
 /* The bit of the ISR which indicates a device configuration change. */
 #define VIRTIO_PCI_ISR_CONFIG		0x2
 /* Vector value used to disable MSI for queue */
+//不使用中断
 #define VIRTIO_MSI_NO_VECTOR            0xffff
 
 #ifndef VIRTIO_PCI_NO_MODERN

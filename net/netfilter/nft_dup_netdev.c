@@ -22,6 +22,7 @@ static void nft_dup_netdev_eval(const struct nft_expr *expr,
 				const struct nft_pktinfo *pkt)
 {
 	struct nft_dup_netdev *priv = nft_expr_priv(expr);
+	/*取输出副本的出接口*/
 	int oif = regs->data[priv->sreg_dev];
 
 	nf_dup_netdev_egress(pkt, oif);
@@ -77,6 +78,7 @@ static const struct nft_expr_ops nft_dup_netdev_ops = {
 	.offload	= nft_dup_netdev_offload,
 };
 
+//注册netdev可用的dup表达式
 static struct nft_expr_type nft_dup_netdev_type __read_mostly = {
 	.family		= NFPROTO_NETDEV,
 	.name		= "dup",

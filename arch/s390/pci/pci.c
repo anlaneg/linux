@@ -284,6 +284,7 @@ static void __iomem *pci_iomap_range_mio(struct pci_dev *pdev, int bar,
 					 unsigned long offset,
 					 unsigned long max)
 {
+    //取给定bar的资源长度
 	unsigned long barsize = pci_resource_len(pdev, bar);
 	struct zpci_dev *zdev = to_zpci(pdev);
 	void __iomem *iova;
@@ -295,6 +296,7 @@ static void __iomem *pci_iomap_range_mio(struct pci_dev *pdev, int bar,
 void __iomem *pci_iomap_range(struct pci_dev *pdev, int bar,
 			      unsigned long offset, unsigned long max)
 {
+    /*bar数目不超过6,bar的资源长度不为0*/
 	if (bar >= PCI_STD_NUM_BARS || !pci_resource_len(pdev, bar))
 		return NULL;
 

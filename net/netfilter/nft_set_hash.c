@@ -409,18 +409,19 @@ static bool nft_rhash_estimate(const struct nft_set_desc *desc, u32 features,
 }
 
 struct nft_hash {
-	u32				seed;
-	u32				buckets;
-	struct hlist_head		table[];
+	u32				seed;//哈希因子
+	u32				buckets;//桶数目
+	struct hlist_head		table[];//桶
 };
 
 struct nft_hash_elem {
-	struct hlist_node		node;
-	struct nft_set_ext		ext;
+	struct hlist_node		node;//用于串到hash表
+	struct nft_set_ext		ext;//set扩展信息
 };
 
+//通过key查询set元素
 static bool nft_hash_lookup(const struct net *net, const struct nft_set *set,
-			    const u32 *key, const struct nft_set_ext **ext)
+			    const u32 *key, const struct nft_set_ext **ext/*出参，查询结果*/)
 {
 	struct nft_hash *priv = nft_set_priv(set);
 	u8 genmask = nft_genmask_cur(net);
@@ -433,6 +434,7 @@ static bool nft_hash_lookup(const struct net *net, const struct nft_set *set,
 		if (!memcmp(nft_set_ext_key(&he->ext), key, set->klen) &&
 		    nft_set_elem_active(&he->ext, genmask)) {
 			*ext = &he->ext;
+			/*元素存在，返回true*/
 			return true;
 		}
 	}
@@ -483,6 +485,7 @@ static bool nft_hash_lookup_fast(const struct net *net,
 static u32 nft_jhash(const struct nft_set *set, const struct nft_hash *priv,
 		     const struct nft_set_ext *ext)
 {
+    //取key
 	const struct nft_data *key = nft_set_ext_key(ext);
 	u32 hash, k1;
 
@@ -499,7 +502,7 @@ static u32 nft_jhash(const struct nft_set *set, const struct nft_hash *priv,
 
 static int nft_hash_insert(const struct net *net, const struct nft_set *set,
 			   const struct nft_set_elem *elem,
-			   struct nft_set_ext **ext)
+			   struct nft_set_ext **ext/*取action中的elem*/)
 {
 	struct nft_hash_elem *this = elem->priv, *he;
 	struct nft_hash *priv = nft_set_priv(set);
@@ -509,12 +512,14 @@ static int nft_hash_insert(const struct net *net, const struct nft_set *set,
 	hash = nft_jhash(set, priv, &this->ext);
 	hlist_for_each_entry(he, &priv->table[hash], node) {
 		if (!memcmp(nft_set_ext_key(&this->ext),
-			    nft_set_ext_key(&he->ext), set->klen) &&
+			    nft_set_ext_key(&he->ext), set->klen)/*key比对*/ &&
 		    nft_set_elem_active(&he->ext, genmask)) {
+		    /*返回已存在的set_ext*/
 			*ext = &he->ext;
 			return -EEXIST;
 		}
 	}
+	//不存在，直接加入到hash表中
 	hlist_add_head_rcu(&this->node, &priv->table[hash]);
 	return 0;
 }
@@ -557,6 +562,7 @@ static void *nft_hash_deactivate(const struct net *net,
 	return NULL;
 }
 
+//将elem自set中移除
 static void nft_hash_remove(const struct net *net,
 			    const struct nft_set *set,
 			    const struct nft_set_elem *elem)
@@ -599,6 +605,7 @@ static u64 nft_hash_privsize(const struct nlattr * const nla[],
 	       nft_hash_buckets(desc->size) * sizeof(struct hlist_head);
 }
 
+//初始化hash set
 static int nft_hash_init(const struct nft_set *set,
 			 const struct nft_set_desc *desc,
 			 const struct nlattr * const tb[])
@@ -611,6 +618,7 @@ static int nft_hash_init(const struct nft_set *set,
 	return 0;
 }
 
+//释放hash set
 static void nft_hash_destroy(const struct nft_set *set)
 {
 	struct nft_hash *priv = nft_set_priv(set);
@@ -618,6 +626,7 @@ static void nft_hash_destroy(const struct nft_set *set)
 	struct hlist_node *next;
 	int i;
 
+	//遍历所有桶，将其中元素移除掉
 	for (i = 0; i < priv->buckets; i++) {
 		hlist_for_each_entry_safe(he, next, &priv->table[i], node) {
 			hlist_del_rcu(&he->node);
@@ -686,6 +695,7 @@ struct nft_set_type nft_set_rhash_type __read_mostly = {
 	},
 };
 
+//提供hash方式的nft_set类型
 struct nft_set_type nft_set_hash_type __read_mostly = {
 	.owner		= THIS_MODULE,
 	.features	= NFT_SET_MAP | NFT_SET_OBJECT,

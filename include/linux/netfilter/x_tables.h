@@ -33,12 +33,12 @@ struct xt_action_param {
 		const struct xt_target *target;
 	};
 	union {
-		const void *matchinfo, *targinfo;
+		const void *matchinfo/*区配的目标比较数*/, *targinfo;
 	};
 	const struct nf_hook_state *state;
-	int fragoff;
-	unsigned int thoff;
-	bool hotdrop;
+	int fragoff;/*分片的offset,非分片时为0*/
+	unsigned int thoff;//到传输层的offset
+	bool hotdrop;//是否直接丢包
 };
 
 static inline struct net *xt_net(const struct xt_action_param *par)
@@ -142,6 +142,7 @@ struct xt_tgdtor_param {
 struct xt_match {
 	struct list_head list;
 
+	//match名称及版本（用于唯一确定一个xt_match)
 	const char name[XT_EXTENSION_MAXNAMELEN];
 	u_int8_t revision;
 
@@ -150,6 +151,8 @@ struct xt_match {
 	/* Arguments changed since 2.6.9, as this must now handle
 	   non-linear skb, using skb_header_pointer and
 	   skb_ip_make_writable. */
+	//返回1表示continue,返回其0表示 break
+	//set *hotdrop =1表示要求丢包
 	bool (*match)(const struct sk_buff *skb,
 		      struct xt_action_param *);
 

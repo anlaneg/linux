@@ -23,6 +23,7 @@ struct nft_cmp_expr {
 	enum nft_cmp_ops	op:8;
 };
 
+//将priv->data中的数据与寄存器中记录的priv->sreg号数据进行比对
 void nft_cmp_eval(const struct nft_expr *expr,
 		  struct nft_regs *regs,
 		  const struct nft_pktinfo *pkt)
@@ -30,9 +31,11 @@ void nft_cmp_eval(const struct nft_expr *expr,
 	const struct nft_cmp_expr *priv = nft_expr_priv(expr);
 	int d;
 
+	//采用memcmp进行比对
 	d = memcmp(&regs->data[priv->sreg], &priv->data, priv->len);
 	switch (priv->op) {
 	case NFT_CMP_EQ:
+	    /*相等比对*/
 		if (d != 0)
 			goto mismatch;
 		break;
@@ -60,6 +63,7 @@ void nft_cmp_eval(const struct nft_expr *expr,
 	return;
 
 mismatch:
+    /*未匹配上，置为break*/
 	regs->verdict.code = NFT_BREAK;
 }
 
@@ -151,6 +155,7 @@ static int nft_cmp_offload(struct nft_offload_ctx *ctx,
 	return __nft_cmp_offload(ctx, flow, priv);
 }
 
+//用于大于4字节的比对操作
 static const struct nft_expr_ops nft_cmp_ops = {
 	.type		= &nft_cmp_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_cmp_expr)),
@@ -227,6 +232,7 @@ nla_put_failure:
 	return -1;
 }
 
+//用于支持小于4字节的相等比对
 const struct nft_expr_ops nft_cmp_fast_ops = {
 	.type		= &nft_cmp_type,
 	.size		= NFT_EXPR_SIZE(sizeof(struct nft_cmp_fast_expr)),
@@ -244,11 +250,13 @@ nft_cmp_select_ops(const struct nft_ctx *ctx, const struct nlattr * const tb[])
 	enum nft_cmp_ops op;
 	int err;
 
+	//三项配置必须均有值
 	if (tb[NFTA_CMP_SREG] == NULL ||
 	    tb[NFTA_CMP_OP] == NULL ||
 	    tb[NFTA_CMP_DATA] == NULL)
 		return ERR_PTR(-EINVAL);
 
+	//目前支持 ==,!=,<,<=,>,>=几种操作
 	op = ntohl(nla_get_be32(tb[NFTA_CMP_OP]));
 	switch (op) {
 	case NFT_CMP_EQ:
@@ -262,16 +270,19 @@ nft_cmp_select_ops(const struct nft_ctx *ctx, const struct nlattr * const tb[])
 		return ERR_PTR(-EINVAL);
 	}
 
+	//初始化compare的data
 	err = nft_data_init(NULL, &data, sizeof(data), &desc,
 			    tb[NFTA_CMP_DATA]);
 	if (err < 0)
 		return ERR_PTR(err);
 
+	//必须为data_value类型
 	if (desc.type != NFT_DATA_VALUE) {
 		err = -EINVAL;
 		goto err1;
 	}
 
+	//数据长度小于4字节且为等于op时，返回fast_ops
 	if (desc.len <= sizeof(u32) && op == NFT_CMP_EQ)
 		return &nft_cmp_fast_ops;
 
@@ -281,6 +292,7 @@ err1:
 	return ERR_PTR(-EINVAL);
 }
 
+//compare表达式
 struct nft_expr_type nft_cmp_type __read_mostly = {
 	.name		= "cmp",
 	.select_ops	= nft_cmp_select_ops,

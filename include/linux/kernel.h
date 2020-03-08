@@ -300,6 +300,10 @@ extern void __cant_sleep(const char *file, int line, int preempt_offset);
  */
 static inline u32 reciprocal_scale(u32 val, u32 ep_ro)
 {
+    //这个函数val为小数的情况下总是0，这样合适吗？
+    //采用val % ep_ro来实现不好吗？
+    //(1。取余实际上仅val的低位bit有效；2。？）
+    //(val*ep_ro)/0XFFFFFFFF
 	return (u32)(((u64) val * ep_ro) >> 32);
 }
 

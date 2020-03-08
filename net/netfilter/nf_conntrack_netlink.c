@@ -3640,12 +3640,14 @@ static int __init ctnetlink_init(void)
 {
 	int ret;
 
+	//注册ct子系统
 	ret = nfnetlink_subsys_register(&ctnl_subsys);
 	if (ret < 0) {
 		pr_err("ctnetlink_init: cannot register with nfnetlink.\n");
 		goto err_out;
 	}
 
+	//注册ct 期待子系统
 	ret = nfnetlink_subsys_register(&ctnl_exp_subsys);
 	if (ret < 0) {
 		pr_err("ctnetlink_init: cannot register exp with nfnetlink.\n");

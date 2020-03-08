@@ -34,23 +34,31 @@
 //看virtio 1.0规定的设备状态
 /* Status byte for guest to report progress, and synchronize features. */
 /* We have seen device and processed generic fields (VIRTIO_CONFIG_F_VIRTIO) */
+//guest os发现了一个设备，并认为其为有效的virtio设备
 #define VIRTIO_CONFIG_S_ACKNOWLEDGE	1
 /* We have found a driver for the device. */
+//guest os 为virtio设备找到了一个合适的驱动
 #define VIRTIO_CONFIG_S_DRIVER		2
 /* Driver has used its parts of the config, and is happy */
 //针对设备的驱动已完成
 #define VIRTIO_CONFIG_S_DRIVER_OK	4
 /* Driver has finished configuring features */
+//针对功能协商已完成
 #define VIRTIO_CONFIG_S_FEATURES_OK	8
 /* Device entered invalid state, driver must reset it */
+//指明驱动需要reset它
 #define VIRTIO_CONFIG_S_NEEDS_RESET	0x40
 /* We've given up on this device. */
+//遇到错误，放弃此设备
 #define VIRTIO_CONFIG_S_FAILED		0x80
 
-/*
 //按照virtio 1.0标准规定
+//（0－23是特定设备类型对应的功能bit)
+// 24-32 是队列扩展及功能协商相关的功能
+// 33-X 预留的扩展
+/*
 Feature bits are allocated as follows:
-0 to 23 Feature bits for the specific device type （0－23是设备类型相关的功能bit)
+0 to 23 Feature bits for the specific device type
 24 to 32 Feature bits reserved for extensions to the queue and feature negotiation mechanisms
 33 and above Feature bits reserved for future extensions.
 */

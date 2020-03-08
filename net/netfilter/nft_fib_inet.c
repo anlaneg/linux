@@ -62,6 +62,7 @@ static struct nft_expr_type nft_fib_inet_type __read_mostly = {
 
 static int __init nft_fib_inet_module_init(void)
 {
+    //注册inet的fib表达式
 	return nft_register_expr(&nft_fib_inet_type);
 }
 

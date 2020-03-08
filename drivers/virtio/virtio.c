@@ -52,6 +52,7 @@ static ssize_t modalias_show(struct device *_d,
 static DEVICE_ATTR_RO(modalias);//模块别名
 
 //显示/sys/bus/virtio/devices/virtio*/features
+//按位显示features
 static ssize_t features_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
 {
@@ -151,7 +152,7 @@ static void __virtio_config_changed(struct virtio_device *dev)
 		drv->config_changed(dev);
 }
 
-//指明配置改变
+//指明virtio device配置改变
 void virtio_config_changed(struct virtio_device *dev)
 {
 	unsigned long flags;
@@ -181,7 +182,7 @@ void virtio_config_enable(struct virtio_device *dev)
 }
 EXPORT_SYMBOL_GPL(virtio_config_enable);
 
-//在设备旧的状态上设置新的status
+//设置新的设备status
 void virtio_add_status(struct virtio_device *dev, unsigned int status)
 {
 	might_sleep();
@@ -191,6 +192,7 @@ EXPORT_SYMBOL_GPL(virtio_add_status);
 
 int virtio_finalize_features(struct virtio_device *dev)
 {
+    //设置驱动，设备协商成功的功能
 	int ret = dev->config->finalize_features(dev);
 	unsigned status;
 
@@ -198,10 +200,11 @@ int virtio_finalize_features(struct virtio_device *dev)
 	if (ret)
 		return ret;
 
+	//协商为非virtio 1.0,直接返回0
 	if (!virtio_has_feature(dev, VIRTIO_F_VERSION_1))
 		return 0;
 
-	//置设备完成了功能协商
+	//置设备与驱动已完成了功能协商
 	//EATURES_OK (8) Indicates that the driver has acknowledged all the features it understands, and feature
 	//negotiation is complete.
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
@@ -246,6 +249,7 @@ static int virtio_dev_probe(struct device *_d)
 	}
 
 	/* Some drivers have a separate feature table for virtio v1.0 */
+	//如果driver有legacy table,则获取，否则使用driver_features
 	if (drv->feature_table_legacy) {
 		driver_features_legacy = 0;
 		for (i = 0; i < drv->feature_table_size_legacy; i++) {
@@ -257,7 +261,7 @@ static int virtio_dev_probe(struct device *_d)
 		driver_features_legacy = driver_features;
 	}
 
-    //如果使能v1.0,则取与操作计算两者合并获得的features
+    //如果使能v1.0,则取与操作计算两者合并device与driver获得的features
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
@@ -270,22 +274,25 @@ static int virtio_dev_probe(struct device *_d)
 		if (device_features & (1ULL << i))
 			__virtio_set_bit(dev, i);
 
+	//调用driver的validate函数，检查设备功能配置
 	if (drv->validate) {
 		err = drv->validate(dev);
 		if (err)
 			goto err;
 	}
 
+	//完成驱动与设备的功能协商
 	err = virtio_finalize_features(dev);
 	if (err)
 		goto err;
 
-    //驱动探测设备(例如virtio_net_driver)
+    //驱动探测设备，生成相应设备(例如virtio_net_driver)
 	err = drv->probe(dev);
 	if (err)
 		goto err;
 
 	/* If probe didn't do it, mark device DRIVER_OK ourselves. */
+	//检查设备是否已达到driver_ok状态，如果未达到，设置为ok(这里驱动都返回0了）
 	if (!(dev->config->get_status(dev) & VIRTIO_CONFIG_S_DRIVER_OK))
 		virtio_device_ready(dev);
 
@@ -297,6 +304,7 @@ static int virtio_dev_probe(struct device *_d)
 
 	return 0;
 err:
+    //标明发生内部错误，驱动失败
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
 	return err;
 
@@ -316,6 +324,7 @@ static int virtio_dev_remove(struct device *_d)
 	WARN_ON_ONCE(dev->config->get_status(dev));
 
 	/* Acknowledge the device's existence again. */
+	//指明设备再次存在
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
 	return 0;
 }
@@ -325,7 +334,7 @@ static struct bus_type virtio_bus = {
 	.name  = "virtio",
 	//virtio bus的设备匹配函数
 	.match = virtio_dev_match,
-	//定义virtio bus的设置属性组
+	//定义virtio bus的设置属性组体现在/sys目录下
 	.dev_groups = virtio_dev_groups,
 	//virtio bus通知uevent时添加uevent环境变量
 	.uevent = virtio_uevent,
@@ -340,7 +349,8 @@ int register_virtio_driver(struct virtio_driver *driver)
 {
 	/* Catch this early. */
 	BUG_ON(driver->feature_table_size && !driver->feature_table);
-	driver->driver.bus = &virtio_bus;//指明驱动支持的设备从属于virtio_bus
+	//指明驱动支持的设备从属于virtio_bus
+	driver->driver.bus = &virtio_bus;
 	return driver_register(&driver->driver);
 }
 EXPORT_SYMBOL_GPL(register_virtio_driver);

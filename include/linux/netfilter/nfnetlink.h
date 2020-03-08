@@ -8,31 +8,45 @@
 #include <uapi/linux/netfilter/nfnetlink.h>
 
 struct nfnl_callback {
+    //在subsys加锁情况下执行的call
 	int (*call)(struct net *net, struct sock *nl, struct sk_buff *skb,
 		    const struct nlmsghdr *nlh,
 		    const struct nlattr * const cda[],
 		    struct netlink_ext_ack *extack);
+	//在rcu读锁情况下执行的call
 	int (*call_rcu)(struct net *net, struct sock *nl, struct sk_buff *skb,
 			const struct nlmsghdr *nlh,
 			const struct nlattr * const cda[],
 			struct netlink_ext_ack *extack);
+	//在批处理型消息情况下执行的call
 	int (*call_batch)(struct net *net, struct sock *nl, struct sk_buff *skb,
 			  const struct nlmsghdr *nlh,
 			  const struct nlattr * const cda[],
 			  struct netlink_ext_ack *extack);
+	//支持的netlink属性策略（用于属性解析）
 	const struct nla_policy *policy;	/* netlink attribute policy */
+	//支持的netlink属性最大数目
 	const u_int16_t attr_count;		/* number of nlattr's */
 };
 
+//定义netfilter netlink子系统
 struct nfnetlink_subsystem {
+    //子系统名称
 	const char *name;
+	//子系统id号
 	__u8 subsys_id;			/* nfnetlink subsystem ID */
+	/*回调函数数组大小*/
 	__u8 cb_count;			/* number of callbacks */
+	//回调函数数组（通过cb_id处理相应消息）
 	const struct nfnl_callback *cb;	/* callback for individual types */
 	struct module *owner;
+	//用于处理批量消息时的变更提交
 	int (*commit)(struct net *net, struct sk_buff *skb);
+	//变更中止
 	int (*abort)(struct net *net, struct sk_buff *skb, bool autoload);
+	//无论最终是commit或者abort，均用于执行cleanup
 	void (*cleanup)(struct net *net);
+	//批量型消息时，校验genid
 	bool (*valid_genid)(struct net *net, u32 genid);
 };
 

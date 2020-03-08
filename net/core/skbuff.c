@@ -2235,7 +2235,7 @@ EXPORT_SYMBOL(__pskb_pull_tail);
  *		check arch/{*}/net/{*}.S files,
  *		since it is called from BPF assembly code.
  */
-//将不连续的skb数据自offset处copy到to中，copy长度为len
+//将不连续的skb->data数据自offset处copy到to中，copy长度为len
 int skb_copy_bits(const struct sk_buff *skb, int offset, void *to, int len)
 {
 	int start = skb_headlen(skb);
@@ -3621,8 +3621,8 @@ static void skb_ts_finish(struct ts_config *conf, struct ts_state *state)
  * subsequent occurrences of the pattern. Returns the offset
  * to the first occurrence or UINT_MAX if no match was found.
  */
-unsigned int skb_find_text(struct sk_buff *skb, unsigned int from,
-			   unsigned int to, struct ts_config *config)
+unsigned int skb_find_text(struct sk_buff *skb, unsigned int from/*起始位置*/,
+			   unsigned int to/*终止位置*/, struct ts_config *config)
 {
 	struct ts_state state;
 	unsigned int ret;
@@ -3632,6 +3632,7 @@ unsigned int skb_find_text(struct sk_buff *skb, unsigned int from,
 
 	skb_prepare_seq_read(skb, from, to, TS_SKB_CB(&state));
 
+	/*在skb中执行字符串搜索*/
 	ret = textsearch_find(config, &state);
 	return (ret <= to - from ? ret : UINT_MAX);
 }

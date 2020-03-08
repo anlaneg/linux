@@ -607,6 +607,7 @@ static int __init nft_tunnel_module_init(void)
 {
 	int err;
 
+	//注册tunnel表达式
 	err = nft_register_expr(&nft_tunnel_type);
 	if (err < 0)
 		return err;

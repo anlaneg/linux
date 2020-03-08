@@ -22,6 +22,7 @@ static void trace_tg_destroy(const struct xt_tgdtor_param *par)
 	nf_logger_put(par->family, NF_LOG_TYPE_LOG);
 }
 
+//为报文打上trace标记
 static unsigned int
 trace_tg(struct sk_buff *skb, const struct xt_action_param *par)
 {

@@ -151,6 +151,7 @@ static int nft_setup_cb_call(enum tc_setup_type type, void *type_data,
 	return 0;
 }
 
+//可offload白chain优先级合法性检查
 int nft_chain_offload_priority(struct nft_base_chain *basechain)
 {
 	if (basechain->ops.priority <= 0 ||
@@ -443,6 +444,7 @@ static void nft_flow_rule_offload_abort(struct net *net,
 	}
 }
 
+//offload规则提交
 int nft_flow_rule_offload_commit(struct net *net)
 {
 	struct nft_trans *trans;
@@ -450,6 +452,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 	u8 policy;
 
 	list_for_each_entry(trans, &net->nft.commit_list, list) {
+	    //仅处理nfproto_netdev类型的family
 		if (trans->ctx.family != NFPROTO_NETDEV)
 			continue;
 
@@ -460,7 +463,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 				continue;
 
 			policy = nft_trans_chain_policy(trans);
-			//创建chain
+			//创建offload chain
 			err = nft_flow_offload_chain(trans->ctx.chain, &policy,
 						     FLOW_BLOCK_BIND);
 			break;
@@ -469,7 +472,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 				continue;
 
 			policy = nft_trans_chain_policy(trans);
-			//删除chain
+			//删除offload chain
 			err = nft_flow_offload_chain(trans->ctx.chain, &policy,
 						     FLOW_BLOCK_UNBIND);
 			break;
@@ -482,7 +485,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 				err = -EOPNOTSUPP;
 				break;
 			}
-			//下发flow规则
+			//下发offload flow规则
 			err = nft_flow_offload_rule(trans->ctx.chain,
 						    nft_trans_rule(trans),
 						    nft_trans_flow_rule(trans),
@@ -491,7 +494,7 @@ int nft_flow_rule_offload_commit(struct net *net)
 		case NFT_MSG_DELRULE:
 			if (!(trans->ctx.chain->flags & NFT_CHAIN_HW_OFFLOAD))
 				continue;
-			//删除的flow
+			//删除 offload的flow
 			err = nft_flow_offload_rule(trans->ctx.chain,
 						    nft_trans_rule(trans),
 						    NULL, FLOW_CLS_DESTROY);
@@ -533,6 +536,7 @@ static struct nft_chain *__nft_offload_get_chain(struct net_device *dev)
 	struct nft_chain *chain;
 
 	list_for_each_entry(table, &net->nft.tables, list) {
+	    //仅处理netdev类型的table
 		if (table->family != NFPROTO_NETDEV)
 			continue;
 

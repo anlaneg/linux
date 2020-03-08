@@ -142,10 +142,10 @@ struct vring_virtqueue {
 		struct {
 			/* Actual memory layout for this queue. */
 			struct {
-				unsigned int num;
-				struct vring_packed_desc *desc;
-				struct vring_packed_desc_event *driver;
-				struct vring_packed_desc_event *device;
+				unsigned int num;//ring大小
+				struct vring_packed_desc *desc;/*desc队列*/
+				struct vring_packed_desc_event *driver;//描述事件
+				struct vring_packed_desc_event *device;//描述事件
 			} vring;
 
 			/* Driver ring wrap counter. */
@@ -167,11 +167,11 @@ struct vring_virtqueue {
 			u16 event_flags_shadow;
 
 			/* Per-descriptor state. */
-			struct vring_desc_state_packed *desc_state;
+			struct vring_desc_state_packed *desc_state;//每个描述的状态
 			struct vring_desc_extra_packed *desc_extra;
 
 			/* DMA address and size information */
-			dma_addr_t ring_dma_addr;
+			dma_addr_t ring_dma_addr;//desc队列对应的物理地址
 			dma_addr_t driver_event_dma_addr;
 			dma_addr_t device_event_dma_addr;
 			size_t ring_size_in_bytes;
@@ -272,8 +272,9 @@ size_t virtio_max_dma_size(struct virtio_device *vdev)
 }
 EXPORT_SYMBOL_GPL(virtio_max_dma_size);
 
+/*申请size字节的buffer,并返回buffer对应的dma地址*/
 static void *vring_alloc_queue(struct virtio_device *vdev, size_t size,
-			      dma_addr_t *dma_handle, gfp_t flag)
+			      dma_addr_t *dma_handle/*出参，dma地址*/, gfp_t flag)
 {
 	if (vring_use_dma_api(vdev)) {
 		return dma_alloc_coherent(vdev->dev.parent, size,
@@ -282,6 +283,7 @@ static void *vring_alloc_queue(struct virtio_device *vdev, size_t size,
 		void *queue = alloc_pages_exact(PAGE_ALIGN(size), flag);
 
 		if (queue) {
+		    //将queue转换为物理地址
 			phys_addr_t phys_addr = virt_to_phys(queue);
 			*dma_handle = (dma_addr_t)phys_addr;
 
@@ -1374,6 +1376,7 @@ static inline bool more_used_packed(const struct vring_virtqueue *vq)
 			vq->packed.used_wrap_counter);
 }
 
+//packet类型报文收取
 static void *virtqueue_get_buf_ctx_packed(struct virtqueue *_vq,
 					  unsigned int *len,
 					  void **ctx)
@@ -1581,9 +1584,10 @@ static void *virtqueue_detach_unused_buf_packed(struct virtqueue *_vq)
 	return NULL;
 }
 
+//创建packed类型的virtqueue
 static struct virtqueue *vring_create_virtqueue_packed(
-	unsigned int index,
-	unsigned int num,
+	unsigned int index/*队列编号*/,
+	unsigned int num/*队列长度*/,
 	unsigned int vring_align,
 	struct virtio_device *vdev,
 	bool weak_barriers,
@@ -1600,6 +1604,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	size_t ring_size_in_bytes, event_size_in_bytes;
 	unsigned int i;
 
+	//desc队列大小
 	ring_size_in_bytes = num * sizeof(struct vring_packed_desc);
 
 	ring = vring_alloc_queue(vdev, ring_size_in_bytes,
@@ -1608,6 +1613,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	if (!ring)
 		goto err_ring;
 
+	//driver desc事件
 	event_size_in_bytes = sizeof(struct vring_packed_desc_event);
 
 	driver = vring_alloc_queue(vdev, event_size_in_bytes,
@@ -1616,6 +1622,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	if (!driver)
 		goto err_driver;
 
+	//device desc事件
 	device = vring_alloc_queue(vdev, event_size_in_bytes,
 				   &device_event_dma_addr,
 				   GFP_KERNEL|__GFP_NOWARN|__GFP_ZERO);

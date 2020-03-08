@@ -323,6 +323,8 @@ static struct ts_ops fsm_ops = {
 
 static int __init init_fsm(void)
 {
+    //注册字符串搜索算法fsm(有限状态机）
+    //https://zh.wikipedia.org/wiki/%E6%9C%89%E9%99%90%E7%8A%B6%E6%80%81%E6%9C%BA
 	return textsearch_register(&fsm_ops);
 }
 

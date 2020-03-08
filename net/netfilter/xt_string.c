@@ -26,8 +26,10 @@ string_mt(const struct sk_buff *skb, struct xt_action_param *par)
 	const struct xt_string_info *conf = par->matchinfo;
 	bool invert;
 
+	/*检查是否要反向选择*/
 	invert = conf->u.v1.flags & XT_STRING_FLAG_INVERT;
 
+	//在skb中执行字符串查找
 	return (skb_find_text((struct sk_buff *)skb, conf->from_offset,
 			     conf->to_offset, conf->config)
 			     != UINT_MAX) ^ invert;
@@ -42,17 +44,26 @@ static int string_mt_check(const struct xt_mtchk_param *par)
 	int flags = TS_AUTOLOAD;
 
 	/* Damn, can't handle this case properly with iptables... */
+	//from必须小于to
 	if (conf->from_offset > conf->to_offset)
 		return -EINVAL;
+
+	//匹配算法必须以0结尾
 	if (conf->algo[XT_STRING_MAX_ALGO_NAME_SIZE - 1] != '\0')
 		return -EINVAL;
+
+	//待匹配的串不能大于128字节
 	if (conf->patlen > XT_STRING_MAX_PATTERN_SIZE)
 		return -EINVAL;
+
+	//只支持忽略大小写及反向选择两个控制选项
 	if (conf->u.v1.flags &
 	    ~(XT_STRING_FLAG_IGNORECASE | XT_STRING_FLAG_INVERT))
 		return -EINVAL;
 	if (conf->u.v1.flags & XT_STRING_FLAG_IGNORECASE)
 		flags |= TS_IGNORECASE;
+
+	//构造字符串搜索配置
 	ts_conf = textsearch_prepare(conf->algo, conf->pattern, conf->patlen,
 				     GFP_KERNEL, flags);
 	if (IS_ERR(ts_conf))

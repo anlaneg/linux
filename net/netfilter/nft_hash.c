@@ -234,6 +234,7 @@ static struct nft_expr_type nft_hash_type __read_mostly = {
 
 static int __init nft_hash_module_init(void)
 {
+    //注册hash表达式
 	return nft_register_expr(&nft_hash_type);
 }
 

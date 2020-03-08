@@ -310,6 +310,8 @@ struct pci_dev {
 #endif
 	u8		pcie_cap;	/* PCIe capability offset */
 	u8		msi_cap;	/* MSI capability offset */
+	//MSI（消息信号中断）是设备向一个特别的地址执行写入，会引发cpu收到中断
+	//指向msi-x capability register
 	u8		msix_cap;	/* MSI-X capability offset */
 	u8		pcie_mpss:3;	/* PCIe Max Payload Size Supported */
 	u8		rom_base_reg;	/* Config register controlling ROM */
@@ -386,6 +388,7 @@ struct pci_dev {
 	unsigned int	multifunction:1;	/* Multi-function device *///标记是此设备是否为多功能设备
 
 	unsigned int	is_busmaster:1;		/* Is busmaster */
+	//不使用msi中断
 	unsigned int	no_msi:1;		/* May not use MSI */
 	unsigned int	no_64bit_msi:1;		/* May only use 32-bit MSIs */
 	unsigned int	block_cfg_access:1;	/* Config space access blocked */

@@ -48,9 +48,9 @@ static inline u32 nft_cmp_fast_mask(unsigned int len)
 extern const struct nft_expr_ops nft_cmp_fast_ops;
 
 struct nft_payload {
-	enum nft_payload_bases	base:8;
-	u8			offset;
-	u8			len;
+	enum nft_payload_bases	base:8;/*偏移的基准点*/
+	u8			offset;/*基于其准点的offset*/
+	u8			len;/*数据的长度*/
 	enum nft_registers	dreg:8;
 };
 

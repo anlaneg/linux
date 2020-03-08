@@ -4408,15 +4408,19 @@ EXPORT_SYMBOL(pci_clear_mwi);
  */
 void pci_intx(struct pci_dev *pdev, int enable)
 {
+    //开启或禁止pdev设备的中断
 	u16 pci_command, new;
 
+	//读command寄存器
 	pci_read_config_word(pdev, PCI_COMMAND, &pci_command);
 
 	if (enable)
+	    /*如果开启中断，则command寄存器去掉disable标记*/
 		new = pci_command & ~PCI_COMMAND_INTX_DISABLE;
 	else
 		new = pci_command | PCI_COMMAND_INTX_DISABLE;
 
+	//command前后不一致，则写相应command配置
 	if (new != pci_command) {
 		struct pci_devres *dr;
 

@@ -7,7 +7,8 @@
 #include <net/netfilter/nf_tables_ipv4.h>
 #include <net/netfilter/nf_tables_ipv6.h>
 
-static unsigned int nft_nat_do_chain(void *priv, struct sk_buff *skb,
+//nat类型chain的规则执行
+static unsigned int nft_nat_do_chain(void *priv/*要执行的chain*/, struct sk_buff *skb,
 				     const struct nf_hook_state *state)
 {
 	struct nft_pktinfo pkt;
@@ -33,6 +34,7 @@ static unsigned int nft_nat_do_chain(void *priv, struct sk_buff *skb,
 }
 
 #ifdef CONFIG_NF_TABLES_IPV4
+//nat chain类型
 static const struct nft_chain_type nft_chain_nat_ipv4 = {
 	.name		= "nat",
 	.type		= NFT_CHAIN_T_NAT,

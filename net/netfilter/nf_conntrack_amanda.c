@@ -121,6 +121,7 @@ static int amanda_help(struct sk_buff *skb,
 		goto out;
 	start += dataoff + search[SEARCH_CONNECT].len;
 
+	//在skb中查找指定关键字
 	stop = skb_find_text(skb, start, skb->len,
 			     search[SEARCH_NEWLINE].ts);
 	if (stop == UINT_MAX)

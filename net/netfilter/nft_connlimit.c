@@ -257,6 +257,7 @@ static int __init nft_connlimit_module_init(void)
 	if (err < 0)
 		return err;
 
+	//注册connlimit表达式
 	err = nft_register_expr(&nft_connlimit_type);
 	if (err < 0)
 		goto err1;

@@ -280,6 +280,7 @@ static int __init nft_counter_module_init(void)
 	if (err < 0)
 		return err;
 
+	//注册counter表达式
 	err = nft_register_expr(&nft_counter_type);
 	if (err < 0)
 		goto err1;

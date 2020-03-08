@@ -25,16 +25,18 @@ MODULE_ALIAS("ip6t_tcp");
 static inline bool
 port_match(u_int16_t min, u_int16_t max, u_int16_t port, bool invert)
 {
+    //检查目标port是否在[min,max]范围以内
 	return (port >= min && port <= max) ^ invert;
 }
 
+/*检查报文skb的tcphdr中是否有option选项*/
 static bool
 tcp_find_option(u_int8_t option,
 		const struct sk_buff *skb,
 		unsigned int protoff,
-		unsigned int optlen,
-		bool invert,
-		bool *hotdrop)
+		unsigned int optlen/*选项长度*/,
+		bool invert/*是否反向选择*/,
+		bool *hotdrop/*是否丢包*/)
 {
 	/* tcp.doff is only 4 bits, ie. max 15 * 4 bytes */
 	const u_int8_t *op;
@@ -47,6 +49,7 @@ tcp_find_option(u_int8_t option,
 		return invert;
 
 	/* If we don't have the whole header, drop packet. */
+	//取tcp选项起始位置
 	op = skb_header_pointer(skb, protoff + sizeof(struct tcphdr),
 				optlen, _opt);
 	if (op == NULL) {
@@ -54,6 +57,7 @@ tcp_find_option(u_int8_t option,
 		return false;
 	}
 
+	/*遍历tcp选项，检查选项中是否有option选项*/
 	for (i = 0; i < optlen; ) {
 		if (op[i] == option) return !invert;
 		if (op[i] < 2) i++;
@@ -63,6 +67,7 @@ tcp_find_option(u_int8_t option,
 	return invert;
 }
 
+//tcp的xt_match回调
 static bool tcp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct tcphdr *th;
@@ -77,13 +82,16 @@ static bool tcp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		   flag overwrite to pass the direction checks.
 		*/
 		if (par->fragoff == 1) {
+		    //对offset=1的分片报文直接丢弃，这个处理比较怪
 			pr_debug("Dropping evil TCP offset=1 frag.\n");
 			par->hotdrop = true;
 		}
 		/* Must not be a fragment. */
+		/*分片报文均不能被匹配*/
 		return false;
 	}
 
+	//取tcp header
 	th = skb_header_pointer(skb, par->thoff, sizeof(_tcph), &_tcph);
 	if (th == NULL) {
 		/* We've been asked to examine this packet, and we
@@ -93,22 +101,30 @@ static bool tcp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		return false;
 	}
 
+	//源port匹配
 	if (!port_match(tcpinfo->spts[0], tcpinfo->spts[1],
 			ntohs(th->source),
 			!!(tcpinfo->invflags & XT_TCP_INV_SRCPT)))
 		return false;
+
+	//目的port匹配
 	if (!port_match(tcpinfo->dpts[0], tcpinfo->dpts[1],
 			ntohs(th->dest),
 			!!(tcpinfo->invflags & XT_TCP_INV_DSTPT)))
 		return false;
+
+	//tcp flags匹配
 	if (!NF_INVF(tcpinfo, XT_TCP_INV_FLAGS,
 		     (((unsigned char *)th)[13] & tcpinfo->flg_mask) == tcpinfo->flg_cmp))
 		return false;
 	if (tcpinfo->option) {
 		if (th->doff * 4 < sizeof(_tcph)) {
+		    //错误的报文，直接丢弃
 			par->hotdrop = true;
 			return false;
 		}
+
+		/*检查tcphdr头部中是否包含tcpinfo->option*/
 		if (!tcp_find_option(tcpinfo->option, skb, par->thoff,
 				     th->doff*4 - sizeof(_tcph),
 				     tcpinfo->invflags & XT_TCP_INV_OPTION,
@@ -126,6 +142,7 @@ static int tcp_mt_check(const struct xt_mtchk_param *par)
 	return (tcpinfo->invflags & ~XT_TCP_INV_MASK) ? -EINVAL : 0;
 }
 
+//xt_match的udp匹配回调
 static bool udp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct udphdr *uh;
@@ -134,8 +151,10 @@ static bool udp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 
 	/* Must not be a fragment. */
 	if (par->fragoff != 0)
+	    /*不考虑分片*/
 		return false;
 
+	//获取udphdr
 	uh = skb_header_pointer(skb, par->thoff, sizeof(_udph), &_udph);
 	if (uh == NULL) {
 		/* We've been asked to examine this packet, and we
@@ -145,6 +164,7 @@ static bool udp_mt(const struct sk_buff *skb, struct xt_action_param *par)
 		return false;
 	}
 
+	//对udp进行port匹配
 	return port_match(udpinfo->spts[0], udpinfo->spts[1],
 			  ntohs(uh->source),
 			  !!(udpinfo->invflags & XT_UDP_INV_SRCPT))
@@ -218,6 +238,7 @@ static struct xt_match tcpudp_mt_reg[] __read_mostly = {
 	},
 };
 
+//注册udp,tcp的xt_match
 static int __init tcpudp_mt_init(void)
 {
 	return xt_register_matches(tcpudp_mt_reg, ARRAY_SIZE(tcpudp_mt_reg));

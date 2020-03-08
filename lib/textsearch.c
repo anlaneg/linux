@@ -107,9 +107,11 @@
 #include <linux/textsearch.h>
 #include <linux/slab.h>
 
+//用于注册系统中已知的字符串搜索算法
 static LIST_HEAD(ts_ops);
 static DEFINE_SPINLOCK(ts_mod_lock);
 
+//通过名称查找字符串搜索算法ops
 static inline struct ts_ops *lookup_ts_algo(const char *name)
 {
 	struct ts_ops *o;
@@ -117,6 +119,7 @@ static inline struct ts_ops *lookup_ts_algo(const char *name)
 	rcu_read_lock();
 	list_for_each_entry_rcu(o, &ts_ops, list) {
 		if (!strcmp(name, o->name)) {
+		    //名称匹配，尝试get其对应的module
 			if (!try_module_get(o->owner))
 				o = NULL;
 			rcu_read_unlock();
@@ -140,6 +143,7 @@ static inline struct ts_ops *lookup_ts_algo(const char *name)
  * Returns 0 or -EEXISTS if another module has already registered
  * with same name.
  */
+//注册字符串搜索算法
 int textsearch_register(struct ts_ops *ops)
 {
 	int err = -EEXIST;
@@ -175,6 +179,7 @@ EXPORT_SYMBOL(textsearch_register);
  * Returns 0 on success or -ENOENT if no matching textsearch
  * registration was found.
  */
+//解注册字符串搜索算法
 int textsearch_unregister(struct ts_ops *ops)
 {
 	int err = 0;
@@ -260,8 +265,8 @@ EXPORT_SYMBOL(textsearch_find_continuous);
  * parameters or a ERR_PTR(). If a zero length pattern is passed, this
  * function returns EINVAL.
  */
-struct ts_config *textsearch_prepare(const char *algo, const void *pattern,
-				     unsigned int len, gfp_t gfp_mask, int flags)
+struct ts_config *textsearch_prepare(const char *algo/*字符串匹配算法*/, const void *pattern/*模式串*/,
+				     unsigned int len/*模式串长度*/, gfp_t gfp_mask, int flags/*搜索标记*/)
 {
 	int err = -ENOENT;
 	struct ts_config *conf;

@@ -40,6 +40,7 @@ static bool nft_payload_rebuild_vlan_hdr(const struct sk_buff *skb, int mac_off,
 static bool
 nft_payload_copy_vlan(u32 *d, const struct sk_buff *skb, u8 offset, u8 len)
 {
+    //到mac头偏移量
 	int mac_off = skb_mac_header(skb) - skb->data;
 	u8 *vlanh, *dst_u8 = (u8 *) d;
 	struct vlan_ethhdr veth;
@@ -48,15 +49,19 @@ nft_payload_copy_vlan(u32 *d, const struct sk_buff *skb, u8 offset, u8 len)
 	if ((skb->protocol == htons(ETH_P_8021AD) ||
 	     skb->protocol == htons(ETH_P_8021Q)) &&
 	    offset >= VLAN_ETH_HLEN && offset < VLAN_ETH_HLEN + VLAN_HLEN)
+	    //双层vlan情况
 		vlan_hlen += VLAN_HLEN;
 
 	vlanh = (u8 *) &veth;
 	if (offset < VLAN_ETH_HLEN + vlan_hlen) {
+	    //offset小于双层vlan的长度
 		u8 ethlen = len;
 
 		if (vlan_hlen &&
+		        /*自mac头位置开始，copy整个vlan头到veth中*/
 		    skb_copy_bits(skb, mac_off, &veth, VLAN_ETH_HLEN) < 0)
 			return false;
+		        /*通过重建的方式构造veth*/
 		else if (!nft_payload_rebuild_vlan_hdr(skb, mac_off, &veth))
 			return false;
 
@@ -78,6 +83,7 @@ nft_payload_copy_vlan(u32 *d, const struct sk_buff *skb, u8 offset, u8 len)
 	return skb_copy_bits(skb, offset + mac_off, dst_u8, len) == 0;
 }
 
+//加载payload到regs中
 void nft_payload_eval(const struct nft_expr *expr,
 		      struct nft_regs *regs,
 		      const struct nft_pktinfo *pkt)
@@ -85,20 +91,23 @@ void nft_payload_eval(const struct nft_expr *expr,
 	const struct nft_payload *priv = nft_expr_priv(expr);
 	const struct sk_buff *skb = pkt->skb;
 	u32 *dest = &regs->data[priv->dreg];
-	int offset;
+	int offset;/*到基准点的偏移量*/
 
 	dest[priv->len / NFT_REG32_SIZE] = 0;
 	switch (priv->base) {
 	case NFT_PAYLOAD_LL_HEADER:
+	    //mac header必须已设置
 		if (!skb_mac_header_was_set(skb))
 			goto err;
 
 		if (skb_vlan_tag_present(skb)) {
+		    //skb配置了vlan tag
 			if (!nft_payload_copy_vlan(dest, skb,
 						   priv->offset, priv->len))
 				goto err;
 			return;
 		}
+		//到基准的偏移为到mac头的偏移量
 		offset = skb_mac_header(skb) - skb->data;
 		break;
 	case NFT_PAYLOAD_NETWORK_HEADER:
@@ -114,6 +123,7 @@ void nft_payload_eval(const struct nft_expr *expr,
 	}
 	offset += priv->offset;
 
+	//加载offset位置开vcckc，priv->len长度的数据到dest中
 	if (skb_copy_bits(skb, offset, dest, priv->len) < 0)
 		goto err;
 	return;

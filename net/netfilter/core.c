@@ -266,7 +266,7 @@ out_assign:
 
 //取对应的hook链表头指针
 static struct nf_hook_entries __rcu **
-nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum,
+nf_hook_entry_head(struct net *net, int pf, unsigned int hooknum/*hook点编号*/,
 		   struct net_device *dev)
 {
 	switch (pf) {
@@ -456,7 +456,7 @@ int nf_register_net_hook(struct net *net, const struct nf_hook_ops *reg)
 {
 	int err;
 
-	//如果是ip，则分别注册ipv4,ipv6两类hook点
+	//如果是inet类型，则分别注册ipv4,ipv6两类hook点
 	if (reg->pf == NFPROTO_INET) {
 		err = __nf_register_net_hook(net, NFPROTO_IPV4, reg);
 		if (err < 0)

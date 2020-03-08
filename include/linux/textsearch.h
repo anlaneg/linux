@@ -38,7 +38,7 @@ struct ts_state
  */
 struct ts_ops
 {
-	const char		*name;
+	const char		*name;//字符串搜索算法名称
 	struct ts_config *	(*init)(const void *, unsigned int, gfp_t, int);
 	unsigned int		(*find)(struct ts_config *,
 					struct ts_state *);
@@ -125,6 +125,7 @@ static inline unsigned int textsearch_find(struct ts_config *conf,
 					   struct ts_state *state)
 {
 	state->offset = 0;
+	/*执行字符串搜索*/
 	return textsearch_next(conf, state);
 }
 

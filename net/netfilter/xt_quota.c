@@ -28,15 +28,18 @@ quota_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	struct xt_quota_info *q = (void *)par->matchinfo;
 	struct xt_quota_priv *priv = q->master;
+	/*是否执行反向选择*/
 	bool ret = q->flags & XT_QUOTA_INVERT;
 
 	spin_lock_bh(&priv->lock);
 	if (priv->quota >= skb->len) {
+	    /*如果quota够此报文分配，则命中*/
 		priv->quota -= skb->len;
 		ret = !ret;
 	} else {
 		/* we do not allow even small packets from now on */
 		priv->quota = 0;
+		/*不足quota分配，不命中（不考虑invert情况下）*/
 	}
 	spin_unlock_bh(&priv->lock);
 

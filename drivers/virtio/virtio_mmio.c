@@ -84,6 +84,7 @@ struct virtio_mmio_device {
 	struct virtio_device vdev;
 	struct platform_device *pdev;
 
+	//指向mmio virtio设备注册的内存结构体
 	void __iomem *base;
 	unsigned long version;
 
@@ -133,6 +134,7 @@ static int vm_finalize_features(struct virtio_device *vdev)
 		return -EINVAL;
 	}
 
+	//设置virtio设备与驱动协商的功能
 	writel(1, vm_dev->base + VIRTIO_MMIO_DRIVER_FEATURES_SEL);
 	writel((u32)(vdev->features >> 32),
 			vm_dev->base + VIRTIO_MMIO_DRIVER_FEATURES);
@@ -144,6 +146,7 @@ static int vm_finalize_features(struct virtio_device *vdev)
 	return 0;
 }
 
+//自mmio_config的结尾处，读取专用于具体设备的配置，其意义与数值将由device与driver来共同解释
 static void vm_get(struct virtio_device *vdev, unsigned offset,
 		   void *buf, unsigned len)
 {
@@ -501,7 +504,7 @@ static const char *vm_bus_name(struct virtio_device *vdev)
 }
 
 static const struct virtio_config_ops virtio_mmio_config_ops = {
-	.get		= vm_get,
+	.get		= vm_get,//mmio方式的设配置项读取方式
 	.set		= vm_set,
 	.generation	= vm_generation,
 	.get_status	= vm_get_status,
@@ -550,6 +553,7 @@ static int virtio_mmio_probe(struct platform_device *pdev)
 		return PTR_ERR(vm_dev->base);
 
 	/* Check magic value */
+	//mgaic取值必须为'virt'
 	magic = readl(vm_dev->base + VIRTIO_MMIO_MAGIC_VALUE);
 	if (magic != ('v' | 'i' << 8 | 'r' << 16 | 't' << 24)) {
 		dev_warn(&pdev->dev, "Wrong magic value 0x%08lx!\n", magic);

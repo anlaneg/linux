@@ -19,6 +19,7 @@ static struct nf_flowtable_type flowtable_ipv6 = {
 
 static int __init nf_flow_ipv6_module_init(void)
 {
+    //注册ipv6的flowtable
 	nft_register_flowtable_type(&flowtable_ipv6);
 
 	return 0;

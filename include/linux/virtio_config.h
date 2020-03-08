@@ -68,7 +68,7 @@ struct irq_affinity;
  */
 typedef void vq_callback_t(struct virtqueue *);
 struct virtio_config_ops {
-	//配置项获取
+	//具体一个virtio设备的配置项获取，给定offset，取其对应的buffer内容
 	void (*get)(struct virtio_device *vdev, unsigned offset,
 		    void *buf, unsigned len);
 	//配置项设置
@@ -76,14 +76,16 @@ struct virtio_config_ops {
 		    const void *buf, unsigned len);
 	//读取配置的版本，用于保证配置的原子性
 	u32 (*generation)(struct virtio_device *vdev);
-	//获取设备状态
+	//获取virtio设备状态
 	u8 (*get_status)(struct virtio_device *vdev);
 	//设置设备状态
 	void (*set_status)(struct virtio_device *vdev, u8 status);
+	//重置设备
 	void (*reset)(struct virtio_device *vdev);
-	int (*find_vqs)(struct virtio_device *, unsigned nvqs,
-			struct virtqueue *vqs[], vq_callback_t *callbacks[],
-			const char * const names[], const bool *ctx,
+	//构造对应的nvqs虚队列
+	int (*find_vqs)(struct virtio_device *, unsigned nvqs/*虚队列数，rx+tx+ctl队列*/,
+			struct virtqueue *vqs[]/*出参，指向各队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx回调*/,
+			const char * const names[]/*各vq名称*/, const bool *ctx/**/,
 			struct irq_affinity *desc);
 	void (*del_vqs)(struct virtio_device *);
 	//获取设备功能位
@@ -128,6 +130,7 @@ static inline bool __virtio_test_bit(const struct virtio_device *vdev,
  * @vdev: the device
  * @fbit: the feature bit
  */
+//为virtio设备指定开启的功能
 static inline void __virtio_set_bit(struct virtio_device *vdev,
 				    unsigned int fbit)
 {
@@ -421,6 +424,7 @@ static inline void virtio_cwrite8(struct virtio_device *vdev,
 	vdev->config->set(vdev, offset, &val, sizeof(val));
 }
 
+//读offset位置的u16数值
 static inline u16 virtio_cread16(struct virtio_device *vdev,
 				 unsigned int offset)
 {
@@ -479,6 +483,7 @@ static inline void virtio_cwrite64(struct virtio_device *vdev,
 #define virtio_cread_feature(vdev, fbit, structname, member, ptr)	\
 	({								\
 		int _r = 0;						\
+		/*如果不支持fbit,则直接返回失败*/\
 		if (!virtio_has_feature(vdev, fbit))			\
 			_r = -ENOENT;					\
 		else							\

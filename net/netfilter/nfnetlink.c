@@ -40,8 +40,9 @@ MODULE_ALIAS_NET_PF_PROTO(PF_NETLINK, NETLINK_NETFILTER);
 
 #define NFNL_MAX_ATTR_COUNT	32
 
+//定义netfilter netlink子系统
 static struct {
-	struct mutex				mutex;
+	struct mutex				mutex;//子系统的锁，保护subsys结构
 	const struct nfnetlink_subsystem __rcu	*subsys;
 } table[NFNL_SUBSYS_COUNT];
 
@@ -57,12 +58,14 @@ static const int nfnl_group2type[NFNLGRP_MAX+1] = {
 	[NFNLGRP_NFTRACE]		= NFNL_SUBSYS_NFTABLES,
 };
 
+//对subsys_id进行加锁
 void nfnl_lock(__u8 subsys_id)
 {
 	mutex_lock(&table[subsys_id].mutex);
 }
 EXPORT_SYMBOL_GPL(nfnl_lock);
 
+//对subsys_id进行解锁
 void nfnl_unlock(__u8 subsys_id)
 {
 	mutex_unlock(&table[subsys_id].mutex);
@@ -70,6 +73,7 @@ void nfnl_unlock(__u8 subsys_id)
 EXPORT_SYMBOL_GPL(nfnl_unlock);
 
 #ifdef CONFIG_PROVE_LOCKING
+//对subsys_id进行是否加锁检查
 bool lockdep_nfnl_is_held(u8 subsys_id)
 {
 	return lockdep_is_held(&table[subsys_id].mutex);
@@ -77,13 +81,14 @@ bool lockdep_nfnl_is_held(u8 subsys_id)
 EXPORT_SYMBOL_GPL(lockdep_nfnl_is_held);
 #endif
 
-//注册subsys
+//注册netfilter netlink的子系统
 int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 {
 	u8 cb_id;
 
 	/* Sanity-check attr_count size to avoid stack buffer overflow. */
 	for (cb_id = 0; cb_id < n->cb_count; cb_id++)
+	    /*单个子系统，其提供的cb.attr_count不得超过限制*/
 		if (WARN_ON(n->cb[cb_id].attr_count > NFNL_MAX_ATTR_COUNT))
 			return -EINVAL;
 
@@ -92,6 +97,7 @@ int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 		nfnl_unlock(n->subsys_id);
 		return -EBUSY;
 	}
+	//注册netfilter netlink子系统信息
 	rcu_assign_pointer(table[n->subsys_id].subsys, n);
 	nfnl_unlock(n->subsys_id);
 
@@ -99,6 +105,7 @@ int nfnetlink_subsys_register(const struct nfnetlink_subsystem *n)
 }
 EXPORT_SYMBOL_GPL(nfnetlink_subsys_register);
 
+//解注册netfilter netlink的子系统
 int nfnetlink_subsys_unregister(const struct nfnetlink_subsystem *n)
 {
 	nfnl_lock(n->subsys_id);
@@ -121,6 +128,7 @@ static inline const struct nfnetlink_subsystem *nfnetlink_get_subsys(u16 type)
 	return rcu_dereference(table[subsys_id].subsys);
 }
 
+//取netfilter netlink子系统的type号回调
 static inline const struct nfnl_callback *
 nfnetlink_find_client(u16 type, const struct nfnetlink_subsystem *ss)
 {
@@ -160,9 +168,10 @@ int nfnetlink_unicast(struct sk_buff *skb, struct net *net, u32 portid,
 EXPORT_SYMBOL_GPL(nfnetlink_unicast);
 
 /* Process one complete nfnetlink message. */
-//处理一个完整的netlink消息
+//处理一个完整的netfilter netlink消息
+//消息格式 (nlmsghdr,nfgenmsg,subsystem-cb-attribute,
 static int nfnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
-			     struct netlink_ext_ack *extack)
+			     struct netlink_ext_ack *extack/*出参，错误信息*/)
 {
 	struct net *net = sock_net(skb->sk);
 	const struct nfnl_callback *nc;
@@ -181,6 +190,7 @@ replay:
 	ss = nfnetlink_get_subsys(type);
 	if (!ss) {
 #ifdef CONFIG_MODULES
+	    /*subsystem可能未加载，尝试动态加载*/
 		rcu_read_unlock();
 		request_module("nfnetlink-subsys-%d", NFNL_SUBSYS_ID(type));
 		rcu_read_lock();
@@ -188,6 +198,7 @@ replay:
 		if (!ss)
 #endif
 		{
+		    //查找不到对应的子系统，返回错误
 			rcu_read_unlock();
 			return -EINVAL;
 		}
@@ -202,21 +213,23 @@ replay:
 
 	{
 		int min_len = nlmsg_total_size(sizeof(struct nfgenmsg));
-		u8 cb_id = NFNL_MSG_TYPE(nlh->nlmsg_type);
+		u8 cb_id = NFNL_MSG_TYPE(nlh->nlmsg_type);//子系统回调id
 		struct nlattr *cda[NFNL_MAX_ATTR_COUNT + 1];
 		struct nlattr *attr = (void *)nlh + min_len;
 		int attrlen = nlh->nlmsg_len - min_len;
-		__u8 subsys_id = NFNL_SUBSYS_ID(type);
+		__u8 subsys_id = NFNL_SUBSYS_ID(type);//子系统id
 
 		/* Sanity-check NFNL_MAX_ATTR_COUNT */
 		if (ss->cb[cb_id].attr_count > NFNL_MAX_ATTR_COUNT) {
+		    /*多次防越界检查*/
 			rcu_read_unlock();
 			return -ENOMEM;
 		}
 
-		err = nla_parse_deprecated(cda, ss->cb[cb_id].attr_count,
-					   attr, attrlen,
-					   ss->cb[cb_id].policy, extack);
+		//解析subsystem对应的attribute
+		err = nla_parse_deprecated(cda/*出参，解析好的属性值*/, ss->cb[cb_id].attr_count,
+					   attr/*netlink中的属性指针*/, attrlen/*属性长度*/,
+					   ss->cb[cb_id].policy/*属性策略*/, extack);
 		if (err < 0) {
 			rcu_read_unlock();
 			return err;
@@ -229,9 +242,11 @@ replay:
 					   extack);
 			rcu_read_unlock();
 		} else {
-			//否则使用call回调
+			//否则使用call回调，将rcu读解锁，针对subsys_id进行加锁
 			rcu_read_unlock();
 			nfnl_lock(subsys_id);
+
+			//加锁后，先检查是否subsys_id是否变更
 			if (nfnl_dereference_protected(subsys_id) != ss ||
 			    nfnetlink_find_client(type, ss) != nc)
 				err = -EAGAIN;
@@ -243,6 +258,8 @@ replay:
 				err = -EINVAL;
 			nfnl_unlock(subsys_id);
 		}
+
+		//如果返回EAGAIN,则再执行一次
 		if (err == -EAGAIN)
 			goto replay;
 		return err;
@@ -326,9 +343,11 @@ replay:
 		return netlink_ack(oskb, nlh, -ENOMEM, NULL);
 
 	nfnl_lock(subsys_id);
+	/*取子系统*/
 	ss = nfnl_dereference_protected(subsys_id);
 	if (!ss) {
 #ifdef CONFIG_MODULES
+	    //动态加载子系统
 		nfnl_unlock(subsys_id);
 		request_module("nfnetlink-subsys-%d", subsys_id);
 		nfnl_lock(subsys_id);
@@ -342,6 +361,7 @@ replay:
 		}
 	}
 
+	//批量型消息必须要求子系统支持commit,abort回调
 	if (!ss->valid_genid || !ss->commit || !ss->abort) {
 		nfnl_unlock(subsys_id);
 		netlink_ack(oskb, nlh, -EOPNOTSUPP, NULL);
@@ -354,6 +374,7 @@ replay:
 		return kfree_skb(skb);
 	}
 
+	//先进行genid校验
 	if (!ss->valid_genid(net, genid)) {
 		module_put(ss->owner);
 		nfnl_unlock(subsys_id);
@@ -413,6 +434,7 @@ replay:
 			goto ack;
 		}
 
+		//取子系统中对应回调
 		nc = nfnetlink_find_client(type, ss);
 		if (!nc) {
 			err = -EINVAL;
@@ -432,6 +454,7 @@ replay:
 				goto ack;
 			}
 
+			//相应子系统某一类别消息的属性解析
 			err = nla_parse_deprecated(cda,
 						   ss->cb[cb_id].attr_count,
 						   attr, attrlen,
@@ -439,7 +462,7 @@ replay:
 			if (err < 0)
 				goto ack;
 
-			//如果有call_batch回调，则调用
+			//批量型消息，如果有call_batch回调，则调用
 			if (nc->call_batch) {
 				err = nc->call_batch(net, net->nfnl, skb, nlh,
 						     (const struct nlattr **)cda,
@@ -486,6 +509,7 @@ ack:
 		skb_pull(skb, msglen);
 	}
 done:
+    //批处理结果执行
 	if (status & NFNL_BATCH_REPLAY) {
 		ss->abort(net, oskb, true);
 		nfnl_err_reset(&err_list);
@@ -512,10 +536,13 @@ done:
 	module_put(ss->owner);
 }
 
+//批量型消息策略
 static const struct nla_policy nfnl_batch_policy[NFNL_BATCH_MAX + 1] = {
 	[NFNL_BATCH_GENID]	= { .type = NLA_U32 },
 };
 
+//netfilter netlink批量型消息处理
+//消息格式(nlmsghdr,nfgenmsg,gen_id)
 static void nfnetlink_rcv_skb_batch(struct sk_buff *skb, struct nlmsghdr *nlh)
 {
 	int min_len = nlmsg_total_size(sizeof(struct nfgenmsg));
@@ -534,6 +561,7 @@ static void nfnetlink_rcv_skb_batch(struct sk_buff *skb, struct nlmsghdr *nlh)
 	if (skb->len < NLMSG_HDRLEN + sizeof(struct nfgenmsg))
 		return;
 
+	//批量型消息解析
 	err = nla_parse_deprecated(cda, NFNL_BATCH_MAX, attr, attrlen,
 				   nfnl_batch_policy, NULL);
 	if (err < 0) {
@@ -545,13 +573,15 @@ static void nfnetlink_rcv_skb_batch(struct sk_buff *skb, struct nlmsghdr *nlh)
 
 	nfgenmsg = nlmsg_data(nlh);
 	skb_pull(skb, msglen);
+
+	//对nftables的res_id做特别处理
 	/* Work around old nft using host byte order */
 	if (nfgenmsg->res_id == NFNL_SUBSYS_NFTABLES)
 		res_id = NFNL_SUBSYS_NFTABLES;
 	else
 		res_id = ntohs(nfgenmsg->res_id);
 
-	nfnetlink_rcv_batch(skb, nlh, res_id, gen_id);
+	nfnetlink_rcv_batch(skb, nlh, res_id/*子系统id*/, gen_id);
 }
 
 //netfilter的netlink消息接受及处理
@@ -608,7 +638,7 @@ static int __net_init nfnetlink_net_init(struct net *net)
 #endif
 	};
 
-	//注册NETFILTER的netlink子系统
+	//注册NETFILTER的netlink socket
 	nfnl = netlink_kernel_create(net, NETLINK_NETFILTER, &cfg);
 	if (!nfnl)
 		return -ENOMEM;

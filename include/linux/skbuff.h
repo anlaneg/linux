@@ -2594,6 +2594,7 @@ static inline u32 skb_mac_header_len(const struct sk_buff *skb)
 	return skb->network_header - skb->mac_header;
 }
 
+//mac头部是否已设置
 static inline int skb_mac_header_was_set(const struct sk_buff *skb)
 {
 	return skb->mac_header != (typeof(skb->mac_header))~0U;

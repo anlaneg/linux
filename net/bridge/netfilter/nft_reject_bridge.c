@@ -435,6 +435,7 @@ static struct nft_expr_type nft_reject_bridge_type __read_mostly = {
 
 static int __init nft_reject_bridge_module_init(void)
 {
+    //注册reject桥表达式
 	return nft_register_expr(&nft_reject_bridge_type);
 }
 
