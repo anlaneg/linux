@@ -1767,7 +1767,8 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 
 int __sys_accept4_file(struct file *file, unsigned file_flags,
 		       struct sockaddr __user *upeer_sockaddr,
-		       int __user *upeer_addrlen, int flags)
+		       int __user *upeer_addrlen, int flags,
+		       unsigned long nofile)
 {
 	struct socket *sock, *newsock;
 	struct file *newfile;
@@ -1802,7 +1803,7 @@ int __sys_accept4_file(struct file *file, unsigned file_flags,
 	__module_get(newsock->ops->owner);
 
 	//申请一个未用的fd
-	newfd = get_unused_fd_flags(flags);
+	newfd = __get_unused_fd_flags(flags, nofile);
 	if (unlikely(newfd < 0)) {
 		err = newfd;
 		sock_release(newsock);
@@ -1872,7 +1873,8 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 	f = fdget(fd);
 	if (f.file) {
 		ret = __sys_accept4_file(f.file, 0, upeer_sockaddr,
-						upeer_addrlen, flags);
+						upeer_addrlen, flags,
+						rlimit(RLIMIT_NOFILE));
 		if (f.flags)
 			fput(f.file);
 	}

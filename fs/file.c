@@ -593,11 +593,16 @@ static int alloc_fd(unsigned start, unsigned flags)
 	return __alloc_fd(current->files, start, rlimit(RLIMIT_NOFILE), flags);
 }
 
+int __get_unused_fd_flags(unsigned flags, unsigned long nofile)
+{
+	//申请一个未用的fd
+	return __alloc_fd(current->files/*当前进程已打开的文件*/, 0/*从0开始申请*/, nofile, flags);
+}
+
 //申请一个未用的fd(自0开始）
 int get_unused_fd_flags(unsigned flags)
 {
-	//申请一个未用的fd
-	return __alloc_fd(current->files/*当前进程已打开的文件*/, 0/*从0开始申请*/, rlimit(RLIMIT_NOFILE)/*最大此进程fd数目*/, flags);
+	return __get_unused_fd_flags(flags, rlimit(RLIMIT_NOFILE)/*最大此进程fd数目*/);
 }
 EXPORT_SYMBOL(get_unused_fd_flags);
 
