@@ -19,7 +19,7 @@ struct macvlan_dev {
 	struct net_device	*dev;
 	struct list_head	list;
 	struct hlist_node	hlist;
-	struct macvlan_port	*port;
+	struct macvlan_port	*port;//指向所属的macvlan_port
 	struct net_device	*lowerdev;
 	void			*accel_priv;
 	struct vlan_pcpu_stats __percpu *pcpu_stats;

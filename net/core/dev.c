@@ -2969,6 +2969,7 @@ EXPORT_SYMBOL(netif_set_real_num_tx_queues);
  */
 int netif_set_real_num_rx_queues(struct net_device *dev, unsigned int rxq)
 {
+    //为dev设置收队列
 	int rc;
 
 	if (rxq < 1 || rxq > dev->num_rx_queues)
@@ -4291,6 +4292,7 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		flow_table = rcu_dereference(rxqueue->rps_flow_table);
 		if (!flow_table)
 			goto out;
+		/*按hash计算一个flow_id*/
 		flow_id = skb_get_hash(skb) & flow_table->mask;
 		rc = dev->netdev_ops->ndo_rx_flow_steer(dev, skb,
 							rxq_index, flow_id);
@@ -4316,6 +4318,7 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
  * CPU from the RPS map of the receiving queue for a given skb.
  * rcu_read_lock must be held on entry.
  */
+//完成此报文投递cpu选择
 static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		       struct rps_dev_flow **rflowp)
 {
@@ -4329,10 +4332,11 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	u32 hash;
 
 	if (skb_rx_queue_recorded(skb)) {
-		/*skb中记录了rx queue的index,故取对应的rxqueue*/
+		/*skb中记录了rx queue的index,故取对应的rxqueue，并自此队列找对应rx*/
 		u16 index = skb_get_rx_queue(skb);
 
 		if (unlikely(index >= dev->real_num_rx_queues)) {
+		    /*选择的队列大于实际队列*/
 			WARN_ONCE(dev->real_num_rx_queues > 1,
 				  "%s received packet on queue %u, but number "
 				  "of RX queues is %u\n",
@@ -4344,12 +4348,14 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 
 	/* Avoid computing hash if RFS/RPS is not active for this rxqueue */
 
+	/*取rfs表*/
 	flow_table = rcu_dereference(rxqueue->rps_flow_table);
 	/*拿到rxqueuex上的rps map*/
 	map = rcu_dereference(rxqueue->rps_map);
 	if (!flow_table && !map)
-		goto done;
+		goto done;/*无配置，直接done*/
 
+	/*取报文对应的hash*/
 	skb_reset_network_header(skb);
 	hash = skb_get_hash(skb);
 	if (!hash)
@@ -4371,6 +4377,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		/* OK, now we know there is a match,
 		 * we can look at the local (per receive queue) flow table
 		 */
+		//获取一个flow
 		rflow = &flow_table->flows[hash & flow_table->mask];
 		tcpu = rflow->cpu;
 
@@ -4406,12 +4413,14 @@ try_rps:
 		/*有map,通过skb上的hashcode计算采用哪个cpu执行传递*/
 		tcpu = map->cpus[reciprocal_scale(hash, map->len)];
 		if (cpu_online(tcpu)) {
+		    /*cpu在线，完成cpu选中*/
 			cpu = tcpu;
 			goto done;
 		}
 	}
 
 done:
+    /*返回选择的cpu*/
 	return cpu;
 }
 
@@ -4814,7 +4823,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 		preempt_disable();
 		rcu_read_lock();
 
-		/*获取skb对应的传输cpu*/
+		/*rps情况下：选择处理此报文的cpu，如果cpu<0，则不需要其它cpu中转*/
 		cpu = get_rps_cpu(skb->dev, skb, &rflow);
 		if (cpu < 0)
 			cpu = smp_processor_id();
@@ -5553,9 +5562,11 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 #ifdef CONFIG_RPS
 	if (static_branch_unlikely(&rps_needed)) {
 		struct rps_dev_flow voidflow, *rflow = &voidflow;
+		/*rps情况下：选择处理此报文的cpu，如果cpu<0，则不需要其它cpu中转*/
 		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 		if (cpu >= 0) {
+		    //将此报文加入cpu对应的backlog,完成投递返回。
 			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			rcu_read_unlock();
 			return ret;
@@ -5589,7 +5600,7 @@ static void netif_receive_skb_list_internal(struct list_head *head)
 	if (static_branch_unlikely(&rps_needed)) {
 		list_for_each_entry_safe(skb, next, head, list) {
 			struct rps_dev_flow voidflow, *rflow = &voidflow;
-			/*确定是哪个cpu*/
+			/*rps情况下：选择处理此报文的cpu，如果cpu<0，则不需要其它cpu中转*/
 			int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 			if (cpu >= 0) {
@@ -10141,7 +10152,7 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv/*私有结构体大小*/, co
 		dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
 	}
 
-	//tx队列初始化
+	//tx队列数初始化
 	dev->num_tx_queues = txqs;
 	dev->real_num_tx_queues = txqs;
 	if (netif_alloc_netdev_queues(dev))

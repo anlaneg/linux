@@ -112,6 +112,7 @@ static ssize_t sysfs_kf_bin_read(struct kernfs_open_file *of, char *buf,
 static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 			     size_t count, loff_t pos)
 {
+    //取文件对应的sysfs_ops
 	const struct sysfs_ops *ops = sysfs_file_ops(of->kn);
 	struct kobject *kobj = of->kn->parent->priv;
 	ssize_t len;
@@ -122,7 +123,7 @@ static ssize_t sysfs_kf_read(struct kernfs_open_file *of, char *buf,
 	 */
 	if (WARN_ON_ONCE(buf != of->prealloc_buf))
 		return 0;
-	//先要全部的数据（不支持offset的情况）
+	//需要全部的数据（不支持offset的情况）
 	len = ops->show(kobj, of->kn->priv, buf);
 	if (len < 0)
 		return len;

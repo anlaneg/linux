@@ -112,6 +112,7 @@ static int vfio_mdev_probe(struct device *dev)
 {
 	struct mdev_device *mdev = to_mdev_device(dev);
 
+	//创建mdev设备对应的vfio_dev
 	return vfio_add_group_dev(dev, &vfio_mdev_dev_ops, mdev);
 }
 
@@ -120,12 +121,14 @@ static void vfio_mdev_remove(struct device *dev)
 	vfio_del_group_dev(dev);
 }
 
+//mdev设备驱动
 static struct mdev_driver vfio_mdev_driver = {
 	.name	= "vfio_mdev",
 	.probe	= vfio_mdev_probe,
 	.remove	= vfio_mdev_remove,
 };
 
+//vfio mdev驱动注册
 static int __init vfio_mdev_init(void)
 {
 	return mdev_register_driver(&vfio_mdev_driver, THIS_MODULE);

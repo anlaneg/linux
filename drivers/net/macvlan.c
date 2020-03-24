@@ -42,7 +42,7 @@
 
 struct macvlan_port {
 	struct net_device	*dev;//macvlan所属的dev
-	//串连所有macvlan设备
+	//按macvlan dev的mac地址hash所有macvlan设备
 	struct hlist_head	vlan_hash[MACVLAN_HASH_SIZE];
 	struct list_head	vlans;
 	//需要处理的广播报文挂在此链上，会有专门的work处理
@@ -172,7 +172,7 @@ static int macvlan_hash_add_source(struct macvlan_dev *vlan,
 		return -ENOMEM;
 
 	ether_addr_copy(entry->addr, addr);
-	entry->vlan = vlan;
+	entry->vlan = vlan;/*macvlan设备*/
 	h = &port->vlan_source_hash[macvlan_eth_hash(addr)];
 	hlist_add_head_rcu(&entry->hlist, h);
 	vlan->macaddr_count++;
@@ -282,11 +282,13 @@ static void macvlan_broadcast(struct sk_buff *skb,
 	if (skb->protocol == htons(ETH_P_PAUSE))
 		return;
 
+	//遍历所有macvlan dev
 	for (i = 0; i < MACVLAN_HASH_SIZE; i++) {
 		hlist_for_each_entry_rcu(vlan, &port->vlan_hash[i], hlist) {
 			if (vlan->dev == src || !(vlan->mode & mode))
 				continue;
 
+			/*计算目的mac的hash*/
 			hash = mc_hash(vlan, eth->h_dest);
 			if (!test_bit(hash, vlan->mc_filter))
 				continue;
@@ -597,7 +599,7 @@ static netdev_tx_t macvlan_start_xmit(struct sk_buff *skb,
 	if (unlikely(netpoll_tx_running(dev)))
 		return macvlan_netpoll_send_skb(vlan, skb);
 
-	//将报文送
+	//将报文送给macvlan设备对应的lowerdev
 	ret = macvlan_queue_xmit(skb, dev);
 
 	if (likely(ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN)) {
@@ -1173,6 +1175,7 @@ static const struct net_device_ops macvlan_netdev_ops = {
 	.ndo_uninit		= macvlan_uninit,
 	.ndo_open		= macvlan_open,
 	.ndo_stop		= macvlan_stop,
+	//mac vlan报文发送
 	.ndo_start_xmit		= macvlan_start_xmit,
 	.ndo_change_mtu		= macvlan_change_mtu,
 	.ndo_do_ioctl		= macvlan_do_ioctl,
@@ -1219,6 +1222,7 @@ static void macvlan_setup(struct net_device *dev)
 	dev->priv_flags |= IFF_NO_QUEUE;
 }
 
+//macvlan接口创建，注册macvlan设备收包函数
 static int macvlan_port_create(struct net_device *dev)
 {
 	struct macvlan_port *port;
@@ -1232,7 +1236,7 @@ static int macvlan_port_create(struct net_device *dev)
 	if (netdev_is_rx_handler_busy(dev))
 		return -EBUSY;
 
-	//创建macvlan port
+	//创建macvlan port（每个lower dev一个macvlan port)
 	port = kzalloc(sizeof(*port), GFP_KERNEL);
 	if (port == NULL)
 		return -ENOMEM;
@@ -1313,6 +1317,7 @@ static int macvlan_validate(struct nlattr *tb[], struct nlattr *data[],
 	    nla_get_u16(data[IFLA_MACVLAN_FLAGS]) & ~MACVLAN_FLAG_NOPROMISC)
 		return -EINVAL;
 
+	/*如果指定了macvlan模式，则模式必须只能是以下几种*/
 	if (data[IFLA_MACVLAN_MODE]) {
 		switch (nla_get_u32(data[IFLA_MACVLAN_MODE])) {
 		case MACVLAN_MODE_PRIVATE:
@@ -1457,7 +1462,7 @@ int macvlan_common_newlink(struct net *src_net, struct net_device *dev/*要初�
 	if (!tb[IFLA_ADDRESS])
 		eth_hw_addr_random(dev);
 
-	//lowerdev非macvlan port,创建macvlan
+	//lowerdev非macvlan port,创建macvlan，注册macvlan收包handle
 	if (!netif_is_macvlan_port(lowerdev)) {
 		err = macvlan_port_create(lowerdev);
 		if (err < 0)
@@ -1707,7 +1712,7 @@ static struct net *macvlan_get_link_net(const struct net_device *dev)
 static struct rtnl_link_ops macvlan_link_ops = {
 	.kind		= "macvlan",
 	.setup		= macvlan_setup,
-	.newlink	= macvlan_newlink,
+	.newlink	= macvlan_newlink,//macvlan链路创建
 	.dellink	= macvlan_dellink,
 	.get_link_net	= macvlan_get_link_net,
 	.priv_size      = sizeof(struct macvlan_dev),

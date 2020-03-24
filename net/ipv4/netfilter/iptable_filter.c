@@ -40,7 +40,7 @@ iptable_filter_hook(void *priv, struct sk_buff *skb,
 	return ipt_do_table(skb, state, state->net->ipv4.iptable_filter);
 }
 
-//要注册的filter hook数组
+//要注册的filter的hook ops数组
 static struct nf_hook_ops *filter_ops __read_mostly;
 
 /* Default to forward because I got too much mail already. */
@@ -98,7 +98,7 @@ static int __init iptable_filter_init(void)
 {
 	int ret;
 
-	//创建filter的netfilter的hook点
+	//创建filter的netfilter的filter_ops
 	filter_ops = xt_hook_ops_alloc(&packet_filter, iptable_filter_hook);
 	if (IS_ERR(filter_ops))
 		return PTR_ERR(filter_ops);

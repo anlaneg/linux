@@ -114,11 +114,12 @@ struct tcp_options_received {
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
 		dsack : 1,	/* D-SACK is scheduled			*/
-		//窗口扩大选项在syn报文被发现
+		//在syn报文中发现窗口扩大选项
 		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
+		//在syn中发现sack
 		sack_ok : 3,	/* SACK seen on SYN packet		*/
 		smc_ok : 1,	/* SMC seen on SYN packet		*/
-		//窗口放大因子
+		//协商的窗口放大因子
 		snd_wscale : 4,	/* Window scaling received from sender	*/
 		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
 	u8	num_sacks;	/* Number of SACK blocks		*/
@@ -161,6 +162,7 @@ struct tcp_request_sock {
 	bool				is_mptcp;
 	u32				txhash;
 	u32				rcv_isn;
+	//发送时的seq号
 	u32				snt_isn;
 	u32				ts_off;
 	u32				last_oow_ack_time; /* last SYNACK */
@@ -170,6 +172,7 @@ struct tcp_request_sock {
 						  */
 };
 
+//将request_sock转换为tcp_request_sock
 static inline struct tcp_request_sock *tcp_rsk(const struct request_sock *req)
 {
 	return (struct tcp_request_sock *)req;

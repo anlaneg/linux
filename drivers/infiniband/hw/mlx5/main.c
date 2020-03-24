@@ -6876,6 +6876,7 @@ static int mlx5_ib_stage_ib_reg_init(struct mlx5_ib_dev *dev)
 		name = "mlx5_%d";
 	else
 		name = "mlx5_bond_%d";
+	/*注册ib设备*/
 	return ib_register_device(&dev->ib_dev, name);
 }
 

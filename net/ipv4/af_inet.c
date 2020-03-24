@@ -228,6 +228,7 @@ int inet_listen(struct socket *sock, int backlog)
 			tcp_fastopen_init_key_once(sock_net(sk));
 		}
 
+		/*完成监听及socket注册成listen表*/
 		err = inet_csk_listen_start(sk, backlog);
 		if (err)
 			goto out;

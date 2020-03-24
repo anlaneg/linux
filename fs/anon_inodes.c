@@ -88,8 +88,9 @@ struct file *anon_inode_getfile(const char *name,
 	 * so ihold() is safe.
 	 */
 	ihold(anon_inode_inode);
+	//申请虚假文件
 	file = alloc_file_pseudo(anon_inode_inode, anon_inode_mnt, name,
-				 flags & (O_ACCMODE | O_NONBLOCK), fops/**/);
+				 flags & (O_ACCMODE | O_NONBLOCK), fops/*虚假文件操作集*/);
 	if (IS_ERR(file))
 		goto err;
 
@@ -124,7 +125,7 @@ EXPORT_SYMBOL_GPL(anon_inode_getfile);
  * setup.  Returns new descriptor or an error code.
  */
 int anon_inode_getfd(const char *name, const struct file_operations *fops,
-		     void *priv, int flags)
+		     void *priv/*文件私有数据*/, int flags)
 {
 	int error, fd;
 	struct file *file;
@@ -135,11 +136,14 @@ int anon_inode_getfd(const char *name, const struct file_operations *fops,
 		return error;
 	fd = error;
 
+	//创建虚假文件，并指定文件fops
 	file = anon_inode_getfile(name, fops, priv, flags);
 	if (IS_ERR(file)) {
 		error = PTR_ERR(file);
 		goto err_put_unused_fd;
 	}
+
+	/*实现文件与fd之间的映射*/
 	fd_install(fd, file);
 
 	return fd;

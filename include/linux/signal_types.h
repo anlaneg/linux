@@ -34,7 +34,7 @@ struct sigpending {
 
 struct sigaction {
 #ifndef __ARCH_HAS_IRIX_SIGACTION
-	__sighandler_t	sa_handler;
+	__sighandler_t	sa_handler;/*信号响应回调*/
 	unsigned long	sa_flags;
 #else
 	unsigned int	sa_flags;

@@ -1243,6 +1243,7 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 	struct xt_table *t, *found = NULL;
 
 	mutex_lock(&xt[af].mutex);
+	//如果此表名称已存在，则返回
 	list_for_each_entry(t, &net->xt.tables[af], list)
 		if (strcmp(t->name, name) == 0 && try_module_get(t->me))
 			return t;
@@ -1259,6 +1260,7 @@ struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 		if (!try_module_get(t->me))
 			goto out;
 		mutex_unlock(&xt[af].mutex);
+		//初始化table
 		err = t->table_init(net);
 		if (err < 0) {
 			module_put(t->me);
@@ -1498,6 +1500,7 @@ struct xt_table *xt_register_table(struct net *net,
 	/* save number of initial entries */
 	private->initial_entries = private->number;
 
+	//将table加入
 	list_add(&table->list, &net->xt.tables[table->af]);
 	mutex_unlock(&xt[table->af].mutex);
 	return table;
@@ -1755,7 +1758,7 @@ xt_hook_ops_alloc(const struct xt_table *table, nf_hookfn *fn)
 	     hook_mask >>= 1, ++hooknum) {
 		if (!(hook_mask & 1))
 			continue;
-		ops[i].hook     = fn;//填充fn
+		ops[i].hook     = fn;//填充hook回调
 		ops[i].pf       = table->af;
 		ops[i].hooknum  = hooknum;
 		ops[i].priority = table->priority;//填充优先级

@@ -90,6 +90,7 @@ static int tcp_v4_md5_hash_hdr(char *md5_hash, const struct tcp_md5sig_key *key,
 struct inet_hashinfo tcp_hashinfo;
 EXPORT_SYMBOL(tcp_hashinfo);
 
+/*生成tcp seq*/
 static u32 tcp_v4_init_seq(const struct sk_buff *skb)
 {
 	return secure_tcp_seq(ip_hdr(skb)->daddr,
@@ -98,6 +99,7 @@ static u32 tcp_v4_init_seq(const struct sk_buff *skb)
 			      tcp_hdr(skb)->source);
 }
 
+//利用daddr,saddr生成ts_offset
 static u32 tcp_v4_init_ts_off(const struct net *net, const struct sk_buff *skb)
 {
 	return secure_tcp_ts_off(net, ip_hdr(skb)->daddr, ip_hdr(skb)->saddr);
@@ -645,7 +647,7 @@ EXPORT_SYMBOL(tcp_v4_send_check);
  *		arrived with segment.
  *	Exception: precedence violation. We do not implement it in any case.
  */
-
+//tcp报文执行reset发送
 static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb)
 {
 	const struct tcphdr *th = tcp_hdr(skb);
@@ -972,7 +974,7 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 	if (!dst && (dst = inet_csk_route_req(sk, &fl4, req)) == NULL)
 		return -1;
 
-	//构造synack报文
+	//按synack_type来构造synack报文
 	skb = tcp_make_synack(sk, dst, req, foc, synack_type);
 
 	if (skb) {
@@ -1448,8 +1450,8 @@ const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 #endif
 	.route_req	=	tcp_v4_route_req,//查询到对应的路由
 	.init_seq	=	tcp_v4_init_seq,//生成seq号
-	.init_ts_off	=	tcp_v4_init_ts_off,
-	.send_synack	=	tcp_v4_send_synack,//向外发送synack
+	.init_ts_off	=	tcp_v4_init_ts_off,//生成ts offset
+	.send_synack	=	tcp_v4_send_synack,//向外发送syn+ack报文
 };
 
 //收到syn标记，处理tcp连接请求
@@ -1908,7 +1910,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 
 	th = (const struct tcphdr *)skb->data;
 
-	//tcp头部非4字节对齐
+	//tcp头部长度非4字节对齐
 	if (unlikely(th->doff < sizeof(struct tcphdr) / 4))
 		goto bad_packet;
 
@@ -1934,7 +1936,7 @@ lookup:
 	sk = __inet_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th)/*tcp头部长度*/, th->source/*源端口*/,
 			       th->dest/*目的端口*/, sdif/*报文入接口*/, &refcounted);
 	if (!sk)
-	    //不存在对应的socket,不存在对应的listen socket
+	    //不存在对应的socket,（含listen socket）
 		goto no_tcp_socket;
 
 process:
@@ -1944,7 +1946,7 @@ process:
 		//如果是其它报文，则可能是之前重发的报文，丢弃
 		goto do_time_wait;
 
-	//socket已收到syn报文
+	//socket已收到syn报文,并回复了syn+ack时处理此状态
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
 		struct request_sock *req = inet_reqsk(sk);
 		bool req_stolen = false;
@@ -2022,7 +2024,8 @@ process:
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
-	tcp_v4_fill_cb(skb, iph, th);//skb cb初始化
+	//skb cb初始化
+	tcp_v4_fill_cb(skb, iph, th);
 
 	skb->dev = NULL;
 
@@ -2043,6 +2046,7 @@ process:
 		sk->sk_rx_skb_cache = NULL;
 		ret = tcp_v4_do_rcv(sk, skb);
 	} else {
+	    /*kernel正在执行函数lock_sock_fast来操作此socket*/
 		if (tcp_add_backlog(sk, skb))
 			goto discard_and_relse;
 		skb_to_free = NULL;
@@ -2692,9 +2696,9 @@ struct proto tcp_prot = {
 	.sendpage		= tcp_sendpage,
 	.backlog_rcv		= tcp_v4_do_rcv,
 	.release_cb		= tcp_release_cb,
-	.hash			= inet_hash,//注册socket
+	.hash			= inet_hash,//注册tcp socket
 	.unhash			= inet_unhash,
-	.get_port		= inet_csk_get_port,
+	.get_port		= inet_csk_get_port,/*动态生成port并绑定 或者绑定指定port*/
 	.enter_memory_pressure	= tcp_enter_memory_pressure,
 	.leave_memory_pressure	= tcp_leave_memory_pressure,
 	.stream_memory_free	= tcp_stream_memory_free,

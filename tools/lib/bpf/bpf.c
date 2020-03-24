@@ -271,6 +271,7 @@ int bpf_load_program_xattr(const struct bpf_load_program_attr *load_attr,
 		       min(strlen(load_attr->name), BPF_OBJ_NAME_LEN - 1));
 	attr.prog_flags = load_attr->prog_flags;
 
+	/*调用bpf系统调用，完成bpf装载*/
 	fd = sys_bpf_prog_load(&attr, sizeof(attr));
 	if (fd >= 0)
 		return fd;

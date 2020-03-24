@@ -1462,15 +1462,18 @@ static struct socket *get_tap_socket(int fd)
 
 	if (!file)
 		return ERR_PTR(-EBADF);
+	/*如果为tun接口，则返回tun对应的socket*/
 	sock = tun_get_socket(file);
 	if (!IS_ERR(sock))
 		return sock;
+	/*如果为tap接口，则返回tap对应的socket*/
 	sock = tap_get_socket(file);
 	if (IS_ERR(sock))
 		fput(file);
 	return sock;
 }
 
+//获取fd对应的socket
 static struct socket *get_socket(int fd)
 {
 	struct socket *sock;
@@ -1478,6 +1481,7 @@ static struct socket *get_socket(int fd)
 	/* special case to disable backend */
 	if (fd == -1)
 		return NULL;
+	/*检查是否为raw socket*/
 	sock = get_raw_socket(fd);
 	if (!IS_ERR(sock))
 		return sock;
@@ -1487,7 +1491,7 @@ static struct socket *get_socket(int fd)
 	return ERR_PTR(-ENOTSOCK);
 }
 
-static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
+static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd)
 {
 	struct socket *sock, *oldsock;
 	struct vhost_virtqueue *vq;
@@ -1504,6 +1508,8 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 		r = -ENOBUFS;
 		goto err;
 	}
+
+	//取index号vq
 	vq = &n->vqs[index].vq;
 	nvq = &n->vqs[index];
 	mutex_lock(&vq->mutex);
@@ -1513,6 +1519,8 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 		r = -EFAULT;
 		goto err_vq;
 	}
+
+	//取fd对应的socket
 	sock = get_socket(fd);
 	if (IS_ERR(sock)) {
 		r = PTR_ERR(sock);
@@ -1522,6 +1530,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index, int fd)
 	/* start polling new socket */
 	oldsock = vq->private_data;
 	if (sock != oldsock) {
+	    /*如果两者提供的socket不一致，则执行更新*/
 		ubufs = vhost_net_ubuf_alloc(vq,
 					     sock && vhost_sock_zcopy(sock));
 		if (IS_ERR(ubufs)) {
@@ -1704,6 +1713,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	case VHOST_NET_SET_BACKEND:
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
+		/*设置backend*/
 		return vhost_net_set_backend(n, backend.index, backend.fd);
 	case VHOST_GET_FEATURES:
 		features = VHOST_NET_FEATURES;

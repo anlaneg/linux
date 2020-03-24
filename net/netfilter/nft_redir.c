@@ -140,6 +140,7 @@ static const struct nft_expr_ops nft_redir_ipv4_ops = {
 	.validate	= nft_redir_validate,
 };
 
+//注册ipv4类型的redirect
 static struct nft_expr_type nft_redir_ipv4_type __read_mostly = {
 	.family		= NFPROTO_IPV4,
 	.name		= "redir",

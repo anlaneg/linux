@@ -171,6 +171,7 @@ int __inet_inherit_port(const struct sock *sk, struct sock *child)
 }
 EXPORT_SYMBOL_GPL(__inet_inherit_port);
 
+//取sk对应的listen哈希桶
 static struct inet_listen_hashbucket *
 inet_lhash2_bucket_sk(struct inet_hashinfo *h, struct sock *sk)
 {
@@ -189,16 +190,20 @@ inet_lhash2_bucket_sk(struct inet_hashinfo *h, struct sock *sk)
 	return inet_lhash2_bucket(h, hash);
 }
 
+//将socket加入到lhash2表中（如果lhash2表未初始化，则跳过）
 static void inet_hash2(struct inet_hashinfo *h, struct sock *sk)
 {
 	struct inet_listen_hashbucket *ilb2;
 
+	//未初始化，直接返回
 	if (!h->lhash2)
 		return;
 
+	/*取sk对应的桶*/
 	ilb2 = inet_lhash2_bucket_sk(h, sk);
 
 	spin_lock(&ilb2->lock);
+	//加入socket到listen链
 	if (sk->sk_reuseport && sk->sk_family == AF_INET6)
 		hlist_add_tail_rcu(&inet_csk(sk)->icsk_listen_portaddr_node,
 				   &ilb2->head);
@@ -209,6 +214,7 @@ static void inet_hash2(struct inet_hashinfo *h, struct sock *sk)
 	spin_unlock(&ilb2->lock);
 }
 
+//删除已加入listen链的socket
 static void inet_unhash2(struct inet_hashinfo *h, struct sock *sk)
 {
 	struct inet_listen_hashbucket *ilb2;
@@ -375,10 +381,12 @@ begin:
 		//hash值相等，与sk内部成员进行比对（地址pair,port pair及接口匹配）
 		if (likely(INET_MATCH(sk, net, acookie,
 				      saddr, daddr, ports, dif, sdif))) {
+
+		    //增加此socket的引用
 			if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
 				goto out;
 
-			//这里为什么要反着再查一遍？
+			//增加socket引用成功，再查询一遍（为什么？）
 			if (unlikely(!INET_MATCH(sk, net, acookie,
 						 saddr, daddr, ports,
 						 dif, sdif))) {
@@ -483,6 +491,7 @@ static u32 inet_sk_port_offset(const struct sock *sk)
 /* insert a socket into ehash, and eventually remove another one
  * (The another one can be a SYN_RECV or TIMEWAIT
  */
+//将socket加入到ehash表中
 bool inet_ehash_insert(struct sock *sk, struct sock *osk)
 {
 	struct inet_hashinfo *hashinfo = sk->sk_prot->h.hashinfo;
@@ -534,14 +543,16 @@ static int inet_reuseport_add_sock(struct sock *sk,
 	struct sock *sk2;
 	kuid_t uid = sock_i_uid(sk);
 
+	//遍历ilb->nulls_head
 	sk_nulls_for_each_rcu(sk2, node, &ilb->nulls_head) {
 		if (sk2 != sk &&
-		    sk2->sk_family == sk->sk_family &&
+		    sk2->sk_family == sk->sk_family /*family一致*/&&
 		    ipv6_only_sock(sk2) == ipv6_only_sock(sk) &&
 		    sk2->sk_bound_dev_if == sk->sk_bound_dev_if &&
 		    inet_csk(sk2)->icsk_bind_hash == tb &&
 		    sk2->sk_reuseport && uid_eq(uid, sock_i_uid(sk2)) &&
 		    inet_rcv_saddr_equal(sk, sk2, false))
+		    /*找到与其相同的socket,将其加入sk_reuseport_cb*/
 			return reuseport_add_sock(sk, sk2,
 						  inet_rcv_saddr_any(sk));
 	}
@@ -561,22 +572,29 @@ int __inet_hash(struct sock *sk, struct sock *osk)
 		inet_ehash_nolisten(sk, osk);
 		return 0;
 	}
+
+	//socket必须不能加入hash中
 	WARN_ON(!sk_unhashed(sk));
-	//将sk加入到listening_hash表中
+
+	//取socket对应的listening_hash哈希桶
 	ilb = &hashinfo->listening_hash[inet_sk_listen_hashfn(sk)];
 
 	spin_lock(&ilb->lock);
+	//如果此socket开启了port reuse,则将sock加入到reuseport中
 	if (sk->sk_reuseport) {
 		err = inet_reuseport_add_sock(sk, ilb);
 		if (err)
 			goto unlock;
 	}
+
+	//将sk加入到链表ilb->nulls_head
 	if (IS_ENABLED(CONFIG_IPV6) && sk->sk_reuseport &&
 		sk->sk_family == AF_INET6)
 		__sk_nulls_add_node_tail_rcu(sk, &ilb->nulls_head);
 	else
-	        //将sk加入到链表ilb->head
 		__sk_nulls_add_node_rcu(sk, &ilb->nulls_head);
+
+	//将sk加入到lhash2表中
 	inet_hash2(hashinfo, sk);
 	ilb->count++;
 	sock_set_flag(sk, SOCK_RCU_FREE);
@@ -593,6 +611,7 @@ int inet_hash(struct sock *sk)
 {
 	int err = 0;
 
+	//注册任何非close状态的socket
 	if (sk->sk_state != TCP_CLOSE) {
 		local_bh_disable();
 		err = __inet_hash(sk, NULL);
@@ -763,6 +782,7 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 }
 EXPORT_SYMBOL_GPL(inet_hash_connect);
 
+//仅初始化listening_hash表
 void inet_hashinfo_init(struct inet_hashinfo *h)
 {
 	int i;
@@ -778,6 +798,7 @@ void inet_hashinfo_init(struct inet_hashinfo *h)
 }
 EXPORT_SYMBOL_GPL(inet_hashinfo_init);
 
+//初始化lhash2哈希表
 static void init_hashinfo_lhash2(struct inet_hashinfo *h)
 {
 	int i;
@@ -789,6 +810,7 @@ static void init_hashinfo_lhash2(struct inet_hashinfo *h)
 	}
 }
 
+//申请lhash2哈希表并初始化它
 void __init inet_hashinfo2_init(struct inet_hashinfo *h, const char *name,
 				unsigned long numentries, int scale,
 				unsigned long low_limit,

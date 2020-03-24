@@ -77,6 +77,7 @@ struct device *mdev_get_iommu_device(struct device *dev);
  **/
 struct mdev_parent_ops {
 	struct module   *owner;
+	//设备对应的attr groups
 	const struct attribute_group **dev_attr_groups;
 	const struct attribute_group **mdev_attr_groups;
 	struct attribute_group **supported_type_groups;

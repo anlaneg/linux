@@ -305,6 +305,7 @@ enum rdma_nldev_attr {
 	/* Identifier for ib_device */
 	RDMA_NLDEV_ATTR_DEV_INDEX,		/* u32 */
 
+	//rdma设备名称
 	RDMA_NLDEV_ATTR_DEV_NAME,		/* string */
 	/*
 	 * Device index together with port index are identifiers

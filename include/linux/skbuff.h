@@ -1377,6 +1377,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 			     struct flow_dissector *flow_dissector,
 			     void *target_container);
 
+/*取报文对应的hashcode*/
 static inline __u32 skb_get_hash(struct sk_buff *skb)
 {
 	if (!skb->l4_hash && !skb->sw_hash)
@@ -4406,16 +4407,19 @@ static inline void skb_copy_queue_mapping(struct sk_buff *to, const struct sk_bu
 	to->queue_mapping = from->queue_mapping;
 }
 
+//保存skb的映射队列（为了规避不等于0，采用+1实现）
 static inline void skb_record_rx_queue(struct sk_buff *skb, u16 rx_queue)
 {
 	skb->queue_mapping = rx_queue + 1;
 }
 
+//取skb中已记录的映射队列（采用-1还原）
 static inline u16 skb_get_rx_queue(const struct sk_buff *skb)
 {
 	return skb->queue_mapping - 1;
 }
 
+//skb是否已记录其映射的队列
 static inline bool skb_rx_queue_recorded(const struct sk_buff *skb)
 {
 	return skb->queue_mapping != 0;

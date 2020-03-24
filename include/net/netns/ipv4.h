@@ -94,7 +94,7 @@ struct netns_ipv4 {
 	int sysctl_icmp_ratemask;
 	int sysctl_icmp_errors_use_inbound_ifaddr;
 
-	struct local_ports ip_local_ports;
+	struct local_ports ip_local_ports;/*本地可用ports范围*/
 
 	int sysctl_tcp_ecn;
 	int sysctl_tcp_ecn_fallback;

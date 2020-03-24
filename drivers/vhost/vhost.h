@@ -232,6 +232,7 @@ int vhost_init_device_iotlb(struct vhost_dev *d, bool enabled);
 #define vq_err(vq, fmt, ...) do {                                  \
 		pr_debug(pr_fmt(fmt), ##__VA_ARGS__);       \
 		if ((vq)->error_ctx)                               \
+		        /*向error_ctx触发eventfd事件*/\
 				eventfd_signal((vq)->error_ctx, 1);\
 	} while (0)
 

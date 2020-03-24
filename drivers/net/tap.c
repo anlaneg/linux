@@ -315,6 +315,7 @@ void tap_del_queues(struct tap_dev *tap)
 }
 EXPORT_SYMBOL_GPL(tap_del_queues);
 
+//macvtap收包函数及tap收包函数
 rx_handler_result_t tap_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;

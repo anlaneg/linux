@@ -69,7 +69,9 @@ struct inet_request_sock {
 	struct request_sock	req;
 #define ir_loc_addr		req.__req_common.skc_rcv_saddr
 #define ir_rmt_addr		req.__req_common.skc_daddr
+//端口号（主机序）
 #define ir_num			req.__req_common.skc_num
+//对端端口号（网络序）
 #define ir_rmt_port		req.__req_common.skc_dport
 #define ir_v6_rmt_addr		req.__req_common.skc_v6_daddr
 #define ir_v6_loc_addr		req.__req_common.skc_v6_rcv_saddr
@@ -84,10 +86,12 @@ struct inet_request_sock {
 				tstamp_ok  : 1,
 				sack_ok	   : 1,
 				wscale_ok  : 1,
+				/*是否开启enc标记*/
 				ecn_ok	   : 1,
 				acked	   : 1,
 				no_srccheck: 1,
 				smc_ok	   : 1;
+	//构造skb时要设置的skb->mark
 	u32                     ir_mark;
 	union {
 		struct ip_options_rcu __rcu	*ireq_opt;
@@ -107,6 +111,7 @@ static inline struct inet_request_sock *inet_rsk(const struct request_sock *sk)
 
 static inline u32 inet_request_mark(const struct sock *sk, struct sk_buff *skb)
 {
+    //如果未设置socket sk_mark,且容许接受skb的mark,则返回skb->mark,否则使用socket->sk_mark
 	if (!sk->sk_mark && sock_net(sk)->ipv4.sysctl_tcp_fwmark_accept)
 		return skb->mark;
 

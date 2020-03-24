@@ -515,6 +515,7 @@ void __ip_select_ident(struct net *net, struct iphdr *iph, int segs)
 		get_random_bytes(&net->ipv4.ip_id_key,
 				 sizeof(net->ipv4.ip_id_key));
 
+	//生成ip层id号
 	hash = siphash_3u32((__force u32)iph->daddr,
 			    (__force u32)iph->saddr,
 			    iph->protocol,

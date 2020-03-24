@@ -22,6 +22,7 @@ static DEFINE_SPINLOCK(virqfd_lock);
 
 static int __init vfio_virqfd_init(void)
 {
+    //创建vfio-irqfd-cleanup工作队列
 	vfio_irqfd_cleanup_wq =
 		create_singlethread_workqueue("vfio-irqfd-cleanup");
 	if (!vfio_irqfd_cleanup_wq)

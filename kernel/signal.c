@@ -1064,6 +1064,7 @@ static void complete_signal(int sig, struct task_struct *p, enum pid_type type)
 
 static inline bool legacy_queue(struct sigpending *signals, int sig)
 {
+    //信号属于非rt信号，且信号存在
 	return (sig < SIGRTMIN) && sigismember(&signals->signal, sig);
 }
 
@@ -1089,6 +1090,7 @@ static int __send_signal(int sig, struct kernel_siginfo *info, struct task_struc
 	 */
 	result = TRACE_SIGNAL_ALREADY_PENDING;
 	if (legacy_queue(pending, sig))
+	    //sig信号属于非rt信号，且待触发
 		goto ret;
 
 	result = TRACE_SIGNAL_DELIVERED;
@@ -3951,7 +3953,7 @@ void __weak sigaction_compat_abi(struct k_sigaction *act,
 {
 }
 
-int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
+int do_sigaction(int sig, struct k_sigaction *act/*新的信号响应函数*/, struct k_sigaction *oact/**/)
 {
 	struct task_struct *p = current, *t;
 	struct k_sigaction *k;
@@ -3960,6 +3962,7 @@ int do_sigaction(int sig, struct k_sigaction *act, struct k_sigaction *oact)
 	if (!valid_signal(sig) || sig < 1 || (act && sig_kernel_only(sig)))
 		return -EINVAL;
 
+	/*取当前进程sig号信号的action*/
 	k = &p->sighand->action[sig-1];
 
 	spin_lock_irq(&p->sighand->siglock);
@@ -4182,15 +4185,17 @@ COMPAT_SYSCALL_DEFINE1(sigpending, compat_old_sigset_t __user *, set32)
  * others support only sys_rt_sigprocmask.
  */
 
-SYSCALL_DEFINE3(sigprocmask, int, how, old_sigset_t __user *, nset,
-		old_sigset_t __user *, oset)
+SYSCALL_DEFINE3(sigprocmask, int, how/*操作方式*/, old_sigset_t __user *, nset/*要设置的信号集*/,
+		old_sigset_t __user *, oset/*操作前信号集*/)
 {
 	old_sigset_t old_set, new_set;
 	sigset_t new_blocked;
 
+	//取当前进程不响应的信号
 	old_set = current->blocked.sig[0];
 
 	if (nset) {
+	    /*用户指定了要设置的信号集*/
 		if (copy_from_user(&new_set, nset, sizeof(*nset)))
 			return -EFAULT;
 
@@ -4198,22 +4203,27 @@ SYSCALL_DEFINE3(sigprocmask, int, how, old_sigset_t __user *, nset,
 
 		switch (how) {
 		case SIG_BLOCK:
+		    //new_set是信号阻塞集，将new_set中的配置填充到new_blocked中
 			sigaddsetmask(&new_blocked, new_set);
 			break;
 		case SIG_UNBLOCK:
+		    //new_set是信号不阻塞集，将new_blocked中的指定信号移除掉
 			sigdelsetmask(&new_blocked, new_set);
 			break;
 		case SIG_SETMASK:
+		    //new_set是信号block全集，直接更新new_blocked集合
 			new_blocked.sig[0] = new_set;
 			break;
 		default:
 			return -EINVAL;
 		}
 
+		//使新的阻塞集生效
 		set_current_blocked(&new_blocked);
 	}
 
 	if (oset) {
+	    /*用户指定了oset,将old_set的内容复制给oset*/
 		if (copy_to_user(oset, &old_set, sizeof(*oset)))
 			return -EFAULT;
 	}
@@ -4417,6 +4427,7 @@ SYSCALL_DEFINE2(signal, int, sig, __sighandler_t, handler)
 
 	ret = do_sigaction(sig, &new_sa, &old_sa);
 
+	/*如果失败，则返回ret,否则返回旧的handler*/
 	return ret ? ret : (unsigned long)old_sa.sa.sa_handler;
 }
 #endif /* __ARCH_WANT_SYS_SIGNAL */

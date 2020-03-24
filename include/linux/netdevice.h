@@ -756,6 +756,7 @@ bool rps_may_expire_flow(struct net_device *dev, u16 rxq_index, u32 flow_id,
 /* This structure contains an instance of an RX queue. */
 struct netdev_rx_queue {
 #ifdef CONFIG_RPS
+    //rx队列可接收的cpu map （来源于queueu/rx-%d/rps_cpus配置）
 	struct rps_map __rcu		*rps_map;
 	struct rps_dev_flow_table __rcu	*rps_flow_table;
 #endif
@@ -4767,6 +4768,7 @@ static inline bool netif_is_macsec(const struct net_device *dev)
 	return dev->priv_flags & IFF_MACSEC;
 }
 
+//dev是否为macvlan设备
 static inline bool netif_is_macvlan(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_MACVLAN;

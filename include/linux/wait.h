@@ -126,7 +126,7 @@ init_waitqueue_func_entry(struct wait_queue_entry *wq_entry, wait_queue_func_t f
  */
 static inline int waitqueue_active(struct wait_queue_head *wq_head)
 {
-	//检查等待队列是否不为空，即有等待者
+	//检查等待队列是否不为空，即是否有等待者
 	return !list_empty(&wq_head->head);
 }
 

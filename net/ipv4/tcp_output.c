@@ -354,6 +354,7 @@ static void tcp_ecn_clear_syn(struct sock *sk, struct sk_buff *skb)
 		TCP_SKB_CB(skb)->tcp_flags &= ~(TCPHDR_ECE | TCPHDR_CWR);
 }
 
+//如果enc_ok,则在tcp上打上ece标记
 static void
 tcp_ecn_make_synack(const struct request_sock *req, struct tcphdr *th)
 {
@@ -697,14 +698,16 @@ static unsigned int tcp_syn_options(struct sock *sk, struct sk_buff *skb,
 }
 
 /* Set up TCP options for SYN-ACKs. */
+//填充tcp选项，返回选项长度
 static unsigned int tcp_synack_options(const struct sock *sk,
 				       struct request_sock *req,
 				       unsigned int mss, struct sk_buff *skb,
-				       struct tcp_out_options *opts,
+				       struct tcp_out_options *opts/*出参，待填充的tcp选项*/,
 				       const struct tcp_md5sig_key *md5,
 				       struct tcp_fastopen_cookie *foc)
 {
 	struct inet_request_sock *ireq = inet_rsk(req);
+	/*tcp选项最大空间*/
 	unsigned int remaining = MAX_TCP_OPTION_SPACE;
 
 #ifdef CONFIG_TCP_MD5SIG
@@ -722,20 +725,25 @@ static unsigned int tcp_synack_options(const struct sock *sk,
 #endif
 
 	/* We always send an MSS option. */
-	opts->mss = mss;
+	opts->mss = mss;/*填充mss*/
 	remaining -= TCPOLEN_MSS_ALIGNED;
 
+	//使能窗口扩大因子
 	if (likely(ireq->wscale_ok)) {
 		opts->ws = ireq->rcv_wscale;
 		opts->options |= OPTION_WSCALE;
 		remaining -= TCPOLEN_WSCALE_ALIGNED;
 	}
+
+	//使能时间签
 	if (likely(ireq->tstamp_ok)) {
 		opts->options |= OPTION_TS;
 		opts->tsval = tcp_skb_timestamp(skb) + tcp_rsk(req)->ts_off;
 		opts->tsecr = req->ts_recent;
 		remaining -= TCPOLEN_TSTAMP_ALIGNED;
 	}
+
+	//使能sack
 	if (likely(ireq->sack_ok)) {
 		opts->options |= OPTION_SACK_ADVERTISE;
 		if (unlikely(!ireq->tstamp_ok))
@@ -3319,6 +3327,7 @@ int tcp_send_synack(struct sock *sk)
  * Allocate one skb and build a SYNACK packet.
  * @dst is consumed : Caller should not use it again.
  */
+//构造syn+ack格式的skb
 struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 				struct request_sock *req,
 				struct tcp_fastopen_cookie *foc,
@@ -3334,6 +3343,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	int mss;
 	u64 now;
 
+	//申请skb
 	skb = alloc_skb(MAX_TCP_HEADER, GFP_ATOMIC);
 	if (unlikely(!skb)) {
 		dst_release(dst);
@@ -3359,8 +3369,10 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 		skb_set_owner_w(skb, (struct sock *)sk);
 		break;
 	}
+	/*设置路由项*/
 	skb_dst_set(skb, dst);
 
+	//选择合适的mss
 	mss = tcp_mss_clamp(tp, dst_metric_advmss(dst));
 
 	memset(&opts, 0, sizeof(opts));
@@ -3381,12 +3393,15 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	md5 = tcp_rsk(req)->af_specific->req_md5_lookup(sk, req_to_sk(req));
 #endif
 	skb_set_hash(skb, tcp_rsk(req)->txhash, PKT_HASH_TYPE_L4);
+	//填充tcp选项字段opts,加上tcp头，得出tcp头部总长度
 	tcp_header_size = tcp_synack_options(sk, req, mss, skb, &opts, md5,
 					     foc) + sizeof(*th);
 
+	//空出tcp待填充位置
 	skb_push(skb, tcp_header_size);
 	skb_reset_transport_header(skb);
 
+	//填充tcp
 	th = (struct tcphdr *)skb->data;
 	memset(th, 0, sizeof(struct tcphdr));
 	th->syn = 1;
@@ -3394,7 +3409,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	tcp_ecn_make_synack(req, th);
 	th->source = htons(ireq->ir_num);
 	th->dest = ireq->ir_rmt_port;
-	skb->mark = ireq->ir_mark;
+	skb->mark = ireq->ir_mark;//设置skb mark
 	skb->ip_summed = CHECKSUM_PARTIAL;
 	th->seq = htonl(tcp_rsk(req)->snt_isn);//填充seq
 	/* XXX data is queued and acked as is. No buffer/window check */
@@ -3402,8 +3417,8 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 
 	/* RFC1323: The window in SYN & SYN/ACK segments is never scaled. */
 	th->window = htons(min(req->rsk_rcv_wnd, 65535U));
-	tcp_options_write((__be32 *)(th + 1), NULL, &opts);
-	th->doff = (tcp_header_size >> 2);
+	tcp_options_write((__be32 *)(th + 1), NULL, &opts);//写入选项
+	th->doff = (tcp_header_size >> 2);//更新tcp header长度
 	__TCP_INC_STATS(sock_net(sk), TCP_MIB_OUTSEGS);
 
 #ifdef CONFIG_TCP_MD5SIG

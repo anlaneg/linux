@@ -446,6 +446,7 @@ EXPORT_SYMBOL(strchrnul);
  */
 char *strnchrnul(const char *s, size_t count, int c)
 {
+    /*返回第一个c或者'\0'结束符所在位置*/
 	while (count-- && *s && *s != (char)c)
 		s++;
 	return (char *)s;

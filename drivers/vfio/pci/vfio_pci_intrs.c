@@ -30,6 +30,7 @@ static void vfio_send_intx_eventfd(void *opaque, void *unused)
 	struct vfio_pci_device *vdev = opaque;
 
 	if (likely(is_intx(vdev) && !vdev->virq_disabled))
+	    /*设备可中断，且未禁用中断，触发中断事件*/
 		eventfd_signal(vdev->ctx[0].trigger, 1);
 }
 
@@ -240,6 +241,7 @@ static irqreturn_t vfio_msihandler(int irq, void *arg)
 {
 	struct eventfd_ctx *trigger = arg;
 
+	/*触发eventfd中断*/
 	eventfd_signal(trigger, 1);
 	return IRQ_HANDLED;
 }
@@ -282,7 +284,7 @@ static int vfio_msi_enable(struct vfio_pci_device *vdev, int nvec, bool msix)
 }
 
 static int vfio_msi_set_vector_signal(struct vfio_pci_device *vdev,
-				      int vector, int fd, bool msix)
+				      int vector, int fd/*eventfd系统调用返回的fd*/, bool msix)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	struct eventfd_ctx *trigger;
@@ -310,6 +312,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_device *vdev,
 	if (!vdev->ctx[vector].name)
 		return -ENOMEM;
 
+	/*依据fd获取eventfd_ctx，以便可以向用户态发送中断*/
 	trigger = eventfd_ctx_fdget(fd);
 	if (IS_ERR(trigger)) {
 		kfree(vdev->ctx[vector].name);
@@ -330,6 +333,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_device *vdev,
 		pci_write_msi_msg(irq, &msg);
 	}
 
+	/*填充中断触发函数vfio_msihandler，其将触发eventfd_signal*/
 	ret = request_irq(irq, vfio_msihandler, 0,
 			  vdev->ctx[vector].name, trigger);
 	if (ret) {
@@ -352,7 +356,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_device *vdev,
 }
 
 static int vfio_msi_set_block(struct vfio_pci_device *vdev, unsigned start,
-			      unsigned count, int32_t *fds, bool msix)
+			      unsigned count/*fds数组大小*/, int32_t *fds/*一组eventfd系统调用返回的fds*/, bool msix)
 {
 	int i, j, ret = 0;
 
@@ -507,7 +511,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_device *vdev,
 		return -EINVAL;
 
 	if (flags & VFIO_IRQ_SET_DATA_EVENTFD) {
-		int32_t *fds = data;
+		int32_t *fds = data;/*一组eventfd系统调用返回的fds*/
 		int ret;
 
 		if (vdev->irq_type == index)

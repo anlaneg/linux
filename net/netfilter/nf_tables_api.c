@@ -2245,6 +2245,7 @@ static int nf_tables_newchain(struct net *net, struct sock *nlsk,
 
 	lockdep_assert_held(&net->nft.commit_mutex);
 
+	//取table
 	table = nft_table_lookup(net, nla[NFTA_CHAIN_TABLE], family, genmask);
 	if (IS_ERR(table)) {
 		NL_SET_BAD_ATTR(extack, nla[NFTA_CHAIN_TABLE]);

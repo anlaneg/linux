@@ -77,13 +77,16 @@ EXPORT_SYMBOL_GPL(uuid_gen);
  */
 bool uuid_is_valid(const char *uuid)
 {
+    //检查字符串uuid是否为有效的uuid
 	unsigned int i;
 
 	for (i = 0; i < UUID_STRING_LEN; i++) {
 		if (i == 8 || i == 13 || i == 18 || i == 23) {
 			if (uuid[i] != '-')
+			    /*以上位置必须有'-'号*/
 				return false;
 		} else if (!isxdigit(uuid[i])) {
+		    /*每个字符必须为16进制*/
 			return false;
 		}
 	}
@@ -92,14 +95,17 @@ bool uuid_is_valid(const char *uuid)
 }
 EXPORT_SYMBOL(uuid_is_valid);
 
+//将uuid转换为16位的buffer
 static int __uuid_parse(const char *uuid, __u8 b[16], const u8 ei[16])
 {
 	static const u8 si[16] = {0,2,4,6,9,11,14,16,19,21,24,26,28,30,32,34};
 	unsigned int i;
 
+	//uuid必须为有效的
 	if (!uuid_is_valid(uuid))
 		return -EINVAL;
 
+	//将uuid转换为16位的buffer
 	for (i = 0; i < 16; i++) {
 		int hi = hex_to_bin(uuid[si[i] + 0]);
 		int lo = hex_to_bin(uuid[si[i] + 1]);
@@ -110,6 +116,7 @@ static int __uuid_parse(const char *uuid, __u8 b[16], const u8 ei[16])
 	return 0;
 }
 
+//将uuid转换为u->b
 int guid_parse(const char *uuid, guid_t *u)
 {
 	return __uuid_parse(uuid, u->b, guid_index);

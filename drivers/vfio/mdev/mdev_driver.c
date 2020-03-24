@@ -37,6 +37,7 @@ static void mdev_detach_iommu(struct mdev_device *mdev)
 	dev_info(&mdev->dev, "MDEV: detaching iommu\n");
 }
 
+//mdev bus实现probe
 static int mdev_probe(struct device *dev)
 {
 	struct mdev_driver *drv = to_mdev_driver(dev->driver);
@@ -47,6 +48,7 @@ static int mdev_probe(struct device *dev)
 	if (ret)
 		return ret;
 
+	/*使driver的probe埋行探测*/
 	if (drv && drv->probe) {
 		ret = drv->probe(dev);
 		if (ret)
@@ -85,9 +87,10 @@ EXPORT_SYMBOL_GPL(mdev_bus_type);
  **/
 int mdev_register_driver(struct mdev_driver *drv, struct module *owner)
 {
+    //mdev驱动注册
 	/* initialize common driver fields */
 	drv->driver.name = drv->name;
-	drv->driver.bus = &mdev_bus_type;
+	drv->driver.bus = &mdev_bus_type;//驱动所属bus
 	drv->driver.owner = owner;
 
 	/* register with core */
@@ -105,6 +108,7 @@ void mdev_unregister_driver(struct mdev_driver *drv)
 }
 EXPORT_SYMBOL(mdev_unregister_driver);
 
+//注册mdev bus
 int mdev_bus_register(void)
 {
 	return bus_register(&mdev_bus_type);

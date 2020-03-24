@@ -742,7 +742,7 @@ static ssize_t store_rps_map(struct netdev_rx_queue *queue,
 	}
 
 	i = 0;
-	/*填充mask中指定的每一个cpu*/
+	/*填充mask中指定的每一个cpu,考虑online cpu*/
 	for_each_cpu_and(cpu, mask, cpu_online_mask)
 		map->cpus[i++] = cpu;
 
@@ -796,6 +796,7 @@ static void rps_dev_flow_table_release(struct rcu_head *rcu)
 	vfree(table);
 }
 
+//设置一个大小为count的表，共有count个flow,每个flow指定一个cpu
 static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 					    const char *buf, size_t len)
 {
@@ -807,10 +808,12 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
+	//转换为整数
 	rc = kstrtoul(buf, 0, &count);
 	if (rc < 0)
 		return rc;
 
+	//使count变为power_of_two
 	if (count) {
 		mask = count - 1;
 		/* mask = roundup_pow_of_two(count) - 1;
@@ -832,11 +835,12 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 			return -EINVAL;
 		}
 #endif
+		//申请table
 		table = vmalloc(RPS_DEV_FLOW_TABLE_SIZE(mask + 1));
 		if (!table)
 			return -ENOMEM;
 
-		table->mask = mask;
+		table->mask = mask;//table掩码（长度-1)
 		for (count = 0; count <= mask; count++)
 			table->flows[count].cpu = RPS_NO_CPU;
 	} else {
@@ -844,6 +848,7 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	}
 
 	spin_lock(&rps_dev_flow_lock);
+	//设置table
 	old_table = rcu_dereference_protected(queue->rps_flow_table,
 					      lockdep_is_held(&rps_dev_flow_lock));
 	rcu_assign_pointer(queue->rps_flow_table, table);
@@ -855,7 +860,7 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	return len;
 }
 
-//rps是软件实现的rss
+//rps用于是软件实现的rss，解决网卡队列数小于cpu的问题。
 static struct rx_queue_attribute rps_cpus_attribute __ro_after_init
 	= __ATTR(rps_cpus, 0644, show_rps_map, store_rps_map);
 
@@ -864,6 +869,7 @@ static struct rx_queue_attribute rps_dev_flow_table_cnt_attribute __ro_after_ini
 		 show_rps_dev_flow_table_cnt, store_rps_dev_flow_table_cnt);
 #endif /* CONFIG_RPS */
 
+//记录每个queue中的属性项
 static struct attribute *rx_queue_default_attrs[] __ro_after_init = {
 #ifdef CONFIG_RPS
 	&rps_cpus_attribute.attr,
@@ -937,6 +943,7 @@ static int rx_queue_add_kobject(struct net_device *dev, int index)
 	dev_hold(queue->dev);
 
 	kobj->kset = dev->queues_kset;
+	//添加rx-%u对应的object文件夹
 	error = kobject_init_and_add(kobj, &rx_queue_ktype, NULL,
 				     "rx-%u", index);
 	if (error)
@@ -969,6 +976,7 @@ net_rx_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 	if (!dev->sysfs_rx_queue_group)
 		return 0;
 #endif
+	//如果new_num大于old_num,则增加新的rx-%d kobject对象
 	for (i = old_num; i < new_num; i++) {
 		error = rx_queue_add_kobject(dev, i);
 		if (error) {
@@ -977,6 +985,7 @@ net_rx_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
 		}
 	}
 
+	//new_num可能小于old_num，故移除kobj
 	while (--i >= new_num) {
 		struct kobject *kobj = &dev->_rx[i].kobj;
 

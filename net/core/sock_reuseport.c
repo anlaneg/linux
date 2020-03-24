@@ -151,6 +151,7 @@ int reuseport_add_sock(struct sock *sk, struct sock *sk2, bool bind_inany)
 {
 	struct sock_reuseport *old_reuse, *reuse;
 
+	//如果为首个reuse socket,则申请reuseport_cb
 	if (!rcu_access_pointer(sk2->sk_reuseport_cb)) {
 		int err = reuseport_alloc(sk2, bind_inany);
 
@@ -164,10 +165,12 @@ int reuseport_add_sock(struct sock *sk, struct sock *sk2, bool bind_inany)
 	old_reuse = rcu_dereference_protected(sk->sk_reuseport_cb,
 					     lockdep_is_held(&reuseport_lock));
 	if (old_reuse && old_reuse->num_socks != 1) {
+	    /*sk如果也有reuse块，则报错*/
 		spin_unlock_bh(&reuseport_lock);
 		return -EBUSY;
 	}
 
+	//reuse数量达到最大值，扩大resuse->socks数组
 	if (reuse->num_socks == reuse->max_socks) {
 		reuse = reuseport_grow(reuse);
 		if (!reuse) {
@@ -176,6 +179,7 @@ int reuseport_add_sock(struct sock *sk, struct sock *sk2, bool bind_inany)
 		}
 	}
 
+	//将此socket加入到reuse表中
 	reuse->socks[reuse->num_socks] = sk;
 	/* paired with smp_rmb() in reuseport_select_sock() */
 	smp_wmb();

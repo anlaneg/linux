@@ -146,6 +146,7 @@ static inline int ip_select_ttl(struct inet_sock *inet, struct dst_entry *dst)
  *		Add an ip header to a skbuff and send it out.
  *
  */
+//构造ip报文并发送
 int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 			  __be32 saddr, __be32 daddr, struct ip_options_rcu *opt)
 {
@@ -160,7 +161,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 	iph = ip_hdr(skb);
 	iph->version  = 4;
 	iph->ihl      = 5;
-	iph->tos      = inet->tos;
+	iph->tos      = inet->tos;/*来源于socket的tos*/
 	iph->ttl      = ip_select_ttl(inet, &rt->dst);
 	iph->daddr    = (opt && opt->opt.srr ? opt->opt.faddr : daddr);
 	iph->saddr    = saddr;
@@ -173,6 +174,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 		__ip_select_ident(net, iph, 1);
 	}
 
+	//如果有选项，则构造ip选项
 	if (opt && opt->opt.optlen) {
 		iph->ihl += opt->opt.optlen>>2;
 		ip_options_build(skb, &opt->opt, daddr, rt, 0);
@@ -183,6 +185,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 		skb->mark = sk->sk_mark;
 
 	/* Send it out. */
+	//向外发送ip报文
 	return ip_local_out(net, skb->sk, skb);
 }
 EXPORT_SYMBOL_GPL(ip_build_and_send_pkt);

@@ -716,6 +716,7 @@ static int bnxt_re_register_ib(struct bnxt_re_dev *rdev)
 	if (ret)
 		return ret;
 
+	//注册ib设备
 	return ib_register_device(ibdev, "bnxt_re%d");
 }
 

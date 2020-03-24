@@ -492,6 +492,7 @@ static int vfio_pci_open(void *device_data)
 
 	mutex_lock(&vdev->reflck->lock);
 
+	//vfio引用计数为0，开始vfio-pci设备
 	if (!vdev->refcnt) {
 		ret = vfio_pci_enable(vdev);
 		if (ret)
@@ -904,6 +905,7 @@ static long vfio_pci_ioctl(void *device_data,
 			-EFAULT : 0;
 
 	} else if (cmd == VFIO_DEVICE_SET_IRQS) {
+	    /*设备中断设置*/
 		struct vfio_irq_set hdr;
 		u8 *data = NULL;
 		int max, ret = 0;
@@ -1331,6 +1333,7 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	mutex_init(&vdev->ioeventfds_lock);
 	INIT_LIST_HEAD(&vdev->ioeventfds_list);
 
+	//创建pci dev设备对应的vfio_dev
 	ret = vfio_add_group_dev(&pdev->dev, &vfio_pci_ops, vdev);
 	if (ret) {
 		vfio_iommu_group_put(group, &pdev->dev);
@@ -1431,6 +1434,7 @@ static const struct pci_error_handlers vfio_err_handlers = {
 	.error_detected = vfio_pci_aer_err_detected,
 };
 
+//vfio pci驱动（只支持动态ids)
 static struct pci_driver vfio_pci_driver = {
 	.name		= "vfio-pci",
 	.id_table	= NULL, /* only dynamic ids */
@@ -1630,12 +1634,14 @@ put_devs:
 	kfree(devs.devices);
 }
 
+//vfio-pci驱动移除
 static void __exit vfio_pci_cleanup(void)
 {
 	pci_unregister_driver(&vfio_pci_driver);
 	vfio_pci_uninit_perm_bits();
 }
 
+//将ids添加到vfio-pci支持的ids
 static void __init vfio_pci_fill_ids(void)
 {
 	char *p, *id;
@@ -1646,8 +1652,10 @@ static void __init vfio_pci_fill_ids(void)
 		return;
 
 	/* add ids specified in the module parameter */
+	//解析参数传入的ids
 	p = ids;
 	while ((id = strsep(&p, ","))) {
+	    //按逗号分隔了一个id
 		unsigned int vendor, device, subvendor = PCI_ANY_ID,
 			subdevice = PCI_ANY_ID, class = 0, class_mask = 0;
 		int fields;
@@ -1655,6 +1663,7 @@ static void __init vfio_pci_fill_ids(void)
 		if (!strlen(id))
 			continue;
 
+		//自id串里解释出vendor,device,subverdor,subdevice...
 		fields = sscanf(id, "%x:%x:%x:%x:%x:%x",
 				&vendor, &device, &subvendor, &subdevice,
 				&class, &class_mask);
@@ -1687,10 +1696,12 @@ static int __init vfio_pci_init(void)
 		return ret;
 
 	/* Register and scan for devices */
+	//注册vfio-pci 驱动
 	ret = pci_register_driver(&vfio_pci_driver);
 	if (ret)
 		goto out_driver;
 
+	//添加驱动支持的ids table
 	vfio_pci_fill_ids();
 
 	return 0;

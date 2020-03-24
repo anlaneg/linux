@@ -26,6 +26,7 @@
 
 DEFINE_PER_CPU(int, eventfd_wake_count);
 
+//负责context id号分配
 static DEFINE_IDA(eventfd_ida);
 
 struct eventfd_ctx {
@@ -41,7 +42,7 @@ struct eventfd_ctx {
 	 */
 	__u64 count;
 	unsigned int flags;
-	int id;
+	int id;//ctx编号
 };
 
 /**
@@ -71,14 +72,16 @@ __u64 eventfd_signal(struct eventfd_ctx *ctx, __u64 n)
 	 * safe context.
 	 */
 	if (WARN_ON_ONCE(this_cpu_read(eventfd_wake_count)))
+	    /*防止在执行下列函数时被中断了，这里直接返回（故不能保证信号数量）*/
 		return 0;
 
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
 	this_cpu_inc(eventfd_wake_count);
 	if (ULLONG_MAX - ctx->count < n)
 		n = ULLONG_MAX - ctx->count;
-	ctx->count += n;
+	ctx->count += n;/*增加事件数*/
 	if (waitqueue_active(&ctx->wqh))
+	    /*等待队列中有wait,采用pollin事件将其唤醒*/
 		wake_up_locked_poll(&ctx->wqh, EPOLLIN);
 	this_cpu_dec(eventfd_wake_count);
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
@@ -129,6 +132,7 @@ static __poll_t eventfd_poll(struct file *file, poll_table *wait)
 	__poll_t events = 0;
 	u64 count;
 
+	/*poll等待*/
 	poll_wait(file, &ctx->wqh, wait);
 
 	/*
@@ -172,10 +176,13 @@ static __poll_t eventfd_poll(struct file *file, poll_table *wait)
 	count = READ_ONCE(ctx->count);
 
 	if (count > 0)
+	    //event量大于0，可读
 		events |= EPOLLIN;
 	if (count == ULLONG_MAX)
+	    //event量过大，报错
 		events |= EPOLLERR;
 	if (ULLONG_MAX - 1 > count)
+	    //event量可写
 		events |= EPOLLOUT;
 
 	return events;
@@ -183,6 +190,7 @@ static __poll_t eventfd_poll(struct file *file, poll_table *wait)
 
 static void eventfd_ctx_do_read(struct eventfd_ctx *ctx, __u64 *cnt)
 {
+    /*如果是信号量，则一个event触发一次，否则容许多个event可触发一次*/
 	*cnt = (ctx->flags & EFD_SEMAPHORE) ? 1 : ctx->count;
 	ctx->count -= *cnt;
 }
@@ -216,6 +224,7 @@ int eventfd_ctx_remove_wait_queue(struct eventfd_ctx *ctx, wait_queue_entry_t *w
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_remove_wait_queue);
 
+//eventfd读操作处理
 static ssize_t eventfd_read(struct file *file, char __user *buf, size_t count,
 			    loff_t *ppos)
 {
@@ -230,12 +239,15 @@ static ssize_t eventfd_read(struct file *file, char __user *buf, size_t count,
 	spin_lock_irq(&ctx->wqh.lock);
 	res = -EAGAIN;
 	if (ctx->count > 0)
+	    /*有事件，直接填充*/
 		res = sizeof(ucnt);
 	else if (!(file->f_flags & O_NONBLOCK)) {
+	    /*无事件，将wait加入等待队列*/
 		__add_wait_queue(&ctx->wqh, &wait);
 		for (;;) {
 			set_current_state(TASK_INTERRUPTIBLE);
 			if (ctx->count > 0) {
+			    /*有事件发生，跳出*/
 				res = sizeof(ucnt);
 				break;
 			}
@@ -244,19 +256,23 @@ static ssize_t eventfd_read(struct file *file, char __user *buf, size_t count,
 				break;
 			}
 			spin_unlock_irq(&ctx->wqh.lock);
+			//调度出，等待事件发生
 			schedule();
 			spin_lock_irq(&ctx->wqh.lock);
 		}
 		__remove_wait_queue(&ctx->wqh, &wait);
 		__set_current_state(TASK_RUNNING);
 	}
+
 	if (likely(res > 0)) {
+	    /*读取事件触发次数*/
 		eventfd_ctx_do_read(ctx, &ucnt);
 		if (waitqueue_active(&ctx->wqh))
 			wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
 	}
 	spin_unlock_irq(&ctx->wqh.lock);
 
+	//返回触发次数
 	if (res > 0 && put_user(ucnt, (__u64 __user *)buf))
 		return -EFAULT;
 
@@ -301,6 +317,7 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 		__set_current_state(TASK_RUNNING);
 	}
 	if (likely(res > 0)) {
+	    /*增加事件触发次数*/
 		ctx->count += ucnt;
 		if (waitqueue_active(&ctx->wqh))
 			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
@@ -323,6 +340,7 @@ static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 }
 #endif
 
+//eventfd对应的fops
 static const struct file_operations eventfd_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= eventfd_show_fdinfo,
@@ -371,10 +389,12 @@ EXPORT_SYMBOL_GPL(eventfd_fget);
  */
 struct eventfd_ctx *eventfd_ctx_fdget(int fd)
 {
+    /*通过fd找到其对应的eventfd_ctx*/
 	struct eventfd_ctx *ctx;
 	struct fd f = fdget(fd);
 	if (!f.file)
 		return ERR_PTR(-EBADF);
+	//取文件私有数据，即eventfd_ctx
 	ctx = eventfd_ctx_fileget(f.file);
 	fdput(f);
 	return ctx;
@@ -392,6 +412,7 @@ EXPORT_SYMBOL_GPL(eventfd_ctx_fdget);
  */
 struct eventfd_ctx *eventfd_ctx_fileget(struct file *file)
 {
+    /*取eventfd file对应的私有数据，即eventfd_ctx*/
 	struct eventfd_ctx *ctx;
 
 	if (file->f_op != &eventfd_fops)
@@ -403,6 +424,7 @@ struct eventfd_ctx *eventfd_ctx_fileget(struct file *file)
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_fileget);
 
+//实现eventfd,eventfd2系统调用
 static int do_eventfd(unsigned int count, int flags)
 {
 	struct eventfd_ctx *ctx;
@@ -412,6 +434,7 @@ static int do_eventfd(unsigned int count, int flags)
 	BUILD_BUG_ON(EFD_CLOEXEC != O_CLOEXEC);
 	BUILD_BUG_ON(EFD_NONBLOCK != O_NONBLOCK);
 
+	/*有效flags检查*/
 	if (flags & ~EFD_FLAGS_SET)
 		return -EINVAL;
 
@@ -421,11 +444,12 @@ static int do_eventfd(unsigned int count, int flags)
 
 	kref_init(&ctx->kref);
 	init_waitqueue_head(&ctx->wqh);
-	ctx->count = count;
+	ctx->count = count;/*指定初始事件数*/
 	ctx->flags = flags;
 	ctx->id = ida_simple_get(&eventfd_ida, 0, 0, GFP_KERNEL);
 
-	fd = anon_inode_getfd("[eventfd]", &eventfd_fops, ctx,
+	/*映射fd*/
+	fd = anon_inode_getfd("[eventfd]", &eventfd_fops, ctx/*定义eventfd_ctx为file私有数据*/,
 			      O_RDWR | (flags & EFD_SHARED_FCNTL_FLAGS));
 	if (fd < 0)
 		eventfd_free_ctx(ctx);
@@ -433,11 +457,13 @@ static int do_eventfd(unsigned int count, int flags)
 	return fd;
 }
 
+/*定义系统调用eventfd2*/
 SYSCALL_DEFINE2(eventfd2, unsigned int, count, int, flags)
 {
 	return do_eventfd(count, flags);
 }
 
+/*定义系统调用eventfd*/
 SYSCALL_DEFINE1(eventfd, unsigned int, count)
 {
 	return do_eventfd(count, 0);

@@ -206,6 +206,7 @@ static int macvtap_init(void)
 {
 	int err;
 
+	//创建macvtap字符设备
 	err = tap_create_cdev(&macvtap_cdev, &macvtap_major, "macvtap",
 			      THIS_MODULE);
 	if (err)
@@ -219,6 +220,7 @@ static int macvtap_init(void)
 	if (err)
 		goto out3;
 
+	//注册macvtap link
 	err = macvlan_link_register(&macvtap_link_ops);
 	if (err)
 		goto out4;

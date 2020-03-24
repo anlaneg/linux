@@ -873,6 +873,7 @@ int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 	struct flow_block_offload bo;
 	int err;
 
+	/*如果flowtable不可offload，则直接返回*/
 	if (!nf_flowtable_hw_offload(flowtable))
 		return 0;
 

@@ -540,6 +540,7 @@ static inline bool end_of_str(char c)
 	return c == '\0' || c == '\n';
 }
 
+//遇到符号','或者' '认为region结束
 static inline bool __end_of_region(char c)
 {
 	return isspace(c) || c == ',';
@@ -562,6 +563,7 @@ static const char *bitmap_find_region(const char *str)
 	return end_of_str(*str) ? NULL : str;
 }
 
+//回退到非region结尾
 static const char *bitmap_find_region_reverse(const char *start, const char *end)
 {
 	while (start <= end && __end_of_region(*end))
@@ -693,6 +695,7 @@ int bitmap_parselist_user(const char __user *ubuf,
 }
 EXPORT_SYMBOL(bitmap_parselist_user);
 
+//从end向前进行转换u32,将转换的值存入到num
 static const char *bitmap_get_x32_reverse(const char *start,
 					const char *end, u32 *num)
 {
@@ -700,16 +703,19 @@ static const char *bitmap_get_x32_reverse(const char *start,
 	int c, i;
 
 	for (i = 0; i < 32; i += 4) {
+	    /*从结尾开始将最后一个字符由16进制转为二进制*/
 		c = hex_to_bin(*end--);
 		if (c < 0)
 			return ERR_PTR(-EINVAL);
 
+		//构造结果
 		ret |= c << i;
 
 		if (start > end || __end_of_region(*end))
 			goto out;
 	}
 
+	//格式有误检查
 	if (hex_to_bin(*end--) >= 0)
 		return ERR_PTR(-EOVERFLOW);
 out:
@@ -736,12 +742,14 @@ out:
 int bitmap_parse(const char *start, unsigned int buflen,
 		unsigned long *maskp, int nmaskbits)
 {
+    //找配置结束位置
 	const char *end = strnchrnul(start, buflen, '\n') - 1;
 	int chunks = BITS_TO_U32(nmaskbits);
 	u32 *bitmap = (u32 *)maskp;
 	int unset_bit;
 
 	while (1) {
+	    //每32位一个region
 		end = bitmap_find_region_reverse(start, end);
 		if (start > end)
 			break;
@@ -749,11 +757,13 @@ int bitmap_parse(const char *start, unsigned int buflen,
 		if (!chunks--)
 			return -EOVERFLOW;
 
+		//region转换为一个u32
 		end = bitmap_get_x32_reverse(start, end, bitmap++);
 		if (IS_ERR(end))
 			return PTR_ERR(end);
 	}
 
+	//获得未转换的bitmap
 	unset_bit = (BITS_TO_U32(nmaskbits) - chunks) * 32;
 	if (unset_bit < nmaskbits) {
 		bitmap_clear(maskp, unset_bit, nmaskbits - unset_bit);

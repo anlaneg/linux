@@ -40,7 +40,7 @@
  * daddr is real destination address, next hop is recorded in IP header.
  * saddr is address of outgoing interface.
  */
-
+//ip选项构造
 void ip_options_build(struct sk_buff *skb, struct ip_options *opt,
 		      __be32 daddr, struct rtable *rt, int is_frag)
 {
@@ -96,6 +96,7 @@ int __ip_options_echo(struct net *net, struct ip_options *dopt,
 
 	memset(dopt, 0, sizeof(struct ip_options));
 
+	/*选项长度为0，则直接返回*/
 	if (sopt->optlen == 0)
 		return 0;
 

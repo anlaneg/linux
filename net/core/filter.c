@@ -1667,6 +1667,8 @@ static inline void bpf_pull_mac_rcsum(struct sk_buff *skb)
 		skb_postpull_rcsum(skb, skb_mac_header(skb), skb->mac_len);
 }
 
+//bpf辅助函数，用于提供skb内容修改，offset指出要修改的位置，from指出要改成什么样的值
+//len指出改的长度，flags指出hash,checksum的控制信息
 BPF_CALL_5(bpf_skb_store_bytes, struct sk_buff *, skb, u32, offset,
 	   const void *, from, u32, len, u64, flags)
 {
@@ -1676,6 +1678,7 @@ BPF_CALL_5(bpf_skb_store_bytes, struct sk_buff *, skb, u32, offset,
 		return -EINVAL;
 	if (unlikely(offset > 0xffff))
 		return -EFAULT;
+	//使offset,offset+len区间可写
 	if (unlikely(bpf_try_make_writable(skb, offset + len)))
 		return -EFAULT;
 
@@ -1683,8 +1686,10 @@ BPF_CALL_5(bpf_skb_store_bytes, struct sk_buff *, skb, u32, offset,
 	if (flags & BPF_F_RECOMPUTE_CSUM)
 		__skb_postpull_rcsum(skb, ptr, len, offset);
 
+	//写入修改的值
 	memcpy(ptr, from, len);
 
+	//checksum重新计算，清除skb的相关hash
 	if (flags & BPF_F_RECOMPUTE_CSUM)
 		__skb_postpush_rcsum(skb, ptr, len, offset);
 	if (flags & BPF_F_INVALIDATE_HASH)
@@ -1693,6 +1698,7 @@ BPF_CALL_5(bpf_skb_store_bytes, struct sk_buff *, skb, u32, offset,
 	return 0;
 }
 
+//报文内容修改的辅助函数
 static const struct bpf_func_proto bpf_skb_store_bytes_proto = {
 	.func		= bpf_skb_store_bytes,
 	.gpl_only	= false,
@@ -1704,6 +1710,7 @@ static const struct bpf_func_proto bpf_skb_store_bytes_proto = {
 	.arg5_type	= ARG_ANYTHING,
 };
 
+//将针对skb自offset位置开始长度为len的内容加载进to中
 BPF_CALL_4(bpf_skb_load_bytes, const struct sk_buff *, skb, u32, offset,
 	   void *, to, u32, len)
 {
@@ -1712,6 +1719,7 @@ BPF_CALL_4(bpf_skb_load_bytes, const struct sk_buff *, skb, u32, offset,
 	if (unlikely(offset > 0xffff))
 		goto err_clear;
 
+	//取offset，len长度内容存入到to中
 	ptr = skb_header_pointer(skb, offset, len, to);
 	if (unlikely(!ptr))
 		goto err_clear;
@@ -1724,6 +1732,7 @@ err_clear:
 	return -EFAULT;
 }
 
+//提供skb内容的加载
 static const struct bpf_func_proto bpf_skb_load_bytes_proto = {
 	.func		= bpf_skb_load_bytes,
 	.gpl_only	= false,

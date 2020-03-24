@@ -232,7 +232,7 @@ struct sock_common {
 	unsigned short		skc_rx_queue_mapping;
 #endif
 	union {
-		int		skc_incoming_cpu;
+		int		skc_incoming_cpu;//报文上次来临时，使用的cpu
 		u32		skc_rcv_wnd;
 		u32		skc_tw_rcv_nxt; /* struct tcp_timewait_sock  */
 	};
@@ -390,8 +390,10 @@ struct sock {
 #define sk_v6_daddr		__sk_common.skc_v6_daddr
 #define sk_v6_rcv_saddr	__sk_common.skc_v6_rcv_saddr
 #define sk_cookie		__sk_common.skc_cookie
+//上次入方向报文使用的cpu编号
 #define sk_incoming_cpu		__sk_common.skc_incoming_cpu
 #define sk_flags		__sk_common.skc_flags
+//记录上次收到skb的hash值
 #define sk_rxhash		__sk_common.skc_rxhash
 
 	socket_lock_t		sk_lock;
@@ -483,7 +485,7 @@ struct sock {
 				sk_userlocks : 4;
 	u8			sk_pacing_shift;
 	u16			sk_type;//socket类型
-	u16			sk_protocol;//指明协议
+	u16			sk_protocol;//指明socket对应协议
 	u16			sk_gso_max_segs;
 	unsigned long	        sk_lingertime;
 	//sock创建时的proto,例如udp_proto
@@ -532,6 +534,7 @@ struct sock {
 #endif
 	//sock释放函数
 	void                    (*sk_destruct)(struct sock *sk);
+	//reuse控制块，记录与此socket一起reuse此port的socket
 	struct sock_reuseport __rcu	*sk_reuseport_cb;
 #ifdef CONFIG_BPF_SYSCALL
 	struct bpf_sk_storage __rcu	*sk_bpf_storage;
@@ -986,6 +989,7 @@ static inline int sk_backlog_rcv(struct sock *sk, struct sk_buff *skb)
 	return sk->sk_backlog_rcv(sk, skb);
 }
 
+//更新incoming_cpu
 static inline void sk_incoming_cpu_update(struct sock *sk)
 {
 	int cpu = raw_smp_processor_id();
@@ -1031,6 +1035,7 @@ static inline void sock_rps_save_rxhash(struct sock *sk,
 					const struct sk_buff *skb)
 {
 #ifdef CONFIG_RPS
+    //如果报文上次的收到的hash与本次不一致，则更新rxhash
 	if (unlikely(sk->sk_rxhash != skb->hash))
 		sk->sk_rxhash = skb->hash;
 #endif

@@ -1511,6 +1511,7 @@ static long vhost_vring_set_num(struct vhost_dev *d,
 	return 0;
 }
 
+/*设置vring对应的地址*/
 static long vhost_vring_set_addr(struct vhost_dev *d,
 				 struct vhost_virtqueue *vq,
 				 void __user *argp)
@@ -1578,6 +1579,7 @@ static long vhost_vring_set_num_addr(struct vhost_dev *d,
 		r = vhost_vring_set_num(d, vq, argp);
 		break;
 	case VHOST_SET_VRING_ADDR:
+	    /*设置vring的地址*/
 		r = vhost_vring_set_addr(d, vq, argp);
 		break;
 	default:

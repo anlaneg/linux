@@ -20,43 +20,51 @@
 #define DRIVER_AUTHOR		"NVIDIA Corporation"
 #define DRIVER_DESC		"Mediated device Core Driver"
 
+//记录所有mdev_parent结构
 static LIST_HEAD(parent_list);
 static DEFINE_MUTEX(parent_list_lock);
 static struct class_compat *mdev_bus_compat_class;
 
+//记录所有的mdev_device结构
 static LIST_HEAD(mdev_list);
 static DEFINE_MUTEX(mdev_list_lock);
 
+//取mdev的父设备
 struct device *mdev_parent_dev(struct mdev_device *mdev)
 {
 	return mdev->parent->dev;
 }
 EXPORT_SYMBOL(mdev_parent_dev);
 
+//取mdev的驱动数据
 void *mdev_get_drvdata(struct mdev_device *mdev)
 {
 	return mdev->driver_data;
 }
 EXPORT_SYMBOL(mdev_get_drvdata);
 
+//设置mdev的驱动数据
 void mdev_set_drvdata(struct mdev_device *mdev, void *data)
 {
 	mdev->driver_data = data;
 }
 EXPORT_SYMBOL(mdev_set_drvdata);
 
+//取mdev对应的dev
 struct device *mdev_dev(struct mdev_device *mdev)
 {
 	return &mdev->dev;
 }
 EXPORT_SYMBOL(mdev_dev);
 
+//如果dev为mdev,则获取其对应的mdev
 struct mdev_device *mdev_from_dev(struct device *dev)
 {
 	return dev_is_mdev(dev) ? to_mdev_device(dev) : NULL;
 }
 EXPORT_SYMBOL(mdev_from_dev);
 
+//取mdev的uuid
 const guid_t *mdev_uuid(struct mdev_device *mdev)
 {
 	return &mdev->uuid;
@@ -64,6 +72,7 @@ const guid_t *mdev_uuid(struct mdev_device *mdev)
 EXPORT_SYMBOL(mdev_uuid);
 
 /* Should be called holding parent_list_lock */
+//遍历parent_list，针对每个mdev_parent,检查其对应的dev是否为需要查找的dev
 static struct mdev_parent *__find_parent_device(struct device *dev)
 {
 	struct mdev_parent *parent;
@@ -85,6 +94,7 @@ static void mdev_release_parent(struct kref *kref)
 	put_device(dev);
 }
 
+//mdev_parent的get函数
 static struct mdev_parent *mdev_get_parent(struct mdev_parent *parent)
 {
 	if (parent)
@@ -93,6 +103,7 @@ static struct mdev_parent *mdev_get_parent(struct mdev_parent *parent)
 	return parent;
 }
 
+//mdev_parent的put函数
 static void mdev_put_parent(struct mdev_parent *parent)
 {
 	if (parent)
@@ -141,15 +152,18 @@ static int mdev_device_remove_cb(struct device *dev, void *data)
  */
 int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 {
+    /*注册mdev设备*/
 	int ret;
 	struct mdev_parent *parent;
 	char *env_string = "MDEV_STATE=registered";
 	char *envp[] = { env_string, NULL };
 
 	/* check for mandatory ops */
+	/*mdev_parent的ops必须满足以下条件*/
 	if (!ops || !ops->create || !ops->remove || !ops->supported_type_groups)
 		return -EINVAL;
 
+	//增加dev引用
 	dev = get_device(dev);
 	if (!dev)
 		return -EINVAL;
@@ -157,13 +171,16 @@ int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 	mutex_lock(&parent_list_lock);
 
 	/* Check for duplicate */
+	//取此设备的mdev_parent
 	parent = __find_parent_device(dev);
 	if (parent) {
+	    //如此设备已存在mdev_parent，则注册失败
 		parent = NULL;
 		ret = -EEXIST;
 		goto add_dev_err;
 	}
 
+	//创建mdev_parent
 	parent = kzalloc(sizeof(*parent), GFP_KERNEL);
 	if (!parent) {
 		ret = -ENOMEM;
@@ -184,6 +201,7 @@ int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 		}
 	}
 
+	/*创建parent以应的sysfs文件*/
 	ret = parent_create_sysfs_files(parent);
 	if (ret)
 		goto add_dev_err;
@@ -192,9 +210,11 @@ int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 	if (ret)
 		dev_warn(dev, "Failed to create compatibility class link\n");
 
+	//将创建的mdev_parent加入到parent_list中
 	list_add(&parent->next, &parent_list);
 	mutex_unlock(&parent_list_lock);
 
+	//触发uevent事件
 	dev_info(dev, "MDEV: Registered\n");
 	kobject_uevent_env(&dev->kobj, KOBJ_CHANGE, envp);
 
@@ -252,6 +272,7 @@ void mdev_unregister_device(struct device *dev)
 }
 EXPORT_SYMBOL(mdev_unregister_device);
 
+//将mdev_device自链中移除，并释放
 static void mdev_device_free(struct mdev_device *mdev)
 {
 	mutex_lock(&mdev_list_lock);
@@ -262,6 +283,7 @@ static void mdev_device_free(struct mdev_device *mdev)
 	kfree(mdev);
 }
 
+//由device获取其对应的mdev_deivce,并将其释放
 static void mdev_device_release(struct device *dev)
 {
 	struct mdev_device *mdev = to_mdev_device(dev);
@@ -269,14 +291,16 @@ static void mdev_device_release(struct device *dev)
 	mdev_device_free(mdev);
 }
 
+//mdev设备创建
 int mdev_device_create(struct kobject *kobj,
-		       struct device *dev, const guid_t *uuid)
+		       struct device *dev, const guid_t *uuid/*device唯一标识*/)
 {
 	int ret;
 	struct mdev_device *mdev, *tmp;
 	struct mdev_parent *parent;
 	struct mdev_type *type = to_mdev_type(kobj);
 
+	//取type->parent对应的mdev_parent
 	parent = mdev_get_parent(type->parent);
 	if (!parent)
 		return -EINVAL;
@@ -284,6 +308,7 @@ int mdev_device_create(struct kobject *kobj,
 	mutex_lock(&mdev_list_lock);
 
 	/* Check for duplicate */
+	/*遍历所有mdev_device,查找uuid是否已存在*/
 	list_for_each_entry(tmp, &mdev_list, next) {
 		if (guid_equal(&tmp->uuid, uuid)) {
 			mutex_unlock(&mdev_list_lock);
@@ -292,6 +317,7 @@ int mdev_device_create(struct kobject *kobj,
 		}
 	}
 
+	//创建mdev_device
 	mdev = kzalloc(sizeof(*mdev), GFP_KERNEL);
 	if (!mdev) {
 		mutex_unlock(&mdev_list_lock);
@@ -300,9 +326,11 @@ int mdev_device_create(struct kobject *kobj,
 	}
 
 	guid_copy(&mdev->uuid, uuid);
+	//加入到mdev_list中
 	list_add(&mdev->next, &mdev_list);
 	mutex_unlock(&mdev_list_lock);
 
+	//对应的mdev_parent
 	mdev->parent = parent;
 
 	/* Check if parent unregistration has started */
@@ -324,6 +352,7 @@ int mdev_device_create(struct kobject *kobj,
 	if (ret)
 		goto ops_create_fail;
 
+	//将mdev加入
 	ret = device_add(&mdev->dev);
 	if (ret)
 		goto add_fail;
@@ -404,6 +433,7 @@ struct device *mdev_get_iommu_device(struct device *dev)
 }
 EXPORT_SYMBOL(mdev_get_iommu_device);
 
+//mdev bus初始化
 static int __init mdev_init(void)
 {
 	return mdev_bus_register();

@@ -53,6 +53,7 @@ int pci_add_dynid(struct pci_driver *drv,
 		  unsigned int class, unsigned int class_mask,
 		  unsigned long driver_data)
 {
+    //创建dynid
 	struct pci_dynid *dynid;
 
 	dynid = kzalloc(sizeof(*dynid), GFP_KERNEL);
@@ -68,6 +69,7 @@ int pci_add_dynid(struct pci_driver *drv,
 	dynid->id.driver_data = driver_data;
 
 	spin_lock(&drv->dynids.lock);
+	//添加动态id
 	list_add_tail(&dynid->node, &drv->dynids.list);
 	spin_unlock(&drv->dynids.lock);
 
@@ -106,12 +108,14 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 	int fields = 0;
 	int retval = 0;
 
+	//必须至少指定2个值
 	fields = sscanf(buf, "%x %x %x %x %x %x %lx",
 			&vendor, &device, &subvendor, &subdevice,
 			&class, &class_mask, &driver_data);
 	if (fields < 2)
 		return -EINVAL;
 
+	//如果是7个值，则填充
 	if (fields != 7) {
 		struct pci_dev *pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
 		if (!pdev)
@@ -123,6 +127,7 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 		pdev->subsystem_device = subdevice;
 		pdev->class = class;
 
+		//如果已存在，则直接返回
 		if (pci_match_id(pdrv->id_table, pdev))
 			retval = -EEXIST;
 
@@ -135,6 +140,7 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 	/* Only accept driver_data values that match an existing id_table
 	   entry */
 	if (ids) {
+	    /*如果ids存在，则必须driver_data是匹配的*/
 		retval = -EINVAL;
 		while (ids->vendor || ids->subvendor || ids->class_mask) {
 			if (driver_data == ids->driver_data) {
@@ -147,12 +153,14 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 			return retval;
 	}
 
+	/*添加专门的动态id tables*/
 	retval = pci_add_dynid(pdrv, vendor, device, subvendor, subdevice,
 			       class, class_mask, driver_data);
 	if (retval)
 		return retval;
 	return count;
 }
+//提供new_id来添加新的动态id table项
 static DRIVER_ATTR_WO(new_id);
 
 /**
@@ -180,6 +188,7 @@ static ssize_t remove_id_store(struct device_driver *driver, const char *buf,
 		return -EINVAL;
 
 	spin_lock(&pdrv->dynids.lock);
+	//将指定动态id自驱动中移除
 	list_for_each_entry_safe(dynid, n, &pdrv->dynids.list, node) {
 		struct pci_device_id *id = &dynid->id;
 		if ((id->vendor == vendor) &&
@@ -197,6 +206,8 @@ static ssize_t remove_id_store(struct device_driver *driver, const char *buf,
 
 	return retval;
 }
+
+//实现驱动ids的移除
 static DRIVER_ATTR_WO(remove_id);
 
 static struct attribute *pci_drv_attrs[] = {
@@ -204,6 +215,8 @@ static struct attribute *pci_drv_attrs[] = {
 	&driver_attr_remove_id.attr,
 	NULL,
 };
+
+//给pci驱动添加动态ids
 ATTRIBUTE_GROUPS(pci_drv);
 
 /**
@@ -263,6 +276,7 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 
 	/* Look at the dynamic ids first, before the static ones */
 	spin_lock(&drv->dynids.lock);
+	/*先进行动态ids的匹配*/
 	list_for_each_entry(dynid, &drv->dynids.list, node) {
 		if (pci_match_one_device(&dynid->id, dev)) {
 			found_id = &dynid->id;
@@ -271,10 +285,12 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 	}
 	spin_unlock(&drv->dynids.lock);
 
+	/*没有找到，再进行id_table式的匹配*/
 	if (!found_id)
 		found_id = pci_match_id(drv->id_table, dev);
 
 	/* driver_override will always match, send a dummy id */
+	/*没有找到，则直接检查设备指定的驱动*/
 	if (!found_id && dev->driver_override)
 		found_id = &pci_device_id_any;
 

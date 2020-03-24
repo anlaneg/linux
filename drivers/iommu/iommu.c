@@ -35,7 +35,7 @@ static u32 iommu_cmd_line __read_mostly;
 struct iommu_group {
 	struct kobject kobj;
 	struct kobject *devices_kobj;
-	struct list_head devices;
+	struct list_head devices;//group下所有设备链表
 	struct mutex mutex;
 	struct blocking_notifier_head notifier;
 	void *iommu_data;
@@ -851,6 +851,7 @@ static int __iommu_group_for_each_dev(struct iommu_group *group, void *data,
 	struct group_device *device;
 	int ret = 0;
 
+	//遍历group下所有设备，并执行fn函数，如果失败，则跳出
 	list_for_each_entry(device, &group->devices, list) {
 		ret = fn(device->dev, data);
 		if (ret)
@@ -860,8 +861,9 @@ static int __iommu_group_for_each_dev(struct iommu_group *group, void *data,
 }
 
 
+//加锁后进行dev遍历访问
 int iommu_group_for_each_dev(struct iommu_group *group, void *data,
-			     int (*fn)(struct device *, void *))
+			     int (*fn/*访问函数*/)(struct device *, void *))
 {
 	int ret;
 
@@ -883,6 +885,7 @@ EXPORT_SYMBOL_GPL(iommu_group_for_each_dev);
  */
 struct iommu_group *iommu_group_get(struct device *dev)
 {
+    //获取dev设备对应的iommu_group
 	struct iommu_group *group = dev->iommu_group;
 
 	if (group)

@@ -4145,6 +4145,7 @@ static void sched_update_worker(struct task_struct *tsk)
 	}
 }
 
+//将当前进程调度走
 asmlinkage __visible void __sched schedule(void)
 {
 	struct task_struct *tsk = current;

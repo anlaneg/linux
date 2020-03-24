@@ -2403,12 +2403,14 @@ static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 			return err;
 	}
 
+	//设置link状态
 	if (tb[IFLA_VF_LINK_STATE]) {
 		struct ifla_vf_link_state *ivl = nla_data(tb[IFLA_VF_LINK_STATE]);
 
 		if (ivl->vf >= INT_MAX)
 			return -EINVAL;
 		err = -EOPNOTSUPP;
+		//通过ops的回调完成enable设置
 		if (ops->ndo_set_vf_link_state)
 			err = ops->ndo_set_vf_link_state(dev, ivl->vf,
 							 ivl->link_state);

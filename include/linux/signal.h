@@ -53,6 +53,7 @@ enum siginfo_layout siginfo_layout(unsigned sig, int si_code);
    be atomic.  */
 static inline void sigaddset(sigset_t *set, int _sig)
 {
+    //向sigset中添加指定信号（添加时，信号值会被减1）
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
 		set->sig[0] |= 1UL << sig;
@@ -62,6 +63,7 @@ static inline void sigaddset(sigset_t *set, int _sig)
 
 static inline void sigdelset(sigset_t *set, int _sig)
 {
+    //自sigset中移除指定信号
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
 		set->sig[0] &= ~(1UL << sig);
@@ -71,6 +73,7 @@ static inline void sigdelset(sigset_t *set, int _sig)
 
 static inline int sigismember(sigset_t *set, int _sig)
 {
+    //检查sigset中是否包含指定信号
 	unsigned long sig = _sig - 1;
 	if (_NSIG_WORDS == 1)
 		return 1 & (set->sig[0] >> sig);
@@ -82,6 +85,7 @@ static inline int sigismember(sigset_t *set, int _sig)
 
 static inline int sigisemptyset(sigset_t *set)
 {
+    //检查指定sigset中是否不包含任何信号
 	switch (_NSIG_WORDS) {
 	case 4:
 		return (set->sig[3] | set->sig[2] |
@@ -98,6 +102,7 @@ static inline int sigisemptyset(sigset_t *set)
 
 static inline int sigequalsets(const sigset_t *set1, const sigset_t *set2)
 {
+    //检查两个sigset是否完全相等
 	switch (_NSIG_WORDS) {
 	case 4:
 		return	(set1->sig[3] == set2->sig[3]) &&
@@ -113,14 +118,17 @@ static inline int sigequalsets(const sigset_t *set1, const sigset_t *set2)
 	return 0;
 }
 
+//获得指定信号的mask
 #define sigmask(sig)	(1UL << ((sig) - 1))
 
 #ifndef __HAVE_ARCH_SIG_SETOPS
 #include <linux/string.h>
 
+/**/
 #define _SIG_SET_BINOP(name, op)					\
 static inline void name(sigset_t *r, const sigset_t *a, const sigset_t *b) \
 {									\
+    /*针对信号集合a,b指定操作op,使其执行结果存放在集合r中，函数命名为name*/\
 	unsigned long a0, a1, a2, a3, b0, b1, b2, b3;			\
 									\
 	switch (_NSIG_WORDS) {						\
@@ -143,12 +151,15 @@ static inline void name(sigset_t *r, const sigset_t *a, const sigset_t *b) \
 	}								\
 }
 
+//实现两个信号集合的or操作
 #define _sig_or(x,y)	((x) | (y))
 _SIG_SET_BINOP(sigorsets, _sig_or)
 
+//实现两个信号集合的与操作
 #define _sig_and(x,y)	((x) & (y))
 _SIG_SET_BINOP(sigandsets, _sig_and)
 
+//实现两个信号集合的与非操作
 #define _sig_andn(x,y)	((x) & ~(y))
 _SIG_SET_BINOP(sigandnsets, _sig_andn)
 
@@ -160,6 +171,7 @@ _SIG_SET_BINOP(sigandnsets, _sig_andn)
 #define _SIG_SET_OP(name, op)						\
 static inline void name(sigset_t *set)					\
 {									\
+    /*针对信号集合set,使其执行操作op,使其执行结果存放在原集合中，函数命名为name*/\
 	switch (_NSIG_WORDS) {						\
 	case 4:	set->sig[3] = op(set->sig[3]);				\
 		set->sig[2] = op(set->sig[2]);				\
@@ -173,12 +185,14 @@ static inline void name(sigset_t *set)					\
 	}								\
 }
 
+//取原信号集取反
 #define _sig_not(x)	(~(x))
 _SIG_SET_OP(signotset, _sig_not)
 
 #undef _SIG_SET_OP
 #undef _sig_not
 
+//清空原信号集
 static inline void sigemptyset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
@@ -192,6 +206,7 @@ static inline void sigemptyset(sigset_t *set)
 	}
 }
 
+//设置原信号集为全集
 static inline void sigfillset(sigset_t *set)
 {
 	switch (_NSIG_WORDS) {
@@ -209,16 +224,19 @@ static inline void sigfillset(sigset_t *set)
 
 static inline void sigaddsetmask(sigset_t *set, unsigned long mask)
 {
+    //将mask中的信号集合掩到set上
 	set->sig[0] |= mask;
 }
 
 static inline void sigdelsetmask(sigset_t *set, unsigned long mask)
 {
+    //自set中的信号集合中取消掉mask指定的信号
 	set->sig[0] &= ~mask;
 }
 
 static inline int sigtestsetmask(sigset_t *set, unsigned long mask)
 {
+    //检查set中的信号集合中是否mask指定的全部或部分信号
 	return (set->sig[0] & mask) != 0;
 }
 

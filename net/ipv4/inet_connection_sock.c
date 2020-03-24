@@ -112,6 +112,7 @@ bool inet_rcv_saddr_any(const struct sock *sk)
 	return !sk->sk_rcv_saddr;
 }
 
+//取local可用port范围
 void inet_get_local_port_range(struct net *net, int *low, int *high)
 {
 	unsigned int seq;
@@ -170,7 +171,7 @@ static int inet_csk_bind_conflict(const struct sock *sk,
  * inet_bind_hashbucket lock held.
  */
 static struct inet_bind_hashbucket *
-inet_csk_find_open_port(struct sock *sk, struct inet_bind_bucket **tb_ret, int *port_ret)
+inet_csk_find_open_port(struct sock *sk, struct inet_bind_bucket **tb_ret, int *port_ret/*出参，可使用的port*/)
 {
 	struct inet_hashinfo *hinfo = sk->sk_prot->h.hashinfo;
 	int port = 0;
@@ -187,6 +188,7 @@ other_half_scan:
 	inet_get_local_port_range(net, &low, &high);
 	high++; /* [32768, 60999] -> [32768, 61000[ */
 	if (high - low < 4)
+	    /*low与high之间差别太小，不进行二分法查找*/
 		attempt_half = 0;
 	if (attempt_half) {
 		int half = low + (((high - low) >> 2) << 1);
@@ -211,8 +213,10 @@ other_parity_scan:
 	for (i = 0; i < remaining; i += 2, port += 2) {
 		if (unlikely(port >= high))
 			port -= remaining;
+		//检查port是否为local预留
 		if (inet_is_local_reserved_port(net, port))
 			continue;
+		//检查port是否可绑定
 		head = &hinfo->bhash[inet_bhashfn(net, port,
 						  hinfo->bhash_size)];
 		spin_lock_bh(&head->lock);
@@ -220,11 +224,11 @@ other_parity_scan:
 			if (net_eq(ib_net(tb), net) && tb->l3mdev == l3mdev &&
 			    tb->port == port) {
 				if (!inet_csk_bind_conflict(sk, tb, false, false))
-					goto success;
+					goto success;/*有使用，但不冲突*/
 				goto next_port;
 			}
 		tb = NULL;
-		goto success;
+		goto success;/*无使用*/
 next_port:
 		spin_unlock_bh(&head->lock);
 		cond_resched();
@@ -297,10 +301,12 @@ int inet_csk_get_port(struct sock *sk, unsigned short snum)
 	l3mdev = inet_sk_bound_l3mdev(sk);
 
 	if (!port) {
+	    /*使用动态port情况，获取一个可使用的port*/
 		head = inet_csk_find_open_port(sk, &tb, &port);
 		if (!head)
 			return ret;
 		if (!tb)
+		    /*port无人使用*/
 			goto tb_not_found;
 		goto success;
 	}
@@ -758,9 +764,11 @@ drop:
 static void reqsk_queue_hash_req(struct request_sock *req,
 				 unsigned long timeout)
 {
+    //初始化rsk_timer,并指定触发时间为timeout
 	timer_setup(&req->rsk_timer, reqsk_timer_handler, TIMER_PINNED);
 	mod_timer(&req->rsk_timer, jiffies + timeout);
 
+	//将此socket加入到ehash
 	inet_ehash_insert(req_to_sk(req), NULL);
 	/* before letting lookups find us, make sure all req fields
 	 * are committed to memory and refcnt initialized.
@@ -901,17 +909,21 @@ int inet_csk_listen_start(struct sock *sk, int backlog)
 	 * It is OK, because this socket enters to hash table only
 	 * after validation is complete.
 	 */
+	//置socket状态为listen状态
 	inet_sk_state_store(sk, TCP_LISTEN);
 	if (!sk->sk_prot->get_port(sk, inet->inet_num)) {
+	    /*inet->inet_num port可使用*/
 		inet->inet_sport = htons(inet->inet_num);
 
 		sk_dst_reset(sk);
+		/*注册此协议对应的socket*/
 		err = sk->sk_prot->hash(sk);
 
 		if (likely(!err))
 			return 0;
 	}
 
+	/*注册失败，置socket为close状态*/
 	inet_sk_set_state(sk, TCP_CLOSE);
 	return err;
 }

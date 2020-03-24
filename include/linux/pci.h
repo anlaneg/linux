@@ -472,6 +472,7 @@ struct pci_dev {
 #endif
 	phys_addr_t	rom;		/* Physical address if not from BAR */
 	size_t		romlen;		/* Length if not from BAR */
+	//强制指定驱动匹配此设备
 	char		*driver_override; /* Driver name to force a match */
 
 	//0号bit位被置上时表示设备未连接
@@ -845,7 +846,7 @@ struct pci_driver {
 	const struct pci_error_handlers *err_handler;
 	const struct attribute_group **groups;
 	struct device_driver	driver;//设备驱动（可理解为基类）
-	struct pci_dynids	dynids;
+	struct pci_dynids	dynids;//驱动的动态ids
 };
 
 #define	to_pci_driver(drv) container_of(drv, struct pci_driver, driver)

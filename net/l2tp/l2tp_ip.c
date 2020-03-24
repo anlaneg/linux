@@ -594,6 +594,7 @@ static struct proto l2tp_ip_prot = {
 	.sendmsg	   = l2tp_ip_sendmsg,
 	.recvmsg	   = l2tp_ip_recvmsg,
 	.backlog_rcv	   = l2tp_ip_backlog_recv,
+	//注册socket
 	.hash		   = inet_hash,
 	.unhash		   = inet_unhash,
 	.obj_size	   = sizeof(struct l2tp_ip_sock),

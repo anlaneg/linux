@@ -1681,6 +1681,7 @@ static ssize_t ucma_write(struct file *filp, const char __user *buf,
 	if (!ucma_cmd_table[hdr.cmd])
 		return -ENOSYS;
 
+	//执行相应的命令
 	ret = ucma_cmd_table[hdr.cmd](file, buf + sizeof(hdr), hdr.in, hdr.out);
 	if (!ret)
 		ret = len;
@@ -1711,6 +1712,7 @@ static __poll_t ucma_poll(struct file *filp, struct poll_table_struct *wait)
  */
 static int ucma_open(struct inode *inode, struct file *filp)
 {
+    //打开rcma_cm设备，创建一个ucma_file
 	struct ucma_file *file;
 
 	file = kmalloc(sizeof *file, GFP_KERNEL);
@@ -1773,6 +1775,7 @@ static int ucma_close(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+//rdma_cm字符设备fops
 static const struct file_operations ucma_fops = {
 	.owner 	 = THIS_MODULE,
 	.open 	 = ucma_open,
@@ -1782,6 +1785,7 @@ static const struct file_operations ucma_fops = {
 	.llseek	 = no_llseek,
 };
 
+//rdma_cm字符设备
 static struct miscdevice ucma_misc = {
 	.minor		= MISC_DYNAMIC_MINOR,
 	.name		= "rdma_cm",

@@ -355,6 +355,7 @@ static inline int __must_check kstrtoul(const char *s, unsigned int base, unsign
 	 * We want to shortcut function call, but
 	 * __builtin_types_compatible_p(unsigned long, unsigned long long) = 0.
 	 */
+    //转换字符串为无符号long型
 	if (sizeof(unsigned long) == sizeof(unsigned long long) &&
 	    __alignof__(unsigned long) == __alignof__(unsigned long long))
 		return kstrtoull(s, base, (unsigned long long *)res);

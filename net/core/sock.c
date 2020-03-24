@@ -1069,6 +1069,8 @@ set_rcvbuf:
 			clear_bit(SOCK_PASSSEC, &sock->flags);
 		break;
 	case SO_MARK:
+	    /*更新so mark,用于使skb->mark生效*/
+	    //https://blog.csdn.net/dog250/article/details/7664062
 		if (!ns_capable(sock_net(sk)->user_ns, CAP_NET_ADMIN)) {
 			ret = -EPERM;
 		} else if (val != sk->sk_mark) {
@@ -1997,7 +1999,9 @@ void __sock_wfree(struct sk_buff *skb)
 
 void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 {
+    //确保skb没有skb->sk给值
 	skb_orphan(skb);
+	//设置skb对应的socket
 	skb->sk = sk;
 #ifdef CONFIG_INET
 	if (unlikely(!sk_fullsock(sk))) {

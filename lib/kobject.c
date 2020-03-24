@@ -379,7 +379,7 @@ EXPORT_SYMBOL(kobject_set_name);
  * the memory is cleaned up properly.
  */
 //初始化一个kobj
-void kobject_init(struct kobject *kobj, struct kobj_type *ktype)
+void kobject_init(struct kobject *kobj, struct kobj_type *ktype/*object对应的type*/)
 {
 	char *err_str;
 
@@ -513,8 +513,8 @@ EXPORT_SYMBOL(kobject_add);
  * same type of error handling after a call to kobject_add() and kobject
  * lifetime rules are the same here.
  */
-int kobject_init_and_add(struct kobject *kobj, struct kobj_type *ktype,
-			 struct kobject *parent, const char *fmt, ...)
+int kobject_init_and_add(struct kobject *kobj, struct kobj_type *ktype/*obj类型*/,
+			 struct kobject *parent/*obj父节点*/, const char *fmt/*obj名称格式串*/, ...)
 {
 	va_list args;
 	int retval;
@@ -1052,7 +1052,7 @@ static struct kset *kset_create(const char *name,
 //创建名称为$name的keyset
 struct kset *kset_create_and_add(const char *name,
 				 const struct kset_uevent_ops *uevent_ops,
-				 struct kobject *parent_kobj)
+				 struct kobject *parent_kobj/*kset对应的父kobject*/)
 {
 	struct kset *kset;
 	int error;

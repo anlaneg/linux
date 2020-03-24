@@ -627,6 +627,7 @@ static const struct nla_policy ipip_policy[IFLA_IPTUN_MAX + 1] = {
 	[IFLA_IPTUN_FWMARK]		= { .type = NLA_U32 },
 };
 
+//ipip link ops
 static struct rtnl_link_ops ipip_link_ops __read_mostly = {
 	.kind		= "ipip",
 	.maxtype	= IFLA_IPTUN_MAX,

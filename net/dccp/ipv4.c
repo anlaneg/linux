@@ -948,6 +948,7 @@ static struct proto dccp_v4_prot = {
 	.sendmsg		= dccp_sendmsg,
 	.recvmsg		= dccp_recvmsg,
 	.backlog_rcv		= dccp_v4_do_rcv,
+	//注册socket,以便可查找到
 	.hash			= inet_hash,
 	.unhash			= inet_unhash,
 	.accept			= inet_csk_accept,

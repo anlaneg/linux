@@ -348,6 +348,7 @@ static int zap_process(struct task_struct *start, int exit_code, int flags)
 	for_each_thread(start, t) {
 		task_clear_jobctl_pending(t, JOBCTL_PENDING_MASK);
 		if (t != current && t->mm) {
+		    //向pending的信号中添加SIGKILL
 			sigaddset(&t->pending.signal, SIGKILL);
 			signal_wake_up(t, 1);
 			nr++;

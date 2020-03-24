@@ -306,9 +306,11 @@ static void ib_device_check_mandatory(struct ib_device *device)
  */
 struct ib_device *ib_device_get_by_index(const struct net *net, u32 index)
 {
+    //通过index获取ib_device
 	struct ib_device *device;
 
 	down_read(&devices_rwsem);
+	/*取index号ib设备*/
 	device = xa_load(&devices, index);
 	if (device) {
 		if (!rdma_dev_access_netns(device, net)) {
@@ -459,6 +461,7 @@ static int alloc_name(struct ib_device *ibdev, const char *name)
 
 	lockdep_assert_held_write(&devices_rwsem);
 	ida_init(&inuse);
+	//遍历所有设备，标记哪些id号被占用了
 	xa_for_each (&devices, index, device) {
 		char buf[IB_DEVICE_NAME_MAX];
 
@@ -475,10 +478,12 @@ static int alloc_name(struct ib_device *ibdev, const char *name)
 			goto out;
 	}
 
+	/*申请一个空闲id*/
 	rc = ida_alloc(&inuse, GFP_KERNEL);
 	if (rc < 0)
 		goto out;
 
+	//为设备设置name
 	rc = dev_set_name(&ibdev->dev, name, rc);
 out:
 	ida_destroy(&inuse);
@@ -1148,12 +1153,16 @@ static int assign_name(struct ib_device *device, const char *name)
 	if (ret)
 		goto out;
 
+	//检查名称是否重复
 	if (__ib_device_get_by_name(dev_name(&device->dev))) {
 		ret = -ENFILE;
 		goto out;
 	}
+
+	//设置device名称
 	strlcpy(device->name, dev_name(&device->dev), IB_DEVICE_NAME_MAX);
 
+	//将device加入
 	ret = xa_alloc_cyclic(&devices, &device->index, device, xa_limit_31b,
 			&last_id, GFP_KERNEL);
 	if (ret > 0)
@@ -1340,10 +1349,12 @@ out:
  * asynchronously then the device pointer may become freed as soon as this
  * function returns.
  */
-int ib_register_device(struct ib_device *device, const char *name)
+//ib设备注册
+int ib_register_device(struct ib_device *device, const char *name/*ib设备名称*/)
 {
 	int ret;
 
+	//设置设备名称
 	ret = assign_name(device, name);
 	if (ret)
 		return ret;
@@ -1838,6 +1849,7 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 	int ret = -ENOENT;
 
 	down_read(&ibdev->client_data_rwsem);
+	//遍历所有clients,找出名称为client_name的client
 	xan_for_each_marked (&ibdev->client_data, index, client_data,
 			     CLIENT_DATA_REGISTERED) {
 		struct ib_client *client = xa_load(&clients, index);
@@ -1848,6 +1860,7 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 			ret = -EOPNOTSUPP;
 			break;
 		}
+		//取其对应的netlink info,填充到res中
 		ret = client->get_nl_info(ibdev, client_data, res);
 		if (WARN_ON(ret == -ENOENT))
 			ret = -EINVAL;
@@ -2525,11 +2538,13 @@ struct net_device *ib_get_net_dev_by_params(struct ib_device *dev,
 }
 EXPORT_SYMBOL(ib_get_net_dev_by_params);
 
+//利用ops设置dev->ops
 void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 {
 	struct ib_device_ops *dev_ops = &dev->ops;
 #define SET_DEVICE_OP(ptr, name)                                               \
 	do {                                                                   \
+	    /*ops如果有name指针，且ptr的name指针为空，则将使ptr->name=ops->name*/\
 		if (ops->name)                                                 \
 			if (!((ptr)->name))				       \
 				(ptr)->name = ops->name;                       \

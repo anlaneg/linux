@@ -757,10 +757,11 @@ struct vfio_iommu_type1_info_cap_iova_range {
  * provided struct vfio_dma_map. Caller sets argsz. READ &/ WRITE required.
  */
 struct vfio_iommu_type1_dma_map {
-	__u32	argsz;
-	__u32	flags;
+	__u32	argsz;//内存大小
+	__u32	flags;//读写标记
 #define VFIO_DMA_MAP_FLAG_READ (1 << 0)		/* readable from device */
 #define VFIO_DMA_MAP_FLAG_WRITE (1 << 1)	/* writable from device */
+	//进程使用的虚地址
 	__u64	vaddr;				/* Process virtual address */
 	__u64	iova;				/* IO virtual address */
 	__u64	size;				/* Size of mapping (bytes) */

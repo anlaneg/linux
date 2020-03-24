@@ -54,7 +54,7 @@ struct request_sock {
 #define rsk_rcv_wnd			__req_common.skc_rcv_wnd
 
 	struct request_sock		*dl_next;
-	u16				mss;
+	u16				mss;//协商的mss
 	u8				num_retrans; /* number of retransmits */
 	u8				cookie_ts:1; /* syncookie: encode tcpopts in timestamp */
 	u8				num_timeout:7; /* number of timeouts */

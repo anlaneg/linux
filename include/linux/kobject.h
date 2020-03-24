@@ -138,6 +138,7 @@ static inline bool kobject_has_children(struct kobject *kobj)
 	return kobj->sd && kobj->sd->dir.subdirs;
 }
 
+//定义kobj的类型
 struct kobj_type {
 	void (*release)(struct kobject *kobj);
 	//显示某个属性时，或者设置某个属性时的操作集

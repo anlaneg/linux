@@ -228,8 +228,10 @@ EXPORT_SYMBOL(rdma_nl_put_driver_u64_hex);
 
 static int fill_nldev_handle(struct sk_buff *msg, struct ib_device *device)
 {
+    //存放ib设备index
 	if (nla_put_u32(msg, RDMA_NLDEV_ATTR_DEV_INDEX, device->index))
 		return -EMSGSIZE;
+	//存放ib设备名称
 	if (nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_NAME,
 			   dev_name(&device->dev)))
 		return -EMSGSIZE;
@@ -863,6 +865,7 @@ static int nldev_get_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err || !tb[RDMA_NLDEV_ATTR_DEV_INDEX])
 		return -EINVAL;
 
+	//通过index获得device
 	index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
 
 	device = ib_device_get_by_index(sock_net(skb->sk), index);
@@ -918,6 +921,7 @@ static int nldev_set_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 		nla_strlcpy(name, tb[RDMA_NLDEV_ATTR_DEV_NAME],
 			    IB_DEVICE_NAME_MAX);
+		//ib设备重命名
 		err = ib_device_rename(device, name);
 		goto done;
 	}
@@ -1569,6 +1573,7 @@ static int nldev_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	return 0;
 }
 
+//取指定编号设备对应的chardev
 static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 			     struct netlink_ext_ack *extack)
 {
@@ -1590,6 +1595,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (tb[RDMA_NLDEV_ATTR_DEV_INDEX]) {
 		index = nla_get_u32(tb[RDMA_NLDEV_ATTR_DEV_INDEX]);
+		//通过index取相应的ib设备
 		ibdev = ib_device_get_by_index(sock_net(skb->sk), index);
 		if (!ibdev)
 			return -EINVAL;

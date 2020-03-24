@@ -135,6 +135,7 @@ u32 secure_tcp_seq(__be32 saddr, __be32 daddr,
 {
 	u32 hash;
 
+	//通过源地址，目的地址，源port,目的port生成tcp seq
 	net_secret_init();
 	hash = siphash_3u32((__force u32)saddr, (__force u32)daddr,
 			    (__force u32)sport << 16 | (__force u32)dport,

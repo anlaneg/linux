@@ -318,6 +318,7 @@ int rdma_nl_net_init(struct rdma_dev_net *rnet)
 	};
 	struct sock *nls;
 
+	//注册NETLINK_RDMA socket类型
 	nls = netlink_kernel_create(net, NETLINK_RDMA, &cfg);
 	if (!nls)
 		return -ENOMEM;

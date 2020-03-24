@@ -2033,6 +2033,7 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 		iommu->v2 = true;
 		break;
 	default:
+	    /*遇到不支持的参数，返回失败*/
 		kfree(iommu);
 		return ERR_PTR(-EINVAL);
 	}
@@ -2180,6 +2181,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 
 	if (cmd == VFIO_CHECK_EXTENSION) {
 		switch (arg) {
+		/*如果是以下扩展，直接返回支持*/
 		case VFIO_TYPE1_IOMMU:
 		case VFIO_TYPE1v2_IOMMU:
 		case VFIO_TYPE1_NESTING_IOMMU:
@@ -2244,18 +2246,21 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 			-EFAULT : 0;
 
 	} else if (cmd == VFIO_IOMMU_MAP_DMA) {
+	    /*映射dma地址*/
 		struct vfio_iommu_type1_dma_map map;
 		uint32_t mask = VFIO_DMA_MAP_FLAG_READ |
 				VFIO_DMA_MAP_FLAG_WRITE;
 
 		minsz = offsetofend(struct vfio_iommu_type1_dma_map, size);
 
+		//使用用户传入的数据填充map
 		if (copy_from_user(&map, (void __user *)arg, minsz))
 			return -EFAULT;
 
 		if (map.argsz < minsz || map.flags & ~mask)
 			return -EINVAL;
 
+		/*完成dma地址映射*/
 		return vfio_dma_do_map(iommu, &map);
 
 	} else if (cmd == VFIO_IOMMU_UNMAP_DMA) {
@@ -2319,6 +2324,7 @@ static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.unregister_notifier	= vfio_iommu_type1_unregister_notifier,
 };
 
+/*注册vfio-iommu-type1驱动*/
 static int __init vfio_iommu_type1_init(void)
 {
 	return vfio_register_iommu_driver(&vfio_iommu_driver_ops_type1);

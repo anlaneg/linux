@@ -13,8 +13,9 @@ extern spinlock_t reuseport_lock;
 struct sock_reuseport {
 	struct rcu_head		rcu;
 
+	//socks数组可使用的长度
 	u16			max_socks;	/* length of socks */
-	//可reuse的sockets数目
+	//记录已使用的可reuse的sockets数目(即socks的数组有效表项的长度）
 	u16			num_socks;	/* elements in socks */
 	/* The last synq overflow event timestamp of this
 	 * reuse->socks[] group.
@@ -25,7 +26,7 @@ struct sock_reuseport {
 	unsigned int		bind_inany:1;
 	unsigned int		has_conns:1;
 	struct bpf_prog __rcu	*prog;		/* optional BPF sock selector */
-	//可reuse的sockets
+	//记录可reuse的sockets
 	struct sock		*socks[0];	/* array of sock pointers */
 };
 

@@ -110,7 +110,7 @@ struct inet_bind_hashbucket {
  */
 #define LISTENING_NULLS_BASE (1U << 29)
 struct inet_listen_hashbucket {
-	spinlock_t		lock;
+	spinlock_t		lock;//冲突链保护锁
 	unsigned int		count;//已加入的socket数目
 	union {
 		struct hlist_head	head;//hash表
@@ -130,7 +130,7 @@ struct inet_hashinfo {
 	 */
 	struct inet_ehash_bucket	*ehash;//已建立稳定连接的sockets表
 	spinlock_t			*ehash_locks;
-	unsigned int			ehash_mask;
+	unsigned int			ehash_mask;//ehash表桶mask
 	unsigned int			ehash_locks_mask;
 
 	/* Ok, let's try this, I give up, we do need a local binding
@@ -141,8 +141,8 @@ struct inet_hashinfo {
 	unsigned int			bhash_size;
 
 	/* The 2nd listener table hashed by local port and address */
-	unsigned int			lhash2_mask;
-	struct inet_listen_hashbucket	*lhash2;
+	unsigned int			lhash2_mask;//监听表桶mask
+	struct inet_listen_hashbucket	*lhash2;//已被监听的sockets表
 
 	/* All the above members are written once at bootup and
 	 * never written again _or_ are predominantly read-access.
@@ -407,6 +407,7 @@ u32 inet6_ehashfn(const struct net *net,
 		  const struct in6_addr *laddr, const u16 lport,
 		  const struct in6_addr *faddr, const __be16 fport);
 
+//设置socket的对端ip
 static inline void sk_daddr_set(struct sock *sk, __be32 addr)
 {
 	sk->sk_daddr = addr; /* alias of inet_daddr */
@@ -415,6 +416,7 @@ static inline void sk_daddr_set(struct sock *sk, __be32 addr)
 #endif
 }
 
+/*设置socket的本端ip地址*/
 static inline void sk_rcv_saddr_set(struct sock *sk, __be32 addr)
 {
 	sk->sk_rcv_saddr = addr; /* alias of inet_rcv_saddr */

@@ -503,6 +503,7 @@ static int __setup_rt_frame(int sig, struct ksignal *ksig,
 	   next argument after the signal number on the stack. */
 	regs->si = (unsigned long)&frame->info;
 	regs->dx = (unsigned long)&frame->uc;
+	/*使ip指向信号触发函数*/
 	regs->ip = (unsigned long) ksig->ka.sa.sa_handler;
 
 	regs->sp = (unsigned long)frame;

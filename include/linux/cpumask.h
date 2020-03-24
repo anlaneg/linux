@@ -42,6 +42,7 @@ extern unsigned int nr_cpu_ids;
 #ifdef CONFIG_CPUMASK_OFFSTACK
 /* Assuming NR_CPUS is huge, a runtime limit is more efficient.  Also,
  * not all bits may be allocated. */
+/*记录cpu数目*/
 #define nr_cpumask_bits	nr_cpu_ids
 #else
 #define nr_cpumask_bits	((unsigned int)NR_CPUS)
@@ -686,6 +687,7 @@ static inline int cpulist_parse(const char *buf, struct cpumask *dstp)
  */
 static inline unsigned int cpumask_size(void)
 {
+    //cpu掩码的bits占用的long类型字节数
 	return BITS_TO_LONGS(nr_cpumask_bits) * sizeof(long);
 }
 

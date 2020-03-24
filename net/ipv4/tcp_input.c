@@ -3839,7 +3839,7 @@ static u16 tcp_parse_mss_option(const struct tcphdr *th, u16 user_mss)
  */
 void tcp_parse_options(const struct net *net,
 		       const struct sk_buff *skb,
-		       struct tcp_options_received *opt_rx, int estab,
+		       struct tcp_options_received *opt_rx/*出参，收到的选项信息*/, int estab/*是否已稳定连接*/,
 		       struct tcp_fastopen_cookie *foc)
 {
 	const unsigned char *ptr;
@@ -3872,7 +3872,8 @@ void tcp_parse_options(const struct net *net,
 			if (opsize > length)
 				return;	/* don't parse partial options */
 			switch (opcode) {
-			case TCPOPT_MSS://mss只能在syn包中存在，否则不生效
+			case TCPOPT_MSS:
+			    //mss只能在syn包中存在，否则不生效
 				if (opsize == TCPOLEN_MSS && th->syn && !estab) {
 					//取两字节的大端数字，用于对方给出的mss
 					u16 in_mss = get_unaligned_be16(ptr);
@@ -3882,7 +3883,8 @@ void tcp_parse_options(const struct net *net,
 						if (opt_rx->user_mss &&
 						    opt_rx->user_mss < in_mss)
 							in_mss = opt_rx->user_mss;
-						opt_rx->mss_clamp = in_mss;//使能较小的mss
+						//记录协商的mss
+						opt_rx->mss_clamp = in_mss;
 					}
 				}
 				break;
@@ -3908,7 +3910,7 @@ void tcp_parse_options(const struct net *net,
 					__u8 snd_wscale = *(__u8 *)ptr;
 					opt_rx->wscale_ok = 1;
 					if (snd_wscale > TCP_MAX_WSCALE) {
-						//窗口扩大因子过大，告警
+						//窗口扩大因子过大，告警，并规范为最大值
 						net_info_ratelimited("%s: Illegal window scaling value %d > %u received\n",
 								     __func__,
 								     snd_wscale,
@@ -3929,6 +3931,7 @@ void tcp_parse_options(const struct net *net,
 				}
 				break;
 			case TCPOPT_SACK_PERM:
+			    /*sack标记只在syn报文中生效*/
 				if (opsize == TCPOLEN_SACK_PERM && th->syn &&
 				    !estab && net->ipv4.sysctl_tcp_sack) {
 					//收到有效的sack协商
@@ -6222,7 +6225,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 		goto discard;
 
 	case TCP_LISTEN:
-		//listen状态下，ack标记不能有值，返回１，触发回复rst
+		//listen状态下，tcp falgs的ack标记不能有值，返回１，触发回复rst
 		if (th->ack)
 			return 1;
 
@@ -6257,7 +6260,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			return 0;
 		}
 
-		//其它标记的报文需要丢弃
+		//没有syn标记的报文需要丢弃
 		goto discard;
 
 	case TCP_SYN_SENT:
@@ -6539,6 +6542,7 @@ static void tcp_openreq_init(struct request_sock *req,
 	ireq->tstamp_ok = rx_opt->tstamp_ok;
 	ireq->sack_ok = rx_opt->sack_ok;
 	ireq->snd_wscale = rx_opt->snd_wscale;
+	//使能窗口扩大因子
 	ireq->wscale_ok = rx_opt->wscale_ok;
 	ireq->acked = 0;
 	ireq->ecn_ok = 0;
@@ -6559,6 +6563,7 @@ struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 					       attach_listener);
 
 	if (req) {
+	    /*取inet对应的inet_request_sock*/
 		struct inet_request_sock *ireq = inet_rsk(req);
 
 		ireq->ireq_opt = NULL;
@@ -6763,6 +6768,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tcp_ecn_create_request(req, skb, sk, dst);
 
 	if (want_cookie) {
+	    //使用syn cookie来生成seq号
 		isn = cookie_init_sequence(af_ops, sk, skb, &req->mss);
 		req->cookie_ts = tmp_opt.tstamp_ok;
 		if (!tmp_opt.tstamp_ok)
@@ -6772,6 +6778,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tcp_rsk(req)->snt_isn = isn;
 	tcp_rsk(req)->txhash = net_tx_rndhash();
 	tcp_openreq_init_rwin(req, sk, dst);
+	/*设置req对应socket的rx queue*/
 	sk_rx_queue_set(req_to_sk(req), skb);
 	if (!want_cookie) {
 		tcp_reqsk_record_syn(sk, req, skb);
@@ -6793,6 +6800,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	} else {
 		tcp_rsk(req)->tfo_listener = false;
 		if (!want_cookie)
+		    /*将新建立的socket加入到request socket队列中*/
 			inet_csk_reqsk_queue_hash_add(sk, req,
 				tcp_timeout_init((struct sock *)req));
 		//向外发送synack，完成syn报文处理

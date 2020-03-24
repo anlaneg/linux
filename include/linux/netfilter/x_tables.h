@@ -228,10 +228,10 @@ struct xt_table {
 	struct list_head list;
 
 	/* What hooks you will enter on */
-	unsigned int valid_hooks;//有效的hook点（1<<X进行标记）
+	unsigned int valid_hooks;//要注册的hook点掩码表示（1<<X进行标记）
 
 	/* Man behind the curtain... */
-	struct xt_table_info *private;//窗纱
+	struct xt_table_info *private;
 
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;

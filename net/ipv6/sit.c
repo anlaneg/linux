@@ -1917,6 +1917,7 @@ static void __exit sit_cleanup(void)
 	rcu_barrier(); /* Wait for completion of call_rcu()'s */
 }
 
+//ipv4 tunnel,支持ipv6,ipv4,mpls
 static int __init sit_init(void)
 {
 	int err;
