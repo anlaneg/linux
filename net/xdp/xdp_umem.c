@@ -21,6 +21,7 @@
 
 #define XDP_UMEM_MIN_CHUNK_SIZE 2048
 
+//管理umem内存块的id分配
 static DEFINE_IDA(umem_ida);
 
 void xdp_add_sk_umem(struct xdp_umem *umem, struct xdp_sock *xs)
@@ -292,7 +293,7 @@ static int xdp_umem_pin_pages(struct xdp_umem *umem)
 		return -ENOMEM;
 
 	down_read(&current->mm->mmap_sem);
-	/*获取用户内存的每个页指针*/
+	/*获取用户内存的每个页指针，将其pin在内存里*/
 	npgs = pin_user_pages(umem->address, umem->npgs,
 			      gup_flags | FOLL_LONGTERM, &umem->pgs[0]/*出参，各页指针*/, NULL);
 	up_read(&current->mm->mmap_sem);
@@ -342,9 +343,12 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 //注册用户态的内存
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
+    /*是否为不对齐的chunks*/
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
+	/*chunk大小及headroom大小*/
 	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
 	unsigned int chunks, chunks_per_page;
+	/*chunks起始地址，chunks内存大小*/
 	u64 addr = mr->addr, size = mr->len;
 	int size_chk, err;
 
@@ -358,6 +362,7 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 		return -EINVAL;
 	}
 
+	//当前仅支持unaligned,need_wakeup两种标记
 	if (mr->flags & ~(XDP_UMEM_UNALIGNED_CHUNK_FLAG |
 			XDP_UMEM_USES_NEED_WAKEUP))
 		return -EINVAL;
@@ -372,9 +377,11 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 		return -EINVAL;
 	}
 
+	//防地址超界
 	if ((addr + size) < addr)
 		return -EINVAL;
 
+	/*获得chunk的数目*/
 	chunks = (unsigned int)div_u64(size, chunk_size);
 	if (chunks == 0)
 		return -EINVAL;
@@ -385,6 +392,7 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 			return -EINVAL;
 	}
 
+	/*可用于存放实际报文的大小（减去headroom,减去xdp packet headroom)*/
 	size_chk = chunk_size - headroom - XDP_PACKET_HEADROOM;
 	if (size_chk < 0)
 		return -EINVAL;
@@ -443,6 +451,7 @@ struct xdp_umem *xdp_umem_create(struct xdp_umem_reg *mr)
 	if (!umem)
 		return ERR_PTR(-ENOMEM);
 
+	//为umem分配id号
 	err = ida_simple_get(&umem_ida, 0, 0, GFP_KERNEL);
 	if (err < 0) {
 		kfree(umem);
@@ -450,8 +459,10 @@ struct xdp_umem *xdp_umem_create(struct xdp_umem_reg *mr)
 	}
 	umem->id = err;
 
+	/*注册此内存区域*/
 	err = xdp_umem_reg(umem, mr);
 	if (err) {
+	    /*注册失败，释放此id*/
 		ida_simple_remove(&umem_ida, umem->id);
 		kfree(umem);
 		return ERR_PTR(err);

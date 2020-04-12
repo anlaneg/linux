@@ -78,6 +78,7 @@ EXPORT_SYMBOL_GPL(llist_del_first);
  */
 struct llist_node *llist_reverse_order(struct llist_node *head)
 {
+    //链表反转
 	struct llist_node *new_head = NULL;
 
 	while (head) {

@@ -13,6 +13,7 @@
 #include <linux/skbuff.h>
 #include <net/pkt_sched.h>
 
+//进入blackhole的所有报文将均被free
 static int blackhole_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 			     struct sk_buff **to_free)
 {
@@ -20,6 +21,7 @@ static int blackhole_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	return NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
 }
 
+//自blackhole中不能出队任何报文
 static struct sk_buff *blackhole_dequeue(struct Qdisc *sch)
 {
 	return NULL;

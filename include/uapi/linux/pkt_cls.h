@@ -416,9 +416,9 @@ enum {
 
 enum {
 	TCA_CGROUP_UNSPEC,
-	TCA_CGROUP_ACT,
-	TCA_CGROUP_POLICE,
-	TCA_CGROUP_EMATCHES,
+	TCA_CGROUP_ACT,//cgroup对应的动作
+	TCA_CGROUP_POLICE,//cgroup对应的策略
+	TCA_CGROUP_EMATCHES,//cgroup对应的匹配
 	__TCA_CGROUP_MAX,
 };
 

@@ -349,6 +349,7 @@ out:
 }
 EXPORT_SYMBOL(xsk_umem_consume_tx);
 
+//唤醒设备进行处理
 static int xsk_wakeup(struct xdp_sock *xs, u8 flags)
 {
 	struct net_device *dev = xs->dev;
@@ -671,6 +672,7 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 	if (sxdp->sxdp_family != AF_XDP)
 		return -EINVAL;
 
+	/*当前支持的flags检查*/
 	flags = sxdp->sxdp_flags;
 	if (flags & ~(XDP_SHARED_UMEM | XDP_COPY | XDP_ZEROCOPY |
 		      XDP_USE_NEED_WAKEUP))
@@ -880,9 +882,11 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 			return -EINVAL;
 		}
 
+		//按不同opt对应不同的xsk_queue
 		q = (optname == XDP_UMEM_FILL_RING) ? &xs->umem->fq :
 			&xs->umem->cq;
-		err = xsk_init_queue(entries, q, true);
+		//初始化对应的umem_queue
+		err = xsk_init_queue(entries/*queue长度*/, q, true);
 		mutex_unlock(&xs->mutex);
 		return err;
 	}
@@ -893,6 +897,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
+//获取rxtx ring格式对应的指针offset
 static void xsk_enter_rxtx_offsets(struct xdp_ring_offset_v1 *ring)
 {
 	ring->producer = offsetof(struct xdp_rxtx_ring, ptrs.producer);
@@ -900,6 +905,7 @@ static void xsk_enter_rxtx_offsets(struct xdp_ring_offset_v1 *ring)
 	ring->desc = offsetof(struct xdp_rxtx_ring, desc);
 }
 
+//获取umem ring格式对应的指针offset
 static void xsk_enter_umem_offsets(struct xdp_ring_offset_v1 *ring)
 {
 	ring->producer = offsetof(struct xdp_umem_ring, ptrs.producer);
@@ -962,6 +968,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 			/* xdp_ring_offset is identical to xdp_ring_offset_v1
 			 * except for the flags field added to the end.
 			 */
+		    //各ring 生产者，消费者，描述符的offset（rx,tx,fill ring,completion ring)
 			xsk_enter_rxtx_offsets((struct xdp_ring_offset_v1 *)
 					       &off.rx);
 			xsk_enter_rxtx_offsets((struct xdp_ring_offset_v1 *)
@@ -970,6 +977,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 					       &off.fr);
 			xsk_enter_umem_offsets((struct xdp_ring_offset_v1 *)
 					       &off.cr);
+			//各ring的flags的offset
 			off.rx.flags = offsetof(struct xdp_rxtx_ring,
 						ptrs.flags);
 			off.tx.flags = offsetof(struct xdp_rxtx_ring,
@@ -982,6 +990,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 			len = sizeof(off);
 			to_copy = &off;
 		} else {
+		    //各ring 生产者，消费者，描述符的offset（rx,tx,fill ring,completion ring)
 			xsk_enter_rxtx_offsets(&off_v1.rx);
 			xsk_enter_rxtx_offsets(&off_v1.tx);
 			xsk_enter_umem_offsets(&off_v1.fr);
@@ -1040,7 +1049,7 @@ static int xsk_mmap(struct file *file, struct socket *sock,
 	if (READ_ONCE(xs->state) != XSK_READY)
 		return -EBUSY;
 
-	//区分当前是在映射哪个队列
+	//区分当前是在映射哪个队列（rx,tx,umem的fq/cq)
 	if (offset == XDP_PGOFF_RX_RING) {
 		q = READ_ONCE(xs->rx);
 	} else if (offset == XDP_PGOFF_TX_RING) {
@@ -1129,6 +1138,7 @@ static const struct proto_ops xsk_proto_ops = {
 	.getsockopt	= xsk_getsockopt,
 	.sendmsg	= xsk_sendmsg,
 	.recvmsg	= sock_no_recvmsg,
+	//实现ring的映射
 	.mmap		= xsk_mmap,
 	.sendpage	= sock_no_sendpage,
 };

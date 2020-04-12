@@ -45,20 +45,20 @@ struct xdp_umem {
 	struct xsk_queue *fq;//fill队列
 	struct xsk_queue *cq;//complete队列
 	struct xdp_umem_page *pages;/*自kernel申请的一组与umem相同页数的内存*/
-	u64 chunk_mask;
+	u64 chunk_mask;/*chunk大小的mask,chunk大小为2的n次方，故mask为其值减一*/
 	u64 size;/*用户内存大小*/
-	u32 headroom;
-	u32 chunk_size_nohr;
+	u32 headroom;/*报文的headroom大小*/
+	u32 chunk_size_nohr;/*不读算headroom情况下chunk大小*/
 	struct user_struct *user;
 	unsigned long address;/*用户内存起始地址*/
 	refcount_t users;
 	struct work_struct work;
 	struct page **pgs;/*用户内存的各页指针*/
-	u32 npgs;/*内存页数目*/
+	u32 npgs;/*用户指定内存占用的页数目*/
 	u16 queue_id;
 	u8 need_wakeup;
 	u8 flags;
-	int id;
+	int id;/*唯一编号*/
 	struct net_device *dev;
 	struct xdp_umem_fq_reuse *fq_reuse;
 	bool zc;

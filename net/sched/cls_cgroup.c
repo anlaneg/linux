@@ -22,6 +22,7 @@ struct cls_cgroup_head {
 	struct rcu_work		rwork;
 };
 
+//检查tp是否与skb可以匹配，如果匹配，则执行tp对应的action
 static int cls_cgroup_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			       struct tcf_result *res)
 {
@@ -38,6 +39,7 @@ static int cls_cgroup_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	res->classid = classid;
 	res->class = 0;
 
+	//完成classid确认，执行其对应action
 	return tcf_exts_exec(skb, &head->exts, res);
 }
 
@@ -195,6 +197,7 @@ nla_put_failure:
 	return -1;
 }
 
+//执行cgroup相关的匹配及策略
 static struct tcf_proto_ops cls_cgroup_ops __read_mostly = {
 	.kind		=	"cgroup",
 	.init		=	cls_cgroup_init,

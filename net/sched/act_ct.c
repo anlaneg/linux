@@ -46,16 +46,21 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 
+	//取skb的链接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
 		return false;
+	//与ct同属一个net namespace
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
 		return false;
+
+	//zone id相同
 	if (nf_ct_zone(ct)->id != zone_id)
 		return false;
 
 	/* Force conntrack entry direction. */
 	if (force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+	    //移除已建立的ct
 		if (nf_ct_is_confirmed(ct))
 			nf_ct_kill(ct);
 
@@ -333,6 +338,7 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 	int err;
 	enum nf_nat_manip_type maniptype;
 
+	/*非nat act，则跳出*/
 	if (!(ct_action & TCA_CT_ACT_NAT))
 		return NF_ACCEPT;
 
@@ -377,6 +383,7 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 #endif
 }
 
+//执行ct action
 static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		      struct tcf_result *res)
 {

@@ -22,6 +22,7 @@ struct cgroup_cls_state {
 
 struct cgroup_cls_state *task_cls_state(struct task_struct *p);
 
+//取进程对应的classid
 static inline u32 task_cls_classid(struct task_struct *p)
 {
 	u32 classid;
@@ -30,6 +31,7 @@ static inline u32 task_cls_classid(struct task_struct *p)
 		return 0;
 
 	rcu_read_lock();
+	//取task对应的classid
 	classid = container_of(task_css(p, net_cls_cgrp_id),
 			       struct cgroup_cls_state, css)->classid;
 	rcu_read_unlock();

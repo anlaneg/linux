@@ -419,6 +419,7 @@ static int tbf_change(struct Qdisc *sch, struct nlattr *opt,
 		if (err)
 			goto done;
 	} else if (qopt->limit > 0) {
+	    //创建字节类型fifo先进先出队列
 		child = fifo_create_dflt(sch, &bfifo_qdisc_ops, qopt->limit,
 					 extack);
 		if (IS_ERR(child)) {

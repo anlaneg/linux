@@ -131,7 +131,8 @@ int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 	int rc = -EEXIST;
 
 	write_lock(&qdisc_mod_lock);
-	//检查是否已注册
+
+	//检查qdisc是否已注册
 	for (qp = &qdisc_base; (q = *qp) != NULL; qp = &q->next)
 		if (!strcmp(qops->id, q->id))
 			goto out;

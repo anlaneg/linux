@@ -130,6 +130,7 @@ struct vhost_net_virtqueue {
 
 struct vhost_net {
 	struct vhost_dev dev;
+	//设备收发队列
 	struct vhost_net_virtqueue vqs[VHOST_NET_VQ_MAX];
 	struct vhost_poll poll[VHOST_NET_VQ_MAX];
 	/* Number of TX recently submitted.
@@ -284,6 +285,7 @@ static int vhost_net_set_ubuf_info(struct vhost_net *n)
 	for (i = 0; i < VHOST_NET_VQ_MAX; ++i) {
 		zcopy = vhost_net_zcopy_mask & (0x1 << i);
 		if (!zcopy)
+		    /*如果此队列未开启zcopy,则跳过*/
 			continue;
 		n->vqs[i].ubuf_info =
 			kmalloc_array(UIO_MAXIOV,
@@ -825,6 +827,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		}
 
 		/* TODO: Check specific error and bomb out unless ENOBUFS? */
+		/*向socket中发送报文*/
 		err = sock->ops->sendmsg(sock, &msg, len);
 		if (unlikely(err < 0)) {
 			vhost_discard_vq_desc(vq, 1);
@@ -1185,6 +1188,8 @@ static void handle_rx(struct vhost_net *net)
 			 */
 			iov_iter_advance(&msg.msg_iter, vhost_hlen);
 		}
+
+		/*自socket中收取报文*/
 		err = sock->ops->recvmsg(sock, &msg,
 					 sock_len, MSG_DONTWAIT | MSG_TRUNC);
 		/* Userspace might have consumed the packet meanwhile:
@@ -1196,6 +1201,7 @@ static void handle_rx(struct vhost_net *net)
 			vhost_discard_vq_desc(vq, headcount);
 			continue;
 		}
+		/*自tap,tun口完成了报文收取*/
 		/* Supply virtio_net_hdr if VHOST_NET_F_VIRTIO_NET_HDR */
 		if (unlikely(vhost_hlen)) {
 			if (copy_to_iter(&hdr, sizeof(hdr),
@@ -1256,6 +1262,7 @@ static void handle_rx_kick(struct vhost_work *work)
 	handle_rx(net);
 }
 
+/*vhost发包入口*/
 static void handle_tx_net(struct vhost_work *work)
 {
 	struct vhost_net *net = container_of(work, struct vhost_net,
@@ -1263,6 +1270,7 @@ static void handle_tx_net(struct vhost_work *work)
 	handle_tx(net);
 }
 
+/*vhost收包入口*/
 static void handle_rx_net(struct vhost_work *work)
 {
 	struct vhost_net *net = container_of(work, struct vhost_net,
@@ -1509,7 +1517,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 		goto err;
 	}
 
-	//取index号vq
+	//取收/发队列对应的vq
 	vq = &n->vqs[index].vq;
 	nvq = &n->vqs[index];
 	mutex_lock(&vq->mutex);
@@ -1520,7 +1528,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 		goto err_vq;
 	}
 
-	//取fd对应的socket
+	//取fd对应的socket（raw-socket,tap-socket等）
 	sock = get_socket(fd);
 	if (IS_ERR(sock)) {
 		r = PTR_ERR(sock);
@@ -1684,6 +1692,7 @@ static long vhost_net_set_owner(struct vhost_net *n)
 
 	mutex_lock(&n->dev.mutex);
 	if (vhost_dev_has_owner(&n->dev)) {
+	    //已有owner,退出
 		r = -EBUSY;
 		goto out;
 	}
@@ -1713,25 +1722,29 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	case VHOST_NET_SET_BACKEND:
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
-		/*设置backend*/
+		/*设置收/发队列的backend*/
 		return vhost_net_set_backend(n, backend.index, backend.fd);
 	case VHOST_GET_FEATURES:
+	    /*返回vhost支持的features*/
 		features = VHOST_NET_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof features))
 			return -EFAULT;
 		return 0;
 	case VHOST_SET_FEATURES:
+	    /*设置vhost需要支持的features,当前仅容许vhost支持feature的关闭*/
 		if (copy_from_user(&features, featurep, sizeof features))
 			return -EFAULT;
 		if (features & ~VHOST_NET_FEATURES)
 			return -EOPNOTSUPP;
 		return vhost_net_set_features(n, features);
 	case VHOST_GET_BACKEND_FEATURES:
+	    /*返回backed支持的功能*/
 		features = VHOST_NET_BACKEND_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof(features)))
 			return -EFAULT;
 		return 0;
 	case VHOST_SET_BACKEND_FEATURES:
+	    /*设置backed需要支持的功能*/
 		if (copy_from_user(&features, featurep, sizeof(features)))
 			return -EFAULT;
 		if (features & ~VHOST_NET_BACKEND_FEATURES)
@@ -1740,11 +1753,14 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	case VHOST_RESET_OWNER:
 		return vhost_net_reset_owner(n);
 	case VHOST_SET_OWNER:
+	    /*创建vhost work线程,处理work*/
 		return vhost_net_set_owner(n);
 	default:
 		mutex_lock(&n->dev.mutex);
+		/*尝试vhost设备的ioctl*/
 		r = vhost_dev_ioctl(&n->dev, ioctl, argp);
 		if (r == -ENOIOCTLCMD)
+		    /*尝试vhost设备对应vring的ioctl*/
 			r = vhost_vring_ioctl(&n->dev, ioctl, argp);
 		else
 			vhost_net_flush(n);
@@ -1793,6 +1809,7 @@ static const struct file_operations vhost_net_fops = {
 	.llseek		= noop_llseek,
 };
 
+/*vhost-net设备支持的字符设备 /dev/vhost-net */
 static struct miscdevice vhost_net_misc = {
 	.minor = VHOST_NET_MINOR,
 	.name = "vhost-net",
@@ -1803,6 +1820,7 @@ static int vhost_net_init(void)
 {
 	if (experimental_zcopytx)
 		vhost_net_enable_zcopy(VHOST_NET_VQ_TX);
+	/*vhost-net字符设备创建*/
 	return misc_register(&vhost_net_misc);
 }
 module_init(vhost_net_init);

@@ -45,34 +45,37 @@ struct fl_flow_key {
 	};
 	//源目的端口
 	struct flow_dissector_key_ports tp;
-	//icmp type与code
+	//icmp type与code 匹配
 	struct flow_dissector_key_icmp icmp;
-	//arp协议
+	//arp协议匹配
 	struct flow_dissector_key_arp arp;
-	//隧道key,src,dst地址
+	//隧道key匹配
 	struct flow_dissector_key_keyid enc_key_id;
 	union {
+	    //隧道ipv4/ipv6源目的地址匹配
 		struct flow_dissector_key_ipv4_addrs enc_ipv4;
 		struct flow_dissector_key_ipv6_addrs enc_ipv6;
 	};
-	//隧道方式tp配置
+	//隧道方式传输层配置
 	struct flow_dissector_key_ports enc_tp;
 	struct flow_dissector_key_mpls mpls;
-	//tcp标记位
+	//tcp标记位匹配
 	struct flow_dissector_key_tcp tcp;
-	struct flow_dissector_key_ip ip;//tos,ttl支持
+	//tos,ttl匹配支持
+	struct flow_dissector_key_ip ip;
 	//隧道填充时ttl,tos
 	struct flow_dissector_key_ip enc_ip;
 	//隧道相关的选项
 	struct flow_dissector_key_enc_opts enc_opts;
 	union {
-		struct flow_dissector_key_ports tp;
+		struct flow_dissector_key_ports tp;//传输层匹配
 		struct {
-			//支持port-range方式
+			//支持port-range方式匹配
 			struct flow_dissector_key_ports tp_min;
 			struct flow_dissector_key_ports tp_max;
 		};
 	} tp_range;
+	//ct状态匹配
 	struct flow_dissector_key_ct ct;
 } __aligned(BITS_PER_LONG / 8); /* Ensure that we can do comparisons as longs. */
 
@@ -110,7 +113,7 @@ struct fl_flow_tmplt {
 };
 
 struct cls_fl_head {
-    //哈希表，用于保存不同的mask(用于哈希查询）
+    //哈希表，用于保存不同mask的rules(用于哈希查询）
 	struct rhashtable ht;
 	spinlock_t masks_lock; /* Protect masks list */
 	//链表，用于保存不同的mask（用于遍历）
@@ -343,6 +346,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	struct fl_flow_mask *mask;
 	struct cls_fl_filter *f;
 
+	//遍历所有mask
 	list_for_each_entry_rcu(mask, &head->masks, list) {
 		flow_dissector_init_keys(&skb_key.control, &skb_key.basic);
 		fl_clear_masked_range(&skb_key, mask);
@@ -371,11 +375,12 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	return -1;
 }
 
-//flower类型tcf初始化
+//flower 分类器初始化
 static int fl_init(struct tcf_proto *tp)
 {
 	struct cls_fl_head *head;
 
+	//申请存放匹配规则的head
 	head = kzalloc(sizeof(*head), GFP_KERNEL);
 	if (!head)
 		return -ENOBUFS;
@@ -1669,7 +1674,7 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 	skb_flow_dissector_init(dissector, keys/*记录各成员的在fl_flow_key中的offset*/, cnt/*成员数*/);
 }
 
-//创建mask并将其添加进head->ht中
+//创建新的mask并将其添加进head->ht中
 static struct fl_flow_mask *fl_create_new_mask(struct cls_fl_head *head,
 					       struct fl_flow_mask *mask/*要创建的mask*/)
 {
@@ -1847,6 +1852,7 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 	return 0;
 }
 
+//添加删除flower规则
 static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报文*/,
 		     struct tcf_proto *tp, unsigned long base,
 		     u32 handle/*规则对应的handle*/, struct nlattr **tca/*netlink消息*/,
@@ -1861,7 +1867,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	bool in_ht;
 	int err;
 
-	//filter均存在options中
+	//flower规则均存在options中
 	if (!tca[TCA_OPTIONS]) {
 		err = -EINVAL;
 		goto errout_fold;
@@ -2957,6 +2963,7 @@ static bool fl_delete_empty(struct tcf_proto *tp)
 //注册flower关键字对应的ops
 static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.kind		= "flower",
+	//执行flower规则匹配
 	.classify	= fl_classify,
 	.init		= fl_init,
 	.destroy	= fl_destroy,

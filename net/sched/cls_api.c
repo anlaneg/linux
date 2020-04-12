@@ -274,7 +274,7 @@ static struct tcf_proto *tcf_proto_create(const char *kind/*分类过滤器名�
 		err = PTR_ERR(tp->ops);
 		goto errout;
 	}
-	//使用ops的分类函数
+	//使用ops的分类函数,做为tp的分类函数
 	tp->classify = tp->ops->classify;
 	//指定要分类的协议
 	tp->protocol = protocol;
@@ -1662,7 +1662,7 @@ reclassify:
 		    tp->protocol != htons(ETH_P_ALL))
 			continue;
 
-		//使用tp进行分类(例如flower的classify函数）
+		//针对skb使用tp进行分类(例如flower的classify函数）
 		err = tp->classify(skb, tp, res);
 #ifdef CONFIG_NET_CLS_ACT
 		if (unlikely(err == TC_ACT_RECLASSIFY && !compat_mode)) {
@@ -3141,6 +3141,7 @@ void tcf_exts_destroy(struct tcf_exts *exts)
 }
 EXPORT_SYMBOL(tcf_exts_destroy);
 
+//解析actions
 int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		      struct nlattr *rate_tlv, struct tcf_exts *exts/*规则对应的待填充action*/, bool ovr,
 		      bool rtnl_held, struct netlink_ext_ack *extack)
@@ -3151,6 +3152,7 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		size_t attr_size = 0;
 
 		if (exts->police && tb[exts->police]) {
+		    //如果指定了exts->police,且其对应的netlink字段存在，则解析exts->police对应的action
 			act = tcf_action_init_1(net, tp, tb[exts->police],
 						rate_tlv, "police", ovr,
 						TCA_ACT_BIND, rtnl_held,

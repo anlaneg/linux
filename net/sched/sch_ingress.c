@@ -78,12 +78,14 @@ static u32 ingress_ingress_block_get(struct Qdisc *sch)
 	return q->block_info.block_index;
 }
 
+//ingress队列初始化
 static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {
 	struct ingress_sched_data *q = qdisc_priv(sch);
 	struct net_device *dev = qdisc_dev(sch);
 
+	//当前初始化ingress队列，故指明需要ingress钩子点处理
 	net_inc_ingress_queue();
 
 	//使对miniqp的修改可以修改dev->miniq_ingress

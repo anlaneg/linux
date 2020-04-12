@@ -2055,6 +2055,7 @@ static DEFINE_STATIC_KEY_FALSE(ingress_needed_key);
 
 void net_inc_ingress_queue(void)
 {
+    //增加ingress key,标明需要ingress处理
 	static_branch_inc(&ingress_needed_key);
 }
 EXPORT_SYMBOL_GPL(net_inc_ingress_queue);
@@ -3726,6 +3727,7 @@ static void qdisc_pkt_len_init(struct sk_buff *skb)
 	}
 }
 
+//带qdisc方式的报文发送
 static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 				 struct net_device *dev,
 				 struct netdev_queue *txq)
@@ -3739,7 +3741,7 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	qdisc_calculate_pkt_len(skb, q);
 
 	if (q->flags & TCQ_F_NOLOCK) {
-		//报文入队
+		//报文入队（例如）
 		rc = q->enqueue(skb, q, &to_free) & NET_XMIT_MASK;
 		qdisc_run(q);
 
@@ -3847,6 +3849,7 @@ int dev_loopback_xmit(struct net *net, struct sock *sk, struct sk_buff *skb)
 EXPORT_SYMBOL(dev_loopback_xmit);
 
 #ifdef CONFIG_NET_EGRESS
+//报文的egress入口点
 static struct sk_buff *
 sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 {
@@ -3998,7 +4001,7 @@ u16 netdev_pick_tx(struct net_device *dev, struct sk_buff *skb,
 }
 EXPORT_SYMBOL(netdev_pick_tx);
 
-//返回要投递的队列
+//返回要投递的netdev_queue队列
 struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 					 struct sk_buff *skb,
 					 struct net_device *sb_dev)
@@ -4963,6 +4966,7 @@ int (*br_fdb_test_addr_hook)(struct net_device *dev,
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 #endif
 
+//ingress钩子点
 static inline struct sk_buff *
 sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev)
@@ -5113,6 +5117,7 @@ static bool skb_pfmemalloc_protocol(struct sk_buff *skb)
 	}
 }
 
+//触发netfilter ingress 钩子点
 static inline int nf_ingress(struct sk_buff *skb, struct packet_type **pt_prev,
 			     int *ret, struct net_device *orig_dev)
 {
@@ -5220,7 +5225,7 @@ skip_taps:
 		if (!skb)
 			goto out;
 
-		//调用设备的ingress hook点
+		//触发netfilter ingress 钩子点
 		if (nf_ingress(skb, &pt_prev, &ret, orig_dev) < 0)
 			goto out;
 	}

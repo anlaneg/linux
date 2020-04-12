@@ -18,18 +18,21 @@ void xskq_set_umem(struct xsk_queue *q, u64 size, u64 chunk_mask)
 	q->chunk_mask = chunk_mask;
 }
 
-static size_t xskq_get_ring_size(struct xsk_queue *q, bool umem_queue)
+//计算ring需要的内存大小
+static size_t xskq_get_ring_size(struct xsk_queue *q, bool umem_queue/*是否umem queue*/)
 {
 	struct xdp_umem_ring *umem_ring;
 	struct xdp_rxtx_ring *rxtx_ring;
 
 	if (umem_queue)
+	    //umem_ring结构体后 + q->nentries * desc个元素
 		return struct_size(umem_ring, desc, q->nentries);
+	//rxtx_ring结构体后 + q->nentries * desc个元素
 	return struct_size(rxtx_ring, desc, q->nentries);
 }
 
 //创建指定大小的xsk队列
-struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
+struct xsk_queue *xskq_create(u32 nentries, bool umem_queue/*是否umem队列*/)
 {
 	struct xsk_queue *q;
 	gfp_t gfp_flags;
@@ -45,6 +48,7 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue)
 
 	gfp_flags = GFP_KERNEL | __GFP_ZERO | __GFP_NOWARN |
 		    __GFP_COMP  | __GFP_NORETRY;
+	/*确认ring内存大小*/
 	size = xskq_get_ring_size(q, umem_queue);
 
 	/*为ring申请对应的内存*/

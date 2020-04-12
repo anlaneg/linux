@@ -7,6 +7,7 @@
 #include "en/params.h"
 #include <net/xdp_sock.h>
 
+/*触发报文处理*/
 int mlx5e_xsk_wakeup(struct net_device *dev, u32 qid, u32 flags)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);

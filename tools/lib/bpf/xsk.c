@@ -50,20 +50,20 @@
 struct xsk_umem {
 	struct xsk_ring_prod *fill;/*指向fill队列*/
 	struct xsk_ring_cons *comp;/*指向complete队列*/
-	char *umem_area;/*用户态内存起始地址*/
-	struct xsk_umem_config config;
-	int fd;
+	char *umem_area;/*用户态内存起始地址,按页对齐*/
+	struct xsk_umem_config config;/*umem_area内存配置情况*/
+	int fd;/*afxdp socket*/
 	int refcount;
 };
 
 struct xsk_socket {
-	struct xsk_ring_cons *rx;
-	struct xsk_ring_prod *tx;
+	struct xsk_ring_cons *rx;//rx信息
+	struct xsk_ring_prod *tx;//tx信息
 	__u64 outstanding_tx;
 	struct xsk_umem *umem;
-	struct xsk_socket_config config;
+	struct xsk_socket_config config;//rx,tx配置信息
 	int fd;
-	int ifindex;
+	int ifindex;/*ifname接口对应的ifindex*/
 	int prog_fd;
 	int xsks_map_fd;/*map对应的fd*/
 	__u32 queue_id;
@@ -112,6 +112,7 @@ static void xsk_set_umem_config(struct xsk_umem_config *cfg,
 				const struct xsk_umem_config *usr_cfg)
 {
 	if (!usr_cfg) {
+	    /*用户未提供配置，使用默认值*/
 		cfg->fill_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
 		cfg->comp_size = XSK_RING_CONS__DEFAULT_NUM_DESCS;
 		cfg->frame_size = XSK_UMEM__DEFAULT_FRAME_SIZE;
@@ -203,10 +204,10 @@ static int xsk_get_mmap_offsets(int fd, struct xdp_mmap_offsets *off)
 	return -EINVAL;
 }
 
-int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
-			    __u64 size, struct xsk_ring_prod *fill/*出参，初始化好的fill队列*/,
+int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area/*buffer首地址*/,
+			    __u64 size/*buffer长度*/, struct xsk_ring_prod *fill/*出参，初始化好的fill队列*/,
 			    struct xsk_ring_cons *comp/*出参，初始化好的complete队列*/,
-			    const struct xsk_umem_config *usr_config)
+			    const struct xsk_umem_config *usr_config/*用户内存配置*/)
 {
 	struct xdp_mmap_offsets off;
 	struct xdp_umem_reg mr;
@@ -214,9 +215,11 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 	void *map;
 	int err;
 
+	/*参数不能为空*/
 	if (!umem_area || !umem_ptr || !fill || !comp)
 		return -EFAULT;
-	/*申请的buffer必须以页对齐*/
+
+	/*申请的umem_area必须以页对齐*/
 	if (!size && !xsk_page_aligned(umem_area))
 		return -EINVAL;
 
@@ -240,6 +243,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 	mr.len = size;
 	//chunk的大小为每个帧的大小
 	mr.chunk_size = umem->config.frame_size;
+	//每个帧前headroom空间大小
 	mr.headroom = umem->config.frame_headroom;
 	mr.flags = umem->config.flags;
 
@@ -268,7 +272,7 @@ int xsk_umem__create_v0_0_4(struct xsk_umem **umem_ptr, void *umem_area,
 		goto out_socket;
 	}
 
-	//获取各成员的offset，用于与kernel对齐数据结构
+	//获取各ring成员的offset，用于与kernel对齐数据结构
 	err = xsk_get_mmap_offsets(umem->fd, &off);
 	if (err) {
 		err = -errno;
@@ -606,8 +610,8 @@ static int xsk_setup_xdp_prog(struct xsk_socket *xsk)
 	return 0;
 }
 
-int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
-		       __u32 queue_id, struct xsk_umem *umem,
+int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname/*接口名称*/,
+		       __u32 queue_id/*队列编号*/, struct xsk_umem *umem,
 		       struct xsk_ring_cons *rx, struct xsk_ring_prod *tx,
 		       const struct xsk_socket_config *usr_config)
 {
@@ -677,6 +681,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 		}
 	}
 
+	//取rx,tx队列的offset信息
 	err = xsk_get_mmap_offsets(xsk->fd, &off);
 	if (err) {
 		err = -errno;
@@ -724,6 +729,7 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, const char *ifname,
 	}
 	xsk->tx = tx;
 
+	//xdp socket绑定
 	sxdp.sxdp_family = PF_XDP;
 	sxdp.sxdp_ifindex = xsk->ifindex;
 	sxdp.sxdp_queue_id = xsk->queue_id;

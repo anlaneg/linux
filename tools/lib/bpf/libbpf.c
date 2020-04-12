@@ -89,8 +89,10 @@ static int __base_pr(enum libbpf_print_level level, const char *format,
 	return vfprintf(stderr, format, args);
 }
 
+/*记录lib文件的输出函数*/
 static libbpf_print_fn_t __libbpf_pr = __base_pr;
 
+/*指定libbpf的输出函数*/
 libbpf_print_fn_t libbpf_set_print(libbpf_print_fn_t fn)
 {
 	libbpf_print_fn_t old_print_fn = __libbpf_pr;
@@ -99,6 +101,7 @@ libbpf_print_fn_t libbpf_set_print(libbpf_print_fn_t fn)
 	return old_print_fn;
 }
 
+/*提供libbpf的日志输出*/
 __printf(2, 3)
 void libbpf_print(enum libbpf_print_level level, const char *format, ...)
 {

@@ -195,6 +195,7 @@ void vhost_poll_init(struct vhost_poll *poll, vhost_work_fn_t fn,
 	poll->dev = dev;
 	poll->wqh = NULL;
 
+	//初始化vhost-work的处理函数
 	vhost_work_init(&poll->work, fn);
 }
 EXPORT_SYMBOL_GPL(vhost_poll_init);
@@ -253,6 +254,7 @@ void vhost_poll_flush(struct vhost_poll *poll)
 }
 EXPORT_SYMBOL_GPL(vhost_poll_flush);
 
+//为dev增加work,dev->worker线程会处理这些工作
 void vhost_work_queue(struct vhost_dev *dev, struct vhost_work *work)
 {
 	if (!dev->worker)
@@ -272,6 +274,7 @@ EXPORT_SYMBOL_GPL(vhost_work_queue);
 /* A lockless hint for busy polling code to exit the loop */
 bool vhost_has_work(struct vhost_dev *dev)
 {
+    //vhost设备上是否有work需要处理
 	return !llist_empty(&dev->work_list);
 }
 EXPORT_SYMBOL_GPL(vhost_has_work);
@@ -329,6 +332,7 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 	__vhost_vq_meta_reset(vq);
 }
 
+//内核线程用于执行vhost的worker
 static int vhost_worker(void *data)
 {
 	struct vhost_dev *dev = data;
@@ -352,9 +356,11 @@ static int vhost_worker(void *data)
 		if (!node)
 			schedule();
 
+		//将列表反转
 		node = llist_reverse_order(node);
 		/* make sure flag is seen after deletion */
 		smp_wmb();
+		//遍历执行每个work
 		llist_for_each_entry_safe(work, work_next, node, node) {
 			clear_bit(VHOST_WORK_QUEUED, &work->flags);
 			__set_current_state(TASK_RUNNING);
@@ -531,6 +537,7 @@ static int vhost_attach_cgroups(struct vhost_dev *dev)
 /* Caller should have device mutex */
 bool vhost_dev_has_owner(struct vhost_dev *dev)
 {
+    //检查设备是否已有owner
 	return dev->mm;
 }
 EXPORT_SYMBOL_GPL(vhost_dev_has_owner);
@@ -548,8 +555,10 @@ long vhost_dev_set_owner(struct vhost_dev *dev)
 	}
 
 	/* No owner, become one */
+	/*与当前进程工享同一份mm*/
 	dev->mm = get_task_mm(current);
 	dev->kcov_handle = kcov_common_handle();
+	/*创建与此进程相对应的vhost-%d内核线程,处理dev->work_list上的vhost_work*/
 	worker = kthread_create(vhost_worker, dev, "vhost-%d", current->pid);
 	if (IS_ERR(worker)) {
 		err = PTR_ERR(worker);
@@ -1015,7 +1024,7 @@ static inline int vhost_get_used_idx(struct vhost_virtqueue *vq,
 }
 
 static inline int vhost_get_desc(struct vhost_virtqueue *vq,
-				 struct vring_desc *desc, int idx)
+				 struct vring_desc *desc/*出参，待填充desc*/, int idx/*要取的desc索引*/)
 {
 	return vhost_copy_from_user(vq, desc, vq->desc + idx, sizeof(*desc));
 }
@@ -1490,6 +1499,7 @@ err:
 	return -EFAULT;
 }
 
+//设置vq队列长度
 static long vhost_vring_set_num(struct vhost_dev *d,
 				struct vhost_virtqueue *vq,
 				void __user *argp)
@@ -1520,6 +1530,7 @@ static long vhost_vring_set_addr(struct vhost_dev *d,
 
 	if (copy_from_user(&a, argp, sizeof a))
 		return -EFAULT;
+	/*当前仅支持vring_f_log*/
 	if (a.flags & ~(0x1 << VHOST_VRING_F_LOG))
 		return -EOPNOTSUPP;
 
@@ -1533,6 +1544,7 @@ static long vhost_vring_set_addr(struct vhost_dev *d,
 	/* Make sure it's safe to cast pointers to vring types. */
 	BUILD_BUG_ON(__alignof__ *vq->avail > VRING_AVAIL_ALIGN_SIZE);
 	BUILD_BUG_ON(__alignof__ *vq->used > VRING_USED_ALIGN_SIZE);
+	//用户传入的地址必须是对齐的
 	if ((a.avail_user_addr & (VRING_AVAIL_ALIGN_SIZE - 1)) ||
 	    (a.used_user_addr & (VRING_USED_ALIGN_SIZE - 1)) ||
 	    (a.log_guest_addr & (VRING_USED_ALIGN_SIZE - 1)))
@@ -1556,6 +1568,7 @@ static long vhost_vring_set_addr(struct vhost_dev *d,
 			return -EINVAL;
 	}
 
+	//设置vqueue的地址
 	vq->log_used = !!(a.flags & (0x1 << VHOST_VRING_F_LOG));
 	vq->desc = (void __user *)(unsigned long)a.desc_user_addr;
 	vq->avail = (void __user *)(unsigned long)a.avail_user_addr;
@@ -1576,6 +1589,7 @@ static long vhost_vring_set_num_addr(struct vhost_dev *d,
 
 	switch (ioctl) {
 	case VHOST_SET_VRING_NUM:
+	    /*设置vring长度*/
 		r = vhost_vring_set_num(d, vq, argp);
 		break;
 	case VHOST_SET_VRING_ADDR:
@@ -1613,6 +1627,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 
 	if (ioctl == VHOST_SET_VRING_NUM ||
 	    ioctl == VHOST_SET_VRING_ADDR) {
+	    //设置vring的长度及vring地址
 		return vhost_vring_set_num_addr(d, vq, ioctl, argp);
 	}
 
@@ -1794,6 +1809,7 @@ long vhost_dev_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *argp)
 			if (vq->private_data && !vq_log_access_ok(vq, base))
 				r = -EFAULT;
 			else
+			    /*设置log基准*/
 				vq->log_base = base;
 			mutex_unlock(&vq->mutex);
 		}
@@ -1837,6 +1853,7 @@ static int set_bit_to_user(int nr, void __user *addr)
 	int bit = nr + (log % PAGE_SIZE) * 8;
 	int r;
 
+	/*取addr对应的一个page*/
 	r = get_user_pages_fast(log, 1, FOLL_WRITE, &page);
 	if (r < 0)
 		return r;
@@ -1852,23 +1869,30 @@ static int set_bit_to_user(int nr, void __user *addr)
 static int log_write(void __user *log_base,
 		     u64 write_address, u64 write_length)
 {
+    /*write地址对应的页号*/
 	u64 write_page = write_address / VHOST_PAGE_SIZE;
 	int r;
 
+	/*写长度为0，退出*/
 	if (!write_length)
 		return 0;
+	/*写地址在页内的偏移量*/
 	write_length += write_address % VHOST_PAGE_SIZE;
 	for (;;) {
+	    /*在log_base中，每个页占一个bit*/
 		u64 base = (u64)(unsigned long)log_base;
-		u64 log = base + write_page / 8;
-		int bit = write_page % 8;
+		u64 log = base + write_page / 8;/*此页在log_base中的位置*/
+		int bit = write_page % 8;/*位的偏移量*/
+		/*32位机器相关*/
 		if ((u64)(unsigned long)log != log)
 			return -EFAULT;
+		/*设置write地址对应的页bits位为1*/
 		r = set_bit_to_user(bit, (void __user *)(unsigned long)log);
 		if (r < 0)
 			return r;
 		if (write_length <= VHOST_PAGE_SIZE)
 			break;
+		/*继续检查下一页*/
 		write_length -= VHOST_PAGE_SIZE;
 		write_page += 1;
 	}
@@ -2291,6 +2315,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 			       i, vq->num, head);
 			return -EINVAL;
 		}
+		//取i号desc
 		ret = vhost_get_desc(vq, &desc, i);
 		if (unlikely(ret)) {
 			vq_err(vq, "Failed to get descriptor: idx %d addr %p\n",

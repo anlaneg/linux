@@ -31,6 +31,7 @@ struct xdp_id_md {
 	struct xdp_link_info info;
 };
 
+/*打开netlink socket*/
 int libbpf_netlink_open(__u32 *nl_pid)
 {
 	struct sockaddr_nl sa;
@@ -206,6 +207,7 @@ static int __dump_link_nlmsg(struct nlmsghdr *nlh,
 	return dump_link_nlmsg(cookie, ifi, tb);
 }
 
+//回调函数，用于解析tb，检查其与cookie给出的匹配条件是否一致，如果一致收集信息填充进cookie
 static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 {
 	struct nlattr *xdp_tb[IFLA_XDP_MAX + 1];
@@ -251,6 +253,7 @@ static int get_xdp_info(void *cookie, void *msg, struct nlattr **tb)
 	return 0;
 }
 
+//获取ifindex的xdp link信息
 int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
 			  size_t info_size, __u32 flags)
 {
@@ -268,6 +271,7 @@ int bpf_get_link_xdp_info(int ifindex, struct xdp_link_info *info,
 	if (flags && flags & mask)
 		return -EINVAL;
 
+	/*打开netlink socket*/
 	sock = libbpf_netlink_open(&nl_pid);
 	if (sock < 0)
 		return sock;
@@ -301,6 +305,7 @@ static __u32 get_xdp_id(struct xdp_link_info *info, __u32 flags)
 	return 0;
 }
 
+//获取ifindex对应的xdp_id
 int bpf_get_link_xdp_id(int ifindex, __u32 *prog_id, __u32 flags)
 {
 	struct xdp_link_info info;
@@ -313,6 +318,7 @@ int bpf_get_link_xdp_id(int ifindex, __u32 *prog_id, __u32 flags)
 	return ret;
 }
 
+/*通过RTM_GETLINK dump指定link的信息*/
 int libbpf_nl_get_link(int sock, unsigned int nl_pid,
 		       libbpf_dump_nlmsg_t dump_link_nlmsg, void *cookie)
 {
@@ -331,6 +337,7 @@ int libbpf_nl_get_link(int sock, unsigned int nl_pid,
 	if (send(sock, &req, req.nlh.nlmsg_len, 0) < 0)
 		return -errno;
 
+	//发送所有link的dump信息，通过dump_link_nlmsg完成匹配及结果收集
 	return bpf_netlink_recv(sock, nl_pid, seq, __dump_link_nlmsg,
 				dump_link_nlmsg, cookie);
 }

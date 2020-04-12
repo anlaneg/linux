@@ -65,9 +65,13 @@ struct xdp_mmap_offsets {
 #define XDP_OPTIONS			8
 
 struct xdp_umem_reg {
+    /*报文数据起始地址*/
 	__u64 addr; /* Start of packet data area */
+	/*报文数据长度*/
 	__u64 len; /* Length of packet data area */
+	/*每个帧的大小*/
 	__u32 chunk_size;
+	/*每个帧前headroom长度*/
 	__u32 headroom;
 	__u32 flags;
 };

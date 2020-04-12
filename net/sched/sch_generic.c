@@ -936,9 +936,10 @@ errout:
 	return ERR_PTR(err);
 }
 
+//申请Qdisc,并通过init调用完成qdisc初始化
 struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue,
 				const struct Qdisc_ops *ops,
-				unsigned int parentid/*父Qdisc*/,
+				unsigned int parentid/*父Qdisc编号*/,
 				struct netlink_ext_ack *extack)
 {
 	struct Qdisc *sch;
@@ -1349,6 +1350,7 @@ int dev_qdisc_change_tx_queue_len(struct net_device *dev)
 	return ret;
 }
 
+//为网络设备队列设备对应的排队规则qdisc
 static void dev_init_scheduler_queue(struct net_device *dev,
 				     struct netdev_queue *dev_queue,
 				     void *_qdisc)

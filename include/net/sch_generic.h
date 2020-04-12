@@ -48,8 +48,8 @@ struct qdisc_size_table {
 
 /* similar to sk_buff_head, but skb->prev pointer is undefined. */
 struct qdisc_skb_head {
-	struct sk_buff	*head;
-	struct sk_buff	*tail;
+	struct sk_buff	*head;//队头
+	struct sk_buff	*tail;//队尾
 	__u32		qlen;//队列长度
 	spinlock_t	lock;
 };
@@ -85,7 +85,7 @@ struct Qdisc {
 #define TCQ_F_INVISIBLE		0x80 /* invisible by default in dump */
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
-	u32			limit;
+	u32			limit;//队列容许的最大长度
 	//队列操作集
 	const struct Qdisc_ops	*ops;
 	struct qdisc_size_table	__rcu *stab;
@@ -111,7 +111,7 @@ struct Qdisc {
 	 * For performance sake on SMP, we put highly modified fields at the end
 	 */
 	struct sk_buff_head	gso_skb ____cacheline_aligned_in_smp;
-	struct qdisc_skb_head	q;
+	struct qdisc_skb_head	q;//保存skb的队列
 	struct gnet_stats_basic_packed bstats;
 	seqcount_t		running;
 	struct gnet_stats_queue	qstats;
@@ -274,10 +274,10 @@ struct Qdisc_ops {
 					   struct sk_buff **to_free);
 	//出队一个报文（如果不提供此回调，则给值为noop_qdisc_ops.dequeue）
 	struct sk_buff *	(*dequeue)(struct Qdisc *);
-	//peek一个报文（如果不提供此回调，则给值为noop_qdisc_ops.peek）
+	//peek一个报文，返回但不出队（如果不提供此回调，则给值为noop_qdisc_ops.peek）
 	struct sk_buff *	(*peek)(struct Qdisc *);
 
-	//队列初始化
+	//通过配置初始化队列
 	int			(*init)(struct Qdisc *sch, struct nlattr *arg,
 					struct netlink_ext_ack *extack);
 	//清空队列
@@ -400,7 +400,7 @@ struct tcf_proto {
 	void __rcu		*root;
 
 	/* called under RCU BH lock*/
-	//实现报文分类，来源于struct tcf_proto_ops
+	//报文分类函数，来源于struct tcf_proto_ops
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto */*执行分类的分类器*/,
 					    struct tcf_result */*出参，分类结果*/);
@@ -954,6 +954,7 @@ static inline void __qdisc_qstats_drop(struct Qdisc *sch, int count)
 	sch->qstats.drops += count;
 }
 
+//增加丢包计数
 static inline void qstats_drop_inc(struct gnet_stats_queue *qstats)
 {
 	qstats->drops++;
@@ -964,12 +965,13 @@ static inline void qstats_overlimit_inc(struct gnet_stats_queue *qstats)
 	qstats->overlimits++;
 }
 
+//增加队列丢包数
 static inline void qdisc_qstats_drop(struct Qdisc *sch)
 {
 	qstats_drop_inc(&sch->qstats);
 }
 
-//增加丢包数
+//增加percpu丢包数
 static inline void qdisc_qstats_cpu_drop(struct Qdisc *sch)
 {
 	this_cpu_inc(sch->cpu_qstats->drops);
@@ -1022,6 +1024,7 @@ static inline void qdisc_skb_head_init(struct qdisc_skb_head *qh)
 	qh->qlen = 0;
 }
 
+//将skb加入到qh结尾
 static inline void __qdisc_enqueue_tail(struct sk_buff *skb,
 					struct qdisc_skb_head *qh)
 {
@@ -1032,12 +1035,14 @@ static inline void __qdisc_enqueue_tail(struct sk_buff *skb,
 		last->next = skb;
 		qh->tail = skb;
 	} else {
+	    //首包情况
 		qh->tail = skb;
 		qh->head = skb;
 	}
 	qh->qlen++;
 }
 
+//将skb入队列sch尾部，增加backlog长度
 static inline int qdisc_enqueue_tail(struct sk_buff *skb, struct Qdisc *sch)
 {
 	__qdisc_enqueue_tail(skb, &sch->q);
@@ -1075,6 +1080,7 @@ static inline struct sk_buff *__qdisc_dequeue_head(struct qdisc_skb_head *qh)
 	return skb;
 }
 
+//自先进先出队列的头部位置出队一个报文
 static inline struct sk_buff *qdisc_dequeue_head(struct Qdisc *sch)
 {
 	struct sk_buff *skb = __qdisc_dequeue_head(&sch->q);
@@ -1107,6 +1113,7 @@ static inline void __qdisc_drop_all(struct sk_buff *skb,
 	*to_free = skb;
 }
 
+//将队头的第一个报文出队，将其存入到to_free中
 static inline unsigned int __qdisc_queue_drop_head(struct Qdisc *sch,
 						   struct qdisc_skb_head *qh,
 						   struct sk_buff **to_free)
@@ -1114,6 +1121,7 @@ static inline unsigned int __qdisc_queue_drop_head(struct Qdisc *sch,
 	struct sk_buff *skb = __qdisc_dequeue_head(qh);
 
 	if (likely(skb != NULL)) {
+	    //返回队列长度
 		unsigned int len = qdisc_pkt_len(skb);
 
 		qdisc_qstats_backlog_dec(sch, skb);
@@ -1130,6 +1138,7 @@ static inline unsigned int qdisc_queue_drop_head(struct Qdisc *sch,
 	return __qdisc_queue_drop_head(sch, &sch->q, to_free);
 }
 
+//返回队列元素（不出队）
 static inline struct sk_buff *qdisc_peek_head(struct Qdisc *sch)
 {
 	const struct qdisc_skb_head *qh = &sch->q;
@@ -1257,6 +1266,7 @@ static inline int qdisc_drop_cpu(struct sk_buff *skb, struct Qdisc *sch,
 	return NET_XMIT_DROP;
 }
 
+//在sch上执行丢包
 static inline int qdisc_drop(struct sk_buff *skb, struct Qdisc *sch,
 			     struct sk_buff **to_free)
 {

@@ -86,7 +86,7 @@ struct vhost_virtqueue {
 
 	/* The actual ring of buffers. */
 	struct mutex mutex;
-	unsigned int num;
+	unsigned int num;//队列长度
 	struct vring_desc __user *desc;
 	struct vring_avail __user *avail;
 	struct vring_used __user *used;
@@ -163,6 +163,7 @@ struct vhost_dev {
 	int nvqs;
 	struct eventfd_ctx *log_ctx;
 	struct llist_head work_list;
+	//内核线程，用于处理work_list上所有的vhost_work的回调
 	struct task_struct *worker;
 	struct vhost_umem *umem;
 	struct vhost_umem *iotlb;

@@ -11,7 +11,9 @@
 #include <net/xdp_sock.h>
 
 struct xdp_ring {
+    //生产者索引
 	u32 producer ____cacheline_aligned_in_smp;
+	//消费者索引
 	u32 consumer ____cacheline_aligned_in_smp;
 	u32 flags;
 };
@@ -35,7 +37,7 @@ struct xsk_queue {
 	u32 nentries;//队列长度
 	u32 cached_prod;
 	u32 cached_cons;
-	struct xdp_ring *ring;
+	struct xdp_ring *ring;/*ring队列*/
 	u64 invalid_descs;
 };
 

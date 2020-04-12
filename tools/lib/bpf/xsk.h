@@ -23,16 +23,17 @@ extern "C" {
 #endif
 
 /* Do not access these members directly. Use the functions below. */
+/*定义各ring的结构*/
 #define DEFINE_XSK_RING(name) \
 struct name { \
 	__u32 cached_prod; \
 	__u32 cached_cons; \
-	__u32 mask; \
-	__u32 size; \
-	__u32 *producer; \
-	__u32 *consumer; \
-	void *ring; \
-	__u32 *flags; \
+	__u32 mask; /*ring的size对应的掩码*/\
+	__u32 size; /*ring的大小*/\
+	__u32 *producer; /*ring生产者对应的指针*/\
+	__u32 *consumer; /*ring消费者对应的指针*/\
+	void *ring; /*desc ring的起始地址*/\
+	__u32 *flags; /*ring flags对应的指针*/\
 }
 
 DEFINE_XSK_RING(xsk_ring_prod);
@@ -194,10 +195,10 @@ LIBBPF_API int xsk_socket__fd(const struct xsk_socket *xsk);
 #define XSK_UMEM__DEFAULT_FLAGS 0
 
 struct xsk_umem_config {
-	__u32 fill_size;
-	__u32 comp_size;
-	__u32 frame_size;
-	__u32 frame_headroom;
+	__u32 fill_size;/*生产队列描述符数目*/
+	__u32 comp_size;/*消费队列描述符数目*/
+	__u32 frame_size;/*每个帧的大小*/
+	__u32 frame_headroom;/*帧buffer的headroom大小*/
 	__u32 flags;
 };
 

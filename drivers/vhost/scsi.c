@@ -1671,11 +1671,12 @@ vhost_scsi_ioctl(struct file *f,
 	u32 __user *eventsp = argp;
 	u32 events_missed;
 	u64 features;
-	int r, abi_version = VHOST_SCSI_ABI_VERSION;
+	int r, abi_version = VHOST_SCSI_ABI_VERSION;/*当前abi版本号*/
 	struct vhost_virtqueue *vq = &vs->vqs[VHOST_SCSI_VQ_EVT].vq;
 
 	switch (ioctl) {
 	case VHOST_SCSI_SET_ENDPOINT:
+	    /*设置scsi的endpoint*/
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
 		if (backend.reserved != 0)
@@ -1690,6 +1691,7 @@ vhost_scsi_ioctl(struct file *f,
 
 		return vhost_scsi_clear_endpoint(vs, &backend);
 	case VHOST_SCSI_GET_ABI_VERSION:
+	    /*获取abi版本号*/
 		if (copy_to_user(argp, &abi_version, sizeof abi_version))
 			return -EFAULT;
 		return 0;
@@ -1736,6 +1738,7 @@ static const struct file_operations vhost_scsi_fops = {
 	.llseek		= noop_llseek,
 };
 
+/*vhost-scsi字符设备*/
 static struct miscdevice vhost_scsi_misc = {
 	MISC_DYNAMIC_MINOR,
 	"vhost-scsi",
