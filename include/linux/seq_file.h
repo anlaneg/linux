@@ -21,7 +21,6 @@ struct seq_file {
 	size_t pad_until;
 	loff_t index;
 	loff_t read_pos;//读取的偏移量
-	u64 version;
 	struct mutex lock;
 	const struct seq_operations *op;//操作集
 	int poll_event;

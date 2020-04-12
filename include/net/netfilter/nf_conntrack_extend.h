@@ -45,7 +45,7 @@ enum nf_ct_ext_id {
 struct nf_ct_ext {
 	u8 offset[NF_CT_EXT_NUM];//各扩展的内存起始位置
 	u8 len;//扩展内存的长度
-	char data[0];//扩展内存指针
+	char data[];//扩展内存指针
 };
 
 static inline bool __nf_ct_ext_exist(const struct nf_ct_ext *ext, u8 id)

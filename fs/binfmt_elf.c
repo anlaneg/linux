@@ -27,6 +27,7 @@
 #include <linux/highuid.h>
 #include <linux/compiler.h>
 #include <linux/highmem.h>
+#include <linux/hugetlb.h>
 #include <linux/pagemap.h>
 #include <linux/vmalloc.h>
 #include <linux/security.h>
@@ -703,18 +704,10 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	unsigned long reloc_func_desc __maybe_unused = 0;
 	int executable_stack = EXSTACK_DEFAULT;
 	struct elfhdr *elf_ex = (struct elfhdr *)bprm->buf;
-	struct {
-		struct elfhdr interp_elf_ex;//指向解析器对应的elf文件头部
-	} *loc;
+	struct elfhdr *interp_elf_ex = NULL;//指向解析器对应的elf文件头部
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
-
-	loc = kmalloc(sizeof(*loc), GFP_KERNEL);
-	if (!loc) {
-		retval = -ENOMEM;
-		goto out_ret;
-	}
 
 	retval = -ENOEXEC;
 	/* First of all, some simple consistency checks */
@@ -783,10 +776,16 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		 */
 		would_dump(bprm, interpreter);
 
+		interp_elf_ex = kmalloc(sizeof(*interp_elf_ex), GFP_KERNEL);
+		if (!interp_elf_ex) {
+			retval = -ENOMEM;
+			goto out_free_ph;
+		}
+
 		/* Get the exec headers */
 		//加载解析器的elf头部到loc->interp_elf_ex
-		retval = elf_read(interpreter, &loc->interp_elf_ex,
-				  sizeof(loc->interp_elf_ex), 0);
+		retval = elf_read(interpreter, interp_elf_ex,
+				  sizeof(*interp_elf_ex), 0);
 		if (retval < 0)
 			goto out_free_dentry;
 
@@ -823,15 +822,15 @@ out_free_interp:
 	if (interpreter) {
 		retval = -ELIBBAD;
 		/* Not an ELF interpreter */
-		if (memcmp(loc->interp_elf_ex.e_ident, ELFMAG, SELFMAG) != 0)
+		if (memcmp(interp_elf_ex->e_ident, ELFMAG, SELFMAG) != 0)
 			goto out_free_dentry;
 		/* Verify the interpreter has a valid arch */
-		if (!elf_check_arch(&loc->interp_elf_ex) ||
-		    elf_check_fdpic(&loc->interp_elf_ex))
+		if (!elf_check_arch(interp_elf_ex) ||
+		    elf_check_fdpic(interp_elf_ex))
 			goto out_free_dentry;
 
 		/* Load the interpreter program headers */
-		interp_elf_phdata = load_elf_phdrs(&loc->interp_elf_ex,
+		interp_elf_phdata = load_elf_phdrs(interp_elf_ex,
 						   interpreter);
 		if (!interp_elf_phdata)
 			goto out_free_dentry;
@@ -839,10 +838,10 @@ out_free_interp:
 		/* Pass PT_LOPROC..PT_HIPROC headers to arch code */
 		//校验解析器的体系代码
 		elf_ppnt = interp_elf_phdata;
-		for (i = 0; i < loc->interp_elf_ex.e_phnum; i++, elf_ppnt++)
+		for (i = 0; i < interp_elf_ex->e_phnum; i++, elf_ppnt++)
 			switch (elf_ppnt->p_type) {
 			case PT_LOPROC ... PT_HIPROC:
-				retval = arch_elf_pt_proc(&loc->interp_elf_ex,
+				retval = arch_elf_pt_proc(interp_elf_ex,
 							  elf_ppnt, interpreter,
 							  true, &arch_state);
 				if (retval)
@@ -857,7 +856,7 @@ out_free_interp:
 	 * the exec syscall.
 	 */
 	retval = arch_check_elf(elf_ex,
-				!!interpreter, &loc->interp_elf_ex,
+				!!interpreter, interp_elf_ex,
 				&arch_state);
 	if (retval)
 		goto out_free_dentry;
@@ -1077,7 +1076,7 @@ out_free_interp:
 	}
 
 	if (interpreter) {
-		elf_entry = load_elf_interp(&loc->interp_elf_ex,
+		elf_entry = load_elf_interp(interp_elf_ex,
 					    interpreter,
 					    load_bias, interp_elf_phdata);
 		if (!IS_ERR((void *)elf_entry)) {
@@ -1086,7 +1085,7 @@ out_free_interp:
 			 * adjustment
 			 */
 			interp_load_addr = elf_entry;
-			elf_entry += loc->interp_elf_ex.e_entry;
+			elf_entry += interp_elf_ex->e_entry;
 		}
 		if (BAD_ADDR(elf_entry)) {
 			retval = IS_ERR((void *)elf_entry) ?
@@ -1097,6 +1096,9 @@ out_free_interp:
 
 		allow_write_access(interpreter);
 		fput(interpreter);
+
+		kfree(interp_elf_ex);
+		kfree(interp_elf_phdata);
 	} else {
 		elf_entry = e_entry;
 		if (BAD_ADDR(elf_entry)) {
@@ -1105,7 +1107,6 @@ out_free_interp:
 		}
 	}
 
-	kfree(interp_elf_phdata);
 	kfree(elf_phdata);
 
 	set_binfmt(&elf_format);
@@ -1175,12 +1176,11 @@ out_free_interp:
 	start_thread(regs, elf_entry, bprm->p);
 	retval = 0;
 out:
-	kfree(loc);
-out_ret:
 	return retval;
 
 	/* error cleanup */
 out_free_dentry:
+	kfree(interp_elf_ex);
 	kfree(interp_elf_phdata);
 	allow_write_access(interpreter);
 	if (interpreter)
@@ -1339,7 +1339,7 @@ static unsigned long vma_dump_size(struct vm_area_struct *vma,
 	}
 
 	/* Hugetlb memory check */
-	if (vma->vm_flags & VM_HUGETLB) {
+	if (is_vm_hugetlb_page(vma)) {
 		if ((vma->vm_flags & VM_SHARED) && FILTER(HUGETLB_SHARED))
 			goto whole;
 		if (!(vma->vm_flags & VM_SHARED) && FILTER(HUGETLB_PRIVATE))

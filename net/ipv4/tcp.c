@@ -2271,7 +2271,7 @@ void tcp_set_state(struct sock *sk, int state)
 		if (inet_csk(sk)->icsk_bind_hash &&
 		    !(sk->sk_userlocks & SOCK_BINDPORT_LOCK))
 			inet_put_port(sk);
-		/* fall through */
+		fallthrough;
 	default:
 		if (oldstate == TCP_ESTABLISHED)
 			TCP_DEC_STATS(sock_net(sk), TCP_MIB_CURRESTAB);
@@ -2970,8 +2970,10 @@ static int do_tcp_setsockopt(struct sock *sk, int level,
 			err = -EPERM;
 		else if (tp->repair_queue == TCP_SEND_QUEUE)
 			WRITE_ONCE(tp->write_seq, val);
-		else if (tp->repair_queue == TCP_RECV_QUEUE)
+		else if (tp->repair_queue == TCP_RECV_QUEUE) {
 			WRITE_ONCE(tp->rcv_nxt, val);
+			WRITE_ONCE(tp->copied_seq, val);
+		}
 		else
 			err = -EINVAL;
 		break;
@@ -3366,6 +3368,7 @@ static size_t tcp_opt_stats_get_size(void)
 		nla_total_size(sizeof(u32)) + /* TCP_NLA_REORD_SEEN */
 		nla_total_size(sizeof(u32)) + /* TCP_NLA_SRTT */
 		nla_total_size(sizeof(u16)) + /* TCP_NLA_TIMEOUT_REHASH */
+		nla_total_size(sizeof(u32)) + /* TCP_NLA_BYTES_NOTSENT */
 		0;
 }
 
@@ -3421,6 +3424,8 @@ struct sk_buff *tcp_get_timestamping_opt_stats(const struct sock *sk)
 	nla_put_u32(stats, TCP_NLA_REORD_SEEN, tp->reord_seen);
 	nla_put_u32(stats, TCP_NLA_SRTT, tp->srtt_us >> 3);
 	nla_put_u16(stats, TCP_NLA_TIMEOUT_REHASH, tp->timeout_rehash);
+	nla_put_u32(stats, TCP_NLA_BYTES_NOTSENT,
+		    max_t(int, 0, tp->write_seq - tp->snd_nxt));
 
 	return stats;
 }
@@ -3690,13 +3695,35 @@ static int do_tcp_getsockopt(struct sock *sk, int level,
 
 		if (get_user(len, optlen))
 			return -EFAULT;
-		if (len != sizeof(zc))
+		if (len < offsetofend(struct tcp_zerocopy_receive, length))
 			return -EINVAL;
+		if (len > sizeof(zc)) {
+			len = sizeof(zc);
+			if (put_user(len, optlen))
+				return -EFAULT;
+		}
 		if (copy_from_user(&zc, optval, len))
 			return -EFAULT;
 		lock_sock(sk);
 		err = tcp_zerocopy_receive(sk, &zc);
 		release_sock(sk);
+		if (len == sizeof(zc))
+			goto zerocopy_rcv_sk_err;
+		switch (len) {
+		case offsetofend(struct tcp_zerocopy_receive, err):
+			goto zerocopy_rcv_sk_err;
+		case offsetofend(struct tcp_zerocopy_receive, inq):
+			goto zerocopy_rcv_inq;
+		case offsetofend(struct tcp_zerocopy_receive, length):
+		default:
+			goto zerocopy_rcv_out;
+		}
+zerocopy_rcv_sk_err:
+		if (!err)
+			zc.err = sock_error(sk);
+zerocopy_rcv_inq:
+		zc.inq = tcp_inq_hint(sk);
+zerocopy_rcv_out:
 		if (!err && copy_to_user(optval, &zc, len))
 			err = -EFAULT;
 		return err;

@@ -951,6 +951,7 @@ const struct mlx5_flow_cmds *mlx5_fs_cmd_get_default(enum fs_flow_table_type typ
 	case FS_FT_SNIFFER_TX:
 	case FS_FT_NIC_TX:
 	case FS_FT_RDMA_RX:
+	case FS_FT_RDMA_TX:
 		//对支持的table type返回对应的cmds
 		return mlx5_fs_cmd_get_fw_cmds();
 	default:

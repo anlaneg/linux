@@ -35,7 +35,7 @@
  *		       (u64) THREAD_SIZE * 8UL);
  *
  * If you need less than 50 threads would mean we're dealing with systems
- * smaller than 3200 pages. This assuems you are capable of having ~13M memory,
+ * smaller than 3200 pages. This assumes you are capable of having ~13M memory,
  * and this would only be an be an upper limit, after which the OOM killer
  * would take effect. Systems like these are very unlikely if modules are
  * enabled.
@@ -121,7 +121,7 @@ out:
  * invoke it.
  *
  * If module auto-loading support is disabled then this function
- * becomes a no-operation.
+ * simply returns -ENOENT.
  */
 //通过模拟用户态创建modprobe进程的方式加载module
 int __request_module(bool wait, const char *fmt, ...)
@@ -139,7 +139,7 @@ int __request_module(bool wait, const char *fmt, ...)
 	WARN_ON_ONCE(wait && current_is_async());
 
 	if (!modprobe_path[0])
-		return 0;
+		return -ENOENT;
 
 	//构造模块名称
 	va_start(args, fmt);

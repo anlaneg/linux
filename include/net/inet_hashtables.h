@@ -387,10 +387,8 @@ static inline struct sock *__inet_lookup_skb(struct inet_hashinfo *hashinfo,
 					     const int sdif,//入接口
 					     bool *refcounted)
 {
-	struct sock *sk = skb_steal_sock(skb);
+	struct sock *sk = skb_steal_sock(skb, refcounted);
 	const struct iphdr *iph = ip_hdr(skb);
-
-	*refcounted = true;
 
 	//如果skb中已有对应的socket,则直接返回
 	if (sk)

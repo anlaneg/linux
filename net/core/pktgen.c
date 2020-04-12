@@ -2043,8 +2043,8 @@ static int pktgen_setup_dev(const struct pktgen_net *pn,
 	}
 
 	//指定的netdev必须为ether设备
-	if (odev->type != ARPHRD_ETHER) {
-		pr_err("not an ethernet device: \"%s\"\n", ifname);
+	if (odev->type != ARPHRD_ETHER && odev->type != ARPHRD_LOOPBACK) {
+		pr_err("not an ethernet or loopback device: \"%s\"\n", ifname);
 		err = -EINVAL;
 	} else if (!netif_running(odev)) {
 		//指定的netdev必须是up的
@@ -3423,7 +3423,7 @@ static void pktgen_xmit(struct pktgen_dev *pkt_dev)
 			/* skb was 'freed' by stack, so clean few
 			 * bits and reuse it
 			 */
-			skb_reset_tc(skb);
+			skb_reset_redirect(skb);
 		} while (--burst > 0);
 		goto out; /* Skips xmit_mode M_START_XMIT */
 	} else if (pkt_dev->xmit_mode == M_QUEUE_XMIT) {

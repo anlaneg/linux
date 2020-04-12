@@ -159,7 +159,7 @@ struct fib_info {
 	struct nexthop		*nh;
 	struct rcu_head		rcu;
 	//取第一个next hop做为出接口设备
-	struct fib_nh		fib_nh[0];//含多个next hop
+	struct fib_nh		fib_nh[];//含多个next hop
 };
 
 
@@ -258,7 +258,7 @@ struct fib_table {
 	//struct trie类型，属于trie根节点
 	unsigned long 		*tb_data;
 	//从此地址开始是一个struct trie类型
-	unsigned long		__data[0];
+	unsigned long		__data[];
 };
 
 struct fib_dump_filter {
@@ -490,8 +490,9 @@ int fib_nh_init(struct net *net, struct fib_nh *fib_nh,
 		struct fib_config *cfg, int nh_weight,
 		struct netlink_ext_ack *extack);
 void fib_nh_release(struct net *net, struct fib_nh *fib_nh);
-int fib_nh_common_init(struct fib_nh_common *nhc, struct nlattr *fc_encap,
-		       u16 fc_encap_type, void *cfg, gfp_t gfp_flags,
+int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc,
+		       struct nlattr *fc_encap, u16 fc_encap_type,
+		       void *cfg, gfp_t gfp_flags,
 		       struct netlink_ext_ack *extack);
 void fib_nh_common_release(struct fib_nh_common *nhc);
 
