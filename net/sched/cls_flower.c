@@ -357,6 +357,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		 */
 		skb_key.basic.n_proto = skb->protocol;//网络层协议ipv4/ipv6
 		skb_flow_dissect_tunnel_info(skb, &mask->dissector, &skb_key);
+		//解析ct相关的字段
 		skb_flow_dissect_ct(skb, &mask->dissector, &skb_key,
 				    fl_ct_info_to_flower_map,
 				    ARRAY_SIZE(fl_ct_info_to_flower_map));
@@ -365,7 +366,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 
 		fl_set_masked_key(&skb_mkey, &skb_key, mask);
 
-		//查询flow
+		//如果查询出flow，则执行rule对应action
 		f = fl_lookup(mask, &skb_mkey, &skb_key);
 		if (f && !tc_skip_sw(f->flags)) {
 			*res = f->res;
@@ -1301,7 +1302,7 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 	return 0;
 }
 
-//解析并填充key,mask
+//解析并填充ct相关的key,mask
 static int fl_set_key_ct(struct nlattr **tb,/*netlink属性数组*/
 			 struct flow_dissector_key_ct *key,/*出参，匹配key*/
 			 struct flow_dissector_key_ct *mask,/*出参，key对应的掩码*/
@@ -1312,33 +1313,44 @@ static int fl_set_key_ct(struct nlattr **tb,/*netlink属性数组*/
 			NL_SET_ERR_MSG(extack, "Conntrack isn't enabled");
 			return -EOPNOTSUPP;
 		}
+
+		//设置ct_state
 		fl_set_key_val(tb, &key->ct_state, TCA_FLOWER_KEY_CT_STATE,
 			       &mask->ct_state, TCA_FLOWER_KEY_CT_STATE_MASK,
 			       sizeof(key->ct_state));
 	}
+
 	if (tb[TCA_FLOWER_KEY_CT_ZONE]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_ZONES)) {
 			NL_SET_ERR_MSG(extack, "Conntrack zones isn't enabled");
 			return -EOPNOTSUPP;
 		}
+
+		//设置ct_zone
 		fl_set_key_val(tb, &key->ct_zone, TCA_FLOWER_KEY_CT_ZONE,
 			       &mask->ct_zone, TCA_FLOWER_KEY_CT_ZONE_MASK,
 			       sizeof(key->ct_zone));
 	}
+
 	if (tb[TCA_FLOWER_KEY_CT_MARK]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_MARK)) {
 			NL_SET_ERR_MSG(extack, "Conntrack mark isn't enabled");
 			return -EOPNOTSUPP;
 		}
+
+		//设置ct_mark
 		fl_set_key_val(tb, &key->ct_mark, TCA_FLOWER_KEY_CT_MARK,
 			       &mask->ct_mark, TCA_FLOWER_KEY_CT_MARK_MASK,
 			       sizeof(key->ct_mark));
 	}
+
 	if (tb[TCA_FLOWER_KEY_CT_LABELS]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_LABELS)) {
 			NL_SET_ERR_MSG(extack, "Conntrack labels aren't enabled");
 			return -EOPNOTSUPP;
 		}
+
+		//设置ct_labels
 		fl_set_key_val(tb, key->ct_labels, TCA_FLOWER_KEY_CT_LABELS,
 			       mask->ct_labels, TCA_FLOWER_KEY_CT_LABELS_MASK,
 			       sizeof(key->ct_labels));
@@ -1580,6 +1592,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 			return ret;
 	}
 
+	//填充ct相关
 	ret = fl_set_key_ct(tb, &key->ct, &mask->ct, extack);
 	if (ret)
 		return ret;
@@ -1955,7 +1968,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	if (err)
 		goto errout;
 
-	//规则与mask关联
+	//使规则与mask关联，如果mask不存在，则
 	err = fl_check_assign_mask(head, fnew, fold, mask);
 	if (err)
 		goto errout;
@@ -2878,7 +2891,7 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh,
+static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的flow*/,
 		   struct sk_buff *skb, struct tcmsg *t, bool rtnl_held)
 {
 	struct cls_fl_filter *f = fh;
@@ -2901,6 +2914,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh,
 	    nla_put_u32(skb, TCA_FLOWER_CLASSID, f->res.classid))
 		goto nla_put_failure_locked;
 
+	//存入key,mask
 	key = &f->key;
 	mask = &f->mask->key;
 	skip_hw = tc_skip_hw(f->flags);
@@ -2920,6 +2934,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh,
 	if (nla_put_u32(skb, TCA_FLOWER_IN_HW_COUNT, f->in_hw_count))
 		goto nla_put_failure;
 
+	//dump flower对应的actions
 	if (tcf_exts_dump(skb, &f->exts))
 		goto nla_put_failure;
 
@@ -2998,6 +3013,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.put		= fl_put,
 	//添加或修改flower规则，并触发向硬件下发
 	.change		= fl_change,
+	//移除flower规则
 	.delete		= fl_delete,
 	.delete_empty	= fl_delete_empty,
 	.walk		= fl_walk,

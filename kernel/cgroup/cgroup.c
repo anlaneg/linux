@@ -118,6 +118,7 @@ static struct workqueue_struct *cgroup_destroy_wq;
 
 /* generate an array of cgroup subsystem pointers */
 #define SUBSYS(_x) [_x ## _cgrp_id] = &_x ## _cgrp_subsys,
+//各cgroup子系统指针
 struct cgroup_subsys *cgroup_subsys[] = {
 #include <linux/cgroup_subsys.h>
 };
@@ -125,6 +126,7 @@ struct cgroup_subsys *cgroup_subsys[] = {
 
 /* array of cgroup subsystem names */
 #define SUBSYS(_x) [_x ## _cgrp_id] = #_x,
+//指定cgroup所有子系统的名称
 static const char *cgroup_subsys_name[] = {
 #include <linux/cgroup_subsys.h>
 };
@@ -239,6 +241,7 @@ bool cgroup_ssid_enabled(int ssid)
 	if (CGROUP_SUBSYS_COUNT == 0)
 		return false;
 
+	//检查指定的subsystem是否enable
 	return static_key_enabled(cgroup_subsys_enabled_key[ssid]);
 }
 
@@ -1462,6 +1465,7 @@ struct cgroup *task_cgroup_from_root(struct task_struct *task,
 
 static struct kernfs_syscall_ops cgroup_kf_syscall_ops;
 
+//构造cgroup文件名称
 static char *cgroup_file_name(struct cgroup *cgrp, const struct cftype *cft,
 			      char *buf)
 {
@@ -1675,6 +1679,7 @@ static void css_clear_dir(struct cgroup_subsys_state *css)
  */
 static int css_populate_dir(struct cgroup_subsys_state *css)
 {
+    /*创建cgroup文件*/
 	struct cgroup *cgrp = css->cgroup;
 	struct cftype *cfts, *failed_cfts;
 	int ret;
@@ -1688,10 +1693,12 @@ static int css_populate_dir(struct cgroup_subsys_state *css)
 		else
 			cfts = cgroup1_base_files;
 
+		//遍历cfts一组目录
 		ret = cgroup_addrm_files(&cgrp->self, cgrp, cfts, true);
 		if (ret < 0)
 			return ret;
 	} else {
+	    //遍历css->ss->cfts链表，执行文件添加
 		list_for_each_entry(cfts, &css->ss->cfts, node) {
 			ret = cgroup_addrm_files(css, cgrp, cfts, true);
 			if (ret < 0) {
@@ -2161,6 +2168,7 @@ static void cgroup_kill_sb(struct super_block *sb)
 	kernfs_kill_sb(sb);
 }
 
+//cgroup文件系统
 struct file_system_type cgroup_fs_type = {
 	.name			= "cgroup",
 	.init_fs_context	= cgroup_init_fs_context,
@@ -3663,10 +3671,12 @@ static ssize_t cgroup_freeze_write(struct kernfs_open_file *of,
 	return nbytes;
 }
 
+//cgroup kernfs文件打开
 static int cgroup_file_open(struct kernfs_open_file *of)
 {
 	struct cftype *cft = of->kn->priv;
 
+	//如果有opene函数，则调用
 	if (cft->open)
 		return cft->open(of);
 	return 0;
@@ -3680,6 +3690,7 @@ static void cgroup_file_release(struct kernfs_open_file *of)
 		cft->release(of);
 }
 
+/*cgroup文件写入函数实现*/
 static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 				 size_t nbytes, loff_t off)
 {
@@ -3700,6 +3711,7 @@ static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 	    ns != &init_cgroup_ns && ns->root_cset->dfl_cgrp == cgrp)
 		return -EPERM;
 
+	//有write函数直接写入
 	if (cft->write)
 		return cft->write(of, buf, nbytes, off);
 
@@ -3714,11 +3726,13 @@ static ssize_t cgroup_file_write(struct kernfs_open_file *of, char *buf,
 	rcu_read_unlock();
 
 	if (cft->write_u64) {
+	    //执行无符号64位整数写
 		unsigned long long v;
 		ret = kstrtoull(buf, 0, &v);
 		if (!ret)
 			ret = cft->write_u64(css, cft, v);
 	} else if (cft->write_s64) {
+	    //执行有符号64位整数写
 		long long v;
 		ret = kstrtoll(buf, 0, &v);
 		if (!ret)
@@ -3740,22 +3754,26 @@ static __poll_t cgroup_file_poll(struct kernfs_open_file *of, poll_table *pt)
 	return kernfs_generic_poll(of, pt);
 }
 
+//由cft提供seq_start
 static void *cgroup_seqfile_start(struct seq_file *seq, loff_t *ppos)
 {
 	return seq_cft(seq)->seq_start(seq, ppos);
 }
 
+//由cft提供seq_next
 static void *cgroup_seqfile_next(struct seq_file *seq, void *v, loff_t *ppos)
 {
 	return seq_cft(seq)->seq_next(seq, v, ppos);
 }
 
+//由cft提供seq_stp[
 static void cgroup_seqfile_stop(struct seq_file *seq, void *v)
 {
 	if (seq_cft(seq)->seq_stop)
 		seq_cft(seq)->seq_stop(seq, v);
 }
 
+//由cft提供seq_show
 static int cgroup_seqfile_show(struct seq_file *m, void *arg)
 {
 	struct cftype *cft = seq_cft(m);
@@ -3814,6 +3832,7 @@ static void cgroup_file_notify_timer(struct timer_list *timer)
 					notify_timer));
 }
 
+//添加cft cgroup文件
 static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 			   struct cftype *cft)
 {
@@ -3825,6 +3844,7 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	key = &cft->lockdep_key;
 #endif
+	//添加cft指定文件
 	kn = __kernfs_create_file(cgrp->kn, cgroup_file_name(cgrp, cft, name),
 				  cgroup_file_mode(cft),
 				  GLOBAL_ROOT_UID, GLOBAL_ROOT_GID,
@@ -3863,8 +3883,8 @@ static int cgroup_add_file(struct cgroup_subsys_state *css, struct cgroup *cgrp,
  * For removals, this function never fails.
  */
 static int cgroup_addrm_files(struct cgroup_subsys_state *css,
-			      struct cgroup *cgrp, struct cftype cfts[],
-			      bool is_add)
+			      struct cgroup *cgrp, struct cftype cfts[]/*添加或需要移除的cgroup文件*/,
+			      bool is_add/*添加还是移除*/)
 {
 	struct cftype *cft, *cft_end = NULL;
 	int ret = 0;
@@ -3872,6 +3892,7 @@ static int cgroup_addrm_files(struct cgroup_subsys_state *css,
 	lockdep_assert_held(&cgroup_mutex);
 
 restart:
+    /*遍历cfts数组*/
 	for (cft = cfts; cft != cft_end && cft->name[0] != '\0'; cft++) {
 		/* does cft->flags tell us to skip this file on @cgrp? */
 		if ((cft->flags & __CFTYPE_ONLY_ON_DFL) && !cgroup_on_dfl(cgrp))
@@ -3885,6 +3906,7 @@ restart:
 		if ((cft->flags & CFTYPE_DEBUG) && !cgroup_debug)
 			continue;
 		if (is_add) {
+		    /*执行cft文件添加*/
 			ret = cgroup_add_file(css, cgrp, cft);
 			if (ret) {
 				pr_warn("%s: failed to add %s, err=%d\n",
@@ -3894,6 +3916,7 @@ restart:
 				goto restart;
 			}
 		} else {
+		    /*移除cft文件*/
 			cgroup_rm_file(cgrp, cft);
 		}
 	}
@@ -3946,6 +3969,7 @@ static int cgroup_init_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 {
 	struct cftype *cft;
 
+	//遍历所有cft,其最后一个元素为NULL
 	for (cft = cfts; cft->name[0] != '\0'; cft++) {
 		struct kernfs_ops *kf_ops;
 
@@ -4028,9 +4052,11 @@ static int cgroup_add_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 {
 	int ret;
 
+	/*此subsystem未启动，退出*/
 	if (!cgroup_ssid_enabled(ss->id))
 		return 0;
 
+	//cfts必须不为NULL
 	if (!cfts || cfts[0].name[0] == '\0')
 		return 0;
 
@@ -4040,7 +4066,10 @@ static int cgroup_add_cftypes(struct cgroup_subsys *ss, struct cftype *cfts)
 
 	mutex_lock(&cgroup_mutex);
 
+	//将cfts加入ss
 	list_add_tail(&cfts->node, &ss->cfts);
+
+	/*添加cfts目录添加*/
 	ret = cgroup_apply_cftypes(cfts, true);
 	if (ret)
 		cgroup_rm_cftypes_locked(cfts);
@@ -4522,6 +4551,7 @@ repeat:
 void css_task_iter_start(struct cgroup_subsys_state *css, unsigned int flags,
 			 struct css_task_iter *it)
 {
+    //将it清零，完成初始化
 	memset(it, 0, sizeof(*it));
 
 	spin_lock_irq(&css_set_lock);
@@ -5650,6 +5680,7 @@ int __init cgroup_init_early(void)
 
 	RCU_INIT_POINTER(init_task.cgroups, &init_css_set);
 
+	//遍历所有subsystem,执行初始化
 	for_each_subsys(ss, i) {
 		WARN(!ss->css_alloc || !ss->css_free || ss->name || ss->id,
 		     "invalid cgroup_subsys %d:%s css_alloc=%p css_free=%p id:name=%d:%s\n",
@@ -5663,6 +5694,7 @@ int __init cgroup_init_early(void)
 		if (!ss->legacy_name)
 			ss->legacy_name = cgroup_subsys_name[i];
 
+		/*子系统有early_init,执行初始化*/
 		if (ss->early_init)
 			cgroup_init_subsys(ss, true);
 	}
@@ -5709,6 +5741,7 @@ int __init cgroup_init(void)
 
 	mutex_unlock(&cgroup_mutex);
 
+	//遍历所有cgroup子系统
 	for_each_subsys(ss, ssid) {
 		if (ss->early_init) {
 			struct cgroup_subsys_state *css =
@@ -5773,9 +5806,13 @@ int __init cgroup_init(void)
 	hash_add(css_set_table, &init_css_set.hlist,
 		 css_set_hash(init_css_set.subsys));
 
+	//创建/sys/fs/cgroup挂载点
 	WARN_ON(sysfs_create_mount_point(fs_kobj, "cgroup"));
+	//注册cgroup文件系统
 	WARN_ON(register_filesystem(&cgroup_fs_type));
+	//注册cgroup2文件系统
 	WARN_ON(register_filesystem(&cgroup2_fs_type));
+	//创建/proc/cgroups文件
 	WARN_ON(!proc_create_single("cgroups", 0, NULL, proc_cgroupstats_show));
 #ifdef CONFIG_CPUSETS
 	WARN_ON(register_filesystem(&cpuset_fs_type));

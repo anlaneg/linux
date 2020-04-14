@@ -29,9 +29,13 @@ struct seq_file {
 };
 
 struct seq_operations {
+    //创建一个迭代器
 	void * (*start) (struct seq_file *m, loff_t *pos);
+	//当迭代完成时被调用，用于执行清理工作
 	void (*stop) (struct seq_file *m, void *v);
+	//移动迭代器到下一个序号位置
 	void * (*next) (struct seq_file *m, void *v, loff_t *pos);
+	//格式化迭代器指向的对象完成格式化
 	int (*show) (struct seq_file *m, void *v);
 };
 

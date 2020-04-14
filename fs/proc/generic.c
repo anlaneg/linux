@@ -629,7 +629,7 @@ struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
 {
 	struct proc_dir_entry *p;
 
-	//创建名称为name的规则文件
+	//创建名称为name的普通文件
 	p = proc_create_reg(name, mode, &parent, data);
 	if (!p)
 		return NULL;

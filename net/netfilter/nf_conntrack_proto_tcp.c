@@ -144,11 +144,11 @@ enum tcp_bit_set {
 //发起方遇到一个syn标记，则原状态由none转为syn_send状态
 //tcp_conntracks[0][0][1]指，
 //发起方（tcp_conntracks[0]）遇到一个syn标记（tcp_conntracks[0][0]），则原状态由
-//syn_send(tcp_conntracks[0][0][1])转换为syn_send
+//tcp_conntracks[0][0][1]=syn_send转换为syn_send
 static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 	{
 /* ORIGINAL */
-//正方向状态
+//正方向状态（注释位于数组下）
 /* 	     sNO, sSS, sSR, sES, sFW, sCW, sLA, sTW, sCL, sS2	*/
 /*syn*/	   { sSS, sSS, sIG, sIG, sIG, sIG, sIG, sSS, sSS, sS2 },
 /*
@@ -215,7 +215,7 @@ static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 /*rst*/    { sIV, sCL, sCL, sCL, sCL, sCL, sCL, sCL, sCL, sCL },
 /*none*/   { sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV, sIV }
 	},
-	//反方向状态
+	//自此开始为反方向状态
 	{
 /* REPLY */
 /* 	     sNO, sSS, sSR, sES, sFW, sCW, sLA, sTW, sCL, sS2	*/
@@ -792,6 +792,7 @@ static noinline bool tcp_new(struct nf_conn *ct, const struct sk_buff *skb,
 	enum tcp_conntrack new_state;
 	struct net *net = nf_ct_net(ct);
 	const struct nf_tcp_net *tn = nf_tcp_pernet(net);
+
 	//分别指向sender，receiver
 	const struct ip_ct_tcp_state *sender = &ct->proto.tcp.seen[0];
 	const struct ip_ct_tcp_state *receiver = &ct->proto.tcp.seen[1];

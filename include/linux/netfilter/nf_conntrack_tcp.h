@@ -6,8 +6,11 @@
 
 
 struct ip_ct_tcp_state {
+    //本方向结尾数据seq编号
 	u_int32_t	td_end;		/* max of seq + len */
+	//本方向报文理论下最大窗口可接收字节
 	u_int32_t	td_maxend;	/* max of ack + max(win, 1) */
+	//报文提供的窗口大小
 	u_int32_t	td_maxwin;	/* max(win) */
 	u_int32_t	td_maxack;	/* max of ack */
 	u_int8_t	td_scale;	/* window scale factor */

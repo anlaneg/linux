@@ -207,8 +207,9 @@ void psample_group_put(struct psample_group *group)
 }
 EXPORT_SYMBOL_GPL(psample_group_put);
 
-void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
-			   u32 trunc_size, int in_ifindex, int out_ifindex,
+//完成数据采样
+void psample_sample_packet(struct psample_group *group, struct sk_buff *skb/*采样的skb*/,
+			   u32 trunc_size/*报文截短长度*/, int in_ifindex, int out_ifindex,
 			   u32 sample_rate)
 {
 	struct sk_buff *nl_skb;
@@ -229,6 +230,7 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 		data_len = PSAMPLE_MAX_PACKET_SIZE - meta_len - NLA_HDRLEN
 			    - NLA_ALIGNTO;
 
+	//申请netlink消息buffer
 	nl_skb = genlmsg_new(meta_len + nla_total_size(data_len), GFP_ATOMIC);
 	if (unlikely(!nl_skb))
 		return;
@@ -238,12 +240,14 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 	if (unlikely(!data))
 		goto error;
 
+	//添加in_ifindex
 	if (in_ifindex) {
 		ret = nla_put_u16(nl_skb, PSAMPLE_ATTR_IIFINDEX, in_ifindex);
 		if (unlikely(ret < 0))
 			goto error;
 	}
 
+	//添加out_ifindex
 	if (out_ifindex) {
 		ret = nla_put_u16(nl_skb, PSAMPLE_ATTR_OIFINDEX, out_ifindex);
 		if (unlikely(ret < 0))
@@ -262,10 +266,12 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 	if (unlikely(ret < 0))
 		goto error;
 
+	//填充seq
 	ret = nla_put_u32(nl_skb, PSAMPLE_ATTR_GROUP_SEQ, group->seq++);
 	if (unlikely(ret < 0))
 		goto error;
 
+	//填充data到netlink消息
 	if (data_len) {
 		int nla_len = nla_total_size(data_len);
 		struct nlattr *nla;

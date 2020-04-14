@@ -6,7 +6,8 @@
    extension. */
 enum ip_conntrack_info {
 	/* Part of an established connection (either direction). */
-	IP_CT_ESTABLISHED,//双方向的流均看到了，完整的ct。
+    //双方向的流均看到了，完整的ct。
+	IP_CT_ESTABLISHED,
 
 	/* Like NEW, but related to an existing connection, or ICMP error
 	   (in either direction). */
@@ -23,8 +24,10 @@ enum ip_conntrack_info {
 	//反方向的ct
 	IP_CT_IS_REPLY,
 
-	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,//连接已经建立，数据包在回包方向。
-	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,//期待创建的ct，同时数据包在回包方向。
+	//连接已经建立，数据包在回包方向。
+	IP_CT_ESTABLISHED_REPLY = IP_CT_ESTABLISHED + IP_CT_IS_REPLY,
+	//期待创建的ct，同时数据包在回包方向。
+	IP_CT_RELATED_REPLY = IP_CT_RELATED + IP_CT_IS_REPLY,
 	/* No NEW in reply direction. */
 
 	/* Number of distinct IP_CT types. */
@@ -34,7 +37,8 @@ enum ip_conntrack_info {
 #ifndef __KERNEL__
 	IP_CT_NEW_REPLY = IP_CT_NUMBER,
 #else
-	IP_CT_UNTRACKED = 7,//指明不创建连接跟踪
+	//指明不创建连接跟踪
+	IP_CT_UNTRACKED = 7,
 #endif
 };
 

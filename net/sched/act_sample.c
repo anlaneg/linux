@@ -155,9 +155,11 @@ static bool tcf_sample_dev_ok_push(struct net_device *dev)
 	}
 }
 
+//执行报文采样
 static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 			  struct tcf_result *res)
 {
+    //采样参数
 	struct tcf_sample *s = to_sample(a);
 	struct psample_group *psample_group;
 	int retval;
@@ -172,11 +174,14 @@ static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 	psample_group = rcu_dereference_bh(s->psample_group);
 
 	/* randomly sample packets according to rate */
+	//随机数恰好等于rate时，执行采样
 	if (psample_group && (prandom_u32() % s->rate == 0)) {
 		if (!skb_at_tc_ingress(skb)) {
+		    //egress方向采样
 			iif = skb->skb_iif;
 			oif = skb->dev->ifindex;
 		} else {
+		    //ingress方向采样
 			iif = skb->dev->ifindex;
 			oif = 0;
 		}
@@ -185,6 +190,7 @@ static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 		if (skb_at_tc_ingress(skb) && tcf_sample_dev_ok_push(skb->dev))
 			skb_push(skb, skb->mac_len);
 
+		//采样报文大小
 		size = s->truncate ? s->trunc_size : skb->len;
 		psample_sample_packet(psample_group, skb, size, iif, oif,
 				      s->rate);
@@ -281,6 +287,7 @@ static struct tc_action_ops act_sample_ops = {
 	.kind	  = "sample",
 	.id	  = TCA_ID_SAMPLE,
 	.owner	  = THIS_MODULE,
+	//执行sample动作
 	.act	  = tcf_sample_act,
 	.dump	  = tcf_sample_dump,
 	.init	  = tcf_sample_init,

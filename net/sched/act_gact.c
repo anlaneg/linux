@@ -27,7 +27,9 @@ static int gact_net_rand(struct tcf_gact *gact)
 {
 	smp_rmb(); /* coupled with smp_wmb() in tcf_gact_init() */
 	if (prandom_u32() % gact->tcfg_pval)
+	    /*随机值余非0时返回此action*/
 		return gact->tcf_action;
+	/*随机值余0时返回此action*/
 	return gact->tcfg_paction;
 }
 
@@ -37,7 +39,9 @@ static int gact_determ(struct tcf_gact *gact)
 
 	smp_rmb(); /* coupled with smp_wmb() in tcf_gact_init() */
 	if (pack % gact->tcfg_pval)
+	    /*随机值余非0时返回此action*/
 		return gact->tcf_action;
+	/*随机值余0时返回此action*/
 	return gact->tcfg_paction;
 }
 
@@ -156,6 +160,7 @@ static int tcf_gact_act(struct sk_buff *skb, const struct tc_action *a,
 			struct tcf_result *res)
 {
 	struct tcf_gact *gact = to_gact(a);
+	/*默认返回此action*/
 	int action = READ_ONCE(gact->tcf_action);
 
 #ifdef CONFIG_GACT_PROB

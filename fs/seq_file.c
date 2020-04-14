@@ -94,8 +94,8 @@ static int traverse(struct seq_file *m, loff_t offset)
 	m->count = m->from = 0;
 	if (!offset)
 		return 0;
-	//如果没有buf，则申请buf
 
+	//如果没有buf，则申请buf
 	if (!m->buf) {
 		m->buf = seq_buf_alloc(m->size = PAGE_SIZE);
 		if (!m->buf)
@@ -147,7 +147,7 @@ Eoverflow:
  *
  *	Ready-made ->f_op->read()
  */
-ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
+ssize_t seq_read(struct file *file, char __user *buf/*存放读取到的内容*/, size_t size, loff_t *ppos/*文件当前位置*/)
 {
 	struct seq_file *m = file->private_data;
 	size_t copied = 0;
@@ -162,6 +162,7 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 	 * record as it might have been already advanced by previous requests
 	 */
 	if (*ppos == 0) {
+	    /*当前位置位于文件开始*/
 		m->index = 0;
 		m->count = 0;
 	}
@@ -207,25 +208,32 @@ ssize_t seq_read(struct file *file, char __user *buf, size_t size, loff_t *ppos)
 	}
 	/* we need at least one record in buffer */
 	m->from = 0;
+	/*创建迭代器，返回m->index指向的obj对应的迭代器*/
 	p = m->op->start(m, &m->index);
 	while (1) {
 		err = PTR_ERR(p);
 		if (!p || IS_ERR(p))
 			break;
-		//调用seq_file的show方法
+
+		//调用seq_file的show方法格式化此迭代器
 		err = m->op->show(m, p);
 		if (err < 0)
+		    /*执行出错*/
 			break;
 		if (unlikely(err))
 			m->count = 0;
+		/*获取下一个obj对象对应的迭代器*/
 		if (unlikely(!m->count)) {
 			p = m->op->next(m, p, &m->index);
 			continue;
 		}
 		if (m->count < m->size)
 			goto Fill;
+
+		/*遍历完成，执行迭代器清理*/
 		m->op->stop(m, p);
 		kvfree(m->buf);
+		/*重新申请buffer,再创建迭代器*/
 		m->count = 0;
 		m->buf = seq_buf_alloc(m->size <<= 1);
 		if (!m->buf)
@@ -303,6 +311,7 @@ loff_t seq_lseek(struct file *file, loff_t offset, int whence)
 	mutex_lock(&m->lock);
 	switch (whence) {
 	case SEEK_CUR:
+	    /*由文件起始位置算偏移量*/
 		offset += file->f_pos;
 		/* fall through */
 	case SEEK_SET:

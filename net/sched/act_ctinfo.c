@@ -79,6 +79,7 @@ static void tcf_ctinfo_cpmark_set(struct nf_conn *ct, struct tcf_ctinfo *ca,
 	skb->mark = ct->mark & cp->cpmarkmask;
 }
 
+//实现dscp修改
 static int tcf_ctinfo_act(struct sk_buff *skb, const struct tc_action *a,
 			  struct tcf_result *res)
 {

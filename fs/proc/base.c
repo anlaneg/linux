@@ -3458,7 +3458,7 @@ static const struct inode_operations proc_tid_comm_inode_operations = {
 static const struct pid_entry tid_base_stuff[] = {
 	DIR("fd",        S_IRUSR|S_IXUSR, proc_fd_inode_operations, proc_fd_operations),
 	DIR("fdinfo",    S_IRUSR|S_IXUSR, proc_fdinfo_inode_operations, proc_fdinfo_operations),
-	//ns目录情况
+	//进程中ns目录情况
 	DIR("ns",	 S_IRUSR|S_IXUGO, proc_ns_dir_inode_operations, proc_ns_dir_operations),
 #ifdef CONFIG_NET
 	DIR("net",        S_IRUGO|S_IXUGO, proc_net_inode_operations, proc_net_operations),
@@ -3518,6 +3518,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	ONE("cpuset",    S_IRUGO, proc_cpuset_show),
 #endif
 #ifdef CONFIG_CGROUPS
+	//进程的cgroup配置情况
 	ONE("cgroup",  S_IRUGO, proc_cgroup_show),
 #endif
 #ifdef CONFIG_PROC_CPU_RESCTRL

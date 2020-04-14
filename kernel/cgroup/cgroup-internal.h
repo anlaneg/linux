@@ -161,6 +161,7 @@ extern struct file_system_type cgroup_fs_type;
  * @ss: the iteration cursor
  * @ssid: the index of @ss, CGROUP_SUBSYS_COUNT after reaching the end
  */
+/*遍历所有cgroup子系统,ssid为此子系统的指针*/
 #define for_each_subsys(ss, ssid)					\
 	for ((ssid) = 0; (ssid) < CGROUP_SUBSYS_COUNT &&		\
 	     (((ss) = cgroup_subsys[ssid]) || true); (ssid)++)

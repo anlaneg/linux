@@ -171,6 +171,7 @@ nft_meta_get_eval_cgroup(u32 *dest, const struct nft_pktinfo *pkt)
 	if (!sk || !sk_fullsock(sk) || !net_eq(nft_net(pkt), sock_net(sk)))
 		return false;
 
+	//取此socket对应的classid
 	*dest = sock_cgroup_classid(&sk->sk_cgrp_data);
 	return true;
 }
@@ -386,6 +387,7 @@ void nft_meta_get_eval(const struct nft_expr *expr,
 		break;
 #ifdef CONFIG_CGROUP_NET_CLASSID
 	case NFT_META_CGROUP:
+	    /*取此socket对应的classid*/
 		if (!nft_meta_get_eval_cgroup(dest, pkt))
 			goto err;
 		break;

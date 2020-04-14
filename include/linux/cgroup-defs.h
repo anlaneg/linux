@@ -39,6 +39,7 @@ struct poll_table_struct;
 #define MAX_CFTYPE_NAME		64
 
 /* define the enumeration of all cgroup subsystems */
+//定义cgroup所有子系统的id
 #define SUBSYS(_x) _x ## _cgrp_id,
 enum cgroup_subsys_id {
 #include <linux/cgroup_subsys.h>
@@ -561,22 +562,27 @@ struct cftype {
 	 */
 	struct cgroup_subsys *ss;	/* NULL for cgroup core files */
 	struct list_head node;		/* anchored at ss->cfts */
-	struct kernfs_ops *kf_ops;
+	struct kernfs_ops *kf_ops;/*文件操作集*/
 
+	//cgroup文件被打开时，如果有此回调，则调用
 	int (*open)(struct kernfs_open_file *of);
+	//cgroup文件被关闭时，如果有此回调，则调用
 	void (*release)(struct kernfs_open_file *of);
 
 	/*
 	 * read_u64() is a shortcut for the common case of returning a
 	 * single integer. Use it in place of read()
 	 */
+	//cgroup文件被格式化输出时，如无seq_show回调，则调用此回调
 	u64 (*read_u64)(struct cgroup_subsys_state *css, struct cftype *cft);
 	/*
 	 * read_s64() is a signed version of read_u64()
 	 */
+	//cgroup文件被格式化输出时，如无seq_show,read_u64回调，则调用此回调
 	s64 (*read_s64)(struct cgroup_subsys_state *css, struct cftype *cft);
 
 	/* generic seq_file read interface */
+	//cgroup文件被格式化输出时，如有此回调，则调用
 	int (*seq_show)(struct seq_file *sf, void *v);
 
 	/* optional ops, implement all or none */
@@ -589,11 +595,13 @@ struct cftype {
 	 * a single integer (as parsed by simple_strtoull) from
 	 * userspace. Use in place of write(); return 0 or error.
 	 */
+	//cgroup文件被写入时，如果无write回调，且有此回调写调用，则调用
 	int (*write_u64)(struct cgroup_subsys_state *css, struct cftype *cft,
 			 u64 val);
 	/*
 	 * write_s64() is a signed version of write_u64()
 	 */
+	//cgroup文件被写入时，如果无write,write_u64回调，且有此回调写调用，则调用
 	int (*write_s64)(struct cgroup_subsys_state *css, struct cftype *cft,
 			 s64 val);
 
@@ -603,9 +611,11 @@ struct cftype {
 	 * Maximum write size is determined by ->max_write_len.  Use
 	 * of_css/cft() to access the associated css and cft.
 	 */
+	//cgroup文件被写入时，如果有此回调写调用
 	ssize_t (*write)(struct kernfs_open_file *of,
 			 char *buf, size_t nbytes, loff_t off);
 
+	//cgroup文件被poll时调用
 	__poll_t (*poll)(struct kernfs_open_file *of,
 			 struct poll_table_struct *pt);
 
@@ -684,8 +694,8 @@ struct cgroup_subsys {
 	bool warned_broken_hierarchy:1;
 
 	/* the following two fields are initialized automtically during boot */
-	int id;
-	const char *name;
+	int id;//子系统编号
+	const char *name;//子系统名称
 
 	/* optional, initialized automatically during boot if not set */
 	const char *legacy_name;
@@ -818,6 +828,7 @@ static inline u16 sock_cgroup_prioidx(const struct sock_cgroup_data *skcd)
 	return (skcd->is_data & 1) ? skcd->prioidx : 1;
 }
 
+//取给定socket cgroup对应的classid
 static inline u32 sock_cgroup_classid(const struct sock_cgroup_data *skcd)
 {
 	/* fallback to 0 which is the unconfigured default classid */
@@ -845,14 +856,17 @@ static inline void sock_cgroup_set_prioidx(struct sock_cgroup_data *skcd,
 	WRITE_ONCE(skcd->val, skcd_buf.val);	/* see sock_cgroup_ptr() */
 }
 
+//为socket设置对应的classid
 static inline void sock_cgroup_set_classid(struct sock_cgroup_data *skcd,
 					   u32 classid)
 {
 	struct sock_cgroup_data skcd_buf = {{ .val = READ_ONCE(skcd->val) }};
 
+	//已设置为classid,不再继续设置
 	if (sock_cgroup_classid(&skcd_buf) == classid)
 		return;
 
+	//如果is_data未置为1，则将其置为1，并设置classid
 	if (!(skcd_buf.is_data & 1)) {
 		skcd_buf.val = 0;
 		skcd_buf.is_data = 1;

@@ -1087,6 +1087,7 @@ int f_dupfd(unsigned int from, struct file *file, unsigned flags)
 	return err;
 }
 
+//通过f函数遍历files
 int iterate_fd(struct files_struct *files, unsigned n,
 		int (*f)(const void *, struct file *, unsigned),
 		const void *p)
@@ -1096,11 +1097,13 @@ int iterate_fd(struct files_struct *files, unsigned n,
 	if (!files)
 		return 0;
 	spin_lock(&files->file_lock);
+	//遍历所有fds,逐个得到file,并调用f函数
 	for (fdt = files_fdtable(files); n < fdt->max_fds; n++) {
 		struct file *file;
 		file = rcu_dereference_check_fdtable(files, fdt->fd[n]);
 		if (!file)
 			continue;
+		//调用函数f
 		res = f(p, file, n);
 		if (res)
 			break;

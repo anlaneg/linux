@@ -1758,7 +1758,7 @@ resolve_normal_ct(struct nf_conn *tmpl,
 
 	/* It exists; we have (non-exclusive) reference. */
 	if (NF_CT_DIRECTION(h) == IP_CT_DIR_REPLY) {
-		//命中的ct响应方向的元组（回包）
+		//命中的是ct响应方向的元组（回包）
 		ctinfo = IP_CT_ESTABLISHED_REPLY;
 	} else {
 		/* Once we've had two way comms, always ESTABLISHED. */
@@ -1842,6 +1842,7 @@ static int nf_conntrack_handle_packet(struct nf_conn *ct,
 		return nf_conntrack_tcp_packet(ct, skb, dataoff,
 					       ctinfo, state);
 	case IPPROTO_UDP:
+	    //连接跟踪udp状态更新
 		return nf_conntrack_udp_packet(ct, skb, dataoff,
 					       ctinfo, state);
 	case IPPROTO_ICMP:
@@ -1872,6 +1873,7 @@ static int nf_conntrack_handle_packet(struct nf_conn *ct,
 #endif
 	}
 
+	//其它协议状态更新
 	return generic_packet(ct, skb, ctinfo);
 }
 

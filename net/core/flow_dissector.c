@@ -313,6 +313,7 @@ skb_flow_dissect_set_enc_addr_type(enum flow_dissector_key_id type,
 	ctrl->addr_type = type;
 }
 
+//自skb中提取ct信息，并填充key_ct相关的key
 void
 skb_flow_dissect_ct(const struct sk_buff *skb,
 		    struct flow_dissector *flow_dissector,
@@ -329,6 +330,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_CT))
 		return;
 
+	//取skb对应的ct
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
 		return;
@@ -337,6 +339,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 					FLOW_DISSECTOR_KEY_CT,
 					target_container);
 
+	//填充ct_state,ct_zone,ct_mark字段
 	if (ctinfo < mapsize)
 		key->ct_state = ctinfo_map[ctinfo];
 #if IS_ENABLED(CONFIG_NF_CONNTRACK_ZONES)
@@ -346,6 +349,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 	key->ct_mark = ct->mark;
 #endif
 
+	//自ct中取labels扩展
 	cl = nf_ct_labels_find(ct);
 	if (cl)
 		memcpy(key->ct_labels, cl->bits, sizeof(key->ct_labels));

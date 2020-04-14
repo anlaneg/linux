@@ -975,7 +975,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 			goto do_nat;
 		}
 
-		//没有缓存，执行创建
+		//没有缓存,也没有查找到，执行创建
 		/* Associate skb with specified zone. */
 		if (tmpl) {
 			ct = nf_ct_get(skb, &ctinfo);

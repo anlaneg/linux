@@ -463,7 +463,7 @@ static int sock_map_fd(struct socket *sock, int flags)
  *
  *	On failure returns %NULL and assigns -ENOTSOCK to @err.
  */
-
+//如果此file为socket file,则返回socket,否则返回NULL
 struct socket *sock_from_file(struct file *file, int *err)
 {
 	if (file->f_op == &socket_file_ops)

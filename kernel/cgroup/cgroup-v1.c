@@ -651,6 +651,7 @@ struct cftype cgroup1_base_files[] = {
 };
 
 /* Display information about each subsystem and each hierarchy */
+//显示/proc/cgroups文件内容
 int proc_cgroupstats_show(struct seq_file *m, void *v)
 {
 	struct cgroup_subsys *ss;

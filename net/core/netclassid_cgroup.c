@@ -25,6 +25,7 @@ struct cgroup_cls_state *task_cls_state(struct task_struct *p)
 }
 EXPORT_SYMBOL_GPL(task_cls_state);
 
+//申请net cls对应的子系统
 static struct cgroup_subsys_state *
 cgrp_css_alloc(struct cgroup_subsys_state *parent_css)
 {
@@ -61,7 +62,7 @@ static void cgrp_css_free(struct cgroup_subsys_state *css)
 
 struct update_classid_context {
 	u32 classid;
-	unsigned int batch;
+	unsigned int batch;//批量更新数目
 };
 
 #define UPDATE_CLASSID_BATCH 1000
@@ -74,16 +75,19 @@ static int update_classid_sock(const void *v, struct file *file, unsigned n)
 
 	if (sock) {
 		spin_lock(&cgroup_sk_update_lock);
+		//更新socket 文件的classid
 		sock_cgroup_set_classid(&sock->sk->sk_cgrp_data, ctx->classid);
 		spin_unlock(&cgroup_sk_update_lock);
 	}
 	if (--ctx->batch == 0) {
+	    //一次最大支持批量更新的数目
 		ctx->batch = UPDATE_CLASSID_BATCH;
 		return n + 1;
 	}
 	return 0;
 }
 
+//更新此进程所有socket file的classid
 static void update_classid_task(struct task_struct *p, u32 classid)
 {
 	struct update_classid_context ctx = {
@@ -94,6 +98,7 @@ static void update_classid_task(struct task_struct *p, u32 classid)
 
 	do {
 		task_lock(p);
+		//更新此进程所有socket file的classid,一次最大容许更新class_batch个
 		fd = iterate_fd(p->files, fd, update_classid_sock, &ctx);
 		task_unlock(p);
 		cond_resched();
@@ -110,11 +115,13 @@ static void cgrp_attach(struct cgroup_taskset *tset)
 	}
 }
 
+//返回classid
 static u64 read_classid(struct cgroup_subsys_state *css, struct cftype *cft)
 {
 	return css_cls_state(css)->classid;
 }
 
+//写classid
 static int write_classid(struct cgroup_subsys_state *css, struct cftype *cft,
 			 u64 value)
 {
@@ -124,6 +131,7 @@ static int write_classid(struct cgroup_subsys_state *css, struct cftype *cft,
 
 	cgroup_sk_alloc_disable();
 
+	//写classid
 	cs->classid = (u32)value;
 
 	css_task_iter_start(css, 0, &it);
@@ -145,6 +153,7 @@ static struct cftype ss_files[] = {
 	{ }	/* terminate */
 };
 
+//net cls对应的cgroup子系统
 struct cgroup_subsys net_cls_cgrp_subsys = {
 	.css_alloc		= cgrp_css_alloc,
 	.css_online		= cgrp_css_online,

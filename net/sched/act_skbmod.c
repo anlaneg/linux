@@ -45,6 +45,7 @@ static int tcf_skbmod_act(struct sk_buff *skb, const struct tc_action *a,
 	if (unlikely(action == TC_ACT_SHOT))
 		goto drop;
 
+	/*按flags修改相应字段 dmac,smac,eth_type*/
 	p = rcu_dereference_bh(d->skbmod_p);
 	flags = p->flags;
 	if (flags & SKBMOD_F_DMAC)
@@ -54,6 +55,7 @@ static int tcf_skbmod_act(struct sk_buff *skb, const struct tc_action *a,
 	if (flags & SKBMOD_F_ETYPE)
 		eth_hdr(skb)->h_proto = p->eth_type;
 
+	//实现mac交换
 	if (flags & SKBMOD_F_SWAPMAC) {
 		u16 tmpaddr[ETH_ALEN / 2]; /* ether_addr_copy() requirement */
 		/*XXX: I am sure we can come up with more efficient swapping*/
