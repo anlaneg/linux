@@ -192,6 +192,7 @@ struct flow_dissector_key_eth_addrs {
  * @flags: flags
  */
 struct flow_dissector_key_tcp {
+    //tcp 标记信息，取htons(0x0FFF)
 	__be16 flags;
 };
 

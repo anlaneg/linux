@@ -327,10 +327,11 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 	struct nf_conn_labels *cl;
 	struct nf_conn *ct;
 
+	//如果没有要求解析ct,则直接返回
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_CT))
 		return;
 
-	//取skb对应的ct
+	//取skb对应的ct(要求skb中已查询ct)
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
 		return;
@@ -341,6 +342,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 
 	//填充ct_state,ct_zone,ct_mark字段
 	if (ctinfo < mapsize)
+	    /*由ctinfo映射ct_state*/
 		key->ct_state = ctinfo_map[ctinfo];
 #if IS_ENABLED(CONFIG_NF_CONNTRACK_ZONES)
 	key->ct_zone = ct->zone.id;
@@ -749,6 +751,7 @@ __skb_flow_dissect_tcp(const struct sk_buff *skb,
 	struct flow_dissector_key_tcp *key_tcp;
 	struct tcphdr *th, _th;
 
+	//如果tcp key已设置，则直接返回不再解析
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_TCP))
 		return;
 
@@ -759,7 +762,7 @@ __skb_flow_dissect_tcp(const struct sk_buff *skb,
 	if (unlikely(__tcp_hdrlen(th) < sizeof(_th)))
 		return;
 
-	//解析tcp的flags
+	//获取tcp key对象，解析tcp的flags
 	key_tcp = skb_flow_dissector_target(flow_dissector,
 					    FLOW_DISSECTOR_KEY_TCP,
 					    target_container);
@@ -959,8 +962,8 @@ bool bpf_flow_dissect(struct bpf_prog *prog, struct bpf_flow_dissector *ctx,
 bool __skb_flow_dissect(const struct net *net,
 			const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,/*记录待解析各字段及其在container中存放的位置*/
-			void *target_container,
-			void *data/*报文起始位置*/, __be16 proto, int nhoff, int hlen,
+			void *target_container/*用于存放解析到的内容*/,
+			void *data/*报文起始位置*/, __be16 proto, int nhoff/*到网络层偏移量*/, int hlen,
 			unsigned int flags)
 {
 	//完成报文解析，并将解析的内容存放在target_container中
@@ -976,13 +979,15 @@ bool __skb_flow_dissect(const struct net *net,
 	u8 ip_proto = 0;
 	bool ret;
 
+	//使用默认参数
 	if (!data) {
-		//未指定报文起始位置，使用data
+		//未指定报文起始位置指针，使用skb->data
 		data = skb->data;
-		//三层报文协议
+		//取报文l3层协议号
 		proto = skb_vlan_tag_present(skb) ?
 			 skb->vlan_proto : skb->protocol;
-		//到三层的偏移量
+
+		//取到网络层的偏移量
 		nhoff = skb_network_offset(skb);
 		hlen = skb_headlen(skb);
 #if IS_ENABLED(CONFIG_NET_DSA)
@@ -1015,6 +1020,7 @@ bool __skb_flow_dissect(const struct net *net,
 					      FLOW_DISSECTOR_KEY_BASIC,
 					      target_container);
 
+	//取报文所属的net namespace
 	if (skb) {
 		if (!net) {
 			if (skb->dev)
@@ -1026,6 +1032,7 @@ bool __skb_flow_dissect(const struct net *net,
 
 	WARN_ON_ONCE(!net);
 	if (net) {
+	    /*如果init_net有flow_dissector_prog,则使用ebpf程序来解析报文*/
 		rcu_read_lock();
 		attached = rcu_dereference(init_net.flow_dissector_prog);
 
@@ -1063,7 +1070,7 @@ bool __skb_flow_dissect(const struct net *net,
 	//检查是否需要解析以太头
 	if (dissector_uses_key(flow_dissector,
 			       FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
-		//解析源目的mac地址
+		//解析以太头，列出源目的mac地址
 		struct ethhdr *eth = eth_hdr(skb);
 		struct flow_dissector_key_eth_addrs *key_eth_addrs;
 

@@ -4870,6 +4870,7 @@ EXPORT_SYMBOL(__alloc_pages_nodemask);
  */
 unsigned long __get_free_pages(gfp_t gfp_mask, unsigned int order)
 {
+    //申请一个指定order的页
 	struct page *page;
 
 	page = alloc_pages(gfp_mask & ~__GFP_HIGHMEM, order);

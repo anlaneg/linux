@@ -1042,6 +1042,8 @@ void *memchr(const void *s, int c, size_t n)
 EXPORT_SYMBOL(memchr);
 #endif
 
+//自start位置开始每个字节进行检查，共检查bytes个字节，如果这些bytes个字节中不包含了u8的value
+//则返回其第一次不匹配的位置，否则返回NULL
 static void *check_bytes8(const u8 *start, u8 value, unsigned int bytes)
 {
 	while (bytes) {
@@ -1062,6 +1064,7 @@ static void *check_bytes8(const u8 *start, u8 value, unsigned int bytes)
  * returns the address of the first character other than @c, or %NULL
  * if the whole buffer contains just @c.
  */
+//自start位置开始查bytes个字节，返回这bytes个字节中首个不与c(u8类型）相等的元素位置
 void *memchr_inv(const void *start, int c, size_t bytes)
 {
 	u8 value = c;
@@ -1073,6 +1076,7 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 		//如不存在，返回NULL
 		return check_bytes8(start, value, bytes);
 
+	//构造8个value并按字节顺序填充到value64中
 	value64 = value;
 #if defined(CONFIG_ARCH_HAS_FAST_MULTIPLIER) && BITS_PER_LONG == 64
 	value64 *= 0x0101010101010101ULL;
@@ -1085,6 +1089,7 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 	value64 |= value64 << 32;
 #endif
 
+	//由于后面我们是每8字节匹配一次，故需要将不对齐的prefix先处理
 	prefix = (unsigned long)start % 8;
 	if (prefix) {
 		u8 *r;
@@ -1101,6 +1106,7 @@ void *memchr_inv(const void *start, int c, size_t bytes)
 
 	while (words) {
 		if (*(u64 *)start != value64)
+		    /*如果不相等，则一定存在一个与其不匹配的字节*/
 			return check_bytes8(start, value, 8);
 		start += 8;
 		words--;

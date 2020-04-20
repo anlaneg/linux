@@ -275,11 +275,14 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		return cpu_addr;
 
 	/* let the implementation decide on the zone to allocate from: */
+	//移除以下flag,使实现自主选择
 	flag &= ~(__GFP_DMA | __GFP_DMA32 | __GFP_HIGHMEM);
 
 	if (dma_is_direct(ops))
+	    /*如果没有ops,则采用direct alloc*/
 		cpu_addr = dma_direct_alloc(dev, size, dma_handle, flag, attrs);
 	else if (ops->alloc)
+	    /*通过ops进行申请*/
 		cpu_addr = ops->alloc(dev, size, dma_handle, flag, attrs);
 	else
 		return NULL;

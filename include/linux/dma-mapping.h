@@ -646,10 +646,11 @@ static inline void *dma_alloc_coherent(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp)
 {
 
-	return dma_alloc_attrs(dev, size, dma_handle, gfp,
+	return dma_alloc_attrs(dev, size/*dma内存大小*/, dma_handle/*出参，申请的dma地址？*/, gfp,
 			(gfp & __GFP_NOWARN) ? DMA_ATTR_NO_WARN : 0);
 }
 
+//一致性dma内存释放
 static inline void dma_free_coherent(struct device *dev, size_t size,
 		void *cpu_addr, dma_addr_t dma_handle)
 {
@@ -672,6 +673,9 @@ static inline u64 dma_get_mask(struct device *dev)
  */
 static inline int dma_set_mask_and_coherent(struct device *dev, u64 mask)
 {
+    //同时设置dma mask与一致性dma mask
+    //dma_mask表示的是该设备通过DMA方式可寻址的物理地址范围
+    //coherent_dma_mask表示所有设备通过DMA方式可寻址的公共的物理地址范围，
 	int rc = dma_set_mask(dev, mask);
 	if (rc == 0)
 		dma_set_coherent_mask(dev, mask);

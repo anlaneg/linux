@@ -850,10 +850,14 @@ struct pci_driver {
 	const char		*name;
 	//支持的设备列表
 	const struct pci_device_id *id_table;	/* Must be non-NULL for probe to be called */
+	//新设备加入后，进行探测
 	int  (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
 	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
+	//暂停设备
 	int  (*suspend)(struct pci_dev *dev, pm_message_t state);	/* Device suspended */
+	//恢复（唤醒）设备
 	int  (*resume)(struct pci_dev *dev);	/* Device woken up */
+	//关闭设备
 	void (*shutdown)(struct pci_dev *dev);
 	//完成设备sriov的开启，num_vfs为0时，禁止sriov,>0时虚拟num_vfs个vf,返回成功虚拟的数目
 	int  (*sriov_configure)(struct pci_dev *dev, int num_vfs); /* On PF */

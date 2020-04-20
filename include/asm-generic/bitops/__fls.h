@@ -16,6 +16,7 @@ static __always_inline unsigned long __fls(unsigned long word)
 
 #if BITS_PER_LONG == 64
 	if (!(word & (~0ul << 32))) {
+	    //检查高32位是否为零，如是，则需要检查后32位
 		num -= 32;
 		word <<= 32;
 	}
@@ -38,7 +39,7 @@ static __always_inline unsigned long __fls(unsigned long word)
 	}
 	if (!(word & (~0ul << (BITS_PER_LONG-1))))
 		num -= 1;
-	return num;
+	return num;/*返回是‘1’的最高位编号*/
 }
 
 #endif /* _ASM_GENERIC_BITOPS___FLS_H_ */

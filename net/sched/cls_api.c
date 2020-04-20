@@ -2335,6 +2335,7 @@ errout_locked:
 	goto errout;
 }
 
+//filter删除实现
 static int tc_del_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 			  struct netlink_ext_ack *extack)
 {

@@ -28,6 +28,7 @@
  */
 static inline __attribute_const__ int get_order(unsigned long size)
 {
+    //获取size对应的order(级别）
 	if (__builtin_constant_p(size)) {
 		if (!size)
 			return BITS_PER_LONG - PAGE_SHIFT;
@@ -38,6 +39,8 @@ static inline __attribute_const__ int get_order(unsigned long size)
 		return ilog2((size) - 1) - PAGE_SHIFT + 1;
 	}
 
+	//将size减一，然后以页对齐，取其最高位‘1’的编号，这里
+	//2^^0=1 即1页，2^^1=2即一次申请2页
 	size--;
 	size >>= PAGE_SHIFT;
 #if BITS_PER_LONG == 32

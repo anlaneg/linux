@@ -1592,7 +1592,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 			return ret;
 	}
 
-	//填充ct相关
+	//解析ct相关的key及value
 	ret = fl_set_key_ct(tb, &key->ct, &mask->ct, extack);
 	if (ret)
 		return ret;
@@ -1636,6 +1636,8 @@ static int fl_init_mask_hashtable(struct fl_flow_mask *mask)
 //成员member在fl_flow_key的size
 #define FL_KEY_MEMBER_SIZE(member) sizeof_field(struct fl_flow_key, member)
 
+//返回mask结构体中成员member首个字节取值不为0的内存位置
+//如果此成员取值为一组纯0的内存，则返回NULL
 #define FL_KEY_IS_MASKED(mask, member)						\
 	memchr_inv(((char *)mask) + FL_KEY_MEMBER_OFFSET(member),		\
 		   0, FL_KEY_MEMBER_SIZE(member))				\
@@ -1650,10 +1652,11 @@ static int fl_init_mask_hashtable(struct fl_flow_mask *mask)
 		cnt++;								\
 	} while(0);
 
+/*如果成员member在mask中有掩码，则填充keys，用于指明需要解析id对应的字段*/
 #define FL_KEY_SET_IF_MASKED(mask, keys, cnt, id, member)			\
 	do {									\
 		if (FL_KEY_IS_MASKED(mask, member))				\
-			/*如果member在mask中已设置，将设置id对应的member*/\
+			/*如果member在mask中有全部或部分非0给值，将设置id对应的member*/\
 			FL_KEY_SET(keys, cnt, id, member);			\
 	} while(0);
 
@@ -1680,6 +1683,7 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 			     FLOW_DISSECTOR_KEY_PORTS_RANGE, tp_range);
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_IP, ip);
+	//如果mask->tcp非0，则为keys中设置要求解析FLOW_DISSECTOR_KEY_TCP的标记及相应数据
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_TCP, tcp);
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,

@@ -181,6 +181,7 @@ static const struct pci_error_handlers e1000_err_handler = {
 };
 
 static struct pci_driver e1000_driver = {
+    //驱动名称
 	.name     = e1000_driver_name,
 	.id_table = e1000_pci_tbl,
 	.probe    = e1000_probe,
@@ -825,6 +826,7 @@ static int e1000_set_features(struct net_device *netdev,
 	return 1;
 }
 
+//e1000驱动操作集
 static const struct net_device_ops e1000_netdev_ops = {
 	.ndo_open		= e1000_open,
 	.ndo_stop		= e1000_close,
@@ -1010,8 +1012,10 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	pci_using_dac = 0;
 	if ((hw->bus_type == e1000_bus_type_pcix) &&
 	    !dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64))) {
+	    //使用64位dma地址,设置设备可访问物理地址范围为[0,~0ULL]
 		pci_using_dac = 1;
 	} else {
+	    //使用32位dma地址，设置设备可访问物理地址范围为[0,(1ULL<<32)-1]
 		err = dma_set_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(32));
 		if (err) {
 			pr_err("No usable DMA config, aborting\n");
@@ -1063,6 +1067,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 				NETIF_F_RXALL |
 				NETIF_F_RXFCS);
 
+	//可使用高地址的dma
 	if (pci_using_dac) {
 		netdev->features |= NETIF_F_HIGHDMA;
 		netdev->vlan_features |= NETIF_F_HIGHDMA;
@@ -1207,6 +1212,7 @@ static int e1000_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* reset the hardware with the new settings */
 	e1000_reset(adapter);
 
+	//注册网络设备
 	strcpy(netdev->name, "eth%d");
 	err = register_netdev(netdev);
 	if (err)
@@ -1708,6 +1714,7 @@ static int e1000_setup_rx_resources(struct e1000_adapter *adapter,
 	rxdr->size = rxdr->count * desc_len;
 	rxdr->size = ALIGN(rxdr->size, 4096);
 
+	//申请描述符对应的dma内存
 	rxdr->desc = dma_alloc_coherent(&pdev->dev, rxdr->size, &rxdr->dma,
 					GFP_KERNEL);
 	if (!rxdr->desc) {
@@ -1767,6 +1774,7 @@ int e1000_setup_all_rx_resources(struct e1000_adapter *adapter)
 {
 	int i, err = 0;
 
+	//申请adapter->num_rx_queues个队列
 	for (i = 0; i < adapter->num_rx_queues; i++) {
 		err = e1000_setup_rx_resources(adapter, &adapter->rx_ring[i]);
 		if (err) {
