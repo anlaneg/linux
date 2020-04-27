@@ -1029,6 +1029,7 @@ static inline void bpf_enable_instrumentation(void)
 extern const struct file_operations bpf_map_fops;
 extern const struct file_operations bpf_prog_fops;
 
+//对外申明 bpf程序类型操作集，bpf程序类型verifier操作集，map操作集
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	extern const struct bpf_prog_ops _name ## _prog_ops; \
 	extern const struct bpf_verifier_ops _name ## _verifier_ops;

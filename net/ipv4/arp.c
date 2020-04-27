@@ -722,13 +722,14 @@ static bool arp_is_garp(struct net *net, struct net_device *dev,
 static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
+	//取dev的ipv4设备
 	struct in_device *in_dev = __in_dev_get_rcu(dev);
 	struct arphdr *arp;
 	unsigned char *arp_ptr;
 	struct rtable *rt;
-	unsigned char *sha;
-	unsigned char *tha = NULL;
-	__be32 sip, tip;
+	unsigned char *sha;/*发送方硬件地址*/
+	unsigned char *tha = NULL;/*目标方硬件地址*/
+	__be32 sip, tip;/*发送方ip地址，目标方ip地址*/
 	u16 dev_type = dev->type;
 	int addr_type;
 	struct neighbour *n;
@@ -739,7 +740,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	 * is ARP'able.
 	 */
 
-	//入口设备未指定，无法处理，丢包
+	//dev无ipv4设备,则不支持arp处理，丢包
 	if (!in_dev)
 		goto out_free_skb;
 
@@ -748,7 +749,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 	//arp协议类型检查
 	switch (dev_type) {
 	default:
-		//本函数仅处理网络协议为ip的arp报文，或者设备类型与arp的碍件类型不一致的，也丢包
+		//本函数仅处理网络协议为ip的arp报文，或者设备类型与arp的硬件类型一致的arp摄文，否则丢包
 		if (arp->ar_pro != htons(ETH_P_IP) ||
 		    htons(dev_type) != arp->ar_hrd)
 			goto out_free_skb;
@@ -804,7 +805,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		break;
 #endif
 	default:
-		tha = arp_ptr;//目标方mac
+		tha = arp_ptr;//目标方硬件地址
 		arp_ptr += dev->addr_len;
 	}
 	memcpy(&tip, arp_ptr, 4);//目标方ip
@@ -812,7 +813,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.
  */
-	//目的ip不能是组播ip,目标ip不能是loopback ip,否则丢包
+	//目标方ip不能是组播ip,目标ip不能是loopback ip,否则丢包
 	if (ipv4_is_multicast(tip) ||
 	    (!IN_DEV_ROUTE_LOCALNET(in_dev) && ipv4_is_loopback(tip)))
 		goto out_free_skb;
@@ -830,7 +831,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
  *     Special case: We must set Frame Relay source Q.922 address
  */
 	if (dev_type == ARPHRD_DLCI)
-		sha = dev->broadcast;
+		sha = dev->broadcast;/*针对DLCI型设备，发送方硬件地址为设备广播地址*/
 
 /*
  *  Process entry.  The idea here is we want to send a reply if it is a
@@ -907,8 +908,10 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    (arp_fwd_proxy(in_dev, dev, rt) ||
 			     arp_fwd_pvlan(in_dev, dev, rt, sip, tip) ||
 			     (rt->dst.dev != dev &&
+			      /*执行代理邻居表项查询*/
 			      pneigh_lookup(&arp_tbl, net, &tip, dev, 0)))) {
-				//为arp代理表项，生成邻居表项
+
+			    //tip当前被我们代理，现在收到针对tip的请求，我们更新（创建）发送方ip及发送方mac地址
 				n = neigh_event_ns(&arp_tbl, sha, &sip, dev);
 				if (n)
 					neigh_release(n);
@@ -921,7 +924,7 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 						     dev->dev_addr, sha,
 						     reply_dst);
 				} else {
-					//将请求入队？？入队的目的是什么？？？
+					//将代理的arp请求入队,入队的目的是什么？？？
 					pneigh_enqueue(&arp_tbl,
 						       in_dev->arp_parms, skb);
 					goto out_free_dst;
@@ -1015,33 +1018,34 @@ static int arp_rcv(struct sk_buff *skb, struct net_device *dev,
 	const struct arphdr *arp;
 
 	/* do not tweak dropwatch on an ARP we will ignore */
-	//设置不支持arp,arp的目的mac非本机（即单播mac且非本接口收取），loopback口报文
+	//设备设置不支持arp,arp的目的mac非本机（即单播mac且非本接口收取），loopback口报文
 	//满足此条件，丢包
 	if (dev->flags & IFF_NOARP ||
 	    skb->pkt_type == PACKET_OTHERHOST ||
 	    skb->pkt_type == PACKET_LOOPBACK)
 		goto consumeskb;
 
+	//如skb被share,则clone
 	skb = skb_share_check(skb, GFP_ATOMIC);
 	if (!skb)
 		goto out_of_mem;
 
 	/* ARP header, plus 2 device addresses, plus 2 IP addresses.  */
-	//不足arp协议所需字段，丢包
+	//不足arp协议头部所需字段，丢包
 	if (!pskb_may_pull(skb, arp_hdr_len(dev)))
 		goto freeskb;
 
 	//偏移到arp头部
 	arp = arp_hdr(skb);
 
-	//当前设备不支持此类型arp报文（以太网只支持硬件长度为6，协议地址长度为4的arp)
+	//丢弃掉设备不支持的arp报文（例如以太网只支持硬件长度为6，协议地址长度为4的arp)
 	if (arp->ar_hln != dev->addr_len || arp->ar_pln != 4)
 		goto freeskb;
 
-	//当skb的cb置为空
+	//将skb的cb置为空
 	memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
 
-	//走ARP钩子点,ARP_IN
+	//走ARP钩子点,ARP_IN (arptables工具可用于操作这些规则）
 	return NF_HOOK(NFPROTO_ARP, NF_ARP_IN,
 		       dev_net(dev), NULL, skb, dev, NULL,
 		       arp_process);
@@ -1468,6 +1472,7 @@ static void arp_format_pneigh_entry(struct seq_file *seq,
 		   dev ? dev->name : "*");
 }
 
+//显示arp邻居表项
 static int arp_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == SEQ_START_TOKEN) {
@@ -1485,6 +1490,7 @@ static int arp_seq_show(struct seq_file *seq, void *v)
 	return 0;
 }
 
+//负责完成迭代器初始化
 static void *arp_seq_start(struct seq_file *seq, loff_t *pos)
 {
 	/* Don't want to confuse "arp -a" w/ magic entries,
@@ -1495,6 +1501,7 @@ static void *arp_seq_start(struct seq_file *seq, loff_t *pos)
 
 /* ------------------------------------------------------------------------ */
 
+//用于/proc/net/arp表显示
 static const struct seq_operations arp_seq_ops = {
 	.start	= arp_seq_start,
 	.next	= neigh_seq_next,
@@ -1523,6 +1530,7 @@ static struct pernet_operations arp_net_ops = {
 	.exit = arp_net_exit,
 };
 
+//每一个net namespace均有一个独立的/proc/net/arp表信息
 static int __init arp_proc_init(void)
 {
 	return register_pernet_subsys(&arp_net_ops);

@@ -73,6 +73,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 					const struct vdpa_config_ops *config,
 					size_t size)
 {
+    //vdap设备申请及初始化
 	struct vdpa_device *vdev;
 	int err = -EINVAL;
 
@@ -91,12 +92,13 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	if (err < 0)
 		goto err_ida;
 
-	vdev->dev.bus = &vdpa_bus;
+	vdev->dev.bus = &vdpa_bus;/*vdpa虚拟总线*/
 	vdev->dev.parent = parent;
 	vdev->dev.release = vdpa_release_dev;
 	vdev->index = err;
 	vdev->config = config;
 
+	//设置vdpa设备名称
 	err = dev_set_name(&vdev->dev, "vdpa%u", vdev->index);
 	if (err)
 		goto err_name;

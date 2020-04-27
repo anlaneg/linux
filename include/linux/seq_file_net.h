@@ -9,7 +9,7 @@ extern struct net init_net;
 
 struct seq_net_private {
 #ifdef CONFIG_NET_NS
-	struct net *net;
+	struct net *net;//所属的net namespace
 #endif
 };
 

@@ -25,7 +25,7 @@ struct ipv4_devconf {
 //inet4_dev结构体（ipv4设备结构体）
 struct in_device {
 	struct net_device	*dev;//关联(所属）的net_device
-	refcount_t		refcnt;
+	refcount_t		refcnt;//设备引用计数
 	int			dead;
 	//inet4设备上所有ip地址列表
 	struct in_ifaddr	__rcu *ifa_list;/* IP ifaddr chain		*/
@@ -227,7 +227,7 @@ static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 
 static inline struct in_device *__in_dev_get_rcu(const struct net_device *dev)
 {
-	//取in_device
+	//取dev对外显现的ipv4设备
 	return rcu_dereference(dev->ip_ptr);
 }
 

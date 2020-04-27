@@ -261,10 +261,11 @@ static struct in_device *inetdev_init(struct net_device *dev)
 
 	ASSERT_RTNL();
 
-	//申请ipv4设备内存
+	//申请ipv4设备的内存
 	in_dev = kzalloc(sizeof(*in_dev), GFP_KERNEL);
 	if (!in_dev)
 		goto out;
+
 	//使用net namespace对应的dev default config来初始化配置
 	memcpy(&in_dev->cnf, dev_net(dev)->ipv4.devconf_dflt,
 			sizeof(in_dev->cnf));
@@ -273,6 +274,7 @@ static struct in_device *inetdev_init(struct net_device *dev)
 	in_dev->arp_parms = neigh_parms_alloc(dev, &arp_tbl);
 	if (!in_dev->arp_parms)
 		goto out_kfree;
+
 	//设备未处于forwarding状态，禁止lro
 	if (IPV4_DEVCONF(in_dev->cnf, FORWARDING))
 		dev_disable_lro(dev);
@@ -288,12 +290,14 @@ static struct in_device *inetdev_init(struct net_device *dev)
 		in_dev = NULL;
 		goto out;
 	}
+
+	//组播初始化
 	ip_mc_init_dev(in_dev);
 	if (dev->flags & IFF_UP)
 		ip_mc_up(in_dev);
 
 	/* we can receive as soon as ip_ptr is set -- do this last */
-	//设置inet4_dev给net_device
+	//设置ipv4设备给net_device
 	rcu_assign_pointer(dev->ip_ptr, in_dev);
 out:
 	return in_dev ?: ERR_PTR(err);
@@ -2652,6 +2656,7 @@ static int devinet_sysctl_register(struct in_device *idev)
 {
 	int err;
 
+	//检查dev名称是否合理
 	if (!sysctl_dev_name_is_allowed(idev->dev->name))
 		return -EINVAL;
 

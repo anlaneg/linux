@@ -709,7 +709,7 @@ static u32 pneigh_hash(const void *pkey, unsigned int key_len)
 	return hash_val;
 }
 
-//在neighbour链上查询静态neigh
+//在neighbour链上查询代理neigh
 static struct pneigh_entry *__pneigh_lookup_1(struct pneigh_entry *n,
 					      struct net *net,
 					      const void *pkey,
@@ -719,7 +719,7 @@ static struct pneigh_entry *__pneigh_lookup_1(struct pneigh_entry *n,
 	while (n) {
 		if (!memcmp(n->key, pkey, key_len) &&/*地址相同*/
 		    net_eq(pneigh_net(n), net) &&/*net namespace相同*/
-		    (n->dev == dev || !n->dev))/*设备相同或者静态neighbour未指定dev*/
+		    (n->dev == dev || !n->dev))/*设备完全相同或者代理neighbour未指定dev*/
 			return n;
 		n = n->next;
 	}
@@ -737,10 +737,10 @@ struct pneigh_entry *__pneigh_lookup(struct neigh_table *tbl,
 }
 EXPORT_SYMBOL_GPL(__pneigh_lookup);
 
-//查询代理表项
+//查询代理邻居表项
 struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 				    struct net *net, const void *pkey,
-				    struct net_device *dev, int creat/*失配后，是否创建*/)
+				    struct net_device *dev/*代理设备*/, int creat/*失配后，是否创建*/)
 {
 	struct pneigh_entry *n;
 	unsigned int key_len = tbl->key_len;
@@ -751,12 +751,13 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 			      net, pkey, key_len, dev);
 	read_unlock_bh(&tbl->lock);
 
+	/*已找到或者不创建，则直接返回*/
 	if (n || !creat)
 		goto out;
 
 	ASSERT_RTNL();
 
-	//未查询到，且要求create,执行创建
+	//未查询到，且要求create,执行代理领居表项创建
 	n = kmalloc(sizeof(*n) + key_len, GFP_KERNEL);
 	if (!n)
 		goto out;
@@ -777,7 +778,7 @@ struct pneigh_entry * pneigh_lookup(struct neigh_table *tbl,
 		goto out;
 	}
 
-	//加入
+	//加入此代理表项
 	write_lock_bh(&tbl->lock);
 	n->next = tbl->phash_buckets[hash_val];
 	tbl->phash_buckets[hash_val] = n;
@@ -1942,6 +1943,7 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		}
 	}
 
+	//取指定family的邻居表
 	tbl = neigh_find_table(ndm->ndm_family);
 	if (tbl == NULL)
 		return -EAFNOSUPPORT;
@@ -1958,12 +1960,12 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (tb[NDA_PROTOCOL])
 		protocol = nla_get_u8(tb[NDA_PROTOCOL]);
 
-	//查询代理表
+	//查询并创建代理表
 	if (ndm->ndm_flags & NTF_PROXY) {
 		struct pneigh_entry *pn;
 
 		err = -ENOBUFS;
-		pn = pneigh_lookup(tbl, net, dst, dev, 1);
+		pn = pneigh_lookup(tbl, net, dst, dev, 1/*如失配，则创建*/);
 		if (pn) {
 			pn->flags = ndm->ndm_flags;
 			if (protocol)
@@ -1983,6 +1985,7 @@ static int neigh_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto out;
 	}
 
+	//查询邻居表项
 	neigh = neigh_lookup(tbl, dst, dev);
 	if (neigh == NULL) {
 		bool exempt_from_gc;
@@ -3085,6 +3088,7 @@ EXPORT_SYMBOL(neigh_xmit);
 
 #ifdef CONFIG_PROC_FS
 
+//找从属于seq的首个neighbour
 static struct neighbour *neigh_get_first(struct seq_file *seq)
 {
 	struct neigh_seq_state *state = seq->private;
@@ -3094,10 +3098,12 @@ static struct neighbour *neigh_get_first(struct seq_file *seq)
 	int bucket;
 
 	state->flags &= ~NEIGH_SEQ_IS_PNEIGH;
+	//遍历所有桶
 	for (bucket = 0; bucket < (1 << nht->hash_shift); bucket++) {
-		n = rcu_dereference_bh(nht->hash_buckets[bucket]);
+		n = rcu_dereference_bh(nht->hash_buckets[bucket]);//取对应的桶
 
 		while (n) {
+		    //必须属于同一net namespace
 			if (!net_eq(dev_net(n->dev), net))
 				goto next;
 			if (state->neigh_sub_iter) {
@@ -3124,6 +3130,7 @@ next:
 	return n;
 }
 
+//返回n后面的那一个neighbour
 static struct neighbour *neigh_get_next(struct seq_file *seq,
 					struct neighbour *n,
 					loff_t *pos)
@@ -3141,6 +3148,7 @@ static struct neighbour *neigh_get_next(struct seq_file *seq,
 
 	while (1) {
 		while (n) {
+		    //必须与seq属于同一个net namespace
 			if (!net_eq(dev_net(n->dev), net))
 				goto next;
 			if (state->neigh_sub_iter) {
@@ -3172,6 +3180,7 @@ next:
 	return n;
 }
 
+//跳过pos-1个neighbour,返回第pos个neighbour
 static struct neighbour *neigh_get_idx(struct seq_file *seq, loff_t *pos)
 {
 	struct neighbour *n = neigh_get_first(seq);
@@ -3264,6 +3273,7 @@ static void *neigh_get_idx_any(struct seq_file *seq, loff_t *pos)
 	return rc;
 }
 
+//初始化邻居表项的遍历结构体（如有必要偏移到pos指定位置）
 void *neigh_seq_start(struct seq_file *seq, loff_t *pos, struct neigh_table *tbl, unsigned int neigh_seq_flags)
 	__acquires(tbl->lock)
 	__acquires(rcu_bh)
@@ -3271,13 +3281,16 @@ void *neigh_seq_start(struct seq_file *seq, loff_t *pos, struct neigh_table *tbl
 	struct neigh_seq_state *state = seq->private;
 
 	state->tbl = tbl;
+	/*指明当前待遍历的桶为NULL*/
 	state->bucket = 0;
 	state->flags = (neigh_seq_flags & ~NEIGH_SEQ_IS_PNEIGH);
 
 	rcu_read_lock_bh();
+	/*设置要遍历的hashtable*/
 	state->nht = rcu_dereference_bh(tbl->nht);
 	read_lock(&tbl->lock);
 
+	/*如果指定的pos非0，则偏移到hashtable指定位置,并返回对应的neighbour*/
 	return *pos ? neigh_get_idx_any(seq, pos) : SEQ_START_TOKEN;
 }
 EXPORT_SYMBOL(neigh_seq_start);
@@ -3360,6 +3373,7 @@ static void neigh_stat_seq_stop(struct seq_file *seq, void *v)
 
 }
 
+//显示邻居表项的状态信息
 static int neigh_stat_seq_show(struct seq_file *seq, void *v)
 {
 	struct neigh_table *tbl = PDE_DATA(file_inode(seq->file));

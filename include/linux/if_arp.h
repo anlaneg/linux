@@ -38,6 +38,7 @@ static inline unsigned int arp_hdr_len(const struct net_device *dev)
 #endif
 	default:
 		/* ARP header, plus 2 device addresses, plus 2 IP addresses. */
+	    //arp以太头长度（注意：arphdr定义中并不包含mac地址与ip地址）
 		return sizeof(struct arphdr) + (dev->addr_len + sizeof(u32)) * 2;
 	}
 }

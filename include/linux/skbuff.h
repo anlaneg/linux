@@ -1713,6 +1713,7 @@ static inline void __skb_header_release(struct sk_buff *skb)
  */
 static inline int skb_shared(const struct sk_buff *skb)
 {
+    /*如果此buffer被多个人使用，则此buffer认为被共享*/
 	return refcount_read(&skb->users) != 1;
 }
 

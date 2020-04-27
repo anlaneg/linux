@@ -749,6 +749,7 @@ static const struct file_operations vhost_vdpa_fops = {
 	.open		= vhost_vdpa_open,
 	.release	= vhost_vdpa_release,
 	.write_iter	= vhost_vdpa_chr_write_iter,
+	//完成vhost控制面协商
 	.unlocked_ioctl	= vhost_vdpa_unlocked_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 };
@@ -763,6 +764,7 @@ static void vhost_vdpa_release_dev(struct device *device)
 	kfree(v);
 }
 
+//适配vhost-vdap设备
 static int vhost_vdpa_probe(struct vdpa_device *vdpa)
 {
 	const struct vdpa_config_ops *ops = vdpa->config;
@@ -806,6 +808,7 @@ static int vhost_vdpa_probe(struct vdpa_device *vdpa)
 	if (r)
 		goto err;
 
+	//初始化字符设备的操作集
 	cdev_init(&v->cdev, &vhost_vdpa_fops);
 	v->cdev.owner = THIS_MODULE;
 
@@ -852,11 +855,13 @@ static int __init vhost_vdpa_init(void)
 {
 	int r;
 
+	//注册vhost-vdpa字符设备
 	r = alloc_chrdev_region(&vhost_vdpa_major, 0, VHOST_VDPA_DEV_MAX,
 				"vhost-vdpa");
 	if (r)
 		goto err_alloc_chrdev;
 
+	//注册vdap驱动
 	r = vdpa_register_driver(&vhost_vdpa_driver);
 	if (r)
 		goto err_vdpa_register_driver;

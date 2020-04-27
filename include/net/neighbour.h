@@ -183,6 +183,7 @@ struct neigh_ops {
 	int			(*connected_output)(struct neighbour *, struct sk_buff *);
 };
 
+//代理邻居表项
 struct pneigh_entry {
 	struct pneigh_entry	*next;
 	possible_net_t		net;
@@ -414,11 +415,11 @@ void pneigh_for_each(struct neigh_table *tbl,
 
 struct neigh_seq_state {
 	struct seq_net_private p;
-	struct neigh_table *tbl;
-	struct neigh_hash_table *nht;
+	struct neigh_table *tbl;/*所属的neighbour表*/
+	struct neigh_hash_table *nht;/*对应的哈希表*/
 	void *(*neigh_sub_iter)(struct neigh_seq_state *state,
 				struct neighbour *n, loff_t *pos);
-	unsigned int bucket;
+	unsigned int bucket;/*当前访问所处的桶*/
 	unsigned int flags;
 #define NEIGH_SEQ_NEIGH_ONLY	0x00000001
 #define NEIGH_SEQ_IS_PNEIGH	0x00000002

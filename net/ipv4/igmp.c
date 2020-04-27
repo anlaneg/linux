@@ -1780,6 +1780,7 @@ static void ip_mc_reset(struct in_device *in_dev)
 }
 #endif
 
+//ipv4设备组播初始化
 void ip_mc_init_dev(struct in_device *in_dev)
 {
 	ASSERT_RTNL();

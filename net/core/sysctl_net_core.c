@@ -442,7 +442,7 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_dointvec_jiffies,
 	},
 	{
-		.procname	= "message_burst",
+		.procname	= "message_burst",//每秒消息触发数
 		.data		= &net_ratelimit_state.burst,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,

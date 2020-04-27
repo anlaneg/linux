@@ -626,12 +626,13 @@ static int htb_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 		}
 #ifdef CONFIG_NET_CLS_ACT
 	} else if (!cl) {
+	    /*没有确定分类，丢包*/
 		if (ret & __NET_XMIT_BYPASS)
 			qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);
 		return ret;
 #endif
-	} else if ((ret = qdisc_enqueue(skb, cl->leaf.q,
+	} else if ((ret = qdisc_enqueue(skb, cl->leaf.q,/*将报文入队列cl对应的q*/
 					to_free)) != NET_XMIT_SUCCESS) {
 		//找到了此skb对应的class,但将报文入到队列时，失败。
 		if (net_xmit_drop_count(ret)) {
@@ -891,6 +892,7 @@ next:
 			goto next;
 		}
 
+		//自叶子节点出队
 		skb = cl->leaf.q->dequeue(cl->leaf.q);
 		if (likely(skb != NULL))
 			break;
@@ -1236,6 +1238,7 @@ static void htb_parent_to_leaf(struct htb_sched *q, struct htb_class *cl,
 
 	parent->level = 0;
 	memset(&parent->inner, 0, sizeof(parent->inner));
+	/*如果未给定队列，则使用noop_qdisc*/
 	parent->leaf.q = new_q ? new_q : &noop_qdisc;
 	parent->tokens = parent->buffer;
 	parent->ctokens = parent->cbuffer;

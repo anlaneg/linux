@@ -24,6 +24,7 @@
 
 #include "disasm.h"
 
+//定义各bpf 程序类型对应的verifier操作集
 static const struct bpf_verifier_ops * const bpf_verifier_ops[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	[_id] = & _name ## _verifier_ops,
