@@ -144,6 +144,8 @@ x509.genkey
 
 # Kdevelop4
 *.kdev4
+#for eclipse config.h
+5.4.19-config.h
 
 # Clang's compilation database file
 /compile_commands.json
