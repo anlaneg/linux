@@ -795,9 +795,9 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
  */
 	//解arp负载
 	arp_ptr = (unsigned char *)(arp + 1);
-	sha	= arp_ptr;//发送方硬件地址
+	sha	= arp_ptr;//取发送方硬件地址
 	arp_ptr += dev->addr_len;
-	memcpy(&sip, arp_ptr, 4);//发送方ip
+	memcpy(&sip, arp_ptr, 4);//取发送方ip
 	arp_ptr += 4;
 	switch (dev_type) {
 #if IS_ENABLED(CONFIG_FIREWIRE_NET)
@@ -805,10 +805,10 @@ static int arp_process(struct net *net, struct sock *sk, struct sk_buff *skb)
 		break;
 #endif
 	default:
-		tha = arp_ptr;//目标方硬件地址
+		tha = arp_ptr;//取目标方硬件地址
 		arp_ptr += dev->addr_len;
 	}
-	memcpy(&tip, arp_ptr, 4);//目标方ip
+	memcpy(&tip, arp_ptr, 4);//取目标方ip
 /*
  *	Check for bad requests for 127.x.x.x and requests for multicast
  *	addresses.  If this is one such, delete it.

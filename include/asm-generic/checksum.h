@@ -51,11 +51,25 @@ extern __sum16 ip_fast_csum(const void *iph, unsigned int ihl);
 /*
  * Fold a partial checksum
  */
+//1、 先将需要计算checksum数据中的checksum设为0； 
+//2、 计算checksum的数据按2byte划分开来，每2byte组成一个16bit的值，如果最后有单个byte的数据，补一个byte的0组成2byte； 
+//3、 将所有的16bit值累加到一个32bit的值中； 
+//4、 将32bit值的高16bit与低16bit相加到一个新的32bit值中，若新的32bit值大于0Xffff, 
+//再将新值的高16bit与低16bit相加； 
+//5、 将上一步计算所得的16bit值按位取反，即得到checksum值，存入数据的checksum字段即可。
+//此函数完成4,5步
 static inline __sum16 csum_fold(__wsum csum)
 {
+    //考虑任意的csum,(sum & 0xffff) <= 0xffff
+    //且 (sum >> 16) <= 0xffff
+    //所以 (sum & 0xffff) + (sum >>16) <= 0x1fffe
+    //此时，如果其<= 0xffff,则其再计算一次合结果不变
+    //      如果其>0xffff && <=0x1fffe,则其值最大为0xffff
+    //故下面的代码通过两次计算获得16位的sum
 	u32 sum = (__force u32)csum;
 	sum = (sum & 0xffff) + (sum >> 16);
 	sum = (sum & 0xffff) + (sum >> 16);
+    //按checksum计算方法，其最终结果需要取反
 	return (__force __sum16)~sum;
 }
 #endif

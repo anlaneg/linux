@@ -384,6 +384,7 @@ static void set_ip_addr(struct sk_buff *skb, struct iphdr *nh,
 	*addr = new_addr;
 }
 
+//更新ipv6的checksum
 static void update_ipv6_checksum(struct sk_buff *skb, u8 l4_proto,
 				 __be32 addr[4], const __be32 new_addr[4])
 {

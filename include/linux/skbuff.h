@@ -3958,6 +3958,8 @@ __sum16 __skb_checksum_complete(struct sk_buff *skb);
 
 static inline int skb_csum_unnecessary(const struct sk_buff *skb)
 {
+    //如果没必要检查checksum或者checksum已确认有效，或者
+    //只需要执行一部分checksum检查，且checksum start offset大于零，则没必要执行checksum检查
 	return ((skb->ip_summed == CHECKSUM_UNNECESSARY) ||
 		skb->csum_valid ||
 		(skb->ip_summed == CHECKSUM_PARTIAL &&
@@ -4017,6 +4019,7 @@ static inline bool __skb_checksum_validate_needed(struct sk_buff *skb,
 						  __sum16 check)
 {
 	if (skb_csum_unnecessary(skb) || (zero_okay && !check)) {
+        /*不需要执行checksum检查*/
 		skb->csum_valid = 1;
 		__skb_decr_checksum_unnecessary(skb);
 		return false;
@@ -4056,19 +4059,22 @@ static inline __sum16 __skb_checksum_validate_complete(struct sk_buff *skb,
 						       __wsum psum)
 {
 	if (skb->ip_summed == CHECKSUM_COMPLETE) {
+        /*当前为complete,skb->csum中保存的为不含伪头的checksum,加上伪头并折叠后，如果为0,则校验通过*/
 		if (!csum_fold(csum_add(psum, skb->csum))) {
 			skb->csum_valid = 1;
 			return 0;
 		}
 	}
 
+    /*此时校验未通过，或者ip_summed非complete,在csum中先保存伪头*/
 	skb->csum = psum;
 
 	if (complete || skb->len <= CHECKSUM_BREAK) {
+        /*如果指明要完全检查，或者skb长度比较小，则执行完整检查*/
 		__sum16 csum;
 
 		csum = __skb_checksum_complete(skb);
-		skb->csum_valid = !csum;
+		skb->csum_valid = !csum;/*仅checksum为0时，则校验通过*/
 		return csum;
 	}
 
@@ -4097,11 +4103,12 @@ static inline __wsum null_compute_pseudo(struct sk_buff *skb, int proto)
 	skb->csum_valid = 0;						\
 	if (__skb_checksum_validate_needed(skb, zero_okay, check))	\
 		__ret = __skb_checksum_validate_complete(skb,		\
-				complete, compute_pseudo(skb, proto)/*伪头对应的checksum*/);	\
+				complete, compute_pseudo(skb, proto)/*计算伪头对应的checksum*/);	\
 	__ret;								\
 })
 
-#define skb_checksum_init(skb, proto, compute_pseudo)			\
+//校验skb的checksum
+#define skb_checksum_init(skb, proto, compute_pseudo/*伪头计算函数*/)			\
 	__skb_checksum_validate(skb, proto, false, false, 0, compute_pseudo)
 
 #define skb_checksum_init_zero_check(skb, proto, check, compute_pseudo)	\

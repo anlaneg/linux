@@ -54,6 +54,7 @@ static __inline__ __wsum csum_and_copy_to_user
 #endif
 
 #ifndef HAVE_ARCH_CSUM_ADD
+//checksum 按bit32方式进行加，如果有进位，则进位回加
 static inline __wsum csum_add(__wsum csum, __wsum addend)
 {
 	u32 res = (__force u32)csum;
@@ -62,6 +63,7 @@ static inline __wsum csum_add(__wsum csum, __wsum addend)
 }
 #endif
 
+//checksum 按bit32方式进移除
 static inline __wsum csum_sub(__wsum csum, __wsum addend)
 {
 	return csum_add(csum, ~addend);
@@ -104,11 +106,13 @@ csum_block_sub(__wsum csum, __wsum csum2, int offset)
 	return csum_block_add(csum, ~csum2, offset);
 }
 
+//不对checksum进行拆叠，直接返回
 static inline __wsum csum_unfold(__sum16 n)
 {
 	return (__force __wsum)n;
 }
 
+//计算长度为len的buff对应的checksum,并合上sum(但不进行折叠）
 static inline __wsum csum_partial_ext(const void *buff, int len, __wsum sum)
 {
 	return csum_partial(buff, len, sum);

@@ -2760,6 +2760,7 @@ __wsum __skb_checksum(const struct sk_buff *skb, int offset, int len,
 }
 EXPORT_SYMBOL(__skb_checksum);
 
+//自报文的offset位置开始计算长度为len的checksum,并合上已有的csum
 __wsum skb_checksum(const struct sk_buff *skb, int offset,
 		    int len, __wsum csum)
 {
@@ -2889,8 +2890,10 @@ __sum16 __skb_checksum_complete(struct sk_buff *skb)
 	__wsum csum;
 	__sum16 sum;
 
+    //计算当前内容的checksum
 	csum = skb_checksum(skb, 0, skb->len, 0);
 
+    //skb->csum中保存的为伪头，合上它，并折叠，得到最终checksum
 	sum = csum_fold(csum_add(skb->csum, csum));
 	/* This check is inverted, because we already knew the hardware
 	 * checksum is invalid before calling this function. So, if the
@@ -2900,6 +2903,7 @@ __sum16 __skb_checksum_complete(struct sk_buff *skb)
 	 * when moving skb->data around.
 	 */
 	if (likely(!sum)) {
+        /*经校验checksum为0,此时说明原来的skb->csum是错的，告警*/
 		if (unlikely(skb->ip_summed == CHECKSUM_COMPLETE) &&
 		    !skb->csum_complete_sw)
 			netdev_rx_csum_fault(skb->dev, skb);

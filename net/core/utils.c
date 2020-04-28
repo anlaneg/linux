@@ -459,6 +459,12 @@ void inet_proto_csum_replace16(__sum16 *sum, struct sk_buff *skb,
 			       const __be32 *from, const __be32 *to,
 			       bool pseudohdr)
 {
+    //*sum中保存着原来的checksum,通过~csum_unfold即可将其还原为折叠未取反前的结果
+    //csum_partial 是一个checksum计算函数，但其仅计算到32bit结果，即不进行折叠
+    //csum_fold 会将计算的checksum折叠取反，从而得到正确的checksum
+    //如果提供了参数pseudohdr,则仅折叠但不取反，以便能继续进行checksum计算
+
+    //对from取反，相当于自checksum中移除掉(减去）原来对from[0]....[4]的加操作
 	__be32 diff[] = {
 		~from[0], ~from[1], ~from[2], ~from[3],
 		to[0], to[1], to[2], to[3],
@@ -475,6 +481,11 @@ EXPORT_SYMBOL(inet_proto_csum_replace16);
 void inet_proto_csum_replace_by_diff(__sum16 *sum, struct sk_buff *skb,
 				     __wsum diff, bool pseudohdr)
 {
+    //*sum中保存着原来的checksum,~csum_unfold相当于对checksum取反，即得到未取反前结果
+    //csum_add按bit32方式进行checksum计算
+    //csum_fold进行checksum折叠取反，故*sum中将保存调整后的checksum
+
+    //如果有pseudohdr,则用调整后不折叠的值来更新skb->csum
 	if (skb->ip_summed != CHECKSUM_PARTIAL) {
 		*sum = csum_fold(csum_add(diff, ~csum_unfold(*sum)));
 		if (skb->ip_summed == CHECKSUM_COMPLETE && pseudohdr)

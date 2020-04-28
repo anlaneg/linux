@@ -320,7 +320,7 @@ static int nf_flow_nat_ipv6_tcp(struct sk_buff *skb, unsigned int thoff,
 		return -1;
 
 	tcph = (void *)(skb_network_header(skb) + thoff);
-	inet_proto_csum_replace16(&tcph->check, skb, addr->s6_addr32,
+	inet_proto_csum_replace16(&tcph->check/*tcp层checksum*/, skb, addr->s6_addr32/*旧的地址*/,
 				  new_addr->s6_addr32, true);
 
 	return 0;
