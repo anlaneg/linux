@@ -1635,6 +1635,7 @@ struct bpf_scratchpad {
 
 static DEFINE_PER_CPU(struct bpf_scratchpad, bpf_sp);
 
+/*确保skb前write_len字段可写*/
 static inline int __bpf_try_make_writable(struct sk_buff *skb,
 					  unsigned int write_len)
 {
@@ -1644,8 +1645,10 @@ static inline int __bpf_try_make_writable(struct sk_buff *skb,
 static inline int bpf_try_make_writable(struct sk_buff *skb,
 					unsigned int write_len)
 {
+    /*确保skb前write_len字段可写*/
 	int err = __bpf_try_make_writable(skb, write_len);
 
+	//防止copy,更新bpf元数据信息
 	bpf_compute_data_pointers(skb);
 	return err;
 }
@@ -1929,7 +1932,7 @@ static const struct bpf_func_proto bpf_l3_csum_replace_proto = {
 	.arg5_type	= ARG_ANYTHING,
 };
 
-BPF_CALL_5(bpf_l4_csum_replace, struct sk_buff *, skb, u32, offset,
+BPF_CALL_5(bpf_l4_csum_replace, struct sk_buff *, skb, u32, offset/*到报文l4层checksum字段的offset*/,
 	   u64, from, u64, to, u64, flags)
 {
 	bool is_pseudo = flags & BPF_F_PSEUDO_HDR;
@@ -1943,9 +1946,11 @@ BPF_CALL_5(bpf_l4_csum_replace, struct sk_buff *, skb, u32, offset,
 		return -EINVAL;
 	if (unlikely(offset > 0xffff || offset & 1))
 		return -EFAULT;
+	/*确保checksum字段可写*/
 	if (unlikely(bpf_try_make_writable(skb, offset + sizeof(*ptr))))
 		return -EFAULT;
 
+	/*取l4层的checksum字段位置*/
 	ptr = (__sum16 *)(skb->data + offset);
 	if (is_mmzero && !do_mforce && !*ptr)
 		return 0;
@@ -1955,18 +1960,22 @@ BPF_CALL_5(bpf_l4_csum_replace, struct sk_buff *, skb, u32, offset,
 		if (unlikely(from != 0))
 			return -EINVAL;
 
+		/*这种是push数据时使用，from必须为0*/
 		inet_proto_csum_replace_by_diff(ptr, skb, to, is_pseudo);
 		break;
 	case 2:
+	    //2字节替换情况
 		inet_proto_csum_replace2(ptr, skb, from, to, is_pseudo);
 		break;
 	case 4:
+	    //4字节替换情况
 		inet_proto_csum_replace4(ptr, skb, from, to, is_pseudo);
 		break;
 	default:
 		return -EINVAL;
 	}
 
+	/*更新checksum为0xffff*/
 	if (is_mmzero && !*ptr)
 		*ptr = CSUM_MANGLED_0;
 	return 0;
@@ -1988,9 +1997,10 @@ BPF_CALL_5(bpf_csum_diff, __be32 *, from, u32, from_size,
 	   __be32 *, to, u32, to_size, __wsum, seed)
 {
 	struct bpf_scratchpad *sp = this_cpu_ptr(&bpf_sp);
-	u32 diff_size = from_size + to_size;
+	u32 diff_size = from_size + to_size;/*总checksum数据长度*/
 	int i, j = 0;
 
+	//只处理三种情况,push数据/pull数据/diff数据
 	/* This is quite flexible, some examples:
 	 *
 	 * from_size == 0, to_size > 0,  seed := csum --> pushing data
@@ -2003,11 +2013,13 @@ BPF_CALL_5(bpf_csum_diff, __be32 *, from, u32, from_size,
 		     diff_size > sizeof(sp->diff)))
 		return -EINVAL;
 
+	//构造数据checksum数据，减去from,加上to
 	for (i = 0; i < from_size / sizeof(__be32); i++, j++)
 		sp->diff[j] = ~from[i];
 	for (i = 0; i <   to_size / sizeof(__be32); i++, j++)
 		sp->diff[j] = to[i];
 
+	//计算checksum
 	return csum_partial(sp->diff, diff_size, seed);
 }
 

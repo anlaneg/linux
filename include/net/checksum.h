@@ -125,6 +125,7 @@ static inline void csum_replace_by_diff(__sum16 *sum, __wsum diff)
 	*sum = csum_fold(csum_add(diff, ~csum_unfold(*sum)));
 }
 
+//checksum 减掉from,加上to并折叠，完成更新
 static inline void csum_replace4(__sum16 *sum, __be32 from, __be32 to)
 {
 	__wsum tmp = csum_sub(~csum_unfold(*sum), (__force __wsum)from);
@@ -152,7 +153,8 @@ void inet_proto_csum_replace16(__sum16 *sum, struct sk_buff *skb,
 void inet_proto_csum_replace_by_diff(__sum16 *sum, struct sk_buff *skb,
 				     __wsum diff, bool pseudohdr);
 
-static inline void inet_proto_csum_replace2(__sum16 *sum, struct sk_buff *skb,
+/*更新checksum 2字节情况*/
+static inline void inet_proto_csum_replace2(__sum16 *sum/*待填充的checksum字段*/, struct sk_buff *skb,
 					    __be16 from, __be16 to,
 					    bool pseudohdr)
 {

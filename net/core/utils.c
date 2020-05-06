@@ -422,16 +422,20 @@ bool inet_addr_is_any(struct sockaddr *addr)
 }
 EXPORT_SYMBOL(inet_addr_is_any);
 
+//更新checksum 4字节情况
 void inet_proto_csum_replace4(__sum16 *sum, struct sk_buff *skb,
 			      __be32 from, __be32 to, bool pseudohdr)
 {
 	if (skb->ip_summed != CHECKSUM_PARTIAL) {
+	    /*完成checksum更新*/
 		csum_replace4(sum, from, to);
 		if (skb->ip_summed == CHECKSUM_COMPLETE && pseudohdr)
+		    /*更新负载的check sum*/
 			skb->csum = ~csum_add(csum_sub(~(skb->csum),
 						       (__force __wsum)from),
 					      (__force __wsum)to);
 	} else if (pseudohdr)
+	    /*partial情况，仅更新checksum*/
 		*sum = ~csum_fold(csum_add(csum_sub(csum_unfold(*sum),
 						    (__force __wsum)from),
 					   (__force __wsum)to));

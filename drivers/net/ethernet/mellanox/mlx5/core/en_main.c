@@ -4281,6 +4281,7 @@ static netdev_features_t mlx5e_tunnel_features_check(struct mlx5e_priv *priv,
 
 	switch (vlan_get_protocol(skb)) {
 	case htons(ETH_P_IP):
+	    //取l4层协议
 		proto = ip_hdr(skb)->protocol;
 		break;
 	case htons(ETH_P_IPV6):
@@ -4299,6 +4300,7 @@ static netdev_features_t mlx5e_tunnel_features_check(struct mlx5e_priv *priv,
 			return features;
 		break;
 	case IPPROTO_UDP:
+	    //取udp报文的目的port
 		udph = udp_hdr(skb);
 		port = be16_to_cpu(udph->dest);
 
