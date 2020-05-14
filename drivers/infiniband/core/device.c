@@ -89,13 +89,13 @@ EXPORT_SYMBOL_GPL(ib_wq);
  * registered, and keep it registered, for the required duration.
  *
  */
-static DEFINE_XARRAY_FLAGS(devices, XA_FLAGS_ALLOC);
+static DEFINE_XARRAY_FLAGS(devices, XA_FLAGS_ALLOC);/*保存所有ib设备*/
 static DECLARE_RWSEM(devices_rwsem);
 #define DEVICE_REGISTERED XA_MARK_1
 
-static u32 highest_client_id;
+static u32 highest_client_id;/*维护全局的client id*/
 #define CLIENT_REGISTERED XA_MARK_1
-static DEFINE_XARRAY_FLAGS(clients, XA_FLAGS_ALLOC);
+static DEFINE_XARRAY_FLAGS(clients, XA_FLAGS_ALLOC);/*保存所有client*/
 static DECLARE_RWSEM(clients_rwsem);
 
 static void ib_client_put(struct ib_client *client)
@@ -139,6 +139,7 @@ MODULE_PARM_DESC(netns_mode,
  */
 bool rdma_dev_access_netns(const struct ib_device *dev, const struct net *net)
 {
+    /*检查dev是否在net namespace中可见*/
 	return (ib_devices_shared_netns ||
 		net_eq(read_pnet(&dev->coredev.rdma_net), net));
 }
@@ -675,6 +676,7 @@ static int add_client_context(struct ib_device *device,
 	 */
 	if (xa_get_mark(&device->client_data, client->client_id,
 		    CLIENT_DATA_REGISTERED))
+	    /*如果client_data已注册，则跳出*/
 		goto out;
 
 	ret = xa_err(xa_store(&device->client_data, client->client_id, NULL,
@@ -686,6 +688,7 @@ static int add_client_context(struct ib_device *device,
 		client->add(device);
 
 	/* Readers shall not see a client until add has been completed */
+	//标记client data已注册
 	xa_set_mark(&device->client_data, client->client_id,
 		    CLIENT_DATA_REGISTERED);
 	up_read(&device->client_data_rwsem);
@@ -805,6 +808,7 @@ static int setup_port_data(struct ib_device *device)
 	return 0;
 }
 
+/*如果驱动提供了回调，则获取并返回，否则返回NULL*/
 void ib_get_device_fw_str(struct ib_device *dev, char *str)
 {
 	if (dev->ops.get_dev_fw_str)
@@ -1700,6 +1704,7 @@ static struct pernet_operations rdma_dev_net_ops = {
 	.size = sizeof(struct rdma_dev_net),
 };
 
+//分配client id
 static int assign_client_id(struct ib_client *client)
 {
 	int ret;
@@ -1716,6 +1721,7 @@ static int assign_client_id(struct ib_client *client)
 		goto out;
 
 	highest_client_id++;
+	//标记client为已注册
 	xa_set_mark(&clients, client->client_id, CLIENT_REGISTERED);
 
 out:
@@ -1759,6 +1765,7 @@ int ib_register_client(struct ib_client *client)
 		return ret;
 
 	down_read(&devices_rwsem);
+	//遍历所有已注册的devices
 	xa_for_each_marked (&devices, index, device, DEVICE_REGISTERED) {
 		ret = add_client_context(device, client);
 		if (ret) {
@@ -1898,6 +1905,7 @@ int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 		ret = __ib_get_global_client_nl_info(client_name, res);
 #ifdef CONFIG_MODULES
 	if (ret == -ENOENT) {
+	    /*加载module后，再获取一次*/
 		request_module("rdma-client-%s", client_name);
 		if (ibdev)
 			ret = __ib_get_client_nl_info(ibdev, client_name, res);
@@ -1935,6 +1943,7 @@ void ib_set_client_data(struct ib_device *device, struct ib_client *client,
 	if (WARN_ON(IS_ERR(data)))
 		data = NULL;
 
+	/*将client加入到device->client_data中*/
 	rc = xa_store(&device->client_data, client->client_id, data,
 		      GFP_KERNEL);
 	WARN_ON(xa_is_err(rc));
@@ -2319,22 +2328,26 @@ void ib_enum_all_roce_netdevs(roce_netdev_filter filter,
  *
  * Enumerates all ib_devices and calls callback() on each device.
  */
-int ib_enum_all_devs(nldev_callback nldev_cb, struct sk_buff *skb,
+int ib_enum_all_devs(nldev_callback nldev_cb/*处理dev的回调*/, struct sk_buff *skb,
 		     struct netlink_callback *cb)
 {
+    //枚举所有已注册的ib设备，并通过nldev_cb处理它们
 	unsigned long index;
 	struct ib_device *dev;
 	unsigned int idx = 0;
 	int ret = 0;
 
 	down_read(&devices_rwsem);
+	//枚举所有已注册的ib设备
 	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED) {
+	    //dev必须是当前socket所属net namespace可见的
 		if (!rdma_dev_access_netns(dev, sock_net(skb->sk)))
 			continue;
 
-		ret = nldev_cb(dev, skb, cb, idx);
+		//通过nldev_cb处理此dev
+		ret = nldev_cb(dev, skb, cb, idx/*已回调的设备数目*/);
 		if (ret)
-			break;
+			break;/*返回非0，则停止枚举*/
 		idx++;
 	}
 	up_read(&devices_rwsem);

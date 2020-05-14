@@ -71,8 +71,8 @@ const char *__attribute_const__ rdma_event_msg(enum rdma_cm_event_type event);
 #define RDMA_IB_IP_PS_IB     0x00000000013F0000ULL
 
 struct rdma_addr {
-	struct sockaddr_storage src_addr;
-	struct sockaddr_storage dst_addr;
+	struct sockaddr_storage src_addr;//源地址
+	struct sockaddr_storage dst_addr;//目的地址
 	struct rdma_dev_addr dev_addr;
 };
 

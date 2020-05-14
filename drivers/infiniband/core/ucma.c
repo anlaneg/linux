@@ -77,7 +77,7 @@ struct ucma_file {
 	struct mutex		mut;
 	struct file		*filp;
 	struct list_head	ctx_list;
-	struct list_head	event_list;
+	struct list_head	event_list;//提供事件挂接（用户态通过此获取相应事件）
 	wait_queue_head_t	poll_wait;
 	struct workqueue_struct	*close_wq;
 };
@@ -86,7 +86,7 @@ struct ucma_context {
 	u32			id;
 	struct completion	comp;
 	refcount_t		ref;
-	int			events_reported;
+	int			events_reported;/*事件报告次数*/
 	int			backlog;
 
 	struct ucma_file	*file;
@@ -99,7 +99,7 @@ struct ucma_context {
 	/* mark that device is in process of destroying the internal HW
 	 * resources, protected by the ctx_table lock
 	 */
-	int			closing;
+	int			closing;/*标记正在关闭*/
 	/* sync between removal event and id destroy, protected by file mut */
 	int			destroying;
 	struct work_struct	close_work;
@@ -125,7 +125,7 @@ struct ucma_event {
 	struct work_struct	close_work;
 };
 
-static DEFINE_XARRAY_ALLOC(ctx_table);
+static DEFINE_XARRAY_ALLOC(ctx_table);/*保存ucma_context*/
 static DEFINE_XARRAY_ALLOC(multicast_table);
 
 static const struct file_operations ucma_fops;
@@ -135,6 +135,7 @@ static inline struct ucma_context *_ucma_find_context(int id,
 {
 	struct ucma_context *ctx;
 
+	/*通过id获取context*/
 	ctx = xa_load(&ctx_table, id);
 	if (!ctx)
 		ctx = ERR_PTR(-ENOENT);
@@ -143,6 +144,7 @@ static inline struct ucma_context *_ucma_find_context(int id,
 	return ctx;
 }
 
+/*通过id获得ucma_context*/
 static struct ucma_context *ucma_get_ctx(struct ucma_file *file, int id)
 {
 	struct ucma_context *ctx;
@@ -219,6 +221,7 @@ static struct ucma_context *ucma_alloc_ctx(struct ucma_file *file)
 	ctx->file = file;
 	mutex_init(&ctx->mutex);
 
+	/*申请id,关联对应的context*/
 	if (xa_alloc(&ctx_table, &ctx->id, ctx, xa_limit_32b, GFP_KERNEL))
 		goto error;
 
@@ -337,7 +340,8 @@ static void ucma_removal_event_handler(struct rdma_cm_id *cm_id)
 		pr_err("ucma_removal_event_handler: warning: connect request event wasn't found\n");
 }
 
-static int ucma_event_handler(struct rdma_cm_id *cm_id,
+//添加event
+static int ucma_event_handler(struct rdma_cm_id *cm_id/*event关联的cm_id*/,
 			      struct rdma_cm_event *event)
 {
 	struct ucma_event *uevent;
@@ -383,6 +387,7 @@ static int ucma_event_handler(struct rdma_cm_id *cm_id,
 		goto out;
 	}
 
+	//将用户态event加入到event_list上
 	list_add_tail(&uevent->list, &ctx->file->event_list);
 	wake_up_interruptible(&ctx->file->poll_wait);
 	if (event->event == RDMA_CM_EVENT_DEVICE_REMOVAL)
@@ -392,6 +397,7 @@ out:
 	return ret;
 }
 
+//用户通过此命令获取系统的event
 static ssize_t ucma_get_event(struct ucma_file *file, const char __user *inbuf,
 			      int in_len, int out_len)
 {
@@ -414,9 +420,11 @@ static ssize_t ucma_get_event(struct ucma_file *file, const char __user *inbuf,
 	while (list_empty(&file->event_list)) {
 		mutex_unlock(&file->mut);
 
+		//链表为空，当前文件为非阻塞，则返回again
 		if (file->filp->f_flags & O_NONBLOCK)
 			return -EAGAIN;
 
+		//阻塞等待文件事件链表不为空
 		if (wait_event_interruptible(file->poll_wait,
 					     !list_empty(&file->event_list)))
 			return -ERESTARTSYS;
@@ -424,6 +432,7 @@ static ssize_t ucma_get_event(struct ucma_file *file, const char __user *inbuf,
 		mutex_lock(&file->mut);
 	}
 
+	//事件队列不为空，自链表上摘一个事件
 	uevent = list_entry(file->event_list.next, struct ucma_event, list);
 
 	if (uevent->resp.event == RDMA_CM_EVENT_CONNECT_REQUEST) {
@@ -445,9 +454,11 @@ static ssize_t ucma_get_event(struct ucma_file *file, const char __user *inbuf,
 		goto done;
 	}
 
+	//自链表上移除已通知的事件
 	list_del(&uevent->list);
 	uevent->ctx->events_reported++;
 	if (uevent->mc)
+	    /*如果要组播，则执行组播计数增加*/
 		uevent->mc->events_reported++;
 	kfree(uevent);
 done:
@@ -455,7 +466,8 @@ done:
 	return ret;
 }
 
-static int ucma_get_qp_type(struct rdma_ucm_create_id *cmd, enum ib_qp_type *qp_type)
+//通过cmd铆取要创建的qp type
+static int ucma_get_qp_type(struct rdma_ucm_create_id *cmd, enum ib_qp_type *qp_type/*出参，要创建的qp类型*/)
 {
 	switch (cmd->ps) {
 	case RDMA_PS_TCP:
@@ -483,31 +495,36 @@ static ssize_t ucma_create_id(struct ucma_file *file, const char __user *inbuf,
 	enum ib_qp_type qp_type;
 	int ret;
 
+	/*提供的长度必须大于sizeof(resp)*/
 	if (out_len < sizeof(resp))
 		return -ENOSPC;
 
+	//取create id对应的cmd
 	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
 		return -EFAULT;
 
+	//取要创建的qp类型
 	ret = ucma_get_qp_type(&cmd, &qp_type);
 	if (ret)
 		return ret;
 
 	mutex_lock(&file->mut);
+	/*创建context*/
 	ctx = ucma_alloc_ctx(file);
 	mutex_unlock(&file->mut);
 	if (!ctx)
 		return -ENOMEM;
 
 	ctx->uid = cmd.uid;
-	cm_id = __rdma_create_id(current->nsproxy->net_ns,
+	cm_id = __rdma_create_id(current->nsproxy->net_ns/*当前进程的net namespace*/,
 				 ucma_event_handler, ctx, cmd.ps, qp_type, NULL);
 	if (IS_ERR(cm_id)) {
 		ret = PTR_ERR(cm_id);
 		goto err1;
 	}
 
-	resp.id = ctx->id;
+	resp.id = ctx->id;/*填充响应*/
+	/*将响应填充到response指定的地址内*/
 	if (copy_to_user(u64_to_user_ptr(cmd.response),
 			 &resp, sizeof(resp))) {
 		ret = -EFAULT;
@@ -654,9 +671,11 @@ static ssize_t ucma_bind_ip(struct ucma_file *file, const char __user *inbuf,
 	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
 		return -EFAULT;
 
+	//必须是合法的地址长度
 	if (!rdma_addr_size_in6(&cmd.addr))
 		return -EINVAL;
 
+	/*通过id获取context*/
 	ctx = ucma_get_ctx(file, cmd.id);
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
@@ -694,6 +713,7 @@ static ssize_t ucma_bind(struct ucma_file *file, const char __user *inbuf,
 	return ret;
 }
 
+//响应用户态resolve_ip命令
 static ssize_t ucma_resolve_ip(struct ucma_file *file,
 			       const char __user *inbuf,
 			       int in_len, int out_len)
@@ -709,6 +729,7 @@ static ssize_t ucma_resolve_ip(struct ucma_file *file,
 	    !rdma_addr_size_in6(&cmd.dst_addr))
 		return -EINVAL;
 
+	/*通过id找到context*/
 	ctx = ucma_get_ctx(file, cmd.id);
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
@@ -1071,7 +1092,7 @@ static ssize_t ucma_connect(struct ucma_file *file, const char __user *inbuf,
 			    int in_len, int out_len)
 {
 	struct rdma_ucm_connect cmd;
-	struct rdma_conn_param conn_param;
+	struct rdma_conn_param conn_param;/*连接参数，来源于客户端*/
 	struct ucma_context *ctx;
 	int ret;
 
@@ -1672,9 +1693,9 @@ file_put:
 static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 				   const char __user *inbuf,
 				   int in_len, int out_len) = {
-	[RDMA_USER_CM_CMD_CREATE_ID] 	 = ucma_create_id,
-	[RDMA_USER_CM_CMD_DESTROY_ID]	 = ucma_destroy_id,
-	[RDMA_USER_CM_CMD_BIND_IP]	 = ucma_bind_ip,
+	[RDMA_USER_CM_CMD_CREATE_ID] 	 = ucma_create_id,/*创建context*/
+	[RDMA_USER_CM_CMD_DESTROY_ID]	 = ucma_destroy_id,/*销毁context*/
+	[RDMA_USER_CM_CMD_BIND_IP]	 = ucma_bind_ip,/*绑定设置源地址*/
 	[RDMA_USER_CM_CMD_RESOLVE_IP]	 = ucma_resolve_ip,
 	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,
 	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,
@@ -1684,7 +1705,7 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_REJECT]	 = ucma_reject,
 	[RDMA_USER_CM_CMD_DISCONNECT]	 = ucma_disconnect,
 	[RDMA_USER_CM_CMD_INIT_QP_ATTR]	 = ucma_init_qp_attr,
-	[RDMA_USER_CM_CMD_GET_EVENT]	 = ucma_get_event,
+	[RDMA_USER_CM_CMD_GET_EVENT]	 = ucma_get_event,/*用户态通过此命令返回event*/
 	[RDMA_USER_CM_CMD_GET_OPTION]	 = NULL,
 	[RDMA_USER_CM_CMD_SET_OPTION]	 = ucma_set_option,
 	[RDMA_USER_CM_CMD_NOTIFY]	 = ucma_notify,
@@ -1723,10 +1744,11 @@ static ssize_t ucma_write(struct file *filp, const char __user *buf,
 	if (hdr.in + sizeof(hdr) > len)
 		return -EINVAL;
 
+	//命令缺失
 	if (!ucma_cmd_table[hdr.cmd])
 		return -ENOSYS;
 
-	//执行相应的命令
+	//执行相应的命令并填充响应数据到用户态
 	ret = ucma_cmd_table[hdr.cmd](file, buf + sizeof(hdr), hdr.in, hdr.out);
 	if (!ret)
 		ret = len;
@@ -1864,6 +1886,7 @@ static int __init ucma_init(void)
 {
 	int ret;
 
+	//注册rdma_cm字符设备
 	ret = misc_register(&ucma_misc);
 	if (ret)
 		return ret;

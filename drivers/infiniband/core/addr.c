@@ -206,8 +206,10 @@ int rdma_addr_size(const struct sockaddr *addr)
 }
 EXPORT_SYMBOL(rdma_addr_size);
 
+
 int rdma_addr_size_in6(struct sockaddr_in6 *addr)
 {
+    //返回地址长度
 	int ret = rdma_addr_size((struct sockaddr *) addr);
 
 	return ret <= sizeof(*addr) ? ret : 0;

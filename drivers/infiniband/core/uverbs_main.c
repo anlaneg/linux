@@ -1020,10 +1020,11 @@ static int ib_uverbs_get_nl_info(struct ib_device *ibdev, void *client_data,
 	return 0;
 }
 
+//uverbs ib客户端
 static struct ib_client uverbs_client = {
 	.name   = "uverbs",
 	.no_kverbs_req = true,
-	.add    = ib_uverbs_add_one,
+	.add    = ib_uverbs_add_one,/*添加一个uverbs设备*/
 	.remove = ib_uverbs_remove_one,
 	.get_nl_info = ib_uverbs_get_nl_info,
 };
@@ -1142,8 +1143,10 @@ static void ib_uverbs_add_one(struct ib_device *device)
 		goto err_uapi;
 
 	uverbs_dev->dev.devt = base;
+	/*设置uverbs设备名称*/
 	dev_set_name(&uverbs_dev->dev, "uverbs%d", uverbs_dev->devnum);
 
+	/*设置uverbs字符设备的fops*/
 	cdev_init(&uverbs_dev->cdev,
 		  device->ops.mmap ? &uverbs_mmap_fops : &uverbs_fops);
 	uverbs_dev->cdev.owner = THIS_MODULE;
@@ -1242,6 +1245,7 @@ static char *uverbs_devnode(struct device *dev, umode_t *mode)
 	return kasprintf(GFP_KERNEL, "infiniband/%s", dev_name(dev));
 }
 
+//uverbs模块初始化
 static int __init ib_uverbs_init(void)
 {
 	int ret;
@@ -1277,6 +1281,7 @@ static int __init ib_uverbs_init(void)
 		goto out_class;
 	}
 
+	//uverbs客户端注册
 	ret = ib_register_client(&uverbs_client);
 	if (ret) {
 		pr_err("user_verbs: couldn't register client\n");

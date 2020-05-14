@@ -888,7 +888,7 @@ static inline struct nlmsghdr *nlmsg_put_answer(struct sk_buff *skb,
  * Use NLMSG_DEFAULT_SIZE if the size of the payload isn't known
  * and a good default is needed.
  */
-//申请一个新的netlink消息
+//申请一个指定长度的netlink buffer
 static inline struct sk_buff *nlmsg_new(size_t payload, gfp_t flags)
 {
 	return alloc_skb(nlmsg_total_size(payload), flags);

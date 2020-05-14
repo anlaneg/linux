@@ -364,6 +364,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	int duration;
 	int softlockup_all_cpu_backtrace = sysctl_softlockup_all_cpu_backtrace;
 
+	/*如未开启，则退出*/
 	if (!watchdog_enabled)
 		return HRTIMER_NORESTART;
 
@@ -429,7 +430,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 		}
 
 		pr_emerg("BUG: soft lockup - CPU#%d stuck for %us! [%s:%d]\n",
-			smp_processor_id(), duration,
+			smp_processor_id()/*当前cpu编号*/, duration/*持续时间*/,
 			current->comm, task_pid_nr(current));
 		print_modules();
 		print_irqtrace_events(current);
@@ -459,6 +460,7 @@ static enum hrtimer_restart watchdog_timer_fn(struct hrtimer *hrtimer)
 	return HRTIMER_RESTART;
 }
 
+//开启指定cpu上的watchdog
 static void watchdog_enable(unsigned int cpu)
 {
 	struct hrtimer *hrtimer = this_cpu_ptr(&watchdog_hrtimer);
@@ -526,6 +528,7 @@ static int softlockup_start_fn(void *data)
 	return 0;
 }
 
+/*开始所有cpu上的softlockup watchdog*/
 static void softlockup_start_all(void)
 {
 	int cpu;

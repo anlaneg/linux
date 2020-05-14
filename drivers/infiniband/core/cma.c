@@ -399,6 +399,7 @@ struct cma_req_info {
 	u16 pkey;
 };
 
+//检查当前状态是否为comp
 static int cma_comp(struct rdma_id_private *id_priv, enum rdma_cm_state comp)
 {
 	unsigned long flags;
@@ -416,13 +417,16 @@ static int cma_comp_exch(struct rdma_id_private *id_priv,
 	unsigned long flags;
 	int ret;
 
+	/*如果当前状态为comp,则更新为exch*/
 	spin_lock_irqsave(&id_priv->lock, flags);
 	if ((ret = (id_priv->state == comp)))
 		id_priv->state = exch;
 	spin_unlock_irqrestore(&id_priv->lock, flags);
+	/*返回非0，表示已更新；返回0，表示未更新*/
 	return ret;
 }
 
+//更新状态为exch,返回旧的状态
 static enum rdma_cm_state cma_exch(struct rdma_id_private *id_priv,
 				   enum rdma_cm_state exch)
 {
@@ -507,16 +511,19 @@ static void cma_release_dev(struct rdma_id_private *id_priv)
 	mutex_unlock(&lock);
 }
 
+//取源地址
 static inline struct sockaddr *cma_src_addr(struct rdma_id_private *id_priv)
 {
 	return (struct sockaddr *) &id_priv->id.route.addr.src_addr;
 }
 
+//取目的地址
 static inline struct sockaddr *cma_dst_addr(struct rdma_id_private *id_priv)
 {
 	return (struct sockaddr *) &id_priv->id.route.addr.dst_addr;
 }
 
+//取地址族
 static inline unsigned short cma_family(struct rdma_id_private *id_priv)
 {
 	return id_priv->id.route.addr.src_addr.ss_family;
@@ -864,7 +871,7 @@ struct rdma_cm_id *__rdma_create_id(struct net *net,
 
 	rdma_restrack_set_task(&id_priv->res, caller);
 	id_priv->res.type = RDMA_RESTRACK_CM_ID;
-	id_priv->state = RDMA_CM_IDLE;
+	id_priv->state = RDMA_CM_IDLE;/*设置初始化状态*/
 	id_priv->id.context = context;
 	id_priv->id.event_handler = event_handler;
 	id_priv->id.ps = ps;
@@ -1162,6 +1169,7 @@ static inline bool cma_loopback_addr(const struct sockaddr *addr)
 
 static inline bool cma_any_addr(const struct sockaddr *addr)
 {
+    //是否any地址或者loopback地址
 	return cma_zero_addr(addr) || cma_loopback_addr(addr);
 }
 
@@ -1908,6 +1916,7 @@ static void cma_set_rep_event_data(struct rdma_cm_event *event,
 	event->param.conn.qp_num = rep_data->remote_qpn;
 }
 
+/*事件处理（有部分会通知给用户态）*/
 static int cma_cm_event_handler(struct rdma_id_private *id_priv,
 				struct rdma_cm_event *event)
 {
@@ -2636,6 +2645,7 @@ static int cma_query_ib_route(struct rdma_id_private *id_priv,
 	return (id_priv->query_id < 0) ? id_priv->query_id : 0;
 }
 
+//更新状态，触发事件处理
 static void cma_work_handler(struct work_struct *_work)
 {
 	struct cma_work *work = container_of(_work, struct cma_work, work);
@@ -2643,9 +2653,11 @@ static void cma_work_handler(struct work_struct *_work)
 	int destroy = 0;
 
 	mutex_lock(&id_priv->handler_mutex);
+	//如果状态符合预期（与old_state相等），则执行状态变更
 	if (!cma_comp_exch(id_priv, work->old_state, work->new_state))
 		goto out;
 
+	//触发事件处理函数
 	if (cma_cm_event_handler(id_priv, &work->event)) {
 		cma_exch(id_priv, RDMA_CM_DESTROYING);
 		destroy = 1;
@@ -3195,10 +3207,12 @@ static int cma_bind_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 			 const struct sockaddr *dst_addr)
 {
 	if (!src_addr || !src_addr->sa_family) {
+	    /*没有源地址，执行选源*/
 		src_addr = (struct sockaddr *) &id->route.addr.src_addr;
 		src_addr->sa_family = dst_addr->sa_family;
 		if (IS_ENABLED(CONFIG_IPV6) &&
 		    dst_addr->sa_family == AF_INET6) {
+		    /*目的地址为ipv6地址时*/
 			struct sockaddr_in6 *src_addr6 = (struct sockaddr_in6 *) src_addr;
 			struct sockaddr_in6 *dst_addr6 = (struct sockaddr_in6 *) dst_addr;
 			src_addr6->sin6_scope_id = dst_addr6->sin6_scope_id;
@@ -3218,9 +3232,11 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 	struct rdma_id_private *id_priv;
 	int ret;
 
+	//设置目的地址到id_private
 	id_priv = container_of(id, struct rdma_id_private, id);
 	memcpy(cma_dst_addr(id_priv), dst_addr, rdma_addr_size(dst_addr));
 	if (id_priv->state == RDMA_CM_IDLE) {
+	    //当前状态为idle,则执行地址绑定
 		ret = cma_bind_addr(id, src_addr, dst_addr);
 		if (ret) {
 			memset(cma_dst_addr(id_priv), 0,
@@ -3240,11 +3256,13 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 	}
 
 	if (cma_any_addr(dst_addr)) {
+	    //loopback地址处理
 		ret = cma_resolve_loopback(id_priv);
 	} else {
 		if (dst_addr->sa_family == AF_IB) {
 			ret = cma_resolve_ib_addr(id_priv);
 		} else {
+		    //ip地址处理
 			ret = rdma_resolve_ip(cma_src_addr(id_priv), dst_addr,
 					      &id->route.addr.dev_addr,
 					      timeout_ms, addr_handler,
@@ -3643,16 +3661,19 @@ err:
 }
 EXPORT_SYMBOL(rdma_listen);
 
+//为rdma绑定源地址
 int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 {
 	struct rdma_id_private *id_priv;
 	int ret;
 	struct sockaddr  *daddr;
 
+	//仅支持以下类型地址绑定
 	if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6 &&
 	    addr->sa_family != AF_IB)
 		return -EAFNOSUPPORT;
 
+	//由id获得rdma_id_private结构
 	id_priv = container_of(id, struct rdma_id_private, id);
 	if (!cma_comp_exch(id_priv, RDMA_CM_IDLE, RDMA_CM_ADDR_BOUND))
 		return -EINVAL;
@@ -3661,6 +3682,7 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 	if (ret)
 		goto err1;
 
+	//填充源地址
 	memcpy(cma_src_addr(id_priv), addr, rdma_addr_size(addr));
 	if (!cma_any_addr(addr)) {
 		ret = cma_translate_addr(addr, &id->route.addr.dev_addr);
@@ -3683,6 +3705,7 @@ int rdma_bind_addr(struct rdma_cm_id *id, struct sockaddr *addr)
 		}
 #endif
 	}
+	/*设置daddr协议族*/
 	daddr = cma_dst_addr(id_priv);
 	daddr->sa_family = addr->sa_family;
 
@@ -3981,6 +4004,7 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 	int ret;
 
 	id_priv = container_of(id, struct rdma_id_private, id);
+	/*只能由route_resolved移动到 cm_connect状态*/
 	if (!cma_comp_exch(id_priv, RDMA_CM_ROUTE_RESOLVED, RDMA_CM_CONNECT))
 		return -EINVAL;
 
@@ -4003,6 +4027,7 @@ int rdma_connect(struct rdma_cm_id *id, struct rdma_conn_param *conn_param)
 
 	return 0;
 err:
+    /*处理出错，则由connect降回到route_resolved*/
 	cma_comp_exch(id_priv, RDMA_CM_CONNECT, RDMA_CM_ROUTE_RESOLVED);
 	return ret;
 }
@@ -4657,6 +4682,7 @@ static void cma_add_one(struct ib_device *device)
 	if (!cma_dev->default_roce_tos)
 		goto free_gid_type;
 
+	//遍历所有设备的port
 	rdma_for_each_port (device, i) {
 		supported_gids = roce_gid_type_mask_support(device, i);
 		WARN_ON(!supported_gids);
@@ -4821,6 +4847,7 @@ static int __init cma_init(void)
 	ib_sa_register_client(&sa_client);
 	register_netdevice_notifier(&cma_nb);
 
+	//注册cma客户端
 	ret = ib_register_client(&cma_client);
 	if (ret)
 		goto err;

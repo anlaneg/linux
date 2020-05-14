@@ -226,11 +226,13 @@ int rdma_nl_put_driver_u64_hex(struct sk_buff *msg, const char *name, u64 value)
 }
 EXPORT_SYMBOL(rdma_nl_put_driver_u64_hex);
 
+//填充ib设备index及name
 static int fill_nldev_handle(struct sk_buff *msg, struct ib_device *device)
 {
     //存放ib设备index
 	if (nla_put_u32(msg, RDMA_NLDEV_ATTR_DEV_INDEX, device->index))
 		return -EMSGSIZE;
+
 	//存放ib设备名称
 	if (nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_NAME,
 			   dev_name(&device->dev)))
@@ -239,39 +241,47 @@ static int fill_nldev_handle(struct sk_buff *msg, struct ib_device *device)
 	return 0;
 }
 
+//向msg中填充ib设备dump信息
 static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 {
 	char fw[IB_FW_VERSION_NAME_MAX];
 	int ret = 0;
 	u8 port;
 
+	//填充name及index
 	if (fill_nldev_handle(msg, device))
 		return -EMSGSIZE;
 
 	if (nla_put_u32(msg, RDMA_NLDEV_ATTR_PORT_INDEX, rdma_end_port(device)))
 		return -EMSGSIZE;
 
+	//存放ib设备capabilities
 	BUILD_BUG_ON(sizeof(device->attrs.device_cap_flags) != sizeof(u64));
 	if (nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_CAP_FLAGS,
 			      device->attrs.device_cap_flags,
 			      RDMA_NLDEV_ATTR_PAD))
 		return -EMSGSIZE;
 
+	//填充ib设备的fw信息，如果fw信息返回0，则填充失败
 	ib_get_device_fw_str(device, fw);
 	/* Device without FW has strlen(fw) = 0 */
 	if (strlen(fw) && nla_put_string(msg, RDMA_NLDEV_ATTR_FW_VERSION, fw))
 		return -EMSGSIZE;
 
+	//ib设备所属的numa信息
 	if (nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_NODE_GUID,
 			      be64_to_cpu(device->node_guid),
 			      RDMA_NLDEV_ATTR_PAD))
 		return -EMSGSIZE;
+	//ib设备系统image信息
 	if (nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_SYS_IMAGE_GUID,
 			      be64_to_cpu(device->attrs.sys_image_guid),
 			      RDMA_NLDEV_ATTR_PAD))
 		return -EMSGSIZE;
+	//？？？？
 	if (nla_put_u8(msg, RDMA_NLDEV_ATTR_DEV_NODE_TYPE, device->node_type))
 		return -EMSGSIZE;
+	//？？？？
 	if (nla_put_u8(msg, RDMA_NLDEV_ATTR_DEV_DIM, device->use_cq_dim))
 		return -EMSGSIZE;
 
@@ -280,6 +290,7 @@ static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 	 * which can potentially have two different link type for the same
 	 * IB device is considered as better to be avoided in the future,
 	 */
+	//检查设备功能支持情况（仅检查first port)
 	port = rdma_start_port(device);
 	if (rdma_cap_opa_mad(device, port))
 		ret = nla_put_string(msg, RDMA_NLDEV_ATTR_DEV_PROTOCOL, "opa");
@@ -878,6 +889,7 @@ static int nldev_get_doit(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto err;
 	}
 
+	//构造netlink头部，并填充device信息
 	nlh = nlmsg_put(msg, NETLINK_CB(skb).portid, nlh->nlmsg_seq,
 			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
 			0, 0);
@@ -952,30 +964,35 @@ put_done:
 	return err;
 }
 
-static int _nldev_get_dumpit(struct ib_device *device,
+static int _nldev_get_dumpit(struct ib_device *device/*待dump的ib设备*/,
 			     struct sk_buff *skb,
 			     struct netlink_callback *cb,
-			     unsigned int idx)
+			     unsigned int idx/*枚举编号*/)
 {
 	int start = cb->args[0];
 	struct nlmsghdr *nlh;
 
+	/*未达到start要求的索引，本次不处理*/
 	if (idx < start)
 		return 0;
 
+	//添加一个新的netlink头，用于存放待dump的信息
 	nlh = nlmsg_put(skb, NETLINK_CB(cb->skb).portid, cb->nlh->nlmsg_seq,
-			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),
+			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV, RDMA_NLDEV_CMD_GET),/*指明ib设备get信息*/
 			0, NLM_F_MULTI);
 
+	//填充device信息
 	if (fill_dev_info(skb, device)) {
 		nlmsg_cancel(skb, nlh);
 		goto out;
 	}
 
+	//信息填充结束，指定length
 	nlmsg_end(skb, nlh);
 
 	idx++;
 
+	//保存遍历位置，指报文长度
 out:	cb->args[0] = idx;
 	return skb->len;
 }
@@ -1591,6 +1608,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	err = nlmsg_parse(nlh, 0, tb, RDMA_NLDEV_ATTR_MAX - 1, nldev_policy,
 			  extack);
+	/*传入的消息必须指定chardev_type，例如"uverbs"*/
 	if (err || !tb[RDMA_NLDEV_ATTR_CHARDEV_TYPE])
 		return -EINVAL;
 
@@ -1624,7 +1642,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 	nlh = nlmsg_put(msg, NETLINK_CB(skb).portid, nlh->nlmsg_seq,
 			RDMA_NL_GET_TYPE(RDMA_NL_NLDEV,
-					 RDMA_NLDEV_CMD_GET_CHARDEV),
+					 RDMA_NLDEV_CMD_GET_CHARDEV),/*指明chardev信息获取*/
 			0, 0);
 
 	data.nl_msg = msg;
@@ -2087,12 +2105,13 @@ static int nldev_stat_get_dumpit(struct sk_buff *skb,
 }
 
 static const struct rdma_nl_cbs nldev_cb_table[RDMA_NLDEV_NUM_OPS] = {
+        //用于ib设备信息获取
 	[RDMA_NLDEV_CMD_GET] = {
-		.doit = nldev_get_doit,
-		.dump = nldev_get_dumpit,
+		.doit = nldev_get_doit,//通过index获取指定ib设备信息
+		.dump = nldev_get_dumpit,//dump系统所有ib设备
 	},
 	[RDMA_NLDEV_CMD_GET_CHARDEV] = {
-		.doit = nldev_get_chardev,
+		.doit = nldev_get_chardev,/**/
 	},
 	[RDMA_NLDEV_CMD_SET] = {
 		.doit = nldev_set_doit,

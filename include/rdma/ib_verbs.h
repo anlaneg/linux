@@ -2316,7 +2316,8 @@ struct ib_device_ops {
 			    struct ib_udata *udata);
 	int (*modify_device)(struct ib_device *device, int device_modify_mask,
 			     struct ib_device_modify *device_modify);
-	void (*get_dev_fw_str)(struct ib_device *device, char *str);
+	/*获取ib设备的fw信息*/
+	void (*get_dev_fw_str)(struct ib_device *device, char *str/*出参*/);
 	const struct cpumask *(*get_vector_affinity)(struct ib_device *ibdev,
 						     int comp_vector);
 	int (*query_port)(struct ib_device *device, u8 port_num,
@@ -2620,7 +2621,7 @@ struct ib_core_device {
 	 * union of ib_core_device and device exists in ib_device.
 	 */
 	struct device dev;
-	possible_net_t rdma_net;
+	possible_net_t rdma_net;//设备所属的net namespace
 	struct kobject *ports_kobj;
 	struct list_head port_list;
 	struct ib_device *owner; /* reach back to owner ib_device */
@@ -2630,7 +2631,7 @@ struct rdma_restrack_root;
 struct ib_device {
 	/* Do not access @dma_device directly from ULP nor from HW drivers. */
 	struct device                *dma_device;
-	struct ib_device_ops	     ops;
+	struct ib_device_ops	     ops;/*ib设备操作集*/
 	char                          name[IB_DEVICE_NAME_MAX];
 	struct rcu_head rcu_head;
 
@@ -2686,7 +2687,7 @@ struct ib_device {
 	struct rdmacg_device         cg_device;
 #endif
 
-	u32                          index;
+	u32                          index;/*设备索引*/
 	struct rdma_restrack_root *res;
 
 	const struct uapi_definition   *driver_def;
@@ -2974,6 +2975,7 @@ enum rdma_link_layer rdma_port_get_link_layer(struct ib_device *device,
  */
 static inline bool rdma_cap_ib_switch(const struct ib_device *device)
 {
+    /*设备是否为ib switch*/
 	return device->is_switch;
 }
 
@@ -2995,6 +2997,7 @@ static inline u8 rdma_start_port(const struct ib_device *device)
  * @device - The struct ib_device * to iterate over
  * @iter - The unsigned int to store the port number
  */
+//遍历device的所有port
 #define rdma_for_each_port(device, iter)                                       \
 	for (iter = rdma_start_port(device + BUILD_BUG_ON_ZERO(!__same_type(   \
 						     unsigned int, iter)));    \
@@ -3013,6 +3016,7 @@ static inline u8 rdma_end_port(const struct ib_device *device)
 	return rdma_cap_ib_switch(device) ? 0 : device->phys_port_cnt;
 }
 
+//是否为有效port编号
 static inline int rdma_is_port_valid(const struct ib_device *device,
 				     unsigned int port)
 {

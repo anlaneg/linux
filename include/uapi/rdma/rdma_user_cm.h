@@ -89,7 +89,7 @@ struct rdma_ucm_cmd_hdr {
 
 struct rdma_ucm_create_id {
 	__aligned_u64 uid;
-	__aligned_u64 response;
+	__aligned_u64 response;//响应地址
 	__u16 ps;                  /* use enum rdma_ucm_port_space */
 	__u8  qp_type;
 	__u8  reserved[5];
