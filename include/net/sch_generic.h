@@ -458,6 +458,7 @@ struct tcf_block {
 	struct mutex lock;
 	struct list_head chain_list;//用于记录在此block下所有的struct tcf_chain
 	u32 index; /* block index for shared blocks */ //对应的id
+	u32 classid; /* which class this block belongs to */
 	refcount_t refcnt;
 	struct net *net;//所属net
 	struct Qdisc *q;//所属的Qdisc
