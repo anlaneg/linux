@@ -11,22 +11,25 @@
 
 #define PIPE_PARANOIA /* for now */
 
-#define iterate_iovec(i, n, __v, __p, skip, STEP) {	\
+#define iterate_iovec(i/*待遍历的iov_iter*/, n/*需要复制的字节数*/, __v, __p, skip/*需要跳过的字节数*/, STEP/*复制函数*/) {	\
 	size_t left;					\
 	size_t wanted = n;				\
 	__p = i->iov;					\
+	/*skip后剩余长度*/\
 	__v.iov_len = min(n, __p->iov_len - skip);	\
 	if (likely(__v.iov_len)) {			\
+	    /*剩余长度不为0，构造新的__p，命名为__v*/\
 		__v.iov_base = __p->iov_base + skip;	\
 		left = (STEP);				\
 		__v.iov_len -= left;			\
 		skip += __v.iov_len;			\
 		n -= __v.iov_len;			\
 	} else {					\
+	    /*剩余长度为0*/\
 		left = 0;				\
 	}						\
 	while (unlikely(!left && n)) {			\
-		__p++;					\
+		__p++;/*移动到下一个iov*/					\
 		__v.iov_len = min(n, __p->iov_len);	\
 		if (unlikely(!__v.iov_len))		\
 			continue;			\
@@ -94,8 +97,9 @@
 	}							\
 }
 
-#define iterate_and_advance(i, n, v, I, B, K) {			\
+#define iterate_and_advance(i/*待遍历的iov_iter*/, n/*需要复制的字节数*/, v, I/*内存复制函数*/, B, K) {			\
 	if (unlikely(i->count < n))				\
+	    /*需要复制的字节数大于实际字节数，截短*/\
 		n = i->count;					\
 	if (i->count) {						\
 		size_t skip = i->iov_offset;			\
@@ -144,6 +148,7 @@ static int copyout(void __user *to, const void *from, size_t n)
 	return n;
 }
 
+//自from位置开始复制n个字节到to指向的内存里
 static int copyin(void *to, const void __user *from, size_t n)
 {
 	if (access_ok(from, n)) {
@@ -437,10 +442,11 @@ int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes)
 }
 EXPORT_SYMBOL(iov_iter_fault_in_readable);
 
-void iov_iter_init(struct iov_iter *i, unsigned int direction,
+void iov_iter_init(struct iov_iter *i/*出参，待填充*/, unsigned int direction,
 			const struct iovec *iov, unsigned long nr_segs,
 			size_t count)
 {
+    //当前仅支持read/write两种方向
 	WARN_ON(direction & ~(READ | WRITE));
 	direction &= READ | WRITE;
 
@@ -617,6 +623,7 @@ static size_t csum_and_copy_to_pipe_iter(const void *addr, size_t bytes,
 	return bytes;
 }
 
+/*将from指向的bytes字节内存，复制到i指向的一片或多片内存中*/
 size_t _copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 {
 	const char *from = addr;
@@ -754,6 +761,7 @@ size_t _copy_to_iter_mcsafe(const void *addr, size_t bytes, struct iov_iter *i)
 EXPORT_SYMBOL_GPL(_copy_to_iter_mcsafe);
 #endif /* CONFIG_ARCH_HAS_UACCESS_MCSAFE */
 
+//将i中的bytes个字节，复制到addr指明的内存里
 size_t _copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
 {
 	char *to = addr;
@@ -764,7 +772,7 @@ size_t _copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
 	if (iter_is_iovec(i))
 		might_fault();
 	iterate_and_advance(i, bytes, v,
-		copyin((to += v.iov_len) - v.iov_len, v.iov_base, v.iov_len),
+		copyin((to += v.iov_len) - v.iov_len/*目的地址*/, v.iov_base/*源地址*/, v.iov_len),
 		memcpy_from_page((to += v.bv_len) - v.bv_len, v.bv_page,
 				 v.bv_offset, v.bv_len),
 		memcpy((to += v.iov_len) - v.iov_len, v.iov_base, v.iov_len)

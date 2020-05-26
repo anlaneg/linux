@@ -89,6 +89,7 @@ enum {
 	MLX5E_TC_FLOW_FLAG_DUP		= MLX5E_TC_FLOW_BASE + 4,
 	MLX5E_TC_FLOW_FLAG_NOT_READY	= MLX5E_TC_FLOW_BASE + 5,
 	MLX5E_TC_FLOW_FLAG_DELETED	= MLX5E_TC_FLOW_BASE + 6,
+	//标记为ct相关的flow
 	MLX5E_TC_FLOW_FLAG_CT		= MLX5E_TC_FLOW_BASE + 7,
 };
 
@@ -378,6 +379,7 @@ static void __flow_flag_clear(struct mlx5e_tc_flow *flow, unsigned long flag)
 #define flow_flag_clear(flow, flag) __flow_flag_clear(flow, \
 						      MLX5E_TC_FLOW_FLAG_##flag)
 
+//检查flag标记是否存在
 static bool __flow_flag_test(struct mlx5e_tc_flow *flow, unsigned long flag)
 {
 	bool ret = test_bit(flag, &flow->flags);
@@ -387,6 +389,7 @@ static bool __flow_flag_test(struct mlx5e_tc_flow *flow, unsigned long flag)
 	return ret;
 }
 
+//检查是否存在MLX5E_TC_FLOW_FLAG_XX 标记
 #define flow_flag_test(flow, flag) __flow_flag_test(flow, \
 						    MLX5E_TC_FLOW_FLAG_##flag)
 
@@ -1168,12 +1171,14 @@ mlx5e_tc_offload_fdb_rules(struct mlx5_eswitch *esw,
 	struct mlx5_flow_handle *rule;
 
 	if (flow_flag_test(flow, CT)) {
+	    //ct对应的flow下发
 		mod_hdr_acts = &attr->parse_attr->mod_hdr_acts;
 
 		return mlx5_tc_ct_flow_offload(flow->priv, flow, spec, attr,
 					       mod_hdr_acts);
 	}
 
+	//非ct相关的flow下发
 	rule = mlx5_eswitch_add_offloaded_rule(esw, spec, attr);
 	if (IS_ERR(rule))
 		return rule;

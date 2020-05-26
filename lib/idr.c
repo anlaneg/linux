@@ -384,9 +384,11 @@ int ida_alloc_range(struct ida *ida, unsigned int min, unsigned int max,
 	unsigned long flags;
 	struct ida_bitmap *bitmap, *alloc = NULL;
 
+	//min不能大于2^31
 	if ((int)min < 0)
 		return -ENOSPC;
 
+	//max不得大于2^31
 	if ((int)max < 0)
 		max = INT_MAX;
 
@@ -395,18 +397,23 @@ retry:
 next:
 	bitmap = xas_find_marked(&xas, max / IDA_BITMAP_BITS, XA_FREE_MARK);
 	if (xas.xa_index > min / IDA_BITMAP_BITS)
+	    /*当前索引已超过min,则bit从0开始检测*/
 		bit = 0;
 	if (xas.xa_index * IDA_BITMAP_BITS + bit > max)
+	    /*当前索引已超过max,返回无可用id*/
 		goto nospc;
 
 	if (xa_is_value(bitmap)) {
 		unsigned long tmp = xa_to_value(bitmap);
 
 		if (bit < BITS_PER_XA_VALUE) {
+		    /*在tmp bitmap中找一个未用的bit*/
 			bit = find_next_zero_bit(&tmp, BITS_PER_XA_VALUE, bit);
 			if (xas.xa_index * IDA_BITMAP_BITS + bit > max)
+			    /*检查索引是否超过max,若超过，则返回无可用id*/
 				goto nospc;
 			if (bit < BITS_PER_XA_VALUE) {
+			    /*将此bit标记为'1'并存入*/
 				tmp |= 1UL << bit;
 				xas_store(&xas, xa_mk_value(tmp));
 				goto out;

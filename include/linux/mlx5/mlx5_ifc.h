@@ -1550,10 +1550,12 @@ struct mlx5_ifc_cmd_hca_cap_bits {
 
 enum mlx5_flow_destination_type {
 	MLX5_FLOW_DESTINATION_TYPE_VPORT        = 0x0,
+	//标记报文目的地址是传给指定flow table
 	MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE   = 0x1,
 	MLX5_FLOW_DESTINATION_TYPE_TIR          = 0x2,
 
 	MLX5_FLOW_DESTINATION_TYPE_PORT         = 0x99,
+	//标记flow counter动作
 	MLX5_FLOW_DESTINATION_TYPE_COUNTER      = 0x100,
 	MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE_NUM = 0x101,
 };
@@ -2943,9 +2945,11 @@ enum {
 	MLX5_FLOW_CONTEXT_ACTION_DECAP     = 0x20,
 	//修改头部字段
 	MLX5_FLOW_CONTEXT_ACTION_MOD_HDR   = 0x40,
+	//pop单层vlan
 	MLX5_FLOW_CONTEXT_ACTION_VLAN_POP  = 0x80,
 	//push单层的vlan
 	MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH = 0x100,
+	//pop 2层vlan
 	MLX5_FLOW_CONTEXT_ACTION_VLAN_POP_2  = 0x400,
 	//push 2层的vlan
 	MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH_2 = 0x800,
@@ -5654,7 +5658,7 @@ struct mlx5_ifc_set_action_in_bits {
 	u8         reserved_at_18[0x3];
 	u8         length[0x5];
 
-	u8         data[0x20];
+	u8         data[0x20];/*用于存要设置的数据*/
 };
 
 struct mlx5_ifc_add_action_in_bits {

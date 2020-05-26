@@ -729,10 +729,11 @@ struct mlx5dr_action {
 			struct mlx5dr_icm_chunk *chunk;
 			u8 *data;
 			u32 data_size;
-			u16 num_of_actions;
+			u16 num_of_actions;/*action数目(结合data提供action)*/
 			u32 index;
 			u8 allow_rx:1;
 			u8 allow_tx:1;
+			//是否修改ttl
 			u8 modify_ttl:1;
 		} rewrite;
 		struct {

@@ -1444,13 +1444,14 @@ static void virtnet_poll_cleantx(struct receive_queue *rq)
 		netif_tx_wake_queue(txq);
 }
 
-//virt-net rx队列的napi收包函数（一次性收取budet个包）
+//virtio-net rx队列的napi收包函数（一次性收取budet个包）
 static int virtnet_poll(struct napi_struct *napi, int budget)
 {
 	//获取收队列
 	struct receive_queue *rq =
 		container_of(napi, struct receive_queue, napi);
-	struct virtnet_info *vi = rq->vq->vdev->priv;//队列对应的virtnet设备
+	//队列对应的virtnet设备
+	struct virtnet_info *vi = rq->vq->vdev->priv;
 	struct send_queue *sq;
 	unsigned int received;
 	unsigned int xdp_xmit = 0;

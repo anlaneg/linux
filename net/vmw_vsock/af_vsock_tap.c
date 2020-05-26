@@ -82,6 +82,7 @@ static void __vsock_deliver_tap(struct sk_buff *skb)
 	int ret;
 	struct vsock_tap *tmp;
 
+	//遍历vsock_tap_all链表，送一份skb副本给相应的设备
 	list_for_each_entry_rcu(tmp, &vsock_tap_all, list) {
 		ret = __vsock_deliver_tap_skb(skb, tmp->dev);
 		if (unlikely(ret))
@@ -89,18 +90,23 @@ static void __vsock_deliver_tap(struct sk_buff *skb)
 	}
 }
 
+//如果vsock_tap_all不为空，则复制报文给链上所有设备一份
 void vsock_deliver_tap(struct sk_buff *build_skb(void *opaque), void *opaque)
 {
 	struct sk_buff *skb;
 
 	rcu_read_lock();
 
+	//如果队列为空，则不处理
 	if (likely(list_empty(&vsock_tap_all)))
 		goto out;
 
+	//按opaque完成报文构造
 	skb = build_skb(opaque);
 	if (skb) {
+	    //复制报文给vsock_tap_all上所有设备
 		__vsock_deliver_tap(skb);
+		//释放原报文
 		consume_skb(skb);
 	}
 

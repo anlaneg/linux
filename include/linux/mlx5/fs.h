@@ -108,9 +108,9 @@ struct mlx5_flow_context {
 struct mlx5_flow_spec {
 	//定义匹配层级，例如匹配到以太层/ip层/tcp层
 	u8   match_criteria_enable;
-	//相当于定义struct mlx5_ifc_fte_match_param_bits结构体（记录掩码）
+	//待匹配的掩码，相当于定义struct mlx5_ifc_fte_match_param_bits结构体
 	u32  match_criteria[MLX5_ST_SZ_DW(fte_match_param)];
-	//匹配相关的key
+	//待匹配的key
 	u32  match_value[MLX5_ST_SZ_DW(fte_match_param)];
 	struct mlx5_flow_context flow_context;
 };
@@ -206,11 +206,13 @@ enum {
 };
 
 struct mlx5_flow_act {
+    //要做的动作的标记（例如MLX5_FLOW_CONTEXT_ACTION_VLAN_POP）
 	u32 action;
 	struct mlx5_modify_hdr  *modify_hdr;
 	struct mlx5_pkt_reformat *pkt_reformat;
 	uintptr_t esp_id;
 	u32 flags;
+	//1层vlan及2层vlan的设置
 	struct mlx5_fs_vlan vlan[MLX5_FS_VLAN_DEPTH];
 	struct ib_counters *counters;
 };

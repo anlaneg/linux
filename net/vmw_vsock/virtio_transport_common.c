@@ -93,6 +93,7 @@ out_pkt:
 }
 
 /* Packet capture */
+//依据vsock_pkt构造skb
 static struct sk_buff *virtio_transport_build_skb(void *opaque)
 {
 	struct virtio_vsock_pkt *pkt = opaque;
@@ -105,14 +106,16 @@ static struct sk_buff *virtio_transport_build_skb(void *opaque)
 	 * the payload length from the header and the buffer pointer taking
 	 * care of the offset in the original packet.
 	 */
-	payload_len = le32_to_cpu(pkt->hdr.len);
-	payload_buf = pkt->buf + pkt->off;
+	payload_len = le32_to_cpu(pkt->hdr.len);/*报文负载长度*/
+	payload_buf = pkt->buf + pkt->off;/*报文起始地址*/
 
+	/*申请可容纳此报文的skb*/
 	skb = alloc_skb(sizeof(*hdr) + sizeof(pkt->hdr) + payload_len,
 			GFP_ATOMIC);
 	if (!skb)
 		return NULL;
 
+	//填充报文common header
 	hdr = skb_put(skb, sizeof(*hdr));
 
 	/* pkt->hdr is little-endian so no need to byteswap here */
@@ -146,20 +149,25 @@ static struct sk_buff *virtio_transport_build_skb(void *opaque)
 		break;
 	}
 
+	//存入virtio socket header
 	skb_put_data(skb, &pkt->hdr, sizeof(pkt->hdr));
 
+	//存入实际报文内容
 	if (payload_len) {
 		skb_put_data(skb, payload_buf, payload_len);
 	}
 
+	//返回构造好的skb
 	return skb;
 }
 
 void virtio_transport_deliver_tap_pkt(struct virtio_vsock_pkt *pkt)
 {
+    //如果此报文已交给过tap设备，则返回
 	if (pkt->tap_delivered)
 		return;
 
+	//否则完成tap设备交付
 	vsock_deliver_tap(virtio_transport_build_skb, pkt);
 	pkt->tap_delivered = true;
 }
@@ -183,8 +191,10 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 	if (unlikely(!t_ops))
 		return -EFAULT;
 
+	//取本端地址
 	src_cid = t_ops->transport.get_local_cid();
 	src_port = vsk->local_addr.svm_port;
+	//确定对端地址
 	if (!info->remote_cid) {
 		dst_cid	= vsk->remote_addr.svm_cid;
 		dst_port = vsk->remote_addr.svm_port;
@@ -206,6 +216,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 	if (pkt_len == 0 && info->op == VIRTIO_VSOCK_OP_RW)
 		return pkt_len;
 
+	//构造要发送给dst_cid的报文
 	pkt = virtio_transport_alloc_pkt(info, pkt_len,
 					 src_cid, src_port,
 					 dst_cid, dst_port);
@@ -216,6 +227,7 @@ static int virtio_transport_send_pkt_info(struct vsock_sock *vsk,
 
 	virtio_transport_inc_tx_pkt(vvs, pkt);
 
+	//向dst_cid发送此报文
 	return t_ops->send_pkt(pkt);
 }
 
@@ -1088,13 +1100,14 @@ virtio_transport_recv_listen(struct sock *sk, struct virtio_vsock_pkt *pkt,
  * lock.
  */
 void virtio_transport_recv_pkt(struct virtio_transport *t,
-			       struct virtio_vsock_pkt *pkt)
+			       struct virtio_vsock_pkt *pkt/*收到的报文*/)
 {
 	struct sockaddr_vm src, dst;
 	struct vsock_sock *vsk;
 	struct sock *sk;
 	bool space_available;
 
+	//初始化src,dst
 	vsock_addr_init(&src, le64_to_cpu(pkt->hdr.src_cid),
 			le32_to_cpu(pkt->hdr.src_port));
 	vsock_addr_init(&dst, le64_to_cpu(pkt->hdr.dst_cid),

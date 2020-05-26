@@ -44,14 +44,14 @@
 #define MLX5_FC_POOL_USED_BUFF_RATIO 10
 
 struct mlx5_fc_cache {
-	u64 packets;
-	u64 bytes;
-	u64 lastuse;
+	u64 packets;//包数
+	u64 bytes;//字节数
+	u64 lastuse;//最后一次更新的时间（软件引入的变量）
 };
 
 struct mlx5_fc {
 	struct list_head list;
-	struct llist_node addlist;
+	struct llist_node addlist;//要增加的flow counter
 	struct llist_node dellist;
 
 	/* last{packets,bytes} members are used when calculating the delta since
@@ -60,10 +60,11 @@ struct mlx5_fc {
 	u64 lastpackets;
 	u64 lastbytes;
 
-	struct mlx5_fc_bulk *bulk;
-	u32 id;
+	struct mlx5_fc_bulk *bulk;/*所属的flow counter批组*/
+	u32 id;/*flow counter对应的唯一id,由fw分配*/
 	bool aging;
 
+	//缓存此fc的统计数据
 	struct mlx5_fc_cache cache ____cacheline_aligned_in_smp;
 };
 
@@ -124,14 +125,17 @@ static struct list_head *mlx5_fc_counters_lookup_next(struct mlx5_core_dev *dev,
 	return counter ? &counter->list : &fc_stats->counters;
 }
 
+//实现flow counter的新增
 static void mlx5_fc_stats_insert(struct mlx5_core_dev *dev,
 				 struct mlx5_fc *counter)
 {
+    /*找出counter可存放的位置*/
 	struct list_head *next = mlx5_fc_counters_lookup_next(dev, counter->id);
 
 	list_add_tail(&counter->list, next);
 }
 
+//实现flow counter的删除
 static void mlx5_fc_stats_remove(struct mlx5_core_dev *dev,
 				 struct mlx5_fc *counter)
 {
@@ -150,14 +154,17 @@ static int get_max_bulk_query_len(struct mlx5_core_dev *dev)
 			  (1 << MLX5_CAP_GEN(dev, log_max_flow_counter_bulk)));
 }
 
+//更新cache对应的统计数据
 static void update_counter_cache(int index, u32 *bulk_raw_data,
 				 struct mlx5_fc_cache *cache)
 {
+    //自bulk_raw_data中提取此fc的统计数据
 	void *stats = MLX5_ADDR_OF(query_flow_counter_out, bulk_raw_data,
 			     flow_statistics[index]);
 	u64 packets = MLX5_GET64(traffic_counter, stats, packets);
 	u64 bytes = MLX5_GET64(traffic_counter, stats, octets);
 
+	//如果缓存的packets与当前取得的值无变化，则直接return,避免更新lastuse字段
 	if (cache->packets == packets)
 		return;
 
@@ -188,7 +195,7 @@ static void mlx5_fc_stats_query_counter_range(struct mlx5_core_dev *dev,
 				 ALIGN(last_id - bulk_base_id + 1, 4));
 
 		err = mlx5_cmd_fc_bulk_query(dev, bulk_base_id, bulk_len,
-					     data);
+					     data/*出参，结果集*/);
 		if (err) {
 			mlx5_core_err(dev, "Error doing bulk query: %d\n", err);
 			return;
@@ -204,6 +211,7 @@ static void mlx5_fc_stats_query_counter_range(struct mlx5_core_dev *dev,
 				break;
 			}
 
+			//更新counter的统计
 			update_counter_cache(counter_index, data, cache);
 		}
 	}
@@ -239,21 +247,27 @@ static void mlx5_fc_stats_work(struct work_struct *work)
 	unsigned long now = jiffies;
 
 	if (addlist || !list_empty(&fc_stats->counters))
+	    //下次继续进行本任务
 		queue_delayed_work(fc_stats->wq, &fc_stats->work,
 				   fc_stats->sampling_interval);
 
+	//遍历addlist上的counter,这些counter需要添加
 	llist_for_each_entry(counter, addlist, addlist)
 		mlx5_fc_stats_insert(dev, counter);
 
+	//遍历dellist上的counter
 	llist_for_each_entry_safe(counter, tmp, dellist, dellist) {
 		mlx5_fc_stats_remove(dev, counter);
 
 		mlx5_fc_release(dev, counter);
 	}
 
+	//未到下次查询时间，或者flow counter为空，则不执行
 	if (time_before(now, fc_stats->next_query) ||
 	    list_empty(&fc_stats->counters))
 		return;
+
+	//遍历并向fw查询这些counter的计数
 	last = list_last_entry(&fc_stats->counters, struct mlx5_fc, list);
 
 	counter = list_first_entry(&fc_stats->counters, struct mlx5_fc,
@@ -264,15 +278,18 @@ static void mlx5_fc_stats_work(struct work_struct *work)
 	fc_stats->next_query = now + fc_stats->sampling_interval;
 }
 
+//申请一个 flow counter
 static struct mlx5_fc *mlx5_fc_single_alloc(struct mlx5_core_dev *dev)
 {
 	struct mlx5_fc *counter;
 	int err;
 
+	//申请counter对应内存
 	counter = kzalloc(sizeof(*counter), GFP_KERNEL);
 	if (!counter)
 		return ERR_PTR(-ENOMEM);
 
+	//为counter分配id
 	err = mlx5_cmd_fc_alloc(dev, &counter->id);
 	if (err) {
 		kfree(counter);
@@ -287,17 +304,21 @@ static struct mlx5_fc *mlx5_fc_acquire(struct mlx5_core_dev *dev, bool aging)
 	struct mlx5_fc_stats *fc_stats = &dev->priv.fc_stats;
 	struct mlx5_fc *counter;
 
+	//批量申请
 	if (aging && MLX5_CAP_GEN(dev, flow_counter_bulk_alloc) != 0) {
 		counter = mlx5_fc_pool_acquire_counter(&fc_stats->fc_pool);
 		if (!IS_ERR(counter))
 			return counter;
 	}
 
+	//单个申请
 	return mlx5_fc_single_alloc(dev);
 }
 
+//创建flow counter,并使fc_stats->wq执行
 struct mlx5_fc *mlx5_fc_create(struct mlx5_core_dev *dev, bool aging)
 {
+    //申请flow counter
 	struct mlx5_fc *counter = mlx5_fc_acquire(dev, aging);
 	struct mlx5_fc_stats *fc_stats = &dev->priv.fc_stats;
 	int err;
@@ -326,6 +347,7 @@ struct mlx5_fc *mlx5_fc_create(struct mlx5_core_dev *dev, bool aging)
 		if (err)
 			goto err_out_alloc;
 
+		//将counter加入到fc_stats->addlist中
 		llist_add(&counter->addlist, &fc_stats->addlist);
 
 		mod_delayed_work(fc_stats->wq, &fc_stats->work, 0);
@@ -345,6 +367,7 @@ u32 mlx5_fc_id(struct mlx5_fc *counter)
 }
 EXPORT_SYMBOL(mlx5_fc_id);
 
+//移除指定的flow counter
 void mlx5_fc_destroy(struct mlx5_core_dev *dev, struct mlx5_fc *counter)
 {
 	struct mlx5_fc_stats *fc_stats = &dev->priv.fc_stats;
@@ -469,7 +492,7 @@ struct mlx5_fc_bulk {
 	struct list_head pool_list;
 	u32 base_id;
 	int bulk_len;
-	unsigned long *bitmask;
+	unsigned long *bitmask;/*指明这一批flow counter的分配情况*/
 	struct mlx5_fc fcs[];
 };
 
@@ -485,16 +508,17 @@ static int mlx5_fc_bulk_get_free_fcs_amount(struct mlx5_fc_bulk *bulk)
 	return bitmap_weight(bulk->bitmask, bulk->bulk_len);
 }
 
+//创建一个/一批flow counter
 static struct mlx5_fc_bulk *mlx5_fc_bulk_create(struct mlx5_core_dev *dev)
 {
 	enum mlx5_fc_bulk_alloc_bitmask alloc_bitmask;
 	struct mlx5_fc_bulk *bulk;
 	int err = -ENOMEM;
-	int bulk_len;
+	int bulk_len;/*要申请的数目*/
 	u32 base_id;
 	int i;
 
-	alloc_bitmask = MLX5_CAP_GEN(dev, flow_counter_bulk_alloc);
+	alloc_bitmask = MLX5_CAP_GEN(dev, flow_counter_bulk_alloc/*一批最大支持数目*/);
 	bulk_len = alloc_bitmask > 0 ? MLX5_FC_BULK_NUM_FCS(alloc_bitmask) : 1;
 
 	bulk = kzalloc(sizeof(*bulk) + bulk_len * sizeof(struct mlx5_fc),
@@ -507,10 +531,11 @@ static struct mlx5_fc_bulk *mlx5_fc_bulk_create(struct mlx5_core_dev *dev)
 	if (!bulk->bitmask)
 		goto err_alloc_bitmask;
 
-	err = mlx5_cmd_fc_bulk_alloc(dev, alloc_bitmask, &base_id);
+	err = mlx5_cmd_fc_bulk_alloc(dev, alloc_bitmask, &base_id/*起始id*/);
 	if (err)
 		goto err_mlx5_cmd_bulk_alloc;
 
+	//初始化申请一批flow counter
 	bulk->base_id = base_id;
 	bulk->bulk_len = bulk_len;
 	for (i = 0; i < bulk_len; i++) {

@@ -664,13 +664,14 @@ bool mlx5_fs_dr_is_supported(struct mlx5_core_dev *dev)
 	return mlx5dr_is_supported(dev);
 }
 
+//smfs 下流表方式，见mlx5_flow_namespace_set_mode
 static const struct mlx5_flow_cmds mlx5_flow_cmds_dr = {
 	.create_flow_table = mlx5_cmd_dr_create_flow_table,
 	.destroy_flow_table = mlx5_cmd_dr_destroy_flow_table,
 	.modify_flow_table = mlx5_cmd_dr_modify_flow_table,
 	.create_flow_group = mlx5_cmd_dr_create_flow_group,
 	.destroy_flow_group = mlx5_cmd_dr_destroy_flow_group,
-	.create_fte = mlx5_cmd_dr_create_fte,
+	.create_fte = mlx5_cmd_dr_create_fte,/*创建flow table entry*/
 	.update_fte = mlx5_cmd_dr_update_fte,
 	.delete_fte = mlx5_cmd_dr_delete_fte,
 	.update_root_ft = mlx5_cmd_dr_update_root_ft,

@@ -111,7 +111,7 @@ static inline bool rht_is_a_nulls(const struct rhash_head *ptr)
 	return ((unsigned long) ptr & 1);
 }
 
-//取对应的obj
+//取被加入到hashtasble中对应的元素
 static inline void *rht_obj(const struct rhashtable *ht,
 			    const struct rhash_head *he)
 {
@@ -125,6 +125,7 @@ static inline unsigned int rht_bucket_index(const struct bucket_table *tbl,
 	return hash & (tbl->size - 1);
 }
 
+//计算hashcoce
 static inline unsigned int rht_key_get_hash(struct rhashtable *ht,
 	const void *key, const struct rhashtable_params params,
 	unsigned int hash_rnd)
@@ -133,8 +134,10 @@ static inline unsigned int rht_key_get_hash(struct rhashtable *ht,
 
 	/* params must be equal to ht->p if it isn't constant. */
 	if (!__builtin_constant_p(params.key_len))
+	    /*key_len非常数时，采用参数提供的hashfn执行hashcode计算*/
 		hash = ht->p.hashfn(key, ht->key_len, hash_rnd);
 	else if (params.key_len) {
+	    /*指定了key_len时，如果有hashfn，则调用，否采使用jhash或jhash2来计算*/
 		unsigned int key_len = params.key_len;
 
 		if (params.hashfn)
@@ -144,6 +147,7 @@ static inline unsigned int rht_key_get_hash(struct rhashtable *ht,
 		else
 			hash = jhash2(key, key_len / sizeof(u32), hash_rnd);
 	} else {
+	    //未提供情况
 		unsigned int key_len = ht->p.key_len;
 
 		if (params.hashfn)
@@ -295,6 +299,7 @@ struct rhash_lock_head **rht_bucket_nested_insert(struct rhashtable *ht,
 static inline struct rhash_lock_head *const *rht_bucket(
 	const struct bucket_table *tbl, unsigned int hash)
 {
+    //针对嵌套hash,再查找一次，决定桶
 	return unlikely(tbl->nest) ? rht_bucket_nested(tbl, hash) :
 				     &tbl->buckets[hash];
 }
@@ -580,7 +585,7 @@ static inline void rht_assign_unlock(struct bucket_table *tbl,
  * list returned by rhltable_lookup.
  */
 //遍历list链表，每个元素为tpos
-#define rhl_for_each_entry_rcu(tpos, pos, list, member)			\
+#define rhl_for_each_entry_rcu(tpos, pos, list/*链表头*/, member)			\
 	for (pos = list; pos && rht_entry(tpos, pos, member);		\
 	     pos = rcu_dereference_raw(pos->next))
 
@@ -595,7 +600,7 @@ static inline int rhashtable_compare(struct rhashtable_compare_arg *arg,
 
 /* Internal function, do not use. */
 static inline struct rhash_head *__rhashtable_lookup(
-	struct rhashtable *ht, const void *key,
+	struct rhashtable *ht/*待查询的hashtable*/, const void *key,
 	const struct rhashtable_params params)
 {
 	//构造比对参数
@@ -615,12 +620,13 @@ restart:
 	//采用函数params.obj_cmpfn遍历对应的桶
 	bkt = rht_bucket(tbl, hash);
 	do {
+	    /*遍历桶链he*/
 		rht_for_each_rcu_from(he, rht_ptr_rcu(bkt), tbl, hash) {
 			if (params.obj_cmpfn ?
-			    params.obj_cmpfn(&arg, rht_obj(ht, he)) :
+			    params.obj_cmpfn(&arg, rht_obj(ht, he))/*使用提供的cmpfn函数*/ :
 			    rhashtable_compare(&arg, rht_obj(ht, he)))//默认为memcmp函数进行比对
 				continue;
-			return he;
+			return he;/*命中直接返回*/
 		}
 		/* An object might have been moved to a different hash chain,
 		 * while we walk along it - better check and retry.
@@ -702,9 +708,10 @@ static inline void *rhashtable_lookup_fast(
  * Returns the list of entries that match the given key.
  */
 static inline struct rhlist_head *rhltable_lookup(
-	struct rhltable *hlt, const void *key,
+	struct rhltable *hlt/*hashtable表*/, const void *key,
 	const struct rhashtable_params params)
 {
+    /*hash表查询*/
 	struct rhash_head *he = __rhashtable_lookup(&hlt->ht, key, params);
 
 	return he ? container_of(he, struct rhlist_head, rhead) : NULL;
@@ -867,7 +874,7 @@ static inline int rhashtable_insert_fast(
  * table grows beyond 70%.
  */
 static inline int rhltable_insert_key(
-	struct rhltable *hlt, const void *key, struct rhlist_head *list,
+	struct rhltable *hlt, const void *key/*待加入的key*/, struct rhlist_head *list/*待加入的节点*/,
 	const struct rhashtable_params params)
 {
 	return PTR_ERR(__rhashtable_insert_fast(&hlt->ht, key, &list->rhead,
@@ -890,9 +897,10 @@ static inline int rhltable_insert_key(
  * table grows beyond 70%.
  */
 static inline int rhltable_insert(
-	struct rhltable *hlt, struct rhlist_head *list,
+	struct rhltable *hlt/*待操作的hashtble*/, struct rhlist_head *list/*待加入的hash节点*/,
 	const struct rhashtable_params params)
 {
+    //向hashtable中加入元素
 	const char *key = rht_obj(&hlt->ht, &list->rhead);
 
 	key += params.key_offset;

@@ -83,6 +83,7 @@ static inline bool file_can_poll(struct file *file)
 	return file->f_op->poll;
 }
 
+//执行file对应的poll回调
 static inline __poll_t vfs_poll(struct file *file, struct poll_table_struct *pt)
 {
 	if (unlikely(!file->f_op->poll))

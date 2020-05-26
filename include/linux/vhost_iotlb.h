@@ -5,16 +5,16 @@
 #include <linux/interval_tree_generic.h>
 
 struct vhost_iotlb_map {
-	struct rb_node rb;
-	struct list_head link;
-	u64 start;
-	u64 last;
-	u64 size;
-	u64 addr;
+	struct rb_node rb;//用于串连到tlb->root上
+	struct list_head link;//用于串到tlb上
+	u64 start;//起始地址
+	u64 last;//终止地址
+	u64 size;//地址范围长度
+	u64 addr;//用户态地址
 #define VHOST_MAP_RO 0x1
 #define VHOST_MAP_WO 0x2
 #define VHOST_MAP_RW 0x3
-	u32 perm;
+	u32 perm;/*地址权限*/
 	u32 flags_padding;
 	u64 __subtree_last;
 };

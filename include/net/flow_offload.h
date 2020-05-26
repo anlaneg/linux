@@ -227,7 +227,7 @@ struct flow_action_entry {
 			enum flow_action_mangle_base htype;//修改的字段所处头部类型
 			u32		offset;//自头部位置到字段的偏移量
 			u32		mask;
-			u32		val;//设置的值
+			u32		val;//要设置的值
 		} mangle;
 		//隧道封装参数
 		struct ip_tunnel_info	*tunnel;	/* FLOW_ACTION_TUNNEL_ENCAP */

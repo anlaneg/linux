@@ -82,11 +82,11 @@
 #define MLX5_ADDR_OF(typ, p, fld) ((void *)((uint8_t *)(p) + MLX5_BYTE_OFF(typ, fld)))
 
 /* insert a value to a struct */
-//依据struct mlx5_ifc_##typ##_bits结构体填充消息体
-#define MLX5_SET(typ/*结构体名称*/, p/*结构体指针*/, fld/*结构体内字段名*/, v/*要设置的值*/) do { \
-	/*制作一个value副本*/\
+//依据struct mlx5_ifc_##typ##_bits结构体大小，为结构体指定p赋值，等价于((typ)(p))->fld=v
+#define MLX5_SET(typ/*结构体名称*/, p/*指向结构体typ的指针*/, fld/*结构体内字段名*/, v/*要设置的值*/) do { \
+	/*制作一个value的副本*/\
 	u32 _v = v; \
-	/*结构体大小必须4字节对齐*/\
+	/*结构体typ大小必须4字节对齐*/\
 	BUILD_BUG_ON(__mlx5_st_sz_bits(typ) % 32);             \
 	/*设置typ->fld的值为_v*/\
 	*((__be32 *)(p) + __mlx5_dw_off(typ, fld)) = \
@@ -113,7 +113,7 @@
 		     << __mlx5_dw_bit_off(typ, fld))); \
 } while (0)
 
-//取typ类型结构体p中的fld成员
+//取typ类型结构体p中的fld成员,等价于取变量 ((type)(p))->fld
 #define MLX5_GET(typ, p, fld) ((be32_to_cpu(*((__be32 *)(p) +\
 __mlx5_dw_off(typ, fld))) >> __mlx5_dw_bit_off(typ, fld)) & \
 __mlx5_mask(typ, fld))
@@ -1051,6 +1051,7 @@ enum {
 	//匹配外层头
 	MLX5_MATCH_OUTER_HEADERS	= 1 << 0,
 	MLX5_MATCH_MISC_PARAMETERS	= 1 << 1,
+	//匹配内层头
 	MLX5_MATCH_INNER_HEADERS	= 1 << 2,
 	MLX5_MATCH_MISC_PARAMETERS_2	= 1 << 3,
 	MLX5_MATCH_MISC_PARAMETERS_3	= 1 << 4,

@@ -202,8 +202,8 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index/
 		return ERR_PTR(-ENOMEM);
 
 	//创建virtqueue
-	vq = vp_dev->setup_vq(vp_dev, info, index, callback, name, ctx,
-			      msix_vec);
+	vq = vp_dev->setup_vq(vp_dev, info, index/*vq索引号*/, callback, name/*vq名称*/, ctx,
+			      msix_vec/*vq使用的中断号*/);
 	if (IS_ERR(vq))
 		goto out_info;
 
@@ -333,10 +333,11 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,/*虚队�
 			continue;
 		}
 
-		//未给定回调，置为no_vectore
+		//未给定回调，置不使用中断
 		if (!callbacks[i])
 			msix_vec = VIRTIO_MSI_NO_VECTOR;
 		else if (vp_dev->per_vq_vectors)
+		    //每个vq一个中断，按序分配申请的中断
 			msix_vec = allocated_vectors++;
 		else
 			msix_vec = VP_MSIX_VQ_VECTOR;

@@ -40,7 +40,7 @@
 /* This marks a buffer as continuing via the next field. */
 #define VRING_DESC_F_NEXT	1 //标记其next指向下一个描述符
 /* This marks a buffer as write-only (otherwise read-only). */
-#define VRING_DESC_F_WRITE	2
+#define VRING_DESC_F_WRITE	2 //标记这个buffer可写（如为0，则表示可读）
 /* This means the buffer contains a list of buffer descriptors. */
 #define VRING_DESC_F_INDIRECT	4
 
@@ -48,7 +48,7 @@
  * Mark a descriptor as available or used in packed ring.
  * Notice: they are defined as shifts instead of shifted values.
  */
-#define VRING_PACKED_DESC_F_AVAIL	7
+#define VRING_PACKED_DESC_F_AVAIL	7 /*标记此描述符有效*/
 #define VRING_PACKED_DESC_F_USED	15
 
 /* The Host uses this in used->flags to advise the Guest: don't kick me when
@@ -118,12 +118,12 @@ struct vring_used_elem {
 	/* Index of start of used descriptor chain. */
 	__virtio32 id;//描述符索引
 	/* Total length of the descriptor chain which was used (written to) */
-	__virtio32 len;//描述符数目
+	__virtio32 len;//描述符链buffer总可写长度
 };
 
 struct vring_used {
 	__virtio16 flags;
-	__virtio16 idx;
+	__virtio16 idx;/*当前used表位置*/
 	struct vring_used_elem ring[];//长度为num（见vring)，已完成使用的索引符索引＋描述符数目
 };
 

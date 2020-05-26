@@ -95,6 +95,7 @@ static inline unsigned char iov_iter_rw(const struct iov_iter *i)
  */
 static inline size_t iov_length(const struct iovec *iov, unsigned long nr_segs)
 {
+    //取iovec可用的总字节长度
 	unsigned long seg;
 	size_t ret = 0;
 
@@ -129,6 +130,7 @@ bool _copy_from_iter_full(void *addr, size_t bytes, struct iov_iter *i);
 size_t _copy_from_iter_nocache(void *addr, size_t bytes, struct iov_iter *i);
 bool _copy_from_iter_full_nocache(void *addr, size_t bytes, struct iov_iter *i);
 
+//将addr指向的bytes字节，复制到i中
 static __always_inline __must_check
 size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 {
@@ -138,8 +140,9 @@ size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
 		return _copy_to_iter(addr, bytes, i);
 }
 
+//将i中的数据，复制到addr中，复制长度为bytes
 static __always_inline __must_check
-size_t copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
+size_t copy_from_iter(void *addr, size_t bytes/*addr指向内存大小*/, struct iov_iter *i)
 {
 	if (unlikely(!check_copy_size(addr, bytes, false)))
 		return 0;

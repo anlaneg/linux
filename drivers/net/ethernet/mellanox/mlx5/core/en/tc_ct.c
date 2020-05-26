@@ -315,6 +315,7 @@ mlx5_tc_ct_parse_mangle_to_mod_act(struct flow_action_entry *act,
 		else if (offset == offsetof(struct iphdr, daddr))
 			field = MLX5_ACTION_IN_FIELD_OUT_DIPV4;
 		else
+		    //当前不支持对其它字段的修改
 			return -EOPNOTSUPP;
 		break;
 
@@ -364,6 +365,7 @@ mlx5_tc_ct_parse_mangle_to_mod_act(struct flow_action_entry *act,
 		return -EOPNOTSUPP;
 	}
 
+	/*设置要修改的值及value*/
 	MLX5_SET(set_action_in, modact, action_type, MLX5_ACTION_TYPE_SET);
 	MLX5_SET(set_action_in, modact, offset, 0);
 	MLX5_SET(set_action_in, modact, field, field);
@@ -398,6 +400,7 @@ mlx5_tc_ct_entry_create_nat(struct mlx5_tc_ct_priv *ct_priv,
 			modact = mod_acts->actions +
 				 mod_acts->num_actions * action_size;
 
+			//解析待修改字段parse
 			err = mlx5_tc_ct_parse_mangle_to_mod_act(act, modact);
 			if (err)
 				return err;

@@ -50,13 +50,14 @@ static inline void vp_iowrite16(u16 value, __le16 __iomem *addr)
 	iowrite16(value, addr);
 }
 
+//向addr中写入value
 static inline void vp_iowrite32(u32 value, __le32 __iomem *addr)
 {
 	iowrite32(value, addr);
 }
 
 static void vp_iowrite64_twopart(u64 val,
-				 __le32 __iomem *lo, __le32 __iomem *hi)
+				 __le32 __iomem *lo/*低32bit地址*/, __le32 __iomem *hi/*高32bit地址*/)
 {
 	vp_iowrite32((u32)val, lo);
 	vp_iowrite32(val >> 32, hi);
@@ -328,10 +329,10 @@ static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
 				  unsigned index,//队列索引
-				  void (*callback)(struct virtqueue *vq),//队列回调
+				  void (*callback)(struct virtqueue *vq),//队列中断回调
 				  const char *name,//队列名称
 				  bool ctx,//队列是否有context
-				  u16 msix_vec)
+				  u16 msix_vec/*为此队列指定的中断向量*/)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = vp_dev->common;
 	struct virtqueue *vq;
@@ -365,11 +366,11 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	info->msix_vector = msix_vec;
 
 	/* create the vring */
-	//创建vring
+	//创建vring，通过vp_notify通知后端
 	vq = vring_create_virtqueue(index, num,
 				    SMP_CACHE_BYTES, &vp_dev->vdev,
 				    true, true, ctx,
-				    vp_notify, callback, name);//通过vp_notify通知后端
+				    vp_notify, callback, name);
 	if (!vq)
 		return ERR_PTR(-ENOMEM);
 
@@ -414,6 +415,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	}
 
 	if (msix_vec != VIRTIO_MSI_NO_VECTOR) {
+	    //指明了中断，则为此队列配置中断
 		vp_iowrite16(msix_vec, &cfg->queue_msix_vector);
 		msix_vec = vp_ioread16(&cfg->queue_msix_vector);
 		if (msix_vec == VIRTIO_MSI_NO_VECTOR) {
@@ -579,6 +581,7 @@ static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
 static inline void check_offsets(void)
 {
 	/* Note: disk space was harmed in compilation of this function. */
+    //确保相应偏移量在合适的位置，例如desc表地址的高32位及低32位地址
 	BUILD_BUG_ON(VIRTIO_PCI_CAP_VNDR !=
 		     offsetof(struct virtio_pci_cap, cap_vndr));
 	BUILD_BUG_ON(VIRTIO_PCI_CAP_NEXT !=

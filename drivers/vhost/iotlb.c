@@ -47,12 +47,14 @@ EXPORT_SYMBOL_GPL(vhost_iotlb_map_free);
  * fails
  */
 int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
-			  u64 start, u64 last,
-			  u64 addr, unsigned int perm)
+			  u64 start/*起始地址*/, u64 last/*终止地址*/,
+			  u64 addr, unsigned int perm/*访问权限*/)
 {
+    //在iotlb中增加一个映射
 	struct vhost_iotlb_map *map;
 
 	if (last < start)
+	    //终止地址必须大于等于起始地址
 		return -EFAULT;
 
 	if (iotlb->limit &&
@@ -69,10 +71,11 @@ int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
 	map->start = start;
 	map->size = last - start + 1;
 	map->last = last;
-	map->addr = addr;
+	map->addr = addr;/*用户态地址*/
 	map->perm = perm;
 
 	iotlb->nmaps++;
+	//将其加入到tbl->root上
 	vhost_iotlb_itree_insert(map, &iotlb->root);
 
 	INIT_LIST_HEAD(&map->link);
@@ -152,7 +155,7 @@ EXPORT_SYMBOL_GPL(vhost_iotlb_free);
  * @end: end of IOVA range
  */
 struct vhost_iotlb_map *
-vhost_iotlb_itree_first(struct vhost_iotlb *iotlb, u64 start, u64 last)
+vhost_iotlb_itree_first(struct vhost_iotlb *iotlb, u64 start/*起始地址*/, u64 last/*终止地址*/)
 {
 	return vhost_iotlb_itree_iter_first(&iotlb->root, start, last);
 }

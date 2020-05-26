@@ -319,7 +319,7 @@ static int mlx5_cmd_modify_flow_table(struct mlx5_flow_root_namespace *ns,
 	return mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 }
 
-//定义新的group
+//告知fw创建新的flow group
 static int mlx5_cmd_create_flow_group(struct mlx5_flow_root_namespace *ns,
 				      struct mlx5_flow_table *ft,
 				      u32 *in,
@@ -652,7 +652,7 @@ static int mlx5_cmd_delete_fte(struct mlx5_flow_root_namespace *ns,
 	return mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 }
 
-//向fw申请一个flow counter id
+//向fw申请一个/一组 flow counter id
 int mlx5_cmd_fc_bulk_alloc(struct mlx5_core_dev *dev,
 			   enum mlx5_fc_bulk_alloc_bitmask alloc_bitmask,
 			   u32 *id)
@@ -671,6 +671,7 @@ int mlx5_cmd_fc_bulk_alloc(struct mlx5_core_dev *dev,
 	return err;
 }
 
+//向fw申请一个flow counter对应的id号
 int mlx5_cmd_fc_alloc(struct mlx5_core_dev *dev, u32 *id)
 {
 	return mlx5_cmd_fc_bulk_alloc(dev, 0, id);
@@ -887,16 +888,16 @@ static void mlx5_cmd_modify_header_dealloc(struct mlx5_flow_root_namespace *ns,
 	mlx5_cmd_exec(dev, in, sizeof(in), out, sizeof(out));
 }
 
-//已支持的table type的cmds处理
+//dmfs下流表方式（旧的下流方式）已支持的table type的cmds处理
 static const struct mlx5_flow_cmds mlx5_flow_cmds = {
-	//创建flow table
+	//告知fw创建flow table
 	.create_flow_table = mlx5_cmd_create_flow_table,
 	.destroy_flow_table = mlx5_cmd_destroy_flow_table,
 	.modify_flow_table = mlx5_cmd_modify_flow_table,
-	//flow group
+	//告知fw创建flow group
 	.create_flow_group = mlx5_cmd_create_flow_group,
 	.destroy_flow_group = mlx5_cmd_destroy_flow_group,
-	//增加flow to flow table
+	//告知fw创建flow table entry
 	.create_fte = mlx5_cmd_create_fte,
 	.update_fte = mlx5_cmd_update_fte,
 	.delete_fte = mlx5_cmd_delete_fte,

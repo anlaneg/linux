@@ -170,9 +170,10 @@ struct virtio_pci_common_cfg {
 
 	/* About a specific virtqueue. */
 	__le16 queue_select;		/* read-write */
-	//队列大小
+	//vq队列大小
 	__le16 queue_size;		/* read-write, power of 2. */
 	__le16 queue_msix_vector;	/* read-write */
+	//队列是否开始
 	__le16 queue_enable;		/* read-write */
 	__le16 queue_notify_off;	/* read-only */
 	//队列desc,avail,used的地址配置（来源于pci层）
@@ -214,6 +215,7 @@ struct virtio_pci_cfg_cap {
 #define VIRTIO_PCI_COMMON_Q_MSIX	26
 #define VIRTIO_PCI_COMMON_Q_ENABLE	28
 #define VIRTIO_PCI_COMMON_Q_NOFF	30
+//设置desc表低32位
 #define VIRTIO_PCI_COMMON_Q_DESCLO	32
 #define VIRTIO_PCI_COMMON_Q_DESCHI	36
 #define VIRTIO_PCI_COMMON_Q_AVAILLO	40

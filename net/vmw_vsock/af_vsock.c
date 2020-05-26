@@ -133,7 +133,7 @@ static struct proto vsock_proto = {
 /* Transport used for host->guest communication */
 static const struct vsock_transport *transport_h2g;
 /* Transport used for guest->host communication */
-static const struct vsock_transport *transport_g2h;
+static const struct vsock_transport *transport_g2h;/*guest到主机的传输层*/
 /* Transport used for DGRAM communication */
 static const struct vsock_transport *transport_dgram;
 /* Transport used for local communication */
@@ -479,8 +479,10 @@ int vsock_assign_transport(struct vsock_sock *vsk, struct vsock_sock *psk)
 }
 EXPORT_SYMBOL_GPL(vsock_assign_transport);
 
+/*检查当前给定的cid是否已存在*/
 bool vsock_find_cid(unsigned int cid)
 {
+    /*g2h通信时，检查cid是否为local cid*/
 	if (transport_g2h && cid == transport_g2h->get_local_cid())
 		return true;
 
@@ -2159,7 +2161,7 @@ const struct vsock_transport *vsock_core_get_transport(struct vsock_sock *vsk)
 }
 EXPORT_SYMBOL_GPL(vsock_core_get_transport);
 
-int vsock_core_register(const struct vsock_transport *t, int features)
+int vsock_core_register(const struct vsock_transport *t, int features/*注册哪种传输*/)
 {
 	const struct vsock_transport *t_h2g, *t_g2h, *t_dgram, *t_local;
 	int err = mutex_lock_interruptible(&vsock_register_mutex);
@@ -2167,25 +2169,27 @@ int vsock_core_register(const struct vsock_transport *t, int features)
 	if (err)
 		return err;
 
-	t_h2g = transport_h2g;
-	t_g2h = transport_g2h;
+	t_h2g = transport_h2g;//由主机到guest
+	t_g2h = transport_g2h;//由guest到主机
 	t_dgram = transport_dgram;
 	t_local = transport_local;
 
 	if (features & VSOCK_TRANSPORT_F_H2G) {
 		if (t_h2g) {
+		    /*防止已注册*/
 			err = -EBUSY;
 			goto err_busy;
 		}
-		t_h2g = t;
+		t_h2g = t;/*注册主机到guest*/
 	}
 
 	if (features & VSOCK_TRANSPORT_F_G2H) {
 		if (t_g2h) {
+		    /*防止已注册*/
 			err = -EBUSY;
 			goto err_busy;
 		}
-		t_g2h = t;
+		t_g2h = t;/*注册guest到主机*/
 	}
 
 	if (features & VSOCK_TRANSPORT_F_DGRAM) {
@@ -2193,7 +2197,7 @@ int vsock_core_register(const struct vsock_transport *t, int features)
 			err = -EBUSY;
 			goto err_busy;
 		}
-		t_dgram = t;
+		t_dgram = t;/*注册dgram*/
 	}
 
 	if (features & VSOCK_TRANSPORT_F_LOCAL) {
@@ -2201,9 +2205,10 @@ int vsock_core_register(const struct vsock_transport *t, int features)
 			err = -EBUSY;
 			goto err_busy;
 		}
-		t_local = t;
+		t_local = t;/*注册local方式*/
 	}
 
+	/*更新赋值结果*/
 	transport_h2g = t_h2g;
 	transport_g2h = t_g2h;
 	transport_dgram = t_dgram;

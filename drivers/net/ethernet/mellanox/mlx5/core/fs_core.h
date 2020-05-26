@@ -74,7 +74,7 @@ enum fs_node_type {
 	FS_TYPE_FLOW_TABLE,
 	FS_TYPE_FLOW_GROUP,//flow group表
 	FS_TYPE_FLOW_ENTRY,//flow表项
-	FS_TYPE_FLOW_DEST
+	FS_TYPE_FLOW_DEST//flow的目的地
 };
 
 enum fs_flow_table_type {
@@ -130,14 +130,16 @@ struct fs_node {
 	struct list_head	list;
 	//指向子节点
 	struct list_head	children;
-	enum fs_node_type	type;//node类型
+	enum fs_node_type	type;//node类型(例如FS_TYPE_FLOW_GROUP，FS_TYPE_FLOW_ENTRY）
 	struct fs_node		*parent;//node的父节接，例如fte的parent为flow group
 	struct fs_node		*root;
 	/* lock the node for writing and traversing */
 	struct rw_semaphore	lock;
 	refcount_t		refcount;
-	bool			active;
+	bool			active;/*标明此节点已在fw中创建*/
+	//fs_node在移除时需要执行硬件fw删除回调
 	void			(*del_hw_func)(struct fs_node *);
+	//fs_node在移除时需要执行软件删除回调
 	void			(*del_sw_func)(struct fs_node *);
 	atomic_t		version;
 };
@@ -154,7 +156,7 @@ struct mlx5_flow_rule {
 
 struct mlx5_flow_handle {
 	int num_rules;//rule数组大小
-	struct mlx5_flow_rule *rule[];
+	struct mlx5_flow_rule *rule[];/*记录目标*/
 };
 
 /* Type of children is mlx5_flow_group */
@@ -176,15 +178,15 @@ struct mlx5_flow_table {
 		unsigned int		required_groups;
 		unsigned int		group_size;
 		unsigned int		num_groups;
-		unsigned int		max_fte;
+		unsigned int		max_fte;//支持的最大fte数目
 	} autogroup;
 	/* Protect fwd_rules */
 	struct mutex			lock;
 	/* FWD rules that point on this flow table */
 	struct list_head		fwd_rules;
 	u32				flags;
-	//用于存储属于此flow table的flow groups
-	struct rhltable			fgs_hash;
+	//hashtable 用于存储属于此flow table的flow groups
+	struct rhltable			fgs_hash;//以掩码做为key
 	enum mlx5_flow_table_miss_action def_miss_action;
 };
 
@@ -211,10 +213,10 @@ struct mlx5_ft_underlay_qp {
 struct fs_fte {
 	struct fs_node			node;
 	struct mlx5_fs_dr_rule		fs_dr_rule;
-	//匹配字段
+	//匹配字段信息（掩码信息由从属的flow group提供）
 	u32				val[MLX5_ST_SZ_DW_MATCH_PARAM];
-	u32				dests_size;
-	//索引号（id+group->start_index)
+	u32				dests_size;/*此fte目标的数目*/
+	//索引号（=id+group->start_index)
 	u32				index;
 	struct mlx5_flow_context	flow_context;
 	//flow table entry的对应的动作
@@ -244,26 +246,28 @@ struct mlx5_flow_namespace {
 
 struct mlx5_flow_group_mask {
 	u8	match_criteria_enable;
-	//flow group下统一匹配掩码
+	//flow group下统一的掩码
 	u32	match_criteria[MLX5_ST_SZ_DW_MATCH_PARAM];
 };
 
 /* Type of children is fs_fte */
-//用于抽象mask(同一类flow的搞一个group)
+//用于抽象mask(同一类mask的处于同一个flow group)
 struct mlx5_flow_group {
 	struct fs_node			node;
 	struct mlx5_fs_dr_matcher	fs_dr_matcher;
 	//flow group对应的mask
 	struct mlx5_flow_group_mask	mask;
-	//group中最小的index编号
+	//flow group中最小的index编号
 	u32				start_index;
-	//group中支持的最大fte数目
+	//flow group中支持的最大fte数目
 	u32				max_ftes;
-	//负责此group中的id分配
+	//负责此flow group中的fte id分配(范围0到max_ftes，fte->index值为start+此id而来)
 	struct ida			fte_allocator;
+	//flow group对应的id(由fw提供）
 	u32				id;
-	//记录此flow group下的所有fte
+	//hahstable记录此flow group下的所有fte
 	struct rhashtable		ftes_hash;
+	//hash节点，用于串到hashtable->fgs_hash上
 	struct rhlist_head		hash;
 };
 
@@ -328,6 +332,7 @@ void mlx5_cleanup_fs(struct mlx5_core_dev *dev);
 #define fs_for_each_ft_safe(pos, tmp, prio)			\
 	fs_list_for_each_entry_safe(pos, tmp, &(prio)->node.children)
 
+//遍历flowtable中所有flowgroup
 #define fs_for_each_fg(pos, ft)			\
 	fs_list_for_each_entry(pos, &(ft)->node.children)
 

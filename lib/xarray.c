@@ -183,6 +183,7 @@ static void *xas_start(struct xa_state *xas)
 	if (xas_valid(xas))
 		return xas_reload(xas);
 	if (xas_error(xas))
+	    /*如果处于error状态，则返回NULL*/
 		return NULL;
 
 	//返回xa中首个元素

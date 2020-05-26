@@ -219,6 +219,7 @@ static inline bool llist_add(struct llist_node *new, struct llist_head *head)
  */
 static inline struct llist_node *llist_del_all(struct llist_head *head)
 {
+    //自无锁链表的head中移除所有元素，并返回
 	return xchg(&head->first, NULL);
 }
 

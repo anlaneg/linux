@@ -466,7 +466,7 @@ struct mlx5_fc_pool {
 	struct list_head fully_used;
 	struct list_head partially_used;
 	struct list_head unused;
-	int available_fcs;
+	int available_fcs;/*可用的flow counter数目（当前软件提前申请的）*/
 	int used_fcs;
 	int threshold;
 };

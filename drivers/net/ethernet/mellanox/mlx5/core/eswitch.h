@@ -393,8 +393,11 @@ enum {
 };
 
 enum mlx5_flow_match_level {
+    //不匹配
 	MLX5_MATCH_NONE	= MLX5_INLINE_MODE_NONE,
+	//匹配2层
 	MLX5_MATCH_L2	= MLX5_INLINE_MODE_L2,
+	//匹配3层
 	MLX5_MATCH_L3	= MLX5_INLINE_MODE_IP,
 	//匹配到4层
 	MLX5_MATCH_L4	= MLX5_INLINE_MODE_TCP_UDP,
@@ -439,14 +442,14 @@ struct mlx5_esw_flow_attr {
 	} dests[MLX5_MAX_FLOW_FWD_VPORTS];//记录输出信息
 	struct  mlx5_modify_hdr *modify_hdr;//修改头部对应的action信息
 	u8	inner_match_level;//非隧道解析层数（例如udp,tcp层）
-	u8	outer_match_level;//隧道解析层数
-	struct mlx5_fc *counter;//统计信息（由fw进行分配）
+	u8	outer_match_level;//隧道外层解析层数
+	struct mlx5_fc *counter;//flow统计信息（由fw进行分配id）
 	u32	chain;//规则所属的chain索引
 	u16	prio;
 	u32	dest_chain;/*跳转到的目的chain*/
 	u32	flags;
 	struct mlx5_flow_table *fdb;
-	struct mlx5_flow_table *dest_ft;
+	struct mlx5_flow_table *dest_ft;//非0时，表示报文需要传给指定flow table
 	struct mlx5_ct_attr ct_attr;
 	//flow的解析过程属性
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
@@ -481,16 +484,18 @@ static inline bool mlx5_esw_qos_enabled(struct mlx5_eswitch *esw)
 	return esw->qos.enabled;
 }
 
+//检查dev对vlan action的支持
 static inline bool mlx5_eswitch_vlan_actions_supported(struct mlx5_core_dev *dev,
-						       u8 vlan_depth)
+						       u8 vlan_depth/*检查vlan的支持层数*/)
 {
 	bool ret = MLX5_CAP_ESW_FLOWTABLE_FDB(dev, pop_vlan) &&
 		   MLX5_CAP_ESW_FLOWTABLE_FDB(dev, push_vlan);
 
+	//如果仅要求1层vlan的支持，则直接返回结果
 	if (vlan_depth == 1)
 		return ret;
 
-	//2层vlan操作
+	//如果需要2层vlan的支持，则检查push_vlan2,pop_vlan2
 	return  ret && MLX5_CAP_ESW_FLOWTABLE_FDB(dev, pop_vlan_2) &&
 		MLX5_CAP_ESW_FLOWTABLE_FDB(dev, push_vlan_2);
 }

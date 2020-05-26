@@ -310,9 +310,11 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 	flow_act.action = attr->action;
 	/* if per flow vlan pop/push is emulated, don't set that into the firmware */
 	if (!mlx5_eswitch_vlan_actions_supported(esw->dev, 1))
+	    //设备不支持vlan pop/push 清楚掉action上对应标记位，使其不生效
 		flow_act.action &= ~(MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH |
 				     MLX5_FLOW_CONTEXT_ACTION_VLAN_POP);
 	else if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_VLAN_PUSH) {
+	    //填充vlan push/push2 相应的参数
 		flow_act.vlan[0].ethtype = ntohs(attr->vlan_proto[0]);
 		flow_act.vlan[0].vid = attr->vlan_vid[0];
 		flow_act.vlan[0].prio = attr->vlan_prio[0];
@@ -328,16 +330,19 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 		struct mlx5_flow_table *ft;
 
 		if (attr->dest_ft) {
+		    //将报文送给指定flow table
 			flow_act.flags |= FLOW_ACT_IGNORE_FLOW_LEVEL;
 			dest[i].type = MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE;
 			dest[i].ft = attr->dest_ft;
 			i++;
 		} else if (attr->flags & MLX5_ESW_ATTR_FLAG_SLOW_PATH) {
+		    /*送最后一个flowtable*/
 			flow_act.flags |= FLOW_ACT_IGNORE_FLOW_LEVEL;
 			dest[i].type = MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE;
 			dest[i].ft = mlx5_esw_chains_get_tc_end_ft(esw);
 			i++;
 		} else if (attr->dest_chain) {
+		    /*将chain之间的跳转转换为flowtable间跳转*/
 			flow_act.flags |= FLOW_ACT_IGNORE_FLOW_LEVEL;
 			ft = mlx5_esw_chains_get_table(esw, attr->dest_chain,
 						       1, 0);
@@ -369,6 +374,7 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 			}
 		}
 	}
+	//flow counter动作
 	if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_COUNT) {
 		dest[i].type = MLX5_FLOW_DESTINATION_TYPE_COUNTER;
 		dest[i].counter_id = mlx5_fc_id(attr->counter);
@@ -380,6 +386,7 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 	if (attr->inner_match_level != MLX5_MATCH_NONE)
 		spec->match_criteria_enable |= MLX5_MATCH_INNER_HEADERS;
 
+	//如果需要修改头部，则记录需要修改的头部信息
 	if (flow_act.action & MLX5_FLOW_CONTEXT_ACTION_MOD_HDR)
 		flow_act.modify_hdr = attr->modify_hdr;
 
@@ -395,11 +402,14 @@ mlx5_eswitch_add_offloaded_rule(struct mlx5_eswitch *esw,
 		if (!(attr->flags & MLX5_ESW_ATTR_FLAG_NO_IN_PORT))
 			mlx5_eswitch_set_rule_source_port(esw, spec, attr);
 	}
+
+	/*未找到合适的flow table,跳出*/
 	if (IS_ERR(fdb)) {
 		rule = ERR_CAST(fdb);
 		goto err_esw_get;
 	}
 
+	/*检查规则是否需要split ?*/
 	if (mlx5_eswitch_termtbl_required(esw, attr, &flow_act, spec))
 		rule = mlx5_eswitch_add_termtbl_rule(esw, fdb, spec, attr,
 						     &flow_act, dest, i);

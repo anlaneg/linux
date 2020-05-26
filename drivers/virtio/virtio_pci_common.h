@@ -53,7 +53,7 @@ struct virtio_pci_device {
 	/* Modern only fields */
 	/* The IO mapping for the PCI config space (non-legacy mode) */
 	//映射自设备（VIRTIO_PCI_CAP_COMMON_CFG capability）
-	struct virtio_pci_common_cfg __iomem *common;
+	struct virtio_pci_common_cfg __iomem *common;//virto-pci公共配置
 	/* Device-specific data (non-legacy mode)  */
 	void __iomem *device;
 	/* Base of vq notifications (non-legacy mode). */
@@ -98,7 +98,7 @@ struct virtio_pci_device {
 	unsigned msix_used_vectors;//已使用的中断数目
 
 	/* Whether we have vector per vq */
-	bool per_vq_vectors;
+	bool per_vq_vectors;/*是否每个vq一个中断向量*/
 
 	//创建virtqueue
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,

@@ -35,6 +35,7 @@
 
 #include "fs_core.h"
 
+//向fw提供发送命令完成相应数据结构创建
 struct mlx5_flow_cmds {
 	int (*create_flow_table)(struct mlx5_flow_root_namespace *ns,
 				 struct mlx5_flow_table *ft,
@@ -56,6 +57,7 @@ struct mlx5_flow_cmds {
 				  struct mlx5_flow_table *ft,
 				  struct mlx5_flow_group *fg);
 
+	//通过fw命令创建fte
 	int (*create_fte)(struct mlx5_flow_root_namespace *ns,
 			  struct mlx5_flow_table *ft,
 			  struct mlx5_flow_group *fg,

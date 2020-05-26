@@ -234,9 +234,10 @@ static inline void idr_preload_end(void)
  * IDA - ID Allocator, use when translation from id to pointer isn't necessary.
  */
 #define IDA_CHUNK_SIZE		128	/* 128 bytes per chunk */
-#define IDA_BITMAP_LONGS	(IDA_CHUNK_SIZE / sizeof(long))
-#define IDA_BITMAP_BITS 	(IDA_BITMAP_LONGS * sizeof(long) * 8)
+#define IDA_BITMAP_LONGS	(IDA_CHUNK_SIZE / sizeof(long)) //128字节共计多少long类型
+#define IDA_BITMAP_BITS 	(IDA_BITMAP_LONGS * sizeof(long) * 8) //一个chunk可用的bits数
 
+//定义一个chunk的bitmap
 struct ida_bitmap {
 	unsigned long		bitmap[IDA_BITMAP_LONGS];
 };
@@ -269,7 +270,7 @@ void ida_destroy(struct ida *ida);
  */
 static inline int ida_alloc(struct ida *ida, gfp_t gfp)
 {
-	//申请id号
+    //申请一个没有使用的id号
 	return ida_alloc_range(ida, 0, ~0, gfp);
 }
 
@@ -287,6 +288,7 @@ static inline int ida_alloc(struct ida *ida, gfp_t gfp)
  */
 static inline int ida_alloc_min(struct ida *ida, unsigned int min, gfp_t gfp)
 {
+    //申请一个没有使用的id号
 	return ida_alloc_range(ida, min, ~0, gfp);
 }
 
@@ -304,6 +306,7 @@ static inline int ida_alloc_min(struct ida *ida, unsigned int min, gfp_t gfp)
  */
 static inline int ida_alloc_max(struct ida *ida, unsigned int max, gfp_t gfp)
 {
+    //申请一个没有使用的id号
 	return ida_alloc_range(ida, 0, max, gfp);
 }
 

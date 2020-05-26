@@ -687,6 +687,7 @@ static ssize_t tap_get_user(struct tap_queue *q, void *msg_control,
 			linear = ETH_HLEN;
 	}
 
+	//申请skb
 	skb = tap_alloc_skb(&q->sk, TAP_RESERVE, copylen,
 			    linear, noblock, &err);
 	if (!skb)
@@ -732,6 +733,7 @@ static ssize_t tap_get_user(struct tap_queue *q, void *msg_control,
 	}
 
 	if (tap) {
+	    //将报文发送给tap口
 		skb->dev = tap->dev;
 		dev_queue_xmit(skb);
 	} else {
@@ -861,6 +863,7 @@ static ssize_t tap_do_read(struct tap_queue *q,
 
 put:
 	if (skb) {
+	    //读取skb的内容，将其存入到to中
 		ret = tap_put_user(q, skb, to);
 		if (unlikely(ret < 0))
 			kfree_skb(skb);

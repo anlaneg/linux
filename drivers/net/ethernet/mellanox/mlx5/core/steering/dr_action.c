@@ -219,7 +219,7 @@ next_action_state[DR_ACTION_DOMAIN_MAX][DR_ACTION_STATE_MAX][DR_ACTION_TYP_MAX] 
 };
 
 struct dr_action_modify_field_conv {
-	u16 hw_field;
+	u16 hw_field;//硬件字段名称
 	u8 start;
 	u8 end;
 	u8 l3_type;
@@ -227,24 +227,29 @@ struct dr_action_modify_field_conv {
 };
 
 static const struct dr_action_modify_field_conv dr_action_conv_arr[] = {
+    //src mac信息
 	[MLX5_ACTION_IN_FIELD_OUT_SMAC_47_16] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_1, .start = 16, .end = 47,
 	},
 	[MLX5_ACTION_IN_FIELD_OUT_SMAC_15_0] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_1, .start = 0, .end = 15,
 	},
+	//ethertype信息
 	[MLX5_ACTION_IN_FIELD_OUT_ETHERTYPE] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_2, .start = 32, .end = 47,
 	},
+	//dst mac信息
 	[MLX5_ACTION_IN_FIELD_OUT_DMAC_47_16] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_0, .start = 16, .end = 47,
 	},
 	[MLX5_ACTION_IN_FIELD_OUT_DMAC_15_0] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_0, .start = 0, .end = 15,
 	},
+	//ip层dscp
 	[MLX5_ACTION_IN_FIELD_OUT_IP_DSCP] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L3_1, .start = 0, .end = 5,
 	},
+	//
 	[MLX5_ACTION_IN_FIELD_OUT_TCP_FLAGS] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L4_0, .start = 48, .end = 56,
 		.l4_type = MLX5DR_ACTION_MDFY_HW_HDR_L4_TCP,
@@ -313,6 +318,7 @@ static const struct dr_action_modify_field_conv dr_action_conv_arr[] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L3_0, .start = 32, .end = 63,
 		.l3_type = MLX5DR_ACTION_MDFY_HW_HDR_L3_IPV4,
 	},
+	//寄存器取值（1个metadata寄存器，3个64位寄存器）
 	[MLX5_ACTION_IN_FIELD_METADATA_REG_A] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_METADATA, .start = 0, .end = 31,
 	},
@@ -337,12 +343,15 @@ static const struct dr_action_modify_field_conv dr_action_conv_arr[] = {
 	[MLX5_ACTION_IN_FIELD_METADATA_REG_C_5] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_REG_2, .start = 0, .end = 31,
 	},
+	//tcp seq 编号
 	[MLX5_ACTION_IN_FIELD_OUT_TCP_SEQ_NUM] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L4_1, .start = 32, .end = 63,
 	},
+	//tcp ack 编号
 	[MLX5_ACTION_IN_FIELD_OUT_TCP_ACK_NUM] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L4_1, .start = 0, .end = 31,
 	},
+	//首个vlan id
 	[MLX5_ACTION_IN_FIELD_OUT_FIRST_VID] = {
 		.hw_field = MLX5DR_ACTION_MDFY_HW_FLD_L2_2, .start = 0, .end = 15,
 	},
@@ -893,6 +902,7 @@ static int dr_actions_l2_rewrite(struct mlx5dr_domain *dmn,
 		MLX5_SET(dr_action_hw_set, ops + i, inline_data, hdr_fld_2b);
 		MLX5_SET(dr_action_hw_set, ops + i, destination_length, 16);
 	} else {
+	    /*执行vlan封装*/
 		hdr_fld_2b = MLX5_GET(l2_hdr, l2_hdr, ethertype);
 		vlan_type = hdr_fld_2b == SVLAN_ETHERTYPE ? DR_STE_SVLAN : DR_STE_CVLAN;
 		hdr_fld_2b = MLX5_GET(l2_hdr, l2_hdr, vlan);
@@ -1315,11 +1325,13 @@ dec_ref:
 	return NULL;
 }
 
+//取此sw_field对应的硬件信息
 static const struct dr_action_modify_field_conv *
 dr_action_modify_get_hw_info(u16 sw_field)
 {
 	const struct dr_action_modify_field_conv *hw_action_info;
 
+	//检查software字段索引是否合法
 	if (sw_field >= ARRAY_SIZE(dr_action_conv_arr))
 		goto not_found;
 
@@ -1392,7 +1404,7 @@ dr_action_modify_sw_to_hw_set(struct mlx5dr_domain *dmn,
 	length = MLX5_GET(set_action_in, sw_action, length);
 	offset = MLX5_GET(set_action_in, sw_action, offset);
 	sw_field = MLX5_GET(set_action_in, sw_action, field);
-	data = MLX5_GET(set_action_in, sw_action, data);
+	data = MLX5_GET(set_action_in, sw_action, data);/*取要设置的数据*/
 
 	/* Convert SW data to HW modify action format */
 	hw_action_info = dr_action_modify_get_hw_info(sw_field);
@@ -1404,6 +1416,7 @@ dr_action_modify_sw_to_hw_set(struct mlx5dr_domain *dmn,
 	/* PRM defines that length zero specific length of 32bits */
 	length = length ? length : 32;
 
+	//取硬件最大长度
 	max_length = hw_action_info->end - hw_action_info->start + 1;
 
 	if (length + offset > max_length) {
@@ -1423,6 +1436,7 @@ dr_action_modify_sw_to_hw_set(struct mlx5dr_domain *dmn,
 	MLX5_SET(dr_action_hw_set, hw_action, destination_length,
 		 length == 32 ? 0 : length);
 
+	//设置要设置的对应的数据
 	MLX5_SET(dr_action_hw_set, hw_action, inline_data, data);
 
 	*ret_hw_info = hw_action_info;
@@ -1513,6 +1527,7 @@ dr_action_modify_sw_to_hw(struct mlx5dr_domain *dmn,
 
 	switch (action) {
 	case MLX5_ACTION_TYPE_SET:
+	    /*内容修改*/
 		ret = dr_action_modify_sw_to_hw_set(dmn, sw_action,
 						    hw_action,
 						    ret_dst_hw_info);
@@ -1692,6 +1707,7 @@ static int dr_actions_convert_modify_header(struct mlx5dr_action *action,
 	action->rewrite.allow_rx = 1;
 	action->rewrite.allow_tx = 1;
 
+	//遍历每个sw的actions
 	for (i = 0; i < num_sw_actions; i++) {
 		sw_action = &sw_actions[i];
 
@@ -1766,7 +1782,7 @@ static int dr_action_create_modify_action(struct mlx5dr_domain *dmn,
 	u32 num_hw_actions;
 	u32 num_sw_actions;
 	__be64 *hw_actions;
-	bool modify_ttl;
+	bool modify_ttl/*是否修改ttl*/;
 	int ret;
 
 	num_sw_actions = actions_sz / DR_MODIFY_ACTION_SIZE;
@@ -1782,6 +1798,7 @@ static int dr_action_create_modify_action(struct mlx5dr_domain *dmn,
 	if (!chunk)
 		return -ENOMEM;
 
+	/*申请存放hw_actions*/
 	hw_actions = kcalloc(1, max_hw_actions * DR_MODIFY_ACTION_SIZE, GFP_KERNEL);
 	if (!hw_actions) {
 		ret = -ENOMEM;
@@ -1793,7 +1810,7 @@ static int dr_action_create_modify_action(struct mlx5dr_domain *dmn,
 					       num_sw_actions,
 					       actions,
 					       hw_actions,
-					       &num_hw_actions,
+					       &num_hw_actions/*出参，hw action的数目*/,
 					       &modify_ttl);
 	if (ret)
 		goto free_hw_actions;

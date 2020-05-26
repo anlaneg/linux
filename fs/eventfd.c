@@ -369,6 +369,7 @@ struct file *eventfd_fget(int fd)
 	file = fget(fd);
 	if (!file)
 		return ERR_PTR(-EBADF);
+	/*fd指定的必须为eventfd*/
 	if (file->f_op != &eventfd_fops) {
 		fput(file);
 		return ERR_PTR(-EINVAL);

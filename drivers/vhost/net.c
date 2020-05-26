@@ -106,8 +106,8 @@ struct vhost_net_buf {
 
 struct vhost_net_virtqueue {
 	struct vhost_virtqueue vq;
-	size_t vhost_hlen;
-	size_t sock_hlen;
+	size_t vhost_hlen;/*协商出来的vhost头部长度*/
+	size_t sock_hlen;/*协商出来的socket头部长度*/
 	/* vhost zerocopy support fields below: */
 	/* last used idx for outstanding DMA zerocopy buffers */
 	int upend_idx;
@@ -287,6 +287,7 @@ static int vhost_net_set_ubuf_info(struct vhost_net *n)
 		if (!zcopy)
 		    /*如果此队列未开启zcopy,则跳过*/
 			continue;
+		//申请ubuf_info空间
 		n->vqs[i].ubuf_info =
 			kmalloc_array(UIO_MAXIOV,
 				      sizeof(*n->vqs[i].ubuf_info),
@@ -560,13 +561,14 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 
 static int vhost_net_tx_get_vq_desc(struct vhost_net *net,
 				    struct vhost_net_virtqueue *tnvq,
-				    unsigned int *out_num, unsigned int *in_num,
+				    unsigned int *out_num/*出参，可读数据片数目*/, unsigned int *in_num/*出参，可写数据片数目*/,
 				    struct msghdr *msghdr, bool *busyloop_intr)
 {
 	struct vhost_net_virtqueue *rnvq = &net->vqs[VHOST_NET_VQ_RX];
 	struct vhost_virtqueue *rvq = &rnvq->vq;
 	struct vhost_virtqueue *tvq = &tnvq->vq;
 
+	//取可用描述符索引
 	int r = vhost_get_vq_desc(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
 				  out_num, in_num, NULL, NULL);
 
@@ -610,24 +612,28 @@ static size_t init_iov_iter(struct vhost_virtqueue *vq, struct iov_iter *iter,
 static int get_tx_bufs(struct vhost_net *net,
 		       struct vhost_net_virtqueue *nvq,
 		       struct msghdr *msg,
-		       unsigned int *out, unsigned int *in,
+		       unsigned int *out/*出参，可读数据片数目*/, unsigned int *in/*出参，可写数据片数目*/,
 		       size_t *len, bool *busyloop_intr)
 {
 	struct vhost_virtqueue *vq = &nvq->vq;
 	int ret;
 
+	//取可用描述符索引
 	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
 
+	//提取失败或者无可用描述符，直接返回
 	if (ret < 0 || ret == vq->num)
 		return ret;
 
 	if (*in) {
+	    /*当前为读取报文并发送给tap口，故in需要为0*/
 		vq_err(vq, "Unexpected descriptor format for TX: out %d, int %d\n",
 			*out, *in);
 		return -EFAULT;
 	}
 
 	/* Sanity check */
+	//将描述符指定的buffer赋给msg->msg_iter
 	*len = init_iov_iter(vq, &msg->msg_iter, nvq->vhost_hlen, *out);
 	if (*len == 0) {
 		vq_err(vq, "Unexpected header len for TX: %zd expected %zd\n",
@@ -758,6 +764,7 @@ static int vhost_net_build_xdp(struct vhost_net_virtqueue *nvq,
 	return 0;
 }
 
+//处理发送队列的报文，将其扔给后端socket
 static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 {
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_TX];
@@ -782,6 +789,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		if (nvq->done_idx == VHOST_NET_BATCH)
 			vhost_tx_batch(net, nvq, sock, &msg);
 
+		//获取描述符索引及其指明的buffer
 		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len,
 				   &busyloop_intr);
 		/* On error, stop handling until the next kick. */
@@ -829,7 +837,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		}
 
 		/* TODO: Check specific error and bomb out unless ENOBUFS? */
-		/*向socket中发送报文*/
+		/*自msg中复制数据，构造skb,并向sock中发送报文*/
 		err = sock->ops->sendmsg(sock, &msg, len);
 		if (unlikely(err < 0)) {
 			vhost_discard_vq_desc(vq, 1);
@@ -950,12 +958,14 @@ static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
 
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
+//处理tx队列报文发送
 static void handle_tx(struct vhost_net *net)
 {
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_TX];
 	struct vhost_virtqueue *vq = &nvq->vq;
 	struct socket *sock;
 
+	//取后端对应的socket
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_TX);
 	sock = vhost_vq_get_backend(vq);
 	if (!sock)
@@ -970,6 +980,7 @@ static void handle_tx(struct vhost_net *net)
 	if (vhost_sock_zcopy(sock))
 		handle_tx_zerocopy(net, sock);
 	else
+	    //处理tx队列的报文 ，将其传给sock
 		handle_tx_copy(net, sock);
 
 out:
@@ -1029,12 +1040,12 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
  *	returns number of buffer heads allocated, negative on error
  */
 static int get_rx_bufs(struct vhost_virtqueue *vq,
-		       struct vring_used_elem *heads,
-		       int datalen,
-		       unsigned *iovcount,
+		       struct vring_used_elem *heads/*出参，需占用描述符及其能及供的buffer尺寸*/,
+		       int datalen/*预期要获得的buffer总大小*/,
+		       unsigned *iovcount/*出参，vq->iov被占用总长度*/,
 		       struct vhost_log *log,
 		       unsigned *log_num,
-		       unsigned int quota)
+		       unsigned int quota/*容许占用的描述符数目上限*/)
 {
 	unsigned int out, in;
 	int seg = 0;
@@ -1048,9 +1059,12 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	while (datalen > 0 && headcount < quota) {
 		if (unlikely(seg >= UIO_MAXIOV)) {
+		    //数据片段过多，报错
 			r = -ENOBUFS;
 			goto err;
 		}
+
+		//取可用描述符索引
 		r = vhost_get_vq_desc(vq, vq->iov + seg,
 				      ARRAY_SIZE(vq->iov) - seg, &out,
 				      &in, log, log_num);
@@ -1059,10 +1073,12 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 		d = r;
 		if (d == vq->num) {
+		    /*无用描述符，退出*/
 			r = 0;
 			goto err;
 		}
 		if (unlikely(out || in <= 0)) {
+		    /*当前在处理报文发送，故需要可读buffer数目为0*/
 			vq_err(vq, "unexpected descriptor format for RX: "
 				"out %d, in %d\n", out, in);
 			r = -EINVAL;
@@ -1073,11 +1089,12 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 			log += *log_num;
 		}
 		heads[headcount].id = cpu_to_vhost32(vq, d);
+		//当前已占用描述符可提供的buffer大小
 		len = iov_length(vq->iov + seg, in);
 		heads[headcount].len = cpu_to_vhost32(vq, len);
-		datalen -= len;
-		++headcount;
-		seg += in;
+		datalen -= len;//剩余待需要buffer大小
+		++headcount;//已占用描述符数目
+		seg += in;/*当前已占用iov 数据片总数目*/
 	}
 	heads[headcount - 1].len = cpu_to_vhost32(vq, len + datalen);
 	*iovcount = seg;
@@ -1097,6 +1114,7 @@ err:
 
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
+//从tap口拿到报文，将其写入到net->vqs rx队列中
 static void handle_rx(struct vhost_net *net)
 {
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_RX];
@@ -1126,6 +1144,7 @@ static void handle_rx(struct vhost_net *net)
 	int recv_pkts = 0;
 
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_RX);
+	//取vq对应的后端
 	sock = vhost_vq_get_backend(vq);
 	if (!sock)
 		goto out;
@@ -1148,6 +1167,7 @@ static void handle_rx(struct vhost_net *net)
 						      &busyloop_intr);
 		if (!sock_len)
 			break;
+		//需要读取的buffer总长为vhost_len,获取足够描述符，以便可以存入它
 		sock_len += sock_hlen;
 		vhost_len = sock_len + vhost_hlen;
 		headcount = get_rx_bufs(vq, vq->heads + nvq->done_idx,
@@ -1158,6 +1178,7 @@ static void handle_rx(struct vhost_net *net)
 			goto out;
 		/* OK, now we need to know about added descriptors. */
 		if (!headcount) {
+		    /*未获取到描述符*/
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
 			} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {
@@ -1191,7 +1212,7 @@ static void handle_rx(struct vhost_net *net)
 			iov_iter_advance(&msg.msg_iter, vhost_hlen);
 		}
 
-		/*自socket中收取报文*/
+		/*可写的buffer已被记录在msg.msg_iter中，自sock中拿到报文，将其写入到msg.msg_iter中*/
 		err = sock->ops->recvmsg(sock, &msg,
 					 sock_len, MSG_DONTWAIT | MSG_TRUNC);
 		/* Userspace might have consumed the packet meanwhile:
@@ -1264,7 +1285,7 @@ static void handle_rx_kick(struct vhost_work *work)
 	handle_rx(net);
 }
 
-/*vhost发包入口*/
+/*vhost tx队列处理入口，报文将被发送给后端socket*/
 static void handle_tx_net(struct vhost_work *work)
 {
 	struct vhost_net *net = container_of(work, struct vhost_net,
@@ -1272,7 +1293,7 @@ static void handle_tx_net(struct vhost_work *work)
 	handle_tx(net);
 }
 
-/*vhost收包入口*/
+/*vhost rx队列处理入口，报文将被送给vm*/
 static void handle_rx_net(struct vhost_work *work)
 {
 	struct vhost_net *net = container_of(work, struct vhost_net,
@@ -1280,6 +1301,7 @@ static void handle_rx_net(struct vhost_work *work)
 	handle_rx(net);
 }
 
+//处理vhost-net设备打开
 static int vhost_net_open(struct inode *inode, struct file *f)
 {
 	struct vhost_net *n;
@@ -1292,6 +1314,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	n = kvmalloc(sizeof *n, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!n)
 		return -ENOMEM;
+	//申请多个vqs
 	vqs = kmalloc_array(VHOST_NET_VQ_MAX, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs) {
 		kvfree(n);
@@ -1511,6 +1534,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	int r;
 
 	mutex_lock(&n->dev.mutex);
+	//设置后端的必须为owner
 	r = vhost_dev_check_owner(&n->dev);
 	if (r)
 		goto err;
@@ -1609,6 +1633,7 @@ static long vhost_net_reset_owner(struct vhost_net *n)
 	struct vhost_iotlb *umem;
 
 	mutex_lock(&n->dev.mutex);
+	/*必须由owner发起reset*/
 	err = vhost_dev_check_owner(&n->dev);
 	if (err)
 		goto done;
@@ -1631,6 +1656,7 @@ done:
 	return err;
 }
 
+//设置backend需要开启的功能
 static int vhost_net_set_backend_features(struct vhost_net *n, u64 features)
 {
 	int i;
@@ -1651,6 +1677,7 @@ static int vhost_net_set_features(struct vhost_net *n, u64 features)
 	size_t vhost_hlen, sock_hlen, hdr_len;
 	int i;
 
+	//如果开启了mrg_rxbuf或者version_1,则vhost header长度为mrg_rxbuf,否则为net_hdr
 	hdr_len = (features & ((1ULL << VIRTIO_NET_F_MRG_RXBUF) |
 			       (1ULL << VIRTIO_F_VERSION_1))) ?
 			sizeof(struct virtio_net_hdr_mrg_rxbuf) :
@@ -1669,6 +1696,7 @@ static int vhost_net_set_features(struct vhost_net *n, u64 features)
 	    !vhost_log_access_ok(&n->dev))
 		goto out_unlock;
 
+	//初始化iotlb
 	if ((features & (1ULL << VIRTIO_F_IOMMU_PLATFORM))) {
 		if (vhost_init_device_iotlb(&n->dev, true))
 			goto out_unlock;
@@ -1689,6 +1717,7 @@ out_unlock:
 	return -EFAULT;
 }
 
+//为vhost-dev设置owner
 static long vhost_net_set_owner(struct vhost_net *n)
 {
 	int r;
@@ -1699,9 +1728,12 @@ static long vhost_net_set_owner(struct vhost_net *n)
 		r = -EBUSY;
 		goto out;
 	}
+
+	//初始化ubuf_info空间
 	r = vhost_net_set_ubuf_info(n);
 	if (r)
 		goto out;
+	//确定vhost-dev的owner，创建相应内核线程
 	r = vhost_dev_set_owner(&n->dev);
 	if (r)
 		vhost_net_clear_ubuf_info(n);
@@ -1711,6 +1743,7 @@ out:
 	return r;
 }
 
+//处理vhost-net设备的ioctl
 static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			    unsigned long arg)
 {
@@ -1723,9 +1756,9 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 
 	switch (ioctl) {
 	case VHOST_NET_SET_BACKEND:
+	    /*设置收/发队列的backend*/
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
-		/*设置收/发队列的backend*/
 		return vhost_net_set_backend(n, backend.index, backend.fd);
 	case VHOST_GET_FEATURES:
 	    /*返回vhost支持的features*/
@@ -1734,7 +1767,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			return -EFAULT;
 		return 0;
 	case VHOST_SET_FEATURES:
-	    /*设置vhost需要支持的features,当前仅容许vhost支持feature的关闭*/
+	    /*设置vhost-net需要支持的features*/
 		if (copy_from_user(&features, featurep, sizeof features))
 			return -EFAULT;
 		if (features & ~VHOST_NET_FEATURES)
@@ -1754,9 +1787,10 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			return -EOPNOTSUPP;
 		return vhost_net_set_backend_features(n, features);
 	case VHOST_RESET_OWNER:
+	    /*重置owner*/
 		return vhost_net_reset_owner(n);
 	case VHOST_SET_OWNER:
-	    /*创建vhost work线程,处理work*/
+	    /*为vhost-net设置owner,创建vhost work线程,处理work*/
 		return vhost_net_set_owner(n);
 	default:
 		mutex_lock(&n->dev.mutex);
@@ -1823,7 +1857,8 @@ static int vhost_net_init(void)
 {
 	if (experimental_zcopytx)
 		vhost_net_enable_zcopy(VHOST_NET_VQ_TX);
-	/*vhost-net字符设备创建*/
+
+	/*vhost-net字符设备注册*/
 	return misc_register(&vhost_net_misc);
 }
 module_init(vhost_net_init);

@@ -51,6 +51,7 @@
  */
 static inline void *xa_mk_value(unsigned long v)
 {
+    //左移一位，并打上标记‘1’，指明为value
 	WARN_ON((long)v < 0);
 	return (void *)((v << 1) | 1);
 }
@@ -64,6 +65,7 @@ static inline void *xa_mk_value(unsigned long v)
  */
 static inline unsigned long xa_to_value(const void *entry)
 {
+    //还原value（原来左移了一位，并打上了'1'标记）
 	return (unsigned long)entry >> 1;
 }
 
@@ -76,6 +78,7 @@ static inline unsigned long xa_to_value(const void *entry)
  */
 static inline bool xa_is_value(const void *entry)
 {
+    //检查entry是否为value
 	return (unsigned long)entry & 1;
 }
 
@@ -94,6 +97,7 @@ static inline bool xa_is_value(const void *entry)
  */
 static inline void *xa_tag_pointer(void *p, unsigned long tag)
 {
+    //为p打上 tag (目前为 0，1，3）
 	return (void *)((unsigned long)p | tag);
 }
 
@@ -109,6 +113,7 @@ static inline void *xa_tag_pointer(void *p, unsigned long tag)
  */
 static inline void *xa_untag_pointer(void *entry)
 {
+    //移除tag
 	return (void *)((unsigned long)entry & ~3UL);
 }
 
@@ -124,6 +129,7 @@ static inline void *xa_untag_pointer(void *entry)
  */
 static inline unsigned int xa_pointer_tag(void *entry)
 {
+    //取出指针上的tag
 	return (unsigned long)entry & 3UL;
 }
 
@@ -142,6 +148,7 @@ static inline unsigned int xa_pointer_tag(void *entry)
  */
 static inline void *xa_mk_internal(unsigned long v)
 {
+    //为v打上internal标记 （左移 2位，并打上'10'标记）
 	return (void *)((v << 2) | 2);
 }
 
@@ -154,6 +161,7 @@ static inline void *xa_mk_internal(unsigned long v)
  */
 static inline unsigned long xa_to_internal(const void *entry)
 {
+    //取出internal标记前的值
 	return (unsigned long)entry >> 2;
 }
 
@@ -166,9 +174,11 @@ static inline unsigned long xa_to_internal(const void *entry)
  */
 static inline bool xa_is_internal(const void *entry)
 {
+    //检查是否有internal标记
 	return ((unsigned long)entry & 3) == 2;
 }
 
+//定义zero entry(其为一个等值于 257的内部entry)
 #define XA_ZERO_ENTRY		xa_mk_internal(257)
 
 /**
@@ -182,6 +192,7 @@ static inline bool xa_is_internal(const void *entry)
  */
 static inline bool xa_is_zero(const void *entry)
 {
+    //检查是否为zero entry
 	return unlikely(entry == XA_ZERO_ENTRY);
 }
 
@@ -198,6 +209,7 @@ static inline bool xa_is_zero(const void *entry)
  */
 static inline bool xa_is_err(const void *entry)
 {
+    //检查entry是否为error,error必须是internal类型，且必须是合法的error number
 	return unlikely(xa_is_internal(entry) &&
 			entry >= xa_mk_internal(-MAX_ERRNO));
 }
@@ -217,6 +229,7 @@ static inline bool xa_is_err(const void *entry)
 static inline int xa_err(void *entry)
 {
 	/* xa_to_internal() would not do sign extension. */
+    //如果xa保存着error number,则返回error number
 	if (xa_is_err(entry))
 		return (long)entry >> 2;
 	return 0;
@@ -238,9 +251,12 @@ struct xa_limit {
 	u32 min;
 };
 
+//定义xa_limit类型初始化函数
 #define XA_LIMIT(_min, _max) (struct xa_limit) { .min = _min, .max = _max }
 
+//定义u32 bit limit
 #define xa_limit_32b	XA_LIMIT(0, UINT_MAX)
+//定义u31 bit limit
 #define xa_limit_31b	XA_LIMIT(0, INT_MAX)
 
 typedef unsigned __bitwise xa_mark_t;
@@ -293,9 +309,10 @@ struct xarray {
 	spinlock_t	xa_lock;
 /* private: The rest of the data structure is not to be used directly. */
 	gfp_t		xa_flags;
-	void __rcu *	xa_head;
+	void __rcu *	xa_head;//首个元素
 };
 
+//初始化xarray
 #define XARRAY_INIT(name, flags) {				\
 	.xa_lock = __SPIN_LOCK_UNLOCKED(name.xa_lock),		\
 	.xa_flags = flags,					\
@@ -1161,6 +1178,7 @@ void xa_dump_node(const struct xa_node *);
 /* Private */
 static inline void *xa_head(const struct xarray *xa)
 {
+    //取xa中首个元素
 	return rcu_dereference_check(xa->xa_head,
 						lockdep_is_held(&xa->xa_lock));
 }
@@ -1168,6 +1186,7 @@ static inline void *xa_head(const struct xarray *xa)
 /* Private */
 static inline void *xa_head_locked(const struct xarray *xa)
 {
+    //取xa中首个元素
 	return rcu_dereference_protected(xa->xa_head,
 						lockdep_is_held(&xa->xa_lock));
 }
@@ -1319,18 +1338,20 @@ struct xa_state {
  * We encode errnos in the xas->xa_node.  If an error has happened, we need to
  * drop the lock to fix it, and once we've done so the xa_state is invalid.
  */
+//将errno存放到xa_node中
 #define XA_ERROR(errno) ((struct xa_node *)(((unsigned long)errno << 2) | 2UL))
+//由于xa_node中存入的为errno,故有'1','3' 两个node没有被使用，将其定义为xas_bounds,xas_restart
 #define XAS_BOUNDS	((struct xa_node *)1UL)
 #define XAS_RESTART	((struct xa_node *)3UL)
 
 #define __XA_STATE(array, index, shift, sibs)  {	\
-	.xa = array,					\
+	.xa = array,/*要操作的array*/					\
 	.xa_index = index,				\
 	.xa_shift = shift,				\
 	.xa_sibs = sibs,				\
 	.xa_offset = 0,					\
 	.xa_pad = 0,					\
-	.xa_node = XAS_RESTART,				\
+	.xa_node = XAS_RESTART,/*指定为restart状态*/				\
 	.xa_alloc = NULL,				\
 	.xa_update = NULL				\
 }
@@ -1343,7 +1364,8 @@ struct xa_state {
  *
  * Declare and initialise an xa_state on the stack.
  */
-#define XA_STATE(name, array, index)				\
+#define XA_STATE(name/*变量名称*/, array/*被操作的xarray*/, index)				\
+        /*定义名称为name的xa_state*/\
 	struct xa_state name = __XA_STATE(array, index, 0, 0)
 
 /**
@@ -1384,6 +1406,7 @@ struct xa_state {
  */
 static inline int xas_error(const struct xa_state *xas)
 {
+    //取xas->xa_node存储的error number
 	return xa_err(xas->xa_node);
 }
 
@@ -1398,6 +1421,7 @@ static inline int xas_error(const struct xa_state *xas)
  */
 static inline void xas_set_err(struct xa_state *xas, long err)
 {
+    //在xa_state中保存error number
 	xas->xa_node = XA_ERROR(err);
 }
 
@@ -1409,6 +1433,11 @@ static inline void xas_set_err(struct xa_state *xas, long err)
  */
 static inline bool xas_invalid(const struct xa_state *xas)
 {
+    //由于xas->xa_node有三种情况
+    //(1） error number 以'10'结尾
+    //(2) XAS_BOUNDS 定义为 '01'
+    //(3) XAS_RESTART 定义为 '11'
+    //故以上三种均能返回真
 	return (unsigned long)xas->xa_node & 3;
 }
 

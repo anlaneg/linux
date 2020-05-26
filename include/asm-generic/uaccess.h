@@ -151,6 +151,7 @@ static inline int __put_user_fn(size_t size, void __user *ptr, void *x)
 
 extern int __put_user_bad(void) __attribute__((noreturn));
 
+/*自user space读取指针ptr指向的值，将其存入x指向的位置*/
 #define __get_user(x, ptr)					\
 ({								\
 	int __gu_err = -EFAULT;					\
@@ -203,10 +204,11 @@ extern int __put_user_bad(void) __attribute__((noreturn));
 #ifndef __get_user_fn
 static inline int __get_user_fn(size_t size, const void __user *ptr, void *x)
 {
+    //自用户态copy一段由ptr指向的长度为size的数据到x指向的位置
 	return unlikely(raw_copy_from_user(x, ptr, size)) ? -EFAULT : 0;
 }
 
-#define __get_user_fn(sz, u, k)	__get_user_fn(sz, u, k)
+#define __get_user_fn(sz, u/*用户态指向的内存*/, k/*kernel指向的内存*/)	__get_user_fn(sz, u, k)
 
 #endif
 
