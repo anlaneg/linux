@@ -115,7 +115,7 @@ struct ovs_skb_cb {
  */
 struct dp_upcall_info {
 	struct ip_tunnel_info *egress_tun_info;
-	const struct nlattr *userdata;
+	const struct nlattr *userdata;//upcall时上传到用户态的信息
 	const struct nlattr *actions;
 	int actions_len;
 	//采用哪个portid发送消息（netlink消息）

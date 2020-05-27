@@ -938,7 +938,7 @@ static int output_userspace(struct datapath *dp, struct sk_buff *skb,
 		 a = nla_next(a, &rem)) {
 		switch (nla_type(a)) {
 		case OVS_USERSPACE_ATTR_USERDATA:
-			//上送用户指定的data
+			//设置上送用户指定的data
 			upcall.userdata = a;
 			break;
 
@@ -1000,7 +1000,7 @@ static int dec_ttl_exception_handler(struct datapath *dp, struct sk_buff *skb,
  */
 static int sample(struct datapath *dp, struct sk_buff *skb,
 		  struct sw_flow_key *key, const struct nlattr *attr,
-		  bool last)
+		  bool last/*是否最后一个action*/)
 {
 	struct nlattr *actions;
 	struct nlattr *sample_arg;
@@ -1011,8 +1011,11 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 	/* The first action is always 'OVS_SAMPLE_ATTR_ARG'. */
 	sample_arg = nla_data(attr);
 	arg = nla_data(sample_arg);
+	//跟随在采样后面的action
 	actions = nla_next(sample_arg, &rem);
 
+	//probability为U32_MAX时 或者随机数大于arg->probability时，直接跳过此检查
+	//否则不进行采样
 	if ((arg->probability != U32_MAX) &&
 	    (!arg->probability || prandom_u32() > arg->probability)) {
 		if (last)
@@ -1021,7 +1024,7 @@ static int sample(struct datapath *dp, struct sk_buff *skb,
 	}
 
 	clone_flow_key = !arg->exec;
-	return clone_execute(dp, skb, key, 0, actions, rem, last,
+	return clone_execute(dp, skb, key, 0, actions, rem/*action长度*/, last,
 			     clone_flow_key);
 }
 

@@ -468,7 +468,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	if (err)
 		goto out;
 
-	//写入userdata
+	//upcall前写入userdata，例如sflow报文上送情况就在此中，之前用户态写入
 	if (upcall_info->userdata)
 		__nla_put(user_skb, OVS_PACKET_ATTR_USERDATA,
 			  nla_len(upcall_info->userdata),

@@ -636,6 +636,7 @@ struct sample_arg {
 	bool exec;                   /* When true, actions in sample will not
 				      * change flow keys. False otherwise.
 				      */
+	//可能性为u32_max时，无条件采样，否则随机数小于probability时采样
 	u32  probability;            /* Same value as
 				      * 'OVS_SAMPLE_ATTR_PROBABILITY'.
 				      */

@@ -2491,6 +2491,7 @@ static int validate_and_copy_sample(struct net *net, const struct nlattr *attr,
 	if (rem)
 		return -EINVAL;
 
+	//probability不能为0
 	probability = attrs[OVS_SAMPLE_ATTR_PROBABILITY];
 	if (!probability || nla_len(probability) != sizeof(u32))
 		return -EINVAL;
