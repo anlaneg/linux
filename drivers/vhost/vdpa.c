@@ -95,6 +95,7 @@ static irqreturn_t vhost_vdpa_virtqueue_cb(void *private)
 	struct vhost_virtqueue *vq = private;
 	struct eventfd_ctx *call_ctx = vq->call_ctx;
 
+	/*触发eventfd信号*/
 	if (call_ctx)
 		eventfd_signal(call_ctx, 1);
 
@@ -109,6 +110,7 @@ static void vhost_vdpa_reset(struct vhost_vdpa *v)
 	ops->set_status(vdpa, 0);
 }
 
+//返回vdpa设备id号
 static long vhost_vdpa_get_device_id(struct vhost_vdpa *v, u8 __user *argp)
 {
 	struct vdpa_device *vdpa = v->vdpa;
@@ -123,6 +125,7 @@ static long vhost_vdpa_get_device_id(struct vhost_vdpa *v, u8 __user *argp)
 	return 0;
 }
 
+//取vdpa设备状态
 static long vhost_vdpa_get_status(struct vhost_vdpa *v, u8 __user *statusp)
 {
 	struct vdpa_device *vdpa = v->vdpa;
@@ -195,6 +198,7 @@ static long vhost_vdpa_get_config(struct vhost_vdpa *v,
 	if (!buf)
 		return -ENOMEM;
 
+	//取vdpa设备配置
 	ops->get_config(vdpa, config.off, buf, config.len);
 
 	if (copy_to_user(c->buf, buf, config.len)) {
@@ -206,6 +210,7 @@ static long vhost_vdpa_get_config(struct vhost_vdpa *v,
 	return 0;
 }
 
+//vdpa配置设置
 static long vhost_vdpa_set_config(struct vhost_vdpa *v,
 				  struct vhost_vdpa_config __user *c)
 {
@@ -249,6 +254,7 @@ static long vhost_vdpa_get_features(struct vhost_vdpa *v, u64 __user *featurep)
 	return 0;
 }
 
+//设置vdpa设备需要开启的features
 static long vhost_vdpa_set_features(struct vhost_vdpa *v, u64 __user *featurep)
 {
 	struct vdpa_device *vdpa = v->vdpa;
@@ -274,6 +280,7 @@ static long vhost_vdpa_set_features(struct vhost_vdpa *v, u64 __user *featurep)
 	return 0;
 }
 
+//获取vdpa设备vring的大小
 static long vhost_vdpa_get_vring_num(struct vhost_vdpa *v, u16 __user *argp)
 {
 	struct vdpa_device *vdpa = v->vdpa;
@@ -349,6 +356,7 @@ static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 		break;
 
 	case VHOST_SET_VRING_NUM:
+	    //设置vring大小
 		ops->set_vq_num(vdpa, idx, vq->num);
 		break;
 	}
@@ -368,34 +376,44 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 
 	switch (cmd) {
 	case VHOST_VDPA_GET_DEVICE_ID:
+	    //取设备device id
 		r = vhost_vdpa_get_device_id(v, argp);
 		break;
 	case VHOST_VDPA_GET_STATUS:
+	    //取设备状态
 		r = vhost_vdpa_get_status(v, argp);
 		break;
 	case VHOST_VDPA_SET_STATUS:
+	    //设置设备状态
 		r = vhost_vdpa_set_status(v, argp);
 		break;
 	case VHOST_VDPA_GET_CONFIG:
+	    //取vdpa配置
 		r = vhost_vdpa_get_config(v, argp);
 		break;
 	case VHOST_VDPA_SET_CONFIG:
+	    //设置vdpa配置
 		r = vhost_vdpa_set_config(v, argp);
 		break;
 	case VHOST_GET_FEATURES:
+	    //取vdap设备支持的features
 		r = vhost_vdpa_get_features(v, argp);
 		break;
 	case VHOST_SET_FEATURES:
+	    //设置vdpa设置开启的features
 		r = vhost_vdpa_set_features(v, argp);
 		break;
 	case VHOST_VDPA_GET_VRING_NUM:
+	    //获取vring的大小
 		r = vhost_vdpa_get_vring_num(v, argp);
 		break;
 	case VHOST_SET_LOG_BASE:
 	case VHOST_SET_LOG_FD:
+	    //暂不支持以上cmd
 		r = -ENOIOCTLCMD;
 		break;
 	default:
+	    //与vhost设备相关的ioctl
 		r = vhost_dev_ioctl(&v->vdev, cmd, argp);
 		if (r == -ENOIOCTLCMD)
 			r = vhost_vdpa_vring_ioctl(v, cmd, argp);
@@ -744,7 +762,7 @@ static const struct file_operations vhost_vdpa_fops = {
 	.open		= vhost_vdpa_open,
 	.release	= vhost_vdpa_release,
 	.write_iter	= vhost_vdpa_chr_write_iter,
-	//完成vhost控制面协商
+	//完成vhost控制面协商(vdpa实现）
 	.unlocked_ioctl	= vhost_vdpa_unlocked_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
 };
@@ -838,6 +856,7 @@ static void vhost_vdpa_remove(struct vdpa_device *vdpa)
 	put_device(&v->dev);
 }
 
+//注册vdpa驱动（vhost_vdap)
 static struct vdpa_driver vhost_vdpa_driver = {
 	.driver = {
 		.name	= "vhost_vdpa",
@@ -850,7 +869,7 @@ static int __init vhost_vdpa_init(void)
 {
 	int r;
 
-	//注册vhost-vdpa字符设备
+	//为vhost-vdpa字符设备申请设备号
 	r = alloc_chrdev_region(&vhost_vdpa_major, 0, VHOST_VDPA_DEV_MAX,
 				"vhost-vdpa");
 	if (r)

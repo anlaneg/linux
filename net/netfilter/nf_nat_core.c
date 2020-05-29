@@ -603,7 +603,7 @@ struct nf_conn_nat *nf_ct_nat_ext_add(struct nf_conn *ct)
 		//此连接上已创建nat扩展内存，直接返回
 		return nat;
 
-	//创建
+	//添加nat扩展内存
 	if (!nf_ct_is_confirmed(ct))
 		nat = nf_ct_ext_add(ct, NF_CT_EXT_NAT, GFP_ATOMIC);
 
@@ -659,6 +659,7 @@ nf_nat_setup_info(struct nf_conn *ct,
 		else
 			ct->status |= IPS_DST_NAT;//标记需要做dnat
 
+		//如果ct有helper,且ct上没有seq调整扩展，则添加seq调整扩展
 		if (nfct_help(ct) && !nfct_seqadj(ct))
 			if (!nfct_seqadj_ext_add(ct))
 				return NF_DROP;

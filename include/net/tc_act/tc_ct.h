@@ -9,6 +9,7 @@
 #include <net/netfilter/nf_nat.h>
 #include <net/netfilter/nf_conntrack_labels.h>
 
+/*ct的控制参数*/
 struct tcf_ct_params {
 	struct nf_conn *tmpl;
 	u16 zone;

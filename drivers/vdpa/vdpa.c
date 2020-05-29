@@ -14,6 +14,7 @@
 
 static DEFINE_IDA(vdpa_index_ida);
 
+//执行vdpa设备与vdpa驱动适配
 static int vdpa_dev_probe(struct device *d)
 {
 	struct vdpa_device *vdev = dev_to_vdpa(d);
@@ -70,7 +71,7 @@ static void vdpa_release_dev(struct device *d)
  * ida.
  */
 struct vdpa_device *__vdpa_alloc_device(struct device *parent,
-					const struct vdpa_config_ops *config,
+					const struct vdpa_config_ops *config/*vdpa操作集*/,
 					size_t size)
 {
     //vdap设备申请及初始化
@@ -88,6 +89,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	if (!vdev)
 		goto err;
 
+	/*申请空闲id号做为设备索引*/
 	err = ida_simple_get(&vdpa_index_ida, 0, 0, GFP_KERNEL);
 	if (err < 0)
 		goto err_ida;
@@ -96,7 +98,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	vdev->dev.parent = parent;
 	vdev->dev.release = vdpa_release_dev;
 	vdev->index = err;
-	vdev->config = config;
+	vdev->config = config;/*设置vdpa设备操作集*/
 
 	//设置vdpa设备名称
 	err = dev_set_name(&vdev->dev, "vdpa%u", vdev->index);
@@ -148,6 +150,7 @@ EXPORT_SYMBOL_GPL(vdpa_unregister_device);
  */
 int __vdpa_register_driver(struct vdpa_driver *drv, struct module *owner)
 {
+    //vdpa驱动注册
 	drv->driver.bus = &vdpa_bus;
 	drv->driver.owner = owner;
 

@@ -9,6 +9,7 @@
 enum nf_ct_ext_id {
 	NF_CT_EXT_HELPER,//helper类型
 #if IS_ENABLED(CONFIG_NF_NAT)
+	//链接跟踪上nat扩展
 	NF_CT_EXT_NAT,
 #endif
 	NF_CT_EXT_SEQADJ,

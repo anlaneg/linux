@@ -41,7 +41,7 @@ struct vdpasim_virtqueue {
 	u64 desc_addr;
 	u64 device_addr;
 	u64 driver_addr;
-	u32 num;
+	u32 num;//vq长度
 	void *private;
 	irqreturn_t (*cb)(void *data);
 };
@@ -310,6 +310,7 @@ static struct vdpasim *vdpasim_create(void)
 	struct device *dev;
 	int ret = -ENOMEM;
 
+	/*创建vdpasim设备*/
 	vdpasim = vdpa_alloc_device(struct vdpasim, vdpa, NULL,
 				    &vdpasim_net_config_ops);
 	if (!vdpasim)
@@ -365,6 +366,7 @@ static int vdpasim_set_vq_address(struct vdpa_device *vdpa, u16 idx,
 	return 0;
 }
 
+//设置vq大小
 static void vdpasim_set_vq_num(struct vdpa_device *vdpa, u16 idx, u32 num)
 {
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
@@ -575,6 +577,7 @@ static void vdpasim_free(struct vdpa_device *vdpa)
 		vhost_iotlb_free(vdpasim->iommu);
 }
 
+/*vdpasim配置操作集*/
 static const struct vdpa_config_ops vdpasim_net_config_ops = {
 	.set_vq_address         = vdpasim_set_vq_address,
 	.set_vq_num             = vdpasim_set_vq_num,
@@ -604,6 +607,7 @@ static const struct vdpa_config_ops vdpasim_net_config_ops = {
 
 static int __init vdpasim_dev_init(void)
 {
+    //vdpa 模拟设备创建
 	vdpasim_dev = vdpasim_create();
 
 	if (!IS_ERR(vdpasim_dev))

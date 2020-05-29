@@ -380,6 +380,7 @@ static void virtio_vdpa_remove(struct vdpa_device *vdpa)
 	unregister_virtio_device(&vd_dev->vdev);
 }
 
+//声明virtio vdpa驱动
 static struct vdpa_driver virtio_vdpa_driver = {
 	.driver = {
 		.name	= "virtio_vdpa",

@@ -504,6 +504,7 @@ static bool tcf_ct_flow_table_lookup(struct tcf_ct_params *p,
 	if ((ct && !nf_ct_is_template(ct)) || ctinfo == IP_CT_UNTRACKED)
 		return false;
 
+	//解析报文元组信息
 	switch (family) {
 	case NFPROTO_IPV4:
 		if (!tcf_ct_flow_table_fill_tuple_ipv4(skb, &tuple, &tcph))
@@ -568,7 +569,9 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 	//取skb的链接跟踪
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
+	    /*如果没有对应的ct，则直接返回*/
 		return false;
+
 	//与ct同属一个net namespace
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
 		return false;
@@ -578,8 +581,8 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 		return false;
 
 	/* Force conntrack entry direction. */
+	//当前有ct,但当前报文方向非original,如果给定force,则将其移除
 	if (force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
-	    //移除已建立的ct
 		if (nf_ct_is_confirmed(ct))
 			nf_ct_kill(ct);
 
@@ -752,6 +755,7 @@ static int ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	int hooknum, err = NF_ACCEPT;
 
 	/* See HOOK2MANIP(). */
+	//确定在哪个钩子点做
 	if (maniptype == NF_NAT_MANIP_SRC)
 		hooknum = NF_INET_LOCAL_IN; /* Source NAT */
 	else
@@ -760,14 +764,17 @@ static int ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	switch (ctinfo) {
 	case IP_CT_RELATED:
 	case IP_CT_RELATED_REPLY:
+	    //主要是icmp嵌套报文nat转换
 		if (skb->protocol == htons(ETH_P_IP) &&
 		    ip_hdr(skb)->protocol == IPPROTO_ICMP) {
+		    //icmp期待创建session响应方向报文的nat处理
 			if (!nf_nat_icmp_reply_translation(skb, ct, ctinfo,
 							   hooknum))
 				err = NF_DROP;
 			goto out;
 		} else if (IS_ENABLED(CONFIG_IPV6) &&
 			   skb->protocol == htons(ETH_P_IPV6)) {
+		    //ipv6 icmpv6 nat处理
 			__be16 frag_off;
 			u8 nexthdr = ipv6_hdr(skb)->nexthdr;
 			int hdrlen = ipv6_skip_exthdr(skb,
@@ -789,6 +796,7 @@ static int ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 		/* Seen it before?  This can happen for loopback, retrans,
 		 * or local packets.
 		 */
+	    //检查是否需要做nat，如果没有做完，则做。
 		if (!nf_nat_initialized(ct, maniptype)) {
 			/* Initialize according to the NAT action. */
 			err = (range && range->flags & NF_NAT_RANGE_MAP_IPS)
@@ -848,6 +856,7 @@ static void tcf_ct_act_set_labels(struct nf_conn *ct,
 #endif
 }
 
+//针对ct做nat处理
 static int tcf_ct_act_nat(struct sk_buff *skb,
 			  struct nf_conn *ct,
 			  enum ip_conntrack_info ctinfo,
@@ -864,9 +873,12 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 		return NF_ACCEPT;
 
 	/* Add NAT extension if not confirmed yet. */
+	//ct没有confirmed且添加nat扩展不成功，则丢包，不能nat
 	if (!nf_ct_is_confirmed(ct) && !nf_ct_nat_ext_add(ct))
 		return NF_DROP;   /* Can't NAT. */
 
+	//确定做何种nat
+	//非new状态，且已做snat,dnat，则反方向与正方向状态不一致
 	if (ctinfo != IP_CT_NEW && (ct->status & IPS_NAT_MASK) &&
 	    (ctinfo != IP_CT_RELATED || commit)) {
 		/* NAT an established or related connection like before. */
@@ -888,7 +900,10 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 		return NF_ACCEPT;
 	}
 
-	err = ct_nat_execute(skb, ct, ctinfo, range, maniptype);
+	//做第一次nat
+	err = ct_nat_execute(skb, ct, ctinfo, range, maniptype/*要做的nat类型*/);
+
+	//如果ct要求做两次nat,则本次依据上次处理情况，做另一个nat
 	if (err == NF_ACCEPT &&
 	    ct->status & IPS_SRC_NAT && ct->status & IPS_DST_NAT) {
 		if (maniptype == NF_NAT_MANIP_SRC)
@@ -896,6 +911,7 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 		else
 			maniptype = NF_NAT_MANIP_SRC;
 
+		//做第二次nat
 		err = ct_nat_execute(skb, ct, ctinfo, range, maniptype);
 	}
 	return err;
@@ -924,7 +940,9 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 
 	retval = READ_ONCE(c->tcf_action);
 	commit = p->ct_action & TCA_CT_ACT_COMMIT;
+	/*清除skb的ct信息，ct将被移除*/
 	clear = p->ct_action & TCA_CT_ACT_CLEAR;
+	/*只容许源方向建立ct*/
 	force = p->ct_action & TCA_CT_ACT_FORCE;
 	tmpl = p->tmpl;
 
@@ -968,8 +986,10 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	 * actually run the packet through conntrack twice unless it's for a
 	 * different zone.
 	 */
+	//如上面注释所言，确定是否使用cached的ct
 	cached = tcf_ct_skb_nfct_cached(net, skb, p->zone, force);
 	if (!cached) {
+	    //当前skb没有对应的ct或者已创建的ct不符合当前action,执行action创建
 		if (!commit && tcf_ct_flow_table_lookup(p, skb, family)) {
 			skip_add = true;
 			goto do_nat;
@@ -1006,7 +1026,7 @@ do_nat:
 		goto drop;
 
 	if (commit) {
-		//设置packet对应的mark,labels
+		//如果指定了commit,则将ct置为confirm,并设置packet对应的mark,labels
 		tcf_ct_act_set_mark(ct, p->mark, p->mark_mask);
 		tcf_ct_act_set_labels(ct, p->labels, p->labels_mask);
 

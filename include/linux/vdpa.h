@@ -27,7 +27,9 @@ struct vdpa_callback {
 struct vdpa_device {
 	struct device dev;
 	struct device *dma_dev;
+	//vdpa设备操作集
 	const struct vdpa_config_ops *config;
+	//设备索引
 	unsigned int index;
 };
 
@@ -151,9 +153,11 @@ struct vdpa_device {
  */
 struct vdpa_config_ops {
 	/* Virtqueue ops */
+    //设置vring的地址，idx队列编号，desc_area desc表地址，driver_area avail表地址，device_area used表地址
 	int (*set_vq_address)(struct vdpa_device *vdev,
 			      u16 idx, u64 desc_area, u64 driver_area,
 			      u64 device_area);
+	//设置vring长度
 	void (*set_vq_num)(struct vdpa_device *vdev, u16 idx, u32 num);
 	void (*kick_vq)(struct vdpa_device *vdev, u16 idx);
 	void (*set_vq_cb)(struct vdpa_device *vdev, u16 idx,
@@ -165,17 +169,24 @@ struct vdpa_config_ops {
 
 	/* Device ops */
 	u32 (*get_vq_align)(struct vdpa_device *vdev);
+	//取vdpa设备支持的功能
 	u64 (*get_features)(struct vdpa_device *vdev);
 	int (*set_features)(struct vdpa_device *vdev, u64 features);
 	void (*set_config_cb)(struct vdpa_device *vdev,
 			      struct vdpa_callback *cb);
+	//返回vdpa设备的vring大小
 	u16 (*get_vq_num_max)(struct vdpa_device *vdev);
+	//返回vdpa设备的device id号
 	u32 (*get_device_id)(struct vdpa_device *vdev);
 	u32 (*get_vendor_id)(struct vdpa_device *vdev);
+	//返回设备状态
 	u8 (*get_status)(struct vdpa_device *vdev);
+	//设置设备状态
 	void (*set_status)(struct vdpa_device *vdev, u8 status);
+	//填充vdpa配置到buf中
 	void (*get_config)(struct vdpa_device *vdev, unsigned int offset,
 			   void *buf, unsigned int len);
+	//设置vdpa配置自buf
 	void (*set_config)(struct vdpa_device *vdev, unsigned int offset,
 			   const void *buf, unsigned int len);
 	u32 (*get_generation)(struct vdpa_device *vdev);
@@ -194,7 +205,8 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 					const struct vdpa_config_ops *config,
 					size_t size);
 
-#define vdpa_alloc_device(dev_struct, member, parent, config)   \
+//申请并初始化vdpa设备
+#define vdpa_alloc_device(dev_struct, member, parent, config/*vdpa设备配置操作集*/)   \
 			  container_of(__vdpa_alloc_device( \
 				       parent, config, \
 				       sizeof(dev_struct) + \
