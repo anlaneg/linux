@@ -45,7 +45,7 @@
  * The IANA assigned port is 4789, but the Linux default is 8472
  * for compatibility with early adopters.
  */
-//vxlan端口号
+//vxlan端口的默认地址（linux使用地址）
 static unsigned short vxlan_port __read_mostly = 8472;
 module_param_named(udp_port, vxlan_port, ushort, 0444);
 MODULE_PARM_DESC(udp_port, "Destination UDP port");
@@ -74,11 +74,13 @@ struct vxlan_net {
 struct vxlan_fdb {
 	struct hlist_node hlist;	/* linked list of entries */
 	struct rcu_head	  rcu;
+	//上次更新时间
 	unsigned long	  updated;	/* jiffies */
 	unsigned long	  used;
-	struct list_head  remotes;//fdb均添加在此链上
+	struct list_head  remotes;//rdst均添加在此链上
 	u8		  eth_addr[ETH_ALEN];//mac地址（外层源mac)
 	u16		  state;	/* see ndm_state */
+	//对应的vni
 	__be32		  vni;
 	u16		  flags;	/* see ndm_flags and below */
 };
@@ -423,6 +425,7 @@ static int vxlan_fdb_notify(struct vxlan_dev *vxlan, struct vxlan_fdb *fdb,
 	return 0;
 }
 
+//vxlan ip邻居表项失配时将触发
 static void vxlan_ip_miss(struct net_device *dev, union vxlan_addr *ipa)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -434,6 +437,7 @@ static void vxlan_ip_miss(struct net_device *dev, union vxlan_addr *ipa)
 		.remote_vni = cpu_to_be32(VXLAN_N_VID),
 	};
 
+	//向用户态发送netlink消息，获取neighbour
 	vxlan_fdb_notify(vxlan, &f, &remote, RTM_GETNEIGH, true, NULL);
 }
 
@@ -524,6 +528,7 @@ static struct vxlan_fdb *vxlan_find_mac(struct vxlan_dev *vxlan,
 }
 
 /* caller should hold vxlan->hash_lock */
+//通过ip,port,vni,ifindex查找vxlan rdst
 static struct vxlan_rdst *vxlan_fdb_find_rdst(struct vxlan_fdb *f,
 					      union vxlan_addr *ip, __be16 port,
 					      __be32 vni, __u32 ifindex)
@@ -685,7 +690,7 @@ static int vxlan_fdb_append(struct vxlan_fdb *f,
 	if (rd)
 		return 0;
 
-	//创建vm mac对应的fdb表项
+	//创建vm mac对应的remote dest
 	rd = kmalloc(sizeof(*rd), GFP_ATOMIC);
 	if (rd == NULL)
 		return -ENOBUFS;
@@ -834,22 +839,24 @@ static int vxlan_fdb_create(struct vxlan_dev *vxlan,
 			    const u8 *mac, union vxlan_addr *ip,
 			    __u16 state, __be16 port, __be32 src_vni,
 			    __be32 vni, __u32 ifindex, __u16 ndm_flags,
-			    struct vxlan_fdb **fdb)
+			    struct vxlan_fdb **fdb/*出参，创建的fdb表项*/)
 {
 	struct vxlan_rdst *rd = NULL;
 	struct vxlan_fdb *f;
 	int rc;
 
+	/*当fdb表项超过限制后，返回申请失败*/
 	if (vxlan->cfg.addrmax &&
 	    vxlan->addrcnt >= vxlan->cfg.addrmax)
 		return -ENOSPC;
 
 	netdev_dbg(vxlan->dev, "add %pM -> %pIS\n", mac, ip);
-	//申请fdb
+	//申请vxlan fdb
 	f = vxlan_fdb_alloc(mac, state, src_vni, ndm_flags);
 	if (!f)
 		return -ENOMEM;
 
+	//创建rd,并将rd挂接在fd->remotes上
 	rc = vxlan_fdb_append(f, ip, port, vni, ifindex, &rd);
 	if (rc < 0) {
 		kfree(f);
@@ -886,6 +893,7 @@ static void vxlan_fdb_destroy(struct vxlan_dev *vxlan, struct vxlan_fdb *f,
 
 	netdev_dbg(vxlan->dev, "delete %pM\n", f->eth_addr);
 
+	/*释放vxlan fdb数目*/
 	--vxlan->addrcnt;
 	if (do_notify)
 		list_for_each_entry(rd, &f->remotes, list)
@@ -1674,7 +1682,7 @@ static bool vxlan_ecn_decapsulate(struct vxlan_sock *vs, void *oiph,
 }
 
 /* Callback from net/ipv4/udp.c to receive packets */
-//收到vxlan报文处理（解封装，回调将在udp收到报文后被触发）
+//收到vxlan报文处理（解封装，回调将在udp收到报文后被触发，看udp_queue_rcv_one_skb）
 static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 {
 	struct pcpu_sw_netstats *stats;
@@ -1739,19 +1747,22 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		goto drop;
 
 	if (vxlan_collect_metadata(vs)) {
-		//如有必要为skb收集metadata信息
+		//创建metadata_dst,收集tunnel信息
 		struct metadata_dst *tun_dst;
 
 		tun_dst = udp_tun_rx_dst(skb, vxlan_get_sk_family(vs), TUNNEL_KEY,
-					 key32_to_tunnel_id(vni), sizeof(*md));
+					 key32_to_tunnel_id(vni), sizeof(*md)/*选项大小*/);
 
 		if (!tun_dst)
 			goto drop;
 
+		//使md指向metadata-dst中存放md的空间
 		md = ip_tunnel_info_opts(&tun_dst->u.tun_info);
 
+		//为此skb设置其dst
 		skb_dst_set(skb, (struct dst_entry *)tun_dst);
 	} else {
+	    //不需要收集md时，置为null
 		memset(md, 0, sizeof(*md));
 	}
 
@@ -1765,6 +1776,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	 */
 
 	if (unparsed.vx_flags || unparsed.vx_vni) {
+	    //不容许有其它标记，如有，则丢包
 		/* If there are any unprocessed flags remaining treat
 		 * this as a malformed packet. This behavior diverges from
 		 * VXLAN RFC (RFC7348) which stipulates that bits in reserved
@@ -1777,6 +1789,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 
 	if (!raw_proto) {
+	    //fdb学习及reset mac header
 		if (!vxlan_set_mac(vxlan, vs, skb, vni))
 			goto drop;
 	} else {
@@ -1797,12 +1810,14 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 
 	rcu_read_lock();
 
+	//如果vxlan设备没有up,则丢包
 	if (unlikely(!(vxlan->dev->flags & IFF_UP))) {
 		rcu_read_unlock();
 		atomic_long_inc(&vxlan->dev->rx_dropped);
 		goto drop;
 	}
 
+	//收包统计计数增加
 	stats = this_cpu_ptr(vxlan->dev->tstats);
 	u64_stats_update_begin(&stats->syncp);
 	stats->rx_packets++;
@@ -1868,6 +1883,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 	}
 	parp = arp_hdr(skb);
 
+	//只处理以太网的arp请求报文
 	if ((parp->ar_hrd != htons(ARPHRD_ETHER) &&
 	     parp->ar_hrd != htons(ARPHRD_IEEE802)) ||
 	    parp->ar_pro != htons(ETH_P_IP) ||
@@ -1887,7 +1903,7 @@ static int arp_reduce(struct net_device *dev, struct sk_buff *skb, __be32 vni)
 	    ipv4_is_multicast(tip))
 		goto out;
 
-	//查询arp表，获知tip的邻居表项
+	//查询arp表，获知tip的邻居表项(这里的dev有net namespace属性，故没有给出namespace)
 	n = neigh_lookup(&arp_tbl, &tip, dev);
 
 	if (n) {
@@ -2095,6 +2111,7 @@ static bool route_shortcircuit(struct net_device *dev, struct sk_buff *skb)
 	struct vxlan_dev *vxlan = netdev_priv(dev);
 	struct neighbour *n;
 
+	//不处理目的为组播的报文
 	if (is_multicast_ether_addr(eth_hdr(skb)->h_dest))
 		return false;
 
@@ -2107,8 +2124,10 @@ static bool route_shortcircuit(struct net_device *dev, struct sk_buff *skb)
 		if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 			return false;
 		pip = ip_hdr(skb);
+		//按目的ip查询邻居表项
 		n = neigh_lookup(&arp_tbl, &pip->daddr, dev);
 		if (!n && (vxlan->cfg.flags & VXLAN_F_L3MISS)) {
+		    /*如果未查询到邻居表项，则触发ip miss,向用户态发送netlink通知*/
 			union vxlan_addr ipa = {
 				.sin.sin_addr.s_addr = pip->daddr,
 				.sin.sin_family = AF_INET,
@@ -2151,6 +2170,7 @@ static bool route_shortcircuit(struct net_device *dev, struct sk_buff *skb)
 
 		diff = !ether_addr_equal(eth_hdr(skb)->h_dest, n->ha);
 		if (diff) {
+		    /*skb目的mac与neighbour不同，这里修改源目的mac*/
 			memcpy(eth_hdr(skb)->h_source, eth_hdr(skb)->h_dest,
 				dev->addr_len);
 			memcpy(eth_hdr(skb)->h_dest, n->ha, dev->addr_len);
@@ -2461,7 +2481,7 @@ static int encap_bypass_if_local(struct sk_buff *skb, struct net_device *dev,
 
 //向接口dev发送报文vxlan skb
 static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
-			   __be32 default_vni, struct vxlan_rdst *rdst,
+			   __be32 default_vni, struct vxlan_rdst *rdst/*vxlan对端*/,
 			   bool did_rsc)
 {
 	struct dst_cache *dst_cache;
@@ -2482,6 +2502,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 	bool udp_sum = false;
 	bool xnet = !net_eq(vxlan->net, dev_net(vxlan->dev));
 
+	//取skb对应的隧道信息
 	info = skb_tunnel_info(skb);
 
 	if (rdst) {
@@ -2726,11 +2747,14 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
+	//如果vxlan开启了proxy模式，则reduce arp报文
 	if (vxlan->cfg.flags & VXLAN_F_PROXY) {
 		eth = eth_hdr(skb);
+		//仅处理arp报文件
 		if (ntohs(eth->h_proto) == ETH_P_ARP)
 			return arp_reduce(dev, skb, vni);
 #if IS_ENABLED(CONFIG_IPV6)
+		//如果开启ipv6,则处理icmpv6报文
 		else if (ntohs(eth->h_proto) == ETH_P_IPV6 &&
 			 pskb_may_pull(skb, sizeof(struct ipv6hdr) +
 					    sizeof(struct nd_msg)) &&
@@ -2759,7 +2783,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 	}
 
 	if (f == NULL) {
-		//没有查找，尝试向默认remote转发
+		//没有查找到fdb，尝试向默认remote转发
 		f = vxlan_find_mac(vxlan, all_zeros_mac, vni);
 		if (f == NULL) {
 			if ((vxlan->cfg.flags & VXLAN_F_L2MISS) &&
@@ -2772,7 +2796,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 	}
 
-	//按转发表，给每个remotes发送一份
+	//按照fdb(转发表)，给每个remotes发送一份
 	list_for_each_entry_rcu(rdst, &f->remotes, list) {
 		struct sk_buff *skb1;
 
@@ -2784,7 +2808,7 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		skb1 = skb_clone(skb, GFP_ATOMIC);
 		if (skb1)
 			//向rdst发送此报文
-			vxlan_xmit_one(skb1, dev, vni, rdst, did_rsc);
+			vxlan_xmit_one(skb1, dev, vni, rdst/*目标*/, did_rsc);
 	}
 
 	if (fdst)
@@ -3210,6 +3234,7 @@ static const struct nla_policy vxlan_policy[IFLA_VXLAN_MAX + 1] = {
 static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 			  struct netlink_ext_ack *extack)
 {
+    //vxlan设备地址校验
 	if (tb[IFLA_ADDRESS]) {
 		if (nla_len(tb[IFLA_ADDRESS]) != ETH_ALEN) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_ADDRESS],
@@ -3224,6 +3249,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		}
 	}
 
+	//vxlan设备mtu校验
 	if (tb[IFLA_MTU]) {
 		u32 mtu = nla_get_u32(tb[IFLA_MTU]);
 
@@ -3240,6 +3266,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		return -EINVAL;
 	}
 
+	//vxlan id校验
 	if (data[IFLA_VXLAN_ID]) {
 		u32 id = nla_get_u32(data[IFLA_VXLAN_ID]);
 
@@ -3250,6 +3277,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		}
 	}
 
+	//vxlan 源port范围校验
 	if (data[IFLA_VXLAN_PORT_RANGE]) {
 		const struct ifla_vxlan_port_range *p
 			= nla_data(data[IFLA_VXLAN_PORT_RANGE]);
@@ -3261,6 +3289,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 		}
 	}
 
+	//vxlan分片标识符校验
 	if (data[IFLA_VXLAN_DF]) {
 		enum ifla_vxlan_df df = nla_get_u8(data[IFLA_VXLAN_DF]);
 
@@ -3274,6 +3303,7 @@ static int vxlan_validate(struct nlattr *tb[], struct nlattr *data[],
 	return 0;
 }
 
+//返回vxlan设备驱动信息
 static void vxlan_get_drvinfo(struct net_device *netdev,
 			      struct ethtool_drvinfo *drvinfo)
 {
@@ -3307,7 +3337,7 @@ static const struct ethtool_ops vxlan_ethtool_ops = {
 };
 
 static struct socket *vxlan_create_sock(struct net *net, bool ipv6,
-					__be16 port, u32 flags, int ifindex)
+					__be16 port, u32 flags, int ifindex/*要绑定的接口ifindex*/)
 {
 	struct socket *sock;
 	struct udp_port_cfg udp_conf;
@@ -3336,9 +3366,9 @@ static struct socket *vxlan_create_sock(struct net *net, bool ipv6,
 }
 
 /* Create new listen socket if needed */
-static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
+static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6/*是否使能ipv6*/,
 					      __be16 port, u32 flags,
-					      int ifindex)
+					      int ifindex/*socket绑定的ifindex*/)
 {
 	struct vxlan_net *vn = net_generic(net, vxlan_net_id);
 	struct vxlan_sock *vs;
@@ -3346,6 +3376,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	unsigned int h;
 	struct udp_tunnel_sock_cfg tunnel_cfg;
 
+	//申请vxlan socket
 	vs = kzalloc(sizeof(*vs), GFP_KERNEL);
 	if (!vs)
 		return ERR_PTR(-ENOMEM);
@@ -3353,7 +3384,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	for (h = 0; h < VNI_HASH_SIZE; ++h)
 		INIT_HLIST_HEAD(&vs->vni_list[h]);
 
-	//创建socket
+	//创建kernel socket
 	sock = vxlan_create_sock(net, ipv6, port, flags, ifindex);
 	if (IS_ERR(sock)) {
 		kfree(vs);
@@ -3389,7 +3420,7 @@ static struct vxlan_sock *vxlan_socket_create(struct net *net, bool ipv6,
 	return vs;
 }
 
-static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
+static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6/*是否使能ipv6*/)
 {
 	struct vxlan_net *vn = net_generic(vxlan->net, vxlan_net_id);
 	struct vxlan_sock *vs = NULL;
@@ -3433,6 +3464,7 @@ static int __vxlan_sock_add(struct vxlan_dev *vxlan, bool ipv6)
 
 static int vxlan_sock_add(struct vxlan_dev *vxlan)
 {
+    //是否收集metadata
 	bool metadata = vxlan->cfg.flags & VXLAN_F_COLLECT_METADATA;
 	bool ipv6 = vxlan->cfg.flags & VXLAN_F_IPV6 || metadata;
 	bool ipv4 = !ipv6 || metadata;
@@ -3455,13 +3487,13 @@ static int vxlan_sock_add(struct vxlan_dev *vxlan)
 }
 
 static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
-				 struct net_device **lower,
-				 struct vxlan_dev *old,
+				 struct net_device **lower/*出参，指定的底层设备*/,
+				 struct vxlan_dev *old/*入参，当前执行vxlan设备old的新配置校验（容许为null)*/,
 				 struct netlink_ext_ack *extack)
 {
 	struct vxlan_net *vn = net_generic(src_net, vxlan_net_id);
 	struct vxlan_dev *tmp;
-	bool use_ipv6 = false;
+	bool use_ipv6 = false;/*是否使用ipv6地址*/
 
 	if (conf->flags & VXLAN_F_GPE) {
 		/* For now, allow GPE only together with
@@ -3477,7 +3509,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		}
 	}
 
-	//默认使用ipv4地址
+	//确定remote_ip,saddr地址的协议族
 	if (!conf->remote_ip.sa.sa_family && !conf->saddr.sa.sa_family) {
 		/* Unless IPv6 is explicitly requested, assume IPv4 */
 		conf->remote_ip.sa.sa_family = AF_INET;
@@ -3494,8 +3526,8 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 		return -EINVAL;
 	}
 
+	//vxlan设备源地址不得为组播地址
 	if (vxlan_addr_multicast(&conf->saddr)) {
-		//防目将源地址配置为组播地址
 		NL_SET_ERR_MSG(extack, "Local address cannot be multicast");
 		return -EINVAL;
 	}
@@ -3557,6 +3589,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 
 #if IS_ENABLED(CONFIG_IPV6)
 		if (use_ipv6) {
+		    //当然，应用ipv6时，ipv6对应设备也得存在
 			struct inet6_dev *idev = __in6_dev_get(lowerdev);
 			if (idev && idev->cnf.disable_ipv6) {
 				NL_SET_ERR_MSG(extack,
@@ -3568,6 +3601,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 
 		*lower = lowerdev;
 	} else {
+	    //指定底层设备时，不得使用组播目的地址，两者相互冲突
 		if (vxlan_addr_multicast(&conf->remote_ip)) {
 			NL_SET_ERR_MSG(extack,
 				       "Local interface required for multicast remote destination");
@@ -3600,6 +3634,7 @@ static int vxlan_config_validate(struct net *src_net, struct vxlan_config *conf,
 	//防止配置重复的vxlan(例如端口及vni已被占用）
 	list_for_each_entry(tmp, &vn->vxlan_list, next) {
 		if (tmp == old)
+		    //跳过自身
 			continue;
 
 		if (tmp->cfg.vni != conf->vni)
@@ -3635,6 +3670,7 @@ static void vxlan_config_apply(struct net_device *dev,
 	int max_mtu = ETH_MAX_MTU;
 
 	if (!changelink) {
+	    //gpe标记设备创建
 		if (conf->flags & VXLAN_F_GPE)
 			vxlan_raw_setup(dev);
 		else
@@ -3659,6 +3695,7 @@ static void vxlan_config_apply(struct net_device *dev,
 
 		needed_headroom = lowerdev->hard_header_len;
 
+		//如果未配置mtu,则更新vxlan mtu值
 		max_mtu = lowerdev->mtu - (use_ipv6 ? VXLAN6_HEADROOM :
 					   VXLAN_HEADROOM);
 		if (max_mtu < ETH_MIN_MTU)
@@ -3689,10 +3726,12 @@ static int vxlan_dev_configure(struct net *src_net, struct net_device *dev,
 	struct net_device *lowerdev;
 	int ret;
 
+	//执行vxlan配置校验
 	ret = vxlan_config_validate(src_net, conf, &lowerdev, vxlan, extack);
 	if (ret)
 		return ret;
 
+	//应用vxlan配置
 	vxlan_config_apply(dev, conf, lowerdev, src_net, changelink);
 
 	return 0;
@@ -3716,12 +3755,11 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 	if (err)
 		return err;
 
-	dev->ethtool_ops = &vxlan_ethtool_ops;
+	dev->ethtool_ops = &vxlan_ethtool_ops;/*设置vxlan设备ethtool*/
 
 	/* create an fdb entry for a valid default destination */
-	//下发默认fdb
 	if (!vxlan_addr_any(&dst->remote_ip)) {
-		//默认远端ip不等于any,添加全0mac完成到 remote_ip的封装（实现默认fdb添加）
+		//默认远端ip不等于any时,添加全0mac完成到 remote_ip的封装（实现默认fdb添加）
 		err = vxlan_fdb_create(vxlan, all_zeros_mac,
 				       &dst->remote_ip,
 				       NUD_REACHABLE | NUD_PERMANENT,
@@ -3734,7 +3772,7 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 			return err;
 	}
 
-	//注册netdev
+	//注册vxlan netdev
 	err = register_netdevice(dev);
 	if (err)
 		goto errout;
@@ -3750,6 +3788,7 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 			goto errout;
 	}
 
+	//配置设备dev
 	err = rtnl_configure_link(dev, NULL);
 	if (err)
 		goto unlink;
@@ -3796,6 +3835,7 @@ static int vxlan_nl2flag(struct vxlan_config *conf, struct nlattr *tb[],
 {
 	unsigned long flags;
 
+	/*如果tb中没有attrtype属性，则直接返回*/
 	if (!tb[attrtype])
 		return 0;
 
@@ -3805,19 +3845,23 @@ static int vxlan_nl2flag(struct vxlan_config *conf, struct nlattr *tb[],
 	}
 
 	if (vxlan_policy[attrtype].type == NLA_FLAG)
+	    //如果为flag,则为其打上mask
 		flags = conf->flags | mask;
 	else if (nla_get_u8(tb[attrtype]))
+	    //非flag,则其值为1时打上
 		flags = conf->flags | mask;
 	else
+	    //非flag,则其值为0时移除
 		flags = conf->flags & ~mask;
 
+	//设置flags
 	conf->flags = flags;
 
 	return 0;
 }
 
 static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
-			 struct net_device *dev, struct vxlan_config *conf,
+			 struct net_device *dev, struct vxlan_config *conf/*vxlan配置*/,
 			 bool changelink, struct netlink_ext_ack *extack)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);
@@ -3829,6 +3873,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	if (changelink)
 		memcpy(conf, &vxlan->cfg, sizeof(*conf));
 
+	//如果配置了vni,则设置conf->vni
 	if (data[IFLA_VXLAN_ID]) {
 		__be32 vni = cpu_to_be32(nla_get_u32(data[IFLA_VXLAN_ID]));
 
@@ -3839,6 +3884,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->vni = cpu_to_be32(nla_get_u32(data[IFLA_VXLAN_ID]));
 	}
 
+	//给定了组播组，则设置conf->remote_ip
 	if (data[IFLA_VXLAN_GROUP]) {
 		if (changelink && (conf->remote_ip.sa.sa_family != AF_INET)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_GROUP], "New group address family does not match old group");
@@ -3862,6 +3908,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->remote_ip.sa.sa_family = AF_INET6;
 	}
 
+	//设置vxlan本端地址
 	if (data[IFLA_VXLAN_LOCAL]) {
 		if (changelink && (conf->saddr.sa.sa_family != AF_INET)) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LOCAL], "New local address family does not match old");
@@ -3886,6 +3933,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->saddr.sa.sa_family = AF_INET6;
 	}
 
+	//指定vxlan对应的底层设备
 	if (data[IFLA_VXLAN_LINK])
 		conf->remote_ifindex = nla_get_u32(data[IFLA_VXLAN_LINK]);
 
@@ -3909,6 +3957,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->label = nla_get_be32(data[IFLA_VXLAN_LABEL]) &
 			     IPV6_FLOWLABEL_MASK;
 
+	/*设置LEARN标记*/
 	if (data[IFLA_VXLAN_LEARNING]) {
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_LEARNING,
 				    VXLAN_F_LEARN, changelink, true,
@@ -3920,9 +3969,11 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		conf->flags |= VXLAN_F_LEARN;
 	}
 
+	/*设置过期间隔*/
 	if (data[IFLA_VXLAN_AGEING])
 		conf->age_interval = nla_get_u32(data[IFLA_VXLAN_AGEING]);
 
+	/*设置是否开启proxy功能*/
 	if (data[IFLA_VXLAN_PROXY]) {
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_PROXY,
 				    VXLAN_F_PROXY, changelink, false,
@@ -3931,6 +3982,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 			return err;
 	}
 
+	/*设置是否开启rsc功能*/
 	if (data[IFLA_VXLAN_RSC]) {
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_RSC,
 				    VXLAN_F_RSC, changelink, false,
@@ -3955,6 +4007,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 			return err;
 	}
 
+	/*设置vxlan fdb表项最大数目*/
 	if (data[IFLA_VXLAN_LIMIT]) {
 		if (changelink) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_LIMIT],
@@ -3965,6 +4018,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	}
 
 	if (data[IFLA_VXLAN_COLLECT_METADATA]) {
+	    //解析collect_metadata标记
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_COLLECT_METADATA,
 				    VXLAN_F_COLLECT_METADATA, changelink, false,
 				    extack);
@@ -3972,6 +4026,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 			return err;
 	}
 
+	//设置源port范围
 	if (data[IFLA_VXLAN_PORT_RANGE]) {
 		if (!changelink) {
 			const struct ifla_vxlan_port_range *p
@@ -3985,6 +4040,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 		}
 	}
 
+	//设置目的port
 	if (data[IFLA_VXLAN_PORT]) {
 		if (changelink) {
 			NL_SET_ERR_MSG_ATTR(extack, tb[IFLA_VXLAN_PORT],
@@ -4074,6 +4130,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 	return 0;
 }
 
+//实现vxlan link新建
 static int vxlan_newlink(struct net *src_net, struct net_device *dev,
 			 struct nlattr *tb[], struct nlattr *data[],
 			 struct netlink_ext_ack *extack)
@@ -4081,10 +4138,12 @@ static int vxlan_newlink(struct net *src_net, struct net_device *dev,
 	struct vxlan_config conf;
 	int err;
 
+	//解析配置，填充conf
 	err = vxlan_nl2conf(tb, data, dev, &conf, false, extack);
 	if (err)
 		return err;
 
+	//采用conf完成vxlan设备创建
 	return __vxlan_dev_create(src_net, dev, &conf, extack);
 }
 
@@ -4313,7 +4372,7 @@ static struct rtnl_link_ops vxlan_link_ops __read_mostly = {
 	.priv_size	= sizeof(struct vxlan_dev),
 	.setup		= vxlan_setup,//netdev初始化函数
 	.validate	= vxlan_validate,
-	.newlink	= vxlan_newlink,//link新建
+	.newlink	= vxlan_newlink,//vxlan link新建
 	.changelink	= vxlan_changelink,
 	.dellink	= vxlan_dellink,
 	.get_size	= vxlan_get_size,
@@ -4322,9 +4381,9 @@ static struct rtnl_link_ops vxlan_link_ops __read_mostly = {
 };
 
 //vxlan设备创建
-struct net_device *vxlan_dev_create(struct net *net, const char *name,
+struct net_device *vxlan_dev_create(struct net *net, const char *name/*vxlan设备名称*/,
 				    u8 name_assign_type,
-				    struct vxlan_config *conf)
+				    struct vxlan_config *conf/*vxlan设备配置*/)
 {
 	struct nlattr *tb[IFLA_MAX + 1];
 	struct net_device *dev;
@@ -4334,7 +4393,7 @@ struct net_device *vxlan_dev_create(struct net *net, const char *name,
 
 	//创建link(tb为0）
 	dev = rtnl_create_link(net, name/*link名称*/, name_assign_type,
-			       &vxlan_link_ops, tb, NULL);
+			       &vxlan_link_ops, tb/*传入的tb为空*/, NULL);
 	if (IS_ERR(dev))
 		return dev;
 

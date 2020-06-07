@@ -179,7 +179,7 @@ struct vxlan_metadata {
 /* per UDP socket information */
 struct vxlan_sock {
 	struct hlist_node hlist;
-	struct socket	 *sock;
+	struct socket	 *sock;/*vxlan对应的socket*/
 	struct hlist_head vni_list[VNI_HASH_SIZE];
 	refcount_t	  refcnt;
 	u32		  flags;
@@ -192,11 +192,11 @@ union vxlan_addr {
 };
 
 struct vxlan_rdst {
-	union vxlan_addr	 remote_ip;//隧道外层ip地址
+	union vxlan_addr	 remote_ip;//到隧道远端ip地址
 	__be16			 remote_port;//到隧道远端的目的port
 	u8			 offloaded:1;
 	__be32			 remote_vni;//到远端的vxlan编号
-	u32			 remote_ifindex;//到远端的本端出接口
+	u32			 remote_ifindex;//到远端去时的本端出接口
 	struct net_device	 *remote_dev;
 	struct list_head	 list;
 	struct rcu_head		 rcu;
@@ -204,26 +204,31 @@ struct vxlan_rdst {
 };
 
 struct vxlan_config {
+    //vxlan隧道远端地址（可为组播地址）
 	union vxlan_addr	remote_ip;
 	//vxlan隧道本端的ip地址
 	union vxlan_addr	saddr;
+	//配置的vni
 	__be32			vni;
-	//出接口设备ifindex
+	//去远端时出接口设备ifindex
 	int			remote_ifindex;
 	int			mtu;//隧道mtu
 	__be16			dst_port;//隧道目的port
 	//可使用的源port范围
 	u16			port_min;
 	u16			port_max;
-	//封装用的tos
+	//封装用的tos（为1时指inherit)
 	u8			tos;
 	//隧道封装时使用的ttl
 	u8			ttl;
 	__be32			label;
+	//vxlan设备功能标记，例如VXLAN_F_COLLECT_METADATA
 	u32			flags;
+	/*vxlan fdb的过期间隔*/
 	unsigned long		age_interval;
 	unsigned int		addrmax;
 	bool			no_share;
+	//vxlan封装的分片标记
 	enum ifla_vxlan_df	df;
 };
 
@@ -244,12 +249,13 @@ struct vxlan_dev {
 	struct vxlan_sock __rcu *vn6_sock;	/* listening socket for IPv6 */
 #endif
 	struct net_device *dev;
+	//设备所属的net namespace
 	struct net	  *net;		/* netns for packet i/o */
 	struct vxlan_rdst default_dst;	/* default destination */
 
 	struct timer_list age_timer;//用于老化fdb表项
 	spinlock_t	  hash_lock[FDB_HASH_SIZE];
-	unsigned int	  addrcnt;
+	unsigned int	  addrcnt;/*记录vxlan fdb表项最大值*/
 	struct gro_cells  gro_cells;
 
 	struct vxlan_config	cfg;//配置信息（如本端ip，vni等）
@@ -258,8 +264,11 @@ struct vxlan_dev {
 	struct hlist_head fdb_head[FDB_HASH_SIZE];
 };
 
+//如果有此标记，则vxlan需要学习fdb表（外层ip,内层源mac,出接口）
 #define VXLAN_F_LEARN			0x01
+//如果有此标记，则若本机arp表项中有对应表项，则响应arp请求
 #define VXLAN_F_PROXY			0x02
+//如果有此标记（route short circuit），则
 #define VXLAN_F_RSC			0x04
 #define VXLAN_F_L2MISS			0x08
 #define VXLAN_F_L3MISS			0x10

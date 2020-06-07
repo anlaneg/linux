@@ -312,6 +312,7 @@ void wg_socket_clear_peer_endpoint_src(struct wg_peer *peer)
 	write_unlock_bh(&peer->endpoint_lock);
 }
 
+/*wireguard socket收包处理*/
 static int wg_receive(struct sock *sk, struct sk_buff *skb)
 {
 	struct wg_device *wg;

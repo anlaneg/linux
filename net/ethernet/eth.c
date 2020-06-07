@@ -383,6 +383,7 @@ const struct header_ops eth_header_ops ____cacheline_aligned = {
  */
 void ether_setup(struct net_device *dev)
 {
+    //初始化以太网络设备
 	dev->header_ops		= &eth_header_ops;
 	dev->type		= ARPHRD_ETHER;
 	dev->hard_header_len 	= ETH_HLEN;

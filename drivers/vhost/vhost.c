@@ -1021,6 +1021,7 @@ static inline int vhost_get_avail_head(struct vhost_virtqueue *vq,
 			       &vq->avail->ring[idx & (vq->num - 1)]);
 }
 
+//取vq->avail->flags内容
 static inline int vhost_get_avail_flags(struct vhost_virtqueue *vq,
 					__virtio16 *flags)
 {
@@ -2507,6 +2508,7 @@ static bool vhost_notify(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 	 * interrupts. */
 	smp_mb();
 
+	//队列为空时，如果容许，则返回true，表示通知
 	if (vhost_has_feature(vq, VIRTIO_F_NOTIFY_ON_EMPTY) &&
 	    unlikely(vq->avail_idx == vq->last_avail_idx))
 		return true;
@@ -2517,6 +2519,7 @@ static bool vhost_notify(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 			vq_err(vq, "Failed to get flags");
 			return true;
 		}
+		/*如果vq要求中断，则返回true*/
 		return !(flags & cpu_to_vhost16(vq, VRING_AVAIL_F_NO_INTERRUPT));
 	}
 	old = vq->signalled_used;
@@ -2550,7 +2553,7 @@ void vhost_add_used_and_signal(struct vhost_dev *dev,
 			       unsigned int head, int len)
 {
 	vhost_add_used(vq, head, len);
-	vhost_signal(dev, vq);
+	vhost_signal(dev, vq);/*向guest发送信号*/
 }
 EXPORT_SYMBOL_GPL(vhost_add_used_and_signal);
 
@@ -2560,7 +2563,7 @@ void vhost_add_used_and_signal_n(struct vhost_dev *dev,
 				 struct vring_used_elem *heads, unsigned count)
 {
 	vhost_add_used_n(vq, heads, count);
-	vhost_signal(dev, vq);
+	vhost_signal(dev, vq);/*向guest发送信号*/
 }
 EXPORT_SYMBOL_GPL(vhost_add_used_and_signal_n);
 
@@ -2625,8 +2628,10 @@ void vhost_disable_notify(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
 	int r;
 
+	//如果vq有 used no_notify 标记，则不用禁止
 	if (vq->used_flags & VRING_USED_F_NO_NOTIFY)
 		return;
+	//为used_flags打上disable notify标记
 	vq->used_flags |= VRING_USED_F_NO_NOTIFY;
 	if (!vhost_has_feature(vq, VIRTIO_RING_F_EVENT_IDX)) {
 		r = vhost_update_used_flags(vq);

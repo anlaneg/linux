@@ -41,6 +41,7 @@ struct dst_entry {
 #define DST_FAKE_RTABLE		0x0010
 #define DST_XFRM_TUNNEL		0x0020
 #define DST_XFRM_QUEUE		0x0040
+//标记dst_entry为struct metadata_dst
 #define DST_METADATA		0x0080
 
 	/* A non-zero value of dst->obsolete forces by-hand validation
@@ -377,6 +378,7 @@ static inline u32 dst_tclassid(const struct sk_buff *skb)
 int dst_discard_out(struct net *net, struct sock *sk, struct sk_buff *skb);
 static inline int dst_discard(struct sk_buff *skb)
 {
+    /*将报文skb丢弃掉*/
 	return dst_discard_out(&init_net, skb->sk, skb);
 }
 void *dst_alloc(struct dst_ops *ops, struct net_device *dev, int initial_ref,

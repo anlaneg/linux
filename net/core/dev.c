@@ -4594,6 +4594,7 @@ enqueue:
 	}
 
 drop:
+    /*报文超过backlog,则被丢弃*/
 	sd->dropped++;
 	rps_unlock(sd);
 
@@ -7889,6 +7890,7 @@ int netdev_upper_dev_link(struct net_device *dev,
 			  struct net_device *upper_dev,
 			  struct netlink_ext_ack *extack)
 {
+    //为dev添加upper设备
 	return __netdev_upper_dev_link(dev, upper_dev, false,
 				       NULL, NULL, extack);
 }
@@ -10108,10 +10110,10 @@ void netdev_freemem(struct net_device *dev)
  * for each queue on the device.
  * 申请网络设备
  */
-struct net_device *alloc_netdev_mqs(int sizeof_priv/*私有结构体大小*/, const char *name/*接口名称*/,
+struct net_device *alloc_netdev_mqs(int sizeof_priv/*私有结构体大小*/, const char *name/*网络设备名称*/,
 		unsigned char name_assign_type,
-		void (*setup)(struct net_device *)/*初始化函数*/,
-		unsigned int txqs/*tx队列数目*/, unsigned int rxqs/*rx队列数目*/)
+		void (*setup)(struct net_device *)/*网络设备初始化函数*/,
+		unsigned int txqs/*设备tx队列数目*/, unsigned int rxqs/*设备rx队列数目*/)
 {
 	struct net_device *dev;
 	unsigned int alloc_size;
@@ -10184,7 +10186,8 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv/*私有结构体大小*/, co
 	hash_init(dev->qdisc_hash);
 #endif
 	dev->priv_flags = IFF_XMIT_DST_RELEASE | IFF_XMIT_DST_RELEASE_PERM;
-	setup(dev);//调用设备的setup回调
+	//调用设备的setup回调，执行定制初始化
+	setup(dev);
 
 	if (!dev->tx_queue_len) {
 		dev->priv_flags |= IFF_NO_QUEUE;

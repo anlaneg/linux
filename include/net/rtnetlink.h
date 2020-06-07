@@ -69,7 +69,7 @@ struct rtnl_link_ops {
 
 	//link独有IFLA_INFO_DATA型数据的netlink type
 	unsigned int		maxtype;
-	//各link中netlink type对应的数据类型
+	//各link中netlink type独有的数据类型，用于link数据解析
 	const struct nla_policy	*policy;
 	//link_info_data型消息数据体校验
 	int			(*validate)(struct nlattr *tb[],
@@ -97,9 +97,9 @@ struct rtnl_link_ops {
 	size_t			(*get_xstats_size)(const struct net_device *dev);
 	int			(*fill_xstats)(struct sk_buff *skb,
 					       const struct net_device *dev);
-	//取tx队列数目
+	//获取设备tx队列数目
 	unsigned int		(*get_num_tx_queues)(void);
-	//取rx队列数目
+	//获取设备rx队列数目
 	unsigned int		(*get_num_rx_queues)(void);
 
 	unsigned int		slave_maxtype;

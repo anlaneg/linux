@@ -11,7 +11,7 @@
 #endif
 
 struct udp_port_cfg {
-	u8			family;
+	u8			family;//使用的协议族
 
 	/* Used only for kernel-created sockets */
 	union {
@@ -28,9 +28,9 @@ struct udp_port_cfg {
 #endif
 	};
 
-	__be16			local_udp_port;
-	__be16			peer_udp_port;
-	int			bind_ifindex;
+	__be16			local_udp_port;//本端udp端口号
+	__be16			peer_udp_port;//对端udp端口号（如果指定，则connect将被执行）
+	int			bind_ifindex;//要绑定的ifindex
 	unsigned int		use_udp_checksums:1,
 				use_udp6_tx_checksums:1,
 				use_udp6_rx_checksums:1,
@@ -51,8 +51,9 @@ static inline int udp_sock_create6(struct net *net, struct udp_port_cfg *cfg,
 }
 #endif
 
+//创建一个udp kernel socket
 static inline int udp_sock_create(struct net *net,
-				  struct udp_port_cfg *cfg,
+				  struct udp_port_cfg *cfg/*端口配置*/,
 				  struct socket **sockp)
 {
 	if (cfg->family == AF_INET)

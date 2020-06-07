@@ -17,19 +17,21 @@ struct hw_port_info {
 };
 
 struct metadata_dst {
-	struct dst_entry		dst;
-	enum metadata_type		type;
+	struct dst_entry		dst;//父类型（dst_entry是所有xx_dst的父类）
+	enum metadata_type		type;/*metadata类型*/
 	union {
-		//tunnel类型时填充此结构体
-		struct ip_tunnel_info	tun_info;
+		struct ip_tunnel_info	tun_info;//tunnel类型metadata的信息
 		struct hw_port_info	port_info;
 	} u;
 };
 
+//如果存在，返回skb对应的metadata_dst
 static inline struct metadata_dst *skb_metadata_dst(const struct sk_buff *skb)
 {
+    //将报文的dst_entry转换为metadata_dst
 	struct metadata_dst *md_dst = (struct metadata_dst *) skb_dst(skb);
 
+	//得到的metadata_dst必须非空，且其标记为DST_METADATA
 	if (md_dst && md_dst->dst.flags & DST_METADATA)
 		return md_dst;
 
@@ -44,7 +46,7 @@ skb_tunnel_info(const struct sk_buff *skb)
 	struct dst_entry *dst;
 
 	if (md_dst && md_dst->type == METADATA_IP_TUNNEL)
-		//指明tunnel，则返回tun_info
+		//如果metadata_dst指明为tunnel，则返回tun_info
 		return &md_dst->u.tun_info;
 
 	dst = skb_dst(skb);
@@ -95,8 +97,8 @@ void metadata_dst_free_percpu(struct metadata_dst __percpu *md_dst);
 struct metadata_dst __percpu *
 metadata_dst_alloc_percpu(u8 optslen, enum metadata_type type, gfp_t flags);
 
-//申请tunnel类型的metadata_dst
-static inline struct metadata_dst *tun_rx_dst(int md_size)
+//申请并初始化metdata_ip_tunnel类型的metadata_dst
+static inline struct metadata_dst *tun_rx_dst(int md_size/*md选项大小*/)
 {
 	struct metadata_dst *tun_dst;
 
@@ -142,12 +144,13 @@ static inline struct ip_tunnel_info *skb_tunnel_info_unclone(struct sk_buff *skb
 	return &dst->u.tun_info;
 }
 
+/*申请并初始化metadata_dst （ip tunnel类型）*/
 static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr/*源ip*/,
-						    __be32 daddr,
+						    __be32 daddr/*目的ip*/,
 						    __u8 tos, __u8 ttl,
 						    __be16 tp_dst/*目的port*/,
 						    __be16 flags,
-						    __be64 tunnel_id,
+						    __be64 tunnel_id/*隧道id号*/,
 						    int md_size/*选项长度*/)
 {
 	struct metadata_dst *tun_dst;
@@ -159,15 +162,17 @@ static inline struct metadata_dst *__ip_tun_set_dst(__be32 saddr/*源ip*/,
 	//初始化tunnel.key信息
 	ip_tunnel_key_init(&tun_dst->u.tun_info.key,
 			   saddr, daddr, tos, ttl,
-			   0, 0, tp_dst, tunnel_id, flags/*tunnel标记*/);
+			   0/*lable置为0*/, 0/*源port置为0*/, tp_dst, tunnel_id, flags/*tunnel标记*/);
 	return tun_dst;
 }
 
+/*创建并初始化ipv4 metadata dst*/
 static inline struct metadata_dst *ip_tun_rx_dst(struct sk_buff *skb,
 						 __be16 flags,
 						 __be64 tunnel_id,
 						 int md_size)
 {
+    //取ip头指针
 	const struct iphdr *iph = ip_hdr(skb);
 
 	return __ip_tun_set_dst(iph->saddr, iph->daddr, iph->tos, iph->ttl,
@@ -207,6 +212,7 @@ static inline struct metadata_dst *__ipv6_tun_set_dst(const struct in6_addr *sad
 	return tun_dst;
 }
 
+/*创建并初始化ipv6 metadata dst*/
 static inline struct metadata_dst *ipv6_tun_rx_dst(struct sk_buff *skb,
 						   __be16 flags,
 						   __be64 tunnel_id,

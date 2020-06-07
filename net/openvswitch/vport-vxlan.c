@@ -62,6 +62,7 @@ static int vxlan_configure_exts(struct vport *vport, struct nlattr *attr,
 	if (err < 0)
 		return err;
 
+	//如果需要开启gbp，则打上相应标记
 	if (exts[OVS_VXLAN_EXT_GBP])
 		conf->flags |= VXLAN_F_GBP;
 
@@ -94,6 +95,7 @@ static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 	if (a && nla_len(a) == sizeof(u16)) {
 		conf.dst_port = htons(nla_get_u16(a));
 	} else {
+	    //userspace必须提供目的port
 		/* Require destination port from userspace. */
 		err = -EINVAL;
 		goto error;
@@ -103,6 +105,7 @@ static struct vport *vxlan_tnl_create(const struct vport_parms *parms)
 	if (IS_ERR(vport))
 		return vport;
 
+	//如有必要，配置gbp
 	a = nla_find_nested(options, OVS_TUNNEL_ATTR_EXTENSION);
 	if (a) {
 		err = vxlan_configure_exts(vport, a, &conf);
@@ -146,6 +149,7 @@ static struct vport *vxlan_create(const struct vport_parms *parms)
 	if (IS_ERR(vport))
 		return vport;
 
+	//获取刚创建的vxlan dev,并针对其创建vport,及挂载rx_handler回调，促使decap后走入ovs
 	return ovs_netdev_link(vport, parms->name);
 }
 
@@ -154,7 +158,7 @@ static struct vport_ops ovs_vxlan_netdev_vport_ops = {
 	.create			= vxlan_create,
 	.destroy		= ovs_netdev_tunnel_destroy,
 	.get_options		= vxlan_get_options,
-	//报文将自vxlan对应的dev送出
+	//报文将自vxlan对应的dev送出,由函数vxlan_xmit完在报文封装
 	.send			= dev_queue_xmit,
 };
 

@@ -3862,6 +3862,7 @@ EXPORT_SYMBOL(kernel_getsockopt);
 int kernel_setsockopt(struct socket *sock, int level, int optname,
 			char *optval, unsigned int optlen)
 {
+    //实现setsockopt函数
 	mm_segment_t oldfs = get_fs();
 	char __user *uoptval;
 	int err;
@@ -3872,6 +3873,7 @@ int kernel_setsockopt(struct socket *sock, int level, int optname,
 	if (level == SOL_SOCKET)
 		err = sock_setsockopt(sock, level, optname, uoptval, optlen);
 	else
+	    //其它level，由sock对应的ops回调处理
 		err = sock->ops->setsockopt(sock, level, optname, uoptval,
 					    optlen);
 	set_fs(oldfs);

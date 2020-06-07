@@ -74,6 +74,7 @@ Feature bits are allocated as follows:
 #ifndef VIRTIO_CONFIG_NO_LEGACY
 /* Do we get callbacks when the ring is completely used, even if we've
  * suppressed them? */
+//如果avali队列为空，需要通知
 #define VIRTIO_F_NOTIFY_ON_EMPTY	24
 
 /* Can the device handle any descriptor layout? */

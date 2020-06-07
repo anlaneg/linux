@@ -100,8 +100,8 @@ struct vhost_net_ubuf_ref {
 #define VHOST_NET_BATCH 64
 struct vhost_net_buf {
 	void **queue;
-	int tail;
-	int head;
+	int tail;/*队列尾指针*/
+	int head;/*队列头指针*/
 };
 
 struct vhost_net_virtqueue {
@@ -151,6 +151,7 @@ static unsigned vhost_net_zcopy_mask __read_mostly;
 
 static void *vhost_net_buf_get_ptr(struct vhost_net_buf *rxq)
 {
+    /*如果有数据，则返回head指向的元素，否则返回NULL*/
 	if (rxq->tail != rxq->head)
 		return rxq->queue[rxq->head];
 	else
@@ -167,6 +168,7 @@ static int vhost_net_buf_is_empty(struct vhost_net_buf *rxq)
 	return rxq->tail == rxq->head;
 }
 
+/*获取一个buffer指针，并将head读头前移一格*/
 static void *vhost_net_buf_consume(struct vhost_net_buf *rxq)
 {
 	void *ret = vhost_net_buf_get_ptr(rxq);
@@ -1040,9 +1042,9 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
  *	returns number of buffer heads allocated, negative on error
  */
 static int get_rx_bufs(struct vhost_virtqueue *vq,
-		       struct vring_used_elem *heads/*出参，需占用描述符及其能及供的buffer尺寸*/,
+		       struct vring_used_elem *heads/*出参，需占用描述符及其能提供的buffer尺寸*/,
 		       int datalen/*预期要获得的buffer总大小*/,
-		       unsigned *iovcount/*出参，vq->iov被占用总长度*/,
+		       unsigned *iovcount/*出参，vq->iov被占用总数目*/,
 		       struct vhost_log *log,
 		       unsigned *log_num,
 		       unsigned int quota/*容许占用的描述符数目上限*/)
@@ -1160,6 +1162,7 @@ static void handle_rx(struct vhost_net *net)
 
 	vq_log = unlikely(vhost_has_feature(vq, VHOST_F_LOG_ALL)) ?
 		vq->log : NULL;
+	/*检查vq是否开启了merge rxbuf功能*/
 	mergeable = vhost_has_feature(vq, VIRTIO_NET_F_MRG_RXBUF);
 
 	do {
@@ -1178,7 +1181,7 @@ static void handle_rx(struct vhost_net *net)
 			goto out;
 		/* OK, now we need to know about added descriptors. */
 		if (!headcount) {
-		    /*未获取到描述符*/
+		    /*未获取到描述符,加入poll队列等待，开启通知*/
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
 			} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {

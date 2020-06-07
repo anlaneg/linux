@@ -10,18 +10,21 @@
 #include <net/udp.h>
 #include <net/udp_tunnel.h>
 
+//udp创建ipv4的socket
 int udp_sock_create4(struct net *net, struct udp_port_cfg *cfg,
-		     struct socket **sockp)
+		     struct socket **sockp/*出参，创建的socket*/)
 {
 	int err;
 	struct socket *sock = NULL;
 	struct sockaddr_in udp_addr;
 
+	//创建kernel使用的udp socket
 	err = sock_create_kern(net, AF_INET, SOCK_DGRAM, 0, &sock);
 	if (err < 0)
 		goto error;
 
 	if (cfg->bind_ifindex) {
+	    //如果指定了待绑定的接口，则完成接口绑定
 		err = kernel_setsockopt(sock, SOL_SOCKET, SO_BINDTOIFINDEX,
 					(void *)&cfg->bind_ifindex,
 					sizeof(cfg->bind_ifindex));
@@ -29,6 +32,7 @@ int udp_sock_create4(struct net *net, struct udp_port_cfg *cfg,
 			goto error;
 	}
 
+	/*实现地址绑定*/
 	udp_addr.sin_family = AF_INET;
 	udp_addr.sin_addr = cfg->local_ip;
 	udp_addr.sin_port = cfg->local_udp_port;
@@ -37,6 +41,7 @@ int udp_sock_create4(struct net *net, struct udp_port_cfg *cfg,
 	if (err < 0)
 		goto error;
 
+	//如果指定了对端port,则进行连接
 	if (cfg->peer_udp_port) {
 		udp_addr.sin_family = AF_INET;
 		udp_addr.sin_addr = cfg->peer_ip;
@@ -63,7 +68,7 @@ error:
 EXPORT_SYMBOL(udp_sock_create4);
 
 void setup_udp_tunnel_sock(struct net *net, struct socket *sock,
-			   struct udp_tunnel_sock_cfg *cfg)
+			   struct udp_tunnel_sock_cfg *cfg/*udp隧道socket配置*/)
 {
 	struct sock *sk = sock->sk;
 
@@ -204,12 +209,14 @@ void udp_tunnel_sock_release(struct socket *sock)
 }
 EXPORT_SYMBOL_GPL(udp_tunnel_sock_release);
 
+/*创建udp tunnel的metadata dst*/
 struct metadata_dst *udp_tun_rx_dst(struct sk_buff *skb,  unsigned short family,
-				    __be16 flags, __be64 tunnel_id, int md_size)
+				    __be16 flags, __be64 tunnel_id/*tunnel id*/, int md_size)
 {
 	struct metadata_dst *tun_dst;
 	struct ip_tunnel_info *info;
 
+	//按协议族申请并初始化metadata_dst
 	if (family == AF_INET)
 		tun_dst = ip_tun_rx_dst(skb, flags, tunnel_id, md_size);
 	else
@@ -220,6 +227,7 @@ struct metadata_dst *udp_tun_rx_dst(struct sk_buff *skb,  unsigned short family,
 	info = &tun_dst->u.tun_info;
 	info->key.tp_src = udp_hdr(skb)->source;
 	info->key.tp_dst = udp_hdr(skb)->dest;
+	/*如果udp开启checksum,则打上tunnel checksum标记*/
 	if (udp_hdr(skb)->check)
 		info->key.tun_flags |= TUNNEL_CSUM;
 	return tun_dst;

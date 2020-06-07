@@ -991,7 +991,8 @@ set_rcvbuf:
 		ret = sock_set_timeout(&sk->sk_sndtimeo, optval, optlen, optname == SO_SNDTIMEO_OLD);
 		break;
 
-	case SO_ATTACH_FILTER://为socket设置bpf过滤器
+	case SO_ATTACH_FILTER:
+	    //为socket设置bpf过滤器
 		//ref https://www.cnblogs.com/rollenholt/articles/2585517.html
 		ret = -EINVAL;
 		if (optlen == sizeof(struct sock_fprog)) {
@@ -1185,6 +1186,7 @@ set_rcvbuf:
 		break;
 
 	case SO_BINDTOIFINDEX:
+	    /*完成socket与ifindex的绑定*/
 		ret = sock_setbindtodevice_locked(sk, val);
 		break;
 

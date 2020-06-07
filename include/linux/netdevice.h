@@ -1978,7 +1978,7 @@ struct net_device {
 
 	/* Interface address info. */
 	unsigned char		perm_addr[MAX_ADDR_LEN];
-	unsigned char		addr_assign_type;//设备地址如何产生，例如“随机生成”，
+	unsigned char		addr_assign_type;//设备地址如何产生，例如“随机生成（NET_ADDR_RANDOM）”，
 	unsigned char		addr_len;//设备地址长度（如以太网6字节）
 	unsigned char		upper_level;
 	unsigned char		lower_level;
@@ -2186,6 +2186,7 @@ struct net_device {
 static inline bool netif_elide_gro(const struct net_device *dev)
 {
 	if (!(dev->features & NETIF_F_GRO) || dev->xdp_prog)
+	    /*没有开启gro或者设备上有xdp_prog*/
 		return true;
 	return false;
 }
@@ -2515,8 +2516,8 @@ struct packet_offload {
 
 /* often modified stats are per-CPU, other are shared (netdev->stats) */
 struct pcpu_sw_netstats {
-	u64     rx_packets;
-	u64     rx_bytes;
+	u64     rx_packets;//收到的报文数
+	u64     rx_bytes;//收到的报文字节数
 	u64     tx_packets;
 	u64     tx_bytes;
 	struct u64_stats_sync   syncp;

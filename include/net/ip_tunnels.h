@@ -32,23 +32,25 @@
 
 /* Used to memset ipv4 address padding. */
 #define IP_TUNNEL_KEY_IPV4_PAD	offsetofend(struct ip_tunnel_key, u.ipv4.dst)
+//获取ipv4 u结构体的pad大小
 #define IP_TUNNEL_KEY_IPV4_PAD_LEN				\
 	(sizeof_field(struct ip_tunnel_key, u) -		\
 	 sizeof_field(struct ip_tunnel_key, u.ipv4))
 
+//ip隧道相应的key信息
 struct ip_tunnel_key {
 	__be64			tun_id;//隧道id号（例如vni)
 	union {
 		struct {
-			__be32	src;
-			__be32	dst;
-		} ipv4;//隧道源目的地址
+			__be32	src;//源地址
+			__be32	dst;//目的地址
+		} ipv4;//ipv4隧道
 		struct {
-			struct in6_addr src;
-			struct in6_addr dst;
-		} ipv6;
+			struct in6_addr src;//源地址
+			struct in6_addr dst;//目的地址
+		} ipv6;//ipv6隧道
 	} u;
-	__be16			tun_flags;//标记
+	__be16			tun_flags;//隧道标记
 	u8			tos;		/* TOS for IPv4, TC for IPv6 */ //tos信息
 	u8			ttl;		/* TTL for IPv4, HL for IPv6 */ //ttl信息
 	__be32			label;		/* Flow Label for IPv6 */
@@ -167,6 +169,7 @@ struct ip_tunnel_net {
 	int type;
 };
 
+//初始化ip_tunnel_key(ipv4)
 static inline void ip_tunnel_key_init(struct ip_tunnel_key *key,
 				      __be32 saddr, __be32 daddr,
 				      u8 tos, u8 ttl, __be32 label,
@@ -176,6 +179,7 @@ static inline void ip_tunnel_key_init(struct ip_tunnel_key *key,
 	key->tun_id = tun_id;
 	key->u.ipv4.src = saddr;
 	key->u.ipv4.dst = daddr;
+	//清除pad空间
 	memset((unsigned char *)key + IP_TUNNEL_KEY_IPV4_PAD,
 	       0, IP_TUNNEL_KEY_IPV4_PAD_LEN);
 	key->tos = tos;
@@ -191,6 +195,7 @@ static inline void ip_tunnel_key_init(struct ip_tunnel_key *key,
 	key->tp_dst = tp_dst;
 
 	/* Clear struct padding. */
+	//将key结构体中pad清零
 	if (sizeof(*key) != IP_TUNNEL_KEY_SIZE)
 		memset((unsigned char *)key + IP_TUNNEL_KEY_SIZE,
 		       0, sizeof(*key) - IP_TUNNEL_KEY_SIZE);

@@ -25,6 +25,7 @@ enum {
  * @TYPE: The structure containing the field of interest
  * @MEMBER: The field to return the size of
  */
+//取结构体type中成员member的大小
 #define sizeof_field(TYPE, MEMBER) sizeof((((TYPE *)0)->MEMBER))
 
 /**
@@ -34,6 +35,7 @@ enum {
  * @MEMBER: The member within the structure to get the end offset of
  */
 #define offsetofend(TYPE, MEMBER) \
+    /*返回type结构体成员member结尾的偏移量*/\
 	(offsetof(TYPE, MEMBER)	+ sizeof_field(TYPE, MEMBER))
 
 #endif

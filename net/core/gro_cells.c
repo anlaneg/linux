@@ -20,6 +20,7 @@ int gro_cells_receive(struct gro_cells *gcells, struct sk_buff *skb)
 		goto drop;
 
 	if (!gcells->cells || skb_cloned(skb) || netif_elide_gro(dev)) {
+	    //不需要做gro时，将报文直接置入协议栈
 		res = netif_rx(skb);
 		goto unlock;
 	}

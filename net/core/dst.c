@@ -27,6 +27,7 @@
 #include <net/dst.h>
 #include <net/dst_metadata.h>
 
+//丢包
 int dst_discard_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	kfree_skb(skb);
@@ -44,6 +45,7 @@ const struct dst_metrics dst_default_metrics = {
 };
 EXPORT_SYMBOL(dst_default_metrics);
 
+/*初始化设置dst*/
 void dst_init(struct dst_entry *dst, struct dst_ops *ops,
 	      struct net_device *dev, int initial_ref, int initial_obsolete,
 	      unsigned short flags)
@@ -237,10 +239,12 @@ void __dst_destroy_metrics_generic(struct dst_entry *dst, unsigned long old)
 }
 EXPORT_SYMBOL(__dst_destroy_metrics_generic);
 
+/*metadata dst操作集*/
 static struct dst_ops md_dst_ops = {
 	.family =		AF_UNSPEC,
 };
 
+/*metadata dst out 丢包*/
 static int dst_md_discard_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	WARN_ONCE(1, "Attempting to call output on metadata dst\n");
@@ -248,6 +252,7 @@ static int dst_md_discard_out(struct net *net, struct sock *sk, struct sk_buff *
 	return 0;
 }
 
+/*metadata dst in丢包*/
 static int dst_md_discard(struct sk_buff *skb)
 {
 	WARN_ONCE(1, "Attempting to call input on metadata dst\n");
@@ -255,6 +260,7 @@ static int dst_md_discard(struct sk_buff *skb)
 	return 0;
 }
 
+//初始化metadata dst
 static void __metadata_dst_init(struct metadata_dst *md_dst,
 				enum metadata_type type, u8 optslen)
 
@@ -269,11 +275,13 @@ static void __metadata_dst_init(struct metadata_dst *md_dst,
 	dst->input = dst_md_discard;
 	dst->output = dst_md_discard_out;
 
+	//初始化metadata除dst以外区域
 	memset(dst + 1, 0, sizeof(*md_dst) + optslen - sizeof(*dst));
 	md_dst->type = type;
 }
 
-struct metadata_dst *metadata_dst_alloc(u8 optslen, enum metadata_type type,
+/*申请并初始化metadata_dst*/
+struct metadata_dst *metadata_dst_alloc(u8 optslen/*选项长度*/, enum metadata_type type,
 					gfp_t flags)
 {
 	struct metadata_dst *md_dst;

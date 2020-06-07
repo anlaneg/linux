@@ -168,7 +168,7 @@ struct proto_ops {
 	//listen系统调用实现
 	int		(*listen)    (struct socket *sock, int len);
 	int		(*shutdown)  (struct socket *sock, int flags);
-	//setsockopt调用实现
+	//setsockopt调用实现（非SOL_SOCKET情况）
 	int		(*setsockopt)(struct socket *sock, int level,
 				      int optname/*操作码*/, char __user *optval/*操作码对应数值*/, unsigned int optlen/*操作码对应参数长度*/);
 	int		(*getsockopt)(struct socket *sock, int level,

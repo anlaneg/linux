@@ -733,6 +733,7 @@ EXPORT_SYMBOL(dev_uc_flush);
  */
 void dev_uc_init(struct net_device *dev)
 {
+    //网络设备单播地址初始化
 	__hw_addr_init(&dev->uc);
 }
 EXPORT_SYMBOL(dev_uc_init);
@@ -956,6 +957,7 @@ EXPORT_SYMBOL(dev_mc_flush);
  */
 void dev_mc_init(struct net_device *dev)
 {
+    //网络设备组播地址链表初始化
 	__hw_addr_init(&dev->mc);
 }
 EXPORT_SYMBOL(dev_mc_init);

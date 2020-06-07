@@ -963,6 +963,7 @@ static inline bool skb_pfmemalloc(const struct sk_buff *skb)
  */
 static inline struct dst_entry *skb_dst(const struct sk_buff *skb)
 {
+    //取报文对应的dst_entry
 	/* If refdst was not refcounted, check we still are in a
 	 * rcu_read_lock section
 	 */
@@ -982,6 +983,7 @@ static inline struct dst_entry *skb_dst(const struct sk_buff *skb)
  */
 static inline void skb_dst_set(struct sk_buff *skb, struct dst_entry *dst)
 {
+    //设skb设置dst_entry
 	skb->_skb_refdst = (unsigned long)dst;
 }
 

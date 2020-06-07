@@ -3072,19 +3072,19 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 	unsigned int num_tx_queues = 1;
 	unsigned int num_rx_queues = 1;
 
-	//tx队列数目来自配置或通过函数获取
+	//设置tx队列数目（其来自配置或通过函数获取）
 	if (tb[IFLA_NUM_TX_QUEUES])
 		num_tx_queues = nla_get_u32(tb[IFLA_NUM_TX_QUEUES]);
 	else if (ops->get_num_tx_queues)
 		num_tx_queues = ops->get_num_tx_queues();
 
-	//rx队列数目
+	//设置rx队列数目
 	if (tb[IFLA_NUM_RX_QUEUES])
 		num_rx_queues = nla_get_u32(tb[IFLA_NUM_RX_QUEUES]);
 	else if (ops->get_num_rx_queues)
 		num_rx_queues = ops->get_num_rx_queues();
 
-	//队列数目校验
+	//rx,tx队列数目校验
 	if (num_tx_queues < 1 || num_tx_queues > 4096) {
 		NL_SET_ERR_MSG(extack, "Invalid number of transmit queues");
 		return ERR_PTR(-EINVAL);
