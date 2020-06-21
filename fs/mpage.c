@@ -91,7 +91,7 @@ mpage_alloc(struct block_device *bdev,
 }
 
 /*
- * support function for mpage_readpages.  The fs supplied get_block might
+ * support function for mpage_readahead.  The fs supplied get_block might
  * return an up to date buffer.  This is used to map that buffer into
  * the page, which allows readpage to avoid triggering a duplicate call
  * to get_block.
@@ -348,13 +348,8 @@ confused:
 }
 
 /**
- * mpage_readpages - populate an address space with some pages & start reads against them
- * @mapping: the address_space
- * @pages: The address of a list_head which contains the target pages.  These
- *   pages have their ->index populated and are otherwise uninitialised.
- *   The page at @pages->prev has the lowest file offset, and reads should be
- *   issued in @pages->prev to @pages->next order.(pages按页索引号从小到大排列，其->index即为索引号）
- * @nr_pages: The number of pages at *@pages
+ * mpage_readahead - start reads against pages
+ * @rac: Describes which pages to read.
  * @get_block: The filesystem's block mapper function.
  *
  * This function walks the pages and the blocks within each page, building and
@@ -391,40 +386,26 @@ confused:
  *
  * This all causes the disk requests to be issued in the correct order.
  */
-int
-mpage_readpages(struct address_space *mapping, struct list_head *pages,
-				unsigned nr_pages, get_block_t get_block)
+void mpage_readahead(struct readahead_control *rac, get_block_t get_block)
 {
+	struct page *page;
 	struct mpage_readpage_args args = {
 		.get_block = get_block,
 		.is_readahead = true,
 	};
-	unsigned page_idx;
 
-	for (page_idx = 0; page_idx < nr_pages; page_idx++) {
-		//由pages获取其对应的page结构体，用于获知要填充的page
-		struct page *page = lru_to_page(pages);
-
+	while ((page = readahead_page(rac))) {
 		prefetchw(&page->flags);
-		//将page自pages链中摘除
-		list_del(&page->lru);
-
-		if (!add_to_page_cache_lru(page, mapping,
-					page->index,
-					readahead_gfp_mask(mapping))) {
-			args.page = page;
-			args.nr_pages = nr_pages - page_idx;
-			args.bio = do_mpage_readpage(&args);
-		}
+		args.page = page;
+		args.nr_pages = readahead_count(rac);
+		args.bio = do_mpage_readpage(&args);
 		put_page(page);
 	}
-	BUG_ON(!list_empty(pages));
 	if (args.bio)
 		//处理块设备读
 		mpage_bio_submit(REQ_OP_READ, REQ_RAHEAD, args.bio);
-	return 0;
 }
-EXPORT_SYMBOL(mpage_readpages);
+EXPORT_SYMBOL(mpage_readahead);
 
 /*
  * This isn't called much at all
@@ -577,7 +558,7 @@ static int __mpage_writepage(struct page *page, struct writeback_control *wbc,
 		 * Page has buffers, but they are all unmapped. The page was
 		 * created by pagein or read over a hole which was handled by
 		 * block_read_full_page().  If this address_space is also
-		 * using mpage_readpages then this can rarely happen.
+		 * using mpage_readahead then this can rarely happen.
 		 */
 		goto confused;
 	}

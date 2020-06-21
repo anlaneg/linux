@@ -1783,6 +1783,8 @@ int fib_dump_info(struct sk_buff *skb, u32 portid, u32 seq, int event,
 			goto nla_put_failure;
 		if (nexthop_is_blackhole(fi->nh))
 			rtm->rtm_type = RTN_BLACKHOLE;
+		if (!fi->fib_net->ipv4.sysctl_nexthop_compat_mode)
+			goto offload;
 	}
 
 	if (nhs == 1) {
@@ -1808,6 +1810,7 @@ int fib_dump_info(struct sk_buff *skb, u32 portid, u32 seq, int event,
 			goto nla_put_failure;
 	}
 
+offload:
 	if (fri->offload)
 		rtm->rtm_flags |= RTM_F_OFFLOAD;
 	if (fri->trap)

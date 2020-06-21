@@ -45,8 +45,22 @@ static const u8 nla_attr_minlen[NLA_TYPE_MAX+1] = {
 	[NLA_S64]	= sizeof(s64),
 };
 
+/*
+ * Nested policies might refer back to the original
+ * policy in some cases, and userspace could try to
+ * abuse that and recurse by nesting in the right
+ * ways. Limit recursion to avoid this problem.
+ */
+#define MAX_POLICY_RECURSION_DEPTH	10
+
+static int __nla_validate_parse(const struct nlattr *head, int len, int maxtype,
+				const struct nla_policy *policy,
+				unsigned int validate,
+				struct netlink_ext_ack *extack,
+				struct nlattr **tb, unsigned int depth);
+
 static int validate_nla_bitfield32(const struct nlattr *nla,
-				   const u32 *valid_flags_mask)
+				   const u32 valid_flags_mask)
 {
 	const struct nla_bitfield32 *bf = nla_data(nla);
 
@@ -54,11 +68,11 @@ static int validate_nla_bitfield32(const struct nlattr *nla,
 		return -EINVAL;
 
 	/*disallow invalid bit selector */
-	if (bf->selector & ~*valid_flags_mask)
+	if (bf->selector & ~valid_flags_mask)
 		return -EINVAL;
 
 	/*disallow invalid bit values */
-	if (bf->value & ~*valid_flags_mask)
+	if (bf->value & ~valid_flags_mask)
 		return -EINVAL;
 
 	/*disallow valid bit values that are not selected*/
@@ -71,7 +85,7 @@ static int validate_nla_bitfield32(const struct nlattr *nla,
 static int nla_validate_array(const struct nlattr *head, int len, int maxtype,
 			      const struct nla_policy *policy,
 			      struct netlink_ext_ack *extack,
-			      unsigned int validate)
+			      unsigned int validate, unsigned int depth)
 {
 	const struct nlattr *entry;
 	int rem;
@@ -88,8 +102,9 @@ static int nla_validate_array(const struct nlattr *head, int len, int maxtype,
 			return -ERANGE;
 		}
 
-		ret = __nla_validate(nla_data(entry), nla_len(entry),
-				     maxtype, policy, validate, extack);
+		ret = __nla_validate_parse(nla_data(entry), nla_len(entry),
+					   maxtype, policy, validate, extack,
+					   NULL, depth + 1);
 		if (ret < 0)
 			return ret;
 	}
@@ -97,17 +112,58 @@ static int nla_validate_array(const struct nlattr *head, int len, int maxtype,
 	return 0;
 }
 
-static int nla_validate_int_range(const struct nla_policy *pt,
-				  const struct nlattr *nla,
-				  struct netlink_ext_ack *extack)
+void nla_get_range_unsigned(const struct nla_policy *pt,
+			    struct netlink_range_validation *range)
 {
-	bool validate_min, validate_max;
-	s64 value;
+	WARN_ON_ONCE(pt->validation_type != NLA_VALIDATE_RANGE_PTR &&
+		     (pt->min < 0 || pt->max < 0));
 
-	validate_min = pt->validation_type == NLA_VALIDATE_RANGE ||
-		       pt->validation_type == NLA_VALIDATE_MIN;
-	validate_max = pt->validation_type == NLA_VALIDATE_RANGE ||
-		       pt->validation_type == NLA_VALIDATE_MAX;
+	range->min = 0;
+
+	switch (pt->type) {
+	case NLA_U8:
+		range->max = U8_MAX;
+		break;
+	case NLA_U16:
+		range->max = U16_MAX;
+		break;
+	case NLA_U32:
+		range->max = U32_MAX;
+		break;
+	case NLA_U64:
+	case NLA_MSECS:
+		range->max = U64_MAX;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return;
+	}
+
+	switch (pt->validation_type) {
+	case NLA_VALIDATE_RANGE:
+		range->min = pt->min;
+		range->max = pt->max;
+		break;
+	case NLA_VALIDATE_RANGE_PTR:
+		*range = *pt->range;
+		break;
+	case NLA_VALIDATE_MIN:
+		range->min = pt->min;
+		break;
+	case NLA_VALIDATE_MAX:
+		range->max = pt->max;
+		break;
+	default:
+		break;
+	}
+}
+
+static int nla_validate_int_range_unsigned(const struct nla_policy *pt,
+					   const struct nlattr *nla,
+					   struct netlink_ext_ack *extack)
+{
+	struct netlink_range_validation range;
+	u64 value;
 
 	switch (pt->type) {
 	case NLA_U8:
@@ -119,6 +175,77 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	case NLA_U32:
 		value = nla_get_u32(nla);
 		break;
+	case NLA_U64:
+	case NLA_MSECS:
+		value = nla_get_u64(nla);
+		break;
+	default:
+		return -EINVAL;
+	}
+
+	nla_get_range_unsigned(pt, &range);
+
+	if (value < range.min || value > range.max) {
+		NL_SET_ERR_MSG_ATTR(extack, nla,
+				    "integer out of range");
+		return -ERANGE;
+	}
+
+	return 0;
+}
+
+void nla_get_range_signed(const struct nla_policy *pt,
+			  struct netlink_range_validation_signed *range)
+{
+	switch (pt->type) {
+	case NLA_S8:
+		range->min = S8_MIN;
+		range->max = S8_MAX;
+		break;
+	case NLA_S16:
+		range->min = S16_MIN;
+		range->max = S16_MAX;
+		break;
+	case NLA_S32:
+		range->min = S32_MIN;
+		range->max = S32_MAX;
+		break;
+	case NLA_S64:
+		range->min = S64_MIN;
+		range->max = S64_MAX;
+		break;
+	default:
+		WARN_ON_ONCE(1);
+		return;
+	}
+
+	switch (pt->validation_type) {
+	case NLA_VALIDATE_RANGE:
+		range->min = pt->min;
+		range->max = pt->max;
+		break;
+	case NLA_VALIDATE_RANGE_PTR:
+		*range = *pt->range_signed;
+		break;
+	case NLA_VALIDATE_MIN:
+		range->min = pt->min;
+		break;
+	case NLA_VALIDATE_MAX:
+		range->max = pt->max;
+		break;
+	default:
+		break;
+	}
+}
+
+static int nla_validate_int_range_signed(const struct nla_policy *pt,
+					 const struct nlattr *nla,
+					 struct netlink_ext_ack *extack)
+{
+	struct netlink_range_validation_signed range;
+	s64 value;
+
+	switch (pt->type) {
 	case NLA_S8:
 		value = nla_get_s8(nla);
 		break;
@@ -131,22 +258,13 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	case NLA_S64:
 		value = nla_get_s64(nla);
 		break;
-	case NLA_U64:
-		/* treat this one specially, since it may not fit into s64 */
-		if ((validate_min && nla_get_u64(nla) < pt->min) ||
-		    (validate_max && nla_get_u64(nla) > pt->max)) {
-			NL_SET_ERR_MSG_ATTR(extack, nla,
-					    "integer out of range");
-			return -ERANGE;
-		}
-		return 0;
 	default:
-		WARN_ON(1);
 		return -EINVAL;
 	}
 
-	if ((validate_min && value < pt->min) ||
-	    (validate_max && value > pt->max)) {
+	nla_get_range_signed(pt, &range);
+
+	if (value < range.min || value > range.max) {
 		NL_SET_ERR_MSG_ATTR(extack, nla,
 				    "integer out of range");
 		return -ERANGE;
@@ -155,10 +273,32 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	return 0;
 }
 
+static int nla_validate_int_range(const struct nla_policy *pt,
+				  const struct nlattr *nla,
+				  struct netlink_ext_ack *extack)
+{
+	switch (pt->type) {
+	case NLA_U8:
+	case NLA_U16:
+	case NLA_U32:
+	case NLA_U64:
+	case NLA_MSECS:
+		return nla_validate_int_range_unsigned(pt, nla, extack);
+	case NLA_S8:
+	case NLA_S16:
+	case NLA_S32:
+	case NLA_S64:
+		return nla_validate_int_range_signed(pt, nla, extack);
+	default:
+		WARN_ON(1);
+		return -EINVAL;
+	}
+}
+
 //netlink类消息校验
 static int validate_nla(const struct nlattr *nla, int maxtype,
 			const struct nla_policy *policy, unsigned int validate,
-			struct netlink_ext_ack *extack)
+			struct netlink_ext_ack *extack, unsigned int depth)
 {
 	u16 strict_start_type = policy[0].strict_start_type;
 	const struct nla_policy *pt;
@@ -178,8 +318,10 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 
 	//校验属性的长度
 	if ((nla_attr_len[pt->type]/*此类型有目标的长度*/ && attrlen != nla_attr_len[pt->type]/*实际报文的大小与约定的长度不符*/) ||
-			/*此类型为严格长度属性，其长度必须与pt->len相等*/
-	    (pt->type == NLA_EXACT_LEN_WARN && attrlen != pt->len)) {
+	    /*此类型为严格长度属性，其长度必须与pt->len相等*/
+	    (pt->type == NLA_EXACT_LEN &&
+	     pt->validation_type == NLA_VALIDATE_WARN_TOO_LONG &&
+	     attrlen != pt->len)) {
 		pr_warn_ratelimited("netlink: '%s': attribute type %d has an invalid length.\n",
 				    current->comm, type);
 		if (validate & NL_VALIDATE_STRICT_ATTRS) {
@@ -208,17 +350,11 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 	}
 
 	switch (pt->type) {
-	case NLA_EXACT_LEN:
-		//精确长度校验
-		if (attrlen != pt->len)
-			goto out_err;
-		break;
-
 	case NLA_REJECT:
 		//需要reject掉的属性，如果有extack,则填充错误信息到extack
-		if (extack && pt->validation_data) {
+		if (extack && pt->reject_message) {
 			NL_SET_BAD_ATTR(extack, nla);
-			extack->_msg = pt->validation_data;
+			extack->_msg = pt->reject_message;
 			return -EINVAL;
 		}
 		err = -EINVAL;
@@ -234,7 +370,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		if (attrlen != sizeof(struct nla_bitfield32))
 			goto out_err;
 
-		err = validate_nla_bitfield32(nla, pt->validation_data);
+		err = validate_nla_bitfield32(nla, pt->bitfield32_valid);
 		if (err)
 			goto out_err;
 		break;
@@ -281,10 +417,11 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 			break;
 		if (attrlen < NLA_HDRLEN)
 			goto out_err;
-		if (pt->validation_data) {
-			err = __nla_validate(nla_data(nla), nla_len(nla), pt->len,
-					     pt->validation_data, validate,
-					     extack);
+		if (pt->nested_policy) {
+			err = __nla_validate_parse(nla_data(nla), nla_len(nla),
+						   pt->len, pt->nested_policy,
+						   validate, extack, NULL,
+						   depth + 1);
 			if (err < 0) {
 				/*
 				 * return directly to preserve the inner
@@ -302,12 +439,12 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 			break;
 		if (attrlen < NLA_HDRLEN)
 			goto out_err;
-		if (pt->validation_data) {
+		if (pt->nested_policy) {
 			int err;
 
 			err = nla_validate_array(nla_data(nla), nla_len(nla),
-						 pt->len, pt->validation_data,
-						 extack, validate);
+						 pt->len, pt->nested_policy,
+						 extack, validate, depth);
 			if (err < 0) {
 				/*
 				 * return directly to preserve the inner
@@ -331,6 +468,13 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 			goto out_err;
 		break;
 
+	case NLA_EXACT_LEN:
+		if (pt->validation_type != NLA_VALIDATE_WARN_TOO_LONG) {
+			if (attrlen != pt->len)
+				goto out_err;
+			break;
+		}
+		/* fall through */
 	default:
 		//校验最小长度
 		if (pt->len)
@@ -347,6 +491,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 	case NLA_VALIDATE_NONE:
 		/* nothing to do */
 		break;
+	case NLA_VALIDATE_RANGE_PTR:
 	case NLA_VALIDATE_RANGE:
 	case NLA_VALIDATE_MIN:
 	case NLA_VALIDATE_MAX:
@@ -376,10 +521,16 @@ static int __nla_validate_parse(const struct nlattr *head/*属性起始指针*/,
 				const struct nla_policy *policy,
 				unsigned int validate,
 				struct netlink_ext_ack *extack,
-				struct nlattr **tb/*出参，记录解析的各attr*/)
+				struct nlattr **tb/*出参，记录解析的各attr*/, unsigned int depth)
 {
 	const struct nlattr *nla;
 	int rem;
+
+	if (depth >= MAX_POLICY_RECURSION_DEPTH) {
+		NL_SET_ERR_MSG(extack,
+			       "allowed policy recursion depth exceeded");
+		return -EINVAL;
+	}
 
 	if (tb)
 		//tb清零
@@ -402,7 +553,7 @@ static int __nla_validate_parse(const struct nlattr *head/*属性起始指针*/,
 		if (policy) {
 			//有policy,采用policy检查字段
 			int err = validate_nla(nla, maxtype, policy,
-					       validate, extack);
+					       validate, extack, depth);
 
 			if (err < 0)
 				return err;
@@ -446,7 +597,7 @@ int __nla_validate(const struct nlattr *head, int len, int maxtype,
 		   struct netlink_ext_ack *extack)
 {
 	return __nla_validate_parse(head, len, maxtype, policy, validate,
-				    extack, NULL);
+				    extack, NULL, 0);
 }
 EXPORT_SYMBOL(__nla_validate);
 
@@ -501,7 +652,7 @@ int __nla_parse(struct nlattr **tb, int maxtype,
 		struct netlink_ext_ack *extack)
 {
 	return __nla_validate_parse(head, len, maxtype, policy, validate,
-				    extack, tb);
+				    extack, tb, 0);
 }
 EXPORT_SYMBOL(__nla_parse);
 

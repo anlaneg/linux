@@ -855,9 +855,16 @@ static void set_operstate(struct net_device *dev, unsigned char transition)
 	switch (transition) {
 	case IF_OPER_UP:
 		if ((operstate == IF_OPER_DORMANT ||
+		     operstate == IF_OPER_TESTING ||
 		     operstate == IF_OPER_UNKNOWN) &&
-		    !netif_dormant(dev))
+		    !netif_dormant(dev) && !netif_testing(dev))
 			operstate = IF_OPER_UP;
+		break;
+
+	case IF_OPER_TESTING:
+		if (operstate == IF_OPER_UP ||
+		    operstate == IF_OPER_UNKNOWN)
+			operstate = IF_OPER_TESTING;
 		break;
 
 	case IF_OPER_DORMANT:
@@ -2485,7 +2492,6 @@ static int do_set_master(struct net_device *dev, int ifindex,
 			err = ops->ndo_del_slave(upper_dev, dev);
 			if (err)
 				return err;
-			netdev_update_lockdep_key(dev);
 		} else {
 			return -EOPNOTSUPP;
 		}
@@ -4064,8 +4070,8 @@ static int rtnl_fdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct ndmsg *ndm;
 	struct nlattr *tb[NDA_MAX+1];
 	struct net_device *dev;
-	int err = -EINVAL;
 	__u8 *addr;
+	int err;
 	u16 vid;
 
 	if (!netlink_capable(skb, CAP_NET_ADMIN))

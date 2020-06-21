@@ -691,7 +691,7 @@ static int vhost_vsock_dev_open(struct inode *inode, struct file *file)
 	//初始化vsock对应的设备
 	vhost_dev_init(&vsock->dev, vqs, ARRAY_SIZE(vsock->vqs),
 		       UIO_MAXIOV, VHOST_VSOCK_PKT_WEIGHT,
-		       VHOST_VSOCK_WEIGHT, NULL/*指定消息处理为空*/);
+		       VHOST_VSOCK_WEIGHT, true, NULL/*指定消息处理为空*/);
 
 	/*将vsock指定为私有数据*/
 	file->private_data = vsock;

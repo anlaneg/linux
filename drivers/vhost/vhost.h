@@ -67,10 +67,10 @@ struct vhost_virtqueue {
 	/* The actual ring of buffers. */
 	struct mutex mutex;
 	unsigned int num;//队列长度
-	struct vring_desc __user *desc;/*用户态指定的desc表起始地址*/
+	vring_desc_t __user *desc;/*用户态指定的desc表起始地址*/
 	//avail表中存放的是可用的描述符（desc）索引，其长度与vq一致
-	struct vring_avail __user *avail;/*用户态指定的avail表起始地址*/
-	struct vring_used __user *used;/*用户态指定的use表起始地址*/
+	vring_avail_t __user *avail;/*用户态指定的avail表起始地址*/
+	vring_used_t __user *used;/*用户态指定的use表起始地址*/
 	const struct vhost_iotlb_map *meta_iotlb[VHOST_NUM_ADDRS];
 	struct file *kick;/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
 	struct eventfd_ctx *call_ctx;//通过此eventfd告知guest，有数据到达
@@ -158,6 +158,7 @@ struct vhost_dev {
 	int weight;
 	int byte_weight;
 	u64 kcov_handle;
+	bool use_worker;
 	/*消息处理回调（由vhost_dev_init设置）*/
 	int (*msg_handler)(struct vhost_dev *dev,
 			   struct vhost_iotlb_msg *msg);
@@ -166,6 +167,7 @@ struct vhost_dev {
 bool vhost_exceeds_weight(struct vhost_virtqueue *vq, int pkts, int total_len);
 void vhost_dev_init(struct vhost_dev *, struct vhost_virtqueue **vqs,
 		    int nvqs, int iov_limit, int weight, int byte_weight,
+		    bool use_worker,
 		    int (*msg_handler)(struct vhost_dev *dev,
 				       struct vhost_iotlb_msg *msg));
 long vhost_dev_set_owner(struct vhost_dev *dev);

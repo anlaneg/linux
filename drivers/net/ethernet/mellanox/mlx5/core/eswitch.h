@@ -99,13 +99,19 @@ struct vport_ingress {
 
 struct vport_egress {
 	struct mlx5_flow_table *acl;
-	struct mlx5_flow_group *allowed_vlans_grp;
-	struct mlx5_flow_group *drop_grp;
 	struct mlx5_flow_handle  *allowed_vlan;
-	struct {
-		struct mlx5_flow_handle *drop_rule;
-		struct mlx5_fc *drop_counter;
-	} legacy;
+	struct mlx5_flow_group *vlan_grp;
+	union {
+		struct {
+			struct mlx5_flow_group *drop_grp;
+			struct mlx5_flow_handle *drop_rule;
+			struct mlx5_fc *drop_counter;
+		} legacy;
+		struct {
+			struct mlx5_flow_group *fwd_grp;
+			struct mlx5_flow_handle *fwd_rule;
+		} offloads;
+	};
 };
 
 struct mlx5_vport_drop_stats {
@@ -143,6 +149,8 @@ struct mlx5_vport {
 
 	struct vport_ingress    ingress;
 	struct vport_egress     egress;
+	u32                     default_metadata;
+	u32                     metadata;
 
 	struct mlx5_vport_info  info;
 
@@ -215,6 +223,8 @@ struct mlx5_esw_offload {
 	struct mutex encap_tbl_lock; /* protects encap_tbl */
 	//hashtable,用于保存当前系统支持的隧道key及隧道类型
 	DECLARE_HASHTABLE(encap_tbl, 8);
+	struct mutex decap_tbl_lock; /* protects decap_tbl */
+	DECLARE_HASHTABLE(decap_tbl, 8);
 	//hashtable,用于保存当前系统遇到的actions
 	struct mod_hdr_tbl mod_hdr;
 	DECLARE_HASHTABLE(termtbl_tbl, 8);
@@ -223,6 +233,7 @@ struct mlx5_esw_offload {
 	u8 inline_mode;
 	atomic64_t num_flows;
 	enum devlink_eswitch_encap_mode encap;
+	struct ida vport_metadata_ida;
 };
 
 /* E-Switch MC FDB table hash node */
@@ -291,18 +302,10 @@ void esw_offloads_disable(struct mlx5_eswitch *esw);
 int esw_offloads_enable(struct mlx5_eswitch *esw);
 void esw_offloads_cleanup_reps(struct mlx5_eswitch *esw);
 int esw_offloads_init_reps(struct mlx5_eswitch *esw);
-void esw_vport_cleanup_ingress_rules(struct mlx5_eswitch *esw,
-				     struct mlx5_vport *vport);
-int esw_vport_create_ingress_acl_table(struct mlx5_eswitch *esw,
-				       struct mlx5_vport *vport,
-				       int table_size);
-void esw_vport_destroy_ingress_acl_table(struct mlx5_vport *vport);
-void esw_vport_cleanup_egress_rules(struct mlx5_eswitch *esw,
-				    struct mlx5_vport *vport);
-int esw_vport_enable_egress_acl(struct mlx5_eswitch *esw,
-				struct mlx5_vport *vport);
-void esw_vport_disable_egress_acl(struct mlx5_eswitch *esw,
-				  struct mlx5_vport *vport);
+
+u32 mlx5_esw_match_metadata_alloc(struct mlx5_eswitch *esw);
+void mlx5_esw_match_metadata_free(struct mlx5_eswitch *esw, u32 metadata);
+
 int mlx5_esw_modify_vport_rate(struct mlx5_eswitch *esw, u16 vport_num,
 			       u32 rate_mbps);
 
@@ -337,11 +340,7 @@ int mlx5_eswitch_get_vport_stats(struct mlx5_eswitch *esw,
 void mlx5_eswitch_del_send_to_vport_rule(struct mlx5_flow_handle *rule);
 
 int mlx5_eswitch_modify_esw_vport_context(struct mlx5_core_dev *dev, u16 vport,
-					  bool other_vport,
-					  void *in, int inlen);
-int mlx5_eswitch_query_esw_vport_context(struct mlx5_core_dev *dev, u16 vport,
-					 bool other_vport,
-					 void *out, int outlen);
+					  bool other_vport, void *in);
 
 struct mlx5_flow_spec;
 struct mlx5_esw_flow_attr;
@@ -451,6 +450,7 @@ struct mlx5_esw_flow_attr {
 	struct mlx5_flow_table *fdb;
 	struct mlx5_flow_table *dest_ft;//非0时，表示报文需要传给指定flow table
 	struct mlx5_ct_attr ct_attr;
+	struct mlx5_pkt_reformat *decap_pkt_reformat;
 	//flow的解析过程属性
 	struct mlx5e_tc_flow_parse_attr *parse_attr;
 };
@@ -474,10 +474,6 @@ int mlx5_eswitch_del_vlan_action(struct mlx5_eswitch *esw,
 				 struct mlx5_esw_flow_attr *attr);
 int __mlx5_eswitch_set_vport_vlan(struct mlx5_eswitch *esw,
 				  u16 vport, u16 vlan, u8 qos, u8 set_flags);
-
-int mlx5_esw_create_vport_egress_acl_vlan(struct mlx5_eswitch *esw,
-					  struct mlx5_vport *vport,
-					  u16 vlan_id, u32 flow_action);
 
 static inline bool mlx5_esw_qos_enabled(struct mlx5_eswitch *esw)
 {

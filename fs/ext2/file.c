@@ -79,7 +79,7 @@ out_unlock:
 /*
  * The lock ordering for ext2 DAX fault paths is:
  *
- * mmap_sem (MM)
+ * mmap_lock (MM)
  *   sb_start_pagefault (vfs, freeze)
  *     ext2_inode_info->dax_sem
  *       address_space->i_mmap_rwsem or page_lock (mutually exclusive in DAX)
@@ -202,9 +202,7 @@ const struct file_operations ext2_file_operations = {
 
 //inode对应的文件类型的操作集
 const struct inode_operations ext2_file_inode_operations = {
-#ifdef CONFIG_EXT2_FS_XATTR
 	.listxattr	= ext2_listxattr,
-#endif
 	.getattr	= ext2_getattr,
 	.setattr	= ext2_setattr,
 	.get_acl	= ext2_get_acl,

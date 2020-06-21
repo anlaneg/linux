@@ -28,7 +28,6 @@ struct mlx5_eq {
 	__be32 __iomem	        *doorbell;
 	u32                     cons_index;//eq的消费者指针
 	struct mlx5_frag_buf    buf;/*eqe的列表（按eqe索引的offset获取eqe)*/
-	int                     size;
 	unsigned int            vecidx;
 	unsigned int            irqn;//eq对应的中断号
 	u8                      eqn;//eq编号 eq_number

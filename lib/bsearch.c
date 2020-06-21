@@ -28,30 +28,12 @@
  * the key and elements in the array are of the same type, you can use
  * the same comparison function for both sort() and bsearch().
  */
-void *bsearch(const void *key, const void *base, size_t num, size_t size/*元素大小*/,
-	      cmp_func_t cmp)
+void *bsearch(const void *key, const void *base, size_t num, size_t size/*元素大小*/, cmp_func_t cmp)
 {
-	const char *pivot;
-	int result;
-
-	while (num > 0) {
-		pivot = base + (num >> 1) * size;
-		//通过比对函数对key,pivot进行比对
-		result = cmp(key, pivot);
-
-		//找到相同的
-		if (result == 0)
-			return (void *)pivot;
-
-		if (result > 0) {
-		    //key > pivot,base右移
-			base = pivot + size;
-			num--;
-		}
-		num >>= 1;
-	}
-
-	return NULL;
+	//通过比对函数对key,pivot进行比对
+	//找到相同的
+	//key > pivot,base右移
+	return __inline_bsearch(key, base, num, size, cmp);
 }
 EXPORT_SYMBOL(bsearch);
 NOKPROBE_SYMBOL(bsearch);

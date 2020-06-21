@@ -649,7 +649,7 @@ int dev_uc_sync(struct net_device *to, struct net_device *from)
 	if (to->addr_len != from->addr_len)
 		return -EINVAL;
 
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	err = __hw_addr_sync(&to->uc, &from->uc, to->addr_len);
 	if (!err)
 		__dev_set_rx_mode(to);
@@ -679,7 +679,7 @@ int dev_uc_sync_multiple(struct net_device *to, struct net_device *from)
 	if (to->addr_len != from->addr_len)
 		return -EINVAL;
 
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	err = __hw_addr_sync_multiple(&to->uc, &from->uc, to->addr_len);
 	if (!err)
 		__dev_set_rx_mode(to);
@@ -703,7 +703,7 @@ void dev_uc_unsync(struct net_device *to, struct net_device *from)
 		return;
 
 	netif_addr_lock_bh(from);
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	__hw_addr_unsync(&to->uc, &from->uc, to->addr_len);
 	__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
@@ -872,7 +872,7 @@ int dev_mc_sync(struct net_device *to, struct net_device *from)
 	if (to->addr_len != from->addr_len)
 		return -EINVAL;//两个设备必须为同类设备
 
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	//自from设备向to设备同步组播mac地址
 	err = __hw_addr_sync(&to->mc, &from->mc, to->addr_len);
 	if (!err)
@@ -903,7 +903,7 @@ int dev_mc_sync_multiple(struct net_device *to, struct net_device *from)
 	if (to->addr_len != from->addr_len)
 		return -EINVAL;
 
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	err = __hw_addr_sync_multiple(&to->mc, &from->mc, to->addr_len);
 	if (!err)
 		__dev_set_rx_mode(to);
@@ -927,7 +927,7 @@ void dev_mc_unsync(struct net_device *to, struct net_device *from)
 		return;
 
 	netif_addr_lock_bh(from);
-	netif_addr_lock(to);
+	netif_addr_lock_nested(to);
 	__hw_addr_unsync(&to->mc, &from->mc, to->addr_len);
 	__dev_set_rx_mode(to);
 	netif_addr_unlock(to);
