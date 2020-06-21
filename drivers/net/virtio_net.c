@@ -2834,7 +2834,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 
 	/* Allocate/initialize parameters for send/receive virtqueues */
 	for (i = 0; i < vi->max_queue_pairs; i++) {
-		//各队列中断回调
+		//设置各队列报文中断回调
 		callbacks[rxq2vq(i)] = skb_recv_done;//2*x为收队列
 		callbacks[txq2vq(i)] = skb_xmit_done;//2*x+1为发队列
 

@@ -160,6 +160,7 @@ void ftrace_likely_update(struct ftrace_likely_data *f, int val,
 #endif
 
 #ifndef RELOC_HIDE
+//返回（typeof(ptr))(ptr) + off 对应的指针
 # define RELOC_HIDE(ptr, off)					\
   ({ unsigned long __ptr;					\
      __ptr = (unsigned long) (ptr);				\

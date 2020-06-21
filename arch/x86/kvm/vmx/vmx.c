@@ -4366,6 +4366,7 @@ static void enable_nmi_window(struct kvm_vcpu *vcpu)
 	exec_controls_setbit(to_vmx(vcpu), CPU_BASED_NMI_WINDOW_EXITING);
 }
 
+//完成中断注入
 static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
@@ -4375,7 +4376,7 @@ static void vmx_inject_irq(struct kvm_vcpu *vcpu)
 
 	trace_kvm_inj_virq(irq);
 
-	++vcpu->stat.irq_injections;
+	++vcpu->stat.irq_injections;/*记录中断发生的次数*/
 	if (vmx->rmode.vm86_active) {
 		int inc_eip = 0;
 		if (vcpu->arch.interrupt.soft)

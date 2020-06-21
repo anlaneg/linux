@@ -72,6 +72,7 @@ static inline __poll_t poll_requested_events(const poll_table *p)
 	return p ? p->_key : ~(__poll_t)0;
 }
 
+/*设置pt的入队回调*/
 static inline void init_poll_funcptr(poll_table *pt, poll_queue_proc qproc)
 {
 	pt->_qproc = qproc;

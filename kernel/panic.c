@@ -56,6 +56,8 @@ EXPORT_SYMBOL_GPL(panic_timeout);
 #define PANIC_PRINT_ALL_PRINTK_MSG	0x00000020
 unsigned long panic_print;
 
+//panic通知链
+//当kernel panic后，此链上所有关注者将被通知
 ATOMIC_NOTIFIER_HEAD(panic_notifier_list);
 
 EXPORT_SYMBOL(panic_notifier_list);
@@ -259,6 +261,7 @@ void panic(const char *fmt, ...)
 	 * Run any panic handlers, including those that might need to
 	 * add information to the kmsg dump output.
 	 */
+	//触发kernel panic通知链上所有handler
 	atomic_notifier_call_chain(&panic_notifier_list, 0, buf);
 
 	/* Call flush even twice. It tries harder with a single online CPU */

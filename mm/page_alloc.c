@@ -352,6 +352,7 @@ EXPORT_SYMBOL(movable_zone);
 #endif /* CONFIG_HAVE_MEMBLOCK_NODE_MAP */
 
 #if MAX_NUMNODES > 1
+/*numa节点的数目*/
 unsigned int nr_node_ids __read_mostly = MAX_NUMNODES;
 unsigned int nr_online_nodes __read_mostly = 1;
 EXPORT_SYMBOL(nr_node_ids);
@@ -4804,7 +4805,7 @@ static inline void finalise_ac(gfp_t gfp_mask, struct alloc_context *ac)
  * This is the 'heart' of the zoned buddy allocator.
  */
 struct page *
-__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order/*page数目-1*/, int preferred_nid/*优先选择的node id*/,
+__alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order/*page数目-1*/, int preferred_nid/*优先选择的numa node*/,
 							nodemask_t *nodemask)
 {
 	struct page *page;
@@ -4840,7 +4841,8 @@ __alloc_pages_nodemask(gfp_t gfp_mask, unsigned int order/*page数目-1*/, int p
 	//首先在freelist上尝试申请
 	page = get_page_from_freelist(alloc_mask, order, alloc_flags, &ac);
 	if (likely(page))
-		goto out;//自freelist上申请到，退出
+	    //自freelist上申请到，退出
+		goto out;
 
 	/*
 	 * Apply scoped allocation constraints. This is mainly about GFP_NOFS

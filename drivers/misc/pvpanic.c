@@ -27,23 +27,28 @@ MODULE_LICENSE("GPL");
 static void
 pvpanic_send_event(unsigned int event)
 {
+    //向base通过ioport写入event
 	iowrite8(event, base);
 }
 
+//pvpanic收到panic通知
 static int
 pvpanic_panic_notify(struct notifier_block *nb, unsigned long code,
 		     void *unused)
 {
 	unsigned int event = PVPANIC_PANICKED;
 
+	//如果kexec crash被加载，则更改event为crash loaded
 	if (kexec_crash_loaded())
 		event = PVPANIC_CRASH_LOADED;
 
+	//发送panic事件
 	pvpanic_send_event(event);
 
 	return NOTIFY_DONE;
 }
 
+//kernel panic时此handler将被调用
 static struct notifier_block pvpanic_panic_nb = {
 	.notifier_call = pvpanic_panic_notify,
 	.priority = 1, /* let this called before broken drm_fb_helper */
@@ -59,6 +64,7 @@ static const struct acpi_device_id pvpanic_device_ids[] = {
 };
 MODULE_DEVICE_TABLE(acpi, pvpanic_device_ids);
 
+//pvpanic驱动
 static struct acpi_driver pvpanic_driver = {
 	.name =		"pvpanic",
 	.class =	"QEMU",
@@ -107,6 +113,7 @@ static int pvpanic_add(struct acpi_device *device)
 	if (!base)
 		return -ENODEV;
 
+	//将pvpanic_panic_nb加入到kernel panic通知链上
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &pvpanic_panic_nb);
 
@@ -153,6 +160,7 @@ static int pvpanic_mmio_probe(struct platform_device *pdev)
 	if (IS_ERR(base))
 		return PTR_ERR(base);
 
+	//注册kernel panic通知回调
 	atomic_notifier_chain_register(&panic_notifier_list,
 				       &pvpanic_panic_nb);
 

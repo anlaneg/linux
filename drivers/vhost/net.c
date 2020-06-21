@@ -1050,7 +1050,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 		       unsigned int quota/*容许占用的描述符数目上限*/)
 {
 	unsigned int out, in;
-	int seg = 0;
+	int seg = 0;/*当前vq->iov已占用segment大小*/
 	int headcount = 0;
 	unsigned d;
 	int r, nlogs = 0;
@@ -1061,7 +1061,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	while (datalen > 0 && headcount < quota) {
 		if (unlikely(seg >= UIO_MAXIOV)) {
-		    //数据片段过多，报错
+		    //数据片段过多超过配额，报错
 			r = -ENOBUFS;
 			goto err;
 		}
@@ -1075,7 +1075,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 		d = r;
 		if (d == vq->num) {
-		    /*无用描述符，退出*/
+		    /*返回值为队列大小，无用描述符，退出*/
 			r = 0;
 			goto err;
 		}
@@ -1166,6 +1166,7 @@ static void handle_rx(struct vhost_net *net)
 	mergeable = vhost_has_feature(vq, VIRTIO_NET_F_MRG_RXBUF);
 
 	do {
+	    //确定要发送的pkt长度
 		sock_len = vhost_net_rx_peek_head_len(net, sock->sk,
 						      &busyloop_intr);
 		if (!sock_len)
@@ -1173,15 +1174,18 @@ static void handle_rx(struct vhost_net *net)
 		//需要读取的buffer总长为vhost_len,获取足够描述符，以便可以存入它
 		sock_len += sock_hlen;
 		vhost_len = sock_len + vhost_hlen;
+
+		//获取足够容纳报文的描述符
 		headcount = get_rx_bufs(vq, vq->heads + nvq->done_idx,
 					vhost_len, &in, vq_log, &log,
 					likely(mergeable) ? UIO_MAXIOV : 1);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(headcount < 0))
+		    /*获取描述符失败，退出*/
 			goto out;
 		/* OK, now we need to know about added descriptors. */
 		if (!headcount) {
-		    /*未获取到描述符,加入poll队列等待，开启通知*/
+		    /*未获取到可用描述符,加入poll队列等待，开启通知*/
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
 			} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {
@@ -1194,11 +1198,14 @@ static void handle_rx(struct vhost_net *net)
 			 * they refilled. */
 			goto out;
 		}
+
+		/*获取到足够的描述符*/
 		busyloop_intr = false;
 		if (nvq->rx_ring)
 			msg.msg_control = vhost_net_buf_consume(&nvq->rxq);
 		/* On overrun, truncate and discard */
 		if (unlikely(headcount > UIO_MAXIOV)) {
+		    /*遇到过大报，描述符数量超过配额，截短收包后丢弃*/
 			iov_iter_init(&msg.msg_iter, READ, vq->iov, 1, 1);
 			err = sock->ops->recvmsg(sock, &msg,
 						 1, MSG_DONTWAIT | MSG_TRUNC);
@@ -1215,13 +1222,14 @@ static void handle_rx(struct vhost_net *net)
 			iov_iter_advance(&msg.msg_iter, vhost_hlen);
 		}
 
-		/*可写的buffer已被记录在msg.msg_iter中，自sock中拿到报文，将其写入到msg.msg_iter中*/
+		/*可写的buffer已被记录在msg.msg_iter中，自sock中拿到报文，并将其写入到msg.msg_iter中*/
 		err = sock->ops->recvmsg(sock, &msg,
 					 sock_len, MSG_DONTWAIT | MSG_TRUNC);
 		/* Userspace might have consumed the packet meanwhile:
 		 * it's not supposed to do this usually, but might be hard
 		 * to prevent. Discard data we got (if any) and keep going. */
 		if (unlikely(err != sock_len)) {
+		    //报文长度有误，归还申请的描述符
 			pr_debug("Discarded rx packet: "
 				 " len %d, expected %zd\n", err, sock_len);
 			vhost_discard_vq_desc(vq, headcount);
@@ -1230,6 +1238,7 @@ static void handle_rx(struct vhost_net *net)
 		/*自tap,tun口完成了报文收取*/
 		/* Supply virtio_net_hdr if VHOST_NET_F_VIRTIO_NET_HDR */
 		if (unlikely(vhost_hlen)) {
+		    /*如果支持vhost header,则取出hdr*/
 			if (copy_to_iter(&hdr, sizeof(hdr),
 					 &fixup) != sizeof(hdr)) {
 				vq_err(vq, "Unable to write vnet_hdr "
@@ -1253,6 +1262,7 @@ static void handle_rx(struct vhost_net *net)
 			goto out;
 		}
 		nvq->done_idx += headcount;
+		//如果用量超过阀值，则通知对端
 		if (nvq->done_idx > VHOST_NET_BATCH)
 			vhost_net_signal_used(nvq);
 		if (unlikely(vq_log))
@@ -1266,6 +1276,7 @@ static void handle_rx(struct vhost_net *net)
 	else if (!sock_len)
 		vhost_net_enable_vq(net, vq);
 out:
+    //通知对端
 	vhost_net_signal_used(nvq);
 	mutex_unlock(&vq->mutex);
 }

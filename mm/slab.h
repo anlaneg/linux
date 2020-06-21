@@ -71,6 +71,7 @@ struct memcg_cache_array {
  * @kmem_caches_node: List node for @memcg->kmem_caches list.
  */
 struct memcg_cache_params {
+    //指向cache的root cache,如果为空，则自身为root cache
 	struct kmem_cache *root_cache;
 	union {
 		struct {
@@ -139,7 +140,9 @@ extern struct kmem_cache *kmem_cache;
 
 /* A table of kmalloc cache names and sizes */
 extern const struct kmalloc_info_struct {
+    //各memory类型的名称
 	const char *name[NR_KMALLOC_TYPES];
+	//cache块大小
 	unsigned int size;
 } kmalloc_info[];
 
@@ -624,14 +627,15 @@ struct kmem_cache_node {
 	unsigned long nr_partial;
 	struct list_head partial;
 #ifdef CONFIG_SLUB_DEBUG
-	atomic_long_t nr_slabs;
-	atomic_long_t total_objects;
+	atomic_long_t nr_slabs;/*此numa node上slab数目*/
+	atomic_long_t total_objects;/*obj总数*/
 	struct list_head full;
 #endif
 #endif
 
 };
 
+/*给定node编号，获取node上对应的kmem_cache_node*/
 static inline struct kmem_cache_node *get_node(struct kmem_cache *s, int node)
 {
 	return s->node[node];
@@ -641,6 +645,7 @@ static inline struct kmem_cache_node *get_node(struct kmem_cache *s, int node)
  * Iterator over all nodes. The body will be executed for each node that has
  * a kmem_cache_node structure allocated (which is true for all online nodes)
  */
+//遍历所有numa nodes
 #define for_each_kmem_cache_node(__s, __node, __n) \
 	for (__node = 0; __node < nr_node_ids; __node++) \
 		 if ((__n = get_node(__s, __node)))

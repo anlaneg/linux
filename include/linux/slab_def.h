@@ -16,6 +16,7 @@ struct kmem_cache {
 	unsigned int limit;
 	unsigned int shared;
 
+	//要分配的obj大小
 	unsigned int size;
 	struct reciprocal_value reciprocal_buffer_size;
 /* 2) touched by every alloc & free from the backend */
@@ -36,6 +37,7 @@ struct kmem_cache {
 	unsigned int freelist_size;
 
 	/* constructor func */
+	//obj的构造函数
 	void (*ctor)(void *obj);
 
 /* 4) cache creation/removal */
@@ -86,6 +88,7 @@ struct kmem_cache {
 	unsigned int useroffset;	/* Usercopy region offset */
 	unsigned int usersize;		/* Usercopy region size */
 
+	//每个numa节点上一个kmem_cache_node
 	struct kmem_cache_node *node[MAX_NUMNODES];
 };
 

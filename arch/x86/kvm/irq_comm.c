@@ -131,6 +131,7 @@ static inline bool kvm_msi_route_invalid(struct kvm *kvm,
 	return kvm->arch.x2apic_format && (e->msi.address_hi & 0xff);
 }
 
+//kvm设置msi中断
 int kvm_set_msi(struct kvm_kernel_irq_routing_entry *e,
 		struct kvm *kvm, int irq_source_id, int level, bool line_status)
 {
@@ -139,6 +140,7 @@ int kvm_set_msi(struct kvm_kernel_irq_routing_entry *e,
 	if (kvm_msi_route_invalid(kvm, e))
 		return -EINVAL;
 
+	//level不得为0
 	if (!level)
 		return -1;
 

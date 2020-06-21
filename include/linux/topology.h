@@ -85,6 +85,7 @@ DECLARE_PER_CPU(int, numa_node);
 /* Returns the number of the current Node. */
 static inline int numa_node_id(void)
 {
+    //返回当前cpu所属的numa node
 	return raw_cpu_read(numa_node);
 }
 #endif

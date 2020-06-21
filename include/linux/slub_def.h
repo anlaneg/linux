@@ -38,9 +38,13 @@ enum stat_item {
 	CPU_PARTIAL_DRAIN,	/* Drain cpu partial to node partial */
 	NR_SLUB_STAT_ITEMS };
 
+//每个cpu有一个此结构
 struct kmem_cache_cpu {
+    //指向空闲可分配的首个obj
 	void **freelist;	/* Pointer to next available object */
+	//此结构所属的cpu编号
 	unsigned long tid;	/* Globally unique transaction id */
+	//我们当前分配的obj来自哪个页
 	struct page *page;	/* The slab from which we are allocating */
 #ifdef CONFIG_SLUB_CPU_PARTIAL
 	struct page *partial;	/* Partially allocated frozen slabs */
@@ -80,21 +84,25 @@ struct kmem_cache_order_objects {
  * Slab cache management.
  */
 struct kmem_cache {
+    //cpu_slab是一个percpu变量，按cpu缓存的obj
 	struct kmem_cache_cpu __percpu *cpu_slab;
 	/* Used for retrieving partial slabs, etc. */
 	slab_flags_t flags;
 	unsigned long min_partial;
 	unsigned int size;	/* The size of an object including metadata */
 	unsigned int object_size;/* The size of an object without metadata */
+	//object指针添加上此offset后，即定位到此object中记录的free pointer（那是另一个object的指针）
 	unsigned int offset;	/* Free pointer offset */
 #ifdef CONFIG_SLUB_CPU_PARTIAL
 	/* Number of per cpu partial objects to keep around */
 	unsigned int cpu_partial;
 #endif
+	//记录两个数据量1。需要申请的page大小（order);2.page可容纳的obj数目
 	struct kmem_cache_order_objects oo;
 
 	/* Allocation and freeing of slabs */
 	struct kmem_cache_order_objects max;
+	//与oo相同，但考虑申请page时以obj大小来考虑
 	struct kmem_cache_order_objects min;
 	gfp_t allocflags;	/* gfp flags to use on each alloc */
 	int refcount;		/* Refcount for slab cache destroy */
@@ -102,6 +110,7 @@ struct kmem_cache {
 	unsigned int inuse;		/* Offset to metadata */
 	unsigned int align;		/* Alignment */
 	unsigned int red_left_pad;	/* Left redzone padding size */
+	//cache名称
 	const char *name;	/* Name (only for display!) */
 	struct list_head list;	/* List of slab caches */
 #ifdef CONFIG_SYSFS
@@ -129,6 +138,8 @@ struct kmem_cache {
 #endif
 
 #ifdef CONFIG_SLAB_FREELIST_RANDOM
+	//一个random序列，从(0,obj_count-1)*obj_size
+	//每个obj一个，其值为obj_size的整数倍
 	unsigned int *random_seq;
 #endif
 
@@ -139,6 +150,7 @@ struct kmem_cache {
 	unsigned int useroffset;	/* Usercopy region offset */
 	unsigned int usersize;		/* Usercopy region size */
 
+	//指向按numa node划分的统计信息
 	struct kmem_cache_node *node[MAX_NUMNODES];
 };
 

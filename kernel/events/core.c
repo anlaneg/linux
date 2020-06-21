@@ -4224,6 +4224,7 @@ unlock:
 	raw_spin_unlock(&ctx->lock);
 }
 
+//返回event自身的count及其子evetn的计数
 static inline u64 perf_event_count(struct perf_event *event)
 {
 	return local64_read(&event->count) + atomic64_read(&event->child_count);
@@ -4420,6 +4421,7 @@ find_lively_task_by_vpid(pid_t vpid)
 
 	rcu_read_lock();
 	if (!vpid)
+	    /*如果未指明vpid,则使用当前进程*/
 		task = current;
 	else
 		task = find_task_by_vpid(vpid);
@@ -5012,7 +5014,8 @@ static int perf_release(struct inode *inode, struct file *file)
 	return 0;
 }
 
-static u64 __perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *running)
+//读取event的计数
+static u64 __perf_event_read_value(struct perf_event *event, u64 *enabled/*出参*/, u64 *running/*出参*/)
 {
 	struct perf_event *child;
 	u64 total = 0;
@@ -5030,6 +5033,7 @@ static u64 __perf_event_read_value(struct perf_event *event, u64 *enabled, u64 *
 	*running += event->total_time_running +
 			atomic64_read(&event->child_total_time_running);
 
+	//沿child_list遍历child event,计数总和
 	list_for_each_entry(child, &event->child_list, child_list) {
 		(void)perf_event_read(child, false);
 		total += perf_event_count(child);
@@ -5210,6 +5214,7 @@ __perf_read(struct perf_event *event, char __user *buf, size_t count)
 	return ret;
 }
 
+//读取perf事件
 static ssize_t
 perf_read(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 {
@@ -5390,6 +5395,7 @@ EXPORT_SYMBOL_GPL(perf_event_period);
 
 static const struct file_operations perf_fops;
 
+/*取fd对应的perf_fops对应的fd结构体*/
 static inline int perf_fget_light(int fd, struct fd *p)
 {
 	struct fd f = fdget(fd);
@@ -6196,7 +6202,7 @@ static int perf_fasync(int fd, struct file *filp, int on)
 static const struct file_operations perf_fops = {
 	.llseek			= no_llseek,
 	.release		= perf_release,
-	.read			= perf_read,
+	.read			= perf_read,//获取计数器结果
 	.poll			= perf_poll,
 	.unlocked_ioctl		= perf_ioctl,
 	.compat_ioctl		= perf_compat_ioctl,
@@ -11473,10 +11479,14 @@ again:
  * @cpu:		target cpu
  * @group_fd:		group leader event fd
  */
+//实现perf_event_open系统调用
+//pid == 0 and cpu == -1 任意进程任意cpu
+//pid == 0 and cpu >= 0  任意进程指定cpu
 SYSCALL_DEFINE5(perf_event_open,
 		struct perf_event_attr __user *, attr_uptr,
 		pid_t, pid, int, cpu, int, group_fd, unsigned long, flags)
 {
+
 	struct perf_event *group_leader = NULL, *output_event = NULL;
 	struct perf_event *event, *sibling;
 	struct perf_event_attr attr;
@@ -11492,6 +11502,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	int cgroup_fd = -1;
 
 	/* for future expandability... */
+	//标记位有效性检查
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
 
@@ -11549,6 +11560,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & PERF_FLAG_FD_CLOEXEC)
 		f_flags |= O_CLOEXEC;
 
+	//分配一个没有使用的fd
 	event_fd = get_unused_fd_flags(f_flags);
 	if (event_fd < 0)
 		return event_fd;
@@ -11599,6 +11611,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & PERF_FLAG_PID_CGROUP)
 		cgroup_fd = pid;
 
+	//申请并初始化perf event
 	event = perf_event_alloc(&attr, cpu, task, group_leader, NULL,
 				 NULL, NULL, cgroup_fd);
 	if (IS_ERR(event)) {
@@ -11714,6 +11727,7 @@ SYSCALL_DEFINE5(perf_event_open,
 			goto err_context;
 	}
 
+	//申请虚假文件,并为其指定私有数据为perf event
 	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event,
 					f_flags);
 	if (IS_ERR(event_file)) {
@@ -11890,6 +11904,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	 * perf_group_detach().
 	 */
 	fdput(group);
+	/*使event_fd与 event_file相互关联*/
 	fd_install(event_fd, event_file);
 	return event_fd;
 

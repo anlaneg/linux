@@ -49,7 +49,9 @@ static int use_pager = -1;
 const char *input_name;
 
 struct cmd_struct {
+    //perf子命令名称
 	const char *cmd;
+	//perf命令处理函数
 	int (*fn)(int, const char **);
 	int option;
 };
@@ -357,6 +359,7 @@ static void handle_internal_command(int argc, const char **argv)
 		argv[0] = cmd = "help";
 	}
 
+	//查找cmd对应的command结构体，并执行
 	for (i = 0; i < ARRAY_SIZE(commands); i++) {
 		struct cmd_struct *p = commands+i;
 		if (strcmp(p->cmd, cmd))
@@ -430,12 +433,14 @@ void pthread__unblock_sigwinch(void)
 	pthread_sigmask(SIG_UNBLOCK, &set, NULL);
 }
 
+/*perf日志输出函数*/
 static int libperf_print(enum libperf_print_level level,
 			 const char *fmt, va_list ap)
 {
 	return eprintf(level, verbose, fmt, ap);
 }
 
+/*perf命令行入口*/
 int main(int argc, const char **argv)
 {
 	int err;
@@ -448,6 +453,7 @@ int main(int argc, const char **argv)
 
 	libperf_init(libperf_print);
 
+	//如果未提供命令，则使用perf-help
 	cmd = extract_argv0_path(argv[0]);
 	if (!cmd)
 		cmd = "perf-help";

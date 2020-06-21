@@ -206,7 +206,7 @@ struct parse_opt_ctx_t {
 	const char **argv;
 	const char **out;
 	int argc, cpidx;
-	const char *opt;
+	const char *opt;//记录当前遇到的选项
 	const struct option *excl_opt;
 	int flags;
 };

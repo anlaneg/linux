@@ -19,6 +19,7 @@ void test_attr__open(struct perf_event_attr *attr, pid_t pid, int cpu,
 #define HAVE_ATTR_TEST 1
 #endif
 
+//调用perf_event_open系统调用
 static inline int
 sys_perf_event_open(struct perf_event_attr *attr,
 		      pid_t pid, int cpu, int group_fd,

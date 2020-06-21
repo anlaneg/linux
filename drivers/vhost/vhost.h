@@ -73,7 +73,7 @@ struct vhost_virtqueue {
 	struct vring_used __user *used;/*用户态指定的use表起始地址*/
 	const struct vhost_iotlb_map *meta_iotlb[VHOST_NUM_ADDRS];
 	struct file *kick;/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
-	struct eventfd_ctx *call_ctx;
+	struct eventfd_ctx *call_ctx;//通过此eventfd告知guest，有数据到达
 	struct eventfd_ctx *error_ctx;
 	struct eventfd_ctx *log_ctx;
 

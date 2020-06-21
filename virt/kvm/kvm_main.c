@@ -1048,6 +1048,7 @@ static void update_memslots(struct kvm_memslots *slots,
 	}
 }
 
+//检查mem标记是否合法（不支持非预期的flags)
 static int check_memory_region_flags(const struct kvm_userspace_memory_region *mem)
 {
 	u32 valid_flags = KVM_MEM_LOG_DIRTY_PAGES;
@@ -1127,9 +1128,9 @@ static struct kvm_memslots *kvm_dup_memslots(struct kvm_memslots *old,
 
 static int kvm_set_memslot(struct kvm *kvm,
 			   const struct kvm_userspace_memory_region *mem,
-			   struct kvm_memory_slot *old,
-			   struct kvm_memory_slot *new, int as_id,
-			   enum kvm_mr_change change)
+			   struct kvm_memory_slot *old/*旧的slot信息*/,
+			   struct kvm_memory_slot *new/*新的slot信息*/, int as_id,
+			   enum kvm_mr_change change/*变更方式*/)
 {
 	struct kvm_memory_slot *slot;
 	struct kvm_memslots *slots;
@@ -1224,6 +1225,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	r = check_memory_region_flags(mem);
 	if (r)
+	    /*标记非预期，返回失败*/
 		return r;
 
 	as_id = mem->slot >> 16;
@@ -1231,18 +1233,22 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	/* General sanity checks */
 	if (mem->memory_size & (PAGE_SIZE - 1))
+	    /*内存大小必须按页对齐*/
 		return -EINVAL;
 	if (mem->guest_phys_addr & (PAGE_SIZE - 1))
+	    /*guest物理同存必须按页对齐*/
 		return -EINVAL;
 	/* We can read the guest memory with __xxx_user() later on. */
 	if ((id < KVM_USER_MEM_SLOTS) &&
 	    ((mem->userspace_addr & (PAGE_SIZE - 1)) ||
 	     !access_ok((void __user *)(unsigned long)mem->userspace_addr,
 			mem->memory_size)))
+	    /*userspace地址必须按页对齐，虚拟地址必须可访问*/
 		return -EINVAL;
 	if (as_id >= KVM_ADDRESS_SPACE_NUM || id >= KVM_MEM_SLOTS_NUM)
 		return -EINVAL;
 	if (mem->guest_phys_addr + mem->memory_size < mem->guest_phys_addr)
+	    /*地址值不得出现溢出*/
 		return -EINVAL;
 
 	/*
@@ -1253,26 +1259,32 @@ int __kvm_set_memory_region(struct kvm *kvm,
 	 */
 	tmp = id_to_memslot(__kvm_memslots(kvm, as_id), id);
 	if (tmp) {
+	    /*旧的memory slot存在，通过old记录它*/
 		old = *tmp;
 		tmp = NULL;
 	} else {
+	    /*旧的memory slot不存在*/
 		memset(&old, 0, sizeof(old));
 		old.id = id;
 	}
 
+	//由于配置的memory_size为0，故执行memory slot移除
 	if (!mem->memory_size)
 		return kvm_delete_memslot(kvm, mem, &old, as_id);
 
+	//这里完成memory slot创建或修改
 	new.id = id;
 	new.base_gfn = mem->guest_phys_addr >> PAGE_SHIFT;
 	new.npages = mem->memory_size >> PAGE_SHIFT;
 	new.flags = mem->flags;
 	new.userspace_addr = mem->userspace_addr;
 
+	//内存大小的页数不得超限
 	if (new.npages > KVM_MEM_MAX_NR_PAGES)
 		return -EINVAL;
 
 	if (!old.npages) {
+	    /*旧的memory slot不存在，故需要创建*/
 		change = KVM_MR_CREATE;
 		new.dirty_bitmap = NULL;
 		memset(&new.arch, 0, sizeof(new.arch));
@@ -1280,11 +1292,14 @@ int __kvm_set_memory_region(struct kvm *kvm,
 		if ((new.userspace_addr != old.userspace_addr) ||
 		    (new.npages != old.npages) ||
 		    ((new.flags ^ old.flags) & KVM_MEM_READONLY))
+		    /*不支持对一个已存在的memory slot做以上字段的修改*/
 			return -EINVAL;
 
 		if (new.base_gfn != old.base_gfn)
+		    //guest物理地址发生变更，故需要移动
 			change = KVM_MR_MOVE;
 		else if (new.flags != old.flags)
+		    //仅标记位发生变更
 			change = KVM_MR_FLAGS_ONLY;
 		else /* Nothing to change. */
 			return 0;
@@ -1296,6 +1311,7 @@ int __kvm_set_memory_region(struct kvm *kvm,
 
 	if ((change == KVM_MR_CREATE) || (change == KVM_MR_MOVE)) {
 		/* Check for overlaps */
+	    //遍历as_id下所有 memory slot,检查是否与待创建的slot有重叠，如有，则报错
 		kvm_for_each_memslot(tmp, __kvm_memslots(kvm, as_id)) {
 			if (tmp->id == id)
 				continue;
@@ -1332,6 +1348,7 @@ out_bitmap:
 }
 EXPORT_SYMBOL_GPL(__kvm_set_memory_region);
 
+//kvm memory-region更新
 int kvm_set_memory_region(struct kvm *kvm,
 			  const struct kvm_userspace_memory_region *mem)
 {
@@ -1344,9 +1361,11 @@ int kvm_set_memory_region(struct kvm *kvm,
 }
 EXPORT_SYMBOL_GPL(kvm_set_memory_region);
 
+//执行创建，修改，删除 guest physical memory slot
 static int kvm_vm_ioctl_set_memory_region(struct kvm *kvm,
 					  struct kvm_userspace_memory_region *mem)
 {
+    //slot id超限，报错
 	if ((u16)mem->slot >= KVM_USER_MEM_SLOTS)
 		return -EINVAL;
 
@@ -3649,9 +3668,11 @@ static long kvm_vm_ioctl(struct file *filp,
 		break;
 	}
 	case KVM_SET_USER_MEMORY_REGION: {
+	    //创建，修改，删除 guest physical memory slot
 		struct kvm_userspace_memory_region kvm_userspace_mem;
 
 		r = -EFAULT;
+		//取用户态传入的参数
 		if (copy_from_user(&kvm_userspace_mem, argp,
 						sizeof(kvm_userspace_mem)))
 			goto out;
@@ -3700,6 +3721,7 @@ static long kvm_vm_ioctl(struct file *filp,
 	}
 #endif
 	case KVM_IRQFD: {
+	    //注入irqfd,主要作用：负责poll eventfd后向vm注入中断
 		struct kvm_irqfd data;
 
 		r = -EFAULT;

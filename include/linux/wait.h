@@ -87,8 +87,9 @@ static inline void init_waitqueue_entry(struct wait_queue_entry *wq_entry, struc
 	wq_entry->func		= default_wake_function;
 }
 
+//初始化等待队列entry
 static inline void
-init_waitqueue_func_entry(struct wait_queue_entry *wq_entry, wait_queue_func_t func)
+init_waitqueue_func_entry(struct wait_queue_entry *wq_entry, wait_queue_func_t func/*被唤醒时要执行的回调*/)
 {
 	wq_entry->flags		= 0;
 	wq_entry->private	= NULL;

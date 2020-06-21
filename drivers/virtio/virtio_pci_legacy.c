@@ -117,7 +117,7 @@ static u16 vp_config_vector(struct virtio_pci_device *vp_dev, u16 vector)
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
 				  unsigned index,
-				  void (*callback)(struct virtqueue *vq),
+				  void (*callback)(struct virtqueue *vq)/*vring报文中断处理函数*/,
 				  const char *name,
 				  bool ctx,
 				  u16 msix_vec/*中断地址*/)

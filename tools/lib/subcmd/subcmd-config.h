@@ -3,6 +3,7 @@
 #define __PERF_SUBCMD_CONFIG_H
 
 struct subcmd_config {
+    //程序名称
 	const char *exec_name;
 	const char *prefix;
 	const char *exec_path;

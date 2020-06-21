@@ -490,6 +490,7 @@ static void check_typos(const char *arg, const struct option *options)
 	}
 }
 
+//通过argc,argv初始化context
 static void parse_options_start(struct parse_opt_ctx_t *ctx,
 				int argc, const char **argv, int flags)
 {
@@ -521,6 +522,7 @@ static int parse_options_step(struct parse_opt_ctx_t *ctx,
 
 	for (; ctx->argc; ctx->argc--, ctx->argv++) {
 		arg = ctx->argv[0];
+		//针对非选项，如有必要，采用参数覆盖选项
 		if (*arg != '-' || !arg[1]) {
 			if (ctx->flags & PARSE_OPT_STOP_AT_NON_OPTION)
 				break;
@@ -529,8 +531,10 @@ static int parse_options_step(struct parse_opt_ctx_t *ctx,
 		}
 
 		if (arg[1] != '-') {
+		    //遇到短选项
 			ctx->opt = ++arg;
 			if (internal_help && *ctx->opt == 'h') {
+			    //显示用法信息
 				return usage_with_options_internal(usagestr, options, 0, ctx);
 			}
 			switch (parse_short_opt(ctx, options)) {
@@ -626,8 +630,8 @@ static int parse_options_end(struct parse_opt_ctx_t *ctx)
 	return ctx->cpidx + ctx->argc;
 }
 
-int parse_options_subcommand(int argc, const char **argv, const struct option *options,
-			const char *const subcommands[], const char *usagestr[], int flags)
+int parse_options_subcommand(int argc, const char **argv, const struct option *options/*命令选项*/,
+			const char *const subcommands[]/*子命令*/, const char *usagestr[], int flags)
 {
 	struct parse_opt_ctx_t ctx;
 
@@ -647,6 +651,7 @@ int parse_options_subcommand(int argc, const char **argv, const struct option *o
 		usagestr[0] = buf;
 	}
 
+	//通过argc,argv初始化ctx
 	parse_options_start(&ctx, argc, argv, flags);
 	switch (parse_options_step(&ctx, options, usagestr)) {
 	case PARSE_OPT_HELP:

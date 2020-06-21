@@ -29,8 +29,10 @@
 #include "slab.h"
 
 enum slab_state slab_state;
+//用于串连所有slab caches，不论其是否为root cache
 LIST_HEAD(slab_caches);
 DEFINE_MUTEX(slab_mutex);
+/*负责分配kmem_cache的cache*/
 struct kmem_cache *kmem_cache;
 
 #ifdef CONFIG_HARDENED_USERCOPY
@@ -130,6 +132,7 @@ int __kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t nr,
 
 #ifdef CONFIG_MEMCG_KMEM
 
+//用于串连系统所有root slab cache
 LIST_HEAD(slab_root_caches);
 static DEFINE_SPINLOCK(memcg_kmem_wq_lock);
 
@@ -238,6 +241,7 @@ int memcg_update_all_caches(int num_memcgs)
 void memcg_link_cache(struct kmem_cache *s, struct mem_cgroup *memcg)
 {
 	if (is_root_cache(s)) {
+	    /*如果s为root cache,则加入到slab_root_caches*/
 		list_add(&s->root_caches_node, &slab_root_caches);
 	} else {
 		css_get(&memcg->css);
@@ -376,10 +380,10 @@ struct kmem_cache *find_mergeable(unsigned int size, unsigned int align,
 	return NULL;
 }
 
-static struct kmem_cache *create_cache(const char *name,
+static struct kmem_cache *create_cache(const char *name/*kmem_cache名称*/,
 		unsigned int object_size, unsigned int align,
 		slab_flags_t flags, unsigned int useroffset,
-		unsigned int usersize, void (*ctor)(void *),
+		unsigned int usersize, void (*ctor/*obj构造函数*/)(void *),
 		struct mem_cgroup *memcg, struct kmem_cache *root_cache)
 {
 	struct kmem_cache *s;
@@ -1038,8 +1042,9 @@ bool slab_is_available(void)
 }
 
 #ifndef CONFIG_SLOB
+//初始化kmem_cache
 /* Create a cache during boot when no slab services are available yet */
-void __init create_boot_cache(struct kmem_cache *s, const char *name,
+void __init create_boot_cache(struct kmem_cache *s, const char *name/*cache名称*/,
 		unsigned int size, slab_flags_t flags,
 		unsigned int useroffset, unsigned int usersize)
 {
@@ -1071,16 +1076,18 @@ void __init create_boot_cache(struct kmem_cache *s, const char *name,
 	s->refcount = -1;	/* Exempt from merging for now */
 }
 
-struct kmem_cache *__init create_kmalloc_cache(const char *name,
-		unsigned int size, slab_flags_t flags,
+struct kmem_cache *__init create_kmalloc_cache(const char *name/*要创建的cache名称*/,
+		unsigned int size/*obj大小*/, slab_flags_t flags,
 		unsigned int useroffset, unsigned int usersize)
 {
+    //申请一个kmem_cache
 	struct kmem_cache *s = kmem_cache_zalloc(kmem_cache, GFP_NOWAIT);
 
 	if (!s)
 		panic("Out of memory when creating slab %s\n", name);
 
 	create_boot_cache(s, name, size, flags, useroffset, usersize);
+	//将此cache加入到slab_caches中，以方便遍历
 	list_add(&s->list, &slab_caches);
 	memcg_link_cache(s, NULL);
 	s->refcount = 1;
@@ -1088,7 +1095,7 @@ struct kmem_cache *__init create_kmalloc_cache(const char *name,
 }
 
 struct kmem_cache *
-kmalloc_caches[NR_KMALLOC_TYPES][KMALLOC_SHIFT_HIGH + 1] __ro_after_init =
+kmalloc_caches[NR_KMALLOC_TYPES/*kmalloc类型*/][KMALLOC_SHIFT_HIGH + 1/*申请的内存长度*/] __ro_after_init =
 { /* initialization for https://bugs.llvm.org/show_bug.cgi?id=42570 */ };
 EXPORT_SYMBOL(kmalloc_caches);
 
@@ -1138,6 +1145,7 @@ struct kmem_cache *kmalloc_slab(size_t size, gfp_t flags)
 {
 	unsigned int index;
 
+	//确认自哪个index对应的kmem_cache中申请内存
 	if (size <= 192) {
 		if (!size)
 			return ZERO_SIZE_PTR;
@@ -1175,7 +1183,7 @@ struct kmem_cache *kmalloc_slab(size_t size, gfp_t flags)
  * kmalloc-67108864.
  */
 const struct kmalloc_info_struct kmalloc_info[] __initconst = {
-	INIT_KMALLOC_INFO(0, 0),
+	INIT_KMALLOC_INFO(0, 0),//size为0
 	INIT_KMALLOC_INFO(96, 96),
 	INIT_KMALLOC_INFO(192, 192),
 	INIT_KMALLOC_INFO(8, 8),
@@ -1251,6 +1259,7 @@ void __init setup_kmalloc_cache_index_table(void)
 	}
 }
 
+//创建指定type及size的kmalloc cache
 static void __init
 new_kmalloc_cache(int idx, enum kmalloc_cache_type type, slab_flags_t flags)
 {
@@ -1273,9 +1282,11 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 	int i;
 	enum kmalloc_cache_type type;
 
+	//为kmalloc创建cache (不包含DMA zone)
 	for (type = KMALLOC_NORMAL; type <= KMALLOC_RECLAIM; type++) {
 		for (i = KMALLOC_SHIFT_LOW; i <= KMALLOC_SHIFT_HIGH; i++) {
 			if (!kmalloc_caches[type][i])
+			    //此type及size未创建cache,这里执行创建
 				new_kmalloc_cache(i, type, flags);
 
 			/*
@@ -1285,9 +1296,11 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 			 */
 			if (KMALLOC_MIN_SIZE <= 32 && i == 6 &&
 					!kmalloc_caches[type][1])
+			    //创建1
 				new_kmalloc_cache(1, type, flags);
 			if (KMALLOC_MIN_SIZE <= 64 && i == 7 &&
 					!kmalloc_caches[type][2])
+			    //创建2
 				new_kmalloc_cache(2, type, flags);
 		}
 	}
@@ -1296,6 +1309,7 @@ void __init create_kmalloc_caches(slab_flags_t flags)
 	slab_state = UP;
 
 #ifdef CONFIG_ZONE_DMA
+	//创建dma对应的kmalloc cache
 	for (i = 0; i <= KMALLOC_SHIFT_HIGH; i++) {
 		struct kmem_cache *s = kmalloc_caches[KMALLOC_NORMAL][i];
 
@@ -1352,9 +1366,11 @@ static void freelist_randomize(struct rnd_state *state, unsigned int *list,
 	unsigned int rand;
 	unsigned int i;
 
+	//初始化list数组按下标(0,count-1)
 	for (i = 0; i < count; i++)
 		list[i] = i;
 
+	//再用随机数将其打乱
 	/* Fisher-Yates shuffle */
 	for (i = count - 1; i > 0; i--) {
 		rand = prandom_u32_state(state);
@@ -1379,6 +1395,7 @@ int cache_random_seq_create(struct kmem_cache *cachep, unsigned int count,
 	/* Get best entropy at this stage of boot */
 	prandom_seed_state(&state, get_random_long());
 
+	//填充random_seq
 	freelist_randomize(&state, cachep->random_seq, count);
 	return 0;
 }
@@ -1398,6 +1415,7 @@ void cache_random_seq_destroy(struct kmem_cache *cachep)
 #define SLABINFO_RIGHTS (0400)
 #endif
 
+//slabinfo文件标题输出
 static void print_slabinfo_header(struct seq_file *m)
 {
 	/*
@@ -1419,13 +1437,15 @@ static void print_slabinfo_header(struct seq_file *m)
 	seq_putc(m, '\n');
 }
 
+//查找slab_root_caches的第pos号元素
 void *slab_start(struct seq_file *m, loff_t *pos)
 {
 	mutex_lock(&slab_mutex);
 	return seq_list_start(&slab_root_caches, *pos);
 }
 
-void *slab_next(struct seq_file *m, void *p, loff_t *pos)
+/*取v之后的元素，及其对应的pos*/
+void *slab_next(struct seq_file *m, void *p, loff_t *pos/*出参， 编号*/)
 {
 	return seq_list_next(p, &slab_root_caches, pos);
 }
@@ -1481,6 +1501,7 @@ static int slab_show(struct seq_file *m, void *p)
 {
 	struct kmem_cache *s = list_entry(p, struct kmem_cache, root_caches_node);
 
+	//如果是首个元素，则输出标题
 	if (p == slab_root_caches.next)
 		print_slabinfo_header(m);
 	cache_show(s, m);
@@ -1575,6 +1596,7 @@ static const struct seq_operations slabinfo_op = {
 	.show = slab_show,
 };
 
+//slabinfo文件打开函数
 static int slabinfo_open(struct inode *inode, struct file *file)
 {
 	return seq_open(file, &slabinfo_op);
@@ -1589,9 +1611,10 @@ static const struct proc_ops slabinfo_proc_ops = {
 	.proc_release	= seq_release,
 };
 
+//创建/proc/slabinfo文件
 static int __init slab_proc_init(void)
 {
-	proc_create("slabinfo", SLABINFO_RIGHTS, NULL, &slabinfo_proc_ops);
+	proc_create("slabinfo", SLABINFO_RIGHTS, NULL/*父节点为NULL*/, &slabinfo_proc_ops);
 	return 0;
 }
 module_init(slab_proc_init);

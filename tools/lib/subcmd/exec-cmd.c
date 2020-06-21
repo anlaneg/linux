@@ -17,6 +17,7 @@
 static const char *argv_exec_path;
 static const char *argv0_path;
 
+/*初始化subcmd_config*/
 void exec_cmd_init(const char *exec_name, const char *prefix,
 		   const char *exec_path, const char *exec_path_env)
 {
@@ -85,14 +86,17 @@ const char *extract_argv0_path(const char *argv0)
 {
 	const char *slash;
 
+	//参数为空时，返回NULL
 	if (!argv0 || !*argv0)
 		return NULL;
 	slash = argv0 + strlen(argv0);
 
+	//argv0字符串的最后一个字符开始，查找'/'字符所在位置
 	while (argv0 <= slash && !is_dir_sep(*slash))
 		slash--;
 
 	if (slash >= argv0) {
+	    //命令行里指定的了目录，返回命令，记录路径到argv0_path中
 		argv0_path = strndup(argv0, slash - argv0);
 		return argv0_path ? slash + 1 : NULL;
 	}

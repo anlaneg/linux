@@ -1895,6 +1895,7 @@ static int kmem_config(const char *var, const char *value, void *cb __maybe_unus
 	return 0;
 }
 
+//perf kmem命令入口
 int cmd_kmem(int argc, const char **argv)
 {
 	const char * const default_slab_sort = "frag,hit,bytes";
@@ -1902,6 +1903,7 @@ int cmd_kmem(int argc, const char **argv)
 	struct perf_data data = {
 		.mode = PERF_DATA_MODE_READ,
 	};
+	//kmem选项列表
 	const struct option kmem_options[] = {
 	OPT_STRING('i', "input", &input_name, "file", "input file name"),
 	OPT_INCR('v', "verbose", &verbose,
@@ -1937,6 +1939,7 @@ int cmd_kmem(int argc, const char **argv)
 	if (ret)
 		return ret;
 
+	//处理子命令选项
 	argc = parse_options_subcommand(argc, argv, kmem_options,
 					kmem_subcommands, kmem_usage, 0);
 
@@ -1950,6 +1953,7 @@ int cmd_kmem(int argc, const char **argv)
 			kmem_page = 1;
 	}
 
+	//处理遇到的record命令
 	if (!strncmp(argv[0], "rec", 3)) {
 		symbol__init(NULL);
 		return __cmd_record(argc, argv);

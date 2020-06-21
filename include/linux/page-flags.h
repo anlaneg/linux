@@ -251,16 +251,19 @@ static inline void page_init_poison(struct page *page, size_t size)
 /*
  * Macros to create function definitions for page flags
  */
-#define TESTPAGEFLAG(uname, lname, policy)				\
+#define TESTPAGEFLAG(uname/*函数名称*/, lname/*标记位名称*/, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
+    /*检查page->flags是否具有标记位lname*/\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
 
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
+    /*为page->flags添加标记lname*/\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
 
 #define CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void ClearPage##uname(struct page *page)		\
+    /*为page->flags清除标记lname*/\
 	{ clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
 #define __SETPAGEFLAG(uname, lname, policy)				\
@@ -284,6 +287,7 @@ static __always_inline int TestClearPage##uname(struct page *page)	\
 	SETPAGEFLAG(uname, lname, policy)				\
 	CLEARPAGEFLAG(uname, lname, policy)
 
+/*定义page->flags的lname标记位检查，设置，清除*/
 #define __PAGEFLAG(uname, lname, policy)				\
 	TESTPAGEFLAG(uname, lname, policy)				\
 	__SETPAGEFLAG(uname, lname, policy)				\

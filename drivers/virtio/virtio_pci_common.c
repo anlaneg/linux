@@ -99,8 +99,10 @@ static irqreturn_t vp_interrupt(int irq, void *opaque)
 
 	/* Configuration change?  Tell driver if it wants to know. */
 	if (isr & VIRTIO_PCI_ISR_CONFIG)
+	    /*处理配置中断*/
 		vp_config_changed(irq, opaque);
 
+	//处理队列中断
 	return vp_vring_interrupt(irq, opaque);
 }
 
@@ -187,7 +189,7 @@ error:
 
 //创建vq,设置vq物理地址，中断号
 static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index/*虚队列index*/,
-				     void (*callback/*虚队列中断回调*/)(struct virtqueue *vq),
+				     void (*callback/*虚队列报文中断回调*/)(struct virtqueue *vq),
 				     const char *name/*虚队列名称*/,
 				     bool ctx/*虚队列是否有context*/,
 				     u16 msix_vec/*中断号*/)
@@ -294,7 +296,7 @@ void vp_del_vqs(struct virtio_device *vdev)
 }
 
 static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,/*虚队列数目*/
-		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx回调*/,
+		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx报文中断回调*/,
 		const char * const names[]/*各vq名称*/, bool per_vq_vectors,/*是否每个队列一个msi-x向量*/
 		const bool *ctx,
 		struct irq_affinity *desc)
@@ -384,6 +386,7 @@ static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned nvqs,
 	if (!vp_dev->vqs)
 		return -ENOMEM;
 
+	//配置中断处理函数
 	err = request_irq(vp_dev->pci_dev->irq, vp_interrupt, IRQF_SHARED,
 			dev_name(&vdev->dev), vp_dev);
 	if (err)

@@ -269,7 +269,7 @@ struct kvm_vcpu {
 	int vcpu_idx; /* index in kvm->vcpus array */
 	int srcu_idx;
 	int mode;
-	u64 requests;
+	u64 requests;//记录当前vcpu上的未绝请求
 	unsigned long guest_debug;
 
 	int pre_pcpu;
@@ -341,12 +341,12 @@ static inline int kvm_vcpu_exiting_guest_mode(struct kvm_vcpu *vcpu)
 
 struct kvm_memory_slot {
 	gfn_t base_gfn;
-	unsigned long npages;
+	unsigned long npages;//内存大小对应的页数目
 	unsigned long *dirty_bitmap;
 	struct kvm_arch_memory_slot arch;
-	unsigned long userspace_addr;
+	unsigned long userspace_addr;//内存对应的用户态起始地址
 	u32 flags;
-	short id;
+	short id;//slot id号
 };
 
 static inline unsigned long kvm_dirty_bitmap_bytes(struct kvm_memory_slot *memslot)
@@ -650,15 +650,18 @@ static inline struct kvm_memslots *kvm_vcpu_memslots(struct kvm_vcpu *vcpu)
 	return __kvm_memslots(vcpu->kvm, as_id);
 }
 
+//通过slot id获得memory slot
 static inline
-struct kvm_memory_slot *id_to_memslot(struct kvm_memslots *slots, int id)
+struct kvm_memory_slot *id_to_memslot(struct kvm_memslots *slots, int id/*slot编号*/)
 {
+    //由slot id获得index
 	int index = slots->id_to_index[id];
 	struct kvm_memory_slot *slot;
 
 	if (index < 0)
 		return NULL;
 
+	//返回对应的memory slot
 	slot = &slots->memslots[index];
 
 	WARN_ON(slot->id != id);
@@ -1229,6 +1232,7 @@ static inline int kvm_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 
 void kvm_arch_irq_routing_update(struct kvm *kvm);
 
+//向指定的vcpu发起req请求
 static inline void kvm_make_request(int req, struct kvm_vcpu *vcpu)
 {
 	/*
@@ -1239,6 +1243,7 @@ static inline void kvm_make_request(int req, struct kvm_vcpu *vcpu)
 	set_bit(req & KVM_REQUEST_MASK, (void *)&vcpu->requests);
 }
 
+/*检查vcpu上是否有未绝的请求*/
 static inline bool kvm_request_pending(struct kvm_vcpu *vcpu)
 {
 	return READ_ONCE(vcpu->requests);

@@ -233,6 +233,7 @@ do {									\
 #define per_cpu_ptr(ptr, cpu)						\
 ({									\
 	__verify_pcpu_ptr(ptr);						\
+	/*ptr是一个per cpu变量，这里返回cpu对应的变量，通过加cpu_offset获得*/\
 	SHIFT_PERCPU_PTR((ptr), per_cpu_offset((cpu)));			\
 })
 

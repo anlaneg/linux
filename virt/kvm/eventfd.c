@@ -38,6 +38,7 @@ kvm_arch_irqfd_allowed(struct kvm *kvm, struct kvm_irqfd *args)
 	return true;
 }
 
+//完成irqfd的中断注入
 static void
 irqfd_inject(struct work_struct *work)
 {
@@ -184,15 +185,17 @@ int __attribute__((weak)) kvm_arch_set_irq_inatomic(
 static int
 irqfd_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
 {
+    //获得被唤醒的irqfd
 	struct kvm_kernel_irqfd *irqfd =
 		container_of(wait, struct kvm_kernel_irqfd, wait);
 	__poll_t flags = key_to_poll(key);
 	struct kvm_kernel_irq_routing_entry irq;
-	struct kvm *kvm = irqfd->kvm;
+	struct kvm *kvm = irqfd->kvm;/*确定对应的kvm*/
 	unsigned seq;
 	int idx;
 
 	if (flags & EPOLLIN) {
+	    //收到pollin事件
 		idx = srcu_read_lock(&kvm->irq_srcu);
 		do {
 			seq = read_seqcount_begin(&irqfd->irq_entry_sc);
@@ -202,6 +205,7 @@ irqfd_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
 		if (kvm_arch_set_irq_inatomic(&irq, kvm,
 					      KVM_USERSPACE_IRQ_SOURCE_ID, 1,
 					      false) == -EWOULDBLOCK)
+		    //触发irqfd的inject worker,使其注入中断
 			schedule_work(&irqfd->inject);
 		srcu_read_unlock(&kvm->irq_srcu, idx);
 	}
@@ -230,6 +234,7 @@ irqfd_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync, void *key)
 	return 0;
 }
 
+//将由pt获得kvm_kernel_irqfd,并将其对应的wait加入到等待队列
 static void
 irqfd_ptable_queue_proc(struct file *file, wait_queue_head_t *wqh,
 			poll_table *pt)
@@ -301,16 +306,19 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	irqfd->kvm = kvm;
 	irqfd->gsi = args->gsi;
 	INIT_LIST_HEAD(&irqfd->list);
+	//初始化inject work对应的回调,当eventfd被触发，此函数将被调用注入中断
 	INIT_WORK(&irqfd->inject, irqfd_inject);
 	INIT_WORK(&irqfd->shutdown, irqfd_shutdown);
 	seqcount_init(&irqfd->irq_entry_sc);
 
+	/*获得此fd对应的file*/
 	f = fdget(args->fd);
 	if (!f.file) {
 		ret = -EBADF;
 		goto out;
 	}
 
+	//确保证file必须为eventfd
 	eventfd = eventfd_ctx_fileget(f.file);
 	if (IS_ERR(eventfd)) {
 		ret = PTR_ERR(eventfd);
@@ -372,6 +380,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	 * Install our own custom wake-up handling so we are notified via
 	 * a callback whenever someone signals the underlying eventfd
 	 */
+	//将irqfd加入到poll,一旦eventfd事件触发，则irqfd将被wakeup
 	init_waitqueue_func_entry(&irqfd->wait, irqfd_wakeup);
 	init_poll_funcptr(&irqfd->pt, irqfd_ptable_queue_proc);
 
@@ -398,6 +407,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	 * Check if there was an event already pending on the eventfd
 	 * before we registered, and trigger it as if we didn't miss it.
 	 */
+	//开始监听eventfd事件触发
 	events = vfs_poll(f.file, &irqfd->pt);
 
 	if (events & EPOLLIN)
@@ -566,6 +576,7 @@ kvm_irqfd_deassign(struct kvm *kvm, struct kvm_irqfd *args)
 int
 kvm_irqfd(struct kvm *kvm, struct kvm_irqfd *args)
 {
+    //当前支持两种操作deassign与 resample
 	if (args->flags & ~(KVM_IRQFD_FLAG_DEASSIGN | KVM_IRQFD_FLAG_RESAMPLE))
 		return -EINVAL;
 

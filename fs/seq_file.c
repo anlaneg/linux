@@ -887,6 +887,7 @@ void seq_hex_dump(struct seq_file *m, const char *prefix_str, int prefix_type,
 }
 EXPORT_SYMBOL(seq_hex_dump);
 
+/*找到链表中的第pos号元素，并返回其指针*/
 struct list_head *seq_list_start(struct list_head *head, loff_t pos)
 {
 	struct list_head *lh;

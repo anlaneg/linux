@@ -1595,7 +1595,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	bool may_reduce_num,
 	bool context,
 	bool (*notify)(struct virtqueue *),
-	void (*callback)(struct virtqueue *),
+	void (*callback)(struct virtqueue *)/*packed类型报文收取函数*/,
 	const char *name/*要创建的vq名称*/)
 {
 	struct vring_virtqueue *vq;
@@ -2079,6 +2079,7 @@ static inline bool more_used(const struct vring_virtqueue *vq)
 	return vq->packed_ring ? more_used_packed(vq) : more_used_split(vq);
 }
 
+//执行vq的中断回调
 irqreturn_t vring_interrupt(int irq, void *_vq)
 {
 	struct vring_virtqueue *vq = to_vvq(_vq);
@@ -2107,7 +2108,7 @@ struct virtqueue *__vring_new_virtqueue(unsigned int index,
 					bool weak_barriers,
 					bool context,
 					bool (*notify)(struct virtqueue *),
-					void (*callback)(struct virtqueue *),
+					void (*callback)(struct virtqueue *)/*split格式报文收取函数*/,
 					const char *name)
 {
 	unsigned int i;
@@ -2190,7 +2191,7 @@ struct virtqueue *vring_create_virtqueue(
 	bool may_reduce_num,
 	bool context/*队列是否有context*/,
 	bool (*notify)(struct virtqueue *),
-	void (*callback)(struct virtqueue *)/*队列回调*/,
+	void (*callback)(struct virtqueue *)/*队列报文处理回调*/,
 	const char *name/*队列名称*/)
 {
     //如果virtio开启packed功能，则创建packed类型的vring

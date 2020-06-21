@@ -427,6 +427,7 @@ EXPORT_SYMBOL(strchr);
  */
 char *strchrnul(const char *s, int c)
 {
+    /*在s中查找c,直到遇见，或者遇到'\0'*/
 	while (*s && *s != (char)c)
 		s++;
 	return (char *)s;

@@ -541,6 +541,7 @@ out:
 static void ipvlan_multicast_enqueue(struct ipvl_port *port,
 				     struct sk_buff *skb, bool tx_pkt)
 {
+    //收到pause帧，丢弃此报文
 	if (skb->protocol == htons(ETH_P_PAUSE)) {
 		kfree_skb(skb);
 		return;

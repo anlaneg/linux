@@ -44,6 +44,7 @@ int __ilog2_u64(u64 n)
 static inline __attribute__((const))
 bool is_power_of_2(unsigned long n)
 {
+    //检查n是否为power_of_2
 	return (n != 0 && ((n & (n - 1)) == 0));
 }
 

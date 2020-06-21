@@ -726,6 +726,7 @@ struct perf_config_set *perf_config_set__new(void)
 	return set;
 }
 
+/*初始化全局变量config_set*/
 static int perf_config__init(void)
 {
 	if (config_set == NULL)

@@ -562,7 +562,7 @@ struct proc_dir_entry *proc_create(const char *name, umode_t mode,
 				   struct proc_dir_entry *parent,
 				   const struct proc_ops *proc_ops)
 {
-	return proc_create_data(name, mode, parent, proc_ops, NULL);
+	return proc_create_data(name/*要创建的proc文件名称*/, mode, parent, proc_ops/*文件操作集*/, NULL);
 }
 EXPORT_SYMBOL(proc_create);
 

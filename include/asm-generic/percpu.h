@@ -16,8 +16,10 @@
  * some arches have their own ways of determining the offset (x86_64, s390).
  */
 #ifndef __per_cpu_offset
+//定义每个per cpu指针的偏移量
 extern unsigned long __per_cpu_offset[NR_CPUS];
 
+//给定cpu id,取其对应的per cpu指针偏移量
 #define per_cpu_offset(x) (__per_cpu_offset[x])
 #endif
 

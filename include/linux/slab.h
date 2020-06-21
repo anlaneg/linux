@@ -318,6 +318,7 @@ enum kmalloc_cache_type {
 extern struct kmem_cache *
 kmalloc_caches[NR_KMALLOC_TYPES][KMALLOC_SHIFT_HIGH + 1];
 
+//确定要申请的memory类型
 static __always_inline enum kmalloc_cache_type kmalloc_type(gfp_t flags)
 {
 #ifdef CONFIG_ZONE_DMA
@@ -349,6 +350,7 @@ static __always_inline enum kmalloc_cache_type kmalloc_type(gfp_t flags)
 static __always_inline unsigned int kmalloc_index(size_t size)
 {
 	if (!size)
+	    /*申请大小为0时，返回0*/
 		return 0;
 
 	if (size <= KMALLOC_MIN_SIZE)
@@ -545,11 +547,13 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 		unsigned int index;
 #endif
 		if (size > KMALLOC_MAX_CACHE_SIZE)
+		    //例如大于8192的内存需求走large
 			return kmalloc_large(size, flags);
 #ifndef CONFIG_SLOB
 		index = kmalloc_index(size);
 
 		if (!index)
+		    /*0长度申请内存时，返回此指针*/
 			return ZERO_SIZE_PTR;
 
 		return kmem_cache_alloc_trace(
@@ -557,6 +561,7 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 				flags, size);
 #endif
 	}
+	//申请非常量的size
 	return __kmalloc(size, flags);
 }
 
@@ -657,6 +662,7 @@ extern void *__kmalloc_node_track_caller(size_t, gfp_t, int, unsigned long);
  */
 static inline void *kmem_cache_zalloc(struct kmem_cache *k, gfp_t flags)
 {
+    //申请创建kmem_cache
 	return kmem_cache_alloc(k, flags | __GFP_ZERO);
 }
 

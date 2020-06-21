@@ -111,6 +111,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		size_t iov_len, payload_len;
 		int head;
 
+		//如果vsock没有报文，则跳出
 		spin_lock_bh(&vsock->send_pkt_list_lock);
 		if (list_empty(&vsock->send_pkt_list)) {
 			spin_unlock_bh(&vsock->send_pkt_list_lock);
@@ -124,7 +125,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		list_del_init(&pkt->list);
 		spin_unlock_bh(&vsock->send_pkt_list_lock);
 
-		/*取可用的描述符*/
+		/*取一个可用的描述符*/
 		head = vhost_get_vq_desc(vq, vq->iov, ARRAY_SIZE(vq->iov),
 					 &out, &in, NULL, NULL);
 		if (head < 0) {
@@ -151,7 +152,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 			break;
 		}
 
-		//当前处理报文发送，故此队列上应没有报文进来，不能有读到的数据
+		//当前是在处理报文发送，故此队列上应没有报文进来，不能有读到的数据
 		if (out) {
 			virtio_transport_free_pkt(pkt);
 			vq_err(vq, "Expected 0 output buffers, got %u\n", out);
@@ -243,8 +244,9 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 			virtio_transport_free_pkt(pkt);
 		}
 	} while(likely(!vhost_exceeds_weight(vq, ++pkts, total_len)));
+
+	//我们向对端发送了报文，故通过eventfd通知guest,我们发送了报文
 	if (added)
-	    //通过eventfd通知guest,我们发送了报文
 		vhost_signal(&vsock->dev, vq);
 
 out:
