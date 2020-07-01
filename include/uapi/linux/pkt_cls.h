@@ -173,9 +173,9 @@ struct tc_police {
 
 struct tcf_t {
 	__u64   install;
-	__u64   lastuse;
+	__u64   lastuse;/*记录最后一次使用时间*/
 	__u64   expires;
-	__u64   firstuse;
+	__u64   firstuse;/*记录首次使用时间*/
 };
 
 struct tc_cnt {

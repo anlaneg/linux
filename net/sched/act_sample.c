@@ -83,12 +83,14 @@ static int tcf_sample_init(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		goto release_idr;
 
+	//取采样速率
 	rate = nla_get_u32(tb[TCA_SAMPLE_RATE]);
 	if (!rate) {
 		NL_SET_ERR_MSG(extack, "invalid sample rate");
 		err = -EINVAL;
 		goto put_chain;
 	}
+	//获取psample_group，并增加其引用计数
 	psample_group_num = nla_get_u32(tb[TCA_SAMPLE_PSAMPLE_GROUP]);
 	psample_group = psample_group_get(net, psample_group_num);
 	if (!psample_group) {
@@ -174,7 +176,7 @@ static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 	psample_group = rcu_dereference_bh(s->psample_group);
 
 	/* randomly sample packets according to rate */
-	//随机数恰好等于rate时，执行采样
+	//随机数恰好为rate的倍数时，执行采样
 	if (psample_group && (prandom_u32() % s->rate == 0)) {
 		if (!skb_at_tc_ingress(skb)) {
 		    //egress方向采样
@@ -188,14 +190,16 @@ static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 
 		/* on ingress, the mac header gets popped, so push it back */
 		if (skb_at_tc_ingress(skb) && tcf_sample_dev_ok_push(skb->dev))
+		    //ingress方向，回退data指针，露出mac头
 			skb_push(skb, skb->mac_len);
 
 		//采样报文大小
 		size = s->truncate ? s->trunc_size : skb->len;
-		psample_sample_packet(psample_group, skb, size, iif, oif,
+		psample_sample_packet(psample_group/*执行哪个psampe的报文需要上送*/, skb, size, iif, oif,
 				      s->rate);
 
 		if (skb_at_tc_ingress(skb) && tcf_sample_dev_ok_push(skb->dev))
+		    //ingress方向，增加data指针，跳过mac头
 			skb_pull(skb, skb->mac_len);
 	}
 

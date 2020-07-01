@@ -100,6 +100,7 @@ static int __init load_umh(void)
 
 	mutex_lock(&bpfilter_ops.lock);
 	if (!bpfilter_ops.stop) {
+	    /*stop如果为false,则跳出*/
 		err = -EFAULT;
 		goto out;
 	}

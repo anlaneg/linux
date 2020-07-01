@@ -2,6 +2,9 @@
 /* internal file - do not include directly */
 
 #ifdef CONFIG_NET
+//1.BPF_PROG_TYPE 第二个参数 + _verifier_ops 为verifier对应的ops
+//2.BPF_PROG_TYPE 第二个参数 + _prog_ops 为prog对应的ops
+//3.BPF_MAP_TYPE  会在每个文件中定义其类型对应的_ops变量，这些变量会被集中在bpf_map_types数组中
 BPF_PROG_TYPE(BPF_PROG_TYPE_SOCKET_FILTER, sk_filter,
 	      struct __sk_buff, struct sk_buff)
 BPF_PROG_TYPE(BPF_PROG_TYPE_SCHED_CLS, tc_cls_act,

@@ -83,7 +83,9 @@ int register_filesystem(struct file_system_type * fs)
 	//不容许名称中含'.'
 	BUG_ON(strchr(fs->name, '.'));
 	if (fs->next)
-		return -EBUSY;//已被挂接在文件系统链上
+	    //已被挂接在文件系统链上
+		return -EBUSY;
+
 	write_lock(&file_systems_lock);
 	p = find_filesystem(fs->name, strlen(fs->name));
 	if (*p)
@@ -132,7 +134,7 @@ int unregister_filesystem(struct file_system_type * fs)
 EXPORT_SYMBOL(unregister_filesystem);
 
 #ifdef CONFIG_SYSFS_SYSCALL
-//取给定名称的文件系统的index
+//取给定名称的文件系统在链表中的index
 static int fs_index(const char __user * __name)
 {
 	struct file_system_type * tmp;
@@ -260,6 +262,7 @@ static int __init proc_filesystems_init(void)
 module_init(proc_filesystems_init);
 #endif
 
+//通过名称查询对应的file_system_type
 static struct file_system_type *__get_fs_type(const char *name, int len)
 {
 	struct file_system_type *fs;

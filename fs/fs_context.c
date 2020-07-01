@@ -238,7 +238,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	fc->purpose	= purpose;
 	fc->sb_flags	= sb_flags;
 	fc->sb_flags_mask = sb_flags_mask;
-	fc->fs_type	= get_filesystem(fs_type);
+	fc->fs_type	= get_filesystem(fs_type);//引用fc对应的fs_type
 	fc->cred	= get_current_cred();
 	fc->net_ns	= get_net(current->nsproxy->net_ns);
 	fc->log.prefix	= fs_type->name;
@@ -589,6 +589,7 @@ static int legacy_get_tree(struct fs_context *fc)
 	struct super_block *sb;
 	struct dentry *root;
 
+	//调用fs_type的mount函数进行挂载
 	root = fc->fs_type->mount(fc->fs_type, fc->sb_flags,
 				      fc->source, ctx->legacy_data);
 	if (IS_ERR(root))

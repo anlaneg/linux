@@ -33,7 +33,8 @@ struct tcf_block_ext_info {
 	tcf_chain_head_change_t *chain_head_change;
 	/*回调的私有数据，目前指向miniq*/
 	void *chain_head_change_priv;
-	u32 block_index;//block index
+	//对应的block索引号
+	u32 block_index;
 };
 
 struct tcf_block_cb;
@@ -58,6 +59,7 @@ void tcf_block_put(struct tcf_block *block);
 void tcf_block_put_ext(struct tcf_block *block, struct Qdisc *q,
 		       struct tcf_block_ext_info *ei);
 
+//如果block索引非0，则其为可公享block
 static inline bool tcf_block_shared(struct tcf_block *block)
 {
 	return block->index;

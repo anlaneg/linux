@@ -16,6 +16,7 @@
 
 struct ipv4_devconf {
 	void	*sysctl;
+	/*inet设备配置*/
 	int	data[IPV4_DEVCONF_MAX];
 	DECLARE_BITMAP(state, IPV4_DEVCONF_MAX);
 };
@@ -63,6 +64,7 @@ static inline int ipv4_devconf_get(struct in_device *in_dev, int index)
 	return in_dev->cnf.data[index];
 }
 
+//设置具体的一项inet4设备配置
 static inline void ipv4_devconf_set(struct in_device *in_dev, int index,
 				    int val)
 {

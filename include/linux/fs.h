@@ -2635,7 +2635,9 @@ extern void __init vfs_caches_init(void);
 
 extern struct kmem_cache *names_cachep;
 
+//自names_cachep中申请object
 #define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
+//还原自names_cacep中申请的object
 #define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))
 
 #ifdef CONFIG_BLOCK

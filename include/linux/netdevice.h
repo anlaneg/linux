@@ -892,7 +892,7 @@ enum bpf_netdev_command {
 	 * reference, but on success it takes ownership and must bpf_prog_put
 	 * when it is no longer used.
 	 */
-	XDP_SETUP_PROG,
+	XDP_SETUP_PROG,//设置xdp prog
 	XDP_SETUP_PROG_HW,
 	XDP_QUERY_PROG,
 	XDP_QUERY_PROG_HW,
@@ -951,7 +951,7 @@ struct xfrmdev_ops {
 
 struct dev_ifalias {
 	struct rcu_head rcuhead;
-	char ifalias[];
+	char ifalias[];//以'\0'结尾的接口名称
 };
 
 struct devlink;
@@ -1330,6 +1330,7 @@ struct net_device_ops {
 					        struct ifreq *ifr, int cmd);
 	int			(*ndo_set_config)(struct net_device *dev,
 					          struct ifmap *map);
+	//更新设备mtu
 	int			(*ndo_change_mtu)(struct net_device *dev,
 						  int new_mtu);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
@@ -1511,12 +1512,12 @@ struct net_device_ops {
 						       struct sk_buff *skb);
 	void			(*ndo_set_rx_headroom)(struct net_device *dev,
 						       int needed_headroom);
-	//用于ebpf offload相关
+	//用于xdp/ebpf 相关setup回调
 	int			(*ndo_bpf)(struct net_device *dev,
 					   struct netdev_bpf *bpf);
 	//xdp报文发送
-	int			(*ndo_xdp_xmit)(struct net_device *dev, int n,
-						struct xdp_frame **xdp,
+	int			(*ndo_xdp_xmit)(struct net_device *dev/*要发送报文的设备*/, int n/*报文数目*/,
+						struct xdp_frame **xdp/*待发送的一组报文*/,
 						u32 flags);
 	int			(*ndo_xsk_wakeup)(struct net_device *dev,
 						  u32 queue_id, u32 flags);
@@ -1884,6 +1885,7 @@ struct net_device {
 	//设备名称
 	char			name[IFNAMSIZ];
 	struct netdev_name_node	*name_node;
+	/*设备别名 */
 	struct dev_ifalias	__rcu *ifalias;
 	/*
 	 *	I/O specific fields
@@ -2051,6 +2053,7 @@ struct net_device {
 	//rx队列（rx队列数为num_rx_queues)
 	struct netdev_rx_queue	*_rx;
 	unsigned int		num_rx_queues;
+	//当前实际可用的队列数
 	unsigned int		real_num_rx_queues;
 
 	/*
@@ -4091,6 +4094,7 @@ static inline bool netif_oper_up(const struct net_device *dev)
  */
 static inline bool netif_device_present(struct net_device *dev)
 {
+    //检查设备是否已用
 	return test_bit(__LINK_STATE_PRESENT, &dev->state);
 }
 

@@ -295,15 +295,18 @@ static unsigned int calculate_alignment(slab_flags_t flags,
 	if (flags & SLAB_HWCACHE_ALIGN) {
 		unsigned int ralign;
 
+		//如果size少于cachelin/2，则减少对齐字节数
 		ralign = cache_line_size();
 		while (size <= ralign / 2)
 			ralign /= 2;
 		align = max(align, ralign);
 	}
 
+	//对齐必须大于min align
 	if (align < ARCH_SLAB_MINALIGN)
 		align = ARCH_SLAB_MINALIGN;
 
+	//使align按(void*)对齐
 	return ALIGN(align, sizeof(void *));
 }
 
@@ -380,8 +383,9 @@ struct kmem_cache *find_mergeable(unsigned int size, unsigned int align,
 	return NULL;
 }
 
+/*创建kmem_cache*/
 static struct kmem_cache *create_cache(const char *name/*kmem_cache名称*/,
-		unsigned int object_size, unsigned int align,
+		unsigned int object_size/*obj大小*/, unsigned int align/*对齐大小*/,
 		slab_flags_t flags, unsigned int useroffset,
 		unsigned int usersize, void (*ctor/*obj构造函数*/)(void *),
 		struct mem_cgroup *memcg, struct kmem_cache *root_cache)
@@ -389,6 +393,7 @@ static struct kmem_cache *create_cache(const char *name/*kmem_cache名称*/,
 	struct kmem_cache *s;
 	int err;
 
+	//offset+usersize不得超过obj_size
 	if (WARN_ON(useroffset + usersize > object_size))
 		useroffset = usersize = 0;
 
@@ -455,8 +460,8 @@ out_free_cache:
  * Return: a pointer to the cache on success, NULL on failure.
  */
 struct kmem_cache *
-kmem_cache_create_usercopy(const char *name,
-		  unsigned int size, unsigned int align,
+kmem_cache_create_usercopy(const char *name/*要创建的slab名称*/,
+		  unsigned int size/*要创建的obj大小*/, unsigned int align,
 		  slab_flags_t flags,
 		  unsigned int useroffset, unsigned int usersize,
 		  void (*ctor)(void *))
@@ -500,6 +505,7 @@ kmem_cache_create_usercopy(const char *name,
 	if (s)
 		goto out_unlock;
 
+	//复制cache名称失败，退出
 	cache_name = kstrdup_const(name, GFP_KERNEL);
 	if (!cache_name) {
 		err = -ENOMEM;

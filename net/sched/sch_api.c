@@ -1148,7 +1148,7 @@ skip:
 	return 0;
 }
 
-//为sch中ingress,egress设置block_index
+//为sch中设置ingress/egress的block_index
 static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 				   struct netlink_ext_ack *extack)
 {
@@ -1371,6 +1371,7 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 			return -EINVAL;
 		}
 		if (tca[TCA_INGRESS_BLOCK] || tca[TCA_EGRESS_BLOCK]) {
+		    //不容许修改ingress/egress block编号
 			NL_SET_ERR_MSG(extack, "Change of blocks is not supported");
 			return -EOPNOTSUPP;
 		}
@@ -1452,8 +1453,8 @@ const struct nla_policy rtm_tca_policy[TCA_MAX + 1] = {
 	[TCA_STAB]		= { .type = NLA_NESTED },
 	[TCA_DUMP_INVISIBLE]	= { .type = NLA_FLAG },
 	[TCA_CHAIN]		= { .type = NLA_U32 },//chain的索引号
-	[TCA_INGRESS_BLOCK]	= { .type = NLA_U32 },
-	[TCA_EGRESS_BLOCK]	= { .type = NLA_U32 },
+	[TCA_INGRESS_BLOCK]	= { .type = NLA_U32 },//ingress block编号
+	[TCA_EGRESS_BLOCK]	= { .type = NLA_U32 },//egress block编号
 };
 
 /*
@@ -2179,6 +2180,7 @@ static int tc_ctl_tclass(struct sk_buff *skb, struct nlmsghdr *n,
 		}
 	}
 
+	//不容许有ingress/egress block被填充
 	if (tca[TCA_INGRESS_BLOCK] || tca[TCA_EGRESS_BLOCK]) {
 		NL_SET_ERR_MSG(extack, "Shared blocks are not supported for classes");
 		return -EOPNOTSUPP;

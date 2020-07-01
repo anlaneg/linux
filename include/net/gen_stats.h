@@ -14,6 +14,7 @@ struct gnet_stats_basic_packed {
 };
 
 struct gnet_stats_basic_cpu {
+    //统计报文数及字节数
 	struct gnet_stats_basic_packed bstats;
 	struct u64_stats_sync syncp;
 } __aligned(2 * sizeof(u64));

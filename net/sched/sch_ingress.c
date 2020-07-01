@@ -62,7 +62,7 @@ static void clsact_chain_head_change(struct tcf_proto *tp_head, void *priv)
 	mini_qdisc_pair_swap(miniqp, tp_head);
 };
 
-//设置ingress block_index
+//ingress队列设置ingress block_index
 static void ingress_ingress_block_set(struct Qdisc *sch, u32 block_index)
 {
 	struct ingress_sched_data *q = qdisc_priv(sch);

@@ -1412,14 +1412,16 @@ rollback:
  *
  *	Set ifalias for a device,
  */
-int dev_set_alias(struct net_device *dev, const char *alias, size_t len)
+int dev_set_alias(struct net_device *dev, const char *alias/*接口别名*/, size_t len)
 {
+    //设置或别更设备别名称
 	struct dev_ifalias *new_alias = NULL;
 
 	if (len >= IFALIASZ)
 		return -EINVAL;
 
 	if (len) {
+	    //申请dev_ifalias 并填充
 		new_alias = kmalloc(sizeof(*new_alias) + len + 1, GFP_KERNEL);
 		if (!new_alias)
 			return -ENOMEM;
@@ -1429,6 +1431,7 @@ int dev_set_alias(struct net_device *dev, const char *alias, size_t len)
 	}
 
 	mutex_lock(&ifalias_mutex);
+	/*更新设备别名指针*/
 	new_alias = rcu_replace_pointer(dev->ifalias, new_alias,
 					mutex_is_locked(&ifalias_mutex));
 	mutex_unlock(&ifalias_mutex);
@@ -5612,7 +5615,7 @@ static void __netif_receive_skb_list(struct list_head *head)
 		memalloc_noreclaim_restore(noreclaim_flag);
 }
 
-//网卡驱动不支持ndo_bpf回调时，此函数将被用于安装更一般的xdp程序
+//网卡驱动不支持ndo_bpf回调时，此函数将被用于安装xdp程序到更一般的位置
 static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 {
 	struct bpf_prog *old = rtnl_dereference(dev->xdp_prog);
@@ -5632,7 +5635,8 @@ static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 	}
 
 	switch (xdp->command) {
-	case XDP_SETUP_PROG://设置新的xdp programme
+	case XDP_SETUP_PROG:
+	    //设置新的xdp prog
 		rcu_assign_pointer(dev->xdp_prog, new);
 		if (old)
 			bpf_prog_put(old);
@@ -8627,6 +8631,7 @@ int dev_change_flags(struct net_device *dev, unsigned int flags,
 }
 EXPORT_SYMBOL(dev_change_flags);
 
+//设置设备mtu
 int __dev_set_mtu(struct net_device *dev, int new_mtu)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
@@ -8640,6 +8645,7 @@ int __dev_set_mtu(struct net_device *dev, int new_mtu)
 }
 EXPORT_SYMBOL(__dev_set_mtu);
 
+//检查mtu大小是否合乎范围
 int dev_validate_mtu(struct net_device *dev, int new_mtu,
 		     struct netlink_ext_ack *extack)
 {
@@ -8669,9 +8675,11 @@ int dev_set_mtu_ext(struct net_device *dev, int new_mtu,
 {
 	int err, orig_mtu;
 
+	//mtu未变化
 	if (new_mtu == dev->mtu)
 		return 0;
 
+	//mtu校验
 	err = dev_validate_mtu(dev, new_mtu, extack);
 	if (err)
 		return err;
@@ -8679,14 +8687,17 @@ int dev_set_mtu_ext(struct net_device *dev, int new_mtu,
 	if (!netif_device_present(dev))
 		return -ENODEV;
 
+	//执行pre change mtu事件
 	err = call_netdevice_notifiers(NETDEV_PRECHANGEMTU, dev);
 	err = notifier_to_errno(err);
 	if (err)
 		return err;
 
+	//更新设备mtu
 	orig_mtu = dev->mtu;
 	err = __dev_set_mtu(dev, new_mtu);
 
+	//执行change mtu事件
 	if (!err) {
 		err = call_netdevice_notifiers_mtu(NETDEV_CHANGEMTU, dev,
 						   orig_mtu);
@@ -8791,6 +8802,7 @@ EXPORT_SYMBOL(dev_pre_changeaddr_notify);
 int dev_set_mac_address(struct net_device *dev, struct sockaddr *sa,
 			struct netlink_ext_ack *extack)
 {
+    //为设备设置mac地址
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int err;
 
@@ -8978,6 +8990,7 @@ int dev_change_proto_down_generic(struct net_device *dev, bool proto_down)
 }
 EXPORT_SYMBOL(dev_change_proto_down_generic);
 
+/*执行设备关联xdp程序查询*/
 u32 __dev_xdp_query(struct net_device *dev, bpf_op_t bpf_op,
 		    enum bpf_netdev_command cmd)
 {
@@ -8995,9 +9008,9 @@ u32 __dev_xdp_query(struct net_device *dev, bpf_op_t bpf_op,
 	return xdp.prog_id;
 }
 
-static int dev_xdp_install(struct net_device *dev, bpf_op_t bpf_op,
+static int dev_xdp_install(struct net_device *dev/*目标设备*/, bpf_op_t bpf_op/*负责安装的回调*/,
 			   struct netlink_ext_ack *extack, u32 flags,
-			   struct bpf_prog *prog)
+			   struct bpf_prog *prog/*要安装的xdp程序*/)
 {
 	bool non_hw = !(flags & XDP_FLAGS_HW_MODE);
 	struct bpf_prog *prev_prog = NULL;
@@ -9015,12 +9028,13 @@ static int dev_xdp_install(struct net_device *dev, bpf_op_t bpf_op,
 	if (flags & XDP_FLAGS_HW_MODE)
 		xdp.command = XDP_SETUP_PROG_HW;
 	else
+	    /*非hw执行的xdp程序*/
 		xdp.command = XDP_SETUP_PROG;
 	xdp.extack = extack;
 	xdp.flags = flags;
 	xdp.prog = prog;
 
-	/*通过bpf_op完成bpf操作*/
+	/*通过bpf_op完成bpf setup操作*/
 	err = bpf_op(dev, &xdp);
 	if (!err && non_hw)
 		bpf_prog_change_xdp(prev_prog, prog);
@@ -9070,7 +9084,7 @@ static void dev_xdp_uninstall(struct net_device *dev)
  *	Set or clear a bpf program for a device
  */
 int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
-		      int fd, int expected_fd, u32 flags)
+		      int fd/*要设置的bpf程序*/, int expected_fd, u32 flags)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 	enum bpf_netdev_command query;
@@ -9088,6 +9102,7 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 	/*取netdev对应的ndo_bpf回调做为bpf操作函数*/
 	bpf_op = bpf_chk = ops->ndo_bpf;
 	if (!bpf_op && (flags & (XDP_FLAGS_DRV_MODE | XDP_FLAGS_HW_MODE))) {
+	    /*bpf_op用于支持driver/hw bpf模式*/
 		NL_SET_ERR_MSG(extack, "underlying driver does not support XDP in native mode");
 		return -EOPNOTSUPP;
 	}
@@ -9098,8 +9113,10 @@ int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 	if (bpf_op == bpf_chk)
 		bpf_chk = generic_xdp_install;
 
+	/*获取旧的xdp程序fd*/
 	prog_id = __dev_xdp_query(dev, bpf_op, query);
 	if (flags & XDP_FLAGS_REPLACE) {
+	    /*有替代标记，将旧的prog移除掉*/
 		if (expected_fd >= 0) {
 			prog = bpf_prog_get_type_dev(expected_fd,
 						     BPF_PROG_TYPE_XDP,
@@ -10476,7 +10493,7 @@ EXPORT_SYMBOL(unregister_netdev);
  *
  *	Callers must hold the rtnl semaphore.
  */
-
+//切换设备的net namespace到net
 int dev_change_net_namespace(struct net_device *dev, struct net *net, const char *pat)
 {
 	struct net *net_old = dev_net(dev);
@@ -10503,6 +10520,7 @@ int dev_change_net_namespace(struct net_device *dev, struct net *net, const char
 	 */
 	err = -EEXIST;
 	if (__dev_get_by_name(net, dev->name)) {
+	    /*取目标net namespace中查询dev->name是否已存在*/
 		/* We get here if we can't use the current device name */
 		if (!pat)
 			goto out;

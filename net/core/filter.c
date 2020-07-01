@@ -3547,12 +3547,12 @@ static int __bpf_tx_xdp_map(struct net_device *dev_rx, void *fwd,
 	switch (map->map_type) {
 	case BPF_MAP_TYPE_DEVMAP:
 	case BPF_MAP_TYPE_DEVMAP_HASH:
+	    //报文重定向到fwd,如有必要运行相应xdp->xdp_prog
 		return dev_map_enqueue(fwd, xdp, dev_rx);
 	case BPF_MAP_TYPE_CPUMAP:
 		return cpu_map_enqueue(fwd, xdp, dev_rx);
 	case BPF_MAP_TYPE_XSKMAP:
-	    	/*map为XSKMAP情况下fwd为xdp_socket*/
-		/*将文送给指定的xdp_socket*/
+	    /*map为XSKMAP情况下fwd为xdp_socket,将文将送给指定的xdp_socket*/
 		return __xsk_map_redirect(fwd, xdp);
 	default:
 		return -EBADRQC;
@@ -3602,10 +3602,11 @@ void bpf_clear_redirect_map(struct bpf_map *map)
 	}
 }
 
+//按bpf程序运行结果bpf_redirect_info将报文自指定设备发出
 int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 		    struct bpf_prog *xdp_prog)
 {
-    	//通过函数bpf_xdp_redirect_map，已经设置了bpf_redirect_info
+    //通过函数bpf_xdp_redirect_map，已经设置了bpf_redirect_info
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	struct bpf_map *map = READ_ONCE(ri->map);
 	u32 index = ri->tgt_index;
@@ -3618,14 +3619,17 @@ int xdp_do_redirect(struct net_device *dev, struct xdp_buff *xdp,
 	WRITE_ONCE(ri->map, NULL);
 
 	if (unlikely(!map)) {
+	    /*无map情况下，通过ifindex找到目标设备*/
 		fwd = dev_get_by_index_rcu(dev_net(dev), index);
 		if (unlikely(!fwd)) {
 			err = -EINVAL;
 			goto err;
 		}
 
+		//将报文自目标设备发出
 		err = dev_xdp_enqueue(fwd, xdp, dev);
 	} else {
+	    /*有map,按fwd映射报文目的地*/
 		err = __bpf_tx_xdp_map(dev, fwd, map, xdp);
 	}
 
@@ -9234,6 +9238,7 @@ const struct bpf_prog_ops sk_reuseport_prog_ops = {
 
 DEFINE_BPF_DISPATCHER(xdp)
 
+/*xdp程序变更处理*/
 void bpf_prog_change_xdp(struct bpf_prog *prev_prog, struct bpf_prog *prog)
 {
 	bpf_dispatcher_change_prog(BPF_DISPATCHER_PTR(xdp), prev_prog, prog);

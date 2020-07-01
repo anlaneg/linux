@@ -851,6 +851,7 @@ static inline int qdisc_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	return sch->enqueue(skb, sch, to_free);
 }
 
+//累计bstats的字节数及报文数
 static inline void _bstats_update(struct gnet_stats_basic_packed *bstats,
 				  __u64 bytes, __u32 packets)
 {
@@ -874,6 +875,7 @@ static inline void _bstats_cpu_update(struct gnet_stats_basic_cpu *bstats,
 	u64_stats_update_end(&bstats->syncp);
 }
 
+//统计报文数及字节数
 static inline void bstats_cpu_update(struct gnet_stats_basic_cpu *bstats,
 				     const struct sk_buff *skb)
 {

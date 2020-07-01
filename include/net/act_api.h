@@ -36,6 +36,7 @@ struct tc_action {
 	struct gnet_stats_queue		tcfa_qstats;
 	struct net_rate_estimator __rcu *tcfa_rate_est;
 	spinlock_t			tcfa_lock;
+	//percpu统计计数，表明处理的报文数及字节数
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats_hw;
 	struct gnet_stats_queue __percpu *cpu_qstats;
@@ -65,6 +66,7 @@ struct tc_action {
  */
 static inline void tcf_lastuse_update(struct tcf_t *tm)
 {
+    //更新首次使用时间及末次使用时间
 	unsigned long now = jiffies;
 
 	if (tm->lastuse != now)
@@ -99,7 +101,7 @@ struct tc_action_ops {
 	size_t	size;
 	struct module		*owner;
 	//action执行函数
-	int     (*act)(struct sk_buff *, const struct tc_action *,
+	int     (*act)(struct sk_buff *, const struct tc_action */*action对应的参数*/,
 		       struct tcf_result *); /* called under RCU BH lock*/
 	//dump具体一个action
 	int     (*dump)(struct sk_buff *, struct tc_action *, int, int);

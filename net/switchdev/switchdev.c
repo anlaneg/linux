@@ -436,7 +436,7 @@ int call_switchdev_notifiers(unsigned long val, struct net_device *dev,
 			     struct switchdev_notifier_info *info,
 			     struct netlink_ext_ack *extack)
 {
-	//执行switchdev链通知
+	//执行switchdev notif链通知
 	info->dev = dev;
 	info->extack = extack;
 	return atomic_notifier_call_chain(&switchdev_notif_chain, val, info);

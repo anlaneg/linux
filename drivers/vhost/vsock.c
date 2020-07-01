@@ -927,6 +927,7 @@ static int __init vhost_vsock_init(void)
 				  VSOCK_TRANSPORT_F_H2G);
 	if (ret < 0)
 		return ret;
+	//注册misc设备
 	return misc_register(&vhost_vsock_misc);
 };
 

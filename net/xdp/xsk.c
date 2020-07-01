@@ -430,6 +430,7 @@ static int xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 	return __xsk_sendmsg(sk);
 }
 
+//检测xdp socket poll事件
 static __poll_t xsk_poll(struct file *file, struct socket *sock,
 			     struct poll_table_struct *wait)
 {
@@ -451,8 +452,10 @@ static __poll_t xsk_poll(struct file *file, struct socket *sock,
 			__xsk_sendmsg(sk);
 	}
 
+	//如果rx队列不为空，则返回可读
 	if (xs->rx && !xskq_prod_is_empty(xs->rx))
 		mask |= EPOLLIN | EPOLLRDNORM;
+	//如果tx队列不为空，则返回可写
 	if (xs->tx && !xskq_cons_is_full(xs->tx))
 		mask |= EPOLLOUT | EPOLLWRNORM;
 

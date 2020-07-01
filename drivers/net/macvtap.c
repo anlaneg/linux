@@ -139,6 +139,7 @@ static struct rtnl_link_ops macvtap_link_ops __read_mostly = {
 	.setup		= macvtap_setup,
 	.newlink	= macvtap_newlink,
 	.dellink	= macvtap_dellink,
+	//指定其私有结构为macvtap_dev
 	.priv_size      = sizeof(struct macvtap_dev),
 };
 
@@ -152,14 +153,18 @@ static int macvtap_device_event(struct notifier_block *unused,
 	int err;
 	char tap_name[IFNAMSIZ];
 
+	//只处理macvtap设备事件
 	if (dev->rtnl_link_ops != &macvtap_link_ops)
 		return NOTIFY_DONE;
 
+	//构造tap设备名称
 	snprintf(tap_name, IFNAMSIZ, "tap%d", dev->ifindex);
 	vlantap = netdev_priv(dev);
 
 	switch (event) {
 	case NETDEV_REGISTER:
+	    //当收到macvtap设备注册信息后，创建一个tap%d设备，并利用vlantap->tap
+	    //保存此信息
 		/* Create the device node here after the network device has
 		 * been registered but before register_netdevice has
 		 * finished running.
@@ -170,7 +175,7 @@ static int macvtap_device_event(struct notifier_block *unused,
 
 		devt = MKDEV(MAJOR(macvtap_major), vlantap->tap.minor);
 		classdev = device_create(&macvtap_class, &dev->dev, devt,
-					 dev, tap_name);
+					 dev, tap_name/*要创建的tap设备*/);
 		if (IS_ERR(classdev)) {
 			tap_free_minor(macvtap_major, &vlantap->tap);
 			return notifier_from_errno(PTR_ERR(classdev));

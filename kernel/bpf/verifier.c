@@ -24,7 +24,7 @@
 
 #include "disasm.h"
 
-//定义各bpf 程序类型对应的verifier操作集
+//定义各bpf程序类型对应的verifier操作集
 static const struct bpf_verifier_ops * const bpf_verifier_ops[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
 	[_id] = & _name ## _verifier_ops,
@@ -9910,6 +9910,7 @@ static int jit_subprogs(struct bpf_verifier_env *env)
 			    insn->src_reg != BPF_PSEUDO_CALL)
 				continue;
 			subprog = insn->off;
+			/*将其更新为函数指针的偏移量*/
 			insn->imm = BPF_CAST_CALL(func[subprog]->bpf_func) -
 				    __bpf_call_base;
 		}
@@ -10918,6 +10919,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
 		goto err_free_env;
 	for (i = 0; i < len; i++)
 		env->insn_aux_data[i].orig_idx = i;
+	//记录evn对应的prog及其对应的verifier_ops
 	env->prog = *prog;
 	env->ops = bpf_verifier_ops[env->prog->type];
 	is_priv = bpf_capable();
@@ -10933,6 +10935,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr,
 	if (!is_priv)
 		mutex_lock(&bpf_verifier_lock);
 
+	//复用用户态指定的log buffeer
 	if (attr->log_level || attr->log_buf || attr->log_size) {
 		/* user requested verbose verifier output
 		 * and supplied buffer to store the verification trace

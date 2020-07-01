@@ -707,6 +707,7 @@ static inline unsigned long task_rlimit_max(const struct task_struct *task,
 
 static inline unsigned long rlimit(unsigned int limit)
 {
+    //返回当前进程指定limit的取值
 	return task_rlimit(current, limit);
 }
 

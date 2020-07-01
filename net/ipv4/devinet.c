@@ -2001,12 +2001,14 @@ static const struct nla_policy inet_af_policy[IFLA_INET_MAX+1] = {
 	[IFLA_INET_CONF]	= { .type = NLA_NESTED },
 };
 
+//inet协议独有的link校验回调
 static int inet_validate_link_af(const struct net_device *dev,
 				 const struct nlattr *nla)
 {
 	struct nlattr *a, *tb[IFLA_INET_MAX+1];
 	int err, rem;
 
+	//设备必须为inet类型设备
 	if (dev && !__in_dev_get_rcu(dev))
 		return -EAFNOSUPPORT;
 
@@ -2015,6 +2017,7 @@ static int inet_validate_link_af(const struct net_device *dev,
 	if (err < 0)
 		return err;
 
+	//校验inet_conf是否合乎规范
 	if (tb[IFLA_INET_CONF]) {
 		nla_for_each_nested(a, tb[IFLA_INET_CONF], rem) {
 			int cfgid = nla_type(a);
@@ -2042,6 +2045,7 @@ static int inet_set_link_af(struct net_device *dev, const struct nlattr *nla)
 	if (nla_parse_nested_deprecated(tb, IFLA_INET_MAX, nla, NULL, NULL) < 0)
 		BUG();
 
+	//inet_conf容许有多个配置项
 	if (tb[IFLA_INET_CONF]) {
 		nla_for_each_nested(a, tb[IFLA_INET_CONF], rem)
 			ipv4_devconf_set(in_dev, nla_type(a), nla_get_u32(a));

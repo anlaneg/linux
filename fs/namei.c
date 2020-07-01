@@ -125,9 +125,8 @@
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
 //依据用户空间传入的文件名称，构造filename
-//empty 用于出参，指出文件名称是否为空
 struct filename *
-getname_flags(const char __user *filename, int flags, int *empty)
+getname_flags(const char __user *filename, int flags, int *empty/*出参，名称是否为空*/)
 {
 	struct filename *result;
 	char *kname;
@@ -137,8 +136,8 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	if (result)
 		return result;
 
-	//申请一个cache
-	//注：cache的大小正好为PATH_MAX，含struct filename大小
+	//申请一个name object
+	//注：object的大小正好为PATH_MAX，含struct filename大小
 	//所以才有下文中当发现路径名称大于EMBEDDED_NAME_MAX时，直接申请一个
 	//offsetof(struct filename, iname[1]);结构来了事,猛一看，吓我一跳。
 	result = __getname();
@@ -199,10 +198,10 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	result->refcnt = 1;
 	/* The empty path is special. */
 	if (unlikely(!len)) {
-		//名称为空时做特别处理（需要flags参与）
 		if (empty)
 			*empty = 1;
 		if (!(flags & LOOKUP_EMPTY)) {
+		    /*如果名称为空，但没有empty标记，则报错*/
 			putname(result);
 			return ERR_PTR(-ENOENT);
 		}
@@ -214,10 +213,11 @@ getname_flags(const char __user *filename, int flags, int *empty)
 	return result;
 }
 
-//通过用户空间传入的文件名称，构造filename结构体
+//通过用户空间传入的文件路径名称，构造filename结构体
 struct filename *
 getname(const char __user * filename)
 {
+    //不容许名称为空
 	return getname_flags(filename, 0, NULL);
 }
 
@@ -515,7 +515,7 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path;
+	struct path	path;//路径对应的锚点
 	struct qstr	last;//记录分析位置（为了避免在路径分析过程中传递分析点文件名称指针及长度）
 	struct path	root;//记录根路径（１。为了避免'..'方式穿透根目录)
 	struct inode	*inode; /* path.dentry.d_inode */
@@ -538,6 +538,7 @@ struct nameidata {
 	umode_t		dir_mode;
 } __randomize_layout;
 
+//构造nameidata
 static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 {
 	struct nameidata *old = current->nameidata;
@@ -2143,7 +2144,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
-	//跳过文件路径分隔符（支持出现多个）
+	//跳过前导的文件路径分隔符（支持出现多个）
 	while (*name=='/')
 		name++;//跳过目录分隔符
 
@@ -2181,6 +2182,8 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		}
 		if (likely(type == LAST_NORM)) {
 			//普通文件情况（非'..','.'这种）
+
+		    //取此文件父路径
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
 			//如果目录需要执行d_hash,则更新this
@@ -2260,7 +2263,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	const char *s = nd->name->name;
 
 	if (!*s)
+	    /*s为空时，清掉RCU标记*/
 		flags &= ~LOOKUP_RCU;
+
+	/*如有rcu标记，则加rcu_read锁*/
 	if (flags & LOOKUP_RCU)
 		rcu_read_lock();
 
@@ -2320,10 +2326,10 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->inode = nd->path.dentry->d_inode;
 		}
 	} else {
-		//文件路径给出为相对路径，相不是相对当前工作目录
+		//文件路径给出为相对路径，但不是相对当前工作目录
 		//给出了相对目录的fd
 		/* Caller must check execute permissions on the starting path component */
-		struct fd f = fdget_raw(nd->dfd);//对相对的目录fd
+		struct fd f = fdget_raw(nd->dfd);//取相对的目录fd
 		struct dentry *dentry;
 
 		//未查找到dfd对应的file,文件描述符无效
@@ -2349,7 +2355,6 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->inode = nd->path.dentry->d_inode;
 		}
 		fdput(f);
-		//返回相对的文件或路径名
 	}
 
 	/* For scoped-lookups we need to set the root to the dirfd as well. */
@@ -2362,6 +2367,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->flags |= LOOKUP_ROOT_GRABBED;
 		}
 	}
+
+	//返回相对的文件或路径名
 	return s;
 }
 
@@ -3726,7 +3733,7 @@ int vfs_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 }
 EXPORT_SYMBOL(vfs_mkdir);
 
-long do_mkdirat(int dfd, const char __user *pathname, umode_t mode)
+long do_mkdirat(int dfd/*patchname为相对地址时的锚点*/, const char __user *pathname, umode_t mode)
 {
 	struct dentry *dentry;
 	struct path path;
@@ -3756,8 +3763,10 @@ SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 	return do_mkdirat(dfd, pathname, mode);
 }
 
-SYSCALL_DEFINE2(mkdir, const char __user *, pathname, umode_t, mode)
+//定义系统调用mkdir
+SYSCALL_DEFINE2(mkdir, const char __user *, pathname/*要创建的路径名*/, umode_t, mode)
 {
+    //指明相对于当前工作目录
 	return do_mkdirat(AT_FDCWD, pathname, mode);
 }
 

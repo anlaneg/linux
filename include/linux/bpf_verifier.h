@@ -326,11 +326,11 @@ struct bpf_insn_aux_data {
 #define BPF_VERIFIER_TMP_LOG_SIZE	1024
 
 struct bpf_verifier_log {
-	u32 level;
+	u32 level;//日志级别
 	char kbuf[BPF_VERIFIER_TMP_LOG_SIZE];
-	char __user *ubuf;
+	char __user *ubuf;//用户态日志可输出buffer
 	u32 len_used;
-	u32 len_total;
+	u32 len_total;//用户态buffer总长度
 };
 
 static inline bool bpf_verifier_log_full(const struct bpf_verifier_log *log)
@@ -367,6 +367,7 @@ struct bpf_verifier_env {
 	u32 insn_idx;
 	u32 prev_insn_idx;
 	struct bpf_prog *prog;		/* eBPF program being verified */
+	//prog->type对应的verifier操作集
 	const struct bpf_verifier_ops *ops;
 	struct bpf_verifier_stack_elem *head; /* stack of verifier states to be processed */
 	int stack_size;			/* number of states to be processed */

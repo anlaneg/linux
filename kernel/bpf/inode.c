@@ -28,6 +28,7 @@ enum bpf_type {
 	BPF_TYPE_LINK,
 };
 
+//按bpf类型，对相应结构引用计数加1
 static void *bpf_any_get(void *raw, enum bpf_type type)
 {
 	switch (type) {
@@ -48,6 +49,7 @@ static void *bpf_any_get(void *raw, enum bpf_type type)
 	return raw;
 }
 
+//按bpf类型，对相应结构引用计数减1
 static void bpf_any_put(void *raw, enum bpf_type type)
 {
 	switch (type) {
@@ -126,13 +128,14 @@ static struct inode *bpf_get_inode(struct super_block *sb,
 	return inode;
 }
 
-static int bpf_inode_type(const struct inode *inode, enum bpf_type *type)
+/*由inode获得bpf类型*/
+static int bpf_inode_type(const struct inode *inode, enum bpf_type *type/*出参，bpf类型*/)
 {
 	*type = BPF_TYPE_UNSPEC;
 	if (inode->i_op == &bpf_prog_iops)
-		*type = BPF_TYPE_PROG;
+		*type = BPF_TYPE_PROG;/*bpf程序*/
 	else if (inode->i_op == &bpf_map_iops)
-		*type = BPF_TYPE_MAP;
+		*type = BPF_TYPE_MAP;/*bpf映射表*/
 	else if (inode->i_op == &bpf_link_iops)
 		*type = BPF_TYPE_LINK;
 	else
@@ -486,10 +489,12 @@ static void *bpf_obj_do_get(const char __user *pathname,
 	if (ret)
 		goto out;
 
+	/*获取bpf类型*/
 	ret = bpf_inode_type(inode, type);
 	if (ret)
 		goto out;
 
+	/*增加引用*/
 	raw = bpf_any_get(inode->i_private, *type);
 	if (!IS_ERR(raw))
 		touch_atime(&path);
@@ -508,6 +513,7 @@ int bpf_obj_get_user(const char __user *pathname, int flags)
 	void *raw;
 	int ret;
 
+	//默认读写权限
 	f_flags = bpf_get_file_flag(flags);
 	if (f_flags < 0)
 		return f_flags;
@@ -516,6 +522,7 @@ int bpf_obj_get_user(const char __user *pathname, int flags)
 	if (IS_ERR(raw))
 		return PTR_ERR(raw);
 
+	/*按程序类构造file并与相应raw进行映射*/
 	if (type == BPF_TYPE_PROG)
 		ret = bpf_prog_new_fd(raw);
 	else if (type == BPF_TYPE_MAP)
@@ -523,7 +530,7 @@ int bpf_obj_get_user(const char __user *pathname, int flags)
 	else if (type == BPF_TYPE_LINK)
 		ret = bpf_link_new_fd(raw);
 	else
-		return -ENOENT;
+		return -ENOENT;/*这里是一个bug,不能直接返回*/
 
 	if (ret < 0)
 		bpf_any_put(raw, type);

@@ -1700,7 +1700,7 @@ static struct sock *sk_prot_alloc(struct proto *prot, gfp_t priority,
 
 	slab = prot->slab;
 	if (slab != NULL) {
-		//协议有自已的slab，自slab中申请
+		//协议有自已的slab，则自slab中申请
 		sk = kmem_cache_alloc(slab, priority & ~__GFP_ZERO);
 		if (!sk)
 			return sk;

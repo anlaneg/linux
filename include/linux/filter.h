@@ -541,9 +541,12 @@ struct bpf_binary_header {
 };
 
 struct bpf_prog {
+    //申请的内存页数
 	u16			pages;		/* Number of allocated pages */
 	u16			jited:1,	/* Is our filter JIT'ed? */
+	            //是否开启jit功能
 				jit_requested:1,/* archs need to JIT the prog */
+				//是否gpl协议兼容
 				gpl_compatible:1, /* Is filter GPL compatible? */
 				cb_access:1,	/* Is control block accessed? */
 				dst_needed:1,	/* Do we need dst entry? */
@@ -554,7 +557,8 @@ struct bpf_prog {
 				enforce_expected_attach_type:1; /* Enforce expected_attach_type checking at attach time */
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	enum bpf_attach_type	expected_attach_type; /* For some prog types */
-	u32			len;		/* Number of filter blocks */ //insns数组的大小
+	//insns数组的大小
+	u32			len;		/* Number of filter blocks */
 	u32			jited_len;	/* Size of jited insns in bytes */
 	u8			tag[BPF_TAG_SIZE];
 	struct bpf_prog_aux	*aux;		/* Auxiliary fields */
@@ -576,7 +580,7 @@ struct sk_filter {
 
 DECLARE_STATIC_KEY_FALSE(bpf_stats_enabled_key);
 
-//运行bpf程序
+//运行bpf程序(prog)->bpf_func将被调用
 #define __BPF_PROG_RUN(prog, ctx, dfunc)	({			\
 	u32 ret;							\
 	cant_migrate();							\
@@ -635,7 +639,7 @@ struct bpf_skb_data_end {
 
 struct bpf_redirect_info {
 	u32 flags;
-	u32 tgt_index;//目标index
+	u32 tgt_index;//目标ifindex
 	void *tgt_value;//
 	struct bpf_map *map;
 	u32 kern_flags;
@@ -949,6 +953,7 @@ static inline void xdp_clear_return_frame_no_direct(void)
 	ri->kern_flags &= ~BPF_RI_F_RF_NO_DIRECT;
 }
 
+//检查此报文是否能发送
 static inline int xdp_ok_fwd_dev(const struct net_device *fwd,
 				 unsigned int pktlen)
 {
@@ -1049,6 +1054,7 @@ static inline bool bpf_jit_is_ebpf(void)
 # endif
 }
 
+//确定bpf jit是否被开启
 static inline bool ebpf_jit_enabled(void)
 {
 	return bpf_jit_enable && bpf_jit_is_ebpf();

@@ -391,6 +391,7 @@ errout:
 		rtnl_set_sk_err(net, RTNLGRP_NEIGH, err);
 }
 
+//填充fdb_info结构体
 static void vxlan_fdb_switchdev_notifier_info(const struct vxlan_dev *vxlan,
 			    const struct vxlan_fdb *fdb,
 			    const struct vxlan_rdst *rd,
@@ -412,7 +413,7 @@ static void vxlan_fdb_switchdev_notifier_info(const struct vxlan_dev *vxlan,
 static int vxlan_fdb_switchdev_call_notifiers(struct vxlan_dev *vxlan,
 					      struct vxlan_fdb *fdb,
 					      struct vxlan_rdst *rd,
-					      bool adding,
+					      bool adding/*是否vxlan fdb新增*/,
 					      struct netlink_ext_ack *extack)
 {
 	struct switchdev_notifier_vxlan_fdb_info info;
@@ -422,9 +423,12 @@ static int vxlan_fdb_switchdev_call_notifiers(struct vxlan_dev *vxlan,
 	if (WARN_ON(!rd))
 		return 0;
 
+	//结构体填充
 	notifier_type = adding ? SWITCHDEV_VXLAN_FDB_ADD_TO_DEVICE
 			       : SWITCHDEV_VXLAN_FDB_DEL_TO_DEVICE;
 	vxlan_fdb_switchdev_notifier_info(vxlan, fdb, rd, NULL, &info);
+
+	//解发switchdev notif通知链
 	ret = call_switchdev_notifiers(notifier_type, vxlan->dev,
 				       &info.info, extack);
 	return notifier_to_errno(ret);
@@ -439,12 +443,14 @@ static int vxlan_fdb_notify(struct vxlan_dev *vxlan, struct vxlan_fdb *fdb,
 	if (swdev_notify && rd) {
 		switch (type) {
 		case RTM_NEWNEIGH:
+		    //fdb添加
 			err = vxlan_fdb_switchdev_call_notifiers(vxlan, fdb, rd,
 								 true, extack);
 			if (err)
 				return err;
 			break;
 		case RTM_DELNEIGH:
+		    //fdb删除
 			vxlan_fdb_switchdev_call_notifiers(vxlan, fdb, rd,
 							   false, extack);
 			break;
@@ -1155,6 +1161,7 @@ static int vxlan_fdb_update_create(struct vxlan_dev *vxlan,
 	if (rc < 0)
 		return rc;
 
+	//将vxlan fdb表项加入
 	vxlan_fdb_insert(vxlan, mac, src_vni, f);
 	rc = vxlan_fdb_notify(vxlan, f, first_remote_rtnl(f), RTM_NEWNEIGH,
 			      swdev_notify, extack);
@@ -4679,6 +4686,7 @@ vxlan_fdb_offloaded_set(struct net_device *dev,
 
 	spin_lock_bh(&vxlan->hash_lock[hash_index]);
 
+	//通过mac/vni获得fdb
 	f = vxlan_find_mac(vxlan, fdb_info->eth_addr, fdb_info->vni);
 	if (!f)
 		goto out;
@@ -4903,11 +4911,11 @@ static int __init vxlan_init_module(void)
 	if (rc)
 		goto out2;
 
-	//注册vxlan对应的ip link类型
 	rc = register_switchdev_notifier(&vxlan_switchdev_notifier_block);
 	if (rc)
 		goto out3;
 
+	//注册vxlan对应的ip link类型
 	rc = rtnl_link_register(&vxlan_link_ops);
 	if (rc)
 		goto out4;

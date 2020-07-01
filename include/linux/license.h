@@ -2,6 +2,7 @@
 #ifndef __LICENSE_H
 #define __LICENSE_H
 
+//检查是否为gpl兼容的证书
 static inline int license_is_gpl_compatible(const char *license)
 {
 	return (strcmp(license, "GPL") == 0

@@ -40,7 +40,7 @@ struct veth_stats {
 	u64	rx_drops;
 	/* xdp */
 	u64	xdp_packets;
-	u64	xdp_bytes;
+	u64	xdp_bytes;//xdp报文数
 	u64	xdp_redirect;
 	u64	xdp_drops;
 	u64	xdp_tx;
@@ -56,12 +56,12 @@ struct veth_rq_stats {
 
 struct veth_rq {
 	struct napi_struct	xdp_napi;
-	struct net_device	*dev;
+	struct net_device	*dev;/*此队列所属的dev*/
 	struct bpf_prog __rcu	*xdp_prog;/*指向本队列对应的xdp程序*/
 	struct xdp_mem_info	xdp_mem;
 	struct veth_rq_stats	stats;
 	bool			rx_notify_masked;
-	struct ptr_ring		xdp_ring;
+	struct ptr_ring		xdp_ring;/*负责入队xdp报文*/
 	struct xdp_rxq_info	xdp_rxq;
 };
 
@@ -69,7 +69,7 @@ struct veth_priv {
 	struct net_device __rcu	*peer;/*对端设备*/
 	atomic64_t		dropped;
 	struct bpf_prog		*_xdp_prog;/*指向被设置的xdp程序*/
-	struct veth_rq		*rq;
+	struct veth_rq		*rq;/*多个收队列*/
 	unsigned int		requested_headroom;
 };
 
@@ -264,7 +264,7 @@ static void __veth_xdp_flush(struct veth_rq *rq)
 	}
 }
 
-//支持xdp的rx方式
+//支持xdp的rx方式（将报文直接投递到rq的xdp_ring，napi会poll其中的报文并处理）
 static int veth_xdp_rx(struct veth_rq *rq, struct sk_buff *skb)
 {
 	if (unlikely(ptr_ring_produce(&rq->xdp_ring, skb))) {
@@ -304,6 +304,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 	rxq = skb_get_queue_mapping(skb);
 	if (rxq < rcv->real_num_rx_queues) {
 		rq = &rcv_priv->rq[rxq];
+		/*如果此队列上有xdp程序，则需要采用xdp方式收包*/
 		rcv_xdp = rcu_access_pointer(rq->xdp_prog);
 		if (rcv_xdp)
 			skb_record_rx_queue(skb, rxq);
@@ -406,15 +407,17 @@ static void veth_set_multicast_list(struct net_device *dev)
 }
 
 /*通过buffer构造skb*/
-static struct sk_buff *veth_build_skb(void *head, int headroom, int len,
-				      int buflen)
+static struct sk_buff *veth_build_skb(void *head/*buffer地始地址*/, int headroom/*headroom长度*/, int len/*报文长度*/,
+				      int buflen/*buffer长度*/)
 {
 	struct sk_buff *skb;
 
+	//通过head生成skb
 	skb = build_skb(head, buflen);
 	if (!skb)
 		return NULL;
 
+	//跳过headroom长度
 	skb_reserve(skb, headroom);
 	skb_put(skb, len);
 
@@ -426,8 +429,9 @@ static int veth_select_rxq(struct net_device *dev)
 	return smp_processor_id() % dev->real_num_rx_queues;
 }
 
+//将xdp_frame发送到对端设备
 static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目*/,
-			 struct xdp_frame **frames/*待发送报文*/,
+			 struct xdp_frame **frames/*待发送报文数组*/,
 			 u32 flags, bool ndo_xmit)
 {
 	struct veth_priv *rcv_priv, *priv = netdev_priv(dev);
@@ -453,15 +457,18 @@ static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目
 	 * device is up.
 	 */
 	if (!rcu_access_pointer(rq->xdp_prog))
+	    /*此队列没有prog,退出*/
 		goto out;
 
 	max_len = rcv->mtu + rcv->hard_header_len + VLAN_HLEN;
 
+	//加生产者锁，遍历每个frames,将其打上xdp_frame标记，并入队列xdp_ring中
 	spin_lock(&rq->xdp_ring.producer_lock);
 	for (i = 0; i < n; i++) {
 		struct xdp_frame *frame = frames[i];
 		void *ptr = veth_xdp_to_ptr(frame);
 
+		//如果报文长度超限，或者ring存入失败，则丢包
 		if (unlikely(frame->len > max_len ||
 			     __ptr_ring_produce(&rq->xdp_ring, ptr))) {
 			xdp_return_frame_rx_napi(frame);
@@ -470,9 +477,11 @@ static int veth_xdp_xmit(struct net_device *dev, int n/*要发送的报文数目
 	}
 	spin_unlock(&rq->xdp_ring.producer_lock);
 
+	//如有必要，使设备可被调度，使其收包
 	if (flags & XDP_XMIT_FLUSH)
 		__veth_xdp_flush(rq);
 
+	/*记录成功发送的数目*/
 	ret = n - drops;
 	if (ndo_xmit) {
 		u64_stats_update_begin(&rq->stats.syncp);
@@ -487,6 +496,7 @@ out:
 	return ret;
 }
 
+//veth xdp报文发送回调函数
 static int veth_ndo_xdp_xmit(struct net_device *dev, int n,
 			     struct xdp_frame **frames, u32 flags)
 {
@@ -549,12 +559,13 @@ out:
 static int veth_xdp_tx(struct veth_rq *rq, struct xdp_buff *xdp,
 		       struct veth_xdp_tx_bq *bq)
 {
+    //将xdp_buff转换为xdp_frame
 	struct xdp_frame *frame = xdp_convert_buff_to_frame(xdp);
 
 	if (unlikely(!frame))
 		return -EOVERFLOW;
 
-	/*bq中存储了一批报文，已满，将其刷出*/
+	/*bq中存储了一批报文，但已满，将其刷出*/
 	if (unlikely(bq->count == VETH_XDP_TX_BULK_SIZE))
 		veth_xdp_flush_bq(rq, bq);
 
@@ -580,22 +591,27 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 	hard_start -= sizeof(struct xdp_frame);
 
 	rcu_read_lock();
+	/*取rx队列上的xdp程序*/
 	xdp_prog = rcu_dereference(rq->xdp_prog);
 	if (likely(xdp_prog)) {
 		struct xdp_buff xdp;
 		u32 act;
 
+		//将frame转为xdp buffer
 		xdp_convert_frame_to_buff(frame, &xdp);
 		xdp.rxq = &rq->xdp_rxq;
 
+		//运行xdp_prog->bpf_func,取其返回值
 		act = bpf_prog_run_xdp(xdp_prog, &xdp);
 
 		switch (act) {
 		case XDP_PASS:
+		    /*报文需要上送协议栈*/
 			delta = frame->data - xdp.data;
 			len = xdp.data_end - xdp.data;
 			break;
 		case XDP_TX:
+		    //完成报文发送
 			orig_frame = *frame;
 			xdp.rxq->mem = frame->mem;
 			if (unlikely(veth_xdp_tx(rq, &xdp, bq) < 0)) {
@@ -608,6 +624,7 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 			rcu_read_unlock();
 			goto xdp_xmit;
 		case XDP_REDIRECT:
+		    //完成报文重定向
 			orig_frame = *frame;
 			xdp.rxq->mem = frame->mem;
 			if (xdp_do_redirect(rq->dev, &xdp, xdp_prog)) {
@@ -619,20 +636,24 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 			rcu_read_unlock();
 			goto xdp_xmit;
 		default:
+		    /*不支持的返回值*/
 			bpf_warn_invalid_xdp_action(act);
 			/* fall through */
 		case XDP_ABORTED:
 			trace_xdp_exception(rq->dev, xdp_prog, act);
 			/* fall through */
 		case XDP_DROP:
+		    /*要求丢包，执行丢包统计*/
 			stats->xdp_drops++;
 			goto err_xdp;
 		}
 	}
 	rcu_read_unlock();
 
+	//构造对应的skb,使其上送协议栈
+	/*buffer headroom长度*/
 	headroom = sizeof(struct xdp_frame) + frame->headroom - delta;
-	skb = veth_build_skb(hard_start, headroom, len, frame->frame_sz);
+	skb = veth_build_skb(hard_start/*buffer首地址*/, headroom, len, frame->frame_sz);
 	if (!skb) {
 		xdp_return_frame(frame);
 		stats->rx_drops++;
@@ -821,6 +842,7 @@ xdp_xmit:
 	return NULL;
 }
 
+//自xdp_ring中收取报文，并针对单个报文执行xdp程序
 static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct veth_xdp_tx_bq *bq,
 			struct veth_stats *stats)
@@ -835,6 +857,7 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			break;
 
 		if (veth_is_xdp_frame(ptr)) {
+		    //ring中出的是xdp格式报文
 			struct xdp_frame *frame = veth_ptr_to_xdp(ptr);
 
 			stats->xdp_bytes += frame->len;
@@ -881,6 +904,7 @@ static int veth_poll(struct napi_struct *napi, int budget)
 		/* Write rx_notify_masked before reading ptr_ring */
 		smp_store_mb(rq->rx_notify_masked, false);
 		if (unlikely(!__ptr_ring_empty(&rq->xdp_ring))) {
+		    /*xdp_ring不为空，仍需要继续调度*/
 			rq->rx_notify_masked = true;
 			napi_schedule(&rq->xdp_napi);
 		}
@@ -895,11 +919,13 @@ static int veth_poll(struct napi_struct *napi, int budget)
 	return done;
 }
 
+//为每个rq创建xdp_ring并将其加入到napi中
 static int veth_napi_add(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
 	int err, i;
 
+	//为每个rq创建xdp_ring
 	for (i = 0; i < dev->real_num_rx_queues; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
@@ -908,6 +934,7 @@ static int veth_napi_add(struct net_device *dev)
 			goto err_xdp_ring;
 	}
 
+	//将每个队列加入到napi中
 	for (i = 0; i < dev->real_num_rx_queues; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
@@ -945,7 +972,7 @@ static void veth_napi_del(struct net_device *dev)
 	}
 }
 
-//为设备veth开启xdp
+//veth设备开启xdp
 static int veth_enable_xdp(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
@@ -988,6 +1015,7 @@ err_rxq_reg:
 	return err;
 }
 
+//禁止掉veth上的xdp功能
 static void veth_disable_xdp(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
@@ -1167,18 +1195,18 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 			struct netlink_ext_ack *extack)
 {
 	struct veth_priv *priv = netdev_priv(dev);
-	struct bpf_prog *old_prog;
+	struct bpf_prog *old_prog;/*之前设置的旧bpf程序*/
 	struct net_device *peer;
 	unsigned int max_mtu;
 	int err;
 
 	old_prog = priv->_xdp_prog;
-	priv->_xdp_prog = prog;
+	priv->_xdp_prog = prog;//设置当前需生效的bpf程序
 	peer = rtnl_dereference(priv->peer);
 
 	if (prog) {
 		if (!peer) {
-		    /*对端不存在，报错*/
+		    /*对端不存在，不能设置bpf程序，报错*/
 			NL_SET_ERR_MSG_MOD(extack, "Cannot set XDP when peer is detached");
 			err = -ENOTCONN;
 			goto err;
@@ -1188,12 +1216,13 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 			  peer->hard_header_len -
 			  SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
 		if (peer->mtu > max_mtu) {
-		    //对端的mtu大于本端mtu
+		    //对端mtu不得大于bpf程序支持的最大mtu
 			NL_SET_ERR_MSG_MOD(extack, "Peer MTU is too large to set XDP");
 			err = -ERANGE;
 			goto err;
 		}
 
+		//两端生效队列数必须一致
 		if (dev->real_num_rx_queues < peer->real_num_tx_queues) {
 			NL_SET_ERR_MSG_MOD(extack, "XDP expects number of rx queues not less than peer tx queues");
 			err = -ENOSPC;
@@ -1201,7 +1230,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 		}
 
 		if (dev->flags & IFF_UP) {
-		    //设备接口已up,使能XDP
+		    //设备接口已up,则使能XDP
 			err = veth_enable_xdp(dev);
 			if (err) {
 				NL_SET_ERR_MSG_MOD(extack, "Setup for XDP failed");
@@ -1209,6 +1238,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 			}
 		}
 
+		//首次设置，则关闭对端的gso功能，更新max_mtu
 		if (!old_prog) {
 			peer->hw_features &= ~NETIF_F_GSO_SOFTWARE;
 			peer->max_mtu = max_mtu;
@@ -1217,10 +1247,11 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 
 	if (old_prog) {
 		if (!prog) {
-		    /*原来有prog,现在没有了，需要禁用*/
+		    /*原来有prog,现在没有了，需要禁用xdp程序*/
 			if (dev->flags & IFF_UP)
 				veth_disable_xdp(dev);
 
+			//还原gso功能，更新max_mtu
 			if (peer) {
 				peer->hw_features |= NETIF_F_GSO_SOFTWARE;
 				peer->max_mtu = ETH_MAX_MTU;
@@ -1229,6 +1260,7 @@ static int veth_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 		bpf_prog_put(old_prog);
 	}
 
+	//如果首次，或者原来有现在被移除，则更新peer的功能（前面修改了）
 	if ((!!old_prog ^ !!prog) && peer)
 		netdev_update_features(peer);
 
@@ -1260,6 +1292,7 @@ static int veth_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 	    //设置xdp程序
 		return veth_xdp_set(dev, xdp->prog, xdp->extack);
 	case XDP_QUERY_PROG:
+	    /*当前运行在此dev上的xdp程序查询*/
 		xdp->prog_id = veth_xdp_query(dev);
 		return 0;
 	default:

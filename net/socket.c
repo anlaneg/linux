@@ -154,6 +154,7 @@ static const struct file_operations socket_file_ops = {
 	.read_iter =	sock_read_iter,
 	//socket对应fd的写函数
 	.write_iter =	sock_write_iter,
+	//socket对应的poll函数
 	.poll =		sock_poll,
 	.unlocked_ioctl = sock_ioctl,
 #ifdef CONFIG_COMPAT
@@ -417,7 +418,7 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 	if (!dname)
 		dname = sock->sk ? sock->sk->sk_prot_creator->name : "";
 
-	//为socket申请一个假的struct file
+	//为socket申请一个假的struct file，并与其关联
 	file = alloc_file_pseudo(SOCK_INODE(sock), sock_mnt/*socket对应的文件挂载点*/, dname/*dentry对应的名称*/,
 				O_RDWR | (flags & O_NONBLOCK),
 				&socket_file_ops);
@@ -1278,11 +1279,14 @@ out_release:
 EXPORT_SYMBOL(sock_create_lite);
 
 /* No kernel lock held - perfect */
+//socket文件的poll事件检测
 static __poll_t sock_poll(struct file *file, poll_table *wait)
 {
+    //取file对应的socket
 	struct socket *sock = file->private_data;
 	__poll_t events = poll_requested_events(wait), flag = 0;
 
+	//如果sock没有poll回调，则直接返回0
 	if (!sock->ops->poll)
 		return 0;
 
@@ -1295,6 +1299,7 @@ static __poll_t sock_poll(struct file *file, poll_table *wait)
 		flag = POLL_BUSY_LOOP;
 	}
 
+	//调用sock自定义的poll
 	return sock->ops->poll(file, sock, wait) | flag;
 }
 

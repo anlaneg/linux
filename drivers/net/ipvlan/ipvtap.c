@@ -144,6 +144,7 @@ static int ipvtap_device_event(struct notifier_block *unused,
 	int err;
 	char tap_name[IFNAMSIZ];
 
+	//只处理ipvtap设备事件
 	if (dev->rtnl_link_ops != &ipvtap_link_ops)
 		return NOTIFY_DONE;
 
@@ -161,6 +162,7 @@ static int ipvtap_device_event(struct notifier_block *unused,
 			return notifier_from_errno(err);
 
 		devt = MKDEV(MAJOR(ipvtap_major), vlantap->tap.minor);
+		//当ipvtap设备创建时，创建tap%d设备与之关联
 		classdev = device_create(&ipvtap_class, &dev->dev, devt,
 					 dev, tap_name);
 		if (IS_ERR(classdev)) {

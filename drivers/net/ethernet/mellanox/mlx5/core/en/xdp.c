@@ -121,6 +121,7 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 		      u32 *len, struct xdp_buff *xdp)
 {
+    //取此队列对应的xdp程序
 	struct bpf_prog *prog = READ_ONCE(rq->xdp_prog);
 	u32 act;
 	int err;
@@ -132,11 +133,11 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 	act = bpf_prog_run_xdp(prog, xdp);
 	switch (act) {
 	case XDP_PASS:
-	    	//上传协议栈
+	    //上传协议栈
 		*len = xdp->data_end - xdp->data;
 		return false;
 	case XDP_TX:
-	    	//自某个队列发出，不再上传协议栈
+	    //自某个队列发出，不再上传协议栈
 		if (unlikely(!mlx5e_xmit_xdp_buff(rq->xdpsq, rq, di, xdp)))
 			goto xdp_abort;
 		__set_bit(MLX5E_RQ_FLAG_XDP_XMIT, rq->flags); /* non-atomic */

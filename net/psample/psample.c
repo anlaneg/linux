@@ -117,6 +117,7 @@ static struct genl_family psample_nl_family __ro_after_init = {
 	.n_mcgrps	= ARRAY_SIZE(psample_nl_mcgrps),
 };
 
+//psample group事件通知
 static void psample_group_notify(struct psample_group *group,
 				 enum psample_command cmd)
 {
@@ -159,6 +160,7 @@ static void psample_group_destroy(struct psample_group *group)
 	kfree_rcu(group, rcu);
 }
 
+//检查指定group_num的psample_group是否存在
 static struct psample_group *
 psample_group_lookup(struct net *net, u32 group_num)
 {
@@ -170,6 +172,7 @@ psample_group_lookup(struct net *net, u32 group_num)
 	return NULL;
 }
 
+//如果指定psample group不存在，则创建。否则增加引用计数
 struct psample_group *psample_group_get(struct net *net, u32 group_num)
 {
 	struct psample_group *group;
@@ -190,6 +193,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(psample_group_get);
 
+//增加psample group引用计数
 void psample_group_take(struct psample_group *group)
 {
 	spin_lock_bh(&psample_groups_lock);
@@ -198,6 +202,7 @@ void psample_group_take(struct psample_group *group)
 }
 EXPORT_SYMBOL_GPL(psample_group_take);
 
+//减少psample group计数
 void psample_group_put(struct psample_group *group)
 {
 	spin_lock_bh(&psample_groups_lock);
@@ -284,7 +289,8 @@ static int __psample_ip_tun_to_nlattr(struct sk_buff *skb,
 	return 0;
 }
 
-static int psample_ip_tun_to_nlattr(struct sk_buff *skb/*采样的skb*/,
+//向netlink报文中存入tunnel信息
+static int psample_ip_tun_to_nlattr(struct sk_buff *skb/*netlink消息buffer*/,
 			    struct ip_tunnel_info *tun_info)
 {
 	struct nlattr *nla;
@@ -305,6 +311,7 @@ static int psample_ip_tun_to_nlattr(struct sk_buff *skb/*采样的skb*/,
 	return 0;
 }
 
+//计算tunnel信息长度
 static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 {
 	unsigned short tun_proto = ip_tunnel_info_af(tun_info);
@@ -357,8 +364,8 @@ static int psample_tunnel_meta_len(struct ip_tunnel_info *tun_info)
 #endif
 
 void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
-			   u32 trunc_size, int in_ifindex, int out_ifindex,
-			   u32 sample_rate)
+			   u32 trunc_size/*采样长度*/, int in_ifindex/*入接口ifindex*/, int out_ifindex/*出接口ifindex*/,
+			   u32 sample_rate/*采样速率*/)
 {
 #ifdef CONFIG_INET
 	struct ip_tunnel_info *tun_info;
@@ -369,6 +376,7 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 	void *data;
 	int ret;
 
+	//计算采样netlink消息大小
 	meta_len = (in_ifindex ? nla_total_size(sizeof(u16)) : 0) +
 		   (out_ifindex ? nla_total_size(sizeof(u16)) : 0) +
 		   nla_total_size(sizeof(u32)) +	/* sample_rate */
@@ -377,6 +385,7 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 		   nla_total_size(sizeof(u32));		/* seq */
 
 #ifdef CONFIG_INET
+	//skb上有metadata则合并tunnel信息长度
 	tun_info = skb_tunnel_info(skb);
 	if (tun_info)
 		meta_len += psample_tunnel_meta_len(tun_info);
@@ -411,19 +420,22 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 			goto error;
 	}
 
+	//添加rate
 	ret = nla_put_u32(nl_skb, PSAMPLE_ATTR_SAMPLE_RATE, sample_rate);
 	if (unlikely(ret < 0))
 		goto error;
 
+	//添加报文源长度
 	ret = nla_put_u32(nl_skb, PSAMPLE_ATTR_ORIGSIZE, skb->len);
 	if (unlikely(ret < 0))
 		goto error;
 
+	//添加采样group
 	ret = nla_put_u32(nl_skb, PSAMPLE_ATTR_SAMPLE_GROUP, group->group_num);
 	if (unlikely(ret < 0))
 		goto error;
 
-	//填充seq
+	//自增group序号，填充seq
 	ret = nla_put_u32(nl_skb, PSAMPLE_ATTR_GROUP_SEQ, group->seq++);
 	if (unlikely(ret < 0))
 		goto error;
@@ -443,12 +455,14 @@ void psample_sample_packet(struct psample_group *group, struct sk_buff *skb,
 
 #ifdef CONFIG_INET
 	if (tun_info) {
+	    //存入tunnel信息
 		ret = psample_ip_tun_to_nlattr(nl_skb, tun_info);
 		if (unlikely(ret < 0))
 			goto error;
 	}
 #endif
 
+	//报文发送到用户态
 	genlmsg_end(nl_skb, data);
 	genlmsg_multicast_netns(&psample_nl_family, group->net, nl_skb, 0,
 				PSAMPLE_NL_MCGRP_SAMPLE, GFP_ATOMIC);

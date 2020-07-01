@@ -2886,7 +2886,7 @@ static __always_inline void *slab_alloc(struct kmem_cache *s,
 	return slab_alloc_node(s, gfpflags, NUMA_NO_NODE/*使用任意node*/, addr);
 }
 
-//分配一个kmem_cache
+//分配一个obj
 void *kmem_cache_alloc(struct kmem_cache *s, gfp_t gfpflags)
 {
     /*自s中申请obj*/
@@ -3646,7 +3646,7 @@ static int calculate_sizes(struct kmem_cache *s, int forced_order)
 	 * place the free pointer at word boundaries and this determines
 	 * the possible location of the free pointer.
 	 */
-	size = ALIGN(size, sizeof(void *));
+	size = ALIGN(size, sizeof(void *));//使size按(void*)对齐
 	/*
 	 * This is the area of the object where a freepointer can be
 	 * safely written. If redzoning adds more to the inuse size, we

@@ -50,7 +50,7 @@ static DEFINE_SPINLOCK(link_idr_lock);
 
 int sysctl_unprivileged_bpf_disabled __read_mostly;
 
-/*各种bpf map对应的ops*/
+/*定义各种bpf map对应的ops*/
 static const struct bpf_map_ops * const bpf_map_types[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type)
 #define BPF_MAP_TYPE(_id, _ops) \
@@ -96,6 +96,7 @@ const struct bpf_map_ops bpf_map_offload_ops = {
 	.map_check_btf = map_check_no_btf,
 };
 
+/*校验并创建指定type的bpf_map*/
 static struct bpf_map *find_and_alloc_map(union bpf_attr *attr)
 {
 	const struct bpf_map_ops *ops;
@@ -683,6 +684,7 @@ const struct file_operations bpf_map_fops = {
 	.poll		= bpf_map_poll,
 };
 
+/*生成一个file实体，使其与map相关联，返回对应的fd*/
 int bpf_map_new_fd(struct bpf_map *map, int flags)
 {
 	int ret;
@@ -691,11 +693,12 @@ int bpf_map_new_fd(struct bpf_map *map, int flags)
 	if (ret < 0)
 		return ret;
 
-	/*创建此map对应的fd*/
+	/*关联此map*/
 	return anon_inode_getfd("bpf-map", &bpf_map_fops, map,
 				flags | O_CLOEXEC);
 }
 
+/*解析map的flags,默认为read-write模式*/
 int bpf_get_file_flag(int flags)
 {
 	if ((flags & BPF_F_RDONLY) && (flags & BPF_F_WRONLY))
@@ -821,6 +824,7 @@ static int map_create(union bpf_attr *attr)
 	if (f_flags < 0)
 		return f_flags;
 
+	//校验numa node是否有效
 	if (numa_node != NUMA_NO_NODE &&
 	    ((unsigned int)numa_node >= nr_node_ids ||
 	     !node_online(numa_node)))
@@ -831,7 +835,7 @@ static int map_create(union bpf_attr *attr)
 	if (IS_ERR(map))
 		return PTR_ERR(map);
 
-	//设置map名称等
+	//设置map名称
 	err = bpf_obj_name_cpy(map->name, attr->map_name,
 			       sizeof(attr->map_name));
 	if (err < 0)
@@ -876,10 +880,12 @@ static int map_create(union bpf_attr *attr)
 	if (err)
 		goto free_map;
 
+	//为map申请id
 	err = bpf_map_alloc_id(map);
 	if (err)
 		goto free_map_sec;
 
+	//为map关联一个file并返回其对应的fd
 	err = bpf_map_new_fd(map, f_flags);
 	if (err < 0) {
 		/* failed to allocate fd.
@@ -1586,6 +1592,7 @@ static const struct bpf_prog_ops * const bpf_prog_types[] = {
 #undef BPF_LINK_TYPE
 };
 
+//通过bpf_prog type查找对应的ops,并记录此ops
 static int find_prog_type(enum bpf_prog_type type, struct bpf_prog *prog)
 {
 	const struct bpf_prog_ops *ops;
@@ -1680,6 +1687,7 @@ static void bpf_prog_uncharge_memlock(struct bpf_prog *prog)
 	free_uid(user);
 }
 
+/*为bpf程序申请id号*/
 static int bpf_prog_alloc_id(struct bpf_prog *prog)
 {
 	int id;
@@ -1822,6 +1830,7 @@ static void bpf_prog_show_fdinfo(struct seq_file *m, struct file *filp)
 }
 #endif
 
+/*bpf程序的file operations*/
 const struct file_operations bpf_prog_fops = {
 #ifdef CONFIG_PROC_FS
 	.show_fdinfo	= bpf_prog_show_fdinfo,
@@ -1831,6 +1840,7 @@ const struct file_operations bpf_prog_fops = {
 	.write		= bpf_dummy_write,
 };
 
+/*生成一个file实体，使其与prog相关联，返回对应的fd*/
 int bpf_prog_new_fd(struct bpf_prog *prog)
 {
 	int ret;
@@ -2095,12 +2105,13 @@ static bool is_perfmon_prog_type(enum bpf_prog_type prog_type)
 /* last field in 'union bpf_attr' used by this command */
 #define	BPF_PROG_LOAD_LAST_FIELD attach_prog_fd
 
+//加载bpf代码段
 static int bpf_prog_load(union bpf_attr *attr, union bpf_attr __user *uattr)
 {
 	enum bpf_prog_type type = attr->prog_type;
 	struct bpf_prog *prog;
 	int err;
-	char license[128];
+	char license[128];/*许可证*/
 	bool is_gpl;
 
 	if (CHECK_ATTR(BPF_PROG_LOAD))
@@ -2236,6 +2247,7 @@ static int bpf_prog_load(union bpf_attr *attr, union bpf_attr __user *uattr)
 	perf_event_bpf_event(prog, PERF_BPF_EVENT_PROG_LOAD, 0);
 	bpf_audit_prog(prog, BPF_AUDIT_LOAD);
 
+	/*为此prog关联一个file,并返回其对应的fd*/
 	err = bpf_prog_new_fd(prog);
 	if (err < 0)
 		bpf_prog_put(prog);
@@ -2269,6 +2281,7 @@ static int bpf_obj_pin(const union bpf_attr *attr)
 
 static int bpf_obj_get(const union bpf_attr *attr)
 {
+    //参数校验
 	if (CHECK_ATTR(BPF_OBJ) || attr->bpf_fd != 0 ||
 	    attr->file_flags & ~BPF_OBJ_FLAG_MASK)
 		return -EINVAL;
@@ -2471,8 +2484,10 @@ int bpf_link_settle(struct bpf_link_primer *primer)
 	return primer->fd;
 }
 
+/*生成一个file实体，使其与link相关联，返回对应的fd*/
 int bpf_link_new_fd(struct bpf_link *link)
 {
+    //关联link
 	return anon_inode_getfd("bpf-link", &bpf_link_fops, link, O_CLOEXEC);
 }
 
@@ -4135,6 +4150,7 @@ SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, siz
 		err = bpf_obj_pin(&attr);
 		break;
 	case BPF_OBJ_GET:
+	    /*通过路径名称获取对应obj的关联fd*/
 		err = bpf_obj_get(&attr);
 		break;
 	case BPF_PROG_ATTACH:

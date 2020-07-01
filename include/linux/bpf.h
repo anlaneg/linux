@@ -40,7 +40,7 @@ extern spinlock_t btf_idr_lock;
 /* map is generic key/value storage optionally accesible by eBPF programs */
 struct bpf_map_ops {
 	/* funcs callable from userspace (via syscall) */
-    //map_alloc申请前check，参数attr校验
+    //map alloc申请前check，参数attr校验
 	int (*map_alloc_check)(union bpf_attr *attr);
 	//map空间申请，初始化
 	struct bpf_map *(*map_alloc)(union bpf_attr *attr);
@@ -122,6 +122,7 @@ struct bpf_map {
 	u32 map_flags;
 	int spin_lock_off; /* >=0 valid offset, <0 error */
 	u32 id;//map的编号
+	//map关联的numa node
 	int numa_node;
 	u32 btf_key_type_id;
 	u32 btf_value_type_id;
@@ -581,6 +582,7 @@ void bpf_trampoline_put(struct bpf_trampoline *tr);
 	},							\
 }
 
+/*定义bpf dispatcher_func函数，使其直接调用参数3 bpf_func*/
 #define DEFINE_BPF_DISPATCHER(name)					\
 	noinline unsigned int bpf_dispatcher_##name##_func(		\
 		const void *ctx,					\
@@ -600,6 +602,7 @@ void bpf_trampoline_put(struct bpf_trampoline *tr);
 		unsigned int (*bpf_func)(const void *,			\
 					 const struct bpf_insn *));	\
 	extern struct bpf_dispatcher bpf_dispatcher_##name;
+/*bpf dispatcher_func函数名称*/
 #define BPF_DISPATCHER_FUNC(name) bpf_dispatcher_##name##_func
 #define BPF_DISPATCHER_PTR(name) (&bpf_dispatcher_##name)
 void bpf_dispatcher_change_prog(struct bpf_dispatcher *d, struct bpf_prog *from,
@@ -673,7 +676,7 @@ struct bpf_prog_aux {
 	u32 max_pkt_offset;
 	u32 max_tp_access;
 	u32 stack_depth;
-	u32 id;
+	u32 id;/*bpf prog对应的id号*/
 	u32 func_cnt; /* used by non-func prog as the number of func progs */
 	u32 func_idx; /* 0 for non-func prog, the index in func array for func prog */
 	u32 attach_btf_id; /* in-kernel BTF type id to attach to */
@@ -696,12 +699,15 @@ struct bpf_prog_aux {
 	struct bpf_jit_poke_descriptor *poke_tab;
 	u32 size_poke_tab;
 	struct bpf_ksym ksym;
+	//此类型bpf prog对应的操作函数，看函数find_prog_type
 	const struct bpf_prog_ops *ops;
 	struct bpf_map **used_maps;
+	//指向对应的bpf程序
 	struct bpf_prog *prog;
 	struct user_struct *user;
 	u64 load_time; /* ns since boottime */
 	struct bpf_map *cgroup_storage[MAX_BPF_CGROUP_STORAGE_TYPE];
+	//prog 名称
 	char name[BPF_OBJ_NAME_LEN];
 #ifdef CONFIG_SECURITY
 	void *security;
@@ -734,6 +740,7 @@ struct bpf_prog_aux {
 	u32 linfo_idx;
 	u32 num_exentries;
 	struct exception_table_entry *extable;
+	//指向per cpu的统计信息
 	struct bpf_prog_stats __percpu *stats;
 	union {
 		struct work_struct work;
@@ -1269,6 +1276,7 @@ int cpu_map_enqueue(struct bpf_cpu_map_entry *rcpu, struct xdp_buff *xdp,
 /* Return map's numa specified by userspace */
 static inline int bpf_map_attr_numa_node(const union bpf_attr *attr)
 {
+    //如果指定了numa,返回用户态指定的numa node
 	return (attr->map_flags & BPF_F_NUMA_NODE) ?
 		attr->numa_node : NUMA_NO_NODE;
 }

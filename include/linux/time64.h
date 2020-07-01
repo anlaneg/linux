@@ -86,6 +86,7 @@ static inline struct timespec64 timespec64_sub(struct timespec64 lhs,
  */
 static inline bool timespec64_valid(const struct timespec64 *ts)
 {
+    //检查ts中的值是否合法
 	/* Dates before 1970 are bogus */
 	if (ts->tv_sec < 0)
 		return false;

@@ -142,8 +142,9 @@ static struct tap_dev *tap_dev_get_rcu(const struct net_device *dev)
  */
 
 static int tap_enable_queue(struct tap_dev *tap, struct file *file,
-			    struct tap_queue *q)
+			    struct tap_queue *q/*要添加的队列*/)
 {
+    //为tap设备设置队列
 	int err = -EINVAL;
 
 	ASSERT_RTNL();
@@ -270,10 +271,12 @@ static struct tap_queue *tap_get_queue(struct tap_dev *tap,
 	/* Check if we can use flow to select a queue */
 	rxq = skb_get_hash(skb);
 	if (rxq) {
+	    /*通过skb的hash选中使用哪个队列*/
 		queue = rcu_dereference(tap->taps[rxq % numvtaps]);
 		goto out;
 	}
 
+	//如果skb已对应的队列，则使用相应队列
 	if (likely(skb_rx_queue_recorded(skb))) {
 		rxq = skb_get_rx_queue(skb);
 
@@ -285,6 +288,7 @@ static struct tap_queue *tap_get_queue(struct tap_dev *tap,
 	}
 
 single:
+    //使用默认队列
 	queue = rcu_dereference(tap->taps[0]);
 out:
 	return queue;
@@ -324,14 +328,17 @@ rx_handler_result_t tap_handle_frame(struct sk_buff **pskb)
 	struct tap_queue *q;
 	netdev_features_t features = TAP_FEATURES;
 
+	//取对应的tap设备
 	tap = tap_dev_get_rcu(dev);
 	if (!tap)
 		return RX_HANDLER_PASS;
 
+	//采用首个skb选中一个队列
 	q = tap_get_queue(tap, skb);
 	if (!q)
 		return RX_HANDLER_PASS;
 
+	//使data指向以太头
 	skb_push(skb, ETH_HLEN);
 
 	/* Apply the forward feature mask so that we perform segmentation
@@ -354,8 +361,10 @@ rx_handler_result_t tap_handle_frame(struct sk_buff **pskb)
 		}
 
 		consume_skb(skb);
+		//遍历segs上所有skb，将其入队到q->ring
 		skb_list_walk_safe(segs, skb, next) {
 			skb_mark_not_on_list(skb);
+			//将skb入队
 			if (ptr_ring_produce(&q->ring, skb)) {
 				kfree_skb(skb);
 				kfree_skb_list(next);

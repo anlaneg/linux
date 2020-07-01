@@ -563,6 +563,7 @@ static size_t rtnl_link_get_size(const struct net_device *dev)
 
 static LIST_HEAD(rtnl_af_ops);
 
+/*查询指定family对应的rtnl_af_ops*/
 static const struct rtnl_af_ops *rtnl_af_lookup(const int family)
 {
 	const struct rtnl_af_ops *ops;
@@ -584,6 +585,7 @@ static const struct rtnl_af_ops *rtnl_af_lookup(const int family)
 void rtnl_af_register(struct rtnl_af_ops *ops)
 {
 	rtnl_lock();
+	/*新增一种af_ops*/
 	list_add_tail_rcu(&ops->list, &rtnl_af_ops);
 	rtnl_unlock();
 }
@@ -2146,6 +2148,7 @@ int rtnl_nla_parse_ifla(struct nlattr **tb, const struct nlattr *head, int len,
 }
 EXPORT_SYMBOL(rtnl_nla_parse_ifla);
 
+//通过pid,ns_fd获取对应的net namespace
 struct net *rtnl_link_get_net(struct net *src_net, struct nlattr *tb[])
 {
 	struct net *net;
@@ -2157,6 +2160,7 @@ struct net *rtnl_link_get_net(struct net *src_net, struct nlattr *tb[])
 	else if (tb[IFLA_NET_NS_FD])
 		net = get_net_ns_by_fd(nla_get_u32(tb[IFLA_NET_NS_FD]));
 	else
+	    /*如无配置，则返回源net namespace*/
 		net = get_net(src_net);
 	return net;
 }
@@ -2177,9 +2181,11 @@ static struct net *rtnl_link_get_net_by_nlattr(struct net *src_net,
 	if (tb[IFLA_NET_NS_PID] || tb[IFLA_NET_NS_FD])
 		return rtnl_link_get_net(src_net, tb);
 
+	//如未配置target_netnsid,则返回源
 	if (!tb[IFLA_TARGET_NETNSID])
 		return get_net(src_net);
 
+	//通过target_netnsid找对端netns
 	net = get_net_ns_by_id(src_net, nla_get_u32(tb[IFLA_TARGET_NETNSID]));
 	if (!net)
 		return ERR_PTR(-EINVAL);
@@ -2188,7 +2194,7 @@ static struct net *rtnl_link_get_net_by_nlattr(struct net *src_net,
 }
 
 static struct net *rtnl_link_get_net_capable(const struct sk_buff *skb,
-					     struct net *src_net,
+					     struct net *src_net/*dev当前所处的net namespace*/,
 					     struct nlattr *tb[], int cap)
 {
 	struct net *net;
@@ -2237,10 +2243,11 @@ invalid_attr:
 	return -EINVAL;
 }
 
+/*针对dev校验设备配置*/
 static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 {
 	if (dev) {
-		//设备地址
+		//设备地址不得小于dev->addr_len
 		if (tb[IFLA_ADDRESS] &&
 		    nla_len(tb[IFLA_ADDRESS]) < dev->addr_len)
 			return -EINVAL;
@@ -2252,6 +2259,7 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 	}
 
 	if (tb[IFLA_AF_SPEC]) {
+	    /*处理af独有的属性*/
 		struct nlattr *af;
 		int rem, err;
 
@@ -2261,16 +2269,19 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 			rcu_read_lock();
 			af_ops = rtnl_af_lookup(nla_type(af));
 			if (!af_ops) {
+			    /*遇到不支持的af*/
 				rcu_read_unlock();
 				return -EAFNOSUPPORT;
 			}
 
 			if (!af_ops->set_link_af) {
+			    /*此af必须实现了set_link回调*/
 				rcu_read_unlock();
 				return -EOPNOTSUPP;
 			}
 
 			if (af_ops->validate_link_af) {
+			    /*校验af独有的配置*/
 				err = af_ops->validate_link_af(dev, af);
 				if (err < 0) {
 					rcu_read_unlock();
@@ -2516,19 +2527,22 @@ static int do_set_master(struct net_device *dev, int ifindex,
 #define DO_SETLINK_MODIFIED	0x01
 /* notify flag means notify + modified. */
 #define DO_SETLINK_NOTIFY	0x03
+/*设置link配置*/
 static int do_setlink(const struct sk_buff *skb,
-		      struct net_device *dev, struct ifinfomsg *ifm,
+		      struct net_device *dev/*要设置的dev*/, struct ifinfomsg *ifm,
 		      struct netlink_ext_ack *extack,
-		      struct nlattr **tb, char *ifname, int status)
+		      struct nlattr **tb, char *ifname/*设备对应的名称*/, int status)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int err;
 
+	//配置校验
 	err = validate_linkmsg(dev, tb);
 	if (err < 0)
 		return err;
 
 	if (tb[IFLA_NET_NS_PID] || tb[IFLA_NET_NS_FD] || tb[IFLA_TARGET_NETNSID]) {
+	    //确定net namespace
 		struct net *net = rtnl_link_get_net_capable(skb, dev_net(dev),
 							    tb, CAP_NET_ADMIN);
 		if (IS_ERR(net)) {
@@ -2536,6 +2550,7 @@ static int do_setlink(const struct sk_buff *skb,
 			goto errout;
 		}
 
+		//将dev切换到新的net namespace
 		err = dev_change_net_namespace(dev, net, ifname);
 		put_net(net);
 		if (err)
@@ -2547,6 +2562,7 @@ static int do_setlink(const struct sk_buff *skb,
 		struct rtnl_link_ifmap *u_map;
 		struct ifmap k_map;
 
+		/*必须支持ndo_set_config回调来处理、*/
 		if (!ops->ndo_set_config) {
 			err = -EOPNOTSUPP;
 			goto errout;
@@ -2557,6 +2573,7 @@ static int do_setlink(const struct sk_buff *skb,
 			goto errout;
 		}
 
+		/*自配置中取参数并调用ndo_set_config进行处理*/
 		u_map = nla_data(tb[IFLA_MAP]);
 		k_map.mem_start = (unsigned long) u_map->mem_start;
 		k_map.mem_end = (unsigned long) u_map->mem_end;
@@ -2586,6 +2603,7 @@ static int do_setlink(const struct sk_buff *skb,
 		sa->sa_family = dev->type;
 		memcpy(sa->sa_data, nla_data(tb[IFLA_ADDRESS]),
 		       dev->addr_len);
+		//设置设备mac地址
 		err = dev_set_mac_address(dev, sa, extack);
 		kfree(sa);
 		if (err)
@@ -2594,6 +2612,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_MTU]) {
+	    /*变更设备mtu*/
 		err = dev_set_mtu_ext(dev, nla_get_u32(tb[IFLA_MTU]), extack);
 		if (err < 0)
 			goto errout;
@@ -2611,6 +2630,7 @@ static int do_setlink(const struct sk_buff *skb,
 	 * requested.
 	 */
 	if (ifm->ifi_index > 0 && ifname[0]) {
+	    /*变更接口名称*/
 		err = dev_change_name(dev, ifname);
 		if (err < 0)
 			goto errout;
@@ -2618,6 +2638,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_IFALIAS]) {
+	    /*设置接口别名*/
 		err = dev_set_alias(dev, nla_data(tb[IFLA_IFALIAS]),
 				    nla_len(tb[IFLA_IFALIAS]));
 		if (err < 0)
@@ -2626,6 +2647,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_BROADCAST]) {
+	    /*更新设备广播地址*/
 		nla_memcpy(dev->broadcast, tb[IFLA_BROADCAST], dev->addr_len);
 		call_netdevice_notifiers(NETDEV_CHANGEADDR, dev);
 	}
@@ -2779,6 +2801,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_AF_SPEC]) {
+	    /*设置af相关的配置*/
 		struct nlattr *af;
 		int rem;
 
@@ -2789,6 +2812,7 @@ static int do_setlink(const struct sk_buff *skb,
 
 			BUG_ON(!(af_ops = rtnl_af_lookup(nla_type(af))));
 
+			//执行af对应的配置设置
 			err = af_ops->set_link_af(dev, af);
 			if (err < 0) {
 				rcu_read_unlock();
@@ -2810,6 +2834,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_XDP]) {
+	    /*更新挂接在网络设备上的xdp程序*/
 		struct nlattr *xdp[IFLA_XDP_MAX + 1];
 		u32 xdp_flags = 0;
 
@@ -2819,6 +2844,7 @@ static int do_setlink(const struct sk_buff *skb,
 		if (err < 0)
 			goto errout;
 
+		/*不容许以上两种id被设置*/
 		if (xdp[IFLA_XDP_ATTACHED] || xdp[IFLA_XDP_PROG_ID]) {
 			err = -EINVAL;
 			goto errout;
@@ -2827,6 +2853,7 @@ static int do_setlink(const struct sk_buff *skb,
 		if (xdp[IFLA_XDP_FLAGS]) {
 			xdp_flags = nla_get_u32(xdp[IFLA_XDP_FLAGS]);
 			if (xdp_flags & ~XDP_FLAGS_MASK) {
+			    /*遇到当前不支持的flags,报错*/
 				err = -EINVAL;
 				goto errout;
 			}
@@ -2836,7 +2863,7 @@ static int do_setlink(const struct sk_buff *skb,
 			}
 		}
 
-		/*用户为link指定的XDP bpf程序的fd*/
+		/*用户为link指定的XDP bpf程序对应的fd*/
 		if (xdp[IFLA_XDP_FD]) {
 			int expected_fd = -1;
 
@@ -2874,7 +2901,7 @@ errout:
 
 static struct net_device *rtnl_dev_get(struct net *net,
 				       struct nlattr *ifname_attr,
-				       struct nlattr *altifname_attr,
+				       struct nlattr *altifname_attr/*支持更大的ifname长度*/,
 				       char *ifname)
 {
 	char buffer[ALTIFNAMSIZ];
@@ -2882,8 +2909,10 @@ static struct net_device *rtnl_dev_get(struct net *net,
 	if (!ifname) {
 		ifname = buffer;
 		if (ifname_attr)
+		    /*自ifname_attr中取ifname*/
 			nla_strlcpy(ifname, ifname_attr, IFNAMSIZ);
 		else if (altifname_attr)
+		    /*自altifname_attr中提取ifname*/
 			nla_strlcpy(ifname, altifname_attr, ALTIFNAMSIZ);
 		else
 			return NULL;
@@ -2892,6 +2921,7 @@ static struct net_device *rtnl_dev_get(struct net *net,
 	return __dev_get_by_name(net, ifname);
 }
 
+//处理link配置的netlink消息处理
 static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
@@ -2911,6 +2941,7 @@ static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		goto errout;
 
+	//如果指定ifname，则填充；否则置为空串
 	if (tb[IFLA_IFNAME])
 		nla_strlcpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
@@ -2918,6 +2949,7 @@ static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	err = -EINVAL;
 	ifm = nlmsg_data(nlh);
+	/*如果指定ifindex，则通过ifindex查找dev;否则用名称确定dev*/
 	if (ifm->ifi_index > 0)
 		dev = __dev_get_by_index(net, ifm->ifi_index);
 	else if (tb[IFLA_IFNAME] || tb[IFLA_ALT_IFNAME])
@@ -2930,6 +2962,7 @@ static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout;
 	}
 
+	/*实现link配置*/
 	err = do_setlink(skb, dev, ifm, extack, tb, ifname, 0);
 errout:
 	return err;

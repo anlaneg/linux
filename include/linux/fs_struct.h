@@ -32,7 +32,8 @@ static inline void get_fs_root(struct fs_struct *fs, struct path *root)
 	spin_unlock(&fs->lock);
 }
 
-static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd)
+//取当前进程工作路径
+static inline void get_fs_pwd(struct fs_struct *fs, struct path *pwd/*出参，当前工作路径*/)
 {
 	spin_lock(&fs->lock);
 	*pwd = fs->pwd;

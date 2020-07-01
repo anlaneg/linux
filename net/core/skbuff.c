@@ -1942,7 +1942,7 @@ EXPORT_SYMBOL(skb_push);
  */
 void *skb_pull(struct sk_buff *skb, unsigned int len)
 {
-	//跳data指针，跳过已解析的报文
+	//使data指针增加len，跳过已解析的报文
 	return skb_pull_inline(skb, len);
 }
 EXPORT_SYMBOL(skb_pull);

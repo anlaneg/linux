@@ -30,6 +30,7 @@
 struct ptr_ring {
 	//生产者可存放的位置
 	int producer ____cacheline_aligned_in_smp;
+	//生产者锁
 	spinlock_t producer_lock;
 	//消费者可读取的首位置
 	int consumer_head ____cacheline_aligned_in_smp; /* next valid entry */
@@ -132,6 +133,7 @@ static inline int ptr_ring_produce(struct ptr_ring *r, void *ptr)
 	int ret;
 
 	spin_lock(&r->producer_lock);
+	//将ptr入队
 	ret = __ptr_ring_produce(r, ptr);
 	spin_unlock(&r->producer_lock);
 

@@ -55,8 +55,8 @@ struct xdp_mem_info {
 struct page_pool;
 
 struct xdp_rxq_info {
-	struct net_device *dev;
-	u32 queue_index;
+	struct net_device *dev;/*所属设备*/
+	u32 queue_index;/*队列索引*/
 	u32 reg_state;
 	struct xdp_mem_info mem;
 } ____cacheline_aligned; /* perf critical, avoid false-sharing */
@@ -69,9 +69,10 @@ struct xdp_buff {
 	void *data;/*指向报文起始位置*/
 	void *data_end;/*指向报文结尾位置*/
 	void *data_meta;/*如果驱动不支持data_meta，则指向data+1,否则指向data_meta*/
-	void *data_hard_start;//buffer的起始位置
+	void *data_hard_start;//buffer的起始位置(其后跟xdp_frame结构+headroom为xdp_frame data)
 	/*所属的接收队列信息*/
 	struct xdp_rxq_info *rxq;
+	/*所属的发送队列信息*/
 	struct xdp_txq_info *txq;
 	u32 frame_sz; /* frame size to deduce data_hard_end/reserved tailroom*/
 };
@@ -87,11 +88,11 @@ struct xdp_buff {
 	 SKB_DATA_ALIGN(sizeof(struct skb_shared_info)))
 
 struct xdp_frame {
-	void *data;
-	u16 len;
-	u16 headroom;
+	void *data;/*指向报文起始位置*/
+	u16 len;/*报文长度*/
+	u16 headroom;/*报文headroom大小，在data之前*/
 	u32 metasize:8;
-	u32 frame_sz:24;
+	u32 frame_sz:24;/*buffer大小*/
 	/* Lifetime of xdp_rxq_info is limited to NAPI/enqueue time,
 	 * while mem info is valid on remote CPU.
 	 */
@@ -112,6 +113,7 @@ void xdp_warn(const char *msg, const char *func, const int line);
 
 struct xdp_frame *xdp_convert_zc_to_xdp_frame(struct xdp_buff *xdp);
 
+//将xdp_frame转换为xdp_buff
 static inline
 void xdp_convert_frame_to_buff(struct xdp_frame *frame, struct xdp_buff *xdp)
 {
@@ -122,7 +124,9 @@ void xdp_convert_frame_to_buff(struct xdp_frame *frame, struct xdp_buff *xdp)
 	xdp->frame_sz = frame->frame_sz;
 }
 
-/* Convert xdp_buff to xdp_frame */
+/* Convert xdp_buff to xdp_frame
+ * 报文转换为xdp_frame
+ */
 static inline
 struct xdp_frame *xdp_convert_buff_to_frame(struct xdp_buff *xdp)
 {
@@ -146,6 +150,7 @@ struct xdp_frame *xdp_convert_buff_to_frame(struct xdp_buff *xdp)
 		return NULL;
 	}
 
+	//在xdp-buffer中直接初始化xdp_frame
 	/* Store info in top of packet */
 	xdp_frame = xdp->data_hard_start;
 

@@ -76,17 +76,20 @@ void *bpf_internal_load_pointer_neg_helper(const struct sk_buff *skb, int k, uns
 	return NULL;
 }
 
+//申请bpf_pprog
 struct bpf_prog *bpf_prog_alloc_no_stats(unsigned int size, gfp_t gfp_extra_flags)
 {
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO | gfp_extra_flags;
 	struct bpf_prog_aux *aux;
 	struct bpf_prog *fp;
 
+	/*申请fp空间*/
 	size = round_up(size, PAGE_SIZE);
 	fp = __vmalloc(size, gfp_flags);
 	if (fp == NULL)
 		return NULL;
 
+	//申请辅助变量
 	aux = kzalloc(sizeof(*aux), GFP_KERNEL | gfp_extra_flags);
 	if (aux == NULL) {
 		vfree(fp);
@@ -103,7 +106,8 @@ struct bpf_prog *bpf_prog_alloc_no_stats(unsigned int size, gfp_t gfp_extra_flag
 	return fp;
 }
 
-struct bpf_prog *bpf_prog_alloc(unsigned int size, gfp_t gfp_extra_flags)
+//初始化bpf_prog
+struct bpf_prog *bpf_prog_alloc(unsigned int size/*内存大小*/, gfp_t gfp_extra_flags)
 {
 	gfp_t gfp_flags = GFP_KERNEL | __GFP_ZERO | gfp_extra_flags;
 	struct bpf_prog *prog;
@@ -1366,14 +1370,17 @@ u64 __weak bpf_probe_read_kernel(void *dst, u32 size, const void *unsafe_ptr)
  *
  * Decode and execute eBPF instructions.
  */
-static u64 __no_fgcse ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct bpf_insn *insn/*待运行指令*/, u64 *stack/*栈底指针*/)
+static u64 __no_fgcse ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct bpf_insn *insn/*当前待运行指令*/, u64 *stack/*栈底指针*/)
 {
 //定义二元操作符的goto lable
 #define BPF_INSN_2_LBL(x, y)    [BPF_##x | BPF_##y] = &&x##_##y
+
 //定义三元操作符的goto label
 #define BPF_INSN_3_LBL(x, y, z) [BPF_##x | BPF_##y | BPF_##z] = &&x##_##y##_##z
+
+    //定义所有跳转位置
 	static const void * const jumptable[256] __annotate_jump_table = {
-	        //先将数组指向default_label
+	    //先将数组指向default_label
 		[0 ... 255] = &&default_label,
 		//再重写数组的goto lable
 		/* Now overwrite non-defaults ... */
@@ -1396,7 +1403,7 @@ static u64 __no_fgcse ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct
 
 	//每条指令的入口点
 select_insn:
-	goto *jumptable[insn->code];
+	goto *jumptable[insn->code];//跳到指令要求的位置
 
 	/* ALU */
 #define ALU(OPCODE, OP)			\
@@ -1413,7 +1420,7 @@ select_insn:
 		DST = (u32) DST OP (u32) IMM;	\
 		CONT;
 
-	//定义可跳转的ALU点
+	//定义可跳转的ALU点（加减乘与或...)
 	ALU(ADD,  +)
 	ALU(SUB,  -)
 	ALU(AND,  &)
@@ -1423,13 +1430,13 @@ select_insn:
 	ALU(XOR,  ^)
 	ALU(MUL,  *)
 #undef ALU
-	ALU_NEG:
+	ALU_NEG://取负
 		DST = (u32) -DST;
 		CONT;
 	ALU64_NEG:
 		DST = -DST;
 		CONT;
-	ALU_MOV_X:
+	ALU_MOV_X://装载
 		DST = (u32) SRC;
 		CONT;
 	ALU_MOV_K:
@@ -1441,11 +1448,11 @@ select_insn:
 	ALU64_MOV_K:
 		DST = IMM;
 		CONT;
-	LD_IMM_DW:
+	LD_IMM_DW://构造64位立即数
 		DST = (u64) (u32) insn[0].imm | ((u64) (u32) insn[1].imm) << 32;
 		insn++;
 		CONT;
-	ALU_ARSH_X:
+	ALU_ARSH_X://右移src
 		DST = (u64) (u32) (((s32) DST) >> SRC);
 		CONT;
 	ALU_ARSH_K:
@@ -1458,6 +1465,7 @@ select_insn:
 		(*(s64 *) &DST) >>= IMM;
 		CONT;
 	ALU64_MOD_X:
+	    //取余
 		div64_u64_rem(DST, SRC, &AX);
 		DST = AX;
 		CONT;
@@ -1474,6 +1482,7 @@ select_insn:
 		DST = do_div(AX, (u32) IMM);
 		CONT;
 	ALU64_DIV_X:
+	    //整除
 		DST = div64_u64(DST, SRC);
 		CONT;
 	ALU_DIV_X:
@@ -1490,6 +1499,7 @@ select_insn:
 		DST = (u32) AX;
 		CONT;
 	ALU_END_TO_BE:
+	    //转大端
 		switch (IMM) {
 		case 16:
 			DST = (__force u16) cpu_to_be16(DST);
@@ -1503,6 +1513,7 @@ select_insn:
 		}
 		CONT;
 	ALU_END_TO_LE:
+	    //转小端
 		switch (IMM) {
 		case 16:
 			DST = (__force u16) cpu_to_le16(DST);
@@ -1528,7 +1539,7 @@ select_insn:
 		CONT;
 
 	JMP_CALL_ARGS:
-	    //可传入下一条指针
+	    //调用多参数的，外部函数（传入下一跳地址）
 		BPF_R0 = (__bpf_call_base_args + insn->imm)(BPF_R1, BPF_R2,
 							    BPF_R3, BPF_R4,
 							    BPF_R5,
@@ -1656,6 +1667,7 @@ out:
 		return 0;
 }
 
+//定义不同栈大小的__bpf_prog_run的函数名称
 #define PROG_NAME(stack_size) __bpf_prog_run##stack_size
 /*定义不同栈大小的bpf运行函数*/
 #define DEFINE_BPF_PROG_RUN(stack_size) \
@@ -1674,12 +1686,15 @@ static unsigned int PROG_NAME(stack_size)(const void *ctx, const struct bpf_insn
 	return ___bpf_prog_run(regs, insn, stack); \
 }
 
+//定义不同栈长度的__bpf_prog_run_args函数（FP指向栈底）
 #define PROG_NAME_ARGS(stack_size) __bpf_prog_run_args##stack_size
 #define DEFINE_BPF_PROG_RUN_ARGS(stack_size) \
 static u64 PROG_NAME_ARGS(stack_size)(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5, \
-				      const struct bpf_insn *insn) \
+				      const struct bpf_insn *insn/*首条指令*/) \
 { \
+	/*按指定大小定义栈*/\
 	u64 stack[stack_size / sizeof(u64)]; \
+	/*定义各寄存器*/\
 	u64 regs[MAX_BPF_EXT_REG]; \
 \
     /*指向栈底，分别给参数寄存器赋值，r1,r2,r3,r4,r5*/\
@@ -1700,16 +1715,19 @@ static u64 PROG_NAME_ARGS(stack_size)(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5, \
 #define EVAL5(FN, X, Y...) FN(X) EVAL4(FN, Y)
 #define EVAL6(FN, X, Y...) FN(X) EVAL5(FN, Y)
 
+//定义各种栈长度对应的bpf运行函数__bpf_prog_run
 EVAL6(DEFINE_BPF_PROG_RUN, 32, 64, 96, 128, 160, 192);
 EVAL6(DEFINE_BPF_PROG_RUN, 224, 256, 288, 320, 352, 384);
 EVAL4(DEFINE_BPF_PROG_RUN, 416, 448, 480, 512);
 
+//定义各种栈长度对应的bpf运行函数__bpf_prog_run_args
 EVAL6(DEFINE_BPF_PROG_RUN_ARGS, 32, 64, 96, 128, 160, 192);
 EVAL6(DEFINE_BPF_PROG_RUN_ARGS, 224, 256, 288, 320, 352, 384);
 EVAL4(DEFINE_BPF_PROG_RUN_ARGS, 416, 448, 480, 512);
 
 #define PROG_NAME_LIST(stack_size) PROG_NAME(stack_size),
 
+//各种栈长度对应的bpf运行函数__bpf_prog_run数组
 static unsigned int (*interpreters[])(const void *ctx,
 				      const struct bpf_insn *insn) = {
 EVAL6(PROG_NAME_LIST, 32, 64, 96, 128, 160, 192)
@@ -1718,6 +1736,8 @@ EVAL4(PROG_NAME_LIST, 416, 448, 480, 512)
 };
 #undef PROG_NAME_LIST
 #define PROG_NAME_LIST(stack_size) PROG_NAME_ARGS(stack_size),
+
+//各种栈长度对应的bpf运行函数__bpf_prog_run_args数组
 static u64 (*interpreters_args[])(u64 r1, u64 r2, u64 r3, u64 r4, u64 r5,
 				  const struct bpf_insn *insn) = {
 EVAL6(PROG_NAME_LIST, 32, 64, 96, 128, 160, 192)
@@ -1786,11 +1806,13 @@ static int bpf_check_tail_call(const struct bpf_prog *fp)
 	return 0;
 }
 
+//按栈长度使用不同的运行函数
 static void bpf_prog_select_func(struct bpf_prog *fp)
 {
 #ifndef CONFIG_BPF_JIT_ALWAYS_ON
 	u32 stack_depth = max_t(u32, fp->aux->stack_depth, 1);
 
+	//按栈长度，选择不同的运行函数，最终调入___bpf_prog_run
 	fp->bpf_func = interpreters[(round_up(stack_depth, 32) / 32) - 1];
 #else
 	fp->bpf_func = __bpf_prog_ret0_warn;

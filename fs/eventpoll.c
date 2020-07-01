@@ -1005,6 +1005,7 @@ void eventpoll_release_file(struct file *file)
 	mutex_unlock(&epmutex);
 }
 
+//申请一个eventpoll
 static int ep_alloc(struct eventpoll **pep)
 {
 	int error;
@@ -1026,7 +1027,7 @@ static int ep_alloc(struct eventpoll **pep)
 	ep->ovflist = EP_UNACTIVE_PTR;
 	ep->user = user;
 
-	*pep = ep;
+	*pep = ep;/*设置申请的eventpoll*/
 
 	return 0;
 
@@ -2073,6 +2074,7 @@ static int do_epoll_create(int flags)
 		error = fd;
 		goto out_free_ep;
 	}
+	//构造file与其关联
 	file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
 				 O_RDWR | (flags & O_CLOEXEC));
 	if (IS_ERR(file)) {
@@ -2080,6 +2082,7 @@ static int do_epoll_create(int flags)
 		goto out_free_fd;
 	}
 	ep->file = file;
+	//使fd与file相关联
 	fd_install(fd, file);
 	return fd;
 
@@ -2090,6 +2093,7 @@ out_free_ep:
 	return error;
 }
 
+//定义epoll_create1系统调用
 SYSCALL_DEFINE1(epoll_create1, int, flags)
 {
 	return do_epoll_create(flags);

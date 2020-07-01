@@ -129,6 +129,7 @@ SYSCALL_DEFINE2(fsopen, const char __user *, _fs_name, unsigned int, flags)
 	if (IS_ERR(fs_name))
 		return PTR_ERR(fs_name);
 
+	//获取指定名称的文件系统file_system_type
 	fs_type = get_fs_type(fs_name);
 	kfree(fs_name);
 	if (!fs_type)

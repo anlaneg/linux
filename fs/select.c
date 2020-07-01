@@ -272,8 +272,10 @@ static int poll_schedule_timeout(struct poll_wqueues *pwq, int state,
  */
 int poll_select_set_timeout(struct timespec64 *to, time64_t sec, long nsec)
 {
+    //设置超时时间
 	struct timespec64 ts = {.tv_sec = sec, .tv_nsec = nsec};
 
+	//超时时间有效性校验
 	if (!timespec64_valid(&ts))
 		return -EINVAL;
 
@@ -388,6 +390,7 @@ typedef struct {
 static inline
 int get_fd_set(unsigned long nr, void __user *ufdset, unsigned long *fdset)
 {
+    //采用ufdset填充fdset
 	nr = FDS_BYTES(nr);
 	if (ufdset)
 		return copy_from_user(fdset, ufdset, nr) ? -EFAULT : 0;
@@ -473,7 +476,7 @@ static inline void wait_key_set(poll_table *wait, unsigned long in,
 		wait->_key |= POLLOUT_SET;
 }
 
-static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
+static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time/*超时时间点*/)
 {
 	ktime_t expire, *to = NULL;
 	struct poll_wqueues table;
@@ -619,7 +622,7 @@ static int do_select(int n, fd_set_bits *fds, struct timespec64 *end_time)
  * I'm trying ERESTARTNOHAND which restart only when you want to.
  */
 int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
-			   fd_set __user *exp, struct timespec64 *end_time)
+			   fd_set __user *exp, struct timespec64 *end_time/*超时时间*/)
 {
 	fd_set_bits fds;
 	void *bits;
@@ -638,6 +641,7 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 	fdt = files_fdtable(current->files);
 	max_fds = fdt->max_fds;
 	rcu_read_unlock();
+	/*指定的最大fds超过当前进程实际可用fds数目,更正*/
 	if (n > max_fds)
 		n = max_fds;
 
@@ -666,10 +670,13 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 	fds.res_out = bits + 4*size;
 	fds.res_ex  = bits + 5*size;
 
+	//复制用户态参数
 	if ((ret = get_fd_set(n, inp, fds.in)) ||
 	    (ret = get_fd_set(n, outp, fds.out)) ||
 	    (ret = get_fd_set(n, exp, fds.ex)))
 		goto out;
+
+	//清空出参用结构体
 	zero_fd_set(n, fds.res_in);
 	zero_fd_set(n, fds.res_out);
 	zero_fd_set(n, fds.res_ex);
@@ -685,6 +692,7 @@ int core_sys_select(int n, fd_set __user *inp, fd_set __user *outp,
 		ret = 0;
 	}
 
+	//将出参复制到用户态
 	if (set_fd_set(n, inp, fds.res_in) ||
 	    set_fd_set(n, outp, fds.res_out) ||
 	    set_fd_set(n, exp, fds.res_ex))
@@ -705,9 +713,11 @@ static int kern_select(int n, fd_set __user *inp, fd_set __user *outp,
 	int ret;
 
 	if (tvp) {
+	    /*用户指定了超时时间*/
 		if (copy_from_user(&tv, tvp, sizeof(tv)))
 			return -EFAULT;
 
+		/*设置超时时间点*/
 		to = &end_time;
 		if (poll_select_set_timeout(to,
 				tv.tv_sec + (tv.tv_usec / USEC_PER_SEC),
@@ -719,6 +729,7 @@ static int kern_select(int n, fd_set __user *inp, fd_set __user *outp,
 	return poll_select_finish(&end_time, tvp, PT_TIMEVAL, ret);
 }
 
+//定义select对应的系统调用
 SYSCALL_DEFINE5(select, int, n, fd_set __user *, inp, fd_set __user *, outp,
 		fd_set __user *, exp, struct __kernel_old_timeval __user *, tvp)
 {
@@ -834,8 +845,11 @@ SYSCALL_DEFINE1(old_select, struct sel_arg_struct __user *, arg)
 #endif
 
 struct poll_list {
+    //用于串成链表
 	struct poll_list *next;
+	//entries数组大小
 	int len;
+	//保存pollfd
 	struct pollfd entries[0];
 };
 
@@ -848,7 +862,7 @@ struct poll_list {
  * pwait poll_table will be used by the fd-provided poll handler for waiting,
  * if pwait->_qproc is non-NULL.
  */
-static inline __poll_t do_pollfd(struct pollfd *pollfd, poll_table *pwait,
+static inline __poll_t do_pollfd(struct pollfd *pollfd/*要进行poll检查的pollfd*/, poll_table *pwait,
 				     bool *can_busy_poll,
 				     __poll_t busy_flag)
 {
@@ -859,6 +873,7 @@ static inline __poll_t do_pollfd(struct pollfd *pollfd, poll_table *pwait,
 	if (fd < 0)
 		goto out;
 	mask = EPOLLNVAL;
+	//取fd对应的file
 	f = fdget(fd);
 	if (!f.file)
 		goto out;
@@ -878,8 +893,8 @@ out:
 	return mask;
 }
 
-static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
-		   struct timespec64 *end_time)
+static int do_poll(struct poll_list *list/*要poll的一组pollfd*/, struct poll_wqueues *wait,
+		   struct timespec64 *end_time/*截止时间*/)
 {
 	poll_table* pt = &wait->pt;
 	ktime_t expire, *to = NULL;
@@ -901,9 +916,11 @@ static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
 		struct poll_list *walk;
 		bool can_busy_loop = false;
 
+		//遍历poll_list
 		for (walk = list; walk != NULL; walk = walk->next) {
 			struct pollfd * pfd, * pfd_end;
 
+			//遍历单个poll_list中的单个pollfd
 			pfd = walk->entries;
 			pfd_end = pfd + walk->len;
 			for (; pfd != pfd_end; pfd++) {
@@ -968,7 +985,7 @@ static int do_poll(struct poll_list *list, struct poll_wqueues *wait,
 			sizeof(struct pollfd))
 
 static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
-		struct timespec64 *end_time)
+		struct timespec64 *end_time/*截止时间点*/)
 {
 	struct poll_wqueues table;
 	int err = -EFAULT, fdcount, len;
@@ -983,6 +1000,8 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 	if (nfds > rlimit(RLIMIT_NOFILE))
 		return -EINVAL;
 
+	//stack_pps中如果保存不下用户传入的ufds，则通过kmalloc再申请多个poll_list
+	//并将它们均串成一个链表
 	len = min_t(unsigned int, nfds, N_STACK_PPS);
 	for (;;) {
 		walk->next = NULL;
@@ -998,6 +1017,7 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 		if (!todo)
 			break;
 
+		//再申请一个poll_list
 		len = min(todo, POLLFD_PER_PAGE);
 		walk = walk->next = kmalloc(struct_size(walk, entries, len),
 					    GFP_KERNEL);
@@ -1022,6 +1042,7 @@ static int do_sys_poll(struct pollfd __user *ufds, unsigned int nfds,
 
 	err = fdcount;
 out_fds:
+    /*释放多余申请的poll_list*/
 	walk = head->next;
 	while (walk) {
 		struct poll_list *pos = walk;
@@ -1054,16 +1075,18 @@ static long do_restart_poll(struct restart_block *restart_block)
 	return ret;
 }
 
-SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds, unsigned int, nfds,
-		int, timeout_msecs)
+//定义并实现系统调用poll
+SYSCALL_DEFINE3(poll, struct pollfd __user *, ufds/*描述符及事件组成的pollfd数组*/, unsigned int, nfds/*pollfd数组大小*/,
+		int, timeout_msecs/*超时时间，单位为毫秒*/)
 {
 	struct timespec64 end_time, *to = NULL;
 	int ret;
 
 	if (timeout_msecs >= 0) {
+	    /*获得过期时间点*/
 		to = &end_time;
-		poll_select_set_timeout(to, timeout_msecs / MSEC_PER_SEC,
-			NSEC_PER_MSEC * (timeout_msecs % MSEC_PER_SEC));
+		poll_select_set_timeout(to, timeout_msecs / MSEC_PER_SEC/*秒数*/,
+			NSEC_PER_MSEC * (timeout_msecs % MSEC_PER_SEC)/*增加10^6倍，换算为ns*/);
 	}
 
 	ret = do_sys_poll(ufds, nfds, to);

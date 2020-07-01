@@ -56,7 +56,7 @@ struct xdp_dev_bulk_queue {
 	struct xdp_frame *q[DEV_MAP_BULK_SIZE];
 	struct list_head flush_node;
 	struct net_device *dev;
-	struct net_device *dev_rx;
+	struct net_device *dev_rx;/*报文入口设备*/
 	unsigned int count;
 };
 
@@ -345,9 +345,11 @@ static int bq_xmit_all(struct xdp_dev_bulk_queue *bq, u32 flags)
 	int sent = 0, drops = 0, err = 0;
 	int i;
 
+	//队列为空，退出
 	if (unlikely(!bq->count))
 		return 0;
 
+	//预取报文
 	for (i = 0; i < bq->count; i++) {
 		struct xdp_frame *xdpf = bq->q[i];
 
@@ -426,6 +428,7 @@ static int bq_enqueue(struct net_device *dev, struct xdp_frame *xdpf,
 	struct list_head *flush_list = this_cpu_ptr(&dev_flush_list);
 	struct xdp_dev_bulk_queue *bq = this_cpu_ptr(dev->xdp_bulkq);
 
+	//队列已满，直接发送出去
 	if (unlikely(bq->count == DEV_MAP_BULK_SIZE))
 		bq_xmit_all(bq, 0);
 
@@ -436,6 +439,7 @@ static int bq_enqueue(struct net_device *dev, struct xdp_frame *xdpf,
 	if (!bq->dev_rx)
 		bq->dev_rx = dev_rx;
 
+	//将报文入队列q
 	bq->q[bq->count++] = xdpf;
 
 	if (!bq->flush_node.prev)
@@ -444,6 +448,7 @@ static int bq_enqueue(struct net_device *dev, struct xdp_frame *xdpf,
 	return 0;
 }
 
+//执行xdp设备入队列dev的发送队列
 static inline int __xdp_enqueue(struct net_device *dev, struct xdp_buff *xdp,
 			       struct net_device *dev_rx)
 {
@@ -462,6 +467,7 @@ static inline int __xdp_enqueue(struct net_device *dev, struct xdp_buff *xdp,
 	if (unlikely(!xdpf))
 		return -EOVERFLOW;
 
+	//将xdpf发送出去
 	return bq_enqueue(dev, xdpf, dev_rx);
 }
 
@@ -493,7 +499,8 @@ static struct xdp_buff *dev_map_run_prog(struct net_device *dev,
 	return NULL;
 }
 
-int dev_xdp_enqueue(struct net_device *dev, struct xdp_buff *xdp,
+//将xdp入队到dev设备
+int dev_xdp_enqueue(struct net_device *dev/*目标设备*/, struct xdp_buff *xdp,
 		    struct net_device *dev_rx)
 {
 	return __xdp_enqueue(dev, xdp, dev_rx);
@@ -502,9 +509,11 @@ int dev_xdp_enqueue(struct net_device *dev, struct xdp_buff *xdp,
 int dev_map_enqueue(struct bpf_dtab_netdev *dst, struct xdp_buff *xdp,
 		    struct net_device *dev_rx)
 {
+    //取报文目标设备
 	struct net_device *dev = dst->dev;
 
 	if (dst->xdp_prog) {
+	    /*如果dst有xdp程序，则运行程序后，将其送给dev设备发出*/
 		xdp = dev_map_run_prog(dev, xdp, dst->xdp_prog);
 		if (!xdp)
 			return 0;

@@ -199,7 +199,7 @@ DEFINE_IDR(btf_idr);
 DEFINE_SPINLOCK(btf_idr_lock);
 
 struct btf {
-	void *data;
+	void *data;//btf数据
 	struct btf_type **types;
 	u32 *resolved_ids;
 	u32 *resolved_sizes;
@@ -208,7 +208,7 @@ struct btf {
 	struct btf_header hdr;
 	u32 nr_types;
 	u32 types_size;
-	u32 data_size;
+	u32 data_size;//btf数据大小
 	refcount_t refcnt;
 	u32 id;
 	struct rcu_head rcu;
@@ -3393,8 +3393,8 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 	return 0;
 }
 
-static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
-			     u32 log_level, char __user *log_ubuf, u32 log_size)
+static struct btf *btf_parse(void __user *btf_data/*btf起始地址*/, u32 btf_data_size/*btf大小*/,
+			     u32 log_level/*log级别*/, char __user *log_ubuf/*log buffer起始地址*/, u32 log_size/*log buffer大小*/)
 {
 	struct btf_verifier_env *env = NULL;
 	struct bpf_verifier_log *log;
@@ -3402,6 +3402,7 @@ static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
 	u8 *data;
 	int err;
 
+	/*btf不能过大*/
 	if (btf_data_size > BTF_MAX_SIZE)
 		return ERR_PTR(-E2BIG);
 
@@ -3409,6 +3410,7 @@ static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
 	if (!env)
 		return ERR_PTR(-ENOMEM);
 
+	//设置log
 	log = &env->log;
 	if (log_level || log_ubuf || log_size) {
 		/* user requested verbose verifier output
@@ -3433,6 +3435,7 @@ static struct btf *btf_parse(void __user *btf_data, u32 btf_data_size,
 	}
 	env->btf = btf;
 
+	//填充用户态传入的btf_data
 	data = kvmalloc(btf_data_size, GFP_KERNEL | __GFP_NOWARN);
 	if (!data) {
 		err = -ENOMEM;

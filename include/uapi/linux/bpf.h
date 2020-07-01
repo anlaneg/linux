@@ -119,6 +119,7 @@ enum bpf_cmd {
 	BPF_ITER_CREATE,
 };
 
+/*bpf支持的map类型*/
 enum bpf_map_type {
 	BPF_MAP_TYPE_UNSPEC,
 	BPF_MAP_TYPE_HASH,
@@ -443,6 +444,7 @@ union bpf_attr {
 					 * BPF_F_NUMA_NODE is set).
 					 */
 		char	map_name[BPF_OBJ_NAME_LEN];
+		//如果指定了此变量，则map创建时使用bpf_map_offload_ops
 		__u32	map_ifindex;	/* ifindex of netdev to create on */
 		__u32	btf_fd;		/* fd pointing to a BTF type data */
 		__u32	btf_key_type_id;	/* BTF type_id of the key */
@@ -482,7 +484,7 @@ union bpf_attr {
 
 	struct { /* anonymous struct used by BPF_PROG_LOAD command */
 		__u32		prog_type;	/* one of enum bpf_prog_type */
-		__u32		insn_cnt;
+		__u32		insn_cnt;//指令数
 		__aligned_u64	insns;
 		__aligned_u64	license;
 		__u32		log_level;	/* verbosity level of verifier */

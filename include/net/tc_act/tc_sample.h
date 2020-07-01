@@ -9,9 +9,9 @@
 //采样参数
 struct tcf_sample {
 	struct tc_action common;
-	u32 rate;
-	bool truncate;//截短长度，为0时，使用报文长度
-	u32 trunc_size;
+	u32 rate;//采样率
+	bool truncate;//是否容许报文截短，为0时，使用报文长度
+	u32 trunc_size;//采样报文长度
 	struct psample_group __rcu *psample_group;
 	u32 psample_group_num;
 	struct list_head tcfm_list;

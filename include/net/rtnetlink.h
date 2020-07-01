@@ -143,8 +143,8 @@ void rtnl_link_unregister(struct rtnl_link_ops *ops);
  *		      net_device accordingly.
  */
 struct rtnl_af_ops {
-	struct list_head	list;
-	int			family;
+	struct list_head	list;//用于串在rtnl_af_ops链上
+	int			family;//对应的family（主键）
 
 	int			(*fill_link_af)(struct sk_buff *skb,
 						const struct net_device *dev,
@@ -152,8 +152,10 @@ struct rtnl_af_ops {
 	size_t			(*get_link_af_size)(const struct net_device *dev,
 						    u32 ext_filter_mask);
 
+	//针对dev校验此af独有的属性
 	int			(*validate_link_af)(const struct net_device *dev,
 						    const struct nlattr *attr);
+	//针对dev设置此af独有的属性
 	int			(*set_link_af)(struct net_device *dev,
 					       const struct nlattr *attr);
 

@@ -3253,6 +3253,7 @@ void __init vfs_caches_init_early(void)
 
 void __init vfs_caches_init(void)
 {
+    //创建path路径的cache
 	names_cachep = kmem_cache_create_usercopy("names_cache", PATH_MAX, 0,
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC, 0, PATH_MAX, NULL);
 

@@ -873,6 +873,7 @@ static int tcf_block_insert(struct tcf_block *block, struct net *net,
 
 	idr_preload(GFP_KERNEL);
 	spin_lock(&tn->idr_lock);
+	/*要求自idr中分配block->index对应的编号*/
 	err = idr_alloc_u32(&tn->idr, block, &block->index, block->index,
 			    GFP_NOWAIT);
 	spin_unlock(&tn->idr_lock);
@@ -1370,14 +1371,15 @@ int tcf_block_get_ext(struct tcf_block **p_block/*出参，创建或查询好的
 		block = tcf_block_refcnt_get(net, ei->block_index);
 
 	if (!block) {
-		//block不存在，需要创建block
+		//block不存在，需要创建指定索引的block
 		block = tcf_block_create(net, q, ei->block_index, extack);
 		if (IS_ERR(block))
 			return PTR_ERR(block);
 		if (tcf_block_shared(block)) {
-			//针对共享block,直接加入
+			//针对共享block,强制分配编号
 			err = tcf_block_insert(block, net, extack);
 			if (err)
+			    //编号分配失败（已占用）
 				goto err_block_insert;
 		}
 	}

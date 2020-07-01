@@ -267,6 +267,7 @@ int xdp_rxq_info_reg_mem_model(struct xdp_rxq_info *xdp_rxq,
 	int id, errno, ret;
 	void *ptr;
 
+	//此函数调用时，必须为registered状态
 	if (xdp_rxq->reg_state != REG_STATE_REGISTERED) {
 		WARN(1, "Missing register, driver bug");
 		return -EFAULT;

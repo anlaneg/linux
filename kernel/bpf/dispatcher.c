@@ -129,8 +129,8 @@ static void bpf_dispatcher_update(struct bpf_dispatcher *d, int prev_num_progs)
 	d->image_off = noff;
 }
 
-void bpf_dispatcher_change_prog(struct bpf_dispatcher *d, struct bpf_prog *from,
-				struct bpf_prog *to)
+void bpf_dispatcher_change_prog(struct bpf_dispatcher *d, struct bpf_prog *from/*前一个bpf程序*/,
+				struct bpf_prog *to/*更新后的bpf程序*/)
 {
 	bool changed = false;
 	int prev_num_progs;
