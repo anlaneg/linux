@@ -3134,6 +3134,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 			open_flag &= ~O_TRUNC;
 		if (!IS_POSIXACL(dir->d_inode))
 			mode &= ~current_umask();
+		if (likely(got_write))
 			//之前不存在，需要创建其对应的文件,检查能否创建
 			create_error = may_o_create(&nd->path, dentry, mode);
 		else
@@ -3766,7 +3767,7 @@ SYSCALL_DEFINE3(mkdirat, int, dfd, const char __user *, pathname, umode_t, mode)
 //定义系统调用mkdir
 SYSCALL_DEFINE2(mkdir, const char __user *, pathname/*要创建的路径名*/, umode_t, mode)
 {
-    //指明相对于当前工作目录
+    //指明如果patch为相对路径，则相对于当前工作目录
 	return do_mkdirat(AT_FDCWD, pathname, mode);
 }
 
