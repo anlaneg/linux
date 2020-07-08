@@ -21,17 +21,20 @@
 #include <linux/uaccess.h>
 #include "kstrtox.h"
 
-const char *_parse_integer_fixup_radix(const char *s, unsigned int *base)
+//确定s串，使用的基数
+const char *_parse_integer_fixup_radix(const char *s, unsigned int *base/*基数*/)
 {
+    //base为0，自动识别基数
 	if (*base == 0) {
 		if (s[0] == '0') {
 			if (_tolower(s[1]) == 'x' && isxdigit(s[2]))
-				*base = 16;
+				*base = 16;/*0x开头，为16进制*/
 			else
-				*base = 8;
+				*base = 8;/*0开头，8进制*/
 		} else
-			*base = 10;
+			*base = 10;/*默认10进制*/
 	}
+	//跳过基数符号（8进制的0没有被跳过）
 	if (*base == 16 && s[0] == '0' && _tolower(s[1]) == 'x')
 		s += 2;
 	return s;
@@ -45,8 +48,9 @@ const char *_parse_integer_fixup_radix(const char *s, unsigned int *base)
  *
  * Don't you dare use this function.
  */
-unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long *p)
+unsigned int _parse_integer(const char *s/*整数字符串*/, unsigned int base/*基数*/, unsigned long long *p/*转换后的值*/)
 {
+    //按基数解析非负整数
 	unsigned long long res;
 	unsigned int rv;
 
@@ -62,8 +66,10 @@ unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long
 		else if ('a' <= lc && lc <= 'f')
 			val = lc - 'a' + 10;
 		else
+		    /*遇到非预期的符号，跳出*/
 			break;
 
+		/*val超过基数，遇到非预期符号，跳出*/
 		if (val >= base)
 			break;
 		/*
@@ -71,10 +77,14 @@ unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long
 		 * it in the max base we support (16)
 		 */
 		if (unlikely(res & (~0ull << 60))) {
+		    /*res再扩大base倍后，会超过u64_t最大值，返回overflow*/
 			if (res > div_u64(ULLONG_MAX - val, base))
 				rv |= KSTRTOX_OVERFLOW;
 		}
+		//res增加一个数字
 		res = res * base + val;
+
+		//消费的字符数加1
 		rv++;
 		s++;
 	}

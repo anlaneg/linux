@@ -659,15 +659,18 @@ struct inode {
 
 	//inode对应的操作集
 	const struct inode_operations	*i_op;
-	struct super_block	*i_sb;//指向inode对应的super_block
-	struct address_space	*i_mapping;//指向此结构体的成员i_data
+	//指向inode所属的super_block
+	struct super_block	*i_sb;
+	//指向此结构体的成员i_data
+	struct address_space	*i_mapping;
 
 #ifdef CONFIG_SECURITY
 	void			*i_security;
 #endif
 
 	/* Stat data, not accessed from path walking */
-	unsigned long		i_ino;//inode编号（每个文件系统内唯一）
+	//inode编号（每个文件系统内唯一）
+	unsigned long		i_ino;
 	/*
 	 * Filesystems may only read i_nlink directly.  They shall use the
 	 * following functions for modification:
@@ -679,14 +682,17 @@ struct inode {
 		const unsigned int i_nlink;
 		unsigned int __i_nlink;
 	};
-	dev_t			i_rdev;//指向对应的设备编号
-	loff_t			i_size;//文件大小
+	//指向对应的设备编号
+	dev_t			i_rdev;
+	//文件大小
+	loff_t			i_size;
 	struct timespec64	i_atime;
 	struct timespec64	i_mtime;
 	struct timespec64	i_ctime;
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
-	u8			i_blkbits;//块占用的bits数
+	//块占用的bits数
+	u8			i_blkbits;
 	u8			i_write_hint;
 	blkcnt_t		i_blocks;
 
@@ -712,6 +718,7 @@ struct inode {
 	u16			i_wb_frn_history;
 #endif
 	struct list_head	i_lru;		/* inode LRU list */
+	//用于将inode串连到super block链表上，看super_block->s_inodes
 	struct list_head	i_sb_list;
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
@@ -729,7 +736,7 @@ struct inode {
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
 	union {
-	        //对应的file操作符
+	    //对应的file操作符
 		const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 		void (*free_inode)(struct inode *);
 	};
@@ -1467,7 +1474,7 @@ struct sb_writers {
 
 struct super_block {
 	struct list_head	s_list;		/* Keep this first */
-	//所属的设备编号
+	//所属的设备编号(通过此字段可唯一确定super_block)
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
 	unsigned long		s_blocksize;//文件系统的块大小
@@ -1987,7 +1994,7 @@ extern loff_t vfs_dedupe_file_range_one(struct file *src_file, loff_t src_pos,
 
 
 struct super_operations {
-	//通过此回调，申请并创建inode
+	//通过此回调，申请并创建inode,如无此回调，则自inode_cachep中申请inode
    	struct inode *(*alloc_inode)(struct super_block *sb);
    	//通过此回调，释放创建的inode
 	void (*destroy_inode)(struct inode *);
@@ -2003,6 +2010,7 @@ struct super_operations {
 	int (*freeze_fs) (struct super_block *);
 	int (*thaw_super) (struct super_block *);
 	int (*unfreeze_fs) (struct super_block *);
+	/*获取文件系统统计信息*/
 	int (*statfs) (struct dentry *, struct kstatfs *);
 	int (*remount_fs) (struct super_block *, int *, char *);
 	void (*umount_begin) (struct super_block *);
@@ -2288,10 +2296,13 @@ struct file_system_type {
 	int fs_flags;
 #define FS_REQUIRES_DEV		1 
 #define FS_BINARY_MOUNTDATA	2
+	//标记文件系统支持子类型，此时名称通过'.'号划分，'.'号后的为子类型
 #define FS_HAS_SUBTYPE		4
 #define FS_USERNS_MOUNT		8	/* Can be mounted by userns root */
 #define FS_DISALLOW_NOTIFY_PERM	16	/* Disable fanotify permission events */
 #define FS_RENAME_DOES_D_MOVE	32768	/* FS will handle d_move() during rename() internally. */
+	//初始化当前fs对应的fs_context,如果此回调不提供，则默认使用legacy_init_fs_context
+	//此函数针对各fs提供fs context的ops
 	int (*init_fs_context)(struct fs_context *);
 	const struct fs_parameter_spec *parameters;
 	//文件系统挂载回调
@@ -2593,9 +2604,8 @@ struct filename {
 	//记录用户空间里传入的文件路径指针指针（我们从这里copy数据到的iname)
 	const __user char	*uptr;	/* original userland pointer */
 	int			refcnt;
-	//64位系统时，这里会有空隙
+	//注：64位系统时，这里会有空隙
 	struct audit_names	*aname;
-	//由于aname总能保证8字节对齐，故iname也能保证
 	const char		iname[];//存储具体的文件名，并使name指向自已
 };
 static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);

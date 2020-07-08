@@ -54,6 +54,7 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 {
 	int retval;
 
+	//如此文件系统无此回调，则返回不支持此系统调用
 	if (!dentry->d_sb->s_op->statfs)
 		return -ENOSYS;
 
@@ -61,6 +62,7 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 	retval = security_sb_statfs(dentry);
 	if (retval)
 		return retval;
+	//通过回调获取超级块的s_op完成统计信息获取
 	retval = dentry->d_sb->s_op->statfs(dentry, buf);
 	if (retval == 0 && buf->f_frsize == 0)
 		buf->f_frsize = buf->f_bsize;
@@ -243,6 +245,7 @@ static int vfs_ustat(dev_t dev, struct kstatfs *sbuf)
 	return err;
 }
 
+//系统调用，返回已挂载系统的状态
 SYSCALL_DEFINE2(ustat, unsigned, dev, struct ustat __user *, ubuf)
 {
 	struct ustat tmp;

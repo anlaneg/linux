@@ -567,8 +567,10 @@ static ssize_t proc_sys_call_handler(struct file *filp, void __user *ubuf,
 
 	/* don't even try if the size is too large */
 	if (count > KMALLOC_MAX_SIZE)
+	    //用户态给定的buffer过大时返回失败
 		return -ENOMEM;
 
+	//申请count字符的kernel buffer(write时复制用户态buffer数据）
 	if (write) {
 		kbuf = memdup_user_nul(ubuf, count);
 		if (IS_ERR(kbuf)) {
@@ -582,17 +584,20 @@ static ssize_t proc_sys_call_handler(struct file *filp, void __user *ubuf,
 			goto out;
 	}
 
+	//bpf程序入口
 	error = BPF_CGROUP_RUN_PROG_SYSCTL(head, table, write, &kbuf, &count,
 					   ppos);
 	if (error)
 		goto out_free_buf;
 
+	//通过table->proc_handler处理此输入
 	/* careful: calling conventions are nasty here */
 	error = table->proc_handler(table, write, kbuf, &count, ppos);
 	if (error)
 		goto out_free_buf;
 
 	if (!write) {
+	    //读时，将kbuf内容复制到ubuf中
 		error = -EFAULT;
 		if (copy_to_user(ubuf, kbuf, count))
 			goto out_free_buf;
@@ -1111,10 +1116,12 @@ static int sysctl_check_table_array(const char *path, struct ctl_table *table)
 static int sysctl_check_table(const char *path, struct ctl_table *table)
 {
 	int err = 0;
+	//遍历每个表项
 	for (; table->procname; table++) {
 		if (table->child)
 			err |= sysctl_err(path, table, "Not a file");
 
+		//表项的proc_handler必须为固定一组值
 		if ((table->proc_handler == proc_dostring) ||
 		    (table->proc_handler == proc_dointvec) ||
 		    (table->proc_handler == proc_douintvec) ||
@@ -1308,14 +1315,17 @@ struct ctl_table_header *__register_sysctl_table(
 	struct ctl_node *node;
 	int nr_entries = 0;
 
+	//计算table长度
 	for (entry = table; entry->procname; entry++)
 		nr_entries++;
 
+	//为每个表项，申请一个 ctl_node
 	header = kzalloc(sizeof(struct ctl_table_header) +
 			 sizeof(struct ctl_node)*nr_entries, GFP_KERNEL);
 	if (!header)
 		return NULL;
 
+	//指向表项开始位置
 	node = (struct ctl_node *)(header + 1);
 	init_header(header, root, set, node, table);
 	if (sysctl_check_table(path, table))

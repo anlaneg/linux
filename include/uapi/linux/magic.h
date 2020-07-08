@@ -85,7 +85,7 @@
 #define ANON_INODE_FS_MAGIC	0x09041934
 #define BTRFS_TEST_MAGIC	0x73727279
 #define NSFS_MAGIC		0x6e736673
-#define BPF_FS_MAGIC		0xcafe4a11
+#define BPF_FS_MAGIC		0xcafe4a11 //bpf文件系统magic
 #define AAFS_MAGIC		0x5a3c69f0
 #define ZONEFS_MAGIC		0x5a4f4653
 

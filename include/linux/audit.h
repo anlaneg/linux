@@ -291,11 +291,13 @@ static inline void audit_set_context(struct task_struct *task, struct audit_cont
 	task->audit_context = ctx;
 }
 
+//取当前进程audit_context
 static inline struct audit_context *audit_context(void)
 {
 	return current->audit_context;
 }
 
+//检查当前进程是否未设置audit_context
 static inline bool audit_dummy_context(void)
 {
 	void *p = audit_context();
@@ -325,12 +327,14 @@ static inline void audit_syscall_exit(void *pt_regs)
 static inline struct filename *audit_reusename(const __user char *name)
 {
 	if (unlikely(!audit_dummy_context()))
+	    /*如果当前进程设置了audit context,则进入查询缓存*/
 		return __audit_reusename(name);
 	return NULL;
 }
 static inline void audit_getname(struct filename *name)
 {
 	if (unlikely(!audit_dummy_context()))
+	    /*如果当前进程设置了audit context,则进入执行缓存添加*/
 		__audit_getname(name);
 }
 static inline void audit_inode(struct filename *name,

@@ -258,10 +258,11 @@ void *memdup_user_nul(const void __user *src, size_t len)
 	 * cause pagefault, which makes it pointless to use GFP_NOFS
 	 * or GFP_ATOMIC.
 	 */
-	p = kmalloc_track_caller(len + 1, GFP_KERNEL);
+	p = kmalloc_track_caller(len + 1, GFP_KERNEL);//申请空间
 	if (!p)
 		return ERR_PTR(-ENOMEM);
 
+	//复制用户态数据
 	if (copy_from_user(p, src, len)) {
 		kfree(p);
 		return ERR_PTR(-EFAULT);

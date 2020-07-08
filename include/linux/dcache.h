@@ -93,7 +93,7 @@ struct dentry {
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_t d_seq;		/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
-	//指向父目录项
+	//指向父dentry项
 	struct dentry *d_parent;	/* parent directory */
 	struct qstr d_name;//指向此dentry的名称
 	//此dentry对应的inode

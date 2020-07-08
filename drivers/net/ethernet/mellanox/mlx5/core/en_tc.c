@@ -4322,6 +4322,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			attr->dest_chain = act->chain_index;
 			break;
 		case FLOW_ACTION_CT:
+		    //解析ct action
 			err = mlx5_tc_ct_parse_action(priv, attr, act, extack);
 			if (err)
 				return err;
@@ -4577,6 +4578,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
+	//解析ct匹配项
 	err = mlx5_tc_ct_parse_match(priv, &parse_attr->spec, f, extack);
 	if (err)
 		goto err_free;

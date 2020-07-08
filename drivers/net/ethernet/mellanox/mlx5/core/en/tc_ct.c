@@ -705,6 +705,7 @@ mlx5_tc_ct_block_flow_offload(enum tc_setup_type type, void *type_data,
 	return -EOPNOTSUPP;
 }
 
+//ct状态匹配
 int
 mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
 		       struct mlx5_flow_spec *spec,
@@ -737,6 +738,7 @@ mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
 	ct_state = key->ct_state;
 	ct_state_mask = mask->ct_state;
 
+	//仅以下三种状态可被offload
 	if (ct_state_mask & ~(TCA_FLOWER_KEY_CT_FLAGS_TRACKED |
 			      TCA_FLOWER_KEY_CT_FLAGS_ESTABLISHED |
 			      TCA_FLOWER_KEY_CT_FLAGS_NEW)) {
@@ -745,6 +747,7 @@ mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
 		return -EOPNOTSUPP;
 	}
 
+	//仅低32位ct labes可被支持
 	if (mask->ct_labels[1] || mask->ct_labels[2] || mask->ct_labels[3]) {
 		NL_SET_ERR_MSG_MOD(extack,
 				   "only lower 32bits of ct_labels are supported for offload");
@@ -753,9 +756,9 @@ mlx5_tc_ct_parse_match(struct mlx5e_priv *priv,
 
 	ct_state_on = ct_state & ct_state_mask;
 	ct_state_off = (ct_state & ct_state_mask) ^ ct_state_mask;
-	trk = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_TRACKED;
-	new = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_NEW;
-	est = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_ESTABLISHED;
+	trk = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_TRACKED;/*是否有trk标记*/
+	new = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_NEW;/*是否有new标记*/
+	est = ct_state_on & TCA_FLOWER_KEY_CT_FLAGS_ESTABLISHED;/*是否有est标记*/
 	untrk = ct_state_off & TCA_FLOWER_KEY_CT_FLAGS_TRACKED;
 	unest = ct_state_off & TCA_FLOWER_KEY_CT_FLAGS_ESTABLISHED;
 
@@ -1157,7 +1160,7 @@ __mlx5_tc_ct_flow_offload(struct mlx5e_priv *priv,
 			  struct mlx5_flow_handle **flow_rule)
 {
 	struct mlx5_tc_ct_priv *ct_priv = mlx5_tc_ct_get_ct_priv(priv);
-	bool nat = attr->ct_attr.ct_action & TCA_CT_ACT_NAT;
+	bool nat = attr->ct_attr.ct_action & TCA_CT_ACT_NAT;/*标记是否要做nat*/
 	struct mlx5e_tc_mod_hdr_acts pre_mod_acts = {};
 	struct mlx5_flow_spec *post_ct_spec = NULL;
 	struct mlx5_eswitch *esw = ct_priv->esw;

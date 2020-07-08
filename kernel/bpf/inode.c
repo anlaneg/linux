@@ -114,6 +114,7 @@ static struct inode *bpf_get_inode(struct super_block *sb,
 		return ERR_PTR(-EINVAL);
 	}
 
+	//申请一个inode
 	inode = new_inode(sb);
 	if (!inode)
 		return ERR_PTR(-ENOSPC);
@@ -613,6 +614,7 @@ enum {
 	OPT_MODE,
 };
 
+//定义支持的参数
 static const struct fs_parameter_spec bpf_fs_parameters[] = {
 	fsparam_u32oct	("mode",			OPT_MODE),
 	{}
@@ -628,6 +630,7 @@ static int bpf_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	struct fs_parse_result result;
 	int opt;
 
+	//解析bpf参数
 	opt = fs_parse(fc, bpf_fs_parameters, param, &result);
 	if (opt < 0)
 		/* We might like to report bad mount options here, but
@@ -638,6 +641,7 @@ static int bpf_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 	switch (opt) {
 	case OPT_MODE:
+	    //按参数设置mode
 		opts->mode = result.uint_32 & S_IALLUGO;
 		break;
 	}
@@ -671,6 +675,7 @@ static int bpf_get_tree(struct fs_context *fc)
 	return get_tree_nodev(fc, bpf_fill_super);
 }
 
+//释放bpf文件系统的私有结构（fs_private，其上记录了bpf_mount_opts）
 static void bpf_free_fc(struct fs_context *fc)
 {
 	kfree(fc->fs_private);
@@ -687,6 +692,7 @@ static const struct fs_context_operations bpf_context_ops = {
  */
 static int bpf_init_fs_context(struct fs_context *fc)
 {
+    //申请bpf_mount_opts，并将其记录在fs_private上
 	struct bpf_mount_opts *opts;
 
 	opts = kzalloc(sizeof(struct bpf_mount_opts), GFP_KERNEL);
@@ -700,6 +706,7 @@ static int bpf_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+//定义bpf文件系统类型
 static struct file_system_type bpf_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "bpf",
@@ -712,10 +719,12 @@ static int __init bpf_init(void)
 {
 	int ret;
 
+	//在sys/fs下创建bpf目录
 	ret = sysfs_create_mount_point(fs_kobj, "bpf");
 	if (ret)
 		return ret;
 
+	//注册bpf文件系统
 	ret = register_filesystem(&bpf_fs_type);
 	if (ret)
 		sysfs_remove_mount_point(fs_kobj, "bpf");

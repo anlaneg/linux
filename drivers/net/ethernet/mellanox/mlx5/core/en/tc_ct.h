@@ -22,7 +22,7 @@ struct nf_flowtable;
 
 struct mlx5_ct_attr {
 	u16 zone;
-	u16 ct_action;
+	u16 ct_action;/*记录ct action*/
 	struct mlx5_ct_flow *ct_flow;
 	struct nf_flowtable *nf_ft;
 };

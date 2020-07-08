@@ -3603,7 +3603,7 @@ struct __sk_buff {
 };
 
 struct bpf_tunnel_key {
-	__u32 tunnel_id;
+	__u32 tunnel_id;//隧道id
 	union {
 		__u32 remote_ipv4;
 		__u32 remote_ipv6[4];

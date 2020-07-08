@@ -42,7 +42,7 @@
 
 static int thaw_super_locked(struct super_block *sb);
 
-//用于维护所有super_blocks
+//用于维护系统所有super_blocks
 static LIST_HEAD(super_blocks);
 static DEFINE_SPINLOCK(sb_lock);
 
@@ -530,6 +530,7 @@ retry:
 	}
 	if (!s) {
 		spin_unlock(&sb_lock);
+		/*申请超级块*/
 		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
@@ -548,6 +549,7 @@ retry:
 	s->s_type = fc->fs_type;
 	s->s_iflags |= fc->s_iflags;
 	strlcpy(s->s_id, s->s_type->name, sizeof(s->s_id));
+	//将超级块加入链表
 	list_add_tail(&s->s_list, &super_blocks);
 	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
 	spin_unlock(&sb_lock);
@@ -873,12 +875,14 @@ restart:
 	return NULL;
 }
 
+//通过 dev查找其对应的super block
 struct super_block *user_get_super(dev_t dev)
 {
 	struct super_block *sb;
 
 	spin_lock(&sb_lock);
 rescan:
+    //遍历系统所有super block,查找dev对应的super block
 	list_for_each_entry(sb, &super_blocks, s_list) {
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
@@ -1193,6 +1197,7 @@ int vfs_get_super(struct fs_context *fc,
 	if (IS_ERR(sb))
 		return PTR_ERR(sb);
 
+	/*填充fc的root为sb的root*/
 	if (!sb->s_root) {
 		err = fill_super(sb, fc);
 		if (err)
@@ -1221,7 +1226,7 @@ error:
 EXPORT_SYMBOL(vfs_get_super);
 
 int get_tree_nodev(struct fs_context *fc,
-		  int (*fill_super)(struct super_block *sb,
+		  int (*fill_super/*fs对应的super block填充函数*/)(struct super_block *sb,
 				    struct fs_context *fc))
 {
 	return vfs_get_super(fc, vfs_get_independent_super, fill_super);
@@ -1566,6 +1571,7 @@ int vfs_get_tree(struct fs_context *fc)
 	if (error < 0)
 		return error;
 
+	//get_tree后，fc->root必须被填充
 	if (!fc->root) {
 		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
 		       fc->fs_type->name);

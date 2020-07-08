@@ -1862,6 +1862,7 @@ __audit_reusename(const __user char *uptr)
 	struct audit_context *context = audit_context();
 	struct audit_names *n;
 
+	//遍历context->names_list,如果有记录的uptr,则命中返回
 	list_for_each_entry(n, &context->names_list, list) {
 		if (!n->name)
 			continue;
@@ -1888,6 +1889,7 @@ void __audit_getname(struct filename *name)
 	if (!context->in_syscall)
 		return;
 
+	//在context上缓存项，并填充filename
 	n = audit_alloc_name(context, AUDIT_TYPE_UNKNOWN);
 	if (!n)
 		return;

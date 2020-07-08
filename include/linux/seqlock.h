@@ -128,7 +128,7 @@ static inline unsigned __read_seqcount_begin(const seqcount_t *s)
 repeat:
 	ret = READ_ONCE(s->sequence);
 	if (unlikely(ret & 1)) {
-	    //读数为奇数时，继续repeat
+	    //读数为奇数时，repeat读
 		cpu_relax();
 		goto repeat;
 	}
@@ -147,6 +147,7 @@ repeat:
  */
 static inline unsigned raw_read_seqcount(const seqcount_t *s)
 {
+    //读取seq序号
 	unsigned ret = READ_ONCE(s->sequence);
 	smp_rmb();
 	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);
@@ -164,6 +165,7 @@ static inline unsigned raw_read_seqcount(const seqcount_t *s)
  */
 static inline unsigned raw_read_seqcount_begin(const seqcount_t *s)
 {
+    //读取一个偶数并返回
 	unsigned ret = __read_seqcount_begin(s);
 	smp_rmb();
 	return ret;
@@ -244,7 +246,7 @@ static inline int read_seqcount_retry(const seqcount_t *s, unsigned start)
 }
 
 
-
+//先执行一次写
 static inline void raw_write_seqcount_begin(seqcount_t *s)
 {
 	kcsan_nestable_atomic_begin();
@@ -252,6 +254,7 @@ static inline void raw_write_seqcount_begin(seqcount_t *s)
 	smp_wmb();
 }
 
+//再执行一次写（确保end之后奇偶性与begin前保持不变）
 static inline void raw_write_seqcount_end(seqcount_t *s)
 {
 	smp_wmb();

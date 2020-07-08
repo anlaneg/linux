@@ -365,6 +365,7 @@ int proc_dostring(struct ctl_table *table, int write,
 			ppos);
 }
 
+//返回buf中可被跳过的空格数，buf将被更新到第一个非空格起始位置
 static size_t proc_skip_spaces(char **buf)
 {
 	size_t ret;
@@ -399,19 +400,23 @@ static void proc_skip_char(char **buf, size_t *size, const char v)
  * the function will defer the decision what characters count as invalid to the
  * caller.
  */
-static int strtoul_lenient(const char *cp, char **endp, unsigned int base,
-			   unsigned long *res)
+static int strtoul_lenient(const char *cp, char **endp/*出参，记录转换中止位置*/, unsigned int base/*基数*/,
+			   unsigned long *res/*出参，转换后结果*/)
 {
 	unsigned long long result;
 	unsigned int rv;
 
+	//确定cp使用的基数
 	cp = _parse_integer_fixup_radix(cp, &base);
 	rv = _parse_integer(cp, base, &result);
 	if ((rv & KSTRTOX_OVERFLOW) || (result != (unsigned long)result))
+	    /*数据绕回*/
 		return -ERANGE;
 
+	//增加消费掉的字符数
 	cp += rv;
 
+	//记录转换中止位置
 	if (endp)
 		*endp = (char *)cp;
 
@@ -436,17 +441,19 @@ static int strtoul_lenient(const char *cp, char **endp, unsigned int base,
  * character exists (size is non-zero after returning from this
  * function), @tr is updated with the trailing character.
  */
-static int proc_get_long(char **buf, size_t *size,
-			  unsigned long *val, bool *neg,
-			  const char *perm_tr, unsigned perm_tr_len, char *tr)
+static int proc_get_long(char **buf/*字符串*/, size_t *size/*字符串长度*/,
+			  unsigned long *val/*出参，转换后的值*/, bool *neg/*出参，指定是否为负数*/,
+			  const char *perm_tr, unsigned perm_tr_len, char *tr/*存入尾部字符*/)
 {
 	int len;
 	char *p, tmp[TMPBUFLEN];
 
+	/*字符串长度不得为零*/
 	if (!*size)
 		return -EINVAL;
 
 	len = *size;
+	/*long型长度不超过TMPBUFLEN(最大20位）:18,446,744,073,709,551,615*/
 	if (len > TMPBUFLEN - 1)
 		len = TMPBUFLEN - 1;
 
@@ -455,16 +462,20 @@ static int proc_get_long(char **buf, size_t *size,
 	tmp[len] = 0;
 	p = tmp;
 	if (*p == '-' && *size > 1) {
+	    //遇到负数符号
 		*neg = true;
 		p++;
 	} else
 		*neg = false;
+	//必须为数字
 	if (!isdigit(*p))
 		return -EINVAL;
 
-	if (strtoul_lenient(p, &p, 0, val))
+	//转换p表示的非符数，记录在val中
+	if (strtoul_lenient(p/*待转换的串*/, &p/*转换中止位置*/, 0/*10进制*/, val/*出参，转换后的值*/))
 		return -EINVAL;
 
+	//消费掉的长度
 	len = p - tmp;
 
 	/* We don't know if the next char is whitespace thus we may accept
@@ -473,12 +484,14 @@ static int proc_get_long(char **buf, size_t *size,
 	if (len == TMPBUFLEN - 1)
 		return -EINVAL;
 
+	//未消费完所有字符，且提供了容许的tailer数组，*p如果不在perm_tr中存在，则报错
 	if (len < *size && perm_tr_len && !memchr(perm_tr, *p, perm_tr_len))
 		return -EINVAL;
 
 	if (tr && (len < *size))
 		*tr = *p;
 
+	//已解析位置及长度更新
 	*buf += len;
 	*size -= len;
 
@@ -498,6 +511,7 @@ static int proc_get_long(char **buf, size_t *size,
  */
 static void proc_put_long(void **buf, size_t *size, unsigned long val, bool neg)
 {
+    //向buf中存入val(val可能为负数）
 	int len;
 	char tmp[TMPBUFLEN], *p = tmp;
 
@@ -511,33 +525,38 @@ static void proc_put_long(void **buf, size_t *size, unsigned long val, bool neg)
 }
 #undef TMPBUFLEN
 
-static void proc_put_char(void **buf, size_t *size, char c)
+//向buf中存入一个字符
+static void proc_put_char(void **buf/*入出参，buf写入位置*/, size_t *size/*入出参，可用buf长度*/, char c)
 {
 	if (*size) {
 		char **buffer = (char **)buf;
-		**buffer = c;
+		**buffer = c;//向buffer中写入c
 
-		(*size)--;
-		(*buffer)++;
+		(*size)--;//可写长度减一
+		(*buffer)++;//buffer写位置后移
 		*buf = *buffer;
 	}
 }
 
-static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
+static int do_proc_dointvec_conv(bool *negp/*是否取负值*/, unsigned long *lvalp,
 				 int *valp,
-				 int write, void *data)
+				 int write/*是否写操作，若写，则valp=lvalp*/, void *data/*不使用*/)
 {
 	if (write) {
+	    //检查lvalp的取值，并将其负给valp
 		if (*negp) {
+		    //lvalp不得大于0
 			if (*lvalp > (unsigned long) INT_MAX + 1)
 				return -EINVAL;
 			*valp = -*lvalp;
 		} else {
+		    //lvalp不得超过int_max
 			if (*lvalp > (unsigned long) INT_MAX)
 				return -EINVAL;
 			*valp = *lvalp;
 		}
 	} else {
+	    //检查valp，填充lvalp,negp
 		int val = *valp;
 		if (val < 0) {
 			*negp = true;
@@ -567,10 +586,10 @@ static int do_proc_douintvec_conv(unsigned long *lvalp,
 
 static const char proc_wspace_sep[] = { ' ', '\t', '\n' };
 
-static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
-		  int write, void *buffer,
-		  size_t *lenp, loff_t *ppos,
-		  int (*conv)(bool *negp, unsigned long *lvalp, int *valp,
+static int __do_proc_dointvec(void *tbl_data/*待填充或读取的数据*/, struct ctl_table *table,
+		  int write, void *buffer/*write时使用的待解析buffer,read时使用的格式化buffer*/,
+		  size_t *lenp/*出参，剩余长度*/, loff_t *ppos,
+		  int (*conv/*转换回调*/)(bool *negp, unsigned long *lvalp, int *valp,
 			      int write, void *data),
 		  void *data)
 {
@@ -578,16 +597,18 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 	size_t left;
 	char *p;
 	
+	//没有tbl_data或者maxlen为0，则直接返回
 	if (!tbl_data || !table->maxlen || !*lenp || (*ppos && !write)) {
 		*lenp = 0;
 		return 0;
 	}
 	
-	i = (int *) tbl_data;
-	vleft = table->maxlen / sizeof(*i);
+	i = (int *) tbl_data;/*i指向tbl_data的每一个项*/
+	vleft = table->maxlen / sizeof(*i);/*有多少项*/
 	left = *lenp;
 
 	if (!conv)
+	    /*如未提供回调，则使和默认转换函数*/
 		conv = do_proc_dointvec_conv;
 
 	if (write) {
@@ -599,37 +620,50 @@ static int __do_proc_dointvec(void *tbl_data, struct ctl_table *table,
 		p = buffer;
 	}
 
+	//执行每一项解析
 	for (; left && vleft--; i++, first=0) {
 		unsigned long lval;
 		bool neg;
 
 		if (write) {
+		    //更新p指针，使其指向首个非space字符
 			left -= proc_skip_spaces(&p);
 
 			if (!left)
+			    /*字符串变为空，跳出*/
 				break;
-			err = proc_get_long(&p, &left, &lval, &neg,
+
+			//分析p,将转换后的值存在lval中
+			err = proc_get_long(&p, &left/*待解析长度*/, &lval, &neg/*是否负数*/,
 					     proc_wspace_sep,
 					     sizeof(proc_wspace_sep), NULL);
 			if (err)
+			    /*格式有误，退出*/
 				break;
+
+			//指明写操作
 			if (conv(&neg, &lval, i, 1, data)) {
 				err = -EINVAL;
 				break;
 			}
 		} else {
+		    //执行读操作，输出到buffer
 			if (conv(&neg, &lval, i, 0, data)) {
 				err = -EINVAL;
 				break;
 			}
 			if (!first)
+			    /*存入一个\t*/
 				proc_put_char(&buffer, &left, '\t');
+			/*存入 neg?lval*/
 			proc_put_long(&buffer, &left, lval, neg);
 		}
 	}
 
+	//read情况下，再向buffer写入一个\n
 	if (!write && !first && left && !err)
 		proc_put_char(&buffer, &left, '\n');
+	//写情况下，如left,则再跳过空格符
 	if (write && !err && left)
 		left -= proc_skip_spaces(&p);
 	if (write && first)
@@ -913,9 +947,9 @@ struct do_proc_dointvec_minmax_conv_param {
 	int *max;
 };
 
-static int do_proc_dointvec_minmax_conv(bool *negp, unsigned long *lvalp,
-					int *valp,
-					int write, void *data)
+static int do_proc_dointvec_minmax_conv(bool *negp/*写时为入参，读时为出参*/, unsigned long *lvalp/*写时为入参，读时为出参*/,
+					int *valp/*写时为出参，读时为入参*/,
+					int write, void *data/*读时，范围检查*/)
 {
 	int tmp, ret;
 	struct do_proc_dointvec_minmax_conv_param *param = data;
@@ -923,15 +957,16 @@ static int do_proc_dointvec_minmax_conv(bool *negp, unsigned long *lvalp,
 	 * If writing, first do so via a temporary local int so we can
 	 * bounds-check it before touching *valp.
 	 */
-	int *ip = write ? &tmp : valp;
+	int *ip = write ? &tmp : valp;/*如果是写，则用tmp记录最终数值，否则记录输出的最终值*/
 
 	ret = do_proc_dointvec_conv(negp, lvalp, ip, write, data);
 	if (ret)
 		return ret;
 
 	if (write) {
+	    //如果写操作，则tmp必须在区间[param->min,parm->max]以内
 		if ((param->min && *param->min > tmp) ||
-		    (param->max && *param->max < tmp))
+		    (param->max/*如非零则检查*/ && *param->max < tmp))
 			return -EINVAL;
 		*valp = tmp;
 	}
@@ -958,10 +993,12 @@ static int do_proc_dointvec_minmax_conv(bool *negp, unsigned long *lvalp,
 int proc_dointvec_minmax(struct ctl_table *table, int write,
 		  void *buffer, size_t *lenp, loff_t *ppos)
 {
+    //读取net.ipv4.tcp_rmem 配置
 	struct do_proc_dointvec_minmax_conv_param param = {
 		.min = (int *) table->extra1,
 		.max = (int *) table->extra2,
 	};
+	//解析或格式化一组配置数据
 	return do_proc_dointvec(table, write, buffer, lenp, ppos,
 				do_proc_dointvec_minmax_conv, &param);
 }

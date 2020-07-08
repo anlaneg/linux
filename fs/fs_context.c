@@ -60,17 +60,22 @@ static const struct constant_table common_clear_sb_flag[] = {
  */
 static int vfs_parse_sb_flag(struct fs_context *fc, const char *key)
 {
+    //检查key是否为sb_flags的控制命令
 	unsigned int token;
 
+	//检查common_set_sb_flag中是否包含key,如不包含返回0，否则返回key对应的value
 	token = lookup_constant(common_set_sb_flag, key, 0);
 	if (token) {
+	    //被命中，sb_flags标记设置
 		fc->sb_flags |= token;
 		fc->sb_flags_mask |= token;
 		return 0;
 	}
 
+	//检查common_set_sb_flag中是否包含key,如不包含返回0，否则返回key对应的value
 	token = lookup_constant(common_clear_sb_flag, key, 0);
 	if (token) {
+	    //被命中，sb_flags标记清除
 		fc->sb_flags &= ~token;
 		fc->sb_flags_mask |= token;
 		return 0;
@@ -99,11 +104,14 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	int ret;
 
+	//param必须包含key
 	if (!param->key)
 		return invalf(fc, "Unnamed parameter\n");
 
+	//检查param是否为sb_flags控制参数
 	ret = vfs_parse_sb_flag(fc, param->key);
 	if (ret != -ENOPARAM)
+	    /*为sb_flags控制参数，已处理，返回*/
 		return ret;
 
 	ret = security_fs_context_parse_param(fc, param);
@@ -113,6 +121,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 		 */
 		return ret;
 
+	//如果fs指定了参数解析函数，则调用
 	if (fc->ops->parse_param) {
 		ret = fc->ops->parse_param(fc, param);
 		if (ret != -ENOPARAM)
@@ -123,6 +132,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	 * default handling of source.
 	 */
 	if (strcmp(param->key, "source") == 0) {
+	    //处理默认的source参数
 		if (param->type != fs_value_is_string)
 			return invalf(fc, "VFS: Non-string source");
 		if (fc->source)
@@ -158,6 +168,7 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 		param.type = fs_value_is_string;
 	}
 
+	//解析fs参数key
 	ret = vfs_parse_fs_param(fc, &param);
 	kfree(param.string);
 	return ret;
@@ -181,23 +192,27 @@ int generic_parse_monolithic(struct fs_context *fc, void *data)
 	int ret = 0;
 
 	if (!options)
+	    /*无选顶，返回*/
 		return 0;
 
 	ret = security_sb_eat_lsm_opts(options, &fc->security);
 	if (ret)
 		return ret;
 
+	//按','号分隔options,并进行遍历
 	while ((key = strsep(&options, ",")) != NULL) {
 		if (*key) {
 			size_t v_len = 0;
 			char *value = strchr(key, '=');
 
 			if (value) {
+			    //忽略掉以'='开头的选项
 				if (value == key)
 					continue;
 				*value++ = 0;
 				v_len = strlen(value);
 			}
+			//解析key,value参数
 			ret = vfs_parse_fs_string(fc, key, value, v_len);
 			if (ret < 0)
 				break;
@@ -231,6 +246,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	struct fs_context *fc;
 	int ret = -ENOMEM;
 
+	//申请fs context
 	fc = kzalloc(sizeof(struct fs_context), GFP_KERNEL);
 	if (!fc)
 		return ERR_PTR(-ENOMEM);
@@ -262,11 +278,13 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	/* TODO: Make all filesystems support this unconditionally */
 	init_fs_context = fc->fs_type->init_fs_context;
 	if (!init_fs_context)
+	    /*文件系统未提供此回调，使用默认值*/
 		init_fs_context = legacy_init_fs_context;
 
 	ret = init_fs_context(fc);
 	if (ret < 0)
 		goto err_fc;
+	//标记需要调用ops->free函数
 	fc->need_free = true;
 	return fc;
 
@@ -318,9 +336,11 @@ struct fs_context *vfs_dup_fs_context(struct fs_context *src_fc)
 	struct fs_context *fc;
 	int ret;
 
+	//如果未提供dup回调，则返回不支持
 	if (!src_fc->ops->dup)
 		return ERR_PTR(-EOPNOTSUPP);
 
+	//先制作一个src_fc副本
 	fc = kmemdup(src_fc, sizeof(struct fs_context), GFP_KERNEL);
 	if (!fc)
 		return ERR_PTR(-ENOMEM);
@@ -339,6 +359,7 @@ struct fs_context *vfs_dup_fs_context(struct fs_context *src_fc)
 		refcount_inc(&fc->log.log->usage);
 
 	/* Can't call put until we've called ->dup */
+	//fs自定义的私有数据副本制作函数
 	ret = fc->ops->dup(fc, src_fc);
 	if (ret < 0)
 		goto err_fc;
@@ -442,6 +463,7 @@ void put_fs_context(struct fs_context *fc)
 		deactivate_super(sb);
 	}
 
+	//如有必要调用fs的自定义free
 	if (fc->need_free && fc->ops && fc->ops->free)
 		fc->ops->free(fc);
 
@@ -452,6 +474,7 @@ void put_fs_context(struct fs_context *fc)
 	put_fc_log(fc);
 	put_filesystem(fc->fs_type);
 	kfree(fc->source);
+	//释放fs context
 	kfree(fc);
 }
 EXPORT_SYMBOL(put_fs_context);
@@ -632,6 +655,7 @@ const struct fs_context_operations legacy_fs_context_ops = {
  */
 static int legacy_init_fs_context(struct fs_context *fc)
 {
+    //默认fs context初始化函数
 	fc->fs_private = kzalloc(sizeof(struct legacy_fs_context), GFP_KERNEL);
 	if (!fc->fs_private)
 		return -ENOMEM;
@@ -645,8 +669,10 @@ int parse_monolithic_mount_data(struct fs_context *fc, void *data)
 
 	monolithic_mount_data = fc->ops->parse_monolithic;
 	if (!monolithic_mount_data)
+	    /*未提供回调，使用默认回调*/
 		monolithic_mount_data = generic_parse_monolithic;
 
+	/*解析data参数*/
 	return monolithic_mount_data(fc, data);
 }
 

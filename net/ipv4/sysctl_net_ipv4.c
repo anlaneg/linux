@@ -1356,6 +1356,7 @@ static struct ctl_table ipv4_net_table[] = {
 	{ }
 };
 
+//为net namespace注册table
 static __net_init int ipv4_sysctl_init_net(struct net *net)
 {
 	struct ctl_table *table;
@@ -1416,6 +1417,7 @@ static __init int sysctl_ipv4_init(void)
 	if (!hdr)
 		return -ENOMEM;
 
+	//net namespace初始化
 	if (register_pernet_subsys(&ipv4_sysctl_ops)) {
 		unregister_net_sysctl_table(hdr);
 		return -ENOMEM;

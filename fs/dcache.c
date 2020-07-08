@@ -921,6 +921,7 @@ static inline void __dget(struct dentry *dentry)
 	lockref_get(&dentry->d_lockref);
 }
 
+//获取dentry的父dentry
 struct dentry *dget_parent(struct dentry *dentry)
 {
 	int gotref;
@@ -2375,7 +2376,7 @@ EXPORT_SYMBOL(d_lookup);
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
-	struct hlist_bl_head *b = d_hash(hash);
+	struct hlist_bl_head *b = d_hash(hash);/*在缓冲中查找*/
 	struct hlist_bl_node *node;
 	struct dentry *found = NULL;
 	struct dentry *dentry;
@@ -2410,9 +2411,11 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 			continue;
 
 		spin_lock(&dentry->d_lock);
+
 		//跳过非同一父节点的
 		if (dentry->d_parent != parent)
 			goto next;
+
 		//是否已自hash表中移除？？
 		if (d_unhashed(dentry))
 			goto next;

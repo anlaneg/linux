@@ -61,7 +61,9 @@ enum fs_value_type {
  * Configuration parameter.
  */
 struct fs_parameter {
+    //参数名称
 	const char		*key;		/* Parameter name */
+	//参数值类型
 	enum fs_value_type	type:8;		/* The type of value here */
 	union {
 		char		*string;
@@ -74,7 +76,7 @@ struct fs_parameter {
 };
 
 struct p_log {
-	const char *prefix;
+	const char *prefix;//日志信息前缀
 	struct fc_log *log;
 };
 
@@ -88,9 +90,12 @@ struct p_log {
  * See Documentation/filesystems/mount_api.rst
  */
 struct fs_context {
+    //可由各fs定制的操作集
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
+	//文件系统类型
 	struct file_system_type	*fs_type;
+	//文件系统的私有数据
 	void			*fs_private;	/* The filesystem's context */
 	void			*sget_key;
 	struct dentry		*root;		/* The root and superblock */
@@ -107,14 +112,19 @@ struct fs_context {
 	unsigned int		lsm_flags;	/* Information flags from the fs to the LSM */
 	enum fs_context_purpose	purpose:8;
 	enum fs_context_phase	phase:8;	/* The phase the context is in */
+	//指明是否有必要调用ops->free回调，用于释放fs_context中fs定制的私有数据
 	bool			need_free:1;	/* Need to call ops->free() */
 	bool			global:1;	/* Goes into &init_user_ns */
 };
 
 struct fs_context_operations {
+    //各fs定制的fs_context私有数据释放函数
 	void (*free)(struct fs_context *fc);
+	//各fs在通过src_fc拷贝制作一份副本时，填充fc中私有结构
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
+	//各fs定制的文件系统参数解析函数
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
+	//如果此回调不提供，则使用generic_parse_monolithic,用于解析data数据
 	int (*parse_monolithic)(struct fs_context *fc, void *data);
 	int (*get_tree)(struct fs_context *fc);
 	int (*reconfigure)(struct fs_context *fc);

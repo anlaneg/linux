@@ -23,6 +23,7 @@ static const struct constant_table bool_names[] = {
 	{ },
 };
 
+//查询常量表，按name匹配，一旦有表项命中，则返回表项,否则返回NULL
 static const struct constant_table *
 __lookup_constant(const struct constant_table *tbl, const char *name)
 {
@@ -40,38 +41,47 @@ __lookup_constant(const struct constant_table *tbl, const char *name)
  */
 int lookup_constant(const struct constant_table *tbl, const char *name, int not_found)
 {
+    //查询常量表，如果有命中，则返回表项对应的value,否则返回失配值（not_found)
 	const struct constant_table *p = __lookup_constant(tbl, name);
 
 	return p ? p->value : not_found;
 }
 EXPORT_SYMBOL(lookup_constant);
 
+//是否flag参数
 static inline bool is_flag(const struct fs_parameter_spec *p)
 {
 	return p->type == NULL;
 }
 
+//检查param由哪个fs_parameter_spec定义
 static const struct fs_parameter_spec *fs_lookup_key(
-	const struct fs_parameter_spec *desc,
-	struct fs_parameter *param, bool *negated)
+	const struct fs_parameter_spec *desc/*支持的参数列表*/,
+	struct fs_parameter *param/*待匹配的参数*/, bool *negated/*出参，指明是否反选项*/)
 {
 	const struct fs_parameter_spec *p, *other = NULL;
-	const char *name = param->key;
+	const char *name = param->key;/*取参数名称*/
 	bool want_flag = param->type == fs_value_is_flag;
 
 	*negated = false;
+	/*遍历支持的fs参数列表*/
 	for (p = desc; p->name; p++) {
+	    //跳过参数名不匹配的项
 		if (strcmp(p->name, name) != 0)
 			continue;
 		if (likely(is_flag(p) == want_flag))
+		    /*是flag,且名称匹配，直接返回*/
 			return p;
+		/*记录最后一个匹配的项做为备选项*/
 		other = p;
 	}
 	if (want_flag) {
+	    /*期待flag,但没有匹配，尝试匹配相反选项noXXX*/
 		if (name[0] == 'n' && name[1] == 'o' && name[2]) {
 			for (p = desc; p->name; p++) {
 				if (strcmp(p->name, name + 2) != 0)
 					continue;
+				//跳过无反选项的参数
 				if (!(p->flags & fs_param_neg_with_no))
 					continue;
 				*negated = true;
@@ -79,6 +89,7 @@ static const struct fs_parameter_spec *fs_lookup_key(
 			}
 		}
 	}
+	/*返回命中的选项*/
 	return other;
 }
 
@@ -103,7 +114,7 @@ static const struct fs_parameter_spec *fs_lookup_key(
 int __fs_parse(struct p_log *log,
 	     const struct fs_parameter_spec *desc,
 	     struct fs_parameter *param,
-	     struct fs_parse_result *result)
+	     struct fs_parse_result *result/*出参，转换后的参数值*/)
 {
 	const struct fs_parameter_spec *p;
 
@@ -111,8 +122,10 @@ int __fs_parse(struct p_log *log,
 
 	p = fs_lookup_key(desc, param, &result->negated);
 	if (!p)
+	    /*未查找到此参数*/
 		return -ENOPARAM;
 
+	/*告警，不建议再使用此参数*/
 	if (p->flags & fs_param_deprecated)
 		warn_plog(log, "Deprecated parameter '%s'", param->key);
 
@@ -120,11 +133,13 @@ int __fs_parse(struct p_log *log,
 	 * parameter and give an error if we can't.
 	 */
 	if (is_flag(p)) {
+	    /*命中的参数要求是flag,但参数并不是flags*/
 		if (param->type != fs_value_is_flag)
 			return inval_plog(log, "Unexpected value for '%s'",
 				      param->key);
 		result->boolean = !result->negated;
 	} else  {
+	    /*完成type回调，实现参数到result的配置转换*/
 		int ret = p->type(log, p, param, result);
 		if (ret)
 			return ret;

@@ -703,9 +703,10 @@ COMPAT_SYSCALL_DEFINE2(newfstat, unsigned int, fd,
 /* Caller is here responsible for sufficient locking (ie. inode->i_lock) */
 void __inode_add_bytes(struct inode *inode, loff_t bytes)
 {
-	inode->i_blocks += bytes >> 9;
-	bytes &= 511;
+	inode->i_blocks += bytes >> 9;//除以512字节，获得占用多少个block
+	bytes &= 511;//与上511,获得block占满后余多少字李
 	inode->i_bytes += bytes;
+	//如果之前bytes中含有字节，则若满512计一个block
 	if (inode->i_bytes >= 512) {
 		inode->i_blocks++;
 		inode->i_bytes -= 512;

@@ -22,8 +22,9 @@
  * This is commonly provided by 32bit archs to provide an optimized 64bit
  * divide.
  */
-static inline u64 div_u64_rem(u64 dividend, u32 divisor, u32 *remainder)
+static inline u64 div_u64_rem(u64 dividend/*被除数*/, u32 divisor/*除数*/, u32 *remainder/*余数*/)
 {
+    //dividend整数divisor,通过remainer获取余数
 	*remainder = dividend % divisor;
 	return dividend / divisor;
 }
@@ -123,6 +124,7 @@ extern s64 div64_s64(s64 dividend, s64 divisor);
 #ifndef div_u64
 static inline u64 div_u64(u64 dividend, u32 divisor)
 {
+    //返回dividend整除divisor的商
 	u32 remainder;
 	return div_u64_rem(dividend, divisor, &remainder);
 }

@@ -2851,8 +2851,8 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
  * create a new mount for userspace and request it to be added into the
  * namespace's tree
  */
-static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
-			int mnt_flags, const char *name, void *data)
+static int do_new_mount(struct path *path, const char *fstype/*文件系统名称*/, int sb_flags,
+			int mnt_flags/*挂载标记*/, const char *name/*source参数取值,指明设备地址*/, void *data/*各fs自定义的数据*/)
 {
 	struct file_system_type *type;
 	struct fs_context *fc;
@@ -2867,6 +2867,7 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 	if (!type)
 		return -ENODEV;
 
+	//支持子类型，取子类型名称subtype
 	if (type->fs_flags & FS_HAS_SUBTYPE) {
 		subtype = strchr(fstype, '.');
 		if (subtype) {
@@ -2878,16 +2879,20 @@ static int do_new_mount(struct path *path, const char *fstype, int sb_flags,
 		}
 	}
 
+	//创建file system context
 	fc = fs_context_for_mount(type, sb_flags);
 	put_filesystem(type);
 	if (IS_ERR(fc))
 		return PTR_ERR(fc);
 
+	//如果有subtype,则使fs解析subtype参数
 	if (subtype)
 		err = vfs_parse_fs_string(fc, "subtype",
 					  subtype, strlen(subtype));
+	//解析source参数
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
+	/*解析data数据参数*/
 	if (!err)
 		err = parse_monolithic_mount_data(fc, data);
 	if (!err && !mount_capable(fc))

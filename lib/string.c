@@ -503,6 +503,7 @@ EXPORT_SYMBOL(strnchr);
  */
 char *skip_spaces(const char *str)
 {
+    //跳过自str位置开始的一串连续空格
 	while (isspace(*str))
 		++str;
 	return (char *)str;

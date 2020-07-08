@@ -38,9 +38,12 @@ fs_param_type fs_param_is_bool, fs_param_is_u32, fs_param_is_s32, fs_param_is_u6
  */
 struct fs_parameter_spec {
 	const char		*name;
+	//此值为NULL时，标记是一个flag参数，否则表示回调，完成参数到值的转换
 	fs_param_type		*type;	/* The desired parameter type */
+	//选项编号
 	u8			opt;	/* Option number (returned by fs_parse()) */
 	unsigned short		flags;
+	//指明noxxx是反选项
 #define fs_param_neg_with_no	0x0002	/* "noxxx" is negative param */
 #define fs_param_neg_with_empty	0x0004	/* "xxx=" is negative param */
 #define fs_param_deprecated	0x0008	/* The param is deprecated */
@@ -51,8 +54,10 @@ struct fs_parameter_spec {
  * Result of parse.
  */
 struct fs_parse_result {
+    //是否指明的为反选项
 	bool			negated;	/* T if param was "noxxx" */
 	union {
+	    //boolean类型取值
 		bool		boolean;	/* For spec_bool */
 		int		int_32;		/* For spec_s32/spec_enum */
 		unsigned int	uint_32;	/* For spec_u32{,_octal,_hex}/spec_enum */
@@ -68,7 +73,7 @@ extern int __fs_parse(struct p_log *log,
 static inline int fs_parse(struct fs_context *fc,
 	     const struct fs_parameter_spec *desc,
 	     struct fs_parameter *param,
-	     struct fs_parse_result *result)
+	     struct fs_parse_result *result/*出参，param被转换后结果*/)
 {
 	return __fs_parse(&fc->log, desc, param, result);
 }

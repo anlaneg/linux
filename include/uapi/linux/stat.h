@@ -28,8 +28,8 @@
 #define S_ISSOCK(m)	(((m) & S_IFMT) == S_IFSOCK)
 
 //user读写执行权限位
-#define S_IRWXU 00700
-#define S_IRUSR 00400
+#define S_IRWXU 00700 //读写执行
+#define S_IRUSR 00400 //读权限
 #define S_IWUSR 00200
 #define S_IXUSR 00100
 

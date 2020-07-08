@@ -280,8 +280,9 @@ static struct file_system_type *__get_fs_type(const char *name, int len)
 struct file_system_type *get_fs_type(const char *name)
 {
 	struct file_system_type *fs;
+	//如果包含'.'，则文件系统名称为'.'之前的,'.'号之后的为subtype名称
 	const char *dot = strchr(name, '.');
-	int len = dot ? dot - name : strlen(name);//如果包含'.'，则文件系统名称为'.'之前的
+	int len = dot ? dot - name : strlen(name);
 
 	fs = __get_fs_type(name, len);//采用名称取得filesystem
 	if (!fs && (request_module("fs-%.*s", len, name) == 0)) {

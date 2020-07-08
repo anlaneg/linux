@@ -113,8 +113,8 @@ static inline void *proc_sys_poll_event(struct ctl_table_poll *poll)
 /* A sysctl table is an array of struct ctl_table: */
 struct ctl_table {
 	const char *procname;		/* Text ID for /proc/sys, or zero */
-	void *data;
-	int maxlen;
+	void *data;/*记录一组配置项*/
+	int maxlen;/*这组数据字节数目*/
 	umode_t mode;
 	struct ctl_table *child;	/* Deprecated */
 	proc_handler *proc_handler;	/* Callback for text formatting */
@@ -133,7 +133,7 @@ struct ctl_node {
 struct ctl_table_header {
 	union {
 		struct {
-			struct ctl_table *ctl_table;
+			struct ctl_table *ctl_table;//对应的ctl_table
 			int used;
 			int count;
 			int nreg;
@@ -145,7 +145,7 @@ struct ctl_table_header {
 	struct ctl_table_root *root;
 	struct ctl_table_set *set;
 	struct ctl_dir *parent;
-	struct ctl_node *node;
+	struct ctl_node *node;//表项起始位置
 	struct hlist_head inodes; /* head for proc_inode->sysctl_inodes */
 };
 

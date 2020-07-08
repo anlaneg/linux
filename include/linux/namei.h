@@ -19,6 +19,7 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 
 /* pathwalk mode */
 #define LOOKUP_FOLLOW		0x0001	/* follow links at the end */
+/*标志查询目录*/
 #define LOOKUP_DIRECTORY	0x0002	/* require a directory */
 #define LOOKUP_AUTOMOUNT	0x0004  /* force terminal automount */
 /*容许空的路径*/
