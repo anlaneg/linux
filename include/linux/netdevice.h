@@ -1396,7 +1396,7 @@ struct net_device_ops {
 	int			(*ndo_set_vf_rss_query_en)(
 						   struct net_device *dev,
 						   int vf, bool setting);
-	/*用于实现tc offload，队列，flower等*/
+	/*针对dev,用于实现tc offload，支持队列，flower等*/
 	int			(*ndo_setup_tc)(struct net_device *dev,
 						enum tc_setup_type type,
 						void *type_data);
@@ -2004,7 +2004,7 @@ struct net_device {
 	unsigned char		name_assign_type;
 	bool			uc_promisc;
 	struct netdev_hw_addr_list	uc;//此设备上配置的单播mac地址
-	struct netdev_hw_addr_list	mc;
+	struct netdev_hw_addr_list	mc;//此设备上配置的组播mac地址
 	struct netdev_hw_addr_list	dev_addrs;//设备硬件地址列表
 
 #ifdef CONFIG_SYSFS
@@ -2074,7 +2074,7 @@ struct net_device {
 	struct nf_hook_entries __rcu *nf_hooks_ingress;//设备的ingress　hook
 #endif
 
-	unsigned char		broadcast[MAX_ADDR_LEN];//广播地址
+	unsigned char		broadcast[MAX_ADDR_LEN];//广播mac地址
 #ifdef CONFIG_RFS_ACCEL
 	struct cpu_rmap		*rx_cpu_rmap;
 #endif

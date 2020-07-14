@@ -296,10 +296,10 @@ struct Qdisc_ops {
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 	int			(*dump_stats)(struct Qdisc *, struct gnet_dump *);
 
-	//设置ingress block
+	//设置ingress block的block index
 	void			(*ingress_block_set)(struct Qdisc *sch,
 						     u32 block_index);
-	//设置egress block,使其与指定index关联
+	//设置egress block的block index
 	void			(*egress_block_set)(struct Qdisc *sch,
 						    u32 block_index);
 	/*取sch对应的ingress block index*/
@@ -357,6 +357,7 @@ struct tcf_proto_ops {
 	bool			(*delete_empty)(struct tcf_proto *tp);
 	void			(*walk)(struct tcf_proto *tp,
 					struct tcf_walker *arg, bool rtnl_held);
+	/*实现tp规则的再次下发*/
 	int			(*reoffload)(struct tcf_proto *tp, bool add,
 					     flow_setup_cb_t *cb, void *cb_priv,
 					     struct netlink_ext_ack *extack);
@@ -420,7 +421,7 @@ struct tcf_proto {
 	 * classifiers to protect their private data.
 	 */
 	spinlock_t		lock;
-	bool			deleting;
+	bool			deleting;//标记此tp正在被删除
 	refcount_t		refcnt;//引用计数
 	struct rcu_head		rcu;
 	struct hlist_node	destroy_ht_node;
@@ -441,13 +442,13 @@ typedef void tcf_chain_head_change_t(struct tcf_proto *tp_head, void *priv);
 struct tcf_chain {
 	/* Protects filter_chain. */
 	struct mutex filter_chain_lock;
-	//用于挂接分类器
+	//用于挂接分类器（第一个元素为此chain上首个tp)
 	struct tcf_proto __rcu *filter_chain;
 	struct list_head list;//用于串连至block->chain_list
 	struct tcf_block *block;//指向所属的block
 	u32 index; /* chain index 索引号*/
-	unsigned int refcnt;
-	unsigned int action_refcnt;
+	unsigned int refcnt;//此chain被引用总数
+	unsigned int action_refcnt;//action对此chain的引用数
 	bool explicitly_created;
 	bool flushing;
 	const struct tcf_proto_ops *tmplt_ops;
@@ -461,14 +462,14 @@ struct tcf_block {
 	 */
 	struct mutex lock;
 	struct list_head chain_list;//用于记录在此block下所有的struct tcf_chain
-	u32 index; /* block index for shared blocks */ //对应的id
+	u32 index; /* block index for shared blocks */ //对应的block索引
 	u32 classid; /* which class this block belongs to */
 	refcount_t refcnt;
 	struct net *net;//所属net
-	struct Qdisc *q;//所属的Qdisc
+	struct Qdisc *q;//所属的Qdisc （如果block为共享的，则不设置此q)
 	struct rw_semaphore cb_lock; /* protects cb_list and offload counters */
 	struct flow_block flow_block;
-	//用于挂接struct tcf_block_owner_item类型
+	//用于挂接struct tcf_block_owner_item类型,指明谁使用此block
 	struct list_head owner_list;
 	bool keep_dst;
 	atomic_t offloadcnt; /* Number of oddloaded filters */

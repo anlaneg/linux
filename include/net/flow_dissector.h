@@ -226,7 +226,7 @@ struct flow_dissector_key_ip {
  * @ingress_iftype: ingress interface type
  */
 struct flow_dissector_key_meta {
-	int ingress_ifindex;
+	int ingress_ifindex;/*入接口ifindex*/
 	u16 ingress_iftype;
 };
 

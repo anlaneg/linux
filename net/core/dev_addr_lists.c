@@ -16,7 +16,7 @@
  * General list handling functions
  */
 
-static int __hw_addr_create_ex(struct netdev_hw_addr_list *list,
+static int __hw_addr_create_ex(struct netdev_hw_addr_list *list/*要链接地址的链表*/,
 			       const unsigned char *addr, int addr_len,
 			       unsigned char addr_type, bool global,
 			       bool sync)

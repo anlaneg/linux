@@ -1847,6 +1847,7 @@ int bnxt_tc_setup_flower(struct bnxt *bp, u16 src_fid,
 	}
 }
 
+/*间接的block回调*/
 static int bnxt_tc_setup_indr_block_cb(enum tc_setup_type type,
 				       void *type_data, void *cb_priv)
 {
@@ -1894,6 +1895,7 @@ static int bnxt_tc_setup_indr_block(struct net_device *netdev, struct bnxt *bp,
 	struct bnxt_flower_indr_block_cb_priv *cb_priv;
 	struct flow_block_cb *block_cb;
 
+	//当前仅支持ingress方向的offload
 	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
 		return -EOPNOTSUPP;
 
@@ -1907,6 +1909,7 @@ static int bnxt_tc_setup_indr_block(struct net_device *netdev, struct bnxt *bp,
 		cb_priv->bp = bp;
 		list_add(&cb_priv->list, &bp->tc_indr_block_list);
 
+		/*申请并构造block_cb*/
 		block_cb = flow_block_cb_alloc(bnxt_tc_setup_indr_block_cb,
 					       cb_priv, cb_priv,
 					       bnxt_tc_setup_indr_rel);
@@ -1916,6 +1919,7 @@ static int bnxt_tc_setup_indr_block(struct net_device *netdev, struct bnxt *bp,
 			return PTR_ERR(block_cb);
 		}
 
+		/*将block_cb挂接在flow_block_offload*/
 		flow_block_cb_add(block_cb, f);
 		list_add_tail(&block_cb->driver_list, &bnxt_block_cb_list);
 		break;
@@ -1939,6 +1943,7 @@ static int bnxt_tc_setup_indr_block(struct net_device *netdev, struct bnxt *bp,
 	return 0;
 }
 
+/*如果netdev为vxlan设备，则容许offload*/
 static bool bnxt_is_netdev_indr_offload(struct net_device *netdev)
 {
 	return netif_is_vxlan(netdev);
@@ -1947,6 +1952,7 @@ static bool bnxt_is_netdev_indr_offload(struct net_device *netdev)
 static int bnxt_tc_setup_indr_cb(struct net_device *netdev, void *cb_priv,
 				 enum tc_setup_type type, void *type_data)
 {
+    /*此netdev如不支持offload,则直接返回*/
 	if (!bnxt_is_netdev_indr_offload(netdev))
 		return -EOPNOTSUPP;
 
@@ -1997,6 +2003,7 @@ int bnxt_init_tc(struct bnxt *bp)
 	int rc;
 
 	if (bp->hwrm_spec_code < 0x10803) {
+	    /*fw无法支持tc flower offload*/
 		netdev_warn(bp->dev,
 			    "Firmware does not support TC flower offload.\n");
 		return -ENOTSUPP;
@@ -2047,6 +2054,7 @@ int bnxt_init_tc(struct bnxt *bp)
 	/* init indirect block notifications */
 	INIT_LIST_HEAD(&bp->tc_indr_block_list);
 
+	/*注册间接的dev tc_block_setup回调*/
 	rc = flow_indr_dev_register(bnxt_tc_setup_indr_cb, bp);
 	if (!rc)
 		return 0;

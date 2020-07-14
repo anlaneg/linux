@@ -59,7 +59,7 @@ void tcf_block_put(struct tcf_block *block);
 void tcf_block_put_ext(struct tcf_block *block, struct Qdisc *q,
 		       struct tcf_block_ext_info *ei);
 
-//如果block索引非0，则其为可公享block
+//检查是否为共享block,如果block索引非0，则其为共享block
 static inline bool tcf_block_shared(struct tcf_block *block)
 {
 	return block->index;
@@ -279,6 +279,7 @@ tcf_exts_stats_update(const struct tcf_exts *exts,
 
 	preempt_disable();
 
+	//遍历所有action分量，更新action统计信息
 	for (i = 0; i < exts->nr_actions; i++) {
 		struct tc_action *a = exts->actions[i];
 
@@ -508,6 +509,7 @@ static inline int tcf_valid_offset(const struct sk_buff *skb,
 		      (ptr <= (ptr + len)));
 }
 
+/*通过indev_tlv获得其指定dev对应的接口ifindex*/
 static inline int
 tcf_change_indev(struct net *net, struct nlattr *indev_tlv,
 		 struct netlink_ext_ack *extack)
@@ -515,11 +517,13 @@ tcf_change_indev(struct net *net, struct nlattr *indev_tlv,
 	char indev[IFNAMSIZ];
 	struct net_device *dev;
 
+	//填充indev设备名称
 	if (nla_strlcpy(indev, indev_tlv, IFNAMSIZ) >= IFNAMSIZ) {
 		NL_SET_ERR_MSG_ATTR(extack, indev_tlv,
 				    "Interface name too long");
 		return -EINVAL;
 	}
+
 	//通过名称查找dev,返回dev->ifindex
 	dev = __dev_get_by_name(net, indev);
 	if (!dev) {
@@ -599,7 +603,7 @@ struct tc_cls_u32_offload {
 	};
 };
 
-//检查dev是否可offload tc
+//检查dev是否容许tc hw offload
 static inline bool tc_can_offload(const struct net_device *dev)
 {
 	return dev->features & NETIF_F_HW_TC;

@@ -259,12 +259,14 @@ static u32 macvlan_hash_mix(const struct macvlan_dev *vlan)
 }
 
 
+//addr是一个组播mac地址，跳过前两个字节，将后面的4个字节转换为u32整数val
 static unsigned int mc_hash(const struct macvlan_dev *vlan,
 			    const unsigned char *addr)
 {
 	u32 val = __get_unaligned_cpu32(addr + 2);
 
 	val ^= macvlan_hash_mix(vlan);
+	//使val变更为一个小于MACVLAN_MC_FILTER_BITS位bits的数
 	return hash_32(val, MACVLAN_MC_FILTER_BITS);
 }
 
@@ -677,6 +679,7 @@ static int macvlan_open(struct net_device *dev)
 	}
 
 	if (dev->flags & IFF_ALLMULTI) {
+	    /*使lower设备开启组播*/
 		err = dev_set_allmulti(lowerdev, 1);
 		if (err < 0)
 			goto del_unicast;
@@ -820,18 +823,23 @@ static void macvlan_compute_filter(unsigned long *mc_filter,
 				   struct macvlan_dev *vlan)
 {
 	if (dev->flags & (IFF_PROMISC | IFF_ALLMULTI)) {
+	    //混杂模式且容许所有组播
 		bitmap_fill(mc_filter, MACVLAN_MC_FILTER_SZ);
 	} else {
 		struct netdev_hw_addr *ha;
 		DECLARE_BITMAP(filter, MACVLAN_MC_FILTER_SZ);
 
+		//将filter置为'0'
 		bitmap_zero(filter, MACVLAN_MC_FILTER_SZ);
+		//针对配置的mc地址，设置filter,使mc映射的位为'1'
 		netdev_for_each_mc_addr(ha, dev) {
 			__set_bit(mc_hash(vlan, ha->addr), filter);
 		}
 
+		//设置广播地址对应的位
 		__set_bit(mc_hash(vlan, dev->broadcast), filter);
 
+		//使mc_filter生效
 		bitmap_copy(mc_filter, filter, MACVLAN_MC_FILTER_SZ);
 	}
 }
@@ -842,6 +850,7 @@ static void macvlan_set_mac_lists(struct net_device *dev)
 
 	macvlan_compute_filter(vlan->mc_filter, dev, vlan);
 
+	//单播组播mac同步
 	dev_uc_sync(vlan->lowerdev, dev);
 	dev_mc_sync(vlan->lowerdev, dev);
 
@@ -858,6 +867,7 @@ static void macvlan_set_mac_lists(struct net_device *dev)
 	 * The solution is to maintain a list of broadcast addresses like
 	 * we do for uc/mc, if you care.
 	 */
+	//设置组播filter
 	macvlan_compute_filter(vlan->port->mc_filter, vlan->lowerdev, NULL);
 }
 
@@ -1199,6 +1209,7 @@ static const struct net_device_ops macvlan_netdev_ops = {
 	.ndo_fix_features	= macvlan_fix_features,
 	.ndo_change_rx_flags	= macvlan_change_rx_flags,
 	.ndo_set_mac_address	= macvlan_set_mac_address,
+	//同步uc,mc到lower设备，设置macvlan的mc_filter
 	.ndo_set_rx_mode	= macvlan_set_mac_lists,
 	.ndo_get_stats64	= macvlan_dev_get_stats64,
 	.ndo_validate_addr	= eth_validate_addr,

@@ -78,7 +78,7 @@ static u32 ingress_ingress_block_get(struct Qdisc *sch)
 	return q->block_info.block_index;
 }
 
-//ingress队列初始化
+//ingress qdisc初始化
 static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr *opt,
 			struct netlink_ext_ack *extack)
 {

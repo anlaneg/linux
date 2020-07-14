@@ -239,6 +239,7 @@ static void cls_bpf_stop_offload(struct tcf_proto *tp,
 		pr_err("Stopping hardware offload failed: %d\n", err);
 }
 
+/*状态查询*/
 static void cls_bpf_offload_update_stats(struct tcf_proto *tp,
 					 struct cls_bpf_prog *prog)
 {

@@ -8,9 +8,9 @@
 #include <linux/rhashtable.h>
 
 struct flow_match {
-	struct flow_dissector	*dissector;
-	void			*mask;
-	void			*key;
+	struct flow_dissector	*dissector;/*指向flow_key信息*/
+	void			*mask;/*指向掩码*/
+	void			*key;/*指向匹配条件*/
 };
 
 struct flow_match_meta {
@@ -191,6 +191,7 @@ enum flow_action_hw_stats {
 				   FLOW_ACTION_HW_STATS_DELAYED,
 	FLOW_ACTION_HW_STATS_DISABLED =
 		BIT(FLOW_ACTION_HW_STATS_DISABLED_BIT),
+	//不关心硬件中的统计信息
 	FLOW_ACTION_HW_STATS_DONT_CARE = BIT(FLOW_ACTION_HW_STATS_NUM_BITS) - 1,
 };
 
@@ -210,6 +211,7 @@ struct flow_action_entry {
 	enum flow_action_id		id;//action 类别
 	enum flow_action_hw_stats	hw_stats;
 	action_destr			destructor;
+	/*destructor回调的参数*/
 	void				*destructor_priv;
 	//action对应的参数
 	union {
@@ -298,7 +300,7 @@ struct flow_action_entry {
 
 struct flow_action {
 	unsigned int			num_entries;//action数目
-	struct flow_action_entry	entries[];
+	struct flow_action_entry	entries[];/*记录flow动作*/
 };
 
 static inline bool flow_action_has_entries(const struct flow_action *action)
@@ -396,7 +398,9 @@ flow_action_basic_hw_stats_check(const struct flow_action *action,
 }
 
 struct flow_rule {
+    //规则的匹配情况
 	struct flow_match	match;
+	//规则的动作情况
 	struct flow_action	action;
 };
 
@@ -445,21 +449,22 @@ enum flow_block_binder_type {
 };
 
 struct flow_block {
+    //用于挂接flow_block_offload回调
 	struct list_head cb_list;
 };
 
 struct netlink_ext_ack;
 
 struct flow_block_offload {
-	enum flow_block_command command;
-	enum flow_block_binder_type binder_type;
-	bool block_shared;
+	enum flow_block_command command;/*正在执行的cmd*/
+	enum flow_block_binder_type binder_type;/*binder方向*/
+	bool block_shared;/*是否为共享型block*/
 	bool unlocked_driver_cb;
-	struct net *net;
+	struct net *net;/*bo所属的net namespace*/
 	struct flow_block *block;
 	struct list_head cb_list;
 	struct list_head *driver_block_list;
-	struct netlink_ext_ack *extack;
+	struct netlink_ext_ack *extack;/*netlink应答信息*/
 };
 
 enum tc_setup_type;
@@ -471,18 +476,22 @@ struct flow_block_cb;
 struct flow_block_indr {
 	struct list_head		list;
 	struct net_device		*dev;
+	/*绑定类型*/
 	enum flow_block_binder_type	binder_type;
 	void				*data;
+	/*当flow_block_indr被移除时调用*/
 	void				(*cleanup)(struct flow_block_cb *block_cb);
 };
 
 struct flow_block_cb {
-	struct list_head	driver_list;
-	struct list_head	list;
-	flow_setup_cb_t		*cb;
-	void			*cb_ident;
-	void			*cb_priv;
+	struct list_head	driver_list;/*用于挂接在driver自已的链表上*/
+	struct list_head	list;/*用于挂接在flow_block_offload->cb_list上*/
+	flow_setup_cb_t		*cb;/*block回调函数*/
+	void			*cb_ident;/*私有数据，与cb合起来唯一确定flow_block_cb*/
+	void			*cb_priv;/*block回调函数参数*/
+	/*此flow block callback被释放时调用*/
 	void			(*release)(void *cb_priv);
+	/*间接绑定情况*/
 	struct flow_block_indr	indr;
 	unsigned int		refcnt;
 };
@@ -499,12 +508,14 @@ void *flow_block_cb_priv(struct flow_block_cb *block_cb);
 void flow_block_cb_incref(struct flow_block_cb *block_cb);
 unsigned int flow_block_cb_decref(struct flow_block_cb *block_cb);
 
+//将block_cb挂接在offload->cb_list上
 static inline void flow_block_cb_add(struct flow_block_cb *block_cb,
 				     struct flow_block_offload *offload)
 {
 	list_add_tail(&block_cb->list, &offload->cb_list);
 }
 
+//将block_cb自offload->cb_list上移除
 static inline void flow_block_cb_remove(struct flow_block_cb *block_cb,
 					struct flow_block_offload *offload)
 {
@@ -528,7 +539,7 @@ enum flow_cls_command {
 };
 
 struct flow_cls_common_offload {
-	u32 chain_index;
+	u32 chain_index;/*chain索引*/
 	__be16 protocol;
 	u32 prio;
 	struct netlink_ext_ack *extack;
@@ -537,7 +548,7 @@ struct flow_cls_common_offload {
 struct flow_cls_offload {
 	struct flow_cls_common_offload common;
 	enum flow_cls_command command;
-	unsigned long cookie;
+	unsigned long cookie;/*用于标识flow*/
 	struct flow_rule *rule;
 	struct flow_stats stats;
 	u32 classid;

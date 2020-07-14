@@ -1240,7 +1240,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 		goto err_out;
 	}
 
-	//创建ops对应的qdisc，并初始化
+	//通过ops创建对应的qdisc，并初始化
 	sch = qdisc_alloc(dev_queue, ops, extack);
 	if (IS_ERR(sch)) {
 		err = PTR_ERR(sch);
@@ -1287,7 +1287,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	if (err)
 		goto err_out3;
 
-	//具体子类队列初始化
+	//通过ops完成qdisc定制类初始化
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)

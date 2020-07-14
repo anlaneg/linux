@@ -2137,7 +2137,7 @@ static DEFINE_STATIC_KEY_FALSE(ingress_needed_key);
 
 void net_inc_ingress_queue(void)
 {
-    //增加ingress key,标明需要ingress处理
+    //增加ingress key,表明开启ingress处理
 	static_branch_inc(&ingress_needed_key);
 }
 EXPORT_SYMBOL_GPL(net_inc_ingress_queue);
@@ -8388,7 +8388,7 @@ static int __dev_set_allmulti(struct net_device *dev, int inc, bool notify)
 
 	ASSERT_RTNL();
 
-	dev->flags |= IFF_ALLMULTI;
+	dev->flags |= IFF_ALLMULTI;/*使网络设备支持组播*/
 	dev->allmulti += inc;
 	if (dev->allmulti == 0) {
 		/*
@@ -8465,6 +8465,7 @@ void __dev_set_rx_mode(struct net_device *dev)
 		}
 	}
 
+	/*设置网络设备的收方向filter等情况*/
 	if (ops->ndo_set_rx_mode)
 		ops->ndo_set_rx_mode(dev);
 }

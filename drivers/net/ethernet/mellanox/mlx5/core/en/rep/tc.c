@@ -467,6 +467,7 @@ mlx5e_rep_indr_setup_block(struct net_device *netdev,
 	return 0;
 }
 
+//indrect dev回调触发
 static
 int mlx5e_rep_indr_setup_cb(struct net_device *netdev, void *cb_priv,
 			    enum tc_setup_type type, void *type_data)

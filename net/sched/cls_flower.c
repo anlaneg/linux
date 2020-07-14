@@ -106,10 +106,10 @@ struct fl_flow_mask {
 };
 
 struct fl_flow_tmplt {
-	struct fl_flow_key dummy_key;
-	struct fl_flow_key mask;
-	struct flow_dissector dissector;
-	struct tcf_chain *chain;
+	struct fl_flow_key dummy_key;/*匹配信息*/
+	struct fl_flow_key mask;/*匹配的掩码信息*/
+	struct flow_dissector dissector;/*记录flow中出现的key及各key在结构fl_flow_key中的offset*/
+	struct tcf_chain *chain;/*所属的chain*/
 };
 
 struct cls_fl_head {
@@ -484,7 +484,7 @@ static void fl_hw_destroy_filter(struct tcf_proto *tp, struct cls_fl_filter *f,
 
 }
 
-//替换硬件中的filter
+//替换hw中的flower规则
 static int fl_hw_replace_filter(struct tcf_proto *tp,
 				struct cls_fl_filter *f, bool rtnl_held,
 				struct netlink_ext_ack *extack)
@@ -520,7 +520,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 		return 0;
 	}
 
-	//知会硬件offload flower
+	//通过setup flower知会硬件offload flower
 	err = tc_setup_cb_add(block, tp, TC_SETUP_CLSFLOWER, &cls_flower,
 			      skip_sw, &f->flags, &f->in_hw_count, rtnl_held);
 	tc_cleanup_flow_action(&cls_flower.rule->action);
@@ -537,9 +537,11 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 	return 0;
 }
 
+/*flower状态查询*/
 static void fl_hw_update_stats(struct tcf_proto *tp, struct cls_fl_filter *f,
 			       bool rtnl_held)
 {
+    /*tp对应的block*/
 	struct tcf_block *block = tp->chain->block;
 	struct flow_cls_offload cls_flower = {};
 
@@ -812,12 +814,14 @@ static void fl_set_key_val(struct nlattr **tb,
 			   void *val/*出参，指定val_type对应的值*/, int val_type,
 			   void *mask/*出参，指定mask_type对应的值*/, int mask_type, int len/*val长度*/)
 {
+    //没有指定此type值，跳出
 	if (!tb[val_type])
 		return;
+
 	//自tb中提取val_type,填充val
 	nla_memcpy(val, tb[val_type], len);
 	if (mask_type == TCA_FLOWER_UNSPEC || !tb[mask_type])
-		//如mask_type未指定，或tb不包含mask_type,则仅支持全1的mask
+		//如mask_type未指定，或tb不包含此type的mask设置,则仅支持全1的mask
 		memset(mask, 0xff, len);
 	else
 		//支持mask
@@ -1327,6 +1331,7 @@ static int fl_set_enc_opt(struct nlattr **tb, struct fl_flow_key *key,
 	const struct nlattr *nla_enc_key, *nla_opt_key, *nla_opt_msk = NULL;
 	int err, option_len, key_depth, msk_depth = 0;
 
+	//解析隧道选项
 	err = nla_validate_nested_deprecated(tb[TCA_FLOWER_KEY_ENC_OPTS],
 					     TCA_FLOWER_KEY_ENC_OPTS_MAX,
 					     enc_opts_policy, extack);
@@ -1523,16 +1528,17 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 {
 	__be16 ethertype;
 	int ret = 0;
+
 	//如果指定indev,则匹配报文所属入接口
 	if (tb[TCA_FLOWER_INDEV]) {
 		int err = tcf_change_indev(net, tb[TCA_FLOWER_INDEV], extack);
 		if (err < 0)
 			return err;
 		key->meta.ingress_ifindex = err;
-		mask->meta.ingress_ifindex = 0xffffffff;
+		mask->meta.ingress_ifindex = 0xffffffff;//标记ifinde需要被匹配
 	}
 
-	//填充目的mac,源mac及其mask
+	//填充目的mac,源mac及其对应mask值
 	fl_set_key_val(tb, key->eth.dst, TCA_FLOWER_KEY_ETH_DST,
 		       mask->eth.dst, TCA_FLOWER_KEY_ETH_DST_MASK,
 		       sizeof(key->eth.dst));
@@ -1660,6 +1666,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 			       sizeof(key->icmp.code));
 	} else if (key->basic.n_proto == htons(ETH_P_MPLS_UC) ||
 		   key->basic.n_proto == htons(ETH_P_MPLS_MC)) {
+	    //mpls填充
 		ret = fl_set_key_mpls(tb, &key->mpls, &mask->mpls, extack);
 		if (ret)
 			return ret;
@@ -1727,7 +1734,7 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 			       sizeof(key->enc_ipv6.dst));
 	}
 
-	//填充隧道key,传输层src,dst port情况
+	//填充隧道key,隧道传输层srcport,dstport情况
 	fl_set_key_val(tb, &key->enc_key_id.keyid, TCA_FLOWER_KEY_ENC_KEY_ID,
 		       &mask->enc_key_id.keyid, TCA_FLOWER_UNSPEC,
 		       sizeof(key->enc_key_id.keyid));
@@ -1824,11 +1831,15 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 	struct flow_dissector_key keys[FLOW_DISSECTOR_KEY_MAX];
 	size_t cnt = 0;
 
+	//如果mask中含key_meta信息，则记录meta到keys中
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_META, meta);
+
 	//填充fl_flow_key中各成员的offset
 	FL_KEY_SET(keys, cnt, FLOW_DISSECTOR_KEY_CONTROL, control);
 	FL_KEY_SET(keys, cnt, FLOW_DISSECTOR_KEY_BASIC, basic);
+
+	//如果掩码中包含eth，ip,ipv6,port，则填充keys
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_ETH_ADDRS, eth);
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
@@ -2325,6 +2336,8 @@ fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 		/*未指定时，使用首个filter*/
 		f = list_entry(&head->hw_filters, struct cls_fl_filter,
 			       hw_list);
+
+	/*返回未被移除的filter*/
 	list_for_each_entry_continue(f, &head->hw_filters, hw_list) {
 		if (!(add && f->deleted) && refcount_inc_not_zero(&f->refcnt)) {
 			spin_unlock(&tp->lock);
@@ -2336,7 +2349,7 @@ fl_get_next_hw_filter(struct tcf_proto *tp, struct cls_fl_filter *f, bool add)
 	return NULL;
 }
 
-static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则更新*/, flow_setup_cb_t *cb/*针对每条cls_flower执行TC_SETUP_CLSFLOWER*/,
+static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则添加*/, flow_setup_cb_t *cb/*针对每条cls_flower执行TC_SETUP_CLSFLOWER*/,
 			void *cb_priv/*回调的私有数据*/, struct netlink_ext_ack *extack)
 {
 	struct tcf_block *block = tp->chain->block;
@@ -2362,7 +2375,7 @@ static int fl_reoffload(struct tcf_proto *tp, bool add/*是否规则更新*/, fl
 
 		tc_cls_common_offload_init(&cls_flower.common, tp, f->flags,
 					   extack);
-		cls_flower.command = add ?
+		cls_flower.command = add /*确定规则增删*/ ?
 			FLOW_CLS_REPLACE : FLOW_CLS_DESTROY;
 		cls_flower.cookie = (unsigned long)f;
 		cls_flower.rule->match.dissector = &f->mask->dissector;
@@ -2426,19 +2439,20 @@ static void fl_hw_del(struct tcf_proto *tp, void *type_data)
 	spin_unlock(&tp->lock);
 }
 
-static int fl_hw_create_tmplt(struct tcf_chain *chain,
+/*flower tmplt创建*/
+static int fl_hw_create_tmplt(struct tcf_chain *chain/*从属的chain*/,
 			      struct fl_flow_tmplt *tmplt)
 {
 	struct flow_cls_offload cls_flower = {};
-	struct tcf_block *block = chain->block;
+	struct tcf_block *block = chain->block;/*取chain对应的block*/
 
 	cls_flower.rule = flow_rule_alloc(0);
 	if (!cls_flower.rule)
 		return -ENOMEM;
 
 	cls_flower.common.chain_index = chain->index;
-	cls_flower.command = FLOW_CLS_TMPLT_CREATE;
-	cls_flower.cookie = (unsigned long) tmplt;
+	cls_flower.command = FLOW_CLS_TMPLT_CREATE;/*flower模块创建*/
+	cls_flower.cookie = (unsigned long) tmplt;/*用tmplt地址指定cookie*/
 	cls_flower.rule->match.dissector = &tmplt->dissector;
 	cls_flower.rule->match.mask = &tmplt->mask;
 	cls_flower.rule->match.key = &tmplt->dummy_key;
@@ -2446,12 +2460,13 @@ static int fl_hw_create_tmplt(struct tcf_chain *chain,
 	/* We don't care if driver (any of them) fails to handle this
 	 * call. It serves just as a hint for it.
 	 */
-	tc_setup_cb_call(block, TC_SETUP_CLSFLOWER, &cls_flower, false, true);
+	tc_setup_cb_call(block, TC_SETUP_CLSFLOWER, &cls_flower, false, true);/*触发回调，创建flower*/
 	kfree(cls_flower.rule);
 
 	return 0;
 }
 
+/*flower tmplt删除*/
 static void fl_hw_destroy_tmplt(struct tcf_chain *chain,
 				struct fl_flow_tmplt *tmplt)
 {
@@ -2465,6 +2480,7 @@ static void fl_hw_destroy_tmplt(struct tcf_chain *chain,
 	tc_setup_cb_call(block, TC_SETUP_CLSFLOWER, &cls_flower, false, true);
 }
 
+//通过tca创建tmplt
 static void *fl_tmplt_create(struct net *net, struct tcf_chain *chain,
 			     struct nlattr **tca,
 			     struct netlink_ext_ack *extack)
@@ -2473,9 +2489,11 @@ static void *fl_tmplt_create(struct net *net, struct tcf_chain *chain,
 	struct nlattr **tb;
 	int err;
 
+	/*必须指明options*/
 	if (!tca[TCA_OPTIONS])
 		return ERR_PTR(-EINVAL);
 
+	/*解析options*/
 	tb = kcalloc(TCA_FLOWER_MAX + 1, sizeof(struct nlattr *), GFP_KERNEL);
 	if (!tb)
 		return ERR_PTR(-ENOBUFS);
@@ -2489,13 +2507,17 @@ static void *fl_tmplt_create(struct net *net, struct tcf_chain *chain,
 		err = -ENOMEM;
 		goto errout_tb;
 	}
+
+	//解析tb，填充key,mask
 	tmplt->chain = chain;
 	err = fl_set_key(net, tb, &tmplt->dummy_key, &tmplt->mask, extack);
 	if (err)
 		goto errout_tmplt;
 
+	//填充dissector
 	fl_init_dissector(&tmplt->dissector, &tmplt->mask);
 
+	//在hw中创建tmplt
 	err = fl_hw_create_tmplt(chain, tmplt);
 	if (err)
 		goto errout_tmplt;
@@ -3187,6 +3209,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的
 
 	spin_unlock(&tp->lock);
 
+	/*更新硬件统计信息*/
 	if (!skip_hw)
 		fl_hw_update_stats(tp, f, rtnl_held);
 
@@ -3318,6 +3341,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.delete		= fl_delete,
 	.delete_empty	= fl_delete_empty,
 	.walk		= fl_walk,
+	//在次向硬件中下发某条规则
 	.reoffload	= fl_reoffload,
 	.hw_add		= fl_hw_add,
 	.hw_del		= fl_hw_del,

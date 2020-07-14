@@ -46,6 +46,7 @@ void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 {
 	unsigned int i;
 
+	//先将flow_dissector清零
 	memset(flow_dissector, 0, sizeof(*flow_dissector));
 
 	for (i = 0; i < key_count; i++, key++) {
@@ -56,11 +57,13 @@ void skb_flow_dissector_init(struct flow_dissector *flow_dissector,
 		BUG_ON(dissector_uses_key(flow_dissector,
 					  key->key_id));
 
-		//指明出现的key_id
+		//指明出现的所有key_id
 		dissector_set_key(flow_dissector, key->key_id);
+		//记录这些key_id所在的位置
 		flow_dissector->offset[key->key_id] = key->offset;
 	}
 
+	//要求control,basic必须出现
 	/* Ensure that the dissector always includes control and basic key.
 	 * That way we are able to avoid handling lack of these in fast path.
 	 */

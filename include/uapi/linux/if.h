@@ -118,7 +118,9 @@ enum net_device_flags {
 #define IFF_RUNNING			IFF_RUNNING
 //接口是否支持arp（如有此标记，则不支持arp)
 #define IFF_NOARP			IFF_NOARP
+//接口是否处于混杂模式
 #define IFF_PROMISC			IFF_PROMISC
+//接口收取所有组播报文
 #define IFF_ALLMULTI			IFF_ALLMULTI
 #define IFF_MASTER			IFF_MASTER
 #define IFF_SLAVE			IFF_SLAVE

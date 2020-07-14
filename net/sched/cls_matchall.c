@@ -324,6 +324,7 @@ static int mall_reoffload(struct tcf_proto *tp, bool add, flow_setup_cb_t *cb,
 	return 0;
 }
 
+/*match all状态查询*/
 static void mall_stats_hw_filter(struct tcf_proto *tp,
 				 struct cls_mall_head *head,
 				 unsigned long cookie)
