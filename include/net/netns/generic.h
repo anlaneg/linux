@@ -37,6 +37,7 @@ struct net_generic {
 	};
 };
 
+//取指定id在net_generic中的私有数据
 static inline void *net_generic(const struct net *net, unsigned int id)
 {
 	struct net_generic *ng;

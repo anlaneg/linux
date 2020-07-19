@@ -51,7 +51,7 @@ static const struct sysfs_ops mdev_type_sysfs_ops = {
 	.store = mdev_type_attr_store,
 };
 
-//处理mdev_device创建
+//处理mdev_device 'create'属性的设置操作
 static ssize_t create_store(struct kobject *kobj, struct device *dev,
 			    const char *buf, size_t count)
 {
@@ -92,7 +92,7 @@ static void mdev_type_release(struct kobject *kobj)
 	kfree(type);
 }
 
-//定义mdev_type的类型
+//定义mdev_type的kobj类型
 static struct kobj_type mdev_type_ktype = {
 	.sysfs_ops = &mdev_type_sysfs_ops,
 	.release = mdev_type_release,
@@ -127,7 +127,7 @@ static struct mdev_type *add_mdev_supported_type(struct mdev_parent *parent,
 		return ERR_PTR(ret);
 	}
 
-	//创建type对应"create" sysfs文件及其属性文件
+	//创建type对应文件，并创建"create"属性文件
 	ret = sysfs_create_file(&type->kobj, &mdev_type_attr_create.attr);
 	if (ret)
 		goto attr_create_failed;
@@ -226,7 +226,7 @@ int parent_create_sysfs_files(struct mdev_parent *parent)
 
 	INIT_LIST_HEAD(&parent->type_list);
 
-	/*创建dev对应的所有属性组*/
+	/*为dev创建mdev_parent定义的所有属性组*/
 	ret = sysfs_create_groups(&parent->dev->kobj,
 				  parent->ops->dev_attr_groups);
 	if (ret)
@@ -245,6 +245,7 @@ create_err:
 	return ret;
 }
 
+//写'remove'文件触发
 static ssize_t remove_store(struct device *dev, struct device_attribute *attr,
 			    const char *buf, size_t count)
 {
@@ -266,6 +267,7 @@ static ssize_t remove_store(struct device *dev, struct device_attribute *attr,
 
 static DEVICE_ATTR_WO(remove);
 
+//定义mdev设备的'remove'文件，只写属性
 static const struct attribute *mdev_device_attrs[] = {
 	&dev_attr_remove.attr,
 	NULL,
@@ -298,7 +300,10 @@ type_link_failed:
 
 void mdev_remove_sysfs_files(struct device *dev, struct mdev_type *type)
 {
+    //移除'remove‘文件
 	sysfs_remove_files(&dev->kobj, mdev_device_attrs);
+	//移除'mdev_type'链接
 	sysfs_remove_link(&dev->kobj, "mdev_type");
+	//移除dev名称的链接
 	sysfs_remove_link(type->devices_kobj, dev_name(dev));
 }

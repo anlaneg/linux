@@ -20,12 +20,13 @@
 #define DRIVER_AUTHOR		"NVIDIA Corporation"
 #define DRIVER_DESC		"Mediated device Core Driver"
 
-//记录所有mdev_parent结构
+//记录系统中所有mdev_parent结构
 static LIST_HEAD(parent_list);
+//保护parent_list
 static DEFINE_MUTEX(parent_list_lock);
 static struct class_compat *mdev_bus_compat_class;
 
-//记录所有的mdev_device结构
+//记录系统中所有的mdev_device结构
 static LIST_HEAD(mdev_list);
 static DEFINE_MUTEX(mdev_list_lock);
 
@@ -72,11 +73,12 @@ const guid_t *mdev_uuid(struct mdev_device *mdev)
 EXPORT_SYMBOL(mdev_uuid);
 
 /* Should be called holding parent_list_lock */
-//遍历parent_list，针对每个mdev_parent,检查其对应的dev是否为需要查找的dev
+//检查dev，是否存在其对应的mdev_parent结构
 static struct mdev_parent *__find_parent_device(struct device *dev)
 {
 	struct mdev_parent *parent;
 
+	//系统所有mdev_parent均记录在parent_list上
 	list_for_each_entry(parent, &parent_list, next) {
 		if (parent->dev == dev)
 			return parent;
@@ -86,10 +88,12 @@ static struct mdev_parent *__find_parent_device(struct device *dev)
 
 static void mdev_release_parent(struct kref *kref)
 {
+    //由kref获得mdev_parent
 	struct mdev_parent *parent = container_of(kref, struct mdev_parent,
 						  ref);
 	struct device *dev = parent->dev;
 
+	//释放parent,device
 	kfree(parent);
 	put_device(dev);
 }
@@ -122,6 +126,7 @@ static void mdev_device_remove_common(struct mdev_device *mdev)
 	device_del(&mdev->dev);
 	parent = mdev->parent;
 	lockdep_assert_held(&parent->unreg_sem);
+	//调用parent定义的remove函数
 	ret = parent->ops->remove(mdev);
 	if (ret)
 		dev_err(&mdev->dev, "Remove failed: err=%d\n", ret);
@@ -134,6 +139,7 @@ static void mdev_device_remove_common(struct mdev_device *mdev)
 static int mdev_device_remove_cb(struct device *dev, void *data)
 {
 	if (dev_is_mdev(dev)) {
+	    //如果dev是mdev,则将其移除
 		struct mdev_device *mdev;
 
 		mdev = to_mdev_device(dev);
@@ -150,9 +156,9 @@ static int mdev_device_remove_cb(struct device *dev, void *data)
  * Add device to list of registered parent devices.
  * Returns a negative value on error, otherwise 0.
  */
-int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
+int mdev_register_device(struct device *dev/*mdev_parent对应的底层设备*/, const struct mdev_parent_ops *ops)
 {
-    /*注册mdev设备*/
+    /*基于dev注册一个mdev_parent设备*/
 	int ret;
 	struct mdev_parent *parent;
 	char *env_string = "MDEV_STATE=registered";
@@ -171,10 +177,9 @@ int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 	mutex_lock(&parent_list_lock);
 
 	/* Check for duplicate */
-	//取此设备的mdev_parent
+	//取此设备的mdev_parent，如已存在，则注册失败
 	parent = __find_parent_device(dev);
 	if (parent) {
-	    //如此设备已存在mdev_parent，则注册失败
 		parent = NULL;
 		ret = -EEXIST;
 		goto add_dev_err;
@@ -193,7 +198,9 @@ int mdev_register_device(struct device *dev, const struct mdev_parent_ops *ops)
 	parent->dev = dev;
 	parent->ops = ops;
 
+	//如未赋值，则为其赋值
 	if (!mdev_bus_compat_class) {
+	    //在/sys/class下创建mdev_bus
 		mdev_bus_compat_class = class_compat_register("mdev_bus");
 		if (!mdev_bus_compat_class) {
 			ret = -ENOMEM;
@@ -240,6 +247,7 @@ EXPORT_SYMBOL(mdev_register_device);
 
 void mdev_unregister_device(struct device *dev)
 {
+    //mdev设备解注册
 	struct mdev_parent *parent;
 	char *env_string = "MDEV_STATE=unregistered";
 	char *envp[] = { env_string, NULL };
@@ -292,7 +300,7 @@ static void mdev_device_release(struct device *dev)
 }
 
 //mdev设备创建
-int mdev_device_create(struct kobject *kobj,
+int mdev_device_create(struct kobject *kobj/*mdev_type,用于指明mdev_parent*/,
 		       struct device *dev, const guid_t *uuid/*device唯一标识*/)
 {
 	int ret;
@@ -308,7 +316,7 @@ int mdev_device_create(struct kobject *kobj,
 	mutex_lock(&mdev_list_lock);
 
 	/* Check for duplicate */
-	/*遍历所有mdev_device,查找uuid是否已存在*/
+	/*遍历所有mdev_device,查找uuid是否已存在，如存在，则返回失败*/
 	list_for_each_entry(tmp, &mdev_list, next) {
 		if (guid_equal(&tmp->uuid, uuid)) {
 			mutex_unlock(&mdev_list_lock);
@@ -342,9 +350,9 @@ int mdev_device_create(struct kobject *kobj,
 
 	device_initialize(&mdev->dev);
 	mdev->dev.parent  = dev;
-	mdev->dev.bus     = &mdev_bus_type;
+	mdev->dev.bus     = &mdev_bus_type;//mdev对应的bus
 	mdev->dev.release = mdev_device_release;
-	dev_set_name(&mdev->dev, "%pUl", uuid);
+	dev_set_name(&mdev->dev, "%pUl", uuid);/*mdev设备名称*/
 	mdev->dev.groups = parent->ops->mdev_attr_groups;
 	mdev->type_kobj = kobj;
 
@@ -402,6 +410,7 @@ int mdev_device_remove(struct device *dev)
 		return -EAGAIN;
 	}
 
+	/*指明设备未激活*/
 	mdev->active = false;
 	mutex_unlock(&mdev_list_lock);
 
@@ -415,6 +424,7 @@ int mdev_device_remove(struct device *dev)
 	return 0;
 }
 
+//为mdev_device设置iommu_device
 int mdev_set_iommu_device(struct device *dev, struct device *iommu_device)
 {
 	struct mdev_device *mdev = to_mdev_device(dev);
@@ -425,6 +435,7 @@ int mdev_set_iommu_device(struct device *dev, struct device *iommu_device)
 }
 EXPORT_SYMBOL(mdev_set_iommu_device);
 
+//取mdev_device的iommu_device
 struct device *mdev_get_iommu_device(struct device *dev)
 {
 	struct mdev_device *mdev = to_mdev_device(dev);

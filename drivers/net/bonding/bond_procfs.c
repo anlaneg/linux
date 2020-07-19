@@ -292,6 +292,7 @@ void bond_remove_proc_entry(struct bonding *bond)
  */
 void __net_init bond_create_proc_dir(struct bond_net *bn)
 {
+    //创建/proc/net/bonding目录
 	if (!bn->proc_dir) {
 		bn->proc_dir = proc_mkdir(DRV_NAME, bn->net->proc_net);
 		if (!bn->proc_dir)

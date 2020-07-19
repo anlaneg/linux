@@ -14,10 +14,10 @@ int  mdev_bus_register(void);
 void mdev_bus_unregister(void);
 
 struct mdev_parent {
-	struct device *dev;/*从属于mdev的设备*/
-	const struct mdev_parent_ops *ops;
-	struct kref ref;
-	struct list_head next;
+	struct device *dev;/*mdev_parent关联的设备*/
+	const struct mdev_parent_ops *ops;/*操作集*/
+	struct kref ref;//引用计数
+	struct list_head next;//用于串连在链表parent_list上
 	struct kset *mdev_types_kset;
 	struct list_head type_list;/*记录支持的一组mdev_type*/
 	/* Synchronize device creation/removal with parent unregistration */
@@ -25,18 +25,19 @@ struct mdev_parent {
 };
 
 struct mdev_device {
-	struct device dev;
-	struct mdev_parent *parent;
+	struct device dev;//mdev对应的device
+	struct mdev_parent *parent;//mdev对应的mdev_parent
 	guid_t uuid;
-	void *driver_data;
+	void *driver_data;//mdev设备的私有数据
 	struct list_head next;
 	struct kobject *type_kobj;
 	struct device *iommu_device;
-	bool active;
+	bool active;//设备是否被激活
 };
 
 //将device转换为mdev_deivce
 #define to_mdev_device(dev)	container_of(dev, struct mdev_device, dev)
+
 //检查dev是否为mdev(如果其bus类型为mdev_bus,则认为是mdev)
 #define dev_is_mdev(d)		((d)->bus == &mdev_bus_type)
 

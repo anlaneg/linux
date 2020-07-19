@@ -175,8 +175,10 @@ struct kset_uevent_ops {
 
 struct kobj_attribute {
 	struct attribute attr;
+	//显示函数
 	ssize_t (*show)(struct kobject *kobj, struct kobj_attribute *attr,
 			char *buf);
+	//设置函数
 	ssize_t (*store)(struct kobject *kobj, struct kobj_attribute *attr,
 			 const char *buf, size_t count);
 };

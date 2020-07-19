@@ -68,7 +68,9 @@
 #define bond_first_slave_rcu(bond) \
 	netdev_lower_get_first_private_rcu(bond->dev)
 
+//检查pos是否为首个bond的slave
 #define bond_is_first_slave(bond, pos) (pos == bond_first_slave(bond))
+//检查pos是否为最后一个bond的slave
 #define bond_is_last_slave(bond, pos) (pos == bond_last_slave(bond))
 
 /**
@@ -83,6 +85,7 @@
 	netdev_for_each_lower_private((bond)->dev, pos, iter)
 
 /* Caller must have rcu_read_lock */
+//遍历bond设备的所有slave设备
 #define bond_for_each_slave_rcu(bond, pos, iter) \
 	netdev_for_each_lower_private_rcu((bond)->dev, pos, iter)
 
@@ -111,8 +114,9 @@ static inline int is_netpoll_tx_blocked(struct net_device *dev)
 #define is_netpoll_tx_blocked(dev) (0)
 #endif
 
+//bonding配置参数
 struct bond_params {
-	int mode;
+	int mode;//采用哪种模式进行bond
 	int xmit_policy;
 	int miimon;
 	u8 num_peer_notif;
@@ -197,12 +201,13 @@ struct bond_up_slave {
  */
 struct bonding {
 	struct   net_device *dev; /* first - useful for panic debug */
-	struct   slave __rcu *curr_active_slave;
+	struct   slave __rcu *curr_active_slave;//主备模式下，记录主slave
 	struct   slave __rcu *current_arp_slave;
 	struct   slave __rcu *primary_slave;
 	struct   bond_up_slave __rcu *usable_slaves;
 	struct   bond_up_slave __rcu *all_slaves;
 	bool     force_primary;
+	/*记录slave的数量*/
 	s32      slave_cnt; /* never change this value outside the attach/detach wrappers */
 	int     (*recv_probe)(const struct sk_buff *, struct bonding *,
 			      struct slave *);
@@ -225,7 +230,7 @@ struct bonding {
 	u32      rr_tx_counter;
 	struct   ad_bond_info ad_info;
 	struct   alb_bond_info alb_info;
-	struct   bond_params params;
+	struct   bond_params params;//bond设备配置参数
 	struct   workqueue_struct *wq;
 	struct   delayed_work mii_work;
 	struct   delayed_work arp_work;
@@ -600,6 +605,7 @@ static inline __be32 bond_confirm_addr(struct net_device *dev, __be32 dst, __be3
 }
 
 struct bond_net {
+    //关联的net namespace
 	struct net		*net;	/* Associated network namespace */
 	struct list_head	dev_list;
 #ifdef CONFIG_PROC_FS

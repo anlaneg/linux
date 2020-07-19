@@ -1080,6 +1080,7 @@ static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
 	if (hdr->hdr.flags & VIRTIO_NET_HDR_F_DATA_VALID)
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 
+	/*收到错误的报文，显示警告，并丢包*/
 	if (virtio_net_hdr_to_skb(skb, &hdr->hdr,
 				  virtio_is_little_endian(vi->vdev))) {
 		net_warn_ratelimited("%s: bad gso: type: %u, size: %u\n",

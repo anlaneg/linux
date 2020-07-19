@@ -77,11 +77,12 @@ struct device *mdev_get_iommu_device(struct device *dev);
  **/
 struct mdev_parent_ops {
 	struct module   *owner;
-	//设备对应的attr groups
+	//从属mdev_parent的dev将新增的attr groups
 	const struct attribute_group **dev_attr_groups;
 	const struct attribute_group **mdev_attr_groups;
 	struct attribute_group **supported_type_groups;
 
+	//mdev设备create时调用
 	int     (*create)(struct kobject *kobj, struct mdev_device *mdev);
 	int     (*remove)(struct mdev_device *mdev);
 	int     (*open)(struct mdev_device *mdev);
@@ -98,7 +99,9 @@ struct mdev_parent_ops {
 /* interface for exporting mdev supported type attributes */
 struct mdev_type_attribute {
 	struct attribute attr;
+	//属性显示时调用
 	ssize_t (*show)(struct kobject *kobj, struct device *dev, char *buf);
+	//属性设置时调用
 	ssize_t (*store)(struct kobject *kobj, struct device *dev,
 			 const char *buf, size_t count);
 };
@@ -128,6 +131,7 @@ struct mdev_driver {
 	struct device_driver driver;
 };
 
+//取mdev驱动
 #define to_mdev_driver(drv)	container_of(drv, struct mdev_driver, driver)
 
 void *mdev_get_drvdata(struct mdev_device *mdev);

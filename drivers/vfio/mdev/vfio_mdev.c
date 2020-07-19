@@ -21,6 +21,7 @@
 #define DRIVER_AUTHOR   "NVIDIA Corporation"
 #define DRIVER_DESC     "VFIO based driver for Mediated device"
 
+//调用mdev_parent指明的open函数
 static int vfio_mdev_open(void *device_data)
 {
 	struct mdev_device *mdev = device_data;
@@ -40,6 +41,7 @@ static int vfio_mdev_open(void *device_data)
 	return ret;
 }
 
+//调用mdev_parent指明的release函数
 static void vfio_mdev_release(void *device_data)
 {
 	struct mdev_device *mdev = device_data;
@@ -51,6 +53,7 @@ static void vfio_mdev_release(void *device_data)
 	module_put(THIS_MODULE);
 }
 
+//调用mdev_parent指明的ioctl函数
 static long vfio_mdev_unlocked_ioctl(void *device_data,
 				     unsigned int cmd, unsigned long arg)
 {
@@ -63,6 +66,7 @@ static long vfio_mdev_unlocked_ioctl(void *device_data,
 	return parent->ops->ioctl(mdev, cmd, arg);
 }
 
+//调用mdev_parent指明的read函数
 static ssize_t vfio_mdev_read(void *device_data, char __user *buf,
 			      size_t count, loff_t *ppos)
 {
@@ -75,6 +79,7 @@ static ssize_t vfio_mdev_read(void *device_data, char __user *buf,
 	return parent->ops->read(mdev, buf, count, ppos);
 }
 
+//调用mdev_parent指明的write函数
 static ssize_t vfio_mdev_write(void *device_data, const char __user *buf,
 			       size_t count, loff_t *ppos)
 {
@@ -87,6 +92,7 @@ static ssize_t vfio_mdev_write(void *device_data, const char __user *buf,
 	return parent->ops->write(mdev, buf, count, ppos);
 }
 
+//调用mdev_parent指明的mmap函数
 static int vfio_mdev_mmap(void *device_data, struct vm_area_struct *vma)
 {
 	struct mdev_device *mdev = device_data;
@@ -98,6 +104,7 @@ static int vfio_mdev_mmap(void *device_data, struct vm_area_struct *vma)
 	return parent->ops->mmap(mdev, vma);
 }
 
+//vfio-mdev设备，总是通过mdev_parent设备提供的ops完成操作
 static const struct vfio_device_ops vfio_mdev_dev_ops = {
 	.name		= "vfio-mdev",
 	.open		= vfio_mdev_open,
@@ -121,21 +128,22 @@ static void vfio_mdev_remove(struct device *dev)
 	vfio_del_group_dev(dev);
 }
 
-//mdev设备驱动
+//vfio_mdev设备驱动
 static struct mdev_driver vfio_mdev_driver = {
 	.name	= "vfio_mdev",
 	.probe	= vfio_mdev_probe,
 	.remove	= vfio_mdev_remove,
 };
 
-//vfio mdev驱动注册
 static int __init vfio_mdev_init(void)
 {
+    //vfio mdev驱动注册
 	return mdev_register_driver(&vfio_mdev_driver, THIS_MODULE);
 }
 
 static void __exit vfio_mdev_exit(void)
 {
+    //vfio mdev驱动解注册
 	mdev_unregister_driver(&vfio_mdev_driver);
 }
 

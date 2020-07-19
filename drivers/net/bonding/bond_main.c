@@ -200,6 +200,7 @@ MODULE_PARM_DESC(lp_interval, "The number of seconds between instances where "
 atomic_t netpoll_block_tx = ATOMIC_INIT(0);
 #endif
 
+//记录bond在general net中的id号
 unsigned int bond_net_id __read_mostly;
 
 static const struct flow_dissector_key flow_keys_bonding_keys[] = {
@@ -290,15 +291,17 @@ const char *bond_mode_name(int mode)
 netdev_tx_t bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb,
 			struct net_device *slave_dev)
 {
-	skb->dev = slave_dev;
+	skb->dev = slave_dev;//切换报文所属设备
 
 	BUILD_BUG_ON(sizeof(skb->queue_mapping) !=
 		     sizeof(qdisc_skb_cb(skb)->slave_dev_queue_mapping));
+	//设置skb对应队列
 	skb_set_queue_mapping(skb, qdisc_skb_cb(skb)->slave_dev_queue_mapping);
 
 	if (unlikely(netpoll_tx_running(bond->dev)))
 		return bond_netpoll_send_skb(bond_get_slave_by_dev(bond, slave_dev), skb);
 
+	//完成报文发送
 	return dev_queue_xmit(skb);
 }
 
@@ -3268,17 +3271,20 @@ static int bond_netdev_event(struct notifier_block *this,
 	netdev_dbg(event_dev, "%s received %s\n",
 		   __func__, netdev_cmd_to_name(event));
 
+	//只处理bonding口的事件
 	if (!(event_dev->priv_flags & IFF_BONDING))
 		return NOTIFY_DONE;
 
 	if (event_dev->flags & IFF_MASTER) {
 		int ret;
 
+		//master事件处理
 		ret = bond_master_netdev_event(event, event_dev);
 		if (ret != NOTIFY_DONE)
 			return ret;
 	}
 
+	//slave事件处理
 	if (event_dev->flags & IFF_SLAVE)
 		return bond_slave_netdev_event(event, event_dev);
 
@@ -3294,6 +3300,7 @@ static struct notifier_block bond_netdev_notifier = {
 /* L2 hash helper */
 static inline u32 bond_eth_hash(struct sk_buff *skb)
 {
+    //使用以太网目的mac/源mac/三层协议号，计算hash
 	struct ethhdr *ep, hdr_tmp;
 
 	ep = skb_header_pointer(skb, 0, sizeof(hdr_tmp), &hdr_tmp);
@@ -3391,10 +3398,12 @@ u32 bond_xmit_hash(struct bonding *bond, struct sk_buff *skb)
 	struct flow_keys flow;
 	u32 hash;
 
+	/*使用skb对应的hash*/
 	if (bond->params.xmit_policy == BOND_XMIT_POLICY_ENCAP34 &&
 	    skb->l4_hash)
 		return skb->hash;
 
+	/*使用skb二层对应的hash*/
 	if (bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER2 ||
 	    !bond_flow_dissect(bond, skb, &flow))
 		return bond_eth_hash(skb);
@@ -4032,12 +4041,14 @@ non_igmp:
 	return NULL;
 }
 
+//bond设备，执行轮巡发送
 static netdev_tx_t bond_xmit_roundrobin(struct sk_buff *skb,
 					struct net_device *bond_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct slave *slave;
 
+	//通过轮巡选择出slave
 	slave = bond_xmit_roundrobin_slave_get(bond, skb);
 	if (likely(slave))
 		return bond_dev_queue_xmit(bond, skb, slave->dev);
@@ -4045,6 +4056,7 @@ static netdev_tx_t bond_xmit_roundrobin(struct sk_buff *skb,
 	return bond_tx_drop(bond_dev, skb);
 }
 
+//主备模式的bond选择slave
 static struct slave *bond_xmit_activebackup_slave_get(struct bonding *bond,
 						      struct sk_buff *skb)
 {
@@ -4060,10 +4072,12 @@ static netdev_tx_t bond_xmit_activebackup(struct sk_buff *skb,
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct slave *slave;
 
+	//选择slave
 	slave = bond_xmit_activebackup_slave_get(bond, skb);
 	if (slave)
 		return bond_dev_queue_xmit(bond, skb, slave->dev);
 
+	//slave不存在，丢包
 	return bond_tx_drop(bond_dev, skb);
 }
 
@@ -4274,9 +4288,13 @@ static netdev_tx_t bond_xmit_broadcast(struct sk_buff *skb,
 	struct slave *slave = NULL;
 	struct list_head *iter;
 
+	//遍历bond设备的所有slavee
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (bond_is_last_slave(bond, slave))
+		    /*最后一个slave直接跳出，skb不必clone*/
 			break;
+
+		//如果slave up,则向其发送一份副本
 		if (bond_slave_is_up(slave) && slave->link == BOND_LINK_UP) {
 			struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 
@@ -4288,6 +4306,8 @@ static netdev_tx_t bond_xmit_broadcast(struct sk_buff *skb,
 			bond_dev_queue_xmit(bond, skb2, slave->dev);
 		}
 	}
+
+	/*最后一个slave,如果slave up,则向其发送*/
 	if (slave && bond_slave_is_up(slave) && slave->link == BOND_LINK_UP)
 		return bond_dev_queue_xmit(bond, skb, slave->dev);
 
@@ -4322,7 +4342,7 @@ static inline int bond_slave_override(struct bonding *bond,
 	return 1;
 }
 
-
+//bond设备的队列选择函数
 static u16 bond_select_queue(struct net_device *dev, struct sk_buff *skb,
 			     struct net_device *sb_dev)
 {
@@ -4386,6 +4406,7 @@ static struct net_device *bond_xmit_get_slave(struct net_device *master_dev,
 	return NULL;
 }
 
+//bond设备依据当前mode,选择合适的slave完成报文发送
 static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bonding *bond = netdev_priv(dev);
@@ -4404,6 +4425,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 	case BOND_MODE_XOR:
 		return bond_3ad_xor_xmit(skb, dev);
 	case BOND_MODE_BROADCAST:
+	    //广播模式下，向所有slave接口均发送一份
 		return bond_xmit_broadcast(skb, dev);
 	case BOND_MODE_ALB:
 		return bond_alb_xmit(skb, dev);
@@ -4417,7 +4439,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 	}
 }
 
-//bond的发送函数
+//bond设备的报文发送函数
 static netdev_tx_t bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct bonding *bond = netdev_priv(dev);
@@ -4430,6 +4452,7 @@ static netdev_tx_t bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_BUSY;
 
 	rcu_read_lock();
+	//如果bond没有slave，则直接丢包，否则选择slave进行发送
 	if (bond_has_slaves(bond))
 		ret = __bond_start_xmit(skb, dev);
 	else
@@ -4607,6 +4630,7 @@ static void bond_uninit(struct net_device *bond_dev)
 
 /*------------------------- Module initialization ---------------------------*/
 
+//解析module参数，填充params
 static int bond_check_params(struct bond_params *params)
 {
 	int arp_validate_value, fail_over_mac_value, primary_reselect_value, i;
@@ -4630,6 +4654,7 @@ static int bond_check_params(struct bond_params *params)
 			pr_err("Error: Invalid bonding mode \"%s\"\n", mode);
 			return -EINVAL;
 		}
+		/*记录bond的类型*/
 		bond_mode = valptr->value;
 	}
 
@@ -5041,6 +5066,7 @@ int bond_create(struct net *net, const char *name)
 
 	rtnl_lock();
 
+	//创建bond接口
 	bond_dev = alloc_netdev_mq(sizeof(struct bonding),
 				   name ? name : "bond%d", NET_NAME_UNKNOWN,
 				   bond_setup, tx_queues);
@@ -5111,25 +5137,30 @@ static struct pernet_operations bond_net_ops = {
 	.size = sizeof(struct bond_net),
 };
 
+/*bonding模块初始化*/
 static int __init bonding_init(void)
 {
 	int i;
 	int res;
 
+	//填充bonding的模块配置
 	res = bond_check_params(&bonding_defaults);
 	if (res)
 		goto out;
 
+	//为每个net namespace注册init/exit钩子
 	res = register_pernet_subsys(&bond_net_ops);
 	if (res)
 		goto out;
 
+	//为bond创建netlink创建ops
 	res = bond_netlink_init();
 	if (res)
 		goto err_link;
 
 	bond_create_debugfs();
 
+	//创建max_bonds个bond口
 	for (i = 0; i < max_bonds; i++) {
 		res = bond_create(&init_net, NULL);
 		if (res)

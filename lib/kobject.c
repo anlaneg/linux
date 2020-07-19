@@ -354,7 +354,7 @@ int kobject_set_name_vargs(struct kobject *kobj, const char *fmt,
  */
 int kobject_set_name(struct kobject *kobj, const char *fmt, ...)
 {
-    //采用格式化串设置kobject名称
+    //采用格式化串设置kobj->name
 	va_list vargs;
 	int retval;
 
@@ -843,7 +843,7 @@ struct kobject *kobject_create(void)
  *
  * If the kobject was not able to be created, NULL will be returned.
  */
-//创建一个新的obj,并将其添加在parent下
+//创建一个新的kobj,并将其添加在parent下
 struct kobject *kobject_create_and_add(const char *name, struct kobject *parent)
 {
 	struct kobject *kobj;
@@ -874,22 +874,23 @@ void kset_init(struct kset *k)
 	spin_lock_init(&k->list_lock);
 }
 
-//显示属性
+//kobj属性显示函数
 /* default kobject attribute operations */
-static ssize_t kobj_attr_show(struct kobject *kobj, struct attribute *attr,
+static ssize_t kobj_attr_show(struct kobject *kobj/*kobj_attribute类型*/, struct attribute *attr/*访问的属性*/,
 			      char *buf)
 {
 	struct kobj_attribute *kattr;
 	ssize_t ret = -EIO;
 
+	//转为kobj_attrbute后，调用show函数完成显示
 	kattr = container_of(attr, struct kobj_attribute, attr);
 	if (kattr->show)
 		ret = kattr->show(kobj, kattr, buf);
 	return ret;
 }
 
-//设置属性
-static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
+//kobj属性设置函数
+static ssize_t kobj_attr_store(struct kobject *kobj/*kobj_attribute类型*/, struct attribute *attr,
 			       const char *buf, size_t count)
 {
 	struct kobj_attribute *kattr;
@@ -901,6 +902,7 @@ static ssize_t kobj_attr_store(struct kobject *kobj, struct attribute *attr,
 	return ret;
 }
 
+/*定义kobj默认的sysfs操作符*/
 const struct sysfs_ops kobj_sysfs_ops = {
 	.show	= kobj_attr_show,
 	.store	= kobj_attr_store,
@@ -970,6 +972,7 @@ struct kobject *kset_find_obj(struct kset *kset, const char *name)
 }
 EXPORT_SYMBOL_GPL(kset_find_obj);
 
+//kset节点释放函数
 static void kset_release(struct kobject *kobj)
 {
 	struct kset *kset = container_of(kobj, struct kset, kobj);
@@ -984,8 +987,9 @@ static void kset_get_ownership(struct kobject *kobj, kuid_t *uid, kgid_t *gid)
 		kobject_get_ownership(kobj->parent, uid, gid);
 }
 
+//定义kset类型（的kobj)
 static struct kobj_type kset_ktype = {
-	.sysfs_ops	= &kobj_sysfs_ops,
+	.sysfs_ops	= &kobj_sysfs_ops,//kset的sysfs操作集
 	.release	= kset_release,
 	.get_ownership	= kset_get_ownership,
 };
@@ -1007,7 +1011,7 @@ static struct kobj_type kset_ktype = {
  */
 static struct kset *kset_create(const char *name,
 				const struct kset_uevent_ops *uevent_ops/*kset对应的uevent操作集*/,
-				struct kobject *parent_kobj)
+				struct kobject *parent_kobj/*kset对应的父kobj*/)
 {
 	struct kset *kset;
 	int retval;
@@ -1015,11 +1019,14 @@ static struct kset *kset_create(const char *name,
 	kset = kzalloc(sizeof(*kset), GFP_KERNEL);
 	if (!kset)
 		return NULL;
+
+	//设置kset对应kobj名称
 	retval = kobject_set_name(&kset->kobj, "%s", name);
 	if (retval) {
 		kfree(kset);
 		return NULL;
 	}
+
 	//kset对应的udevent操作集
 	kset->uevent_ops = uevent_ops;
 	kset->kobj.parent = parent_kobj;

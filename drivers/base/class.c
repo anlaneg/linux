@@ -82,7 +82,7 @@ static struct kobj_type class_ktype = {
 };
 
 /* Hotplug events for classes go to the class subsys */
-static struct kset *class_kset;
+static struct kset *class_kset;/*'/sys/class’对应的kset*/
 
 
 int class_create_file_ns(struct class *cls, const struct class_attribute *attr,
@@ -505,6 +505,8 @@ struct class_compat *class_compat_register(const char *name)
 	cls = kmalloc(sizeof(struct class_compat), GFP_KERNEL);
 	if (!cls)
 		return NULL;
+
+	//创建一个class,将其添加到/sys/class/下（并添加到class_kset下）
 	cls->kobj = kobject_create_and_add(name, &class_kset->kobj);
 	if (!cls->kobj) {
 		kfree(cls);
@@ -576,6 +578,7 @@ EXPORT_SYMBOL_GPL(class_compat_remove_link);
 
 int __init classes_init(void)
 {
+    //创建class kset,不支持uevent事件
 	class_kset = kset_create_and_add("class", NULL, NULL);
 	if (!class_kset)
 		return -ENOMEM;

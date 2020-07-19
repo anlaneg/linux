@@ -774,6 +774,7 @@ struct rtnl_link_ops bond_link_ops __read_mostly = {
 	.fill_slave_info	= bond_fill_slave_info,
 };
 
+//注册bond接口对应的link操作集
 int __init bond_netlink_init(void)
 {
 	return rtnl_link_register(&bond_link_ops);

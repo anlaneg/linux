@@ -83,7 +83,7 @@ static const struct bond_opt_value bond_mode_tbl[] = {
 	{ "active-backup", BOND_MODE_ACTIVEBACKUP, 0},
 	{ "balance-xor",   BOND_MODE_XOR,          0},
 	{ "broadcast",     BOND_MODE_BROADCAST,    0},
-	{ "802.3ad",       BOND_MODE_8023AD,       0},
+	{ "802.3ad",       BOND_MODE_8023AD,       0},/*采用lacp协议*/
 	{ "balance-tlb",   BOND_MODE_TLB,          0},
 	{ "balance-alb",   BOND_MODE_ALB,          0},
 	{ NULL,            -1,                     0},
@@ -204,6 +204,7 @@ static const struct bond_opt_value bond_ad_user_port_key_tbl[] = {
 	{ NULL,      -1,    0},
 };
 
+//bond模块选项描述及解析
 static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 	[BOND_OPT_MODE] = {
 		.id = BOND_OPT_MODE,
@@ -516,6 +517,7 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 
 	/* No parsing if the option wants a raw val */
 	if (opt->flags & BOND_OPTFLAG_RAWVAL)
+	    //opt为raw,直接返回
 		return val;
 
 	tbl = opt->values;
@@ -742,6 +744,7 @@ const struct bond_option *bond_opt_get(unsigned int option)
 	if (!BOND_OPT_VALID(option))
 		return NULL;
 
+	//取指定选项约束结构
 	return &bond_opts[option];
 }
 

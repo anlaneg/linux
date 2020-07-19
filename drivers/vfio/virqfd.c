@@ -38,6 +38,7 @@ static void __exit vfio_virqfd_exit(void)
 
 static void virqfd_deactivate(struct virqfd *virqfd)
 {
+    //virqfd入队
 	queue_work(vfio_irqfd_cleanup_wq, &virqfd->shutdown);
 }
 

@@ -2856,6 +2856,7 @@ EXPORT_SYMBOL_GPL(kill_device);
  */
 void device_del(struct device *dev)
 {
+    //实现device删除
 	struct device *parent = dev->parent;
 	struct kobject *glue_dir = NULL;
 	struct class_interface *class_intf;

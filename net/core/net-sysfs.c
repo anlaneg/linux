@@ -645,7 +645,7 @@ static struct attribute *netstat_attrs[] __ro_after_init = {
 	&dev_attr_rx_length_errors.attr,
 	&dev_attr_rx_over_errors.attr,
 	&dev_attr_rx_crc_errors.attr,
-	&dev_attr_rx_frame_errors.attr,
+	&dev_attr_rx_frame_errors.attr,/*收到的错误包计数*/
 	&dev_attr_rx_fifo_errors.attr,
 	&dev_attr_rx_missed_errors.attr,
 	&dev_attr_tx_aborted_errors.attr,
@@ -659,6 +659,7 @@ static struct attribute *netstat_attrs[] __ro_after_init = {
 	NULL
 };
 
+//显示网卡的统计信息
 static const struct attribute_group netstat_group = {
 	.name  = "statistics",
 	.attrs  = netstat_attrs,

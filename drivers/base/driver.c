@@ -144,7 +144,7 @@ void driver_remove_groups(struct device_driver *drv,
  * since most of the things we have to do deal with the bus
  * structures.
  */
-//驱动注册
+//linux驱动注册
 int driver_register(struct device_driver *drv)
 {
 	int ret;
@@ -185,6 +185,8 @@ int driver_register(struct device_driver *drv)
 		bus_remove_driver(drv);
 		return ret;
 	}
+
+	//触发驱动注册uevent事件
 	kobject_uevent(&drv->p->kobj, KOBJ_ADD);
 
 	return ret;

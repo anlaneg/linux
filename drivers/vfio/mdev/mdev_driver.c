@@ -48,7 +48,7 @@ static int mdev_probe(struct device *dev)
 	if (ret)
 		return ret;
 
-	/*使driver的probe埋行探测*/
+	/*使driver的probe执行探测*/
 	if (drv && drv->probe) {
 		ret = drv->probe(dev);
 		if (ret)
@@ -63,6 +63,7 @@ static int mdev_remove(struct device *dev)
 	struct mdev_driver *drv = to_mdev_driver(dev->driver);
 	struct mdev_device *mdev = to_mdev_device(dev);
 
+	//移除mdev设备
 	if (drv && drv->remove)
 		drv->remove(dev);
 
@@ -71,6 +72,7 @@ static int mdev_remove(struct device *dev)
 	return 0;
 }
 
+//定义mdev bus类型
 struct bus_type mdev_bus_type = {
 	.name		= "mdev",
 	.probe		= mdev_probe,
@@ -104,6 +106,7 @@ EXPORT_SYMBOL(mdev_register_driver);
  */
 void mdev_unregister_driver(struct mdev_driver *drv)
 {
+    //mdev驱动解注册
 	driver_unregister(&drv->driver);
 }
 EXPORT_SYMBOL(mdev_unregister_driver);

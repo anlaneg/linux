@@ -1378,6 +1378,7 @@ netdev_tx_t bond_tlb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 	return bond_do_alb_xmit(skb, bond, tx_slave);
 }
 
+//alb模式下，slave接口发送
 struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 				      struct sk_buff *skb)
 {
@@ -1399,14 +1400,17 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 
 		if (is_broadcast_ether_addr(eth_data->h_dest) ||
 		    !pskb_network_may_pull(skb, sizeof(*iph))) {
+		    /*二层广播报文/不足ip头，则不做tx均衡*/
 			do_tx_balance = false;
 			break;
 		}
 		iph = ip_hdr(skb);
 		if (iph->daddr == ip_bcast || iph->protocol == IPPROTO_IGMP) {
+		    /*三层广播报文，或igmp报文，不做tx均衡*/
 			do_tx_balance = false;
 			break;
 		}
+		/*按目的ip进行hash*/
 		hash_start = (char *)&(iph->daddr);
 		hash_size = sizeof(iph->daddr);
 		break;
@@ -1418,6 +1422,7 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 		 * that here just in case.
 		 */
 		if (is_broadcast_ether_addr(eth_data->h_dest)) {
+		    /*二层广播报文,则不做tx均衡*/
 			do_tx_balance = false;
 			break;
 		}
@@ -1444,6 +1449,7 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 			break;
 		}
 
+		/*按目的ip进行hash*/
 		hash_start = (char *)&ip6hdr->daddr;
 		hash_size = sizeof(ip6hdr->daddr);
 		break;
@@ -1478,6 +1484,7 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 		break;
 	}
 	case ETH_P_ARP:
+	    /*arp不做balance*/
 		do_tx_balance = false;
 		if (bond_info->rlb_enabled)
 			tx_slave = rlb_arp_xmit(skb, bond);
@@ -1489,6 +1496,7 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 
 	if (do_tx_balance) {
 		if (bond->params.tlb_dynamic_lb) {
+		    /*通过hash，选择slave*/
 			hash_index = _simple_hash(hash_start, hash_size);
 			tx_slave = tlb_choose_channel(bond, hash_index, skb->len);
 		} else {
@@ -1510,11 +1518,13 @@ struct slave *bond_xmit_alb_slave_get(struct bonding *bond,
 	return tx_slave;
 }
 
+//bond alb模式报文发送
 netdev_tx_t bond_alb_xmit(struct sk_buff *skb, struct net_device *bond_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct slave *tx_slave = NULL;
 
+	//选择alb对应的slave,并发送
 	tx_slave = bond_xmit_alb_slave_get(bond, skb);
 	return bond_do_alb_xmit(skb, bond, tx_slave);
 }

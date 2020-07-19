@@ -500,6 +500,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 		return -EINVAL;
 	}
 
+    /*取kset对应的uevent操作集*/
 	kset = top_kobj->kset;
 	uevent_ops = kset->uevent_ops;
 
