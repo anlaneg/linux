@@ -616,6 +616,7 @@ void nf_conntrack_destroy(struct nf_conntrack *nfct)
 	rcu_read_lock();
 	ct_hook = rcu_dereference(nf_ct_hook);
 	BUG_ON(ct_hook == NULL);
+	//触发ct销毁时的钩子点
 	ct_hook->destroy(nfct);
 	rcu_read_unlock();
 }

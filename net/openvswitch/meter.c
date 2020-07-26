@@ -40,6 +40,7 @@ static const struct nla_policy band_policy[OVS_BAND_ATTR_MAX + 1] = {
 
 static u32 meter_hash(struct dp_meter_instance *ti, u32 id)
 {
+    //此函数实现导致id不得超过n_meters,如果超过，将于id% ti->n_meters冲突
 	return id % ti->n_meters;
 }
 
@@ -55,6 +56,7 @@ static void ovs_meter_free(struct dp_meter *meter)
 static struct dp_meter *lookup_meter(const struct dp_meter_table *tbl,
 				     u32 meter_id)
 {
+    /*取meter_id号dp_meter*/
 	struct dp_meter_instance *ti = rcu_dereference_ovsl(tbl->ti);
 	u32 hash = meter_hash(ti, meter_id);
 	struct dp_meter *meter;
@@ -66,6 +68,7 @@ static struct dp_meter *lookup_meter(const struct dp_meter_table *tbl,
 	return NULL;
 }
 
+//创建size个dp_meter
 static struct dp_meter_instance *dp_meter_instance_alloc(const u32 size)
 {
 	struct dp_meter_instance *ti;
@@ -94,6 +97,7 @@ static void dp_meter_instance_free_rcu(struct rcu_head *rcu)
 	kvfree(ti);
 }
 
+/*增大ti,重新分布meter表*/
 static int
 dp_meter_instance_realloc(struct dp_meter_table *tbl, u32 size)
 {
@@ -125,6 +129,7 @@ static void dp_meter_instance_insert(struct dp_meter_instance *ti,
 	rcu_assign_pointer(ti->dp_meters[hash], meter);
 }
 
+//自ti中移除id号meter
 static void dp_meter_instance_remove(struct dp_meter_instance *ti,
 				     struct dp_meter *meter)
 {
@@ -134,6 +139,7 @@ static void dp_meter_instance_remove(struct dp_meter_instance *ti,
 	RCU_INIT_POINTER(ti->dp_meters[hash], NULL);
 }
 
+/*向tbl中添加新的meter,如有必要添加新的meter*/
 static int attach_meter(struct dp_meter_table *tbl, struct dp_meter *meter)
 {
 	struct dp_meter_instance *ti = rcu_dereference_ovsl(tbl->ti);
@@ -144,6 +150,7 @@ static int attach_meter(struct dp_meter_table *tbl, struct dp_meter *meter)
 	 * OvS uses id-pool to fetch a available id.
 	 */
 	if (unlikely(rcu_dereference_ovsl(ti->dp_meters[hash])))
+	    /*meter->id对应的meter_id一定没有设置？*/
 		return -EBUSY;
 
 	dp_meter_instance_insert(ti, meter);
@@ -151,10 +158,12 @@ static int attach_meter(struct dp_meter_table *tbl, struct dp_meter *meter)
 	/* That function is thread-safe. */
 	tbl->count++;
 	if (tbl->count >= tbl->max_meters_allowed) {
+	    /*meter数量不得超限*/
 		err = -EFBIG;
 		goto attach_err;
 	}
 
+	/*如有必要，increase这个数组*/
 	if (tbl->count >= ti->n_meters &&
 	    dp_meter_instance_realloc(tbl, ti->n_meters * 2)) {
 		err = -ENOMEM;
@@ -169,6 +178,7 @@ attach_err:
 	return err;
 }
 
+//自tbl中移除meter,如有必要，shrink此数组
 static int detach_meter(struct dp_meter_table *tbl, struct dp_meter *meter)
 {
 	struct dp_meter_instance *ti;
@@ -182,6 +192,7 @@ static int detach_meter(struct dp_meter_table *tbl, struct dp_meter *meter)
 
 	tbl->count--;
 
+	//meter数量较少，执行shrink
 	/* Shrink the meter array if necessary. */
 	if (ti->n_meters > DP_METER_ARRAY_SIZE_MIN &&
 	    tbl->count <= (ti->n_meters / 4)) {
@@ -326,6 +337,7 @@ nla_put_failure:
 	return err;
 }
 
+/*通过netlink attr完成dp_meter创建*/
 static struct dp_meter *dp_meter_create(struct nlattr **a)
 {
 	struct nlattr *nla;
@@ -339,6 +351,7 @@ static struct dp_meter *dp_meter_create(struct nlattr **a)
 	if (!a[OVS_METER_ATTR_BANDS])
 		return ERR_PTR(-EINVAL);
 
+	/*bands数量不得超过DP_MAX_BANDS*/
 	nla_for_each_nested(nla, a[OVS_METER_ATTR_BANDS], rem)
 		if (++n_bands > DP_MAX_BANDS)
 			return ERR_PTR(-EINVAL);
@@ -361,6 +374,7 @@ static struct dp_meter *dp_meter_create(struct nlattr **a)
 
 	/* Set up meter bands. */
 	band = meter->bands;
+	//遍历并填充配置的band
 	nla_for_each_nested(nla, a[OVS_METER_ATTR_BANDS], rem) {
 		struct nlattr *attr[OVS_BAND_ATTR_MAX + 1];
 		u32 band_max_delta_t;
@@ -381,6 +395,7 @@ static struct dp_meter *dp_meter_create(struct nlattr **a)
 		band->type = nla_get_u32(attr[OVS_BAND_ATTR_TYPE]);
 		band->rate = nla_get_u32(attr[OVS_BAND_ATTR_RATE]);
 		if (band->rate == 0) {
+		    /*band中配置的rate不得为0*/
 			err = -EINVAL;
 			goto exit_free_meter;
 		}
@@ -406,6 +421,7 @@ exit_free_meter:
 	return ERR_PTR(err);
 }
 
+//实现meter配置
 static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr **a = info->attrs;
@@ -419,13 +435,16 @@ static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	u32 meter_id;
 	bool failed;
 
+	/*必须指定meter id*/
 	if (!a[OVS_METER_ATTR_ID])
 		return -EINVAL;
 
+	/*依赖netlink消息创建meter*/
 	meter = dp_meter_create(a);
 	if (IS_ERR_OR_NULL(meter))
 		return PTR_ERR(meter);
 
+	/*构造meter消息响应头*/
 	reply = ovs_meter_cmd_reply_start(info, OVS_METER_CMD_SET,
 					  &ovs_reply_header);
 	if (IS_ERR(reply)) {
@@ -434,6 +453,7 @@ static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	ovs_lock();
+	/*取datapath*/
 	dp = get_dp(sock_net(skb->sk), ovs_header->dp_ifindex);
 	if (!dp) {
 		err = -ENODEV;
@@ -443,6 +463,7 @@ static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	meter_tbl = &dp->meter_tbl;
 	meter_id = nla_get_u32(a[OVS_METER_ATTR_ID]);
 
+	/*取datapth中指定的meter,先移除旧的meter,再添加新的meter*/
 	old_meter = lookup_meter(meter_tbl, meter_id);
 	err = detach_meter(meter_tbl, old_meter);
 	if (err)
@@ -593,6 +614,7 @@ exit_unlock:
 bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 		       struct sw_flow_key *key, u32 meter_id)
 {
+    /*当前时间的ms数*/
 	long long int now_ms = div_u64(ktime_get_ns(), 1000 * 1000);
 	long long int long_delta_ms;
 	struct dp_meter_band *band;
@@ -602,6 +624,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	u32 delta_ms;
 	u32 cost;
 
+	/*取meter_id号meter*/
 	meter = lookup_meter(&dp->meter_tbl, meter_id);
 	/* Do not drop the packet when there is no meter. */
 	if (!meter)
@@ -610,6 +633,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 	/* Lock the meter while using it. */
 	spin_lock(&meter->lock);
 
+	/*计算与上次使用的间隔*/
 	long_delta_ms = (now_ms - meter->used); /* ms */
 
 	/* Make sure delta_ms will not be too large, so that bucket will not
@@ -641,20 +665,25 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 		long long int max_bucket_size;
 
 		band = &meter->bands[i];
+		/*令牌最大数，容许的速率+burst_size*/
 		max_bucket_size = (band->burst_size + band->rate) * 1000LL;
 
+		/*补充令牌*/
 		band->bucket += delta_ms * band->rate;
 		if (band->bucket > max_bucket_size)
 			band->bucket = max_bucket_size;
 
 		if (band->bucket >= cost) {
+		    /*令牌可支出，完成令牌支出*/
 			band->bucket -= cost;
 		} else if (band->rate > band_exceeded_rate) {
+		    /*令牌不足以支出，获得期待的速率及最大速率的band索引*/
 			band_exceeded_rate = band->rate;
 			band_exceeded_max = i;
 		}
 	}
 
+	/*如果有令牌不足支出，则完成报文丢弃及数目统计*/
 	if (band_exceeded_max >= 0) {
 		/* Update band statistics. */
 		band = &meter->bands[band_exceeded_max];
@@ -663,6 +692,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 
 		/* Drop band triggered, let the caller drop the 'skb'.  */
 		if (band->type == OVS_METER_BAND_TYPE_DROP) {
+		    /*返回true，报文将被丢弃*/
 			spin_unlock(&meter->lock);
 			return true;
 		}
@@ -678,7 +708,7 @@ static struct genl_ops dp_meter_genl_ops[] = {
 		.flags = 0,		  /* OK for unprivileged users. */
 		.doit = ovs_meter_cmd_features
 	},
-	{ .cmd = OVS_METER_CMD_SET,
+	{ .cmd = OVS_METER_CMD_SET,/*用于实现meter设置*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = GENL_ADMIN_PERM, /* Requires CAP_NET_ADMIN
 					   *  privilege.
@@ -730,6 +760,7 @@ int ovs_meters_init(struct datapath *dp)
 
 	/* Allow meters in a datapath to use ~3.12% of physical memory. */
 	free_mem_bytes = nr_free_buffer_pages() * (PAGE_SIZE >> 5);
+	/*最大容许200k*/
 	tbl->max_meters_allowed = min(free_mem_bytes / sizeof(struct dp_meter),
 				      DP_METER_NUM_MAX);
 	if (!tbl->max_meters_allowed)

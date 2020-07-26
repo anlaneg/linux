@@ -30,11 +30,13 @@ struct nf_conntrack {
 void nf_conntrack_destroy(struct nf_conntrack *nfct);
 static inline void nf_conntrack_put(struct nf_conntrack *nfct)
 {
+    //nf_conntrack的引用释放函数
 	if (nfct && atomic_dec_and_test(&nfct->use))
 		nf_conntrack_destroy(nfct);
 }
 static inline void nf_conntrack_get(struct nf_conntrack *nfct)
 {
+    //nf_conntrack的增加引用函数
 	if (nfct)
 		atomic_inc(&nfct->use);
 }

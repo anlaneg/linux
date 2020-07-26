@@ -433,6 +433,7 @@ static int vfio_pci_set_intx_unmask(struct vfio_pci_device *vdev,
 		if (unmask)
 			vfio_pci_intx_unmask(vdev);
 	} else if (flags & VFIO_IRQ_SET_DATA_EVENTFD) {
+	    /*取eventfd对应的fd*/
 		int32_t fd = *(int32_t *)data;
 		if (fd >= 0)
 			return vfio_virqfd_enable((void *) vdev,

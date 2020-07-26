@@ -984,6 +984,7 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCGIFNETMASK:
 	case SIOCGIFDSTADDR:
 	case SIOCGIFPFLAGS:
+	    /*获取接口相关信息*/
 		if (copy_from_user(&ifr, p, sizeof(struct ifreq)))
 			return -EFAULT;
 		err = devinet_ioctl(net, cmd, &ifr);
@@ -997,6 +998,7 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 	case SIOCSIFDSTADDR:
 	case SIOCSIFPFLAGS:
 	case SIOCSIFFLAGS:
+	    /*设置inet4设备接口相关信息*/
 		if (copy_from_user(&ifr, p, sizeof(struct ifreq)))
 			return -EFAULT;
 		err = devinet_ioctl(net, cmd, &ifr);

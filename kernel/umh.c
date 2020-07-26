@@ -387,6 +387,7 @@ struct subprocess_info *call_usermodehelper_setup(const char *path, char **argv,
 	if (!sub_info)
 		goto out;
 
+	//执行此work的工作函数
 	INIT_WORK(&sub_info->work, call_usermodehelper_exec_work);
 
 #ifdef CONFIG_STATIC_USERMODEHELPER

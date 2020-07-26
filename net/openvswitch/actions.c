@@ -1389,9 +1389,10 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_SAMPLE: {
+		    //对报文进行采样
 			bool last = nla_is_last(a, rem);
 
-			err = sample(dp, skb, key, a, last);
+			err = sample(dp, skb, key, a, last/*当前是否为最后一个action*/);
 			if (last)
 				return err;
 
@@ -1416,6 +1417,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_CT_CLEAR:
+		    //移除skb上ct信息
 			err = ovs_ct_clear(skb, key);
 			break;
 
@@ -1444,7 +1446,9 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_METER:
+		    /*如果a指定的meter_id不存在，则meter action将被忽略*/
 			if (ovs_meter_execute(dp, skb, key, nla_get_u32(a))) {
+			    /*skb将被丢弃*/
 				consume_skb(skb);
 				return 0;
 			}

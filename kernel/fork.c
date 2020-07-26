@@ -2931,7 +2931,7 @@ static int unshare_fd(unsigned long unshare_flags, struct files_struct **new_fdp
  * constructed. Here we are modifying the current, active,
  * task_struct.
  */
-int ksys_unshare(unsigned long unshare_flags)
+int ksys_unshare(unsigned long unshare_flags/*unshare相关的标记*/)
 {
 	struct fs_struct *fs, *new_fs = NULL;
 	struct files_struct *fd, *new_fd = NULL;

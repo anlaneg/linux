@@ -1050,7 +1050,7 @@ static int inet_abc_len(__be32 addr)
 	return rc;
 }
 
-
+/*inet4设备类 ioctl处理*/
 int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 {
 	struct sockaddr_in sin_orig;
@@ -1063,11 +1063,13 @@ int devinet_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr)
 	int ret = -EFAULT;
 	int tryaddrmatch = 0;
 
+	/*置字符串结束符*/
 	ifr->ifr_name[IFNAMSIZ - 1] = 0;
 
 	/* save original address for comparison */
 	memcpy(&sin_orig, sin, sizeof(*sin));
 
+	/*如果名称中有':'号，则取':'之前做为接口名称*/
 	colon = strchr(ifr->ifr_name, ':');
 	if (colon)
 		*colon = 0;

@@ -307,7 +307,7 @@ static DEFINE_RAW_SPINLOCK(wq_mayday_lock);	/* protects wq->maydays list */
 /* wait for manager to go away */
 static struct rcuwait manager_wait = __RCUWAIT_INITIALIZER(manager_wait);
 
-//链接系统所有工作队列
+//链接系统中所有工作队列
 static LIST_HEAD(workqueues);		/* PR: list of all workqueues */
 static bool workqueue_freezing;		/* PL: have wqs started freezing? */
 
@@ -4414,6 +4414,7 @@ static bool pwq_busy(struct pool_workqueue *pwq)
  */
 void destroy_workqueue(struct workqueue_struct *wq)
 {
+    //销毁指定工作队列
 	struct pool_workqueue *pwq;
 	int node;
 

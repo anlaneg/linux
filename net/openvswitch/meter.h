@@ -24,8 +24,8 @@ struct datapath;
 
 struct dp_meter_band {
 	u32 type;
-	u32 rate;
-	u32 burst_size;
+	u32 rate;//容许的最大速率 kbps
+	u32 burst_size;//容许的burst流量 kbps
 	u64 bucket; /* 1/1000 packets, or in bits */
 	struct ovs_flow_stats stats;
 };
@@ -34,24 +34,26 @@ struct dp_meter {
 	spinlock_t lock;    /* Per meter lock */
 	struct rcu_head rcu;
 	u32 id;
-	u16 kbps:1, keep_stats:1;
-	u16 n_bands;
+	u16 kbps:1/*单位是否为kbps或者包数每秒*/, keep_stats:1;
+	u16 n_bands;/*band的数目*/
 	u32 max_delta_t;
 	u64 used;
+	//定义此meter被命中的包数及字节数
 	struct ovs_flow_stats stats;
+	//记录配置的bands
 	struct dp_meter_band bands[];
 };
 
 struct dp_meter_instance {
 	struct rcu_head rcu;
-	u32 n_meters;
+	u32 n_meters;//dp_meter的数目
 	struct dp_meter __rcu *dp_meters[];
 };
 
 struct dp_meter_table {
 	struct dp_meter_instance __rcu *ti;
 	u32 count;
-	u32 max_meters_allowed;
+	u32 max_meters_allowed;/*容许的最大meter*/
 };
 
 extern struct genl_family dp_meter_genl_family;

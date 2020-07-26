@@ -19,9 +19,9 @@ struct file;
 struct subprocess_info {
 	struct work_struct work;
 	struct completion *complete;
-	const char *path;
-	char **argv;
-	char **envp;
+	const char *path;//用户态可执行文件路径
+	char **argv;//命令行参数
+	char **envp;//可执行文件环境变量
 	struct file *file;
 	int wait;
 	int retval;

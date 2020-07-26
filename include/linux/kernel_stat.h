@@ -61,6 +61,7 @@ static inline void kstat_incr_softirqs_this_cpu(unsigned int irq)
 	__this_cpu_inc(kstat.softirqs[irq]);
 }
 
+//获得当前cpu上指定中断被触发的次数
 static inline unsigned int kstat_softirqs_cpu(unsigned int irq, int cpu)
 {
        return kstat_cpu(cpu).softirqs[irq];

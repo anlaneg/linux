@@ -82,7 +82,7 @@ struct datapath {
 	u32 max_headroom;
 
 	/* Switch meters. */
-	struct dp_meter_table meter_tbl;//hash表
+	struct dp_meter_table meter_tbl;//meter hash表,保存dp_meter
 };
 
 /**

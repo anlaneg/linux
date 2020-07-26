@@ -484,6 +484,7 @@ enum ip_conntrack_info;
 
 struct nf_ct_hook {
 	int (*update)(struct net *net, struct sk_buff *skb);
+	//ct移除时，需要调用的钩子点
 	void (*destroy)(struct nf_conntrack *);
 	bool (*get_tuple_skb)(struct nf_conntrack_tuple *,
 			      const struct sk_buff *);

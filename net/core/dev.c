@@ -892,7 +892,7 @@ struct net_device *dev_get_by_name_rcu(struct net *net, const char *name)
 {
 	struct netdev_name_node *node_name;
 
-	//查找名称为name的设备，如果找不到返回NULL
+	//查找名称为name的网络设备，如果找不到返回NULL
 	node_name = netdev_name_node_lookup_rcu(net, name);
 	return node_name ? node_name->dev : NULL;
 }

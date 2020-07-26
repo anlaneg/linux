@@ -16,6 +16,7 @@ static int show_softirqs(struct seq_file *p, void *v)
 		seq_printf(p, "CPU%-8d", i);
 	seq_putc(p, '\n');
 
+	//显示所有软中断统计计数
 	for (i = 0; i < NR_SOFTIRQS; i++) {
 		seq_printf(p, "%12s:", softirq_to_name[i]);
 		for_each_possible_cpu(j)

@@ -1040,7 +1040,7 @@ xdp_xmit:
 
 //解析buf，并组装成skb,使其走kernel协议栈
 static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
-			void *buf, unsigned int len, void **ctx,
+			void *buf, unsigned int len/*报文长度*/, void **ctx,
 			unsigned int *xdp_xmit,
 			struct virtnet_rq_stats *stats)
 {

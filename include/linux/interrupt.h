@@ -531,7 +531,7 @@ extern bool force_irqthreads;
 
 enum
 {
-	HI_SOFTIRQ=0,
+	HI_SOFTIRQ=0,//最高优化级软中断
 	TIMER_SOFTIRQ,
 	NET_TX_SOFTIRQ,
 	NET_RX_SOFTIRQ,//网络收包软中断
@@ -632,6 +632,7 @@ enum
 #ifdef CONFIG_SMP
 static inline int tasklet_trylock(struct tasklet_struct *t)
 {
+    //检查t->state是否为run状态，如果test_and_set_bit直接返回1，否则返回0
 	return !test_and_set_bit(TASKLET_STATE_RUN, &(t)->state);
 }
 

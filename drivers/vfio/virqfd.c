@@ -68,6 +68,7 @@ static int virqfd_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync, void
 		 */
 		if (*(virqfd->pvirqfd) == virqfd) {
 			*(virqfd->pvirqfd) = NULL;
+			/*将virqfd加入等待队列*/
 			virqfd_deactivate(virqfd);
 		}
 
@@ -80,12 +81,14 @@ static int virqfd_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync, void
 static void virqfd_ptable_queue_proc(struct file *file,
 				     wait_queue_head_t *wqh, poll_table *pt)
 {
+    //由pt获得virqfd,并将其加入到wqh的队列
 	struct virqfd *virqfd = container_of(pt, struct virqfd, pt);
 	add_wait_queue(wqh, &virqfd->wait);
 }
 
 static void virqfd_shutdown(struct work_struct *work)
 {
+    //由work获得virqfd
 	struct virqfd *virqfd = container_of(work, struct virqfd, shutdown);
 	u64 cnt;
 
@@ -98,6 +101,7 @@ static void virqfd_shutdown(struct work_struct *work)
 
 static void virqfd_inject(struct work_struct *work)
 {
+    //由work获得virqfd,并调用thread回调
 	struct virqfd *virqfd = container_of(work, struct virqfd, inject);
 	if (virqfd->thread)
 		virqfd->thread(virqfd->opaque, virqfd->data);
@@ -106,7 +110,7 @@ static void virqfd_inject(struct work_struct *work)
 int vfio_virqfd_enable(void *opaque,
 		       int (*handler)(void *, void *),
 		       void (*thread)(void *, void *),
-		       void *data, struct virqfd **pvirqfd, int fd)
+		       void *data, struct virqfd **pvirqfd, int fd/*eventfd对应的文件fd*/)
 {
 	struct fd irqfd;
 	struct eventfd_ctx *ctx;
@@ -114,6 +118,7 @@ int vfio_virqfd_enable(void *opaque,
 	int ret = 0;
 	__poll_t events;
 
+	/*创建virqfd*/
 	virqfd = kzalloc(sizeof(*virqfd), GFP_KERNEL);
 	if (!virqfd)
 		return -ENOMEM;
@@ -127,12 +132,14 @@ int vfio_virqfd_enable(void *opaque,
 	INIT_WORK(&virqfd->shutdown, virqfd_shutdown);
 	INIT_WORK(&virqfd->inject, virqfd_inject);
 
+	//取中断对应的eventfd
 	irqfd = fdget(fd);
 	if (!irqfd.file) {
 		ret = -EBADF;
 		goto err_fd;
 	}
 
+	//取eventfd对应的私有数据
 	ctx = eventfd_ctx_fileget(irqfd.file);
 	if (IS_ERR(ctx)) {
 		ret = PTR_ERR(ctx);
@@ -165,6 +172,7 @@ int vfio_virqfd_enable(void *opaque,
 	init_waitqueue_func_entry(&virqfd->wait, virqfd_wakeup);
 	init_poll_funcptr(&virqfd->pt, virqfd_ptable_queue_proc);
 
+	/*触发eventfd的poll回调*/
 	events = vfs_poll(irqfd.file, &virqfd->pt);
 
 	/*
@@ -172,6 +180,8 @@ int vfio_virqfd_enable(void *opaque,
 	 * before we registered and trigger it as if we didn't miss it.
 	 */
 	if (events & EPOLLIN) {
+	    /*eventfd可读，如果有handle,则通过handle处理此事件，否则如果有thread回调，则
+	     * 执行inject work，使之触发thread回调*/
 		if ((!handler || handler(opaque, data)) && thread)
 			schedule_work(&virqfd->inject);
 	}

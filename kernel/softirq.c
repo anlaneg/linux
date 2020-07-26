@@ -281,7 +281,7 @@ restart:
 	h = softirq_vec;
 
 	//ffs(0x1)==1,ffs(0x10)==5,ffs(0x100)==9
-	//返回最低位‘1’所在的比特数
+	//返回最低位‘1’所在的比特数（低位中断优先级更高）
 	while ((softirq_bit = ffs(pending))) {
 		unsigned int vec_nr;
 		int prev_count;
@@ -499,7 +499,9 @@ void open_softirq(int nr, void (*action)(struct softirq_action *))
  * Tasklets
  */
 struct tasklet_head {
+    //首个元素
 	struct tasklet_struct *head;
+	//指向最后一个元素
 	struct tasklet_struct **tail;
 };
 
@@ -515,13 +517,16 @@ static void __tasklet_schedule_common(struct tasklet_struct *t,
 
 	local_irq_save(flags);
 	head = this_cpu_ptr(headp);
+	//将t加入到head队列的结尾
 	t->next = NULL;
 	*head->tail = t;
 	head->tail = &(t->next);
+	//触发softirq_nr号软中断
 	raise_softirq_irqoff(softirq_nr);
 	local_irq_restore(flags);
 }
 
+//触发tasklet软中断
 void __tasklet_schedule(struct tasklet_struct *t)
 {
 	__tasklet_schedule_common(t, &tasklet_vec,
@@ -529,6 +534,7 @@ void __tasklet_schedule(struct tasklet_struct *t)
 }
 EXPORT_SYMBOL(__tasklet_schedule);
 
+//触发hi_softirq软中断
 void __tasklet_hi_schedule(struct tasklet_struct *t)
 {
 	__tasklet_schedule_common(t, &tasklet_hi_vec,
@@ -543,21 +549,27 @@ static void tasklet_action_common(struct softirq_action *a,
 	struct tasklet_struct *list;
 
 	local_irq_disable();
+
+	//采用list指向tl_head->head,并将tl_head->head清空
 	list = tl_head->head;
 	tl_head->head = NULL;
 	tl_head->tail = &tl_head->head;
 	local_irq_enable();
 
+	//遍历list指向的tasklet_struct链表
 	while (list) {
 		struct tasklet_struct *t = list;
 
+		//准备下一个遍历对象
 		list = list->next;
 
+		//尝试直接运行func
 		if (tasklet_trylock(t)) {
 			if (!atomic_read(&t->count)) {
 				if (!test_and_clear_bit(TASKLET_STATE_SCHED,
 							&t->state))
 					BUG();
+				//触发tasklet_struct的func函数
 				t->func(t->data);
 				tasklet_unlock(t);
 				continue;
@@ -566,9 +578,14 @@ static void tasklet_action_common(struct softirq_action *a,
 		}
 
 		local_irq_disable();
+
+		//将t自原来的 tl_heead->head中移除
 		t->next = NULL;
+		//将t加入到tl_head中（tl_head->tail原来指向最后一个元素的next)
 		*tl_head->tail = t;
+		//更新tl_head->tail到最后一个元素
 		tl_head->tail = &t->next;
+		//指明当前cpu触发softirq_nr号中断
 		__raise_softirq_irqoff(softirq_nr);
 		local_irq_enable();
 	}
@@ -622,6 +639,7 @@ void __init softirq_init(void)
 			&per_cpu(tasklet_hi_vec, cpu).head;
 	}
 
+	//定义tasklet_softirq的回调函数
 	open_softirq(TASKLET_SOFTIRQ, tasklet_action);
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
 }
