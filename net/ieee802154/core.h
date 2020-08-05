@@ -28,6 +28,7 @@ struct cfg802154_registered_device {
 	struct wpan_phy wpan_phy __aligned(NETDEV_ALIGN);
 };
 
+//由wpan_phy获得registered_device
 static inline struct cfg802154_registered_device *
 wpan_phy_to_rdev(struct wpan_phy *wpan_phy)
 {

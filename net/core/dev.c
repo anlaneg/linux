@@ -2667,7 +2667,7 @@ static struct xps_map *expand_xps_map(struct xps_map *map, int attr_index,
 
 /* Must be called under cpus_read_lock */
 int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask,
-			  u16 index, bool is_rxqs_map)
+			  u16 index/*tx队列索引*/, bool is_rxqs_map)
 {
 	const unsigned long *online_mask = NULL, *possible_mask = NULL;
 	struct xps_dev_maps *dev_maps, *new_dev_maps = NULL;
@@ -2864,6 +2864,7 @@ error:
 }
 EXPORT_SYMBOL_GPL(__netif_set_xps_queue);
 
+/*设置dev的index号tx队列的xps cpu掩码*/
 int netif_set_xps_queue(struct net_device *dev, const struct cpumask *mask,
 			u16 index)
 {
@@ -3096,7 +3097,8 @@ static void __netif_reschedule(struct Qdisc *q)
 	q->next_sched = NULL;
 	*sd->output_queue_tailp = q;
 	sd->output_queue_tailp = &q->next_sched;
-	raise_softirq_irqoff(NET_TX_SOFTIRQ);//触发tx软中断
+	//触发tx软中断
+	raise_softirq_irqoff(NET_TX_SOFTIRQ);
 	local_irq_restore(flags);
 }
 
@@ -3151,12 +3153,15 @@ void __dev_kfree_skb_irq(struct sk_buff *skb, enum skb_free_reason reason)
 
 	if (likely(refcount_read(&skb->users) == 1)) {
 		smp_rmb();
+		/*存放到irq链表上的skb引用计数恒为0*/
 		refcount_set(&skb->users, 0);
 	} else if (likely(!refcount_dec_and_test(&skb->users))) {
+	    /*仍在使用，减引用计数，退出*/
 		return;
 	}
-	get_kfree_skb_cb(skb)->reason = reason;
+	get_kfree_skb_cb(skb)->reason = reason;/*设置释放原因*/
 	local_irq_save(flags);
+	/*将此skb挂接在tx软中断的completion_queue上，通过tx softirq完成报文释放*/
 	skb->next = __this_cpu_read(softnet_data.completion_queue);
 	__this_cpu_write(softnet_data.completion_queue, skb);
 	raise_softirq_irqoff(NET_TX_SOFTIRQ);
@@ -3556,6 +3561,7 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 {
 	u16 gso_segs = skb_shinfo(skb)->gso_segs;
 
+	/*超过设备支持的最大gso分段数，清除掉此功能*/
 	if (gso_segs > dev->gso_max_segs)
 		return features & ~NETIF_F_GSO_MASK;
 
@@ -3584,6 +3590,7 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 
 netdev_features_t netif_skb_features(struct sk_buff *skb)
 {
+    /*skb所属的网络设备*/
 	struct net_device *dev = skb->dev;
 	netdev_features_t features = dev->features;
 
@@ -3633,7 +3640,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 }
 
 //发送一组skb
-struct sk_buff *dev_hard_start_xmit(struct sk_buff *first, struct net_device *dev,
+struct sk_buff *dev_hard_start_xmit(struct sk_buff *first/*待发送的一组skb*/, struct net_device *dev,
 				    struct netdev_queue *txq, int *ret)
 {
 	struct sk_buff *skb = first;
@@ -3742,7 +3749,7 @@ out_null:
 
 struct sk_buff *validate_xmit_skb_list(struct sk_buff *skb, struct net_device *dev, bool *again)
 {
-	struct sk_buff *next, *head = NULL, *tail;
+	struct sk_buff *next/*指向当前校验skb的next*/, *head = NULL/*指向校验通过的首个skb*/, *tail/*指向校验通过的skb list的最后一个元素*/;
 
 	for (; skb != NULL; skb = next) {
 		next = skb->next;
@@ -3753,6 +3760,7 @@ struct sk_buff *validate_xmit_skb_list(struct sk_buff *skb, struct net_device *d
 
 		skb = validate_xmit_skb(skb, dev, again);
 		if (!skb)
+		    /*校验不通过，报文被丢弃，考虑下一个*/
 			continue;
 
 		if (!head)
@@ -3991,6 +3999,7 @@ static int __get_xps_queue_idx(struct net_device *dev, struct sk_buff *skb,
 		if (map->len == 1)
 			queue_index = map->queues[0];
 		else
+		    /*按hash选队列index*/
 			queue_index = map->queues[reciprocal_scale(
 						skb_get_hash(skb), map->len)];
 		if (unlikely(queue_index >= dev->real_num_tx_queues))
@@ -4064,6 +4073,7 @@ u16 netdev_pick_tx(struct net_device *dev, struct sk_buff *skb,
 
 	sb_dev = sb_dev ? : dev;
 
+	/*如果sk中记录的sk_tx_queue_mapping未更新/无效，则更新*/
 	if (queue_index < 0 || skb->ooo_okay ||
 	    queue_index >= dev->real_num_tx_queues) {
 		int new_index = get_xps_queue(dev, sb_dev, skb);
@@ -4345,7 +4355,7 @@ static inline void ____napi_schedule(struct softnet_data *sd,
 /* One global table that all flow-based protocols share. */
 struct rps_sock_flow_table __rcu *rps_sock_flow_table __read_mostly;
 EXPORT_SYMBOL(rps_sock_flow_table);
-u32 rps_cpu_mask __read_mostly;
+u32 rps_cpu_mask __read_mostly;/*系统所有cpu掩码*/
 EXPORT_SYMBOL(rps_cpu_mask);
 
 struct static_key_false rps_needed __read_mostly;
@@ -4353,12 +4363,14 @@ EXPORT_SYMBOL(rps_needed);
 struct static_key_false rfs_needed __read_mostly;
 EXPORT_SYMBOL(rfs_needed);
 
+/*更新local flow table中cpu信息*/
 static struct rps_dev_flow *
 set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	    struct rps_dev_flow *rflow, u16 next_cpu)
 {
 	if (next_cpu < nr_cpu_ids) {
 #ifdef CONFIG_RFS_ACCEL
+	    //rfs硬件加速
 		struct netdev_rx_queue *rxqueue;
 		struct rps_dev_flow_table *flow_table;
 		struct rps_dev_flow *old_rflow;
@@ -4380,7 +4392,8 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			goto out;
 		/*按hash计算一个flow_id*/
 		flow_id = skb_get_hash(skb) & flow_table->mask;
-		rc = dev->netdev_ops->ndo_rx_flow_steer(dev, skb,
+		rc = dev->netdev_ops->s
+		        (dev, skb,
 							rxq_index, flow_id);
 		if (rc < 0)
 			goto out;
@@ -4409,7 +4422,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		       struct rps_dev_flow **rflowp)
 {
 	const struct rps_sock_flow_table *sock_flow_table;
-	/*取设备的rx队列*/
+	/*取设备的rx队列数组*/
 	struct netdev_rx_queue *rxqueue = dev->_rx;
 	struct rps_dev_flow_table *flow_table;
 	struct rps_map *map;
@@ -4429,24 +4442,28 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 				  dev->name, index, dev->real_num_rx_queues);
 			goto done;
 		}
+		/*映射到具体的rx队列上*/
 		rxqueue += index;
 	}
 
 	/* Avoid computing hash if RFS/RPS is not active for this rxqueue */
 
-	/*取rfs表*/
+	/*取此队列对应的rps_flow表*/
 	flow_table = rcu_dereference(rxqueue->rps_flow_table);
 	/*拿到rxqueuex上的rps map*/
 	map = rcu_dereference(rxqueue->rps_map);
 	if (!flow_table && !map)
-		goto done;/*无配置，直接done*/
+	    /*没有配置rps,也没有配置rfs，直接done*/
+		goto done;
 
 	/*取报文对应的hash*/
 	skb_reset_network_header(skb);
 	hash = skb_get_hash(skb);
 	if (!hash)
+	    /*报文hash为0，直接done*/
 		goto done;
 
+	/*当一个socket达到稳定连接后，kernel会将其对应的skb->hash及其所处的cpu记录在rps_sock_flow_table中*/
 	sock_flow_table = rcu_dereference(rps_sock_flow_table);
 	if (flow_table && sock_flow_table) {
 		struct rps_dev_flow *rflow;
@@ -4456,14 +4473,19 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		/* First check into global flow table if there is a match */
 		ident = sock_flow_table->ents[hash & sock_flow_table->mask];
 		if ((ident ^ hash) & ~rps_cpu_mask)
+		    /*
+		     * 由于ents中保存的是skb->hash(部分）+cpuid,故排除掉cpuid的影响，如果非0，说明此skb->hash未记录
+		     * 跳出flow维护过程，直接通过map来映射
+		     */
 			goto try_rps;
 
+		/*取出当前记录的此socket上次更新记录时对应的cpu*/
 		next_cpu = ident & rps_cpu_mask;
 
 		/* OK, now we know there is a match,
 		 * we can look at the local (per receive queue) flow table
 		 */
-		//获取一个flow
+		//利用此hash检查此rx队列的lcoal flow表项
 		rflow = &flow_table->flows[hash & flow_table->mask];
 		tcpu = rflow->cpu;
 
@@ -4482,6 +4504,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		    (tcpu >= nr_cpu_ids || !cpu_online(tcpu) ||
 		     ((int)(per_cpu(softnet_data, tcpu).input_queue_head -
 		      rflow->last_qtail)) >= 0)) {
+		    /*在global flow table中查找到了此flow,但种种原因local flow中的表项需要更新*/
 			tcpu = next_cpu;
 			rflow = set_rps_cpu(dev, skb, rflow, next_cpu);
 		}
@@ -4986,11 +5009,13 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 	if (sd->completion_queue) {
 		struct sk_buff *clist;
 
+		//采用clist保存completion_queue链表，将其上挂接的skb释放掉
 		local_irq_disable();
 		clist = sd->completion_queue;
 		sd->completion_queue = NULL;
 		local_irq_enable();
 
+		//clist上挂载的是skb,将这些skb释放掉
 		while (clist) {
 			struct sk_buff *skb = clist;
 
@@ -5014,6 +5039,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 	if (sd->output_queue) {
 		struct Qdisc *head;
 
+		//采用head保存sd->output_queue队列
 		local_irq_disable();
 		head = sd->output_queue;
 		sd->output_queue = NULL;
@@ -5027,6 +5053,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 			head = head->next_sched;
 
 			if (!(q->flags & TCQ_F_NOLOCK)) {
+			    //需要对q加锁
 				root_lock = qdisc_lock(q);
 				spin_lock(root_lock);
 			}
@@ -5035,6 +5062,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 			 */
 			smp_mb__before_atomic();
 			clear_bit(__QDISC_STATE_SCHED, &q->state);
+			//调度qdisc
 			qdisc_run(q);
 			if (root_lock)
 				spin_unlock(root_lock);
@@ -5680,7 +5708,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 		if (cpu >= 0) {
-		    //将此报文加入cpu对应的backlog,完成投递返回。
+		    //选出了相应的cpu,将此报文加入cpu对应的backlog,完成投递返回。
 			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			rcu_read_unlock();
 			return ret;
@@ -10625,17 +10653,22 @@ static int dev_cpu_dead(unsigned int oldcpu)
 	struct softnet_data *sd, *oldsd, *remsd = NULL;
 
 	local_irq_disable();
-	cpu = smp_processor_id();//当前运行的cpu id
-	sd = &per_cpu(softnet_data, cpu);//取此cpu对应的softnet_data
-	oldsd = &per_cpu(softnet_data, oldcpu);//取旧cpu对应的softnet_data
+	//当前运行的cpu id
+	cpu = smp_processor_id();
+	//取此cpu对应的softnet_data
+	sd = &per_cpu(softnet_data, cpu);
+	//取旧cpu对应的softnet_data
+	oldsd = &per_cpu(softnet_data, oldcpu);
 
 	/* Find end of our completion_queue. */
 	list_skb = &sd->completion_queue;
 	while (*list_skb)
 		list_skb = &(*list_skb)->next;
 	/* Append completion queue from offline CPU. */
-	*list_skb = oldsd->completion_queue;//将下线cpu的oldsd->competion_queue加入到当前cpu上
-	oldsd->completion_queue = NULL;//旧cpu的completion_queue置为空
+	//将下线cpu的oldsd->competion_queue加入到当前cpu上
+	*list_skb = oldsd->completion_queue;
+	//旧cpu的completion_queue置为空
+	oldsd->completion_queue = NULL;
 
 	/* Append output queue from offline CPU. */
 	//合并oldsd->output_queue

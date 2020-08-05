@@ -77,6 +77,7 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 
 	ASSERT_RTNL();
 
+	/*只容许以上两种type*/
 	if (!have_ifidx && !have_wdev_id)
 		return ERR_PTR(-EINVAL);
 
@@ -90,12 +91,15 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
 		struct wireless_dev *wdev;
 
+		/*跳过net namespace不一致的rdev*/
 		if (wiphy_net(&rdev->wiphy) != netns)
 			continue;
 
+		/*跳过wdev_id不一致的*/
 		if (have_wdev_id && rdev->wiphy_idx != wiphy_idx)
 			continue;
 
+		/*遍历rdev设备上所有wdev,执行ifindex,wdev_id进行匹配*/
 		list_for_each_entry(wdev, &rdev->wiphy.wdev_list, list) {
 			if (have_ifidx && wdev->netdev &&
 			    wdev->netdev->ifindex == ifidx) {
@@ -117,6 +121,7 @@ __cfg80211_wdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	return ERR_PTR(-ENODEV);
 }
 
+/*通过属性获得rdev*/
 static struct cfg80211_registered_device *
 __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 {
@@ -125,15 +130,18 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 
 	ASSERT_RTNL();
 
+	/*只处理以下几个属性*/
 	if (!attrs[NL80211_ATTR_WIPHY] &&
 	    !attrs[NL80211_ATTR_IFINDEX] &&
 	    !attrs[NL80211_ATTR_WDEV])
 		return ERR_PTR(-EINVAL);
 
+	/*通过wiphy查找register的设备*/
 	if (attrs[NL80211_ATTR_WIPHY])
 		rdev = cfg80211_rdev_by_wiphy_idx(
 				nla_get_u32(attrs[NL80211_ATTR_WIPHY]));
 
+	/*通过wdev_id获得register的设备*/
 	if (attrs[NL80211_ATTR_WDEV]) {
 		u64 wdev_id = nla_get_u64(attrs[NL80211_ATTR_WDEV]);
 		struct wireless_dev *wdev;
@@ -164,6 +172,7 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 
 		netdev = __dev_get_by_index(netns, ifindex);
 		if (netdev) {
+		    //此设备为ieee80211设备，取相应register设备
 			if (netdev->ieee80211_ptr)
 				tmp = wiphy_to_rdev(
 					netdev->ieee80211_ptr->wiphy);
@@ -201,6 +210,7 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 static struct cfg80211_registered_device *
 cfg80211_get_dev_from_info(struct net *netns, struct genl_info *info)
 {
+    //通过info属性，获取registered device
 	return __cfg80211_rdev_from_attrs(netns, info->attrs);
 }
 
@@ -2049,6 +2059,7 @@ static int nl80211_send_wiphy(struct cfg80211_registered_device *rdev,
 	if (WARN_ON(!state))
 		return -EINVAL;
 
+	//填充
 	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
 	    nla_put_string(msg, NL80211_ATTR_WIPHY_NAME,
 			   wiphy_name(&rdev->wiphy)) ||
@@ -14279,18 +14290,25 @@ bad_tid_conf:
 	return ret;
 }
 
+/*需要取指定wiphy*/
 #define NL80211_FLAG_NEED_WIPHY		0x01
+/*通过ifindex获得netdev*/
 #define NL80211_FLAG_NEED_NETDEV	0x02
+/*需要进行rtnl加锁*/
 #define NL80211_FLAG_NEED_RTNL		0x04
+/*需要确保设备处于running状态*/
 #define NL80211_FLAG_CHECK_NETDEV_UP	0x08
 #define NL80211_FLAG_NEED_NETDEV_UP	(NL80211_FLAG_NEED_NETDEV |\
 					 NL80211_FLAG_CHECK_NETDEV_UP)
+/*通过wdev_id获得wdev*/
 #define NL80211_FLAG_NEED_WDEV		0x10
 /* If a netdev is associated, it must be UP, P2P must be started */
 #define NL80211_FLAG_NEED_WDEV_UP	(NL80211_FLAG_NEED_WDEV |\
 					 NL80211_FLAG_CHECK_NETDEV_UP)
+/*需要清空netlink skb头部*/
 #define NL80211_FLAG_CLEAR_SKB		0x20
 
+//80211模块netlink回调执行前函数
 static int nl80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			    struct genl_info *info)
 {
@@ -14303,12 +14321,14 @@ static int nl80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 		rtnl_lock();
 
 	if (ops->internal_flags & NL80211_FLAG_NEED_WIPHY) {
+	    //指明需要wiphy
 		rdev = cfg80211_get_dev_from_info(genl_info_net(info), info);
 		if (IS_ERR(rdev)) {
 			if (rtnl)
 				rtnl_unlock();
 			return PTR_ERR(rdev);
 		}
+		/*0位置存registered设备*/
 		info->user_ptr[0] = rdev;
 	} else if (ops->internal_flags & NL80211_FLAG_NEED_NETDEV ||
 		   ops->internal_flags & NL80211_FLAG_NEED_WDEV) {
@@ -14332,6 +14352,7 @@ static int nl80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 				return -EINVAL;
 			}
 
+			/*存netdev设备*/
 			info->user_ptr[1] = dev;
 		} else {
 			info->user_ptr[1] = wdev;
@@ -14347,15 +14368,18 @@ static int nl80211_pre_doit(const struct genl_ops *ops, struct sk_buff *skb,
 		if (dev)
 			dev_hold(dev);
 
+		/*填充registered设备*/
 		info->user_ptr[0] = rdev;
 	}
 
 	return 0;
 }
 
+//80211消息处理post回调
 static void nl80211_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 			      struct genl_info *info)
 {
+    //释放wdev
 	if (info->user_ptr[1]) {
 		if (ops->internal_flags & NL80211_FLAG_NEED_WDEV) {
 			struct wireless_dev *wdev = info->user_ptr[1];
@@ -14367,6 +14391,7 @@ static void nl80211_post_doit(const struct genl_ops *ops, struct sk_buff *skb,
 		}
 	}
 
+	//加锁了，这里解锁
 	if (ops->internal_flags & NL80211_FLAG_NEED_RTNL)
 		rtnl_unlock();
 
@@ -15242,6 +15267,7 @@ static const struct genl_ops nl80211_ops[] = {
 	},
 };
 
+/*80211 family支持的情况*/
 static struct genl_family nl80211_fam __ro_after_init = {
 	.name = NL80211_GENL_NAME,	/* have users key off the name instead */
 	.hdrsize = 0,			/* no private header */
@@ -15249,10 +15275,12 @@ static struct genl_family nl80211_fam __ro_after_init = {
 	.maxattr = NL80211_ATTR_MAX,
 	.policy = nl80211_policy,
 	.netnsok = true,
-	.pre_doit = nl80211_pre_doit,//ops提供的netlink命令调用前，此函数总被调用
+	//ops提供的netlink命令调用前，此函数总被调用
+	.pre_doit = nl80211_pre_doit,
 	.post_doit = nl80211_post_doit,
 	.module = THIS_MODULE,
-	.ops = nl80211_ops,//对外提供的netlink操作命令回调
+	//对外提供的netlink操作命令回调
+	.ops = nl80211_ops,
 	.n_ops = ARRAY_SIZE(nl80211_ops),
 	.mcgrps = nl80211_mcgrps,
 	.n_mcgrps = ARRAY_SIZE(nl80211_mcgrps),
@@ -17526,6 +17554,7 @@ int __init nl80211_init(void)
 {
 	int err;
 
+	/*注册80211 family*/
 	err = genl_register_family(&nl80211_fam);
 	if (err)
 		return err;

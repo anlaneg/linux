@@ -726,8 +726,9 @@ struct rps_dev_flow_table {
  * meaning we use 32-6=26 bits for the hash.
  */
 struct rps_sock_flow_table {
-	u32	mask;
+	u32	mask;//ents表的大小总是2的N次幂，这里的mask为size-1
 
+	//保存在ents中的是hash(部分）+cpuid
 	u32	ents[] ____cacheline_aligned_in_smp;
 };
 #define	RPS_SOCK_FLOW_TABLE_SIZE(_num) (offsetof(struct rps_sock_flow_table, ents[_num]))
@@ -737,11 +738,14 @@ struct rps_sock_flow_table {
 extern u32 rps_cpu_mask;
 extern struct rps_sock_flow_table __rcu *rps_sock_flow_table;
 
+/*设置此hash可占用的flow_table位置及cpu_id*/
 static inline void rps_record_sock_flow(struct rps_sock_flow_table *table,
 					u32 hash)
 {
 	if (table && hash) {
+	    /*取hash对应的table index*/
 		unsigned int index = hash & table->mask;
+		/*移除掉hash中cpu可用的mask部分，腾出空间存放当前cpu-id*/
 		u32 val = hash & ~rps_cpu_mask;
 
 		/* We only give a hint, preemption can change CPU under us */
@@ -761,7 +765,7 @@ bool rps_may_expire_flow(struct net_device *dev, u16 rxq_index, u32 flow_id,
 /* This structure contains an instance of an RX queue. */
 struct netdev_rx_queue {
 #ifdef CONFIG_RPS
-    //rx队列可接收的cpu map （来源于queueu/rx-%d/rps_cpus配置）
+    //指明此rx队列可接收的cpu map （来源于queueu/rx-%d/rps_cpus配置）
 	struct rps_map __rcu		*rps_map;
 	struct rps_dev_flow_table __rcu	*rps_flow_table;
 #endif
@@ -2165,7 +2169,7 @@ struct net_device {
 	//gso最大size
 	unsigned int		gso_max_size;
 #define GSO_MAX_SEGS		65535
-	//gso最大分段数
+	//设备支持的最大gso分段数
 	u16			gso_max_segs;
 
 #ifdef CONFIG_DCB
@@ -2254,6 +2258,7 @@ struct netdev_queue *netdev_get_tx_queue(const struct net_device *dev,
 	return &dev->_tx[index];
 }
 
+/*取skb映射的dev的tx队列*/
 static inline struct netdev_queue *skb_get_tx_queue(const struct net_device *dev,
 						    const struct sk_buff *skb)
 {
@@ -3748,7 +3753,7 @@ static inline int __netif_set_xps_queue(struct net_device *dev,
  */
 static inline bool netif_is_multiqueue(const struct net_device *dev)
 {
-	//检查设备是否为多队列设备
+	//检查设备是否为tx多队列设备
 	return dev->num_tx_queues > 1;
 }
 

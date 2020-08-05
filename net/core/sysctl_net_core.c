@@ -46,6 +46,7 @@ int sysctl_devconf_inherit_init_net __read_mostly;
 EXPORT_SYMBOL(sysctl_devconf_inherit_init_net);
 
 #ifdef CONFIG_RPS
+/*配置全局rps_sock_flow_table*/
 static int rps_sock_flow_sysctl(struct ctl_table *table, int write,
 				void *buffer, size_t *lenp, loff_t *ppos)
 {
@@ -61,21 +62,26 @@ static int rps_sock_flow_sysctl(struct ctl_table *table, int write,
 
 	mutex_lock(&sock_flow_mutex);
 
+	/*当前使能的table及size*/
 	orig_sock_table = rcu_dereference_protected(rps_sock_flow_table,
 					lockdep_is_held(&sock_flow_mutex));
 	size = orig_size = orig_sock_table ? orig_sock_table->mask + 1 : 0;
 
+	/*触发填写或者读取表大小到size变量*/
 	ret = proc_dointvec(&tmp, write, buffer, lenp, ppos);
 
 	if (write) {
 		if (size) {
 			if (size > 1<<29) {
+			    /*拒绝过大的size*/
 				/* Enforce limit to prevent overflow */
 				mutex_unlock(&sock_flow_mutex);
 				return -EINVAL;
 			}
+			/*sock_table大小*/
 			size = roundup_pow_of_two(size);
 			if (size != orig_size) {
+			    /*当前指明大小与旧表不相等，申请新的sock_table*/
 				sock_table =
 				    vmalloc(RPS_SOCK_FLOW_TABLE_SIZE(size));
 				if (!sock_table) {
@@ -87,11 +93,13 @@ static int rps_sock_flow_sysctl(struct ctl_table *table, int write,
 			} else
 				sock_table = orig_sock_table;
 
+			/*标记cpu为空*/
 			for (i = 0; i < size; i++)
 				sock_table->ents[i] = RPS_NO_CPU;
 		} else
 			sock_table = NULL;
 
+		/*设置sock_flow_table*/
 		if (sock_table != orig_sock_table) {
 			rcu_assign_pointer(rps_sock_flow_table, sock_table);
 			if (sock_table) {

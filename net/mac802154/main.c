@@ -25,6 +25,7 @@ static void ieee802154_tasklet_handler(unsigned long data)
 	struct ieee802154_local *local = (struct ieee802154_local *)data;
 	struct sk_buff *skb;
 
+	//自local->skb_queue中取出报文，交由ieee802154_rx函数处理
 	while ((skb = skb_dequeue(&local->skb_queue))) {
 		switch (skb->pkt_type) {
 		case IEEE802154_RX_MSG:

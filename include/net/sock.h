@@ -1033,6 +1033,7 @@ static inline void sk_incoming_cpu_update(struct sock *sk)
 		WRITE_ONCE(sk->sk_incoming_cpu, cpu);
 }
 
+/*记录此hash对应的cpu*/
 static inline void sock_rps_record_flow_hash(__u32 hash)
 {
 #ifdef CONFIG_RPS
@@ -1060,6 +1061,7 @@ static inline void sock_rps_record_flow(const struct sock *sk)
 		 * [1] : sk_state and sk_prot are in the same cache line.
 		 */
 		if (sk->sk_state == TCP_ESTABLISHED)
+		    /*socket达到稳定连接，记录其hash对应的cpu*/
 			sock_rps_record_flow_hash(sk->sk_rxhash);
 	}
 #endif
@@ -1856,6 +1858,7 @@ static inline int sk_tx_queue_get(const struct sock *sk)
 	return -1;
 }
 
+/*设置sock的sk_rx_queue_mapping*/
 static inline void sk_rx_queue_set(struct sock *sk, const struct sk_buff *skb)
 {
 #ifdef CONFIG_XPS
@@ -1870,6 +1873,7 @@ static inline void sk_rx_queue_set(struct sock *sk, const struct sk_buff *skb)
 #endif
 }
 
+/*清除sock的sk_rx_queue_mapping*/
 static inline void sk_rx_queue_clear(struct sock *sk)
 {
 #ifdef CONFIG_XPS
@@ -1878,6 +1882,7 @@ static inline void sk_rx_queue_clear(struct sock *sk)
 }
 
 #ifdef CONFIG_XPS
+/*返回sock->sk_rx_queueu_mapping*/
 static inline int sk_rx_queue_get(const struct sock *sk)
 {
 	if (sk && sk->sk_rx_queue_mapping != NO_QUEUE_MAPPING)

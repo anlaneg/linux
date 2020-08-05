@@ -867,12 +867,14 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 			return -EINVAL;
 		}
 #endif
-		//申请table
+		//为queue申请local flow table
 		table = vmalloc(RPS_DEV_FLOW_TABLE_SIZE(mask + 1));
 		if (!table)
 			return -ENOMEM;
 
-		table->mask = mask;//table掩码（长度-1)
+		//table掩码（长度-1)
+		table->mask = mask;
+		//指明local flow table上的cpu为空
 		for (count = 0; count <= mask; count++)
 			table->flows[count].cpu = RPS_NO_CPU;
 	} else {
@@ -880,7 +882,7 @@ static ssize_t store_rps_dev_flow_table_cnt(struct netdev_rx_queue *queue,
 	}
 
 	spin_lock(&rps_dev_flow_lock);
-	//设置table
+	//设置rx队列上的local flow table
 	old_table = rcu_dereference_protected(queue->rps_flow_table,
 					      lockdep_is_held(&rps_dev_flow_lock));
 	rcu_assign_pointer(queue->rps_flow_table, table);
@@ -1133,6 +1135,7 @@ static ssize_t tx_timeout_show(struct netdev_queue *queue, char *buf)
 	return sprintf(buf, "%lu", trans_timeout);
 }
 
+/*通过queue取queue在dev->_tx队列数组中的索引（即tx队列编号）*/
 static unsigned int get_netdev_queue_index(struct netdev_queue *queue)
 {
 	struct net_device *dev = queue->dev;
@@ -1331,7 +1334,7 @@ static const struct attribute_group dql_group = {
 #endif /* CONFIG_BQL */
 
 #ifdef CONFIG_XPS
-// /sys/class/net/eth0/queues/tx-*/xps_cpus
+// 显示/sys/class/net/eth0/queues/tx-*/xps_cpus
 static ssize_t xps_cpus_show(struct netdev_queue *queue,
 			     char *buf)
 {
@@ -1368,6 +1371,7 @@ static ssize_t xps_cpus_show(struct netdev_queue *queue,
 	rcu_read_lock();
 	dev_maps = rcu_dereference(dev->xps_cpus_map);
 	if (dev_maps) {
+	    //遍历在线的所有cpu
 		for_each_possible_cpu(cpu) {
 			int i, tci = cpu * num_tc + tc;
 			struct xps_map *map;
@@ -1391,6 +1395,7 @@ static ssize_t xps_cpus_show(struct netdev_queue *queue,
 	return len < PAGE_SIZE ? len : -EINVAL;
 }
 
+// 设置/sys/class/net/eth0/queues/tx-*/xps_cpus
 static ssize_t xps_cpus_store(struct netdev_queue *queue,
 			      const char *buf, size_t len)
 {
@@ -1399,17 +1404,21 @@ static ssize_t xps_cpus_store(struct netdev_queue *queue,
 	cpumask_var_t mask;
 	int err;
 
+	//dev必须支持tx多队列
 	if (!netif_is_multiqueue(dev))
 		return -ENOENT;
 
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
+	/*申请足够空间的cpumask*/
 	if (!alloc_cpumask_var(&mask, GFP_KERNEL))
 		return -ENOMEM;
 
+	/*取队列索引*/
 	index = get_netdev_queue_index(queue);
 
+	/*将buffer转换为cpu mask*/
 	err = bitmap_parse(buf, len, cpumask_bits(mask), nr_cpumask_bits);
 	if (err) {
 		free_cpumask_var(mask);

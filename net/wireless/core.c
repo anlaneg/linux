@@ -60,6 +60,7 @@ struct cfg80211_registered_device *cfg80211_rdev_by_wiphy_idx(int wiphy_idx)
 
 	ASSERT_RTNL();
 
+	/*遍历cfg80211_rdev_list中所有已注册的设备，查找wiphy_idx对应的registered设备*/
 	list_for_each_entry(rdev, &cfg80211_rdev_list, list) {
 		if (rdev->wiphy_idx == wiphy_idx) {
 			result = rdev;
@@ -917,6 +918,7 @@ int wiphy_register(struct wiphy *wiphy)
 	/* set up regulatory info */
 	wiphy_regulatory_register(wiphy);
 
+	//将设备注册到cfg80211_rdev_list链表上
 	list_add_rcu(&rdev->list, &cfg80211_rdev_list);
 	cfg80211_rdev_list_generation++;
 

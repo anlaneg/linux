@@ -83,6 +83,7 @@ struct Qdisc {
 				      */
 	//dump不可见队列
 #define TCQ_F_INVISIBLE		0x80 /* invisible by default in dump */
+	//标记q不需要加锁
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
 	u32			limit;//队列容许的最大长度

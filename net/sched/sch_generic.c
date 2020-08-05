@@ -279,6 +279,7 @@ validate:
 	skb = q->dequeue(q);
 	if (skb) {
 bulk:
+        //批量出报，将其采用skb串连起来
 		if (qdisc_may_bulk(q))
 			try_bulk_dequeue_skb(q, skb, txq, packets);
 		else
@@ -298,7 +299,7 @@ trace:
  *				false  - hardware queue frozen backoff
  *				true   - feel free to send more pkts
  */
-bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
+bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdisc *q,
 		     struct net_device *dev, struct netdev_queue *txq/*发送到指定txq队列*/,
 		     spinlock_t *root_lock, bool validate)
 {
@@ -338,7 +339,7 @@ bool sch_direct_xmit(struct sk_buff *skb, struct Qdisc *q,
 	if (root_lock)
 		spin_lock(root_lock);
 
-	//设备发送未完成，重启将skb入队
+	//设备发送未完成的skb，将其入队
 	if (!dev_xmit_complete(ret)) {
 		/* Driver returned NETDEV_TX_BUSY - requeue skb */
 		if (unlikely(ret != NETDEV_TX_BUSY))
@@ -388,7 +389,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 		root_lock = qdisc_lock(q);
 
 	dev = qdisc_dev(q);
-	//为skb取其对应的tx队列
+	//取skb其对应的tx队列
 	txq = skb_get_tx_queue(dev, skb);
 
 	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
@@ -402,6 +403,7 @@ void __qdisc_run(struct Qdisc *q)
 	while (qdisc_restart(q, &packets)) {
 		quota -= packets;
 		if (quota <= 0) {
+		    //quota被用完了，但报文可能没有发完，触发tx软中断
 			__netif_schedule(q);
 			break;
 		}

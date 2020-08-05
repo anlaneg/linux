@@ -1359,6 +1359,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 static inline __u32 skb_get_hash(struct sk_buff *skb)
 {
 	if (!skb->l4_hash && !skb->sw_hash)
+	    /*为此报文计算hash*/
 		__skb_get_hash(skb);
 
 	return skb->hash;
@@ -1497,6 +1498,7 @@ static inline void skb_zcopy_abort(struct sk_buff *skb)
 	}
 }
 
+/*将skb自skb->next链中移除*/
 static inline void skb_mark_not_on_list(struct sk_buff *skb)
 {
 	skb->next = NULL;
@@ -4499,6 +4501,7 @@ static inline __sum16 gso_make_checksum(struct sk_buff *skb, __wsum res)
 	return csum_fold(csum_partial(csum_start, plen, partial));
 }
 
+/*skb是否为gso报文*/
 static inline bool skb_is_gso(const struct sk_buff *skb)
 {
 	return skb_shinfo(skb)->gso_size;

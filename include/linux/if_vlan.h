@@ -679,6 +679,7 @@ static inline bool skb_vlan_tagged(const struct sk_buff *skb)
 {
 	if (!skb_vlan_tag_present(skb) &&
 	    likely(!eth_type_vlan(skb->protocol)))
+	    /*skb无vlxan并且skb协议非vlan协议，返回false*/
 		return false;
 
 	return true;

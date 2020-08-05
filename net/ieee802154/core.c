@@ -146,6 +146,7 @@ int wpan_phy_register(struct wpan_phy *phy)
 		return ret;
 	}
 
+	//将设备挂在链上
 	list_add_rcu(&rdev->list, &cfg802154_rdev_list);
 	cfg802154_rdev_list_generation++;
 

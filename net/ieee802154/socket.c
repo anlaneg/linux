@@ -1072,6 +1072,7 @@ static int ieee802154_rcv(struct sk_buff *skb, struct net_device *dev,
 			     DUMP_PREFIX_NONE, skb->data, skb->len);
 #endif
 
+	/*仅支持init_net namespace*/
 	if (!net_eq(dev_net(dev), &init_net))
 		goto drop;
 
@@ -1088,6 +1089,7 @@ drop:
 	return NET_RX_DROP;
 }
 
+/*802.15.4帧处理*/
 static struct packet_type ieee802154_packet_type = {
 	.type = htons(ETH_P_IEEE802154),
 	.func = ieee802154_rcv,
