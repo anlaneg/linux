@@ -2856,6 +2856,7 @@ void __init proc_caches_init(void)
  */
 static int check_unshare_flags(unsigned long unshare_flags)
 {
+    /*当前支持以下unshare flags*/
 	if (unshare_flags & ~(CLONE_THREAD|CLONE_FS|CLONE_NEWNS|CLONE_SIGHAND|
 				CLONE_VM|CLONE_FILES|CLONE_SYSVSEM|
 				CLONE_NEWUTS|CLONE_NEWIPC|CLONE_NEWNET|
@@ -2891,6 +2892,7 @@ static int unshare_fs(unsigned long unshare_flags, struct fs_struct **new_fsp)
 {
 	struct fs_struct *fs = current->fs;
 
+	/*必须有clone_fs标记*/
 	if (!(unshare_flags & CLONE_FS) || !fs)
 		return 0;
 
@@ -2960,6 +2962,7 @@ int ksys_unshare(unsigned long unshare_flags/*unshare相关的标记*/)
 	 * If unsharing namespace, must also unshare filesystem information.
 	 */
 	if (unshare_flags & CLONE_NEWNS)
+	    /*补加unshare FS*/
 		unshare_flags |= CLONE_FS;
 
 	err = check_unshare_flags(unshare_flags);
@@ -2981,6 +2984,7 @@ int ksys_unshare(unsigned long unshare_flags/*unshare相关的标记*/)
 	err = unshare_userns(unshare_flags, &new_cred);
 	if (err)
 		goto bad_unshare_cleanup_fd;
+	/*创建对应的namespace*/
 	err = unshare_nsproxy_namespaces(unshare_flags, &new_nsproxy,
 					 new_cred, new_fs);
 	if (err)
@@ -2999,12 +3003,14 @@ int ksys_unshare(unsigned long unshare_flags/*unshare相关的标记*/)
 			shm_init_task(current);
 		}
 
+		/*替换当前进程的nsproxy*/
 		if (new_nsproxy)
 			switch_task_namespaces(current, new_nsproxy);
 
 		task_lock(current);
 
 		if (new_fs) {
+		    /*交换fs*/
 			fs = current->fs;
 			spin_lock(&fs->lock);
 			current->fs = new_fs;

@@ -227,6 +227,7 @@ loff_t noop_llseek(struct file *file, loff_t offset, int whence)
 }
 EXPORT_SYMBOL(noop_llseek);
 
+//不支持llseek
 loff_t no_llseek(struct file *file, loff_t offset, int whence)
 {
 	return -ESPIPE;

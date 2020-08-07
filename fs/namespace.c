@@ -67,9 +67,10 @@ static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
 static struct hlist_head *mount_hashtable __read_mostly;
-//挂载点hash表
+//按dentry索引的mount point hash表
 static struct hlist_head *mountpoint_hashtable __read_mostly;
-static struct kmem_cache *mnt_cache __read_mostly;//挂载点cache
+//负责系统中struct mount结构体的分配
+static struct kmem_cache *mnt_cache __read_mostly;
 static DECLARE_RWSEM(namespace_sem);
 static HLIST_HEAD(unmounted);	/* protected by namespace_sem */
 static LIST_HEAD(ex_mountpoints); /* protected by namespace_sem */
@@ -176,19 +177,19 @@ unsigned int mnt_get_count(struct mount *mnt)
 }
 
 //申请并初始化mount
-static struct mount *alloc_vfsmnt(const char *name)
+static struct mount *alloc_vfsmnt(const char *name/*待挂载设备名称*/)
 {
 	//申请mnt节点
 	struct mount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
 	if (mnt) {
 		int err;
 
-		//申请挂载点编号
+		//为mount申请编号
 		err = mnt_alloc_id(mnt);
 		if (err)
 			goto out_free_cache;
 
-		//填充挂载点设备名称
+		//填充mount设备名称
 		if (name) {
 			mnt->mnt_devname = kstrdup_const(name, GFP_KERNEL);
 			if (!mnt->mnt_devname)
@@ -736,13 +737,14 @@ static struct mountpoint *get_mountpoint(struct dentry *dentry)
 			return ERR_PTR(-ENOENT);
 mountpoint:
 		read_seqlock_excl(&mount_lock);
+		/*检查dentry是否已有对应的mountpoint*/
 		mp = lookup_mountpoint(dentry);
 		read_sequnlock_excl(&mount_lock);
 		if (mp)
 			goto done;
 	}
 
-	//如果没有查询到mountpoint,则创建一个针对dentry的mountpoint,并加入到hash表中
+	//如果没有查询到mountpoint,则创建一个针对此dentry的mountpoint,并加入到hash表中
 	if (!new)
 		new = kmalloc(sizeof(struct mountpoint), GFP_KERNEL);
 	if (!new)
@@ -765,6 +767,7 @@ mountpoint:
 	read_seqlock_excl(&mount_lock);
 	new->m_dentry = dget(dentry);
 	new->m_count = 1;
+	/*加入到mountpoint_hashtable*/
 	hlist_add_head(&new->m_hash, mp_hash(dentry));
 	INIT_HLIST_HEAD(&new->m_list);
 	read_sequnlock_excl(&mount_lock);
@@ -800,6 +803,7 @@ static void put_mountpoint(struct mountpoint *mp)
 	__put_mountpoint(mp, &ex_mountpoints);
 }
 
+/*检查mount ns是否与当前进程一致*/
 static inline int check_mnt(struct mount *mnt)
 {
 	return mnt->mnt_ns == current->nsproxy->mnt_ns;
@@ -991,6 +995,7 @@ EXPORT_SYMBOL(vfs_create_mount);
 
 struct vfsmount *fc_mount(struct fs_context *fc)
 {
+    //创建superblock,获取文件系统对应的root dentry
 	int err = vfs_get_tree(fc);
 	if (!err) {
 		up_write(&fc->root->d_sb->s_umount);
@@ -1000,8 +1005,9 @@ struct vfsmount *fc_mount(struct fs_context *fc)
 }
 EXPORT_SYMBOL(fc_mount);
 
-struct vfsmount *vfs_kern_mount(struct file_system_type *type,
-				int flags, const char *name,
+/*创建superblock，获得root dentry,并据此创建vfsmount*/
+struct vfsmount *vfs_kern_mount(struct file_system_type *type/*要挂载的文件系统*/,
+				int flags, const char *name/*文件系统名称*/,
 				void *data)
 {
 	struct fs_context *fc;
@@ -1015,10 +1021,12 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type,
 	if (IS_ERR(fc))
 		return ERR_CAST(fc);
 
+	/*填充fc->source为$name*/
 	if (name)
 		ret = vfs_parse_fs_string(fc, "source",
 					  name, strlen(name));
 	if (!ret)
+	    /*其它选项解析*/
 		ret = parse_monolithic_mount_data(fc, data);
 	if (!ret)
 		mnt = fc_mount(fc);
@@ -2281,6 +2289,7 @@ static int flags_to_propagation_type(int ms_flags)
 static int do_change_type(struct path *path, int ms_flags)
 {
 	struct mount *m;
+	/*取当前path的挂载信息*/
 	struct mount *mnt = real_mount(path->mnt);
 	int recurse = ms_flags & MS_REC;
 	int type;
@@ -2795,8 +2804,10 @@ static int do_add_mount(struct mount *newmnt, struct mountpoint *mp,
 	/* Refuse the same filesystem on the same mount point */
 	if (path->mnt->mnt_sb == newmnt->mnt.mnt_sb &&
 	    path->mnt->mnt_root == path->dentry)
+	    /*重复挂载*/
 		return -EBUSY;
 
+	/*dentry不能为符号链接*/
 	if (d_is_symlink(newmnt->mnt.mnt_root))
 		return -EINVAL;
 
@@ -2815,6 +2826,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 {
 	struct vfsmount *mnt;
 	struct mountpoint *mp;
+	/*被挂载文件系统对应的super_block*/
 	struct super_block *sb = fc->root->d_sb;
 	int error;
 
@@ -2829,6 +2841,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 
 	up_write(&sb->s_umount);
 
+	//创建vfsmount
 	mnt = vfs_create_mount(fc);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
@@ -2898,6 +2911,7 @@ static int do_new_mount(struct path *path, const char *fstype/*文件系统名�
 	if (!err && !mount_capable(fc))
 		err = -EPERM;
 	if (!err)
+	    /*获得fs对应的root dentry*/
 		err = vfs_get_tree(fc);
 	if (!err)
 		err = do_new_mount_fc(fc, path, mnt_flags);
@@ -3143,8 +3157,8 @@ char *copy_mount_string(const void __user *data)
  * Therefore, if this magic number is present, it carries no information
  * and must be discarded.
  */
-long do_mount(const char *dev_name, const char __user *dir_name,
-		const char *type_page, unsigned long flags, void *data_page)
+long do_mount(const char *dev_name/*设备名称*/, const char __user *dir_name/*挂载点目录名称*/,
+		const char *type_page/*文件系统名称*/, unsigned long flags/*挂载控制标记*/, void *data_page/*挂载选项字符串*/)
 {
 	struct path path;
 	unsigned int mnt_flags = 0, sb_flags;
@@ -3158,6 +3172,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (data_page)
 		((char *)data_page)[PAGE_SIZE - 1] = 0;
 
+	/*当前实现拒绝nouser标记*/
 	if (flags & MS_NOUSER)
 		return -EINVAL;
 
@@ -3167,6 +3182,7 @@ long do_mount(const char *dev_name, const char __user *dir_name,
 	if (retval)
 		return retval;
 
+	/*触发安全相关的sb_mount钩子函数*/
 	retval = security_sb_mount(dev_name, &path,
 				   type_page, flags, data_page);
 	if (!retval && !may_mount())
@@ -3262,6 +3278,7 @@ static void free_mnt_ns(struct mnt_namespace *ns)
  */
 static atomic64_t mnt_ns_seq = ATOMIC64_INIT(1);
 
+/*创建mount namespace*/
 static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns, bool anon)
 {
 	struct mnt_namespace *new_ns;
@@ -3272,6 +3289,7 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns, bool a
 	if (!ucounts)
 		return ERR_PTR(-ENOSPC);
 
+	/*申请mount namespace空间*/
 	new_ns = kzalloc(sizeof(struct mnt_namespace), GFP_KERNEL);
 	if (!new_ns) {
 		dec_mnt_namespaces(ucounts);
@@ -3285,6 +3303,7 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns, bool a
 			return ERR_PTR(ret);
 		}
 	}
+	/*指明mount ns操作集*/
 	new_ns->ns.ops = &mntns_operations;
 	if (!anon)
 		new_ns->seq = atomic64_add_return(1, &mnt_ns_seq);
@@ -3297,8 +3316,9 @@ static struct mnt_namespace *alloc_mnt_ns(struct user_namespace *user_ns, bool a
 	return new_ns;
 }
 
+/*按flags要求，增加旧的mount namespace的引用或者新建mount namespace*/
 __latent_entropy
-struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns,
+struct mnt_namespace *copy_mnt_ns(unsigned long flags, struct mnt_namespace *ns/*源mount namespace*/,
 		struct user_namespace *user_ns, struct fs_struct *new_fs)
 {
 	struct mnt_namespace *new_ns;
@@ -3420,9 +3440,9 @@ SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		char __user *, type, unsigned long, flags, void __user *, data)
 {
 	int ret;
-	char *kernel_type;
-	char *kernel_dev;
-	void *options;
+	char *kernel_type/*文件系统名称*/;
+	char *kernel_dev/*设备名称*/;
+	void *options/*mount选项参数*/;
 
 	//准备kernel_type,kernel_dev,options参数
 	kernel_type = copy_mount_string(type);
@@ -3443,7 +3463,7 @@ SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
 		goto out_data;
 
 	//处理mount系统调用
-	ret = do_mount(kernel_dev, dir_name, kernel_type, flags, options);
+	ret = do_mount(kernel_dev/*设备名*/, dir_name/*挂载点目录名*/, kernel_type/*类型名称*/, flags/*mount控制标记*/, options/*选项字符串*/);
 
 	kfree(options);
 out_data:
@@ -3870,6 +3890,7 @@ void put_mnt_ns(struct mnt_namespace *ns)
 {
 	if (!atomic_dec_and_test(&ns->count))
 		return;
+	/*ns无人引用，需要释放*/
 	drop_collected_mounts(&ns->root->mnt);
 	free_mnt_ns(ns);
 }
@@ -4049,6 +4070,7 @@ bool mnt_may_suid(struct vfsmount *mnt)
 	       current_in_userns(mnt->mnt_sb->s_user_ns);
 }
 
+/*自task中获取mount namespace对应的ns_common*/
 static struct ns_common *mntns_get(struct task_struct *task)
 {
 	struct ns_common *ns = NULL;
@@ -4120,6 +4142,7 @@ static struct user_namespace *mntns_owner(struct ns_common *ns)
 	return to_mnt_ns(ns)->user_ns;
 }
 
+/*mount namespace操作集*/
 const struct proc_ns_operations mntns_operations = {
 	.name		= "mnt",
 	.type		= CLONE_NEWNS,

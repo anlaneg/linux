@@ -26,6 +26,7 @@ struct vfsmount;
  * with heavy changes by Linus Torvalds
  */
 
+/*检查是否为root dentry*/
 #define IS_ROOT(x) ((x) == (x)->d_parent)
 
 /* The hash is always the low bits of hash_len */
@@ -47,11 +48,12 @@ struct vfsmount;
 struct qstr {
 	union {
 		struct {
+		    //hash值及字符串长度
 			HASH_LEN_DECLARE;
 		};
 		u64 hash_len;
 	};
-	const unsigned char *name;
+	const unsigned char *name;/*字符串名称*/
 };
 
 #define QSTR_INIT(n,l) { { { .len = l } }, .name = n }
@@ -95,18 +97,22 @@ struct dentry {
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	//指向父dentry项
 	struct dentry *d_parent;	/* parent directory */
-	struct qstr d_name;//指向此dentry的名称
+	//指向此dentry的名称
+	struct qstr d_name;
 	//此dentry对应的inode
 	struct inode *d_inode;		/* Where the name belongs to - NULL is
 					 * negative */
-	//内建的短名称空间
+	//默认提供的可存放短名称的空间
 	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
 
 	/* Ref lookup also touches following */
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
-	const struct dentry_operations *d_op;//dentry对应的操作集
-	struct super_block *d_sb;	/* The root of the dentry tree */ //所属的超级块指针
+	/*dentry对应的操作集*/
+	const struct dentry_operations *d_op;
+	/*dentry所属的超级块指针*/
+	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
+	/*dentry的私有数据，用于各fs自主指定*/
 	void *d_fsdata;			/* fs-specific data */
 
 	union {
@@ -115,7 +121,7 @@ struct dentry {
 	};
 	//用于提供链连接给父dentry
 	struct list_head d_child;	/* child of parent list */
-	//所有子项，可以是目录，也可以是文件
+	//用于串连所有从属于自已的dentry
 	struct list_head d_subdirs;	/* our children */
 	/*
 	 * d_alias and d_rcu can share memory
@@ -146,7 +152,7 @@ struct dentry_operations {
 	int (*d_compare)(const struct dentry *,
 			unsigned int, const char *, const struct qstr *);
 	int (*d_delete)(const struct dentry *);
-	//申请dentry后，用于初始化dentry
+	//申请dentry后，此回调用于初始化dentry
 	int (*d_init)(struct dentry *);
 	void (*d_release)(struct dentry *);
 	void (*d_prune)(struct dentry *);
@@ -192,6 +198,7 @@ struct dentry_operations {
 
 #define DCACHE_DONTCACHE		0x00000080 /* Purge from memory on final dput() */
 
+//dentry不能被挂载
 #define DCACHE_CANT_MOUNT		0x00000100
 #define DCACHE_GENOCIDE			0x00000200
 #define DCACHE_SHRINK_LIST		0x00000400
@@ -351,6 +358,7 @@ extern struct dentry *dget_parent(struct dentry *dentry);
  
 static inline int d_unhashed(const struct dentry *dentry)
 {
+    /*dentry是否未被加入到hashtable中*/
 	return hlist_bl_unhashed(&dentry->d_hash);
 }
 
@@ -379,6 +387,7 @@ static inline int d_in_lookup(const struct dentry *dentry)
 	return dentry->d_flags & DCACHE_PAR_LOOKUP;
 }
 
+/*如果dentry在in lookup,则唤醒等待查询结果的请求*/
 static inline void d_lookup_done(struct dentry *dentry)
 {
 	if (unlikely(d_in_lookup(dentry))) {

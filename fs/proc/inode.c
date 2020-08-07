@@ -573,6 +573,7 @@ static const struct file_operations proc_reg_file_ops = {
 	.poll		= proc_reg_poll,
 	.unlocked_ioctl	= proc_reg_unlocked_ioctl,
 #ifdef CONFIG_COMPAT
+	/*proc文件提供的ioctl命令支持*/
 	.compat_ioctl	= proc_reg_compat_ioctl,
 #endif
 	.mmap		= proc_reg_mmap,

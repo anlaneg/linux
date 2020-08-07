@@ -1526,6 +1526,7 @@ union security_list_options {
 	#undef LSM_HOOK
 };
 
+/*针对每个lsm_hook定义一个hook链表头*/
 struct security_hook_heads {
 	#define LSM_HOOK(RET, DEFAULT, NAME, ...) struct hlist_head NAME;
 	#include "lsm_hook_defs.h"

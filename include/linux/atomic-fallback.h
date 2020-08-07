@@ -1032,6 +1032,7 @@ atomic_sub_and_test(int i, atomic_t *v)
 static __always_inline bool
 atomic_dec_and_test(atomic_t *v)
 {
+    /*对v进行原子减1，检查减之后是否为0*/
 	return atomic_dec_return(v) == 0;
 }
 #define atomic_dec_and_test atomic_dec_and_test

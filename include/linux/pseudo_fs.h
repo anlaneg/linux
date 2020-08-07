@@ -7,7 +7,7 @@ struct pseudo_fs_context {
 	const struct super_operations *ops;
 	const struct xattr_handler **xattr;
 	const struct dentry_operations *dops;
-	unsigned long magic;
+	unsigned long magic;/*文件系统magic*/
 };
 
 struct pseudo_fs_context *init_pseudo(struct fs_context *fc,

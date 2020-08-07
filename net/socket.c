@@ -158,6 +158,7 @@ static const struct file_operations socket_file_ops = {
 	.poll =		sock_poll,
 	.unlocked_ioctl = sock_ioctl,
 #ifdef CONFIG_COMPAT
+	/*提供socket支持的ioctl命令*/
 	.compat_ioctl = compat_sock_ioctl,
 #endif
 	.mmap =		sock_mmap,
@@ -1114,6 +1115,7 @@ static long sock_do_ioctl(struct net *net, struct socket *sock,
 
 struct ns_common *get_net_ns(struct ns_common *ns)
 {
+    //增加net namespace的引用计数
 	return &get_net(container_of(ns, struct net, ns))->ns;
 }
 EXPORT_SYMBOL_GPL(get_net_ns);
@@ -1200,6 +1202,7 @@ static long sock_ioctl(struct file *file, unsigned cmd, unsigned long arg)
 			if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 				break;
 
+			/*返回当前socket所属net namespace的关联fd*/
 			err = open_related_ns(&net->ns, get_net_ns);
 			break;
 		case SIOCGSTAMP_OLD:

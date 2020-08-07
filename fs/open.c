@@ -556,6 +556,7 @@ retry:
 	if (error)
 		goto dput_and_out;
 
+	/*设置当前进程的fs->root路径*/
 	set_fs_root(current->fs, &path);
 	error = 0;
 dput_and_out:
@@ -829,7 +830,8 @@ static int do_dentry_open(struct file *f,
 		//如果未指定open函数，则调用f->f_op->open函数
 		open = f->f_op->open;
 	if (open) {
-		error = open(inode, f);//调用open完成文件打开
+	    //有open回调，调用open完成文件打开
+		error = open(inode, f);
 		if (error)
 			goto cleanup_all;
 	}

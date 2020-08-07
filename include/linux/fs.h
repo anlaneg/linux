@@ -646,7 +646,7 @@ struct fsnotify_mark_connector;
  * of the 'struct inode'
  */
 struct inode {
-	umode_t			i_mode;
+	umode_t			i_mode;/*inode权限位等*/
 	unsigned short		i_opflags;
 	kuid_t			i_uid;
 	kgid_t			i_gid;
@@ -686,9 +686,9 @@ struct inode {
 	dev_t			i_rdev;
 	//文件大小
 	loff_t			i_size;
-	struct timespec64	i_atime;
-	struct timespec64	i_mtime;
-	struct timespec64	i_ctime;
+	struct timespec64	i_atime;/*访问时间*/
+	struct timespec64	i_mtime;/*修改时间*/
+	struct timespec64	i_ctime;/*创建时间*/
 	spinlock_t		i_lock;	/* i_blocks, i_bytes, maybe i_size */
 	unsigned short          i_bytes;
 	//块占用的bits数
@@ -722,13 +722,14 @@ struct inode {
 	struct list_head	i_sb_list;
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
-		struct hlist_head	i_dentry;
+		struct hlist_head	i_dentry;/*指出引用此inode的dentry*/
 		struct rcu_head		i_rcu;
 	};
 
 	//inode版本号
 	atomic64_t		i_version;
 	atomic64_t		i_sequence; /* see futex */
+	/*inode的引用计数*/
 	atomic_t		i_count;
 	atomic_t		i_dio_count;
 	atomic_t		i_writecount;
@@ -736,8 +737,9 @@ struct inode {
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
 	union {
-	    //对应的file操作符
+	    //对应的file操作函数集
 		const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
+		//inode空间释放函数
 		void (*free_inode)(struct inode *);
 	};
 	struct file_lock_context	*i_flctx;
@@ -1550,6 +1552,7 @@ struct super_block {
 	 */
 	const char *s_subtype;
 
+	/*此文件系统中dnetry对应的操作集*/
 	const struct dentry_operations *s_d_op; /* default d_op for dentries */
 
 	/*
@@ -1601,7 +1604,7 @@ struct super_block {
 
 	/* s_inode_list_lock protects s_inodes */
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
-	struct list_head	s_inodes;	/* all inodes */ //记录此文件系统中所有inode
+	struct list_head	s_inodes;	/* all inodes */ /*链表，记录此文件系统中所有inode*/
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */
@@ -1866,26 +1869,36 @@ struct block_device_operations;
 struct iov_iter;
 
 struct file_operations {
-	struct module *owner;//fop所属的module
+    //fop所属的module
+	struct module *owner;
 	//实现lseek功能
 	loff_t (*llseek) (struct file *, loff_t, int);
 	//read,read_iter两个函数实现其一，即可用于读文件
-	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);//文件读功能
-	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);//文件写功能
-	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的读
-	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);//支持iov方式的写
+	//文件读功能
+	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+	//文件写功能
+	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
+	//支持iov方式的读
+	ssize_t (*read_iter) (struct kiocb *, struct iov_iter *);
+	//支持iov方式的写
+	ssize_t (*write_iter) (struct kiocb *, struct iov_iter *);
 	int (*iopoll)(struct kiocb *kiocb, bool spin);
 	int (*iterate) (struct file *, struct dir_context *);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
+	/*用于提供未被do_vfs_ioctl支持的定制版ioctl命令*/
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
-	int (*open) (struct inode *, struct file *);//文件打开函数
-	int (*flush) (struct file *, fl_owner_t id);//close时此回调将被先调用
-	int (*release) (struct inode *, struct file *);//通过release回调释放file
-	int (*fsync) (struct file *, loff_t, loff_t, int datasync);//将指定范围内的数据刷至磁盘
+	//文件打开函数
+	int (*open) (struct inode *, struct file *);
+	//close时此回调将被先调用
+	int (*flush) (struct file *, fl_owner_t id);
+	//通过release回调释放file
+	int (*release) (struct inode *, struct file *);
+	//将指定范围内的数据刷至磁盘
+	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);
 	ssize_t (*sendpage) (struct file *, struct page *, int, size_t, loff_t *, int);
@@ -1910,7 +1923,7 @@ struct file_operations {
 } __randomize_layout;
 
 struct inode_operations {
-	//在inode*下查询名称为struct dentry*的dentry,最后一个参数为flags
+	//在inode下查询指定名称的dentry,最后一个参数为flags
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
 	int (*permission) (struct inode *, int);
@@ -1996,8 +2009,9 @@ extern loff_t vfs_dedupe_file_range_one(struct file *src_file, loff_t src_pos,
 struct super_operations {
 	//通过此回调，申请并创建inode,如无此回调，则自inode_cachep中申请inode
    	struct inode *(*alloc_inode)(struct super_block *sb);
-   	//通过此回调，释放创建的inode
+   	//通过此回调，销毁创建的inode
 	void (*destroy_inode)(struct inode *);
+	//通过此回调，完成inode释放
 	void (*free_inode)(struct inode *);
 
    	void (*dirty_inode) (struct inode *, int flags);
@@ -2606,7 +2620,8 @@ struct filename {
 	int			refcnt;
 	//注：64位系统时，这里会有空隙
 	struct audit_names	*aname;
-	const char		iname[];//存储具体的文件名，并使name指向自已
+	//存储具体的文件名，并使name指向自已
+	const char		iname[];
 };
 static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
 

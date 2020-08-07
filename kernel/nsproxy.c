@@ -111,6 +111,7 @@ static struct nsproxy *create_new_namespaces(unsigned long flags,
 		goto out_cgroup;
 	}
 
+	/*按flags要求，新建net namesapce或者引用旧的net namespace*/
 	new_nsp->net_ns = copy_net_ns(flags, user_ns, tsk->nsproxy->net_ns);
 	if (IS_ERR(new_nsp->net_ns)) {
 		err = PTR_ERR(new_nsp->net_ns);
@@ -320,7 +321,7 @@ static int prepare_nsset(unsigned flags, struct nsset *nsset)
 {
 	struct task_struct *me = current;
 
-	//生成新 的nsproxy,flags为0，使用原有进程的nsproxy
+	//生成新的nsproxy,flags为0，使用原有进程的nsproxy
 	nsset->nsproxy = create_new_namespaces(0, me, current_user_ns(), me->fs);
 	if (IS_ERR(nsset->nsproxy))
 		return PTR_ERR(nsset->nsproxy);
@@ -519,7 +520,7 @@ static void commit_nsset(struct nsset *nsset)
 	nsset->nsproxy = NULL;
 }
 
-//设置当前线程与指定类型namespace关联关系的系统调用
+//设置当前进程与指定类型的ns相关联
 SYSCALL_DEFINE2(setns, int, fd, int, flags)
 {
 	struct file *file;
@@ -532,8 +533,10 @@ SYSCALL_DEFINE2(setns, int, fd, int, flags)
 		return -EBADF;
 
 	if (proc_ns_file(file)) {
+	    //针对ns文件拿到ns_common
 		ns = get_proc_ns(file_inode(file));
 		if (flags && (ns->ops->type != flags))
+		    /*文件必须与flags相一致*/
 			err = -EINVAL;
 		flags = ns->ops->type;
 	} else if (!IS_ERR(pidfd_pid(file))) {
@@ -544,13 +547,16 @@ SYSCALL_DEFINE2(setns, int, fd, int, flags)
 	if (err)
 		goto out;
 
+	//构造nsset,复制现有nsproxy
 	err = prepare_nsset(flags, &nsset);
 	if (err)
 		goto out;
 
 	if (proc_ns_file(file))
+	    /*尝试进行ns替换*/
 		err = validate_ns(&nsset, ns);
 	else
+	    //针对pid文件处理，完成ns替换
 		err = validate_nsset(&nsset, file->private_data);
 	if (!err) {
 		commit_nsset(&nsset);

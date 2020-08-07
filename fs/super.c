@@ -208,7 +208,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	int i;
 
 	if (!s)
-		return NULL;//申请失败，报错
+		return NULL;//申请失败
 
 	INIT_LIST_HEAD(&s->s_mounts);
 	s->s_user_ns = get_user_ns(user_ns);
@@ -517,6 +517,7 @@ struct super_block *sget_fc(struct fs_context *fc,
 {
 	struct super_block *s = NULL;
 	struct super_block *old;
+	/*针对global使用init_user_ns,否则使用fc中的user_ns*/
 	struct user_namespace *user_ns = fc->global ? &init_user_ns : fc->user_ns;
 	int err;
 
@@ -1082,6 +1083,7 @@ static DEFINE_IDA(unnamed_dev_ida);
  */
 int get_anon_bdev(dev_t *p)
 {
+    /*动态申请并填充dev_t*/
 	int dev;
 
 	/*
@@ -1197,13 +1199,14 @@ int vfs_get_super(struct fs_context *fc,
 	if (IS_ERR(sb))
 		return PTR_ERR(sb);
 
-	/*填充fc的root为sb的root*/
 	if (!sb->s_root) {
+	    /*当sb->s_root未加载时，通过fill_super进行设置*/
 		err = fill_super(sb, fc);
 		if (err)
 			goto error;
 
 		sb->s_flags |= SB_ACTIVE;
+		/*设置root dentry*/
 		fc->root = dget(sb->s_root);
 	} else {
 		fc->root = dget(sb->s_root);
@@ -1554,7 +1557,7 @@ EXPORT_SYMBOL(mount_single);
  * be used for mounting.  The filesystem places a pointer to the root to be
  * used for mounting in @fc->root.
  */
-//实现文件系统挂载，返回被挂载设备的根dentry
+//获得被挂载设备的root dentry
 int vfs_get_tree(struct fs_context *fc)
 {
 	struct super_block *sb;
@@ -1566,12 +1569,11 @@ int vfs_get_tree(struct fs_context *fc)
 	/* Get the mountable root in fc->root, with a ref on the root and a ref
 	 * on the superblock.
 	 */
-	//调用对应文件系统的mount函数，实现对文件系统的挂载，挂载点为name，返回的root为文件系统根目录
+	//获得文件系统的root dentry
 	error = fc->ops->get_tree(fc);
 	if (error < 0)
 		return error;
 
-	//get_tree后，fc->root必须被填充
 	if (!fc->root) {
 		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
 		       fc->fs_type->name);
@@ -1581,6 +1583,7 @@ int vfs_get_tree(struct fs_context *fc)
 		BUG();
 	}
 
+	/*取root dentry对应的sb*/
 	sb = fc->root->d_sb;
 	WARN_ON(!sb->s_bdi);
 

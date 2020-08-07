@@ -142,6 +142,7 @@ struct pid_namespace *copy_pid_ns(unsigned long flags,
 	struct user_namespace *user_ns, struct pid_namespace *old_ns)
 {
 	if (!(flags & CLONE_NEWPID))
+	    /*没有指定要创建pid namesapce，返回old_ns*/
 		return get_pid_ns(old_ns);
 	if (task_active_pid_ns(current) != old_ns)
 		return ERR_PTR(-EINVAL);

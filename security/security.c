@@ -697,6 +697,7 @@ static void __init lsm_early_task(struct task_struct *task)
  *	This is a hook that returns a value.
  */
 
+/*遍历security_hook_heads.FUNC链表，完成FUNC回调调用,不关心回调返回值*/
 #define call_void_hook(FUNC, ...)				\
 	do {							\
 		struct security_hook_list *P;			\
@@ -705,7 +706,8 @@ static void __init lsm_early_task(struct task_struct *task)
 			P->hook.FUNC(__VA_ARGS__);		\
 	} while (0)
 
-#define call_int_hook(FUNC, IRC, ...) ({			\
+/*遍历security_hook_heads.FUNC链表，完成FUNC回调调用，回调返回非0，则停止*/
+#define call_int_hook(FUNC, IRC/*无回调时的返回值*/, ...) ({			\
 	int RC = IRC;						\
 	do {							\
 		struct security_hook_list *P;			\
@@ -910,6 +912,7 @@ int security_sb_statfs(struct dentry *dentry)
 	return call_int_hook(sb_statfs, 0, dentry);
 }
 
+/*触发sb_mount安全回调*/
 int security_sb_mount(const char *dev_name, const struct path *path,
                        const char *type, unsigned long flags, void *data)
 {
@@ -931,6 +934,7 @@ int security_sb_set_mnt_opts(struct super_block *sb,
 				unsigned long kern_flags,
 				unsigned long *set_kern_flags)
 {
+    /*触发安全回调sb_set_mnt_opts*/
 	return call_int_hook(sb_set_mnt_opts,
 				mnt_opts ? -EOPNOTSUPP : 0, sb,
 				mnt_opts, kern_flags, set_kern_flags);
@@ -1462,6 +1466,7 @@ void security_file_free(struct file *file)
 
 int security_file_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
+    //调用安全回调file_ioctl
 	return call_int_hook(file_ioctl, 0, file, cmd, arg);
 }
 EXPORT_SYMBOL_GPL(security_file_ioctl);
@@ -1939,6 +1944,7 @@ void security_d_instantiate(struct dentry *dentry, struct inode *inode)
 {
 	if (unlikely(inode && IS_PRIVATE(inode)))
 		return;
+	//触发安全回调d_instantiate
 	call_void_hook(d_instantiate, dentry, inode);
 }
 EXPORT_SYMBOL(security_d_instantiate);

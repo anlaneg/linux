@@ -78,7 +78,7 @@ struct inodes_stat_t inodes_stat;
 static DEFINE_PER_CPU(unsigned long, nr_inodes);
 static DEFINE_PER_CPU(unsigned long, nr_unused);
 
-//提供cache,满足自此cache中申请inode
+//提供inode cache,如果super_operations没有提供alloc_inode回调，则自此申请
 static struct kmem_cache *inode_cachep __read_mostly;
 
 static long get_nr_inodes(void)
@@ -143,7 +143,9 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_flags = 0;
 	atomic64_set(&inode->i_sequence, 0);
 	atomic_set(&inode->i_count, 1);
+	/*设置inode的op为空回调*/
 	inode->i_op = &empty_iops;
+	/*设置inode的file op为空回调*/
 	inode->i_fop = &no_open_fops;
 	inode->__i_nlink = 1;
 	inode->i_opflags = 0;
@@ -224,6 +226,7 @@ static void i_callback(struct rcu_head *head)
 	if (inode->free_inode)
 		inode->free_inode(inode);
 	else
+	    //直接释放进cache
 		free_inode_nonrcu(inode);
 }
 
@@ -237,7 +240,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 		//如果有alloc_inode，则采用alloc_inode进行申请
 		inode = ops->alloc_inode(sb);
 	else
-		//如无alloc_inode回调，则自inode的cache中申请node
+		//无alloc_inode回调，则自inode的cache中申请node
 		inode = kmem_cache_alloc(inode_cachep, GFP_KERNEL);
 
 	if (!inode)
@@ -245,7 +248,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 
 	//inode初始化
 	if (unlikely(inode_init_always(sb, inode))) {
-		//初始化失败，释放inode
+		//初始化失败，销毁inode
 		if (ops->destroy_inode) {
 			ops->destroy_inode(inode);
 			if (!ops->free_inode)
@@ -1694,6 +1697,7 @@ void iput(struct inode *inode)
 		return;
 	BUG_ON(inode->i_state & I_CLEAR);
 retry:
+    //减少inode的引用，如有必要，将其释放
 	if (atomic_dec_and_lock(&inode->i_count, &inode->i_lock)) {
 		if (inode->i_nlink && (inode->i_state & I_DIRTY_TIME)) {
 			atomic_inc(&inode->i_count);

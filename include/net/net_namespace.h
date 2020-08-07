@@ -246,6 +246,7 @@ void ipx_unregister_sysctl(void);
 #ifdef CONFIG_NET_NS
 void __put_net(struct net *net);
 
+/*增加net namespace的引用计数*/
 static inline struct net *get_net(struct net *net)
 {
 	refcount_inc(&net->count);

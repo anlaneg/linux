@@ -314,6 +314,7 @@ static const struct super_operations simple_super_operations = {
 	.statfs		= simple_statfs,
 };
 
+//pseudo类文件系统super填充
 static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
 {
 	struct pseudo_fs_context *ctx = fc->fs_private;
@@ -327,6 +328,8 @@ static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
 	s->s_op = ctx->ops ?: &simple_super_operations;
 	s->s_xattr = ctx->xattr;
 	s->s_time_gran = 1;
+
+	/*申请一个inode，将其做为root*/
 	root = new_inode(s);
 	if (!root)
 		return -ENOMEM;
@@ -340,6 +343,7 @@ static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
 	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
 	//此节点的access time，modify time,create time置为相等
 	root->i_atime = root->i_mtime = root->i_ctime = current_time(root);
+	/*通过root inode创建root dentry*/
 	s->s_root = d_make_root(root);
 	if (!s->s_root)
 		return -ENOMEM;

@@ -202,6 +202,7 @@ static int xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 
 static DEFINE_IDA(proc_inum_ida);
 
+/*首个有效动态id*/
 #define PROC_DYNAMIC_FIRST 0xF0000000U
 
 /*
@@ -212,6 +213,7 @@ int proc_alloc_inum(unsigned int *inum)
 {
 	int i;
 
+	/*自proc_inum_ida中申请空间id*/
 	i = ida_simple_get(&proc_inum_ida, 0, UINT_MAX - PROC_DYNAMIC_FIRST + 1,
 			   GFP_KERNEL);
 	if (i < 0)
@@ -223,6 +225,7 @@ int proc_alloc_inum(unsigned int *inum)
 
 void proc_free_inum(unsigned int inum)
 {
+    /*释放proc_inum_ida中申请的id*/
 	ida_simple_remove(&proc_inum_ida, inum - PROC_DYNAMIC_FIRST);
 }
 

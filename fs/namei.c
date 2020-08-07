@@ -515,9 +515,12 @@ EXPORT_SYMBOL(path_put);
 
 #define EMBEDDED_LEVELS 2
 struct nameidata {
-	struct path	path;//路径对应的位置
-	struct qstr	last;//记录分析位置（为了避免在路径分析过程中传递分析点文件名称指针及长度）
-	struct path	root;//记录根路径（１。为了避免'..'方式穿透根目录)
+    //当前分析位置的路径
+	struct path	path;
+	//记录分析位置（为了避免在路径分析过程中传递分析点文件名称指针及长度）
+	struct qstr	last;
+	//记录根路径（１。为了避免'..'方式穿透根目录)
+	struct path	root;
 	//路径当前位置对应的inode
 	struct inode	*inode; /* path.dentry.d_inode */
 	unsigned int	flags;
@@ -532,11 +535,13 @@ struct nameidata {
 		const char *name;
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
-	struct filename	*name;//路径名称
+	//路径名称
+	struct filename	*name;
 	//临时保存的nameidata,处理完成后需要还原
 	struct nameidata *saved;
 	unsigned	root_seq;
-	int		dfd;//锚点对应的fd
+	//锚点对应的fd
+	int		dfd;
 	kuid_t		dir_uid;
 	umode_t		dir_mode;
 } __randomize_layout;
@@ -875,6 +880,7 @@ static int set_root(struct nameidata *nd)
 
 		do {
 			seq = read_seqcount_begin(&fs->seq);
+			/*使用当前进程的root路径*/
 			nd->root = fs->root;
 			nd->root_seq = __read_seqcount_begin(&nd->root.dentry->d_seq);
 		} while (read_seqcount_retry(&fs->seq, seq));
@@ -885,6 +891,7 @@ static int set_root(struct nameidata *nd)
 	return 0;
 }
 
+/*填充nd->root,设置root为nd当前path*/
 static int nd_jump_root(struct nameidata *nd)
 {
 	if (unlikely(nd->flags & LOOKUP_BENEATH))
@@ -901,6 +908,8 @@ static int nd_jump_root(struct nameidata *nd)
 		if (error)
 			return error;
 	}
+
+	/*使用nd->root做为当前path*/
 	if (nd->flags & LOOKUP_RCU) {
 		struct dentry *d;
 		nd->path = nd->root;
@@ -1160,6 +1169,7 @@ static bool choose_mountpoint_rcu(struct mount *m, const struct path *root,
 			     root->mnt == &m->mnt))
 			break;
 		if (mountpoint != m->mnt.mnt_root) {
+		    /*填充path,使用父挂载点信息*/
 			path->mnt = &m->mnt;
 			path->dentry = mountpoint;
 			*seqp = read_seqcount_begin(&mountpoint->d_seq);
@@ -1477,6 +1487,7 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	return dentry;
 }
 
+/*在dcache(dentry_hashtable)中查找对应的dentry*/
 static struct dentry *lookup_fast(struct nameidata *nd,
 				  struct inode **inode,
 			          unsigned *seqp)
@@ -1492,6 +1503,7 @@ static struct dentry *lookup_fast(struct nameidata *nd,
 	 */
 	if (nd->flags & LOOKUP_RCU) {
 		unsigned seq;
+		/*执行dentry在dcache中的查询*/
 		dentry = __d_lookup_rcu(parent, &nd->last, &seq);
 		if (unlikely(!dentry)) {
 			if (unlazy_walk(nd))
@@ -1574,6 +1586,7 @@ again:
 	} else {
 		//未获得dentry查询结果，调用inode->i_op的lookup函数完成查询
 		old = inode->i_op->lookup(inode, dentry, flags);
+		//唤醒等待者
 		d_lookup_done(dentry);
 		if (unlikely(old)) {
 			dput(dentry);
@@ -1583,6 +1596,7 @@ again:
 	return dentry;
 }
 
+//通过in lookup优化查询，最坏的情况通过inode->lookup完成查询
 static struct dentry *lookup_slow(const struct qstr *name,
 				  struct dentry *dir,
 				  unsigned int flags)
@@ -1749,6 +1763,7 @@ static const char *step_into(struct nameidata *nd, int flags,
 	return pick_link(nd, &path, inode, seq, flags);
 }
 
+/*完成'..'目录查找，切换到父dentry*/
 static struct dentry *follow_dotdot_rcu(struct nameidata *nd,
 					struct inode **inodep,
 					unsigned *seqp)
@@ -1756,8 +1771,10 @@ static struct dentry *follow_dotdot_rcu(struct nameidata *nd,
 	struct dentry *parent, *old;
 
 	if (path_equal(&nd->path, &nd->root))
+	    /*当前已为root,无法向上查找*/
 		goto in_root;
 	if (unlikely(nd->path.dentry == nd->path.mnt->mnt_root)) {
+	    /*当前路径为挂载点的root entry位置*/
 		struct path path;
 		unsigned seq;
 		if (!choose_mountpoint_rcu(real_mount(nd->path.mnt),
@@ -1765,6 +1782,7 @@ static struct dentry *follow_dotdot_rcu(struct nameidata *nd,
 			goto in_root;
 		if (unlikely(nd->flags & LOOKUP_NO_XDEV))
 			return ERR_PTR(-ECHILD);
+		/*当前路径上有父挂载点，使用父挂点path及inode*/
 		nd->path = path;
 		nd->inode = path.dentry->d_inode;
 		nd->seq = seq;
@@ -1772,6 +1790,7 @@ static struct dentry *follow_dotdot_rcu(struct nameidata *nd,
 			return ERR_PTR(-ECHILD);
 		/* we know that mountpoint was pinned */
 	}
+	/*切换到父dentry及其inode,seq*/
 	old = nd->path.dentry;
 	parent = old->d_parent;
 	*inodep = parent->d_inode;
@@ -1812,6 +1831,7 @@ static struct dentry *follow_dotdot(struct nameidata *nd,
 			return ERR_PTR(-EXDEV);
 	}
 	/* rare case of legitimate dget_parent()... */
+	/*取父dentry*/
 	parent = dget_parent(nd->path.dentry);
 	if (unlikely(!path_connected(nd->path.mnt, parent))) {
 		dput(parent);
@@ -1838,7 +1858,7 @@ static const char *handle_dots(struct nameidata *nd, int type)
 		struct inode *inode;
 		unsigned seq;
 
-		//未指定root时，填充root
+		//nd中没有指定root的挂载点，填充root
 		if (!nd->root.mnt) {
 			error = ERR_PTR(set_root(nd));
 			if (error)
@@ -1848,6 +1868,7 @@ static const char *handle_dots(struct nameidata *nd, int type)
 			parent = follow_dotdot_rcu(nd, &inode, &seq);
 		else
 			parent = follow_dotdot(nd, &inode, &seq);
+
 		/*获取父dentry失败，退出*/
 		if (IS_ERR(parent))
 			return ERR_CAST(parent);
@@ -1889,13 +1910,13 @@ static const char *walk_component(struct nameidata *nd, int flags)
 	 * parent relationships.
 	 */
 	if (unlikely(nd->last_type != LAST_NORM)) {
-	    /*遇到'.','..'文件*/
+	    /*遇到'.','..'，执行path变更*/
 		if (!(flags & WALK_MORE) && nd->depth)
 			put_link(nd);
 		return handle_dots(nd, nd->last_type);
 	}
 
-	//查找当前分析位置的文件对应的dentry,inode（快速查询，在缓存中查）
+	//查找当前分析位置的文件对应的dentry,inode（dcache查询）
 	dentry = lookup_fast(nd, &inode, &seq);
 	if (IS_ERR(dentry))
 		return ERR_CAST(dentry);
@@ -2186,7 +2207,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		type = LAST_NORM;
 		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
-		if (name[0] == '.') switch (hashlen_len(hash_len)) {
+		if (name[0] == '.'/*名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
 			case 2:
 				//本层名称为'..'
 				if (name[1] == '.') {
@@ -2198,10 +2219,9 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				//本层名称为'.'
 				type = LAST_DOT;
 		}
+		//普通文件情况（非'..','.'这种）
 		if (likely(type == LAST_NORM)) {
-			//普通文件情况（非'..','.'这种）
-
-		    //取此文件父路径
+		    //取当前位置的dentry
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
 			//如果目录需要执行d_hash,则更新this
@@ -2225,7 +2245,8 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		//跳到本层文件或目录结尾
 		name += hashlen_len(hash_len);
 		if (!*name)
-			//（注：此时最后一层name还未分析,自这里直接跳出，防止用户执行的是文件新建，查肯定是没法查到文件的）
+			//到达字符串结尾
+		    //（注：此时最后一层name还未分析,自这里直接跳出，防止用户执行的是文件新建，查肯定是没法查到文件的）
 			goto OK;
 		/*
 		 * If it wasn't NUL, we know it was '/'. Skip that
@@ -2250,7 +2271,7 @@ OK:
 			name = nd->stack[--depth].name;
 			link = walk_component(nd, 0);
 		} else {
-			//name层次之后还有目录或者文件（即分析的是路径中间的目录）
+			//name不为空，即当前分析位置后仍有内容
 			//分析本层的目录名，并更新对应的dentry,inode
 			/* not the last component */
 			link = walk_component(nd, WALK_MORE);
@@ -2274,6 +2295,7 @@ OK:
 }
 
 /* must be paired with terminate_walk() */
+//初始化nd,设置nd对应的root,path
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
 	int error;
@@ -2317,7 +2339,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	/* Absolute pathname -- fetch the root (LOOKUP_IN_ROOT uses nd->dfd). */
 	if (*s == '/' && !(flags & LOOKUP_IN_ROOT)) {
-		//文件路径名称给出的是绝对路径，则设置nd->root为当前进程fs->root
+		//文件路径名称给出的是绝对路径，则设置nd->root为当前进程fs->root,
+	    //且设置当前nd->path为nd->root
 		error = nd_jump_root(nd);
 		if (unlikely(error))
 			return ERR_PTR(error);
@@ -2333,7 +2356,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 			do {
 				seq = read_seqcount_begin(&fs->seq);
-				nd->path = fs->pwd;
+				nd->path = fs->pwd;/*取进程的当前工作目录*/
 				nd->inode = nd->path.dentry->d_inode;
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
@@ -2391,6 +2414,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	return s;
 }
 
+/*执行最后一个dentry查询*/
 static inline const char *lookup_last(struct nameidata *nd)
 {
 	if (nd->last_type == LAST_NORM && nd->last.name[nd->last.len])
@@ -2410,7 +2434,7 @@ static int handle_lookup_down(struct nameidata *nd)
 /* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
-	//获取相对于nd->path或nd->root的路径或文件名
+	//初始化nd,准备解析文件路径
 	const char *s = path_init(nd, flags);
 	int err;
 
@@ -2434,6 +2458,7 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		nd->flags &= ~LOOKUP_JUMPED; // no d_weak_revalidate(), please...
 	}
 	if (!err) {
+	    /*返回查询到的path结果*/
 		*path = nd->path;
 		nd->path.mnt = NULL;
 		nd->path.dentry = NULL;
@@ -2739,7 +2764,7 @@ int path_pts(struct path *path)
 #endif
 
 //name 目录字符串，获得其对应的path
-int user_path_at_empty(int dfd, const char __user *name, unsigned flags,
+int user_path_at_empty(int dfd, const char __user *name/*路径名称*/, unsigned flags,
 		 struct path *path, int *empty)
 {
 	return filename_lookup(dfd, getname_flags(name, flags, empty),

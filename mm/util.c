@@ -144,6 +144,7 @@ EXPORT_SYMBOL(kmemdup);
  */
 char *kmemdup_nul(const char *s, size_t len, gfp_t gfp)
 {
+    /*制作s的一个副本，s可以非'\0'结尾，副本需要'\0'结尾*/
 	char *buf;
 
 	if (!s)

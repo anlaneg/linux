@@ -565,6 +565,7 @@ SYSCALL_DEFINE2(pidfd_open, pid_t, pid, unsigned int, flags)
 	struct pid *p;
 
 	if (flags)
+	    /*flags当前必须为0*/
 		return -EINVAL;
 
 	if (pid <= 0)

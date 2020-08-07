@@ -728,6 +728,7 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 				(int __user *)argp);
 
 	default:
+	    /*针对规则文件的其它ioctl*/
 		if (S_ISREG(inode->i_mode))
 			return file_ioctl(filp, cmd, argp);
 		break;
@@ -796,9 +797,11 @@ long compat_ptr_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(compat_ptr_ioctl);
 
+/*对外提供ioctl系统调用*/
 COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 		       compat_ulong_t, arg)
 {
+    /*由fd获得file*/
 	struct fd f = fdget(fd);
 	int error;
 
@@ -839,11 +842,13 @@ COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 	 * argument.
 	 */
 	default:
+	    /*其它通过vfs完成的ioctl*/
 		error = do_vfs_ioctl(f.file, fd, cmd,
 				     (unsigned long)compat_ptr(arg));
 		if (error != -ENOIOCTLCMD)
 			break;
 
+		/*上面的ioctl不能完成，如果file ops恰提供了compat_ioctl,则调用*/
 		if (f.file->f_op->compat_ioctl)
 			error = f.file->f_op->compat_ioctl(f.file, cmd, arg);
 		if (error == -ENOIOCTLCMD)

@@ -32,7 +32,7 @@
 static LIST_HEAD(pernet_list);
 static struct list_head *first_device = &pernet_list;
 
-//所有的namespace将串在此链上
+//记录系统中所有的namespace，将其串连在此链上
 LIST_HEAD(net_namespace_list);
 EXPORT_SYMBOL_GPL(net_namespace_list);
 
@@ -348,13 +348,14 @@ static __net_init int setup_net(struct net *net, struct user_namespace *user_ns)
 	spin_lock_init(&net->nsid_lock);
 	mutex_init(&net->ipv4.ra_mutex);
 
-	//已注册的pernet函数，触发pernet的init调用
+	//针对已注册的pernet函数，触发pernet的init调用
 	list_for_each_entry(ops, &pernet_list, list) {
 		error = ops_init(ops, net);
 		if (error < 0)
 			goto out_undo;
 	}
 	down_write(&net_rwsem);
+
 	//将此net namespace加入到链表中
 	list_add_tail_rcu(&net->list, &net_namespace_list);
 	up_write(&net_rwsem);
@@ -415,6 +416,7 @@ static void dec_net_namespaces(struct ucounts *ucounts)
 	dec_ucount(ucounts, UCOUNT_NET_NAMESPACES);
 }
 
+/*负责分配struct net结构体*/
 static struct kmem_cache *net_cachep __ro_after_init;
 static struct workqueue_struct *netns_wq;
 
@@ -466,7 +468,7 @@ void net_drop_ns(void *p)
 		net_free(ns);
 }
 
-//由flags决定使用之前的old_net还是创建新的ns
+//由flags决定使用之前的old_net还是创建新的net namespace
 struct net *copy_net_ns(unsigned long flags,
 			struct user_namespace *user_ns, struct net *old_net)
 {
@@ -478,7 +480,7 @@ struct net *copy_net_ns(unsigned long flags,
 	if (!(flags & CLONE_NEWNET))
 		return get_net(old_net);
 
-	//需要创建新的net namespace
+	/*需要创建新的net namespace*/
 
 	//获得ucounts
 	ucounts = inc_net_namespaces(user_ns);

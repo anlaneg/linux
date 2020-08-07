@@ -107,6 +107,7 @@ struct proc_inode {
  */
 static inline struct proc_inode *PROC_I(const struct inode *inode)
 {
+    //取inode所属的proc_inode
 	return container_of(inode, struct proc_inode, vfs_inode);
 }
 

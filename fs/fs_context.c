@@ -132,7 +132,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	 * default handling of source.
 	 */
 	if (strcmp(param->key, "source") == 0) {
-	    //处理默认的source参数
+	    //处理默认的source参数，将其移交给fc->source
 		if (param->type != fs_value_is_string)
 			return invalf(fc, "VFS: Non-string source");
 		if (fc->source)
@@ -254,7 +254,8 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	fc->purpose	= purpose;
 	fc->sb_flags	= sb_flags;
 	fc->sb_flags_mask = sb_flags_mask;
-	fc->fs_type	= get_filesystem(fs_type);//引用fc对应的fs_type
+	//引用fc对应的fs_type
+	fc->fs_type	= get_filesystem(fs_type);
 	fc->cred	= get_current_cred();
 	fc->net_ns	= get_net(current->nsproxy->net_ns);
 	fc->log.prefix	= fs_type->name;
@@ -278,7 +279,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	/* TODO: Make all filesystems support this unconditionally */
 	init_fs_context = fc->fs_type->init_fs_context;
 	if (!init_fs_context)
-	    /*文件系统未提供此回调，使用默认值*/
+	    /*如果文件系统(fs_type)未提供此回调，则使用默认值*/
 		init_fs_context = legacy_init_fs_context;
 
 	ret = init_fs_context(fc);

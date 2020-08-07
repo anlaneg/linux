@@ -58,6 +58,7 @@ static const char *proc_ns_get_link(struct dentry *dentry,
 	if (!ptrace_may_access(task, PTRACE_MODE_READ_FSCREDS))
 		goto out;
 
+	/*构造进程task中ns_ops类型的ns对应的ns_path*/
 	error = ns_get_path(&ns_path, task, ns_ops);
 	if (error)
 		goto out;
