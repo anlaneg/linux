@@ -309,7 +309,7 @@ kvm_irqfd_assign(struct kvm *kvm, struct kvm_irqfd *args)
 	//初始化inject work对应的回调,当eventfd被触发，此函数将被调用注入中断
 	INIT_WORK(&irqfd->inject, irqfd_inject);
 	INIT_WORK(&irqfd->shutdown, irqfd_shutdown);
-	seqcount_init(&irqfd->irq_entry_sc);
+	seqcount_spinlock_init(&irqfd->irq_entry_sc, &kvm->irqfds.lock);
 
 	/*获得此fd对应的file*/
 	f = fdget(args->fd);

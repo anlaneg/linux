@@ -269,8 +269,8 @@ void exit_task_namespaces(struct task_struct *p)
 static int check_setns_flags(unsigned long flags)
 {
 	if (!flags || (flags & ~(CLONE_NEWNS | CLONE_NEWUTS | CLONE_NEWIPC |
-				 CLONE_NEWNET | CLONE_NEWUSER | CLONE_NEWPID |
-				 CLONE_NEWCGROUP)))
+				 CLONE_NEWNET | CLONE_NEWTIME | CLONE_NEWUSER |
+				 CLONE_NEWPID | CLONE_NEWCGROUP)))
 		return -EINVAL;
 
 #ifndef CONFIG_USER_NS
@@ -295,6 +295,10 @@ static int check_setns_flags(unsigned long flags)
 #endif
 #ifndef CONFIG_NET_NS
 	if (flags & CLONE_NEWNET)
+		return -EINVAL;
+#endif
+#ifndef CONFIG_TIME_NS
+	if (flags & CLONE_NEWTIME)
 		return -EINVAL;
 #endif
 
@@ -472,6 +476,14 @@ static int validate_nsset(struct nsset *nsset, struct pid *pid)
 	}
 #endif
 
+#ifdef CONFIG_TIME_NS
+	if (flags & CLONE_NEWTIME) {
+		ret = validate_ns(nsset, &nsp->time_ns->ns);
+		if (ret)
+			goto out;
+	}
+#endif
+
 out:
 	if (pid_ns)
 		put_pid_ns(pid_ns);
@@ -515,6 +527,11 @@ static void commit_nsset(struct nsset *nsset)
 		exit_sem(me);
 #endif
 
+#ifdef CONFIG_TIME_NS
+	if (flags & CLONE_NEWTIME)
+		timens_commit(me, nsset->nsproxy->time_ns);
+#endif
+
 	/* transfer ownership */
 	switch_task_namespaces(me, nsset->nsproxy);
 	nsset->nsproxy = NULL;
@@ -542,7 +559,7 @@ SYSCALL_DEFINE2(setns, int, fd, int, flags)
 	} else if (!IS_ERR(pidfd_pid(file))) {
 		err = check_setns_flags(flags);
 	} else {
-		err = -EBADF;
+		err = -EINVAL;
 	}
 	if (err)
 		goto out;

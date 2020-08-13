@@ -40,6 +40,7 @@ struct xsk_queue {
 	u32 cached_cons;
 	struct xdp_ring *ring;/*ring队列*/
 	u64 invalid_descs;
+	u64 queue_empty_descs;
 };
 
 /* The structure of the shared state of the rings are the same as the
@@ -355,6 +356,11 @@ static inline bool xskq_prod_is_empty(struct xsk_queue *q)
 static inline u64 xskq_nb_invalid_descs(struct xsk_queue *q)
 {
 	return q ? q->invalid_descs : 0;
+}
+
+static inline u64 xskq_nb_queue_empty_descs(struct xsk_queue *q)
+{
+	return q ? q->queue_empty_descs : 0;
 }
 
 struct xsk_queue *xskq_create(u32 nentries, bool umem_queue);

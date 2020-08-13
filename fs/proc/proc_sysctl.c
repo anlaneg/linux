@@ -566,9 +566,10 @@ static ssize_t proc_sys_call_handler(struct file *filp, void __user *ubuf,
 		goto out;
 
 	/* don't even try if the size is too large */
-	if (count > KMALLOC_MAX_SIZE)
-	    //用户态给定的buffer过大时返回失败
-		return -ENOMEM;
+	error = -ENOMEM;
+	//用户态给定的buffer过大时返回失败
+	if (count >= KMALLOC_MAX_SIZE)
+		goto out;
 
 	//申请count字符的kernel buffer(write时复制用户态buffer数据）
 	if (write) {
@@ -578,7 +579,6 @@ static ssize_t proc_sys_call_handler(struct file *filp, void __user *ubuf,
 			goto out;
 		}
 	} else {
-		error = -ENOMEM;
 		kbuf = kzalloc(count, GFP_KERNEL);
 		if (!kbuf)
 			goto out;

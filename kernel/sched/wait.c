@@ -406,7 +406,7 @@ int autoremove_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, i
 
 	if (ret)
 		/*成功唤醒，将等待成员自队列中移除*/
-		list_del_init(&wq_entry->entry);
+		list_del_init_careful(&wq_entry->entry);
 
 	return ret;
 }

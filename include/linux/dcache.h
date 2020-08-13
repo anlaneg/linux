@@ -93,7 +93,7 @@ struct dentry {
 	/* RCU lookup touched fields */
 	//看DCACHE_OP_*定义
 	unsigned int d_flags;		/* protected by d_lock */
-	seqcount_t d_seq;		/* per dentry seqlock */
+	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	//指向父dentry项
 	struct dentry *d_parent;	/* parent directory */

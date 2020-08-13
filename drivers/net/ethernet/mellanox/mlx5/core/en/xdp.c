@@ -114,7 +114,8 @@ mlx5e_xmit_xdp_buff(struct mlx5e_xdpsq *sq, struct mlx5e_rq *rq,
 		xdpi.page.di    = *di;
 	}
 
-	return sq->xmit_xdp_frame(sq, &xdptxd, &xdpi, 0);
+	return INDIRECT_CALL_2(sq->xmit_xdp_frame, mlx5e_xmit_xdp_frame_mpwqe,
+			       mlx5e_xmit_xdp_frame, sq, &xdptxd, &xdpi, 0);
 }
 
 /* returns true if packet was consumed by xdp */
@@ -155,12 +156,12 @@ bool mlx5e_xdp_handle(struct mlx5e_rq *rq, struct mlx5e_dma_info *di,
 		return true;
 	default:
 		bpf_warn_invalid_xdp_action(act);
-		/* fall through */
+		fallthrough;
 	case XDP_ABORTED:
 	    //出现异常或者明确丢包，不再上送协议栈
 xdp_abort:
 		trace_xdp_exception(rq->netdev, prog, act);
-		/* fall through */
+		fallthrough;
 	case XDP_DROP:
 		rq->stats->xdp_drop++;
 		return true;
@@ -242,7 +243,7 @@ enum {
 	MLX5E_XDP_CHECK_START_MPWQE = 2,
 };
 
-static int mlx5e_xmit_xdp_frame_check_mpwqe(struct mlx5e_xdpsq *sq)
+INDIRECT_CALLABLE_SCOPE int mlx5e_xmit_xdp_frame_check_mpwqe(struct mlx5e_xdpsq *sq)
 {
 	if (unlikely(!sq->mpwqe.wqe)) {
 		const u16 stop_room = mlx5e_stop_room_for_wqe(MLX5_SEND_WQE_MAX_WQEBBS);
@@ -261,10 +262,9 @@ static int mlx5e_xmit_xdp_frame_check_mpwqe(struct mlx5e_xdpsq *sq)
 	return MLX5E_XDP_CHECK_OK;
 }
 
-static bool mlx5e_xmit_xdp_frame_mpwqe(struct mlx5e_xdpsq *sq,
-				       struct mlx5e_xdp_xmit_data *xdptxd,
-				       struct mlx5e_xdp_info *xdpi,
-				       int check_result)
+INDIRECT_CALLABLE_SCOPE bool
+mlx5e_xmit_xdp_frame_mpwqe(struct mlx5e_xdpsq *sq, struct mlx5e_xdp_xmit_data *xdptxd,
+			   struct mlx5e_xdp_info *xdpi, int check_result)
 {
 	struct mlx5e_xdp_mpwqe *session = &sq->mpwqe;
 	struct mlx5e_xdpsq_stats *stats = sq->stats;
@@ -298,7 +298,7 @@ static bool mlx5e_xmit_xdp_frame_mpwqe(struct mlx5e_xdpsq *sq,
 	return true;
 }
 
-static int mlx5e_xmit_xdp_frame_check(struct mlx5e_xdpsq *sq)
+INDIRECT_CALLABLE_SCOPE int mlx5e_xmit_xdp_frame_check(struct mlx5e_xdpsq *sq)
 {
 	if (unlikely(!mlx5e_wqc_has_room_for(&sq->wq, sq->cc, sq->pc, 1))) {
 		/* SQ is full, ring doorbell */
@@ -310,10 +310,9 @@ static int mlx5e_xmit_xdp_frame_check(struct mlx5e_xdpsq *sq)
 	return MLX5E_XDP_CHECK_OK;
 }
 
-static bool mlx5e_xmit_xdp_frame(struct mlx5e_xdpsq *sq,
-				 struct mlx5e_xdp_xmit_data *xdptxd,
-				 struct mlx5e_xdp_info *xdpi,
-				 int check_result)
+INDIRECT_CALLABLE_SCOPE bool
+mlx5e_xmit_xdp_frame(struct mlx5e_xdpsq *sq, struct mlx5e_xdp_xmit_data *xdptxd,
+		     struct mlx5e_xdp_info *xdpi, int check_result)
 {
 	struct mlx5_wq_cyc       *wq   = &sq->wq;
 	u16                       pi   = mlx5_wq_cyc_ctr2ix(wq, sq->pc);
@@ -511,6 +510,7 @@ int mlx5e_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **frames,
 		struct xdp_frame *xdpf = frames[i];
 		struct mlx5e_xdp_xmit_data xdptxd;
 		struct mlx5e_xdp_info xdpi;
+		bool ret;
 
 		xdptxd.data = xdpf->data;
 		xdptxd.len = xdpf->len;
@@ -527,7 +527,9 @@ int mlx5e_xdp_xmit(struct net_device *dev, int n, struct xdp_frame **frames,
 		xdpi.frame.xdpf     = xdpf;
 		xdpi.frame.dma_addr = xdptxd.dma_addr;
 
-		if (unlikely(!sq->xmit_xdp_frame(sq, &xdptxd, &xdpi, 0))) {
+		ret = INDIRECT_CALL_2(sq->xmit_xdp_frame, mlx5e_xmit_xdp_frame_mpwqe,
+				      mlx5e_xmit_xdp_frame, sq, &xdptxd, &xdpi, 0);
+		if (unlikely(!ret)) {
 			dma_unmap_single(sq->pdev, xdptxd.dma_addr,
 					 xdptxd.len, DMA_TO_DEVICE);
 			xdp_return_frame_rx_napi(xdpf);

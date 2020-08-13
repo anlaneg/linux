@@ -118,7 +118,7 @@ struct tc_action_ops {
 			const struct tc_action_ops *,
 			struct netlink_ext_ack *);
 	/*action的统计信息更新函数*/
-	void	(*stats_update)(struct tc_action *, u64, u32, u64, bool);
+	void	(*stats_update)(struct tc_action *, u64, u64, u64, u64, bool);
 	size_t  (*get_fill_size)(const struct tc_action *act);
 	struct net_device *(*get_dev)(const struct tc_action *a,
 				      tc_action_priv_destructor *destructor);
@@ -244,8 +244,8 @@ static inline void tcf_action_inc_overlimit_qstats(struct tc_action *a)
 	spin_unlock(&a->tcfa_lock);
 }
 
-void tcf_action_update_stats(struct tc_action *a, u64 bytes, u32 packets,
-			     bool drop, bool hw);
+void tcf_action_update_stats(struct tc_action *a, u64 bytes, u64 packets,
+			     u64 drops, bool hw);
 int tcf_action_copy_stats(struct sk_buff *, struct tc_action *, int);
 
 int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
@@ -256,13 +256,14 @@ struct tcf_chain *tcf_action_set_ctrlact(struct tc_action *a, int action,
 #endif /* CONFIG_NET_CLS_ACT */
 
 static inline void tcf_action_stats_update(struct tc_action *a, u64 bytes,
-					   u64 packets, u64 lastuse, bool hw)
+					   u64 packets, u64 drops,
+					   u64 lastuse, bool hw)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	if (!a->ops->stats_update)
 		return;
 
-	a->ops->stats_update(a, bytes, packets, lastuse, hw);
+	a->ops->stats_update(a, bytes, packets, drops, lastuse, hw);
 #endif
 }
 

@@ -234,7 +234,7 @@ next_rule:
 		jumpstack[stackptr].chain = chain;
 		jumpstack[stackptr].rules = rules + 1;
 		stackptr++;
-		/* fall through */
+		fallthrough;
 	case NFT_GOTO:
 	    //跳到指定chcain上运行
 		nft_trace_packet(&info, chain, rule,

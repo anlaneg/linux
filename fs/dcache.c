@@ -1761,7 +1761,7 @@ static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dent
 	dentry->d_lockref.count = 1;
 	dentry->d_flags = 0;
 	spin_lock_init(&dentry->d_lock);
-	seqcount_init(&dentry->d_seq);
+	seqcount_spinlock_init(&dentry->d_seq, &dentry->d_lock);
 	dentry->d_inode = NULL;
 	dentry->d_parent = dentry;
 	/*设置所属的sb*/

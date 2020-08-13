@@ -93,6 +93,7 @@ struct device_private {
 	struct klist_node knode_class;
 	struct list_head deferred_probe;
 	struct device_driver *async_driver;
+	char *deferred_probe_reason;
 	struct device *device;//指向对应的设备
 	u8 dead:1;
 };
@@ -134,7 +135,8 @@ extern void device_release_driver_internal(struct device *dev,
 extern void driver_detach(struct device_driver *drv);
 extern int driver_probe_device(struct device_driver *drv, struct device *dev);
 extern void driver_deferred_probe_del(struct device *dev);
-
+extern void device_set_deferred_probe_reason(const struct device *dev,
+					     struct va_format *vaf);
 //通过bus的匹配函数检查驱动是否可以与device匹配
 static inline int driver_match_device(struct device_driver *drv,
 				      struct device *dev)
@@ -155,7 +157,6 @@ extern char *make_class_name(const char *name, struct kobject *kobj);
 extern int devres_release_all(struct device *dev);
 extern void device_block_probing(void);
 extern void device_unblock_probing(void);
-extern void driver_deferred_probe_force_trigger(void);
 
 /* /sys/devices directory */
 extern struct kset *devices_kset;

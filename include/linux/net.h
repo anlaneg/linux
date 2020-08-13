@@ -21,6 +21,7 @@
 #include <linux/rcupdate.h>
 #include <linux/once.h>
 #include <linux/fs.h>
+#include <linux/sockptr.h>
 
 #include <uapi/linux/net.h>
 
@@ -170,15 +171,10 @@ struct proto_ops {
 	int		(*shutdown)  (struct socket *sock, int flags);
 	//setsockopt调用实现（非SOL_SOCKET情况）
 	int		(*setsockopt)(struct socket *sock, int level,
-				      int optname/*操作码*/, char __user *optval/*操作码对应数值*/, unsigned int optlen/*操作码对应参数长度*/);
+				      int optname/*操作码*/, sockptr_t optval/*操作码对应数值*/,
+				      unsigned int optlen/*操作码对应参数长度*/);
 	int		(*getsockopt)(struct socket *sock, int level,
 				      int optname, char __user *optval, int __user *optlen);
-#ifdef CONFIG_COMPAT
-	int		(*compat_setsockopt)(struct socket *sock, int level,
-				      int optname, char __user *optval, unsigned int optlen);
-	int		(*compat_getsockopt)(struct socket *sock, int level,
-				      int optname, char __user *optval, int __user *optlen);
-#endif
 	void		(*show_fdinfo)(struct seq_file *m, struct socket *sock);
 	int		(*sendmsg)   (struct socket *sock, struct msghdr *m,
 				      size_t total_len);

@@ -351,7 +351,6 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode *dir,
 	struct page *page = NULL;
 	struct ext2_inode_info *ei = EXT2_I(dir);
 	ext2_dirent * de;
-	int dir_has_error = 0;
 
 	if (npages == 0)
 		goto out;
@@ -365,28 +364,28 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode *dir,
 	n = start;
 	do {
 		char *kaddr;
-		page = ext2_get_page(dir, n, dir_has_error);
-		if (!IS_ERR(page)) {
-			kaddr = page_address(page);
-			de = (ext2_dirent *) kaddr;
-			kaddr += ext2_last_byte(dir, n) - reclen;
-			while ((char *) de <= kaddr) {
-				if (de->rec_len == 0) {
-					//其下无记录，无法查询，返回NULL
-					ext2_error(dir->i_sb, __func__,
-						"zero-length directory entry");
-					ext2_put_page(page);
-					goto out;
-				}
-				//检查de是否与要查询的name要匹配
-				if (ext2_match (namelen, name, de))
-					goto found;
-				//获取下一个de项
-				de = ext2_next_entry(de);
+		page = ext2_get_page(dir, n, 0);
+		if (IS_ERR(page))
+			return ERR_CAST(page);
+
+		kaddr = page_address(page);
+		de = (ext2_dirent *) kaddr;
+		kaddr += ext2_last_byte(dir, n) - reclen;
+		while ((char *) de <= kaddr) {
+			if (de->rec_len == 0) {
+				//其下无记录，无法查询，返回NULL
+				ext2_error(dir->i_sb, __func__,
+					"zero-length directory entry");
+				ext2_put_page(page);
+				goto out;
 			}
-			ext2_put_page(page);
-		} else
-			dir_has_error = 1;
+			//检查de是否与要查询的name要匹配
+			if (ext2_match(namelen, name, de))
+				goto found;
+			//获取下一个de项
+			de = ext2_next_entry(de);
+		}
+		ext2_put_page(page);
 
 		if (++n >= npages)
 			n = 0;
@@ -400,7 +399,7 @@ struct ext2_dir_entry_2 *ext2_find_entry (struct inode *dir,
 		}
 	} while (n != start);
 out:
-	return NULL;
+	return ERR_PTR(-ENOENT);
 
 found:
 	*res_page = page;
@@ -420,20 +419,20 @@ struct ext2_dir_entry_2 * ext2_dotdot (struct inode *dir, struct page **p)
 	return de;
 }
 
-ino_t ext2_inode_by_name(struct inode *dir, const struct qstr *child)
+int ext2_inode_by_name(struct inode *dir, const struct qstr *child, ino_t *ino)
 {
-	ino_t res = 0;
 	struct ext2_dir_entry_2 *de;
 	struct page *page;
 	
 	//在目录下查找child指定子文件
-	de = ext2_find_entry (dir, child, &page);
-	if (de) {
-		//返回此文件对应的inode号
-		res = le32_to_cpu(de->inode);
-		ext2_put_page(page);
-	}
-	return res;
+	de = ext2_find_entry(dir, child, &page);
+	if (IS_ERR(de))
+		return PTR_ERR(de);
+
+	//返回此文件对应的inode号
+	*ino = le32_to_cpu(de->inode);
+	ext2_put_page(page);
+	return 0;
 }
 
 static int ext2_prepare_chunk(struct page *page, loff_t pos, unsigned len)

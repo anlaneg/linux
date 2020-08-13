@@ -1404,7 +1404,8 @@ retry:
  *
  * This takes care of mlocking the pages too if VM_LOCKED is set.
  *
- * return 0 on success, negative error code on error.
+ * Return either number of pages pinned in the vma, or a negative error
+ * code on error.
  *
  * vma->vm_mm->mmap_lock must be held.
  *
@@ -2196,7 +2197,7 @@ static inline pte_t gup_get_pte(pte_t *ptep)
  */
 static inline pte_t gup_get_pte(pte_t *ptep)
 {
-	return READ_ONCE(*ptep);
+	return ptep_get(ptep);
 }
 #endif /* CONFIG_GUP_GET_PTE_LOW_HIGH */
 
@@ -2425,7 +2426,7 @@ static int gup_hugepte(pte_t *ptep, unsigned long sz, unsigned long addr,
 	if (pte_end < end)
 		end = pte_end;
 
-	pte = READ_ONCE(*ptep);
+	pte = huge_ptep_get(ptep);
 
 	if (!pte_access_permitted(pte, flags & FOLL_WRITE))
 		return 0;

@@ -1271,19 +1271,6 @@ err:
 	return err;
 }
 
-//返回dev设备上对应的xdp程序id
-static u32 veth_xdp_query(struct net_device *dev)
-{
-	struct veth_priv *priv = netdev_priv(dev);
-	const struct bpf_prog *xdp_prog;
-
-	xdp_prog = priv->_xdp_prog;
-	if (xdp_prog)
-		return xdp_prog->aux->id;
-
-	return 0;
-}
-
 //veth对xdp的处理
 static int veth_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 {
@@ -1291,10 +1278,6 @@ static int veth_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 	case XDP_SETUP_PROG:
 	    //设置xdp程序
 		return veth_xdp_set(dev, xdp->prog, xdp->extack);
-	case XDP_QUERY_PROG:
-	    /*当前运行在此dev上的xdp程序查询*/
-		xdp->prog_id = veth_xdp_query(dev);
-		return 0;
 	default:
 		return -EINVAL;
 	}

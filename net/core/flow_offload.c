@@ -4,6 +4,7 @@
 #include <net/flow_offload.h>
 #include <linux/rtnetlink.h>
 #include <linux/mutex.h>
+#include <linux/rhashtable.h>
 
 //申请最多支持num_actions个动作的flow_rule
 struct flow_rule *flow_rule_alloc(unsigned int num_actions)
@@ -423,14 +424,15 @@ int flow_indr_dev_register(flow_indr_block_bind_cb_t *cb, void *cb_priv)
 EXPORT_SYMBOL(flow_indr_dev_register);
 
 //自flow_block_indr_list移除指定setup_cb回调，并将其收集在cleanup_list上
-static void __flow_block_indr_cleanup(flow_setup_cb_t *setup_cb, void *cb_priv,
+static void __flow_block_indr_cleanup(void (*release)(void *cb_priv),
+				      void *cb_priv,
 				      struct list_head *cleanup_list)
 {
 	struct flow_block_cb *this, *next;
 
 	list_for_each_entry_safe(this, next, &flow_block_indr_list, indr.list) {
-		if (this->cb == setup_cb &&
-		    this->cb_priv == cb_priv) {
+		if (this->release == release &&
+		    this->indr.cb_priv == cb_priv) {
 			list_move(&this->indr.list, cleanup_list);
 			return;
 		}
@@ -450,7 +452,7 @@ static void flow_block_indr_notify(struct list_head *cleanup_list)
 
 //通过给定参数，移除flow indrect dev
 void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
-			      flow_setup_cb_t *setup_cb)
+			      void (*release)(void *cb_priv))
 {
 	struct flow_indr_dev *this, *next, *indr_dev = NULL;
 	LIST_HEAD(cleanup_list);
@@ -474,9 +476,8 @@ void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
 	}
 
 	//在flow_block_indr_list链表上完成移除
-
 	//收集setup_cb到cleanup_list
-	__flow_block_indr_cleanup(setup_cb, cb_priv, &cleanup_list);
+	__flow_block_indr_cleanup(release, cb_priv, &cleanup_list);
 	mutex_unlock(&flow_indr_block_lock);
 
 	//调用cleanup_list上所有元素的cleanup回调
@@ -488,39 +489,45 @@ EXPORT_SYMBOL(flow_indr_dev_unregister);
 //初始化flow block callback
 static void flow_block_indr_init(struct flow_block_cb *flow_block,
 				 struct flow_block_offload *bo,
-				 struct net_device *dev, void *data,
+				 struct net_device *dev, struct Qdisc *sch, void *data,
+				 void *cb_priv,
 				 void (*cleanup/*cb被移除时调用*/)(struct flow_block_cb *block_cb))
 {
 	flow_block->indr.binder_type = bo->binder_type;
 	flow_block->indr.data = data;
+	flow_block->indr.cb_priv = cb_priv;
 	flow_block->indr.dev = dev;
+	flow_block->indr.sch = sch;
 	flow_block->indr.cleanup = cleanup;
 }
 
 /*构造flow_block_cb,按command解绑定/绑定 block_cb*/
-static void __flow_block_indr_binding(struct flow_block_offload *bo,
-				      struct net_device *dev, void *data,
-				      void (*cleanup)(struct flow_block_cb *block_cb))
+struct flow_block_cb *flow_indr_block_cb_alloc(flow_setup_cb_t *cb,
+					       void *cb_ident, void *cb_priv,
+					       void (*release)(void *cb_priv),
+					       struct flow_block_offload *bo,
+					       struct net_device *dev,
+					       struct Qdisc *sch, void *data,
+					       void *indr_cb_priv,
+					       void (*cleanup)(struct flow_block_cb *block_cb))
 {
 	struct flow_block_cb *block_cb;
 
-	list_for_each_entry(block_cb, &bo->cb_list, list) {
-		switch (bo->command) {
-		case FLOW_BLOCK_BIND:
-		    //初始化block_cb，并将其绑定到block间接回调链上
-			flow_block_indr_init(block_cb, bo, dev, data, cleanup);
-			list_add(&block_cb->indr.list, &flow_block_indr_list);
-			break;
-		case FLOW_BLOCK_UNBIND:
-		    //将此block_cb自block间接回调链上移除
-			list_del(&block_cb->indr.list);
-			break;
-		}
-	}
+	block_cb = flow_block_cb_alloc(cb, cb_ident, cb_priv, release);
+	if (IS_ERR(block_cb))
+		goto out;
+
+	//初始化block_cb，并将其绑定到block间接回调链上
+	flow_block_indr_init(block_cb, bo, dev, sch, data, indr_cb_priv, cleanup);
+	list_add(&block_cb->indr.list, &flow_block_indr_list);
+
+out:
+	return block_cb;
 }
+EXPORT_SYMBOL(flow_indr_block_cb_alloc);
 
 //dev未提供ndo_setup_tc回调，通过此函数间接触发block bind回调，例如触发vxlan设备的offload
-int flow_indr_dev_setup_offload(struct net_device *dev/*offload关联的设备*/,
+int flow_indr_dev_setup_offload(struct net_device *dev/*offload关联的设备*/, struct Qdisc *sch,
 				enum tc_setup_type type, void *data,
 				struct flow_block_offload *bo,
 				void (*cleanup)(struct flow_block_cb *block_cb))
@@ -530,10 +537,8 @@ int flow_indr_dev_setup_offload(struct net_device *dev/*offload关联的设备*/
 	mutex_lock(&flow_indr_block_lock);
 	/*触发系统所有间接设备block bind回调，不关心返回值,由各回调自行检查处理*/
 	list_for_each_entry(this, &flow_block_indr_dev_list, list)
-		this->cb(dev, this->cb_priv, type, bo);
+		this->cb(dev, sch, this->cb_priv, type, bo, data, cleanup);
 
-	//实现block回调的绑定/解绑定
-	__flow_block_indr_binding(bo, dev, data, cleanup);
 	mutex_unlock(&flow_indr_block_lock);
 
 	/*bo的cb_list不能为空*/

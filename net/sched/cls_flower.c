@@ -77,6 +77,7 @@ struct fl_flow_key {
 	} tp_range;
 	//ct状态匹配
 	struct flow_dissector_key_ct ct;
+	struct flow_dissector_key_hash hash;
 } __aligned(BITS_PER_LONG / 8); /* Ensure that we can do comparisons as longs. */
 
 struct fl_flow_mask_range {
@@ -356,12 +357,14 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		/* skb_flow_dissect() does not set n_proto in case an unknown
 		 * protocol, so do it rather here.
 		 */
-		skb_key.basic.n_proto = skb->protocol;//网络层协议ipv4/ipv6
+		//网络层协议ipv4/ipv6
+		skb_key.basic.n_proto = skb_protocol(skb, false);
 		skb_flow_dissect_tunnel_info(skb, &mask->dissector, &skb_key);
 		//解析ct相关的字段
 		skb_flow_dissect_ct(skb, &mask->dissector, &skb_key,
 				    fl_ct_info_to_flower_map,
 				    ARRAY_SIZE(fl_ct_info_to_flower_map));
+		skb_flow_dissect_hash(skb, &mask->dissector, &skb_key);
 		//解析skb中的mask->dissector提及的字段，并将解析结果存入到skb_key中
 		skb_flow_dissect(skb, &mask->dissector, &skb_key, 0);
 
@@ -555,6 +558,7 @@ static void fl_hw_update_stats(struct tcf_proto *tp, struct cls_fl_filter *f,
 
 	tcf_exts_stats_update(&f->exts, cls_flower.stats.bytes,
 			      cls_flower.stats.pkts,
+			      cls_flower.stats.drops,
 			      cls_flower.stats.lastused,
 			      cls_flower.stats.used_hw_stats,
 			      cls_flower.stats.used_hw_stats_valid);
@@ -768,6 +772,9 @@ static const struct nla_policy fl_policy[TCA_FLOWER_MAX + 1] = {
 	[TCA_FLOWER_KEY_CT_LABELS_MASK]	= { .type = NLA_BINARY,
 					    .len = 128 / BITS_PER_BYTE },
 	[TCA_FLOWER_FLAGS]		= { .type = NLA_U32 },
+	[TCA_FLOWER_KEY_HASH]		= { .type = NLA_U32 },
+	[TCA_FLOWER_KEY_HASH_MASK]	= { .type = NLA_U32 },
+
 };
 
 static const struct nla_policy
@@ -1750,6 +1757,10 @@ static int fl_set_key(struct net *net, struct nlattr **tb,
 	//隧道支持的tos,ttl
 	fl_set_key_ip(tb, true, &key->enc_ip, &mask->enc_ip);
 
+	fl_set_key_val(tb, &key->hash.hash, TCA_FLOWER_KEY_HASH,
+		       &mask->hash.hash, TCA_FLOWER_KEY_HASH_MASK,
+		       sizeof(key->hash.hash));
+
 	//隧道封装相关选项
 	if (tb[TCA_FLOWER_KEY_ENC_OPTS]) {
 		ret = fl_set_enc_opt(tb, key, mask, extack);
@@ -1883,6 +1894,8 @@ static void fl_init_dissector(struct flow_dissector *dissector,
 			     FLOW_DISSECTOR_KEY_ENC_OPTS, enc_opts);
 	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
 			     FLOW_DISSECTOR_KEY_CT, ct);
+	FL_KEY_SET_IF_MASKED(mask, keys, cnt,
+			     FLOW_DISSECTOR_KEY_HASH, hash);
 
 	skb_flow_dissector_init(dissector, keys/*记录各成员的在fl_flow_key中的offset*/, cnt/*成员数*/);
 }
@@ -3164,6 +3177,11 @@ static int fl_dump_key(struct sk_buff *skb, struct net *net,
 		goto nla_put_failure;
 
 	if (fl_dump_key_flags(skb, key->control.flags, mask->control.flags))
+		goto nla_put_failure;
+
+	if (fl_dump_key_val(skb, &key->hash.hash, TCA_FLOWER_KEY_HASH,
+			     &mask->hash.hash, TCA_FLOWER_KEY_HASH_MASK,
+			     sizeof(key->hash.hash)))
 		goto nla_put_failure;
 
 	return 0;

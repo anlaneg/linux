@@ -1936,7 +1936,8 @@ int cmd_kmem(int argc, const char **argv)
 
 	//处理子命令选项
 	argc = parse_options_subcommand(argc, argv, kmem_options,
-					kmem_subcommands, kmem_usage, 0);
+					kmem_subcommands, kmem_usage,
+					PARSE_OPT_STOP_AT_NON_OPTION);
 
 	if (!argc)
 		usage_with_options(kmem_usage, kmem_options);
