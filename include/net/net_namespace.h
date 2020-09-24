@@ -99,7 +99,9 @@ struct net {
 	struct ctl_table_set	sysctls;
 #endif
 
+	//rtnetlink类型socket(kernel端）
 	struct sock 		*rtnl;			/* rtnetlink socket */
+	//genetlink类socket(kernel端）
 	struct sock		*genl_sock;
 
 	//负责同一个namespace下所有uevent事件的socket

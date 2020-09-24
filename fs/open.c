@@ -530,12 +530,14 @@ out:
 	return error;
 }
 
+/*定义chroot系统调用*/
 SYSCALL_DEFINE1(chroot, const char __user *, filename)
 {
 	struct path path;
 	int error;
 	unsigned int lookup_flags = LOOKUP_FOLLOW | LOOKUP_DIRECTORY;
 retry:
+    /*取filename对应的path*/
 	error = user_path_at(AT_FDCWD, filename, lookup_flags, &path);
 	if (error)
 		goto out;
@@ -547,6 +549,7 @@ retry:
 	error = -EPERM;
 	if (!ns_capable(current_user_ns(), CAP_SYS_CHROOT))
 		goto dput_and_out;
+	/*触发path_chroot安全钩子*/
 	error = security_path_chroot(&path);
 	if (error)
 		goto dput_and_out;

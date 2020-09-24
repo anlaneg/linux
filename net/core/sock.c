@@ -3521,6 +3521,7 @@ int proto_register(struct proto *prot, int alloc_slab)
 			goto out;
 		}
 
+		//创建prot对应的slab
 		if (req_prot_init(prot))
 			goto out_free_request_sock_slab;
 
@@ -3589,14 +3590,17 @@ EXPORT_SYMBOL(proto_unregister);
 int sock_load_diag_module(int family, int protocol)
 {
 	if (!protocol) {
+	    /*如果family未注册，则返回*/
 		if (!sock_is_registered(family))
 			return -ENOENT;
 
+		//尝试加载module
 		return request_module("net-pf-%d-proto-%d-type-%d", PF_NETLINK,
 				      NETLINK_SOCK_DIAG, family);
 	}
 
 #ifdef CONFIG_INET
+	//inet protocol检查
 	if (family == AF_INET &&
 	    protocol != IPPROTO_RAW &&
 	    protocol < MAX_INET_PROTOS &&
@@ -3629,6 +3633,7 @@ static void proto_seq_stop(struct seq_file *seq, void *v)
 	mutex_unlock(&proto_list_mutex);
 }
 
+//检查method是否不为NULL
 static char proto_method_implemented(const void *method)
 {
 	return method == NULL ? 'n' : 'y';
@@ -3650,15 +3655,19 @@ static void proto_seq_printf(struct seq_file *seq, struct proto *proto)
 
 	seq_printf(seq, "%-9s %4u %6d  %6ld   %-3s %6u   %-3s  %-10s "
 			"%2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c %2c\n",
+		   //协议名称
 		   proto->name,
 		   proto->obj_size,
 		   sock_prot_inuse_get(seq_file_net(seq), proto),
 		   sock_prot_memory_allocated(proto),
 		   sock_prot_memory_pressure(proto),
 		   proto->max_header,
+		   //是否有自用slab
 		   proto->slab == NULL ? "no" : "yes",
 		   module_name(proto->owner),
+		   //是否支持close方法
 		   proto_method_implemented(proto->close),
+		   //是否支持connect方法
 		   proto_method_implemented(proto->connect),
 		   proto_method_implemented(proto->disconnect),
 		   proto_method_implemented(proto->accept),

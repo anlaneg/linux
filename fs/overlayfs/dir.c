@@ -653,11 +653,13 @@ out:
 static int ovl_create(struct inode *dir, struct dentry *dentry, umode_t mode,
 		      bool excl)
 {
+    //创建普通文件
 	return ovl_create_object(dentry, (mode & 07777) | S_IFREG, 0, NULL);
 }
 
 static int ovl_mkdir(struct inode *dir, struct dentry *dentry, umode_t mode)
 {
+    //创建目录
 	return ovl_create_object(dentry, (mode & 07777) | S_IFDIR, 0, NULL);
 }
 
@@ -674,6 +676,7 @@ static int ovl_mknod(struct inode *dir, struct dentry *dentry, umode_t mode,
 static int ovl_symlink(struct inode *dir, struct dentry *dentry,
 		       const char *link)
 {
+    //创建链接
 	return ovl_create_object(dentry, S_IFLNK, 0, link);
 }
 
@@ -1284,6 +1287,7 @@ out:
 	return err;
 }
 
+/*overlayfs对应的inode操作集*/
 const struct inode_operations ovl_dir_inode_operations = {
 	.lookup		= ovl_lookup,
 	.mkdir		= ovl_mkdir,

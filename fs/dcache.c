@@ -2263,7 +2263,7 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 {
 	u64 hashlen = name->hash_len;
 	const unsigned char *str = name->name;
-	/*取dentry对应的hash桶头*/
+	/*通过hash表dentry_hashtable获得对应的hash桶头*/
 	struct hlist_bl_head *b = d_hash(hashlen_hash(hashlen));
 	struct hlist_bl_node *node;
 	struct dentry *dentry;
@@ -2317,6 +2317,7 @@ seqretry:
 		    /*跳过还未加入的*/
 			continue;
 
+		//有DCACBHE_OP_COMPARE标记，通过d_compare回调进行比对
 		if (unlikely(parent->d_flags & DCACHE_OP_COMPARE)) {
 			int tlen;
 			const char *tname;
@@ -2329,10 +2330,12 @@ seqretry:
 				cpu_relax();
 				goto seqretry;
 			}
+			/*通过d_compare函数，检查dentry是否与name相匹配*/
 			if (parent->d_op->d_compare(dentry,
 						    tlen, tname, name) != 0)
 				continue;
 		} else {
+		    /*直接通过名称进行匹配*/
 			if (dentry->d_name.hash_len != hashlen)
 				continue;
 			if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
@@ -2386,11 +2389,12 @@ EXPORT_SYMBOL(d_lookup);
  *
  * __d_lookup callers must be commented.
  */
-//在parent下查找name对应的dentry
+//在dentry_hashtable表中通过name查找对应的dentry
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
-	struct hlist_bl_head *b = d_hash(hash);/*在缓冲中查找*/
+	/*在dentry_hashtable哈希表中找到对应的链表头*/
+	struct hlist_bl_head *b = d_hash(hash);
 	struct hlist_bl_node *node;
 	struct dentry *found = NULL;
 	struct dentry *dentry;

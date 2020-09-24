@@ -921,8 +921,10 @@ static int proc_sys_compare(const struct dentry *dentry,
 	inode = d_inode_rcu(dentry);
 	if (!inode)
 		return 1;
+	/*名称长度不符，失配*/
 	if (name->len != len)
 		return 1;
+	/*名称不同，失配*/
 	if (memcmp(name->name, str, len))
 		return 1;
 	head = rcu_dereference(PROC_I(inode)->sysctl);

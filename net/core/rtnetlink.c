@@ -59,7 +59,7 @@
 
 struct rtnl_link {
 	rtnl_doit_func		doit;/*消息处理回调*/
-	rtnl_dumpit_func	dumpit;
+	rtnl_dumpit_func	dumpit;/*dump消息回调处理*/
 	struct module		*owner;/*消息处理对应的module*/
 	unsigned int		flags;/*注册时传入的flag*/
 	struct rcu_head		rcu;
@@ -180,7 +180,7 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 //消息回调注册(doit 请求处理回调，dumpit 消息dump回调）
 static int rtnl_register_internal(struct module *owner,
 				  int protocol/*地址族 af*/, int msgtype/*消息类型*/,
-				  rtnl_doit_func doit/*消息处理函数*/, rtnl_dumpit_func dumpit,
+				  rtnl_doit_func doit/*消息处理函数*/, rtnl_dumpit_func dumpit/*dump类消息处理*/,
 				  unsigned int flags)
 {
 	struct rtnl_link *link, *old;
@@ -226,6 +226,8 @@ static int rtnl_register_internal(struct module *owner,
 	WARN_ON(doit && link->doit && link->doit != doit);
 	if (doit)
 		link->doit = doit;
+
+	//如果dumpit存在，则设置
 	WARN_ON(dumpit && link->dumpit && link->dumpit != dumpit);
 	if (dumpit)
 		link->dumpit = dumpit;
@@ -233,7 +235,8 @@ static int rtnl_register_internal(struct module *owner,
 	link->flags |= flags;
 
 	/* publish protocol:msgtype */
-	rcu_assign_pointer(tab[msgindex], link);//设置
+	//设置
+	rcu_assign_pointer(tab[msgindex], link);
 	ret = 0;
 	if (old)
 		kfree_rcu(old, rcu);
@@ -741,6 +744,7 @@ int rtnetlink_send(struct sk_buff *skb, struct net *net, u32 pid, unsigned int g
 		refcount_inc(&skb->users);
 	netlink_broadcast(rtnl, skb, pid, group, GFP_KERNEL);
 	if (echo)
+	    /*回复单播报文给相应pid*/
 		err = netlink_unicast(rtnl, skb, pid, MSG_DONTWAIT);
 	return err;
 }
@@ -5567,9 +5571,9 @@ out:
 }
 
 /* Process one rtnetlink message. */
-//处理rtnetlink类消息
+//处理rtnetlink类请求消息
 static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息头部*/,
-			     struct netlink_ext_ack *extack)
+			     struct netlink_ext_ack *extack/*出参，出错时辅助信息*/)
 {
 	struct net *net = sock_net(skb->sk);
 	struct rtnl_link *link;
@@ -5581,6 +5585,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 	int family;
 	int type;
 
+	//消息类型校验
 	type = nlh->nlmsg_type;
 	if (type > RTM_MAX)
 		return -EOPNOTSUPP;
@@ -5593,6 +5598,9 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 		return 0;
 
 	family = ((struct rtgenmsg *)nlmsg_data(nlh))->rtgen_family;
+	/*rtnetlink的type在设置时，一般有四类操作，new为0，delete为1，get为2,set为3，故共点用两个bits
+	 * 所以这里直接采用mask=3
+	 */
 	kind = type&3;
 
 	if (kind != 2 && !netlink_net_capable(skb, CAP_NET_ADMIN))
@@ -5600,7 +5608,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 
 	rcu_read_lock();
 
-	//kind为2的需要特殊对待
+	/*针对kind=2即get类消息，且为dump方式，做特殊处理*/
 	if (kind == 2 && nlh->nlmsg_flags&NLM_F_DUMP) {
 		struct sock *rtnl;
 		rtnl_dumpit_func dumpit;
@@ -5618,6 +5626,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 		owner = link->owner;
 		dumpit = link->dumpit;
 
+		/*针对link dump消息时，更新min_dump_alloc*/
 		if (type == RTM_GETLINK - RTM_BASE)
 			min_dump_alloc = rtnl_calcit(skb, nlh);
 
@@ -5628,6 +5637,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 
 		rcu_read_unlock();
 
+		/*处理rtnetlink的dump功能*/
 		rtnl = net->rtnl;
 		if (err == 0) {
 			struct netlink_dump_control c = {
@@ -5635,6 +5645,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 				.min_dump_alloc	= min_dump_alloc,
 				.module		= owner,
 			};
+			/*触发dump开始*/
 			err = netlink_dump_start(rtnl, skb, nlh, &c);
 			/* netlink_dump_start() will keep a reference on
 			 * module if dump is still in progress.
@@ -5647,6 +5658,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 	//通过family,type查找相应的结构体，调用doit完成消息处理
 	link = rtnl_get_link(family, type);
 	if (!link || !link->doit) {
+	    /*没找到，采用PF_UNSPEC再查*/
 		family = PF_UNSPEC;
 		link = rtnl_get_link(PF_UNSPEC, type);
 		if (!link || !link->doit)
@@ -5660,13 +5672,14 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 		goto out_unlock;
 	}
 
+	/*如果link上包含无锁标记，则在调用doit时不添加rtnl_lock*/
 	flags = link->flags;
 	if (flags & RTNL_FLAG_DOIT_UNLOCKED) {
 		doit = link->doit;
 		rcu_read_unlock();
 		if (doit)
 			//解锁后，调用doit处理此消息
-			err = doit(skb, nlh, extack);
+			err = doit(skb, nlh, extack/*出参，出错时辅助信息*/);
 		module_put(owner);
 		return err;
 	}
@@ -5676,7 +5689,7 @@ static int rtnetlink_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh/*消息�
 	rtnl_lock();
 	link = rtnl_get_link(family, type);
 	if (link && link->doit)
-		err = link->doit(skb, nlh, extack);
+		err = link->doit(skb, nlh, extack/*出参，出错时辅助信息*/);
 	rtnl_unlock();
 
 	module_put(owner);
@@ -5745,6 +5758,7 @@ static struct notifier_block rtnetlink_dev_notifier = {
 static int __net_init rtnetlink_net_init(struct net *net)
 {
 	struct sock *sk;
+	//定义rt netlink kernel socket配置
 	struct netlink_kernel_cfg cfg = {
 		.groups		= RTNLGRP_MAX,
 		//rt netlink类消息接收处理
@@ -5754,10 +5768,11 @@ static int __net_init rtnetlink_net_init(struct net *net)
 		.bind		= rtnetlink_bind,
 	};
 
-	//注册NETLINK_ROUTE消息处理
+	//创建NETLINK_ROUTE netlink socket并进行消息处理
 	sk = netlink_kernel_create(net, NETLINK_ROUTE, &cfg);
 	if (!sk)
 		return -ENOMEM;
+	//设置rt netlink socket
 	net->rtnl = sk;
 	return 0;
 }

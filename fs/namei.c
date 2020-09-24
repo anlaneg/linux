@@ -126,7 +126,7 @@
 
 //依据用户空间传入的文件名称，构造filename
 struct filename *
-getname_flags(const char __user *filename, int flags, int *empty/*出参，名称是否为空*/)
+getname_flags(const char __user *filename/*文件路径名称*/, int flags, int *empty/*出参，文件路径名称是否为空*/)
 {
 	struct filename *result;
 	char *kname;
@@ -138,7 +138,7 @@ getname_flags(const char __user *filename, int flags, int *empty/*出参，名�
 		return result;
 
 	//申请一个name object
-	//注：object的大小正好为PATH_MAX，含struct filename大小
+	//注：object的大小正好为PATH_MAX，包含结构体struct filename大小
 	//所以才有下文中当发现路径名称大于EMBEDDED_NAME_MAX时，直接申请一个
 	//offsetof(struct filename, iname[1]);结构来了事,猛一看，吓我一跳。
 	result = __getname();
@@ -167,7 +167,7 @@ getname_flags(const char __user *filename, int flags, int *empty/*出参，名�
 	 * userland.
 	 */
 	if (unlikely(len == EMBEDDED_NAME_MAX)) {
-		//文件路径较长，为结构体struct filename申请新空间，原有空间全部存放路径
+		//文件路径较长，为结构体struct filename申请新专用空间，然后把obj全部用来存放路径
 		const size_t size = offsetof(struct filename, iname[1]);
 		kname = (char *)result;
 
@@ -475,6 +475,7 @@ int inode_permission(struct inode *inode, int mask)
 			return -EACCES;
 	}
 
+	/*inode权限检查*/
 	retval = do_inode_permission(inode, mask);
 	if (retval)
 		return retval;
@@ -521,11 +522,11 @@ struct nameidata {
 	struct qstr	last;
 	//记录根路径（１。为了避免'..'方式穿透根目录)
 	struct path	root;
-	//路径当前位置对应的inode
+	//当前分析位置路径对应的inode
 	struct inode	*inode; /* path.dentry.d_inode */
 	unsigned int	flags;
-	unsigned	seq, m_seq/*mount_lock锁序号*/, r_seq/*rename_lock锁序号*/;
-	int		last_type;
+	unsigned	seq/*当前分析dentry的seq*/, m_seq/*mount_lock锁序号*/, r_seq/*rename_lock锁序号*/;
+	int		last_type;/*最后一次分析的文件类型，例如LAST_NORM*/
 	unsigned	depth;
 	//临时保存的total_link_count,处理完成后需要还原
 	int		total_link_count;
@@ -535,10 +536,11 @@ struct nameidata {
 		const char *name;
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
-	//路径名称
+	//文件路径名称
 	struct filename	*name;
 	//临时保存的nameidata,处理完成后需要还原
 	struct nameidata *saved;
+	/*root dentry对应的seqlock的seq*/
 	unsigned	root_seq;
 	//锚点对应的fd
 	int		dfd;
@@ -546,11 +548,12 @@ struct nameidata {
 	umode_t		dir_mode;
 } __randomize_layout;
 
-//构造nameidata
+//构造并设置进程的nameidata
 static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 {
 	struct nameidata *old = current->nameidata;
-	p->stack = p->internal;//使stack指向p->internal
+	//使stack指向p->internal
+	p->stack = p->internal;
 	p->dfd = dfd;
 	p->name = name;
 	p->total_link_count = old ? old->total_link_count : 0;
@@ -1539,7 +1542,7 @@ static struct dentry *lookup_fast(struct nameidata *nd,
 			/* we'd been told to redo it in non-rcu mode */
 			status = d_revalidate(dentry, nd->flags);
 	} else {
-		//在parent中查找当前分析的文件或目录对应的dentry
+	    //在dentry_hashtable表中通过name查找对应的dentry
 		dentry = __d_lookup(parent, &nd->last);
 		if (unlikely(!dentry))
 			//没有查找到，返回0
@@ -2179,7 +2182,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	nd->last_type = LAST_ROOT;
 	nd->flags |= LOOKUP_PARENT;
 
-	//错误的路径名称
+	//错误的路径名称,直接退出
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
@@ -2187,11 +2190,12 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	while (*name=='/')
 		name++;
 
-	//文件或者目录名为空，返回0
+	//文件或者目录名为空，成功返回0
 	if (!*name)
 		return 0;
 
 	/* At this point we know we have a real path component. */
+	/*当前我们确定一个新的目录或文件层，先分析上一层*/
 	for(;;) {
 		const char *link;
 		u64 hash_len;
@@ -2202,14 +2206,15 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (err)
 			return err;
 
-		//计算本层name的hashcode(即hash_len)
+		//利用dentry,name计算hashcode(返回值为hash+length)
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
 		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
-		if (name[0] == '.'/*名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
+		if (name[0] == '.'/*名称首字符为'.'*/)
+		   switch (hashlen_len(hash_len)) {
 			case 2:
-				//本层名称为'..'
+				//name长度为2，且name[1]='.',即本层名称为'..'
 				if (name[1] == '.') {
 					type = LAST_DOTDOT;
 					nd->flags |= LOOKUP_JUMPED;
@@ -2219,12 +2224,13 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				//本层名称为'.'
 				type = LAST_DOT;
 		}
+
 		//普通文件情况（非'..','.'这种）
 		if (likely(type == LAST_NORM)) {
 		    //取当前位置的dentry
 			struct dentry *parent = nd->path.dentry;
 			nd->flags &= ~LOOKUP_JUMPED;
-			//如果目录需要执行d_hash,则更新this
+			//如果目录需要执行d_hash,则构造this,并触发回调，进行hash调整
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
 				err = parent->d_op->d_hash(parent, &this);
@@ -2242,7 +2248,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		nd->last.name = name;
 		nd->last_type = type;
 
-		//跳到本层文件或目录结尾
+		//跳到本层文件或目录的结尾
 		name += hashlen_len(hash_len);
 		if (!*name)
 			//到达字符串结尾
@@ -2259,6 +2265,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		//检查路径是否结束（防止文件路径以'/'号结尾）
 		if (unlikely(!*name)) {
+		    /*路径名称为空，即完成解析，注此时最后一次还未解析*/
 OK:
 			/* pathname or trailing symlink, done */
 			if (!depth) {
@@ -2271,7 +2278,7 @@ OK:
 			name = nd->stack[--depth].name;
 			link = walk_component(nd, 0);
 		} else {
-			//name不为空，即当前分析位置后仍有内容
+			//name不为空，且当前分析位置后仍有内容
 			//分析本层的目录名，并更新对应的dentry,inode
 			/* not the last component */
 			link = walk_component(nd, WALK_MORE);
@@ -2299,7 +2306,7 @@ OK:
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
 	int error;
-	//取路径字符串
+	//取文件路径名称
 	const char *s = nd->name->name;
 
 	if (!*s)
@@ -2313,11 +2320,13 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	nd->flags = flags | LOOKUP_JUMPED;
 	nd->depth = 0;
 
+	//记录seq序号
 	nd->m_seq = __read_seqcount_begin(&mount_lock.seqcount);
 	nd->r_seq = __read_seqcount_begin(&rename_lock.seqcount);
 	smp_rmb();
 
 	if (flags & LOOKUP_ROOT) {
+	    /*nd给定了root,从root开始分析*/
 		struct dentry *root = nd->root.dentry;
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
@@ -2333,14 +2342,14 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		return s;
 	}
 
+	//root没有给定，需要先确定root
 	nd->root.mnt = NULL;
 	nd->path.mnt = NULL;
 	nd->path.dentry = NULL;
 
 	/* Absolute pathname -- fetch the root (LOOKUP_IN_ROOT uses nd->dfd). */
 	if (*s == '/' && !(flags & LOOKUP_IN_ROOT)) {
-		//文件路径名称给出的是绝对路径，则设置nd->root为当前进程fs->root,
-	    //且设置当前nd->path为nd->root
+		//文件路径名称给出的是绝对路径，设置当前进程fs->root为nd->root
 		error = nd_jump_root(nd);
 		if (unlikely(error))
 			return ERR_PTR(error);
@@ -2356,7 +2365,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 			do {
 				seq = read_seqcount_begin(&fs->seq);
-				nd->path = fs->pwd;/*取进程的当前工作目录*/
+				/*取进程的当前工作目录,为当前分析位置*/
+				nd->path = fs->pwd;
 				nd->inode = nd->path.dentry->d_inode;
 				nd->seq = __read_seqcount_begin(&nd->path.dentry->d_seq);
 			} while (read_seqcount_retry(&fs->seq, seq));
@@ -2368,9 +2378,8 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		}
 	} else {
 	    //文件路径名称给出的是相对路径，且不是相对于当前工作目录，则进入
-
 		/* Caller must check execute permissions on the starting path component */
-	    //取相对的目录fd
+	    //取相对dfd对应的dentry
 		struct fd f = fdget_raw(nd->dfd);
 		struct dentry *dentry;
 
@@ -2387,7 +2396,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			return ERR_PTR(-ENOTDIR);
 		}
 
-		//找到了锚点，设置对应的path
+		//设置锚点对应的path
 		nd->path = f.file->f_path;
 		if (flags & LOOKUP_RCU) {
 			nd->inode = nd->path.dentry->d_inode;
@@ -2434,7 +2443,7 @@ static int handle_lookup_down(struct nameidata *nd)
 /* Returns 0 and nd will be valid on success; Retuns error, otherwise. */
 static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path)
 {
-	//初始化nd,准备解析文件路径
+	//初始化nd，及nd->path,准备解析文件路径
 	const char *s = path_init(nd, flags);
 	int err;
 
@@ -2468,18 +2477,22 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 }
 
 int filename_lookup(int dfd, struct filename *name, unsigned flags,
-		    struct path *path, struct path *root)
+		    struct path *path, struct path *root/*指定的root path*/)
 {
 	int retval;
 	struct nameidata nd;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+
+	/*设置root path*/
 	if (unlikely(root)) {
 		nd.root = *root;
 		flags |= LOOKUP_ROOT;
 	}
+
 	//设置当前进程的nameidata(设置要查询的路径及其相对的目录fd)
 	set_nameidata(&nd, dfd, name);
+
 	//确认(dfd,name)对应的path
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))

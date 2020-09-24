@@ -267,6 +267,7 @@ SEQCOUNT_LOCKTYPE(struct ww_mutex,	ww_mutex,	true,	&s->lock->base)
 #define __read_seqcount_begin(s)					\
 	__read_seqcount_t_begin(__seqcount_ptr(s))
 
+//读取s->sequence,如果其为偶数返回，如果其为奇数，则忙等直接s->sequence变更为偶数
 static inline unsigned __read_seqcount_t_begin(const seqcount_t *s)
 {
 	unsigned ret;
@@ -293,7 +294,7 @@ repeat:
 
 static inline unsigned raw_read_seqcount_t_begin(const seqcount_t *s)
 {
-    	//读取seq序号
+    //读取seq序号（ret返回时必为偶数）
 	unsigned ret = __read_seqcount_t_begin(s);
 	smp_rmb();
 	return ret;
@@ -310,8 +311,8 @@ static inline unsigned raw_read_seqcount_t_begin(const seqcount_t *s)
 
 static inline unsigned read_seqcount_t_begin(const seqcount_t *s)
 {
-    	//读取一个偶数并返回
 	seqcount_lockdep_reader_access(s);
+	//读取一个偶数并返回
 	return raw_read_seqcount_t_begin(s);
 }
 
@@ -403,8 +404,10 @@ static inline int __read_seqcount_t_retry(const seqcount_t *s, unsigned start)
  * Return: true if a read section retry is required, else false
  */
 #define read_seqcount_retry(s, start)					\
+    /*检查s中记录的seq是否与start不同，如不同，则返回true*/\
 	read_seqcount_t_retry(__seqcount_ptr(s), start)
 
+/*检查seqcount_t记录的seq与start是否不一致*/
 static inline int read_seqcount_t_retry(const seqcount_t *s, unsigned start)
 {
 	smp_rmb();
@@ -424,6 +427,7 @@ do {									\
 	raw_write_seqcount_t_begin(__seqcount_ptr(s));			\
 } while (0)
 
+/*将seqcount加1*/
 static inline void raw_write_seqcount_t_begin(seqcount_t *s)
 {
 	kcsan_nestable_atomic_begin();
@@ -444,8 +448,12 @@ do {									\
 		preempt_enable();					\
 } while (0)
 
+//将seqcount加1
 static inline void raw_write_seqcount_t_end(seqcount_t *s)
 {
+    //在这里解释下为什么需要在seqcount的seq加1时进行wmb操作
+    //由于seqcount_end实际上是在模拟解锁情况，即其与raw_write_seqcount_t_begin
+    //合起来保护一段内存操作，故在解锁前需要保证所有smp的读写操作均完成。
 	smp_wmb();
 	s->sequence++;
 	kcsan_nestable_atomic_end();
@@ -493,6 +501,7 @@ do {									\
 	if (__seqcount_lock_preemptible(s))				\
 		preempt_disable();					\
 									\
+	/*将seqcount执行加1*/\
 	write_seqcount_t_begin(__seqcount_ptr(s));			\
 } while (0)
 
@@ -509,6 +518,7 @@ static inline void write_seqcount_t_begin(seqcount_t *s)
  */
 #define write_seqcount_end(s)						\
 do {									\
+    /*将seqcount执行加1，由于begin时加1，end时加1，故在读看来如果seqcount为偶数，则不需要加锁*/\
 	write_seqcount_t_end(__seqcount_ptr(s));			\
 									\
 	if (__seqcount_lock_preemptible(s))				\

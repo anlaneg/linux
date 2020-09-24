@@ -62,6 +62,7 @@ struct genl_family {
 	const struct genl_ops *	ops;
 	const struct genl_multicast_group *mcgrps;
 	unsigned int		n_ops;
+	//组播组数目（mcgrps结sqqcwsg大小）
 	unsigned int		n_mcgrps;
 	unsigned int		mcgrp_offset;	/* private */
 	struct module		*module;

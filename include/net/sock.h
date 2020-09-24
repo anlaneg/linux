@@ -499,6 +499,7 @@ struct sock {
 	kuid_t			sk_uid;
 	struct pid		*sk_peer_pid;
 	const struct cred	*sk_peer_cred;
+	//收包超时时间
 	long			sk_rcvtimeo;
 	ktime_t			sk_stamp;
 #if BITS_PER_LONG==32
@@ -1158,6 +1159,7 @@ static inline void sk_prot_clear_nulls(struct sock *sk, int size)
  * socket layer -> transport layer interface
  */
 struct proto {
+    //协议自已的close方法
 	void			(*close)(struct sock *sk,
 					long timeout);
 	int			(*pre_connect)(struct sock *sk,
@@ -2259,6 +2261,7 @@ struct sk_buff *sock_dequeue_err_skb(struct sock *sk);
 
 static inline int sock_error(struct sock *sk)
 {
+    /*自sock中提供sk->sk_err,如果其非0，则返回相应的值，并将其清零*/
 	int err;
 	if (likely(!sk->sk_err))
 		return 0;

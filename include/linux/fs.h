@@ -1582,6 +1582,7 @@ struct super_block {
 	int s_stack_depth;
 
 	/* s_inode_list_lock protects s_inodes */
+	//保护s_inodes链表
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
 	struct list_head	s_inodes;	/* all inodes */ /*链表，记录此文件系统中所有inode*/
 
@@ -1901,12 +1902,11 @@ struct inode_operations {
 	//在inode下查询指定名称的dentry,最后一个参数为flags
 	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
+	//inode权限检查
 	int (*permission) (struct inode *, int);
 	struct posix_acl * (*get_acl)(struct inode *, int);
 
 	int (*readlink) (struct dentry *, char __user *,int);
-
-	//在inode下创建dentry执行
 	int (*create) (struct inode *,struct dentry *, umode_t, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
@@ -2280,7 +2280,8 @@ int sync_inode(struct inode *inode, struct writeback_control *wbc);
 int sync_inode_metadata(struct inode *inode, int wait);
 
 struct file_system_type {
-	const char *name;//文件系统名称
+    //文件系统名称
+	const char *name;
 	int fs_flags;
 #define FS_REQUIRES_DEV		1 
 #define FS_BINARY_MOUNTDATA	2
@@ -2298,8 +2299,10 @@ struct file_system_type {
 		       const char *, void *);
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
-	struct file_system_type * next;//用于将文件系统串成链表
-	struct hlist_head fs_supers;//已被实例化的super_block统一挂在这个链上
+	//用于将文件系统串成链表
+	struct file_system_type * next;
+	//已被实例化的super_block统一挂在这个链上
+	struct hlist_head fs_supers;
 
 	struct lock_class_key s_lock_key;
 	struct lock_class_key s_umount_key;
@@ -2571,14 +2574,14 @@ static inline int break_layout(struct inode *inode, bool wait)
 /* fs/open.c */
 struct audit_names;
 struct filename {
-	//指向实际的文件名
+	//指针，指向文件路径名称
 	const char		*name;	/* pointer to actual string */
-	//记录用户空间里传入的文件路径指针指针（我们从这里copy数据到的iname)
+	//记录用户空间里传入的文件路径名称的指针
 	const __user char	*uptr;	/* original userland pointer */
+	//引用计数
 	int			refcnt;
-	//注：64位系统时，这里会有空隙
 	struct audit_names	*aname;
-	//存储具体的文件名，并使name指向自已
+	//inner模式时，存储具体的文件路径名称
 	const char		iname[];
 };
 static_assert(offsetof(struct filename, iname) % sizeof(long) == 0);
@@ -2618,9 +2621,9 @@ extern void __init vfs_caches_init(void);
 
 extern struct kmem_cache *names_cachep;
 
-//自names_cachep中申请object
+//自names_cachep中申请struct filename
 #define __getname()		kmem_cache_alloc(names_cachep, GFP_KERNEL)
-//还原自names_cacep中申请的object
+//归还自names_cacep中申请的struct filename
 #define __putname(name)		kmem_cache_free(names_cachep, (void *)(name))
 
 extern struct super_block *blockdev_superblock;

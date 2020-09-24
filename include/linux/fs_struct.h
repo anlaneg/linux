@@ -7,13 +7,13 @@
 #include <linux/seqlock.h>
 
 struct fs_struct {
+    //此结构的引用计数
 	int users;
 	spinlock_t lock;
 	seqcount_spinlock_t seq;
 	int umask;
 	int in_exec;
-	//对应的root目录路径及当前进程工作目录路径
-	struct path root, pwd;
+	struct path root/*当前进程root目录路径*/, pwd/*当前进程工作目录*/;
 } __randomize_layout;
 
 extern struct kmem_cache *fs_cachep;
@@ -25,6 +25,7 @@ extern struct fs_struct *copy_fs_struct(struct fs_struct *);
 extern void free_fs_struct(struct fs_struct *);
 extern int unshare_fs_struct(void);
 
+/*取fs的root路径*/
 static inline void get_fs_root(struct fs_struct *fs, struct path *root)
 {
 	spin_lock(&fs->lock);

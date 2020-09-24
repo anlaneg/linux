@@ -14,6 +14,7 @@
  */
 void set_fs_root(struct fs_struct *fs, const struct path *path)
 {
+    /*设置fs的root路径*/
 	struct path old_root;
 
 	path_get(path);
@@ -37,7 +38,9 @@ void set_fs_pwd(struct fs_struct *fs, const struct path *path)
 
 	path_get(path);
 	spin_lock(&fs->lock);
+	//将seq执行加1
 	write_seqcount_begin(&fs->seq);
+	//执行fs->pwd修改,记录旧的值
 	old_pwd = fs->pwd;
 	fs->pwd = *path;
 	write_seqcount_end(&fs->seq);
@@ -49,12 +52,14 @@ void set_fs_pwd(struct fs_struct *fs, const struct path *path)
 
 static inline int replace_path(struct path *p, const struct path *old, const struct path *new)
 {
+    //如果p与old相等，则将p更新为new
 	if (likely(p->dentry != old->dentry || p->mnt != old->mnt))
 		return 0;
 	*p = *new;
 	return 1;
 }
 
+/*遍历所有进程，如果其fs->root或者fs->pwd与old_root相同，则将其更新为new_root*/
 void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 {
 	struct task_struct *g, *p;
@@ -62,8 +67,10 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 	int count = 0;
 
 	read_lock(&tasklist_lock);
+	/*遍历所有进程，如果其fs->root或者fs->pwd与old_root相同，则将其更新为new_root*/
 	do_each_thread(g, p) {
 		task_lock(p);
+		/*取此进程的fs*/
 		fs = p->fs;
 		if (fs) {
 			int hits = 0;
@@ -73,6 +80,7 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 			hits += replace_path(&fs->pwd, old_root, new_root);
 			write_seqcount_end(&fs->seq);
 			while (hits--) {
+			    /*hists不为0，即new root被引用，增加其引用*/
 				count++;
 				path_get(new_root);
 			}
@@ -81,10 +89,12 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 		task_unlock(p);
 	} while_each_thread(g, p);
 	read_unlock(&tasklist_lock);
+	/*相应的减少对old_root的引用*/
 	while (count--)
 		path_put(old_root);
 }
 
+/*fs_struct结构体释放函数*/
 void free_fs_struct(struct fs_struct *fs)
 {
 	path_put(&fs->root);

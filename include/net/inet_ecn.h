@@ -24,6 +24,7 @@ static inline int INET_ECN_is_ce(__u8 dsfield)
 	return (dsfield & INET_ECN_MASK) == INET_ECN_CE;
 }
 
+//ecn标记位不为0
 static inline int INET_ECN_is_not_ect(__u8 dsfield)
 {
 	return (dsfield & INET_ECN_MASK) == INET_ECN_NOT_ECT;
@@ -50,6 +51,7 @@ static inline __u8 INET_ECN_encapsulate(__u8 outer, __u8 inner)
 	return outer;
 }
 
+//为tos添加ecn_ect_0标记
 static inline void INET_ECN_xmit(struct sock *sk)
 {
 	inet_sk(sk)->tos |= INET_ECN_ECT_0;
@@ -104,6 +106,7 @@ static inline int IP_ECN_set_ect1(struct iphdr *iph)
 {
 	u32 check = (__force u32)iph->check;
 
+	/*如果tos未设置ect_0标记，则退出*/
 	if ((iph->tos & INET_ECN_MASK) != INET_ECN_ECT_0)
 		return 0;
 
@@ -257,11 +260,13 @@ static inline int INET_ECN_decapsulate(struct sk_buff *skb,
 	bool set_ce = false;
 	int rc;
 
+	/*内层tos的ecn不为0时返回rc为非零（1，2）*/
 	rc = __INET_ECN_decapsulate(outer, inner, &set_ce);
 	if (!rc) {
 		if (set_ce)
 			INET_ECN_set_ce(skb);
 		else if ((outer & INET_ECN_MASK) == INET_ECN_ECT_1)
+		    /*外层ecn标记为1*/
 			INET_ECN_set_ect1(skb);
 	}
 
@@ -275,6 +280,7 @@ static inline int IP_ECN_decapsulate(const struct iphdr *oiph,
 
 	switch (skb_protocol(skb, true)) {
 	case htons(ETH_P_IP):
+	    /*内层报文tos*/
 		inner = ip_hdr(skb)->tos;
 		break;
 	case htons(ETH_P_IPV6):
@@ -284,7 +290,7 @@ static inline int IP_ECN_decapsulate(const struct iphdr *oiph,
 		return 0;
 	}
 
-	return INET_ECN_decapsulate(skb, oiph->tos, inner);
+	return INET_ECN_decapsulate(skb, oiph->tos/*外层报文tos*/, inner);
 }
 
 static inline int IP6_ECN_decapsulate(const struct ipv6hdr *oipv6h,

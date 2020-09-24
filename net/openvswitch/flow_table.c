@@ -51,7 +51,7 @@ static u16 range_n_bytes(const struct sw_flow_key_range *range)
 }
 
 void ovs_flow_mask_key(struct sw_flow_key *dst/*出参，存放key&mask结果*/, const struct sw_flow_key *src,
-		       bool full, const struct sw_flow_mask *mask)
+		       bool full/*是否全掩码*/, const struct sw_flow_mask *mask)
 {
 	int start = full ? 0 : mask->range.start;
 	int len = full ? sizeof *dst : range_n_bytes(&mask->range);
@@ -709,8 +709,8 @@ static bool ovs_flow_cmp_unmasked_key(const struct sw_flow *flow,
 }
 
 static struct sw_flow *masked_flow_lookup(struct table_instance *ti,
-					  const struct sw_flow_key *unmasked/*未加mask的数据，加了mask的数据*/,
-					  const struct sw_flow_mask *mask,
+					  const struct sw_flow_key *unmasked/*未加mask的数据*/,
+					  const struct sw_flow_mask *mask/*要加的mask*/,
 					  u32 *n_mask_hit)
 {
 	struct sw_flow *flow;
@@ -752,6 +752,7 @@ static struct sw_flow *flow_lookup(struct flow_table *tbl,
 	if (likely(*index < ma->max)) {
 		mask = rcu_dereference_ovsl(ma->masks[*index]);
 		if (mask) {
+		    //假设采用mask,这里进行key&mask后进行value查询
 			flow = masked_flow_lookup(ti, key, mask, n_mask_hit);
 			if (flow) {
 				u64_stats_update_begin(&ma->syncp);

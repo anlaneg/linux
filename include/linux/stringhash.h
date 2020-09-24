@@ -72,6 +72,7 @@ extern unsigned int __pure full_name_hash(const void *salt, const char *, unsign
 //这一组函数，在一个u64中包含了name的hash,也包含了name的长度
 #define hashlen_hash(hashlen) ((u32)(hashlen))
 #define hashlen_len(hashlen)  ((u32)((hashlen) >> 32))
+/*使高32位保存length*/
 #define hashlen_create(hash, len) ((u64)(len)<<32 | (u32)(hash))
 
 /* Return the "hash_len" (hash and length) of a null-terminated string */

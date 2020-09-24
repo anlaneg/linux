@@ -1146,6 +1146,7 @@ int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *p,
 		else
 			return 0;
 	} else
+	    /*填充规则对应的报文统计信息*/
 		err = gnet_stats_start_copy(skb, TCA_ACT_STATS,
 					    &p->tcfa_lock, &d, TCA_ACT_PAD);
 

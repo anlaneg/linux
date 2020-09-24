@@ -553,6 +553,7 @@ static void fl_hw_update_stats(struct tcf_proto *tp, struct cls_fl_filter *f,
 	cls_flower.cookie = (unsigned long) f;
 	cls_flower.classid = f->res.classid;
 
+	/*通过回调，触发驱动进行flower状态更新*/
 	tc_setup_cb_call(block, TC_SETUP_CLSFLOWER, &cls_flower, false,
 			 rtnl_held);
 
@@ -2308,6 +2309,7 @@ static int fl_delete(struct tcf_proto *tp, void *arg, bool *last/*出参，当�
 	return err;
 }
 
+/*遍历tp对应的filter规则*/
 static void fl_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 		    bool rtnl_held)
 {
@@ -2317,11 +2319,15 @@ static void fl_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 
 	arg->count = arg->skip;
 
+	//通过hand->handle_idr遍历每个filter规则
 	idr_for_each_entry_continue_ul(&head->handle_idr, f, tmp, id) {
 		/* don't return filters that are being deleted */
 		if (!refcount_inc_not_zero(&f->refcnt))
+		    /*跳过不再引用的flower filter*/
 			continue;
+		/*采用tp dump每条flower filter规则*/
 		if (arg->fn(tp, f, arg) < 0) {
+		    /*执行walk回调失败，停止*/
 			__fl_put(f);
 			arg->stop = 1;
 			break;
@@ -2329,7 +2335,7 @@ static void fl_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 		__fl_put(f);
 		arg->count++;
 	}
-	arg->cookie = id;
+	arg->cookie = id;/*记录停止时的id*/
 }
 
 //用于获得已下发给hw的filter
@@ -2983,6 +2989,7 @@ static int fl_dump_key_enc_opt(struct sk_buff *skb,
 	return fl_dump_key_options(skb, TCA_FLOWER_KEY_ENC_OPTS_MASK, msk_opts);
 }
 
+/*将flower的key,mask存入到skb中*/
 static int fl_dump_key(struct sk_buff *skb, struct net *net,
 		       struct fl_flow_key *key, struct fl_flow_key *mask)
 {
@@ -3190,8 +3197,9 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
-static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的flow*/,
-		   struct sk_buff *skb, struct tcmsg *t, bool rtnl_held)
+/*flower filter规则dump*/
+static int fl_dump(struct net *net, struct tcf_proto *tp/*待dump的filter*/, void *fh/*待封装的flower filter规则*/,
+		   struct sk_buff *skb/*待填充的filter*/, struct tcmsg *t, bool rtnl_held)
 {
 	struct cls_fl_filter *f = fh;
 	struct nlattr *nest;
@@ -3203,17 +3211,19 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的
 
 	t->tcm_handle = f->handle;
 
+	/*flower内容将做为options存放*/
 	nest = nla_nest_start_noflag(skb, TCA_OPTIONS);
 	if (!nest)
 		goto nla_put_failure;
 
 	spin_lock(&tp->lock);
 
+	/*存放classid*/
 	if (f->res.classid &&
 	    nla_put_u32(skb, TCA_FLOWER_CLASSID, f->res.classid))
 		goto nla_put_failure_locked;
 
-	//存入key,mask
+	/*存入key,mask*/
 	key = &f->key;
 	mask = &f->mask->key;
 	skip_hw = tc_skip_hw(f->flags);
@@ -3221,7 +3231,7 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的
 	if (fl_dump_key(skb, net, key, mask))
 		goto nla_put_failure_locked;
 
-	//存入flower的标记
+	/*存入flower的标记*/
 	if (f->flags && nla_put_u32(skb, TCA_FLOWER_FLAGS, f->flags))
 		goto nla_put_failure_locked;
 
@@ -3234,12 +3244,13 @@ static int fl_dump(struct net *net, struct tcf_proto *tp, void *fh/*待封装的
 	if (nla_put_u32(skb, TCA_FLOWER_IN_HW_COUNT, f->in_hw_count))
 		goto nla_put_failure;
 
-	//dump flower对应的actions
+	/*dump flower对应的actions*/
 	if (tcf_exts_dump(skb, &f->exts))
 		goto nla_put_failure;
 
 	nla_nest_end(skb, nest);
 
+	/*dump flower的状态信息*/
 	if (tcf_exts_dump_stats(skb, &f->exts) < 0)
 		goto nla_put_failure;
 
@@ -3363,7 +3374,7 @@ static struct tcf_proto_ops cls_fl_ops __read_mostly = {
 	.reoffload	= fl_reoffload,
 	.hw_add		= fl_hw_add,
 	.hw_del		= fl_hw_del,
-	.dump		= fl_dump,
+	.dump		= fl_dump,/*dump一条给定的规则*/
 	.terse_dump	= fl_terse_dump,
 	.bind_class	= fl_bind_class,
 	.tmplt_create	= fl_tmplt_create,

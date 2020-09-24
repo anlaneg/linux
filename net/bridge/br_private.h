@@ -345,6 +345,7 @@ struct net_bridge {
 	struct list_head		port_list;
 	struct net_device		*dev;
 	struct pcpu_sw_netstats		__percpu *stats;
+	//用于标记各选项功能
 	unsigned long			options;
 	/* These fields are accessed on each packet */
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
@@ -584,6 +585,7 @@ static inline int br_afspec_cmd_to_rtm(int cmd)
 	return 0;
 }
 
+//检查桥是否开启了opt选项
 static inline int br_opt_get(const struct net_bridge *br,
 			     enum net_bridge_opts opt)
 {

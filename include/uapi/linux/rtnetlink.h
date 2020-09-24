@@ -78,10 +78,13 @@ enum {
 	RTM_GETTCLASS,
 #define RTM_GETTCLASS	RTM_GETTCLASS
 
+	//tfilter创建
 	RTM_NEWTFILTER	= 44,
 #define RTM_NEWTFILTER	RTM_NEWTFILTER
+	//tfilter删除
 	RTM_DELTFILTER,
 #define RTM_DELTFILTER	RTM_DELTFILTER
+	//tfilter获取
 	RTM_GETTFILTER,
 #define RTM_GETTFILTER	RTM_GETTFILTER
 
@@ -588,14 +591,17 @@ struct tcmsg {
 	unsigned char	tcm_family;
 	unsigned char	tcm__pad1;
 	unsigned short	tcm__pad2;
-	int		tcm_ifindex;//操作的设备编号
-	__u32		tcm_handle;//唯一确定一条filter或者qdisc
+	//操作的设备编号
+	int		tcm_ifindex;
+	//唯一确定一条filter或者qdisc
+	__u32		tcm_handle;
 	__u32		tcm_parent;
 /* tcm_block_index is used instead of tcm_parent
  * in case tcm_ifindex == TCM_IFINDEX_MAGIC_BLOCK
  */
 #define tcm_block_index tcm_parent
-	__u32		tcm_info;//优先级及报文类型
+	//优先级及报文类型
+	__u32		tcm_info;
 };
 
 /* For manipulation of filters in shared block, tcm_ifindex is set to

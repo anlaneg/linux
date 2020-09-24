@@ -145,7 +145,7 @@ static void sock_show_fdinfo(struct seq_file *m, struct file *f)
  *	Socket files have a set of 'special' operations as well as the generic file ones. These don't appear
  *	in the operation structures but are done directly via the socketcall() multiplexor.
  */
-//socket对应的文件操作集
+//系统中所有socket对应的文件操作集
 static const struct file_operations socket_file_ops = {
 	.owner =	THIS_MODULE,
 	//socket对应的fd不支持llseek函数
@@ -903,6 +903,7 @@ INDIRECT_CALLABLE_DECLARE(int inet6_recvmsg(struct socket *, struct msghdr *,
 static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
 				     int flags)
 {
+    //调用sock自已的recvmsg回调
 	return INDIRECT_CALL_INET(sock->ops->recvmsg, inet6_recvmsg,
 				  inet_recvmsg, sock, msg, msg_data_left(msg),
 				  flags);
@@ -922,6 +923,7 @@ int sock_recvmsg(struct socket *sock, struct msghdr *msg, int flags)
 {
 	int err = security_socket_recvmsg(sock, msg, msg_data_left(msg), flags);
 
+	//如果安全回调，没有触发，则直接调用各socket对应的recvmsg回调
 	return err ?: sock_recvmsg_nosec(sock, msg, flags);
 }
 EXPORT_SYMBOL(sock_recvmsg);
@@ -982,6 +984,7 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
 static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
+	//由file获得正在被操作的socket
 	struct socket *sock = file->private_data;
 	struct msghdr msg = {.msg_iter = *to,
 			     .msg_iocb = iocb};
@@ -996,6 +999,7 @@ static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	if (!iov_iter_count(to))	/* Match SYS5 behaviour */
 		return 0;
 
+	//通过sock的recvmsg函数完成内容收取
 	res = sock_recvmsg(sock, &msg, msg.msg_flags);
 	*to = msg.msg_iter;
 	return res;

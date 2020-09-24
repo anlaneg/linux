@@ -252,6 +252,7 @@ static struct pernet_operations netlink_tap_net_ops = {
 	.size = sizeof(struct netlink_tap_net),
 };
 
+//检查skb能否不被filter，返回false表示会被filter
 static bool netlink_filter_tap(const struct sk_buff *skb)
 {
 	struct sock *sk = skb->sk;
@@ -310,9 +311,11 @@ static void __netlink_deliver_tap(struct sk_buff *skb, struct netlink_tap_net *n
 	int ret;
 	struct netlink_tap *tmp;
 
+	//执行filter检查，如果被filter，则直接返回
 	if (!netlink_filter_tap(skb))
 		return;
 
+	//将此skb给每个nn->netlink_tap_all上的dev给一份
 	list_for_each_entry_rcu(tmp, &nn->netlink_tap_all, list) {
 		ret = __netlink_deliver_tap_skb(skb, tmp->dev);
 		if (unlikely(ret))
@@ -322,6 +325,7 @@ static void __netlink_deliver_tap(struct sk_buff *skb, struct netlink_tap_net *n
 
 static void netlink_deliver_tap(struct net *net, struct sk_buff *skb)
 {
+    //取此net namespace中的netlink_tap_net私有数据
 	struct netlink_tap_net *nn = net_generic(net, netlink_tap_net_id);
 
 	rcu_read_lock();
@@ -660,7 +664,7 @@ static int __netlink_create(struct net *net, struct socket *sock,
 	return 0;
 }
 
-//通过填充sock完成netlink socket的构造
+//netlink socket的创建
 static int netlink_create(struct net *net, struct socket *sock, int protocol,
 			  int kern)
 {
@@ -1150,7 +1154,7 @@ static int netlink_ioctl(struct socket *sock, unsigned int cmd,
 	return -ENOIOCTLCMD;
 }
 
-//通过portid找对应的sock
+//通过portid找对应的netlink sock
 static struct sock *netlink_getsockbyportid(struct sock *ssk, u32 portid)
 {
 	struct sock *sock;
@@ -1261,6 +1265,7 @@ int netlink_attachskb(struct sock *sk, struct sk_buff *skb,
 	return 0;
 }
 
+//将skb报文送入到netlink socket的sk_receive_queue中，等待用户态收取
 static int __netlink_sendskb(struct sock *sk, struct sk_buff *skb)
 {
 	int len = skb->len;
@@ -1310,8 +1315,9 @@ static struct sk_buff *netlink_trim(struct sk_buff *skb, gfp_t allocation)
 	return skb;
 }
 
-static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
-				  struct sock *ssk)
+//sk属于kernel,ssk发送了报文，kernel处理此报文
+static int netlink_unicast_kernel(struct sock *sk/*接收方sock*/, struct sk_buff *skb,
+				  struct sock *ssk/*发送方sock*/)
 {
 	int ret;
 	//由注册时产生的sk,获取对应的netlink_sock
@@ -1323,7 +1329,7 @@ static int netlink_unicast_kernel(struct sock *sk, struct sk_buff *skb,
 		netlink_skb_set_owner_r(skb, sk);
 		NETLINK_CB(skb).sk = ssk;
 		netlink_deliver_tap_kernel(sk, ssk, skb);
-		//交给对应的netlink子系统去处理消息
+		//回调接收方的netlink_rcv回调，交给对应的netlink子系统去处理消息
 		nlk->netlink_rcv(skb);
 		consume_skb(skb);
 	} else {
@@ -1352,8 +1358,10 @@ retry:
 		return PTR_ERR(sk);
 	}
 	if (netlink_is_kernel(sk))
-		//目标sk属于kernel,报文将被kernel接受,送给kernel
+		//目标sk属于kernel,此报文被kernel接收,送给kernel进行处理
 		return netlink_unicast_kernel(sk, skb, ssk);
+
+	//其它需要中转的报文
 
 	if (sk_filter(sk, skb)) {
 		err = skb->len;
@@ -1869,11 +1877,14 @@ static void netlink_cmsg_listen_all_nsid(struct sock *sk, struct msghdr *msg,
 		 &NETLINK_CB(skb).nsid);
 }
 
-//用户态请求kernel转发msg数据
+//用户态请求kernel处理msg数据
 static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 {
+    //取sock对应的netlink socket
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
+
+	//取netlink目的地址
 	DECLARE_SOCKADDR(struct sockaddr_nl *, addr, msg->msg_name);
 	u32 dst_portid;
 	u32 dst_group;
@@ -1893,9 +1904,13 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		err = -EINVAL;
 		if (msg->msg_namelen < sizeof(struct sockaddr_nl))
 			goto out;
+
+		//必须为netlink地址
 		if (addr->nl_family != AF_NETLINK)
 			goto out;
-		dst_portid = addr->nl_pid;//取目的进程pid,做为dst_port_id
+
+		//取目的进程pid,做为dst_port_id
+		dst_portid = addr->nl_pid;
 		dst_group = ffs(addr->nl_groups);
 		err =  -EPERM;
 		if ((dst_group || dst_portid) &&
@@ -1919,6 +1934,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	err = -EMSGSIZE;
 	if (len > sk->sk_sndbuf - 32)
 		goto out;
+	/*申请可存放len长度的netlink消息buffer*/
 	err = -ENOBUFS;
 	skb = netlink_alloc_large_skb(len, dst_group);
 	if (skb == NULL)
@@ -1929,6 +1945,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	NETLINK_CB(skb).creds	= scm.creds;
 	NETLINK_CB(skb).flags	= netlink_skb_flags;
 
+	//完成buffer复制
 	err = -EFAULT;
 	if (memcpy_from_msg(skb_put(skb, len), msg, len)) {
 		kfree_skb(skb);
@@ -1954,6 +1971,8 @@ out:
 	return err;
 }
 
+//系统调用通过recvmsg/read触发netlink消息的收取函数
+//具体收取时，会自sk->sk_receive_queue上摘取已获得的skb
 static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 			   int flags)
 {
@@ -1970,10 +1989,13 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	copied = 0;
 
-	skb = skb_recv_datagram(sk, flags, noblock, &err);
+	//自sk->sk_receive_queue上收取报文
+	skb = skb_recv_datagram(sk, flags, noblock/*是否非阻塞*/, &err);
 	if (skb == NULL)
+	    /*没有收到报文内容，跳出*/
 		goto out;
 
+	//socket上有合适的数据，准备返回
 	data_skb = skb;
 
 #ifdef CONFIG_COMPAT_NETLINK_MESSAGES
@@ -2004,6 +2026,7 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 		copied = len;
 	}
 
+	//将数据填充进缓冲区，完成收取
 	skb_reset_transport_header(data_skb);
 	err = skb_copy_datagram_msg(data_skb, 0, msg, copied);
 
@@ -2028,8 +2051,10 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 
 	skb_free_datagram(sk, skb);
 
+	/*之前已有callback在运行，本次收取了一些数据，继续dump此socket,进行上一次的收取*/
 	if (nlk->cb_running &&
 	    atomic_read(&sk->sk_rmem_alloc) <= sk->sk_rcvbuf / 2) {
+	    //再收取下一块skb
 		ret = netlink_dump(sk);
 		if (ret) {
 			sk->sk_err = -ret;
@@ -2040,9 +2065,11 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	scm_recv(sock, msg, &scm, flags);
 out:
 	netlink_rcv_wake(sk);
+	/*返回错误码或者收取到的报文长度*/
 	return err ? : copied;
 }
 
+//提供告警的data_ready函数
 static void netlink_data_ready(struct sock *sk)
 {
 	BUG();
@@ -2091,6 +2118,7 @@ __netlink_kernel_create(struct net *net, int unit, struct module *module,
 	if (!listeners)
 		goto out_sock_release;
 
+	//提供默认的data_ready通知回调，此回调会告警
 	sk->sk_data_ready = netlink_data_ready;
 	if (cfg && cfg->input)
 		//如果cfg拥有input回调，则将其命名为netlink_rcv的回调函数
@@ -2224,10 +2252,11 @@ EXPORT_SYMBOL(__nlmsg_put);
  * It looks a bit ugly.
  * It would be better to create kernel thread.
  */
-
+/*netlink处理dump请求*/
 static int netlink_dump(struct sock *sk)
 {
 	struct netlink_sock *nlk = nlk_sk(sk);
+	/*出错信息*/
 	struct netlink_ext_ack extack = {};
 	struct netlink_callback *cb;
 	struct sk_buff *skb = NULL;
@@ -2255,12 +2284,14 @@ static int netlink_dump(struct sock *sk)
 	alloc_min_size = max_t(int, cb->min_dump_alloc, NLMSG_GOODSIZE);
 
 	if (alloc_min_size < nlk->max_recvmsg_len) {
+	    /*按netlink max_recvmsg_len申请buffer*/
 		alloc_size = nlk->max_recvmsg_len;
 		skb = alloc_skb(alloc_size,
 				(GFP_KERNEL & ~__GFP_DIRECT_RECLAIM) |
 				__GFP_NOWARN | __GFP_NORETRY);
 	}
 	if (!skb) {
+	    /*按一般的min_size进行申请*/
 		alloc_size = alloc_min_size;
 		skb = alloc_skb(alloc_size, GFP_KERNEL);
 	}
@@ -2282,14 +2313,17 @@ static int netlink_dump(struct sock *sk)
 
 	if (nlk->dump_done_errno > 0) {
 		cb->extack = &extack;
+		/*将内容dump到skb中，返回errno*/
 		nlk->dump_done_errno = cb->dump(skb, cb);
 		cb->extack = NULL;
 	}
 
+	/*dump到了内容，或者dump buffer剩余长度不足以存放size*/
 	if (nlk->dump_done_errno > 0 ||
 	    skb_tailroom(skb) < nlmsg_total_size(sizeof(nlk->dump_done_errno))) {
 		mutex_unlock(nlk->cb_mutex);
 
+		/*buffer dump内容大于0，向socket发送skb*/
 		if (sk_filter(sk, skb))
 			kfree_skb(skb);
 		else
@@ -2297,6 +2331,7 @@ static int netlink_dump(struct sock *sk)
 		return 0;
 	}
 
+	/*无dump到内容，添加done标记*/
 	nlh = nlmsg_put_answer(skb, cb, NLMSG_DONE,
 			       sizeof(nlk->dump_done_errno),
 			       NLM_F_MULTI | cb->answer_flags);
@@ -2317,16 +2352,20 @@ static int netlink_dump(struct sock *sk)
 	if (sk_filter(sk, skb))
 		kfree_skb(skb);
 	else
+	    /*将skb送给socket sk*/
 		__netlink_sendskb(sk, skb);
 
+	/*dump完成，执行done回调*/
 	if (cb->done)
 		cb->done(cb);
 
+	//标记，cb运行结束
 	nlk->cb_running = false;
 	module = cb->module;
 	skb = cb->skb;
 	mutex_unlock(nlk->cb_mutex);
 	module_put(module);
+	//减少skb引用
 	consume_skb(skb);
 	return 0;
 
@@ -2336,7 +2375,7 @@ errout_skb:
 	return err;
 }
 
-int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
+int __netlink_dump_start(struct sock *ssk/*发送端socket*/, struct sk_buff *skb,
 			 const struct nlmsghdr *nlh,
 			 struct netlink_dump_control *control)
 {
@@ -2347,13 +2386,17 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 
 	refcount_inc(&skb->users);
 
+	//查找到接收端socket
 	sk = netlink_lookup(sock_net(ssk), ssk->sk_protocol, NETLINK_CB(skb).portid);
 	if (sk == NULL) {
 		ret = -ECONNREFUSED;
 		goto error_free;
 	}
 
+	//将接收端socket转换为netlink socket
 	nlk = nlk_sk(sk);
+
+	/*添加socket对应的锁*/
 	mutex_lock(nlk->cb_mutex);
 	/* A dump is in progress... */
 	if (nlk->cb_running) {
@@ -2366,6 +2409,7 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 		goto error_unlock;
 	}
 
+	//初始化netlink对应的控制块
 	cb = &nlk->cb;
 	memset(cb, 0, sizeof(*cb));
 	cb->dump = control->dump;
@@ -2379,6 +2423,7 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 	nlk2 = nlk_sk(NETLINK_CB(skb).sk);
 	cb->strict_check = !!(nlk2->flags & NETLINK_F_STRICT_CHK);
 
+	//如有必要，执行start函数
 	if (control->start) {
 		ret = control->start(cb);
 		if (ret)
@@ -2390,6 +2435,7 @@ int __netlink_dump_start(struct sock *ssk, struct sk_buff *skb,
 
 	mutex_unlock(nlk->cb_mutex);
 
+	//执行dump
 	ret = netlink_dump(sk);
 
 	sock_put(sk);
@@ -2415,7 +2461,7 @@ EXPORT_SYMBOL(__netlink_dump_start);
 
 //完成netlink消息应答
 void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误编码*/,
-		 const struct netlink_ext_ack *extack)
+		 const struct netlink_ext_ack *extack/*应答的出错信息*/)
 {
 	struct sk_buff *skb;
 	struct nlmsghdr *rep;
@@ -2424,6 +2470,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误�
 	size_t tlvlen = 0;
 	struct netlink_sock *nlk = nlk_sk(NETLINK_CB(in_skb).sk);
 	unsigned int flags = 0;
+	/*flags上必须有EXT ACT标记*/
 	bool nlk_has_extack = nlk->flags & NETLINK_F_EXT_ACK;
 
 	/* Error messages get the original request appened, unless the user
@@ -2452,6 +2499,7 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误�
 		return;
 	}
 
+	/*存入NLMSG_ERROR*/
 	rep = __nlmsg_put(skb, NETLINK_CB(in_skb).portid, nlh->nlmsg_seq,
 			  NLMSG_ERROR, payload, flags);
 	errmsg = nlmsg_data(rep);
@@ -2509,6 +2557,7 @@ int netlink_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 			goto ack;
 
 		/* Skip control messages */
+		//跳过控制类消息，直接ack
 		if (nlh->nlmsg_type < NLMSG_MIN_TYPE)
 			goto ack;
 
@@ -2782,8 +2831,10 @@ static const struct proto_ops netlink_ops = {
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	netlink_setsockopt,
 	.getsockopt =	netlink_getsockopt,
-	.sendmsg =	netlink_sendmsg,//对应系统调用sendmsg
-	.recvmsg =	netlink_recvmsg,//对应系统调用recvmsg
+	//对应系统调用sendmsg/write
+	.sendmsg =	netlink_sendmsg,
+	//对应系统调用recvmsg/read
+	.recvmsg =	netlink_recvmsg,
 	.mmap =		sock_no_mmap,
 	.sendpage =	sock_no_sendpage,
 };

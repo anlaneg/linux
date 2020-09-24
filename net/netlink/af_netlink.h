@@ -8,7 +8,7 @@
 #include <net/sock.h>
 
 /* flags */
-//属于kernel socket
+//标记netlink socket属于kernel socket
 #define NETLINK_F_KERNEL_SOCKET		0x1
 #define NETLINK_F_RECV_PKTINFO		0x2
 #define NETLINK_F_BROADCAST_SEND_ERROR	0x4
@@ -35,12 +35,15 @@ struct netlink_sock {
 	size_t			max_recvmsg_len;
 	wait_queue_head_t	wait;
 	bool			bound;
+	//如果此值为true,则收取时需要再dump一次
 	bool			cb_running;
 	int			dump_done_errno;
+	//netlink socket回调上下文
 	struct netlink_callback	cb;
 	struct mutex		*cb_mutex;
 	struct mutex		cb_def_mutex;
 	//负责收取netlink消息（每个protocol一个对应的netlink_rcv)
+	//所有发向kernel的netlink消息均均会调用此函数
 	void			(*netlink_rcv)(struct sk_buff *skb);
 	int			(*netlink_bind)(struct net *net, int group);
 	void			(*netlink_unbind)(struct net *net, int group);

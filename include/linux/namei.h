@@ -22,7 +22,7 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 /*标志查询目录*/
 #define LOOKUP_DIRECTORY	0x0002	/* require a directory */
 #define LOOKUP_AUTOMOUNT	0x0004  /* force terminal automount */
-/*容许空的路径*/
+/*容许空的文件路径名称*/
 #define LOOKUP_EMPTY		0x4000	/* accept empty path [user_... only] */
 #define LOOKUP_DOWN		0x8000	/* follow mounts in the starting point */
 #define LOOKUP_MOUNTPOINT	0x0080	/* follow mounts in the end */
@@ -39,6 +39,7 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 /* internal use only */
 #define LOOKUP_PARENT		0x0010
 #define LOOKUP_JUMPED		0x1000
+/*nd中给定了有效root*/
 #define LOOKUP_ROOT		0x2000
 #define LOOKUP_ROOT_GRABBED	0x0008
 

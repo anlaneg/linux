@@ -51,7 +51,7 @@ struct qstr {
 		    //hash值及字符串长度
 			HASH_LEN_DECLARE;
 		};
-		u64 hash_len;
+		u64 hash_len;//hashcode+length
 	};
 	const unsigned char *name;/*字符串名称*/
 };
@@ -148,11 +148,13 @@ enum dentry_d_lock_class
 struct dentry_operations {
 	int (*d_revalidate)(struct dentry *, unsigned int);
 	int (*d_weak_revalidate)(struct dentry *, unsigned int);
+	/*计算dentry下对应name的hash值*/
 	int (*d_hash)(const struct dentry *, struct qstr *);
+	/*检查dentry是否与qstr相匹配*/
 	int (*d_compare)(const struct dentry *,
-			unsigned int, const char *, const struct qstr *);
+			unsigned int/*dentry名称长度*/, const char */*dentry名称*/, const struct qstr */*待匹配名称*/);
 	int (*d_delete)(const struct dentry *);
-	//申请dentry后，此回调用于初始化dentry
+	/*申请dentry后，此回调用于初始化dentry*/
 	int (*d_init)(struct dentry *);
 	void (*d_release)(struct dentry *);
 	void (*d_prune)(struct dentry *);

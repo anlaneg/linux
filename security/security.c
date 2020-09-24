@@ -2133,6 +2133,7 @@ int security_socket_sendmsg(struct socket *sock, struct msghdr *msg, int size)
 int security_socket_recvmsg(struct socket *sock, struct msghdr *msg,
 			    int size, int flags)
 {
+    //触发socket_recvmsg回调
 	return call_int_hook(socket_recvmsg, 0, sock, msg, size, flags);
 }
 

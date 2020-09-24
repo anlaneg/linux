@@ -356,6 +356,7 @@ struct tcf_proto_ops {
 					  bool *last, bool rtnl_held,
 					  struct netlink_ext_ack *);
 	bool			(*delete_empty)(struct tcf_proto *tp);
+	/*按arg参数内容，遍历tp对应规则*/
 	void			(*walk)(struct tcf_proto *tp,
 					struct tcf_walker *arg, bool rtnl_held);
 	/*实现tp规则的再次下发*/

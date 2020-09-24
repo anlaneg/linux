@@ -60,6 +60,7 @@ static void genl_unlock_all(void)
 	up_write(&cb_lock);
 }
 
+/*负责分配netlink gernal family id*/
 static DEFINE_IDR(genl_fam_idr);
 
 /*
@@ -198,6 +199,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 
 		if (WARN_ON(grp->name[0] == '\0'))
 			return -EINVAL;
+		/*group名称中必须包含'\0'*/
 		if (WARN_ON(memchr(grp->name, '\0', GENL_NAMSIZ) == NULL))
 			return -EINVAL;
 	}
@@ -618,6 +620,7 @@ static int genl_family_rcv_msg_dumpit(const struct genl_family *family,
 			.done = genl_lock_done,
 		};
 
+		//不支持并行操作，针对genl进行加锁
 		genl_unlock();
 		err = __netlink_dump_start(net->genl_sock, skb, nlh, &c);
 		genl_lock();
@@ -630,6 +633,7 @@ static int genl_family_rcv_msg_dumpit(const struct genl_family *family,
 			.done = genl_parallel_done,
 		};
 
+		//支持并行操作
 		err = __netlink_dump_start(net->genl_sock, skb, nlh, &c);
 	}
 
@@ -687,7 +691,7 @@ out:
 	return err;
 }
 
-//采用指定的family来解析处理此msg
+//采用指定的family来解析处理general netlink消息
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
 			       struct nlmsghdr *nlh,//netlink消息头
@@ -695,7 +699,8 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 {
 	const struct genl_ops *ops;
 	struct net *net = sock_net(skb->sk);
-	struct genlmsghdr *hdr = nlmsg_data(nlh);//指向netlink消息头后
+	//指向netlink消息头后
+	struct genlmsghdr *hdr = nlmsg_data(nlh);
 	int hdrlen;
 
 	/* this family doesn't exist in this netns */
@@ -727,7 +732,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 						ops, hdrlen, net);
 }
 
-//Generic netlink消息接受
+//Generic netlink消息接收
 static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
@@ -739,6 +744,7 @@ static int genl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (family == NULL)
 		return -ENOENT;
 
+	//如果有parallel_ops，则不需要添加genl lock
 	if (!family->parallel_ops)
 		genl_lock();
 
@@ -1167,11 +1173,12 @@ static struct genl_family genl_ctrl __ro_after_init = {
 static int __net_init genl_pernet_init(struct net *net)
 {
 	struct netlink_kernel_cfg cfg = {
-		//Generic netlink类消息按收函数
+		//Generic 类netlink消息按收函数
 		.input		= genl_rcv,
 		.flags		= NL_CFG_F_NONROOT_RECV,
 	};
 
+	//创建kernel处理的netlink generic类netlink socket
 	/* we'll bump the group number right afterwards */
 	net->genl_sock = netlink_kernel_create(net, NETLINK_GENERIC, &cfg);
 

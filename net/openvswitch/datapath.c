@@ -430,6 +430,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 		skb = nskb;
 	}
 
+	/*skb报文长度必须小于65535*/
 	if (nla_attr_size(skb->len) > USHRT_MAX) {
 		err = -EFBIG;
 		goto out;
@@ -449,7 +450,7 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	else
 		hlen = skb->len;
 
-	//生成netlink消息
+	//生成合乎大小的netlink buffer消息
 	len = upcall_msg_size(upcall_info, hlen - cutlen,
 			      OVS_CB(skb)->acts_origlen);
 	user_skb = genlmsg_new(len, GFP_ATOMIC);
@@ -472,7 +473,8 @@ static int queue_userspace_packet(struct datapath *dp, struct sk_buff *skb,
 	if (err)
 		goto out;
 
-	//upcall前写入userdata，例如sflow报文上送情况就在此中，之前用户态写入
+	//在upcall之前，我们写入userdata，例如sflow报文上送情况就在此中，之前用户态写入此值，
+	//我们不关心此值内容，直接写入到用户态。
 	if (upcall_info->userdata)
 		__nla_put(user_skb, OVS_PACKET_ATTR_USERDATA,
 			  nla_len(upcall_info->userdata),
@@ -2520,8 +2522,10 @@ struct genl_family dp_vport_genl_family __ro_after_init = {
 	.module = THIS_MODULE,
 };
 
+//所有datapath的general family
 static struct genl_family * const dp_genl_families[] = {
 	&dp_datapath_genl_family,
+	/*vport相关消息*/
 	&dp_vport_genl_family,
 	&dp_flow_genl_family,
 	&dp_packet_genl_family,
@@ -2539,11 +2543,13 @@ static void dp_unregister_genl(int n_families)
 		genl_unregister_family(dp_genl_families[i]);
 }
 
+/*datapath注册general netlink*/
 static int __init dp_register_genl(void)
 {
 	int err;
 	int i;
 
+	//完成所有family注册
 	for (i = 0; i < ARRAY_SIZE(dp_genl_families); i++) {
 
 		err = genl_register_family(dp_genl_families[i]);

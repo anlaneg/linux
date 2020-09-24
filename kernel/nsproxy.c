@@ -518,6 +518,7 @@ static void commit_nsset(struct nsset *nsset)
 
 	/* We only need to commit if we have used a temporary fs_struct. */
 	if ((flags & CLONE_NEWNS) && (flags & ~CLONE_NEWNS)) {
+	    /*更新me进程的root/pwd*/
 		set_fs_root(me->fs, &nsset->fs->root);
 		set_fs_pwd(me->fs, &nsset->fs->pwd);
 	}

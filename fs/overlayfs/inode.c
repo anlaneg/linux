@@ -486,6 +486,7 @@ static int ovl_fiemap(struct inode *inode, struct fiemap_extent_info *fieinfo,
 	return err;
 }
 
+/*overlay普通文件inode操作集*/
 static const struct inode_operations ovl_file_inode_operations = {
 	.setattr	= ovl_setattr,
 	.permission	= ovl_permission,
@@ -625,7 +626,7 @@ static void ovl_map_ino(struct inode *inode, unsigned long ino, int fsid)
 }
 
 void ovl_inode_init(struct inode *inode, struct ovl_inode_params *oip,
-		    unsigned long ino, int fsid)
+		    unsigned long ino/*inode唯一编号*/, int fsid)
 {
 	struct inode *realinode;
 
@@ -642,6 +643,7 @@ void ovl_inode_init(struct inode *inode, struct ovl_inode_params *oip,
 	ovl_map_ino(inode, ino, fsid);
 }
 
+/*overlay文件系统inode填充*/
 static void ovl_fill_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
@@ -654,21 +656,25 @@ static void ovl_fill_inode(struct inode *inode, umode_t mode, dev_t rdev)
 
 	switch (mode & S_IFMT) {
 	case S_IFREG:
+	    /*普通文件*/
 		inode->i_op = &ovl_file_inode_operations;
 		inode->i_fop = &ovl_file_operations;
 		inode->i_mapping->a_ops = &ovl_aops;
 		break;
 
 	case S_IFDIR:
+	    /*目录*/
 		inode->i_op = &ovl_dir_inode_operations;
 		inode->i_fop = &ovl_dir_operations;
 		break;
 
 	case S_IFLNK:
+	    /*链接*/
 		inode->i_op = &ovl_symlink_inode_operations;
 		break;
 
 	default:
+	    /*其它类型文件*/
 		inode->i_op = &ovl_special_inode_operations;
 		init_special_inode(inode, mode, rdev);
 		break;
@@ -779,8 +785,10 @@ struct inode *ovl_new_inode(struct super_block *sb, umode_t mode, dev_t rdev)
 {
 	struct inode *inode;
 
+	//通过sb获取一个inode
 	inode = new_inode(sb);
 	if (inode)
+	    //完成inode填充
 		ovl_fill_inode(inode, mode, rdev);
 
 	return inode;
@@ -998,6 +1006,7 @@ struct inode *ovl_get_inode(struct super_block *sb,
 		ino = key->i_ino;
 	} else {
 		/* Lower hardlink that will be broken on copy up */
+	    //通过sb申请一个inode
 		inode = new_inode(sb);
 		if (!inode) {
 			err = -ENOMEM;

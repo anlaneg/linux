@@ -192,17 +192,23 @@ netlink_skb_clone(struct sk_buff *skb, gfp_t gfp_mask)
 
 
 struct netlink_callback {
+    //待填充的skb
 	struct sk_buff		*skb;
+	/*netlink消息头部*/
 	const struct nlmsghdr	*nlh;
+	/*dump输出，将数据输出到skb中*/
 	int			(*dump)(struct sk_buff * skb,
 					struct netlink_callback *cb);
+	/*dump完成后回调*/
 	int			(*done)(struct netlink_callback *cb);
 	void			*data;
 	/* the module that dump function belong to */
 	struct module		*module;
+	/*ack扩展信息，用于指明错误信息*/
 	struct netlink_ext_ack	*extack;
 	u16			family;
 	u16			answer_flags;
+	/*dump最小申请空间大小*/
 	u32			min_dump_alloc;
 	unsigned int		prev_seq, seq;
 	bool			strict_check;
@@ -226,10 +232,13 @@ struct nlmsghdr *
 __nlmsg_put(struct sk_buff *skb, u32 portid, u32 seq, int type, int len, int flags);
 
 struct netlink_dump_control {
+    /*dump之前调用*/
 	int (*start)(struct netlink_callback *);
+	/*dump回调，返回值为在skb中存入的内容长度*/
 	int (*dump)(struct sk_buff *skb, struct netlink_callback *);
 	int (*done)(struct netlink_callback *);
 	void *data;
+	/*dump对应的module*/
 	struct module *module;
 	u16 min_dump_alloc;
 };

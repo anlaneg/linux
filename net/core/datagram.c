@@ -119,6 +119,7 @@ int __skb_wait_for_more_packets(struct sock *sk, struct sk_buff_head *queue,
 		goto interrupted;
 
 	error = 0;
+	/*请求调度，超时时间为timeo*/
 	*timeo_p = schedule_timeout(*timeo_p);
 out:
 	finish_wait(sk_sleep(sk), &wait);
@@ -243,7 +244,7 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
  */
 struct sk_buff *__skb_try_recv_datagram(struct sock *sk,
 					struct sk_buff_head *queue,
-					unsigned int flags, int *off, int *err,
+					unsigned int flags, int *off, int *err/*出参，错误编号*/,
 					struct sk_buff **last)
 {
 	struct sk_buff *skb;
@@ -254,6 +255,7 @@ struct sk_buff *__skb_try_recv_datagram(struct sock *sk,
 	int error = sock_error(sk);
 
 	if (error)
+	    /*socket有错误，直接返回error值*/
 		goto no_packet;
 
 	do {
@@ -289,19 +291,22 @@ EXPORT_SYMBOL(__skb_try_recv_datagram);
 
 struct sk_buff *__skb_recv_datagram(struct sock *sk,
 				    struct sk_buff_head *sk_queue,
-				    unsigned int flags, int *off, int *err)
+				    unsigned int flags, int *off, int *err/*出参，错误编号*/)
 {
 	struct sk_buff *skb, *last;
 	long timeo;
 
+	//如果不阻塞，则超时时间为0，否则使用收超时
 	timeo = sock_rcvtimeo(sk, flags & MSG_DONTWAIT);
 
 	do {
+	    //自sk_queue上获取报文，有则直接返回
 		skb = __skb_try_recv_datagram(sk, sk_queue, flags, off, err,
 					      &last);
 		if (skb)
 			return skb;
 
+		//如果返回的为EAGAIN,则再获取一次
 		if (*err != -EAGAIN)
 			break;
 	} while (timeo &&
@@ -313,10 +318,11 @@ struct sk_buff *__skb_recv_datagram(struct sock *sk,
 EXPORT_SYMBOL(__skb_recv_datagram);
 
 struct sk_buff *skb_recv_datagram(struct sock *sk, unsigned int flags,
-				  int noblock, int *err)
+				  int noblock, int *err/*收取失败，错误编号*/)
 {
 	int off = 0;
 
+	//自socket的sk_receive_queue上收取报文(可阻塞）
 	return __skb_recv_datagram(sk, &sk->sk_receive_queue,
 				   flags | (noblock ? MSG_DONTWAIT : 0),
 				   &off, err);

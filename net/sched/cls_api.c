@@ -1921,7 +1921,7 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 }
 
 static int tcf_fill_node(struct net *net, struct sk_buff *skb,
-			 struct tcf_proto *tp, struct tcf_block *block,
+			 struct tcf_proto *tp/*待dump的filter*/, struct tcf_block *block,
 			 struct Qdisc *q, u32 parent, void *fh,
 			 u32 portid, u32 seq, u16 flags, int event,
 			 bool terse_dump, bool rtnl_held)
@@ -1930,6 +1930,7 @@ static int tcf_fill_node(struct net *net, struct sk_buff *skb,
 	struct nlmsghdr  *nlh;
 	unsigned char *b = skb_tail_pointer(skb);
 
+	/*构造nlmsghdr*/
 	nlh = nlmsg_put(skb, portid, seq, event, sizeof(*tcm), flags);
 	if (!nlh)
 		goto out_nlmsg_trim;
@@ -1945,10 +1946,14 @@ static int tcf_fill_node(struct net *net, struct sk_buff *skb,
 		tcm->tcm_block_index = block->index;
 	}
 	tcm->tcm_info = TC_H_MAKE(tp->prio, tp->protocol);
+	//存入filter名称
 	if (nla_put_string(skb, TCA_KIND, tp->ops->kind))
 		goto nla_put_failure;
+
+	//存入chain索引
 	if (nla_put_u32(skb, TCA_CHAIN, tp->chain->index))
 		goto nla_put_failure;
+
 	if (!fh) {
 		tcm->tcm_handle = 0;
 	} else if (terse_dump) {
@@ -1978,17 +1983,19 @@ cls_op_not_supp:
 static int tfilter_notify(struct net *net, struct sk_buff *oskb,
 			  struct nlmsghdr *n, struct tcf_proto *tp,
 			  struct tcf_block *block, struct Qdisc *q,
-			  u32 parent, void *fh, int event, bool unicast,
+			  u32 parent, void *fh, int event, bool unicast/*是否单播发送*/,
 			  bool rtnl_held)
 {
 	struct sk_buff *skb;
 	u32 portid = oskb ? NETLINK_CB(oskb).portid : 0;
 	int err = 0;
 
+	/*申请skb*/
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb)
 		return -ENOBUFS;
 
+	//填充tp信息
 	if (tcf_fill_node(net, skb, tp, block, q, parent, fh, portid,
 			  n->nlmsg_seq, n->nlmsg_flags, event,
 			  false, rtnl_held) <= 0) {
@@ -1997,6 +2004,7 @@ static int tfilter_notify(struct net *net, struct sk_buff *oskb,
 	}
 
 	if (unicast)
+	    /*单播完成报文发送*/
 		err = netlink_unicast(net->rtnl, skb, portid, MSG_DONTWAIT);
 	else
 		err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
@@ -2476,6 +2484,7 @@ errout_locked:
 	goto errout;
 }
 
+//kernel提供对外filter获取接口
 static int tc_get_tfilter(struct sk_buff *skb, struct nlmsghdr *n,
 			  struct netlink_ext_ack *extack)
 {
@@ -2600,28 +2609,31 @@ errout:
 
 struct tcf_dump_args {
 	struct tcf_walker w;
-	struct sk_buff *skb;
+	struct sk_buff *skb;/*dump要填充的skb*/
 	struct netlink_callback *cb;
-	struct tcf_block *block;
-	struct Qdisc *q;
+	struct tcf_block *block;/*当前dump的block*/
+	struct Qdisc *q;/*当前dump对应的qdisc*/
 	u32 parent;
-	bool terse_dump;
+	bool terse_dump;/*是否使能精简dump*/
 };
 
+//完成tp dump
 static int tcf_node_dump(struct tcf_proto *tp, void *n, struct tcf_walker *arg)
 {
 	struct tcf_dump_args *a = (void *)arg;
 	struct net *net = sock_net(a->skb->sk);
 
+	//调用tc->dump将tp dump到a->skb中
 	return tcf_fill_node(net, a->skb, tp, a->block, a->q, a->parent,
 			     n, NETLINK_CB(a->cb->skb).portid,
 			     a->cb->nlh->nlmsg_seq, NLM_F_MULTI,
 			     RTM_NEWTFILTER, a->terse_dump, true);
 }
 
+//chain上所有的tp dump
 static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
-			   struct sk_buff *skb, struct netlink_callback *cb,
-			   long index_start, long *p_index, bool terse)
+			   struct sk_buff *skb, struct netlink_callback *cb/*netlink回调上下文*/,
+			   long index_start, long *p_index/*入出参，tp起始索引*/, bool terse/*是否采用简短模式dump*/)
 {
 	struct net *net = sock_net(skb->sk);
 	struct tcf_block *block = chain->block;
@@ -2629,12 +2641,14 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 	struct tcf_proto *tp, *tp_prev;
 	struct tcf_dump_args arg;
 
+	//遍历chain上的filter,针对filter进行dump
 	for (tp = __tcf_get_next_proto(chain, NULL);
 	     tp;
 	     tp_prev = tp,
 		     tp = __tcf_get_next_proto(chain, tp),
 		     tcf_proto_put(tp_prev, true, NULL),
 		     (*p_index)++) {
+	    /*未达到dump起始位置，不处理*/
 		if (*p_index < index_start)
 			continue;
 		if (TC_H_MAJ(tcm->tcm_info) &&
@@ -2643,6 +2657,7 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 		if (TC_H_MIN(tcm->tcm_info) &&
 		    TC_H_MIN(tcm->tcm_info) != tp->protocol)
 			continue;
+		/*找到首个需要dump的位置，将cb->args[1]置为0*/
 		if (*p_index > index_start)
 			memset(&cb->args[1], 0,
 			       sizeof(cb->args) - sizeof(cb->args[0]));
@@ -2654,8 +2669,11 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 				goto errout;
 			cb->args[1] = 1;
 		}
+		/*无walk回调，忽略*/
 		if (!tp->ops->walk)
 			continue;
+
+		/*指定回调为tc filter填充函数*/
 		arg.w.fn = tcf_node_dump;
 		arg.skb = skb;
 		arg.cb = cb;
@@ -2669,6 +2687,7 @@ static bool tcf_chain_dump(struct tcf_chain *chain, struct Qdisc *q, u32 parent,
 		arg.terse_dump = terse;
 		tp->ops->walk(tp, &arg.w, true);
 		cb->args[2] = arg.w.cookie;
+		/*记录下一次dump对应的id号*/
 		cb->args[1] = arg.w.count + 1;
 		if (arg.w.stop)
 			goto errout;
@@ -2685,7 +2704,8 @@ static const struct nla_policy tcf_tfilter_dump_policy[TCA_MAX + 1] = {
 };
 
 /* called with RTNL */
-static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
+//tc提供的filter dump对外接口
+static int tc_dump_tfilter(struct sk_buff *skb/*待填充的skb*/, struct netlink_callback *cb)
 {
 	struct tcf_chain *chain, *chain_prev;
 	struct net *net = sock_net(skb->sk);
@@ -2707,6 +2727,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 	if (err)
 		return err;
 
+	/*检查是否采用简短模式进行dump*/
 	if (tca[TCA_DUMP_FLAGS]) {
 		struct nla_bitfield32 flags =
 			nla_get_bitfield32(tca[TCA_DUMP_FLAGS]);
@@ -2730,6 +2751,7 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 		struct net_device *dev;
 		unsigned long cl = 0;
 
+		//由ifindex取得对应的netdev
 		dev = __dev_get_by_index(net, tcm->tcm_ifindex);
 		if (!dev)
 			return skb->len;
@@ -2746,11 +2768,13 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 			goto out;
 		if (!cops->tcf_block)
 			goto out;
+		/*获得class分类*/
 		if (TC_H_MIN(tcm->tcm_parent)) {
 			cl = cops->find(q, tcm->tcm_parent);
 			if (cl == 0)
 				goto out;
 		}
+		/*获得class分类对应的block*/
 		block = cops->tcf_block(q, cl, NULL);
 		if (!block)
 			goto out;
@@ -2759,9 +2783,11 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 			q = NULL;
 	}
 
+	//记录起始位置
 	index_start = cb->args[0];
 	index = 0;
 
+	/*遍历block上的chain，针对chain进行dump*/
 	for (chain = __tcf_get_next_chain(block, NULL);
 	     chain;
 	     chain_prev = chain,
@@ -2780,12 +2806,14 @@ static int tc_dump_tfilter(struct sk_buff *skb, struct netlink_callback *cb)
 
 	if (tcm->tcm_ifindex == TCM_IFINDEX_MAGIC_BLOCK)
 		tcf_block_refcnt_put(block, true);
+	/*记录下次tp index*/
 	cb->args[0] = index;
 
 out:
 	/* If we did no progress, the error (EMSGSIZE) is real */
 	if (skb->len == 0 && err)
 		return err;
+	/*返回dump长度*/
 	return skb->len;
 }
 
@@ -3258,6 +3286,7 @@ void tcf_exts_change(struct tcf_exts *dst, struct tcf_exts *src)
 EXPORT_SYMBOL(tcf_exts_change);
 
 #ifdef CONFIG_NET_CLS_ACT
+/*返回第一个action*/
 static struct tc_action *tcf_exts_first_act(struct tcf_exts *exts)
 {
 	if (exts->nr_actions == 0)
@@ -3267,6 +3296,7 @@ static struct tc_action *tcf_exts_first_act(struct tcf_exts *exts)
 }
 #endif
 
+/*filter action信息dump*/
 int tcf_exts_dump(struct sk_buff *skb, struct tcf_exts *exts)
 {
 #ifdef CONFIG_NET_CLS_ACT

@@ -229,6 +229,7 @@ static int prepend_unreachable(char **buffer, int *buflen)
 	return prepend(buffer, buflen, "(unreachable)", 13);
 }
 
+/*取root path*/
 static void get_fs_root_rcu(struct fs_struct *fs, struct path *root)
 {
 	unsigned seq;
@@ -392,15 +393,18 @@ Elong:
 	return ERR_PTR(-ENAMETOOLONG);
 }
 
+/*自fs中获取root,pwd*/
 static void get_fs_root_and_pwd_rcu(struct fs_struct *fs, struct path *root,
 				    struct path *pwd)
 {
 	unsigned seq;
 
 	do {
+	    //读取fs->seq的取值
 		seq = read_seqcount_begin(&fs->seq);
 		*root = fs->root;
 		*pwd = fs->pwd;
+		//如果fs->seq中记录的值与seq已不相同，则重新读取
 	} while (read_seqcount_retry(&fs->seq, seq));
 }
 

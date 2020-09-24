@@ -3239,8 +3239,8 @@ int path_mount(const char *dev_name/*设备名称*/, struct path *path/*挂载�
 			    data_page);
 }
 
-long do_mount(const char *dev_name, const char __user *dir_name,
-		const char *type_page, unsigned long flags, void *data_page)
+long do_mount(const char *dev_name/*设备名称*/, const char __user *dir_name,
+		const char *type_page/*文件系统类型*/, unsigned long flags, void *data_page)
 {
 	struct path path;
 	int ret;
@@ -3831,6 +3831,7 @@ static void __init init_mount_tree(void)
 	struct mnt_namespace *ns;
 	struct path root;
 
+	//挂载rootfs文件系统
 	mnt = vfs_kern_mount(&rootfs_fs_type, 0, "rootfs", NULL);
 	if (IS_ERR(mnt))
 		panic("Can't create rootfs");

@@ -773,6 +773,7 @@ static loff_t ovl_remap_file_range(struct file *file_in, loff_t pos_in,
 			    remap_flags, op);
 }
 
+//overlay普通文件操作集
 const struct file_operations ovl_file_operations = {
 	.open		= ovl_open,
 	.release	= ovl_release,
@@ -792,6 +793,7 @@ const struct file_operations ovl_file_operations = {
 	.remap_file_range	= ovl_remap_file_range,
 };
 
+//提供ovl_aio_req结构体cache
 int __init ovl_aio_request_cache_init(void)
 {
 	ovl_aio_request_cachep = kmem_cache_create("ovl_aio_req",

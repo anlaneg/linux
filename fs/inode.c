@@ -230,7 +230,7 @@ static void i_callback(struct rcu_head *head)
 		free_inode_nonrcu(inode);
 }
 
-//申请并初始化inode
+//自sb中申请一个inode,并初始化
 static struct inode *alloc_inode(struct super_block *sb)
 {
 	const struct super_operations *ops = sb->s_op;

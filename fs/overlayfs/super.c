@@ -160,6 +160,7 @@ static int ovl_dentry_weak_revalidate(struct dentry *dentry, unsigned int flags)
 	return ovl_dentry_revalidate_common(dentry, flags, true);
 }
 
+//overlay的dentry操作集
 static const struct dentry_operations ovl_dentry_operations = {
 	.d_release = ovl_dentry_release,
 	.d_real = ovl_d_real,
@@ -1938,12 +1939,14 @@ out:
 	return err;
 }
 
+//overlay文件系统挂载，返回根dentry
 static struct dentry *ovl_mount(struct file_system_type *fs_type, int flags,
 				const char *dev_name, void *raw_data)
 {
 	return mount_nodev(fs_type, flags, raw_data, ovl_fill_super);
 }
 
+/*overlay文件系统*/
 static struct file_system_type ovl_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "overlay",
@@ -1963,6 +1966,7 @@ static int __init ovl_init(void)
 {
 	int err;
 
+	//提供ovl_inode结构体
 	ovl_inode_cachep = kmem_cache_create("ovl_inode",
 					     sizeof(struct ovl_inode), 0,
 					     (SLAB_RECLAIM_ACCOUNT|
@@ -1973,6 +1977,7 @@ static int __init ovl_init(void)
 
 	err = ovl_aio_request_cache_init();
 	if (!err) {
+	    /*overlay文件系统注册*/
 		err = register_filesystem(&ovl_fs_type);
 		if (!err)
 			return 0;
@@ -1986,6 +1991,7 @@ static int __init ovl_init(void)
 
 static void __exit ovl_exit(void)
 {
+    //解注册文件系统
 	unregister_filesystem(&ovl_fs_type);
 
 	/*

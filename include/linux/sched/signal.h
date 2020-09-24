@@ -582,9 +582,11 @@ extern void flush_itimer_signals(void);
 #define tasklist_empty() \
 	list_empty(&init_task.tasks)
 
+//取下一个task
 #define next_task(p) \
 	list_entry_rcu((p)->tasks.next, struct task_struct, tasks)
 
+/*遍历所有task*/
 #define for_each_process(p) \
 	for (p = &init_task ; (p = next_task(p)) != &init_task ; )
 

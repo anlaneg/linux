@@ -931,10 +931,12 @@ struct task_struct {
 	struct fs_struct		*fs;
 
 	/* Open file information: */
-	struct files_struct		*files;//记录当前进程已打开的文件列表
+	//记录当前进程已打开的文件列表
+	struct files_struct		*files;
 
 	/* Namespaces: */
-	struct nsproxy			*nsproxy;//当前进程的namespace信息
+	//当前进程的namespace信息
+	struct nsproxy			*nsproxy;
 
 	/* Signal handlers: */
 	struct signal_struct		*signal;
