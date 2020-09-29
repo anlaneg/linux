@@ -104,7 +104,7 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			__skb_push(skb, skb->mac_len);
 			bpf_compute_data_pointers(skb);
 			//调用bpf程序,返回filter_res
-			filter_res = BPF_PROG_RUN(prog->filter, skb);
+			filter_res = BPF_PROG_RUN                                                                                                                          (                                                   prog->filter, skb);
 			//使data跳过mac头
 			__skb_pull(skb, skb->mac_len);
 		} else {

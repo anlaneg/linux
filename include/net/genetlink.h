@@ -13,6 +13,7 @@
  * @name: name of the multicast group, names are per-family
  */
 struct genl_multicast_group {
+    /*组播组名称*/
 	char			name[GENL_NAMSIZ];
 };
 
@@ -64,6 +65,7 @@ struct genl_family {
 	unsigned int		n_ops;
 	//组播组数目（mcgrps结sqqcwsg大小）
 	unsigned int		n_mcgrps;
+	//为组播组分配的起始id
 	unsigned int		mcgrp_offset;	/* private */
 	struct module		*module;
 };

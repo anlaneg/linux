@@ -2524,9 +2524,11 @@ struct genl_family dp_vport_genl_family __ro_after_init = {
 
 //所有datapath的general family
 static struct genl_family * const dp_genl_families[] = {
+    /*datapath相关消息*/
 	&dp_datapath_genl_family,
 	/*vport相关消息*/
 	&dp_vport_genl_family,
+	/*flow相关消息*/
 	&dp_flow_genl_family,
 	&dp_packet_genl_family,
 	&dp_meter_genl_family,

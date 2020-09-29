@@ -28,6 +28,7 @@ static DECLARE_RWSEM(cb_lock);
 atomic_t genl_sk_destructing_cnt = ATOMIC_INIT(0);
 DECLARE_WAIT_QUEUE_HEAD(genl_sk_destructing_waitq);
 
+/*gneral netlink socket锁*/
 void genl_lock(void)
 {
 	mutex_lock(&genl_mutex);
@@ -91,9 +92,9 @@ static int genl_ctrl_event(int event, const struct genl_family *family,
 			   const struct genl_multicast_group *grp,
 			   int grp_id);
 
+//给定id,获得genl_family
 static const struct genl_family *genl_family_find_byid(unsigned int id)
 {
-	//给定id,获得genl_family
 	return idr_find(&genl_fam_idr, id);
 }
 
@@ -122,7 +123,8 @@ static const struct genl_ops *genl_get_cmd(u8 cmd,
 	return NULL;
 }
 
-static int genl_allocate_reserve_groups(int n_groups, int *first_id)
+/*申请n_groups个可连续分配groups*/
+static int genl_allocate_reserve_groups(int n_groups, int *first_id/*返回首个可分配groups*/)
 {
 	unsigned long *new_groups;
 	int start = 0;
@@ -131,6 +133,7 @@ static int genl_allocate_reserve_groups(int n_groups, int *first_id)
 	bool fits;
 
 	do {
+	    /*在mc_groups中找一个为0的bit位*/
 		if (start == 0)
 			id = find_first_zero_bit(mc_groups,
 						 mc_groups_longs *
@@ -141,18 +144,22 @@ static int genl_allocate_reserve_groups(int n_groups, int *first_id)
 						start);
 
 		fits = true;
+		/*自id开始找一块连续的可用bits*/
 		for (i = id;
 		     i < min_t(int, id + n_groups,
 			       mc_groups_longs * BITS_PER_LONG);
 		     i++) {
 			if (test_bit(i, mc_groups)) {
+			    /*自id开始，不能找到连续的可用bits，退出*/
 				start = i;
 				fits = false;
 				break;
 			}
 		}
 
+		/*需要开辟新的空间来进行mc_groups存放*/
 		if (id + n_groups > mc_groups_longs * BITS_PER_LONG) {
+		    /*新的长度*/
 			unsigned long new_longs = mc_groups_longs +
 						  BITS_TO_LONGS(n_groups);
 			size_t nlen = new_longs * sizeof(unsigned long);
@@ -164,18 +171,21 @@ static int genl_allocate_reserve_groups(int n_groups, int *first_id)
 				mc_groups = new_groups;
 				*mc_groups = mc_group_start;
 			} else {
+			    /*增大空间*/
 				new_groups = krealloc(mc_groups, nlen,
 						      GFP_KERNEL);
 				if (!new_groups)
 					return -ENOMEM;
 				mc_groups = new_groups;
+				/*使新申请的空间均初始化为0*/
 				for (i = 0; i < BITS_TO_LONGS(n_groups); i++)
 					mc_groups[mc_groups_longs + i] = 0;
 			}
 			mc_groups_longs = new_longs;
 		}
-	} while (!fits);
+	} while (!fits);/*没找到id开始可用的n_groups，则继续循环*/
 
+	/*自id开始，分配n_groups个bits*/
 	for (i = id; i < id + n_groups; i++)
 		set_bit(i, mc_groups);
 	*first_id = id;
@@ -194,6 +204,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 	if (!n_groups)
 		return 0;
 
+	/*组播组名称校验处理*/
 	for (i = 0; i < n_groups; i++) {
 		const struct genl_multicast_group *grp = &family->mcgrps[i];
 
@@ -218,12 +229,14 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		first_id = GENL_ID_PMCRAID;
 		BUG_ON(n_groups != 1);
 	} else {
+	    /*申请一组n_groups个id*/
 		groups_allocated = true;
 		err = genl_allocate_reserve_groups(n_groups, &first_id);
 		if (err)
 			return err;
 	}
 
+	/*记录此family的起始id*/
 	family->mcgrp_offset = first_id;
 
 	/* if still initializing, can't and don't need to to realloc bitmaps */
@@ -288,6 +301,7 @@ static void genl_unregister_mc_groups(const struct genl_family *family)
 	}
 }
 
+/*family ops校验*/
 static int genl_validate_ops(const struct genl_family *family)
 {
 	const struct genl_ops *ops = family->ops;
@@ -295,14 +309,18 @@ static int genl_validate_ops(const struct genl_family *family)
 	int i, j;
 
 	if (WARN_ON(n_ops && !ops))
-		return -EINVAL;//参数有误，有ops计数，但无ops指针
+	    //参数有误，有ops计数，但无ops指针
+		return -EINVAL;
 
 	if (!n_ops)
-		return 0;//如果无ops，则不再校验
+	    //如果无ops，则不再校验
+		return 0;
 
 	for (i = 0; i < n_ops; i++) {
 		if (ops[i].dumpit == NULL && ops[i].doit == NULL)
+		    /*dumpit与doit必须至少提供一个*/
 			return -EINVAL;
+		/*ops间的cmd不能重复*/
 		for (j = i + 1; j < n_ops; j++)
 			if (ops[i].cmd == ops[j].cmd)
 				return -EINVAL;
@@ -362,6 +380,7 @@ int genl_register_family(struct genl_family *family)
 	family->id = idr_alloc_cyclic(&genl_fam_idr, family,
 				      start, end + 1, GFP_KERNEL);
 	if (family->id < 0) {
+	    /*申请失败，报错*/
 		err = family->id;
 		goto errout_locked;
 	}
@@ -898,6 +917,7 @@ nla_put_failure:
 	return -EMSGSIZE;
 }
 
+/*dump所有的family*/
 static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	int n = 0;
@@ -906,6 +926,7 @@ static int ctrl_dumpfamily(struct sk_buff *skb, struct netlink_callback *cb)
 	int fams_to_skip = cb->args[0];
 	unsigned int id;
 
+	/*遍历genl_fam_idr，获得每个family信息*/
 	idr_for_each_entry(&genl_fam_idr, rt, id) {
 		if (!rt->netnsok && !net_eq(net, &init_net))
 			continue;
@@ -972,6 +993,7 @@ static const struct nla_policy ctrl_policy[CTRL_ATTR_MAX+1] = {
 				    .len = GENL_NAMSIZ - 1 },
 };
 
+/*给定名称，获取名称对应的family*/
 static int ctrl_getfamily(struct sk_buff *skb, struct genl_info *info)
 {
 	struct sk_buff *msg;
@@ -1140,6 +1162,7 @@ nla_put_failure:
 
 static const struct genl_ops genl_ctrl_ops[] = {
 	{
+	    /*给定名称，获取名称对应的family_id*/
 		.cmd		= CTRL_CMD_GETFAMILY,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit		= ctrl_getfamily,
@@ -1155,6 +1178,7 @@ static const struct genl_multicast_group genl_ctrl_groups[] = {
 	{ .name = "notify", },
 };
 
+/*netlink ctrl对应的family*/
 static struct genl_family genl_ctrl __ro_after_init = {
 	.module = THIS_MODULE,
 	.ops = genl_ctrl_ops,
