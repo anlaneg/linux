@@ -163,7 +163,7 @@ static void poll_napi(struct net_device *dev)
 	//取当前cpu
 	int cpu = smp_processor_id();
 
-	list_for_each_entry(napi, &dev->napi_list, dev_list) {
+	list_for_each_entry_rcu(napi, &dev->napi_list, dev_list) {
 		//原子设备当前此dev的poll owner为当前cpu,如果已有其它cpu设置，则跳出
 		if (cmpxchg(&napi->poll_owner, -1, cpu) == -1) {
 			//设置成功，执行poll

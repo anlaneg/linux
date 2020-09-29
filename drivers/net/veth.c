@@ -638,10 +638,10 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 		default:
 		    /*不支持的返回值*/
 			bpf_warn_invalid_xdp_action(act);
-			/* fall through */
+			fallthrough;
 		case XDP_ABORTED:
 			trace_xdp_exception(rq->dev, xdp_prog, act);
-			/* fall through */
+			fallthrough;
 		case XDP_DROP:
 		    /*要求丢包，执行丢包统计*/
 			stats->xdp_drops++;
@@ -792,10 +792,10 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 	default:
 	    //其它无效返回值，丢包
 		bpf_warn_invalid_xdp_action(act);
-		/* fall through */
+		fallthrough;
 	case XDP_ABORTED:
 		trace_xdp_exception(rq->dev, xdp_prog, act);
-		/* fall through */
+		fallthrough;
 	case XDP_DROP:
 		stats->xdp_drops++;
 		goto xdp_drop;

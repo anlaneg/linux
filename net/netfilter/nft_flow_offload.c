@@ -104,7 +104,7 @@ static void nft_flow_offload_eval(const struct nft_expr *expr,
 
 	//有helper或者seq需要调整，则不能offload
 	if (nf_ct_ext_exist(ct, NF_CT_EXT_HELPER) ||
-	    ct->status & IPS_SEQ_ADJUST)
+	    ct->status & (IPS_SEQ_ADJUST | IPS_NAT_CLASH))
 		goto out;
 
 	//ct未confirm,不能offload

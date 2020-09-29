@@ -1238,7 +1238,7 @@ static inline u16 bpf_anc_helper(const struct sock_filter *ftest)
 		BPF_ANCILLARY(RANDOM);
 		BPF_ANCILLARY(VLAN_TPID);
 		}
-		/* Fallthrough. */
+		fallthrough;
 	default:
 		return ftest->code;
 	}

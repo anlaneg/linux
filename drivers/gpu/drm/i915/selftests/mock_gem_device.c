@@ -78,6 +78,7 @@ static void mock_device_release(struct drm_device *dev)
 	drm_mode_config_cleanup(&i915->drm);
 
 out:
+	i915_params_free(&i915->params);
 	put_device(&i915->drm.pdev->dev);
 	i915->drm.pdev = NULL;
 }
@@ -117,11 +118,11 @@ static struct dev_pm_domain pm_domain = {
 
 struct drm_i915_private *mock_gem_device(void)
 {
+#if IS_ENABLED(CONFIG_IOMMU_API) && defined(CONFIG_INTEL_IOMMU)
+	static struct dev_iommu fake_iommu = { .priv = (void *)-1 };
+#endif
 	struct drm_i915_private *i915;
 	struct pci_dev *pdev;
-#if IS_ENABLED(CONFIG_IOMMU_API) && defined(CONFIG_INTEL_IOMMU)
-	struct dev_iommu iommu;
-#endif
 	int err;
 
 	pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
@@ -140,10 +141,8 @@ struct drm_i915_private *mock_gem_device(void)
 	dma_coerce_mask_and_coherent(&pdev->dev, DMA_BIT_MASK(64));
 
 #if IS_ENABLED(CONFIG_IOMMU_API) && defined(CONFIG_INTEL_IOMMU)
-	/* HACK HACK HACK to disable iommu for the fake device; force identity mapping */
-	memset(&iommu, 0, sizeof(iommu));
-	iommu.priv = (void *)-1;
-	pdev->dev.iommu = &iommu;
+	/* HACK to disable iommu for the fake device; force identity mapping */
+	pdev->dev.iommu = &fake_iommu;
 #endif
 
 	pci_set_drvdata(pdev, i915);
@@ -164,6 +163,8 @@ struct drm_i915_private *mock_gem_device(void)
 	}
 	i915->drm.pdev = pdev;
 	drmm_add_final_kfree(&i915->drm, i915);
+
+	i915_params_copy(&i915->params, &i915_modparams);
 
 	intel_runtime_pm_init_early(&i915->runtime_pm);
 

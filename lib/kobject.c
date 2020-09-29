@@ -656,9 +656,6 @@ static void __kobject_del(struct kobject *kobj)
 	struct kernfs_node *sd;
 	const struct kobj_type *ktype;
 
-	if (!kobj)
-		return;
-
 	sd = kobj->sd;
 	ktype = get_ktype(kobj);
 
@@ -689,8 +686,12 @@ static void __kobject_del(struct kobject *kobj)
  */
 void kobject_del(struct kobject *kobj)
 {
-	struct kobject *parent = kobj->parent;
+	struct kobject *parent;
 
+	if (!kobj)
+		return;
+
+	parent = kobj->parent;
 	__kobject_del(kobj);
 	kobject_put(parent);
 }

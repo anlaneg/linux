@@ -8,6 +8,7 @@ struct netns_nftables {
 	struct list_head	tables;//用于串链netfilter对应的所有tables
 	struct list_head	commit_list;
 	struct list_head	module_list;
+	struct list_head	notify_list;
 	struct mutex		commit_mutex;
 	unsigned int		base_seq;
 	u8			gencursor;//记录当前的generations(目前仅两种）

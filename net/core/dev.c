@@ -4850,10 +4850,10 @@ static u32 netif_receive_generic_xdp(struct sk_buff *skb,
 		break;
 	default:
 		bpf_warn_invalid_xdp_action(act);
-		/* fall through */
+		fallthrough;
 	case XDP_ABORTED:
 		trace_xdp_exception(skb->dev, xdp_prog, act);
-		/* fall through */
+		fallthrough;
 	case XDP_DROP://action为丢包
 	do_drop:
 		kfree_skb(skb);
@@ -6886,13 +6886,14 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 		netdev_err_once(dev, "%s() called with weight %d\n", __func__,
 				weight);
 	napi->weight = weight;
-	list_add(&napi->dev_list, &dev->napi_list);
 	napi->dev = dev;
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
 	//指明napi可调度
 	set_bit(NAPI_STATE_SCHED, &napi->state);
+	set_bit(NAPI_STATE_NPSVC, &napi->state);
+	list_add_rcu(&napi->dev_list, &dev->napi_list);
 	napi_hash_add(napi);
 }
 EXPORT_SYMBOL(netif_napi_add);
@@ -8962,7 +8963,7 @@ int dev_get_port_parent_id(struct net_device *dev,
 		if (!first.id_len)
 			first = *ppid;
 		else if (memcmp(&first, ppid, sizeof(*ppid)))
-			return -ENODATA;
+			return -EOPNOTSUPP;
 	}
 
 	return err;
@@ -9058,13 +9059,15 @@ struct bpf_xdp_link {
 	int flags;
 };
 
-static enum bpf_xdp_mode dev_xdp_mode(u32 flags)
+static enum bpf_xdp_mode dev_xdp_mode(struct net_device *dev, u32 flags)
 {
 	if (flags & XDP_FLAGS_HW_MODE)
 		return XDP_MODE_HW;
 	if (flags & XDP_FLAGS_DRV_MODE)
 		return XDP_MODE_DRV;
-	return XDP_MODE_SKB;
+	if (flags & XDP_FLAGS_SKB_MODE)
+		return XDP_MODE_SKB;
+	return dev->netdev_ops->ndo_bpf ? XDP_MODE_DRV : XDP_MODE_SKB;
 }
 
 static bpf_op_t dev_xdp_bpf_op(struct net_device *dev, enum bpf_xdp_mode mode)
@@ -9214,7 +9217,7 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 		return -EINVAL;
 	}
 
-	mode = dev_xdp_mode(flags);
+	mode = dev_xdp_mode(dev, flags);
 	/* can't replace attached link */
 	if (dev_xdp_link(dev, mode)) {
 		NL_SET_ERR_MSG(extack, "Can't replace active BPF XDP link");
@@ -9231,10 +9234,6 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 		NL_SET_ERR_MSG(extack, "Active program does not match expected");
 		return -EEXIST;
 	}
-	if ((flags & XDP_FLAGS_UPDATE_IF_NOEXIST) && cur_prog) {
-		NL_SET_ERR_MSG(extack, "XDP program already attached");
-		return -EBUSY;
-	}
 
 	/* put effective new program into new_prog */
 	if (link)
@@ -9245,6 +9244,10 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 		enum bpf_xdp_mode other_mode = mode == XDP_MODE_SKB
 					       ? XDP_MODE_DRV : XDP_MODE_SKB;
 
+		if ((flags & XDP_FLAGS_UPDATE_IF_NOEXIST) && cur_prog) {
+			NL_SET_ERR_MSG(extack, "XDP program already attached");
+			return -EBUSY;
+		}
 		if (!offload && dev_xdp_prog(dev, other_mode)) {
 			NL_SET_ERR_MSG(extack, "Native and generic XDP can't be active at the same time");
 			return -EEXIST;
@@ -9302,7 +9305,7 @@ static int dev_xdp_detach_link(struct net_device *dev,
 
 	ASSERT_RTNL();
 
-	mode = dev_xdp_mode(link->flags);
+	mode = dev_xdp_mode(dev, link->flags);
 	if (dev_xdp_link(dev, mode) != link)
 		return -EINVAL;
 
@@ -9326,12 +9329,6 @@ static void bpf_xdp_link_release(struct bpf_link *link)
 		xdp_link->dev = NULL;
 	}
 
-<<<<<<< HEAD
-	//为设备安装xdp程序
-	err = dev_xdp_install(dev, bpf_op, extack, flags, prog);
-	if (err < 0 && prog)
-		bpf_prog_put(prog);
-=======
 	rtnl_unlock();
 }
 
@@ -9384,7 +9381,6 @@ static int bpf_xdp_link_update(struct bpf_link *link, struct bpf_prog *new_prog,
 	enum bpf_xdp_mode mode;
 	bpf_op_t bpf_op;
 	int err = 0;
->>>>>>> upstream/master
 
 	rtnl_lock();
 
@@ -9405,7 +9401,7 @@ static int bpf_xdp_link_update(struct bpf_link *link, struct bpf_prog *new_prog,
 		goto out_unlock;
 	}
 
-	mode = dev_xdp_mode(xdp_link->flags);
+	mode = dev_xdp_mode(xdp_link->dev, xdp_link->flags);
 	bpf_op = dev_xdp_bpf_op(xdp_link->dev, mode);
 	err = dev_xdp_install(xdp_link->dev, mode, bpf_op, NULL,
 			      xdp_link->flags, new_prog);
@@ -9489,7 +9485,7 @@ out_put_dev:
 int dev_change_xdp_fd(struct net_device *dev, struct netlink_ext_ack *extack,
 		      int fd, int expected_fd, u32 flags)
 {
-	enum bpf_xdp_mode mode = dev_xdp_mode(flags);
+	enum bpf_xdp_mode mode = dev_xdp_mode(dev, flags);
 	struct bpf_prog *new_prog = NULL, *old_prog = NULL;
 	int err;
 

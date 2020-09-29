@@ -260,10 +260,10 @@ int peernet2id_alloc(struct net *net, struct net *peer, gfp_t gfp)
 	if (refcount_read(&net->count) == 0)
 		return NETNSA_NSID_NOT_ASSIGNED;
 
-	spin_lock(&net->nsid_lock);
+	spin_lock_bh(&net->nsid_lock);
 	id = __peernet2id(net, peer);
 	if (id >= 0) {
-		spin_unlock(&net->nsid_lock);
+		spin_unlock_bh(&net->nsid_lock);
 		return id;
 	}
 
@@ -273,12 +273,12 @@ int peernet2id_alloc(struct net *net, struct net *peer, gfp_t gfp)
 	 * just been idr_remove()'d from there in cleanup_net().
 	 */
 	if (!maybe_get_net(peer)) {
-		spin_unlock(&net->nsid_lock);
+		spin_unlock_bh(&net->nsid_lock);
 		return NETNSA_NSID_NOT_ASSIGNED;
 	}
 
 	id = alloc_netid(net, peer, -1);
-	spin_unlock(&net->nsid_lock);
+	spin_unlock_bh(&net->nsid_lock);
 
 	put_net(peer);
 	if (id < 0)
@@ -557,20 +557,20 @@ static void unhash_nsid(struct net *net, struct net *last)
 	for_each_net(tmp) {
 		int id;
 
-		spin_lock(&tmp->nsid_lock);
+		spin_lock_bh(&tmp->nsid_lock);
 		id = __peernet2id(tmp, net);
 		if (id >= 0)
 			idr_remove(&tmp->netns_ids, id);
-		spin_unlock(&tmp->nsid_lock);
+		spin_unlock_bh(&tmp->nsid_lock);
 		if (id >= 0)
 			rtnl_net_notifyid(tmp, RTM_DELNSID, id, 0, NULL,
 					  GFP_KERNEL);
 		if (tmp == last)
 			break;
 	}
-	spin_lock(&net->nsid_lock);
+	spin_lock_bh(&net->nsid_lock);
 	idr_destroy(&net->netns_ids);
-	spin_unlock(&net->nsid_lock);
+	spin_unlock_bh(&net->nsid_lock);
 }
 
 static LLIST_HEAD(cleanup_list);
@@ -797,10 +797,10 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return PTR_ERR(peer);
 	}
 
-	spin_lock(&net->nsid_lock);
+	spin_lock_bh(&net->nsid_lock);
 	if (__peernet2id(net, peer) >= 0) {
-	    //peer对应的nsid已存在
-		spin_unlock(&net->nsid_lock);
+		//peer对应的nsid已存在
+		spin_unlock_bh(&net->nsid_lock);
 		err = -EEXIST;
 		NL_SET_BAD_ATTR(extack, nla);
 		NL_SET_ERR_MSG(extack,
@@ -810,7 +810,7 @@ static int rtnl_net_newid(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	//为peer申请（或者设置指定的）nsid
 	err = alloc_netid(net, peer, nsid);
-	spin_unlock(&net->nsid_lock);
+	spin_unlock_bh(&net->nsid_lock);
 	if (err >= 0) {
 		rtnl_net_notifyid(net, RTM_NEWNSID, err, NETLINK_CB(skb).portid,
 				  nlh, GFP_KERNEL);

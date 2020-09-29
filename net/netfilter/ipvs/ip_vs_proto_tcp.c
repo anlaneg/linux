@@ -329,7 +329,7 @@ tcp_csum_check(int af, struct sk_buff *skb, struct ip_vs_protocol *pp)
 	case CHECKSUM_NONE:
 		//设备没有做checksum,软件做
 		skb->csum = skb_checksum(skb, tcphoff, skb->len - tcphoff, 0);
-		/* fall through */
+		fallthrough;
 	case CHECKSUM_COMPLETE:
 #ifdef CONFIG_IP_VS_IPV6
 		if (af == AF_INET6) {

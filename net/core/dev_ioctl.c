@@ -322,7 +322,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, unsigned int cmd)
 		err = net_hwtstamp_validate(ifr);
 		if (err)
 			return err;
-		/* fall through */
+		fallthrough;
 
 	/*
 	 *	Unknown or private ioctl
@@ -482,7 +482,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr, bool *need_c
 	case SIOCSIFTXQLEN:
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
-		/* fall through */
+		fallthrough;
 	/*
 	 *	These ioctl calls:
 	 *	- require local superuser power.
@@ -507,7 +507,7 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr, bool *need_c
 	case SIOCSHWTSTAMP:
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
-		/* fall through */
+		fallthrough;
 	case SIOCBONDSLAVEINFOQUERY:
 	case SIOCBONDINFOQUERY:
 		dev_load(net, ifr->ifr_name);

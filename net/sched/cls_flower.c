@@ -1262,8 +1262,10 @@ static int fl_set_vxlan_opt(const struct nlattr *nla, struct fl_flow_key *key,
 		return -EINVAL;
 	}
 
-	if (tb[TCA_FLOWER_KEY_ENC_OPT_VXLAN_GBP])
+	if (tb[TCA_FLOWER_KEY_ENC_OPT_VXLAN_GBP]) {
 		md->gbp = nla_get_u32(tb[TCA_FLOWER_KEY_ENC_OPT_VXLAN_GBP]);
+		md->gbp &= VXLAN_GBP_MASK;
+	}
 
 	return sizeof(*md);
 }
@@ -1308,6 +1310,7 @@ static int fl_set_erspan_opt(const struct nlattr *nla, struct fl_flow_key *key,
 		}
 		if (tb[TCA_FLOWER_KEY_ENC_OPT_ERSPAN_INDEX]) {
 			nla = tb[TCA_FLOWER_KEY_ENC_OPT_ERSPAN_INDEX];
+			memset(&md->u, 0x00, sizeof(md->u));
 			md->u.index = nla_get_be32(nla);
 		}
 	} else if (md->version == 2) {

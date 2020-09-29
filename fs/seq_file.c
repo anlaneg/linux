@@ -314,7 +314,7 @@ loff_t seq_lseek(struct file *file, loff_t offset, int whence)
 	case SEEK_CUR:
 	    /*由文件起始位置算偏移量*/
 		offset += file->f_pos;
-		/* fall through */
+		fallthrough;
 	case SEEK_SET:
 		if (offset < 0)
 			break;

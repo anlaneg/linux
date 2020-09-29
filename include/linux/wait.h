@@ -22,6 +22,7 @@ int default_wake_function(struct wait_queue_entry *wq_entry, unsigned mode, int 
 /*为等待队列成员打标记，记录上次唤醒的位置*/
 #define WQ_FLAG_BOOKMARK	0x04
 #define WQ_FLAG_CUSTOM		0x08
+#define WQ_FLAG_DONE		0x10
 
 /*
  * A single wait-queue entry structure:

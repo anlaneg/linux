@@ -307,12 +307,12 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 //注册用户态的内存
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 {
-    /*是否为不对齐的chunks*/
-	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
 	/*chunk大小及headroom大小*/
-	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
+	u32 npgs_rem, chunk_size = mr->chunk_size, headroom = mr->headroom;
+    	/*是否为不对齐的chunks*/
+	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
 	u64 npgs, addr = mr->addr, size = mr->len;
-	unsigned int chunks, chunks_per_page;
+	unsigned int chunks, chunks_rem;
 	int err;
 
 	if (chunk_size < XDP_UMEM_MIN_CHUNK_SIZE || chunk_size > PAGE_SIZE) {
@@ -344,20 +344,19 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	if ((addr + size) < addr)
 		return -EINVAL;
 
-	npgs = size >> PAGE_SHIFT;
+	npgs = div_u64_rem(size, PAGE_SIZE, &npgs_rem);
+	if (npgs_rem)
+		npgs++;
 	if (npgs > U32_MAX)
 		return -EINVAL;
 
 	/*获得chunk的数目*/
-	chunks = (unsigned int)div_u64(size, chunk_size);
+	chunks = (unsigned int)div_u64_rem(size, chunk_size, &chunks_rem);
 	if (chunks == 0)
 		return -EINVAL;
 
-	if (!unaligned_chunks) {
-		chunks_per_page = PAGE_SIZE / chunk_size;
-		if (chunks < chunks_per_page || chunks % chunks_per_page)
-			return -EINVAL;
-	}
+	if (!unaligned_chunks && chunks_rem)
+		return -EINVAL;
 
 	/*可用于存放实际报文的大小（减去headroom,减去xdp packet headroom)*/
 	if (headroom >= chunk_size - XDP_PACKET_HEADROOM)
