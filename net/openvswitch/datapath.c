@@ -187,7 +187,7 @@ struct vport *ovs_lookup_vport(const struct datapath *dp, u16 port_no)
 	//查找对应的hash桶
 	head = vport_hash_bucket(dp, port_no);
 	hlist_for_each_entry_rcu(vport, head, dp_hash_node,
-				lockdep_ovsl_is_held()) {
+				 lockdep_ovsl_is_held()) {
 		if (vport->port_no == port_no)
 			return vport;
 	}
@@ -267,7 +267,7 @@ void ovs_dp_process_packet(struct sk_buff *skb, struct sw_flow_key *key/*skb对�
 	error = ovs_execute_actions(dp, skb, sf_acts, key);
 	if (unlikely(error))
 		net_dbg_ratelimited("ovs: action execution error on datapath %s: %d\n",
-							ovs_dp_name(dp), error);
+				    ovs_dp_name(dp), error);
 
 	stats_counter = &stats->n_hit;
 
@@ -316,7 +316,7 @@ err:
 static int queue_gso_packets(struct datapath *dp, struct sk_buff *skb,
 			     const struct sw_flow_key *key,
 			     const struct dp_upcall_info *upcall_info,
-				 uint32_t cutlen)
+			     uint32_t cutlen)
 {
 	unsigned int gso_type = skb_shinfo(skb)->gso_type;
 	struct sw_flow_key later_key;
@@ -685,7 +685,7 @@ static const struct nla_policy packet_policy[OVS_PACKET_ATTR_MAX + 1] = {
 };
 
 //处理用户态发送下来的报文及action
-static const struct genl_ops dp_packet_genl_ops[] = {
+static const struct genl_small_ops dp_packet_genl_ops[] = {
 	{ .cmd = OVS_PACKET_CMD_EXECUTE,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
@@ -701,8 +701,8 @@ static struct genl_family dp_packet_genl_family __ro_after_init = {
 	.policy = packet_policy,
 	.netnsok = true,
 	.parallel_ops = true,
-	.ops = dp_packet_genl_ops,
-	.n_ops = ARRAY_SIZE(dp_packet_genl_ops),
+	.small_ops = dp_packet_genl_ops,
+	.n_small_ops = ARRAY_SIZE(dp_packet_genl_ops),
 	.module = THIS_MODULE,
 };
 
@@ -1125,11 +1125,12 @@ error:
 }
 
 /* Factor out action copy to avoid "Wframe-larger-than=1024" warning. */
-static noinline_for_stack struct sw_flow_actions *get_flow_actions(struct net *net,
-						const struct nlattr *a,
-						const struct sw_flow_key *key,
-						const struct sw_flow_mask *mask,
-						bool log)
+static noinline_for_stack
+struct sw_flow_actions *get_flow_actions(struct net *net,
+					 const struct nlattr *a,
+					 const struct sw_flow_key *key,
+					 const struct sw_flow_mask *mask,
+					 bool log)
 {
 	struct sw_flow_actions *acts;
 	struct sw_flow_key masked_key;
@@ -1429,7 +1430,8 @@ static int ovs_flow_cmd_del(struct sk_buff *skb, struct genl_info *info)
 
 			ovs_notify(&dp_flow_genl_family, reply, info);
 		} else {
-			netlink_set_err(sock_net(skb->sk)->genl_sock, 0, 0, PTR_ERR(reply));
+			netlink_set_err(sock_net(skb->sk)->genl_sock, 0, 0,
+					PTR_ERR(reply));
 		}
 	}
 
@@ -1501,7 +1503,7 @@ static const struct nla_policy flow_policy[OVS_FLOW_ATTR_MAX + 1] = {
 	[OVS_FLOW_ATTR_UFID_FLAGS] = { .type = NLA_U32 },
 };
 
-static const struct genl_ops dp_flow_genl_ops[] = {
+static const struct genl_small_ops dp_flow_genl_ops[] = {
 	{ .cmd = OVS_FLOW_CMD_NEW,//处理流的添加
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
@@ -1533,8 +1535,8 @@ static struct genl_family dp_flow_genl_family __ro_after_init = {
 	.policy = flow_policy,
 	.netnsok = true,
 	.parallel_ops = true,
-	.ops = dp_flow_genl_ops,
-	.n_ops = ARRAY_SIZE(dp_flow_genl_ops),
+	.small_ops = dp_flow_genl_ops,
+	.n_small_ops = ARRAY_SIZE(dp_flow_genl_ops),
 	.mcgrps = &ovs_dp_flow_multicast_group,
 	.n_mcgrps = 1,
 	.module = THIS_MODULE,
@@ -1563,7 +1565,7 @@ static int ovs_dp_cmd_fill_info(struct datapath *dp, struct sk_buff *skb,
 	int err;
 
 	ovs_header = genlmsg_put(skb, portid, seq, &dp_datapath_genl_family,
-				   flags, cmd);
+				 flags, cmd);
 	if (!ovs_header)
 		goto error;
 
@@ -1627,11 +1629,13 @@ static struct datapath *lookup_datapath(struct net *net,
 	return dp ? dp : ERR_PTR(-ENODEV);
 }
 
-static void ovs_dp_reset_user_features(struct sk_buff *skb, struct genl_info *info)
+static void ovs_dp_reset_user_features(struct sk_buff *skb,
+				       struct genl_info *info)
 {
 	struct datapath *dp;
 
-	dp = lookup_datapath(sock_net(skb->sk), info->userhdr, info->attrs);
+	dp = lookup_datapath(sock_net(skb->sk), info->userhdr,
+			     info->attrs);
 	if (IS_ERR(dp))
 		return;
 
@@ -1981,7 +1985,7 @@ static const struct nla_policy datapath_policy[OVS_DP_ATTR_MAX + 1] = {
 		PCPU_MIN_UNIT_SIZE / sizeof(struct mask_cache_entry)),
 };
 
-static const struct genl_ops dp_datapath_genl_ops[] = {
+static const struct genl_small_ops dp_datapath_genl_ops[] = {
 	{ .cmd = OVS_DP_CMD_NEW,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
@@ -2013,8 +2017,8 @@ static struct genl_family dp_datapath_genl_family __ro_after_init = {
 	.policy = datapath_policy,
 	.netnsok = true,
 	.parallel_ops = true,
-	.ops = dp_datapath_genl_ops,
-	.n_ops = ARRAY_SIZE(dp_datapath_genl_ops),
+	.small_ops = dp_datapath_genl_ops,
+	.n_small_ops = ARRAY_SIZE(dp_datapath_genl_ops),
 	.mcgrps = &ovs_dp_datapath_multicast_group,
 	.n_mcgrps = 1,
 	.module = THIS_MODULE,
@@ -2147,7 +2151,7 @@ static unsigned int ovs_get_max_headroom(struct datapath *dp)
 
 	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++) {
 		hlist_for_each_entry_rcu(vport, &dp->ports[i], dp_hash_node,
-					lockdep_ovsl_is_held()) {
+					 lockdep_ovsl_is_held()) {
 			dev = vport->dev;
 			dev_headroom = netdev_get_fwd_headroom(dev);
 			if (dev_headroom > max_headroom)
@@ -2165,10 +2169,11 @@ static void ovs_update_headroom(struct datapath *dp, unsigned int new_headroom)
 	int i;
 
 	dp->max_headroom = new_headroom;
-	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++)
+	for (i = 0; i < DP_VPORT_HASH_BUCKETS; i++) {
 		hlist_for_each_entry_rcu(vport, &dp->ports[i], dp_hash_node,
-					lockdep_ovsl_is_held())
+					 lockdep_ovsl_is_held())
 			netdev_set_rx_headroom(vport->dev, new_headroom);
+	}
 }
 
 //处理vport的新建netlink命令
@@ -2483,7 +2488,7 @@ static const struct nla_policy vport_policy[OVS_VPORT_ATTR_MAX + 1] = {
 	[OVS_VPORT_ATTR_NETNSID] = { .type = NLA_S32 },
 };
 
-static const struct genl_ops dp_vport_genl_ops[] = {
+static const struct genl_small_ops dp_vport_genl_ops[] = {
 	{ .cmd = OVS_VPORT_CMD_NEW,
 	  .validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 	  .flags = GENL_UNS_ADMIN_PERM, /* Requires CAP_NET_ADMIN privilege. */
@@ -2515,8 +2520,8 @@ struct genl_family dp_vport_genl_family __ro_after_init = {
 	.policy = vport_policy,
 	.netnsok = true,
 	.parallel_ops = true,
-	.ops = dp_vport_genl_ops,
-	.n_ops = ARRAY_SIZE(dp_vport_genl_ops),
+	.small_ops = dp_vport_genl_ops,
+	.n_small_ops = ARRAY_SIZE(dp_vport_genl_ops),
 	.mcgrps = &ovs_dp_vport_multicast_group,
 	.n_mcgrps = 1,
 	.module = THIS_MODULE,
@@ -2569,14 +2574,20 @@ error:
 static int __net_init ovs_init_net(struct net *net)
 {
 	struct ovs_net *ovs_net = net_generic(net, ovs_net_id);
+	int err;
 
 	INIT_LIST_HEAD(&ovs_net->dps);
 	//初始化work函数
 	INIT_WORK(&ovs_net->dp_notify_work, ovs_dp_notify_wq);
 	INIT_DELAYED_WORK(&ovs_net->masks_rebalance, ovs_dp_masks_rebalance);
+
+	err = ovs_ct_init(net);
+	if (err)
+		return err;
+
 	schedule_delayed_work(&ovs_net->masks_rebalance,
 			      msecs_to_jiffies(DP_MASKS_REBALANCE_INTERVAL));
-	return ovs_ct_init(net);
+	return 0;
 }
 
 static void __net_exit list_vports_from_net(struct net *net, struct net *dnet,
@@ -2645,7 +2656,8 @@ static int __init dp_init(void)
 {
 	int err;
 
-	BUILD_BUG_ON(sizeof(struct ovs_skb_cb) > sizeof_field(struct sk_buff, cb));
+	BUILD_BUG_ON(sizeof(struct ovs_skb_cb) >
+		     sizeof_field(struct sk_buff, cb));
 
 	pr_info("Open vSwitch switching datapath\n");
 

@@ -45,7 +45,8 @@ enum nf_inet_hooks {
 	NF_INET_FORWARD,//转发
 	NF_INET_LOCAL_OUT,//出本机报文
 	NF_INET_POST_ROUTING,//路由后
-	NF_INET_NUMHOOKS
+	NF_INET_NUMHOOKS,
+	NF_INET_INGRESS = NF_INET_NUMHOOKS,
 };
 
 enum nf_dev_hooks {

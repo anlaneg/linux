@@ -869,7 +869,7 @@ retry:
  *
  * Test to see if the opener of the socket we received the message
  * from had when the netlink socket was created and the sender of the
- * message has has the capability @cap in the user namespace @user_ns.
+ * message has the capability @cap in the user namespace @user_ns.
  */
 bool __netlink_ns_capable(const struct netlink_skb_parms *nsp,
 			struct user_namespace *user_ns, int cap)
@@ -888,7 +888,7 @@ EXPORT_SYMBOL(__netlink_ns_capable);
  *
  * Test to see if the opener of the socket we received the message
  * from had when the netlink socket was created and the sender of the
- * message has has the capability @cap in the user namespace @user_ns.
+ * message has the capability @cap in the user namespace @user_ns.
  */
 bool netlink_ns_capable(const struct sk_buff *skb,
 			struct user_namespace *user_ns, int cap)
@@ -904,7 +904,7 @@ EXPORT_SYMBOL(netlink_ns_capable);
  *
  * Test to see if the opener of the socket we received the message
  * from had when the netlink socket was created and the sender of the
- * message has has the capability @cap in all user namespaces.
+ * message has the capability @cap in all user namespaces.
  */
 bool netlink_capable(const struct sk_buff *skb, int cap)
 {
@@ -919,7 +919,7 @@ EXPORT_SYMBOL(netlink_capable);
  *
  * Test to see if the opener of the socket we received the message
  * from had when the netlink socket was created and the sender of the
- * message has has the capability @cap over the network namespace of
+ * message has the capability @cap over the network namespace of
  * the socket we received the message from.
  */
 bool netlink_net_capable(const struct sk_buff *skb, int cap)
@@ -1893,7 +1893,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	struct scm_cookie scm;
 	u32 netlink_skb_flags = 0;
 
-	if (msg->msg_flags&MSG_OOB)
+	if (msg->msg_flags & MSG_OOB)
 		return -EOPNOTSUPP;
 
 	err = scm_send(sock, msg, &scm, true);
@@ -1964,7 +1964,7 @@ static int netlink_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 		netlink_broadcast(sk, skb, dst_portid, dst_group, GFP_KERNEL);
 	}
 	//采用单播转发
-	err = netlink_unicast(sk, skb, dst_portid, msg->msg_flags&MSG_DONTWAIT);
+	err = netlink_unicast(sk, skb, dst_portid, msg->msg_flags & MSG_DONTWAIT);
 
 out:
 	scm_destroy(&scm);
@@ -1979,12 +1979,12 @@ static int netlink_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	struct scm_cookie scm;
 	struct sock *sk = sock->sk;
 	struct netlink_sock *nlk = nlk_sk(sk);
-	int noblock = flags&MSG_DONTWAIT;
+	int noblock = flags & MSG_DONTWAIT;
 	size_t copied;
 	struct sk_buff *skb, *data_skb;
 	int err, ret;
 
-	if (flags&MSG_OOB)
+	if (flags & MSG_OOB)
 		return -EOPNOTSUPP;
 
 	copied = 0;
@@ -2252,6 +2252,30 @@ EXPORT_SYMBOL(__nlmsg_put);
  * It looks a bit ugly.
  * It would be better to create kernel thread.
  */
+
+static int netlink_dump_done(struct netlink_sock *nlk, struct sk_buff *skb,
+			     struct netlink_callback *cb,
+			     struct netlink_ext_ack *extack)
+{
+	struct nlmsghdr *nlh;
+
+	nlh = nlmsg_put_answer(skb, cb, NLMSG_DONE, sizeof(nlk->dump_done_errno),
+			       NLM_F_MULTI | cb->answer_flags);
+	if (WARN_ON(!nlh))
+		return -ENOBUFS;
+
+	nl_dump_check_consistent(cb, nlh);
+	memcpy(nlmsg_data(nlh), &nlk->dump_done_errno, sizeof(nlk->dump_done_errno));
+
+	if (extack->_msg && nlk->flags & NETLINK_F_EXT_ACK) {
+		nlh->nlmsg_flags |= NLM_F_ACK_TLVS;
+		if (!nla_put_string(skb, NLMSGERR_ATTR_MSG, extack->_msg))
+			nlmsg_end(skb, nlh);
+	}
+
+	return 0;
+}
+
 /*netlink处理dump请求*/
 static int netlink_dump(struct sock *sk)
 {
@@ -2260,7 +2284,6 @@ static int netlink_dump(struct sock *sk)
 	struct netlink_ext_ack extack = {};
 	struct netlink_callback *cb;
 	struct sk_buff *skb = NULL;
-	struct nlmsghdr *nlh;
 	struct module *module;
 	int err = -ENOBUFS;
 	int alloc_min_size;
@@ -2332,22 +2355,19 @@ static int netlink_dump(struct sock *sk)
 	}
 
 	/*无dump到内容，添加done标记*/
-	nlh = nlmsg_put_answer(skb, cb, NLMSG_DONE,
-			       sizeof(nlk->dump_done_errno),
-			       NLM_F_MULTI | cb->answer_flags);
-	if (WARN_ON(!nlh))
+	if (netlink_dump_done(nlk, skb, cb, &extack))
 		goto errout_skb;
 
-	nl_dump_check_consistent(cb, nlh);
-
-	memcpy(nlmsg_data(nlh), &nlk->dump_done_errno,
-	       sizeof(nlk->dump_done_errno));
-
-	if (extack._msg && nlk->flags & NETLINK_F_EXT_ACK) {
-		nlh->nlmsg_flags |= NLM_F_ACK_TLVS;
-		if (!nla_put_string(skb, NLMSGERR_ATTR_MSG, extack._msg))
-			nlmsg_end(skb, nlh);
+#ifdef CONFIG_COMPAT_NETLINK_MESSAGES
+	/* frag_list skb's data is used for compat tasks
+	 * and the regular skb's data for normal (non-compat) tasks.
+	 * See netlink_recvmsg().
+	 */
+	if (unlikely(skb_shinfo(skb)->frag_list)) {
+		if (netlink_dump_done(nlk, skb_shinfo(skb)->frag_list, cb, &extack))
+			goto errout_skb;
 	}
+#endif
 
 	if (sk_filter(sk, skb))
 		kfree_skb(skb);
@@ -2488,6 +2508,8 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误�
 		tlvlen += nla_total_size(sizeof(u32));
 	if (nlk_has_extack && extack && extack->cookie_len)
 		tlvlen += nla_total_size(extack->cookie_len);
+	if (err && nlk_has_extack && extack && extack->policy)
+		tlvlen += netlink_policy_dump_attr_size_estimate(extack->policy);
 
 	if (tlvlen)
 		flags |= NLM_F_ACK_TLVS;
@@ -2521,6 +2543,9 @@ void netlink_ack(struct sk_buff *in_skb, struct nlmsghdr *nlh, int err/*错误�
 		if (extack->cookie_len)
 			WARN_ON(nla_put(skb, NLMSGERR_ATTR_COOKIE,
 					extack->cookie_len, extack->cookie));
+		if (extack->policy)
+			netlink_policy_dump_write_attr(skb, extack->policy,
+						       NLMSGERR_ATTR_POLICY);
 	}
 
 	nlmsg_end(skb, rep);

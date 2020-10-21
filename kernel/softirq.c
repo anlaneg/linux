@@ -491,6 +491,7 @@ void raise_softirq(unsigned int nr)
 //通过标记nr号位来标记对应软件中断触发
 void __raise_softirq_irqoff(unsigned int nr)
 {
+	lockdep_assert_irqs_disabled();
 	trace_softirq_raise(nr);
 	or_softirq_pending(1UL << nr);
 }

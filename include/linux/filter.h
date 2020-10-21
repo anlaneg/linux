@@ -1274,13 +1274,17 @@ struct bpf_sock_addr_kern {
 
 struct bpf_sock_ops_kern {
 	struct	sock *sk;
-	u32	op;
 	union {
 		u32 args[4];
 		u32 reply;
 		u32 replylong[4];
 	};
-	u32	is_fullsock;
+	struct sk_buff	*syn_skb;
+	struct sk_buff	*skb;
+	void	*skb_data_end;
+	u8	op;
+	u8	is_fullsock;
+	u8	remaining_opt_len;
 	u64	temp;			/* temp and everything after is not
 					 * initialized to 0 before calling
 					 * the BPF program. New fields that
@@ -1321,6 +1325,8 @@ int copy_bpf_fprog_from_user(struct sock_fprog *dst, sockptr_t src, int len);
 struct bpf_sk_lookup_kern {
 	u16		family;
 	u16		protocol;
+	__be16		sport;
+	u16		dport;
 	struct {
 		__be32 saddr;
 		__be32 daddr;
@@ -1329,8 +1335,6 @@ struct bpf_sk_lookup_kern {
 		const struct in6_addr *saddr;
 		const struct in6_addr *daddr;
 	} v6;
-	__be16		sport;
-	u16		dport;
 	struct sock	*selected_sk;
 	bool		no_reuseport;
 };

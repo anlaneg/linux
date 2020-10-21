@@ -217,7 +217,7 @@ struct sock *tcp_get_cookie_sock(struct sock *sk, struct sk_buff *skb,
 		sock_rps_save_rxhash(child, skb);
 
 		if (rsk_drop_req(req)) {
-			refcount_set(&req->rsk_refcnt, 2);
+			reqsk_put(req);
 			return child;
 		}
 
@@ -289,11 +289,10 @@ struct request_sock *cookie_tcp_reqsk_alloc(const struct request_sock_ops *ops,
 					    struct sock *sk,
 					    struct sk_buff *skb)
 {
+	struct tcp_request_sock *treq;
 	struct request_sock *req;
 
 #ifdef CONFIG_MPTCP
-	struct tcp_request_sock *treq;
-
 	if (sk_is_mptcp(sk))
 		ops = &mptcp_subflow_request_sock_ops;
 #endif
@@ -302,8 +301,9 @@ struct request_sock *cookie_tcp_reqsk_alloc(const struct request_sock_ops *ops,
 	if (!req)
 		return NULL;
 
-#if IS_ENABLED(CONFIG_MPTCP)
 	treq = tcp_rsk(req);
+	treq->syn_tos = TCP_SKB_CB(skb)->ip_dsfield;
+#if IS_ENABLED(CONFIG_MPTCP)
 	treq->is_mptcp = sk_is_mptcp(sk);
 	if (treq->is_mptcp) {
 		int err = mptcp_subflow_init_cookie_req(req, sk, skb);

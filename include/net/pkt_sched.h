@@ -19,13 +19,10 @@ struct qdisc_walker {
 	int	(*fn)(struct Qdisc *, unsigned long cl, struct qdisc_walker *);
 };
 
-#define QDISC_ALIGNTO		64
-#define QDISC_ALIGN(len)	(((len) + QDISC_ALIGNTO-1) & ~(QDISC_ALIGNTO-1))
-
 //取Qdisc后面各kind对应的私有结构
 static inline void *qdisc_priv(struct Qdisc *q)
 {
-	return (char *) q + QDISC_ALIGN(sizeof(struct Qdisc));
+	return &q->privdata;
 }
 
 /* 

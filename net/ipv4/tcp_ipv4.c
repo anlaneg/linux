@@ -577,7 +577,7 @@ int tcp_v4_err(struct sk_buff *skb, u32 info)
 	case TCP_SYN_SENT:
 	case TCP_SYN_RECV:
 		/* Only in fast or simultaneous open. If a fast open socket is
-		 * is already accepted it is treated as a connected one below.
+		 * already accepted it is treated as a connected one below.
 		 */
 		if (fastopen && !fastopen->sk)
 			break;
@@ -971,12 +971,14 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 			      struct flowi *fl,
 			      struct request_sock *req,
 			      struct tcp_fastopen_cookie *foc,
-			      enum tcp_synack_type synack_type)
+			      enum tcp_synack_type synack_type,
+			      struct sk_buff *syn_skb)
 {
 	const struct inet_request_sock *ireq = inet_rsk(req);
 	struct flowi4 fl4;
 	int err = -1;
 	struct sk_buff *skb;
+	u8 tos;
 
 	/* First, grab a route. */
 	//检查到对端的路由是否存在
@@ -984,7 +986,10 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 		return -1;
 
 	//按synack_type来构造synack报文
-	skb = tcp_make_synack(sk, dst, req, foc, synack_type);
+	skb = tcp_make_synack(sk, dst, req, foc, synack_type, syn_skb);
+
+	tos = sock_net(sk)->ipv4.sysctl_tcp_reflect_tos ?
+			tcp_rsk(req)->syn_tos : inet_sk(sk)->tos;
 
 	if (skb) {
 	    //如果skb构造成功，执行checksum计算
@@ -994,7 +999,8 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 		//构造ip报文，并发送pkt到ip层
 		err = ip_build_and_send_pkt(skb, sk, ireq->ir_loc_addr,
 					    ireq->ir_rmt_addr,
-					    rcu_dereference(ireq->ireq_opt));
+					    rcu_dereference(ireq->ireq_opt),
+					    tos & ~INET_ECN_MASK);
 		rcu_read_unlock();
 		err = net_xmit_eval(err);
 	}
@@ -1544,6 +1550,10 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 		inet_csk(newsk)->icsk_ext_hdr_len = inet_opt->opt.optlen;
 	newinet->inet_id = prandom_u32();
 
+	/* Set ToS of the new socket based upon the value of incoming SYN. */
+	if (sock_net(sk)->ipv4.sysctl_tcp_reflect_tos)
+		newinet->tos = tcp_rsk(req)->syn_tos & ~INET_ECN_MASK;
+
 	if (!dst) {
 		dst = inet_csk_route_child_sock(sk, newsk, req);
 		if (!dst)
@@ -1813,12 +1823,12 @@ bool tcp_add_backlog(struct sock *sk, struct sk_buff *skb)
 
 	__skb_pull(skb, hdrlen);
 	if (skb_try_coalesce(tail, skb, &fragstolen, &delta)) {
-		thtail->window = th->window;
-
 		TCP_SKB_CB(tail)->end_seq = TCP_SKB_CB(skb)->end_seq;
 
-		if (after(TCP_SKB_CB(skb)->ack_seq, TCP_SKB_CB(tail)->ack_seq))
+		if (likely(!before(TCP_SKB_CB(skb)->ack_seq, TCP_SKB_CB(tail)->ack_seq))) {
 			TCP_SKB_CB(tail)->ack_seq = TCP_SKB_CB(skb)->ack_seq;
+			thtail->window = th->window;
+		}
 
 		/* We have to update both TCP_SKB_CB(tail)->tcp_flags and
 		 * thtail->fin, so that the fast path in tcp_rcv_established()

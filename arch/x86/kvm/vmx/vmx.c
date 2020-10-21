@@ -13,7 +13,6 @@
  *   Yaniv Kamay  <yaniv@qumranet.com>
  */
 
-#include <linux/frame.h>
 #include <linux/highmem.h>
 #include <linux/hrtimer.h>
 #include <linux/kernel.h>
@@ -22,6 +21,7 @@
 #include <linux/moduleparam.h>
 #include <linux/mod_devicetable.h>
 #include <linux/mm.h>
+#include <linux/objtool.h>
 #include <linux/sched.h>
 #include <linux/sched/smt.h>
 #include <linux/slab.h>
@@ -794,6 +794,18 @@ void update_exception_bitmap(struct kvm_vcpu *vcpu)
 	 */
 	if (is_guest_mode(vcpu))
 		eb |= get_vmcs12(vcpu)->exception_bitmap;
+        else {
+		/*
+		 * If EPT is enabled, #PF is only trapped if MAXPHYADDR is mismatched
+		 * between guest and host.  In that case we only care about present
+		 * faults.  For vmcs02, however, PFEC_MASK and PFEC_MATCH are set in
+		 * prepare_vmcs02_rare.
+		 */
+		bool selective_pf_trap = enable_ept && (eb & (1u << PF_VECTOR));
+		int mask = selective_pf_trap ? PFERR_PRESENT_MASK : 0;
+		vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, mask);
+		vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, mask);
+	}
 
 	vmcs_write32(EXCEPTION_BITMAP, eb);
 }
@@ -4360,16 +4372,6 @@ static void init_vmcs(struct vcpu_vmx *vmx)
 		/* Bit[6~0] are forced to 1, writes are ignored. */
 		vmx->pt_desc.guest.output_mask = 0x7F;
 		vmcs_write64(GUEST_IA32_RTIT_CTL, 0);
-	}
-
-	/*
-	 * If EPT is enabled, #PF is only trapped if MAXPHYADDR is mismatched
-	 * between guest and host.  In that case we only care about present
-	 * faults.
-	 */
-	if (enable_ept) {
-		vmcs_write32(PAGE_FAULT_ERROR_CODE_MASK, PFERR_PRESENT_MASK);
-		vmcs_write32(PAGE_FAULT_ERROR_CODE_MATCH, PFERR_PRESENT_MASK);
 	}
 }
 

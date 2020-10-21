@@ -53,7 +53,6 @@ struct table_instance {
 	struct rcu_head rcu;
 	int node_ver;//此表使用的节点版本（借此实现表迁移时查询不加锁?rcu保证删除）
 	u32 hash_seed;//随机数seed
-	bool keep_flows;
 };
 
 struct flow_table {

@@ -105,7 +105,7 @@ struct Qdisc {
 	//队列统计信息
 	struct gnet_stats_queue	__percpu *cpu_qstats;
 	//qdisc为了内存对齐，浪费了头部padded字节的内存（记录起来方便释放）
-	int			padded;
+	int			pad;
 	refcount_t		refcnt;
 
 	/*
@@ -128,6 +128,9 @@ struct Qdisc {
 	//标明队列为空
 	bool			empty;
 	struct rcu_head		rcu;
+
+	/* private data */
+	long privdata[] ____cacheline_aligned;
 };
 
 static inline void qdisc_refcount_inc(struct Qdisc *qdisc)
@@ -1120,12 +1123,6 @@ static inline unsigned int __qdisc_queue_drop_head(struct Qdisc *sch,
 	}
 
 	return 0;
-}
-
-static inline unsigned int qdisc_queue_drop_head(struct Qdisc *sch,
-						 struct sk_buff **to_free)
-{
-	return __qdisc_queue_drop_head(sch, &sch->q, to_free);
 }
 
 //返回队列元素（不出队）

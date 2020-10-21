@@ -14,6 +14,8 @@
 #include <net/netlink.h>
 #include <net/flow_offload.h>
 
+#define NFT_MAX_HOOKS	(NF_INET_INGRESS + 1)
+
 struct module;
 
 #define NFT_JUMP_STACK_SIZE	16
@@ -146,13 +148,6 @@ static inline void nft_data_copy(u32 *dst, const struct nft_data *src,
 	if (len % NFT_REG32_SIZE)
 		dst[len / NFT_REG32_SIZE] = 0;
 	memcpy(dst, src, len);
-}
-
-static inline void nft_data_debug(const struct nft_data *data)
-{
-	pr_debug("data[0]=%x data[1]=%x data[2]=%x data[3]=%x\n",
-		 data->data[0], data->data[1],
-		 data->data[2], data->data[3]);
 }
 
 /**
@@ -968,6 +963,8 @@ struct nft_chain {
 					bound:1,
 					genmask:2;
 	char				*name;//chain名称
+	u16				udlen;
+	u8				*udata;
 
 	/* Only used during control plane commit phase: */
 	struct nft_rule			**rules_next;
@@ -1005,7 +1002,7 @@ struct nft_chain_type {
 	//每个hook占一位（按编号占位），用于标明hook回调是否提供
 	unsigned int			hook_mask;
 	//各hook点回调函数指针
-	nf_hookfn			*hooks[NF_MAX_HOOKS];
+	nf_hookfn			*hooks[NFT_MAX_HOOKS];
 	//hook点函数回调注册时调用
 	int				(*ops_register)(struct net *net, const struct nf_hook_ops *ops);
 	//hook点函数回调解注册时调用
@@ -1107,7 +1104,15 @@ struct nft_table {
 					flags:8,
 					genmask:2;//记录generations mask,用于标记生效情况
 	char				*name;//netfilter 表名称
+	u16				udlen;
+	u8				*udata;
 };
+
+static inline bool nft_base_chain_netdev(int family, u32 hooknum)
+{
+	return family == NFPROTO_NETDEV ||
+	       (family == NFPROTO_INET && hooknum == NF_INET_INGRESS);
+}
 
 void nft_register_chain_type(const struct nft_chain_type *);
 void nft_unregister_chain_type(const struct nft_chain_type *);
@@ -1149,6 +1154,8 @@ struct nft_object {
 	u32				genmask:2,
 					use:30;
 	u64				handle;
+	u16				udlen;
+	u8				*udata;
 	/* runtime data below here */
 	//object对应的ops
 	const struct nft_object_ops	*ops ____cacheline_aligned;

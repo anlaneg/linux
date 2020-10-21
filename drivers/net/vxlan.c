@@ -195,8 +195,9 @@ static inline struct vxlan_rdst *first_remote_rtnl(struct vxlan_fdb *fdb)
 	return list_first_entry(&fdb->remotes, struct vxlan_rdst, list);
 }
 
-/* Find VXLAN socket based on network namespace, address family and UDP port
- * and enabled unshareable flags.
+/* Find VXLAN socket based on network namespace, address family, UDP port,
+ * enabled unshareable flags and socket device binding (see l3mdev with
+ * non-default VRF).
  */
 static struct vxlan_sock *vxlan_find_sock(struct net *net, sa_family_t family,
 					  __be16 port, u32 flags, int ifindex)
@@ -1868,7 +1869,6 @@ static bool vxlan_ecn_decapsulate(struct vxlan_sock *vs, void *oiph,
 //收到vxlan报文处理（解封装，回调将在udp收到报文后被触发，看udp_queue_rcv_one_skb）
 static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 {
-	struct pcpu_sw_netstats *stats;
 	struct vxlan_dev *vxlan;
 	struct vxlan_sock *vs;
 	struct vxlanhdr unparsed;
@@ -1929,6 +1929,10 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 				   !net_eq(vxlan->net, dev_net(vxlan->dev))))
 		goto drop;
 
+	if (vs->flags & VXLAN_F_REMCSUM_RX)
+		if (unlikely(!vxlan_remcsum(&unparsed, skb, vs->flags)))
+			goto drop;
+
 	if (vxlan_collect_metadata(vs)) {
 		//创建metadata_dst,收集tunnel信息
 		struct metadata_dst *tun_dst;
@@ -1949,9 +1953,6 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 		memset(md, 0, sizeof(*md));
 	}
 
-	if (vs->flags & VXLAN_F_REMCSUM_RX)
-		if (!vxlan_remcsum(&unparsed, skb, vs->flags))
-			goto drop;
 	if (vs->flags & VXLAN_F_GBP)
 		vxlan_parse_gbp_hdr(&unparsed, skb, vs->flags, md);
 	/* Note that GBP and GPE can never be active together. This is
@@ -2001,12 +2002,7 @@ static int vxlan_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 
 	//收包统计计数增加
-	stats = this_cpu_ptr(vxlan->dev->tstats);
-	u64_stats_update_begin(&stats->syncp);
-	stats->rx_packets++;
-	stats->rx_bytes += skb->len;
-	u64_stats_update_end(&stats->syncp);
-
+	dev_sw_netstats_rx_add(vxlan->dev, skb->len);
 	//vxlan设备的gro处理
 	gro_cells_receive(&vxlan->gro_cells, skb);
 
@@ -4051,7 +4047,7 @@ static int __vxlan_dev_create(struct net *net, struct net_device *dev,
 
 	//配置设备dev
 	err = rtnl_configure_link(dev, NULL);
-	if (err)
+	if (err < 0)
 		goto unlink;
 
 	if (f) {

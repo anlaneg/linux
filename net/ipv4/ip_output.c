@@ -149,7 +149,8 @@ static inline int ip_select_ttl(struct inet_sock *inet, struct dst_entry *dst)
  */
 //构造ip报文并发送
 int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
-			  __be32 saddr, __be32 daddr, struct ip_options_rcu *opt)
+			  __be32 saddr, __be32 daddr, struct ip_options_rcu *opt,
+			  u8 tos)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct rtable *rt = skb_rtable(skb);
@@ -162,7 +163,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 	iph = ip_hdr(skb);
 	iph->version  = 4;
 	iph->ihl      = 5;
-	iph->tos      = inet->tos;/*来源于socket的tos*/
+	iph->tos      = tos;/*来源于socket的tos*/
 	iph->ttl      = ip_select_ttl(inet, &rt->dst);
 	iph->daddr    = (opt && opt->opt.srr ? opt->opt.faddr : daddr);
 	iph->saddr    = saddr;
@@ -1022,7 +1023,7 @@ static int __ip_append_data(struct sock *sk,
 
 	fragheaderlen = sizeof(struct iphdr) + (opt ? opt->optlen : 0);
 	maxfraglen = ((mtu - fragheaderlen) & ~7) + fragheaderlen;
-	maxnonfragsize = ip_sk_ignore_df(sk) ? 0xFFFF : mtu;
+	maxnonfragsize = ip_sk_ignore_df(sk) ? IP_MAX_MTU : mtu;
 
 	if (cork->length + length > maxnonfragsize - fragheaderlen) {
 		ip_local_error(sk, EMSGSIZE, fl4->daddr, inet->inet_dport,
@@ -1152,7 +1153,7 @@ alloc_new_skb:
 			if (fraggap) {
 				skb->csum = skb_copy_and_csum_bits(
 					skb_prev, maxfraglen,
-					data + transhdrlen, fraggap, 0);
+					data + transhdrlen, fraggap);
 				skb_prev->csum = csum_sub(skb_prev->csum,
 							  skb->csum);
 				data += fraggap;
@@ -1377,7 +1378,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 	if (cork->flags & IPCORK_OPT)
 		opt = cork->opt;
 
-	if (!(rt->dst.dev->features&NETIF_F_SG))
+	if (!(rt->dst.dev->features & NETIF_F_SG))
 		return -EOPNOTSUPP;
 
 	hh_len = LL_RESERVED_SPACE(rt->dst.dev);
@@ -1437,7 +1438,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 				skb->csum = skb_copy_and_csum_bits(skb_prev,
 								   maxfraglen,
 						    skb_transport_header(skb),
-								   fraggap, 0);
+								   fraggap);
 				skb_prev->csum = csum_sub(skb_prev->csum,
 							  skb->csum);
 				pskb_trim_unique(skb_prev, maxfraglen);
@@ -1562,7 +1563,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	ip_select_ident(net, skb, sk);
 
 	if (opt) {
-		iph->ihl += opt->optlen>>2;
+		iph->ihl += opt->optlen >> 2;
 		ip_options_build(skb, opt, cork->addr, rt, 0);
 	}
 
@@ -1675,7 +1676,7 @@ static int ip_reply_glue_bits(void *dptr, char *to, int offset,
 {
 	__wsum csum;
 
-	csum = csum_partial_copy_nocheck(dptr+offset, to, len, 0);
+	csum = csum_partial_copy_nocheck(dptr+offset, to, len);
 	skb->csum = csum_block_add(skb->csum, csum, odd);
 	return 0;
 }

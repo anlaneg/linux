@@ -48,14 +48,23 @@ static inline void nft_trace_packet(struct nft_traceinfo *info,
 	}
 }
 
+static void nft_bitwise_fast_eval(const struct nft_expr *expr,
+				  struct nft_regs *regs)
+{
+	const struct nft_bitwise_fast_expr *priv = nft_expr_priv(expr);
+	u32 *src = &regs->data[priv->sreg];
+	u32 *dst = &regs->data[priv->dreg];
+
+	*dst = (*src & priv->mask) ^ priv->xor;
+}
+
 //如果regs->data中的值与priv->data相等，则返回，否则置为nft_break
 static void nft_cmp_fast_eval(const struct nft_expr *expr,
 			      struct nft_regs *regs)
 {
 	const struct nft_cmp_fast_expr *priv = nft_expr_priv(expr);
-	u32 mask = nft_cmp_fast_mask(priv->len);
 
-	if ((regs->data[priv->sreg] & mask) == priv->data)
+	if (((regs->data[priv->sreg] & priv->mask) == priv->data) ^ priv->inv)
 		return;
 	regs->verdict.code = NFT_BREAK;
 }
@@ -186,6 +195,8 @@ next_rule:
 			if (expr->ops == &nft_cmp_fast_ops)
 			    /*小于4字节的相等比对处理*/
 				nft_cmp_fast_eval(expr, &regs);
+			else if (expr->ops == &nft_bitwise_fast_ops)
+				nft_bitwise_fast_eval(expr, &regs);
 			else if (expr->ops != &nft_payload_fast_ops ||
 				 !nft_payload_fast_eval(expr, &regs, pkt))
 			    /*执行表达式*/
