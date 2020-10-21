@@ -346,6 +346,7 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.set = bond_option_use_carrier_set
 	},
 	[BOND_OPT_ACTIVE_SLAVE] = {
+	    /*激活bond设备的slave设备*/
 		.id = BOND_OPT_ACTIVE_SLAVE,
 		.name = "active_slave",
 		.desc = "Currently active slave",
@@ -384,11 +385,12 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.set = bond_option_lp_interval_set
 	},
 	[BOND_OPT_SLAVES] = {
+	    /*bond设备slave成员管理*/
 		.id = BOND_OPT_SLAVES,
 		.name = "slaves",
 		.desc = "Slave membership management",
 		.flags = BOND_OPTFLAG_RAWVAL,
-		.set = bond_option_slaves_set //设置slave
+		.set = bond_option_slaves_set
 	},
 	[BOND_OPT_TLB_DYNAMIC_LB] = {
 		.id = BOND_OPT_TLB_DYNAMIC_LB,
@@ -486,6 +488,7 @@ static const struct bond_opt_value *bond_opt_get_flags(const struct bond_option 
  */
 static bool bond_opt_check_range(const struct bond_option *opt, u64 val)
 {
+    //val在opt中的范围中检查
 	const struct bond_opt_value *minval, *maxval;
 
 	minval = bond_opt_get_flags(opt, BOND_VALFLAG_MIN);
@@ -520,6 +523,7 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 	    //opt为raw,直接返回
 		return val;
 
+	/*取选项容许的值集合*/
 	tbl = opt->values;
 	if (!tbl)
 		goto out;
@@ -527,11 +531,14 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 	/* ULLONG_MAX is used to bypass string processing */
 	checkval = val->value != ULLONG_MAX;
 	if (!checkval) {
+	    /*确认opt中提供的配置为字符串格式*/
 		if (!val->string)
 			goto out;
+		/*自\n位置截断*/
 		p = strchr(val->string, '\n');
 		if (p)
 			*p = '\0';
+		/*从前向后找，找是否包含非空格及数字*/
 		for (p = val->string; *p; p++)
 			if (!(isdigit(*p) || isspace(*p)))
 				break;
@@ -539,8 +546,10 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 		 * and sets checkval appropriately
 		 */
 		if (*p) {
+		    //纯字符串
 			rv = sscanf(val->string, "%32s", valstr);
 		} else {
+		    //纯数字
 			rv = sscanf(val->string, "%llu", &val->value);
 			checkval = true;
 		}
@@ -548,6 +557,7 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 			goto out;
 	}
 
+	//如果有取值枚举列表，则进行列表比对，命中即返回。
 	for (i = 0; tbl[i].string; i++) {
 		/* Check for exact match */
 		if (checkval) {
@@ -578,10 +588,13 @@ static int bond_opt_check_deps(struct bonding *bond,
 {
 	struct bond_params *params = &bond->params;
 
+	/*此bond配置选项不支持此模式*/
 	if (test_bit(params->mode, &opt->unsuppmodes))
 		return -EACCES;
+	/*不容许有slave,但此时配置已有slave,报错*/
 	if ((opt->flags & BOND_OPTFLAG_NOSLAVES) && bond_has_slaves(bond))
 		return -ENOTEMPTY;
+	/*选项要求设置之前接口需要为down,但现在是up的*/
 	if ((opt->flags & BOND_OPTFLAG_IFDOWN) && (bond->dev->flags & IFF_UP))
 		return -EBUSY;
 
@@ -656,8 +669,8 @@ static void bond_opt_error_interpret(struct bonding *bond,
  * used for both enabling/changing an option and for disabling it. RTNL lock
  * must be obtained before calling this function.
  */
-int __bond_opt_set(struct bonding *bond,
-		   unsigned int option, struct bond_opt_value *val)
+int __bond_opt_set(struct bonding *bond/*要配置的bond设备*/,
+		   unsigned int option/*bond设备要配置的项*/, struct bond_opt_value *val/*bond设备要配置的值*/)
 {
 	const struct bond_opt_value *retval = NULL;
 	const struct bond_option *opt;
@@ -671,11 +684,13 @@ int __bond_opt_set(struct bonding *bond,
 	ret = bond_opt_check_deps(bond, opt);
 	if (ret)
 		goto out;
+	//解析配置，返回配置值
 	retval = bond_opt_parse(opt, val);
 	if (!retval) {
 		ret = -EINVAL;
 		goto out;
 	}
+	/*通过回调，使能此配置*/
 	ret = opt->set(bond, retval);
 out:
 	if (ret)
@@ -744,7 +759,7 @@ const struct bond_option *bond_opt_get(unsigned int option)
 	if (!BOND_OPT_VALID(option))
 		return NULL;
 
-	//取指定选项约束结构
+	//取指定选项的约束结构体
 	return &bond_opts[option];
 }
 
@@ -788,25 +803,30 @@ static int bond_option_mode_set(struct bonding *bond,
 static int bond_option_active_slave_set(struct bonding *bond,
 					const struct bond_opt_value *newval)
 {
+    /*slave接口名称*/
 	char ifname[IFNAMSIZ] = { 0, };
 	struct net_device *slave_dev;
 	int ret = 0;
 
 	sscanf(newval->string, "%15s", ifname); /* IFNAMSIZ */
 	if (!strlen(ifname) || newval->string[0] == '\n') {
+	    /*slave设备为空*/
 		slave_dev = NULL;
 	} else {
+	    /*通过名称查找slave设备*/
 		slave_dev = __dev_get_by_name(dev_net(bond->dev), ifname);
 		if (!slave_dev)
 			return -ENODEV;
 	}
 
 	if (slave_dev) {
+	    /*slave_dev必须已为slave设备*/
 		if (!netif_is_bond_slave(slave_dev)) {
 			slave_err(bond->dev, slave_dev, "Device is not bonding slave\n");
 			return -EINVAL;
 		}
 
+		/*slave_dev的master设备必须是bond->dev*/
 		if (bond->dev != netdev_master_upper_dev_get(slave_dev)) {
 			slave_err(bond->dev, slave_dev, "Device is not our slave\n");
 			return -EINVAL;
@@ -816,6 +836,7 @@ static int bond_option_active_slave_set(struct bonding *bond,
 	block_netpoll_tx();
 	/* check to see if we are clearing active */
 	if (!slave_dev) {
+	    /*清除当前已激活的slave设备*/
 		netdev_dbg(bond->dev, "Clearing current active slave\n");
 		RCU_INIT_POINTER(bond->curr_active_slave, NULL);
 		bond_select_active_slave(bond);
@@ -834,6 +855,7 @@ static int bond_option_active_slave_set(struct bonding *bond,
 				slave_dbg(bond->dev, new_active->dev, "Setting as active slave\n");
 				bond_change_active_slave(bond, new_active);
 			} else {
+			    /*激活时，salve_dev不为up,告警*/
 				slave_err(bond->dev, new_active->dev, "Could not set as active slave; either %s is down or the link is down\n",
 					  new_active->dev->name);
 				ret = -EINVAL;
@@ -1380,6 +1402,7 @@ err_no_cmd:
 static int bond_option_slaves_set(struct bonding *bond,
 				  const struct bond_opt_value *newval)
 {
+    /*必须为”[+-]$ifname“格式的串*/
 	char command[IFNAMSIZ + 1] = { 0, };
 	struct net_device *dev;
 	char *ifname;
@@ -1390,8 +1413,10 @@ static int bond_option_slaves_set(struct bonding *bond,
 	if ((strlen(command) <= 1) ||
 	    (command[0] != '+' && command[0] != '-') ||
 	    !dev_valid_name(ifname))
+	    /*不合法的串格式，报错*/
 		goto err_no_cmd;
 
+	/*通过ifname查找netdev*/
 	dev = __dev_get_by_name(dev_net(bond->dev), ifname);
 	if (!dev) {
 		netdev_dbg(bond->dev, "interface %s does not exist!\n",
@@ -1402,11 +1427,13 @@ static int bond_option_slaves_set(struct bonding *bond,
 
 	switch (command[0]) {
 	case '+':
+	    /*添加bond成员*/
 		slave_dbg(bond->dev, dev, "Enslaving interface\n");
 		ret = bond_enslave(bond->dev, dev, NULL);
 		break;
 
 	case '-':
+	    /*移除bond成员*/
 		slave_dbg(bond->dev, dev, "Releasing interface\n");
 		ret = bond_release(bond->dev, dev);
 		break;

@@ -1260,12 +1260,13 @@ static int register_pernet_operations(struct list_head *list,
 	int error;
 
 	if (ops->id) {
-		//如果给定的id号不为0，这种情况下ops需要分配私有数据，为ops分配固定id号
+		//如果给定的id号地址不为0，这种情况下ops需要分配私有数据，为ops分配固定id号
 		error = ida_alloc_min(&net_generic_ids, MIN_PERNET_OPS_ID,
 				GFP_KERNEL);
 		if (error < 0)
 		    //分配固定id号失败
 			return error;
+		/*填充分配的pernet 私有数据编号*/
 		*ops->id = error;
 		//增加可生成私有数据的大小
 		max_gen_ptrs = max(max_gen_ptrs, *ops->id + 1);

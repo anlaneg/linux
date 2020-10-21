@@ -775,6 +775,7 @@ int bond_create_sysfs(struct bond_net *bn)
 	bn->class_attr_bonding_masters = class_attr_bonding_masters;
 	sysfs_attr_init(&bn->class_attr_bonding_masters.attr);
 
+	//创建bonding_masters文件
 	ret = netdev_class_create_file_ns(&bn->class_attr_bonding_masters,
 					  bn->net);
 	/* Permit multiple loads of the module by ignoring failures to

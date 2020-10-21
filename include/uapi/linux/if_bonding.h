@@ -64,7 +64,9 @@
 
 #define BOND_CHECK_MII_STATUS	(SIOCGMIIPHY)
 
+/*轮循模式*/
 #define BOND_MODE_ROUNDROBIN	0
+/*主备模式*/
 #define BOND_MODE_ACTIVEBACKUP	1
 #define BOND_MODE_XOR		2
 #define BOND_MODE_BROADCAST	3

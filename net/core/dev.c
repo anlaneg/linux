@@ -7079,7 +7079,7 @@ struct netdev_adjacent {
 	struct net_device *dev;
 
 	/* upper master flag, there can only be one master device per list */
-	bool master;
+	bool master;/*为master设备*/
 
 	/* lookup ignore flag */
 	bool ignore;
@@ -7174,13 +7174,16 @@ EXPORT_SYMBOL(netdev_has_any_upper_dev);
  */
 struct net_device *netdev_master_upper_dev_get(struct net_device *dev)
 {
+    /*获取dev设备的master upper device*/
 	struct netdev_adjacent *upper;
 
 	ASSERT_RTNL();
 
+	/*adj_list为空，返回NULL*/
 	if (list_empty(&dev->adj_list.upper))
 		return NULL;
 
+	/*取dev->adj_list首个设备*/
 	upper = list_first_entry(&dev->adj_list.upper,
 				 struct netdev_adjacent, list);
 	if (likely(upper->master))
@@ -7440,9 +7443,11 @@ void *netdev_lower_get_next_private_rcu(struct net_device *dev,
 
 	lower = list_entry_rcu((*iter)->next, struct netdev_adjacent, list);
 
+	//到达dev的首元素，遍历结束，返回NULL
 	if (&lower->list == &dev->adj_list.lower)
 		return NULL;
 
+	/*设置出参，用于指向当前元素，以便下次访问下一个元素*/
 	*iter = &lower->list;
 
 	return lower->private;

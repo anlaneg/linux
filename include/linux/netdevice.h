@@ -1960,7 +1960,7 @@ struct net_device {
 	const struct iw_handler_def *wireless_handlers;
 	struct iw_public_data	*wireless_data;
 #endif
-	const struct net_device_ops *netdev_ops;
+	const struct net_device_ops *netdev_ops;/*设备操作集*/
 	const struct ethtool_ops *ethtool_ops;
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	const struct l3mdev_ops	*l3mdev_ops;

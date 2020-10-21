@@ -52,6 +52,7 @@
 /* slave list primitives */
 #define bond_slave_list(bond) (&(bond)->dev->adj_list.lower)
 
+/*检查bond设备是否包含slave接口*/
 #define bond_has_slaves(bond) !list_empty(bond_slave_list(bond))
 
 /* IMPORTANT: bond_first/last_slave can return NULL in case of an empty list */
@@ -99,17 +100,20 @@ extern atomic_t netpoll_block_tx;
 
 static inline void block_netpoll_tx(void)
 {
+    /*阻止发包*/
 	atomic_inc(&netpoll_block_tx);
 }
 
 static inline void unblock_netpoll_tx(void)
 {
+    /*解除发包阻止*/
 	atomic_dec(&netpoll_block_tx);
 }
 
 static inline int is_netpoll_tx_blocked(struct net_device *dev)
 {
 	if (unlikely(netpoll_tx_running(dev)))
+	    /*检查是否阻塞此dev发包*/
 		return atomic_read(&netpoll_block_tx);
 	return 0;
 }
@@ -123,6 +127,7 @@ static inline int is_netpoll_tx_blocked(struct net_device *dev)
 struct bond_params {
 	int mode;//采用哪种模式进行bond
 	int xmit_policy;
+	/*monitor接口间隔时间*/
 	int miimon;
 	u8 num_peer_notif;
 	int arp_interval;
@@ -138,6 +143,7 @@ struct bond_params {
 	int ad_select;
 	char primary[IFNAMSIZ];
 	int primary_reselect;
+	/*arp探测的目标ip*/
 	__be32 arp_targets[BOND_MAX_ARP_TARGETS];
 	int tx_queues;
 	int all_slaves_active;
@@ -159,7 +165,9 @@ struct bond_parm_tbl {
 };
 
 struct slave {
+    /*slave对应的netdev*/
 	struct net_device *dev; /* first - useful for panic debug */
+	/*slave所属的bonding*/
 	struct bonding *bond; /* our master */
 	int    delay;
 	/* all three in jiffies */
@@ -177,7 +185,7 @@ struct slave {
 	u32    original_mtu;
 	u32    link_failure_count;
 	u32    speed;
-	u16    queue_id;
+	u16    queue_id;/*slave对应的bond的queue id*/
 	u8     perm_hwaddr[MAX_ADDR_LEN];
 	struct ad_slave_info *ad_info;
 	struct tlb_slave_info tlb_info;
@@ -205,8 +213,10 @@ struct bond_up_slave {
  * Get rcu_read_lock when reading or RTNL when writing slave list.
  */
 struct bonding {
+    //bonding对应的bond设备
 	struct   net_device *dev; /* first - useful for panic debug */
-	struct   slave __rcu *curr_active_slave;//主备模式下，记录主slave
+	//记录当前active的slave设备（主备模式下，记录主slave）
+	struct   slave __rcu *curr_active_slave;
 	struct   slave __rcu *current_arp_slave;
 	struct   slave __rcu *primary_slave;
 	struct   bond_up_slave __rcu *usable_slaves;
@@ -235,7 +245,8 @@ struct bonding {
 	u32      rr_tx_counter;
 	struct   ad_bond_info ad_info;
 	struct   alb_bond_info alb_info;
-	struct   bond_params params;//bond设备配置参数
+	//bond设备配置参数
+	struct   bond_params params;
 	struct   workqueue_struct *wq;
 	struct   delayed_work mii_work;
 	struct   delayed_work arp_work;
@@ -275,9 +286,11 @@ struct bond_vlan_tag {
 static inline struct slave *bond_get_slave_by_dev(struct bonding *bond,
 						  struct net_device *slave_dev)
 {
+    /*给定slave_dev,查找到其对应的slave结构体*/
 	return netdev_lower_dev_get_private(bond->dev, slave_dev);
 }
 
+/*取slave对应的bonding结构*/
 static inline struct bonding *bond_get_bond_by_slave(struct slave *slave)
 {
 	return slave->bond;

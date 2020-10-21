@@ -107,6 +107,7 @@ void rtnetlink_init(void);
 void __rtnl_unlock(void);
 void rtnl_kfree_skbs(struct sk_buff *head, struct sk_buff *tail);
 
+/*如果rtnl锁未被持有，则告警*/
 #define ASSERT_RTNL() \
 	WARN_ONCE(!rtnl_is_locked(), \
 		  "RTNL: assertion failed at %s (%d)\n", __FILE__,  __LINE__)

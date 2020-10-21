@@ -119,7 +119,7 @@ int rtnl_trylock(void)
 }
 EXPORT_SYMBOL(rtnl_trylock);
 
-//rtnl_mutex必须被持有
+//检查rtnl_mutex是否被持有
 int rtnl_is_locked(void)
 {
 	return mutex_is_locked(&rtnl_mutex);

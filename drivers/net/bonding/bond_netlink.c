@@ -118,6 +118,7 @@ static const struct nla_policy bond_slave_policy[IFLA_BOND_SLAVE_MAX + 1] = {
 static int bond_validate(struct nlattr *tb[], struct nlattr *data[],
 			 struct netlink_ext_ack *extack)
 {
+    //如果配置了目的地址，则必须是有效的mac地址
 	if (tb[IFLA_ADDRESS]) {
 		if (nla_len(tb[IFLA_ADDRESS]) != ETH_ALEN)
 			return -EINVAL;
@@ -155,10 +156,12 @@ static int bond_slave_changelink(struct net_device *bond_dev,
 	return 0;
 }
 
+//修改bond配置
 static int bond_changelink(struct net_device *bond_dev, struct nlattr *tb[],
 			   struct nlattr *data[],
 			   struct netlink_ext_ack *extack)
 {
+    //取bond设备的私有结构
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct bond_opt_value newval;
 	int miimon = 0;
@@ -168,25 +171,32 @@ static int bond_changelink(struct net_device *bond_dev, struct nlattr *tb[],
 		return 0;
 
 	if (data[IFLA_BOND_MODE]) {
+	    //设置bond设备模式
 		int mode = nla_get_u8(data[IFLA_BOND_MODE]);
 
+		/*将mode转换为bond_opt_value类型*/
 		bond_opt_initval(&newval, mode);
+
+		/*转换并使能配置*/
 		err = __bond_opt_set(bond, BOND_OPT_MODE, &newval);
 		if (err)
 			return err;
 	}
 	if (data[IFLA_BOND_ACTIVE_SLAVE]) {
+	    /*设置bond设备的slave设备ifindex*/
 		int ifindex = nla_get_u32(data[IFLA_BOND_ACTIVE_SLAVE]);
 		struct net_device *slave_dev;
 		char *active_slave = "";
 
 		if (ifindex != 0) {
+		    /*通过ifindex查找指定的slave设备*/
 			slave_dev = __dev_get_by_index(dev_net(bond_dev),
 						       ifindex);
 			if (!slave_dev)
 				return -ENODEV;
 			active_slave = slave_dev->name;
 		}
+		/*激活slave设备，容许active_slave名称为空*/
 		bond_opt_initstr(&newval, active_slave);
 		err = __bond_opt_set(bond, BOND_OPT_ACTIVE_SLAVE, &newval);
 		if (err)
@@ -201,6 +211,7 @@ static int bond_changelink(struct net_device *bond_dev, struct nlattr *tb[],
 			return err;
 	}
 	if (data[IFLA_BOND_UPDELAY]) {
+	    //updelay时间
 		int updelay = nla_get_u32(data[IFLA_BOND_UPDELAY]);
 
 		bond_opt_initval(&newval, updelay);
@@ -452,10 +463,12 @@ static int bond_newlink(struct net *src_net, struct net_device *bond_dev,
 {
 	int err;
 
+	//修改bonding设备配置
 	err = bond_changelink(bond_dev, tb, data, extack);
 	if (err < 0)
 		return err;
 
+	//向系统注册bond设备
 	err = register_netdevice(bond_dev);
 	if (!err) {
 		struct bonding *bond = netdev_priv(bond_dev);
@@ -750,6 +763,7 @@ static int bond_fill_linkxstats(struct sk_buff *skb,
 	return 0;
 }
 
+/*bond对外提供的rtnl link ops*/
 struct rtnl_link_ops bond_link_ops __read_mostly = {
 	.kind			= "bond",
 	.priv_size		= sizeof(struct bonding),
@@ -757,7 +771,8 @@ struct rtnl_link_ops bond_link_ops __read_mostly = {
 	.maxtype		= IFLA_BOND_MAX,
 	.policy			= bond_policy,
 	.validate		= bond_validate,
-	.newlink		= bond_newlink,//bond口创建
+	//bond口创建
+	.newlink		= bond_newlink,
 	.changelink		= bond_changelink,
 	.get_size		= bond_get_size,
 	.fill_info		= bond_fill_info,

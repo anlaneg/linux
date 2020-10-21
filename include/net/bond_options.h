@@ -82,8 +82,11 @@ struct bond_opt_value {
 struct bonding;
 
 struct bond_option {
+    /*bond配置选项编号*/
 	int id;
+	/*bond配置选项名称*/
 	const char *name;
+	/*bond配置选项描述信息*/
 	const char *desc;
 	u32 flags;
 
@@ -94,8 +97,9 @@ struct bond_option {
 	/* supported values which this option can have, can be a subset of
 	 * BOND_OPTVAL_RANGE's value range
 	 */
-	const struct bond_opt_value *values;
+	const struct bond_opt_value *values;/*选项容许的值（集合）*/
 
+	/*为bond设备使能配置值*/
 	int (*set)(struct bonding *bond, const struct bond_opt_value *val);
 };
 
@@ -116,16 +120,19 @@ const struct bond_opt_value *bond_opt_get_val(unsigned int option, u64 val);
  * When value is ULLONG_MAX then string will be used.
  */
 static inline void __bond_opt_init(struct bond_opt_value *optval,
-				   char *string, u64 value)
+				   char *string/*字符串类型配置*/, u64 value/*整数类型配置*/)
 {
 	memset(optval, 0, sizeof(*optval));
 	optval->value = ULLONG_MAX;
+	/*检查使用哪类配置*/
 	if (value == ULLONG_MAX)
 		optval->string = string;
 	else
 		optval->value = value;
 }
+/*初始化整数类型配置*/
 #define bond_opt_initval(optval, value) __bond_opt_init(optval, NULL, value)
+/*初始化字符串类型配置*/
 #define bond_opt_initstr(optval, str) __bond_opt_init(optval, str, ULLONG_MAX)
 
 void bond_option_arp_ip_targets_clear(struct bonding *bond);

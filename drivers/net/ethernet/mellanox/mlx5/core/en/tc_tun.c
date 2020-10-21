@@ -200,7 +200,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	ttl = tun_key->ttl;
 
 	//执行路由查询
-	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev/*出接口设备*/, &route_dev,
+	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev/*出接口设备*/, &route_dev/*源设备*/,
 				      &fl4, &n/*下一跳对应的领居表项*/, &ttl);
 	if (err)
 		return err;

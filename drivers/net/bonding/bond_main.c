@@ -91,6 +91,7 @@
 /* monitor all links that often (in milliseconds). <=0 disables monitoring */
 
 static int max_bonds	= BOND_DEFAULT_MAX_BONDS;
+//bonding默认发送队列数
 static int tx_queues	= BOND_DEFAULT_TX_QUEUES;
 static int num_peer_notif = 1;
 static int miimon;
@@ -290,7 +291,8 @@ const char *bond_mode_name(int mode)
 netdev_tx_t bond_dev_queue_xmit(struct bonding *bond, struct sk_buff *skb,
 			struct net_device *slave_dev)
 {
-	skb->dev = slave_dev;//切换报文所属设备
+    //切换报文所属设备
+	skb->dev = slave_dev;
 
 	BUILD_BUG_ON(sizeof(skb->queue_mapping) !=
 		     sizeof(qdisc_skb_cb(skb)->slave_dev_queue_mapping));
@@ -974,6 +976,7 @@ void bond_change_active_slave(struct bonding *bond, struct slave *new_active)
 	old_active = rtnl_dereference(bond->curr_active_slave);
 
 	if (old_active == new_active)
+	    /*两者相同，不处理，直接返回*/
 		return;
 
 #ifdef CONFIG_XFRM_OFFLOAD
@@ -1546,7 +1549,7 @@ void bond_lower_state_changed(struct slave *slave)
 }
 
 /* enslave device <slave> to bond device <master> */
-int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
+int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要添加的成员*/,
 		 struct netlink_ext_ack *extack)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
@@ -1564,6 +1567,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 
 	/* already in-use? */
 	if (netdev_is_rx_handler_busy(slave_dev)) {
+	    /*slave_dev已被挂载了rx_handler*/
 		NL_SET_ERR_MSG(extack, "Device is in use and cannot be enslaved");
 		slave_err(bond_dev, slave_dev,
 			  "Error: Device is in use and cannot be enslaved\n");
@@ -1571,6 +1575,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	}
 
 	if (bond_dev == slave_dev) {
+	    /*不容许将自身加入为成员*/
 		NL_SET_ERR_MSG(extack, "Cannot enslave bond to itself.");
 		netdev_err(bond_dev, "cannot enslave bond to itself.\n");
 		return -EPERM;
@@ -1600,6 +1605,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	 * enslaving it; the old ifenslave will not.
 	 */
 	if (slave_dev->flags & IFF_UP) {
+	    /*slave设备在添加时，不能up*/
 		NL_SET_ERR_MSG(extack, "Device can not be enslaved while up");
 		slave_err(bond_dev, slave_dev, "slave is up - this may be due to an out of date ifenslave\n");
 		return -EPERM;
@@ -1613,10 +1619,13 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 	 * ether type (eg ARPHRD_ETHER and ARPHRD_INFINIBAND) share the same bond
 	 */
 	if (!bond_has_slaves(bond)) {
+	    /*bond设备添加首个slaves情况*/
 		if (bond_dev->type != slave_dev->type) {
+		    /*bond设备与slave_dev设备类型不一致，需要将bond_dev类型转换过来*/
 			slave_dbg(bond_dev, slave_dev, "change device type from %d to %d\n",
 				  bond_dev->type, slave_dev->type);
 
+			/*触发bond_dev类型转换*/
 			res = call_netdevice_notifiers(NETDEV_PRE_TYPE_CHANGE,
 						       bond_dev);
 			res = notifier_to_errno(res);
@@ -1632,14 +1641,17 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev,
 			if (slave_dev->type != ARPHRD_ETHER)
 				bond_setup_by_slave(bond_dev, slave_dev);
 			else {
+			    /*将bond_dev初始化为ether类型*/
 				ether_setup(bond_dev);
 				bond_dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 			}
 
+			/*触发通知*/
 			call_netdevice_notifiers(NETDEV_POST_TYPE_CHANGE,
 						 bond_dev);
 		}
 	} else if (bond_dev->type != slave_dev->type) {
+	    /*bond已有成员，再加入的slave_dev与即有成员类型不一致，报错*/
 		NL_SET_ERR_MSG(extack, "Device type is different from other slaves");
 		slave_err(bond_dev, slave_dev, "ether type (%d) is different from other slaves (%d), can not enslave it\n",
 			  slave_dev->type, bond_dev->type);
@@ -2645,6 +2657,7 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 	__be32 *targets = bond->params.arp_targets, addr;
 	int i;
 
+	/*遍历每个待探测的目标ip*/
 	for (i = 0; i < BOND_MAX_ARP_TARGETS && targets[i]; i++) {
 		slave_dbg(bond->dev, slave->dev, "%s: target %pI4\n",
 			  __func__, &targets[i]);
@@ -2654,6 +2667,7 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 		rt = ip_route_output(dev_net(bond->dev), targets[i], 0,
 				     RTO_ONLINK, 0);
 		if (IS_ERR(rt)) {
+		    /*路由不可达，发送源ip为0的arp请求*/
 			/* there's no route to target - try to send arp
 			 * probe to generate any traffic (arp_validate=0)
 			 */
@@ -2685,8 +2699,10 @@ static void bond_arp_send_all(struct bonding *bond, struct slave *slave)
 		continue;
 
 found:
+        /*选择源ip*/
 		addr = bond_confirm_addr(rt->dst.dev, targets[i], 0);
 		ip_rt_put(rt);
+		/*构造并向targets[i]发送arp请求*/
 		bond_arp_send(slave, ARPOP_REQUEST, targets[i], addr, tags);
 		kfree(tags);
 	}
@@ -3190,6 +3206,7 @@ static void bond_activebackup_arp_mon(struct bonding *bond)
 
 	delta_in_ticks = msecs_to_jiffies(bond->params.arp_interval);
 
+	/*bond没有slave设备*/
 	if (!bond_has_slaves(bond))
 		goto re_arm;
 
@@ -3567,6 +3584,7 @@ u32 bond_xmit_hash(struct bonding *bond, struct sk_buff *skb)
 
 void bond_work_init_all(struct bonding *bond)
 {
+    //初始化bonding的work
 	INIT_DELAYED_WORK(&bond->mcast_work,
 			  bond_resend_igmp_join_requests_delayed);
 	INIT_DELAYED_WORK(&bond->alb_work, bond_alb_monitor);
@@ -4091,6 +4109,7 @@ static struct slave *bond_get_slave_by_id(struct bonding *bond,
 	/* Here we start from the slave with slave_id */
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (--i < 0) {
+		    //此slave能执行tx,则选择此slave
 			if (bond_slave_can_tx(slave))
 				return slave;
 		}
@@ -4161,11 +4180,14 @@ static struct slave *bond_xmit_roundrobin_slave_get(struct bonding *bond,
 		if (unlikely(!pskb_may_pull(skb, noff + sizeof(*iph))))
 			goto non_igmp;
 
+		//取得skb的ip头部
 		iph = ip_hdr(skb);
 		if (iph->protocol == IPPROTO_IGMP) {
+		    //针对igmp报文，将自bond->curr_active_slave设备送出
 			slave = rcu_dereference(bond->curr_active_slave);
 			if (slave)
 				return slave;
+			/*curr_acttive_slave设备不存在，取首个可使用slave*/
 			return bond_get_slave_by_id(bond, 0);
 		}
 	}
@@ -4194,7 +4216,7 @@ static netdev_tx_t bond_xmit_roundrobin(struct sk_buff *skb,
 	return bond_tx_drop(bond_dev, skb);
 }
 
-//主备模式的bond选择slave
+//主备模式的bond选择slave时，直接使用bond->curr_active_slave
 static struct slave *bond_xmit_activebackup_slave_get(struct bonding *bond,
 						      struct sk_buff *skb)
 {
@@ -4466,6 +4488,7 @@ static inline int bond_slave_override(struct bonding *bond,
 
 	/* Find out if any slaves have the same mapping as this skb. */
 	bond_for_each_slave_rcu(bond, slave, iter) {
+	    //如果skb指定的queue_id与slave对应的queue_id相等，如slave up,则自slave送出
 		if (slave->queue_id == skb_get_queue_mapping(skb)) {
 			if (bond_slave_is_up(slave) &&
 			    slave->link == BOND_LINK_UP) {
@@ -4558,6 +4581,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 	case BOND_MODE_ROUNDROBIN:
 		return bond_xmit_roundrobin(skb, dev);
 	case BOND_MODE_ACTIVEBACKUP:
+	    /*主备模式情况下，直接自bond->curr_active_slave口送出*/
 		return bond_xmit_activebackup(skb, dev);
 	case BOND_MODE_8023AD:
 	case BOND_MODE_XOR:
@@ -4664,7 +4688,8 @@ static const struct net_device_ops bond_netdev_ops = {
 	.ndo_uninit		= bond_uninit,
 	.ndo_open		= bond_open,
 	.ndo_stop		= bond_close,
-	.ndo_start_xmit		= bond_start_xmit,//bond设备发送函数
+	//bond设备发送函数
+	.ndo_start_xmit		= bond_start_xmit,
 	.ndo_select_queue	= bond_select_queue,
 	.ndo_get_stats64	= bond_get_stats,
 	.ndo_do_ioctl		= bond_do_ioctl,
@@ -4821,7 +4846,7 @@ static int bond_check_params(struct bond_params *params)
 			pr_err("Error: Invalid bonding mode \"%s\"\n", mode);
 			return -EINVAL;
 		}
-		/*记录bond的类型*/
+		/*记录bond的模式*/
 		bond_mode = valptr->value;
 	}
 
@@ -5272,6 +5297,7 @@ int bond_create(struct net *net, const char *name)
 
 static int __net_init bond_net_init(struct net *net)
 {
+    /*取此net的bond私有数据，并初始化它*/
 	struct bond_net *bn = net_generic(net, bond_net_id);
 
 	bn->net = net;
@@ -5301,6 +5327,7 @@ static void __net_exit bond_net_exit(struct net *net)
 	bond_destroy_proc_dir(bn);
 }
 
+/*bond在net namespace中的操作集*/
 static struct pernet_operations bond_net_ops = {
 	.init = bond_net_init,
 	.exit = bond_net_exit,
@@ -5314,7 +5341,7 @@ static int __init bonding_init(void)
 	int i;
 	int res;
 
-	//填充bonding的模块配置
+	//填充bonding的模块默认配置
 	res = bond_check_params(&bonding_defaults);
 	if (res)
 		goto out;
@@ -5331,7 +5358,7 @@ static int __init bonding_init(void)
 
 	bond_create_debugfs();
 
-	//创建max_bonds个bond口
+	//初始化时，创建max_bonds个bond口
 	for (i = 0; i < max_bonds; i++) {
 		res = bond_create(&init_net, NULL);
 		if (res)
