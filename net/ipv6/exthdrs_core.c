@@ -186,7 +186,9 @@ EXPORT_SYMBOL_GPL(ipv6_find_tlv);
 int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
 		  int target, unsigned short *fragoff, int *flags)
 {
+    //跳到ipv6头部后面
 	unsigned int start = skb_network_offset(skb) + sizeof(struct ipv6hdr);
+	/*取下一层头部类型*/
 	u8 nexthdr = ipv6_hdr(skb)->nexthdr;
 	bool found;
 
@@ -231,6 +233,7 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
 				found = false;
 		}
 
+		//分片扩展信息头
 		if (nexthdr == NEXTHDR_FRAGMENT) {
 			unsigned short _frag_off;
 			__be16 *fp;

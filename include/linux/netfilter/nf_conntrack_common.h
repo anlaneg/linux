@@ -24,7 +24,7 @@ struct ip_conntrack_stat {
 #define NFCT_PTRMASK	~(NFCT_INFOMASK)
 
 struct nf_conntrack {
-	atomic_t use;
+	atomic_t use;/*ct引用计数*/
 };
 
 void nf_conntrack_destroy(struct nf_conntrack *nfct);

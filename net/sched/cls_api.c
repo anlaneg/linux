@@ -702,14 +702,14 @@ static bool tcf_block_offload_in_use(struct tcf_block *block)
 static int tcf_block_offload_cmd(struct tcf_block *block,
 				 struct net_device *dev, struct Qdisc *sch,
 				 struct tcf_block_ext_info *ei,
-				 enum flow_block_command command,
+				 enum flow_block_command command/*block子命令*/,
 				 struct netlink_ext_ack *extack)
 {
 	struct flow_block_offload bo = {};
 
-	//初始化bo
-	tcf_block_offload_init(&bo, dev, sch, command, ei->binder_type,
-			       &block->flow_block, tcf_block_shared(block),
+	//初始化flow block offload
+	tcf_block_offload_init(&bo, dev, sch, command, ei->binder_type/*offload的方向*/,
+			       &block->flow_block, tcf_block_shared(block)/*是否为share block*/,
 			       extack);
 
 	//如果dev有ndo_setup_tc回调，则触发tc_setup_block
@@ -727,7 +727,7 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 	}
 
 
-	/*dev没有ndo_setup_tc回调，间接触发tc_setup_block*/
+	/*dev没有ndo_setup_tc回调，例如vxlan设备，间接触发tc_setup_block*/
 	flow_indr_dev_setup_offload(dev, sch, TC_SETUP_BLOCK, block, &bo,
 				    tc_block_indr_cleanup);
 	/*为此block增加新的bo*/
@@ -757,7 +757,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 		goto err_unlock;
 	}
 
-	//执行block bind命令
+	//触发block卸载的block bind命令
 	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_BIND, extack);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_inc;
@@ -1732,6 +1732,7 @@ int tcf_classify_ingress(struct sk_buff *skb,
 
 	/* If we missed on some chain */
 	if (ret == TC_ACT_UNSPEC && last_executed_chain) {
+	    /*向skb中添加扩展，记录当前执行到哪个chain*/
 		ext = skb_ext_add(skb, TC_SKB_EXT);
 		if (WARN_ON_ONCE(!ext))
 			return TC_ACT_SHOT;

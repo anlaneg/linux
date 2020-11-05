@@ -36,7 +36,7 @@ union nf_conntrack_proto {
 	struct ip_ct_tcp tcp;
 	struct nf_ct_udp udp;
 	struct nf_ct_gre gre;
-	unsigned int tmpl_padto;
+	unsigned int tmpl_padto;/*当前对齐指针距实际内存申请位置的偏移量，用于释放*/
 };
 
 union nf_conntrack_expect_proto {

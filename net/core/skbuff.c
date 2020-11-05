@@ -3672,7 +3672,8 @@ void *skb_pull_rcsum(struct sk_buff *skb, unsigned int len)
 	unsigned char *data = skb->data;
 
 	BUG_ON(len > skb->len);
-	__skb_pull(skb, len);//更新data后移len长度，减少skb长度
+	//更新data后移len长度，减少skb长度
+	__skb_pull(skb, len);
 	skb_postpull_rcsum(skb, data, len);
 	return skb->data;
 }
@@ -6313,6 +6314,7 @@ void *__skb_ext_set(struct sk_buff *skb, enum skb_ext_id id,
  */
 void *skb_ext_add(struct sk_buff *skb, enum skb_ext_id id)
 {
+    /*向skb中添加扩展*/
 	struct skb_ext *new, *old = NULL;
 	unsigned int newlen, newoff;
 

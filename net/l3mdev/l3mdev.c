@@ -109,6 +109,7 @@ EXPORT_SYMBOL_GPL(l3mdev_ifindex_lookup_by_table_id);
 
 int l3mdev_master_ifindex_rcu(const struct net_device *dev)
 {
+    /*取dev设备的master设备*/
 	int ifindex = 0;
 
 	if (!dev)
@@ -281,6 +282,7 @@ void l3mdev_update_flow(struct net *net, struct flowi *fl)
 	rcu_read_lock();
 
 	if (fl->flowi_oif) {
+	    /*取出接口对应的dev*/
 		dev = dev_get_by_index_rcu(net, fl->flowi_oif);
 		if (dev) {
 			ifindex = l3mdev_master_ifindex_rcu(dev);

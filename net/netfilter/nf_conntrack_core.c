@@ -577,6 +577,7 @@ struct nf_conn *nf_ct_tmpl_alloc(struct net *net,
 	struct nf_conn *tmpl, *p;
 
 	if (ARCH_KMALLOC_MINALIGN <= NFCT_INFOMASK) {
+	    /*申请结构体nf_conn,考虑对齐问题*/
 		tmpl = kzalloc(sizeof(*tmpl) + NFCT_INFOMASK, flags);
 		if (!tmpl)
 			return NULL;
@@ -588,14 +589,18 @@ struct nf_conn *nf_ct_tmpl_alloc(struct net *net,
 			tmpl->proto.tmpl_padto = (char *)tmpl - (char *)p;
 		}
 	} else {
+	    /*申请结构体nf_conn*/
 		tmpl = kzalloc(sizeof(*tmpl), flags);
 		if (!tmpl)
 			return NULL;
 	}
 
 	tmpl->status = IPS_TEMPLATE;
+	/*指定ct所属的net namespace*/
 	write_pnet(&tmpl->ct_net, net);
+	/*指定ct所属的zone*/
 	nf_ct_zone_add(tmpl, zone);
+	/*指定此ct引用计数为0*/
 	atomic_set(&tmpl->ct_general.use, 0);
 
 	return tmpl;
@@ -901,6 +906,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(nf_conntrack_hash_check_insert);
 
+//更新ct的统计计数
 void nf_ct_acct_add(struct nf_conn *ct, u32 dir, unsigned int packets,
 		    unsigned int bytes)
 {
@@ -908,6 +914,7 @@ void nf_ct_acct_add(struct nf_conn *ct, u32 dir, unsigned int packets,
 
 	acct = nf_conn_acct_find(ct);
 	if (acct) {
+	    //更新ct上的counter
 		struct nf_conn_counter *counter = acct->counter;
 
 		atomic64_add(packets, &counter[dir].packets);
@@ -1873,6 +1880,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	u_int8_t protonum;
 	int dataoff, ret;
 
+	/*取ct模板*/
 	tmpl = nf_ct_get(skb, &ctinfo);
 	if (tmpl || ctinfo == IP_CT_UNTRACKED) {
 		//防止重复查询或者遇着明确标明不进行跟踪的报文
@@ -2783,6 +2791,7 @@ static struct nf_ct_hook nf_conntrack_hook = {
 	.get_tuple_skb  = nf_conntrack_get_tuple_skb,
 };
 
+/*设置contrack的回调*/
 void nf_conntrack_init_end(void)
 {
 	/* For use by REJECT target */

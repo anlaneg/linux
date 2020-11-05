@@ -157,6 +157,7 @@ static void flow_offload_fixup_ct_timeout(struct nf_conn *ct)
 
 static void flow_offload_fixup_ct_state(struct nf_conn *ct)
 {
+    /*如为tcp协议，修正est状态，且最大窗口大小为0*/
 	if (nf_ct_protonum(ct) == IPPROTO_TCP)
 		flow_offload_fixup_tcp(&ct->proto.tcp);
 }
@@ -257,6 +258,7 @@ EXPORT_SYMBOL_GPL(flow_offload_add);
 void flow_offload_refresh(struct nf_flowtable *flow_table,
 			  struct flow_offload *flow)
 {
+    //flow超时时间为30S后
 	flow->timeout = nf_flowtable_time_stamp + NF_FLOW_TIMEOUT;
 
 	if (likely(!nf_flowtable_hw_offload(flow_table) ||
@@ -292,6 +294,7 @@ static void flow_offload_del(struct nf_flowtable *flow_table,
 	flow_offload_free(flow);
 }
 
+/*flow teardown设置*/
 void flow_offload_teardown(struct flow_offload *flow)
 {
 	set_bit(NF_FLOW_TEARDOWN, &flow->flags);
@@ -300,6 +303,7 @@ void flow_offload_teardown(struct flow_offload *flow)
 }
 EXPORT_SYMBOL_GPL(flow_offload_teardown);
 
+/*通过tuple查询flow_offload_tuple_rhash*/
 struct flow_offload_tuple_rhash *
 flow_offload_lookup(struct nf_flowtable *flow_table,
 		    struct flow_offload_tuple *tuple)
@@ -308,16 +312,22 @@ flow_offload_lookup(struct nf_flowtable *flow_table,
 	struct flow_offload *flow;
 	int dir;
 
+	/*通过tuple查询flow_table->rhashtable表*/
 	tuplehash = rhashtable_lookup(&flow_table->rhashtable, tuple,
 				      nf_flow_offload_rhash_params);
 	if (!tuplehash)
+	    /*无记录，返回NULL*/
 		return NULL;
 
+	/*由tuplehash换算flow_offload对象*/
 	dir = tuplehash->tuple.dir;
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
+
+	//如flow为teardown标记，返回NULL？
 	if (test_bit(NF_FLOW_TEARDOWN, &flow->flags))
 		return NULL;
 
+	//如flow->ct有dying标记，返回NULL？
 	if (unlikely(nf_ct_is_dying(flow->ct)))
 		return NULL;
 

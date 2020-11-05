@@ -3962,9 +3962,11 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 	switch (tcf_classify(skb, miniq->filter_list, &cl_res, false)) {
 	case TC_ACT_OK:
 	case TC_ACT_RECLASSIFY:
+	    /*指定报文classid*/
 		skb->tc_index = TC_H_MIN(cl_res.classid);
 		break;
 	case TC_ACT_SHOT:
+	    /*返回shot,则释放此skb*/
 		mini_qdisc_qstats_cpu_drop(miniq);
 		*ret = NET_XMIT_DROP;
 		kfree_skb(skb);
@@ -3972,10 +3974,12 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 	case TC_ACT_STOLEN:
 	case TC_ACT_QUEUED:
 	case TC_ACT_TRAP:
+	    /*报文已缓存，此处减少报文引用计数*/
 		*ret = NET_XMIT_SUCCESS;
 		consume_skb(skb);
 		return NULL;
 	case TC_ACT_REDIRECT:
+	    /*报文重定向到另一个接口*/
 		/* No need to push/pop skb's mac_header here on egress! */
 		skb_do_redirect(skb);
 		*ret = NET_XMIT_SUCCESS;

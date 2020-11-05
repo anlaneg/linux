@@ -403,13 +403,14 @@ int flow_indr_dev_register(flow_indr_block_bind_cb_t *cb, void *cb_priv)
 	list_for_each_entry(indr_dev, &flow_block_indr_dev_list, list) {
 		if (indr_dev->cb == cb &&
 		    indr_dev->cb_priv == cb_priv) {
+		    /*如果已存在此注册，则增加引用计数*/
 			refcount_inc(&indr_dev->refcnt);
 			mutex_unlock(&flow_indr_block_lock);
 			return 0;
 		}
 	}
 
-	//构造indrect dev,并将其挂接在flow_block_indr_dev_list
+	//没有注册，则构造indrect dev,并将其挂接在flow_block_indr_dev_list
 	indr_dev = flow_indr_dev_alloc(cb, cb_priv);
 	if (!indr_dev) {
 		mutex_unlock(&flow_indr_block_lock);
@@ -433,6 +434,7 @@ static void __flow_block_indr_cleanup(void (*release)(void *cb_priv),
 	list_for_each_entry_safe(this, next, &flow_block_indr_list, indr.list) {
 		if (this->release == release &&
 		    this->indr.cb_priv == cb_priv) {
+		    /*release回调与间接cb_priv一起唯一确定一个flow_block_cb*/
 			list_move(&this->indr.list, cleanup_list);
 			return;
 		}
@@ -462,6 +464,7 @@ void flow_indr_dev_unregister(flow_indr_block_bind_cb_t *cb, void *cb_priv,
 		if (this->cb == cb &&
 		    this->cb_priv == cb_priv &&
 		    refcount_dec_and_test(&this->refcnt)) {
+		    /*引用计数减为0，执行移除*/
 			indr_dev = this;
 			list_del(&indr_dev->list);
 			//在flow_block_indr_dev_list上完成移除
@@ -501,12 +504,12 @@ static void flow_block_indr_init(struct flow_block_cb *flow_block,
 	flow_block->indr.cleanup = cleanup;
 }
 
-/*构造flow_block_cb,按command解绑定/绑定 block_cb*/
+/*api,构造flow_block_cb,按command解绑定/绑定 block_cb*/
 struct flow_block_cb *flow_indr_block_cb_alloc(flow_setup_cb_t *cb,
-					       void *cb_ident, void *cb_priv,
-					       void (*release)(void *cb_priv),
+					       void *cb_ident/*回调标识*/, void *cb_priv/*回调参数*/,
+					       void (*release/*flow_block_cb释放时回调*/)(void *cb_priv),
 					       struct flow_block_offload *bo,
-					       struct net_device *dev,
+					       struct net_device *dev/*被间接绑定的上层设备，例如vxlan_sys_4789*/,
 					       struct Qdisc *sch, void *data,
 					       void *indr_cb_priv,
 					       void (*cleanup)(struct flow_block_cb *block_cb))
@@ -527,7 +530,7 @@ out:
 EXPORT_SYMBOL(flow_indr_block_cb_alloc);
 
 //dev未提供ndo_setup_tc回调，通过此函数间接触发block bind回调，例如触发vxlan设备的offload
-int flow_indr_dev_setup_offload(struct net_device *dev/*offload关联的设备*/, struct Qdisc *sch,
+int flow_indr_dev_setup_offload(struct net_device *dev/*offload关联的设备，例如vxlan_sys_4789*/, struct Qdisc *sch,
 				enum tc_setup_type type, void *data,
 				struct flow_block_offload *bo,
 				void (*cleanup)(struct flow_block_cb *block_cb))

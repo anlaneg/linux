@@ -866,6 +866,7 @@ static inline void _bstats_update(struct gnet_stats_basic_packed *bstats,
 	bstats->packets += packets;
 }
 
+/*累计bstats的字节数及报文数*/
 static inline void bstats_update(struct gnet_stats_basic_packed *bstats,
 				 const struct sk_buff *skb)
 {

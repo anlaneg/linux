@@ -380,6 +380,7 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 {
 	bool tcp = false;
 
+	//只处理est,est_reply
 	if (ctinfo != IP_CT_ESTABLISHED && ctinfo != IP_CT_ESTABLISHED_REPLY)
 		return;
 
@@ -402,32 +403,38 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 	tcf_ct_flow_table_add(ct_ft, ct, tcp);
 }
 
+//解析tcp/udp报文，填充tuple
 static bool
 tcf_ct_flow_table_fill_tuple_ipv4(struct sk_buff *skb,
-				  struct flow_offload_tuple *tuple,
-				  struct tcphdr **tcph)
+				  struct flow_offload_tuple *tuple/*出参，待填充的元组信息*/,
+				  struct tcphdr **tcph/*出参，如为tcp协议，则返回tcp头指针*/)
 {
 	struct flow_ports *ports;
 	unsigned int thoff;
 	struct iphdr *iph;
 
+	/*使ip头可平坦访问*/
 	if (!pskb_network_may_pull(skb, sizeof(*iph)))
 		return false;
 
 	iph = ip_hdr(skb);
 	thoff = iph->ihl * 4;
 
+	/*ip为分片报文或者ip头存在选项，则返回false*/
 	if (ip_is_fragment(iph) ||
 	    unlikely(thoff != sizeof(struct iphdr)))
 		return false;
 
+	/*非tcp,udp协议返回false*/
 	if (iph->protocol != IPPROTO_TCP &&
 	    iph->protocol != IPPROTO_UDP)
 		return false;
 
+	/*ttl过小*/
 	if (iph->ttl <= 1)
 		return false;
 
+	/*使l4头部可访问*/
 	if (!pskb_network_may_pull(skb, iph->protocol == IPPROTO_TCP ?
 					thoff + sizeof(struct tcphdr) :
 					thoff + sizeof(*ports)))
@@ -448,20 +455,23 @@ tcf_ct_flow_table_fill_tuple_ipv4(struct sk_buff *skb,
 	return true;
 }
 
+//解析ipv6报文，填充tuple
 static bool
 tcf_ct_flow_table_fill_tuple_ipv6(struct sk_buff *skb,
-				  struct flow_offload_tuple *tuple,
-				  struct tcphdr **tcph)
+				  struct flow_offload_tuple *tuple/*出参，待填充tuple*/,
+				  struct tcphdr **tcph/*出参，如为tcp协议，则指向tcp头部*/)
 {
 	struct flow_ports *ports;
 	struct ipv6hdr *ip6h;
 	unsigned int thoff;
 
+	//获取ipv6头部
 	if (!pskb_network_may_pull(skb, sizeof(*ip6h)))
 		return false;
 
 	ip6h = ipv6_hdr(skb);
 
+	//只容许下一层为tcp/udp
 	if (ip6h->nexthdr != IPPROTO_TCP &&
 	    ip6h->nexthdr != IPPROTO_UDP)
 		return false;
@@ -479,6 +489,7 @@ tcf_ct_flow_table_fill_tuple_ipv6(struct sk_buff *skb,
 	if (ip6h->nexthdr == IPPROTO_TCP)
 		*tcph = (void *)(skb_network_header(skb) + thoff);
 
+	//填充tuple
 	ports = (struct flow_ports *)(skb_network_header(skb) + thoff);
 	tuple->src_v6 = ip6h->saddr;
 	tuple->dst_v6 = ip6h->daddr;
@@ -508,7 +519,7 @@ static bool tcf_ct_flow_table_lookup(struct tcf_ct_params *p,
 	if ((ct && !nf_ct_is_template(ct)) || ctinfo == IP_CT_UNTRACKED)
 		return false;
 
-	//解析报文元组信息
+	//解析报文元组信息;如不支持解析，返回false
 	switch (family) {
 	case NFPROTO_IPV4:
 		if (!tcf_ct_flow_table_fill_tuple_ipv4(skb, &tuple, &tcph))
@@ -522,6 +533,7 @@ static bool tcf_ct_flow_table_lookup(struct tcf_ct_params *p,
 		return false;
 	}
 
+	/*如不存在tuplehash,返回false*/
 	tuplehash = flow_offload_lookup(nf_ft, &tuple);
 	if (!tuplehash)
 		return false;
@@ -530,17 +542,22 @@ static bool tcf_ct_flow_table_lookup(struct tcf_ct_params *p,
 	flow = container_of(tuplehash, struct flow_offload, tuplehash[dir]);
 	ct = flow->ct;
 
+	/*tcp报文，且包含fin,rst标记时，将flow标记为teardown状态*/
 	if (tcph && (unlikely(tcph->fin || tcph->rst))) {
 		flow_offload_teardown(flow);
 		return false;
 	}
 
+	//flow已存在，如为原方向，则为est;否则反方向，则为est_reply
 	ctinfo = dir == FLOW_OFFLOAD_DIR_ORIGINAL ? IP_CT_ESTABLISHED :
 						    IP_CT_ESTABLISHED_REPLY;
 
+	/*刷新netfilter表中的flow*/
 	flow_offload_refresh(nf_ft, flow);
 	nf_conntrack_get(&ct->ct_general);
+	/*状态更新*/
 	nf_ct_set(skb, ct, ctinfo);
+	/*统计更新*/
 	nf_ct_acct_update(ct, dir, skb->len);
 
 	return true;
@@ -565,6 +582,7 @@ struct tc_ct_action_net {
 };
 
 /* Determine whether skb->_nfct is equal to the result of conntrack lookup. */
+//检测当前skb中缓存的ct是否与待查询的ct相同，如果相同返回true,否则返回false
 static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 				   u16 zone_id, bool force)
 {
@@ -577,17 +595,18 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 	    /*如果没有对应的ct，则直接返回*/
 		return false;
 
-	//与ct同属一个net namespace
+	//有ct,且与ct不属于同一个net namespace，返回false
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
 		return false;
 
-	//zone id相同
+	//zone id不相同
 	if (nf_ct_zone(ct)->id != zone_id)
 		return false;
 
 	/* Force conntrack entry direction. */
 	//当前有ct,但当前报文方向非original,如果给定force,则将其移除
 	if (force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
+	    /*移除ct，且将其置为untracked*/
 		if (nf_ct_is_confirmed(ct))
 			nf_ct_kill(ct);
 
@@ -597,6 +616,7 @@ static bool tcf_ct_skb_nfct_cached(struct net *net, struct sk_buff *skb,
 		return false;
 	}
 
+	/*可以复用ct*/
 	return true;
 }
 
@@ -646,20 +666,24 @@ static u8 tcf_ct_skb_nf_family(struct sk_buff *skb)
 	return family;
 }
 
-static int tcf_ct_ipv4_is_fragment(struct sk_buff *skb, bool *frag)
+//检查skb是否为ipv4分片报文
+static int tcf_ct_ipv4_is_fragment(struct sk_buff *skb, bool *frag/*出参，是否为分片报文*/)
 {
 	unsigned int len;
 
 	len =  skb_network_offset(skb) + sizeof(struct iphdr);
 	if (unlikely(skb->len < len))
+	    /*ip头部不完整，报错*/
 		return -EINVAL;
 	if (unlikely(!pskb_may_pull(skb, len)))
+	    /*使ip头部平坦失败*/
 		return -ENOMEM;
 
 	*frag = ip_is_fragment(ip_hdr(skb));
 	return 0;
 }
 
+/*检查skb是否为ipv6分片*/
 static int tcf_ct_ipv6_is_fragment(struct sk_buff *skb, bool *frag)
 {
 	unsigned int flags = 0, len, payload_ofs = 0;
@@ -668,8 +692,10 @@ static int tcf_ct_ipv6_is_fragment(struct sk_buff *skb, bool *frag)
 
 	len =  skb_network_offset(skb) + sizeof(struct ipv6hdr);
 	if (unlikely(skb->len < len))
+	    /*报文长度不足ipv6*/
 		return -EINVAL;
 	if (unlikely(!pskb_may_pull(skb, len)))
+	    /*报文长度平坦失败*/
 		return -ENOMEM;
 
 	nexthdr = ipv6_find_hdr(skb, &payload_ofs, -1, &frag_off, &flags);
@@ -680,6 +706,7 @@ static int tcf_ct_ipv6_is_fragment(struct sk_buff *skb, bool *frag)
 	return 0;
 }
 
+/*ct前执行分片重组*/
 static int tcf_ct_handle_fragments(struct net *net, struct sk_buff *skb,
 				   u8 family, u16 zone, bool *defrag)
 {
@@ -694,11 +721,13 @@ static int tcf_ct_handle_fragments(struct net *net, struct sk_buff *skb,
 	if ((ct && !nf_ct_is_template(ct)) || ctinfo == IP_CT_UNTRACKED)
 		return 0;
 
+	/*确定当前报文是否为分片报文*/
 	if (family == NFPROTO_IPV4)
 		err = tcf_ct_ipv4_is_fragment(skb, &frag);
 	else
 		err = tcf_ct_ipv6_is_fragment(skb, &frag);
 	if (err || !frag)
+	    /*解析出错或者报文非分片，则返回*/
 		return err;
 
 	skb_get(skb);
@@ -843,6 +872,7 @@ out:
 }
 #endif /* CONFIG_NF_NAT */
 
+//为ct设置mark
 static void tcf_ct_act_set_mark(struct nf_conn *ct, u32 mark, u32 mask)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK_MARK)
@@ -860,6 +890,7 @@ static void tcf_ct_act_set_mark(struct nf_conn *ct, u32 mark, u32 mask)
 #endif
 }
 
+//为ct设置lables
 static void tcf_ct_act_set_labels(struct nf_conn *ct,
 				  u32 *labels,
 				  u32 *labels_m)
@@ -939,9 +970,11 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 }
 
 //执行ct action
+//用于为skb关联其对应的ct;或者为skb创建对应的ct
 static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		      struct tcf_result *res)
 {
+    /*取报文所在的net namespace*/
 	struct net *net = dev_net(skb->dev);
 	bool cached, commit, clear, force;
 	enum ip_conntrack_info ctinfo;
@@ -957,28 +990,34 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 
 	p = rcu_dereference_bh(c->params);
 
+	/*取此ct action的处理结果*/
 	retval = READ_ONCE(c->tcf_action);
+	/*向kernel添加新的ct*/
 	commit = p->ct_action & TCA_CT_ACT_COMMIT;
 	/*清除skb的ct信息，ct将被移除*/
 	clear = p->ct_action & TCA_CT_ACT_CLEAR;
 	/*只容许源方向建立ct*/
 	force = p->ct_action & TCA_CT_ACT_FORCE;
+	/*取此ct的连接跟踪模板*/
 	tmpl = p->tmpl;
 
+	/*更新此action的lastuse时间及firstuse时间*/
 	tcf_lastuse_update(&c->tcf_tm);
 
 	if (clear) {
 		//如果需要清除ct,则将skb中的ct清除掉
 		ct = nf_ct_get(skb, &ctinfo);
 		if (ct) {
+		    /*减少ct引用计数，将skb置为未tracked*/
 			nf_conntrack_put(&ct->ct_general);
 			nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
 		}
 
+		/*此时为untracked标记*/
 		goto out;
 	}
 
-	//目前支持对ipv4,ipv6进行ct创建
+	//目前仅支持对ipv4,ipv6进行ct创建
 	family = tcf_ct_skb_nf_family(skb);
 	if (family == NFPROTO_UNSPEC)
 		goto drop;
@@ -986,11 +1025,14 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	/* The conntrack module expects to be working at L3.
 	 * We also try to pull the IPv4/6 header to linear area
 	 */
+	//使skb->data指向l3头部
 	nh_ofs = skb_network_offset(skb);
 	skb_pull_rcsum(skb, nh_ofs);
+
 	//处理分片重组
 	err = tcf_ct_handle_fragments(net, skb, family, p->zone, &defrag);
 	if (err == -EINPROGRESS) {
+	    /*报文被分片表缓存*/
 		retval = TC_ACT_STOLEN;
 		goto out;
 	}
@@ -1006,11 +1048,12 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	 * actually run the packet through conntrack twice unless it's for a
 	 * different zone.
 	 */
-	//如上面注释所言，确定是否使用cached的ct
+	//如上面注释所言，确定是否使用skb中缓存的，如与待查询的一致，则返回true
 	cached = tcf_ct_skb_nfct_cached(net, skb, p->zone, force);
 	if (!cached) {
-	    //当前skb没有对应的ct或者已创建的ct不符合当前action,执行action创建
+	    //当前skb没有对应的ct或者已创建的ct,但不符合当前ct action要求,再次执行action创建
 		if (!commit && tcf_ct_flow_table_lookup(p, skb, family)) {
+		    /*不要求commit,且netfilter table中已存在，跳过创建*/
 			skip_add = true;
 			goto do_nat;
 		}
@@ -1022,10 +1065,11 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 			if (skb_nfct(skb))
 				nf_conntrack_put(skb_nfct(skb));
 			nf_conntrack_get(&tmpl->ct_general);
+			/*将此ct模板赋给skb,并置new状态*/
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
 
-		//创建ct
+		//模拟netfilter上下文，创建ct
 		state.hook = NF_INET_PRE_ROUTING;
 		state.net = net;
 		state.pf = family;
@@ -1060,9 +1104,11 @@ do_nat:
 	}
 
 out_push:
+    /*还原到原来的skb->data*/
 	skb_push_rcsum(skb, nh_ofs);
 
 out:
+    /*更新报文统计计数及字节数*/
 	tcf_action_update_bstats(&c->common, skb);
 	if (defrag)
 		qdisc_skb_cb(skb)->pkt_len = skb->len;
@@ -1237,6 +1283,7 @@ static int tcf_ct_fill_params(struct net *net,
 	if (p->zone == NF_CT_DEFAULT_ZONE_ID)
 		return 0;
 
+	/*初始化zone,申请tmpl连接*/
 	nf_ct_zone_init(&zone, p->zone, NF_CT_DEFAULT_ZONE_DIR, 0);
 	tmpl = nf_ct_tmpl_alloc(net, &zone, GFP_KERNEL);
 	if (!tmpl) {
@@ -1246,7 +1293,9 @@ static int tcf_ct_fill_params(struct net *net,
 
 	//设置此ct confirmed
 	__set_bit(IPS_CONFIRMED_BIT, &tmpl->status);
+	/*增加此ct引用计数*/
 	nf_conntrack_get(&tmpl->ct_general);
+	/*设置ct模板*/
 	p->tmpl = tmpl;
 
 	return 0;

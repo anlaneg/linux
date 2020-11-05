@@ -23,6 +23,7 @@ struct mlx5e_tc_tunnel {
 	int tunnel_type;
 	enum mlx5_flow_match_level match_level;
 
+	/*检查priv能否offload当前tc tunnel*/
 	bool (*can_offload)(struct mlx5e_priv *priv);
 	int (*calc_hlen)(struct mlx5e_encap_entry *e);
 	int (*init_encap_attr)(struct net_device *tunnel_dev,

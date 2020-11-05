@@ -58,7 +58,8 @@ struct ovs_conntrack_info {
 	struct nf_conntrack_helper *helper;
 	struct nf_conntrack_zone zone;
 	struct nf_conn *ct;
-	u8 commit : 1;//如果不存在，则可以创建ct
+	//如果不存在，则可以创建ct
+	u8 commit : 1;
 	//nat方式
 	u8 nat : 3;                 /* enum ovs_ct_nat */
 	u8 force : 1;
@@ -706,7 +707,7 @@ static bool skb_nfct_cached(struct net *net,
 	struct nf_conn *ct;
 	bool ct_executed = true;
 
-	//取skb对应的连接跟踪
+	//取skb对应的连接跟踪地址及ct信息
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
 		ct = ovs_ct_executed(net, key, info, skb, &ct_executed);
@@ -1249,6 +1250,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 		return 0;
 
 #if	IS_ENABLED(CONFIG_NETFILTER_CONNCOUNT)
+	//zone连接跟踪限制触发检查
 	if (static_branch_unlikely(&ovs_ct_limit_enabled)) {
 		if (!nf_ct_is_confirmed(ct)) {
 			err = ovs_ct_check_limit(net, info,

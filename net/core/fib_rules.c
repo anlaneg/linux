@@ -309,7 +309,7 @@ int fib_rules_lookup(struct fib_rules_ops *ops/*执行策略查询的协议族op
 
 	rcu_read_lock();
 
-	//遍历每条rule
+	//遍历每条策略路由rule
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 jumped:
         //尝试匹配规则

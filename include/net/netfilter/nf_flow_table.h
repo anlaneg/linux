@@ -91,21 +91,26 @@ enum flow_offload_tuple_dir {
 
 struct flow_offload_tuple {
 	union {
+	    //源ip
 		struct in_addr		src_v4;
 		struct in6_addr		src_v6;
 	};
 	union {
+	    //目的ip
 		struct in_addr		dst_v4;
 		struct in6_addr		dst_v6;
 	};
 	struct {
+	    //源目的port
 		__be16			src_port;
 		__be16			dst_port;
 	};
 
 	int				iifidx;
 
+	//三层协议类型（例如af_inet)
 	u8				l3proto;
+	//四层协议类型（例如tcp,icmp,udp等）
 	u8				l4proto;
 	u8				dir;
 

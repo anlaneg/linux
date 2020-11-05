@@ -72,7 +72,7 @@ struct mlx5_rep_uplink_priv {
 	 * private data
 	 *
 	 */
-	struct list_head	    tc_indr_block_priv_list;
+	struct list_head	    tc_indr_block_priv_list;/*记录自已bind的设备*/
 
 	struct mlx5_tun_entropy tun_entropy;
 
@@ -99,6 +99,7 @@ struct mlx5e_rep_priv {
 	struct mlx5_flow_table *root_ft;
 	struct mlx5_flow_handle *vport_rx_rule;
 	struct list_head       vport_sqs_list;
+	/*uplink rep的私有数据，必须为uplink时有效*/
 	struct mlx5_rep_uplink_priv uplink_priv; /* valid for uplink rep */
 	struct rtnl_link_stats64 prev_vf_vport_stats;
 };

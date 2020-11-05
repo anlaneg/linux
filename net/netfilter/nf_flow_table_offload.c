@@ -13,15 +13,16 @@
 #include <net/netfilter/nf_conntrack_core.h>
 #include <net/netfilter/nf_conntrack_tuple.h>
 
+/*负责offload flow的工作队列*/
 static struct workqueue_struct *nf_flow_offload_wq;
 
 struct flow_offload_work {
 	struct list_head	list;
-	enum flow_cls_command	cmd;
-	int			priority;
-	struct nf_flowtable	*flowtable;
-	struct flow_offload	*flow;
-	struct work_struct	work;
+	enum flow_cls_command	cmd;/*flow offload命令*/
+	int			priority;/*flow offload优先级*/
+	struct nf_flowtable	*flowtable;/*offload到哪张表*/
+	struct flow_offload	*flow;/*要offload的流*/
+	struct work_struct	work;/*负责offload的work*/
 };
 
 #define NF_FLOW_DISSECTOR(__match, __type, __field)	\
@@ -801,6 +802,7 @@ static void flow_offload_work_stats(struct flow_offload_work *offload)
 	}
 }
 
+/*负责offload ct的worker工作函数*/
 static void flow_offload_work_handler(struct work_struct *work)
 {
 	struct flow_offload_work *offload;
@@ -808,6 +810,7 @@ static void flow_offload_work_handler(struct work_struct *work)
 	offload = container_of(work, struct flow_offload_work, work);
 	switch (offload->cmd) {
 		case FLOW_CLS_REPLACE:
+		    /*flow替换*/
 			flow_offload_work_add(offload);
 			break;
 		case FLOW_CLS_DESTROY:
@@ -824,11 +827,13 @@ static void flow_offload_work_handler(struct work_struct *work)
 	kfree(offload);
 }
 
+/*将offload work加入工作队列*/
 static void flow_offload_queue_work(struct flow_offload_work *offload)
 {
 	queue_work(nf_flow_offload_wq, &offload->work);
 }
 
+/*构造offload work*/
 static struct flow_offload_work *
 nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 			   struct flow_offload *flow, unsigned int cmd)
@@ -853,7 +858,7 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	return offload;
 }
 
-
+/*flow offload添加*/
 void nf_flow_offload_add(struct nf_flowtable *flowtable,
 			 struct flow_offload *flow)
 {

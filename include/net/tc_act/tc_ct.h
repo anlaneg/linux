@@ -11,6 +11,7 @@
 
 /*ct的控制参数*/
 struct tcf_ct_params {
+    /*ct模板*/
 	struct nf_conn *tmpl;
 	u16 zone;
 

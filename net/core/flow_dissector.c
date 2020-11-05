@@ -259,6 +259,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 	//取skb对应的ct(要求skb中已查询ct)
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
+	    /*无对应的ct,不填充key->ct_state*/
 		return;
 
 	key = skb_flow_dissector_target(flow_dissector,

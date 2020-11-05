@@ -19,7 +19,7 @@
 #include "lib/port_tun.h"
 
 struct mlx5e_rep_indr_block_priv {
-	struct net_device *netdev;
+	struct net_device *netdev;/*被绑定的网络设备*/
 	struct mlx5e_rep_priv *rpriv;
 
 	struct list_head list;
@@ -288,6 +288,7 @@ int mlx5e_rep_tc_event_port_affinity(struct mlx5e_priv *priv)
 	return NOTIFY_OK;
 }
 
+/*检查netdev是否已被此rpriv绑定，如绑定返回mlx5e_rep_indr_block_priv*/
 static struct mlx5e_rep_indr_block_priv *
 mlx5e_rep_indr_block_priv_lookup(struct mlx5e_rep_priv *rpriv,
 				 struct net_device *netdev)
@@ -306,6 +307,7 @@ mlx5e_rep_indr_block_priv_lookup(struct mlx5e_rep_priv *rpriv,
 	return NULL;
 }
 
+/*间接flower规则卸载*/
 static int
 mlx5e_rep_indr_offload(struct net_device *netdev,
 		       struct flow_cls_offload *flower,
@@ -332,6 +334,7 @@ mlx5e_rep_indr_offload(struct net_device *netdev,
 	return err;
 }
 
+/*间接形tc回调，例如vxlan封装解封装卸载*/
 static int mlx5e_rep_indr_setup_tc_cb(enum tc_setup_type type,
 				      void *type_data, void *indr_priv)
 {
@@ -404,7 +407,7 @@ static void mlx5e_rep_indr_block_unbind(void *cb_priv)
 static LIST_HEAD(mlx5e_block_cb_list);
 
 static int
-mlx5e_rep_indr_setup_block(struct net_device *netdev, struct Qdisc *sch,
+mlx5e_rep_indr_setup_block(struct net_device *netdev/*要绑定的上层设备，例如vxlan_sys_4789*/, struct Qdisc *sch,
 			   struct mlx5e_rep_priv *rpriv,
 			   struct flow_block_offload *f,
 			   flow_setup_cb_t *setup_cb,
@@ -415,10 +418,12 @@ mlx5e_rep_indr_setup_block(struct net_device *netdev, struct Qdisc *sch,
 	struct mlx5e_rep_indr_block_priv *indr_priv;
 	struct flow_block_cb *block_cb;
 
+	/*为vlan设备增加的检查*/
 	if (!mlx5e_tc_tun_device_to_offload(priv, netdev) &&
 	    !(is_vlan_dev(netdev) && vlan_dev_real_dev(netdev) == rpriv->netdev))
 		return -EOPNOTSUPP;
 
+	/*仅支持ingress方向*/
 	if (f->binder_type != FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS)
 		return -EOPNOTSUPP;
 
@@ -426,11 +431,14 @@ mlx5e_rep_indr_setup_block(struct net_device *netdev, struct Qdisc *sch,
 	f->driver_block_list = &mlx5e_block_cb_list;
 
 	switch (f->command) {
+	/*执行block的绑定*/
 	case FLOW_BLOCK_BIND:
 		indr_priv = mlx5e_rep_indr_block_priv_lookup(rpriv, netdev);
 		if (indr_priv)
+		    /*已绑定，返回*/
 			return -EEXIST;
 
+		/*未绑定，申请indr_priv记录此绑定关系*/
 		indr_priv = kmalloc(sizeof(*indr_priv), GFP_KERNEL);
 		if (!indr_priv)
 			return -ENOMEM;
@@ -440,6 +448,7 @@ mlx5e_rep_indr_setup_block(struct net_device *netdev, struct Qdisc *sch,
 		list_add(&indr_priv->list,
 			 &rpriv->uplink_priv.tc_indr_block_priv_list);
 
+		/*生成对应的block_cb*/
 		block_cb = flow_indr_block_cb_alloc(setup_cb, indr_priv, indr_priv,
 						    mlx5e_rep_indr_block_unbind,
 						    f, netdev, sch, data, rpriv,
@@ -471,7 +480,7 @@ mlx5e_rep_indr_setup_block(struct net_device *netdev, struct Qdisc *sch,
 	return 0;
 }
 
-//indrect dev回调触发
+//indrect dev回调处理函数，例如vxlan卸载
 static
 int mlx5e_rep_indr_setup_cb(struct net_device *netdev, struct Qdisc *sch, void *cb_priv,
 			    enum tc_setup_type type, void *type_data,
@@ -480,10 +489,12 @@ int mlx5e_rep_indr_setup_cb(struct net_device *netdev, struct Qdisc *sch, void *
 {
 	switch (type) {
 	case TC_SETUP_BLOCK:
+	    /*tc block卸载*/
 		return mlx5e_rep_indr_setup_block(netdev, sch, cb_priv, type_data,
 						  mlx5e_rep_indr_setup_tc_cb,
 						  data, cleanup);
 	case TC_SETUP_FT:
+	    /*flow table卸载*/
 		return mlx5e_rep_indr_setup_block(netdev, sch, cb_priv, type_data,
 						  mlx5e_rep_indr_setup_ft_cb,
 						  data, cleanup);
@@ -492,6 +503,7 @@ int mlx5e_rep_indr_setup_cb(struct net_device *netdev, struct Qdisc *sch, void *
 	}
 }
 
+/*注册间接设备block bind回调*/
 int mlx5e_rep_tc_netdevice_event_register(struct mlx5e_rep_priv *rpriv)
 {
 	struct mlx5_rep_uplink_priv *uplink_priv = &rpriv->uplink_priv;
@@ -499,6 +511,7 @@ int mlx5e_rep_tc_netdevice_event_register(struct mlx5e_rep_priv *rpriv)
 	/* init indirect block notifications */
 	INIT_LIST_HEAD(&uplink_priv->tc_indr_block_priv_list);
 
+	/*注册setup_block,setup_ft两种间接触发*/
 	return flow_indr_dev_register(mlx5e_rep_indr_setup_cb, rpriv);
 }
 

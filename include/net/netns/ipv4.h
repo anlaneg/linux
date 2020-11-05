@@ -59,7 +59,9 @@ struct netns_ipv4 {
 	//fib是否有custom配置的规则
 	bool			fib_has_custom_rules;
 	unsigned int		fib_rules_require_fldissect;
+	/*main路由表*/
 	struct fib_table __rcu	*fib_main;
+	/*default路由表*/
 	struct fib_table __rcu	*fib_default;
 #endif
 	bool			fib_has_custom_local_routes;

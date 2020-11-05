@@ -31,12 +31,13 @@ struct tc_action {
 	atomic_t			tcfa_bindcnt;
 	int				tcfa_action;
 	struct tcf_t			tcfa_tm;
+	//非percpu统计计数，表明action处理过的报文数及字节数
 	struct gnet_stats_basic_packed	tcfa_bstats;
 	struct gnet_stats_basic_packed	tcfa_bstats_hw;
 	struct gnet_stats_queue		tcfa_qstats;
 	struct net_rate_estimator __rcu *tcfa_rate_est;
 	spinlock_t			tcfa_lock;
-	//percpu统计计数，表明处理的报文数及字节数
+	//percpu统计计数，表明处理过的报文数及字节数
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats_hw;
 	struct gnet_stats_queue __percpu *cpu_qstats;
@@ -212,10 +213,12 @@ static inline void tcf_action_update_bstats(struct tc_action *a,
 					    struct sk_buff *skb)
 {
 	if (likely(a->cpu_bstats)) {
+	    /*更新此action通过的报文数及字节数（percpu统计）*/
 		bstats_cpu_update(this_cpu_ptr(a->cpu_bstats), skb);
 		return;
 	}
 	spin_lock(&a->tcfa_lock);
+	/*更新此action通过的报文数及字节数（非percpu统计）*/
 	bstats_update(&a->tcfa_bstats, skb);
 	spin_unlock(&a->tcfa_lock);
 }

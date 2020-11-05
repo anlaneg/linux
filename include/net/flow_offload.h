@@ -481,26 +481,34 @@ typedef int flow_setup_cb_t(enum tc_setup_type type, void *type_data,
 struct flow_block_cb;
 
 struct flow_block_indr {
+    /*用于串接在flow_block_indr_list链上*/
 	struct list_head		list;
+	/*间接绑定的上层设备，例如vxlan_sys_4789*/
 	struct net_device		*dev;
 	struct Qdisc			*sch;
-	/*绑定类型*/
+	/*间接绑定block方向类型*/
 	enum flow_block_binder_type	binder_type;
 	void				*data;
+	/*间接回调的私有数据*/
 	void				*cb_priv;
 	/*当flow_block_indr被移除时调用*/
 	void				(*cleanup)(struct flow_block_cb *block_cb);
 };
 
 struct flow_block_cb {
-	struct list_head	driver_list;/*用于挂接在driver自已的链表上*/
-	struct list_head	list;/*用于挂接在flow_block_offload->cb_list上*/
-	flow_setup_cb_t		*cb;/*block回调函数*/
-	void			*cb_ident;/*私有数据，与cb合起来唯一确定flow_block_cb*/
-	void			*cb_priv;/*block回调函数参数*/
+    /*用于挂接在driver自已的链表上*/
+	struct list_head	driver_list;
+	/*用于挂接在flow_block_offload->cb_list上*/
+	struct list_head	list;
+	/*block回调函数*/
+	flow_setup_cb_t		*cb;
+	/*回调标识（私有数据），与cb合起来唯一确定flow_block_cb*/
+	void			*cb_ident;
+	/*block回调函数参数*/
+	void			*cb_priv;
 	/*此flow block callback被释放时调用*/
 	void			(*release)(void *cb_priv);
-	/*间接绑定情况*/
+	/*间接绑定参数情况*/
 	struct flow_block_indr	indr;
 	unsigned int		refcnt;
 };

@@ -5,6 +5,7 @@
 #include "lib/vxlan.h"
 #include "en/tc_tun.h"
 
+/*如果设备具备vxlan encap/decap功能，则返回true,表示可卸载*/
 static bool mlx5e_tc_tun_can_offload_vxlan(struct mlx5e_priv *priv)
 {
 	return !!MLX5_CAP_ESW(priv->mdev, vxlan_encap_decap);
@@ -141,6 +142,7 @@ static int mlx5e_tc_tun_parse_vxlan(struct mlx5e_priv *priv,
 	return 0;
 }
 
+/*vxlan隧道*/
 struct mlx5e_tc_tunnel vxlan_tunnel = {
 	.tunnel_type          = MLX5E_TC_TUNNEL_TYPE_VXLAN,
 	.match_level          = MLX5_MATCH_L4,

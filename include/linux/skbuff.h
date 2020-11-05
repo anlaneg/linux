@@ -2678,6 +2678,7 @@ static inline int skb_inner_network_offset(const struct sk_buff *skb)
 	return skb_inner_network_header(skb) - skb->data;
 }
 
+/*使自l3头开始，长度为len的内存平坦*/
 static inline int pskb_network_may_pull(struct sk_buff *skb, unsigned int len)
 {
 	return pskb_may_pull(skb, skb_network_offset(skb) + len);
@@ -4194,6 +4195,7 @@ static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 #endif
 }
 
+/*取skb中记录的连接跟踪指针及状态*/
 static inline unsigned long skb_get_nfct(const struct sk_buff *skb)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)

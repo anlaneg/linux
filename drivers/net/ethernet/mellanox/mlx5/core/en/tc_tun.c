@@ -10,16 +10,21 @@
 #include "rep/tc.h"
 #include "rep/neigh.h"
 
+/*依据隧道设备类型，使用不同的tc tunnel*/
 struct mlx5e_tc_tunnel *mlx5e_get_tc_tun(struct net_device *tunnel_dev)
 {
 	if (netif_is_vxlan(tunnel_dev))
+	    /*tunnel_dev为vxlan设备，返回vxlan_tunnel*/
 		return &vxlan_tunnel;
 	else if (netif_is_geneve(tunnel_dev))
+	    /*tunnel_dev确认为geneve设备*/
 		return &geneve_tunnel;
 	else if (netif_is_gretap(tunnel_dev) ||
 		 netif_is_ip6gretap(tunnel_dev))
+	    /*gretap设备*/
 		return &gre_tunnel;
 	else if (netif_is_bareudp(tunnel_dev))
+	    /*bareudp设备*/
 		return &mplsoudp_tunnel;
 	else
 		return NULL;
@@ -34,6 +39,7 @@ static int get_route_and_out_devs(struct mlx5e_priv *priv,
 	struct mlx5_eswitch *esw = priv->mdev->priv.eswitch;
 	bool dst_is_lag_dev;
 
+	/*如为vlan设备，则取vlan real设备*/
 	real_dev = is_vlan_dev(dev) ? vlan_dev_real_dev(dev) : dev;
 	uplink_dev = mlx5_eswitch_uplink_get_proto_dev(esw, REP_ETH);
 
@@ -94,12 +100,14 @@ static int mlx5e_route_lookup_ipv4(struct mlx5e_priv *priv,
 	int ret;
 
 	if (mlx5_lag_is_multipath(mdev)) {
+	    /*lag设备情况*/
 		struct mlx5_eswitch *esw = mdev->priv.eswitch;
 
 		uplink_dev = mlx5_eswitch_uplink_get_proto_dev(esw, REP_ETH);
 		fl4->flowi4_oif = uplink_dev->ifindex;
 	}
 
+	/*在mirror设备对应的net namespace中执行路由查询*/
 	rt = ip_route_output_key(dev_net(mirred_dev), fl4);
 	if (IS_ERR(rt))
 		return PTR_ERR(rt);
@@ -463,6 +471,7 @@ bool mlx5e_tc_tun_device_to_offload(struct mlx5e_priv *priv,
 {
 	struct mlx5e_tc_tunnel *tunnel = mlx5e_get_tc_tun(netdev);
 
+	/*检查priv是否可卸载此tunnel*/
 	if (tunnel && tunnel->can_offload(priv))
 		return true;
 	else

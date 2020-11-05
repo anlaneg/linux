@@ -137,7 +137,7 @@ INDIRECT_CALLABLE_SCOPE int fib4_rule_action(struct fib_rule *rule,
 
 	rcu_read_lock();
 
-	//取要跳转的表
+	//取规则要求查询的路由表
 	tb_id = fib_rule_get_table(rule, arg);
 	tbl = fib_get_table(rule->fr_net, tb_id);
 	if (tbl)
@@ -191,6 +191,7 @@ INDIRECT_CALLABLE_SCOPE int fib4_rule_match(struct fib_rule *rule,
 	__be32 daddr = fl4->daddr;
 	__be32 saddr = fl4->saddr;
 
+	/*源ip及目的ip匹配*/
 	if (((saddr ^ r->src) & r->srcmask) ||
 	    ((daddr ^ r->dst) & r->dstmask))
 		return 0;

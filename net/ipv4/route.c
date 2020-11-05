@@ -2542,6 +2542,7 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 	//按入接口为lookback查询
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
 	fl4->flowi4_tos = tos & IPTOS_RT_MASK;
+
 	/*如果tos有onlink标记，则变更scope*/
 	fl4->flowi4_scope = ((tos & RTO_ONLINK) ?
 			 RT_SCOPE_LINK : RT_SCOPE_UNIVERSE);
@@ -2656,7 +2657,10 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	if (!fl4->daddr) {
 		fl4->daddr = fl4->saddr;
 		if (!fl4->daddr)
+		    /*源地址也未没有指定，使用loopback地址*/
 			fl4->daddr = fl4->saddr = htonl(INADDR_LOOPBACK);
+
+		/*使用本net namespace的loopback设备为出接口*/
 		dev_out = net->loopback_dev;
 		fl4->flowi4_oif = LOOPBACK_IFINDEX;
 		res->type = RTN_LOCAL;
