@@ -40,10 +40,10 @@ extern const u8 kallsyms_names[] __weak;/*记录kernel内置的符号*/
  * has one (eg: FRV).
  */
 extern const unsigned int kallsyms_num_syms
-__attribute__((weak, section(".rodata")));/*记录kernel内置符号总数*/
+__section(".rodata") __attribute__((weak));/*记录kernel内置符号总数*/
 
 extern const unsigned long kallsyms_relative_base
-__attribute__((weak, section(".rodata")));
+__section(".rodata") __attribute__((weak));
 
 extern const char kallsyms_token_table[] __weak;/*能过token编号获得token*/
 extern const u16 kallsyms_token_index[] __weak;/*通过token索引得到token编号*/

@@ -2903,8 +2903,8 @@ redo:
 
 	object = c->freelist;
 	page = c->page;
-	if (unlikely(!object || !node_match(page, node))) {
-	    /*没有c->freelist上没有obj了，再申请一组*/
+	if (unlikely(!object || !page || !node_match(page, node))) {
+	    	/*没有c->freelist上没有obj了，再申请一组*/
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 	} else {
 	    //freelist上有，自链上直接分配

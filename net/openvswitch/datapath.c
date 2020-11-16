@@ -1767,13 +1767,13 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	parms.port_no = OVSP_LOCAL;
 	parms.upcall_portids = a[OVS_DP_ATTR_UPCALL_PID];
 
+	/* So far only local changes have been made, now need the lock. */
+	ovs_lock();
+
 	//设置user的功能bit
 	err = ovs_dp_change(dp, a);
 	if (err)
-		goto err_destroy_meters;
-
-	/* So far only local changes have been made, now need the lock. */
-	ovs_lock();
+		goto err_unlock_and_destroy_meters;
 
 	//创建与datapth同名的internal类型接口,并指定其port number
 	vport = new_vport(&parms);
@@ -1791,8 +1791,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				ovs_dp_reset_user_features(skb, info);
 		}
 
-		ovs_unlock();
-		goto err_destroy_meters;
+		goto err_unlock_and_destroy_meters;
 	}
 
 	err = ovs_dp_cmd_fill_info(dp, reply, info->snd_portid,
@@ -1807,7 +1806,8 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	ovs_notify(&dp_datapath_genl_family, reply, info);
 	return 0;
 
-err_destroy_meters:
+err_unlock_and_destroy_meters:
+	ovs_unlock();
 	ovs_meters_exit(dp);
 err_destroy_ports:
 	kfree(dp->ports);

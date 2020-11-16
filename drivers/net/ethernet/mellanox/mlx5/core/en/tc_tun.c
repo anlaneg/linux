@@ -83,13 +83,13 @@ static int get_route_and_out_devs(struct mlx5e_priv *priv,
 	return 0;
 }
 
-static int mlx5e_route_lookup_ipv4(struct mlx5e_priv *priv,
-				   struct net_device *mirred_dev,
-				   struct net_device **out_dev,
-				   struct net_device **route_dev,
-				   struct flowi4 *fl4,
-				   struct neighbour **out_n,
-				   u8 *out_ttl)
+static int mlx5e_route_lookup_ipv4_get(struct mlx5e_priv *priv,
+				       struct net_device *mirred_dev,
+				       struct net_device **out_dev,
+				       struct net_device **route_dev,
+				       struct flowi4 *fl4,
+				       struct neighbour **out_n,
+				       u8 *out_ttl)
 {
 	struct neighbour *n;
 	struct rtable *rt;
@@ -125,17 +125,27 @@ static int mlx5e_route_lookup_ipv4(struct mlx5e_priv *priv,
 		ip_rt_put(rt);
 		return ret;
 	}
+	dev_hold(*route_dev);
 
 	if (!(*out_ttl))
 		*out_ttl = ip4_dst_hoplimit(&rt->dst);
 	//查询邻居表项
 	n = dst_neigh_lookup(&rt->dst, &fl4->daddr);
 	ip_rt_put(rt);
-	if (!n)
+	if (!n) {
+		dev_put(*route_dev);
 		return -ENOMEM;
+	}
 
 	*out_n = n;
 	return 0;
+}
+
+static void mlx5e_route_lookup_ipv4_put(struct net_device *route_dev,
+					struct neighbour *n)
+{
+	neigh_release(n);
+	dev_put(route_dev);
 }
 
 static const char *mlx5e_netdev_kind(struct net_device *dev)
@@ -208,8 +218,8 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	ttl = tun_key->ttl;
 
 	//执行路由查询
-	err = mlx5e_route_lookup_ipv4(priv, mirred_dev, &out_dev/*出接口设备*/, &route_dev/*源设备*/,
-				      &fl4, &n/*下一跳对应的领居表项*/, &ttl);
+	err = mlx5e_route_lookup_ipv4_get(priv, mirred_dev, &out_dev/*出接口设备*/, &route_dev/*源设备*/,
+					  &fl4, &n/*下一跳对应的领居表项*/, &ttl);
 	if (err)
 		return err;
 
@@ -239,7 +249,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 	e->m_neigh.family = n->ops->family;
 	memcpy(&e->m_neigh.dst_ip, n->primary_key, n->tbl->key_len);
 	e->out_dev = out_dev;
-	e->route_dev = route_dev;
+	e->route_dev_ifindex = route_dev->ifindex;
 
 	/* It's important to add the neigh to the hash table before checking
 	 * the neigh validity state. So if we'll get a notification, in case the
@@ -298,7 +308,7 @@ int mlx5e_tc_tun_create_header_ipv4(struct mlx5e_priv *priv,
 
 	e->flags |= MLX5_ENCAP_ENTRY_VALID;
 	mlx5e_rep_queue_neigh_stats_work(netdev_priv(out_dev));
-	neigh_release(n);
+	mlx5e_route_lookup_ipv4_put(route_dev, n);
 	return err;
 
 destroy_neigh_entry:
@@ -306,18 +316,18 @@ destroy_neigh_entry:
 free_encap:
 	kfree(encap_header);
 release_neigh:
-	neigh_release(n);
+	mlx5e_route_lookup_ipv4_put(route_dev, n);
 	return err;
 }
 
 #if IS_ENABLED(CONFIG_INET) && IS_ENABLED(CONFIG_IPV6)
-static int mlx5e_route_lookup_ipv6(struct mlx5e_priv *priv,
-				   struct net_device *mirred_dev,
-				   struct net_device **out_dev,
-				   struct net_device **route_dev,
-				   struct flowi6 *fl6,
-				   struct neighbour **out_n,
-				   u8 *out_ttl)
+static int mlx5e_route_lookup_ipv6_get(struct mlx5e_priv *priv,
+				       struct net_device *mirred_dev,
+				       struct net_device **out_dev,
+				       struct net_device **route_dev,
+				       struct flowi6 *fl6,
+				       struct neighbour **out_n,
+				       u8 *out_ttl)
 {
 	struct dst_entry *dst;
 	struct neighbour *n;
@@ -338,13 +348,23 @@ static int mlx5e_route_lookup_ipv6(struct mlx5e_priv *priv,
 		return ret;
 	}
 
+	dev_hold(*route_dev);
 	n = dst_neigh_lookup(dst, &fl6->daddr);
 	dst_release(dst);
-	if (!n)
+	if (!n) {
+		dev_put(*route_dev);
 		return -ENOMEM;
+	}
 
 	*out_n = n;
 	return 0;
+}
+
+static void mlx5e_route_lookup_ipv6_put(struct net_device *route_dev,
+					struct neighbour *n)
+{
+	neigh_release(n);
+	dev_put(route_dev);
 }
 
 int mlx5e_tc_tun_create_header_ipv6(struct mlx5e_priv *priv,
@@ -368,8 +388,8 @@ int mlx5e_tc_tun_create_header_ipv6(struct mlx5e_priv *priv,
 	fl6.daddr = tun_key->u.ipv6.dst;
 	fl6.saddr = tun_key->u.ipv6.src;
 
-	err = mlx5e_route_lookup_ipv6(priv, mirred_dev, &out_dev, &route_dev,
-				      &fl6, &n, &ttl);
+	err = mlx5e_route_lookup_ipv6_get(priv, mirred_dev, &out_dev, &route_dev,
+					  &fl6, &n, &ttl);
 	if (err)
 		return err;
 
@@ -398,7 +418,7 @@ int mlx5e_tc_tun_create_header_ipv6(struct mlx5e_priv *priv,
 	e->m_neigh.family = n->ops->family;
 	memcpy(&e->m_neigh.dst_ip, n->primary_key, n->tbl->key_len);
 	e->out_dev = out_dev;
-	e->route_dev = route_dev;
+	e->route_dev_ifindex = route_dev->ifindex;
 
 	/* It's importent to add the neigh to the hash table before checking
 	 * the neigh validity state. So if we'll get a notification, in case the
@@ -453,7 +473,7 @@ int mlx5e_tc_tun_create_header_ipv6(struct mlx5e_priv *priv,
 
 	e->flags |= MLX5_ENCAP_ENTRY_VALID;
 	mlx5e_rep_queue_neigh_stats_work(netdev_priv(out_dev));
-	neigh_release(n);
+	mlx5e_route_lookup_ipv6_put(route_dev, n);
 	return err;
 
 destroy_neigh_entry:
@@ -461,7 +481,7 @@ destroy_neigh_entry:
 free_encap:
 	kfree(encap_header);
 release_neigh:
-	neigh_release(n);
+	mlx5e_route_lookup_ipv6_put(route_dev, n);
 	return err;
 }
 #endif

@@ -29,9 +29,15 @@ struct nfnl_callback {
 	const u_int16_t attr_count;		/* number of nlattr's */
 };
 
+enum nfnl_abort_action {
+	NFNL_ABORT_NONE		= 0,
+	NFNL_ABORT_AUTOLOAD,
+	NFNL_ABORT_VALIDATE,
+};
+
 //定义netfilter netlink子系统
 struct nfnetlink_subsystem {
-    //子系统名称
+    	//子系统名称
 	const char *name;
 	//子系统id号
 	__u8 subsys_id;			/* nfnetlink subsystem ID */
@@ -43,7 +49,8 @@ struct nfnetlink_subsystem {
 	//用于处理批量消息时的变更提交
 	int (*commit)(struct net *net, struct sk_buff *skb);
 	//变更中止
-	int (*abort)(struct net *net, struct sk_buff *skb, bool autoload);
+	int (*abort)(struct net *net, struct sk_buff *skb,
+		     enum nfnl_abort_action action);
 	//无论最终是commit或者abort，均用于执行cleanup
 	void (*cleanup)(struct net *net);
 	//批量型消息时，校验genid

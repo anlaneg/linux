@@ -1375,7 +1375,7 @@ u64 __weak bpf_probe_read_kernel(void *dst, u32 size, const void *unsafe_ptr)
  *
  * Decode and execute eBPF instructions.
  */
-static u64 __no_fgcse ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct bpf_insn *insn/*当前待运行指令*/, u64 *stack/*栈底指针*/)
+static u64 ___bpf_prog_run(u64 *regs/*所有寄存器*/, const struct bpf_insn *insn/*当前待运行指令*/, u64 *stack/*栈底指针*/)
 {
 //定义二元操作符的goto lable
 #define BPF_INSN_2_LBL(x, y)    [BPF_##x | BPF_##y] = &&x##_##y

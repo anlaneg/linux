@@ -610,7 +610,8 @@ void __warn(const char *file, int line, void *caller/*警告函数的名称*/, u
 	}
 
 	//显示调用栈
-	dump_stack();
+	if (!regs)
+		dump_stack();
 
 	print_irqtrace_events(current);
 
