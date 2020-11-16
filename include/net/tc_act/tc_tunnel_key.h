@@ -24,6 +24,7 @@ struct tcf_tunnel_key {
 
 #define to_tunnel_key(a) ((struct tcf_tunnel_key *)a)
 
+/*如果a为一个tunnel_key且，tunnel_key对应的action为添加tunnel,则返回true*/
 static inline bool is_tcf_tunnel_set(const struct tc_action *a)
 {
 #ifdef CONFIG_NET_CLS_ACT
@@ -38,6 +39,7 @@ static inline bool is_tcf_tunnel_set(const struct tc_action *a)
 	return false;
 }
 
+/*如果a为一个tunnel_key，且tunnel_key对应的action为移除tunnel,则返回true*/
 static inline bool is_tcf_tunnel_release(const struct tc_action *a)
 {
 #ifdef CONFIG_NET_CLS_ACT

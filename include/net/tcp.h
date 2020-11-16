@@ -270,8 +270,11 @@ static inline bool tcp_under_memory_pressure(const struct sock *sk)
 
 static inline bool before(__u32 seq1, __u32 seq2)
 {
+        /*seq1是否小于seq2*/
         return (__s32)(seq1-seq2) < 0;
 }
+
+/*检查seq2是否大于等于seq1*/
 #define after(seq2, seq1) 	before(seq1, seq2)
 
 /* is s2<=s1<=s3 ? */

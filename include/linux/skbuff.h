@@ -2556,7 +2556,7 @@ static inline void skb_set_transport_header(struct sk_buff *skb,
 	skb->transport_header += offset;
 }
 
-//获取网络头指针（网络层）
+//获取网络头指针（网络层l3）
 static inline unsigned char *skb_network_header(const struct sk_buff *skb)
 {
 	return skb->head + skb->network_header;
@@ -2667,7 +2667,7 @@ static inline u32 skb_inner_network_header_len(const struct sk_buff *skb)
 	return skb->inner_transport_header - skb->inner_network_header;
 }
 
-//获取到network层指针的偏移量
+//获取到network（l3)层指针的偏移量
 static inline int skb_network_offset(const struct sk_buff *skb)
 {
 	return skb_network_header(skb) - skb->data;
@@ -4186,6 +4186,7 @@ static inline void skb_remcsum_process(struct sk_buff *skb, void *ptr,
 	skb->csum = csum_add(skb->csum, delta);
 }
 
+/*取skb中保存的ct信息（不含状态）*/
 static inline struct nf_conntrack *skb_nfct(const struct sk_buff *skb)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
@@ -4205,6 +4206,7 @@ static inline unsigned long skb_get_nfct(const struct sk_buff *skb)
 #endif
 }
 
+/*为skb设置其对应的连接跟踪指针及状态*/
 static inline void skb_set_nfct(struct sk_buff *skb, unsigned long nfct)
 {
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)

@@ -4208,6 +4208,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 				  MLX5_FLOW_CONTEXT_ACTION_COUNT;
 			break;
 		case FLOW_ACTION_TRAP:
+		    /*处理trap action*/
 			if (!flow_offload_has_one_action(flow_action)) {
 				NL_SET_ERR_MSG_MOD(extack,
 						   "action trap is supported as a sole action only");
@@ -4432,6 +4433,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			esw_attr->split_count = esw_attr->out_count;
 			break;
 		case FLOW_ACTION_TUNNEL_DECAP:
+		    /*指明隧道解封装action*/
 			decap = true;
 			break;
 		case FLOW_ACTION_GOTO:
@@ -4445,7 +4447,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			attr->dest_chain = act->chain_index;
 			break;
 		case FLOW_ACTION_CT:
-		    	//解析ct action
+		    //解析ct action
 			err = mlx5_tc_ct_parse_action(get_ct_priv(priv), attr, act, extack);
 			if (err)
 				return err;
@@ -4453,6 +4455,7 @@ static int parse_tc_fdb_actions(struct mlx5e_priv *priv,
 			flow_flag_set(flow, CT);
 			break;
 		default:
+		    /*不支持其它action*/
 			NL_SET_ERR_MSG_MOD(extack, "The offload action is not supported");
 			return -EOPNOTSUPP;
 		}

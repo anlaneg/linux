@@ -484,13 +484,18 @@ struct mlx5_fc_pool {
 struct mlx5_fc_stats {
 	spinlock_t counters_idr_lock; /* protects counters_idr */
 	struct idr counters_idr;
+	/*当前生效的flow counter*/
 	struct list_head counters;
+	/*本次需要添加的flow counter*/
 	struct llist_head addlist;
+	/*本次需要移除的flow counter*/
 	struct llist_head dellist;
 
 	struct workqueue_struct *wq;
 	struct delayed_work work;
+	/*下一次执行flower counter查询的时间*/
 	unsigned long next_query;
+	/*flow counter的采样间隔*/
 	unsigned long sampling_interval; /* jiffies */
 	u32 *bulk_query_out;
 	struct mlx5_fc_pool fc_pool;

@@ -245,7 +245,7 @@ static bool nf_ct_get_tuple_ports(const struct sk_buff *skb,
 	return true;
 }
 
-//提取3层，4层的元组
+//自skb中提取当前方向的3层，4层元组
 static bool
 nf_ct_get_tuple(const struct sk_buff *skb,
 		unsigned int nhoff,//到网络层的offset
@@ -415,7 +415,7 @@ static int get_l4proto(const struct sk_buff *skb,
 
 //解析skb，填充tuple
 bool nf_ct_get_tuplepr(const struct sk_buff *skb, unsigned int nhoff/*到网络头的偏移量*/,
-		       u_int16_t l3num,
+		       u_int16_t l3num/*l3协议类型*/,
 		       struct net *net, struct nf_conntrack_tuple *tuple)
 {
 	u8 protonum;//记录l4层协议类型
@@ -837,6 +837,7 @@ found:
 	return h;
 }
 
+/*在指定的zone中查询tuple对应的连接跟踪hash节点*/
 struct nf_conntrack_tuple_hash *
 nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 		      const struct nf_conntrack_tuple *tuple)
@@ -1113,6 +1114,7 @@ drop:
 }
 
 /* Confirm a connection given skb; places it in hash table */
+/*确认此skb对应的连接跟踪（仅发起方可以confirm连接）*/
 int
 __nf_conntrack_confirm(struct sk_buff *skb)
 {
@@ -1716,6 +1718,7 @@ resolve_normal_ct(struct nf_conn *tmpl,
 		  const struct nf_hook_state *state)
 {
 	const struct nf_conntrack_zone *zone;
+	/*报文元组信息（6元组）*/
 	struct nf_conntrack_tuple tuple;
 	struct nf_conntrack_tuple_hash *h;
 	enum ip_conntrack_info ctinfo;
@@ -1880,7 +1883,7 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 	u_int8_t protonum;
 	int dataoff, ret;
 
-	/*取ct模板*/
+	/*连接跟踪创建时，存在nfct中的为ct模板*/
 	tmpl = nf_ct_get(skb, &ctinfo);
 	if (tmpl || ctinfo == IP_CT_UNTRACKED) {
 		//防止重复查询或者遇着明确标明不进行跟踪的报文
@@ -1888,6 +1891,8 @@ nf_conntrack_in(struct sk_buff *skb, const struct nf_hook_state *state)
 		if ((tmpl && !nf_ct_is_template(tmpl)) ||
 		     ctinfo == IP_CT_UNTRACKED)
 			return NF_ACCEPT;
+
+		/*拿到模板，将nfct清空*/
 		skb->_nfct = 0;
 	}
 
@@ -2103,6 +2108,7 @@ static void nf_conntrack_attach(struct sk_buff *nskb, const struct sk_buff *skb)
 	nf_conntrack_get(skb_nfct(nskb));
 }
 
+//这个函数为什么要更新一遍ct?
 static int __nf_conntrack_update(struct net *net, struct sk_buff *skb,
 				 struct nf_conn *ct,
 				 enum ip_conntrack_info ctinfo)
@@ -2122,7 +2128,7 @@ static int __nf_conntrack_update(struct net *net, struct sk_buff *skb,
 		return -1;
 
 	if (!nf_ct_get_tuple(skb, skb_network_offset(skb), dataoff, l3num,
-			     l4num, net, &tuple))
+			     l4num, net, &tuple/*出参，l3,l4元组信息*/))
 		return -1;
 
 	if (ct->status & IPS_SRC_NAT) {
@@ -2141,8 +2147,10 @@ static int __nf_conntrack_update(struct net *net, struct sk_buff *skb,
 			ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.u.all;
 	}
 
+	/*通过tuple在zone中查询元组信息*/
 	h = nf_conntrack_find_get(net, nf_ct_zone(ct), &tuple);
 	if (!h)
+	    /*没有查询到ct,退出*/
 		return 0;
 
 	/* Store status bits of the conntrack that is clashing to re-do NAT
@@ -2150,19 +2158,23 @@ static int __nf_conntrack_update(struct net *net, struct sk_buff *skb,
 	 */
 	status = ct->status;
 
+	/*重新设置skb关联的ct*/
 	nf_ct_put(ct);
 	ct = nf_ct_tuplehash_to_ctrack(h);
 	nf_ct_set(skb, ct, ctinfo);
 
+	/*取nat钩子点*/
 	nat_hook = rcu_dereference(nf_nat_hook);
 	if (!nat_hook)
 		return 0;
 
+	/*做snat*/
 	if (status & IPS_SRC_NAT &&
 	    nat_hook->manip_pkt(skb, ct, NF_NAT_MANIP_SRC,
 				IP_CT_DIR_ORIGINAL) == NF_DROP)
 		return -1;
 
+	/*做dnat*/
 	if (status & IPS_DST_NAT &&
 	    nat_hook->manip_pkt(skb, ct, NF_NAT_MANIP_DST,
 				IP_CT_DIR_ORIGINAL) == NF_DROP)
@@ -2189,6 +2201,7 @@ static int nf_confirm_cthelper(struct sk_buff *skb, struct nf_conn *ct,
 	if (!(helper->flags & NF_CT_HELPER_F_USERSPACE))
 		return 0;
 
+	//到l4层的偏移量
 	switch (nf_ct_l3num(ct)) {
 	case NFPROTO_IPV4:
 		protoff = skb_network_offset(skb) + ip_hdrlen(skb);
@@ -2212,6 +2225,7 @@ static int nf_confirm_cthelper(struct sk_buff *skb, struct nf_conn *ct,
 
 	if (test_bit(IPS_SEQ_ADJUST_BIT, &ct->status) &&
 	    !nf_is_loopback_packet(skb)) {
+	    /*ct指明需要调整seq,且报文不属于loopback设备，执行seq调整*/
 		if (!nf_ct_seq_adjust(skb, ct, ctinfo, protoff)) {
 			NF_CT_STAT_INC_ATOMIC(nf_ct_net(ct), drop);
 			return -1;
@@ -2228,22 +2242,26 @@ static int nf_conntrack_update(struct net *net, struct sk_buff *skb)
 	struct nf_conn *ct;
 	int err;
 
+	/*取skb对应的链接跟踪及ct状态*/
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct)
+	    /*无ct不处理*/
 		return 0;
 
 	if (!nf_ct_is_confirmed(ct)) {
+	    /*ct没有confirm,（可能会被更新？另一方向先到？）执行更新*/
 		err = __nf_conntrack_update(net, skb, ct, ctinfo);
 		if (err < 0)
 			return err;
 
+		/*ct可能被变更了，重新获取一遍*/
 		ct = nf_ct_get(skb, &ctinfo);
 	}
 
 	return nf_confirm_cthelper(skb, ct, ctinfo);
 }
 
-static bool nf_conntrack_get_tuple_skb(struct nf_conntrack_tuple *dst_tuple,
+static bool nf_conntrack_get_tuple_skb(struct nf_conntrack_tuple *dst_tuple/*出参，记录获取的元组信息*/,
 				       const struct sk_buff *skb)
 {
 	const struct nf_conntrack_tuple *src_tuple;
@@ -2254,23 +2272,29 @@ static bool nf_conntrack_get_tuple_skb(struct nf_conntrack_tuple *dst_tuple,
 
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct) {
+	    /*有ct,自ct当前方向中取对应的元组*/
 		src_tuple = nf_ct_tuple(ct, CTINFO2DIR(ctinfo));
 		memcpy(dst_tuple, src_tuple, sizeof(*dst_tuple));
 		return true;
 	}
 
+	/*无ct,自skb中提供当前方向对应的元组*/
 	if (!nf_ct_get_tuplepr(skb, skb_network_offset(skb),
 			       NFPROTO_IPV4, dev_net(skb->dev),
 			       &srctuple))
 		return false;
 
+	/*在默认的zone中查询元组对应的ct hash节点*/
 	hash = nf_conntrack_find_get(dev_net(skb->dev),
 				     &nf_ct_zone_dflt,
 				     &srctuple);
 	if (!hash)
+	    /*没有找到对应的ct*/
 		return false;
 
+	/*取源方向元组*/
 	ct = nf_ct_tuplehash_to_ctrack(hash);
+	/*？这里的方向性如何处理？*/
 	src_tuple = nf_ct_tuple(ct, !hash->tuple.dst.dir);
 	memcpy(dst_tuple, src_tuple, sizeof(*dst_tuple));
 	nf_ct_put(ct);

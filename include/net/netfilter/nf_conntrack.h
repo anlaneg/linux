@@ -71,17 +71,19 @@ struct nf_conn {
 	u32 timeout;
 
 #ifdef CONFIG_NF_CONNTRACK_ZONES
+	//ct所属的zone
 	struct nf_conntrack_zone zone;
 #endif
 	/* XXX should I move this to the tail ? - Y.K */
 	/* These are my tuples; original and reply */
 	//nat情况下记录的是各方向转换后地址
-	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的五元组信息（1。源方向;2.目的方向）
+	struct nf_conntrack_tuple_hash tuplehash[IP_CT_DIR_MAX];//记录两个方向的五元组信息（1。源方向;2.响应方向）
 
 	/* Have we seen traffic both ways yet? (bitset) */
 	unsigned long status;//标记位
 
 	u16		cpu;
+	/*ct所属的net namespace*/
 	possible_net_t ct_net;
 
 #if IS_ENABLED(CONFIG_NF_NAT)
@@ -108,7 +110,7 @@ struct nf_conn {
 	union nf_conntrack_proto proto;//协议相关的信息
 };
 
-//由hash节点获取ct
+//由连接跟踪hash节点获取ct
 static inline struct nf_conn *
 nf_ct_tuplehash_to_ctrack(const struct nf_conntrack_tuple_hash *hash)
 {
@@ -116,6 +118,7 @@ nf_ct_tuplehash_to_ctrack(const struct nf_conntrack_tuple_hash *hash)
 			    tuplehash[hash->tuple.dst.dir]);
 }
 
+//取l3层协议号
 static inline u_int16_t nf_ct_l3num(const struct nf_conn *ct)
 {
 	return ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.src.l3num;
@@ -126,6 +129,7 @@ static inline u_int8_t nf_ct_protonum(const struct nf_conn *ct)
 	return ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple.dst.protonum;
 }
 
+/*给定方向，自ct中提供其对应的五元组*/
 #define nf_ct_tuple(ct, dir) (&(ct)->tuplehash[dir].tuple)
 
 /* get master conntrack via master expectation */
@@ -249,6 +253,7 @@ static inline int nf_ct_is_template(const struct nf_conn *ct)
 /* It's confirmed if it is, or has been in the hash table. */
 static inline int nf_ct_is_confirmed(const struct nf_conn *ct)
 {
+    /*检查此ct是否已经confirmed*/
 	return test_bit(IPS_CONFIRMED_BIT, &ct->status);
 }
 

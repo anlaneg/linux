@@ -5,6 +5,7 @@
 #include <linux/netfilter/nf_conntrack_zones_common.h>
 #include <net/netfilter/nf_conntrack.h>
 
+//取连接所属的zone信息
 static inline const struct nf_conntrack_zone *
 nf_ct_zone(const struct nf_conn *ct)
 {

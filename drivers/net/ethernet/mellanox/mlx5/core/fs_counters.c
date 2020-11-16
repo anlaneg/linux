@@ -173,12 +173,14 @@ static void update_counter_cache(int index, u32 *bulk_raw_data,
 	cache->lastuse = jiffies;
 }
 
+/*请求更新first flow count至last_id对应flower counter之间的flow counter更新*/
 static void mlx5_fc_stats_query_counter_range(struct mlx5_core_dev *dev,
 					      struct mlx5_fc *first,
 					      u32 last_id)
 {
 	struct mlx5_fc_stats *fc_stats = &dev->priv.fc_stats;
 	bool query_more_counters = (first->id <= last_id);
+	/*取设备支持的最大查询长度*/
 	int max_bulk_len = get_max_bulk_query_len(dev);
 	u32 *data = fc_stats->bulk_query_out;
 	struct mlx5_fc *counter = first;
@@ -194,6 +196,7 @@ static void mlx5_fc_stats_query_counter_range(struct mlx5_core_dev *dev,
 		bulk_len = min_t(int, max_bulk_len,
 				 ALIGN(last_id - bulk_base_id + 1, 4));
 
+		/*向fw请求flow counter查询*/
 		err = mlx5_cmd_fc_bulk_query(dev, bulk_base_id, bulk_len,
 					     data/*出参，结果集*/);
 		if (err) {
@@ -202,6 +205,7 @@ static void mlx5_fc_stats_query_counter_range(struct mlx5_core_dev *dev,
 		}
 		query_more_counters = false;
 
+		/*更新fw查询结果到软件*/
 		list_for_each_entry_from(counter, &fc_stats->counters, list) {
 			int counter_index = counter->id - bulk_base_id;
 			struct mlx5_fc_cache *cache = &counter->cache;
@@ -268,10 +272,14 @@ static void mlx5_fc_stats_work(struct work_struct *work)
 		return;
 
 	//遍历并向fw查询这些counter的计数
+
+	//取得最后一个flow counter
 	last = list_last_entry(&fc_stats->counters, struct mlx5_fc, list);
 
+	//取得首个flow counter
 	counter = list_first_entry(&fc_stats->counters, struct mlx5_fc,
 				   list);
+	//执行flow counter更新
 	if (counter)
 		mlx5_fc_stats_query_counter_range(dev, counter, last->id);
 

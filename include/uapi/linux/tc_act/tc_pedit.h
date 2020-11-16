@@ -30,12 +30,17 @@ enum {
   * means no specific header type - offset is relative to the network layer
   */
 enum pedit_header_type {
-	//修改的头部类型
+	/*传统修改基准，指无明确头部类型，自network头算起*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_NETWORK = 0,
+	/*以太头修改基准*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_ETH = 1,
+	/*ipv4头修改基准*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_IP4 = 2,
+	/*ipv6头修改基准*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_IP6 = 3,
+	/*tcp修改基准*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_TCP = 4,
+	/*udp修改基准*/
 	TCA_PEDIT_KEY_EX_HDR_TYPE_UDP = 5,
 	__PEDIT_HDR_TYPE_MAX,
 };

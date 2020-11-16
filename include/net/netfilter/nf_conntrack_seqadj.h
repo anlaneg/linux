@@ -18,9 +18,11 @@ struct nf_ct_seqadj {
 };
 
 struct nf_conn_seqadj {
+    //最多容许两个调整信息（正反方向）
 	struct nf_ct_seqadj	seq[IP_CT_DIR_MAX];
 };
 
+/*自ct中取出seq调整护展信息*/
 static inline struct nf_conn_seqadj *nfct_seqadj(const struct nf_conn *ct)
 {
 	return nf_ct_ext_find(ct, NF_CT_EXT_SEQADJ);

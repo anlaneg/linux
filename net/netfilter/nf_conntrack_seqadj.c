@@ -163,7 +163,7 @@ static unsigned int nf_ct_sack_adjust(struct sk_buff *skb,
 /* TCP sequence number adjustment.  Returns 1 on success, 0 on failure */
 int nf_ct_seq_adjust(struct sk_buff *skb,
 		     struct nf_conn *ct, enum ip_conntrack_info ctinfo,
-		     unsigned int protoff)
+		     unsigned int protoff/*到l4层头部的偏移量*/)
 {
 	enum ip_conntrack_dir dir = CTINFO2DIR(ctinfo);
 	struct tcphdr *tcph;
@@ -173,28 +173,36 @@ int nf_ct_seq_adjust(struct sk_buff *skb,
 	struct nf_ct_seqadj *this_way, *other_way;
 	int res = 1;
 
+	/*当前方向seq调整信息*/
 	this_way  = &seqadj->seq[dir];
+	/*对向seq调整信息*/
 	other_way = &seqadj->seq[!dir];
 
+	/*确保skb整个tcp头部可写*/
 	if (skb_ensure_writable(skb, protoff + sizeof(*tcph)))
 		return 0;
 
 	tcph = (void *)skb->data + protoff;
 	spin_lock_bh(&ct->lock);
+	/*如果tcp现有的seq大于纠正的seq分隔点，则使用after offset,否则使用之前的offset*/
 	if (after(ntohl(tcph->seq), this_way->correction_pos))
 		seqoff = this_way->offset_after;
 	else
 		seqoff = this_way->offset_before;
 
+	/*添加offset,获得新的seq值，并指行checksum替换，seq替换*/
 	newseq = htonl(ntohl(tcph->seq) + seqoff);
 	inet_proto_csum_replace4(&tcph->check, skb, tcph->seq, newseq, false);
 	pr_debug("Adjusting sequence number from %u->%u\n",
 		 ntohl(tcph->seq), ntohl(newseq));
 	tcph->seq = newseq;
 
+	/*如果不含ack,则不考虑sack,ack的情况*/
 	if (!tcph->ack)
 		goto out;
 
+
+	/*考虑ack seq的变更*/
 	if (after(ntohl(tcph->ack_seq) - other_way->offset_before,
 		  other_way->correction_pos))
 		ackoff = other_way->offset_after;
@@ -209,6 +217,7 @@ int nf_ct_seq_adjust(struct sk_buff *skb,
 		 ntohl(newack));
 	tcph->ack_seq = newack;
 
+	/*处理sack的调整情况*/
 	res = nf_ct_sack_adjust(skb, protoff, ct, ctinfo);
 out:
 	spin_unlock_bh(&ct->lock);

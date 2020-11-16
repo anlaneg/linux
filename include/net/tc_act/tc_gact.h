@@ -44,6 +44,7 @@ static inline bool is_tcf_gact_ok(const struct tc_action *a)
 	return __is_tcf_gact_act(a, TC_ACT_OK, false);
 }
 
+//是否act_shot action 对应丢包
 static inline bool is_tcf_gact_shot(const struct tc_action *a)
 {
 	return __is_tcf_gact_act(a, TC_ACT_SHOT, false);
