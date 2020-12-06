@@ -41,9 +41,11 @@ struct lwtunnel_encap_ops {
 	void (*destroy_state)(struct lwtunnel_state *lws);
 	int (*output)(struct net *net, struct sock *sk, struct sk_buff *skb);
 	int (*input)(struct sk_buff *skb);
+	/*将tunnel信息填充到skb*/
 	int (*fill_encap)(struct sk_buff *skb,
 			  struct lwtunnel_state *lwtstate);
 	int (*get_encap_size)(struct lwtunnel_state *lwtstate);
+	/*比对两个tunnel是否相等*/
 	int (*cmp_encap)(struct lwtunnel_state *a, struct lwtunnel_state *b);
 	int (*xmit)(struct sk_buff *skb);
 
@@ -71,6 +73,7 @@ static inline void lwtstate_put(struct lwtunnel_state *lws)
 		lwtstate_free(lws);
 }
 
+/*检查是否为轻量级tunnel的output redirect*/
 static inline bool lwtunnel_output_redirect(struct lwtunnel_state *lwtstate)
 {
 	if (lwtstate && (lwtstate->flags & LWTUNNEL_STATE_OUTPUT_REDIRECT))
@@ -79,6 +82,7 @@ static inline bool lwtunnel_output_redirect(struct lwtunnel_state *lwtstate)
 	return false;
 }
 
+/*检查是否为轻量级tunnel的input redirect*/
 static inline bool lwtunnel_input_redirect(struct lwtunnel_state *lwtstate)
 {
 	if (lwtstate && (lwtstate->flags & LWTUNNEL_STATE_INPUT_REDIRECT))

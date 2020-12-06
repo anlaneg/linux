@@ -33,7 +33,7 @@
 #include <linux/mlx5/driver.h>
 #include "mlx5_core.h"
 
-//用于串连所有注册的interace
+//用于串连所有注册的mlx5_interface
 static LIST_HEAD(intf_list);
 static LIST_HEAD(mlx5_dev_list);
 /* intf dev list mutex */
@@ -198,12 +198,14 @@ bool mlx5_device_registered(struct mlx5_core_dev *dev)
 	return found;
 }
 
+/**/
 void mlx5_register_device(struct mlx5_core_dev *dev)
 {
 	struct mlx5_priv *priv = &dev->priv;
 	struct mlx5_interface *intf;
 
 	mutex_lock(&mlx5_intf_mutex);
+	/*将mlx5_priv挂载在mlx5_dev_list上*/
 	list_add_tail(&priv->dev_list, &mlx5_dev_list);
 	list_for_each_entry(intf, &intf_list, list)
 		mlx5_add_device(intf, priv);
@@ -222,17 +224,19 @@ void mlx5_unregister_device(struct mlx5_core_dev *dev)
 	mutex_unlock(&mlx5_intf_mutex);
 }
 
-//接口注册
+//mellanox 添加接口
 int mlx5_register_interface(struct mlx5_interface *intf)
 {
 	struct mlx5_priv *priv;
 
+	/*必须提供add,remove回调*/
 	if (!intf->add || !intf->remove)
 		return -EINVAL;
 
 	mutex_lock(&mlx5_intf_mutex);
 	//将接口注册到intf_list中
 	list_add_tail(&intf->list, &intf_list);
+	/*遍历每个struct mlx5_core_dev的私有数据*/
 	list_for_each_entry(priv, &mlx5_dev_list, dev_list)
 		mlx5_add_device(intf, priv);
 	mutex_unlock(&mlx5_intf_mutex);
@@ -246,6 +250,7 @@ void mlx5_unregister_interface(struct mlx5_interface *intf)
 	struct mlx5_priv *priv;
 
 	mutex_lock(&mlx5_intf_mutex);
+	/**/
 	list_for_each_entry(priv, &mlx5_dev_list, dev_list)
 		mlx5_remove_device(intf, priv);
 	list_del(&intf->list);

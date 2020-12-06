@@ -427,7 +427,7 @@ static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 		break;
 
 	case VHOST_SET_VRING_NUM:
-	    //设置vring大小
+	    //设置vring队列大小
 		ops->set_vq_num(vdpa, idx, vq->num);
 		break;
 	}

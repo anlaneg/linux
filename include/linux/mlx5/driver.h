@@ -574,7 +574,7 @@ struct mlx5_priv {
 	//dbgfs中的根目录
 	struct dentry	       *dbg_root;
 
-	struct list_head        dev_list;
+	struct list_head        dev_list;//用于串连到mlx5_dev_list
 	struct list_head        ctx_list;//用于串连不同intf的mlx5_device_context
 	spinlock_t              ctx_lock;
 	struct mlx5_events      *events;

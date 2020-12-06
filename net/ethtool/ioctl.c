@@ -1932,6 +1932,7 @@ static int ethtool_get_stats(struct net_device *dev, void __user *useraddr)
 		data = vzalloc(array_size(n_stats, sizeof(u64)));
 		if (!data)
 			return -ENOMEM;
+		/*获取设备统计计数*/
 		ops->get_ethtool_stats(dev, &stats, data);
 	} else {
 		data = NULL;

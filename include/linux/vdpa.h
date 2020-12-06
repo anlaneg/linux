@@ -200,10 +200,10 @@ struct vdpa_config_ops {
 	/* Virtqueue ops */
     //设置vring的地址，idx队列编号，desc_area desc表地址，driver_area avail表地址，device_area used表地址
 	int (*set_vq_address)(struct vdpa_device *vdev,
-			      u16 idx, u64 desc_area, u64 driver_area,
-			      u64 device_area);
+			      u16 idx/*队列编号*/, u64 desc_area/*desc_area desc表地址*/, u64 driver_area/*driver_area avail表地址*/,
+			      u64 device_area/*device_area used表地址*/);
 	//设置vring长度
-	void (*set_vq_num)(struct vdpa_device *vdev, u16 idx, u32 num);
+	void (*set_vq_num)(struct vdpa_device *vdev, u16 idx/*队列编号*/, u32 num/*队列长度*/);
 	void (*kick_vq)(struct vdpa_device *vdev, u16 idx);
 	void (*set_vq_cb)(struct vdpa_device *vdev, u16 idx,
 			  struct vdpa_callback *cb);
@@ -259,7 +259,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 					size_t size);
 
 //申请并初始化vdpa设备
-#define vdpa_alloc_device(dev_struct, member, parent, config/*vdpa设备配置操作集*/, nvqs)   \
+#define vdpa_alloc_device(dev_struct/*vdpa设备结构体类型*/, member, parent, config/*vdpa设备配置操作集*/, nvqs)   \
 			  container_of(__vdpa_alloc_device( \
 				       parent, config, nvqs, \
 				       sizeof(dev_struct) + \

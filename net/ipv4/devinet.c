@@ -184,6 +184,7 @@ struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr)
 	u32 hash = inet_addr_hash(net, addr);
 	struct in_ifaddr *ifa;
 
+	/*检查inet_addr_lst中是否包含addr地址，如包含返回，否则返回NULL*/
 	hlist_for_each_entry_rcu(ifa, &inet_addr_lst[hash], hash)
 		if (ifa->ifa_local == addr &&
 		    net_eq(dev_net(ifa->ifa_dev->dev), net))

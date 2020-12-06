@@ -35,9 +35,11 @@ static void *mlx5_vdpa_add(struct mlx5_core_dev *mdev)
 {
 	struct mlx5_vdpa_dev *vdev;
 
+	/*不支持pf*/
 	if (mlx5_core_is_pf(mdev))
 		return NULL;
 
+	/*检查是否支持virtio net emulation*/
 	if (!required_caps_supported(mdev)) {
 		dev_info(mdev->device, "virtio net emulation not supported\n");
 		return NULL;
@@ -56,6 +58,7 @@ static void mlx5_vdpa_remove(struct mlx5_core_dev *mdev, void *context)
 	mlx5_vdpa_remove_dev(vdev);
 }
 
+/*定义vdpa interface*/
 static struct mlx5_interface mlx5_vdpa_interface = {
 	.add = mlx5_vdpa_add,
 	.remove = mlx5_vdpa_remove,

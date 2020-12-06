@@ -111,7 +111,7 @@ static int find_dynamic_major(void)
 //申请minorct个major的字符设备，同时占用[baseminor,baseminor+minor)之间的minor
 static struct char_device_struct *
 __register_chrdev_region(unsigned int major, unsigned int baseminor,
-			   int minorct, const char *name)
+			   int minorct, const char *name/*字符设备名称*/)
 {
 	struct char_device_struct *cd, *curr, *prev = NULL;
 	int ret;

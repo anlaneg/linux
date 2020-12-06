@@ -1842,6 +1842,7 @@ static int mlx5_get_vq_irq(struct vdpa_device *vdv, u16 idx)
 	return -EOPNOTSUPP;
 }
 
+/*vdpa操作集*/
 static const struct vdpa_config_ops mlx5_vdpa_ops = {
 	.set_vq_address = mlx5_vdpa_set_vq_address,
 	.set_vq_num = mlx5_vdpa_set_vq_num,
@@ -1937,9 +1938,11 @@ void *mlx5_vdpa_add_dev(struct mlx5_core_dev *mdev)
 	int err;
 
 	/* we save one virtqueue for control virtqueue should we require it */
+	/*获取当前支持的最大virtio-queues数目*/
 	max_vqs = MLX5_CAP_DEV_VDPA_EMULATION(mdev, max_num_virtio_queues);
 	max_vqs = min_t(u32, max_vqs, MLX5_MAX_SUPPORTED_VQS);
 
+	/*申请vdpa设备*/
 	ndev = vdpa_alloc_device(struct mlx5_vdpa_net, mvdev.vdev, mdev->device, &mlx5_vdpa_ops,
 				 2 * mlx5_vdpa_max_qps(max_vqs));
 	if (IS_ERR(ndev))

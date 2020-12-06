@@ -444,6 +444,7 @@ int fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	if (!r && !fib_num_tclassid_users(net) &&
 	    (dev->ifindex != oif || !IN_DEV_TX_REDIRECTS(idev))) {
 		if (IN_DEV_ACCEPT_LOCAL(idev))
+		    /*如果idev接受local ip，则校验通过*/
 			goto ok;
 		/* with custom local routes in place, checking local addresses
 		 * only will be too optimistic, with custom rules, checking
@@ -452,6 +453,7 @@ int fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 		if (net->ipv4.fib_has_custom_local_routes ||
 		    fib4_has_custom_rules(net))
 			goto full_check;
+		/*如果src是本机地址，则校验不通过*/
 		if (inet_lookup_ifaddr_rcu(net, src))
 			return -EINVAL;
 

@@ -83,7 +83,7 @@ int lwtunnel_encap_add_ops(const struct lwtunnel_encap_ops *ops,
 }
 EXPORT_SYMBOL_GPL(lwtunnel_encap_add_ops);
 
-//设置lwtun_encaps[num]为NULL
+//移除轻量级tunnel,设置lwtun_encaps[num]为NULL
 int lwtunnel_encap_del_ops(const struct lwtunnel_encap_ops *ops,
 			   unsigned int encap_type)
 {
@@ -112,6 +112,7 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 	bool found = false;
 	int ret = -EINVAL;
 
+	//encap类型检查
 	if (encap_type == LWTUNNEL_ENCAP_NONE ||
 	    encap_type > LWTUNNEL_ENCAP_MAX) {
 		NL_SET_ERR_MSG_ATTR(extack, encap,
@@ -121,15 +122,17 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+
 	//取encap_type对应的opss
 	ops = rcu_dereference(lwtun_encaps[encap_type]);
+
 	//找到对应的ops.且存在build_state回调，则found=true
 	if (likely(ops && ops->build_state && try_module_get(ops->owner)))
 		found = true;
 	rcu_read_unlock();
 
 	if (found) {
-	        //通过build_state执行调用
+	    //通过build_state执行调用
 		ret = ops->build_state(net, encap, family, cfg, lws, extack);
 		if (ret)
 			module_put(ops->owner);
@@ -145,6 +148,7 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 }
 EXPORT_SYMBOL_GPL(lwtunnel_build_state);
 
+/*通过检查encap_type是否存在对应的ops,确认此type是否有效*/
 int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 {
 	const struct lwtunnel_encap_ops *ops;
@@ -161,7 +165,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 	rcu_read_unlock();
 #ifdef CONFIG_MODULES
 	if (!ops) {
-	    //加载对应的modules
+	    //ops不存在，加载对应的modules
 		const char *encap_type_str = lwtunnel_encap_str(encap_type);
 
 		if (encap_type_str) {
@@ -170,11 +174,13 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 			rtnl_lock();
 
 			rcu_read_lock();
+			/*已加载，再尝试一次*/
 			ops = rcu_dereference(lwtun_encaps[encap_type]);
 			rcu_read_unlock();
 		}
 	}
 #endif
+	/*如果ops不存在，则返回不支持，否则校验通过*/
 	ret = ops ? 0 : -EOPNOTSUPP;
 	if (ret < 0)
 		NL_SET_ERR_MSG(extack, "lwt encapsulation type not supported");
@@ -183,6 +189,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_valid_encap_type);
 
+/*遍历所有netlink消息，校验其指定的encap类型*/
 int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 				   struct netlink_ext_ack *extack)
 {
@@ -198,6 +205,7 @@ int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 			attrs = rtnh_attrs(rtnh);
 			nla_entype = nla_find(attrs, attrlen, RTA_ENCAP_TYPE);
 
+			/*encap类型校验*/
 			if (nla_entype) {
 				encap_type = nla_get_u16(nla_entype);
 
@@ -237,10 +245,12 @@ int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 	if (!lwtstate)
 		return 0;
 
+	/*检查tunnel封装方式*/
 	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||
 	    lwtstate->type > LWTUNNEL_ENCAP_MAX)
 		return 0;
 
+	/*向skb中填充tunnel info信息*/
 	nest = nla_nest_start_noflag(skb, encap_attr);
 	if (!nest)
 		return -EMSGSIZE;
@@ -255,6 +265,7 @@ int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 	if (ret)
 		goto nla_put_failure;
 	nla_nest_end(skb, nest);
+	/*填充tunnel类型到skb*/
 	ret = nla_put_u16(skb, encap_type_attr, lwtstate->type);
 	if (ret)
 		goto nla_put_failure;
@@ -319,6 +330,7 @@ int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_cmp_encap);
 
+/*调用ops->output 完成轻量tunnel输出*/
 int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -328,6 +340,7 @@ int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	if (!dst)
 		goto drop;
+	/*tunnel状态*/
 	lwtstate = dst->lwtstate;
 
 	if (lwtstate->type == LWTUNNEL_ENCAP_NONE ||

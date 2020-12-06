@@ -86,6 +86,7 @@ static int bpf_mt_check_v1(const struct xt_mtchk_param *par)
 		return -EINVAL;
 }
 
+/*针对此skb执行ebpf程序*/
 static bool bpf_mt(const struct sk_buff *skb, struct xt_action_param *par)
 {
 	const struct xt_bpf_info *info = par->matchinfo;
@@ -141,6 +142,7 @@ static struct xt_match bpf_mt_reg[] __read_mostly = {
 
 static int __init bpf_mt_init(void)
 {
+    //注册bpf的match
 	return xt_register_matches(bpf_mt_reg, ARRAY_SIZE(bpf_mt_reg));
 }
 
