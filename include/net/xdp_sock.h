@@ -31,6 +31,7 @@ struct xdp_umem {
 	struct page **pgs;/*用户内存的各页指针*/
 	int id;
 	struct list_head xsk_dma_list;
+	struct work_struct work;
 };
 
 struct xsk_map {

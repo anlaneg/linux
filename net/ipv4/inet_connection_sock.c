@@ -808,7 +808,7 @@ static void reqsk_queue_hash_req(struct request_sock *req,
 	mod_timer(&req->rsk_timer, jiffies + timeout);
 
 	//将此socket加入到ehash
-	inet_ehash_insert(req_to_sk(req), NULL);
+	inet_ehash_insert(req_to_sk(req), NULL, NULL);
 	/* before letting lookups find us, make sure all req fields
 	 * are committed to memory and refcnt initialized.
 	 */
