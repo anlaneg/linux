@@ -77,6 +77,7 @@ static void nf_flow_rule_lwt_match(struct nf_flow_match *match,
 	match->dissector.used_keys |= enc_keys;
 }
 
+//依据tuple填充match字段
 static int nf_flow_rule_match(struct nf_flow_match *match,
 			      const struct flow_offload_tuple *tuple,
 			      struct dst_entry *other_dst)
@@ -573,6 +574,7 @@ EXPORT_SYMBOL_GPL(nf_flow_rule_route_ipv6);
 
 #define NF_FLOW_RULE_ACTION_MAX	16
 
+/*由flow_offload_work转换flow_rule*/
 static struct nf_flow_rule *
 nf_flow_offload_rule_alloc(struct net *net,
 			   const struct flow_offload_work *offload,
@@ -597,12 +599,14 @@ nf_flow_offload_rule_alloc(struct net *net,
 	flow_rule->rule->match.mask = &flow_rule->match.mask;
 	flow_rule->rule->match.key = &flow_rule->match.key;
 
+	/*转换到flow_rule的match*/
 	tuple = &flow->tuplehash[dir].tuple;
 	other_dst = flow->tuplehash[!dir].tuple.dst_cache;
 	err = nf_flow_rule_match(&flow_rule->match, tuple, other_dst);
 	if (err < 0)
 		goto err_flow_match;
 
+	/*转换flow的action到flow_rule*/
 	flow_rule->rule->action.num_entries = 0;
 	if (flowtable->type->action(net, flow, dir, flow_rule) < 0)
 		goto err_flow_match;
@@ -641,8 +645,9 @@ static void nf_flow_offload_destroy(struct nf_flow_rule *flow_rule[])
 		__nf_flow_offload_destroy(flow_rule[i]);
 }
 
+/*产生待offload work对应的两项flow_rule(源方向，响应方向）*/
 static int nf_flow_offload_alloc(const struct flow_offload_work *offload,
-				 struct nf_flow_rule *flow_rule[])
+				 struct nf_flow_rule *flow_rule[]/*出参，转换为后的flow_rule*/)
 {
 	struct net *net = read_pnet(&offload->flowtable->net);
 
@@ -674,11 +679,12 @@ static void nf_flow_offload_init(struct flow_cls_offload *cls_flow,
 	cls_flow->cookie = (unsigned long)tuple;
 }
 
+/*将flow_rule转换为flow_cls_offload,并通过block_cb触发，送到网卡驱动*/
 static int nf_flow_offload_tuple(struct nf_flowtable *flowtable,
 				 struct flow_offload *flow,
 				 struct nf_flow_rule *flow_rule,
 				 enum flow_offload_tuple_dir dir,
-				 int priority, int cmd,
+				 int priority/*规则优先级*/, int cmd,
 				 struct flow_stats *stats,
 				 struct list_head *block_cb_list)
 {
@@ -694,6 +700,7 @@ static int nf_flow_offload_tuple(struct nf_flowtable *flowtable,
 		cls_flow.rule = flow_rule->rule;
 
 	down_read(&flowtable->flow_block_lock);
+	/*触发所有block_cb_list回调，如果有错误，则跳过*/
 	list_for_each_entry(block_cb, block_cb_list, list) {
 		err = block_cb->cb(TC_SETUP_CLSFLOWER, &cls_flow,
 				   block_cb->cb_priv);
@@ -712,7 +719,7 @@ static int nf_flow_offload_tuple(struct nf_flowtable *flowtable,
 
 static int flow_offload_tuple_add(struct flow_offload_work *offload,
 				  struct nf_flow_rule *flow_rule,
-				  enum flow_offload_tuple_dir dir)
+				  enum flow_offload_tuple_dir dir/*待加入的流方向*/)
 {
 	return nf_flow_offload_tuple(offload->flowtable, offload->flow,
 				     flow_rule, dir, offload->priority,
@@ -728,11 +735,13 @@ static void flow_offload_tuple_del(struct flow_offload_work *offload,
 			      &offload->flowtable->flow_block.cb_list);
 }
 
+/*向硬件中添加flow_rule*/
 static int flow_offload_rule_add(struct flow_offload_work *offload,
 				 struct nf_flow_rule *flow_rule[])
 {
 	int ok_count = 0;
 
+	//分别添加源与响应方向的rule
 	ok_count += flow_offload_tuple_add(offload, flow_rule[0],
 					   FLOW_OFFLOAD_DIR_ORIGINAL);
 	ok_count += flow_offload_tuple_add(offload, flow_rule[1],
@@ -756,6 +765,7 @@ static void flow_offload_work_add(struct flow_offload_work *offload)
 	if (err < 0)
 		set_bit(NF_FLOW_HW_REFRESH, &offload->flow->flags);
 	else
+	    /*下发成功，标记此ct在硬件中*/
 		set_bit(IPS_HW_OFFLOAD_BIT, &offload->flow->ct->status);
 
 	nf_flow_offload_destroy(flow_rule);
@@ -817,6 +827,7 @@ static void flow_offload_work_handler(struct work_struct *work)
 			flow_offload_work_del(offload);
 			break;
 		case FLOW_CLS_STATS:
+		    /*flow状态获取*/
 			flow_offload_work_stats(offload);
 			break;
 		default:
@@ -833,7 +844,7 @@ static void flow_offload_queue_work(struct flow_offload_work *offload)
 	queue_work(nf_flow_offload_wq, &offload->work);
 }
 
-/*构造offload work*/
+/*利用flow构造offload work*/
 static struct flow_offload_work *
 nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 			   struct flow_offload *flow, unsigned int cmd)
@@ -853,6 +864,7 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	offload->flow = flow;
 	offload->priority = flowtable->priority;
 	offload->flowtable = flowtable;
+	/*指定此work的处理函数*/
 	INIT_WORK(&offload->work, flow_offload_work_handler);
 
 	return offload;
@@ -864,6 +876,7 @@ void nf_flow_offload_add(struct nf_flowtable *flowtable,
 {
 	struct flow_offload_work *offload;
 
+	/*生成flow offload replace命令*/
 	offload = nf_flow_offload_work_alloc(flowtable, flow, FLOW_CLS_REPLACE);
 	if (!offload)
 		return;
@@ -983,6 +996,7 @@ static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
 
 	nf_flow_table_block_offload_init(bo, dev_net(dev), cmd, flowtable,
 					 extack);
+	/*触发flow_table卸载*/
 	err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_FT, bo);
 	if (err < 0)
 		return err;
@@ -1002,10 +1016,12 @@ int nf_flow_table_offload_setup(struct nf_flowtable *flowtable,
 	if (!nf_flowtable_hw_offload(flowtable))
 		return 0;
 
+	/*如果有回调，通过回调触发*/
 	if (dev->netdev_ops->ndo_setup_tc)
 		err = nf_flow_table_offload_cmd(&bo, flowtable, dev, cmd,
 						&extack);
 	else
+	    /*触发间接flow table offload*/
 		err = nf_flow_table_indr_offload_cmd(&bo, flowtable, dev, cmd,
 						     &extack);
 	if (err < 0)

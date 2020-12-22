@@ -37,28 +37,28 @@
 #define VETH_XDP_TX_BULK_SIZE	16
 
 struct veth_stats {
-	u64	rx_drops;
+	u64	rx_drops;/*rx方向丢包数*/
 	/* xdp */
 	u64	xdp_packets;
 	u64	xdp_bytes;//xdp报文数
-	u64	xdp_redirect;
-	u64	xdp_drops;
-	u64	xdp_tx;
+	u64	xdp_redirect;/*redirect的报文数*/
+	u64	xdp_drops;/*xdp丢包数量*/
+	u64	xdp_tx;/*送tx方向的报文数*/
 	u64	xdp_tx_err;
 	u64	peer_tq_xdp_xmit;
 	u64	peer_tq_xdp_xmit_err;
 };
 
 struct veth_rq_stats {
-	struct veth_stats	vs;
+	struct veth_stats	vs;/*记录此队列状态*/
 	struct u64_stats_sync	syncp;
 };
 
 struct veth_rq {
-	struct napi_struct	xdp_napi;
+	struct napi_struct	xdp_napi;/*用于napi轮循*/
 	struct net_device	*dev;/*此队列所属的dev*/
 	struct bpf_prog __rcu	*xdp_prog;/*指向本队列对应的xdp程序*/
-	struct xdp_mem_info	xdp_mem;
+	struct xdp_mem_info	xdp_mem;/*指向xdp_prog中的mem*/
 	struct veth_rq_stats	stats;
 	bool			rx_notify_masked;
 	struct ptr_ring		xdp_ring;/*负责入队xdp报文*/
@@ -233,9 +233,11 @@ static const struct ethtool_ops veth_ethtool_ops = {
 
 static bool veth_is_xdp_frame(void *ptr)
 {
+    /*检查是否为xdp frame*/
 	return (unsigned long)ptr & VETH_XDP_FLAG;
 }
 
+/*针对xdp frame,获取其对应的xdp_frame地址*/
 static struct xdp_frame *veth_ptr_to_xdp(void *ptr)
 {
 	return (void *)((unsigned long)ptr & ~VETH_XDP_FLAG);
@@ -524,6 +526,7 @@ static void veth_xdp_flush_bq(struct veth_rq *rq, struct veth_xdp_tx_bq *bq)
 {
 	int sent, i, err = 0;
 
+	/*将bq上缓存的报文，自rq->dev设备发送出去*/
 	sent = veth_xdp_xmit(rq->dev, bq->count, bq->q, 0, false);
 	if (sent < 0) {
 		err = sent;
@@ -564,6 +567,7 @@ out:
 	rcu_read_unlock();
 }
 
+//将xdp buffer转为xdp_frame,并将其挂接在bq->q中
 static int veth_xdp_tx(struct veth_rq *rq, struct xdp_buff *xdp,
 		       struct veth_xdp_tx_bq *bq)
 {
@@ -583,11 +587,13 @@ static int veth_xdp_tx(struct veth_rq *rq, struct xdp_buff *xdp,
 	return 0;
 }
 
+/*veth xdp收到一个xdp_frame,进行处理，返回对应的skb*/
 static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 					struct xdp_frame *frame,
 					struct veth_xdp_tx_bq *bq,
 					struct veth_stats *stats)
 {
+    /*data前是一段headroom*/
 	void *hard_start = frame->data - frame->headroom;
 	int len = frame->len, delta = 0;
 	struct xdp_frame orig_frame;
@@ -596,6 +602,7 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 	struct sk_buff *skb;
 
 	/* bpf_xdp_adjust_head() assures BPF cannot access xdp_frame area */
+	/*headroom前是xdp_frame结构体*/
 	hard_start -= sizeof(struct xdp_frame);
 
 	rcu_read_lock();
@@ -605,7 +612,7 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 		struct xdp_buff xdp;
 		u32 act;
 
-		//将frame转为xdp buffer
+		//将xdp frame转为xdp buffer
 		xdp_convert_frame_to_buff(frame, &xdp);
 		xdp.rxq = &rq->xdp_rxq;
 
@@ -615,11 +622,11 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 		switch (act) {
 		case XDP_PASS:
 		    /*报文需要上送协议栈*/
-			delta = frame->data - xdp.data;
-			len = xdp.data_end - xdp.data;
+			delta = frame->data - xdp.data;/*报文起始地址变化量*/
+			len = xdp.data_end - xdp.data;/*报文长度变化量*/
 			break;
 		case XDP_TX:
-		    //完成报文发送
+		    //收到报文需要走tx方向，这里将报文挂在bq队列上，等待发送。
 			orig_frame = *frame;
 			xdp.rxq->mem = frame->mem;
 			if (unlikely(veth_xdp_tx(rq, &xdp, bq) < 0)) {
@@ -680,6 +687,7 @@ xdp_xmit:
 	return NULL;
 }
 
+/*veth xdp收到一个skb报文*/
 static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 					struct sk_buff *skb,
 					struct veth_xdp_tx_bq *bq,
@@ -753,6 +761,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		skb = nskb;
 	}
 
+	/*构造xdp buffer*/
 	xdp.data_hard_start = skb->head;
 	xdp.data = skb_mac_header(skb);
 	xdp.data_end = xdp.data + pktlen;
@@ -787,6 +796,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		rcu_read_unlock();
 		goto xdp_xmit;
 	case XDP_REDIRECT:
+	    /*报文redirect*/
 		get_page(virt_to_page(xdp.data));
 		consume_skb(skb);
 		xdp.rxq->mem = rq->xdp_mem;
@@ -858,10 +868,12 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 	int i, done = 0;
 
 	for (i = 0; i < budget; i++) {
+	    /*自xdp ring中出队一个报文*/
 		void *ptr = __ptr_ring_consume(&rq->xdp_ring);
 		struct sk_buff *skb;
 
 		if (!ptr)
+		    /*队列已为空*/
 			break;
 
 		if (veth_is_xdp_frame(ptr)) {
@@ -869,14 +881,17 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct xdp_frame *frame = veth_ptr_to_xdp(ptr);
 
 			stats->xdp_bytes += frame->len;
+			/*veth xdp收到一个xdp frame*/
 			skb = veth_xdp_rcv_one(rq, frame, bq, stats);
 		} else {
-		    //普通skb报文
+		    //ring中出的是普通skb报文
 			skb = ptr;
 			stats->xdp_bytes += skb->len;
+			/*veth xdp收到一个skb*/
 			skb = veth_xdp_rcv_skb(rq, skb, bq, stats);
 		}
 
+		/*经xdp处理，此报文不为NULL，仍需要送协议栈*/
 		if (skb)
 			napi_gro_receive(&rq->xdp_napi, skb);
 
@@ -897,15 +912,19 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 //负责xdp ring队列收包
 static int veth_poll(struct napi_struct *napi, int budget)
 {
+    /*通过napi取得对应的veth_rq*/
 	struct veth_rq *rq =
 		container_of(napi, struct veth_rq, xdp_napi);
+	/*记录veth_xdp_rcv时，报文统计信息*/
 	struct veth_stats stats = {};
+	/*在此队列上记录，需要执行tx发送的skb*/
 	struct veth_xdp_tx_bq bq;
 	int done;
 
 	bq.count = 0;
 
 	xdp_set_return_frame_no_direct();
+	/*自rq中收取报文*/
 	done = veth_xdp_rcv(rq, budget, &bq, &stats);
 
 	if (done < budget && napi_complete_done(napi, done)) {
@@ -918,8 +937,10 @@ static int veth_poll(struct napi_struct *napi, int budget)
 		}
 	}
 
+	/*有xdp_tx报文，将这些报文发出*/
 	if (stats.xdp_tx > 0)
 		veth_xdp_flush(rq, &bq);
+	/*有xddp redirect类型报文，将这些报文发出*/
 	if (stats.xdp_redirect > 0)
 		xdp_do_flush();
 	xdp_clear_return_frame_no_direct();
@@ -986,13 +1007,16 @@ static int veth_enable_xdp(struct net_device *dev)
 	int err, i;
 
 	if (!xdp_rxq_info_is_reg(&priv->rq[0].xdp_rxq)) {
+	    /*rq上没有xdp_rxq,则进入，并遍历每个rx队列*/
 		for (i = 0; i < dev->real_num_rx_queues; i++) {
 			struct veth_rq *rq = &priv->rq[i];
 
+			/*初始化此队列对应的xdp_rxq*/
 			err = xdp_rxq_info_reg(&rq->xdp_rxq, dev, i);
 			if (err < 0)
 				goto err_rxq_reg;
 
+			/*设置xdp_rxq的memory type*/
 			err = xdp_rxq_info_reg_mem_model(&rq->xdp_rxq,
 							 MEM_TYPE_PAGE_SHARED,
 							 NULL);
@@ -1048,6 +1072,7 @@ static int veth_open(struct net_device *dev)
 	if (!peer)
 		return -ENOTCONN;
 
+	/*veth有xdp_pro,开启xdp*/
 	if (priv->_xdp_prog) {
 		err = veth_enable_xdp(dev);
 		if (err)
@@ -1082,11 +1107,13 @@ static int is_valid_veth_mtu(int mtu)
 	return mtu >= ETH_MIN_MTU && mtu <= ETH_MAX_MTU;
 }
 
+/*为veth申请rx队列*/
 static int veth_alloc_queues(struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
 	int i;
 
+	/*申请num_rx_queues个队列*/
 	priv->rq = kcalloc(dev->num_rx_queues, sizeof(*priv->rq), GFP_KERNEL);
 	if (!priv->rq)
 		return -ENOMEM;
@@ -1106,6 +1133,7 @@ static void veth_free_queues(struct net_device *dev)
 	kfree(priv->rq);
 }
 
+/*初始化rx队列，申请link统计*/
 static int veth_dev_init(struct net_device *dev)
 {
 	int err;
@@ -1352,12 +1380,14 @@ static int veth_validate(struct nlattr *tb[], struct nlattr *data[],
 			 struct netlink_ext_ack *extack)
 {
 	if (tb[IFLA_ADDRESS]) {
+	    /*地址长度校验*/
 		if (nla_len(tb[IFLA_ADDRESS]) != ETH_ALEN)
 			return -EINVAL;
 		if (!is_valid_ether_addr(nla_data(tb[IFLA_ADDRESS])))
 			return -EADDRNOTAVAIL;
 	}
 	if (tb[IFLA_MTU]) {
+	    /*mtu校验*/
 		if (!is_valid_veth_mtu(nla_get_u32(tb[IFLA_MTU])))
 			return -EINVAL;
 	}
@@ -1366,6 +1396,7 @@ static int veth_validate(struct nlattr *tb[], struct nlattr *data[],
 
 static struct rtnl_link_ops veth_link_ops;
 
+/*veth接口新建*/
 static int veth_newlink(struct net *src_net, struct net_device *dev,
 			struct nlattr *tb[], struct nlattr *data[],
 			struct netlink_ext_ack *extack)
@@ -1383,9 +1414,11 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	 * create and register peer first
 	 */
 	if (data != NULL && data[VETH_INFO_PEER] != NULL) {
+	    /*解析对端*/
 		struct nlattr *nla_peer;
 
 		nla_peer = data[VETH_INFO_PEER];
+		/*指向对端配置*/
 		ifmp = nla_data(nla_peer);
 		err = rtnl_nla_parse_ifla(peer_tb,
 					  nla_data(nla_peer) + sizeof(struct ifinfomsg),
@@ -1405,9 +1438,11 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	}
 
 	if (ifmp && tbp[IFLA_IFNAME]) {
+	    /*获取对端接口名称*/
 		nla_strlcpy(ifname, tbp[IFLA_IFNAME], IFNAMSIZ);
 		name_assign_type = NET_NAME_USER;
 	} else {
+	    /*使用动态的接口名称*/
 		snprintf(ifname, IFNAMSIZ, DRV_NAME "%%d");
 		name_assign_type = NET_NAME_ENUM;
 	}
@@ -1416,6 +1451,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	if (IS_ERR(net))
 		return PTR_ERR(net);
 
+	/*创建对端link*/
 	peer = rtnl_create_link(net, ifname, name_assign_type,
 				&veth_link_ops, tbp, extack);
 	if (IS_ERR(peer)) {
@@ -1423,15 +1459,18 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 		return PTR_ERR(peer);
 	}
 
+	/*为peer生成mac地址*/
 	if (!ifmp || !tbp[IFLA_ADDRESS])
 		eth_hw_addr_random(peer);
 
+	/*设置peer的ifindex*/
 	if (ifmp && (dev->ifindex != 0))
 		peer->ifindex = ifmp->ifi_index;
 
 	peer->gso_max_size = dev->gso_max_size;
 	peer->gso_max_segs = dev->gso_max_segs;
 
+	/*注册peer设备*/
 	err = register_netdevice(peer);
 	put_net(net);
 	net = NULL;
@@ -1440,6 +1479,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 
 	netif_carrier_off(peer);
 
+	/*按flags配置peer*/
 	err = rtnl_configure_link(peer, ifmp);
 	if (err < 0)
 		goto err_configure_peer;
@@ -1451,14 +1491,17 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	 * should be re-allocated
 	 */
 
+	/*为本端生成随机mac*/
 	if (tb[IFLA_ADDRESS] == NULL)
 		eth_hw_addr_random(dev);
 
+	/*设置本端名称*/
 	if (tb[IFLA_IFNAME])
 		nla_strlcpy(dev->name, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
 		snprintf(dev->name, IFNAMSIZ, DRV_NAME "%%d");
 
+	/*注册本端设备*/
 	err = register_netdevice(dev);
 	if (err < 0)
 		goto err_register_dev;
@@ -1469,6 +1512,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	 * tie the deviced together
 	 */
 
+	/*对端互指*/
 	priv = netdev_priv(dev);
 	rcu_assign_pointer(priv->peer, peer);
 
@@ -1488,6 +1532,7 @@ err_register_peer:
 	return err;
 }
 
+/*veth链路删除回调*/
 static void veth_dellink(struct net_device *dev, struct list_head *head)
 {
 	struct veth_priv *priv;
@@ -1514,6 +1559,7 @@ static const struct nla_policy veth_policy[VETH_INFO_MAX + 1] = {
 	[VETH_INFO_PEER]	= { .len = sizeof(struct ifinfomsg) },
 };
 
+/*获取设备所属的net namespace*/
 static struct net *veth_get_link_net(const struct net_device *dev)
 {
 	struct veth_priv *priv = netdev_priv(dev);
@@ -1530,6 +1576,7 @@ static struct rtnl_link_ops veth_link_ops = {
 	.validate	= veth_validate,
 	//新建veth link
 	.newlink	= veth_newlink,
+	//删除veth link
 	.dellink	= veth_dellink,
 	.policy		= veth_policy,
 	.maxtype	= VETH_INFO_MAX,

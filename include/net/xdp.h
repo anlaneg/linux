@@ -56,9 +56,9 @@ struct page_pool;
 
 struct xdp_rxq_info {
 	struct net_device *dev;/*所属设备*/
-	u32 queue_index;/*队列索引*/
-	u32 reg_state;
-	struct xdp_mem_info mem;
+	u32 queue_index;/*所属队列索引*/
+	u32 reg_state;/*当前注册状态*/
+	struct xdp_mem_info mem;/*xdp内存信息*/
 } ____cacheline_aligned; /* perf critical, avoid false-sharing */
 
 struct xdp_txq_info {
@@ -97,7 +97,7 @@ struct xdp_frame {
 	void *data;/*指向报文起始位置*/
 	u16 len;/*报文长度*/
 	u16 headroom;/*报文headroom大小，在data之前*/
-	u32 metasize:8;
+	u32 metasize:8;/*frame的data前面存放的是metadata*/
 	u32 frame_sz:24;/*buffer大小*/
 	/* Lifetime of xdp_rxq_info is limited to NAPI/enqueue time,
 	 * while mem info is valid on remote CPU.

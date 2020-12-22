@@ -827,6 +827,7 @@ err_orig:
 	return err;
 }
 
+/*ct flow卸载添加*/
 static int
 mlx5_tc_ct_block_flow_offload_add(struct mlx5_ct_ft *ft,
 				  struct flow_cls_offload *flow)

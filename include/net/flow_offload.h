@@ -167,10 +167,15 @@ enum flow_action_id {
  */
 enum flow_action_mangle_base {
 	FLOW_ACT_MANGLE_UNSPEC		= 0,
+	/*以太头更新*/
 	FLOW_ACT_MANGLE_HDR_TYPE_ETH,
+	/*ipv4头部更新*/
 	FLOW_ACT_MANGLE_HDR_TYPE_IP4,
+	/*ipv6头部更新*/
 	FLOW_ACT_MANGLE_HDR_TYPE_IP6,
+	/*tcp头部更新*/
 	FLOW_ACT_MANGLE_HDR_TYPE_TCP,
+	/*udp头部更新*/
 	FLOW_ACT_MANGLE_HDR_TYPE_UDP,
 };
 
@@ -207,7 +212,8 @@ struct flow_action_cookie *flow_action_cookie_create(void *data,
 void flow_action_cookie_destroy(struct flow_action_cookie *cookie);
 
 struct flow_action_entry {
-	enum flow_action_id		id;//action 类别
+    //action 类别
+	enum flow_action_id		id;
 	enum flow_action_hw_stats	hw_stats;
 	action_destr			destructor;
 	/*destructor回调的参数*/
@@ -226,12 +232,16 @@ struct flow_action_entry {
 			__be16		proto;//vlan对应的ethertype
 			u8		prio;//vlan优先级
 		} vlan;
-		struct {				/* FLOW_ACTION_MANGLE */
-							/* FLOW_ACTION_ADD */
-			enum flow_action_mangle_base htype;//修改的字段所处头部类型
-			u32		offset;//自头部位置到字段的偏移量
+		struct {
+		    /* FLOW_ACTION_MANGLE */
+			/* FLOW_ACTION_ADD */
+		    //修改的字段所处头部类型
+			enum flow_action_mangle_base htype;
+			//自头部位置到字段的偏移量
+			u32		offset;
 			u32		mask;
-			u32		val;//要设置的值
+			//要设置的值
+			u32		val;
 		} mangle;
 		//隧道封装参数
 		struct ip_tunnel_info	*tunnel;	/* FLOW_ACTION_TUNNEL_ENCAP */
@@ -265,6 +275,7 @@ struct flow_action_entry {
 			u16 zone;
 			struct nf_flowtable *flow_table;
 		} ct;
+		/*ct的metadata*/
 		struct {
 			unsigned long cookie;
 			u32 mark;
@@ -563,7 +574,7 @@ int flow_block_cb_setup_simple(struct flow_block_offload *f,
 			       void *cb_ident, void *cb_priv, bool ingress_only);
 
 enum flow_cls_command {
-	FLOW_CLS_REPLACE,
+	FLOW_CLS_REPLACE,/*flow class的替换*/
 	FLOW_CLS_DESTROY,
 	FLOW_CLS_STATS,
 	FLOW_CLS_TMPLT_CREATE,

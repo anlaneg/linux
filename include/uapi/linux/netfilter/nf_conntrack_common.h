@@ -123,6 +123,7 @@ enum ip_conntrack_status {
 	IPS_HELPER = (1 << IPS_HELPER_BIT),
 
 	/* Conntrack has been offloaded to flow table. */
+	/*此连接跟踪已被offload到流表*/
 	IPS_OFFLOAD_BIT = 14,
 	IPS_OFFLOAD = (1 << IPS_OFFLOAD_BIT),
 

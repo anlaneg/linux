@@ -13,6 +13,7 @@
 struct tcf_ct_params {
     /*ct模板*/
 	struct nf_conn *tmpl;
+	/*ct所属的zone*/
 	u16 zone;
 
 	u32 mark;
@@ -21,19 +22,25 @@ struct tcf_ct_params {
 	u32 labels[NF_CT_LABELS_MAX_SIZE / sizeof(u32)];
 	u32 labels_mask[NF_CT_LABELS_MAX_SIZE / sizeof(u32)];
 
+	/*地址段及port段范围填充*/
 	struct nf_nat_range2 range;
+	/*是否ipv4地址段*/
 	bool ipv4_range;
 
+	/*ct action内容*/
 	u16 ct_action;
 
 	struct rcu_head rcu;
 
+	/*对应的ct_flowtable*/
 	struct tcf_ct_flow_table *ct_ft;
+	/*ct对应的flowtable*/
 	struct nf_flowtable *nf_ft;
 };
 
 struct tcf_ct {
 	struct tc_action common;
+	/*ct参数*/
 	struct tcf_ct_params __rcu *params;
 };
 

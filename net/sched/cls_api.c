@@ -2714,6 +2714,7 @@ static int tc_dump_tfilter(struct sk_buff *skb/*待填充的skb*/, struct netlin
 	struct Qdisc *q = NULL;
 	struct tcf_block *block;
 	struct tcmsg *tcm = nlmsg_data(cb->nlh);
+	/*简短模式*/
 	bool terse_dump = false;
 	long index_start;
 	long index;

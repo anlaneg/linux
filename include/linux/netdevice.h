@@ -1961,7 +1961,7 @@ struct net_device {
 	struct iw_public_data	*wireless_data;
 #endif
 	const struct net_device_ops *netdev_ops;/*设备操作集*/
-	const struct ethtool_ops *ethtool_ops;
+	const struct ethtool_ops *ethtool_ops;/*设备ethtool操作集*/
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	const struct l3mdev_ops	*l3mdev_ops;
 #endif
@@ -2170,6 +2170,7 @@ struct net_device {
 	/* mid-layer private */
 	union {
 		void					*ml_priv;
+		/*percore的link统计信息*/
 		struct pcpu_lstats __percpu		*lstats;
 		struct pcpu_sw_netstats __percpu	*tstats;
 		struct pcpu_dstats __percpu		*dstats;
@@ -2638,6 +2639,7 @@ static inline void dev_sw_netstats_rx_add(struct net_device *dev, unsigned int l
 	u64_stats_update_end(&tstats->syncp);
 }
 
+/*link报文统计增加*/
 static inline void dev_lstats_add(struct net_device *dev, unsigned int len)
 {
 	struct pcpu_lstats *lstats = this_cpu_ptr(dev->lstats);

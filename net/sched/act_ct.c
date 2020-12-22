@@ -89,6 +89,7 @@ tcf_ct_flow_table_add_action_nat_ipv4(const struct nf_conntrack_tuple *tuple,
 				      struct nf_conntrack_tuple target,
 				      struct flow_action *action)
 {
+    /*指定ipv4 src/dst地址转换*/
 	if (memcmp(&target.src.u3, &tuple->src.u3, sizeof(target.src.u3)))
 		tcf_ct_add_mangle_action(action, FLOW_ACT_MANGLE_HDR_TYPE_IP4,
 					 offsetof(struct iphdr, saddr),
@@ -129,6 +130,7 @@ tcf_ct_flow_table_add_action_nat_ipv6(const struct nf_conntrack_tuple *tuple,
 							    daddr));
 }
 
+/*指定tcp src/dst port转换*/
 static void
 tcf_ct_flow_table_add_action_nat_tcp(const struct nf_conntrack_tuple *tuple,
 				     struct nf_conntrack_tuple target,
@@ -147,6 +149,7 @@ tcf_ct_flow_table_add_action_nat_tcp(const struct nf_conntrack_tuple *tuple,
 					 0xFFFF, be16_to_cpu(target_dst));
 }
 
+//指定udp src/dst port转换
 static void
 tcf_ct_flow_table_add_action_nat_udp(const struct nf_conntrack_tuple *tuple,
 				     struct nf_conntrack_tuple target,
@@ -184,6 +187,7 @@ static void tcf_ct_flow_table_add_action_meta(struct nf_conn *ct,
 	/* aligns with the CT reference on the SKB nf_ct_set */
 	entry->ct_metadata.cookie = (unsigned long)ct | ctinfo;
 
+	/*填充ct的labels*/
 	act_ct_labels = entry->ct_metadata.labels;
 	ct_labels = nf_ct_labels_find(ct);
 	if (ct_labels)
@@ -205,6 +209,7 @@ static int tcf_ct_flow_table_add_action_nat(struct net *net,
 
 	nf_ct_invert_tuple(&target, &ct->tuplehash[!dir].tuple);
 
+	/*地址转换*/
 	switch (tuple->src.l3num) {
 	case NFPROTO_IPV4:
 		tcf_ct_flow_table_add_action_nat_ipv4(tuple, target,
@@ -218,6 +223,7 @@ static int tcf_ct_flow_table_add_action_nat(struct net *net,
 		return -EOPNOTSUPP;
 	}
 
+	/*端口转换*/
 	switch (nf_ct_protonum(ct)) {
 	case IPPROTO_TCP:
 		tcf_ct_flow_table_add_action_nat_tcp(tuple, target, action);
@@ -232,6 +238,7 @@ static int tcf_ct_flow_table_add_action_nat(struct net *net,
 	return 0;
 }
 
+/*转换flow的action*/
 static int tcf_ct_flow_table_fill_actions(struct net *net,
 					  const struct flow_offload *flow,
 					  enum flow_offload_tuple_dir tdir,
@@ -270,31 +277,37 @@ err_nat:
 	return err;
 }
 
+/*指定flowtable类型为ct*/
 static struct nf_flowtable_type flowtable_ct = {
 	.action		= tcf_ct_flow_table_fill_actions,
 	.owner		= THIS_MODULE,
 };
 
+/*依据params创建ct_ft*/
 static int tcf_ct_flow_table_get(struct tcf_ct_params *params)
 {
 	struct tcf_ct_flow_table *ct_ft;
 	int err = -ENOMEM;
 
 	mutex_lock(&zones_mutex);
+	/*如果params已存在，则返回*/
 	ct_ft = rhashtable_lookup_fast(&zones_ht, &params->zone, zones_params);
 	if (ct_ft && refcount_inc_not_zero(&ct_ft->ref))
 		goto out_unlock;
 
+	/*申请ct flow table*/
 	ct_ft = kzalloc(sizeof(*ct_ft), GFP_KERNEL);
 	if (!ct_ft)
 		goto err_alloc;
 	refcount_set(&ct_ft->ref, 1);
 
+	/*将ct_ft加入到zones_ht中*/
 	ct_ft->zone = params->zone;
 	err = rhashtable_insert_fast(&zones_ht, &ct_ft->node, zones_params);
 	if (err)
 		goto err_insert;
 
+	/*设置flowtable的ct type*/
 	ct_ft->nf_ft.type = &flowtable_ct;
 	ct_ft->nf_ft.flags |= NF_FLOWTABLE_HW_OFFLOAD;
 	err = nf_flow_table_init(&ct_ft->nf_ft);
@@ -335,8 +348,10 @@ static void tcf_ct_flow_table_put(struct tcf_ct_params *params)
 	struct tcf_ct_flow_table *ct_ft = params->ct_ft;
 
 	if (refcount_dec_and_test(&params->ct_ft->ref)) {
+	    /*将ct_ft节点自zones_ht中移除*/
 		rhashtable_remove_fast(&zones_ht, &ct_ft->node, zones_params);
 		INIT_RCU_WORK(&ct_ft->rwork, tcf_ct_flow_table_cleanup_work);
+		/*将ct_ft加入到act_ct_wq*/
 		queue_rcu_work(act_ct_wq, &ct_ft->rwork);
 	}
 }
@@ -348,20 +363,24 @@ static void tcf_ct_flow_table_add(struct tcf_ct_flow_table *ct_ft,
 	struct flow_offload *entry;
 	int err;
 
+	/*ct已卸载跳过*/
 	if (test_and_set_bit(IPS_OFFLOAD_BIT, &ct->status))
 		return;
 
+	/*创建并填充ct对应的flow_offload entry*/
 	entry = flow_offload_alloc(ct);
 	if (!entry) {
 		WARN_ON_ONCE(1);
 		goto err_alloc;
 	}
 
+	/*针对tcp,由于卸载后窗口检查容易出错，故放宽此检查*/
 	if (tcp) {
 		ct->proto.tcp.seen[0].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
 		ct->proto.tcp.seen[1].flags |= IP_CT_TCP_FLAG_BE_LIBERAL;
 	}
 
+	/*将flow offload entry加入到flow table*/
 	err = flow_offload_add(&ct_ft->nf_ft, entry);
 	if (err)
 		goto err_add;
@@ -388,6 +407,7 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 	case IPPROTO_TCP:
 		tcp = true;
 		if (ct->proto.tcp.state != TCP_CONNTRACK_ESTABLISHED)
+		    /*tcp状态必须达到estable状态*/
 			return;
 		break;
 	case IPPROTO_UDP:
@@ -396,6 +416,7 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 		return;
 	}
 
+	/*如果ct有helper,且需要seq调整，则不将其加入流表*/
 	if (nf_ct_ext_exist(ct, NF_CT_EXT_HELPER) ||
 	    ct->status & IPS_SEQ_ADJUST)
 		return;
@@ -1144,17 +1165,21 @@ static int tcf_ct_fill_params_nat(struct tcf_ct_params *p,
 {
 	struct nf_nat_range2 *range;
 
+	/*action没有指定做nat,退出*/
 	if (!(p->ct_action & TCA_CT_ACT_NAT))
 		return 0;
 
+	/*没有配置nat功能，退出*/
 	if (!IS_ENABLED(CONFIG_NF_NAT)) {
 		NL_SET_ERR_MSG_MOD(extack, "Netfilter nat isn't enabled in kernel");
 		return -EOPNOTSUPP;
 	}
 
+	/*当前仅支持snat,dnat两种功能*/
 	if (!(p->ct_action & (TCA_CT_ACT_NAT_SRC | TCA_CT_ACT_NAT_DST)))
 		return 0;
 
+	/*当前不支持snat与dnat出时存在*/
 	if ((p->ct_action & TCA_CT_ACT_NAT_SRC) &&
 	    (p->ct_action & TCA_CT_ACT_NAT_DST)) {
 		NL_SET_ERR_MSG_MOD(extack, "dnat and snat can't be enabled at the same time");
@@ -1163,6 +1188,7 @@ static int tcf_ct_fill_params_nat(struct tcf_ct_params *p,
 
 	range = &p->range;
 	if (tb[TCA_CT_NAT_IPV4_MIN]) {
+	    /*ipv4地址段*/
 		struct nlattr *max_attr = tb[TCA_CT_NAT_IPV4_MAX];
 
 		p->ipv4_range = true;
@@ -1174,6 +1200,7 @@ static int tcf_ct_fill_params_nat(struct tcf_ct_params *p,
 				     nla_get_in_addr(max_attr) :
 				     range->min_addr.ip;
 	} else if (tb[TCA_CT_NAT_IPV6_MIN]) {
+	    /*ipv6地址段*/
 		struct nlattr *max_attr = tb[TCA_CT_NAT_IPV6_MAX];
 
 		p->ipv4_range = false;
@@ -1186,6 +1213,7 @@ static int tcf_ct_fill_params_nat(struct tcf_ct_params *p,
 				      range->min_addr.in6;
 	}
 
+	/*port范围填充*/
 	if (tb[TCA_CT_NAT_PORT_MIN]) {
 		range->flags |= NF_NAT_RANGE_PROTO_SPECIFIED;
 		range->min_proto.all = nla_get_be16(tb[TCA_CT_NAT_PORT_MIN]);
@@ -1198,18 +1226,24 @@ static int tcf_ct_fill_params_nat(struct tcf_ct_params *p,
 	return 0;
 }
 
+/*设置ct key与val*/
 static void tcf_ct_set_key_val(struct nlattr **tb,
-			       void *val, int val_type,
-			       void *mask, int mask_type,
-			       int len)
+			       void *val/*出参，tb中val_type对应的值*/, int val_type,
+			       void *mask/*出参，tb中mask_type对应的值*/, int mask_type,
+			       int len/*val类型的值长度*/)
 {
+    /*val_type如不存在，则返回*/
 	if (!tb[val_type])
 		return;
+
+	/*利用val_type填充val*/
 	nla_memcpy(val, tb[val_type], len);
 
+	/*mask如不存在，则不再处理*/
 	if (!mask)
 		return;
 
+	/*如果mask_type存在，则按mask_type要求填充，否则填充为全ff*/
 	if (mask_type == TCA_CT_UNSPEC || !tb[mask_type])
 		memset(mask, 0xff, len);
 	else
@@ -1217,11 +1251,12 @@ static void tcf_ct_set_key_val(struct nlattr **tb,
 }
 
 static int tcf_ct_fill_params(struct net *net,
-			      struct tcf_ct_params *p,
+			      struct tcf_ct_params *p/*出参*/,
 			      struct tc_ct *parm,
 			      struct nlattr **tb,
 			      struct netlink_ext_ack *extack)
 {
+    /*取当前net namespace中ct的私有数据*/
 	struct tc_ct_action_net *tn = net_generic(net, ct_net_id);
 	struct nf_conntrack_zone zone;
 	struct nf_conn *tmpl;
@@ -1234,13 +1269,16 @@ static int tcf_ct_fill_params(struct net *net,
 			   NULL, TCA_CT_UNSPEC,
 			   sizeof(p->ct_action));
 
+	/*要求清除ct*/
 	if (p->ct_action & TCA_CT_ACT_CLEAR)
 		return 0;
 
+	/*填充nat参数*/
 	err = tcf_ct_fill_params_nat(p, parm, tb, extack);
 	if (err)
 		return err;
 
+	/*ct mark填充*/
 	if (tb[TCA_CT_MARK]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_MARK)) {
 			NL_SET_ERR_MSG_MOD(extack, "Conntrack mark isn't enabled.");
@@ -1252,6 +1290,7 @@ static int tcf_ct_fill_params(struct net *net,
 				   sizeof(p->mark));
 	}
 
+	/*ct labels填充*/
 	if (tb[TCA_CT_LABELS]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_LABELS)) {
 			NL_SET_ERR_MSG_MOD(extack, "Conntrack labels isn't enabled.");
@@ -1268,6 +1307,7 @@ static int tcf_ct_fill_params(struct net *net,
 				   sizeof(p->labels));
 	}
 
+	/*ct zone填充*/
 	if (tb[TCA_CT_ZONE]) {
 		if (!IS_ENABLED(CONFIG_NF_CONNTRACK_ZONES)) {
 			NL_SET_ERR_MSG_MOD(extack, "Conntrack zones isn't enabled.");
@@ -1358,13 +1398,14 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 
 	c = to_ct(*a);
 
+	/*申请并填充ct parameter*/
 	params = kzalloc(sizeof(*params), GFP_KERNEL);
 	if (unlikely(!params)) {
 		err = -ENOMEM;
 		goto cleanup;
 	}
 
-	err = tcf_ct_fill_params(net, params, parm, tb, extack);
+	err = tcf_ct_fill_params(net, params/*出参*/, parm, tb, extack);
 	if (err)
 		goto cleanup;
 
@@ -1373,6 +1414,7 @@ static int tcf_ct_init(struct net *net, struct nlattr *nla,
 		goto cleanup;
 
 	spin_lock_bh(&c->tcf_lock);
+	/*设置a,要求跳到那个chain*/
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
 	params = rcu_replace_pointer(c->params, params,
 				     lockdep_is_held(&c->tcf_lock));
@@ -1625,6 +1667,7 @@ static int __init ct_init_module(void)
 	if (err)
 		goto err_tbl_init;
 
+	/*注册ct action*/
 	err = tcf_register_action(&act_ct_ops, &ct_net_ops);
 	if (err)
 		goto err_register;

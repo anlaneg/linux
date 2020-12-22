@@ -177,7 +177,6 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 
 	//当前仅支持unaligned,need_wakeup两种标记
 	if (mr->flags & ~XDP_UMEM_UNALIGNED_CHUNK_FLAG)
->>>>>>> upstream/master
 		return -EINVAL;
 
 	if (!unaligned_chunks && !is_power_of_2(chunk_size))

@@ -127,9 +127,11 @@ static bool nf_conntrack_double_lock(struct net *net, unsigned int h1,
 {
 	h1 %= CONNTRACK_LOCKS;
 	h2 %= CONNTRACK_LOCKS;
+	//定义加锁顺序，保证小的值先加锁
 	if (h1 <= h2) {
 		nf_conntrack_lock(&nf_conntrack_locks[h1]);
 		if (h1 != h2)
+		    /*如果锁相等，则仅加一次*/
 			spin_lock_nested(&nf_conntrack_locks[h2],
 					 SINGLE_DEPTH_NESTING);
 	} else {
@@ -672,6 +674,7 @@ static void nf_ct_delete_from_lists(struct nf_conn *ct)
 	nf_ct_helper_destroy(ct);
 
 	local_bh_disable();
+	/*针对两个方向的hash进行加锁*/
 	do {
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hash = hash_conntrack(net,
@@ -680,7 +683,9 @@ static void nf_ct_delete_from_lists(struct nf_conn *ct)
 					   &ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 	} while (nf_conntrack_double_lock(net, hash, reply_hash, sequence));
 
+	/*将ct移除掉*/
 	clean_from_lists(ct);
+	/*执行解锁*/
 	nf_conntrack_double_unlock(hash, reply_hash);
 
 	nf_ct_add_to_dying_list(ct);
@@ -872,6 +877,7 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 	zone = nf_ct_zone(ct);
 
 	local_bh_disable();
+	/*针对两个flow进行加锁*/
 	do {
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		hash = hash_conntrack(net,
@@ -880,6 +886,7 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 					   &ct->tuplehash[IP_CT_DIR_REPLY].tuple);
 	} while (nf_conntrack_double_lock(net, hash, reply_hash, sequence));
 
+	/*检查两个方向的tuple是否已在表中*/
 	/* See if there's one in the list already, including reverse */
 	hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[hash], hnnode)
 		if (nf_ct_key_equal(h, &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
@@ -892,9 +899,11 @@ nf_conntrack_hash_check_insert(struct nf_conn *ct)
 			goto out;
 
 	smp_wmb();
+	/*两个方向不在表中，这里直接插入*/
 	/* The caller holds a reference to this object */
 	atomic_set(&ct->ct_general.use, 2);
 	__nf_conntrack_hash_insert(ct, hash, reply_hash);
+	/*双方向解锁*/
 	nf_conntrack_double_unlock(hash, reply_hash);
 	NF_CT_STAT_INC(net, insert);
 	local_bh_enable();
@@ -1143,6 +1152,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	zone = nf_ct_zone(ct);
 	local_bh_disable();
 
+	/*针对两个方向的hash进行加锁*/
 	do {
 		sequence = read_seqcount_begin(&nf_conntrack_generation);
 		/* reuse the hash saved before */
@@ -1191,11 +1201,13 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[hash/*正方向hash*/], hnnode)
 		if (nf_ct_key_equal(h, &ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple,
 				    zone, net))
+		    /*正方向存在*/
 			goto out;
 
 	hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[reply_hash], hnnode)
 		if (nf_ct_key_equal(h, &ct->tuplehash[IP_CT_DIR_REPLY].tuple,
 				    zone, net))
+		    /*从方向存在*/
 			goto out;
 
 	/* Timer relative to confirmation time, not original
@@ -1210,6 +1222,7 @@ __nf_conntrack_confirm(struct sk_buff *skb)
 	 * guarantee that no other CPU can find the conntrack before the above
 	 * stores are visible.
 	 */
+	/*将两个flow加入*/
 	__nf_conntrack_hash_insert(ct, hash, reply_hash);
 	nf_conntrack_double_unlock(hash, reply_hash);
 	local_bh_enable();

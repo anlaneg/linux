@@ -115,6 +115,7 @@ struct rtnl_link_ops {
 	int			(*fill_slave_info)(struct sk_buff *skb,
 						   const struct net_device *dev,
 						   const struct net_device *slave_dev);
+	/*获取dev所属的net namespace*/
 	struct net		*(*get_link_net)(const struct net_device *dev);
 	size_t			(*get_linkxstats_size)(const struct net_device *dev,
 						       int attr);

@@ -176,10 +176,12 @@ int xdp_rxq_info_reg(struct xdp_rxq_info *xdp_rxq,
 	}
 
 	/* State either UNREGISTERED or NEW */
+	/*针对unregistered/new两种状态，设置xdp_rxq*/
 	xdp_rxq_info_init(xdp_rxq);
 	xdp_rxq->dev = dev;
 	xdp_rxq->queue_index = queue_index;
 
+	/*更新为已注册状态*/
 	xdp_rxq->reg_state = REG_STATE_REGISTERED;
 	return 0;
 }
@@ -273,11 +275,13 @@ int xdp_rxq_info_reg_mem_model(struct xdp_rxq_info *xdp_rxq,
 		return -EFAULT;
 	}
 
+	/*检查此mem type是否支持*/
 	if (!__is_supported_mem_type(type))
 		return -EOPNOTSUPP;
 
 	xdp_rxq->mem.type = type;
 
+	/*page_poll类型必须提供allocator*/
 	if (!allocator) {
 		if (type == MEM_TYPE_PAGE_POOL)
 			return -EINVAL; /* Setup time check page_pool req */

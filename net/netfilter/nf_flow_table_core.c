@@ -57,9 +57,11 @@ struct flow_offload *flow_offload_alloc(struct nf_conn *ct)
 
 	flow->ct = ct;
 
+	//填充flow待卸载的五元组
 	flow_offload_fill_dir(flow, FLOW_OFFLOAD_DIR_ORIGINAL);
 	flow_offload_fill_dir(flow, FLOW_OFFLOAD_DIR_REPLY);
 
+	//填充flow flag
 	if (ct->status & IPS_SRC_NAT)
 		__set_bit(NF_FLOW_SNAT, &flow->flags);
 	if (ct->status & IPS_DST_NAT)
@@ -228,6 +230,7 @@ int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 
 	flow->timeout = nf_flowtable_time_stamp + NF_FLOW_TIMEOUT;
 
+	/*将正反方向两个flow均加入到flow_table中*/
 	err = rhashtable_insert_fast(&flow_table->rhashtable,
 				     &flow->tuplehash[0].node,
 				     nf_flow_offload_rhash_params);

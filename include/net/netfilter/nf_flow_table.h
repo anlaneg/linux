@@ -52,6 +52,7 @@ struct nf_flowtable_type {
 	int				(*setup)(struct nf_flowtable *ft,
 						 struct net_device *dev,
 						 enum flow_block_command cmd);
+	/*此类型action转换*/
 	int				(*action)(struct net *net,
 						  const struct flow_offload *flow,
 						  enum flow_offload_tuple_dir dir,
@@ -72,12 +73,13 @@ struct nf_flowtable {
 	int				priority;
 	const struct nf_flowtable_type	*type;//flowtable对应的type
 	struct delayed_work		gc_work;
-	unsigned int			flags;
+	unsigned int			flags;//看nf_flowtable_flags
 	struct flow_block		flow_block;
 	struct rw_semaphore		flow_block_lock; /* Guards flow_block */
 	possible_net_t			net;
 };
 
+/*检查此flowtable是否可卸载*/
 static inline bool nf_flowtable_hw_offload(struct nf_flowtable *flowtable)
 {
 	return flowtable->flags & NF_FLOWTABLE_HW_OFFLOAD;
@@ -112,6 +114,7 @@ struct flow_offload_tuple {
 	u8				l3proto;
 	//四层协议类型（例如tcp,icmp,udp等）
 	u8				l4proto;
+	//当前方向
 	u8				dir;
 
 	u16				mtu;
@@ -141,10 +144,13 @@ enum flow_offload_type {
 };
 
 struct flow_offload {
+    /*待卸载流对应的源/反向*/
 	struct flow_offload_tuple_rhash		tuplehash[FLOW_OFFLOAD_DIR_MAX];
+	/*待卸载流对应的ct*/
 	struct nf_conn				*ct;
 	unsigned long				flags;
 	u16					type;
+	/*此flow的超时时间*/
 	u32					timeout;
 	struct rcu_head				rcu_head;
 };
@@ -187,6 +193,7 @@ nf_flow_table_offload_add_cb(struct nf_flowtable *flow_table,
 		goto unlock;
 	}
 
+	/*为此block挂接回调*/
 	list_add_tail(&block_cb->list, &block->cb_list);
 
 unlock:
