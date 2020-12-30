@@ -22,9 +22,11 @@
 #include <net/protocol.h>
 
 #if IS_ENABLED(CONFIG_IPV6)
+/*支持的ipv6 l4协议*/
 struct inet6_protocol __rcu *inet6_protos[MAX_INET_PROTOS] __read_mostly;
 EXPORT_SYMBOL(inet6_protos);
 
+/*向ipv6添加支持的l4协议号*/
 int inet6_add_protocol(const struct inet6_protocol *prot, unsigned char protocol)
 {
 	return !cmpxchg((const struct inet6_protocol **)&inet6_protos[protocol],
@@ -32,6 +34,7 @@ int inet6_add_protocol(const struct inet6_protocol *prot, unsigned char protocol
 }
 EXPORT_SYMBOL(inet6_add_protocol);
 
+/*移除ipv6支持的l4协议号*/
 int inet6_del_protocol(const struct inet6_protocol *prot, unsigned char protocol)
 {
 	int ret;

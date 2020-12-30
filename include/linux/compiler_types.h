@@ -57,6 +57,7 @@ static inline void __chk_io_ptr(const volatile void __iomem *ptr) { }
 
 /* Indirect macros required for expanded argument pasting, eg. __LINE__. */
 #define ___PASTE(a,b) a##b
+/*将a,b粘在一起*/
 #define __PASTE(a,b) ___PASTE(a,b)
 
 #ifdef __KERNEL__

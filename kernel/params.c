@@ -288,10 +288,12 @@ EXPORT_SYMBOL(param_ops_charp);
 /* Actually could be a bool or an int, for historical reasons. */
 int param_set_bool(const char *val, const struct kernel_param *kp)
 {
+    /*给的参数不NULL,更正为常量字符串*/
 	/* No equals means "set"... */
 	if (!val) val = "1";
 
 	/* One of =[yYnN01] */
+	/*解析kp->args,填充val*/
 	return strtobool(val, kp->arg);
 }
 EXPORT_SYMBOL(param_set_bool);
@@ -303,6 +305,7 @@ int param_get_bool(char *buffer, const struct kernel_param *kp)
 }
 EXPORT_SYMBOL(param_get_bool);
 
+/*kernel参数 bool类型操作集*/
 const struct kernel_param_ops param_ops_bool = {
 	.flags = KERNEL_PARAM_OPS_FL_NOARG,
 	.set = param_set_bool,
@@ -523,29 +526,35 @@ EXPORT_SYMBOL(param_ops_string);
 struct param_attribute
 {
 	struct module_attribute mattr;
+	/*kernel modudle参数*/
 	const struct kernel_param *param;
 };
 
 struct module_param_attrs
 {
+    /*module参数属性数目*/
 	unsigned int num;
 	struct attribute_group grp;
+	/*module属性数组*/
 	struct param_attribute attrs[];
 };
 
 #ifdef CONFIG_SYSFS
 #define to_param_attr(n) container_of(n, struct param_attribute, mattr)
 
+/*module参数属性显示*/
 static ssize_t param_attr_show(struct module_attribute *mattr,
 			       struct module_kobject *mk, char *buf)
 {
 	int count;
 	struct param_attribute *attribute = to_param_attr(mattr);
 
+	//没有get回调，报错
 	if (!attribute->param->ops->get)
 		return -EPERM;
 
 	kernel_param_lock(mk->mod);
+	/*通过get回调，获取kernel parameter配置结果*/
 	count = attribute->param->ops->get(buf, attribute->param);
 	kernel_param_unlock(mk->mod);
 	return count;
@@ -559,11 +568,13 @@ static ssize_t param_attr_store(struct module_attribute *mattr,
  	int err;
 	struct param_attribute *attribute = to_param_attr(mattr);
 
+	/*参数没有set回调，报错*/
 	if (!attribute->param->ops->set)
 		return -EPERM;
 
 	kernel_param_lock(mk->mod);
 	if (param_check_unsafe(attribute->param))
+	    /*通过回调设置配置*/
 		err = attribute->param->ops->set(buf, attribute->param);
 	else
 		err = -EPERM;
@@ -606,7 +617,7 @@ EXPORT_SYMBOL(kernel_param_unlock);
  */
 static __modinit int add_sysfs_param(struct module_kobject *mk,
 				     const struct kernel_param *kp,
-				     const char *name)
+				     const char *name/*参数名称*/)
 {
 	struct module_param_attrs *new_mp;
 	struct attribute **new_attrs;
@@ -650,14 +661,19 @@ static __modinit int add_sysfs_param(struct module_kobject *mk,
 	memset(&mk->mp->attrs[mk->mp->num], 0, sizeof(mk->mp->attrs[0]));
 	sysfs_attr_init(&mk->mp->attrs[mk->mp->num].mattr.attr);
 	mk->mp->attrs[mk->mp->num].param = kp;
+	/*属性显示*/
 	mk->mp->attrs[mk->mp->num].mattr.show = param_attr_show;
 	/* Do not allow runtime DAC changes to make param writable. */
 	if ((kp->perm & (S_IWUSR | S_IWGRP | S_IWOTH)) != 0)
+	    /*权限位不为0，则容放对此kernel parameter进行设置*/
 		mk->mp->attrs[mk->mp->num].mattr.store = param_attr_store;
 	else
+	    /*权限位为0，不容许设置*/
 		mk->mp->attrs[mk->mp->num].mattr.store = NULL;
+	/*参数名称*/
 	mk->mp->attrs[mk->mp->num].mattr.attr.name = (char *)name;
 	mk->mp->attrs[mk->mp->num].mattr.attr.mode = kp->perm;
+	/*参数数目增加*/
 	mk->mp->num++;
 
 	/* Fix up all the pointers, since krealloc can move us */
@@ -689,6 +705,7 @@ int module_param_sysfs_setup(struct module *mod,
 			     const struct kernel_param *kparam,
 			     unsigned int num_params)
 {
+    /*在/sys/module/[mod->name]/parameters/下创建各module参数*/
 	int i, err;
 	bool params = false;
 

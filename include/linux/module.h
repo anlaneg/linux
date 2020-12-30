@@ -52,6 +52,7 @@ struct module_kobject {
 } __randomize_layout;
 
 struct module_attribute {
+    /*module属性操作*/
 	struct attribute attr;
 	ssize_t (*show)(struct module_attribute *, struct module_kobject *,
 			char *);

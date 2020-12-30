@@ -887,7 +887,9 @@ static inline void ftrace_dump(enum ftrace_dump_mode oops_dump_mode) { }
 
 /* Permissions on a sysfs file: you didn't miss the 0 prefix did you? */
 #define VERIFY_OCTAL_PERMISSIONS(perms)						\
+    /*perms不得小于0*/\
 	(BUILD_BUG_ON_ZERO((perms) < 0) +					\
+	 /*perms不得大于0777*/\
 	 BUILD_BUG_ON_ZERO((perms) > 0777) +					\
 	 /* USER_READABLE >= GROUP_READABLE >= OTHER_READABLE */		\
 	 BUILD_BUG_ON_ZERO((((perms) >> 6) & 4) < (((perms) >> 3) & 4)) +	\

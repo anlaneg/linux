@@ -91,7 +91,7 @@ struct ovs_ct_limit {
 };
 
 struct ovs_ct_limit_info {
-	u32 default_limit;
+	u32 default_limit;/*默认zone limit*/
 	struct hlist_head *limits;
 	struct nf_conncount_data *data;
 };
@@ -1164,6 +1164,7 @@ static void ct_limit_set(const struct ovs_ct_limit_info *info,
 	head = ct_limit_hash_bucket(info, new_ct_limit->zone);
 	hlist_for_each_entry_rcu(ct_limit, head, hlist_node) {
 		if (ct_limit->zone == new_ct_limit->zone) {
+		    /*替换对此zone的ct limit配置*/
 			hlist_replace_rcu(&ct_limit->hlist_node,
 					  &new_ct_limit->hlist_node);
 			kfree_rcu(ct_limit, rcu);
@@ -1171,6 +1172,7 @@ static void ct_limit_set(const struct ovs_ct_limit_info *info,
 		}
 	}
 
+	/*之前没有配置此zone,这里将其加入*/
 	hlist_add_head_rcu(&new_ct_limit->hlist_node, head);
 }
 
@@ -1206,6 +1208,7 @@ static u32 ct_limit_get(const struct ovs_ct_limit_info *info, u16 zone)
 	return info->default_limit;
 }
 
+/*openvswitch ct limit检查*/
 static int ovs_ct_check_limit(struct net *net,
 			      const struct ovs_conntrack_info *info,
 			      const struct nf_conntrack_tuple *tuple)
@@ -1219,8 +1222,10 @@ static int ovs_ct_check_limit(struct net *net,
 
 	per_zone_limit = ct_limit_get(ct_limit_info, info->zone.id);
 	if (per_zone_limit == OVS_CT_LIMIT_UNLIMITED)
+	    /*不对ct limit进行限制*/
 		return 0;
 
+	/*大于ct limit规定的连接数，报错。*/
 	connections = nf_conncount_count(net, ct_limit_info->data,
 					 &conncount_key, tuple, &info->zone);
 	if (connections > per_zone_limit)
@@ -1253,6 +1258,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 	//zone连接跟踪限制触发检查
 	if (static_branch_unlikely(&ovs_ct_limit_enabled)) {
 		if (!nf_ct_is_confirmed(ct)) {
+		    /*正在创建ct,执行对ct的limit检查*/
 			err = ovs_ct_check_limit(net, info,
 				&ct->tuplehash[IP_CT_DIR_ORIGINAL].tuple);
 			if (err) {
@@ -2010,9 +2016,9 @@ static bool check_zone_id(int zone_id, u16 *pzone)
 	}
 	return false;
 }
-
+/*将netlink配置的ct limit转至info中*/
 static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
-				       struct ovs_ct_limit_info *info)
+				       struct ovs_ct_limit_info *info/*出参，各ct limit配置*/)
 {
 	struct ovs_zone_limit *zone_limit;
 	int rem;
@@ -2024,13 +2030,16 @@ static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
 	while (rem >= sizeof(*zone_limit)) {
 		if (unlikely(zone_limit->zone_id ==
 				OVS_ZONE_LIMIT_DEFAULT_ZONE)) {
+		    /*设置默认zone_limit*/
 			ovs_lock();
 			info->default_limit = zone_limit->limit;
 			ovs_unlock();
 		} else if (unlikely(!check_zone_id(
 				zone_limit->zone_id, &zone))) {
+		    /*遇到不合法的zone id*/
 			OVS_NLERR(true, "zone id is out of range");
 		} else {
+		    /*构造对此zone的ct limit配置*/
 			struct ovs_ct_limit *ct_limit;
 
 			ct_limit = kmalloc(sizeof(*ct_limit), GFP_KERNEL);
@@ -2049,6 +2058,7 @@ static int ovs_ct_limit_set_zone_limit(struct nlattr *nla_zone_limit,
 				NLA_ALIGN(sizeof(*zone_limit)));
 	}
 
+	/*还有剩余配置内容，这里进行告警*/
 	if (rem)
 		OVS_NLERR(true, "set zone limit has %d unknown bytes", rem);
 
@@ -2194,6 +2204,7 @@ exit_err:
 	return err;
 }
 
+/*实现各zone limit配置设置*/
 static int ovs_ct_limit_cmd_set(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nlattr **a = info->attrs;
@@ -2208,11 +2219,13 @@ static int ovs_ct_limit_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
 
+	/*必须填充zone_limit项*/
 	if (!a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT]) {
 		err = -EINVAL;
 		goto exit_err;
 	}
 
+	/*设置zone limit项*/
 	err = ovs_ct_limit_set_zone_limit(a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT],
 					  ct_limit_info);
 	if (err)
@@ -2221,6 +2234,7 @@ static int ovs_ct_limit_cmd_set(struct sk_buff *skb, struct genl_info *info)
 	static_branch_enable(&ovs_ct_limit_enabled);
 
 	genlmsg_end(reply, ovs_reply_header);
+	/*向用户态响应*/
 	return genlmsg_reply(reply, info);
 
 exit_err:
@@ -2309,18 +2323,18 @@ static const struct genl_small_ops ct_limit_genl_ops[] = {
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = GENL_ADMIN_PERM, /* Requires CAP_NET_ADMIN
 					   * privilege. */
-		.doit = ovs_ct_limit_cmd_set,
+		.doit = ovs_ct_limit_cmd_set,/*用户态配置各zone ct limit*/
 	},
 	{ .cmd = OVS_CT_LIMIT_CMD_DEL,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = GENL_ADMIN_PERM, /* Requires CAP_NET_ADMIN
 					   * privilege. */
-		.doit = ovs_ct_limit_cmd_del,
+		.doit = ovs_ct_limit_cmd_del,/*用户态删除各zone ct limit配置*/
 	},
 	{ .cmd = OVS_CT_LIMIT_CMD_GET,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.flags = 0,		  /* OK for unprivileged users. */
-		.doit = ovs_ct_limit_cmd_get,
+		.doit = ovs_ct_limit_cmd_get,/*用户态获取各zone ct limit配置*/
 	},
 };
 

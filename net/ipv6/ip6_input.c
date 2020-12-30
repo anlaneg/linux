@@ -59,6 +59,8 @@ static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 			INDIRECT_CALL_2(edemux, tcp_v6_early_demux,
 					udp_v6_early_demux, skb);
 	}
+
+	/*执行ipv6路由查询*/
 	if (!skb_valid_dst(skb))
 		ip6_route_input(skb);
 }
@@ -73,6 +75,7 @@ int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	ip6_rcv_finish_core(net, sk, skb);
 
+	/*按路由进行投递*/
 	return dst_input(skb);
 }
 
@@ -142,6 +145,7 @@ static void ip6_list_rcv_finish(struct net *net, struct sock *sk,
 	ip6_sublist_rcv_finish(&sublist);
 }
 
+//ipv6报文收取
 static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 				    struct net *net)
 {
@@ -160,6 +164,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	//取此net_device对应的inet6_dev
 	idev = __in6_dev_get(skb->dev);
 
+	//ipv6 in报文计数
 	__IP6_UPD_PO_STATS(net, idev, IPSTATS_MIB_IN, skb->len);
 
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL ||
@@ -261,6 +266,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	if (ipv6_addr_v4mapped(&hdr->saddr))
 		goto err;
 
+	/*更新l4层头offset*/
 	skb->transport_header = skb->network_header + sizeof(*hdr);
 	IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
 
@@ -269,10 +275,12 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	/* pkt_len may be zero if Jumbo payload option is present */
 	if (pkt_len || hdr->nexthdr != NEXTHDR_HOP) {
 		if (pkt_len + sizeof(struct ipv6hdr) > skb->len) {
+		    /*ipv6报文不足，丢弃*/
 			__IP6_INC_STATS(net,
 					idev, IPSTATS_MIB_INTRUNCATEDPKTS);
 			goto drop;
 		}
+		/*checksum校验*/
 		if (pskb_trim_rcsum(skb, pkt_len + sizeof(struct ipv6hdr))) {
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
 			goto drop;
@@ -280,6 +288,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 		hdr = ipv6_hdr(skb);
 	}
 
+	/*ipv6的下一层为nexthdr_hop,解析ipv4选项*/
 	if (hdr->nexthdr == NEXTHDR_HOP) {
 		if (ipv6_parse_hopopts(skb) < 0) {
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
@@ -380,14 +389,17 @@ void ip6_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int nexthdr,
 
 resubmit:
 	idev = ip6_dst_idev(skb_dst(skb));
+	/*取next_header*/
 	nhoff = IP6CB(skb)->nhoff;
 	if (!have_final) {
 		if (!pskb_pull(skb, skb_transport_offset(skb)))
 			goto discard;
+		/*取最后一层的nexthdr*/
 		nexthdr = skb_network_header(skb)[nhoff];
 	}
 
 resubmit_final:
+    /*通过nexthdr查raw socket*/
 	raw = raw6_local_deliver(skb, nexthdr);
 	ipprot = rcu_dereference(inet6_protos[nexthdr]);
 	if (ipprot) {
@@ -438,6 +450,7 @@ resubmit_final:
 		    !xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))
 			goto discard;
 
+		//送udp/tcp协议
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v6_rcv, udpv6_rcv,
 				      skb);
 		if (ret > 0) {
@@ -479,6 +492,7 @@ discard:
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	rcu_read_lock();
+	/*local in报文投递*/
 	ip6_protocol_deliver_rcu(net, skb, 0, false);
 	rcu_read_unlock();
 
@@ -488,6 +502,7 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 
 int ip6_input(struct sk_buff *skb)
 {
+    /*ipv6走local in流程*/
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
 		       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
 		       ip6_input_finish);

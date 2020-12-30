@@ -45,6 +45,7 @@
 #define DRIVER_DESC     "Type1 IOMMU driver for VFIO"
 
 static bool allow_unsafe_interrupts;
+/*指定module参数*/
 module_param_named(allow_unsafe_interrupts,
 		   allow_unsafe_interrupts, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(allow_unsafe_interrupts,

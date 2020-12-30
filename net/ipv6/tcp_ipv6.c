@@ -1818,6 +1818,7 @@ INDIRECT_CALLABLE_SCOPE void tcp_v6_early_demux(struct sk_buff *skb)
 					&hdr->daddr, ntohs(th->dest),
 					inet6_iif(skb), inet6_sdif(skb));
 	if (sk) {
+	    /*填充此skb对应的socket*/
 		skb->sk = sk;
 		skb->destructor = sock_edemux;
 		if (sk_fullsock(sk)) {
@@ -2149,6 +2150,7 @@ EXPORT_SYMBOL_GPL(tcpv6_prot);
  * early_demux can change based on sysctl.
  */
 static struct inet6_protocol tcpv6_protocol = {
+    /*ipv6对应的tcp收取函数*/
 	.early_demux	=	tcp_v6_early_demux,
 	.early_demux_handler =  tcp_v6_early_demux,
 	.handler	=	tcp_v6_rcv,

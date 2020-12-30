@@ -130,8 +130,8 @@ struct ipv6hdr {
 	__u8			nexthdr;//下一头部
 	__u8			hop_limit;//跳限制数
 
-	struct	in6_addr	saddr;
-	struct	in6_addr	daddr;
+	struct	in6_addr	saddr;/*源地址*/
+	struct	in6_addr	daddr;/*目的地址*/
 };
 
 

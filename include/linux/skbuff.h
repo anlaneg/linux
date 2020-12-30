@@ -2651,6 +2651,7 @@ static inline unsigned char *skb_checksum_start(const struct sk_buff *skb)
 	return skb->head + skb->csum_start;
 }
 
+/*到传输层的偏移量*/
 static inline int skb_transport_offset(const struct sk_buff *skb)
 {
 	return skb_transport_header(skb) - skb->data;

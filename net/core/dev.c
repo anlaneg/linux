@@ -845,6 +845,7 @@ int dev_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 {
 	struct ip_tunnel_info *info;
 
+	/*如果没有ndo相应函数，则返回错误，否则通过回调填充tunnel metadata信息*/
 	if (!dev->netdev_ops  || !dev->netdev_ops->ndo_fill_metadata_dst)
 		return -EINVAL;
 

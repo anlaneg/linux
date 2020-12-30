@@ -135,6 +135,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 	len -= 2;
 
 	while (len > 0) {
+	    /*nh指向ipv6头，off结合nh,指向选项起始位置(Type)，off+1指向选项中的Length*/
 		int optlen = nh[off + 1] + 2;
 		int i;
 
@@ -1029,12 +1030,14 @@ int ipv6_parse_hopopts(struct sk_buff *skb)
 	 */
 	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) + 8) ||
 	    !pskb_may_pull(skb, (sizeof(struct ipv6hdr) +
+	            /*选项头长度*/
 				 ((skb_transport_header(skb)[1] + 1) << 3)))) {
 fail_and_free:
 		kfree_skb(skb);
 		return -1;
 	}
 
+	/*扩展头长度*/
 	extlen = (skb_transport_header(skb)[1] + 1) << 3;
 	if (extlen > net->ipv6.sysctl.max_hbh_opts_len)
 		goto fail_and_free;
@@ -1042,8 +1045,10 @@ fail_and_free:
 	opt->flags |= IP6SKB_HOPBYHOP;
 	if (ip6_parse_tlv(tlvprochopopt_lst, skb,
 			  init_net.ipv6.sysctl.max_hbh_opts_cnt)) {
+	    /*跳过ipv6选项头*/
 		skb->transport_header += extlen;
 		opt = IP6CB(skb);
+		/*使用选项中的next-header*/
 		opt->nhoff = sizeof(struct ipv6hdr);
 		return 1;
 	}
@@ -1175,6 +1180,7 @@ void ipv6_push_nfrag_opts(struct sk_buff *skb, struct ipv6_txoptions *opt,
 			ipv6_push_exthdr(skb, proto, NEXTHDR_DEST, opt->dst0opt);
 	}
 	if (opt->hopopt)
+	    /*填充选项头*/
 		ipv6_push_exthdr(skb, proto, NEXTHDR_HOP, opt->hopopt);
 }
 

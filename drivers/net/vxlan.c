@@ -3287,6 +3287,7 @@ static int vxlan_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
+/*填充tunnel信息*/
 static int vxlan_fill_metadata_dst(struct net_device *dev, struct sk_buff *skb)
 {
 	struct vxlan_dev *vxlan = netdev_priv(dev);

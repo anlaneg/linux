@@ -48,8 +48,10 @@ struct kernel_param_ops {
 	/* How the ops should behave */
 	unsigned int flags;
 	/* Returns 0, or -errno.  arg is in kp->arg. */
+	/*kernel参数值设置*/
 	int (*set)(const char *val, const struct kernel_param *kp);
 	/* Returns length written or -errno.  Buffer is 4k (ie. be short!) */
+	/*kernel参数值获取*/
 	int (*get)(char *buffer, const struct kernel_param *kp);
 	/* Optional function to free kp->arg when module unloaded. */
 	void (*free)(void *arg);
@@ -67,13 +69,18 @@ enum {
 };
 
 struct kernel_param {
+    /*指向参数名称字符串数组（添加了前缀后的kernel参数名称）*/
 	const char *name;
+	/*指向参数对应的module*/
 	struct module *mod;
+	/*指向参数类型对应的ops*/
 	const struct kernel_param_ops *ops;
+	/*参数权限位*/
 	const u16 perm;
 	s8 level;
 	u8 flags;
 	union {
+	    /*参数默认参数*/
 		void *arg;
 		const struct kparam_string *str;
 		const struct kparam_array *arr;
@@ -160,7 +167,7 @@ struct kparam_array
  */
 #define module_param_named_unsafe(name, value, type, perm)		\
 	param_check_##type(name, &(value));				\
-	module_param_cb_unsafe(name, &param_ops_##type, &value, perm);	\
+	module_param_cb_unsafe(name, &param_ops_##type/*此类型操作集*/, &value, perm);	\
 	__MODULE_PARM_TYPE(name, #type)
 
 /**
@@ -284,7 +291,7 @@ struct kparam_array
 
 /* This is the fundamental function for registering boot/module
    parameters. */
-#define __module_param_call(prefix, name, ops, arg, perm, level, flags)	\
+#define __module_param_call(prefix/*模块参数名称前缀*/, name/*参数名称*/, ops, arg, perm, level, flags)	\
 	/* Default value instead of permissions? */			\
 	static const char __param_str_##name[] = prefix #name;		\
 	static struct kernel_param __moduleparam_const __param_##name	\
@@ -406,6 +413,7 @@ static inline void destroy_params(const struct kernel_param *params,
 /* The macros to do compile-time type checking stolen from Jakub
    Jelinek, who IIRC came up with this idea for the 2.4 module init code. */
 #define __param_check(name, p, type) \
+    /*针对此类型check,直接返回p*/\
 	static inline type __always_unused *__check_##name(void) { return(p); }
 
 extern const struct kernel_param_ops param_ops_byte;
@@ -463,6 +471,7 @@ extern void param_free_charp(void *arg);
 extern const struct kernel_param_ops param_ops_bool;
 extern int param_set_bool(const char *val, const struct kernel_param *kp);
 extern int param_get_bool(char *buffer, const struct kernel_param *kp);
+/*检查bool参数*/
 #define param_check_bool(name, p) __param_check(name, p, bool)
 
 extern const struct kernel_param_ops param_ops_bool_enable_only;

@@ -945,6 +945,7 @@ static int output_userspace(struct datapath *dp, struct sk_buff *skb,
 			if (vport) {
 				int err;
 
+				/*上送到用户态时，获取skb对应的tunnel信息*/
 				err = dev_fill_metadata_dst(vport->dev, skb);
 				if (!err)
 					upcall.egress_tun_info = skb_tunnel_info(skb);
