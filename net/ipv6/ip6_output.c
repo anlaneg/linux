@@ -225,6 +225,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 		skb = skb2;
 	}
 
+	/*存入ipv6选项*/
 	if (opt) {
 		seg_len += opt->opt_nflen + opt->opt_flen;
 
@@ -236,6 +237,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 					     &fl6->saddr);
 	}
 
+	/*存放ipv6头*/
 	skb_push(skb, sizeof(struct ipv6hdr));
 	skb_reset_network_header(skb);
 	hdr = ipv6_hdr(skb);
@@ -277,6 +279,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 		/* hooks should never assume socket lock is held.
 		 * we promote our socket to non const
 		 */
+		/*触发local out钩子点*/
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_OUT,
 			       net, (struct sock *)sk, skb, NULL, dst->dev,
 			       dst_output);

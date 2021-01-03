@@ -536,7 +536,7 @@ static int tcp_v6_send_synack(const struct sock *sk, struct dst_entry *dst,
 			tclass |= INET_ECN_ECT_0;
 
 		rcu_read_lock();
-		opt = ireq->ipv6_opt;
+		opt = ireq->ipv6_opt;/*传输选项*/
 		if (!opt)
 			opt = rcu_dereference(np->opt);
 		err = ip6_xmit(sk, skb, fl6, sk->sk_mark, opt,

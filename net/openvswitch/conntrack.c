@@ -86,8 +86,8 @@ struct ovs_ct_limit {
 	/* Elements in ovs_ct_limit_info->limits hash table */
 	struct hlist_node hlist_node;
 	struct rcu_head rcu;
-	u16 zone;
-	u32 limit;
+	u16 zone;/*所属的zone*/
+	u32 limit;/*对应的zone ct limit配置*/
 };
 
 struct ovs_ct_limit_info {
@@ -1196,6 +1196,7 @@ static void ct_limit_del(const struct ovs_ct_limit_info *info, u16 zone)
 /* Call with RCU read lock */
 static u32 ct_limit_get(const struct ovs_ct_limit_info *info, u16 zone)
 {
+    /*给定zone id,获取其对应的ct limit配置*/
 	struct ovs_ct_limit *ct_limit;
 	struct hlist_head *head;
 
@@ -1205,6 +1206,7 @@ static u32 ct_limit_get(const struct ovs_ct_limit_info *info, u16 zone)
 			return ct_limit->limit;
 	}
 
+	/*没有找到此limit,使用默认limit*/
 	return info->default_limit;
 }
 
@@ -1220,14 +1222,15 @@ static int ovs_ct_check_limit(struct net *net,
 
 	conncount_key = info->zone.id;
 
+	/*取此zone对应的limit*/
 	per_zone_limit = ct_limit_get(ct_limit_info, info->zone.id);
 	if (per_zone_limit == OVS_CT_LIMIT_UNLIMITED)
-	    /*不对ct limit进行限制*/
+	    /*不对ct limit进行限制,直接返回*/
 		return 0;
 
-	/*大于ct limit规定的连接数，报错。*/
+	/*取当前ct在此zone下的计数，如大于ct limit规定的连接数，报错。*/
 	connections = nf_conncount_count(net, ct_limit_info->data,
-					 &conncount_key, tuple, &info->zone);
+					 &conncount_key/*zone id号*/, tuple, &info->zone);
 	if (connections > per_zone_limit)
 		return -ENOMEM;
 
@@ -1932,6 +1935,7 @@ static void __ovs_ct_free_action(struct ovs_conntrack_info *ct_info)
 }
 
 #if	IS_ENABLED(CONFIG_NETFILTER_CONNCOUNT)
+/*初始化ct limit_info*/
 static int ovs_ct_limit_init(struct net *net, struct ovs_net *ovs_net)
 {
 	int i, err;

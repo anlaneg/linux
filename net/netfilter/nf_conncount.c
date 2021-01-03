@@ -381,6 +381,7 @@ out_unlock:
 	return count;
 }
 
+/*获取链接跟踪计数*/
 static unsigned int
 count_tree(struct net *net,
 	   struct nf_conncount_data *data,
