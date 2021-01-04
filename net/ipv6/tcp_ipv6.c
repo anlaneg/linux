@@ -1572,7 +1572,7 @@ static void tcp_v6_fill_cb(struct sk_buff *skb, const struct ipv6hdr *hdr,
 			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
 }
 
-//tcp v6报文接收入口
+//ipv6收到tcp报文（tcp处理入口）
 INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 {
 	struct sk_buff *skb_to_free;
@@ -1585,6 +1585,7 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	int ret;
 	struct net *net = dev_net(skb->dev);
 
+	/*mac必须为本机*/
 	if (skb->pkt_type != PACKET_HOST)
 		goto discard_it;
 
@@ -1593,11 +1594,13 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	 */
 	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
 
+	/*必须完整的tcp头困定头*/
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
 		goto discard_it;
 
 	th = (const struct tcphdr *)skb->data;
 
+	/*tcp必须有完整长度*/
 	if (unlikely(th->doff < sizeof(struct tcphdr)/4))
 		goto bad_packet;
 	if (!pskb_may_pull(skb, th->doff*4))
@@ -1611,6 +1614,7 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	hdr = ipv6_hdr(skb);
 
 lookup:
+    /*查询socket*/
 	sk = __inet6_lookup_skb(&tcp_hashinfo, skb, __tcp_hdrlen(th),
 				th->source, th->dest, inet6_iif(skb), sdif,
 				&refcounted);
@@ -1800,18 +1804,22 @@ INDIRECT_CALLABLE_SCOPE void tcp_v6_early_demux(struct sk_buff *skb)
 	const struct tcphdr *th;
 	struct sock *sk;
 
+	/*只处理二层指明到host的报文*/
 	if (skb->pkt_type != PACKET_HOST)
 		return;
 
+	/*报文长度必须大于tcphdr*/
 	if (!pskb_may_pull(skb, skb_transport_offset(skb) + sizeof(struct tcphdr)))
 		return;
 
 	hdr = ipv6_hdr(skb);
 	th = tcp_hdr(skb);
 
+	/*不足tcp头部，不处理（th->doff*4表示真实长度）*/
 	if (th->doff < sizeof(struct tcphdr) / 4)
 		return;
 
+	/*查询est状态的socket,检查是否存在*/
 	/* Note : We use inet6_iif() here, not tcp_v6_iif() */
 	sk = __inet6_lookup_established(dev_net(skb->dev), &tcp_hashinfo,
 					&hdr->saddr, th->source,
@@ -1828,6 +1836,7 @@ INDIRECT_CALLABLE_SCOPE void tcp_v6_early_demux(struct sk_buff *skb)
 				dst = dst_check(dst, tcp_inet6_sk(sk)->rx_dst_cookie);
 			if (dst &&
 			    inet_sk(sk)->rx_dst_ifindex == skb->skb_iif)
+			    /*使用socket中记录的dst做为路由*/
 				skb_dst_set_noref(skb, dst);
 		}
 	}

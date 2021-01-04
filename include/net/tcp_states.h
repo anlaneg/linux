@@ -11,15 +11,21 @@
 
 enum {
 	TCP_ESTABLISHED = 1,
-	TCP_SYN_SENT,
-	TCP_SYN_RECV,
-	TCP_FIN_WAIT1,
-	TCP_FIN_WAIT2,
+	TCP_SYN_SENT,/*本机已发syn*/
+	TCP_SYN_RECV,/*本机收到syn*/
+	TCP_FIN_WAIT1,/*本机想关闭，已向对端发送了fin*/
+	TCP_FIN_WAIT2,/*本机向对端发送了fin,且对端针对此fin已回复ack*/
+	/*本机收到fin,关且本机已针对此fin回复ack*/
 	TCP_TIME_WAIT,
+	/*socket首个状态*/
 	TCP_CLOSE,
+	/*本机收到对端发送过来的fin,且本端针对此fin回复了actk*/
 	TCP_CLOSE_WAIT,
+	/*之前已确认了对端的fin,当前状态本端关闭，发送了fin,等待对端响应ack*/
 	TCP_LAST_ACK,
-	TCP_LISTEN,//socket监听后首个注册状态
+	//socket监听后首个注册状态
+	TCP_LISTEN,
+	/*本机向对端发送了fin,但对端没有针以此fin回复ack,而是发送了fin,此时认定两端同时关闭*/
 	TCP_CLOSING,	/* Now a valid state */
 	TCP_NEW_SYN_RECV,//收到syn报文
 

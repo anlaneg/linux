@@ -51,6 +51,7 @@ static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 {
 	void (*edemux)(struct sk_buff *skb);
 
+	/*通过est socket反向确定sbk->dst,尝试跳过ip6_route_input*/
 	if (net->ipv4.sysctl_ip_early_demux && !skb_dst(skb) && skb->sk == NULL) {
 		const struct inet6_protocol *ipprot;
 
@@ -288,7 +289,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 		hdr = ipv6_hdr(skb);
 	}
 
-	/*ipv6的下一层为nexthdr_hop,解析ipv4选项*/
+	/*ipv6的下一层为nexthdr_hop,解析ipv6选项*/
 	if (hdr->nexthdr == NEXTHDR_HOP) {
 		if (ipv6_parse_hopopts(skb) < 0) {
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
@@ -499,7 +500,7 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 	return 0;
 }
 
-
+/*路由确定ipv6报文送主机，此函数走local_in钩子点*/
 int ip6_input(struct sk_buff *skb)
 {
     /*ipv6走local in流程*/
@@ -509,6 +510,7 @@ int ip6_input(struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(ip6_input);
 
+/*ipv6 组播输入*/
 int ip6_mc_input(struct sk_buff *skb)
 {
 	int sdif = inet6_sdif(skb);

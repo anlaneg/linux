@@ -67,12 +67,14 @@ static inline struct sock *__inet6_lookup(struct net *net,
 					  const int dif, const int sdif,
 					  bool *refcounted)
 {
+    /*先查est状态的socket*/
 	struct sock *sk = __inet6_lookup_established(net, hashinfo, saddr,
 						     sport, daddr, hnum,
 						     dif, sdif);
 	*refcounted = true;
 	if (sk)
 		return sk;
+	/*再查listener状态的socket*/
 	*refcounted = false;
 	return inet6_lookup_listener(net, hashinfo, skb, doff, saddr, sport,
 				     daddr, hnum, dif, sdif);

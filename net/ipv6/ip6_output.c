@@ -303,6 +303,7 @@ static int ip6_call_ra_chain(struct sk_buff *skb, int sel)
 	struct sock *last = NULL;
 
 	read_lock(&ip6_ra_lock);
+	/*遍历ip6_ra_chain列表*/
 	for (ra = ip6_ra_chain; ra; ra = ra->next) {
 		struct sock *sk = ra->sk;
 		if (sk && ra->sel == sel &&
@@ -421,6 +422,7 @@ static bool ip6_pkt_too_big(const struct sk_buff *skb, unsigned int mtu)
 	return true;
 }
 
+/*ipv6查路由后，确认报文需要转发，走此函数*/
 int ip6_forward(struct sk_buff *skb)
 {
 	struct inet6_dev *idev = __in6_dev_get_safely(skb->dev);
@@ -430,12 +432,15 @@ int ip6_forward(struct sk_buff *skb)
 	struct net *net = dev_net(dst->dev);
 	u32 mtu;
 
+	/*未开启转发，丢包*/
 	if (net->ipv6.devconf_all->forwarding == 0)
 		goto error;
 
+	/*需要转发，但目的mac未指向当前主机*/
 	if (skb->pkt_type != PACKET_HOST)
 		goto drop;
 
+	/*需要转发的报文具有socket,丢包*/
 	if (unlikely(skb->sk))
 		goto drop;
 
@@ -471,6 +476,7 @@ int ip6_forward(struct sk_buff *skb)
 	 *	check and decrement ttl
 	 */
 	if (hdr->hop_limit <= 1) {
+	    /*ipv6 ttl小于等于1*/
 		icmpv6_send(skb, ICMPV6_TIME_EXCEED, ICMPV6_EXC_HOPLIMIT, 0);
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
 

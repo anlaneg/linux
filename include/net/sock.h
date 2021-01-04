@@ -2596,6 +2596,7 @@ skb_sk_is_prefetched(struct sk_buff *skb)
  */
 static inline bool sk_fullsock(const struct sock *sk)
 {
+    /*socket是否不处于time_wait,new_syn_rcv状态*/
 	return (1 << sk->sk_state) & ~(TCPF_TIME_WAIT | TCPF_NEW_SYN_RECV);
 }
 

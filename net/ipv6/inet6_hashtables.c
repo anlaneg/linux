@@ -68,6 +68,7 @@ struct sock *__inet6_lookup_established(struct net *net,
 
 
 begin:
+    /*ipv6 est状态下socket查询*/
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
 		if (sk->sk_hash != hash)
 			continue;

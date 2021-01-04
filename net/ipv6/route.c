@@ -1105,10 +1105,13 @@ static void ip6_rt_init_dst(struct rt6_info *rt, const struct fib6_result *res)
 	rt->dst.output = ip6_output;
 
 	if (res->fib6_type == RTN_LOCAL || res->fib6_type == RTN_ANYCAST) {
+	    /*主机路由，走ip6_input*/
 		rt->dst.input = ip6_input;
 	} else if (ipv6_addr_type(&f6i->fib6_dst.addr) & IPV6_ADDR_MULTICAST) {
+	    /*组播路由，走mc转发*/
 		rt->dst.input = ip6_mc_input;
 	} else {
+	    /*其它，送转发*/
 		rt->dst.input = ip6_forward;
 	}
 
@@ -2439,6 +2442,7 @@ u32 rt6_multipath_hash(const struct net *net, const struct flowi6 *fl6,
 }
 
 /* Called with rcu held */
+/*ipv6路由查询*/
 void ip6_route_input(struct sk_buff *skb)
 {
 	const struct ipv6hdr *iph = ipv6_hdr(skb);

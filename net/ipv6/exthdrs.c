@@ -74,6 +74,7 @@ struct tlvtype_proc {
 static bool ip6_tlvopt_unknown(struct sk_buff *skb, int optoff,
 			       bool disallow_unknowns)
 {
+    /*如禁止未知option,则丢包*/
 	if (disallow_unknowns) {
 		/* If unknown TLVs are disallowed by configuration
 		 * then always silently drop packet. Note this also
@@ -85,6 +86,7 @@ static bool ip6_tlvopt_unknown(struct sk_buff *skb, int optoff,
 		goto drop;
 	}
 
+	//取选项type的6，7bit位（这里缺少解释）
 	switch ((skb_network_header(skb)[optoff] & 0xC0) >> 6) {
 	case 0: /* ignore */
 		return true;
@@ -111,13 +113,20 @@ drop:
 
 /* Parse tlv encoded option header (hop-by-hop or destination) */
 
-static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
+static bool ip6_parse_tlv(const struct tlvtype_proc *procs/*容许的选项*/,
 			  struct sk_buff *skb,
-			  int max_count)
+			  int max_count/*容许的最大tlv数目*/)
 {
-	int len = (skb_transport_header(skb)[1] + 1) << 3;
-	const unsigned char *nh = skb_network_header(skb);
-	int off = skb_network_header_len(skb);
+    /*当前采用的是ipv6,其ipv6 header之后有options,options格式为:
+     * {
+     *      Next Header (8bits)
+     *      Hdr Ext Len (8bits) 注：其表示的为扩展头的长度（需要*8），但不含next header
+     *      Options and Padding(不定长）
+     *  }
+     * */
+	int len = (skb_transport_header(skb)[1] + 1) << 3;/*扩展头长度*/
+	const unsigned char *nh = skb_network_header(skb);/*l3指针*/
+	int off = skb_network_header_len(skb);/*传输层到网络层之间的增量，即l3头部长度*/
 	const struct tlvtype_proc *curr;
 	bool disallow_unknowns = false;
 	int tlv_count = 0;
@@ -128,6 +137,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 		max_count = -max_count;
 	}
 
+	/*无效的报文长度，丢包*/
 	if (skb_transport_offset(skb) + len > skb_headlen(skb))
 		goto bad;
 
@@ -139,11 +149,14 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 		int optlen = nh[off + 1] + 2;
 		int i;
 
+		/*按option的type进行检查处理*/
 		switch (nh[off]) {
 		case IPV6_TLV_PAD1:
+		    /*pad1的选项长度只容许为1*/
 			optlen = 1;
 			padlen++;
 			if (padlen > 7)
+			    /*pad长度不得超过7，丢包*/
 				goto bad;
 			break;
 
@@ -154,6 +167,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 			 * See also RFC 4942, Section 2.1.9.5.
 			 */
 			padlen += optlen;
+			/*pad长度不容许超过7，丢包*/
 			if (padlen > 7)
 				goto bad;
 			/* RFC 4942 recommends receiving hosts to
@@ -161,6 +175,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 			 * only zeroes.
 			 */
 			for (i = 2; i < optlen; i++) {
+			    /*padn选项，要求所有padi必须为0*/
 				if (nh[off + i] != 0)
 					goto bad;
 			}
@@ -172,9 +187,11 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 
 			tlv_count++;
 			if (tlv_count > max_count)
+			    /*除pading外，tlv结构数量超过max_count,丢包*/
 				goto bad;
 
 			for (curr = procs; curr->type >= 0; curr++) {
+			    /*off指定的是当前待解析选项位置，遇到type相等，执行回调*/
 				if (curr->type == nh[off]) {
 					/* type specific length/alignment
 					   checks will be performed in the
@@ -184,6 +201,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 					break;
 				}
 			}
+			/*curr与procs失配，遇到未知的option*/
 			if (curr->type < 0 &&
 			    !ip6_tlvopt_unknown(skb, off, disallow_unknowns))
 				return false;
@@ -191,10 +209,12 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs,
 			padlen = 0;
 			break;
 		}
+		/*增加解析长度*/
 		off += optlen;
 		len -= optlen;
 	}
 
+	/*解析成功，内容无剩氽*/
 	if (len == 0)
 		return true;
 bad:
@@ -924,6 +944,7 @@ static bool ipv6_hop_ra(struct sk_buff *skb, int optoff)
 	const unsigned char *nh = skb_network_header(skb);
 
 	if (nh[optoff + 1] == 2) {
+	    /*标记需要route alert，并填充ra*/
 		IP6CB(skb)->flags |= IP6SKB_ROUTERALERT;
 		memcpy(&IP6CB(skb)->ra, nh + optoff + 2, sizeof(IP6CB(skb)->ra));
 		return true;
@@ -952,6 +973,7 @@ static bool ipv6_hop_jumbo(struct sk_buff *skb, int optoff)
 
 	pkt_len = ntohl(*(__be32 *)(nh + optoff + 2));
 	if (pkt_len <= IPV6_MAXPLEN) {
+	    /*巨帧大小必须大于IPV6_MAXPLEN*/
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
 		icmpv6_param_prob(skb, ICMPV6_HDR_FIELD, optoff+2);
 		return false;
@@ -1003,7 +1025,7 @@ drop:
 static const struct tlvtype_proc tlvprochopopt_lst[] = {
 	{
 		.type	= IPV6_TLV_ROUTERALERT,
-		.func	= ipv6_hop_ra,
+		.func	= ipv6_hop_ra,/*设置route alert标记*/
 	},
 	{
 		.type	= IPV6_TLV_JUMBO,
