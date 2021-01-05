@@ -704,6 +704,7 @@ typedef unsigned char *sk_buff_data_t;
  *	@transport_header: Transport layer header
  *	@network_header: Network layer header
  *	@mac_header: Link layer header
+ *	@kcov_handle: KCOV remote handle for remote coverage collection
  *	@tail: Tail pointer
  *	@end: End pointer
  *	@head: Head of buffer
@@ -913,6 +914,10 @@ struct sk_buff {
 	__u16			transport_header;//到传输层的偏移量
 	__u16			network_header;//到网络头的偏移量
 	__u16			mac_header;//到mac头的偏移量
+
+#ifdef CONFIG_KCOV
+	u64			kcov_handle;
+#endif
 
 	/* private: */
 	__u32			headers_end[0];
@@ -4684,6 +4689,23 @@ static inline void skb_reset_redirect(struct sk_buff *skb)
 {
 #ifdef CONFIG_NET_REDIRECT
 	skb->redirected = 0;
+#endif
+}
+
+static inline void skb_set_kcov_handle(struct sk_buff *skb,
+				       const u64 kcov_handle)
+{
+#ifdef CONFIG_KCOV
+	skb->kcov_handle = kcov_handle;
+#endif
+}
+
+static inline u64 skb_get_kcov_handle(struct sk_buff *skb)
+{
+#ifdef CONFIG_KCOV
+	return skb->kcov_handle;
+#else
+	return 0;
 #endif
 }
 

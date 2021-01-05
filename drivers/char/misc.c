@@ -60,8 +60,7 @@ static DEFINE_MUTEX(misc_mtx);
 /*
  * Assigned numbers, used for dynamic minors
  */
-#define DYNAMIC_MINORS 64 /* like dynamic majors */
-
+#define DYNAMIC_MINORS 128 /* like dynamic majors */
 //记录哪些动态minors已分配（bitmap)
 static DECLARE_BITMAP(misc_minors, DYNAMIC_MINORS);
 

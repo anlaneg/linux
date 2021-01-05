@@ -2154,7 +2154,6 @@ dma_pool_err:
 	kvfree(cmd->stats);
 	return err;
 }
-EXPORT_SYMBOL(mlx5_cmd_init);
 
 void mlx5_cmd_cleanup(struct mlx5_core_dev *dev)
 {
@@ -2167,11 +2166,9 @@ void mlx5_cmd_cleanup(struct mlx5_core_dev *dev)
 	dma_pool_destroy(cmd->pool);
 	kvfree(cmd->stats);
 }
-EXPORT_SYMBOL(mlx5_cmd_cleanup);
 
 void mlx5_cmd_set_state(struct mlx5_core_dev *dev,
 			enum mlx5_cmdif_state cmdif_state)
 {
 	dev->cmd.state = cmdif_state;
 }
-EXPORT_SYMBOL(mlx5_cmd_set_state);

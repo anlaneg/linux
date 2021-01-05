@@ -6,8 +6,6 @@
 #include <linux/fs_pin.h>
 
 struct mnt_namespace {
-    //mount namespace 引用计数
-	atomic_t		count;
 	struct ns_common	ns;/*ns公共结构*/
 	struct mount *	root;
 	/*
@@ -128,7 +126,7 @@ static inline void detach_mounts(struct dentry *dentry)
 /*增加mount namespace的引用计数*/
 static inline void get_mnt_ns(struct mnt_namespace *ns)
 {
-	atomic_inc(&ns->count);
+	refcount_inc(&ns->ns.count);
 }
 
 extern seqlock_t mount_lock;

@@ -441,7 +441,7 @@ static int ovs_meter_cmd_set(struct sk_buff *skb, struct genl_info *info)
 
 	/*依赖netlink消息创建meter*/
 	meter = dp_meter_create(a);
-	if (IS_ERR_OR_NULL(meter))
+	if (IS_ERR(meter))
 		return PTR_ERR(meter);
 
 	/*构造meter消息响应头*/

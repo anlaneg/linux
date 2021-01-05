@@ -140,7 +140,7 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 	//自eq队列中取下一个eqe
 	eqe = next_eqe_sw(eq);
 	if (!eqe)
-		goto out;
+		return 0;
 
 	do {
 		struct mlx5_core_cq *cq;
@@ -168,8 +168,6 @@ static int mlx5_eq_comp_int(struct notifier_block *nb,
 
 		//继续循环直到eqe消费完，或者eqe已达到处理最大数
 	} while ((++num_eqes < MLX5_EQ_POLLING_BUDGET) && (eqe = next_eqe_sw(eq)));
-
-out:
 	eq_update_ci(eq, 1);
 
 	if (cqn != -1)
@@ -196,19 +194,21 @@ u32 mlx5_eq_poll_irq_disabled(struct mlx5_eq_comp *eq)
 	return count_eqe;
 }
 
-static void mlx5_eq_async_int_lock(struct mlx5_eq_async *eq, unsigned long *flags)
+static void mlx5_eq_async_int_lock(struct mlx5_eq_async *eq, bool recovery,
+				   unsigned long *flags)
 	__acquires(&eq->lock)
 {
-	if (in_irq())
+	if (!recovery)
 		spin_lock(&eq->lock);
 	else
 		spin_lock_irqsave(&eq->lock, *flags);
 }
 
-static void mlx5_eq_async_int_unlock(struct mlx5_eq_async *eq, unsigned long *flags)
+static void mlx5_eq_async_int_unlock(struct mlx5_eq_async *eq, bool recovery,
+				     unsigned long *flags)
 	__releases(&eq->lock)
 {
-	if (in_irq())
+	if (!recovery)
 		spin_unlock(&eq->lock);
 	else
 		spin_unlock_irqrestore(&eq->lock, *flags);
@@ -230,11 +230,13 @@ static int mlx5_eq_async_int(struct notifier_block *nb,
 	struct mlx5_eqe *eqe;
 	unsigned long flags;
 	int num_eqes = 0;
+	bool recovery;
 
 	dev = eq->dev;
 	eqt = dev->priv.eq_table;
 
-	mlx5_eq_async_int_lock(eq_async, &flags);
+	recovery = action == ASYNC_EQ_RECOVER;
+	mlx5_eq_async_int_lock(eq_async, recovery, &flags);
 
 	eqe = next_eqe_sw(eq);
 	if (!eqe)
@@ -253,12 +255,12 @@ static int mlx5_eq_async_int(struct notifier_block *nb,
 		++eq->cons_index;
 
 	} while ((++num_eqes < MLX5_EQ_POLLING_BUDGET) && (eqe = next_eqe_sw(eq)));
+	eq_update_ci(eq, 1);
 
 out:
-	eq_update_ci(eq, 1);
-	mlx5_eq_async_int_unlock(eq_async, &flags);
+	mlx5_eq_async_int_unlock(eq_async, recovery, &flags);
 
-	return unlikely(action == ASYNC_EQ_RECOVER) ? num_eqes : 0;
+	return unlikely(recovery) ? num_eqes : 0;
 }
 
 void mlx5_cmd_eq_recover(struct mlx5_core_dev *dev)

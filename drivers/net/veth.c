@@ -967,7 +967,6 @@ static int veth_napi_add(struct net_device *dev)
 	for (i = 0; i < dev->real_num_rx_queues; i++) {
 		struct veth_rq *rq = &priv->rq[i];
 
-		netif_napi_add(dev, &rq->xdp_napi, veth_poll, NAPI_POLL_WEIGHT);
 		napi_enable(&rq->xdp_napi);
 	}
 
@@ -1012,7 +1011,8 @@ static int veth_enable_xdp(struct net_device *dev)
 			struct veth_rq *rq = &priv->rq[i];
 
 			/*初始化此队列对应的xdp_rxq*/
-			err = xdp_rxq_info_reg(&rq->xdp_rxq, dev, i);
+			netif_napi_add(dev, &rq->xdp_napi, veth_poll, NAPI_POLL_WEIGHT);
+			err = xdp_rxq_info_reg(&rq->xdp_rxq, dev, i, rq->xdp_napi.napi_id);
 			if (err < 0)
 				goto err_rxq_reg;
 
@@ -1040,8 +1040,12 @@ static int veth_enable_xdp(struct net_device *dev)
 err_reg_mem:
 	xdp_rxq_info_unreg(&priv->rq[i].xdp_rxq);
 err_rxq_reg:
-	for (i--; i >= 0; i--)
-		xdp_rxq_info_unreg(&priv->rq[i].xdp_rxq);
+	for (i--; i >= 0; i--) {
+		struct veth_rq *rq = &priv->rq[i];
+
+		xdp_rxq_info_unreg(&rq->xdp_rxq);
+		netif_napi_del(&rq->xdp_napi);
+	}
 
 	return err;
 }
@@ -1438,8 +1442,8 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	}
 
 	if (ifmp && tbp[IFLA_IFNAME]) {
-	    /*获取对端接口名称*/
-		nla_strlcpy(ifname, tbp[IFLA_IFNAME], IFNAMSIZ);
+	    	/*获取对端接口名称*/
+		nla_strscpy(ifname, tbp[IFLA_IFNAME], IFNAMSIZ);
 		name_assign_type = NET_NAME_USER;
 	} else {
 	    /*使用动态的接口名称*/
@@ -1497,7 +1501,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 
 	/*设置本端名称*/
 	if (tb[IFLA_IFNAME])
-		nla_strlcpy(dev->name, tb[IFLA_IFNAME], IFNAMSIZ);
+		nla_strscpy(dev->name, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
 		snprintf(dev->name, IFNAMSIZ, DRV_NAME "%%d");
 

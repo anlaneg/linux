@@ -174,6 +174,10 @@ int mdev_register_device(struct device *dev/*mdev_parent对应的底层设备*/,
 	if (!dev)
 		return -EINVAL;
 
+	/* Not mandatory, but its absence could be a problem */
+	if (!ops->request)
+		dev_info(dev, "Driver cannot be asked to release device\n");
+
 	mutex_lock(&parent_list_lock);
 
 	/* Check for duplicate */

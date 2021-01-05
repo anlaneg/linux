@@ -1258,6 +1258,7 @@ do_indirects:
 				mark_inode_dirty(inode);
 				ext2_free_branches(inode, &nr, &nr+1, 3);
 			}
+			break;
 		case EXT2_TIND_BLOCK:
 			;
 	}

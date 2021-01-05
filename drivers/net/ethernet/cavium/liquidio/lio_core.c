@@ -730,14 +730,9 @@ static void liquidio_napi_drv_callback(void *arg)
 		//触发软中断，实现napi收包
 		napi_schedule_irqoff(&droq->napi);
 	} else {
-		call_single_data_t *csd = &droq->csd;
-
-		csd->func = napi_schedule_wrapper;
-		csd->info = &droq->napi;
-		csd->flags = 0;
-
+		INIT_CSD(&droq->csd, napi_schedule_wrapper, &droq->napi);
 		//调用此函数，检查是否可以进行napi调度
-		smp_call_function_single_async(droq->cpu_id, csd);
+		smp_call_function_single_async(droq->cpu_id, &droq->csd);
 	}
 }
 

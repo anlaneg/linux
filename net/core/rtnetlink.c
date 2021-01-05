@@ -144,7 +144,7 @@ EXPORT_SYMBOL(lockdep_rtnl_is_held);
 //rtnl_msg_handlers[protocol]为一个rtnl_link的数组指针，其大小由RTM_NR_MSGTYPES定义
 //对当需要处理某type的消息时，先由protocol获得相应的rtnl_link table,然后再由type映射到
 //对应的rtnl_link指针上，调用其对应的doit回调
-static struct rtnl_link *__rcu *rtnl_msg_handlers[RTNL_FAMILY_MAX + 1];
+static struct rtnl_link __rcu *__rcu *rtnl_msg_handlers[RTNL_FAMILY_MAX + 1];
 
 //msgtype需要此函数映射，成为rtnl_link table的下标
 static inline int rtm_msgindex(int msgtype)
@@ -164,7 +164,7 @@ static inline int rtm_msgindex(int msgtype)
 //通过协议，消息类型获得对应的rtnl_link，看rtnl_msg_handlers说明
 static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 {
-	struct rtnl_link **tab;
+	struct rtnl_link __rcu **tab;
 
 	if (protocol >= ARRAY_SIZE(rtnl_msg_handlers))
 		protocol = PF_UNSPEC;
@@ -174,7 +174,7 @@ static struct rtnl_link *rtnl_get_link(int protocol, int msgtype)
 		//如果protocol无对应的table,则使用protocol=PF_UNSPEC对应的tab
 		tab = rcu_dereference_rtnl(rtnl_msg_handlers[PF_UNSPEC]);
 
-	return tab[msgtype];
+	return rcu_dereference_rtnl(tab[msgtype]);
 }
 
 //消息回调注册(doit 请求处理回调，dumpit 消息dump回调）
@@ -193,9 +193,8 @@ static int rtnl_register_internal(struct module *owner,
 	msgindex = rtm_msgindex(msgtype);
 
 	rtnl_lock();
-
 	//取各协议对应的tab
-	tab = rtnl_msg_handlers[protocol];
+	tab = rtnl_dereference(rtnl_msg_handlers[protocol]);
 	if (tab == NULL) {
 		//此protocol对应的tab为空时，初始化它
 		tab = kcalloc(RTM_NR_MSGTYPES, sizeof(void *), GFP_KERNEL);
@@ -307,7 +306,8 @@ void rtnl_register(int protocol, int msgtype,
 //解除对protocol,msgtype对应消息处理的注册
 int rtnl_unregister(int protocol, int msgtype)
 {
-	struct rtnl_link **tab, *link;
+	struct rtnl_link __rcu **tab;
+	struct rtnl_link *link;
 	int msgindex;
 
 	BUG_ON(protocol < 0 || protocol > RTNL_FAMILY_MAX);
@@ -320,7 +320,7 @@ int rtnl_unregister(int protocol, int msgtype)
 		return -ENOENT;
 	}
 
-	link = tab[msgindex];
+	link = rtnl_dereference(tab[msgindex]);
 	rcu_assign_pointer(tab[msgindex], NULL);
 	rtnl_unlock();
 
@@ -340,20 +340,21 @@ EXPORT_SYMBOL_GPL(rtnl_unregister);
 //取消protocol所有类型消息的注册
 void rtnl_unregister_all(int protocol)
 {
-	struct rtnl_link **tab, *link;
+	struct rtnl_link __rcu **tab;
+	struct rtnl_link *link;
 	int msgindex;
 
 	BUG_ON(protocol < 0 || protocol > RTNL_FAMILY_MAX);
 
 	rtnl_lock();
-	tab = rtnl_msg_handlers[protocol];
+	tab = rtnl_dereference(rtnl_msg_handlers[protocol]);
 	if (!tab) {
 		rtnl_unlock();
 		return;
 	}
 	RCU_INIT_POINTER(rtnl_msg_handlers[protocol], NULL);
 	for (msgindex = 0; msgindex < RTM_NR_MSGTYPES; msgindex++) {
-		link = tab[msgindex];
+		link = rtnl_dereference(tab[msgindex]);
 		if (!link)
 			continue;
 
@@ -1971,7 +1972,7 @@ static const struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla
 	if (linfo[IFLA_INFO_KIND]) {
 		char kind[MODULE_NAME_LEN];
 
-		nla_strlcpy(kind, linfo[IFLA_INFO_KIND], sizeof(kind));
+		nla_strscpy(kind, linfo[IFLA_INFO_KIND], sizeof(kind));
 		ops = rtnl_link_ops_get(kind);
 	}
 
@@ -3015,11 +3016,11 @@ static struct net_device *rtnl_dev_get(struct net *net,
 	if (!ifname) {
 		ifname = buffer;
 		if (ifname_attr)
-		    /*自ifname_attr中取ifname*/
-			nla_strlcpy(ifname, ifname_attr, IFNAMSIZ);
+		    	/*自ifname_attr中取ifname*/
+			nla_strscpy(ifname, ifname_attr, IFNAMSIZ);
 		else if (altifname_attr)
-		    /*自altifname_attr中提取ifname*/
-			nla_strlcpy(ifname, altifname_attr, ALTIFNAMSIZ);
+		    	/*自altifname_attr中提取ifname*/
+			nla_strscpy(ifname, altifname_attr, ALTIFNAMSIZ);
 		else
 			return NULL;
 	}
@@ -3049,7 +3050,7 @@ static int rtnl_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	//如果指定ifname，则填充；否则置为空串
 	if (tb[IFLA_IFNAME])
-		nla_strlcpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
+		nla_strscpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
 		ifname[0] = '\0';
 
@@ -3353,7 +3354,7 @@ replay:
 		return err;
 
 	if (tb[IFLA_IFNAME])
-		nla_strlcpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
+		nla_strscpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
 		ifname[0] = '\0';
 
@@ -3389,7 +3390,7 @@ replay:
 	if (linkinfo[IFLA_INFO_KIND]) {
 		//自linkinfo[IFLA_INFO_KIND]中提取字符串值，并进行link_ops查询
 		//查找kind对应的ops,即不同link-type对应的ops
-		nla_strlcpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
+		nla_strscpy(kind, linkinfo[IFLA_INFO_KIND], sizeof(kind));
 		ops = rtnl_link_ops_get(kind);
 	} else {
 		kind[0] = '\0';
@@ -3865,7 +3866,7 @@ static int rtnl_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 		s_idx = 1;
 
 	for (idx = 1; idx <= RTNL_FAMILY_MAX; idx++) {
-		struct rtnl_link **tab;
+		struct rtnl_link __rcu **tab;
 		struct rtnl_link *link;
 		rtnl_dumpit_func dumpit;
 
@@ -3879,7 +3880,7 @@ static int rtnl_dump_all(struct sk_buff *skb, struct netlink_callback *cb)
 		if (!tab)
 			continue;
 
-		link = tab[type];
+		link = rcu_dereference_rtnl(tab[type]);
 		if (!link)
 			continue;
 

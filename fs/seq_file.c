@@ -173,11 +173,13 @@ EXPORT_SYMBOL(seq_read);
 ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
 	struct seq_file *m = iocb->ki_filp->private_data;
-	size_t size = iov_iter_count(iter);
 	size_t copied = 0;
 	size_t n;
 	void *p;
 	int err = 0;
+
+	if (!iov_iter_count(iter))
+		return 0;
 
 	mutex_lock(&m->lock);
 
@@ -213,44 +215,40 @@ ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 		if (!m->buf)
 			goto Enomem;
 	}
-	/* if not empty - flush it first */
+	// something left in the buffer - copy it out first
 	//缓冲内已存在一些数据未读取
 	if (m->count) {
-		n = min(m->count, size);
-		//自from位置copy n个字节到buf中
-		if (copy_to_iter(m->buf + m->from, n, iter) != n)
-			goto Efault;
+		n = copy_to_iter(m->buf + m->from, m->count, iter);
 		m->count -= n;//未读取字节数减少
 		m->from += n;//可读取字节偏移量增大
-		size -= n;//待收取数量减少n
 		copied += n;//完成了n个copy
-		if (!size)
+		if (m->count)	// hadn't managed to copy everything
 			goto Done;
 	}
-	/* we need at least one record in buffer */
+	// get a non-empty record in the buffer
 	m->from = 0;
 	/*创建迭代器，返回m->index指向的obj对应的迭代器*/
 	p = m->op->start(m, &m->index);
 	while (1) {
 		err = PTR_ERR(p);
-		if (!p || IS_ERR(p))
+		if (!p || IS_ERR(p))	// EOF or an error
 			break;
 
 		//调用seq_file的show方法格式化此迭代器
 		err = m->op->show(m, p);
-		if (err < 0)
-		    /*执行出错*/
+		if (err < 0)		// hard error
+		    	/*执行出错*/
 			break;
-		if (unlikely(err))
+		if (unlikely(err))	// ->show() says "skip it"
 			m->count = 0;
 		/*获取下一个obj对象对应的迭代器*/
-		if (unlikely(!m->count)) {
+		if (unlikely(!m->count)) { // empty record
 			p = m->op->next(m, p, &m->index);
 			continue;
 		}
-		if (m->count < m->size)
+		if (!seq_has_overflowed(m)) // got it
 			goto Fill;
-
+		// need a bigger buffer
 		/*遍历完成，执行迭代器清理*/
 		m->op->stop(m, p);
 		kvfree(m->buf);
@@ -261,11 +259,14 @@ ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 			goto Enomem;
 		p = m->op->start(m, &m->index);
 	}
+	// EOF or an error
 	m->op->stop(m, p);
 	m->count = 0;
 	goto Done;
 Fill:
-	/* they want more? let's try to get some more */
+	// one non-empty record is in the buffer; if they want more,
+	// try to fit more in, but in any case we need to advance
+	// the iterator once for every record shown.
 	while (1) {
 		size_t offs = m->count;
 		loff_t pos = m->index;
@@ -276,30 +277,27 @@ Fill:
 					    m->op->next);
 			m->index++;
 		}
-		if (!p || IS_ERR(p)) {
-			err = PTR_ERR(p);
+		if (!p || IS_ERR(p))	// no next record for us
 			break;
-		}
-		if (m->count >= size)
+		if (m->count >= iov_iter_count(iter))
 			break;
 		err = m->op->show(m, p);
-		if (seq_has_overflowed(m) || err) {
+		if (err > 0) {		// ->show() says "skip it"
 			m->count = offs;
-			if (likely(err <= 0))
-				break;
+		} else if (err || seq_has_overflowed(m)) {
+			m->count = offs;
+			break;
 		}
 	}
 	m->op->stop(m, p);
-	n = min(m->count, size);
-	if (copy_to_iter(m->buf, n, iter) != n)
-		goto Efault;
+	n = copy_to_iter(m->buf, m->count, iter);
 	copied += n;
 	m->count -= n;
 	m->from = n;
 Done:
-	if (!copied)
-		copied = err;
-	else {
+	if (unlikely(!copied)) {
+		copied = m->count ? -EFAULT : err;
+	} else {
 		iocb->ki_pos += copied;
 		m->read_pos += copied;
 	}
@@ -307,9 +305,6 @@ Done:
 	return copied;
 Enomem:
 	err = -ENOMEM;
-	goto Done;
-Efault:
-	err = -EFAULT;
 	goto Done;
 }
 EXPORT_SYMBOL(seq_read_iter);

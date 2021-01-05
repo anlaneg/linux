@@ -433,11 +433,9 @@ static void __flow_block_indr_cleanup(void (*release)(void *cb_priv),
 
 	list_for_each_entry_safe(this, next, &flow_block_indr_list, indr.list) {
 		if (this->release == release &&
-		    this->indr.cb_priv == cb_priv) {
-		    /*release回调与间接cb_priv一起唯一确定一个flow_block_cb*/
+		    this->indr.cb_priv == cb_priv)
+		    	/*release回调与间接cb_priv一起唯一确定一个flow_block_cb*/
 			list_move(&this->indr.list, cleanup_list);
-			return;
-		}
 	}
 }
 
