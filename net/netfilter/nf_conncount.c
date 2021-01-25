@@ -395,6 +395,7 @@ count_tree(struct net *net,
 	unsigned int hash;
 	u8 keylen = data->keylen;
 
+	/*计算key的hash*/
 	hash = jhash2(key, data->keylen, conncount_rnd) % CONNCOUNT_SLOTS;
 	root = &data->root[hash];
 

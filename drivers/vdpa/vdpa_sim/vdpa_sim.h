@@ -34,9 +34,9 @@ struct vdpasim_virtqueue {
 
 struct vdpasim_dev_attr {
 	u64 supported_features;
-	size_t config_size;
+	size_t config_size;/*config空间大小*/
 	size_t buffer_size;
-	int nvqs;
+	int nvqs;/*设备队列数*/
 	u32 id;
 
 	work_func_t work_fn;
@@ -46,9 +46,9 @@ struct vdpasim_dev_attr {
 
 /* State of each vdpasim device */
 struct vdpasim {
-	struct vdpa_device vdpa;
-	struct vdpasim_virtqueue *vqs;
-	struct work_struct work;
+	struct vdpa_device vdpa;/*vdpa设备*/
+	struct vdpasim_virtqueue *vqs;/*虚队列，两个，发+收*/
+	struct work_struct work;/*vdpa模拟设备的工作函数*/
 	struct vdpasim_dev_attr dev_attr;
 	/* spinlock to synchronize virtqueue state */
 	spinlock_t lock;

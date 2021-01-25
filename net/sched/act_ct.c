@@ -1113,6 +1113,7 @@ do_nat:
 		goto drop;
 
 	if (commit) {
+	    /*XXX在这个位置做ct数量限制*/
 		//如果指定了commit,则将ct置为confirm,并设置packet对应的mark,labels
 		tcf_ct_act_set_mark(ct, p->mark, p->mark_mask);
 		tcf_ct_act_set_labels(ct, p->labels, p->labels_mask);
@@ -1618,11 +1619,13 @@ static struct tc_action_ops act_ct_ops = {
 	.size		=	sizeof(struct tcf_ct),
 };
 
+/*ct action在pernet时需要的初始化*/
 static __net_init int ct_init_net(struct net *net)
 {
 	unsigned int n_bits = sizeof_field(struct tcf_ct_params, labels) * 8;
 	struct tc_ct_action_net *tn = net_generic(net, ct_net_id);
 
+	/*ct是否包含lables*/
 	if (nf_connlabels_get(net, n_bits - 1)) {
 		tn->labels = false;
 		pr_err("act_ct: Failed to set connlabels length");
@@ -1649,6 +1652,7 @@ static void __net_exit ct_exit_net(struct list_head *net_list)
 	tc_action_net_exit(net_list, ct_net_id);
 }
 
+/*ct action在per net namespace时需要执行的操作*/
 static struct pernet_operations ct_net_ops = {
 	.init = ct_init_net,
 	.exit_batch = ct_exit_net,

@@ -229,6 +229,7 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr)
 	struct device *dev;
 	int i, ret = -ENOMEM;
 
+	/*vdpa设备操作集*/
 	if (batch_mapping)
 		ops = &vdpasim_batch_config_ops;
 	else
@@ -241,6 +242,7 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr)
 		goto err_alloc;
 
 	vdpasim->dev_attr = *dev_attr;
+	/*初始化vdpa设备的work*/
 	INIT_WORK(&vdpasim->work, dev_attr->work_fn);
 	spin_lock_init(&vdpasim->lock);
 	spin_lock_init(&vdpasim->iommu_lock);
@@ -251,10 +253,12 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr)
 		goto err_iommu;
 	set_dma_ops(dev, &vdpasim_dma_ops);
 
+	/*申请config空间*/
 	vdpasim->config = kzalloc(dev_attr->config_size, GFP_KERNEL);
 	if (!vdpasim->config)
 		goto err_iommu;
 
+	/*每个vqs对应一个virtqueue结构*/
 	vdpasim->vqs = kcalloc(dev_attr->nvqs, sizeof(struct vdpasim_virtqueue),
 			       GFP_KERNEL);
 	if (!vdpasim->vqs)
@@ -310,6 +314,7 @@ static void vdpasim_kick_vq(struct vdpa_device *vdpa, u16 idx)
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
 	struct vdpasim_virtqueue *vq = &vdpasim->vqs[idx];
 
+	/*队列如ready,则启动work*/
 	if (vq->ready)
 		schedule_work(&vdpasim->work);
 }
@@ -332,6 +337,7 @@ static void vdpasim_set_vq_ready(struct vdpa_device *vdpa, u16 idx, bool ready)
 	spin_lock(&vdpasim->lock);
 	vq->ready = ready;
 	if (vq->ready)
+	    /*虚队列功能ready*/
 		vdpasim_queue_ready(vdpasim, idx);
 	spin_unlock(&vdpasim->lock);
 }
@@ -549,7 +555,7 @@ static void vdpasim_free(struct vdpa_device *vdpa)
 	kfree(vdpasim->config);
 }
 
-/*vdpasim配置操作集*/
+/*vdpasim设备配置操作集*/
 static const struct vdpa_config_ops vdpasim_config_ops = {
 	.set_vq_address         = vdpasim_set_vq_address,
 	.set_vq_num             = vdpasim_set_vq_num,

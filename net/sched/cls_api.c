@@ -220,7 +220,8 @@ static inline u32 tcf_auto_prio(struct tcf_proto *tp)
 	u32 first = TC_H_MAKE(0xC0000000U, 0U);
 
 	if (tp)
-		//如有tp,则按tp获得优先级
+		//当前这个tp是排在我们后面的，我们需要排在它前面，我们要比它的优先级小。
+	    //如有tp,则按tp获得优先级
 		first = tp->prio - 1;
 
 	return TC_H_MAJ(first);
@@ -1909,7 +1910,7 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 		}
 	}
 
-	//设置chain_info,使其指示tp的前一个，后一个
+	//设置chain_info,使其指示tp要写入的位置（当前指向后一个元素），后一个tp
 	chain_info->pprev = pprev;
 	if (tp) {
 		chain_info->next = tp->next;
@@ -2223,6 +2224,7 @@ replay:
 			goto errout_locked;
 		}
 
+		/*自动申请比较小的优先级*/
 		if (prio_allocate)
 			prio = tcf_auto_prio(tcf_chain_tp_prev(chain,
 							       &chain_info));

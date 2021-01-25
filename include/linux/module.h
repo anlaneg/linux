@@ -47,7 +47,7 @@ struct module_kobject {
 	struct kobject kobj;
 	struct module *mod;
 	struct kobject *drivers_dir;
-	struct module_param_attrs *mp;
+	struct module_param_attrs *mp;/*模块参数属性*/
 	struct completion *kobj_completion;
 } __randomize_layout;
 

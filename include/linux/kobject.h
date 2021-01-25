@@ -65,7 +65,7 @@ struct kobject {
 	const char		*name;/* kobject对象的名字，对应sysfs中的目录名 */
 	struct list_head	entry;//用于挂接成链，例如挂接给kset
 	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
-	struct kset		*kset;
+	struct kset		*kset;/*此kobject从属的kset*/
 	//kobj对应的ktype(可约定一组公共的attr,groups)
 	struct kobj_type	*ktype;
 	//其在sysfs中对应的node

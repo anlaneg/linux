@@ -34,18 +34,18 @@ struct mask_cache {
 };
 
 struct mask_count {
-	int index;
-	u64 counter;
+	int index;/*mask索引*/
+	u64 counter;/*mask被命中的计数*/
 };
 
 struct mask_array_stats {
 	struct u64_stats_sync syncp;
-	u64 usage_cntrs[];
+	u64 usage_cntrs[];/*每个mask被命中的次数*/
 };
 
 struct mask_array {
 	struct rcu_head rcu;
-	int count, max;//mask数组长度
+	int count/*mask数组长度*/, max/*mask数组长度的最大值*/;
 	struct mask_array_stats __percpu *masks_usage_stats;
 	u64 *masks_usage_zero_cntr;
 	struct sw_flow_mask __rcu *masks[];

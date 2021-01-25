@@ -141,11 +141,13 @@ static struct deferred_action *add_deferred_actions(struct sk_buff *skb,
 	return da;
 }
 
+/*指定key解析内容变更为无效*/
 static void invalidate_flow_key(struct sw_flow_key *key)
 {
 	key->mac_proto |= SW_FLOW_KEY_INVALID;
 }
 
+/*检查key的解析内容是否有效*/
 static bool is_flow_key_valid(const struct sw_flow_key *key)
 {
 	return !(key->mac_proto & SW_FLOW_KEY_INVALID);
@@ -1401,6 +1403,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 					return err;
 			}
 
+			/*执行ct action*/
 			err = ovs_ct_execute(ovs_dp_get_net(dp), skb, key,
 					     nla_data(a));
 

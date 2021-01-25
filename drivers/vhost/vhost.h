@@ -72,14 +72,21 @@ struct vhost_virtqueue {
 
 	/* The actual ring of buffers. */
 	struct mutex mutex;
-	unsigned int num;//队列长度
-	vring_desc_t __user *desc;/*用户态指定的desc表起始地址*/
+	//队列长度
+	unsigned int num;
+	/*用户态指定的desc表起始地址*/
+	vring_desc_t __user *desc;
 	//avail表中存放的是可用的描述符（desc）索引，其长度与vq一致
-	vring_avail_t __user *avail;/*用户态指定的avail表起始地址*/
-	vring_used_t __user *used;/*用户态指定的use表起始地址*/
+	/*用户态指定的avail表起始地址*/
+	vring_avail_t __user *avail;
+	/*用户态指定的use表起始地址*/
+	vring_used_t __user *used;
+	/*iotlb缓存（仅一个）*/
 	const struct vhost_iotlb_map *meta_iotlb[VHOST_NUM_ADDRS];
-	struct file *kick;/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
-	struct vhost_vring_call call_ctx;//通过此eventfd告知guest，有数据到达
+	/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
+	struct file *kick;
+	//通过此eventfd告知guest，有数据到达
+	struct vhost_vring_call call_ctx;
 	struct eventfd_ctx *error_ctx;
 	struct eventfd_ctx *log_ctx;
 
@@ -90,13 +97,16 @@ struct vhost_virtqueue {
 	vhost_work_fn_t handle_kick;
 
 	/* Last available index we saw. */
-	u16 last_avail_idx;/*记录我们读取到的avail表位置*/
+	/*记录我们读取到的avail表位置*/
+	u16 last_avail_idx;
 
 	/* Caches available index value from user. */
-	u16 avail_idx;/*记录当前我们可读取的avail表最大位置*/
+	/*记录当前我们可读取的avail表最大位置*/
+	u16 avail_idx;
 
 	/* Last index we used. */
-	u16 last_used_idx;//指出可存放used的起始索引
+	//指出可存放used的起始索引
+	u16 last_used_idx;
 
 	/* Used flags */
 	u16 used_flags;
@@ -108,27 +118,35 @@ struct vhost_virtqueue {
 	bool signalled_used_valid;
 
 	/* Log writes to used structure. */
-	bool log_used;/*是否支持VHOST_VRING_F_LOG*/
-	u64 log_addr;/*用户态指定的log起始地址*/
+	/*是否支持VHOST_VRING_F_LOG*/
+	bool log_used;
+	/*用户态指定的log起始地址*/
+	u64 log_addr;
 
 	struct iovec iov[UIO_MAXIOV];
 	struct iovec iotlb_iov[64];
 	struct iovec *indirect;
 	struct vring_used_elem *heads;
 	/* Protected by virtqueue mutex. */
-	struct vhost_iotlb *umem;/*用户态指定的memory region情况*/
+	/*用户态指定的memory region情况*/
+	struct vhost_iotlb *umem;
 	struct vhost_iotlb *iotlb;
-	void *private_data;/*vq的后端，例如vsock*/
-	u64 acked_features;/*通过VHOST_SET_FEATURES开启的功能*/
-	u64 acked_backend_features;/*通过VHOST_SET_BACKEND_FEATURES开启的backend功能*/
+	/*vq的后端，例如vsock*/
+	void *private_data;
+	/*通过VHOST_SET_FEATURES开启的功能*/
+	u64 acked_features;
+	/*通过VHOST_SET_BACKEND_FEATURES开启的backend功能*/
+	u64 acked_backend_features;
 	/* Log write descriptors */
-	void __user *log_base;/*用户态指定的log base*/
+	/*用户态指定的log base*/
+	void __user *log_base;
 	struct vhost_log *log;
 	struct iovec log_iov[64];
 
 	/* Ring endianness. Defaults to legacy native endianness.
 	 * Set to true when starting a modern virtio device. */
-	bool is_le;/*是否使用小端*/
+	/*是否使用小端*/
+	bool is_le;
 #ifdef CONFIG_VHOST_CROSS_ENDIAN_LEGACY
 	/* Ring endianness requested by userspace for cross-endian support. */
 	bool user_be;
@@ -148,17 +166,24 @@ struct vhost_msg_node {
 struct vhost_dev {
 	struct mm_struct *mm;
 	struct mutex mutex;
-	struct vhost_virtqueue **vqs;/*设备虚拟队列*/
-	int nvqs;/*虚队列数目*/
-	struct eventfd_ctx *log_ctx;/*用户态通过VHOST_SET_LOG_FD指定的eventfd_ctx*/
+	/*设备虚拟队列*/
+	struct vhost_virtqueue **vqs;
+	/*虚队列数目*/
+	int nvqs;
+	/*用户态通过VHOST_SET_LOG_FD指定的eventfd_ctx*/
+	struct eventfd_ctx *log_ctx;
 	/*内核线程vhost-$(owner-pid)将执行挂接在此链表上的所有work*/
 	struct llist_head work_list;
 	//内核线程，用于处理work_list上所有的vhost_work的回调
 	struct task_struct *worker;
-	struct vhost_iotlb *umem;/*用户态指定的mem region*/
+	/*用户态指定的mem region*/
+	struct vhost_iotlb *umem;
+	/*为此设备关联的软件实现iotlb*/
 	struct vhost_iotlb *iotlb;
 	spinlock_t iotlb_lock;
+	/*记录待处理的iotlb miss消息*/
 	struct list_head read_list;
+	/*记录正在处理的iotlb miss消息*/
 	struct list_head pending_list;
 	wait_queue_head_t wait;
 	int iov_limit;

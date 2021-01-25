@@ -534,12 +534,14 @@ struct module_param_attrs
 {
     /*module参数属性数目*/
 	unsigned int num;
+	/*属性所属的group*/
 	struct attribute_group grp;
 	/*module属性数组*/
 	struct param_attribute attrs[];
 };
 
 #ifdef CONFIG_SYSFS
+/*由module_attribute获取其对应的param_attribute*/
 #define to_param_attr(n) container_of(n, struct param_attribute, mattr)
 
 /*module参数属性显示*/
@@ -615,8 +617,8 @@ EXPORT_SYMBOL(kernel_param_unlock);
  * create file in sysfs.  Returns an error on out of memory.  Always cleans up
  * if there's an error.
  */
-static __modinit int add_sysfs_param(struct module_kobject *mk,
-				     const struct kernel_param *kp,
+static __modinit int add_sysfs_param(struct module_kobject *mk/*模块object*/,
+				     const struct kernel_param *kp/*参数*/,
 				     const char *name/*参数名称*/)
 {
 	struct module_param_attrs *new_mp;
@@ -626,6 +628,7 @@ static __modinit int add_sysfs_param(struct module_kobject *mk,
 	/* We don't bother calling this with invisible parameters. */
 	BUG_ON(!kp->perm);
 
+	/*初始化mk->mp*/
 	if (!mk->mp) {
 		/* First allocation. */
 		mk->mp = kzalloc(sizeof(*mk->mp), GFP_KERNEL);
@@ -660,19 +663,23 @@ static __modinit int add_sysfs_param(struct module_kobject *mk,
 	/* Tack new one on the end. */
 	memset(&mk->mp->attrs[mk->mp->num], 0, sizeof(mk->mp->attrs[0]));
 	sysfs_attr_init(&mk->mp->attrs[mk->mp->num].mattr.attr);
+	/*设置此属性对应的kernel属性*/
 	mk->mp->attrs[mk->mp->num].param = kp;
+
 	/*属性显示*/
 	mk->mp->attrs[mk->mp->num].mattr.show = param_attr_show;
 	/* Do not allow runtime DAC changes to make param writable. */
 	if ((kp->perm & (S_IWUSR | S_IWGRP | S_IWOTH)) != 0)
-	    /*权限位不为0，则容放对此kernel parameter进行设置*/
+	    /*权限位中有写权限，则容放对此kernel parameter进行设置*/
 		mk->mp->attrs[mk->mp->num].mattr.store = param_attr_store;
 	else
-	    /*权限位为0，不容许设置*/
+	    /*权限位中无写权限，不容许设置*/
 		mk->mp->attrs[mk->mp->num].mattr.store = NULL;
+
 	/*参数名称*/
 	mk->mp->attrs[mk->mp->num].mattr.attr.name = (char *)name;
 	mk->mp->attrs[mk->mp->num].mattr.attr.mode = kp->perm;
+
 	/*参数数目增加*/
 	mk->mp->num++;
 
@@ -763,10 +770,12 @@ static struct module_kobject * __init locate_module_kobject(const char *name)
 	struct kobject *kobj;
 	int err;
 
+	/*通过module名称查找module_kobject*/
 	kobj = kset_find_obj(module_kset, name);
 	if (kobj) {
 		mk = to_module_kobject(kobj);
 	} else {
+	    /*此module_kobject未存在，这里创建它*/
 		mk = kzalloc(sizeof(struct module_kobject), GFP_KERNEL);
 		BUG_ON(!mk);
 
@@ -776,6 +785,7 @@ static struct module_kobject * __init locate_module_kobject(const char *name)
 					   "%s", name);
 #ifdef CONFIG_MODULES
 		if (!err)
+		    /*创建sys/modules/$module_name目录*/
 			err = sysfs_create_file(&mk->kobj, &module_uevent.attr);
 #endif
 		if (err) {
@@ -792,8 +802,8 @@ static struct module_kobject * __init locate_module_kobject(const char *name)
 	return mk;
 }
 
-static void __init kernel_add_sysfs_param(const char *name,
-					  const struct kernel_param *kparam,
+static void __init kernel_add_sysfs_param(const char *name/*参数所属module名称*/,
+					  const struct kernel_param *kparam/*待加入的参数名称*/,
 					  unsigned int name_skip)
 {
 	struct module_kobject *mk;
@@ -838,6 +848,7 @@ static void __init param_sysfs_builtin(void)
 		if (kp->perm == 0)
 			continue;
 
+		/*如果名称中无.,则使用kernel做为module名称，否则使用.前的名称为module名称*/
 		dot = strchr(kp->name, '.');
 		if (!dot) {
 			/* This happens for core_param() */
@@ -847,6 +858,7 @@ static void __init param_sysfs_builtin(void)
 			name_len = dot - kp->name + 1;
 			strlcpy(modname, kp->name, name_len);
 		}
+		/*将kernel parameter加入到module中*/
 		kernel_add_sysfs_param(modname, kp, name_len);
 	}
 }
@@ -882,6 +894,7 @@ static void __init version_sysfs_builtin(void)
 
 /* module-related sysfs stuff */
 
+/*显示module属性*/
 static ssize_t module_attr_show(struct kobject *kobj,
 				struct attribute *attr,
 				char *buf)
@@ -901,6 +914,7 @@ static ssize_t module_attr_show(struct kobject *kobj,
 	return ret;
 }
 
+/*设置module属性*/
 static ssize_t module_attr_store(struct kobject *kobj,
 				struct attribute *attr,
 				const char *buf, size_t len)
@@ -920,6 +934,7 @@ static ssize_t module_attr_store(struct kobject *kobj,
 	return ret;
 }
 
+/*module属性显示及存储*/
 static const struct sysfs_ops module_sysfs_ops = {
 	.show = module_attr_show,
 	.store = module_attr_store,

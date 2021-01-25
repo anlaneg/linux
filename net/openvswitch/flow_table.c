@@ -274,12 +274,14 @@ static int tbl_mask_array_realloc(struct flow_table *tbl, int size)
 	return 0;
 }
 
+/*向flowtable中加入新的flow_mask*/
 static int tbl_mask_array_add_mask(struct flow_table *tbl,
 				   struct sw_flow_mask *new)
 {
 	struct mask_array *ma = ovsl_dereference(tbl->mask_array);
 	int err, ma_count = READ_ONCE(ma->count);
 
+	/*长度不足，进行扩充*/
 	if (ma_count >= ma->max) {
 		err = tbl_mask_array_realloc(tbl, ma->max +
 						  MASK_ARRAY_SIZE_MIN);
@@ -744,19 +746,21 @@ static struct sw_flow *flow_lookup(struct flow_table *tbl,
 				   const struct sw_flow_key *key,
 				   u32 *n_mask_hit,
 				   u32 *n_cache_hit,
-				   u32 *index)
+				   u32 *index/*入出参，优先查询哪个mask，命中了哪个mask*/)
 {
 	struct mask_array_stats *stats = this_cpu_ptr(ma->masks_usage_stats);
 	struct sw_flow *flow;
 	struct sw_flow_mask *mask;
 	int i;
 
+	/*所给的index必须小于mask的实际数量，这里优先查询index指定的mask*/
 	if (likely(*index < ma->max)) {
 		mask = rcu_dereference_ovsl(ma->masks[*index]);
 		if (mask) {
 		    //假设采用mask,这里进行key&mask后进行value查询
 			flow = masked_flow_lookup(ti, key, mask, n_mask_hit);
 			if (flow) {
+			    /*在此mask情况下，命中了flow*/
 				u64_stats_update_begin(&stats->syncp);
 				stats->usage_cntrs[*index]++;
 				u64_stats_update_end(&stats->syncp);
@@ -769,6 +773,7 @@ static struct sw_flow *flow_lookup(struct flow_table *tbl,
 	//遍历所有mask，考虑采用哪个mask可以匹配到流
 	for (i = 0; i < ma->max; i++)  {
 
+	    /*跳过已查询的mask*/
 		if (i == *index)
 			continue;
 
@@ -870,6 +875,7 @@ struct sw_flow *ovs_flow_tbl_lookup(struct flow_table *tbl,
 	u32 __always_unused n_mask_hit;
 	u32 __always_unused n_cache_hit;
 	struct sw_flow *flow;
+	/*默认从0号mask查起*/
 	u32 index = 0;
 
 	/* This function gets called trough the netlink interface and therefore
@@ -994,6 +1000,7 @@ static struct sw_flow_mask *mask_alloc(void)
 	return mask;
 }
 
+/*检查两个mask是否相等*/
 static bool mask_equal(const struct sw_flow_mask *a,
 		       const struct sw_flow_mask *b)
 {
@@ -1032,6 +1039,7 @@ static int flow_mask_insert(struct flow_table *tbl, struct sw_flow *flow,
 
 	mask = flow_mask_find(tbl, new);
 	if (!mask) {
+	    /*mask在table中不存在，这里申请新的mask*/
 		/* Allocate a new mask if none exsits. */
 		mask = mask_alloc();
 		if (!mask)
@@ -1045,6 +1053,7 @@ static int flow_mask_insert(struct flow_table *tbl, struct sw_flow *flow,
 			return -ENOMEM;
 		}
 	} else {
+	    /*增加mask的引用计数*/
 		BUG_ON(!mask->ref_count);
 		mask->ref_count++;
 	}
@@ -1142,6 +1151,7 @@ void ovs_flow_masks_rebalance(struct flow_table *table)
 	if (!masks_and_count)
 		return;
 
+	/*遍历每个mask*/
 	for (i = 0; i < ma->max; i++) {
 		struct sw_flow_mask *mask;
 		int cpu;
@@ -1153,6 +1163,7 @@ void ovs_flow_masks_rebalance(struct flow_table *table)
 		masks_and_count[i].index = i;
 		masks_and_count[i].counter = 0;
 
+		/*取各cpu统计的masks_and_count计数*/
 		for_each_possible_cpu(cpu) {
 			struct mask_array_stats *stats;
 			unsigned int start;

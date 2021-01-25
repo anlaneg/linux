@@ -12,21 +12,26 @@
 #include <linux/slab.h>
 #include <linux/vdpa.h>
 
+/*负责vdpa设备的index分配*/
 static DEFINE_IDA(vdpa_index_ida);
 
 //执行vdpa设备与vdpa驱动适配
 static int vdpa_dev_probe(struct device *d)
 {
+    /*设备为vdpa设备*/
 	struct vdpa_device *vdev = dev_to_vdpa(d);
+	/*驱动为vdpa驱动*/
 	struct vdpa_driver *drv = drv_to_vdpa(vdev->dev.driver);
 	int ret = 0;
 
+	/*采用vdpa驱动probe此vdpa设备*/
 	if (drv && drv->probe)
 		ret = drv->probe(vdev);
 
 	return ret;
 }
 
+/*指定d对应的vdpa驱动移除设备*/
 static int vdpa_dev_remove(struct device *d)
 {
 	struct vdpa_device *vdev = dev_to_vdpa(d);
@@ -38,20 +43,24 @@ static int vdpa_dev_remove(struct device *d)
 	return 0;
 }
 
+/*vdpa对应的虚拟bus*/
 static struct bus_type vdpa_bus = {
 	.name  = "vdpa",
 	.probe = vdpa_dev_probe,
 	.remove = vdpa_dev_remove,
 };
 
+/*vdpa设备释放*/
 static void vdpa_release_dev(struct device *d)
 {
 	struct vdpa_device *vdev = dev_to_vdpa(d);
 	const struct vdpa_config_ops *ops = vdev->config;
 
+	/*释放此vdpa设备*/
 	if (ops->free)
 		ops->free(vdev);
 
+	/*归还vdpa设备对应的index*/
 	ida_simple_remove(&vdpa_index_ida, vdev->index);
 	kfree(vdev);
 }
@@ -71,10 +80,10 @@ static void vdpa_release_dev(struct device *d)
  * Returns an error when parent/config/dma_dev is not set or fail to get
  * ida.
  */
-struct vdpa_device *__vdpa_alloc_device(struct device *parent,
+struct vdpa_device *__vdpa_alloc_device(struct device *parent/*父设备*/,
 					const struct vdpa_config_ops *config/*vdpa操作集*/,
-					int nvqs,
-					size_t size)
+					int nvqs/*虚队列数*/,
+					size_t size/*vdpa设备空间大小（含私有空间）*/)
 {
     //vdap设备申请及初始化
 	struct vdpa_device *vdev;
@@ -83,9 +92,11 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	if (!config)
 		goto err;
 
+	/*dma_map与dma_unmap必须成对出现*/
 	if (!!config->dma_map != !!config->dma_unmap)
 		goto err;
 
+	/*申请vdpa空间*/
 	err = -ENOMEM;
 	vdev = kzalloc(size, GFP_KERNEL);
 	if (!vdev)
@@ -114,6 +125,7 @@ struct vdpa_device *__vdpa_alloc_device(struct device *parent,
 	return vdev;
 
 err_name:
+    /*释放为此dev申请的index*/
 	ida_simple_remove(&vdpa_index_ida, vdev->index);
 err_ida:
 	kfree(vdev);
@@ -131,6 +143,7 @@ EXPORT_SYMBOL_GPL(__vdpa_alloc_device);
  */
 int vdpa_register_device(struct vdpa_device *vdev)
 {
+    /*添加此device到sysfs*/
 	return device_add(&vdev->dev);
 }
 EXPORT_SYMBOL_GPL(vdpa_register_device);
@@ -174,6 +187,7 @@ EXPORT_SYMBOL_GPL(vdpa_unregister_driver);
 
 static int vdpa_init(void)
 {
+    /*注册vdpa bus*/
 	return bus_register(&vdpa_bus);
 }
 

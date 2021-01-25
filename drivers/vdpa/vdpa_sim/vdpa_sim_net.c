@@ -37,6 +37,7 @@ u8 macaddr_buf[ETH_ALEN];
 
 static struct vdpasim *vdpasim_net_dev;
 
+/*vdpa设备的work函数*/
 static void vdpasim_net_work(struct work_struct *work)
 {
 	struct vdpasim *vdpasim = container_of(work, struct vdpasim, work);
@@ -49,19 +50,23 @@ static void vdpasim_net_work(struct work_struct *work)
 
 	spin_lock(&vdpasim->lock);
 
+	/*设备需要已被driver绑定*/
 	if (!(vdpasim->status & VIRTIO_CONFIG_S_DRIVER_OK))
 		goto out;
 
+	/*rx与tx需要ready*/
 	if (!txq->ready || !rxq->ready)
 		goto out;
 
 	while (true) {
+	    /*取tx的head，记录到txq->out_iov*/
 		total_write = 0;
 		err = vringh_getdesc_iotlb(&txq->vring, &txq->out_iov, NULL,
 					   &txq->head, GFP_ATOMIC);
 		if (err <= 0)
 			break;
 
+		/*取rx的head,记录到rxq->in_iov*/
 		err = vringh_getdesc_iotlb(&rxq->vring, NULL, &rxq->in_iov,
 					   &rxq->head, GFP_ATOMIC);
 		if (err <= 0) {
@@ -70,12 +75,14 @@ static void vdpasim_net_work(struct work_struct *work)
 		}
 
 		while (true) {
+		    /*将txq->out_iov中的数据存入到vdpasim->buffer中*/
 			read = vringh_iov_pull_iotlb(&txq->vring, &txq->out_iov,
 						     vdpasim->buffer,
 						     PAGE_SIZE);
 			if (read <= 0)
 				break;
 
+			/*将vdpasim->buffer里的内容写入到rxq->in_iov中*/
 			write = vringh_iov_push_iotlb(&rxq->vring, &rxq->in_iov,
 						      vdpasim->buffer, read);
 			if (write <= 0)
@@ -100,6 +107,7 @@ static void vdpasim_net_work(struct work_struct *work)
 			vringh_notify(&rxq->vring);
 		local_bh_enable();
 
+		/*处理多个报文后，调度走*/
 		if (++pkts > 4) {
 			schedule_work(&vdpasim->work);
 			goto out;
@@ -120,6 +128,7 @@ static void vdpasim_net_get_config(struct vdpasim *vdpasim, void *config)
 	memcpy(net_config->mac, macaddr_buf, ETH_ALEN);
 }
 
+/*初始化vdpa模拟设备*/
 static int __init vdpasim_net_init(void)
 {
 	struct vdpasim_dev_attr dev_attr = {};
@@ -140,15 +149,18 @@ static int __init vdpasim_net_init(void)
 	dev_attr.nvqs = VDPASIM_NET_VQ_NUM;
 	dev_attr.config_size = sizeof(struct virtio_net_config);
 	dev_attr.get_config = vdpasim_net_get_config;
+	/*将rx方向的报，转到tx方向*/
 	dev_attr.work_fn = vdpasim_net_work;
 	dev_attr.buffer_size = PAGE_SIZE;
 
+	/*按配置，创建vdpa设备*/
 	vdpasim_net_dev = vdpasim_create(&dev_attr);
 	if (IS_ERR(vdpasim_net_dev)) {
 		ret = PTR_ERR(vdpasim_net_dev);
 		goto out;
 	}
 
+	/*注册vdpa设备*/
 	ret = vdpa_register_device(&vdpasim_net_dev->vdpa);
 	if (ret)
 		goto put_dev;

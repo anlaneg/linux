@@ -291,7 +291,7 @@ struct kparam_array
 
 /* This is the fundamental function for registering boot/module
    parameters. */
-#define __module_param_call(prefix/*模块参数名称前缀*/, name/*参数名称*/, ops, arg, perm, level, flags)	\
+#define __module_param_call(prefix/*模块参数名称前缀*/, name/*参数名称*/, ops/*参数操作ops*/, arg, perm, level, flags)	\
 	/* Default value instead of permissions? */			\
 	static const char __param_str_##name[] = prefix #name;		\
 	static struct kernel_param __moduleparam_const __param_##name	\

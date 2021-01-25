@@ -266,6 +266,7 @@ int kstrtoint(const char *s, unsigned int base, int *res)
 }
 EXPORT_SYMBOL(kstrtoint);
 
+/*kernel 字符串转为u16*/
 int kstrtou16(const char *s, unsigned int base, u16 *res)
 {
 	unsigned long long tmp;

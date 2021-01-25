@@ -24,7 +24,9 @@
 #define MOD_LICENSE  "GPL v2"
 
 struct virtio_vdpa_device {
+    /*本质是一个virtio设备*/
 	struct virtio_device vdev;
+	/*对应的后端vdpa设备*/
 	struct vdpa_device *vdpa;
 	u64 features;
 
@@ -191,6 +193,7 @@ virtio_vdpa_setup_vq(struct virtio_device *vdev, unsigned int index,
 		goto err_vq;
 	}
 
+	/*指明vdpa设备的index号队列ready*/
 	ops->set_vq_ready(vdpa, index, 1);
 
 	vq->priv = info;
@@ -331,6 +334,7 @@ static void virtio_vdpa_release_dev(struct device *_d)
 	kfree(vd_dev);
 }
 
+/*检查给定vdpa设备是否可被本驱动使能*/
 static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 {
 	const struct vdpa_config_ops *ops = vdpa->config;
@@ -377,7 +381,7 @@ static void virtio_vdpa_remove(struct vdpa_device *vdpa)
 	unregister_virtio_device(&vd_dev->vdev);
 }
 
-//声明virtio vdpa驱动
+//申明virtio vdpa驱动
 static struct vdpa_driver virtio_vdpa_driver = {
 	.driver = {
 		.name	= "virtio_vdpa",

@@ -237,6 +237,7 @@ static void mlx5_fc_release(struct mlx5_core_dev *dev, struct mlx5_fc *counter)
 		mlx5_fc_free(dev, counter);
 }
 
+/*执行flow counter状态更新*/
 static void mlx5_fc_stats_work(struct work_struct *work)
 {
 	struct mlx5_core_dev *dev = container_of(work, struct mlx5_core_dev,

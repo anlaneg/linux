@@ -55,6 +55,7 @@ enum ovs_ct_nat {
 
 /* Conntrack action context for execution. */
 struct ovs_conntrack_info {
+    /*连接对应的alg helper函数*/
 	struct nf_conntrack_helper *helper;
 	struct nf_conntrack_zone zone;
 	struct nf_conn *ct;
@@ -66,7 +67,7 @@ struct ovs_conntrack_info {
 	u8 have_eventmask : 1;
 	u16 family;
 	u32 eventmask;              /* Mask of 1 << IPCT_*. */
-	struct md_mark mark;
+	struct md_mark mark;/*ct的mark信息*/
 	struct md_labels labels;
 	char timeout[CTNL_TIMEOUT_NAME_MAX];
 	struct nf_ct_timeout *nf_ct_timeout;
@@ -342,6 +343,7 @@ int ovs_ct_put_key(const struct sw_flow_key *swkey,
 	return 0;
 }
 
+/*设置ct mark到conntrack中*/
 static int ovs_ct_set_mark(struct nf_conn *ct, struct sw_flow_key *key,
 			   u32 ct_mark, u32 mask)
 {
@@ -667,7 +669,7 @@ ovs_ct_find_existing(struct net *net, const struct nf_conntrack_zone *zone,
 	return ct;
 }
 
-//返回已存在的ct
+//返回已存在kernel中已创建的ct
 static
 struct nf_conn *ovs_ct_executed(struct net *net,
 				const struct sw_flow_key *key,
@@ -700,7 +702,7 @@ struct nf_conn *ovs_ct_executed(struct net *net,
 /* Determine whether skb->_nfct is equal to the result of conntrack lookup. */
 static bool skb_nfct_cached(struct net *net,
 			    const struct sw_flow_key *key,
-			    const struct ovs_conntrack_info *info,
+			    const struct ovs_conntrack_info *info/*出参，连接跟踪状态*/,
 			    struct sk_buff *skb)
 {
 	enum ip_conntrack_info ctinfo;
@@ -716,7 +718,8 @@ static bool skb_nfct_cached(struct net *net,
 		//获取链接状态信息
 		nf_ct_get(skb, &ctinfo);
 	else
-		return false;//ct未创建，则返回
+	    //ct未创建，则返回
+		return false;
 
 	//net不相等，忽略此ct
 	if (!net_eq(net, read_pnet(&ct->ct_net)))
@@ -738,6 +741,7 @@ static bool skb_nfct_cached(struct net *net,
 	if (info->nf_ct_timeout) {
 		struct nf_conn_timeout *timeout_ext;
 
+		/*取ct中存在的timeout扩展，需要与info的timeout相等*/
 		timeout_ext = nf_ct_timeout_find(ct);
 		if (!timeout_ext || info->nf_ct_timeout !=
 		    rcu_dereference(timeout_ext->timeout))
@@ -745,7 +749,7 @@ static bool skb_nfct_cached(struct net *net,
 	}
 
 	/* Force conntrack entry direction to the current packet? */
-	//如果给定info,且本报文为源方向，则丢弃掉此ct
+	//如果给定info->force,且本报文为源方向，则丢弃掉此ct
 	if (info->force && CTINFO2DIR(ctinfo) != IP_CT_DIR_ORIGINAL) {
 		/* Delete the conntrack entry if confirmed, else just release
 		 * the reference.
@@ -754,6 +758,7 @@ static bool skb_nfct_cached(struct net *net,
 			nf_ct_delete(ct, 0, 0);
 
 		nf_conntrack_put(&ct->ct_general);
+		/*清除skb中ct引用*/
 		nf_ct_set(skb, NULL, 0);
 		return false;
 	}
@@ -999,12 +1004,13 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 	 * actually run the packet through conntrack twice unless it's for a
 	 * different zone.
 	 */
+    /*检查是否已有key对应的ct缓存存在*/
 	bool cached = skb_nfct_cached(net, key, info, skb);
 	enum ip_conntrack_info ctinfo;
 	struct nf_conn *ct;
 
 	if (!cached) {
-		//未查询到ct,构造hook state准备手动调用nf_conntrack_in创建ct
+		//之前未查询到ct,构造hook state准备手动调用nf_conntrack_in创建ct
 		struct nf_hook_state state = {
 			.hook = NF_INET_PRE_ROUTING,
 			.pf = info->family,
@@ -1037,7 +1043,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		ovs_ct_update_key(skb, info, key, true, true);
 	}
 
-	//取ct
+	//取skb中记录的ct
 	ct = nf_ct_get(skb, &ctinfo);
 	if (ct) {
 		bool add_helper = false;
@@ -1066,7 +1072,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 		 * the helper here.
 		 */
 		if (info->commit && info->helper && !nfct_help(ct)) {
-			//添加helper
+			//ct需要commit,且指明helper,此处添加helper
 			int err = __nf_ct_try_assign_helper(ct, info->ct,
 							    GFP_ATOMIC);
 			if (err)
@@ -1080,6 +1086,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 			}
 		}
 
+		/*执行help分析*/
 		/* Call the helper only if:
 		 * - nf_conntrack_in() was executed above ("!cached") or a
 		 *   helper was just attached ("add_helper") for a confirmed
@@ -1092,6 +1099,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 			return -EINVAL;
 		}
 
+		/*标记ct的out-of-window不进行检查*/
 		if (nf_ct_protonum(ct) == IPPROTO_TCP &&
 		    nf_ct_is_confirmed(ct) && nf_conntrack_tcp_established(ct)) {
 			/* Be liberal for tcp packets so that out-of-window
@@ -1266,7 +1274,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 		return 0;
 
 #if	IS_ENABLED(CONFIG_NETFILTER_CONNCOUNT)
-	//zone连接跟踪限制触发检查
+	//zone连接跟踪数量限制触发检查
 	if (static_branch_unlikely(&ovs_ct_limit_enabled)) {
 		if (!nf_ct_is_confirmed(ct)) {
 		    /*正在创建ct,执行对ct的limit检查*/
@@ -1292,6 +1300,7 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 	if (info->have_eventmask) {
 		struct nf_conntrack_ecache *cache = nf_ct_ecache_find(ct);
 
+		/*在ct中添加eventmask*/
 		if (cache)
 			cache->ctmask = info->eventmask;
 	}
@@ -1301,12 +1310,14 @@ static int ovs_ct_commit(struct net *net, struct sw_flow_key *key/*报文key*/,
 	 * action.
 	 */
 	if (info->mark.mask) {
+	    /*变更mark到ct中*/
 		err = ovs_ct_set_mark(ct, key, info->mark.value,
 				      info->mark.mask);
 		if (err)
 			return err;
 	}
 	if (!nf_ct_is_confirmed(ct)) {
+	    /*未commit,初始化label*/
 		err = ovs_ct_init_labels(ct, key, &info->labels.value,
 					 &info->labels.mask);
 		if (err)
@@ -1352,6 +1363,7 @@ static int ovs_skb_network_trim(struct sk_buff *skb)
 		len = skb->len;
 	}
 
+	/*checksum检查*/
 	err = pskb_trim_rcsum(skb, len);
 	if (err)
 		kfree_skb(skb);
@@ -1362,7 +1374,7 @@ static int ovs_skb_network_trim(struct sk_buff *skb)
 /* Returns 0 on success, -EINPROGRESS if 'skb' is stolen, or other nonzero
  * value if 'skb' is freed.
  */
-int ovs_ct_execute(struct net *net, struct sk_buff *skb,
+int ovs_ct_execute(struct net *net/*所属的net namespace*/, struct sk_buff *skb,
 		   struct sw_flow_key *key/*报文的key信息*/,
 		   const struct ovs_conntrack_info *info/*ct动作对应的参数*/)
 {
@@ -1370,8 +1382,8 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 	int err;
 
 	/* The conntrack module expects to be working at L3. */
-	nh_ofs = skb_network_offset(skb);//到l3的offset
-	skb_pull_rcsum(skb, nh_ofs);
+	nh_ofs = skb_network_offset(skb);/*到l3的offset*/
+	skb_pull_rcsum(skb, nh_ofs);/*将data指针移动到l3头部*/
 
 	err = ovs_skb_network_trim(skb);
 	if (err)
@@ -1391,6 +1403,7 @@ int ovs_ct_execute(struct net *net, struct sk_buff *skb,
 		/*未指明commit，仅执行ct查询*/
 		err = ovs_ct_lookup(net, key, info, skb);
 
+	/*回归到原来skb->data指向位置*/
 	skb_push(skb, nh_ofs);
 	skb_postpush_rcsum(skb, skb->data, nh_ofs);
 	if (err)

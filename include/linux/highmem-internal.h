@@ -186,6 +186,7 @@ static inline void *kmap_atomic(struct page *page)
 {
 	preempt_disable();
 	pagefault_disable();
+	/*取此页虚拟地址*/
 	return page_address(page);
 }
 

@@ -291,6 +291,7 @@ void vhost_poll_queue(struct vhost_poll *poll)
 }
 EXPORT_SYMBOL_GPL(vhost_poll_queue);
 
+/*初始化vq中meta_iotlb为NULL*/
 static void __vhost_vq_meta_reset(struct vhost_virtqueue *vq)
 {
 	int j;
@@ -474,14 +475,16 @@ static size_t vhost_get_used_size(struct vhost_virtqueue *vq,
 	       sizeof(*vq->used->ring) * num + event;
 }
 
+/*desc表大小*/
 static size_t vhost_get_desc_size(struct vhost_virtqueue *vq,
 				  unsigned int num)
 {
 	return sizeof(*vq->desc) * num;
 }
 
+/*初始化vhost_dev*/
 void vhost_dev_init(struct vhost_dev *dev,
-		    struct vhost_virtqueue **vqs, int nvqs/*vq数目*/,
+		    struct vhost_virtqueue **vqs/*已初始化完成的vhost_virtqueue*/, int nvqs/*vq数目*/,
 		    int iov_limit, int weight, int byte_weight,
 		    bool use_worker,
 		    int (*msg_handler)(struct vhost_dev *dev,
@@ -758,6 +761,7 @@ static bool log_access_ok(void __user *log_base, u64 addr, unsigned long sz)
 			 (sz + VHOST_PAGE_SIZE * 8 - 1) / VHOST_PAGE_SIZE / 8);
 }
 
+/*uaddr及uaddr+size不得overflow*/
 static bool vhost_overflow(u64 uaddr, u64 size)
 {
 	/* Make sure 64 bit math will not overflow. */
@@ -796,6 +800,7 @@ static bool vq_memory_access_ok(void __user *log_base, struct vhost_iotlb *umem,
 	return true;
 }
 
+/*通过vq meta进行iotlb映射查询，如果miss，返回NULL*/
 static inline void __user *vhost_vq_meta_fetch(struct vhost_virtqueue *vq,
 					       u64 addr, unsigned int size,
 					       int type)
@@ -878,6 +883,7 @@ static int vhost_copy_from_user(struct vhost_virtqueue *vq, void *to,
 {
 	int ret;
 
+	/*vq无iotlb，则硬件保证*/
 	if (!vq->iotlb)
 		return __copy_from_user(to, from, size);
 	else {
@@ -892,8 +898,10 @@ static int vhost_copy_from_user(struct vhost_virtqueue *vq, void *to,
 		struct iov_iter f;
 
 		if (uaddr)
+		    /*vq的meta信息中已包含desc表的iotlb映射，直接转换*/
 			return __copy_from_user(to, uaddr, size);
 
+		//meta中没有，通过iotlb查一遍，如果失败，则退出，否则完成填写
 		//转换地址区间[from,from+size]的地址，存放在vq->iotlb_iov中
 		ret = translate_desc(vq, (u64)(uintptr_t)from, size, vq->iotlb_iov,
 				     ARRAY_SIZE(vq->iotlb_iov),
@@ -953,6 +961,7 @@ static inline void __user *__vhost_get_user(struct vhost_virtqueue *vq,
 					    void __user *addr/*要转换地址*/, unsigned int size/*地址指向的内存大小*/,
 					    int type)
 {
+    /*优先在meta中查询，如果命中，则直接返回*/
 	void __user *uaddr = vhost_vq_meta_fetch(vq,
 			     (u64)(uintptr_t)addr, size, type);
 	if (uaddr)
@@ -1093,6 +1102,7 @@ static inline int vhost_get_desc(struct vhost_virtqueue *vq,
 	return vhost_copy_from_user(vq, desc, vq->desc + idx, sizeof(*desc));
 }
 
+/*检查是否有等待此msg的队列，如有使其可运行*/
 static void vhost_iotlb_notify_vq(struct vhost_dev *d,
 				  struct vhost_iotlb_msg *msg)
 {
@@ -1100,11 +1110,14 @@ static void vhost_iotlb_notify_vq(struct vhost_dev *d,
 
 	spin_lock(&d->iotlb_lock);
 
+	/*检查pending_list上挂接的iotlb miss消息，如果当前消息对应了此miss,则将其自
+	 * pending中移除掉，并将poll设备对应的work入队到vhost work中，使其执行*/
 	list_for_each_entry_safe(node, n, &d->pending_list, node) {
 		struct vhost_iotlb_msg *vq_msg = &node->msg.iotlb;
 		if (msg->iova <= vq_msg->iova &&
 		    msg->iova + msg->size - 1 >= vq_msg->iova &&
 		    vq_msg->type == VHOST_IOTLB_MISS) {
+		    //使可执行
 			vhost_poll_queue(&node->vq->poll);
 			list_del(&node->node);
 			kfree(node);
@@ -1131,6 +1144,7 @@ static bool umem_access_ok(u64 uaddr, u64 size, int access)
 	return true;
 }
 
+/*iotlb 消息update/invalidate消息处理*/
 static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 				   struct vhost_iotlb_msg *msg)
 {
@@ -1141,6 +1155,7 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 	switch (msg->type) {
 	case VHOST_IOTLB_UPDATE:
 		if (!dev->iotlb) {
+		    /*此时iotlb必须已创建*/
 			ret = -EFAULT;
 			break;
 		}
@@ -1149,12 +1164,14 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 			break;
 		}
 		vhost_vq_meta_reset(dev);
+		/*在设备iotlb中添加地址映射*/
 		if (vhost_iotlb_add_range(dev->iotlb, msg->iova,
 					  msg->iova + msg->size - 1,
 					  msg->uaddr, msg->perm)) {
 			ret = -ENOMEM;
 			break;
 		}
+		/*收到iotlb更新，检查是否有pending,如有，促使其运行*/
 		vhost_iotlb_notify_vq(dev, msg);
 		break;
 	case VHOST_IOTLB_INVALIDATE:
@@ -1163,6 +1180,7 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 			break;
 		}
 		vhost_vq_meta_reset(dev);
+		/*自设备iotlb中移除指定范围的地址映射*/
 		vhost_iotlb_del_range(dev->iotlb, msg->iova,
 				      msg->iova + msg->size - 1);
 		break;
@@ -1176,6 +1194,8 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 
 	return ret;
 }
+
+/*处理vhost_dev设备对应的iotlb消息*/
 ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 			     struct iov_iter *from)
 {
@@ -1189,6 +1209,7 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 		goto done;
 	}
 
+	/*当前支持以下几类消息*/
 	switch (type) {
 	case VHOST_IOTLB_MSG:
 		/* There maybe a hole after type for V1 message type,
@@ -1211,6 +1232,7 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 		goto done;
 	}
 
+	/*如果有msg_handler，则处理，否则不处理*/
 	if (dev->msg_handler)
 		ret = dev->msg_handler(dev, &msg);
 	else
@@ -1227,6 +1249,7 @@ done:
 }
 EXPORT_SYMBOL(vhost_chr_write_iter);
 
+/*检测是否有iotlb miss消息可读*/
 __poll_t vhost_chr_poll(struct file *file, struct vhost_dev *dev,
 			    poll_table *wait)
 {
@@ -1234,6 +1257,7 @@ __poll_t vhost_chr_poll(struct file *file, struct vhost_dev *dev,
 
 	poll_wait(file, &dev->wait, wait);
 
+	/*队列不为空，标明有数组*/
 	if (!list_empty(&dev->read_list))
 		mask |= EPOLLIN | EPOLLRDNORM;
 
@@ -1241,6 +1265,7 @@ __poll_t vhost_chr_poll(struct file *file, struct vhost_dev *dev,
 }
 EXPORT_SYMBOL(vhost_chr_poll);
 
+/*自dev->read_list上获取iotlb miss消息，并填充到to中，同时将此消息移至dev->pending_list*/
 ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 			    int noblock)
 {
@@ -1249,6 +1274,7 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 	ssize_t ret = 0;
 	unsigned size = sizeof(struct vhost_msg);
 
+	/*要读取的字节小于vhost_msg大小，返回0*/
 	if (iov_iter_count(to) < size)
 		return 0;
 
@@ -1258,37 +1284,49 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 					TASK_INTERRUPTIBLE);
 
 		node = vhost_dequeue_msg(dev, &dev->read_list);
+
+		/*有可处理消息，跳出*/
 		if (node)
 			break;
+
+		/*不容许阻塞，返回EAGAIN*/
 		if (noblock) {
 			ret = -EAGAIN;
 			break;
 		}
+
+		/*当前进程有未绝信号，返回ERESTARTSYS*/
 		if (signal_pending(current)) {
 			ret = -ERESTARTSYS;
 			break;
 		}
+
+		/*iotlb未创建，返回失败*/
 		if (!dev->iotlb) {
 			ret = -EBADFD;
 			break;
 		}
 
+		/*无数据，且容许阻塞，调度到其它进程*/
 		schedule();
 	}
 
 	if (!noblock)
 		finish_wait(&dev->wait, &wait);
 
+	/*消息type校验及copy准备*/
 	if (node) {
 		struct vhost_iotlb_msg *msg;
 		void *start = &node->msg;
 
 		switch (node->msg.type) {
 		case VHOST_IOTLB_MSG:
+		    /*v1 iotlb消息*/
 			size = sizeof(node->msg);
 			msg = &node->msg.iotlb;
 			break;
 		case VHOST_IOTLB_MSG_V2:
+		    /*v2 iotlb消息*/
 			size = sizeof(node->msg_v2);
 			msg = &node->msg_v2.iotlb;
 			break;
@@ -1297,11 +1335,15 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 			break;
 		}
 
+		/*将msg copy到to中*/
 		ret = copy_to_iter(start, size, to);
 		if (ret != size || msg->type != VHOST_IOTLB_MISS) {
+		    /*copy失败，且消息类型非iotlb miss的，直接丢弃*/
 			kfree(node);
 			return ret;
 		}
+
+		/*将copy成功的消息，添加到dev->pending_list队列上*/
 		vhost_enqueue_msg(dev, &dev->pending_list, node);
 	}
 
@@ -1315,6 +1357,7 @@ static int vhost_iotlb_miss(struct vhost_virtqueue *vq, u64 iova, int access)
 	struct vhost_dev *dev = vq->dev;
 	struct vhost_msg_node *node;
 	struct vhost_iotlb_msg *msg;
+	/*采用哪个版本的消息格式*/
 	bool v2 = vhost_backend_has_feature(vq, VHOST_BACKEND_F_IOTLB_MSG_V2);
 
 	//构造tlb miss消息
@@ -1329,11 +1372,11 @@ static int vhost_iotlb_miss(struct vhost_virtqueue *vq, u64 iova, int access)
 		msg = &node->msg.iotlb;
 	}
 
+	//iotlb miss消息入队到read_list
 	msg->type = VHOST_IOTLB_MISS;
 	msg->iova = iova;
 	msg->perm = access;
 
-	//消息入队
 	vhost_enqueue_msg(dev, &dev->read_list, node);
 
 	return 0;
@@ -1366,6 +1409,7 @@ static void vhost_vq_meta_update(struct vhost_virtqueue *vq,
 		vq->meta_iotlb[type] = map;
 }
 
+/*查询addr,addr+len区间对应的iotlb是否存在映射且权限正确，如不存在构造tlb miss,如存在返回true*/
 static bool iotlb_access_ok(struct vhost_virtqueue *vq,
 			    int access, u64 addr, u64 len, int type)
 {
@@ -1377,11 +1421,14 @@ static bool iotlb_access_ok(struct vhost_virtqueue *vq,
 		return true;
 
 	while (len > s) {
+	    /*在iotlb中查询[addr，last]区间*/
 		map = vhost_iotlb_itree_first(umem, addr, last);
 		if (map == NULL || map->start > addr) {
+		    /*缺少此区间映射信息，构造消息，用于向guest知会iotlb miss*/
 			vhost_iotlb_miss(vq, addr, access);
 			return false;
 		} else if (!(map->perm & access)) {
+		    /*有此区间映射信息，但权限不一致*/
 			/* Report the possible access violation by
 			 * request another translation from userspace.
 			 */
@@ -1390,6 +1437,7 @@ static bool iotlb_access_ok(struct vhost_virtqueue *vq,
 
 		size = map->size - addr + map->start;
 
+		/*记录缓存*/
 		if (orig_addr == addr && size >= len)
 			vhost_vq_meta_update(vq, map, type);
 
@@ -1407,6 +1455,7 @@ int vq_meta_prefetch(struct vhost_virtqueue *vq)
 	if (!vq->iotlb)
 		return 1;
 
+	/*提前预取desc,avail,used表的iotlb表映射，如返回false,则存在miss情况*/
 	return iotlb_access_ok(vq, VHOST_MAP_RO, (u64)(uintptr_t)vq->desc,
 			       vhost_get_desc_size(vq, num), VHOST_ADDR_DESC) &&
 	       iotlb_access_ok(vq, VHOST_MAP_RO, (u64)(uintptr_t)vq->avail,
@@ -2129,6 +2178,7 @@ err:
 }
 EXPORT_SYMBOL_GPL(vhost_vq_init_access);
 
+/*通过iotlb转换内存区间[addr,addr+len]的地址信息*/
 static int translate_desc(struct vhost_virtqueue *vq, u64 addr/*待转换地址*/, u32 len,
 			  struct iovec iov[]/*出参，转换后的虚地址情况*/, int iov_size, int access/*访问权限*/)
 {
@@ -2733,7 +2783,7 @@ struct vhost_msg_node *vhost_dequeue_msg(struct vhost_dev *dev,
 
 	spin_lock(&dev->iotlb_lock);
 	if (!list_empty(head)) {
-	    //队列不为空，出一个node
+	    //队列不为空，出首个node
 		node = list_first_entry(head, struct vhost_msg_node,
 					node);
 		list_del(&node->node);

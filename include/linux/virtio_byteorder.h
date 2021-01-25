@@ -23,6 +23,7 @@ static inline u16 __virtio16_to_cpu(bool little_endian, __virtio16 val)
 		return be16_to_cpu((__force __be16)val);
 }
 
+/*按大小端要求，针对val进行转序*/
 static inline __virtio16 __cpu_to_virtio16(bool little_endian, u16 val)
 {
 	if (little_endian)

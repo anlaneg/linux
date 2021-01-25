@@ -32,7 +32,7 @@ struct vringh {
 	bool weak_barriers;
 
 	/* Last available index we saw (ie. where we're up to). */
-	u16 last_avail_idx;
+	u16 last_avail_idx;/*上次我们查看的有效ring索引*/
 
 	/* Last index we used. */
 	u16 last_used_idx;
@@ -241,6 +241,7 @@ static inline u32 vringh32_to_cpu(const struct vringh *vrh, __virtio32 val)
 	return __virtio32_to_cpu(vringh_is_little_endian(vrh), val);
 }
 
+/*序列转换*/
 static inline __virtio32 cpu_to_vringh32(const struct vringh *vrh, u32 val)
 {
 	return __cpu_to_virtio32(vringh_is_little_endian(vrh), val);

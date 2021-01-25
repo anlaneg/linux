@@ -1941,6 +1941,7 @@ vhost_scsi_ioctl(struct file *f,
 	}
 }
 
+/*vhost-scsi字符设备的操作集*/
 static const struct file_operations vhost_scsi_fops = {
 	.owner          = THIS_MODULE,
 	.release        = vhost_scsi_release,

@@ -494,6 +494,7 @@ struct ovs_key_ct_labels {
 					 * was mangled by NAT.
 					 */
 
+/*指明需要做snat,dnat*/
 #define OVS_CS_F_NAT_MASK (OVS_CS_F_SRC_NAT | OVS_CS_F_DST_NAT)
 
 struct ovs_key_ct_tuple_ipv4 {

@@ -52,7 +52,7 @@ struct vdpa_device {
 	//设备索引
 	unsigned int index;
 	bool features_valid;
-	int nvqs;
+	int nvqs;/*设备虚队列数*/
 };
 
 /**
@@ -208,6 +208,7 @@ struct vdpa_config_ops {
 	void (*kick_vq)(struct vdpa_device *vdev, u16 idx);
 	void (*set_vq_cb)(struct vdpa_device *vdev, u16 idx,
 			  struct vdpa_callback *cb);
+	/*设置vq队列的ready状态*/
 	void (*set_vq_ready)(struct vdpa_device *vdev, u16 idx, bool ready);
 	bool (*get_vq_ready)(struct vdpa_device *vdev, u16 idx);
 	int (*set_vq_state)(struct vdpa_device *vdev, u16 idx,
@@ -251,6 +252,7 @@ struct vdpa_config_ops {
 	int (*dma_unmap)(struct vdpa_device *vdev, u64 iova, u64 size);
 
 	/* Free device resources */
+	/*释放vdpa设备的资源*/
 	void (*free)(struct vdpa_device *vdev);
 };
 
@@ -288,6 +290,7 @@ struct vdpa_driver {
 int __vdpa_register_driver(struct vdpa_driver *drv, struct module *owner);
 void vdpa_unregister_driver(struct vdpa_driver *drv);
 
+/*注册vdpa驱动，解注册vdpa驱动*/
 #define module_vdpa_driver(__vdpa_driver) \
 	module_driver(__vdpa_driver, vdpa_register_driver,	\
 		      vdpa_unregister_driver)
@@ -307,6 +310,7 @@ static inline void *vdpa_get_drvdata(const struct vdpa_device *vdev)
 	return dev_get_drvdata(&vdev->dev);
 }
 
+/*vdpa设置驱动数据*/
 static inline void vdpa_set_drvdata(struct vdpa_device *vdev, void *data)
 {
 	dev_set_drvdata(&vdev->dev, data);

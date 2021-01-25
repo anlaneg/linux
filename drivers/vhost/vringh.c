@@ -43,6 +43,7 @@ static inline int __vringh_get_head(const struct vringh *vrh,
 	u16 avail_idx, i, head;
 	int err;
 
+	/*读取vrh->vring.avali->idx,将其存放在avail_idx*/
 	err = getu16(vrh, &avail_idx, &vrh->vring.avail->idx);
 	if (err) {
 		vringh_bad("Failed to access avail idx at %p",
@@ -50,14 +51,17 @@ static inline int __vringh_get_head(const struct vringh *vrh,
 		return err;
 	}
 
+	/*和上一次avali_idx相等，则返回vring的size*/
 	if (*last_avail_idx == avail_idx)
 		return vrh->vring.num;
 
 	/* Only get avail ring entries after they have been exposed by guest. */
 	virtio_rmb(vrh->weak_barriers);
 
+	/*取vring中有效元素的首个索引*/
 	i = *last_avail_idx & (vrh->vring.num - 1);
 
+	/*取i号元素*/
 	err = getu16(vrh, &head, &vrh->vring.avail->ring[i]);
 	if (err) {
 		vringh_bad("Failed to read head: idx %d address %p",
@@ -65,12 +69,14 @@ static inline int __vringh_get_head(const struct vringh *vrh,
 		return err;
 	}
 
+	/*head索引无效，报错*/
 	if (head >= vrh->vring.num) {
 		vringh_bad("Guest says index %u > %u is available",
 			   head, vrh->vring.num);
 		return -EINVAL;
 	}
 
+	/*更新index,并返回head索引*/
 	(*last_avail_idx)++;
 	return head;
 }
@@ -263,7 +269,7 @@ static int slow_copy(struct vringh *vrh, void *dst, const void *src,
 }
 
 static inline int
-__vringh_iov(struct vringh *vrh, u16 i,
+__vringh_iov(struct vringh *vrh, u16 i/*要提取的描述符索引*/,
 	     struct vringh_kiov *riov,
 	     struct vringh_kiov *wiov,
 	     bool (*rcheck)(struct vringh *vrh, u64 addr, size_t *len,
@@ -303,10 +309,12 @@ __vringh_iov(struct vringh *vrh, u16 i,
 			err = slow_copy(vrh, &desc, &descs[i], rcheck, getrange,
 					&slowrange, copy);
 		else
+		    /*复制i号描述符内容到desc中*/
 			err = copy(vrh, &desc, &descs[i], sizeof(desc));
 		if (unlikely(err))
 			goto fail;
 
+		/*遇到indirect格式的描述符*/
 		if (unlikely(desc.flags &
 			     cpu_to_vringh16(vrh, VRING_DESC_F_INDIRECT))) {
 			u64 a = vringh64_to_cpu(vrh, desc.addr);
@@ -339,8 +347,10 @@ __vringh_iov(struct vringh *vrh, u16 i,
 		}
 
 		if (desc.flags & cpu_to_vringh16(vrh, VRING_DESC_F_WRITE))
+		    /*此描述符可写*/
 			iov = wiov;
 		else {
+		    /*此描述符只读*/
 			iov = riov;
 			if (unlikely(wiov && wiov->i)) {
 				vringh_bad("Readable desc %p after writable",
@@ -673,12 +683,14 @@ int vringh_getdesc_user(struct vringh *vrh,
 {
 	int err;
 
+	/*取vrh中首个有效index,记录在err*/
 	*head = vrh->vring.num;
 	err = __vringh_get_head(vrh, getu16_user, &vrh->last_avail_idx);
 	if (err < 0)
 		return err;
 
 	/* Empty... */
+	/*在__vring_get_head中通过返回vring的size来表示队列为空*/
 	if (err == vrh->vring.num)
 		return 0;
 
@@ -702,6 +714,7 @@ int vringh_getdesc_user(struct vringh *vrh,
 	BUILD_BUG_ON(sizeof(((struct iovec *)NULL)->iov_len)
 		     != sizeof(((struct kvec *)NULL)->iov_len));
 
+	/*记录当前有效索引*/
 	*head = err;
 	err = __vringh_iov(vrh, *head, (struct vringh_kiov *)riov,
 			   (struct vringh_kiov *)wiov,
@@ -1065,9 +1078,10 @@ EXPORT_SYMBOL(vringh_need_notify_kern);
 
 #if IS_REACHABLE(CONFIG_VHOST_IOTLB)
 
+/*转换(addr,addr+len)这段地址的物理地址，结果存在iov中,返回填写的iov数组大小*/
 static int iotlb_translate(const struct vringh *vrh,
 			   u64 addr, u64 len, struct bio_vec iov[],
-			   int iov_size, u32 perm)
+			   int iov_size/*指出iov数组最大长度*/, u32 perm)
 {
 	struct vhost_iotlb_map *map;
 	struct vhost_iotlb *iotlb = vrh->iotlb;
@@ -1077,29 +1091,40 @@ static int iotlb_translate(const struct vringh *vrh,
 	while (len > s) {
 		u64 size, pa, pfn;
 
+		/*tlb数组信息超过限制*/
 		if (unlikely(ret >= iov_size)) {
 			ret = -ENOBUFS;
 			break;
 		}
 
+		/*在iotlb中查找地址范围[addr,addr+len-1]*/
 		map = vhost_iotlb_itree_first(iotlb, addr,
 					      addr + len - 1);
 		if (!map || map->start > addr) {
+		    /*此范围在iotlb中不存在*/
 			ret = -EINVAL;
 			break;
 		} else if (!(map->perm & perm)) {
+		    /*此范围存在于iotlb,但与要求的权限不一致*/
 			ret = -EPERM;
 			break;
 		}
 
+		/*map->size+map->start为终止地址，当前map可提供的可转换地址长度*/
 		size = map->size - addr + map->start;
+		/*当前addr对应的物理地址*/
 		pa = map->addr + addr - map->start;
+		/*物理地址对应的页号*/
 		pfn = pa >> PAGE_SHIFT;
+		/*记录物理页信息，完成tlb转换*/
 		iov[ret].bv_page = pfn_to_page(pfn);
 		iov[ret].bv_len = min(len - s, size);
 		iov[ret].bv_offset = pa & (PAGE_SIZE - 1);
+		/*已完成解析的地址长度*/
 		s += size;
+		/*下次待查询的地址起始位置*/
 		addr += size;
+		/*已填写的tlb数组索引*/
 		++ret;
 	}
 
@@ -1142,27 +1167,32 @@ static inline int copy_to_iotlb(const struct vringh *vrh, void *dst,
 	return copy_to_iter(src, len, &iter);
 }
 
+/*自p指针对应的tlb映射地址中读取u16的内容*/
 static inline int getu16_iotlb(const struct vringh *vrh,
-			       u16 *val, const __virtio16 *p)
+			       u16 *val/*出参，获取p中存入的内容*/, const __virtio16 *p)
 {
 	struct bio_vec iov;
 	void *kaddr, *from;
 	int ret;
 
 	/* Atomic read is needed for getu16 */
+	//通过iotlb转换p地址到iov中
 	ret = iotlb_translate(vrh, (u64)(uintptr_t)p, sizeof(*p),
 			      &iov, 1, VHOST_MAP_RO);
 	if (ret < 0)
 		return ret;
 
+	/*定位此变量对应的地址*/
 	kaddr = kmap_atomic(iov.bv_page);
 	from = kaddr + iov.bv_offset;
+	/*读取from指针内容，存入val中*/
 	*val = vringh16_to_cpu(vrh, READ_ONCE(*(__virtio16 *)from));
 	kunmap_atomic(kaddr);
 
 	return 0;
 }
 
+/*向p指针对应的tlb映射地址中写入u16的内容*/
 static inline int putu16_iotlb(const struct vringh *vrh,
 			       __virtio16 *p, u16 val)
 {
@@ -1171,13 +1201,16 @@ static inline int putu16_iotlb(const struct vringh *vrh,
 	int ret;
 
 	/* Atomic write is needed for putu16 */
+	//通过iotlb转换p地址到iov中
 	ret = iotlb_translate(vrh, (u64)(uintptr_t)p, sizeof(*p),
 			      &iov, 1, VHOST_MAP_WO);
 	if (ret < 0)
 		return ret;
 
+	/*定位此变量对应的地址*/
 	kaddr = kmap_atomic(iov.bv_page);
 	to = kaddr + iov.bv_offset;
+	/*向to指针内容，存入val中*/
 	WRITE_ONCE(*(__virtio16 *)to, cpu_to_vringh16(vrh, val));
 	kunmap_atomic(kaddr);
 

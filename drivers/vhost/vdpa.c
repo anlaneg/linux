@@ -36,13 +36,13 @@ enum {
 struct vhost_vdpa {
 	struct vhost_dev vdev;
 	struct iommu_domain *domain;
-	struct vhost_virtqueue *vqs;
+	struct vhost_virtqueue *vqs;/*指向nvqs个vhost_virtqueue*/
 	struct completion completion;
 	struct vdpa_device *vdpa;
 	struct device dev;
 	struct cdev cdev;
 	atomic_t opened;
-	int nvqs;
+	int nvqs;/*虚队列数目*/
 	int virtio_id;
 	int minor;
 	struct eventfd_ctx *config_ctx;
@@ -52,7 +52,7 @@ struct vhost_vdpa {
 
 static DEFINE_IDA(vhost_vdpa_ida);
 
-static dev_t vhost_vdpa_major;
+static dev_t vhost_vdpa_major;/*vdpa字符设备major编号*/
 
 static void handle_vq_kick(struct vhost_work *work)
 {
@@ -399,6 +399,7 @@ static long vhost_vdpa_vring_ioctl(struct vhost_vdpa *v, unsigned int cmd,
 
 	switch (cmd) {
 	case VHOST_SET_VRING_ADDR:
+	    /*设置desc,avail,used队列地址*/
 		if (ops->set_vq_address(vdpa, idx,
 					(u64)(uintptr_t)vq->desc,
 					(u64)(uintptr_t)vq->avail,
@@ -749,6 +750,7 @@ free:
 	return ret;
 }
 
+/*处理vdpa的iotlb消息*/
 static int vhost_vdpa_process_iotlb_msg(struct vhost_dev *dev,
 					struct vhost_iotlb_msg *msg)
 {
@@ -862,6 +864,7 @@ static void vhost_vdpa_set_iova_range(struct vhost_vdpa *v)
 	}
 }
 
+/*vhost-vdap字符设备open函数*/
 static int vhost_vdpa_open(struct inode *inode, struct file *filep)
 {
 	struct vhost_vdpa *v;
@@ -878,6 +881,7 @@ static int vhost_vdpa_open(struct inode *inode, struct file *filep)
 	nvqs = v->nvqs;
 	vhost_vdpa_reset(v);
 
+	/*申请虚队列数组*/
 	vqs = kmalloc_array(nvqs, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs) {
 		r = -ENOMEM;
@@ -892,6 +896,7 @@ static int vhost_vdpa_open(struct inode *inode, struct file *filep)
 	vhost_dev_init(dev, vqs, nvqs, 0, 0, 0, false,
 		       vhost_vdpa_process_iotlb_msg);
 
+	/*初始化此设备对应的iotlb*/
 	dev->iotlb = vhost_iotlb_alloc(0, 0);
 	if (!dev->iotlb) {
 		r = -ENOMEM;
@@ -1010,6 +1015,7 @@ static int vhost_vdpa_mmap(struct file *file, struct vm_area_struct *vma)
 }
 #endif /* CONFIG_MMU */
 
+/*vdpa字符设备对应的ops*/
 static const struct file_operations vhost_vdpa_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vhost_vdpa_open,
@@ -1045,10 +1051,12 @@ static int vhost_vdpa_probe(struct vdpa_device *vdpa)
 	if (ops->get_device_id(vdpa) != VIRTIO_ID_NET)
 		return -ENOTSUPP;
 
+	/*申请vhost-vdap设备*/
 	v = kzalloc(sizeof(*v), GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!v)
 		return -ENOMEM;
 
+	/*申请一个可用的minor vdpa字符设备号*/
 	minor = ida_simple_get(&vhost_vdpa_ida, 0,
 			       VHOST_VDPA_DEV_MAX, GFP_KERNEL);
 	if (minor < 0) {
@@ -1073,11 +1081,12 @@ static int vhost_vdpa_probe(struct vdpa_device *vdpa)
 		goto err;
 	}
 
+	/*置字符设备名称*/
 	r = dev_set_name(&v->dev, "vhost-vdpa-%u", minor);
 	if (r)
 		goto err;
 
-	//初始化字符设备的操作集
+	//初始化vdpa字符设备的操作集
 	cdev_init(&v->cdev, &vhost_vdpa_fops);
 	v->cdev.owner = THIS_MODULE;
 
@@ -1125,7 +1134,7 @@ static int __init vhost_vdpa_init(void)
 {
 	int r;
 
-	//为vhost-vdpa字符设备申请设备号
+	//为vhost-vdpa字符设备申请一组设备号
 	r = alloc_chrdev_region(&vhost_vdpa_major, 0, VHOST_VDPA_DEV_MAX,
 				"vhost-vdpa");
 	if (r)

@@ -193,6 +193,7 @@ static void ops_exit_list(const struct pernet_operations *ops,
 		list_for_each_entry(net, net_exit_list, exit_list)
 			ops->exit(net);
 	}
+	/*用户如果指定了exit_batch，则执行此回调*/
 	if (ops->exit_batch)
 		ops->exit_batch(net_exit_list);
 }

@@ -6,11 +6,11 @@
 
 struct vhost_iotlb_map {
 	struct rb_node rb;//用于串连到tlb->root上
-	struct list_head link;//用于串到tlb上
-	u64 start;//起始地址
-	u64 last;//终止地址
+	struct list_head link;//用于串到tlb->list上
+	u64 start;//虚拟起始地址
+	u64 last;//虚拟终止地址
 	u64 size;//地址范围长度
-	u64 addr;//用户态地址
+	u64 addr;//物理起始地址
 #define VHOST_MAP_RO 0x1
 #define VHOST_MAP_WO 0x2
 #define VHOST_MAP_RW 0x3
@@ -22,10 +22,10 @@ struct vhost_iotlb_map {
 #define VHOST_IOTLB_FLAG_RETIRE 0x1
 
 struct vhost_iotlb {
-	struct rb_root_cached root;
-	struct list_head list;
-	unsigned int limit;
-	unsigned int nmaps;
+	struct rb_root_cached root;/*用于map查询，用于树型存储map*/
+	struct list_head list;/*用于map遍历，串连所有map*/
+	unsigned int limit;/*iotlb的容量极限*/
+	unsigned int nmaps;/*存入到root中的map总数*/
 	unsigned int flags;
 };
 

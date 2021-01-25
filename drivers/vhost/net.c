@@ -106,8 +106,10 @@ struct vhost_net_buf {
 
 struct vhost_net_virtqueue {
 	struct vhost_virtqueue vq;
-	size_t vhost_hlen;/*协商出来的vhost头部长度*/
-	size_t sock_hlen;/*协商出来的socket头部长度*/
+	/*协商出来的vhost头部长度*/
+	size_t vhost_hlen;
+	/*协商出来的socket头部长度*/
+	size_t sock_hlen;
 	/* vhost zerocopy support fields below: */
 	/* last used idx for outstanding DMA zerocopy buffers */
 	int upend_idx;
@@ -123,7 +125,7 @@ struct vhost_net_virtqueue {
 	 * Protected by vq mutex. Writers must also take device mutex. */
 	struct vhost_net_ubuf_ref *ubufs;
 	struct ptr_ring *rx_ring;
-	struct vhost_net_buf rxq;
+	struct vhost_net_buf rxq;/*收队列buffer*/
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
 };
@@ -974,6 +976,7 @@ static void handle_tx(struct vhost_net *net)
 	if (!sock)
 		goto out;
 
+	/*预取meta的iotlb映射信息，如预取失败，则等待guest回复miss*/
 	if (!vq_meta_prefetch(vq))
 		goto out;
 
@@ -1152,6 +1155,7 @@ static void handle_rx(struct vhost_net *net)
 	if (!sock)
 		goto out;
 
+	/*预取meta的iotlb映射信息，如预取失败，则等待guest回复miss*/
 	if (!vq_meta_prefetch(vq))
 		goto out;
 
@@ -1282,6 +1286,7 @@ out:
 	mutex_unlock(&vq->mutex);
 }
 
+/*处理指定设备的tx*/
 static void handle_tx_kick(struct vhost_work *work)
 {
 	struct vhost_virtqueue *vq = container_of(work, struct vhost_virtqueue,
@@ -1291,6 +1296,7 @@ static void handle_tx_kick(struct vhost_work *work)
 	handle_tx(net);
 }
 
+/*处理指定设备的rx*/
 static void handle_rx_kick(struct vhost_work *work)
 {
 	struct vhost_virtqueue *vq = container_of(work, struct vhost_virtqueue,
@@ -1336,6 +1342,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 		return -ENOMEM;
 	}
 
+	/*初始化收队列buffer*/
 	queue = kmalloc_array(VHOST_NET_BATCH, sizeof(void *),
 			      GFP_KERNEL);
 	if (!queue) {
@@ -1345,6 +1352,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	}
 	n->vqs[VHOST_NET_VQ_RX].rxq.queue = queue;
 
+	/*初始化xdp发队列buffer*/
 	xdp = kmalloc_array(VHOST_NET_BATCH, sizeof(*xdp), GFP_KERNEL);
 	if (!xdp) {
 		kfree(vqs);
@@ -1357,8 +1365,12 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	dev = &n->dev;
 	vqs[VHOST_NET_VQ_TX] = &n->vqs[VHOST_NET_VQ_TX].vq;
 	vqs[VHOST_NET_VQ_RX] = &n->vqs[VHOST_NET_VQ_RX].vq;
+
+	/*设置rx,tx队列的收发处理work*/
 	n->vqs[VHOST_NET_VQ_TX].vq.handle_kick = handle_tx_kick;
 	n->vqs[VHOST_NET_VQ_RX].vq.handle_kick = handle_rx_kick;
+
+	/*初始化vq*/
 	for (i = 0; i < VHOST_NET_VQ_MAX; i++) {
 		n->vqs[i].ubufs = NULL;
 		n->vqs[i].ubuf_info = NULL;
@@ -1370,11 +1382,14 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 		n->vqs[i].rx_ring = NULL;
 		vhost_net_buf_init(&n->vqs[i].rxq);
 	}
+
+	/*vqs指向n->vqs，已完成初始化,这里初始化virtio-net设备*/
 	vhost_dev_init(dev, vqs, VHOST_NET_VQ_MAX,
 		       UIO_MAXIOV + VHOST_NET_BATCH,
 		       VHOST_NET_PKT_WEIGHT, VHOST_NET_WEIGHT, true,
 		       NULL);
 
+	/*n->poll的回调函数*/
 	vhost_poll_init(n->poll + VHOST_NET_VQ_TX, handle_tx_net, EPOLLOUT, dev);
 	vhost_poll_init(n->poll + VHOST_NET_VQ_RX, handle_rx_net, EPOLLIN, dev);
 
@@ -1385,6 +1400,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	return 0;
 }
 
+/*取出并返回后端对应的sock,并更新设备的sock为NULL，*/
 static struct socket *vhost_net_stop_vq(struct vhost_net *n,
 					struct vhost_virtqueue *vq)
 {
@@ -1540,6 +1556,7 @@ static struct socket *get_socket(int fd)
 	return ERR_PTR(-ENOTSOCK);
 }
 
+/*更新vhost_net设备指定队列的后端设备*/
 static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd)
 {
 	struct socket *sock, *oldsock;
@@ -1554,6 +1571,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	if (r)
 		goto err;
 
+	/*设置的队列编号不得大于VHOST_NET_VQ_MAX*/
 	if (index >= VHOST_NET_VQ_MAX) {
 		r = -ENOBUFS;
 		goto err;
@@ -1588,13 +1606,14 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 			goto err_ubufs;
 		}
 
+		/*关闭对旧队列的poll,设置新的后端，丢弃nvq中缓存数据*/
 		vhost_net_disable_vq(n, vq);
 		vhost_vq_set_backend(vq, sock);
 		vhost_net_buf_unproduce(nvq);
-		r = vhost_vq_init_access(vq);
+		r = vhost_vq_init_access(vq);//重新初始化vq
 		if (r)
 			goto err_used;
-		r = vhost_net_enable_vq(n, vq);
+		r = vhost_net_enable_vq(n, vq);//开启对新队列的poll
 		if (r)
 			goto err_used;
 		if (index == VHOST_NET_VQ_RX)
@@ -1611,6 +1630,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	mutex_unlock(&vq->mutex);
 
 	if (oldubufs) {
+	    /*释放旧的buffer*/
 		vhost_net_ubuf_put_wait_and_free(oldubufs);
 		mutex_lock(&vq->mutex);
 		vhost_zerocopy_signal_used(n, vq);
@@ -1618,6 +1638,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	}
 
 	if (oldsock) {
+	    /*释放旧的sock*/
 		vhost_net_flush_vq(n, index);
 		sockfd_put(oldsock);
 	}
@@ -1755,7 +1776,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 
 	switch (ioctl) {
 	case VHOST_NET_SET_BACKEND:
-	    /*设置收/发队列的backend*/
+	    /*设置收/发队列的后端设备fd*/
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
 		return vhost_net_set_backend(n, backend.index, backend.fd);
@@ -1769,6 +1790,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	    /*设置vhost-net需要支持的features*/
 		if (copy_from_user(&features, featurep, sizeof features))
 			return -EFAULT;
+		/*新设置的features必须是支持的子集*/
 		if (features & ~VHOST_NET_FEATURES)
 			return -EOPNOTSUPP;
 		return vhost_net_set_features(n, features);
@@ -1806,6 +1828,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 	}
 }
 
+/*向用户态返回自身的iotlb miss消息*/
 static ssize_t vhost_net_chr_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
@@ -1816,6 +1839,7 @@ static ssize_t vhost_net_chr_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	return vhost_chr_read_iter(dev, to, noblock);
 }
 
+/*vhost_dev设备的iotlb消息处理*/
 static ssize_t vhost_net_chr_write_iter(struct kiocb *iocb,
 					struct iov_iter *from)
 {
@@ -1823,6 +1847,7 @@ static ssize_t vhost_net_chr_write_iter(struct kiocb *iocb,
 	struct vhost_net *n = file->private_data;
 	struct vhost_dev *dev = &n->dev;
 
+	/*向vhost_dev设备进行写操作*/
 	return vhost_chr_write_iter(dev, from);
 }
 
@@ -1834,6 +1859,12 @@ static __poll_t vhost_net_chr_poll(struct file *file, poll_table *wait)
 	return vhost_chr_poll(file, dev, wait);
 }
 
+/*vhost-net字符设备操作集
+ * read_iter,write_iter,poll分别对应iotlb消息处理的”用户态读取“，”用户态写入“
+ * 以下”用户态检测是否可读取“
+ * open负责vhost_dev设备的创建
+ * unlocked_ioctl负责vhost_dev设备的配置
+ */
 static const struct file_operations vhost_net_fops = {
 	.owner          = THIS_MODULE,
 	.release        = vhost_net_release,

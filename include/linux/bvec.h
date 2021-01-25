@@ -29,9 +29,9 @@ struct page;
  * This holds because page_is_mergeable() checks the above property.
  */
 struct bio_vec {
-	struct page	*bv_page;
-	unsigned int	bv_len;
-	unsigned int	bv_offset;
+	struct page	*bv_page;/*页指针*/
+	unsigned int	bv_len;/*可转换长度*/
+	unsigned int	bv_offset;/*有效起始地址在页内的offset*/
 };
 
 struct bvec_iter {

@@ -30,6 +30,7 @@ static const struct sysfs_ops *sysfs_file_ops(struct kernfs_node *kn)
 
 	if (kn->flags & KERNFS_LOCKDEP)
 		lockdep_assert_held(kn);
+	/*如果有ktype,则使用ktype对应的sysfs_ops*/
 	return kobj->ktype ? kobj->ktype->sysfs_ops : NULL;
 }
 
@@ -73,7 +74,7 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	 * The code works fine with PAGE_SIZE return but it's likely to
 	 * indicate truncated result or overflow in normal use cases.
 	 */
-	//写的内容大于一个页
+	//写的内容大于一个页,则截断
 	if (count >= (ssize_t)PAGE_SIZE) {
 		printk("fill_read_buffer: %pS returned bad count\n",
 				ops->show);

@@ -288,6 +288,7 @@ static inline bool nf_ct_is_expired(const struct nf_conn *ct)
 /* use after obtaining a reference count */
 static inline bool nf_ct_should_gc(const struct nf_conn *ct)
 {
+    /*ct过期*/
 	return nf_ct_is_expired(ct) && nf_ct_is_confirmed(ct) &&
 	       !nf_ct_is_dying(ct);
 }

@@ -1798,6 +1798,7 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				   info->snd_seq, 0, OVS_DP_CMD_NEW);
 	BUG_ON(err < 0);
 
+	/*针对当前dp所属的net,取其私有结构。*/
 	ovs_net = net_generic(ovs_dp_get_net(dp), ovs_net_id);
 	list_add_tail_rcu(&dp->list_node, &ovs_net->dps);
 
@@ -2460,6 +2461,7 @@ out:
 	return skb->len;
 }
 
+/*执行flow mask重平衡*/
 static void ovs_dp_masks_rebalance(struct work_struct *work)
 {
 	struct ovs_net *ovs_net = container_of(work, struct ovs_net,
@@ -2579,6 +2581,7 @@ static int __net_init ovs_init_net(struct net *net)
 	INIT_LIST_HEAD(&ovs_net->dps);
 	//初始化work函数
 	INIT_WORK(&ovs_net->dp_notify_work, ovs_dp_notify_wq);
+	/*负责dp mask的重新平衡，上一个统计周期内，谁命中的多，谁就第一个命中*/
 	INIT_DELAYED_WORK(&ovs_net->masks_rebalance, ovs_dp_masks_rebalance);
 
 	err = ovs_ct_init(net);

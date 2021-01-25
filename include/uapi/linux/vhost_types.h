@@ -57,7 +57,9 @@ struct vhost_iotlb_msg {
 #define VHOST_ACCESS_RW      0x3
 	__u8 perm;
 #define VHOST_IOTLB_MISS           1
+/*向iotlb中添加映射信息*/
 #define VHOST_IOTLB_UPDATE         2
+/*无效iotlb中指定的映射信息*/
 #define VHOST_IOTLB_INVALIDATE     3
 #define VHOST_IOTLB_ACCESS_FAIL    4
 /*
