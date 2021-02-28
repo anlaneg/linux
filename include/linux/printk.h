@@ -16,6 +16,7 @@ extern int oops_in_progress;	/* If set, an oops, panic(), BUG() or die() is in p
 
 #define PRINTK_MAX_SINGLE_HEADER_LEN 2
 
+/*解析日志级别(‘0’-‘7’,‘c’)*/
 static inline int printk_get_level(const char *buffer)
 {
 	if (buffer[0] == KERN_SOH_ASCII && buffer[1]) {
@@ -88,8 +89,8 @@ struct ctl_table;
 extern int suppress_printk;
 
 struct va_format {
-	const char *fmt;
-	va_list *va;
+	const char *fmt;/*格式化串*/
+	va_list *va;/*格式化串参数*/
 };
 
 /*

@@ -178,12 +178,15 @@ int get_flags(const char **fmt)
 	} while (1);
 }
 
+/*获取域宽*/
 static
 int get_int(const char **fmt, va_list *ap)
 {
+    /*转为数字*/
 	if (isdigit(**fmt))
 		return skip_atoi(fmt);
 	if (**fmt == '*') {
+	    /*下一个参数指出了域宽*/
 		++(*fmt);
 		/* it's the next argument */
 		return va_arg(*ap, int);
@@ -291,6 +294,7 @@ u32 utf16_to_utf32(const u16 **s16)
 	return (0x10000 - (0xd800 << 10) - 0xdc00) + (c0 << 10) + c1;
 }
 
+/*如果pos小于size,则将c字符存入buf中*/
 #define PUTC(c) \
 do {				\
 	if (pos < size)		\
@@ -298,6 +302,7 @@ do {				\
 	++pos;			\
 } while (0);
 
+/*按fmt要求的格式输出ap,将输出的内容存储在buf中（buf最大可容纳size字节），返回写入长度*/
 int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 {
 	/* The maximum space required is to print a 64-bit number in octal */
@@ -336,20 +341,24 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 
 	for (pos = 0; *fmt; ++fmt) {
 		if (*fmt != '%' || *++fmt == '%') {
+		    /*遇到非'%'或者'%%'，则存此字符到buffer*/
 			PUTC(*fmt);
 			continue;
 		}
 
+		/*前一个字符为'%',取当前控制符，容许多个控制符*/
 		/* process flags */
 		flags = get_flags(&fmt);
 
 		/* get field width */
 		field_width = get_int(&fmt, &args);
 		if (field_width < 0) {
+		    /*字段宽为负值时，记为左对齐*/
 			field_width = -field_width;
 			flags |= LEFT;
 		}
 
+		/*左对齐时，移除0填充*/
 		if (flags & LEFT)
 			flags &= ~ZEROPAD;
 
@@ -357,6 +366,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 		precision = -1;
 		if (*fmt == '.') {
 			++fmt;
+			/*取精度域宽*/
 			precision = get_int(&fmt, &args);
 			if (precision >= 0)
 				flags &= ~ZEROPAD;
@@ -368,6 +378,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 			qualifier = *fmt;
 			++fmt;
 			if (qualifier == *fmt) {
+			    /*转为大写*/
 				qualifier -= 'a'-'A';
 				++fmt;
 			}
@@ -391,6 +402,7 @@ int vsnprintf(char *buf, size_t size, const char *fmt, va_list ap)
 			goto output;
 
 		case 's':
+		    /*s输出，提取void**/
 			flags &= LEFT;
 			if (precision < 0)
 				precision = INT_MAX;

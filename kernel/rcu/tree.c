@@ -3472,6 +3472,7 @@ void kvfree_call_rcu(struct rcu_head *head, rcu_callback_t func)
 	void *ptr;
 
 	if (head) {
+	    /*取出对应的结构体*/
 		ptr = (void *) head - (unsigned long) func;
 	} else {
 		/*

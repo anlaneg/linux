@@ -70,6 +70,7 @@ typedef struct raw_spinlock {
 
 typedef struct spinlock {
 	union {
+	    //具体的lock
 		struct raw_spinlock rlock;
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC

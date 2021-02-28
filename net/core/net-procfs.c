@@ -112,6 +112,7 @@ static void dev_seq_printf_stats(struct seq_file *seq, struct net_device *dev)
  */
 static int dev_seq_show(struct seq_file *seq, void *v)
 {
+    /*显示/proc/net/dev文件*/
 	if (v == SEQ_START_TOKEN)
 		seq_puts(seq, "Inter-|   Receive                            "
 			      "                    |  Transmit\n"
@@ -119,7 +120,7 @@ static int dev_seq_show(struct seq_file *seq, void *v)
 			      "compressed multicast|bytes    packets errs "
 			      "drop fifo colls carrier compressed\n");
 	else
-		dev_seq_printf_stats(seq, v);
+		dev_seq_printf_stats(seq, v/*网络设备*/);
 	return 0;
 }
 
@@ -306,6 +307,7 @@ static int __net_init dev_proc_net_init(struct net *net)
 {
 	int rc = -ENOMEM;
 
+	/*创建dev文件*/
 	if (!proc_create_net("dev", 0444, net->proc_net, &dev_seq_ops,
 			sizeof(struct seq_net_private)))
 		goto out;

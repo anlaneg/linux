@@ -176,6 +176,7 @@ static inline void zone_page_state_add(long x, struct zone *zone,
 	atomic_long_add(x, &vm_zone_stat[item]);
 }
 
+/*增加item的计数*/
 static inline void node_page_state_add(long x, struct pglist_data *pgdat,
 				 enum node_stat_item item)
 {
@@ -193,6 +194,7 @@ static inline unsigned long global_zone_page_state(enum zone_stat_item item)
 	return x;
 }
 
+/*读取vm_node_stat[item]*/
 static inline
 unsigned long global_node_page_state_pages(enum node_stat_item item)
 {
@@ -204,6 +206,7 @@ unsigned long global_node_page_state_pages(enum node_stat_item item)
 	return x;
 }
 
+/*读取item对应的统计计数*/
 static inline unsigned long global_node_page_state(enum node_stat_item item)
 {
 	VM_WARN_ON_ONCE(vmstat_item_in_bytes(item));

@@ -1885,6 +1885,7 @@ static u16 parse_prefix(char *text, int *level, enum log_flags *lflags)
 	while (*text) {
 		kern_level = printk_get_level(text);
 		if (!kern_level)
+		    /*为0号的，直接退出*/
 			break;
 
 		switch (kern_level) {
@@ -1897,6 +1898,7 @@ static u16 parse_prefix(char *text, int *level, enum log_flags *lflags)
 				*lflags |= LOG_CONT;
 		}
 
+		/*按两个字节进行检查*/
 		prefix_len += 2;
 		text += 2;
 	}
@@ -1962,9 +1964,11 @@ int vprintk_store(int facility, int level,
 	 * terminating '\0', which is not counted by vsnprintf().
 	 */
 	va_copy(args2, args);
+	/*尝试用8字节来容纳格式化内容*/
 	reserve_size = vsnprintf(&prefix_buf[0], sizeof(prefix_buf), fmt, args2) + 1;
 	va_end(args2);
 
+	/*最大容许LOG_LINE_MAX字节*/
 	if (reserve_size > LOG_LINE_MAX)
 		reserve_size = LOG_LINE_MAX;
 
@@ -1981,6 +1985,7 @@ int vprintk_store(int facility, int level,
 	if (lflags & LOG_CONT) {
 		prb_rec_init_wr(&r, reserve_size);
 		if (prb_reserve_in_last(&e, prb, &r, caller_id, LOG_LINE_MAX)) {
+		    /*输出到r.text_buf中*/
 			text_len = printk_sprint(&r.text_buf[r.info->text_len], reserve_size,
 						 facility, &lflags, fmt, args);
 			r.info->text_len += text_len;
@@ -2118,7 +2123,9 @@ asmlinkage __visible int printk(const char *fmt, ...)
 	va_list args;
 	int r;
 
+	/*转换va_list*/
 	va_start(args, fmt);
+	/*格式化输出*/
 	r = vprintk_func(fmt, args);
 	va_end(args);
 

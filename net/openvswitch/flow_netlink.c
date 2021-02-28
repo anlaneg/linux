@@ -2023,7 +2023,7 @@ nla_put_failure:
 }
 
 static int __ovs_nla_put_key(const struct sw_flow_key *swkey,
-			     const struct sw_flow_key *output, bool is_mask,
+			     const struct sw_flow_key *output/*待存入的key*/, bool is_mask,
 			     struct sk_buff *skb)
 {
 	struct ovs_key_ethernet *eth_key;

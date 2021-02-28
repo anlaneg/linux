@@ -853,6 +853,7 @@ static inline notrace void rcu_read_unlock_sched_notrace(void)
  */
 #define __kvfree_rcu(head, offset) \
 	do { \
+	    /*offset是rcu成员在结构体中的偏移量，其不能超过4096*/\
 		BUILD_BUG_ON(!__is_kvfree_rcu_offset(offset)); \
 		kvfree_call_rcu(head, (rcu_callback_t)(unsigned long)(offset)); \
 	} while (0)

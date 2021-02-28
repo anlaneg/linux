@@ -6,6 +6,7 @@
 #include <linux/numa.h>
 
 extern struct pglist_data *node_data[];
+/*取第nid号node对应的pglist_data,每个node下的内存部局由pglist_data进行描述*/
 #define NODE_DATA(nid)		(node_data[nid])
 
 static inline int pfn_to_nid(unsigned long pfn)

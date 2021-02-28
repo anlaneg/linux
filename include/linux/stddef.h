@@ -12,6 +12,7 @@ enum {
 	true	= 1
 };
 
+/*member在结构体type中的offset*/
 #undef offsetof
 #ifdef __compiler_offsetof
 #define offsetof(TYPE, MEMBER)	__compiler_offsetof(TYPE, MEMBER)

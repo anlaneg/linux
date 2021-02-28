@@ -437,6 +437,7 @@ static inline int num_node_state(enum node_states state)
 
 #define first_online_node	first_node(node_states[N_ONLINE])
 #define first_memory_node	first_node(node_states[N_MEMORY])
+/*取下一个online的numa node*/
 static inline int next_online_node(int nid)
 {
 	return next_node(nid, node_states[N_ONLINE]);

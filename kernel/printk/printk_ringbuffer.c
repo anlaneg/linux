@@ -1391,6 +1391,7 @@ bool prb_reserve_in_last(struct prb_reserved_entry *e, struct printk_ringbuffer 
 		if (!data_check_size(&rb->text_data_ring, r->text_buf_size))
 			goto fail;
 
+		/*请求的数据大于支持的最大大小，报错*/
 		if (r->text_buf_size > max_size)
 			goto fail;
 

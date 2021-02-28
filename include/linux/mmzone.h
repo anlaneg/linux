@@ -448,9 +448,11 @@ struct zone {
 	long lowmem_reserve[MAX_NR_ZONES];
 
 #ifdef CONFIG_NUMA
-	int node;//本zone所属numa node编号
+	//本zone所属numa node编号
+	int node;
 #endif
-	struct pglist_data	*zone_pgdat;//此属所属的pglist_data
+	//此zone所属的pglist_data(即numa node)
+	struct pglist_data	*zone_pgdat;
 	struct per_cpu_pageset __percpu *pageset;
 	/*
 	 * the high and batch values are copied to individual pagesets for
@@ -720,7 +722,7 @@ typedef struct pglist_data {
 	 * zones may be populated, but it is the full list. It is referenced by
 	 * this node's node_zonelists as well as other node's node_zonelists.
 	 */
-	struct zone node_zones[MAX_NR_ZONES];//记录各个zone
+	struct zone node_zones[MAX_NR_ZONES];//记录此node上各个zone
 
 	/*
 	 * node_zonelists contains references to all zones in all nodes.
@@ -756,7 +758,8 @@ typedef struct pglist_data {
 	unsigned long node_present_pages; /* total number of physical pages */
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
-	int node_id;//此pglist_dat属性哪个numa id
+	//此pglist_dat属性哪个numa id
+	int node_id;
 	wait_queue_head_t kswapd_wait;
 	wait_queue_head_t pfmemalloc_wait;
 	struct task_struct *kswapd;	/* Protected by
@@ -1023,6 +1026,7 @@ extern struct zone *next_zone(struct zone *zone);
 	     zone;					\
 	     zone = next_zone(zone))
 
+/**/
 #define for_each_populated_zone(zone)		        \
 	for (zone = (first_online_pgdat())->node_zones; \
 	     zone;					\

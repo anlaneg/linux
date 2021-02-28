@@ -10,11 +10,13 @@
 #include <linux/mm.h>
 #include <linux/mmzone.h>
 
+/*取首个online的node对应的pglist_data*/
 struct pglist_data *first_online_pgdat(void)
 {
 	return NODE_DATA(first_online_node);
 }
 
+/*取下个可用的pgdat*/
 struct pglist_data *next_online_pgdat(struct pglist_data *pgdat)
 {
 	int nid = next_online_node(pgdat->node_id);
@@ -32,12 +34,16 @@ struct zone *next_zone(struct zone *zone)
 	pg_data_t *pgdat = zone->zone_pgdat;
 
 	if (zone < pgdat->node_zones + MAX_NR_ZONES - 1)
+	    /*zone未遍历完，仍自增*/
 		zone++;
 	else {
+	    /*node对应的zone遍历完，这里跳至下一个node*/
 		pgdat = next_online_pgdat(pgdat);
 		if (pgdat)
+		    /*使用此node上首个zone*/
 			zone = pgdat->node_zones;
 		else
+		    /*所有zone均完成遍历，返回NULL*/
 			zone = NULL;
 	}
 	return zone;

@@ -148,7 +148,7 @@ EXPORT_SYMBOL(latent_entropy);
  */
 nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
 	[N_POSSIBLE] = NODE_MASK_ALL,
-	[N_ONLINE] = { { [0] = 1UL } },
+	[N_ONLINE] = { { [0] = 1UL } },/*online的node对应的bitmap*/
 #ifndef CONFIG_NUMA
 	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
 #ifdef CONFIG_HIGHMEM
@@ -4024,9 +4024,14 @@ void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 	if ((gfp_mask & __GFP_NOWARN) || !__ratelimit(&nopage_rs))
 		return;
 
+	/*按%pV输出fmt指定的list*/
 	va_start(args, fmt);
 	vaf.fmt = fmt;
 	vaf.va = &args;
+	/*添加输出进程名称及gfp_mask等，例如
+	 * kworker/u192:30: page allocation failure: order:4,
+	 *  mode:0x60c0c0(GFP_KERNEL|__GFP_COMP|__GFP_ZERO), nodemask=(null)
+	 * */
 	pr_warn("%s: %pV, mode:%#x(%pGg), nodemask=%*pbl",
 			current->comm, &vaf, gfp_mask, &gfp_mask,
 			nodemask_pr_args(nodemask));
@@ -4034,7 +4039,9 @@ void warn_alloc(gfp_t gfp_mask, nodemask_t *nodemask, const char *fmt, ...)
 
 	cpuset_print_current_mems_allowed();
 	pr_cont("\n");
+	/*显示堆栈*/
 	dump_stack();
+	/*显示内存信息*/
 	warn_alloc_show_mem(gfp_mask, nodemask);
 }
 
@@ -5543,6 +5550,7 @@ void show_free_areas(unsigned int filter, nodemask_t *nodemask)
 			free_pcp += per_cpu_ptr(zone->pageset, cpu)->pcp.count;
 	}
 
+	/*显示各page状态统计数目*/
 	printk("active_anon:%lu inactive_anon:%lu isolated_anon:%lu\n"
 		" active_file:%lu inactive_file:%lu isolated_file:%lu\n"
 		" unevictable:%lu dirty:%lu writeback:%lu\n"
@@ -5568,6 +5576,7 @@ void show_free_areas(unsigned int filter, nodemask_t *nodemask)
 		free_pcp,
 		global_zone_page_state(NR_FREE_CMA_PAGES));
 
+	/*遍历所有online的node*/
 	for_each_online_pgdat(pgdat) {
 		if (show_mem_node_skip(filter, pgdat->node_id, nodemask))
 			continue;

@@ -1171,6 +1171,7 @@ restart:
 				continue;
 			}
 
+			/*显示此net namespace下所有ct*/
 			if (!net_eq(net, nf_ct_net(ct)))
 				continue;
 
@@ -1331,6 +1332,7 @@ static int ctnetlink_parse_tuple_proto(struct nlattr *attr,
 	return ret;
 }
 
+/*通过配置创建指定的zone*/
 static int
 ctnetlink_parse_zone(const struct nlattr *attr,
 		     struct nf_conntrack_zone *zone)
@@ -1445,6 +1447,7 @@ ctnetlink_parse_tuple_filter(const struct nlattr * const cda[],
 	return 0;
 }
 
+/*通过netlink创始指定的tuple*/
 static int
 ctnetlink_parse_tuple(const struct nlattr * const cda[],
 		      struct nf_conntrack_tuple *tuple, u32 type,
@@ -1534,6 +1537,7 @@ static int ctnetlink_flush_conntrack(struct net *net,
 	return 0;
 }
 
+/*通过netlink消息删除contrack*/
 static int ctnetlink_del_conntrack(struct net *net, struct sock *ctnl,
 				   struct sk_buff *skb,
 				   const struct nlmsghdr *nlh,
@@ -1568,12 +1572,14 @@ static int ctnetlink_del_conntrack(struct net *net, struct sock *ctnl,
 	if (err < 0)
 		return err;
 
+	/*通过tuple获取conntrack*/
 	h = nf_conntrack_find_get(net, &zone, &tuple);
 	if (!h)
 		return -ENOENT;
 
 	ct = nf_ct_tuplehash_to_ctrack(h);
 
+	/*跳过已经卸载的ct，此处的处理不合理，应触发offload规则移除*/
 	if (test_bit(IPS_OFFLOAD_BIT, &ct->status)) {
 		nf_ct_put(ct);
 		return -EBUSY;
@@ -1588,12 +1594,14 @@ static int ctnetlink_del_conntrack(struct net *net, struct sock *ctnl,
 		}
 	}
 
+	/*执行ct的删除*/
 	nf_ct_delete(ct, NETLINK_CB(skb).portid, nlmsg_report(nlh));
 	nf_ct_put(ct);
 
 	return 0;
 }
 
+/*给定zone,元组返回ct*/
 static int ctnetlink_get_conntrack(struct net *net, struct sock *ctnl,
 				   struct sk_buff *skb,
 				   const struct nlmsghdr *nlh,
@@ -1617,9 +1625,11 @@ static int ctnetlink_get_conntrack(struct net *net, struct sock *ctnl,
 			.data = (void *)cda,
 		};
 
+		/*执行ct的dump*/
 		return netlink_dump_start(ctnl, skb, nlh, &c);
 	}
 
+	/*按给定参数，查找指定ct*/
 	err = ctnetlink_parse_zone(cda[CTA_ZONE], &zone);
 	if (err < 0)
 		return err;
@@ -3417,6 +3427,7 @@ static bool expect_iter_all(struct nf_conntrack_expect *exp, void *data)
 	return true;
 }
 
+/*期待删除*/
 static int ctnetlink_del_expect(struct net *net, struct sock *ctnl,
 				struct sk_buff *skb, const struct nlmsghdr *nlh,
 				const struct nlattr * const cda[],
@@ -3441,10 +3452,12 @@ static int ctnetlink_del_expect(struct net *net, struct sock *ctnl,
 			return err;
 
 		/* bump usage count to 2 */
+		/*通过zone,tuple查找指定的期待*/
 		exp = nf_ct_expect_find_get(net, &zone, &tuple);
 		if (!exp)
 			return -ENOENT;
 
+		/*如指明期待id,且id不相等，则返回删除失败*/
 		if (cda[CTA_EXPECT_ID]) {
 			__be32 id = nla_get_be32(cda[CTA_EXPECT_ID]);
 			if (ntohl(id) != (u32)(unsigned long)exp) {
@@ -3699,6 +3712,7 @@ static int ctnetlink_new_expect(struct net *net, struct sock *ctnl,
 	spin_lock_bh(&nf_conntrack_expect_lock);
 	exp = __nf_ct_expect_find(net, &zone, &tuple);
 	if (!exp) {
+	    /*指定的期待不存在，这里创建它*/
 		spin_unlock_bh(&nf_conntrack_expect_lock);
 		err = -ENOENT;
 		if (nlh->nlmsg_flags & NLM_F_CREATE) {
@@ -3834,6 +3848,7 @@ static const struct nfnl_callback ctnl_exp_cb[IPCTNL_MSG_EXP_MAX] = {
 	[IPCTNL_MSG_EXP_GET_STATS_CPU]	= { .call = ctnetlink_stat_exp_cpu },
 };
 
+/*conntrack子系统*/
 static const struct nfnetlink_subsystem ctnl_subsys = {
 	.name				= "conntrack",
 	.subsys_id			= NFNL_SUBSYS_CTNETLINK,

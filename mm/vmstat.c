@@ -1006,6 +1006,7 @@ unsigned long sum_zone_numa_state(int node,
 unsigned long node_page_state_pages(struct pglist_data *pgdat,
 				    enum node_stat_item item)
 {
+    /*取各pgdat的item的统计计数*/
 	long x = atomic_long_read(&pgdat->vm_stat[item]);
 #ifdef CONFIG_SMP
 	if (x < 0)
@@ -1014,6 +1015,7 @@ unsigned long node_page_state_pages(struct pglist_data *pgdat,
 	return x;
 }
 
+/*取各pgdat的item的统计计数*/
 unsigned long node_page_state(struct pglist_data *pgdat,
 			      enum node_stat_item item)
 {

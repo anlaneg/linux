@@ -260,6 +260,7 @@ exit_idle:
  */
 static void do_idle(void)
 {
+    /*取idle线程所在cpu*/
 	int cpu = smp_processor_id();
 	/*
 	 * If the arch has a polling bit, we maintain an invariant:
@@ -278,6 +279,7 @@ static void do_idle(void)
 
 		local_irq_disable();
 
+		/*此cpu offline*/
 		if (cpu_is_offline(cpu)) {
 			tick_nohz_idle_stop_tick();
 			cpuhp_report_idle_dead();

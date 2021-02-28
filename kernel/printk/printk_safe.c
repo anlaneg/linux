@@ -359,6 +359,7 @@ void __printk_safe_exit(void)
 	this_cpu_dec(printk_context);
 }
 
+/*格式化输出fmt*/
 __printf(1, 0) int vprintk_func(const char *fmt, va_list args)
 {
 #ifdef CONFIG_KGDB_KDB
@@ -375,6 +376,7 @@ __printf(1, 0) int vprintk_func(const char *fmt, va_list args)
 	    raw_spin_trylock(&logbuf_lock)) {
 		int len;
 
+		/*执行格式化输出*/
 		len = vprintk_store(0, LOGLEVEL_DEFAULT, NULL, fmt, args);
 		raw_spin_unlock(&logbuf_lock);
 		defer_console_output();

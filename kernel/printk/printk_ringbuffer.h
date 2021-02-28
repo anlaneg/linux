@@ -41,6 +41,7 @@ struct printk_info {
 struct printk_record {
 	struct printk_info	*info;
 	char			*text_buf;
+	/*需要的字符缓存区大小*/
 	unsigned int		text_buf_size;
 };
 

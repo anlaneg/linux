@@ -387,7 +387,7 @@ static void x86_vector_deactivate(struct irq_domain *dom, struct irq_data *irqd)
 
 static int activate_reserved(struct irq_data *irqd)
 {
-	struct apic_chip_data *apicd = apic_chip_data(irqd);
+	struct apic_chip_data *a  picd = apic_chip_data(irqd);
 	int ret;
 
 	ret = assign_irq_vector_any_locked(irqd);

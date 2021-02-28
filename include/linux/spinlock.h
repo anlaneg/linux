@@ -341,6 +341,7 @@ do {								\
 
 #else
 
+/*初始化spinlock*/
 # define spin_lock_init(_lock)			\
 do {						\
 	spinlock_check(_lock);			\

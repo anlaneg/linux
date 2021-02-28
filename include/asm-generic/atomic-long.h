@@ -23,6 +23,7 @@ typedef atomic_t atomic_long_t;
 
 #ifdef CONFIG_64BIT
 
+/*原子变量读取*/
 static __always_inline long
 atomic_long_read(const atomic_long_t *v)
 {

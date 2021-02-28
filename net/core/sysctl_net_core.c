@@ -372,6 +372,7 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_do_dev_weight,
 	},
 	{
+	    /*设备间转发积压容许的最大队列长度*/
 		.procname	= "netdev_max_backlog",
 		.data		= &netdev_max_backlog,
 		.maxlen		= sizeof(int),
@@ -540,6 +541,7 @@ static struct ctl_table net_core_table[] = {
 		.extra2		= &max_skb_frags,
 	},
 	{
+	    /*批量收包的最大时间*/
 		.procname	= "netdev_budget_usecs",
 		.data		= &netdev_budget_usecs,
 		.maxlen		= sizeof(unsigned int),

@@ -3307,8 +3307,8 @@ struct softnet_data {
 	struct sk_buff_head	process_queue;
 
 	/* stats */
-	unsigned int		processed;
-	unsigned int		time_squeeze;
+	unsigned int		processed;/*已处理的报文数目*/
+	unsigned int		time_squeeze;/*收取超时或者满收取的次数*/
 	unsigned int		received_rps;
 #ifdef CONFIG_RPS
 	struct softnet_data	*rps_ipi_list;
@@ -3339,7 +3339,7 @@ struct softnet_data {
 	unsigned int		cpu;
 	unsigned int		input_queue_tail;
 #endif
-	unsigned int		dropped;
+	unsigned int		dropped;/*超过backlog被丢弃的数目*/
 	struct sk_buff_head	input_pkt_queue;//处理设备间转发
 	struct napi_struct	backlog;
 
