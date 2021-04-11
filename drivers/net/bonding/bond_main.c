@@ -611,8 +611,10 @@ static int bond_check_dev_link(struct bonding *bond,
 		/* Yes, the mii is overlaid on the ifreq.ifr_ifru */
 		strncpy(ifr.ifr_name, slave_dev->name, IFNAMSIZ);
 		mii = if_mii(&ifr);
+		/*调用slave设备的ioctl回调，获取phy的地址*/
 		if (ioctl(slave_dev, &ifr, SIOCGMIIPHY) == 0) {
 			mii->reg_num = MII_BMSR;
+			/*通过ioctl读取 MII phy 寄存器*/
 			if (ioctl(slave_dev, &ifr, SIOCGMIIREG) == 0)
 				return mii->val_out & BMSR_LSTATUS;
 		}
@@ -1488,6 +1490,7 @@ static struct kobj_type slave_ktype = {
 #endif
 };
 
+/*创建bond slave kobj*/
 static int bond_kobj_init(struct slave *slave)
 {
 	int err;
@@ -1519,6 +1522,7 @@ static struct slave *bond_alloc_slave(struct bonding *bond,
 		SLAVE_AD_INFO(slave) = kzalloc(sizeof(struct ad_slave_info),
 					       GFP_KERNEL);
 		if (!SLAVE_AD_INFO(slave)) {
+		    /*申请失败，释放kobject*/
 			kobject_put(&slave->kobj);
 			return NULL;
 		}
@@ -1594,7 +1598,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 
 	/* already in-use? */
 	if (netdev_is_rx_handler_busy(slave_dev)) {
-	    /*slave_dev已被挂载了rx_handler*/
+	    /*slave_dev已被挂载了rx_handler，则告警不能加入到bond*/
 		NL_SET_ERR_MSG(extack, "Device is in use and cannot be enslaved");
 		slave_err(bond_dev, slave_dev,
 			  "Error: Device is in use and cannot be enslaved\n");
@@ -1602,7 +1606,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	}
 
 	if (bond_dev == slave_dev) {
-	    /*不容许将自身加入为成员*/
+	    /*不容许将自身加入为成员口*/
 		NL_SET_ERR_MSG(extack, "Cannot enslave bond to itself.");
 		netdev_err(bond_dev, "cannot enslave bond to itself.\n");
 		return -EPERM;
@@ -1632,7 +1636,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	 * enslaving it; the old ifenslave will not.
 	 */
 	if (slave_dev->flags & IFF_UP) {
-	    /*slave设备在添加时，不能up*/
+	    /*slave设备在添加时，不能是up的*/
 		NL_SET_ERR_MSG(extack, "Device can not be enslaved while up");
 		slave_err(bond_dev, slave_dev, "slave is up - this may be due to an out of date ifenslave\n");
 		return -EPERM;
@@ -1687,6 +1691,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 
 	if (slave_dev->type == ARPHRD_INFINIBAND &&
 	    BOND_MODE(bond) != BOND_MODE_ACTIVEBACKUP) {
+	    /*infiniband只支持主备模式*/
 		NL_SET_ERR_MSG(extack, "Only active-backup mode is supported for infiniband slaves");
 		slave_warn(bond_dev, slave_dev, "Type (%d) supports only active-backup mode\n",
 			   slave_dev->type);
@@ -1723,6 +1728,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 			goto err_undo_flags;
 	}
 
+	/*创建slave*/
 	new_slave = bond_alloc_slave(bond, slave_dev);
 	if (!new_slave) {
 		res = -ENOMEM;
@@ -2306,12 +2312,14 @@ static int bond_miimon_inspect(struct bonding *bond)
 		switch (slave->link) {
 		case BOND_LINK_UP:
 			if (link_state)
+			    /*link是up的，继续检查下一个*/
 				continue;
 
 			bond_propose_link_state(slave, BOND_LINK_FAIL);
 			commit++;
 			slave->delay = bond->params.downdelay;
 			if (slave->delay) {
+			    /*slave需要downdelay*/
 				slave_info(bond->dev, slave->dev, "link status down for %sinterface, disabling it in %d ms\n",
 					   (BOND_MODE(bond) ==
 					    BOND_MODE_ACTIVEBACKUP) ?
@@ -3494,7 +3502,7 @@ static inline u32 bond_eth_hash(struct sk_buff *skb)
 }
 
 static bool bond_flow_ip(struct sk_buff *skb, struct flow_keys *fk,
-			 int *noff, int *proto, bool l34)
+			 int *noff/*到网络层的offset*/, int *proto, bool l34)
 {
 	const struct ipv6hdr *iph6;
 	const struct iphdr *iph;
@@ -3503,6 +3511,7 @@ static bool bond_flow_ip(struct sk_buff *skb, struct flow_keys *fk,
 		if (unlikely(!pskb_may_pull(skb, *noff + sizeof(*iph))))
 			return false;
 		iph = (const struct iphdr *)(skb->data + *noff);
+		/*源ip*/
 		iph_to_flow_copy_v4addrs(fk, iph);
 		*noff += iph->ihl << 2;
 		if (!ip_is_fragment(iph))
@@ -3518,6 +3527,7 @@ static bool bond_flow_ip(struct sk_buff *skb, struct flow_keys *fk,
 		return false;
 	}
 
+	/*提取port信息*/
 	if (l34 && *proto >= 0)
 		fk->ports.ports = skb_flow_get_ports(skb, *noff, *proto);
 
@@ -3528,15 +3538,21 @@ static bool bond_flow_ip(struct sk_buff *skb, struct flow_keys *fk,
 static bool bond_flow_dissect(struct bonding *bond, struct sk_buff *skb,
 			      struct flow_keys *fk)
 {
+    /*是否l3+l4*/
 	bool l34 = bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER34;
 	int noff, proto = -1;
 
+	/*
+	 * encapsulated layer 2+3或者encapsulated layer 3+4模式正点，先针对skb
+	 * 进行解码，并填充到fk中
+	 * */
 	if (bond->params.xmit_policy > BOND_XMIT_POLICY_LAYER23) {
 		memset(fk, 0, sizeof(*fk));
 		return __skb_flow_dissect(NULL, skb, &flow_keys_bonding,
 					  fk, NULL, 0, 0, 0, 0);
 	}
 
+	/*其它模式，填充fk*/
 	fk->ports.ports = 0;
 	memset(&fk->icmp, 0, sizeof(fk->icmp));
 	noff = skb_network_offset(skb);
@@ -3587,20 +3603,23 @@ u32 bond_xmit_hash(struct bonding *bond, struct sk_buff *skb)
 	    skb->l4_hash)
 		return skb->hash;
 
-	/*使用skb二层对应的hash*/
+	/*使用skb二层对应的hash,或者填充flow失败，走二层hash*/
 	if (bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER2 ||
 	    !bond_flow_dissect(bond, skb, &flow))
 		return bond_eth_hash(skb);
 
 	if (bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER23 ||
 	    bond->params.xmit_policy == BOND_XMIT_POLICY_ENCAP23) {
+	    /*l2+l3的hash使用二层hash*/
 		hash = bond_eth_hash(skb);
 	} else {
+	    /*采用port计算*/
 		if (flow.icmp.id)
 			memcpy(&hash, &flow.icmp, sizeof(hash));
 		else
 			memcpy(&hash, &flow.ports.ports, sizeof(hash));
 	}
+	/*合入srcip,dstip*/
 	hash ^= (__force u32)flow_get_u32_dst(&flow) ^
 		(__force u32)flow_get_u32_src(&flow);
 	hash ^= (hash >> 16);
@@ -3671,6 +3690,7 @@ static int bond_open(struct net_device *bond_dev)
 		bond->recv_probe = bond_arp_rcv;
 	}
 
+	/*lacp方式的bond*/
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
 		queue_delayed_work(bond->wq, &bond->ad_work, 0);
 		/* register to receive LACPDUs */
@@ -4433,6 +4453,7 @@ out:
 	return ret;
 }
 
+/*lacp,xor模式选择slave*/
 static struct slave *bond_xmit_3ad_xor_slave_get(struct bonding *bond,
 						 struct sk_buff *skb,
 						 struct bond_up_slave *slaves)
@@ -4441,11 +4462,13 @@ static struct slave *bond_xmit_3ad_xor_slave_get(struct bonding *bond,
 	unsigned int count;
 	u32 hash;
 
+	/*计算此skb对应的hash*/
 	hash = bond_xmit_hash(bond, skb);
 	count = slaves ? READ_ONCE(slaves->count) : 0;
 	if (unlikely(!count))
 		return NULL;
 
+	/*通过此hash取余选择slave*/
 	slave = slaves->arr[hash % count];
 	return slave;
 }
@@ -4464,6 +4487,7 @@ static netdev_tx_t bond_3ad_xor_xmit(struct sk_buff *skb,
 	slaves = rcu_dereference(bond->usable_slaves);
 	slave = bond_xmit_3ad_xor_slave_get(bond, skb, slaves);
 	if (likely(slave))
+	    /*选择出slave,送slave对应的设备*/
 		return bond_dev_queue_xmit(bond, skb, slave->dev);
 
 	return bond_tx_drop(dev, skb);
@@ -4575,6 +4599,7 @@ static struct net_device *bond_xmit_get_slave(struct net_device *master_dev,
 			slaves = rcu_dereference(bond->all_slaves);
 		else
 			slaves = rcu_dereference(bond->usable_slaves);
+		/*选择此报文对应的slave*/
 		slave = bond_xmit_3ad_xor_slave_get(bond, skb, slaves);
 		break;
 	case BOND_MODE_BROADCAST:
@@ -4614,6 +4639,7 @@ static netdev_tx_t __bond_start_xmit(struct sk_buff *skb, struct net_device *dev
 		return bond_xmit_activebackup(skb, dev);
 	case BOND_MODE_8023AD:
 	case BOND_MODE_XOR:
+	    /*lacp模式下slave选择*/
 		return bond_3ad_xor_xmit(skb, dev);
 	case BOND_MODE_BROADCAST:
 	    //广播模式下，向所有slave接口均发送一份
@@ -4643,6 +4669,7 @@ static netdev_tx_t bond_start_xmit(struct sk_buff *skb, struct net_device *dev)
 		return NETDEV_TX_BUSY;
 
 	rcu_read_lock();
+
 	//如果bond没有slave，则直接丢包，否则选择slave进行发送
 	if (bond_has_slaves(bond))
 		ret = __bond_start_xmit(skb, dev);
@@ -4734,7 +4761,9 @@ static const struct net_device_ops bond_netdev_ops = {
 	.ndo_netpoll_cleanup	= bond_netpoll_cleanup,
 	.ndo_poll_controller	= bond_poll_controller,
 #endif
+	/*bond成员口添加*/
 	.ndo_add_slave		= bond_enslave,
+	/*bond成员口删除*/
 	.ndo_del_slave		= bond_release,
 	.ndo_fix_features	= bond_fix_features,
 	.ndo_features_check	= passthru_features_check,
@@ -5266,6 +5295,7 @@ static int bond_init(struct net_device *bond_dev)
 	return 0;
 }
 
+/*bonding tx队列数*/
 unsigned int bond_get_num_tx_queues(void)
 {
 	return tx_queues;

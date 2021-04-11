@@ -534,6 +534,7 @@ struct dst_entry *__sk_dst_check(struct sock *sk, u32 cookie)
 	struct dst_entry *dst = __sk_dst_get(sk);
 
 	if (dst && dst->obsolete && dst->ops->check(dst, cookie) == NULL) {
+	    /*dst_entry存在，但检查不通过，返回NULL*/
 		sk_tx_queue_clear(sk);
 		sk->sk_dst_pending_confirm = 0;
 		RCU_INIT_POINTER(sk->sk_dst_cache, NULL);
@@ -2032,6 +2033,7 @@ void sk_setup_caps(struct sock *sk, struct dst_entry *dst)
 {
 	u32 max_segs = 1;
 
+	/*在sock中缓存dst_entry*/
 	sk_dst_set(sk, dst);
 	sk->sk_route_caps = dst->dev->features | sk->sk_route_forced_caps;
 	if (sk->sk_route_caps & NETIF_F_GSO)
@@ -3475,12 +3477,18 @@ static void req_prot_cleanup(struct request_sock_ops *rsk_prot)
 	rsk_prot->slab = NULL;
 }
 
-//为prot->rsk_prot创始slab
+/*为协议对应的request sock申请slab
+ * 例如/proc/slabinfo中的
+ * request_sock_TCPv6     53     53    304   53    4 : tunables    0    0    0 : slabdata      1      1      0
+ * request_sock_TCP    5088   5088    304   53    4 : tunables    0    0    0 : slabdata     96     96      0
+ * request_queue         13     13   2456   13    8 : tunables    0    0    0 : slabdata      1      1      0
+ * */
 static int req_prot_init(const struct proto *prot)
 {
 	struct request_sock_ops *rsk_prot = prot->rsk_prot;
 
 	if (!rsk_prot)
+	    /*协议无request sock,退出*/
 		return 0;
 
 	//构造slab名称
@@ -3489,7 +3497,7 @@ static int req_prot_init(const struct proto *prot)
 	if (!rsk_prot->slab_name)
 		return -ENOMEM;
 
-	//构造slab
+	//构造request sock slab
 	rsk_prot->slab = kmem_cache_create(rsk_prot->slab_name,
 					   rsk_prot->obj_size, 0,
 					   SLAB_ACCOUNT | prot->slab_flags,
@@ -3509,7 +3517,12 @@ int proto_register(struct proto *prot, int alloc_slab)
 	int ret = -ENOBUFS;
 
 	if (alloc_slab) {
-		//如果需要申请slab，则创建相应slab
+		/*如果需要申请slab，则创建相应slab
+		 * 例如/proc/slabinfo中输出
+		 * UDPv6              15696  15696   1344   24    8 : tunables    0    0    0 : slabdata    654    654      0
+		 * UDP                40572  40572   1152   28    8 : tunables    0    0    0 : slabdata   1449   1449      0
+	     *
+	     */
 		prot->slab = kmem_cache_create_usercopy(prot->name,
 					prot->obj_size, 0,
 					SLAB_HWCACHE_ALIGN | SLAB_ACCOUNT |
@@ -3523,18 +3536,19 @@ int proto_register(struct proto *prot, int alloc_slab)
 			goto out;
 		}
 
-		//创建prot对应的slab
+		/*创建prot对应的request_sock slab*/
 		if (req_prot_init(prot))
 			goto out_free_request_sock_slab;
 
+		/*创建pro对应的timewait sock*/
 		if (prot->twsk_prot != NULL) {
-			//初始化twsk_prot
+			//初始化timewait sock slab对应的名称
 			prot->twsk_prot->twsk_slab_name = kasprintf(GFP_KERNEL, "tw_sock_%s", prot->name);
 
 			if (prot->twsk_prot->twsk_slab_name == NULL)
 				goto out_free_request_sock_slab;
 
-			//创建twsk slab
+			//创建timewait sock slab
 			prot->twsk_prot->twsk_slab =
 				kmem_cache_create(prot->twsk_prot->twsk_slab_name,
 						  prot->twsk_prot->twsk_obj_size,
@@ -3548,12 +3562,14 @@ int proto_register(struct proto *prot, int alloc_slab)
 	}
 
 	mutex_lock(&proto_list_mutex);
+
 	//为prot查找一个空闲的protocol index
 	ret = assign_proto_idx(prot);
 	if (ret) {
 		mutex_unlock(&proto_list_mutex);
 		goto out_free_timewait_sock_slab;
 	}
+
 	//将prot添加到proto_list，用于/proc/net/protocols文件
 	list_add(&prot->node, &proto_list);
 	mutex_unlock(&proto_list_mutex);

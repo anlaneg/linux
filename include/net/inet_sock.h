@@ -39,7 +39,8 @@
 struct ip_options {
 	__be32		faddr;
 	__be32		nexthop;
-	unsigned char	optlen;//报文内的ip选项总长度
+	//报文内的ip选项总长度
+	unsigned char	optlen;
 	unsigned char	srr;
 	unsigned char	rr;
 	unsigned char	ts;
@@ -57,7 +58,7 @@ struct ip_options {
 
 struct ip_options_rcu {
 	struct rcu_head rcu;
-	struct ip_options opt;
+	struct ip_options opt;/*ip选项*/
 };
 
 struct ip_options_data {
@@ -204,18 +205,23 @@ struct inet_sock {
 	struct ipv6_pinfo	*pinet6;
 #endif
 	/* Socket demultiplex comparisons on incoming packets. */
+	/*socket中记录的dstip*/
 #define inet_daddr		sk.__sk_common.skc_daddr
 //设置接收的地址（报文中的目的ip,一般情况下我们在bind时设置的是0）
 #define inet_rcv_saddr		sk.__sk_common.skc_rcv_saddr
+	/*sk中记录的dst port*/
 #define inet_dport		sk.__sk_common.skc_dport
 #define inet_num		sk.__sk_common.skc_num
 
 	__be32			inet_saddr;
+	/*构造报文时，使用的ttl,容许app配置，默认值为-1*/
 	__s16			uc_ttl;
 	__u16			cmsg_flags;
+	/*sk中记录的src port*/
 	__be16			inet_sport;
 	__u16			inet_id;
 
+	/*记录ipv4层选项*/
 	struct ip_options_rcu __rcu	*inet_opt;
 	int			rx_dst_ifindex;
 	__u8			tos;
@@ -291,6 +297,7 @@ static inline struct sock *skb_to_full_sk(const struct sk_buff *skb)
 	return sk_to_full_sk(skb->sk);
 }
 
+/*由sock转为ipv4 socket*/
 static inline struct inet_sock *inet_sk(const struct sock *sk)
 {
 	return (struct inet_sock *)sk;

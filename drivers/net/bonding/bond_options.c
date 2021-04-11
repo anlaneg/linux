@@ -134,6 +134,7 @@ static const struct bond_opt_value bond_intmax_tbl[] = {
 	{ NULL,      -1,      0}
 };
 
+/*当前支持两种情况slow及fast*/
 static const struct bond_opt_value bond_lacp_rate_tbl[] = {
 	{ "slow", AD_LACP_SLOW, 0},
 	{ "fast", AD_LACP_FAST, 0},
@@ -207,6 +208,7 @@ static const struct bond_opt_value bond_ad_user_port_key_tbl[] = {
 //bond模块选项描述及解析
 static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 	[BOND_OPT_MODE] = {
+	    /*bond mode的设置及解析*/
 		.id = BOND_OPT_MODE,
 		.name = "mode",
 		.desc = "bond device mode",
@@ -223,6 +225,7 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.set = bond_option_pps_set
 	},
 	[BOND_OPT_XMIT_HASH] = {
+	    /*bonding的发包hash算法*/
 		.id = BOND_OPT_XMIT_HASH,
 		.name = "xmit_hash_policy",
 		.desc = "balance-xor, 802.3ad, and tlb hashing method",
@@ -283,6 +286,7 @@ static const struct bond_option bond_opts[BOND_OPT_LAST] = {
 		.values = bond_intmax_tbl,
 		.set = bond_option_updelay_set
 	},
+	/*lacp_rate配置*/
 	[BOND_OPT_LACP_RATE] = {
 		.id = BOND_OPT_LACP_RATE,
 		.name = "lacp_rate",
@@ -776,10 +780,12 @@ static void bond_set_xfrm_features(struct net_device *bond_dev, u64 mode)
 	netdev_update_features(bond_dev);
 }
 
+/*bond口模式设定*/
 static int bond_option_mode_set(struct bonding *bond,
 				const struct bond_opt_value *newval)
 {
 	if (!bond_mode_uses_arp(newval->value)) {
+	    /*这些模式不需要arp监控，告警后关闭arp监控间隔*/
 		if (bond->params.arp_interval) {
 			netdev_dbg(bond->dev, "%s mode is incompatible with arp monitoring, start mii monitoring\n",
 				   newval->string);
@@ -787,6 +793,7 @@ static int bond_option_mode_set(struct bonding *bond,
 			bond->params.arp_interval = 0;
 		}
 
+		/*这些需要开启monitor interface interval,如果没有配置，则使用默认值*/
 		if (!bond->params.miimon) {
 			/* set miimon to default value */
 			bond->params.miimon = BOND_DEFAULT_MIIMON;
@@ -795,6 +802,7 @@ static int bond_option_mode_set(struct bonding *bond,
 		}
 	}
 
+	/*ALB模式*/
 	if (newval->value == BOND_MODE_ALB)
 		bond->params.tlb_dynamic_lb = 1;
 
@@ -1237,6 +1245,7 @@ static int bond_option_fail_over_mac_set(struct bonding *bond,
 	return 0;
 }
 
+/*设置报文发送时的策略hash算法，见bond_xmit_hashtype_tbl*/
 static int bond_option_xmit_hash_policy_set(struct bonding *bond,
 					    const struct bond_opt_value *newval)
 {

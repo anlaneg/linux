@@ -637,6 +637,7 @@ static void tcp_write_timer(struct timer_list *t)
 	sock_put(sk);
 }
 
+/*增加此sock的tcp timeouts计数*/
 void tcp_syn_ack_timeout(const struct request_sock *req)
 {
 	struct net *net = read_pnet(&inet_rsk(req)->ireq_net);

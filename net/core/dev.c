@@ -3652,6 +3652,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	len = skb->len;
 	PRANDOM_ADD_NOISE(skb, dev, txq, len + jiffies);
 	trace_net_dev_start_xmit(skb, dev);
+	//通过netdev设备的ops完成发送
 	rc = netdev_start_xmit(skb, dev, txq, more);
 	trace_net_dev_xmit(skb, rc, dev, len/*报文长度*/);
 
@@ -3660,7 +3661,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 
 //发送一组skb
 struct sk_buff *dev_hard_start_xmit(struct sk_buff *first/*待发送的一组skb*/, struct net_device *dev,
-				    struct netdev_queue *txq, int *ret)
+				    struct netdev_queue *txq, int *ret/*出参，返回值*/)
 {
 	struct sk_buff *skb = first;
 	int rc = NETDEV_TX_OK;
@@ -3669,7 +3670,9 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first/*待发送的一组skb
 	while (skb) {
 		struct sk_buff *next = skb->next;
 
+		//将skb自链中摘除
 		skb_mark_not_on_list(skb);
+		//发送此skb
 		rc = xmit_one(skb, dev, txq, next != NULL);
 		if (unlikely(!dev_xmit_complete(rc))) {
 			skb->next = next;
@@ -4247,7 +4250,10 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 		int cpu = smp_processor_id(); /* ok because BHs are off */
 
 		if (txq->xmit_lock_owner != cpu) {
+		    /*此txq 的xmit_lock的owner不是当前cpu*/
+
 			if (dev_xmit_recursion())
+			    /*递归层数超限*/
 				goto recursion_alert;
 
 			skb = validate_xmit_skb(skb, dev, &again);
@@ -4259,9 +4265,13 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 			//如果txq没有stop,则执行报文发送
 			if (!netif_xmit_stopped(txq)) {
+			    //递归层数增加
 				dev_xmit_recursion_inc();
+
 				//调用ndo_start_xmit完成dev设备单个skb的发送
 				skb = dev_hard_start_xmit(skb, dev, txq, &rc);
+
+				//递归层数减少
 				dev_xmit_recursion_dec();
 				if (dev_xmit_complete(rc)) {
 					HARD_TX_UNLOCK(dev, txq);
@@ -8423,6 +8433,7 @@ struct net_device *netdev_get_xmit_slave(struct net_device *dev,
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 
+	/*dev需要选择slave,通过回调完成slave选择*/
 	if (!ops->ndo_get_xmit_slave)
 		return NULL;
 	return ops->ndo_get_xmit_slave(dev, skb, all_slaves);
@@ -8956,6 +8967,7 @@ int dev_set_mtu_ext(struct net_device *dev, int new_mtu,
 	return err;
 }
 
+/*设置dev设备的mtu*/
 int dev_set_mtu(struct net_device *dev, int new_mtu)
 {
 	struct netlink_ext_ack extack;

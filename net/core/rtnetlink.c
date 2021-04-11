@@ -2534,7 +2534,8 @@ static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 	return err;
 }
 
-static int do_set_master(struct net_device *dev, int ifindex,
+/*将dev添加到ifindex接口*/
+static int do_set_master(struct net_device *dev/*成员口*/, int ifindex/*master接口*/,
 			 struct netlink_ext_ack *extack)
 {
 	struct net_device *upper_dev = netdev_master_upper_dev_get(dev);
@@ -2542,8 +2543,10 @@ static int do_set_master(struct net_device *dev, int ifindex,
 	int err;
 
 	if (upper_dev) {
+	    /*dev的master设备为upper_dev,如果其ifindex与要设置的相同则直接返回*/
 		if (upper_dev->ifindex == ifindex)
 			return 0;
+		/*否则将dev自upper_dev中移除掉，后面再添加*/
 		ops = upper_dev->netdev_ops;
 		if (ops->ndo_del_slave) {
 			err = ops->ndo_del_slave(upper_dev, dev);
@@ -2555,6 +2558,7 @@ static int do_set_master(struct net_device *dev, int ifindex,
 	}
 
 	if (ifindex) {
+	    /*通过ifindex获取master设备*/
 		upper_dev = __dev_get_by_index(dev_net(dev), ifindex);
 		if (!upper_dev)
 			return -EINVAL;
@@ -2767,6 +2771,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_MASTER]) {
+	    /*设置dev的master接口*/
 		err = do_set_master(dev, nla_get_u32(tb[IFLA_MASTER]), extack);
 		if (err)
 			goto errout;
@@ -3576,6 +3581,7 @@ replay:
 		if (err < 0)
 			goto out_unregister;
 	}
+	/*设置dev设备的master接口为tb[ifla_master]*/
 	if (tb[IFLA_MASTER]) {
 		err = do_set_master(dev, nla_get_u32(tb[IFLA_MASTER]), extack);
 		if (err)

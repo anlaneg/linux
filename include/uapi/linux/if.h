@@ -123,6 +123,7 @@ enum net_device_flags {
 //接口收取所有组播报文
 #define IFF_ALLMULTI			IFF_ALLMULTI
 #define IFF_MASTER			IFF_MASTER
+/*标记接口为slave*/
 #define IFF_SLAVE			IFF_SLAVE
 #define IFF_MULTICAST			IFF_MULTICAST
 #define IFF_PORTSEL			IFF_PORTSEL

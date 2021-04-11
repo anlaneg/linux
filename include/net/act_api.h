@@ -37,8 +37,9 @@ struct tc_action {
 	struct gnet_stats_queue		tcfa_qstats;
 	struct net_rate_estimator __rcu *tcfa_rate_est;
 	spinlock_t			tcfa_lock;
-	//percpu统计计数，表明处理过的报文数及字节数
+	//percpu统计计数，表明处理过的报文数及字节数（TCA_STATS_BASIC类型）
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
+	//percpu统计计数，表明处理过的报文数及字节数（TCA_STATS_BASIC_HW类型）
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats_hw;
 	struct gnet_stats_queue __percpu *cpu_qstats;
 	//填充action的cookie

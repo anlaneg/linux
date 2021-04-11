@@ -518,6 +518,7 @@ static struct ctl_table net_core_table[] = {
 #endif
 #endif /* CONFIG_NET */
 	{
+	    /*一次rx软中断最多收取多少报文*/
 		.procname	= "netdev_budget",
 		.data		= &netdev_budget,
 		.maxlen		= sizeof(int),

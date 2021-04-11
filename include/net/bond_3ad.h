@@ -127,7 +127,7 @@ typedef struct lacpdu {
 } __packed lacpdu_t;
 
 typedef struct lacpdu_header {
-	struct ethhdr hdr;
+	struct ethhdr hdr;/*以太头*/
 	struct lacpdu lacpdu;
 } __packed lacpdu_header_t;
 
@@ -164,8 +164,8 @@ struct port;
 #endif
 
 struct bond_3ad_stats {
-	atomic64_t lacpdu_rx;
-	atomic64_t lacpdu_tx;
+	atomic64_t lacpdu_rx;/*收到的lacp数目*/
+	atomic64_t lacpdu_tx;/*发出的lacp数目*/
 	atomic64_t lacpdu_unknown_rx;
 	atomic64_t lacpdu_illegal_rx;
 
@@ -238,6 +238,7 @@ typedef struct port {
 	u32 churn_partner_count;
 	churn_state_t sm_churn_actor_state;
 	churn_state_t sm_churn_partner_state;
+	/*此port所属的slave*/
 	struct slave *slave;		/* pointer to the bond slave that this port belongs to */
 	struct aggregator *aggregator;	/* pointer to an aggregator that this port related to */
 	struct port *next_port_in_aggregator;	/* Next port on the linked list of the parent aggregator */

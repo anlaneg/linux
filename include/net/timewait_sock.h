@@ -12,10 +12,11 @@
 #include <net/sock.h>
 
 struct timewait_sock_ops {
+    //timewait sock对应的slab
 	struct kmem_cache	*twsk_slab;
-	//twsk slab名称
+	//timewait sock slab名称
 	char		*twsk_slab_name;
-	//twsk slab对应obj大小
+	//timewait sock slab对应obj大小
 	unsigned int	twsk_obj_size;
 	int		(*twsk_unique)(struct sock *sk,
 				       struct sock *sktw, void *twp);

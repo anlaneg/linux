@@ -372,6 +372,7 @@ const struct header_ops eth_header_ops ____cacheline_aligned = {
 	.cache		= eth_header_cache,
 	//更新缓存（这里是更件目的mac)
 	.cache_update	= eth_header_cache_update,
+	//解析帧类型
 	.parse_protocol	= eth_header_parse_protocol,
 };
 

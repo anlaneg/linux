@@ -1226,6 +1226,7 @@ out_dead:
 }
 EXPORT_SYMBOL(__neigh_event_send);
 
+/*将neigh->ha更新到neigh->h中*/
 static void neigh_update_hhs(struct neighbour *neigh)
 {
 	struct hh_cache *hh;

@@ -2018,21 +2018,25 @@ static int __init inet_init(void)
 	struct list_head *r;
 	int rc;
 
+	/*skb->cb必须大于sizeof(struct inet_skb_parm)*/
 	sock_skb_cb_check_size(sizeof(struct inet_skb_parm));
 
-	//注册tcp协议
+	//注册tcp协议sock
 	rc = proto_register(&tcp_prot, 1);
 	if (rc)
 		goto out;
 
+	/*注册udp协议sock*/
 	rc = proto_register(&udp_prot, 1);
 	if (rc)
 		goto out_unregister_tcp_proto;
 
+	/*注册raw协议sock*/
 	rc = proto_register(&raw_prot, 1);
 	if (rc)
 		goto out_unregister_udp_proto;
 
+	/*注册ping协议sock*/
 	rc = proto_register(&ping_prot, 1);
 	if (rc)
 		goto out_unregister_raw_proto;
@@ -2130,9 +2134,11 @@ static int __init inet_init(void)
 
 	ipv4_proc_init();
 
-	ipfrag_init();//分片表初始化
+	//分片表初始化
+	ipfrag_init();
 
-	dev_add_pack(&ip_packet_type);//ipv4报文处理器注册
+	//ipv4报文处理器注册
+	dev_add_pack(&ip_packet_type);
 
 	ip_tunnel_core_init();
 

@@ -185,10 +185,14 @@ struct sock_common {
 		};
 	};
 
-	unsigned short		skc_family;//sock family字段，例如AF_INET
-	volatile unsigned char	skc_state;//socket状态，例如syn_recv
-	unsigned char		skc_reuse:4;//socket 地址reuse标记
-	unsigned char		skc_reuseport:1;//socket port reuse
+	//sock family字段，例如AF_INET
+	unsigned short		skc_family;
+	//socket状态，例如syn_recv
+	volatile unsigned char	skc_state;
+	//socket 地址reuse标记
+	unsigned char		skc_reuse:4;
+	//socket port reuse
+	unsigned char		skc_reuseport:1;
 	unsigned char		skc_ipv6only:1;
 	unsigned char		skc_net_refcnt:1;
 	int			skc_bound_dev_if;
@@ -233,7 +237,8 @@ struct sock_common {
 	unsigned short		skc_rx_queue_mapping;
 #endif
 	union {
-		int		skc_incoming_cpu;//报文上次来临时，使用的cpu
+	    //报文上次来临时，使用的cpu
+		int		skc_incoming_cpu;
 		u32		skc_rcv_wnd;
 		u32		skc_tw_rcv_nxt; /* struct tcp_timewait_sock  */
 	};
@@ -443,6 +448,7 @@ struct sock {
 	struct xfrm_policy __rcu *sk_policy[2];
 #endif
 	struct dst_entry	*sk_rx_dst;
+	/*socket中缓存的dst_entry，减少每次查询*/
 	struct dst_entry __rcu	*sk_dst_cache;
 	atomic_t		sk_omem_alloc;
 	int			sk_sndbuf;//发送缓冲区大小
@@ -488,7 +494,8 @@ struct sock {
 				sk_userlocks : 4;
 	u8			sk_pacing_shift;
 	u16			sk_type;//socket类型
-	u16			sk_protocol;//指明socket对应协议
+	//指明socket对应协议（l4层）
+	u16			sk_protocol;
 	u16			sk_gso_max_segs;
 	unsigned long	        sk_lingertime;
 	//sock创建时的proto,例如udp_proto
@@ -1250,7 +1257,7 @@ struct proto {
 	int			max_header;
 	bool			no_autobind;
 
-	//自指定slab中申请sock
+	//协议申请sock的slab(可以为空）
 	struct kmem_cache	*slab;
 	//sock slab的obj空间大小
 	unsigned int		obj_size;
@@ -1260,6 +1267,7 @@ struct proto {
 
 	struct percpu_counter	*orphan_count;
 
+	/*如果无request sock,则为空，例如request_sock_TCP*/
 	struct request_sock_ops	*rsk_prot;
 	struct timewait_sock_ops *twsk_prot;
 
@@ -1975,6 +1983,7 @@ static inline void sk_rethink_txhash(struct sock *sk)
 		sk_set_txhash(sk);
 }
 
+/*取socket中缓存的dst_entry*/
 static inline struct dst_entry *
 __sk_dst_get(struct sock *sk)
 {
@@ -2432,6 +2441,7 @@ struct sock_skb_cb {
 #define SOCK_SKB_CB(__skb) ((struct sock_skb_cb *)((__skb)->cb + \
 			    SOCK_SKB_CB_OFFSET))
 
+/*skb->cb结构体大于不得小于size(cb结尾存放sock_skb_cb)*/
 #define sock_skb_cb_check_size(size) \
 	BUILD_BUG_ON((size) > SOCK_SKB_CB_OFFSET)
 

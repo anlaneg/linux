@@ -1175,6 +1175,7 @@ int tcf_action_copy_stats(struct sk_buff *skb, struct tc_action *p,
 	if (err < 0)
 		goto errout;
 
+	/*汇总percpu:p->cpu_stats,将其填充到d中*/
 	if (gnet_stats_copy_basic(NULL, &d, p->cpu_bstats, &p->tcfa_bstats) < 0 ||
 	    gnet_stats_copy_basic_hw(NULL, &d, p->cpu_bstats_hw,
 				     &p->tcfa_bstats_hw) < 0 ||

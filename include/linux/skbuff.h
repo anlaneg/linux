@@ -1305,6 +1305,7 @@ __be32 __skb_flow_get_ports(const struct sk_buff *skb, int thoff, u8 ip_proto,
 static inline __be32 skb_flow_get_ports(const struct sk_buff *skb,
 					int thoff, u8 ip_proto)
 {
+    /*提取port信息*/
 	return __skb_flow_get_ports(skb, thoff, ip_proto, NULL, 0);
 }
 

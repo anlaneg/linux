@@ -2849,9 +2849,11 @@ struct proto tcp_prot = {
 	.sendpage		= tcp_sendpage,
 	.backlog_rcv		= tcp_v4_do_rcv,
 	.release_cb		= tcp_release_cb,
-	.hash			= inet_hash,//注册tcp socket
+	//注册tcp socket
+	.hash			= inet_hash,
 	.unhash			= inet_unhash,
-	.get_port		= inet_csk_get_port,/*动态生成port并绑定 或者绑定指定port*/
+	/*动态生成port并绑定 或者绑定指定port*/
+	.get_port		= inet_csk_get_port,
 	.enter_memory_pressure	= tcp_enter_memory_pressure,
 	.leave_memory_pressure	= tcp_leave_memory_pressure,
 	.stream_memory_free	= tcp_stream_memory_free,
@@ -2865,7 +2867,9 @@ struct proto tcp_prot = {
 	.max_header		= MAX_TCP_HEADER,
 	.obj_size		= sizeof(struct tcp_sock),
 	.slab_flags		= SLAB_TYPESAFE_BY_RCU,
+	/*timewait sock*/
 	.twsk_prot		= &tcp_timewait_sock_ops,
+	/*request sock*/
 	.rsk_prot		= &tcp_request_sock_ops,
 	.h.hashinfo		= &tcp_hashinfo,
 	.no_autobind		= true,

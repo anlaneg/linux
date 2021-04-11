@@ -253,7 +253,7 @@ struct hh_cache {
 	//计算__len对齐后的长度
 #define HH_DATA_ALIGN(__len) \
 	(((__len)+(HH_DATA_MOD-1))&~(HH_DATA_MOD - 1))
-	//用于缓存硬件头
+	//用于缓存硬件头（16字节）
 	unsigned long	hh_data[HH_DATA_ALIGN(LL_MAX_HEADER) / sizeof(long)];
 };
 
@@ -3367,6 +3367,7 @@ static inline int dev_recursion_level(void)
 	return this_cpu_read(softnet_data.xmit.recursion);
 }
 
+/*检查xmit递归层数*/
 #define XMIT_RECURSION_LIMIT	8
 static inline bool dev_xmit_recursion(void)
 {
@@ -3374,11 +3375,13 @@ static inline bool dev_xmit_recursion(void)
 			XMIT_RECURSION_LIMIT);
 }
 
+/*增加xmit递归层数*/
 static inline void dev_xmit_recursion_inc(void)
 {
 	__this_cpu_inc(softnet_data.xmit.recursion);
 }
 
+/*减少xmit递归层数*/
 static inline void dev_xmit_recursion_dec(void)
 {
 	__this_cpu_dec(softnet_data.xmit.recursion);
@@ -4313,6 +4316,7 @@ static inline u32 netif_msg_init(int debug_value, int default_msg_enable_bits)
 	return (1U << debug_value) - 1;
 }
 
+/*加锁，并记录当前xmit_lock的owner*/
 static inline void __netif_tx_lock(struct netdev_queue *txq, int cpu)
 {
 	spin_lock(&txq->_xmit_lock);
@@ -4344,6 +4348,7 @@ static inline bool __netif_tx_trylock(struct netdev_queue *txq)
 	return ok;
 }
 
+/*解锁 txq*/
 static inline void __netif_tx_unlock(struct netdev_queue *txq)
 {
 	txq->xmit_lock_owner = -1;

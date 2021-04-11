@@ -23,6 +23,7 @@
 static inline int
 gnet_stats_copy(struct gnet_dump *d, int type, void *buf, int size, int padattr)
 {
+    /*将buf中的数据填充到d->skb中*/
 	if (nla_put_64bit(d->skb, type, size, buf, padattr))
 		goto nla_put_failure;
 	return 0;
@@ -114,6 +115,7 @@ gnet_stats_start_copy(struct sk_buff *skb, int type, spinlock_t *lock,
 }
 EXPORT_SYMBOL(gnet_stats_start_copy);
 
+/*遍历每个cpu,并自每个cpu上取percpu变量bcpu,将其计数合入到bstats中*/
 static void
 __gnet_stats_copy_basic_cpu(struct gnet_stats_basic_packed *bstats,
 			    struct gnet_stats_basic_cpu __percpu *cpu)
@@ -145,6 +147,7 @@ __gnet_stats_copy_basic(const seqcount_t *running,
 	unsigned int seq;
 
 	if (cpu) {
+	    /*取percpu变量，将其值合入到bstats中*/
 		__gnet_stats_copy_basic_cpu(bstats, cpu);
 		return;
 	}
@@ -166,8 +169,10 @@ ___gnet_stats_copy_basic(const seqcount_t *running,
 {
 	struct gnet_stats_basic_packed bstats = {0};
 
+	/*取percpu变量，将其值合并到bstats中*/
 	__gnet_stats_copy_basic(running, &bstats, cpu, b);
 
+	/*针对TCA_STATS_BASIC，填充d->tc_stats*/
 	if (d->compat_tc_stats && type == TCA_STATS_BASIC) {
 		d->tc_stats.bytes = bstats.bytes;
 		d->tc_stats.packets = bstats.packets;
@@ -177,10 +182,11 @@ ___gnet_stats_copy_basic(const seqcount_t *running,
 		struct gnet_stats_basic sb;
 		int res;
 
+		/*将bstats中统计的数据存入到sb中，再填充到netlink消息中*/
 		memset(&sb, 0, sizeof(sb));
 		sb.bytes = bstats.bytes;
 		sb.packets = bstats.packets;
-		res = gnet_stats_copy(d, type, &sb, sizeof(sb), TCA_STATS_PAD);
+		res = gnet_stats_copy(d, type/*统计类型*/, &sb, sizeof(sb), TCA_STATS_PAD);
 		if (res < 0 || sb.packets == bstats.packets)
 			return res;
 		/* emit 64bit stats only if needed */
@@ -209,6 +215,7 @@ gnet_stats_copy_basic(const seqcount_t *running,
 		      struct gnet_stats_basic_cpu __percpu *cpu,
 		      struct gnet_stats_basic_packed *b)
 {
+    /*取percpu,将其值填充到d中*/
 	return ___gnet_stats_copy_basic(running, d, cpu, b,
 					TCA_STATS_BASIC);
 }
@@ -233,6 +240,7 @@ gnet_stats_copy_basic_hw(const seqcount_t *running,
 			 struct gnet_stats_basic_cpu __percpu *cpu,
 			 struct gnet_stats_basic_packed *b)
 {
+    /*取tca_stats_basic_hw类型的统计，并将其填充到d中*/
 	return ___gnet_stats_copy_basic(running, d, cpu, b,
 					TCA_STATS_BASIC_HW);
 }

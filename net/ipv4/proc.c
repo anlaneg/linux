@@ -211,7 +211,7 @@ static const struct snmp_mib snmp4_net_list[] = {
 	SNMP_MIB_ITEM("TCPLossFailures", LINUX_MIB_TCPLOSSFAILURES),
 	SNMP_MIB_ITEM("TCPFastRetrans", LINUX_MIB_TCPFASTRETRANS),
 	SNMP_MIB_ITEM("TCPSlowStartRetrans", LINUX_MIB_TCPSLOWSTARTRETRANS),
-	SNMP_MIB_ITEM("TCPTimeouts", LINUX_MIB_TCPTIMEOUTS),
+	SNMP_MIB_ITEM("TCPTimeouts", LINUX_MIB_TCPTIMEOUTS),/*tcp超时计数*/
 	SNMP_MIB_ITEM("TCPLossProbes", LINUX_MIB_TCPLOSSPROBES),
 	SNMP_MIB_ITEM("TCPLossProbeRecovery", LINUX_MIB_TCPLOSSPROBERECOVERY),
 	SNMP_MIB_ITEM("TCPRenoRecoveryFail", LINUX_MIB_TCPRENORECOVERYFAIL),
@@ -467,10 +467,12 @@ static int netstat_seq_show(struct seq_file *seq, void *v)
 	int i;
 	struct net *net = seq->private;
 
+	//显示tcp层统计计数名称
 	seq_puts(seq, "TcpExt:");
 	for (i = 0; snmp4_net_list[i].name; i++)
 		seq_printf(seq, " %s", snmp4_net_list[i].name);
 
+	//显示tcp层统计计数值
 	seq_puts(seq, "\nTcpExt:");
 	for (i = 0; snmp4_net_list[i].name; i++)
 		seq_printf(seq, " %lu",

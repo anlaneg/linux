@@ -139,6 +139,7 @@ static inline int ip_select_ttl(struct inet_sock *inet, struct dst_entry *dst)
 	int ttl = inet->uc_ttl;
 
 	if (ttl < 0)
+	    /*用户未指定ttl,*/
 		ttl = ip4_dst_hoplimit(dst);
 	return ttl;
 }
@@ -324,6 +325,7 @@ static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *
 	return ip_finish_output2(net, sk, skb);
 }
 
+/*postrouting钩子点后执行此函数*/
 static int ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	int ret;
@@ -470,7 +472,7 @@ static void ip_copy_addrs(struct iphdr *iph, const struct flowi4 *fl4)
 
 /* Note: skb->sk can be different from sk, in case of tunnels */
 int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
-		    __u8 tos)
+		    __u8 tos/*ip报文对应的tos值*/)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct net *net = sock_net(sk);
@@ -488,11 +490,13 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 	fl4 = &fl->u.ip4;
 	rt = skb_rtable(skb);
 	if (rt)
+	    /*报文中如已有rtable,则跳过此处理*/
 		goto packet_routed;
 
 	/* Make sure we can route this packet. */
 	rt = (struct rtable *)__sk_dst_check(sk, 0);
 	if (!rt) {
+	    /*rt不存在，执行rt查询*/
 		__be32 daddr;
 
 		/* Use correct destination address if we have options. */
@@ -517,6 +521,7 @@ int __ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl,
 			goto no_route;//无路由，丢包
 		sk_setup_caps(sk, &rt->dst);
 	}
+	/*在skb中缓存dst_entry*/
 	skb_dst_set_noref(skb, &rt->dst);
 
 packet_routed:
@@ -524,17 +529,21 @@ packet_routed:
 		goto no_route;
 
 	/* OK, we know where to send it, allocate and build IP header. */
-	//构造ip头，并填充
+	//构造ip头，并填充（如有ip选项，则使用ip层选项总长度）
 	skb_push(skb, sizeof(struct iphdr) + (inet_opt ? inet_opt->opt.optlen : 0));
 	skb_reset_network_header(skb);
 	iph = ip_hdr(skb);
+	/*填充ip版本，头部长度（初始值），tos*/
 	*((__be16 *)iph) = htons((4 << 12) | (5 << 8) | (tos & 0xff));
 	if (ip_dont_fragment(sk, &rt->dst) && !skb->ignore_df)
+	    /*指明不容许分片*/
 		iph->frag_off = htons(IP_DF);
 	else
 		iph->frag_off = 0;
+	/*填充ttl,l4层协议*/
 	iph->ttl      = ip_select_ttl(inet, &rt->dst);
 	iph->protocol = sk->sk_protocol;
+	/*填充src-addr,dst-addr*/
 	ip_copy_addrs(iph, fl4);
 
 	/* Transport layer set skb->h.foo itself. */
@@ -565,6 +574,7 @@ no_route:
 }
 EXPORT_SYMBOL(__ip_queue_xmit);
 
+/*上层协议栈送报文到ip协议栈*/
 int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl)
 {
 	return __ip_queue_xmit(sk, skb, fl, inet_sk(sk)->tos);

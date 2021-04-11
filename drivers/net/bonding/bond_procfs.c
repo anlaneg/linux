@@ -132,6 +132,7 @@ static void bond_info_show_master(struct seq_file *seq)
 		struct ad_info ad_info;
 
 		seq_puts(seq, "\n802.3ad info\n");
+		/*显示是否使用lacp fast*/
 		seq_printf(seq, "LACP rate: %s\n",
 			   (bond->params.lacp_fast) ? "fast" : "slow");
 		seq_printf(seq, "Min links: %d\n", bond->params.min_links);

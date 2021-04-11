@@ -1246,7 +1246,7 @@ INDIRECT_CALLABLE_DECLARE(void tcp_v4_send_check(struct sock *sk, struct sk_buff
  * SKB, or a fresh unique copy made by the retransmit engine.
  */
 static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
-			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt)
+			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt/*下次期待的序号*/)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	struct inet_sock *inet;
@@ -1286,6 +1286,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	}
 
 	inet = inet_sk(sk);
+	/*取tcp控制块*/
 	tcb = TCP_SKB_CB(skb);
 	memset(&opts, 0, sizeof(opts));
 
@@ -1338,7 +1339,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	th = (struct tcphdr *)skb->data;
 	th->source		= inet->inet_sport;
 	th->dest		= inet->inet_dport;
-	th->seq			= htonl(tcb->seq);
+	th->seq			= htonl(tcb->seq);/*tcp对应的seq*/
 	th->ack_seq		= htonl(rcv_nxt);
 	*(((__be16 *)th) + 6)	= htons(((tcp_header_size >> 2) << 12) |
 					tcb->tcp_flags);
@@ -1412,6 +1413,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 
 	tcp_add_tx_delay(skb, tp);
 
+	/*报文送ip协议栈*/
 	err = INDIRECT_CALL_INET(icsk->icsk_af_ops->queue_xmit,
 				 inet6_csk_xmit, ip_queue_xmit,
 				 sk, skb, &inet->cork.fl);

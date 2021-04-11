@@ -66,6 +66,7 @@
 		NULL)
 
 /* Caller must have rcu_read_lock */
+/*取第一个slave*/
 #define bond_first_slave_rcu(bond) \
 	netdev_lower_get_first_private_rcu(bond->dev)
 
@@ -123,7 +124,9 @@ static inline int is_netpoll_tx_blocked(struct net_device *dev)
 
 //bonding配置参数
 struct bond_params {
-	int mode;//采用哪种模式进行bond
+    //采用哪种模式进行bond
+	int mode;
+	/*发送时采用何种策略计算hashcode*/
 	int xmit_policy;
 	/*monitor接口间隔时间*/
 	int miimon;
@@ -134,8 +137,10 @@ struct bond_params {
 	int use_carrier;
 	int fail_over_mac;
 	int updelay;
+	/*down接口的延迟时间*/
 	int downdelay;
 	int peer_notif_delay;
+	/*是否lacp fast方式*/
 	int lacp_fast;
 	unsigned int min_links;
 	int ad_select;
@@ -180,17 +185,22 @@ struct slave {
 	       should_notify:1, /* indicates whether the state changed */
 	       should_notify_link:1; /* indicates whether the link changed */
 	u8     duplex;
+	/*记录slave被加入之前对应的mtu*/
 	u32    original_mtu;
 	u32    link_failure_count;
 	u32    speed;
-	u16    queue_id;/*slave对应的bond的queue id*/
+	/*slave对应的bond的queue id*/
+	u16    queue_id;
+	/*记录slave被加入之前对应的hwaddr*/
 	u8     perm_hwaddr[MAX_ADDR_LEN];
+	/*slave的私有信息*/
 	struct ad_slave_info *ad_info;
 	struct tlb_slave_info tlb_info;
 #ifdef CONFIG_NET_POLL_CONTROLLER
 	struct netpoll *np;
 #endif
 	struct delayed_work notify_work;
+	/*此slave对应的kobj*/
 	struct kobject kobj;
 	struct rtnl_link_stats64 slave_stats;
 };
@@ -201,8 +211,10 @@ static inline struct slave *to_slave(struct kobject *kobj)
 }
 
 struct bond_up_slave {
+    /*arr数组大小，有多少slave*/
 	unsigned int	count;
 	struct rcu_head rcu;
+	/*指明slave数组*/
 	struct slave	*arr[];
 };
 

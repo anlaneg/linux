@@ -85,6 +85,7 @@ static const u8 null_mac_addr[ETH_ALEN + 2] __long_aligned = {
 static u16 ad_ticks_per_sec;
 static const int ad_delta_in_ticks = (AD_TIMER_INTERVAL * HZ) / 1000;
 
+/*lacp报文对应的组播mac*/
 static const u8 lacpdu_mcast_addr[ETH_ALEN + 2] __long_aligned =
 	MULTICAST_LACPDU_ADDR;
 
@@ -765,6 +766,7 @@ static struct aggregator *__get_active_agg(struct aggregator *aggregator)
  */
 static inline void __update_lacpdu_from_port(struct port *port)
 {
+    /*更新port->lacpdu消息，随后此lacpdu会被自port送出*/
 	struct lacpdu *lacpdu = &port->lacpdu;
 	const struct port_params *partner = &port->partner_oper;
 
@@ -819,6 +821,7 @@ static inline void __update_lacpdu_from_port(struct port *port)
  */
 static int ad_lacpdu_send(struct port *port)
 {
+    /*构造并自port对应的slave->dev发送出一个lacpdu*/
 	struct slave *slave = port->slave;
 	struct sk_buff *skb;
 	struct lacpdu_header *lacpdu_header;
@@ -831,14 +834,16 @@ static int ad_lacpdu_send(struct port *port)
 	atomic64_inc(&SLAVE_AD_INFO(slave)->stats.lacpdu_tx);
 	atomic64_inc(&BOND_AD_INFO(slave->bond).stats.lacpdu_tx);
 
+	/*报文需要自slave发出，故skb从属slave->dev*/
 	skb->dev = slave->dev;
 	skb_reset_mac_header(skb);
 	skb->network_header = skb->mac_header + ETH_HLEN;
-	skb->protocol = PKT_TYPE_LACPDU;
-	skb->priority = TC_PRIO_CONTROL;
+	skb->protocol = PKT_TYPE_LACPDU;/*指明为lacp报文*/
+	skb->priority = TC_PRIO_CONTROL;/*指明skb优先级，通过此优先级可控制送物理网络优先级*/
 
 	lacpdu_header = skb_put(skb, length);
 
+	/*填写目的mac,srcmac,ether_type*/
 	ether_addr_copy(lacpdu_header->hdr.h_dest, lacpdu_mcast_addr);
 	/* Note: source address is set to be the member's PERMANENT address,
 	 * because we use it to identify loopback lacpdus in receive.
@@ -846,8 +851,10 @@ static int ad_lacpdu_send(struct port *port)
 	ether_addr_copy(lacpdu_header->hdr.h_source, slave->perm_hwaddr);
 	lacpdu_header->hdr.h_proto = PKT_TYPE_LACPDU;
 
+	/*填写lacpdu到skb*/
 	lacpdu_header->lacpdu = port->lacpdu;
 
+	/*将报文送出*/
 	dev_queue_xmit(skb);
 
 	return 0;
@@ -1254,6 +1261,7 @@ static void ad_tx_machine(struct port *port)
 		if (port->ntt && (port->sm_vars & AD_PORT_LACP_ENABLED)) {
 			__update_lacpdu_from_port(port);
 
+			/*自port发送lacpdu,大于零时，则成功*/
 			if (ad_lacpdu_send(port) >= 0) {
 				slave_dbg(port->slave->bond->dev,
 					  port->slave->dev,
@@ -2101,6 +2109,7 @@ void bond_3ad_unbind_slave(struct slave *slave)
 	port->actor_oper_port_state &= ~LACP_STATE_DISTRIBUTING;
 	port->actor_oper_port_state &= ~LACP_STATE_AGGREGATION;
 	__update_lacpdu_from_port(port);
+	/*自此port向外发送一个lacpdu*/
 	ad_lacpdu_send(port);
 
 	/* check if this aggregator is occupied */
@@ -2291,6 +2300,7 @@ void bond_3ad_state_machine_handler(struct work_struct *work)
 
 	/* check if there are any slaves */
 	if (!bond_has_slaves(bond))
+	    /*bond没有成员，则退出*/
 		goto re_arm;
 
 	/* check if agg_select_timer timer after initialize is timed out */
@@ -2642,6 +2652,7 @@ int bond_3ad_get_active_agg_info(struct bonding *bond, struct ad_info *ad_info)
 	return ret;
 }
 
+/*bond收到lacp报文*/
 int bond_3ad_lacpdu_recv(const struct sk_buff *skb, struct bonding *bond,
 			 struct slave *slave)
 {

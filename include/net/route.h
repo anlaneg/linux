@@ -363,6 +363,7 @@ static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 	struct net *net = dev_net(dst->dev);
 
 	if (hoplimit == 0)
+	    /*路由中没有映射ttl,使用默认的ttl*/
 		hoplimit = net->ipv4.sysctl_ip_default_ttl;
 	return hoplimit;
 }

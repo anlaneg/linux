@@ -509,6 +509,7 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 		seq = read_seqbegin(&hh->hh_lock);
 		hh_len = READ_ONCE(hh->hh_len);
 		if (likely(hh_len <= HH_DATA_MOD)) {
+		    /*hh_len小于等于16情况，dstmac,srcmac,ethtype,*/
 			hh_alen = HH_DATA_MOD;
 
 			/* skb_push() would proceed silently if we have room for
@@ -521,6 +522,7 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 				       HH_DATA_MOD);
 			}
 		} else {
+		    /*将hh->hh_data填充到skb->data中*/
 			hh_alen = HH_DATA_ALIGN(hh_len);
 
 			if (likely(skb_headroom(skb) >= hh_alen)) {
@@ -531,10 +533,12 @@ static inline int neigh_hh_output(const struct hh_cache *hh, struct sk_buff *skb
 	} while (read_seqretry(&hh->hh_lock, seq));
 
 	if (WARN_ON_ONCE(skb_headroom(skb) < hh_alen)) {
+	    /*head空间不足以存放hh_alene,丢包*/
 		kfree_skb(skb);
 		return NET_XMIT_DROP;
 	}
 
+	//指向hh头部（跳hh_len长度)
 	__skb_push(skb, hh_len);
 	//直接发送报文
 	return dev_queue_xmit(skb);
@@ -549,7 +553,7 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb,
 	if ((n->nud_state & NUD_CONNECTED) && hh->hh_len && !skip_cache)
 		return neigh_hh_output(hh, skb);
 	else
-		//调用邻居表项的output进行处理（或缓存或丢弃）
+		//调用邻居表项的output进行处理（或缓存或丢弃），例如neigh_direct_output
 		return n->output(n, skb);
 }
 

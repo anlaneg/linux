@@ -33,10 +33,14 @@ enum nf_ip_hook_priorities {
 	NF_IP_PRI_CONNTRACK_DEFRAG = -400,//执行分片重组
 	NF_IP_PRI_RAW = -300,//执行raw点
 	NF_IP_PRI_SELINUX_FIRST = -225,
-	NF_IP_PRI_CONNTRACK = -200,//连接跟踪在此点创建(此时创建出来的不考虑nat情况，正反向一致）
-	NF_IP_PRI_MANGLE = -150,//执行mangle点
-	NF_IP_PRI_NAT_DST = -100,//dnat点（这里会因为nat修改连接跟踪）
-	NF_IP_PRI_FILTER = 0,//执行filter
+	//连接跟踪在此点创建(此时创建出来的不考虑nat情况，正反向一致）
+	NF_IP_PRI_CONNTRACK = -200,
+	//执行mangle点
+	NF_IP_PRI_MANGLE = -150,
+	//dnat点（这里会因为nat修改连接跟踪）
+	NF_IP_PRI_NAT_DST = -100,
+	//执行filter
+	NF_IP_PRI_FILTER = 0,
 	NF_IP_PRI_SECURITY = 50,
 	NF_IP_PRI_NAT_SRC = 100,//snat点
 	NF_IP_PRI_SELINUX_LAST = 225,
