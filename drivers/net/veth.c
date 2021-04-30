@@ -35,6 +35,7 @@
 #define VETH_XDP_HEADROOM	(XDP_PACKET_HEADROOM + NET_IP_ALIGN)
 
 #define VETH_XDP_TX_BULK_SIZE	16
+#define VETH_XDP_BATCH		16
 
 struct veth_stats {
 	u64	rx_drops;/*rx方向丢包数*/
@@ -308,8 +309,7 @@ static netdev_tx_t veth_xmit(struct sk_buff *skb, struct net_device *dev)
 		rq = &rcv_priv->rq[rxq];
 		/*如果此队列上有xdp程序，则需要采用xdp方式收包*/
 		rcv_xdp = rcu_access_pointer(rq->xdp_prog);
-		if (rcv_xdp)
-			skb_record_rx_queue(skb, rxq);
+		skb_record_rx_queue(skb, rxq);
 	}
 
 	skb_tx_timestamp(skb);
@@ -588,22 +588,13 @@ static int veth_xdp_tx(struct veth_rq *rq, struct xdp_buff *xdp,
 }
 
 /*veth xdp收到一个xdp_frame,进行处理，返回对应的skb*/
-static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
-					struct xdp_frame *frame,
-					struct veth_xdp_tx_bq *bq,
-					struct veth_stats *stats)
+static struct xdp_frame *veth_xdp_rcv_one(struct veth_rq *rq,
+					  struct xdp_frame *frame,
+					  struct veth_xdp_tx_bq *bq,
+					  struct veth_stats *stats)
 {
-    /*data前是一段headroom*/
-	void *hard_start = frame->data - frame->headroom;
-	int len = frame->len, delta = 0;
 	struct xdp_frame orig_frame;
 	struct bpf_prog *xdp_prog;
-	unsigned int headroom;
-	struct sk_buff *skb;
-
-	/* bpf_xdp_adjust_head() assures BPF cannot access xdp_frame area */
-	/*headroom前是xdp_frame结构体*/
-	hard_start -= sizeof(struct xdp_frame);
 
 	rcu_read_lock();
 	/*取rx队列上的xdp程序*/
@@ -621,9 +612,9 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 
 		switch (act) {
 		case XDP_PASS:
-		    /*报文需要上送协议栈*/
-			delta = frame->data - xdp.data;/*报文起始地址变化量*/
-			len = xdp.data_end - xdp.data;/*报文长度变化量*/
+		    	/*报文需要上送协议栈*/
+			if (xdp_update_frame_from_buff(&xdp, frame))
+				goto err_xdp;
 			break;
 		case XDP_TX:
 		    //收到报文需要走tx方向，这里将报文挂在bq队列上，等待发送。
@@ -665,26 +656,43 @@ static struct sk_buff *veth_xdp_rcv_one(struct veth_rq *rq,
 	}
 	rcu_read_unlock();
 
-	//构造对应的skb,使其上送协议栈
-	/*buffer headroom长度*/
-	headroom = sizeof(struct xdp_frame) + frame->headroom - delta;
-	skb = veth_build_skb(hard_start/*buffer首地址*/, headroom, len, frame->frame_sz);
-	if (!skb) {
-		xdp_return_frame(frame);
-		stats->rx_drops++;
-		goto err;
-	}
-
-	xdp_release_frame(frame);
-	xdp_scrub_frame(frame);
-	skb->protocol = eth_type_trans(skb, rq->dev);
-err:
-	return skb;
+	return frame;
 err_xdp:
 	rcu_read_unlock();
 	xdp_return_frame(frame);
 xdp_xmit:
 	return NULL;
+}
+
+/* frames array contains VETH_XDP_BATCH at most */
+static void veth_xdp_rcv_bulk_skb(struct veth_rq *rq, void **frames,
+				  int n_xdpf, struct veth_xdp_tx_bq *bq,
+				  struct veth_stats *stats)
+{
+	void *skbs[VETH_XDP_BATCH];
+	int i;
+
+	if (xdp_alloc_skb_bulk(skbs, n_xdpf,
+			       GFP_ATOMIC | __GFP_ZERO) < 0) {
+		for (i = 0; i < n_xdpf; i++)
+			xdp_return_frame(frames[i]);
+		stats->rx_drops += n_xdpf;
+
+		return;
+	}
+
+	for (i = 0; i < n_xdpf; i++) {
+		struct sk_buff *skb = skbs[i];
+
+		skb = __xdp_build_skb_from_frame(frames[i], skb,
+						 rq->dev);
+		if (!skb) {
+			xdp_return_frame(frames[i]);
+			stats->rx_drops++;
+			continue;
+		}
+		napi_gro_receive(&rq->xdp_napi, skb);
+	}
 }
 
 /*veth xdp收到一个skb报文*/
@@ -693,7 +701,7 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 					struct veth_xdp_tx_bq *bq,
 					struct veth_stats *stats)
 {
-	u32 pktlen, headroom, act, metalen;
+	u32 pktlen, headroom, act, metalen, frame_sz;
 	void *orig_data, *orig_data_end;
 	struct bpf_prog *xdp_prog;
 	int mac_len, delta, off;
@@ -761,16 +769,11 @@ static struct sk_buff *veth_xdp_rcv_skb(struct veth_rq *rq,
 		skb = nskb;
 	}
 
-	/*构造xdp buffer*/
-	xdp.data_hard_start = skb->head;
-	xdp.data = skb_mac_header(skb);
-	xdp.data_end = xdp.data + pktlen;
-	xdp.data_meta = xdp.data;
-	xdp.rxq = &rq->xdp_rxq;
-
 	/* SKB "head" area always have tailroom for skb_shared_info */
-	xdp.frame_sz = (void *)skb_end_pointer(skb) - xdp.data_hard_start;
-	xdp.frame_sz += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	frame_sz = skb_end_pointer(skb) - skb->head;
+	frame_sz += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	xdp_init_buff(&xdp, frame_sz, &rq->xdp_rxq);
+	xdp_prepare_buff(&xdp, skb->head, skb->mac_header, pktlen, true);
 
 	/*记录报文原始的起始位置及终止位置*/
 	orig_data = xdp.data;
@@ -865,38 +868,50 @@ static int veth_xdp_rcv(struct veth_rq *rq, int budget,
 			struct veth_xdp_tx_bq *bq,
 			struct veth_stats *stats)
 {
-	int i, done = 0;
+	int i, done = 0, n_xdpf = 0;
+	void *xdpf[VETH_XDP_BATCH];
 
 	for (i = 0; i < budget; i++) {
 	    /*自xdp ring中出队一个报文*/
 		void *ptr = __ptr_ring_consume(&rq->xdp_ring);
-		struct sk_buff *skb;
 
 		if (!ptr)
 		    /*队列已为空*/
 			break;
 
 		if (veth_is_xdp_frame(ptr)) {
-		    //ring中出的是xdp格式报文
+			/* ndo_xdp_xmit */
+		    	//ring中出的是xdp格式报文
 			struct xdp_frame *frame = veth_ptr_to_xdp(ptr);
 
 			stats->xdp_bytes += frame->len;
 			/*veth xdp收到一个xdp frame*/
-			skb = veth_xdp_rcv_one(rq, frame, bq, stats);
+			frame = veth_xdp_rcv_one(rq, frame, bq, stats);
+			if (frame) {
+				/* XDP_PASS */
+				xdpf[n_xdpf++] = frame;
+				if (n_xdpf == VETH_XDP_BATCH) {
+					veth_xdp_rcv_bulk_skb(rq, xdpf, n_xdpf,
+							      bq, stats);
+					n_xdpf = 0;
+				}
+			}
 		} else {
-		    //ring中出的是普通skb报文
-			skb = ptr;
+			/* ndo_start_xmit */
+		    	//ring中出的是普通skb报文
+			struct sk_buff *skb = ptr;
+
 			stats->xdp_bytes += skb->len;
 			/*veth xdp收到一个skb*/
 			skb = veth_xdp_rcv_skb(rq, skb, bq, stats);
+			if (skb)
+				napi_gro_receive(&rq->xdp_napi, skb);
 		}
-
-		/*经xdp处理，此报文不为NULL，仍需要送协议栈*/
-		if (skb)
-			napi_gro_receive(&rq->xdp_napi, skb);
-
 		done++;
 	}
+
+	if (n_xdpf)
+		veth_xdp_rcv_bulk_skb(rq, xdpf, n_xdpf, bq, stats);
 
 	u64_stats_update_begin(&rq->stats.syncp);
 	rq->stats.vs.xdp_redirect += stats->xdp_redirect;

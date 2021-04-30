@@ -108,17 +108,6 @@ static inline __be16 gre_tnl_flags_to_gre_flags(__be16 tflags)
 	return flags;
 }
 
-static inline __sum16 gre_checksum(struct sk_buff *skb)
-{
-	__wsum csum;
-
-	if (skb->ip_summed == CHECKSUM_PARTIAL)
-		csum = lco_csum(skb);
-	else
-		csum = skb_checksum(skb, 0, skb->len, 0);
-	return csum_fold(csum);
-}
-
 //构造gre头部
 static inline void gre_build_header(struct sk_buff *skb, int hdr_len,
 				    __be16 flags, __be16 proto,
@@ -149,7 +138,13 @@ static inline void gre_build_header(struct sk_buff *skb, int hdr_len,
 		    !(skb_shinfo(skb)->gso_type &
 		      (SKB_GSO_GRE | SKB_GSO_GRE_CSUM))) {
 			*ptr = 0;
-			*(__sum16 *)ptr = gre_checksum(skb);
+			if (skb->ip_summed == CHECKSUM_PARTIAL) {
+				*(__sum16 *)ptr = csum_fold(lco_csum(skb));
+			} else {
+				skb->ip_summed = CHECKSUM_PARTIAL;
+				skb->csum_start = skb_transport_header(skb) - skb->head;
+				skb->csum_offset = sizeof(*greh);
+			}
 		}
 	}
 }

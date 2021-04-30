@@ -114,6 +114,10 @@ struct flow_offload_tuple {
 	u8				l3proto;
 	//四层协议类型（例如tcp,icmp,udp等）
 	u8				l4proto;
+
+	/* All members above are keys for lookups, see flow_offload_hash(). */
+	struct { }			__hash;
+
 	//当前方向
 	u8				dir;
 

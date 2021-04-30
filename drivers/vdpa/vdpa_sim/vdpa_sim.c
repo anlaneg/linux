@@ -237,7 +237,7 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr)
 
 	/*创建vdpasim设备*/
 	vdpasim = vdpa_alloc_device(struct vdpasim, vdpa, NULL, ops,
-				    dev_attr->nvqs);
+				    dev_attr->name);
 	if (!vdpasim)
 		goto err_alloc;
 
@@ -252,6 +252,7 @@ struct vdpasim *vdpasim_create(struct vdpasim_dev_attr *dev_attr)
 	if (dma_set_mask_and_coherent(dev, DMA_BIT_MASK(64)))
 		goto err_iommu;
 	set_dma_ops(dev, &vdpasim_dma_ops);
+	vdpasim->vdpa.mdev = dev_attr->mgmt_dev;
 
 	/*申请config空间*/
 	vdpasim->config = kzalloc(dev_attr->config_size, GFP_KERNEL);

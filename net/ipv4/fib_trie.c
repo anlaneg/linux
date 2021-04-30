@@ -1067,6 +1067,8 @@ fib_find_matching_alias(struct net *net, const struct fib_rt_info *fri)
 void fib_alias_hw_flags_set(struct net *net, const struct fib_rt_info *fri)
 {
 	struct fib_alias *fa_match;
+	struct sk_buff *skb;
+	int err;
 
 	rcu_read_lock();
 
@@ -1074,9 +1076,42 @@ void fib_alias_hw_flags_set(struct net *net, const struct fib_rt_info *fri)
 	if (!fa_match)
 		goto out;
 
+	if (fa_match->offload == fri->offload && fa_match->trap == fri->trap &&
+	    fa_match->offload_failed == fri->offload_failed)
+		goto out;
+
 	fa_match->offload = fri->offload;
 	fa_match->trap = fri->trap;
 
+	/* 2 means send notifications only if offload_failed was changed. */
+	if (net->ipv4.sysctl_fib_notify_on_flag_change == 2 &&
+	    fa_match->offload_failed == fri->offload_failed)
+		goto out;
+
+	fa_match->offload_failed = fri->offload_failed;
+
+	if (!net->ipv4.sysctl_fib_notify_on_flag_change)
+		goto out;
+
+	skb = nlmsg_new(fib_nlmsg_size(fa_match->fa_info), GFP_ATOMIC);
+	if (!skb) {
+		err = -ENOBUFS;
+		goto errout;
+	}
+
+	err = fib_dump_info(skb, 0, 0, RTM_NEWROUTE, fri, 0);
+	if (err < 0) {
+		/* -EMSGSIZE implies BUG in fib_nlmsg_size() */
+		WARN_ON(err == -EMSGSIZE);
+		kfree_skb(skb);
+		goto errout;
+	}
+
+	rtnl_notify(skb, net, 0, RTNLGRP_IPV4_ROUTE, NULL, GFP_ATOMIC);
+	goto out;
+
+errout:
+	rtnl_set_sk_err(net, RTNLGRP_IPV4_ROUTE, err);
 out:
 	rcu_read_unlock();
 }
@@ -1310,6 +1345,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 			new_fa->fa_default = -1;
 			new_fa->offload = 0;
 			new_fa->trap = 0;
+			new_fa->offload_failed = 0;
 
 			hlist_replace_rcu(&fa->fa_list, &new_fa->fa_list);
 
@@ -1375,6 +1411,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	new_fa->fa_default = -1;
 	new_fa->offload = 0;
 	new_fa->trap = 0;
+	new_fa->offload_failed = 0;
 
 	/* Insert new entry to the list. */
 	err = fib_insert_alias(t/*要加入的trie*/, tp/*父节点*/, l/*父节点下的叶子节点*/, new_fa/*新的fa*/, fa, key);
@@ -2320,6 +2357,7 @@ static int fn_trie_dump_leaf(struct key_vector *l, struct fib_table *tb,
 				fri.type = fa->fa_type;
 				fri.offload = fa->offload;
 				fri.trap = fa->trap;
+				fri.offload_failed = fa->offload_failed;
 				err = fib_dump_info(skb,
 						    NETLINK_CB(cb->skb).portid,
 						    cb->nlh->nlmsg_seq,

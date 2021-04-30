@@ -186,6 +186,7 @@ static void tcf_ct_flow_table_add_action_meta(struct nf_conn *ct,
 					     IP_CT_ESTABLISHED_REPLY;
 	/* aligns with the CT reference on the SKB nf_ct_set */
 	entry->ct_metadata.cookie = (unsigned long)ct | ctinfo;
+	entry->ct_metadata.orig_dir = dir == IP_CT_DIR_ORIGINAL;
 
 	/*填充ct的labels*/
 	act_ct_labels = entry->ct_metadata.labels;
@@ -1028,6 +1029,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	tcf_lastuse_update(&c->tcf_tm);
 
 	if (clear) {
+		qdisc_skb_cb(skb)->post_ct = false;
 		//如果需要清除ct,则将skb中的ct清除掉
 		ct = nf_ct_get(skb, &ctinfo);
 		if (ct) {
@@ -1037,7 +1039,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		}
 
 		/*此时为untracked标记*/
-		goto out;
+		goto out_clear;
 	}
 
 	//目前仅支持对ipv4,ipv6进行ct创建
@@ -1132,7 +1134,9 @@ out_push:
 	skb_push_rcsum(skb, nh_ofs);
 
 out:
-    /*更新报文统计计数及字节数*/
+	qdisc_skb_cb(skb)->post_ct = true;
+out_clear:
+    	/*更新报文统计计数及字节数*/
 	tcf_action_update_bstats(&c->common, skb);
 	if (defrag)
 		qdisc_skb_cb(skb)->pkt_len = skb->len;

@@ -106,60 +106,63 @@ xt_rateest_tg(struct sk_buff *skb, const struct xt_action_param *par)
 
 static int xt_rateest_tg_checkentry(const struct xt_tgchk_param *par)
 {
-    struct xt_rateest_net *xn = net_generic(par->net, xt_rateest_id);
-    struct xt_rateest_target_info *info = par->targinfo;
-    struct xt_rateest *est;
-    struct {
-        struct nlattr       opt;
-        struct gnet_estimator   est;
-    } cfg;
-    int ret;
+	struct xt_rateest_net *xn = net_generic(par->net, xt_rateest_id);
+	struct xt_rateest_target_info *info = par->targinfo;
+	struct xt_rateest *est;
+	struct {
+		struct nlattr		opt;
+		struct gnet_estimator	est;
+	} cfg;
+	int ret;
 
-    net_get_random_once(&jhash_rnd, sizeof(jhash_rnd));
+	if (strnlen(info->name, sizeof(est->name)) >= sizeof(est->name))
+		return -ENAMETOOLONG;
 
-    mutex_lock(&xn->hash_lock);
-    est = __xt_rateest_lookup(xn, info->name);
-    if (est) {
-        mutex_unlock(&xn->hash_lock);
-        /*
-         * If estimator parameters are specified, they must match the
-         * existing estimator.
-         */
-        if ((!info->interval && !info->ewma_log) ||
-            (info->interval != est->params.interval ||
-             info->ewma_log != est->params.ewma_log)) {
-            xt_rateest_put(par->net, est);
-            return -EINVAL;
-        }
-        info->est = est;
-        return 0;
-    }
+	net_get_random_once(&jhash_rnd, sizeof(jhash_rnd));
 
-    ret = -ENOMEM;
-    est = kzalloc(sizeof(*est), GFP_KERNEL);
-    if (!est)
-        goto err1;
+	mutex_lock(&xn->hash_lock);
+	est = __xt_rateest_lookup(xn, info->name);
+	if (est) {
+		mutex_unlock(&xn->hash_lock);
+		/*
+		 * If estimator parameters are specified, they must match the
+		 * existing estimator.
+		 */
+		if ((!info->interval && !info->ewma_log) ||
+		    (info->interval != est->params.interval ||
+		     info->ewma_log != est->params.ewma_log)) {
+			xt_rateest_put(par->net, est);
+			return -EINVAL;
+		}
+		info->est = est;
+		return 0;
+	}
 
-    strlcpy(est->name, info->name, sizeof(est->name));
-    spin_lock_init(&est->lock);
-    est->refcnt     = 1;
-    est->params.interval    = info->interval;
-    est->params.ewma_log    = info->ewma_log;
+	ret = -ENOMEM;
+	est = kzalloc(sizeof(*est), GFP_KERNEL);
+	if (!est)
+		goto err1;
 
-    cfg.opt.nla_len     = nla_attr_size(sizeof(cfg.est));
-    cfg.opt.nla_type    = TCA_STATS_RATE_EST;
-    cfg.est.interval    = info->interval;
-    cfg.est.ewma_log    = info->ewma_log;
+	strlcpy(est->name, info->name, sizeof(est->name));
+	spin_lock_init(&est->lock);
+	est->refcnt		= 1;
+	est->params.interval	= info->interval;
+	est->params.ewma_log	= info->ewma_log;
 
-    ret = gen_new_estimator(&est->bstats, NULL, &est->rate_est,
-                &est->lock, NULL, &cfg.opt);
-    if (ret < 0)
-        goto err2;
+	cfg.opt.nla_len		= nla_attr_size(sizeof(cfg.est));
+	cfg.opt.nla_type	= TCA_STATS_RATE_EST;
+	cfg.est.interval	= info->interval;
+	cfg.est.ewma_log	= info->ewma_log;
 
-    info->est = est;
-    xt_rateest_hash_insert(xn, est);
-    mutex_unlock(&xn->hash_lock);
-    return 0;
+	ret = gen_new_estimator(&est->bstats, NULL, &est->rate_est,
+				&est->lock, NULL, &cfg.opt);
+	if (ret < 0)
+		goto err2;
+
+	info->est = est;
+	xt_rateest_hash_insert(xn, est);
+	mutex_unlock(&xn->hash_lock);
+	return 0;
 
 err2:
     kfree(est);

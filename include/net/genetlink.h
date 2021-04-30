@@ -15,6 +15,7 @@
 struct genl_multicast_group {
     /*组播组名称*/
 	char			name[GENL_NAMSIZ];
+	u8			flags;
 };
 
 struct genl_ops;

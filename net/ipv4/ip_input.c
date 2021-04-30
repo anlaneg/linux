@@ -269,6 +269,7 @@ int ip_local_deliver(struct sk_buff *skb)
 		       net, NULL, skb, skb->dev, NULL,
 		       ip_local_deliver_finish);
 }
+EXPORT_SYMBOL(ip_local_deliver);
 
 //ip层选项处理
 static inline bool ip_rcv_options(struct sk_buff *skb, struct net_device *dev)

@@ -34,6 +34,7 @@ static inline int rtnl_msg_family(const struct nlmsghdr *nlh)
  *
  *	@list: Used internally
  *	@kind: Identifier
+ *	@netns_refund: Physical device, move to init_net on netns exit
  *	@maxtype: Highest device specific netlink attribute number
  *	@policy: Netlink policy for device specific attribute validation
  *	@validate: Optional validation function for netlink/changelink parameters
@@ -68,6 +69,7 @@ struct rtnl_link_ops {
 	//link初创建时，将通过此函数完成新建link的初始化工作
 	void			(*setup)(struct net_device *dev);
 
+	bool			netns_refund;
 	//link独有IFLA_INFO_DATA型数据的netlink type
 	unsigned int		maxtype;
 	//各link中netlink type独有的数据类型，用于link数据解析
@@ -159,8 +161,8 @@ struct rtnl_af_ops {
 						    const struct nlattr *attr);
 	//针对dev设置此af独有的属性
 	int			(*set_link_af)(struct net_device *dev,
-					       const struct nlattr *attr);
-
+					       const struct nlattr *attr,
+					       struct netlink_ext_ack *extack);
 	int			(*fill_stats_af)(struct sk_buff *skb,
 						 const struct net_device *dev);
 	size_t			(*get_stats_af_size)(const struct net_device *dev);

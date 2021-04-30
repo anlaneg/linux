@@ -168,7 +168,6 @@ struct pci_bus *pci_find_next_bus(const struct pci_bus *from)
 	struct list_head *n;
 	struct pci_bus *b = NULL;
 
-	WARN_ON(in_interrupt());
 	down_read(&pci_bus_sem);
 	n = from ? from->node.next : pci_root_buses.next;
 	if (n != &pci_root_buses)
@@ -196,7 +195,6 @@ struct pci_dev *pci_get_slot(struct pci_bus *bus, unsigned int devfn)
 {
 	struct pci_dev *dev;
 
-	WARN_ON(in_interrupt());
 	down_read(&pci_bus_sem);
 
     //遍历bus上的所有devices，如果有与devfn相同的，则返回
@@ -275,7 +273,6 @@ static struct pci_dev *pci_get_dev_by_id(const struct pci_device_id *id,
 	struct device *dev_start = NULL;
 	struct pci_dev *pdev = NULL;
 
-	WARN_ON(in_interrupt());
 	if (from)
 		dev_start = &from->dev;
 	dev = bus_find_device(&pci_bus_type, dev_start, (void *)id,
@@ -382,7 +379,6 @@ int pci_dev_present(const struct pci_device_id *ids)
 {
 	struct pci_dev *found = NULL;
 
-	WARN_ON(in_interrupt());
 	while (ids->vendor || ids->subvendor || ids->class_mask) {
 		found = pci_get_dev_by_id(ids, NULL);
 		if (found) {
