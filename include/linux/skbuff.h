@@ -298,7 +298,7 @@ struct sk_buff_head {
 	struct sk_buff	*prev;
 
 	__u32		qlen;//队列长度
-	spinlock_t	lock;
+	spinlock_t	lock;/*保存此队列*/
 };
 
 struct sk_buff;
@@ -855,7 +855,7 @@ struct sk_buff {
 	__u8			offload_l3_fwd_mark:1;
 #endif
 #ifdef CONFIG_NET_CLS_ACT
-	//是否跳过对此报文的分类
+	//此报文是否跳过classify处理
 	__u8			tc_skip_classify:1;
 	//tc处于ingress位置
 	__u8			tc_at_ingress:1;
@@ -1882,6 +1882,7 @@ static inline struct sk_buff *skb_peek_tail(const struct sk_buff_head *list_)
  */
 static inline __u32 skb_queue_len(const struct sk_buff_head *list_)
 {
+    /*取了列长度*/
 	return list_->qlen;
 }
 

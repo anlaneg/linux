@@ -6,7 +6,7 @@
 #include <linux/export.h>
 #include "vlan.h"
 
-//vlan报文处理
+//vlan报文处理（已对vlan进行了剥离）
 bool vlan_do_receive(struct sk_buff **skbp)
 {
 	struct sk_buff *skb = *skbp;
@@ -15,24 +15,26 @@ bool vlan_do_receive(struct sk_buff **skbp)
 	struct net_device *vlan_dev;
 	struct vlan_pcpu_stats *rx_stats;
 
-	//找vlan对应的设备
+	//在skb->dev上找vlan对应的设备（关心vlan_proto)
 	vlan_dev = vlan_find_dev(skb->dev, vlan_proto, vlan_id);
 	if (!vlan_dev)
-		//没有设备处理对应此vlan
+		//没有设备处理对应此vlan设备
 		return false;
 
 	skb = *skbp = skb_share_check(skb, GFP_ATOMIC);
 	if (unlikely(!skb))
 		return false;
 
-	//接口未up
+	//vlan设备接口未up，丢包
 	if (unlikely(!(vlan_dev->flags & IFF_UP))) {
 		kfree_skb(skb);
 		*skbp = NULL;
 		return false;
 	}
 
-	skb->dev = vlan_dev;//更改为对应的vlan设备（这一句实际上就完成了vlan的转发）
+	//更改为对应的vlan设备（这一句实际上就完成了vlan的转发）
+	skb->dev = vlan_dev;
+
 	//刚换了设备，重新看一下，是否是发给自已的了？
 	if (unlikely(skb->pkt_type == PACKET_OTHERHOST)) {
 		/* Our lower layer thinks this is not local, let's make sure.

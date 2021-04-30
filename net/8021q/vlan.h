@@ -40,6 +40,7 @@ struct vlan_info {
 	struct rcu_head		rcu;
 };
 
+/*按vlan协议映射index*/
 static inline int vlan_proto_idx(__be16 proto)
 {
 	switch (proto) {
@@ -53,6 +54,7 @@ static inline int vlan_proto_idx(__be16 proto)
 	}
 }
 
+/*按vlan_id及protocol index在表vg中查找net_device*/
 static inline struct net_device *__vlan_group_get_device(struct vlan_group *vg,
 							 unsigned int pidx,
 							 u16 vlan_id)
@@ -64,6 +66,7 @@ static inline struct net_device *__vlan_group_get_device(struct vlan_group *vg,
 	return array ? array[vlan_id % VLAN_GROUP_ARRAY_PART_LEN] : NULL;
 }
 
+/*依据vlan_proto,vlan_id查找其对应的net_device*/
 static inline struct net_device *vlan_group_get_device(struct vlan_group *vg,
 						       __be16 vlan_proto,
 						       u16 vlan_id)
@@ -93,7 +96,7 @@ static inline void vlan_group_set_device(struct vlan_group *vg,
 }
 
 /* Must be invoked with rcu_read_lock or with RTNL. */
-//获取real_dev设备上是注册的vlan_id对应的网络子设备
+//获取real_dev设备上是注册的vlan_id对应的vlan设备
 static inline struct net_device *vlan_find_dev(struct net_device *real_dev,
 					       __be16 vlan_proto, u16 vlan_id)
 {

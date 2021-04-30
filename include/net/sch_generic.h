@@ -747,6 +747,7 @@ static inline bool skb_at_tc_ingress(const struct sk_buff *skb)
 #endif
 }
 
+/*检查此skb是否需要跳过classify*/
 static inline bool skb_skip_tc_classify(struct sk_buff *skb)
 {
 #ifdef CONFIG_NET_CLS_ACT

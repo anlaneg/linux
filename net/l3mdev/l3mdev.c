@@ -15,8 +15,10 @@ struct l3mdev_handler {
 	lookup_by_table_id_t dev_lookup;
 };
 
+/*容许每种l3mdev有一个独立的l3mdev_handler*/
 static struct l3mdev_handler l3mdev_handlers[L3MDEV_TYPE_MAX + 1];
 
+/*type有效范围检查*/
 static int l3mdev_check_type(enum l3mdev_type l3type)
 {
 	if (l3type <= L3MDEV_TYPE_UNSPEC || l3type > L3MDEV_TYPE_MAX)
@@ -39,11 +41,13 @@ int l3mdev_table_lookup_register(enum l3mdev_type l3type,
 
 	spin_lock(&l3mdev_lock);
 
+	/*此类型已有lookup回调，报错*/
 	if (hdlr->dev_lookup) {
 		res = -EBUSY;
 		goto unlock;
 	}
 
+	/*注册lookup回调*/
 	hdlr->dev_lookup = fn;
 	res = 0;
 

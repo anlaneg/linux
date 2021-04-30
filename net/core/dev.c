@@ -2182,6 +2182,7 @@ static int call_netdevice_notifiers_mtu(unsigned long val,
 }
 
 #ifdef CONFIG_NET_INGRESS
+/*指明是否需要进行ingress方向逻辑处理*/
 static DEFINE_STATIC_KEY_FALSE(ingress_needed_key);
 
 void net_inc_ingress_queue(void)
@@ -4458,6 +4459,7 @@ EXPORT_SYMBOL(rps_sock_flow_table);
 u32 rps_cpu_mask __read_mostly;/*系统所有cpu掩码*/
 EXPORT_SYMBOL(rps_cpu_mask);
 
+/*标示rps功能是否开启*/
 struct static_key_false rps_needed __read_mostly;
 EXPORT_SYMBOL(rps_needed);
 struct static_key_false rfs_needed __read_mostly;
@@ -4531,7 +4533,7 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	u32 hash;
 
 	if (skb_rx_queue_recorded(skb)) {
-		/*skb中记录了rx queue的index,故取对应的rxqueue，并自此队列找对应rx*/
+		/*skb中已记录了rx queue的index,故这里直接取对应的rxqueue*/
 		u16 index = skb_get_rx_queue(skb);
 
 		if (unlikely(index >= dev->real_num_rx_queues)) {
@@ -4563,9 +4565,11 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 	    /*报文hash为0，直接done*/
 		goto done;
 
-	/*当一个socket达到稳定连接后，kernel会将其对应的skb->hash及其所处的cpu记录在rps_sock_flow_table中*/
+	/*当一个socket达到稳定连接后，kernel会将其对应的skb->hash及其所处的cpu
+	 * 记录在rps_sock_flow_table中*/
 	sock_flow_table = rcu_dereference(rps_sock_flow_table);
 	if (flow_table && sock_flow_table) {
+	    /*配置了rps_flow_table，且rps_sock_floww_table存在，则尝试查询*/
 		struct rps_dev_flow *rflow;
 		u32 next_cpu;
 		u32 ident;
@@ -4574,7 +4578,8 @@ static int get_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 		ident = sock_flow_table->ents[hash & sock_flow_table->mask];
 		if ((ident ^ hash) & ~rps_cpu_mask)
 		    /*
-		     * 由于ents中保存的是skb->hash(部分）+cpuid,故排除掉cpuid的影响，如果非0，说明此skb->hash未记录
+		     * 由于ents中保存的是skb->hash(部分）+cpuid,故排除掉cpuid的影响，
+		     * 如果非0，说明此skb->hash未记录
 		     * 跳出flow维护过程，直接通过map来映射
 		     */
 			goto try_rps;
@@ -4622,7 +4627,7 @@ try_rps:
 		/*有map,通过skb上的hashcode计算采用哪个cpu执行传递*/
 		tcpu = map->cpus[reciprocal_scale(hash, map->len)];
 		if (cpu_online(tcpu)) {
-		    /*cpu在线，完成cpu选中*/
+		    /*cpu必须在线，完成cpu选中*/
 			cpu = tcpu;
 			goto done;
 		}
@@ -4719,6 +4724,7 @@ static bool skb_flow_limit(struct sk_buff *skb, unsigned int qlen)
 	unsigned int old_flow, new_flow;
 
 	if (qlen < (netdev_max_backlog >> 1))
+	    /*qlen不足netdev_max_backlog的一半时，退出*/
 		return false;
 
 	sd = this_cpu_ptr(&softnet_data);
@@ -4726,11 +4732,14 @@ static bool skb_flow_limit(struct sk_buff *skb, unsigned int qlen)
 	rcu_read_lock();
 	fl = rcu_dereference(sd->flow_limit);
 	if (fl) {
-	    /*确定桶索引*/
+	    /*依据skb->hash,确定其在flow-limit表上对应的桶索引*/
 		new_flow = skb_get_hash(skb) & (fl->num_buckets - 1);
+
+		/*通过fl->history_head保存old_flow，记录new_flow*/
 		old_flow = fl->history[fl->history_head];
 		fl->history[fl->history_head] = new_flow;
 
+		/*增加history_head*/
 		fl->history_head++;
 		fl->history_head &= FLOW_LIMIT_HISTORY - 1;
 
@@ -4764,17 +4773,19 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 	unsigned long flags;
 	unsigned int qlen;
 
+	/*取cpu对应的sd*/
 	sd = &per_cpu(softnet_data, cpu);
 
 	local_irq_save(flags);
 
+	/*准备操作sd上的input_pkt_queue,其与自已可能不是一个cpu,故需要加锁*/
 	rps_lock(sd);
-	//如果skb->dev未在运行状态，则丢包
+
+	//如果skb->dev未在running状态，则丢包
 	if (!netif_running(skb->dev))
 		goto drop;
 
-	//检查是否可入队，如果无法入队，则丢包
-	//队列长度未超限，
+	//检查是否可入队，如果无法入队，则丢包,队列长度未超限，
 	qlen = skb_queue_len(&sd->input_pkt_queue);
 	if (qlen <= netdev_max_backlog && !skb_flow_limit(skb, qlen)) {
 		if (qlen) {
@@ -5398,12 +5409,13 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 	pt_prev = NULL;
 
 another_round:
-	//记录接口的ifindex
+	//记录skb入接口的ifindex
 	skb->skb_iif = skb->dev->ifindex;
 
 	__this_cpu_inc(softnet_data.processed);
 
 	if (static_branch_unlikely(&generic_xdp_needed_key)) {
+	    /*对generic_xdp功能的支持，驱动不支持，在此处处理*/
 		int ret2;
 
 		preempt_disable();
@@ -5412,6 +5424,7 @@ another_round:
 		preempt_enable();
 
 		if (ret2 != XDP_PASS) {
+		    /*如果返回值非xdp_pass,则丢包（即generic_xdp只支持xdp_pass返回值与drop)*/
 			ret = NET_RX_DROP;
 			goto out;
 		}
@@ -5419,7 +5432,7 @@ another_round:
 	}
 
 	if (eth_type_vlan(skb->protocol)) {
-		//vlan剥离
+		/*遇到vlan协议，执行vlan剥离*/
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
@@ -5430,6 +5443,7 @@ another_round:
 		goto skip_classify;
 
 	if (pfmemalloc)
+	    /*容许这种报文跳过ptype_all回调区配*/
 		goto skip_taps;
 
 	//ptype_all链上的ptype将处理收到的所有报文，这里遍历ptype_all链，
@@ -5443,7 +5457,7 @@ another_round:
 
 	//skb->dev->ptype_all链上的ptype将处理此设备收到的所有报文，这里
 	//遍历skb->dev上的ptype_all链，处理此报文（tcpdump通过此回调获得指定设备的报文）
-	//当此循环结束时，pt_prev指向的那个ptype的回调还没有指行
+	//注意：当此循环结束时，pt_prev指向的那个ptype的回调还没有执行
 	list_for_each_entry_rcu(ptype, &skb->dev->ptype_all, list) {
 		if (pt_prev)
 			ret = deliver_skb(skb, pt_prev, orig_dev);
@@ -5452,13 +5466,14 @@ another_round:
 
 skip_taps:
 #ifdef CONFIG_NET_INGRESS
-	//执行报文的ingress处理
+	//执行报文的ingress classfic处理
 	if (static_branch_unlikely(&ingress_needed_key)) {
 		bool another = false;
 
 		skb = sch_handle_ingress(skb, &pt_prev, &ret, orig_dev,
 					 &another);
 		if (another)
+		    /*变更了设备，退回再走一遍流程*/
 			goto another_round;
 		if (!skb)
 			goto out;
@@ -5471,8 +5486,10 @@ skip_taps:
 	skb_reset_redirect(skb);
 skip_classify:
 	if (pfmemalloc && !skb_pfmemalloc_protocol(skb))
+	    /*指明了pfmemalloc,但skb不是pfmemalloc关联的协议，则丢包*/
 		goto drop;
 
+	/*报文是有vlan标记的，进行vlan接收*/
 	if (skb_vlan_tag_present(skb)) {
 		//先处理前面未执行的packet_type回调
 		if (pt_prev) {
@@ -5499,14 +5516,17 @@ skip_classify:
 		//bond设备就注册有bond_handle_frame
 		switch (rx_handler(&skb)) {
 		case RX_HANDLER_CONSUMED:
-			ret = NET_RX_SUCCESS;//已成功处理，不再向上层传递，处理完成
+		    //已成功处理，不再向上层传递，处理完成
+			ret = NET_RX_SUCCESS;
 			goto out;
 		case RX_HANDLER_ANOTHER:
-			goto another_round;//已更换入口设备，重新执行
+		    //已更换入口设备，重新执行
+			goto another_round;
 		case RX_HANDLER_EXACT:
 			deliver_exact = true;
 		case RX_HANDLER_PASS:
-			break;//继续向下处理（此handle放通了此报文）,例如lldp报文
+		    //继续向下处理（此handle放通了此报文）,例如lldp报文
+			break;
 		default:
 			BUG();
 		}
@@ -5603,6 +5623,7 @@ out:
 
 static int __netif_receive_skb_one_core(struct sk_buff *skb, bool pfmemalloc)
 {
+    /*记录原始的skb->dev*/
 	struct net_device *orig_dev = skb->dev;
 	struct packet_type *pt_prev = NULL;
 	int ret;
@@ -5813,7 +5834,7 @@ static int generic_xdp_install(struct net_device *dev, struct netdev_bpf *xdp)
 	return ret;
 }
 
-//报文开始走协议栈处理
+//skb报文开始走协议栈处理
 static int netif_receive_skb_internal(struct sk_buff *skb)
 {
 	int ret;
@@ -5831,13 +5852,15 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 		int cpu = get_rps_cpu(skb->dev, skb, &rflow);
 
 		if (cpu >= 0) {
-		    //选出了相应的cpu,将此报文加入cpu对应的backlog,完成投递返回。
+		    //当前cpu不处理此报文，这里选出了相应的cpu,
+		    //将此报文加入cpu对应的backlog,并返回。
 			ret = enqueue_to_backlog(skb, cpu, &rflow->last_qtail);
 			rcu_read_unlock();
 			return ret;
 		}
 	}
 #endif
+	/*没有开启rps或者rps指明就是本cpu处理此报文，则继续向上传递*/
 	ret = __netif_receive_skb(skb);
 	rcu_read_unlock();
 	return ret;
@@ -5896,7 +5919,7 @@ static void netif_receive_skb_list_internal(struct list_head *head)
  *	NET_RX_SUCCESS: no congestion
  *	NET_RX_DROP: packet was dropped
  */
-//处理自网络层收到的报文
+//处理自网络收到的报文
 int netif_receive_skb(struct sk_buff *skb)
 {
 	int ret;

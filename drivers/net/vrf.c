@@ -116,7 +116,7 @@ struct net_vrf {
 	u32                     tb_id;
 
 	struct list_head	me_list;   /* entry in vrf_map_elem */
-	int			ifindex;
+	int			ifindex;/*对应的l3mdev netdev设备*/
 };
 
 struct pcpu_dstats {
@@ -518,6 +518,7 @@ static int vrf_ip_local_out(struct net *net, struct sock *sk,
 	return err;
 }
 
+/*vrf做v4地址出方向处理*/
 static netdev_tx_t vrf_process_v4_outbound(struct sk_buff *skb,
 					   struct net_device *vrf_dev)
 {
@@ -1127,15 +1128,18 @@ err:
 	return ret;
 }
 
+/*向vrf中添加slave设备*/
 static int vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 			 struct netlink_ext_ack *extack)
 {
 	if (netif_is_l3_master(port_dev)) {
+	    /*不能是l3master dev设备做slave*/
 		NL_SET_ERR_MSG(extack,
 			       "Can not enslave an L3 master device to a VRF");
 		return -EINVAL;
 	}
 
+	/*不能重复添加*/
 	if (netif_is_l3_slave(port_dev))
 		return -EINVAL;
 
@@ -1153,6 +1157,7 @@ static int do_vrf_del_slave(struct net_device *dev, struct net_device *port_dev)
 	return 0;
 }
 
+/*自vrf设备中移除slave设备*/
 static int vrf_del_slave(struct net_device *dev, struct net_device *port_dev)
 {
 	return do_vrf_del_slave(dev, port_dev);
@@ -1206,7 +1211,8 @@ out_nomem:
 static const struct net_device_ops vrf_netdev_ops = {
 	.ndo_init		= vrf_dev_init,
 	.ndo_uninit		= vrf_dev_uninit,
-	.ndo_start_xmit		= vrf_xmit,//vrf设备发包函数
+	//vrf设备发包函数
+	.ndo_start_xmit		= vrf_xmit,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_get_stats64	= vrf_get_stats64,
 	.ndo_add_slave		= vrf_add_slave,
@@ -1222,6 +1228,7 @@ static u32 vrf_fib_table(const struct net_device *dev)
 
 static int vrf_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
+    /*报文丢弃*/
 	kfree_skb(skb);
 	return 0;
 }
@@ -1432,10 +1439,12 @@ static struct sk_buff *vrf_ip6_rcv(struct net_device *vrf_dev,
 static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 				  struct sk_buff *skb)
 {
-	skb->dev = vrf_dev;//将设备更新为vrf设备
+    //将设备更新为vrf设备
+	skb->dev = vrf_dev;
 	skb->skb_iif = vrf_dev->ifindex;
 	IPCB(skb)->flags |= IPSKB_L3SLAVE;
 
+	/*不处理组播报文*/
 	if (ipv4_is_multicast(ip_hdr(skb)->daddr))
 		goto out;
 
@@ -1447,6 +1456,7 @@ static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 		goto out;
 	}
 
+	/*对vrf_dev进行计数*/
 	vrf_rx_stats(vrf_dev, skb->len);
 
 	if (!list_empty(&vrf_dev->ptype_all)) {
@@ -1460,6 +1470,7 @@ static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 		}
 	}
 
+	/*触发per routing钩子点*/
 	skb = vrf_rcv_nfhook(NFPROTO_IPV4, NF_INET_PRE_ROUTING, skb, vrf_dev);
 out:
 	return skb;
@@ -1734,6 +1745,7 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 	int err;
 
 	if (!data || !data[IFLA_VRF_TABLE]) {
+	    /*必须指定vrf table id*/
 		NL_SET_ERR_MSG(extack, "VRF table id is missing");
 		return -EINVAL;
 	}
@@ -1745,8 +1757,10 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 		return -EINVAL;
 	}
 
+	/*指明此设备为l3mdev master*/
 	dev->priv_flags |= IFF_L3MDEV_MASTER;
 
+	/*注册网络设备*/
 	err = register_netdevice(dev);
 	if (err)
 		goto out;
@@ -1768,12 +1782,14 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 
 	add_fib_rules = &nn_vrf->add_fib_rules;
 	if (*add_fib_rules) {
+	    /*如果netns需要添加fib rules,则在此处添加*/
 		err = vrf_add_fib_rules(dev);
 		if (err) {
 			vrf_map_unregister_dev(dev);
 			unregister_netdevice(dev);
 			goto out;
 		}
+		/*指明规则已添加*/
 		*add_fib_rules = false;
 	}
 
@@ -1829,9 +1845,12 @@ static struct rtnl_link_ops vrf_link_ops __read_mostly = {
 	.get_slave_size  = vrf_get_slave_size,
 	.fill_slave_info = vrf_fill_slave_info,
 
-	.newlink	= vrf_newlink,//vrf link创建
+	//vrf link创建
+	.newlink	= vrf_newlink,
+	//vrf link移除
 	.dellink	= vrf_dellink,
-	.setup		= vrf_setup,//vrf link初始化
+	//vrf link初始化
+	.setup		= vrf_setup,
 	.maxtype	= IFLA_VRF_MAX,
 };
 
@@ -1845,6 +1864,7 @@ static int vrf_device_event(struct notifier_block *unused,
 		struct net_device *vrf_dev;
 
 		if (!netif_is_l3_slave(dev))
+		    /*如果l3mdev slave设备在解注册，则l3mdev需要移除此slave*/
 			goto out;
 
 		vrf_dev = netdev_master_upper_dev_get(dev);
@@ -1854,6 +1874,7 @@ out:
 	return NOTIFY_DONE;
 }
 
+/*处理slave设备移除*/
 static struct notifier_block vrf_notifier_block __read_mostly = {
 	.notifier_call = vrf_device_event,
 };
@@ -1998,6 +2019,7 @@ static void vrf_netns_exit_sysctl(struct net *net)
 /* Initialize per network namespace state */
 static int __net_init vrf_netns_init(struct net *net)
 {
+    /*vrf模块对每个net namespace的初始化*/
 	struct netns_vrf *nn_vrf = net_generic(net, vrf_net_id);
 
 	nn_vrf->add_fib_rules = true;
@@ -2014,6 +2036,7 @@ static void __net_exit vrf_netns_exit(struct net *net)
 static struct pernet_operations vrf_net_ops __net_initdata = {
 	.init = vrf_netns_init,
 	.exit = vrf_netns_exit,
+	/*出参，分配的vrf netns私有数据域id*/
 	.id   = &vrf_net_id,
 	.size = sizeof(struct netns_vrf),
 };
@@ -2028,11 +2051,13 @@ static int __init vrf_init_module(void)
 	if (rc < 0)
 		goto error;
 
+	/*注册l3mdev vrf类型设备的lookup回调*/
 	rc = l3mdev_table_lookup_register(L3MDEV_TYPE_VRF,
 					  vrf_ifindex_lookup_by_table_id);
 	if (rc < 0)
 		goto unreg_pernet;
 
+	/*注册vrf类型的link*/
 	rc = rtnl_link_register(&vrf_link_ops);
 	if (rc < 0)
 		goto table_lookup_unreg;

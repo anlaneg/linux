@@ -758,8 +758,9 @@ bool rps_may_expire_flow(struct net_device *dev, u16 rxq_index, u32 flow_id,
 /* This structure contains an instance of an RX queue. */
 struct netdev_rx_queue {
 #ifdef CONFIG_RPS
-    //指明此rx队列可接收的cpu map （来源于queueu/rx-%d/rps_cpus配置）
+    //指明可接收此rx队列的cpu map （来源于queueu/rx-%d/rps_cpus配置）
 	struct rps_map __rcu		*rps_map;
+	/*指明具体的一条flow由哪个cpu处理（来源于？？？）*/
 	struct rps_dev_flow_table __rcu	*rps_flow_table;
 #endif
 	struct kobject			kobj;
@@ -2039,7 +2040,8 @@ struct net_device {
 	/* Protocol-specific pointers */
 
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
-	struct vlan_info __rcu	*vlan_info;//用于记录vlan信息（设备首次添加vlan时申请空间）
+	//用于记录此设备上关联的vlan信息（设备首次添加vlan时申请空间）
+	struct vlan_info __rcu	*vlan_info;
 #endif
 #if IS_ENABLED(CONFIG_NET_DSA)
 	struct dsa_port		*dsa_ptr;
@@ -3307,7 +3309,7 @@ static inline int unregister_gifconf(unsigned int family)
 #define FLOW_LIMIT_HISTORY	(1 << 7)  /* must be ^2 and !overflow buckets */
 struct sd_flow_limit {
 	u64			count;
-	unsigned int		num_buckets;
+	unsigned int		num_buckets;/*桶数，flow的数量*/
 	unsigned int		history_head;
 	u16			history[FLOW_LIMIT_HISTORY];
 	u8			buckets[];
@@ -3324,7 +3326,7 @@ struct softnet_data {
 	struct sk_buff_head	process_queue;
 
 	/* stats */
-	unsigned int		processed;/*已处理的报文数目*/
+	unsigned int		processed;/*当前cpu已处理的报文数目*/
 	unsigned int		time_squeeze;/*收取超时或者满收取的次数*/
 	unsigned int		received_rps;
 #ifdef CONFIG_RPS
@@ -3356,8 +3358,10 @@ struct softnet_data {
 	unsigned int		cpu;
 	unsigned int		input_queue_tail;
 #endif
-	unsigned int		dropped;/*超过backlog被丢弃的数目*/
-	struct sk_buff_head	input_pkt_queue;//处理设备间转发
+	/*超过backlog被丢弃的数目*/
+	unsigned int		dropped;
+	//处理设备间转发，也接收其它cpu因rps等转交过来的报文
+	struct sk_buff_head	input_pkt_queue;
 	struct napi_struct	backlog;
 
 };

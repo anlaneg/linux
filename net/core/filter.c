@@ -2502,6 +2502,7 @@ int skb_do_redirect(struct sk_buff *skb)
 	if (unlikely(!dev))
 		goto out_drop;
 	if (flags & BPF_F_PEER) {
+	    /*通过dev->netdev_ops获取对端设备，并变更skb->dev*/
 		const struct net_device_ops *ops = dev->netdev_ops;
 
 		if (unlikely(!ops->ndo_get_peer_dev ||

@@ -6,7 +6,7 @@
 #include <linux/netdevice.h>
 
 #ifdef CONFIG_NETFILTER_INGRESS
-//检查ingress回调是否被激活
+//检查netfilter ingress回调是否被激活
 static inline bool nf_hook_ingress_active(const struct sk_buff *skb)
 {
 #ifdef CONFIG_JUMP_LABEL
@@ -19,6 +19,7 @@ static inline bool nf_hook_ingress_active(const struct sk_buff *skb)
 /* caller must hold rcu_read_lock */
 static inline int nf_hook_ingress(struct sk_buff *skb)
 {
+    /*netfilter ingress hook调用*/
 	struct nf_hook_entries *e = rcu_dereference(skb->dev->nf_hooks_ingress);
 	struct nf_hook_state state;
 	int ret;
