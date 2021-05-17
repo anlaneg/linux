@@ -36,6 +36,7 @@ static int udp_dump_one(struct udp_table *tbl,
 	struct net *net = sock_net(in_skb->sk);
 
 	rcu_read_lock();
+	/*查询req请求的udp socket*/
 	if (req->sdiag_family == AF_INET)
 		/* src and dst are swapped for historical reasons */
 		sk = __udp4_lib_lookup(net,
@@ -52,10 +53,12 @@ static int udp_dump_one(struct udp_table *tbl,
 				req->id.idiag_if, 0, tbl, NULL);
 #endif
 	if (sk && !refcount_inc_not_zero(&sk->sk_refcnt))
+		/*引用计数增加失败*/
 		sk = NULL;
 	rcu_read_unlock();
 	err = -ENOENT;
 	if (!sk)
+		/*查询socket不存在*/
 		goto out_nosk;
 
 	err = sock_diag_check_cookie(sk, req->id.idiag_cookie);
@@ -70,6 +73,7 @@ static int udp_dump_one(struct udp_table *tbl,
 	if (!rep)
 		goto out;
 
+	/*填充socket信息到netlink*/
 	err = inet_sk_diag_fill(sk, NULL, rep, cb, req, 0,
 				netlink_net_capable(in_skb, CAP_NET_ADMIN));
 	if (err < 0) {

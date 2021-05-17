@@ -552,6 +552,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		if (!tb[FRA_SRC] ||
 		    frh->src_len > (ops->addr_size * 8) ||
 		    nla_len(tb[FRA_SRC]) != ops->addr_size) {
+			/*FRA_SRC参数不合格,frh->src_len为bits长度*/
 			NL_SET_ERR_MSG(extack, "Invalid source address");
 			goto errout;
 	}
@@ -560,6 +561,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		if (!tb[FRA_DST] ||
 		    frh->dst_len > (ops->addr_size * 8) ||
 		    nla_len(tb[FRA_DST]) != ops->addr_size) {
+			/*FRA_DST参数不合格*/
 			NL_SET_ERR_MSG(extack, "Invalid dst address");
 			goto errout;
 	}
@@ -582,6 +584,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		nlrule->pref = fib_default_rule_pref(ops);
 	}
 
+	/*使用哪个路由协议*/
 	nlrule->proto = tb[FRA_PROTOCOL] ?
 		nla_get_u8(tb[FRA_PROTOCOL]) : RTPROT_UNSPEC;
 
@@ -633,12 +636,16 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	nlrule->action = frh->action;
 	nlrule->flags = frh->flags;
+	/*指明要关联的table*/
 	nlrule->table = frh_get_table(frh, tb);
+
+	/*要suppress的前缀长度*/
 	if (tb[FRA_SUPPRESS_PREFIXLEN])
 		nlrule->suppress_prefixlen = nla_get_u32(tb[FRA_SUPPRESS_PREFIXLEN]);
 	else
 		nlrule->suppress_prefixlen = -1;
 
+	/*要supress的ifgroup*/
 	if (tb[FRA_SUPPRESS_IFGROUP])
 		nlrule->suppress_ifgroup = nla_get_u32(tb[FRA_SUPPRESS_IFGROUP]);
 	else

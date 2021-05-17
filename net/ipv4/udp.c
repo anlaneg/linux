@@ -117,7 +117,7 @@
 #include <net/ipv6_stubs.h>
 #endif
 
-//记录udp协议的sockets
+//保存udp协议的sockets
 struct udp_table udp_table __read_mostly;
 EXPORT_SYMBOL(udp_table);
 
@@ -441,10 +441,11 @@ static struct sock *lookup_reuseport(struct net *net, struct sock *sk,
 	return reuse_sk;
 }
 
+/*给定参数，检查hslot2,确认对应的udp socket*/
 /* called with rcu_read_lock() */
 static struct sock *udp4_lib_lookup2(struct net *net,
-				     __be32 saddr, __be16 sport,
-				     __be32 daddr, unsigned int hnum,
+				     __be32 saddr/*源地址*/, __be16 sport/*源端口*/,
+				     __be32 daddr/*目的地址*/, unsigned int hnum/*目的端口（主机序）*/,
 				     int dif, int sdif,
 				     struct udp_hslot *hslot2,
 				     struct sk_buff *skb)
@@ -501,18 +502,19 @@ static struct sock *udp4_lookup_run_bpf(struct net *net,
  * harder than this. -DaveM
  */
 struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr/*源地址*/,
-		__be16 sport/*源端口*/, __be32 daddr, __be16 dport, int dif,
-		int sdif/*源接口*/, struct udp_table *udptable/*udp socket列表*/, struct sk_buff *skb)
+		__be16 sport/*源端口*/, __be32 daddr/*目的地址*/, __be16 dport/*目的端口*/, int dif,
+		int sdif/*源接口*/, struct udp_table *udptable/*udp socket哈希表*/, struct sk_buff *skb)
 {
-	unsigned short hnum = ntohs(dport);
+	unsigned short hnum = ntohs(dport);/*目的地址转主机序*/
 	unsigned int hash2, slot2;
 	struct udp_hslot *hslot2;
 	struct sock *result, *sk;
 
 	//利用{目的地址,目的端口（主机序）}做为hash2
 	hash2 = ipv4_portaddr_hash(net, daddr, hnum);
+	/*找到hash2对应的slot2*/
 	slot2 = hash2 & udptable->mask;
-	//确认hash2对应的bucket即hslot2
+	/*确认hash2对应的bucket即hslot2*/
 	hslot2 = &udptable->hash2[slot2];
 
 	/* Lookup connected or non-wildcard socket */
@@ -521,10 +523,12 @@ struct sock *__udp4_lib_lookup(struct net *net, __be32 saddr/*源地址*/,
 				  daddr, hnum, dif, sdif,
 				  hslot2, skb);
 	if (!IS_ERR_OR_NULL(result) && result->sk_state == TCP_ESTABLISHED)
+		/*查找到est状态的socket,准备返回*/
 		goto done;
 
 	/* Lookup redirect from BPF */
 	if (static_branch_unlikely(&bpf_sk_lookup_enabled)) {
+		/*通过bpf程序进行查询并返回*/
 		sk = udp4_lookup_run_bpf(net, udptable, skb,
 					 saddr, sport, daddr, hnum);
 		if (sk) {
@@ -1052,7 +1056,7 @@ int udp_cmsg_send(struct sock *sk, struct msghdr *msg, u16 *gso_size)
 }
 EXPORT_SYMBOL_GPL(udp_cmsg_send);
 
-//udp报文发送
+//针对udp socket的报文发送
 int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -1074,6 +1078,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	struct sk_buff *skb;
 	struct ip_options_data opt_copy;
 
+	/*msg长度过大*/
 	if (len > 0xFFFF)
 		return -EMSGSIZE;
 
@@ -2021,13 +2026,16 @@ EXPORT_SYMBOL(udp_lib_unhash);
 void udp_lib_rehash(struct sock *sk, u16 newhash)
 {
 	if (sk_hashed(sk)) {
+		/*取此socket保存对应的hashtable*/
 		struct udp_table *udptable = sk->sk_prot->h.udp_table;
 		struct udp_hslot *hslot, *hslot2, *nhslot2;
 
+		/*先采用旧的hash找到hslot2,再通过newhash找到nhslot2,并记录socket对应的hash*/
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
 		nhslot2 = udp_hashslot2(udptable, newhash);
 		udp_sk(sk)->udp_portaddr_hash = newhash;
 
+		/*新旧的slot不相等，需要先移除再添加*/
 		if (hslot2 != nhslot2 ||
 		    rcu_access_pointer(sk->sk_reuseport_cb)) {
 			hslot = udp_hashslot(udptable, sock_net(sk),
@@ -2040,10 +2048,12 @@ void udp_lib_rehash(struct sock *sk, u16 newhash)
 			if (hslot2 != nhslot2) {
 				spin_lock(&hslot2->lock);
 				hlist_del_init_rcu(&udp_sk(sk)->udp_portaddr_node);
+				/*将旧的引用计数减一*/
 				hslot2->count--;
 				spin_unlock(&hslot2->lock);
 
 				spin_lock(&nhslot2->lock);
+				/*将新的slot引用计数加一*/
 				hlist_add_head_rcu(&udp_sk(sk)->udp_portaddr_node,
 							 &nhslot2->head);
 				nhslot2->count++;
@@ -2780,13 +2790,16 @@ int udp_lib_setsockopt(struct sock *sk, int level, int optname,
 }
 EXPORT_SYMBOL(udp_lib_setsockopt);
 
+/*udp socket选项设置*/
 int udp_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
 		   unsigned int optlen)
 {
+	/*SOL_UDP/SOL_UDPLITE选项设置*/
 	if (level == SOL_UDP  ||  level == SOL_UDPLITE)
 		return udp_lib_setsockopt(sk, level, optname,
 					  optval, optlen,
 					  udp_push_pending_frames);
+	/*其它level选项设置*/
 	return ip_setsockopt(sk, level, optname, optval, optlen);
 }
 
@@ -2929,7 +2942,7 @@ struct proto udp_prot = {
 	.sysctl_wmem_offset	= offsetof(struct net, ipv4.sysctl_udp_wmem_min),
 	.sysctl_rmem_offset	= offsetof(struct net, ipv4.sysctl_udp_rmem_min),
 	.obj_size		= sizeof(struct udp_sock),
-	.h.udp_table		= &udp_table,
+	.h.udp_table		= &udp_table,/*udp socket对应的存储socket的hashtable*/
 	.diag_destroy		= udp_abort,
 };
 EXPORT_SYMBOL(udp_prot);

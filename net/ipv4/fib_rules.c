@@ -273,9 +273,11 @@ static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 		}
 	}
 
+	/*解析from指定的源地址*/
 	if (frh->src_len)
 		rule4->src = nla_get_in_addr(tb[FRA_SRC]);
 
+	/*解析to指定的目的地址*/
 	if (frh->dst_len)
 		rule4->dst = nla_get_in_addr(tb[FRA_DST]);
 
