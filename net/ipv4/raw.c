@@ -125,7 +125,7 @@ struct sock *__raw_v4_lookup(struct net *net, struct sock *sk,
 	sk_for_each_from(sk) {
 		struct inet_sock *inet = inet_sk(sk);
 
-		//namespace相等，协议num相等（ipv4/ipv6),目的地址相等，源地址相等，
+		//namespace相等，协议num相等（ipv4/ipv6),目的地址相等(如有），源地址相等(如有），
 		//接口相等时认为找到对应socket
 		if (net_eq(sock_net(sk), net) && inet->inet_num == num	&&
 		    !(inet->inet_daddr && inet->inet_daddr != raddr) 	&&
@@ -300,10 +300,12 @@ void raw_icmp_error(struct sk_buff *skb, int protocol, u32 info)
 	const struct iphdr *iph;
 	struct net *net;
 
+	/*按协议计算hash*/
 	hash = protocol & (RAW_HTABLE_SIZE - 1);
 
 	read_lock(&raw_v4_hashinfo.lock);
 	raw_sk = sk_head(&raw_v4_hashinfo.ht[hash]);
+	/*此protocol有对应的raw socket*/
 	if (raw_sk) {
 		int dif = skb->dev->ifindex;
 		int sdif = inet_sdif(skb);
@@ -314,7 +316,9 @@ void raw_icmp_error(struct sk_buff *skb, int protocol, u32 info)
 		while ((raw_sk = __raw_v4_lookup(net, raw_sk, protocol,
 						iph->daddr, iph->saddr,
 						dif, sdif)) != NULL) {
+			/*检查找一个raw socket关心此报文，则投递*/
 			raw_err(raw_sk, skb, info);
+			/*取下一个raw socket*/
 			raw_sk = sk_next(raw_sk);
 			iph = (const struct iphdr *)skb->data;
 		}

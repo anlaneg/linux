@@ -1823,7 +1823,7 @@ static struct net_protocol udp_protocol = {
 
 //icmp协议注册
 static const struct net_protocol icmp_protocol = {
-	.handler =	icmp_rcv,
+	.handler =	icmp_rcv,/*icmp报文处理*/
 	.err_handler =	icmp_err,
 	.no_policy =	1,
 	.netns_ok =	1,

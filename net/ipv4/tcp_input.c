@@ -6446,6 +6446,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			goto discard;
 	}
 
+    /*必须要用ack/rst/syn标记之一*/
 	if (!th->ack && !th->rst && !th->syn)
 		goto discard;
 

@@ -815,12 +815,15 @@ static void icmp_socket_deliver(struct sk_buff *skb, u32 info)
 	 * avoid additional coding at protocol handlers.
 	 */
 	if (!pskb_may_pull(skb, iph->ihl * 4 + 8)) {
+		/*报文不足icmp头，忽略，增加错误计数*/
 		__ICMP_INC_STATS(dev_net(skb->dev), ICMP_MIB_INERRORS);
 		return;
 	}
 
+	/*icmp raw socket错误类报文投递*/
 	raw_icmp_error(skb, protocol, info);
 
+	/*触发err_handler回调*/
 	ipprot = rcu_dereference(inet_protos[protocol]);
 	if (ipprot && ipprot->err_handler)
 		ipprot->err_handler(skb, info);
@@ -859,19 +862,22 @@ static bool icmp_unreach(struct sk_buff *skb)
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto out_err;
 
+	/*指向icmp头部*/
 	icmph = icmp_hdr(skb);
 	iph   = (const struct iphdr *)skb->data;
 
 	if (iph->ihl < 5) /* Mangled header, drop. */
+		/*不正常的ip头部*/
 		goto out_err;
 
 	switch (icmph->type) {
 	case ICMP_DEST_UNREACH:
+		 /*目的不可达*/
 		switch (icmph->code & 15) {
-		case ICMP_NET_UNREACH:
-		case ICMP_HOST_UNREACH:
-		case ICMP_PROT_UNREACH:
-		case ICMP_PORT_UNREACH:
+		case ICMP_NET_UNREACH:/*网络不可达*/
+		case ICMP_HOST_UNREACH:/*主机不可达*/
+		case ICMP_PROT_UNREACH:/*协议不可达*/
+		case ICMP_PORT_UNREACH:/*端口不可达*/
 			break;
 		case ICMP_FRAG_NEEDED:
 			/* for documentation of the ip_no_pmtu_disc
@@ -940,6 +946,7 @@ static bool icmp_unreach(struct sk_buff *skb)
 		goto out;
 	}
 
+	/*将校验通过的报文送给socket*/
 	icmp_socket_deliver(skb, info);
 
 out:
@@ -1080,6 +1087,7 @@ int icmp_rcv(struct sk_buff *skb)
 		skb_set_network_header(skb, nh);
 	}
 
+	//icmp进来的消息总数增加
 	__ICMP_INC_STATS(net, ICMP_MIB_INMSGS);
 
 	if (skb_checksum_simple_validate(skb))
@@ -1099,7 +1107,7 @@ int icmp_rcv(struct sk_buff *skb)
 	 *	RFC 1122: 3.2.2  Unknown ICMP messages types MUST be silently
 	 *		  discarded.
 	 */
-	//icmp消息类型校验
+	//icmp消息类型校验,非已知type,丢包
 	if (icmph->type > NR_ICMP_TYPES)
 		goto error;
 
@@ -1108,6 +1116,7 @@ int icmp_rcv(struct sk_buff *skb)
 	 *	Parse the ICMP message
 	 */
 
+	/*路由为组播或广播时，只容许以下几中type通过*/
 	if (rt->rt_flags & (RTCF_BROADCAST | RTCF_MULTICAST)) {
 		/*
 		 *	RFC 1122: 3.2.2.6 An ICMP_ECHO to broadcast MAY be
@@ -1132,11 +1141,13 @@ int icmp_rcv(struct sk_buff *skb)
 	success = icmp_pointers[icmph->type].handler(skb);
 
 	if (success)  {
+		//返回成功，报文已被处理，直接消费skb
 		consume_skb(skb);
 		return NET_RX_SUCCESS;
 	}
 
 drop:
+    /*丢包*/
 	kfree_skb(skb);
 	return NET_RX_DROP;
 csum_error:
@@ -1226,6 +1237,7 @@ int icmp_err(struct sk_buff *skb, u32 info)
 	if (type == ICMP_DEST_UNREACH && code == ICMP_FRAG_NEEDED)
 		ipv4_update_pmtu(skb, net, info, 0, IPPROTO_ICMP);
 	else if (type == ICMP_REDIRECT)
+		/*icmp 重定向错误处理*/
 		ipv4_redirect(skb, net, 0, IPPROTO_ICMP);
 
 	return 0;
@@ -1236,7 +1248,8 @@ int icmp_err(struct sk_buff *skb, u32 info)
  */
 static const struct icmp_control icmp_pointers[NR_ICMP_TYPES + 1] = {
 	[ICMP_ECHOREPLY] = {
-		.handler = ping_rcv,//收到icmp reply消息后调用
+        //收到icmp reply消息后调用
+		.handler = ping_rcv,
 	},
 	[1] = {
 		.handler = icmp_discard,

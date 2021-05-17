@@ -3678,6 +3678,7 @@ static int xmit_one(struct sk_buff *skb, struct net_device *dev,
 	int rc;
 
 	if (dev_nit_active(dev))
+        //tcpdump抓包，发包方向
 	    //报文将自此处传送给raw socket(tx方向capture报文）
 		dev_queue_xmit_nit(skb, dev);
 
