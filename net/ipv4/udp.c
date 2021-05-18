@@ -3230,12 +3230,17 @@ void __init udp_table_init(struct udp_table *table, const char *name)
 					      UDP_HTABLE_SIZE_MIN,
 					      64 * 1024);
 
+	/*初始化table->hash2*/
 	table->hash2 = table->hash + (table->mask + 1);
+
+	/*table->hash表初始化*/
 	for (i = 0; i <= table->mask; i++) {
 		INIT_HLIST_HEAD(&table->hash[i].head);
 		table->hash[i].count = 0;
 		spin_lock_init(&table->hash[i].lock);
 	}
+
+	/*tablee->hash2表初始化*/
 	for (i = 0; i <= table->mask; i++) {
 		INIT_HLIST_HEAD(&table->hash2[i].head);
 		table->hash2[i].count = 0;

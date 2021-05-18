@@ -8265,7 +8265,7 @@ static unsigned long __init arch_reserved_kernel_pages(void)
  *   quantity of entries
  * - limit is the number of hash buckets, not the total allocation size
  */
-void *__init alloc_large_system_hash(const char *tablename,
+void *__init alloc_large_system_hash(const char *tablename/*哈希表名称*/,
 				     unsigned long bucketsize,
 				     unsigned long numentries,
 				     int scale,
