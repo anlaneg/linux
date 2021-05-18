@@ -1910,9 +1910,11 @@ static void ip_multipath_l3_keys(const struct sk_buff *skb,
 	struct iphdr _inner_iph;
 	struct icmphdr _icmph;
 
+	/*除icmp协议外，其它均只取srcip,dstip两种*/
 	if (likely(outer_iph->protocol != IPPROTO_ICMP))
 		goto out;
 
+	/*icmp报文如为分片，则只取srcip,dstip*/
 	if (unlikely((outer_iph->frag_off & htons(IP_OFFSET)) != 0))
 		goto out;
 
@@ -1946,11 +1948,13 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 	struct flow_keys hash_keys;
 	u32 mhash;
 
+	/*依据多路径hash策略，进行填充*/
 	switch (net->ipv4.sysctl_fib_multipath_hash_policy) {
 	case 0:
 		memset(&hash_keys, 0, sizeof(hash_keys));
 		hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		if (skb) {
+		    /*如果有skb,则仅针对icmp协议进行内层报文srcip,dstip解析，其它不处理*/
 			ip_multipath_l3_keys(skb, &hash_keys);
 		} else {
 			hash_keys.addrs.v4addrs.src = fl4->saddr;
@@ -1969,6 +1973,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 
 			memset(&hash_keys, 0, sizeof(hash_keys));
 
+			/*有报文，从报文中提取五元组*/
 			if (!flkeys) {
 				skb_flow_dissect_flow_keys(skb, &keys, flag);
 				flkeys = &keys;
@@ -2021,6 +2026,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 		}
 		break;
 	}
+	/*计算hash*/
 	mhash = flow_hash_from_keys(&hash_keys);
 
 	if (multipath_hash)
@@ -2570,7 +2576,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	struct rtable *rth;
 	int err;
 
-	//要匹配源地址
+	//如果fl4->saddr不为0，则要匹配源地址
 	if (fl4->saddr) {
 		//源地址不得为组播，广播，以及network不能为0
 		if (ipv4_is_multicast(fl4->saddr) ||
@@ -2658,7 +2664,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		}
 	}
 
-	//没有指定目标地址
+	//没有指定目标地址，将源ip赋给目的地址，使用lookback做出接口
 	if (!fl4->daddr) {
 		fl4->daddr = fl4->saddr;
 		if (!fl4->daddr)
@@ -2673,6 +2679,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		goto make_route;
 	}
 
+	/*查询路由表*/
 	err = fib_lookup(net, fl4, res, 0);
 	if (err) {
 		res->fi = NULL;

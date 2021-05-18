@@ -1308,6 +1308,7 @@ __be32 fib_result_prefsrc(struct net *net, struct fib_result *res)
 	struct fib_nh_common *nhc = res->nhc;
 
 	if (res->fi->fib_prefsrc)
+	    /*如果fi中有fib_prefsrc，则使用之*/
 		return res->fi->fib_prefsrc;
 
 	if (nhc->nhc_family == AF_INET) {
@@ -2203,6 +2204,7 @@ void fib_select_multipath(struct fib_result *res, int hash)
 		if (hash > atomic_read(&nexthop_nh->fib_nh_upper_bound))
 			continue;
 
+		/*按hash选出下一条*/
 		res->nh_sel = nhsel;
 		res->nhc = &nexthop_nh->nh_common;
 		return;
@@ -2217,6 +2219,7 @@ void fib_select_path(struct net *net, struct fib_result *res,
 		goto check_saddr;
 
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
+	/*有多个下一跳，选择合适的路径*/
 	if (fib_info_num_path(res->fi) > 1) {
 		int h = fib_multipath_hash(net, fl4, skb, NULL);
 
@@ -2230,6 +2233,7 @@ void fib_select_path(struct net *net, struct fib_result *res,
 		fib_select_default(fl4, res);
 
 check_saddr:
+    /*如果没有填充源ip，则依据路由结果选prefsrc*/
 	if (!fl4->saddr)
 		fl4->saddr = fib_result_prefsrc(net, res);
 }

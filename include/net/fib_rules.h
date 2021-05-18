@@ -17,6 +17,7 @@ struct fib_kuid_range {
 	kuid_t end;
 };
 
+/*策略规则*/
 struct fib_rule {
 	struct list_head	list;
 	int			iifindex;//inport对应的ifindex(为0时不匹配）
@@ -29,20 +30,21 @@ struct fib_rule {
 	u8			l3mdev;
 	u8                      proto;//路由协议类型
 	u8			ip_proto;//4层协议号
-	u32			target;//记录要跳转到哪个目标上继续查询
+	u32			target;//goto action时记录要跳转到哪个目标上继续查询
 	__be64			tun_id;//隧道id号
 	struct fib_rule __rcu	*ctarget;//跳转动作对应的rule
 	struct net		*fr_net;//从属于那个namespace
 
 	refcount_t		refcnt;
-	u32			pref;/*规则对应的优先级*/
+	/*规则对应的优先级*/
+	u32			pref;
 	int			suppress_ifgroup;
 	int			suppress_prefixlen;
 	char			iifname[IFNAMSIZ];//inport名称
 	char			oifname[IFNAMSIZ];//outport名称
 	struct fib_kuid_range	uid_range;//记录用户传入的范围
-	struct fib_rule_port_range	sport_range;
-	struct fib_rule_port_range	dport_range;
+	struct fib_rule_port_range	sport_range;//源port范围
+	struct fib_rule_port_range	dport_range;//目的port范围
 	struct rcu_head		rcu;
 };
 

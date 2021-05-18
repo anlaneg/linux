@@ -398,7 +398,8 @@ static void icmp_push_reply(struct icmp_bxm *icmp_param,
  *	Driving logic for building and sending ICMP messages.
  */
 
-static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
+/*icmp reply报文响应*/
+static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb/*原始报文*/)
 {
 	struct ipcm_cookie ipc;
 	struct rtable *rt = skb_rtable(skb);
@@ -431,6 +432,7 @@ static void icmp_reply(struct icmp_bxm *icmp_param, struct sk_buff *skb)
 	ipcm_init(&ipc);
 	inet->tos = ip_hdr(skb)->tos;
 	ipc.sockc.mark = mark;
+	/*目的地址为原报文的源ip*/
 	daddr = ipc.addr = ip_hdr(skb)->saddr;
 	saddr = fib_compute_spec_dst(skb);
 
@@ -1248,7 +1250,7 @@ int icmp_err(struct sk_buff *skb, u32 info)
  */
 static const struct icmp_control icmp_pointers[NR_ICMP_TYPES + 1] = {
 	[ICMP_ECHOREPLY] = {
-        //收到icmp reply消息后调用
+        //收到icmp echo reply消息后调用
 		.handler = ping_rcv,
 	},
 	[1] = {

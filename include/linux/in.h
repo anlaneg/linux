@@ -65,7 +65,7 @@ static inline bool ipv4_is_all_snoopers(__be32 addr)
 	return addr == htonl(INADDR_ALLSNOOPERS_GROUP);
 }
 
-//ip地址首字节为0
+//ip地址为0
 static inline bool ipv4_is_zeronet(__be32 addr)
 {
 	return (addr == 0);

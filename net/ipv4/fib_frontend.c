@@ -317,6 +317,7 @@ __be32 fib_compute_spec_dst(struct sk_buff *skb)
 		if (!fib_lookup(net, &fl4, &res, 0))
 			return fib_result_prefsrc(net, &res);
 	} else {
+	    /*报文中源地址为0*/
 		scope = RT_SCOPE_LINK;
 	}
 
@@ -811,6 +812,7 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 			cfg->fc_priority = nla_get_u32(attr);
 			break;
 		case RTA_PREFSRC:
+		    /*指明优先选择的srcip*/
 			cfg->fc_prefsrc = nla_get_be32(attr);
 			break;
 		case RTA_METRICS:

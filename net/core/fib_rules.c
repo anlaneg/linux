@@ -540,7 +540,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		       struct fib_rules_ops *ops,
 		       struct nlattr *tb[],
 		       struct fib_rule **rule/*出参，返回填充好的规则*/,
-		       bool *user_priority)
+		       bool *user_priority/*用户是否指定了优先级*/)
 {
 	struct net *net = sock_net(skb->sk);
 	//fib规则头部
@@ -829,6 +829,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto errout;
 	}
 
+	/*将netlink消息转换为策略规则*/
 	err = fib_nl2rule(skb, nlh, extack, ops, tb, &rule/*出参，填充好的规则*/, &user_priority);
 	if (err)
 		goto errout;

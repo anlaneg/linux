@@ -145,7 +145,7 @@ struct fib_info {
 	unsigned char		fib_protocol;
 	unsigned char		fib_scope;
 	unsigned char		fib_type;
-	__be32			fib_prefsrc;
+	__be32			fib_prefsrc;/*指定优选源ip*/
 	u32			fib_tb_id;
 	u32			fib_priority;
 	struct dst_metrics	*fib_metrics;
@@ -252,9 +252,12 @@ int fib_notify(struct net *net, struct notifier_block *nb,
 	       struct netlink_ext_ack *extack);
 
 struct fib_table {
-	struct hlist_node	tb_hlist;//用于挂接在hash表上
-	u32			tb_id;//表编号
-	int			tb_num_default;//规则数
+    //用于挂接在hash表上
+	struct hlist_node	tb_hlist;
+	//表编号
+	u32			tb_id;
+	//规则数
+	int			tb_num_default;
 	struct rcu_head		rcu;
 	//struct trie类型，属于trie根节点
 	unsigned long 		*tb_data;

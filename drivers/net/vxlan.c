@@ -2491,7 +2491,7 @@ static struct rtable *vxlan_get_route(struct vxlan_dev *vxlan, struct net_device
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.flowi4_oif = oif;
 	fl4.flowi4_tos = RT_TOS(tos);
-	fl4.flowi4_mark = skb->mark;
+	fl4.flowi4_mark = skb->mark;/*skb上标记的mark*/
 	fl4.flowi4_proto = IPPROTO_UDP;
 	fl4.daddr = daddr;
 	fl4.saddr = *saddr;

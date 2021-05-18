@@ -93,6 +93,7 @@ int __fib_lookup(struct net *net, struct flowi4 *flp,
 
 	//执行ipv4策略路由查询
 	err = fib_rules_lookup(net->ipv4.rules_ops, flowi4_to_flowi(flp), 0, &arg);
+
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	/*通过路由确定命中哪条classid*/
 	if (arg.rule)
@@ -137,8 +138,10 @@ INDIRECT_CALLABLE_SCOPE int fib4_rule_action(struct fib_rule *rule,
 
 	rcu_read_lock();
 
-	//取规则要求查询的路由表
+	//取规则中要求查询的路由表
 	tb_id = fib_rule_get_table(rule, arg);
+
+	/*查询tb_id对应的路由表*/
 	tbl = fib_get_table(rule->fr_net, tb_id);
 	if (tbl)
 		//然后在此tbl中查找路由
