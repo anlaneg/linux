@@ -56,6 +56,7 @@ static inline int udp_sock_create(struct net *net,
 				  struct udp_port_cfg *cfg/*端口配置*/,
 				  struct socket **sockp)
 {
+	/*依据是ipv4/ipv6调用相应的创建函数*/
 	if (cfg->family == AF_INET)
 		return udp_sock_create4(net, cfg, sockp);
 

@@ -184,6 +184,7 @@ bool ip_call_ra_chain(struct sk_buff *skb)
 
 INDIRECT_CALLABLE_DECLARE(int udp_rcv(struct sk_buff *));
 INDIRECT_CALLABLE_DECLARE(int tcp_v4_rcv(struct sk_buff *));
+
 //处理要送往本机的ip报文
 void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 {

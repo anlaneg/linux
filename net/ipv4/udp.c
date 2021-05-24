@@ -2117,6 +2117,7 @@ static int __udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
  */
 static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 {
+	/*转为udp socket*/
 	struct udp_sock *up = udp_sk(sk);
 	int is_udplite = IS_UDPLITE(sk);
 
@@ -2125,6 +2126,7 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
 		goto drop;
+	/*报文准备入队列，skb上引用的ct计数需要释放*/
 	nf_reset_ct(skb);
 
 	//检查是否需要encap处理
@@ -2227,6 +2229,7 @@ static int udp_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	int ret;
 
 	if (likely(!udp_unexpected_gso(sk, skb)))
+		/*udp socket队列收取一个报文*/
 		return udp_queue_rcv_one_skb(sk, skb);
 
 	BUILD_BUG_ON(sizeof(struct udp_skb_cb) > SKB_GSO_CB_OFFSET);
@@ -2397,6 +2400,7 @@ static int udp_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb,
 	if (inet_get_convert_csum(sk) && uh->check && !IS_UDPLITE(sk))
 		skb_checksum_try_convert(skb, IPPROTO_UDP, inet_compute_pseudo);
 
+	/*将收到的报文入队列udp socket*/
 	ret = udp_queue_rcv_skb(sk, skb);
 
 	/* a return value > 0 means to resubmit the input, but
@@ -2446,6 +2450,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 		uh = udp_hdr(skb);
 	}
 
+	/*udp checksum校验*/
 	if (udp4_csum_init(skb, uh, proto))
 		goto csum_error;
 
@@ -2497,6 +2502,7 @@ int __udp4_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	return 0;
 
 short_packet:
+	/*报文长度过短告警*/
 	net_dbg_ratelimited("UDP%s: short packet: From %pI4:%u %d/%d to %pI4:%u\n",
 			    proto == IPPROTO_UDPLITE ? "Lite" : "",
 			    &saddr, ntohs(uh->source),
@@ -2941,7 +2947,7 @@ struct proto udp_prot = {
 	.sysctl_mem		= sysctl_udp_mem,
 	.sysctl_wmem_offset	= offsetof(struct net, ipv4.sysctl_udp_wmem_min),
 	.sysctl_rmem_offset	= offsetof(struct net, ipv4.sysctl_udp_rmem_min),
-	.obj_size		= sizeof(struct udp_sock),
+	.obj_size		= sizeof(struct udp_sock),/*udp socket结构*/
 	.h.udp_table		= &udp_table,/*udp socket对应的存储socket的hashtable*/
 	.diag_destroy		= udp_abort,
 };

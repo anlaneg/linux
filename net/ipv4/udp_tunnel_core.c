@@ -10,7 +10,7 @@
 #include <net/udp.h>
 #include <net/udp_tunnel.h>
 
-//udp创建ipv4的socket
+//kernel创建udp socket(ipv4)
 int udp_sock_create4(struct net *net, struct udp_port_cfg *cfg,
 		     struct socket **sockp/*出参，创建的socket*/)
 {

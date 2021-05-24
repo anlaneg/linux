@@ -2117,6 +2117,7 @@ int security_unix_may_send(struct socket *sock,  struct socket *other)
 }
 EXPORT_SYMBOL(security_unix_may_send);
 
+/*触发socket create检查*/
 int security_socket_create(int family, int type, int protocol, int kern)
 {
 	return call_int_hook(socket_create, 0, family, type, protocol, kern);

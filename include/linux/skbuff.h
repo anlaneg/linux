@@ -4398,6 +4398,7 @@ static inline void skb_ext_copy(struct sk_buff *dst, const struct sk_buff *s) {}
 static inline bool skb_has_extensions(struct sk_buff *skb) { return false; }
 #endif /* CONFIG_SKB_EXTENSIONS */
 
+/*清除掉skb上引用的ct*/
 static inline void nf_reset_ct(struct sk_buff *skb)
 {
 #if defined(CONFIG_NF_CONNTRACK) || defined(CONFIG_NF_CONNTRACK_MODULE)

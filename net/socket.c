@@ -176,7 +176,7 @@ static const struct file_operations socket_file_ops = {
 
 static DEFINE_SPINLOCK(net_family_lock);
 
-//各AF_FAMILY在此数组中注册其对应的socket创建回调
+//各AF_FAMILY在此数组中注册其对应的net_proto_family,常用于socket创建
 //例如：
 //PF_NETLINK对应netlink_family_ops
 //PF_INET 对应 inet_family_ops
@@ -377,6 +377,7 @@ static int sockfs_init_fs_context(struct fs_context *fc)
 
 static struct vfsmount *sock_mnt __read_mostly;
 
+/*socket对应的文件系统，由其上申请inet强转成socket结构*/
 static struct file_system_type sock_fs_type = {
 	.name =		"sockfs",
 	.init_fs_context = sockfs_init_fs_context,
@@ -455,7 +456,8 @@ static int sock_map_fd(struct socket *sock, int flags)
 		return fd;
 	}
 
-	put_unused_fd(fd);//还原不再占用的fd
+	//关联失败，还原不再占用的fd
+	put_unused_fd(fd);
 	return PTR_ERR(newfile);
 }
 
@@ -591,6 +593,7 @@ struct socket *sock_alloc(void)
 	struct inode *inode;
 	struct socket *sock;
 
+	/*自sock_mnt->mnt_sb上申请一个inode*/
 	inode = new_inode_pseudo(sock_mnt->mnt_sb);
 	if (!inode)
 		return NULL;
@@ -608,6 +611,7 @@ struct socket *sock_alloc(void)
 }
 EXPORT_SYMBOL(sock_alloc);
 
+/*如果sock->ops不为空，则调用sock->ops->release*/
 static void __sock_release(struct socket *sock, struct inode *inode)
 {
 	if (sock->ops) {
@@ -615,6 +619,7 @@ static void __sock_release(struct socket *sock, struct inode *inode)
 
 		if (inode)
 			inode_lock(inode);
+		/*解发sock的release回调*/
 		sock->ops->release(sock);
 		sock->sk = NULL;
 		if (inode)
@@ -1052,6 +1057,7 @@ EXPORT_SYMBOL(brioctl_set);
 static DEFINE_MUTEX(vlan_ioctl_mutex);
 static int (*vlan_ioctl_hook) (struct net *, void __user *arg);
 
+/*设置vlan的ioctl回调函数*/
 void vlan_ioctl_set(int (*hook) (struct net *, void __user *))
 {
 	mutex_lock(&vlan_ioctl_mutex);
@@ -1060,6 +1066,7 @@ void vlan_ioctl_set(int (*hook) (struct net *, void __user *))
 }
 EXPORT_SYMBOL(vlan_ioctl_set);
 
+/*针对socket执行ioctl调用*/
 static long sock_do_ioctl(struct net *net, struct socket *sock,
 			  unsigned int cmd, unsigned long arg)
 {
@@ -1380,9 +1387,10 @@ EXPORT_SYMBOL(sock_wake_async);
  *	This function internally uses GFP_KERNEL.
  */
 
-//根据family查找对应的net_proto_family,然后调用对应的协议句柄创建相应的socket
+//socket创建，支持user space,kernel space的socket创建
+//根据family查找net_families数组，获得对应的net_proto_family,然后调用create回调创建相应的socket
 int __sock_create(struct net *net, int family, int type, int protocol,
-			 struct socket **res/*出参，返回创建的socket*/, int kern/*是否kernel socket*/)
+			 struct socket **res/*出参，返回创建的socket*/, int kern/*是否创建kernel socket*/)
 {
 	int err;
 	struct socket *sock;
@@ -1405,12 +1413,13 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	   deadlock in module load.
 	 */
 	if (family == PF_INET && type == SOCK_PACKET) {
+		//兼容性考虑，将family=PF_INET,type=SOCK_PACKET更新为family=PF_PACKET,type=SOCK_PACKET
 		pr_info_once("%s uses obsolete (PF_INET,SOCK_PACKET)\n",
 			     current->comm);
-		//兼容性考虑，将PF_INET,SOCK_PACKET更新为PF_PACKET
 		family = PF_PACKET;
 	}
 
+	/*socket create 安全检查*/
 	err = security_socket_create(family, type, protocol, kern);
 	if (err)
 		return err;
@@ -1428,7 +1437,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 				   closest posix thing */
 	}
 
-	//设置socket类型，例如SOCK_STREAM,SOCK_DGRAM等
+	//设置socket类型，参数传入，例如SOCK_STREAM,SOCK_DGRAM等
 	sock->type = type;
 
 #ifdef CONFIG_MODULES
@@ -1479,6 +1488,7 @@ int __sock_create(struct net *net, int family, int type, int protocol,
 	 * module can have its refcnt decremented
 	 */
 	module_put(pf->owner);
+	/*触发socket create post钩子点*/
 	err = security_socket_post_create(sock, family, type, protocol, kern);
 	if (err)
 		goto out_sock_release;
@@ -1515,7 +1525,7 @@ EXPORT_SYMBOL(__sock_create);
 int sock_create(int family, int type, int protocol, struct socket **res/*出参，返回创建的socket*/)
 {
 	//创建socket,传入namespace
-	return __sock_create(current->nsproxy->net_ns, family, type, protocol, res, 0);
+	return __sock_create(current->nsproxy->net_ns/*当前进程的netns*/, family, type, protocol, res/*出参*/, 0/*指明非kernel socket*/);
 }
 EXPORT_SYMBOL(sock_create);
 
@@ -1531,7 +1541,7 @@ EXPORT_SYMBOL(sock_create);
  *	Returns 0 or an error. This function internally uses GFP_KERNEL.
  */
 
-//创建kernel socket
+//通过此函数创建kernel空间对应的socket
 int sock_create_kern(struct net *net, int family, int type, int protocol, struct socket **res)
 {
 	return __sock_create(net, family, type, protocol, res, 1);
@@ -1553,6 +1563,7 @@ int __sys_socket(int family, int type, int protocol)
 
 	//取封装在type内的flags(高28位）
 	flags = type & ~SOCK_TYPE_MASK;
+
 	//当前仅支持两种flags
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
 		return -EINVAL;
@@ -1560,21 +1571,22 @@ int __sys_socket(int family, int type, int protocol)
 	//取封装在type内的真实type
 	type &= SOCK_TYPE_MASK;
 
+	//由于SOCK_NONBLOCK与O_NONBLOCK不相等，则flags有此标记，此处更新为O_NONBLOCK
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
-		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;//更新为非阻塞标记
+		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
 	//创建对应的socket
 	retval = sock_create(family, type, protocol, &sock/*出参，生成的socket*/);
 	if (retval < 0)
 		return retval;
 
-	//将socket映射到fd
+	//创建socket成功，这里将socket映射到fd（由type传入的flags在这里应用）
 	return sock_map_fd(sock, flags & (O_CLOEXEC | O_NONBLOCK));
 }
 
+//socket(family,type,protocol)系统调用
 SYSCALL_DEFINE3(socket, int, family, int, type, int, protocol)
 {
-	//实现socket系统调用
 	return __sys_socket(family, type, protocol);
 }
 
@@ -1589,11 +1601,14 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 	struct file *newfile1, *newfile2;
 	int flags;
 
+	/*flags提取*/
 	flags = type & ~SOCK_TYPE_MASK;
 	if (flags & ~(SOCK_CLOEXEC | SOCK_NONBLOCK))
 		return -EINVAL;
+	/*type提取*/
 	type &= SOCK_TYPE_MASK;
 
+	/*flags兼容处理*/
 	if (SOCK_NONBLOCK != O_NONBLOCK && (flags & SOCK_NONBLOCK))
 		flags = (flags & ~SOCK_NONBLOCK) | O_NONBLOCK;
 
@@ -1611,6 +1626,7 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 		return fd2;
 	}
 
+	/*填充获取到的未使用fd*/
 	err = put_user(fd1, &usockvec[0]);
 	if (err)
 		goto out;
@@ -1618,6 +1634,8 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 	err = put_user(fd2, &usockvec[1]);
 	if (err)
 		goto out;
+
+	/*socket创建*/
 
 	/*
 	 * Obtain the first socket and check if the underlying protocol
@@ -1634,6 +1652,7 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 		goto out;
 	}
 
+	/*socketpair安全钩子点触发*/
 	err = security_socket_socketpair(sock1, sock2);
 	if (unlikely(err)) {
 		sock_release(sock2);
@@ -1641,6 +1660,7 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 		goto out;
 	}
 
+	/*调用socketpair完成一组socket连接*/
 	err = sock1->ops->socketpair(sock1, sock2);
 	if (unlikely(err < 0)) {
 		sock_release(sock2);
@@ -1648,6 +1668,7 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 		goto out;
 	}
 
+	/*为socket1,socket2关联file*/
 	newfile1 = sock_alloc_file(sock1, flags, NULL);
 	if (IS_ERR(newfile1)) {
 		err = PTR_ERR(newfile1);
@@ -1664,6 +1685,7 @@ int __sys_socketpair(int family, int type, int protocol, int __user *usockvec)
 
 	audit_fd_pair(fd1, fd2);
 
+	/*完成fd与文件关联*/
 	fd_install(fd1, newfile1);
 	fd_install(fd2, newfile2);
 	return 0;
@@ -1674,8 +1696,9 @@ out:
 	return err;
 }
 
+/*实现socketpair创建*/
 SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
-		int __user *, usockvec)
+		int __user *, usockvec/*出参，创建好的一组socketpair*/)
 {
 	return __sys_socketpair(family, type, protocol, usockvec);
 }
@@ -1688,18 +1711,19 @@ SYSCALL_DEFINE4(socketpair, int, family, int, type, int, protocol,
  *	the protocol layer (having also checked the address is ok).
  */
 
-int __sys_bind(int fd, struct sockaddr __user *umyaddr/*要绑定的地址*/, int addrlen)
+int __sys_bind(int fd, struct sockaddr __user *umyaddr/*要绑定的地址*/, int addrlen/*要绑定的地址长度*/)
 {
 	struct socket *sock;
 	struct sockaddr_storage address;
 	int err, fput_needed;
 
-	//依据fd,查找到对应的sock
+	//依据fd,查找到对应的socket
 	sock = sockfd_lookup_light(fd, &err, &fput_needed);
 	if (sock) {
 		//将用户态sockaddr copy到address中
 		err = move_addr_to_kernel(umyaddr, addrlen, &address);
 		if (!err) {
+			/*解发socket bind钩子*/
 			err = security_socket_bind(sock,
 						   (struct sockaddr *)&address,
 						   addrlen);
@@ -1717,7 +1741,7 @@ int __sys_bind(int fd, struct sockaddr __user *umyaddr/*要绑定的地址*/, in
 //定义bind系统调用
 SYSCALL_DEFINE3(bind, int, fd, struct sockaddr __user *, umyaddr, int, addrlen)
 {
-	return __sys_bind(fd, umyaddr, addrlen);
+	return __sys_bind(fd, umyaddr/*要绑定的地址*/, addrlen/*要绑定的地址长度*/);
 }
 
 /*
@@ -1753,6 +1777,7 @@ SYSCALL_DEFINE2(listen, int, fd, int, backlog)
 	return __sys_listen(fd, backlog);
 }
 
+/*实现accept4函数*/
 int __sys_accept4_file(struct file *file, unsigned file_flags,
 		       struct sockaddr __user *upeer_sockaddr,
 		       int __user *upeer_addrlen, int flags,
@@ -1854,12 +1879,13 @@ out_fd:
  *	clean when we restructure accept also.
  */
 
-int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
-		  int __user *upeer_addrlen, int flags)
+int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr/*出参，接入的对端地址*/,
+		  int __user *upeer_addrlen/*出参，接入的对端地址长度*/, int flags)
 {
 	int ret = -EBADF;
 	struct fd f;
 
+	/*由文件描述符到fd*/
 	f = fdget(fd);
 	if (f.file) {
 		ret = __sys_accept4_file(f.file, 0, upeer_sockaddr,
@@ -1874,13 +1900,14 @@ int __sys_accept4(int fd, struct sockaddr __user *upeer_sockaddr,
 SYSCALL_DEFINE4(accept4, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		int __user *, upeer_addrlen, int, flags)
 {
-	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, flags);
+	return __sys_accept4(fd, upeer_sockaddr/*接入的对端地址*/, upeer_addrlen/*接入的对端地址长度*/, flags);
 }
 
+/*实现accept系统调用*/
 SYSCALL_DEFINE3(accept, int, fd, struct sockaddr __user *, upeer_sockaddr,
 		int __user *, upeer_addrlen)
 {
-	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0);
+	return __sys_accept4(fd, upeer_sockaddr, upeer_addrlen, 0/*此情况flags为0*/);
 }
 
 /*
@@ -1901,29 +1928,32 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 	struct socket *sock;
 	int err;
 
+	/*由file获得socket*/
 	sock = sock_from_file(file);
 	if (!sock) {
 		err = -ENOTSOCK;
 		goto out;
 	}
 
+	/*触发connect连接*/
 	err =
 	    security_socket_connect(sock, (struct sockaddr *)address, addrlen);
 	if (err)
 		goto out;
 
-	//调用sock的ops实现connect
+	//调用sock的ops具体实现connect
 	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen,
 				 sock->file->f_flags | file_flags);
 out:
 	return err;
 }
 
-int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
+int __sys_connect(int fd/*socket fd*/, struct sockaddr __user *uservaddr/*要连接的地址*/, int addrlen/*要连接的地址长度*/)
 {
 	int ret = -EBADF;
 	struct fd f;
 
+	/*文件描述符到fd*/
 	f = fdget(fd);
 	if (f.file) {
 		struct sockaddr_storage address;
@@ -1937,6 +1967,7 @@ int __sys_connect(int fd, struct sockaddr __user *uservaddr, int addrlen)
 	return ret;
 }
 
+/*实现系统调用connect*/
 SYSCALL_DEFINE3(connect, int, fd, struct sockaddr __user *, uservaddr,
 		int, addrlen)
 {
@@ -3680,6 +3711,7 @@ EXPORT_SYMBOL(kernel_accept);
 int kernel_connect(struct socket *sock, struct sockaddr *addr, int addrlen,
 		   int flags)
 {
+	/*kernel space的connect具体实现*/
 	return sock->ops->connect(sock, addr, addrlen, flags);
 }
 EXPORT_SYMBOL(kernel_connect);

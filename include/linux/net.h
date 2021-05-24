@@ -68,6 +68,7 @@ enum sock_type {
 	SOCK_PACKET	= 10,
 };
 
+/*sock type最大值*/
 #define SOCK_MAX (SOCK_PACKET + 1)
 /* Mask which covers at least up to SOCK_MASK-1.  The
  * remaining bits are used as flags. */
@@ -112,14 +113,15 @@ struct socket_wq {
  *  @wq: wait queue for several uses
  */
 struct socket {
-	socket_state		state;//socket状态（空闲，未连接，连接中，已连接，断开中）
-
-	short			type;//socket类型，例如SOCK_STREAM
-
+	//socket状态（空闲，未连接，连接中，已连接，断开中）
+	socket_state		state;
+	//socket类型，例如SOCK_STREAM
+	short			type;
 	unsigned long		flags;
-
-	struct file		*file;//socket对应的struct file*结构
-	struct sock		*sk;//指向它对应的sk
+	//socket对应的struct file*结构
+	struct file		*file;
+	//指向它对应的sk
+	struct sock		*sk;
 	//定义socket相关的函数，例如bind,accept
 	const struct proto_ops	*ops;
 
@@ -138,20 +140,24 @@ typedef int (*sk_read_actor_t)(read_descriptor_t *, struct sk_buff *,
 //定义socket相关的函数，系统调用发生时，系统调用将依据不同的family调用对应的
 //proto_ops来完成工作
 struct proto_ops {
+	/*对应的协议族*/
 	int		family;
+	/*所属的模块*/
 	struct module	*owner;
 	//释放socket
 	int		(*release)   (struct socket *sock);
-	//bind系统调用实现
-	int		(*bind)	     (struct socket *sock,
-				      struct sockaddr *myaddr,
-				      int sockaddr_len);
-	int		(*connect)   (struct socket *sock,
-				      struct sockaddr *vaddr,
-				      int sockaddr_len, int flags);
+	//对应bind系统调用具体实现
+	int		(*bind)	     (struct socket *sock/*待操作的socket*/,
+				      struct sockaddr *myaddr/*要绑定的地址*/,
+				      int sockaddr_len/*要绑定的地址长度*/);
+	/*与远端建立连接*/
+	int		(*connect)   (struct socket *sock/*待操作的socket*/,
+				      struct sockaddr *vaddr/*要连接的远端地址*/,
+				      int sockaddr_len/*地址长度*/, int flags);
+	/*将sock1,sock2进行连接，建立成一组pair*/
 	int		(*socketpair)(struct socket *sock1,
 				      struct socket *sock2);
-	//为新接入的链接返回newsock
+	//为新接入的连接返回newsock
 	int		(*accept)    (struct socket *sock,
 				      struct socket *newsock, int flags, bool kern);
 	int		(*getname)   (struct socket *sock,
@@ -174,9 +180,11 @@ struct proto_ops {
 	int		(*setsockopt)(struct socket *sock, int level,
 				      int optname/*操作码*/, sockptr_t optval/*操作码对应数值*/,
 				      unsigned int optlen/*操作码对应参数长度*/);
+	/*获取此socket的option*/
 	int		(*getsockopt)(struct socket *sock, int level,
 				      int optname, char __user *optval, int __user *optlen);
 	void		(*show_fdinfo)(struct seq_file *m, struct socket *sock);
+	/*socket消息发送*/
 	int		(*sendmsg)   (struct socket *sock, struct msghdr *m,
 				      size_t total_len);
 	/* Notes for implementing recvmsg:
@@ -187,6 +195,7 @@ struct proto_ops {
 	 * handlers can assume that msg.msg_name is either NULL or has
 	 * a minimum size of sizeof(struct sockaddr_storage).
 	 */
+	/*socket消息接收*/
 	int		(*recvmsg)   (struct socket *sock, struct msghdr *m,
 				      size_t total_len, int flags);
 	int		(*mmap)	     (struct file *file, struct socket *sock,
@@ -217,9 +226,9 @@ struct net_proto_family {
 	//协议所属的协议族
 	int		family;
 	//kernel系统调用通过family参数找到对应的net_proto_family结构
-	//再通过此结构的create函数完成socket的创建
+	//再通过此函数完成指定family socket的创建
 	int		(*create)(struct net *net, struct socket *sock,
-				  int protocol, int kern);
+				  int protocol, int kern/*是否创建kernel space socket*/);
 	//所属的module
 	struct module	*owner;
 };
@@ -235,8 +244,14 @@ enum {
 };
 
 int sock_wake_async(struct socket_wq *sk_wq, int how, int band);
+
+/*注册此net family对应的socket创建回调*/
 int sock_register(const struct net_proto_family *fam);
+
+/*移除此family对应的socket*/
 void sock_unregister(int family);
+
+/*检查此family是否已注册*/
 bool sock_is_registered(int family);
 int __sock_create(struct net *net, int family, int type, int proto,
 		  struct socket **res, int kern);
