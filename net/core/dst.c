@@ -118,6 +118,7 @@ struct dst_entry *dst_destroy(struct dst_entry * dst)
 	if (!(dst->flags & DST_NOCOUNT))
 		dst_entries_add(dst->ops, -1);
 
+	/*解发dst->ops的销毁回调*/
 	if (dst->ops->destroy)
 		dst->ops->destroy(dst);
 	if (dst->dev)

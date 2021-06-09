@@ -2966,6 +2966,7 @@ EXPORT_SYMBOL(netdev_set_tc_queue);
 
 int netdev_set_num_tc(struct net_device *dev, u8 num_tc)
 {
+    /*num_tc不得超过TC_MAX_QUEUE*/
 	if (num_tc > TC_MAX_QUEUE)
 		return -EINVAL;
 
@@ -3054,6 +3055,7 @@ int netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq)
 
 	disabling = txq < dev->real_num_tx_queues;
 
+	/*要设置的txq不得超过dev->num_tx_queues*/
 	if (txq < 1 || txq > dev->num_tx_queues)
 		return -EINVAL;
 
@@ -3105,6 +3107,7 @@ int netif_set_real_num_rx_queues(struct net_device *dev, unsigned int rxq)
 	if (rxq < 1 || rxq > dev->num_rx_queues)
 		return -EINVAL;
 
+	/*对已注册的设备进行rx object变更*/
 	if (dev->reg_state == NETREG_REGISTERED) {
 		ASSERT_RTNL();
 
@@ -4089,6 +4092,7 @@ static int get_xps_queue(struct net_device *dev, struct net_device *sb_dev,
 	struct sock *sk = skb->sk;
 	int queue_index = -1;
 
+	/*xps没有开启，退出*/
 	if (!static_key_false(&xps_needed))
 		return -1;
 
@@ -4173,6 +4177,7 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 	int queue_index = 0;
 
 #ifdef CONFIG_XPS
+	/*如果xps开启，则取skb对应的sender_cpu*/
 	u32 sender_cpu = skb->sender_cpu - 1;
 
 	if (sender_cpu >= (u32)NR_CPUS)

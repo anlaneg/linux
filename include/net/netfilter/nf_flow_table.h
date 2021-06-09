@@ -71,9 +71,11 @@ struct nf_flowtable {
 	struct list_head		list;
 	struct rhashtable		rhashtable;
 	int				priority;
-	const struct nf_flowtable_type	*type;//flowtable对应的type
+	//flowtable对应的type
+	const struct nf_flowtable_type	*type;
 	struct delayed_work		gc_work;
-	unsigned int			flags;//看nf_flowtable_flags
+	//看enum nf_flowtable_flags
+	unsigned int			flags;
 	struct flow_block		flow_block;
 	struct rw_semaphore		flow_block_lock; /* Guards flow_block */
 	possible_net_t			net;

@@ -293,6 +293,7 @@ static inline bool nf_ct_should_gc(const struct nf_conn *ct)
 	       !nf_ct_is_dying(ct);
 }
 
+/*24小时的秒数*/
 #define	NF_CT_DAY	(86400 * HZ)
 
 /* Set an arbitrary timeout large enough not to ever expire, this save
@@ -301,6 +302,7 @@ static inline bool nf_ct_should_gc(const struct nf_conn *ct)
  */
 static inline void nf_ct_offload_timeout(struct nf_conn *ct)
 {
+    /*如果超时时间小于半天，则更新ct的超时时间*/
 	if (nf_ct_expires(ct) < NF_CT_DAY / 2)
 		ct->timeout = nfct_time_stamp + NF_CT_DAY;
 }

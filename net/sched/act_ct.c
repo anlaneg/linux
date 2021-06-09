@@ -35,6 +35,7 @@
 #include <uapi/linux/netfilter/nf_nat.h>
 
 static struct workqueue_struct *act_ct_wq;
+/*每个zone一个hashtable*/
 static struct rhashtable zones_ht;
 static DEFINE_MUTEX(zones_mutex);
 
@@ -42,7 +43,7 @@ struct tcf_ct_flow_table {
 	struct rhash_head node; /* In zones tables */
 
 	struct rcu_work rwork;
-	struct nf_flowtable nf_ft;
+	struct nf_flowtable nf_ft;/*flowtable指针*/
 	refcount_t ref;
 	u16 zone;
 
@@ -312,6 +313,7 @@ static int tcf_ct_flow_table_get(struct tcf_ct_params *params)
 	ct_ft->nf_ft.type = &flowtable_ct;
 	ct_ft->nf_ft.flags |= NF_FLOWTABLE_HW_OFFLOAD |
 			      NF_FLOWTABLE_COUNTER;
+	/*初始化flow table*/
 	err = nf_flow_table_init(&ct_ft->nf_ft);
 	if (err)
 		goto err_init;
@@ -358,6 +360,7 @@ static void tcf_ct_flow_table_put(struct tcf_ct_params *params)
 	}
 }
 
+/*向flowtable中添加flow_offload_entry，并促使其向驱动进行offload*/
 static void tcf_ct_flow_table_add(struct tcf_ct_flow_table *ct_ft,
 				  struct nf_conn *ct,
 				  bool tcp)
@@ -413,6 +416,7 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 			return;
 		break;
 	case IPPROTO_UDP:
+	    /*udp流量无要求*/
 		break;
 	default:
 		return;
@@ -423,6 +427,7 @@ static void tcf_ct_flow_table_process_conn(struct tcf_ct_flow_table *ct_ft,
 	    ct->status & IPS_SEQ_ADJUST)
 		return;
 
+	/*向flowtable中加入此ct,触发卸载*/
 	tcf_ct_flow_table_add(ct_ft, ct, tcp);
 }
 
@@ -1007,6 +1012,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	struct nf_hook_state state;
 	int nh_ofs, err, retval;
 	struct tcf_ct_params *p;
+	/*是否需要跳过向flow table下发此ct*/
 	bool skip_add = false;
 	bool defrag = false;
 	struct nf_conn *ct;
@@ -1126,6 +1132,7 @@ do_nat:
 		//confirm此ct
 		nf_conntrack_confirm(skb);
 	} else if (!skip_add) {
+	    /*不需要跳过添加，则向flowtable中添加此ct*/
 		tcf_ct_flow_table_process_conn(p->ct_ft, ct, ctinfo);
 	}
 

@@ -74,7 +74,8 @@ struct rhash_lock_head {};
  * @buckets: size * hash buckets
  */
 struct bucket_table {
-	unsigned int		size;//桶的数目（必须为２的Ｎ次方）
+    //桶的数目（必须为２的Ｎ次方）
+	unsigned int		size;
 	unsigned int		nest;//是否为nest哈希表
 	u32			hash_rnd;//随机值（被合并到key的hash计算中，安全原因)
 	struct list_head	walkers;
@@ -310,10 +311,12 @@ static inline struct rhash_lock_head __rcu **rht_bucket_var(
 				     &tbl->buckets[hash];
 }
 
+/*由hashtable确认bucket*/
 static inline struct rhash_lock_head __rcu **rht_bucket_insert(
 	struct rhashtable *ht, struct bucket_table *tbl, unsigned int hash)
 {
 	return unlikely(tbl->nest) ? rht_bucket_nested_insert(ht, tbl, hash) :
+	                /*非nest类型的buckets*/
 				     &tbl->buckets[hash];
 }
 
@@ -733,9 +736,12 @@ static inline void *__rhashtable_insert_fast(
 
 	rcu_read_lock();
 
+	/*取table指针*/
 	tbl = rht_dereference_rcu(ht->tbl, ht);
-	hash = rht_head_hashfn(ht, tbl, obj, params);//计算hash值
+	//计算hash值
+	hash = rht_head_hashfn(ht, tbl, obj, params);
 	elasticity = RHT_ELASTICITY;
+	/*确认hash对应的bucket*/
 	bkt = rht_bucket_insert(ht, tbl, hash);
 	data = ERR_PTR(-ENOMEM);
 	if (!bkt)
@@ -750,6 +756,7 @@ slow_path:
 		return rhashtable_insert_slow(ht, key, obj);
 	}
 
+	/*遍历bucket上的元素*/
 	rht_for_each_from(head, rht_ptr(bkt, tbl, hash), tbl, hash) {
 		struct rhlist_head *plist;
 		struct rhlist_head *list;

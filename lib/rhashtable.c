@@ -181,6 +181,7 @@ static struct bucket_table *bucket_table_alloc(struct rhashtable *ht,
 	int i;
 	static struct lock_class_key __key;
 
+	/*tbl的指针指向的是tbl+nbuckets个bucket*/
 	tbl = kvzalloc(struct_size(tbl, buckets, nbuckets), gfp);
 
 	size = nbuckets;
@@ -190,6 +191,7 @@ static struct bucket_table *bucket_table_alloc(struct rhashtable *ht,
 		nbuckets = 0;
 	}
 
+	/*申请失败*/
 	if (tbl == NULL)
 		return NULL;
 
@@ -200,9 +202,12 @@ static struct bucket_table *bucket_table_alloc(struct rhashtable *ht,
 	rcu_head_init(&tbl->rcu);
 	INIT_LIST_HEAD(&tbl->walkers);
 
+	/*产生hash随机值*/
 	tbl->hash_rnd = get_random_u32();
 
+	/*初始化hash桶*/
 	for (i = 0; i < nbuckets; i++)
+	    /*使桶指向NULL*/
 		INIT_RHT_NULLS_HEAD(tbl->buckets[i]);
 
 	return tbl;
@@ -1019,7 +1024,9 @@ int rhashtable_init(struct rhashtable *ht,
 	struct bucket_table *tbl;
 	size_t size;
 
+	/*key_len与obj_hashfn不能同时为NULL*/
 	if ((!params->key_len && !params->obj_hashfn) ||
+	   /*obj_hashfn不为NULL时，obj_cmpfn必须不为NULL*/
 	    (params->obj_hashfn && !params->obj_cmpfn))
 		return -EINVAL;
 
@@ -1035,6 +1042,7 @@ int rhashtable_init(struct rhashtable *ht,
 	/* Cap total entries at 2^31 to avoid nelems overflow. */
 	ht->max_elems = 1u << 31;
 
+	/*规范化max_size*/
 	if (params->max_size) {
 		ht->p.max_size = rounddown_pow_of_two(params->max_size);
 		if (ht->p.max_size < ht->max_elems / 2)

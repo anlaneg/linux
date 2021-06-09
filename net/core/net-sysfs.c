@@ -1033,6 +1033,7 @@ static int rx_queue_add_kobject(struct net_device *dev, int index)
 	if (error)
 		goto err;
 
+	/*检查rx-%u下是否有rx_queue_group需要创建*/
 	if (dev->sysfs_rx_queue_group) {
 		error = sysfs_create_group(kobj, dev->sysfs_rx_queue_group);
 		if (error)
@@ -1068,7 +1069,7 @@ static int rx_queue_change_owner(struct net_device *dev, int index, kuid_t kuid,
 #endif /* CONFIG_SYSFS */
 
 int
-net_rx_queue_update_kobjects(struct net_device *dev, int old_num, int new_num)
+net_rx_queue_update_kobjects(struct net_device *dev, int old_num/*旧的rx queue数量*/, int new_num)
 {
 #ifdef CONFIG_SYSFS
 	int i;
@@ -1174,6 +1175,7 @@ static const struct sysfs_ops netdev_queue_sysfs_ops = {
 	.store = netdev_queue_attr_store,
 };
 
+/*读写超时时间*/
 static ssize_t tx_timeout_show(struct netdev_queue *queue, char *buf)
 {
 	unsigned long trans_timeout;
@@ -1205,6 +1207,7 @@ static ssize_t traffic_class_show(struct netdev_queue *queue,
 	int index;
 
 	if (!netif_is_multiqueue(dev))
+	    /*必须为多队列设备*/
 		return -ENOENT;
 
 	if (!rtnl_trylock())
@@ -1253,7 +1256,7 @@ static ssize_t tx_maxrate_store(struct netdev_queue *queue,
 	if (!capable(CAP_NET_ADMIN))
 		return -EPERM;
 
-	//转换为无符号u32
+	//将buffer内容转换为无符号u32
 	err = kstrtou32(buf, 10, &rate);
 	if (err < 0)
 		return err;
@@ -1279,9 +1282,11 @@ static struct netdev_queue_attribute queue_tx_maxrate __ro_after_init
 	= __ATTR_RW(tx_maxrate);
 #endif
 
+//只读tx_timeout
 static struct netdev_queue_attribute queue_trans_timeout __ro_after_init
 	= __ATTR_RO(tx_timeout);
 
+//只读traffic_class
 static struct netdev_queue_attribute queue_traffic_class __ro_after_init
 	= __ATTR_RO(traffic_class);
 
@@ -1510,6 +1515,7 @@ static ssize_t xps_cpus_store(struct netdev_queue *queue,
 	return err ? : len;
 }
 
+/*xps_cpus属性读取与写入*/
 static struct netdev_queue_attribute xps_cpus_attribute __ro_after_init
 	= __ATTR_RW(xps_cpus);
 
@@ -1613,6 +1619,7 @@ static ssize_t xps_rxqs_store(struct netdev_queue *queue, const char *buf,
 	return err ? : len;
 }
 
+/*定义xps rxqs属性的读写，存储*/
 static struct netdev_queue_attribute xps_rxqs_attribute __ro_after_init
 	= __ATTR_RW(xps_rxqs);
 #endif /* CONFIG_XPS */

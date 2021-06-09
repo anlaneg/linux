@@ -683,7 +683,7 @@ static void nf_flow_offload_init(struct flow_cls_offload *cls_flow,
 static int nf_flow_offload_tuple(struct nf_flowtable *flowtable,
 				 struct flow_offload *flow,
 				 struct nf_flow_rule *flow_rule,
-				 enum flow_offload_tuple_dir dir,
+				 enum flow_offload_tuple_dir dir/*flow的方向*/,
 				 int priority/*规则优先级*/, int cmd,
 				 struct flow_stats *stats,
 				 struct list_head *block_cb_list)
@@ -824,6 +824,7 @@ static void flow_offload_work_handler(struct work_struct *work)
 			flow_offload_work_add(offload);
 			break;
 		case FLOW_CLS_DESTROY:
+		    /*flow的移除*/
 			flow_offload_work_del(offload);
 			break;
 		case FLOW_CLS_STATS:
@@ -864,7 +865,7 @@ nf_flow_offload_work_alloc(struct nf_flowtable *flowtable,
 	offload->flow = flow;
 	offload->priority = flowtable->priority;
 	offload->flowtable = flowtable;
-	/*指定此work的处理函数*/
+	/*指定此work的处理函数，负责向驱动下发flow_offload规则*/
 	INIT_WORK(&offload->work, flow_offload_work_handler);
 
 	return offload;
@@ -881,6 +882,7 @@ void nf_flow_offload_add(struct nf_flowtable *flowtable,
 	if (!offload)
 		return;
 
+	/*将此工作提交给work，由其具体负责处理*/
 	flow_offload_queue_work(offload);
 }
 
@@ -929,6 +931,7 @@ static int nf_flow_table_block_setup(struct nf_flowtable *flowtable,
 
 	switch (cmd) {
 	case FLOW_BLOCK_BIND:
+	    /*将此bo绑定到指定flowtable，用于处理flowtable的卸载*/
 		list_splice(&bo->cb_list, &flowtable->flow_block.cb_list);
 		break;
 	case FLOW_BLOCK_UNBIND:
@@ -973,6 +976,7 @@ static void nf_flow_table_indr_cleanup(struct flow_block_cb *block_cb)
 	up_write(&flowtable->flow_block_lock);
 }
 
+/*flow table间接卸载*/
 static int nf_flow_table_indr_offload_cmd(struct flow_block_offload *bo,
 					  struct nf_flowtable *flowtable,
 					  struct net_device *dev,
@@ -986,6 +990,7 @@ static int nf_flow_table_indr_offload_cmd(struct flow_block_offload *bo,
 					   nf_flow_table_indr_cleanup);
 }
 
+/*flow table直接卸载*/
 static int nf_flow_table_offload_cmd(struct flow_block_offload *bo,
 				     struct nf_flowtable *flowtable,
 				     struct net_device *dev,

@@ -15,6 +15,7 @@
 #include <net/netfilter/nf_conntrack_tuple.h>
 
 static DEFINE_MUTEX(flowtable_lock);
+/*用于串连所有的flowtables*/
 static LIST_HEAD(flowtables);
 
 static void
@@ -190,6 +191,7 @@ void flow_offload_free(struct flow_offload *flow)
 }
 EXPORT_SYMBOL_GPL(flow_offload_free);
 
+/*计算flow_offload_tuple的hashcode*/
 static u32 flow_offload_hash(const void *data, u32 len, u32 seed)
 {
 	const struct flow_offload_tuple *tuple = data;
@@ -197,6 +199,7 @@ static u32 flow_offload_hash(const void *data, u32 len, u32 seed)
 	return jhash(tuple, offsetof(struct flow_offload_tuple, __hash), seed);
 }
 
+/*计算flow_offload_tuple_rhash的hashcode*/
 static u32 flow_offload_hash_obj(const void *data, u32 len, u32 seed)
 {
 	const struct flow_offload_tuple_rhash *tuplehash = data;
@@ -204,6 +207,7 @@ static u32 flow_offload_hash_obj(const void *data, u32 len, u32 seed)
 	return jhash(&tuplehash->tuple, offsetof(struct flow_offload_tuple, __hash), seed);
 }
 
+/*tuple匹配*/
 static int flow_offload_hash_cmp(struct rhashtable_compare_arg *arg,
 					const void *ptr)
 {
@@ -224,10 +228,12 @@ static const struct rhashtable_params nf_flow_offload_rhash_params = {
 	.automatic_shrinking	= true,
 };
 
+/*向flow_table中添加flow_offload_entry*/
 int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 {
 	int err;
 
+	/*flow超时时间为30S*/
 	flow->timeout = nf_flowtable_time_stamp + NF_FLOW_TIMEOUT;
 
 	/*将正反方向两个flow均加入到flow_table中*/
@@ -241,14 +247,17 @@ int flow_offload_add(struct nf_flowtable *flow_table, struct flow_offload *flow)
 				     &flow->tuplehash[1].node,
 				     nf_flow_offload_rhash_params);
 	if (err < 0) {
+	    /*加入失败，需要将第一个tuple自flowtable中移除*/
 		rhashtable_remove_fast(&flow_table->rhashtable,
 				       &flow->tuplehash[0].node,
 				       nf_flow_offload_rhash_params);
 		return err;
 	}
 
+	/*更新ct的超时时间*/
 	nf_ct_offload_timeout(flow->ct);
 
+	/*如果此flow_table是可硬件卸载的，则将flow添加到驱动*/
 	if (nf_flowtable_hw_offload(flow_table)) {
 		__set_bit(NF_FLOW_HW, &flow->flags);
 		nf_flow_offload_add(flow_table, flow);
@@ -521,10 +530,12 @@ int nf_flow_table_init(struct nf_flowtable *flowtable)
 {
 	int err;
 
+	/*flowtable的gc work*/
 	INIT_DELAYED_WORK(&flowtable->gc_work, nf_flow_offload_work_gc);
 	flow_block_init(&flowtable->flow_block);
 	init_rwsem(&flowtable->flow_block_lock);
 
+	/*初始化flowtable中用于存放flow的hash表*/
 	err = rhashtable_init(&flowtable->rhashtable,
 			      &nf_flow_offload_rhash_params);
 	if (err < 0)
@@ -534,6 +545,7 @@ int nf_flow_table_init(struct nf_flowtable *flowtable)
 			   &flowtable->gc_work, HZ);
 
 	mutex_lock(&flowtable_lock);
+	/*将当前flowtable加入到flowtables链表中*/
 	list_add(&flowtable->list, &flowtables);
 	mutex_unlock(&flowtable_lock);
 

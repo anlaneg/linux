@@ -55,14 +55,16 @@ typedef int (*rht_obj_cmpfn_t)(struct rhashtable_compare_arg *arg,
  */
 struct rhashtable_params {
 	u16			nelem_hint;
-	//key的内存大小
+	//key的内存大小（容许为0）
 	u16			key_len;
 	//加入到hashtable中的元素到key的偏移量
 	u16			key_offset;
 	//he减去head_offset为加入到hashtable中元素
 	u16			head_offset;
 	unsigned int		max_size;
+	/*表项的最小size*/
 	u16			min_size;
+	/*是否容许hash自动缩小*/
 	bool			automatic_shrinking;
 	rht_hashfn_t		hashfn;/*hashcode计算函数*/
 	rht_obj_hashfn_t	obj_hashfn;/*元素hashcode计算函数*/

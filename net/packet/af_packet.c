@@ -277,10 +277,12 @@ static u16 packet_pick_tx_queue(struct sk_buff *skb)
 {
 	struct net_device *dev = skb->dev;
 	const struct net_device_ops *ops = dev->netdev_ops;
+	/*取此函数所在的cpu*/
 	int cpu = raw_smp_processor_id();
 	u16 queue_index;
 
 #ifdef CONFIG_XPS
+	/*记录skb的sender_cpu*/
 	skb->sender_cpu = cpu + 1;
 #endif
 	skb_record_rx_queue(skb, cpu % dev->real_num_tx_queues);
