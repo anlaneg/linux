@@ -721,6 +721,7 @@ enum {
 
 struct tc_mqprio_qopt {
 	__u8	num_tc;
+	/*优先级到tc的映射*/
 	__u8	prio_tc_map[TC_QOPT_BITMASK + 1];
 	//是否支持硬件offload
 	__u8	hw;

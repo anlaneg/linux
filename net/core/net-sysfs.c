@@ -1507,6 +1507,7 @@ static ssize_t xps_cpus_store(struct netdev_queue *queue,
 		return restart_syscall();
 	}
 
+	/*设置dev的index号tx队列的cpu mask配置*/
 	err = netif_set_xps_queue(dev, mask, index);
 	rtnl_unlock();
 
@@ -1592,12 +1593,15 @@ static ssize_t xps_rxqs_store(struct netdev_queue *queue, const char *buf,
 	if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
 
+	/*创建num_rx_queues长度的bitmap*/
 	mask = bitmap_zalloc(dev->num_rx_queues, GFP_KERNEL);
 	if (!mask)
 		return -ENOMEM;
 
+	/*取queue的索引号*/
 	index = get_netdev_queue_index(queue);
 
+	/*解析buf，获得mask*/
 	err = bitmap_parse(buf, len, mask, dev->num_rx_queues);
 	if (err) {
 		bitmap_free(mask);
@@ -1610,6 +1614,7 @@ static ssize_t xps_rxqs_store(struct netdev_queue *queue, const char *buf,
 	}
 
 	cpus_read_lock();
+	/*设置dev设备的index号rx队列配置的cpu mask*/
 	err = __netif_set_xps_queue(dev, mask, index, true);
 	cpus_read_unlock();
 

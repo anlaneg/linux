@@ -4484,9 +4484,10 @@ static inline void skb_set_queue_mapping(struct sk_buff *skb, u16 queue_mapping)
 	skb->queue_mapping = queue_mapping;
 }
 
+//skb映射到哪个队列
 static inline u16 skb_get_queue_mapping(const struct sk_buff *skb)
 {
-	return skb->queue_mapping;//skb映射到哪个队列
+	return skb->queue_mapping;
 }
 
 static inline void skb_copy_queue_mapping(struct sk_buff *to, const struct sk_buff *from)

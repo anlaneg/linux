@@ -787,10 +787,10 @@ struct rx_queue_attribute {
  * map is an array of queues.
  */
 struct xps_map {
-	unsigned int len;
+	unsigned int len;/*map queues数*/
 	unsigned int alloc_len;
 	struct rcu_head rcu;
-	u16 queues[];
+	u16 queues[];/*记录队列索引*/
 };
 #define XPS_MAP_SIZE(_num) (sizeof(struct xps_map) + ((_num) * sizeof(u16)))
 #define XPS_MIN_MAP_ALLOC ((L1_CACHE_ALIGN(offsetof(struct xps_map, queues[1])) \
@@ -816,8 +816,8 @@ struct xps_dev_maps {
 #define TC_BITMASK	15
 /* HW offloaded queuing disciplines txq count and offset maps */
 struct netdev_tc_txq {
-	u16 count;
-	u16 offset;
+	u16 count;/*占用多少个txq*/
+	u16 offset;/*txq自哪个offset开始*/
 };
 
 #if defined(CONFIG_FCOE) || defined(CONFIG_FCOE_MODULE)
@@ -2201,8 +2201,11 @@ struct net_device {
 #ifdef CONFIG_DCB
 	const struct dcbnl_rtnl_ops *dcbnl_ops;
 #endif
+	/*tc数目*/
 	s16			num_tc;
+	/*tc索引与txq的映射关系*/
 	struct netdev_tc_txq	tc_to_txq[TC_MAX_QUEUE];
+	/*优先级与tc的映射*/
 	u8			prio_tc_map[TC_BITMASK + 1];
 
 #if IS_ENABLED(CONFIG_FCOE)
@@ -2244,12 +2247,14 @@ static inline bool netif_elide_gro(const struct net_device *dev)
 
 #define	NETDEV_ALIGN		32
 
+/*由优先级取tc*/
 static inline
 int netdev_get_prio_tc_map(const struct net_device *dev, u32 prio)
 {
 	return dev->prio_tc_map[prio & TC_BITMASK];
 }
 
+/*设置设备dev对应的优先级与tc的映射关系*/
 static inline
 int netdev_set_prio_tc_map(struct net_device *dev, u8 prio, u8 tc)
 {

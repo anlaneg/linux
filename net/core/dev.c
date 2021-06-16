@@ -2712,8 +2712,9 @@ static struct xps_map *expand_xps_map(struct xps_map *map, int attr_index,
 }
 
 /* Must be called under cpus_read_lock */
-int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask,
-			  u16 index/*tx队列索引*/, bool is_rxqs_map)
+/*设置dev的index号tx队列的xps cpu掩码*/
+int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask/*cpu掩码*/,
+			  u16 index/*tx队列索引*/, bool is_rxqs_map/*是否rxq的映射*/)
 {
 	const unsigned long *online_mask = NULL, *possible_mask = NULL;
 	struct xps_dev_maps *dev_maps, *new_dev_maps = NULL;
@@ -2806,9 +2807,11 @@ int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask,
 			int pos = 0;
 
 			map = xmap_dereference(new_dev_maps->attr_map[tci]);
+			/*检查index是否包含在map->queues中*/
 			while ((pos < map->len) && (map->queues[pos] != index))
 				pos++;
 
+			/*index不在map->queues中，添加*/
 			if (pos == map->len)
 				map->queues[map->len++] = index;
 #ifdef CONFIG_NUMA
@@ -2833,6 +2836,7 @@ int __netif_set_xps_queue(struct net_device *dev, const unsigned long *mask,
 		}
 	}
 
+	/*依据标记，设置rxq,txq的maps*/
 	if (is_rxqs_map)
 		rcu_assign_pointer(dev->xps_rxqs_map, new_dev_maps);
 	else
@@ -2927,6 +2931,7 @@ EXPORT_SYMBOL(netif_set_xps_queue);
 #endif
 static void netdev_unbind_all_sb_channels(struct net_device *dev)
 {
+    /*最后一个有效tx队列结尾*/
 	struct netdev_queue *txq = &dev->_tx[dev->num_tx_queues];
 
 	/* Unbind any subordinate channels */
@@ -2958,6 +2963,7 @@ int netdev_set_tc_queue(struct net_device *dev, u8 tc, u16 count, u16 offset)
 #ifdef CONFIG_XPS
 	netif_reset_xps_queues(dev, offset, count);
 #endif
+	/*记录tc与txq的映射关系*/
 	dev->tc_to_txq[tc].count = count;
 	dev->tc_to_txq[tc].offset = offset;
 	return 0;
@@ -2975,6 +2981,7 @@ int netdev_set_num_tc(struct net_device *dev, u8 num_tc)
 #endif
 	netdev_unbind_all_sb_channels(dev);
 
+	/*更新设备的tc数目*/
 	dev->num_tc = num_tc;
 	return 0;
 }
@@ -3272,13 +3279,16 @@ static u16 skb_tx_hash(const struct net_device *dev,
 	u16 qcount = dev->real_num_tx_queues;
 
 	if (dev->num_tc) {
+	    /*设备开启了tc,由优先级获得tc,并更新qoffset,qcount*/
 		u8 tc = netdev_get_prio_tc_map(dev, skb->priority);
 
+		/*取此tc对应的一组队列（qoffset,qcount)*/
 		qoffset = sb_dev->tc_to_txq[tc].offset;
 		qcount = sb_dev->tc_to_txq[tc].count;
 	}
 
 	if (skb_rx_queue_recorded(skb)) {
+	    /*取此skb对应的rx队列号，通过此方式获得tx队列*/
 		hash = skb_get_rx_queue(skb);
 		if (hash >= qoffset)
 			hash -= qoffset;
@@ -3287,6 +3297,7 @@ static u16 skb_tx_hash(const struct net_device *dev,
 		return hash + qoffset;
 	}
 
+	/*利用skb->hash选择tx*/
 	return (u16) reciprocal_scale(skb_get_hash(skb), qcount) + qoffset;
 }
 
@@ -3970,17 +3981,22 @@ static void skb_update_prio(struct sk_buff *skb)
 	const struct sock *sk;
 	unsigned int prioidx;
 
+	/*己设置priority，直接返回*/
 	if (skb->priority)
 		return;
+
+	/*必须有priomap*/
 	map = rcu_dereference_bh(skb->dev->priomap);
 	if (!map)
 		return;
+
+	/*无对应socket,返回*/
 	sk = skb_to_full_sk(skb);
 	if (!sk)
 		return;
 
+	/*取cgroup对应的index,并填充skb->priority*/
 	prioidx = sock_cgroup_prioidx(&sk->sk_cgrp_data);
-
 	if (prioidx < map->priomap_len)
 		skb->priority = map->priomap[prioidx];
 }
@@ -4066,12 +4082,14 @@ static int __get_xps_queue_idx(struct net_device *dev, struct sk_buff *skb,
 
 	if (dev->num_tc) {
 		tci *= dev->num_tc;
+		/*由skb优先级映射tc*/
 		tci += netdev_get_prio_tc_map(dev, skb->priority);
 	}
 
 	map = rcu_dereference(dev_maps->attr_map[tci]);
 	if (map) {
 		if (map->len == 1)
+		    /*只有一个成员时，默认使用0号队列*/
 			queue_index = map->queues[0];
 		else
 		    /*按hash选队列index*/
@@ -4102,6 +4120,7 @@ static int get_xps_queue(struct net_device *dev, struct net_device *sb_dev,
 
 	dev_maps = rcu_dereference(sb_dev->xps_rxqs_map);
 	if (dev_maps) {
+	    /*取rx queue 将其做为tci,获取queue_index*/
 		int tci = sk_rx_queue_get(sk);
 
 		if (tci >= 0 && tci < dev->num_rx_queues)
@@ -4111,6 +4130,7 @@ static int get_xps_queue(struct net_device *dev, struct net_device *sb_dev,
 
 get_cpus_map:
 	if (queue_index < 0) {
+	    /*获取sender_cpu来确认queue_index*/
 		dev_maps = rcu_dereference(sb_dev->xps_cpus_map);
 		if (dev_maps) {
 			unsigned int tci = skb->sender_cpu - 1;
@@ -4141,10 +4161,12 @@ u16 dev_pick_tx_cpu_id(struct net_device *dev, struct sk_buff *skb,
 }
 EXPORT_SYMBOL(dev_pick_tx_cpu_id);
 
+/*系统默认的tx队列选择*/
 u16 netdev_pick_tx(struct net_device *dev, struct sk_buff *skb,
 		     struct net_device *sb_dev)
 {
 	struct sock *sk = skb->sk;
+	/*默认使用socket层关联的tx queue，防止多次选择*/
 	int queue_index = sk_tx_queue_get(sk);
 
 	sb_dev = sb_dev ? : dev;
@@ -4155,11 +4177,14 @@ u16 netdev_pick_tx(struct net_device *dev, struct sk_buff *skb,
 		int new_index = get_xps_queue(dev, sb_dev, skb);
 
 		if (new_index < 0)
+		    /*再选择tx队列索引*/
 			new_index = skb_tx_hash(dev, sb_dev, skb);
 
+		/*queue index有变更，且sock处于timeout,new_syn_rcv之外*/
 		if (queue_index != new_index && sk &&
 		    sk_fullsock(sk) &&
 		    rcu_access_pointer(sk->sk_dst_cache))
+		    /*为当前socket关联新的tx queue*/
 			sk_tx_queue_set(sk, new_index);
 
 		queue_index = new_index;
@@ -4177,7 +4202,8 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 	int queue_index = 0;
 
 #ifdef CONFIG_XPS
-	/*如果xps开启，则取skb对应的sender_cpu*/
+	/*如果xps开启，则取skb对应的sender_cpu,此字段如果之前没有填充，则
+	 * 为零，会导致sender_cpu >= NR_CPUS，故在下面的行进行首次设置即可。*/
 	u32 sender_cpu = skb->sender_cpu - 1;
 
 	if (sender_cpu >= (u32)NR_CPUS)
@@ -4193,7 +4219,7 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 			//通过驱动操作函数选择
 			queue_index = ops->ndo_select_queue(dev, skb, sb_dev);
 		else
-		    /*驱动未提供queue选择方式*/
+		    /*驱动未提供queue,默认选择方式*/
 			queue_index = netdev_pick_tx(dev, skb, sb_dev);
 
 		queue_index = netdev_cap_txqueue(dev, queue_index);
@@ -4249,6 +4275,7 @@ static int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	 */
 	rcu_read_lock_bh();
 
+	/*如有必要，更新skb->priority*/
 	skb_update_prio(skb);
 
 	qdisc_pkt_len_init(skb);
@@ -4500,8 +4527,7 @@ set_rps_cpu(struct net_device *dev, struct sk_buff *skb,
 			goto out;
 		/*按hash计算一个flow_id*/
 		flow_id = skb_get_hash(skb) & flow_table->mask;
-		rc = dev->netdev_ops->s
-		        (dev, skb,
+		rc = dev->netdev_ops->ndo_rx_flow_steer(dev, skb,
 							rxq_index, flow_id);
 		if (rc < 0)
 			goto out;

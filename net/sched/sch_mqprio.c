@@ -59,15 +59,18 @@ static void mqprio_destroy(struct Qdisc *sch)
 	}
 }
 
+/*配置校验*/
 static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt)
 {
 	int i, j;
 
 	/* Verify num_tc is not out of max range */
 	if (qopt->num_tc > TC_MAX_QUEUE)
+	    /*num_tc不得超标*/
 		return -EINVAL;
 
 	/* Verify priority mapping uses valid tcs */
+	/*填写在prio_tc_map中的元素不得大于tc数目*/
 	for (i = 0; i < TC_BITMASK + 1; i++) {
 		if (qopt->prio_tc_map[i] >= qopt->num_tc)
 			return -EINVAL;
@@ -87,7 +90,7 @@ static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt)
 	 * hardware doesn't support offload and we should return an error.
 	 */
 	if (qopt->hw)
-		//如果需要offload到硬件，则要求dev支持nod_setup_tc函数
+		//如果需要offload到硬件，则要求dev支持ndo_setup_tc函数
 		return dev->netdev_ops->ndo_setup_tc ? 0 : -EINVAL;
 
 	for (i = 0; i < qopt->num_tc; i++) {
@@ -99,10 +102,12 @@ static int mqprio_parse_opt(struct net_device *dev, struct tc_mqprio_qopt *qopt)
 		if (qopt->offset[i] >= dev->real_num_tx_queues ||
 		    !qopt->count[i] ||
 		    last > dev->real_num_tx_queues)
+		    /*offset不得超过dev的实际队列数，count不得为0，last不得超过dev实际队列数*/
 			return -EINVAL;
 
 		/* Verify that the offset and counts do not overlap */
 		for (j = i + 1; j < qopt->num_tc; j++) {
+		    /*配置间不得重叠*/
 			if (last > qopt->offset[j])
 				return -EINVAL;
 		}
@@ -165,7 +170,7 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 	if (!opt || nla_len(opt) < sizeof(*qopt))
 		return -EINVAL;
 
-	//mqprio对应的配置选项
+	//取mqprio对应的配置选项，并进行校验
 	qopt = nla_data(opt);
 	if (mqprio_parse_opt(dev, qopt))
 		return -EINVAL;
@@ -282,6 +287,7 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 
 		priv->hw_offload = mqprio.qopt.hw;
 	} else {
+	    /*填充dev->num_tc,dev->tc_to_txq*/
 		netdev_set_num_tc(dev, qopt->num_tc);
 		for (i = 0; i < qopt->num_tc; i++)
 			netdev_set_tc_queue(dev, i,
@@ -290,6 +296,7 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 
 	/* Always use supplied priority mappings */
 	for (i = 0; i < TC_BITMASK + 1; i++)
+	    /*填充dev->prio_tc_map的映射关系*/
 		netdev_set_prio_tc_map(dev, i, qopt->prio_tc_map[i]);
 
 	sch->flags |= TCQ_F_MQROOT;

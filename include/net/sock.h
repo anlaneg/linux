@@ -363,6 +363,7 @@ struct sock {
 #define sk_node			__sk_common.skc_node
 #define sk_nulls_node		__sk_common.skc_nulls_node
 #define sk_refcnt		__sk_common.skc_refcnt
+/*此socket使用哪个tx queue进行发包*/
 #define sk_tx_queue_mapping	__sk_common.skc_tx_queue_mapping
 #ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
 #define sk_rx_queue_mapping	__sk_common.skc_rx_queue_mapping
@@ -1872,6 +1873,7 @@ static inline int sk_receive_skb(struct sock *sk, struct sk_buff *skb,
 	return __sk_receive_skb(sk, skb, nested, 1, true);
 }
 
+/*设置此sock关联到指定tx queue*/
 static inline void sk_tx_queue_set(struct sock *sk, int tx_queue)
 {
 	/* sk_tx_queue_mapping accept only upto a 16-bit value */
@@ -1882,11 +1884,13 @@ static inline void sk_tx_queue_set(struct sock *sk, int tx_queue)
 
 #define NO_QUEUE_MAPPING	USHRT_MAX
 
+/*指明socket未关联tx queue*/
 static inline void sk_tx_queue_clear(struct sock *sk)
 {
 	sk->sk_tx_queue_mapping = NO_QUEUE_MAPPING;
 }
 
+/*取socket对应的tx queue index*/
 static inline int sk_tx_queue_get(const struct sock *sk)
 {
 	if (sk && sk->sk_tx_queue_mapping != NO_QUEUE_MAPPING)

@@ -1064,6 +1064,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
 	struct flowi4 fl4_stack;
 	struct flowi4 *fl4;
+	/*要发送的报文长度*/
 	int ulen = len;
 	struct ipcm_cookie ipc;
 	struct rtable *rt = NULL;
@@ -1107,6 +1108,8 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		}
 		release_sock(sk);
 	}
+
+	/*增加udp header*/
 	ulen += sizeof(struct udphdr);
 
 	/*

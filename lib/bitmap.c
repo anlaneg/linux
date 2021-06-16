@@ -1253,6 +1253,7 @@ void bitmap_copy_le(unsigned long *dst, const unsigned long *src, unsigned int n
 EXPORT_SYMBOL(bitmap_copy_le);
 #endif
 
+/*创建bitmap*/
 unsigned long *bitmap_alloc(unsigned int nbits, gfp_t flags)
 {
 	return kmalloc_array(BITS_TO_LONGS(nbits), sizeof(unsigned long),
