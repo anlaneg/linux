@@ -332,7 +332,7 @@ SEQCOUNT_LOCKNAME(ww_mutex,     struct ww_mutex, true,     &s->lock->base, ww_mu
 	unsigned __seq;							\
 									\
 	while ((__seq = seqprop_sequence(s)) & 1)			\
-	    	//读数为奇数时，repeat读\
+	    	/*读数为奇数时，repeat读*/\
 		cpu_relax();						\
 									\
 	kcsan_atomic_next(KCSAN_SEQLOCK_REGION_MAX);			\
@@ -347,7 +347,7 @@ SEQCOUNT_LOCKNAME(ww_mutex,     struct ww_mutex, true,     &s->lock->base, ww_mu
  */
 #define raw_read_seqcount_begin(s)					\
 ({									\
-    	//读取seq序号（ret返回时必为偶数）\
+    	/*读取seq序号（ret返回时必为偶数）*/\
 	unsigned _seq = __read_seqcount_begin(s);			\
 									\
 	smp_rmb();							\
@@ -363,7 +363,7 @@ SEQCOUNT_LOCKNAME(ww_mutex,     struct ww_mutex, true,     &s->lock->base, ww_mu
 #define read_seqcount_begin(s)						\
 ({									\
 	seqcount_lockdep_reader_access(seqprop_ptr(s));			\
-	//读取一个偶数并返回\
+	/*读取一个偶数并返回*/\
 	raw_read_seqcount_begin(s);					\
 })
 
