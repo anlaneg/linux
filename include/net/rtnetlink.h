@@ -107,6 +107,7 @@ struct rtnl_link_ops {
 
 	unsigned int		slave_maxtype;
 	const struct nla_policy	*slave_policy;
+	/*slave配置变更时调用*/
 	int			(*slave_changelink)(struct net_device *dev,
 						    struct net_device *slave_dev,
 						    struct nlattr *tb[],

@@ -7566,7 +7566,7 @@ struct net_device *netdev_master_upper_dev_get(struct net_device *dev)
 	if (list_empty(&dev->adj_list.upper))
 		return NULL;
 
-	/*取dev->adj_list首个设备*/
+	/*取dev->adj_list首个设备，如果其为master，则返回*/
 	upper = list_first_entry(&dev->adj_list.upper,
 				 struct netdev_adjacent, list);
 	if (likely(upper->master))

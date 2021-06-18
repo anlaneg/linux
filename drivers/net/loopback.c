@@ -155,7 +155,8 @@ static void loopback_dev_free(struct net_device *dev)
 
 static const struct net_device_ops loopback_ops = {
 	.ndo_init        = loopback_dev_init,
-	.ndo_start_xmit  = loopback_xmit,//loopback 发包函数（回环发出的报，又回到协议栈）
+	//loopback 发包函数（回环发出的报，又回到协议栈）
+	.ndo_start_xmit  = loopback_xmit,
 	.ndo_get_stats64 = loopback_get_stats64,
 	.ndo_set_mac_address = eth_mac_addr,
 };
@@ -188,7 +189,7 @@ static void gen_lo_setup(struct net_device *dev,
 		| NETIF_F_LOOPBACK;
 	dev->ethtool_ops	= eth_ops;
 	dev->header_ops		= hdr_ops;
-	dev->netdev_ops		= dev_ops;
+	dev->netdev_ops		= dev_ops;/*设备操作集*/
 	dev->needs_free_netdev	= true;
 	dev->priv_destructor	= dev_destructor;
 }
@@ -214,6 +215,7 @@ static __net_init int loopback_net_init(struct net *net)
 	if (!dev)
 		goto out;
 
+	/*将设备放置在此net namespace上*/
 	dev_net_set(dev, net);
 	err = register_netdev(dev);
 	if (err)
@@ -233,13 +235,14 @@ out:
 
 /* Registered in net/core/dev.c */
 struct pernet_operations __net_initdata loopback_net_ops = {
-	.init = loopback_net_init,
+	.init = loopback_net_init,/*loopback设备的pernet初始化*/
 };
 
 /* blackhole netdevice */
 static netdev_tx_t blackhole_netdev_xmit(struct sk_buff *skb,
 					 struct net_device *dev)
 {
+    /*所有报文将被丢弃*/
 	kfree_skb(skb);
 	net_warn_ratelimited("%s(): Dropping skb.\n", __func__);
 	return NETDEV_TX_OK;
@@ -260,6 +263,7 @@ static void blackhole_netdev_setup(struct net_device *dev)
 /* Setup and register the blackhole_netdev. */
 static int __init blackhole_netdev_init(void)
 {
+    /*创建blackhole设备*/
 	blackhole_netdev = alloc_netdev(0, "blackhole_dev", NET_NAME_UNKNOWN,
 					blackhole_netdev_setup);
 	if (!blackhole_netdev)
@@ -271,6 +275,7 @@ static int __init blackhole_netdev_init(void)
 	rtnl_unlock();
 
 	blackhole_netdev->flags |= IFF_UP | IFF_RUNNING;
+	/*将设备添加到init_net*/
 	dev_net_set(blackhole_netdev, &init_net);
 
 	return 0;

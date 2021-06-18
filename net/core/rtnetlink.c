@@ -369,10 +369,10 @@ void rtnl_unregister_all(int protocol)
 }
 EXPORT_SYMBOL_GPL(rtnl_unregister_all);
 
-//用于串接注册的rtnl_link_ops
+//用于串接系统注册的rtnl_link_ops
 static LIST_HEAD(link_ops);
 
-//给定kind获取rtnl_link_ops
+//给定kind名称获取rtnl_link_ops
 static const struct rtnl_link_ops *rtnl_link_ops_get(const char *kind)
 {
 	const struct rtnl_link_ops *ops;
@@ -1969,6 +1969,7 @@ static const struct rtnl_link_ops *linkinfo_to_kind_ops(const struct nlattr *nla
 	if (nla_parse_nested_deprecated(linfo, IFLA_INFO_MAX, nla, ifla_info_policy, NULL) < 0)
 		return NULL;
 
+	/*通过kind字符串获取rtnl_link_ops*/
 	if (linfo[IFLA_INFO_KIND]) {
 		char kind[MODULE_NAME_LEN];
 
@@ -3332,12 +3333,14 @@ static int __rtnl_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct nlattr *slave_attr[RTNL_SLAVE_MAX_TYPE + 1];
 	unsigned char name_assign_type = NET_NAME_USER;
 	struct nlattr *linkinfo[IFLA_INFO_MAX + 1];
+	/*master设备操作集*/
 	const struct rtnl_link_ops *m_ops = NULL;
 	struct net_device *master_dev = NULL;
 	struct net *net = sock_net(skb->sk);
 	const struct rtnl_link_ops *ops;
 	struct nlattr *tb[IFLA_MAX + 1];
 	struct net *dest_net, *link_net;
+	/*记录slave data*/
 	struct nlattr **slave_data;
 	char kind[MODULE_NAME_LEN];
 	struct net_device *dev;
@@ -3358,6 +3361,7 @@ replay:
 	if (err < 0)
 		return err;
 
+	/*接口名称*/
 	if (tb[IFLA_IFNAME])
 		nla_strscpy(ifname, tb[IFLA_IFNAME], IFNAMSIZ);
 	else
@@ -3379,6 +3383,7 @@ replay:
 			m_ops = master_dev->rtnl_link_ops;
 	}
 
+	/*消息校验*/
 	err = validate_linkmsg(dev, tb);
 	if (err < 0)
 		return err;
@@ -3404,7 +3409,7 @@ replay:
 
 	data = NULL;
 	if (ops) {
-		//解析link独有的data
+		//解析link独有的info_data
 		if (ops->maxtype > RTNL_MAX_TYPE)
 			return -EINVAL;
 
@@ -3426,6 +3431,7 @@ replay:
 
 	slave_data = NULL;
 	if (m_ops) {
+	    /*有master设备情况下处理slave_data*/
 		if (m_ops->slave_maxtype > RTNL_SLAVE_MAX_TYPE)
 			return -EINVAL;
 
@@ -3465,6 +3471,7 @@ replay:
 			status |= DO_SETLINK_NOTIFY;
 		}
 
+		/*有slave相关的配置，执行slave change*/
 		if (linkinfo[IFLA_INFO_SLAVE_DATA]) {
 			if (!m_ops || !m_ops->slave_changelink)
 				return -EOPNOTSUPP;
@@ -3476,11 +3483,11 @@ replay:
 			status |= DO_SETLINK_NOTIFY;
 		}
 
-		//做link的配置
+		//接口存在，做link的配置
 		return do_setlink(skb, dev, ifm, extack, tb, ifname, status);
 	}
 
-	//此情况下dev不存在
+	//此情况下dev不存在，需要新建link
 
 	//如果不需要create，则报错
 	if (!(nlh->nlmsg_flags & NLM_F_CREATE)) {
@@ -3495,7 +3502,7 @@ replay:
 		return -EOPNOTSUPP;
 
 	if (!ops) {
-		//无ops，尝试加载module再查询
+		//无ops，尝试加载此kind类型的module，再查询
 #ifdef CONFIG_MODULES
 		if (kind[0]) {
 			__rtnl_unlock();
@@ -3524,6 +3531,7 @@ replay:
 	if (IS_ERR(dest_net))
 		return PTR_ERR(dest_net);
 
+	/*修改设备对应的netns*/
 	if (tb[IFLA_LINK_NETNSID]) {
 		int id = nla_get_s32(tb[IFLA_LINK_NETNSID]);
 
@@ -3565,11 +3573,12 @@ replay:
 	if (err < 0)
 		goto out_unregister;
 	if (link_net) {
-		//
+		//变更设备的net namespace
 		err = dev_change_net_namespace(dev, dest_net, ifname);
 		if (err < 0)
 			goto out_unregister;
 	}
+
 	/*设置dev设备的master接口为tb[ifla_master]*/
 	if (tb[IFLA_MASTER]) {
 		err = do_set_master(dev, nla_get_u32(tb[IFLA_MASTER]), extack);
