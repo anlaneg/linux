@@ -434,14 +434,17 @@ static int flow_change(struct net *net, struct sk_buff *in_skb,
 	if (!fnew)
 		return -ENOBUFS;
 
+	/*解析ematch的配置规则*/
 	err = tcf_em_tree_validate(tp, tb[TCA_FLOW_EMATCHES], &fnew->ematches);
 	if (err < 0)
 		goto err1;
 
+	/*初始化flow的action*/
 	err = tcf_exts_init(&fnew->exts, net, TCA_FLOW_ACT, TCA_FLOW_POLICE);
 	if (err < 0)
 		goto err2;
 
+	/*action校验*/
 	err = tcf_exts_validate(net, tp, tb, tca[TCA_RATE], &fnew->exts, ovr,
 				true, extack);
 	if (err < 0)

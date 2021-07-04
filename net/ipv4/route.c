@@ -2643,6 +2643,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 
 		/* RACE: Check return value of inet_select_addr instead. */
 		if (!(dev_out->flags & IFF_UP) || !__in_dev_get_rcu(dev_out)) {
+		    /*按口不up*/
 			rth = ERR_PTR(-ENETUNREACH);
 			goto out;
 		}

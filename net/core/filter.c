@@ -2422,6 +2422,7 @@ static int __bpf_redirect_neigh(struct sk_buff *skb, struct net_device *dev,
 	if (unlikely(skb->mac_header >= skb->network_header))
 		goto out;
 	bpf_push_mac_rcsum(skb);
+	/*如果报文为广播，则跳过*/
 	if (is_multicast_ether_addr(ethh->h_dest))
 		goto out;
 
@@ -2441,7 +2442,7 @@ out:
 /* Internal, non-exposed redirect flags. */
 enum {
 	BPF_F_NEIGH	= (1ULL << 1),
-	BPF_F_PEER	= (1ULL << 2),
+	BPF_F_PEER	= (1ULL << 2),/*通过ndo_peer回调来确定*/
 	BPF_F_NEXTHOP	= (1ULL << 3),
 #define BPF_F_REDIRECT_INTERNAL	(BPF_F_NEIGH | BPF_F_PEER | BPF_F_NEXTHOP)
 };
@@ -2491,6 +2492,7 @@ EXPORT_PER_CPU_SYMBOL_GPL(bpf_redirect_info);
 
 int skb_do_redirect(struct sk_buff *skb)
 {
+    /*取当前cpu上的redirect信息*/
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	struct net *net = dev_net(skb->dev);
 	struct net_device *dev;
@@ -2513,9 +2515,11 @@ int skb_do_redirect(struct sk_buff *skb)
 			     !(dev->flags & IFF_UP) ||
 			     net_eq(net, dev_net(dev))))
 			goto out_drop;
+		/*变更报文到对端设备*/
 		skb->dev = dev;
 		return -EAGAIN;
 	}
+
 	return flags & BPF_F_NEIGH ?
 	       __bpf_redirect_neigh(skb, dev, flags & BPF_F_NEXTHOP ?
 				    &ri->nh : NULL) :

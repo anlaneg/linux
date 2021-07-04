@@ -65,6 +65,7 @@ static int fib_net_dump(struct net *net, struct notifier_block *nb,
 	int err = 0;
 
 	rcu_read_lock();
+	/*遍历已注册的所有fib_notifier_ops,按nb执行fib_dump*/
 	list_for_each_entry_rcu(ops, &fn_net->fib_notifier_ops, list) {
 		if (!try_module_get(ops->owner))
 			continue;
@@ -96,6 +97,7 @@ static bool fib_dump_is_consistent(struct net *net, struct notifier_block *nb,
 }
 
 #define FIB_DUMP_MAX_RETRIES 5
+/*注册路由事件变更通知链*/
 int register_fib_notifier(struct net *net, struct notifier_block *nb,
 			  void (*cb)(struct notifier_block *nb),
 			  struct netlink_ext_ack *extack)

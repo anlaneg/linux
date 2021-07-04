@@ -29,6 +29,7 @@ int nsh_push(struct sk_buff *skb, const struct nshhdr *pushed_nh)
 	if (skb_cow_head(skb, length) < 0)
 		return -ENOMEM;
 
+	//添加新的nsh
 	skb_push(skb, length);
 	nh = (struct nshhdr *)(skb->data);
 	memcpy(nh, pushed_nh, length);
@@ -67,6 +68,7 @@ int nsh_pop(struct sk_buff *skb)
 	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 	skb_reset_mac_len(skb);
+	/*记录内层协议*/
 	skb->protocol = inner_proto;
 
 	return 0;

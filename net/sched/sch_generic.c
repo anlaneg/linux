@@ -415,10 +415,13 @@ unsigned long dev_trans_start(struct net_device *dev)
 	unsigned long val, res;
 	unsigned int i;
 
+	/*先取real_dev*/
 	if (is_vlan_dev(dev))
 		dev = vlan_dev_real_dev(dev);
 	else if (netif_is_macvlan(dev))
 		dev = macvlan_dev_real_dev(dev);
+
+	/*找出多个队列中最大的trans_start时间*/
 	res = netdev_get_tx_queue(dev, 0)->trans_start;
 	for (i = 1; i < dev->num_tx_queues; i++) {
 		val = netdev_get_tx_queue(dev, i)->trans_start;
@@ -435,6 +438,7 @@ static void dev_watchdog(struct timer_list *t)
 	struct net_device *dev = from_timer(dev, t, watchdog_timer);
 
 	netif_tx_lock(dev);
+	/*忽略掉noop qdisc*/
 	if (!qdisc_tx_is_noop(dev)) {
 		if (netif_device_present(dev) &&
 		    netif_running(dev) &&
@@ -475,6 +479,7 @@ static void dev_watchdog(struct timer_list *t)
 				dev_hold(dev);
 		}
 	}
+	/*清除frozen状态*/
 	netif_tx_unlock(dev);
 
 	dev_put(dev);
@@ -1378,7 +1383,7 @@ void dev_init_scheduler(struct net_device *dev)
 	if (dev_ingress_queue(dev))
 		dev_init_scheduler_queue(dev, dev_ingress_queue(dev), &noop_qdisc);
 
-	//初始化watchdog定时器
+	//初始化watchdog定时器，用于监测tx超时
 	timer_setup(&dev->watchdog_timer, dev_watchdog, 0);
 }
 
@@ -1476,7 +1481,7 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 	 * is done.
 	 */
 	rcu_barrier();
-	//设置filter_list值为tp_head
+	//设置此miniq查找时的首个tp
 	miniq->filter_list = tp_head;
 	rcu_assign_pointer(*miniqp->p_miniq, miniq);
 
@@ -1489,6 +1494,7 @@ void mini_qdisc_pair_swap(struct mini_Qdisc_pair *miniqp,
 }
 EXPORT_SYMBOL(mini_qdisc_pair_swap);
 
+/*指定miniqp对应的block*/
 void mini_qdisc_pair_block_init(struct mini_Qdisc_pair *miniqp,
 				struct tcf_block *block)
 {

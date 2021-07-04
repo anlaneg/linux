@@ -54,6 +54,7 @@ static struct tcf_block *ingress_tcf_block(struct Qdisc *sch, unsigned long cl,
 	return q->block;
 }
 
+/*为miniqp指定新的tp_head,解决匹配哪些规则的问题*/
 static void clsact_chain_head_change(struct tcf_proto *tp_head, void *priv)
 {
 	struct mini_Qdisc_pair *miniqp = priv;
@@ -89,7 +90,7 @@ static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr
 	//当前初始化ingress队列，故指明需要ingress钩子点处理
 	net_inc_ingress_queue();
 
-	//使对miniqp的修改可以修改dev->miniq_ingress
+	//初始化q->miniqp,并使dev->miniq_ingress指向它
 	mini_qdisc_pair_init(&q->miniqp, sch, &dev->miniq_ingress);
 
 	q->block_info.binder_type = FLOW_BLOCK_BINDER_TYPE_CLSACT_INGRESS;
@@ -100,6 +101,7 @@ static int ingress_init(struct Qdisc *sch/*要初始化的qdisc*/, struct nlattr
 	if (err)
 		return err;
 
+	/*指向q->block*/
 	mini_qdisc_pair_block_init(&q->miniqp, q->block);
 
 	return 0;

@@ -24,6 +24,7 @@ const struct slave_attribute slave_attr_##_name = {		\
 #define SLAVE_ATTR_RO(_name)					\
 	SLAVE_ATTR(_name, 0444, _name##_show)
 
+/*显示slave状态*/
 static ssize_t state_show(struct slave *slave, char *buf)
 {
 	switch (bond_slave_state(slave)) {
@@ -37,18 +38,21 @@ static ssize_t state_show(struct slave *slave, char *buf)
 }
 static SLAVE_ATTR_RO(state);
 
+/*显示slave的链路状态*/
 static ssize_t mii_status_show(struct slave *slave, char *buf)
 {
 	return sprintf(buf, "%s\n", bond_slave_link_status(slave->link));
 }
 static SLAVE_ATTR_RO(mii_status);
 
+/*显示slave的失效次数*/
 static ssize_t link_failure_count_show(struct slave *slave, char *buf)
 {
 	return sprintf(buf, "%d\n", slave->link_failure_count);
 }
 static SLAVE_ATTR_RO(link_failure_count);
 
+/*记录设备原有的硬件地址*/
 static ssize_t perm_hwaddr_show(struct slave *slave, char *buf)
 {
 	return sprintf(buf, "%*phC\n",
@@ -63,6 +67,7 @@ static ssize_t queue_id_show(struct slave *slave, char *buf)
 }
 static SLAVE_ATTR_RO(queue_id);
 
+/*8023ad协商的id号*/
 static ssize_t ad_aggregator_id_show(struct slave *slave, char *buf)
 {
 	const struct aggregator *agg;
@@ -78,6 +83,7 @@ static ssize_t ad_aggregator_id_show(struct slave *slave, char *buf)
 }
 static SLAVE_ATTR_RO(ad_aggregator_id);
 
+/*显示port的状态*/
 static ssize_t ad_actor_oper_port_state_show(struct slave *slave, char *buf)
 {
 	const struct port *ad_port;
@@ -93,6 +99,7 @@ static ssize_t ad_actor_oper_port_state_show(struct slave *slave, char *buf)
 }
 static SLAVE_ATTR_RO(ad_actor_oper_port_state);
 
+/*对端状态*/
 static ssize_t ad_partner_oper_port_state_show(struct slave *slave, char *buf)
 {
 	const struct port *ad_port;
@@ -108,6 +115,7 @@ static ssize_t ad_partner_oper_port_state_show(struct slave *slave, char *buf)
 }
 static SLAVE_ATTR_RO(ad_partner_oper_port_state);
 
+/*slave属性状态*/
 static const struct slave_attribute *slave_attrs[] = {
 	&slave_attr_state,
 	&slave_attr_mii_status,
@@ -140,6 +148,7 @@ int bond_sysfs_slave_add(struct slave *slave)
 	const struct slave_attribute **a;
 	int err;
 
+	/*在slave对应的kobj下添加这些属性*/
 	for (a = slave_attrs; *a; ++a) {
 		err = sysfs_create_file(&slave->kobj, &((*a)->attr));
 		if (err) {
@@ -151,6 +160,7 @@ int bond_sysfs_slave_add(struct slave *slave)
 	return 0;
 }
 
+/*移除bond对应的sysfs文件*/
 void bond_sysfs_slave_del(struct slave *slave)
 {
 	const struct slave_attribute **a;

@@ -834,6 +834,7 @@ EXPORT_SYMBOL(inet_getname);
 
 int inet_send_prepare(struct sock *sk)
 {
+    /*sk达到est状态，则在rfs情况下记录rxhash与cpu的映射关系*/
 	sock_rps_record_flow(sk);
 
 	/* We may need to bind the socket. */

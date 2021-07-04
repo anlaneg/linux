@@ -99,6 +99,7 @@ static struct tcindex_filter_result *tcindex_lookup(struct tcindex_data *p,
 }
 
 
+/*按skb->tc_index转换为key进行查询*/
 static int tcindex_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			    struct tcf_result *res)
 {

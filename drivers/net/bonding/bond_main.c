@@ -559,6 +559,7 @@ static int bond_update_speed_duplex(struct slave *slave)
 	return 0;
 }
 
+/*显示bond slave状态*/
 const char *bond_slave_link_status(s8 link)
 {
 	switch (link) {
@@ -1395,6 +1396,7 @@ static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 		ret = recv_probe(skb, bond, slave);
 		if (ret == RX_HANDLER_CONSUMED) {
 			consume_skb(skb);
+			/*告知上层报文已被消费*/
 			return ret;
 		}
 	}
@@ -1435,17 +1437,21 @@ static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 	return ret;
 }
 
+/*bond的tx类型*/
 static enum netdev_lag_tx_type bond_lag_tx_type(struct bonding *bond)
 {
 	switch (BOND_MODE(bond)) {
 	case BOND_MODE_ROUNDROBIN:
 		return NETDEV_LAG_TX_TYPE_ROUNDROBIN;
 	case BOND_MODE_ACTIVEBACKUP:
+	    /*主备方式*/
 		return NETDEV_LAG_TX_TYPE_ACTIVEBACKUP;
 	case BOND_MODE_BROADCAST:
+	    /*广播*/
 		return NETDEV_LAG_TX_TYPE_BROADCAST;
 	case BOND_MODE_XOR:
 	case BOND_MODE_8023AD:
+	    /*hash方式*/
 		return NETDEV_LAG_TX_TYPE_HASH;
 	default:
 		return NETDEV_LAG_TX_TYPE_UNKNOWN;
@@ -1493,6 +1499,7 @@ static int bond_master_upper_dev_link(struct bonding *bond, struct slave *slave,
 static void bond_upper_dev_unlink(struct bonding *bond, struct slave *slave)
 {
 	netdev_upper_dev_unlink(slave->dev, bond->dev);
+	/*取除slave接口标记*/
 	slave->dev->flags &= ~IFF_SLAVE;
 }
 
@@ -1973,8 +1980,10 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 		goto err_unregister;
 	}
 
+	/*slave状态变更*/
 	bond_lower_state_changed(new_slave);
 
+	/*添加new_slave做bond成员*/
 	res = bond_sysfs_slave_add(new_slave);
 	if (res) {
 		slave_dbg(bond_dev, slave_dev, "Error %d calling bond_sysfs_slave_add\n", res);
@@ -2148,6 +2157,7 @@ static int __bond_release_one(struct net_device *bond_dev,
 	/* recompute stats just before removing the slave */
 	bond_get_stats(bond->dev, &bond->bond_stats);
 
+	/*自bond中移除slave*/
 	bond_upper_dev_unlink(bond, slave);
 	/* unregister rx_handler early so bond_handle_frame wouldn't be called
 	 * for this slave anymore.

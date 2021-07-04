@@ -65,7 +65,8 @@ static rx_handler_result_t netdev_frame_hook(struct sk_buff **pskb)
 		return RX_HANDLER_PASS;
 
 	netdev_port_receive(skb);
-	return RX_HANDLER_CONSUMED;//知会kernel协议栈，报文已被消耗
+	//知会kernel协议栈，报文已被消耗
+	return RX_HANDLER_CONSUMED;
 }
 
 //取ovs的local接口

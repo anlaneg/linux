@@ -8,7 +8,7 @@
 /*
  * This file *must* be included with SUBSYS() defined.
  */
-
+/*cgroup各子系统*/
 #if IS_ENABLED(CONFIG_CPUSETS)
 SUBSYS(cpuset)
 #endif

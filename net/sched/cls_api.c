@@ -132,6 +132,7 @@ tcf_proto_lookup_ops(const char *kind, bool rtnl_held,
 {
 	const struct tcf_proto_ops *ops;
 
+	/*通过kind查找对应的ops*/
 	ops = __tcf_proto_lookup_ops(kind);
 	if (ops)
 		return ops;
@@ -242,6 +243,7 @@ static bool tcf_proto_is_unlocked(const char *kind)
 	bool ret;
 
 	if (strlen(kind) == 0)
+	    /*kind为空，未加锁*/
 		return false;
 
 	ops = tcf_proto_lookup_ops(kind, false, NULL);
@@ -358,6 +360,7 @@ static bool tcf_proto_is_deleting(struct tcf_proto *tp)
 
 struct tcf_filter_chain_list_item {
 	struct list_head list;
+	/*chain head替换回调*/
 	tcf_chain_head_change_t *chain_head_change;
 	void *chain_head_change_priv;
 };
@@ -385,7 +388,7 @@ static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 	return chain;
 }
 
-//更改chain_list首个tp
+//更改chain_list的first_tp为tp_head
 static void tcf_chain_head_change_item(struct tcf_filter_chain_list_item *item,
 				       struct tcf_proto *tp_head)
 {
@@ -1085,7 +1088,7 @@ static void tcf_block_flush_all_chains(struct tcf_block *block, bool rtnl_held)
  */
 
 static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的调度器*/,
-			    u32 *parent/*队列index*/, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
+			    u32 *parent/*队列index，如果为空，则使用dev->qdisc*/, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
 			    struct netlink_ext_ack *extack)
 {
 	const struct Qdisc_class_ops *cops;
@@ -1109,6 +1112,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 	if (!*parent) {
 		//取dev对应的root qdisc
 		*q = dev->qdisc;
+		/*使用q的handle做为parent*/
 		*parent = (*q)->handle;
 	} else {
 		//取parent指定的q
@@ -1120,6 +1124,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 		}
 	}
 
+	/*增加q的引用计数*/
 	*q = qdisc_refcount_inc_nz(*q);
 	if (!*q) {
 		NL_SET_ERR_MSG(extack, "Parent Qdisc doesn't exists");
@@ -1628,7 +1633,7 @@ static inline int __tcf_classify(struct sk_buff *skb,
 				 const struct tcf_proto *orig_tp,
 				 struct tcf_result *res/*分类结果*/,
 				 bool compat_mode,
-				 u32 *last_executed_chain)
+				 u32 *last_executed_chain/*上次执行时的chain*/)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	const int max_reclassify_loop = 4;
@@ -1679,7 +1684,7 @@ reset:
 		return TC_ACT_SHOT;
 	}
 
-	//自first_tp开始重查
+	//自first_tp开始进行新的查找
 	tp = first_tp;
 	goto reclassify;
 #endif
@@ -1706,6 +1711,7 @@ int tcf_classify_ingress(struct sk_buff *skb,
 	return __tcf_classify(skb, tp, tp, res, compat_mode,
 			      &last_executed_chain);
 #else
+	/*开启了skb扩展，则从skb扩展中获取chain信息，容许硬件执行一半后再upcall*/
 	u32 last_executed_chain = tp ? tp->chain->index : 0;
 	const struct tcf_proto *orig_tp = tp;
 	struct tc_skb_ext *ext;
@@ -2099,6 +2105,7 @@ static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n/*netlink消息
 	void *fh;
 	int err;
 	int tp_created;
+	/*标记是否已执行加锁：rtnl_lock*/
 	bool rtnl_held = false;
 
 	if (!netlink_ns_capable(skb, net->user_ns, CAP_NET_ADMIN))
@@ -2115,16 +2122,18 @@ replay:
 
 	t = nlmsg_data(n);
 
-	//提取filter对应报文类型及优先级
+	//提取filter对应报文类型
 	protocol = TC_H_MIN(t->tcm_info);
+	//filter对应的优先级
 	prio = TC_H_MAJ(t->tcm_info);
+	/*默认优先级不申请*/
 	prio_allocate = false;
 	parent = t->tcm_parent;
 	tp = NULL;
 	cl = 0;
 	block = NULL;
 
-	//如果未指定prio,有CREATE标记，则创建一个priority
+	//如果未指定prio,有CREATE标记，则需要申请优先级，这里先使用一个临时值
 	if (prio == 0) {
 		/* If no priority is provided by the user,
 		 * we allocate one.
@@ -2144,6 +2153,7 @@ replay:
 	if (err)
 		return err;
 
+	/*kind名称检查*/
 	if (tcf_proto_check_kind(tca[TCA_KIND], name)) {
 		NL_SET_ERR_MSG(extack, "Specified TC filter name too long");
 		err = -EINVAL;
@@ -2157,6 +2167,7 @@ replay:
 	if (rtnl_held ||
 	    (q && !(q->ops->cl_ops->flags & QDISC_CLASS_OPS_DOIT_UNLOCKED)) ||
 	    !tcf_proto_is_unlocked(name)) {
+	    /*ops需要进行加锁，执行加锁*/
 		rtnl_held = true;
 		rtnl_lock();
 	}
@@ -2258,7 +2269,7 @@ replay:
 		goto errout;
 	}
 
-	//在tp中通过t->tcm_handle查找指定filter
+	//在tp中通过t->tcm_handle查找指定tfilter
 	fh = tp->ops->get(tp, t->tcm_handle);
 
 	if (!fh) {
@@ -2287,8 +2298,9 @@ replay:
 			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
 			      rtnl_held, extack);
 	if (err == 0) {
+	    /*执行成功，知会newtfilter规则新建/变更*/
 		tfilter_notify(net, skb, n, tp, block, q, parent, fh,
-			       RTM_NEWTFILTER, false, rtnl_held);
+			       RTM_NEWTFILTER, false/*组播通知*/, rtnl_held);
 		tfilter_put(tp, fh);
 		/* q pointer is NULL for shared blocks */
 		if (q)
@@ -2936,16 +2948,21 @@ static int tc_chain_tmplt_add(struct tcf_chain *chain, struct net *net,
 
 	/* If kind is not set, user did not specify template. */
 	if (!tca[TCA_KIND])
+	    /*未设置kind,返回*/
 		return 0;
 
 	if (tcf_proto_check_kind(tca[TCA_KIND], name)) {
+	    /*传入的名称过长*/
 		NL_SET_ERR_MSG(extack, "Specified TC chain template name too long");
 		return -EINVAL;
 	}
 
+	/*按名称查找ops*/
 	ops = tcf_proto_lookup_ops(name, true, extack);
 	if (IS_ERR(ops))
 		return PTR_ERR(ops);
+
+	/*必须要提供以下三个回调*/
 	if (!ops->tmplt_create || !ops->tmplt_destroy || !ops->tmplt_dump) {
 		NL_SET_ERR_MSG(extack, "Chain templates are not supported with specified classifier");
 		return -EOPNOTSUPP;

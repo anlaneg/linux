@@ -34,9 +34,11 @@ static struct proto alg_proto = {
 	.obj_size		= sizeof(struct alg_sock),
 };
 
+/*注册系统所有alg types*/
 static LIST_HEAD(alg_types);
 static DECLARE_RWSEM(alg_types_sem);
 
+/*通过name获得af_alg_type*/
 static const struct af_alg_type *alg_get_type(const char *name)
 {
 	const struct af_alg_type *type = ERR_PTR(-ENOENT);
@@ -56,12 +58,14 @@ static const struct af_alg_type *alg_get_type(const char *name)
 	return type;
 }
 
+/*注册alg type*/
 int af_alg_register_type(const struct af_alg_type *type)
 {
 	struct alg_type_list *node;
 	int err = -EEXIST;
 
 	down_write(&alg_types_sem);
+	/*防重复检查*/
 	list_for_each_entry(node, &alg_types, list) {
 		if (!strcmp(node->type->name, type->name))
 			goto unlock;
@@ -169,6 +173,7 @@ static int alg_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	sa->salg_type[sizeof(sa->salg_type) - 1] = 0;
 	sa->salg_name[addr_len - sizeof(*sa) - 1] = 0;
 
+	/*通过alg类型获得type*/
 	type = alg_get_type(sa->salg_type);
 	if (PTR_ERR(type) == -ENOENT) {
 		request_module("algif-%s", sa->salg_type);
@@ -369,6 +374,7 @@ static void alg_sock_destruct(struct sock *sk)
 	alg_do_release(ask->type, ask->private);
 }
 
+/*af alg socket创建*/
 static int alg_create(struct net *net, struct socket *sock, int protocol,
 		      int kern)
 {
@@ -1189,11 +1195,13 @@ EXPORT_SYMBOL_GPL(af_alg_get_rsgl);
 
 static int __init af_alg_init(void)
 {
+    /*注册alg proto*/
 	int err = proto_register(&alg_proto, 0);
 
 	if (err)
 		goto out;
 
+	/*注册af_alg*/
 	err = sock_register(&alg_family);
 	if (err != 0)
 		goto out_unregister_proto;

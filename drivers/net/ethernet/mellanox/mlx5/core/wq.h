@@ -154,6 +154,7 @@ static inline u16 mlx5_wq_cyc_get_tail(struct mlx5_wq_cyc *wq)
 	return mlx5_wq_cyc_ctr2ix(wq, wq->wqe_ctr - wq->cur_sz);
 }
 
+/*给定ix，自wq中获取一个weq*/
 static inline void *mlx5_wq_cyc_get_wqe(struct mlx5_wq_cyc *wq, u16 ix)
 {
 	return mlx5_frag_buf_get_wqe(&wq->fbc, ix);

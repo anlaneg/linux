@@ -5233,7 +5233,7 @@ int (*br_fdb_test_addr_hook)(struct net_device *dev,
 EXPORT_SYMBOL_GPL(br_fdb_test_addr_hook);
 #endif
 
-//ingress钩子点
+//kernel ingress钩子点
 static inline struct sk_buff *
 sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		   struct net_device *orig_dev, bool *another)
@@ -5249,6 +5249,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 	 * out here.
 	 */
 	if (!miniq)
+	    /*此设备没有miniq,退出ingress处理*/
 		return skb;
 
 	//处理上一个ptype的回调
@@ -5278,6 +5279,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 	case TC_ACT_STOLEN:
 	case TC_ACT_QUEUED:
 	case TC_ACT_TRAP:
+	    /*报文已缓存*/
 		consume_skb(skb);
 		return NULL;
 	case TC_ACT_REDIRECT:
@@ -5286,6 +5288,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		 * redirecting to another netdev
 		 */
 		__skb_push(skb, skb->mac_len);
+		/*将报文redirect到另一个设备*/
 		if (skb_do_redirect(skb) == -EAGAIN) {
 			__skb_pull(skb, skb->mac_len);
 			*another = true;
@@ -7468,6 +7471,7 @@ struct netdev_adjacent {
 	struct rcu_head rcu;
 };
 
+/*遍历adj_list，并从中查找adj_dev,如果查找返回adj,否则返回NULL*/
 static struct netdev_adjacent *__netdev_find_adj(struct net_device *adj_dev,
 						 struct list_head *adj_list)
 {
@@ -8204,6 +8208,7 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 	adj = __netdev_find_adj(adj_dev, dev_list);
 
 	if (adj) {
+	    /*如果已存在，增加引用计数*/
 		adj->ref_nr += 1;
 		pr_debug("Insert adjacency: dev %s adj_dev %s adj->ref_nr %d\n",
 			 dev->name, adj_dev->name, adj->ref_nr);
@@ -8389,6 +8394,7 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 			return master_dev == upper_dev ? -EEXIST : -EBUSY;
 	}
 
+	/*upper prechange事件*/
 	ret = call_netdevice_notifiers_info(NETDEV_PRECHANGEUPPER,
 					    &changeupper_info.info);
 	ret = notifier_to_errno(ret);
@@ -8482,9 +8488,9 @@ static void __netdev_upper_dev_unlink(struct net_device *dev,
 {
 	struct netdev_notifier_changeupper_info changeupper_info = {
 		.info = {
-			.dev = dev,
+			.dev = dev,/*移除的slave设备*/
 		},
-		.upper_dev = upper_dev,
+		.upper_dev = upper_dev,/*父设备*/
 		.linking = false,
 	};
 
@@ -8492,11 +8498,13 @@ static void __netdev_upper_dev_unlink(struct net_device *dev,
 
 	changeupper_info.master = netdev_master_upper_dev_get(dev) == upper_dev;
 
+	/*changeupper前通知*/
 	call_netdevice_notifiers_info(NETDEV_PRECHANGEUPPER,
 				      &changeupper_info.info);
 
 	__netdev_adjacent_dev_unlink_neighbour(dev, upper_dev);
 
+	/*changeupper通知*/
 	call_netdevice_notifiers_info(NETDEV_CHANGEUPPER,
 				      &changeupper_info.info);
 
@@ -8809,6 +8817,7 @@ void netdev_lower_state_changed(struct net_device *lower_dev,
 
 	ASSERT_RTNL();
 	changelowerstate_info.lower_state_info = lower_state_info;
+	/*lower state改变*/
 	call_netdevice_notifiers_info(NETDEV_CHANGELOWERSTATE,
 				      &changelowerstate_info.info);
 }
@@ -10479,7 +10488,7 @@ static int netif_alloc_netdev_queues(struct net_device *dev)
 	return 0;
 }
 
-//停止所有队列
+//采用driver xoff 停止所有队列
 void netif_tx_stop_all_queues(struct net_device *dev)
 {
 	unsigned int i;
@@ -10987,6 +10996,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 	}
 	storage->rx_dropped += (unsigned long)atomic_long_read(&dev->rx_dropped);
 	storage->tx_dropped += (unsigned long)atomic_long_read(&dev->tx_dropped);
+	/*报文被收到了协议栈，但没有handler，被丢弃*/
 	storage->rx_nohandler += (unsigned long)atomic_long_read(&dev->rx_nohandler);
 	return storage;
 }
@@ -11041,7 +11051,7 @@ void dev_get_tstats64(struct net_device *dev, struct rtnl_link_stats64 *s)
 }
 EXPORT_SYMBOL_GPL(dev_get_tstats64);
 
-//创建ingress队列
+//如果有，返回ingress队列，否则创建ingress队列
 struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 {
 	struct netdev_queue *queue = dev_ingress_queue(dev);
@@ -11733,6 +11743,7 @@ err_name:
  */
 const char *netdev_drivername(const struct net_device *dev)
 {
+    /*取设备driver名称*/
 	const struct device_driver *driver;
 	const struct device *parent;
 	const char *empty = "";

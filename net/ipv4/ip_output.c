@@ -1032,8 +1032,11 @@ static int __ip_append_data(struct sock *sk,
 
 	hh_len = LL_RESERVED_SPACE(rt->dst.dev);
 
+	/*ip分片头长度+ip选项头*/
 	fragheaderlen = sizeof(struct iphdr) + (opt ? opt->optlen : 0);
+	/*分片报文的最大大小*/
 	maxfraglen = ((mtu - fragheaderlen) & ~7) + fragheaderlen;
+	/*非分片报文的最大大小*/
 	maxnonfragsize = ip_sk_ignore_df(sk) ? IP_MAX_MTU : mtu;
 
 	if (cork->length + length > maxnonfragsize - fragheaderlen) {
@@ -1079,9 +1082,10 @@ static int __ip_append_data(struct sock *sk,
 	if (!skb)
 		goto alloc_new_skb;
 
+	/*要发送的数据为length*/
 	while (length > 0) {
 		/* Check if the remaining data fits into current packet. */
-		copy = mtu - skb->len;
+		copy = mtu - skb->len;/*skb中可存放的报文*/
 		if (copy < length)
 			copy = maxfraglen - skb->len;
 		if (copy <= 0) {

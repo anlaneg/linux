@@ -131,10 +131,12 @@ static int route4_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	u32 id, h;
 	int iif, dont_cache = 0;
 
+	/*取报文命中的路由情况*/
 	dst = skb_dst(skb);
 	if (!dst)
 		goto failure;
 
+	/*取路由对应的classid*/
 	id = dst->tclassid;
 
 	iif = inet_iif(skb);
@@ -142,6 +144,7 @@ static int route4_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	h = route4_fastmap_hash(id, iif);
 
 	spin_lock(&fastmap_lock);
+	/*在fastmap中查一下*/
 	if (id == head->fastmap[h].id &&
 	    iif == head->fastmap[h].iif &&
 	    (f = head->fastmap[h].filter) != NULL) {
@@ -159,6 +162,7 @@ static int route4_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	h = route4_hash_to(id);
 
 restart:
+    /*在ht表中查询*/
 	b = rcu_dereference_bh(head->table[h]);
 	if (b) {
 		for (f = rcu_dereference_bh(b->ht[route4_hash_from(id)]);

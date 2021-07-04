@@ -351,13 +351,15 @@ struct tcf_proto_ops {
 	//通过handle获取指定规则
 	void*			(*get)(struct tcf_proto*, u32 handle);
 	void			(*put)(struct tcf_proto *tp, void *f);
+	/*修改或者新增规则*/
 	int			(*change)(struct net *net, struct sk_buff *,
 					struct tcf_proto*, unsigned long,
 					u32 handle, struct nlattr **,
-					void **, bool, bool,
+					void **/*指向待修改规则，如果新建，则指针指向NULL*/, bool, bool,
 					struct netlink_ext_ack *);
-	int			(*delete)(struct tcf_proto *tp, void *arg,
-					  bool *last, bool rtnl_held,
+	/*删除规则*/
+	int			(*delete)(struct tcf_proto *tp, void *arg/*待操作规则*/,
+					  bool *last/*出参，是否为最后一条规则*/, bool rtnl_held,
 					  struct netlink_ext_ack *);
 	bool			(*delete_empty)(struct tcf_proto *tp);
 	/*按arg参数内容，遍历tp对应规则*/
@@ -407,7 +409,8 @@ enum tcf_proto_ops_flags {
 //此实现为通过protocol执行分类过滤
 struct tcf_proto {
 	/* Fast access part */
-	struct tcf_proto __rcu	*next;//串在chain->filter_chain链上
+    //串在chain->filter_chain链上
+	struct tcf_proto __rcu	*next;
 	void __rcu		*root;
 
 	/* called under RCU BH lock*/
@@ -415,19 +418,22 @@ struct tcf_proto {
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto */*执行分类的分类器*/,
 					    struct tcf_result */*出参，分类结果*/);
-	__be16			protocol;//支持的协议
+	//支持的协议
+	__be16			protocol;
 
 	/* All the rest */
 	u32			prio;//优先级
 	void			*data;
 	//操作集
 	const struct tcf_proto_ops	*ops;
-	struct tcf_chain	*chain;//tp所属的chain
+	//tp所属的chain
+	struct tcf_chain	*chain;
 	/* Lock protects tcf_proto shared state and can be used by unlocked
 	 * classifiers to protect their private data.
 	 */
 	spinlock_t		lock;
-	bool			deleting;//标记此tp正在被删除
+	//标记此tp正在被删除
+	bool			deleting;
 	refcount_t		refcnt;//引用计数
 	struct rcu_head		rcu;
 	struct hlist_node	destroy_ht_node;
@@ -1328,6 +1334,7 @@ static inline void psched_ratecfg_getrate(struct tc_ratespec *res,
 struct mini_Qdisc {
 	struct tcf_proto *filter_list;
 	struct tcf_block *block;
+	/*经过的报文数及字节数*/
 	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
 	struct gnet_stats_queue	__percpu *cpu_qstats;
 	struct rcu_head rcu;

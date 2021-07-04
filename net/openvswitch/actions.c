@@ -297,6 +297,7 @@ static int pop_eth(struct sk_buff *skb, struct sw_flow_key *key)
 	return 0;
 }
 
+/*在报文上添加一层以太头*/
 static int push_eth(struct sk_buff *skb, struct sw_flow_key *key,
 		    const struct ovs_action_push_eth *ethh)
 {
@@ -313,11 +314,13 @@ static int push_eth(struct sk_buff *skb, struct sw_flow_key *key,
 	return 0;
 }
 
+/*添加nsh头部*/
 static int push_nsh(struct sk_buff *skb, struct sw_flow_key *key,
 		    const struct nshhdr *nh)
 {
 	int err;
 
+	/*添加nsh头部*/
 	err = nsh_push(skb, nh);
 	if (err)
 		return err;
@@ -328,6 +331,7 @@ static int push_nsh(struct sk_buff *skb, struct sw_flow_key *key,
 	return 0;
 }
 
+/*丢弃nsh头部*/
 static int pop_nsh(struct sk_buff *skb, struct sw_flow_key *key)
 {
 	int err;
@@ -1418,14 +1422,17 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 			break;
 
 		case OVS_ACTION_ATTR_PUSH_ETH:
+		    /*为skb添加新的以太头*/
 			err = push_eth(skb, key, nla_data(a));
 			break;
 
 		case OVS_ACTION_ATTR_POP_ETH:
+		    /*移除掉skb上的以太头*/
 			err = pop_eth(skb, key);
 			break;
 
 		case OVS_ACTION_ATTR_PUSH_NSH: {
+		    /*向报文添加nsh头部*/
 			u8 buffer[NSH_HDR_MAX_LEN];
 			struct nshhdr *nh = (struct nshhdr *)buffer;
 
@@ -1438,6 +1445,7 @@ static int do_execute_actions(struct datapath *dp, struct sk_buff *skb,
 		}
 
 		case OVS_ACTION_ATTR_POP_NSH:
+		    /*丢弃报文的nsh头*/
 			err = pop_nsh(skb, key);
 			break;
 

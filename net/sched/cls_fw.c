@@ -26,15 +26,21 @@
 
 struct fw_head {
 	u32			mask;
+	/*存储匹配规则*/
 	struct fw_filter __rcu	*ht[HTSIZE];
 	struct rcu_head		rcu;
 };
 
 struct fw_filter {
+    /*串连下一条匹配*/
 	struct fw_filter __rcu	*next;
+	/*fw mark编号*/
 	u32			id;
+	/*规则动作*/
 	struct tcf_result	res;
+	/*接口匹配*/
 	int			ifindex;
+	/*filter扩展action*/
 	struct tcf_exts		exts;
 	struct tcf_proto	*tp;
 	struct rcu_work		rwork;
@@ -56,6 +62,7 @@ static int fw_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	u32 id = skb->mark;
 
 	if (head != NULL) {
+	    /*head不为空，以head中的ht规则为准*/
 		id &= head->mask;
 
 		for (f = rcu_dereference_bh(head->ht[fw_hash(id)]); f;
@@ -72,6 +79,7 @@ static int fw_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			}
 		}
 	} else {
+	    /*按skb->mark进行res->classid分类*/
 		struct Qdisc *q = tcf_block_q(tp->chain->block);
 
 		/* Old method: classify the packet using its skb mark. */
@@ -86,6 +94,7 @@ static int fw_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	return -1;
 }
 
+/*通过handle查找规则*/
 static void *fw_get(struct tcf_proto *tp, u32 handle)
 {
 	struct fw_head *head = rtnl_dereference(tp->root);
@@ -236,7 +245,7 @@ static int fw_set_parms(struct net *net, struct tcf_proto *tp,
 
 static int fw_change(struct net *net, struct sk_buff *in_skb,
 		     struct tcf_proto *tp, unsigned long base,
-		     u32 handle, struct nlattr **tca, void **arg,
+		     u32 handle, struct nlattr **tca, void **arg/*filter规则*/,
 		     bool ovr, bool rtnl_held,
 		     struct netlink_ext_ack *extack)
 {
@@ -261,6 +270,7 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 		if (f->id != handle && handle)
 			return -EINVAL;
 
+		/*填充new filter*/
 		fnew = kzalloc(sizeof(struct fw_filter), GFP_KERNEL);
 		if (!fnew)
 			return -ENOBUFS;
@@ -270,6 +280,7 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 		fnew->ifindex = f->ifindex;
 		fnew->tp = f->tp;
 
+		/*规则对应的action*/
 		err = tcf_exts_init(&fnew->exts, net, TCA_FW_ACT,
 				    TCA_FW_POLICE);
 		if (err < 0) {
@@ -284,6 +295,7 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 			return err;
 		}
 
+		/*加入到hash表中*/
 		fp = &head->ht[fw_hash(fnew->id)];
 		for (pfp = rtnl_dereference(*fp); pfp;
 		     fp = &pfp->next, pfp = rtnl_dereference(*fp))
@@ -294,6 +306,7 @@ static int fw_change(struct net *net, struct sk_buff *in_skb,
 		rcu_assign_pointer(*fp, fnew);
 		tcf_unbind_filter(tp, &f->res);
 		tcf_exts_get_net(&f->exts);
+		/*规则移除work*/
 		tcf_queue_work(&f->rwork, fw_delete_filter_work);
 
 		*arg = fnew;
@@ -342,6 +355,7 @@ errout:
 	return err;
 }
 
+/*调用arg->fn回调，完成规则遍历*/
 static void fw_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 		    bool rtnl_held)
 {
@@ -372,6 +386,7 @@ static void fw_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 	}
 }
 
+/*实现规则dump*/
 static int fw_dump(struct net *net, struct tcf_proto *tp, void *fh,
 		   struct sk_buff *skb, struct tcmsg *t, bool rtnl_held)
 {
@@ -432,6 +447,7 @@ static void fw_bind_class(void *fh, u32 classid, unsigned long cl, void *q,
 	}
 }
 
+//skb->mark匹配操作集
 static struct tcf_proto_ops cls_fw_ops __read_mostly = {
 	.kind		=	"fw",
 	.classify	=	fw_classify,

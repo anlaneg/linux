@@ -2781,7 +2781,7 @@ int sock_no_bind(struct socket *sock, struct sockaddr *saddr, int len)
 }
 EXPORT_SYMBOL(sock_no_bind);
 
-//xdp不支持connect调用
+//不支持connect调用
 int sock_no_connect(struct socket *sock, struct sockaddr *saddr,
 		    int len, int flags)
 {
@@ -2789,14 +2789,14 @@ int sock_no_connect(struct socket *sock, struct sockaddr *saddr,
 }
 EXPORT_SYMBOL(sock_no_connect);
 
-//xdp不支持socketpair调用
+//不支持socketpair调用
 int sock_no_socketpair(struct socket *sock1, struct socket *sock2)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_socketpair);
 
-//xdp不支持accept系统调用
+//不支持accept系统调用
 int sock_no_accept(struct socket *sock, struct socket *newsock, int flags,
 		   bool kern)
 {
@@ -2804,7 +2804,7 @@ int sock_no_accept(struct socket *sock, struct socket *newsock, int flags,
 }
 EXPORT_SYMBOL(sock_no_accept);
 
-//xdp不支持getname调用
+//不支持getname调用
 int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
 		    int peer)
 {
@@ -2812,27 +2812,28 @@ int sock_no_getname(struct socket *sock, struct sockaddr *saddr,
 }
 EXPORT_SYMBOL(sock_no_getname);
 
-//xdp不支持ioctl
+//不支持ioctl
 int sock_no_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_ioctl);
 
-//xdp不支持listen
+//不支持listen
 int sock_no_listen(struct socket *sock, int backlog)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_listen);
 
-//xdp不支持shutdown
+//不支持shutdown
 int sock_no_shutdown(struct socket *sock, int how)
 {
 	return -EOPNOTSUPP;
 }
 EXPORT_SYMBOL(sock_no_shutdown);
 
+/*不支持sendmsg*/
 int sock_no_sendmsg(struct socket *sock, struct msghdr *m, size_t len)
 {
 	return -EOPNOTSUPP;
@@ -2845,7 +2846,7 @@ int sock_no_sendmsg_locked(struct sock *sk, struct msghdr *m, size_t len)
 }
 EXPORT_SYMBOL(sock_no_sendmsg_locked);
 
-//xdp不支持recvmsg
+//不支持recvmsg
 int sock_no_recvmsg(struct socket *sock, struct msghdr *m, size_t len,
 		    int flags)
 {
@@ -2853,6 +2854,7 @@ int sock_no_recvmsg(struct socket *sock, struct msghdr *m, size_t len,
 }
 EXPORT_SYMBOL(sock_no_recvmsg);
 
+/*不支持mmap*/
 int sock_no_mmap(struct file *file, struct socket *sock, struct vm_area_struct *vma)
 {
 	/* Mirror missing mmap method error code */

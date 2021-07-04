@@ -696,7 +696,7 @@ static struct attribute *netstat_attrs[] __ro_after_init = {
 	&dev_attr_tx_window_errors.attr,
 	&dev_attr_rx_compressed.attr,
 	&dev_attr_tx_compressed.attr,
-	&dev_attr_rx_nohandler.attr,
+	&dev_attr_rx_nohandler.attr,/*协议栈收到，但缺少handler导致丢包*/
 	NULL
 };
 

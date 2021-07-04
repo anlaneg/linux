@@ -57,17 +57,21 @@ enum {
 #define TCA_ACT_NOREPLACE	0
 
 #define TC_ACT_UNSPEC	(-1)
+/*执行成功，确定tc_index*/
 #define TC_ACT_OK		0
 //执行重新分类（自链头重新匹配）
 #define TC_ACT_RECLASSIFY	1
 //报文将被free
 #define TC_ACT_SHOT		2
-//执行下一个action ???
+//执行下一个action
 #define TC_ACT_PIPE		3
+/*报文被拿走*/
 #define TC_ACT_STOLEN		4
+/*报文被入队*/
 #define TC_ACT_QUEUED		5
 //继续执行此action
 #define TC_ACT_REPEAT		6
+/*报文重定向*/
 #define TC_ACT_REDIRECT		7
 #define TC_ACT_TRAP		8 /* For hw path, this means "trap to cpu"
 				   * and don't further process the frame
@@ -717,6 +721,7 @@ enum {
 /* Extended Matches */
 
 struct tcf_ematch_tree_hdr {
+    /*有多少个匹配*/
 	__u16		nmatches;
 	__u16		progid;
 };

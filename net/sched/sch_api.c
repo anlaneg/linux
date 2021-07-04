@@ -337,10 +337,12 @@ struct Qdisc *qdisc_lookup_rcu(struct net_device *dev, u32 handle)
 
 	if (!handle)
 		return NULL;
+	/*在设备的qdisc中进行查询，确认指定handle*/
 	q = qdisc_match_from_root(dev->qdisc, handle);
 	if (q)
 		goto out;
 
+	/*取dev的ingress queue*/
 	nq = dev_ingress_queue_rcu(dev);
 	if (nq)
 		q = qdisc_match_from_root(nq->qdisc_sleeping, handle);
@@ -1550,6 +1552,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 			   struct netlink_ext_ack *extack)
 {
+    /*当前net namespace*/
 	struct net *net = sock_net(skb->sk);
 	struct tcmsg *tcm;
 	struct nlattr *tca[TCA_MAX + 1];
@@ -1569,6 +1572,7 @@ replay:
 		return err;
 
 	tcm = nlmsg_data(n);
+	/*如果申请ingress类型qdisc,则此值为TC_H_INGRESS*/
 	clid = tcm->tcm_parent;
 	q = p = NULL;
 

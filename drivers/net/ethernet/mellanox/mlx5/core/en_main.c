@@ -4592,6 +4592,7 @@ netdev_features_t mlx5e_features_check(struct sk_buff *skb,
 	return features;
 }
 
+/*tx timeout work工作函数*/
 static void mlx5e_tx_timeout_work(struct work_struct *work)
 {
 	struct mlx5e_priv *priv = container_of(work, struct mlx5e_priv,
@@ -4602,17 +4603,21 @@ static void mlx5e_tx_timeout_work(struct work_struct *work)
 	rtnl_lock();
 	mutex_lock(&priv->state_lock);
 
+	/*设备状态未开启，则解锁离开*/
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state))
 		goto unlock;
 
+	/*遍历每个tx队列*/
 	for (i = 0; i < netdev->real_num_tx_queues; i++) {
 		struct netdev_queue *dev_queue =
 			netdev_get_tx_queue(netdev, i);
 		struct mlx5e_txqsq *sq = priv->txq2sq[i];
 
+		/*忽略掉未stop的tx队列*/
 		if (!netif_xmit_stopped(dev_queue))
 			continue;
 
+		/*获取tx timeout的超时*/
 		if (mlx5e_reporter_tx_timeout(sq))
 		/* break if tried to reopened channels */
 			break;

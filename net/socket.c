@@ -2053,7 +2053,7 @@ SYSCALL_DEFINE3(getpeername, int, fd, struct sockaddr __user *, usockaddr,
  *	space and check the user space data area is readable before invoking
  *	the protocol.
  */
-int __sys_sendto(int fd, void __user *buff/*要发送的内容*/, size_t len/*数组长度*/, unsigned int flags,
+int __sys_sendto(int fd, void __user *buff/*要发送的内容*/, size_t len/*内容长度*/, unsigned int flags,
 		 struct sockaddr __user *addr/*目标地址*/,  int addr_len/*地址长度*/)
 {
 	struct socket *sock;
@@ -2063,6 +2063,7 @@ int __sys_sendto(int fd, void __user *buff/*要发送的内容*/, size_t len/*�
 	struct iovec iov;
 	int fput_needed;
 
+	/*初始化写操作的msg.msg_iter*/
 	err = import_single_range(WRITE, buff, len, &iov, &msg.msg_iter);
 	if (unlikely(err))
 		return err;
@@ -2079,12 +2080,16 @@ int __sys_sendto(int fd, void __user *buff/*要发送的内容*/, size_t len/*�
 		err = move_addr_to_kernel(addr, addr_len, &address);
 		if (err < 0)
 			goto out_put;
+		/*填充地址及地址长度*/
 		msg.msg_name = (struct sockaddr *)&address;
 		msg.msg_namelen = addr_len;
 	}
+	/*如果文件为非阻塞，则添加非阻塞标记*/
 	if (sock->file->f_flags & O_NONBLOCK)
 		flags |= MSG_DONTWAIT;
 	msg.msg_flags = flags;
+
+	/*将发送归并到sendmsg*/
 	err = sock_sendmsg(sock, &msg);
 
 out_put:
@@ -2107,7 +2112,8 @@ SYSCALL_DEFINE6(sendto, int, fd, void __user *, buff, size_t, len,
 SYSCALL_DEFINE4(send, int, fd, void __user *, buff, size_t, len,
 		unsigned int, flags)
 {
-	return __sys_sendto(fd, buff, len, flags, NULL, 0);
+    /*通过socket向外发送报文*/
+	return __sys_sendto(fd/*描述符*/, buff/*内存buffer*/, len/*内存长度*/, flags/*标记*/, NULL/*远端地址*/, 0/*远端地址长度*/);
 }
 
 /*
@@ -2491,6 +2497,7 @@ out:
 	return err;
 }
 
+/*将umsg的内容copy到msg*/
 int sendmsg_copy_msghdr(struct msghdr *msg,
 			struct user_msghdr __user *umsg, unsigned flags,
 			struct iovec **iov)
@@ -2511,7 +2518,7 @@ int sendmsg_copy_msghdr(struct msghdr *msg,
 	return 0;
 }
 
-static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg,
+static int ___sys_sendmsg(struct socket *sock, struct user_msghdr __user *msg/*用户传入的msghdr*/,
 			 struct msghdr *msg_sys, unsigned int flags,
 			 struct used_address *used_address,
 			 unsigned int allowed_msghdr_flags)
@@ -2566,6 +2573,7 @@ out:
 
 SYSCALL_DEFINE3(sendmsg, int, fd, struct user_msghdr __user *, msg, unsigned int, flags)
 {
+    /*实现sendmsg系统调用*/
 	return __sys_sendmsg(fd, msg, flags, true);
 }
 

@@ -86,7 +86,9 @@
 #include <linux/skbuff.h>
 #include <net/pkt_cls.h>
 
+/*记录系统所有可扩展match的操作集*/
 static LIST_HEAD(ematch_ops);
+/*保护ematch_ops*/
 static DEFINE_RWLOCK(ematch_mod_lock);
 
 //给定kind查找tcf_ematch_ops
@@ -122,6 +124,7 @@ static struct tcf_ematch_ops *tcf_em_lookup(u16 kind)
  */
 int tcf_em_register(struct tcf_ematch_ops *ops)
 {
+    /*可扩展match注册*/
 	int err = -EEXIST;
 	struct tcf_ematch_ops *e;
 
@@ -130,7 +133,7 @@ int tcf_em_register(struct tcf_ematch_ops *ops)
 
 	write_lock(&ematch_mod_lock);
 	list_for_each_entry(e, &ematch_ops, link)
-		//重复注册
+		/*防重复注册*/
 		if (ops->kind == e->kind)
 			goto errout;
 
@@ -167,17 +170,19 @@ static inline struct tcf_ematch *tcf_em_get_match(struct tcf_ematch_tree *tree,
 	return &tree->matches[index];
 }
 
-
+/*解析并校验netlink消息填充em*/
 static int tcf_em_validate(struct tcf_proto *tp,
 			   struct tcf_ematch_tree_hdr *tree_hdr,
 			   struct tcf_ematch *em, struct nlattr *nla, int idx)
 {
 	int err = -EINVAL;
+	/*nla指针指向的是此格式 "[tcf_ematch_hdr,data]"*/
 	struct tcf_ematch_hdr *em_hdr = nla_data(nla);
 	int data_len = nla_len(nla) - sizeof(*em_hdr);
 	void *data = (void *) em_hdr + sizeof(*em_hdr);
 	struct net *net = tp->chain->block->net;
 
+	/*flags必须满足此条件*/
 	if (!TCF_EM_REL_VALID(em_hdr->flags))
 		goto errout;
 
@@ -187,10 +192,12 @@ static int tcf_em_validate(struct tcf_proto *tp,
 		 */
 		u32 ref;
 
+		/*data是一个u32的值，用于表示匹配范围*/
 		if (data_len < sizeof(ref))
 			goto errout;
 		ref = *(u32 *) data;
 
+		/*不得超过match数量*/
 		if (ref >= tree_hdr->nmatches)
 			goto errout;
 
@@ -198,6 +205,7 @@ static int tcf_em_validate(struct tcf_proto *tp,
 		 * to our own position are of course illegal.
 		 */
 		if (ref <= idx)
+		    /*不容许回绕*/
 			goto errout;
 
 
@@ -214,6 +222,7 @@ static int tcf_em_validate(struct tcf_proto *tp,
 		em->ops = tcf_em_lookup(em_hdr->kind);
 
 		if (em->ops == NULL) {
+		    /*动态加载module*/
 			err = -ENOENT;
 #ifdef CONFIG_MODULES
 			__rtnl_unlock();
@@ -237,12 +246,15 @@ static int tcf_em_validate(struct tcf_proto *tp,
 		 * can do a basic sanity check.
 		 */
 		if (em->ops->datalen && data_len < em->ops->datalen)
+		    /*data_len不符合要求*/
 			goto errout;
 
 		if (em->ops->change) {
 			err = -EINVAL;
 			if (em_hdr->flags & TCF_EM_SIMPLE)
+			    /*不得有simple标记*/
 				goto errout;
+			/*解析data填充em*/
 			err = em->ops->change(net, data, data_len, em);
 			if (err < 0)
 				goto errout;
@@ -257,10 +269,12 @@ static int tcf_em_validate(struct tcf_proto *tp,
 			 * the value carried.
 			 */
 			if (em_hdr->flags & TCF_EM_SIMPLE) {
+			    /*简单数据，直接置data*/
 				if (data_len < sizeof(u32))
 					goto errout;
 				em->data = *(u32 *) data;
 			} else {
+			    /*非简单数据，采用内存copy*/
 				void *v = kmemdup(data, data_len, GFP_KERNEL);
 				if (v == NULL) {
 					err = -ENOBUFS;
@@ -315,6 +329,7 @@ int tcf_em_tree_validate(struct tcf_proto *tp, struct nlattr *nla,
 	if (!nla)
 		return 0;
 
+	/*解析netlink消息*/
 	err = nla_parse_nested_deprecated(tb, TCA_EMATCH_TREE_MAX, nla,
 					  em_policy, NULL);
 	if (err < 0)
@@ -324,6 +339,7 @@ int tcf_em_tree_validate(struct tcf_proto *tp, struct nlattr *nla,
 	rt_hdr = tb[TCA_EMATCH_TREE_HDR];
 	rt_list = tb[TCA_EMATCH_TREE_LIST];
 
+	/*这两个值必须得配置*/
 	if (rt_hdr == NULL || rt_list == NULL)
 		goto errout;
 
@@ -350,17 +366,22 @@ int tcf_em_tree_validate(struct tcf_proto *tp, struct nlattr *nla,
 	for (idx = 0; nla_ok(rt_match, list_len); idx++) {
 		err = -EINVAL;
 
+		/*指出序号*/
 		if (rt_match->nla_type != (idx + 1))
 			goto errout_abort;
 
+		/*不得超过nmatches*/
 		if (idx >= tree_hdr->nmatches)
 			goto errout_abort;
 
+		/*负载数据是一个struct tcf_ematch_hdr结构体*/
 		if (nla_len(rt_match) < sizeof(struct tcf_ematch_hdr))
 			goto errout_abort;
 
+		/*取第idx号match的空间*/
 		em = tcf_em_get_match(tree, idx);
 
+		/*解析并校验填充em*/
 		err = tcf_em_validate(tp, tree_hdr, em, rt_match, idx);
 		if (err < 0)
 			goto errout_abort;
@@ -374,6 +395,7 @@ int tcf_em_tree_validate(struct tcf_proto *tp, struct nlattr *nla,
 	 * undefined references during the matching process.
 	 */
 	if (idx != tree_hdr->nmatches) {
+	    /*数据不足nmatches,退出*/
 		err = -EINVAL;
 		goto errout_abort;
 	}
@@ -491,6 +513,7 @@ EXPORT_SYMBOL(tcf_em_tree_dump);
 static inline int tcf_em_match(struct sk_buff *skb, struct tcf_ematch *em,
 			       struct tcf_pkt_info *info)
 {
+    /*通过match回调完成匹配*/
 	int r = em->ops->match(skb, em, info);
 
 	return tcf_em_is_inverted(em) ? !r : r;
@@ -506,12 +529,14 @@ int __tcf_em_tree_match(struct sk_buff *skb, struct tcf_ematch_tree *tree,
 
 proceed:
 	while (match_idx < tree->hdr.nmatches) {
+	    /*取idx号匹配*/
 		cur_match = tcf_em_get_match(tree, match_idx);
 
 		if (tcf_em_is_container(cur_match)) {
 			if (unlikely(stackp >= CONFIG_NET_EMATCH_STACK))
 				goto stack_overflow;
 
+			/*记录match_idx，缓存在栈上*/
 			stack[stackp++] = match_idx;
 			match_idx = cur_match->data;
 			goto proceed;
@@ -519,6 +544,7 @@ proceed:
 
 		res = tcf_em_match(skb, cur_match, info);
 
+		/*检查是否匹配结束*/
 		if (tcf_em_early_end(cur_match, res))
 			break;
 
@@ -536,6 +562,7 @@ pop_stack:
 		if (tcf_em_early_end(cur_match, res)) {
 			goto pop_stack;
 		} else {
+		    /*取下一个match index*/
 			match_idx++;
 			goto proceed;
 		}

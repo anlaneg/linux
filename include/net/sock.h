@@ -1074,6 +1074,7 @@ static inline void sock_rps_record_flow_hash(__u32 hash)
 
 	rcu_read_lock();
 	sock_flow_table = rcu_dereference(rps_sock_flow_table);
+	/*记录flow与cpu的映射关系*/
 	rps_record_sock_flow(sock_flow_table, hash);
 	rcu_read_unlock();
 #endif

@@ -386,6 +386,7 @@ static inline int tcf_em_is_simple(struct tcf_ematch *em)
 	return em->flags & TCF_EM_SIMPLE;
 }
 
+/*结果是否需要反转*/
 static inline int tcf_em_is_inverted(struct tcf_ematch *em)
 {
 	return em->flags & TCF_EM_INVERT;
@@ -401,9 +402,11 @@ static inline int tcf_em_early_end(struct tcf_ematch *em, int result)
 	if (tcf_em_last_match(em))
 		return 1;
 
+	/*与操作，且结果一个分量为0*/
 	if (result == 0 && em->flags & TCF_EM_REL_AND)
 		return 1;
 
+	/*或操作，且结果一个分量非零*/
 	if (result != 0 && em->flags & TCF_EM_REL_OR)
 		return 1;
 
@@ -417,7 +420,9 @@ static inline int tcf_em_early_end(struct tcf_ematch *em, int result)
  * @matches: array of ematches
  */
 struct tcf_ematch_tree {
+    /*匹配metadata来源于TCA_EMATCH_TREE_HDR*/
 	struct tcf_ematch_tree_hdr hdr;
+	/*匹配条件*/
 	struct tcf_ematch *	matches;
 	
 };
@@ -436,6 +441,7 @@ struct tcf_ematch_tree {
  */
 struct tcf_ematch_ops {
 	int			kind;
+	/*此匹配要求的数据长度*/
 	int			datalen;
 	int			(*change)(struct net *net, void *,
 					  int, struct tcf_ematch *);
@@ -471,12 +477,13 @@ int __tcf_em_tree_match(struct sk_buff *, struct tcf_ematch_tree *,
  * or ematch is not enabled in the kernel, otherwise 0 is returned.
  */
 static inline int tcf_em_tree_match(struct sk_buff *skb,
-				    struct tcf_ematch_tree *tree,
+				    struct tcf_ematch_tree *tree/*ematch的节点*/,
 				    struct tcf_pkt_info *info)
 {
 	if (tree->hdr.nmatches)
 		return __tcf_em_tree_match(skb, tree, info);
 	else
+	    /*无匹配条件，则认为结果为True*/
 		return 1;
 }
 

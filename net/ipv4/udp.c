@@ -1057,10 +1057,11 @@ int udp_cmsg_send(struct sock *sk, struct msghdr *msg, u16 *gso_size)
 EXPORT_SYMBOL_GPL(udp_cmsg_send);
 
 //针对udp socket的报文发送
-int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
+int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长度*/)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct udp_sock *up = udp_sk(sk);
+	/*取目的端地址*/
 	DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
 	struct flowi4 fl4_stack;
 	struct flowi4 *fl4;
@@ -1090,7 +1091,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	if (msg->msg_flags & MSG_OOB) /* Mirror BSD error message compatibility */
 		return -EOPNOTSUPP;
 
-	getfrag = is_udplite ? udplite_getfrag : ip_generic_getfrag;
+	getfrag = is_udplite ? udplite_getfrag : ip_generic_getfrag/*udp对应的分片回调*/;
 
 	fl4 = &inet->cork.fl.u.ip4;
 	if (up->pending) {
@@ -1116,6 +1117,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	 *	Get and verify the address.
 	 */
 	if (usin) {
+	    /*校验指定的目的地址*/
 		if (msg->msg_namelen < sizeof(*usin))
 			return -EINVAL;
 		if (usin->sin_family != AF_INET) {
@@ -1135,7 +1137,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		/* Open fast path for connected socket.
 		   Route will not be used, if at least one option is set.
 		 */
-		connected = 1;
+		connected = 1;/*已建立起连接*/
 	}
 
 	ipcm_init_sk(&ipc, inet);
@@ -1202,6 +1204,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		connected = 0;
 	}
 
+	/*目的地址为组播情况*/
 	if (ipv4_is_multicast(daddr)) {
 		if (!ipc.oif || netif_index_is_l3_master(sock_net(sk), ipc.oif))
 			ipc.oif = inet->mc_index;
@@ -1240,6 +1243,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 				   sk->sk_uid);
 
 		security_sk_classify_flow(sk, flowi4_to_flowi_common(fl4));
+		/*查路由*/
 		rt = ip_route_output_flow(net, fl4, sk);
 		if (IS_ERR(rt)) {
 			err = PTR_ERR(rt);
@@ -1300,7 +1304,8 @@ back_from_confirm:
 
 do_append_data:
 	up->len += ulen;
-	err = ip_append_data(sk, fl4, getfrag, msg, ulen,
+	/*添加报文到链上*/
+	err = ip_append_data(sk, fl4, getfrag/*负责分片*/, msg, ulen,
 			     sizeof(struct udphdr), &ipc, &rt,
 			     corkreq ? msg->msg_flags|MSG_MORE : msg->msg_flags);
 	if (err)

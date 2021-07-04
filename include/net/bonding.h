@@ -179,6 +179,7 @@ struct slave {
 	unsigned long last_link_up;
 	unsigned long last_rx;
 	unsigned long target_last_arp_rx[BOND_MAX_ARP_TARGETS];
+	/*slave的链路状态*/
 	s8     link;		/* one of BOND_LINK_XXXX */
 	s8     link_new_state;	/* one of BOND_LINK_XXXX */
 	u8     backup:1,   /* indicates backup slave. Value corresponds with
@@ -189,6 +190,7 @@ struct slave {
 	u8     duplex;
 	/*记录slave被加入之前对应的mtu*/
 	u32    original_mtu;
+	/*链路失败次数*/
 	u32    link_failure_count;
 	u32    speed;
 	/*slave对应的bond的queue id*/
@@ -444,22 +446,26 @@ static inline void bond_slave_state_notify(struct bonding *bond)
 	}
 }
 
+/*当前slave是否为备选状态*/
 static inline int bond_slave_state(struct slave *slave)
 {
 	return slave->backup;
 }
 
+/*slave当前是否为active状态*/
 static inline bool bond_is_active_slave(struct slave *slave)
 {
 	return !bond_slave_state(slave);
 }
 
+/*slave当前是否可以进行tx*/
 static inline bool bond_slave_can_tx(struct slave *slave)
 {
 	return bond_slave_is_up(slave) && slave->link == BOND_LINK_UP &&
 	       bond_is_active_slave(slave);
 }
 
+/*当前slave是否为active状态*/
 static inline bool bond_is_active_slave_dev(const struct net_device *slave_dev)
 {
 	struct slave *slave;
@@ -473,6 +479,7 @@ static inline bool bond_is_active_slave_dev(const struct net_device *slave_dev)
 	return active;
 }
 
+/*mac地址copy*/
 static inline void bond_hw_addr_copy(u8 *dst, const u8 *src, unsigned int len)
 {
 	if (len == ETH_ALEN) {

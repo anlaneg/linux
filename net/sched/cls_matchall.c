@@ -32,11 +32,13 @@ static int mall_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	if (unlikely(!head))
 		return -1;
 
+	/*如跳过skip sw,则报错*/
 	if (tc_skip_sw(head->flags))
 		return -1;
 
 	*res = head->res;
 	__this_cpu_inc(head->pf->rhit);
+	/*执行相应的action*/
 	return tcf_exts_exec(skb, &head->exts, res);
 }
 
@@ -413,7 +415,7 @@ static void mall_bind_class(void *fh, u32 classid, unsigned long cl, void *q,
 
 static struct tcf_proto_ops cls_mall_ops __read_mostly = {
 	.kind		= "matchall",
-	.classify	= mall_classify,
+	.classify	= mall_classify,/*所有流量均命中*/
 	.init		= mall_init,
 	.destroy	= mall_destroy,
 	.get		= mall_get,

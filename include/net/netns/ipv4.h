@@ -54,7 +54,7 @@ struct netns_ipv4 {
 	struct ip_ra_chain __rcu *ra_chain;
 	struct mutex		ra_mutex;
 #ifdef CONFIG_IP_MULTIPLE_TABLES
-	//ipv4策略路由规则操作集
+	//ipv4策略路由规则操作集（例如fib4_rules_ops_template）
 	struct fib_rules_ops	*rules_ops;
 	//fib是否有custom配置的规则
 	bool			fib_has_custom_rules;
@@ -68,7 +68,8 @@ struct netns_ipv4 {
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	int			fib_num_tclassid_users;
 #endif
-	struct hlist_head	*fib_table_hash;//fib哈希表
+	//fib哈希表
+	struct hlist_head	*fib_table_hash;
 	bool			fib_offload_disabled;
 	struct sock		*fibnl;
 

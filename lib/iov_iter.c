@@ -448,7 +448,7 @@ int iov_iter_fault_in_readable(struct iov_iter *i, size_t bytes)
 }
 EXPORT_SYMBOL(iov_iter_fault_in_readable);
 
-void iov_iter_init(struct iov_iter *i/*出参，待填充*/, unsigned int direction,
+void iov_iter_init(struct iov_iter *i/*出参，待填充*/, unsigned int direction/*操作*/,
 			const struct iovec *iov, unsigned long nr_segs,
 			size_t count)
 {
@@ -1826,7 +1826,7 @@ ssize_t import_iovec(int type, const struct iovec __user *uvec,
 }
 EXPORT_SYMBOL(import_iovec);
 
-int import_single_range(int rw, void __user *buf, size_t len,
+int import_single_range(int rw, void __user *buf/*内容*/, size_t len/*内容长度*/,
 		 struct iovec *iov/*出参，初始化要操纵的buffer*/, struct iov_iter *i)
 {
 	if (len > MAX_RW_COUNT)

@@ -391,7 +391,7 @@ struct mlx5e_txqsq {
 
 	/* control path */
 	struct mlx5_wq_ctrl        wq_ctrl;
-	int                        ch_ix;
+	int                        ch_ix;/*队列编号*/
 	int                        txq_ix;
 	u32                        rate_limit;
 	struct work_struct         recover_work;
@@ -817,6 +817,7 @@ struct mlx5e_trap;
 struct mlx5e_priv {
 	/* priv data path fields - start */
 	/* +1 for port ptp ts */
+    /*txq到sq的映射表，通过txq id可以找到sq*/
 	struct mlx5e_txqsq *txq2sq[(MLX5E_MAX_NUM_CHANNELS + 1) * MLX5E_MAX_NUM_TC +
 				   MLX5E_QOS_MAX_LEAF_NODES];
 	int channel_tc2realtxq[MLX5E_MAX_NUM_CHANNELS][MLX5E_MAX_NUM_TC];

@@ -43,12 +43,14 @@ static int basic_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	struct basic_head *head = rcu_dereference_bh(tp->root);
 	struct basic_filter *f;
 
+	/*遍历所有list,执行f->ematches匹配，如果不命中继续，如果命中，则执行action*/
 	list_for_each_entry_rcu(f, &head->flist, link) {
 		__this_cpu_inc(f->pf->rcnt);
 		if (!tcf_em_tree_match(skb, &f->ematches, NULL))
 			continue;
 		__this_cpu_inc(f->pf->rhit);
 		*res = f->res;
+		/*执行action*/
 		r = tcf_exts_exec(skb, &f->exts, res);
 		if (r < 0)
 			continue;
@@ -57,6 +59,7 @@ static int basic_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	return -1;
 }
 
+/*给定handle，找其对应的规则f*/
 static void *basic_get(struct tcf_proto *tp, u32 handle)
 {
 	struct basic_head *head = rtnl_dereference(tp->root);
@@ -71,6 +74,7 @@ static void *basic_get(struct tcf_proto *tp, u32 handle)
 	return NULL;
 }
 
+/*申请tp并初始化tp*/
 static int basic_init(struct tcf_proto *tp)
 {
 	struct basic_head *head;
@@ -126,7 +130,7 @@ static int basic_delete(struct tcf_proto *tp, void *arg, bool *last,
 			bool rtnl_held, struct netlink_ext_ack *extack)
 {
 	struct basic_head *head = rtnl_dereference(tp->root);
-	struct basic_filter *f = arg;
+	struct basic_filter *f = arg;/*要删除的规则*/
 
 	list_del_rcu(&f->link);
 	tcf_unbind_filter(tp, &f->res);
@@ -154,6 +158,7 @@ static int basic_set_parms(struct net *net, struct tcf_proto *tp,
 	if (err < 0)
 		return err;
 
+	/*ematches填充*/
 	err = tcf_em_tree_validate(tp, tb[TCA_BASIC_EMATCHES], &f->ematches);
 	if (err < 0)
 		return err;
@@ -204,6 +209,7 @@ static int basic_change(struct net *net, struct sk_buff *in_skb,
 		err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
 				    INT_MAX, GFP_KERNEL);
 	} else if (!fold) {
+	    /*新规则添加*/
 		err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
 				    handle, GFP_KERNEL);
 	}
@@ -250,6 +256,7 @@ static void basic_walk(struct tcf_proto *tp, struct tcf_walker *arg,
 	struct basic_head *head = rtnl_dereference(tp->root);
 	struct basic_filter *f;
 
+	/*遍历head中的规则*/
 	list_for_each_entry(f, &head->flist, link) {
 		if (arg->count < arg->skip)
 			goto skip;

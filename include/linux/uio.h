@@ -32,9 +32,12 @@ struct iov_iter {
 	 * Bit 1 is the BVEC_FLAG_NO_REF bit, set if type is a bvec and
 	 * the caller isn't expecting to drop a page reference when done.
 	 */
-	unsigned int type;//读操作或写操作(依据此类型取不同的union值）
-	size_t iov_offset;//iov的读写偏移量
-	size_t count;//要读写入的长度
+    //读操作或写操作(另外会依据此类型取不同的union值，例如iov,kvec等）
+	unsigned int type;
+	//iov的读写偏移量
+	size_t iov_offset;
+	//要读写入的长度
+	size_t count;
 	union {
 		const struct iovec *iov;
 		const struct kvec *kvec;
@@ -42,7 +45,8 @@ struct iov_iter {
 		struct pipe_inode_info *pipe;
 	};
 	union {
-		unsigned long nr_segs;//iov的buffer数量
+	    //iov的buffer数量
+		unsigned long nr_segs;
 		struct {
 			unsigned int head;
 			unsigned int start_head;

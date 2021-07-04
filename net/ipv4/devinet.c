@@ -1364,13 +1364,17 @@ __be32 inet_select_addr(const struct net_device *dev, __be32 dst, int scope)
 
 	in_dev_for_each_ifa_rcu(ifa, in_dev) {
 		if (ifa->ifa_flags & IFA_F_SECONDARY)
+		    /*跳过从地址*/
 			continue;
 		if (min(ifa->ifa_scope, localnet_scope) > scope)
+		    /*跳过大于要求范围的地址*/
 			continue;
+		/*如果有dst,则使用与dst在同个网段的地址*/
 		if (!dst || inet_ifa_match(dst, ifa)) {
 			addr = ifa->ifa_local;
 			break;
 		}
+		/*没有选中地址，记录此地址*/
 		if (!addr)
 			addr = ifa->ifa_local;
 	}

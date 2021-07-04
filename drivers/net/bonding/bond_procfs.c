@@ -37,8 +37,10 @@ static void *bond_info_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 
 	++*pos;
 	if (v == SEQ_START_TOKEN)
+	    /*取首个slave*/
 		return bond_first_slave_rcu(bond);
 
+	/*遍历其它slave*/
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (found)
 			return slave;
@@ -64,9 +66,11 @@ static void bond_info_show_master(struct seq_file *seq)
 
 	curr = rcu_dereference(bond->curr_active_slave);
 
+	/*显示bond模式*/
 	seq_printf(seq, "Bonding Mode: %s",
 		   bond_mode_name(BOND_MODE(bond)));
 
+	/*主备模式的bond*/
 	if (BOND_MODE(bond) == BOND_MODE_ACTIVEBACKUP &&
 	    bond->params.fail_over_mac) {
 		optval = bond_opt_get_val(BOND_OPT_FAIL_OVER_MAC,
@@ -76,6 +80,7 @@ static void bond_info_show_master(struct seq_file *seq)
 
 	seq_printf(seq, "\n");
 
+	/*显示hash策略*/
 	if (bond_mode_uses_xmit_hash(bond)) {
 		optval = bond_opt_get_val(BOND_OPT_XMIT_HASH,
 					  bond->params.xmit_policy);
@@ -98,6 +103,7 @@ static void bond_info_show_master(struct seq_file *seq)
 			   (curr) ? curr->dev->name : "None");
 	}
 
+	/*mii状态*/
 	seq_printf(seq, "MII Status: %s\n", netif_carrier_ok(bond->dev) ?
 		   "up" : "down");
 	seq_printf(seq, "MII Polling Interval (ms): %d\n", bond->params.miimon);
@@ -128,6 +134,7 @@ static void bond_info_show_master(struct seq_file *seq)
 		seq_printf(seq, "\n");
 	}
 
+	/*显示8023.ad相关信息*/
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
 		struct ad_info ad_info;
 
@@ -246,9 +253,11 @@ static void bond_info_show_slave(struct seq_file *seq,
 static int bond_info_seq_show(struct seq_file *seq, void *v)
 {
 	if (v == SEQ_START_TOKEN) {
+	    /*显示bond版本及master信息*/
 		seq_printf(seq, "%s\n", bond_version);
 		bond_info_show_master(seq);
 	} else
+	    /*显示slave信息*/
 		bond_info_show_slave(seq, v);
 
 	return 0;
@@ -258,6 +267,7 @@ static const struct seq_operations bond_info_seq_ops = {
 	.start = bond_info_seq_start,
 	.next  = bond_info_seq_next,
 	.stop  = bond_info_seq_stop,
+	/*信息显示*/
 	.show  = bond_info_seq_show,
 };
 

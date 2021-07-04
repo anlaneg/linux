@@ -406,6 +406,7 @@ int fib_rules_dump(struct net *net, struct notifier_block *nb, int family,
 	ops = lookup_rules_ops(net, family);
 	if (!ops)
 		return -EAFNOSUPPORT;
+	/*遍历所有已配置策略路由，执行规则添加*/
 	list_for_each_entry_rcu(rule, &ops->rules_list, list) {
 		err = call_fib_rule_notifier(nb, FIB_EVENT_RULE_ADD,
 					     rule, family, extack);

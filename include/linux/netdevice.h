@@ -616,7 +616,7 @@ struct netdev_queue {
 	 * Number of TX timeouts for this queue
 	 * (/sys/class/net/DEV/Q/trans_timeout)
 	 */
-	unsigned long		trans_timeout;
+	unsigned long		trans_timeout;/*队列超时的次数*/
 
 	/* Subordinate device that the queue has been assigned to */
 	struct net_device	*sb_dev;
@@ -631,6 +631,7 @@ struct netdev_queue {
 	/*
 	 * Time (in jiffies) of last Tx
 	 */
+	/*队列最后一次传输的开始时间*/
 	unsigned long		trans_start;
 
 	unsigned long		state;
@@ -1518,6 +1519,7 @@ struct net_device_ops {
 	struct devlink_port *	(*ndo_get_devlink_port)(struct net_device *dev);
 	int			(*ndo_tunnel_ctl)(struct net_device *dev,
 						  struct ip_tunnel_parm *p, int cmd);
+	/*获取对端的设备*/
 	struct net_device *	(*ndo_get_peer_dev)(struct net_device *dev);
 };
 
@@ -2094,26 +2096,34 @@ struct net_device {
 #ifdef CONFIG_NET_CLS_ACT
 	struct mini_Qdisc __rcu	*miniq_ingress;
 #endif
+	/*设备的ingress queue*/
 	struct netdev_queue __rcu *ingress_queue;
 #ifdef CONFIG_NETFILTER_INGRESS
-	struct nf_hook_entries __rcu *nf_hooks_ingress;//设备的ingress　hook
+	//设备的ingress　hook
+	struct nf_hook_entries __rcu *nf_hooks_ingress;
 #endif
 
-	unsigned char		broadcast[MAX_ADDR_LEN];//广播mac地址
+	//广播mac地址
+	unsigned char		broadcast[MAX_ADDR_LEN];
 #ifdef CONFIG_RFS_ACCEL
 	struct cpu_rmap		*rx_cpu_rmap;
 #endif
-	struct hlist_node	index_hlist;//提供挂载点，使设备可挂载在ifidx对应的hash表中
+	//提供挂载点，使设备可挂载在ifidx对应的hash表中
+	struct hlist_node	index_hlist;
 
 /*
  * Cache lines mostly used on transmit path
  */
 	//tx队列（其数量为num_tx_queues个）
 	struct netdev_queue	*_tx ____cacheline_aligned_in_smp;
-	unsigned int		num_tx_queues;//tx队列数
-	unsigned int		real_num_tx_queues;//有效的tx队列数
-	struct Qdisc		*qdisc;//根排队队列
-	unsigned int		tx_queue_len;//tx队列大小
+	//tx队列数
+	unsigned int		num_tx_queues;
+	//有效的tx队列数
+	unsigned int		real_num_tx_queues;
+	//根排队队列
+	struct Qdisc		*qdisc;
+	//tx队列大小
+	unsigned int		tx_queue_len;
 	spinlock_t		tx_global_lock;
 
 	struct xdp_dev_bulk_queue __percpu *xdp_bulkq;
@@ -2132,7 +2142,7 @@ struct net_device {
 #endif
 	/* These may be needed for future network-power-down code. */
 	struct timer_list	watchdog_timer;
-	int			watchdog_timeo;
+	int			watchdog_timeo;/*超时的检测周期*/
 
 	u32                     proto_down_reason;
 
@@ -2745,13 +2755,13 @@ enum netdev_lag_hash {
 };
 
 struct netdev_lag_upper_info {
-	enum netdev_lag_tx_type tx_type;
-	enum netdev_lag_hash hash_type;
+	enum netdev_lag_tx_type tx_type;/*tx类型*/
+	enum netdev_lag_hash hash_type;/*hash类型*/
 };
 
 struct netdev_lag_lower_state_info {
-	u8 link_up : 1,
-	   tx_enabled : 1;
+	u8 link_up : 1,/*链路是否up*/
+	   tx_enabled : 1;/*tx是否开启*/
 };
 
 #include <linux/notifier.h>
@@ -2891,6 +2901,7 @@ extern rwlock_t				dev_base_lock;		/* Device list lock */
 						     dev_list)
 #define for_each_netdev_continue_rcu(net, d)		\
 	list_for_each_entry_continue_rcu(d, &(net)->dev_base_head, dev_list)
+/*遍历init_net下所有netdev,如果此netdev的master为参数bond,则执行访问*/
 #define for_each_netdev_in_bond_rcu(bond, slave)	\
 		for_each_netdev_rcu(&init_net, slave)	\
 			if (netdev_master_upper_dev_get_rcu(slave) == (bond))
@@ -3478,7 +3489,7 @@ static inline void netif_tx_wake_all_queues(struct net_device *dev)
 	}
 }
 
-//设置queue为stop状态
+//设置queue为driver stop状态
 static __always_inline void netif_tx_stop_queue(struct netdev_queue *dev_queue)
 {
 	set_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state);
@@ -3493,13 +3504,13 @@ static __always_inline void netif_tx_stop_queue(struct netdev_queue *dev_queue)
  */
 static inline void netif_stop_queue(struct net_device *dev)
 {
-    //停止0号tx队列
+    //停止0号tx队列 driver off
 	netif_tx_stop_queue(netdev_get_tx_queue(dev, 0));
 }
 
 void netif_tx_stop_all_queues(struct net_device *dev);
 
-//检查指定tx队列是否off
+//检查指定tx队列是否driver off
 static inline bool netif_tx_queue_stopped(const struct netdev_queue *dev_queue)
 {
 	return test_bit(__QUEUE_STATE_DRV_XOFF, &dev_queue->state);
@@ -3516,6 +3527,7 @@ static inline bool netif_queue_stopped(const struct net_device *dev)
 	return netif_tx_queue_stopped(netdev_get_tx_queue(dev, 0));
 }
 
+/*driver xoff或者stack xoff都是stopped*/
 static inline bool netif_xmit_stopped(const struct netdev_queue *dev_queue)
 {
 	return dev_queue->state & QUEUE_STATE_ANY_XOFF;
@@ -4417,6 +4429,7 @@ static inline void __netif_tx_unlock_bh(struct netdev_queue *txq)
 	spin_unlock_bh(&txq->_xmit_lock);
 }
 
+/*设置队列txq的trans_start时间*/
 static inline void txq_trans_update(struct netdev_queue *txq)
 {
 	if (txq->xmit_lock_owner != -1)
@@ -4428,6 +4441,7 @@ static inline void netif_trans_update(struct net_device *dev)
 {
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, 0);
 
+	/*更新0号队列的trans_start时间*/
 	if (txq->trans_start != jiffies)
 		txq->trans_start = jiffies;
 }
@@ -4443,7 +4457,9 @@ static inline void netif_tx_lock(struct net_device *dev)
 	unsigned int i;
 	int cpu;
 
+	/*tx_global_lock加锁*/
 	spin_lock(&dev->tx_global_lock);
+	/*变更所有tx队列为frozen*/
 	cpu = smp_processor_id();
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		struct netdev_queue *txq = netdev_get_tx_queue(dev, i);
@@ -4961,6 +4977,7 @@ static inline netdev_tx_t netdev_start_xmit(struct sk_buff *skb, struct net_devi
 
 	rc = __netdev_start_xmit(ops, skb, dev, more);
 	if (rc == NETDEV_TX_OK)
+	    /*报文发送成功，更新trans_start*/
 		txq_trans_update(txq);
 
 	return rc;
@@ -5164,11 +5181,13 @@ static inline bool netif_is_team_port(const struct net_device *dev)
 	return dev->priv_flags & IFF_TEAM_PORT;
 }
 
+/*设备需要为lag master*/
 static inline bool netif_is_lag_master(const struct net_device *dev)
 {
 	return netif_is_bond_master(dev) || netif_is_team_master(dev);
 }
 
+/*设备需要为lag slave port*/
 static inline bool netif_is_lag_port(const struct net_device *dev)
 {
 	return netif_is_bond_slave(dev) || netif_is_team_port(dev);
