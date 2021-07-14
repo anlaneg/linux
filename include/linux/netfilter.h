@@ -65,8 +65,8 @@ struct nf_hook_ops;
 struct sock;
 
 struct nf_hook_state {
-	unsigned int hook;//hook点
-	u_int8_t pf;//协议族
+	u8 hook;//hook点
+	u8 pf;//协议族
 	struct net_device *in;//入接口设备
 	struct net_device *out;//出接口设备
 	struct sock *sk;
@@ -77,6 +77,11 @@ struct nf_hook_state {
 typedef unsigned int nf_hookfn(void *priv,
 			       struct sk_buff *skb,
 			       const struct nf_hook_state *state);
+enum nf_hook_ops_type {
+	NF_HOOK_OP_UNDEFINED,
+	NF_HOOK_OP_NF_TABLES,
+};
+
 struct nf_hook_ops {
 	/* User fills in from here down. */
     /*hook函数*/
@@ -86,7 +91,8 @@ struct nf_hook_ops {
 	/*hook私有数据*/
 	void			*priv;
 	//协议family
-	u_int8_t		pf;
+	u8			pf;
+	enum nf_hook_ops_type	hook_ops_type:8;
 	/*hook点编号*/
 	unsigned int		hooknum;
 	/* Hooks are ordered in ascending priority. */

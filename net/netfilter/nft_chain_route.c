@@ -26,7 +26,7 @@ static unsigned int nf_route_table_hook4(void *priv/*要执行的chain*/,
 	u8 tos;
 
 	nft_set_pktinfo(&pkt, skb, state);
-	nft_set_pktinfo_ipv4(&pkt, skb);
+	nft_set_pktinfo_ipv4(&pkt);
 
 	mark = skb->mark;
 	iph = ip_hdr(skb);
@@ -78,7 +78,7 @@ static unsigned int nf_route_table_hook6(void *priv,
 	int err;
 
 	nft_set_pktinfo(&pkt, skb, state);
-	nft_set_pktinfo_ipv6(&pkt, skb);
+	nft_set_pktinfo_ipv6(&pkt);
 
 	/* save source/dest address, mark, hoplimit, flowlabel, priority */
 	memcpy(&saddr, &ipv6_hdr(skb)->saddr, sizeof(saddr));

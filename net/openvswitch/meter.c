@@ -407,7 +407,7 @@ static struct dp_meter *dp_meter_create(struct nlattr **a)
 		 *
 		 * Start with a full bucket.
 		 */
-		band->bucket = (band->burst_size + band->rate) * 1000ULL;
+		band->bucket = band->burst_size * 1000ULL;
 		band_max_delta_t = div_u64(band->bucket, band->rate);
 		if (band_max_delta_t > meter->max_delta_t)
 			meter->max_delta_t = band_max_delta_t;
@@ -635,6 +635,14 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 
 	/*计算与上次使用的间隔*/
 	long_delta_ms = (now_ms - meter->used); /* ms */
+	if (long_delta_ms < 0) {
+		/* This condition means that we have several threads fighting
+		 * for a meter lock, and the one who received the packets a
+		 * bit later wins. Assuming that all racing threads received
+		 * packets at the same time to avoid overflow.
+		 */
+		long_delta_ms = 0;
+	}
 
 	/* Make sure delta_ms will not be too large, so that bucket will not
 	 * wrap around below.
@@ -666,7 +674,7 @@ bool ovs_meter_execute(struct datapath *dp, struct sk_buff *skb,
 
 		band = &meter->bands[i];
 		/*令牌最大数，容许的速率+burst_size*/
-		max_bucket_size = (band->burst_size + band->rate) * 1000LL;
+		max_bucket_size = band->burst_size * 1000LL;
 
 		/*补充令牌*/
 		band->bucket += delta_ms * band->rate;

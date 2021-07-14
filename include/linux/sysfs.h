@@ -168,6 +168,12 @@ static const struct attribute_group _name##_group = {		\
 	/*将_group设置为groups数组中的一个且唯一的成员*/\
 __ATTRIBUTE_GROUPS(_name)
 
+#define BIN_ATTRIBUTE_GROUPS(_name)				\
+static const struct attribute_group _name##_group = {		\
+	.bin_attrs = _name##_attrs,				\
+};								\
+__ATTRIBUTE_GROUPS(_name)
+
 struct file;
 struct vm_area_struct;
 struct address_space;

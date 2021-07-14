@@ -1,6 +1,6 @@
 /* SPDX-License-Identifier: GPL-2.0-only */
 /*
- * Mediated device interal definitions
+ * Mediated device internal definitions
  *
  * Copyright (c) 2016, NVIDIA CORPORATION. All rights reserved.
  *     Author: Neo Jia <cjia@nvidia.com>
@@ -24,29 +24,12 @@ struct mdev_parent {
 	struct rw_semaphore unreg_sem;
 };
 
-struct mdev_device {
-	struct device dev;//mdev对应的device
-	struct mdev_parent *parent;//mdev对应的mdev_parent
-	guid_t uuid;
-	void *driver_data;//mdev设备的私有数据
-	struct list_head next;
-	struct kobject *type_kobj;
-	struct device *iommu_device;
-	bool active;//设备是否被激活
-};
-
-//将device转换为mdev_deivce
-#define to_mdev_device(dev)	container_of(dev, struct mdev_device, dev)
-
-//检查dev是否为mdev(如果其bus类型为mdev_bus,则认为是mdev)
-#define dev_is_mdev(d)		((d)->bus == &mdev_bus_type)
-
 struct mdev_type {
 	struct kobject kobj;/*类型为mdev_type_ktype的kobj*/
 	struct kobject *devices_kobj;/*this->kobj下的名称为devices的kobject*/
 	struct mdev_parent *parent;/*所属的mdev_parent*/
 	struct list_head next;
-	struct attribute_group *group;/*对应的属性组*/
+	unsigned int type_group_id;
 };
 
 #define to_mdev_type_attr(_attr)	\
@@ -55,14 +38,27 @@ struct mdev_type {
 #define to_mdev_type(_kobj)		\
 	container_of(_kobj, struct mdev_type, kobj)
 
+extern struct mdev_driver vfio_mdev_driver;
+
 int  parent_create_sysfs_files(struct mdev_parent *parent);
 void parent_remove_sysfs_files(struct mdev_parent *parent);
 
-int  mdev_create_sysfs_files(struct device *dev, struct mdev_type *type);
-void mdev_remove_sysfs_files(struct device *dev, struct mdev_type *type);
+int  mdev_create_sysfs_files(struct mdev_device *mdev);
+void mdev_remove_sysfs_files(struct mdev_device *mdev);
 
-int  mdev_device_create(struct kobject *kobj,
-			struct device *dev, const guid_t *uuid);
-int  mdev_device_remove(struct device *dev);
+int mdev_device_create(struct mdev_type *kobj, const guid_t *uuid);
+int  mdev_device_remove(struct mdev_device *dev);
+
+void mdev_release_parent(struct kref *kref);
+
+static inline void mdev_get_parent(struct mdev_parent *parent)
+{
+	kref_get(&parent->ref);
+}
+
+static inline void mdev_put_parent(struct mdev_parent *parent)
+{
+	kref_put(&parent->ref, mdev_release_parent);
+}
 
 #endif /* MDEV_PRIVATE_H */

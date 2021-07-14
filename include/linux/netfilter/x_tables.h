@@ -36,8 +36,8 @@ struct xt_action_param {
 		const void *matchinfo/*区配的目标比较数*/, *targinfo;
 	};
 	const struct nf_hook_state *state;
-	int fragoff;/*分片的offset,非分片时为0*/
 	unsigned int thoff;//到传输层的offset
+	u16 fragoff;/*分片的offset,非分片时为0*/
 	bool hotdrop;//是否直接丢包
 };
 
@@ -162,7 +162,7 @@ struct xt_match {
 
 	/* Called when entry of this type deleted. */
 	void (*destroy)(const struct xt_mtdtor_param *);
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 	/* Called when userspace align differs from kernel space one */
 	void (*compat_from_user)(void *dst, const void *src);
 	int (*compat_to_user)(void __user *dst, const void *src);
@@ -173,7 +173,7 @@ struct xt_match {
 	const char *table;
 	unsigned int matchsize;
 	unsigned int usersize;
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 	unsigned int compatsize;
 #endif
 	unsigned int hooks;
@@ -203,7 +203,7 @@ struct xt_target {
 
 	/* Called when entry of this type deleted. */
 	void (*destroy)(const struct xt_tgdtor_param *);
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 	/* Called when userspace align differs from kernel space one */
 	void (*compat_from_user)(void *dst, const void *src);
 	int (*compat_to_user)(void __user *dst, const void *src);
@@ -214,7 +214,7 @@ struct xt_target {
 	const char *table;
 	unsigned int targetsize;
 	unsigned int usersize;
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 	unsigned int compatsize;
 #endif
 	unsigned int hooks;
@@ -232,6 +232,9 @@ struct xt_table {
 
 	/* Man behind the curtain... */
 	struct xt_table_info *private;
+
+	/* hook ops that register the table with the netfilter core */
+	struct nf_hook_ops *ops;
 
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;
@@ -327,6 +330,7 @@ struct xt_target *xt_request_find_target(u8 af, const char *name, u8 revision);
 int xt_find_revision(u8 af, const char *name, u8 revision, int target,
 		     int *err);
 
+struct xt_table *xt_find_table(struct net *net, u8 af, const char *name);
 struct xt_table *xt_find_table_lock(struct net *net, u_int8_t af,
 				    const char *name);
 struct xt_table *xt_request_find_table_lock(struct net *net, u_int8_t af,
@@ -453,7 +457,7 @@ xt_get_per_cpu_counter(struct xt_counters *cnt, unsigned int cpu)
 
 struct nf_hook_ops *xt_hook_ops_alloc(const struct xt_table *, nf_hookfn *);
 
-#ifdef CONFIG_COMPAT
+#ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 #include <net/compat.h>
 
 struct compat_xt_entry_match {
@@ -534,5 +538,5 @@ int xt_compat_check_entry_offsets(const void *base, const char *elems,
 				  unsigned int target_offset,
 				  unsigned int next_offset);
 
-#endif /* CONFIG_COMPAT */
+#endif /* CONFIG_NETFILTER_XTABLES_COMPAT */
 #endif /* _X_TABLES_H */

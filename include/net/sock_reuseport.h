@@ -14,9 +14,10 @@ struct sock_reuseport {
 	struct rcu_head		rcu;
 
 	//socks数组可使用的长度
-	u16			max_socks;	/* length of socks */
+	u16			max_socks;		/* length of socks */
 	//记录已使用的可reuse的sockets数目(即socks的数组有效表项的长度）
-	u16			num_socks;	/* elements in socks */
+	u16			num_socks;		/* elements in socks */
+	u16			num_closed_socks;	/* closed elements in socks */
 	/* The last synq overflow event timestamp of this
 	 * reuse->socks[] group.
 	 */
@@ -34,10 +35,14 @@ extern int reuseport_alloc(struct sock *sk, bool bind_inany);
 extern int reuseport_add_sock(struct sock *sk, struct sock *sk2,
 			      bool bind_inany);
 extern void reuseport_detach_sock(struct sock *sk);
+void reuseport_stop_listen_sock(struct sock *sk);
 extern struct sock *reuseport_select_sock(struct sock *sk,
 					  u32 hash,
 					  struct sk_buff *skb,
 					  int hdr_len);
+struct sock *reuseport_migrate_sock(struct sock *sk,
+				    struct sock *migrating_sk,
+				    struct sk_buff *skb);
 extern int reuseport_attach_prog(struct sock *sk, struct bpf_prog *prog);
 extern int reuseport_detach_prog(struct sock *sk);
 

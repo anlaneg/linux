@@ -796,7 +796,8 @@ static int tcf_ct_handle_fragments(struct net *net, struct sk_buff *skb,
 #endif
 	}
 
-	*qdisc_skb_cb(skb) = cb;
+	if (err != -EINPROGRESS)
+		*qdisc_skb_cb(skb) = cb;
 	skb_clear_hash(skb);
 	skb->ignore_df = 1;
 	return err;
@@ -980,17 +981,21 @@ static int tcf_ct_act_nat(struct sk_buff *skb,
 
 	//做第一次nat
 	err = ct_nat_execute(skb, ct, ctinfo, range, maniptype/*要做的nat类型*/);
-
 	//如果ct要求做两次nat,则本次依据上次处理情况，做另一个nat
-	if (err == NF_ACCEPT &&
-	    ct->status & IPS_SRC_NAT && ct->status & IPS_DST_NAT) {
-		if (maniptype == NF_NAT_MANIP_SRC)
-			maniptype = NF_NAT_MANIP_DST;
-		else
-			maniptype = NF_NAT_MANIP_SRC;
+	if (err == NF_ACCEPT && ct->status & IPS_DST_NAT) {
+		if (ct->status & IPS_SRC_NAT) {
+			if (maniptype == NF_NAT_MANIP_SRC)
+				maniptype = NF_NAT_MANIP_DST;
+			else
+				maniptype = NF_NAT_MANIP_SRC;
 
-		//做第二次nat
-		err = ct_nat_execute(skb, ct, ctinfo, range, maniptype);
+			//做第二次nat
+			err = ct_nat_execute(skb, ct, ctinfo, range,
+					     maniptype);
+		} else if (CTINFO2DIR(ctinfo) == IP_CT_DIR_ORIGINAL) {
+			err = ct_nat_execute(skb, ct, ctinfo, NULL,
+					     NF_NAT_MANIP_SRC);
+		}
 	}
 	return err;
 #else
@@ -1065,7 +1070,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	if (err == -EINPROGRESS) {
 	    /*报文被分片表缓存*/
 		retval = TC_ACT_STOLEN;
-		goto out;
+		goto out_clear;
 	}
 	if (err)
 		goto drop;
@@ -1082,9 +1087,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 	//如上面注释所言，确定是否使用skb中缓存的，如与待查询的一致，则返回true
 	cached = tcf_ct_skb_nfct_cached(net, skb, p->zone, force);
 	if (!cached) {
-	    //当前skb没有对应的ct或者已创建的ct,但不符合当前ct action要求,再次执行action创建
-		if (!commit && tcf_ct_flow_table_lookup(p, skb, family)) {
-		    /*不要求commit,且netfilter table中已存在，跳过创建*/
+		if (tcf_ct_flow_table_lookup(p, skb, family)) {
 			skip_add = true;
 			goto do_nat;
 		}
@@ -1092,9 +1095,7 @@ static int tcf_ct_act(struct sk_buff *skb, const struct tc_action *a,
 		//没有缓存,也没有查找到，执行创建
 		/* Associate skb with specified zone. */
 		if (tmpl) {
-			ct = nf_ct_get(skb, &ctinfo);
-			if (skb_nfct(skb))
-				nf_conntrack_put(skb_nfct(skb));
+			nf_conntrack_put(skb_nfct(skb));
 			nf_conntrack_get(&tmpl->ct_general);
 			/*将此ct模板赋给skb,并置new状态*/
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
@@ -1121,7 +1122,7 @@ do_nat:
 		goto drop;
 
 	if (commit) {
-	    /*XXX在这个位置做ct数量限制*/
+	    	/*XXX在这个位置做ct数量限制*/
 		//如果指定了commit,则将ct置为confirm,并设置packet对应的mark,labels
 		tcf_ct_act_set_mark(ct, p->mark, p->mark_mask);
 		tcf_ct_act_set_labels(ct, p->labels, p->labels_mask);
@@ -1131,16 +1132,15 @@ do_nat:
 		 */
 		//confirm此ct
 		nf_conntrack_confirm(skb);
-	} else if (!skip_add) {
-	    /*不需要跳过添加，则向flowtable中添加此ct*/
-		tcf_ct_flow_table_process_conn(p->ct_ft, ct, ctinfo);
 	}
+
+	if (!skip_add)
+		tcf_ct_flow_table_process_conn(p->ct_ft, ct, ctinfo);
 
 out_push:
     /*还原到原来的skb->data*/
 	skb_push_rcsum(skb, nh_ofs);
 
-out:
 	qdisc_skb_cb(skb)->post_ct = true;
 out_clear:
     	/*更新报文统计计数及字节数*/
@@ -1333,9 +1333,6 @@ static int tcf_ct_fill_params(struct net *net,
 				   NULL, TCA_CT_UNSPEC,
 				   sizeof(p->zone));
 	}
-
-	if (p->zone == NF_CT_DEFAULT_ZONE_ID)
-		return 0;
 
 	/*初始化zone,申请tmpl连接*/
 	nf_ct_zone_init(&zone, p->zone, NF_CT_DEFAULT_ZONE_DIR, 0);

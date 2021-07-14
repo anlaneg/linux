@@ -525,11 +525,12 @@ void ovs_vport_send(struct vport *vport, struct sk_buff *skb, u8 mac_proto)
 
 	if (unlikely(packet_length(skb, vport->dev) > mtu &&
 		     !skb_is_gso(skb))) {
-		//未开启gso,报文的大小超过mtu,则丢包
-		net_warn_ratelimited("%s: dropped over-mtu packet: %d > %d\n",
-				     vport->dev->name,
-				     packet_length(skb, vport->dev), mtu);
 		vport->dev->stats.tx_errors++;
+		if (vport->dev->flags & IFF_UP)
+			net_warn_ratelimited("%s: dropped over-mtu packet: "
+					     "%d > %d\n", vport->dev->name,
+					     packet_length(skb, vport->dev),
+					     mtu);
 		goto drop;
 	}
 

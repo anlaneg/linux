@@ -119,7 +119,7 @@ int flow_dissector_bpf_prog_attach_check(struct net *net,
  * is the protocol port offset returned from proto_ports_offset
  */
 __be32 __skb_flow_get_ports(const struct sk_buff *skb, int thoff, u8 ip_proto,
-			    void *data, int hlen)
+			    const void *data, int hlen)
 {
 	int poff = proto_ports_offset(ip_proto);
 
@@ -166,7 +166,7 @@ static bool icmp_has_id(u8 type)
  */
 void skb_flow_get_icmp_tci(const struct sk_buff *skb,
 			   struct flow_dissector_key_icmp *key_icmp,
-			   void *data, int thoff, int hlen)
+			   const void *data, int thoff, int hlen)
 {
 	struct icmphdr *ih, _ih;
 
@@ -192,8 +192,8 @@ EXPORT_SYMBOL(skb_flow_get_icmp_tci);
  */
 static void __skb_flow_dissect_icmp(const struct sk_buff *skb,
 				    struct flow_dissector *flow_dissector,
-				    void *target_container,
-				    void *data, int thoff, int hlen)
+				    void *target_container, const void *data,
+				    int thoff, int hlen)
 {
 	struct flow_dissector_key_icmp *key_icmp;
 
@@ -436,8 +436,8 @@ EXPORT_SYMBOL(skb_flow_dissect_hash);
 static enum flow_dissect_ret
 __skb_flow_dissect_mpls(const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,
-			void *target_container, void *data, int nhoff, int hlen,
-			int lse_index, bool *entropy_label)
+			void *target_container, const void *data, int nhoff,
+			int hlen, int lse_index, bool *entropy_label)
 {
 	struct mpls_label *hdr, _hdr;
 	u32 entry, label, bos;
@@ -494,7 +494,8 @@ __skb_flow_dissect_mpls(const struct sk_buff *skb,
 static enum flow_dissect_ret
 __skb_flow_dissect_arp(const struct sk_buff *skb,
 		       struct flow_dissector *flow_dissector,
-		       void *target_container, void *data, int nhoff, int hlen)
+		       void *target_container, const void *data,
+		       int nhoff, int hlen)
 {
 	struct flow_dissector_key_arp *key_arp;
 	struct {
@@ -550,7 +551,7 @@ static enum flow_dissect_ret
 __skb_flow_dissect_gre(const struct sk_buff *skb,
 		       struct flow_dissector_key_control *key_control,
 		       struct flow_dissector *flow_dissector,
-		       void *target_container, void *data,
+		       void *target_container, const void *data,
 		       __be16 *p_proto, int *p_nhoff, int *p_hlen,
 		       unsigned int flags)
 {
@@ -690,8 +691,8 @@ __skb_flow_dissect_gre(const struct sk_buff *skb,
 static enum flow_dissect_ret
 __skb_flow_dissect_batadv(const struct sk_buff *skb,
 			  struct flow_dissector_key_control *key_control,
-			  void *data, __be16 *p_proto, int *p_nhoff, int hlen,
-			  unsigned int flags)
+			  const void *data, __be16 *p_proto, int *p_nhoff,
+			  int hlen, unsigned int flags)
 {
 	struct {
 		struct batadv_unicast_packet batadv_unicast;
@@ -722,7 +723,8 @@ __skb_flow_dissect_batadv(const struct sk_buff *skb,
 static void
 __skb_flow_dissect_tcp(const struct sk_buff *skb,
 		       struct flow_dissector *flow_dissector,
-		       void *target_container, void *data, int thoff, int hlen)
+		       void *target_container, const void *data,
+		       int thoff, int hlen)
 {
 	struct flow_dissector_key_tcp *key_tcp;
 	struct tcphdr *th, _th;
@@ -748,8 +750,8 @@ __skb_flow_dissect_tcp(const struct sk_buff *skb,
 static void
 __skb_flow_dissect_ports(const struct sk_buff *skb,
 			 struct flow_dissector *flow_dissector,
-			 void *target_container, void *data, int nhoff,
-			 u8 ip_proto, int hlen)
+			 void *target_container, const void *data,
+			 int nhoff, u8 ip_proto, int hlen)
 {
 	enum flow_dissector_key_id dissector_ports = FLOW_DISSECTOR_KEY_MAX;
 	struct flow_dissector_key_ports *key_ports;
@@ -773,7 +775,8 @@ __skb_flow_dissect_ports(const struct sk_buff *skb,
 static void
 __skb_flow_dissect_ipv4(const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,
-			void *target_container, void *data, const struct iphdr *iph)
+			void *target_container, const void *data,
+			const struct iphdr *iph)
 {
 	struct flow_dissector_key_ip *key_ip;
 
@@ -792,7 +795,8 @@ __skb_flow_dissect_ipv4(const struct sk_buff *skb,
 static void
 __skb_flow_dissect_ipv6(const struct sk_buff *skb,
 			struct flow_dissector *flow_dissector,
-			void *target_container, void *data, const struct ipv6hdr *iph)
+			void *target_container, const void *data,
+			const struct ipv6hdr *iph)
 {
 	struct flow_dissector_key_ip *key_ip;
 
@@ -860,8 +864,10 @@ static void __skb_flow_bpf_to_target(const struct bpf_flow_keys *flow_keys,
 		key_addrs = skb_flow_dissector_target(flow_dissector,
 						      FLOW_DISSECTOR_KEY_IPV6_ADDRS,
 						      target_container);
-		memcpy(&key_addrs->v6addrs, &flow_keys->ipv6_src,
-		       sizeof(key_addrs->v6addrs));
+		memcpy(&key_addrs->v6addrs.src, &flow_keys->ipv6_src,
+		       sizeof(key_addrs->v6addrs.src));
+		memcpy(&key_addrs->v6addrs.dst, &flow_keys->ipv6_dst,
+		       sizeof(key_addrs->v6addrs.dst));
 		key_control->addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 	}
 
@@ -939,10 +945,9 @@ bool bpf_flow_dissect(struct bpf_prog *prog, struct bpf_flow_dissector *ctx,
  */
 bool __skb_flow_dissect(const struct net *net,
 			const struct sk_buff *skb,
-			struct flow_dissector *flow_dissector,/*记录待解析各字段及其在container中存放的位置*/
-			void *target_container/*用于存放解析到的内容*/,
-			void *data/*报文起始位置*/, __be16 proto, int nhoff/*到网络层偏移量*/, int hlen,
-			unsigned int flags)
+			struct flow_dissector *flow_dissector/*记录待解析各字段及其在container中存放的位置*/,
+			void *target_container/*用于存放解析到的内容*/, const void *data/*报文起始位置*/,
+			__be16 proto, int nhoff/*到网络层偏移量*/, int hlen, unsigned int flags)
 {
 	//完成报文解析，并将解析的内容存放在target_container中
 	struct flow_dissector_key_control *key_control;
@@ -975,8 +980,8 @@ bool __skb_flow_dissect(const struct net *net,
 			int offset = 0;
 
 			ops = skb->dev->dsa_ptr->tag_ops;
-			/* Tail taggers don't break flow dissection */
-			if (!ops->tail_tag) {
+			/* Only DSA header taggers break flow dissection */
+			if (ops->needed_headroom) {
 				if (ops->flow_dissect)
 					ops->flow_dissect(skb, &proto, &offset);
 				else
@@ -1705,7 +1710,7 @@ __u32 skb_get_hash_perturb(const struct sk_buff *skb,
 }
 EXPORT_SYMBOL(skb_get_hash_perturb);
 
-u32 __skb_get_poff(const struct sk_buff *skb, void *data,
+u32 __skb_get_poff(const struct sk_buff *skb, const void *data,
 		   const struct flow_keys_basic *keys, int hlen)
 {
 	u32 poff = keys->control.thoff;

@@ -45,8 +45,6 @@ struct net_protocol {
 
 	//协议是否跳过xfrm4_policy_check
 	unsigned int		no_policy:1,
-				//协议是否支持net namespace
-				netns_ok:1,
 				/* does the protocol do more stringent
 				 * icmp tag validation than simple
 				 * socket lookup?

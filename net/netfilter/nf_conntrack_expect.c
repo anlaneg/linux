@@ -50,12 +50,15 @@ void nf_ct_unlink_expect_report(struct nf_conntrack_expect *exp,
 {
 	struct nf_conn_help *master_help = nfct_help(exp->master);
 	struct net *net = nf_ct_exp_net(exp);
+	struct nf_conntrack_net *cnet;
 
 	WARN_ON(!master_help);
 	WARN_ON(timer_pending(&exp->timeout));
 
 	hlist_del_rcu(&exp->hnode);
-	net->ct.expect_count--;
+
+	cnet = nf_ct_pernet(net);
+	cnet->expect_count--;
 
 	hlist_del_rcu(&exp->lnode);
 	master_help->expecting[exp->class]--;
@@ -121,10 +124,11 @@ __nf_ct_expect_find(struct net *net,
 		    const struct nf_conntrack_zone *zone,
 		    const struct nf_conntrack_tuple *tuple)
 {
+	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
 	struct nf_conntrack_expect *i;
 	unsigned int h;
 
-	if (!net->ct.expect_count)
+	if (!cnet->expect_count)
 		return NULL;
 
 	h = nf_ct_expect_dst_hash(net, tuple);
@@ -162,11 +166,12 @@ nf_ct_find_expectation(struct net *net,
 		       const struct nf_conntrack_zone *zone,
 		       const struct nf_conntrack_tuple *tuple)
 {
+	struct nf_conntrack_net *cnet = nf_ct_pernet(net);
 	struct nf_conntrack_expect *i, *exp = NULL;
 	unsigned int h;
 
 	//namespace无期待，则退出
-	if (!net->ct.expect_count)
+	if (!cnet->expect_count)
 		return NULL;
 
 	//查找元组是否有匹配的期待
@@ -380,6 +385,7 @@ EXPORT_SYMBOL_GPL(nf_ct_expect_put);
 
 static void nf_ct_expect_insert(struct nf_conntrack_expect *exp)
 {
+	struct nf_conntrack_net *cnet;
 	struct nf_conn_help *master_help = nfct_help(exp->master);
 	struct nf_conntrack_helper *helper;
 	struct net *net = nf_ct_exp_net(exp);
@@ -401,7 +407,8 @@ static void nf_ct_expect_insert(struct nf_conntrack_expect *exp)
 	master_help->expecting[exp->class]++;
 
 	hlist_add_head_rcu(&exp->hnode, &nf_ct_expect_hash[h]);
-	net->ct.expect_count++;
+	cnet = nf_ct_pernet(net);
+	cnet->expect_count++;
 
 	NF_CT_STAT_INC(net, expect_create);
 }
@@ -427,6 +434,7 @@ static inline int __nf_ct_expect_check(struct nf_conntrack_expect *expect,
 {
 	const struct nf_conntrack_expect_policy *p;
 	struct nf_conntrack_expect *i;
+	struct nf_conntrack_net *cnet;
 	struct nf_conn *master = expect->master;
 	struct nf_conn_help *master_help = nfct_help(master);
 	struct nf_conntrack_helper *helper;
@@ -470,7 +478,8 @@ static inline int __nf_ct_expect_check(struct nf_conntrack_expect *expect,
 		}
 	}
 
-	if (net->ct.expect_count >= nf_ct_expect_max) {
+	cnet = nf_ct_pernet(net);
+	if (cnet->expect_count >= nf_ct_expect_max) {
 		net_warn_ratelimited("nf_conntrack: expectation table full\n");
 		ret = -EMFILE;
 	}
@@ -698,7 +707,6 @@ module_param_named(expect_hashsize, nf_ct_expect_hsize, uint, 0400);
 
 int nf_conntrack_expect_pernet_init(struct net *net)
 {
-	net->ct.expect_count = 0;
 	return exp_proc_init(net);
 }
 

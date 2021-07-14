@@ -38,10 +38,6 @@ enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, L
 
 /* internal use only */
 #define LOOKUP_PARENT		0x0010
-#define LOOKUP_JUMPED		0x1000
-/*nd中给定了有效root*/
-#define LOOKUP_ROOT		0x2000
-#define LOOKUP_ROOT_GRABBED	0x0008
 
 /* Scoping flags for lookup. */
 #define LOOKUP_NO_SYMLINKS	0x010000 /* No symlink crossing. */

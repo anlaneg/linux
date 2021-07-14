@@ -574,7 +574,7 @@ struct nameidata {
 	struct path	root;
 	//当前分析位置路径对应的inode
 	struct inode	*inode; /* path.dentry.d_inode */
-	unsigned int	flags;
+	unsigned int	flags, state;
 	unsigned	seq/*当前分析dentry的seq*/, m_seq/*mount_lock锁序号*/, r_seq/*rename_lock锁序号*/;
 	int		last_type;/*最后一次分析的文件类型，例如LAST_NORM*/
 	unsigned	depth;
@@ -598,12 +598,17 @@ struct nameidata {
 	umode_t		dir_mode;
 } __randomize_layout;
 
+#define ND_ROOT_PRESET 1
+#define ND_ROOT_GRABBED 2
+#define ND_JUMPED 4
+
 //构造并设置进程的nameidata
-static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)
+static void __set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 {
 	struct nameidata *old = current->nameidata;
 	//使stack指向p->internal
 	p->stack = p->internal;
+	p->depth = 0;
 	p->dfd = dfd;
 	p->name = name;
 	p->path.mnt = NULL;
@@ -613,6 +618,17 @@ static void set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 	p->saved = old;
 	//更新进程的nameidata
 	current->nameidata = p;
+}
+
+static inline void set_nameidata(struct nameidata *p, int dfd, struct filename *name,
+			  const struct path *root)
+{
+	__set_nameidata(p, dfd, name);
+	p->state = 0;
+	if (unlikely(root)) {
+		p->state = ND_ROOT_PRESET;
+		p->root = *root;
+	}
 }
 
 //还原进程之前的nameidata
@@ -677,9 +693,9 @@ static void terminate_walk(struct nameidata *nd)
 		path_put(&nd->path);
 		for (i = 0; i < nd->depth; i++)
 			path_put(&nd->stack[i].link);
-		if (nd->flags & LOOKUP_ROOT_GRABBED) {
+		if (nd->state & ND_ROOT_GRABBED) {
 			path_put(&nd->root);
-			nd->flags &= ~LOOKUP_ROOT_GRABBED;
+			nd->state &= ~ND_ROOT_GRABBED;
 		}
 	} else {
 		nd->flags &= ~LOOKUP_RCU;
@@ -742,9 +758,9 @@ static bool legitimize_root(struct nameidata *nd)
 	if (!nd->root.mnt && (nd->flags & LOOKUP_IS_SCOPED))
 		return false;
 	/* Nothing to do if nd->root is zero or is managed by the VFS user. */
-	if (!nd->root.mnt || (nd->flags & LOOKUP_ROOT))
+	if (!nd->root.mnt || (nd->state & ND_ROOT_PRESET))
 		return true;
-	nd->flags |= LOOKUP_ROOT_GRABBED;
+	nd->state |= ND_ROOT_GRABBED;
 	return legitimize_path(nd, &nd->root, nd->root_seq);
 }
 
@@ -881,8 +897,9 @@ static int complete_walk(struct nameidata *nd)
 		 * We don't want to zero nd->root for scoped-lookups or
 		 * externally-managed nd->root.
 		 */
-		if (!(nd->flags & (LOOKUP_ROOT | LOOKUP_IS_SCOPED)))
-			nd->root.mnt = NULL;
+		if (!(nd->state & ND_ROOT_PRESET))
+			if (!(nd->flags & LOOKUP_IS_SCOPED))
+				nd->root.mnt = NULL;
 		nd->flags &= ~LOOKUP_CACHED;
 		if (!try_to_unlazy(nd))
 			return -ECHILD;
@@ -909,7 +926,7 @@ static int complete_walk(struct nameidata *nd)
 			return -EXDEV;
 	}
 
-	if (likely(!(nd->flags & LOOKUP_JUMPED)))
+	if (likely(!(nd->state & ND_JUMPED)))
 		return 0;
 
 	if (likely(!(dentry->d_flags & DCACHE_OP_WEAK_REVALIDATE)))
@@ -949,7 +966,7 @@ static int set_root(struct nameidata *nd)
 		} while (read_seqcount_retry(&fs->seq, seq));
 	} else {
 		get_fs_root(fs, &nd->root);
-		nd->flags |= LOOKUP_ROOT_GRABBED;
+		nd->state |= ND_ROOT_GRABBED;
 	}
 	return 0;
 }
@@ -987,7 +1004,7 @@ static int nd_jump_root(struct nameidata *nd)
 		path_get(&nd->path);
 		nd->inode = nd->path.dentry->d_inode;
 	}
-	nd->flags |= LOOKUP_JUMPED;
+	nd->state |= ND_JUMPED;
 	return 0;
 }
 
@@ -1015,7 +1032,7 @@ int nd_jump_link(struct path *path)
 	path_put(&nd->path);
 	nd->path = *path;
 	nd->inode = nd->path.dentry->d_inode;
-	nd->flags |= LOOKUP_JUMPED;
+	nd->state |= ND_JUMPED;
 	return 0;
 
 err:
@@ -1165,8 +1182,7 @@ int may_linkat(struct user_namespace *mnt_userns, struct path *link)
  *			  should be allowed, or not, on files that already
  *			  exist.
  * @mnt_userns:	user namespace of the mount the inode was found from
- * @dir_mode: mode bits of directory
- * @dir_uid: owner of directory
+ * @nd: nameidata pathwalk data
  * @inode: the inode of the file to open
  *
  * Block an O_CREAT open of a FIFO (or a regular file) when:
@@ -1464,7 +1480,7 @@ static bool __follow_mount_rcu(struct nameidata *nd, struct path *path,
 			if (mounted) {
 				path->mnt = &mounted->mnt;
 				dentry = path->dentry = mounted->mnt.mnt_root;
-				nd->flags |= LOOKUP_JUMPED;
+				nd->state |= ND_JUMPED;
 				*seqp = read_seqcount_begin(&dentry->d_seq);
 				*inode = dentry->d_inode;
 				/*
@@ -1509,7 +1525,7 @@ static inline int handle_mounts(struct nameidata *nd, struct dentry *dentry,
 		if (unlikely(nd->flags & LOOKUP_NO_XDEV))
 			ret = -EXDEV;
 		else
-			nd->flags |= LOOKUP_JUMPED;
+			nd->state |= ND_JUMPED;
 	}
 	if (unlikely(ret)) {
 		dput(path->dentry);
@@ -2303,7 +2319,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 				//name长度为2，且name[1]='.',即本层名称为'..'
 				if (name[1] == '.') {
 					type = LAST_DOTDOT;
-					nd->flags |= LOOKUP_JUMPED;
+					nd->state |= ND_JUMPED;
 				}
 				break;
 			case 1:
@@ -2315,7 +2331,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (likely(type == LAST_NORM)) {
 		    //取当前位置的dentry
 			struct dentry *parent = nd->path.dentry;
-			nd->flags &= ~LOOKUP_JUMPED;
+			nd->state &= ~ND_JUMPED;
 			//如果目录需要执行d_hash,则构造this,并触发回调，进行hash调整
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
@@ -2407,16 +2423,16 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	if (flags & LOOKUP_RCU)
 		rcu_read_lock();
 
-	nd->flags = flags | LOOKUP_JUMPED;
-	nd->depth = 0;
+	nd->flags = flags;
+	nd->state |= ND_JUMPED;
 
 	//记录seq序号
 	nd->m_seq = __read_seqcount_begin(&mount_lock.seqcount);
 	nd->r_seq = __read_seqcount_begin(&rename_lock.seqcount);
 	smp_rmb();
 
-	if (flags & LOOKUP_ROOT) {
-	    /*nd给定了root,从root开始分析*/
+	if (nd->state & ND_ROOT_PRESET) {
+		/*nd给定了root,从root开始分析*/
 		struct dentry *root = nd->root.dentry;
 		struct inode *inode = root->d_inode;
 		if (*s && unlikely(!d_can_lookup(root)))
@@ -2503,7 +2519,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 			nd->root_seq = nd->seq;
 		} else {
 			path_get(&nd->root);
-			nd->flags |= LOOKUP_ROOT_GRABBED;
+			nd->state |= ND_ROOT_GRABBED;
 		}
 	}
 
@@ -2546,7 +2562,7 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 		;
 	if (!err && unlikely(nd->flags & LOOKUP_MOUNTPOINT)) {
 		err = handle_lookup_down(nd);
-		nd->flags &= ~LOOKUP_JUMPED; // no d_weak_revalidate(), please...
+		nd->state &= ~ND_JUMPED; // no d_weak_revalidate(), please...
 	}
 	if (!err)
 		err = complete_walk(nd);
@@ -2571,16 +2587,8 @@ int filename_lookup(int dfd, struct filename *name, unsigned flags,
 	struct nameidata nd;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
-
-	/*设置root path*/
-	if (unlikely(root)) {
-		nd.root = *root;
-		flags |= LOOKUP_ROOT;
-	}
-
 	//设置当前进程的nameidata(设置要查询的路径及其相对的目录fd)
-	set_nameidata(&nd, dfd, name);
-
+	set_nameidata(&nd, dfd, name, root);
 	//确认(dfd,name)对应的path
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))
@@ -2622,10 +2630,8 @@ static struct filename *filename_parentat(int dfd, struct filename *name,
 
 	if (IS_ERR(name))
 		return name;
-
 	//保存旧的metaidata,初始化新的nd
-	set_nameidata(&nd, dfd, name);
-
+	set_nameidata(&nd, dfd, name, NULL);
 	retval = path_parentat(&nd, flags | LOOKUP_RCU, parent);
 	if (unlikely(retval == -ECHILD))
 		retval = path_parentat(&nd, flags, parent);
@@ -2961,16 +2967,14 @@ static int may_delete(struct user_namespace *mnt_userns, struct inode *dir,
 static inline int may_create(struct user_namespace *mnt_userns,
 			     struct inode *dir, struct dentry *child)
 {
-	struct user_namespace *s_user_ns;
 	audit_inode_child(dir, child, AUDIT_TYPE_CHILD_CREATE);
 	if (child->d_inode)
 		return -EEXIST;
 	if (IS_DEADDIR(dir))
 		return -ENOENT;
-	s_user_ns = dir->i_sb->s_user_ns;
-	if (!kuid_has_mapping(s_user_ns, fsuid_into_mnt(mnt_userns)) ||
-	    !kgid_has_mapping(s_user_ns, fsgid_into_mnt(mnt_userns)))
+	if (!fsuidgid_has_mapping(dir->i_sb, mnt_userns))
 		return -EOVERFLOW;
+
 	return inode_permission(mnt_userns, dir, MAY_WRITE | MAY_EXEC);
 }
 
@@ -3172,14 +3176,11 @@ static int may_o_create(struct user_namespace *mnt_userns,
 			const struct path *dir, struct dentry *dentry,
 			umode_t mode)
 {
-	struct user_namespace *s_user_ns;
 	int error = security_path_mknod(dir, dentry, mode, 0);
 	if (error)
 		return error;
 
-	s_user_ns = dir->dentry->d_sb->s_user_ns;
-	if (!kuid_has_mapping(s_user_ns, fsuid_into_mnt(mnt_userns)) ||
-	    !kgid_has_mapping(s_user_ns, fsgid_into_mnt(mnt_userns)))
+	if (!fsuidgid_has_mapping(dir->dentry->d_sb, mnt_userns))
 		return -EOVERFLOW;
 
 	error = inode_permission(mnt_userns, dir->dentry->d_inode,
@@ -3525,7 +3526,7 @@ static int do_open(struct nameidata *nd,
  * @mnt_userns:	user namespace of the mount the inode was found from
  * @dentry:	pointer to dentry of the base directory
  * @mode:	mode of the new tmpfile
- * @open_flags:	flags
+ * @open_flag:	flags
  *
  * Create a temporary file.
  *
@@ -3670,8 +3671,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	struct file *filp;
 
 	//将dfd,pathname填充到nd中
-	set_nameidata(&nd, dfd, pathname);
-
+	set_nameidata(&nd, dfd, pathname, NULL);
 	//调用path_openat来进行打开
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(filp == ERR_PTR(-ECHILD)))
@@ -3682,25 +3682,22 @@ struct file *do_filp_open(int dfd, struct filename *pathname,
 	return filp;
 }
 
-struct file *do_file_open_root(struct dentry *dentry, struct vfsmount *mnt,
+struct file *do_file_open_root(const struct path *root,
 		const char *name, const struct open_flags *op)
 {
 	struct nameidata nd;
 	struct file *file;
 	struct filename *filename;
-	int flags = op->lookup_flags | LOOKUP_ROOT;
+	int flags = op->lookup_flags;
 
-	nd.root.mnt = mnt;
-	nd.root.dentry = dentry;
-
-	if (d_is_symlink(dentry) && op->intent & LOOKUP_OPEN)
+	if (d_is_symlink(root->dentry) && op->intent & LOOKUP_OPEN)
 		return ERR_PTR(-ELOOP);
 
 	filename = getname_kernel(name);
 	if (IS_ERR(filename))
 		return ERR_CAST(filename);
 
-	set_nameidata(&nd, -1, filename);
+	set_nameidata(&nd, -1, filename, root);
 	file = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(file == ERR_PTR(-ECHILD)))
 		file = path_openat(&nd, op, flags);
@@ -4560,14 +4557,7 @@ SYSCALL_DEFINE2(link, const char __user *, oldname, const char __user *, newname
 
 /**
  * vfs_rename - rename a filesystem object
- * @old_mnt_userns:	old user namespace of the mount the inode was found from
- * @old_dir:		parent of source
- * @old_dentry:		source
- * @new_mnt_userns:	new user namespace of the mount the inode was found from
- * @new_dir:		parent of destination
- * @new_dentry:		destination
- * @delegated_inode:	returns an inode needing a delegation break
- * @flags:		rename flags
+ * @rd:		pointer to &struct renamedata info
  *
  * The caller must hold multiple mutexes--see lock_rename()).
  *

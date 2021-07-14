@@ -32,7 +32,8 @@
 enum {
     //指明vhost当前支持的功能
 	VHOST_VSOCK_FEATURES = VHOST_FEATURES |
-			       (1ULL << VIRTIO_F_ACCESS_PLATFORM)
+			       (1ULL << VIRTIO_F_ACCESS_PLATFORM) |
+			       (1ULL << VIRTIO_VSOCK_F_SEQPACKET)
 };
 
 enum {
@@ -58,6 +59,7 @@ struct vhost_vsock {
 	atomic_t queued_replies;
 
 	u32 guest_cid;/*用户态提供的cid，0表示还没有cid。通过VHOST_VSOCK_SET_GUEST_CID设置*/
+	bool seqpacket_allow;
 };
 
 //返回local cid
@@ -118,6 +120,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		size_t nbytes;
 		size_t iov_len, payload_len;
 		int head;
+		bool restore_flag = false;
 
 		//如果vsock没有报文，则跳出
 		spin_lock_bh(&vsock->send_pkt_list_lock);
@@ -182,9 +185,26 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		/* If the packet is greater than the space available in the
 		 * buffer, we split it using multiple buffers.
 		 */
-		if (payload_len > iov_len - sizeof(pkt->hdr))
+		if (payload_len > iov_len - sizeof(pkt->hdr)) {
 		    /*报文内容过大，需要拆分成多个buffer进行发送，payload_len变更为当前可发送的最大长度*/
 			payload_len = iov_len - sizeof(pkt->hdr);
+
+			/* As we are copying pieces of large packet's buffer to
+			 * small rx buffers, headers of packets in rx queue are
+			 * created dynamically and are initialized with header
+			 * of current packet(except length). But in case of
+			 * SOCK_SEQPACKET, we also must clear record delimeter
+			 * bit(VIRTIO_VSOCK_SEQ_EOR). Otherwise, instead of one
+			 * packet with delimeter(which marks end of record),
+			 * there will be sequence of packets with delimeter
+			 * bit set. After initialized header will be copied to
+			 * rx buffer, this bit will be restored.
+			 */
+			if (le32_to_cpu(pkt->hdr.flags) & VIRTIO_VSOCK_SEQ_EOR) {
+				pkt->hdr.flags &= ~cpu_to_le32(VIRTIO_VSOCK_SEQ_EOR);
+				restore_flag = true;
+			}
+		}
 
 		/* Set the correct length in the header */
 		pkt->hdr.len = cpu_to_le32(payload_len);
@@ -225,7 +245,10 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		 * to send it with the next available buffer.
 		 */
 		if (pkt->off < pkt->len) {
-		    //报文并没有发送完全，将其加回到vsock->send_pkt_list中
+			if (restore_flag)
+				pkt->hdr.flags |= cpu_to_le32(VIRTIO_VSOCK_SEQ_EOR);
+
+		    	//报文并没有发送完全，将其加回到vsock->send_pkt_list中
 			/* We are queueing the same virtio_vsock_pkt to handle
 			 * the remaining bytes, and we want to deliver it
 			 * to monitoring devices in the next iteration.
@@ -391,8 +414,7 @@ vhost_vsock_alloc_pkt(struct vhost_virtqueue *vq,
 		return NULL;
 	}
 
-	if (le16_to_cpu(pkt->hdr.type) == VIRTIO_VSOCK_TYPE_STREAM)
-		pkt->len = le32_to_cpu(pkt->hdr.len);
+	pkt->len = le32_to_cpu(pkt->hdr.len);
 
 	/* No payload */
 	if (!pkt->len)
@@ -439,6 +461,8 @@ static bool vhost_vsock_more_replies(struct vhost_vsock *vsock)
 	return val < vq->num;
 }
 
+static bool vhost_transport_seqpacket_allow(u32 remote_cid);
+
 static struct virtio_transport vhost_transport = {
 	.transport = {
 		.module                   = THIS_MODULE,
@@ -465,6 +489,11 @@ static struct virtio_transport vhost_transport = {
 		.stream_is_active         = virtio_transport_stream_is_active,
 		.stream_allow             = virtio_transport_stream_allow,
 
+		.seqpacket_dequeue        = virtio_transport_seqpacket_dequeue,
+		.seqpacket_enqueue        = virtio_transport_seqpacket_enqueue,
+		.seqpacket_allow          = vhost_transport_seqpacket_allow,
+		.seqpacket_has_data       = virtio_transport_seqpacket_has_data,
+
 		.notify_poll_in           = virtio_transport_notify_poll_in,
 		.notify_poll_out          = virtio_transport_notify_poll_out,
 		.notify_recv_init         = virtio_transport_notify_recv_init,
@@ -482,6 +511,22 @@ static struct virtio_transport vhost_transport = {
 	//向pkt->hdr.dst_cid发送报文
 	.send_pkt = vhost_transport_send_pkt,
 };
+
+static bool vhost_transport_seqpacket_allow(u32 remote_cid)
+{
+	struct vhost_vsock *vsock;
+	bool seqpacket_allow = false;
+
+	rcu_read_lock();
+	vsock = vhost_vsock_get(remote_cid);
+
+	if (vsock)
+		seqpacket_allow = vsock->seqpacket_allow;
+
+	rcu_read_unlock();
+
+	return seqpacket_allow;
+}
 
 //自vq中收取pkt并处理
 static void vhost_vsock_handle_tx_kick(struct vhost_work *work)
@@ -725,7 +770,7 @@ static void vhost_vsock_flush(struct vhost_vsock *vsock)
 	for (i = 0; i < ARRAY_SIZE(vsock->vqs); i++)
 		if (vsock->vqs[i].handle_kick)
 			vhost_poll_flush(&vsock->vqs[i].poll);
-	vhost_work_flush(&vsock->dev, &vsock->send_pkt_work);
+	vhost_work_dev_flush(&vsock->dev);
 }
 
 static void vhost_vsock_reset_orphans(struct sock *sk)
@@ -751,7 +796,7 @@ static void vhost_vsock_reset_orphans(struct sock *sk)
 	vsk->peer_shutdown = SHUTDOWN_MASK;
 	sk->sk_state = SS_UNCONNECTED;
 	sk->sk_err = ECONNRESET;
-	sk->sk_error_report(sk);
+	sk_error_report(sk);
 }
 
 static int vhost_vsock_dev_release(struct inode *inode, struct file *file)
@@ -856,6 +901,9 @@ static int vhost_vsock_set_features(struct vhost_vsock *vsock, u64 features)
 		if (vhost_init_device_iotlb(&vsock->dev, true))
 			goto err;
 	}
+
+	if (features & (1ULL << VIRTIO_VSOCK_F_SEQPACKET))
+		vsock->seqpacket_allow = true;
 
 	//为每个vq设置要开启的功能
 	for (i = 0; i < ARRAY_SIZE(vsock->vqs); i++) {

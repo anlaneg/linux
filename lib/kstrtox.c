@@ -14,11 +14,12 @@
  */
 #include <linux/ctype.h>
 #include <linux/errno.h>
-#include <linux/kernel.h>
-#include <linux/math64.h>
 #include <linux/export.h>
+#include <linux/kstrtox.h>
+#include <linux/math64.h>
 #include <linux/types.h>
 #include <linux/uaccess.h>
+
 #include "kstrtox.h"
 
 //确定s串，使用的基数
@@ -42,13 +43,15 @@ const char *_parse_integer_fixup_radix(const char *s, unsigned int *base/*基数
 
 /*
  * Convert non-negative integer string representation in explicitly given radix
- * to an integer.
+ * to an integer. A maximum of max_chars characters will be converted.
+ *
  * Return number of characters consumed maybe or-ed with overflow bit.
  * If overflow occurs, result integer (incorrect) is still returned.
  *
  * Don't you dare use this function.
  */
-unsigned int _parse_integer(const char *s/*整数字符串*/, unsigned int base/*基数*/, unsigned long long *p/*转换后的值*/)
+unsigned int _parse_integer_limit(const char *s/*整数字符串*/, unsigned int base/*基数*/, unsigned long long *p/*转换后的值*/,
+				  size_t max_chars)
 {
     //按基数解析非负整数
 	unsigned long long res;
@@ -56,7 +59,7 @@ unsigned int _parse_integer(const char *s/*整数字符串*/, unsigned int base/
 
 	res = 0;
 	rv = 0;
-	while (1) {
+	while (max_chars--) {
 		unsigned int c = *s;
 		unsigned int lc = c | 0x20; /* don't tolower() this line */
 		unsigned int val;
@@ -90,6 +93,11 @@ unsigned int _parse_integer(const char *s/*整数字符串*/, unsigned int base/
 	}
 	*p = res;
 	return rv;
+}
+
+unsigned int _parse_integer(const char *s, unsigned int base, unsigned long long *p)
+{
+	return _parse_integer_limit(s, base, p, INT_MAX);
 }
 
 static int _kstrtoull(const char *s, unsigned int base, unsigned long long *res)

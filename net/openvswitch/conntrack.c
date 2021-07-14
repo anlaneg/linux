@@ -850,8 +850,7 @@ static int ovs_ct_nat_execute(struct sk_buff *skb, struct nf_conn *ct,
 	//调用kernel中的nat处理函数,完成nat修改
 	err = nf_nat_packet(ct, ctinfo, hooknum, skb);
 push:
-	skb_push(skb, nh_off);
-	skb_postpush_rcsum(skb, skb->data, nh_off);
+	skb_push_rcsum(skb, nh_off);
 
 	return err;
 }
@@ -1023,8 +1022,7 @@ static int __ovs_ct_lookup(struct net *net, struct sw_flow_key *key,
 
 		/* Associate skb with specified zone. */
 		if (tmpl) {
-			if (skb_nfct(skb))
-				nf_conntrack_put(skb_nfct(skb));
+			nf_conntrack_put(skb_nfct(skb));
 			nf_conntrack_get(&tmpl->ct_general);
 			nf_ct_set(skb, tmpl, IP_CT_NEW);
 		}
@@ -1406,8 +1404,7 @@ int ovs_ct_execute(struct net *net/*所属的net namespace*/, struct sk_buff *sk
 		err = ovs_ct_lookup(net, key, info, skb);
 
 	/*回归到原来skb->data指向位置*/
-	skb_push(skb, nh_ofs);
-	skb_postpush_rcsum(skb, skb->data, nh_ofs);
+	skb_push_rcsum(skb, nh_ofs);
 	if (err)
 		kfree_skb(skb);
 	return err;
@@ -1415,12 +1412,10 @@ int ovs_ct_execute(struct net *net/*所属的net namespace*/, struct sk_buff *sk
 
 int ovs_ct_clear(struct sk_buff *skb, struct sw_flow_key *key)
 {
-	if (skb_nfct(skb)) {
-		nf_conntrack_put(skb_nfct(skb));
-		//清除skb上的连接引用
-		nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
-		ovs_ct_fill_key(skb, key, false);
-	}
+	nf_conntrack_put(skb_nfct(skb));
+	//清除skb上的连接引用
+	nf_ct_set(skb, NULL, IP_CT_UNTRACKED);
+	ovs_ct_fill_key(skb, key, false);
 
 	return 0;
 }

@@ -475,7 +475,7 @@ static struct pktgen_dev *pktgen_find_dev(struct pktgen_thread *t,
 static int pktgen_device_event(struct notifier_block *, unsigned long, void *);
 static void pktgen_run_all_threads(struct pktgen_net *pn);
 static void pktgen_reset_all_threads(struct pktgen_net *pn);
-static void pktgen_stop_all_threads_ifs(struct pktgen_net *pn);
+static void pktgen_stop_all_threads(struct pktgen_net *pn);
 
 static void pktgen_stop(struct pktgen_thread *t);
 static void pktgen_clear_counters(struct pktgen_dev *pkt_dev);
@@ -524,14 +524,11 @@ static ssize_t pgctrl_write(struct file *file, const char __user *buf,
 	data[count - 1] = 0;	/* Strip trailing '\n' and terminate string */
 
 	if (!strcmp(data, "stop"))
-		pktgen_stop_all_threads_ifs(pn);
-
+		pktgen_stop_all_threads(pn);
 	else if (!strcmp(data, "start"))
 		pktgen_run_all_threads(pn);
-
 	else if (!strcmp(data, "reset"))
 		pktgen_reset_all_threads(pn);
-
 	else
 		return -EINVAL;
 
@@ -3086,18 +3083,23 @@ static void pktgen_run(struct pktgen_thread *t)
 }
 
 //通知停止所有发包线程
-static void pktgen_stop_all_threads_ifs(struct pktgen_net *pn)
+static void pktgen_handle_all_threads(struct pktgen_net *pn, u32 flags)
 {
 	struct pktgen_thread *t;
-
-	func_enter();
 
 	mutex_lock(&pktgen_thread_lock);
 
 	list_for_each_entry(t, &pn->pktgen_threads, th_list)
-		t->control |= T_STOP;
+		t->control |= (flags);
 
 	mutex_unlock(&pktgen_thread_lock);
+}
+
+static void pktgen_stop_all_threads(struct pktgen_net *pn)
+{
+	func_enter();
+
+	pktgen_handle_all_threads(pn, T_STOP);
 }
 
 static int thread_is_running(const struct pktgen_thread *t)
@@ -3163,16 +3165,9 @@ static int pktgen_wait_all_threads_run(struct pktgen_net *pn)
 //通知所有thread开始运行
 static void pktgen_run_all_threads(struct pktgen_net *pn)
 {
-	struct pktgen_thread *t;
-
 	func_enter();
 
-	mutex_lock(&pktgen_thread_lock);
-
-	list_for_each_entry(t, &pn->pktgen_threads, th_list)
-		t->control |= (T_RUN);
-
-	mutex_unlock(&pktgen_thread_lock);
+	pktgen_handle_all_threads(pn, T_RUN);
 
 	/* Propagate thread->control  */
 	schedule_timeout_interruptible(msecs_to_jiffies(125));
@@ -3182,16 +3177,9 @@ static void pktgen_run_all_threads(struct pktgen_net *pn)
 
 static void pktgen_reset_all_threads(struct pktgen_net *pn)
 {
-	struct pktgen_thread *t;
-
 	func_enter();
 
-	mutex_lock(&pktgen_thread_lock);
-
-	list_for_each_entry(t, &pn->pktgen_threads, th_list)
-		t->control |= (T_REMDEVALL);
-
-	mutex_unlock(&pktgen_thread_lock);
+	pktgen_handle_all_threads(pn, T_REMDEVALL);
 
 	/* Propagate thread->control  */
 	schedule_timeout_interruptible(msecs_to_jiffies(125));

@@ -408,19 +408,20 @@ EXPORT_SYMBOL_GPL(call_switchdev_blocking_notifiers);
 static int __switchdev_handle_port_obj_add(struct net_device *dev,
 			struct switchdev_notifier_port_obj_info *port_obj_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*add_cb)(struct net_device *dev,
+			int (*add_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_obj *obj,
 				      struct netlink_ext_ack *extack))
 {
+	struct switchdev_notifier_info *info = &port_obj_info->info;
 	struct netlink_ext_ack *extack;
 	struct net_device *lower_dev;
 	struct list_head *iter;
 	int err = -EOPNOTSUPP;
 
-	extack = switchdev_notifier_info_to_extack(&port_obj_info->info);
+	extack = switchdev_notifier_info_to_extack(info);
 
 	if (check_cb(dev)) {
-		err = add_cb(dev, port_obj_info->obj, extack);
+		err = add_cb(dev, info->ctx, port_obj_info->obj, extack);
 		if (err != -EOPNOTSUPP)
 			port_obj_info->handled = true;
 		return err;
@@ -449,7 +450,7 @@ static int __switchdev_handle_port_obj_add(struct net_device *dev,
 int switchdev_handle_port_obj_add(struct net_device *dev,
 			struct switchdev_notifier_port_obj_info *port_obj_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*add_cb)(struct net_device *dev,
+			int (*add_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_obj *obj,
 				      struct netlink_ext_ack *extack))
 {
@@ -466,15 +467,16 @@ EXPORT_SYMBOL_GPL(switchdev_handle_port_obj_add);
 static int __switchdev_handle_port_obj_del(struct net_device *dev,
 			struct switchdev_notifier_port_obj_info *port_obj_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*del_cb)(struct net_device *dev,
+			int (*del_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_obj *obj))
 {
+	struct switchdev_notifier_info *info = &port_obj_info->info;
 	struct net_device *lower_dev;
 	struct list_head *iter;
 	int err = -EOPNOTSUPP;
 
 	if (check_cb(dev)) {
-		err = del_cb(dev, port_obj_info->obj);
+		err = del_cb(dev, info->ctx, port_obj_info->obj);
 		if (err != -EOPNOTSUPP)
 			port_obj_info->handled = true;
 		return err;
@@ -503,7 +505,7 @@ static int __switchdev_handle_port_obj_del(struct net_device *dev,
 int switchdev_handle_port_obj_del(struct net_device *dev,
 			struct switchdev_notifier_port_obj_info *port_obj_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*del_cb)(struct net_device *dev,
+			int (*del_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_obj *obj))
 {
 	int err;
@@ -519,19 +521,20 @@ EXPORT_SYMBOL_GPL(switchdev_handle_port_obj_del);
 static int __switchdev_handle_port_attr_set(struct net_device *dev,
 			struct switchdev_notifier_port_attr_info *port_attr_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*set_cb)(struct net_device *dev,
+			int (*set_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_attr *attr,
 				      struct netlink_ext_ack *extack))
 {
+	struct switchdev_notifier_info *info = &port_attr_info->info;
 	struct netlink_ext_ack *extack;
 	struct net_device *lower_dev;
 	struct list_head *iter;
 	int err = -EOPNOTSUPP;
 
-	extack = switchdev_notifier_info_to_extack(&port_attr_info->info);
+	extack = switchdev_notifier_info_to_extack(info);
 
 	if (check_cb(dev)) {
-		err = set_cb(dev, port_attr_info->attr, extack);
+		err = set_cb(dev, info->ctx, port_attr_info->attr, extack);
 		if (err != -EOPNOTSUPP)
 			port_attr_info->handled = true;
 		return err;
@@ -560,7 +563,7 @@ static int __switchdev_handle_port_attr_set(struct net_device *dev,
 int switchdev_handle_port_attr_set(struct net_device *dev,
 			struct switchdev_notifier_port_attr_info *port_attr_info,
 			bool (*check_cb)(const struct net_device *dev),
-			int (*set_cb)(struct net_device *dev,
+			int (*set_cb)(struct net_device *dev, const void *ctx,
 				      const struct switchdev_attr *attr,
 				      struct netlink_ext_ack *extack))
 {

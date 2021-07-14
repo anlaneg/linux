@@ -34,13 +34,6 @@ EXPORT_SYMBOL(inet_offloads);
 //添加协议（注册４层协议），用于处理４层负载的报文（例如gre,tcp,udp,igmp)
 int inet_add_protocol(const struct net_protocol *prot, unsigned char protocol)
 {
-	//注册的协议必须支持namespace
-	if (!prot->netns_ok) {
-		pr_err("Protocol %u is not namespace aware, cannot register.\n",
-			protocol);
-		return -EINVAL;
-	}
-
 	//按协议号注册相应的解析处理回调
 	return !cmpxchg((const struct net_protocol **)&inet_protos[protocol],
 			NULL, prot) ? 0 : -1;

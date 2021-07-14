@@ -145,22 +145,26 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs/*容许的选项*/,
 	len -= 2;
 
 	while (len > 0) {
-	    /*nh指向ipv6头，off结合nh,指向选项起始位置(Type)，off+1指向选项中的Length*/
-		int optlen = nh[off + 1] + 2;
-		int i;
+	    	/*nh指向ipv6头，off结合nh,指向选项起始位置(Type)，off+1指向选项中的Length*/
+		int optlen, i;
 
 		/*按option的type进行检查处理*/
-		switch (nh[off]) {
-		case IPV6_TLV_PAD1:
-		    /*pad1的选项长度只容许为1*/
-			optlen = 1;
+		if (nh[off] == IPV6_TLV_PAD1) {
 			padlen++;
 			if (padlen > 7)
 			    /*pad长度不得超过7，丢包*/
 				goto bad;
-			break;
+			off++;
+			len--;
+			continue;
+		}
+		if (len < 2)
+			goto bad;
+		optlen = nh[off + 1] + 2;
+		if (optlen > len)
+			goto bad;
 
-		case IPV6_TLV_PADN:
+		if (nh[off] == IPV6_TLV_PADN) {
 			/* RFC 2460 states that the purpose of PadN is
 			 * to align the containing header to multiples
 			 * of 8. 7 is therefore the highest valid value.
@@ -179,12 +183,7 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs/*容许的选项*/,
 				if (nh[off + i] != 0)
 					goto bad;
 			}
-			break;
-
-		default: /* Other TLV code so scan list */
-			if (optlen > len)
-				goto bad;
-
+		} else {
 			tlv_count++;
 			if (tlv_count > max_count)
 			    /*除pading外，tlv结构数量超过max_count,丢包*/
@@ -207,7 +206,6 @@ static bool ip6_parse_tlv(const struct tlvtype_proc *procs/*容许的选项*/,
 				return false;
 
 			padlen = 0;
-			break;
 		}
 		/*增加解析长度*/
 		off += optlen;
@@ -327,7 +325,7 @@ fail_and_free:
 #endif
 
 	if (ip6_parse_tlv(tlvprocdestopt_lst, skb,
-			  init_net.ipv6.sysctl.max_dst_opts_cnt)) {
+			  net->ipv6.sysctl.max_dst_opts_cnt)) {
 		skb->transport_header += extlen;
 		opt = IP6CB(skb);
 #if IS_ENABLED(CONFIG_IPV6_MIP6)
@@ -402,7 +400,7 @@ static int ipv6_srh_rcv(struct sk_buff *skb)
 
 looped_back:
 	if (hdr->segments_left == 0) {
-		if (hdr->nexthdr == NEXTHDR_IPV6) {
+		if (hdr->nexthdr == NEXTHDR_IPV6 || hdr->nexthdr == NEXTHDR_IPV4) {
 			int offset = (hdr->hdrlen + 1) << 3;
 
 			skb_postpull_rcsum(skb, skb_network_header(skb),
@@ -418,7 +416,8 @@ looped_back:
 			skb_reset_network_header(skb);
 			skb_reset_transport_header(skb);
 			skb->encapsulation = 0;
-
+			if (hdr->nexthdr == NEXTHDR_IPV4)
+				skb->protocol = htons(ETH_P_IP);
 			__skb_tunnel_rx(skb, skb->dev, net);
 
 			netif_rx(skb);
@@ -1061,8 +1060,8 @@ fail_and_free:
 
 	opt->flags |= IP6SKB_HOPBYHOP;
 	if (ip6_parse_tlv(tlvprochopopt_lst, skb,
-			  init_net.ipv6.sysctl.max_hbh_opts_cnt)) {
-	    /*跳过ipv6选项头*/
+			  net->ipv6.sysctl.max_hbh_opts_cnt)) {
+	    	/*跳过ipv6选项头*/
 		skb->transport_header += extlen;
 		opt = IP6CB(skb);
 		/*使用选项中的next-header*/

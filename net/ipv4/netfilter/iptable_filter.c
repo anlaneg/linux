@@ -37,7 +37,7 @@ static unsigned int
 iptable_filter_hook(void *priv, struct sk_buff *skb,
 		    const struct nf_hook_state *state)
 {
-	return ipt_do_table(skb, state, state->net->ipv4.iptable_filter);
+	return ipt_do_table(skb, state, priv);
 }
 
 //要注册的filter的hook ops数组
@@ -52,10 +52,6 @@ static int __net_init iptable_filter_table_init(struct net *net)
 	struct ipt_replace *repl;
 	int err;
 
-	if (net->ipv4.iptable_filter)
-		//已注册时直接返回
-		return 0;
-
 	//依据xt_table申请初始化表
 	repl = ipt_alloc_initial_table(&packet_filter);
 	if (repl == NULL)
@@ -67,8 +63,7 @@ static int __net_init iptable_filter_table_init(struct net *net)
 
 	//注filter_ops为hook点钩子实现函数
 	//初始化net->ipv4.iptable_filter指针
-	err = ipt_register_table(net, &packet_filter, repl, filter_ops,
-				 &net->ipv4.iptable_filter);
+	err = ipt_register_table(net, &packet_filter, repl, filter_ops);
 	kfree(repl);
 	return err;
 }
@@ -83,17 +78,12 @@ static int __net_init iptable_filter_net_init(struct net *net)
 
 static void __net_exit iptable_filter_net_pre_exit(struct net *net)
 {
-	if (net->ipv4.iptable_filter)
-		ipt_unregister_table_pre_exit(net, net->ipv4.iptable_filter,
-					      filter_ops);
+	ipt_unregister_table_pre_exit(net, "filter");
 }
 
 static void __net_exit iptable_filter_net_exit(struct net *net)
 {
-	if (!net->ipv4.iptable_filter)
-		return;
-	ipt_unregister_table_exit(net, net->ipv4.iptable_filter);
-	net->ipv4.iptable_filter = NULL;
+	ipt_unregister_table_exit(net, "filter");
 }
 
 static struct pernet_operations iptable_filter_net_ops = {

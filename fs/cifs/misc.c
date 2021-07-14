@@ -1,22 +1,10 @@
+// SPDX-License-Identifier: LGPL-2.1
 /*
  *   fs/cifs/misc.c
  *
  *   Copyright (C) International Business Machines  Corp., 2002,2008
  *   Author(s): Steve French (sfrench@us.ibm.com)
  *
- *   This library is free software; you can redistribute it and/or modify
- *   it under the terms of the GNU Lesser General Public License as published
- *   by the Free Software Foundation; either version 2.1 of the License, or
- *   (at your option) any later version.
- *
- *   This library is distributed in the hope that it will be useful,
- *   but WITHOUT ANY WARRANTY; without even the implied warranty of
- *   MERCHANTABILITY or FITNESS FOR A PARTICULAR PURPOSE.  See
- *   the GNU Lesser General Public License for more details.
- *
- *   You should have received a copy of the GNU Lesser General Public License
- *   along with this library; if not, write to the Free Software
- *   Foundation, Inc., 59 Temple Place, Suite 330, Boston, MA 02111-1307 USA
  */
 
 #include <linux/slab.h>
@@ -672,6 +660,100 @@ cifs_add_pending_open(struct cifs_fid *fid, struct tcon_link *tlink,
 	spin_unlock(&tlink_tcon(open->tlink)->open_file_lock);
 }
 
+/*
+ * Critical section which runs after acquiring deferred_lock.
+ * As there is no reference count on cifs_deferred_close, pdclose
+ * should not be used outside deferred_lock.
+ */
+bool
+cifs_is_deferred_close(struct cifsFileInfo *cfile, struct cifs_deferred_close **pdclose)
+{
+	struct cifs_deferred_close *dclose;
+
+	list_for_each_entry(dclose, &CIFS_I(d_inode(cfile->dentry))->deferred_closes, dlist) {
+		if ((dclose->netfid == cfile->fid.netfid) &&
+			(dclose->persistent_fid == cfile->fid.persistent_fid) &&
+			(dclose->volatile_fid == cfile->fid.volatile_fid)) {
+			*pdclose = dclose;
+			return true;
+		}
+	}
+	return false;
+}
+
+/*
+ * Critical section which runs after acquiring deferred_lock.
+ */
+void
+cifs_add_deferred_close(struct cifsFileInfo *cfile, struct cifs_deferred_close *dclose)
+{
+	bool is_deferred = false;
+	struct cifs_deferred_close *pdclose;
+
+	is_deferred = cifs_is_deferred_close(cfile, &pdclose);
+	if (is_deferred) {
+		kfree(dclose);
+		return;
+	}
+
+	dclose->tlink = cfile->tlink;
+	dclose->netfid = cfile->fid.netfid;
+	dclose->persistent_fid = cfile->fid.persistent_fid;
+	dclose->volatile_fid = cfile->fid.volatile_fid;
+	list_add_tail(&dclose->dlist, &CIFS_I(d_inode(cfile->dentry))->deferred_closes);
+}
+
+/*
+ * Critical section which runs after acquiring deferred_lock.
+ */
+void
+cifs_del_deferred_close(struct cifsFileInfo *cfile)
+{
+	bool is_deferred = false;
+	struct cifs_deferred_close *dclose;
+
+	is_deferred = cifs_is_deferred_close(cfile, &dclose);
+	if (!is_deferred)
+		return;
+	list_del(&dclose->dlist);
+	kfree(dclose);
+}
+
+void
+cifs_close_deferred_file(struct cifsInodeInfo *cifs_inode)
+{
+	struct cifsFileInfo *cfile = NULL;
+	struct cifs_deferred_close *dclose;
+
+	list_for_each_entry(cfile, &cifs_inode->openFileList, flist) {
+		spin_lock(&cifs_inode->deferred_lock);
+		if (cifs_is_deferred_close(cfile, &dclose))
+			mod_delayed_work(deferredclose_wq, &cfile->deferred, 0);
+		spin_unlock(&cifs_inode->deferred_lock);
+	}
+}
+
+void
+cifs_close_all_deferred_files(struct cifs_tcon *tcon)
+{
+	struct cifsFileInfo *cfile;
+	struct list_head *tmp;
+
+	spin_lock(&tcon->open_file_lock);
+	list_for_each(tmp, &tcon->openFileList) {
+		cfile = list_entry(tmp, struct cifsFileInfo, tlist);
+		if (delayed_work_pending(&cfile->deferred)) {
+			/*
+			 * If there is no pending work, mod_delayed_work queues new work.
+			 * So, Increase the ref count to avoid use-after-free.
+			 */
+			if (!mod_delayed_work(deferredclose_wq, &cfile->deferred, 0))
+				cifsFileInfo_get(cfile);
+		}
+	}
+	spin_unlock(&tcon->open_file_lock);
+}
+
 /* parses DFS refferal V3 structure
  * caller is responsible for freeing target_nodes
  * returns:
@@ -1180,7 +1262,7 @@ int update_super_prepath(struct cifs_tcon *tcon, char *prefix)
 	kfree(cifs_sb->prepath);
 
 	if (prefix && *prefix) {
-		cifs_sb->prepath = kstrndup(prefix, strlen(prefix), GFP_ATOMIC);
+		cifs_sb->prepath = kstrdup(prefix, GFP_ATOMIC);
 		if (!cifs_sb->prepath) {
 			rc = -ENOMEM;
 			goto out;

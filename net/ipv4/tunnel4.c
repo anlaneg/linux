@@ -223,7 +223,6 @@ static const struct net_protocol tunnel4_protocol = {
 	.handler	=	tunnel4_rcv,//ipip协议入口
 	.err_handler	=	tunnel4_err,
 	.no_policy	=	1,
-	.netns_ok	=	1,
 };
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -231,7 +230,6 @@ static const struct net_protocol tunnel64_protocol = {
 	.handler	=	tunnel64_rcv,
 	.err_handler	=	tunnel64_err,
 	.no_policy	=	1,
-	.netns_ok	=	1,
 };
 #endif
 
@@ -240,7 +238,6 @@ static const struct net_protocol tunnelmpls4_protocol = {
 	.handler	=	tunnelmpls4_rcv,
 	.err_handler	=	tunnelmpls4_err,
 	.no_policy	=	1,
-	.netns_ok	=	1,
 };
 #endif
 

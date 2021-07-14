@@ -40,7 +40,7 @@ EXPORT_SYMBOL(sg_next);
  * @sg:		The scatterlist
  *
  * Description:
- * Allows to know how many entries are in sg, taking into acount
+ * Allows to know how many entries are in sg, taking into account
  * chaining as well
  *
  **/
@@ -61,7 +61,7 @@ EXPORT_SYMBOL(sg_nents);
  *
  * Description:
  * Determines the number of entries in sg that are required to meet
- * the supplied length, taking into acount chaining as well
+ * the supplied length, taking into account chaining as well
  *
  * Returns:
  *   the number of sg entries needed, negative error on failure

@@ -10,9 +10,6 @@
 #define get_offset(x) ((x) & ((1 << BUCKET_SPACE) - 1))
 #define set_bucket_offset(b, o) ((b) << BUCKET_SPACE | (o))
 
-extern struct list_head ptype_all __read_mostly;
-extern struct list_head ptype_base[PTYPE_HASH_SIZE] __read_mostly;
-
 //pos是一个bucket_idx合上offset的结构，通过pos可以知道需要获取哪个桶的第几个元素
 static inline struct net_device *dev_from_same_bucket(struct seq_file *seq, loff_t *pos)
 {
