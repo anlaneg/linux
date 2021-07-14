@@ -98,8 +98,11 @@ static int neigh_blackhole(struct neighbour *neigh, struct sk_buff *skb)
 static void neigh_cleanup_and_release(struct neighbour *neigh)
 {
 	trace_neigh_cleanup_and_release(neigh, 0);
+	/*对外通知neigh移除*/
 	__neigh_notify(neigh, RTM_DELNEIGH, 0, 0);
+	/*触发neigh状态更新通知链*/
 	call_netevent_notifiers(NETEVENT_NEIGH_UPDATE, neigh);
+	/*移除neigh*/
 	neigh_release(neigh);
 }
 
@@ -211,6 +214,7 @@ bool neigh_remove_one(struct neighbour *ndel, struct neigh_table *tbl)
 	while ((n = rcu_dereference_protected(*np,
 					      lockdep_is_held(&tbl->lock)))) {
 		if (n == ndel)
+		    /*在桶上找到，移除它*/
 			return neigh_del(n, np, tbl);
 		np = &n->next;
 	}
@@ -220,6 +224,7 @@ bool neigh_remove_one(struct neighbour *ndel, struct neigh_table *tbl)
 //强制执行邻居表项回收
 static int neigh_forced_gc(struct neigh_table *tbl)
 {
+    /*最大强制执行回收的数目*/
 	int max_clean = atomic_read(&tbl->gc_entries) - tbl->gc_thresh2;
 	unsigned long tref = jiffies - 5 * HZ;
 	struct neighbour *n, *tmp;
@@ -229,6 +234,7 @@ static int neigh_forced_gc(struct neigh_table *tbl)
 
 	write_lock_bh(&tbl->lock);
 
+	/*遍历gc链上的neighbour,如果状态为NUD_FAILED,则移除*/
 	list_for_each_entry_safe(n, tmp, &tbl->gc_list, gc_list) {
 		if (refcount_read(&n->refcnt) == 1) {
 			bool remove = false;
@@ -387,7 +393,6 @@ static struct neighbour *neigh_alloc(struct neigh_table *tbl,
 	if (exempt_from_gc)
 		goto do_alloc;
 
-	//首先尝试邻居表项回收
 	entries = atomic_inc_return(&tbl->gc_entries) - 1;
 	if (entries >= tbl->gc_thresh3 ||
 	    (entries >= tbl->gc_thresh2 &&
@@ -866,6 +871,7 @@ void neigh_destroy(struct neighbour *neigh)
 	NEIGH_CACHE_STAT_INC(neigh->tbl, destroys);
 
 	if (!neigh->dead) {
+	    /*neigh移除时，必须指明为dead，显示堆栈*/
 		pr_warn("Destroying alive neighbour %p\n", neigh);
 		dump_stack();
 		return;
@@ -879,6 +885,7 @@ void neigh_destroy(struct neighbour *neigh)
 	write_unlock_bh(&neigh->lock);
 	neigh->arp_queue_len_bytes = 0;
 
+	/*如有必要，移除neigh时调用netdev回调*/
 	if (dev->netdev_ops->ndo_neigh_destroy)
 		dev->netdev_ops->ndo_neigh_destroy(dev, neigh);
 
@@ -887,6 +894,7 @@ void neigh_destroy(struct neighbour *neigh)
 
 	neigh_dbg(2, "neigh %p is destroyed\n", neigh);
 
+	/*neigh元素数减一*/
 	atomic_dec(&neigh->tbl->entries);
 	kfree_rcu(neigh, rcu);
 }
@@ -942,9 +950,11 @@ static void neigh_periodic_work(struct work_struct *work)
 				neigh_rand_reach_time(NEIGH_VAR(p, BASE_REACHABLE_TIME));
 	}
 
+	/*表中数量小于gc_thresh1时不进行work处理*/
 	if (atomic_read(&tbl->entries) < tbl->gc_thresh1)
 		goto out;
 
+	/*此时需要执行gc work,遍历每个arp桶*/
 	for (i = 0 ; i < (1 << nht->hash_shift); i++) {
 		np = &nht->hash_buckets[i];
 
@@ -957,16 +967,19 @@ static void neigh_periodic_work(struct work_struct *work)
 			state = n->nud_state;
 			if ((state & (NUD_PERMANENT | NUD_IN_TIMER)) ||
 			    (n->flags & NTF_EXT_LEARNED)) {
+			    /*静态neighbour,timer生效期状态，？？不处理*/
 				write_unlock(&n->lock);
 				goto next_elt;
 			}
 
+			//使n->used >= n->confirmed
 			if (time_before(n->used, n->confirmed))
 				n->used = n->confirmed;
 
 			if (refcount_read(&n->refcnt) == 1 &&
 			    (state == NUD_FAILED ||
 			     time_after(jiffies, n->used + NEIGH_VAR(n->parms, GC_STALETIME)))) {
+			    /*n只有一个引用计数，且state为failed或者长期没有使用超时，则回收*/
 				*np = n->next;
 				neigh_mark_dead(n);
 				write_unlock(&n->lock);
@@ -976,6 +989,7 @@ static void neigh_periodic_work(struct work_struct *work)
 			write_unlock(&n->lock);
 
 next_elt:
+            /*切到下一个elem*/
 			np = &n->next;
 		}
 		/*
@@ -1060,9 +1074,10 @@ static void neigh_timer_handler(struct timer_list *t)
 
 	state = neigh->nud_state;
 	now = jiffies;
+	/*默认下次触发时间为1S后*/
 	next = now + HZ;
 
-	//neighbour状态已达到非定时器控制转态退出
+	//neighbour状态已达到非定时器控制状态，退出
 	if (!(state & NUD_IN_TIMER))
 		goto out;
 
@@ -1070,17 +1085,20 @@ static void neigh_timer_handler(struct timer_list *t)
 		//当前处于reachable状态
 		if (time_before_eq(now,
 				   neigh->confirmed + neigh->parms->reachable_time)) {
+		    /*confirmed的时间距离现在还不到reachable_time,更新下次检查时间*/
 			neigh_dbg(2, "neigh %p is still alive\n", neigh);
 			next = neigh->confirmed + neigh->parms->reachable_time;
 		} else if (time_before_eq(now,
 					  neigh->used +
 					  NEIGH_VAR(neigh->parms, DELAY_PROBE_TIME))) {
+		    /*当前时间大于conirmed +reachable_time,但小于used+probe_time,转DELAY状态*/
 			neigh_dbg(2, "neigh %p is delayed\n", neigh);
 			neigh->nud_state = NUD_DELAY;
 			neigh->updated = jiffies;
 			neigh_suspect(neigh);
 			next = now + NEIGH_VAR(neigh->parms, DELAY_PROBE_TIME);
 		} else {
+		    /*当前时间大于used+probe_time,转STALE状态*/
 			neigh_dbg(2, "neigh %p is suspected\n", neigh);
 			neigh->nud_state = NUD_STALE;
 			neigh->updated = jiffies;
@@ -1121,12 +1139,13 @@ static void neigh_timer_handler(struct timer_list *t)
 	}
 
 	if (neigh->nud_state & NUD_IN_TIMER) {
-		//设置下次触发定时器
+		//此neigh仍在timer的控制下，设置下次触发时间
 		if (time_before(next, jiffies + HZ/100))
 			next = jiffies + HZ/100;
 		if (!mod_timer(&neigh->timer, next))
 			neigh_hold(neigh);
 	}
+
 	if (neigh->nud_state & (NUD_INCOMPLETE | NUD_PROBE)) {
 		//当前处于incomplete或者probe状态，执行arp探测
 		neigh_probe(neigh);
@@ -1736,6 +1755,7 @@ void neigh_table_init(int index, struct neigh_table *tbl)
 	tbl->parms.reachable_time =
 			  neigh_rand_reach_time(NEIGH_VAR(&tbl->parms, BASE_REACHABLE_TIME));
 
+	/*percpu统计信息*/
 	tbl->stats = alloc_percpu(struct neigh_statistics);
 	if (!tbl->stats)
 		panic("cannot create neighbour cache statistics");
@@ -1761,6 +1781,7 @@ void neigh_table_init(int index, struct neigh_table *tbl)
 		WARN_ON(tbl->entry_size % NEIGH_PRIV_ALIGN);
 
 	rwlock_init(&tbl->lock);
+	/*gc work初始化并入队*/
 	INIT_DEFERRABLE_WORK(&tbl->gc_work, neigh_periodic_work);
 	queue_delayed_work(system_power_efficient_wq, &tbl->gc_work,
 			tbl->parms.reachable_time);
@@ -1891,6 +1912,7 @@ static int neigh_delete(struct sk_buff *skb, struct nlmsghdr *nlh,
 		goto out;
 	}
 
+	/*将neighbour置为FAILED状态*/
 	err = __neigh_update(neigh, NULL, NUD_FAILED,
 			     NEIGH_UPDATE_F_OVERRIDE | NEIGH_UPDATE_F_ADMIN,
 			     NETLINK_CB(skb).portid, extack);
@@ -2108,6 +2130,7 @@ static int neightbl_fill_info(struct sk_buff *skb, struct neigh_table *tbl,
 	ndtmsg->ndtm_pad1   = 0;
 	ndtmsg->ndtm_pad2   = 0;
 
+	/*存放thresX*/
 	if (nla_put_string(skb, NDTA_NAME, tbl->id) ||
 	    nla_put_msecs(skb, NDTA_GC_INTERVAL, tbl->gc_interval, NDTA_PAD) ||
 	    nla_put_u32(skb, NDTA_THRESH1, tbl->gc_thresh1) ||
@@ -2381,6 +2404,7 @@ static int neightbl_set(struct sk_buff *skb, struct nlmsghdr *nlh,
 	    !net_eq(net, &init_net))
 		goto errout_tbl_lock;
 
+	/*配置gc相关的thresh值*/
 	if (tb[NDTA_THRESH1])
 		tbl->gc_thresh1 = nla_get_u32(tb[NDTA_THRESH1]);
 

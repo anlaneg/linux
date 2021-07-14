@@ -460,6 +460,7 @@ static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
 	return n;
 }
 
+/*更新daddr对应的neigbour表项的confirm time*/
 static void ipv4_confirm_neigh(const struct dst_entry *dst, const void *daddr)
 {
 	const struct rtable *rt = container_of(dst, struct rtable, dst);

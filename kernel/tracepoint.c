@@ -421,6 +421,7 @@ static void for_each_tracepoint_range(
 
 	if (!begin)
 		return;
+	/*通过函数fct遍历系统所有tracepoint*/
 	for (iter = begin; iter < end; iter++)
 		fct(tracepoint_ptr_deref(iter), priv);
 }
@@ -604,6 +605,7 @@ __initcall(init_tracepoints);
 void for_each_kernel_tracepoint(void (*fct)(struct tracepoint *tp, void *priv),
 		void *priv)
 {
+    /*遍历kernel中所有tracepoint*/
 	for_each_tracepoint_range(__start___tracepoints_ptrs,
 		__stop___tracepoints_ptrs, fct, priv);
 }

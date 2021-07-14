@@ -27,7 +27,9 @@ struct flow_dissector_key_control {
 #define FLOW_DIS_ENCAPSULATION	BIT(2)
 
 enum flow_dissect_ret {
+    /*解析成功完成*/
 	FLOW_DISSECT_RET_OUT_GOOD,
+	/*解析失败后完成*/
 	FLOW_DISSECT_RET_OUT_BAD,
 	FLOW_DISSECT_RET_PROTO_AGAIN,
 	FLOW_DISSECT_RET_IPPROTO_AGAIN,
@@ -238,7 +240,7 @@ struct flow_dissector_key_meta {
  * @ct_labels: conntrack labels
  */
 struct flow_dissector_key_ct {
-	u16	ct_state;
+	u16	ct_state;/*ct状态*/
 	u16	ct_zone;
 	u32	ct_mark;
 	u32	ct_labels[4];
@@ -382,6 +384,7 @@ struct bpf_flow_dissector {
 	void			*data_end;
 };
 
+/*结构体key_control,key_basic清零*/
 static inline void
 flow_dissector_init_keys(struct flow_dissector_key_control *key_control,
 			 struct flow_dissector_key_basic *key_basic)

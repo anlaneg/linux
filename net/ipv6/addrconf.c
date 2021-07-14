@@ -811,6 +811,7 @@ static void dev_forward_change(struct inet6_dev *idev)
 
 	list_for_each_entry(ifa, &idev->addr_list, if_list) {
 		if (ifa->flags&IFA_F_TENTATIVE)
+		    /*跳过临时地址*/
 			continue;
 		if (idev->cnf.forwarding)
 			addrconf_join_anycast(ifa);
@@ -1830,17 +1831,20 @@ out:
 }
 EXPORT_SYMBOL(ipv6_dev_get_saddr);
 
-int __ipv6_get_lladdr(struct inet6_dev *idev, struct in6_addr *addr,
-		      u32 banned_flags)
+int __ipv6_get_lladdr(struct inet6_dev *idev, struct in6_addr *addr/*出参，待填充地址*/,
+		      u32 banned_flags/*禁止的flags*/)
 {
 	struct inet6_ifaddr *ifp;
 	int err = -EADDRNOTAVAIL;
 
+	/*反序遍历所有地址列表*/
 	list_for_each_entry_reverse(ifp, &idev->addr_list, if_list) {
 		if (ifp->scope > IFA_LINK)
+		    /*scope范围不得大于IFA_LINK*/
 			break;
 		if (ifp->scope == IFA_LINK &&
 		    !(ifp->flags & banned_flags)) {
+		    /*只提取IFA_LINK类型地址，且ifp->flags必须没有banned_flags标记*/
 			*addr = ifp->addr;
 			err = 0;
 			break;
@@ -1849,6 +1853,7 @@ int __ipv6_get_lladdr(struct inet6_dev *idev, struct in6_addr *addr,
 	return err;
 }
 
+/*取dev设备上的link local地址*/
 int ipv6_get_lladdr(struct net_device *dev, struct in6_addr *addr,
 		    u32 banned_flags)
 {

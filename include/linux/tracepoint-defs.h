@@ -30,6 +30,7 @@ struct tracepoint_func {
 };
 
 struct tracepoint {
+    /*tracepoint名称*/
 	const char *name;		/* Tracepoint name */
 	struct static_key key;
 	struct static_call_key *static_call_key;

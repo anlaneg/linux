@@ -154,6 +154,7 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 	struct in_ifaddr *ifa;
 
 	rcu_read_lock();
+	/*取此addr对应的ifa*/
 	ifa = inet_lookup_ifaddr_rcu(net, addr);
 	if (!ifa) {
 		struct flowi4 fl4 = { .daddr = addr };
@@ -167,8 +168,10 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 		if (local &&
 		    !fib_table_lookup(local, &fl4, &res, FIB_LOOKUP_NOREF) &&
 		    res.type == RTN_LOCAL)
+		    /*local表存在，查local表成功，取出接口设备*/
 			result = FIB_RES_DEV(res);
 	} else {
+	    /*ifa存在，取ifa对应的网络设备*/
 		result = ifa->ifa_dev->dev;
 	}
 	if (result && devref)
@@ -500,6 +503,7 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 		return 0;
 	}
 
+	/*清除掉从ip标记*/
 	ifa->ifa_flags &= ~IFA_F_SECONDARY;
 	last_primary = &in_dev->ifa_list;
 
@@ -571,7 +575,7 @@ static int __inet_insert_ifa(struct in_ifaddr *ifa, struct nlmsghdr *nlh,
 	//记录ifa到系统
 	inet_hash_insert(dev_net(in_dev->dev), ifa);
 
-	//？？？？
+	//取消lifetime_work,并重新开启
 	cancel_delayed_work(&check_lifetime_work);
 	queue_delayed_work(system_power_efficient_wq, &check_lifetime_work, 0);
 
@@ -664,8 +668,10 @@ static int ip_mc_autojoin_config(struct net *net, bool join,
 
 	lock_sock(sk);
 	if (join)
+	    /*加入组播组*/
 		ret = ip_mc_join_group(sk, &mreq);
 	else
+	    /*离开组播组*/
 		ret = ip_mc_leave_group(sk, &mreq);
 	release_sock(sk);
 
@@ -735,6 +741,7 @@ static void check_lifetime(struct work_struct *work)
 	int i;
 
 	now = jiffies;
+	/*记录下次触发work的理论时间*/
 	next = round_jiffies_up(now + ADDR_CHECK_FREQUENCY);
 
 	for (i = 0; i < IN4_ADDR_HSIZE; i++) {
@@ -744,6 +751,7 @@ static void check_lifetime(struct work_struct *work)
 		hlist_for_each_entry_rcu(ifa, &inet_addr_lst[i], hash) {
 			unsigned long age;
 
+			/*跳过临时的ifa*/
 			if (ifa->ifa_flags & IFA_F_PERMANENT)
 				continue;
 
@@ -825,6 +833,7 @@ static void check_lifetime(struct work_struct *work)
 	if (time_before(next_sched, now + ADDRCONF_TIMER_FUZZ_MAX))
 		next_sched = now + ADDRCONF_TIMER_FUZZ_MAX;
 
+	/*重复work*/
 	queue_delayed_work(system_power_efficient_wq, &check_lifetime_work,
 			next_sched - now);
 }
@@ -834,6 +843,7 @@ static void set_ifa_lifetime(struct in_ifaddr *ifa, __u32 valid_lft,
 {
 	unsigned long timeout;
 
+	/*清除这两个标记*/
 	ifa->ifa_flags &= ~(IFA_F_PERMANENT | IFA_F_DEPRECATED);
 
 	timeout = addrconf_timeout_fixup(valid_lft, HZ);
@@ -978,14 +988,14 @@ static int inet_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	ASSERT_RTNL();
 
-	//申请并填充接口地址
+	//申请并填充接口地址ifa
 	ifa = rtm_to_ifaddr(net, nlh, &valid_lft, &prefered_lft, extack);
 	if (IS_ERR(ifa))
 		return PTR_ERR(ifa);
 
 	ifa_existing = find_matching_ifa(ifa);
 	if (!ifa_existing) {
-	    //没有与要添加的ifa相同的地址配置
+	    //不存在与要添加的ifa相同的地址配置
 		/* It would be best to check for !NLM_F_CREATE here but
 		 * userspace already relies on not having to provide this.
 		 */

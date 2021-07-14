@@ -3271,6 +3271,7 @@ bool flush_rcu_work(struct rcu_work *rwork)
 }
 EXPORT_SYMBOL(flush_rcu_work);
 
+/*取消指定工作*/
 static bool __cancel_work(struct work_struct *work, bool is_dwork)
 {
 	unsigned long flags;

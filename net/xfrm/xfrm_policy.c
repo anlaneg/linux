@@ -3281,7 +3281,7 @@ static void
 decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 {
 	const struct iphdr *iph = ip_hdr(skb);
-	int ihl = iph->ihl;
+	int ihl = iph->ihl;/*ip头部长度*/
 	u8 *xprth = skb_network_header(skb) + ihl * 4;
 	struct flowi4 *fl4 = &fl->u.ip4;
 	int oif = 0;
@@ -3298,6 +3298,7 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 	fl4->saddr = reverse ? iph->daddr : iph->saddr;
 	fl4->flowi4_tos = iph->tos;
 
+	/*非分片报文解析*/
 	if (!ip_is_fragment(iph)) {
 		switch (iph->protocol) {
 		case IPPROTO_UDP:
@@ -3490,10 +3491,12 @@ int __xfrm_decode_session(struct sk_buff *skb, struct flowi *fl,
 {
 	switch (family) {
 	case AF_INET:
+	    /*ipv4解析*/
 		decode_session4(skb, fl, reverse);
 		break;
 #if IS_ENABLED(CONFIG_IPV6)
 	case AF_INET6:
+	    /*ipv6解析*/
 		decode_session6(skb, fl, reverse);
 		break;
 #endif

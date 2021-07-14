@@ -33,7 +33,7 @@
 /*
  * NUD stands for "neighbor unreachability detection"
  */
-
+/*timer生效期的状态*/
 #define NUD_IN_TIMER	(NUD_INCOMPLETE|NUD_REACHABLE|NUD_DELAY|NUD_PROBE)
 #define NUD_VALID	(NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE|NUD_PROBE|NUD_STALE|NUD_DELAY)
 #define NUD_CONNECTED	(NUD_PERMANENT|NUD_NOARP|NUD_REACHABLE)
@@ -159,6 +159,7 @@ struct neighbour {
 	__u8			nud_state;
 	//地址类型
 	__u8			type;
+	/*标记此neighbour不得再更新,仅为dead的neigh才能被销毁*/
 	__u8			dead;
 	u8			protocol;
 	seqlock_t		ha_lock;
@@ -237,9 +238,12 @@ struct neigh_table {
 	char			*id;
 	struct neigh_parms	parms;
 	struct list_head	parms_list;
+	/*gc work的执行间隔*/
 	int			gc_interval;
+	/*table中元素数小于gc_thresh1时，不执行neigh_periodic_work任务*/
 	int			gc_thresh1;
 	int			gc_thresh2;
+	/*table中元素数大于gc_thresh3时，在申请新的neigh时，触发强制gc*/
 	int			gc_thresh3;
 	unsigned long		last_flush;
 	struct delayed_work	gc_work;
@@ -251,7 +255,7 @@ struct neigh_table {
 	struct list_head	gc_list;
 	rwlock_t		lock;
 	unsigned long		last_rand;
-	//邻居表统计计数
+	//邻居表统计计数（percpu)
 	struct neigh_statistics	__percpu *stats;
 	//邻居hash表项
 	struct neigh_hash_table __rcu *nht;

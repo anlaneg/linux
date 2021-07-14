@@ -50,6 +50,7 @@ static inline struct neighbour *__ipv4_neigh_lookup(struct net_device *dev, u32 
 	return n;
 }
 
+/*依据key值，更新其对应的arp表项的confirmed时间*/
 static inline void __ipv4_confirm_neigh(struct net_device *dev, u32 key)
 {
 	struct neighbour *n;

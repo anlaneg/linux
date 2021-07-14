@@ -144,18 +144,25 @@ struct in_ifaddr {
 	struct hlist_node	hash;
 	//用于串连下一个inet4接口地址
 	struct in_ifaddr	__rcu *ifa_next;
-	struct in_device	*ifa_dev;//地址对应的inet4设备
+	/*地址对应的inet4设备*/
+	struct in_device	*ifa_dev;
 	struct rcu_head		rcu_head;
-	__be32			ifa_local;//本端接口地址
-	__be32			ifa_address;//对端接口地址（如果未设置对端地址，则与ifa_local相同）
-	//地址前缀掩码形式
+	//本端接口地址
+	__be32			ifa_local;
+	//对端接口地址（如果未设置对端地址，则与ifa_local相同）
+	__be32			ifa_address;
+	/*地址前缀掩码形式*/
 	__be32			ifa_mask;
 	__u32			ifa_rt_priority;
-	__be32			ifa_broadcast;//广播地址
+	/*广播地址*/
+	__be32			ifa_broadcast;
+	/*地址范围*/
 	unsigned char		ifa_scope;
-	//地址前缀长度
+	/*地址前缀长度*/
 	unsigned char		ifa_prefixlen;
+	/*地址对应的flags*/
 	__u32			ifa_flags;
+	/*标签*/
 	char			ifa_label[IFNAMSIZ];
 
 	/* In seconds, relative to tstamp. Expiry is at tstamp + HZ * lft. */

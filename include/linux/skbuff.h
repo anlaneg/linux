@@ -742,7 +742,7 @@ struct sk_buff {
 	};
 
 	union {
-		ktime_t		tstamp;
+		ktime_t		tstamp;/*收报时的时间签*/
 		u64		skb_mstamp_ns; /* earliest departure time */
 	};
 	/*
@@ -2869,6 +2869,7 @@ static inline int skb_orphan_frags_rx(struct sk_buff *skb, gfp_t gfp_mask)
  */
 static inline void __skb_queue_purge(struct sk_buff_head *list)
 {
+    /*释放list上所有sk_buff*/
 	struct sk_buff *skb;
 	while ((skb = __skb_dequeue(list)) != NULL)
 		kfree_skb(skb);

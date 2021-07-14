@@ -2134,6 +2134,7 @@ static int udp_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 	 */
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
 		goto drop;
+
 	/*报文准备入队列，skb上引用的ct计数需要释放*/
 	nf_reset_ct(skb);
 

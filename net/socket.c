@@ -256,6 +256,7 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 
 static struct kmem_cache *sock_inode_cachep __ro_after_init;
 
+/*自cache中提取socket_alloc,返回对应的inode*/
 static struct inode *sock_alloc_inode(struct super_block *sb)
 {
 	struct socket_alloc *ei;
@@ -276,6 +277,7 @@ static struct inode *sock_alloc_inode(struct super_block *sb)
 	return &ei->vfs_inode;
 }
 
+/*释放inode*/
 static void sock_free_inode(struct inode *inode)
 {
 	struct socket_alloc *ei;
@@ -1032,6 +1034,7 @@ static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (sock->type == SOCK_SEQPACKET)
 		msg.msg_flags |= MSG_EOR;
 
+	/*通过sock的sendmsg函数完成内容发送*/
 	res = sock_sendmsg(sock, &msg);
 	*from = msg.msg_iter;
 	return res;

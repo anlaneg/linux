@@ -311,6 +311,7 @@ void inet6_netconf_notify_devconf(struct net *net, int event, int type,
  */
 static inline struct inet6_dev *__in6_dev_get(const struct net_device *dev)
 {
+    /*取网络设备的inet6_dev*/
 	return rcu_dereference_rtnl(dev->ip6_ptr);
 }
 

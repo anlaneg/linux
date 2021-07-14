@@ -183,6 +183,7 @@ struct proto_ops {
 	/*获取此socket的option*/
 	int		(*getsockopt)(struct socket *sock, int level,
 				      int optname, char __user *optval, int __user *optlen);
+	/*输出socket fd相关info到seq_file中*/
 	void		(*show_fdinfo)(struct seq_file *m, struct socket *sock);
 	/*socket消息发送*/
 	int		(*sendmsg)   (struct socket *sock, struct msghdr *m,

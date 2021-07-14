@@ -1095,6 +1095,7 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir,
 	struct net *net = dev_net(skb->dev);
 	int ndir = dir | (reverse ? XFRM_POLICY_MASK + 1 : 0);
 
+	/*socket有policy,执行sock policy检查*/
 	if (sk && sk->sk_policy[XFRM_POLICY_IN])
 		return __xfrm_policy_check(sk, ndir, skb, family);
 

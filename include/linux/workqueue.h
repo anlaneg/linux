@@ -526,7 +526,7 @@ static inline bool queue_work(struct workqueue_struct *wq,
  * Equivalent to queue_delayed_work_on() but tries to use the local CPU.
  */
 //在指定延迟后将work加入队列（未指定运行在那个cpu上）
-static inline bool queue_delayed_work(struct workqueue_struct *wq,
+static inline bool queue_delayed_work(struct workqueue_struct *wq/*wq队列*/,
 				      struct delayed_work *dwork,
 				      unsigned long delay/*work需要延迟的时间*/)
 {

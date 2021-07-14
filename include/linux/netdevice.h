@@ -1444,6 +1444,7 @@ struct net_device_ops {
 	//每创建一个与此设备相关的邻居表项，则调用此函数完成邻居表项设备相关的私有实始化
 	int			(*ndo_neigh_construct)(struct net_device *dev,
 						       struct neighbour *n);
+	/*neighbour被移除时，此回调将被触发*/
 	void			(*ndo_neigh_destroy)(struct net_device *dev,
 						     struct neighbour *n);
 

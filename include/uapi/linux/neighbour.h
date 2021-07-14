@@ -62,6 +62,7 @@ enum {
 
 /* Dummy states */
 #define NUD_NOARP	0x40
+/*静态的表项*/
 #define NUD_PERMANENT	0x80
 #define NUD_NONE	0x00
 

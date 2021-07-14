@@ -241,6 +241,7 @@ static bool fl_mask_fits_tmplt(struct fl_flow_tmplt *tmplt,
 	return true;
 }
 
+/*将key中mask关心的范围清零*/
 static void fl_clear_masked_range(struct fl_flow_key *key,
 				  struct fl_flow_mask *mask)
 {
@@ -358,23 +359,28 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 
 	//遍历所有mask
 	list_for_each_entry_rcu(mask, &head->masks, list) {
+	    /*每次均对control,basic进行清零处理*/
 		flow_dissector_init_keys(&skb_key.control, &skb_key.basic);
+		/*每次均对mask关心的字段进行清零，准备重新解析*/
 		fl_clear_masked_range(&skb_key, mask);
 
+		/*更新meta*/
 		skb_flow_dissect_meta(skb, &mask->dissector, &skb_key);
 		/* skb_flow_dissect() does not set n_proto in case an unknown
 		 * protocol, so do it rather here.
 		 */
-		//网络层协议ipv4/ipv6
+		/*网络层协议ipv4/ipv6*/
 		skb_key.basic.n_proto = skb_protocol(skb, false);
+		/*更新隧道信息*/
 		skb_flow_dissect_tunnel_info(skb, &mask->dissector, &skb_key);
-		//解析ct相关的字段
+		/*解析ct相关的字段*/
 		skb_flow_dissect_ct(skb, &mask->dissector, &skb_key,
 				    fl_ct_info_to_flower_map,
 				    ARRAY_SIZE(fl_ct_info_to_flower_map),
 				    post_ct);
+		/*解析skb->hash*/
 		skb_flow_dissect_hash(skb, &mask->dissector, &skb_key);
-		//解析skb中的mask->dissector提及的字段，并将解析结果存入到skb_key中
+		/*解析skb中的mask->dissector提及的字段，并将解析结果存入到skb_key中*/
 		skb_flow_dissect(skb, &mask->dissector, &skb_key, 0);
 
 		//如果查询出flow，则执行rule对应action

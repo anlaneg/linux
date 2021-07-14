@@ -1843,6 +1843,7 @@ static struct in_device *ip_mc_find_dev(struct net *net, struct ip_mreqn *imr)
 	struct in_device *idev = NULL;
 
 	if (imr->imr_ifindex) {
+	    /*取ifindexa对应的inet4_dev*/
 		idev = inetdev_by_index(net, imr->imr_ifindex);
 		return idev;
 	}
@@ -2196,6 +2197,7 @@ static int __ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr,
 
 	ASSERT_RTNL();
 
+	/*addr不是组播地址，报错*/
 	if (!ipv4_is_multicast(addr))
 		return -EINVAL;
 

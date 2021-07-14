@@ -51,7 +51,7 @@ struct inet6_ifaddr {
 	__u8			dad_probes;
 	__u8			stable_privacy_retry;
 
-	__u16			scope;
+	__u16			scope;/*地址范围*/
 	__u64			dad_nonce;
 
 	unsigned long		cstamp;	/* created timestamp */
@@ -163,6 +163,7 @@ struct ipv6_devstat {
 struct inet6_dev {
 	struct net_device	*dev;
 
+	/*串连地址列表*/
 	struct list_head	addr_list;
 
 	struct ifmcaddr6	*mc_list;

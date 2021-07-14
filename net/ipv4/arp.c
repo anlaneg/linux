@@ -1383,10 +1383,11 @@ static int arp_proc_init(void);
 
 void __init arp_init(void)
 {
-	//初始化neighbour表
+	//初始化arp表
 	neigh_table_init(NEIGH_ARP_TABLE, &arp_tbl);
 
-	dev_add_pack(&arp_packet_type);//arp报文处理器注册
+	//arp报文处理器注册
+	dev_add_pack(&arp_packet_type);
 	arp_proc_init();
 #ifdef CONFIG_SYSCTL
 	neigh_sysctl_register(NULL, &arp_tbl.parms, NULL);

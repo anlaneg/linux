@@ -408,6 +408,7 @@ void seq_vprintf(struct seq_file *m, const char *f, va_list args)
 	int len;
 
 	if (m->count < m->size) {
+	    /*格式化输出到m->buf中*/
 		len = vsnprintf(m->buf + m->count, m->size - m->count, f, args);
 		if (m->count + len < m->size) {
 			m->count += len;
@@ -418,6 +419,7 @@ void seq_vprintf(struct seq_file *m, const char *f, va_list args)
 }
 EXPORT_SYMBOL(seq_vprintf);
 
+/*格式化并输出内容到seq_file*/
 void seq_printf(struct seq_file *m, const char *f, ...)
 {
 	va_list args;

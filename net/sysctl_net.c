@@ -115,6 +115,7 @@ out1:
 	goto out;
 }
 
+/*为ctl table注册sysctl配置路径*/
 struct ctl_table_header *register_net_sysctl(struct net *net,
 	const char *path, struct ctl_table *table)
 {

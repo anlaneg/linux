@@ -213,9 +213,11 @@ void skb_flow_dissect_meta(const struct sk_buff *skb,
 {
 	struct flow_dissector_key_meta *meta;
 
+	/*此mask不关心meta,则跳过更新*/
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_META))
 		return;
 
+	/*更新meta的in-port*/
 	meta = skb_flow_dissector_target(flow_dissector,
 					 FLOW_DISSECTOR_KEY_META,
 					 target_container);
@@ -230,6 +232,7 @@ skb_flow_dissect_set_enc_addr_type(enum flow_dissector_key_id type,
 {
 	struct flow_dissector_key_control *ctrl;
 
+	/*mask不关心addr_type,则跳过更新*/
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_CONTROL))
 		return;
 
@@ -256,7 +259,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_CT))
 		return;
 
-	//取skb对应的ct(要求skb中已查询ct)
+	/*取skb对应的ct(要求skb中已查询ct)*/
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct && !post_ct)
 	    /*无对应的ct,不填充key->ct_state*/
@@ -291,6 +294,7 @@ skb_flow_dissect_ct(const struct sk_buff *skb,
 }
 EXPORT_SYMBOL(skb_flow_dissect_ct);
 
+/*提取tunnel信息，填充target_container*/
 void
 skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 			     struct flow_dissector *flow_dissector,
@@ -300,6 +304,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 	struct ip_tunnel_key *key;
 
 	/* A quick check to see if there might be something to do. */
+	/*防重复调用*/
 	if (!dissector_uses_key(flow_dissector,
 				FLOW_DISSECTOR_KEY_ENC_KEYID) &&
 	    !dissector_uses_key(flow_dissector,
@@ -318,17 +323,20 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 
 	info = skb_tunnel_info(skb);
 	if (!info)
+	    /*无tunnel info退出*/
 		return;
 
 	key = &info->key;
 
 	switch (ip_tunnel_info_af(info)) {
 	case AF_INET:
+	    /*更新tunnel地址类型为ipv4地址*/
 		skb_flow_dissect_set_enc_addr_type(FLOW_DISSECTOR_KEY_IPV4_ADDRS,
 						   flow_dissector,
 						   target_container);
 		if (dissector_uses_key(flow_dissector,
 				       FLOW_DISSECTOR_KEY_ENC_IPV4_ADDRS)) {
+		    /*提取tunnel的src,dst ip地址*/
 			struct flow_dissector_key_ipv4_addrs *ipv4;
 
 			ipv4 = skb_flow_dissector_target(flow_dissector,
@@ -339,11 +347,13 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 		}
 		break;
 	case AF_INET6:
+	    /*更新tunnel地址类型为ipv6地址*/
 		skb_flow_dissect_set_enc_addr_type(FLOW_DISSECTOR_KEY_IPV6_ADDRS,
 						   flow_dissector,
 						   target_container);
 		if (dissector_uses_key(flow_dissector,
 				       FLOW_DISSECTOR_KEY_ENC_IPV6_ADDRS)) {
+		    /*提取tunnel的src,dst ip地址*/
 			struct flow_dissector_key_ipv6_addrs *ipv6;
 
 			ipv6 = skb_flow_dissector_target(flow_dissector,
@@ -355,6 +365,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 		break;
 	}
 
+	/*如果需要，提取tunnel id*/
 	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_KEYID)) {
 		struct flow_dissector_key_keyid *keyid;
 
@@ -364,6 +375,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 		keyid->keyid = tunnel_id_to_key32(key->tun_id);
 	}
 
+	/*提取tunnel 传输层src,dst port*/
 	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_PORTS)) {
 		struct flow_dissector_key_ports *tp;
 
@@ -374,6 +386,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 		tp->dst = key->tp_dst;
 	}
 
+	/*隧道tos,ttl信息提取*/
 	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_IP)) {
 		struct flow_dissector_key_ip *ip;
 
@@ -384,6 +397,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 		ip->ttl = key->ttl;
 	}
 
+	/*隧道选项信息提取*/
 	if (dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_ENC_OPTS)) {
 		struct flow_dissector_key_enc_opts *enc_opt;
 
@@ -401,6 +415,7 @@ skb_flow_dissect_tunnel_info(const struct sk_buff *skb,
 }
 EXPORT_SYMBOL(skb_flow_dissect_tunnel_info);
 
+/*提取skb->hash信息*/
 void skb_flow_dissect_hash(const struct sk_buff *skb,
 			   struct flow_dissector *flow_dissector,
 			   void *target_container)
@@ -766,6 +781,7 @@ __skb_flow_dissect_ipv4(const struct sk_buff *skb,
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_IP))
 		return;
 
+	/*更新tos,ttl取值*/
 	key_ip = skb_flow_dissector_target(flow_dissector,
 					   FLOW_DISSECTOR_KEY_IP,
 					   target_container);
@@ -783,6 +799,7 @@ __skb_flow_dissect_ipv6(const struct sk_buff *skb,
 	if (!dissector_uses_key(flow_dissector, FLOW_DISSECTOR_KEY_IP))
 		return;
 
+	/*更新ipv6的tos,ttl取值*/
 	key_ip = skb_flow_dissector_target(flow_dissector,
 					   FLOW_DISSECTOR_KEY_IP,
 					   target_container);
@@ -941,7 +958,6 @@ bool __skb_flow_dissect(const struct net *net,
 	u8 ip_proto = 0;
 	bool ret;
 
-	//使用默认参数
 	if (!data) {
 		//未指定报文起始位置指针，使用skb->data
 		data = skb->data;
@@ -1028,6 +1044,7 @@ bool __skb_flow_dissect(const struct net *net,
 				n_proto = skb->protocol;
 			}
 
+			/*bpf方式解析*/
 			prog = READ_ONCE(run_array->items[0].prog);
 			ret = bpf_flow_dissect(prog, &ctx, n_proto, nhoff,
 					       hlen, flags);
@@ -1066,10 +1083,10 @@ proto_again:
 			break;
 		}
 
-		//指向4层起始位置
+		/*指向4层起始位置*/
 		nhoff += iph->ihl * 4;
 
-		//提取4层协议编号
+		/*提取4层协议编号*/
 		ip_proto = iph->protocol;
 
 		if (dissector_uses_key(flow_dissector,
@@ -1078,12 +1095,13 @@ proto_again:
 							      FLOW_DISSECTOR_KEY_IPV4_ADDRS,
 							      target_container);
 
-			//解析ipv4源目的ip地址
+			/*解析ipv4源目的ip地址*/
 			memcpy(&key_addrs->v4addrs, &iph->saddr,
 			       sizeof(key_addrs->v4addrs));
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		}
 
+		/*ttl,tos字段更新*/
 		__skb_flow_dissect_ipv4(skb, flow_dissector,
 					target_container, data, iph);
 
@@ -1096,6 +1114,7 @@ proto_again:
 				fdret = FLOW_DISSECT_RET_OUT_GOOD;
 				break;
 			} else {
+			    /*遇到首片，如果flag要求解析首片，则继续向下，否则跳出*/
 				key_control->flags |= FLOW_DIS_FIRST_FRAG;
 				if (!(flags &
 				      FLOW_DISSECTOR_F_PARSE_1ST_FRAG)) {
@@ -1121,6 +1140,7 @@ proto_again:
 		ip_proto = iph->nexthdr;
 		nhoff += sizeof(struct ipv6hdr);
 
+		/*解析ipv6源目的地址*/
 		if (dissector_uses_key(flow_dissector,
 				       FLOW_DISSECTOR_KEY_IPV6_ADDRS)) {
 			key_addrs = skb_flow_dissector_target(flow_dissector,
@@ -1132,6 +1152,7 @@ proto_again:
 			key_control->addr_type = FLOW_DISSECTOR_KEY_IPV6_ADDRS;
 		}
 
+		/*解析ipv6 flow label*/
 		if ((dissector_uses_key(flow_dissector,
 					FLOW_DISSECTOR_KEY_FLOW_LABEL) ||
 		     (flags & FLOW_DISSECTOR_F_STOP_AT_FLOW_LABEL)) &&
@@ -1335,6 +1356,7 @@ ip_proto_again:
 	//解析4层报文
 	switch (ip_proto) {
 	case IPPROTO_GRE:
+	    /*gre报文解析*/
 		fdret = __skb_flow_dissect_gre(skb, key_control, flow_dissector,
 					       target_container, data,
 					       &proto, &nhoff, &hlen, flags);
@@ -1392,10 +1414,12 @@ ip_proto_again:
 		break;
 	}
 	case IPPROTO_IPIP:
+	    /*解析ipip报文*/
 		proto = htons(ETH_P_IP);
 
 		key_control->flags |= FLOW_DIS_ENCAPSULATION;
 		if (flags & FLOW_DISSECTOR_F_STOP_AT_ENCAP) {
+		    /*指明停止解析，跳出*/
 			fdret = FLOW_DISSECT_RET_OUT_GOOD;
 			break;
 		}

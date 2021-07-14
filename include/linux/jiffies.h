@@ -106,6 +106,7 @@ static inline u64 get_jiffies_64(void)
 	(typecheck(unsigned long, a) && \
 	 typecheck(unsigned long, b) && \
 	 ((long)((b) - (a)) < 0))
+//检查是否a<b
 #define time_before(a,b)	time_after(b,a)
 
 //检查时间a是否>=b
