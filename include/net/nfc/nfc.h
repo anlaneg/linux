@@ -166,7 +166,7 @@ struct nfc_dev {
 	int idx;//nfc设备编号
 	u32 target_next_idx;
 	struct nfc_target *targets;
-	int n_targets;
+	int n_targets;/*指明targets数组大小*/
 	int targets_generation;
 	struct device dev;
 	bool dev_up;//nfc设备是否up
@@ -249,6 +249,7 @@ static inline void nfc_set_drvdata(struct nfc_dev *dev, void *data)
  */
 static inline void *nfc_get_drvdata(struct nfc_dev *dev)
 {
+    /*取驱动私有数据*/
 	return dev_get_drvdata(&dev->dev);
 }
 

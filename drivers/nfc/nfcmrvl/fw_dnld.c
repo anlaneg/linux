@@ -399,6 +399,7 @@ static void fw_dnld_rx_work(struct work_struct *work)
 						    fw_dnld);
 
 	while ((skb = skb_dequeue(&fw_dnld->rx_q))) {
+	    /*将此报文给所有raw socket送一份*/
 		nfc_send_to_raw_sock(priv->ndev->nfc_dev, skb,
 				     RAW_PAYLOAD_NCI, NFC_DIRECTION_RX);
 		switch (fw_dnld->state) {

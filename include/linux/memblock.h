@@ -49,11 +49,11 @@ enum memblock_flags {
  * @nid: NUMA node id
  */
 struct memblock_region {
-	phys_addr_t base;
-	phys_addr_t size;
-	enum memblock_flags flags;
+	phys_addr_t base;/*起始地址*/
+	phys_addr_t size;/*内存大小*/
+	enum memblock_flags flags;/*内存flags*/
 #ifdef CONFIG_NUMA
-	int nid;
+	int nid;/*numa id*/
 #endif
 };
 
@@ -66,10 +66,10 @@ struct memblock_region {
  * @name: the memory type symbolic name
  */
 struct memblock_type {
-	unsigned long cnt;
-	unsigned long max;
-	phys_addr_t total_size;
-	struct memblock_region *regions;
+	unsigned long cnt;/*当前可用的region大小*/
+	unsigned long max;/*当前申请的大小*/
+	phys_addr_t total_size;/*所有region合起来的总大小*/
+	struct memblock_region *regions;/*一组region*/
 	char *name;
 };
 
@@ -237,7 +237,7 @@ static inline void __next_physmem_range(u64 *idx, struct memblock_type *type,
 
 static inline bool memblock_is_hotpluggable(struct memblock_region *m)
 {
-	return m->flags & MEMBLOCK_HOTPLUG;
+	return m->flags & MEMBLOCK_HOTPLUG;/*是否为可hotplug的region*/
 }
 
 static inline bool memblock_is_mirror(struct memblock_region *m)

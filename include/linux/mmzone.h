@@ -1109,7 +1109,7 @@ extern struct zone *next_zone(struct zone *zone);
 	     zone;					\
 	     zone = next_zone(zone))
 
-/**/
+/*遍历所有在线zone,这些zone必须是populated的*/
 #define for_each_populated_zone(zone)		        \
 	for (zone = (first_online_pgdat())->node_zones; \
 	     zone;					\

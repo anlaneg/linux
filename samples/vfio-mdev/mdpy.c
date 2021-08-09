@@ -754,6 +754,7 @@ static int __init mdpy_dev_init(void)
 {
 	int ret = 0;
 
+	/*字符设备注册*/
 	ret = alloc_chrdev_region(&mdpy_devt, 0, MINORMASK + 1, MDPY_NAME);
 	if (ret < 0) {
 		pr_err("Error: failed to register mdpy_dev, err: %d\n", ret);
@@ -763,6 +764,7 @@ static int __init mdpy_dev_init(void)
 	cdev_add(&mdpy_cdev, mdpy_devt, MINORMASK + 1);
 	pr_info("%s: major %d\n", __func__, MAJOR(mdpy_devt));
 
+	/*mdev驱动注册*/
 	ret = mdev_register_driver(&mdpy_driver);
 	if (ret)
 		goto err_cdev;
@@ -777,6 +779,7 @@ static int __init mdpy_dev_init(void)
 	mdpy_dev.release = mdpy_device_release;
 	dev_set_name(&mdpy_dev, "%s", MDPY_NAME);
 
+	/*系统中添加设备*/
 	ret = device_register(&mdpy_dev);
 	if (ret)
 		goto err_class;

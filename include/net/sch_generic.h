@@ -539,7 +539,8 @@ struct tcf_block {
 	unsigned int nooffloaddevcnt; /* Number of devs unable to do offload */
 	unsigned int lockeddevcnt; /* Number of devs that require rtnl lock. */
 	struct {
-		struct tcf_chain *chain;//首个chain
+	    //首个chain
+		struct tcf_chain *chain;
 		//用于串多个tcf_filter_chain_list_item,记录chain_head_change回调函数及参数
 		struct list_head filter_chain_list;
 	} chain0;

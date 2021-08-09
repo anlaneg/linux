@@ -1390,8 +1390,7 @@ retry:
 }
 EXPORT_SYMBOL(netlink_unicast);
 
-//group参数用于表示，是否校验是否存在group
-//是否有监听者
+//group参数用于表示组播号，校验此group是否有监听者
 int netlink_has_listeners(struct sock *sk, unsigned int group)
 {
 	int res = 0;
@@ -2241,17 +2240,19 @@ void __netlink_clear_multicast_users(struct sock *ksk, unsigned int group)
 
 /*添加一个长度为size的nlh*/
 struct nlmsghdr *
-__nlmsg_put(struct sk_buff *skb, u32 portid, u32 seq, int type, int len, int flags)
+__nlmsg_put(struct sk_buff *skb, u32 portid/*指定nlmsg_pid*/, u32 seq/*指定nlmsg_seq*/, int type/*消息类型*/, int len/*payload长度*/, int flags)
 {
 	struct nlmsghdr *nlh;
 	int size = nlmsg_msg_size(len);
 
+	/*填充nlmsghdr*/
 	nlh = skb_put(skb, NLMSG_ALIGN(size));
 	nlh->nlmsg_type = type;
 	nlh->nlmsg_len = size;
 	nlh->nlmsg_flags = flags;
 	nlh->nlmsg_pid = portid;
 	nlh->nlmsg_seq = seq;
+	/*初始化data为0*/
 	if (!__builtin_constant_p(size) || NLMSG_ALIGN(size) - size != 0)
 		memset(nlmsg_data(nlh) + len, 0, NLMSG_ALIGN(size) - size);
 	return nlh;

@@ -102,6 +102,7 @@ unsigned long min_low_pfn;
 unsigned long max_pfn;
 unsigned long long max_possible_pfn;
 
+/*默认使用的memory regions*/
 static struct memblock_region memblock_memory_init_regions[INIT_MEMBLOCK_REGIONS] __initdata_memblock;
 static struct memblock_region memblock_reserved_init_regions[INIT_MEMBLOCK_RESERVED_REGIONS] __initdata_memblock;
 #ifdef CONFIG_HAVE_MEMBLOCK_PHYS_MAP
@@ -119,7 +120,7 @@ struct memblock memblock __initdata_memblock = {
 	.reserved.max		= INIT_MEMBLOCK_RESERVED_REGIONS,
 	.reserved.name		= "reserved",
 
-	.bottom_up		= false,
+	.bottom_up		= false,/*默认自上而下*/
 	.current_limit		= MEMBLOCK_ALLOC_ANYWHERE,
 };
 
@@ -291,7 +292,7 @@ static phys_addr_t __init_memblock memblock_find_in_range_node(phys_addr_t size,
 		end = memblock.current_limit;
 
 	/* avoid allocating the first page */
-	start = max_t(phys_addr_t, start, PAGE_SIZE);
+	start = max_t(phys_addr_t, start, PAGE_SIZE);/*如果start为0，则返回PAGE_SIZE*/
 	end = max(start, end);
 
 	if (memblock_bottom_up())
@@ -565,8 +566,8 @@ static void __init_memblock memblock_insert_region(struct memblock_type *type,
  * 0 on success, -errno on failure.
  */
 static int __init_memblock memblock_add_range(struct memblock_type *type,
-				phys_addr_t base, phys_addr_t size,
-				int nid, enum memblock_flags flags)
+				phys_addr_t base/*起始位置*/, phys_addr_t size/*内存大小*/,
+				int nid/*numa node id编号*/, enum memblock_flags flags)
 {
 	bool insert = false;
 	phys_addr_t obase = base;
@@ -579,6 +580,7 @@ static int __init_memblock memblock_add_range(struct memblock_type *type,
 
 	/* special case for empty array */
 	if (type->regions[0].size == 0) {
+	    /*0号region是空的，填充它*/
 		WARN_ON(type->cnt != 1 || type->total_size);
 		type->regions[0].base = base;
 		type->regions[0].size = size;
@@ -600,8 +602,10 @@ repeat:
 		phys_addr_t rbase = rgn->base;
 		phys_addr_t rend = rbase + rgn->size;
 
+		/*已保存的region起始位置大于end(故需要在此region前面添加一个region)*/
 		if (rbase >= end)
 			break;
+		/*已保存的region终止位置小于base（故后面可能会有重叠或者需要添加，这里continue)*/
 		if (rend <= base)
 			continue;
 		/*
@@ -632,6 +636,7 @@ repeat:
 	}
 
 	if (!nr_new)
+	    /*不需要新增，跳出*/
 		return 0;
 
 	/*
@@ -640,6 +645,7 @@ repeat:
 	 */
 	if (!insert) {
 		while (type->cnt + nr_new > type->max)
+		    /*当前cnt 增加后会大于type->max,执行扩充*/
 			if (memblock_double_array(type, obase, size) < 0)
 				return -ENOMEM;
 		insert = true;
@@ -662,9 +668,10 @@ repeat:
  * Return:
  * 0 on success, -errno on failure.
  */
-int __init_memblock memblock_add_node(phys_addr_t base, phys_addr_t size,
-				       int nid)
+int __init_memblock memblock_add_node(phys_addr_t base/*内存起始位置*/, phys_addr_t size/*内存大小*/,
+				       int nid/*所属numa*/)
 {
+    /*为memblock添加numa内存*/
 	return memblock_add_range(&memblock.memory, base, size, nid, 0);
 }
 
@@ -679,14 +686,14 @@ int __init_memblock memblock_add_node(phys_addr_t base, phys_addr_t size,
  * Return:
  * 0 on success, -errno on failure.
  */
-int __init_memblock memblock_add(phys_addr_t base, phys_addr_t size)
+int __init_memblock memblock_add(phys_addr_t base/*内存起始位置*/, phys_addr_t size/*内存大小*/)
 {
 	phys_addr_t end = base + size - 1;
 
 	memblock_dbg("%s: [%pa-%pa] %pS\n", __func__,
 		     &base, &end, (void *)_RET_IP_);
 
-	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES, 0);
+	return memblock_add_range(&memblock.memory, base, size, MAX_NUMNODES/*未指定numa*/, 0);
 }
 
 /**
@@ -780,6 +787,7 @@ static int __init_memblock memblock_remove_range(struct memblock_type *type,
 	return 0;
 }
 
+/*自memblock中移除掉一段内存*/
 int __init_memblock memblock_remove(phys_addr_t base, phys_addr_t size)
 {
 	phys_addr_t end = base + size - 1;
@@ -809,6 +817,7 @@ int __init_memblock memblock_free(phys_addr_t base, phys_addr_t size)
 	return memblock_remove_range(&memblock.reserved, base, size);
 }
 
+/*在reserved region中添加一段内存*/
 int __init_memblock memblock_reserve(phys_addr_t base, phys_addr_t size)
 {
 	phys_addr_t end = base + size - 1;
@@ -940,11 +949,11 @@ static bool should_skip_region(struct memblock_type *type,
 
 	/* we never skip regions when iterating memblock.reserved or physmem */
 	if (type != memblock_memory)
-		return false;
+		return false;/*不能跳过物理内存*/
 
 	/* only memory regions are associated with nodes, check it */
 	if (nid != NUMA_NO_NODE && nid != m_nid)
-		return true;
+		return true;/*要求了numa id,但本region对应的numa id与之不相等*/
 
 	/* skip hotpluggable memory regions if needed */
 	if (movable_node_is_enabled() && memblock_is_hotpluggable(m))
@@ -952,11 +961,11 @@ static bool should_skip_region(struct memblock_type *type,
 
 	/* if we want mirror memory skip non-mirror memory regions */
 	if ((flags & MEMBLOCK_MIRROR) && !memblock_is_mirror(m))
-		return true;
+		return true;/*要求mirror标记，但本block region没有mirror标记*/
 
 	/* skip nomap memory unless we were asked for it explicitly */
 	if (!(flags & MEMBLOCK_NOMAP) && memblock_is_nomap(m))
-		return true;
+		return true;/*没有要求nomap标记，但本block region有此标记*/
 
 	return false;
 }
@@ -992,45 +1001,52 @@ void __next_mem_range(u64 *idx, int nid, enum memblock_flags flags,
 		      struct memblock_type *type_b, phys_addr_t *out_start,
 		      phys_addr_t *out_end, int *out_nid)
 {
+    /*idx_a为低32位*/
 	int idx_a = *idx & 0xffffffff;
+	/*idx_b为高32位*/
 	int idx_b = *idx >> 32;
 
 	if (WARN_ONCE(nid == MAX_NUMNODES,
 	"Usage of MAX_NUMNODES is deprecated. Use NUMA_NO_NODE instead\n"))
-		nid = NUMA_NO_NODE;
+		nid = NUMA_NO_NODE;/*默认使用-1表示任意numa id*/
 
+	/*沿升序遍历type_a对应的block region*/
 	for (; idx_a < type_a->cnt; idx_a++) {
 		struct memblock_region *m = &type_a->regions[idx_a];
 
-		phys_addr_t m_start = m->base;
-		phys_addr_t m_end = m->base + m->size;
-		int	    m_nid = memblock_get_region_node(m);
+		phys_addr_t m_start = m->base;/*起始地址*/
+		phys_addr_t m_end = m->base + m->size;/*终止地址*/
+		int	    m_nid = memblock_get_region_node(m);/*对应的numa id*/
 
+		/*检查m是否匹配nid,flags的要求*/
 		if (should_skip_region(type_a, m, nid, flags))
 			continue;
 
 		if (!type_b) {
+		    /*如果未指定type_b,则填充m对应的信息后，直接返回*/
 			if (out_start)
 				*out_start = m_start;
 			if (out_end)
 				*out_end = m_end;
 			if (out_nid)
 				*out_nid = m_nid;
-			idx_a++;
+
+			idx_a++;/*移动到下一个block region*/
 			*idx = (u32)idx_a | (u64)idx_b << 32;
 			return;
 		}
 
 		/* scan areas before each reservation */
+		/*遍历type_b*/
 		for (; idx_b < type_b->cnt + 1; idx_b++) {
 			struct memblock_region *r;
 			phys_addr_t r_start;
 			phys_addr_t r_end;
 
 			r = &type_b->regions[idx_b];
-			r_start = idx_b ? r[-1].base + r[-1].size : 0;
+			r_start = idx_b ? r[-1].base + r[-1].size : 0/*type_b的idx_b=0时，默认起始为0*/;
 			r_end = idx_b < type_b->cnt ?
-				r->base : PHYS_ADDR_MAX;
+				r->base : PHYS_ADDR_MAX/*type_b的idx_b == type_b->cnt时，默认终止为“地址最大值”*/;
 
 			/*
 			 * if idx_b advanced past idx_a,
@@ -1089,11 +1105,12 @@ void __init_memblock __next_mem_range_rev(u64 *idx, int nid,
 					  phys_addr_t *out_start,
 					  phys_addr_t *out_end, int *out_nid)
 {
+    /*idx为u64,这里最低32位与高在32位*/
 	int idx_a = *idx & 0xffffffff;
 	int idx_b = *idx >> 32;
 
 	if (WARN_ONCE(nid == MAX_NUMNODES, "Usage of MAX_NUMNODES is deprecated. Use NUMA_NO_NODE instead\n"))
-		nid = NUMA_NO_NODE;
+		nid = NUMA_NO_NODE;/*未指明node*/
 
 	if (*idx == (u64)ULLONG_MAX) {
 		idx_a = type_a->cnt - 1;
@@ -1103,13 +1120,15 @@ void __init_memblock __next_mem_range_rev(u64 *idx, int nid,
 			idx_b = 0;
 	}
 
+	/*反序遍历type_a对应的regions*/
 	for (; idx_a >= 0; idx_a--) {
 		struct memblock_region *m = &type_a->regions[idx_a];
 
-		phys_addr_t m_start = m->base;
-		phys_addr_t m_end = m->base + m->size;
-		int m_nid = memblock_get_region_node(m);
+		phys_addr_t m_start = m->base;/*内存起始位置*/
+		phys_addr_t m_end = m->base + m->size;/*内存终止位置*/
+		int m_nid = memblock_get_region_node(m);/*这段内存所属的numa id*/
 
+		/*检查flags与nid是否与要求匹配，如不匹配continue*/
 		if (should_skip_region(type_a, m, nid, flags))
 			continue;
 
@@ -1411,7 +1430,7 @@ phys_addr_t __init memblock_phys_alloc_range(phys_addr_t size,
  */
 phys_addr_t __init memblock_phys_alloc_try_nid(phys_addr_t size, phys_addr_t align, int nid)
 {
-	return memblock_alloc_range_nid(size, align, 0,
+	return memblock_alloc_range_nid(size, align, 0/*物理起始位置为0*/,
 					MEMBLOCK_ALLOC_ACCESSIBLE, nid, false);
 }
 
@@ -1801,6 +1820,7 @@ bool __init_memblock memblock_is_region_memory(phys_addr_t base, phys_addr_t siz
  */
 bool __init_memblock memblock_is_region_reserved(phys_addr_t base, phys_addr_t size)
 {
+    /*检查这一段内存是否被预留*/
 	return memblock_overlaps_region(&memblock.reserved, base, size);
 }
 

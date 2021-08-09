@@ -541,6 +541,7 @@ int nla_append(struct sk_buff *skb, int attrlen, const void *data);
  */
 static inline int nlmsg_msg_size(int payload)
 {
+    //struct nlmsghdr结构体加上payload
 	return NLMSG_HDRLEN + payload;
 }
 
@@ -550,6 +551,7 @@ static inline int nlmsg_msg_size(int payload)
  */
 static inline int nlmsg_total_size(int payload)
 {
+    /*netlink头 + payload 获取总的长度*/
 	return NLMSG_ALIGN(nlmsg_msg_size(payload));
 }
 
@@ -920,6 +922,7 @@ static inline struct nlmsghdr *nlmsg_put(struct sk_buff *skb, u32 portid, u32 se
 					 int type, int payload, int flags)
 {
 	if (unlikely(skb_tailroom(skb) < nlmsg_total_size(payload)))
+	    /*skb不足以存入payload,返回NULL*/
 		return NULL;
 
 	return __nlmsg_put(skb, portid, seq, type, payload, flags);

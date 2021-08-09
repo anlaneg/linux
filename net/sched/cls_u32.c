@@ -336,11 +336,13 @@ static void *tc_u_common_ptr(const struct tcf_proto *tp)
 		return block->q;
 }
 
+/*按key取桶*/
 static struct hlist_head *tc_u_hash(void *key)
 {
 	return tc_u_common_hash + hash_ptr(key, U32_HASH_SHIFT);
 }
 
+/*按key在tc_u_common_hash中查询tc_u_common*/
 static struct tc_u_common *tc_u_common_find(void *key)
 {
 	struct tc_u_common *tc;
@@ -1408,6 +1410,7 @@ static int __init init_u32(void)
 	if (!tc_u_common_hash)
 		return -ENOMEM;
 
+	/*初始化hashtable*/
 	for (i = 0; i < U32_HASH_SIZE; i++)
 		INIT_HLIST_HEAD(&tc_u_common_hash[i]);
 

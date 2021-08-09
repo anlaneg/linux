@@ -475,11 +475,13 @@ static int nci_open_device(struct nci_dev *ndev)
 
 	mutex_lock(&ndev->req_lock);
 
+	/*检查确认设备已up*/
 	if (test_bit(NCI_UP, &ndev->flags)) {
 		rc = -EALREADY;
 		goto done;
 	}
 
+	/*执行open*/
 	if (ndev->ops->open(ndev)) {
 		rc = -EIO;
 		goto done;
@@ -487,8 +489,10 @@ static int nci_open_device(struct nci_dev *ndev)
 
 	atomic_set(&ndev->cmd_cnt, 1);
 
+	/*置为init*/
 	set_bit(NCI_INIT, &ndev->flags);
 
+	/*执行init*/
 	if (ndev->ops->init)
 		rc = ndev->ops->init(ndev);
 
@@ -497,6 +501,7 @@ static int nci_open_device(struct nci_dev *ndev)
 				   msecs_to_jiffies(NCI_RESET_TIMEOUT));
 	}
 
+	/*执行setup*/
 	if (!rc && ndev->ops->setup) {
 		rc = ndev->ops->setup(ndev);
 	}
@@ -515,6 +520,7 @@ static int nci_open_device(struct nci_dev *ndev)
 				   msecs_to_jiffies(NCI_INIT_TIMEOUT));
 	}
 
+	/*执行post_setup*/
 	if (!rc && ndev->ops->post_setup)
 		rc = ndev->ops->post_setup(ndev);
 
@@ -523,9 +529,11 @@ static int nci_open_device(struct nci_dev *ndev)
 				   msecs_to_jiffies(NCI_INIT_TIMEOUT));
 	}
 
+	/*init完成*/
 	clear_bit(NCI_INIT, &ndev->flags);
 
 	if (!rc) {
+	    /*置为nci up*/
 		set_bit(NCI_UP, &ndev->flags);
 		nci_clear_target_list(ndev);
 		atomic_set(&ndev->state, NCI_IDLE);
@@ -535,6 +543,7 @@ static int nci_open_device(struct nci_dev *ndev)
 		skb_queue_purge(&ndev->rx_q);
 		skb_queue_purge(&ndev->tx_q);
 
+		/*失败了，执行关闭*/
 		ndev->ops->close(ndev);
 		ndev->flags = 0;
 	}
@@ -611,13 +620,16 @@ static void nci_data_timer(struct timer_list *t)
 	queue_work(ndev->rx_wq, &ndev->rx_work);
 }
 
+/*nci设备执行up*/
 static int nci_dev_up(struct nfc_dev *nfc_dev)
 {
+    /*取nci设备*/
 	struct nci_dev *ndev = nfc_get_drvdata(nfc_dev);
 
 	return nci_open_device(ndev);
 }
 
+/*nci设备执行down*/
 static int nci_dev_down(struct nfc_dev *nfc_dev)
 {
 	struct nci_dev *ndev = nfc_get_drvdata(nfc_dev);
@@ -1143,6 +1155,7 @@ struct nci_dev *nci_allocate_device(struct nci_ops *ops,
 	if (!ops->open || !ops->close || !ops->send)
 		return NULL;
 
+	/*如不支持协议，则返回NULL*/
 	if (!supported_protocols)
 		return NULL;
 
@@ -1164,6 +1177,7 @@ struct nci_dev *nci_allocate_device(struct nci_ops *ops,
 	ndev->tx_tailroom = tx_tailroom;
 	init_completion(&ndev->req_completion);
 
+	/*创建nci设备*/
 	ndev->nfc_dev = nfc_allocate_device(&nci_nfc_ops,
 					    supported_protocols,
 					    tx_headroom + NCI_DATA_HDR_SIZE,
@@ -1175,6 +1189,7 @@ struct nci_dev *nci_allocate_device(struct nci_ops *ops,
 	if (!ndev->hci_dev)
 		goto free_nfc;
 
+	/*将此填充为nci驱动私有数据*/
 	nfc_set_drvdata(ndev->nfc_dev, ndev);
 
 	return ndev;
@@ -1335,6 +1350,7 @@ int nci_send_frame(struct nci_dev *ndev, struct sk_buff *skb)
 	skb_orphan(skb);
 
 	/* Send copy to sniffer */
+	/*将此报文给所有raw socket送一份（tx方向）*/
 	nfc_send_to_raw_sock(ndev->nfc_dev, skb,
 			     RAW_PAYLOAD_NCI, NFC_DIRECTION_TX);
 
@@ -1501,6 +1517,7 @@ static void nci_rx_work(struct work_struct *work)
 	while ((skb = skb_dequeue(&ndev->rx_q))) {
 
 		/* Send copy to sniffer */
+	    /*将此报文给所有raw socket送一份（rx方向）*/
 		nfc_send_to_raw_sock(ndev->nfc_dev, skb,
 				     RAW_PAYLOAD_NCI, NFC_DIRECTION_RX);
 

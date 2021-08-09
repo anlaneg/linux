@@ -1192,7 +1192,8 @@ static int __request_region_locked(struct resource *res, struct resource *parent
 		//请求资源（将res添加进parent中）
 		conflict = __request_resource(parent, res);
 		if (!conflict)
-			break;//未返回冲突，跳出
+		    //未返回冲突，跳出
+			break;
 		/*
 		 * mm/hmm.c reserves physical addresses which then
 		 * become unavailable to other users.  Conflicts are
@@ -1235,16 +1236,18 @@ static int __request_region_locked(struct resource *res, struct resource *parent
  * @flags: IO resource flags
  */
 struct resource *__request_region(struct resource *parent,
-				  resource_size_t start, resource_size_t n,
+				  resource_size_t start/*资源起始地址*/, resource_size_t n/*资源大小*/,
 				  const char *name, int flags)
 {
 	struct resource *res = alloc_resource(GFP_KERNEL);
 	int ret;
 
 	if (!res)
+	    /*申请resource失败*/
 		return NULL;
 
 	write_lock(&resource_lock);
+	/*将资源加入到parent中*/
 	ret = __request_region_locked(res, parent, start, n, name, flags);
 	write_unlock(&resource_lock);
 
@@ -1254,6 +1257,7 @@ struct resource *__request_region(struct resource *parent,
 	}
 
 	if (parent == &iomem_resource)
+	    /*针对内存资源，需要revoke*/
 		revoke_iomem(res);
 
 	return res;

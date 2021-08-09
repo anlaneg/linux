@@ -54,7 +54,9 @@ struct genl_family {
 	unsigned int		maxattr;
 	//为组播组分配的起始id
 	unsigned int		mcgrp_offset;	/* private */
+	/*是否支持netns*/
 	u8			netnsok:1;
+	/*是否支持并行操作，如果不支持，则会进行genetlink消息加锁*/
 	u8			parallel_ops:1;
 	u8			n_ops;
 	u8			n_small_ops;
@@ -71,7 +73,7 @@ struct genl_family {
 					     struct genl_info *info);
 	const struct genl_ops *	ops;
 	const struct genl_small_ops *small_ops;
-	const struct genl_multicast_group *mcgrps;
+	const struct genl_multicast_group *mcgrps;/*组播组名称*/
 	struct module		*module;
 };
 
@@ -283,6 +285,7 @@ static inline void *genlmsg_put_reply(struct sk_buff *skb,
  */
 static inline void genlmsg_end(struct sk_buff *skb, void *hdr)
 {
+    /*填充nlmsghdr对应的总长度*/
 	nlmsg_end(skb, hdr - GENL_HDRLEN - NLMSG_HDRLEN);
 }
 
@@ -433,6 +436,7 @@ static inline int genl_set_err(const struct genl_family *family,
 {
 	if (WARN_ON_ONCE(group >= family->n_mcgrps))
 		return -EINVAL;
+	/*向此组播知会通知*/
 	group = family->mcgrp_offset + group;
 	return netlink_set_err(net->genl_sock, portid, group, code);
 }

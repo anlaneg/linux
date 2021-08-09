@@ -17,25 +17,30 @@
  *   allocation usage).
  */
 #define __typecheck(x, y) \
+    /*确保x,y属于相同类型*/\
 	(!!(sizeof((typeof(x) *)1 == (typeof(y) *)1)))
 
 #define __no_side_effects(x, y) \
-		(__is_constexpr(x) && __is_constexpr(y))
+		(__is_constexpr(x)/*x必须为常量*/ && __is_constexpr(y)/*y必须为常量*/)
 
 #define __safe_cmp(x, y) \
 		(__typecheck(x, y) && __no_side_effects(x, y))
 
+/*执行x,y的比较，如果为真，返回x,否则返回y*/
 #define __cmp(x, y, op)	((x) op (y) ? (x) : (y))
 
+/*执行x,y的比对，如果为真，返回x,否则返回y*/
 #define __cmp_once(x, y, unique_x, unique_y, op) ({	\
 		typeof(x) unique_x = (x);		\
 		typeof(y) unique_y = (y);		\
 		__cmp(unique_x, unique_y, op); })
 
 #define __careful_cmp(x, y, op) \
+    /*此函数为编译期函数，如果第一个参数非0，则使用第二个参数为返回值，否则使用第三个做返回值*/\
+    /*这里如果x,y类型相等，且为常量，则采用__cmp进行比对*/\
 	__builtin_choose_expr(__safe_cmp(x, y), \
 		__cmp(x, y, op), \
-		__cmp_once(x, y, __UNIQUE_ID(__x), __UNIQUE_ID(__y), op))
+		__cmp_once(x, y, __UNIQUE_ID(__x)/*唯一名称*/, __UNIQUE_ID(__y), op))
 
 /**
  * min - return minimum of two values of the same or compatible types

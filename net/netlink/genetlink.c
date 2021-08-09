@@ -141,6 +141,7 @@ static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
 	return -ENOENT;
 }
 
+/*利用family中的i号，填充op*/
 static void genl_op_from_small(const struct genl_family *family,
 			       unsigned int i, struct genl_ops *op)
 {
@@ -183,8 +184,10 @@ static void genl_get_cmd_by_index(unsigned int i,
 				  struct genl_ops *op)
 {
 	if (i < family->n_ops)
+	    /*i索引小于n_ops,填充op*/
 		genl_op_from_full(family, i, op);
 	else if (i < family->n_ops + family->n_small_ops)
+	    /*自small_ops提取信息，填充op*/
 		genl_op_from_small(family, i - family->n_ops, op);
 	else
 		WARN_ON_ONCE(1);
@@ -315,6 +318,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 
 		netlink_table_grab();
 		rcu_read_lock();
+		/*遍历每个net namespace*/
 		for_each_net_rcu(net) {
 			err = __netlink_change_ngroups(net->genl_sock,
 					mc_groups_longs * BITS_PER_LONG);
@@ -375,9 +379,10 @@ static int genl_validate_ops(const struct genl_family *family)
 
 	if (WARN_ON(family->n_ops && !family->ops) ||
 	    WARN_ON(family->n_small_ops && !family->small_ops))
-	    	//参数有误，有ops计数，但无ops指针
+	    //参数有误，有ops计数，但无ops指针
 		return -EINVAL;
 
+	/*计算family中有多少cmd*/
 	for (i = 0; i < genl_get_cmd_cnt(family); i++) {
 		struct genl_ops op;
 
@@ -385,6 +390,7 @@ static int genl_validate_ops(const struct genl_family *family)
 		/*dumpit与doit必须至少提供一个*/
 		if (op.dumpit == NULL && op.doit == NULL)
 			return -EINVAL;
+
 		/*ops间的cmd不能重复*/
 		for (j = i + 1; j < genl_get_cmd_cnt(family); j++) {
 			struct genl_ops op2;
@@ -412,7 +418,7 @@ static int genl_validate_ops(const struct genl_family *family)
  */
 int genl_register_family(struct genl_family *family)
 {
-    //注册netlink generic family
+    //注册一个netlink generic family
 	int err, i;
 	int start = GENL_START_ALLOC, end = GENL_MAX_ID;
 
@@ -423,7 +429,7 @@ int genl_register_family(struct genl_family *family)
 
 	genl_lock_all();
 
-	//检查是否已存在
+	//检查此family是否已存在
 	if (genl_family_find_byname(family->name)) {
 		err = -EEXIST;
 		goto errout_locked;
@@ -530,12 +536,13 @@ void *genlmsg_put(struct sk_buff *skb, u32 portid, u32 seq,
 	if (nlh == NULL)
 		return NULL;
 
+	/*填充genlmsghdr*/
 	hdr = nlmsg_data(nlh);
 	hdr->cmd = cmd;
 	hdr->version = family->version;
 	hdr->reserved = 0;
 
-	return (char *) hdr + GENL_HDRLEN;
+	return (char *) hdr + GENL_HDRLEN;/*跳到genlmsghdr尾部*/
 }
 EXPORT_SYMBOL(genlmsg_put);
 
@@ -626,6 +633,7 @@ no_attrs:
 	cb->data = info;
 	if (ops->start) {
 		if (!ctx->family->parallel_ops)
+		    /*不支持并行ops,加锁*/
 			genl_lock();
 		rc = ops->start(cb);
 		if (!ctx->family->parallel_ops)
@@ -793,6 +801,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 
 	/* this family doesn't exist in this netns */
 	if (!family->netnsok && !net_eq(net, &init_net))
+	    /*此family不支持netns,且当前net不是init_net,报错*/
 		return -ENOENT;
 
 	hdrlen = GENL_HDRLEN + family->hdrsize;
@@ -803,6 +812,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 	if (genl_get_cmd(hdr->cmd, family, &op))
 		return -EOPNOTSUPP;
 
+	/*权限检查*/
 	if ((op.flags & GENL_ADMIN_PERM) &&
 	    !netlink_capable(skb, CAP_NET_ADMIN))
 		return -EPERM;
@@ -812,9 +822,11 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 		return -EPERM;
 
 	if ((nlh->nlmsg_flags & NLM_F_DUMP) == NLM_F_DUMP)
+	    /*如果有dump标记，则回调dumpit*/
 		return genl_family_rcv_msg_dumpit(family, skb, nlh, extack,
 						  &op, hdrlen, net);
 	else
+	    /*如果有doit标记，则回调doit*/
 		return genl_family_rcv_msg_doit(family, skb, nlh, extack,
 						&op, hdrlen, net);
 }
@@ -1451,7 +1463,7 @@ static int __net_init genl_pernet_init(struct net *net)
 
 	//创建kernel处理的netlink generic类netlink socket
 	/* we'll bump the group number right afterwards */
-	net->genl_sock = netlink_kernel_create(net, NETLINK_GENERIC, &cfg);
+	net->genl_sock = netlink_kernel_create(net, NETLINK_GENERIC/*协议为generic*/, &cfg);
 
 	if (!net->genl_sock && net_eq(net, &init_net))
 		panic("GENL: Cannot initialize generic netlink\n");
@@ -1541,8 +1553,9 @@ int genlmsg_multicast_allns(const struct genl_family *family,
 }
 EXPORT_SYMBOL(genlmsg_multicast_allns);
 
+/*genetlink组播通知*/
 void genl_notify(const struct genl_family *family, struct sk_buff *skb,
-		 struct genl_info *info, u32 group, gfp_t flags)
+		 struct genl_info *info, u32 group/*指定组播通知*/, gfp_t flags)
 {
 	struct net *net = genl_info_net(info);
 	struct sock *sk = net->genl_sock;

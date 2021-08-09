@@ -367,7 +367,7 @@ struct tcf_filter_chain_list_item {
 
 //创建指定index的chain
 static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
-					  u32 chain_index)
+					  u32 chain_index/*chain索引*/)
 {
 	struct tcf_chain *chain;
 
@@ -877,7 +877,7 @@ tcf_chain0_head_change_cb_del(struct tcf_block *block,
 
 struct tcf_net {
 	spinlock_t idr_lock; /* Protects idr */
-	struct idr idr;
+	struct idr idr;/*记录block指针*/
 };
 
 static unsigned int tcf_net_id;
@@ -950,6 +950,7 @@ static struct tcf_block *tcf_block_lookup(struct net *net, u32 block_index)
 	return idr_find(&tn->idr, block_index);
 }
 
+/*给定block_index查询block*/
 static struct tcf_block *tcf_block_refcnt_get(struct net *net, u32 block_index)
 {
 	struct tcf_block *block;
@@ -1188,7 +1189,7 @@ static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl/*�
 	return 0;
 }
 
-//查找tc filter block
+//给定block_index查找tc filter block
 static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 					  unsigned long cl, int ifindex,
 					  u32 block_index,
@@ -3035,7 +3036,7 @@ replay:
 	}
 
 	mutex_lock(&block->lock);
-	//取chain_index对应的chain
+	//查询chain_index对应的chain
 	chain = tcf_chain_lookup(block, chain_index);
 	if (n->nlmsg_type == RTM_NEWCHAIN) {
 		//当前新建chain
@@ -3985,6 +3986,7 @@ static int tcf_qevent_parse_block_index(struct nlattr *block_index_attr,
 					u32 *p_block_index,
 					struct netlink_ext_ack *extack)
 {
+    /*自attr中取block_index*/
 	*p_block_index = nla_get_u32(block_index_attr);
 	if (!*p_block_index) {
 		NL_SET_ERR_MSG(extack, "Block number may not be zero");
@@ -3996,7 +3998,7 @@ static int tcf_qevent_parse_block_index(struct nlattr *block_index_attr,
 
 int tcf_qevent_init(struct tcf_qevent *qe, struct Qdisc *sch,
 		    enum flow_block_binder_type binder_type,
-		    struct nlattr *block_index_attr,
+		    struct nlattr *block_index_attr/*block index属性*/,
 		    struct netlink_ext_ack *extack)
 {
 	u32 block_index;
@@ -4012,6 +4014,7 @@ int tcf_qevent_init(struct tcf_qevent *qe, struct Qdisc *sch,
 	if (!block_index)
 		return 0;
 
+	/*构造qe*/
 	qe->info.binder_type = binder_type;
 	qe->info.chain_head_change = tcf_chain_head_change_dflt;
 	qe->info.chain_head_change_priv = &qe->filter_chain;

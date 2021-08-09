@@ -354,13 +354,13 @@ static int red_init(struct Qdisc *sch, struct nlattr *opt,
 
 	err = tcf_qevent_init(&q->qe_early_drop, sch,
 			      FLOW_BLOCK_BINDER_TYPE_RED_EARLY_DROP,
-			      tb[TCA_RED_EARLY_DROP_BLOCK], extack);
+			      tb[TCA_RED_EARLY_DROP_BLOCK]/*red early block配置*/, extack);
 	if (err)
 		return err;
 
 	return tcf_qevent_init(&q->qe_mark, sch,
 			       FLOW_BLOCK_BINDER_TYPE_RED_MARK,
-			       tb[TCA_RED_MARK_BLOCK], extack);
+			       tb[TCA_RED_MARK_BLOCK]/*red block配置*/, extack);
 }
 
 static int red_change(struct Qdisc *sch, struct nlattr *opt,

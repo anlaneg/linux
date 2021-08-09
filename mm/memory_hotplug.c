@@ -109,7 +109,7 @@ u64 max_mem_size = U64_MAX;
 
 /* add this memory to iomem resource */
 static struct resource *register_memory_resource(u64 start, u64 size,
-						 const char *resource_name)
+						 const char *resource_name/*资源名称*/)
 {
 	struct resource *res;
 	unsigned long flags =  IORESOURCE_SYSTEM_RAM | IORESOURCE_BUSY;
@@ -117,6 +117,7 @@ static struct resource *register_memory_resource(u64 start, u64 size,
 	if (strcmp(resource_name, "System RAM"))
 		flags |= IORESOURCE_SYSRAM_DRIVER_MANAGED;
 
+	/*检查此范围是否容许*/
 	if (!mhp_range_allowed(start, size, true))
 		return ERR_PTR(-E2BIG);
 
@@ -127,6 +128,7 @@ static struct resource *register_memory_resource(u64 start, u64 size,
 	 * details.
 	 */
 	if (start + size > max_mem_size && system_state < SYSTEM_RUNNING)
+	    /*内存过大*/
 		return ERR_PTR(-E2BIG);
 
 	/*
@@ -993,8 +995,8 @@ int try_online_node(int nid)
 static int check_hotplug_memory_range(u64 start, u64 size)
 {
 	/* memory range must be block size aligned */
-	if (!size || !IS_ALIGNED(start, memory_block_size_bytes()) ||
-	    !IS_ALIGNED(size, memory_block_size_bytes())) {
+	if (!size || !IS_ALIGNED(start, memory_block_size_bytes()/*起始地址必须对齐*/) ||
+	    !IS_ALIGNED(size, memory_block_size_bytes())/*内存大小必须对齐*/) {
 		pr_err("Block size [%#lx] unaligned hotplug range: start %#llx, size %#llx",
 		       memory_block_size_bytes(), start, size);
 		return -EINVAL;
@@ -1055,7 +1057,7 @@ bool mhp_supports_memmap_on_memory(unsigned long size)
  *
  * we are OK calling __meminit stuff here - we have CONFIG_MEMORY_HOTPLUG
  */
-int __ref add_memory_resource(int nid, struct resource *res, mhp_t mhp_flags)
+int __ref add_memory_resource(int nid/*numa node编号*/, struct resource *res/*内存资源*/, mhp_t mhp_flags)
 {
 	struct mhp_params params = { .pgprot = pgprot_mhp(PAGE_KERNEL) };
 	struct vmem_altmap mhp_altmap = {};
@@ -1063,13 +1065,15 @@ int __ref add_memory_resource(int nid, struct resource *res, mhp_t mhp_flags)
 	bool new_node = false;
 	int ret;
 
-	start = res->start;
-	size = resource_size(res);
+	start = res->start;/*资源起始地址*/
+	size = resource_size(res);/*资源大小*/
 
+	/*内存不对齐*/
 	ret = check_hotplug_memory_range(start, size);
 	if (ret)
 		return ret;
 
+	/*numa node不存在，报错*/
 	if (!node_possible(nid)) {
 		WARN(1, "node %d was absent from the node_possible_map\n", nid);
 		return -EINVAL;
@@ -1160,6 +1164,7 @@ int __ref __add_memory(int nid, u64 start, u64 size, mhp_t mhp_flags)
 	struct resource *res;
 	int ret;
 
+	/*将此内存资源加入到iomem_resource*/
 	res = register_memory_resource(start, size, "System RAM");
 	if (IS_ERR(res))
 		return PTR_ERR(res);
@@ -1170,7 +1175,7 @@ int __ref __add_memory(int nid, u64 start, u64 size, mhp_t mhp_flags)
 	return ret;
 }
 
-int add_memory(int nid, u64 start, u64 size, mhp_t mhp_flags)
+int add_memory(int nid/*node id*/, u64 start/*起始物理地址*/, u64 size/*内存大小*/, mhp_t mhp_flags)
 {
 	int rc;
 
@@ -1256,6 +1261,7 @@ struct range __weak arch_get_mappable_range(void)
 
 struct range mhp_get_pluggable_range(bool need_mapping)
 {
+    /*容许的最大内存*/
 	const u64 max_phys = (1ULL << MAX_PHYSMEM_BITS) - 1;
 	struct range mhp_range;
 
@@ -1277,8 +1283,9 @@ EXPORT_SYMBOL_GPL(mhp_get_pluggable_range);
 bool mhp_range_allowed(u64 start, u64 size, bool need_mapping)
 {
 	struct range mhp_range = mhp_get_pluggable_range(need_mapping);
-	u64 end = start + size;
+	u64 end = start + size;/*内存终止地址*/
 
+	/*[start,end)这个范围在mhp_range范围内*/
 	if (start < end && start >= mhp_range.start && (end - 1) <= mhp_range.end)
 		return true;
 

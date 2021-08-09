@@ -27,9 +27,10 @@ struct nfc_protocol {
 
 struct nfc_rawsock {
 	struct sock sk;
-	struct nfc_dev *dev;
+	struct nfc_dev *dev;/*sock对应的dev*/
 	u32 target_idx;
 	struct work_struct tx_work;
+	/*tx work是否被调度*/
 	bool tx_work_scheduled;
 };
 

@@ -15,6 +15,7 @@ struct mdev_type;
 struct mdev_device {
 	struct device dev;
 	guid_t uuid;
+	/*驱动私有数据*/
 	void *driver_data;
 	struct list_head next;
 	struct mdev_type *type;
@@ -22,6 +23,7 @@ struct mdev_device {
 	bool active;
 };
 
+/*由dev获取mdev*/
 static inline struct mdev_device *to_mdev_device(struct device *dev)
 {
 	return container_of(dev, struct mdev_device, dev);

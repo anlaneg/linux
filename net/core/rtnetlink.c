@@ -1409,6 +1409,7 @@ static noinline_for_stack int rtnl_fill_vf(struct sk_buff *skb,
 	if (!dev->dev.parent || ((ext_filter_mask & RTEXT_FILTER_VF) == 0))
 		return 0;
 
+	/*取有多少个vf*/
 	num_vfs = dev_num_vf(dev->dev.parent);
 	if (nla_put_u32(skb, IFLA_NUM_VF, num_vfs))
 		return -EMSGSIZE;
@@ -2364,11 +2365,13 @@ static int handle_vf_guid(struct net_device *dev, struct ifla_vf_guid *ivt, int 
 	return handle_infiniband_guid(dev, ivt, guid_type);
 }
 
+/*设置vf的配置信息*/
 static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 {
 	const struct net_device_ops *ops = dev->netdev_ops;
 	int err = -EINVAL;
 
+	/*配置vf mac地址*/
 	if (tb[IFLA_VF_MAC]) {
 		struct ifla_vf_mac *ivm = nla_data(tb[IFLA_VF_MAC]);
 

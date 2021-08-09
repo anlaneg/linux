@@ -119,8 +119,8 @@ struct perm_bits {
 #define	NO_WRITE	0
 #define	ALL_WRITE	0xFFFFFFFFU
 
-static int vfio_user_config_read(struct pci_dev *pdev, int offset,
-				 __le32 *val, int count)
+static int vfio_user_config_read(struct pci_dev *pdev, int offset/*读取的起始位置*/,
+				 __le32 *val/*出参，读到的值*/, int count/*读取的长度*/)
 {
 	int ret = -EINVAL;
 	u32 tmp_val = 0;
@@ -129,6 +129,7 @@ static int vfio_user_config_read(struct pci_dev *pdev, int offset,
 	case 1:
 	{
 		u8 tmp;
+		/*pdev设备的offset位置处，读取u8*/
 		ret = pci_user_read_config_byte(pdev, offset, &tmp);
 		tmp_val = tmp;
 		break;
@@ -136,22 +137,25 @@ static int vfio_user_config_read(struct pci_dev *pdev, int offset,
 	case 2:
 	{
 		u16 tmp;
+		/*pdev设备的offset位置处，读取u16*/
 		ret = pci_user_read_config_word(pdev, offset, &tmp);
 		tmp_val = tmp;
 		break;
 	}
 	case 4:
+	    /*pdev设备的offset位置处，读取u32*/
 		ret = pci_user_read_config_dword(pdev, offset, &tmp_val);
 		break;
 	}
 
+	/*主机序转小端*/
 	*val = cpu_to_le32(tmp_val);
 
 	return ret;
 }
 
 static int vfio_user_config_write(struct pci_dev *pdev, int offset,
-				  __le32 val, int count)
+				  __le32 val/*要写入的值*/, int count)
 {
 	int ret = -EINVAL;
 	u32 tmp_val = le32_to_cpu(val);
@@ -164,6 +168,7 @@ static int vfio_user_config_write(struct pci_dev *pdev, int offset,
 		ret = pci_user_write_config_word(pdev, offset, tmp_val);
 		break;
 	case 4:
+	    /*pdev设备的offset位置处，写u32*/
 		ret = pci_user_write_config_dword(pdev, offset, tmp_val);
 		break;
 	}
@@ -177,8 +182,10 @@ static int vfio_default_config_read(struct vfio_pci_device *vdev, int pos,
 {
 	__le32 virt = 0;
 
+	/*将vdev->vconfig + pos位置的内容填充到val中*/
 	memcpy(val, vdev->vconfig + pos, count);
 
+	/*将perm->virt + pos位置的内容填充到virt中*/
 	memcpy(&virt, perm->virt + offset, count);
 
 	/* Any non-virtualized bits? */
@@ -187,6 +194,7 @@ static int vfio_default_config_read(struct vfio_pci_device *vdev, int pos,
 		__le32 phys_val = 0;
 		int ret;
 
+		/*pdev设备自pos位置读取count字符，记在phys_val中*/
 		ret = vfio_user_config_read(pdev, pos, &phys_val, count);
 		if (ret)
 			return ret;
@@ -362,10 +370,12 @@ static int alloc_perm_bits(struct perm_bits *perm, int size)
 	perm->virt = kzalloc(size, GFP_KERNEL);
 	perm->write = kzalloc(size, GFP_KERNEL);
 	if (!perm->virt || !perm->write) {
+	    /*申请内存失败*/
 		free_perm_bits(perm);
 		return -ENOMEM;
 	}
 
+	/*默认读写回调*/
 	perm->readfn = vfio_default_config_read;
 	perm->writefn = vfio_default_config_write;
 
@@ -518,6 +528,7 @@ static int vfio_basic_config_read(struct vfio_pci_device *vdev, int pos,
 				  int count, struct perm_bits *perm,
 				  int offset, __le32 *val)
 {
+    /*offset指明了bar*/
 	if (is_bar(offset)) /* pos == offset for basic config */
 		vfio_bar_fixup(vdev);
 

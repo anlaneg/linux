@@ -28,7 +28,7 @@ int nfc_devlist_generation;
 DEFINE_MUTEX(nfc_devlist_mutex);
 
 /* NFC device ID bitmap */
-static DEFINE_IDA(nfc_index_ida);
+static DEFINE_IDA(nfc_index_ida);/*负责nfc设备index申请*/
 
 int nfc_fw_download(struct nfc_dev *dev, const char *firmware_name)
 {
@@ -268,6 +268,7 @@ error:
 	return rc;
 }
 
+/*通过target_idx获取nfc_target*/
 static struct nfc_target *nfc_find_target(struct nfc_dev *dev, u32 target_idx)
 {
 	int i;
@@ -498,6 +499,7 @@ int nfc_data_exchange(struct nfc_dev *dev, u32 target_idx, struct sk_buff *skb,
 
 	device_lock(&dev->dev);
 
+	/*发送设备必须已注册*/
 	if (!device_is_registered(&dev->dev)) {
 		rc = -ENODEV;
 		kfree_skb(skb);
@@ -505,6 +507,7 @@ int nfc_data_exchange(struct nfc_dev *dev, u32 target_idx, struct sk_buff *skb,
 	}
 
 	if (dev->rf_mode == NFC_RF_INITIATOR && dev->active_target != NULL) {
+	    /*initiator模式下，通过ops->im_transceiver进行处理*/
 		if (dev->active_target->idx != target_idx) {
 			rc = -EADDRNOTAVAIL;
 			kfree_skb(skb);
@@ -521,6 +524,7 @@ int nfc_data_exchange(struct nfc_dev *dev, u32 target_idx, struct sk_buff *skb,
 			mod_timer(&dev->check_pres_timer, jiffies +
 				  msecs_to_jiffies(NFC_CHECK_PRES_FREQ_MS));
 	} else if (dev->rf_mode == NFC_RF_TARGET && dev->ops->tm_send != NULL) {
+	    /*target模式下，调用tm_send进行处理*/
 		rc = dev->ops->tm_send(dev, skb);
 	} else {
 		rc = -ENOTCONN;
@@ -1055,7 +1059,7 @@ struct nfc_dev *nfc_get_device(unsigned int idx)
  * @tx_headroom: reserved space at beginning of skb
  * @tx_tailroom: reserved space at end of skb
  */
-struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
+struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops/*操作函数*/,
 				    u32 supported_protocols,
 				    int tx_headroom, int tx_tailroom)
 {
@@ -1067,6 +1071,7 @@ struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops,
 	    !ops->deactivate_target || !ops->im_transceive)
 		return NULL;
 
+	/*supported_protocols为0，返回NULL*/
 	if (!supported_protocols)
 		return NULL;
 

@@ -51,15 +51,18 @@ int nfc_proto_register(const struct nfc_protocol *nfc_proto)
 {
 	int rc;
 
+	/*参数检查*/
 	if (nfc_proto->id < 0 || nfc_proto->id >= NFC_SOCKPROTO_MAX)
 		return -EINVAL;
 
+	/*注册nfc协议*/
 	rc = proto_register(nfc_proto->proto, 0);
 	if (rc)
 		return rc;
 
 	write_lock(&proto_tab_lock);
 	if (proto_tab[nfc_proto->id])
+	    /*协议已存在*/
 		rc = -EBUSY;
 	else
 		proto_tab[nfc_proto->id] = nfc_proto;

@@ -2010,13 +2010,16 @@ static struct sk_buff *
 ovs_ct_limit_cmd_reply_start(struct genl_info *info, u8 cmd,
 			     struct ovs_header **ovs_reply_header)
 {
+    /*用户头信息*/
 	struct ovs_header *ovs_header = info->userhdr;
 	struct sk_buff *skb;
 
+	/*申请skb*/
 	skb = genlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!skb)
 		return ERR_PTR(-ENOMEM);
 
+	/*填充netlink消息，并填写ovs_reply_header*/
 	*ovs_reply_header = genlmsg_put(skb, info->snd_portid,
 					info->snd_seq,
 					&dp_ct_limit_genl_family, 0, cmd);
@@ -2269,6 +2272,7 @@ static int ovs_ct_limit_cmd_del(struct sk_buff *skb, struct genl_info *info)
 	struct ovs_ct_limit_info *ct_limit_info = ovs_net->ct_limit_info;
 	int err;
 
+	/*填充netlink消息头*/
 	reply = ovs_ct_limit_cmd_reply_start(info, OVS_CT_LIMIT_CMD_DEL,
 					     &ovs_reply_header);
 	if (IS_ERR(reply))
@@ -2279,6 +2283,7 @@ static int ovs_ct_limit_cmd_del(struct sk_buff *skb, struct genl_info *info)
 		goto exit_err;
 	}
 
+	/*移除limit配置*/
 	err = ovs_ct_limit_del_zone_limit(a[OVS_CT_LIMIT_ATTR_ZONE_LIMIT],
 					  ct_limit_info);
 	if (err)
@@ -2308,6 +2313,7 @@ static int ovs_ct_limit_cmd_get(struct sk_buff *skb, struct genl_info *info)
 	if (IS_ERR(reply))
 		return PTR_ERR(reply);
 
+	/*填充zone_limit*/
 	nla_reply = nla_nest_start_noflag(reply, OVS_CT_LIMIT_ATTR_ZONE_LIMIT);
 	if (!nla_reply) {
 		err = -EMSGSIZE;

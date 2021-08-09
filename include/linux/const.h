@@ -8,6 +8,7 @@
  * a constant expression, most importantly without evaluating the argument.
  * Glory to Martin Uecker <Martin.Uecker@med.uni-goettingen.de>
  */
+//这里对此宏有详细解释：https://stackoverflow.com/questions/49481217/linux-kernels-is-constexpr-macro
 #define __is_constexpr(x) \
 	(sizeof(int) == sizeof(*(8 ? ((void *)((long)(x) * 0l)) : (int *)8)))
 

@@ -15,10 +15,12 @@
 
 #include "nfc.h"
 
+/*记录系统中的raw socket*/
 static struct nfc_sock_list raw_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(raw_sk_list.lock)
 };
 
+/*sk加入到l对应的链表中*/
 static void nfc_sock_link(struct nfc_sock_list *l, struct sock *sk)
 {
 	write_lock(&l->lock);
@@ -26,6 +28,7 @@ static void nfc_sock_link(struct nfc_sock_list *l, struct sock *sk)
 	write_unlock(&l->lock);
 }
 
+/*将sk自l对应的链表中移除*/
 static void nfc_sock_unlink(struct nfc_sock_list *l, struct sock *sk)
 {
 	write_lock(&l->lock);
@@ -33,24 +36,30 @@ static void nfc_sock_unlink(struct nfc_sock_list *l, struct sock *sk)
 	write_unlock(&l->lock);
 }
 
+/*清空sock队列中的内容*/
 static void rawsock_write_queue_purge(struct sock *sk)
 {
 	pr_debug("sk=%p\n", sk);
 
 	spin_lock_bh(&sk->sk_write_queue.lock);
+	/*清空写队列中的内容*/
 	__skb_queue_purge(&sk->sk_write_queue);
+	/*指明tx队列不再调度*/
 	nfc_rawsock(sk)->tx_work_scheduled = false;
 	spin_unlock_bh(&sk->sk_write_queue.lock);
 }
 
+/*指明sock出错*/
 static void rawsock_report_error(struct sock *sk, int err)
 {
 	pr_debug("sk=%p err=%d\n", sk, err);
 
 	sk->sk_shutdown = SHUTDOWN_MASK;
 	sk->sk_err = -err;
+	/*触发此sk的错误report，例如唤醒等待进程*/
 	sk_error_report(sk);
 
+	/*清空此sock上的发送队列*/
 	rawsock_write_queue_purge(sk);
 }
 
@@ -63,6 +72,7 @@ static int rawsock_release(struct socket *sock)
 	if (!sk)
 		return 0;
 
+	/*如果此sock为raw,则将其自raw_sk_list上移除*/
 	if (sock->type == SOCK_RAW)
 		nfc_sock_unlink(&raw_sk_list, sk);
 
@@ -114,7 +124,9 @@ static int rawsock_connect(struct socket *sock, struct sockaddr *_addr,
 	if (rc)
 		goto put_dev;
 
+	/*此sock对应的dev设备*/
 	nfc_rawsock(sk)->dev = dev;
+	/*对应的对端设备*/
 	nfc_rawsock(sk)->target_idx = addr->target_idx;
 	//指明socket完成连接
 	sock->state = SS_CONNECTED;
@@ -177,6 +189,7 @@ error:
 	sock_put(sk);
 }
 
+/*nfc socket的发送work,每个socket一个work*/
 static void rawsock_tx_work(struct work_struct *work)
 {
 	struct sock *sk = to_rawsock_sk(work);
@@ -187,17 +200,21 @@ static void rawsock_tx_work(struct work_struct *work)
 
 	pr_debug("sk=%p target_idx=%u\n", sk, target_idx);
 
+	/*socket关闭处理*/
 	if (sk->sk_shutdown & SEND_SHUTDOWN) {
 		rawsock_write_queue_purge(sk);
 		return;
 	}
 
+	/*自写队列中提取一个skb*/
 	skb = skb_dequeue(&sk->sk_write_queue);
 
 	sock_hold(sk);
+	/*交付给驱动，完成数据交换*/
 	rc = nfc_data_exchange(dev, target_idx, skb,
 			       rawsock_data_exchange_complete, sk);
 	if (rc) {
+	    /*交换时出错，错误处理*/
 		rawsock_report_error(sk, rc);
 		sock_put(sk);
 	}
@@ -218,10 +235,12 @@ static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	if (sock->state != SS_CONNECTED)
 		return -ENOTCONN;
 
+	/*申请skb,为消息发送做准备*/
 	skb = nfc_alloc_send_skb(dev, sk, msg->msg_flags, len, &rc);
 	if (skb == NULL)
 		return rc;
 
+	/*将消息内容填充到skb*/
 	rc = memcpy_from_msg(skb_put(skb, len), msg, len);
 	if (rc < 0) {
 		kfree_skb(skb);
@@ -229,8 +248,10 @@ static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	spin_lock_bh(&sk->sk_write_queue.lock);
+	/*将报文放入到写队列*/
 	__skb_queue_tail(&sk->sk_write_queue, skb);
 	if (!nfc_rawsock(sk)->tx_work_scheduled) {
+	    /*指明调度tx_work*/
 		schedule_work(&nfc_rawsock(sk)->tx_work);
 		nfc_rawsock(sk)->tx_work_scheduled = true;
 	}
@@ -239,11 +260,11 @@ static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	return len;
 }
 
-//自socket中收取报文
+//nfc socket,收取报文
 static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 			   int flags)
 {
-	int noblock = flags & MSG_DONTWAIT;
+	int noblock = flags & MSG_DONTWAIT;/*是否非阻塞收取*/
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb;
 	int copied;
@@ -256,8 +277,9 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	if (!skb)
 		return rc;
 
-	copied = skb->len;
+	copied = skb->len;/*报文可复制长度*/
 	if (len < copied) {
+	    /*buffer内容过小，指明trunc*/
 		msg->msg_flags |= MSG_TRUNC;
 		copied = len;
 	}
@@ -265,6 +287,7 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	//利用skb填充msg,并返回
 	rc = skb_copy_datagram_msg(skb, 0, msg, copied);
 
+	/*释放此skb*/
 	skb_free_datagram(sk, skb);
 
 	return rc ? : copied;
@@ -289,22 +312,23 @@ static const struct proto_ops rawsock_ops = {
 	.mmap           = sock_no_mmap,//不支持mmap
 };
 
-//SOCK_RAW类型socket对应的ops
+/*SOCK_RAW类型socket对应的ops（其不支持write操作，由其它socket在读取或者发送时，将其报文送一份给
+ * raw socket,以便raw socket可以嗅探到报文，故其只需要read操作即可）*/
 static const struct proto_ops rawsock_raw_ops = {
 	.family         = PF_NFC,
 	.owner          = THIS_MODULE,
-	.release        = rawsock_release,
+	.release        = rawsock_release,/*释放sock*/
 	.bind           = sock_no_bind,//不支持bind
 	.connect        = sock_no_connect,//不支持connect
 	.socketpair     = sock_no_socketpair,//不支持socketpair
 	.accept         = sock_no_accept,//不支持accept
 	.getname        = sock_no_getname,//不支持getname
-	.poll           = datagram_poll,
+	.poll           = datagram_poll,/*支持poll接口*/
 	.ioctl          = sock_no_ioctl,//不支持ioctl
 	.listen         = sock_no_listen,//不支持listen
 	.shutdown       = sock_no_shutdown,//不支持shutdown
 	.sendmsg        = sock_no_sendmsg,//不支持sendmsg
-	.recvmsg        = rawsock_recvmsg,
+	.recvmsg        = rawsock_recvmsg,/*nfc rawsock消息接收*/
 	.mmap           = sock_no_mmap,//不支持mmap
 };
 
@@ -343,9 +367,9 @@ static int rawsock_create(struct net *net, struct socket *sock,
 	if (sock->type == SOCK_RAW) {
 		if (!ns_capable(net->user_ns, CAP_NET_RAW))
 			return -EPERM;
-		sock->ops = &rawsock_raw_ops;
+		sock->ops = &rawsock_raw_ops;/*raw sock只能读取，不能发送*/
 	} else {
-		sock->ops = &rawsock_ops;
+		sock->ops = &rawsock_ops;/*可发送，可读取*/
 	}
 
 	sk = sk_alloc(net, PF_NFC, GFP_ATOMIC, nfc_proto->proto, kern);
@@ -357,8 +381,10 @@ static int rawsock_create(struct net *net, struct socket *sock,
 	sk->sk_destruct = rawsock_destruct;
 	sock->state = SS_UNCONNECTED;
 	if (sock->type == SOCK_RAW)
+	    /*此sock为raw sock,则挂接在raw_sk_list链表上*/
 		nfc_sock_link(&raw_sk_list, sk);
 	else {
+	    /*指明socket的tx work函数*/
 		INIT_WORK(&nfc_rawsock(sk)->tx_work, rawsock_tx_work);
 		nfc_rawsock(sk)->tx_work_scheduled = false;
 	}
@@ -366,8 +392,9 @@ static int rawsock_create(struct net *net, struct socket *sock,
 	return 0;
 }
 
+/*将skb送给发送给所有的raw socket（raw socket用于sniffer)*/
 void nfc_send_to_raw_sock(struct nfc_dev *dev, struct sk_buff *skb,
-			  u8 payload_type, u8 direction)
+			  u8 payload_type, u8 direction/*用0/1来表示方向*/)
 {
 	struct sk_buff *skb_copy = NULL, *nskb;
 	struct sock *sk;
@@ -375,6 +402,7 @@ void nfc_send_to_raw_sock(struct nfc_dev *dev, struct sk_buff *skb,
 
 	read_lock(&raw_sk_list.lock);
 
+	/*遍历挂接在raw_sk_list上所有的raw sock*/
 	sk_for_each(sk, &raw_sk_list.head) {
 		if (!skb_copy) {
 			//制作skb的一个副本
@@ -383,14 +411,17 @@ void nfc_send_to_raw_sock(struct nfc_dev *dev, struct sk_buff *skb,
 			if (!skb_copy)
 				continue;
 
+			/*在原始报文前面添加raw_header*/
 			data = skb_push(skb_copy, NFC_RAW_HEADER_SIZE);
 
+			/*如果有设备，则第一字节填充dev的index,否则为0xff*/
 			data[0] = dev ? dev->idx : 0xFF;
+			/*在第二个字节，填充payload_type及方向*/
 			data[1] = direction & 0x01;
 			data[1] |= (payload_type << 1);
 		}
 
-		//制作skb_copy的副本，并交给对应的socket
+		//制作skb_copy的副本，并交给当前处理的socket
 		nskb = skb_clone(skb_copy, GFP_ATOMIC);
 		if (!nskb)
 			continue;
@@ -413,7 +444,7 @@ static struct proto rawsock_proto = {
 	.obj_size = sizeof(struct nfc_rawsock),
 };
 
-//注册raw协议
+//注册raw协议(用于nfc报文嗅探）
 static const struct nfc_protocol rawsock_nfc_proto = {
 	.id	  = NFC_SOCKPROTO_RAW,
 	.proto    = &rawsock_proto,
@@ -434,5 +465,6 @@ int __init rawsock_init(void)
 
 void rawsock_exit(void)
 {
+    /*移除nfc_raw协议*/
 	nfc_proto_unregister(&rawsock_nfc_proto);
 }

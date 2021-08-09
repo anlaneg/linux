@@ -72,14 +72,16 @@ static const struct genl_multicast_group ovs_dp_vport_multicast_group = {
 static bool ovs_must_notify(struct genl_family *family, struct genl_info *info,
 			    unsigned int group)
 {
+    /*如果有echo标记，则存在listener,则需要通知*/
 	return info->nlhdr->nlmsg_flags & NLM_F_ECHO ||
 	       genl_has_listeners(family, genl_info_net(info), group);
 }
 
+/*family对外组播通知*/
 static void ovs_notify(struct genl_family *family,
 		       struct sk_buff *skb, struct genl_info *info)
 {
-	genl_notify(family, skb, info, 0, GFP_KERNEL);
+	genl_notify(family, skb, info, 0/*此family的通知组播*/, GFP_KERNEL);
 }
 
 /**
@@ -2544,6 +2546,7 @@ static struct genl_family * const dp_genl_families[] = {
 	&dp_packet_genl_family,
 	&dp_meter_genl_family,
 #if	IS_ENABLED(CONFIG_NETFILTER_CONNCOUNT)
+	/*ct limit相关消息*/
 	&dp_ct_limit_genl_family,
 #endif
 };

@@ -224,13 +224,15 @@ int pci_user_read_config_##size						\
 {									\
 	int ret = PCIBIOS_SUCCESSFUL;					\
 	u32 data = -1;							\
+	/*检查pos是否对齐，如果没对齐，则报错*/\
 	if (PCI_##size##_BAD)						\
 		return -EINVAL;						\
 	raw_spin_lock_irq(&pci_lock);				\
 	if (unlikely(dev->block_cfg_access))				\
 		pci_wait_cfg(dev);					\
+		/*通过bus中的ops进行read*/\
 	ret = dev->bus->ops->read(dev->bus, dev->devfn,			\
-					pos, sizeof(type), &data);	\
+					pos, sizeof(type), &data/*出参*/);	\
 	raw_spin_unlock_irq(&pci_lock);				\
 	*val = (type)data;						\
 	return pcibios_err_to_errno(ret);				\
@@ -243,11 +245,13 @@ int pci_user_write_config_##size					\
 	(struct pci_dev *dev, int pos, type val)			\
 {									\
 	int ret = PCIBIOS_SUCCESSFUL;					\
+	/*对齐检查*/\
 	if (PCI_##size##_BAD)						\
 		return -EINVAL;						\
 	raw_spin_lock_irq(&pci_lock);				\
 	if (unlikely(dev->block_cfg_access))				\
 		pci_wait_cfg(dev);					\
+	/*通过bus完成写操作*/\
 	ret = dev->bus->ops->write(dev->bus, dev->devfn,		\
 					pos, sizeof(type), val);	\
 	raw_spin_unlock_irq(&pci_lock);				\
@@ -255,9 +259,11 @@ int pci_user_write_config_##size					\
 }									\
 EXPORT_SYMBOL_GPL(pci_user_write_config_##size);
 
+/*借助的pci设备的bus->ops->read读取u8*/
 PCI_USER_READ_CONFIG(byte, u8)
 PCI_USER_READ_CONFIG(word, u16)
 PCI_USER_READ_CONFIG(dword, u32)
+/*借助的pci设备的bus->ops->write写u8*/
 PCI_USER_WRITE_CONFIG(byte, u8)
 PCI_USER_WRITE_CONFIG(word, u16)
 PCI_USER_WRITE_CONFIG(dword, u32)

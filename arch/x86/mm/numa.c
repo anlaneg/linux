@@ -194,7 +194,7 @@ int __init numa_add_memblk(int nid, u64 start, u64 end)
 }
 
 /* Allocate NODE_DATA for a node on the local memory */
-static void __init alloc_node_data(int nid)
+static void __init alloc_node_data(int nid/*待初始化的node id*/)
 {
 	const size_t nd_size = roundup(sizeof(pg_data_t), PAGE_SIZE);
 	u64 nd_pa;
@@ -211,7 +211,7 @@ static void __init alloc_node_data(int nid)
 		       nd_size, nid);
 		return;
 	}
-	nd = __va(nd_pa);
+	nd = __va(nd_pa);/*转为虚拟地址*/
 
 	/* report and initialize */
 	printk(KERN_INFO "NODE_DATA(%d) allocated [mem %#010Lx-%#010Lx]\n", nid,
@@ -220,6 +220,7 @@ static void __init alloc_node_data(int nid)
 	if (tnid != nid)
 		printk(KERN_INFO "    NODE_DATA(%d) on node %d\n", nid, tnid);
 
+	/*node_data置为0*/
 	node_data[nid] = nd;
 	memset(NODE_DATA(nid), 0, sizeof(pg_data_t));
 

@@ -245,7 +245,7 @@ extern bool early_boot_irqs_disabled;
  * Values used for system_state. Ordering of the states must not be changed
  * as code checks for <, <=, >, >= STATE.
  */
-extern enum system_states {
+extern enum system_states {/*系统运行状态*/
 	SYSTEM_BOOTING,
 	SYSTEM_SCHEDULING,
 	SYSTEM_RUNNING,

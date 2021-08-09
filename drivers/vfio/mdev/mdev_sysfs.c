@@ -313,7 +313,7 @@ void mdev_remove_sysfs_files(struct mdev_device *mdev)
 {
 	struct kobject *kobj = &mdev->dev.kobj;
 
-    	//移除'remove‘文件
+    //移除'remove‘文件
 	sysfs_remove_files(kobj, mdev_device_attrs);
 	//移除'mdev_type'链接
 	sysfs_remove_link(kobj, "mdev_type");

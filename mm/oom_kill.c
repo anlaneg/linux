@@ -453,16 +453,20 @@ static void dump_oom_summary(struct oom_control *oc, struct task_struct *victim)
 
 static void dump_header(struct oom_control *oc, struct task_struct *p)
 {
+    /*当前进程申请内存失败，显示日志*/
 	pr_warn("%s invoked oom-killer: gfp_mask=%#x(%pGg), order=%d, oom_score_adj=%hd\n",
 		current->comm, oc->gfp_mask, &oc->gfp_mask, oc->order,
 			current->signal->oom_score_adj);
 	if (!IS_ENABLED(CONFIG_COMPACTION) && oc->order)
 		pr_warn("COMPACTION is disabled!!!\n");
 
+	/*显示堆栈*/
 	dump_stack();
 	if (is_memcg_oom(oc))
+	    /*cgroup限制情况*/
 		mem_cgroup_print_oom_meminfo(oc->memcg);
 	else {
+	    /*显示mem信息*/
 		show_mem(SHOW_MEM_FILTER_NODES, oc->nodemask);
 		if (should_dump_unreclaim_slab())
 			dump_unreclaimable_slab();

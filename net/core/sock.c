@@ -2973,6 +2973,7 @@ static void sock_def_error_report(struct sock *sk)
 	rcu_read_lock();
 	wq = rcu_dereference(sk->sk_wq);
 	if (skwq_has_sleeper(wq))
+	    /*此sock有等待队列，唤醒*/
 		wake_up_interruptible_poll(&wq->wait, EPOLLERR);
 	sk_wake_async(sk, SOCK_WAKE_IO, POLL_ERR);
 	rcu_read_unlock();
@@ -3094,6 +3095,7 @@ void sock_init_data(struct socket *sock, struct sock *sk)
 	//设置socket的默认数据ready通知函数
 	sk->sk_data_ready	=	sock_def_readable;
 	sk->sk_write_space	=	sock_def_write_space;
+	/*默认error report函数*/
 	sk->sk_error_report	=	sock_def_error_report;
 	sk->sk_destruct		=	sock_def_destruct;
 

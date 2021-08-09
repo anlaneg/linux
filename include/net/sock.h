@@ -440,7 +440,7 @@ struct sock {
 
 	struct sk_filter __rcu	*sk_filter;
 	union {
-		struct socket_wq __rcu	*sk_wq;
+		struct socket_wq __rcu	*sk_wq;/*此sock对应的等待队列*/
 		/* private: */
 		struct socket_wq	*sk_wq_raw;
 		/* public: */
@@ -776,6 +776,7 @@ static inline void __sk_add_node(struct sock *sk, struct hlist_head *list)
 	hlist_add_head(&sk->sk_node, list);
 }
 
+//将sock加入到list中
 static inline void sk_add_node(struct sock *sk, struct hlist_head *list)
 {
 	sock_hold(sk);

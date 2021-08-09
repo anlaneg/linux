@@ -156,8 +156,8 @@ union dm_mem_page_range {
  */
 
 struct dm_header {
-	__u16 type;
-	__u16 size;
+	__u16 type;/*消息类型*/
+	__u16 size;/*消息大小，含自身*/
 	__u32 trans_id;
 } __packed;
 
