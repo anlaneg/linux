@@ -525,6 +525,7 @@ out:
 	return ret;
 }
 
+/*检查ethtool_ops函数设置是否有效*/
 int ethtool_check_ops(const struct ethtool_ops *ops)
 {
 	if (WARN_ON(ops->set_coalesce && !ops->supported_coalesce_params))

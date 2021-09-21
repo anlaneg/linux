@@ -238,7 +238,7 @@ int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
 
 static inline struct sk_buff *ip_finish_skb(struct sock *sk, struct flowi4 *fl4)
 {
-	return __ip_make_skb(sk, fl4, &sk->sk_write_queue, &inet_sk(sk)->cork.base);
+	return __ip_make_skb(sk, fl4, &sk->sk_write_queue/*待发送的skb*/, &inet_sk(sk)->cork.base);
 }
 
 static inline __u8 get_rttos(struct ipcm_cookie* ipc, struct inet_sock *inet)

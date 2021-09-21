@@ -53,8 +53,9 @@ void sk_stream_write_space(struct sock *sk)
  *
  * Must be called with the socket locked.
  */
-int sk_stream_wait_connect(struct sock *sk, long *timeo_p)
+int sk_stream_wait_connect(struct sock *sk, long *timeo_p/*超时时间*/)
 {
+	/*定义wait变量*/
 	DEFINE_WAIT_FUNC(wait, woken_wake_function);
 	struct task_struct *tsk = current;
 	int done;
@@ -66,16 +67,20 @@ int sk_stream_wait_connect(struct sock *sk, long *timeo_p)
 		if ((1 << sk->sk_state) & ~(TCPF_SYN_SENT | TCPF_SYN_RECV))
 			return -EPIPE;
 		if (!*timeo_p)
+			/*超时时间为零，返回EAGAIN*/
 			return -EAGAIN;
 		if (signal_pending(tsk))
 			return sock_intr_errno(*timeo_p);
 
+		/*将wait添加到sock的等待队列*/
 		add_wait_queue(sk_sleep(sk), &wait);
 		sk->sk_write_pending++;
+		/*等待条件成立／超时*/
 		done = sk_wait_event(sk, timeo_p,
 				     !sk->sk_err &&
 				     !((1 << sk->sk_state) &
 				       ~(TCPF_ESTABLISHED | TCPF_CLOSE_WAIT)), &wait);
+		/*自等待队列中移除*/
 		remove_wait_queue(sk_sleep(sk), &wait);
 		sk->sk_write_pending--;
 	} while (!done);

@@ -1647,7 +1647,7 @@ static int __dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (ops->ndo_validate_addr)
 		ret = ops->ndo_validate_addr(dev);
 
-	//调用open回调打开设备
+	//调用驱动open回调打开设备
 	if (!ret && ops->ndo_open)
 		ret = ops->ndo_open(dev);
 
@@ -1690,6 +1690,7 @@ int dev_open(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (dev->flags & IFF_UP)
 		return 0;
 
+	/*具体完成设备up操作*/
 	ret = __dev_open(dev, extack);
 	if (ret < 0)
 		return ret;
@@ -1716,6 +1717,7 @@ static void __dev_close_many(struct list_head *head)
 
 		call_netdevice_notifiers(NETDEV_GOING_DOWN, dev);
 
+		/*清除__link_state_start标记*/
 		clear_bit(__LINK_STATE_START, &dev->state);
 
 		/* Synchronize to scheduled poll. We cannot touch poll list, it
@@ -1740,6 +1742,7 @@ static void __dev_close_many(struct list_head *head)
 		 *	event.
 		 */
 		if (ops->ndo_stop)
+			/*触发驱动ndo_stop回调，完成设备停止*/
 			ops->ndo_stop(dev);
 
 		dev->flags &= ~IFF_UP;
@@ -1756,6 +1759,7 @@ static void __dev_close(struct net_device *dev)
 	list_del(&single);
 }
 
+/*关闭一组由head指定的设备*/
 void dev_close_many(struct list_head *head, bool unlink)
 {
 	struct net_device *dev, *tmp;
@@ -1787,6 +1791,7 @@ EXPORT_SYMBOL(dev_close_many);
  */
 void dev_close(struct net_device *dev)
 {
+	/*仅在设备up时进入*/
 	if (dev->flags & IFF_UP) {
 		LIST_HEAD(single);
 
@@ -5197,6 +5202,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 
 int netif_rx(struct sk_buff *skb)
 {
+	/*旧收包方式：单个报文将被入队到softnet_data,如果队列过大，则触发rx*/
 	int ret;
 
 	trace_netif_rx_entry(skb);
@@ -10194,6 +10200,7 @@ static int dev_new_index(struct net *net)
 static LIST_HEAD(net_todo_list);
 DECLARE_WAIT_QUEUE_HEAD(netdev_unregistering_wq);
 
+/*将此netdev加入到net_todo_list中*/
 static void net_set_todo(struct net_device *dev)
 {
 	list_add_tail(&dev->todo_list, &net_todo_list);
@@ -10637,10 +10644,11 @@ int register_netdevice(struct net_device *dev)
 	might_sleep();
 
 	/* When net_device's are persistent, this will be fatal. */
-	//此时dev一定没有初始化
+	//此时netdev的状态一定是uninitialized
 	BUG_ON(dev->reg_state != NETREG_UNINITIALIZED);
 	BUG_ON(!net);
 
+	/*ethtool_ops有效性检查*/
 	ret = ethtool_check_ops(dev->ethtool_ops);
 	if (ret)
 		return ret;
@@ -10650,7 +10658,8 @@ int register_netdevice(struct net_device *dev)
 
 	ret = dev_get_valid_name(net, dev, dev->name);
 	if (ret < 0)
-		goto out;//名称不可用，失败
+		//名称不可用，失败
+		goto out;
 
 	ret = -ENOMEM;
 	dev->name_node = netdev_name_node_head_alloc(dev);
@@ -10867,6 +10876,7 @@ int register_netdev(struct net_device *dev)
 
 	if (rtnl_lock_killable())
 		return -EINTR;
+	/*具体完成设备注册*/
 	err = register_netdevice(dev);
 	rtnl_unlock();
 	return err;
@@ -11002,7 +11012,7 @@ void netdev_run_todo(void)
 #endif
 
 	/* Snapshot list, allow later requests */
-	list_replace_init(&net_todo_list, &list);
+	list_replace_init(&net_todo_list, &list);/*提取net_todo_list链上内容*/
 
 	__rtnl_unlock();
 
@@ -11011,12 +11021,13 @@ void netdev_run_todo(void)
 	if (!list_empty(&list))
 		rcu_barrier();
 
-	//遍历dev
+	//遍历list上的netdev
 	while (!list_empty(&list)) {
 		struct net_device *dev
 			= list_first_entry(&list, struct net_device, todo_list);
 		list_del(&dev->todo_list);
 
+		/*设备状态必须已为unregistering*/
 		if (unlikely(dev->reg_state != NETREG_UNREGISTERING)) {
 			pr_err("network todo '%s' but state %d\n",
 			       dev->name, dev->reg_state);
@@ -11024,6 +11035,7 @@ void netdev_run_todo(void)
 			continue;
 		}
 
+		/*变更为unregisted*/
 		dev->reg_state = NETREG_UNREGISTERED;
 
 		netdev_wait_allrefs(dev);
@@ -11038,6 +11050,7 @@ void netdev_run_todo(void)
 #if IS_ENABLED(CONFIG_DECNET)
 		WARN_ON(dev->dn_ptr);
 #endif
+		/*释放私有数据*/
 		if (dev->priv_destructor)
 			dev->priv_destructor(dev);
 		if (dev->needs_free_netdev)
@@ -11549,6 +11562,7 @@ void unregister_netdevice_many(struct list_head *head)
 
 	synchronize_net();
 
+	/*遍历head上的netdev,将其加入到net_todo_list上*/
 	list_for_each_entry(dev, head, unreg_list) {
 		dev_put(dev);
 		net_set_todo(dev);
@@ -11572,6 +11586,7 @@ EXPORT_SYMBOL(unregister_netdevice_many);
 void unregister_netdev(struct net_device *dev)
 {
 	rtnl_lock();
+	/*具体完成网络设备解注册*/
 	unregister_netdevice(dev);
 	rtnl_unlock();
 }

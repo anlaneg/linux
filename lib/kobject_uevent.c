@@ -32,6 +32,7 @@
 
 u64 uevent_seqnum;
 #ifdef CONFIG_UEVENT_HELPER
+/*hotplug路径*/
 char uevent_helper[UEVENT_HELPER_PATH_LEN] = CONFIG_UEVENT_HELPER_PATH;
 #endif
 
@@ -266,6 +267,7 @@ static int init_uevent_argv(struct kobj_uevent_env *env, const char *subsystem)
 		return -ENOMEM;
 	}
 
+	/*程序名称*/
 	env->argv[0] = uevent_helper;
 	env->argv[1] = &env->buf[env->buflen];
 	env->argv[2] = NULL;
@@ -632,6 +634,7 @@ int kobject_uevent_env(struct kobject *kobj, enum kobject_action action,
 	if (uevent_helper[0] && !kobj_usermode_filter(kobj)) {
 		struct subprocess_info *info;
 
+		/*为uevent helper添加环境变量*/
 		retval = add_uevent_var(env, "HOME=/");
 		if (retval)
 			goto exit;

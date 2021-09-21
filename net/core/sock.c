@@ -380,7 +380,7 @@ static int sock_get_timeout(long timeo, void *optval, bool old_timeval)
 	return sizeof(tv);
 }
 
-static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
+static int sock_set_timeout(long *timeo_p/*待设置的变量*/, sockptr_t optval, int optlen,
 			    bool old_timeval)
 {
 	struct __kernel_sock_timeval tv;
@@ -389,6 +389,7 @@ static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
 		struct old_timeval32 tv32;
 
 		if (optlen < sizeof(tv32))
+			/*参数长度不为sizeof(tv32)*/
 			return -EINVAL;
 
 		if (copy_from_sockptr(&tv32, optval, sizeof(tv32)))
@@ -407,13 +408,16 @@ static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
 	} else {
 		if (optlen < sizeof(tv))
 			return -EINVAL;
+		/*第三种格式的optval*/
 		if (copy_from_sockptr(&tv, optval, sizeof(tv)))
 			return -EFAULT;
 	}
+	/*us值过小，或者us过大,均认为不合适*/
 	if (tv.tv_usec < 0 || tv.tv_usec >= USEC_PER_SEC)
 		return -EDOM;
 
 	if (tv.tv_sec < 0) {
+		/*如果秒值过小，触发告警*/
 		static int warned __read_mostly;
 
 		*timeo_p = 0;
@@ -426,7 +430,9 @@ static int sock_set_timeout(long *timeo_p, sockptr_t optval, int optlen,
 	}
 	*timeo_p = MAX_SCHEDULE_TIMEOUT;
 	if (tv.tv_sec == 0 && tv.tv_usec == 0)
+		/*0时，使用默认值*/
 		return 0;
+	/*tv_sec小于max_schedule_timeout时生效*/
 	if (tv.tv_sec < (MAX_SCHEDULE_TIMEOUT / HZ - 1))
 		*timeo_p = tv.tv_sec * HZ + DIV_ROUND_UP((unsigned long)tv.tv_usec, USEC_PER_SEC / HZ);
 	return 0;
@@ -764,12 +770,14 @@ void sock_set_priority(struct sock *sk, u32 priority)
 }
 EXPORT_SYMBOL(sock_set_priority);
 
+/*设置sock的发送超时时间*/
 void sock_set_sndtimeo(struct sock *sk, s64 secs)
 {
 	lock_sock(sk);
 	if (secs && secs < MAX_SCHEDULE_TIMEOUT / HZ - 1)
 		sk->sk_sndtimeo = secs * HZ;
 	else
+		/*默认发送超时时间，最大发送超时时间*/
 		sk->sk_sndtimeo = MAX_SCHEDULE_TIMEOUT;
 	release_sock(sk);
 }
@@ -1097,12 +1105,13 @@ set_sndbuf:
 
 	case SO_SNDTIMEO_OLD:
 	case SO_SNDTIMEO_NEW:
+		/*设置发送超时*/
 		ret = sock_set_timeout(&sk->sk_sndtimeo, optval,
 				       optlen, optname == SO_SNDTIMEO_OLD);
 		break;
 
 	case SO_ATTACH_FILTER: {
-	    	//为socket设置bpf过滤器
+		//为socket设置bpf过滤器
 		//ref https://www.cnblogs.com/rollenholt/articles/2585517.html
 		struct sock_fprog fprog;
 
@@ -2128,7 +2137,7 @@ void sock_wfree(struct sk_buff *skb)
 		 * Keep a reference on sk_wmem_alloc, this will be released
 		 * after sk_write_space() call
 		 */
-		WARN_ON(refcount_sub_and_test(len - 1, &sk->sk_wmem_alloc));
+		WARN_ON(refcount_sub_and_test(len - 1, &sk->sk_wmem_alloc));/*写buffer内存释放*/
 		sk->sk_write_space(sk);
 		len = 1;
 	}
@@ -2165,6 +2174,7 @@ void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 		return;
 	}
 #endif
+	/*指明此buffer的释放函数*/
 	skb->destructor = sock_wfree;
 	skb_set_hash_from_sk(skb, sk);
 	/*
@@ -2172,6 +2182,7 @@ void skb_set_owner_w(struct sk_buff *skb, struct sock *sk)
 	 * is enough to guarantee sk_free() wont free this sock until
 	 * all in-flight packets are completed
 	 */
+	/*指明写buffer内存增加*/
 	refcount_add(skb->truesize, &sk->sk_wmem_alloc);
 }
 EXPORT_SYMBOL(skb_set_owner_w);
@@ -2267,14 +2278,16 @@ EXPORT_SYMBOL(sock_i_ino);
 /*
  * Allocate a skb from the socket's send buffer.
  */
-struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size, int force,
+struct sk_buff *sock_wmalloc(struct sock *sk, unsigned long size/*待申请buffer大小*/, int force/*是否强制*/,
 			     gfp_t priority)
 {
 	if (force ||
 	    refcount_read(&sk->sk_wmem_alloc) < READ_ONCE(sk->sk_sndbuf)) {
+		/*force情况或buffer未超限制则申请skb*/
 		struct sk_buff *skb = alloc_skb(size, priority);
 
 		if (skb) {
+			/*将此skb关联到此sock*/
 			skb_set_owner_w(skb, sk);
 			return skb;
 		}
@@ -2421,6 +2434,7 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 			goto interrupted;
 		timeo = sock_wait_for_wmem(sk, timeo);
 	}
+	/*申请skb，并容许多个frag组成data_len*/
 	skb = alloc_skb_with_frags(header_len, data_len, max_page_order,
 				   errcode, sk->sk_allocation);
 	if (skb)

@@ -106,6 +106,7 @@ void __rtnl_unlock(void)
 	}
 }
 
+/*在执行rtnl_unlock时完成todo list上设备移除*/
 void rtnl_unlock(void)
 {
 	/* This fellow will unlock it for us. */

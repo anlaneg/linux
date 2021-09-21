@@ -1349,6 +1349,7 @@ int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 		   struct ipcm_cookie *ipc, struct rtable **rtp,
 		   unsigned int flags)
 {
+	/*如注释言，将多块数据组合成一个大的ip报文，直到ip_push_pending_frames被调用*/
 	struct inet_sock *inet = inet_sk(sk);
 	int err;
 
@@ -1368,8 +1369,8 @@ int ip_append_data(struct sock *sk, struct flowi4 *fl4,
 				from, length, transhdrlen, flags);
 }
 
-ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
-		       int offset, size_t size, int flags)
+ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page/*要添加的数据*/,
+		       int offset, size_t size/*数据长度*/, int flags)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	struct sk_buff *skb;
@@ -1388,6 +1389,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 	if (flags&MSG_PROBE)
 		return 0;
 
+	/*写队列为空，无数据可发，报错*/
 	if (skb_queue_empty(&sk->sk_write_queue))
 		return -EINVAL;
 
@@ -1402,7 +1404,9 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 	hh_len = LL_RESERVED_SPACE(rt->dst.dev);
 	mtu = cork->gso_size ? IP_MAX_MTU : cork->fragsize;
 
+	/*ip及ip选项长度*/
 	fragheaderlen = sizeof(struct iphdr) + (opt ? opt->optlen : 0);
+	/*IP负载最大长度*/
 	maxfraglen = ((mtu - fragheaderlen) & ~7) + fragheaderlen;
 	maxnonfragsize = ip_sk_ignore_df(sk) ? 0xFFFF : mtu;
 
@@ -1412,6 +1416,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 		return -EMSGSIZE;
 	}
 
+	/*取write_queue的最后一个元素,检查其内部是否还能存一些数据*/
 	skb = skb_peek_tail(&sk->sk_write_queue);
 	if (!skb)
 		return -EINVAL;
@@ -1432,6 +1437,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 			fraggap = skb_prev->len - maxfraglen;
 
 			alloclen = fragheaderlen + hh_len + fraggap + 15;
+			/*强制申请alloclen长度skb做为写报文buffer*/
 			skb = sock_wmalloc(sk, alloclen, 1, sk->sk_allocation);
 			if (unlikely(!skb)) {
 				err = -ENOBUFS;
@@ -1465,13 +1471,14 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 			/*
 			 * Put the packet on the pending queue.
 			 */
-			__skb_queue_tail(&sk->sk_write_queue, skb);
+			__skb_queue_tail(&sk->sk_write_queue, skb);/*将新申请的skb存于结尾,待填充*/
 			continue;
 		}
 
 		if (len > size)
 			len = size;
 
+		/*向skb中存入数据*/
 		if (skb_append_pagefrags(skb, page, offset, len)) {
 			err = -EMSGSIZE;
 			goto error;
@@ -1486,6 +1493,7 @@ ssize_t	ip_append_page(struct sock *sk, struct flowi4 *fl4, struct page *page,
 		skb->len += len;
 		skb->data_len += len;
 		skb->truesize += len;
+		/*写buffer申请字长增加*/
 		refcount_add(len, &sk->sk_wmem_alloc);
 		offset += len;
 		size -= len;
@@ -1526,6 +1534,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	__be16 df = 0;
 	__u8 ttl;
 
+	/*自队列出一个skb*/
 	skb = __skb_dequeue(queue);
 	if (!skb)
 		goto out;
@@ -1534,6 +1543,8 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	/* move skb->data to ip header from ext header */
 	if (skb->data < skb_network_header(skb))
 		__skb_pull(skb, skb_network_offset(skb));
+
+	/*将队列中所有tmp_skb移出,串成next链,由skb->frag_list指向*/
 	while ((tmp_skb = __skb_dequeue(queue)) != NULL) {
 		__skb_pull(tmp_skb, skb_network_header_len(skb));
 		*tail_skb = tmp_skb;
@@ -1570,6 +1581,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	else
 		ttl = ip_select_ttl(inet, &rt->dst);
 
+	/*填充ip header*/
 	iph = ip_hdr(skb);
 	iph->version = 4;
 	iph->ihl = 5;
@@ -1580,6 +1592,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	ip_copy_addrs(iph, fl4);
 	ip_select_ident(net, skb, sk);
 
+	/*构造ip选项*/
 	if (opt) {
 		iph->ihl += opt->optlen >> 2;
 		ip_options_build(skb, opt, cork->addr, rt, 0);
@@ -1620,15 +1633,18 @@ int ip_send_skb(struct net *net, struct sk_buff *skb)
 	return err;
 }
 
+/*将sk上未决报文收集整体成大的skb,并完成发送*/
 int ip_push_pending_frames(struct sock *sk, struct flowi4 *fl4)
 {
 	struct sk_buff *skb;
 
+	/*将未决的报文返回为skb*/
 	skb = ip_finish_skb(sk, fl4);
 	if (!skb)
 		return 0;
 
 	/* Netfilter gets whole the not fragmented skb. */
+	/*ip层报文发送*/
 	return ip_send_skb(sock_net(sk), skb);
 }
 
@@ -1639,6 +1655,7 @@ static void __ip_flush_pending_frames(struct sock *sk,
 				      struct sk_buff_head *queue,
 				      struct inet_cork *cork)
 {
+	/*丢弃此sock存放在queue中的skb*/
 	struct sk_buff *skb;
 
 	while ((skb = __skb_dequeue_tail(queue)) != NULL)
@@ -1675,6 +1692,7 @@ struct sk_buff *ip_make_skb(struct sock *sk,
 	if (err)
 		return ERR_PTR(err);
 
+	/*申请skb并填充挂接在queue*/
 	err = __ip_append_data(sk, fl4, &queue, cork,
 			       &current->task_frag, getfrag,
 			       from, length, transhdrlen, flags);
@@ -1683,6 +1701,7 @@ struct sk_buff *ip_make_skb(struct sock *sk,
 		return ERR_PTR(err);
 	}
 
+	/*将queue上的内容构造成一个skb返回*/
 	return __ip_make_skb(sk, fl4, &queue, cork);
 }
 
@@ -1758,6 +1777,7 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 	err = ip_append_data(sk, &fl4, ip_reply_glue_bits, arg->iov->iov_base,
 			     len, 0, &ipc, &rt, MSG_DONTWAIT);
 	if (unlikely(err)) {
+		/*丢掉未决报文*/
 		ip_flush_pending_frames(sk);
 		goto out;
 	}
@@ -1769,6 +1789,7 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 			  arg->csumoffset) = csum_fold(csum_add(nskb->csum,
 								arg->csum));
 		nskb->ip_summed = CHECKSUM_NONE;
+		/*将未决报文推出*/
 		ip_push_pending_frames(sk, &fl4);
 	}
 out:

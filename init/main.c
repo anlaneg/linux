@@ -1400,6 +1400,7 @@ static void __init do_pre_smp_initcalls(void)
 		do_one_initcall(initcall_from_entry(fn));
 }
 
+/*运行$init_filename进程,其参数由全局变量argv_init指出,envp_init为其环境变量*/
 static int run_init_process(const char *init_filename)
 {
 	const char *const *p;
@@ -1412,9 +1413,11 @@ static int run_init_process(const char *init_filename)
 	pr_debug("  with environment:\n");
 	for (p = envp_init; *p; p++)
 		pr_debug("    %s\n", *p);
+	/*启动此进程*/
 	return kernel_execve(init_filename, argv_init, envp_init);
 }
 
+/*尝试运行进程init_filename*/
 static int try_to_run_init_process(const char *init_filename)
 {
 	int ret;
@@ -1505,6 +1508,7 @@ static int __ref kernel_init(void *unused)
 	do_sysctl_args();
 
 	if (ramdisk_execute_command) {
+		/*ramdisk cmd被给定，运行它*/
 		ret = run_init_process(ramdisk_execute_command);
 		if (!ret)
 			return 0;
@@ -1519,6 +1523,7 @@ static int __ref kernel_init(void *unused)
 	 * trying to recover a really broken machine.
 	 */
 	if (execute_command) {
+		/*给定了cmd,运行此程序名称*/
 		ret = run_init_process(execute_command);
 		if (!ret)
 			return 0;
@@ -1527,6 +1532,7 @@ static int __ref kernel_init(void *unused)
 	}
 
 	if (CONFIG_DEFAULT_INIT[0] != '\0') {
+		/*配置了config_default_init,运行此程序名称*/
 		ret = run_init_process(CONFIG_DEFAULT_INIT);
 		if (ret)
 			pr_err("Default init %s failed (error %d)\n",
@@ -1535,6 +1541,7 @@ static int __ref kernel_init(void *unused)
 			return 0;
 	}
 
+	/*在以下位置运行init进程*/
 	if (!try_to_run_init_process("/sbin/init") ||
 	    !try_to_run_init_process("/etc/init") ||
 	    !try_to_run_init_process("/bin/init") ||

@@ -407,6 +407,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	u8 *data;
 	bool pfmemalloc;
 
+	/*按flags选择不同的cache*/
 	cache = (flags & SKB_ALLOC_FCLONE)
 		? skbuff_fclone_cache : skbuff_head_cache;
 
@@ -414,6 +415,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 		gfp_mask |= __GFP_MEMALLOC;
 
 	/* Get the HEAD */
+	/*先申请skb buffer*/
 	if ((flags & (SKB_ALLOC_FCLONE | SKB_ALLOC_NAPI)) == SKB_ALLOC_NAPI &&
 	    likely(node == NUMA_NO_NODE || node == numa_mem_id()))
 		skb = napi_skb_cache_get();
@@ -429,7 +431,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * Both skb->head and skb_shared_info are cache line aligned.
 	 */
 	size = SKB_DATA_ALIGN(size);
-	size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));
+	size += SKB_DATA_ALIGN(sizeof(struct skb_shared_info));/*添加skb_shared_info结构*/
 	data = kmalloc_reserve(size, gfp_mask, node, &pfmemalloc);
 	if (unlikely(!data))
 		goto nodata;
@@ -6059,6 +6061,7 @@ struct sk_buff *alloc_skb_with_frags(unsigned long header_len,
 				     int *errcode,
 				     gfp_t gfp_mask)
 {
+	/*检查申请的data长度需要多少page（按页对齐）*/
 	int npages = (data_len + (PAGE_SIZE - 1)) >> PAGE_SHIFT;
 	unsigned long chunk;
 	struct sk_buff *skb;
@@ -6070,8 +6073,10 @@ struct sk_buff *alloc_skb_with_frags(unsigned long header_len,
 	 * high order pages...
 	 */
 	if (npages > MAX_SKB_FRAGS)
+		/*长度不得页数极限*/
 		return NULL;
 
+	/*针对header_len申请skb buffer*/
 	*errcode = -ENOBUFS;
 	skb = alloc_skb(header_len, gfp_mask);
 	if (!skb)
@@ -6089,6 +6094,7 @@ struct sk_buff *alloc_skb_with_frags(unsigned long header_len,
 						   __GFP_NOWARN,
 						   order);
 				if (page)
+					/*申请npages成功*/
 					goto fill_page;
 				/* Do not retry other high order allocations */
 				order = 1;
@@ -6096,13 +6102,15 @@ struct sk_buff *alloc_skb_with_frags(unsigned long header_len,
 			}
 			order--;
 		}
+		/*一次性申请npages不成功，这里改为一次只申请一页*/
 		page = alloc_page(gfp_mask);
 		if (!page)
 			goto failure;
 fill_page:
 		chunk = min_t(unsigned long, data_len,
 			      PAGE_SIZE << order);
-		skb_fill_page_desc(skb, i, page, 0, chunk);
+		/*填充第i号frag*/
+		skb_fill_page_desc(skb, i/*页申请次数*/, page/*起始地址*/, 0, chunk/*内存大小*/);
 		data_len -= chunk;
 		npages -= 1 << order;
 	}

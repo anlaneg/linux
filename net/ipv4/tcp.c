@@ -1032,6 +1032,7 @@ ssize_t do_tcp_sendpages(struct sock *sk, struct page *page, int offset,
 	int mss_now, size_goal;
 	int err;
 	ssize_t copied;
+	/*取发送超时时间*/
 	long timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
 	if (IS_ENABLED(CONFIG_DEBUG_VM) &&
@@ -1128,12 +1129,14 @@ int tcp_sendpage_locked(struct sock *sk, struct page *page, int offset,
 
 	tcp_rate_check_app_limited(sk);  /* is sending application-limited? */
 
+	/*具体完成page发送*/
 	return do_tcp_sendpages(sk, page, offset, size, flags);
 }
 EXPORT_SYMBOL_GPL(tcp_sendpage_locked);
 
-int tcp_sendpage(struct sock *sk, struct page *page, int offset,
-		 size_t size, int flags)
+/*tcp page数据发送*/
+int tcp_sendpage(struct sock *sk, struct page *page, int offset/*起始偏移量*/,
+		 size_t size/*页内存大小*/, int flags)
 {
 	int ret;
 
@@ -1200,7 +1203,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 	return err;
 }
 
-/*tcp发送数据包*/
+/*tcp消息发送（加锁的）*/
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -1238,6 +1241,7 @@ int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 			goto out_err;
 	}
 
+	/*取sock发送超时时间*/
 	timeo = sock_sndtimeo(sk, flags & MSG_DONTWAIT);
 
 	tcp_rate_check_app_limited(sk);  /* is sending application-limited? */

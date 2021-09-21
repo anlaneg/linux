@@ -456,14 +456,14 @@ struct sock {
 
 	/* ===== cache line for TX ===== */
 	int			sk_wmem_queued;
-	refcount_t		sk_wmem_alloc;
+	refcount_t		sk_wmem_alloc;/*已申请的发送缓冲区大小*/
 	unsigned long		sk_tsq_flags;
 	union {
 		struct sk_buff	*sk_send_head;
 		struct rb_root	tcp_rtx_queue;
 	};
 	struct sk_buff		*sk_tx_skb_cache;
-	//socket写队列
+	//socket待写入下层的buffer队列
 	struct sk_buff_head	sk_write_queue;
 	__s32			sk_peek_off;
 	int			sk_write_pending;
@@ -1119,11 +1119,12 @@ static inline void sock_rps_reset_rxhash(struct sock *sk)
 #endif
 }
 
-#define sk_wait_event(__sk, __timeo, __condition, __wait)		\
+#define sk_wait_event(__sk, __timeo/*超时时间*/, __condition/*待成立的条件*/, __wait)		\
 	({	int __rc;						\
 		release_sock(__sk);					\
 		__rc = __condition;					\
 		if (!__rc) {						\
+			/*条件不成立，等待event发生*/\
 			*(__timeo) = wait_woken(__wait,			\
 						TASK_INTERRUPTIBLE,	\
 						*(__timeo));		\
@@ -1947,6 +1948,7 @@ static inline void sk_set_socket(struct sock *sk, struct socket *sock)
 	sk->sk_socket = sock;
 }
 
+/*返回sock对应的等待队列头指针*/
 static inline wait_queue_head_t *sk_sleep(struct sock *sk)
 {
 	BUILD_BUG_ON(offsetof(struct socket_wq, wait) != 0);
@@ -2186,6 +2188,7 @@ static inline int skb_copy_to_page_nocache(struct sock *sk, struct iov_iter *fro
  */
 static inline int sk_wmem_alloc_get(const struct sock *sk)
 {
+	/*写buffer申请的数目*/
 	return refcount_read(&sk->sk_wmem_alloc) - 1;
 }
 
@@ -2454,11 +2457,13 @@ static inline gfp_t gfp_any(void)
 	return in_softirq() ? GFP_ATOMIC : GFP_KERNEL;
 }
 
+/*如果非阻塞，则返回0,否则返回sk->sk_rcvtimeo*/
 static inline long sock_rcvtimeo(const struct sock *sk, bool noblock)
 {
 	return noblock ? 0 : sk->sk_rcvtimeo;
 }
 
+/*如果非阻塞，则返回0,否则返回sk->sk_sndtimeo*/
 static inline long sock_sndtimeo(const struct sock *sk, bool noblock)
 {
 	return noblock ? 0 : sk->sk_sndtimeo;

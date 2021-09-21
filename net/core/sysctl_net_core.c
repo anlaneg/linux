@@ -597,6 +597,7 @@ static struct ctl_table net_core_table[] = {
 
 static struct ctl_table netns_core_table[] = {
 	{
+		/*listen时会指定backlog,backlog的值不得大于somaxconn*/
 		.procname	= "somaxconn",
 		.data		= &init_net.core.sysctl_somaxconn,
 		.maxlen		= sizeof(int),

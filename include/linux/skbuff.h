@@ -299,7 +299,7 @@ struct sk_buff_head {
 	struct sk_buff	*prev;
 
 	__u32		qlen;//队列长度
-	spinlock_t	lock;/*保存此队列*/
+	spinlock_t	lock;/*保护此队列*/
 };
 
 struct sk_buff;
@@ -331,7 +331,7 @@ typedef struct bio_vec skb_frag_t;
  */
 static inline unsigned int skb_frag_size(const skb_frag_t *frag)
 {
-	return frag->bv_len;
+	return frag->bv_len;/*内存分片大小*/
 }
 
 /**
@@ -341,7 +341,7 @@ static inline unsigned int skb_frag_size(const skb_frag_t *frag)
  */
 static inline void skb_frag_size_set(skb_frag_t *frag, unsigned int size)
 {
-	frag->bv_len = size;
+	frag->bv_len = size;/*设置此内存分片大小*/
 }
 
 /**
@@ -351,7 +351,7 @@ static inline void skb_frag_size_set(skb_frag_t *frag, unsigned int size)
  */
 static inline void skb_frag_size_add(skb_frag_t *frag, int delta)
 {
-	frag->bv_len += delta;
+	frag->bv_len += delta;/*为此内存分片增加delta*/
 }
 
 /**
@@ -538,7 +538,7 @@ struct skb_shared_info {
 	void *		destructor_arg;
 
 	/* must be last field, see pskb_expand_head() */
-	skb_frag_t	frags[MAX_SKB_FRAGS];
+	skb_frag_t	frags[MAX_SKB_FRAGS];/*记录各分片内存信息*/
 };
 
 /* We divide dataref into two halves.  The higher 16 bits hold references
@@ -939,7 +939,7 @@ struct sk_buff {
 	sk_buff_data_t		end;//指向buffer的结束位置，注：实际上在end的后面还有skb_shared_info结构
 	unsigned char		*head,//指向buffer的起始位置
 				*data;//指向报文位置（解析时表示当前分析位置）
-	unsigned int		truesize;//缓冲逻辑的大小，看SKB_TRUESIZE
+	unsigned int		truesize;//缓冲区实际大小
 	refcount_t		users;//引用计数，防报文被释放
 
 #ifdef CONFIG_SKB_EXTENSIONS
@@ -1874,6 +1874,7 @@ static inline struct sk_buff *skb_peek_next(struct sk_buff *skb,
  */
 static inline struct sk_buff *skb_peek_tail(const struct sk_buff_head *list_)
 {
+	/*返回list_的最后一个*/
 	struct sk_buff *skb = READ_ONCE(list_->prev);
 
 	if (skb == (struct sk_buff *)list_)
@@ -2200,16 +2201,16 @@ static inline unsigned int skb_pagelen(const struct sk_buff *skb)
 static inline void __skb_fill_page_desc(struct sk_buff *skb, int i,
 					struct page *page, int off, int size)
 {
-	skb_frag_t *frag = &skb_shinfo(skb)->frags[i];
+	skb_frag_t *frag = &skb_shinfo(skb)->frags[i];/*填充第i号分片*/
 
 	/*
 	 * Propagate page pfmemalloc to the skb if we can. The problem is
 	 * that not all callers have unique ownership of the page but rely
 	 * on page_is_pfmemalloc doing the right thing(tm).
 	 */
-	frag->bv_page		  = page;
-	frag->bv_offset		  = off;
-	skb_frag_size_set(frag, size);
+	frag->bv_page		  = page;/*此frag的page起始地址*/
+	frag->bv_offset		  = off;/*此frag的page的起始偏移*/
+	skb_frag_size_set(frag, size);/*此frag的page连续大小*/
 
 	page = compound_head(page);
 	if (page_is_pfmemalloc(page))
@@ -3137,7 +3138,7 @@ static inline void __skb_frag_ref(skb_frag_t *frag)
  *
  * Takes an additional reference on the @f'th paged fragment of @skb.
  */
-static inline void skb_frag_ref(struct sk_buff *skb, int f)
+static inline void skb_frag_ref(struct sk_buff *skb, int f/*内存分片编号*/)
 {
 	__skb_frag_ref(&skb_shinfo(skb)->frags[f]);
 }

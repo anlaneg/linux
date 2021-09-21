@@ -1007,10 +1007,12 @@ int udp_push_pending_frames(struct sock *sk)
 	struct sk_buff *skb;
 	int err = 0;
 
+	/*完成未决报文整理*/
 	skb = ip_finish_skb(sk, fl4);
 	if (!skb)
 		goto out;
 
+	/*udp向下发送报文*/
 	err = udp_send_skb(skb, fl4, &inet->cork.base);
 
 out:
@@ -1305,13 +1307,14 @@ back_from_confirm:
 
 do_append_data:
 	up->len += ulen;
-	/*添加报文到链上*/
+	/*有未决报文，将其直接添加到链上*/
 	err = ip_append_data(sk, fl4, getfrag/*负责分片*/, msg, ulen,
 			     sizeof(struct udphdr), &ipc, &rt,
 			     corkreq ? msg->msg_flags|MSG_MORE : msg->msg_flags);
 	if (err)
 		udp_flush_pending_frames(sk);
 	else if (!corkreq)
+		/*完成udp未决报文发送*/
 		err = udp_push_pending_frames(sk);
 	else if (unlikely(skb_queue_empty(&sk->sk_write_queue)))
 		up->pending = 0;
@@ -1350,6 +1353,7 @@ EXPORT_SYMBOL(udp_sendmsg);
 int udp_sendpage(struct sock *sk, struct page *page, int offset,
 		 size_t size, int flags)
 {
+	/*取udp socket*/
 	struct inet_sock *inet = inet_sk(sk);
 	struct udp_sock *up = udp_sk(sk);
 	int ret;
@@ -1378,6 +1382,7 @@ int udp_sendpage(struct sock *sk, struct page *page, int offset,
 		return -EINVAL;
 	}
 
+	/*udp有未决数据，执行append*/
 	ret = ip_append_page(sk, &inet->cork.fl.u.ip4,
 			     page, offset, size, flags);
 	if (ret == -EOPNOTSUPP) {
