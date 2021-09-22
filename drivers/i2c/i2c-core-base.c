@@ -569,6 +569,7 @@ static int i2c_device_probe(struct device *dev)
 	if (driver->probe_new)
 		status = driver->probe_new(client);
 	else if (driver->probe)
+	    /*驱动有probe函数，执行probe*/
 		status = driver->probe(client,
 				       i2c_match_id(driver->id_table, client));
 	else

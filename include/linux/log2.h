@@ -21,6 +21,7 @@
 static inline __attribute__((const))
 int __ilog2_u32(u32 n)
 {
+    /*查找最高位的‘1’所在位置（从1开始编号）*/
 	return fls(n) - 1;
 }
 #endif
@@ -29,6 +30,7 @@ int __ilog2_u32(u32 n)
 static inline __attribute__((const))
 int __ilog2_u64(u64 n)
 {
+    /*查找最高位的‘1’所在位置（从1开始编号）*/
 	return fls64(n) - 1;
 }
 #endif

@@ -60,6 +60,7 @@ static inline void INET_ECN_xmit(struct sock *sk)
 		inet6_sk(sk)->tclass |= INET_ECN_ECT_0;
 }
 
+/*清除掉ecn标记*/
 static inline void INET_ECN_dontxmit(struct sock *sk)
 {
 	inet_sk(sk)->tos &= ~INET_ECN_MASK;

@@ -262,12 +262,14 @@ static inline void __nodes_shift_left(nodemask_t *dstp,
 #define first_node(src) __first_node(&(src))
 static inline int __first_node(const nodemask_t *srcp)
 {
+    /*自srcp中提取首个bit标记*/
 	return min_t(int, MAX_NUMNODES, find_first_bit(srcp->bits, MAX_NUMNODES));
 }
 
 #define next_node(n, src) __next_node((n), &(src))
 static inline int __next_node(int n, const nodemask_t *srcp)
 {
+    /*自srcp中提取下一个node*/
 	return min_t(int,MAX_NUMNODES,find_next_bit(srcp->bits, MAX_NUMNODES, n+1));
 }
 
@@ -375,6 +377,7 @@ static inline void __nodes_fold(nodemask_t *dstp, const nodemask_t *origp,
 }
 
 #if MAX_NUMNODES > 1
+/*遍历bitmap mask,得到各个node*/
 #define for_each_node_mask(node, mask)			\
 	for ((node) = first_node(mask);			\
 		(node) < MAX_NUMNODES;			\
@@ -431,7 +434,7 @@ static inline int num_node_state(enum node_states state)
 	return nodes_weight(node_states[state]);
 }
 
-//遍历numa节点
+//遍历指定类型的numa节点
 #define for_each_node_state(__node, __state) \
 	for_each_node_mask((__node), node_states[__state])
 

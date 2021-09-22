@@ -7,6 +7,7 @@
 
 #ifndef __ASSEMBLY__
 
+/*定义长度为bits的bitmap*/
 #define DECLARE_BITMAP(name,bits) \
 	unsigned long name[BITS_TO_LONGS(bits)]
 

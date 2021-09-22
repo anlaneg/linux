@@ -197,6 +197,7 @@ static int tcp_v4_pre_connect(struct sock *sk, struct sockaddr *uaddr,
 }
 
 /* This will initiate an outgoing connection. */
+/*实现tcp v4连接到远端*/
 int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
@@ -213,9 +214,11 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
+	/*远端地址必须为ipv4*/
 	if (usin->sin_family != AF_INET)
 		return -EAFNOSUPPORT;
 
+	/*记录目的地址*/
 	nexthop = daddr = usin->sin_addr.s_addr;
 	inet_opt = rcu_dereference_protected(inet->inet_opt,
 					     lockdep_sock_is_held(sk));
@@ -225,10 +228,10 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		nexthop = inet_opt->opt.faddr;
 	}
 
-	orig_sport = inet->inet_sport;
-	orig_dport = usin->sin_port;
+	orig_sport = inet->inet_sport;/*目端端口*/
+	orig_dport = usin->sin_port;/*远端的目的port*/
 	fl4 = &inet->cork.fl.u.ip4;
-	rt = ip_route_connect(fl4, nexthop, inet->inet_saddr,
+	rt = ip_route_connect(fl4, nexthop, inet->inet_saddr/*本端地址*/,
 			      RT_CONN_FLAGS(sk), sk->sk_bound_dev_if,
 			      IPPROTO_TCP,
 			      orig_sport, orig_dport, sk);
@@ -239,6 +242,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 		return err;
 	}
 
+	/*tcp无法支持组播，广播*/
 	if (rt->rt_flags & (RTCF_MULTICAST | RTCF_BROADCAST)) {
 		ip_rt_put(rt);
 		return -ENETUNREACH;
@@ -247,6 +251,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (!inet_opt || !inet_opt->opt.srr)
 		daddr = fl4->daddr;
 
+	/*如果当时源地址为0.0.0.0,则更正为出接口ip*/
 	if (!inet->inet_saddr)
 		inet->inet_saddr = fl4->saddr;
 	sk_rcv_saddr_set(sk, inet->inet_saddr);
@@ -259,6 +264,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 			WRITE_ONCE(tp->write_seq, 0);
 	}
 
+	/*设置目的端port及目的ip地址*/
 	inet->inet_dport = usin->sin_port;
 	sk_daddr_set(sk, daddr);
 
@@ -311,6 +317,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (err)
 		goto failure;
 
+	/*构造syn包并发送*/
 	err = tcp_connect(sk);
 
 	if (err)
@@ -630,6 +637,7 @@ void __tcp_v4_send_check(struct sk_buff *skb, __be32 saddr, __be32 daddr)
 {
 	struct tcphdr *th = tcp_hdr(skb);
 
+	/*计算tcp伪头的checksum*/
 	th->check = ~tcp_v4_check(skb->len, saddr, daddr, 0);
 	skb->csum_start = skb_transport_header(skb) - skb->head;
 	skb->csum_offset = offsetof(struct tcphdr, check);
@@ -1981,7 +1989,7 @@ int tcp_v4_rcv(struct sk_buff *skb)
 		goto discard_it;
 
 	/* Count it even if it's bad */
-	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
+	__TCP_INC_STATS(net, TCP_MIB_INSEGS);/*tcp总入报数*/
 
 	//报文长度不足tcp头长度，丢包
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
@@ -2149,7 +2157,7 @@ put_and_return:
 	return ret;
 
 no_tcp_socket:
-    //没有查询到此流对应的socket，未监听，如果checksum正确，则回复reset报文
+    //没有查询到此流对应的socket，也未监听，如果checksum正确，则回复reset报文
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
@@ -2865,7 +2873,7 @@ struct proto tcp_prot = {
 	.owner			= THIS_MODULE,
 	.close			= tcp_close,
 	.pre_connect		= tcp_v4_pre_connect,
-	.connect		= tcp_v4_connect,
+	.connect		= tcp_v4_connect,/*实现tcp v4连接到远端*/
 	.disconnect		= tcp_disconnect,
 	.accept			= inet_csk_accept,
 	.ioctl			= tcp_ioctl,
@@ -3030,6 +3038,7 @@ static int __net_init tcp_sk_init(struct net *net)
 			       init_net.ipv4.tcp_congestion_control->owner))
 		net->ipv4.tcp_congestion_control = init_net.ipv4.tcp_congestion_control;
 	else
+	    /*init默认使用 reno算法*/
 		net->ipv4.tcp_congestion_control = &tcp_reno;
 
 	return 0;

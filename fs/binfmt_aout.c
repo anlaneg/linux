@@ -329,6 +329,7 @@ out:
 
 static int __init init_aout_binfmt(void)
 {
+    /*注册aout二进制文件格式*/
 	register_binfmt(&aout_format);
 	return 0;
 }

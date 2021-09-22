@@ -69,10 +69,12 @@ struct zoneref *__next_zones_zonelist(struct zoneref *z,
 	 */
 	if (unlikely(nodes == NULL))
 		while (zonelist_zone_idx(z) > highest_zoneidx)
+		    /*取z中合适type的*/
 			z++;
 	else
 		while (zonelist_zone_idx(z) > highest_zoneidx ||
 				(z->zone && !zref_in_nodemask(z, nodes)))
+		    /*除当前z,还容许在mask中的zone*/
 			z++;
 
 	return z;

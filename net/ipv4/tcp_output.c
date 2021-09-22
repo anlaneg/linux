@@ -127,11 +127,13 @@ static __u16 tcp_advertise_mss(struct sock *sk)
 		unsigned int metric = dst_metric_advmss(dst);
 
 		if (metric < mss) {
+		    /*小于当前记录的mss,则更新mss*/
 			mss = metric;
 			tp->advmss = mss;
 		}
 	}
 
+	/*返回此sock对应的mss*/
 	return (__u16)mss;
 }
 
@@ -394,17 +396,18 @@ static void tcp_ecn_send(struct sock *sk, struct sk_buff *skb,
  */
 static void tcp_init_nondata_skb(struct sk_buff *skb, u32 seq, u8 flags)
 {
+    /*无数据，设置cb*/
 	skb->ip_summed = CHECKSUM_PARTIAL;
 
 	TCP_SKB_CB(skb)->tcp_flags = flags;
 	TCP_SKB_CB(skb)->sacked = 0;
 
-	tcp_skb_pcount_set(skb, 1);
+	tcp_skb_pcount_set(skb, 1);/*报文数1个*/
 
-	TCP_SKB_CB(skb)->seq = seq;
+	TCP_SKB_CB(skb)->seq = seq;/*报文对应的序号*/
 	if (flags & (TCPHDR_SYN | TCPHDR_FIN))
-		seq++;
-	TCP_SKB_CB(skb)->end_seq = seq;
+		seq++;/*fin及syn会占用一个seq*/
+	TCP_SKB_CB(skb)->end_seq = seq;/*报文未带数据，故仍使用此seq(只考虑syn,fin)*/
 }
 
 static inline bool tcp_urg_mode(const struct tcp_sock *tp)
@@ -765,7 +768,7 @@ static unsigned int tcp_syn_options(struct sock *sk, struct sk_buff *skb,
 				struct tcp_md5sig_key **md5)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
-	unsigned int remaining = MAX_TCP_OPTION_SPACE;
+	unsigned int remaining = MAX_TCP_OPTION_SPACE;/*tcp选项最大值*/
 	struct tcp_fastopen_request *fastopen = tp->fastopen_req;
 
 	*md5 = NULL;
@@ -789,10 +792,11 @@ static unsigned int tcp_syn_options(struct sock *sk, struct sk_buff *skb,
 	 * should, and thus we won't abide by the delayed ACK rules correctly.
 	 * SACKs don't matter, we never delay an ACK when we have any of those
 	 * going out.  */
-	opts->mss = tcp_advertise_mss(sk);
-	remaining -= TCPOLEN_MSS_ALIGNED;
+	opts->mss = tcp_advertise_mss(sk);/*取mss值*/
+	remaining -= TCPOLEN_MSS_ALIGNED;/*使mss对齐*/
 
 	if (likely(sock_net(sk)->ipv4.sysctl_tcp_timestamps && !*md5)) {
+	    /*开启了tcp的时间签，选项中填充时间*/
 		opts->options |= OPTION_TS;
 		opts->tsval = tcp_skb_timestamp(skb) + tp->tsoffset;
 		opts->tsecr = tp->rx_opt.ts_recent;
@@ -827,6 +831,7 @@ static unsigned int tcp_syn_options(struct sock *sk, struct sk_buff *skb,
 	smc_set_option(tp, opts, &remaining);
 
 	if (sk_is_mptcp(sk)) {
+	    /*mptcp sync选项填充*/
 		unsigned int size;
 
 		if (mptcp_syn_options(sk, skb, &size, &opts->mptcp)) {
@@ -944,6 +949,7 @@ static unsigned int tcp_established_options(struct sock *sk, struct sk_buff *skb
 #endif
 
 	if (likely(tp->rx_opt.tstamp_ok)) {
+	    /*接收的报文中有时间签，选项中必包含*/
 		opts->options |= OPTION_TS;
 		opts->tsval = skb ? tcp_skb_timestamp(skb) + tp->tsoffset : 0;
 		opts->tsecr = tp->rx_opt.ts_recent;
@@ -1246,7 +1252,7 @@ INDIRECT_CALLABLE_DECLARE(void tcp_v4_send_check(struct sock *sk, struct sk_buff
  * SKB, or a fresh unique copy made by the retransmit engine.
  */
 static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
-			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt/*下次期待的序号*/)
+			      int clone_it, gfp_t gfp_mask, u32 rcv_nxt/*收方向下次期待的序号*/)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	struct inet_sock *inet;
@@ -1286,13 +1292,15 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	}
 
 	inet = inet_sk(sk);
-	/*取tcp控制块*/
+	/*取skb中的tcp控制数据*/
 	tcb = TCP_SKB_CB(skb);
 	memset(&opts, 0, sizeof(opts));
 
 	if (unlikely(tcb->tcp_flags & TCPHDR_SYN)) {
+	    /*发送的报文将带有syn标记，填充opts,并返回选项长度*/
 		tcp_options_size = tcp_syn_options(sk, skb, &opts, &md5);
 	} else {
+	    /*发送的报文带有其它非syn标记，填充opts*/
 		tcp_options_size = tcp_established_options(sk, skb, &opts,
 							   &md5);
 		/* Force a PSH flag on all (GSO) packets to expedite GRO flush
@@ -1304,8 +1312,11 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 		 * release the following packet.
 		 */
 		if (tcp_skb_pcount(skb) > 1)
+		    /*针对gso报文数大于1的强制带psh标记*/
 			tcb->tcp_flags |= TCPHDR_PSH;
 	}
+
+	/*实际tcp头部长度*/
 	tcp_header_size = tcp_options_size + sizeof(struct tcphdr);
 
 	/* if no packet is in qdisc/device queue, then allow XPS to select
@@ -1324,8 +1335,9 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	 */
 	skb->pfmemalloc = 0;
 
+	/*空出tcp位置*/
 	skb_push(skb, tcp_header_size);
-	skb_reset_transport_header(skb);
+	skb_reset_transport_header(skb);/*指向传输层*/
 
 	skb_orphan(skb);
 	skb->sk = sk;
@@ -1340,11 +1352,12 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	th->dest		= inet->inet_dport;
 	th->seq			= htonl(tcb->seq);/*tcp对应的seq*/
 	th->ack_seq		= htonl(rcv_nxt);
+	/*填充flags + data offset*/
 	*(((__be16 *)th) + 6)	= htons(((tcp_header_size >> 2) << 12) |
 					tcb->tcp_flags);
 
-	th->check		= 0;
-	th->urg_ptr		= 0;
+	th->check		= 0;/*checksum填充为零*/
+	th->urg_ptr		= 0;/*紧急指针为零*/
 
 	/* The urg_mode check is necessary during a below snd_una win probe */
 	if (unlikely(tcp_urg_mode(tp) && before(tcb->seq, tp->snd_up))) {
@@ -1368,6 +1381,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 		th->window	= htons(min(tp->rcv_wnd, 65535U));
 	}
 
+	/*填充tcp选项*/
 	tcp_options_write((__be32 *)(th + 1), tp, &opts);
 
 #ifdef CONFIG_TCP_MD5SIG
@@ -1382,11 +1396,13 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	/* BPF prog is the last one writing header option */
 	bpf_skops_write_hdr_opt(sk, skb, NULL, NULL, 0, &opts);
 
+	/*tcp发送前checksum处理*/
 	INDIRECT_CALL_INET(icsk->icsk_af_ops->send_check,
 			   tcp_v6_send_check, tcp_v4_send_check,
 			   sk, skb);
 
 	if (likely(tcb->tcp_flags & TCPHDR_ACK))
+	    /*发送的报文包含ack标记*/
 		tcp_event_ack_sent(sk, tcp_skb_pcount(skb), rcv_nxt);
 
 	if (skb->len != tcp_header_size) {
@@ -1429,6 +1445,7 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	return err;
 }
 
+/*构造tcp头部，并将数据传输给ip层*/
 static int tcp_transmit_skb(struct sock *sk, struct sk_buff *skb, int clone_it,
 			    gfp_t gfp_mask)
 {
@@ -3336,8 +3353,10 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 
 		} else {
 			if (icsk->icsk_ca_state != TCP_CA_Loss)
+			    /*快速重传*/
 				mib_idx = LINUX_MIB_TCPFASTRETRANS;
 			else
+			    /*慢启动*/
 				mib_idx = LINUX_MIB_TCPSLOWSTARTRETRANS;
 		}
 
@@ -3361,6 +3380,7 @@ void tcp_xmit_retransmit_queue(struct sock *sk)
 
 	}
 	if (rearm_timer)
+	    /*重置重传定时器*/
 		tcp_reset_xmit_timer(sk, ICSK_TIME_RETRANS,
 				     inet_csk(sk)->icsk_rto,
 				     TCP_RTO_MAX);
@@ -3859,6 +3879,7 @@ int tcp_connect(struct sock *sk)
 	if (unlikely(!buff))
 		return -ENOBUFS;
 
+	/*指明构造syn报文*/
 	tcp_init_nondata_skb(buff, tp->write_seq++, TCPHDR_SYN);
 	tcp_mstamp_refresh(tp);
 	tp->retrans_stamp = tcp_time_stamp(tp);
@@ -3948,7 +3969,7 @@ void tcp_send_delayed_ack(struct sock *sk)
 }
 
 /* This routine sends an ack and also updates the window. */
-void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
+void __tcp_send_ack(struct sock *sk, u32 rcv_nxt/*收方向下次期待的序号*/)
 {
 	struct sk_buff *buff;
 
@@ -3963,6 +3984,7 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 	buff = alloc_skb(MAX_TCP_HEADER,
 			 sk_gfp_mask(sk, GFP_ATOMIC | __GFP_NOWARN));
 	if (unlikely(!buff)) {
+	    /*申请buffer失败*/
 		struct inet_connection_sock *icsk = inet_csk(sk);
 		unsigned long delay;
 
@@ -3977,6 +3999,7 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 
 	/* Reserve space for headers and prepare control bits. */
 	skb_reserve(buff, MAX_TCP_HEADER);
+	/*指明为ack报文，指明本端的seq*/
 	tcp_init_nondata_skb(buff, tcp_acceptable_seq(sk), TCPHDR_ACK);
 
 	/* We do not want pure acks influencing TCP Small Queues or fq/pacing
@@ -3990,6 +4013,7 @@ void __tcp_send_ack(struct sock *sk, u32 rcv_nxt)
 }
 EXPORT_SYMBOL_GPL(__tcp_send_ack);
 
+/*针对此socket发送ack报文*/
 void tcp_send_ack(struct sock *sk)
 {
 	__tcp_send_ack(sk, tcp_sk(sk)->rcv_nxt);

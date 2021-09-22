@@ -579,25 +579,28 @@ static __always_inline void *kmalloc_large(size_t size, gfp_t flags)
 static __always_inline void *kmalloc(size_t size, gfp_t flags)
 {
 	if (__builtin_constant_p(size)) {
+	    /*size为常量的情况*/
 #ifndef CONFIG_SLOB
 		unsigned int index;
 #endif
 		if (size > KMALLOC_MAX_CACHE_SIZE)
-		    //例如大于8192的内存需求走large
+		    //大于8192的内存需求走large
 			return kmalloc_large(size, flags);
 #ifndef CONFIG_SLOB
+		/*内存大小决使用具体的kmalloc_caches[xx][index]*/
 		index = kmalloc_index(size);
 
 		if (!index)
 		    /*0长度申请内存时，返回此指针*/
 			return ZERO_SIZE_PTR;
 
+		/*自此index大小中提取内存*/
 		return kmem_cache_alloc_trace(
 				kmalloc_caches[kmalloc_type(flags)][index],
 				flags, size);
 #endif
 	}
-	//申请非常量的size
+	//申请非常量的size/slob开启情况下
 	return __kmalloc(size, flags);
 }
 
@@ -725,6 +728,7 @@ static inline void *kmem_cache_zalloc(struct kmem_cache *k, gfp_t flags)
  */
 static inline void *kzalloc(size_t size, gfp_t flags)
 {
+    /*自任意node上申请内存（内存须为全零）*/
 	return kmalloc(size, flags | __GFP_ZERO);
 }
 
@@ -734,7 +738,7 @@ static inline void *kzalloc(size_t size, gfp_t flags)
  * @flags: the type of memory to allocate (see kmalloc).
  * @node: memory node from which to allocate
  */
-//自指定的内存node上申请内存
+//自指定的内存node上申请内存(内存须为全零）
 static inline void *kzalloc_node(size_t size, gfp_t flags, int node)
 {
 	return kmalloc_node(size, flags | __GFP_ZERO, node);

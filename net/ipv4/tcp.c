@@ -1200,6 +1200,7 @@ static int tcp_sendmsg_fastopen(struct sock *sk, struct msghdr *msg,
 	return err;
 }
 
+/*tcp发送数据包*/
 int tcp_sendmsg_locked(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -3380,7 +3381,7 @@ static int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		if (optlen < 1)
 			return -EINVAL;
 
-		//取用户配置的名称
+		//取用户配置的拥塞算法名称
 		val = strncpy_from_sockptr(name, optval,
 					min_t(long, TCP_CA_NAME_MAX-1, optlen));
 		if (val < 0)

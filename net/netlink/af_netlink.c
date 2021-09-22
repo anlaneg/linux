@@ -1553,6 +1553,7 @@ int netlink_broadcast_filtered(struct sock *ssk, struct sk_buff *skb, u32 portid
 
 	netlink_lock_table();
 
+	/*向每个组播组关心者，进行知会*/
 	sk_for_each_bound(sk, &nl_table[ssk->sk_protocol].mc_list)
 		do_one_broadcast(sk, &info);
 

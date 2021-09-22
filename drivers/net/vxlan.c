@@ -2732,6 +2732,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		if (tos == 1)
 			tos = ip_tunnel_get_dsfield(old_iph, skb);
 
+		/*检查是否指明采用zero csum*/
 		if (dst->sa.sa_family == AF_INET)
 			udp_sum = !(flags & VXLAN_F_UDP_ZERO_CSUM_TX);
 		else
@@ -2769,6 +2770,7 @@ static void vxlan_xmit_one(struct sk_buff *skb, struct net_device *dev,
 		ttl = info->key.ttl;
 		tos = info->key.tos;
 		label = info->key.label;
+		/*是否要求tunnel csum*/
 		udp_sum = !!(info->key.tun_flags & TUNNEL_CSUM);
 	}
 
@@ -3000,8 +3002,10 @@ static netdev_tx_t vxlan_xmit(struct sk_buff *skb, struct net_device *dev)
 		//如果配置有collect metadata,则进入（ovs vxlan口就配置了）
 		if (info && info->mode & IP_TUNNEL_INFO_BRIDGE &&
 		    info->mode & IP_TUNNEL_INFO_TX) {
+		    /*ovs ipv4 tunnel-dst为0时走此流程*/
 			vni = tunnel_id_to_key32(info->key.tun_id);
 		} else {
+		    /*ovs ipv4,ipv6走此流程*/
 			if (info && info->mode & IP_TUNNEL_INFO_TX)
 				vxlan_xmit_one(skb, dev, vni, NULL, false);
 			else

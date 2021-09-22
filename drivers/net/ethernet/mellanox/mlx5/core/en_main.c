@@ -3798,8 +3798,10 @@ static int mlx5e_handle_feature(struct net_device *netdev,
 	int err;
 
 	if (!(changes & feature))
+	    /*此功能没有变更，退出*/
 		return 0;
 
+	/*处理此功能变更*/
 	err = feature_handler(netdev, enable);
 	if (err) {
 		netdev_err(netdev, "%s feature %pNF failed, err %d\n",
@@ -4596,6 +4598,7 @@ const struct net_device_ops mlx5e_netdev_ops = {
 	.ndo_set_mac_address     = mlx5e_set_mac,
 	.ndo_vlan_rx_add_vid     = mlx5e_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid    = mlx5e_vlan_rx_kill_vid,
+	/*设备功能设置*/
 	.ndo_set_features        = mlx5e_set_features,
 	.ndo_fix_features        = mlx5e_fix_features,
 	.ndo_change_mtu          = mlx5e_change_nic_mtu,

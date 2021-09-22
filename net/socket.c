@@ -1972,13 +1972,13 @@ int __sys_connect_file(struct file *file, struct sockaddr_storage *address,
 		goto out;
 	}
 
-	/*触发connect连接*/
+	/*触发connect安全回调*/
 	err =
 	    security_socket_connect(sock, (struct sockaddr *)address, addrlen);
 	if (err)
 		goto out;
 
-	//调用sock的ops具体实现connect
+	//调用sock的ops具体实现connect，例如当ops为tcp协议时，
 	err = sock->ops->connect(sock, (struct sockaddr *)address, addrlen,
 				 sock->file->f_flags | file_flags);
 out:
@@ -3566,6 +3566,7 @@ static int compat_sock_ioctl_trans(struct file *file, struct socket *sock,
 	case SIOCGIFCONF:
 		return compat_dev_ifconf(net, argp);
 	case SIOCETHTOOL:
+	    /*ethtool的ioctl设置*/
 		return ethtool_ioctl(net, argp);
 	case SIOCWANDEV:
 		return compat_siocwandev(net, argp);

@@ -56,6 +56,7 @@ struct nfc_ops {
 	int (*dep_link_up)(struct nfc_dev *dev, struct nfc_target *target,
 			   u8 comm_mode, u8 *gb, size_t gb_len);
 	int (*dep_link_down)(struct nfc_dev *dev);
+	/*激话指定的target*/
 	int (*activate_target)(struct nfc_dev *dev, struct nfc_target *target,
 			       u32 protocol);
 	void (*deactivate_target)(struct nfc_dev *dev,
@@ -90,7 +91,7 @@ struct nfc_ops {
  *	configuration one) while %sens_res least significant byte is byte 1.
  */
 struct nfc_target {
-	u32 idx;
+	u32 idx;/*target对应的索引号*/
 	u32 supported_protocols;
 	u16 sens_res;
 	u8 sel_res;
@@ -163,16 +164,23 @@ struct nfc_vendor_cmd {
 };
 
 struct nfc_dev {
-	int idx;//nfc设备编号
+    //nfc设备编号
+	int idx;
+	/*下一个可分配的targets索引*/
 	u32 target_next_idx;
+	/*记录found的targets*/
 	struct nfc_target *targets;
-	int n_targets;/*指明targets数组大小*/
+	/*指明targets数组大小*/
+	int n_targets;
+	/*targets变更序号*/
 	int targets_generation;
 	struct device dev;
-	bool dev_up;//nfc设备是否up
+	//nfc设备是否up
+	bool dev_up;
 	bool fw_download_in_progress;
 	u8 rf_mode;
 	bool polling;
+	/*记录已激活的target*/
 	struct nfc_target *active_target;
 	bool dep_link_up;
 	struct nfc_genl_data genl_data;
@@ -180,8 +188,8 @@ struct nfc_dev {
 
 	struct list_head secure_elements;
 
-	int tx_headroom;
-	int tx_tailroom;
+	int tx_headroom;/*headroom内存大小*/
+	int tx_tailroom;/*tailroom内存大小*/
 
 	struct timer_list check_pres_timer;
 	struct work_struct check_pres_work;
@@ -193,7 +201,8 @@ struct nfc_dev {
 	struct nfc_vendor_cmd *vendor_cmds;
 	int n_vendor_cmds;
 
-	struct nfc_ops *ops;/*nfc的ops指针*/
+	/*nfc的ops指针*/
+	struct nfc_ops *ops;
 	struct genl_info *cur_cmd_info;
 };
 #define to_nfc_dev(_dev) container_of(_dev, struct nfc_dev, dev)

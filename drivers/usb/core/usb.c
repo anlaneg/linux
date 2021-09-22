@@ -561,6 +561,7 @@ static char *usb_devnode(struct device *dev,
 			 usb_dev->bus->busnum, usb_dev->devnum);
 }
 
+/*指明为usb设备类型*/
 struct device_type usb_device_type = {
 	.name =		"usb_device",
 	.release =	usb_release_dev,

@@ -265,7 +265,7 @@ enum nfc_sdp_attr {
 struct sockaddr_nfc {
 	sa_family_t sa_family;
 	__u32 dev_idx;/*nfc设备对应的ifindex*/
-	__u32 target_idx;
+	__u32 target_idx;/*指明要连接到哪个target*/
 	__u32 nfc_protocol;
 };
 

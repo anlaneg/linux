@@ -25,7 +25,7 @@
 #define NFC_CHECK_PRES_FREQ_MS	2000
 
 int nfc_devlist_generation;
-DEFINE_MUTEX(nfc_devlist_mutex);
+DEFINE_MUTEX(nfc_devlist_mutex);/*用于保护系统nfc设备列表*/
 
 /* NFC device ID bitmap */
 static DEFINE_IDA(nfc_index_ida);/*负责nfc设备index申请*/
@@ -410,19 +410,23 @@ int nfc_activate_target(struct nfc_dev *dev, u32 target_idx, u32 protocol)
 		goto error;
 	}
 
+	/*已有激话的target,放弃*/
 	if (dev->active_target) {
 		rc = -EBUSY;
 		goto error;
 	}
 
+	/*按索引找到target*/
 	target = nfc_find_target(dev, target_idx);
 	if (target == NULL) {
 		rc = -ENOTCONN;
 		goto error;
 	}
 
+	/*激活指定target*/
 	rc = dev->ops->activate_target(dev, target, protocol);
 	if (!rc) {
+	    /*激话成功，记录对应的active target,并设置mode为initiator*/
 		dev->active_target = target;
 		dev->rf_mode = NFC_RF_INITIATOR;
 
@@ -775,15 +779,18 @@ EXPORT_SYMBOL(nfc_alloc_recv_skb);
 int nfc_targets_found(struct nfc_dev *dev,
 		      struct nfc_target *targets, int n_targets)
 {
+    /*增加发现的target*/
 	int i;
 
 	pr_debug("dev_name=%s n_targets=%d\n", dev_name(&dev->dev), n_targets);
 
+	/*分配索引*/
 	for (i = 0; i < n_targets; i++)
 		targets[i].idx = dev->target_next_idx++;
 
 	device_lock(&dev->dev);
 
+	/*已添加过，直接返回*/
 	if (dev->polling == false) {
 		device_unlock(&dev->dev);
 		return 0;
@@ -793,9 +800,11 @@ int nfc_targets_found(struct nfc_dev *dev,
 
 	dev->targets_generation++;
 
+	/*将旧的targets移除掉*/
 	kfree(dev->targets);
 	dev->targets = NULL;
 
+	/*复制要填充的targets*/
 	if (targets) {
 		dev->targets = kmemdup(targets,
 				       n_targets * sizeof(struct nfc_target),
@@ -811,6 +820,7 @@ int nfc_targets_found(struct nfc_dev *dev,
 	dev->n_targets = n_targets;
 	device_unlock(&dev->dev);
 
+	/*向外知会targets发现事件*/
 	nfc_genl_targets_found(dev);
 
 	return 0;
@@ -871,6 +881,7 @@ EXPORT_SYMBOL(nfc_target_lost);
 
 inline void nfc_driver_failure(struct nfc_dev *dev, int err)
 {
+    /*移除掉所有targets*/
 	nfc_targets_found(dev, NULL, 0);
 }
 EXPORT_SYMBOL(nfc_driver_failure);
@@ -1059,7 +1070,7 @@ struct nfc_dev *nfc_get_device(unsigned int idx)
  * @tx_headroom: reserved space at beginning of skb
  * @tx_tailroom: reserved space at end of skb
  */
-struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops/*操作函数*/,
+struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops/*操作函数，例如hci_nfc_ops*/,
 				    u32 supported_protocols,
 				    int tx_headroom, int tx_tailroom)
 {
@@ -1089,6 +1100,7 @@ struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops/*操作函数*/,
 	dev->dev.class = &nfc_class;
 	/*设置设备名称*/
 	dev_set_name(&dev->dev, "nfc%d", dev->idx);
+	/*初始化设备结构体*/
 	device_initialize(&dev->dev);
 
 	dev->ops = ops;
@@ -1148,9 +1160,11 @@ int nfc_register_device(struct nfc_dev *dev)
 		pr_debug("The userspace won't be notified that the device %s was added\n",
 			 dev_name(&dev->dev));
 
+	/*申请并初始化rfkill*/
 	dev->rfkill = rfkill_alloc(dev_name(&dev->dev), &dev->dev,
 				   RFKILL_TYPE_NFC, &nfc_rfkill_ops, dev);
 	if (dev->rfkill) {
+	    /*rfkill注册*/
 		if (rfkill_register(dev->rfkill) < 0) {
 			rfkill_destroy(dev->rfkill);
 			dev->rfkill = NULL;

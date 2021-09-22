@@ -55,6 +55,7 @@ static struct tcp_congestion_ops *tcp_ca_find_autoload(struct net *net,
 /* Simple linear search, not much in here. */
 struct tcp_congestion_ops *tcp_ca_find_key(u32 key)
 {
+    /*通过key查询拥塞算法*/
 	struct tcp_congestion_ops *e;
 
 	list_for_each_entry_rcu(e, &tcp_cong_list, list) {
@@ -71,9 +72,11 @@ struct tcp_congestion_ops *tcp_ca_find_key(u32 key)
  */
 int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 {
+    /*注册拥塞控制算法*/
 	int ret = 0;
 
 	/* all algorithms must implement these */
+	/*必须实现以下函数*/
 	if (!ca->ssthresh || !ca->undo_cwnd ||
 	    !(ca->cong_avoid || ca->cong_control)) {
 		pr_err("%s does not implement required ops\n", ca->name);
@@ -84,10 +87,12 @@ int tcp_register_congestion_control(struct tcp_congestion_ops *ca)
 
 	spin_lock(&tcp_cong_list_lock);
 	if (ca->key == TCP_CA_UNSPEC || tcp_ca_find_key(ca->key)) {
+	    /*key对应的拥塞算法已存在*/
 		pr_notice("%s already registered or non-unique key\n",
 			  ca->name);
 		ret = -EEXIST;
 	} else {
+	    /*将算法串连到拥塞链表上*/
 		list_add_tail_rcu(&ca->list, &tcp_cong_list);
 		pr_debug("%s registered\n", ca->name);
 	}
@@ -105,6 +110,7 @@ EXPORT_SYMBOL_GPL(tcp_register_congestion_control);
  */
 void tcp_unregister_congestion_control(struct tcp_congestion_ops *ca)
 {
+    /*拥塞算法移除*/
 	spin_lock(&tcp_cong_list_lock);
 	list_del_rcu(&ca->list);
 	spin_unlock(&tcp_cong_list_lock);
@@ -163,6 +169,7 @@ void tcp_assign_congestion_control(struct sock *sk)
 	const struct tcp_congestion_ops *ca;
 
 	rcu_read_lock();
+	/*取默认的拥塞算法*/
 	ca = rcu_dereference(net->ipv4.tcp_congestion_control);
 	if (unlikely(!bpf_try_module_get(ca, ca->owner)))
 		ca = &tcp_reno;
@@ -176,20 +183,25 @@ void tcp_assign_congestion_control(struct sock *sk)
 		INET_ECN_dontxmit(sk);
 }
 
+/*初始化拥塞算法*/
 void tcp_init_congestion_control(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	tcp_sk(sk)->prior_ssthresh = 0;
+	/*拥塞控制私有数据初始化*/
 	if (icsk->icsk_ca_ops->init)
 		icsk->icsk_ca_ops->init(sk);
 	if (tcp_ca_needs_ecn(sk))
+	    /*需要ecn,打ecn_0标记*/
 		INET_ECN_xmit(sk);
 	else
+	    /*清除掉ecn标记*/
 		INET_ECN_dontxmit(sk);
 	icsk->icsk_ca_initialized = 1;
 }
 
+/*重新初始化socket的拥塞算法*/
 static void tcp_reinit_congestion_control(struct sock *sk,
 					  const struct tcp_congestion_ops *ca)
 {
@@ -214,6 +226,7 @@ void tcp_cleanup_congestion_control(struct sock *sk)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
+	/*清除掉旧拥塞算法资源*/
 	if (icsk->icsk_ca_ops->release)
 		icsk->icsk_ca_ops->release(sk);
 	bpf_module_put(icsk->icsk_ca_ops, icsk->icsk_ca_ops->owner);
@@ -227,6 +240,7 @@ int tcp_set_default_congestion_control(struct net *net, const char *name)
 	int ret;
 
 	rcu_read_lock();
+	/*查找拥塞算法*/
 	ca = tcp_ca_find_autoload(net, name);
 	if (!ca) {
 		ret = -ENOENT;
@@ -237,6 +251,7 @@ int tcp_set_default_congestion_control(struct net *net, const char *name)
 		/* Only init netns can set default to a restricted algorithm */
 		ret = -EPERM;
 	} else {
+	    /*设置默认拥塞控制算法*/
 		prev = xchg(&net->ipv4.tcp_congestion_control, ca);
 		if (prev)
 			bpf_module_put(prev, prev->owner);
@@ -320,7 +335,9 @@ int tcp_set_allowed_congestion_control(char *val)
 
 	spin_lock(&tcp_cong_list_lock);
 	/* pass 1 check for bad entries */
+	/* 算法必须存在*/
 	while ((name = strsep(&clone, " ")) && *name) {
+	    /*拥塞算法采用空格划分，每个算法必须通过tcp_ca_find可查询到*/
 		ca = tcp_ca_find(name);
 		if (!ca) {
 			ret = -ENOENT;
@@ -333,6 +350,7 @@ int tcp_set_allowed_congestion_control(char *val)
 		ca->flags &= ~TCP_CONG_NON_RESTRICTED;
 
 	/* pass 3 mark as allowed */
+	/*将容许的拥塞算法，置上restricted标记*/
 	while ((name = strsep(&val, " ")) && *name) {
 		ca = tcp_ca_find(name);
 		WARN_ON(!ca);
@@ -351,7 +369,7 @@ out:
  * tcp_reinit_congestion_control (if the current congestion control was
  * already initialized.
  */
-int tcp_set_congestion_control(struct sock *sk, const char *name, bool load/*是否容许主动加载*/,
+int tcp_set_congestion_control(struct sock *sk, const char *name/*拥塞算法名称*/, bool load/*是否容许主动加载*/,
 			       bool cap_net_admin)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -364,12 +382,13 @@ int tcp_set_congestion_control(struct sock *sk, const char *name, bool load/*是
 	rcu_read_lock();
 	/*通过名称查询拥塞控制ops*/
 	if (!load)
-		ca = tcp_ca_find(name);
+		ca = tcp_ca_find(name);/*不主动加载*/
 	else
-		ca = tcp_ca_find_autoload(sock_net(sk), name);
+		ca = tcp_ca_find_autoload(sock_net(sk), name);/*主动加载*/
 
 	/* No change asking for existing value */
 	if (ca == icsk->icsk_ca_ops) {
+	    /*与原有的算法一致，退出*/
 		icsk->icsk_ca_setsockopt = 1;
 		goto out;
 	}
@@ -377,10 +396,12 @@ int tcp_set_congestion_control(struct sock *sk, const char *name, bool load/*是
 	if (!ca)
 		err = -ENOENT;
 	else if (!((ca->flags & TCP_CONG_NON_RESTRICTED) || cap_net_admin))
+	    /*不容许使用此拥塞算法*/
 		err = -EPERM;
 	else if (!bpf_try_module_get(ca, ca->owner))
 		err = -EBUSY;
 	else
+	    /*重新设置此sock对应的拥塞算法*/
 		tcp_reinit_congestion_control(sk, ca);
  out:
 	rcu_read_unlock();
@@ -459,6 +480,7 @@ u32 tcp_reno_ssthresh(struct sock *sk)
 {
 	const struct tcp_sock *tp = tcp_sk(sk);
 
+	/*发送方拥塞窗口减半后返回*/
 	return max(tp->snd_cwnd >> 1U, 2U);
 }
 EXPORT_SYMBOL_GPL(tcp_reno_ssthresh);
@@ -471,6 +493,7 @@ u32 tcp_reno_undo_cwnd(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(tcp_reno_undo_cwnd);
 
+/*内建的reno拥塞算法*/
 struct tcp_congestion_ops tcp_reno = {
 	.flags		= TCP_CONG_NON_RESTRICTED,
 	.name		= "reno",

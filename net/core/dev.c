@@ -6204,7 +6204,7 @@ static void gro_normal_one(struct napi_struct *napi, struct sk_buff *skb, int se
 {
 	list_add_tail(&skb->list, &napi->rx_list);
 	napi->rx_count += segs;
-	/*超过gro_normal_batch数量，上送协议栈*/
+	/*超过gro_normal_batch数量（可配置），才上送协议栈*/
 	if (napi->rx_count >= gro_normal_batch)
 		gro_normal_list(napi);
 }
@@ -6301,13 +6301,14 @@ static void gro_list_prepare(const struct list_head *head,
 			continue;
 		}
 
-		//比对skb所属接口设备，vlan,？？？，mac层
+		//比对skb所属接口设备，vlan,metadata，mac层
 		diffs = (unsigned long)p->dev ^ (unsigned long)skb->dev;
 		diffs |= skb_vlan_tag_present(p) ^ skb_vlan_tag_present(skb);
 		if (skb_vlan_tag_present(p))
 			diffs |= skb_vlan_tag_get(p) ^ skb_vlan_tag_get(skb);
 		diffs |= skb_metadata_dst_cmp(p, skb);
 		diffs |= skb_metadata_differs(p, skb);
+		/*mac层比对*/
 		if (maclen == ETH_HLEN)
 			diffs |= compare_ether_header(skb_mac_header(p),
 						      skb_mac_header(skb));
@@ -6384,6 +6385,7 @@ static void gro_flush_oldest(struct napi_struct *napi, struct list_head *head)
 static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 {
 	u32 bucket = skb_get_hash_raw(skb) & (GRO_HASH_BUCKETS - 1);
+	/*取hash到的gro list*/
 	struct gro_list *gro_list = &napi->gro_hash[bucket];
 	struct list_head *head = &offload_base;
 	struct packet_offload *ptype;
@@ -6397,6 +6399,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	if (netif_elide_gro(skb->dev))
 		goto normal;
 
+	/*简单检查skb与gro_list->list上的报文是否为same flow(关注二层）*/
 	gro_list_prepare(&gro_list->list, skb);
 
 	rcu_read_lock();
@@ -6436,7 +6439,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 
 		//调本层的gro_receive函数进行gro处理（例如：看ip_packet_offload结构）
 		pp = INDIRECT_CALL_INET(ptype->callbacks.gro_receive,
-					ipv6_gro_receive, inet_gro_receive,
+					ipv6_gro_receive, inet_gro_receive/*ip层gro receive*/,
 					&gro_list->list, skb);
 		break;
 	}
@@ -6462,7 +6465,8 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	}
 
 	if (same_flow)
-		goto ok;//可合并，或者可释放
+	    //可合并，或者可释放
+		goto ok;
 
 	//需要输出，则走normal
 	if (NAPI_GRO_CB(skb)->flush)
@@ -6541,8 +6545,8 @@ static gro_result_t napi_skb_finish(struct napi_struct *napi,
 		gro_normal_one(napi, skb, 1);
 		break;
 
-		//需要释放报文(报文已被merge)
 	case GRO_MERGED_FREE:
+	    //需要释放报文(报文已被merge)
 		if (NAPI_GRO_CB(skb)->free == NAPI_GRO_FREE_STOLEN_HEAD)
 			napi_skb_free_stolen_head(skb);
 		else
@@ -6569,7 +6573,8 @@ gro_result_t napi_gro_receive(struct napi_struct *napi, struct sk_buff *skb)
 
 	skb_gro_reset_offset(skb, 0);
 
-	ret = napi_skb_finish(napi, skb, dev_gro_receive(napi, skb));
+	/*按gro结果进行skb处理*/
+	ret = napi_skb_finish(napi, skb, dev_gro_receive(napi, skb)/*skb gro处理*/);
 	trace_napi_gro_receive_exit(ret);
 
 	return ret;
@@ -10360,6 +10365,7 @@ int __netdev_update_features(struct net_device *dev)
 	netdev_for_each_upper_dev_rcu(dev, upper, iter)
 		features = netdev_sync_upper_features(dev, upper, features);
 
+	/*计划开启的功能与设备当前开启的功能相比无匹配，退出*/
 	if (dev->features == features)
 		goto sync_lower;
 
@@ -10372,6 +10378,7 @@ int __netdev_update_features(struct net_device *dev)
 	else
 		err = 0;
 
+	/*执行features变更失败*/
 	if (unlikely(err < 0)) {
 		netdev_err(dev,
 			"set_features() failed (%d); wanted %pNF, left %pNF\n",

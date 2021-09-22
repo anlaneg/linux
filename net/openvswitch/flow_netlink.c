@@ -738,6 +738,7 @@ static int ip_tun_from_nlattr(const struct nlattr *attr,
 			tun_flags |= TUNNEL_DONT_FRAGMENT;
 			break;
 		case OVS_TUNNEL_KEY_ATTR_CSUM:
+		    /*设置要求进行csum设置*/
 			tun_flags |= TUNNEL_CSUM;
 			break;
 		case OVS_TUNNEL_KEY_ATTR_TP_SRC:
@@ -2736,15 +2737,17 @@ static int validate_and_copy_set_tun(const struct nlattr *attr,
 		return PTR_ERR(a);
 	}
 
+	/*取ovs_tun，并为其设置tun_dst*/
 	ovs_tun = nla_data(a);
 	ovs_tun->tun_dst = tun_dst;
 
 	tun_info = &tun_dst->u.tun_info;
-	tun_info->mode = IP_TUNNEL_INFO_TX;
+	tun_info->mode = IP_TUNNEL_INFO_TX;/*默认为tx mode*/
 	if (key.tun_proto == AF_INET6)
 		tun_info->mode |= IP_TUNNEL_INFO_IPV6;
 	else if (key.tun_proto == AF_INET && key.tun_key.u.ipv4.dst == 0)
-		tun_info->mode |= IP_TUNNEL_INFO_BRIDGE;
+		tun_info->mode |= IP_TUNNEL_INFO_BRIDGE;/*ipv4情况下，dst为0时，默认桥模式*/
+
 	//填充tunnel_key
 	tun_info->key = key.tun_key;
 

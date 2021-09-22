@@ -296,6 +296,7 @@ void tcp_delack_timer_handler(struct sock *sk)
 	    !(icsk->icsk_ack.pending & ICSK_ACK_TIMER))
 		goto out;
 
+	/*delay ack定时器未到期，重置定时器*/
 	if (time_after(icsk->icsk_ack.timeout, jiffies)) {
 		sk_reset_timer(sk, &icsk->icsk_delack_timer, icsk->icsk_ack.timeout);
 		goto out;
@@ -314,6 +315,7 @@ void tcp_delack_timer_handler(struct sock *sk)
 			icsk->icsk_ack.ato      = TCP_ATO_MIN;
 		}
 		tcp_mstamp_refresh(tcp_sk(sk));
+		/*回复ack*/
 		tcp_send_ack(sk);
 		__NET_INC_STATS(sock_net(sk), LINUX_MIB_DELAYEDACKS);
 	}
@@ -603,6 +605,7 @@ void tcp_write_timer_handler(struct sock *sk)
 		goto out;
 
 	if (time_after(icsk->icsk_timeout, jiffies)) {
+	    /*超时时间未到，重置重传timer*/
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, icsk->icsk_timeout);
 		goto out;
 	}
@@ -610,6 +613,7 @@ void tcp_write_timer_handler(struct sock *sk)
 	tcp_mstamp_refresh(tcp_sk(sk));
 	event = icsk->icsk_pending;
 
+	/*检查为哪种重传超时*/
 	switch (event) {
 	case ICSK_TIME_REO_TIMEOUT:
 		tcp_rack_reo_timeout(sk);
@@ -631,8 +635,10 @@ out:
 	sk_mem_reclaim(sk);
 }
 
+/*重传timer被触发后，此函数将被调用*/
 static void tcp_write_timer(struct timer_list *t)
 {
+    /*由重传timer获得其对应的tcp socket*/
 	struct inet_connection_sock *icsk =
 			from_timer(icsk, t, icsk_retransmit_timer);
 	struct sock *sk = &icsk->icsk_inet.sk;
@@ -787,7 +793,7 @@ static enum hrtimer_restart tcp_compressed_ack_kick(struct hrtimer *timer)
 
 void tcp_init_xmit_timers(struct sock *sk)
 {
-	inet_csk_init_xmit_timers(sk, &tcp_write_timer, &tcp_delack_timer,
+	inet_csk_init_xmit_timers(sk, &tcp_write_timer/*重传timer*/, &tcp_delack_timer/*延迟ack timer*/,
 				  &tcp_keepalive_timer);
 	hrtimer_init(&tcp_sk(sk)->pacing_timer, CLOCK_MONOTONIC,
 		     HRTIMER_MODE_ABS_PINNED_SOFT);

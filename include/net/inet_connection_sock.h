@@ -87,22 +87,24 @@ struct inet_connection_sock {
 	struct request_sock_queue icsk_accept_queue;
 	struct inet_bind_bucket	  *icsk_bind_hash;
 	unsigned long		  icsk_timeout;
+	/*重传timer*/
  	struct timer_list	  icsk_retransmit_timer;
+ 	/*延迟ack timer*/
  	struct timer_list	  icsk_delack_timer;
 	__u32			  icsk_rto;
 	__u32                     icsk_rto_min;
 	__u32                     icsk_delack_max;
 	__u32			  icsk_pmtu_cookie;
-	const struct tcp_congestion_ops *icsk_ca_ops;
+	const struct tcp_congestion_ops *icsk_ca_ops;/*拥塞算法*/
 	const struct inet_connection_sock_af_ops *icsk_af_ops;
 	const struct tcp_ulp_ops  *icsk_ulp_ops;
 	void __rcu		  *icsk_ulp_data;
 	void (*icsk_clean_acked)(struct sock *sk, u32 acked_seq);
 	struct hlist_node         icsk_listen_portaddr_node;
 	unsigned int		  (*icsk_sync_mss)(struct sock *sk, u32 pmtu);
-	__u8			  icsk_ca_state:5,
-				  icsk_ca_initialized:1,
-				  icsk_ca_setsockopt:1,
+	__u8			  icsk_ca_state:5,/*记录拥塞状态*/
+				  icsk_ca_initialized:1,/*指明拥塞算法是否已初始化*/
+				  icsk_ca_setsockopt:1,/*是否设置了拥塞控制算法*/
 				  icsk_ca_dst_locked:1;
 	__u8			  icsk_retransmits;
 	__u8			  icsk_pending;
@@ -136,6 +138,7 @@ struct inet_connection_sock {
 	u32			  icsk_probes_tstamp;
 	u32			  icsk_user_timeout;
 
+	/*拥赛算法的私有数据*/
 	u64			  icsk_ca_priv[104 / sizeof(u64)];
 #define ICSK_CA_PRIV_SIZE	  sizeof_field(struct inet_connection_sock, icsk_ca_priv)
 };
@@ -202,6 +205,7 @@ static inline void inet_csk_clear_xmit_timer(struct sock *sk, const int what)
 		sk_stop_timer(sk, &icsk->icsk_retransmit_timer);
 #endif
 	} else if (what == ICSK_TIME_DACK) {
+	    /*停止delay ack timer*/
 		icsk->icsk_ack.pending = 0;
 		icsk->icsk_ack.retry = 0;
 #ifdef INET_CSK_CLEAR_TIMERS
@@ -215,9 +219,9 @@ static inline void inet_csk_clear_xmit_timer(struct sock *sk, const int what)
 /*
  *	Reset the retransmission timer
  */
-static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what,
-					     unsigned long when,
-					     const unsigned long max_when)
+static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what/*reset哪个定时器*/,
+					     unsigned long when/*距离当前的超时时间*/,
+					     const unsigned long max_when/*超时时间不得大于此值，如大于会被修正*/)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
@@ -229,14 +233,18 @@ static inline void inet_csk_reset_xmit_timer(struct sock *sk, const int what,
 
 	if (what == ICSK_TIME_RETRANS || what == ICSK_TIME_PROBE0 ||
 	    what == ICSK_TIME_LOSS_PROBE || what == ICSK_TIME_REO_TIMEOUT) {
+	    /*仅支持以上重传超时，并设置重传原因及超时时间*/
 		icsk->icsk_pending = what;
 		icsk->icsk_timeout = jiffies + when;
+		/*重置重传timer*/
 		sk_reset_timer(sk, &icsk->icsk_retransmit_timer, icsk->icsk_timeout);
 	} else if (what == ICSK_TIME_DACK) {
+	    /*重置延迟ack timer*/
 		icsk->icsk_ack.pending |= ICSK_ACK_TIMER;
 		icsk->icsk_ack.timeout = jiffies + when;
 		sk_reset_timer(sk, &icsk->icsk_delack_timer, icsk->icsk_ack.timeout);
 	} else {
+	    /*其它未知的timer事件*/
 		pr_debug("inet_csk BUG: unknown timer value\n");
 	}
 }

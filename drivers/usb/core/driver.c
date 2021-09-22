@@ -846,8 +846,10 @@ const struct usb_device_id *usb_device_match_id(struct usb_device *udev,
 	if (!id)
 		return NULL;
 
+	/*idVendor或idProduce必须存在*/
 	for (; id->idVendor || id->idProduct ; id++) {
 		if (usb_match_device(udev, id))
+		    /*如果匹配，则返回匹配的id*/
 			return id;
 	}
 
@@ -858,29 +860,36 @@ bool usb_driver_applicable(struct usb_device *udev,
 			   struct usb_device_driver *udrv)
 {
 	if (udrv->id_table && udrv->match)
+	    /*有match函数与id_table情况下进行比对*/
 		return usb_device_match_id(udev, udrv->id_table) != NULL &&
 		       udrv->match(udev);
 
 	if (udrv->id_table)
+	    /*仅有id_table情况下的匹配*/
 		return usb_device_match_id(udev, udrv->id_table) != NULL;
 
 	if (udrv->match)
+	    /*仅有match回调情况下的匹配*/
 		return udrv->match(udev);
 
 	return false;
 }
 
+/*usb bus上设备与驱动匹配函数*/
 static int usb_device_match(struct device *dev, struct device_driver *drv)
 {
 	/* devices and interfaces are handled separately */
 	if (is_usb_device(dev)) {
+	    /*dev为usb设备情况*/
 		struct usb_device *udev;
 		struct usb_device_driver *udrv;
 
 		/* interface drivers never match devices */
 		if (!is_usb_device_driver(drv))
+		    /*跳过接口驱动*/
 			return 0;
 
+		/*转usb设备及usb驱动*/
 		udev = to_usb_device(dev);
 		udrv = to_usb_device_driver(drv);
 
@@ -889,11 +898,14 @@ static int usb_device_match(struct device *dev, struct device_driver *drv)
 		 * function decide.
 		 */
 		if (!udrv->id_table && !udrv->match)
+		    /*没有id_table,没有match函数返回1*/
 			return 1;
 
+		/*usb设备匹配*/
 		return usb_driver_applicable(udev, udrv);
 
 	} else if (is_usb_interface(dev)) {
+	    /*dev为usb interface情况*/
 		struct usb_interface *intf;
 		struct usb_driver *usb_drv;
 		const struct usb_device_id *id;
@@ -942,6 +954,7 @@ static int usb_uevent(struct device *dev, struct kobj_uevent_env *env)
 	}
 
 	/* per-device configurations are common */
+	/*为uevent添加PRODUCT变量*/
 	if (add_uevent_var(env, "PRODUCT=%x/%x/%x",
 			   le16_to_cpu(usb_dev->descriptor.idVendor),
 			   le16_to_cpu(usb_dev->descriptor.idProduct),
@@ -949,6 +962,7 @@ static int usb_uevent(struct device *dev, struct kobj_uevent_env *env)
 		return -ENOMEM;
 
 	/* class-based driver binding models */
+	/*为uevent添加TYPE变量*/
 	if (add_uevent_var(env, "TYPE=%d/%d/%d",
 			   usb_dev->descriptor.bDeviceClass,
 			   usb_dev->descriptor.bDeviceSubClass,
@@ -1058,7 +1072,7 @@ EXPORT_SYMBOL_GPL(usb_deregister_device_driver);
  * usb_register_dev() to enable that functionality.  This function no longer
  * takes care of that.
  */
-int usb_register_driver(struct usb_driver *new_driver, struct module *owner,
+int usb_register_driver(struct usb_driver *new_driver/*驱动结构体*/, struct module *owner,
 			const char *mod_name)
 {
     //usb驱动注册
@@ -2045,8 +2059,8 @@ int usb_disable_usb2_hardware_lpm(struct usb_device *udev)
 
 //usb bus
 struct bus_type usb_bus_type = {
-	.name =		"usb",
-	.match =	usb_device_match,
+	.name =		"usb",/*指明usb bus*/
+	.match =	usb_device_match,/*设备与驱动的默认匹配方式*/
 	.uevent =	usb_uevent,
 	.need_parent_lock =	true,
 };

@@ -473,6 +473,7 @@ static inline bool gfpflags_normal_context(const gfp_t gfp_flags)
 	| 1 << (___GFP_MOVABLE | ___GFP_DMA32 | ___GFP_DMA | ___GFP_HIGHMEM)  \
 )
 
+/*取flags中对zone type的指定*/
 static inline enum zone_type gfp_zone(gfp_t flags)
 {
 	enum zone_type z;
@@ -511,6 +512,7 @@ static inline int gfp_zonelist(gfp_t flags)
  */
 static inline struct zonelist *node_zonelist(int nid, gfp_t flags)
 {
+    /*依据flags,返回不同的zhonelists*/
 	return NODE_DATA(nid)->node_zonelists + gfp_zonelist(flags);
 }
 

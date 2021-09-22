@@ -111,6 +111,7 @@ static struct dst_entry *inet6_csk_route_socket(struct sock *sk,
 	return dst;
 }
 
+/*上层送报文到ipv6协议栈*/
 int inet6_csk_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl_unused)
 {
 	struct ipv6_pinfo *np = inet6_sk(sk);

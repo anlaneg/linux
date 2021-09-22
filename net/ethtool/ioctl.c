@@ -224,6 +224,7 @@ static netdev_features_t ethtool_get_feature_mask(u32 eth_cmd)
 		return NETIF_F_GSO;
 	case ETHTOOL_GGRO:
 	case ETHTOOL_SGRO:
+	    /*gro对应的mask*/
 		return NETIF_F_GRO;
 	default:
 		BUG();
@@ -256,11 +257,14 @@ static int ethtool_set_one_feature(struct net_device *dev,
 	mask = ethtool_get_feature_mask(ethcmd);
 	mask &= dev->hw_features;
 	if (!mask)
+	    /*设备不支持此功能*/
 		return -EOPNOTSUPP;
 
 	if (edata.data)
+	    /*为此设备添加此功能*/
 		dev->wanted_features |= mask;
 	else
+	    /*移除此设备上此功能*/
 		dev->wanted_features &= ~mask;
 
 	__netdev_update_features(dev);
@@ -2837,6 +2841,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr)
 	case ETHTOOL_STSO:
 	case ETHTOOL_SGSO:
 	case ETHTOOL_SGRO:
+	    /*设置gro,gso,tso等功能*/
 		rc = ethtool_set_one_feature(dev, useraddr, ethcmd);
 		break;
 		//获取接口的channel数目

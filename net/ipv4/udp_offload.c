@@ -512,6 +512,7 @@ struct sk_buff *udp_gro_receive(struct list_head *head, struct sk_buff *skb,
 	struct sk_buff *pp = NULL;
 	struct sk_buff *p;
 	struct udphdr *uh2;
+	/*取gro 当前待解析数据头offset*/
 	unsigned int off = skb_gro_offset(skb);
 	int flush = 1;
 
@@ -579,6 +580,7 @@ static struct sock *udp4_gro_lookup_skb(struct sk_buff *skb, __be16 sport,
 INDIRECT_CALLABLE_SCOPE
 struct sk_buff *udp4_gro_receive(struct list_head *head, struct sk_buff *skb)
 {
+    /*待分析报文的udp header*/
 	struct udphdr *uh = udp_gro_udphdr(skb);
 	struct sock *sk = NULL;
 	struct sk_buff *pp;

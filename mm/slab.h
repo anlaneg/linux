@@ -486,7 +486,7 @@ static inline struct kmem_cache *slab_pre_alloc_hook(struct kmem_cache *s,
 						     struct obj_cgroup **objcgp,
 						     size_t size, gfp_t flags)
 {
-	flags &= gfp_allowed_mask;
+	flags &= gfp_allowed_mask;/*清除掉不容许的flags*/
 
 	might_alloc(flags);
 

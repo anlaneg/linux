@@ -235,6 +235,7 @@ static int proc_tcp_congestion_control(struct ctl_table *ctl, int write,
 
 	ret = proc_dostring(&tbl, write, buffer, lenp, ppos);
 	if (write && ret == 0)
+	    /*设置默认拥塞控制算法*/
 		ret = tcp_set_default_congestion_control(net, val);
 	return ret;
 }
@@ -897,6 +898,7 @@ static struct ctl_table ipv4_net_table[] = {
 #endif
 	{
 		.procname	= "tcp_congestion_control",
+		/*设置tcp默认的拥塞控制算法*/
 		.data		= &init_net.ipv4.tcp_congestion_control,
 		.mode		= 0644,
 		.maxlen		= TCP_CA_NAME_MAX,
@@ -912,6 +914,7 @@ static struct ctl_table ipv4_net_table[] = {
 		.procname	= "tcp_allowed_congestion_control",
 		.maxlen		= TCP_CA_BUF_MAX,
 		.mode		= 0644,
+		/*设置系统容许的拥塞控制算法*/
 		.proc_handler   = proc_allowed_congestion_control,
 	},
 	{

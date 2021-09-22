@@ -183,6 +183,7 @@ int nfc_genl_targets_found(struct nfc_dev *dev)
 	if (!hdr)
 		goto free_msg;
 
+	/*向上知会设备dev->idx发现了多个targets*/
 	if (nla_put_u32(msg, NFC_ATTR_DEVICE_INDEX, dev->idx))
 		goto nla_put_failure;
 
@@ -286,6 +287,7 @@ free_msg:
 	return -EMSGSIZE;
 }
 
+/*发送设备名称，设备idx,支持的protocols,link状态，及rf模式*/
 static int nfc_genl_setup_device_added(struct nfc_dev *dev, struct sk_buff *msg)
 {
 	if (nla_put_string(msg, NFC_ATTR_DEVICE_NAME, nfc_device_name(dev)) ||
@@ -317,6 +319,7 @@ int nfc_genl_device_added(struct nfc_dev *dev)
 
 	genlmsg_end(msg, hdr);
 
+	/*知会到此family的0号组播组*/
 	genlmsg_multicast(&nfc_genl_family, msg, 0, 0, GFP_KERNEL);
 
 	return 0;
@@ -723,18 +726,22 @@ static int nfc_genl_get_device(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[NFC_ATTR_DEVICE_INDEX])
 		return -EINVAL;
 
+	/*提取设备idx*/
 	idx = nla_get_u32(info->attrs[NFC_ATTR_DEVICE_INDEX]);
 
+	/*取对应设备*/
 	dev = nfc_get_device(idx);
 	if (!dev)
 		return -ENODEV;
 
+	/*生成消息buffer*/
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg) {
 		rc = -ENOMEM;
 		goto out_putdev;
 	}
 
+	/*发送接口信息*/
 	rc = nfc_genl_send_device(msg, dev, info->snd_portid, info->snd_seq,
 				  NULL, 0);
 	if (rc < 0)
@@ -751,6 +758,7 @@ out_putdev:
 	return rc;
 }
 
+/*使nfc设备up*/
 static int nfc_genl_dev_up(struct sk_buff *skb, struct genl_info *info)
 {
 	struct nfc_dev *dev;
@@ -1656,19 +1664,19 @@ EXPORT_SYMBOL(nfc_vendor_cmd_reply);
 //nfc支持的netlink接口命令处理
 static const struct genl_ops nfc_genl_ops[] = {
 	{
-		.cmd = NFC_CMD_GET_DEVICE,
+		.cmd = NFC_CMD_GET_DEVICE,/*设备获取*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nfc_genl_get_device,
 		.dumpit = nfc_genl_dump_devices,
 		.done = nfc_genl_dump_devices_done,
 	},
 	{
-		.cmd = NFC_CMD_DEV_UP,
+		.cmd = NFC_CMD_DEV_UP,/*up设备*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nfc_genl_dev_up,
 	},
 	{
-		.cmd = NFC_CMD_DEV_DOWN,
+		.cmd = NFC_CMD_DEV_DOWN,/*down指定设备*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nfc_genl_dev_down,
 	},
@@ -1855,6 +1863,7 @@ int __init nfc_genl_init(void)
 {
 	int rc;
 
+	/*控制消息注册*/
 	rc = genl_register_family(&nfc_genl_family);
 	if (rc)
 		return rc;

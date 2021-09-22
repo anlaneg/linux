@@ -13,10 +13,10 @@ struct timer_list {
 	 * All fields that change during normal runtime grouped to the
 	 * same cacheline
 	 */
-	struct hlist_node	entry;//用于挂在list上
+	struct hlist_node	entry;//用于挂在list上（双链表）
 	unsigned long		expires;//过期时间
 	void			(*function)(struct timer_list *);//timer回调函数
-	u32			flags;
+	u32			flags;/*指出timer标记，及所在cpu*/
 
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map	lockdep_map;

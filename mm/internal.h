@@ -139,7 +139,7 @@ extern bool cgroup_memory_nokmem;
  */
 struct alloc_context {
 	struct zonelist *zonelist;
-	nodemask_t *nodemask;
+	nodemask_t *nodemask;/*可用的node mask*/
 	struct zoneref *preferred_zoneref;
 	int migratetype;
 
@@ -153,7 +153,7 @@ struct alloc_context {
 	 * the target zone since higher zone than this index cannot be
 	 * usable for this allocation request.
 	 */
-	enum zone_type highest_zoneidx;
+	enum zone_type highest_zoneidx;/*最大申请zone*/
 	bool spread_dirty_pages;
 };
 

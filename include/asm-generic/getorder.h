@@ -31,11 +31,14 @@ static __always_inline __attribute_const__ int get_order(unsigned long size)
     //获取size对应的order(级别）
 	if (__builtin_constant_p(size)) {
 		if (!size)
+		    /*size为0*/
 			return BITS_PER_LONG - PAGE_SHIFT;
 
 		if (size < (1UL << PAGE_SHIFT))
+		    /*size小于一个页，返回0*/
 			return 0;
 
+		/*换算成需要多少连续页*/
 		return ilog2((size) - 1) - PAGE_SHIFT + 1;
 	}
 

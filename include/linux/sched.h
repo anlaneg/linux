@@ -981,7 +981,7 @@ struct task_struct {
 	 * - access it with [gs]et_task_comm()
 	 * - lock it with task_lock()
 	 */
-	char				comm[TASK_COMM_LEN];
+	char				comm[TASK_COMM_LEN];/*程序名称*/
 
 	struct nameidata		*nameidata;
 

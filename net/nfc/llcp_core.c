@@ -16,7 +16,7 @@
 
 static u8 llcp_magic[3] = {0x46, 0x66, 0x6d};
 
-static LIST_HEAD(llcp_devices);
+static LIST_HEAD(llcp_devices);/*记录系统所有llcp local设备*/
 
 static void nfc_llcp_rx_skb(struct nfc_llcp_local *local, struct sk_buff *skb);
 

@@ -1037,7 +1037,7 @@ static inline int nlmsg_multicast(struct sock *sk, struct sk_buff *skb,
 {
 	int err;
 
-	NETLINK_CB(skb).dst_group = group;
+	NETLINK_CB(skb).dst_group = group;/*目标group idx*/
 
 	err = netlink_broadcast(sk, skb, portid, group, flags);
 	if (err > 0)

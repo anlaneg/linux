@@ -888,6 +888,7 @@ void udp_set_csum(bool nocheck, struct sk_buff *skb,
 	struct udphdr *uh = udp_hdr(skb);
 
 	if (nocheck) {
+	    /*不检查，udp checksum填写为0*/
 		uh->check = 0;
 	} else if (skb_is_gso(skb)) {
 		uh->check = ~udp_v4_check(len, saddr, daddr, 0);

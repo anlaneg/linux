@@ -1002,8 +1002,10 @@ static inline void del_page_from_free_list(struct page *page, struct zone *zone,
 		__ClearPageReported(page);
 
 	list_del(&page->lru);
+	/*指明此page不再从属于Buddy*/
 	__ClearPageBuddy(page);
 	set_page_private(page, 0);
+	/*此order的free_area数目减1*/
 	zone->free_area[order].nr_free--;
 }
 
@@ -2297,10 +2299,10 @@ void __init init_cma_reserved_pageblock(struct page *page)
  *
  * -- nyc
  */
-static inline void expand(struct zone *zone, struct page *page,
-	int low, int high, int migratetype)
+static inline void expand(struct zone *zone/*page所属的zone*/, struct page *page/*待分割的page*/,
+	int low/*最小的order*/, int high/*最大order*/, int migratetype/*page所属的migrate type*/)
 {
-	unsigned long size = 1 << high;
+	unsigned long size = 1 << high;/*此page实际大小*/
 
 	while (high > low) {
 		high--;
@@ -2476,9 +2478,11 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 		area = &(zone->free_area[current_order]);
 		page = get_page_from_free_area(area, migratetype);
 		if (!page)
+		    /*没在free_area中找到空闲page,继续下一个order*/
 			continue;
+		/*在当前order上找到了空闲page，将此页从原位置移除*/
 		del_page_from_free_list(page, zone, current_order);
-		//我们找到了一组可用的page,现在将page拆分开放在order到current_order之间的链表上（拆分方法是每一个链上存后半段page)
+		//我们找到了可用的page,现在将page拆分开放在order到current_order之间的链表上（拆分方法是每一个链上存后半段page)
 		expand(zone, page, order/*起始的order*/, current_order/*当前分配order*/, migratetype);
         	//记录page来源的migratetype
 		set_pcppage_migratetype(page, migratetype);
@@ -4085,6 +4089,7 @@ retry:
 	 */
 	no_fallback = alloc_flags & ALLOC_NOFRAGMENT;
 	z = ac->preferred_zoneref;
+	/*遍历满足要求的zone,记为z*/
 	for_next_zone_zonelist_nodemask(zone, z, ac->highest_zoneidx,
 					ac->nodemask) {
 		struct page *page;
@@ -4183,7 +4188,7 @@ retry:
 		}
 
 try_this_zone:
-        //自zone上申请page
+        //自此zone上申请page
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
@@ -4309,6 +4314,7 @@ __alloc_pages_may_oom(gfp_t gfp_mask, unsigned int order,
 	 * making progress for us.
 	 */
 	if (!mutex_trylock(&oom_lock)) {
+	    /*没有拿到锁，退出*/
 		*did_some_progress = 1;
 		schedule_timeout_uninterruptible(1);
 		return NULL;
@@ -5174,7 +5180,7 @@ got_pg:
 
 static inline bool prepare_alloc_pages(gfp_t gfp_mask, unsigned int order,
 		int preferred_nid, nodemask_t *nodemask,
-		struct alloc_context *ac, gfp_t *alloc_gfp,
+		struct alloc_context *ac/*出参，页申请的上下文*/, gfp_t *alloc_gfp,
 		unsigned int *alloc_flags)
 {
 	ac->highest_zoneidx = gfp_zone(gfp_mask);
@@ -5367,7 +5373,7 @@ EXPORT_SYMBOL_GPL(__alloc_pages_bulk);
  * This is the 'heart' of the zoned buddy allocator.
  */
 struct page *__alloc_pages(gfp_t gfp, unsigned int order/*page数目-1*/, int preferred_nid/*优先选择的numa node*/,
-							nodemask_t *nodemask)
+							nodemask_t *nodemask/*容许使用的node mask,如为空，则必须为perferred_nid*/)
 {
 	struct page *page;
 	unsigned int alloc_flags = ALLOC_WMARK_LOW;
@@ -5395,6 +5401,7 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order/*page数目-1*/, int pr
 	 */
 	gfp = current_gfp_context(gfp);
 	alloc_gfp = gfp;
+	/*准备alloc context*/
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
 			&alloc_gfp, &alloc_flags))
 		return NULL;
@@ -6187,18 +6194,21 @@ static int find_next_best_node(int node, nodemask_t *used_node_mask)
 
 	/* Use the local node if we haven't already */
 	if (!node_isset(node, *used_node_mask)) {
+	    /*node不在used_node_mask中，设置它*/
 		node_set(node, *used_node_mask);
 		return node;
 	}
 
+	/*按N_MEMORY进行node遍历*/
 	for_each_node_state(n, N_MEMORY) {
 
 		/* Don't want a node to appear more than once */
 		if (node_isset(n, *used_node_mask))
+		    /*已在mask中设置*/
 			continue;
 
 		/* Use the distance array to find the distance */
-		val = node_distance(node, n);
+		val = node_distance(node, n);/*检查n与node间距离*/
 
 		/* Penalize nodes under us ("prefer the next node") */
 		val += (n < node);

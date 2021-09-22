@@ -182,6 +182,7 @@ struct tcp_sock {
 	u32	data_segs_in;	/* RFC4898 tcpEStatsPerfDataSegsIn
 				 * total number of data segments in.
 				 */
+	/*我们期望收到的下一个seq*/
  	u32	rcv_nxt;	/* What we want to receive next 	*/
 	u32	copied_seq;	/* Head of yet unread data		*/
 	u32	rcv_wup;	/* rcv_nxt on last window update sent	*/
@@ -234,6 +235,7 @@ struct tcp_sock {
 		   dsack_seen:1, /* Whether DSACK seen after last adj */
 		   advanced:1;	 /* mstamp advanced since last lost marking */
 	} rack;
+	/*宣告的本端mss*/
 	u16	advmss;		/* Advertised MSS			*/
 	u8	compressed_ack;
 	u8	dup_ack_counter:2,
@@ -295,7 +297,9 @@ struct tcp_sock {
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)
  */
+	/*慢启动门限值*/
  	u32	snd_ssthresh;	/* Slow start size threshold		*/
+ 	/*发送方拥塞窗口*/
  	u32	snd_cwnd;	/* Sending congestion window		*/
 	u32	snd_cwnd_cnt;	/* Linear increase counter		*/
 	u32	snd_cwnd_clamp; /* Do not allow snd_cwnd to grow above this */

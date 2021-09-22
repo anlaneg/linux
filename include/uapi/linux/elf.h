@@ -65,7 +65,9 @@ typedef __s64	Elf64_Sxword;
 /* These constants define the different elf file types */
 #define ET_NONE   0
 #define ET_REL    1
+/*可执行程序*/
 #define ET_EXEC   2
+/*动态库*/
 #define ET_DYN    3
 #define ET_CORE   4
 #define ET_LOPROC 0xff00
@@ -203,37 +205,38 @@ typedef struct elf64_sym {
 #define EI_NIDENT	16
 
 typedef struct elf32_hdr{
-  unsigned char	e_ident[EI_NIDENT];
-  Elf32_Half	e_type;
+  unsigned char	e_ident[EI_NIDENT];/*elf的magic字符串*/
+  Elf32_Half	e_type;/*文件类型，例如ET_EXEC*/
   Elf32_Half	e_machine;
   Elf32_Word	e_version;
   Elf32_Addr	e_entry;  /* Entry point */
-  Elf32_Off	e_phoff;
-  Elf32_Off	e_shoff;
+  Elf32_Off	e_phoff;/*program header entry在文件中的起始位置*/
+  Elf32_Off	e_shoff;/*section header entry在文件中的起始位置*/
   Elf32_Word	e_flags;
   Elf32_Half	e_ehsize;
-  Elf32_Half	e_phentsize;
-  Elf32_Half	e_phnum;
-  Elf32_Half	e_shentsize;
-  Elf32_Half	e_shnum;
+  Elf32_Half	e_phentsize;/*program header entry的大小*/
+  Elf32_Half	e_phnum;/*program header entry的数目*/
+  Elf32_Half	e_shentsize;/*section entry 的大小*/
+  Elf32_Half	e_shnum;/*section entry的数目*/
   Elf32_Half	e_shstrndx;
 } Elf32_Ehdr;
 
 typedef struct elf64_hdr {
+  /*elf的magic字符串*/
   unsigned char	e_ident[EI_NIDENT];	/* ELF "magic number" */
-  Elf64_Half e_type;
-  Elf64_Half e_machine;
-  Elf64_Word e_version;
+  Elf64_Half e_type;/*文件类型，例如ET_EXEC*/
+  Elf64_Half e_machine;/*体系结构*/
+  Elf64_Word e_version;/*obj文件版本号*/
   Elf64_Addr e_entry;		/* Entry point virtual address */
   Elf64_Off e_phoff;		/* Program header table file offset */
   Elf64_Off e_shoff;		/* Section header table file offset */
-  Elf64_Word e_flags;
-  Elf64_Half e_ehsize;
-  Elf64_Half e_phentsize;
-  Elf64_Half e_phnum;
-  Elf64_Half e_shentsize;
-  Elf64_Half e_shnum;
-  Elf64_Half e_shstrndx;
+  Elf64_Word e_flags;/*处理器相关的flags*/
+  Elf64_Half e_ehsize;/*elf头部长度大小*/
+  Elf64_Half e_phentsize;/*program header entry size,必须为sizeof(elf_phdr)*/
+  Elf64_Half e_phnum;/*number of program header entries*/
+  Elf64_Half e_shentsize;/*section header entry size*/
+  Elf64_Half e_shnum;/*number of section header entries*/
+  Elf64_Half e_shstrndx;/*section string table index*/
 } Elf64_Ehdr;
 
 /* These constants define the permissions on sections in the program

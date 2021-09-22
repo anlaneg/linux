@@ -786,7 +786,7 @@ struct kmem_cache *kmalloc_slab(size_t size, gfp_t flags)
  * kmalloc-32M.
  */
 const struct kmalloc_info_struct kmalloc_info[] __initconst = {
-	INIT_KMALLOC_INFO(0, 0),//size为0
+	INIT_KMALLOC_INFO(0, 0),//size为0(不使用）
 	INIT_KMALLOC_INFO(96, 96),
 	INIT_KMALLOC_INFO(192, 192),
 	INIT_KMALLOC_INFO(8, 8),
@@ -966,6 +966,7 @@ void *kmalloc_order(size_t size, gfp_t flags, unsigned int order)
 	void *ret = NULL;
 	struct page *page;
 
+	/*移除掉GFP_SLAB_BUG_MASK标记*/
 	if (unlikely(flags & GFP_SLAB_BUG_MASK))
 		flags = kmalloc_fix_flags(flags);
 
@@ -984,7 +985,7 @@ void *kmalloc_order(size_t size, gfp_t flags, unsigned int order)
 EXPORT_SYMBOL(kmalloc_order);
 
 #ifdef CONFIG_TRACING
-void *kmalloc_order_trace(size_t size, gfp_t flags, unsigned int order)
+void *kmalloc_order_trace(size_t size, gfp_t flags, unsigned int order/*0表示申请1页，1表示申请2页*/)
 {
 	void *ret = kmalloc_order(size, flags, order);
 	trace_kmalloc(_RET_IP_, ret, size, PAGE_SIZE << order, flags);

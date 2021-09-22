@@ -791,6 +791,7 @@ static inline u32 tcp_time_stamp(const struct tcp_sock *tp)
 /* Convert a nsec timestamp into TCP TSval timestamp (ms based currently) */
 static inline u32 tcp_ns_to_ts(u64 ns)
 {
+    /*纳秒转 ts*/
 	return div_u64(ns, NSEC_PER_SEC / TCP_TS_HZ);
 }
 
@@ -850,7 +851,7 @@ struct tcp_skb_cb {
 		 */
 		__u32		tcp_tw_isn;
 		struct {
-			u16	tcp_gso_segs;
+			u16	tcp_gso_segs;/*gso段数*/
 			u16	tcp_gso_size;
 		};
 	};
@@ -1047,7 +1048,7 @@ struct tcp_congestion_ops {
 /* fast path fields are put first to fill one cache line */
 
 	/* return slow start threshold (required) */
-	u32 (*ssthresh)(struct sock *sk);
+	u32 (*ssthresh)(struct sock *sk);/*返回慢启动时的门限值*/
 
 	/* do new cwnd calculation (required) */
 	void (*cong_avoid)(struct sock *sk, u32 ack, u32 acked);
@@ -1080,19 +1081,20 @@ struct tcp_congestion_ops {
 
 /* control/slow paths put last */
 	/* get info for inet_diag (optional) */
+	/*扩展信息获取*/
 	size_t (*get_info)(struct sock *sk, u32 ext, int *attr,
 			   union tcp_cc_info *info);
 
-	char 			name[TCP_CA_NAME_MAX];
+	char 			name[TCP_CA_NAME_MAX];/*拥塞算法名称*/
 	struct module		*owner;
 	struct list_head	list;
-	u32			key;
+	u32			key;/*利用name字段计算的hash key*/
 	u32			flags;
 
 	/* initialize private data (optional) */
-	void (*init)(struct sock *sk);
+	void (*init)(struct sock *sk);/*私有数据初始化*/
 	/* cleanup private data  (optional) */
-	void (*release)(struct sock *sk);
+	void (*release)(struct sock *sk);/*私有数据清除*/
 } ____cacheline_aligned_in_smp;
 
 int tcp_register_congestion_control(struct tcp_congestion_ops *type);
@@ -1132,9 +1134,11 @@ static inline bool tcp_ca_needs_ecn(const struct sock *sk)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 
+	/*检查拥塞算法是否需要ecn使能*/
 	return icsk->icsk_ca_ops->flags & TCP_CONG_NEEDS_ECN;
 }
 
+/*设置拥塞状态*/
 static inline void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -1144,6 +1148,7 @@ static inline void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 	icsk->icsk_ca_state = ca_state;
 }
 
+/*触发窗口事件*/
 static inline void tcp_ca_event(struct sock *sk, const enum tcp_ca_event event)
 {
 	const struct inet_connection_sock *icsk = inet_csk(sk);

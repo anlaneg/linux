@@ -572,6 +572,7 @@ void inet_csk_init_xmit_timers(struct sock *sk,
 			       void (*delack_handler)(struct timer_list *t),
 			       void (*keepalive_handler)(struct timer_list *t))
 {
+    /*初始化发送相关的三个timer,重传timer,delay ack，keepalive timer*/
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	timer_setup(&icsk->icsk_retransmit_timer, retransmit_handler, 0);
@@ -583,6 +584,7 @@ EXPORT_SYMBOL(inet_csk_init_xmit_timers);
 
 void inet_csk_clear_xmit_timers(struct sock *sk)
 {
+    /*停止各发送相关的timer*/
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	icsk->icsk_pending = icsk->icsk_ack.pending = 0;

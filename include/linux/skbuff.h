@@ -887,8 +887,8 @@ struct sk_buff {
 	union {
 		__wsum		csum;
 		struct {
-			__u16	csum_start;
-			__u16	csum_offset;
+			__u16	csum_start;/*checksum计算的起始位置*/
+			__u16	csum_offset;/*checksum字段的填充位置*/
 		};
 	};
 	__u32			priority;

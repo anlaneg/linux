@@ -1294,6 +1294,7 @@ static void set_class_tag(struct rtable *rt, u32 tag)
 
 static unsigned int ipv4_default_advmss(const struct dst_entry *dst)
 {
+    /*tcp头+udp头（不含选项）*/
 	unsigned int header_size = sizeof(struct tcphdr) + sizeof(struct iphdr);
 	unsigned int advmss = max_t(unsigned int, ipv4_mtu(dst) - header_size,
 				    ip_rt_min_advmss);
@@ -1306,12 +1307,14 @@ INDIRECT_CALLABLE_SCOPE unsigned int ipv4_mtu(const struct dst_entry *dst)
 	const struct rtable *rt = (const struct rtable *)dst;
 	unsigned int mtu = rt->rt_pmtu;
 
+	/*自metric中尝试获取*/
 	if (!mtu || time_after_eq(jiffies, rt->dst.expires))
 		mtu = dst_metric_raw(dst, RTAX_MTU);
 
 	if (mtu)
 		goto out;
 
+	/*读取出接口上的mtu*/
 	mtu = READ_ONCE(dst->dev->mtu);
 
 	if (unlikely(ip_mtu_locked(dst))) {
@@ -1322,6 +1325,7 @@ INDIRECT_CALLABLE_SCOPE unsigned int ipv4_mtu(const struct dst_entry *dst)
 out:
 	mtu = min_t(unsigned int, mtu, IP_MAX_MTU);
 
+	/*mtu减去轻量隧道的headdroom*/
 	return mtu - lwtunnel_headroom(dst->lwtstate, mtu);
 }
 EXPORT_INDIRECT_CALLABLE(ipv4_mtu);

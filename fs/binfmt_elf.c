@@ -97,6 +97,7 @@ static int elf_core_dump(struct coredump_params *cprm);
 #define ELF_PAGEOFFSET(_v) ((_v) & (ELF_MIN_ALIGN-1))
 #define ELF_PAGEALIGN(_v) (((_v) + ELF_MIN_ALIGN - 1) & ~(ELF_MIN_ALIGN - 1))
 
+/*可执行文件elf格式*/
 static struct linux_binfmt elf_format = {
 	.module		= THIS_MODULE,
 	.load_binary	= load_elf_binary,
@@ -403,16 +404,18 @@ static unsigned long total_mapping_size(const struct elf_phdr *cmds, int nr)
 {
 	int i, first_idx = -1, last_idx = -1;
 
+	/*遍历program header*/
 	for (i = 0; i < nr; i++) {
 		if (cmds[i].p_type == PT_LOAD) {
-			last_idx = i;
+			last_idx = i;/*记录最后一个load*/
 			if (first_idx == -1)
-				first_idx = i;
+				first_idx = i;/*记录首个load*/
 		}
 	}
 	if (first_idx == -1)
 		return 0;
 
+	/*返回各段大小（这里认为memsz与filesz相等）*/
 	return cmds[last_idx].p_vaddr + cmds[last_idx].p_memsz -
 				ELF_PAGESTART(cmds[first_idx].p_vaddr);
 }
@@ -461,6 +464,7 @@ static unsigned long maximum_alignment(struct elf_phdr *cmds, int nr)
 static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 				       struct file *elf_file)
 {
+    /*保存program header*/
 	struct elf_phdr *elf_phdata = NULL;
 	int retval, err = -1;
 	unsigned int size;
@@ -475,12 +479,12 @@ static struct elf_phdr *load_elf_phdrs(const struct elfhdr *elf_ex,
 
 	/* Sanity check the number of program headers... */
 	/* ...and their total size. */
-	//头部不能过大（8192）
+	//program header 长度不能过大
 	size = sizeof(struct elf_phdr) * elf_ex->e_phnum;
 	if (size == 0 || size > 65536 || size > ELF_MIN_ALIGN)
 		goto out;
 
-	//申请program需要的内存，并自文件中读取它
+	//申请program header entries需要的内存，并自文件中读取它
 	elf_phdata = kmalloc(size, GFP_KERNEL);
 	if (!elf_phdata)
 		goto out;
@@ -610,11 +614,13 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	/* First of all, some simple consistency checks */
 	if (interp_elf_ex->e_type != ET_EXEC &&
 	    interp_elf_ex->e_type != ET_DYN)
+	    /*解释器的类型必须为exec,dyn类型*/
 		goto out;
 	if (!elf_check_arch(interp_elf_ex) ||
 	    elf_check_fdpic(interp_elf_ex))
 		goto out;
 	if (!interpreter->f_op->mmap)
+	    /*必须支持mmap*/
 		goto out;
 
 	total_size = total_mapping_size(interp_elf_phdata,
@@ -831,7 +837,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
  	unsigned long load_addr = 0, load_bias = 0;
 	int load_addr_set = 0;
 	unsigned long error;
-	struct elf_phdr *elf_ppnt/*指向program header的指针*/, *elf_phdata, *interp_elf_phdata = NULL;
+	struct elf_phdr *elf_ppnt/*指向program header的指针*/, *elf_phdata/*指向elf文件中所有program header*/, *interp_elf_phdata = NULL;/*指向解释器的program headers*/
 	struct elf_phdr *elf_property_phdata = NULL;
 	unsigned long elf_bss, elf_brk;
 	int bss_prot = 0;
@@ -842,8 +848,10 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	unsigned long start_code, end_code, start_data, end_data;
 	unsigned long reloc_func_desc __maybe_unused = 0;
 	int executable_stack = EXSTACK_DEFAULT;
+	/*指向elf文件头指始位置（bprm->buf中是预读的内容）*/
 	struct elfhdr *elf_ex = (struct elfhdr *)bprm->buf;
-	struct elfhdr *interp_elf_ex = NULL;//指向解析器对应的elf文件头部
+	//指向解析器对应的elf文件头部
+	struct elfhdr *interp_elf_ex = NULL;
 	struct arch_elf_state arch_state = INIT_ARCH_ELF_STATE;
 	struct mm_struct *mm;
 	struct pt_regs *regs;
@@ -857,15 +865,18 @@ static int load_elf_binary(struct linux_binprm *bprm)
 	//只处理exec文件或者动态库文件
 	if (elf_ex->e_type != ET_EXEC && elf_ex->e_type != ET_DYN)
 		goto out;
+
 	//检查是否为本体系对应的elf文件
 	if (!elf_check_arch(elf_ex))
 		goto out;
 	if (elf_check_fdpic(elf_ex))
 		goto out;
+
+	/*此文件必须支持mmap操作*/
 	if (!bprm->file->f_op->mmap)
 		goto out;
 
-	//自文件中装载program header,并返回
+	//自文件中装载所有program header,并返回
 	elf_phdata = load_elf_phdrs(elf_ex, bprm->file);
 	if (!elf_phdata)
 		goto out;
@@ -880,6 +891,7 @@ static int load_elf_binary(struct linux_binprm *bprm)
 			continue;
 		}
 
+		/*只处理program header为interp*/
 		if (elf_ppnt->p_type != PT_INTERP)
 			continue;
 		/*
@@ -887,11 +899,11 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		 * for now assume that this is an a.out format binary.
 		 */
 		retval = -ENOEXEC;
-		//校验不合法的解析器路径
+		//PT_INTERP这个segment在elf文件中是一个路径地址，其大小不能超过PATH_MAX，也不能小于2
 		if (elf_ppnt->p_filesz > PATH_MAX || elf_ppnt->p_filesz < 2)
 			goto out_free_ph;
 
-		//申请解析器所需要的内存
+		//申请解析器路径所需要的内存
 		retval = -ENOMEM;
 		elf_interpreter = kmalloc(elf_ppnt->p_filesz, GFP_KERNEL);
 		if (!elf_interpreter)
@@ -902,12 +914,13 @@ static int load_elf_binary(struct linux_binprm *bprm)
 				  elf_ppnt->p_offset);
 		if (retval < 0)
 			goto out_free_interp;
+
 		/* make sure path is NULL terminated */
 		retval = -ENOEXEC;
 		if (elf_interpreter[elf_ppnt->p_filesz - 1] != '\0')
 			goto out_free_interp;
 
-		//打开解析器对应的文件（如果文件不存在，将出错）
+		//打开解析器对应的文件,例如"/lib64/ld-linux-x86-64.so.2\0"（此文件从属于glibc）
 		interpreter = open_exec(elf_interpreter);
 		kfree(elf_interpreter);
 		retval = PTR_ERR(interpreter);
@@ -927,13 +940,14 @@ static int load_elf_binary(struct linux_binprm *bprm)
 		}
 
 		/* Get the exec headers */
-		//加载解析器的elf头部到loc->interp_elf_ex
+		//加载解析器的elf头部到interp_elf_ex
 		retval = elf_read(interpreter, interp_elf_ex,
 				  sizeof(*interp_elf_ex), 0);
 		if (retval < 0)
 			goto out_free_dentry;
 
-		break;//已发现并加载解析器，跳出
+		//已发现并加载解析器，跳出
+		break;
 
 out_free_interp:
 		kfree(elf_interpreter);
@@ -961,7 +975,7 @@ out_free_interp:
 		}
 
 	/* Some simple consistency checks for the interpreter */
-	//如果有解析器，则检查解析器程序是否合法，并装载解析器ph到interp_elf_phdata
+	//如果有解释器，则检查解释器程序是否合法，并装载解析器ph到interp_elf_phdata
 	//检查interp_elf ph类型的合法性
 	if (interpreter) {
 		retval = -ELIBBAD;
@@ -971,9 +985,11 @@ out_free_interp:
 		/* Verify the interpreter has a valid arch */
 		if (!elf_check_arch(interp_elf_ex) ||
 		    elf_check_fdpic(interp_elf_ex))
+		    /*检查解释器是否有效*/
 			goto out_free_dentry;
 
 		/* Load the interpreter program headers */
+		/*加载解释器的所有program headers*/
 		interp_elf_phdata = load_elf_phdrs(interp_elf_ex,
 						   interpreter);
 		if (!interp_elf_phdata)
@@ -981,7 +997,6 @@ out_free_interp:
 
 		/* Pass PT_LOPROC..PT_HIPROC headers to arch code */
 		elf_property_phdata = NULL;
-		//校验解析器的体系代码
 		elf_ppnt = interp_elf_phdata;
 		for (i = 0; i < interp_elf_ex->e_phnum; i++, elf_ppnt++)
 			switch (elf_ppnt->p_type) {
@@ -1234,6 +1249,7 @@ out_free_interp:
 	}
 
 	if (interpreter) {
+	    /*加载解释器*/
 		elf_entry = load_elf_interp(interp_elf_ex,
 					    interpreter,
 					    load_bias, interp_elf_phdata,
@@ -2320,6 +2336,7 @@ end_coredump:
 
 static int __init init_elf_binfmt(void)
 {
+    /*注册elf二进制文件格式*/
 	register_binfmt(&elf_format);
 	return 0;
 }

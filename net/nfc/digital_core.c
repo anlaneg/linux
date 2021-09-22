@@ -388,6 +388,7 @@ int digital_target_found(struct nfc_digital_dev *ddev,
 	poll_tech_count = ddev->poll_tech_count;
 	ddev->poll_tech_count = 0;
 
+	/*发现target*/
 	rc = nfc_targets_found(ddev->nfc_dev, target, 1);
 	if (rc) {
 		ddev->poll_tech_count = poll_tech_count;

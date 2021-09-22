@@ -138,11 +138,14 @@ enum
 	TCP_MIB_ATTEMPTFAILS,			/* AttemptFails */
 	TCP_MIB_ESTABRESETS,			/* EstabResets */
 	TCP_MIB_CURRESTAB,			/* CurrEstab */
+	/*tcp入口总报文数（含错包，ipv4/ipv6）*/
 	TCP_MIB_INSEGS,				/* InSegs */
 	TCP_MIB_OUTSEGS,			/* OutSegs */
 	TCP_MIB_RETRANSSEGS,			/* RetransSegs */
+	/*tcp入口进来的总错包数*/
 	TCP_MIB_INERRS,				/* InErrs */
 	TCP_MIB_OUTRSTS,			/* OutRsts */
+	/*tcp checksum错误总数*/
 	TCP_MIB_CSUMERRORS,			/* InCsumErrors */
 	__TCP_MIB_MAX
 };

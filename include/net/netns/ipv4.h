@@ -139,11 +139,11 @@ struct netns_ipv4 {
 	u8 sysctl_tcp_tw_reuse;
 	int sysctl_tcp_fin_timeout;
 	unsigned int sysctl_tcp_notsent_lowat;
-	//开启tcp sack
+	//是否开启tcp sack
 	u8 sysctl_tcp_sack;
 	//开启tcp窗口扩大选项
 	u8 sysctl_tcp_window_scaling;
-	u8 sysctl_tcp_timestamps;
+	u8 sysctl_tcp_timestamps;/*是否开启时间签*/
 	u8 sysctl_tcp_early_retrans;
 	u8 sysctl_tcp_recovery;
 	u8 sysctl_tcp_thin_linear_timeouts;
@@ -179,6 +179,7 @@ struct netns_ipv4 {
 	unsigned long sysctl_tcp_comp_sack_slack_ns;
 	int sysctl_max_syn_backlog;
 	int sysctl_tcp_fastopen;
+	/*设置默认拥塞控制算法*/
 	const struct tcp_congestion_ops __rcu  *tcp_congestion_control;
 	struct tcp_fastopen_context __rcu *tcp_fastopen_ctx;
 	spinlock_t tcp_fastopen_ctx_lock;

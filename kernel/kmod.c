@@ -97,6 +97,7 @@ static int call_modprobe(char *module_name, int wait)
 	info = call_usermodehelper_setup(modprobe_path, argv, envp, GFP_KERNEL,
 					 NULL, free_modprobe_argv, NULL);
 	if (!info)
+	    /*构建subinfo失败*/
 		goto free_module_name;
 
 	return call_usermodehelper_exec(info, wait | UMH_KILLABLE);

@@ -4999,6 +4999,7 @@ static int _bpf_getsockopt(struct sock *sk, int level, int optname,
 
 			if (!icsk->icsk_ca_ops || optlen <= 1)
 				goto err_clear;
+			/*取当前socket的拥塞控制算法名称*/
 			strncpy(optval, icsk->icsk_ca_ops->name, optlen);
 			optval[optlen - 1] = 0;
 			break;

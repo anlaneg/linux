@@ -66,7 +66,7 @@ struct linux_binprm {
 
 	struct rlimit rlim_stack; /* Saved RLIMIT_STACK used during exec. */
 
-	char buf[BINPRM_BUF_SIZE];
+	char buf[BINPRM_BUF_SIZE];/*自文件中预读出来的内容*/
 } __randomize_layout;
 
 #define BINPRM_FLAGS_ENFORCE_NONDUMP_BIT 0
@@ -111,11 +111,13 @@ extern void __register_binfmt(struct linux_binfmt *fmt, int insert);
 /* Registration of default binfmt handlers */
 static inline void register_binfmt(struct linux_binfmt *fmt)
 {
+    /*注册可执行的二进制，并放在链表尾部*/
 	__register_binfmt(fmt, 0);
 }
 /* Same as above, but adds a new binfmt at the top of the list */
 static inline void insert_binfmt(struct linux_binfmt *fmt)
 {
+    /*注册可执行的二进制，并放在链表头部*/
 	__register_binfmt(fmt, 1);
 }
 

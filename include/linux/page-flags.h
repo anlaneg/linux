@@ -745,18 +745,18 @@ static inline int page_has_type(struct page *page)
 }
 
 #define PAGE_TYPE_OPS(uname, lname)					\
-    /*由于这里函数名恰与实现相反，故此函数用于查询page的page_type是否包含指定标记*/\
+/*由于这里函数名恰与实现相反，故此函数用于查询page的page_type是否包含指定标记*/\
 static __always_inline int Page##uname(struct page *page)		\
 {									\
 	return PageType(page, PG_##lname);				\
 }									\
-    /*为page的page_type清除标记*/\
+/*为page的page_type打上标记*/\
 static __always_inline void __SetPage##uname(struct page *page)		\
 {									\
 	VM_BUG_ON_PAGE(!PageType(page, 0), page);			\
 	page->page_type &= ~PG_##lname;					\
 }									\
-    /*为page的page_type打上标记*/\
+/*为page的page_type清除标记*/\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 {									\
 	VM_BUG_ON_PAGE(!Page##uname(page), page);			\

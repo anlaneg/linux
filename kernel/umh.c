@@ -98,6 +98,7 @@ static int call_usermodehelper_exec_async(void *data)
 					     new->cap_inheritable);
 	spin_unlock(&umh_sysctl_lock);
 
+	/*执行init函数*/
 	if (sub_info->init) {
 		retval = sub_info->init(sub_info, new);
 		if (retval) {
@@ -109,6 +110,7 @@ static int call_usermodehelper_exec_async(void *data)
 	commit_creds(new);
 
 	wait_for_initramfs();
+	/*执行sub_info->path指定的程序*/
 	retval = kernel_execve(sub_info->path,
 			       (const char *const *)sub_info->argv,
 			       (const char *const *)sub_info->envp);
@@ -159,6 +161,7 @@ static void call_usermodehelper_exec_sync(struct subprocess_info *sub_info)
  */
 static void call_usermodehelper_exec_work(struct work_struct *work)
 {
+    /*执行sub_info指定的程序*/
 	struct subprocess_info *sub_info =
 		container_of(work, struct subprocess_info, work);
 
@@ -355,8 +358,8 @@ static void helper_unlock(void)
  * Function must be runnable in either a process context or the
  * context in which call_usermodehelper_exec is called.
  */
-struct subprocess_info *call_usermodehelper_setup(const char *path, char **argv,
-		char **envp, gfp_t gfp_mask,
+struct subprocess_info *call_usermodehelper_setup(const char *path/*程序路径及名称*/, char **argv/*程序参数*/,
+		char **envp/*程序环境变量*/, gfp_t gfp_mask,
 		int (*init)(struct subprocess_info *info, struct cred *new),
 		void (*cleanup)(struct subprocess_info *info),
 		void *data)
@@ -408,10 +411,12 @@ int call_usermodehelper_exec(struct subprocess_info *sub_info, int wait)
 	int retval = 0;
 
 	if (!sub_info->path) {
+	    /*没有提供path,执行cleanup回调后退出*/
 		call_usermodehelper_freeinfo(sub_info);
 		return -EINVAL;
 	}
 	helper_lock();
+	/*禁止了usermodehelper,退出*/
 	if (usermodehelper_disabled) {
 		retval = -EBUSY;
 		goto out;
@@ -423,6 +428,7 @@ int call_usermodehelper_exec(struct subprocess_info *sub_info, int wait)
 	 * disable all call_usermodehelper() calls.
 	 */
 	if (strlen(sub_info->path) == 0)
+	    /*path为空串，退出*/
 		goto out;
 
 	/*
@@ -452,6 +458,7 @@ int call_usermodehelper_exec(struct subprocess_info *sub_info, int wait)
 wait_done:
 	retval = sub_info->retval;
 out:
+    /*执行cleanup回调*/
 	call_usermodehelper_freeinfo(sub_info);
 unlock:
 	helper_unlock();

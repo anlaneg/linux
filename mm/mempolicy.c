@@ -2232,6 +2232,7 @@ struct page *alloc_pages(gfp_t gfp, unsigned order)
 	struct page *page;
 
 	if (!in_interrupt() && !(gfp & __GFP_THISNODE))
+	    /*取当前进程的memory policy*/
 		pol = get_task_policy(current);
 
 	/*

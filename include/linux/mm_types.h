@@ -68,6 +68,7 @@ struct mem_cgroup;
 #endif
 
 struct page {
+    /*page所属的node id也在其上/ */
 	unsigned long flags;		/* Atomic flags, some possibly
 					 * updated asynchronously */
 	/*
@@ -507,7 +508,7 @@ struct mm_struct {
 		 */
 		struct mm_rss_stat rss_stat;
 
-		struct linux_binfmt *binfmt;
+		struct linux_binfmt *binfmt;/*二进制格式结构体*/
 
 		/* Architecture-specific MM context */
 		mm_context_t context;

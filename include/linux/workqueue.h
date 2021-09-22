@@ -237,6 +237,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 		(_work)->func = (_func);				\
 	} while (0)
 #else
+/*初始化work结构体*/
 #define __INIT_WORK(_work, _func, _onstack)				\
 	do {								\
 		__init_work((_work), _onstack);				\

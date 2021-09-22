@@ -18,6 +18,7 @@
 static inline bool spacetab(char c) { return c == ' ' || c == '\t'; }
 static inline const char *next_non_spacetab(const char *first, const char *last)
 {
+    /*从first到last查找首个非空格/非table字符并返回其对应的位置*/
 	for (; first <= last; first++)
 		if (!spacetab(*first))
 			return first;
@@ -31,6 +32,7 @@ static inline const char *next_terminator(const char *first, const char *last)
 	return NULL;
 }
 
+/*实现脚本加载*/
 static int load_script(struct linux_binprm *bprm)
 {
 	const char *i_name, *i_sep, *i_arg, *i_end, *buf_end;
@@ -59,6 +61,7 @@ static int load_script(struct linux_binprm *bprm)
 	buf_end = bprm->buf + sizeof(bprm->buf) - 1;
 	i_end = strnchr(bprm->buf, sizeof(bprm->buf), '\n');
 	if (!i_end) {
+	    /*没有找到换行符，定义i_end为首个非空格，非table字符*/
 		i_end = next_non_spacetab(bprm->buf + 2, buf_end);
 		if (!i_end)
 			return -ENOEXEC; /* Entire buf is spaces/tabs */
@@ -67,15 +70,18 @@ static int load_script(struct linux_binprm *bprm)
 		 * interpreter path is truncated.
 		 */
 		if (!next_terminator(i_end, buf_end))
+		    /*不存在下一个terminal字符，失败*/
 			return -ENOEXEC;
+		/*bprm->buf中存储的文字，没有包含换行符，但存在两个terminal字符，这种情况下指向字符结尾*/
 		i_end = buf_end;
 	}
+
 	/* Trim any trailing spaces/tabs from i_end */
 	while (spacetab(i_end[-1]))
-		i_end--;
+		i_end--;/*回退到最后一个非空字符*/
 
 	/* Skip over leading spaces/tabs */
-	i_name = next_non_spacetab(bprm->buf+2, i_end);
+	i_name = next_non_spacetab(bprm->buf+2, i_end);/*跳过前导的空字符*/
 	if (!i_name || (i_name == i_end))
 		return -ENOEXEC; /* No interpreter name found */
 
@@ -83,7 +89,7 @@ static int load_script(struct linux_binprm *bprm)
 	i_arg = NULL;
 	i_sep = next_terminator(i_name, i_end);
 	if (i_sep && (*i_sep != '\0'))
-		i_arg = next_non_spacetab(i_sep, i_end);
+		i_arg = next_non_spacetab(i_sep, i_end);/*指向参数*/
 
 	/*
 	 * If the script filename will be inaccessible after exec, typically
@@ -123,6 +129,7 @@ static int load_script(struct linux_binprm *bprm)
 	if (retval)
 		return retval;
 	bprm->argc++;
+	/*变更解析器(interp)为i_name*/
 	retval = bprm_change_interp(i_name, bprm);
 	if (retval < 0)
 		return retval;
@@ -130,7 +137,7 @@ static int load_script(struct linux_binprm *bprm)
 	/*
 	 * OK, now restart the process with the interpreter's dentry.
 	 */
-	file = open_exec(i_name);
+	file = open_exec(i_name);/*重新执行i_name文件*/
 	if (IS_ERR(file))
 		return PTR_ERR(file);
 
@@ -143,9 +150,9 @@ static struct linux_binfmt script_format = {
 	.load_binary	= load_script,//脚本加载
 };
 
-//注册可解析的格式
 static int __init init_script_binfmt(void)
 {
+    /*注册script可执行文件格式*/
 	register_binfmt(&script_format);
 	return 0;
 }

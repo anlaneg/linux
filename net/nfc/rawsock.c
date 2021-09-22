@@ -114,12 +114,15 @@ static int rawsock_connect(struct socket *sock, struct sockaddr *_addr,
 		goto error;
 	}
 
+	/*地址的target大于设备的下一次target index,说明地址不合法
+	 * 地址的target小于设备当前已知的最小target的index,说明地址不合法*/
 	if (addr->target_idx > dev->target_next_idx - 1 ||
 	    addr->target_idx < dev->target_next_idx - dev->n_targets) {
 		rc = -EINVAL;
 		goto put_dev;
 	}
 
+	/*激活要连接的target*/
 	rc = nfc_activate_target(dev, addr->target_idx, addr->nfc_protocol);
 	if (rc)
 		goto put_dev;

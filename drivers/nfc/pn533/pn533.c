@@ -1820,6 +1820,7 @@ static int pn533_activate_target_nfcdep(struct pn533 *dev)
 	return rc;
 }
 
+/*激活target*/
 static int pn533_activate_target(struct nfc_dev *nfc_dev,
 				 struct nfc_target *target, u32 protocol)
 {
@@ -2852,6 +2853,7 @@ EXPORT_SYMBOL_GPL(pn53x_common_clean);
 int pn532_i2c_nfc_alloc(struct pn533 *priv, u32 protocols,
 			struct device *parent)
 {
+    /*申请nfc设备*/
 	priv->nfc_dev = nfc_allocate_device(&pn533_nfc_ops, protocols,
 					   priv->ops->tx_header_len +
 					   PN533_CMD_DATAEXCH_HEAD_LEN,

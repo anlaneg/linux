@@ -308,7 +308,7 @@ static inline void ip_route_connect_init(struct flowi4 *fl4, __be32 dst, __be32 
 
 static inline struct rtable *ip_route_connect(struct flowi4 *fl4,
 					      __be32 dst, __be32 src, u32 tos,
-					      int oif, u8 protocol,
+					      int oif, u8 protocol/*协议号*/,
 					      __be16 sport, __be16 dport,
 					      struct sock *sk)
 {

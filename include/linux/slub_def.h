@@ -86,7 +86,7 @@ struct kmem_cache_order_objects {
  * Slab cache management.
  */
 struct kmem_cache {
-        //cpu_slab是一个percpu变量，按cpu缓存的obj
+    //cpu_slab是一个percpu变量，按cpu缓存的obj
 	struct kmem_cache_cpu __percpu *cpu_slab;
 	/* Used for retrieving partial slabs, etc. */
 	slab_flags_t flags;

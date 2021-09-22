@@ -124,8 +124,9 @@ struct usb_device_id {
 	__u16		match_flags;
 
 	/* Used for product specific matches; range is inclusive */
-	__u16		idVendor;
-	__u16		idProduct;
+	__u16		idVendor;/*设备厂家*/
+	__u16		idProduct;/*产品id*/
+
 	//lo,hi指定一个范围，与bcdDevice进行匹配
 	__u16		bcdDevice_lo;
 	__u16		bcdDevice_hi;

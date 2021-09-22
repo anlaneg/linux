@@ -30,6 +30,7 @@
 #define ACS_VENDOR_ID 0x072f
 #define ACR122U_PRODUCT_ID 0x2200
 
+/*当前驱动支持的设备列表*/
 static const struct usb_device_id pn533_usb_table[] = {
 	{ USB_DEVICE(PN533_VENDOR_ID, PN533_PRODUCT_ID),
 	  .driver_info = PN533_DEVICE_STD },
@@ -607,6 +608,7 @@ static void pn533_usb_disconnect(struct usb_interface *interface)
 	nfc_info(&interface->dev, "NXP PN533 NFC device disconnected\n");
 }
 
+/*pn533 usb驱动*/
 static struct usb_driver pn533_usb_driver = {
 	.name =		"pn533_usb",
 	.probe =	pn533_usb_probe,

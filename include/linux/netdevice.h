@@ -3107,6 +3107,7 @@ static inline unsigned int skb_gro_len(const struct sk_buff *skb)
 	return skb->len - NAPI_GRO_CB(skb)->data_offset;
 }
 
+/*gro处理时的剥头方式*/
 static inline void skb_gro_pull(struct sk_buff *skb, unsigned int len)
 {
 	NAPI_GRO_CB(skb)->data_offset += len;
@@ -5128,6 +5129,7 @@ static inline netdev_features_t netdev_intersect_features(netdev_features_t f1,
 	return f1 & f2;
 }
 
+/*开启期望功能后的hw_features*/
 static inline netdev_features_t netdev_get_wanted_features(
 	struct net_device *dev)
 {

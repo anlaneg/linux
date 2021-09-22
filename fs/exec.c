@@ -82,8 +82,8 @@ int suid_dumpable = 0;
 static LIST_HEAD(formats);
 static DEFINE_RWLOCK(binfmt_lock);
 
-//注册二进制格式
-void __register_binfmt(struct linux_binfmt * fmt, int insert)
+//注册可执行的二进制格式
+void __register_binfmt(struct linux_binfmt * fmt, int insert/*是否放在头部*/)
 {
 	write_lock(&binfmt_lock);
 	//如果insert为真，则将fmt放置在formats之后，否则放在formats链的结尾
@@ -910,6 +910,7 @@ static struct file *do_open_execat(int fd, struct filename *name, int flags)
 	if (flags & AT_EMPTY_PATH)
 		open_exec_flags.lookup_flags |= LOOKUP_EMPTY;
 
+	/*打开文件$name*/
 	file = do_filp_open(fd, name, &open_exec_flags);
 	if (IS_ERR(file))
 		goto out;
@@ -1225,6 +1226,7 @@ void __set_task_comm(struct task_struct *tsk, const char *buf, bool exec)
 {
 	task_lock(tsk);
 	trace_task_rename(tsk, buf);
+	/*设置程序名称*/
 	strlcpy(tsk->comm, buf, sizeof(tsk->comm));
 	task_unlock(tsk);
 	perf_event_comm(tsk, exec);
@@ -1353,6 +1355,7 @@ int begin_new_exec(struct linux_binprm * bprm)
 		set_dumpable(current->mm, SUID_DUMP_USER);
 
 	perf_event_exec();
+	/*设置待执行的程序名称*/
 	__set_task_comm(me, kbasename(bprm->filename), true);
 
 	/* An exec changes our domain. We are no longer part of the thread
@@ -1668,6 +1671,7 @@ int remove_arg_zero(struct linux_binprm *bprm)
 	struct page *page;
 
 	if (!bprm->argc)
+	    /*没有参数，直接返回*/
 		return 0;
 
 	do {
@@ -1706,6 +1710,7 @@ static int search_binary_handler(struct linux_binprm *bprm)
 	struct linux_binfmt *fmt;
 	int retval;
 
+	/*预读进buffer*/
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		return retval;
@@ -1717,7 +1722,7 @@ static int search_binary_handler(struct linux_binprm *bprm)
 	retval = -ENOENT;
  retry:
 	read_lock(&binfmt_lock);
-	//遍历formats
+	//遍历formats，查找可处理此文件的exec fmt
 	list_for_each_entry(fmt, &formats, lh) {
 		if (!try_module_get(fmt->module))
 			continue;
@@ -1771,9 +1776,11 @@ static int exec_binprm(struct linux_binprm *bprm)
 		ret = search_binary_handler(bprm);
 		if (ret < 0)
 			return ret;
+		/*没有更新解析器，识别结束*/
 		if (!bprm->interpreter)
 			break;
 
+		/*更新了解析器，转而执行解析器*/
 		exec = bprm->file;
 		bprm->file = bprm->interpreter;
 		bprm->interpreter = NULL;
@@ -1812,6 +1819,7 @@ static int bprm_execve(struct linux_binprm *bprm,
 	check_unsafe_exec(bprm);
 	current->in_execve = 1;
 
+	/*打开filename对应的文件*/
 	file = do_open_execat(fd, filename, flags);
 	retval = PTR_ERR(file);
 	if (IS_ERR(file))
@@ -1832,7 +1840,6 @@ static int bprm_execve(struct linux_binprm *bprm,
 	if (bprm->fdpath && get_close_on_exec(fd))
 		bprm->interp_flags |= BINPRM_FLAGS_PATH_INACCESSIBLE;
 
-	//预读一定字节
 	/* Set the unchanging part of bprm->cred */
 	retval = security_bprm_creds_for_exec(bprm);
 	if (retval)
@@ -1937,6 +1944,7 @@ out_ret:
 	return retval;
 }
 
+/*kernel加载运行指定外部程序*/
 int kernel_execve(const char *kernel_filename,
 		  const char *const *argv, const char *const *envp)
 {
@@ -1974,10 +1982,12 @@ int kernel_execve(const char *kernel_filename,
 		goto out_free;
 	bprm->exec = bprm->p;
 
+	/*填充环境变量*/
 	retval = copy_strings_kernel(bprm->envc, envp, bprm);
 	if (retval < 0)
 		goto out_free;
 
+	/*填充参数*/
 	retval = copy_strings_kernel(bprm->argc, argv, bprm);
 	if (retval < 0)
 		goto out_free;

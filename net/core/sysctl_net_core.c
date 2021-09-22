@@ -575,6 +575,7 @@ static struct ctl_table net_core_table[] = {
 		.proc_handler	= proc_do_static_key,
 	},
 	{
+	    /*每收满多少个报文，才送给协议栈*/
 		.procname	= "gro_normal_batch",
 		.data		= &gro_normal_batch,
 		.maxlen		= sizeof(unsigned int),

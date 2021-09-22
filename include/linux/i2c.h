@@ -288,6 +288,7 @@ struct i2c_driver {
 	int (*command)(struct i2c_client *client, unsigned int cmd, void *arg);
 
 	struct device_driver driver;
+	/*驱动支持的设备*/
 	const struct i2c_device_id *id_table;
 
 	/* Device detection callback for automatic device creation */

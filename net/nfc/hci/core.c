@@ -947,6 +947,7 @@ static struct nfc_ops hci_nfc_ops = {
 	.se_io = hci_se_io,
 };
 
+/*hci设备申请创建*/
 struct nfc_hci_dev *nfc_hci_allocate_device(struct nfc_hci_ops *ops,
 					    struct nfc_hci_init_data *init_data,
 					    unsigned long quirks,
@@ -964,10 +965,12 @@ struct nfc_hci_dev *nfc_hci_allocate_device(struct nfc_hci_ops *ops,
 	if (protocols == 0)
 		return NULL;
 
+	/*hci设备申请*/
 	hdev = kzalloc(sizeof(struct nfc_hci_dev), GFP_KERNEL);
 	if (hdev == NULL)
 		return NULL;
 
+	/*llc设备申请*/
 	hdev->llc = nfc_llc_allocate(llc_name, hdev, ops->xmit,
 				     nfc_hci_recv_from_llc, tx_headroom,
 				     tx_tailroom, nfc_hci_llc_failure);
@@ -976,6 +979,7 @@ struct nfc_hci_dev *nfc_hci_allocate_device(struct nfc_hci_ops *ops,
 		return NULL;
 	}
 
+	/*nfc设备申请*/
 	hdev->ndev = nfc_allocate_device(&hci_nfc_ops, protocols,
 					 tx_headroom + HCI_CMDS_HEADROOM,
 					 tx_tailroom);

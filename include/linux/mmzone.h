@@ -25,7 +25,7 @@
 
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_FORCE_MAX_ZONEORDER
-#define MAX_ORDER 11
+#define MAX_ORDER 11 /*memory的最大order*/
 #else
 #define MAX_ORDER CONFIG_FORCE_MAX_ZONEORDER
 #endif
@@ -95,14 +95,17 @@ extern int page_group_by_mobility_disabled;
 	get_pfnblock_flags_mask(page, page_to_pfn(page), MIGRATETYPE_MASK)
 
 struct free_area {
-	struct list_head	free_list[MIGRATE_TYPES];//按不同类型划分的空闲链表
-	unsigned long		nr_free;//空闲的page数目
+    //按不同迁移类型划分的空闲链表
+	struct list_head	free_list[MIGRATE_TYPES];
+	//空闲的page数目
+	unsigned long		nr_free;
 };
 
+/*在area的空闲链中数组中按mirgrate type获取首个page记录*/
 static inline struct page *get_page_from_free_area(struct free_area *area,
 					    int migratetype)
 {
-	//依据migratetype获取空闲page
+	//依据migrate type获取空闲page
 	return list_first_entry_or_null(&area->free_list[migratetype],
 					struct page, lru);
 }
@@ -604,7 +607,8 @@ struct zone {
 	ZONE_PADDING(_pad1_)
 
 	/* free areas of different sizes */
-	struct free_area	free_area[MAX_ORDER];//不同大小(order)的空间area
+	//不同大小(order)对应的可用内存区域
+	struct free_area	free_area[MAX_ORDER];
 
 	/* zone flags, see below */
 	unsigned long		flags;
@@ -1157,6 +1161,7 @@ static __always_inline struct zoneref *next_zones_zonelist(struct zoneref *z,
 					nodemask_t *nodes)
 {
 	if (likely(!nodes && zonelist_zone_idx(z) <= highest_zoneidx))
+	    /*无node mask且z的index <=要求的，直接返回*/
 		return z;
 	return __next_zones_zonelist(z, highest_zoneidx, nodes);
 }

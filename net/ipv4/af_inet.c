@@ -610,6 +610,7 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 
 	if (data_race(!inet_sk(sk)->inet_num) && inet_autobind(sk))
 		return -EAGAIN;
+	/*交给各socket具体的协议完成报文方式的connect,例如ip4_datagram_connect*/
 	return sk->sk_prot->connect(sk, uaddr, addr_len);
 }
 EXPORT_SYMBOL(inet_dgram_connect);
@@ -669,6 +670,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 		}
 	}
 
+	/*检查socket当前状态*/
 	switch (sock->state) {
 	default:
 		err = -EINVAL;
@@ -694,10 +696,12 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 				goto out;
 		}
 
+		/*交给各socket具体的协议完成stream方式的connect,例如tcp_v4_connect*/
 		err = sk->sk_prot->connect(sk, uaddr, addr_len);
 		if (err < 0)
 			goto out;
 
+		/*连接成功，指定为connecting状态*/
 		sock->state = SS_CONNECTING;
 
 		if (!err && inet_sk(sk)->defer_connect)
@@ -752,6 +756,7 @@ sock_error:
 }
 EXPORT_SYMBOL(__inet_stream_connect);
 
+/*ipv4/ipv6处理stream方式的connect*/
 int inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 			int addr_len, int flags)
 {
@@ -1060,13 +1065,13 @@ static int inet_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned lon
 }
 #endif /* CONFIG_COMPAT */
 
-//tcp对应的socket操作集
+//inet stream对应的socket操作集
 const struct proto_ops inet_stream_ops = {
 	.family		   = PF_INET,
 	.owner		   = THIS_MODULE,
 	.release	   = inet_release,
 	.bind		   = inet_bind,
-	.connect	   = inet_stream_connect,
+	.connect	   = inet_stream_connect,/*ipv4/ipv6 stream方式connect实现*/
 	.socketpair	   = sock_no_socketpair,
 	.accept		   = inet_accept,
 	.getname	   = inet_getname,
@@ -1196,7 +1201,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
-    		   //注册 ip raw socket
+               //注册 ip raw socket
 	       .type =       SOCK_RAW,
 	       .protocol =   IPPROTO_IP,	/* wild card */
 	       .prot =       &raw_prot,
@@ -1515,7 +1520,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	proto = iph->protocol;
 
 	rcu_read_lock();
-	//查上层协议对应的gro ops
+	//查ip层协议对应的gro ops
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive)
 		//此协议不支持offload,直接输出
@@ -1611,7 +1616,7 @@ struct sk_buff *inet_gro_receive(struct list_head *head, struct sk_buff *skb)
 	skb_set_transport_header(skb, skb_gro_offset(skb));
 
 	//调用ip上层的协议gro处理
-	pp = indirect_call_gro_receive(tcp4_gro_receive, udp4_gro_receive,
+	pp = indirect_call_gro_receive(tcp4_gro_receive, udp4_gro_receive/*udp层gro接收处理*/,
 				       ops->callbacks.gro_receive, head, skb);
 
 out_unlock:
@@ -1804,7 +1809,8 @@ static struct net_protocol tcp_protocol = {
 	//指明tcp报文入口
 	.handler	=	tcp_v4_rcv,
 	.err_handler	=	tcp_v4_err,
-	.no_policy	=	1,//不执行policy检查
+	//不执行policy检查
+	.no_policy	=	1,
 	.icmp_strict_tag_validation = 1,
 };
 

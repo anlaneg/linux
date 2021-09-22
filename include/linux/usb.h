@@ -949,10 +949,10 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
  * specific device.
  */
 #define USB_DEVICE(vend, prod) \
-    /*匹配vendor与product*/\
+    /*指明匹配vendor与product id*/\
 	.match_flags = USB_DEVICE_ID_MATCH_DEVICE, \
-	.idVendor = (vend), \
-	.idProduct = (prod)
+	.idVendor = (vend), /*vendor*/\
+	.idProduct = (prod) /*产品id*/
 /**
  * USB_DEVICE_VER - describe a specific usb device with a version range
  * @vend: the 16 bit USB Vendor ID
@@ -1305,7 +1305,7 @@ extern void usb_deregister(struct usb_driver *);
  * init/exit. This eliminates a lot of boilerplate. Each module may only
  * use this macro once, and calling it replaces module_init() and module_exit()
  */
-//usb驱动注册
+//usb驱动注册,通过usb_register完成__usb_driver注册，通过usb_deregister完成__usb_driver解注册
 #define module_usb_driver(__usb_driver) \
 	module_driver(__usb_driver/*usb驱动结构*/, usb_register/*usb注册函数*/, \
 		       usb_deregister/*usb解注册函数*/)

@@ -2615,6 +2615,7 @@ static int slub_cpu_dead(unsigned int cpu)
  */
 static inline int node_match(struct page *page, int node)
 {
+    /*检查此页与node是否匹配*/
 #ifdef CONFIG_NUMA
 	if (node != NUMA_NO_NODE && page_to_nid(page) != node)
 		return 0;
@@ -2940,7 +2941,7 @@ static __always_inline void maybe_wipe_obj_freeptr(struct kmem_cache *s,
  * Otherwise we can simply pick the next object from the lockless free list.
  */
 static __always_inline void *slab_alloc_node(struct kmem_cache *s,
-		gfp_t gfpflags, int node, unsigned long addr, size_t orig_size)
+		gfp_t gfpflags, int node/*要求指定node上的内存*/, unsigned long addr, size_t orig_size)
 {
     //自slab中申请obj
 	void *object;
@@ -2995,7 +2996,7 @@ redo:
 	object = c->freelist;
 	page = c->page;
 	if (unlikely(!object || !page || !node_match(page, node))) {
-	    	/*没有c->freelist上没有obj了，再申请一组*/
+	    /*没有c->freelist上没有obj了，再申请一组*/
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 	} else {
 	    //freelist上有，自链上直接分配
@@ -3046,7 +3047,7 @@ static __always_inline void *slab_alloc(struct kmem_cache *s,
 //分配一个obj
 void *kmem_cache_alloc(struct kmem_cache *s, gfp_t gfpflags)
 {
-    	/*自s中申请obj*/
+    /*自s中申请obj*/
 	void *ret = slab_alloc(s, gfpflags, _RET_IP_, s->object_size);
 
 	trace_kmem_cache_alloc(_RET_IP_, ret, s->object_size,

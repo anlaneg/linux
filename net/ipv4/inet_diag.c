@@ -335,6 +335,7 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 		rcu_read_lock();
 		ca_ops = READ_ONCE(icsk->icsk_ca_ops);
 		if (ca_ops)
+		    /*存入拥塞控制算法*/
 			err = nla_put_string(skb, INET_DIAG_CONG, ca_ops->name);
 		rcu_read_unlock();
 		if (err < 0)

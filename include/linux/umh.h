@@ -25,6 +25,7 @@ struct subprocess_info {
 	int wait;
 	int retval;
 	int (*init)(struct subprocess_info *info, struct cred *new);
+	/*进程运行成功/失败后，用于执行清理工作*/
 	void (*cleanup)(struct subprocess_info *info);
 	void *data;
 } __randomize_layout;

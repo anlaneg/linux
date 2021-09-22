@@ -1185,6 +1185,7 @@ struct proto {
 	int			(*pre_connect)(struct sock *sk,
 					struct sockaddr *uaddr,
 					int addr_len);
+	/*协议自已的connect函数*/
 	int			(*connect)(struct sock *sk,
 					struct sockaddr *uaddr,
 					int addr_len);
