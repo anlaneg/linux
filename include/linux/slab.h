@@ -130,6 +130,7 @@
  */
 #define ZERO_SIZE_PTR ((void *)16)
 
+/*检查指针是否为空*/
 #define ZERO_OR_NULL_PTR(x) ((unsigned long)(x) <= \
 				(unsigned long)ZERO_SIZE_PTR)
 

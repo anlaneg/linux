@@ -2325,6 +2325,7 @@ void net_disable_timestamp(void)
 }
 EXPORT_SYMBOL(net_disable_timestamp);
 
+/*设置报文时间签*/
 static inline void net_timestamp_set(struct sk_buff *skb)
 {
 	skb->tstamp = 0;
@@ -2332,6 +2333,7 @@ static inline void net_timestamp_set(struct sk_buff *skb)
 		__net_timestamp(skb);
 }
 
+/*检查条件如果为真，则对报文进行时间签设置*/
 #define net_timestamp_check(COND, SKB)				\
 	if (static_branch_unlikely(&netstamp_needed_key)) {	\
 		if ((COND) && !(SKB)->tstamp)			\
@@ -3205,6 +3207,7 @@ static void __netif_reschedule(struct Qdisc *q)
 
 	local_irq_save(flags);
 	sd = this_cpu_ptr(&softnet_data);
+	/*将q加入到待调度队列结尾*/
 	q->next_sched = NULL;
 	*sd->output_queue_tailp = q;
 	sd->output_queue_tailp = &q->next_sched;
@@ -3215,6 +3218,7 @@ static void __netif_reschedule(struct Qdisc *q)
 
 void __netif_schedule(struct Qdisc *q)
 {
+    /*q如无调度标记，则打上标记，并重调度q*/
 	if (!test_and_set_bit(__QDISC_STATE_SCHED, &q->state))
 		__netif_reschedule(q);
 }
@@ -4523,6 +4527,7 @@ int netdev_max_backlog __read_mostly = 1000;
 EXPORT_SYMBOL(netdev_max_backlog);
 
 int netdev_tstamp_prequeue __read_mostly = 1;
+/*一次rx软中断最多收取多少报文*/
 int netdev_budget __read_mostly = 300;
 /* Must be at least 2 jiffes to guarantee 1 jiffy timeout */
 unsigned int __read_mostly netdev_budget_usecs = 2 * USEC_PER_SEC / HZ;
@@ -4795,7 +4800,7 @@ EXPORT_SYMBOL(rps_may_expire_flow);
 #endif /* CONFIG_RFS_ACCEL */
 
 /* Called from hardirq (IPI) context */
-//触发软中断
+//rps触发软中断
 static void rps_trigger_softirq(void *data)
 {
 	struct softnet_data *sd = data;
@@ -4906,7 +4911,7 @@ static int enqueue_to_backlog(struct sk_buff *skb, int cpu,
 	if (qlen <= netdev_max_backlog && !skb_flow_limit(skb, qlen)) {
 		if (qlen) {
 enqueue:
-			//报文入队
+			//队列中已有报文，报文入队
 			__skb_queue_tail(&sd->input_pkt_queue, skb);
 			input_queue_tail_incr_save(sd, qtail);
 			rps_unlock(sd);
@@ -4920,9 +4925,10 @@ enqueue:
 		//如有必要，触发软中断收包
 		if (!__test_and_set_bit(NAPI_STATE_SCHED, &sd->backlog.state)) {
 			if (!rps_ipi_queued(sd))
+			    /*将backlog加入，并触发软中断*/
 				____napi_schedule(sd, &sd->backlog);
 		}
-		goto enqueue;
+		goto enqueue;/*报文刚才没有入队，将其入队后退出*/
 	}
 
 drop:
@@ -5202,7 +5208,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 
 int netif_rx(struct sk_buff *skb)
 {
-	/*旧收包方式：单个报文将被入队到softnet_data,如果队列过大，则触发rx*/
+        /*旧收包方式：单个报文将被入队到softnet_data,如果队列过大，则触发rx*/
 	int ret;
 
 	trace_netif_rx_entry(skb);
@@ -5282,7 +5288,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 	if (sd->output_queue) {
 		struct Qdisc *head;
 
-		//采用head保存sd->output_queue队列
+		//采用head保存sd->output_queue待出队队列
 		local_irq_disable();
 		head = sd->output_queue;
 		sd->output_queue = NULL;
@@ -5291,6 +5297,7 @@ static __latent_entropy void net_tx_action(struct softirq_action *h)
 
 		rcu_read_lock();
 
+		/*遍历待出队的qdisc*/
 		while (head) {
 			struct Qdisc *q = head;
 			spinlock_t *root_lock = NULL;
@@ -5535,6 +5542,7 @@ static int __netif_receive_skb_core(struct sk_buff **pskb, bool pfmemalloc,
 	int ret = NET_RX_DROP;
 	__be16 type;
 
+	/*为skb设置时间签*/
 	net_timestamp_check(!netdev_tstamp_prequeue, skb);
 
 	trace_netif_receive_skb(skb);
@@ -5555,8 +5563,8 @@ another_round:
 
 	__this_cpu_inc(softnet_data.processed);
 
+	/*对generic_xdp功能的支持，驱动不支持，在此处处理*/
 	if (static_branch_unlikely(&generic_xdp_needed_key)) {
-	    /*对generic_xdp功能的支持，驱动不支持，在此处处理*/
 		int ret2;
 
 		migrate_disable();
@@ -5572,8 +5580,8 @@ another_round:
 		skb_reset_mac_len(skb);
 	}
 
+	/*遇到vlan协议，执行vlan剥离*/
 	if (eth_type_vlan(skb->protocol)) {
-		/*遇到vlan协议，执行vlan剥离*/
 		skb = skb_vlan_untag(skb);
 		if (unlikely(!skb))
 			goto out;
@@ -5589,9 +5597,10 @@ another_round:
 
 	//ptype_all链上的ptype将处理收到的所有报文，这里遍历ptype_all链，
 	//处理此报文（tcpdump通过此回调获得报文）
-	//当此循环结束时，pt_prev指向的那个ptype的回调还没有执行
+	//注：当此循环结束时，pt_prev指向的那个ptype的回调还没有被执行。
 	list_for_each_entry_rcu(ptype, &ptype_all, list) {
 		if (pt_prev)
+		    /*之前设置过pt_prev,回调它*/
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 		pt_prev = ptype;
 	}
@@ -5607,7 +5616,7 @@ another_round:
 
 skip_taps:
 #ifdef CONFIG_NET_INGRESS
-	//执行报文的ingress classfic处理
+	//执行报文的ingress classify处理
 	if (static_branch_unlikely(&ingress_needed_key)) {
 		bool another = false;
 
@@ -5626,8 +5635,8 @@ skip_taps:
 #endif
 	skb_reset_redirect(skb);
 skip_classify:
+    /*指明了pfmemalloc,但skb不是pfmemalloc关联的协议，则丢包*/
 	if (pfmemalloc && !skb_pfmemalloc_protocol(skb))
-	    /*指明了pfmemalloc,但skb不是pfmemalloc关联的协议，则丢包*/
 		goto drop;
 
 	/*报文是有vlan标记的，进行vlan接收*/
@@ -5637,6 +5646,7 @@ skip_classify:
 			ret = deliver_skb(skb, pt_prev, orig_dev);
 			pt_prev = NULL;
 		}
+
 		//vlan报文处理,查vlan对应的逻辑设备，更新对应的入接口，并重执行
 		if (vlan_do_receive(&skb))
 			goto another_round;
@@ -5686,6 +5696,7 @@ check_vlan_id:
 			 * 802.1Q or 802.1AD and vlan_do_receive() above could
 			 * not find vlan dev for vlan id 0.
 			 */
+		    /*vlan为0的情况处理*/
 			__vlan_hwaccel_clear_tag(skb);
 			skb = skb_vlan_untag(skb);
 			if (unlikely(!skb))
@@ -5739,7 +5750,7 @@ check_vlan_id:
 			goto drop;
 		*ppt_prev = pt_prev;
 	} else {
-		//我们实在找不到此报文的处理者
+		//我们实在找不到此报文的处理者，只好丢包了事
 drop:
 		if (!deliver_exact)
 			atomic_long_inc(&skb->dev->rx_dropped);
@@ -5981,7 +5992,7 @@ static int netif_receive_skb_internal(struct sk_buff *skb)
 {
 	int ret;
 
-	net_timestamp_check(netdev_tstamp_prequeue, skb);
+	net_timestamp_check(netdev_tstamp_prequeue/*此值为0时不设置时间签*/, skb);
 
 	if (skb_defer_rx_timestamp(skb))
 		return NET_RX_SUCCESS;
@@ -6208,8 +6219,9 @@ static void gro_normal_list(struct napi_struct *napi)
  */
 static void gro_normal_one(struct napi_struct *napi, struct sk_buff *skb, int segs)
 {
+    /*将报文串在rx_list上，准备上送*/
 	list_add_tail(&skb->list, &napi->rx_list);
-	napi->rx_count += segs;
+	napi->rx_count += segs;/*上送数目*/
 	/*超过gro_normal_batch数量（可配置），才上送协议栈*/
 	if (napi->rx_count >= gro_normal_batch)
 		gro_normal_list(napi);
@@ -6230,6 +6242,7 @@ static int napi_gro_complete(struct napi_struct *napi, struct sk_buff *skb)
 	}
 
 	rcu_read_lock();
+	/*遍历head,通过第一个ptype完成gro complte回调，报文合并checksum之类更新*/
 	list_for_each_entry_rcu(ptype, head, list) {
 		if (ptype->type != type || !ptype->callbacks.gro_complete)
 			continue;
@@ -6252,6 +6265,7 @@ out:
 	return NET_RX_SUCCESS;
 }
 
+/*清除index号gro bucket上缓存的待gro合并的报文*/
 static void __napi_gro_flush_chain(struct napi_struct *napi, u32 index,
 				   bool flush_old)
 {
@@ -6262,6 +6276,7 @@ static void __napi_gro_flush_chain(struct napi_struct *napi, u32 index,
 		if (flush_old && NAPI_GRO_CB(skb)->age == jiffies)
 			return;
 		skb_list_del_init(skb);
+		/*gro 强制complete*/
 		napi_gro_complete(napi, skb);
 		napi->gro_hash[index].count--;
 	}
@@ -6279,6 +6294,7 @@ void napi_gro_flush(struct napi_struct *napi, bool flush_old)
 	unsigned long bitmask = napi->gro_bitmask;
 	unsigned int i, base = ~0U;
 
+	/*清空指定bucket上缓存的待合并gro报文*/
 	while ((i = ffs(bitmask)) != 0) {
 		bitmask >>= i;
 		base += i;
@@ -6498,8 +6514,10 @@ pull:
 ok:
 	if (gro_list->count) {
 		if (!test_bit(bucket, &napi->gro_bitmask))
+		    /*指明这个bucket上有报文在等待*/
 			__set_bit(bucket, &napi->gro_bitmask);
 	} else if (test_bit(bucket, &napi->gro_bitmask)) {
+	    /*gro_list上counter为0，当前bucket上不再有报文在等待*/
 		__clear_bit(bucket, &napi->gro_bitmask);
 	}
 
@@ -6940,6 +6958,7 @@ bool napi_complete_done(struct napi_struct *n, int work_done)
 		napi_gro_flush(n, !!timeout);
 	}
 
+	/*上送协议栈*/
 	gro_normal_list(n);
 
 	if (unlikely(!list_empty(&n->poll_list))) {
@@ -6982,6 +7001,7 @@ EXPORT_SYMBOL(napi_complete_done);
 /* must be called under rcu_read_lock(), as we dont take a reference */
 static struct napi_struct *napi_by_id(unsigned int napi_id)
 {
+    /*检查给定napi_id对应的napi_struct是否存在，如存在返回，否则返回NULL*/
 	unsigned int hash = napi_id % HASH_SIZE(napi_hash);
 	struct napi_struct *napi;
 
@@ -7137,6 +7157,7 @@ EXPORT_SYMBOL(napi_busy_loop);
 
 #endif /* CONFIG_NET_RX_BUSY_POLL */
 
+/*napi加入到napi_hash表中*/
 static void napi_hash_add(struct napi_struct *napi)
 {
 	if (test_bit(NAPI_STATE_NO_BUSY_POLL, &napi->state))
@@ -7149,6 +7170,7 @@ static void napi_hash_add(struct napi_struct *napi)
 		if (unlikely(++napi_gen_id < MIN_NAPI_ID))
 			napi_gen_id = MIN_NAPI_ID;
 	} while (napi_by_id(napi_gen_id));
+	/*为此napi分配napi_id*/
 	napi->napi_id = napi_gen_id;
 
 	//将此napi加入到napi_hash的表中
@@ -7163,6 +7185,7 @@ static void napi_hash_add(struct napi_struct *napi)
  */
 static void napi_hash_del(struct napi_struct *napi)
 {
+    /*将napi自hash表中移除*/
 	spin_lock(&napi_hash_lock);
 
 	hlist_del_init_rcu(&napi->napi_hash_node);
@@ -7188,6 +7211,7 @@ static enum hrtimer_restart napi_watchdog(struct hrtimer *timer)
 	return HRTIMER_NORESTART;
 }
 
+/*gro hash初始化*/
 static void init_gro_hash(struct napi_struct *napi)
 {
 	int i;
@@ -7258,9 +7282,10 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 	napi->skb = NULL;
 	INIT_LIST_HEAD(&napi->rx_list);
 	napi->rx_count = 0;
-    //设置napi的poll
+    //设置napi的poll函数
 	napi->poll = poll;
 	if (weight > NAPI_POLL_WEIGHT)
+	    /*告警weight过大*/
 		netdev_err_once(dev, "%s() called with weight %d\n", __func__,
 				weight);
 	napi->weight = weight;
@@ -7277,11 +7302,12 @@ void netif_napi_add(struct net_device *dev, struct napi_struct *napi,
 	 * Clear dev->threaded if kthread creation failed so that
 	 * threaded mode will not be enabled in napi_enable().
 	 */
-	if (dev->threaded && napi_kthread_create(napi))
+	if (dev->threaded && napi_kthread_create(napi))/*针对这种设备采用线程收包*/
 		dev->threaded = 0;
 }
 EXPORT_SYMBOL(netif_napi_add);
 
+/*napi禁止此设备收包*/
 void napi_disable(struct napi_struct *n)
 {
 	might_sleep();
@@ -7337,6 +7363,7 @@ void __netif_napi_del(struct napi_struct *napi)
 	if (!test_and_clear_bit(NAPI_STATE_LISTED, &napi->state))
 		return;
 
+	/*自napi hash表中移除*/
 	napi_hash_del(napi);
 	list_del_rcu(&napi->dev_list);
 	napi_free_frags(napi);
@@ -7351,7 +7378,7 @@ void __netif_napi_del(struct napi_struct *napi)
 }
 EXPORT_SYMBOL(__netif_napi_del);
 
-static int __napi_poll(struct napi_struct *n, bool *repoll)
+static int __napi_poll(struct napi_struct *n, bool *repoll/*出参，是否需要再收取一次*/)
 {
 	int work, weight;
 
@@ -7366,6 +7393,7 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 	work = 0;
 	if (test_bit(NAPI_STATE_SCHED, &n->state)) {
 		//调用对应的poll函数（采用n中定义的weight来确定需要收取多少个）
+	    //在poll实现中针对work < weight的情况需要调用 napi_complete_done完成报文上送
 		//例如nfp_net_poll
 		work = n->poll(n, weight);
 		trace_napi_poll(n, work, weight);
@@ -7377,7 +7405,8 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 			    n->poll, work, weight);
 
 	if (likely(work < weight))
-		return work;//网卡上的报文被我们收完了
+	    //网卡上的报文被我们收完了,且已调用napi_complete_done
+		return work;
 
 	/* Drivers must not modify the NAPI state if they
 	 * consume the entire weight.  In such cases this code
@@ -7402,6 +7431,7 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 		return work;
 	}
 
+	/*此设备有gro报文在等待*/
 	if (n->gro_bitmask) {
 		/* flush too old packets
 		 * If HZ < 1000, flush all packets.
@@ -7409,6 +7439,7 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 		napi_gro_flush(n, HZ >= 1000);
 	}
 
+	/*将gro处理成功的返回送上层协议栈*/
 	gro_normal_list(n);
 
 	/* Some drivers may have called napi_schedule
@@ -7426,6 +7457,7 @@ static int __napi_poll(struct napi_struct *n, bool *repoll)
 	return work;
 }
 
+/*针对n进行收包处理，如果n仍有报文待收取，则添加到repoll*/
 static int napi_poll(struct napi_struct *n, struct list_head *repoll)
 {
 	bool do_repoll = false;
@@ -7504,17 +7536,20 @@ static int napi_threaded_poll(void *data)
 //收到NET_RX_SOFTIRQ软件中断，通过poll尝试收包
 static __latent_entropy void net_rx_action(struct softirq_action *h)
 {
+    /*取此cpu上软中断数据*/
 	struct softnet_data *sd = this_cpu_ptr(&softnet_data);
-	/*容许的此函数最长poll时间*/
+	/*容许此函数poll的最长时间*/
 	unsigned long time_limit = jiffies +
 		usecs_to_jiffies(netdev_budget_usecs);
 	int budget = netdev_budget;
 	LIST_HEAD(list);
 	LIST_HEAD(repoll);
 
+	/*关闭本cpu中断,防止中断写sd->poll_list*/
 	local_irq_disable();
 	//采用局部变量list来保存sd->poll_list,减小锁的粒度
 	list_splice_init(&sd->poll_list, &list);
+	/*开启cpu中断*/
 	local_irq_enable();
 
 	//在for循环中，我们遍历每一个list成员，如果某个成员没有收满包，则不会再被加
@@ -7525,6 +7560,7 @@ static __latent_entropy void net_rx_action(struct softirq_action *h)
 		//list为空，将跳出循环
 		if (list_empty(&list)) {
 			if (!sd_has_rps_ipi_waiting(sd) && list_empty(&repoll))
+			    /*list与repoll队列均为空，退出*/
 				return;
 			break;
 		}

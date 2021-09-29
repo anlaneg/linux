@@ -112,7 +112,7 @@ struct ptp_header *ptp_parse_header(struct sk_buff *skb, unsigned int type)
 	u8 *ptr = skb_mac_header(skb);
 
 	if (type & PTP_CLASS_VLAN)
-		ptr += VLAN_HLEN;
+		ptr += VLAN_HLEN;/*跳过vlan头*/
 
 	switch (type & PTP_CLASS_PMASK) {
 	case PTP_CLASS_IPV4:

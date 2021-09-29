@@ -899,9 +899,10 @@ static inline int page_trans_huge_mapcount(struct page *page,
 
 static inline struct page *virt_to_head_page(const void *x)
 {
-    //取x地址对应的page
+    //取x地址对应的page信息
 	struct page *page = virt_to_page(x);
 
+	/*取此页对应的复合页信息*/
 	return compound_head(page);
 }
 
@@ -948,8 +949,10 @@ static inline void destroy_compound_page(struct page *page)
 
 static inline unsigned int compound_order(struct page *page)
 {
+    /*如果此page不是复合页的首页，则order为0*/
 	if (!PageHead(page))
 		return 0;
+	/*否则取复合页对应的order(存在第二页里）*/
 	return page[1].compound_order;
 }
 

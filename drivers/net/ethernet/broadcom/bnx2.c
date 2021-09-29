@@ -8530,11 +8530,13 @@ bnx2_init_napi(struct bnx2 *bp)
 		struct bnx2_napi *bnapi = &bp->bnx2_napi[i];
 		int (*poll)(struct napi_struct *, int);
 
+		/*针对0号api执行bnx2_poll*/
 		if (i == 0)
 			poll = bnx2_poll;
 		else
 			poll = bnx2_poll_msix;
 
+		/*为设备添加napi的poll回调*/
 		netif_napi_add(bp->dev, &bp->bnx2_napi[i].napi, poll, 64);
 		bnapi->bp = bp;
 	}

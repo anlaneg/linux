@@ -898,7 +898,7 @@ struct sk_buff {
 	__u16			vlan_tci;//指出vlan id
 #if defined(CONFIG_NET_RX_BUSY_POLL) || defined(CONFIG_XPS)
 	union {
-		//skb由哪个napi收上来的
+		//标记skb由哪个napi收上来的
 		unsigned int	napi_id;
 		unsigned int	sender_cpu;
 	};

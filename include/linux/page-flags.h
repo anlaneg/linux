@@ -182,6 +182,9 @@ enum pageflags {
 
 static inline unsigned long _compound_head(const struct page *page)
 {
+    /*取对此页对应的复合页
+     * {复合页（Compound Page）就是将物理上连续的两个或多个页看成一个
+     独立的大页}*/
 	unsigned long head = READ_ONCE(page->compound_head);
 
 	if (unlikely(head & 1))
@@ -262,25 +265,30 @@ static inline void page_init_poison(struct page *page, size_t size)
 /*
  * Macros to create function definitions for page flags
  */
+/*定义Page##uname函数，检查给定page是否有PG_##lname标记*/
 #define TESTPAGEFLAG(uname/*函数名称*/, lname/*标记位名称*/, policy)				\
 static __always_inline int Page##uname(struct page *page)		\
     /*检查page->flags是否具有标记位lname*/\
 	{ return test_bit(PG_##lname, &policy(page, 0)->flags); }
 
+/*定义SetPage##uname函数，为给定page设置PG_##lname标记*/
 #define SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void SetPage##uname(struct page *page)		\
     /*为page->flags添加标记lname*/\
 	{ set_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*定义ClearPage##uname函数，清除给定page的PG_##lname标记*/
 #define CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void ClearPage##uname(struct page *page)		\
     /*为page->flags清除标记lname*/\
 	{ clear_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*定义__SetPage##uname函数，为给定page设置PG_##lname标记*/
 #define __SETPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __SetPage##uname(struct page *page)		\
 	{ __set_bit(PG_##lname, &policy(page, 1)->flags); }
 
+/*定义__ClearPage##uname函数，清除给定page的PG_##lname标记*/
 #define __CLEARPAGEFLAG(uname, lname, policy)				\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 	{ __clear_bit(PG_##lname, &policy(page, 1)->flags); }

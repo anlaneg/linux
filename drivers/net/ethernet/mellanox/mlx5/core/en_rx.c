@@ -1272,6 +1272,7 @@ static void mlx5e_handle_rx_cqe(struct mlx5e_rq *rq, struct mlx5_cqe64 *cqe)
 			goto free_wqe;
 		}
 
+	/*通过gro直送报文去协议栈*/
 	napi_gro_receive(rq->cq.napi, skb);
 
 free_wqe:
@@ -1550,6 +1551,7 @@ static void mlx5e_handle_rx_cqe_mpwrq(struct mlx5e_rq *rq, struct mlx5_cqe64 *cq
 			goto mpwrq_cqe_out;
 		}
 
+	/*收到一个报文由gro完成上送，这种直送协议栈了，没有软中断*/
 	napi_gro_receive(rq->cq.napi, skb);
 
 mpwrq_cqe_out:

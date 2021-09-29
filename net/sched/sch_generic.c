@@ -437,7 +437,7 @@ void __qdisc_run(struct Qdisc *q)
 			if (q->flags & TCQ_F_NOLOCK)
 				set_bit(__QDISC_STATE_MISSED, &q->state);
 			else
-		    		//quota被用完了，但报文可能没有发完，触发tx软中断
+		    	//quota被用完了，但报文可能没有发完，触发tx软中断
 				__netif_schedule(q);
 
 			break;

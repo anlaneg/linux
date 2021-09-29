@@ -432,6 +432,7 @@ static struct ctl_table net_core_table[] = {
 	},
 #endif
 	{
+	    /*开启/关闭收包打时间签功能*/
 		.procname	= "netdev_tstamp_prequeue",
 		.data		= &netdev_tstamp_prequeue,
 		.maxlen		= sizeof(int),

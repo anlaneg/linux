@@ -339,17 +339,19 @@ struct napi_struct {
 	 */
 	struct list_head	poll_list;
 
+	/*状态信息，NAPI_STATE_SCHED标记在时，才能被poll*/
 	unsigned long		state;
 	//最多一次可以收取多少个
 	int			weight;
 	int			defer_hard_irqs_count;
+	/*标明此gro bucket（每位一个）上是否有报文在等待*/
 	unsigned long		gro_bitmask;
-	//轮循函数，参数2为最多收取x个，来源于weight
+	//轮循函数，参数2为最多收取x个，来源于weight（并在实现中调用napi_complete_done完成报文上送）
 	int			(*poll)(struct napi_struct *, int);
 #ifdef CONFIG_NETPOLL
 	int			poll_owner;
 #endif
-	//对应的设备
+	//对应的网络设备
 	struct net_device	*dev;
     //gro功能缓存的报文
 	struct gro_list		gro_hash[GRO_HASH_BUCKETS];
@@ -361,6 +363,7 @@ struct napi_struct {
 	struct hrtimer		timer;
 	struct list_head	dev_list;
 	struct hlist_node	napi_hash_node;
+	/*此结构体的唯一id*/
 	unsigned int		napi_id;
 	struct task_struct	*thread;
 };
@@ -3441,6 +3444,7 @@ struct softnet_data {
 	struct sd_flow_limit __rcu *flow_limit;
 #endif
 	struct Qdisc		*output_queue;
+	/*最后一个待调度qdisc*/
 	struct Qdisc		**output_queue_tailp;
 	struct sk_buff		*completion_queue;
 #ifdef CONFIG_XFRM_OFFLOAD
@@ -3516,6 +3520,7 @@ static inline void dev_xmit_recursion_dec(void)
 void __netif_schedule(struct Qdisc *q);
 void netif_schedule_queue(struct netdev_queue *txq);
 
+/*触发此设备所有队列的调度*/
 static inline void netif_tx_schedule_all(struct net_device *dev)
 {
 	unsigned int i;

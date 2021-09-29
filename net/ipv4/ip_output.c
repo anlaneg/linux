@@ -315,6 +315,7 @@ static int __ip_finish_output(struct net *net, struct sock *sk, struct sk_buff *
 #endif
 	mtu = ip_skb_dst_mtu(sk, skb);
 	if (skb_is_gso(skb))
+	    /*gso分片处理*/
 		return ip_finish_output_gso(net, sk, skb, mtu);
 
 	//分片处理
@@ -439,7 +440,7 @@ int ip_mc_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 			    !(IPCB(skb)->flags & IPSKB_REROUTED));
 }
 
-//非本机报文输出回调
+//非本机报文ipv4输出回调
 int ip_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct net_device *dev = skb_dst(skb)->dev, *indev = skb->dev;

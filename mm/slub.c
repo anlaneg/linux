@@ -4353,21 +4353,29 @@ void kfree(const void *x)
 
 	trace_kfree(_RET_IP_, x);
 
+	/*排除释放NULL的情况*/
 	if (unlikely(ZERO_OR_NULL_PTR(x)))
 		return;
 
+	/*取x地址对应的page(考虑复合页情况）*/
 	page = virt_to_head_page(x);
 	if (unlikely(!PageSlab(page))) {
+	    /*遇到没有slab标记的page*/
+
+	    /*取此page对应的order*/
 		unsigned int order = compound_order(page);
 
+		/*page必须为复合页*/
 		BUG_ON(!PageCompound(page));
 		kfree_hook(object);
 		mod_lruvec_page_state(page, NR_SLAB_UNRECLAIMABLE_B,
 				      -(PAGE_SIZE << order));
+		/*释放以page为header的页*/
 		__free_pages(page, order);
 		return;
 	}
-	slab_free(page->slab_cache, page, object, NULL, 1, _RET_IP_);
+	/*遇到有slab标记的page,将obj释放到page->slab_cache中*/
+	slab_free(page->slab_cache, page/*object对应的页*/, object/*要释放的地址*/, NULL, 1, _RET_IP_);
 }
 EXPORT_SYMBOL(kfree);
 

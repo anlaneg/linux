@@ -2214,6 +2214,7 @@ static irqreturn_t e100_intr(int irq, void *dev_id)
 
 	if (likely(napi_schedule_prep(&nic->napi))) {
 		e100_disable_irq(nic);
+		/*触发软中断过来poll报文*/
 		__napi_schedule(&nic->napi);
 	}
 
