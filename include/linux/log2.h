@@ -157,7 +157,7 @@ unsigned long __rounddown_pow_of_two(unsigned long n)
  * selects the appropriately-sized optimised version depending on sizeof(n)
  */
 #define ilog2(n) \
-( \
+( /*取n的以2为基的对数*/\
 	__builtin_constant_p(n) ?	\
 	((n) < 2 ? 0 :			\
 	 63 - __builtin_clzll(n)) :	\

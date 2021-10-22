@@ -548,11 +548,14 @@ struct kmem_cache_node {
 #endif
 
 #ifdef CONFIG_SLUB
+	/*partial链表长度*/
 	unsigned long nr_partial;
 	struct list_head partial;
 #ifdef CONFIG_SLUB_DEBUG
-	atomic_long_t nr_slabs;/*此numa node上slab数目*/
-	atomic_long_t total_objects;/*obj总数*/
+	/*此numa node上slab数目*/
+	atomic_long_t nr_slabs;
+	/*此numa node上已申请的obj总数*/
+	atomic_long_t total_objects;
 	struct list_head full;
 #endif
 #endif

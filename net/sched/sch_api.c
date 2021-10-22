@@ -123,7 +123,7 @@ static DEFINE_RWLOCK(qdisc_mod_lock);
 
 /* The list of all installed queueing disciplines. */
 
-static struct Qdisc_ops *qdisc_base;
+static struct Qdisc_ops *qdisc_base;/*注册所有的qdisc_ops*/
 
 /* Register/unregister queueing discipline */
 //qdisc_ops注册
@@ -314,8 +314,10 @@ struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 {
 	struct Qdisc *q;
 
+	/*handle为0时，返回NULL*/
 	if (!handle)
 		return NULL;
+
 	//先尝试查询根队列中注册的队列中查询
 	q = qdisc_match_from_root(dev->qdisc, handle);
 	if (q)
@@ -350,6 +352,7 @@ out:
 	return q;
 }
 
+/*通过classid查找其对应的qdisc*/
 static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
 {
 	unsigned long cl;
@@ -1136,13 +1139,14 @@ skip:
 		if (!cops || !cops->graft)
 			return -EOPNOTSUPP;
 
+		/*取classid对应的cl*/
 		cl = cops->find(parent, classid);
 		if (!cl) {
 			NL_SET_ERR_MSG(extack, "Specified class not found");
 			return -ENOENT;
 		}
 
-		//采用new队列替代之前的old队列
+		//采用new队列替代之前的old队列(对应的分类为cl)
 		err = cops->graft(parent, cl, new, &old, extack);
 		if (err)
 			return err;
@@ -1572,7 +1576,6 @@ replay:
 		return err;
 
 	tcm = nlmsg_data(n);
-	/*如果申请ingress类型qdisc,则此值为TC_H_INGRESS*/
 	clid = tcm->tcm_parent;
 	q = p = NULL;
 

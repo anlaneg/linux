@@ -358,6 +358,7 @@ static __always_inline enum kmalloc_cache_type kmalloc_type(gfp_t flags)
 	 *  3) __GFP_ACCOUNT
 	 */
 	if (IS_ENABLED(CONFIG_ZONE_DMA) && (flags & __GFP_DMA))
+	    /*有dma标记*/
 		return KMALLOC_DMA;
 	if (!IS_ENABLED(CONFIG_MEMCG_KMEM) || (flags & __GFP_RECLAIMABLE))
 		return KMALLOC_RECLAIM;
@@ -385,13 +386,17 @@ static __always_inline unsigned int __kmalloc_index(size_t size,
 	    /*申请大小为0时，返回0*/
 		return 0;
 
+	/*size过小的，返回默认的slab index*/
 	if (size <= KMALLOC_MIN_SIZE)
 		return KMALLOC_SHIFT_LOW;
 
+	/*65-96之间采用index 1*/
 	if (KMALLOC_MIN_SIZE <= 32 && size > 64 && size <= 96)
 		return 1;
+	/*129-192采用index 2*/
 	if (KMALLOC_MIN_SIZE <= 64 && size > 128 && size <= 192)
 		return 2;
+	/*其它的以log2(size)获得n,且n满足[2^(n-1)+1,2^n]区间划分*/
 	if (size <=          8) return 3;
 	if (size <=         16) return 4;
 	if (size <=         32) return 5;
@@ -517,6 +522,7 @@ kmalloc_order_trace(size_t size, gfp_t flags, unsigned int order)
 }
 #endif
 
+/*kmalloc大内存申请入口*/
 static __always_inline void *kmalloc_large(size_t size, gfp_t flags)
 {
 	unsigned int order = get_order(size);
@@ -580,7 +586,7 @@ static __always_inline void *kmalloc_large(size_t size, gfp_t flags)
 static __always_inline void *kmalloc(size_t size, gfp_t flags)
 {
 	if (__builtin_constant_p(size)) {
-	    /*size为常量的情况*/
+	    /*申请的内存大小为常量的情况*/
 #ifndef CONFIG_SLOB
 		unsigned int index;
 #endif
@@ -588,7 +594,7 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 		    //大于8192的内存需求走large
 			return kmalloc_large(size, flags);
 #ifndef CONFIG_SLOB
-		/*内存大小决使用具体的kmalloc_caches[xx][index]*/
+		/*内存大小决定了使用哪种cache进行申请，例如kmalloc_caches[type][index]*/
 		index = kmalloc_index(size);
 
 		if (!index)
@@ -601,7 +607,7 @@ static __always_inline void *kmalloc(size_t size, gfp_t flags)
 				flags, size);
 #endif
 	}
-	//申请非常量的size/slob开启情况下
+	//申请的size非常量
 	return __kmalloc(size, flags);
 }
 

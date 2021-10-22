@@ -650,7 +650,7 @@ static const struct proc_ops proc_single_ops = {
 	.proc_release	= single_release,
 };
 
-struct proc_dir_entry *proc_create_single_data(const char *name, umode_t mode,
+struct proc_dir_entry *proc_create_single_data(const char *name/*文件名称*/, umode_t mode,
 		struct proc_dir_entry *parent/*目录*/,
 		int (*show)(struct seq_file *, void *), void *data)
 {

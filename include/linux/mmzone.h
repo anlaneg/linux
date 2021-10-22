@@ -1008,6 +1008,7 @@ static inline bool populated_zone(struct zone *zone)
 #ifdef CONFIG_NUMA
 static inline int zone_to_nid(struct zone *zone)
 {
+    /*zone所属的node*/
 	return zone->node;
 }
 

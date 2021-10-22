@@ -1933,6 +1933,7 @@ bool bpf_prog_get_ok(struct bpf_prog *prog,
 		return true;
 
 	if (prog->type != *attach_type)
+	    /*程序的type与要求attach的type不一致，返回false*/
 		return false;
 	if (bpf_prog_is_dev_bound(prog->aux) && !attach_drv)
 		return false;
@@ -1961,6 +1962,7 @@ out:
 	return prog;
 }
 
+/*给定fd取其对应的bpf程序*/
 struct bpf_prog *bpf_prog_get(u32 ufd)
 {
 	return __bpf_prog_get(ufd, NULL, false);

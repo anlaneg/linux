@@ -168,6 +168,7 @@ static inline void set_cpu_numa_mem(int cpu, int node)
 /* Returns the number of the nearest Node with memory */
 static inline int numa_mem_id(void)
 {
+    /*返回当前cpu所属numa node*/
 	return numa_node_id();
 }
 #endif

@@ -246,6 +246,7 @@ static void debugfs_slab_add(struct kmem_cache *);
 static inline void debugfs_slab_add(struct kmem_cache *s) { }
 #endif
 
+/*为slab增加si类型统计数目*/
 static inline void stat(const struct kmem_cache *s, enum stat_item si)
 {
 #ifdef CONFIG_SLUB_STATS
@@ -584,6 +585,7 @@ static inline int check_valid_pointer(struct kmem_cache *s,
 	void *base;
 
 	if (!object)
+	    /*所有空指针都有效*/
 		return 1;
 
 	base = page_address(page);
@@ -591,9 +593,14 @@ static inline int check_valid_pointer(struct kmem_cache *s,
 	object = restore_red_left(s, object);
 	if (object < base || object >= base + page->objects * s->size ||
 		(object - base) % s->size) {
+	    /*obj地址小于base: obj不属于当前给定的page(有误）
+	     * obj地址 大于base + page_limit:obj不属于当前给定的page(有误）
+	     * object地址不是s->size的整数倍：非obj的有效起始地址
+	     * */
 		return 0;
 	}
 
+	/*obj地址有效*/
 	return 1;
 }
 
@@ -748,11 +755,14 @@ static void slab_fix(struct kmem_cache *s, char *fmt, ...)
 	va_end(args);
 }
 
+/*检查nextfree地址是否有效*/
 static bool freelist_corrupted(struct kmem_cache *s, struct page *page,
 			       void **freelist, void *nextfree)
 {
+    /*slab需要有checks标记，才进行有效性检查*/
 	if ((s->flags & SLAB_CONSISTENCY_CHECKS) &&
 	    !check_valid_pointer(s, page, nextfree) && freelist) {
+	    /*nextfree地址无效，报错*/
 		object_err(s, page, *freelist, "Freechain corrupt");
 		*freelist = NULL;
 		slab_fix(s, "Isolate corrupted freechain");
@@ -1702,7 +1712,7 @@ static inline bool slab_free_freelist_hook(struct kmem_cache *s,
 	return *head != NULL;
 }
 
-//初始化slab的object
+//初始化slab的这个object
 static void *setup_object(struct kmem_cache *s, struct page *page,
 				void *object)
 {
@@ -1780,11 +1790,11 @@ static void __init init_freelist_randomization(void)
 }
 
 /* Get the next entry on the pre-computed freelist randomized */
-//返回pos号obj的下一个元素，其为一个random元素
+//返回pos号obj的下一个元素（其为一个random元素）
 static void *next_freelist_entry(struct kmem_cache *s, struct page *page,
-				unsigned long *pos/*元素序列*/, void *start/*page地址的最小边界*/,
-				unsigned long page_limit/*page的地址最大边界*/,
-				unsigned long freelist_count/*random_seq数组最大数*/)
+				unsigned long *pos/*元素序列*/, void *start/*page地址的最左侧边界*/,
+				unsigned long page_limit/*obj占用的内存大小*/,
+				unsigned long freelist_count/*此page可分配的obj数目*/)
 {
 	unsigned int idx;
 
@@ -1797,15 +1807,19 @@ static void *next_freelist_entry(struct kmem_cache *s, struct page *page,
 		idx = s->random_seq[*pos];
 		*pos += 1;
 		if (*pos >= freelist_count)
+		    /*pos超过了obj总数，将pos置为零重新检查*/
 			*pos = 0;
+		/*pos号元素的结束位置会超过page_limit,需要尝试另一个pos,继续循环*/
 	} while (unlikely(idx >= page_limit));
 
+	/*返回可用的pos号obj对应的结束地址*/
 	return (char *)start + idx;
 }
 
 /* Shuffle the single linked freelist based on a random pre-computed sequence */
 static bool shuffle_freelist(struct kmem_cache *s, struct page *page)
 {
+    /*将page划分成page->objects个小单元，并将其串连起来*/
 	void *start;/*可使用的起始地址*/
 	void *cur;
 	void *next;
@@ -1815,24 +1829,29 @@ static bool shuffle_freelist(struct kmem_cache *s, struct page *page)
 		return false;
 
 	freelist_count = oo_objects(s->oo);
-	/*随机选一个地址开始*/
+	/*随机选一个obj做为开始*/
 	pos = get_random_int() % freelist_count;
 
-	//page的最大边界
+	/*obj占用的内存大小*/
 	page_limit = page->objects * s->size;
+	//取此page的最左侧边界
 	start = fixup_red_left(s, page_address(page));
 
 	/* First entry is used as the base of the freelist */
 	cur = next_freelist_entry(s, page, &pos, start, page_limit,
 				freelist_count);
 	cur = setup_object(s, page, cur);
-	page->freelist = cur;/*记录首个obj地址*/
+	/*记录此page中首个随机obj地址*/
+	page->freelist = cur;
 
 	//将多个obj串连起来
 	for (idx = 1; idx < page->objects; idx++) {
+	    /*取下一个可用的obj*/
 		next = next_freelist_entry(s, page, &pos, start, page_limit,
 			freelist_count);
+		/*初始化这个obj*/
 		next = setup_object(s, page, next);
+		/*使obj串起来（通过obj的元数据串起来）*/
 		set_freepointer(s, cur, next);
 		cur = next;
 	}
@@ -1854,6 +1873,7 @@ static inline bool shuffle_freelist(struct kmem_cache *s, struct page *page)
 }
 #endif /* CONFIG_SLAB_FREELIST_RANDOM */
 
+/*为slab在numa node上申请一组指定数量的page*/
 static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
 	struct page *page;
@@ -1863,6 +1883,7 @@ static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	int idx;
 	bool shuffle;
 
+	/*清除掉不容许的flags*/
 	flags &= gfp_allowed_mask;
 
 	if (gfpflags_allow_blocking(flags))
@@ -1881,6 +1902,7 @@ static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 	/*申请slab可用的page*/
 	page = alloc_slab_page(s, alloc_gfp, node, oo);
 	if (unlikely(!page)) {
+	    /*按s->oo申请失败，尝试采用s->min进行申请*/
 		oo = s->min;
 		alloc_gfp = flags;
 		/*
@@ -1893,6 +1915,7 @@ static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 		stat(s, ORDER_FALLBACK);
 	}
 
+	/*设置此page可分配的object数目*/
 	page->objects = oo_objects(oo);
 
 	account_slab_page(page, oo_order(oo), s, flags);
@@ -1910,7 +1933,7 @@ static struct page *allocate_slab(struct kmem_cache *s, gfp_t flags, int node)
 
 	setup_page_debug(s, page, start);
 
-	//构造freelist
+	//构造page freelist
 	shuffle = shuffle_freelist(s, page);
 
 	if (!shuffle) {
@@ -1941,16 +1964,17 @@ out:
 	if (!page)
 		return NULL;
 
+	/*增加统计计数*/
 	inc_slabs_node(s, page_to_nid(page), page->objects);
 
 	return page;
 }
 
-/*为slab申请一个page*/
+/*为slab申请指定大小的page*/
 static struct page *new_slab(struct kmem_cache *s, gfp_t flags, int node)
 {
 	if (unlikely(flags & GFP_SLAB_BUG_MASK))
-	    	/*如有bug标记，则显示堆栈*/
+	    /*如有bug标记，则显示堆栈*/
 		flags = kmalloc_fix_flags(flags);
 
 	return allocate_slab(s,
@@ -2097,7 +2121,7 @@ static void *get_partial_node(struct kmem_cache *s, struct kmem_cache_node *n,
 	 * will return NULL.
 	 */
 	if (!n || !n->nr_partial)
-		return NULL;
+		return NULL;/*n为空，或者partial数为0，不能分配*/
 
 	spin_lock(&n->list_lock);
 	list_for_each_entry_safe(page, page2, &n->partial, slab_list) {
@@ -2297,6 +2321,7 @@ static void deactivate_slab(struct kmem_cache *s, struct page *page,
 	struct page new;
 	struct page old;
 
+	/*此page上有可供分配的object*/
 	if (page->freelist) {
 		stat(s, DEACTIVATE_REMOTE_FREES);
 		tail = DEACTIVATE_TO_TAIL;
@@ -2309,6 +2334,7 @@ static void deactivate_slab(struct kmem_cache *s, struct page *page,
 	freelist_tail = NULL;
 	freelist_iter = freelist;
 	while (freelist_iter) {
+	    /*取下一个待处理的free obj*/
 		nextfree = get_freepointer(s, freelist_iter);
 
 		/*
@@ -2316,11 +2342,12 @@ static void deactivate_slab(struct kmem_cache *s, struct page *page,
 		 * 'freelist_iter' is already corrupted.  So isolate all objects
 		 * starting at 'freelist_iter' by skipping them.
 		 */
-		if (freelist_corrupted(s, page, &freelist_iter, nextfree))
+		if (freelist_corrupted(s, page/*元素所属的page*/, &freelist_iter/*当前元素*/, nextfree/*下一个元素*/))
+		    /*如果检查nextfree地址有误，则跳出*/
 			break;
 
 		freelist_tail = freelist_iter;
-		free_delta++;
+		free_delta++;/*记录待释放的元素总数目*/
 
 		freelist_iter = nextfree;
 	}
@@ -2549,6 +2576,7 @@ static void put_cpu_partial(struct kmem_cache *s, struct page *page, int drain)
 
 static inline void flush_slab(struct kmem_cache *s, struct kmem_cache_cpu *c)
 {
+    /*flush次数增加*/
 	stat(s, CPUSLAB_FLUSH);
 	deactivate_slab(s, c->page, c->freelist, c);
 
@@ -2690,7 +2718,7 @@ slab_out_of_memory(struct kmem_cache *s, gfp_t gfpflags, int nid)
 }
 
 static inline void *new_slab_objects(struct kmem_cache *s, gfp_t flags,
-			int node, struct kmem_cache_cpu **pc/*出参，当前cpu的kmem_cache*/)
+			int node/*numa node*/, struct kmem_cache_cpu **pc/*出参，当前cpu的kmem_cache*/)
 {
 	void *freelist;
 	struct kmem_cache_cpu *c = *pc;
@@ -2709,13 +2737,13 @@ static inline void *new_slab_objects(struct kmem_cache *s, gfp_t flags,
 	    /*取当前cpu对应的slab信息*/
 		c = raw_cpu_ptr(s->cpu_slab);
 		if (c->page)
+		    /*新申请了page,需要更换c->page中记录的旧page,这里执行flush*/
 			flush_slab(s, c);
 
 		/*
 		 * No other reference to the page yet so we can
 		 * muck around with it freely without cmpxchg
 		 */
-		//取page中构造好的freelist并返回
 		freelist = page->freelist;
 		page->freelist = NULL;
 
@@ -2940,8 +2968,8 @@ static __always_inline void maybe_wipe_obj_freeptr(struct kmem_cache *s,
  *
  * Otherwise we can simply pick the next object from the lockless free list.
  */
-static __always_inline void *slab_alloc_node(struct kmem_cache *s,
-		gfp_t gfpflags, int node/*要求指定node上的内存*/, unsigned long addr, size_t orig_size)
+static __always_inline void *slab_alloc_node(struct kmem_cache *s/*自哪个cache申请*/,
+		gfp_t gfpflags, int node/*要求指定node上的内存*/, unsigned long addr/*caller地址*/, size_t orig_size)
 {
     //自slab中申请obj
 	void *object;
@@ -2996,7 +3024,7 @@ redo:
 	object = c->freelist;
 	page = c->page;
 	if (unlikely(!object || !page || !node_match(page, node))) {
-	    /*没有c->freelist上没有obj了，再申请一组*/
+	    /*此cache上没有空闲obj,没有空闲page,或者node不匹配，需要再申请一组*/
 		object = __slab_alloc(s, gfpflags, node, addr, c);
 	} else {
 	    //freelist上有，自链上直接分配
@@ -3038,8 +3066,8 @@ out:
 }
 
 /*自slab中申请obj*/
-static __always_inline void *slab_alloc(struct kmem_cache *s,
-		gfp_t gfpflags, unsigned long addr, size_t orig_size)
+static __always_inline void *slab_alloc(struct kmem_cache *s/*自哪个slab进行申请*/,
+		gfp_t gfpflags, unsigned long addr/*caller地址*/, size_t orig_size)
 {
 	return slab_alloc_node(s, gfpflags, NUMA_NO_NODE/*使用任意node*/, addr, orig_size);
 }

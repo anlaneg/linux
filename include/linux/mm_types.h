@@ -128,14 +128,16 @@ struct page {
 			//属page所属的slab
 			struct kmem_cache *slab_cache; /* not slob */
 			/* Double-word boundary */
-			//指向首个free object
+			//指向此page可分配的object
 			void *freelist;		/* first free object */
 			union {
 				void *s_mem;	/* slab: first object */
 				unsigned long counters;		/* SLUB */
 				struct {			/* SLUB */
-					unsigned inuse:16;//可供使用的obj数目
-					unsigned objects:15;//此page可容纳的obj数目
+				    //当前可供分配的obj数目
+					unsigned inuse:16;
+					//此page可容纳的obj数目
+					unsigned objects:15;
 					unsigned frozen:1;
 				};
 			};

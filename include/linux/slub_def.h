@@ -91,6 +91,7 @@ struct kmem_cache {
 	/* Used for retrieving partial slabs, etc. */
 	slab_flags_t flags;
 	unsigned long min_partial;
+	/*此slab中obj的size*/
 	unsigned int size;	/* The size of an object including metadata */
 	unsigned int object_size;/* The size of an object without metadata */
 	struct reciprocal_value reciprocal_size;
@@ -109,6 +110,7 @@ struct kmem_cache {
 	struct kmem_cache_order_objects min;
 	gfp_t allocflags;	/* gfp flags to use on each alloc */
 	int refcount;		/* Refcount for slab cache destroy */
+	/*单个obj的构造函数*/
 	void (*ctor)(void *);
 	//obj实际的大小
 	unsigned int inuse;		/* Offset to metadata */

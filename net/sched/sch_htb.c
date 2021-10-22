@@ -1422,9 +1422,11 @@ htb_select_queue(struct Qdisc *sch, struct tcmsg *tcm)
 	struct htb_sched *q = qdisc_priv(sch);
 	int err;
 
+	/*未卸载时，直接返回qdic对应用queue*/
 	if (!q->offload)
 		return sch->dev_queue;
 
+	/*查询classid对应的qid*/
 	offload_opt = (struct tc_htb_qopt_offload) {
 		.command = TC_HTB_LEAF_QUERY_QUEUE,
 		.classid = TC_H_MIN(tcm->tcm_parent),
@@ -1512,6 +1514,7 @@ static int htb_graft(struct Qdisc *sch, unsigned long arg, struct Qdisc *new,
 	return 0;
 }
 
+/*level为零时，返回leaf对应的q,否则返回NULL*/
 static struct Qdisc *htb_leaf(struct Qdisc *sch, unsigned long arg)
 {
 	struct htb_class *cl = (struct htb_class *)arg;

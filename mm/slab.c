@@ -3295,7 +3295,7 @@ __do_cache_alloc(struct kmem_cache *cachep, gfp_t flags)
 #endif /* CONFIG_NUMA */
 
 static __always_inline void *
-slab_alloc(struct kmem_cache *cachep, gfp_t flags, size_t orig_size, unsigned long caller)
+slab_alloc(struct kmem_cache *cachep/*自此cache中进行申请*/, gfp_t flags, size_t orig_size/*申请的大小*/, unsigned long caller)
 {
 	unsigned long save_flags;
 	void *objp;
@@ -3566,7 +3566,7 @@ EXPORT_SYMBOL(kmem_cache_alloc_bulk);
 
 #ifdef CONFIG_TRACING
 void *
-kmem_cache_alloc_trace(struct kmem_cache *cachep, gfp_t flags, size_t size)
+kmem_cache_alloc_trace(struct kmem_cache *cachep/*自cachep中进行申请*/, gfp_t flags, size_t size/*申请大小*/)
 {
 	void *ret;
 
@@ -3708,7 +3708,7 @@ static __always_inline void *__do_kmalloc(size_t size, gfp_t flags,
 
 void *__kmalloc(size_t size, gfp_t flags)
 {
-	return __do_kmalloc(size, flags, _RET_IP_);
+	return __do_kmalloc(size, flags, _RET_IP_/*当前函数地址*/);
 }
 EXPORT_SYMBOL(__kmalloc);
 

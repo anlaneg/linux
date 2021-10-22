@@ -311,6 +311,7 @@ static int __init ingress_module_init(void)
 		//注册成功，注册clsact排队规则
 		ret = register_qdisc(&clsact_qdisc_ops);
 		if (ret)
+		    /*不成功，解注册ingress的排队规则*/
 			unregister_qdisc(&ingress_qdisc_ops);
 	}
 

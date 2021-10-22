@@ -14,7 +14,7 @@
 
 struct bpf_lwt_prog {
 	struct bpf_prog *prog;
-	char *name;
+	char *name;/*程序名称*/
 };
 
 struct bpf_lwt {
@@ -350,6 +350,7 @@ static int bpf_parse_prog(struct nlattr *attr, struct bpf_lwt_prog *prog,
 	if (!prog->name)
 		return -ENOMEM;
 
+	/*程序对应的fd*/
 	fd = nla_get_u32(tb[LWT_BPF_PROG_FD]);
 	p = bpf_prog_get_type(fd, type);
 	if (IS_ERR(p))
@@ -377,6 +378,7 @@ static int bpf_build_state(struct net *net, struct nlattr *nla,
 	struct bpf_lwt *bpf;
 	int ret;
 
+	/*仅支持ipv4,ipv6*/
 	if (family != AF_INET && family != AF_INET6)
 		return -EAFNOSUPPORT;
 
@@ -396,6 +398,7 @@ static int bpf_build_state(struct net *net, struct nlattr *nla,
 	bpf = bpf_lwt_lwtunnel(newts);
 
 	if (tb[LWT_BPF_IN]) {
+	    /*bpf_in方向*/
 		newts->flags |= LWTUNNEL_STATE_INPUT_REDIRECT;
 		ret = bpf_parse_prog(tb[LWT_BPF_IN], &bpf->in,
 				     BPF_PROG_TYPE_LWT_IN);
