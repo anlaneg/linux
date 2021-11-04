@@ -804,6 +804,7 @@ int security_capable(const struct cred *cred,
 		     int cap,
 		     unsigned int opts)
 {
+    /*触发security_hook_heads.capable函数链*/
 	return call_int_hook(capable, 0, cred, ns, cap, opts);
 }
 

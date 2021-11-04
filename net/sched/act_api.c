@@ -376,6 +376,7 @@ static int tcf_del_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 		goto nla_put_failure;
 
 	mutex_lock(&idrinfo->lock);
+	/*遍历idr中存放的每个元素*/
 	idr_for_each_entry_ul(idr, p, tmp, id) {
 		if (IS_ERR(p))
 			continue;
@@ -452,6 +453,7 @@ static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 	mutex_lock(&idrinfo->lock);
 	p = idr_find(&idrinfo->action_idr, index);
 	if (!p) {
+	    /*没有找到此index对应的指针，返回查询失败*/
 		mutex_unlock(&idrinfo->lock);
 		return -ENOENT;
 	}
@@ -1252,6 +1254,7 @@ static int tca_get_fill(struct sk_buff *skb, struct tc_action *actions[],
 	if (!nest)
 		goto out_nlmsg_trim;
 
+	/*将这些actions dump到skb中*/
 	if (tcf_action_dump(skb, actions, bind, ref, false) < 0)
 		goto out_nlmsg_trim;
 
@@ -1285,6 +1288,7 @@ tcf_get_notify(struct net *net, u32 portid, struct nlmsghdr *n,
 	return rtnl_unicast(skb, net, portid);
 }
 
+/*通过kind,index确认tc_action*/
 static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 					  struct nlmsghdr *n, u32 portid,
 					  struct netlink_ext_ack *extack)
@@ -1308,6 +1312,7 @@ static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 	}
 	index = nla_get_u32(tb[TCA_ACT_INDEX]);
 
+	/*查询kind对应的action ops*/
 	err = -EINVAL;
 	//查询action kind对应的ops
 	ops = tc_lookup_action(tb[TCA_ACT_KIND]);
@@ -1315,6 +1320,7 @@ static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 		NL_SET_ERR_MSG(extack, "Specified TC action kind not found");
 		goto err_out;
 	}
+	/*通过index查找对应的action*/
 	err = -ENOENT;
 	//依据对应的action index查找对应的action
 	if (ops->lookup(net, &a, index) == 0) {
@@ -1482,6 +1488,7 @@ tca_action_gd(struct net *net, struct nlattr *nla, struct nlmsghdr *n,
 	size_t attr_size = 0;
 	struct tc_action *actions[TCA_ACT_MAX_PRIO] = {};
 
+	/*解析action消息*/
 	ret = nla_parse_nested_deprecated(tb, TCA_ACT_MAX_PRIO, nla, NULL,
 					  extack);
 	if (ret < 0)
@@ -1584,6 +1591,7 @@ static const struct nla_policy tcaa_policy[TCA_ROOT_MAX + 1] = {
 	[TCA_ROOT_TIME_DELTA]      = { .type = NLA_U32 },
 };
 
+/*处理tc action创建/删除/获取*/
 static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 			 struct netlink_ext_ack *extack)
 {
@@ -1596,6 +1604,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 	    !netlink_capable(skb, CAP_NET_ADMIN))
 		return -EPERM;
 
+	/*内容解析*/
 	ret = nlmsg_parse_deprecated(n, sizeof(struct tcamsg), tca,
 				     TCA_ROOT_MAX, NULL, extack);
 	if (ret < 0)
@@ -1609,6 +1618,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 	/* n->nlmsg_flags & NLM_F_CREATE */
 	switch (n->nlmsg_type) {
 	case RTM_NEWACTION:
+	    /*新添加一个action*/
 		/* we are going to assume all other flags
 		 * imply create only if it doesn't exist
 		 * Note that CREATE | EXCL implies that
@@ -1622,10 +1632,12 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 				     extack);
 		break;
 	case RTM_DELACTION:
+	    /*移除一个action*/
 		ret = tca_action_gd(net, tca[TCA_ACT_TAB], n,
 				    portid, RTM_DELACTION, extack);
 		break;
 	case RTM_GETACTION:
+	    /*action信息获取*/
 		ret = tca_action_gd(net, tca[TCA_ACT_TAB], n,
 				    portid, RTM_GETACTION, extack);
 		break;

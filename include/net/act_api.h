@@ -134,6 +134,7 @@ struct tc_action_net {
 	const struct tc_action_ops *ops;
 };
 
+/*负责对tc action net进行初始*/
 static inline
 int tc_action_net_init(struct net *net, struct tc_action_net *tn,
 		       const struct tc_action_ops *ops)

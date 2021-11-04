@@ -368,6 +368,7 @@ static bool ns_capable_common(struct user_namespace *ns,
 	int capable;
 
 	if (unlikely(!cap_valid(cap))) {
+	    /*cap标识无效*/
 		pr_crit("capable() called with invalid cap=%u\n", cap);
 		BUG();
 	}
@@ -468,9 +469,11 @@ bool file_ns_capable(const struct file *file, struct user_namespace *ns,
 {
 
 	if (WARN_ON_ONCE(!cap_valid(cap)))
+	    /*未知的权限标识*/
 		return false;
 
 	if (security_capable(file->f_cred, ns, cap, CAP_OPT_NONE) == 0)
+	    /*如果通过hook调用，则返回true*/
 		return true;
 
 	return false;

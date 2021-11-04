@@ -420,6 +420,7 @@ struct vfs_ns_cap_data {
 
 #define CAP_LAST_CAP         CAP_CHECKPOINT_RESTORE
 
+/*检查所给权限标识是否有效*/
 #define cap_valid(x) ((x) >= 0 && (x) <= CAP_LAST_CAP)
 
 /*
