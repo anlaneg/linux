@@ -400,7 +400,6 @@ static void tcp_init_nondata_skb(struct sk_buff *skb, u32 seq, u8 flags)
 	skb->ip_summed = CHECKSUM_PARTIAL;
 
 	TCP_SKB_CB(skb)->tcp_flags = flags;
-	TCP_SKB_CB(skb)->sacked = 0;
 
 	tcp_skb_pcount_set(skb, 1);/*报文数1个*/
 
@@ -1272,8 +1271,6 @@ static int __tcp_transmit_skb(struct sock *sk, struct sk_buff *skb,
 	tp->tcp_wstamp_ns = max(tp->tcp_wstamp_ns, tp->tcp_clock_cache);
 	skb->skb_mstamp_ns = tp->tcp_wstamp_ns;
 	if (clone_it) {
-		TCP_SKB_CB(skb)->tx.in_flight = TCP_SKB_CB(skb)->end_seq
-			- tp->snd_una;
 		oskb = skb;
 
 		tcp_skb_tsorted_save(oskb) {
@@ -1595,7 +1592,7 @@ int tcp_fragment(struct sock *sk, enum tcp_queue tcp_queue,
 		return -ENOMEM;
 
 	/* Get a new skb... force flag on. */
-	buff = sk_stream_alloc_skb(sk, nsize, gfp, true);
+	buff = tcp_stream_alloc_skb(sk, nsize, gfp, true);
 	if (!buff)
 		return -ENOMEM; /* We'll just try again later. */
 	skb_copy_decrypted(buff, skb);
@@ -1620,8 +1617,6 @@ int tcp_fragment(struct sock *sk, enum tcp_queue tcp_queue,
 	tcp_skb_fragment_eor(skb, buff);
 
 	skb_split(skb, buff, len);
-
-	buff->ip_summed = CHECKSUM_PARTIAL;
 
 	buff->tstamp = skb->tstamp;
 	tcp_fragment_tstamp(skb, buff);
@@ -1707,7 +1702,6 @@ int tcp_trim_head(struct sock *sk, struct sk_buff *skb, u32 len)
 	delta_truesize = __pskb_trim_head(skb, len);
 
 	TCP_SKB_CB(skb)->seq += len;
-	skb->ip_summed = CHECKSUM_PARTIAL;
 
 	if (delta_truesize) {
 		skb->truesize	   -= delta_truesize;
@@ -1761,6 +1755,7 @@ int tcp_mtu_to_mss(struct sock *sk, int pmtu)
 	return __tcp_mtu_to_mss(sk, pmtu) -
 	       (tcp_sk(sk)->tcp_header_len - sizeof(struct tcphdr));
 }
+EXPORT_SYMBOL(tcp_mtu_to_mss);
 
 /* Inverse of above */
 int tcp_mss_to_mtu(struct sock *sk, int mss)
@@ -2151,7 +2146,7 @@ static int tso_fragment(struct sock *sk, struct sk_buff *skb, unsigned int len,
 		return tcp_fragment(sk, TCP_FRAG_IN_WRITE_QUEUE,
 				    skb, len, mss_now, gfp);
 
-	buff = sk_stream_alloc_skb(sk, 0, gfp, true);
+	buff = tcp_stream_alloc_skb(sk, 0, gfp, true);
 	if (unlikely(!buff))
 		return -ENOMEM;
 	skb_copy_decrypted(buff, skb);
@@ -2172,12 +2167,8 @@ static int tso_fragment(struct sock *sk, struct sk_buff *skb, unsigned int len,
 	TCP_SKB_CB(skb)->tcp_flags = flags & ~(TCPHDR_FIN | TCPHDR_PSH);
 	TCP_SKB_CB(buff)->tcp_flags = flags;
 
-	/* This packet was never sent out yet, so no SACK bits. */
-	TCP_SKB_CB(buff)->sacked = 0;
-
 	tcp_skb_fragment_eor(skb, buff);
 
-	buff->ip_summed = CHECKSUM_PARTIAL;
 	skb_split(skb, buff, len);
 	tcp_fragment_tstamp(skb, buff);
 
@@ -2418,7 +2409,7 @@ static int tcp_mtu_probe(struct sock *sk)
 		return -1;
 
 	/* We're allowed to probe.  Build it now. */
-	nskb = sk_stream_alloc_skb(sk, probe_size, GFP_ATOMIC, false);
+	nskb = tcp_stream_alloc_skb(sk, probe_size, GFP_ATOMIC, false);
 	if (!nskb)
 		return -1;
 	sk_wmem_queued_add(sk, nskb->truesize);
@@ -2431,9 +2422,6 @@ static int tcp_mtu_probe(struct sock *sk)
 	TCP_SKB_CB(nskb)->seq = TCP_SKB_CB(skb)->seq;
 	TCP_SKB_CB(nskb)->end_seq = TCP_SKB_CB(skb)->seq + probe_size;
 	TCP_SKB_CB(nskb)->tcp_flags = TCPHDR_ACK;
-	TCP_SKB_CB(nskb)->sacked = 0;
-	nskb->csum = 0;
-	nskb->ip_summed = CHECKSUM_PARTIAL;
 
 	tcp_insert_write_queue_before(nskb, skb, sk);
 	tcp_highest_sack_replace(sk, skb, nskb);
@@ -2453,7 +2441,7 @@ static int tcp_mtu_probe(struct sock *sk)
 			TCP_SKB_CB(nskb)->eor = TCP_SKB_CB(skb)->eor;
 			tcp_skb_collapse_tstamp(nskb, skb);
 			tcp_unlink_write_queue(skb, sk);
-			sk_wmem_free_skb(sk, skb);
+			tcp_wmem_free_skb(sk, skb);
 		} else {
 			TCP_SKB_CB(nskb)->tcp_flags |= TCP_SKB_CB(skb)->tcp_flags &
 						   ~(TCPHDR_FIN|TCPHDR_PSH);
@@ -2997,8 +2985,7 @@ u32 __tcp_select_window(struct sock *sk)
 		icsk->icsk_ack.quick = 0;
 
 		if (tcp_under_memory_pressure(sk))
-			tp->rcv_ssthresh = min(tp->rcv_ssthresh,
-					       4U * tp->advmss);
+			tcp_adjust_rcv_ssthresh(sk);
 
 		/* free_space might become our new window, make sure we don't
 		 * increase it due to wscale.
@@ -3076,13 +3063,9 @@ static bool tcp_collapse_retrans(struct sock *sk, struct sk_buff *skb)
 
 	BUG_ON(tcp_skb_pcount(skb) != 1 || tcp_skb_pcount(next_skb) != 1);
 
-	if (next_skb_size) {
-		if (next_skb_size <= skb_availroom(skb))
-			skb_copy_bits(next_skb, 0, skb_put(skb, next_skb_size),
-				      next_skb_size);
-		else if (!tcp_skb_shift(skb, next_skb, 1, next_skb_size))
-			return false;
-	}
+	if (next_skb_size && !tcp_skb_shift(skb, next_skb, 1, next_skb_size))
+		return false;
+
 	tcp_highest_sack_replace(sk, next_skb, skb);
 
 	/* Update sequence range on original skb. */
@@ -3404,7 +3387,8 @@ void sk_forced_mem_schedule(struct sock *sk, int size)
 	sk_memory_allocated_add(sk, amt);
 
 	if (mem_cgroup_sockets_enabled && sk->sk_memcg)
-		mem_cgroup_charge_skmem(sk->sk_memcg, amt);
+		mem_cgroup_charge_skmem(sk->sk_memcg, amt,
+					gfp_memcg_charge() | __GFP_NOFAIL);
 }
 
 /* Send a FIN. The caller locks the socket for us.
@@ -3794,10 +3778,9 @@ static int tcp_send_syn_data(struct sock *sk, struct sk_buff *syn)
 	/* limit to order-0 allocations */
 	space = min_t(size_t, space, SKB_MAX_HEAD(MAX_TCP_HEADER));
 
-	syn_data = sk_stream_alloc_skb(sk, space, sk->sk_allocation, false);
+	syn_data = tcp_stream_alloc_skb(sk, space, sk->sk_allocation, false);
 	if (!syn_data)
 		goto fallback;
-	syn_data->ip_summed = CHECKSUM_PARTIAL;
 	memcpy(syn_data->cb, syn->cb, sizeof(syn->cb));
 	if (space) {
 		int copied = copy_from_iter(skb_put(syn_data, space), space,
@@ -3875,7 +3858,7 @@ int tcp_connect(struct sock *sk)
 		return 0;
 	}
 
-	buff = sk_stream_alloc_skb(sk, 0, sk->sk_allocation, true);
+	buff = tcp_stream_alloc_skb(sk, 0, sk->sk_allocation, true);
 	if (unlikely(!buff))
 		return -ENOBUFS;
 

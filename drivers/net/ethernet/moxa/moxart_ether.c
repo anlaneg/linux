@@ -65,7 +65,7 @@ static int moxart_set_mac_address(struct net_device *ndev, void *addr)
 	if (!is_valid_ether_addr(address->sa_data))
 		return -EADDRNOTAVAIL;
 
-	memcpy(ndev->dev_addr, address->sa_data, ndev->addr_len);
+	eth_hw_addr_set(ndev, address->sa_data);
 	moxart_update_mac_address(ndev);
 
 	return 0;
@@ -540,10 +540,8 @@ static int moxart_mac_probe(struct platform_device *pdev)
 	SET_NETDEV_DEV(ndev, &pdev->dev);
 
 	ret = register_netdev(ndev);
-	if (ret) {
-		free_netdev(ndev);
+	if (ret)
 		goto init_fail;
-	}
 
 	netdev_dbg(ndev, "%s: IRQ=%d address=%pM\n",
 		   __func__, ndev->irq, ndev->dev_addr);

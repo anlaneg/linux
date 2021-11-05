@@ -32,15 +32,15 @@ struct tc_action {
 	int				tcfa_action;
 	struct tcf_t			tcfa_tm;
 	//非percpu统计计数，表明action处理过的报文数及字节数
-	struct gnet_stats_basic_packed	tcfa_bstats;
-	struct gnet_stats_basic_packed	tcfa_bstats_hw;
+	struct gnet_stats_basic_sync	tcfa_bstats;
+	struct gnet_stats_basic_sync	tcfa_bstats_hw;
 	struct gnet_stats_queue		tcfa_qstats;
 	struct net_rate_estimator __rcu *tcfa_rate_est;
 	spinlock_t			tcfa_lock;
 	//percpu统计计数，表明处理过的报文数及字节数（TCA_STATS_BASIC类型）
-	struct gnet_stats_basic_cpu __percpu *cpu_bstats;
+	struct gnet_stats_basic_sync __percpu *cpu_bstats;
 	//percpu统计计数，表明处理过的报文数及字节数（TCA_STATS_BASIC_HW类型）
-	struct gnet_stats_basic_cpu __percpu *cpu_bstats_hw;
+	struct gnet_stats_basic_sync __percpu *cpu_bstats_hw;
 	struct gnet_stats_queue __percpu *cpu_qstats;
 	//填充action的cookie
 	struct tc_cookie	__rcu *act_cookie;
@@ -62,6 +62,14 @@ struct tc_action {
 
 #define TCA_ACT_HW_STATS_ANY (TCA_ACT_HW_STATS_IMMEDIATE | \
 			      TCA_ACT_HW_STATS_DELAYED)
+
+/* Reserve 16 bits for user-space. See TCA_ACT_FLAGS_NO_PERCPU_STATS. */
+#define TCA_ACT_FLAGS_USER_BITS 16
+#define TCA_ACT_FLAGS_USER_MASK 0xffff
+#define TCA_ACT_FLAGS_POLICE	(1U << TCA_ACT_FLAGS_USER_BITS)
+#define TCA_ACT_FLAGS_BIND	(1U << (TCA_ACT_FLAGS_USER_BITS + 1))
+#define TCA_ACT_FLAGS_REPLACE	(1U << (TCA_ACT_FLAGS_USER_BITS + 2))
+#define TCA_ACT_FLAGS_NO_RTNL	(1U << (TCA_ACT_FLAGS_USER_BITS + 3))
 
 /* Update lastuse only if needed, to avoid dirtying a cache line.
  * We use a temp variable to avoid fetching jiffies twice.
@@ -112,8 +120,8 @@ struct tc_action_ops {
 	int     (*lookup)(struct net *net, struct tc_action **a, u32 index);
 	//通过netlink消息初始化对应tc action
 	int     (*init)(struct net *net, struct nlattr *nla,
-			struct nlattr *est, struct tc_action **act/*出参，填充后action*/, int ovr,
-			int bind, bool rtnl_held, struct tcf_proto *tp,
+			struct nlattr *est, struct tc_action **act/*出参，填充后action*/,
+			struct tcf_proto *tp,
 			u32 flags, struct netlink_ext_ack *extack);
 	int     (*walk)(struct net *, struct sk_buff *,
 			struct netlink_callback *, int,
@@ -194,18 +202,16 @@ int tcf_action_destroy(struct tc_action *actions[], int bind);
 int tcf_action_exec(struct sk_buff *skb, struct tc_action **actions,
 		    int nr_actions, struct tcf_result *res);
 int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
-		    struct nlattr *est, char *name, int ovr, int bind,
+		    struct nlattr *est,
 		    struct tc_action *actions[], int init_res[], size_t *attr_size,
-		    bool rtnl_held, struct netlink_ext_ack *extack);
-struct tc_action_ops *tc_action_load_ops(char *name, struct nlattr *nla,
+		    u32 flags, struct netlink_ext_ack *extack);
+struct tc_action_ops *tc_action_load_ops(struct nlattr *nla, bool police,
 					 bool rtnl_held,
 					 struct netlink_ext_ack *extack);
 struct tc_action *tcf_action_init_1(struct net *net, struct tcf_proto *tp,
 				    struct nlattr *nla, struct nlattr *est,
-				    char *name, int ovr, int bind,
 				    struct tc_action_ops *a_o, int *init_res,
-				    bool rtnl_held,
-				    struct netlink_ext_ack *extack);
+				    u32 flags, struct netlink_ext_ack *extack);
 int tcf_action_dump(struct sk_buff *skb, struct tc_action *actions[], int bind,
 		    int ref, bool terse);
 int tcf_action_dump_old(struct sk_buff *skb, struct tc_action *a, int, int);
@@ -215,8 +221,8 @@ static inline void tcf_action_update_bstats(struct tc_action *a,
 					    struct sk_buff *skb)
 {
 	if (likely(a->cpu_bstats)) {
-	    /*更新此action通过的报文数及字节数（percpu统计）*/
-		bstats_cpu_update(this_cpu_ptr(a->cpu_bstats), skb);
+		/*更新此action通过的报文数及字节数（percpu统计）*/
+		bstats_update(this_cpu_ptr(a->cpu_bstats), skb);
 		return;
 	}
 	spin_lock(&a->tcfa_lock);

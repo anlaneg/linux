@@ -110,6 +110,7 @@ struct virtio_device {
 	bool config_enabled;
 	bool config_change_pending;
 	spinlock_t config_lock;
+	spinlock_t vqs_list_lock; /* Protects VQs list access */
 	struct device dev;
 	struct virtio_device_id id;
 	//virtio-pci驱动创建的virtio设备会有一种可能，指向virtio_pci_config_ops
@@ -153,6 +154,7 @@ size_t virtio_max_dma_size(struct virtio_device *vdev);
  * @feature_table_size: number of entries in the feature table array.
  * @feature_table_legacy: same as feature_table but when working in legacy mode.
  * @feature_table_size_legacy: number of entries in feature table legacy array.
+ * @suppress_used_validation: set to not have core validate used length
  * @probe: the function to call when a device is found.  Returns 0 or -errno.
  * @scan: optional function to call after successful probe; intended
  *    for virtio-scsi to invoke a scan.
@@ -169,6 +171,7 @@ struct virtio_driver {
 	unsigned int feature_table_size;//feature_table大小
 	const unsigned int *feature_table_legacy;//legacy功能列表
 	unsigned int feature_table_size_legacy;//legacy_table大小
+	bool suppress_used_validation;
 	int (*validate)(struct virtio_device *dev);//probe设备之前驱动对设备进行校验
 	int (*probe)(struct virtio_device *dev);
 	void (*scan)(struct virtio_device *dev);

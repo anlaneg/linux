@@ -69,7 +69,17 @@ static void ttm_bo_mem_space_debug(struct ttm_buffer_object *bo,
 	}
 }
 
-static void ttm_bo_del_from_lru(struct ttm_buffer_object *bo)
+static inline void ttm_bo_move_to_pinned(struct ttm_buffer_object *bo)
+{
+	struct ttm_device *bdev = bo->bdev;
+
+	list_move_tail(&bo->lru, &bdev->pinned);
+
+	if (bdev->funcs->del_from_lru_notify)
+		bdev->funcs->del_from_lru_notify(bo);
+}
+
+static inline void ttm_bo_del_from_lru(struct ttm_buffer_object *bo)
 {
 	struct ttm_device *bdev = bo->bdev;
 
@@ -98,9 +108,12 @@ void ttm_bo_move_to_lru_tail(struct ttm_buffer_object *bo,
 		dma_resv_assert_held(bo->base.resv);
 
 	if (bo->pin_count) {
-		ttm_bo_del_from_lru(bo);
+		ttm_bo_move_to_pinned(bo);
 		return;
 	}
+
+	if (!mem)
+		return;
 
 	man = ttm_manager_type(bdev, mem->mem_type);
 	list_move_tail(&bo->lru, &man->lru[bo->priority]);
@@ -339,7 +352,7 @@ static int ttm_bo_cleanup_refs(struct ttm_buffer_object *bo,
 		return ret;
 	}
 
-	ttm_bo_del_from_lru(bo);
+	ttm_bo_move_to_pinned(bo);
 	list_del_init(&bo->ddestroy);
 	spin_unlock(&bo->bdev->lru_lock);
 	ttm_bo_cleanup_memtype_use(bo);
@@ -485,6 +498,31 @@ void ttm_bo_unlock_delayed_workqueue(struct ttm_device *bdev, int resched)
 }
 EXPORT_SYMBOL(ttm_bo_unlock_delayed_workqueue);
 
+static int ttm_bo_bounce_temp_buffer(struct ttm_buffer_object *bo,
+				     struct ttm_resource **mem,
+				     struct ttm_operation_ctx *ctx,
+				     struct ttm_place *hop)
+{
+	struct ttm_placement hop_placement;
+	struct ttm_resource *hop_mem;
+	int ret;
+
+	hop_placement.num_placement = hop_placement.num_busy_placement = 1;
+	hop_placement.placement = hop_placement.busy_placement = hop;
+
+	/* find space in the bounce domain */
+	ret = ttm_bo_mem_space(bo, &hop_placement, &hop_mem, ctx);
+	if (ret)
+		return ret;
+	/* move to the bounce domain */
+	ret = ttm_bo_handle_move_mem(bo, hop_mem, false, ctx, NULL);
+	if (ret) {
+		ttm_resource_free(bo, &hop_mem);
+		return ret;
+	}
+	return 0;
+}
+
 static int ttm_bo_evict(struct ttm_buffer_object *bo,
 			struct ttm_operation_ctx *ctx)
 {
@@ -524,12 +562,17 @@ static int ttm_bo_evict(struct ttm_buffer_object *bo,
 		goto out;
 	}
 
+bounce:
 	ret = ttm_bo_handle_move_mem(bo, evict_mem, true, ctx, &hop);
-	if (unlikely(ret)) {
-		WARN(ret == -EMULTIHOP, "Unexpected multihop in eviction - likely driver bug\n");
-		if (ret != -ERESTARTSYS)
+	if (ret == -EMULTIHOP) {
+		ret = ttm_bo_bounce_temp_buffer(bo, &evict_mem, ctx, &hop);
+		if (ret) {
 			pr_err("Buffer eviction failed\n");
-		ttm_resource_free(bo, &evict_mem);
+			ttm_resource_free(bo, &evict_mem);
+			goto out;
+		}
+		/* try and move to final place now. */
+		goto bounce;
 	}
 out:
 	return ret;
@@ -844,31 +887,6 @@ error:
 }
 EXPORT_SYMBOL(ttm_bo_mem_space);
 
-static int ttm_bo_bounce_temp_buffer(struct ttm_buffer_object *bo,
-				     struct ttm_resource **mem,
-				     struct ttm_operation_ctx *ctx,
-				     struct ttm_place *hop)
-{
-	struct ttm_placement hop_placement;
-	struct ttm_resource *hop_mem;
-	int ret;
-
-	hop_placement.num_placement = hop_placement.num_busy_placement = 1;
-	hop_placement.placement = hop_placement.busy_placement = hop;
-
-	/* find space in the bounce domain */
-	ret = ttm_bo_mem_space(bo, &hop_placement, &hop_mem, ctx);
-	if (ret)
-		return ret;
-	/* move to the bounce domain */
-	ret = ttm_bo_handle_move_mem(bo, hop_mem, false, ctx, NULL);
-	if (ret) {
-		ttm_resource_free(bo, &hop_mem);
-		return ret;
-	}
-	return 0;
-}
-
 static int ttm_bo_move_buffer(struct ttm_buffer_object *bo,
 			      struct ttm_placement *placement,
 			      struct ttm_operation_ctx *ctx)
@@ -906,54 +924,11 @@ out:
 	return ret;
 }
 
-static bool ttm_bo_places_compat(const struct ttm_place *places,
-				 unsigned num_placement,
-				 struct ttm_resource *mem,
-				 uint32_t *new_flags)
-{
-	unsigned i;
-
-	for (i = 0; i < num_placement; i++) {
-		const struct ttm_place *heap = &places[i];
-
-		if ((mem->start < heap->fpfn ||
-		     (heap->lpfn != 0 && (mem->start + mem->num_pages) > heap->lpfn)))
-			continue;
-
-		*new_flags = heap->flags;
-		if ((mem->mem_type == heap->mem_type) &&
-		    (!(*new_flags & TTM_PL_FLAG_CONTIGUOUS) ||
-		     (mem->placement & TTM_PL_FLAG_CONTIGUOUS)))
-			return true;
-	}
-	return false;
-}
-
-bool ttm_bo_mem_compat(struct ttm_placement *placement,
-		       struct ttm_resource *mem,
-		       uint32_t *new_flags)
-{
-	if (ttm_bo_places_compat(placement->placement, placement->num_placement,
-				 mem, new_flags))
-		return true;
-
-	if ((placement->busy_placement != placement->placement ||
-	     placement->num_busy_placement > placement->num_placement) &&
-	    ttm_bo_places_compat(placement->busy_placement,
-				 placement->num_busy_placement,
-				 mem, new_flags))
-		return true;
-
-	return false;
-}
-EXPORT_SYMBOL(ttm_bo_mem_compat);
-
 int ttm_bo_validate(struct ttm_buffer_object *bo,
 		    struct ttm_placement *placement,
 		    struct ttm_operation_ctx *ctx)
 {
 	int ret;
-	uint32_t new_flags;
 
 	dma_resv_assert_held(bo->base.resv);
 
@@ -966,7 +941,7 @@ int ttm_bo_validate(struct ttm_buffer_object *bo,
 	/*
 	 * Check whether we need to move buffer.
 	 */
-	if (!ttm_bo_mem_compat(placement, bo->resource, &new_flags)) {
+	if (!ttm_resource_compat(bo->resource, placement)) {
 		ret = ttm_bo_move_buffer(bo, placement, ctx);
 		if (ret)
 			return ret;
@@ -1140,8 +1115,8 @@ int ttm_bo_swapout(struct ttm_buffer_object *bo, struct ttm_operation_ctx *ctx,
 		return -EBUSY;
 
 	if (!bo->ttm || !ttm_tt_is_populated(bo->ttm) ||
-	    bo->ttm->page_flags & TTM_PAGE_FLAG_SG ||
-	    bo->ttm->page_flags & TTM_PAGE_FLAG_SWAPPED ||
+	    bo->ttm->page_flags & TTM_TT_FLAG_EXTERNAL ||
+	    bo->ttm->page_flags & TTM_TT_FLAG_SWAPPED ||
 	    !ttm_bo_get_unless_zero(bo)) {
 		if (locked)
 			dma_resv_unlock(bo->base.resv);
@@ -1149,12 +1124,12 @@ int ttm_bo_swapout(struct ttm_buffer_object *bo, struct ttm_operation_ctx *ctx,
 	}
 
 	if (bo->deleted) {
-		ttm_bo_cleanup_refs(bo, false, false, locked);
+		ret = ttm_bo_cleanup_refs(bo, false, false, locked);
 		ttm_bo_put(bo);
-		return 0;
+		return ret == -EBUSY ? -ENOSPC : ret;
 	}
 
-	ttm_bo_del_from_lru(bo);
+	ttm_bo_move_to_pinned(bo);
 	/* TODO: Cleanup the locking */
 	spin_unlock(&bo->bdev->lru_lock);
 
@@ -1205,7 +1180,7 @@ out:
 	if (locked)
 		dma_resv_unlock(bo->base.resv);
 	ttm_bo_put(bo);
-	return ret;
+	return ret == -EBUSY ? -ENOSPC : ret;
 }
 
 void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
@@ -1213,6 +1188,7 @@ void ttm_bo_tt_destroy(struct ttm_buffer_object *bo)
 	if (bo->ttm == NULL)
 		return;
 
+	ttm_tt_unpopulate(bo->bdev, bo->ttm);
 	ttm_tt_destroy(bo->bdev, bo->ttm);
 	bo->ttm = NULL;
 }

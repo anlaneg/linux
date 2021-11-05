@@ -34,7 +34,16 @@
 
 void page_writeback_init(void);
 
+static inline void *folio_raw_mapping(struct folio *folio)
+{
+	unsigned long mapping = (unsigned long)folio->mapping;
+
+	return (void *)(mapping & ~PAGE_MAPPING_FLAGS);
+}
+
 vm_fault_t do_swap_page(struct vm_fault *vmf);
+void folio_rotate_reclaimable(struct folio *folio);
+bool __folio_end_writeback(struct folio *folio);
 
 void free_pgtables(struct mmu_gather *tlb, struct vm_area_struct *start_vma,
 		unsigned long floor, unsigned long ceiling);
@@ -63,17 +72,28 @@ unsigned find_lock_entries(struct address_space *mapping, pgoff_t start,
 		pgoff_t end, struct pagevec *pvec, pgoff_t *indices);
 
 /**
- * page_evictable - test whether a page is evictable
- * @page: the page to test
+ * folio_evictable - Test whether a folio is evictable.
+ * @folio: The folio to test.
  *
- * Test whether page is evictable--i.e., should be placed on active/inactive
- * lists vs unevictable list.
+ * Test whether @folio is evictable -- i.e., should be placed on
+ * active/inactive lists vs unevictable list.
  *
- * Reasons page might not be evictable:
- * (1) page's mapping marked unevictable
- * (2) page is part of an mlocked VMA
- *
+ * Reasons folio might not be evictable:
+ * 1. folio's mapping marked unevictable
+ * 2. One of the pages in the folio is part of an mlocked VMA
  */
+static inline bool folio_evictable(struct folio *folio)
+{
+	bool ret;
+
+	/* Prevent address_space of inode and swap cache from being freed */
+	rcu_read_lock();
+	ret = !mapping_unevictable(folio_mapping(folio)) &&
+			!folio_test_mlocked(folio);
+	rcu_read_unlock();
+	return ret;
+}
+
 static inline bool page_evictable(struct page *page)
 {
 	bool ret;
@@ -210,6 +230,10 @@ extern void zone_pcp_update(struct zone *zone, int cpu_online);
 extern void zone_pcp_reset(struct zone *zone);
 extern void zone_pcp_disable(struct zone *zone);
 extern void zone_pcp_enable(struct zone *zone);
+
+extern void *memmap_alloc(phys_addr_t size, phys_addr_t align,
+			  phys_addr_t min_addr,
+			  int nid, bool exact_nid);
 
 #if defined CONFIG_COMPACTION || defined CONFIG_CMA
 
@@ -539,11 +563,16 @@ static inline void mminit_validate_memmodel_limits(unsigned long *start_pfn,
 
 #ifdef CONFIG_NUMA
 extern int node_reclaim(struct pglist_data *, gfp_t, unsigned int);
+extern int find_next_best_node(int node, nodemask_t *used_node_mask);
 #else
 static inline int node_reclaim(struct pglist_data *pgdat, gfp_t mask,
 				unsigned int order)
 {
 	return NODE_RECLAIM_NOSCAN;
+}
+static inline int find_next_best_node(int node, nodemask_t *used_node_mask)
+{
+	return NUMA_NO_NODE;
 }
 #endif
 

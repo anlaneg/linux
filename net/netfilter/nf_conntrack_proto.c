@@ -156,6 +156,16 @@ unsigned int nf_confirm(struct sk_buff *skb, unsigned int protoff,
 }
 EXPORT_SYMBOL_GPL(nf_confirm);
 
+static bool in_vrf_postrouting(const struct nf_hook_state *state)
+{
+#if IS_ENABLED(CONFIG_NET_L3_MASTER_DEV)
+	if (state->hook == NF_INET_POST_ROUTING &&
+	    netif_is_l3_master(state->out))
+		return true;
+#endif
+	return false;
+}
+
 //confirm此ct
 static unsigned int ipv4_confirm(void *priv,
 				 struct sk_buff *skb,
@@ -167,6 +177,9 @@ static unsigned int ipv4_confirm(void *priv,
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct || ctinfo == IP_CT_RELATED_REPLY)
 		return nf_conntrack_confirm(skb);
+
+	if (in_vrf_postrouting(state))
+		return NF_ACCEPT;
 
 	//如果有ct即confirm此报文
 	return nf_confirm(skb,
@@ -378,6 +391,9 @@ static unsigned int ipv6_confirm(void *priv,
 	ct = nf_ct_get(skb, &ctinfo);
 	if (!ct || ctinfo == IP_CT_RELATED_REPLY)
 		return nf_conntrack_confirm(skb);
+
+	if (in_vrf_postrouting(state))
+		return NF_ACCEPT;
 
 	protoff = ipv6_skip_exthdr(skb, sizeof(struct ipv6hdr), &pnum,
 				   &frag_off);
@@ -701,13 +717,6 @@ void nf_conntrack_proto_pernet_init(struct net *net)
 #endif
 #ifdef CONFIG_NF_CT_PROTO_GRE
 	nf_conntrack_gre_init_net(net);
-#endif
-}
-
-void nf_conntrack_proto_pernet_fini(struct net *net)
-{
-#ifdef CONFIG_NF_CT_PROTO_GRE
-	nf_ct_gre_keymap_flush(net);
 #endif
 }
 

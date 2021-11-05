@@ -647,7 +647,7 @@ error:
 	return rc;
 }
 
-int nfc_set_remote_general_bytes(struct nfc_dev *dev, u8 *gb, u8 gb_len)
+int nfc_set_remote_general_bytes(struct nfc_dev *dev, const u8 *gb, u8 gb_len)
 {
 	pr_debug("dev_name=%s gb_len=%d\n", dev_name(&dev->dev), gb_len);
 
@@ -676,7 +676,7 @@ int nfc_tm_data_received(struct nfc_dev *dev, struct sk_buff *skb)
 EXPORT_SYMBOL(nfc_tm_data_received);
 
 int nfc_tm_activated(struct nfc_dev *dev, u32 protocol, u8 comm_mode,
-		     u8 *gb, size_t gb_len)
+		     const u8 *gb, size_t gb_len)
 {
 	int rc;
 
@@ -841,7 +841,7 @@ EXPORT_SYMBOL(nfc_targets_found);
  */
 int nfc_target_lost(struct nfc_dev *dev, u32 target_idx)
 {
-	struct nfc_target *tg;
+	const struct nfc_target *tg;
 	int i;
 
 	pr_debug("dev_name %s n_target %d\n", dev_name(&dev->dev), target_idx);
@@ -1070,7 +1070,7 @@ struct nfc_dev *nfc_get_device(unsigned int idx)
  * @tx_headroom: reserved space at beginning of skb
  * @tx_tailroom: reserved space at end of skb
  */
-struct nfc_dev *nfc_allocate_device(struct nfc_ops *ops/*操作函数，例如hci_nfc_ops*/,
+struct nfc_dev *nfc_allocate_device(const struct nfc_ops *ops/*操作函数，例如hci_nfc_ops*/,
 				    u32 supported_protocols,
 				    int tx_headroom, int tx_tailroom)
 {

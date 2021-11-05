@@ -771,8 +771,7 @@ struct failover *net_failover_create(struct net_device *standby_dev)
 	failover_dev->features |= failover_dev->hw_features;
 
 	//使failover_dev与standby_dev的mac地址相同
-	memcpy(failover_dev->dev_addr, standby_dev->dev_addr,
-	       failover_dev->addr_len);
+	dev_addr_set(failover_dev, standby_dev->dev_addr);
 
 	//mtu范围相同
 	failover_dev->min_mtu = standby_dev->min_mtu;

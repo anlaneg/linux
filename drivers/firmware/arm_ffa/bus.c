@@ -46,10 +46,14 @@ static int ffa_device_probe(struct device *dev)
 	struct ffa_driver *ffa_drv = to_ffa_driver(dev->driver);
 	struct ffa_device *ffa_dev = to_ffa_dev(dev);
 
-	if (!ffa_device_match(dev, dev->driver))
-		return -ENODEV;
-
 	return ffa_drv->probe(ffa_dev);
+}
+
+static void ffa_device_remove(struct device *dev)
+{
+	struct ffa_driver *ffa_drv = to_ffa_driver(dev->driver);
+
+	ffa_drv->remove(to_ffa_dev(dev));
 }
 
 static int ffa_device_uevent(struct device *dev, struct kobj_uevent_env *env)
@@ -89,6 +93,7 @@ struct bus_type ffa_bus_type = {
 	.name		= "arm_ffa",
 	.match		= ffa_device_match,
 	.probe		= ffa_device_probe,
+	.remove		= ffa_device_remove,
 	.uevent		= ffa_device_uevent,
 	.dev_groups	= ffa_device_attributes_groups,
 };
@@ -98,6 +103,9 @@ int ffa_driver_register(struct ffa_driver *driver, struct module *owner,
 			const char *mod_name)
 {
 	int ret;
+
+	if (!driver->probe)
+		return -EINVAL;
 
 	driver->driver.bus = &ffa_bus_type;
 	driver->driver.name = driver->name;
@@ -127,7 +135,7 @@ static void ffa_release_device(struct device *dev)
 
 static int __ffa_devices_unregister(struct device *dev, void *data)
 {
-	ffa_release_device(dev);
+	device_unregister(dev);
 
 	return 0;
 }

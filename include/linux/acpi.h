@@ -249,7 +249,7 @@ void acpi_table_print_madt_entry (struct acpi_subtable_header *madt);
 /* the following numa functions are architecture-dependent */
 void acpi_numa_slit_init (struct acpi_table_slit *slit);
 
-#if defined(CONFIG_X86) || defined(CONFIG_IA64)
+#if defined(CONFIG_X86) || defined(CONFIG_IA64) || defined(CONFIG_LOONGARCH)
 void acpi_numa_processor_affinity_init (struct acpi_srat_cpu_affinity *pa);
 #else
 static inline void
@@ -1353,6 +1353,7 @@ static inline int lpit_read_residency_count_address(u64 *address)
 #ifdef CONFIG_ACPI_PPTT
 int acpi_pptt_cpu_is_thread(unsigned int cpu);
 int find_acpi_cpu_topology(unsigned int cpu, int level);
+int find_acpi_cpu_topology_cluster(unsigned int cpu);
 int find_acpi_cpu_topology_package(unsigned int cpu);
 int find_acpi_cpu_topology_hetero_id(unsigned int cpu);
 int find_acpi_cpu_cache_topology(unsigned int cpu, int level);
@@ -1362,6 +1363,10 @@ static inline int acpi_pptt_cpu_is_thread(unsigned int cpu)
 	return -EINVAL;
 }
 static inline int find_acpi_cpu_topology(unsigned int cpu, int level)
+{
+	return -EINVAL;
+}
+static inline int find_acpi_cpu_topology_cluster(unsigned int cpu)
 {
 	return -EINVAL;
 }
@@ -1380,13 +1385,11 @@ static inline int find_acpi_cpu_cache_topology(unsigned int cpu, int level)
 #endif
 
 #ifdef CONFIG_ACPI
-extern int acpi_platform_notify(struct device *dev, enum kobject_action action);
+extern void acpi_device_notify(struct device *dev);
+extern void acpi_device_notify_remove(struct device *dev);
 #else
-static inline int
-acpi_platform_notify(struct device *dev, enum kobject_action action)
-{
-	return 0;
-}
+static inline void acpi_device_notify(struct device *dev) { }
+static inline void acpi_device_notify_remove(struct device *dev) { }
 #endif
 
 #endif	/*_LINUX_ACPI_H*/

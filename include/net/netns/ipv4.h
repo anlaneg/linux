@@ -182,7 +182,6 @@ struct netns_ipv4 {
 	/*设置默认拥塞控制算法*/
 	const struct tcp_congestion_ops __rcu  *tcp_congestion_control;
 	struct tcp_fastopen_context __rcu *tcp_fastopen_ctx;
-	spinlock_t tcp_fastopen_ctx_lock;
 	unsigned int sysctl_tcp_fastopen_blackhole_timeout;
 	atomic_t tfo_active_disable_times;
 	unsigned long tfo_active_disable_stamp;

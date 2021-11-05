@@ -35,9 +35,9 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 	     int (*lock)(dev_t, void *), void *data)
 {
 	//需要占用多少个major
-	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
-	unsigned index = MAJOR(dev);//起始的major
-	unsigned i;
+	unsigned int n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
+	unsigned int index = MAJOR(dev);//起始的major
+	unsigned int i;
 	struct probe *p;
 
 	if (n > 255)
@@ -74,9 +74,9 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 //自domain中删除dev及其range对应的段
 void kobj_unmap(struct kobj_map *domain, dev_t dev, unsigned long range)
 {
-	unsigned n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
-	unsigned index = MAJOR(dev);
-	unsigned i;
+	unsigned int n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
+	unsigned int index = MAJOR(dev);
+	unsigned int i;
 	struct probe *found = NULL;
 
 	if (n > 255)

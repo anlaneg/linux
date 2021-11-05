@@ -215,7 +215,7 @@ static void macvlan_hash_change_addr(struct macvlan_dev *vlan,
 	/* Now that we are unhashed it is safe to change the device
 	 * address without confusing packet delivery.
 	 */
-	memcpy(vlan->dev->dev_addr, addr, ETH_ALEN);
+	eth_hw_addr_set(vlan->dev, addr);
 	macvlan_hash_add(vlan);
 }
 
@@ -743,7 +743,8 @@ hash_del:
 	return 0;
 }
 
-static int macvlan_sync_address(struct net_device *dev, unsigned char *addr)
+static int macvlan_sync_address(struct net_device *dev,
+				const unsigned char *addr)
 {
 	struct macvlan_dev *vlan = netdev_priv(dev);
 	struct net_device *lowerdev = vlan->lowerdev;
@@ -752,7 +753,7 @@ static int macvlan_sync_address(struct net_device *dev, unsigned char *addr)
 
 	if (!(dev->flags & IFF_UP)) {
 		/* Just copy in the new address */
-		ether_addr_copy(dev->dev_addr, addr);
+		eth_hw_addr_set(dev, addr);
 	} else {
 		/* Rehash and update the device filters */
 		if (macvlan_addr_busy(vlan->port, addr))
@@ -881,7 +882,7 @@ static int macvlan_change_mtu(struct net_device *dev, int new_mtu)
 	return 0;
 }
 
-static int macvlan_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
+static int macvlan_eth_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 {
 	struct net_device *real_dev = macvlan_dev_real_dev(dev);
 	const struct net_device_ops *ops = real_dev->netdev_ops;
@@ -897,8 +898,8 @@ static int macvlan_do_ioctl(struct net_device *dev, struct ifreq *ifr, int cmd)
 			break;
 		fallthrough;
 	case SIOCGHWTSTAMP:
-		if (netif_device_present(real_dev) && ops->ndo_do_ioctl)
-			err = ops->ndo_do_ioctl(real_dev, &ifrr, cmd);
+		if (netif_device_present(real_dev) && ops->ndo_eth_ioctl)
+			err = ops->ndo_eth_ioctl(real_dev, &ifrr, cmd);
 		break;
 	}
 
@@ -1204,7 +1205,7 @@ static const struct net_device_ops macvlan_netdev_ops = {
 	//mac vlan报文发送
 	.ndo_start_xmit		= macvlan_start_xmit,
 	.ndo_change_mtu		= macvlan_change_mtu,
-	.ndo_do_ioctl		= macvlan_do_ioctl,
+	.ndo_eth_ioctl		= macvlan_eth_ioctl,
 	.ndo_fix_features	= macvlan_fix_features,
 	.ndo_change_rx_flags	= macvlan_change_rx_flags,
 	.ndo_set_mac_address	= macvlan_set_mac_address,

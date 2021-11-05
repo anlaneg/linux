@@ -637,7 +637,7 @@ static int fxls8962af_i2c_raw_read_errata3(struct fxls8962af_data *data,
 			return ret;
 	}
 
-	return ret;
+	return 0;
 }
 
 static int fxls8962af_fifo_transfer(struct fxls8962af_data *data,
@@ -738,7 +738,7 @@ static irqreturn_t fxls8962af_interrupt(int irq, void *p)
 
 	if (reg & FXLS8962AF_INT_STATUS_SRC_BUF) {
 		ret = fxls8962af_fifo_flush(indio_dev);
-		if (ret)
+		if (ret < 0)
 			return IRQ_NONE;
 
 		return IRQ_HANDLED;

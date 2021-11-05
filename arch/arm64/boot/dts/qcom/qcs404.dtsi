@@ -318,7 +318,7 @@
 			status = "disabled";
 		};
 
-		rpm_msg_ram: memory@60000 {
+		rpm_msg_ram: sram@60000 {
 			compatible = "qcom,rpm-msg-ram";
 			reg = <0x00060000 0x6000>;
 		};
@@ -544,7 +544,7 @@
 			assigned-clock-rates = <19200000>, <200000000>;
 			status = "disabled";
 
-			usb@7580000 {
+			dwc3@7580000 {
 				compatible = "snps,dwc3";
 				reg = <0x07580000 0xcd00>;
 				interrupts = <GIC_SPI 26 IRQ_TYPE_LEVEL_HIGH>;
@@ -573,7 +573,7 @@
 			assigned-clock-rates = <19200000>, <133333333>;
 			status = "disabled";
 
-			usb@78c0000 {
+			dwc3@78c0000 {
 				compatible = "snps,dwc3";
 				reg = <0x078c0000 0xcc00>;
 				interrupts = <GIC_SPI 44 IRQ_TYPE_LEVEL_HIGH>;
@@ -717,6 +717,11 @@
 		tcsr: syscon@1937000 {
 			compatible = "syscon";
 			reg = <0x01937000 0x25000>;
+		};
+
+		sram@290000 {
+			compatible = "qcom,rpm-stats";
+			reg = <0x00290000 0x10000>;
 		};
 
 		spmi_bus: spmi@200f000 {

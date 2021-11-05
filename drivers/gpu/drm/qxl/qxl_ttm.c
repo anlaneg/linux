@@ -101,7 +101,6 @@ int qxl_ttm_io_mem_reserve(struct ttm_device *bdev,
  */
 static void qxl_ttm_backend_destroy(struct ttm_device *bdev, struct ttm_tt *ttm)
 {
-	ttm_tt_destroy_common(bdev, ttm);
 	ttm_tt_fini(ttm);
 	kfree(ttm);
 }
@@ -127,7 +126,7 @@ static void qxl_bo_move_notify(struct ttm_buffer_object *bo,
 	struct qxl_bo *qbo;
 	struct qxl_device *qdev;
 
-	if (!qxl_ttm_bo_is_qxl_bo(bo))
+	if (!qxl_ttm_bo_is_qxl_bo(bo) || !bo->resource)
 		return;
 	qbo = to_qxl_bo(bo);
 	qdev = to_qxl(qbo->tbo.base.dev);

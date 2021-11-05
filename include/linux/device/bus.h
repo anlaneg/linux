@@ -98,7 +98,7 @@ struct bus_type {
 	//使能驱动，使其探测设备（如果此函数为空，则调用驱动的probe进行探测）
 	int (*probe)(struct device *dev);
 	void (*sync_state)(struct device *dev);
-	int (*remove)(struct device *dev);
+	void (*remove)(struct device *dev);
 	void (*shutdown)(struct device *dev);
 
 	int (*online)(struct device *dev);

@@ -322,7 +322,7 @@ int rtnl_unregister(int protocol, int msgtype)
 	}
 
 	link = rtnl_dereference(tab[msgindex]);
-	rcu_assign_pointer(tab[msgindex], NULL);
+	RCU_INIT_POINTER(tab[msgindex], NULL);
 	rtnl_unlock();
 
 	kfree_rcu(link, rcu);
@@ -359,7 +359,7 @@ void rtnl_unregister_all(int protocol)
 		if (!link)
 			continue;
 
-		rcu_assign_pointer(tab[msgindex], NULL);
+		RCU_INIT_POINTER(tab[msgindex], NULL);
 		kfree_rcu(link, rcu);
 	}
 	rtnl_unlock();
@@ -741,16 +741,8 @@ out:
 int rtnetlink_send(struct sk_buff *skb, struct net *net, u32 pid, unsigned int group, int echo)
 {
 	struct sock *rtnl = net->rtnl;
-	int err = 0;
 
-	NETLINK_CB(skb).dst_group = group;
-	if (echo)
-		refcount_inc(&skb->users);
-	netlink_broadcast(rtnl, skb, pid, group, GFP_KERNEL);
-	if (echo)
-	    /*回复单播报文给相应pid*/
-		err = netlink_unicast(rtnl, skb, pid, MSG_DONTWAIT);
-	return err;
+	return nlmsg_notify(rtnl, skb, pid, group, echo, GFP_KERNEL);
 }
 
 int rtnl_unicast(struct sk_buff *skb, struct net *net, u32 pid)
@@ -765,12 +757,8 @@ void rtnl_notify(struct sk_buff *skb, struct net *net, u32 pid, u32 group,
 		 struct nlmsghdr *nlh, gfp_t flags)
 {
 	struct sock *rtnl = net->rtnl;
-	int report = 0;
 
-	if (nlh)
-		report = nlmsg_report(nlh);
-
-	nlmsg_notify(rtnl, skb, pid, group, report, flags);
+	nlmsg_notify(rtnl, skb, pid, group, nlmsg_report(nlh), flags);
 }
 EXPORT_SYMBOL(rtnl_notify);
 
@@ -2004,6 +1992,13 @@ static bool link_master_filtered(struct net_device *dev, int master_idx)
 		return false;
 
 	master = netdev_master_upper_dev_get(dev);
+
+	/* 0 is already used to denote IFLA_MASTER wasn't passed, therefore need
+	 * another invalid value for ifindex to denote "no master".
+	 */
+	if (master_idx == -1)
+		return !!master;
+
 	if (!master || master->ifindex != master_idx)
 		return true;
 
@@ -2307,7 +2302,8 @@ invalid_attr:
 }
 
 /*针对dev校验设备配置*/
-static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
+static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[],
+			    struct netlink_ext_ack *extack)
 {
 	if (dev) {
 		//设备地址不得小于dev->addr_len
@@ -2339,8 +2335,8 @@ static int validate_linkmsg(struct net_device *dev, struct nlattr *tb[])
 				return -EOPNOTSUPP;
 
 			if (af_ops->validate_link_af) {
-			    /*校验af独有的配置*/
-				err = af_ops->validate_link_af(dev, af);
+			    	/*校验af独有的配置*/
+				err = af_ops->validate_link_af(dev, af, extack);
 				if (err < 0)
 					return err;
 			}
@@ -2658,11 +2654,12 @@ static int do_setlink(const struct sk_buff *skb,
 	int err;
 
 	//配置校验
-	err = validate_linkmsg(dev, tb);
+	err = validate_linkmsg(dev, tb, extack);
 	if (err < 0)
 		return err;
 
 	if (tb[IFLA_NET_NS_PID] || tb[IFLA_NET_NS_FD] || tb[IFLA_TARGET_NETNSID]) {
+		const char *pat = ifname && ifname[0] ? ifname : NULL;
 	    	//确定net namespace
 		struct net *net;
 		int new_ifindex;
@@ -2680,7 +2677,7 @@ static int do_setlink(const struct sk_buff *skb,
 			new_ifindex = 0;
 
 		//将dev切换到新的net namespace
-		err = __dev_change_net_namespace(dev, net, ifname, new_ifindex);
+		err = __dev_change_net_namespace(dev, net, pat, new_ifindex);
 		put_net(net);
 		if (err)
 			goto errout;
@@ -3293,8 +3290,8 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 	}
 	//设备mac地址
 	if (tb[IFLA_ADDRESS]) {
-		memcpy(dev->dev_addr, nla_data(tb[IFLA_ADDRESS]),
-				nla_len(tb[IFLA_ADDRESS]));
+		__dev_addr_set(dev, nla_data(tb[IFLA_ADDRESS]),
+			       nla_len(tb[IFLA_ADDRESS]));
 		dev->addr_assign_type = NET_ADDR_SET;
 	}
 
@@ -3405,7 +3402,7 @@ replay:
 	}
 
 	/*消息校验*/
-	err = validate_linkmsg(dev, tb);
+	err = validate_linkmsg(dev, tb, extack);
 	if (err < 0)
 		return err;
 
@@ -3935,9 +3932,8 @@ struct sk_buff *rtmsg_ifinfo_build_skb(int type, struct net_device *dev,
 	struct net *net = dev_net(dev);
 	struct sk_buff *skb;
 	int err = -ENOBUFS;
-	size_t if_info_size;
 
-	skb = nlmsg_new((if_info_size = if_nlmsg_size(dev, 0)), flags);
+	skb = nlmsg_new(if_nlmsg_size(dev, 0), flags);
 	if (skb == NULL)
 		goto errout;
 
@@ -4515,7 +4511,7 @@ static int rtnl_fdb_dump(struct sk_buff *skb, struct netlink_callback *cb)
 					continue;
 
 				if (br_dev != netdev_master_upper_dev_get(dev) &&
-				    !(dev->priv_flags & IFF_EBRIDGE))
+				    !netif_is_bridge_master(dev))
 					continue;
 				cops = ops;
 			}
@@ -5393,7 +5389,7 @@ nla_put_failure:
 static size_t if_nlmsg_stats_size(const struct net_device *dev,
 				  u32 filter_mask)
 {
-	size_t size = 0;
+	size_t size = NLMSG_ALIGN(sizeof(struct if_stats_msg));
 
 	if (stats_attr_valid(filter_mask, IFLA_STATS_LINK_64, 0))
 		size += nla_total_size_64bit(sizeof(struct rtnl_link_stats64));

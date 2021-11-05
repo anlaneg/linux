@@ -23,6 +23,8 @@ struct virtio_shm_region {
  *       any of @get/@set, @get_status/@set_status, or @get_features/
  *       @finalize_features are NOT safe to be called from an atomic
  *       context.
+ * @enable_cbs: enable the callbacks
+ *      vdev: the virtio_device
  * @get: read the value of a configuration field
  *	vdev: the virtio_device
  *	offset: the offset of the configuration field
@@ -75,6 +77,7 @@ struct virtio_shm_region {
  */
 typedef void vq_callback_t(struct virtqueue *);
 struct virtio_config_ops {
+	void (*enable_cbs)(struct virtio_device *vdev);
 	//具体一个virtio设备的配置项获取，给定offset，取其对应的buffer内容
 	void (*get)(struct virtio_device *vdev, unsigned offset,
 		    void *buf, unsigned len);
@@ -245,6 +248,9 @@ void virtio_device_ready(struct virtio_device *dev)
 {
 	//见virtio 1.0 sepc 3.1.1节，完成设备初始化
 	unsigned status = dev->config->get_status(dev);
+
+	if (dev->config->enable_cbs)
+                  dev->config->enable_cbs(dev);
 
 	BUG_ON(status & VIRTIO_CONFIG_S_DRIVER_OK);
 	dev->config->set_status(dev, status | VIRTIO_CONFIG_S_DRIVER_OK);

@@ -5,8 +5,6 @@
 #ifndef __LINUX_FILTER_H__
 #define __LINUX_FILTER_H__
 
-#include <stdarg.h>
-
 #include <linux/atomic.h>
 #include <linux/refcount.h>
 #include <linux/compat.h>
@@ -73,6 +71,11 @@ struct ctl_table_header;
 
 /* unused opcode to mark call to interpreter with arguments */
 #define BPF_CALL_ARGS	0xe0
+
+/* unused opcode to mark speculation barrier for mitigating
+ * Speculative Store Bypass
+ */
+#define BPF_NOSPEC	0xc0
 
 /* As per nm, we expose JITed images as text (code) section for
  * kallsyms. That way, tools like perf can find it to match
@@ -358,10 +361,9 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 		.off   = 0,					\
 		.imm   = TGT })
 
-/* Function call */
+/* Convert function address to BPF immediate */
 
-#define BPF_CAST_CALL(x)					\
-		((u64 (*)(u64, u64, u64, u64, u64))(x))
+#define BPF_CALL_IMM(x)	((void *)(x) - (void *)__bpf_call_base)
 
 #define BPF_EMIT_CALL(FUNC)					\
 	((struct bpf_insn) {					\
@@ -369,7 +371,7 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 		.dst_reg = 0,					\
 		.src_reg = 0,					\
 		.off   = 0,					\
-		.imm   = ((FUNC) - __bpf_call_base) })
+		.imm   = BPF_CALL_IMM(FUNC) })
 
 /* Raw code statement block */
 
@@ -386,6 +388,16 @@ static inline bool insn_is_zext(const struct bpf_insn *insn)
 #define BPF_EXIT_INSN()						\
 	((struct bpf_insn) {					\
 		.code  = BPF_JMP | BPF_EXIT,			\
+		.dst_reg = 0,					\
+		.src_reg = 0,					\
+		.off   = 0,					\
+		.imm   = 0 })
+
+/* Speculation barrier */
+
+#define BPF_ST_NOSPEC()						\
+	((struct bpf_insn) {					\
+		.code  = BPF_ST | BPF_NOSPEC,			\
 		.dst_reg = 0,					\
 		.src_reg = 0,					\
 		.off   = 0,					\
@@ -558,9 +570,9 @@ struct bpf_binary_header {
 };
 
 struct bpf_prog_stats {
-	u64 cnt;
-	u64 nsecs;
-	u64 misses;
+	u64_stats_t cnt;
+	u64_stats_t nsecs;
+	u64_stats_t misses;
 	struct u64_stats_sync syncp;
 } __aligned(2 * sizeof(u64));
 
@@ -579,7 +591,8 @@ struct bpf_prog {
 				kprobe_override:1, /* Do we override a kprobe? */
 				has_callchain_buf:1, /* callchain buffer allocated? */
 				enforce_expected_attach_type:1, /* Enforce expected_attach_type checking at attach time */
-				call_get_stack:1; /* Do we call bpf_get_stack() or bpf_get_stackid() */
+				call_get_stack:1, /* Do we call bpf_get_stack() or bpf_get_stackid() */
+				call_get_func_ip:1; /* Do we call get_func_ip() */
 	enum bpf_prog_type	type;		/* Type of BPF program */
 	enum bpf_attach_type	expected_attach_type; /* For some prog types */
 	//insns数组的大小
@@ -595,8 +608,10 @@ struct bpf_prog {
 	struct sock_fprog_kern	*orig_prog;	/* Original BPF program */
 	/* Instructions for interpreter */
 	//存放指令
-	struct sock_filter	insns[0];
-	struct bpf_insn		insnsi[];
+	union {
+		DECLARE_FLEX_ARRAY(struct sock_filter, insns);
+		DECLARE_FLEX_ARRAY(struct bpf_insn, insnsi);
+	};
 };
 
 struct sk_filter {
@@ -607,31 +622,44 @@ struct sk_filter {
 
 DECLARE_STATIC_KEY_FALSE(bpf_stats_enabled_key);
 
+typedef unsigned int (*bpf_dispatcher_fn)(const void *ctx,
+					  const struct bpf_insn *insnsi,
+					  unsigned int (*bpf_func)(const void *,
+								   const struct bpf_insn *));
 //运行bpf程序(prog)->bpf_func将被调用
-#define __BPF_PROG_RUN(prog, ctx, dfunc)	({			\
-	u32 __ret;							\
-	cant_migrate();							\
-	if (static_branch_unlikely(&bpf_stats_enabled_key)) {		\
-		struct bpf_prog_stats *__stats;				\
-		u64 __start = sched_clock();				\
-		/*通过bpf_func函数运行此程序*/\
-		__ret = dfunc(ctx, (prog)->insnsi, (prog)->bpf_func);	\
-		/*取此cpu上本程序的统计变量*/\
-		__stats = this_cpu_ptr(prog->stats);			\
-		u64_stats_update_begin(&__stats->syncp);		\
-		/*记录程序运行次数*/\
-		__stats->cnt++;						\
-		/*记录程序运行的时长*/\
-		__stats->nsecs += sched_clock() - __start;		\
-		u64_stats_update_end(&__stats->syncp);			\
-	} else {							\
-		/*通过bpf_func函数运行此程序*/\
-		__ret = dfunc(ctx, (prog)->insnsi, (prog)->bpf_func);	\
-	}								\
-	__ret; })
+static __always_inline u32 __bpf_prog_run(const struct bpf_prog *prog,
+					  const void *ctx,
+					  bpf_dispatcher_fn dfunc)
+{
+	u32 ret;
 
-#define BPF_PROG_RUN(prog, ctx)						\
-	__BPF_PROG_RUN(prog, ctx, bpf_dispatcher_nop_func)
+	cant_migrate();
+	if (static_branch_unlikely(&bpf_stats_enabled_key)) {
+		struct bpf_prog_stats *stats;
+		u64 start = sched_clock();
+		unsigned long flags;
+
+		/*通过bpf_func函数运行此程序*/
+		ret = dfunc(ctx, prog->insnsi, prog->bpf_func);
+		/*取此cpu上本程序的统计变量*/
+		stats = this_cpu_ptr(prog->stats);
+		flags = u64_stats_update_begin_irqsave(&stats->syncp);
+		/*记录程序运行次数*/
+		u64_stats_inc(&stats->cnt);
+		/*记录程序运行的时长*/
+		u64_stats_add(&stats->nsecs, sched_clock() - start);
+		u64_stats_update_end_irqrestore(&stats->syncp, flags);
+	} else {
+		/*通过bpf_func函数运行此程序*/\
+		ret = dfunc(ctx, prog->insnsi, prog->bpf_func);
+	}
+	return ret;
+}
+
+static __always_inline u32 bpf_prog_run(const struct bpf_prog *prog, const void *ctx)
+{
+	return __bpf_prog_run(prog, ctx, bpf_dispatcher_nop_func);
+}
 
 /*
  * Use in preemptible and therefore migratable context to make sure that
@@ -651,7 +679,7 @@ static inline u32 bpf_prog_run_pin_on_cpu(const struct bpf_prog *prog,
 
 	//禁止抢占后，运行bpf程序
 	migrate_disable();
-	ret = __BPF_PROG_RUN(prog, ctx, bpf_dispatcher_nop_func);
+	ret = bpf_prog_run(prog, ctx);
 	migrate_enable();
 	return ret;
 }
@@ -724,7 +752,7 @@ static inline void bpf_restore_data_end(
 	cb->data_end = saved_data_end;
 }
 
-static inline u8 *bpf_skb_cb(struct sk_buff *skb)
+static inline u8 *bpf_skb_cb(const struct sk_buff *skb)
 {
 	/* eBPF programs may read/write skb->cb[] area to transfer meta
 	 * data between tail calls. Since this also needs to work with
@@ -745,8 +773,9 @@ static inline u8 *bpf_skb_cb(struct sk_buff *skb)
 
 /* Must be invoked with migration disabled */
 static inline u32 __bpf_prog_run_save_cb(const struct bpf_prog *prog,
-					 struct sk_buff *skb)
+					 const void *ctx)
 {
+	const struct sk_buff *skb = ctx;
 	u8 *cb_data = bpf_skb_cb(skb);
 	u8 cb_saved[BPF_SKB_CB_LEN];
 	u32 res;
@@ -758,7 +787,7 @@ static inline u32 __bpf_prog_run_save_cb(const struct bpf_prog *prog,
 	}
 
 	//bpf程序运行
-	res = BPF_PROG_RUN(prog, skb);
+	res = bpf_prog_run(prog, skb);
 
 	if (unlikely(prog->cb_access))
 		memcpy(cb_data, cb_saved, sizeof(cb_saved));
@@ -792,6 +821,10 @@ static inline u32 bpf_prog_run_clear_cb(const struct bpf_prog *prog,
 
 DECLARE_BPF_DISPATCHER(xdp)
 
+DECLARE_STATIC_KEY_FALSE(bpf_master_redirect_enabled_key);
+
+u32 xdp_master_redirect(struct xdp_buff *xdp);
+
 static __always_inline u32 bpf_prog_run_xdp(const struct bpf_prog *prog,
 					    struct xdp_buff *xdp)
 {
@@ -799,7 +832,14 @@ static __always_inline u32 bpf_prog_run_xdp(const struct bpf_prog *prog,
 	 * under local_bh_disable(), which provides the needed RCU protection
 	 * for accessing map entries.
 	 */
-	return __BPF_PROG_RUN(prog, xdp, BPF_DISPATCHER_FUNC(xdp));
+	u32 act = __bpf_prog_run(prog, xdp, BPF_DISPATCHER_FUNC(xdp));
+
+	if (static_branch_unlikely(&bpf_master_redirect_enabled_key)) {
+		if (act == XDP_TX && netif_is_bond_slave(xdp->rxq->dev))
+			act = xdp_master_redirect(xdp);
+	}
+
+	return act;
 }
 
 void bpf_prog_change_xdp(struct bpf_prog *prev_prog, struct bpf_prog *prog);
@@ -1049,6 +1089,7 @@ extern int bpf_jit_enable;
 extern int bpf_jit_harden;
 extern int bpf_jit_kallsyms;
 extern long bpf_jit_limit;
+extern long bpf_jit_limit_max;
 
 typedef void (*bpf_jit_fill_hole_t)(void *area, unsigned int size);
 
@@ -1451,7 +1492,7 @@ static inline bool bpf_sk_lookup_run_v4(struct net *net, int protocol,
 		};
 		u32 act;
 
-		act = BPF_PROG_SK_LOOKUP_RUN_ARRAY(run_array, ctx, BPF_PROG_RUN);
+		act = BPF_PROG_SK_LOOKUP_RUN_ARRAY(run_array, ctx, bpf_prog_run);
 		if (act == SK_PASS) {
 			selected_sk = ctx.selected_sk;
 			no_reuseport = ctx.no_reuseport;
@@ -1489,7 +1530,7 @@ static inline bool bpf_sk_lookup_run_v6(struct net *net, int protocol,
 		};
 		u32 act;
 
-		act = BPF_PROG_SK_LOOKUP_RUN_ARRAY(run_array, ctx, BPF_PROG_RUN);
+		act = BPF_PROG_SK_LOOKUP_RUN_ARRAY(run_array, ctx, bpf_prog_run);
 		if (act == SK_PASS) {
 			selected_sk = ctx.selected_sk;
 			no_reuseport = ctx.no_reuseport;

@@ -26,6 +26,7 @@
 #include "amdgpu_smu.h"
 
 #define SMU13_DRIVER_IF_VERSION_INV 0xFFFFFFFF
+#define SMU13_DRIVER_IF_VERSION_YELLOW_CARP 0x04
 #define SMU13_DRIVER_IF_VERSION_ALDE 0x07
 
 /* MP Apertures */
@@ -162,7 +163,9 @@ int smu_v13_0_notify_display_change(struct smu_context *smu);
 int smu_v13_0_get_current_power_limit(struct smu_context *smu,
 				      uint32_t *power_limit);
 
-int smu_v13_0_set_power_limit(struct smu_context *smu, uint32_t n);
+int smu_v13_0_set_power_limit(struct smu_context *smu,
+			      enum smu_ppt_limit_type limit_type,
+			      uint32_t limit);
 
 int smu_v13_0_init_max_sustainable_clocks(struct smu_context *smu);
 

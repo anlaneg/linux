@@ -826,7 +826,7 @@ tcp_fastopen_blackhole_timeout_sec - INTEGER
 	initial value when the blackhole issue goes away.
 	0 to disable the blackhole detection.
 
-	By default, it is set to 1hr.
+	By default, it is set to 0 (feature is disabled).
 
 tcp_fastopen_key - list of comma separated 32-digit hexadecimal INTEGERs
 	The list consists of a primary key and an optional backup key. The
@@ -988,14 +988,6 @@ tcp_challenge_ack_limit - INTEGER
 	Limits number of Challenge ACK sent per second, as recommended
 	in RFC 5961 (Improving TCP's Robustness to Blind In-Window Attacks)
 	Default: 1000
-
-tcp_rx_skb_cache - BOOLEAN
-	Controls a per TCP socket cache of one skb, that might help
-	performance of some workloads. This might be dangerous
-	on systems with a lot of TCP sockets, since it increases
-	memory usage.
-
-	Default: 0 (disabled)
 
 UDP variables
 =============
@@ -1619,6 +1611,15 @@ arp_accept - BOOLEAN
 	gratuitous arp frame, the arp table will be updated regardless
 	if this setting is on or off.
 
+arp_evict_nocarrier - BOOLEAN
+	Clears the ARP cache on NOCARRIER events. This option is important for
+	wireless devices where the ARP cache should not be cleared when roaming
+	between access points on the same network. In most cases this should
+	remain as the default (1).
+
+	- 1 - (default): Clear the ARP cache on NOCARRIER events
+	- 0 - Do not clear ARP cache on NOCARRIER events
+
 mcast_solicit - INTEGER
 	The maximum number of multicast probes in INCOMPLETE state,
 	when the associated hardware address is unknown.  Defaults
@@ -1925,6 +1926,23 @@ fib_notify_on_flag_change - INTEGER
         - 0 - Do not emit notifications.
         - 1 - Emit notifications.
         - 2 - Emit notifications only for RTM_F_OFFLOAD_FAILED flag change.
+
+ioam6_id - INTEGER
+        Define the IOAM id of this node. Uses only 24 bits out of 32 in total.
+
+        Min: 0
+        Max: 0xFFFFFF
+
+        Default: 0xFFFFFF
+
+ioam6_id_wide - LONG INTEGER
+        Define the wide IOAM id of this node. Uses only 56 bits out of 64 in
+        total. Can be different from ioam6_id.
+
+        Min: 0
+        Max: 0xFFFFFFFFFFFFFF
+
+        Default: 0xFFFFFFFFFFFFFF
 
 IPv6 Fragmentation:
 
@@ -2331,6 +2349,15 @@ ndisc_tclass - INTEGER
 	to leave cleared).
 
 	* 0 - (default)
+
+ndisc_evict_nocarrier - BOOLEAN
+	Clears the neighbor discovery table on NOCARRIER events. This option is
+	important for wireless devices where the neighbor discovery cache should
+	not be cleared when roaming between access points on the same network.
+	In most cases this should remain as the default (1).
+
+	- 1 - (default): Clear neighbor discover cache on NOCARRIER events.
+	- 0 - Do not clear neighbor discovery cache on NOCARRIER events.
 
 mldv1_unsolicited_report_interval - INTEGER
 	The interval in milliseconds in which the next unsolicited

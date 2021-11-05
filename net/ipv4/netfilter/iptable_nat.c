@@ -17,8 +17,6 @@ struct iptable_nat_pernet {
 	struct nf_hook_ops *nf_nat_ops;
 };
 
-static int __net_init iptable_nat_table_init(struct net *net);
-
 static unsigned int iptable_nat_net_id __read_mostly;
 
 static const struct xt_table nf_nat_ipv4_table = {
@@ -29,39 +27,29 @@ static const struct xt_table nf_nat_ipv4_table = {
 			  (1 << NF_INET_LOCAL_IN),
 	.me		= THIS_MODULE,
 	.af		= NFPROTO_IPV4,
-	.table_init	= iptable_nat_table_init,
 };
-
-//按规则处理nat
-static unsigned int iptable_nat_do_chain(void *priv,
-					 struct sk_buff *skb,
-					 const struct nf_hook_state *state)
-{
-	//查询此net对应的ipv4 nat表
-	return ipt_do_table(skb, state, priv);
-}
 
 static const struct nf_hook_ops nf_nat_ipv4_ops[] = {
 	{
-		.hook		= iptable_nat_do_chain,//做dnat
+		.hook		= ipt_do_table,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_PRE_ROUTING,
 		.priority	= NF_IP_PRI_NAT_DST,
 	},
 	{
-		.hook		= iptable_nat_do_chain,//做snat
+		.hook		= ipt_do_table,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_POST_ROUTING,
 		.priority	= NF_IP_PRI_NAT_SRC,
 	},
 	{
-		.hook		= iptable_nat_do_chain,//本机收包前dnat
+		.hook		= ipt_do_table,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_OUT,
 		.priority	= NF_IP_PRI_NAT_DST,
 	},
 	{
-		.hook		= iptable_nat_do_chain,//本机出包前snat
+		.hook		= ipt_do_table,
 		.pf		= NFPROTO_IPV4,
 		.hooknum	= NF_INET_LOCAL_IN,
 		.priority	= NF_IP_PRI_NAT_SRC,
@@ -115,7 +103,7 @@ static void ipt_nat_unregister_lookups(struct net *net)
 	kfree(ops);
 }
 
-static int __net_init iptable_nat_table_init(struct net *net)
+static int iptable_nat_table_init(struct net *net)
 {
 	struct ipt_replace *repl;
 	int ret;
@@ -157,20 +145,25 @@ static struct pernet_operations iptable_nat_net_ops = {
 
 static int __init iptable_nat_init(void)
 {
-	int ret = register_pernet_subsys(&iptable_nat_net_ops);
+	int ret = xt_register_template(&nf_nat_ipv4_table,
+				       iptable_nat_table_init);
 
-	if (ret)
+	if (ret < 0)
 		return ret;
 
-	ret = iptable_nat_table_init(&init_net);
-	if (ret)
-		unregister_pernet_subsys(&iptable_nat_net_ops);
+	ret = register_pernet_subsys(&iptable_nat_net_ops);
+	if (ret < 0) {
+		xt_unregister_template(&nf_nat_ipv4_table);
+		return ret;
+	}
+
 	return ret;
 }
 
 static void __exit iptable_nat_exit(void)
 {
 	unregister_pernet_subsys(&iptable_nat_net_ops);
+	xt_unregister_template(&nf_nat_ipv4_table);
 }
 
 module_init(iptable_nat_init);

@@ -104,8 +104,8 @@ void sctp_packet_config(struct sctp_packet *packet, __u32 vtag,
 		if (asoc->param_flags & SPP_PMTUD_ENABLE)
 			sctp_assoc_sync_pmtu(asoc);
 	} else if (!sctp_transport_pl_enabled(tp) &&
-		   !sctp_transport_pmtu_check(tp)) {
-		if (asoc->param_flags & SPP_PMTUD_ENABLE)
+		   asoc->param_flags & SPP_PMTUD_ENABLE) {
+		if (!sctp_transport_pmtu_check(tp))
 			sctp_assoc_sync_pmtu(asoc);
 	}
 
@@ -581,13 +581,16 @@ int sctp_packet_transmit(struct sctp_packet *packet, gfp_t gfp)
 	chunk = list_entry(packet->chunk_list.next, struct sctp_chunk, list);
 	sk = chunk->skb->sk;
 
-	/* check gso */
 	if (packet->size > tp->pathmtu && !packet->ipfragok && !chunk->pmtu_probe) {
-		if (!sk_can_gso(sk)) {
-			pr_err_once("Trying to GSO but underlying device doesn't support it.");
-			goto out;
+		if (tp->pl.state == SCTP_PL_ERROR) { /* do IP fragmentation if in Error state */
+			packet->ipfragok = 1;
+		} else {
+			if (!sk_can_gso(sk)) { /* check gso */
+				pr_err_once("Trying to GSO but underlying device doesn't support it.");
+				goto out;
+			}
+			gso = 1;
 		}
-		gso = 1;
 	}
 
 	/* alloc head skb */

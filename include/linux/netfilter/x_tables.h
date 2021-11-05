@@ -242,9 +242,6 @@ struct xt_table {
 	u_int8_t af;		/* address/protocol family */ //hook点对应的协议族
 	int priority;		/* hook order */ //hook点的优先级
 
-	/* called when table is needed in the given netns */
-	int (*table_init)(struct net *net);
-
 	/* A unique name... */
 	const char name[XT_TABLE_MAXNAMELEN];//表名称
 };
@@ -456,6 +453,9 @@ xt_get_per_cpu_counter(struct xt_counters *cnt, unsigned int cpu)
 }
 
 struct nf_hook_ops *xt_hook_ops_alloc(const struct xt_table *, nf_hookfn *);
+
+int xt_register_template(const struct xt_table *t, int(*table_init)(struct net *net));
+void xt_unregister_template(const struct xt_table *t);
 
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 #include <net/compat.h>

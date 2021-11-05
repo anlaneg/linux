@@ -442,8 +442,8 @@ static void pn533_send_complete(struct urb *urb)
 	}
 }
 
-static struct pn533_phy_ops usb_phy_ops = {
-    /*向外发送帧*/
+static const struct pn533_phy_ops usb_phy_ops = {
+    	/*向外发送帧*/
 	.send_frame = pn533_usb_send_frame,
 	.send_ack = pn533_usb_send_ack,
 	.abort_cmd = pn533_usb_abort_cmd,

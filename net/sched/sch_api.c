@@ -531,20 +531,27 @@ static struct qdisc_size_table *qdisc_get_stab(struct nlattr *opt,
 	list_for_each_entry(stab, &qdisc_stab_list, list) {
 		if (memcmp(&stab->szopts, s, sizeof(*s)))
 			continue;
-		if (tsize > 0 && memcmp(stab->data, tab, tsize * sizeof(u16)))
+		if (tsize > 0 &&
+		    memcmp(stab->data, tab, flex_array_size(stab, data, tsize)))
 			continue;
 		stab->refcnt++;
 		return stab;
 	}
 
-	stab = kmalloc(sizeof(*stab) + tsize * sizeof(u16), GFP_KERNEL);
+	if (s->size_log > STAB_SIZE_LOG_MAX ||
+	    s->cell_log > STAB_SIZE_LOG_MAX) {
+		NL_SET_ERR_MSG(extack, "Invalid logarithmic size of size table");
+		return ERR_PTR(-EINVAL);
+	}
+
+	stab = kmalloc(struct_size(stab, data, tsize), GFP_KERNEL);
 	if (!stab)
 		return ERR_PTR(-ENOMEM);
 
 	stab->refcnt = 1;
 	stab->szopts = *s;
 	if (tsize > 0)
-		memcpy(stab->data, tab, tsize * sizeof(u16));
+		memcpy(stab->data, tab, flex_array_size(stab, data, tsize));
 
 	list_add_tail(&stab->list, &qdisc_stab_list);
 
@@ -905,7 +912,7 @@ static void qdisc_offload_graft_root(struct net_device *dev,
 static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid/*qdisc的class id*/,
 			 u32 portid, u32 seq, u16 flags, int event)
 {
-	struct gnet_stats_basic_cpu __percpu *cpu_bstats = NULL;
+	struct gnet_stats_basic_sync __percpu *cpu_bstats = NULL;
 	struct gnet_stats_queue __percpu *cpu_qstats = NULL;
 	struct tcmsg *tcm;
 	struct nlmsghdr  *nlh;
@@ -973,8 +980,7 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid/*qdisc�
 		cpu_qstats = q->cpu_qstats;
 	}
 
-	if (gnet_stats_copy_basic(qdisc_root_sleeping_running(q),
-				  &d, cpu_bstats, &q->bstats) < 0 ||
+	if (gnet_stats_copy_basic(&d, cpu_bstats, &q->bstats, true) < 0 ||
 	    gnet_stats_copy_rate_est(&d, &q->rate_est) < 0 ||
 	    gnet_stats_copy_queue(&d, cpu_qstats, &q->qstats, qlen) < 0)
 		goto nla_put_failure;
@@ -1310,26 +1316,17 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 		rcu_assign_pointer(sch->stab, stab);
 	}
 	if (tca[TCA_RATE]) {
-		seqcount_t *running;
-
 		err = -EOPNOTSUPP;
 		if (sch->flags & TCQ_F_MQROOT) {
 			NL_SET_ERR_MSG(extack, "Cannot attach rate estimator to a multi-queue root qdisc");
 			goto err_out4;
 		}
 
-		if (sch->parent != TC_H_ROOT &&
-		    !(sch->flags & TCQ_F_INGRESS) &&
-		    (!p || !(p->flags & TCQ_F_MQROOT)))
-			running = qdisc_root_sleeping_running(sch);
-		else
-			running = &sch->running;
-
 		err = gen_new_estimator(&sch->bstats,
 					sch->cpu_bstats,
 					&sch->rate_est,
 					NULL,
-					running,
+					true,
 					tca[TCA_RATE]);
 		if (err) {
 			NL_SET_ERR_MSG(extack, "Failed to generate new estimator");
@@ -1406,7 +1403,7 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 				      sch->cpu_bstats,
 				      &sch->rate_est,
 				      NULL,
-				      qdisc_root_sleeping_running(sch),
+				      true,
 				      tca[TCA_RATE]);
 	}
 out:
@@ -1927,7 +1924,6 @@ static int tclass_notify(struct net *net, struct sk_buff *oskb,
 {
 	struct sk_buff *skb;
 	u32 portid = oskb ? NETLINK_CB(oskb).portid : 0;
-	int err = 0;
 
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb)
@@ -1938,11 +1934,8 @@ static int tclass_notify(struct net *net, struct sk_buff *oskb,
 		return -EINVAL;
 	}
 
-	err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
-			     n->nlmsg_flags & NLM_F_ECHO);
-	if (err > 0)
-		err = 0;
-	return err;
+	return rtnetlink_send(skb, net, portid, RTNLGRP_TC,
+			      n->nlmsg_flags & NLM_F_ECHO);
 }
 
 static int tclass_del_notify(struct net *net,
@@ -1976,8 +1969,6 @@ static int tclass_del_notify(struct net *net,
 
 	err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 			     n->nlmsg_flags & NLM_F_ECHO);
-	if (err > 0)
-		err = 0;
 	return err;
 }
 

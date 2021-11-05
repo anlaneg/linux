@@ -167,7 +167,8 @@ struct rtnl_af_ops {
 
 	//针对dev校验此af独有的属性
 	int			(*validate_link_af)(const struct net_device *dev,
-						    const struct nlattr *attr);
+						    const struct nlattr *attr,
+						    struct netlink_ext_ack *extack);
 	//针对dev设置此af独有的属性
 	int			(*set_link_af)(struct net_device *dev,
 					       const struct nlattr *attr,

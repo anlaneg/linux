@@ -205,9 +205,17 @@ static void dpp1_power_on_dscl(
 	struct dcn10_dpp *dpp = TO_DCN10_DPP(dpp_base);
 
 	if (dpp->tf_regs->DSCL_MEM_PWR_CTRL) {
-		REG_UPDATE(DSCL_MEM_PWR_CTRL, LUT_MEM_PWR_FORCE, power_on ? 0 : 3);
-		if (power_on)
+		if (power_on) {
+			REG_UPDATE(DSCL_MEM_PWR_CTRL, LUT_MEM_PWR_FORCE, 0);
 			REG_WAIT(DSCL_MEM_PWR_STATUS, LUT_MEM_PWR_STATE, 0, 1, 5);
+		} else {
+			if (dpp->base.ctx->dc->debug.enable_mem_low_power.bits.dscl) {
+				dpp->base.ctx->dc->optimized_required = true;
+				dpp->base.deferred_reg_writes.bits.disable_dscl = true;
+			} else {
+				REG_UPDATE(DSCL_MEM_PWR_CTRL, LUT_MEM_PWR_FORCE, 3);
+			}
+		}
 	}
 }
 
@@ -217,6 +225,8 @@ static void dpp1_dscl_set_lb(
 	const struct line_buffer_params *lb_params,
 	enum lb_memory_config mem_size_config)
 {
+	uint32_t max_partitions = 63; /* Currently hardcoded on all ASICs before DCN 3.2 */
+
 	/* LB */
 	if (dpp->base.caps->dscl_data_proc_format == DSCL_DATA_PRCESSING_FIXED_FORMAT) {
 		/* DSCL caps: pixel data processed in fixed format */
@@ -239,9 +249,12 @@ static void dpp1_dscl_set_lb(
 			LB_DATA_FORMAT__ALPHA_EN, lb_params->alpha_en); /* Alpha enable */
 	}
 
+	if (dpp->base.caps->max_lb_partitions == 31)
+		max_partitions = 31;
+
 	REG_SET_2(LB_MEMORY_CTRL, 0,
 		MEMORY_CONFIG, mem_size_config,
-		LB_MAX_PARTITIONS, 63);
+		LB_MAX_PARTITIONS, max_partitions);
 }
 
 static const uint16_t *dpp1_dscl_get_filter_coeffs_64p(int taps, struct fixed31_32 ratio)

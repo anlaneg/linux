@@ -175,7 +175,7 @@ static int macvtap_device_event(struct notifier_block *unused,
 
 		devt = MKDEV(MAJOR(macvtap_major), vlantap->tap.minor);
 		classdev = device_create(&macvtap_class, &dev->dev, devt,
-					 dev, tap_name/*要创建的tap设备*/);
+					 dev, "%s", tap_name/*要创建的tap设备*/);
 		if (IS_ERR(classdev)) {
 			tap_free_minor(macvtap_major, &vlantap->tap);
 			return notifier_from_errno(PTR_ERR(classdev));

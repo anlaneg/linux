@@ -73,8 +73,11 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	struct net_bridge_port *p = br_port_get_rcu(skb->dev);
 	enum br_pkt_type pkt_type = BR_PKT_UNICAST;
 	struct net_bridge_fdb_entry *dst = NULL;
+	struct net_bridge_mcast_port *pmctx;
 	struct net_bridge_mdb_entry *mdst;
 	bool local_rcv, mcast_hit = false;
+	struct net_bridge_mcast *brmctx;
+	struct net_bridge_vlan *vlan;
 	struct net_bridge *br;
 	u16 vid = 0;
 	u8 state;
@@ -83,9 +86,11 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (!p || p->state == BR_STATE_DISABLED)
 		goto drop;
 
+	brmctx = &p->br->multicast_ctx;
+	pmctx = &p->multicast_ctx;
 	state = p->state;
 	if (!br_allowed_ingress(p->br, nbp_vlan_group_rcu(p), skb, &vid,
-				&state))
+				&state, &vlan))
 		goto out;
 
 	nbp_switchdev_frame_mark(p, skb);
@@ -108,7 +113,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			pkt_type = BR_PKT_MULTICAST;
 			//igmp snooping表项学习，pim snooping,mld表项学习
 			//如果非ipv4的igmp,非ipv6的mld协议，则会返回0，而不合法igmp,mld会在此丢包
-			if (br_multicast_rcv(br, p, skb, vid))
+			if (br_multicast_rcv(&brmctx, &pmctx, vlan, skb, vid))
 				goto drop;
 		}
 	}
@@ -141,11 +146,11 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	switch (pkt_type) {
 	case BR_PKT_MULTICAST:
 		//组播表查询,执行组播转发
-		mdst = br_mdb_get(br, skb, vid);
+		mdst = br_mdb_get(brmctx, skb, vid);
 		if ((mdst || BR_INPUT_SKB_CB_MROUTERS_ONLY(skb)) &&
-		    br_multicast_querier_exists(br, eth_hdr(skb), mdst)) {
+		    br_multicast_querier_exists(brmctx, eth_hdr(skb), mdst)) {
 			if ((mdst && mdst->host_joined) ||
-			    br_multicast_is_router(br, skb)) {
+			    br_multicast_is_router(brmctx, skb)) {
 				local_rcv = true;
 				br->dev->stats.multicast++;
 			}
@@ -181,7 +186,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 			br_flood(br, skb, pkt_type, local_rcv, false);
 		else
 			//组播命中，按mdst中对应的一组出接口进行flood
-			br_multicast_flood(mdst, skb, local_rcv, false);
+			br_multicast_flood(mdst, skb, brmctx, local_rcv, false);
 	}
 
 	if (local_rcv)
@@ -313,11 +318,8 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 	memset(skb->cb, 0, sizeof(struct br_input_skb_cb));
 
 	p = br_port_get_rcu(skb->dev);
-	if (p->flags & BR_VLAN_TUNNEL) {
-		if (br_handle_ingress_vlan_tunnel(skb, p,
-						  nbp_vlan_group_rcu(p)))
-			goto drop;
-	}
+	if (p->flags & BR_VLAN_TUNNEL)
+		br_handle_ingress_vlan_tunnel(skb, p, nbp_vlan_group_rcu(p));
 
 	//如果是local链路以太地址（二层协议），则处理
 	if (unlikely(is_link_local_ether_addr(dest))) {

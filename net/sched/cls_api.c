@@ -668,6 +668,7 @@ static void tcf_block_offload_init(struct flow_block_offload *bo,
 	bo->block_shared = shared;
 	bo->extack = extack;
 	bo->sch = sch;
+	bo->cb_list_head = &flow_block->cb_list;
 	INIT_LIST_HEAD(&bo->cb_list);
 }
 
@@ -1691,20 +1692,10 @@ reset:
 #endif
 }
 
-int tcf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
+int tcf_classify(struct sk_buff *skb,
+		 const struct tcf_block *block,
+		 const struct tcf_proto *tp,
 		 struct tcf_result *res, bool compat_mode)
-{
-	u32 last_executed_chain = 0;
-
-	return __tcf_classify(skb, tp, tp, res, compat_mode,
-			      &last_executed_chain);
-}
-EXPORT_SYMBOL(tcf_classify);
-
-int tcf_classify_ingress(struct sk_buff *skb,
-			 const struct tcf_block *ingress_block,
-			 const struct tcf_proto *tp,
-			 struct tcf_result *res, bool compat_mode)
 {
 #if !IS_ENABLED(CONFIG_NET_TC_SKB_EXT)
 	u32 last_executed_chain = 0;
@@ -1718,20 +1709,22 @@ int tcf_classify_ingress(struct sk_buff *skb,
 	struct tc_skb_ext *ext;
 	int ret;
 
-	ext = skb_ext_find(skb, TC_SKB_EXT);
+	if (block) {
+		ext = skb_ext_find(skb, TC_SKB_EXT);
 
-	if (ext && ext->chain) {
-		struct tcf_chain *fchain;
+		if (ext && ext->chain) {
+			struct tcf_chain *fchain;
 
-		fchain = tcf_chain_lookup_rcu(ingress_block, ext->chain);
-		if (!fchain)
-			return TC_ACT_SHOT;
+			fchain = tcf_chain_lookup_rcu(block, ext->chain);
+			if (!fchain)
+				return TC_ACT_SHOT;
 
-		/* Consume, so cloned/redirect skbs won't inherit ext */
-		skb_ext_del(skb, TC_SKB_EXT);
+			/* Consume, so cloned/redirect skbs won't inherit ext */
+			skb_ext_del(skb, TC_SKB_EXT);
 
-		tp = rcu_dereference_bh(fchain->filter_chain);
-		last_executed_chain = fchain->index;
+			tp = rcu_dereference_bh(fchain->filter_chain);
+			last_executed_chain = fchain->index;
+		}
 	}
 
 	ret = __tcf_classify(skb, tp, orig_tp, res, compat_mode,
@@ -1751,7 +1744,7 @@ int tcf_classify_ingress(struct sk_buff *skb,
 	return ret;
 #endif
 }
-EXPORT_SYMBOL(tcf_classify_ingress);
+EXPORT_SYMBOL(tcf_classify);
 
 struct tcf_chain_info {
 	struct tcf_proto __rcu **pprev;//链上指向某tp的前向指针
@@ -2013,14 +2006,11 @@ static int tfilter_notify(struct net *net, struct sk_buff *oskb,
 	}
 
 	if (unicast)
-	    /*单播完成报文发送*/
-		err = netlink_unicast(net->rtnl, skb, portid, MSG_DONTWAIT);
+	    	/*单播完成报文发送*/
+		err = rtnl_unicast(skb, net, portid);
 	else
 		err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 				     n->nlmsg_flags & NLM_F_ECHO);
-
-	if (err > 0)
-		err = 0;
 	return err;
 }
 
@@ -2053,15 +2043,13 @@ static int tfilter_del_notify(struct net *net, struct sk_buff *oskb,
 	}
 
 	if (unicast)
-		err = netlink_unicast(net->rtnl, skb, portid, MSG_DONTWAIT);
+		err = rtnl_unicast(skb, net, portid);
 	else
 		err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 				     n->nlmsg_flags & NLM_F_ECHO);
 	if (err < 0)
 		NL_SET_ERR_MSG(extack, "Failed to send filter delete notification");
 
-	if (err > 0)
-		err = 0;
 	return err;
 }
 
@@ -2108,6 +2096,7 @@ static int tc_new_tfilter(struct sk_buff *skb, struct nlmsghdr *n/*netlink消息
 	int tp_created;
 	/*标记是否已执行加锁：rtnl_lock*/
 	bool rtnl_held = false;
+	u32 flags;
 
 	if (!netlink_ns_capable(skb, net->user_ns, CAP_NET_ADMIN))
 		return -EPERM;
@@ -2133,6 +2122,7 @@ replay:
 	tp = NULL;
 	cl = 0;
 	block = NULL;
+	flags = 0;
 
 	//如果未指定prio,有CREATE标记，则需要申请优先级，这里先使用一个临时值
 	if (prio == 0) {
@@ -2294,10 +2284,13 @@ replay:
 		goto errout;
 	}
 
+	if (!(n->nlmsg_flags & NLM_F_CREATE))
+		flags |= TCA_ACT_FLAGS_REPLACE;
+	if (!rtnl_held)
+		flags |= TCA_ACT_FLAGS_NO_RTNL;
 	//新增规则或者改变规则(例如flower对应的cls_fl_ops）
 	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh/*入参旧规则，出参新规则*/,
-			      n->nlmsg_flags & NLM_F_CREATE ? TCA_ACT_NOREPLACE : TCA_ACT_REPLACE,
-			      rtnl_held, extack);
+			      flags, extack);
 	if (err == 0) {
 	    /*执行成功，知会newtfilter规则新建/变更*/
 		tfilter_notify(net, skb, n, tp, block, q, parent, fh,
@@ -2904,13 +2897,11 @@ static int tc_chain_notify(struct tcf_chain *chain, struct sk_buff *oskb,
 	}
 
 	if (unicast)
-		err = netlink_unicast(net->rtnl, skb, portid, MSG_DONTWAIT);
+		err = rtnl_unicast(skb, net, portid);
 	else
 		err = rtnetlink_send(skb, net, portid, RTNLGRP_TC,
 				     flags & NLM_F_ECHO);
 
-	if (err > 0)
-		err = 0;
 	return err;
 }
 
@@ -2934,7 +2925,7 @@ static int tc_chain_notify_delete(const struct tcf_proto_ops *tmplt_ops,
 	}
 
 	if (unicast)
-		return netlink_unicast(net->rtnl, skb, portid, MSG_DONTWAIT);
+		return rtnl_unicast(skb, net, portid);
 
 	return rtnetlink_send(skb, net, portid, RTNLGRP_TC, flags & NLM_F_ECHO);
 }
@@ -3108,7 +3099,7 @@ replay:
 		break;
 	case RTM_GETCHAIN:
 		err = tc_chain_notify(chain, skb, n->nlmsg_seq,
-				      n->nlmsg_seq, n->nlmsg_type, true);
+				      n->nlmsg_flags, n->nlmsg_type, true);
 		if (err < 0)
 			NL_SET_ERR_MSG(extack, "Failed to send chain notify message");
 		break;
@@ -3240,8 +3231,8 @@ EXPORT_SYMBOL(tcf_exts_destroy);
 
 //解析actions
 int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
-		      struct nlattr *rate_tlv, struct tcf_exts *exts/*规则对应的待填充action*/, bool ovr,
-		      bool rtnl_held, struct netlink_ext_ack *extack)
+		      struct nlattr *rate_tlv, struct tcf_exts *exts/*规则对应的待填充action*/,
+		      u32 flags, struct netlink_ext_ack *extack)
 {
 #ifdef CONFIG_NET_CLS_ACT
 	{
@@ -3252,14 +3243,16 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		if (exts->police && tb[exts->police]) {
 			struct tc_action_ops *a_o;
 
-			a_o = tc_action_load_ops("police", tb[exts->police], rtnl_held, extack);
+			a_o = tc_action_load_ops(tb[exts->police], true,
+						 !(flags & TCA_ACT_FLAGS_NO_RTNL),
+						 extack);
 			if (IS_ERR(a_o))
 				return PTR_ERR(a_o);
+			flags |= TCA_ACT_FLAGS_POLICE | TCA_ACT_FLAGS_BIND;
 		        //如果指定了exts->police,且其对应的netlink字段存在，则解析exts->police对应的action
 			act = tcf_action_init_1(net, tp, tb[exts->police],
-						rate_tlv, "police", ovr,
-						TCA_ACT_BIND, a_o, init_res,
-						rtnl_held, extack);
+						rate_tlv, a_o, init_res, flags,
+						extack);
 			module_put(a_o->owner);
 			if (IS_ERR(act))
 				return PTR_ERR(act);
@@ -3271,11 +3264,11 @@ int tcf_exts_validate(struct net *net, struct tcf_proto *tp, struct nlattr **tb,
 		} else if (exts->action && tb[exts->action]) {
 			int err;
 
+			flags |= TCA_ACT_FLAGS_BIND;
 			//解析并生成action
 			err = tcf_action_init(net, tp, tb[exts->action]/*要解析的action*/,
-					      rate_tlv, NULL/*name置为NULL，自tb中解析*/, ovr, TCA_ACT_BIND,
-					      exts->actions/*待填充的action*/, init_res,
-					      &attr_size, rtnl_held, extack);
+					      rate_tlv, exts->actions/*待填充的action*/, init_res,
+					      &attr_size, flags, extack);
 			if (err < 0)
 				return err;
 			exts->nr_actions = err;
@@ -4065,7 +4058,7 @@ struct sk_buff *tcf_qevent_handle(struct tcf_qevent *qe, struct Qdisc *sch, stru
 
 	fl = rcu_dereference_bh(qe->filter_chain);
 
-	switch (tcf_classify(skb, fl, &cl_res, false)) {
+	switch (tcf_classify(skb, NULL, fl, &cl_res, false)) {
 	case TC_ACT_SHOT:
 		qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);

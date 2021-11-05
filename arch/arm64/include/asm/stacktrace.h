@@ -9,6 +9,7 @@
 #include <linux/sched.h>
 #include <linux/sched/task_stack.h>
 #include <linux/types.h>
+#include <linux/llist.h>
 
 #include <asm/memory.h>
 #include <asm/ptrace.h>
@@ -35,7 +36,7 @@ struct stack_info {
  * accounting information necessary for robust unwinding.
  *
  * @fp:          The fp value in the frame record (or the real fp)
- * @pc:          The fp value in the frame record (or the real lr)
+ * @pc:          The lr value in the frame record (or the real lr)
  *
  * @stacks_done: Stacks which have been entirely unwound, for which it is no
  *               longer valid to unwind to.
@@ -58,6 +59,9 @@ struct stackframe {
 	enum stack_type prev_type;
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	int graph;
+#endif
+#ifdef CONFIG_KRETPROBES
+	struct llist_node *kr_cur;
 #endif
 };
 

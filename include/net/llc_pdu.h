@@ -15,9 +15,11 @@
 #include <linux/if_ether.h>
 
 /* Lengths of frame formats */
-#define LLC_PDU_LEN_I	4       /* header and 2 control bytes */
-#define LLC_PDU_LEN_S	4
-#define LLC_PDU_LEN_U	3       /* header and 1 control byte */
+#define LLC_PDU_LEN_I		4       /* header and 2 control bytes */
+#define LLC_PDU_LEN_S		4
+#define LLC_PDU_LEN_U		3       /* header and 1 control byte */
+/* header and 1 control byte and XID info */
+#define LLC_PDU_LEN_U_XID	(LLC_PDU_LEN_U + sizeof(struct llc_xid_info))
 /* Known SAP addresses */
 #define LLC_GLOBAL_SAP	0xFF
 #define LLC_NULL_SAP	0x00	/* not network-layer visible */
@@ -52,14 +54,14 @@
 
 //I型帧
 //X-X-X-X-X-X-X-0 = I Frame
-
-#define LLC_PDU_TYPE_I	0	/* first bit */
+#define LLC_PDU_TYPE_I		0	/* first bit */
 //S型帧
 //X-X-X-X-X-X-0-1 = Supervisory Frame
-#define LLC_PDU_TYPE_S	1	/* first two bits */
+#define LLC_PDU_TYPE_S		1	/* first two bits */
 //U型帧
 //X-X-X-X-X-X-1-1 = Unnumbered frame
-#define LLC_PDU_TYPE_U	3	/* first two bits */
+#define LLC_PDU_TYPE_U		3	/* first two bits */
+#define LLC_PDU_TYPE_U_XID	4	/* private type for detecting XID commands */
 
 #define LLC_PDU_TYPE_IS_I(pdu) \
 	((!(pdu->ctrl_1 & LLC_PDU_TYPE_I_MASK)) ? 1 : 0)
@@ -247,8 +249,17 @@ static inline struct llc_pdu_un *llc_pdu_un_hdr(struct sk_buff *skb)
 static inline void llc_pdu_header_init(struct sk_buff *skb, u8 type,
 				       u8 ssap, u8 dsap, u8 cr)
 {
-	const int hlen = type == LLC_PDU_TYPE_U ? 3 : 4;
+	int hlen = 4; /* default value for I and S types */
 	struct llc_pdu_un *pdu;
+
+	switch (type) {
+	case LLC_PDU_TYPE_U:
+		hlen = 3;
+		break;
+	case LLC_PDU_TYPE_U_XID:
+		hlen = 6;
+		break;
+	}
 
 	skb_push(skb, hlen);
 	skb_reset_network_header(skb);
@@ -391,7 +402,10 @@ static inline void llc_pdu_init_as_xid_cmd(struct sk_buff *skb,
 	xid_info->fmt_id = LLC_XID_FMT_ID;	/* 0x81 */
 	xid_info->type	 = svcs_supported;
 	xid_info->rw	 = rx_window << 1;	/* size of receive window */
-	skb_put(skb, sizeof(struct llc_xid_info));
+
+	/* no need to push/put since llc_pdu_header_init() has already
+	 * pushed 3 + 3 bytes
+	 */
 }
 
 /**

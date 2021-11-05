@@ -112,6 +112,16 @@ static int motu_probe(struct fw_unit *unit, const struct ieee1394_device_id *ent
 	if (err < 0)
 		goto error;
 
+	if (motu->spec->flags & SND_MOTU_SPEC_REGISTER_DSP) {
+		err = snd_motu_register_dsp_message_parser_new(motu);
+		if (err < 0)
+			goto error;
+	} else if (motu->spec->flags & SND_MOTU_SPEC_COMMAND_DSP) {
+		err = snd_motu_command_dsp_message_parser_new(motu);
+		if (err < 0)
+			goto error;
+	}
+
 	err = snd_card_register(card);
 	if (err < 0)
 		goto error;
@@ -153,6 +163,7 @@ static const struct ieee1394_device_id motu_id_table[] = {
 	SND_MOTU_DEV_ENTRY(0x000001, &snd_motu_spec_828),
 	SND_MOTU_DEV_ENTRY(0x000002, &snd_motu_spec_896),
 	SND_MOTU_DEV_ENTRY(0x000003, &snd_motu_spec_828mk2),
+	SND_MOTU_DEV_ENTRY(0x000005, &snd_motu_spec_896hd),
 	SND_MOTU_DEV_ENTRY(0x000009, &snd_motu_spec_traveler),
 	SND_MOTU_DEV_ENTRY(0x00000d, &snd_motu_spec_ultralite),
 	SND_MOTU_DEV_ENTRY(0x00000f, &snd_motu_spec_8pre),

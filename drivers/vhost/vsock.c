@@ -120,7 +120,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		size_t nbytes;
 		size_t iov_len, payload_len;
 		int head;
-		bool restore_flag = false;
+		u32 flags_to_restore = 0;
 
 		//如果vsock没有报文，则跳出
 		spin_lock_bh(&vsock->send_pkt_list_lock);
@@ -193,16 +193,21 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 			 * small rx buffers, headers of packets in rx queue are
 			 * created dynamically and are initialized with header
 			 * of current packet(except length). But in case of
-			 * SOCK_SEQPACKET, we also must clear record delimeter
-			 * bit(VIRTIO_VSOCK_SEQ_EOR). Otherwise, instead of one
-			 * packet with delimeter(which marks end of record),
-			 * there will be sequence of packets with delimeter
-			 * bit set. After initialized header will be copied to
-			 * rx buffer, this bit will be restored.
+			 * SOCK_SEQPACKET, we also must clear message delimeter
+			 * bit (VIRTIO_VSOCK_SEQ_EOM) and MSG_EOR bit
+			 * (VIRTIO_VSOCK_SEQ_EOR) if set. Otherwise,
+			 * there will be sequence of packets with these
+			 * bits set. After initialized header will be copied to
+			 * rx buffer, these required bits will be restored.
 			 */
-			if (le32_to_cpu(pkt->hdr.flags) & VIRTIO_VSOCK_SEQ_EOR) {
-				pkt->hdr.flags &= ~cpu_to_le32(VIRTIO_VSOCK_SEQ_EOR);
-				restore_flag = true;
+			if (le32_to_cpu(pkt->hdr.flags) & VIRTIO_VSOCK_SEQ_EOM) {
+				pkt->hdr.flags &= ~cpu_to_le32(VIRTIO_VSOCK_SEQ_EOM);
+				flags_to_restore |= VIRTIO_VSOCK_SEQ_EOM;
+
+				if (le32_to_cpu(pkt->hdr.flags) & VIRTIO_VSOCK_SEQ_EOR) {
+					pkt->hdr.flags &= ~cpu_to_le32(VIRTIO_VSOCK_SEQ_EOR);
+					flags_to_restore |= VIRTIO_VSOCK_SEQ_EOR;
+				}
 			}
 		}
 
@@ -245,8 +250,7 @@ vhost_transport_do_send_pkt(struct vhost_vsock *vsock,
 		 * to send it with the next available buffer.
 		 */
 		if (pkt->off < pkt->len) {
-			if (restore_flag)
-				pkt->hdr.flags |= cpu_to_le32(VIRTIO_VSOCK_SEQ_EOR);
+			pkt->hdr.flags |= cpu_to_le32(flags_to_restore);
 
 		    	//报文并没有发送完全，将其加回到vsock->send_pkt_list中
 			/* We are queueing the same virtio_vsock_pkt to handle

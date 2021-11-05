@@ -47,7 +47,7 @@ void __init idle_thread_set_boot_cpu(void)
  *
  * Creates the thread if it does not exist.
  */
-static inline void idle_init(unsigned int cpu)
+static __always_inline void idle_init(unsigned int cpu)
 {
 	struct task_struct *tsk = per_cpu(idle_threads, cpu);
 
@@ -299,7 +299,7 @@ int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 	unsigned int cpu;
 	int ret = 0;
 
-	get_online_cpus();
+	cpus_read_lock();
 	mutex_lock(&smpboot_threads_lock);
 	//遍历所有在线cpu
 	for_each_online_cpu(cpu) {
@@ -314,7 +314,7 @@ int smpboot_register_percpu_thread(struct smp_hotplug_thread *plug_thread)
 	list_add(&plug_thread->list, &hotplug_threads);
 out:
 	mutex_unlock(&smpboot_threads_lock);
-	put_online_cpus();
+	cpus_read_unlock();
 	return ret;
 }
 EXPORT_SYMBOL_GPL(smpboot_register_percpu_thread);
@@ -327,12 +327,12 @@ EXPORT_SYMBOL_GPL(smpboot_register_percpu_thread);
  */
 void smpboot_unregister_percpu_thread(struct smp_hotplug_thread *plug_thread)
 {
-	get_online_cpus();
+	cpus_read_lock();
 	mutex_lock(&smpboot_threads_lock);
 	list_del(&plug_thread->list);
 	smpboot_destroy_threads(plug_thread);
 	mutex_unlock(&smpboot_threads_lock);
-	put_online_cpus();
+	cpus_read_unlock();
 }
 EXPORT_SYMBOL_GPL(smpboot_unregister_percpu_thread);
 

@@ -369,7 +369,7 @@ __vringh_iov(struct vringh *vrh, u16 i/*要提取的描述符索引*/,
 		else {
 		    /*此描述符只读*/
 			iov = riov;
-			if (unlikely(wiov && wiov->i)) {
+			if (unlikely(wiov && wiov->used)) {
 				vringh_bad("Readable desc %p after writable",
 					   &descs[i]);
 				err = -EINVAL;

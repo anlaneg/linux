@@ -3995,7 +3995,7 @@ static int mvpp2_rx(struct mvpp2_port *port, struct napi_struct *napi,
 		}
 
 		if (pp)
-			skb_mark_for_recycle(skb, page, pp);
+			skb_mark_for_recycle(skb);
 		else
 			dma_unmap_single_attrs(dev->dev.parent, dma_addr,
 					       bm_pool->buf_size, DMA_FROM_DEVICE,
@@ -5367,8 +5367,11 @@ static int mvpp2_ethtool_nway_reset(struct net_device *dev)
 }
 
 /* Set interrupt coalescing for ethtools */
-static int mvpp2_ethtool_set_coalesce(struct net_device *dev,
-				      struct ethtool_coalesce *c)
+static int
+mvpp2_ethtool_set_coalesce(struct net_device *dev,
+			   struct ethtool_coalesce *c,
+			   struct kernel_ethtool_coalesce *kernel_coal,
+			   struct netlink_ext_ack *extack)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
 	int queue;
@@ -5400,8 +5403,11 @@ static int mvpp2_ethtool_set_coalesce(struct net_device *dev,
 }
 
 /* get coalescing for ethtools */
-static int mvpp2_ethtool_get_coalesce(struct net_device *dev,
-				      struct ethtool_coalesce *c)
+static int
+mvpp2_ethtool_get_coalesce(struct net_device *dev,
+			   struct ethtool_coalesce *c,
+			   struct kernel_ethtool_coalesce *kernel_coal,
+			   struct netlink_ext_ack *extack)
 {
 	struct mvpp2_port *port = netdev_priv(dev);
 
@@ -5702,7 +5708,7 @@ static const struct net_device_ops mvpp2_netdev_ops = {
 	.ndo_set_mac_address	= mvpp2_set_mac_address,
 	.ndo_change_mtu		= mvpp2_change_mtu,
 	.ndo_get_stats64	= mvpp2_get_stats64,
-	.ndo_do_ioctl		= mvpp2_ioctl,
+	.ndo_eth_ioctl		= mvpp2_ioctl,
 	.ndo_vlan_rx_add_vid	= mvpp2_vlan_rx_add_vid,
 	.ndo_vlan_rx_kill_vid	= mvpp2_vlan_rx_kill_vid,
 	.ndo_set_features	= mvpp2_set_features,
@@ -6075,9 +6081,9 @@ static void mvpp2_port_copy_mac_addr(struct net_device *dev, struct mvpp2 *priv,
 	char hw_mac_addr[ETH_ALEN] = {0};
 	char fw_mac_addr[ETH_ALEN];
 
-	if (fwnode_get_mac_address(fwnode, fw_mac_addr, ETH_ALEN)) {
+	if (!fwnode_get_mac_address(fwnode, fw_mac_addr)) {
 		*mac_from = "firmware node";
-		ether_addr_copy(dev->dev_addr, fw_mac_addr);
+		eth_hw_addr_set(dev, fw_mac_addr);
 		return;
 	}
 
@@ -6085,7 +6091,7 @@ static void mvpp2_port_copy_mac_addr(struct net_device *dev, struct mvpp2 *priv,
 		mvpp21_get_mac_address(port, hw_mac_addr);
 		if (is_valid_ether_addr(hw_mac_addr)) {
 			*mac_from = "hardware";
-			ether_addr_copy(dev->dev_addr, hw_mac_addr);
+			eth_hw_addr_set(dev, hw_mac_addr);
 			return;
 		}
 	}
@@ -6255,23 +6261,13 @@ static void mvpp2_phylink_validate(struct phylink_config *config,
 	struct mvpp2_port *port = mvpp2_phylink_to_port(config);
 	__ETHTOOL_DECLARE_LINK_MODE_MASK(mask) = { 0, };
 
-	/* Invalid combinations */
-	switch (state->interface) {
-	case PHY_INTERFACE_MODE_10GBASER:
-	case PHY_INTERFACE_MODE_XAUI:
-		if (!mvpp2_port_supports_xlg(port))
-			goto empty_set;
-		break;
-	case PHY_INTERFACE_MODE_RGMII:
-	case PHY_INTERFACE_MODE_RGMII_ID:
-	case PHY_INTERFACE_MODE_RGMII_RXID:
-	case PHY_INTERFACE_MODE_RGMII_TXID:
-		if (!mvpp2_port_supports_rgmii(port))
-			goto empty_set;
-		break;
-	default:
-		break;
-	}
+	/* When in 802.3z mode, we must have AN enabled:
+	 * Bit 2 Field InBandAnEn In-band Auto-Negotiation enable. ...
+	 * When <PortType> = 1 (1000BASE-X) this field must be set to 1.
+	 */
+	if (phy_interface_mode_is_8023z(state->interface) &&
+	    !phylink_test(state->advertising, Autoneg))
+		goto empty_set;
 
 	phylink_set(mask, Autoneg);
 	phylink_set_port_modes(mask);
@@ -6284,19 +6280,12 @@ static void mvpp2_phylink_validate(struct phylink_config *config,
 	switch (state->interface) {
 	case PHY_INTERFACE_MODE_10GBASER:
 	case PHY_INTERFACE_MODE_XAUI:
-	case PHY_INTERFACE_MODE_NA:
 		if (mvpp2_port_supports_xlg(port)) {
-			phylink_set(mask, 10000baseT_Full);
-			phylink_set(mask, 10000baseCR_Full);
-			phylink_set(mask, 10000baseSR_Full);
-			phylink_set(mask, 10000baseLR_Full);
-			phylink_set(mask, 10000baseLRM_Full);
-			phylink_set(mask, 10000baseER_Full);
+			phylink_set_10g_modes(mask);
 			phylink_set(mask, 10000baseKR_Full);
 		}
-		if (state->interface != PHY_INTERFACE_MODE_NA)
-			break;
-		fallthrough;
+		break;
+
 	case PHY_INTERFACE_MODE_RGMII:
 	case PHY_INTERFACE_MODE_RGMII_ID:
 	case PHY_INTERFACE_MODE_RGMII_RXID:
@@ -6308,35 +6297,28 @@ static void mvpp2_phylink_validate(struct phylink_config *config,
 		phylink_set(mask, 100baseT_Full);
 		phylink_set(mask, 1000baseT_Full);
 		phylink_set(mask, 1000baseX_Full);
-		if (state->interface != PHY_INTERFACE_MODE_NA)
-			break;
-		fallthrough;
-	case PHY_INTERFACE_MODE_1000BASEX:
-	case PHY_INTERFACE_MODE_2500BASEX:
-		if (port->comphy ||
-		    state->interface != PHY_INTERFACE_MODE_2500BASEX) {
-			phylink_set(mask, 1000baseT_Full);
-			phylink_set(mask, 1000baseX_Full);
-		}
-		if (port->comphy ||
-		    state->interface == PHY_INTERFACE_MODE_2500BASEX) {
-			phylink_set(mask, 2500baseT_Full);
-			phylink_set(mask, 2500baseX_Full);
-		}
 		break;
+
+	case PHY_INTERFACE_MODE_1000BASEX:
+		phylink_set(mask, 1000baseT_Full);
+		phylink_set(mask, 1000baseX_Full);
+		break;
+
+	case PHY_INTERFACE_MODE_2500BASEX:
+		phylink_set(mask, 2500baseT_Full);
+		phylink_set(mask, 2500baseX_Full);
+		break;
+
 	default:
 		goto empty_set;
 	}
 
-	bitmap_and(supported, supported, mask, __ETHTOOL_LINK_MODE_MASK_NBITS);
-	bitmap_and(state->advertising, state->advertising, mask,
-		   __ETHTOOL_LINK_MODE_MASK_NBITS);
-
-	phylink_helper_basex_speed(state);
+	linkmode_and(supported, supported, mask);
+	linkmode_and(state->advertising, state->advertising, mask);
 	return;
 
 empty_set:
-	bitmap_zero(supported, __ETHTOOL_LINK_MODE_MASK_NBITS);
+	linkmode_zero(supported);
 }
 
 static void mvpp2_xlg_config(struct mvpp2_port *port, unsigned int mode,
@@ -6927,6 +6909,40 @@ static int mvpp2_port_probe(struct platform_device *pdev,
 	if (!mvpp2_use_acpi_compat_mode(port_fwnode)) {
 		port->phylink_config.dev = &dev->dev;
 		port->phylink_config.type = PHYLINK_NETDEV;
+
+		if (mvpp2_port_supports_xlg(port)) {
+			__set_bit(PHY_INTERFACE_MODE_10GBASER,
+				  port->phylink_config.supported_interfaces);
+			__set_bit(PHY_INTERFACE_MODE_XAUI,
+				  port->phylink_config.supported_interfaces);
+		}
+
+		if (mvpp2_port_supports_rgmii(port))
+			phy_interface_set_rgmii(port->phylink_config.supported_interfaces);
+
+		if (comphy) {
+			/* If a COMPHY is present, we can support any of the
+			 * serdes modes and switch between them.
+			 */
+			__set_bit(PHY_INTERFACE_MODE_SGMII,
+				  port->phylink_config.supported_interfaces);
+			__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+				  port->phylink_config.supported_interfaces);
+			__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+				  port->phylink_config.supported_interfaces);
+		} else if (phy_mode == PHY_INTERFACE_MODE_2500BASEX) {
+			/* No COMPHY, with only 2500BASE-X mode supported */
+			__set_bit(PHY_INTERFACE_MODE_2500BASEX,
+				  port->phylink_config.supported_interfaces);
+		} else if (phy_mode == PHY_INTERFACE_MODE_1000BASEX ||
+			   phy_mode == PHY_INTERFACE_MODE_SGMII) {
+			/* No COMPHY, we can switch between 1000BASE-X and SGMII
+			 */
+			__set_bit(PHY_INTERFACE_MODE_1000BASEX,
+				  port->phylink_config.supported_interfaces);
+			__set_bit(PHY_INTERFACE_MODE_SGMII,
+				  port->phylink_config.supported_interfaces);
+		}
 
 		phylink = phylink_create(&port->phylink_config, port_fwnode,
 					 phy_mode, &mvpp2_phylink_ops);

@@ -258,6 +258,7 @@ static int sis900_get_mac_addr(struct pci_dev *pci_dev,
 {
 	struct sis900_private *sis_priv = netdev_priv(net_dev);
 	void __iomem *ioaddr = sis_priv->ioaddr;
+	u16 addr[ETH_ALEN / 2];
 	u16 signature;
 	int i;
 
@@ -271,7 +272,8 @@ static int sis900_get_mac_addr(struct pci_dev *pci_dev,
 
 	/* get MAC address from EEPROM */
 	for (i = 0; i < 3; i++)
-	        ((u16 *)(net_dev->dev_addr))[i] = read_eeprom(ioaddr, i+EEPROMMACAddr);
+	        addr[i] = read_eeprom(ioaddr, i+EEPROMMACAddr);
+	eth_hw_addr_set(net_dev, (u8 *)addr);
 
 	return 1;
 }
@@ -290,6 +292,7 @@ static int sis630e_get_mac_addr(struct pci_dev *pci_dev,
 				struct net_device *net_dev)
 {
 	struct pci_dev *isa_bridge = NULL;
+	u8 addr[ETH_ALEN];
 	u8 reg;
 	int i;
 
@@ -306,8 +309,9 @@ static int sis630e_get_mac_addr(struct pci_dev *pci_dev,
 
 	for (i = 0; i < 6; i++) {
 		outb(0x09 + i, 0x70);
-		((u8 *)(net_dev->dev_addr))[i] = inb(0x71);
+		addr[i] = inb(0x71);
 	}
+	eth_hw_addr_set(net_dev, addr);
 
 	pci_write_config_byte(isa_bridge, 0x48, reg & ~0x40);
 	pci_dev_put(isa_bridge);
@@ -331,6 +335,7 @@ static int sis635_get_mac_addr(struct pci_dev *pci_dev,
 {
 	struct sis900_private *sis_priv = netdev_priv(net_dev);
 	void __iomem *ioaddr = sis_priv->ioaddr;
+	u16 addr[ETH_ALEN / 2];
 	u32 rfcrSave;
 	u32 i;
 
@@ -345,8 +350,9 @@ static int sis635_get_mac_addr(struct pci_dev *pci_dev,
 	/* load MAC addr to filter data register */
 	for (i = 0 ; i < 3 ; i++) {
 		sw32(rfcr, (i << RFADDR_shift));
-		*( ((u16 *)net_dev->dev_addr) + i) = sr16(rfdr);
+		addr[i] = sr16(rfdr);
 	}
+	eth_hw_addr_set(net_dev, (u8 *)addr);
 
 	/* enable packet filtering */
 	sw32(rfcr, rfcrSave | RFEN);
@@ -375,17 +381,18 @@ static int sis96x_get_mac_addr(struct pci_dev *pci_dev,
 {
 	struct sis900_private *sis_priv = netdev_priv(net_dev);
 	void __iomem *ioaddr = sis_priv->ioaddr;
+	u16 addr[ETH_ALEN / 2];
 	int wait, rc = 0;
 
 	sw32(mear, EEREQ);
 	for (wait = 0; wait < 2000; wait++) {
 		if (sr32(mear) & EEGNT) {
-			u16 *mac = (u16 *)net_dev->dev_addr;
 			int i;
 
 			/* get MAC address from EEPROM */
 			for (i = 0; i < 3; i++)
-			        mac[i] = read_eeprom(ioaddr, i + EEPROMMACAddr);
+			        addr[i] = read_eeprom(ioaddr, i + EEPROMMACAddr);
+			 eth_hw_addr_set(net_dev, (u8 *)addr);
 
 			rc = 1;
 			break;
@@ -404,7 +411,7 @@ static const struct net_device_ops sis900_netdev_ops = {
 	.ndo_set_rx_mode	= set_rx_mode,
 	.ndo_validate_addr	= eth_validate_addr,
 	.ndo_set_mac_address 	= eth_mac_addr,
-	.ndo_do_ioctl		= mii_ioctl,
+	.ndo_eth_ioctl		= mii_ioctl,
 	.ndo_tx_timeout		= sis900_tx_timeout,
 #ifdef CONFIG_NET_POLL_CONTROLLER
         .ndo_poll_controller	= sis900_poll,
@@ -443,7 +450,7 @@ static int sis900_probe(struct pci_dev *pci_dev,
 #endif
 
 	/* setup various bits in PCI command register */
-	ret = pci_enable_device(pci_dev);
+	ret = pcim_enable_device(pci_dev);
 	if(ret) return ret;
 
 	i = dma_set_mask(&pci_dev->dev, DMA_BIT_MASK(32));
@@ -469,7 +476,7 @@ static int sis900_probe(struct pci_dev *pci_dev,
 	ioaddr = pci_iomap(pci_dev, 0, 0);
 	if (!ioaddr) {
 		ret = -ENOMEM;
-		goto err_out_cleardev;
+		goto err_out;
 	}
 
 	sis_priv = netdev_priv(net_dev);
@@ -581,8 +588,6 @@ err_unmap_tx:
 			  sis_priv->tx_ring_dma);
 err_out_unmap:
 	pci_iounmap(pci_dev, ioaddr);
-err_out_cleardev:
-	pci_release_regions(pci_dev);
  err_out:
 	free_netdev(net_dev);
 	return ret;
@@ -1100,7 +1105,7 @@ sis900_init_rxfilter (struct net_device * net_dev)
 
 	/* load MAC addr to filter data register */
 	for (i = 0 ; i < 3 ; i++) {
-		u32 w = (u32) *((u16 *)(net_dev->dev_addr)+i);
+		u32 w = (u32) *((const u16 *)(net_dev->dev_addr)+i);
 
 		sw32(rfcr, i << RFADDR_shift);
 		sw32(rfdr, w);
@@ -2499,7 +2504,6 @@ static void sis900_remove(struct pci_dev *pci_dev)
 			  sis_priv->tx_ring_dma);
 	pci_iounmap(pci_dev, sis_priv->ioaddr);
 	free_netdev(net_dev);
-	pci_release_regions(pci_dev);
 }
 
 static int __maybe_unused sis900_suspend(struct device *dev)

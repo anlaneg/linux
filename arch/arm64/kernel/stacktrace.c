@@ -41,6 +41,9 @@ void start_backtrace(struct stackframe *frame, unsigned long fp,
 #ifdef CONFIG_FUNCTION_GRAPH_TRACER
 	frame->graph = 0;
 #endif
+#ifdef CONFIG_KRETPROBES
+	frame->kr_cur = NULL;
+#endif
 
 	/*
 	 * Prime the first unwind.
@@ -129,6 +132,10 @@ int notrace unwind_frame(struct task_struct *tsk, struct stackframe *frame)
 		frame->pc = ret_stack->ret;
 	}
 #endif /* CONFIG_FUNCTION_GRAPH_TRACER */
+#ifdef CONFIG_KRETPROBES
+	if (is_kretprobe_trampoline(frame->pc))
+		frame->pc = kretprobe_find_ret_addr(tsk, (void *)frame->fp, &frame->kr_cur);
+#endif
 
 	frame->pc = ptrauth_strip_insn_pac(frame->pc);
 
@@ -218,7 +225,7 @@ void show_stack(struct task_struct *tsk, unsigned long *sp, const char *loglvl)
 
 #ifdef CONFIG_STACKTRACE
 
-noinline void arch_stack_walk(stack_trace_consume_fn consume_entry,
+noinline notrace void arch_stack_walk(stack_trace_consume_fn consume_entry,
 			      void *cookie, struct task_struct *task,
 			      struct pt_regs *regs)
 {

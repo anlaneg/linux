@@ -13,19 +13,26 @@
  */
 #define VSTAX 73
 
-static void ifh_encode_bitfield(void *ifh, u64 value, u32 pos, u32 width)
+#define ifh_encode_bitfield(ifh, value, pos, _width)			\
+	({								\
+		u32 width = (_width);					\
+									\
+		/* Max width is 5 bytes - 40 bits. In worst case this will
+		 * spread over 6 bytes - 48 bits
+		 */							\
+		compiletime_assert(width <= 40,				\
+				   "Unsupported width, must be <= 40");	\
+		__ifh_encode_bitfield((ifh), (value), (pos), width);	\
+	})
+
+static void __ifh_encode_bitfield(void *ifh, u64 value, u32 pos, u32 width)
 {
 	u8 *ifh_hdr = ifh;
 	/* Calculate the Start IFH byte position of this IFH bit position */
 	u32 byte = (35 - (pos / 8));
 	/* Calculate the Start bit position in the Start IFH byte */
 	u32 bit  = (pos % 8);
-	u64 encode = GENMASK(bit + width - 1, bit) & (value << bit);
-
-	/* Max width is 5 bytes - 40 bits. In worst case this will
-	 * spread over 6 bytes - 48 bits
-	 */
-	compiletime_assert(width <= 40, "Unsupported width, must be <= 40");
+	u64 encode = GENMASK_ULL(bit + width - 1, bit) & (value << bit);
 
 	/* The b0-b7 goes into the start IFH byte */
 	if (encode & 0xFF)
@@ -155,7 +162,7 @@ static int sparx5_set_mac_address(struct net_device *dev, void *p)
 	sparx5_mact_learn(sparx5, PGID_CPU, addr->sa_data, port->pvid);
 
 	/* Record the address */
-	ether_addr_copy(dev->dev_addr, addr->sa_data);
+	eth_hw_addr_set(dev, addr->sa_data);
 
 	return 0;
 }
@@ -193,7 +200,6 @@ struct net_device *sparx5_create_netdev(struct sparx5 *sparx5, u32 portno)
 {
 	struct sparx5_port *spx5_port;
 	struct net_device *ndev;
-	u64 val;
 
 	ndev = devm_alloc_etherdev(sparx5->dev, sizeof(struct sparx5_port));
 	if (!ndev)
@@ -209,8 +215,7 @@ struct net_device *sparx5_create_netdev(struct sparx5 *sparx5, u32 portno)
 	ndev->netdev_ops = &sparx5_port_netdev_ops;
 	ndev->ethtool_ops = &sparx5_ethtool_ops;
 
-	val = ether_addr_to_u64(sparx5->base_mac) + portno + 1;
-	u64_to_ether_addr(val, ndev->dev_addr);
+	eth_hw_addr_gen(ndev, sparx5->base_mac, portno + 1);
 
 	return ndev;
 }

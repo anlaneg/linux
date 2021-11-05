@@ -16,7 +16,6 @@
 #include <linux/signal.h>
 #include <linux/kthread.h>
 #include <linux/dmi.h>
-#include <linux/nls.h>
 #include <linux/dma-map-ops.h>
 #include <linux/platform_data/x86/apple.h>
 #include <linux/pgtable.h>
@@ -609,6 +608,7 @@ struct acpi_device *acpi_bus_get_acpi_device(acpi_handle handle)
 {
 	return handle_to_device(handle, get_acpi_device);
 }
+EXPORT_SYMBOL_GPL(acpi_bus_get_acpi_device);
 
 static struct acpi_device_bus_id *acpi_device_bus_id_match(const char *dev_id)
 {
@@ -2559,6 +2559,12 @@ int __init acpi_scan_init(void)
 			goto out;
 		}
 	}
+
+	/*
+	 * Make sure that power management resources are not blocked by ACPI
+	 * device objects with no users.
+	 */
+	bus_for_each_dev(&acpi_bus_type, NULL, NULL, acpi_dev_turn_off_if_unused);
 
 	acpi_turn_off_unused_power_resources();
 

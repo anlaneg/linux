@@ -1,6 +1,5 @@
 /* SPDX-License-Identifier: LGPL-2.1 */
 /*
- *   fs/cifs/smb2pdu.h
  *
  *   Copyright (c) International Business Machines  Corp., 2009, 2013
  *                 Etersoft, 2012
@@ -394,6 +393,7 @@ struct smb2_compression_capabilities_context {
 	__u16	Padding;
 	__u32	Flags;
 	__le16	CompressionAlgorithms[3];
+	__u16	Pad;  /* Some servers require pad to DataLen multiple of 8 */
 	/* Check if pad needed */
 } __packed;
 

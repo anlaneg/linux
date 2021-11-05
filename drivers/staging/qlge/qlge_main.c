@@ -4547,7 +4547,8 @@ static int qlge_probe(struct pci_dev *pdev,
 	static int cards_found;
 	int err;
 
-	devlink = devlink_alloc(&qlge_devlink_ops, sizeof(struct qlge_adapter));
+	devlink = devlink_alloc(&qlge_devlink_ops, sizeof(struct qlge_adapter),
+				&pdev->dev);
 	if (!devlink)
 		return -ENOMEM;
 
@@ -4613,14 +4614,9 @@ static int qlge_probe(struct pci_dev *pdev,
 		goto netdev_free;
 	}
 
-	err = devlink_register(devlink, &pdev->dev);
+	err = qlge_health_create_reporters(qdev);
 	if (err)
 		goto netdev_free;
-
-	err = qlge_health_create_reporters(qdev);
-
-	if (err)
-		goto devlink_unregister;
 
 	/* Start up the timer to trigger EEH if
 	 * the bus goes dead
@@ -4631,10 +4627,9 @@ static int qlge_probe(struct pci_dev *pdev,
 	qlge_display_dev_info(ndev);
 	atomic_set(&qdev->lb_count, 0);
 	cards_found++;
+	devlink_register(devlink);
 	return 0;
 
-devlink_unregister:
-	devlink_unregister(devlink);
 netdev_free:
 	free_netdev(ndev);
 devlink_free:
@@ -4659,13 +4654,13 @@ static void qlge_remove(struct pci_dev *pdev)
 	struct net_device *ndev = qdev->ndev;
 	struct devlink *devlink = priv_to_devlink(qdev);
 
+	devlink_unregister(devlink);
 	del_timer_sync(&qdev->timer);
 	qlge_cancel_all_work_sync(qdev);
 	unregister_netdev(ndev);
 	qlge_release_all(pdev);
 	pci_disable_device(pdev);
 	devlink_health_reporter_destroy(qdev->reporter);
-	devlink_unregister(devlink);
 	devlink_free(devlink);
 	free_netdev(ndev);
 }

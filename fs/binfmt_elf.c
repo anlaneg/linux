@@ -633,7 +633,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 	eppnt = interp_elf_phdata;
 	for (i = 0; i < interp_elf_ex->e_phnum; i++, eppnt++) {
 		if (eppnt->p_type == PT_LOAD) {
-			int elf_type = MAP_PRIVATE | MAP_DENYWRITE;
+			int elf_type = MAP_PRIVATE;
 			int elf_prot = make_prot(eppnt->p_flags, arch_state,
 						 true, true);
 			unsigned long vaddr = 0;
@@ -641,7 +641,7 @@ static unsigned long load_elf_interp(struct elfhdr *interp_elf_ex,
 
 			vaddr = eppnt->p_vaddr;
 			if (interp_elf_ex->e_type == ET_EXEC || load_addr_set)
-				elf_type |= MAP_FIXED_NOREPLACE;
+				elf_type |= MAP_FIXED;
 			else if (no_base && interp_elf_ex->e_type == ET_DYN)
 				load_addr = -vaddr;
 
@@ -1105,7 +1105,7 @@ out_free_interp:
 		elf_prot = make_prot(elf_ppnt->p_flags, &arch_state,
 				     !!interpreter, false);
 
-		elf_flags = MAP_PRIVATE | MAP_DENYWRITE;
+		elf_flags = MAP_PRIVATE;
 
 		//此segement对应的虚地址
 		vaddr = elf_ppnt->p_vaddr;
@@ -1422,7 +1422,7 @@ static int load_elf_library(struct file *file)
 			(eppnt->p_filesz +
 			 ELF_PAGEOFFSET(eppnt->p_vaddr)),
 			PROT_READ | PROT_WRITE | PROT_EXEC,
-			MAP_FIXED_NOREPLACE | MAP_PRIVATE | MAP_DENYWRITE,
+			MAP_FIXED_NOREPLACE | MAP_PRIVATE,
 			(eppnt->p_offset -
 			 ELF_PAGEOFFSET(eppnt->p_vaddr)));
 	if (error != ELF_PAGESTART(eppnt->p_vaddr))
@@ -1872,7 +1872,7 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	/*
 	 * Allocate a structure for each thread.
 	 */
-	for (ct = &dump_task->mm->core_state->dumper; ct; ct = ct->next) {
+	for (ct = &dump_task->signal->core_state->dumper; ct; ct = ct->next) {
 		t = kzalloc(offsetof(struct elf_thread_core_info,
 				     notes[info->thread_notes]),
 			    GFP_KERNEL);
@@ -2062,7 +2062,7 @@ static int fill_note_info(struct elfhdr *elf, int phdrs,
 	if (!elf_note_info_init(info))
 		return 0;
 
-	for (ct = current->mm->core_state->dumper.next;
+	for (ct = current->signal->core_state->dumper.next;
 					ct; ct = ct->next) {
 		ets = kzalloc(sizeof(*ets), GFP_KERNEL);
 		if (!ets)

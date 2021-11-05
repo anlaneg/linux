@@ -70,6 +70,7 @@
 #include <net/xfrm.h>
 #include <net/mpls.h>
 #include <net/mptcp.h>
+#include <net/mctp.h>
 #include <net/page_pool.h>
 
 #include <linux/uaccess.h>
@@ -80,6 +81,7 @@
 #include <linux/indirect_call_wrapper.h>
 
 #include "datagram.h"
+#include "sock_destructor.h"
 
 //负责分配skb(不含数据仅有描述信息）
 struct kmem_cache *skbuff_head_cache __ro_after_init;
@@ -135,34 +137,31 @@ struct napi_alloc_cache {
 static DEFINE_PER_CPU(struct page_frag_cache, netdev_alloc_cache);
 static DEFINE_PER_CPU(struct napi_alloc_cache, napi_alloc_cache);
 
-static void *__alloc_frag_align(unsigned int fragsz, gfp_t gfp_mask,
-				unsigned int align_mask)
+void *__napi_alloc_frag_align(unsigned int fragsz, unsigned int align_mask)
 {
 	struct napi_alloc_cache *nc = this_cpu_ptr(&napi_alloc_cache);
 
-	return page_frag_alloc_align(&nc->page, fragsz, gfp_mask, align_mask);
-}
-
-void *__napi_alloc_frag_align(unsigned int fragsz, unsigned int align_mask)
-{
 	fragsz = SKB_DATA_ALIGN(fragsz);
 
-	return __alloc_frag_align(fragsz, GFP_ATOMIC, align_mask);
+	return page_frag_alloc_align(&nc->page, fragsz, GFP_ATOMIC, align_mask);
 }
 EXPORT_SYMBOL(__napi_alloc_frag_align);
 
 void *__netdev_alloc_frag_align(unsigned int fragsz, unsigned int align_mask)
 {
-	struct page_frag_cache *nc;
 	void *data;
 
 	fragsz = SKB_DATA_ALIGN(fragsz);
-	if (in_irq() || irqs_disabled()) {
-		nc = this_cpu_ptr(&netdev_alloc_cache);
+	if (in_hardirq() || irqs_disabled()) {
+		struct page_frag_cache *nc = this_cpu_ptr(&netdev_alloc_cache);
+
 		data = page_frag_alloc_align(nc, fragsz, GFP_ATOMIC, align_mask);
 	} else {
+		struct napi_alloc_cache *nc;
+
 		local_bh_disable();
-		data = __alloc_frag_align(fragsz, GFP_ATOMIC, align_mask);
+		nc = this_cpu_ptr(&napi_alloc_cache);
+		data = page_frag_alloc_align(&nc->page, fragsz, GFP_ATOMIC, align_mask);
 		local_bh_enable();
 	}
 	return data;
@@ -404,8 +403,9 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 {
 	struct kmem_cache *cache;
 	struct sk_buff *skb;
-	u8 *data;
+	unsigned int osize;
 	bool pfmemalloc;
+	u8 *data;
 
 	/*按flags选择不同的cache*/
 	cache = (flags & SKB_ALLOC_FCLONE)
@@ -439,7 +439,8 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * Put skb_shared_info exactly at the end of allocated zone,
 	 * to allow max possible filling before reallocation.
 	 */
-	size = SKB_WITH_OVERHEAD(ksize(data));
+	osize = ksize(data);
+	size = SKB_WITH_OVERHEAD(osize);
 	prefetchw(data + size);
 
 	/*
@@ -448,7 +449,7 @@ struct sk_buff *__alloc_skb(unsigned int size, gfp_t gfp_mask,
 	 * the tail pointer in struct sk_buff!
 	 */
 	memset(skb, 0, offsetof(struct sk_buff, tail));
-	__build_skb_around(skb, data, 0);
+	__build_skb_around(skb, data, osize);
 	skb->pfmemalloc = pfmemalloc;
 
 	if (flags & SKB_ALLOC_FCLONE) {
@@ -513,7 +514,7 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 	if (sk_memalloc_socks())
 		gfp_mask |= __GFP_MEMALLOC;
 
-	if (in_irq() || irqs_disabled()) {
+	if (in_hardirq() || irqs_disabled()) {
 		nc = this_cpu_ptr(&netdev_alloc_cache);
 		data = page_frag_alloc(nc, len, gfp_mask);
 		pfmemalloc = nc->pfmemalloc;
@@ -679,7 +680,7 @@ static void skb_release_data(struct sk_buff *skb)
 	if (skb->cloned &&
 	    atomic_sub_return(skb->nohdr ? (1 << SKB_DATAREF_SHIFT) + 1 : 1,
 			      &shinfo->dataref))
-		return;
+		goto exit;
 
 	skb_zcopy_clear(skb, true);
 
@@ -690,6 +691,17 @@ static void skb_release_data(struct sk_buff *skb)
 		kfree_skb_list(shinfo->frag_list);
 
 	skb_free_head(skb);
+exit:
+	/* When we clone an SKB we copy the reycling bit. The pp_recycle
+	 * bit is only set on the head though, so in order to avoid races
+	 * while trying to recycle fragments on __skb_frag_unref() we need
+	 * to make one SKB responsible for triggering the recycle path.
+	 * So disable the recycling bit if an SKB is cloned and we have
+	 * additional references to to the fragmented part of the SKB.
+	 * Eventually the last SKB will have the recycling bit set and it's
+	 * dataref set to 0, which will trigger the recycling
+	 */
+	skb->pp_recycle = 0;
 }
 
 /*
@@ -729,7 +741,7 @@ void skb_release_head_state(struct sk_buff *skb)
 {
 	skb_dst_drop(skb);
 	if (skb->destructor) {
-		WARN_ON(in_irq());
+		WARN_ON(in_hardirq());
 		skb->destructor(skb);
 	}
 #if IS_ENABLED(CONFIG_NF_CONNTRACK)
@@ -964,8 +976,13 @@ void __kfree_skb_defer(struct sk_buff *skb)
 
 void napi_skb_free_stolen_head(struct sk_buff *skb)
 {
-	skb_dst_drop(skb);
-	skb_ext_put(skb);
+	if (unlikely(skb->slow_gro)) {
+		nf_reset_ct(skb);
+		skb_dst_drop(skb);
+		skb_ext_put(skb);
+		skb_orphan(skb);
+		skb->slow_gro = 0;
+	}
 	napi_skb_cache_put(skb);
 }
 
@@ -1806,6 +1823,57 @@ struct sk_buff *skb_realloc_headroom(struct sk_buff *skb, unsigned int headroom)
 	return skb2;
 }
 EXPORT_SYMBOL(skb_realloc_headroom);
+
+/**
+ *	skb_expand_head - reallocate header of &sk_buff
+ *	@skb: buffer to reallocate
+ *	@headroom: needed headroom
+ *
+ *	Unlike skb_realloc_headroom, this one does not allocate a new skb
+ *	if possible; copies skb->sk to new skb as needed
+ *	and frees original skb in case of failures.
+ *
+ *	It expect increased headroom and generates warning otherwise.
+ */
+
+struct sk_buff *skb_expand_head(struct sk_buff *skb, unsigned int headroom)
+{
+	int delta = headroom - skb_headroom(skb);
+	int osize = skb_end_offset(skb);
+	struct sock *sk = skb->sk;
+
+	if (WARN_ONCE(delta <= 0,
+		      "%s is expecting an increase in the headroom", __func__))
+		return skb;
+
+	delta = SKB_DATA_ALIGN(delta);
+	/* pskb_expand_head() might crash, if skb is shared. */
+	if (skb_shared(skb) || !is_skb_wmem(skb)) {
+		struct sk_buff *nskb = skb_clone(skb, GFP_ATOMIC);
+
+		if (unlikely(!nskb))
+			goto fail;
+
+		if (sk)
+			skb_set_owner_w(nskb, sk);
+		consume_skb(skb);
+		skb = nskb;
+	}
+	if (pskb_expand_head(skb, delta, 0, GFP_ATOMIC))
+		goto fail;
+
+	if (sk && is_skb_wmem(skb)) {
+		delta = skb_end_offset(skb) - osize;
+		refcount_add(delta, &sk->sk_wmem_alloc);
+		skb->truesize += delta;
+	}
+	return skb;
+
+fail:
+	kfree_skb(skb);
+	return NULL;
+}
+EXPORT_SYMBOL(skb_expand_head);
 
 /**
  *	skb_copy_expand	-	copy and expand sk_buff
@@ -3061,8 +3129,11 @@ skb_zerocopy_headlen(const struct sk_buff *from)
 
 	if (!from->head_frag ||
 	    skb_headlen(from) < L1_CACHE_BYTES ||
-	    skb_shinfo(from)->nr_frags >= MAX_SKB_FRAGS)
+	    skb_shinfo(from)->nr_frags >= MAX_SKB_FRAGS) {
 		hlen = skb_headlen(from);
+		if (!hlen)
+			hlen = from->len;
+	}
 
 	if (skb_has_frag_list(from))
 		hlen = from->len;
@@ -3877,7 +3948,7 @@ struct sk_buff *skb_segment_list(struct sk_buff *skb,
 		skb_push(nskb, -skb_network_offset(nskb) + offset);
 
 		skb_release_head_state(nskb);
-		 __copy_skb_header(nskb, skb);
+		__copy_skb_header(nskb, skb);
 
 		skb_headers_offset_update(nskb, skb_headroom(nskb) - skb_headroom(skb));
 		skb_copy_from_linear_data_offset(skb, -tnl_hlen,
@@ -3928,6 +3999,9 @@ int skb_gro_receive_list(struct sk_buff *p, struct sk_buff *skb)
 	NAPI_GRO_CB(p)->last = skb;
 	NAPI_GRO_CB(p)->count++;
 	p->data_len += skb->len;
+
+	/* sk owenrship - if any - completely transferred to the aggregated packet */
+	skb->destructor = NULL;
 	p->truesize += skb->truesize;
 	p->len += skb->len;
 
@@ -4295,6 +4369,7 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 	unsigned int headlen = skb_headlen(skb);
 	unsigned int len = skb_gro_len(skb);
 	unsigned int delta_truesize;
+	unsigned int new_truesize;
 	/*gro时，我们可能会缓存多个报文，此时p时我们缓冲的首个报文，skb是本次我们计划
 	 * 缓存的报文，而lp是我们上次缓存的报文*/
 	struct sk_buff *lp;
@@ -4333,10 +4408,10 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 		skb_frag_size_sub(frag, offset);
 
 		/* all fragments truesize : remove (head size + sk_buff) */
-		delta_truesize = skb->truesize -
-				 SKB_TRUESIZE(skb_end_offset(skb));
+		new_truesize = SKB_TRUESIZE(skb_end_offset(skb));
+		delta_truesize = skb->truesize - new_truesize;
 
-		skb->truesize -= skb->data_len;
+		skb->truesize = new_truesize;
 		skb->len -= skb->data_len;
 		skb->data_len = 0;
 
@@ -4365,12 +4440,16 @@ int skb_gro_receive(struct sk_buff *p, struct sk_buff *skb)
 		memcpy(frag + 1, skbinfo->frags, sizeof(*frag) * skbinfo->nr_frags);
 		/* We dont need to clear skbinfo->nr_frags here */
 
-		delta_truesize = skb->truesize - SKB_DATA_ALIGN(sizeof(struct sk_buff));
+		new_truesize = SKB_DATA_ALIGN(sizeof(struct sk_buff));
+		delta_truesize = skb->truesize - new_truesize;
+		skb->truesize = new_truesize;
 		NAPI_GRO_CB(skb)->free = NAPI_GRO_FREE_STOLEN_HEAD;
 		goto done;
 	}
 
 merge:
+	/* sk owenrship - if any - completely transferred to the aggregated packet */
+	skb->destructor = NULL;
 	//skbinfo中的分片数组不足以存放这些frags,需要将frags合并
 	delta_truesize = skb->truesize;
 	if (offset > headlen) {
@@ -4424,6 +4503,9 @@ static const u8 skb_ext_type_len[] = {
 #if IS_ENABLED(CONFIG_MPTCP)
 	[SKB_EXT_MPTCP] = SKB_EXT_CHUNKSIZEOF(struct mptcp_ext),
 #endif
+#if IS_ENABLED(CONFIG_MCTP_FLOWS)
+	[SKB_EXT_MCTP] = SKB_EXT_CHUNKSIZEOF(struct mctp_flow),
+#endif
 };
 
 static __always_inline unsigned int skb_ext_total_length(void)
@@ -4440,6 +4522,9 @@ static __always_inline unsigned int skb_ext_total_length(void)
 #endif
 #if IS_ENABLED(CONFIG_MPTCP)
 		skb_ext_type_len[SKB_EXT_MPTCP] +
+#endif
+#if IS_ENABLED(CONFIG_MCTP_FLOWS)
+		skb_ext_type_len[SKB_EXT_MCTP] +
 #endif
 		0;
 }
@@ -6515,6 +6600,7 @@ void *skb_ext_add(struct sk_buff *skb, enum skb_ext_id id)
 	new->chunks = newlen;
 	new->offset[id] = newoff;
 set_active:
+	skb->slow_gro = 1;
 	skb->extensions = new;
 	skb->active_extensions |= 1 << id;
 	return skb_ext_get_ptr(new, id);
@@ -6528,6 +6614,14 @@ static void skb_ext_put_sp(struct sec_path *sp)
 
 	for (i = 0; i < sp->len; i++)
 		xfrm_state_put(sp->xvec[i]);
+}
+#endif
+
+#ifdef CONFIG_MCTP_FLOWS
+static void skb_ext_put_mctp(struct mctp_flow *flow)
+{
+	if (flow->key)
+		mctp_key_unref(flow->key);
 }
 #endif
 
@@ -6565,6 +6659,10 @@ free_now:
 #ifdef CONFIG_XFRM
 	if (__skb_ext_exist(ext, SKB_EXT_SEC_PATH))
 		skb_ext_put_sp(skb_ext_get_ptr(ext, SKB_EXT_SEC_PATH));
+#endif
+#ifdef CONFIG_MCTP_FLOWS
+	if (__skb_ext_exist(ext, SKB_EXT_MCTP))
+		skb_ext_put_mctp(skb_ext_get_ptr(ext, SKB_EXT_MCTP));
 #endif
 
 	kmem_cache_free(skbuff_ext_cache, ext);

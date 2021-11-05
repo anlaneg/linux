@@ -154,14 +154,14 @@ struct neighbour {
 	struct timer_list	timer;
 	unsigned long		used;
 	atomic_t		probes;//表项的探测次数
-	__u8			flags;
 	//邻居表项的状态(例如NUD_NOARP）
-	__u8			nud_state;
+	u8			nud_state;
 	//地址类型
-	__u8			type;
+	u8			type;
 	/*标记此neighbour不得再更新,仅为dead的neigh才能被销毁*/
-	__u8			dead;
+	u8			dead;
 	u8			protocol;
+	u32			flags;
 	seqlock_t		ha_lock;
 	//硬件地址
 	unsigned char		ha[ALIGN(MAX_ADDR_LEN, sizeof(unsigned long))] __aligned(8);
@@ -170,6 +170,7 @@ struct neighbour {
 	int			(*output)(struct neighbour *, struct sk_buff *);
 	const struct neigh_ops	*ops;
 	struct list_head	gc_list;
+	struct list_head	managed_list;
 	struct rcu_head		rcu;
 	struct net_device	*dev;//邻居表项关联的设备
 	u8			primary_key[0];//neighbor请求的协议目的地址
@@ -189,7 +190,7 @@ struct pneigh_entry {
 	struct pneigh_entry	*next;
 	possible_net_t		net;
 	struct net_device	*dev;
-	u8			flags;
+	u32			flags;
 	u8			protocol;
 	u8			key[];
 };
@@ -247,12 +248,14 @@ struct neigh_table {
 	int			gc_thresh3;
 	unsigned long		last_flush;
 	struct delayed_work	gc_work;
+	struct delayed_work	managed_work;
 	struct timer_list 	proxy_timer;
 	struct sk_buff_head	proxy_queue;
 	//表中邻居表项的数目
 	atomic_t		entries;
 	atomic_t		gc_entries;
 	struct list_head	gc_list;
+	struct list_head	managed_list;
 	rwlock_t		lock;
 	unsigned long		last_rand;
 	//邻居表统计计数（percpu)
@@ -285,12 +288,21 @@ static inline void *neighbour_priv(const struct neighbour *n)
 }
 
 /* flags for neigh_update() */
-#define NEIGH_UPDATE_F_OVERRIDE			0x00000001
-#define NEIGH_UPDATE_F_WEAK_OVERRIDE		0x00000002
-#define NEIGH_UPDATE_F_OVERRIDE_ISROUTER	0x00000004
-#define NEIGH_UPDATE_F_EXT_LEARNED		0x20000000
-#define NEIGH_UPDATE_F_ISROUTER			0x40000000
-#define NEIGH_UPDATE_F_ADMIN			0x80000000
+#define NEIGH_UPDATE_F_OVERRIDE			BIT(0)
+#define NEIGH_UPDATE_F_WEAK_OVERRIDE		BIT(1)
+#define NEIGH_UPDATE_F_OVERRIDE_ISROUTER	BIT(2)
+#define NEIGH_UPDATE_F_USE			BIT(3)
+#define NEIGH_UPDATE_F_MANAGED			BIT(4)
+#define NEIGH_UPDATE_F_EXT_LEARNED		BIT(5)
+#define NEIGH_UPDATE_F_ISROUTER			BIT(6)
+#define NEIGH_UPDATE_F_ADMIN			BIT(7)
+
+/* In-kernel representation for NDA_FLAGS_EXT flags: */
+#define NTF_OLD_MASK		0xff
+#define NTF_EXT_SHIFT		8
+#define NTF_EXT_MASK		(NTF_EXT_MANAGED)
+
+#define NTF_MANAGED		(NTF_EXT_MANAGED << NTF_EXT_SHIFT)
 
 extern const struct nla_policy nda_policy[];
 
@@ -555,11 +567,16 @@ static inline int neigh_output(struct neighbour *n, struct sk_buff *skb,
 	const struct hh_cache *hh = &n->hh;
 
 	//如果arp已完全，则采用hh中的缓存直接输出
-	if ((n->nud_state & NUD_CONNECTED) && hh->hh_len && !skip_cache)
+	/* n->nud_state and hh->hh_len could be changed under us.
+	 * neigh_hh_output() is taking care of the race later.
+	 */
+	if (!skip_cache &&
+	    (READ_ONCE(n->nud_state) & NUD_CONNECTED) &&
+	    READ_ONCE(hh->hh_len))
 		return neigh_hh_output(hh, skb);
-	else
-		//调用邻居表项的output进行处理（或缓存或丢弃），例如neigh_direct_output
-		return n->output(n, skb);
+
+	//调用邻居表项的output进行处理（或缓存或丢弃），例如neigh_direct_output
+	return n->output(n, skb);
 }
 
 static inline struct neighbour *

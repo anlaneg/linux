@@ -1328,7 +1328,7 @@ static int vxge_set_mac_addr(struct net_device *dev, void *p)
 	}
 
 	if (unlikely(!is_vxge_card_up(vdev))) {
-		memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+		eth_hw_addr_set(dev, addr->sa_data);
 		return VXGE_HW_OK;
 	}
 
@@ -1341,7 +1341,7 @@ static int vxge_set_mac_addr(struct net_device *dev, void *p)
 			return -EINVAL;
 	}
 
-	memcpy(dev->dev_addr, addr->sa_data, dev->addr_len);
+	eth_hw_addr_set(dev, addr->sa_data);
 
 	return status;
 }
@@ -3339,7 +3339,7 @@ static const struct net_device_ops vxge_netdev_ops = {
 	.ndo_start_xmit         = vxge_xmit,
 	.ndo_validate_addr      = eth_validate_addr,
 	.ndo_set_rx_mode	= vxge_set_multicast,
-	.ndo_do_ioctl           = vxge_ioctl,
+	.ndo_eth_ioctl           = vxge_ioctl,
 	.ndo_set_mac_address    = vxge_set_mac_addr,
 	.ndo_change_mtu         = vxge_change_mtu,
 	.ndo_fix_features	= vxge_fix_features,
@@ -3512,13 +3512,13 @@ static void vxge_device_unregister(struct __vxge_hw_device *hldev)
 
 	kfree(vdev->vpaths);
 
-	/* we are safe to free it now */
-	free_netdev(dev);
-
 	vxge_debug_init(vdev->level_trace, "%s: ethernet device unregistered",
 			buf);
 	vxge_debug_entryexit(vdev->level_trace,	"%s: %s:%d  Exiting...", buf,
 			     __func__, __LINE__);
+
+	/* we are safe to free it now */
+	free_netdev(dev);
 }
 
 /*
@@ -4663,7 +4663,7 @@ vxge_probe(struct pci_dev *pdev, const struct pci_device_id *pre)
 
 	/* Store the fw version for ethttool option */
 	strcpy(vdev->fw_version, ll_config->device_hw_info.fw_version.version);
-	memcpy(vdev->ndev->dev_addr, (u8 *)vdev->vpaths[0].macaddr, ETH_ALEN);
+	eth_hw_addr_set(vdev->ndev, (u8 *)vdev->vpaths[0].macaddr);
 
 	/* Copy the station mac address to the list */
 	for (i = 0; i < vdev->no_of_vpath; i++) {

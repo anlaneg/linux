@@ -551,7 +551,22 @@ static void proc_put_char(void **buf/*入出参，buf写入位置*/, size_t *siz
 	}
 }
 
-static int do_proc_dointvec_conv(bool *negp/*是否取负值*/, unsigned long *lvalp,
+static int do_proc_dobool_conv(bool *negp/*是否取负值*/, unsigned long *lvalp,
+				int *valp,
+				int write, void *data)
+{
+	if (write) {
+		*(bool *)valp = *lvalp;
+	} else {
+		int val = *(bool *)valp;
+
+		*lvalp = (unsigned long)val;
+		*negp = false;
+	}
+	return 0;
+}
+
+static int do_proc_dointvec_conv(bool *negp, unsigned long *lvalp,
 				 int *valp,
 				 int write/*是否写操作，若写，则valp=lvalp*/, void *data/*不使用*/)
 {
@@ -830,6 +845,26 @@ static int do_proc_douintvec(struct ctl_table *table, int write,
 {
 	return __do_proc_douintvec(table->data, table, write,
 				   buffer, lenp, ppos, conv, data);
+}
+
+/**
+ * proc_dobool - read/write a bool
+ * @table: the sysctl table
+ * @write: %TRUE if this is a write to the sysctl file
+ * @buffer: the user buffer
+ * @lenp: the size of the user buffer
+ * @ppos: file position
+ *
+ * Reads/writes up to table->maxlen/sizeof(unsigned int) integer
+ * values from/to the user buffer, treated as an ASCII string.
+ *
+ * Returns 0 on success.
+ */
+int proc_dobool(struct ctl_table *table, int write, void *buffer,
+		size_t *lenp, loff_t *ppos)
+{
+	return do_proc_dointvec(table, write, buffer, lenp, ppos,
+				do_proc_dobool_conv, NULL);
 }
 
 /**
@@ -1663,6 +1698,12 @@ int proc_do_large_bitmap(struct ctl_table *table, int write,
 
 int proc_dostring(struct ctl_table *table, int write,
 		  void *buffer, size_t *lenp, loff_t *ppos)
+{
+	return -ENOSYS;
+}
+
+int proc_dobool(struct ctl_table *table, int write,
+		void *buffer, size_t *lenp, loff_t *ppos)
 {
 	return -ENOSYS;
 }
@@ -2908,7 +2949,7 @@ static struct ctl_table vm_table[] = {
 		.data		= &sysctl_compaction_proactiveness,
 		.maxlen		= sizeof(sysctl_compaction_proactiveness),
 		.mode		= 0644,
-		.proc_handler	= proc_dointvec_minmax,
+		.proc_handler	= compaction_proactiveness_sysctl_handler,
 		.extra1		= SYSCTL_ZERO,
 		.extra2		= &one_hundred,
 	},
@@ -3462,6 +3503,7 @@ int __init sysctl_init(void)
  * No sense putting this after each symbol definition, twice,
  * exception granted :-)
  */
+EXPORT_SYMBOL(proc_dobool);
 EXPORT_SYMBOL(proc_dointvec);
 EXPORT_SYMBOL(proc_douintvec);
 EXPORT_SYMBOL(proc_dointvec_jiffies);

@@ -210,10 +210,10 @@ void __split_page_owner(struct page *page, unsigned int nr)
 	}
 }
 
-void __copy_page_owner(struct page *oldpage, struct page *newpage)
+void __folio_copy_owner(struct folio *newfolio, struct folio *old)
 {
-	struct page_ext *old_ext = lookup_page_ext(oldpage);
-	struct page_ext *new_ext = lookup_page_ext(newpage);
+	struct page_ext *old_ext = lookup_page_ext(&old->page);
+	struct page_ext *new_ext = lookup_page_ext(&newfolio->page);
 	struct page_owner *old_page_owner, *new_page_owner;
 
 	if (unlikely(!old_ext || !new_ext))
@@ -231,11 +231,11 @@ void __copy_page_owner(struct page *oldpage, struct page *newpage)
 	new_page_owner->free_ts_nsec = old_page_owner->ts_nsec;
 
 	/*
-	 * We don't clear the bit on the oldpage as it's going to be freed
+	 * We don't clear the bit on the old folio as it's going to be freed
 	 * after migration. Until then, the info can be useful in case of
 	 * a bug, and the overall stats will be off a bit only temporarily.
 	 * Also, migrate_misplaced_transhuge_page() can still fail the
-	 * migration and then we want the oldpage to retain the info. But
+	 * migration and then we want the old folio to retain the info. But
 	 * in that case we also don't need to explicitly clear the info from
 	 * the new page, which will be freed.
 	 */
@@ -276,9 +276,6 @@ void pagetypeinfo_showmixedcount_print(struct seq_file *m,
 		pageblock_mt = get_pageblock_migratetype(page);
 
 		for (; pfn < block_end_pfn; pfn++) {
-			if (!pfn_valid_within(pfn))
-				continue;
-
 			/* The pageblock is online, no need to recheck. */
 			page = pfn_to_page(pfn);
 
@@ -354,12 +351,12 @@ print_page_owner(char __user *buf, size_t count, unsigned long pfn,
 	pageblock_mt = get_pageblock_migratetype(page);
 	page_mt  = gfp_migratetype(page_owner->gfp_mask);
 	ret += snprintf(kbuf + ret, count - ret,
-			"PFN %lu type %s Block %lu type %s Flags %#lx(%pGp)\n",
+			"PFN %lu type %s Block %lu type %s Flags %pGp\n",
 			pfn,
 			migratetype_names[page_mt],
 			pfn >> pageblock_order,
 			migratetype_names[pageblock_mt],
-			page->flags, &page->flags);
+			&page->flags);
 
 	if (ret >= count)
 		goto err;
@@ -479,10 +476,6 @@ read_page_owner(struct file *file, char __user *buf, size_t count, loff_t *ppos)
 			continue;
 		}
 
-		/* Check for holes within a MAX_ORDER area */
-		if (!pfn_valid_within(pfn))
-			continue;
-
 		page = pfn_to_page(pfn);
 		if (PageBuddy(page)) {
 			unsigned long freepage_order = buddy_order_unsafe(page);
@@ -560,13 +553,8 @@ static void init_pages_in_zone(pg_data_t *pgdat, struct zone *zone)
 		block_end_pfn = min(block_end_pfn, end_pfn);
 
 		for (; pfn < block_end_pfn; pfn++) {
-			struct page *page;
+			struct page *page = pfn_to_page(pfn);
 			struct page_ext *page_ext;
-
-			if (!pfn_valid_within(pfn))
-				continue;
-
-			page = pfn_to_page(pfn);
 
 			if (page_zone(page) != zone)
 				continue;

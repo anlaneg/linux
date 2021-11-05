@@ -180,10 +180,11 @@ struct arpt_entry *arpt_next_entry(const struct arpt_entry *entry)
 }
 
 //arp 表处理
-unsigned int arpt_do_table(struct sk_buff *skb,
-			   const struct nf_hook_state *state,
-			   struct xt_table *table)
+unsigned int arpt_do_table(void *priv,
+			   struct sk_buff *skb,
+			   const struct nf_hook_state *state)
 {
+	const struct xt_table *table = priv;
 	unsigned int hook = state->hook;
 	static const char nulldevname[IFNAMSIZ] __attribute__((aligned(sizeof(long))));
 	unsigned int verdict = NF_DROP;

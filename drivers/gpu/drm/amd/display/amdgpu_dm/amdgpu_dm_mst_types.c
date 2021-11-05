@@ -64,6 +64,8 @@ static ssize_t dm_dp_aux_transfer(struct drm_dp_aux *aux,
 	payload.i2c_over_aux = (msg->request & DP_AUX_NATIVE_WRITE) == 0;
 	payload.write = (msg->request & DP_AUX_I2C_READ) == 0;
 	payload.mot = (msg->request & DP_AUX_I2C_MOT) != 0;
+	payload.write_status_update =
+			(msg->request & DP_AUX_I2C_WRITE_STATUS_UPDATE) != 0;
 	payload.defer_delay = 0;
 
 	result = dc_link_aux_transfer_raw(TO_DM_AUX(aux)->ddc_service, &payload,
@@ -213,6 +215,29 @@ static int dm_dp_mst_get_modes(struct drm_connector *connector)
 			drm_connector_update_edid_property(
 				&aconnector->base,
 				NULL);
+
+			DRM_DEBUG_KMS("Can't get EDID of %s. Add default remote sink.", connector->name);
+			if (!aconnector->dc_sink) {
+				struct dc_sink *dc_sink;
+				struct dc_sink_init_data init_params = {
+					.link = aconnector->dc_link,
+					.sink_signal = SIGNAL_TYPE_DISPLAY_PORT_MST };
+
+				dc_sink = dc_link_add_remote_sink(
+					aconnector->dc_link,
+					NULL,
+					0,
+					&init_params);
+
+				if (!dc_sink) {
+					DRM_ERROR("Unable to add a remote sink\n");
+					return 0;
+				}
+
+				dc_sink->priv = aconnector;
+				aconnector->dc_sink = dc_sink;
+			}
+
 			return ret;
 		}
 
@@ -495,12 +520,7 @@ struct dsc_mst_fairness_params {
 	uint32_t num_slices_h;
 	uint32_t num_slices_v;
 	uint32_t bpp_overwrite;
-};
-
-struct dsc_mst_fairness_vars {
-	int pbn;
-	bool dsc_enabled;
-	int bpp_x16;
+	struct amdgpu_dm_connector *aconnector;
 };
 
 static int kbps_to_peak_pbn(int kbps)
@@ -524,7 +544,7 @@ static void set_dsc_configs_from_fairness_vars(struct dsc_mst_fairness_params *p
 					params[i].sink->ctx->dc->res_pool->dscs[0],
 					&params[i].sink->dsc_caps.dsc_dec_caps,
 					params[i].sink->ctx->dc->debug.dsc_min_slice_height_override,
-					0,
+					params[i].sink->edid_caps.panel_patch.max_dsc_target_bpp_limit,
 					0,
 					params[i].timing,
 					&params[i].timing->dsc_cfg)) {
@@ -556,7 +576,7 @@ static int bpp_x16_from_pbn(struct dsc_mst_fairness_params param, int pbn)
 			param.sink->ctx->dc->res_pool->dscs[0],
 			&param.sink->dsc_caps.dsc_dec_caps,
 			param.sink->ctx->dc->debug.dsc_min_slice_height_override,
-			0,
+			param.sink->edid_caps.panel_patch.max_dsc_target_bpp_limit,
 			(int) kbps, param.timing, &dsc_config);
 
 	return dsc_config.bits_per_pixel;
@@ -727,12 +747,12 @@ static void try_disable_dsc(struct drm_atomic_state *state,
 
 static bool compute_mst_dsc_configs_for_link(struct drm_atomic_state *state,
 					     struct dc_state *dc_state,
-					     struct dc_link *dc_link)
+					     struct dc_link *dc_link,
+					     struct dsc_mst_fairness_vars *vars)
 {
 	int i;
 	struct dc_stream_state *stream;
 	struct dsc_mst_fairness_params params[MAX_PIPES];
-	struct dsc_mst_fairness_vars vars[MAX_PIPES];
 	struct amdgpu_dm_connector *aconnector;
 	int count = 0;
 	bool debugfs_overwrite = false;
@@ -753,6 +773,7 @@ static bool compute_mst_dsc_configs_for_link(struct drm_atomic_state *state,
 		params[count].timing = &stream->timing;
 		params[count].sink = stream->sink;
 		aconnector = (struct amdgpu_dm_connector *)stream->dm_stream_context;
+		params[count].aconnector = aconnector;
 		params[count].port = aconnector->port;
 		params[count].clock_force_enable = aconnector->dsc_settings.dsc_force_enable;
 		if (params[count].clock_force_enable == DSC_CLK_FORCE_ENABLE)
@@ -775,6 +796,7 @@ static bool compute_mst_dsc_configs_for_link(struct drm_atomic_state *state,
 	}
 	/* Try no compression */
 	for (i = 0; i < count; i++) {
+		vars[i].aconnector = params[i].aconnector;
 		vars[i].pbn = kbps_to_peak_pbn(params[i].bw_range.stream_kbps);
 		vars[i].dsc_enabled = false;
 		vars[i].bpp_x16 = 0;
@@ -828,7 +850,8 @@ static bool compute_mst_dsc_configs_for_link(struct drm_atomic_state *state,
 }
 
 bool compute_mst_dsc_configs_for_state(struct drm_atomic_state *state,
-				       struct dc_state *dc_state)
+				       struct dc_state *dc_state,
+				       struct dsc_mst_fairness_vars *vars)
 {
 	int i, j;
 	struct dc_stream_state *stream;
@@ -859,7 +882,7 @@ bool compute_mst_dsc_configs_for_state(struct drm_atomic_state *state,
 			return false;
 
 		mutex_lock(&aconnector->mst_mgr.lock);
-		if (!compute_mst_dsc_configs_for_link(state, dc_state, stream->link)) {
+		if (!compute_mst_dsc_configs_for_link(state, dc_state, stream->link, vars)) {
 			mutex_unlock(&aconnector->mst_mgr.lock);
 			return false;
 		}

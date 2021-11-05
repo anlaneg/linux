@@ -3,6 +3,7 @@
  * Copyright (c) 2017 Hisilicon Limited.
  */
 
+#include <linux/sched/clock.h>
 #include "hisi_sas.h"
 #define DRV_NAME "hisi_sas_v3_hw"
 
@@ -1153,7 +1154,7 @@ static void fill_prot_v3_hw(struct scsi_cmnd *scsi_cmnd,
 {
 	unsigned char prot_op = scsi_get_prot_op(scsi_cmnd);
 	unsigned int interval = scsi_prot_interval(scsi_cmnd);
-	u32 lbrt_chk_val = t10_pi_ref_tag(scsi_cmnd->request);
+	u32 lbrt_chk_val = t10_pi_ref_tag(scsi_cmd_to_rq(scsi_cmnd));
 
 	switch (prot_op) {
 	case SCSI_PROT_READ_INSERT:

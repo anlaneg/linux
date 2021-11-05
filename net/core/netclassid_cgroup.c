@@ -72,12 +72,9 @@ static int update_classid_sock(const void *v, struct file *file, unsigned n)
 	struct update_classid_context *ctx = (void *)v;
 	struct socket *sock = sock_from_file(file);
 
-	if (sock) {
-		spin_lock(&cgroup_sk_update_lock);
+	if (sock)
 		//更新socket 文件的classid
 		sock_cgroup_set_classid(&sock->sk->sk_cgrp_data, ctx->classid);
-		spin_unlock(&cgroup_sk_update_lock);
-	}
 	if (--ctx->batch == 0) {
 	    //一次最大支持批量更新的数目
 		ctx->batch = UPDATE_CLASSID_BATCH;
@@ -127,8 +124,6 @@ static int write_classid(struct cgroup_subsys_state *css, struct cftype *cft,
 	struct cgroup_cls_state *cs = css_cls_state(css);
 	struct css_task_iter it;
 	struct task_struct *p;
-
-	cgroup_sk_alloc_disable();
 
 	//写classid
 	cs->classid = (u32)value;

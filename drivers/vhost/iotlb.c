@@ -37,19 +37,21 @@ void vhost_iotlb_map_free(struct vhost_iotlb *iotlb,
 EXPORT_SYMBOL_GPL(vhost_iotlb_map_free);
 
 /**
- * vhost_iotlb_add_range - add a new range to vhost IOTLB
+ * vhost_iotlb_add_range_ctx - add a new range to vhost IOTLB
  * @iotlb: the IOTLB
  * @start: start of the IOVA range
  * @last: last of IOVA range
  * @addr: the address that is mapped to @start
  * @perm: access permission of this range
+ * @opaque: the opaque pointer for the new mapping
  *
  * Returns an error last is smaller than start or memory allocation
  * fails
  */
-int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
-			  u64 start/*起始地址*/, u64 last/*终止地址*/,
-			  u64 addr, unsigned int perm/*访问权限*/)
+int vhost_iotlb_add_range_ctx(struct vhost_iotlb *iotlb,
+			      u64 start/*起始地址*/, u64 last/*终止地址*/,
+			      u64 addr, unsigned int perm/*访问权限*/,
+			      void *opaque)
 {
     //在iotlb中增加一个映射
 	struct vhost_iotlb_map *map;
@@ -76,6 +78,7 @@ int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
 	map->last = last;
 	map->addr = addr;
 	map->perm = perm;
+	map->opaque = opaque;
 
 	/*iotlb中map总数增加*/
 	iotlb->nmaps++;
@@ -87,6 +90,15 @@ int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
 	list_add_tail(&map->link, &iotlb->list);
 
 	return 0;
+}
+EXPORT_SYMBOL_GPL(vhost_iotlb_add_range_ctx);
+
+int vhost_iotlb_add_range(struct vhost_iotlb *iotlb,
+			  u64 start, u64 last,
+			  u64 addr, unsigned int perm)
+{
+	return vhost_iotlb_add_range_ctx(iotlb, start, last,
+					 addr, perm, NULL);
 }
 EXPORT_SYMBOL_GPL(vhost_iotlb_add_range);
 

@@ -733,7 +733,7 @@ static int dmz_get_zoned_device(struct dm_target *ti, char *path,
 	dev->dev_idx = idx;
 	(void)bdevname(dev->bdev, dev->name);
 
-	dev->capacity = i_size_read(bdev->bd_inode) >> SECTOR_SHIFT;
+	dev->capacity = bdev_nr_sectors(bdev);
 	if (ti->begin) {
 		ti->error = "Partial mapping is not supported";
 		goto err;
@@ -1118,6 +1118,9 @@ static void dmz_status(struct dm_target *ti, status_type_t type,
 			format_dev_t(buf, dev->bdev->bd_dev);
 			DMEMIT(" %s", buf);
 		}
+		break;
+	case STATUSTYPE_IMA:
+		*result = '\0';
 		break;
 	}
 	return;

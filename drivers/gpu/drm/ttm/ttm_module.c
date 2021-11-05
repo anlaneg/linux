@@ -40,6 +40,18 @@
 #include "ttm_module.h"
 
 /**
+ * DOC: TTM
+ *
+ * TTM is a memory manager for accelerator devices with dedicated memory.
+ *
+ * The basic idea is that resources are grouped together in buffer objects of
+ * certain size and TTM handles lifetime, movement and CPU mappings of those
+ * objects.
+ *
+ * TODO: Add more design background and information here.
+ */
+
+/**
  * ttm_prot_from_caching - Modify the page protection according to the
  * ttm cacing mode
  * @caching: The ttm caching mode
@@ -71,22 +83,6 @@ pgprot_t ttm_prot_from_caching(enum ttm_caching caching, pgprot_t tmp)
 #endif
 	return tmp;
 }
-
-struct dentry *ttm_debugfs_root;
-
-static int __init ttm_init(void)
-{
-	ttm_debugfs_root = debugfs_create_dir("ttm", NULL);
-	return 0;
-}
-
-static void __exit ttm_exit(void)
-{
-	debugfs_remove(ttm_debugfs_root);
-}
-
-module_init(ttm_init);
-module_exit(ttm_exit);
 
 MODULE_AUTHOR("Thomas Hellstrom, Jerome Glisse");
 MODULE_DESCRIPTION("TTM memory manager subsystem (for DRM device)");

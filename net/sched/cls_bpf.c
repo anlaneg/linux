@@ -102,13 +102,13 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			__skb_push(skb, skb->mac_len);
 			bpf_compute_data_pointers(skb);
 			//调用bpf程序,返回filter_res
-			filter_res = BPF_PROG_RUN(prog->filter, skb);
+			filter_res = bpf_prog_run(prog->filter, skb);
 			//使data跳过mac头
 			__skb_pull(skb, skb->mac_len);
 		} else {
 		    /*egress方向运行bpf*/
 			bpf_compute_data_pointers(skb);
-			filter_res = BPF_PROG_RUN(prog->filter, skb);
+			filter_res = bpf_prog_run(prog->filter, skb);
 		}
 
 		//如果程序已集成了action,则检查返回值，直接返回
@@ -430,7 +430,7 @@ static int cls_bpf_prog_from_efd(struct nlattr **tb, struct cls_bpf_prog *prog,
 
 static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 			     struct cls_bpf_prog *prog, unsigned long base,
-			     struct nlattr **tb, struct nlattr *est, bool ovr,
+			     struct nlattr **tb, struct nlattr *est, u32 flags,
 			     struct netlink_ext_ack *extack)
 {
 	bool is_bpf, is_ebpf, have_exts = false;
@@ -443,7 +443,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 	if ((!is_bpf && !is_ebpf) || (is_bpf && is_ebpf))
 		return -EINVAL;
 
-	ret = tcf_exts_validate(net, tp, tb, est, &prog->exts, ovr, true,
+	ret = tcf_exts_validate(net, tp, tb, est, &prog->exts, flags,
 				extack);
 	if (ret < 0)
 		return ret;
@@ -485,7 +485,7 @@ static int cls_bpf_set_parms(struct net *net, struct tcf_proto *tp,
 static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 			  struct tcf_proto *tp, unsigned long base,
 			  u32 handle, struct nlattr **tca,
-			  void **arg, bool ovr, bool rtnl_held,
+			  void **arg, u32 flags,
 			  struct netlink_ext_ack *extack)
 {
 	struct cls_bpf_head *head = rtnl_dereference(tp->root);
@@ -533,7 +533,7 @@ static int cls_bpf_change(struct net *net, struct sk_buff *in_skb,
 	prog->handle = handle;
 
 	//获得用户态指定的bpf程序
-	ret = cls_bpf_set_parms(net, tp, prog, base, tb, tca[TCA_RATE], ovr,
+	ret = cls_bpf_set_parms(net, tp, prog, base, tb, tca[TCA_RATE], flags,
 				extack);
 	if (ret < 0)
 		goto errout_idr;

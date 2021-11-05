@@ -365,7 +365,7 @@ static int intel_pmu_get_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		msr_info->data = pmu->global_ctrl;
 		return 0;
 	case MSR_CORE_PERF_GLOBAL_OVF_CTRL:
-		msr_info->data = pmu->global_ovf_ctrl;
+		msr_info->data = 0;
 		return 0;
 	default:
 		if ((pmc = get_gp_pmc(pmu, msr, MSR_IA32_PERFCTR0)) ||
@@ -423,7 +423,6 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 		if (!(data & pmu->global_ovf_ctrl_mask)) {
 			if (!msr_info->host_initiated)
 				pmu->global_status &= ~data;
-			pmu->global_ovf_ctrl = data;
 			return 0;
 		}
 		break;
@@ -437,13 +436,13 @@ static int intel_pmu_set_msr(struct kvm_vcpu *vcpu, struct msr_data *msr_info)
 			    !(msr & MSR_PMC_FULL_WIDTH_BIT))
 				data = (s64)(s32)data;
 			pmc->counter += data - pmc_read_counter(pmc);
-			if (pmc->perf_event)
+			if (pmc->perf_event && !pmc->is_paused)
 				perf_event_period(pmc->perf_event,
 						  get_sample_period(pmc, data));
 			return 0;
 		} else if ((pmc = get_fixed_pmc(pmu, msr))) {
 			pmc->counter += data - pmc_read_counter(pmc);
-			if (pmc->perf_event)
+			if (pmc->perf_event && !pmc->is_paused)
 				perf_event_period(pmc->perf_event,
 						  get_sample_period(pmc, data));
 			return 0;
@@ -588,8 +587,7 @@ static void intel_pmu_reset(struct kvm_vcpu *vcpu)
 		pmc->counter = 0;
 	}
 
-	pmu->fixed_ctr_ctrl = pmu->global_ctrl = pmu->global_status =
-		pmu->global_ovf_ctrl = 0;
+	pmu->fixed_ctr_ctrl = pmu->global_ctrl = pmu->global_status = 0;
 
 	intel_pmu_release_guest_lbr_event(vcpu);
 }
