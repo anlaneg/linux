@@ -159,6 +159,7 @@ static inline void qdisc_refcount_inc(struct Qdisc *qdisc)
 static inline struct Qdisc *qdisc_refcount_inc_nz(struct Qdisc *qdisc)
 {
 	if (qdisc->flags & TCQ_F_BUILTIN)
+	    /*内建的qdisc,不增加计数*/
 		return qdisc;
 	if (refcount_inc_not_zero(&qdisc->refcnt))
 		return qdisc;
@@ -286,11 +287,14 @@ struct Qdisc_class_ops {
 	/* Class manipulation routines */
 	//给定classid，返回此队列上绑定的对应class
 	unsigned long		(*find)(struct Qdisc *, u32 classid);
+	/*分类规则增改操作*/
 	int			(*change)(struct Qdisc *, u32, u32,
 					struct nlattr **, unsigned long *,
 					struct netlink_ext_ack *);
+	/*分类规则删除操作*/
 	int			(*delete)(struct Qdisc *, unsigned long,
 					  struct netlink_ext_ack *);
+	/*分类规则遍历操作*/
 	void			(*walk)(struct Qdisc *, struct qdisc_walker * arg);
 
 	/* Filter manipulation */
@@ -322,8 +326,9 @@ struct Qdisc_ops {
 	struct Qdisc_ops	*next;
 	//分类操作集
 	const struct Qdisc_class_ops	*cl_ops;
-	char			id[IFNAMSIZ];//ops的唯一标识
-	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小
+	//ops的唯一标识
+	char			id[IFNAMSIZ];
+	//创建qdisc时，会在struct Qdisc后面添加一个priv_size大小，看qdisc_alloc
 	int			priv_size;
 	unsigned int		static_flags;
 
@@ -336,7 +341,7 @@ struct Qdisc_ops {
 	//peek一个报文，返回但不出队（如果不提供此回调，则给值为noop_qdisc_ops.peek）
 	struct sk_buff *	(*peek)(struct Qdisc *);
 
-	//通过配置初始化队列
+	//qdisc队列初始化时调用
 	int			(*init)(struct Qdisc *sch, struct nlattr *arg,
 					struct netlink_ext_ack *extack);
 	//清空队列
@@ -357,15 +362,15 @@ struct Qdisc_ops {
 	int			(*dump)(struct Qdisc *, struct sk_buff *);
 	int			(*dump_stats)(struct Qdisc *, struct gnet_dump *);
 
-	//设置ingress block的block index
+	//设置ingress block的block index时调用（当前clsact,ingress实现了此接口）
 	void			(*ingress_block_set)(struct Qdisc *sch,
 						     u32 block_index);
-	//设置egress block的block index
+	//设置egress block的block index时调用
 	void			(*egress_block_set)(struct Qdisc *sch,
 						    u32 block_index);
-	/*取sch对应的ingress block index*/
+	/*取sch对应的ingress block index时调用*/
 	u32			(*ingress_block_get)(struct Qdisc *sch);
-	/*取sch对应的egress block index*/
+	/*取sch对应的egress block index时调用*/
 	u32			(*egress_block_get)(struct Qdisc *sch);
 
 	struct module		*owner;
@@ -531,8 +536,10 @@ struct tcf_block {
 	 * attached to the block (refcnt, action_refcnt, explicitly_created).
 	 */
 	struct mutex lock;
-	struct list_head chain_list;//用于记录在此block下所有的struct tcf_chain
-	u32 index; /* block index for shared blocks */ //对应的block索引
+	//用于记录在此block下所有的struct tcf_chain
+	struct list_head chain_list;
+	//对应的block索引,非0情况下为share block
+	u32 index; /* block index for shared blocks */
 	u32 classid; /* which class this block belongs to */
 	refcount_t refcnt;
 	struct net *net;//所属net

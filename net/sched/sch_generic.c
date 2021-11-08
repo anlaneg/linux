@@ -639,7 +639,7 @@ static struct netdev_queue noop_netdev_queue = {
 struct Qdisc noop_qdisc = {
 	.enqueue	=	noop_enqueue,
 	.dequeue	=	noop_dequeue,
-	.flags		=	TCQ_F_BUILTIN,
+	.flags		=	TCQ_F_BUILTIN,/*内建队列*/
 	.ops		=	&noop_qdisc_ops,
 	.q.lock		=	__SPIN_LOCK_UNLOCKED(noop_qdisc.q.lock),
 	.dev_queue	=	&noop_netdev_queue,
@@ -958,6 +958,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	gnet_stats_basic_sync_init(&sch->bstats);
 	spin_lock_init(&sch->q.lock);
 
+	/*统计相关的结构体初始化*/
 	if (ops->static_flags & TCQ_F_CPUSTATS) {
 		sch->cpu_bstats =
 			netdev_alloc_pcpu_stats(struct gnet_stats_basic_sync);

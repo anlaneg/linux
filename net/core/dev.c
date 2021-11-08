@@ -2117,13 +2117,14 @@ static DEFINE_STATIC_KEY_FALSE(ingress_needed_key);
 
 void net_inc_ingress_queue(void)
 {
-    //增加ingress key,表明开启ingress处理
+    //加1，表明kernel需开启ingress处理
 	static_branch_inc(&ingress_needed_key);
 }
 EXPORT_SYMBOL_GPL(net_inc_ingress_queue);
 
 void net_dec_ingress_queue(void)
 {
+    /*减1，如果其为0，则标明kernel不需要开启ingress处理*/
 	static_branch_dec(&ingress_needed_key);
 }
 EXPORT_SYMBOL_GPL(net_dec_ingress_queue);
@@ -10613,7 +10614,7 @@ static void netdev_init_one_queue(struct net_device *dev,
 	spin_lock_init(&queue->_xmit_lock);
 	netdev_set_xmit_lockdep_class(&queue->_xmit_lock, dev->type);
 	queue->xmit_lock_owner = -1;
-	//指定queue不从属于任何一个node
+	//指定queue不从属于任何一个numa node
 	netdev_queue_numa_node_write(queue, NUMA_NO_NODE);
 	queue->dev = dev;
 #ifdef CONFIG_BQL
@@ -11234,7 +11235,7 @@ struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 
 #ifdef CONFIG_NET_CLS_ACT
 	if (queue)
-		//ingress queue已存在，则返回
+		//ingress queue已存在，则直接返回
 		return queue;
 
 	//创建queue,并设置dev->ingress_queue

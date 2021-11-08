@@ -275,21 +275,22 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 
 	if (!(root->flags & TCQ_F_BUILTIN) &&
 	    root->handle == handle)
+	    /*如果为非内建队列，且handle匹配，则直接返回*/
 		return root;
 
-	//自root中查找的qdisc
+	//自netdev中查找的qdisc
 	hash_for_each_possible_rcu(qdisc_dev(root)->qdisc_hash, q, hash, handle,
 				   lockdep_rtnl_is_held()) {
 		if (q->handle == handle)
 			return q;
 	}
-	return NULL;
+	return NULL;/*ingress队列将自此处返回*/
 }
 
 //将队列加入到net_device->qdisc_hash
 void qdisc_hash_add(struct Qdisc *q, bool invisible)
 {
-	//仅非根队列且非ingress队列国入到qdisc_hash表中
+	//仅非根队列且非ingress队列加入到qdisc_hash表中
 	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
 		ASSERT_RTNL();
 		hash_add_rcu(qdisc_dev(q)->qdisc_hash, &q->hash, q->handle);
@@ -323,7 +324,7 @@ struct Qdisc *qdisc_lookup(struct net_device *dev, u32 handle)
 	if (q)
 		goto out;
 
-	//再查询ingress队列的qdisc_sleeping
+	//如果dev有ingress_queue,则再查询qdisc_sleeping
 	if (dev_ingress_queue(dev))
 		q = qdisc_match_from_root(
 			dev_ingress_queue(dev)->qdisc_sleeping,
@@ -939,7 +940,7 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid/*qdisc�
 	if (nla_put_string(skb, TCA_KIND, q->ops->id))
 		goto nla_put_failure;
 
-	/*填充ingress block index*/
+	/*填充ingress block index(share block)*/
 	if (q->ops->ingress_block_get) {
 		block_index = q->ops->ingress_block_get(q);
 		if (block_index &&
@@ -1090,6 +1091,7 @@ static int qdisc_graft(struct net_device *dev, struct Qdisc *parent,
 			num_q = 1;
 			ingress = 1;
 			if (!dev_ingress_queue(dev)) {
+			    /*ingress情况下，dev必须要有ingress_queue*/
 				NL_SET_ERR_MSG(extack, "Device does not have an ingress queue");
 				return -ENOENT;
 			}
@@ -1176,6 +1178,7 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 			return -EINVAL;
 		}
 		if (!sch->ops->ingress_block_set) {
+		    /*qdisc必须支持此回调，否则报错*/
 			NL_SET_ERR_MSG(extack, "Ingress block sharing is not supported");
 			return -EOPNOTSUPP;
 		}
@@ -1203,11 +1206,11 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 
    Parameters are passed via opt.
  */
-//qdisc创建
+//执行qdisc创建
 static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
-				  struct netdev_queue *dev_queue,
+				  struct netdev_queue *dev_queue/*dev关联的ingress queue*/,
 				  struct Qdisc *p, u32 parent/*关联的父队列*/, u32 handle/*待创建队列关联的id*/,
-				  struct nlattr **tca, int *errp,
+				  struct nlattr **tca/*配置项*/, int *errp,
 				  struct netlink_ext_ack *extack/*出参，保存出错信息*/)
 {
 	int err;
@@ -1216,10 +1219,10 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	struct Qdisc_ops *ops;
 	struct qdisc_size_table *stab;
 
-	//查找指定的qdisc_ops
+	//依据kind查找对应类型的qdisc_ops
 	ops = qdisc_lookup_ops(kind);
 #ifdef CONFIG_MODULES
-	//尝试加载
+	//如果ops不存在，则尝试加载
 	if (ops == NULL && kind != NULL) {
 		char name[IFNAMSIZ];
 		if (nla_strscpy(name, kind, IFNAMSIZ) >= 0) {
@@ -1263,7 +1266,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	sch->parent = parent;
 
 	if (handle == TC_H_INGRESS) {
-		//标记qdisc为ingress类型队列
+		//如果要求创建的为ingress队列，则添加相应标记
 		sch->flags |= TCQ_F_INGRESS;
 		handle = TC_H_MAKE(TC_H_INGRESS, 0);
 	} else {
@@ -1300,7 +1303,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	if (err)
 		goto err_out3;
 
-	//通过ops完成qdisc定制类初始化
+	//通过ops完成qdisc初始化
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1315,6 +1318,8 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 		}
 		rcu_assign_pointer(sch->stab, stab);
 	}
+
+	/*设置速率*/
 	if (tca[TCA_RATE]) {
 		err = -EOPNOTSUPP;
 		if (sch->flags & TCQ_F_MQROOT) {
@@ -1334,6 +1339,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 		}
 	}
 
+	/*将此sch q加入hashtable*/
 	qdisc_hash_add(sch, false);
 	trace_qdisc_create(ops, dev, parent);
 
@@ -1609,13 +1615,13 @@ replay:
 		//队列未找到，或者队列handle与传的不同，或者未传入handle
 		if (!q || !tcm->tcm_handle || q->handle != tcm->tcm_handle) {
 			if (tcm->tcm_handle) {
-				//队列不存在，或者队列handle与tcm_handle不同
 				if (q && !(n->nlmsg_flags & NLM_F_REPLACE)) {
+				    /*需要重新创建q,但没有提供replace标记*/
 					NL_SET_ERR_MSG(extack, "NLM_F_REPLACE needed to override");
 					return -EEXIST;
 				}
 				if (TC_H_MIN(tcm->tcm_handle)) {
-					//队列的minor必须为0
+					//如果采用指定的handle,则队列的minor必须为0
 					NL_SET_ERR_MSG(extack, "Invalid minor handle");
 					return -EINVAL;
 				}
@@ -1623,6 +1629,7 @@ replay:
 				//通过handle查找q
 				q = qdisc_lookup(dev, tcm->tcm_handle);
 				if (!q)
+				    /*没有找到此handle指定的q,执行创建*/
 					goto create_n_graft;
 
 				if (n->nlmsg_flags & NLM_F_EXCL) {
@@ -1709,18 +1716,19 @@ replay:
 	return err;
 
 create_n_graft:
-	//qdisc队列不存在，准备创建，先创建检查
+	//qdisc队列不存在，准备创建，先检查创建标记
 	if (!(n->nlmsg_flags & NLM_F_CREATE)) {
 		NL_SET_ERR_MSG(extack, "Qdisc not found. To create specify NLM_F_CREATE flag");
 		return -ENOENT;
 	}
 	if (clid == TC_H_INGRESS) {
-		//创建ingress队列
 		if (dev_ingress_queue(dev)) {
+	        //创建ingress qdisc
 			q = qdisc_create(dev, dev_ingress_queue(dev), p,
 					 tcm->tcm_parent, tcm->tcm_parent,
 					 tca, &err, extack);
 		} else {
+		    /*此情况下ingress queue必须存在*/
 			NL_SET_ERR_MSG(extack, "Cannot find ingress queue for specified device");
 			err = -ENOENT;
 		}

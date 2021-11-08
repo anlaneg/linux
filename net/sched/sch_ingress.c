@@ -15,7 +15,7 @@
 #include <net/pkt_cls.h>
 
 struct ingress_sched_data {
-	struct tcf_block *block;
+	struct tcf_block *block;/*ingress对应的block*/
 	struct tcf_block_ext_info block_info;
 	struct mini_Qdisc_pair miniqp;
 };
@@ -25,12 +25,13 @@ static struct Qdisc *ingress_leaf(struct Qdisc *sch, unsigned long arg)
 	return NULL;
 }
 
-//通过classid返回class
+//通过classid返回class,默认+1
 static unsigned long ingress_find(struct Qdisc *sch, u32 classid)
 {
 	return TC_H_MIN(classid) + 1;
 }
 
+//返回此classid绑定到哪个class
 static unsigned long ingress_bind_filter(struct Qdisc *sch,
 					 unsigned long parent, u32 classid)
 {
@@ -142,7 +143,7 @@ static const struct Qdisc_class_ops ingress_class_ops = {
 
 //ingress qdisc 操作集
 static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
-	.cl_ops			=	&ingress_class_ops,
+	.cl_ops			=	&ingress_class_ops,/*ingress的分类操作集*/
 	.id			=	"ingress",
 	.priv_size		=	sizeof(struct ingress_sched_data),
 	.static_flags		=	TCQ_F_CPUSTATS,
@@ -155,7 +156,7 @@ static struct Qdisc_ops ingress_qdisc_ops __read_mostly = {
 };
 
 struct clsact_sched_data {
-	struct tcf_block *ingress_block;//ingress使用block
+	struct tcf_block *ingress_block;//ingress使用的block
 	struct tcf_block *egress_block;//egress使用block
 	struct tcf_block_ext_info ingress_block_info;//ingress信息
 	struct tcf_block_ext_info egress_block_info;//egress信息
@@ -163,6 +164,7 @@ struct clsact_sched_data {
 	struct mini_Qdisc_pair miniqp_egress;
 };
 
+/*除ingress,egress外，其它均返回零*/
 static unsigned long clsact_find(struct Qdisc *sch, u32 classid)
 {
 	switch (TC_H_MIN(classid)) {

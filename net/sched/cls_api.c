@@ -469,7 +469,7 @@ static bool tcf_chain_held_by_acts_only(struct tcf_chain *chain)
 	return chain->refcnt == chain->action_refcnt;
 }
 
-//通过chain_index查找分类器chain
+//通过chain_index在block中查找对应的chain
 static struct tcf_chain *tcf_chain_lookup(struct tcf_block *block,
 					  u32 chain_index)
 {
@@ -878,7 +878,7 @@ tcf_chain0_head_change_cb_del(struct tcf_block *block,
 
 struct tcf_net {
 	spinlock_t idr_lock; /* Protects idr */
-	struct idr idr;/*记录block指针*/
+	struct idr idr;/*记录block index与block指针的映射关系*/
 };
 
 static unsigned int tcf_net_id;
@@ -902,7 +902,7 @@ static int tcf_block_insert(struct tcf_block *block, struct net *net,
 	return err;
 }
 
-//block信息移除
+//block映射信息移除
 static void tcf_block_remove(struct tcf_block *block, struct net *net)
 {
 	struct tcf_net *tn = net_generic(net, tcf_net_id);
@@ -934,7 +934,7 @@ static struct tcf_block *tcf_block_create(struct net *net, struct Qdisc *q,
 
 	refcount_set(&block->refcnt, 1);
 	block->net = net;
-	block->index = block_index;
+	block->index = block_index;/*此值非0时，为share block*/
 
 	/* Don't store q pointer for blocks which are shared */
 	//针对非share block,block指向queue
@@ -1088,8 +1088,7 @@ static void tcf_block_flush_all_chains(struct tcf_block *block, bool rtnl_held)
 /* Lookup Qdisc and increments its reference counter.
  * Set parent, if necessary.
  */
-
-static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的调度器*/,
+static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对应的qdisc*/,
 			    u32 *parent/*队列index，如果为空，则使用dev->qdisc*/, int ifindex/*规则所属的dev对应的ifindex*/, bool rtnl_held,
 			    struct netlink_ext_ack *extack)
 {
@@ -1098,6 +1097,7 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 	int err = 0;
 
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK)
+	    /*share block直接返回*/
 		return 0;
 
 	rcu_read_lock();
@@ -1112,9 +1112,8 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 
 	/* Find qdisc */
 	if (!*parent) {
-		//取dev对应的root qdisc
+		//未指定parent,默认取dev对应的root qdisc，并更新parent
 		*q = dev->qdisc;
-		/*使用q的handle做为parent*/
 		*parent = (*q)->handle;
 	} else {
 		//取parent指定的q
@@ -1137,12 +1136,14 @@ static int __tcf_qdisc_find(struct net *net, struct Qdisc **q/*出参，dev对�
 	/* Is it classful? */
 	cops = (*q)->ops->cl_ops;
 	if (!cops) {
+	    /*必须支持分类操作*/
 		NL_SET_ERR_MSG(extack, "Qdisc not classful");
 		err = -EINVAL;
 		goto errout_qdisc;
 	}
 
 	if (!cops->tcf_block) {
+	    /*必须支持blocks*/
 		NL_SET_ERR_MSG(extack, "Class doesn't support blocks");
 		err = -EOPNOTSUPP;
 		goto errout_qdisc;
@@ -1169,10 +1170,12 @@ errout_qdisc:
 	return err;
 }
 
-static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl/*出参，*/,
+/*通过parent中的classid查找其对应的cl*/
+static int __tcf_qdisc_cl_find(struct Qdisc *q, u32 parent, unsigned long *cl/*出参，此parent对应的class*/,
 			       int ifindex, struct netlink_ext_ack *extack)
 {
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK)
+	    /*share block直接返回*/
 		return 0;
 
 	/* Do we search for filter, attached to class? */
@@ -1199,7 +1202,7 @@ static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 	struct tcf_block *block;
 
 	if (ifindex == TCM_IFINDEX_MAGIC_BLOCK) {
-		//仅ifindex为此值时，我们需要使用block_index获取block
+		//share block情况下，block index是全局的，我们需要使用block_index获取block
 		block = tcf_block_refcnt_get(net, block_index);
 		if (!block) {
 			NL_SET_ERR_MSG(extack, "Block of given index was not found");
@@ -1208,12 +1211,13 @@ static struct tcf_block *__tcf_block_find(struct net *net, struct Qdisc *q,
 	} else {
 		const struct Qdisc_class_ops *cops = q->ops->cl_ops;
 
-		//通过不通class获取其对应的block
+		//通过class获取其对应的非共享block
 		block = cops->tcf_block(q, cl, extack);
 		if (!block)
 			return ERR_PTR(-EINVAL);
 
 		if (tcf_block_shared(block)) {
+		    /*这种情况下不容许share block走这个流程，其应走上面的流程*/
 			NL_SET_ERR_MSG(extack, "This filter block is shared. Please use the block index to manipulate the filters");
 			return ERR_PTR(-EOPNOTSUPP);
 		}
@@ -1381,7 +1385,7 @@ static void tcf_block_owner_del(struct tcf_block *block,
 
 //创建或查询tcf_block
 int tcf_block_get_ext(struct tcf_block **p_block/*出参，创建或查询好的block*/, struct Qdisc *q/*block对应的队列*/,
-		      struct tcf_block_ext_info *ei/*块扩展参数*/,
+		      struct tcf_block_ext_info *ei/*block扩展参数*/,
 		      struct netlink_ext_ack *extack)
 {
 	struct net *net = qdisc_net(q);
@@ -1884,8 +1888,9 @@ static void tcf_chain_tp_delete_empty(struct tcf_chain *chain,
 	tcf_proto_put(tp, rtnl_held, extack);
 }
 
+/**/
 static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
-					   struct tcf_chain_info *chain_info/*出参*/,
+					   struct tcf_chain_info *chain_info/*出参，返回待插入的位置信息*/,
 					   u32 protocol, u32 prio,
 					   bool prio_allocate)
 {
@@ -1911,7 +1916,8 @@ static struct tcf_proto *tcf_chain_tp_find(struct tcf_chain *chain,
 		}
 	}
 
-	//设置chain_info,使其指示tp要写入的位置（当前指向后一个元素），后一个tp
+	//设置chain_info,1.使其指示待插入tp要写入的位置（此指针指向下一个元素）
+	//2.保存当前tp指向的下一个元素
 	chain_info->pprev = pprev;
 	if (tp) {
 		chain_info->next = tp->next;
@@ -2138,13 +2144,12 @@ replay:
 		}
 	}
 
-	/* Find head of filter chain. */
-
+	/*查找qdisc,注：这里要求此qdisc支持class分类，且支持block*/
 	err = __tcf_qdisc_find(net, &q, &parent, t->tcm_ifindex, false, extack);
 	if (err)
 		return err;
 
-	/*kind名称检查*/
+	/*kind名称长度检查，并设置到name*/
 	if (tcf_proto_check_kind(tca[TCA_KIND], name)) {
 		NL_SET_ERR_MSG(extack, "Specified TC filter name too long");
 		err = -EINVAL;
@@ -2163,12 +2168,12 @@ replay:
 		rtnl_lock();
 	}
 
-	//查找cl,准备通过其找block
+	//通过qdisc查找cl
 	err = __tcf_qdisc_cl_find(q, parent, &cl, t->tcm_ifindex, extack);
 	if (err)
 		goto errout;
 
-	//查找block
+	//通过q,cl,查找block（支持share block,非share block获取）
 	block = __tcf_block_find(net, q, cl, t->tcm_ifindex, t->tcm_block_index,
 				 extack);
 	if (IS_ERR(block)) {
@@ -2193,7 +2198,7 @@ replay:
 		goto errout;
 	}
 
-	//在链上查找指定的tc filter protocol分类器
+	//在chain上按prio,protocol查找指定的tc filter protocol分类器
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_tp_find(chain, &chain_info, protocol,
 			       prio, prio_allocate);
@@ -2205,7 +2210,7 @@ replay:
 	}
 
 	if (tp == NULL) {
-		//未找到对应的tc filter protocol 分类器，创建它
+		//未找到对应的tc filter protocol分类器，创建它
 		struct tcf_proto *tp_new = NULL;
 
 		if (chain->flushing) {
@@ -2288,6 +2293,7 @@ replay:
 		flags |= TCA_ACT_FLAGS_REPLACE;
 	if (!rtnl_held)
 		flags |= TCA_ACT_FLAGS_NO_RTNL;
+
 	//新增规则或者改变规则(例如flower对应的cls_fl_ops）
 	err = tp->ops->change(net, skb, tp, cl, t->tcm_handle, tca, &fh/*入参旧规则，出参新规则*/,
 			      flags, extack);
