@@ -136,24 +136,31 @@ static int eql_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 			      void __user *data, int cmd);
 static netdev_tx_t eql_slave_xmit(struct sk_buff *skb, struct net_device *dev);
 
+/*检查所给设备是否为slave*/
 #define eql_is_slave(dev)	((dev->flags & IFF_SLAVE) == IFF_SLAVE)
+/*检查所给设备是否为master*/
 #define eql_is_master(dev)	((dev->flags & IFF_MASTER) == IFF_MASTER)
 
 static void eql_kill_one_slave(slave_queue_t *queue, slave_t *slave);
 
+/*每个slave设备，每个timer周期入队的字节减少slave->priority_Bps*/
 static void eql_timer(struct timer_list *t)
 {
+	/*由timer获得equalizer*/
 	equalizer_t *eql = from_timer(eql, t, timer);
 	struct list_head *this, *tmp, *head;
 
 	spin_lock(&eql->queue.lock);
 	head = &eql->queue.all_slaves;
+	/*遍历eql的所有slave*/
 	list_for_each_safe(this, tmp, head) {
 		slave_t *slave = list_entry(this, slave_t, list);
 
 		if ((slave->dev->flags & IFF_UP) == IFF_UP) {
+			/*UP情况下，slave设备每个周期减去一个priority_Bps*/
 			slave->bytes_queued -= slave->priority_Bps;
 			if (slave->bytes_queued < 0)
+				/*slave设备上积压的报文原理上此时为0*/
 				slave->bytes_queued = 0;
 		} else {
 			eql_kill_one_slave(&eql->queue, slave);
@@ -162,6 +169,7 @@ static void eql_timer(struct timer_list *t)
 	}
 	spin_unlock(&eql->queue.lock);
 
+	/*重置定时器*/
 	eql->timer.expires = jiffies + EQL_DEFAULT_RESCHED_IVAL;
 	add_timer(&eql->timer);
 }
@@ -170,16 +178,19 @@ static const char version[] __initconst =
 	"Equalizer2002: Simon Janes (simon@ncm.com) and David S. Miller (davem@redhat.com)";
 
 static const struct net_device_ops eql_netdev_ops = {
-	.ndo_open	= eql_open,
+	.ndo_open	= eql_open,/*eql网络设备open*/
 	.ndo_stop	= eql_close,
 	.ndo_siocdevprivate = eql_siocdevprivate,
-	.ndo_start_xmit	= eql_slave_xmit,
+	.ndo_start_xmit	= eql_slave_xmit,/*eal网络设备发送*/
 };
 
+/*eal设备初始化,指定此netdev为master设备*/
 static void __init eql_setup(struct net_device *dev)
 {
+	/*netdev的私有数据为equalizer_t*/
 	equalizer_t *eql = netdev_priv(dev);
 
+	/*启动定时器，周期性进行积压报文修正*/
 	timer_setup(&eql->timer, eql_timer, 0);
 	eql->timer.expires  	= jiffies + EQL_DEFAULT_RESCHED_IVAL;
 
@@ -220,12 +231,16 @@ static int eql_open(struct net_device *dev)
 	return 0;
 }
 
+/*将slave自queue中移除，归还slave对应的netdev*/
 static void eql_kill_one_slave(slave_queue_t *queue, slave_t *slave)
 {
 	list_del(&slave->list);
 	queue->num_slaves--;
+	/*指定此设备不再为slave*/
 	slave->dev->flags &= ~IFF_SLAVE;
+	/*归还设备*/
 	dev_put(slave->dev);
+	/*释放slave*/
 	kfree(slave);
 }
 
@@ -245,6 +260,7 @@ static void eql_kill_slave_queue(slave_queue_t *queue)
 	spin_unlock_bh(&queue->lock);
 }
 
+/*释放eql设备*/
 static int eql_close(struct net_device *dev)
 {
 	equalizer_t *eql = netdev_priv(dev);
@@ -282,16 +298,22 @@ static int eql_siocdevprivate(struct net_device *dev, struct ifreq *ifr,
 
 	switch (cmd) {
 		case EQL_ENSLAVE:
+			/*增加slave设备*/
 			return eql_enslave(dev, data);
 		case EQL_EMANCIPATE:
+			/*移除slave设备*/
 			return eql_emancipate(dev, data);
 		case EQL_GETSLAVECFG:
+			/*取给此slave设备配置的优先级*/
 			return eql_g_slave_cfg(dev, data);
 		case EQL_SETSLAVECFG:
+			/*为此slave设备设置优先级*/
 			return eql_s_slave_cfg(dev, data);
 		case EQL_GETMASTRCFG:
+			/*取master配置*/
 			return eql_g_master_cfg(dev, data);
 		case EQL_SETMASTRCFG:
+			/*设置master配置*/
 			return eql_s_master_cfg(dev, data);
 		default:
 			return -EOPNOTSUPP;
@@ -309,6 +331,7 @@ static slave_t *__eql_schedule_slaves(slave_queue_t *queue)
 
 	/* Make a pass to set the best slave. */
 	head = &queue->all_slaves;
+	/*遍历所有的slave netdev,选择一个负载最小(理论上积压在slave上待发送字节最小的一个）的slave*/
 	list_for_each_safe(this, tmp, head) {
 		slave_t *slave = list_entry(this, slave_t, list);
 		unsigned long slave_load, bytes_queued, priority_Bps;
@@ -327,6 +350,7 @@ static slave_t *__eql_schedule_slaves(slave_queue_t *queue)
 				best_slave = slave;
 			}
 		} else {
+			/*移除掉down的slave*/
 			/* We found a dead slave, kill it. */
 			eql_kill_one_slave(queue, slave);
 		}
@@ -341,16 +365,22 @@ static netdev_tx_t eql_slave_xmit(struct sk_buff *skb, struct net_device *dev)
 
 	spin_lock(&eql->queue.lock);
 
+	/*选择一个slave*/
 	slave = __eql_schedule_slaves(&eql->queue);
 	if (slave) {
 		struct net_device *slave_dev = slave->dev;
 
+		/*使此报文从属于选择出来的slave*/
 		skb->dev = slave_dev;
 		skb->priority = TC_PRIO_FILLER;
+		/*计数：slave设备中队列积压的字节长度*/
 		slave->bytes_queued += skb->len;
+		/*使报文自给定的slave设备上发送出去*/
 		dev_queue_xmit(skb);
+		/*增加报文tx计数*/
 		dev->stats.tx_packets++;
 	} else {
+		/*没有合适的slave,丢包*/
 		dev->stats.tx_dropped++;
 		dev_kfree_skb(skb);
 	}
@@ -369,6 +399,7 @@ static slave_t *__eql_find_slave_dev(slave_queue_t *queue, struct net_device *de
 {
 	struct list_head *this, *head;
 
+	/*给定netdev，查找对应的slave_t*/
 	head = &queue->all_slaves;
 	list_for_each(this, head) {
 		slave_t *slave = list_entry(this, slave_t, list);
@@ -380,6 +411,7 @@ static slave_t *__eql_find_slave_dev(slave_queue_t *queue, struct net_device *de
 	return NULL;
 }
 
+/*如果队列拥有的slave数目大于eql容许的最大值，则eql is full*/
 static inline int eql_is_full(slave_queue_t *queue)
 {
 	equalizer_t *eql = netdev_priv(queue->master_dev);
@@ -392,16 +424,23 @@ static inline int eql_is_full(slave_queue_t *queue)
 /* queue->lock must be held */
 static int __eql_insert_slave(slave_queue_t *queue, slave_t *slave)
 {
+	/*eal如果已满，则不容许再插入*/
 	if (!eql_is_full(queue)) {
 		slave_t *duplicate_slave = NULL;
 
+		/*检查slave->dev是否已在eal中存在*/
 		duplicate_slave = __eql_find_slave_dev(queue, slave->dev);
 		if (duplicate_slave)
+			/*此设备重复出现，移除掉前一次配置的slave*/
 			eql_kill_one_slave(queue, duplicate_slave);
 
+		/*增加netdev的引用计数*/
 		dev_hold(slave->dev);
+		/*加入队列*/
 		list_add(&slave->list, &queue->all_slaves);
+		/*增加slave计数*/
 		queue->num_slaves++;
+		/*指明此设备为slave*/
 		slave->dev->flags |= IFF_SLAVE;
 
 		return 0;
@@ -410,6 +449,7 @@ static int __eql_insert_slave(slave_queue_t *queue, slave_t *slave)
 	return -ENOSPC;
 }
 
+/*增加slave设备*/
 static int eql_enslave(struct net_device *master_dev, slaving_request_t __user *srqp)
 {
 	struct net_device *slave_dev;
@@ -418,10 +458,12 @@ static int eql_enslave(struct net_device *master_dev, slaving_request_t __user *
 	if (copy_from_user(&srq, srqp, sizeof (slaving_request_t)))
 		return -EFAULT;
 
+	/*自init_net中获取指定的slave_dev网络设备*/
 	slave_dev = __dev_get_by_name(&init_net, srq.slave_name);
 	if (!slave_dev)
 		return -ENODEV;
 
+	/*此时仅处理master dev为up的情况*/
 	if ((master_dev->flags & IFF_UP) == IFF_UP) {
 		/* slave is not a master & not already a slave: */
 		if (!eql_is_master(slave_dev) && !eql_is_slave(slave_dev)) {
@@ -433,12 +475,13 @@ static int eql_enslave(struct net_device *master_dev, slaving_request_t __user *
 				return -ENOMEM;
 
 			memset(s, 0, sizeof(*s));
-			s->dev = slave_dev;
-			s->priority = srq.priority;
+			s->dev = slave_dev;/*指定此slave对应的netdev*/
+			s->priority = srq.priority;/*优先级*/
 			s->priority_bps = srq.priority;
 			s->priority_Bps = srq.priority / 8;
 
 			spin_lock_bh(&eql->queue.lock);
+			/*添加新增的slave*/
 			ret = __eql_insert_slave(&eql->queue, s);
 			if (ret)
 				kfree(s);
@@ -469,6 +512,7 @@ static int eql_emancipate(struct net_device *master_dev, slaving_request_t __use
 	ret = -EINVAL;
 	spin_lock_bh(&eql->queue.lock);
 	if (eql_is_slave(slave_dev)) {
+		/*如果此设备被标记为slave，则在此处移除它*/
 		slave_t *slave = __eql_find_slave_dev(&eql->queue, slave_dev);
 		if (slave) {
 			eql_kill_one_slave(&eql->queue, slave);
@@ -480,6 +524,7 @@ static int eql_emancipate(struct net_device *master_dev, slaving_request_t __use
 	return ret;
 }
 
+/*给定slave设备，获取其对应的配置*/
 static int eql_g_slave_cfg(struct net_device *dev, slave_config_t __user *scp)
 {
 	equalizer_t *eql = netdev_priv(dev);
@@ -501,12 +546,14 @@ static int eql_g_slave_cfg(struct net_device *dev, slave_config_t __user *scp)
 	if (eql_is_slave(slave_dev)) {
 		slave = __eql_find_slave_dev(&eql->queue, slave_dev);
 		if (slave) {
+			/*取为此slave配置的优先级*/
 			sc.priority = slave->priority;
 			ret = 0;
 		}
 	}
 	spin_unlock_bh(&eql->queue.lock);
 
+	/*写回给用户态*/
 	if (!ret && copy_to_user(scp, &sc, sizeof (slave_config_t)))
 		ret = -EFAULT;
 
@@ -535,6 +582,7 @@ static int eql_s_slave_cfg(struct net_device *dev, slave_config_t __user *scp)
 	if (eql_is_slave(slave_dev)) {
 		slave = __eql_find_slave_dev(&eql->queue, slave_dev);
 		if (slave) {
+			/*为此slave设备设置优先级*/
 			slave->priority = sc.priority;
 			slave->priority_bps = sc.priority;
 			slave->priority_Bps = sc.priority / 8;
@@ -554,6 +602,7 @@ static int eql_g_master_cfg(struct net_device *dev, master_config_t __user *mcp)
 	memset(&mc, 0, sizeof(master_config_t));
 
 	if (eql_is_master(dev)) {
+		/*给定的dev为master设备时，取支持的最大最小slave数目*/
 		eql = netdev_priv(dev);
 		mc.max_slaves = eql->max_slaves;
 		mc.min_slaves = eql->min_slaves;
@@ -573,6 +622,7 @@ static int eql_s_master_cfg(struct net_device *dev, master_config_t __user *mcp)
 		return -EFAULT;
 
 	if (eql_is_master(dev)) {
+		/*给定dev为master时，设置其对应的最大/最小slave数目*/
 		eql = netdev_priv(dev);
 		eql->max_slaves = mc.max_slaves;
 		eql->min_slaves = mc.min_slaves;
@@ -583,17 +633,20 @@ static int eql_s_master_cfg(struct net_device *dev, master_config_t __user *mcp)
 
 static struct net_device *dev_eql;
 
+/*eql设备会将多个netdev bonding成一个eql设备，在发送时，选择负载最小的那一个设备进行发送*/
 static int __init eql_init_module(void)
 {
 	int err;
 
 	pr_info("%s\n", version);
 
+	/*申请网络设备dev_eql*/
 	dev_eql = alloc_netdev(sizeof(equalizer_t), "eql", NET_NAME_UNKNOWN,
 			       eql_setup);
 	if (!dev_eql)
 		return -ENOMEM;
 
+	/*为系统注册此设备*/
 	err = register_netdev(dev_eql);
 	if (err)
 		free_netdev(dev_eql);

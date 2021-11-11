@@ -9725,17 +9725,23 @@ struct bpf_xdp_link {
 	int flags;
 };
 
+/*按照flags确定xdp采用哪种模式*/
 static enum bpf_xdp_mode dev_xdp_mode(struct net_device *dev, u32 flags)
 {
 	if (flags & XDP_FLAGS_HW_MODE)
+		/*下发到硬件*/
 		return XDP_MODE_HW;
 	if (flags & XDP_FLAGS_DRV_MODE)
+		/*下发到驱动*/
 		return XDP_MODE_DRV;
 	if (flags & XDP_FLAGS_SKB_MODE)
+		/*下发到general*/
 		return XDP_MODE_SKB;
+	/*如未给出flags,则检查netdev是否有相应的ops*/
 	return dev->netdev_ops->ndo_bpf ? XDP_MODE_DRV : XDP_MODE_SKB;
 }
 
+/*依据模式返回相应的xdp安装函数*/
 static bpf_op_t dev_xdp_bpf_op(struct net_device *dev, enum bpf_xdp_mode mode)
 {
 	switch (mode) {
@@ -9749,12 +9755,14 @@ static bpf_op_t dev_xdp_bpf_op(struct net_device *dev, enum bpf_xdp_mode mode)
 	}
 }
 
+/*取此设备在相应在xdp模式下的xdp_link结构*/
 static struct bpf_xdp_link *dev_xdp_link(struct net_device *dev,
 					 enum bpf_xdp_mode mode)
 {
 	return dev->xdp_state[mode].link;
 }
 
+/*取此设备在对应xdp模式下的ebpf prog*/
 static struct bpf_prog *dev_xdp_prog(struct net_device *dev,
 				     enum bpf_xdp_mode mode)
 {
@@ -9922,6 +9930,7 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 	cur_prog = dev_xdp_prog(dev, mode);
 	/* can't replace attached prog with link */
 	if (link && cur_prog) {
+		/*不支持pro程序替换*/
 		NL_SET_ERR_MSG(extack, "Can't replace active XDP program with BPF link");
 		return -EBUSY;
 	}
@@ -9935,9 +9944,9 @@ static int dev_xdp_attach(struct net_device *dev, struct netlink_ext_ack *extack
 		new_prog = link->link.prog;
 
 	if (new_prog) {
-		bool offload = mode == XDP_MODE_HW;
+		bool offload = mode == XDP_MODE_HW;/*是否offload到硬件模式*/
 		enum bpf_xdp_mode other_mode = mode == XDP_MODE_SKB
-					       ? XDP_MODE_DRV : XDP_MODE_SKB;
+					       ? XDP_MODE_DRV : XDP_MODE_SKB;/*非当前指定模式*/
 
 		if ((flags & XDP_FLAGS_UPDATE_IF_NOEXIST) && cur_prog) {
 			NL_SET_ERR_MSG(extack, "XDP program already attached");
@@ -10120,7 +10129,7 @@ static const struct bpf_link_ops bpf_xdp_link_lops = {
 	.update_prog = bpf_xdp_link_update,
 };
 
-int bpf_xdp_link_attach(const union bpf_attr *attr, struct bpf_prog *prog)
+int bpf_xdp_link_attach(const union bpf_attr *attr, struct bpf_prog *prog/*要attach的ebpf程序*/)
 {
 	struct net *net = current->nsproxy->net_ns;
 	struct bpf_link_primer link_primer;

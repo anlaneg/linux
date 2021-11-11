@@ -3196,6 +3196,7 @@ attach_type_to_prog_type(enum bpf_attach_type attach_type)
 	case BPF_SK_LOOKUP:
 		return BPF_PROG_TYPE_SK_LOOKUP;
 	case BPF_XDP:
+		/*xdp类型的bpf程序*/
 		return BPF_PROG_TYPE_XDP;
 	default:
 		return BPF_PROG_TYPE_UNSPEC;
@@ -4268,6 +4269,7 @@ static int link_create(union bpf_attr *attr, bpfptr_t uattr)
 	if (CHECK_ATTR(BPF_LINK_CREATE))
 		return -EINVAL;
 
+	/*利用prog fd获得bpf程序*/
 	prog = bpf_prog_get(attr->link_create.prog_fd);
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);

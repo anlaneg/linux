@@ -15,13 +15,14 @@
 #include <net/tcp.h>
 
 static DEFINE_SPINLOCK(tcp_ulp_list_lock);
-static LIST_HEAD(tcp_ulp_list);
+static LIST_HEAD(tcp_ulp_list);/*串连系统中所有tcp_ulp_ops*/
 
 /* Simple linear search, don't expect many entries! */
 static struct tcp_ulp_ops *tcp_ulp_find(const char *name)
 {
 	struct tcp_ulp_ops *e;
 
+	/*遍历tcp_ulp_list,检查指定name的tcp_ulp_ops*/
 	list_for_each_entry_rcu(e, &tcp_ulp_list, list,
 				lockdep_is_held(&tcp_ulp_list_lock)) {
 		if (strcmp(e->name, name) == 0)
@@ -31,6 +32,7 @@ static struct tcp_ulp_ops *tcp_ulp_find(const char *name)
 	return NULL;
 }
 
+/*给定名称$name,查找对应的tcp_ulp_ops（容许主动加载module)*/
 static const struct tcp_ulp_ops *__tcp_ulp_find_autoload(const char *name)
 {
 	const struct tcp_ulp_ops *ulp = NULL;
@@ -40,6 +42,7 @@ static const struct tcp_ulp_ops *__tcp_ulp_find_autoload(const char *name)
 
 #ifdef CONFIG_MODULES
 	if (!ulp && capable(CAP_NET_ADMIN)) {
+		/*指定名称的ulp不存在时，尝试加载module,再查找*/
 		rcu_read_unlock();
 		request_module("tcp-ulp-%s", name);
 		rcu_read_lock();
@@ -62,8 +65,10 @@ int tcp_register_ulp(struct tcp_ulp_ops *ulp)
 
 	spin_lock(&tcp_ulp_list_lock);
 	if (tcp_ulp_find(ulp->name))
+		/*如已存在，则报错*/
 		ret = -EEXIST;
 	else
+		/*不存在，注册ulp*/
 		list_add_tail_rcu(&ulp->list, &tcp_ulp_list);
 	spin_unlock(&tcp_ulp_list_lock);
 
@@ -71,6 +76,7 @@ int tcp_register_ulp(struct tcp_ulp_ops *ulp)
 }
 EXPORT_SYMBOL_GPL(tcp_register_ulp);
 
+/*tcp ulp解注册*/
 void tcp_unregister_ulp(struct tcp_ulp_ops *ulp)
 {
 	spin_lock(&tcp_ulp_list_lock);
@@ -89,6 +95,7 @@ void tcp_get_available_ulp(char *buf, size_t maxlen)
 
 	*buf = '\0';
 	rcu_read_lock();
+	/*遍历已注册的所有ulp，将其格式化为字符串输出到buff*/
 	list_for_each_entry_rcu(ulp_ops, &tcp_ulp_list, list) {
 		offs += snprintf(buf + offs, maxlen - offs,
 				 "%s%s",
@@ -134,6 +141,7 @@ static int __tcp_set_ulp(struct sock *sk, const struct tcp_ulp_ops *ulp_ops)
 
 	err = -EEXIST;
 	if (icsk->icsk_ulp_ops)
+		/*重复设置*/
 		goto out_err;
 
 	err = ulp_ops->init(sk);
@@ -147,12 +155,14 @@ out_err:
 	return err;
 }
 
+/*设置tcp socket的上层协议*/
 int tcp_set_ulp(struct sock *sk, const char *name)
 {
 	const struct tcp_ulp_ops *ulp_ops;
 
 	sock_owned_by_me(sk);
 
+	/*按名称查找上层协议OPS*/
 	ulp_ops = __tcp_ulp_find_autoload(name);
 	if (!ulp_ops)
 		return -ENOENT;

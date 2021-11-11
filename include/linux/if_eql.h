@@ -25,24 +25,24 @@
 
 typedef struct slave {
 	struct list_head	list;
-	struct net_device	*dev;
-	long			priority;
-	long			priority_bps;
-	long			priority_Bps;
-	long			bytes_queued;
+	struct net_device	*dev;/*salve对应的网络设备*/
+	long			priority;/*对应的优先级*/
+	long			priority_bps;/*以bit为单位的优先级*/
+	long			priority_Bps;/*以byte为单位的优先级*/
+	long			bytes_queued;/*积压在此slve上待发送的报文字节长度*/
 } slave_t;
 
 typedef struct slave_queue {
 	spinlock_t		lock;
-	struct list_head	all_slaves;
-	int			num_slaves;
+	struct list_head	all_slaves;/*记录当前配置的所有slave*/
+	int			num_slaves;/*all_slaves队列中slave的数目(队列长度）*/
 	struct net_device	*master_dev;
 } slave_queue_t;
 
 typedef struct equalizer {
 	slave_queue_t		queue;
-	int			min_slaves;
-	int			max_slaves;
+	int			min_slaves;/*eal必须的最小slave数目*/
+	int			max_slaves;/*eql容许的最大slave数目*/
 	struct timer_list	timer;
 } equalizer_t;  
 
