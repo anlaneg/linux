@@ -47,6 +47,9 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	ssize_t count;
 	char *buf;
 
+	if (WARN_ON_ONCE(!ops->show))
+		return -EINVAL;
+
 	/* acquire buffer and ensure that it's >= PAGE_SIZE and clear */
 	count = seq_get_buf(sf, &buf);
 	if (count < PAGE_SIZE) {
@@ -58,17 +61,11 @@ static int sysfs_kf_seq_show(struct seq_file *sf, void *v)
 	//可用内存大于一个page_size，先将此页清0
 	memset(buf, 0, PAGE_SIZE);
 
-	/*
-	 * Invoke show().  Control may reach here via seq file lseek even
-	 * if @ops->show() isn't implemented.
-	 */
-	if (ops->show) {
-		//调用sysfs_ops的show方法，将内容格式化到buf中
-		count = ops->show(kobj, of->kn->priv, buf);
-		if (count < 0)
-			//写失败，返回错误信息
-			return count;
-	}
+	//调用sysfs_ops的show方法，将内容格式化到buf中
+	count = ops->show(kobj, of->kn->priv, buf);
+	if (count < 0)
+		//写失败，返回错误信息
+		return count;
 
 	/*
 	 * The code works fine with PAGE_SIZE return but it's likely to
@@ -283,68 +280,75 @@ static const struct kernfs_ops sysfs_bin_kfops_mmap = {
 
 //向sysfs添加一个文件
 int sysfs_add_file_mode_ns(struct kernfs_node *parent,
-			   const struct attribute *attr/*要创建的文件的私有数据*/, bool is_bin/*是否为二进制文件*/,
-			   umode_t mode/*文件的权限位*/, kuid_t uid/*用户id*/, kgid_t gid/*组id*/, const void *ns)
+		const struct attribute *attr/*要创建的文件的私有数据*/, umode_t mode/*文件的权限位*/, kuid_t uid/*用户id*/,
+		kgid_t gid/*组id*/, const void *ns)
 {
+	struct kobject *kobj = parent->priv;
+	const struct sysfs_ops *sysfs_ops = kobj->ktype->sysfs_ops;
+	struct lock_class_key *key = NULL;
+	const struct kernfs_ops *ops = NULL;
+	struct kernfs_node *kn;
+
+	/* every kobject with an attribute needs a ktype assigned */
+	if (WARN(!sysfs_ops, KERN_ERR
+			"missing sysfs attribute operations for kobject: %s\n",
+			kobject_name(kobj)))
+		return -EINVAL;
+
+        //可读可写
+	if (mode & SYSFS_PREALLOC) {
+		if (sysfs_ops->show && sysfs_ops->store)
+			ops = &sysfs_prealloc_kfops_rw;
+		else if (sysfs_ops->show)
+			ops = &sysfs_prealloc_kfops_ro;
+		else if (sysfs_ops->store)
+			ops = &sysfs_prealloc_kfops_wo;
+	} else {
+		if (sysfs_ops->show && sysfs_ops->store)
+			ops = &sysfs_file_kfops_rw;
+		else if (sysfs_ops->show)
+			ops = &sysfs_file_kfops_ro;
+		else if (sysfs_ops->store)
+			ops = &sysfs_file_kfops_wo;
+	}
+
+	if (!ops)
+		ops = &sysfs_file_kfops_empty;
+
+#ifdef CONFIG_DEBUG_LOCK_ALLOC
+	if (!attr->ignore_lockdep)
+		key = attr->key ?: (struct lock_class_key *)&attr->skey;
+#endif
+
+	kn = __kernfs_create_file(parent, attr->name, mode & 0777, uid, gid,
+				  PAGE_SIZE, ops, (void *)attr, ns, key);
+	if (IS_ERR(kn)) {
+		if (PTR_ERR(kn) == -EEXIST)
+			sysfs_warn_dup(parent, attr->name);
+		return PTR_ERR(kn);
+	}
+	return 0;
+}
+
+int sysfs_add_bin_file_mode_ns(struct kernfs_node *parent,
+		const struct bin_attribute *battr, umode_t mode,
+		kuid_t uid, kgid_t gid, const void *ns)
+{
+	const struct attribute *attr = &battr->attr;
 	struct lock_class_key *key = NULL;
 	const struct kernfs_ops *ops;
 	struct kernfs_node *kn;
-	loff_t size;
 
-	if (!is_bin) {
-		struct kobject *kobj = parent->priv;
-		const struct sysfs_ops *sysfs_ops = kobj->ktype->sysfs_ops;
-
-		/* every kobject with an attribute needs a ktype assigned */
-		if (WARN(!sysfs_ops, KERN_ERR
-			 "missing sysfs attribute operations for kobject: %s\n",
-			 kobject_name(kobj)))
-			return -EINVAL;
-
-		if (sysfs_ops->show && sysfs_ops->store) {
-            //可读可写
-			if (mode & SYSFS_PREALLOC)
-				ops = &sysfs_prealloc_kfops_rw;
-			else
-				ops = &sysfs_file_kfops_rw;
-		} else if (sysfs_ops->show) {
-            //可读
-			if (mode & SYSFS_PREALLOC)
-				ops = &sysfs_prealloc_kfops_ro;
-			else
-				ops = &sysfs_file_kfops_ro;
-		} else if (sysfs_ops->store) {
-            //仅可写
-			if (mode & SYSFS_PREALLOC)
-				ops = &sysfs_prealloc_kfops_wo;
-			else
-				ops = &sysfs_file_kfops_wo;
-		} else
-            //不可读，不可写
-			ops = &sysfs_file_kfops_empty;
-
-		size = PAGE_SIZE;/*文本类型占一个页*/
-	} else {
-        //二进制属性,考虑读写权限
-		struct bin_attribute *battr = (void *)attr;
-
-		if (battr->mmap)
-			//支持map操作
-			ops = &sysfs_bin_kfops_mmap;
-		else if (battr->read && battr->write)
-			//支持读写操作
-			ops = &sysfs_bin_kfops_rw;
-		else if (battr->read)
-			//支持只读
-			ops = &sysfs_bin_kfops_ro;
-		else if (battr->write)
-			//支持只写
-			ops = &sysfs_bin_kfops_wo;
-		else
-			ops = &sysfs_file_kfops_empty;
-
-		size = battr->size;/*二进制类型占为属性大小*/
-	}
+	if (battr->mmap)
+		ops = &sysfs_bin_kfops_mmap;
+	else if (battr->read && battr->write)
+		ops = &sysfs_bin_kfops_rw;
+	else if (battr->read)
+		ops = &sysfs_bin_kfops_ro;
+	else if (battr->write)
+		ops = &sysfs_bin_kfops_wo;
+	else
+		ops = &sysfs_file_kfops_empty;
 
 #ifdef CONFIG_DEBUG_LOCK_ALLOC
 	if (!attr->ignore_lockdep)
@@ -353,7 +357,7 @@ int sysfs_add_file_mode_ns(struct kernfs_node *parent,
 	//调用文件创建,使mode仅9个bit生效
 	//使用“操作集","属性“
 	kn = __kernfs_create_file(parent, attr->name, mode & 0777, uid, gid,
-				  size/*文件大小*/, ops/*文件操作集*/, (void *)attr/*文件私有数据*/, ns, key);
+				  battr->size/*文件大小*/, ops/*文件操作集*/, (void *)attr/*文件私有数据*/, ns, key);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
 			sysfs_warn_dup(parent, attr->name);
@@ -379,8 +383,7 @@ int sysfs_create_file_ns(struct kobject *kobj, const struct attribute *attr,
 
 	//创建文件（非二进制文件）
 	kobject_get_ownership(kobj, &uid, &gid);
-	return sysfs_add_file_mode_ns(kobj->sd, attr, false, attr->mode,
-				      uid, gid, ns);
+	return sysfs_add_file_mode_ns(kobj->sd, attr, attr->mode, uid, gid, ns);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_file_ns);
 
@@ -428,8 +431,8 @@ int sysfs_add_file_to_group(struct kobject *kobj,
 
 	kobject_get_ownership(kobj, &uid, &gid);
 	//将文件存入parent中（非2进制文件）
-	error = sysfs_add_file_mode_ns(parent, attr, false,
-				       attr->mode, uid, gid, NULL);
+	error = sysfs_add_file_mode_ns(parent, attr, attr->mode, uid, gid,
+				       NULL);
 	kernfs_put(parent);
 
 	return error;
@@ -605,8 +608,8 @@ int sysfs_create_bin_file(struct kobject *kobj,
 
 	kobject_get_ownership(kobj, &uid, &gid);
 	//添加二进制文件到kobj->sd
-	return sysfs_add_file_mode_ns(kobj->sd, &attr->attr, true,
-				      attr->attr.mode, uid, gid, NULL);
+	return sysfs_add_bin_file_mode_ns(kobj->sd, attr, attr->attr.mode, uid,
+					   gid, NULL);
 }
 EXPORT_SYMBOL_GPL(sysfs_create_bin_file);
 

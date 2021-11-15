@@ -184,11 +184,10 @@ static ssize_t sriov_vf_msix_count_store(struct device *dev,
 {
 	struct pci_dev *vf_dev = to_pci_dev(dev);
 	struct pci_dev *pdev = pci_physfn(vf_dev);
-	int val, ret;
+	int val, ret = 0;
 
-	ret = kstrtoint(buf, 0, &val);
-	if (ret)
-		return ret;
+	if (kstrtoint(buf, 0, &val) < 0)
+		return -EINVAL;
 
 	if (val < 0)
 		return -EINVAL;
@@ -381,13 +380,12 @@ static ssize_t sriov_numvfs_store(struct device *dev,
 				  const char *buf, size_t count)
 {
 	struct pci_dev *pdev = to_pci_dev(dev);
-	int ret;
+	int ret = 0;
 	u16 num_vfs;
 
 	//获得用户录入的值
-	ret = kstrtou16(buf, 0, &num_vfs);
-	if (ret < 0)
-		return ret;
+	if (kstrtou16(buf, 0, &num_vfs) < 0)
+		return -EINVAL;
 
 	//检查是否超过接口限制
 	if (num_vfs > pci_sriov_get_totalvfs(pdev))

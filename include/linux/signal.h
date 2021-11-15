@@ -132,7 +132,6 @@ static inline int sigequalsets(const sigset_t *set1, const sigset_t *set2)
 #define sigmask(sig)	(1UL << ((sig) - 1))
 
 #ifndef __HAVE_ARCH_SIG_SETOPS
-#include <linux/string.h>
 
 /**/
 #define _SIG_SET_BINOP(name, op)					\

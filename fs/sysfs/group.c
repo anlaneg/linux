@@ -66,8 +66,8 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 
 			//规则化mode,并创建相就能文件
 			mode &= SYSFS_PREALLOC | 0664;
-			error = sysfs_add_file_mode_ns(parent, *attr, false,
-						       mode, uid, gid, NULL);
+			error = sysfs_add_file_mode_ns(parent, *attr, mode, uid,
+						       gid, NULL);
 			if (unlikely(error))
 				break;
 		}
@@ -97,10 +97,9 @@ static int create_files(struct kernfs_node *parent, struct kobject *kobj,
 			     (*bin_attr)->attr.name, mode);
 
 			mode &= SYSFS_PREALLOC | 0664;
-			error = sysfs_add_file_mode_ns(parent,
-					&(*bin_attr)->attr, true,
-					mode,
-					uid, gid, NULL);
+			error = sysfs_add_bin_file_mode_ns(parent, *bin_attr,
+							   mode, uid, gid,
+							   NULL);
 			if (error)
 				break;
 		}
@@ -364,8 +363,8 @@ int sysfs_merge_group(struct kobject *kobj,
 
 	for ((i = 0, attr = grp->attrs); *attr && !error; (++i, ++attr))
 		//在添加时，如果已存在，会返回失败，并继而导致将之前添加的删除
-		error = sysfs_add_file_mode_ns(parent, *attr, false,
-					       (*attr)->mode, uid, gid, NULL);
+		error = sysfs_add_file_mode_ns(parent, *attr, (*attr)->mode,
+					       uid, gid, NULL);
 	if (error) {
 		while (--i >= 0)
 			kernfs_remove_by_name(parent, (*--attr)->name);

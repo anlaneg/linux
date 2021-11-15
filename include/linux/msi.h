@@ -148,7 +148,7 @@ struct msi_desc {
 				u8	is_msix		: 1;/*是否msi-x类型中断*/
 				u8	multiple	: 3;
 				u8	multi_cap	: 3;
-				u8	maskbit		: 1;
+				u8	can_mask	: 1;
 				u8	is_64		: 1;/*是否64位*/
 				u8	is_virtual	: 1;/*是否为虚拟的中断*/
 				u16	entry_nr;/*要请求的中断号*/

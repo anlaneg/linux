@@ -106,6 +106,8 @@ struct kmem_cache {
 #ifdef CONFIG_SLUB_CPU_PARTIAL
 	/* Number of per cpu partial objects to keep around */
 	unsigned int cpu_partial;
+	/* Number of per cpu partial pages to keep around */
+	unsigned int cpu_partial_pages;
 #endif
 	//记录两个数据量1。需要申请的page大小（order);2.page可容纳的obj数目
 	struct kmem_cache_order_objects oo;
@@ -155,17 +157,6 @@ struct kmem_cache {
 	//指向按numa node划分的统计信息
 	struct kmem_cache_node *node[MAX_NUMNODES];
 };
-
-#ifdef CONFIG_SLUB_CPU_PARTIAL
-#define slub_cpu_partial(s)		((s)->cpu_partial)
-#define slub_set_cpu_partial(s, n)		\
-({						\
-	slub_cpu_partial(s) = (n);		\
-})
-#else
-#define slub_cpu_partial(s)		(0)
-#define slub_set_cpu_partial(s, n)
-#endif /* CONFIG_SLUB_CPU_PARTIAL */
 
 #ifdef CONFIG_SYSFS
 #define SLAB_SUPPORTS_SYSFS

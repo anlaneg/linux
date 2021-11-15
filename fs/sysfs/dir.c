@@ -59,8 +59,7 @@ int sysfs_create_dir_ns(struct kobject *kobj, const void *ns)
 	kobject_get_ownership(kobj, &uid, &gid);
 
 	//创建目录，mode为rxw权限（user),所有人读权限，所有人执行权限
-	kn = kernfs_create_dir_ns(parent, kobject_name(kobj),
-				  S_IRWXU | S_IRUGO | S_IXUGO, uid, gid,
+	kn = kernfs_create_dir_ns(parent, kobject_name(kobj), 0755, uid, gid,
 				  kobj, ns);
 	if (IS_ERR(kn)) {
 		if (PTR_ERR(kn) == -EEXIST)
