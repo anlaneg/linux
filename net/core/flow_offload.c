@@ -313,9 +313,10 @@ bool flow_block_cb_is_busy(flow_setup_cb_t *cb, void *cb_ident,
 }
 EXPORT_SYMBOL(flow_block_cb_is_busy);
 
+//为驱动提供的简单cb注册：
 //向driver_block_list及 flow_block_offload注册或解注册flow block callback
 int flow_block_cb_setup_simple(struct flow_block_offload *f,
-			       struct list_head *driver_block_list,
+			       struct list_head *driver_block_list/*指明f从属于哪个driver_block_list*/,
 			       flow_setup_cb_t *cb/*回调函数*/,
 			       void *cb_ident, void *cb_priv/*回调函数参数*/,
 			       bool ingress_only/*仅ingress方向*/)
@@ -444,6 +445,7 @@ int flow_indr_dev_register(flow_indr_block_bind_cb_t *cb, void *cb_priv)
 		return -ENOMEM;
 	}
 
+	/*注册indrect dev*/
 	list_add(&indr_dev->list, &flow_block_indr_dev_list);
 	existing_qdiscs_register(cb, cb_priv);
 	mutex_unlock(&flow_indr_block_lock);
@@ -607,6 +609,7 @@ static int indir_dev_remove(void *data)
 	return 0;
 }
 
+/*遍历驱动注册在flow_block_indr_dev_list上的回调，间接设备解发block bind/block unbind操作*/
 int flow_indr_dev_setup_offload(struct net_device *dev,	struct Qdisc *sch,
 				enum tc_setup_type type, void *data,
 				struct flow_block_offload *bo,

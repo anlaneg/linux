@@ -430,9 +430,10 @@ static void tcf_mirred_dev_put(void *priv)
 	dev_put(dev);
 }
 
+/*增加对被mirror设备的引用计数增加*/
 static struct net_device *
 tcf_mirred_get_dev(const struct tc_action *a,
-		   tc_action_priv_destructor *destructor)
+		   tc_action_priv_destructor *destructor/*出参，get的反操作函数*/)
 {
 	struct tcf_mirred *m = to_mirred(a);
 	struct net_device *dev;

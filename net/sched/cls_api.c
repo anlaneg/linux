@@ -365,7 +365,7 @@ struct tcf_filter_chain_list_item {
 	void *chain_head_change_priv;
 };
 
-//创建指定index的chain
+//在给定block上创建指定index的chain
 static struct tcf_chain *tcf_chain_create(struct tcf_block *block,
 					  u32 chain_index/*chain索引*/)
 {
@@ -627,6 +627,7 @@ static void tcf_chain_put_explicitly_created(struct tcf_chain *chain)
 	__tcf_chain_put(chain, false, true);
 }
 
+/*移除chain上所有tcf_proto*/
 static void tcf_chain_flush(struct tcf_chain *chain, bool rtnl_held)
 {
 	struct tcf_proto *tp, *tp_next;
@@ -634,10 +635,12 @@ static void tcf_chain_flush(struct tcf_chain *chain, bool rtnl_held)
 	mutex_lock(&chain->filter_chain_lock);
 	tp = tcf_chain_dereference(chain->filter_chain, chain);
 	while (tp) {
+	    /*存入rcu，后续一并移除*/
 		tp_next = rcu_dereference_protected(tp->next, 1);
 		tcf_proto_signal_destroying(chain, tp);
 		tp = tp_next;
 	}
+	/*指明此chain为空*/
 	tp = tcf_chain_dereference(chain->filter_chain, chain);
 	RCU_INIT_POINTER(chain->filter_chain, NULL);
 	tcf_chain0_head_change(chain, NULL);
@@ -703,7 +706,7 @@ static bool tcf_block_offload_in_use(struct tcf_block *block)
 	return atomic_read(&block->offloadcnt);
 }
 
-//向驱动触发block offload
+//tc filter触发block offload命令
 static int tcf_block_offload_cmd(struct tcf_block *block,
 				 struct net_device *dev, struct Qdisc *sch,
 				 struct tcf_block_ext_info *ei,
@@ -721,6 +724,7 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 	if (dev->netdev_ops->ndo_setup_tc) {
 		int err;
 
+		/*tc setup block情况下，回调需要填充并返回bo结构体*/
 		err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_BLOCK, &bo);
 		if (err < 0) {
 			if (err != -EOPNOTSUPP)
@@ -732,7 +736,7 @@ static int tcf_block_offload_cmd(struct tcf_block *block,
 	}
 
 
-	/*dev没有ndo_setup_tc回调，例如vxlan设备，间接触发tc_setup_block*/
+	/*当dev没有ndo_setup_tc回调时，例如vxlan设备，间接触发tc_setup_block*/
 	flow_indr_dev_setup_offload(dev, sch, TC_SETUP_BLOCK, block, &bo,
 				    tc_block_indr_cleanup);
 	/*为此block增加新的bo*/
@@ -757,6 +761,7 @@ static int tcf_block_offload_bind(struct tcf_block *block, struct Qdisc *q,
 	if (dev->netdev_ops->ndo_setup_tc &&
 	    !tc_can_offload(dev) &&
 	    tcf_block_offload_in_use(block)) {
+	    /*有ndo_setup_tc,但没有开启offload,此block上offload数非0，则告警，不容许bond(这样后面调不了reoffload接口）*/
 		NL_SET_ERR_MSG(extack, "Bind to offloaded block failed as dev has offload disabled");
 		err = -EOPNOTSUPP;
 		goto err_unlock;
@@ -783,6 +788,7 @@ err_unlock:
 	return err;
 }
 
+/*block解绑*/
 static void tcf_block_offload_unbind(struct tcf_block *block, struct Qdisc *q,
 				     struct tcf_block_ext_info *ei)
 {
@@ -790,6 +796,7 @@ static void tcf_block_offload_unbind(struct tcf_block *block, struct Qdisc *q,
 	int err;
 
 	down_write(&block->cb_lock);
+	/*block与dev相互解绑*/
 	err = tcf_block_offload_cmd(block, dev, q, ei, FLOW_BLOCK_UNBIND, NULL);
 	if (err == -EOPNOTSUPP)
 		goto no_offload_dev_dec;
@@ -1251,6 +1258,7 @@ static void __tcf_block_put(struct tcf_block *block, struct Qdisc *q,
 			tcf_block_remove(block, block->net);
 
 		if (q)
+		    //block unbind处理，关联到q->dev_queue->dev,触发driver执行FLOW_BLOCK_UNBIND
 			tcf_block_offload_unbind(block, q, ei);
 
 		if (free_block)
@@ -1423,7 +1431,7 @@ int tcf_block_get_ext(struct tcf_block **p_block/*出参，创建或查询好的
 	if (err)
 		goto err_chain0_head_change_cb_add;
 
-	//为此block绑定offload
+	//block bind处理，关联到q->dev_queue->dev,触发driver执行FLOW_BLOCK_BIND
 	err = tcf_block_offload_bind(block, q, ei, extack);
 	if (err)
 		goto err_block_offload_bind;
@@ -1494,7 +1502,7 @@ EXPORT_SYMBOL(tcf_block_put);
 
 //遍历block上所有chain,遍历chain上所有tp,针对每个tp调用tp->ops->reoffload
 static int
-tcf_block_playback_offloads(struct tcf_block *block, flow_setup_cb_t *cb/*回调函数*/,
+tcf_block_playback_offloads(struct tcf_block *block, flow_setup_cb_t *cb/*驱动提供的回调函数*/,
 			    void *cb_priv/*回调的私有数据*/, bool add/*是否规则新增*/, bool offload_in_use,
 			    struct netlink_ext_ack *extack/*netlink应答控制信息*/)
 {
@@ -1504,7 +1512,7 @@ tcf_block_playback_offloads(struct tcf_block *block, flow_setup_cb_t *cb/*回调
 
 	lockdep_assert_held(&block->cb_lock);
 
-	for (chain = __tcf_get_next_chain(block, NULL);/*取首个chain*/
+	for (chain = __tcf_get_next_chain(block, NULL);/*取block上首个chain*/
 	     chain;
 	     chain_prev = chain,/*保存上一个chain*/
 		     chain = __tcf_get_next_chain(block, chain),/*取下一个chain*/
@@ -1550,7 +1558,7 @@ static int tcf_block_bind(struct tcf_block *block,
 
 	lockdep_assert_held(&block->cb_lock);
 
-	//新增cb,使block上所有chain(所有chain上所有tp,针对每个tp调用reoffload)
+	//block bind成功，block可能上已有规则，这里使block上所有chain(chain上所有tp,针对每个tp调用reoffload)
 	list_for_each_entry(block_cb, &bo->cb_list, list) {
 		err = tcf_block_playback_offloads(block, block_cb->cb,
 						  block_cb->cb_priv, true,
@@ -1586,6 +1594,7 @@ err_unroll:
 	return err;
 }
 
+/*将此设备上已offload的规则解绑*/
 static void tcf_block_unbind(struct tcf_block *block,
 			     struct flow_block_offload *bo)
 {
@@ -1613,7 +1622,7 @@ static int tcf_block_setup(struct tcf_block *block,
 
 	switch (bo->command) {
 	case FLOW_BLOCK_BIND:
-	    //在block上增加新的bo
+	    //bond情况下，需要将driver填充好的bo更新到block上
 		err = tcf_block_bind(block, bo);
 		break;
 	case FLOW_BLOCK_UNBIND:
@@ -1828,6 +1837,7 @@ static struct tcf_proto *tcf_chain_tp_insert_unique(struct tcf_chain *chain,
 		return ERR_PTR(-EAGAIN);
 	}
 
+	/*确定挺入的位置*/
 	tp = tcf_chain_tp_find(chain, &chain_info,
 			       protocol, prio, false);
 	if (!tp)
@@ -2066,6 +2076,7 @@ static void tfilter_notify_chain(struct net *net, struct sk_buff *oskb,
 {
 	struct tcf_proto *tp;
 
+	/*遍历chain上所有tcf_proto,触发event事件通知*/
 	for (tp = tcf_get_next_proto(chain, NULL);
 	     tp; tp = tcf_get_next_proto(chain, tp))
 		tfilter_notify(net, oskb, n, tp, block,
@@ -2238,7 +2249,7 @@ replay:
 							       &chain_info));
 
 		mutex_unlock(&chain->filter_chain_lock);
-		/*按参数创建tc filter*/
+		/*按参数创建tcf_proto*/
 		tp_new = tcf_proto_create(name, protocol, prio, chain,
 					  rtnl_held, extack);
 		if (IS_ERR(tp_new)) {
@@ -2283,6 +2294,7 @@ replay:
 		goto errout;
 	}
 
+	//chain如果有模块ops,则必须要与创建的是同一类型
 	if (chain->tmplt_ops && chain->tmplt_ops != tp->ops) {
 		NL_SET_ERR_MSG(extack, "Chain template is set to a different filter kind");
 		err = -EINVAL;
@@ -2936,6 +2948,7 @@ static int tc_chain_notify_delete(const struct tcf_proto_ops *tmplt_ops,
 	return rtnetlink_send(skb, net, portid, RTNLGRP_TC, flags & NLM_F_ECHO);
 }
 
+/*创建sepecify template chain*/
 static int tc_chain_tmplt_add(struct tcf_chain *chain, struct net *net,
 			      struct nlattr **tca,
 			      struct netlink_ext_ack *extack)
@@ -2966,6 +2979,7 @@ static int tc_chain_tmplt_add(struct tcf_chain *chain, struct net *net,
 		return -EOPNOTSUPP;
 	}
 
+	/*构造chain的私有数据*/
 	tmplt_priv = ops->tmplt_create(net, chain, tca, extack);
 	if (IS_ERR(tmplt_priv)) {
 		module_put(ops->owner);
@@ -3033,10 +3047,10 @@ replay:
 	}
 
 	mutex_lock(&block->lock);
-	//查询chain_index对应的chain
+	//在block上查询chain_index对应的chain
 	chain = tcf_chain_lookup(block, chain_index);
 	if (n->nlmsg_type == RTM_NEWCHAIN) {
-		//当前新建chain
+		//当前操作新建chain时，如果chain不为空，则创建
 		if (chain) {
 			if (tcf_chain_held_by_acts_only(chain)) {
 				/* The chain exists only because there is
@@ -3084,6 +3098,7 @@ replay:
 
 	switch (n->nlmsg_type) {
 	case RTM_NEWCHAIN:
+	    /*处理chain templates更新*/
 		err = tc_chain_tmplt_add(chain, net, tca, extack);
 		if (err) {
 			tcf_chain_put_explicitly_created(chain);
@@ -3094,6 +3109,7 @@ replay:
 				RTM_NEWCHAIN, false);
 		break;
 	case RTM_DELCHAIN:
+	    /*完成chain移除*/
 		tfilter_notify_chain(net, skb, block, q, parent, n,
 				     chain, RTM_DELTFILTER);
 		/* Flush the chain first as the user requested chain removal. */
@@ -3533,6 +3549,7 @@ retry:
 	if (ok_count < 0)
 		goto err_unlock;
 
+	/*触发事件规则添加*/
 	if (tp->ops->hw_add)
 		tp->ops->hw_add(tp, type_data);
 	if (ok_count > 0)
@@ -3590,6 +3607,7 @@ retry:
 	if (ok_count < 0)
 		goto err_unlock;
 
+	/*触发硬件规则添加*/
 	if (tp->ops->hw_add)
 		tp->ops->hw_add(tp, type_data);
 	if (ok_count > 0)
@@ -3642,11 +3660,11 @@ retry:
 EXPORT_SYMBOL(tc_setup_cb_destroy);
 
 int tc_setup_cb_reoffload(struct tcf_block *block, struct tcf_proto *tp,
-			  bool add, flow_setup_cb_t *cb/*回调函数*/,
+			  bool add, flow_setup_cb_t *cb/*驱动回调函数*/,
 			  enum tc_setup_type type, void *type_data,
 			  void *cb_priv, u32 *flags, unsigned int *in_hw_count)
 {
-    /*执行回调*/
+    /*执行驱动回调*/
 	int err = cb(type, type_data, cb_priv);
 
 	if (err) {

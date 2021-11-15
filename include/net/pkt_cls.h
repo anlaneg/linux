@@ -267,6 +267,7 @@ static inline void tcf_exts_put_net(struct tcf_exts *exts)
 	for (; 0; (void)(i), (void)(a), (void)(exts))
 #endif
 
+/*用所给参数更新action的统计值*/
 static inline void
 tcf_exts_stats_update(const struct tcf_exts *exts,
 		      u64 bytes, u64 packets, u64 drops, u64 lastuse,
@@ -281,6 +282,7 @@ tcf_exts_stats_update(const struct tcf_exts *exts,
 	for (i = 0; i < exts->nr_actions; i++) {
 		struct tc_action *a = exts->actions[i];
 
+		/*更新具体一个action的统计信息*/
 		tcf_action_stats_update(a, bytes, packets, drops,
 					lastuse, true);
 		a->used_hw_stats = used_hw_stats;

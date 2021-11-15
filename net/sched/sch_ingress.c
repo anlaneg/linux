@@ -201,6 +201,7 @@ static struct tcf_block *clsact_tcf_block(struct Qdisc *sch, unsigned long cl,
 	}
 }
 
+/*ingress block index设置*/
 static void clsact_ingress_block_set(struct Qdisc *sch, u32 block_index)
 {
 	struct clsact_sched_data *q = qdisc_priv(sch);
@@ -208,6 +209,7 @@ static void clsact_ingress_block_set(struct Qdisc *sch, u32 block_index)
 	q->ingress_block_info.block_index = block_index;
 }
 
+/*egress block index设置*/
 static void clsact_egress_block_set(struct Qdisc *sch, u32 block_index)
 {
 	struct clsact_sched_data *q = qdisc_priv(sch);
@@ -215,6 +217,7 @@ static void clsact_egress_block_set(struct Qdisc *sch, u32 block_index)
 	q->egress_block_info.block_index = block_index;
 }
 
+/*取ingress block index*/
 static u32 clsact_ingress_block_get(struct Qdisc *sch)
 {
 	struct clsact_sched_data *q = qdisc_priv(sch);
@@ -222,6 +225,7 @@ static u32 clsact_ingress_block_get(struct Qdisc *sch)
 	return q->ingress_block_info.block_index;
 }
 
+/*取egress block index*/
 static u32 clsact_egress_block_get(struct Qdisc *sch)
 {
 	struct clsact_sched_data *q = qdisc_priv(sch);
@@ -229,7 +233,7 @@ static u32 clsact_egress_block_get(struct Qdisc *sch)
 	return q->egress_block_info.block_index;
 }
 
-//ingress ,egress block创建
+//ingress ,egress block同时创建
 static int clsact_init(struct Qdisc *sch, struct nlattr *opt,
 		       struct netlink_ext_ack *extack)
 {
@@ -277,6 +281,7 @@ static void clsact_destroy(struct Qdisc *sch)
 	net_dec_egress_queue();
 }
 
+/*同时支持ingress,egress*/
 static const struct Qdisc_class_ops clsact_class_ops = {
 	.flags		=	QDISC_CLASS_OPS_DOIT_UNLOCKED,
 	.leaf		=	ingress_leaf,
@@ -292,7 +297,7 @@ static struct Qdisc_ops clsact_qdisc_ops __read_mostly = {
 	.id			=	"clsact",
 	.priv_size		=	sizeof(struct clsact_sched_data),
 	.static_flags		=	TCQ_F_CPUSTATS,
-	//初始化ingress qdisc
+	//同时初始化ingress,egress qdisc
 	.init			=	clsact_init,
 	.destroy		=	clsact_destroy,
 	.dump			=	ingress_dump,

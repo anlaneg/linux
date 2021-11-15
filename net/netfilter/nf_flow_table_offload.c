@@ -1134,7 +1134,7 @@ static void nf_flow_table_indr_cleanup(struct flow_block_cb *block_cb)
 	up_write(&flowtable->flow_block_lock);
 }
 
-/*flow table间接卸载*/
+/*flow table间接卸载触发*/
 static int nf_flow_table_indr_offload_cmd(struct flow_block_offload *bo,
 					  struct nf_flowtable *flowtable,
 					  struct net_device *dev,

@@ -444,6 +444,7 @@ static int __nf_register_net_hook(struct net *net, int pf,
 	hooks_validate(new_hooks);
 #ifdef CONFIG_NETFILTER_INGRESS
 	if (nf_ingress_hook(reg, pf))
+	    /*解发ingress钩子点开启*/
 		net_inc_ingress_queue();
 #endif
 #ifdef CONFIG_NETFILTER_EGRESS

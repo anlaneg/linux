@@ -46,6 +46,7 @@ static int gact_determ(struct tcf_gact *gact)
 }
 
 typedef int (*g_rand)(struct tcf_gact *gact);
+/*随机action方法*/
 static g_rand gact_rand[MAX_RAND] = { NULL, gact_net_rand, gact_determ };
 #endif /* CONFIG_GACT_PROB */
 
@@ -166,15 +167,18 @@ static int tcf_gact_act(struct sk_buff *skb, const struct tc_action *a,
 	u32 ptype = READ_ONCE(gact->tcfg_ptype);
 
 	if (ptype)
+	    /*随机action*/
 		action = gact_rand[ptype](gact);
 	}
 #endif
 	tcf_action_update_bstats(&gact->common, skb);
 	if (action == TC_ACT_SHOT)
+	    /*增加丢包计数*/
 		tcf_action_inc_drop_qstats(&gact->common);
 
 	tcf_lastuse_update(&gact->tcf_tm);
 
+	/*返回对应action*/
 	return action;
 }
 

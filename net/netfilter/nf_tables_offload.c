@@ -406,6 +406,7 @@ static int nft_indr_block_offload_cmd(struct nft_base_chain *basechain,
 
 	nft_flow_block_offload_init(&bo, dev_net(dev), cmd, basechain, &extack);
 
+	/*间接block offload解发tc_setup_block*/
 	err = flow_indr_dev_setup_offload(dev, NULL, TC_SETUP_BLOCK, basechain, &bo,
 					  nft_indr_block_cleanup);
 	if (err < 0)
@@ -426,6 +427,7 @@ static int nft_chain_offload_cmd(struct nft_base_chain *basechain,
 	if (dev->netdev_ops->ndo_setup_tc)
 		err = nft_block_offload_cmd(basechain, dev, cmd);
 	else
+	    /*设备没有ndo_setup_tc回调，间接触发cmd命令的offload*/
 		err = nft_indr_block_offload_cmd(basechain, dev, cmd);
 
 	return err;

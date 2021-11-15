@@ -24,11 +24,14 @@ struct tc_action {
 	//action对应的操作集
 	const struct tc_action_ops	*ops;
 	__u32				type; /* for backward compat(TCA_OLD_COMPAT) */
-	struct tcf_idrinfo		*idrinfo;//用于挂接节点，用于通过index查找到action
+	//用于挂接节点，用于通过index查找到此结构
+	struct tcf_idrinfo		*idrinfo;
 
-	u32				tcfa_index;//action对应的index
+	//action对应的index
+	u32				tcfa_index;
 	refcount_t			tcfa_refcnt;
 	atomic_t			tcfa_bindcnt;
+	/*指明的tc action返回值*/
 	int				tcfa_action;
 	struct tcf_t			tcfa_tm;
 	//非percpu统计计数，表明action处理过的报文数及字节数
@@ -44,7 +47,8 @@ struct tc_action {
 	struct gnet_stats_queue __percpu *cpu_qstats;
 	//填充action的cookie
 	struct tc_cookie	__rcu *act_cookie;
-	struct tcf_chain	__rcu *goto_chain;//下一次匹配的chain
+	//下一次匹配的chain
+	struct tcf_chain	__rcu *goto_chain;
 	u32			tcfa_flags;
 	u8			hw_stats;
 	u8			used_hw_stats;
@@ -107,34 +111,39 @@ struct tc_action_ops {
 	//action名称
 	char    kind[IFNAMSIZ];
 	enum tca_id  id; /* identifier should match kind */
-	//需要的tc_action结构体大小
+	//需要的tc_action结构体大小(必须大于tc_action)
 	size_t	size;
 	struct module		*owner;
 	//action执行函数
 	int     (*act)(struct sk_buff *, const struct tc_action */*action对应的参数*/,
 		       struct tcf_result *); /* called under RCU BH lock*/
-	//dump具体一个action
+	//dump具体一个action，并将其结果输出到第一个参数
 	int     (*dump)(struct sk_buff *, struct tc_action *, int, int);
+	/*action移除前的清理工作*/
 	void	(*cleanup)(struct tc_action *);
-	//给定index,查找对应的同类型action
-	int     (*lookup)(struct net *net, struct tc_action **a, u32 index);
+	//给定index,查找此类型对应的action
+	int     (*lookup)(struct net *net, struct tc_action **a/*出参，对应的action*/, u32 index);
 	//通过netlink消息初始化对应tc action
 	int     (*init)(struct net *net, struct nlattr *nla,
 			struct nlattr *est, struct tc_action **act/*出参，填充后action*/,
 			struct tcf_proto *tp,
 			u32 flags, struct netlink_ext_ack *extack);
-	int     (*walk)(struct net *, struct sk_buff *,
+	/*按netlink_callback对action进行遍历*/
+	int     (*walk)(struct net *, struct sk_buff */*信息输出*/,
 			struct netlink_callback *, int,
 			const struct tc_action_ops *,
 			struct netlink_ext_ack *);
-	/*action的统计信息更新函数*/
+	/*action的统计信息更新函数，当一条规则进入硬件后，从硬件dump上来后，需要各action进行此函数更新*/
 	void	(*stats_update)(struct tc_action *, u64, u64, u64, u64, bool);
+	/*action编码进netlink后消息体长度*/
 	size_t  (*get_fill_size)(const struct tc_action *act);
+	/*获得action引用的netdev*/
 	struct net_device *(*get_dev)(const struct tc_action *a,
-				      tc_action_priv_destructor *destructor);
+				      tc_action_priv_destructor *destructor/*出参，action引用移除*/);
+	/*增加对psample group action的引用，可以考虑两者合并*/
 	struct psample_group *
 	(*get_psample_group)(const struct tc_action *a,
-			     tc_action_priv_destructor *destructor);
+			     tc_action_priv_destructor *destructor/*出参，action引用移除*/);
 };
 
 struct tc_action_net {

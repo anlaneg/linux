@@ -206,6 +206,7 @@ int tcf_idr_release(struct tc_action *a, bool bind)
 }
 EXPORT_SYMBOL(tcf_idr_release);
 
+/*action公用信息长度*/
 static size_t tcf_action_shared_attrs_size(const struct tc_action *act)
 {
 	struct tc_cookie *act_cookie;
@@ -246,11 +247,13 @@ static size_t tcf_action_fill_size(const struct tc_action *act)
 {
 	size_t sz = tcf_action_shared_attrs_size(act);
 
+	/*action独有长度*/
 	if (act->ops->get_fill_size)
 		return act->ops->get_fill_size(act) + sz;
 	return sz;
 }
 
+/*存放action a的kind,index,act_cookie,stats(精减型dump)*/
 static int
 tcf_action_dump_terse(struct sk_buff *skb, struct tc_action *a, bool from_act)
 {
@@ -297,6 +300,7 @@ static int tcf_dump_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 
 	s_i = cb->args[0];
 
+	/*遍历idr中当前存在的actions*/
 	idr_for_each_entry_ul(idr, p, tmp, id) {
 		index++;
 		if (index < s_i)
@@ -314,6 +318,7 @@ static int tcf_dump_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 			index--;
 			goto nla_put_failure;
 		}
+		/*检查是否为精简型dump*/
 		err = (act_flags & TCA_ACT_FLAG_TERSE_DUMP) ?
 			tcf_action_dump_terse(skb, p, true) :
 			tcf_action_dump_1(skb, p, 0, 0);
@@ -372,6 +377,7 @@ static int tcf_del_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 	nest = nla_nest_start_noflag(skb, 0);
 	if (nest == NULL)
 		goto nla_put_failure;
+	/*存放kind属性*/
 	if (nla_put_string(skb, TCA_KIND, ops->kind))
 		goto nla_put_failure;
 
@@ -380,6 +386,7 @@ static int tcf_del_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 	idr_for_each_entry_ul(idr, p, tmp, id) {
 		if (IS_ERR(p))
 			continue;
+		/*元素移除*/
 		ret = tcf_idr_release_unsafe(p);
 		if (ret == ACT_P_DELETED) {
 			module_put(ops->owner);
@@ -391,6 +398,7 @@ static int tcf_del_walker(struct tcf_idrinfo *idrinfo, struct sk_buff *skb,
 	}
 	mutex_unlock(&idrinfo->lock);
 
+	/*移除的元素数*/
 	ret = nla_put_u32(skb, TCA_FCNT, n_i);
 	if (ret)
 		goto nla_put_failure;
@@ -839,6 +847,7 @@ static void tcf_action_put_many(struct tc_action *actions[])
 	}
 }
 
+/*各action自已dump*/
 int
 tcf_action_dump_old(struct sk_buff *skb, struct tc_action *a, int bind, int ref)
 {
@@ -852,14 +861,17 @@ tcf_action_dump_1(struct sk_buff *skb, struct tc_action *a, int bind, int ref)
 	unsigned char *b = skb_tail_pointer(skb);
 	struct nlattr *nest;
 
+	/*精简信息dump*/
 	if (tcf_action_dump_terse(skb, a, false))
 		goto nla_put_failure;
 
+	/*填充hw stats*/
 	if (a->hw_stats != TCA_ACT_HW_STATS_ANY &&
 	    nla_put_bitfield32(skb, TCA_ACT_HW_STATS,
 			       a->hw_stats, TCA_ACT_HW_STATS_ANY))
 		goto nla_put_failure;
 
+	/*填充used hw stats*/
 	if (a->used_hw_stats_valid &&
 	    nla_put_bitfield32(skb, TCA_ACT_USED_HW_STATS,
 			       a->used_hw_stats, TCA_ACT_HW_STATS_ANY))
@@ -870,6 +882,7 @@ tcf_action_dump_1(struct sk_buff *skb, struct tc_action *a, int bind, int ref)
 			       a->tcfa_flags, a->tcfa_flags))
 		goto nla_put_failure;
 
+	/*调用dump回调，填充action*/
 	nest = nla_nest_start_noflag(skb, TCA_OPTIONS);
 	if (nest == NULL)
 		goto nla_put_failure;
@@ -1101,7 +1114,7 @@ err_out:
 
 int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 		    struct nlattr *est, struct tc_action *actions[]/*出参，保存生成的action*/,
-		    int init_res[], size_t *attr_size, u32 flags,
+		    int init_res[], size_t *attr_size/*出参，属性占用的消息长度*/, u32 flags,
 		    struct netlink_ext_ack *extack)
 {
 	struct tc_action_ops *ops[TCA_ACT_MAX_PRIO] = {};
@@ -1138,6 +1151,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 			err = PTR_ERR(act);
 			goto err;
 		}
+		/*填充此action所需长度*/
 		sz += tcf_action_fill_size(act);
 		/* Start from index 0 */
 		//存储生成的action
@@ -1322,6 +1336,7 @@ static struct tc_action *tcf_action_get_1(struct net *net, struct nlattr *nla,
 	}
 	/*通过index查找对应的action*/
 	err = -ENOENT;
+
 	//依据对应的action index查找对应的action
 	if (ops->lookup(net, &a, index) == 0) {
 		NL_SET_ERR_MSG(extack, "TC action with specified index not found");
@@ -1388,6 +1403,7 @@ static int tca_action_flush(struct net *net, struct nlattr *nla,
 		goto out_module_put;
 	}
 
+	/*遍历并移除所有元素*/
 	err = ops->walk(net, skb, &dcb, RTM_DELACTION, ops, extack);
 	if (err <= 0) {
 		nla_nest_cancel(skb, nest);
@@ -1474,6 +1490,7 @@ tcf_del_notify(struct net *net, struct nlmsghdr *n, struct tc_action *actions[],
 	return ret;
 }
 
+/*删除action*/
 static int
 tca_action_gd(struct net *net, struct nlattr *nla, struct nlmsghdr *n,
 	      u32 portid, int event, struct netlink_ext_ack *extack)
@@ -1506,6 +1523,7 @@ tca_action_gd(struct net *net, struct nlattr *nla, struct nlmsghdr *n,
 			ret = PTR_ERR(act);
 			goto err;
 		}
+		/*此action占用的字节长度*/
 		attr_size += tcf_action_fill_size(act);
 		actions[i - 1] = act;
 	}
@@ -1649,11 +1667,12 @@ static struct nlattr *find_dump_kind(struct nlattr **nla)
 
 	tb1 = nla[TCA_ACT_TAB];
 	if (tb1 == NULL)
+	    /*未填充ACT_TAB,返回NULL*/
 		return NULL;
 
+	/*这里的tb[1]代码的是什么？policy*/
 	if (nla_parse_deprecated(tb, TCA_ACT_MAX_PRIO, nla_data(tb1), NLMSG_ALIGN(nla_len(tb1)), NULL, NULL) < 0)
 		return NULL;
-
 	if (tb[1] == NULL)
 		return NULL;
 	if (nla_parse_nested_deprecated(tb2, TCA_ACT_MAX, tb[1], tcf_action_policy, NULL) < 0)
@@ -1663,7 +1682,7 @@ static struct nlattr *find_dump_kind(struct nlattr **nla)
 	return kind;
 }
 
-//dump action
+//dump action,并将结果保存在skb中
 static int tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	struct net *net = sock_net(skb->sk);
@@ -1686,6 +1705,7 @@ static int tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 	if (ret < 0)
 		return ret;
 
+	/*dump action时必须指定kind*/
 	kind = find_dump_kind(tb);
 	if (kind == NULL) {
 		pr_info("tc_dump_action: action bad kind\n");
@@ -1724,10 +1744,10 @@ static int tc_dump_action(struct sk_buff *skb, struct netlink_callback *cb)
 	if (!count_attr)
 		goto out_module_put;
 
+	/*开始act table填充*/
 	nest = nla_nest_start_noflag(skb, TCA_ACT_TAB);
 	if (nest == NULL)
 		goto out_module_put;
-
 	ret = a_o->walk(net, skb, cb, RTM_GETACTION, a_o, NULL);
 	if (ret < 0)
 		goto out_module_put;
@@ -1755,7 +1775,7 @@ out_module_put:
 
 static int __init tc_action_init(void)
 {
-	//注册tc的newaction,delaction,getaction三种msgtype
+	//注册tc的new action,del action,get action三种msgtype
 	rtnl_register(PF_UNSPEC, RTM_NEWACTION, tc_ctl_action, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_DELACTION, tc_ctl_action, NULL, 0);
 	rtnl_register(PF_UNSPEC, RTM_GETACTION, tc_ctl_action, tc_dump_action,

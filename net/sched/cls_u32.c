@@ -41,10 +41,12 @@
 #include <linux/idr.h>
 
 struct tc_u_knode {
+    /*串连下一个*/
 	struct tc_u_knode __rcu	*next;
 	u32			handle;
 	struct tc_u_hnode __rcu	*ht_up;
 	struct tcf_exts		exts;
+	/*指定需匹配的indev*/
 	int			ifindex;
 	u8			fshift;
 	struct tcf_result	res;
@@ -55,8 +57,8 @@ struct tc_u_knode {
 	u32			flags;
 	unsigned int		in_hw_count;
 #ifdef CONFIG_CLS_U32_MARK
-	u32			val;
-	u32			mask;
+	u32			val;/*检查此值与 skb->mark & mask相等时节点匹配*/
+	u32			mask;/*skb->mark将与此值取与*/
 	u32 __percpu		*pcpu_success;
 #endif
 	struct rcu_work		rwork;
@@ -79,7 +81,7 @@ struct tc_u_hnode {
 	/* The 'ht' field MUST be the last field in structure to allow for
 	 * more entries allocated at end of structure.
 	 */
-	struct tc_u_knode __rcu	*ht[];
+	struct tc_u_knode __rcu	*ht[];/*hash桶*/
 };
 
 struct tc_u_common {
@@ -108,6 +110,7 @@ static int u32_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		unsigned int	  off;
 	} stack[TC_U32_MAXDEPTH];
 
+	/*取tp对应的hashtable*/
 	struct tc_u_hnode *ht = rcu_dereference_bh(tp->root);
 	unsigned int off = skb_network_offset(skb);
 	struct tc_u_knode *n;
@@ -120,6 +123,7 @@ static int u32_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 	int i, r;
 
 next_ht:
+    /*首次sel取0，ht取tp->root，接下来sel,ht由后续流程控制，从而产生树状*/
 	n = rcu_dereference_bh(ht->ht[sel]);
 
 next_knode:
@@ -131,12 +135,14 @@ next_knode:
 		j = 0;
 #endif
 
+		/*skip software,故转next node*/
 		if (tc_skip_sw(n->flags)) {
 			n = rcu_dereference_bh(n->next);
 			goto next_knode;
 		}
 
 #ifdef CONFIG_CLS_U32_MARK
+		/*fw mark与n->mask后，不为n->val,转next node*/
 		if ((skb->mark & n->mask) != n->val) {
 			n = rcu_dereference_bh(n->next);
 			goto next_knode;
@@ -145,19 +151,21 @@ next_knode:
 		}
 #endif
 
+		/*检查packet指定位置的内容是否与n->sel.keys设置的一致，如不一致，则跳next_knode*/
 		for (i = n->sel.nkeys; i > 0; i--, key++) {
+		    /*network层加 key->off偏移量 + offset-2 后取u32 */
 			int toff = off + key->off + (off2 & key->offmask);
 			__be32 *data, hdata;
 
 			if (skb_headroom(skb) + toff > INT_MAX)
 				goto out;
 
-			//自toff位置取4字节
+			//自toff位置取4字节(u32)
 			data = skb_header_pointer(skb, toff, 4, &hdata);
 			if (!data)
 				goto out;
 			if ((*data ^ key->val) & key->mask) {
-				//不相等，尝试下一个knode
+				//*data & key->mask后与key->val不相等，尝试下一个knode
 				n = rcu_dereference_bh(n->next);
 				goto next_knode;
 			}
@@ -167,13 +175,15 @@ next_knode:
 #endif
 		}
 
-		//与knode命中
+		//与knode命中,如果ht_down不存在，则需要检查terminal标记
 		ht = rcu_dereference_bh(n->ht_down);
 		if (!ht) {
 check_terminal:
+            /*只有找到terminal标记，匹配才能结束，才能执行actions*/
 			if (n->sel.flags & TC_U32_TERMINAL) {
 
 				*res = n->res;
+				/*indev必须匹配*/
 				if (!tcf_match_indev(skb, n->ifindex)) {
 					n = rcu_dereference_bh(n->next);
 					goto next_knode;
@@ -196,11 +206,15 @@ check_terminal:
 
 		/* PUSH */
 		if (sdepth >= TC_U32_MAXDEPTH)
+		    /*检查深度不得超过8*/
 			goto deadloop;
+
+		/*匹配了n,将其记录在栈上*/
 		stack[sdepth].knode = n;
 		stack[sdepth].off = off;
 		sdepth++;
 
+		/*有ht_down,切换到新的ht，切换到新的sel,切换到新的offset*/
 		ht = rcu_dereference_bh(n->ht_down);
 		sel = 0;
 		if (ht->divisor) {
@@ -241,6 +255,7 @@ check_terminal:
 	}
 
 	/* POP */
+	/*pop并回退，检查是否为terminal*/
 	if (sdepth--) {
 		n = stack[sdepth].knode;
 		ht = rcu_dereference_bh(n->ht_up);
@@ -320,6 +335,7 @@ static struct hlist_head *tc_u_common_hash;
 #define U32_HASH_SHIFT 10
 #define U32_HASH_SIZE (1 << U32_HASH_SHIFT)
 
+/*如果是share block,则返回share block指针，如果非share block，则返回block->q*/
 static void *tc_u_common_ptr(const struct tcf_proto *tp)
 {
 	struct tcf_block *block = tp->chain->block;
@@ -353,12 +369,14 @@ static struct tc_u_common *tc_u_common_find(void *key)
 	return NULL;
 }
 
+/*初始化u32匹配方式*/
 static int u32_init(struct tcf_proto *tp)
 {
 	struct tc_u_hnode *root_ht;
 	void *key = tc_u_common_ptr(tp);
 	struct tc_u_common *tp_c = tc_u_common_find(key);
 
+	/*申请root_ht*/
 	root_ht = kzalloc(struct_size(root_ht, ht, 1), GFP_KERNEL);
 	if (root_ht == NULL)
 		return -ENOBUFS;

@@ -355,6 +355,7 @@ struct Qdisc_ops {
 	void			(*attach)(struct Qdisc *sch);
 	//更新tx队列长度
 	int			(*change_tx_queue_len)(struct Qdisc *, unsigned int);
+	/*修改tx队列数目*/
 	void			(*change_real_num_tx)(struct Qdisc *sch,
 						      unsigned int new_real_tx);
 
@@ -404,13 +405,14 @@ struct tcf_proto_ops {
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto *,
 					    struct tcf_result *);
-	//对新在创建的分类器进行初始化
+	//对新创建的分类器进行初始化,看tcf_proto_create
 	int			(*init)(struct tcf_proto*);
 	//销毁分类器
 	void			(*destroy)(struct tcf_proto *tp, bool rtnl_held,
 					   struct netlink_ext_ack *extack);
-	//通过handle获取指定规则
+	//通过handle获取指定规则，增加引用
 	void*			(*get)(struct tcf_proto*, u32 handle);
+	/*释放规则，减少引用*/
 	void			(*put)(struct tcf_proto *tp, void *f);
 	/*修改或者新增规则*/
 	int			(*change)(struct net *net, struct sk_buff *,
@@ -426,7 +428,7 @@ struct tcf_proto_ops {
 	/*按arg参数内容，遍历tp对应规则*/
 	void			(*walk)(struct tcf_proto *tp,
 					struct tcf_walker *arg, bool rtnl_held);
-	/*实现tp规则的再次下发*/
+	/*block setup成功后，如果block上已有规则，则实现block上已有规则的下发*/
 	int			(*reoffload)(struct tcf_proto *tp, bool add,
 					     flow_setup_cb_t *cb, void *cb_priv,
 					     struct netlink_ext_ack *extack);
@@ -436,10 +438,12 @@ struct tcf_proto_ops {
 					  void *type_data);
 	void			(*bind_class)(void *, u32, unsigned long,
 					      void *, unsigned long);
+	/*chain私有数据创建*/
 	void *			(*tmplt_create)(struct net *net,
 						struct tcf_chain *chain,
 						struct nlattr **tca,
 						struct netlink_ext_ack *extack);
+	/*chain私有数据销毁*/
 	void			(*tmplt_destroy)(void *tmplt_priv);
 
 	/* rtnetlink specific */
@@ -475,7 +479,7 @@ struct tcf_proto {
 	void __rcu		*root;
 
 	/* called under RCU BH lock*/
-	//报文分类函数，来源于struct tcf_proto_ops
+	//报文分类函数，来源于struct tcf_proto_ops结构体中的classfiy回调
 	int			(*classify)(struct sk_buff *,
 					    const struct tcf_proto */*执行分类的分类器*/,
 					    struct tcf_result */*出参，分类结果*/);
@@ -527,7 +531,7 @@ struct tcf_chain {
 	bool explicitly_created;
 	bool flushing;
 	const struct tcf_proto_ops *tmplt_ops;
-	void *tmplt_priv;//mask模板
+	void *tmplt_priv;//chain的模板私有数据（例如mask模板）
 	struct rcu_head rcu;
 };
 
@@ -694,6 +698,7 @@ extern struct Qdisc_ops pfifo_fast_ops;
 extern struct Qdisc_ops mq_qdisc_ops;
 extern struct Qdisc_ops noqueue_qdisc_ops;
 extern const struct Qdisc_ops *default_qdisc_ops;
+/*取默认的qdisc ops*/
 static inline const struct Qdisc_ops *
 get_default_qdisc_ops(const struct net_device *dev, int ntx)
 {

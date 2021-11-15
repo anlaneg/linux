@@ -257,16 +257,16 @@ enum {
 #define TCA_U32_MAX (__TCA_U32_MAX - 1)
 
 struct tc_u32_key {
-	__be32		mask;
-	__be32		val;
-	int		off;
+	__be32		mask;/*提取的值，关心哪些bit*/
+	__be32		val;/*匹配后的值*/
+	int		off;/*从哪个位置开始提取*/
 	int		offmask;
 };
 
 struct tc_u32_sel {
 	unsigned char		flags;
 	unsigned char		offshift;
-	unsigned char		nkeys;
+	unsigned char		nkeys;/*keys数组的大小*/
 
 	__be16			offmask;
 	__u16			off;
@@ -274,7 +274,7 @@ struct tc_u32_sel {
 
 	short			hoff;
 	__be32			hmask;
-	struct tc_u32_key	keys[0];
+	struct tc_u32_key	keys[0];/*多个key配置*/
 };
 
 struct tc_u32_mark {

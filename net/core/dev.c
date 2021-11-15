@@ -5589,7 +5589,7 @@ another_round:
 
 skip_taps:
 #ifdef CONFIG_NET_INGRESS
-	//执行报文的ingress classify处理
+	//检查ingress钩子点是否需要开启，如开启则执行报文的ingress classify处理
 	if (static_branch_unlikely(&ingress_needed_key)) {
 		bool another = false;
 

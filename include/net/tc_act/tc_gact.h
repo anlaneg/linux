@@ -8,9 +8,9 @@
 struct tcf_gact {
 	struct tc_action	common;
 #ifdef CONFIG_GACT_PROB
-	u16			tcfg_ptype;
-	u16			tcfg_pval;
-	int			tcfg_paction;
+	u16			tcfg_ptype;/*如果非0，则会开启随机action*/
+	u16			tcfg_pval;/*随机值取模时的模数*/
+	int			tcfg_paction;/*取模余0时，返回此action*/
 	atomic_t		packets;
 #endif
 };

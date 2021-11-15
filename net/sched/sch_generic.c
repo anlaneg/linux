@@ -842,7 +842,7 @@ nla_put_failure:
 	return -1;
 }
 
-//初始化队列
+//初始化pfifo_fast队列
 static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 			   struct netlink_ext_ack *extack)
 {
@@ -998,8 +998,8 @@ errout:
 }
 
 //申请Qdisc,并通过init调用完成qdisc初始化
-struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue,
-				const struct Qdisc_ops *ops,
+struct Qdisc *qdisc_create_dflt(struct netdev_queue *dev_queue/*对应的dev队列*/,
+				const struct Qdisc_ops *ops,/*子qdisc的操作集*/
 				unsigned int parentid/*父Qdisc编号*/,
 				struct netlink_ext_ack *extack)
 {
@@ -1407,6 +1407,7 @@ static int qdisc_change_tx_queue_len(struct net_device *dev,
 	return 0;
 }
 
+/*修改tx队列数目*/
 void dev_qdisc_change_real_num_tx(struct net_device *dev,
 				  unsigned int new_real_tx)
 {
@@ -1416,6 +1417,7 @@ void dev_qdisc_change_real_num_tx(struct net_device *dev,
 		qdisc->ops->change_real_num_tx(qdisc, new_real_tx);
 }
 
+/*修改tx队列数目*/
 void mq_change_real_num_tx(struct Qdisc *sch, unsigned int new_real_tx)
 {
 #ifdef CONFIG_NET_SCHED
@@ -1423,6 +1425,7 @@ void mq_change_real_num_tx(struct Qdisc *sch, unsigned int new_real_tx)
 	struct Qdisc *qdisc;
 	unsigned int i;
 
+	/*删除多余的队列*/
 	for (i = new_real_tx; i < dev->real_num_tx_queues; i++) {
 		qdisc = netdev_get_tx_queue(dev, i)->qdisc_sleeping;
 		/* Only update the default qdiscs we created,
@@ -1431,6 +1434,8 @@ void mq_change_real_num_tx(struct Qdisc *sch, unsigned int new_real_tx)
 		if (qdisc != &noop_qdisc && !qdisc->handle)
 			qdisc_hash_del(qdisc);
 	}
+
+	/*创建新增的队列*/
 	for (i = dev->real_num_tx_queues; i < new_real_tx; i++) {
 		qdisc = netdev_get_tx_queue(dev, i)->qdisc_sleeping;
 		if (qdisc != &noop_qdisc && !qdisc->handle)

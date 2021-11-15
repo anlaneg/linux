@@ -487,7 +487,7 @@ struct flow_block_offload {
 	struct net *net;/*bo所属的net namespace*/
 	struct flow_block *block;
 	struct list_head cb_list;
-	struct list_head *driver_block_list;
+	struct list_head *driver_block_list;/*指明当前从属于驱动的哪个block_list*/
 	struct netlink_ext_ack *extack;/*netlink应答信息*/
 	struct Qdisc *sch;
 	struct list_head *cb_list_head;
@@ -515,7 +515,7 @@ struct flow_block_indr {
 };
 
 struct flow_block_cb {
-    /*用于挂接在driver自已的链表上*/
+    /*用于将当前结构挂接在driver自已的链表上*/
 	struct list_head	driver_list;
 	/*用于挂接在flow_block_offload->cb_list上*/
 	struct list_head	list;

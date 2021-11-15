@@ -313,6 +313,7 @@ static int mall_reoffload(struct tcf_proto *tp, bool add, flow_setup_cb_t *cb,
 		return 0;
 	}
 
+	/*match all规则下发*/
 	err = tc_setup_cb_reoffload(block, tp, add, cb, TC_SETUP_CLSMATCHALL,
 				    &cls_mall, cb_priv, &head->flags,
 				    &head->in_hw_count);
@@ -412,6 +413,7 @@ static void mall_bind_class(void *fh, u32 classid, unsigned long cl, void *q,
 	}
 }
 
+/*命中所有流量，并进行action执行*/
 static struct tcf_proto_ops cls_mall_ops __read_mostly = {
 	.kind		= "matchall",
 	.classify	= mall_classify,/*所有流量均命中*/

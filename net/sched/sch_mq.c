@@ -18,7 +18,8 @@
 #include <net/sch_generic.h>
 
 struct mq_sched {
-	struct Qdisc		**qdiscs;//指出对应的每个队列
+    //指出对应的每个队列,与设备队列保持一致
+	struct Qdisc		**qdiscs;
 };
 
 static int mq_offload(struct Qdisc *sch, enum tc_mq_command cmd)
@@ -29,12 +30,14 @@ static int mq_offload(struct Qdisc *sch, enum tc_mq_command cmd)
 		.handle = sch->handle,
 	};
 
+	/*dev必须开启hw-tc*/
 	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
 		return -EOPNOTSUPP;
 
 	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_MQ, &opt);
 }
 
+/*自硬件读取stats*/
 static int mq_offload_stats(struct Qdisc *sch)
 {
 	struct tc_mq_qopt_offload opt = {
@@ -73,9 +76,11 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 	struct Qdisc *qdisc;
 	unsigned int ntx;
 
+	/*mq必须为root*/
 	if (sch->parent != TC_H_ROOT)
 		return -EOPNOTSUPP;
 
+	/*设备是多队列*/
 	if (!netif_is_multiqueue(dev))
 		return -EOPNOTSUPP;
 
@@ -89,9 +94,9 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 	for (ntx = 0; ntx < dev->num_tx_queues; ntx++) {
 		//取dev的tx队列
 		dev_queue = netdev_get_tx_queue(dev, ntx);
-		//创建dev_queue对应的qdisc
+		//针对每个dev队列创建对应的qdisc
 		qdisc = qdisc_create_dflt(dev_queue, get_default_qdisc_ops(dev, ntx),
-					  TC_H_MAKE(TC_H_MAJ(sch->handle),
+					  TC_H_MAKE(TC_H_MAJ(sch->handle)/*父队列的handle*/,
 						    TC_H_MIN(ntx + 1)),
 					  extack);
 		if (!qdisc)
@@ -102,7 +107,7 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 
 	sch->flags |= TCQ_F_MQROOT;
 
-	//offload 多队列的创建
+	//offload 多队列的创建(不关心驱动是否实现）
 	mq_offload(sch, TC_MQ_CREATE);
 	return 0;
 }
@@ -129,6 +134,7 @@ static void mq_attach(struct Qdisc *sch)
 	priv->qdiscs = NULL;
 }
 
+/*各成员队列统计*/
 static int mq_dump(struct Qdisc *sch, struct sk_buff *skb)
 {
 	struct net_device *dev = qdisc_dev(sch);
@@ -145,9 +151,11 @@ static int mq_dump(struct Qdisc *sch, struct sk_buff *skb)
 	 * qdisc totals are added at end.
 	 */
 	for (ntx = 0; ntx < dev->num_tx_queues; ntx++) {
+	    /*取此队列对应的qdisc*/
 		qdisc = netdev_get_tx_queue(dev, ntx)->qdisc_sleeping;
 		spin_lock_bh(qdisc_lock(qdisc));
 
+		/*更新统计计数*/
 		gnet_stats_add_basic(&sch->bstats, qdisc->cpu_bstats,
 				     &qdisc->bstats, false);
 		gnet_stats_add_queue(&sch->qstats, qdisc->cpu_qstats,
@@ -157,6 +165,7 @@ static int mq_dump(struct Qdisc *sch, struct sk_buff *skb)
 		spin_unlock_bh(qdisc_lock(qdisc));
 	}
 
+	/*统计上hw统计计数*/
 	return mq_offload_stats(sch);
 }
 

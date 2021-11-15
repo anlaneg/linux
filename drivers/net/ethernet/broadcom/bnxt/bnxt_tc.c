@@ -2018,7 +2018,7 @@ int bnxt_init_tc(struct bnxt *bp)
 	int rc;
 
 	if (bp->hwrm_spec_code < 0x10803)
-	    	/*fw无法支持tc flower offload*/
+	    /*fw无法支持tc flower offload*/
 		return 0;
 
 	tc_info = kzalloc(sizeof(*tc_info), GFP_KERNEL);
