@@ -187,6 +187,7 @@ static const u8 tcp_conntracks[2][6][TCP_CONNTRACK_MAX] = {
 /*ack*/	   { sES, sIV, sES, sES, sCW, sCW, sTW, sTW, sCL, sIV },
 /*
  *	sNO -> sES	Assumed. 之前状态为None,当前收到源方向的ack（仅含ack)，认为已建立连接
+ *	sNO -> sES	Assumed.
  *	sSS -> sIV	ACK is invalid: we haven't seen a SYN/ACK yet.
  *	sS2 -> sIV
  *	sSR -> sES	Established state is reached.

@@ -2,7 +2,7 @@
 #ifndef _XT_CONNMARK_H
 #define _XT_CONNMARK_H
 
-#include <linux/netfilter/xt_connmark.h>
+#include <linux/types.h>
 
 /* Copyright (C) 2002,2004 MARA Systems AB <https://www.marasystems.com>
  * by Henrik Nordstrom <hno@marasystems.com>

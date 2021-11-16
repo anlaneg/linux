@@ -234,8 +234,10 @@ static inline void idr_preload_end(void)
  * IDA - ID Allocator, use when translation from id to pointer isn't necessary.
  */
 #define IDA_CHUNK_SIZE		128	/* 128 bytes per chunk */
-#define IDA_BITMAP_LONGS	(IDA_CHUNK_SIZE / sizeof(long)) //128字节共计多少long类型
-#define IDA_BITMAP_BITS 	(IDA_BITMAP_LONGS * sizeof(long) * 8) //一个chunk可用的bits数
+//128字节共计多少long类型
+#define IDA_BITMAP_LONGS	(IDA_CHUNK_SIZE / sizeof(long))
+//一个chunk可用的bits数
+#define IDA_BITMAP_BITS 	(IDA_BITMAP_LONGS * sizeof(long) * 8)
 
 //定义一个chunk的bitmap
 struct ida_bitmap {

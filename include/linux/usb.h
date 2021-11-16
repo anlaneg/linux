@@ -949,10 +949,12 @@ static inline int usb_make_path(struct usb_device *dev, char *buf, size_t size)
  * specific device.
  */
 #define USB_DEVICE(vend, prod) \
-    /*指明匹配vendor与product id*/\
+	/*指明匹配vendor与product id*/\
 	.match_flags = USB_DEVICE_ID_MATCH_DEVICE, \
-	.idVendor = (vend), /*vendor*/\
-	.idProduct = (prod) /*产品id*/
+	/*vendor*/\
+	.idVendor = (vend), \
+	/*产品id*/\
+	.idProduct = (prod)
 /**
  * USB_DEVICE_VER - describe a specific usb device with a version range
  * @vend: the 16 bit USB Vendor ID

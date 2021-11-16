@@ -218,7 +218,8 @@
  */
 
 /* Don't change this without changing skb_csum_unnecessary! */
-#define CHECKSUM_NONE		0 //checksum没有被校验（设备没有做checksum校验）
+//checksum没有被校验（设备没有做checksum校验）
+#define CHECKSUM_NONE		0
 #define CHECKSUM_UNNECESSARY	1
 #define CHECKSUM_COMPLETE	2
 #define CHECKSUM_PARTIAL	3
@@ -1473,7 +1474,8 @@ static inline unsigned int skb_end_offset(const struct sk_buff *skb)
 }
 #endif
 
-/* Internal 取skb对应的shared_info结构*/
+/* Internal */
+/* 取skb对应的shared_info结构*/
 #define skb_shinfo(SKB)	((struct skb_shared_info *)(skb_end_pointer(SKB)))
 
 static inline struct skb_shared_hwtstamps *skb_hwtstamps(struct sk_buff *skb)

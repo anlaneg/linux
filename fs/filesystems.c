@@ -32,6 +32,7 @@
  */
 //记录系统所有filesystem，其为一个指针变量，每一个文件系统均有一个next
 //指针，通过next指针，我们可以将所有文件系统串成一个链
+
 static struct file_system_type *file_systems;
 static DEFINE_RWLOCK(file_systems_lock);
 
@@ -71,6 +72,7 @@ static struct file_system_type **find_filesystem(const char *name, unsigned len)
  *	unregistered.
  */
 //文件系统注册
+ 
 int register_filesystem(struct file_system_type * fs)
 {
 	int res = 0;

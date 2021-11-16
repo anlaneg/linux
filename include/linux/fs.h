@@ -1001,7 +1001,8 @@ struct file {
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
 	struct path		f_path;//文件路径
-	struct inode		*f_inode;	/* cached value */ //文件对应的inode
+	//文件对应的inode
+	struct inode		*f_inode;	/* cached value */
 	//kernel向用户态展示的是fd,当用户态通过系统调用传递fd到kernel后，kernel将其转换为file
 	//通过file_operations来实现各底层差异.
 	//file的f_op取值一般在file open时来源于inode->i_fop成员
@@ -1507,7 +1508,8 @@ struct super_block {
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
 	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
 	unsigned long		s_blocksize;//文件系统的块大小
-	loff_t			s_maxbytes;	/* Max file size */ //文件系统支持的最大文件大小
+	//文件系统支持的最大文件大小
+	loff_t			s_maxbytes;	/* Max file size */
 	struct file_system_type	*s_type;//属于那种文件系统
 	const struct super_operations	*s_op;//super block操作函数
 	const struct dquot_operations	*dq_op;
@@ -1639,7 +1641,8 @@ struct super_block {
 	/* s_inode_list_lock protects s_inodes */
 	//保护s_inodes链表
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
-	struct list_head	s_inodes;	/* all inodes */ /*链表，记录此文件系统中所有inode*/
+	/*链表，记录此文件系统中所有inode*/
+	struct list_head	s_inodes;	/* all inodes */
 
 	spinlock_t		s_inode_wblist_lock;
 	struct list_head	s_inodes_wb;	/* writeback inodes */

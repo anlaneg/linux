@@ -74,8 +74,10 @@ struct link_dead_args {
 };
 
 #define NBD_RT_TIMEDOUT			0
-#define NBD_RT_DISCONNECT_REQUESTED	1 //断开请求已发出
-#define NBD_RT_DISCONNECTED		2 //标记连接已断开
+//断开请求已发出
+#define NBD_RT_DISCONNECT_REQUESTED	1
+//标记连接已断开
+#define NBD_RT_DISCONNECTED		2
 #define NBD_RT_HAS_PID_FILE		3
 #define NBD_RT_HAS_CONFIG_REF		4
 #define NBD_RT_BOUND			5

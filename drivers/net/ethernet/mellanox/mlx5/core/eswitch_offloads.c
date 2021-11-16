@@ -1822,7 +1822,8 @@ static int esw_create_offloads_fdb_tables(struct mlx5_eswitch *esw)
 		esw->fdb_table.offloads.peer_miss_grp = g;
 	}
 
-	/* create miss group 创建miss group并加入默认的rules*/
+	/* 创建miss group并加入默认的rules*/
+	/* create miss group */
 	memset(flow_group_in, 0, inlen);
 	MLX5_SET(create_flow_group_in, flow_group_in, match_criteria_enable,
 		 MLX5_MATCH_OUTER_HEADERS);

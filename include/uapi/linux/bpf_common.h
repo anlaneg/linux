@@ -41,9 +41,12 @@
 #define		BPF_DIV		0x30
 #define		BPF_OR		0x40
 #define		BPF_AND		0x50
-#define		BPF_LSH		0x60 //左移
-#define		BPF_RSH		0x70 //右移
-#define		BPF_NEG		0x80 //取负数
+//左移
+#define		BPF_LSH		0x60
+//右移
+#define		BPF_RSH		0x70
+//取负数
+#define		BPF_NEG		0x80
 #define		BPF_MOD		0x90
 #define		BPF_XOR		0xa0
 /* eBPF     BPF_MOV     0xb0  mov reg to reg */
@@ -57,7 +60,8 @@
 #define		BPF_JSET        0x40
 #define BPF_SRC(code)   ((code) & 0x08)
 #define		BPF_K		0x00
-#define		BPF_X		0x08 //按顺序跳转下一条指令
+//按顺序跳转下一条指令
+#define		BPF_X		0x08
 
 #ifndef BPF_MAXINSNS
 #define BPF_MAXINSNS 4096

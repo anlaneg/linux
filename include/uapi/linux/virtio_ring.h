@@ -38,9 +38,11 @@
 #include <linux/virtio_types.h>
 
 /* This marks a buffer as continuing via the next field. */
-#define VRING_DESC_F_NEXT	1 //标记其next指向下一个描述符
+//标记其next指向下一个描述符
+#define VRING_DESC_F_NEXT	1
 /* This marks a buffer as write-only (otherwise read-only). */
-#define VRING_DESC_F_WRITE	2 //标记这个buffer可写（如为0，则表示可读）
+//标记这个buffer可写（如为0，则表示可读）
+#define VRING_DESC_F_WRITE	2
 /* This means the buffer contains a list of buffer descriptors. */
 #define VRING_DESC_F_INDIRECT	4
 
@@ -48,7 +50,8 @@
  * Mark a descriptor as available or used in packed ring.
  * Notice: they are defined as shifts instead of shifted values.
  */
-#define VRING_PACKED_DESC_F_AVAIL	7 /*标记此描述符有效*/
+/*标记此描述符有效*/
+#define VRING_PACKED_DESC_F_AVAIL	7
 #define VRING_PACKED_DESC_F_USED	15
 
 /* The Host uses this in used->flags to advise the Guest: don't kick me when

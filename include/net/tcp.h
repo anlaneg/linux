@@ -845,8 +845,10 @@ static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
  * If this grows please adjust skbuff.h:skbuff->cb[xxx] size appropriately.
  */
 struct tcp_skb_cb {
-	__u32		seq;		/* Starting sequence number	*/ //报文起始序列号
-	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/ //报文终止序列号
+	//报文起始序列号
+	__u32		seq;		/* Starting sequence number	*/
+	//报文终止序列号
+	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	union {
 		/* Note : tcp_tw_isn is used in input path only
 		 *	  (isn chosen by tcp_timewait_state_process())
@@ -860,7 +862,8 @@ struct tcp_skb_cb {
 			u16	tcp_gso_size;
 		};
 	};
-	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/ //tcp标记位
+	//tcp标记位
+	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/
 
 	__u8		sacked;		/* State flags for SACK.	*/
 #define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
@@ -878,7 +881,8 @@ struct tcp_skb_cb {
 			eor:1,		/* Is skb MSG_EOR marked? */
 			has_rxtstamp:1,	/* SKB has a RX timestamp	*/
 			unused:5;
-	__u32		ack_seq;	/* Sequence number ACK'd	*/ //报文包含的tcp确认序号
+	//报文包含的tcp确认序号
+	__u32		ack_seq;	/* Sequence number ACK'd	*/
 	union {
 		struct {
 #define TCPCB_DELIVERED_CE_MASK ((1U<<20) - 1)

@@ -525,7 +525,8 @@ struct tcf_chain {
 	struct tcf_proto __rcu *filter_chain;
 	struct list_head list;//用于串连至block->chain_list
 	struct tcf_block *block;//指向所属的block
-	u32 index; /* chain index 索引号*/
+	/*索引号*/
+	u32 index; /* chain index */
 	unsigned int refcnt;//此chain被引用总数
 	unsigned int action_refcnt;//action对此chain的引用数
 	bool explicitly_created;

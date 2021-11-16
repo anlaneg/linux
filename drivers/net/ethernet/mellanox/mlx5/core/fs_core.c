@@ -1457,8 +1457,7 @@ add_rule_fte(struct fs_fte *fte,
 
 	//如果fte不存在，则创建，否则更新
 	if (!(fte->status & FS_FTE_STATUS_EXISTING))
-		err = root->cmds->create_fte(root, ft/*flow表项所属的flow table*/,
-				fg/*flow表项所属的flow group*/, fte/*要加入的flow表项*/);
+		err = root->cmds->create_fte(root, ft/*flow表项所属的flow table*/, fg/*flow表项所属的flow group*/, fte/*要加入的flow表项*/);
 	else
 	    //fte已存在，指导fw执行更新
 		err = root->cmds->update_fte(root, ft, fg, modify_mask, fte);

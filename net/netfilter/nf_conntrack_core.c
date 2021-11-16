@@ -763,7 +763,7 @@ nf_ct_key_equal(struct nf_conntrack_tuple_hash *h,
 	 */
 	return nf_ct_tuple_equal(tuple, &h->tuple) &&
 	       nf_ct_zone_equal(ct, zone, NF_CT_DIRECTION(h)) &&
-	       nf_ct_is_confirmed(ct) && /*必须为confirmed的ct*/
+	       nf_ct_is_confirmed(ct) &&/*必须为confirmed的ct*/
 	       net_eq(net, nf_ct_net(ct));
 }
 

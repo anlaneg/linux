@@ -22,11 +22,14 @@ struct sockaddr_ll {
 };
 
 /* Packet types */
-
-#define PACKET_HOST		0		/* To us		*/ //目的mac为本设备mac地址
-#define PACKET_BROADCAST	1		/* To all		*/ //广播报文（mac区分）
-#define PACKET_MULTICAST	2		/* To group		*/ //组播报文
-#define PACKET_OTHERHOST	3		/* To someone else 	*/ //目的mac非本设备mac地址
+//目的mac为本设备mac地址
+#define PACKET_HOST		0		/* To us		*/
+//广播报文（mac区分）
+#define PACKET_BROADCAST	1		/* To all		*/
+//组播报文
+#define PACKET_MULTICAST	2		/* To group		*/
+//目的mac非本设备mac地址
+#define PACKET_OTHERHOST	3		/* To someone else 	*/
 #define PACKET_OUTGOING		4		/* Outgoing of any type */
 #define PACKET_LOOPBACK		5		/* MC/BRD frame looped back */
 #define PACKET_USER		6		/* To user space	*/

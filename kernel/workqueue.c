@@ -147,16 +147,20 @@ enum {
 
 struct worker_pool {
 	raw_spinlock_t		lock;		/* the pool lock */
-	int			cpu;		/* I: the associated cpu */ //pool关联的cpu
-	int			node;		/* I: the associated node ID */ //pool关联的cpu所属的numa节点
+	//pool关联的cpu
+	int			cpu;		/* I: the associated cpu */
+	//pool关联的cpu所属的numa节点
+	int			node;		/* I: the associated node ID */
 	int			id;		/* I: pool ID */
 	unsigned int		flags;		/* X: flags */
 
 	unsigned long		watchdog_ts;	/* L: watchdog timestamp */
 
-	struct list_head	worklist;	/* L: list of pending works */ //待执行工作队列（worker线程将此其上提取work)
+	//待执行工作队列（worker线程将此其上提取work)
+	struct list_head	worklist;	/* L: list of pending works */
 
-	int			nr_workers;	/* L: total number of workers */ //worker数目
+	//worker数目
+	int			nr_workers;	/* L: total number of workers */
 	int			nr_idle;	/* L: currently idle workers */
 
 	struct list_head	idle_list;	/* X: list of idle workers */
@@ -164,14 +168,17 @@ struct worker_pool {
 	struct timer_list	mayday_timer;	/* L: SOS timer for workers */
 
 	/* a workers is either on busy_hash or idle_list, or the manager */
-	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);//一个worker准备运行时将在此链上出现
+	//一个worker准备运行时将在此链上出现
+	DECLARE_HASHTABLE(busy_hash, BUSY_WORKER_HASH_ORDER);
 						/* L: hash of busy workers */
 
 	struct worker		*manager;	/* L: purely informational */
-	struct list_head	workers;	/* A: attached workers *///从属于本pool的workers
+	//从属于本pool的workers
+	struct list_head	workers;	/* A: attached workers */
 	struct completion	*detach_completion; /* all workers detached */
 
-	struct ida		worker_ida;	/* worker IDs for task name */ //为worker分配id
+	//为worker分配id
+	struct ida		worker_ida;	/* worker IDs for task name */
 
 	struct workqueue_attrs	*attrs;		/* I: worker attributes */
 	struct hlist_node	hash_node;	/* PL: unbound_pool_hash node */

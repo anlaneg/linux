@@ -89,8 +89,7 @@ static bool actions_may_change_flow(const struct nlattr *actions)
 }
 
 static void update_range(struct sw_flow_match *match,
-			 size_t offset/*feild在sw_flow_key的位置开始*/,
-			 size_t size/*feild占用的字节数*/, bool is_mask/*feild是否指mask*/)
+			 size_t offset/*feild在sw_flow_key的位置开始*/, size_t size/*feild占用的字节数*/, bool is_mask/*feild是否指mask*/)
 {
 	struct sw_flow_key_range *range;
 	//取字段起始位置，终止位置（向上向下取整）

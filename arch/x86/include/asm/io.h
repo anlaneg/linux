@@ -145,7 +145,8 @@ static inline phys_addr_t virt_to_phys(volatile void *address)
  *	this function
  */
 
-static inline void *phys_to_virt(phys_addr_t address) //将物理地址转换为kernel使用的虚拟地址
+//将物理地址转换为kernel使用的虚拟地址
+static inline void *phys_to_virt(phys_addr_t address)
 {
 	return __va(address);
 }

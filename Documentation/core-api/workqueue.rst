@@ -78,7 +78,7 @@ item pointing to that function and queue that work item on a
 workqueue.
 
 //worker threads负责执行work的函数，如果无work,则worker threads空闲，它受worker-pools管理
-Special purpose threads, called worker threads, execute the functions　　　　　
+Special purpose threads, called worker threads, execute the functions
 off of the queue, one after the other.  If no work is queued, the
 worker threads become idle.  These worker threads are managed in so
 called worker-pools.

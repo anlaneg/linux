@@ -12,19 +12,19 @@ Tips for patch submitters
 	5 people, preferably many more.
 
 2.	Try to release a few ALPHA test versions to the net. Announce
-them onto the kernel channel and await results. This is especially
-important for device drivers, because often that's the only way
-you will find things like the fact version 3 firmware needs
-a magic fix you didn't know about, or some clown changed the
-chips on a board and not its name.  (Don't laugh!  Look at the
-SMC etherpower for that.)
+	them onto the kernel channel and await results. This is especially
+	important for device drivers, because often that's the only way
+	you will find things like the fact version 3 firmware needs
+	a magic fix you didn't know about, or some clown changed the
+	chips on a board and not its name.  (Don't laugh!  Look at the
+	SMC etherpower for that.)
 
 3.	Make sure your changes compile correctly in multiple
-configurations. In particular check that changes work both as a
-module and built into the kernel.
+	configurations. In particular check that changes work both as a
+	module and built into the kernel.
 
 4.	When you are happy with a change make it generally available for
-testing and await feedback.
+	testing and await feedback.
 
 5.	Make a patch available to the relevant maintainer in the list. Use
 	``diff -u`` to make the patch easy to merge. Be prepared to get your
@@ -59,8 +59,8 @@ testing and await feedback.
 	Documentation/process/submitting-patches.rst.
 
 6.	Make sure you have the right to send any changes you make. If you
-do changes at work you may find your employer owns the patch
-not you.
+	do changes at work you may find your employer owns the patch
+	not you.
 
 7.	When sending security related changes or reports to a maintainer
 	please Cc: security@kernel.org, especially if the maintainer

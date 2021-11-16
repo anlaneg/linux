@@ -67,8 +67,10 @@ struct vmap_area {
 	unsigned long va_start;//起始地址
 	unsigned long va_end;//终止地址
 
-	struct rb_node rb_node;         /* address sorted rbtree */ /*用于挂载在树上*/
-	struct list_head list;          /* address sorted list */ /*用于挂载在链表上*/
+	/*用于挂载在树上*/
+	struct rb_node rb_node;         /* address sorted rbtree */
+	/*用于挂载在链表上*/
+	struct list_head list;          /* address sorted list */
 
 	/*
 	 * The following two variables can be packed, because
@@ -78,7 +80,8 @@ struct vmap_area {
 	 */
 	union {
 		unsigned long subtree_max_size; /* in "free" tree */
-		struct vm_struct *vm;           /* in "busy" tree */ //此段内存对应的vm_struct
+		//此段内存对应的vm_struct
+		struct vm_struct *vm;           /* in "busy" tree */
 	};
 };
 

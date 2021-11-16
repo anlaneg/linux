@@ -271,8 +271,7 @@ err_map_notify:
 static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
 			      struct virtqueue *vqs[],//虚队列数组
 			      vq_callback_t *callbacks[],//指出各队列对应的报文收包callback
-			      const char * const names[],//指出各队列名称
-				  const bool *ctx,//指出各队列是否有context
+			      const char * const names[],/*指出各队列名称*/ const bool *ctx,//指出各队列是否有context
 			      struct irq_affinity *desc)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);

@@ -11,7 +11,7 @@
  * struct {
  *	struct type##_replace repl;
  *	struct type##_standard entries[nhooks];
- *  struct type##_error term;
+ *	struct type##_error term;
  * } *tbl;
  * 例如看struct ipt_replace ,struct ipt_error结构
  */
@@ -26,7 +26,8 @@
 		struct type##_replace repl; \
 		struct type##_standard entries[]; \
 	} *tbl; \
-	struct type##_error *term;/*指向结构体中term成员*/\
+	/*指向结构体中term成员*/\
+	struct type##_error *term; \
 	/*我们将在最后一个待注册的hook位置后存放term,这里获得term成员的offset，考虑typeof(*term）成员对齐*/\
 	size_t term_offset = (offsetof(typeof(*tbl), entries[nhooks]) + \
 		__alignof__(*term) - 1) & ~(__alignof__(*term) - 1); \

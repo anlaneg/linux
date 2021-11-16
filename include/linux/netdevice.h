@@ -212,7 +212,8 @@ struct netdev_hw_addr {
 	struct rb_node		node;
 	unsigned char		addr[MAX_ADDR_LEN];//硬件地址
 	unsigned char		type;//硬件地址类型
-#define NETDEV_HW_ADDR_T_LAN		1 //以太网地址
+//以太网地址
+#define NETDEV_HW_ADDR_T_LAN		1
 #define NETDEV_HW_ADDR_T_SAN		2
 #define NETDEV_HW_ADDR_T_UNICAST	3
 #define NETDEV_HW_ADDR_T_MULTICAST	4
@@ -1676,7 +1677,8 @@ enum netdev_priv_flags {
 	IFF_DONT_BRIDGE			= 1<<6,
 	IFF_DISABLE_NETPOLL		= 1<<7,
 	IFF_MACVLAN_PORT		= 1<<8,
-	IFF_BRIDGE_PORT			= 1<<9, //标记设备从属于桥
+	//标记设备从属于桥
+	IFF_BRIDGE_PORT			= 1<<9,
 	IFF_OVS_DATAPATH		= 1<<10,
 	IFF_TX_SKB_SHARING		= 1<<11,
 	IFF_UNICAST_FLT			= 1<<12,

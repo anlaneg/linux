@@ -311,21 +311,26 @@ struct rcec_ea;
 /* The pci_dev structure describes PCI devices */
 struct pci_dev {
 	struct list_head bus_list;	/* Node in per-bus list */
-	struct pci_bus	*bus;		/* Bus this device is on */ //设备所属的BUS
+	//设备所属的BUS
+	struct pci_bus	*bus;		/* Bus this device is on */
 	struct pci_bus	*subordinate;	/* Bus this device bridges to */
 
 	void		*sysdata;	/* Hook for sys-specific extension */
 	struct proc_dir_entry *procent;	/* Device entry in /proc/bus/pci */
 	struct pci_slot	*slot;		/* Physical slot this device is in */
 
-	unsigned int	devfn;		/* Encoded device & function index */ //设备deviceid+function_id
+	//设备deviceid+function_id
+	unsigned int	devfn;		/* Encoded device & function index */
 	unsigned short	vendor;//设备vendor_id信息,来自pci配置空间
 	unsigned short	device;//设备类型编号(device_id)，来自pci配置空间
 	unsigned short	subsystem_vendor;
 	unsigned short	subsystem_device;
-	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */ //设备类型，例如nic
-	u8		revision;	/* PCI revision, low byte of class word */ //记录设备的版本号
-	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */ //pci设备的头标类型（不含multi标记）
+	//设备类型，例如nic
+	unsigned int	class;		/* 3 bytes: (base,sub,prog-if) */
+	//记录设备的版本号
+	u8		revision;	/* PCI revision, low byte of class word */
+	//pci设备的头标类型（不含multi标记）
+	u8		hdr_type;	/* PCI header type (`multi' flag masked out) */
 #ifdef CONFIG_PCIEAER
 	u16		aer_cap;	/* AER capability offset */
 	struct aer_stats *aer_stats;	/* AER stats for this device */
@@ -342,7 +347,8 @@ struct pci_dev {
 	u8		msix_cap;	/* MSI-X capability offset */
 	u8		pcie_mpss:3;	/* PCIe Max Payload Size Supported */
 	u8		rom_base_reg;	/* Config register controlling ROM */
-	u8		pin;		/* Interrupt pin this device uses */ //中断引脚
+	//中断引脚
+	u8		pin;		/* Interrupt pin this device uses */
 	u16		pcie_flags_reg;	/* Cached PCIe Capabilities Register */
 	unsigned long	*dma_alias_mask;/* Mask of enabled devfn aliases */
 
@@ -399,7 +405,8 @@ struct pci_dev {
 	pci_channel_state_t error_state;	/* Current connectivity state */
 	struct device	dev;			/* Generic device interface */
 
-	int		cfg_size;		/* Size of config space */ //设备的配置space大小
+	//设备的配置space大小
+	int		cfg_size;		/* Size of config space */
 
 	/*
 	 * Instead of touching interrupt line and base address registers
@@ -414,7 +421,8 @@ struct pci_dev {
 	unsigned int	io_window:1;		/* Bridge has I/O window */
 	unsigned int	pref_window:1;		/* Bridge has pref mem window */
 	unsigned int	pref_64_window:1;	/* Pref mem window is 64-bit */
-	unsigned int	multifunction:1;	/* Multi-function device *///标记是此设备是否为多功能设备
+	//标记是此设备是否为多功能设备
+	unsigned int	multifunction:1;	/* Multi-function device */
 
 	unsigned int	is_busmaster:1;		/* Is busmaster */
 	//不使用msi中断
@@ -488,7 +496,7 @@ struct pci_dev {
 #endif
 #ifdef CONFIG_PCI_ATS
 	union {
-	    //设备sriov信息
+		//设备sriov信息
 		struct pci_sriov	*sriov;		/* PF: SR-IOV info */
 		struct pci_dev		*physfn;	/* VF: related PF */
 	};

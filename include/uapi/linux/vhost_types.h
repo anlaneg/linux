@@ -98,7 +98,8 @@ struct vhost_msg_v2 {
 
 struct vhost_memory_region {
 	__u64 guest_phys_addr;//guest的物理地址
-	__u64 memory_size; /* bytes */ //地址大小
+	//地址大小
+	__u64 memory_size; /* bytes */
 	__u64 userspace_addr;
 	__u64 flags_padding; /* No flags are currently specified. */
 };

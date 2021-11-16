@@ -1656,7 +1656,7 @@ static int __init init_ext2_fs(void)
 		return err;
 
 	//注册ext2文件系统
-    err = register_filesystem(&ext2_fs_type);
+        err = register_filesystem(&ext2_fs_type);
 	if (err)
 		goto out;
 	return 0;

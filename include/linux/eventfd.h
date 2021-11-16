@@ -23,7 +23,8 @@
  * from eventfd, in order to leave a free define-space for
  * shared O_* flags.
  */
-#define EFD_SEMAPHORE (1 << 0) //一个事件触发一次
+//一个事件触发一次
+#define EFD_SEMAPHORE (1 << 0)
 #define EFD_CLOEXEC O_CLOEXEC
 #define EFD_NONBLOCK O_NONBLOCK
 

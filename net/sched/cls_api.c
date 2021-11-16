@@ -2156,6 +2156,8 @@ replay:
 	}
 
 	/*查找qdisc,注：这里要求此qdisc支持class分类，且支持block*/
+	/* Find head of filter chain. */
+
 	err = __tcf_qdisc_find(net, &q, &parent, t->tcm_ifindex, false, extack);
 	if (err)
 		return err;

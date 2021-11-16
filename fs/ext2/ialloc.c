@@ -455,7 +455,7 @@ struct inode *ext2_new_inode(struct inode *dir, umode_t mode,
 			group = find_group_dir(sb, dir);
 		else
 			group = find_group_orlov(sb, dir);
-	} else
+	} else 
 		//要创建的为文件，校验group　id
 		group = find_group_other(sb, dir);
 

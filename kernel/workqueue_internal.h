@@ -37,9 +37,11 @@ struct worker {
 	/* 64 bytes boundary on 64bit, 32 on 32bit */
 
 	struct task_struct	*task;		/* I: worker task */
-	struct worker_pool	*pool;		/* A: the associated pool */ //对应的pool
+	//对应的pool
+	struct worker_pool	*pool;		/* A: the associated pool */
 						/* L: for rescuers */
-	struct list_head	node;		/* A: anchored at pool->workers */ //用于加入到pool->workers
+	//用于加入到pool->workers
+	struct list_head	node;		/* A: anchored at pool->workers */
 						/* A: runs through worker->node */
 
 	unsigned long		last_active;	/* L: last active timestamp */

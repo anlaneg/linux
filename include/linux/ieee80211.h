@@ -40,9 +40,12 @@
 #define FCS_LEN 4
 
 //frame control  字段中各数据项掩码
-#define IEEE80211_FCTL_VERS		0x0003 //802.11版本对应的mask
-#define IEEE80211_FCTL_FTYPE		0x000c //报文type对应的mask
-#define IEEE80211_FCTL_STYPE		0x00f0 //报文subtype对应的mask
+//802.11版本对应的mask
+#define IEEE80211_FCTL_VERS		0x0003
+//报文type对应的mask
+#define IEEE80211_FCTL_FTYPE		0x000c
+//报文subtype对应的mask
+#define IEEE80211_FCTL_STYPE		0x00f0
 //ds = distribution system
 //from,to均是相对于AP来说的，from ds表示报文由station发送给ap
 //to ds表示报文由ap发送给station,from ds and to ds表示报文由ap转交给另一个ap
@@ -50,9 +53,11 @@
 #define IEEE80211_FCTL_TODS		0x0100
 #define IEEE80211_FCTL_FROMDS		0x0200
 #define IEEE80211_FCTL_MOREFRAGS	0x0400
-#define IEEE80211_FCTL_RETRY		0x0800 //表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
+//表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
+#define IEEE80211_FCTL_RETRY		0x0800
 #define IEEE80211_FCTL_PM		0x1000
-#define IEEE80211_FCTL_MOREDATA		0x2000 //more data标记
+//more data标记
+#define IEEE80211_FCTL_MOREDATA		0x2000
 #define IEEE80211_FCTL_PROTECTED	0x4000
 #define IEEE80211_FCTL_ORDER		0x8000
 #define IEEE80211_FCTL_CTL_EXT		0x0f00

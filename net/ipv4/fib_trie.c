@@ -120,8 +120,10 @@ typedef unsigned int t_key;//无符号整数被义定为t_key(32位）
 
 struct key_vector {
 	t_key key;//检测位取值（如果是叶子，则为目的网段）
-	unsigned char pos;		/* 2log(KEYLENGTH) bits needed */ //检测位起始位置（如果是叶子，则为0）
-	unsigned char bits;		/* 2log(KEYLENGTH) bits needed */ //检测位长度（如果是叶子，则为0）
+	//检测位起始位置（如果是叶子，则为0）
+	unsigned char pos;		/* 2log(KEYLENGTH) bits needed */
+	//检测位长度（如果是叶子，则为0）
+	unsigned char bits;		/* 2log(KEYLENGTH) bits needed */
 	unsigned char slen;//后缀长度（如果非叶子，则与pos相同）
 	union {
 		/* This list pointer if valid if (pos | bits) == 0 (LEAF) */

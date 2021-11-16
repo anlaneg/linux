@@ -2324,8 +2324,7 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		type = LAST_NORM;
 		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
-		if (name[0] == '.'/*名称首字符为'.'*/)
-		   switch (hashlen_len(hash_len)) {
+		if (name[0] == '.'/*名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
 			case 2:
 				//name长度为2，且name[1]='.',即本层名称为'..'
 				if (name[1] == '.') {

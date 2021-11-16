@@ -99,7 +99,7 @@ struct work_struct {
 	struct list_head entry;//用于将work串起来
 	work_func_t func;//work函数
 #ifdef CONFIG_LOCKDEP
-	struct lockdep_map lckdep_map;
+	struct lockdep_map lockdep_map;
 #endif
 };
 

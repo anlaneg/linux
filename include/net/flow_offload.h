@@ -213,7 +213,7 @@ struct flow_action_cookie *flow_action_cookie_create(void *data,
 void flow_action_cookie_destroy(struct flow_action_cookie *cookie);
 
 struct flow_action_entry {
-    //action 类别
+	//action 类别
 	enum flow_action_id		id;
 	enum flow_action_hw_stats	hw_stats;
 	action_destr			destructor;
@@ -233,9 +233,8 @@ struct flow_action_entry {
 			__be16		proto;//vlan对应的ethertype
 			u8		prio;//vlan优先级
 		} vlan;
-		struct {
-		    /* FLOW_ACTION_MANGLE */
-			/* FLOW_ACTION_ADD */
+		struct {				/* FLOW_ACTION_MANGLE */
+							/* FLOW_ACTION_ADD */
 		    //修改的字段所处头部类型
 			enum flow_action_mangle_base htype;
 			//自头部位置到字段的偏移量

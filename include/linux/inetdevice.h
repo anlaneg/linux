@@ -227,11 +227,13 @@ static __inline__ bool bad_mask(__be32 mask, __be32 addr)
 {
 	//传入的mask应为0x000000ff格式，按位取反后为0xffffff00
 	__u32 hmask;
-	if (addr & (mask = ~mask)) //取mask按位取反与addr与后，如果非0，则返回true
+	//取mask按位取反与addr与后，如果非0，则返回true
+	if (addr & (mask = ~mask))
 		//用于限制必须为非0网段
 		return true;
 	hmask = ntohl(mask);
-	if (hmask & (hmask+1))//用于限制hmask从高位开始，不能有'0'，必须是一组连续的'1'
+	//用于限制hmask从高位开始，不能有'0'，必须是一组连续的'1'
+	if (hmask & (hmask+1))
 		return true;
 	return false;
 }

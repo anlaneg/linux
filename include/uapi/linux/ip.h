@@ -119,7 +119,8 @@ struct ip_auth_hdr {
 //esp协议头
 struct ip_esp_hdr {
 	__be32 spi;//安全参数索引
-	__be32 seq_no;		/* Sequence number */ //序号
+	//序号
+	__be32 seq_no;		/* Sequence number */
 	//负载数据（可变长度，例如tcp payload）
 	__u8  enc_data[0];	/* Variable len but >=8. Mind the 64 bit alignment! */
 };

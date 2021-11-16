@@ -238,9 +238,11 @@ struct xt_table {
 
 	/* Set this to THIS_MODULE if you are a module, otherwise NULL */
 	struct module *me;
-
-	u_int8_t af;		/* address/protocol family */ //hook点对应的协议族
-	int priority;		/* hook order */ //hook点的优先级
+	
+	//hook点对应的协议族
+	u_int8_t af;		/* address/protocol family */
+	//hook点的优先级
+	int priority;		/* hook order */
 
 	/* A unique name... */
 	const char name[XT_TABLE_MAXNAMELEN];//表名称

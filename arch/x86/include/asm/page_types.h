@@ -8,8 +8,10 @@
 
 /* PAGE_SHIFT determines the page size */
 #define PAGE_SHIFT		12
-#define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT) //页大小
-#define PAGE_MASK		(~(PAGE_SIZE-1))          //页掩码
+/* 页大小 */
+#define PAGE_SIZE		(_AC(1,UL) << PAGE_SHIFT)
+/* 页掩码 */
+#define PAGE_MASK		(~(PAGE_SIZE-1))
 
 #define PMD_PAGE_SIZE		(_AC(1, UL) << PMD_SHIFT)
 #define PMD_PAGE_MASK		(~(PMD_PAGE_SIZE-1))

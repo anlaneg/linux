@@ -45,7 +45,8 @@ static struct vfio {
 	//保护iommu_drivers_list
 	struct mutex			iommu_drivers_lock;
 	struct list_head		group_list;//记录系统所有vfio_group
-	struct mutex			group_lock; /* locks group_list *///保护group_list
+	//保护group_list
+	struct mutex			group_lock; /* locks group_list */
 	struct ida			group_ida;
 	dev_t				group_devt;
 } vfio;//定义vfio变量

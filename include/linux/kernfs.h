@@ -141,9 +141,11 @@ struct kernfs_node {
 	const char		*name;//名称
 
 	struct rb_node		rb;//用于将节点加入红黑树中
-
-	const void		*ns;	/* namespace tag */ //从属于那个namespace
-	unsigned int		hash;	/* ns + name hash */ //节点对应的hashcode,用于查询
+	
+	//从属于那个namespace
+	const void		*ns;	/* namespace tag */
+	//节点对应的hashcode,用于查询
+	unsigned int		hash;	/* ns + name hash */
 	union {
 		struct kernfs_elem_dir		dir;//目录
 		struct kernfs_elem_symlink	symlink;//链接

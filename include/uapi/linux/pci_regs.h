@@ -26,8 +26,10 @@
  * configuration space.  PCI-X Mode 2 and PCIe devices have 4096 bytes of
  * configuration space.
  */
-#define PCI_CFG_SPACE_SIZE	256 //pci配置space大小
-#define PCI_CFG_SPACE_EXP_SIZE	4096 //pcie配置space大小
+//pci配置space大小
+#define PCI_CFG_SPACE_SIZE	256
+//pcie配置space大小
+#define PCI_CFG_SPACE_EXP_SIZE	4096
 
 /*
  * pci配置空间格式（注：这张图的右侧是低位，故第一行3,2,1,0,第二行是7,6,5,4)
@@ -101,9 +103,12 @@
  */
 #define PCI_STD_HEADER_SIZEOF	64
 #define PCI_STD_NUM_BARS	6	/* Number of standard BARs */
-#define PCI_VENDOR_ID		0x00	/* 16 bits */ //vendor寄存器偏移量0,长16bits
-#define PCI_DEVICE_ID		0x02	/* 16 bits */ //device寄存器偏移量2byte,长16bits
-#define PCI_COMMAND		0x04	/* 16 bits */ //command 寄存器偏移量4byte,长16bits
+//vendor寄存器偏移量0,长16bits
+#define PCI_VENDOR_ID		0x00	/* 16 bits */
+//device寄存器偏移量2byte,长16bits
+#define PCI_DEVICE_ID		0x02	/* 16 bits */
+//command 寄存器偏移量4byte,长16bits
+#define PCI_COMMAND		0x04	/* 16 bits */
 #define  PCI_COMMAND_IO		0x1	/* Enable response in I/O space */
 #define  PCI_COMMAND_MEMORY	0x2	/* Enable response in Memory space */
 #define  PCI_COMMAND_MASTER	0x4	/* Enable bus mastering */
@@ -117,7 +122,8 @@
 //command标记，标记是否禁止中断
 #define  PCI_COMMAND_INTX_DISABLE 0x400 /* INTx Emulation Disable */
 
-#define PCI_STATUS		0x06	/* 16 bits *///status寄存器偏移量为6byte,长16bits
+//status寄存器偏移量为6byte,长16bits
+#define PCI_STATUS		0x06	/* 16 bits */
 #define  PCI_STATUS_IMM_READY	0x01	/* Immediate Readiness */
 #define  PCI_STATUS_INTERRUPT	0x08	/* Interrupt status */
 #define  PCI_STATUS_CAP_LIST	0x10	/* Support Capability List */
@@ -136,19 +142,25 @@
 #define  PCI_STATUS_DETECTED_PARITY	0x8000 /* Set on parity error */
 
 #define PCI_CLASS_REVISION	0x08	/* High 24 bits are class, low 8 revision */
-#define PCI_REVISION_ID		0x08	/* Revision ID */ //revision_id寄存器偏移量８byte,长8位
-#define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */ //class寄存器偏移量9byte,长24bits
+//revision_id寄存器偏移量８byte,长8位
+#define PCI_REVISION_ID		0x08	/* Revision ID */
+//class寄存器偏移量9byte,长24bits
+#define PCI_CLASS_PROG		0x09	/* Reg. Level Programming Interface */
 #define PCI_CLASS_DEVICE	0x0a	/* Device class */
 
-#define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */ //cacheline寄存器偏移量0xc,长8bits
-#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */ //timer寄存器偏移
-#define PCI_HEADER_TYPE		0x0e	/* 8 bits */ //看配置space中header_type的偏移为0x0e
+//cacheline寄存器偏移量0xc,长8bits
+#define PCI_CACHE_LINE_SIZE	0x0c	/* 8 bits */
+//timer寄存器偏移
+#define PCI_LATENCY_TIMER	0x0d	/* 8 bits */
+//看配置space中header_type的偏移为0x0e
+#define PCI_HEADER_TYPE		0x0e	/* 8 bits */
 #define  PCI_HEADER_TYPE_MASK		0x7f
 #define  PCI_HEADER_TYPE_NORMAL		0
 #define  PCI_HEADER_TYPE_BRIDGE		1
 #define  PCI_HEADER_TYPE_CARDBUS	2
 
-#define PCI_BIST		0x0f	/* 8 bits */ //bist寄存器偏移
+//bist寄存器偏移
+#define PCI_BIST		0x0f	/* 8 bits */
 #define  PCI_BIST_CODE_MASK	0x0f	/* Return result */
 #define  PCI_BIST_START		0x40	/* 1 to start BIST, 2 secs or less */
 #define  PCI_BIST_CAPABLE	0x80	/* 1 if BIST capable */
@@ -192,7 +204,8 @@
 
 /* 0x35-0x3b are reserved */
 #define PCI_INTERRUPT_LINE	0x3c	/* 8 bits */
-#define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */ //中断引脚reg偏移量
+//中断引脚reg偏移量
+#define PCI_INTERRUPT_PIN	0x3d	/* 8 bits */
 #define PCI_MIN_GNT		0x3e	/* 8 bits */
 #define PCI_MAX_LAT		0x3f	/* 8 bits */
 
@@ -394,12 +407,15 @@
 /* MSI-X registers (in MSI-X capability) */
 #define PCI_MSIX_FLAGS		2	/* Message Control */
 //message control由以下三部分组成
-#define  PCI_MSIX_FLAGS_QSIZE	0x07FF	/* Table size */ //表项大小
+//表项大小
+#define  PCI_MSIX_FLAGS_QSIZE	0x07FF	/* Table size */
 //禁止此function的所有中断
 #define  PCI_MSIX_FLAGS_MASKALL	0x4000	/* Mask all vectors for this function */
-#define  PCI_MSIX_FLAGS_ENABLE	0x8000	/* MSI-X enable */ //msi-x是否enable
+//msi-x是否enable
+#define  PCI_MSIX_FLAGS_ENABLE	0x8000	/* MSI-X enable */
 #define PCI_MSIX_TABLE		4	/* Table offset */
-#define  PCI_MSIX_TABLE_BIR	0x00000007 /* BAR index */ //msi-x table 所在的BAR索引
+//msi-x table 所在的BAR索引
+#define  PCI_MSIX_TABLE_BIR	0x00000007 /* BAR index */
 //msi-x table在对应BAR中的offset
 #define  PCI_MSIX_TABLE_OFFSET	0xfffffff8 /* Offset into specified BAR */
 #define PCI_MSIX_PBA		8	/* Pending Bit Array offset */

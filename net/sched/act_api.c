@@ -1637,7 +1637,7 @@ static int tc_ctl_action(struct sk_buff *skb, struct nlmsghdr *n,
 		 * is zero) then just set this
 		 */
 		if (n->nlmsg_flags & NLM_F_REPLACE)
-		flags = TCA_ACT_FLAGS_REPLACE;
+			flags = TCA_ACT_FLAGS_REPLACE;
 		//处理tc new action
 		ret = tcf_action_add(net, tca[TCA_ACT_TAB], n, portid, flags,
 				     extack);

@@ -79,13 +79,15 @@
 #define PIPEFS_MAGIC            0x50495045
 #define PROC_SUPER_MAGIC	0x9fa0
 #define SOCKFS_MAGIC		0x534F434B
-#define SYSFS_MAGIC		0x62656572 //sysfs文件系统的magic
+//sysfs文件系统的magic
+#define SYSFS_MAGIC		0x62656572
 #define USBDEVICE_SUPER_MAGIC	0x9fa2
 #define MTD_INODE_FS_MAGIC      0x11307854
 #define ANON_INODE_FS_MAGIC	0x09041934
 #define BTRFS_TEST_MAGIC	0x73727279
 #define NSFS_MAGIC		0x6e736673
-#define BPF_FS_MAGIC		0xcafe4a11 //bpf文件系统magic
+//bpf文件系统magic
+#define BPF_FS_MAGIC		0xcafe4a11
 #define AAFS_MAGIC		0x5a3c69f0
 #define ZONEFS_MAGIC		0x5a4f4653
 

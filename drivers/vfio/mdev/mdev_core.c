@@ -275,8 +275,7 @@ static void mdev_device_release(struct device *dev)
 }
 
 //mdev设备创建
-int mdev_device_create(struct mdev_type *type/*mdev_type,用于指明mdev_parent*/,
-	 const guid_t *uuid/*device唯一标识*/)
+int mdev_device_create(struct mdev_type *type/*mdev_type,用于指明mdev_parent*/, const guid_t *uuid/*device唯一标识*/)
 {
 	int ret;
 	struct mdev_device *mdev, *tmp;
