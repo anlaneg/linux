@@ -1500,7 +1500,9 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 	clid = tcm->tcm_parent;
 	if (clid) {
 		if (clid != TC_H_ROOT) {
+		    /*指定非root队列*/
 			if (TC_H_MAJ(clid) != TC_H_MAJ(TC_H_INGRESS)) {
+			    /*通过handle在dev->qdisc中查询相应的队列*/
 				p = qdisc_lookup(dev, TC_H_MAJ(clid));
 				if (!p) {
 					NL_SET_ERR_MSG(extack, "Failed to find qdisc with specified classid");
@@ -1511,6 +1513,7 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
+		    /*指定的为root队列*/
 			q = dev->qdisc;
 		}
 		if (!q) {
@@ -1518,11 +1521,13 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 			return -ENOENT;
 		}
 
+		/*指定的handle必须与q实际的handle一致*/
 		if (tcm->tcm_handle && q->handle != tcm->tcm_handle) {
 			NL_SET_ERR_MSG(extack, "Invalid handle");
 			return -EINVAL;
 		}
 	} else {
+	    /*通过此handle查询qdisc失败*/
 		q = qdisc_lookup(dev, tcm->tcm_handle);
 		if (!q) {
 			NL_SET_ERR_MSG(extack, "Failed to find qdisc with specified handle");
@@ -1530,16 +1535,19 @@ static int tc_get_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 		}
 	}
 
+	/*队列type必须与实际的一致*/
 	if (tca[TCA_KIND] && nla_strcmp(tca[TCA_KIND], q->ops->id)) {
 		NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 		return -EINVAL;
 	}
 
 	if (n->nlmsg_type == RTM_DELQDISC) {
+	    /*删除队列时clsid必须不能为0*/
 		if (!clid) {
 			NL_SET_ERR_MSG(extack, "Classid cannot be zero");
 			return -EINVAL;
 		}
+		/*队列的handle为0时，拒绝删除*/
 		if (q->handle == 0) {
 			NL_SET_ERR_MSG(extack, "Cannot delete qdisc with handle of zero");
 			return -ENOENT;

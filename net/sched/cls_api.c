@@ -3547,11 +3547,12 @@ retry:
 		goto err_unlock;
 	}
 
+	/*触发驱动回调*/
 	ok_count = __tc_setup_cb_call(block, type, type_data, err_stop);
 	if (ok_count < 0)
 		goto err_unlock;
 
-	/*触发事件规则添加*/
+	/*规则已下发给硬件，没有出错，这里记录下此规则*/
 	if (tp->ops->hw_add)
 		tp->ops->hw_add(tp, type_data);
 	if (ok_count > 0)

@@ -497,6 +497,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 				struct cls_fl_filter *f, bool rtnl_held,
 				struct netlink_ext_ack *extack)
 {
+    /*取tp对应的block,注意，有可能为share block*/
 	struct tcf_block *block = tp->chain->block;
 	struct flow_cls_offload cls_flower = {};
 	bool skip_sw = tc_skip_sw(f->flags);
@@ -2403,6 +2404,7 @@ static void fl_hw_add(struct tcf_proto *tp, void *type_data)
 	struct cls_fl_head *head = fl_head_dereference(tp);
 
 	spin_lock(&tp->lock);
+	/*将规则加入到列表*/
 	list_add(&f->hw_list, &head->hw_filters);
 	spin_unlock(&tp->lock);
 }

@@ -2226,7 +2226,7 @@ struct net_device {
 	unsigned int		num_tx_queues;
 	//有效的tx队列数
 	unsigned int		real_num_tx_queues;
-	//根排队队列
+	//根排队队列（root qdisc)
 	struct Qdisc		*qdisc;
 	//tx队列大小
 	unsigned int		tx_queue_len;

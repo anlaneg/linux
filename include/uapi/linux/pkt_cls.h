@@ -260,7 +260,7 @@ struct tc_u32_key {
 	__be32		mask;/*提取的值，关心哪些bit*/
 	__be32		val;/*匹配后的值*/
 	int		off;/*从哪个位置开始提取*/
-	int		offmask;
+	int		offmask;/*offset对应的mask*/
 };
 
 struct tc_u32_sel {
