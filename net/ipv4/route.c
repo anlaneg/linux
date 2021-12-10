@@ -1913,14 +1913,17 @@ out:
 	hash_keys->addrs.v4addrs.dst = key_iph->daddr;
 }
 
+/*利用外层字段计算hash*/
 static u32 fib_multipath_custom_hash_outer(const struct net *net,
 					   const struct sk_buff *skb,
 					   bool *p_has_inner)
 {
+    /*获知需要哪些字段来计算hash*/
 	u32 hash_fields = net->ipv4.sysctl_fib_multipath_hash_fields;
 	struct flow_keys keys, hash_keys;
 
 	if (!(hash_fields & FIB_MULTIPATH_HASH_FIELD_OUTER_MASK))
+	    /*没有指定字段，返回0*/
 		return 0;
 
 	memset(&hash_keys, 0, sizeof(hash_keys));
@@ -1942,6 +1945,7 @@ static u32 fib_multipath_custom_hash_outer(const struct net *net,
 	return flow_hash_from_keys(&hash_keys);
 }
 
+/*利用内层字段计算hash*/
 static u32 fib_multipath_custom_hash_inner(const struct net *net,
 					   const struct sk_buff *skb,
 					   bool has_inner)
@@ -1957,6 +1961,7 @@ static u32 fib_multipath_custom_hash_inner(const struct net *net,
 		return 0;
 
 	if (!(hash_fields & FIB_MULTIPATH_HASH_FIELD_INNER_MASK))
+	    /*如果没有配置内层字段mask,则返回零*/
 		return 0;
 
 	memset(&hash_keys, 0, sizeof(hash_keys));
@@ -1965,6 +1970,7 @@ static u32 fib_multipath_custom_hash_inner(const struct net *net,
 	if (!(keys.control.flags & FLOW_DIS_ENCAPSULATION))
 		return 0;
 
+	/*按匹配字段进行hash*/
 	if (keys.control.addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {
 		hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		if (hash_fields & FIB_MULTIPATH_HASH_FIELD_INNER_SRC_IP)
@@ -1991,13 +1997,16 @@ static u32 fib_multipath_custom_hash_inner(const struct net *net,
 	return flow_hash_from_keys(&hash_keys);
 }
 
+/*按照用户配置的字段进行hash*/
 static u32 fib_multipath_custom_hash_skb(const struct net *net,
 					 const struct sk_buff *skb)
 {
 	u32 mhash, mhash_inner;
 	bool has_inner = true;
 
+	/*外层字段hash*/
 	mhash = fib_multipath_custom_hash_outer(net, skb, &has_inner);
+	/*内层字段hash*/
 	mhash_inner = fib_multipath_custom_hash_inner(net, skb, has_inner);
 
 	return jhash_2words(mhash, mhash_inner, 0);
@@ -2038,7 +2047,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 
 	/*依据多路径hash策略，进行填充*/
 	switch (net->ipv4.sysctl_fib_multipath_hash_policy) {
-	case 0:
+	case 0:/*使用srcip,dstip进行hash*/
 		memset(&hash_keys, 0, sizeof(hash_keys));
 		hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 		if (skb) {
@@ -2050,9 +2059,10 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 		}
 		mhash = flow_hash_from_keys(&hash_keys);
 		break;
-	case 1:
+	case 1:/*使用srcip,dstip,srcport,dstport,protocol五元组进行hash*/
 		/* skb is currently provided only when forwarding */
 		if (skb) {
+		    /*指明遇encap停止,不解析内层*/
 			unsigned int flag = FLOW_DISSECTOR_F_STOP_AT_ENCAP;
 			struct flow_keys keys;
 
@@ -2062,7 +2072,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 
 			memset(&hash_keys, 0, sizeof(hash_keys));
 
-			/*有报文，从报文中提取五元组*/
+			/*有报文，未提供flkeys,从报文中提取五元组*/
 			if (!flkeys) {
 				skb_flow_dissect_flow_keys(skb, &keys, flag);
 				flkeys = &keys;
@@ -2075,6 +2085,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 			hash_keys.ports.dst = flkeys->ports.dst;
 			hash_keys.basic.ip_proto = flkeys->basic.ip_proto;
 		} else {
+		    /*未提供skb,以fl4中数据为准*/
 			memset(&hash_keys, 0, sizeof(hash_keys));
 			hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
 			hash_keys.addrs.v4addrs.src = fl4->saddr;
@@ -2085,13 +2096,13 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 		}
 		mhash = flow_hash_from_keys(&hash_keys);
 		break;
-	case 2:
+	case 2:/*使用最内层srcip,dstip*/
 		memset(&hash_keys, 0, sizeof(hash_keys));
 		/* skb is currently provided only when forwarding */
 		if (skb) {
 			struct flow_keys keys;
 
-			skb_flow_dissect_flow_keys(skb, &keys, 0);
+			skb_flow_dissect_flow_keys(skb, &keys, 0/*容许一直解析到最内层*/);
 			/* Inner can be v4 or v6 */
 			if (keys.control.addr_type == FLOW_DISSECTOR_KEY_IPV4_ADDRS) {
 				hash_keys.control.addr_type = FLOW_DISSECTOR_KEY_IPV4_ADDRS;
@@ -2116,7 +2127,7 @@ int fib_multipath_hash(const struct net *net, const struct flowi4 *fl4,
 		}
 		mhash = flow_hash_from_keys(&hash_keys);
 		break;
-	case 3:
+	case 3:/*使用用户定义的字段进行hash*/
 		if (skb)
 			mhash = fib_multipath_custom_hash_skb(net, skb);
 		else
@@ -2138,8 +2149,9 @@ static int ip_mkroute_input(struct sk_buff *skb,
 			    struct flow_keys *hkeys)
 {
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
-	//等价路由处理,存在多个下一跳，选一个下一跳
+	//等价路由处理,存在多个下一跳，按sysctl配置选一个下一跳
 	if (res->fi && fib_info_num_path(res->fi) > 1) {
+	    /*获得hashcode*/
 		int h = fib_multipath_hash(res->fi->fib_net, NULL, skb, hkeys);
 
 		fib_select_multipath(res, h);

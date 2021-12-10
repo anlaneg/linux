@@ -393,6 +393,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	if (!av)
 		return NULL;
 
+	/*初始化skb*/
 	skb = rxe_init_packet(rxe, av, paylen, pkt);
 	if (unlikely(!skb))
 		return NULL;

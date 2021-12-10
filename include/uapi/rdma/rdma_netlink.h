@@ -8,6 +8,7 @@ enum {
 	RDMA_NL_IWCM = 2,
 	RDMA_NL_RSVD,
 	RDMA_NL_LS,	/* RDMA Local Services */
+	/*设备相关的消息类型*/
 	RDMA_NL_NLDEV,	/* RDMA device interface */
 	RDMA_NL_NUM_CLIENTS
 };
@@ -18,6 +19,7 @@ enum {
 	RDMA_NL_NUM_GROUPS
 };
 
+/*rdma消息当前在type字段由两部分组成，一部分是大类占6bit,另一部分为op占10bit*/
 #define RDMA_NL_GET_CLIENT(type) ((type & (((1 << 6) - 1) << 10)) >> 10)
 #define RDMA_NL_GET_OP(type) (type & ((1 << 10) - 1))
 #define RDMA_NL_GET_TYPE(client, op) ((client << 10) + op)

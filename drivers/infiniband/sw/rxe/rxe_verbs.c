@@ -12,19 +12,22 @@
 #include "rxe_queue.h"
 #include "rxe_hw_counters.h"
 
+/*查询ib设备属性*/
 static int rxe_query_device(struct ib_device *dev,
-			    struct ib_device_attr *attr,
+			    struct ib_device_attr *attr/*出参，设备属性*/,
 			    struct ib_udata *uhw)
 {
 	struct rxe_dev *rxe = to_rdev(dev);
 
 	if (uhw->inlen || uhw->outlen)
+	    /*此接口要求两者为0*/
 		return -EINVAL;
 
 	*attr = rxe->attr;
 	return 0;
 }
 
+/*查询指定port的属性*/
 static int rxe_query_port(struct ib_device *dev,
 			  u32 port_num, struct ib_port_attr *attr)
 {
@@ -32,15 +35,18 @@ static int rxe_query_port(struct ib_device *dev,
 	int rc;
 
 	/* *attr being zeroed by the caller, avoid zeroing it here */
+	/*填充port属性*/
 	*attr = rxe->port.attr;
 
 	mutex_lock(&rxe->usdev_lock);
+	/*取port的speed,width*/
 	rc = ib_get_eth_speed(dev, port_num, &attr->active_speed,
 			      &attr->active_width);
 
 	if (attr->state == IB_PORT_ACTIVE)
 		attr->phys_state = IB_PORT_PHYS_STATE_LINK_UP;
 	else if (dev_get_flags(rxe->ndev) & IFF_UP)
+	    /*如果底层网络设备为up,则变更为polling*/
 		attr->phys_state = IB_PORT_PHYS_STATE_POLLING;
 	else
 		attr->phys_state = IB_PORT_PHYS_STATE_DISABLED;
@@ -50,6 +56,7 @@ static int rxe_query_port(struct ib_device *dev,
 	return rc;
 }
 
+/*rxe获取index与pkey*/
 static int rxe_query_pkey(struct ib_device *device,
 			  u32 port_num, u16 index, u16 *pkey)
 {
@@ -103,6 +110,7 @@ static enum rdma_link_layer rxe_get_link_layer(struct ib_device *dev,
 	return IB_LINK_LAYER_ETHERNET;
 }
 
+/*分配ucontext空间*/
 static int rxe_alloc_ucontext(struct ib_ucontext *ibuc, struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibuc->device);
@@ -126,10 +134,12 @@ static int rxe_port_immutable(struct ib_device *dev, u32 port_num,
 
 	immutable->core_cap_flags = RDMA_CORE_PORT_IBA_ROCE_UDP_ENCAP;
 
+	/*查询port属性*/
 	err = ib_query_port(dev, port_num, &attr);
 	if (err)
 		return err;
 
+	/*利用port属性填充此值，这些值是？？？？*/
 	immutable->pkey_tbl_len = attr.pkey_tbl_len;
 	immutable->gid_tbl_len = attr.gid_tbl_len;
 	immutable->max_mad_size = IB_MGMT_MAD_SIZE;
@@ -916,6 +926,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
 	struct rxe_pd *pd = to_rpd(ibpd);
 	struct rxe_mr *mr;
 
+	/*申请一个rxe_mr*/
 	mr = rxe_alloc(&rxe->mr_pool);
 	if (!mr) {
 		err = -ENOMEM;
@@ -1117,7 +1128,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	INIT_RDMA_OBJ_SIZE(ib_mw, rxe_mw, ibmw),
 };
 
-int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
+int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name/*ib设备名称*/)
 {
 	int err;
 	struct ib_device *dev = &rxe->ib_dev;
@@ -1125,6 +1136,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
 	strscpy(dev->node_desc, "rxe", sizeof(dev->node_desc));
 
 	dev->node_type = RDMA_NODE_IB_CA;
+	/*支持一个port*/
 	dev->phys_port_cnt = 1;
 	dev->num_comp_vectors = num_possible_cpus();
 	dev->local_dma_lkey = 0;
@@ -1134,6 +1146,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
 	dev->uverbs_cmd_mask |= BIT_ULL(IB_USER_VERBS_CMD_POST_SEND) |
 				BIT_ULL(IB_USER_VERBS_CMD_REQ_NOTIFY_CQ);
 
+	/*设置ib设备操作集*/
 	ib_set_device_ops(dev, &rxe_dev_ops);
 	err = ib_device_set_netdev(&rxe->ib_dev, rxe->ndev, 1);
 	if (err)
@@ -1143,6 +1156,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name)
 	if (err)
 		return err;
 
+	/*注册此ib设备*/
 	err = ib_register_device(dev, ibdev_name, NULL);
 	if (err)
 		pr_warn("%s failed with error %d\n", __func__, err);

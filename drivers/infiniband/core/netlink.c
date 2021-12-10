@@ -48,7 +48,7 @@ static struct {
 	 * unregistration.
 	 */
 	struct rw_semaphore sem;
-} rdma_nl_types[RDMA_NL_NUM_CLIENTS];
+} rdma_nl_types[RDMA_NL_NUM_CLIENTS];/*每类消息一个cb_table*/
 
 bool rdma_nl_chk_listeners(unsigned int group)
 {
@@ -79,7 +79,7 @@ static bool is_nl_msg_valid(unsigned int type, unsigned int op)
 }
 
 static const struct rdma_nl_cbs *
-get_cb_table(const struct sk_buff *skb, unsigned int type, unsigned int op)
+get_cb_table(const struct sk_buff *skb, unsigned int type/*消息类型*/, unsigned int op)
 {
 	const struct rdma_nl_cbs *cb_table;
 
@@ -88,8 +88,10 @@ get_cb_table(const struct sk_buff *skb, unsigned int type, unsigned int op)
 	 * non init_net net namespace.
 	 */
 	if (sock_net(skb->sk) != &init_net && type != RDMA_NL_NLDEV)
+	    /*仅支持init_net网络空间及rdma interface接口类型消息，其它返回NULL*/
 		return NULL;
 
+	/*取此类型消息的回调表*/
 	cb_table = READ_ONCE(rdma_nl_types[type].cb_table);
 	if (!cb_table) {
 		/*
@@ -98,6 +100,7 @@ get_cb_table(const struct sk_buff *skb, unsigned int type, unsigned int op)
 		 */
 		up_read(&rdma_nl_types[type].sem);
 
+		/*没有找到回调，要求加载模块后重试*/
 		request_module("rdma-netlink-subsys-%u", type);
 
 		down_read(&rdma_nl_types[type].sem);
@@ -153,20 +156,25 @@ static int rdma_nl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 			   struct netlink_ext_ack *extack)
 {
 	int type = nlh->nlmsg_type;
+	/*取rdma消息大项*/
 	unsigned int index = RDMA_NL_GET_CLIENT(type);
+	/*取rdma操作命令*/
 	unsigned int op = RDMA_NL_GET_OP(type);
 	const struct rdma_nl_cbs *cb_table;
 	int err = -EINVAL;
 
+	/*index,op有效性检查*/
 	if (!is_nl_msg_valid(index, op))
 		return -EINVAL;
 
 	down_read(&rdma_nl_types[index].sem);
+
 	//由index找到cb_table
 	cb_table = get_cb_table(skb, index, op);
 	if (!cb_table)
 		goto done;
 
+	/*权限检查*/
 	if ((cb_table[op].flags & RDMA_NL_ADMIN_PERM) &&
 	    !netlink_capable(skb, CAP_NET_ADMIN)) {
 		err = -EPERM;
@@ -184,6 +192,7 @@ static int rdma_nl_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 	/* FIXME: Convert IWCM to properly handle doit callbacks */
 	if ((nlh->nlmsg_flags & NLM_F_DUMP) || index == RDMA_NL_IWCM) {
+	    /*针对dump标记，执行netlink dump回调*/
 		struct netlink_dump_control c = {
 			.dump = cb_table[op].dump,
 		};
@@ -238,6 +247,7 @@ static int rdma_nl_rcv_skb(struct sk_buff *skb, int (*cb)(struct sk_buff *,
 		if (nlh->nlmsg_type < NLMSG_MIN_TYPE)
 			goto ack;
 
+		/*处理netlink请求*/
 		err = cb(skb, nlh, &extack);
 		if (err == -EINTR)
 			goto skip;

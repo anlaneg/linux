@@ -692,6 +692,7 @@ int ib_uverbs_dealloc_xrcd(struct ib_uobject *uobject, struct ib_xrcd *xrcd,
 	return 0;
 }
 
+/*注册memory region*/
 static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_reg_mr_resp resp = {};
@@ -723,7 +724,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 		goto err_free;
 	}
 
-	mr = pd->device->ops.reg_user_mr(pd, cmd.start, cmd.length, cmd.hca_va,
+	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va,
 					 cmd.access_flags,
 					 &attrs->driver_udata);
 	if (IS_ERR(mr)) {
@@ -972,6 +973,7 @@ static int ib_uverbs_dealloc_mw(struct uverbs_attr_bundle *attrs)
 	return uobj_perform_destroy(UVERBS_OBJECT_MW, cmd.mw_handle, attrs);
 }
 
+/*create complete channnel,获得对应的fd*/
 static int ib_uverbs_create_comp_channel(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_create_comp_channel	   cmd;
@@ -1048,6 +1050,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, NULL);
 
+	/*调用ib设备对应的create_cq*/
 	ret = ib_dev->ops.create_cq(cq, &attr, &attrs->driver_udata);
 	if (ret)
 		goto err_free;
@@ -1075,6 +1078,7 @@ err:
 	return ret;
 }
 
+/*uverbs 创建cq*/
 static int ib_uverbs_create_cq(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_create_cq      cmd;
@@ -3714,6 +3718,7 @@ static int ib_uverbs_ex_modify_cq(struct uverbs_attr_bundle *attrs)
 #define UAPI_DEF_WRITE_I_EX(req, req_last_member)                              \
 	.write.req_size = offsetofend(req, req_last_member)
 
+/*write 接口*/
 const struct uapi_definition uverbs_def_write_intf[] = {
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_AH,
@@ -3785,6 +3790,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_DEVICE,
+		/*通过write方式执行get_context函数*/
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_GET_CONTEXT,
 				     ib_uverbs_get_context,
 				     UAPI_DEF_WRITE_UDATA_IO(

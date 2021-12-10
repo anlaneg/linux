@@ -211,6 +211,7 @@ struct rxe_qp {
 	struct ib_qp		ibqp;
 	struct rxe_pool_entry	pelem;
 	struct ib_qp_attr	attr;
+	/*标记qp是否有效*/
 	unsigned int		valid;
 	unsigned int		mtu;
 	bool			is_user;
@@ -225,6 +226,7 @@ struct rxe_qp {
 	struct rxe_sq		sq;
 	struct rxe_rq		rq;
 
+	/*对应的udp socket*/
 	struct socket		*sk;
 	u32			dst_cookie;
 	u16			src_port;
@@ -236,7 +238,9 @@ struct rxe_qp {
 	struct list_head	grp_list;
 	spinlock_t		grp_lock; /* guard grp_list */
 
+	/*rxe_resp_queue_pkt函数负责向其中添加skb*/
 	struct sk_buff_head	req_pkts;
+	/*rxe_comp_queue_pkt函数负责向其中添加skb*/
 	struct sk_buff_head	resp_pkts;
 
 	struct rxe_req_info	req;
@@ -373,6 +377,7 @@ struct rxe_mc_elem {
 };
 
 struct rxe_port {
+    /*port属性*/
 	struct ib_port_attr	attr;
 	__be64			port_guid;
 	__be64			subnet_prefix;
@@ -385,11 +390,13 @@ struct rxe_port {
 
 struct rxe_dev {
 	struct ib_device	ib_dev;
+	/*设备属性*/
 	struct ib_device_attr	attr;
 	int			max_ucontext;
 	int			max_inline_data;
 	struct mutex	usdev_lock;
 
+	/*所属的netdev设备*/
 	struct net_device	*ndev;
 
 	int			xmit_errors;

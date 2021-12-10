@@ -153,13 +153,14 @@ struct fib_info {
 #define fib_window fib_metrics->metrics[RTAX_WINDOW-1]
 #define fib_rtt fib_metrics->metrics[RTAX_RTT-1]
 #define fib_advmss fib_metrics->metrics[RTAX_ADVMSS-1]
-	int			fib_nhs;//有多少个next hop
+	/*有多少个next hop，即fib_nh数组大小*/
+	int			fib_nhs;
 	bool			fib_nh_is_v6;
 	bool			nh_updated;
 	struct nexthop		*nh;
 	struct rcu_head		rcu;
 	//取第一个next hop做为出接口设备
-	struct fib_nh		fib_nh[];//含多个next hop
+	struct fib_nh		fib_nh[];/*含多个next hop*/
 };
 
 

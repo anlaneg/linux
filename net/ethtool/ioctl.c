@@ -466,6 +466,7 @@ int __ethtool_get_link_ksettings(struct net_device *dev,
 {
 	ASSERT_RTNL();
 
+	/*网络设备必须存在此回调，否则返回不支持*/
 	if (!dev->ethtool_ops->get_link_ksettings)
 		return -EOPNOTSUPP;
 

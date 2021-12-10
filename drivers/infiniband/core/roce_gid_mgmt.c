@@ -69,6 +69,7 @@ struct netdev_event_work {
 	struct netdev_event_work_cmd	cmds[ROCE_NETDEV_CALLBACK_SZ];
 };
 
+/*检查支持哪种版本的roce封装*/
 static const struct {
 	bool (*is_supported)(const struct ib_device *device, u32 port_num);
 	enum ib_gid_type gid_type;
@@ -79,14 +80,17 @@ static const struct {
 
 #define CAP_TO_GID_TABLE_SIZE	ARRAY_SIZE(PORT_CAP_TO_GID_TYPE)
 
+/*检查此port支持哪些rdma类型*/
 unsigned long roce_gid_type_mask_support(struct ib_device *ib_dev, u32 port)
 {
 	int i;
 	unsigned int ret_flags = 0;
 
 	if (!rdma_protocol_roce(ib_dev, port))
+	    /*不支持roce的情况*/
 		return 1UL << IB_GID_TYPE_IB;
 
+	/*检查此设备支持哪种版本的roce封装*/
 	for (i = 0; i < CAP_TO_GID_TABLE_SIZE; i++)
 		if (PORT_CAP_TO_GID_TYPE[i].is_supported(ib_dev, port))
 			ret_flags |= 1UL << PORT_CAP_TO_GID_TYPE[i].gid_type;
@@ -205,6 +209,7 @@ is_ndev_for_default_gid_filter(struct ib_device *ib_dev, u32 port,
 	bool res;
 
 	if (!rdma_ndev)
+	    /*为空时返回false*/
 		return false;
 
 	rcu_read_lock();
@@ -224,6 +229,7 @@ is_ndev_for_default_gid_filter(struct ib_device *ib_dev, u32 port,
 	return res;
 }
 
+/*针对所有结果均命中*/
 static bool pass_all_filter(struct ib_device *ib_dev, u32 port,
 			    struct net_device *rdma_ndev, void *cookie)
 {
@@ -483,6 +489,7 @@ static void enum_all_gids_of_dev_cb(struct ib_device *ib_dev,
 	 */
 	rtnl_lock();
 	down_read(&net_rwsem);
+	/*遍历所有net namespace下所有net device*/
 	for_each_net(net)
 		for_each_netdev(net, ndev) {
 			/*
@@ -510,6 +517,7 @@ static void enum_all_gids_of_dev_cb(struct ib_device *ib_dev,
  */
 void rdma_roce_rescan_device(struct ib_device *ib_dev)
 {
+    /*针对所有ib_dev的port,执行enum_all_gids_of_dev_cb*/
 	ib_enum_roce_netdev(ib_dev, pass_all_filter, NULL,
 			    enum_all_gids_of_dev_cb, NULL);
 }

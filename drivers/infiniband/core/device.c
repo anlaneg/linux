@@ -89,13 +89,13 @@ EXPORT_SYMBOL_GPL(ib_wq);
  * registered, and keep it registered, for the required duration.
  *
  */
-static DEFINE_XARRAY_FLAGS(devices, XA_FLAGS_ALLOC);/*保存所有ib设备*/
+static DEFINE_XARRAY_FLAGS(devices, XA_FLAGS_ALLOC);/*保存系统所有ib设备*/
 static DECLARE_RWSEM(devices_rwsem);
 #define DEVICE_REGISTERED XA_MARK_1
 
 static u32 highest_client_id;/*维护全局的client id*/
 #define CLIENT_REGISTERED XA_MARK_1
-static DEFINE_XARRAY_FLAGS(clients, XA_FLAGS_ALLOC);/*保存所有client*/
+static DEFINE_XARRAY_FLAGS(clients, XA_FLAGS_ALLOC);/*保存系统所有ib client*/
 static DECLARE_RWSEM(clients_rwsem);
 
 static void ib_client_put(struct ib_client *client)
@@ -181,6 +181,7 @@ static void *xan_find_marked(struct xarray *xa, unsigned long *indexp,
 
 /* RCU hash table mapping netdevice pointers to struct ib_port_data */
 static DEFINE_SPINLOCK(ndev_hash_lock);
+/*记录系统所有ib设备与netdev映射关系*/
 static DECLARE_HASHTABLE(ndev_hash, 5);
 
 static void free_netdevs(struct ib_device *ib_dev);
@@ -268,7 +269,9 @@ static void ib_device_check_mandatory(struct ib_device *device)
 {
 #define IB_MANDATORY_FUNC(x) { offsetof(struct ib_device_ops, x), #x }
 	static const struct {
+	    /*函数在结构体中的offset*/
 		size_t offset;
+		/*函数名称*/
 		char  *name;
 	} mandatory_table[] = {
 		IB_MANDATORY_FUNC(query_device),
@@ -291,10 +294,12 @@ static void ib_device_check_mandatory(struct ib_device *device)
 	};
 	int i;
 
+	/*默认为kverbs,如果下面某个函数指针为空，则为kverbs*/
 	device->kverbs_provider = true;
 	for (i = 0; i < ARRAY_SIZE(mandatory_table); ++i) {
 		if (!*(void **) ((void *) &device->ops +
 				 mandatory_table[i].offset)) {
+		    /*遇到为空的函数指针，标记非kverbs*/
 			device->kverbs_provider = false;
 			break;
 		}
@@ -314,12 +319,14 @@ struct ib_device *ib_device_get_by_index(const struct net *net, u32 index)
 	/*取index号ib设备*/
 	device = xa_load(&devices, index);
 	if (device) {
+	    /*如果此设备在指定net namespace下不可见，则返回NULL*/
 		if (!rdma_dev_access_netns(device, net)) {
 			device = NULL;
 			goto out;
 		}
 
 		if (!ib_device_try_get(device))
+		    /*增加引用失败，返回NULL*/
 			device = NULL;
 	}
 out:
@@ -577,6 +584,7 @@ static void rdma_init_coredev(struct ib_core_device *coredev,
  */
 struct ib_device *_ib_alloc_device(size_t size)
 {
+    /*申请并初始化ib_device*/
 	struct ib_device *device;
 	unsigned int i;
 
@@ -615,6 +623,7 @@ struct ib_device *_ib_alloc_device(size_t size)
 
 	rwlock_init(&device->cache_lock);
 
+	/*支持哪此cmd命令*/
 	device->uverbs_cmd_mask =
 		BIT_ULL(IB_USER_VERBS_CMD_ALLOC_MW) |
 		BIT_ULL(IB_USER_VERBS_CMD_ALLOC_PD) |
@@ -718,11 +727,13 @@ static int add_client_context(struct ib_device *device,
 	    /*如果client_data已注册，则跳出*/
 		goto out;
 
+	/*将client_id位置为NULL*/
 	ret = xa_err(xa_store(&device->client_data, client->client_id, NULL,
 			      GFP_KERNEL));
 	if (ret)
 		goto out;
 	downgrade_write(&device->client_data_rwsem);
+	/*触发client的add回调*/
 	if (client->add) {
 		if (client->add(device)) {
 			/*
@@ -793,6 +804,7 @@ static int alloc_port_data(struct ib_device *device)
 	u32 port;
 
 	if (device->port_data)
+	    /*已执行初始化，退出*/
 		return 0;
 
 	/* This can only be called once the physical port range is defined */
@@ -822,7 +834,9 @@ static int alloc_port_data(struct ib_device *device)
 	 */
 	device->port_data = pdata_rcu->pdata;
 
+	/*遍历所有port*/
 	rdma_for_each_port (device, port) {
+	    /*初始化每个port对应的ib_port_data*/
 		struct ib_port_data *pdata = &device->port_data[port];
 
 		pdata->ib_dev = device;
@@ -836,10 +850,12 @@ static int alloc_port_data(struct ib_device *device)
 
 static int verify_immutable(const struct ib_device *dev, u32 port)
 {
+    /*如果port不支持MAD报文，且Max MAD size不为0，则配置有误*/
 	return WARN_ON(!rdma_cap_ib_mad(dev, port) &&
 			    rdma_max_mad_size(dev, port) != 0);
 }
 
+/*分配并初始化port_data*/
 static int setup_port_data(struct ib_device *device)
 {
 	u32 port;
@@ -849,14 +865,16 @@ static int setup_port_data(struct ib_device *device)
 	if (ret)
 		return ret;
 
+	/*遍历所有port,填充pdata->immutable*/
 	rdma_for_each_port (device, port) {
 		struct ib_port_data *pdata = &device->port_data[port];
 
-		ret = device->ops.get_port_immutable(device, port,
+		ret = device->ops.get_port_immutable(device, port/*port编号*/,
 						     &pdata->immutable);
 		if (ret)
 			return ret;
 
+		/*检查mad合法性*/
 		if (verify_immutable(device, port))
 			return -EINVAL;
 	}
@@ -1253,12 +1271,14 @@ static int setup_device(struct ib_device *device)
 
 	ib_device_check_mandatory(device);
 
+	/*分配并初始化port_data*/
 	ret = setup_port_data(device);
 	if (ret) {
 		dev_warn(&device->dev, "Couldn't create per-port data\n");
 		return ret;
 	}
 
+	/*查询并填充device属性*/
 	memset(&device->attrs, 0, sizeof(device->attrs));
 	ret = device->ops.query_device(device, &device->attrs, &uhw);
 	if (ret) {
@@ -1340,6 +1360,7 @@ static int enable_device_and_get(struct ib_device *device)
 	}
 
 	down_read(&clients_rwsem);
+	/*遍历当前注册的client*/
 	xa_for_each_marked (&clients, index, client, CLIENT_REGISTERED) {
 		ret = add_client_context(device, client);
 		if (ret)
@@ -1394,10 +1415,12 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 	WARN_ON(dma_device && !dma_device->dma_parms);
 	device->dma_device = dma_device;
 
+	/*设备属性查询*/
 	ret = setup_device(device);
 	if (ret)
 		return ret;
 
+	/*ip_cache构造*/
 	ret = ib_cache_setup_one(device);
 	if (ret) {
 		dev_warn(&device->dev,
@@ -1405,6 +1428,7 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 		return ret;
 	}
 
+	/*ib设备的groups信息,例如/sys/class/infiniband/mlx5_0*/
 	device->groups[0] = &ib_dev_attr_group;
 	device->groups[1] = device->ops.device_group;
 	ret = ib_setup_device_attrs(device);
@@ -1420,6 +1444,7 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 	 * is too early amd device is not initialized yet.
 	 */
 	dev_set_uevent_suppress(&device->dev, true);
+	/*添加设备*/
 	ret = device_add(&device->dev);
 	if (ret)
 		goto cg_cleanup;
@@ -1431,6 +1456,7 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 		goto dev_cleanup;
 	}
 
+	/*enable此设备*/
 	ret = enable_device_and_get(device);
 	if (ret) {
 		void (*dealloc_fn)(struct ib_device *);
@@ -1740,7 +1766,7 @@ static struct pernet_operations rdma_dev_net_ops = {
 	.size = sizeof(struct rdma_dev_net),
 };
 
-//分配client id
+//添加此client到clients中，并分配client id
 static int assign_client_id(struct ib_client *client)
 {
 	int ret;
@@ -1752,6 +1778,7 @@ static int assign_client_id(struct ib_client *client)
 	 * registration order.
 	 */
 	client->client_id = highest_client_id;
+	/*注册此client*/
 	ret = xa_insert(&clients, client->client_id, client, GFP_KERNEL);
 	if (ret)
 		goto out;
@@ -1790,6 +1817,7 @@ static void remove_client_id(struct ib_client *client)
  */
 int ib_register_client(struct ib_client *client)
 {
+    /*注册ib client*/
 	struct ib_device *device;
 	unsigned long index;
 	int ret;
@@ -1801,7 +1829,7 @@ int ib_register_client(struct ib_client *client)
 		return ret;
 
 	down_read(&devices_rwsem);
-	//遍历所有已注册的devices
+	//遍历所有已注册的devices，为此client补add事件
 	xa_for_each_marked (&devices, index, device, DEVICE_REGISTERED) {
 		ret = add_client_context(device, client);
 		if (ret) {
@@ -1894,12 +1922,13 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 	int ret = -ENOENT;
 
 	down_read(&ibdev->client_data_rwsem);
-	//遍历所有clients,找出名称为client_name的client
+	//遍历ibdev设备对应的所有clients,找出名称为client_name的client
 	xan_for_each_marked (&ibdev->client_data, index, client_data,
 			     CLIENT_DATA_REGISTERED) {
 		struct ib_client *client = xa_load(&clients, index);
 
 		if (!client || strcmp(client->name, client_name) != 0)
+		    /*与client_name不匹配，退出*/
 			continue;
 		if (!client->get_nl_info) {
 			ret = -EOPNOTSUPP;
@@ -1916,6 +1945,7 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 		 * valid for the caller.
 		 */
 		if (!ret && res->cdev)
+		    /*增加此client对应cdev的引用*/
 			get_device(res->cdev);
 		break;
 	}
@@ -1936,6 +1966,7 @@ int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 	int ret;
 
 	if (ibdev)
+	    /*取ibdev中名称为client_name的client信息，如有cdev,则增加cdev引用*/
 		ret = __ib_get_client_nl_info(ibdev, client_name, res);
 	else
 		ret = __ib_get_global_client_nl_info(client_name, res);
@@ -1956,6 +1987,7 @@ int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 	}
 
 	if (WARN_ON(!res->cdev))
+	    /*如果无对应cdev,则返回参数无效*/
 		return -EINVAL;
 	return 0;
 }
@@ -1997,6 +2029,7 @@ EXPORT_SYMBOL(ib_set_client_data);
  */
 void ib_register_event_handler(struct ib_event_handler *event_handler)
 {
+    /*ib event处理函数注册*/
 	down_write(&event_handler->device->event_handler_rwsem);
 	list_add_tail(&event_handler->list,
 		      &event_handler->device->event_handler_list);
@@ -2025,6 +2058,7 @@ void ib_dispatch_event_clients(struct ib_event *event)
 
 	down_read(&event->device->event_handler_rwsem);
 
+	/*遍历注册在此devcie设备上的所有event handle,并进行执行*/
 	list_for_each_entry(handler, &event->device->event_handler_list, list)
 		handler->handler(handler, event);
 
@@ -2070,6 +2104,7 @@ static int iw_query_port(struct ib_device *device,
 	return device->ops.query_port(device, port_num, port_attr);
 }
 
+/*查询指定port的属性*/
 static int __ib_query_port(struct ib_device *device,
 			   u32 port_num,
 			   struct ib_port_attr *port_attr)
@@ -2078,10 +2113,12 @@ static int __ib_query_port(struct ib_device *device,
 
 	memset(port_attr, 0, sizeof(*port_attr));
 
+	/*查询ib设备的port_num号port的属性*/
 	err = device->ops.query_port(device, port_num, port_attr);
 	if (err || port_attr->subnet_prefix)
 		return err;
 
+	/*针对非infiniband的链路层，直接返回*/
 	if (rdma_port_get_link_layer(device, port_num) !=
 	    IB_LINK_LAYER_INFINIBAND)
 		return 0;
@@ -2105,11 +2142,14 @@ int ib_query_port(struct ib_device *device,
 		  struct ib_port_attr *port_attr)
 {
 	if (!rdma_is_port_valid(device, port_num))
+	    /*port_num无效*/
 		return -EINVAL;
 
 	if (rdma_protocol_iwarp(device, port_num))
+	    /*支持iwarp协议*/
 		return iw_query_port(device, port_num, port_attr);
 	else
+	    /*查询非iwarp协议的port信息*/
 		return __ib_query_port(device, port_num, port_attr);
 }
 EXPORT_SYMBOL(ib_query_port);
@@ -2226,6 +2266,7 @@ static void free_netdevs(struct ib_device *ib_dev)
 	}
 }
 
+/*取此port对应的net_device*/
 struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 					u32 port)
 {
@@ -2242,8 +2283,10 @@ struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 	 * get_netdev().
 	 */
 	if (ib_dev->ops.get_netdev)
+	    /*取此port对应的底层netdev*/
 		res = ib_dev->ops.get_netdev(ib_dev, port);
 	else {
+	    /*无回调，返回pdata->netdev*/
 		spin_lock(&pdata->netdev_lock);
 		res = rcu_dereference_protected(
 			pdata->netdev, lockdep_is_held(&pdata->netdev_lock));
@@ -2276,16 +2319,19 @@ struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 struct ib_device *ib_device_get_by_netdev(struct net_device *ndev,
 					  enum rdma_driver_id driver_id)
 {
+    /*查找匹配的driver_id与ndev*/
 	struct ib_device *res = NULL;
 	struct ib_port_data *cur;
 
+	/*遍历ndev_hash*/
 	rcu_read_lock();
 	hash_for_each_possible_rcu (ndev_hash, cur, ndev_hash_link,
 				    (uintptr_t)ndev) {
-		if (rcu_access_pointer(cur->netdev) == ndev &&
+		if (rcu_access_pointer(cur->netdev) == ndev/*指针相等*/ &&
 		    (driver_id == RDMA_DRIVER_UNKNOWN ||
 		     cur->ib_dev->ops.driver_id == driver_id) &&
-		    ib_device_try_get(cur->ib_dev)) {
+		    ib_device_try_get(cur->ib_dev)/*增加引用*/) {
+		    /*取匹配了的ib_device*/
 			res = cur->ib_dev;
 			break;
 		}
@@ -2318,10 +2364,12 @@ void ib_enum_roce_netdev(struct ib_device *ib_dev,
 
 	rdma_for_each_port (ib_dev, port)
 		if (rdma_protocol_roce(ib_dev, port)) {
+		    /*取此port对应的net_device*/
 			struct net_device *idev =
 				ib_device_get_netdev(ib_dev, port);
 
 			if (filter(ib_dev, port, idev, filter_cookie))
+			    /*filter返回非0时，执行此cb*/
 				cb(ib_dev, port, idev, cookie);
 
 			if (idev)
@@ -2404,6 +2452,7 @@ int ib_query_pkey(struct ib_device *device,
 	if (!device->ops.query_pkey)
 		return -EOPNOTSUPP;
 
+	/*获取指定port的index号P_key*/
 	return device->ops.query_pkey(device, port_num, index, pkey);
 }
 EXPORT_SYMBOL(ib_query_pkey);
@@ -2594,29 +2643,36 @@ void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 	struct ib_device_ops *dev_ops = &dev->ops;
 #define SET_DEVICE_OP(ptr, name)                                               \
 	do {                                                                   \
-	    /*ops如果有name指针，且ptr的name指针为空，则将使ptr->name=ops->name*/\
+	    /*ops如果有$name指针，且ptr的$name指针不为空，则将使ptr->name=ops->name*/\
 		if (ops->name)                                                 \
 			if (!((ptr)->name))				       \
 				(ptr)->name = ops->name;                       \
 	} while (0)
 
+	/*ptr->size_$name = ops->size_$name*/
 #define SET_OBJ_SIZE(ptr, name) SET_DEVICE_OP(ptr, size_##name)
 
+	/*driver_id设置*/
 	if (ops->driver_id != RDMA_DRIVER_UNKNOWN) {
 		WARN_ON(dev_ops->driver_id != RDMA_DRIVER_UNKNOWN &&
 			dev_ops->driver_id != ops->driver_id);
 		dev_ops->driver_id = ops->driver_id;
 	}
+
+	/*owner设置*/
 	if (ops->owner) {
 		WARN_ON(dev_ops->owner && dev_ops->owner != ops->owner);
 		dev_ops->owner = ops->owner;
 	}
+
+	/*uverbs_api_ver设置*/
 	if (ops->uverbs_abi_ver)
 		dev_ops->uverbs_abi_ver = ops->uverbs_abi_ver;
 
 	dev_ops->uverbs_no_driver_id_binding |=
 		ops->uverbs_no_driver_id_binding;
 
+	/*填充以下字段*/
 	SET_DEVICE_OP(dev_ops, add_gid);
 	SET_DEVICE_OP(dev_ops, advise_mr);
 	SET_DEVICE_OP(dev_ops, alloc_dm);

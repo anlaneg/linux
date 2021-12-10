@@ -1437,7 +1437,7 @@ ip_proto_again:
 
 		key_control->flags |= FLOW_DIS_ENCAPSULATION;
 		if (flags & FLOW_DISSECTOR_F_STOP_AT_ENCAP) {
-		    /*指明停止解析，跳出*/
+		    /*指明遇encap停止解析，跳出*/
 			fdret = FLOW_DISSECT_RET_OUT_GOOD;
 			break;
 		}

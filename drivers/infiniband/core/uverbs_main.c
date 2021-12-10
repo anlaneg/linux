@@ -558,11 +558,13 @@ static ssize_t verify_hdr(struct ib_uverbs_cmd_hdr *hdr,
 	return 0;
 }
 
+/*uverbs文件写操作处理*/
 static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 			     size_t count, loff_t *pos)
 {
 	struct ib_uverbs_file *file = filp->private_data;
 	const struct uverbs_api_write_method *method_elm;
+	/*取对应的uapi*/
 	struct uverbs_api *uapi = file->device->uapi;
 	struct ib_uverbs_ex_cmd_hdr ex_hdr;
 	struct ib_uverbs_cmd_hdr hdr;
@@ -579,9 +581,11 @@ static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 	if (count < sizeof(hdr))
 		return -EINVAL;
 
+	/*将buf内容转换为ib_uverbs_cmd_hdr类型*/
 	if (copy_from_user(&hdr, buf, sizeof(hdr)))
 		return -EFAULT;
 
+	/*取cmd对应的method*/
 	method_elm = uapi_get_method(uapi, hdr.command);
 	if (IS_ERR(method_elm))
 		return PTR_ERR(method_elm);
@@ -667,6 +671,7 @@ static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 
 	}
 
+	/*调用具体方法*/
 	ret = method_elm->handler(&bundle);
 	if (bundle.uobject)
 		uverbs_finalize_object(bundle.uobject, UVERBS_ACCESS_NEW, true,
@@ -977,6 +982,7 @@ static int ib_uverbs_close(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+/*uverbs文件的文件操作集*/
 static const struct file_operations uverbs_fops = {
 	.owner	 = THIS_MODULE,
 	.write	 = ib_uverbs_write,
@@ -987,6 +993,7 @@ static const struct file_operations uverbs_fops = {
 	.compat_ioctl = compat_ptr_ioctl,
 };
 
+/*uverbs文件的文件操作集，比uverbs_fops多了mmap接口*/
 static const struct file_operations uverbs_mmap_fops = {
 	.owner	 = THIS_MODULE,
 	.write	 = ib_uverbs_write,
@@ -1029,7 +1036,9 @@ static int ib_uverbs_get_nl_info(struct ib_device *ibdev, void *client_data,
 static struct ib_client uverbs_client = {
 	.name   = "uverbs",
 	.no_kverbs_req = true,
-	.add    = ib_uverbs_add_one,/*添加一个uverbs设备*/
+	/*添加一个ib-device设备时调用*/
+	.add    = ib_uverbs_add_one,
+	/*移除一个ib-device设备时调用*/
 	.remove = ib_uverbs_remove_one,
 	.get_nl_info = ib_uverbs_get_nl_info,
 };
@@ -1054,6 +1063,7 @@ static ssize_t ibdev_show(struct device *device, struct device_attribute *attr,
 }
 static DEVICE_ATTR_RO(ibdev);
 
+/*uverbs当前支持的abi版本显示*/
 static ssize_t abi_version_show(struct device *device,
 				struct device_attribute *attr, char *buf)
 {
@@ -1066,6 +1076,7 @@ static ssize_t abi_version_show(struct device *device,
 	srcu_key = srcu_read_lock(&dev->disassociate_srcu);
 	ib_dev = srcu_dereference(dev->ib_dev, &dev->disassociate_srcu);
 	if (ib_dev)
+	    /*此ib设备存在时，显示ops中uverbs_abi版本信息*/
 		ret = sysfs_emit(buf, "%u\n", ib_dev->ops.uverbs_abi_ver);
 	srcu_read_unlock(&dev->disassociate_srcu, srcu_key);
 
@@ -1099,6 +1110,7 @@ static int ib_uverbs_create_uapi(struct ib_device *device,
 	return 0;
 }
 
+/*ib_device加入时，uverbs模块的此函数将被调用*/
 static int ib_uverbs_add_one(struct ib_device *device)
 {
 	int devnum;
@@ -1109,6 +1121,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	if (!device->ops.alloc_ucontext)
 		return -EOPNOTSUPP;
 
+	/*uverbs_dev内存申请*/
 	uverbs_dev = kzalloc(sizeof(*uverbs_dev), GFP_KERNEL);
 	if (!uverbs_dev)
 		return -ENOMEM;
@@ -1134,6 +1147,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	rcu_assign_pointer(uverbs_dev->ib_dev, device);
 	uverbs_dev->num_comp_vectors = device->num_comp_vectors;
 
+	/*分配devnum*/
 	devnum = ida_alloc_max(&uverbs_ida, IB_UVERBS_MAX_DEVICES - 1,
 			       GFP_KERNEL);
 	if (devnum < 0) {
@@ -1156,6 +1170,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 
 	/*设置uverbs字符设备的fops*/
 	cdev_init(&uverbs_dev->cdev,
+	        /*如果device支持mmap回调，则使用mmap_fops*/
 		  device->ops.mmap ? &uverbs_mmap_fops : &uverbs_fops);
 	uverbs_dev->cdev.owner = THIS_MODULE;
 

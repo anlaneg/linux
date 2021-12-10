@@ -65,6 +65,7 @@ enum rxe_hdr_mask {
 	RXE_DETH_MASK		= BIT(RXE_DETH),
 	RXE_PAYLOAD_MASK	= BIT(RXE_PAYLOAD),
 
+	/*标记为request报文*/
 	RXE_REQ_MASK		= BIT(NUM_HDR_TYPES + 0),
 	RXE_ACK_MASK		= BIT(NUM_HDR_TYPES + 1),
 	RXE_SEND_MASK		= BIT(NUM_HDR_TYPES + 2),
@@ -92,6 +93,7 @@ enum rxe_hdr_mask {
 struct rxe_opcode_info {
 	char			*name;
 	enum rxe_hdr_mask	mask;
+	/*此op对应的消息长度*/
 	int			length;
 	int			offset[NUM_HDR_TYPES];
 };

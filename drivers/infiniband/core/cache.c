@@ -45,6 +45,7 @@
 #include "core_priv.h"
 
 struct ib_pkey_cache {
+    /*table大小*/
 	int             table_len;
 	u16             table[];
 };
@@ -97,6 +98,7 @@ struct ib_gid_table_entry {
 };
 
 struct ib_gid_table {
+    /*table大小*/
 	int				sz;
 	/* In RoCE, adding a GID to the table requires:
 	 * (a) Find if this GID is already exists.
@@ -116,7 +118,9 @@ struct ib_gid_table {
 	/* rwlock protects data_vec[ix]->state and entry pointer.
 	 */
 	rwlock_t			rwlock;
+	/*entry指针数组，sz指定了数组大小*/
 	struct ib_gid_table_entry	**data_vec;
+	/*一个port支持多种roce封装，这里每个bit指出各封装的index*/
 	/* bit field, each bit indicates the index of default GID */
 	u32				default_gid_indices;
 };
@@ -769,6 +773,7 @@ const struct ib_gid_attr *rdma_find_gid_by_filter(
 	return res;
 }
 
+/*创建指定大小的ib_gid_table*/
 static struct ib_gid_table *alloc_gid_table(int sz)
 {
 	struct ib_gid_table *table = kzalloc(sizeof(*table), GFP_KERNEL);
@@ -776,6 +781,7 @@ static struct ib_gid_table *alloc_gid_table(int sz)
 	if (!table)
 		return NULL;
 
+	/*申请sz个ib_gid_table_entry指针*/
 	table->data_vec = kcalloc(sz, sizeof(*table->data_vec), GFP_KERNEL);
 	if (!table->data_vec)
 		goto err_free_table;
@@ -875,6 +881,7 @@ static void gid_table_reserve_default(struct ib_device *ib_dev, u32 port,
 	unsigned int num_default_gids;
 
 	roce_gid_type_mask = roce_gid_type_mask_support(ib_dev, port);
+	/*支持几种类型*/
 	num_default_gids = hweight_long(roce_gid_type_mask);
 	/* Reserve starting indices for default GIDs */
 	for (i = 0; i < num_default_gids && i < table->sz; i++)
@@ -897,6 +904,7 @@ static int _gid_table_setup_one(struct ib_device *ib_dev)
 	struct ib_gid_table *table;
 	u32 rdma_port;
 
+	/*初始化每个port的gid表*/
 	rdma_for_each_port (ib_dev, rdma_port) {
 		table = alloc_gid_table(
 			ib_dev->port_data[rdma_port].immutable.gid_tbl_len);
@@ -1461,6 +1469,7 @@ err:
 	return ret;
 }
 
+/*ib_cache信息更新*/
 static int
 ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 		bool update_pkeys, bool enforce_security)
@@ -1478,6 +1487,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 	if (!tprops)
 		return -ENOMEM;
 
+	/*查询port属性*/
 	ret = ib_query_port(device, port, tprops);
 	if (ret) {
 		dev_warn(&device->dev, "ib_query_port failed (%d)\n", ret);
@@ -1485,6 +1495,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 	}
 
 	if (!rdma_protocol_roce(device, port) && update_gids) {
+	    /*port不支持roce的情况*/
 		ret = config_non_roce_gid_cache(device, port,
 						tprops);
 		if (ret)
@@ -1494,6 +1505,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 	update_pkeys &= !!tprops->pkey_tbl_len;
 
 	if (update_pkeys) {
+	    /*申请tprops->pkey_tbl_len个uint16放在Pkey_cache后面*/
 		pkey_cache = kmalloc(struct_size(pkey_cache, table,
 						 tprops->pkey_tbl_len),
 				     GFP_KERNEL);
@@ -1505,6 +1517,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 		pkey_cache->table_len = tprops->pkey_tbl_len;
 
 		for (i = 0; i < pkey_cache->table_len; ++i) {
+		    /*填充i号pkey*/
 			ret = ib_query_pkey(device, port, i,
 					    pkey_cache->table + i);
 			if (ret) {
@@ -1518,6 +1531,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 
 	write_lock_irq(&device->cache_lock);
 
+	/*更新pkey_cache*/
 	if (update_pkeys) {
 		old_pkey_cache = device->port_data[port].cache.pkey;
 		device->port_data[port].cache.pkey = pkey_cache;
@@ -1600,11 +1614,14 @@ void ib_dispatch_event(const struct ib_event *event)
 
 	work = kzalloc(sizeof(*work), GFP_ATOMIC);
 	if (!work)
+	    /*申请work失败，退*/
 		return;
 
 	if (is_cache_update_event(event))
+	    /*cache event工作*/
 		INIT_WORK(&work->work, ib_cache_event_task);
 	else
+	    /*一般event工作*/
 		INIT_WORK(&work->work, ib_generic_event_task);
 
 	work->event = *event;

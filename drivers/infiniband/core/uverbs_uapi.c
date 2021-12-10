@@ -21,9 +21,11 @@ static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 	if (key == UVERBS_API_KEY_ERR)
 		return ERR_PTR(-EOVERFLOW);
 
+	/*申请空间*/
 	elm = kzalloc(alloc_size, GFP_KERNEL);
 	if (!elm)
 		return ERR_PTR(-ENOMEM);
+	/*添加记录*/
 	rc = radix_tree_insert(&uapi->radix, key, elm);
 	if (rc) {
 		kfree(elm);
@@ -38,6 +40,7 @@ static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key,
 {
 	void *elm;
 
+	/*添加key对应的内存映射到uapi->redix*/
 	elm = uapi_add_elm(uapi, key, alloc_size);
 	if (!IS_ERR(elm)) {
 		*exists = false;
@@ -47,6 +50,7 @@ static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key,
 	if (elm != ERR_PTR(-EEXIST))
 		return elm;
 
+	/*查询key对应的elem*/
 	elm = radix_tree_lookup(&uapi->radix, key);
 	if (WARN_ON(!elm))
 		return ERR_PTR(-EINVAL);
@@ -69,6 +73,7 @@ static int uapi_create_write(struct uverbs_api *uapi,
 	else
 		method_key |= uapi_key_write_method(def->write.command_num);
 
+	/*添加method_elem*/
 	method_elm = uapi_add_get_elm(uapi, method_key, sizeof(*method_elm),
 				      &exists);
 	if (IS_ERR(method_elm))
@@ -77,6 +82,7 @@ static int uapi_create_write(struct uverbs_api *uapi,
 	if (WARN_ON(exists && (def->write.is_ex != method_elm->is_ex)))
 		return -EINVAL;
 
+	/*初始化method_elm*/
 	method_elm->is_ex = def->write.is_ex;
 	method_elm->handler = def->func_write;
 	if (!def->write.is_ex)
@@ -119,6 +125,7 @@ static int uapi_merge_method(struct uverbs_api *uapi,
 			return -EINVAL;
 	} else {
 		WARN_ON(!method->handler);
+		/*设置handler*/
 		rcu_assign_pointer(method_elm->handler, method->handler);
 		if (method->handler != uverbs_destroy_def_handler)
 			method_elm->driver_method = is_driver;
@@ -175,6 +182,7 @@ static int uapi_merge_obj_tree(struct uverbs_api *uapi,
 	int rc;
 
 	obj_key = uapi_key_obj(obj->id);
+	/*分配obj_elm并与obj_key关联*/
 	obj_elm = uapi_add_get_elm(uapi, obj_key, sizeof(*obj_elm), &exists);
 	if (IS_ERR(obj_elm))
 		return PTR_ERR(obj_elm);
@@ -205,6 +213,7 @@ static int uapi_merge_obj_tree(struct uverbs_api *uapi,
 	if (!obj->methods)
 		return 0;
 
+	/*处理obj->methods*/
 	for (i = 0; i != obj->num_methods; i++) {
 		const struct uverbs_method_def *method = (*obj->methods)[i];
 
@@ -280,15 +289,18 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 	if (!def_list)
 		return 0;
 
+	/*遍历def_list*/
 	for (;; def++) {
 		switch ((enum uapi_definition_kind)def->kind) {
 		case UAPI_DEF_CHAIN:
+		    /*遇到chain类型的uapi，递归调用*/
 			rc = uapi_merge_def(uapi, ibdev, def->chain, is_driver);
 			if (rc)
 				return rc;
 			continue;
 
 		case UAPI_DEF_CHAIN_OBJ_TREE:
+		    /*遇到chain类型时，object_id必须与其指针指向的id相等*/
 			if (WARN_ON(def->object_start.object_id !=
 				    def->chain_obj_tree->id))
 				return -EINVAL;
@@ -301,6 +313,7 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			continue;
 
 		case UAPI_DEF_END:
+		    /*处理结束*/
 			return 0;
 
 		case UAPI_DEF_IS_SUPPORTED_DEV_FN: {
@@ -634,6 +647,7 @@ static const struct uapi_definition uverbs_core_api[] = {
 	UAPI_DEF_CHAIN(uverbs_def_obj_qp),
 	UAPI_DEF_CHAIN(uverbs_def_obj_srq),
 	UAPI_DEF_CHAIN(uverbs_def_obj_wq),
+	/*write相关的接口*/
 	UAPI_DEF_CHAIN(uverbs_def_write_intf),
 	{},
 };
@@ -692,6 +706,7 @@ void uverbs_disassociate_api_pre(struct ib_uverbs_device *uverbs_dev)
 				rcu_dereference_protected(*slot, true);
 
 			if (method_elm->driver_method)
+			    /*使用driver method,这里禁止掉ioctl的handler*/
 				rcu_assign_pointer(method_elm->handler, NULL);
 		}
 	}

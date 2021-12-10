@@ -338,7 +338,7 @@ static inline struct net *read_pnet(const possible_net_t *pnet)
 }
 
 /* Protected by net_rwsem */
-//遍历系统中所有的namespace
+//遍历系统中所有的net namespace
 #define for_each_net(VAR)				\
 	list_for_each_entry(VAR, &net_namespace_list, list)
 #define for_each_net_continue_reverse(VAR)		\

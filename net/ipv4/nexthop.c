@@ -1209,6 +1209,7 @@ struct nexthop *nexthop_select_path(struct nexthop *nh, int hash)
 	struct nh_group *nhg;
 
 	if (!nh->is_group)
+	    /*不是group，返回自身*/
 		return nh;
 
 	nhg = rcu_dereference(nh->nh_grp);

@@ -225,8 +225,10 @@ err1:
 static inline void rxe_rcv_pkt(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	if (pkt->mask & RXE_REQ_MASK)
+	    /*request报文，添加qp->req_pkts*/
 		rxe_resp_queue_pkt(pkt->qp, skb);
 	else
+	    /*response报文，添加qp->resp_pkts*/
 		rxe_comp_queue_pkt(pkt->qp, skb);
 }
 
@@ -376,6 +378,7 @@ void rxe_rcv(struct sk_buff *skb)
 	pkt->mask |= rxe_opcode[pkt->opcode].mask;
 
 	if (unlikely(skb->len < header_size(pkt)))
+	    /*报文长度不足*/
 		goto drop;
 
 	err = hdr_check(pkt);
@@ -389,6 +392,7 @@ void rxe_rcv(struct sk_buff *skb)
 	rxe_counter_inc(rxe, RXE_CNT_RCVD_PKTS);
 
 	if (unlikely(bth_qpn(pkt) == IB_MULTICAST_QPN))
+	    /*multicast_qpn类型*/
 		rxe_rcv_mcast_pkt(rxe, skb);
 	else
 		rxe_rcv_pkt(pkt, skb);

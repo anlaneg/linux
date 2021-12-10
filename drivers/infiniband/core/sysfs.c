@@ -63,12 +63,14 @@ struct gid_attr_group {
 
 struct ib_port {
 	struct kobject kobj;
+	/*此port对应的ib设备*/
 	struct ib_device *ibdev;
 	struct gid_attr_group *gid_attr_group;
 	struct hw_stats_port_data *hw_stats_data;
 
 	struct attribute_group groups[3];
 	const struct attribute_group *groups_list[5];
+	/*此port编号*/
 	u32 port_num;
 	struct port_table_attribute attrs_list[];
 };
@@ -891,6 +893,7 @@ alloc_hw_stats_device(struct ib_device *ibdev)
 	struct rdma_hw_stats *stats;
 
 	if (!ibdev->ops.alloc_hw_device_stats)
+	    /*rxe不支持此回调*/
 		return ERR_PTR(-EOPNOTSUPP);
 	stats = ibdev->ops.alloc_hw_device_stats(ibdev);
 	if (!stats)
@@ -939,6 +942,7 @@ int ib_setup_device_attrs(struct ib_device *ibdev)
 	data = alloc_hw_stats_device(ibdev);
 	if (IS_ERR(data)) {
 		if (PTR_ERR(data) == -EOPNOTSUPP)
+		    /*如果ibdev不支持，则返回0*/
 			return 0;
 		return PTR_ERR(data);
 	}
@@ -1197,12 +1201,14 @@ static void destroy_gid_attrs(struct ib_port *port)
 static struct ib_port *setup_port(struct ib_core_device *coredev, int port_num,
 				  const struct ib_port_attr *attr)
 {
+    /*创建ib_port在sysfs中的属性*/
 	struct ib_device *device = rdma_device_to_ibdev(&coredev->dev);
 	bool is_full_dev = &device->coredev == coredev;
 	const struct attribute_group **cur_group;
 	struct ib_port *p;
 	int ret;
 
+	/*申请ib_port*/
 	p = kvzalloc(struct_size(p, attrs_list,
 				attr->gid_tbl_len + attr->pkey_tbl_len),
 		    GFP_KERNEL);
@@ -1307,6 +1313,7 @@ static const char *node_type_string(int node_type)
 	return "<unknown>";
 }
 
+/*显示dev的node_type*/
 static ssize_t node_type_show(struct device *device,
 			      struct device_attribute *attr, char *buf)
 {
@@ -1317,6 +1324,7 @@ static ssize_t node_type_show(struct device *device,
 }
 static DEVICE_ATTR_RO(node_type);
 
+/*显示dev->attrs.sys_image_guid*/
 static ssize_t sys_image_guid_show(struct device *device,
 				   struct device_attribute *dev_attr, char *buf)
 {
@@ -1331,6 +1339,7 @@ static ssize_t sys_image_guid_show(struct device *device,
 }
 static DEVICE_ATTR_RO(sys_image_guid);
 
+/*显示dev->node_guid*/
 static ssize_t node_guid_show(struct device *device,
 			      struct device_attribute *attr, char *buf)
 {
@@ -1345,6 +1354,7 @@ static ssize_t node_guid_show(struct device *device,
 }
 static DEVICE_ATTR_RO(node_guid);
 
+/*显示dev->node_desc*/
 static ssize_t node_desc_show(struct device *device,
 			      struct device_attribute *attr, char *buf)
 {
@@ -1373,6 +1383,7 @@ static ssize_t node_desc_store(struct device *device,
 }
 static DEVICE_ATTR_RW(node_desc);
 
+/*显示fw版本*/
 static ssize_t fw_ver_show(struct device *device, struct device_attribute *attr,
 			   char *buf)
 {
@@ -1394,6 +1405,7 @@ static struct attribute *ib_dev_attrs[] = {
 	NULL,
 };
 
+/*ib设备属性*/
 const struct attribute_group ib_dev_attr_group = {
 	.attrs = ib_dev_attrs,
 };
@@ -1418,19 +1430,23 @@ int ib_setup_port_attrs(struct ib_core_device *coredev)
 	u32 port_num;
 	int ret;
 
+	/*创建ports,例如：/sys/class/infiniband/mlx5_0/ports*/
 	coredev->ports_kobj = kobject_create_and_add("ports",
 						     &coredev->dev.kobj);
 	if (!coredev->ports_kobj)
 		return -ENOMEM;
 
+	/*添加所有port对应的属性文件*/
 	rdma_for_each_port (device, port_num) {
 		struct ib_port_attr attr;
 		struct ib_port *port;
 
+		/*查询port属性*/
 		ret = ib_query_port(device, port_num, &attr);
 		if (ret)
 			goto err_put;
 
+		/*显示ib_port部分属性到sysfs*/
 		port = setup_port(coredev, port_num, &attr);
 		if (IS_ERR(port)) {
 			ret = PTR_ERR(port);

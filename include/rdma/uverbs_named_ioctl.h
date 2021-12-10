@@ -8,14 +8,17 @@
 
 #include <rdma/uverbs_ioctl.h>
 
+/*UVERBS_MODULE_NAME 模块名称*/
 #ifndef UVERBS_MODULE_NAME
 #error "Please #define UVERBS_MODULE_NAME before including rdma/uverbs_named_ioctl.h"
 #endif
 
+/*合并两个字符串*/
 #define _UVERBS_PASTE(x, y)	x ## y
 #define _UVERBS_NAME(x, y)	_UVERBS_PASTE(x, y)
 #define UVERBS_METHOD(id)	_UVERBS_NAME(UVERBS_MODULE_NAME, _method_##id)
 #define UVERBS_HANDLER(id)	_UVERBS_NAME(UVERBS_MODULE_NAME, _handler_##id)
+/*产生一个id,形如：$UVERBS_MODULE_NAME_object_$id*/
 #define UVERBS_OBJECT(id)	_UVERBS_NAME(UVERBS_MODULE_NAME, _object_##id)
 
 /* These are static so they do not need to be qualified */

@@ -62,12 +62,14 @@ static struct hlist_head fib_info_devhash[DEVINDEX_HASHSIZE];
  */
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 
+/*遍历fi中的fib_nh数组，nhsel指出下一跳序号；nexthop_np指出下一跳信息*/
 #define for_nexthops(fi) {						\
 	int nhsel; const struct fib_nh *nh;				\
 	for (nhsel = 0, nh = (fi)->fib_nh;				\
 	     nhsel < fib_info_num_path((fi));				\
 	     nh++, nhsel++)
 
+/*遍历fi中的fib_nh数组，nhsel指出下一跳序号；nexthop_np指出下一跳信息*/
 #define change_nexthops(fi) {						\
 	int nhsel; struct fib_nh *nexthop_nh;				\
 	for (nhsel = 0,	nexthop_nh = (struct fib_nh *)((fi)->fib_nh);	\
@@ -769,8 +771,10 @@ static void fib_rebalance(struct fib_info *fi)
 	int w;
 
 	if (fib_info_num_path(fi) < 2)
+	    /*下一跳数量小于2，不处理*/
 		return;
 
+	/*所有有效nexthop的fib_nh_weight值总合*/
 	total = 0;
 	for_nexthops(fi) {
 		if (nh->fib_nh_flags & RTNH_F_DEAD)
@@ -2187,6 +2191,7 @@ void fib_select_multipath(struct fib_result *res, int hash)
 	bool first = false;
 
 	if (unlikely(res->fi->nh)) {
+	    /*有nh,自nexthop中选择一个路由*/
 		nexthop_path_fib_result(res, hash);
 		return;
 	}
@@ -2194,8 +2199,10 @@ void fib_select_multipath(struct fib_result *res, int hash)
 	change_nexthops(fi) {
 		if (net->ipv4.sysctl_fib_multipath_use_neigh) {
 			if (!fib_good_nh(nexthop_nh))
+			    /*跳过无效的下一跳*/
 				continue;
 			if (!first) {
+			    /*记录首个有效的nexthop（这里保证总是能选择一个出来）*/
 				res->nh_sel = nhsel;
 				res->nhc = &nexthop_nh->nh_common;
 				first = true;
@@ -2203,9 +2210,10 @@ void fib_select_multipath(struct fib_result *res, int hash)
 		}
 
 		if (hash > atomic_read(&nexthop_nh->fib_nh_upper_bound))
+		    /*用hash选择时，不满足要求，下一个*/
 			continue;
 
-		/*按hash选出下一条*/
+		/*按hash选出第一个满足要求的nexthop*/
 		res->nh_sel = nhsel;
 		res->nhc = &nexthop_nh->nh_common;
 		return;
@@ -2220,8 +2228,8 @@ void fib_select_path(struct net *net, struct fib_result *res,
 		goto check_saddr;
 
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
-	/*有多个下一跳，选择合适的路径*/
 	if (fib_info_num_path(res->fi) > 1) {
+	    /*有多个下一跳，利用sysctl配置选择合适的路径（自解析）*/
 		int h = fib_multipath_hash(net, fl4, skb, NULL);
 
 		fib_select_multipath(res, h);

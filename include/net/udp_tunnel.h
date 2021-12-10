@@ -172,6 +172,7 @@ static inline int udp_tunnel_handle_offloads(struct sk_buff *skb, bool udp_csum)
 }
 #endif
 
+/*此socket开启隧道encap*/
 static inline void udp_tunnel_encap_enable(struct socket *sock)
 {
 	struct udp_sock *up = udp_sk(sock->sk);

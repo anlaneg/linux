@@ -88,6 +88,7 @@ struct uverbs_api_ioctl_method {
 	int(__rcu *handler)(struct uverbs_attr_bundle *attrs);
 	DECLARE_BITMAP(attr_mandatory, UVERBS_API_ATTR_BKEY_LEN);
 	u16 bundle_size;
+	/*为真时，使用栈上的变量,否则申请堆中的pbundle*/
 	u8 use_stack:1;
 	u8 driver_method:1;
 	u8 disabled:1;
@@ -99,6 +100,7 @@ struct uverbs_api_ioctl_method {
 struct uverbs_api_write_method {
 	int (*handler)(struct uverbs_attr_bundle *attrs);
 	u8 disabled:1;
+	/*是否扩展类write_method*/
 	u8 is_ex:1;
 	u8 has_udata:1;
 	u8 has_resp:1;
@@ -113,12 +115,15 @@ struct uverbs_api_attr {
 struct uverbs_api {
 	/* radix tree contains struct uverbs_api_* pointers */
 	struct radix_tree_root radix;
+	/*对应的driver id*/
 	enum rdma_driver_id driver_id;
 
 	unsigned int num_write;
 	unsigned int num_write_ex;
 	struct uverbs_api_write_method notsupp_method;
+	/*write对应的methods函数*/
 	const struct uverbs_api_write_method **write_methods;
+	/*write对应的扩展方法函数集*/
 	const struct uverbs_api_write_method **write_ex_methods;
 };
 
@@ -135,6 +140,7 @@ uapi_get_object(struct uverbs_api *uapi, u16 object_id)
 	if (object_id == UVERBS_IDR_ANY_OBJECT)
 		return ERR_PTR(-ENOMSG);
 
+	/*查找此object对应的uverbs_api_object对象*/
 	res = radix_tree_lookup(&uapi->radix, uapi_key_obj(object_id));
 	if (!res)
 		return ERR_PTR(-ENOENT);
@@ -164,6 +170,7 @@ extern const struct uapi_definition uverbs_def_obj_srq[];
 extern const struct uapi_definition uverbs_def_obj_wq[];
 extern const struct uapi_definition uverbs_def_write_intf[];
 
+/*获取cmd对应的method*/
 static inline const struct uverbs_api_write_method *
 uapi_get_method(const struct uverbs_api *uapi, u32 command)
 {
@@ -174,6 +181,7 @@ uapi_get_method(const struct uverbs_api *uapi, u32 command)
 		return ERR_PTR(-EINVAL);
 
 	if (command & IB_USER_VERBS_CMD_FLAG_EXTENDED) {
+	    /*cmd包含ex标记，查write_ex_methods集合*/
 		if (cmd_idx >= uapi->num_write_ex)
 			return ERR_PTR(-EOPNOTSUPP);
 		return uapi->write_ex_methods[cmd_idx];

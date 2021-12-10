@@ -129,9 +129,12 @@ int addrconf_prefix_rcv_add_addr(struct net *net, struct net_device *dev,
 
 static inline void addrconf_addr_eui48_base(u8 *eui, const char *const addr)
 {
+    /*使用前3字节*/
 	memcpy(eui, addr, 3);
+	/*变更4，5字节*/
 	eui[3] = 0xFF;
 	eui[4] = 0xFE;
+	/*6，7，8字节使用后3字节*/
 	memcpy(eui + 5, addr + 3, 3);
 }
 

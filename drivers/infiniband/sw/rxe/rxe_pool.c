@@ -9,14 +9,18 @@
 
 static const struct rxe_type_info {
 	const char *name;
+	/*pool单个元素大小*/
 	size_t size;
+	/*到entry的offset*/
 	size_t elem_offset;
 	void (*cleanup)(struct rxe_pool_entry *obj);
 	enum rxe_pool_flags flags;
+	/*针对有RXE_POOL_INDEX标记的pool必须提供min,max两个index范围*/
 	u32 min_index;
 	u32 max_index;
 	size_t key_offset;
 	size_t key_size;
+	/*各rxe pool类型配置情况*/
 } rxe_type_info[RXE_NUM_TYPES] = {
 	[RXE_TYPE_UC] = {
 		.name		= "rxe-uc",
@@ -105,6 +109,7 @@ static int rxe_pool_init_index(struct rxe_pool *pool, u32 max, u32 min)
 {
 	int err = 0;
 
+	/*index范围必须能支持pool->max_elem个elem*/
 	if ((max - min + 1) < pool->max_elem) {
 		pr_warn("not enough indices for max_elem\n");
 		err = -EINVAL;
@@ -114,6 +119,7 @@ static int rxe_pool_init_index(struct rxe_pool *pool, u32 max, u32 min)
 	pool->index.max_index = max;
 	pool->index.min_index = min;
 
+	/*创建index table*/
 	pool->index.table = bitmap_zalloc(max - min + 1, GFP_KERNEL);
 	if (!pool->index.table) {
 		err = -ENOMEM;
@@ -124,13 +130,15 @@ out:
 	return err;
 }
 
+/*初始化pool*/
 int rxe_pool_init(
 	struct rxe_dev		*rxe,
-	struct rxe_pool		*pool,
-	enum rxe_elem_type	type,
-	unsigned int		max_elem)
+	struct rxe_pool		*pool/*待初始化的pool*/,
+	enum rxe_elem_type	type/*pool类型*/,
+	unsigned int		max_elem/*pool内成员大小*/)
 {
 	int			err = 0;
+	/*pool中各元素大小*/
 	size_t			size = rxe_type_info[type].size;
 
 	memset(pool, 0, sizeof(*pool));
@@ -149,6 +157,7 @@ int rxe_pool_init(
 	rwlock_init(&pool->pool_lock);
 
 	if (rxe_type_info[type].flags & RXE_POOL_INDEX) {
+	    /*pool需要初始化index*/
 		err = rxe_pool_init_index(pool,
 					  rxe_type_info[type].max_index,
 					  rxe_type_info[type].min_index);
@@ -157,6 +166,7 @@ int rxe_pool_init(
 	}
 
 	if (rxe_type_info[type].flags & RXE_POOL_KEY) {
+	    /*entry offset/size填充*/
 		pool->key.key_offset = rxe_type_info[type].key_offset;
 		pool->key.key_size = rxe_type_info[type].key_size;
 	}

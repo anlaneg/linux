@@ -118,8 +118,9 @@ struct nh_grp_entry {
 
 struct nh_group {
 	struct nh_group		*spare; /* spare group for removals */
+	/*有多少个下一跳*/
 	u16			num_nh;
-	bool			is_multipath;
+	bool			is_multipath;/*是否为多路径*/
 	bool			hash_threshold;
 	bool			resilient;
 	bool			fdb_nh;
@@ -141,6 +142,7 @@ struct nexthop {
 
 	u8			protocol;   /* app managing this nh */
 	u8			nh_flags;
+	/*是否为一组next hop,如果为真nh_grp结构有效*/
 	bool			is_group;
 
 	refcount_t		refcnt;
@@ -285,6 +287,7 @@ static inline bool nexthop_is_multipath(const struct nexthop *nh)
 
 struct nexthop *nexthop_select_path(struct nexthop *nh, int hash);
 
+/*如果nexthop为group,则取group中下一跳数目*/
 static inline unsigned int nexthop_num_path(const struct nexthop *nh)
 {
 	unsigned int rc = 1;
@@ -443,6 +446,7 @@ static inline bool nexthop_uses_dev(const struct nexthop *nh,
 	return false;
 }
 
+/*获知：有多少个下一跳*/
 static inline unsigned int fib_info_num_path(const struct fib_info *fi)
 {
 	if (unlikely(fi->nh))

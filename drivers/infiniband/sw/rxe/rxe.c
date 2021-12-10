@@ -109,7 +109,9 @@ static void rxe_init_ports(struct rxe_dev *rxe)
 {
 	struct rxe_port *port = &rxe->port;
 
+	/*初始化port信息*/
 	rxe_init_port_param(port);
+	/*使用mac地址更新port_guid*/
 	addrconf_addr_eui48((unsigned char *)&port->port_guid,
 			    rxe->ndev->dev_addr);
 	spin_lock_init(&port->port_lock);
@@ -120,6 +122,7 @@ static int rxe_init_pools(struct rxe_dev *rxe)
 {
 	int err;
 
+	/*创建各个pool*/
 	err = rxe_pool_init(rxe, &rxe->uc_pool, RXE_TYPE_UC,
 			    rxe->max_ucontext);
 	if (err)
@@ -235,16 +238,18 @@ void rxe_set_mtu(struct rxe_dev *rxe, unsigned int ndev_mtu)
 /* called by ifc layer to create new rxe device.
  * The caller should allocate memory for rxe by calling ib_alloc_device.
  */
-int rxe_add(struct rxe_dev *rxe, unsigned int mtu, const char *ibdev_name)
+int rxe_add(struct rxe_dev *rxe, unsigned int mtu, const char *ibdev_name/*ib设备名称*/)
 {
 	int err;
 
+	/*初始化rxe设备*/
 	err = rxe_init(rxe);
 	if (err)
 		return err;
 
 	rxe_set_mtu(rxe, mtu);
 
+	/*注册设备*/
 	return rxe_register_device(rxe, ibdev_name);
 }
 
@@ -254,19 +259,23 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 	int err = 0;
 
 	if (is_vlan_dev(ndev)) {
+	    /*不能是vlan设备*/
 		pr_err("rxe creation allowed on top of a real device only\n");
 		err = -EPERM;
 		goto err;
 	}
 
+	/*检查此ndev是否已有存在的rxe设备*/
 	exists = rxe_get_dev_from_net(ndev);
 	if (exists) {
+	    /*设备已存在，报错*/
 		ib_device_put(&exists->ib_dev);
 		pr_err("already configured on %s\n", ndev->name);
 		err = -EEXIST;
 		goto err;
 	}
 
+	/*依赖ndev添加名称为ibdev_name的ib设备*/
 	err = rxe_net_add(ibdev_name, ndev);
 	if (err) {
 		pr_err("failed to add %s\n", ndev->name);
@@ -289,6 +298,7 @@ static int __init rxe_module_init(void)
 	if (err)
 		return err;
 
+	/*注册rxe类型link*/
 	rdma_link_register(&rxe_link_ops);
 	rxe_initialized = true;
 	pr_info("loaded\n");

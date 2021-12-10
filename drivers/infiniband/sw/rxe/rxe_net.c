@@ -150,11 +150,13 @@ static struct dst_entry *rxe_find_route(struct net_device *ndev,
 	return dst;
 }
 
+/*udp隧道encap收到报文*/
 static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 {
 	struct udphdr *udph;
 	struct rxe_dev *rxe;
 	struct net_device *ndev = skb->dev;
+	/*skb的cb中设置rxe_pkt_info*/
 	struct rxe_pkt_info *pkt = SKB_TO_PKT(skb);
 
 	/* takes a reference on rxe->ib_dev
@@ -162,8 +164,10 @@ static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	 */
 	rxe = rxe_get_dev_from_net(ndev);
 	if (!rxe && is_vlan_dev(ndev))
+	    /*无rxe设备，当前ndev为vlan设备,自real_dev中获取rxe设备*/
 		rxe = rxe_get_dev_from_net(vlan_dev_real_dev(ndev));
 	if (!rxe)
+	    /*无rxe设备，丢包*/
 		goto drop;
 
 	if (skb_linearize(skb)) {
@@ -175,10 +179,13 @@ static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	udph = udp_hdr(skb);
 	pkt->rxe = rxe;
 	pkt->port_num = 1;
+	/*跳给udp头部*/
 	pkt->hdr = (u8 *)(udph + 1);
 	pkt->mask = RXE_GRH_MASK;
+	/*udp内容长度*/
 	pkt->paylen = be16_to_cpu(udph->len) - sizeof(*udph);
 
+	/*roce收到报文*/
 	rxe_rcv(skb);
 
 	return 0;
@@ -189,7 +196,7 @@ drop:
 }
 
 static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
-					   bool ipv6)
+					   bool ipv6/*是否ipv6协议*/)
 {
 	int err;
 	struct socket *sock;
@@ -206,7 +213,7 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	udp_cfg.local_udp_port = port;
 
 	/* Create UDP socket */
-	err = udp_sock_create(net, &udp_cfg, &sock);
+	err = udp_sock_create(net, &udp_cfg, &sock/*创建的udp socket*/);
 	if (err < 0)
 		return ERR_PTR(err);
 
@@ -214,7 +221,7 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 	tnl_cfg.encap_rcv = rxe_udp_encap_recv;
 
 	/* Setup UDP tunnel */
-	setup_udp_tunnel_sock(net, sock, &tnl_cfg);
+	setup_udp_tunnel_sock(net, sock, &tnl_cfg/*隧道配置*/);
 
 	return sock;
 }
@@ -293,6 +300,7 @@ static void prepare_ipv6_hdr(struct dst_entry *dst, struct sk_buff *skb,
 	ip6h->payload_len = htons(skb->len - sizeof(*ip6h));
 }
 
+/*rxe报文路由查询，并填充udp header,ipv4 header*/
 static int prepare4(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	struct rxe_qp *qp = pkt->qp;
@@ -303,6 +311,7 @@ static int prepare4(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 	struct in_addr *saddr = &av->sgid_addr._sockaddr_in.sin_addr;
 	struct in_addr *daddr = &av->dgid_addr._sockaddr_in.sin_addr;
 
+	/*确定路由*/
 	dst = rxe_find_route(skb->dev, qp, av);
 	if (!dst) {
 		pr_err("Host not reachable\n");
@@ -344,6 +353,7 @@ static int prepare6(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 	return 0;
 }
 
+/*填充ip头部*/
 int rxe_prepare(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	int err = 0;
@@ -372,21 +382,25 @@ static void rxe_skb_tx_dtor(struct sk_buff *skb)
 	rxe_drop_ref(qp);
 }
 
+/*rxe报文下推至3层*/
 static int rxe_send(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 {
 	int err;
 
 	skb->destructor = rxe_skb_tx_dtor;
-	skb->sk = pkt->qp->sk->sk;
+	skb->sk = pkt->qp->sk->sk;/*指定qp对应的socket*/
 
 	rxe_add_ref(pkt->qp);
 	atomic_inc(&pkt->qp->skb_out);
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+	    /*ipv4本机报文发送*/
 		err = ip_local_out(dev_net(skb_dst(skb)->dev), skb->sk, skb);
 	} else if (skb->protocol == htons(ETH_P_IPV6)) {
+	    /*ipv6本机报文发送*/
 		err = ip6_local_out(dev_net(skb_dst(skb)->dev), skb->sk, skb);
 	} else {
+	    /*未知的l3协议*/
 		pr_err("Unknown layer 3 protocol: %d\n", skb->protocol);
 		atomic_dec(&pkt->qp->skb_out);
 		rxe_drop_ref(pkt->qp);
@@ -491,6 +505,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 		rcu_read_unlock();
 		goto out;
 	}
+	/*申请skb*/
 	skb = alloc_skb(paylen + hdr_len + LL_RESERVED_SPACE(ndev),
 			GFP_ATOMIC);
 
@@ -502,14 +517,17 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 	skb_reserve(skb, hdr_len + LL_RESERVED_SPACE(ndev));
 
 	/* FIXME: hold reference to this netdev until life of this skb. */
+	/*skb对应的dev*/
 	skb->dev	= ndev;
 	rcu_read_unlock();
 
+	/*网络层使用哪种协议*/
 	if (av->network_type == RXE_NETWORK_TYPE_IPV4)
 		skb->protocol = htons(ETH_P_IP);
 	else
 		skb->protocol = htons(ETH_P_IPV6);
 
+	/*packet对应的rxe设备*/
 	pkt->rxe	= rxe;
 	pkt->port_num	= port_num;
 	pkt->hdr	= skb_put(skb, paylen);
@@ -529,17 +547,20 @@ const char *rxe_parent_name(struct rxe_dev *rxe, unsigned int port_num)
 	return rxe->ndev->name;
 }
 
+/*基于ndev创建名称为ibdev_name的rxe设备*/
 int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 {
 	int err;
 	struct rxe_dev *rxe = NULL;
 
+	/*申请rxe设备*/
 	rxe = ib_alloc_device(rxe_dev, ib_dev);
 	if (!rxe)
 		return -ENOMEM;
 
 	rxe->ndev = ndev;
 
+	/*rxe设备添加*/
 	err = rxe_add(rxe, ndev->mtu, ibdev_name);
 	if (err) {
 		ib_dealloc_device(&rxe->ib_dev);
@@ -569,6 +590,7 @@ void rxe_port_up(struct rxe_dev *rxe)
 	port = &rxe->port;
 	port->attr.state = IB_PORT_ACTIVE;
 
+	/*触发port active事件*/
 	rxe_port_event(rxe, IB_EVENT_PORT_ACTIVE);
 	dev_info(&rxe->ib_dev.dev, "set active\n");
 }
@@ -588,6 +610,7 @@ void rxe_port_down(struct rxe_dev *rxe)
 
 void rxe_set_port_state(struct rxe_dev *rxe)
 {
+    /*物理接口up且carrier ok,则置rxe port为up*/
 	if (netif_running(rxe->ndev) && netif_carrier_ok(rxe->ndev))
 		rxe_port_up(rxe);
 	else

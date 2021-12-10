@@ -101,6 +101,7 @@ static int cm_send_rej_locked(struct cm_id_private *cm_id_priv,
 			      u8 ari_length, const void *private_data,
 			      u8 private_data_len);
 
+/*cm client，用于添加ib设备创建删除时cm相关的事件处理*/
 static struct ib_client cm_client = {
 	.name   = "cm",
 	.add    = cm_add_one,
@@ -109,6 +110,7 @@ static struct ib_client cm_client = {
 
 static struct ib_cm {
 	spinlock_t lock;
+	/*用于串连cm_device*/
 	struct list_head device_list;
 	rwlock_t device_lock;
 	struct rb_root listen_service_table;
@@ -166,6 +168,7 @@ struct cm_device {
 	struct kref kref;
 	struct list_head list;
 	spinlock_t mad_agent_lock;
+	/*对应的ib_device*/
 	struct ib_device *ib_device;
 	u8 ack_delay;
 	int going_down;

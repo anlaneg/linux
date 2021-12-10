@@ -120,6 +120,7 @@ void retransmit_timer(struct timer_list *t)
 	}
 }
 
+/*向qp->resp_pkts中添加skb,并运行qp->comp.task*/
 void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
 	int must_sched;

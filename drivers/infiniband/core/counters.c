@@ -638,6 +638,7 @@ void rdma_counter_init(struct ib_device *dev)
 		mutex_init(&port_counter->lock);
 
 		if (!dev->ops.alloc_hw_port_stats)
+		    /*跳过不支持此接口的设备*/
 			continue;
 
 		port_counter->hstats = dev->ops.alloc_hw_port_stats(dev, port);

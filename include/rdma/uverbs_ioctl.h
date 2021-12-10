@@ -328,6 +328,7 @@ enum uapi_definition_scope {
 };
 
 struct uapi_definition {
+    /*uapi_definition_kind类型*/
 	u8 kind;
 	u8 scope;
 	union {
@@ -336,6 +337,7 @@ struct uapi_definition {
 		} object_start;
 		struct {
 			u16 command_num;
+			/*是否扩展类write方法*/
 			u8 is_ex:1;
 			u8 has_udata:1;
 			u8 has_resp:1;
@@ -347,7 +349,9 @@ struct uapi_definition {
 	union {
 		bool (*func_is_supported)(struct ib_device *device);
 		int (*func_write)(struct uverbs_attr_bundle *attrs);
+		/*chain类型时有效，指向一组uapi_definition*/
 		const struct uapi_definition *chain;
+		/*tree类型时有效，指向uverbs_object_def的指针*/
 		const struct uverbs_object_def *chain_obj_tree;
 		size_t needs_fn_offset;
 	};
@@ -362,6 +366,7 @@ struct uapi_definition {
 		##__VA_ARGS__
 
 /* Use in a var_args of DECLARE_UVERBS_OBJECT */
+/*write类非扩展方法*/
 #define DECLARE_UVERBS_WRITE(_command_num, _func, _cmd_desc, ...)              \
 	{                                                                      \
 		.kind = UAPI_DEF_WRITE,                                        \
@@ -421,6 +426,7 @@ struct uapi_definition {
 	}
 
 /* Include another struct uapi_definition in this one */
+/*chain类型的uapi_defintion,其值为一个数组的uapi_definition*/
 #define UAPI_DEF_CHAIN(_def_var)                                               \
 	{                                                                      \
 		.kind = UAPI_DEF_CHAIN, .chain = _def_var,                     \

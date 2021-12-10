@@ -12,13 +12,16 @@
  * sk_buff for received packets.
  */
 struct rxe_pkt_info {
+    /*设备对应的rxe设备*/
 	struct rxe_dev		*rxe;		/* device that owns packet */
 	struct rxe_qp		*qp;		/* qp that owns packet */
 	struct rxe_send_wqe	*wqe;		/* send wqe */
+	/*跳过udp头部*/
 	u8			*hdr;		/* points to bth */
 	u32			mask;		/* useful info about pkt */
 	u32			psn;		/* bth psn of packet */
 	u16			pkey_index;	/* partition of pkt */
+	/*udp负载*/
 	u16			paylen;		/* length of bth - icrc */
 	u8			port_num;	/* port pkt received on */
 	u8			opcode;		/* bth opcode of packet */
@@ -59,6 +62,7 @@ static inline struct sk_buff *PKT_TO_SKB(struct rxe_pkt_info *pkt)
  * Base Transport Header
  ******************************************************************************/
 struct rxe_bth {
+    /*bth头部12字节*/
 	u8			opcode;
 	u8			flags;
 	__be16			pkey;

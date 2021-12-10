@@ -33,6 +33,7 @@ enum rxe_elem_type {
 struct rxe_pool_entry;
 
 struct rxe_pool_entry {
+    /*所属的pool*/
 	struct rxe_pool		*pool;
 	struct kref		ref_cnt;
 	struct list_head	list;
@@ -46,21 +47,29 @@ struct rxe_pool_entry {
 };
 
 struct rxe_pool {
+    /*pool所属的rxe设备*/
 	struct rxe_dev		*rxe;
 	rwlock_t		pool_lock; /* protects pool add/del/search */
+	/*对齐后各elem大小*/
 	size_t			elem_size;
+	/*各entry的清理函数*/
 	void			(*cleanup)(struct rxe_pool_entry *obj);
 	enum rxe_pool_flags	flags;
+	/*pool对应的类型*/
 	enum rxe_elem_type	type;
 
+	/*最大元素数*/
 	unsigned int		max_elem;
+	/*已使用元素数*/
 	atomic_t		num_elem;
 
 	/* only used if indexed */
 	struct {
 		struct rb_root		tree;
+		/*bitmap,用于记录哪些index已分配*/
 		unsigned long		*table;
 		u32			last;
+		/*此pool的最大，最小索引*/
 		u32			max_index;
 		u32			min_index;
 	} index;
@@ -68,7 +77,9 @@ struct rxe_pool {
 	/* only used if keyed */
 	struct {
 		struct rb_root		tree;
+		/*到entry的偏移量*/
 		size_t			key_offset;
+		/*entry的大小*/
 		size_t			key_size;
 	} key;
 };

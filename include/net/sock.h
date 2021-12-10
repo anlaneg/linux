@@ -540,6 +540,7 @@ struct sock {
 				sk_txtime_unused : 6;
 
 	struct socket		*sk_socket;
+	/*socket私有数据*/
 	void			*sk_user_data;
 #ifdef CONFIG_SECURITY
 	void			*sk_security;

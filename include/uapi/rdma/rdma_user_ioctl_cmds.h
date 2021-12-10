@@ -73,10 +73,13 @@ struct ib_uverbs_attr {
 	};
 };
 
+/*uverbs ioctl command头信息结构体*/
 struct ib_uverbs_ioctl_hdr {
+    /*消息总长度*/
 	__u16 length;
 	__u16 object_id;
 	__u16 method_id;
+	/*attr数组大小*/
 	__u16 num_attrs;
 	__aligned_u64 reserved1;
 	__u32 driver_id;

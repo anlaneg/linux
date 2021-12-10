@@ -227,17 +227,21 @@ rdma_node_get_transport(unsigned int node_type)
 }
 EXPORT_SYMBOL(rdma_node_get_transport);
 
+/*取此port对应的link layer类型*/
 enum rdma_link_layer rdma_port_get_link_layer(struct ib_device *device,
 					      u32 port_num)
 {
 	enum rdma_transport_type lt;
 	if (device->ops.get_link_layer)
+	    /*取ib_device对应的port_num号port对应的链路层类型*/
 		return device->ops.get_link_layer(device, port_num);
 
 	lt = rdma_node_get_transport(device->node_type);
 	if (lt == RDMA_TRANSPORT_IB)
+	    /*明确标明为ib*/
 		return IB_LINK_LAYER_INFINIBAND;
 
+	/*其它默认为ethernet*/
 	return IB_LINK_LAYER_ETHERNET;
 }
 EXPORT_SYMBOL(rdma_port_get_link_layer);
@@ -1209,6 +1213,7 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	struct ib_qp *qp;
 	int ret;
 
+	/*接口create_qp不得为空*/
 	if (!dev->ops.create_qp)
 		return ERR_PTR(-EOPNOTSUPP);
 
@@ -1890,13 +1895,16 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 	struct net_device *netdev;
 	struct ethtool_link_ksettings lksettings;
 
+	/*此port链路层必须为ethernet*/
 	if (rdma_port_get_link_layer(dev, port_num) != IB_LINK_LAYER_ETHERNET)
 		return -EINVAL;
 
+	/*取此port对应的netdev*/
 	netdev = ib_device_get_netdev(dev, port_num);
 	if (!netdev)
 		return -ENODEV;
 
+	/*取link ksetting*/
 	rtnl_lock();
 	rc = __ethtool_get_link_ksettings(netdev, &lksettings);
 	rtnl_unlock();
@@ -1904,13 +1912,16 @@ int ib_get_eth_speed(struct ib_device *dev, u32 port_num, u16 *speed, u8 *width)
 	dev_put(netdev);
 
 	if (!rc && lksettings.base.speed != (u32)SPEED_UNKNOWN) {
+	    /*使用netdev的speed*/
 		netdev_speed = lksettings.base.speed;
 	} else {
+	    /*默认1000M口*/
 		netdev_speed = SPEED_1000;
 		pr_warn("%s speed is unknown, defaulting to %u\n", netdev->name,
 			netdev_speed);
 	}
 
+	/*按底层网络设备带宽，决定width,speed*/
 	if (netdev_speed <= SPEED_1000) {
 		*width = IB_WIDTH_1X;
 		*speed = IB_SPEED_SDR;

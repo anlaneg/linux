@@ -420,12 +420,14 @@ static int ib_uverbs_run_method(struct bundle_priv *pbundle,
 	int ret;
 
 	/* See uverbs_disassociate_api() */
+	/*取handler函数*/
 	handler = srcu_dereference(
 		pbundle->method_elm->handler,
 		&pbundle->bundle.ufile->device->disassociate_srcu);
 	if (!handler)
 		return -EIO;
 
+	/*用户态pbundle->user_attrs转内存态*/
 	pbundle->uattrs = uverbs_alloc(&pbundle->bundle, uattrs_size);
 	if (IS_ERR(pbundle->uattrs))
 		return PTR_ERR(pbundle->uattrs);
@@ -451,6 +453,7 @@ static int ib_uverbs_run_method(struct bundle_priv *pbundle,
 	else
 		pbundle->bundle.driver_udata = (struct ib_udata){};
 
+	/*触发handler回调*/
 	if (destroy_bkey != UVERBS_API_ATTR_BKEY_LEN) {
 		struct uverbs_obj_attr *destroy_attr =
 			&pbundle->bundle.attrs[destroy_bkey].obj_attr;
@@ -544,6 +547,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 			       struct ib_uverbs_attr __user *user_attrs)
 {
 	const struct uverbs_api_ioctl_method *method_elm;
+	/*由ufile获得uapi*/
 	struct uverbs_api *uapi = ufile->device->uapi;
 	struct radix_tree_iter attrs_iter;
 	struct bundle_priv *pbundle;
@@ -552,17 +556,24 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 	int ret;
 
 	if (unlikely(hdr->driver_id != uapi->driver_id))
+	    /*传入的driver_id必须与uapi的driver_id相等*/
 		return -EINVAL;
 
+	/*通过key查询value*/
 	slot = radix_tree_iter_lookup(
 		&uapi->radix, &attrs_iter,
 		uapi_key_obj(hdr->object_id) |
 			uapi_key_ioctl_method(hdr->method_id));
 	if (unlikely(!slot))
+	    /*未查询到对应的回调元素*/
 		return -EPROTONOSUPPORT;
+
+	/*将slot转为method_elm*/
 	method_elm = rcu_dereference_protected(*slot, true);
 
+	/*构造pbundle*/
 	if (!method_elm->use_stack) {
+	    /*不使用栈上的变量，改在堆里申请*/
 		pbundle = kmalloc(method_elm->bundle_size, GFP_KERNEL);
 		if (!pbundle)
 			return -ENOMEM;
@@ -572,6 +583,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 		pbundle->alloc_head.next = NULL;
 		pbundle->allocated_mem = &pbundle->alloc_head;
 	} else {
+	    /*使用栈上的变量onstack*/
 		pbundle = &onstack;
 		pbundle->internal_avail = sizeof(pbundle->internal_buffer);
 		pbundle->allocated_mem = NULL;
@@ -605,6 +617,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 long ib_uverbs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct ib_uverbs_file *file = filp->private_data;
+	/*命令参数*/
 	struct ib_uverbs_ioctl_hdr __user *user_hdr =
 		(struct ib_uverbs_ioctl_hdr __user *)arg;
 	struct ib_uverbs_ioctl_hdr hdr;
@@ -612,8 +625,10 @@ long ib_uverbs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int err;
 
 	if (unlikely(cmd != RDMA_VERBS_IOCTL))
+	    /*cmd必须为rdam_verbs_ioctl*/
 		return -ENOIOCTLCMD;
 
+	/*用户态数据转kernel态*/
 	err = copy_from_user(&hdr, user_hdr, sizeof(hdr));
 	if (err)
 		return -EFAULT;

@@ -110,7 +110,7 @@ int ib_enum_all_devs(nldev_callback nldev_cb, struct sk_buff *skb,
 
 struct ib_client_nl_info {
 	struct sk_buff *nl_msg;
-	struct device *cdev;
+	struct device *cdev;/*对应的字符设备*/
 	u32 port;
 	u64 abi;
 };

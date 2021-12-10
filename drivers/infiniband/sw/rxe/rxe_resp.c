@@ -84,20 +84,23 @@ void rxe_resp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 	int must_sched;
 	struct rxe_pkt_info *pkt = SKB_TO_PKT(skb);
 
+	/*将skb添加到qp->req_pkts队列*/
 	skb_queue_tail(&qp->req_pkts, skb);
 
 	must_sched = (pkt->opcode == IB_OPCODE_RC_RDMA_READ_REQUEST) ||
 			(skb_queue_len(&qp->req_pkts) > 1);
 
+	/*运行qp->resp.task任务*/
 	rxe_run_task(&qp->resp.task, must_sched);
 }
 
 static inline enum resp_states get_req(struct rxe_qp *qp,
-				       struct rxe_pkt_info **pkt_p)
+				       struct rxe_pkt_info **pkt_p/*出参，首个qp->req_pkts的pkt_info*/)
 {
 	struct sk_buff *skb;
 
 	if (qp->resp.state == QP_STATE_ERROR) {
+	    /*释放qp上所有的req_pkts*/
 		while ((skb = skb_dequeue(&qp->req_pkts))) {
 			rxe_drop_ref(qp);
 			kfree_skb(skb);
@@ -108,8 +111,10 @@ static inline enum resp_states get_req(struct rxe_qp *qp,
 		return RESPST_CHK_RESOURCE;
 	}
 
+	/*peek首个报文*/
 	skb = skb_peek(&qp->req_pkts);
 	if (!skb)
+	    /*队列为空，直接退出*/
 		return RESPST_EXIT;
 
 	*pkt_p = SKB_TO_PKT(skb);
@@ -1192,6 +1197,7 @@ static void rxe_drain_req_pkts(struct rxe_qp *qp, bool notify)
 		queue_advance_consumer(q, q->type);
 }
 
+/*处理报文并进行响应*/
 int rxe_responder(void *arg)
 {
 	struct rxe_qp *qp = (struct rxe_qp *)arg;
@@ -1224,6 +1230,7 @@ int rxe_responder(void *arg)
 			 resp_state_name[state]);
 		switch (state) {
 		case RESPST_GET_REQ:
+		    /*取req,并得到下一步state*/
 			state = get_req(qp, &pkt);
 			break;
 		case RESPST_CHK_PSN:
@@ -1361,7 +1368,9 @@ int rxe_responder(void *arg)
 			goto done;
 
 		case RESPST_EXIT:
+		    /*处理结束，退出*/
 			if (qp->resp.goto_error) {
+			    /*遇到错误，更改state,要求下一步*/
 				state = RESPST_ERROR;
 				break;
 			}
@@ -1374,6 +1383,7 @@ int rxe_responder(void *arg)
 			goto exit;
 
 		case RESPST_ERROR:
+		    /*达到错误状态*/
 			qp->resp.goto_error = 0;
 			pr_warn("qp#%d moved to error state\n", qp_num(qp));
 			rxe_qp_error(qp);
