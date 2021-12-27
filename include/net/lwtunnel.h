@@ -34,9 +34,10 @@ struct lwtunnel_state {
 };
 
 struct lwtunnel_encap_ops {
+    /*隧道初始化，配置来源于ip route*/
 	int (*build_state)(struct net *net, struct nlattr *encap,
 			   unsigned int family, const void *cfg,
-			   struct lwtunnel_state **ts,
+			   struct lwtunnel_state **ts/*出参，产生隧道state*/,
 			   struct netlink_ext_ack *extack);
 	void (*destroy_state)(struct lwtunnel_state *lws);
 	int (*output)(struct net *net, struct sock *sk, struct sk_buff *skb);

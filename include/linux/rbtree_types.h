@@ -10,6 +10,7 @@ struct rb_node {
 /* The alignment might seem pointless, but allegedly CRIS needs it */
 
 struct rb_root {
+    /*红黑树，树根节点*/
 	struct rb_node *rb_node;
 };
 

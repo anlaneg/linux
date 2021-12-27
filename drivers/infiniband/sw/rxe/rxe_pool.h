@@ -35,6 +35,7 @@ struct rxe_pool_entry;
 struct rxe_pool_entry {
     /*所属的pool*/
 	struct rxe_pool		*pool;
+	/*此entry的引用计数*/
 	struct kref		ref_cnt;
 	struct list_head	list;
 
@@ -43,6 +44,7 @@ struct rxe_pool_entry {
 
 	/* only used if indexed */
 	struct rb_node		index_node;
+	/*elem对应的在pool里的index*/
 	u32			index;
 };
 
@@ -65,9 +67,11 @@ struct rxe_pool {
 
 	/* only used if indexed */
 	struct {
+	    /*红黑树树根节点，用于查询pool entry*/
 		struct rb_root		tree;
 		/*bitmap,用于记录哪些index已分配*/
 		unsigned long		*table;
+		/*记录上次分配的index*/
 		u32			last;
 		/*此pool的最大，最小索引*/
 		u32			max_index;

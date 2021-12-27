@@ -129,9 +129,9 @@ struct nf_conntrack_tuple_hash {
 static inline bool __nf_ct_tuple_src_equal(const struct nf_conntrack_tuple *t1,
 					   const struct nf_conntrack_tuple *t2)
 {
-	return (nf_inet_addr_cmp(&t1->src.u3, &t2->src.u3) &&
-		t1->src.u.all == t2->src.u.all &&
-		t1->src.l3num == t2->src.l3num);
+	return (nf_inet_addr_cmp(&t1->src.u3, &t2->src.u3) /*端ip比对*/&&
+		t1->src.u.all == t2->src.u.all /*源端口比对*/&&
+		t1->src.l3num == t2->src.l3num);/*l3协议号必须相同*/
 }
 
 //检查两个tuple dst是否相等
@@ -140,7 +140,7 @@ static inline bool __nf_ct_tuple_dst_equal(const struct nf_conntrack_tuple *t1,
 {
 	return (nf_inet_addr_cmp(&t1->dst.u3, &t2->dst.u3) &&
 		t1->dst.u.all == t2->dst.u.all &&
-		t1->dst.protonum == t2->dst.protonum);
+		t1->dst.protonum == t2->dst.protonum);/*l4协议号必须相同*/
 }
 
 //检查t1,t2两个元组是否相等

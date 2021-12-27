@@ -104,13 +104,14 @@ static int rxe_modify_port(struct ib_device *dev,
 	return 0;
 }
 
+/*取ib设备对应的底层链路层*/
 static enum rdma_link_layer rxe_get_link_layer(struct ib_device *dev,
 					       u32 port_num)
 {
 	return IB_LINK_LAYER_ETHERNET;
 }
 
-/*分配ucontext空间*/
+/*分配ucontext空间,并不直接申请rxe_ucontext，而直接由ib_ucontext转换而来*/
 static int rxe_alloc_ucontext(struct ib_ucontext *ibuc, struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibuc->device);
@@ -139,7 +140,7 @@ static int rxe_port_immutable(struct ib_device *dev, u32 port_num,
 	if (err)
 		return err;
 
-	/*利用port属性填充此值，这些值是？？？？*/
+	/*利用port属性填充此值*/
 	immutable->pkey_tbl_len = attr.pkey_tbl_len;
 	immutable->gid_tbl_len = attr.gid_tbl_len;
 	immutable->max_mad_size = IB_MGMT_MAD_SIZE;
@@ -147,11 +148,13 @@ static int rxe_port_immutable(struct ib_device *dev, u32 port_num,
 	return 0;
 }
 
+/*并不直接申请rxe_pd,而直接将ib_pd转换为rxe_pd*/
 static int rxe_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
 	struct rxe_pd *pd = to_rpd(ibpd);
 
+	/*初始化pd所属的pool*/
 	return rxe_add_to_pool(&rxe->pd_pool, pd);
 }
 
@@ -163,6 +166,7 @@ static int rxe_dealloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 	return 0;
 }
 
+/*创建ah*/
 static int rxe_create_ah(struct ib_ah *ibah,
 			 struct rdma_ah_init_attr *init_attr,
 			 struct ib_udata *udata)
@@ -186,6 +190,7 @@ static int rxe_create_ah(struct ib_ah *ibah,
 	if (err)
 		return err;
 
+	/*添加ah到ah_pool*/
 	err = rxe_add_to_pool(&rxe->ah_pool, ah);
 	if (err)
 		return err;
@@ -254,25 +259,30 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	int num_sge = ibwr->num_sge;
 	int full;
 
+	/*检查队列是否为满*/
 	full = queue_full(rq->queue, QUEUE_TYPE_TO_DRIVER);
 	if (unlikely(full)) {
 		err = -ENOMEM;
 		goto err1;
 	}
 
+	/*num_sge过大，接收失败*/
 	if (unlikely(num_sge > rq->max_sge)) {
 		err = -EINVAL;
 		goto err1;
 	}
 
+	/*取接收buffer长度*/
 	length = 0;
 	for (i = 0; i < num_sge; i++)
 		length += ibwr->sg_list[i].length;
 
+	/*取recv wqe*/
 	recv_wqe = queue_producer_addr(rq->queue, QUEUE_TYPE_TO_DRIVER);
 	recv_wqe->wr_id = ibwr->wr_id;
 	recv_wqe->num_sge = num_sge;
 
+	/*复制ib_sge指针到ibwr->sg_list*/
 	memcpy(recv_wqe->dma.sge, ibwr->sg_list,
 	       num_sge * sizeof(struct ib_sge));
 
@@ -282,6 +292,7 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	recv_wqe->dma.cur_sge		= 0;
 	recv_wqe->dma.sge_offset	= 0;
 
+	/*更新生产者指针*/
 	queue_advance_producer(rq->queue, QUEUE_TYPE_TO_DRIVER);
 
 	return 0;
@@ -290,6 +301,7 @@ err1:
 	return err;
 }
 
+/*创建srq*/
 static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 			  struct ib_udata *udata)
 {
@@ -441,14 +453,17 @@ static int rxe_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init,
 
 		qp->is_user = true;
 	} else {
+	    /*非用户态qp*/
 		qp->is_user = false;
 	}
 
+	/*将qp加入到pool*/
 	err = rxe_add_to_pool(&rxe->qp_pool, qp);
 	if (err)
 		return err;
 
 	rxe_add_index(qp);
+	/*初始化qp*/
 	err = rxe_qp_from_init(rxe, qp, pd, init, uresp, ibqp->pd, udata);
 	if (err)
 		goto qp_init;
@@ -461,6 +476,7 @@ qp_init:
 	return err;
 }
 
+/*更新qp*/
 static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			 int mask, struct ib_udata *udata)
 {
@@ -647,12 +663,14 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	unsigned long flags;
 	int full;
 
+	/*校验wr*/
 	err = validate_send_wr(qp, ibwr, mask, length);
 	if (err)
 		return err;
 
 	spin_lock_irqsave(&qp->sq.sq_lock, flags);
 
+	/*检查队列是否已满*/
 	full = queue_full(sq->queue, QUEUE_TYPE_TO_DRIVER);
 
 	if (unlikely(full)) {
@@ -660,9 +678,12 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		return -ENOMEM;
 	}
 
+	/*取生产者对应的wqe*/
 	send_wqe = queue_producer_addr(sq->queue, QUEUE_TYPE_TO_DRIVER);
+	/*更新send_wqe*/
 	init_send_wqe(qp, ibwr, mask, length, send_wqe);
 
+	/*更新新产者指针*/
 	queue_advance_producer(sq->queue, QUEUE_TYPE_TO_DRIVER);
 
 	spin_unlock_irqrestore(&qp->sq.sq_lock, flags);
@@ -696,16 +717,20 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 
 		next = wr->next;
 
+		/*取此wr的数据总长度*/
 		length = 0;
 		for (i = 0; i < wr->num_sge; i++)
 			length += wr->sg_list[i].length;
 
+		/*发送此wr*/
 		err = post_one_send(qp, wr, mask, length);
 
 		if (err) {
 			*bad_wr = wr;
 			break;
 		}
+
+		/*切换到下一个wr*/
 		wr = next;
 	}
 
@@ -716,6 +741,7 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 	return err;
 }
 
+/*rxe实现post_send,用于知会数据已准备完成*/
 static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 			 const struct ib_send_wr **bad_wr)
 {
@@ -753,6 +779,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 		goto err1;
 	}
 
+	/*srq不为空，报错*/
 	if (unlikely(qp->srq)) {
 		*bad_wr = wr;
 		err = -EINVAL;
@@ -761,6 +788,7 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 
 	spin_lock_irqsave(&rq->producer_lock, flags);
 
+	/*针对每个wr执行一次post_one_recv*/
 	while (wr) {
 		err = post_one_recv(rq, wr);
 		if (unlikely(err)) {
@@ -904,11 +932,14 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	struct rxe_pd *pd = to_rpd(ibpd);
 	struct rxe_mr *mr;
 
+	/*申请mr*/
 	mr = rxe_alloc(&rxe->mr_pool);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
+	/*加入到pool中*/
 	rxe_add_index(mr);
+	/*pd引用增加*/
 	rxe_add_ref(pd);
 	rxe_mr_init_dma(pd, access, mr);
 
@@ -933,10 +964,12 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
 		goto err2;
 	}
 
+	/*将其加入到pool*/
 	rxe_add_index(mr);
 
 	rxe_add_ref(pd);
 
+	/*初始化mr*/
 	err = rxe_mr_init_user(pd, start, length, iova, access, mr);
 	if (err)
 		goto err3;
@@ -951,6 +984,7 @@ err2:
 	return ERR_PTR(err);
 }
 
+/*申请ib_mr*/
 static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 				  u32 max_num_sg)
 {
@@ -959,15 +993,18 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 	struct rxe_mr *mr;
 	int err;
 
+	/*当前仅支持ib_mr_type_mem_reg类型*/
 	if (mr_type != IB_MR_TYPE_MEM_REG)
 		return ERR_PTR(-EINVAL);
 
+	/*申请mr*/
 	mr = rxe_alloc(&rxe->mr_pool);
 	if (!mr) {
 		err = -ENOMEM;
 		goto err1;
 	}
 
+	/*将mr加入到pool中*/
 	rxe_add_index(mr);
 
 	rxe_add_ref(pd);
@@ -1022,6 +1059,7 @@ static int rxe_attach_mcast(struct ib_qp *ibqp, union ib_gid *mgid, u16 mlid)
 	if (err)
 		return err;
 
+	/*添加组播组*/
 	err = rxe_mcast_add_grp_elem(rxe, qp, grp);
 
 	rxe_drop_ref(grp);
@@ -1036,6 +1074,7 @@ static int rxe_detach_mcast(struct ib_qp *ibqp, union ib_gid *mgid, u16 mlid)
 	return rxe_mcast_drop_grp_elem(rxe, qp, mgid);
 }
 
+/*rxe设备父设备名称（及网络接口名称）*/
 static ssize_t parent_show(struct device *device,
 			   struct device_attribute *attr, char *buf)
 {
@@ -1056,6 +1095,7 @@ static const struct attribute_group rxe_attr_group = {
 	.attrs = rxe_dev_attributes,
 };
 
+/*驱动使能此设备*/
 static int rxe_enable_driver(struct ib_device *ib_dev)
 {
 	struct rxe_dev *rxe = container_of(ib_dev, struct rxe_dev, ib_dev);
@@ -1099,8 +1139,11 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.get_port_immutable = rxe_port_immutable,
 	.map_mr_sg = rxe_map_mr_sg,
 	.mmap = rxe_mmap,
+	/*更新ah*/
 	.modify_ah = rxe_modify_ah,
+	/*更新ib_device*/
 	.modify_device = rxe_modify_device,
+	/*port属性修改*/
 	.modify_port = rxe_modify_port,
 	.modify_qp = rxe_modify_qp,
 	.modify_srq = rxe_modify_srq,

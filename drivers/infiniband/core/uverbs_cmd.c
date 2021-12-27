@@ -416,6 +416,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 
+/*执行pd创建*/
 static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_alloc_pd_resp resp = {};
@@ -433,6 +434,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	if (IS_ERR(uobj))
 		return PTR_ERR(uobj);
 
+	/*申请此设备对应的pd内存*/
 	pd = rdma_zalloc_drv_obj(ib_dev, ib_pd);
 	if (!pd) {
 		ret = -ENOMEM;
@@ -446,6 +448,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	rdma_restrack_new(&pd->res, RDMA_RESTRACK_PD);
 	rdma_restrack_set_name(&pd->res, NULL);
 
+	/*驱动处理alloc_pd*/
 	ret = ib_dev->ops.alloc_pd(pd, &attrs->driver_udata);
 	if (ret)
 		goto err_alloc;
@@ -703,13 +706,16 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	int                          ret;
 	struct ib_device *ib_dev;
 
+	/*自attrs中读取cmd*/
 	ret = uverbs_request(attrs, &cmd, sizeof(cmd));
 	if (ret)
 		return ret;
 
+	/*两者与之后地址结果应是一致的*/
 	if ((cmd.start & ~PAGE_MASK) != (cmd.hca_va & ~PAGE_MASK))
 		return -EINVAL;
 
+	/*申请uobj对象*/
 	uobj = uobj_alloc(UVERBS_OBJECT_MR, attrs, &ib_dev);
 	if (IS_ERR(uobj))
 		return PTR_ERR(uobj);
@@ -718,12 +724,14 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		goto err_free;
 
+	/*查询cmd指定的pd*/
 	pd = uobj_get_obj_read(pd, UVERBS_OBJECT_PD, cmd.pd_handle, attrs);
 	if (!pd) {
 		ret = -EINVAL;
 		goto err_free;
 	}
 
+	/*此pd对应的device执行user space内存注册*/
 	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va,
 					 cmd.access_flags,
 					 &attrs->driver_udata);
@@ -1987,6 +1995,7 @@ static void *alloc_wr(size_t wr_size, __u32 num_sge)
 		       GFP_KERNEL);
 }
 
+/*收到post send消息*/
 static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_post_send      cmd;
@@ -2031,6 +2040,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 	sg_ind = 0;
 	last = NULL;
 	for (i = 0; i < cmd.wr_count; ++i) {
+	    /*取写入的第i个wrq,填充到user_wr中*/
 		if (copy_from_user(user_wr, wqes + i * cmd.wqe_size,
 				   cmd.wqe_size)) {
 			ret = -EFAULT;
@@ -2125,9 +2135,13 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		}
 
 		if (!last)
+		    /*wr指向首个wqe*/
 			wr = next;
 		else
+		    /*将weq串起来*/
 			last->next = next;
+
+		/*更新last*/
 		last = next;
 
 		next->next       = NULL;
@@ -2137,6 +2151,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 		next->send_flags = user_wr->send_flags;
 
 		if (next->num_sge) {
+		    /*指定了sg_list,复制它的数据sg_list*/
 			next->sg_list = (void *) next +
 				ALIGN(next_size, sizeof(struct ib_sge));
 			if (copy_from_user(next->sg_list, sgls + sg_ind,
@@ -2150,9 +2165,11 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 			next->sg_list = NULL;
 	}
 
+	/*调用post_send*/
 	resp.bad_wr = 0;
 	ret = qp->device->ops.post_send(qp->real_qp, wr, &bad_wr);
 	if (ret)
+	    /*发送失败*/
 		for (next = wr; next; next = next->next) {
 			++resp.bad_wr;
 			if (next == bad_wr)
@@ -3683,27 +3700,28 @@ static int ib_uverbs_ex_modify_cq(struct uverbs_attr_bundle *attrs)
  * cannot be changed.
  */
 #define UAPI_DEF_WRITE_IO(req, resp)                                           \
-	.write.has_resp = 1 +                                                  \
+	.write.has_resp = 1 /*有响应*/+                                                  \
 			  BUILD_BUG_ON_ZERO(offsetof(req, response) != 0) +    \
 			  BUILD_BUG_ON_ZERO(sizeof_field(req, response) !=    \
 					    sizeof(u64)),                      \
-	.write.req_size = sizeof(req), .write.resp_size = sizeof(resp)
+	.write.req_size = sizeof(req)/*请求结构体大小*/, .write.resp_size = sizeof(resp)/*响应结构体大小*/
 
 #define UAPI_DEF_WRITE_I(req) .write.req_size = sizeof(req)
 
+/*有udata的*/
 #define UAPI_DEF_WRITE_UDATA_IO(req, resp)                                     \
 	UAPI_DEF_WRITE_IO(req, resp),                                          \
 		.write.has_udata =                                             \
-			1 +                                                    \
+			1 /*包含udata*/+                                                    \
 			BUILD_BUG_ON_ZERO(offsetof(req, driver_data) !=        \
 					  sizeof(req)) +                       \
 			BUILD_BUG_ON_ZERO(offsetof(resp, driver_data) !=       \
-					  sizeof(resp))
+					  sizeof(resp))/*响应/请求大小等于driver_data之前大小*/
 
 #define UAPI_DEF_WRITE_UDATA_I(req)                                            \
 	UAPI_DEF_WRITE_I(req),                                                 \
 		.write.has_udata =                                             \
-			1 + BUILD_BUG_ON_ZERO(offsetof(req, driver_data) !=    \
+			1 /*包含udata*/+ BUILD_BUG_ON_ZERO(offsetof(req, driver_data) !=    \
 					      sizeof(req))
 
 /*
@@ -3872,7 +3890,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UVERBS_OBJECT_PD,
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_ALLOC_PD,
-			ib_uverbs_alloc_pd,
+			ib_uverbs_alloc_pd,/*创建pd*/
 			UAPI_DEF_WRITE_UDATA_IO(struct ib_uverbs_alloc_pd,
 						struct ib_uverbs_alloc_pd_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(alloc_pd)),
@@ -3918,6 +3936,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_post_recv,
 					  struct ib_uverbs_post_recv_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(post_recv)),
+			/*收到发送结束通知，调用post_send*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_POST_SEND,
 			ib_uverbs_post_send,

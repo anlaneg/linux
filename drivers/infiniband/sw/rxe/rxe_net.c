@@ -26,6 +26,7 @@ int rxe_mcast_add(struct rxe_dev *rxe, union ib_gid *mgid)
 	unsigned char ll_addr[ETH_ALEN];
 
 	ipv6_eth_mc_map((struct in6_addr *)mgid->raw, ll_addr);
+	/*为设备添加组播地址*/
 	err = dev_mc_add(rxe->ndev, ll_addr);
 
 	return err;
@@ -318,9 +319,11 @@ static int prepare4(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 		return -EHOSTUNREACH;
 	}
 
+	/*填充udp头部*/
 	prepare_udp_hdr(skb, cpu_to_be16(qp->src_port),
 			cpu_to_be16(ROCE_V2_UDP_DPORT));
 
+	/*填充ipv4头部*/
 	prepare_ipv4_hdr(dst, skb, saddr->s_addr, daddr->s_addr, IPPROTO_UDP,
 			 av->grh.traffic_class, av->grh.hop_limit, df, xnet);
 
@@ -363,6 +366,7 @@ int rxe_prepare(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 	else if (skb->protocol == htons(ETH_P_IPV6))
 		err = prepare6(pkt, skb);
 
+	/*检查出接口对应的mac是否与rxe_get_av(pkt)->dmac)相同*/
 	if (ether_addr_equal(skb->dev->dev_addr, rxe_get_av(pkt)->dmac))
 		pkt->mask |= RXE_LOOPBACK_MASK;
 
@@ -423,6 +427,7 @@ static int rxe_loopback(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 {
 	memcpy(SKB_TO_PKT(skb), pkt, sizeof(*pkt));
 
+	/*移除ip头*/
 	if (skb->protocol == htons(ETH_P_IP))
 		skb_pull(skb, sizeof(struct iphdr));
 	else
@@ -451,6 +456,7 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 		goto drop;
 	}
 
+	/*填充ib头部*/
 	rxe_icrc_generate(skb, pkt);
 
 	if (pkt->mask & RXE_LOOPBACK_MASK)
@@ -465,7 +471,9 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 
 	if ((qp_type(qp) != IB_QPT_RC) &&
 	    (pkt->mask & RXE_END_MASK)) {
+	    /*标记此wqe发送完成*/
 		pkt->wqe->state = wqe_state_done;
+		/*触发qp->comp.task运行*/
 		rxe_run_task(&qp->comp.task, 1);
 	}
 
@@ -492,6 +500,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 	if (IS_ERR(attr))
 		return NULL;
 
+	/*ip层头部长度*/
 	if (av->network_type == RXE_NETWORK_TYPE_IPV4)
 		hdr_len = ETH_HLEN + sizeof(struct udphdr) +
 			sizeof(struct iphdr);
@@ -514,6 +523,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 		goto out;
 	}
 
+	/*指向udp层*/
 	skb_reserve(skb, hdr_len + LL_RESERVED_SPACE(ndev));
 
 	/* FIXME: hold reference to this netdev until life of this skb. */

@@ -108,7 +108,8 @@ __uobj_alloc(const struct uverbs_api_object *obj,
 	return uobj;
 }
 
-#define uobj_alloc(_type, _attrs, _ib_dev)                                     \
+/*申请type类型的uobj*/
+#define uobj_alloc(_type/*obj类型*/, _attrs, _ib_dev/*出参，obj对应的ib_dev*/)                                     \
 	__uobj_alloc(uobj_get_type(_attrs, _type), _attrs, _ib_dev)
 
 static inline void uverbs_flow_action_fill_action(struct ib_flow_action *action,
@@ -162,6 +163,7 @@ static inline void ib_set_flow(struct ib_uobject *uobj, struct ib_flow *ibflow,
 	uflow->resources = uflow_res;
 }
 
+/*每个type对应的obj*/
 struct uverbs_api_object {
 	const struct uverbs_obj_type *type_attrs;
 	const struct uverbs_obj_type_class *type_class;

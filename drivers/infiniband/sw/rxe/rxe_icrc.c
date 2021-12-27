@@ -114,6 +114,7 @@ static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 
 	bth_offset += hdr_size;
 
+	/*填充ib头部*/
 	memcpy(&pshdr[bth_offset], pkt->hdr, RXE_BTH_BYTES);
 	bth = (struct rxe_bth *)&pshdr[bth_offset];
 

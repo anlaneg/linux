@@ -51,6 +51,7 @@ static DEFINE_SPINLOCK(fib_info_lock);
 static struct hlist_head *fib_info_hash;
 static struct hlist_head *fib_info_laddrhash;
 static unsigned int fib_info_hash_size;
+/*记录系统中fib_info的总数*/
 static unsigned int fib_info_cnt;
 
 #define DEVINDEX_HASHBITS 8
@@ -572,19 +573,21 @@ static int fib_detect_death(struct fib_info *fi, int order,
 	return 1;
 }
 
-int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc,
+int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc/*出参*/,
 		       struct nlattr *encap, u16 encap_type,
 		       void *cfg, gfp_t gfp_flags,
 		       struct netlink_ext_ack *extack)
 {
 	int err;
 
+	/*申请percpu的rtable*/
 	nhc->nhc_pcpu_rth_output = alloc_percpu_gfp(struct rtable __rcu *,
 						    gfp_flags);
 	if (!nhc->nhc_pcpu_rth_output)
 		return -ENOMEM;
 
 	if (encap) {
+	    /*提供了路由encap动作，初始化nhc_lwtstate*/
 		struct lwtunnel_state *lwtstate;
 
 		if (encap_type == LWTUNNEL_ENCAP_NONE) {
@@ -610,7 +613,7 @@ lwt_failure:
 }
 EXPORT_SYMBOL_GPL(fib_nh_common_init);
 
-int fib_nh_init(struct net *net, struct fib_nh *nh,
+int fib_nh_init(struct net *net, struct fib_nh *nh/*出参，利用cfg填充nh*/,
 		struct fib_config *cfg, int nh_weight,
 		struct netlink_ext_ack *extack)
 {
@@ -618,6 +621,7 @@ int fib_nh_init(struct net *net, struct fib_nh *nh,
 
 	nh->fib_nh_family = AF_INET;
 
+	/*rtable及encap 轻量隧道初始化*/
 	err = fib_nh_common_init(net, &nh->nh_common, cfg->fc_encap,
 				 cfg->fc_encap_type, cfg, GFP_KERNEL, extack);
 	if (err)
@@ -645,6 +649,7 @@ int fib_nh_init(struct net *net, struct fib_nh *nh,
 
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 
+/*获取有多少个下一跳配置*/
 static int fib_count_nexthops(struct rtnexthop *rtnh, int remaining,
 			      struct netlink_ext_ack *extack)
 {
@@ -666,7 +671,7 @@ static int fib_count_nexthops(struct rtnexthop *rtnh, int remaining,
 }
 
 /* only called when fib_nh is integrated into fib_info */
-static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
+static int fib_get_nhs(struct fib_info *fi/*出参，填充nexthop*/, struct rtnexthop *rtnh,
 		       int remaining, struct fib_config *cfg,
 		       struct netlink_ext_ack *extack)
 {
@@ -675,11 +680,14 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 	struct fib_nh *nh;
 	int ret;
 
+	/*遍历并填充nexthop*/
 	change_nexthops(fi) {
 		int attrlen;
 
+		/*先将fib_cfg清空，将消息内容先解析到fib_cfg中*/
 		memset(&fib_cfg, 0, sizeof(fib_cfg));
 
+		/*消息有效性检查*/
 		if (!rtnh_ok(rtnh, remaining)) {
 			NL_SET_ERR_MSG(extack,
 				       "Invalid nexthop configuration - extra data after nexthop");
@@ -702,15 +710,18 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 			nla = nla_find(attrs, attrlen, RTA_GATEWAY);
 			nlav = nla_find(attrs, attrlen, RTA_VIA);
 			if (nla && nlav) {
+			    /*两者不能同时配置*/
 				NL_SET_ERR_MSG(extack,
 					       "Nexthop configuration can not contain both GATEWAY and VIA");
 				return -EINVAL;
 			}
 			if (nla) {
+			    /*gateway情况*/
 				fib_cfg.fc_gw4 = nla_get_in_addr(nla);
 				if (fib_cfg.fc_gw4)
 					fib_cfg.fc_gw_family = AF_INET;
 			} else if (nlav) {
+			    /*via情况,fib_cfg填充*/
 				ret = fib_gw_from_via(&fib_cfg, nlav, extack);
 				if (ret)
 					goto errout;
@@ -726,6 +737,7 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 				fib_cfg.fc_encap_type = nla_get_u16(nla);
 		}
 
+		/*以上完成fib_cfg解析，现在利用它来填充nexthop_nh*/
 		ret = fib_nh_init(net, nexthop_nh, &fib_cfg,
 				  rtnh->rtnh_hops + 1, extack);
 		if (ret)
@@ -735,8 +747,10 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 	} endfor_nexthops(fi);
 
 	ret = -EINVAL;
+	/*取首个下一跳信息*/
 	nh = fib_info_nh(fi, 0);
 	if (cfg->fc_oif && nh->fib_nh_oif != cfg->fc_oif) {
+	    /*必须与cfg->fc_oif一致*/
 		NL_SET_ERR_MSG(extack,
 			       "Nexthop device index does not match RTA_OIF");
 		goto errout;
@@ -747,6 +761,7 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 		     nh->fib_nh_gw4 != cfg->fc_gw4) ||
 		    (cfg->fc_gw_family == AF_INET6 &&
 		     ipv6_addr_cmp(&nh->fib_nh_gw6, &cfg->fc_gw6))) {
+		    /*网关对应协议族检查*/
 			NL_SET_ERR_MSG(extack,
 				       "Nexthop gateway does not match RTA_GATEWAY or RTA_VIA");
 			goto errout;
@@ -754,6 +769,7 @@ static int fib_get_nhs(struct fib_info *fi, struct rtnexthop *rtnh,
 	}
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	if (cfg->fc_flow && nh->nh_tclassid != cfg->fc_flow) {
+	    /*fc_flow必须与下一跳一致*/
 		NL_SET_ERR_MSG(extack,
 			       "Nexthop class id does not match RTA_FLOW");
 		goto errout;
@@ -774,7 +790,7 @@ static void fib_rebalance(struct fib_info *fi)
 	    /*下一跳数量小于2，不处理*/
 		return;
 
-	/*所有有效nexthop的fib_nh_weight值总合*/
+	/*取得所有有效nexthop的fib_nh_weight值总和*/
 	total = 0;
 	for_nexthops(fi) {
 		if (nh->fib_nh_flags & RTNH_F_DEAD)
@@ -784,6 +800,7 @@ static void fib_rebalance(struct fib_info *fi)
 		    nh->fib_nh_flags & RTNH_F_LINKDOWN)
 			continue;
 
+		/*所有路由权重信息（weight在1，255范围内）*/
 		total += nh->fib_nh_weight;
 	} endfor_nexthops(fi);
 
@@ -797,6 +814,9 @@ static void fib_rebalance(struct fib_info *fi)
 			   nexthop_nh->fib_nh_flags & RTNH_F_LINKDOWN) {
 			upper_bound = -1;
 		} else {
+		    /*行致此处，我们需要按weight将u32_t的整个整数空间映射给这些下一跳，以方便它们按权重进行
+		     * 流量划分，整数空间我们需要保证分配是连续的，如果在0-0.5范围，则舍去1，0.5-1.0则进上去。
+		     * 故这里采用DIV_ROUND_CLOSEST_ULL进行了划分*/
 			w += nexthop_nh->fib_nh_weight;
 			upper_bound = DIV_ROUND_CLOSEST_ULL((u64)w << 31,
 							    total) - 1;
@@ -1296,6 +1316,7 @@ __be32 fib_info_update_nhc_saddr(struct net *net, struct fib_nh_common *nhc,
 	struct fib_nh *nh;
 
 	if (nhc->nhc_family != AF_INET)
+	    /*非inet选源*/
 		return inet_select_addr(nhc->nhc_dev, 0, scope);
 
 	nh = container_of(nhc, struct fib_nh, nh_common);
@@ -1355,7 +1376,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 	struct fib_info *fi = NULL;
 	struct nexthop *nh = NULL;
 	struct fib_info *ofi;
-	int nhs = 1;
+	int nhs = 1;/*默认只配置有一个下一跳*/
 	struct net *net = cfg->fc_nlinfo.nl_net;
 
 	//fc_type校验
@@ -1363,7 +1384,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 		goto err_inval;
 
 	/* Fast check to catch the most weird cases */
-	//scope范围检查
+	//scope范围检查，路由类型要求的scope不能大于cfg指定的scope
 	if (fib_props[cfg->fc_type].scope > cfg->fc_scope) {
 		NL_SET_ERR_MSG(extack, "Invalid scope");
 		goto err_inval;
@@ -1389,11 +1410,12 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 			NL_SET_ERR_MSG(extack, "Nexthop id does not exist");
 			goto err_inval;
 		}
-		nhs = 0;
+		nhs = 0;/*这种情况下，引用的nh已初始化，故指为0*/
 	}
 
 #ifdef CONFIG_IP_ROUTE_MULTIPATH
 	if (cfg->fc_mp) {
+	    /*获取配置有多少个下一跳*/
 		nhs = fib_count_nexthops(cfg->fc_mp, cfg->fc_mp_len, extack);
 		if (nhs == 0)
 			goto err_inval;
@@ -1422,10 +1444,12 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 			goto failure;
 	}
 
+	/*申请有nhs个fib_nh成员的fib_info结构*/
 	fi = kzalloc(struct_size(fi, fib_nh, nhs), GFP_KERNEL);
 	if (!fi)
 		goto failure;
-	fi->fib_metrics = ip_fib_metrics_init(fi->fib_net, cfg->fc_mx,
+	/*初始化fib_metrics*/
+	fi->fib_metrics = ip_fib_metrics_init(fi->fib_net/*此时此成员还未设置,不过当前不影响*/, cfg->fc_mx,
 					      cfg->fc_mx_len, extack);
 	if (IS_ERR(fi->fib_metrics)) {
 		err = PTR_ERR(fi->fib_metrics);
@@ -1445,6 +1469,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 
 	fi->fib_nhs = nhs;
 	if (nh) {
+	    /*通过nh_id引用的其它的下一跳，增加引用并指向*/
 		if (!nexthop_get(nh)) {
 			NL_SET_ERR_MSG(extack, "Nexthop has been deleted");
 			err = -EINVAL;
@@ -1453,14 +1478,17 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 			fi->nh = nh;
 		}
 	} else {
+	    /*使fi下所有nexthops指向自身，初始化nexthop_nh->nh_parent成员*/
 		change_nexthops(fi) {
 			nexthop_nh->nh_parent = fi;
 		} endfor_nexthops(fi)
 
 		if (cfg->fc_mp)
+		    /*配置有多路径，填充nexthops*/
 			err = fib_get_nhs(fi, cfg->fc_mp, cfg->fc_mp_len, cfg,
 					  extack);
 		else
+		    /*默认的情况，只有一个下一跳，填充fi->fib_nh[0]*/
 			err = fib_nh_init(net, fi->fib_nh, cfg, 1, extack);
 	}
 
@@ -1468,6 +1496,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 		goto failure;
 
 	if (fib_props[cfg->fc_type].error) {
+	    /*error非0的，不容许配置以下各项*/
 		if (cfg->fc_gw_family || cfg->fc_oif || cfg->fc_mp) {
 			NL_SET_ERR_MSG(extack,
 				       "Gateway, device and multipath can not be specified for this route type");
@@ -1475,6 +1504,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 		}
 		goto link_it;
 	} else {
+	    /*此分支仅支持以下几种路由类型*/
 		switch (cfg->fc_type) {
 		case RTN_UNICAST:
 		case RTN_LOCAL:
@@ -1502,16 +1532,19 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 
 		/* Local address is added. */
 		if (nhs != 1) {
+		    /*主机范围不支持多路径*/
 			NL_SET_ERR_MSG(extack,
 				       "Route with host scope can not have multiple nexthops");
 			goto err_inval;
 		}
 		if (nh->fib_nh_gw_family) {
+		    /*不得有gateway*/
 			NL_SET_ERR_MSG(extack,
 				       "Route with host scope can not have a gateway");
 			goto err_inval;
 		}
 		nh->fib_nh_scope = RT_SCOPE_NOWHERE;
+		/*出接口对应的设备*/
 		nh->fib_nh_dev = dev_get_by_index(net, nh->fib_nh_oif);
 		err = -ENODEV;
 		if (!nh->fib_nh_dev)
@@ -1519,6 +1552,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 	} else {
 		int linkdown = 0;
 
+		/*检查多个下一跳*/
 		change_nexthops(fi) {
 			err = fib_check_nh(cfg->fc_nlinfo.nl_net, nexthop_nh,
 					   cfg->fc_table, cfg->fc_scope,
@@ -1532,12 +1566,14 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 			fi->fib_flags |= RTNH_F_LINKDOWN;
 	}
 
+	/*指定了pref src,检查其是否有效*/
 	if (fi->fib_prefsrc && !fib_valid_prefsrc(cfg, fi->fib_prefsrc)) {
 		NL_SET_ERR_MSG(extack, "Invalid prefsrc address");
 		goto err_inval;
 	}
 
 	if (!fi->nh) {
+	    /*更新路由对应的优选源，这个源地址一般由出接口反推*/
 		change_nexthops(fi) {
 			fib_info_update_nhc_saddr(net, &nexthop_nh->nh_common,
 						  fi->fib_scope);
@@ -1545,6 +1581,7 @@ struct fib_info *fib_create_info(struct fib_config *cfg,
 				fi->fib_nh_is_v6 = true;
 		} endfor_nexthops(fi)
 
+		/*多个下一跳之间流量平衡*/
 		fib_rebalance(fi);
 	}
 
@@ -2221,6 +2258,7 @@ void fib_select_multipath(struct fib_result *res, int hash)
 }
 #endif
 
+/*路由表查询结果记录在res中，如果存在多路径，则进行多路选择*/
 void fib_select_path(struct net *net, struct fib_result *res,
 		     struct flowi4 *fl4, const struct sk_buff *skb)
 {

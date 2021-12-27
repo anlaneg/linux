@@ -35,6 +35,7 @@ static bool rpfilter_lookup_reverse(struct net *net, struct flowi4 *fl4,
 	struct fib_result res;
 	int ret __maybe_unused;
 
+	/*执行路由查询*/
 	if (fib_lookup(net, fl4, &res, FIB_LOOKUP_IGNORE_LINKSTATE))
 		return false;
 

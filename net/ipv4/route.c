@@ -2229,7 +2229,7 @@ static struct net_device *ip_rt_get_dev(struct net *net,
  */
 //单播路由查找
 static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
-			       u8 tos, struct net_device *dev,
+			       u8 tos/*报文tos取值*/, struct net_device *dev,
 			       struct fib_result *res)
 {
 	struct in_device *in_dev = __in_dev_get_rcu(dev);
@@ -2254,6 +2254,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	tun_info = skb_tunnel_info(skb);
 	if (tun_info && !(tun_info->mode & IP_TUNNEL_INFO_TX))
+	    /*取tunnel id*/
 		fl4.flowi4_tun_key.tun_id = tun_info->key.tun_id;
 	else
 		fl4.flowi4_tun_key.tun_id = 0;
@@ -2265,6 +2266,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	res->fi = NULL;
 	res->table = NULL;
+
 	//如果目地地址是受限广播地址，或者源目的地址均为0，
 	if (ipv4_is_lbcast(daddr) || (saddr == 0 && daddr == 0))
 		goto brd_input;
@@ -2296,17 +2298,18 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	/*
 	 *	Now we are ready to route packet.
 	 */
-	fl4.flowi4_oif = 0;/*出接口指定为0*/
-	fl4.flowi4_iif = dev->ifindex;
+	fl4.flowi4_oif = 0;/*出接口指定为0,未知*/
+	fl4.flowi4_iif = dev->ifindex;/*指定入接口*/
 	fl4.flowi4_mark = skb->mark;
 	fl4.flowi4_tos = tos;
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
 	fl4.flowi4_flags = 0;
-	fl4.daddr = daddr;
+	fl4.daddr = daddr;/*目的地址*/
 	fl4.saddr = saddr;
 	fl4.flowi4_uid = sock_net_uid(net, NULL);
 	fl4.flowi4_multipath_hash = 0;
 
+	/*取报文srcport,dstport*/
 	if (fib4_rules_early_flow_dissect(net, skb, &fl4, &_flkeys/*解析报文获得的参数*/)) {
 		flkeys = &_flkeys;
 	} else {
@@ -2324,6 +2327,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	}
 
 	if (res->type == RTN_BROADCAST) {
+	    /*查询到广播路由*/
 		if (IN_DEV_BFORWARD(in_dev))
 			goto make_route;
 		/* not do cache if bc_forwarding is enabled */
@@ -2658,6 +2662,7 @@ add:
  * Major route resolver routine.
  */
 
+/*按入接口为loopback口方式进行路由查询*/
 struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 					const struct sk_buff *skb)
 {
@@ -2672,11 +2677,12 @@ struct rtable *ip_route_output_key_hash(struct net *net, struct flowi4 *fl4,
 
 	//按入接口为lookback查询
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
+	/*清除掉tos上的额外标记*/
 	fl4->flowi4_tos = tos & IPTOS_RT_MASK;
 
 	/*如果tos有onlink标记，则变更scope*/
 	fl4->flowi4_scope = ((tos & RTO_ONLINK) ?
-			 RT_SCOPE_LINK : RT_SCOPE_UNIVERSE);
+			 RT_SCOPE_LINK/*直连*/ : RT_SCOPE_UNIVERSE/*全球*/);
 
 	rcu_read_lock();
 	rth = ip_route_output_key_hash_rcu(net, fl4, &res, skb);
@@ -2698,7 +2704,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 
 	//如果fl4->saddr不为0，则要匹配源地址
 	if (fl4->saddr) {
-		//源地址不得为组播，广播，以及network不能为0
+		//源地址不得为组播，广播，以及network不能为0的地址
 		if (ipv4_is_multicast(fl4->saddr) ||
 		    ipv4_is_lbcast(fl4->saddr) ||
 		    ipv4_is_zeronet(fl4->saddr)) {
@@ -2719,7 +2725,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		if (fl4->flowi4_oif == 0 &&
 		    (ipv4_is_multicast(fl4->daddr) ||
 		     ipv4_is_lbcast(fl4->daddr))) {
-		    /*目的地址是广播或组播，出接口未指定时进入*/
+		    /*目的地址是广播或组播，且出接口未指定时进入*/
 			/* It is equivalent to inet_addr_type(saddr) == RTN_LOCAL */
 			dev_out = __ip_dev_find(net, fl4->saddr, false);
 			if (!dev_out)
@@ -2767,6 +2773,8 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 			rth = ERR_PTR(-ENETUNREACH);
 			goto out;
 		}
+
+		/*向目的地址为组播，广播或者igmp协议情况下，如果未给定saddr,则进入*/
 		if (ipv4_is_local_multicast(fl4->daddr) ||
 		    ipv4_is_lbcast(fl4->daddr) ||
 		    fl4->flowi4_proto == IPPROTO_IGMP) {
@@ -2775,11 +2783,15 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 							      RT_SCOPE_LINK);
 			goto make_route;
 		}
+
+		/*没有指定源地址，选择源地址*/
 		if (!fl4->saddr) {
 			if (ipv4_is_multicast(fl4->daddr))
+			    /*如果目的为组播,则在dev_out设备上选择首个flowi4 fa*/
 				fl4->saddr = inet_select_addr(dev_out, 0,
 							      fl4->flowi4_scope);
 			else if (!fl4->daddr)
+			    /*如果目地址没有提供,则在dev_out设备上选择首个host fa*/
 				fl4->saddr = inet_select_addr(dev_out, 0,
 							      RT_SCOPE_HOST);
 		}
@@ -2803,6 +2815,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	/*查询路由表*/
 	err = fib_lookup(net, fl4, res, 0);
 	if (err) {
+	    /*查询路由失败*/
 		res->fi = NULL;
 		res->table = NULL;
 		if (fl4->flowi4_oif &&
@@ -2837,7 +2850,9 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 	}
 
 	if (res->type == RTN_LOCAL) {
+	    /*查路由确认走local*/
 		if (!fl4->saddr) {
+		    /*选择源ip*/
 			if (res->fi->fib_prefsrc)
 				fl4->saddr = res->fi->fib_prefsrc;
 			else
@@ -2925,6 +2940,7 @@ struct rtable *ip_route_output_flow(struct net *net, struct flowi4 *flp4,
 	struct rtable *rt = __ip_route_output_key(net, flp4);
 
 	if (IS_ERR(rt))
+	    /*查询失败，返回*/
 		return rt;
 
 	if (flp4->flowi4_proto) {

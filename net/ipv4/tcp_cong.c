@@ -38,10 +38,11 @@ struct tcp_congestion_ops *tcp_ca_find(const char *name)
 static struct tcp_congestion_ops *tcp_ca_find_autoload(struct net *net,
 						       const char *name)
 {
+    /*查找指定名称的tcp拥塞控制算法*/
 	struct tcp_congestion_ops *ca = tcp_ca_find(name);
 
 #ifdef CONFIG_MODULES
-	/*如果拥塞控制未查找到，则尝试加载module后重试*/
+	/*如果拥塞控制算法未查找到，则尝试加载module后重试*/
 	if (!ca && capable(CAP_NET_ADMIN)) {
 		rcu_read_unlock();
 		request_module("tcp_%s", name);
@@ -126,6 +127,7 @@ void tcp_unregister_congestion_control(struct tcp_congestion_ops *ca)
 }
 EXPORT_SYMBOL_GPL(tcp_unregister_congestion_control);
 
+/*通过拥塞算法名称查找其对应的key及ecn_ca*/
 u32 tcp_ca_get_key_by_name(struct net *net, const char *name, bool *ecn_ca)
 {
 	const struct tcp_congestion_ops *ca;

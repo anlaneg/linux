@@ -111,6 +111,7 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
 	unsigned long flags;
+	/*发送队列*/
 	struct rxe_queue *q = qp->sq.queue;
 	unsigned int index = qp->req.wqe_index;
 	unsigned int cons;
@@ -376,6 +377,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	u32			qp_num;
 	int			ack_req;
 
+	/*报文总长度*/
 	/* length from start of bth to end of icrc */
 	paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE;
 
@@ -454,6 +456,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	return skb;
 }
 
+/*构造报文，并填充报文负载*/
 static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       struct rxe_pkt_info *pkt, struct sk_buff *skb,
 		       int paylen)
@@ -466,6 +469,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 
 	if (pkt->mask & RXE_WRITE_OR_SEND_MASK) {
 		if (wqe->wr.send_flags & IB_SEND_INLINE) {
+		    /*填写负载报文：op_code暂为空*/
 			u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
 
 			memcpy(payload_addr(pkt), tmp, paylen);
@@ -473,12 +477,15 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 			wqe->dma.resid -= paylen;
 			wqe->dma.sge_offset += paylen;
 		} else {
+		    /*填写负载报文：op_code暂为空*/
 			err = copy_data(qp->pd, 0, &wqe->dma,
 					payload_addr(pkt), paylen,
 					RXE_FROM_MR_OBJ);
 			if (err)
 				return err;
 		}
+
+		/*填充pad，设为0*/
 		if (bth_pad(pkt)) {
 			u8 *pad = payload_addr(pkt) + paylen;
 
@@ -625,6 +632,7 @@ int rxe_requester(void *arg)
 	int ret;
 	struct rxe_send_wqe rollback_wqe;
 	u32 rollback_psn;
+	/*取出待发送queue*/
 	struct rxe_queue *q = qp->sq.queue;
 
 	rxe_add_ref(qp);
@@ -648,6 +656,7 @@ next_wqe:
 		qp->req.need_retry = 0;
 	}
 
+	/*自send->queue中提取一个wqe*/
 	wqe = req_next_wqe(qp);
 	if (unlikely(!wqe))
 		goto exit;
@@ -712,6 +721,7 @@ next_wqe:
 		payload = mtu;
 	}
 
+	/*申请足够长度的skb*/
 	skb = init_req_packet(qp, wqe, opcode, payload, &pkt);
 	if (unlikely(!skb)) {
 		pr_err("qp#%d Failed allocating skb\n", qp_num(qp));
@@ -719,6 +729,7 @@ next_wqe:
 		goto err;
 	}
 
+	/*填充报文负载*/
 	ret = finish_packet(qp, wqe, &pkt, skb, payload);
 	if (unlikely(ret)) {
 		pr_debug("qp#%d Error during finish packet\n", qp_num(qp));

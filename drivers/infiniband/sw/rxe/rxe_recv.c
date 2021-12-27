@@ -16,6 +16,7 @@ static int check_type_state(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 	unsigned int pkt_type;
 
 	if (unlikely(!qp->valid))
+	    /*qp无效直接返回*/
 		goto err1;
 
 	pkt_type = pkt->opcode & 0xe0;
@@ -115,6 +116,7 @@ static int check_addr(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 	if (qp_type(qp) != IB_QPT_RC && qp_type(qp) != IB_QPT_UC)
 		goto done;
 
+	/*设备Port 校验*/
 	if (unlikely(pkt->port_num != qp->attr.port_num)) {
 		pr_warn_ratelimited("port %d != qp port %d\n",
 				    pkt->port_num, qp->attr.port_num);
@@ -122,6 +124,7 @@ static int check_addr(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 	}
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+	    /*端目的ip校验*/
 		struct in_addr *saddr =
 			&qp->pri_av.sgid_addr._sockaddr_in.sin_addr;
 		struct in_addr *daddr =
@@ -142,6 +145,7 @@ static int check_addr(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 		}
 
 	} else if (skb->protocol == htons(ETH_P_IPV6)) {
+	    /*源目的ip校验*/
 		struct in6_addr *saddr =
 			&qp->pri_av.sgid_addr._sockaddr_in6.sin6_addr;
 		struct in6_addr *daddr =
@@ -181,14 +185,17 @@ static int hdr_check(struct rxe_pkt_info *pkt)
 		goto err1;
 	}
 
+	/*不支持qpn为0的情况*/
 	if (unlikely(qpn == 0)) {
 		pr_warn_once("QP 0 not supported");
 		goto err1;
 	}
 
+	/*非组播qpn情况处理*/
 	if (qpn != IB_MULTICAST_QPN) {
-		index = (qpn == 1) ? port->qp_gsi_index : qpn;
+		index = (qpn == 1) ? port->qp_gsi_index/*qpn为1情况下*/ : qpn;
 
+		/*通过indexs查询对应的qp*/
 		qp = rxe_pool_get_index(&rxe->qp_pool, index);
 		if (unlikely(!qp)) {
 			pr_warn_ratelimited("no qp matches qpn 0x%x\n", qpn);
@@ -199,6 +206,7 @@ static int hdr_check(struct rxe_pkt_info *pkt)
 		if (unlikely(err))
 			goto err2;
 
+		/*地址校验*/
 		err = check_addr(rxe, pkt, qp);
 		if (unlikely(err))
 			goto err2;
@@ -213,6 +221,7 @@ static int hdr_check(struct rxe_pkt_info *pkt)
 		}
 	}
 
+	/*设置pkt对应的qp*/
 	pkt->qp = qp;
 	return 0;
 

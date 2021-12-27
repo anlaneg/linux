@@ -231,6 +231,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->sq.max_inline = init->cap.max_inline_data = wqe_size;
 	wqe_size += sizeof(struct rxe_send_wqe);
 
+	/*创建sq*/
 	type = QUEUE_TYPE_FROM_CLIENT;
 	qp->sq.queue = rxe_queue_init(rxe, &qp->sq.max_wr,
 				wqe_size, type);
@@ -258,8 +259,10 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	spin_lock_init(&qp->sq.sq_lock);
 	skb_queue_head_init(&qp->req_pkts);
 
+	/*wqe消息处理任务，处理收到的请求*/
 	rxe_init_task(rxe, &qp->req.task, qp,
 		      rxe_requester, "req");
+	/*wqe处理完成后，此任务将被调度，用于进行响应处理*/
 	rxe_init_task(rxe, &qp->comp.task, qp,
 		      rxe_completer, "comp");
 

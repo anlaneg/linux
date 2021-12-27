@@ -11,6 +11,7 @@ void rxe_init_av(struct rdma_ah_attr *attr, struct rxe_av *av)
 {
 	rxe_av_from_attr(rdma_ah_get_port_num(attr), av, attr);
 	rxe_av_fill_ip_info(av, attr);
+	/*设置目的mac*/
 	memcpy(av->dmac, attr->roce.dmac, ETH_ALEN);
 }
 
@@ -96,6 +97,7 @@ void rxe_av_fill_ip_info(struct rxe_av *av, struct rdma_ah_attr *attr)
 		break;
 	}
 
+	/*设置网络类型*/
 	av->network_type = type;
 }
 

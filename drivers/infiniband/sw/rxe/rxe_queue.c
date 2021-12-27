@@ -52,7 +52,7 @@ inline void rxe_queue_reset(struct rxe_queue *q)
 	memset(q->buf->data, 0, q->buf_size - sizeof(struct rxe_queue_buf));
 }
 
-struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem,
+struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*队列元素数目*/,
 			unsigned int elem_size, enum queue_type type)
 {
 	struct rxe_queue *q;
@@ -61,6 +61,7 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem,
 
 	/* num_elem == 0 is allowed, but uninteresting */
 	if (*num_elem < 0)
+	    /*必须指定正的队列元素数*/
 		goto err1;
 
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
@@ -84,8 +85,10 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem,
 	num_slots = roundup_pow_of_two(num_slots);
 	q->index_mask = num_slots - 1;
 
+	/*buffer指向一个rxe_queue_buf结构，后面跟num_slot个elem(大小为elem_size)*/
 	buf_size = sizeof(struct rxe_queue_buf) + num_slots * elem_size;
 
+	/*申请q所使用的buffer*/
 	q->buf = vmalloc_user(buf_size);
 	if (!q->buf)
 		goto err2;

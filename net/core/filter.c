@@ -5473,6 +5473,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 		fl4.flowi4_tun_key.tun_id = 0;
 		fl4.flowi4_uid = sock_net_uid(net, NULL);
 
+		/*????这样查路由的目的是啥，2021-12-26没时间看，略*/
 		err = fib_lookup(net, &fl4, &res, FIB_LOOKUP_NOREF);
 	}
 
@@ -5491,6 +5492,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 	if (res.type != RTN_UNICAST)
 		return BPF_FIB_LKUP_RET_NOT_FWDED;
 
+	/*多路径情况，进行多路径选择*/
 	if (fib_info_num_path(res.fi) > 1)
 		fib_select_path(net, &res, &fl4, NULL);
 

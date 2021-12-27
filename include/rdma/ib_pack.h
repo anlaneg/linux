@@ -50,9 +50,12 @@ struct ib_field {
 
 enum {
 	/* transport types -- just used to define real constants */
+    //RC (Reliable Connection) : a connection is established between endnotes, and messages are reliabled sent between them.
 	IB_OPCODE_RC                                = 0x00,
+	//UC (Unreliable Connection): a connection is established between endnodes, and messages are sent, but transmission is not guarranteed. This is optional.
 	IB_OPCODE_UC                                = 0x20,
 	IB_OPCODE_RD                                = 0x40,
+	//UD (Unreliable Datagram): a single packet message can be sent to an endnote without first establishing a connection; transmission is not guranteed.
 	IB_OPCODE_UD                                = 0x60,
 	/* per IBTA 1.3 vol 1 Table 38, A10.3.2 */
 	IB_OPCODE_CNP                               = 0x80,

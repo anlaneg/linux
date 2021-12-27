@@ -61,6 +61,7 @@ static void rxe_mr_init(int access, struct rxe_mr *mr)
 	mr->lkey = mr->ibmr.lkey = lkey;
 	mr->rkey = mr->ibmr.rkey = rkey;
 
+	/*初始化状态为无效*/
 	mr->state = RXE_MR_STATE_INVALID;
 	mr->map_shift = ilog2(RXE_BUF_PER_MAP);
 }
@@ -76,19 +77,22 @@ static void rxe_mr_free_map_set(int num_map, struct rxe_map_set *set)
 	kfree(set);
 }
 
-static int rxe_mr_alloc_map_set(int num_map, struct rxe_map_set **setp)
+static int rxe_mr_alloc_map_set(int num_map, struct rxe_map_set **setp/*出错，创建num_map个rxe_map结构体形成map_set*/)
 {
 	int i;
 	struct rxe_map_set *set;
 
+	/*申请map_set*/
 	set = kmalloc(sizeof(*set), GFP_KERNEL);
 	if (!set)
 		goto err_out;
 
+	/*申请num_map个rxe_map指针*/
 	set->map = kmalloc_array(num_map, sizeof(struct rxe_map *), GFP_KERNEL);
 	if (!set->map)
 		goto err_free_set;
 
+	/*初始化rxe_map*/
 	for (i = 0; i < num_map; i++) {
 		set->map[i] = kmalloc(sizeof(struct rxe_map), GFP_KERNEL);
 		if (!set->map[i])
@@ -119,11 +123,12 @@ err_out:
  *
  * Return: 0 on success else an error
  */
-static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf, int both)
+static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf, int both/*是否两个map均需要*/)
 {
 	int ret;
 	int num_map;
 
+	/*map数以RXE_BUF_PER_MAP对齐*/
 	BUILD_BUG_ON(!is_power_of_2(RXE_BUF_PER_MAP));
 	num_map = (num_buf + RXE_BUF_PER_MAP - 1) / RXE_BUF_PER_MAP;
 
@@ -133,10 +138,12 @@ static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf, int both)
 	mr->max_buf = num_map * RXE_BUF_PER_MAP;
 	mr->num_map = num_map;
 
+	/*申请mr->cur_map_set*/
 	ret = rxe_mr_alloc_map_set(num_map, &mr->cur_map_set);
 	if (ret)
 		goto err_out;
 
+	/*两个map均需要，执行next_map_set申请*/
 	if (both) {
 		ret = rxe_mr_alloc_map_set(num_map, &mr->next_map_set);
 		if (ret) {
@@ -157,6 +164,7 @@ void rxe_mr_init_dma(struct rxe_pd *pd, int access, struct rxe_mr *mr)
 
 	mr->ibmr.pd = &pd->ibpd;
 	mr->access = access;
+	/*初始化状态有效*/
 	mr->state = RXE_MR_STATE_VALID;
 	mr->type = IB_MR_TYPE_DMA;
 }
@@ -681,6 +689,7 @@ int rxe_mr_set_page(struct ib_mr *ibmr, u64 addr)
 	return 0;
 }
 
+/*移除mr注册*/
 int rxe_dereg_mr(struct ib_mr *ibmr, struct ib_udata *udata)
 {
 	struct rxe_mr *mr = to_rmr(ibmr);

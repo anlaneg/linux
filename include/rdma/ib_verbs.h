@@ -591,6 +591,7 @@ struct rdma_hw_stats {
 	unsigned long	lifespan;
 	const struct rdma_stat_desc *descs;
 	unsigned long	*is_disabled;
+	/*指明value数组大小*/
 	int		num_counters;
 	u64		value[];
 };
@@ -1361,12 +1362,15 @@ struct ib_cqe {
 };
 
 struct ib_send_wr {
+    /*用于串连wr，构体wrlist*/
 	struct ib_send_wr      *next;
 	union {
+	    /*所属的wrlist*/
 		u64		wr_id;
 		struct ib_cqe	*wr_cqe;
 	};
 	struct ib_sge	       *sg_list;
+	/*指明当前sg_list数组大小*/
 	int			num_sge;
 	enum ib_wr_opcode	opcode;
 	int			send_flags;
@@ -1438,6 +1442,7 @@ struct ib_recv_wr {
 		struct ib_cqe	*wr_cqe;
 	};
 	struct ib_sge	       *sg_list;
+	/*sg_list数目*/
 	int			num_sge;
 };
 
@@ -1531,6 +1536,7 @@ struct ib_udata {
 struct ib_pd {
 	u32			local_dma_lkey;
 	u32			flags;
+	/*所属的device*/
 	struct ib_device       *device;
 	struct ib_uobject      *uobject;
 	atomic_t          	usecnt; /* count all resources */
@@ -1572,6 +1578,7 @@ enum ib_poll_context {
 };
 
 struct ib_cq {
+    /*所属ib_device*/
 	struct ib_device       *device;
 	struct ib_ucq_object   *uobject;
 	ib_comp_handler   	comp_handler;
@@ -1807,12 +1814,14 @@ struct ib_dm {
 
 struct ib_mr {
 	struct ib_device  *device;
+	/*所属pd*/
 	struct ib_pd	  *pd;
 	u32		   lkey;
 	u32		   rkey;
 	u64		   iova;
 	u64		   length;
 	unsigned int	   page_size;
+	/*内存类型*/
 	enum ib_mr_type	   type;
 	bool		   need_inval;
 	union {
@@ -2285,6 +2294,7 @@ struct iw_cm_conn_param;
 			 !__same_type(((struct drv_struct *)NULL)->member,     \
 				      struct ib_struct)))
 
+/*申请一个driver对应的ib_type类型的obj*/
 #define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type, gfp)                          \
 	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type, \
 					   gfp, false))
@@ -2293,6 +2303,7 @@ struct iw_cm_conn_param;
 	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type, \
 					   GFP_KERNEL, true))
 
+/*申请一个driver对应的ib_type类型的obj*/
 #define rdma_zalloc_drv_obj(ib_dev, ib_type)                                   \
 	rdma_zalloc_drv_obj_gfp(ib_dev, ib_type, GFP_KERNEL)
 
@@ -2449,6 +2460,7 @@ struct ib_device_ops {
 	void (*disassociate_ucontext)(struct ib_ucontext *ibcontext);
 	int (*alloc_pd)(struct ib_pd *pd, struct ib_udata *udata);
 	int (*dealloc_pd)(struct ib_pd *pd, struct ib_udata *udata);
+    /*创建ah,查询ah,修改ah,销毁ah*/
 	int (*create_ah)(struct ib_ah *ah, struct rdma_ah_init_attr *attr,
 			 struct ib_udata *udata);
 	int (*create_user_ah)(struct ib_ah *ah, struct rdma_ah_init_attr *attr,
@@ -2456,6 +2468,7 @@ struct ib_device_ops {
 	int (*modify_ah)(struct ib_ah *ah, struct rdma_ah_attr *ah_attr);
 	int (*query_ah)(struct ib_ah *ah, struct rdma_ah_attr *ah_attr);
 	int (*destroy_ah)(struct ib_ah *ah, u32 flags);
+	/*创建srq,查询srq,修改srq,销毁srq*/
 	int (*create_srq)(struct ib_srq *srq,
 			  struct ib_srq_init_attr *srq_init_attr,
 			  struct ib_udata *udata);
@@ -2464,6 +2477,7 @@ struct ib_device_ops {
 			  struct ib_udata *udata);
 	int (*query_srq)(struct ib_srq *srq, struct ib_srq_attr *srq_attr);
 	int (*destroy_srq)(struct ib_srq *srq, struct ib_udata *udata);
+	/*创建qp,查询qp,修改qp,销毁qp*/
 	int (*create_qp)(struct ib_qp *qp, struct ib_qp_init_attr *qp_init_attr,
 			 struct ib_udata *udata);
 	int (*modify_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
@@ -2471,6 +2485,7 @@ struct ib_device_ops {
 	int (*query_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			int qp_attr_mask, struct ib_qp_init_attr *qp_init_attr);
 	int (*destroy_qp)(struct ib_qp *qp, struct ib_udata *udata);
+	/*创建cq,修改cq,销毁cq,调整cq大小*/
 	int (*create_cq)(struct ib_cq *cq, const struct ib_cq_init_attr *attr,
 			 struct ib_udata *udata);
 	int (*modify_cq)(struct ib_cq *cq, u16 cq_count, u16 cq_period);
@@ -2577,6 +2592,7 @@ struct ib_device_ops {
 	 *   return struct tells the core to set a default lifespan.
 	 */
 	struct rdma_hw_stats *(*alloc_hw_device_stats)(struct ib_device *device);
+	/*申请并初始化rdma_hw_stats结构体*/
 	struct rdma_hw_stats *(*alloc_hw_port_stats)(struct ib_device *device,
 						     u32 port_num);
 	/**
@@ -2675,7 +2691,7 @@ struct ib_device_ops {
 	 * Provide NUMA node. This API exists for rdmavt/hfi1 only.
 	 * Everyone else relies on Linux memory management model.
 	 */
-	int (*get_numa_node)(struct ib_device *dev);
+	int (*get_numa_node)(struct ib_device *dev);/*取此设备对应numa node*/
 
 	/*各obj的大小*/
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
@@ -2743,6 +2759,7 @@ struct ib_device {
 	 */
 	const struct attribute_group	*groups[4];
 
+	/*指明设备支持哪些cmd命令*/
 	u64			     uverbs_cmd_mask;
 
 	/*设备描述信息*/
@@ -2772,6 +2789,7 @@ struct ib_device {
 
 	struct rdma_restrack_root *res;
 
+	/*驱动增加的一些api*/
 	const struct uapi_definition   *driver_def;
 
 	/*
@@ -2795,9 +2813,11 @@ struct ib_device {
 	u32 lag_flags;
 };
 
+/*申请size大小的pd*/
 static inline void *rdma_zalloc_obj(struct ib_device *dev, size_t size,
 				    gfp_t gfp, bool is_numa_aware)
 {
+    /*如果关心numa，则在numa节点上申请size大小*/
 	if (is_numa_aware && dev->ops.get_numa_node)
 		return kzalloc_node(size, gfp, dev->ops.get_numa_node(dev));
 

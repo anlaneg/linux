@@ -1975,9 +1975,11 @@ static int ovs_ct_limit_init(struct net *net, struct ovs_net *ovs_net)
 	for (i = 0; i < CT_LIMIT_HASH_BUCKETS; i++)
 		INIT_HLIST_HEAD(&ovs_net->ct_limit_info->limits[i]);
 
+	/*初始化ct limit对应的结构体*/
 	ovs_net->ct_limit_info->data =
 		nf_conncount_init(net, NFPROTO_INET, sizeof(u32));
 
+	/*初始化失败处理*/
 	if (IS_ERR(ovs_net->ct_limit_info->data)) {
 		err = PTR_ERR(ovs_net->ct_limit_info->data);
 		kfree(ovs_net->ct_limit_info->limits);
@@ -1993,6 +1995,7 @@ static void ovs_ct_limit_exit(struct net *net, struct ovs_net *ovs_net)
 	const struct ovs_ct_limit_info *info = ovs_net->ct_limit_info;
 	int i;
 
+	/*执行conncount销毁*/
 	nf_conncount_destroy(net, NFPROTO_INET, info->data);
 	for (i = 0; i < CT_LIMIT_HASH_BUCKETS; ++i) {
 		struct hlist_head *head = &info->limits[i];
@@ -2143,13 +2146,17 @@ static int __ovs_ct_limit_get_zone_limit(struct net *net,
 {
 	struct nf_conntrack_zone ct_zone;
 	struct ovs_zone_limit zone_limit;
+	/*指定要过滤的zone_id*/
 	u32 conncount_key = zone_id;
 
 	zone_limit.zone_id = zone_id;
+	/*当前此zone配置的limit*/
 	zone_limit.limit = limit;
+	/*初始化zone方向为origin/reply两个方向，初始化flags为0*/
 	nf_ct_zone_init(&ct_zone, zone_id, NF_CT_DEFAULT_ZONE_DIR, 0);
 
-	zone_limit.count = nf_conncount_count(net, data, &conncount_key, NULL,
+	/*返回当前zone ct计数*/
+	zone_limit.count = nf_conncount_count(net, data, &conncount_key/*查询用的key*/, NULL,
 					      &ct_zone);
 	return nla_put_nohdr(reply, sizeof(zone_limit), &zone_limit);
 }

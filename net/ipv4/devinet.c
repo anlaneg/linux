@@ -159,6 +159,8 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 	/*取此addr对应的ifa*/
 	ifa = inet_lookup_ifaddr_rcu(net, addr);
 	if (!ifa) {
+	    /*未找到此地址对应的ifa,利用addr查询local表，
+	     * 如果查询成功，则使用路由对应的net_device*/
 		struct flowi4 fl4 = { .daddr = addr };
 		struct fib_result res = { 0 };
 		struct fib_table *local;
@@ -170,7 +172,7 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 		if (local &&
 		    !fib_table_lookup(local, &fl4, &res, FIB_LOOKUP_NOREF) &&
 		    res.type == RTN_LOCAL)
-		    /*local表存在，查local表成功，取出接口设备*/
+		    /*local表存在，且查local表成功，取出接口设备*/
 			result = FIB_RES_DEV(res);
 	} else {
 	    /*ifa存在，取ifa对应的网络设备*/
@@ -184,12 +186,13 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 EXPORT_SYMBOL(__ip_dev_find);
 
 /* called under RCU lock */
+/*通过addr查找其对应的ifaddr结构*/
 struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr)
 {
 	u32 hash = inet_addr_hash(net, addr);
 	struct in_ifaddr *ifa;
 
-	/*检查inet_addr_lst中是否包含addr地址，如包含返回，否则返回NULL*/
+	/*检查inet_addr_lst中是否包含给定的addr，如包含则返回ifa，否则返回NULL*/
 	hlist_for_each_entry_rcu(ifa, &inet_addr_lst[hash], hash)
 		if (ifa->ifa_local == addr &&
 		    net_eq(dev_net(ifa->ifa_dev->dev), net))
@@ -1341,6 +1344,7 @@ out:
 	return done;
 }
 
+/*遍历in_dev设备上的所有Ifa，查找合适scop的ifa*/
 static __be32 in_dev_select_addr(const struct in_device *in_dev,
 				 int scope)
 {
@@ -1348,7 +1352,10 @@ static __be32 in_dev_select_addr(const struct in_device *in_dev,
 
 	in_dev_for_each_ifa_rcu(ifa, in_dev) {
 		if (ifa->ifa_flags & IFA_F_SECONDARY)
+		    /*跳过备地址*/
 			continue;
+
+		/*地址范围必须小于scop*/
 		if (ifa->ifa_scope != RT_SCOPE_LINK &&
 		    ifa->ifa_scope <= scope)
 			return ifa->ifa_local;
@@ -1357,6 +1364,10 @@ static __be32 in_dev_select_addr(const struct in_device *in_dev,
 	return 0;
 }
 
+/*选择源地址，
+ * 1。优先查找dev设备与dst同网段的地址；
+ * 2.如果dst为0，则优先使用dev设备上首个ifa
+ * 3。查dev对应的master设备上对应<=scope的ifa*/
 __be32 inet_select_addr(const struct net_device *dev, __be32 dst, int scope)
 {
 	const struct in_ifaddr *ifa;
@@ -1369,19 +1380,21 @@ __be32 inet_select_addr(const struct net_device *dev, __be32 dst, int scope)
 	rcu_read_lock();
 	in_dev = __in_dev_get_rcu(dev);
 	if (!in_dev)
+	    /*此设备无ipv4设备*/
 		goto no_in_dev;
 
 	if (unlikely(IN_DEV_ROUTE_LOCALNET(in_dev)))
 		localnet_scope = RT_SCOPE_LINK;
 
+	/*在ipv4设备中查找满足要求地址*/
 	in_dev_for_each_ifa_rcu(ifa, in_dev) {
 		if (ifa->ifa_flags & IFA_F_SECONDARY)
 		    /*跳过从地址*/
 			continue;
 		if (min(ifa->ifa_scope, localnet_scope) > scope)
-		    /*跳过大于要求范围的地址*/
+		    /*跳过大于要求scope的地址*/
 			continue;
-		/*如果有dst,则使用与dst在同个网段的地址*/
+		/*如果有dst,则使用与dst在同个网段的地址，如果没有dst,则使用第一个ifa*/
 		if (!dst || inet_ifa_match(dst, ifa)) {
 			addr = ifa->ifa_local;
 			break;
@@ -1392,6 +1405,7 @@ __be32 inet_select_addr(const struct net_device *dev, __be32 dst, int scope)
 	}
 
 	if (addr)
+	    /*选中地址，退出*/
 		goto out_unlock;
 no_in_dev:
 	master_idx = l3mdev_master_ifindex_rcu(dev);
@@ -1404,23 +1418,28 @@ no_in_dev:
 	if (master_idx &&
 	    (dev = dev_get_by_index_rcu(net, master_idx)) &&
 	    (in_dev = __in_dev_get_rcu(dev))) {
+	    /*取为master设备对应的ipv4 device*/
 		addr = in_dev_select_addr(in_dev, scope);
 		if (addr)
 			goto out_unlock;
 	}
 
+	/*master_idx存在，但其不通过dev_get_by_index_rcu获取*/
 	/* Not loopback addresses on loopback should be preferred
 	   in this case. It is important that lo is the first interface
 	   in dev_base list.
 	 */
 	for_each_netdev_rcu(net, dev) {
 		if (l3mdev_master_ifindex_rcu(dev) != master_idx)
+		    /*跳过非master_idx*/
 			continue;
 
 		in_dev = __in_dev_get_rcu(dev);
 		if (!in_dev)
+		    /*跳过非ipv4 device*/
 			continue;
 
+		/*在master_idx上选择源地址*/
 		addr = in_dev_select_addr(in_dev, scope);
 		if (addr)
 			goto out_unlock;

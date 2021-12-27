@@ -528,12 +528,14 @@ static void rxe_drain_resp_pkts(struct rxe_qp *qp, bool notify)
 	struct rxe_send_wqe *wqe;
 	struct rxe_queue *q = qp->sq.queue;
 
+	/*清除qp->resp_pkts上所有skb*/
 	while ((skb = skb_dequeue(&qp->resp_pkts))) {
 		rxe_drop_ref(qp);
 		kfree_skb(skb);
 		ib_device_put(qp->ibqp.device);
 	}
 
+	/*知会send queue上所有wqe，状态变更为err*/
 	while ((wqe = queue_head(q, q->type))) {
 		if (notify) {
 			wqe->status = IB_WC_WR_FLUSH_ERR;
@@ -555,6 +557,7 @@ static void free_pkt(struct rxe_pkt_info *pkt)
 	ib_device_put(dev);
 }
 
+/*completer任务处理函数*/
 int rxe_completer(void *arg)
 {
 	struct rxe_qp *qp = (struct rxe_qp *)arg;
@@ -587,6 +590,7 @@ int rxe_completer(void *arg)
 		goto done;
 	}
 
+	/*首先定为ack状态*/
 	state = COMPST_GET_ACK;
 
 	while (1) {
@@ -594,6 +598,7 @@ int rxe_completer(void *arg)
 			 comp_state_name[state]);
 		switch (state) {
 		case COMPST_GET_ACK:
+		    /*自resp_pkts队列上提取一个skb,变更状态：获取wqe*/
 			skb = skb_dequeue(&qp->resp_pkts);
 			if (skb) {
 				pkt = SKB_TO_PKT(skb);

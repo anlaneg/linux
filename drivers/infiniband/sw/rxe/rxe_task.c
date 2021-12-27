@@ -10,6 +10,7 @@
 
 #include "rxe_task.h"
 
+/*rxe_task运行，直到遇到非0返回*/
 int __rxe_do_task(struct rxe_task *task)
 
 {
@@ -57,6 +58,7 @@ void rxe_do_task(struct tasklet_struct *t)
 
 	do {
 		cont = 0;
+		/*执行此task任务*/
 		ret = task->func(task->arg);
 
 		spin_lock_irqsave(&task->state_lock, flags);
@@ -92,6 +94,7 @@ int rxe_init_task(void *obj, struct rxe_task *task,
 {
 	task->obj	= obj;
 	task->arg	= arg;
+	/*设置此task对应的工作函数*/
 	task->func	= func;
 	snprintf(task->name, sizeof(task->name), "%s", name);
 	task->destroyed	= false;

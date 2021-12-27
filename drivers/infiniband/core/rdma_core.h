@@ -98,13 +98,19 @@ struct uverbs_api_ioctl_method {
 };
 
 struct uverbs_api_write_method {
+    /*此write类方法对应的回调*/
 	int (*handler)(struct uverbs_attr_bundle *attrs);
+	/*此方法是否未开启*/
 	u8 disabled:1;
 	/*是否扩展类write_method*/
 	u8 is_ex:1;
+	/*此方法是否支持udata*/
 	u8 has_udata:1;
+	/*此方法是否有响应*/
 	u8 has_resp:1;
+	/*此方法对应的req大小*/
 	u8 req_size;
+	/*此方法对应的resp大小*/
 	u8 resp_size;
 };
 

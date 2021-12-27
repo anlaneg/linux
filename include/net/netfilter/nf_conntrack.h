@@ -51,8 +51,8 @@ struct nf_conntrack_net {
 	bool auto_assign_helper_warned;
 
 	/* only used from work queues, configuration plane, and so on: */
-	unsigned int users4;
-	unsigned int users6;
+	unsigned int users4;/*使能ipv4*/
+	unsigned int users6;/*使能ipv6*/
 	unsigned int users_bridge;
 #ifdef CONFIG_SYSCTL
 	struct ctl_table_header	*sysctl_header;
@@ -368,6 +368,7 @@ nf_ct_set(struct sk_buff *skb, struct nf_conn *ct, enum ip_conntrack_info info)
 
 extern unsigned int nf_conntrack_net_id;
 
+/*取此net namespace对应的连接跟踪私有数据*/
 static inline struct nf_conntrack_net *nf_ct_pernet(const struct net *net)
 {
 	return net_generic(net, nf_conntrack_net_id);

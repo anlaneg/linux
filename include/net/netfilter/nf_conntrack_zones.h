@@ -72,6 +72,7 @@ static inline u16 nf_ct_zone_id(const struct nf_conntrack_zone *zone,
 #endif
 }
 
+/*检查两者zone id是否匹配*/
 static inline bool nf_ct_zone_equal(const struct nf_conn *a,
 				    const struct nf_conntrack_zone *b,
 				    enum ip_conntrack_dir dir)

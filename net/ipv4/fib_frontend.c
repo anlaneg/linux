@@ -78,7 +78,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	struct fib_table *tb, *alias = NULL;
 	unsigned int h;
 
-	//main表特殊处理
+	//未指定采用哪个talbe,则默认为main表
 	if (id == 0)
 		id = RT_TABLE_MAIN;
 
@@ -87,11 +87,11 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	if (tb)
 		return tb;
 
-	//针对local表，无custom_rules，则与main表共享trie
+	//针对local表，无策略路由，则与main表共享trie
 	if (id == RT_TABLE_LOCAL && !net->ipv4.fib_has_custom_rules)
 		alias = fib_new_table(net, RT_TABLE_MAIN);
 
-	//初始化fib table
+	//初始化指定id的路由表
 	tb = fib_trie_table(id, alias);
 	if (!tb)
 		return NULL;
@@ -124,8 +124,9 @@ struct fib_table *fib_get_table(struct net *net, u32 id)
 	unsigned int h;
 
 	if (id == 0)
-		//未指定路由表id号，由使和main表
+		//未指定路由表id号，由使用main表
 		id = RT_TABLE_MAIN;
+
 	//确定使用哪个哈希桶，然后遍历hash桶，找需要的table
 	h = id & (FIB_TABLE_HASHSZ - 1);
 
@@ -227,20 +228,22 @@ static inline unsigned int __inet_dev_addr_type(struct net *net,
 	struct fib_table *table;
 
 	if (ipv4_is_zeronet(addr) || ipv4_is_lbcast(addr))
-		return RTN_BROADCAST;//广播地址
+		return RTN_BROADCAST;//广播
 	if (ipv4_is_multicast(addr))
-		return RTN_MULTICAST;//组播地址
+		return RTN_MULTICAST;//组播路由
 
 	rcu_read_lock();
 
 	//取出对应的路由表
 	table = fib_get_table(net, tb_id);
 	if (table) {
-		ret = RTN_UNICAST;//默认是单播地址
+		ret = RTN_UNICAST;//默认是网络及直连
 		//查路由表
 		if (!fib_table_lookup(table, &fl4, &res, FIB_LOOKUP_NOREF)) {
+		    /*取首个配置的下一跳*/
 			struct fib_nh_common *nhc = fib_info_nhc(res.fi, 0);
 
+			/*如果未指定dev/dev与首个下一跳出接口一致，返回路由类型*/
 			if (!dev || dev == nhc->nhc_dev)
 				ret = res.type;
 		}
@@ -370,11 +373,11 @@ static int __fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	struct flowi4 fl4;
 	bool dev_match;
 
-	fl4.flowi4_oif = 0;
-	fl4.flowi4_iif = l3mdev_master_ifindex_rcu(dev);
+	fl4.flowi4_oif = 0;/*出接口未知*/
+	fl4.flowi4_iif = l3mdev_master_ifindex_rcu(dev);/*入接口设置为dev*/
 	if (!fl4.flowi4_iif)
-		fl4.flowi4_iif = oif ? : LOOPBACK_IFINDEX;
-	fl4.daddr = src;
+		fl4.flowi4_iif = oif ? : LOOPBACK_IFINDEX;/*如无，则设置为ifindex*/
+	fl4.daddr = src;/*反查路由表*/
 	fl4.saddr = dst;
 	fl4.flowi4_tos = tos;
 	fl4.flowi4_scope = RT_SCOPE_UNIVERSE;
@@ -386,6 +389,7 @@ static int __fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 	no_addr = idev->ifa_list == NULL;
 
 	fl4.flowi4_mark = IN_DEV_SRC_VMARK(idev) ? skb->mark : 0;
+	/*sport,dstport解析填充*/
 	if (!fib4_rules_early_flow_dissect(net, skb, &fl4, &flkeys)) {
 		fl4.flowi4_proto = 0;
 		fl4.fl4_sport = 0;
@@ -394,12 +398,15 @@ static int __fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 		swap(fl4.fl4_sport, fl4.fl4_dport);
 	}
 
+	/*查路由，确定反向路由情况*/
 	if (fib_lookup(net, &fl4, &res, 0))
 		goto last_resort;
+
 	if (res.type != RTN_UNICAST &&
 	    (res.type != RTN_LOCAL || !IN_DEV_ACCEPT_LOCAL(idev)))
+	    /*反向路由非直接/网关，也非local,流量有误*/
 		goto e_inval;
-	fib_combine_itag(itag, &res);
+	fib_combine_itag(itag/*出参，流量对应的tclassid*/, &res);
 
 	dev_match = fib_info_nh_uses_dev(res.fi, dev);
 	/* This is not common, loopback packets retain skb_dst so normally they
@@ -455,6 +462,7 @@ int fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 		 */
 		if (net->ipv4.fib_has_custom_local_routes ||
 		    fib4_has_custom_rules(net))
+		    /*用户配置了策略路由，进行反向检查*/
 			goto full_check;
 		/*如果src是本机地址，则校验不通过*/
 		if (inet_lookup_ifaddr_rcu(net, src))
@@ -466,6 +474,7 @@ ok:
 	}
 
 full_check:
+    /*进行反向路由检查*/
 	return __fib_validate_source(skb, src, dst, tos, oif, dev, r, idev, itag);
 }
 
@@ -708,22 +717,26 @@ const struct nla_policy rtm_ipv4_policy[RTA_MAX + 1] = {
 	[RTA_NH_ID]		= { .type = NLA_U32 },
 };
 
+/*网关信息对应的via解析,用于本端ipv4,对端ipv6*/
 int fib_gw_from_via(struct fib_config *cfg, struct nlattr *nla,
 		    struct netlink_ext_ack *extack)
 {
 	struct rtvia *via;
 	int alen;
 
+	/*属性长度过短，不足以填充familiy*/
 	if (nla_len(nla) < offsetof(struct rtvia, rtvia_addr)) {
 		NL_SET_ERR_MSG(extack, "Invalid attribute length for RTA_VIA");
 		return -EINVAL;
 	}
 
 	via = nla_data(nla);
+	/*地址长度*/
 	alen = nla_len(nla) - offsetof(struct rtvia, rtvia_addr);
 
 	switch (via->rtvia_family) {
 	case AF_INET:
+	    /*下一跳目的地址为ipv4,其长度必须等于4*/
 		if (alen != sizeof(__be32)) {
 			NL_SET_ERR_MSG(extack, "Invalid IPv4 address in RTA_VIA");
 			return -EINVAL;
@@ -732,6 +745,7 @@ int fib_gw_from_via(struct fib_config *cfg, struct nlattr *nla,
 		cfg->fc_gw4 = *((__be32 *)via->rtvia_addr);
 		break;
 	case AF_INET6:
+	    /*下一跳目的地址为ipv6,其长度必须为16*/
 #if IS_ENABLED(CONFIG_IPV6)
 		if (alen != sizeof(struct in6_addr)) {
 			NL_SET_ERR_MSG(extack, "Invalid IPv6 address in RTA_VIA");
@@ -745,6 +759,7 @@ int fib_gw_from_via(struct fib_config *cfg, struct nlattr *nla,
 #endif
 		break;
 	default:
+	    /*当前kernel不支持其它RTA_VIA*/
 		NL_SET_ERR_MSG(extack, "Unsupported address family in RTA_VIA");
 		return -EINVAL;
 	}
@@ -784,33 +799,40 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	cfg->fc_nlinfo.nlh = nlh;
 	cfg->fc_nlinfo.nl_net = net;
 
+	/*路由项类型检查*/
 	if (cfg->fc_type > RTN_MAX) {
 		NL_SET_ERR_MSG(extack, "Invalid route type");
 		err = -EINVAL;
 		goto errout;
 	}
 
+	/*遍历rtmsg消息后的每个tlv*/
 	nlmsg_for_each_attr(attr, nlh, sizeof(struct rtmsg), remaining) {
 		switch (nla_type(attr)) {
 		case RTA_DST:
+		    /*目的地址*/
 			cfg->fc_dst = nla_get_be32(attr);
 			break;
 		case RTA_OIF:
+		    /*出接口设备*/
 			cfg->fc_oif = nla_get_u32(attr);
 			break;
 		case RTA_GATEWAY:
+		    /*网关配置*/
 			has_gw = true;
 			cfg->fc_gw4 = nla_get_be32(attr);
 			if (cfg->fc_gw4)
 				cfg->fc_gw_family = AF_INET;
 			break;
 		case RTA_VIA:
+		    /*网关地址（但与当前非同一协议族）*/
 			has_via = true;
 			err = fib_gw_from_via(cfg, attr, extack);
 			if (err)
 				goto errout;
 			break;
 		case RTA_PRIORITY:
+		    /*路由优先级*/
 			cfg->fc_priority = nla_get_u32(attr);
 			break;
 		case RTA_PREFSRC:
@@ -818,10 +840,12 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 			cfg->fc_prefsrc = nla_get_be32(attr);
 			break;
 		case RTA_METRICS:
+		    //一些杂项内容的设置
 			cfg->fc_mx = nla_data(attr);
 			cfg->fc_mx_len = nla_len(attr);
 			break;
 		case RTA_MULTIPATH:
+		    /*配置多个下一跳情况，完成encap_type校验，记录配置的值*/
 			err = lwtunnel_valid_encap_type_attr(nla_data(attr),
 							     nla_len(attr),
 							     extack);
@@ -834,12 +858,15 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 			cfg->fc_flow = nla_get_u32(attr);
 			break;
 		case RTA_TABLE:
+		    /*设置要添加到哪张路由表*/
 			cfg->fc_table = nla_get_u32(attr);
 			break;
 		case RTA_ENCAP:
+		    /*encap action对应的参数*/
 			cfg->fc_encap = attr;
 			break;
 		case RTA_ENCAP_TYPE:
+		    /*使用哪种encap*/
 			cfg->fc_encap_type = nla_get_u16(attr);
 			err = lwtunnel_valid_encap_type(cfg->fc_encap_type,
 							extack);
@@ -853,6 +880,7 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	}
 
 	if (cfg->fc_nh_id) {
+	    /*如果设置了nh_id,则以下配置与其冲突，报错*/
 		if (cfg->fc_oif || cfg->fc_gw_family ||
 		    cfg->fc_encap || cfg->fc_mp) {
 			NL_SET_ERR_MSG(extack,
@@ -862,6 +890,7 @@ static int rtm_to_fib_config(struct net *net, struct sk_buff *skb,
 	}
 
 	if (has_gw && has_via) {
+	    /*不能同时使能 via gateway 和via(不同协议族）*/
 		NL_SET_ERR_MSG(extack,
 			       "Nexthop configuration can not contain both GATEWAY and VIA");
 		return -EINVAL;
@@ -902,7 +931,7 @@ errout:
 	return err;
 }
 
-//ipv4路由添加
+//ipv4路由添加netlink消息处理
 static int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh,
 			     struct netlink_ext_ack *extack)
 {
@@ -911,7 +940,7 @@ static int inet_rtm_newroute(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct fib_table *tb;
 	int err;
 
-	//将消息转为cfg结构配置
+	//将netlink消息转为cfg结构配置
 	err = rtm_to_fib_config(net, skb, nlh, &cfg, extack);
 	if (err < 0)
 		goto errout;
@@ -1377,6 +1406,7 @@ static void nl_fib_lookup(struct net *net, struct fib_result_nl *frn)
 
 	rcu_read_lock();
 
+	/*取待查询的路由表*/
 	tb = fib_get_table(net, frn->tb_id_in);
 
 	frn->err = -ENOENT;

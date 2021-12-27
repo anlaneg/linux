@@ -821,7 +821,7 @@ struct ib_uverbs_send_wr {
 struct ib_uverbs_post_send {
 	__aligned_u64 response;
 	__u32 qp_handle;
-	__u32 wr_count;
+	__u32 wr_count;/*写了多少个wr*/
 	__u32 sge_count;
 	__u32 wqe_size;
 	struct ib_uverbs_send_wr send_wr[0];

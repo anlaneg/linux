@@ -659,7 +659,7 @@ static int ip_tun_set_opts(struct nlattr *attr, struct ip_tunnel_info *info,
 
 static int ip_tun_build_state(struct net *net, struct nlattr *attr,
 			      unsigned int family, const void *cfg,
-			      struct lwtunnel_state **ts,
+			      struct lwtunnel_state **ts/*出参，构造产生的state*/,
 			      struct netlink_ext_ack *extack)
 {
 	struct nlattr *tb[LWTUNNEL_IP_MAX + 1];
@@ -924,6 +924,7 @@ static int ip_tun_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 		      ip_tunnel_info_opts(info_b), info_a->options_len);
 }
 
+/*ip隧道*/
 static const struct lwtunnel_encap_ops ip_tun_lwt_ops = {
 	.build_state = ip_tun_build_state,
 	.destroy_state = ip_tun_destroy_state,

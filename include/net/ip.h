@@ -95,6 +95,7 @@ static inline void ipcm_init_sk(struct ipcm_cookie *ipcm,
 	ipcm->sockc.mark = inet->sk.sk_mark;
 	ipcm->sockc.tsflags = inet->sk.sk_tsflags;
 	ipcm->oif = inet->sk.sk_bound_dev_if;
+	/*使用socket记录的src address*/
 	ipcm->addr = inet->inet_saddr;
 }
 
@@ -244,6 +245,7 @@ static inline struct sk_buff *ip_finish_skb(struct sock *sk, struct flowi4 *fl4)
 
 static inline __u8 get_rttos(struct ipcm_cookie* ipc, struct inet_sock *inet)
 {
+    /*如果ipc->tos已设置，则返回ipc->tos，否则使用inet socket的tos*/
 	return (ipc->tos != -1) ? RT_TOS(ipc->tos) : RT_TOS(inet->tos);
 }
 

@@ -134,6 +134,7 @@ enum uapi_radix_data {
 	UVERBS_API_METHOD_KEY_BITS = 5,
 	UVERBS_API_METHOD_KEY_SHIFT = UVERBS_API_ATTR_KEY_BITS,
 	UVERBS_API_METHOD_KEY_NUM_CORE = 22,
+	/*write类方法*/
 	UVERBS_API_METHOD_IS_WRITE = 30 << UVERBS_API_METHOD_KEY_SHIFT,
 	UVERBS_API_METHOD_IS_WRITE_EX = 31 << UVERBS_API_METHOD_KEY_SHIFT,
 	UVERBS_API_METHOD_KEY_NUM_DRIVER =
@@ -194,7 +195,9 @@ static inline __attribute_const__ u32 uapi_key_ioctl_method(u32 id)
 static inline __attribute_const__ u32 uapi_key_write_method(u32 id)
 {
 	if (id >= UVERBS_API_WRITE_KEY_NUM)
+	    /*key id超限，有误*/
 		return UVERBS_API_KEY_ERR;
+	/*非扩展类write方法（指明key id)*/
 	return UVERBS_API_METHOD_IS_WRITE | id;
 }
 
@@ -202,6 +205,7 @@ static inline __attribute_const__ u32 uapi_key_write_ex_method(u32 id)
 {
 	if (id >= UVERBS_API_WRITE_KEY_NUM)
 		return UVERBS_API_KEY_ERR;
+	/*扩展类write方法（指明key id)*/
 	return UVERBS_API_METHOD_IS_WRITE_EX | id;
 }
 
@@ -309,12 +313,13 @@ struct uverbs_object_def {
 	u16					 id;
 	const struct uverbs_obj_type	        *type_attrs;
 	size_t				         num_methods;
+	/*针对obj的一组方法*/
 	const struct uverbs_method_def * const (*methods)[];
 };
 
 enum uapi_definition_kind {
 	UAPI_DEF_END = 0,
-	UAPI_DEF_OBJECT_START,
+	UAPI_DEF_OBJECT_START,/*标记后续是一组对象*/
 	UAPI_DEF_WRITE,
 	UAPI_DEF_CHAIN_OBJ_TREE,
 	UAPI_DEF_CHAIN,
@@ -333,27 +338,33 @@ struct uapi_definition {
 	u8 scope;
 	union {
 		struct {
+		    /*标记后续为哪种objdect_id*/
 			u16 object_id;
 		} object_start;
 		struct {
+		    /*cmd对应的枚举*/
 			u16 command_num;
 			/*是否扩展类write方法*/
 			u8 is_ex:1;
 			u8 has_udata:1;
+			/*是否有resp*/
 			u8 has_resp:1;
+			/*请求结构体大小*/
 			u8 req_size;
+			/*响应结构体大小*/
 			u8 resp_size;
 		} write;
 	};
 
 	union {
 		bool (*func_is_supported)(struct ib_device *device);
+		/*cmd对应的调用函数*/
 		int (*func_write)(struct uverbs_attr_bundle *attrs);
 		/*chain类型时有效，指向一组uapi_definition*/
 		const struct uapi_definition *chain;
 		/*tree类型时有效，指向uverbs_object_def的指针*/
 		const struct uverbs_object_def *chain_obj_tree;
-		size_t needs_fn_offset;
+		size_t needs_fn_offset;/*到具体函数指针的偏移量*/
 	};
 };
 
@@ -412,10 +423,10 @@ struct uapi_definition {
 		.kind = UAPI_DEF_IS_SUPPORTED_DEV_FN,                          \
 		.scope = UAPI_SCOPE_METHOD,                                    \
 		.needs_fn_offset =                                             \
-			offsetof(struct ib_device_ops, ibdev_fn) +             \
+			offsetof(struct ib_device_ops, ibdev_fn)/*ibdev_fn在结构体中的offset*/ +             \
 			BUILD_BUG_ON_ZERO(sizeof_field(struct ib_device_ops,   \
 						       ibdev_fn) !=            \
-					  sizeof(void *)),                     \
+					  sizeof(void *)),/*成员必须是指针*/                     \
 	}
 
 /* Call a function to determine if the entire object is supported or not */

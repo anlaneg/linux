@@ -213,13 +213,14 @@ struct inet_sock {
 #define inet_dport		sk.__sk_common.skc_dport
 #define inet_num		sk.__sk_common.skc_num
 
+	/*源地址*/
 	__be32			inet_saddr;
 	/*构造报文时，使用的ttl,容许app配置，默认值为-1*/
 	__s16			uc_ttl;
 	__u16			cmsg_flags;
 	/*记录ipv4层选项*/
 	struct ip_options_rcu __rcu	*inet_opt;
-	/*sk中记录的src port*/
+	/*sk中记录的src port（网络序）*/
 	__be16			inet_sport;
 	__u16			inet_id;
 

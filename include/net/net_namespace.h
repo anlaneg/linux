@@ -88,6 +88,7 @@ struct net {
 
 	struct ns_common	ns;
 
+	/*挂接此network下所有net_device*/
 	struct list_head 	dev_base_head;
 	struct proc_dir_entry 	*proc_net;
 	struct proc_dir_entry 	*proc_net_stat;

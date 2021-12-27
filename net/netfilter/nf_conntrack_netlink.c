@@ -552,9 +552,10 @@ static int ctnetlink_dump_info(struct sk_buff *skb, struct nf_conn *ct)
 	return 0;
 }
 
+/*将ct格式化到skb中*/
 static int
 ctnetlink_fill_info(struct sk_buff *skb, u32 portid, u32 seq, u32 type,
-		    struct nf_conn *ct, bool extinfo, unsigned int flags)
+		    struct nf_conn *ct/*待格式化的ct*/, bool extinfo, unsigned int flags)
 {
 	const struct nf_conntrack_zone *zone;
 	struct nlmsghdr *nlh;
@@ -1048,6 +1049,7 @@ static int ctnetlink_start(struct netlink_callback *cb)
 	return 0;
 }
 
+/*flags指定了要参与匹配的字段，如果ct_tuple中的字段与filter_tuple的字段不匹配，则返回0*/
 static int ctnetlink_filter_match_tuple(struct nf_conntrack_tuple *filter_tuple,
 					struct nf_conntrack_tuple *ct_tuple,
 					u_int32_t flags, int family)
@@ -1117,12 +1119,14 @@ static int ctnetlink_filter_match_tuple(struct nf_conntrack_tuple *filter_tuple,
 	return 1;
 }
 
+/*检查给定的ct与（struct ctnetlink_filter*)data 是否匹配*/
 static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 {
 	struct ctnetlink_filter *filter = data;
 	struct nf_conntrack_tuple *tuple;
 	u32 status;
 
+	/*没有filter,认为匹配*/
 	if (filter == NULL)
 		goto out;
 
@@ -1131,8 +1135,10 @@ static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 	 * then match everything.
 	 */
 	if (filter->family && nf_ct_l3num(ct) != filter->family)
+	    /*协议族不匹配*/
 		goto ignore_entry;
 
+	/*检查orig方向字段匹配情况*/
 	if (filter->orig_flags) {
 		tuple = nf_ct_tuple(ct, IP_CT_DIR_ORIGINAL);
 		if (!ctnetlink_filter_match_tuple(&filter->orig, tuple,
@@ -1141,6 +1147,7 @@ static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 			goto ignore_entry;
 	}
 
+	/*检查reply方向字段匹配情况*/
 	if (filter->reply_flags) {
 		tuple = nf_ct_tuple(ct, IP_CT_DIR_REPLY);
 		if (!ctnetlink_filter_match_tuple(&filter->reply, tuple,
@@ -1150,9 +1157,12 @@ static int ctnetlink_filter_match(struct nf_conn *ct, void *data)
 	}
 
 #ifdef CONFIG_NF_CONNTRACK_MARK
+	/*检查ct->mark中是否有filter要求的bit*/
 	if ((ct->mark & filter->mark.mask) != filter->mark.val)
 		goto ignore_entry;
 #endif
+
+	/*检查ct->status中是否有status要求的字段*/
 	status = (u32)READ_ONCE(ct->status);
 	if ((status & filter->status.mask) != filter->status.val)
 		goto ignore_entry;
@@ -1164,6 +1174,7 @@ ignore_entry:
 	return 0;
 }
 
+/*dump全局的连接跟踪表（支持字段匹配）*/
 static int
 ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 {
@@ -1180,6 +1191,8 @@ ctnetlink_dump_table(struct sk_buff *skb, struct netlink_callback *cb)
 	i = 0;
 
 	local_bh_disable();
+
+	/*遍历全局conntrack hash表的所有桶*/
 	for (; cb->args[0] < nf_conntrack_htable_size; cb->args[0]++) {
 restart:
 		while (i) {
@@ -1195,10 +1208,15 @@ restart:
 			spin_unlock(lockp);
 			goto out;
 		}
+
+		/*遍历全局conntrack hash表的cb->args[0]号桶*/
 		hlist_nulls_for_each_entry(h, n, &nf_conntrack_hash[cb->args[0]],
 					   hnnode) {
 			if (NF_CT_DIRECTION(h) != IP_CT_DIR_ORIGINAL)
+			    /*跳过非源方向的ct*/
 				continue;
+
+			/*取h对应的ct*/
 			ct = nf_ct_tuplehash_to_ctrack(h);
 			if (nf_ct_is_expired(ct)) {
 				if (i < ARRAY_SIZE(nf_ct_evict) &&
@@ -1207,18 +1225,22 @@ restart:
 				continue;
 			}
 
-			/*显示此net namespace下所有ct*/
+			/*跳过非此net namespace下的ct*/
 			if (!net_eq(net, nf_ct_net(ct)))
 				continue;
 
+			/*跳到上次dump的位置*/
 			if (cb->args[1]) {
 				if (ct != last)
 					continue;
 				cb->args[1] = 0;
 			}
+
+			/*跳过与filter不匹配的ct*/
 			if (!ctnetlink_filter_match(ct, cb->data))
 				continue;
 
+			/*填充此ct并返回*/
 			res =
 			ctnetlink_fill_info(skb, NETLINK_CB(cb->skb).portid,
 					    cb->nlh->nlmsg_seq,
@@ -1232,6 +1254,8 @@ restart:
 			}
 		}
 		spin_unlock(lockp);
+
+		/*当前桶遍历完成，准备切换到下一个桶，cb->args[1]回归到零*/
 		if (cb->args[1]) {
 			cb->args[1] = 0;
 			goto restart;
@@ -1650,6 +1674,7 @@ static int ctnetlink_get_conntrack(struct sk_buff *skb,
 	int err;
 
 	if (info->nlh->nlmsg_flags & NLM_F_DUMP) {
+	    /*dump全局连接跟踪表*/
 		struct netlink_dump_control c = {
 			.start = ctnetlink_start,
 			.dump = ctnetlink_dump_table,
@@ -1710,6 +1735,7 @@ static int ctnetlink_done_list(struct netlink_callback *cb)
 	return 0;
 }
 
+/*通过dying控制dump当前net namespace中的dying/unconfirmed链*/
 static int
 ctnetlink_dump_list(struct sk_buff *skb, struct netlink_callback *cb, bool dying)
 {
@@ -1728,6 +1754,7 @@ ctnetlink_dump_list(struct sk_buff *skb, struct netlink_callback *cb, bool dying
 
 	last = (struct nf_conn *)cb->args[1];
 
+	/*遍历每个cpu上的list进行ct dump*/
 	for (cpu = cb->args[0]; cpu < nr_cpu_ids; cpu++) {
 		struct ct_pcpu *pcpu;
 
@@ -1736,12 +1763,17 @@ ctnetlink_dump_list(struct sk_buff *skb, struct netlink_callback *cb, bool dying
 
 		pcpu = per_cpu_ptr(net->ct.pcpu_lists, cpu);
 		spin_lock_bh(&pcpu->lock);
+		/*确定是否需要选择dying链表*/
 		list = dying ? &pcpu->dying : &pcpu->unconfirmed;
 restart:
+        /*遍历list，取list上每个ct元素*/
 		hlist_nulls_for_each_entry(h, n, list, hnnode) {
 			ct = nf_ct_tuplehash_to_ctrack(h);
 			if (l3proto && nf_ct_l3num(ct) != l3proto)
+			    /*忽略掉l3协议不相等的ct*/
 				continue;
+
+			/*跳转到上次遍历位置*/
 			if (cb->args[1]) {
 				if (ct != last)
 					continue;
@@ -1782,12 +1814,14 @@ out:
 	return skb->len;
 }
 
+/*dump ct dring链表*/
 static int
 ctnetlink_dump_dying(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	return ctnetlink_dump_list(skb, cb, true);
 }
 
+/*遍历dump ct dying list*/
 static int ctnetlink_get_ct_dying(struct sk_buff *skb,
 				  const struct nfnl_info *info,
 				  const struct nlattr * const cda[])
@@ -1803,12 +1837,14 @@ static int ctnetlink_get_ct_dying(struct sk_buff *skb,
 	return -EOPNOTSUPP;
 }
 
+/*dump ct unconfirmed链表*/
 static int
 ctnetlink_dump_unconfirmed(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	return ctnetlink_dump_list(skb, cb, false);
 }
 
+/*遍历dump ct unconfirmed list*/
 static int ctnetlink_get_ct_unconfirmed(struct sk_buff *skb,
 					const struct nfnl_info *info,
 					const struct nlattr * const cda[])
@@ -3789,6 +3825,7 @@ static const struct nfnl_callback ctnl_cb[IPCTNL_MSG_MAX] = {
 		.attr_count	= CTA_MAX,
 		.policy		= ct_nla_policy
 	},
+	/*显示指定ct/dump满足要求的ct*/
 	[IPCTNL_MSG_CT_GET]	= {
 		.call		= ctnetlink_get_conntrack,
 		.type		= NFNL_CB_MUTEX,
@@ -3815,10 +3852,12 @@ static const struct nfnl_callback ctnl_cb[IPCTNL_MSG_MAX] = {
 		.call		= ctnetlink_stat_ct,
 		.type		= NFNL_CB_MUTEX,
 	},
+	/*dump ct的dying链表*/
 	[IPCTNL_MSG_CT_GET_DYING] = {
 		.call		= ctnetlink_get_ct_dying,
 		.type		= NFNL_CB_MUTEX,
 	},
+	/*dump ct的unconfirmed链表*/
 	[IPCTNL_MSG_CT_GET_UNCONFIRMED]	= {
 		.call		= ctnetlink_get_ct_unconfirmed,
 		.type		= NFNL_CB_MUTEX,

@@ -180,6 +180,7 @@ struct rxe_resp_info {
 	u8			aeth_syndrome;
 
 	/* Receive only */
+	/*指向可使用的下一个recv wqe*/
 	struct rxe_recv_wqe	*wqe;
 
 	/* RDMA read / atomic only */
@@ -223,7 +224,9 @@ struct rxe_qp {
 
 	enum ib_sig_type	sq_sig_type;
 
+	/*发送q*/
 	struct rxe_sq		sq;
+	/*接收q*/
 	struct rxe_rq		rq;
 
 	/*对应的udp socket*/
@@ -238,13 +241,16 @@ struct rxe_qp {
 	struct list_head	grp_list;
 	spinlock_t		grp_lock; /* guard grp_list */
 
-	/*rxe_resp_queue_pkt函数负责向其中添加skb*/
+	/*rxe_resp_queue_pkt函数负责向其中添加skb，这些skb是roce收到的报文，后续会用它填充wr*/
 	struct sk_buff_head	req_pkts;
 	/*rxe_comp_queue_pkt函数负责向其中添加skb*/
 	struct sk_buff_head	resp_pkts;
 
+	/*处理发送请求，处理req_pkts*/
 	struct rxe_req_info	req;
+	/*对接收内容进行响应*/
 	struct rxe_comp_info	comp;
+	/*处理接收请求,处理resp_pkts*/
 	struct rxe_resp_info	resp;
 
 	atomic_t		ssn;
@@ -295,7 +301,9 @@ struct rxe_map {
 };
 
 struct rxe_map_set {
+    /*指针数组，每个成员指向一个struct rxe_map*/
 	struct rxe_map		**map;
+	/*虚地址*/
 	u64			va;
 	u64			iova;
 	size_t			length;
@@ -330,6 +338,7 @@ struct rxe_mr {
 	u32			num_buf;
 
 	u32			max_buf;
+	/*rxe_map_set的大小*/
 	u32			num_map;
 
 	atomic_t		num_mw;
@@ -418,6 +427,7 @@ struct rxe_dev {
 	spinlock_t		mmap_offset_lock; /* guard mmap_offset */
 	u64			mmap_offset;
 
+	/*统计信息*/
 	atomic64_t		stats_counters[RXE_NUM_OF_COUNTERS];
 
 	struct rxe_port		port;

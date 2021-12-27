@@ -81,7 +81,9 @@ struct dst_entry {
 };
 
 struct dst_metrics {
+    /*路由相关的metrics配置，其下标为type减去1，例如RTAX_ADVMSS-1指建议的mss*/
 	u32		metrics[RTAX_MAX];
+	/*引用计数*/
 	refcount_t	refcnt;
 } __aligned(4);		/* Low pointer bits contain DST_METRICS_FLAGS */
 extern const struct dst_metrics dst_default_metrics;

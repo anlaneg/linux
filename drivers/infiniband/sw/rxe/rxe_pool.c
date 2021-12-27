@@ -11,7 +11,7 @@ static const struct rxe_type_info {
 	const char *name;
 	/*pool单个元素大小*/
 	size_t size;
-	/*到entry的offset*/
+	/*obj指针位置到rxe_pool_entry位置的offset*/
 	size_t elem_offset;
 	void (*cleanup)(struct rxe_pool_entry *obj);
 	enum rxe_pool_flags flags;
@@ -184,21 +184,26 @@ void rxe_pool_cleanup(struct rxe_pool *pool)
 	bitmap_free(pool->index.table);
 }
 
+/*在pool里申请空间的index*/
 static u32 alloc_index(struct rxe_pool *pool)
 {
 	u32 index;
 	u32 range = pool->index.max_index - pool->index.min_index + 1;
 
+	/*查找空闲的index*/
 	index = find_next_zero_bit(pool->index.table, range, pool->index.last);
 	if (index >= range)
 		index = find_first_zero_bit(pool->index.table, range);
 
 	WARN_ON_ONCE(index >= range);
+	/*占用此index*/
 	set_bit(index, pool->index.table);
 	pool->index.last = index;
+	/*返回对应的index编号*/
 	return index + pool->index.min_index;
 }
 
+/*将new节点加入到pool中（采用红黑树插法）*/
 static int rxe_insert_index(struct rxe_pool *pool, struct rxe_pool_entry *new)
 {
 	struct rb_node **link = &pool->index.tree.rb_node;
@@ -257,6 +262,7 @@ static int rxe_insert_key(struct rxe_pool *pool, struct rxe_pool_entry *new)
 	return 0;
 }
 
+/*将elem加入到pool,采用指定的key*/
 int __rxe_add_key_locked(struct rxe_pool_entry *elem, void *key)
 {
 	struct rxe_pool *pool = elem->pool;
@@ -309,6 +315,7 @@ int __rxe_add_index_locked(struct rxe_pool_entry *elem)
 	return err;
 }
 
+/*将elem加入到其对应的pool中*/
 int __rxe_add_index(struct rxe_pool_entry *elem)
 {
 	struct rxe_pool *pool = elem->pool;
@@ -365,19 +372,23 @@ out_cnt:
 	return NULL;
 }
 
+/*自pool中申请一个对象*/
 void *rxe_alloc(struct rxe_pool *pool)
 {
 	const struct rxe_type_info *info = &rxe_type_info[pool->type];
 	struct rxe_pool_entry *elem;
 	u8 *obj;
 
+	/*数量不足，分配失败*/
 	if (atomic_inc_return(&pool->num_elem) > pool->max_elem)
 		goto out_cnt;
 
+	/*申请obj*/
 	obj = kzalloc(info->size, GFP_KERNEL);
 	if (!obj)
 		goto out_cnt;
 
+	/*指向rxe_pool_entry*/
 	elem = (struct rxe_pool_entry *)(obj + info->elem_offset);
 
 	elem->pool = pool;
@@ -390,6 +401,7 @@ out_cnt:
 	return NULL;
 }
 
+/*初始化elem对应的pool*/
 int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_entry *elem)
 {
 	if (atomic_inc_return(&pool->num_elem) > pool->max_elem)
@@ -466,6 +478,7 @@ void *rxe_pool_get_index(struct rxe_pool *pool, u32 index)
 	return obj;
 }
 
+/*通过key查找key对应的obj*/
 void *rxe_pool_get_key_locked(struct rxe_pool *pool, void *key)
 {
 	const struct rxe_type_info *info = &rxe_type_info[pool->type];
@@ -476,6 +489,7 @@ void *rxe_pool_get_key_locked(struct rxe_pool *pool, void *key)
 
 	node = pool->key.tree.rb_node;
 
+	/*通过key查找elem*/
 	while (node) {
 		elem = rb_entry(node, struct rxe_pool_entry, key_node);
 

@@ -33,11 +33,12 @@ struct fib_config {
 	//网关对应的协议族
 	u8			fc_gw_family;
 	/* 2 bytes unused */
-	u32			fc_table;//路由要下发到哪张表里
-	__be32			fc_dst;//目的地址
+	//路由要下发到哪张表里(小于256时有效，大于256时，netlink原为其赋的为RT_TABLE_UNSPEC）
+	u32			fc_table;
+	__be32			fc_dst;//路由目的地址/目的网段
 	union {
 		__be32		fc_gw4;//下一跳地址（网关地址）
-		struct in6_addr	fc_gw6;
+		struct in6_addr	fc_gw6;//下一跳地址（网关地址）
 	};
 	int			fc_oif;//出口设备的ifindex
 	u32			fc_flags;
@@ -46,14 +47,22 @@ struct fib_config {
 	//优先选择的源地址（当存在secondary地址时，fc_prefsrc为primary地址）
 	__be32			fc_prefsrc;
 	u32			fc_nh_id;
+	/*一些杂项内容将填充到其中，来源于netlink type:RTA_METRICS,例如mtu配置等*/
 	struct nlattr		*fc_mx;
+	/*记录用户配置的多个下一跳*/
 	struct rtnexthop	*fc_mp;
+	/*记录fc_mx buffer的长度*/
 	int			fc_mx_len;
+	/*记录用户配置的多个下一跳（fc_mp数组）的 buffer长度*/
 	int			fc_mp_len;
+	/*通过realms配置的flow classid*/
 	u32			fc_flow;
+	/*netlink相关的控制标记*/
 	u32			fc_nlflags;
 	struct nl_info		fc_nlinfo;
+	/*encap情况下对应的配置参数*/
 	struct nlattr		*fc_encap;
+	/*指明采用哪种encap类型*/
 	u16			fc_encap_type;
 };
 
@@ -83,23 +92,30 @@ struct fnhe_hash_bucket {
 #define FNHE_RECLAIM_DEPTH	5
 
 struct fib_nh_common {
+    /*出接口对应的设备*/
 	struct net_device	*nhc_dev;
+	/*出接口*/
 	int			nhc_oif;
 	unsigned char		nhc_scope;
 	u8			nhc_family;
+	/*网关对应的family*/
 	u8			nhc_gw_family;
 	unsigned char		nhc_flags;
+	/*encap方式的隧道state,保存有隧道相关的元数据*/
 	struct lwtunnel_state	*nhc_lwtstate;
 
 	union {
-		__be32          ipv4;
+		__be32          ipv4;/*当网关family为af-inet时有效*/
 		struct in6_addr ipv6;
-	} nhc_gw;
+	} nhc_gw;/*网关地址*/
 
+	/*设置路由权重*/
 	int			nhc_weight;
+	/*按权重划分的当前下一跳对应的空间范围，前一个范围由上一个成员指定*/
 	atomic_t		nhc_upper_bound;
 
 	/* v4 specific, but allows fib6_nh with v4 routes */
+	/*percpu的rtable*/
 	struct rtable __rcu * __percpu *nhc_pcpu_rth_output;
 	struct rtable __rcu     *nhc_rth_input;
 	struct fnhe_hash_bucket	__rcu *nhc_exceptions;
@@ -108,18 +124,23 @@ struct fib_nh_common {
 struct fib_nh {
 	struct fib_nh_common	nh_common;
 	struct hlist_node	nh_hash;
+	/*指向当前结构所属的fib_info*/
 	struct fib_info		*nh_parent;
 #ifdef CONFIG_IP_ROUTE_CLASSID
+	/*通过realms配置的flow classid*/
 	__u32			nh_tclassid;
 #endif
 	__be32			nh_saddr;
 	int			nh_saddr_genid;
 #define fib_nh_family		nh_common.nhc_family
+	/*下一跳出接口对应的设备*/
 #define fib_nh_dev		nh_common.nhc_dev
+	/*下一跳对应出接口*/
 #define fib_nh_oif		nh_common.nhc_oif
 #define fib_nh_flags		nh_common.nhc_flags
 #define fib_nh_lws		nh_common.nhc_lwtstate
 #define fib_nh_scope		nh_common.nhc_scope
+	/*网关对应的family*/
 #define fib_nh_gw_family	nh_common.nhc_gw_family
 #define fib_nh_gw4		nh_common.nhc_gw.ipv4
 #define fib_nh_gw6		nh_common.nhc_gw.ipv6
@@ -137,17 +158,25 @@ struct fib_info {
 	struct hlist_node	fib_hash;
 	struct hlist_node	fib_lhash;
 	struct list_head	nh_list;
+	/*所属的net namespace*/
 	struct net		*fib_net;
 	refcount_t		fib_treeref;
 	refcount_t		fib_clntref;
 	unsigned int		fib_flags;
 	unsigned char		fib_dead;
+	/*下发路由的协议*/
 	unsigned char		fib_protocol;
+	//地址范围，看结构体rt_scope_t
 	unsigned char		fib_scope;
+	//路由类型（看rtnetlink.h中RTN_LOCAL对应结构体）
 	unsigned char		fib_type;
-	__be32			fib_prefsrc;/*指定优选源ip*/
+	/*指定优选源ip*/
+	__be32			fib_prefsrc;
+	//路由要下发到哪张表里
 	u32			fib_tb_id;
+	//路由的优先级
 	u32			fib_priority;
+	/*路由相关联的一些配置杂项*/
 	struct dst_metrics	*fib_metrics;
 #define fib_mtu fib_metrics->metrics[RTAX_MTU-1]
 #define fib_window fib_metrics->metrics[RTAX_WINDOW-1]
@@ -157,10 +186,11 @@ struct fib_info {
 	int			fib_nhs;
 	bool			fib_nh_is_v6;
 	bool			nh_updated;
+	/*通过nh_id引用的其它位置的下一跳*/
 	struct nexthop		*nh;
 	struct rcu_head		rcu;
 	//取第一个next hop做为出接口设备
-	struct fib_nh		fib_nh[];/*含多个next hop*/
+	struct fib_nh		fib_nh[];/*包含0/多个next hop*/
 };
 
 
@@ -172,13 +202,20 @@ struct fib_table;
 struct fib_result {
 	__be32			prefix;//网络号
 	unsigned char		prefixlen;//网络号长度
+	/*指明使用的下一跳索引*/
 	unsigned char		nh_sel;
-	unsigned char		type;//地址类型（单播，广播，组播，本地地址）
+	//路由类型，例如RTN_LOCAL
+	unsigned char		type;
+	/*路由scope*/
 	unsigned char		scope;
+	/*路由规则对应的tclassid*/
 	u32			tclassid;
+	/*指明使用的下一跳*/
 	struct fib_nh_common	*nhc;
-	struct fib_info		*fi;//路由信息
-	struct fib_table	*table;//属于哪张路由表
+	//下一跳对应的路由信息
+	struct fib_info		*fi;
+	//属于哪张路由表
+	struct fib_table	*table;
 	struct hlist_head	*fa_head;
 };
 
@@ -255,9 +292,9 @@ int fib_notify(struct net *net, struct notifier_block *nb,
 struct fib_table {
     //用于挂接在hash表上
 	struct hlist_node	tb_hlist;
-	//表编号
+	//路由表编号
 	u32			tb_id;
-	//规则数
+	//路由条目数（不含默认路由？）
 	int			tb_num_default;
 	struct rcu_head		rcu;
 	//struct trie类型，属于trie根节点
@@ -379,9 +416,9 @@ struct fib_table *fib_get_table(struct net *net, u32 id);
 int __fib_lookup(struct net *net, struct flowi4 *flp,
 		 struct fib_result *res, unsigned int flags);
 
-//ipv4路由表查询
+//ipv4路由表查询（优先查询策略路由，再查main表，再查default表）
 static inline int fib_lookup(struct net *net, struct flowi4 *flp,
-			     struct fib_result *res, unsigned int flags)
+			     struct fib_result *res/*出参，路由查询结果*/, unsigned int flags)
 {
 	struct fib_table *tb;
 	int err = -ENETUNREACH;

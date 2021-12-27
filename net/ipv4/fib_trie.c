@@ -1179,7 +1179,7 @@ noleaf:
 
 static int fib_insert_alias(struct trie *t, struct key_vector *tp,
 			    struct key_vector *l, struct fib_alias *new,
-			    struct fib_alias *fa, t_key key)
+			    struct fib_alias *fa, t_key key/*网段前缀*/)
 {
 	if (!l)
 		//没有对应的叶子节点，创建它，并在其下插入key(叶子节点）
@@ -1237,9 +1237,9 @@ static void fib_remove_alias(struct trie *t, struct key_vector *tp,
 			     struct key_vector *l, struct fib_alias *old);
 
 /* Caller must hold RTNL. */
-//fib表表项添加
+//fib表添加表项
 int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由表*/,
-		     struct fib_config *cfg, struct netlink_ext_ack *extack)
+		     struct fib_config *cfg/*路由表项*/, struct netlink_ext_ack *extack)
 {
 	//trie根节点
 	struct trie *t = (struct trie *)tb->tb_data;
@@ -1247,7 +1247,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	struct key_vector *l, *tp;
 	u16 nlflags = NLM_F_EXCL;
 	struct fib_info *fi;
-	//前缀长度
+	//目的地址前缀长度
 	u8 plen = cfg->fc_dst_len;
 	//后缀长度(suffix)
 	u8 slen = KEYLENGTH - plen;
@@ -1255,6 +1255,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	u32 key;
 	int err;
 
+	/*目的地址*/
 	key = ntohl(cfg->fc_dst);
 
 	//参数校验
@@ -1264,7 +1265,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	//打出debug,向表tb_id中插入 target为key,掩码长度为plen的的路由
 	pr_debug("Insert table=%u %08x/%d\n", tb->tb_id, key, plen);
 
-	//生成fib info
+	//利用cfg生成fib info结构体
 	fi = fib_create_info(cfg, extack);
 	if (IS_ERR(fi)) {
 		err = PTR_ERR(fi);
@@ -1396,10 +1397,10 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	if (!(cfg->fc_nlflags & NLM_F_CREATE))
 		goto out;
 
-	//准备创建
+	//我们没有找到到目的网络的路由项，行至此处，又容许创建，故准备创建
 	nlflags |= NLM_F_CREATE;
 	err = -ENOBUFS;
-	//为new_fa申请节点空间
+	//自fn_alias_kmem pool中为new_fa申请节点空间
 	new_fa = kmem_cache_alloc(fn_alias_kmem, GFP_KERNEL);
 	if (!new_fa)
 		goto out;
@@ -1416,7 +1417,7 @@ int fib_table_insert(struct net *net, struct fib_table *tb/*要操作的路由�
 	new_fa->offload_failed = 0;
 
 	/* Insert new entry to the list. */
-	err = fib_insert_alias(t/*要加入的trie*/, tp/*父节点*/, l/*父节点下的叶子节点*/, new_fa/*新的fa*/, fa, key);
+	err = fib_insert_alias(t/*要加入的trie*/, tp/*父节点*/, l/*父节点下的叶子节点*/, new_fa/*新的fa*/, fa, key/*目的网段地址*/);
 	if (err)
 		goto out_free_new_fa;
 
@@ -1485,7 +1486,7 @@ bool fib_lookup_good_nhc(const struct fib_nh_common *nhc, int fib_flags,
 }
 
 /* should be called with rcu_read_lock */
-//trie表查询(负责实现路由表查询）
+//trie表查询(负责实现具体一张路由表的查询，不负责多路径选择）
 int fib_table_lookup(struct fib_table *tb/*路由表*/, const struct flowi4 *flp,
 		     struct fib_result *res, int fib_flags)
 {
@@ -1646,6 +1647,7 @@ out_reject:
 		if (fi->fib_flags & RTNH_F_DEAD)
 			continue;
 
+		/*fi->nh非0的情况查询*/
 		if (unlikely(fi->nh)) {
 			if (nexthop_is_blackhole(fi->nh)) {
 				err = fib_props[RTN_BLACKHOLE].error;
@@ -1659,10 +1661,12 @@ out_reject:
 			goto miss;
 		}
 
+		/*多个下一跳时，遍历查找，找到首个可用下一跳*/
 		for (nhsel = 0; nhsel < fib_info_num_path(fi); nhsel++) {
 			nhc = fib_info_nhc(fi, nhsel);
 
 			if (!fib_lookup_good_nhc(nhc, fib_flags, flp))
+			    /*跳过当前不可用的nhc*/
 				continue;
 set_result:
 			if (!(fib_flags & FIB_LOOKUP_NOREF))
@@ -1670,7 +1674,7 @@ set_result:
 
 			res->prefix = htonl(n->key);
 			res->prefixlen = KEYLENGTH - fa->fa_slen;
-			res->nh_sel = nhsel;
+			res->nh_sel = nhsel;/*注：当前记录的为首个可用的下一跳*/
 			res->nhc = nhc;
 			res->type = fa->fa_type;
 			res->scope = fi->fib_scope;

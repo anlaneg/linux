@@ -100,7 +100,7 @@ static inline enum resp_states get_req(struct rxe_qp *qp,
 	struct sk_buff *skb;
 
 	if (qp->resp.state == QP_STATE_ERROR) {
-	    /*释放qp上所有的req_pkts*/
+	    /*qp->resp状态处于error状态，释放qp上所有的req_pkts*/
 		while ((skb = skb_dequeue(&qp->req_pkts))) {
 			rxe_drop_ref(qp);
 			kfree_skb(skb);
@@ -354,6 +354,7 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 			qp->resp.status = IB_WC_WR_FLUSH_ERR;
 			return RESPST_COMPLETE;
 		} else if (!srq) {
+		    /*取可使用的wqe*/
 			qp->resp.wqe = queue_head(qp->rq.queue,
 					QUEUE_TYPE_FROM_CLIENT);
 			if (qp->resp.wqe) {
@@ -524,6 +525,7 @@ static enum resp_states send_data_in(struct rxe_qp *qp, void *data_addr,
 {
 	int err;
 
+	/*填充qp->resp.wqe*/
 	err = copy_data(qp->pd, IB_ACCESS_LOCAL_WRITE, &qp->resp.wqe->dma,
 			data_addr, data_len, RXE_TO_MR_OBJ);
 	if (unlikely(err))
@@ -924,6 +926,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 	if (!qp->srq)
 		queue_advance_consumer(qp->rq.queue, QUEUE_TYPE_FROM_CLIENT);
 
+	/*wqe填充完成，将此设置NULL*/
 	qp->resp.wqe = NULL;
 
 	if (rxe_cq_post(qp->rcq, &cqe, pkt ? bth_se(pkt) : 1))
@@ -1252,6 +1255,7 @@ int rxe_responder(void *arg)
 			state = check_rkey(qp, pkt);
 			break;
 		case RESPST_EXECUTE:
+		    /*填充数据*/
 			state = execute(qp, pkt);
 			break;
 		case RESPST_COMPLETE:

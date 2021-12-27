@@ -64,14 +64,17 @@ struct netns_ipv4 {
 	/*default路由表*/
 	struct fib_table __rcu	*fib_default;
 	unsigned int		fib_rules_require_fldissect;
+	/*是否配置有策略路由规则*/
 	bool			fib_has_custom_rules;
 #endif
+	/*local表中是否有用户添加的配置*/
 	bool			fib_has_custom_local_routes;
 	bool			fib_offload_disabled;
 #ifdef CONFIG_IP_ROUTE_CLASSID
+	/*fib中用户配置的tclassid数目*/
 	int			fib_num_tclassid_users;
 #endif
-	//fib哈希表
+	//用于按table id查找对应的路由表
 	struct hlist_head	*fib_table_hash;
 	struct sock		*fibnl;
 

@@ -232,14 +232,21 @@ struct rtattr {
  ****/
 
 struct rtmsg {
+    /*协议族*/
 	unsigned char		rtm_family;
+	/*目的地址前缀长度*/
 	unsigned char		rtm_dst_len;
+	/*源地址前缀长度*/
 	unsigned char		rtm_src_len;
+	/*tos相关设置*/
 	unsigned char		rtm_tos;
 
+	/*要添加到哪张路由表*/
 	unsigned char		rtm_table;	/* Routing table id */
+	/*路由项对应的安装协议，例如RTPROT_BOOT*/
 	unsigned char		rtm_protocol;	/* Routing protocol; see below	*/
 	unsigned char		rtm_scope;	/* See below */	
+	/*路由项类型，例如RTN_LOCAL*/
 	unsigned char		rtm_type;	/* See below	*/
 
 	unsigned		rtm_flags;
@@ -251,13 +258,14 @@ enum {
 	RTN_UNSPEC,
 	//网关或者直连路由
 	RTN_UNICAST,		/* Gateway or direct route	*/
-	//本机地址
+	//本机路由
 	RTN_LOCAL,		/* Accept locally		*/
-	//广播地址
+	//广播
 	RTN_BROADCAST,		/* Accept locally as broadcast,
 				   send as broadcast */
 	RTN_ANYCAST,		/* Accept locally as broadcast,
 				   but send as unicast */
+	/*组播路由*/
 	RTN_MULTICAST,		/* Multicast route		*/
 	//黑洞路由，负责丢包
 	RTN_BLACKHOLE,		/* Drop				*/
@@ -411,9 +419,12 @@ enum rtattr_type_t {
  */
 
 struct rtnexthop {
+    /*消息长度*/
 	unsigned short		rtnh_len;
 	unsigned char		rtnh_flags;
+	/*通过weight-1指定*/
 	unsigned char		rtnh_hops;
+	/*出接口设备*/
 	int			rtnh_ifindex;
 };
 
@@ -465,7 +476,7 @@ struct rta_cacheinfo {
 /* RTM_METRICS --- array of struct rtattr with types of RTAX_* */
 
 enum {
-	RTAX_UNSPEC,
+	RTAX_UNSPEC,/*将被忽略*/
 #define RTAX_UNSPEC RTAX_UNSPEC
 	RTAX_LOCK,
 #define RTAX_LOCK RTAX_LOCK

@@ -54,13 +54,20 @@ enum queue_type {
 };
 
 struct rxe_queue {
+    /*queue对应的rxe设备*/
 	struct rxe_dev		*rxe;
+	/*buffer指向一个rxe_queue_buf结构，后面跟num_slot个elem(大小为elem_size)*/
 	struct rxe_queue_buf	*buf;
 	struct rxe_mmap_info	*ip;
+	/*buffer的内存大小*/
 	size_t			buf_size;
+	/*queue中元素个体大小*/
 	size_t			elem_size;
+	/*无素个体大小的log2的对数*/
 	unsigned int		log2_elem_size;
+	/*buffer中共有num_slot个元素,是2的N次，index_mask恰为num_sloat -1*/
 	u32			index_mask;
+	/*队列类型*/
 	enum queue_type		type;
 	/* private copy of index for shared queues between
 	 * kernel space and user space. Kernel reads and writes
@@ -188,6 +195,7 @@ static inline void queue_advance_producer(struct rxe_queue *q,
 			__func__);
 		break;
 	case QUEUE_TYPE_TO_DRIVER:
+	    /*更新producer索引*/
 		prod = q->buf->producer_index;
 		prod = (prod + 1) & q->index_mask;
 		q->buf->producer_index = prod;
@@ -235,6 +243,7 @@ static inline void *queue_producer_addr(struct rxe_queue *q,
 static inline void *queue_consumer_addr(struct rxe_queue *q,
 					enum queue_type type)
 {
+    /*取生产者指针指向的元素*/
 	u32 cons = queue_get_consumer(q, type);
 
 	return q->buf->data + (cons << q->log2_elem_size);
@@ -255,6 +264,7 @@ static inline u32 queue_index_from_addr(const struct rxe_queue *q,
 
 static inline void *queue_head(struct rxe_queue *q, enum queue_type type)
 {
+    /*队列为空时，返回NULL，否则去首个元素*/
 	return queue_empty(q, type) ? NULL : queue_consumer_addr(q, type);
 }
 

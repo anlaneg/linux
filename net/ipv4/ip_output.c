@@ -1573,7 +1573,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	iph->frag_off = df;
 	iph->ttl = ttl;
 	iph->protocol = sk->sk_protocol;
-	ip_copy_addrs(iph, fl4);
+	ip_copy_addrs(iph, fl4);/*使用fl4的源目的ip*/
 	ip_select_ident(net, skb, sk);
 
 	/*构造ip选项*/

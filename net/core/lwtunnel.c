@@ -71,6 +71,7 @@ struct lwtunnel_state *lwtunnel_state_alloc(int encap_len)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_state_alloc);
 
+/*记录系统中所有轻量级隧道对应的encap_ops*/
 static const struct lwtunnel_encap_ops __rcu *
 		lwtun_encaps[LWTUNNEL_ENCAP_MAX + 1] __read_mostly;
 
@@ -110,7 +111,7 @@ EXPORT_SYMBOL_GPL(lwtunnel_encap_del_ops);
 
 int lwtunnel_build_state(struct net *net, u16 encap_type,
 			 struct nlattr *encap, unsigned int family,
-			 const void *cfg, struct lwtunnel_state **lws,
+			 const void *cfg, struct lwtunnel_state **lws/*出参，创建的隧道状态*/,
 			 struct netlink_ext_ack *extack)
 {
 	const struct lwtunnel_encap_ops *ops;
@@ -137,7 +138,7 @@ int lwtunnel_build_state(struct net *net, u16 encap_type,
 	rcu_read_unlock();
 
 	if (found) {
-	    //通过build_state执行调用
+	    //通过build_state执行初始化隧道状态lws
 		ret = ops->build_state(net, encap, family, cfg, lws, extack);
 		if (ret)
 			module_put(ops->owner);
@@ -166,6 +167,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 	}
 
 	rcu_read_lock();
+	/*取此encap对应的ops*/
 	ops = rcu_dereference(lwtun_encaps[encap_type]);
 	rcu_read_unlock();
 #ifdef CONFIG_MODULES
@@ -194,7 +196,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_valid_encap_type);
 
-/*遍历所有netlink消息，校验其指定的encap类型*/
+/*遍历所有netlink消息，校验指定的encap类型是否在kernel中已注册*/
 int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 				   struct netlink_ext_ack *extack)
 {
@@ -210,7 +212,7 @@ int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 			attrs = rtnh_attrs(rtnh);
 			nla_entype = nla_find(attrs, attrlen, RTA_ENCAP_TYPE);
 
-			/*encap类型校验*/
+			/*encap类型校验,确保此encap_type在kernel中有对应的ops,如不存在，则返回not support*/
 			if (nla_entype) {
 				encap_type = nla_get_u16(nla_entype);
 

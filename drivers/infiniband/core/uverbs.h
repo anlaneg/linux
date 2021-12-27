@@ -111,6 +111,7 @@ struct ib_uverbs_device {
 	struct srcu_struct			disassociate_srcu;
 	struct mutex				lists_mutex; /* protect lists */
 	struct list_head			uverbs_file_list;
+	/*uverbs对应的api函数*/
 	struct uverbs_api			*uapi;
 };
 

@@ -5278,6 +5278,9 @@ static int ip6_route_multipath_add(struct fib6_config *cfg,
 			goto cleanup;
 		}
 
+		/*哈哈，1。rtnh_hops默认为0，此情况下权重为1
+		 *  2。为了保证fib_nh_weight在 1-255空间
+		 * */
 		rt->fib6_nh->fib_nh_weight = rtnh->rtnh_hops + 1;
 
 		err = ip6_route_info_append(info->nl_net, &rt6_nh_list,

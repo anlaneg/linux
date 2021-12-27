@@ -124,9 +124,9 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
 	fl4->flowi4_tun_key.tun_id = 0;
 	fl4->flowi4_uid = uid;
 	fl4->daddr = daddr;/*目的地址*/
-	fl4->saddr = saddr;
-	fl4->fl4_dport = dport;
-	fl4->fl4_sport = sport;
+	fl4->saddr = saddr;/*源地址*/
+	fl4->fl4_dport = dport;/*目的端口*/
+	fl4->fl4_sport = sport;/*源端口*/
 	fl4->flowi4_multipath_hash = 0;
 }
 

@@ -138,6 +138,7 @@ static inline int qp_num(struct rxe_qp *qp)
 	return qp->ibqp.qp_num;
 }
 
+/*取qp类型*/
 static inline enum ib_qp_type qp_type(struct rxe_qp *qp)
 {
 	return qp->ibqp.qp_type;

@@ -185,7 +185,7 @@ suppress_route:
 	return true;
 }
 
-//fib ipv4规则匹配
+//策略路由ipv4规则其它字段匹配
 INDIRECT_CALLABLE_SCOPE int fib4_rule_match(struct fib_rule *rule,
 					    struct flowi *fl, int flags)
 {
@@ -207,11 +207,12 @@ INDIRECT_CALLABLE_SCOPE int fib4_rule_match(struct fib_rule *rule,
 	if (rule->ip_proto && (rule->ip_proto != fl4->flowi4_proto))
 		return 0;
 
-	//端目的port匹配
+	//端port范围匹配
 	if (fib_rule_port_range_set(&rule->sport_range) &&
 	    !fib_rule_port_inrange(&rule->sport_range, fl4->fl4_sport))
 		return 0;
 
+	//目的port范围匹配
 	if (fib_rule_port_range_set(&rule->dport_range) &&
 	    !fib_rule_port_inrange(&rule->dport_range, fl4->fl4_dport))
 		return 0;
@@ -286,6 +287,7 @@ static int fib4_rule_configure(struct fib_rule *rule, struct sk_buff *skb,
 
 #ifdef CONFIG_IP_ROUTE_CLASSID
 	if (tb[FRA_FLOW]) {
+	    /*规则对应的tclassid*/
 		rule4->tclassid = nla_get_u32(tb[FRA_FLOW]);
 		if (rule4->tclassid)
 			net->ipv4.fib_num_tclassid_users++;
@@ -347,6 +349,7 @@ static int fib4_rule_compare(struct fib_rule *rule, struct fib_rule_hdr *frh,
 		return 0;
 
 #ifdef CONFIG_IP_ROUTE_CLASSID
+	/*匹配tclassid*/
 	if (tb[FRA_FLOW] && (rule4->tclassid != nla_get_u32(tb[FRA_FLOW])))
 		return 0;
 #endif

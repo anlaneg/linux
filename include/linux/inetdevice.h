@@ -158,7 +158,7 @@ struct in_ifaddr {
 	__u32			ifa_rt_priority;
 	/*广播地址*/
 	__be32			ifa_broadcast;
-	/*地址范围*/
+	/*地址scope*/
 	unsigned char		ifa_scope;
 	/*地址前缀长度*/
 	unsigned char		ifa_prefixlen;

@@ -337,6 +337,7 @@ out:
  */
 static void tcp_delack_timer(struct timer_list *t)
 {
+    /*延迟ack timer逻辑处理*/
 	struct inet_connection_sock *icsk =
 			from_timer(icsk, t, icsk_delack_timer);
 	struct sock *sk = &icsk->icsk_inet.sk;
@@ -679,6 +680,7 @@ EXPORT_SYMBOL_GPL(tcp_set_keepalive);
 
 static void tcp_keepalive_timer (struct timer_list *t)
 {
+    /*保活timer逻辑处理*/
 	struct sock *sk = from_timer(sk, t, sk_timer);
 	struct inet_connection_sock *icsk = inet_csk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -794,7 +796,7 @@ static enum hrtimer_restart tcp_compressed_ack_kick(struct hrtimer *timer)
 void tcp_init_xmit_timers(struct sock *sk)
 {
 	inet_csk_init_xmit_timers(sk, &tcp_write_timer/*重传timer*/, &tcp_delack_timer/*延迟ack timer*/,
-				  &tcp_keepalive_timer);
+				  &tcp_keepalive_timer/*保活timer*/);
 	hrtimer_init(&tcp_sk(sk)->pacing_timer, CLOCK_MONOTONIC,
 		     HRTIMER_MODE_ABS_PINNED_SOFT);
 	tcp_sk(sk)->pacing_timer.function = tcp_pace_kick;

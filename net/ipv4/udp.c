@@ -938,7 +938,7 @@ static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 	uh = udp_hdr(skb);
 	uh->source = inet->inet_sport;
 	uh->dest = fl4->fl4_dport;
-	uh->len = htons(len);
+	uh->len = htons(len);/*udp负载长度*/
 	uh->check = 0;
 
 	if (cork->gso_size) {
@@ -983,6 +983,7 @@ static int udp_send_skb(struct sk_buff *skb, struct flowi4 *fl4,
 	} else if (skb->ip_summed == CHECKSUM_PARTIAL) { /* UDP hardware csum */
 csum_partial:
 
+        /*计算udp头部的checksum*/
 		udp4_hwcsum(skb, fl4->saddr, fl4->daddr);
 		goto send;
 
@@ -1087,8 +1088,8 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 	struct rtable *rt = NULL;
 	int free = 0;
 	int connected = 0;
-	__be32 daddr, faddr, saddr;
-	__be16 dport;
+	__be32 daddr/*目的地址*/, faddr, saddr;
+	__be16 dport/*udp 目的端口*/;
 	u8  tos;
 	int err, is_udplite = IS_UDPLITE(sk);
 	int corkreq = READ_ONCE(up->corkflag) || msg->msg_flags&MSG_MORE;
@@ -1126,14 +1127,14 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 		release_sock(sk);
 	}
 
-	/*增加udp header*/
+	/*增加udp header,获得udp报文总长度*/
 	ulen += sizeof(struct udphdr);
 
 	/*
 	 *	Get and verify the address.
 	 */
 	if (usin) {
-	    /*校验指定的目的地址*/
+	    /*usin不为空，则校验指定的目的地址*/
 		if (msg->msg_namelen < sizeof(*usin))
 			return -EINVAL;
 		if (usin->sin_family != AF_INET) {
@@ -1141,13 +1142,16 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 				return -EAFNOSUPPORT;
 		}
 
+		/*取用户指定的目的地址及目的端口*/
 		daddr = usin->sin_addr.s_addr;
 		dport = usin->sin_port;
 		if (dport == 0)
 			return -EINVAL;
 	} else {
+	    /*未指定目的地址时，sock必须已双向通信*/
 		if (sk->sk_state != TCP_ESTABLISHED)
 			return -EDESTADDRREQ;
+		/*取socket对应的目的地址及目的端口*/
 		daddr = inet->inet_daddr;
 		dport = inet->inet_dport;
 		/* Open fast path for connected socket.
@@ -1212,6 +1216,8 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 		faddr = ipc.opt->opt.faddr;
 		connected = 0;
 	}
+
+	/*决定tos取值*/
 	tos = get_rttos(&ipc, inet);
 	if (sock_flag(sk, SOCK_LOCALROUTE) ||
 	    (msg->msg_flags & MSG_DONTROUTE) ||
@@ -1259,6 +1265,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 				   sk->sk_uid);
 
 		security_sk_classify_flow(sk, flowi4_to_flowi_common(fl4));
+
 		/*查路由*/
 		rt = ip_route_output_flow(net, fl4, sk);
 		if (IS_ERR(rt)) {

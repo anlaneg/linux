@@ -168,6 +168,7 @@ struct sock_common {
 	union {
 		__addrpair	skc_addrpair;
 		struct {
+		    /*目的地址*/
 			__be32	skc_daddr;
 			//设置接收的地址（报文中的目的ip,一般情况下我们在bind时设置的是0）
 			__be32	skc_rcv_saddr;
@@ -181,6 +182,7 @@ struct sock_common {
 	union {
 		__portpair	skc_portpair;
 		struct {
+		    /*目的端口*/
 			__be16	skc_dport;
 			__u16	skc_num;
 		};
@@ -477,6 +479,7 @@ struct sock {
 	__u32			sk_dst_pending_confirm;
 	u32			sk_pacing_status; /* see enum sk_pacing */
 	long			sk_sndtimeo;
+	/*keepalive定时器*/
 	struct timer_list	sk_timer;
 	__u32			sk_priority;
 	__u32			sk_mark;
@@ -497,7 +500,7 @@ struct sock {
 	 */
 	u8			sk_padding : 1,
 				sk_kern_sock : 1,//指明是否为kernel的socket
-				sk_no_check_tx : 1,
+				sk_no_check_tx : 1,/*指明是否不做tx checksum处理*/
 				sk_no_check_rx : 1,
 				sk_userlocks : 4;
 	u8			sk_pacing_shift;

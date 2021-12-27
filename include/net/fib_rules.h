@@ -51,7 +51,7 @@ struct fib_rule {
 struct fib_lookup_arg {
 	void			*lookup_ptr;
 	const void		*lookup_data;
-	void			*result;/*保存查询到的路由项*/
+	void			*result;/*保存查询到的路由结果*/
 	struct fib_rule		*rule;/*保存命中的策略*/
 	u32			table;
 	int			flags;

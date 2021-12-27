@@ -63,8 +63,8 @@ struct rxe_global_route {
 struct rxe_av {
 	__u8			port_num;
 	/* From RXE_NETWORK_TYPE_* */
-	__u8			network_type;
-	__u8			dmac[6];
+	__u8			network_type;/*网络层类型*/
+	__u8			dmac[6];/*目的Mac*/
 	struct rxe_global_route	grh;
 	union {
 		struct sockaddr_in	_sockaddr_in;
@@ -138,14 +138,18 @@ struct mminfo {
 };
 
 struct rxe_dma_info {
+    /*数据长度*/
 	__u32			length;
 	__u32			resid;
 	__u32			cur_sge;
+	/*seg数组长度*/
 	__u32			num_sge;
 	__u32			sge_offset;
 	__u32			reserved;
 	union {
+	    /*inline数据*/
 		__DECLARE_FLEX_ARRAY(__u8, inline_data);
+		/*sge数组*/
 		__DECLARE_FLEX_ARRAY(struct rxe_sge, sge);
 	};
 };

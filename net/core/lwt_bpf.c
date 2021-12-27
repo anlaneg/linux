@@ -653,6 +653,7 @@ int bpf_lwt_push_ip_encap(struct sk_buff *skb, void *hdr, u32 len, bool ingress)
 	return 0;
 }
 
+/*注册bpf轻量级隧道*/
 static int __init bpf_lwt_init(void)
 {
 	return lwtunnel_encap_add_ops(&bpf_encap_ops, LWTUNNEL_ENCAP_BPF);

@@ -1934,6 +1934,7 @@ fail:
  */
 void __percpu *__alloc_percpu_gfp(size_t size, size_t align, gfp_t gfp)
 {
+    /*percpu内存申请size大小，以align对齐*/
 	return pcpu_alloc(size, align, false, gfp);
 }
 EXPORT_SYMBOL_GPL(__alloc_percpu_gfp);

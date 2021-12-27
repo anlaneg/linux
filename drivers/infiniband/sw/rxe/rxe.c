@@ -20,6 +20,7 @@ bool rxe_initialized;
  */
 void rxe_dealloc(struct ib_device *ib_dev)
 {
+    /*ib_dev释放*/
 	struct rxe_dev *rxe = container_of(ib_dev, struct rxe_dev, ib_dev);
 
 	rxe_pool_cleanup(&rxe->uc_pool);

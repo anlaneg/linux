@@ -1353,6 +1353,7 @@ static int enable_device_and_get(struct ib_device *device)
 	 */
 	downgrade_write(&devices_rwsem);
 
+	/*驱动使能此设备*/
 	if (device->ops.enable_driver) {
 		ret = device->ops.enable_driver(device);
 		if (ret)

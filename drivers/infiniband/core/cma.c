@@ -1417,6 +1417,7 @@ static int cma_save_req_info(const struct ib_cm_event *ib_event,
 	return 0;
 }
 
+/*检查地址是否合理，检查反向路由是否指向net_dev*/
 static bool validate_ipv4_net_dev(struct net_device *net_dev,
 				  const struct sockaddr_in *dst_addr,
 				  const struct sockaddr_in *src_addr)
@@ -1428,12 +1429,14 @@ static bool validate_ipv4_net_dev(struct net_device *net_dev,
 	int err;
 	bool ret;
 
+	/*必须为合法的外发（forward)地址*/
 	if (ipv4_is_multicast(saddr) || ipv4_is_lbcast(saddr) ||
 	    ipv4_is_lbcast(daddr) || ipv4_is_zeronet(saddr) ||
 	    ipv4_is_zeronet(daddr) || ipv4_is_loopback(daddr) ||
 	    ipv4_is_loopback(saddr))
 		return false;
 
+	/*指定入接口，反转src/dst ip进行路由查询*/
 	memset(&fl4, 0, sizeof(fl4));
 	fl4.flowi4_iif = net_dev->ifindex;
 	fl4.daddr = daddr;
@@ -1441,6 +1444,7 @@ static bool validate_ipv4_net_dev(struct net_device *net_dev,
 
 	rcu_read_lock();
 	err = fib_lookup(dev_net(net_dev), &fl4, &res, 0);
+	/*检查对应的出接口是否为netdev*/
 	ret = err == 0 && FIB_RES_DEV(res) == net_dev;
 	rcu_read_unlock();
 

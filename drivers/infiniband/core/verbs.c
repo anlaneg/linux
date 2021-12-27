@@ -3001,6 +3001,7 @@ struct rdma_hw_stats *rdma_alloc_hw_stats_struct(
 {
 	struct rdma_hw_stats *stats;
 
+	/*申请rdam_hw_stats,并添加num_counters个u64*/
 	stats = kzalloc(struct_size(stats, value, num_counters), GFP_KERNEL);
 	if (!stats)
 		return NULL;

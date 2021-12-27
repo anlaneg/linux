@@ -9,13 +9,17 @@
 
 struct fib_alias {
 	struct hlist_node	fa_list;
+	/*路由对应的配置信息*/
 	struct fib_info		*fa_info;
+	/*路由配置项指定的tos*/
 	u8			fa_tos;
-	//fib类型
+	////路由类型（看rtnetlink.h中RTN_LOCAL对应结构体）
 	u8			fa_type;
 	u8			fa_state;
-	u8			fa_slen;//后缀长度
-	u32			tb_id;//哪张路由表
+	//后缀长度（目的地址减去前缀后剩余长度）
+	u8			fa_slen;
+	//所属的路由表
+	u32			tb_id;
 	s16			fa_default;
 	u8			offload:1,
 				trap:1,

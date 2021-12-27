@@ -452,7 +452,7 @@ struct nla_policy {
  * @skip_notify_kernel: Skip selected in-kernel notifications
  */
 struct nl_info {
-	struct nlmsghdr		*nlh;
+	struct nlmsghdr		*nlh;/*对应的消息头*/
 	struct net		*nl_net;//从属于哪个network namespace
 	u32			portid;
 	u8			skip_notify:1,
@@ -591,7 +591,9 @@ static inline int nlmsg_len(const struct nlmsghdr *nlh)
 static inline struct nlattr *nlmsg_attrdata(const struct nlmsghdr *nlh,
 					    int hdrlen)
 {
+    /*取nlh对应的负载*/
 	unsigned char *data = nlmsg_data(nlh);
+	/*处理负载对齐，返回负载指针*/
 	return (struct nlattr *) (data + NLMSG_ALIGN(hdrlen));
 }
 

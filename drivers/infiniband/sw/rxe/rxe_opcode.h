@@ -91,7 +91,9 @@ enum rxe_hdr_mask {
 #define RXE_NUM_OPCODE		256
 
 struct rxe_opcode_info {
+    /*opcode名称*/
 	char			*name;
+	/*opcode对应的mask*/
 	enum rxe_hdr_mask	mask;
 	/*此op对应的消息长度*/
 	int			length;

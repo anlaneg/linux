@@ -386,6 +386,7 @@ struct ib_uobject *rdma_lookup_get_uobject(const struct uverbs_api_object *obj,
 		if (IS_ERR(obj))
 			return ERR_PTR(-EINVAL);
 
+		/*查询指定id的object*/
 		uobj = obj->type_class->lookup_get(obj, ufile, id, mode);
 		if (IS_ERR(uobj))
 			return uobj;

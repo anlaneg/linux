@@ -271,12 +271,15 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 {
 	int ret = 0;
 
+	/*入接口*/
 	if (rule->iifindex && (rule->iifindex != fl->flowi_iif))
 		goto out;
 
+	/*为什么会有出接口，出接口还未知呀？？？*/
 	if (rule->oifindex && (rule->oifindex != fl->flowi_oif))
 		goto out;
 
+	/*rule mark按掩码进行匹配*/
 	if ((rule->mark ^ fl->flowi_mark) & rule->mark_mask)
 		goto out;
 
@@ -297,6 +300,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 			       fib4_rule_match,
 			       rule, fl, flags);
 out:
+    /*not 标记对整个匹配条件进行反转*/
 	return (rule->flags & FIB_RULE_INVERT) ? !ret : ret;
 }
 
@@ -853,7 +857,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	if (err < 0)
 		goto errout_free;
 
-	//查找target对应的rule,更新到rule对应的ctarget指针
+	//查找target对应的rule（以规则优先级为目标）,更新到rule对应的ctarget指针
 	list_for_each_entry(r, &ops->rules_list, list) {
 		if (r->pref == rule->target) {
 			RCU_INIT_POINTER(rule->ctarget, r);
@@ -861,6 +865,7 @@ int fib_nl_newrule(struct sk_buff *skb, struct nlmsghdr *nlh,
 		}
 	}
 
+	/*没有找到target对应的规则*/
 	if (rcu_dereference_protected(rule->ctarget, 1) == NULL)
 		unresolved = 1;
 

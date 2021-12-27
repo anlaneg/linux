@@ -60,7 +60,7 @@ EXPORT_SYMBOL_GPL(nf_conntrack_locks);
 __cacheline_aligned_in_smp DEFINE_SPINLOCK(nf_conntrack_expect_lock);
 EXPORT_SYMBOL_GPL(nf_conntrack_expect_lock);
 
-//保存ct的hashtable（全局的）
+//保存ct的hashtable指针（全局的）
 struct hlist_nulls_head *nf_conntrack_hash __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_hash);
 
@@ -187,7 +187,7 @@ static void nf_conntrack_all_unlock(void)
 	spin_unlock(&nf_conntrack_locks_all_lock);
 }
 
-//系统连接跟踪表大小
+//系统连接跟踪表桶大小
 unsigned int nf_conntrack_htable_size __read_mostly;
 EXPORT_SYMBOL_GPL(nf_conntrack_htable_size);
 
@@ -220,6 +220,7 @@ static u32 hash_conntrack_raw(const struct nf_conntrack_tuple *tuple,
 	combined.dst_addr = tuple->dst.u3;
 	combined.zone = zoneid;
 	combined.net_mix = net_hash_mix(net);
+	/*这里不包含srcport ????*/
 	combined.dport = (__force __u16)tuple->dst.u.all;
 	combined.proto = tuple->dst.protonum;
 
@@ -810,6 +811,7 @@ begin:
 	nf_conntrack_get_ht(&ct_hash, &hsize);
 	bucket = reciprocal_scale(hash, hsize);
 
+	/*在ct表中遍历此bucket*/
 	hlist_nulls_for_each_entry_rcu(h, n, &ct_hash[bucket], hnnode) {
 		struct nf_conn *ct;
 
@@ -871,12 +873,12 @@ found:
 	return h;
 }
 
-/*在指定的zone中查询tuple对应的连接跟踪hash节点*/
+/*在指定的zone中查询tuple对应的连接跟踪hash节点（正反两个方向均会被查询）*/
 struct nf_conntrack_tuple_hash *
 nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 		      const struct nf_conntrack_tuple *tuple)
 {
-	//查找链接跟踪
+	/*查找正方向链接跟踪*/
 	unsigned int rid, zone_id = nf_ct_zone_id(zone, IP_CT_DIR_ORIGINAL);
 	struct nf_conntrack_tuple_hash *thash;
 
@@ -884,8 +886,10 @@ nf_conntrack_find_get(struct net *net, const struct nf_conntrack_zone *zone,
 					hash_conntrack_raw(tuple, zone_id, net));
 
 	if (thash)
+	    /*如果查询到，则返回*/
 		return thash;
 
+	/*未查询到，在反方向中查找*/
 	rid = nf_ct_zone_id(zone, IP_CT_DIR_REPLY);
 	if (rid != zone_id)
 		return __nf_conntrack_find_get(net, zone, tuple,

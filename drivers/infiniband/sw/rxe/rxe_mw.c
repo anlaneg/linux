@@ -5,6 +5,7 @@
 
 #include "rxe.h"
 
+/*并不直接申请rxe_mw,而由ibmw直接转换rxe_mw并加入到pool*/
 int rxe_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 {
 	struct rxe_mw *mw = to_rmw(ibmw);
@@ -20,6 +21,7 @@ int rxe_alloc_mw(struct ib_mw *ibmw, struct ib_udata *udata)
 		return ret;
 	}
 
+	/*mw添加索引进pool*/
 	rxe_add_index(mw);
 	mw->rkey = ibmw->rkey = (mw->pelem.index << 8) | rxe_get_next_key(-1);
 	mw->state = (mw->ibmw.type == IB_MW_TYPE_2) ?
@@ -54,6 +56,7 @@ static void rxe_do_dealloc_mw(struct rxe_mw *mw)
 
 int rxe_dealloc_mw(struct ib_mw *ibmw)
 {
+    /*ibmw释放*/
 	struct rxe_mw *mw = to_rmw(ibmw);
 	struct rxe_pd *pd = to_rpd(ibmw->pd);
 	unsigned long flags;

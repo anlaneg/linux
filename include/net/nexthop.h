@@ -458,6 +458,7 @@ static inline unsigned int fib_info_num_path(const struct fib_info *fi)
 int fib_check_nexthop(struct nexthop *nh, u8 scope,
 		      struct netlink_ext_ack *extack);
 
+/*取nhsel对应的下一跳信息*/
 static inline struct fib_nh_common *fib_info_nhc(struct fib_info *fi, int nhsel)
 {
 	if (unlikely(fi->nh))

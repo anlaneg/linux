@@ -14,14 +14,16 @@
 struct rxe_pkt_info {
     /*设备对应的rxe设备*/
 	struct rxe_dev		*rxe;		/* device that owns packet */
+	/*此报文对应的qp*/
 	struct rxe_qp		*qp;		/* qp that owns packet */
+	/*报文对应的wqe*/
 	struct rxe_send_wqe	*wqe;		/* send wqe */
-	/*跳过udp头部*/
+	/*跳过udp头部，指向udp负载*/
 	u8			*hdr;		/* points to bth */
 	u32			mask;		/* useful info about pkt */
 	u32			psn;		/* bth psn of packet */
 	u16			pkey_index;	/* partition of pkt */
-	/*udp负载*/
+	/*udp负载长度*/
 	u16			paylen;		/* length of bth - icrc */
 	u8			port_num;	/* port pkt received on */
 	u8			opcode;		/* bth opcode of packet */
@@ -63,9 +65,10 @@ static inline struct sk_buff *PKT_TO_SKB(struct rxe_pkt_info *pkt)
  ******************************************************************************/
 struct rxe_bth {
     /*bth头部12字节*/
-	u8			opcode;
+	u8			opcode;/*操作码*/
 	u8			flags;
 	__be16			pkey;
+	/*低24位用于表示qpn*/
 	__be32			qpn;
 	__be32			apsn;
 };
@@ -92,6 +95,7 @@ static inline u8 __bth_opcode(void *arg)
 	return bth->opcode;
 }
 
+/*设置操作码*/
 static inline void __bth_set_opcode(void *arg, u8 opcode)
 {
 	struct rxe_bth *bth = arg;
@@ -177,6 +181,7 @@ static inline void __bth_set_pkey(void *arg, u16 pkey)
 	bth->pkey = cpu_to_be16(pkey);
 }
 
+/*取低24位，做为qpn*/
 static inline u32 __bth_qpn(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -341,6 +346,7 @@ static inline void bth_set_pkey(struct rxe_pkt_info *pkt, u16 pkey)
 	__bth_set_pkey(pkt->hdr, pkey);
 }
 
+/*取报文对应的qpn*/
 static inline u32 bth_qpn(struct rxe_pkt_info *pkt)
 {
 	return __bth_qpn(pkt->hdr);
@@ -396,6 +402,7 @@ static inline void bth_set_resv7(struct rxe_pkt_info *pkt)
 	__bth_set_resv7(pkt->hdr);
 }
 
+/*取bth头部的psn*/
 static inline u32 bth_psn(struct rxe_pkt_info *pkt)
 {
 	return __bth_psn(pkt->hdr);
@@ -412,6 +419,7 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se,
 {
 	struct rxe_bth *bth = (struct rxe_bth *)(pkt->hdr);
 
+	/*初始化操作码*/
 	bth->opcode = opcode;
 	bth->flags = (pad << 4) & BTH_PAD_MASK;
 	if (se)

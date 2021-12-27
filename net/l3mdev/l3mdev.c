@@ -120,8 +120,10 @@ int l3mdev_master_ifindex_rcu(const struct net_device *dev)
 		return 0;
 
 	if (netif_is_l3_master(dev)) {
+	    /*已是master,取对应的ifindex*/
 		ifindex = dev->ifindex;
 	} else if (netif_is_l3_slave(dev)) {
+	    /*取dev对应的master,并返回ifindex*/
 		struct net_device *master;
 		struct net_device *_dev = (struct net_device *)dev;
 

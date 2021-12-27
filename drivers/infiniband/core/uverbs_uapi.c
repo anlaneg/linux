@@ -25,7 +25,8 @@ static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 	elm = kzalloc(alloc_size, GFP_KERNEL);
 	if (!elm)
 		return ERR_PTR(-ENOMEM);
-	/*添加记录*/
+
+	/*添加记录key对应elem*/
 	rc = radix_tree_insert(&uapi->radix, key, elm);
 	if (rc) {
 		kfree(elm);
@@ -35,8 +36,8 @@ static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 	return elm;
 }
 
-static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key,
-			      size_t alloc_size, bool *exists)
+static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key/*要添加的key*/,
+			      size_t alloc_size/*key对应的ele大小*/, bool *exists/*出参，是否已存在*/)
 {
 	void *elm;
 
@@ -50,7 +51,7 @@ static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key,
 	if (elm != ERR_PTR(-EEXIST))
 		return elm;
 
-	/*查询key对应的elem*/
+	/*已存在，查询key对应的elem*/
 	elm = radix_tree_lookup(&uapi->radix, key);
 	if (WARN_ON(!elm))
 		return ERR_PTR(-EINVAL);
@@ -58,22 +59,24 @@ static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key,
 	return elm;
 }
 
+/*创建obj_key对应的method element*/
 static int uapi_create_write(struct uverbs_api *uapi,
 			     struct ib_device *ibdev,
 			     const struct uapi_definition *def,
 			     u32 obj_key,
-			     u32 *cur_method_key)
+			     u32 *cur_method_key/*出叁，此方法对应的key*/)
 {
 	struct uverbs_api_write_method *method_elm;
-	u32 method_key = obj_key;
+	u32 method_key = obj_key;/*指明命令要应用的key*/
 	bool exists;
 
 	if (def->write.is_ex)
+	    /*扩展类方法*/
 		method_key |= uapi_key_write_ex_method(def->write.command_num);
 	else
 		method_key |= uapi_key_write_method(def->write.command_num);
 
-	/*添加method_elem*/
+	/*添加method_key对应的method_elem*/
 	method_elm = uapi_add_get_elm(uapi, method_key, sizeof(*method_elm),
 				      &exists);
 	if (IS_ERR(method_elm))
@@ -236,6 +239,7 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 {
 	bool exists;
 
+	/*禁止此obj*/
 	if (def->scope == UAPI_SCOPE_OBJECT) {
 		struct uverbs_api_object *obj_elm;
 
@@ -247,6 +251,7 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 		return 0;
 	}
 
+	/*禁止此method*/
 	if (def->scope == UAPI_SCOPE_METHOD &&
 	    uapi_key_is_ioctl_method(method_key)) {
 		struct uverbs_api_ioctl_method *method_elm;
@@ -259,6 +264,7 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 		return 0;
 	}
 
+	/*禁止此Method*/
 	if (def->scope == UAPI_SCOPE_METHOD &&
 	    (uapi_key_is_write_method(method_key) ||
 	     uapi_key_is_write_ex_method(method_key))) {
@@ -277,7 +283,7 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 }
 
 static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
-			  const struct uapi_definition *def_list,
+			  const struct uapi_definition *def_list/*uverbs api列表*/,
 			  bool is_driver)
 {
 	const struct uapi_definition *def = def_list;
@@ -287,6 +293,7 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 	int rc;
 
 	if (!def_list)
+	    /*列表为空，退出*/
 		return 0;
 
 	/*遍历def_list*/
@@ -317,11 +324,14 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			return 0;
 
 		case UAPI_DEF_IS_SUPPORTED_DEV_FN: {
+		    /*指明此uapi_definitions是针对method的，这些function在obj的指定offset位置*/
 			void **ibdev_fn =
 				(void *)(&ibdev->ops) + def->needs_fn_offset;
 
 			if (*ibdev_fn)
+			    /*此函数存在，处理结束*/
 				continue;
+			/*此函数不存在，禁止此function/此对象*/
 			rc = uapi_disable_elm(
 				uapi, def, cur_obj_key, cur_method_key);
 			if (rc)
@@ -330,8 +340,10 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 		}
 
 		case UAPI_DEF_IS_SUPPORTED_FUNC:
+		    /*指明此uapi_definitions是针对method的，通过回调检查是否支持*/
 			if (def->func_is_supported(ibdev))
 				continue;
+			/*确认不支持此method,禁止此function/此对象*/
 			rc = uapi_disable_elm(
 				uapi, def, cur_obj_key, cur_method_key);
 			if (rc)
@@ -339,17 +351,21 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			continue;
 
 		case UAPI_DEF_OBJECT_START: {
+		    /*指明接下来的uapi_definitions是一组object(本uapi_definition是obj的起始）*/
 			struct uverbs_api_object *obj_elm;
 
+			/*取起始的obj id*/
 			cur_obj_key = uapi_key_obj(def->object_start.object_id);
 			obj_elm = uapi_add_get_elm(uapi, cur_obj_key,
 						   sizeof(*obj_elm), &exists);
 			if (IS_ERR(obj_elm))
 				return PTR_ERR(obj_elm);
+			/*更新cur_obj_key，并申请obj_elm成功，继续向下处理*/
 			continue;
 		}
 
 		case UAPI_DEF_WRITE:
+		    /*指明此uapi_definitions是一个write函数，添加这个函数*/
 			rc = uapi_create_write(
 				uapi, ibdev, def, cur_obj_key, &cur_method_key);
 			if (rc)
@@ -664,9 +680,11 @@ struct uverbs_api *uverbs_alloc_api(struct ib_device *ibdev)
 	INIT_RADIX_TREE(&uapi->radix, GFP_KERNEL);
 	uapi->driver_id = ibdev->ops.driver_id;
 
+	/*合并uverbs_core_api*/
 	rc = uapi_merge_def(uapi, ibdev, uverbs_core_api, false);
 	if (rc)
 		goto err;
+	/*合并驱动引入的api*/
 	rc = uapi_merge_def(uapi, ibdev, ibdev->driver_def, true);
 	if (rc)
 		goto err;

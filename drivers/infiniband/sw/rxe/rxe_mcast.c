@@ -49,8 +49,10 @@ int rxe_mcast_get_grp(struct rxe_dev *rxe, union ib_gid *mgid,
 
 	grp = rxe_pool_get_key_locked(pool, mgid);
 	if (grp)
+	    /*mgid对应的rxe_mc_grp存在，直接返回*/
 		goto done;
 
+	/*grp不存在，创建它，并返回*/
 	grp = create_grp(rxe, pool, mgid);
 	if (IS_ERR(grp)) {
 		write_unlock_irqrestore(&pool->pool_lock, flags);
