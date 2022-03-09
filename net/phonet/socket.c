@@ -31,6 +31,7 @@ static int pn_socket_release(struct socket *sock)
 
 	if (sk) {
 		sock->sk = NULL;
+		/*协议导参见close此socket*/
 		sk->sk_prot->close(sk, 0);
 	}
 	return 0;

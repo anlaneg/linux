@@ -139,6 +139,7 @@ extern phys_addr_t per_cpu_ptr_to_phys(void *addr);
 #define alloc_percpu_gfp(type, gfp)					\
 	(typeof(type) __percpu *)__alloc_percpu_gfp(sizeof(type),	\
 						__alignof__(type), gfp)
+/*申请percpu结构体type*/
 #define alloc_percpu(type)						\
 	(typeof(type) __percpu *)__alloc_percpu(sizeof(type),		\
 						__alignof__(type))

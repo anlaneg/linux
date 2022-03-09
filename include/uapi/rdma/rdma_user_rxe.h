@@ -61,15 +61,16 @@ struct rxe_global_route {
 };
 
 struct rxe_av {
+    /*port编号*/
 	__u8			port_num;
 	/* From RXE_NETWORK_TYPE_* */
-	__u8			network_type;/*网络层类型*/
+	__u8			network_type;/*网络层类型ipv4/ipv6*/
 	__u8			dmac[6];/*目的Mac*/
 	struct rxe_global_route	grh;
 	union {
 		struct sockaddr_in	_sockaddr_in;
 		struct sockaddr_in6	_sockaddr_in6;
-	} sgid_addr, dgid_addr;
+	} sgid_addr, dgid_addr;/*源地址，目的地址*/
 };
 
 struct rxe_send_wr {

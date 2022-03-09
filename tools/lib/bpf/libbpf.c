@@ -7959,14 +7959,17 @@ bpf_object__next(struct bpf_object *prev)
 		return NULL;
 
 	if (!prev)
+	    /*取bpf_objects_list的首个元素*/
 		next = list_first_entry(&bpf_objects_list,
 					struct bpf_object,
 					list);
 	else
+	    /*取下个元素*/
 		next = list_next_entry(prev, list);
 
 	/* Empty list is noticed here so don't need checking on entry. */
 	if (&next->list == &bpf_objects_list)
+	    /*此元素必须从属于bpf_objects_list*/
 		return NULL;
 
 	return next;
@@ -8859,6 +8862,7 @@ static bool map_uses_real_name(const struct bpf_map *map)
 	return false;
 }
 
+/*取bpf map名称*/
 const char *bpf_map__name(const struct bpf_map *map)
 {
 	if (!map)
@@ -9070,6 +9074,7 @@ struct bpf_map *
 bpf_object__next_map(const struct bpf_object *obj, const struct bpf_map *prev)
 {
 	if (prev == NULL)
+	    /*取Obj对应的maps*/
 		return obj->maps;
 
 	return __bpf_map__iter(prev, obj, 1);

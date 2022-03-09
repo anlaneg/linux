@@ -12,7 +12,7 @@
 
 enum parse_opt_type {
 	/* special types */
-	OPTION_END,
+	OPTION_END,/*最后一个选项*/
 	OPTION_ARGUMENT,
 	OPTION_GROUP,
 	/* options with no arguments */
@@ -100,8 +100,8 @@ typedef int parse_opt_cb(const struct option *, const char *arg, int unset);
  */
 struct option {
 	enum parse_opt_type type;
-	int short_name;
-	const char *long_name;
+	int short_name;/*短选项名*/
+	const char *long_name;/*长选项名*/
 	void *value;
 	const char *argh;
 	const char *help;

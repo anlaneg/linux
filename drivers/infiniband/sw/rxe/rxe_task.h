@@ -20,12 +20,15 @@ enum {
  */
 struct rxe_task {
 	void			*obj;
+	/*task对应的softirq的tasklet*/
 	struct tasklet_struct	tasklet;
 	int			state;
 	spinlock_t		state_lock; /* spinlock for task state */
 	void			*arg;
+	/*TASK工作函数*/
 	int			(*func)(void *arg);
 	int			ret;
+	/*TASK名称*/
 	char			name[16];
 	bool			destroyed;
 };

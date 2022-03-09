@@ -998,6 +998,7 @@ int parse_opt_verbosity_cb(const struct option *opt,
 static struct option *
 find_option(struct option *opts, int shortopt, const char *longopt)
 {
+    /*遍历opts,如果shortopt不为0，且opts->short_name 与shortopt相等，或者longopt匹配，则返回匹配的opts*/
 	for (; opts->type != OPTION_END; opts++) {
 		if ((shortopt && opts->short_name == shortopt) ||
 		    (opts->long_name && longopt &&

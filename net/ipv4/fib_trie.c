@@ -1759,8 +1759,8 @@ static void fib_notify_alias_delete(struct net *net, u32 key,
 }
 
 /* Caller must hold RTNL. */
-int fib_table_delete(struct net *net, struct fib_table *tb,
-		     struct fib_config *cfg, struct netlink_ext_ack *extack)
+int fib_table_delete(struct net *net, struct fib_table *tb/*路由表*/,
+		     struct fib_config *cfg/*待删除的路由项*/, struct netlink_ext_ack *extack)
 {
 	struct trie *t = (struct trie *) tb->tb_data;
 	struct fib_alias *fa, *fa_to_delete;

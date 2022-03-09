@@ -52,8 +52,8 @@ inline void rxe_queue_reset(struct rxe_queue *q)
 	memset(q->buf->data, 0, q->buf_size - sizeof(struct rxe_queue_buf));
 }
 
-struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*队列元素数目*/,
-			unsigned int elem_size, enum queue_type type)
+struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参，队列元素数目*/,
+			unsigned int elem_size/*队列元素大小*/, enum queue_type type/*队列类型*/)
 {
 	struct rxe_queue *q;
 	size_t buf_size;
@@ -64,6 +64,7 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*队列元�
 	    /*必须指定正的队列元素数*/
 		goto err1;
 
+	/*申请queue*/
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		goto err1;
@@ -76,6 +77,7 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*队列元�
 
 	/* pad element up to at least a cacheline and always a power of 2 */
 	if (elem_size < cache_line_size())
+	    /*elem_size最小为cache line size*/
 		elem_size = cache_line_size();
 	elem_size = roundup_pow_of_two(elem_size);
 

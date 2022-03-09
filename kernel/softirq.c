@@ -557,11 +557,12 @@ restart:
 		vec_nr = h - softirq_vec;//获得对应的中断号
 		prev_count = preempt_count();
 
-		//vec_nr号中断发生次数加1
+		//当前CPU vec_nr号中断发生次数加1
 		kstat_incr_softirqs_this_cpu(vec_nr);
 
 		trace_softirq_entry(vec_nr);
-		h->action(h);//执行软件中断的回调函数
+		//执行软件中断的回调函数
+		h->action(h);
 		trace_softirq_exit(vec_nr);
 		if (unlikely(prev_count != preempt_count())) {
 			pr_err("huh, entered softirq %u %s %p with preempt_count %08x, exited with %08x?\n",
@@ -725,9 +726,12 @@ struct tasklet_head {
 	struct tasklet_struct **tail;
 };
 
+/*记录每个CPU上系统需要执行的tasklet*/
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_vec);
+/*记录每个CPU上系统需要执行的tasklet_hi*/
 static DEFINE_PER_CPU(struct tasklet_head, tasklet_hi_vec);
 
+/*将tasklet添加进heapdp所对应的链表中，记录需要执行的tasklet*/
 static void __tasklet_schedule_common(struct tasklet_struct *t,
 				      struct tasklet_head __percpu *headp,
 				      unsigned int softirq_nr)
@@ -776,9 +780,10 @@ static bool tasklet_clear_sched(struct tasklet_struct *t)
 	return false;
 }
 
+/*执行softirq_nr号软中断，tl_head列出了需要执行的tasklet*/
 static void tasklet_action_common(struct softirq_action *a,
 				  struct tasklet_head *tl_head,
-				  unsigned int softirq_nr)
+				  unsigned int softirq_nr/*软中断编号*/)
 {
 	struct tasklet_struct *list;
 
@@ -790,14 +795,15 @@ static void tasklet_action_common(struct softirq_action *a,
 	tl_head->tail = &tl_head->head;
 	local_irq_enable();
 
-	//遍历list指向的tasklet_struct链表
+	//遍历list，如果成功执行则移除，如果未成功执行，则仍存入回tl_head中
+	//（其指向的是待执行的tasklet_struct）
 	while (list) {
 		struct tasklet_struct *t = list;
 
 		//准备下一个遍历对象
 		list = list->next;
 
-		//尝试直接运行func
+		//尝试直接执行此tasklet
 		if (tasklet_trylock(t)) {
 			if (!atomic_read(&t->count)) {
 				if (tasklet_clear_sched(t)) {
@@ -807,6 +813,7 @@ static void tasklet_action_common(struct softirq_action *a,
 						t->func(t->data);
 				}
 				tasklet_unlock(t);
+				/*tasklet被成功执行，切换下一个tasklet*/
 				continue;
 			}
 			tasklet_unlock(t);
@@ -814,9 +821,9 @@ static void tasklet_action_common(struct softirq_action *a,
 
 		local_irq_disable();
 
-		//将t自原来的 tl_heead->head中移除
+		//tasklet未执行，将t自原来的tl_heead->head中移除
 		t->next = NULL;
-		//将t加入到tl_head中（tl_head->tail原来指向最后一个元素的next)
+		//将t重新加入到链表（放在队尾，tl_head->tail原来指向最后一个元素的next)
 		*tl_head->tail = t;
 		//更新tl_head->tail到最后一个元素
 		tl_head->tail = &t->next;
@@ -826,16 +833,19 @@ static void tasklet_action_common(struct softirq_action *a,
 	}
 }
 
+/*tasklet软中断处理*/
 static __latent_entropy void tasklet_action(struct softirq_action *a)
 {
 	tasklet_action_common(a, this_cpu_ptr(&tasklet_vec), TASKLET_SOFTIRQ);
 }
 
+/*最高优先级的软中断*/
 static __latent_entropy void tasklet_hi_action(struct softirq_action *a)
 {
 	tasklet_action_common(a, this_cpu_ptr(&tasklet_hi_vec), HI_SOFTIRQ);
 }
 
+/*初始化此tasklet,指明其使用callback回调进行tasklet执行*/
 void tasklet_setup(struct tasklet_struct *t,
 		   void (*callback)(struct tasklet_struct *))
 {
@@ -848,7 +858,7 @@ void tasklet_setup(struct tasklet_struct *t,
 }
 EXPORT_SYMBOL(tasklet_setup);
 
-//初始化一个tasklet,设置其对应的回调函数
+//初始化一个tasklet,指明其使用func回调进行tasklet执行，同时指定func对应的参数
 void tasklet_init(struct tasklet_struct *t,
 		  void (*func)(unsigned long), unsigned long data)
 {
@@ -930,10 +940,11 @@ void __init softirq_init(void)
 
 	//定义tasklet_softirq的回调函数
 	open_softirq(TASKLET_SOFTIRQ, tasklet_action);
+	/*定义hi_softirq对应回调*/
 	open_softirq(HI_SOFTIRQ, tasklet_hi_action);
 }
 
-/*检查ksoftirqd是否有工作需要处理*/
+/*检查ksoftirqd是否有工作需要处理,返回值非0，表示有softirq待处理*/
 static int ksoftirqd_should_run(unsigned int cpu)
 {
 	return local_softirq_pending();
@@ -949,7 +960,8 @@ static void run_ksoftirqd(unsigned int cpu)
 		 * We can safely run softirq on inline stack, as we are not deep
 		 * in the task stack here.
 		 */
-		__do_softirq();//做当前cpu上的软中断处理
+	    //做当前cpu上的软中断处理
+		__do_softirq();
 		ksoftirqd_run_end();
 		cond_resched();
 		return;

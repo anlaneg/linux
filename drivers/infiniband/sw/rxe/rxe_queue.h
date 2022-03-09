@@ -65,7 +65,7 @@ struct rxe_queue {
 	size_t			elem_size;
 	/*无素个体大小的log2的对数*/
 	unsigned int		log2_elem_size;
-	/*buffer中共有num_slot个元素,是2的N次，index_mask恰为num_sloat -1*/
+	/*buffer中共有num_slot个元素,是2的N次，index_mask恰为num_slot -1*/
 	u32			index_mask;
 	/*队列类型*/
 	enum queue_type		type;
@@ -98,6 +98,7 @@ static inline u32 queue_next_index(struct rxe_queue *q, int index)
 	return (index + 1) & q->index_mask;
 }
 
+/*生产者指针*/
 static inline u32 queue_get_producer(const struct rxe_queue *q,
 				     enum queue_type type)
 {
@@ -123,6 +124,7 @@ static inline u32 queue_get_producer(const struct rxe_queue *q,
 	return prod;
 }
 
+/*消费者指针*/
 static inline u32 queue_get_consumer(const struct rxe_queue *q,
 				     enum queue_type type)
 {
@@ -156,6 +158,7 @@ static inline int queue_empty(struct rxe_queue *q, enum queue_type type)
 	return ((prod - cons) & q->index_mask) == 0;
 }
 
+/*检查队列是否为满*/
 static inline int queue_full(struct rxe_queue *q, enum queue_type type)
 {
 	u32 prod = queue_get_producer(q, type);
@@ -170,9 +173,11 @@ static inline u32 queue_count(const struct rxe_queue *q,
 	u32 prod = queue_get_producer(q, type);
 	u32 cons = queue_get_consumer(q, type);
 
+	/*队列已有元素空间*/
 	return (prod - cons) & q->index_mask;
 }
 
+/*更新q的生产者指针*/
 static inline void queue_advance_producer(struct rxe_queue *q,
 					  enum queue_type type)
 {
@@ -232,6 +237,7 @@ static inline void queue_advance_consumer(struct rxe_queue *q,
 	}
 }
 
+/*取生产者指针指向的元素*/
 static inline void *queue_producer_addr(struct rxe_queue *q,
 					enum queue_type type)
 {
@@ -243,7 +249,7 @@ static inline void *queue_producer_addr(struct rxe_queue *q,
 static inline void *queue_consumer_addr(struct rxe_queue *q,
 					enum queue_type type)
 {
-    /*取生产者指针指向的元素*/
+    /*取消费者指针指向的元素*/
 	u32 cons = queue_get_consumer(q, type);
 
 	return q->buf->data + (cons << q->log2_elem_size);

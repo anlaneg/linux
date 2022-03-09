@@ -78,6 +78,7 @@ void rxe_av_fill_ip_info(struct rxe_av *av, struct rdma_ah_attr *attr)
 	int ibtype;
 	int type;
 
+	/*填充源/目的地址*/
 	rdma_gid2ip((struct sockaddr *)&av->sgid_addr, &sgid_attr->gid);
 	rdma_gid2ip((struct sockaddr *)&av->dgid_addr,
 		    &rdma_ah_read_grh(attr)->dgid);
@@ -107,9 +108,11 @@ struct rxe_av *rxe_get_av(struct rxe_pkt_info *pkt)
 	u32 ah_num;
 
 	if (!pkt || !pkt->qp)
+	    /*没有指明qp,直接返回*/
 		return NULL;
 
 	if (qp_type(pkt->qp) == IB_QPT_RC || qp_type(pkt->qp) == IB_QPT_UC)
+	    /*针对rc,uc两种qp模式时，直接返回qp->priv_av*/
 		return &pkt->qp->pri_av;
 
 	if (!pkt->wqe)

@@ -56,8 +56,8 @@ struct udp_skb_cb {
  *	@lock:	spinlock protecting changes to head/count
  */
 struct udp_hslot {
-	struct hlist_head	head;
-	int			count;
+	struct hlist_head	head;/*链表*/
+	int			count;/*此链上的socket总数*/
 	spinlock_t		lock;
 } __attribute__((aligned(2 * sizeof(long))));
 
@@ -77,6 +77,8 @@ struct udp_table {
 };
 extern struct udp_table udp_table;
 void udp_table_init(struct udp_table *, const char *);
+
+/*按port查询udp hashtable*/
 static inline struct udp_hslot *udp_hashslot(struct udp_table *table,
 					     struct net *net, unsigned int num)
 {

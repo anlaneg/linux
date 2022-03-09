@@ -14,7 +14,7 @@
 #include <linux/bug.h>
 
 /* Don't assign or return these: may not be this big! */
-typedef struct cpumask { DECLARE_BITMAP(bits, NR_CPUS); } cpumask_t;
+typedef struct cpumask { DECLARE_BITMAP(bits, NR_CPUS); } cpumask_t;/*每个cpu一个bit*/
 
 /**
  * cpumask_bits - get the bits in a cpumask
@@ -532,6 +532,7 @@ static inline bool cpumask_empty(const struct cpumask *srcp)
  */
 static inline bool cpumask_full(const struct cpumask *srcp)
 {
+    /*检查bitmap是否为满*/
 	return bitmap_full(cpumask_bits(srcp), nr_cpumask_bits);
 }
 

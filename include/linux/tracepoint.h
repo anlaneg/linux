@@ -203,6 +203,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 			rcu_irq_enter_irqson();				\
 		}							\
 									\
+		/*调用此tracepoint的入口函数*/\
 		__DO_TRACE_CALL(name, TP_ARGS(args));			\
 									\
 		if (rcuidle) {						\
@@ -245,6 +246,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	static inline void trace_##name(proto)				\
 	{								\
 		if (static_key_false(&__tracepoint_##name.key))		\
+		    /*调用trace回调*/\
 			__DO_TRACE(name,				\
 				TP_ARGS(args),				\
 				TP_CONDITION(cond), 0);			\
@@ -257,8 +259,9 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	__DECLARE_TRACE_RCU(name, PARAMS(proto), PARAMS(args),		\
 			    PARAMS(cond))				\
 	static inline int						\
-	register_trace_##name(void (*probe)(data_proto), void *data)	\
+	register_trace_##name(void (*probe/*回调函数*/)(data_proto), void *data)	\
 	{								\
+	    /*调用公用的tracepoint注册函数，完成回调注册（无优先级）*/\
 		return tracepoint_probe_register(&__tracepoint_##name,	\
 						(void *)probe, data);	\
 	}								\
@@ -266,12 +269,14 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	register_trace_prio_##name(void (*probe)(data_proto), void *data,\
 				   int prio)				\
 	{								\
+	    /*调用公用的tracepoint注册函数，完成回调注册*/\
 		return tracepoint_probe_register_prio(&__tracepoint_##name, \
 					      (void *)probe, data, prio); \
 	}								\
 	static inline int						\
 	unregister_trace_##name(void (*probe)(data_proto), void *data)	\
 	{								\
+	    /*调用公用的tracepoint解注册函数，完成回调删除*/\
 		return tracepoint_probe_unregister(&__tracepoint_##name,\
 						(void *)probe, data);	\
 	}								\
@@ -282,6 +287,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	static inline bool						\
 	trace_##name##_enabled(void)					\
 	{								\
+	    /*开启$name对应的trace*/\
 		return static_key_false(&__tracepoint_##name.key);	\
 	}
 
@@ -292,8 +298,9 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
  */
 #define DEFINE_TRACE_FN(_name, _reg, _unreg, proto, args)		\
 	static const char __tpstrtab_##_name[]				\
-	__section("__tracepoints_strings") = #_name;			\
+	__section("__tracepoints_strings") = #_name;/*tracepoint名称*/			\
 	extern struct static_call_key STATIC_CALL_KEY(tp_func_##_name);	\
+	/*提前声明__traceiter_$_name函数*/\
 	int __traceiter_##_name(void *__data, proto);			\
 	struct tracepoint __tracepoint_##_name	__used			\
 	__section("__tracepoints") = {					\
@@ -302,11 +309,12 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		.key = STATIC_KEY_INIT_FALSE,				\
 		.static_call_key = &STATIC_CALL_KEY(tp_func_##_name),	\
 		.static_call_tramp = STATIC_CALL_TRAMP_ADDR(tp_func_##_name), \
-		.iterator = &__traceiter_##_name,			\
+		.iterator = &__traceiter_##_name,/*trace遍历回调*/			\
 		.regfunc = _reg,					\
 		.unregfunc = _unreg,					\
 		.funcs = NULL };					\
 	__TRACEPOINT_ENTRY(_name);					\
+	/*定义__traceiter_$_name函数，遍历触发注册的回调*/\
 	int __traceiter_##_name(void *__data, proto)			\
 	{								\
 		struct tracepoint_func *it_func_ptr;			\
@@ -315,9 +323,11 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		it_func_ptr =						\
 			rcu_dereference_raw((&__tracepoint_##_name)->funcs); \
 		if (it_func_ptr) {					\
+		    /*it_func_ptr不为空，遍历并执行*/\
 			do {						\
-				it_func = READ_ONCE((it_func_ptr)->func); \
-				__data = (it_func_ptr)->data;		\
+				it_func = READ_ONCE((it_func_ptr)->func);/*函数回调*/ \
+				__data = (it_func_ptr)->data;/*函数回调参数*/		\
+				/*触发回调*/\
 				((void(*)(void *, proto))(it_func))(__data, args); \
 			} while ((++it_func_ptr)->func);		\
 		}							\
@@ -325,7 +335,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	}								\
 	DEFINE_STATIC_CALL(tp_func_##_name, __traceiter_##_name);
 
-#define DEFINE_TRACE(name, proto, args)		\
+#define DEFINE_TRACE(name/*trace的函数名称*/, proto, args)		\
 	DEFINE_TRACE_FN(name, NULL, NULL, PARAMS(proto), PARAMS(args));
 
 #define EXPORT_TRACEPOINT_SYMBOL_GPL(name)				\

@@ -22,12 +22,14 @@
 /* Skip "." and ".." directories */
 static int filter(const struct dirent *dir)
 {
+    /*跳过'.'及'..'目录*/
 	if (dir->d_name[0] == '.')
 		return 0;
 	else
 		return 1;
 }
 
+/*申请数组大小为nr*/
 #define thread_map__alloc(__nr) perf_thread_map__realloc(NULL, __nr)
 
 struct perf_thread_map *thread_map__new_by_pid(pid_t pid)
@@ -58,11 +60,13 @@ struct perf_thread_map *thread_map__new_by_pid(pid_t pid)
 	return threads;
 }
 
+/*申请perf_thread_map,并记录首个tid*/
 struct perf_thread_map *thread_map__new_by_tid(pid_t tid)
 {
 	struct perf_thread_map *threads = thread_map__alloc(1);
 
 	if (threads != NULL) {
+	    /*记录首个线程的tid*/
 		perf_thread_map__set_pid(threads, 0, tid);
 		threads->nr = 1;
 		refcount_set(&threads->refcnt, 1);
@@ -204,6 +208,7 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 		if (pid == prev_pid)
 			continue;
 
+		/*扫描task目录*/
 		sprintf(name, "/proc/%d/task", pid);
 		items = scandir(name, &namelist, filter, NULL);
 		if (items <= 0)
@@ -216,8 +221,9 @@ static struct perf_thread_map *thread_map__new_by_pid_str(const char *pid_str)
 
 		threads = nt;
 
+		/*设置这些thread对应的pid*/
 		for (i = 0; i < items; i++) {
-			perf_thread_map__set_pid(threads, j++, atoi(namelist[i]->d_name));
+			perf_thread_map__set_pid(threads, j++/*数组下标*/, atoi(namelist[i]->d_name)/*线程pid*/);
 			zfree(&namelist[i]);
 		}
 		threads->nr = total_tasks;

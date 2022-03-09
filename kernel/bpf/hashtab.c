@@ -91,6 +91,7 @@ struct bucket {
 
 struct bpf_htab {
 	struct bpf_map map;
+	/*指向桶*/
 	struct bucket *buckets;
 	void *elems;
 	union {
@@ -99,9 +100,11 @@ struct bpf_htab {
 	};
 	struct htab_elem *__percpu *extra_elems;
 	atomic_t count;	/* number of elements in this hashtable */
+	/*hash桶*/
 	u32 n_buckets;	/* number of hash buckets */
+	/*elem元素大小*/
 	u32 elem_size;	/* size of each element in bytes */
-	u32 hashrnd;
+	u32 hashrnd;/*随机值seed变量*/
 	struct lock_class_key lockdep_key;
 	int __percpu *map_locked[HASHTAB_MAP_LOCK_COUNT];
 };
@@ -124,6 +127,7 @@ struct htab_elem {
 		struct bpf_lru_node lru_node;
 	};
 	u32 hash;
+	/*保存KEY及value*/
 	char key[] __aligned(8);
 };
 
@@ -410,6 +414,7 @@ static int htab_map_alloc_check(union bpf_attr *attr)
 	bool percpu_lru = (attr->map_flags & BPF_F_NO_COMMON_LRU);
 	bool prealloc = !(attr->map_flags & BPF_F_NO_PREALLOC);
 	bool zero_seed = (attr->map_flags & BPF_F_ZERO_SEED);
+	/*返回对应的numa node*/
 	int numa_node = bpf_map_attr_numa_node(attr);
 
 	BUILD_BUG_ON(offsetof(struct htab_elem, htab) !=
@@ -445,8 +450,10 @@ static int htab_map_alloc_check(union bpf_attr *attr)
 	 */
 	if (attr->max_entries == 0 || attr->key_size == 0 ||
 	    attr->value_size == 0)
+	    /*元素大小有误*/
 		return -EINVAL;
 
+	/*key与value过大*/
 	if ((u64)attr->key_size + attr->value_size >= KMALLOC_MAX_SIZE -
 	   sizeof(struct htab_elem))
 		/* if key_size + value_size is bigger, the user space won't be
@@ -459,6 +466,7 @@ static int htab_map_alloc_check(union bpf_attr *attr)
 	return 0;
 }
 
+/*申请bpf_map*/
 static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 {
 	bool percpu = (attr->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
@@ -475,6 +483,7 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 	struct bpf_htab *htab;
 	int err, i;
 
+	/*申请table空间*/
 	htab = kzalloc(sizeof(*htab), GFP_USER | __GFP_ACCOUNT);
 	if (!htab)
 		return ERR_PTR(-ENOMEM);
@@ -488,9 +497,11 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 		 * since we are at it, make each lru list has the same
 		 * number of elements.
 		 */
+	    /*元素最大数为cpu的整数倍*/
 		htab->map.max_entries = roundup(attr->max_entries,
 						num_possible_cpus());
 		if (htab->map.max_entries < attr->max_entries)
+		    /*遇到整数绕回问题，向下取整数倍*/
 			htab->map.max_entries = rounddown(attr->max_entries,
 							  num_possible_cpus());
 	}
@@ -498,6 +509,7 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 	/* hash table size must be power of 2 */
 	htab->n_buckets = roundup_pow_of_two(htab->map.max_entries);
 
+	/*elem_size大小*/
 	htab->elem_size = sizeof(struct htab_elem) +
 			  round_up(htab->map.key_size, 8);
 	if (percpu)
@@ -518,6 +530,7 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 	if (!htab->buckets)
 		goto free_htab;
 
+	/*申请锁*/
 	for (i = 0; i < HASHTAB_MAP_LOCK_COUNT; i++) {
 		htab->map_locked[i] = bpf_map_alloc_percpu(&htab->map,
 							   sizeof(int),
@@ -527,6 +540,7 @@ static struct bpf_map *htab_map_alloc(union bpf_attr *attr)
 			goto free_map_locked;
 	}
 
+	/*初始化hashrnd*/
 	if (htab->map.map_flags & BPF_F_ZERO_SEED)
 		htab->hashrnd = 0;
 	else
@@ -596,7 +610,7 @@ static struct htab_elem *lookup_elem_raw(struct hlist_nulls_head *head, u32 hash
  * the unlikely event when elements moved from one bucket into another
  * while link list is being walked
  */
-static struct htab_elem *lookup_nulls_elem_raw(struct hlist_nulls_head *head,
+static struct htab_elem *lookup_nulls_elem_raw(struct hlist_nulls_head *head/*桶头*/,
 					       u32 hash, void *key,
 					       u32 key_size, u32 n_buckets)
 {
@@ -606,6 +620,7 @@ static struct htab_elem *lookup_nulls_elem_raw(struct hlist_nulls_head *head,
 again:
 	hlist_nulls_for_each_entry_rcu(l, n, head, hash_node)
 		if (l->hash == hash && !memcmp(&l->key, key, key_size))
+		    /*hashcode与key相等，返回l*/
 			return l;
 
 	if (unlikely(get_nulls_value(n) != (hash & (n_buckets - 1))))
@@ -629,22 +644,28 @@ static void *__htab_map_lookup_elem(struct bpf_map *map, void *key)
 	WARN_ON_ONCE(!rcu_read_lock_held() && !rcu_read_lock_trace_held() &&
 		     !rcu_read_lock_bh_held());
 
+	/*取key大小*/
 	key_size = map->key_size;
 
+	/*计算hash*/
 	hash = htab_map_hash(key, key_size, htab->hashrnd);
 
+	/*获得桶*/
 	head = select_bucket(htab, hash);
 
+	/*执行查询*/
 	l = lookup_nulls_elem_raw(head, hash, key, key_size, htab->n_buckets);
 
 	return l;
 }
 
+/*查询key对应的value*/
 static void *htab_map_lookup_elem(struct bpf_map *map, void *key)
 {
 	struct htab_elem *l = __htab_map_lookup_elem(map, key);
 
 	if (l)
+	    /*跳过key,返回value*/
 		return l->key + round_up(map->key_size, 8);
 
 	return NULL;
@@ -2106,6 +2127,7 @@ out:
 }
 
 static int htab_map_btf_id;
+/*BPF_MAP_TYPE_HASH类型对应的ops*/
 const struct bpf_map_ops htab_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc_check = htab_map_alloc_check,
@@ -2113,6 +2135,7 @@ const struct bpf_map_ops htab_map_ops = {
 	.map_free = htab_map_free,
 	.map_get_next_key = htab_map_get_next_key,
 	.map_release_uref = htab_map_free_timers,
+	/*按key查询value*/
 	.map_lookup_elem = htab_map_lookup_elem,
 	.map_lookup_and_delete_elem = htab_map_lookup_and_delete_elem,
 	.map_update_elem = htab_map_update_elem,

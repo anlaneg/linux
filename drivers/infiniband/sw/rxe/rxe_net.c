@@ -43,6 +43,7 @@ int rxe_mcast_delete(struct rxe_dev *rxe, union ib_gid *mgid)
 	return err;
 }
 
+/*针对ndev查询saddr,daddr对应的目的地址*/
 static struct dst_entry *rxe_find_route4(struct net_device *ndev,
 				  struct in_addr *saddr,
 				  struct in_addr *daddr)
@@ -51,17 +52,19 @@ static struct dst_entry *rxe_find_route4(struct net_device *ndev,
 	struct flowi4 fl = { { 0 } };
 
 	memset(&fl, 0, sizeof(fl));
-	fl.flowi4_oif = ndev->ifindex;
-	memcpy(&fl.saddr, saddr, sizeof(*saddr));
-	memcpy(&fl.daddr, daddr, sizeof(*daddr));
-	fl.flowi4_proto = IPPROTO_UDP;
+	fl.flowi4_oif = ndev->ifindex;/*出接口*/
+	memcpy(&fl.saddr, saddr, sizeof(*saddr));/*源地址*/
+	memcpy(&fl.daddr, daddr, sizeof(*daddr));/*目的地址*/
+	fl.flowi4_proto = IPPROTO_UDP;/*指定udp协议*/
 
+	/*路由查询*/
 	rt = ip_route_output_key(&init_net, &fl);
 	if (IS_ERR(rt)) {
 		pr_err_ratelimited("no route to %pI4\n", &daddr->s_addr);
 		return NULL;
 	}
 
+	/*返回路由*/
 	return &rt->dst;
 }
 
@@ -126,8 +129,10 @@ static struct dst_entry *rxe_find_route(struct net_device *ndev,
 			struct in_addr *saddr;
 			struct in_addr *daddr;
 
+			/*取av中的源地址/目的地址*/
 			saddr = &av->sgid_addr._sockaddr_in.sin_addr;
 			daddr = &av->dgid_addr._sockaddr_in.sin_addr;
+			/*路由项*/
 			dst = rxe_find_route4(ndev, saddr, daddr);
 		} else if (av->network_type == RXE_NETWORK_TYPE_IPV6) {
 			struct in6_addr *saddr6;
@@ -197,7 +202,7 @@ drop:
 }
 
 static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
-					   bool ipv6/*是否ipv6协议*/)
+					   bool ipv6/*是否只使能ipv6协议*/)
 {
 	int err;
 	struct socket *sock;
@@ -392,7 +397,8 @@ static int rxe_send(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	int err;
 
 	skb->destructor = rxe_skb_tx_dtor;
-	skb->sk = pkt->qp->sk->sk;/*指定qp对应的socket*/
+	/*指定qp对应的socket*/
+	skb->sk = pkt->qp->sk->sk;
 
 	rxe_add_ref(pkt->qp);
 	atomic_inc(&pkt->qp->skb_out);
@@ -523,7 +529,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 		goto out;
 	}
 
-	/*指向udp层*/
+	/*指向udp负载*/
 	skb_reserve(skb, hdr_len + LL_RESERVED_SPACE(ndev));
 
 	/* FIXME: hold reference to this netdev until life of this skb. */

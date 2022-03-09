@@ -162,14 +162,15 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	 * If the combination of the addr and size requested for this memory
 	 * region causes an integer overflow, return error.
 	 */
-	if (((addr + size) < addr) ||
-	    PAGE_ALIGN(addr + size) < (addr + size))
+	if (((addr + size) < addr)/*地址绕回*/ ||
+	    PAGE_ALIGN(addr + size) < (addr + size)/*页对齐后绕回*/)
 		return ERR_PTR(-EINVAL);
 
 	if (!can_do_mlock())
 		return ERR_PTR(-EPERM);
 
 	if (access & IB_ACCESS_ON_DEMAND)
+	    /*rxe不支持on demand*/
 		return ERR_PTR(-EOPNOTSUPP);
 
 	umem = kzalloc(sizeof(*umem), GFP_KERNEL);
@@ -187,20 +188,24 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	umem->owning_mm = mm = current->mm;
 	mmgrab(mm);
 
+	/*申请一个空闲页*/
 	page_list = (struct page **) __get_free_page(GFP_KERNEL);
 	if (!page_list) {
 		ret = -ENOMEM;
 		goto umem_kfree;
 	}
 
+	/*取要注册的内存页数*/
 	npages = ib_umem_num_pages(umem);
 	if (npages == 0 || npages > UINT_MAX) {
+	    /*内存过小/过大报错*/
 		ret = -EINVAL;
 		goto out;
 	}
 
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
+	/*算上新需要pin的内存，检查是否超过limit*/
 	new_pinned = atomic64_add_return(npages, &mm->pinned_vm);
 	if (new_pinned > lock_limit && !capable(CAP_IPC_LOCK)) {
 		atomic64_sub(npages, &mm->pinned_vm);
@@ -208,6 +213,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 		goto out;
 	}
 
+	/*待申请的首页地址*/
 	cur_base = addr & PAGE_MASK;
 
 	if (!umem->writable)
@@ -215,6 +221,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 
 	while (npages) {
 		cond_resched();
+		/*pin内存*/
 		pinned = pin_user_pages_fast(cur_base,
 					  min_t(unsigned long, npages,
 						PAGE_SIZE /
@@ -225,8 +232,9 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 			goto umem_release;
 		}
 
+		/*跳过已经pin的内存页*/
 		cur_base += pinned * PAGE_SIZE;
-		npages -= pinned;
+		npages -= pinned;/*待pin的内存页数减少*/
 		ret = sg_alloc_append_table_from_pages(
 			&umem->sgt_append, page_list, pinned, 0,
 			pinned << PAGE_SHIFT, ib_dma_max_seg_size(device),

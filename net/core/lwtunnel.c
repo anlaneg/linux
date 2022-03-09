@@ -61,7 +61,8 @@ static const char *lwtunnel_encap_str(enum lwtunnel_encap_types encap_type)
 
 #endif /* CONFIG_MODULES */
 
-struct lwtunnel_state *lwtunnel_state_alloc(int encap_len)
+/*申请各lwtunnel状态结构体*/
+struct lwtunnel_state *lwtunnel_state_alloc(int encap_len/*私有数据大小*/)
 {
 	struct lwtunnel_state *lws;
 
@@ -111,7 +112,7 @@ EXPORT_SYMBOL_GPL(lwtunnel_encap_del_ops);
 
 int lwtunnel_build_state(struct net *net, u16 encap_type,
 			 struct nlattr *encap, unsigned int family,
-			 const void *cfg, struct lwtunnel_state **lws/*出参，创建的隧道状态*/,
+			 const void *cfg, struct lwtunnel_state **lws/*出参，创建的轻量级隧道状态*/,
 			 struct netlink_ext_ack *extack)
 {
 	const struct lwtunnel_encap_ops *ops;
@@ -162,6 +163,7 @@ int lwtunnel_valid_encap_type(u16 encap_type, struct netlink_ext_ack *extack)
 
 	if (encap_type == LWTUNNEL_ENCAP_NONE ||
 	    encap_type > LWTUNNEL_ENCAP_MAX) {
+	    /*遇到不认识的tunnel类型*/
 		NL_SET_ERR_MSG(extack, "Unknown lwt encapsulation type");
 		return ret;
 	}
@@ -228,6 +230,7 @@ int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 }
 EXPORT_SYMBOL_GPL(lwtunnel_valid_encap_type_attr);
 
+/*通过destroy_state回调完成轻量级隧道释放*/
 void lwtstate_free(struct lwtunnel_state *lws)
 {
 	const struct lwtunnel_encap_ops *ops = lwtun_encaps[lws->type];
@@ -242,6 +245,7 @@ void lwtstate_free(struct lwtunnel_state *lws)
 }
 EXPORT_SYMBOL_GPL(lwtstate_free);
 
+/*tunnel信息，填充到netlink*/
 int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 			int encap_attr, int encap_type_attr)
 {
@@ -264,6 +268,7 @@ int lwtunnel_fill_encap(struct sk_buff *skb, struct lwtunnel_state *lwtstate,
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
+	/*将此tunnel的配置信息，编码netlink到skb*/
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->fill_encap))
 		ret = ops->fill_encap(skb, lwtstate);
@@ -286,6 +291,7 @@ nla_put_failure:
 }
 EXPORT_SYMBOL_GPL(lwtunnel_fill_encap);
 
+/*取lwtstate通过netlink封装时，需要的内存大小*/
 int lwtunnel_get_encap_size(struct lwtunnel_state *lwtstate)
 {
 	const struct lwtunnel_encap_ops *ops;
@@ -314,16 +320,20 @@ int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 	int ret = 0;
 
 	if (!a && !b)
+	    /*两者均为空，匹配*/
 		return 0;
 
 	if (!a || !b)
+	    /*有一方为空，不匹配*/
 		return 1;
 
 	if (a->type != b->type)
+	    /*encap type不相等，不匹配*/
 		return 1;
 
 	if (a->type == LWTUNNEL_ENCAP_NONE ||
 	    a->type > LWTUNNEL_ENCAP_MAX)
+	    /*a的type不合法，认为匹配*/
 		return 0;
 
 	rcu_read_lock();
@@ -374,6 +384,7 @@ drop:
 }
 EXPORT_SYMBOL_GPL(lwtunnel_output);
 
+/*轻量级隧道xmit钩子点入口*/
 int lwtunnel_xmit(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -392,7 +403,7 @@ int lwtunnel_xmit(struct sk_buff *skb)
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
-	//执行对应ops的xmit
+	//执行轻量级隧道对应ops的xmit
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->xmit))
 		ret = ops->xmit(skb);
@@ -410,6 +421,7 @@ drop:
 }
 EXPORT_SYMBOL_GPL(lwtunnel_xmit);
 
+/*轻量级隧道input入口*/
 int lwtunnel_input(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -427,7 +439,7 @@ int lwtunnel_input(struct sk_buff *skb)
 
 	ret = -EOPNOTSUPP;
 	rcu_read_lock();
-	//执行对应ops的input
+	//执行轻量级隧道对应ops的input
 	ops = rcu_dereference(lwtun_encaps[lwtstate->type]);
 	if (likely(ops && ops->input))
 		ret = ops->input(skb);

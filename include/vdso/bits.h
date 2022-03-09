@@ -4,6 +4,6 @@
 
 #include <vdso/const.h>
 
-#define BIT(nr)			(UL(1) << (nr))
+#define BIT(nr)			(1UL << (nr))
 
 #endif	/* __VDSO_BITS_H */

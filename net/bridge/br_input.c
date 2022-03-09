@@ -386,6 +386,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		}
 	}
 
+	/*检查skb是否为预定要收取的帧*/
 	if (unlikely(br_process_frame_type(p, skb)))
 		return RX_HANDLER_PASS;
 
@@ -427,6 +428,7 @@ rx_handler_func_t *br_get_rx_handler(const struct net_device *dev)
 	return br_handle_frame;
 }
 
+/*注册br要收取的不同type的帧*/
 void br_add_frame(struct net_bridge *br, struct br_frame_type *ft)
 {
 	hlist_add_head_rcu(&ft->list, &br->frame_type_list);

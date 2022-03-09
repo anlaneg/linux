@@ -7,6 +7,8 @@
  */
 
 #define __stringify_1(x...)	#x
+
+/*将参数x...格式化为字符串*/
 #define __stringify(x...)	__stringify_1(x)
 
 #endif	/* !__LINUX_STRINGIFY_H */

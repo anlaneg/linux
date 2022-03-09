@@ -32,6 +32,7 @@
 #endif
 
 #ifndef RLIMIT_MEMLOCK
+/*最大pin住的内存页数大小*/
 # define RLIMIT_MEMLOCK		8	/* max locked-in-memory address space */
 #endif
 

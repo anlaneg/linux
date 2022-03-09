@@ -81,7 +81,7 @@ static void ftrace__workload_exec_failed_signal(int signo __maybe_unused,
 	done = true;
 }
 
-static int __write_tracing_file(const char *name, const char *val, bool append)
+static int __write_tracing_file(const char *name/*文件名*/, const char *val/*内容*/, bool append/*是否进行append*/)
 {
 	char *file;
 	int fd, ret = -1;
@@ -90,6 +90,7 @@ static int __write_tracing_file(const char *name, const char *val, bool append)
 	char errbuf[512];
 	char *val_copy;
 
+	/*取文件路径*/
 	file = get_tracing_file(name);
 	if (!file) {
 		pr_debug("cannot get tracing file: %s\n", name);
@@ -101,6 +102,7 @@ static int __write_tracing_file(const char *name, const char *val, bool append)
 	else
 		flags |= O_TRUNC;
 
+	/*打开文件*/
 	fd = open(file, flags);
 	if (fd < 0) {
 		pr_debug("cannot open tracing file: %s: %s\n",
@@ -115,8 +117,10 @@ static int __write_tracing_file(const char *name, const char *val, bool append)
 	val_copy = strdup(val);
 	if (!val_copy)
 		goto out_close;
+	/*为内容添加一个'\n'*/
 	val_copy[size] = '\n';
 
+	/*执行内容写入*/
 	if (write(fd, val_copy, size + 1) == size + 1)
 		ret = 0;
 	else
@@ -131,11 +135,14 @@ out:
 	return ret;
 }
 
+/*向trace文件中写，不执行append*/
 static int write_tracing_file(const char *name, const char *val)
 {
 	return __write_tracing_file(name, val, false);
 }
 
+
+/*向trace文件中写，执行append*/
 static int append_tracing_file(const char *name, const char *val)
 {
 	return __write_tracing_file(name, val, true);
@@ -591,6 +598,7 @@ static int __cmd_ftrace(struct perf_ftrace *ftrace, int argc, const char **argv)
 	signal(SIGCHLD, sig_handler);
 	signal(SIGPIPE, sig_handler);
 
+	/*还原trace文件*/
 	if (reset_tracing_files(ftrace) < 0) {
 		pr_err("failed to reset ftrace\n");
 		goto out;
@@ -615,6 +623,7 @@ static int __cmd_ftrace(struct perf_ftrace *ftrace, int argc, const char **argv)
 
 	setup_pager();
 
+	/*打开trace_pipe文件*/
 	trace_file = get_tracing_file("trace_pipe");
 	if (!trace_file) {
 		pr_err("failed to open trace_pipe\n");
@@ -698,11 +707,14 @@ static int perf_ftrace_config(const char *var, const char *value, void *cb)
 	struct perf_ftrace *ftrace = cb;
 
 	if (!strstarts(var, "ftrace."))
+	    /*非ftrace.前缀,忽略此配置*/
 		return 0;
 
 	if (strcmp(var, "ftrace.tracer"))
+	    /*当前仅处理ftrace.tracer配置*/
 		return -1;
 
+	/*当前仅支持以下两种配置*/
 	if (!strcmp(value, "function_graph") ||
 	    !strcmp(value, "function")) {
 		ftrace->tracer = value;
@@ -872,6 +884,7 @@ static void select_tracer(struct perf_ftrace *ftrace)
 	pr_debug("%s tracer is used\n", ftrace->tracer);
 }
 
+/*ftrace命令执行*/
 int cmd_ftrace(int argc, const char **argv)
 {
 	int ret;
@@ -931,6 +944,7 @@ int cmd_ftrace(int argc, const char **argv)
 	INIT_LIST_HEAD(&ftrace.graph_funcs);
 	INIT_LIST_HEAD(&ftrace.nograph_funcs);
 
+	/*通过perf_ftrace_config函数，针对ftrace进行填充*/
 	ret = perf_config(perf_ftrace_config, &ftrace);
 	if (ret < 0)
 		return -1;

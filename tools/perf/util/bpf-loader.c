@@ -1511,7 +1511,7 @@ int bpf__apply_obj_config(void)
 	bpf_object__for_each_safe(obj, objtmp)	\
 		bpf_object__for_each_map(pos, obj)
 
-#define bpf__for_each_map_named(pos, obj, objtmp, name)	\
+#define bpf__for_each_map_named(pos, obj, objtmp, name/*需要匹配的map名称*/)	\
 	bpf__for_each_map(pos, obj, objtmp) 		\
 		if (bpf_map__name(pos) && 		\
 			(strcmp(name, 			\
@@ -1526,6 +1526,7 @@ struct evsel *bpf__setup_output_event(struct evlist *evlist, const char *name)
 	int err;
 	bool need_init = false;
 
+	/*遍历name名称的map*/
 	bpf__for_each_map_named(map, obj, tmp, name) {
 		struct bpf_map_priv *priv = bpf_map__priv(map);
 

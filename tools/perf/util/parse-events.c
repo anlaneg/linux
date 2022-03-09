@@ -60,6 +60,7 @@ static struct perf_pmu_event_symbol *perf_pmu_events_list;
  */
 static int perf_pmu_events_list_num;
 
+/*hw事件symbols*/
 struct event_symbol event_symbols_hw[PERF_COUNT_HW_MAX] = {
 	[PERF_COUNT_HW_CPU_CYCLES] = {
 		.symbol = "cpu-cycles",
@@ -163,11 +164,12 @@ struct event_symbol event_symbols_sw[PERF_COUNT_SW_MAX] = {
 #define PERF_EVENT_ID(config)		__PERF_EVENT_FIELD(config, EVENT)
 
 #define for_each_subsystem(sys_dir, sys_dirent)			\
-	while ((sys_dirent = readdir(sys_dir)) != NULL)		\
-		if (sys_dirent->d_type == DT_DIR &&		\
-		    (strcmp(sys_dirent->d_name, ".")) &&	\
-		    (strcmp(sys_dirent->d_name, "..")))
+	while ((sys_dirent = readdir(sys_dir)) != NULL)/*读取此目录*/	\
+		if (sys_dirent->d_type == DT_DIR /*必须是目录*/&&		\
+		    (strcmp(sys_dirent->d_name, ".")/*非.目录*/) &&	\
+		    (strcmp(sys_dirent->d_name, "..")/*非..目录*/))
 
+/*目录 $dir_path/$evt_dir 下存在id文件时返回0*/
 static int tp_event_has_id(const char *dir_path, struct dirent *evt_dir)
 {
 	char evt_path[MAXPATHLEN];
@@ -183,11 +185,11 @@ static int tp_event_has_id(const char *dir_path, struct dirent *evt_dir)
 }
 
 #define for_each_event(dir_path, evt_dir, evt_dirent)		\
-	while ((evt_dirent = readdir(evt_dir)) != NULL)		\
-		if (evt_dirent->d_type == DT_DIR &&		\
-		    (strcmp(evt_dirent->d_name, ".")) &&	\
+	while ((evt_dirent = readdir(evt_dir)) != NULL/*读取evt_dir目录*/)		\
+		if (evt_dirent->d_type == DT_DIR /*需要是目录*/&&		\
+		    (strcmp(evt_dirent->d_name, "."))/*跳过'.','..'目录*/ &&	\
 		    (strcmp(evt_dirent->d_name, "..")) &&	\
-		    (!tp_event_has_id(dir_path, evt_dirent)))
+		    (!tp_event_has_id(dir_path, evt_dirent))/*必须存在id文件*/)
 
 #define MAX_EVENT_LENGTH 512
 
@@ -2613,7 +2615,7 @@ static int cmp_string(const void *a, const void *b)
  * Print the events from <debugfs_mount_point>/tracing/events
  */
 
-void print_tracepoint_events(const char *subsys_glob, const char *event_glob,
+void print_tracepoint_events(const char *subsys_glob/*用于匹配子系统*/, const char *event_glob/*用于匹配event*/,
 			     bool name_only)
 {
 	DIR *sys_dir, *evt_dir;
@@ -2627,22 +2629,29 @@ void print_tracepoint_events(const char *subsys_glob, const char *event_glob,
 restart:
 	sys_dir = tracing_events__opendir();
 	if (!sys_dir)
+	    /*目录不存在，退出*/
 		return;
 
 	if (evt_num_known) {
+	    /*已完成event number统计（看第一遍处理），这里申请空间，用于存储event*/
 		evt_list = zalloc(sizeof(char *) * evt_num);
 		if (!evt_list)
 			goto out_close_sys_dir;
 	}
 
+	/*遍历events目录下，所有目录*/
 	for_each_subsystem(sys_dir, sys_dirent) {
+	    /*如果subsys_glob被指定，要求访问的目录需要与subsys_glob相匹配*/
 		if (subsys_glob != NULL &&
 		    !strglobmatch(sys_dirent->d_name, subsys_glob))
+		    /*不匹配，尝试下一个目录*/
 			continue;
 
+		/*取此目录对应的subsystem path*/
 		dir_path = get_events_file(sys_dirent->d_name);
 		if (!dir_path)
 			continue;
+		/*打开此subsystem目录*/
 		evt_dir = opendir(dir_path);
 		if (!evt_dir)
 			goto next;
@@ -2650,16 +2659,20 @@ restart:
 		for_each_event(dir_path, evt_dir, evt_dirent) {
 			if (event_glob != NULL &&
 			    !strglobmatch(evt_dirent->d_name, event_glob))
+			    /*如果指定了event_glob,则event_glob必须与此目录匹配，不匹配，尝试下一个*/
 				continue;
 
 			if (!evt_num_known) {
+			    /*第一遍，针对event进行记数*/
 				evt_num++;
 				continue;
 			}
 
+			/*取event路径(父目录：子目录，例如：“xdp:xdp_bulk_tx”）*/
 			snprintf(evt_path, MAXPATHLEN, "%s:%s",
 				 sys_dirent->d_name, evt_dirent->d_name);
 
+			/*存储event路径*/
 			evt_list[evt_i] = strdup(evt_path);
 			if (evt_list[evt_i] == NULL) {
 				put_events_file(dir_path);
@@ -2674,10 +2687,15 @@ next:
 	closedir(sys_dir);
 
 	if (!evt_num_known) {
+	    /*已完成event匹配计数，进行第二遍尝试*/
 		evt_num_known = true;
 		goto restart;
 	}
+
+	/*完成event_list内容排序*/
 	qsort(evt_list, evt_num, sizeof(char *), cmp_string);
+
+	/*执行event内容输出*/
 	evt_i = 0;
 	while (evt_i < evt_num) {
 		if (name_only) {
@@ -3018,7 +3036,7 @@ void print_tool_events(const char *event_glob, bool name_only)
 		printf("\n");
 }
 
-void print_symbol_events(const char *event_glob, unsigned type,
+void print_symbol_events(const char *event_glob/*进行event通配*/, unsigned type,
 				struct event_symbol *syms, unsigned max,
 				bool name_only)
 {
@@ -3043,6 +3061,7 @@ restart:
 		if (syms->symbol == NULL)
 			continue;
 
+		/*如果提供了event glob,则必须匹配*/
 		if (event_glob != NULL && !(strglobmatch(syms->symbol, event_glob) ||
 		      (syms->alias && strglobmatch(syms->alias, event_glob))))
 			continue;
@@ -3051,15 +3070,18 @@ restart:
 			continue;
 
 		if (!evt_num_known) {
+		    /*第一遍，进行event计数*/
 			evt_num++;
 			continue;
 		}
 
+		/*构造符号及别名*/
 		if (!name_only && strlen(syms->alias))
 			snprintf(name, MAX_NAME_LEN, "%s OR %s", syms->symbol, syms->alias);
 		else
 			strlcpy(name, syms->symbol, MAX_NAME_LEN);
 
+		/*收集event list*/
 		evt_list[evt_i] = strdup(name);
 		if (evt_list[evt_i] == NULL)
 			goto out_enomem;
@@ -3067,10 +3089,14 @@ restart:
 	}
 
 	if (!evt_num_known) {
+	    /*完成第一遍event number收集*/
 		evt_num_known = true;
 		goto restart;
 	}
+	/*对event list进行排序*/
 	qsort(evt_list, evt_num, sizeof(char *), cmp_string);
+
+	/*显示event*/
 	evt_i = 0;
 	while (evt_i < evt_num) {
 		if (name_only) {

@@ -471,6 +471,7 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 	struct file *file;
 
 	if (!dname)
+	    /*socket时，采用socket协议名称，例如UDP*/
 		dname = sock->sk ? sock->sk->sk_prot_creator->name : "";
 
 	//为socket申请一个假的struct file，并与其关联

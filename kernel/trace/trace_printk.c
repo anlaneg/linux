@@ -185,8 +185,10 @@ static inline void format_mod_start(void) { }
 static inline void format_mod_stop(void) { }
 #endif /* CONFIG_MODULES */
 
+/*标记trace printk是否开启*/
 static bool __read_mostly trace_printk_enabled = true;
 
+/*控制trace printk是否开启*/
 void trace_printk_control(bool enabled)
 {
 	trace_printk_enabled = enabled;
@@ -206,8 +208,10 @@ int __trace_bprintk(unsigned long ip, const char *fmt, ...)
 		return 0;
 
 	if (!trace_printk_enabled)
+	    /*未开启，直接退出*/
 		return 0;
 
+	/*调用ap版本*/
 	va_start(ap, fmt);
 	ret = trace_vbprintk(ip, fmt, ap);
 	va_end(ap);

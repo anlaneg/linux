@@ -77,6 +77,7 @@ static u32 udp6_ehashfn(const struct net *net,
 			       udp_ipv6_hash_secret + net_hash_mix(net));
 }
 
+/*udp v6的get_port回调，用于port绑定*/
 int udp_v6_get_port(struct sock *sk, unsigned short snum)
 {
 	unsigned int hash2_nulladdr =
@@ -1727,6 +1728,7 @@ struct proto udpv6_prot = {
 	.sendmsg		= udpv6_sendmsg,
 	.recvmsg		= udpv6_recvmsg,
 	.release_cb		= ip6_datagram_release_cb,
+	/*这是个假函数，整体上采用get_port进行socket绑定*/
 	.hash			= udp_lib_hash,
 	.unhash			= udp_lib_unhash,
 	.rehash			= udp_v6_rehash,

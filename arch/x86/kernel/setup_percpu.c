@@ -141,6 +141,7 @@ static void __init pcpu_fc_free(void *ptr, size_t size)
 static int __init pcpu_cpu_distance(unsigned int from, unsigned int to)
 {
 #ifdef CONFIG_NUMA
+    /*如果from与to属于一个node,则认为local,否则认为remote*/
 	if (early_cpu_to_node(from) == early_cpu_to_node(to))
 		return LOCAL_DISTANCE;
 	else
@@ -171,8 +172,9 @@ void __init setup_per_cpu_areas(void)
 	unsigned long delta;
 	int rc;
 
+	//输出以下常见格式：setup_percpu: NR_CPUS:8192 nr_cpumask_bits:1 nr_cpu_ids:1 nr_node_ids:1
 	pr_info("NR_CPUS:%d nr_cpumask_bits:%d nr_cpu_ids:%u nr_node_ids:%u\n",
-		NR_CPUS, nr_cpumask_bits, nr_cpu_ids, nr_node_ids);
+		NR_CPUS/*配置的cpu数目*/, nr_cpumask_bits, nr_cpu_ids, nr_node_ids);
 
 	/*
 	 * Allocate percpu area.  Embedding allocator is our favorite;

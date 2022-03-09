@@ -670,6 +670,7 @@ int ip_rt_ioctl(struct net *net, unsigned int cmd, struct rtentry *rt)
 			if (cmd == SIOCDELRT) {
 				tb = fib_get_table(net, cfg.fc_table);
 				if (tb)
+				    /*执行路由删除*/
 					err = fib_table_delete(net, tb, &cfg,
 							       NULL);
 				else

@@ -5127,6 +5127,7 @@ out_redir:
 }
 EXPORT_SYMBOL_GPL(do_xdp_generic);
 
+/*选择cpu,并使报文入队*/
 static int netif_rx_internal(struct sk_buff *skb)
 {
 	int ret;
@@ -5183,7 +5184,7 @@ static int netif_rx_internal(struct sk_buff *skb)
 
 int netif_rx(struct sk_buff *skb)
 {
-        /*旧收包方式：单个报文将被入队到softnet_data,如果队列过大，则触发rx*/
+    /*旧收包方式：单个报文将被入队到softnet_data,如果队列过大，则触发rx*/
 	int ret;
 
 	trace_netif_rx_entry(skb);

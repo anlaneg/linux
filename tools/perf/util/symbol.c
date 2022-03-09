@@ -2391,6 +2391,7 @@ int setup_list(struct strlist **list, const char *list_str,
 	if (list_str == NULL)
 		return 0;
 
+	/*通过list_str构造strlist*/
 	*list = strlist__new(list_str, NULL);
 	if (!*list) {
 		pr_err("problems parsing %s list\n", list_name);

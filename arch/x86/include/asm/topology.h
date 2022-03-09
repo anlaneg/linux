@@ -55,6 +55,7 @@ extern int early_cpu_to_node(int cpu);
 /* Same function but used if called before per_cpu areas are setup */
 static inline int early_cpu_to_node(int cpu)
 {
+    /*取cpu所属的node*/
 	return early_per_cpu(x86_cpu_to_node_map, cpu);
 }
 

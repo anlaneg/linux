@@ -406,6 +406,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
+	/*取给定port的属性*/
 	ret = ib_query_port(ib_dev, cmd.port_num, &attr);
 	if (ret)
 		return ret;
@@ -711,7 +712,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
-	/*两者与之后地址结果应是一致的*/
+	/*两者与之后地址结果应是一致的（但上层传入的是相同的值）*/
 	if ((cmd.start & ~PAGE_MASK) != (cmd.hca_va & ~PAGE_MASK))
 		return -EINVAL;
 
@@ -720,6 +721,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	if (IS_ERR(uobj))
 		return PTR_ERR(uobj);
 
+	/*检查access flags*/
 	ret = ib_check_mr_access(ib_dev, cmd.access_flags);
 	if (ret)
 		goto err_free;
@@ -732,8 +734,8 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	}
 
 	/*此pd对应的device执行user space内存注册*/
-	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va,
-					 cmd.access_flags,
+	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*内存地址*/,
+					 cmd.access_flags/*访问标记*/,
 					 &attrs->driver_udata);
 	if (IS_ERR(mr)) {
 		ret = PTR_ERR(mr);
@@ -753,13 +755,13 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	rdma_restrack_set_name(&mr->res, NULL);
 	rdma_restrack_add(&mr->res);
 
-	uobj->object = mr;
+	uobj->object = mr;/*使uobj指向mr,从而实现可查找到mr*/
 	uobj_put_obj_read(pd);
 	uobj_finalize_uobj_create(uobj, attrs);
 
 	resp.lkey = mr->lkey;
 	resp.rkey = mr->rkey;
-	resp.mr_handle = uobj->id;
+	resp.mr_handle = uobj->id;/*回传uobj对应的id*/
 	return uverbs_response(attrs, &resp, sizeof(resp));
 
 err_put:
@@ -1022,6 +1024,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	if (cmd->comp_vector >= attrs->ufile->device->num_comp_vectors)
 		return -EINVAL;
 
+	/*申请cq*/
 	obj = (struct ib_ucq_object *)uobj_alloc(UVERBS_OBJECT_CQ, attrs,
 						 &ib_dev);
 	if (IS_ERR(obj))
@@ -1043,6 +1046,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 	attr.comp_vector = cmd->comp_vector;
 	attr.flags = cmd->flags;
 
+	/*申请driver对应的cq结构体大小*/
 	cq = rdma_zalloc_drv_obj(ib_dev, ib_cq);
 	if (!cq) {
 		ret = -ENOMEM;
@@ -1070,6 +1074,7 @@ static int create_cq(struct uverbs_attr_bundle *attrs,
 		uverbs_uobject_get(&obj->uevent.event_file->uobj);
 	uobj_finalize_uobj_create(&obj->uevent.uobject, attrs);
 
+	/*设置cq id*/
 	resp.base.cq_handle = obj->uevent.uobject.id;
 	resp.base.cqe = cq->cqe;
 	resp.response_length = uverbs_response_length(attrs, sizeof(resp));
@@ -1302,6 +1307,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 	bool has_sq = true;
 	struct ib_device *ib_dev;
 
+	/*qp类型检查*/
 	switch (cmd->qp_type) {
 	case IB_QPT_RAW_PACKET:
 		if (!capable(CAP_NET_RAW))
@@ -1318,6 +1324,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 		return -EINVAL;
 	}
 
+	/*申请qp obj*/
 	obj = (struct ib_uqp_object *)uobj_alloc(UVERBS_OBJECT_QP, attrs,
 						 &ib_dev);
 	if (IS_ERR(obj))
@@ -1377,6 +1384,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 
 			if (!ind_tbl) {
 				if (cmd->recv_cq_handle != cmd->send_cq_handle) {
+				    /*读取recv对应的cq*/
 					rcq = uobj_get_obj_read(
 						cq, UVERBS_OBJECT_CQ,
 						cmd->recv_cq_handle, attrs);
@@ -1389,10 +1397,12 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 		}
 
 		if (has_sq)
+		    /*获取send对应的cq*/
 			scq = uobj_get_obj_read(cq, UVERBS_OBJECT_CQ,
 						cmd->send_cq_handle, attrs);
 		if (!ind_tbl && cmd->qp_type != IB_QPT_XRC_INI)
 			rcq = rcq ?: scq;
+		/*获取pd*/
 		pd = uobj_get_obj_read(pd, UVERBS_OBJECT_PD, cmd->pd_handle,
 				       attrs);
 		if (!pd || (!scq && has_sq)) {
@@ -1444,6 +1454,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 		attr.source_qpn = cmd->source_qpn;
 	}
 
+	/*创建qp*/
 	qp = ib_create_qp_user(device, pd, &attr, &attrs->driver_udata, obj,
 			       KBUILD_MODNAME);
 	if (IS_ERR(qp)) {
@@ -1452,6 +1463,7 @@ static int create_qp(struct uverbs_attr_bundle *attrs,
 	}
 	ib_qp_usecnt_inc(qp);
 
+	/*obj指向qp*/
 	obj->uevent.uobject.object = qp;
 	obj->uevent.event_file = READ_ONCE(attrs->ufile->default_async_file);
 	if (obj->uevent.event_file)
@@ -1510,6 +1522,7 @@ err_put:
 	return ret;
 }
 
+/*uverbs创建qp*/
 static int ib_uverbs_create_qp(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_create_qp      cmd;
@@ -1644,6 +1657,7 @@ static void copy_ah_attr_to_uverbs(struct ib_uverbs_qp_dest *uverb_attr,
 	uverb_attr->port_num          = rdma_ah_get_port_num(rdma_attr);
 }
 
+/*qp属性*/
 static int ib_uverbs_query_qp(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_query_qp      cmd;
@@ -1664,12 +1678,14 @@ static int ib_uverbs_query_qp(struct uverbs_attr_bundle *attrs)
 		goto out;
 	}
 
+	/*通过qp_handle查询qp*/
 	qp = uobj_get_obj_read(qp, UVERBS_OBJECT_QP, cmd.qp_handle, attrs);
 	if (!qp) {
 		ret = -EINVAL;
 		goto out;
 	}
 
+	/*查询此qp对应的*/
 	ret = ib_query_qp(qp, attr, cmd.attr_mask, init_attr);
 
 	rdma_lookup_put_uobject(&qp->uobject->uevent.uobject,
@@ -1769,6 +1785,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 	if (!attr)
 		return -ENOMEM;
 
+	/*通过qp_handle查找到对应的qp*/
 	qp = uobj_get_obj_read(qp, UVERBS_OBJECT_QP, cmd->base.qp_handle,
 			       attrs);
 	if (!qp) {
@@ -1776,6 +1793,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		goto out;
 	}
 
+	/*检查port是否有效*/
 	if ((cmd->base.attr_mask & IB_QP_PORT) &&
 	    !rdma_is_port_valid(qp->device, cmd->base.port_num)) {
 		ret = -EINVAL;
@@ -1783,6 +1801,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 	}
 
 	if ((cmd->base.attr_mask & IB_QP_AV)) {
+	    /*检查port是否有效*/
 		if (!rdma_is_port_valid(qp->device, cmd->base.dest.port_num)) {
 			ret = -EINVAL;
 			goto release_qp;
@@ -1852,6 +1871,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		goto release_qp;
 	}
 
+	/*按mask设置对应属性*/
 	if (cmd->base.attr_mask & IB_QP_STATE)
 		attr->qp_state = cmd->base.qp_state;
 	if (cmd->base.attr_mask & IB_QP_CUR_STATE)
@@ -1904,6 +1924,7 @@ static int modify_qp(struct uverbs_attr_bundle *attrs,
 		copy_ah_attr_from_uverbs(qp->device, &attr->alt_ah_attr,
 					 &cmd->base.alt_dest);
 
+	/*按attr设置qp*/
 	ret = ib_modify_qp_with_udata(qp, attr,
 				      modify_qp_mask(qp->qp_type,
 						     cmd->base.attr_mask),
@@ -1923,13 +1944,16 @@ static int ib_uverbs_modify_qp(struct uverbs_attr_bundle *attrs)
 	struct ib_uverbs_ex_modify_qp cmd;
 	int ret;
 
+	/*解码request*/
 	ret = uverbs_request(attrs, &cmd.base, sizeof(cmd.base));
 	if (ret)
 		return ret;
 
 	if (cmd.base.attr_mask & ~IB_QP_ATTR_STANDARD_BITS)
+	    /*遇到不支持的属性修改*/
 		return -EOPNOTSUPP;
 
+	/*完成qp修改*/
 	return modify_qp(attrs, &cmd);
 }
 
@@ -2399,6 +2423,7 @@ out:
 	return ret;
 }
 
+/*创建ah*/
 static int ib_uverbs_create_ah(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_create_ah	 cmd;
@@ -3819,6 +3844,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			ib_uverbs_query_device,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_device,
 					  struct ib_uverbs_query_device_resp)),
+			/*查询port的属性*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_QUERY_PORT,
 			ib_uverbs_query_port,
@@ -3908,6 +3934,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_I(struct ib_uverbs_attach_mcast),
 			UAPI_DEF_METHOD_NEEDS_FN(attach_mcast),
 			UAPI_DEF_METHOD_NEEDS_FN(detach_mcast)),
+			/*创建qp*/
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_CREATE_QP,
 				     ib_uverbs_create_qp,
 				     UAPI_DEF_WRITE_UDATA_IO(
@@ -3927,6 +3954,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_METHOD_NEEDS_FN(detach_mcast)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_MODIFY_QP,
+			/*修改qp配置*/
 			ib_uverbs_modify_qp,
 			UAPI_DEF_WRITE_I(struct ib_uverbs_modify_qp),
 			UAPI_DEF_METHOD_NEEDS_FN(modify_qp)),

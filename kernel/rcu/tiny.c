@@ -105,6 +105,7 @@ static inline bool rcu_reclaim_tiny(struct rcu_head *head)
 }
 
 /* Invoke the RCU callbacks whose grace period has elapsed.  */
+/*rcu软中断处理函数*/
 static __latent_entropy void rcu_process_callbacks(struct softirq_action *unused)
 {
 	struct rcu_head *next, *list;
@@ -220,6 +221,7 @@ EXPORT_SYMBOL_GPL(poll_state_synchronize_rcu);
 
 void __init rcu_init(void)
 {
+    /*注册rcu软中断*/
 	open_softirq(RCU_SOFTIRQ, rcu_process_callbacks);
 	rcu_early_boot_tests();
 }

@@ -48,12 +48,15 @@ struct bundle_priv {
 	size_t internal_used;
 
 	struct radix_tree_root *radix;
+	/*当前cmd关联的method elem*/
 	const struct uverbs_api_ioctl_method *method_elm;
 	void __rcu **radix_slots;
 	unsigned long radix_slots_len;
 	u32 method_key;
 
+	/*用户配置的属性数组（用户态）*/
 	struct ib_uverbs_attr __user *user_attrs;
+	/*用户配置的属性数组（内核态）*/
 	struct ib_uverbs_attr *uattrs;
 
 	DECLARE_BITMAP(uobj_finalize, UVERBS_API_ATTR_BKEY_LEN);
@@ -385,6 +388,7 @@ static int uverbs_set_attr(struct bundle_priv *pbundle,
 	void __rcu **slot;
 	int ret;
 
+	/*找对应的slot*/
 	slot = uapi_get_attr_for_method(pbundle, attr_key);
 	if (!slot) {
 		/*
@@ -411,9 +415,10 @@ static int uverbs_set_attr(struct bundle_priv *pbundle,
 }
 
 static int ib_uverbs_run_method(struct bundle_priv *pbundle,
-				unsigned int num_attrs)
+				unsigned int num_attrs/*属性数组大小*/)
 {
 	int (*handler)(struct uverbs_attr_bundle *attrs);
+	/*num_attrs个ib_uverbs_attr*/
 	size_t uattrs_size = array_size(sizeof(*pbundle->uattrs), num_attrs);
 	unsigned int destroy_bkey = pbundle->method_elm->destroy_bkey;
 	unsigned int i;
@@ -431,9 +436,11 @@ static int ib_uverbs_run_method(struct bundle_priv *pbundle,
 	pbundle->uattrs = uverbs_alloc(&pbundle->bundle, uattrs_size);
 	if (IS_ERR(pbundle->uattrs))
 		return PTR_ERR(pbundle->uattrs);
+    /*复制这些attr到pbundle->user_attrs*/
 	if (copy_from_user(pbundle->uattrs, pbundle->user_attrs, uattrs_size))
 		return -EFAULT;
 
+	/*设置attribute*/
 	for (i = 0; i != num_attrs; i++) {
 		ret = uverbs_set_attr(pbundle, &pbundle->uattrs[i]);
 		if (unlikely(ret))
@@ -543,8 +550,8 @@ static void bundle_destroy(struct bundle_priv *pbundle, bool commit)
 }
 
 static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
-			       struct ib_uverbs_ioctl_hdr *hdr,
-			       struct ib_uverbs_attr __user *user_attrs)
+			       struct ib_uverbs_ioctl_hdr *hdr/*消息头*/,
+			       struct ib_uverbs_attr __user *user_attrs/*来自用户态的属性数组内容*/)
 {
 	const struct uverbs_api_ioctl_method *method_elm;
 	/*由ufile获得uapi*/
@@ -609,7 +616,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 	memset(pbundle->uobj_hw_obj_valid, 0,
 	       sizeof(pbundle->uobj_hw_obj_valid));
 
-	ret = ib_uverbs_run_method(pbundle, hdr->num_attrs);
+	ret = ib_uverbs_run_method(pbundle, hdr->num_attrs/*属性数*/);
 	bundle_destroy(pbundle, ret == 0);
 	return ret;
 }
@@ -625,7 +632,7 @@ long ib_uverbs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int err;
 
 	if (unlikely(cmd != RDMA_VERBS_IOCTL))
-	    /*cmd必须为rdam_verbs_ioctl*/
+	    /*uverbs ioctl cmd必须为rdam_verbs_ioctl*/
 		return -ENOIOCTLCMD;
 
 	/*用户态数据转kernel态*/
@@ -633,10 +640,12 @@ long ib_uverbs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	if (err)
 		return -EFAULT;
 
+	/*消息总长度不得超过page_size,且必须合法*/
 	if (hdr.length > PAGE_SIZE ||
 	    hdr.length != struct_size(&hdr, attrs, hdr.num_attrs))
 		return -EINVAL;
 
+	/*预留的两个成员必须为0*/
 	if (hdr.reserved1 || hdr.reserved2)
 		return -EPROTONOSUPPORT;
 

@@ -186,6 +186,7 @@ func_add(struct tracepoint_func **funcs, struct tracepoint_func *tp_func,
 	int pos = -1;		/* Insertion position into new array */
 
 	if (WARN_ON(!tp_func->func))
+	    /*tracepoint func没有提供回调，报错*/
 		return ERR_PTR(-EINVAL);
 
 	debug_print_probes(*funcs);
@@ -197,7 +198,9 @@ func_add(struct tracepoint_func **funcs, struct tracepoint_func *tp_func,
 				continue;	/* Skip stub functions. */
 			if (old[iter_probes].func == tp_func->func &&
 			    old[iter_probes].data == tp_func->data)
+			    /*函数及函数参数相等，返回已存在*/
 				return ERR_PTR(-EEXIST);
+			/*当前回调数目*/
 			nr_probes++;
 		}
 	}
@@ -212,18 +215,24 @@ func_add(struct tracepoint_func **funcs, struct tracepoint_func *tp_func,
 				continue;
 			/* Insert before probes of lower priority */
 			if (pos < 0 && old[iter_probes].prio < prio)
-				pos = nr_probes++;
+				pos = nr_probes++;/*记录需要存放的位置，通过++，空出此格*/
+			/*将old复制到new中*/
 			new[nr_probes++] = old[iter_probes];
 		}
 		if (pos < 0)
+		    /*记录要存放的位置为结尾*/
 			pos = nr_probes++;
 		/* nr_probes now points to the end of the new array */
 	} else {
 		pos = 0;
 		nr_probes = 1; /* must point at end of array */
 	}
+
+	/*在pos位置存放要放置的回调，在nr_probes位置存入NULL*/
 	new[pos] = *tp_func;
 	new[nr_probes].func = NULL;
+
+	/*出参，返回新的回调集*/
 	*funcs = new;
 	debug_print_probes(*funcs);
 	return old;
@@ -297,11 +306,15 @@ static void *func_remove(struct tracepoint_func **funcs,
 static enum tp_func_state nr_func_state(const struct tracepoint_func *tp_funcs)
 {
 	if (!tp_funcs)
+	    /*没有回调*/
 		return TP_FUNC_0;
 	if (!tp_funcs[1].func)
+	    /*有一个回调*/
 		return TP_FUNC_1;
 	if (!tp_funcs[2].func)
+	    /*有两个回调*/
 		return TP_FUNC_2;
+	/*有多个回调*/
 	return TP_FUNC_N;	/* 3 or more */
 }
 
@@ -333,6 +346,7 @@ static int tracepoint_add_func(struct tracepoint *tp,
 			return ret;
 	}
 
+	/*向此tp添加func回调*/
 	tp_funcs = rcu_dereference_protected(tp->funcs,
 			lockdep_is_held(&tracepoints_mutex));
 	old = func_add(&tp_funcs, func, prio);
@@ -358,6 +372,7 @@ static int tracepoint_add_func(struct tracepoint *tp,
 		tracepoint_update_call(tp, tp_funcs);
 		/* Both iterator and static call handle NULL tp->funcs */
 		rcu_assign_pointer(tp->funcs, tp_funcs);
+		/*指明此tracepoint被enable*/
 		static_key_enable(&tp->key);
 		break;
 	case TP_FUNC_2:		/* 1->2 */
@@ -498,8 +513,8 @@ EXPORT_SYMBOL_GPL(tracepoint_probe_register_prio_may_exist);
  * performed either with a tracepoint module going notifier, or from
  * within module exit functions.
  */
-int tracepoint_probe_register_prio(struct tracepoint *tp, void *probe,
-				   void *data, int prio)
+int tracepoint_probe_register_prio(struct tracepoint *tp, void *probe/*tracepoint对应的回调函数*/,
+				   void *data/*回调函数参数*/, int prio/*优先级*/)
 {
 	struct tracepoint_func tp_func;
 	int ret;
@@ -526,7 +541,7 @@ EXPORT_SYMBOL_GPL(tracepoint_probe_register_prio);
  * performed either with a tracepoint module going notifier, or from
  * within module exit functions.
  */
-int tracepoint_probe_register(struct tracepoint *tp, void *probe, void *data)
+int tracepoint_probe_register(struct tracepoint *tp, void *probe/*回调函数*/, void *data/*回调参数*/)
 {
 	return tracepoint_probe_register_prio(tp, probe, data, TRACEPOINT_DEFAULT_PRIO);
 }
@@ -542,6 +557,7 @@ EXPORT_SYMBOL_GPL(tracepoint_probe_register);
  */
 int tracepoint_probe_unregister(struct tracepoint *tp, void *probe, void *data)
 {
+    /*针对tracepoint完成回调解注册*/
 	struct tracepoint_func tp_func;
 	int ret;
 

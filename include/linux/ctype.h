@@ -40,6 +40,7 @@ extern const unsigned char _ctype[];
 #if __has_builtin(__builtin_isdigit)
 #define  isdigit(c) __builtin_isdigit(c)
 #else
+/*检查c字符是否为数字*/
 static inline int isdigit(int c)
 {
 	return '0' <= c && c <= '9';

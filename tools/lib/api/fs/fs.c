@@ -86,11 +86,17 @@ static const char * const bpf_fs__known_mountpoints[] = {
 };
 
 struct fs {
+    /*fs名称*/
 	const char		*name;
+	/*多个挂载点*/
 	const char * const	*mounts;
+	/*挂载点*/
 	char			 path[PATH_MAX];
+	/*标记fs被查找到了*/
 	bool			 found;
+	/*标记fs在/proc/mounts下被查找到*/
 	bool			 checked;
+	/*fs对应的magic*/
 	long			 magic;
 };
 
@@ -152,10 +158,12 @@ static bool fs__read_mounts(struct fs *fs)
 	char type[100];
 	FILE *fp;
 
+	/*读取mounts列表*/
 	fp = fopen("/proc/mounts", "r");
 	if (fp == NULL)
 		return NULL;
 
+	/*遍历mounts列表，检查fs挂载情况*/
 	while (!found &&
 	       fscanf(fp, "%*s %" STR(PATH_MAX) "s %99s %*s %*d %*d\n",
 		      fs->path, type) == 2) {
@@ -169,12 +177,15 @@ static bool fs__read_mounts(struct fs *fs)
 	return fs->found = found;
 }
 
+/*检查挂载点是否与指定的fs magic匹配*/
 static int fs__valid_mount(const char *fs, long magic)
 {
 	struct statfs st_fs;
 
+	/*取路径fs的stat*/
 	if (statfs(fs, &st_fs) < 0)
 		return -ENOENT;
+	/*检查fs是否匹配*/
 	else if ((long)st_fs.f_type != magic)
 		return -ENOENT;
 
@@ -187,6 +198,7 @@ static bool fs__check_mounts(struct fs *fs)
 
 	ptr = fs->mounts;
 	while (*ptr) {
+	    /*查找合适的挂载点*/
 		if (fs__valid_mount(*ptr, fs->magic) == 0) {
 			fs->found = true;
 			strcpy(fs->path, *ptr);
@@ -198,6 +210,7 @@ static bool fs__check_mounts(struct fs *fs)
 	return false;
 }
 
+/*字符串转大写*/
 static void mem_toupper(char *f, size_t len)
 {
 	while (len) {
@@ -223,26 +236,33 @@ static bool fs__env_override(struct fs *fs)
 	mem_toupper(upper_name, name_len);
 	strcpy(&upper_name[name_len], "_PATH");
 
+	/*取${name}_PATH对应的环境变量*/
 	override_path = getenv(upper_name);
 	if (!override_path)
+	    /*无环境变量，返回false*/
 		return false;
 
 	fs->found = true;
 	fs->checked = true;
+	/*使能环境变量指定的path*/
 	strncpy(fs->path, override_path, sizeof(fs->path) - 1);
 	fs->path[sizeof(fs->path) - 1] = '\0';
 	return true;
 }
 
+/*取fs对应的挂载信息*/
 static const char *fs__get_mountpoint(struct fs *fs)
 {
 	if (fs__env_override(fs))
+	    /*使用env使能的path*/
 		return fs->path;
 
 	if (fs__check_mounts(fs))
+	    /*fs对应的挂载点被确认匹配，返回对应path*/
 		return fs->path;
 
 	if (fs__read_mounts(fs))
+	    /*读取mounts表，查找fs对应的挂载点*/
 		return fs->path;
 
 	return NULL;
@@ -253,6 +273,7 @@ static const char *fs__mountpoint(int idx)
 	struct fs *fs = &fs__entries[idx];
 
 	if (fs->found)
+	    /*查找到，返回挂载点*/
 		return (const char *)fs->path;
 
 	/* the mount point was already checked for the mount point
@@ -261,6 +282,7 @@ static const char *fs__mountpoint(int idx)
 	 * in case of multiple calls.
 	 */
 	if (fs->checked)
+	    /*之前检查过，没有找到*/
 		return NULL;
 
 	return fs__get_mountpoint(fs);
@@ -284,8 +306,10 @@ static const char *fs__mount(int idx)
 	const char *mountpoint;
 
 	if (fs__mountpoint(idx))
+	    /*已挂载，返回挂载点*/
 		return (const char *)fs->path;
 
+	/*完成对fs的挂载*/
 	mountpoint = mount_overload(fs);
 
 	if (mount(NULL, mountpoint, fs->name, 0, NULL) < 0)
@@ -297,16 +321,19 @@ static const char *fs__mount(int idx)
 #define FS(name, idx)				\
 const char *name##__mountpoint(void)		\
 {						\
+    /*取此文件系统的挂载点*/\
 	return fs__mountpoint(idx);		\
 }						\
 						\
 const char *name##__mount(void)			\
 {						\
+    /*完成fs挂载，并返回挂载点*/\
 	return fs__mount(idx);			\
 }						\
 						\
 bool name##__configured(void)			\
 {						\
+    /*检查此fs是否已被挂载*/\
 	return name##__mountpoint() != NULL;	\
 }
 

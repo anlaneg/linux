@@ -19,9 +19,10 @@
 
 /* Simple unsegmented callback lists. */
 struct rcu_cblist {
+    /*rcu单链表*/
 	struct rcu_head *head;
 	struct rcu_head **tail;
-	long len;
+	long len;/*元素数*/
 };
 
 #define RCU_CBLIST_INITIALIZER(n) { .head = NULL, .tail = &n.head }

@@ -1993,7 +1993,7 @@ static void sk_prot_free(struct proto *prot, struct sock *sk)
  *	@kern: is this to be a kernel socket?
  */
 struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
-		      struct proto *prot, int kern)
+		      struct proto *prot/*sock关联的协议*/, int kern)
 {
 	struct sock *sk;
 
@@ -3530,6 +3530,7 @@ int sock_common_setsockopt(struct socket *sock, int level, int optname,
 {
 	struct sock *sk = sock->sk;
 
+	/*socket对应协议处理socket选项设置*/
 	return sk->sk_prot->setsockopt(sk, level, optname, optval, optlen);
 }
 EXPORT_SYMBOL(sock_common_setsockopt);
@@ -3537,6 +3538,7 @@ EXPORT_SYMBOL(sock_common_setsockopt);
 void sk_common_release(struct sock *sk)
 {
 	if (sk->sk_prot->destroy)
+	    /*如果有destory,则调用其释放资源*/
 		sk->sk_prot->destroy(sk);
 
 	/*
@@ -3547,7 +3549,7 @@ void sk_common_release(struct sock *sk)
 	 * A. Remove from hash tables.
 	 */
 
-	sk->sk_prot->unhash(sk);
+	sk->sk_prot->unhash(sk);/*将socket自哈希表中移除掉*/
 
 	/*
 	 * In this point socket cannot receive new packets, but it is possible
@@ -3596,6 +3598,7 @@ static DECLARE_BITMAP(proto_inuse_idx, PROTO_INUSE_NR);
 
 void sock_prot_inuse_add(struct net *net, struct proto *prot, int val)
 {
+    /*此cpu上在用的sock数加1*/
 	__this_cpu_add(net->core.prot_inuse->val[prot->inuse_idx], val);
 }
 EXPORT_SYMBOL_GPL(sock_prot_inuse_add);

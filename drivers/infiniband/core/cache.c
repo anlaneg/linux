@@ -1224,9 +1224,11 @@ rdma_get_gid_attr(struct ib_device *device, u32 port_num, int index)
 	struct ib_gid_table *table;
 	unsigned long flags;
 
+	/*port num有效性检查*/
 	if (!rdma_is_port_valid(device, port_num))
 		return ERR_PTR(-EINVAL);
 
+	/*取gid table*/
 	table = rdma_gid_table(device, port_num);
 	if (index < 0 || index >= table->sz)
 		return ERR_PTR(-EINVAL);

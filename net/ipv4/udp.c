@@ -138,13 +138,14 @@ static int udp_lib_lport_inuse(struct net *net, __u16 num,
 	kuid_t uid = sock_i_uid(sk);
 
 	sk_for_each(sk2, &hslot->head) {
+	    /*net namespace必须相等，*/
 		if (net_eq(sock_net(sk2), net) &&
-		    sk2 != sk &&
-		    (bitmap || udp_sk(sk2)->udp_port_hash == num) &&
-		    (!sk2->sk_reuse || !sk->sk_reuse) &&
+		    sk2 != sk /*查找的不能是当前的sk*/&&
+		    (bitmap || udp_sk(sk2)->udp_port_hash == num/*udp socket必须采用此port*/) &&
+		    (!sk2->sk_reuse || !sk->sk_reuse/*必须没有地址reuse标记*/) &&
 		    (!sk2->sk_bound_dev_if || !sk->sk_bound_dev_if ||
-		     sk2->sk_bound_dev_if == sk->sk_bound_dev_if) &&
-		    inet_rcv_saddr_equal(sk, sk2, true)) {
+		     sk2->sk_bound_dev_if == sk->sk_bound_dev_if/*接口if确保相等，容许为0*/) &&
+		    inet_rcv_saddr_equal(sk, sk2, true)/*rcv_saddr确保相等（容许为0）*/) {
 			if (sk2->sk_reuseport && sk->sk_reuseport &&
 			    !rcu_access_pointer(sk->sk_reuseport_cb) &&
 			    uid_eq(uid, sock_i_uid(sk2))) {
@@ -228,34 +229,39 @@ static int udp_reuseport_add_sock(struct sock *sk, struct udp_hslot *hslot)
  *                   with NULL address
  */
 int udp_lib_get_port(struct sock *sk, unsigned short snum,
-		     unsigned int hash2_nulladdr)
+		     unsigned int hash2_nulladdr/*无ip地址情况下的hashcode*/)
 {
 	struct udp_hslot *hslot, *hslot2;
+	/*取此socket对应的udptable*/
 	struct udp_table *udptable = sk->sk_prot->h.udp_table;
 	int    error = 1;
 	struct net *net = sock_net(sk);
 
 	if (!snum) {
-		//未指定port的情况（或者提定的port为0）
+		//未指定port的情况，自动分配port并进行绑定
 		int low, high, remaining;
 		unsigned int rand;
 		unsigned short first, last;
 		DECLARE_BITMAP(bitmap, PORTS_PER_CHAIN);
 
+		/*取local可用的port range*/
 		inet_get_local_port_range(net, &low, &high);
 		remaining = (high - low) + 1;
 
+		/*随机选一个查询起始点*/
 		rand = prandom_u32();
 		first = reciprocal_scale(rand, remaining) + low;
 		/*
 		 * force rand to be an odd multiple of UDP_HTABLE_SIZE
 		 */
-		rand = (rand | 1) * (udptable->mask + 1);
+		rand = (rand | 1) * (udptable->mask + 1);/*确保不会为0*/
 		last = first + udptable->mask + 1;
 		do {
 			hslot = udp_hashslot(udptable, net, first);
 			bitmap_zero(bitmap, PORTS_PER_CHAIN);
 			spin_lock_bh(&hslot->lock);
+			/*在bitmap中标记出，当前hslot桶上，已被占用的各个port
+			 * （注：此桶上有一些port会被放进来，如果没有在bitmap中标记出来，则其可被占用）*/
 			udp_lib_lport_inuse(net, snum, hslot, bitmap, sk,
 					    udptable->log);
 
@@ -266,17 +272,20 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 			 * give us randomization and full range coverage.
 			 */
 			do {
-				if (low <= snum && snum <= high &&
-				    !test_bit(snum >> udptable->log, bitmap) &&
-				    !inet_is_local_reserved_port(net, snum))
+				if (low <= snum && snum <= high /*snum在范围以内*/&&
+				    !test_bit(snum >> udptable->log, bitmap) /*未被占用*/&&
+				    !inet_is_local_reserved_port(net, snum)) /*未被预留*/
+				    /*找没有被占用的port*/
 					goto found;
+				/*跳到下一个位于本桶的port上，进行检测*/
 				snum += rand;
 			} while (snum != first);
 			spin_unlock_bh(&hslot->lock);
 			cond_resched();
 		} while (++first != last);
-		goto fail;
+		goto fail;/*实在是找不到合适的port*/
 	} else {
+	    /*查询此udp port对应的slot*/
 		hslot = udp_hashslot(udptable, net, snum);
 		spin_lock_bh(&hslot->lock);
 		if (hslot->count > 10) {
@@ -302,13 +311,13 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 				goto found;
 		}
 scan_primary_hash:
-		if (udp_lib_lport_inuse(net, snum, hslot, NULL, sk, 0))
+		if (udp_lib_lport_inuse(net, snum, hslot/*桶头*/, NULL, sk, 0))
 			goto fail_unlock;
 	}
 found:
 	inet_sk(sk)->inet_num = snum;
 	udp_sk(sk)->udp_port_hash = snum;
-	udp_sk(sk)->udp_portaddr_hash ^= snum;
+	udp_sk(sk)->udp_portaddr_hash ^= snum;/*合上后一半hash*/
 	if (sk_unhashed(sk)) {
 		if (sk->sk_reuseport &&
 		    udp_reuseport_add_sock(sk, hslot)) {
@@ -318,12 +327,15 @@ found:
 			goto fail_unlock;
 		}
 
+		/*将此sk加入到hslot对应的list上*/
 		sk_add_node_rcu(sk, &hslot->head);
 		hslot->count++;
 		sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);
 
+		/*通过port+address查询slot2*/
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
 		spin_lock(&hslot2->lock);
+		/*添加sk到slot2*/
 		if (IS_ENABLED(CONFIG_IPV6) && sk->sk_reuseport &&
 		    sk->sk_family == AF_INET6)
 			hlist_add_tail_rcu(&udp_sk(sk)->udp_portaddr_node,
@@ -343,9 +355,9 @@ fail:
 }
 EXPORT_SYMBOL(udp_lib_get_port);
 
-int udp_v4_get_port(struct sock *sk, unsigned short snum)
+int udp_v4_get_port(struct sock *sk, unsigned short snum/*待检查的srcport*/)
 {
-	//算两个hash,一个bind地址按0算，一个绑定地址按填充的算
+	//算两个hash,一个按bind地址为0考虑，一种bind地址为非0考虑，这里仅计算一半
 	unsigned int hash2_nulladdr =
 		ipv4_portaddr_hash(sock_net(sk), htonl(INADDR_ANY), snum);
 	unsigned int hash2_partial =
@@ -1676,6 +1688,7 @@ EXPORT_SYMBOL_GPL(udp_destruct_sock);
 //udp的socket初始化函数，socket创建期间调用
 int udp_init_sock(struct sock *sk)
 {
+    /*初始化reader_queue*/
 	skb_queue_head_init(&udp_sk(sk)->reader_queue);
 	sk->sk_destruct = udp_destruct_sock;
 	return 0;
@@ -2016,6 +2029,7 @@ int udp_pre_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	if (addr_len < sizeof(struct sockaddr_in))
 		return -EINVAL;
 
+	/*执行bpf程序*/
 	return BPF_CGROUP_RUN_PROG_INET4_CONNECT_LOCK(sk, uaddr);
 }
 EXPORT_SYMBOL(udp_pre_connect);
@@ -2133,6 +2147,7 @@ EXPORT_SYMBOL(udp_lib_rehash);
 
 void udp_v4_rehash(struct sock *sk)
 {
+    /*依据新的inet-rcv_addr,inet_num重新进行hash*/
 	u16 new_hash = ipv4_portaddr_hash(sock_net(sk),
 					  inet_sk(sk)->inet_rcv_saddr,
 					  inet_sk(sk)->inet_num);
@@ -2944,6 +2959,7 @@ int udp_lib_getsockopt(struct sock *sk, int level, int optname,
 }
 EXPORT_SYMBOL(udp_lib_getsockopt);
 
+/*udp socket选项值获取*/
 int udp_getsockopt(struct sock *sk, int level, int optname,
 		   char __user *optval, int __user *optlen)
 {

@@ -375,6 +375,7 @@ out_cnt:
 /*自pool中申请一个对象*/
 void *rxe_alloc(struct rxe_pool *pool)
 {
+    /*取此pool type对应的元数据*/
 	const struct rxe_type_info *info = &rxe_type_info[pool->type];
 	struct rxe_pool_entry *elem;
 	u8 *obj;

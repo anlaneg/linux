@@ -152,6 +152,7 @@ long long simple_strtoll(const char *cp, char **endp, unsigned int base)
 }
 EXPORT_SYMBOL(simple_strtoll);
 
+/*自s中读取数字，遇到非数字退出，返回对应的数字值，为了能变更s,使用了'char**' */
 static noinline_for_stack
 int skip_atoi(const char **s)
 {
@@ -2536,6 +2537,7 @@ int format_decode(const char *fmt, struct printf_spec *spec)
 	/* By default */
 	spec->type = FORMAT_TYPE_NONE;
 
+	/*查找%号*/
 	for (; *fmt ; ++fmt) {
 		if (*fmt == '%')
 			break;
@@ -2543,7 +2545,10 @@ int format_decode(const char *fmt, struct printf_spec *spec)
 
 	/* Return the current non-format string */
 	if (fmt != start || !*fmt)
+	    /*返回非format串*/
 		return fmt - start;
+
+	/*fmt首个字符为%号,故开始解析format对应的串*/
 
 	/* Process flags */
 	spec->flags = 0;
@@ -2554,11 +2559,14 @@ int format_decode(const char *fmt, struct printf_spec *spec)
 		++fmt;
 
 		switch (*fmt) {
+		/*标记左对齐*/
 		case '-': spec->flags |= LEFT;    break;
 		case '+': spec->flags |= PLUS;    break;
 		case ' ': spec->flags |= SPACE;   break;
 		case '#': spec->flags |= SPECIAL; break;
+		/*标记执行0填充*/
 		case '0': spec->flags |= ZEROPAD; break;
+		/*遇到不认识的修饰符*/
 		default:  found = false;
 		}
 
@@ -2570,6 +2578,7 @@ int format_decode(const char *fmt, struct printf_spec *spec)
 	spec->field_width = -1;
 
 	if (isdigit(*fmt))
+	    /*fmt为字符，取位宽要求*/
 		spec->field_width = skip_atoi(&fmt);
 	else if (*fmt == '*') {
 		/* it's the next argument */
@@ -2583,6 +2592,7 @@ precision:
 	if (*fmt == '.') {
 		++fmt;
 		if (isdigit(*fmt)) {
+		    /*明确指定了精度长度，取精度长度*/
 			spec->precision = skip_atoi(&fmt);
 			if (spec->precision < 0)
 				spec->precision = 0;
@@ -2610,6 +2620,7 @@ qualifier:
 		}
 	}
 
+	/*解析数据类型及输出base*/
 	/* default base */
 	spec->base = 10;
 	switch (*fmt) {
@@ -2635,6 +2646,7 @@ qualifier:
 		break;
 
 	case 'x':
+	    /*标明16进制采用小写*/
 		spec->flags |= SMALL;
 		fallthrough;
 
@@ -2644,6 +2656,7 @@ qualifier:
 
 	case 'd':
 	case 'i':
+	    /*标明采用有符号数值*/
 		spec->flags |= SIGN;
 		break;
 	case 'u':
@@ -2663,6 +2676,7 @@ qualifier:
 		return fmt - start;
 	}
 
+	/*指明参数类型*/
 	if (qualifier == 'L')
 		spec->type = FORMAT_TYPE_LONG_LONG;
 	else if (qualifier == 'l') {
@@ -3035,7 +3049,7 @@ EXPORT_SYMBOL(sprintf);
  * If the return value is greater than @size, the resulting bin_buf is NOT
  * valid for bstr_printf().
  */
-int vbin_printf(u32 *bin_buf, size_t size, const char *fmt, va_list args)
+int vbin_printf(u32 *bin_buf, size_t size/*buffer大小(以32bits为基本单位）*/, const char *fmt, va_list args)
 {
 	struct printf_spec spec = {0};
 	char *str, *end;
@@ -3068,6 +3082,7 @@ int vbin_printf(u32 *bin_buf, size_t size, const char *fmt, va_list args)
 	value;								\
 })
 
+	/*遍历format串，展开具体内容*/
 	while (*fmt) {
 		int read = format_decode(fmt, &spec);
 

@@ -44,7 +44,7 @@ struct seg6_local_lwtunnel_ops {
 };
 
 struct seg6_action_desc {
-	int action;
+	int action;/*对应的action*/
 	unsigned long attrs;
 
 	/* The optattrs field is used for specifying all the optional
@@ -155,9 +155,11 @@ static struct ipv6_sr_hdr *get_srh(struct sk_buff *skb, int flags)
 	struct ipv6_sr_hdr *srh;
 	int len, srhoff = 0;
 
+	/*在ipv6 header后面查找IPPROTO_ROUTING扩展头*/
 	if (ipv6_find_hdr(skb, &srhoff, IPPROTO_ROUTING, NULL, &flags) < 0)
 		return NULL;
 
+	/*查找到sr_hdr,取其对应的内容+srhoff*/
 	if (!pskb_may_pull(skb, srhoff + sizeof(*srh)))
 		return NULL;
 
@@ -173,12 +175,14 @@ static struct ipv6_sr_hdr *get_srh(struct sk_buff *skb, int flags)
 	 */
 	srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
 
+	/*执行seg6校验*/
 	if (!seg6_validate_srh(srh, len, true))
 		return NULL;
 
 	return srh;
 }
 
+/*取sr_hdr*/
 static struct ipv6_sr_hdr *get_and_validate_srh(struct sk_buff *skb)
 {
 	struct ipv6_sr_hdr *srh;
@@ -209,9 +213,11 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 		return false;
 #endif
 
+	/*查找proto对应的扩展头*/
 	if (ipv6_find_hdr(skb, &off, proto, NULL, NULL) < 0)
 		return false;
 
+	/*使skb->data前移到offset对应的位置，其恰好为扩展头*/
 	if (!pskb_pull(skb, off))
 		return false;
 
@@ -225,11 +231,13 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 	return true;
 }
 
-static void advance_nextseg(struct ipv6_sr_hdr *srh, struct in6_addr *daddr)
+/*取srh->segments_left对应的ip地址*/
+static void advance_nextseg(struct ipv6_sr_hdr *srh, struct in6_addr *daddr/*出参，更新目的ip*/)
 {
 	struct in6_addr *addr;
 
 	srh->segments_left--;
+	/*自srh->segments中提取addr*/
 	addr = srh->segments + srh->segments_left;
 	*daddr = *addr;
 }
@@ -247,6 +255,7 @@ seg6_lookup_any_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
 	int dev_flags = 0;
 
 	fl6.flowi6_iif = skb->dev->ifindex;
+	/*如果nhaddr有值，则使用nhaddr提供的，否则使用hdr->daddr*/
 	fl6.daddr = nhaddr ? *nhaddr : hdr->daddr;
 	fl6.saddr = hdr->saddr;
 	fl6.flowlabel = ip6_flowinfo(hdr);
@@ -257,8 +266,10 @@ seg6_lookup_any_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
 		fl6.flowi6_flags = FLOWI_FLAG_KNOWN_NH;
 
 	if (!tbl_id) {
+	    /*未提供具体路由表，执行默认路由查询*/
 		dst = ip6_route_input_lookup(net, skb->dev, &fl6, skb, flags);
 	} else {
+	    /*按提定的表号进行路由查询*/
 		struct fib6_table *table;
 
 		table = fib6_get_table(net, tbl_id);
@@ -303,14 +314,18 @@ static int input_action_end(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
 
+	/*自skb中提取sr_hdr*/
 	srh = get_and_validate_srh(skb);
 	if (!srh)
 		goto drop;
 
+	/*自srh头部提取并更新目的地址*/
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
-	seg6_lookup_nexthop(skb, NULL, 0);
+	/*按更新后的目的地址，进行路由查询*/
+	seg6_lookup_nexthop(skb, NULL, 0/*未指明路由表项*/);
 
+	/*调用route的input钩子点*/
 	return dst_input(skb);
 
 drop:
@@ -327,8 +342,10 @@ static int input_action_end_x(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	if (!srh)
 		goto drop;
 
+	/*更新目的地址*/
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
+	/*查询到slwt->nh6的路由*/
 	seg6_lookup_nexthop(skb, &slwt->nh6, 0);
 
 	return dst_input(skb);
@@ -342,12 +359,15 @@ static int input_action_end_t(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
 
+	/*取srh头部*/
 	srh = get_and_validate_srh(skb);
 	if (!srh)
 		goto drop;
 
+	/*更新目的地址*/
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
+	/*在slwt指定的Table中进行目的地址查询*/
 	seg6_lookup_nexthop(skb, NULL, slwt->table);
 
 	return dst_input(skb);
@@ -365,9 +385,11 @@ static int input_action_end_dx2(struct sk_buff *skb,
 	struct net_device *odev;
 	struct ethhdr *eth;
 
+	/*在ipv6头部后面查找以太头*/
 	if (!decap_and_validate(skb, IPPROTO_ETHERNET))
 		goto drop;
 
+	/*取以太头*/
 	if (!pskb_may_pull(skb, ETH_HLEN))
 		goto drop;
 
@@ -379,8 +401,10 @@ static int input_action_end_dx2(struct sk_buff *skb,
 	 * use case.
 	 */
 	if (!eth_proto_is_802_3(eth->h_proto))
+	    /*丢包非802.3*/
 		goto drop;
 
+	/*取slwt对应的出接口设备*/
 	odev = dev_get_by_index_rcu(net, slwt->oif);
 	if (!odev)
 		goto drop;
@@ -391,6 +415,7 @@ static int input_action_end_dx2(struct sk_buff *skb,
 	if (odev->type != ARPHRD_ETHER)
 		goto drop;
 
+	/*设备必须up*/
 	if (!(odev->flags & IFF_UP) || !netif_carrier_ok(odev))
 		goto drop;
 
@@ -404,9 +429,11 @@ static int input_action_end_dx2(struct sk_buff *skb,
 	if (skb->len - ETH_HLEN > odev->mtu)
 		goto drop;
 
+	/*指明报文从属的设备*/
 	skb->dev = odev;
 	skb->protocol = eth->h_proto;
 
+	/*将报文自此设备发送出去*/
 	return dev_queue_xmit(skb);
 
 drop:
@@ -445,6 +472,7 @@ static int input_action_end_dx6(struct sk_buff *skb,
 	 * an SRH with SL=0, or no SRH.
 	 */
 
+    /*自ipv6头部后面查找ipv6头，并解封装*/
 	if (!decap_and_validate(skb, IPPROTO_IPV6))
 		goto drop;
 
@@ -454,6 +482,7 @@ static int input_action_end_dx6(struct sk_buff *skb,
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 	nf_reset_ct(skb);
 
+	/*解封装后，执行路由查询（可能查slwt对应的下一跳）将报文送出*/
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_PRE_ROUTING,
 			       dev_net(skb->dev), NULL, skb, NULL,
@@ -494,16 +523,19 @@ static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 static int input_action_end_dx4(struct sk_buff *skb,
 				struct seg6_local_lwt *slwt)
 {
+    /*在ipv6头后查询ipip协议，并剥掉头部*/
 	if (!decap_and_validate(skb, IPPROTO_IPIP))
 		goto drop;
 
 	if (!pskb_may_pull(skb, sizeof(struct iphdr)))
 		goto drop;
 
+	/*变更为ipv4报文*/
 	skb->protocol = htons(ETH_P_IP);
 	skb_set_transport_header(skb, sizeof(struct iphdr));
 	nf_reset_ct(skb);
 
+	/*执行prerouting钩子点，查询路由，并执行路由input钩子点*/
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
 		return NF_HOOK(NFPROTO_IPV4, NF_INET_PRE_ROUTING,
 			       dev_net(skb->dev), NULL, skb, NULL,
@@ -622,6 +654,7 @@ drop:
 	return ERR_PTR(-EINVAL);
 }
 
+/*取info给定net namespace下对应的vrf_ifindex设备*/
 static struct net_device *end_dt_get_vrf_rcu(struct sk_buff *skb,
 					     struct seg6_end_dt_info *info)
 {
@@ -692,6 +725,7 @@ static int input_action_end_dt4(struct sk_buff *skb,
 	struct iphdr *iph;
 	int err;
 
+	/*查找ipv6头部后面的Ipip,并进行头部剥离*/
 	if (!decap_and_validate(skb, IPPROTO_IPIP))
 		goto drop;
 
@@ -856,6 +890,7 @@ static int input_action_end_b6(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	ipv6_hdr(skb)->payload_len = htons(skb->len - sizeof(struct ipv6hdr));
 	skb_set_transport_header(skb, sizeof(struct ipv6hdr));
 
+	/*按ipv6头部进行路由查询*/
 	seg6_lookup_nexthop(skb, NULL, 0);
 
 	return dst_input(skb);
@@ -976,6 +1011,7 @@ drop:
 	return -EINVAL;
 }
 
+/*当前支持的不同action table*/
 static struct seg6_action_desc seg6_action_table[] = {
 	{
 		.action		= SEG6_LOCAL_ACTION_END,
@@ -999,18 +1035,21 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END_DX2,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_OIF),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*解封装，并将内层的l2报文自指定设备发出*/
 		.input		= input_action_end_dx2,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX6,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*解封装，并将内存的ipv6报文通过查路由填充以太头后，自设备发出*/
 		.input		= input_action_end_dx6,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX4,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH4),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*解封装，并将内部存的ipv4报文通过查路由，送路由input钩子点*/
 		.input		= input_action_end_dx4,
 	},
 	{
@@ -1073,6 +1112,7 @@ static struct seg6_action_desc seg6_action_table[] = {
 
 };
 
+/*通过action确定对应的action_desc*/
 static struct seg6_action_desc *__get_action_desc(int action)
 {
 	struct seg6_action_desc *desc;
@@ -1800,6 +1840,7 @@ parse_attrs_err:
 	return err;
 }
 
+/*seg6 local隧道状态构造*/
 static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 				  unsigned int family, const void *cfg,
 				  struct lwtunnel_state **ts,
@@ -1813,6 +1854,7 @@ static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 	if (family != AF_INET6)
 		return -EINVAL;
 
+	/*消息解析*/
 	err = nla_parse_nested_deprecated(tb, SEG6_LOCAL_MAX, nla,
 					  seg6_local_policy, extack);
 

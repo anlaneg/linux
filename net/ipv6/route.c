@@ -5681,6 +5681,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 		if (dst->dev && nla_put_u32(skb, RTA_OIF, dst->dev->ifindex))
 			goto nla_put_failure;
 
+		/*填充encap配置情况*/
 		if (dst->lwtstate &&
 		    lwtunnel_fill_encap(skb, dst->lwtstate, RTA_ENCAP, RTA_ENCAP_TYPE) < 0)
 			goto nla_put_failure;

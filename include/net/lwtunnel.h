@@ -27,27 +27,35 @@ struct lwtunnel_state {
 	__u16		flags;
 	__u16		headroom;
 	atomic_t	refcnt;
+	/*保存原始的路由output函数*/
 	int		(*orig_output)(struct net *net, struct sock *sk, struct sk_buff *skb);
+	/*保存原始的路由input函数*/
 	int		(*orig_input)(struct sk_buff *);
 	struct		rcu_head rcu;
+	/*私有结构*/
 	__u8            data[];
 };
 
 struct lwtunnel_encap_ops {
     /*隧道初始化，配置来源于ip route*/
-	int (*build_state)(struct net *net, struct nlattr *encap,
-			   unsigned int family, const void *cfg,
-			   struct lwtunnel_state **ts/*出参，产生隧道state*/,
+	int (*build_state)(struct net *net, struct nlattr *encap/*轻量隧道配置*/,
+			   unsigned int family, const void *cfg/*从属的路由配置*/,
+			   struct lwtunnel_state **ts/*出参，依据encap,cfg产生隧道state*/,
 			   struct netlink_ext_ack *extack);
+	/*销毁隧道state时使用*/
 	void (*destroy_state)(struct lwtunnel_state *lws);
+	/*路由output钩子点，由传输层到网络层*/
 	int (*output)(struct net *net, struct sock *sk, struct sk_buff *skb);
+	/*路由input钩子点，由网络层到传输层*/
 	int (*input)(struct sk_buff *skb);
-	/*将tunnel信息填充到skb*/
+	/*netlink封装，将tunnel信息填充到skb*/
 	int (*fill_encap)(struct sk_buff *skb,
 			  struct lwtunnel_state *lwtstate);
+	/*netlink封装时，tunnel信息占用的内存长度*/
 	int (*get_encap_size)(struct lwtunnel_state *lwtstate);
-	/*比对两个tunnel是否相等*/
+	/*比对两个tunnel state是否相等（方便删除时匹配用）*/
 	int (*cmp_encap)(struct lwtunnel_state *a, struct lwtunnel_state *b);
+	/*ip报文逐片发送时，调用此钩子*/
 	int (*xmit)(struct sk_buff *skb);
 
 	struct module *owner;
@@ -141,6 +149,7 @@ static inline void lwtunnel_set_redirect(struct dst_entry *dst)
 {
 	if (lwtunnel_output_redirect(dst->lwtstate)) {
 		dst->lwtstate->orig_output = dst->output;
+		/*轻量级隧道执行output输出*/
 		dst->output = lwtunnel_output;
 	}
 	if (lwtunnel_input_redirect(dst->lwtstate)) {

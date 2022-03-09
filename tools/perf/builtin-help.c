@@ -424,6 +424,7 @@ static int show_html_page(const char *perf_cmd)
 	return 0;
 }
 
+/*执行perf help命令*/
 int cmd_help(int argc, const char **argv)
 {
 	bool show_all = false;
@@ -438,7 +439,7 @@ int cmd_help(int argc, const char **argv)
 	OPT_END(),
 	};
 	const char * const builtin_help_subcommands[] = {
-		"buildid-cache", "buildid-list", "diff", "evlist", "help", "list",
+		"buildid-cache", "buildid-list", "diff", "evlist", "help", "list"/*显示event*/,
 		"record", "report", "bench", "stat", "timechart", "top", "annotate",
 		"script", "sched", "kallsyms", "kmem", "lock", "kvm", "test", "inject", "mem", "data",
 #ifdef HAVE_LIBELF_SUPPORT

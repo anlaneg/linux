@@ -25,6 +25,7 @@ static int seq_show(struct seq_file *m, void *v)
 	struct file *file = NULL;
 	struct task_struct *task;
 
+	/*取对应的进程*/
 	task = get_proc_task(m->private);
 	if (!task)
 		return -ENOENT;
@@ -35,6 +36,7 @@ static int seq_show(struct seq_file *m, void *v)
 		unsigned int fd = proc_fd(m->private);
 
 		spin_lock(&files->file_lock);
+		/*取进程中fd对应的file*/
 		file = files_lookup_fd_locked(files, fd);
 		if (file) {
 			struct fdtable *fdt = files_fdtable(files);
@@ -52,6 +54,7 @@ static int seq_show(struct seq_file *m, void *v)
 	put_task_struct(task);
 
 	if (ret)
+	    /*如以上过程出错，则直接返回ret*/
 		return ret;
 
 	seq_printf(m, "pos:\t%lli\nflags:\t0%o\nmnt_id:\t%i\nino:\t%lu\n",
@@ -64,6 +67,7 @@ static int seq_show(struct seq_file *m, void *v)
 	if (seq_has_overflowed(m))
 		goto out;
 
+	/*调用show_fdinfo返回*/
 	if (file->f_op->show_fdinfo)
 		file->f_op->show_fdinfo(m, file);
 
@@ -329,6 +333,7 @@ static struct dentry *proc_fdinfo_instantiate(struct dentry *dentry,
 	ei = PROC_I(inode);
 	ei->fd = data->fd;
 
+	/*设置对应的fop为fdinfo对应的操作集*/
 	inode->i_fop = &proc_fdinfo_file_operations;
 	tid_fd_update_inode(task, inode, 0);
 

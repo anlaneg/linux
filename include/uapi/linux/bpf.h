@@ -1195,7 +1195,7 @@ enum {
 	BPF_F_STACK_BUILD_ID	= (1U << 5),
 
 /* Zero-initialize hash function seed. This should only be used for testing. */
-	BPF_F_ZERO_SEED		= (1U << 6),
+	BPF_F_ZERO_SEED		= (1U << 6),/*随机变量seed为零*/
 
 /* Flags for accessing BPF object from program side. */
 	BPF_F_RDONLY_PROG	= (1U << 7),
@@ -1258,16 +1258,21 @@ union bpf_attr {
 	struct { /* anonymous struct used by BPF_MAP_CREATE command */
 	    //指定map的类别
 		__u32	map_type;	/* one of enum bpf_map_type */
+		/*key大小*/
 		__u32	key_size;	/* size of key in bytes */
+		/*value大小*/
 		__u32	value_size;	/* size of value in bytes */
+		/*map中实体最大数*/
 		__u32	max_entries;	/* max number of entries in a map */
 		__u32	map_flags;	/* BPF_MAP_CREATE related
 					 * flags defined above.
 					 */
 		__u32	inner_map_fd;	/* fd pointing to the inner map */
+		/*map关联的numa节点*/
 		__u32	numa_node;	/* numa node (effective only if
 					 * BPF_F_NUMA_NODE is set).
 					 */
+		/*map名称*/
 		char	map_name[BPF_OBJ_NAME_LEN];
 		//如果指定了此变量，则map创建时使用bpf_map_offload_ops
 		__u32	map_ifindex;	/* ifindex of netdev to create on */

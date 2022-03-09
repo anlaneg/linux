@@ -68,6 +68,7 @@ struct bpf_map_ops {
 	struct bpf_map *(*map_alloc)(union bpf_attr *attr);
 	void (*map_release)(struct bpf_map *map, struct file *map_file);
 	void (*map_free)(struct bpf_map *map);
+	/*针对给定map的当前key,获取next-key*/
 	int (*map_get_next_key)(struct bpf_map *map, void *key, void *next_key);
 	void (*map_release_uref)(struct bpf_map *map);
 	void *(*map_lookup_elem_sys_only)(struct bpf_map *map, void *key);
@@ -84,11 +85,17 @@ struct bpf_map_ops {
 				union bpf_attr __user *uattr);
 
 	/* funcs callable from userspace and from eBPF programs */
+	/*按key查询value*/
 	void *(*map_lookup_elem)(struct bpf_map *map, void *key);
+	/*执行指定KEy的更新*/
 	int (*map_update_elem)(struct bpf_map *map, void *key, void *value, u64 flags);
+	/*删除指定key*/
 	int (*map_delete_elem)(struct bpf_map *map, void *key);
+	/*针对queue,stack等执行push操作,对应的更新*/
 	int (*map_push_elem)(struct bpf_map *map, void *value, u64 flags);
+	/*针对queue,stack等执行pop操作,对应的删除*/
 	int (*map_pop_elem)(struct bpf_map *map, void *value);
+	/*针对queue,stack等执行peek操作,对应的查询*/
 	int (*map_peek_elem)(struct bpf_map *map, void *value);
 
 	/* funcs called by prog_array and perf_event_array map */
@@ -97,6 +104,7 @@ struct bpf_map_ops {
 	void (*map_fd_put_ptr)(void *ptr);
 	int (*map_gen_lookup)(struct bpf_map *map, struct bpf_insn *insn_buf);
 	u32 (*map_fd_sys_lookup_elem)(void *ptr);
+	/*针对seq_file显示key对应的内容*/
 	void (*map_seq_show_elem)(struct bpf_map *map, void *key,
 				  struct seq_file *m);
 	int (*map_check_btf)(const struct bpf_map *map,
@@ -179,7 +187,8 @@ struct bpf_map {
 	u32 map_flags;
 	int spin_lock_off; /* >=0 valid offset, <0 error */
 	int timer_off; /* >=0 valid offset, <0 error */
-	u32 id;//map的编号
+	//map的编号
+	u32 id;
 	//map关联的numa node
 	int numa_node;
 	u32 btf_key_type_id;
@@ -1251,6 +1260,7 @@ BPF_PROG_RUN_ARRAY_CG_FLAGS(const struct bpf_prog_array __rcu *array_rcu,
 	array = rcu_dereference(array_rcu);
 	item = &array->items[0];
 	old_run_ctx = bpf_set_run_ctx(&run_ctx.run_ctx);
+	/*遍历执行item中所有bpf程序*/
 	while ((prog = READ_ONCE(item->prog))) {
 		run_ctx.prog_item = item;
 		func_ret = run_prog(prog, ctx);

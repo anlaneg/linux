@@ -427,8 +427,8 @@ struct ib_uverbs_ex_create_cq {
 };
 
 struct ib_uverbs_create_cq_resp {
-	__u32 cq_handle;
-	__u32 cqe;
+	__u32 cq_handle;/*cq编号*/
+	__u32 cqe;/*cqe数目*/
 	__aligned_u64 driver_data[0];
 };
 
@@ -598,8 +598,11 @@ enum {
 
 struct ib_uverbs_ex_create_qp {
 	__aligned_u64 user_handle;
+	/*指定pd*/
 	__u32 pd_handle;
+	/*发送对应的cq handle*/
 	__u32 send_cq_handle;
+	/*接收对应的cq handle*/
 	__u32 recv_cq_handle;
 	__u32 srq_handle;
 	__u32 max_send_wr;
@@ -629,8 +632,8 @@ struct ib_uverbs_open_qp {
 
 /* also used for open response */
 struct ib_uverbs_create_qp_resp {
-	__u32 qp_handle;
-	__u32 qpn;
+	__u32 qp_handle;/*qb object编号*/
+	__u32 qpn;/*qp编号*/
 	__u32 max_send_wr;
 	__u32 max_recv_wr;
 	__u32 max_send_sge;
@@ -709,8 +712,8 @@ struct ib_uverbs_query_qp_resp {
 struct ib_uverbs_modify_qp {
 	struct ib_uverbs_qp_dest dest;
 	struct ib_uverbs_qp_dest alt_dest;
-	__u32 qp_handle;
-	__u32 attr_mask;
+	__u32 qp_handle;/*qp编号*/
+	__u32 attr_mask;/*待修改属性*/
 	__u32 qkey;
 	__u32 rq_psn;
 	__u32 sq_psn;

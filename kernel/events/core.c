@@ -6838,6 +6838,7 @@ void perf_event_header__init_id(struct perf_event_header *header,
 		__perf_event_header__init_id(header, data, event);
 }
 
+/*按data->type完成对应data字段，写入到handle*/
 static void __perf_event__output_id_sample(struct perf_output_handle *handle,
 					   struct perf_sample_data *data)
 {
@@ -7902,7 +7903,7 @@ void perf_event_fork(struct task_struct *task)
 struct perf_comm_event {
 	struct task_struct	*task;
 	char			*comm;
-	int			comm_size;
+	int			comm_size;/*字符串comm长度*/
 
 	struct {
 		struct perf_event_header	header;
@@ -7930,6 +7931,7 @@ static void perf_event_comm_output(struct perf_event *event,
 		return;
 
 	perf_event_header__init_id(&comm_event->event_id.header, &sample, event);
+	/*依据要写入内容，设置合适的大小，填充hanle*/
 	ret = perf_output_begin(&handle, &sample, event,
 				comm_event->event_id.header.size);
 
@@ -7939,10 +7941,13 @@ static void perf_event_comm_output(struct perf_event *event,
 	comm_event->event_id.pid = perf_event_pid(event, comm_event->task);
 	comm_event->event_id.tid = perf_event_tid(event, comm_event->task);
 
+	/*写event_id*/
 	perf_output_put(&handle, comm_event->event_id);
+	/*写comm_event->comm*/
 	__output_copy(&handle, comm_event->comm,
 				   comm_event->comm_size);
 
+	/*按sample->type写入sample相关字段*/
 	perf_event__output_id_sample(event, &handle, &sample);
 
 	perf_output_end(&handle);
@@ -7976,6 +7981,7 @@ void perf_event_comm(struct task_struct *task, bool exec)
 	if (!atomic_read(&nr_comm_events))
 		return;
 
+	/*event类型为record_comm*/
 	comm_event = (struct perf_comm_event){
 		.task	= task,
 		/* .comm      */

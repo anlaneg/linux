@@ -681,6 +681,7 @@ static int bpf_for_each_array_elem(struct bpf_map *map, bpf_callback_t callback_
 }
 
 static int array_map_btf_id;
+/*BPF_MAP_TYPE_ARRAY类型map对应的ops*/
 const struct bpf_map_ops array_map_ops = {
 	.map_meta_equal = array_map_meta_equal,
 	.map_alloc_check = array_map_alloc_check,
@@ -707,6 +708,7 @@ const struct bpf_map_ops array_map_ops = {
 };
 
 static int percpu_array_map_btf_id;
+/*BPF_MAP_TYPE_PERCPU_ARRAY类型map对应的ops*/
 const struct bpf_map_ops percpu_array_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc_check = array_map_alloc_check,
@@ -1105,6 +1107,7 @@ static void prog_array_map_free(struct bpf_map *map)
  * and map_meta_equal is not implemented.
  */
 static int prog_array_map_btf_id;
+/*BPF_MAP_TYPE_PROG_ARRAY类型map对应的ops*/
 const struct bpf_map_ops prog_array_map_ops = {
 	.map_alloc_check = fd_array_map_alloc_check,
 	.map_alloc = prog_array_map_alloc,
@@ -1211,6 +1214,7 @@ static void perf_event_fd_array_map_free(struct bpf_map *map)
 }
 
 static int perf_event_array_map_btf_id;
+/*BPF_MAP_TYPE_PERF_EVENT_ARRAY类型对应的ops*/
 const struct bpf_map_ops perf_event_array_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc_check = fd_array_map_alloc_check,
@@ -1248,6 +1252,7 @@ static void cgroup_fd_array_free(struct bpf_map *map)
 }
 
 static int cgroup_array_map_btf_id;
+/*BPF_MAP_TYPE_CGROUP_ARRAY类型map对应的ops*/
 const struct bpf_map_ops cgroup_array_map_ops = {
 	.map_meta_equal = bpf_map_meta_equal,
 	.map_alloc_check = fd_array_map_alloc_check,

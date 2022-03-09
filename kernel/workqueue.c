@@ -1423,6 +1423,7 @@ static int wq_select_unbound_cpu(int cpu)
 	}
 
 	if (cpumask_empty(wq_unbound_cpumask))
+	    /*未提供wq_unbond_cpumask,直接返回传入的cpu*/
 		return cpu;
 
 	//先取出上次一次选择的cpu
@@ -1467,11 +1468,13 @@ retry:
 	/* pwq which will be used unless @work is executing elsewhere */
 	if (wq->flags & WQ_UNBOUND) {
 		if (req_cpu == WORK_CPU_UNBOUND)
-			cpu = wq_select_unbound_cpu(raw_smp_processor_id());
+			cpu = wq_select_unbound_cpu(raw_smp_processor_id()/*当前cpu*/);
 		pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
 	} else {
 		if (req_cpu == WORK_CPU_UNBOUND)
+		    /*未指定cpu,使用当前cpu*/
 			cpu = raw_smp_processor_id();
+		/*取wq上关联cpu的pwq*/
 		pwq = per_cpu_ptr(wq->cpu_pwqs, cpu);
 	}
 

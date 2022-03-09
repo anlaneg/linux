@@ -191,7 +191,7 @@ ssize_t seq_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	 * record as it might have been already advanced by previous requests
 	 */
 	if (iocb->ki_pos == 0) {
-	    	/*当前位置位于文件开始*/
+	    /*当前位置位于文件开始*/
 		m->index = 0;
 		m->count = 0;
 	}

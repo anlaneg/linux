@@ -17,6 +17,7 @@ static char tracing_mnt[PATH_MAX]  = "/sys/kernel/debug";
 static char tracing_path[PATH_MAX]        = "/sys/kernel/debug/tracing";
 static char tracing_events_path[PATH_MAX] = "/sys/kernel/debug/tracing/events";
 
+/*设置这些全局变量*/
 static void __tracing_path_set(const char *tracing, const char *mountpoint)
 {
 	snprintf(tracing_mnt, sizeof(tracing_mnt), "%s", mountpoint);
@@ -26,10 +27,13 @@ static void __tracing_path_set(const char *tracing, const char *mountpoint)
 		 mountpoint, tracing, "events");
 }
 
+
+/*取tracefs挂载的目录*/
 static const char *tracing_path_tracefs_mount(void)
 {
 	const char *mnt;
 
+	/*挂载tracefs*/
 	mnt = tracefs__mount();
 	if (!mnt)
 		return NULL;
@@ -43,6 +47,7 @@ static const char *tracing_path_debugfs_mount(void)
 {
 	const char *mnt;
 
+	/*挂载debugfs*/
 	mnt = debugfs__mount();
 	if (!mnt)
 		return NULL;
@@ -56,10 +61,12 @@ const char *tracing_path_mount(void)
 {
 	const char *mnt;
 
+	/*返回tracefs挂载点*/
 	mnt = tracing_path_tracefs_mount();
 	if (mnt)
 		return mnt;
 
+	/*返回debugfs挂载点*/
 	mnt = tracing_path_debugfs_mount();
 
 	return mnt;
@@ -70,6 +77,7 @@ void tracing_path_set(const char *mntpt)
 	__tracing_path_set("tracing/", mntpt);
 }
 
+/*返回trace文件的路径,例如/sys/kernel/debug/tracing/$name */
 char *get_tracing_file(const char *name)
 {
 	char *file;
@@ -100,12 +108,14 @@ void put_events_file(char *file)
 	free(file);
 }
 
+/*打开并返回events目录*/
 DIR *tracing_events__opendir(void)
 {
 	DIR *dir = NULL;
 	char *path = get_tracing_file("events");
 
 	if (path) {
+	    /*打开events目录*/
 		dir = opendir(path);
 		put_events_file(path);
 	}

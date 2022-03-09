@@ -358,6 +358,7 @@ static inline int inet_iif(const struct sk_buff *skb)
 	return skb->skb_iif;
 }
 
+/*取hoplimit*/
 static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 {
 	int hoplimit = dst_metric_raw(dst, RTAX_HOPLIMIT);

@@ -3215,15 +3215,18 @@ static struct trace_buffer_struct *trace_percpu_buffer;
  */
 static char *get_trace_buf(void)
 {
+    /*取当前cpu对应的buffer*/
 	struct trace_buffer_struct *buffer = this_cpu_ptr(trace_percpu_buffer);
 
 	if (!buffer || buffer->nesting >= 4)
+	    /*buffer未申请/nesting数量过多*/
 		return NULL;
 
 	buffer->nesting++;
 
 	/* Interrupts must see nesting incremented before we use the buffer */
 	barrier();
+	/*返回trace对应的buffer*/
 	return &buffer->buffer[buffer->nesting - 1][0];
 }
 
@@ -3234,6 +3237,7 @@ static void put_trace_buf(void)
 	this_cpu_dec(trace_percpu_buffer->nesting);
 }
 
+/**/
 static int alloc_percpu_trace_buffer(void)
 {
 	struct trace_buffer_struct *buffers;
@@ -3337,12 +3341,14 @@ int trace_vbprintk(unsigned long ip, const char *fmt, va_list args)
 	trace_ctx = tracing_gen_ctx();
 	preempt_disable_notrace();
 
+	/*取此cpu对应的buffer*/
 	tbuffer = get_trace_buf();
 	if (!tbuffer) {
 		len = 0;
 		goto out_nobuffer;
 	}
 
+	/*格式化内容到tbuffer中*/
 	len = vbin_printf((u32 *)tbuffer, TRACE_BUF_SIZE/sizeof(int), fmt, args);
 
 	if (len > TRACE_BUF_SIZE/sizeof(int) || len < 0)
@@ -3359,6 +3365,7 @@ int trace_vbprintk(unsigned long ip, const char *fmt, va_list args)
 	entry->ip			= ip;
 	entry->fmt			= fmt;
 
+	/*复制tbuffer内容*/
 	memcpy(entry->buf, tbuffer, sizeof(u32) * len);
 	if (!call_filter_check_discard(call, entry, buffer, event)) {
 		__buffer_unlock_commit(buffer, event);
@@ -8541,6 +8548,7 @@ static struct dentry *tracing_dentry_percpu(struct trace_array *tr, int cpu)
 	if (IS_ERR(d_tracer))
 		return NULL;
 
+	/*在d_tracer对应目录下，创建per_cpu*/
 	tr->percpu_dir = tracefs_create_dir("per_cpu", d_tracer);
 
 	MEM_FAIL(!tr->percpu_dir,
@@ -8550,8 +8558,8 @@ static struct dentry *tracing_dentry_percpu(struct trace_array *tr, int cpu)
 }
 
 static struct dentry *
-trace_create_cpu_file(const char *name, umode_t mode, struct dentry *parent,
-		      void *data, long cpu, const struct file_operations *fops)
+trace_create_cpu_file(const char *name/*文件名称*/, umode_t mode, struct dentry *parent/*父目录*/,
+		      void *data, long cpu/*所属的cpu id*/, const struct file_operations *fops/*文件操作fops*/)
 {
 	struct dentry *ret = trace_create_file(name, mode, parent, data, fops);
 
@@ -8570,6 +8578,7 @@ tracing_init_tracefs_percpu(struct trace_array *tr, long cpu)
 	if (!d_percpu)
 		return;
 
+	/*当前trace关联的cpu目录*/
 	snprintf(cpu_dir, 30, "cpu%ld", cpu);
 	d_cpu = tracefs_create_dir(cpu_dir, d_percpu);
 	if (!d_cpu) {
@@ -8578,7 +8587,7 @@ tracing_init_tracefs_percpu(struct trace_array *tr, long cpu)
 	}
 
 	/* per cpu trace_pipe */
-	trace_create_cpu_file("trace_pipe", TRACE_MODE_READ, d_cpu,
+	trace_create_cpu_file("trace_pipe", TRACE_MODE_READ, d_cpu/*父节点为cpu目录*/,
 				tr, cpu, &tracing_pipe_fops);
 
 	/* per cpu trace */
@@ -8752,9 +8761,9 @@ static const struct file_operations trace_options_core_fops = {
 	.llseek = generic_file_llseek,
 };
 
-struct dentry *trace_create_file(const char *name,
+struct dentry *trace_create_file(const char *name/*文件名*/,
 				 umode_t mode,
-				 struct dentry *parent,
+				 struct dentry *parent/*父目录*/,
 				 void *data,
 				 const struct file_operations *fops)
 {
@@ -9473,6 +9482,7 @@ init_tracer_tracefs(struct trace_array *tr, struct dentry *d_tracer)
 	trace_create_file("error_log", TRACE_MODE_WRITE, d_tracer,
 			  tr, &tracing_err_log_fops);
 
+	/*针对所有cpu，进行tracefs创建*/
 	for_each_tracing_cpu(cpu)
 		tracing_init_tracefs_percpu(tr, cpu);
 
@@ -9492,6 +9502,7 @@ static struct vfsmount *trace_automount(struct dentry *mntpt, void *ingore)
 	type = get_fs_type("tracefs");
 	if (!type)
 		return NULL;
+	/*挂载tracefs文件系统*/
 	mnt = vfs_submount(mntpt, type, "tracefs", NULL);
 	put_filesystem(type);
 	if (IS_ERR(mnt))

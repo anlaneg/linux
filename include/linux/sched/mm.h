@@ -33,6 +33,7 @@ extern struct mm_struct *mm_alloc(void);
  */
 static inline void mmgrab(struct mm_struct *mm)
 {
+    /*增加引用*/
 	atomic_inc(&mm->mm_count);
 }
 

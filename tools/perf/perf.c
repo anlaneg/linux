@@ -253,6 +253,7 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 			if (envchanged)
 				*envchanged = 1;
 		} else if (!strcmp(cmd, "--list-cmds")) {
+		    /*显示子命令*/
 			unsigned int i;
 
 			for (i = 0; i < ARRAY_SIZE(commands); i++) {
@@ -295,6 +296,7 @@ static int handle_options(const char ***argv, int *argc, int *envchanged)
 #define RUN_SETUP	(1<<0)
 #define USE_PAGER	(1<<1)
 
+/*运行内建的命令*/
 static int run_builtin(struct cmd_struct *p, int argc, const char **argv)
 {
 	int status;
@@ -365,6 +367,7 @@ static void handle_internal_command(int argc, const char **argv)
 		struct cmd_struct *p = commands+i;
 		if (strcmp(p->cmd, cmd))
 			continue;
+		/*执行内建的子命令*/
 		exit(run_builtin(p, argc, argv));
 	}
 }

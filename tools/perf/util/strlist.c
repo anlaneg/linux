@@ -25,6 +25,7 @@ struct rb_node *strlist__node_new(struct rblist *rblist, const void *entry)
 			if (s == NULL)
 				goto out_delete;
 		}
+		/*设置string*/
 		snode->s = s;
 		rc = &snode->rb_node;
 	}
@@ -52,6 +53,7 @@ void strlist__node_delete(struct rblist *rblist, struct rb_node *rb_node)
 	str_node__delete(snode, slist->dupstr);
 }
 
+/*string list节点比对函数*/
 static int strlist__node_cmp(struct rb_node *rb_node, const void *entry)
 {
 	const char *str = entry;
@@ -74,6 +76,7 @@ int strlist__load(struct strlist *slist, const char *filename)
 	if (fp == NULL)
 		return -errno;
 
+	/*自文件中读取一行数据*/
 	while (fgets(entry, sizeof(entry), fp) != NULL) {
 		const size_t len = strlen(entry);
 
@@ -81,6 +84,7 @@ int strlist__load(struct strlist *slist, const char *filename)
 			continue;
 		entry[len - 1] = '\0';
 
+		/*添加元素到slist*/
 		err = strlist__add(slist, entry);
 		if (err != 0)
 			goto out;
@@ -114,10 +118,12 @@ static int strlist__parse_list_entry(struct strlist *slist, const char *s,
 	int err;
 	char *subst = NULL;
 
+	/*s以file://开头,打开给定的文件，构造slist*/
 	if (strncmp(s, "file://", 7) == 0)
 		return strlist__load(slist, s + 7);
 
 	if (subst_dir) {
+	    /*指定了目录名称，添加目录构成路径，加载此文件，构造slist*/
 		err = -ENOMEM;
 		if (asprintf(&subst, "%s/%s", subst_dir, s) < 0)
 			goto out;
@@ -133,26 +139,32 @@ static int strlist__parse_list_entry(struct strlist *slist, const char *s,
 		}
 	}
 
+	/*在slist中添加s*/
 	err = strlist__add(slist, s);
 out:
 	free(subst);
 	return err;
 }
 
+/*加载文件内容或字符串内容到slist*/
 static int strlist__parse_list(struct strlist *slist, const char *s, const char *subst_dir)
 {
 	char *sep;
 	int err;
 
 	while ((sep = strchr(s, ',')) != NULL) {
+	    /*置字符串结束符*/
 		*sep = '\0';
-		err = strlist__parse_list_entry(slist, s, subst_dir);
+		/*添加s到slist*/
+		err = strlist__parse_list_entry(slist, s/*分隔的一部分内容*/, subst_dir);
+		/*还原字符串内容*/
 		*sep = ',';
 		if (err != 0)
 			return err;
 		s = sep + 1;
 	}
 
+	/*直接添加s到slist*/
 	return *s ? strlist__parse_list_entry(slist, s, subst_dir) : 0;
 }
 
@@ -167,6 +179,7 @@ struct strlist *strlist__new(const char *list, const struct strlist_config *conf
 
 		if (config) {
 			dupstr = !config->dont_dupstr;
+			/*文件目录名称*/
 			dirname = config->dirname;
 			file_only = config->file_only;
 		}
@@ -179,6 +192,7 @@ struct strlist *strlist__new(const char *list, const struct strlist_config *conf
 		slist->dupstr	 = dupstr;
 		slist->file_only = file_only;
 
+		/*指定了list,将list内容（字符串或者文件中的字符串）添加到slist中*/
 		if (list && strlist__parse_list(slist, list, dirname) != 0)
 			goto out_error;
 	}

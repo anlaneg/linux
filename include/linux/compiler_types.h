@@ -317,6 +317,7 @@ struct ftrace_likely_data {
 			prefix ## suffix();				\
 	} while (0)
 #else
+/*采用空实现*/
 # define __compiletime_assert(condition, msg, prefix, suffix) do { } while (0)
 #endif
 

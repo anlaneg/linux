@@ -574,8 +574,8 @@ static int fib_detect_death(struct fib_info *fi, int order,
 }
 
 int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc/*出参*/,
-		       struct nlattr *encap, u16 encap_type,
-		       void *cfg, gfp_t gfp_flags,
+		       struct nlattr *encap/*encap类型对应的配置参数*/, u16 encap_type/*encap类型*/,
+		       void *cfg/*用户配置的路由*/, gfp_t gfp_flags,
 		       struct netlink_ext_ack *extack)
 {
 	int err;
@@ -587,7 +587,7 @@ int fib_nh_common_init(struct net *net, struct fib_nh_common *nhc/*出参*/,
 		return -ENOMEM;
 
 	if (encap) {
-	    /*提供了路由encap动作，初始化nhc_lwtstate*/
+	    /*提供了路由encap动作，通过lwtunnel_build_state函数解析encap,初始化nhc_lwtstate*/
 		struct lwtunnel_state *lwtstate;
 
 		if (encap_type == LWTUNNEL_ENCAP_NONE) {
@@ -852,9 +852,11 @@ static int fib_encap_match(struct net *net, u16 encap_type,
 	if (encap_type == LWTUNNEL_ENCAP_NONE)
 		return 0;
 
+	/*通过encap进行lwtstate构造，以方便匹配*/
 	ret = lwtunnel_build_state(net, encap_type, encap, AF_INET,
 				   cfg, &lwtstate, extack);
 	if (!ret) {
+	    /*执行lwtstate与路由中保存的lws的比对*/
 		result = lwtunnel_cmp_encap(lwtstate, nh->fib_nh_lws);
 		lwtstate_free(lwtstate);
 	}
@@ -883,6 +885,7 @@ int fib_nh_match(struct net *net, struct fib_config *cfg, struct fib_info *fi,
 		struct fib_nh *nh = fib_info_nh(fi, 0);
 
 		if (cfg->fc_encap) {
+		    /*有encap配置，执行encap匹配*/
 			if (fib_encap_match(net, cfg->fc_encap_type,
 					    cfg->fc_encap, nh, cfg, extack))
 				return 1;

@@ -585,6 +585,7 @@ static inline void rht_assign_unlock(struct bucket_table *tbl,
 	for (pos = list; pos && rht_entry(tpos, pos, member);		\
 	     pos = rcu_dereference_raw(pos->next))
 
+/*默认执行内存比对*/
 static inline int rhashtable_compare(struct rhashtable_compare_arg *arg,
 				     const void *obj)
 {

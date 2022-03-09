@@ -714,6 +714,7 @@ struct perf_event {
 	 */
 	struct mutex			child_mutex;
 	struct list_head		child_list;
+	/*指向其对应的父event*/
 	struct perf_event		*parent;
 
 	int				oncpu;
@@ -897,9 +898,11 @@ struct perf_output_handle {
 	struct perf_event		*event;
 	struct perf_buffer		*rb;
 	unsigned long			wakeup;
+	/*输出对应的缓冲区大小*/
 	unsigned long			size;
 	u64				aux_flags;
 	union {
+	    /*输出对应的缓冲区起始地址*/
 		void			*addr;
 		unsigned long		head;
 	};

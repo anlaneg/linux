@@ -17,6 +17,7 @@
 /* Initialize simple callback list. */
 void rcu_cblist_init(struct rcu_cblist *rclp)
 {
+    /*单链表初始化*/
 	rclp->head = NULL;
 	rclp->tail = &rclp->head;
 	rclp->len = 0;
@@ -27,6 +28,7 @@ void rcu_cblist_init(struct rcu_cblist *rclp)
  */
 void rcu_cblist_enqueue(struct rcu_cblist *rclp, struct rcu_head *rhp)
 {
+    /*向尾部添加一个rcu_head*/
 	*rclp->tail = rhp;
 	rclp->tail = &rhp->next;
 	WRITE_ONCE(rclp->len, rclp->len + 1);
@@ -44,12 +46,15 @@ void rcu_cblist_flush_enqueue(struct rcu_cblist *drclp,
 			      struct rcu_cblist *srclp,
 			      struct rcu_head *rhp)
 {
+    /*1。将srclp的内容移交给drclp*/
 	drclp->head = srclp->head;
 	if (drclp->head)
 		drclp->tail = srclp->tail;
 	else
 		drclp->tail = &drclp->head;
 	drclp->len = srclp->len;
+
+	/*2.如果rhp为空，则初始化srclp为空，否则将srclp初始为空后，添加rhp*/
 	if (!rhp) {
 		rcu_cblist_init(srclp);
 	} else {
@@ -66,6 +71,7 @@ void rcu_cblist_flush_enqueue(struct rcu_cblist *drclp,
  */
 struct rcu_head *rcu_cblist_dequeue(struct rcu_cblist *rclp)
 {
+    /*自单队列rcu_cblist中出一个元素*/
 	struct rcu_head *rhp;
 
 	rhp = rclp->head;

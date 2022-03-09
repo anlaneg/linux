@@ -15,8 +15,10 @@ struct perf_buffer {
 	struct rcu_head			rcu_head;
 #ifdef CONFIG_PERF_USE_VMALLOC
 	struct work_struct		work;
+	/*页采用哪种order*/
 	int				page_order;	/* allocation order  */
 #endif
+	/*数据页数目*/
 	int				nr_pages;	/* nr of data pages  */
 	int				overwrite;	/* can overwrite itself */
 	int				paused;		/* can write into ring buffer */
@@ -55,6 +57,7 @@ struct perf_buffer {
 	void				*aux_priv;
 
 	struct perf_event_mmap_page	*user_page;
+	/*记录各页起始地址*/
 	void				*data_pages[];
 };
 
@@ -116,6 +119,7 @@ static inline int page_order(struct perf_buffer *rb)
 }
 #endif
 
+/*此buffer大小*/
 static inline unsigned long perf_data_size(struct perf_buffer *rb)
 {
 	return rb->nr_pages << (PAGE_SHIFT + page_order(rb));
@@ -126,21 +130,25 @@ static inline unsigned long perf_aux_size(struct perf_buffer *rb)
 	return rb->aux_nr_pages << PAGE_SHIFT;
 }
 
-#define __DEFINE_OUTPUT_COPY_BODY(advance_buf, memcpy_func, ...)	\
+#define __DEFINE_OUTPUT_COPY_BODY(advance_buf/*buf是否前移*/, memcpy_func, ...)	\
 {									\
 	unsigned long size, written;					\
 									\
 	do {								\
+	    /*选最短的buffer长度*/\
 		size    = min(handle->size, len);			\
+		/*通过memcpy_func函数，完成copy，注：memcpy_fun返回值为0*/\
 		written = memcpy_func(__VA_ARGS__);			\
 		written = size - written;				\
 									\
+		/*待写入长度减少，待写入指针前移*/\
 		len -= written;						\
 		handle->addr += written;				\
 		if (advance_buf)					\
 			buf += written;					\
 		handle->size -= written;				\
 		if (!handle->size) {					\
+		    /*如果handle的buffer已被用完，则写下一个整页*/\
 			struct perf_buffer *rb = handle->rb;	\
 									\
 			handle->page++;					\
@@ -157,7 +165,8 @@ static inline unsigned long perf_aux_size(struct perf_buffer *rb)
 static inline unsigned long						\
 func_name(struct perf_output_handle *handle,				\
 	  const void *buf, unsigned long len)				\
-__DEFINE_OUTPUT_COPY_BODY(true, memcpy_func, handle->addr, buf, size)
+	  /*定义func_name对应的函数实现*/\
+__DEFINE_OUTPUT_COPY_BODY(true, memcpy_func, handle->addr/*可填写的起始地址*/, buf/*待填写的内容*/, size/*待填写的长度*/)
 
 static inline unsigned long
 __output_custom(struct perf_output_handle *handle, perf_copy_f copy_func,
@@ -172,7 +181,7 @@ static inline unsigned long
 memcpy_common(void *dst, const void *src, unsigned long n)
 {
 	memcpy(dst, src, n);
-	return 0;
+	return 0;/*注：这里返回了0*/
 }
 
 DEFINE_OUTPUT_COPY(__output_copy, memcpy_common)

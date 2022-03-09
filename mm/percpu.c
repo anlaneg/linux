@@ -232,10 +232,12 @@ static bool pcpu_addr_in_chunk(struct pcpu_chunk *chunk, void *addr)
 
 static int __pcpu_size_to_slot(int size)
 {
+    /*高位1所在位置*/
 	int highbit = fls(size);	/* size is in bytes */
 	return max(highbit - PCPU_SLOT_BASE_SHIFT + 2, 1);
 }
 
+/*取size对应的slot*/
 static int pcpu_size_to_slot(int size)
 {
 	if (size == pcpu_unit_size)
@@ -510,6 +512,7 @@ static void *pcpu_mem_zalloc(size_t size, gfp_t gfp)
 	if (WARN_ON_ONCE(!slab_is_available()))
 		return NULL;
 
+	/*percpu申请内存*/
 	if (size <= PAGE_SIZE)
 		return kzalloc(size, gfp);
 	else
@@ -1719,7 +1722,7 @@ static void pcpu_memcg_free_hook(struct pcpu_chunk *chunk, int off, size_t size)
  * RETURNS:
  * Percpu pointer to the allocated area on success, NULL on failure.
  */
-static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
+static void __percpu *pcpu_alloc(size_t size/*单个内存大小*/, size_t align/*对齐方式*/, bool reserved,
 				 gfp_t gfp)
 {
 	gfp_t pcpu_gfp;
@@ -1747,6 +1750,7 @@ static void __percpu *pcpu_alloc(size_t size, size_t align, bool reserved,
 	 * of up to PCPU_MIN_ALLOC_SIZE - 1 bytes.
 	 */
 	if (unlikely(align < PCPU_MIN_ALLOC_SIZE))
+	    /*最小的percpu对齐*/
 		align = PCPU_MIN_ALLOC_SIZE;
 
 	size = ALIGN(size, PCPU_MIN_ALLOC_SIZE);
@@ -1885,6 +1889,7 @@ area_found:
 	ptr = __addr_to_pcpu_ptr(chunk->base_addr + off);
 	kmemleak_alloc_percpu(ptr, size, gfp);
 
+	/*trace触发*/
 	trace_percpu_alloc_percpu(reserved, is_atomic, size, align,
 			chunk->base_addr, off, ptr);
 
@@ -2707,9 +2712,10 @@ void __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
 	pcpu_unit_offsets = unit_off;
 
 	/* determine basic parameters */
-	pcpu_unit_pages = ai->unit_size >> PAGE_SHIFT;
-	pcpu_unit_size = pcpu_unit_pages << PAGE_SHIFT;
+	pcpu_unit_pages = ai->unit_size >> PAGE_SHIFT;/*占用的页数*/
+	pcpu_unit_size = pcpu_unit_pages << PAGE_SHIFT;/*占用的字节数*/
 	pcpu_atom_size = ai->atom_size;
+	/*申请populated个pcpu_unit_pages bits*/
 	pcpu_chunk_struct_size = struct_size(chunk, populated,
 					     BITS_TO_LONGS(pcpu_unit_pages));
 
@@ -2732,6 +2738,7 @@ void __init pcpu_setup_first_chunk(const struct pcpu_alloc_info *ai,
 		panic("%s: Failed to allocate %zu bytes\n", __func__,
 		      pcpu_nr_slots * sizeof(pcpu_chunk_lists[0]));
 
+	/*初始化lists*/
 	for (i = 0; i < pcpu_nr_slots; i++)
 		INIT_LIST_HEAD(&pcpu_chunk_lists[i]);
 
@@ -2860,7 +2867,9 @@ static struct pcpu_alloc_info * __init __flatten pcpu_build_alloc_info(
 {
 	static int group_map[NR_CPUS] __initdata;
 	static int group_cnt[NR_CPUS] __initdata;
+	/*cpu掩码*/
 	static struct cpumask mask __initdata;
+	/*静态大小（percpu起始位置到percpu终止位置间的字节占用大小）*/
 	const size_t static_size = __per_cpu_end - __per_cpu_start;
 	int nr_groups = 1, nr_units = 0;
 	size_t size_sum, min_unit_size, alloc_size;

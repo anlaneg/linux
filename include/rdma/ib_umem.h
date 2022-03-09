@@ -17,11 +17,16 @@ struct ib_umem_odp;
 struct dma_buf_attach_ops;
 
 struct ib_umem {
+    /*所属ib设备*/
 	struct ib_device       *ibdev;
+	/*此进程对程对应的mm*/
 	struct mm_struct       *owning_mm;
 	u64 iova;
+	/*内存大小*/
 	size_t			length;
+	/*内存起始地址*/
 	unsigned long		address;
+	/*标记内存是否可写*/
 	u32 writable : 1;
 	u32 is_odp : 1;
 	u32 is_dmabuf : 1;
@@ -59,14 +64,16 @@ static inline unsigned long ib_umem_dma_offset(struct ib_umem *umem,
 	       (pgsz - 1);
 }
 
+/*umem指定的范围(umem->iova,umem->iova+umem->length）上沿边界按页对齐后，共占用多少页*/
 static inline size_t ib_umem_num_dma_blocks(struct ib_umem *umem,
-					    unsigned long pgsz)
+					    unsigned long pgsz/*页大小，必须为2的整数次幂*/)
 {
 	return (size_t)((ALIGN(umem->iova + umem->length, pgsz) -
 			 ALIGN_DOWN(umem->iova, pgsz))) /
 	       pgsz;
 }
 
+/*取umem指定的内存范围，占多少页内存*/
 static inline size_t ib_umem_num_pages(struct ib_umem *umem)
 {
 	return ib_umem_num_dma_blocks(umem, PAGE_SIZE);

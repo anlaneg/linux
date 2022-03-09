@@ -787,6 +787,7 @@ void kfree_skb(struct sk_buff *skb)
 		//引用计数没有减为0，直接返回
 		return;
 
+	/*触发kfree_skb对应的tracepoint回调*/
 	trace_kfree_skb(skb, __builtin_return_address(0));
 	//释放skb
 	__kfree_skb(skb);

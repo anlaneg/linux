@@ -1082,6 +1082,7 @@ void blk_add_driver_data(struct request *rq, void *data, size_t len)
 }
 EXPORT_SYMBOL_GPL(blk_add_driver_data);
 
+/*注册tracepoint*/
 static void blk_register_tracepoints(void)
 {
 	int ret;

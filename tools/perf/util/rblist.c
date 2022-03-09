@@ -10,6 +10,7 @@
 
 #include "rblist.h"
 
+/*将new_entry加入到rblist*/
 int rblist__add_node(struct rblist *rblist, const void *new_entry)
 {
 	struct rb_node **p = &rblist->entries.rb_root.rb_node;
@@ -21,22 +22,27 @@ int rblist__add_node(struct rblist *rblist, const void *new_entry)
 
 		parent = *p;
 
+		/*与根节点进行比对*/
 		rc = rblist->node_cmp(parent, new_entry);
 		if (rc > 0)
+		    /*大于0，放左节点*/
 			p = &(*p)->rb_left;
 		else if (rc < 0) {
+		    /*小于0，放右节点*/
 			p = &(*p)->rb_right;
 			leftmost = false;
 		}
 		else
+		    /*等于0，报已存在*/
 			return -EEXIST;
 	}
 
+	/*找到插入点，这里进行节点新建*/
 	new_node = rblist->node_new(rblist, new_entry);
 	if (new_node == NULL)
 		return -ENOMEM;
 
-	rb_link_node(new_node, parent, p);
+	rb_link_node(new_node, parent, p/*插入点*/);
 	rb_insert_color_cached(new_node, &rblist->entries, leftmost);
 	++rblist->nr_entries;
 

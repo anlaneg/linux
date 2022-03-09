@@ -1067,6 +1067,7 @@ static int __init inet6_init(void)
 	if (err)
 		goto out;
 
+	/*注册udpv6 protocol*/
 	err = proto_register(&udpv6_prot, 1);
 	if (err)
 		goto out_unregister_tcp_proto;

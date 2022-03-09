@@ -24,7 +24,7 @@
 #include <linux/stringify.h>
 
 #undef TRACE_EVENT
-#define TRACE_EVENT(name, proto, args, tstruct, assign, print)	\
+#define TRACE_EVENT(name/*trace函数名称*/, proto, args, tstruct, assign, print)	\
 	DEFINE_TRACE(name, PARAMS(proto), PARAMS(args))
 
 #undef TRACE_EVENT_CONDITION

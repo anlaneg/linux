@@ -38,11 +38,12 @@ struct rdma_dev_addr {
 	unsigned char dst_dev_addr[MAX_ADDR_LEN];
 	unsigned char broadcast[MAX_ADDR_LEN];
 	unsigned short dev_type;
-	int bound_dev_if;
+	int bound_dev_if;/*设置的目的端口*/
 	enum rdma_transport_type transport;
-	struct net *net;
+	struct net *net;/*当前所属net namespace*/
 	const struct ib_gid_attr *sgid_attr;
 	enum rdma_network_type network;
+	/*取hop limit*/
 	int hoplimit;
 };
 
@@ -136,6 +137,7 @@ static inline void rdma_gid2ip(struct sockaddr *out, const union ib_gid *gid)
 		struct sockaddr_in *out_in = (struct sockaddr_in *)out;
 		memset(out_in, 0, sizeof(*out_in));
 		out_in->sin_family = AF_INET;
+		/*后4个字节为s_addr*/
 		memcpy(&out_in->sin_addr.s_addr, gid->raw + 12, 4);
 	} else {
 		struct sockaddr_in6 *out_in = (struct sockaddr_in6 *)out;
@@ -217,6 +219,7 @@ static inline int iboe_get_rate(struct net_device *dev)
 		return IB_RATE_PORT_CURRENT;
 }
 
+/*ipv6 link local地址*/
 static inline int rdma_link_local_addr(struct in6_addr *addr)
 {
 	if (addr->s6_addr32[0] == htonl(0xfe800000) &&

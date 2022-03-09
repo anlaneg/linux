@@ -14,6 +14,7 @@ struct str_node {
 
 struct strlist {
 	struct rblist rblist;
+	/*需要使用strdup函数进行复制*/
 	bool	      dupstr;
 	bool	      file_only;
 };

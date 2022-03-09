@@ -109,6 +109,7 @@ static inline
 unsigned long find_first_bit(const unsigned long *addr, unsigned long size)
 {
 	if (small_const_nbits(size)) {
+	    /*size小于unsigned long类型所占的bits数时，取首个bit '1'位置*/
 		unsigned long val = *addr & GENMASK(size - 1, 0);
 
 		return val ? __ffs(val) : size;

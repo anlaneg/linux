@@ -705,6 +705,7 @@ int perf_event__synthesize_modules(struct perf_tool *tool, perf_event__handler_t
 	return rc;
 }
 
+/*目录项必须是数字开头*/
 static int filter_task(const struct dirent *dirent)
 {
 	return isdigit(dirent->d_name[0]);
@@ -714,7 +715,7 @@ static int __event__synthesize_thread(union perf_event *comm_event,
 				      union perf_event *mmap_event,
 				      union perf_event *fork_event,
 				      union perf_event *namespaces_event,
-				      pid_t pid, int full, perf_event__handler_t process,
+				      pid_t pid/*待处理的进程id*/, int full, perf_event__handler_t process,
 				      struct perf_tool *tool, struct machine *machine,
 				      bool needs_mmap, bool mmap_data)
 {
@@ -885,9 +886,9 @@ static int __perf_event__synthesize_threads(struct perf_tool *tool,
 					    struct machine *machine,
 					    bool needs_mmap,
 					    bool mmap_data,
-					    struct dirent **dirent,
-					    int start,
-					    int num)
+					    struct dirent **dirent/*全局的进程目录数组*/,
+					    int start/*当前线程负责的起始task编号*/,
+					    int num/*当前线程负责的task总数*/)
 {
 	union perf_event *comm_event, *mmap_event, *fork_event;
 	union perf_event *namespaces_event;
@@ -914,10 +915,13 @@ static int __perf_event__synthesize_threads(struct perf_tool *tool,
 	if (namespaces_event == NULL)
 		goto out_free_fork;
 
+	/*遍历所有direntry*/
 	for (i = start; i < start + num; i++) {
 		if (!isdigit(dirent[i]->d_name[0]))
+		    /*只考虑进程*/
 			continue;
 
+		/*取进程Pid*/
 		pid = (pid_t)strtol(dirent[i]->d_name, &end, 10);
 		/* only interested in proper numerical dirents */
 		if (*end)
@@ -949,9 +953,10 @@ struct synthesize_threads_arg {
 	struct machine *machine;
 	bool needs_mmap;
 	bool mmap_data;
+	/*指向全局的进程目录*/
 	struct dirent **dirent;
-	int num;
-	int start;
+	int num;/*负责的进程数*/
+	int start;/*负责的起始进程下标*/
 };
 
 static void *synthesize_threads_worker(void *arg)
@@ -986,8 +991,9 @@ int perf_event__synthesize_threads(struct perf_tool *tool,
 	if (machine__is_default_guest(machine))
 		return 0;
 
+	/*构造/proc*/
 	snprintf(proc_path, sizeof(proc_path), "%s/proc", machine->root_dir);
-	n = scandir(proc_path, &dirent, filter_task, alphasort);
+	n = scandir(proc_path, &dirent/*出参，满足的task*/, filter_task/*必须为进程*/, alphasort);
 	if (n < 0)
 		return err;
 
@@ -1006,16 +1012,21 @@ int perf_event__synthesize_threads(struct perf_tool *tool,
 	if (thread_nr > n)
 		thread_nr = n;
 
+	/*创建pthread_t数组（长度：thread_nr)*/
 	synthesize_threads = calloc(sizeof(pthread_t), thread_nr);
 	if (synthesize_threads == NULL)
 		goto free_dirent;
 
+	/*创建参数指定数组（长度:thread_nr)*/
 	args = calloc(sizeof(*args), thread_nr);
 	if (args == NULL)
 		goto free_threads;
 
+	/*每个线程负责多少进程*/
 	num_per_thread = n / thread_nr;
+	/*剩余的进程数*/
 	m = n % thread_nr;
+	/*初始化各线程参数*/
 	for (i = 0; i < thread_nr; i++) {
 		args[i].tool = tool;
 		args[i].process = process;
@@ -1024,17 +1035,22 @@ int perf_event__synthesize_threads(struct perf_tool *tool,
 		args[i].mmap_data = mmap_data;
 		args[i].dirent = dirent;
 	}
+	/*将剩余的这m个分配给前面的m个线程，其负责数量+1，其起始位置为i*num*/
 	for (i = 0; i < m; i++) {
 		args[i].num = num_per_thread + 1;
 		args[i].start = i * args[i].num;
 	}
 	if (i != 0)
+	    /*下一个线程的base起始位置*/
 		base = args[i-1].start + args[i-1].num;
+
+	/*填充其它的线程*/
 	for (j = i; j < thread_nr; j++) {
 		args[j].num = num_per_thread;
 		args[j].start = base + (j - i) * args[i].num;
 	}
 
+	/*创建线程*/
 	for (i = 0; i < thread_nr; i++) {
 		if (pthread_create(&synthesize_threads[i], NULL,
 				   synthesize_threads_worker, &args[i]))

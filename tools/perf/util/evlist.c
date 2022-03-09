@@ -313,6 +313,7 @@ struct evsel *evlist__find_tracepoint_by_name(struct evlist *evlist, const char 
 {
 	struct evsel *evsel;
 
+	/*遍历event list,检查其名称,当为name,返回evsel,否则返回NULL*/
 	evlist__for_each_entry(evlist, evsel) {
 		if ((evsel->core.attr.type == PERF_TYPE_TRACEPOINT) &&
 		    (strcmp(evsel->name, name) == 0))

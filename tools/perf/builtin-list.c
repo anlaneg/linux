@@ -78,18 +78,22 @@ int cmd_list(int argc, const char **argv)
 		char *sep, *s;
 
 		if (strcmp(argv[i], "tracepoint") == 0)
+		    /*显示tracepoint对应的events,其常见/sys/kernel/debug/tracing/events目录下*/
 			print_tracepoint_events(NULL, NULL, raw_dump);
 		else if (strcmp(argv[i], "hw") == 0 ||
 			 strcmp(argv[i], "hardware") == 0)
+		    /*检查event_symbols_hw并进行显示*/
 			print_symbol_events(NULL, PERF_TYPE_HARDWARE,
 					event_symbols_hw, PERF_COUNT_HW_MAX, raw_dump);
 		else if (strcmp(argv[i], "sw") == 0 ||
 			 strcmp(argv[i], "software") == 0) {
+		    /*检查event_symbols_sw并进行显示*/
 			print_symbol_events(NULL, PERF_TYPE_SOFTWARE,
 					event_symbols_sw, PERF_COUNT_SW_MAX, raw_dump);
 			print_tool_events(NULL, raw_dump);
 		} else if (strcmp(argv[i], "cache") == 0 ||
 			 strcmp(argv[i], "hwcache") == 0)
+		    /*显示hwcache*/
 			print_hwcache_events(NULL, raw_dump);
 		else if (strcmp(argv[i], "pmu") == 0)
 			print_pmu_events(NULL, raw_dump, !desc_flag,
@@ -102,6 +106,7 @@ int cmd_list(int argc, const char **argv)
 		else if (strcmp(argv[i], "metricgroup") == 0 || strcmp(argv[i], "metricgroups") == 0)
 			metricgroup__print(false, true, NULL, raw_dump, details_flag, pmu_name);
 		else if ((sep = strchr(argv[i], ':')) != NULL) {
+		    /*参数中包含':'号*/
 			int sep_idx;
 
 			sep_idx = sep - argv[i];
@@ -111,12 +116,15 @@ int cmd_list(int argc, const char **argv)
 				goto out;
 			}
 
-			s[sep_idx] = '\0';
-			print_tracepoint_events(s, s + sep_idx + 1, raw_dump);
+			s[sep_idx] = '\0';/*将输入采用':'分隔成两段*/
+			print_tracepoint_events(s/*subsystem匹配*/, s + sep_idx + 1/*event 匹配*/, raw_dump);
 			print_sdt_events(s, s + sep_idx + 1, raw_dump);
 			metricgroup__print(true, true, s, raw_dump, details_flag, pmu_name);
 			free(s);
 		} else {
+		    /*参数中没有包含':',按subsystem进行匹配输出
+		     * 例如perf list xdp
+		     * */
 			if (asprintf(&s, "*%s*", argv[i]) < 0) {
 				printf("Critical: Not enough memory! Trying to continue...\n");
 				continue;

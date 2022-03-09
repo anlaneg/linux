@@ -41,11 +41,14 @@ int rxe_ib_get_hw_stats(struct ib_device *ibdev,
 	return ARRAY_SIZE(rxe_counter_descs);
 }
 
+/*申请统计状态对应的hw_port_stats*/
 struct rdma_hw_stats *rxe_ib_alloc_hw_port_stats(struct ib_device *ibdev,
 						 u32 port_num)
 {
+    /*counter数目等于RXE_NUM_OF_COUNTERS*/
 	BUILD_BUG_ON(ARRAY_SIZE(rxe_counter_descs) != RXE_NUM_OF_COUNTERS);
 
+	/*返回硬件统计结果*/
 	return rdma_alloc_hw_stats_struct(rxe_counter_descs,
 					  ARRAY_SIZE(rxe_counter_descs),
 					  RDMA_HW_STATS_DEFAULT_LIFESPAN);

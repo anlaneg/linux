@@ -2704,11 +2704,13 @@ static void strict_work_handler(struct work_struct *work)
 static __latent_entropy void rcu_core(void)
 {
 	unsigned long flags;
+	/*取当前cpu对应的rcu_data*/
 	struct rcu_data *rdp = raw_cpu_ptr(&rcu_data);
 	struct rcu_node *rnp = rdp->mynode;
 	const bool do_batch = !rcu_segcblist_completely_offloaded(&rdp->cblist);
 
 	if (cpu_is_offline(smp_processor_id()))
+	    /*此cpu offline则不处理*/
 		return;
 	trace_rcu_utilization(TPS("Start RCU core"));
 	WARN_ON_ONCE(!rdp->beenonline);
@@ -2749,6 +2751,7 @@ static __latent_entropy void rcu_core(void)
 		queue_work_on(rdp->cpu, rcu_gp_wq, &rdp->strict_work);
 }
 
+/*rcu软中断处理函数*/
 static void rcu_core_si(struct softirq_action *h)
 {
 	rcu_core();
@@ -4709,6 +4712,7 @@ void __init rcu_init(void)
 	if (dump_tree)
 		rcu_dump_rcu_node_tree();
 	if (use_softirq)
+	    /*注册rcu软中断*/
 		open_softirq(RCU_SOFTIRQ, rcu_core_si);
 
 	/*

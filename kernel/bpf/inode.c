@@ -69,24 +69,28 @@ static void bpf_any_put(void *raw, enum bpf_type type)
 	}
 }
 
-static void *bpf_fd_probe_obj(u32 ufd, enum bpf_type *type)
+/*通过fd获取对应的对象*/
+static void *bpf_fd_probe_obj(u32 ufd, enum bpf_type *type/*出参，获取fd对应的对象类型*/)
 {
 	void *raw;
 
 	raw = bpf_map_get_with_uref(ufd);
 	if (!IS_ERR(raw)) {
+	    /*查询map成功*/
 		*type = BPF_TYPE_MAP;
 		return raw;
 	}
 
 	raw = bpf_prog_get(ufd);
 	if (!IS_ERR(raw)) {
+	    /*查询bpf程序成功*/
 		*type = BPF_TYPE_PROG;
 		return raw;
 	}
 
 	raw = bpf_link_get_from_fd(ufd);
 	if (!IS_ERR(raw)) {
+	    /*查询bpf link成功*/
 		*type = BPF_TYPE_LINK;
 		return raw;
 	}
@@ -217,6 +221,7 @@ error:
 	return NULL;
 }
 
+/*访问下一个map key*/
 static void *map_seq_next(struct seq_file *m, void *v, loff_t *pos)
 {
 	struct bpf_map *map = seq_file_to_map(m);
@@ -227,13 +232,16 @@ static void *map_seq_next(struct seq_file *m, void *v, loff_t *pos)
 	if (map_iter(m)->done)
 		return NULL;
 
+	/*区分是否首次遍历*/
 	if (unlikely(v == SEQ_START_TOKEN))
 		prev_key = NULL;
 	else
 		prev_key = key;
 
 	rcu_read_lock();
+	/*获取下一个key*/
 	if (map->ops->map_get_next_key(map, prev_key, key)) {
+	    /*遍历结束*/
 		map_iter(m)->done = true;
 		key = NULL;
 	}
@@ -241,6 +249,7 @@ static void *map_seq_next(struct seq_file *m, void *v, loff_t *pos)
 	return key;
 }
 
+/*初始化map_iter*/
 static void *map_seq_start(struct seq_file *m, loff_t *pos)
 {
 	if (map_iter(m)->done)
@@ -249,10 +258,12 @@ static void *map_seq_start(struct seq_file *m, loff_t *pos)
 	return *pos ? map_iter(m)->key : SEQ_START_TOKEN;
 }
 
+/*访问结束*/
 static void map_seq_stop(struct seq_file *m, void *v)
 {
 }
 
+/*显示当前key对应的value*/
 static int map_seq_show(struct seq_file *m, void *v)
 {
 	struct bpf_map *map = seq_file_to_map(m);
@@ -262,6 +273,7 @@ static int map_seq_show(struct seq_file *m, void *v)
 		seq_puts(m, "# WARNING!! The output is for debug purpose only\n");
 		seq_puts(m, "# WARNING!! The output format will change\n");
 	} else {
+	    /*为seq file显示map中key对应的value*/
 		map->ops->map_seq_show_elem(map, key, m);
 	}
 
@@ -286,6 +298,7 @@ static int bpffs_map_open(struct inode *inode, struct file *file)
 	if (!iter)
 		return -ENOMEM;
 
+	/*打开seq文件*/
 	err = seq_open(file, &bpffs_map_seq_ops);
 	if (err) {
 		map_iter_free(iter);
@@ -361,7 +374,7 @@ static int bpf_mkmap(struct dentry *dentry, umode_t mode, void *arg)
 
 	return bpf_mkobj_ops(dentry, mode, arg, &bpf_map_iops,
 			     bpf_map_support_seq_show(map) ?
-			     &bpffs_map_fops : &bpffs_obj_fops);
+			     &bpffs_map_fops/*支持seq file的*/ : &bpffs_obj_fops/*不支持seq file的，则返回打开文件失败*/);
 }
 
 static int bpf_mklink(struct dentry *dentry, umode_t mode, void *arg)
@@ -439,8 +452,8 @@ static int bpf_iter_link_pin_kernel(struct dentry *parent,
 	return ret;
 }
 
-static int bpf_obj_do_pin(const char __user *pathname, void *raw,
-			  enum bpf_type type)
+static int bpf_obj_do_pin(const char __user *pathname/*路径名*/, void *raw/*bpf对象*/,
+			  enum bpf_type type/*bpf对象类型*/)
 {
 	struct dentry *dentry;
 	struct inode *dir;
@@ -448,6 +461,7 @@ static int bpf_obj_do_pin(const char __user *pathname, void *raw,
 	umode_t mode;
 	int ret;
 
+	/*创建pathname对应的dentry*/
 	dentry = user_path_create(AT_FDCWD, pathname, &path, 0);
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
@@ -458,6 +472,7 @@ static int bpf_obj_do_pin(const char __user *pathname, void *raw,
 	if (ret)
 		goto out;
 
+	/*目录必须使用bpf fs*/
 	dir = d_inode(path.dentry);
 	if (dir->i_op != &bpf_dir_iops) {
 		ret = -EPERM;
@@ -469,6 +484,7 @@ static int bpf_obj_do_pin(const char __user *pathname, void *raw,
 		ret = vfs_mkobj(dentry, mode, bpf_mkprog, raw);
 		break;
 	case BPF_TYPE_MAP:
+	    /*按路径创建文件，并支持文件内容读取*/
 		ret = vfs_mkobj(dentry, mode, bpf_mkmap, raw);
 		break;
 	case BPF_TYPE_LINK:
@@ -488,6 +504,7 @@ int bpf_obj_pin_user(u32 ufd, const char __user *pathname)
 	void *raw;
 	int ret;
 
+	/*依据fd获取bpf对象*/
 	raw = bpf_fd_probe_obj(ufd, &type);
 	if (IS_ERR(raw))
 		return PTR_ERR(raw);
@@ -499,6 +516,7 @@ int bpf_obj_pin_user(u32 ufd, const char __user *pathname)
 	return ret;
 }
 
+/*通过pathname获知其对应的bpf object type*/
 static void *bpf_obj_do_get(const char __user *pathname,
 			    enum bpf_type *type, int flags)
 {

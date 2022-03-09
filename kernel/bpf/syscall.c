@@ -131,14 +131,19 @@ static struct bpf_map *find_and_alloc_map(union bpf_attr *attr)
 	/*指定map_ifindex,则采用bpf_map_offload_ops*/
 	if (attr->map_ifindex)
 		ops = &bpf_map_offload_ops;
+
+	/*申请map空间*/
 	map = ops->map_alloc(attr);
 	if (IS_ERR(map))
 		return map;
+
+	/*填充map的类型及ops*/
 	map->ops = ops;
 	map->map_type = type;
 	return map;
 }
 
+/*取hashtable对应的value大小*/
 static u32 bpf_map_value_size(const struct bpf_map *map)
 {
 	if (map->map_type == BPF_MAP_TYPE_PERCPU_HASH ||
@@ -208,8 +213,10 @@ static int bpf_map_update_value(struct bpf_map *map, struct fd f, void *key,
 	} else if (map->map_type == BPF_MAP_TYPE_QUEUE ||
 		   map->map_type == BPF_MAP_TYPE_STACK ||
 		   map->map_type == BPF_MAP_TYPE_BLOOM_FILTER) {
+	    /*针对queue,stack等执行push*/
 		err = map->ops->map_push_elem(map, value, flags);
 	} else {
+	    /*通过回调完成更新*/
 		rcu_read_lock();
 		err = map->ops->map_update_elem(map, key, value, flags);
 		rcu_read_unlock();
@@ -220,6 +227,7 @@ static int bpf_map_update_value(struct bpf_map *map, struct fd f, void *key,
 	return err;
 }
 
+/*执行bpf map查询，并返回key对应的value*/
 static int bpf_map_copy_value(struct bpf_map *map, void *key, void *value,
 			      __u64 flags)
 {
@@ -253,14 +261,17 @@ static int bpf_map_copy_value(struct bpf_map *map, void *key, void *value,
 		/* struct_ops map requires directly updating "value" */
 		err = bpf_struct_ops_map_sys_lookup_elem(map, key, value);
 	} else {
+	    /*通过map_lookup_elem或者map_lookup_elem_sys_only进行查询*/
 		rcu_read_lock();
 		if (map->ops->map_lookup_elem_sys_only)
 			ptr = map->ops->map_lookup_elem_sys_only(map, key);
 		else
 			ptr = map->ops->map_lookup_elem(map, key);
 		if (IS_ERR(ptr)) {
+		    /*查询失败*/
 			err = PTR_ERR(ptr);
 		} else if (!ptr) {
+		    /*未查询到元素*/
 			err = -ENOENT;
 		} else {
 			err = 0;
@@ -322,6 +333,7 @@ static void *__bpf_map_area_alloc(u64 size, int numa_node, bool mmapable)
 			flags, numa_node, __builtin_return_address(0));
 }
 
+/*在numa_node上申请bpf map内存size大小*/
 void *bpf_map_area_alloc(u64 size, int numa_node)
 {
 	return __bpf_map_area_alloc(size, numa_node, false);
@@ -546,6 +558,7 @@ static unsigned long bpf_map_memory_footprint(const struct bpf_map *map)
 	return round_up(map->max_entries * size, PAGE_SIZE);
 }
 
+/*显示map对应的info*/
 static void bpf_map_show_fdinfo(struct seq_file *m, struct file *filp)
 {
 	const struct bpf_map *map = filp->private_data;
@@ -695,6 +708,7 @@ static __poll_t bpf_map_poll(struct file *filp, struct poll_table_struct *pts)
 //bpf map对应的文件操作集
 const struct file_operations bpf_map_fops = {
 #ifdef CONFIG_PROC_FS
+    /*通过bpf fs向外展示bpf map的元数据*/
 	.show_fdinfo	= bpf_map_show_fdinfo,
 #endif
 	.release	= bpf_map_release,
@@ -866,6 +880,7 @@ static int map_create(union bpf_attr *attr)
 		return -EINVAL;
 
 	/* find map type and init map: hashtable vs rbtree vs bloom vs ... */
+	/*创建map*/
 	map = find_and_alloc_map(attr);
 	if (IS_ERR(map))
 		return PTR_ERR(map);
@@ -994,6 +1009,7 @@ struct bpf_map *bpf_map_get(u32 ufd)
 	return map;
 }
 
+/*利用fd获取bpf_map*/
 struct bpf_map *bpf_map_get_with_uref(u32 ufd)
 {
 	struct fd f = fdget(ufd);
@@ -1063,9 +1079,12 @@ static void *___bpf_copy_key(bpfptr_t ukey, u64 key_size)
 /* last field in 'union bpf_attr' used by this command */
 #define BPF_MAP_LOOKUP_ELEM_LAST_FIELD flags
 
+/*通过key执行指定map的查询，返回对应的value*/
 static int map_lookup_elem(union bpf_attr *attr)
 {
+    /*查询用的key*/
 	void __user *ukey = u64_to_user_ptr(attr->key);
+	/*填充用的value*/
 	void __user *uvalue = u64_to_user_ptr(attr->value);
 	int ufd = attr->map_fd;
 	struct bpf_map *map;
@@ -1080,10 +1099,13 @@ static int map_lookup_elem(union bpf_attr *attr)
 	if (attr->flags & ~BPF_F_LOCK)
 		return -EINVAL;
 
+	/*通过fd获取map*/
 	f = fdget(ufd);
 	map = __bpf_map_get(f);
 	if (IS_ERR(map))
 		return PTR_ERR(map);
+
+	/*map查权限检查*/
 	if (!(map_get_sys_perms(map, f) & FMODE_CAN_READ)) {
 		err = -EPERM;
 		goto err_put;
@@ -1095,14 +1117,17 @@ static int map_lookup_elem(union bpf_attr *attr)
 		goto err_put;
 	}
 
+	/*按map->key_size复制用户态key*/
 	key = __bpf_copy_key(ukey, map->key_size);
 	if (IS_ERR(key)) {
 		err = PTR_ERR(key);
 		goto err_put;
 	}
 
+	/*取hashtable对应的value大小*/
 	value_size = bpf_map_value_size(map);
 
+	/*申请value对应的内存*/
 	err = -ENOMEM;
 	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
@@ -1167,6 +1192,7 @@ static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 		goto err_put;
 	}
 
+	/*复制用户态key*/
 	key = ___bpf_copy_key(ukey, map->key_size);
 	if (IS_ERR(key)) {
 		err = PTR_ERR(key);
@@ -1175,15 +1201,18 @@ static int map_update_elem(union bpf_attr *attr, bpfptr_t uattr)
 
 	value_size = bpf_map_value_size(map);
 
+	/*为value申请空间*/
 	err = -ENOMEM;
 	value = kvmalloc(value_size, GFP_USER | __GFP_NOWARN);
 	if (!value)
 		goto free_key;
 
+	/*复制用户态value设置的新值*/
 	err = -EFAULT;
 	if (copy_from_bpfptr(value, uvalue, value_size) != 0)
 		goto free_value;
 
+	/*执行更新*/
 	err = bpf_map_update_value(map, f, key, value, attr->flags);
 
 free_value:
@@ -1629,6 +1658,7 @@ static int map_freeze(const union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_MAP_FREEZE))
 		return -EINVAL;
 
+	/*取map*/
 	f = fdget(ufd);
 	map = __bpf_map_get(f);
 	if (IS_ERR(map))
@@ -1655,6 +1685,7 @@ static int map_freeze(const union bpf_attr *attr)
 		goto err_put;
 	}
 
+	/*指明map frozen*/
 	WRITE_ONCE(map->frozen, true);
 err_put:
 	mutex_unlock(&map->freeze_mutex);
@@ -2417,6 +2448,7 @@ static int bpf_obj_pin(const union bpf_attr *attr)
 	return bpf_obj_pin_user(attr->bpf_fd, u64_to_user_ptr(attr->pathname));
 }
 
+/*通过pin的路径查询对应的bpf object*/
 static int bpf_obj_get(const union bpf_attr *attr)
 {
     //参数校验
@@ -2424,6 +2456,7 @@ static int bpf_obj_get(const union bpf_attr *attr)
 	    attr->file_flags & ~BPF_OBJ_FLAG_MASK)
 		return -EINVAL;
 
+	/*通过pin的路径查询对应的bpf object*/
 	return bpf_obj_get_user(u64_to_user_ptr(attr->pathname),
 				attr->file_flags);
 }
@@ -4632,26 +4665,30 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 
 	switch (cmd) {
 	case BPF_MAP_CREATE:
-	    /*bpf的map创建*/
+	    /*bpf的map创建,返回对应的fd*/
 		err = map_create(&attr);
 		break;
 	case BPF_MAP_LOOKUP_ELEM:
+	    /*通过key执行指定map的查询，返回对应的value*/
 		err = map_lookup_elem(&attr);
 		break;
 	case BPF_MAP_UPDATE_ELEM:
+	    /*执行对指定map的元素更新*/
 		err = map_update_elem(&attr, uattr);
 		break;
 	case BPF_MAP_DELETE_ELEM:
+	    /*执行对指定map的元素删除*/
 		err = map_delete_elem(&attr);
 		break;
 	case BPF_MAP_GET_NEXT_KEY:
+	    /*提供一个key,取此key对应的next key*/
 		err = map_get_next_key(&attr);
 		break;
 	case BPF_MAP_FREEZE:
 		err = map_freeze(&attr);
 		break;
 	case BPF_PROG_LOAD:
-	    /*bpf程序加载*/
+	    /*bpf程序校验及加载，返回其对应的fd*/
 		err = bpf_prog_load(&attr, uattr);
 		break;
 	case BPF_OBJ_PIN:
@@ -4756,6 +4793,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 	return err;
 }
 
+/*bpf系统调用*/
 SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, size)
 {
 	return __sys_bpf(cmd, USER_BPFPTR(uattr), size);

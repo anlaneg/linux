@@ -184,6 +184,7 @@ struct trace {
 	bool			libtraceevent_print;
 	bool			kernel_syscallchains;
 	s16			args_alignment;
+	/*是否显示时间*/
 	bool			show_tstamp;
 	bool			show_duration;
 	bool			show_zeros;
@@ -4691,13 +4692,15 @@ static int trace__parse_cgroups(const struct option *opt, const char *str, int u
 	return 0;
 }
 
+/*trace配置解析*/
 static int trace__config(const char *var, const char *value, void *arg)
 {
 	struct trace *trace = arg;
 	int err = 0;
 
 	if (!strcmp(var, "trace.add_events")) {
-		trace->perfconfig_events = strdup(value);
+		/*perf添加的events*/
+	    trace->perfconfig_events = strdup(value);
 		if (trace->perfconfig_events == NULL) {
 			pr_err("Not enough memory for %s\n", "trace.add_events");
 			return -1;
@@ -4750,6 +4753,7 @@ static void trace__exit(struct trace *trace)
 	zfree(&trace->perfconfig_events);
 }
 
+/*perf trace命令行*/
 int cmd_trace(int argc, const char **argv)
 {
 	const char *trace_usage[] = {
@@ -4871,6 +4875,7 @@ int cmd_trace(int argc, const char **argv)
 	int err = -1;
 	char bf[BUFSIZ];
 
+	/*注册信号*/
 	signal(SIGSEGV, sighandler_dump_stack);
 	signal(SIGFPE, sighandler_dump_stack);
 	signal(SIGCHLD, sig_handler);
@@ -4923,7 +4928,8 @@ int cmd_trace(int argc, const char **argv)
 	 * wrong in more detail.
 	 */
 	if (trace.perfconfig_events != NULL) {
-		struct parse_events_error parse_err;
+		/*配置了要增加的event*/
+	    struct parse_events_error parse_err;
 
 		parse_events_error__init(&parse_err);
 		err = parse_events(trace.evlist, trace.perfconfig_events, &parse_err);

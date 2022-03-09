@@ -2831,10 +2831,10 @@ static unsigned long lockless_pages_from_mm(unsigned long start,
 	return nr_pinned;
 }
 
-static int internal_get_user_pages_fast(unsigned long start,
-					unsigned long nr_pages,
+static int internal_get_user_pages_fast(unsigned long start/*起始地址*/,
+					unsigned long nr_pages/*页数*/,
 					unsigned int gup_flags,
-					struct page **pages)
+					struct page **pages/*出参*/)
 {
 	unsigned long len, end;
 	unsigned long nr_pinned;
@@ -2851,13 +2851,16 @@ static int internal_get_user_pages_fast(unsigned long start,
 	if (!(gup_flags & FOLL_FAST_ONLY))
 		might_lock_read(&current->mm->mmap_lock);
 
+	/*页起始长度*/
 	start = untagged_addr(start) & PAGE_MASK;
+	/*内存长度*/
 	len = nr_pages << PAGE_SHIFT;
 	if (check_add_overflow(start, len, &end))
 		return 0;
 	if (unlikely(!access_ok((void __user *)start, len)))
 		return -EFAULT;
 
+	//？？？？
 	nr_pinned = lockless_pages_from_mm(start, end, gup_flags, pages);
 	if (nr_pinned == nr_pages || gup_flags & FOLL_FAST_ONLY)
 		return nr_pinned;

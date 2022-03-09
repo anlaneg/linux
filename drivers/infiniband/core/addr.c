@@ -55,7 +55,9 @@
 
 struct addr_req {
 	struct list_head list;
+	/*源地址*/
 	struct sockaddr_storage src_addr;
+	/*目的地址*/
 	struct sockaddr_storage dst_addr;
 	struct rdma_dev_addr *addr;
 	void *context;
@@ -384,10 +386,10 @@ static int fetch_ha(const struct dst_entry *dst, struct rdma_dev_addr *dev_addr,
 		return dst_fetch_ha(dst, dev_addr, daddr);
 }
 
-static int addr4_resolve(struct sockaddr *src_sock,
-			 const struct sockaddr *dst_sock,
+static int addr4_resolve(struct sockaddr *src_sock/*源地址*/,
+			 const struct sockaddr *dst_sock/*目的地址*/,
 			 struct rdma_dev_addr *addr,
-			 struct rtable **prt)
+			 struct rtable **prt/*出参，路由项*/)
 {
 	struct sockaddr_in *src_in = (struct sockaddr_in *)src_sock;
 	const struct sockaddr_in *dst_in =
@@ -400,9 +402,12 @@ static int addr4_resolve(struct sockaddr *src_sock,
 	int ret;
 
 	memset(&fl4, 0, sizeof(fl4));
-	fl4.daddr = dst_ip;
-	fl4.saddr = src_ip;
+	fl4.daddr = dst_ip;/*目的ip*/
+	fl4.saddr = src_ip;/*源ip*/
+	/*指定出接口为addr对应的接口*/
 	fl4.flowi4_oif = addr->bound_dev_if;
+
+	/*查询路由*/
 	rt = ip_route_output_key(addr->net, &fl4);
 	ret = PTR_ERR_OR_ZERO(rt);
 	if (ret)
@@ -552,10 +557,10 @@ static void rdma_addr_set_net_defaults(struct rdma_dev_addr *addr)
 	addr->bound_dev_if = 0;
 }
 
-static int addr_resolve(struct sockaddr *src_in,
-			const struct sockaddr *dst_in,
-			struct rdma_dev_addr *addr,
-			bool resolve_neigh,
+static int addr_resolve(struct sockaddr *src_in/*源地址*/,
+			const struct sockaddr *dst_in/*目的地址*/,
+			struct rdma_dev_addr *addr,/*目的地址*/
+			bool resolve_neigh/*是否解析邻居表项*/,
 			bool resolve_by_gid_attr,
 			u32 seq)
 {
@@ -565,6 +570,7 @@ static int addr_resolve(struct sockaddr *src_in,
 	int ret;
 
 	if (!addr->net) {
+	    /*必须设置net namespace*/
 		pr_warn_ratelimited("%s: missing namespace\n", __func__);
 		return -EINVAL;
 	}
@@ -587,6 +593,8 @@ static int addr_resolve(struct sockaddr *src_in,
 			return ret;
 		}
 	}
+
+	/*确定路由*/
 	if (src_in->sa_family == AF_INET) {
 		ret = addr4_resolve(src_in, dst_in, addr, &rt);
 		dst = &rt->dst;
@@ -605,6 +613,7 @@ static int addr_resolve(struct sockaddr *src_in,
 	 * only if src addr translation didn't fail.
 	 */
 	if (!ret && resolve_neigh)
+	    /*邻居表项解析*/
 		ret = addr_resolve_neigh(dst, dst_in, addr, ndev_flags, seq);
 
 	if (src_in->sa_family == AF_INET)
@@ -646,6 +655,7 @@ static void process_one_req(struct work_struct *_work)
 		}
 	}
 
+	/*执行回调*/
 	req->callback(req->status, (struct sockaddr *)&req->src_addr,
 		req->addr, req->context);
 	req->callback = NULL;
@@ -663,8 +673,8 @@ static void process_one_req(struct work_struct *_work)
 	spin_unlock_bh(&lock);
 }
 
-int rdma_resolve_ip(struct sockaddr *src_addr, const struct sockaddr *dst_addr,
-		    struct rdma_dev_addr *addr, unsigned long timeout_ms,
+int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockaddr *dst_addr/*目的地址*/,
+		    struct rdma_dev_addr *addr/*rdma地址*/, unsigned long timeout_ms,
 		    void (*callback)(int status, struct sockaddr *src_addr,
 				     struct rdma_dev_addr *addr, void *context),
 		    bool resolve_by_gid_attr, void *context)
@@ -681,6 +691,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr, const struct sockaddr *dst_addr,
 	dst_in = (struct sockaddr *) &req->dst_addr;
 
 	if (src_addr) {
+	    /*如果给定了源地址，就设置源地址*/
 		if (src_addr->sa_family != dst_addr->sa_family) {
 			ret = -EINVAL;
 			goto err;
@@ -699,6 +710,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr, const struct sockaddr *dst_addr,
 	INIT_DELAYED_WORK(&req->work, process_one_req);
 	req->seq = (u32)atomic_inc_return(&ib_nl_addr_request_seq);
 
+	/*地址解析*/
 	req->status = addr_resolve(src_in, dst_in, addr, true,
 				   req->resolve_by_gid_attr, req->seq);
 	switch (req->status) {
@@ -813,9 +825,9 @@ static void resolve_cb(int status, struct sockaddr *src_addr,
 	complete(&((struct resolve_cb_context *)context)->comp);
 }
 
-int rdma_addr_find_l2_eth_by_grh(const union ib_gid *sgid,
-				 const union ib_gid *dgid,
-				 u8 *dmac, const struct ib_gid_attr *sgid_attr,
+int rdma_addr_find_l2_eth_by_grh(const union ib_gid *sgid/*源地址*/,
+				 const union ib_gid *dgid/*目的地址*/,
+				 u8 *dmac/*目的地址*/, const struct ib_gid_attr *sgid_attr,
 				 int *hoplimit)
 {
 	struct rdma_dev_addr dev_addr;
@@ -826,11 +838,12 @@ int rdma_addr_find_l2_eth_by_grh(const union ib_gid *sgid,
 	} sgid_addr, dgid_addr;
 	int ret;
 
+	/*源地址，目的地址设置*/
 	rdma_gid2ip((struct sockaddr *)&sgid_addr, sgid);
 	rdma_gid2ip((struct sockaddr *)&dgid_addr, dgid);
 
 	memset(&dev_addr, 0, sizeof(dev_addr));
-	dev_addr.net = &init_net;
+	dev_addr.net = &init_net;/*设备地址net namespace设置为init_net*/
 	dev_addr.sgid_attr = sgid_attr;
 
 	init_completion(&ctx.comp);

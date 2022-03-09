@@ -2150,7 +2150,7 @@ int ib_query_port(struct ib_device *device,
 	    /*支持iwarp协议*/
 		return iw_query_port(device, port_num, port_attr);
 	else
-	    /*查询非iwarp协议的port信息*/
+	    /*查询非iwarp协议的port信息，例如roce*/
 		return __ib_query_port(device, port_num, port_attr);
 }
 EXPORT_SYMBOL(ib_query_port);

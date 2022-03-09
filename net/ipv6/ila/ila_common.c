@@ -18,6 +18,7 @@ void ila_init_saved_csum(struct ila_params *p)
 	if (!p->locator_match.v64)
 		return;
 
+	/*计算locator与locator_match之间csum的diff*/
 	p->csum_diff = compute_csum_diff8(
 				(__be32 *)&p->locator,
 				(__be32 *)&p->locator_match);

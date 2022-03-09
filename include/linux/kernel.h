@@ -314,12 +314,14 @@ void tracing_snapshot_alloc(void);
 extern void tracing_start(void);
 extern void tracing_stop(void);
 
+/*促使编译器执行检查*/
 static inline __printf(1, 2)
 void ____trace_printk_check_format(const char *fmt, ...)
 {
 }
 #define __trace_printk_check_format(fmt, args...)			\
 do {									\
+    /*不执行，仅执行语法检查*/\
 	if (0)								\
 		____trace_printk_check_format(fmt, ##args);		\
 } while (0)
@@ -358,21 +360,24 @@ do {									\
 do {							\
 	char _______STR[] = __stringify((__VA_ARGS__));	\
 	if (sizeof(_______STR) > 3)			\
+	    /*参数__VA_ARGS__不为空，使用do_trace_printk*/\
 		do_trace_printk(fmt, ##__VA_ARGS__);	\
 	else						\
+	    /*参数__VA_ARGS__为空，直接输出*/\
 		trace_puts(fmt);			\
 } while (0)
 
 #define do_trace_printk(fmt, args...)					\
 do {									\
+    /*如果fmt为常量串，则使用,否则置为NULL*/\
 	static const char *trace_printk_fmt __used			\
 		__section("__trace_printk_fmt") =			\
 		__builtin_constant_p(fmt) ? fmt : NULL;			\
-									\
+	/*检查fmt格式*/					\
 	__trace_printk_check_format(fmt, ##args);			\
 									\
 	if (__builtin_constant_p(fmt))					\
-		__trace_bprintk(_THIS_IP_, trace_printk_fmt, ##args);	\
+		__trace_bprintk(_THIS_IP_/*当前位置*/, trace_printk_fmt, ##args);	\
 	else								\
 		__trace_printk(_THIS_IP_, fmt, ##args);			\
 } while (0)

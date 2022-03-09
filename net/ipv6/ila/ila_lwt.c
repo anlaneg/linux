@@ -20,7 +20,7 @@ struct ila_lwt {
 	struct ila_params p;
 	struct dst_cache dst_cache;
 	u32 connected : 1;
-	u32 lwt_output : 1;
+	u32 lwt_output : 1;/*是否使用output钩子*/
 };
 
 static inline struct ila_lwt *ila_lwt_lwtunnel(
@@ -29,6 +29,7 @@ static inline struct ila_lwt *ila_lwt_lwtunnel(
 	return (struct ila_lwt *)lwt->data;
 }
 
+/*隧道参数*/
 static inline struct ila_params *ila_params_lwtunnel(
 	struct lwtunnel_state *lwt)
 {
@@ -44,12 +45,13 @@ static int ila_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	int err = -EINVAL;
 
 	if (skb->protocol != htons(ETH_P_IPV6))
+	    /*只处理ipv6报文*/
 		goto drop;
 
 	if (ilwt->lwt_output)
 		ila_update_ipv6_locator(skb,
 					ila_params_lwtunnel(orig_dst->lwtstate),
-					true);
+					true/*由sir到ila转换*/);
 
 	if (rt->rt6i_flags & (RTF_GATEWAY | RTF_CACHE)) {
 		/* Already have a next hop address in route, no need for
@@ -104,13 +106,16 @@ static int ila_input(struct sk_buff *skb)
 	struct ila_lwt *ilwt = ila_lwt_lwtunnel(dst->lwtstate);
 
 	if (skb->protocol != htons(ETH_P_IPV6))
+	    /*只处理ipv6报文*/
 		goto drop;
 
 	if (!ilwt->lwt_output)
+	    /*先执行dst更换*/
 		ila_update_ipv6_locator(skb,
 					ila_params_lwtunnel(dst->lwtstate),
 					false);
 
+	/*送原来的input*/
 	return dst->lwtstate->orig_input(skb);
 
 drop:
@@ -125,6 +130,7 @@ static const struct nla_policy ila_nl_policy[ILA_ATTR_MAX + 1] = {
 	[ILA_ATTR_HOOK_TYPE] = { .type = NLA_U8, },
 };
 
+/*ila轻量隧道初始化*/
 static int ila_build_state(struct net *net, struct nlattr *nla,
 			   unsigned int family, const void *cfg,
 			   struct lwtunnel_state **ts,
@@ -139,26 +145,32 @@ static int ila_build_state(struct net *net, struct nlattr *nla,
 	u8 ident_type = ILA_ATYPE_USE_FORMAT;
 	u8 hook_type = ILA_HOOK_ROUTE_OUTPUT;
 	u8 csum_mode = ILA_CSUM_NO_ACTION;
+	/*指明是否采用output方向*/
 	bool lwt_output = true;
 	u8 eff_ident_type;
 	int ret;
 
+	/*只支持ipv6*/
 	if (family != AF_INET6)
 		return -EINVAL;
 
+	/*解析netlink*/
 	ret = nla_parse_nested_deprecated(tb, ILA_ATTR_MAX, nla,
 					  ila_nl_policy, extack);
 	if (ret < 0)
 		return ret;
 
 	if (!tb[ILA_ATTR_LOCATOR])
+	    /*必须配置locator*/
 		return -EINVAL;
 
 	iaddr = (struct ila_addr *)&cfg6->fc_dst;
 
+	/*解析配置的id格式*/
 	if (tb[ILA_ATTR_IDENT_TYPE])
 		ident_type = nla_get_u8(tb[ILA_ATTR_IDENT_TYPE]);
 
+	/*用户自定义格式时，eff_ident_type为type字段*/
 	if (ident_type == ILA_ATYPE_USE_FORMAT) {
 		/* Infer identifier type from type field in formatted
 		 * identifier.
@@ -176,6 +188,7 @@ static int ila_build_state(struct net *net, struct nlattr *nla,
 		eff_ident_type = ident_type;
 	}
 
+	/*当前仅支持LUID类型的格式*/
 	switch (eff_ident_type) {
 	case ILA_ATYPE_IID:
 		/* Don't allow ILA for IID type */
@@ -191,6 +204,7 @@ static int ila_build_state(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	/*获取配置的hook类型*/
 	if (tb[ILA_ATTR_HOOK_TYPE])
 		hook_type = nla_get_u8(tb[ILA_ATTR_HOOK_TYPE]);
 
@@ -205,6 +219,7 @@ static int ila_build_state(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	/*获取配置的csum模式*/
 	if (tb[ILA_ATTR_CSUM_MODE])
 		csum_mode = nla_get_u8(tb[ILA_ATTR_CSUM_MODE]);
 
@@ -233,12 +248,13 @@ static int ila_build_state(struct net *net, struct nlattr *nla,
 
 	p->csum_mode = csum_mode;
 	p->ident_type = ident_type;
+	/*记录配置的locator*/
 	p->locator.v64 = (__force __be64)nla_get_u64(tb[ILA_ATTR_LOCATOR]);
 
 	/* Precompute checksum difference for translation since we
 	 * know both the old locator and the new one.
 	 */
-	p->locator_match = iaddr->loc;
+	p->locator_match = iaddr->loc;/*记录目的端的loc*/
 
 	ila_init_saved_csum(p);
 
@@ -316,6 +332,7 @@ static const struct lwtunnel_encap_ops ila_encap_ops = {
 
 int ila_lwt_init(void)
 {
+    /*执行ila轻量级隧道封装*/
 	return lwtunnel_encap_add_ops(&ila_encap_ops, LWTUNNEL_ENCAP_ILA);
 }
 

@@ -397,6 +397,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_GID_ENTRY)(
 		return PTR_ERR(ucontext);
 	ib_dev = ucontext->device;
 
+	/*检查port_num是否有效*/
 	if (!rdma_is_port_valid(ib_dev, port_num))
 		return -EINVAL;
 
@@ -404,6 +405,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_GID_ENTRY)(
 	if (IS_ERR(gid_attr))
 		return PTR_ERR(gid_attr);
 
+	/*利用gid_attr->gid填充entry.gid*/
 	memcpy(&entry.gid, &gid_attr->gid, sizeof(gid_attr->gid));
 	entry.gid_index = gid_attr->index;
 	entry.port_num = gid_attr->port_num;

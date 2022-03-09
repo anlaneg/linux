@@ -774,8 +774,8 @@ static int ib_resolve_unicast_gid_dmac(struct ib_device *device,
 		return ret;
 	}
 
-	ret = rdma_addr_find_l2_eth_by_grh(&sgid_attr->gid, &grh->dgid,
-					   ah_attr->roce.dmac,
+	ret = rdma_addr_find_l2_eth_by_grh(&sgid_attr->gid/*源地址*/, &grh->dgid/*目的地址*/,
+					   ah_attr->roce.dmac/*出叁，目的mac*/,
 					   sgid_attr, &hop_limit);
 
 	grh->hop_limit = hop_limit;
@@ -1217,6 +1217,7 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	if (!dev->ops.create_qp)
 		return ERR_PTR(-EOPNOTSUPP);
 
+	/*申请qp*/
 	qp = rdma_zalloc_drv_obj_numa(dev, ib_qp);
 	if (!qp)
 		return ERR_PTR(-ENOMEM);
@@ -1286,6 +1287,7 @@ struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
 {
 	struct ib_qp *qp, *xrc_qp;
 
+	/*创建qp*/
 	if (attr->qp_type == IB_QPT_XRC_TGT)
 		qp = create_qp(dev, pd, attr, NULL, NULL, caller);
 	else
@@ -1741,6 +1743,7 @@ static int ib_resolve_eth_dmac(struct ib_device *device,
 					(char *)ah_attr->roce.dmac);
 		}
 	} else {
+	    /*ipv4地址*/
 		ret = ib_resolve_unicast_gid_dmac(device, ah_attr);
 	}
 	return ret;

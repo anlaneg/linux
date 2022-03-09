@@ -44,6 +44,7 @@ int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len
 		if (!saddr)
 			saddr = inet->mc_addr;
 	}
+    /*查询路由*/
 	fl4 = &inet->cork.fl.u.ip4;
 	rt = ip_route_connect(fl4, usin->sin_addr.s_addr, saddr,
 			      RT_CONN_FLAGS(sk), oif,
@@ -65,6 +66,7 @@ int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len
 		inet->inet_saddr = fl4->saddr;	/* Update source address */
 	if (!inet->inet_rcv_saddr) {
 		inet->inet_rcv_saddr = fl4->saddr;
+		/*rcv addr变更，执行hash位置调整*/
 		if (sk->sk_prot->rehash)
 			sk->sk_prot->rehash(sk);
 	}

@@ -23,6 +23,7 @@
  */
 struct ipv6_sr_hdr {
 	__u8	nexthdr;
+	/*头部长度*/
 	__u8	hdrlen;
 	__u8	type;
 	__u8	segments_left;
@@ -30,7 +31,7 @@ struct ipv6_sr_hdr {
 	__u8	flags;
 	__u16	tag;
 
-	struct in6_addr segments[0];
+	struct in6_addr segments[0];/*一组segments*/
 };
 
 #define SR6_FLAG1_PROTECTED	(1 << 6)

@@ -24,8 +24,8 @@ struct trace_print_flags_u64 {
 };
 
 struct tracepoint_func {
-	void *func;
-	void *data;
+	void *func;/*tracepoint函数*/
+	void *data;/*tracepoint回调函数参数*/
 	int prio;
 };
 
@@ -35,9 +35,11 @@ struct tracepoint {
 	struct static_key key;
 	struct static_call_key *static_call_key;
 	void *static_call_tramp;
+	/*指向funcs的遍历函数*/
 	void *iterator;
 	int (*regfunc)(void);
 	void (*unregfunc)(void);
+	/*指向一组注册的trace回调*/
 	struct tracepoint_func __rcu *funcs;
 };
 

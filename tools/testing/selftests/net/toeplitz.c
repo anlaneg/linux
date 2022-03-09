@@ -179,6 +179,7 @@ static void verify_rxhash(const char *pkt, uint32_t rx_hash, int cpu)
 		addrs = pkt + offsetof(struct ip6_hdr, ip6_src);
 	}
 
+	/*复制报文的4元组，srcip,dstip,srcport,dstport*/
 	memcpy(four_tuple, addrs, (addr_len * 2) + (sizeof(uint16_t) * 2));
 	rx_hash_sw = toeplitz(four_tuple, toeplitz_key);
 
@@ -446,6 +447,7 @@ static void show_silos(void)
 		fprintf(stderr, "silo %d: cpu %d\n", i, rps_silo_to_cpu[i]);
 }
 
+/*解析并填充toeplitz算法对应的key*/
 static void parse_toeplitz_key(const char *str, int slen, unsigned char *key)
 {
 	int i, ret, off;

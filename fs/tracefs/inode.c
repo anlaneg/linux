@@ -329,6 +329,7 @@ static struct dentry *start_creating(const char *name, struct dentry *parent)
 	 * have around.
 	 */
 	if (!parent)
+	    /*父目录不存在，使用root目录*/
 		parent = tracefs_mount->mnt_root;
 
 	inode_lock(parent->d_inode);
@@ -389,8 +390,8 @@ static struct dentry *end_creating(struct dentry *dentry)
  * If tracefs is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *tracefs_create_file(const char *name, umode_t mode,
-				   struct dentry *parent, void *data,
+struct dentry *tracefs_create_file(const char *name/*文件名称*/, umode_t mode,
+				   struct dentry *parent/*父目录*/, void *data,
 				   const struct file_operations *fops)
 {
 	struct dentry *dentry;
@@ -462,7 +463,7 @@ static struct dentry *__create_dir(const char *name, struct dentry *parent,
  * If tracing is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *tracefs_create_dir(const char *name, struct dentry *parent)
+struct dentry *tracefs_create_dir(const char *name/*目录名称*/, struct dentry *parent/*父节点*/)
 {
 	return __create_dir(name, parent, &simple_dir_inode_operations);
 }

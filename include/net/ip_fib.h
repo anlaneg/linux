@@ -101,7 +101,7 @@ struct fib_nh_common {
 	/*网关对应的family*/
 	u8			nhc_gw_family;
 	unsigned char		nhc_flags;
-	/*encap方式的隧道state,保存有隧道相关的元数据*/
+	/*encap方式情况下，此变量非空,用于保存有隧道相关的元数据*/
 	struct lwtunnel_state	*nhc_lwtstate;
 
 	union {
@@ -138,6 +138,7 @@ struct fib_nh {
 	/*下一跳对应出接口*/
 #define fib_nh_oif		nh_common.nhc_oif
 #define fib_nh_flags		nh_common.nhc_flags
+	/*路由中保存的轻量级隧道配置*/
 #define fib_nh_lws		nh_common.nhc_lwtstate
 #define fib_nh_scope		nh_common.nhc_scope
 	/*网关对应的family*/

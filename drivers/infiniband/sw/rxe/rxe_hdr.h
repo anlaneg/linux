@@ -427,7 +427,7 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se,
 	if (mig)
 		bth->flags |= BTH_MIG_MASK;
 	bth->pkey = cpu_to_be16(pkey);
-	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);
+	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置qpn*/
 	psn &= BTH_PSN_MASK;
 	if (ack_req)
 		psn |= BTH_ACK_MASK;

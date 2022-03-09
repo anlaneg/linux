@@ -12,6 +12,7 @@ struct circ_buf {
 	int tail;
 };
 
+/*head与tail之间差距，即ring的元素数目*/
 /* Return count in buffer.  */
 #define CIRC_CNT(head,tail,size) (((head) - (tail)) & ((size)-1))
 

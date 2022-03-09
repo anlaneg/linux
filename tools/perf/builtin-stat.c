@@ -2221,6 +2221,7 @@ static void setup_system_wide(int forks)
 	}
 }
 
+/*perf stat命令使用*/
 int cmd_stat(int argc, const char **argv)
 {
 	const char * const stat_usage[] = {

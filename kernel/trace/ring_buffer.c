@@ -537,6 +537,7 @@ struct trace_buffer {
 
 	struct mutex			mutex;
 
+	/*每个cpu一个buffer*/
 	struct ring_buffer_per_cpu	**buffers;
 
 	struct hlist_node		node;

@@ -407,6 +407,7 @@ static int bpf_build_state(struct net *net, struct nlattr *nla,
 	}
 
 	if (tb[LWT_BPF_OUT]) {
+	    /*需要redrect到output方向*/
 		newts->flags |= LWTUNNEL_STATE_OUTPUT_REDIRECT;
 		ret = bpf_parse_prog(tb[LWT_BPF_OUT], &bpf->out,
 				     BPF_PROG_TYPE_LWT_OUT);
@@ -512,6 +513,7 @@ static int bpf_encap_cmp(struct lwtunnel_state *a, struct lwtunnel_state *b)
 	       bpf_lwt_prog_cmp(&a_bpf->xmit, &b_bpf->xmit);
 }
 
+/*利用bpf做轻量级隧道*/
 static const struct lwtunnel_encap_ops bpf_encap_ops = {
 	.build_state	= bpf_build_state,
 	.destroy_state	= bpf_destroy_state,

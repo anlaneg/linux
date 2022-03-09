@@ -501,12 +501,15 @@ err1:
 	return err;
 }
 
+/*查询qp*/
 static int rxe_query_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 			int mask, struct ib_qp_init_attr *init)
 {
 	struct rxe_qp *qp = to_rqp(ibqp);
 
+	/*qp填充init*/
 	rxe_qp_to_init(qp, init);
+	/*qp填充attr*/
 	rxe_qp_to_attr(qp, attr, mask);
 
 	return 0;
@@ -807,6 +810,7 @@ err1:
 	return err;
 }
 
+/*rxe 创建cq*/
 static int rxe_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 			 struct ib_udata *udata)
 {
@@ -825,6 +829,7 @@ static int rxe_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
 	if (attr->flags)
 		return -EOPNOTSUPP;
 
+	/*cqe数目检查*/
 	err = rxe_cq_chk_attr(rxe, NULL, attr->cqe, attr->comp_vector);
 	if (err)
 		return err;
@@ -946,11 +951,12 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	return &mr->ibmr;
 }
 
+/*rxe设备注册mr*/
 static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
-				     u64 start,
-				     u64 length,
+				     u64 start,/*内存起始地址*/
+				     u64 length,/*内存长度*/
 				     u64 iova,
-				     int access, struct ib_udata *udata)
+				     int access/*访问标记*/, struct ib_udata *udata)
 {
 	int err;
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
@@ -969,7 +975,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
 
 	rxe_add_ref(pd);
 
-	/*初始化mr*/
+	/*初始化mr，pin住相应的内存页*/
 	err = rxe_mr_init_user(pd, start, length, iova, access, mr);
 	if (err)
 		goto err3;
@@ -1007,6 +1013,7 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 	/*将mr加入到pool中*/
 	rxe_add_index(mr);
 
+	/*pd引用数增加*/
 	rxe_add_ref(pd);
 
 	err = rxe_mr_init_fast(pd, max_num_sg, mr);

@@ -2061,6 +2061,7 @@ int bpf_get_perf_event_info(const struct perf_event *event, u32 *prog_id,
 	return err;
 }
 
+/*初始化irq_work*/
 static int __init send_signal_irq_work_init(void)
 {
 	int cpu;
@@ -2068,7 +2069,7 @@ static int __init send_signal_irq_work_init(void)
 
 	for_each_possible_cpu(cpu) {
 		work = per_cpu_ptr(&send_signal_work, cpu);
-		init_irq_work(&work->irq_work, do_bpf_send_signal);
+		init_irq_work(&work->irq_work, do_bpf_send_signal/*信号发送*/);
 	}
 	return 0;
 }

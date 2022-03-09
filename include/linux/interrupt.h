@@ -492,6 +492,7 @@ DECLARE_STATIC_KEY_FALSE(force_irqthreads_key);
 #define local_softirq_pending_ref irq_stat.__softirq_pending
 #endif
 
+/*读取当前CPU对应的softirq_pending_ref*/
 #define local_softirq_pending()	(__this_cpu_read(local_softirq_pending_ref))
 //设置x号软中断待处理
 #define set_softirq_pending(x)	(__this_cpu_write(local_softirq_pending_ref, (x)))
@@ -520,8 +521,8 @@ enum
 {
 	HI_SOFTIRQ=0,//最高优化级软中断
 	TIMER_SOFTIRQ,
-	NET_TX_SOFTIRQ,
-	NET_RX_SOFTIRQ,//网络收包软中断
+	NET_TX_SOFTIRQ,/*网络发包软中断*/
+	NET_RX_SOFTIRQ,/*网络收包软中断*/
 	BLOCK_SOFTIRQ,
 	IRQ_POLL_SOFTIRQ,
 	TASKLET_SOFTIRQ,
@@ -591,14 +592,16 @@ static inline struct task_struct *this_cpu_ksoftirqd(void)
 struct tasklet_struct
 {
 	struct tasklet_struct *next;
+	/*tasklet对应的调度状态*/
 	unsigned long state;
 	atomic_t count;
+	/*如果此值为真，则执行callback回调，否则执行func回调*/
 	bool use_callback;
 	union {
 		void (*func)(unsigned long data);
 		void (*callback)(struct tasklet_struct *t);
 	};
-	unsigned long data;
+	unsigned long data;/*func回调对应的参数*/
 };
 
 #define DECLARE_TASKLET(name, _callback)		\

@@ -353,6 +353,7 @@ struct ib_tm_caps {
 };
 
 struct ib_cq_init_attr {
+    /*cqe数目*/
 	unsigned int	cqe;
 	u32		comp_vector;
 	u32		flags;
@@ -390,12 +391,14 @@ struct ib_device_attr {
 	u32			hw_ver;
 	/*qp最大数目*/
 	int			max_qp;
+	/*qp_wr最大数目*/
 	int			max_qp_wr;
 	u64			device_cap_flags;
 	int			max_send_sge;
 	int			max_recv_sge;
 	int			max_sge_rd;
 	int			max_cq;
+	/*cqe最大数目*/
 	int			max_cqe;
 	int			max_mr;
 	int			max_pd;
@@ -590,6 +593,7 @@ struct rdma_hw_stats {
 	unsigned long	timestamp;
 	unsigned long	lifespan;
 	const struct rdma_stat_desc *descs;
+	/*bitmap,标记哪些counter被禁用*/
 	unsigned long	*is_disabled;
 	/*指明value数组大小*/
 	int		num_counters;
@@ -766,10 +770,11 @@ struct ib_event_handler {
 	} while (0)
 
 struct ib_global_route {
-	const struct ib_gid_attr *sgid_attr;
-	union ib_gid	dgid;
+	const struct ib_gid_attr *sgid_attr;/*源地址*/
+	union ib_gid	dgid;/*目的地址*/
 	u32		flow_label;
 	u8		sgid_index;
+	/*hop 跳数*/
 	u8		hop_limit;
 	u8		traffic_class;
 };
@@ -927,7 +932,7 @@ struct opa_ah_attr {
 };
 
 struct rdma_ah_attr {
-	struct ib_global_route	grh;
+	struct ib_global_route	grh;/*路由情况*/
 	u8			sl;
 	u8			static_rate;
 	u32			port_num;
@@ -1160,19 +1165,22 @@ struct ib_qp_init_attr {
 	void                  (*event_handler)(struct ib_event *, void *);
 
 	void		       *qp_context;
+	/*发送对应的cq*/
 	struct ib_cq	       *send_cq;
+	/*接收对应的cq*/
 	struct ib_cq	       *recv_cq;
 	struct ib_srq	       *srq;
 	struct ib_xrcd	       *xrcd;     /* XRC TGT QPs only */
 	struct ib_qp_cap	cap;
 	enum ib_sig_type	sq_sig_type;
+	/*qp类型*/
 	enum ib_qp_type		qp_type;
 	u32			create_flags;
 
 	/*
 	 * Only needed for special QP types, or when using the RW API.
 	 */
-	u32			port_num;
+	u32			port_num;/*port编号*/
 	struct ib_rwq_ind_table *rwq_ind_tbl;
 	u32			source_qpn;
 };
@@ -1580,10 +1588,12 @@ enum ib_poll_context {
 struct ib_cq {
     /*所属ib_device*/
 	struct ib_device       *device;
+	/*对应的ucq object*/
 	struct ib_ucq_object   *uobject;
 	ib_comp_handler   	comp_handler;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void                   *cq_context;
+	/*cqe数目*/
 	int               	cqe;
 	unsigned int		cqe_used;
 	atomic_t          	usecnt; /* count number of work queues */
@@ -1765,8 +1775,11 @@ struct ib_qp_security {
 struct ib_qp {
     /*所属的ib设备*/
 	struct ib_device       *device;
+	/*所属的pd*/
 	struct ib_pd	       *pd;
+	/*发送对应的cq*/
 	struct ib_cq	       *send_cq;
+	/*接收对应的cq*/
 	struct ib_cq	       *recv_cq;
 	spinlock_t		mr_lock;
 	int			mrs_used;
@@ -1780,18 +1793,22 @@ struct ib_qp {
 	atomic_t		usecnt;
 	struct list_head	open_list;
 	struct ib_qp           *real_qp;
+	/*对应的uobject*/
 	struct ib_uqp_object   *uobject;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void		       *qp_context;
 	/* sgid_attrs associated with the AV's */
 	const struct ib_gid_attr *av_sgid_attr;
 	const struct ib_gid_attr *alt_path_sgid_attr;
+	/*qp编号*/
 	u32			qp_num;
 	u32			max_write_sge;
 	u32			max_read_sge;
+	/*指出qp类型*/
 	enum ib_qp_type		qp_type;
 	struct ib_rwq_ind_table *rwq_ind_tbl;
 	struct ib_qp_security  *qp_sec;
+	/*port编号*/
 	u32			port;
 
 	bool			integrity_en;
@@ -1813,6 +1830,7 @@ struct ib_dm {
 };
 
 struct ib_mr {
+    /*所属的ib设备*/
 	struct ib_device  *device;
 	/*所属pd*/
 	struct ib_pd	  *pd;
@@ -1825,6 +1843,7 @@ struct ib_mr {
 	enum ib_mr_type	   type;
 	bool		   need_inval;
 	union {
+	    /*对应的uobj*/
 		struct ib_uobject	*uobject;	/* user */
 		struct list_head	qp_entry;	/* FR */
 	};
@@ -4367,17 +4386,21 @@ static inline int ib_check_mr_access(struct ib_device *ib_dev,
 	 */
 	if (flags & (IB_ACCESS_REMOTE_ATOMIC | IB_ACCESS_REMOTE_WRITE) &&
 	    !(flags & IB_ACCESS_LOCAL_WRITE))
+	    /*flag有remote atomic,remote write要求时，必须有local write*/
 		return -EINVAL;
 
 	if (flags & ~IB_ACCESS_SUPPORTED)
+	    /*包含了不支持的flag*/
 		return -EINVAL;
 
 	if (flags & IB_ACCESS_ON_DEMAND &&
 	    !(ib_dev->attrs.device_cap_flags & IB_DEVICE_ON_DEMAND_PAGING))
+	    /*有on demand标记时，设备必须有相应功能支持*/
 		return -EINVAL;
 	return 0;
 }
 
+/*检查内存是否可写*/
 static inline bool ib_access_writable(int access_flags)
 {
 	/*

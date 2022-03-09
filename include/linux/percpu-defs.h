@@ -250,6 +250,7 @@ do {									\
 	SHIFT_PERCPU_PTR(ptr, my_cpu_offset);				\
 })
 #else
+/*取percpu变量*/
 #define this_cpu_ptr(ptr) raw_cpu_ptr(ptr)
 #endif
 

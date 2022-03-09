@@ -31,22 +31,27 @@ int __rxe_do_task(struct rxe_task *task)
  */
 void rxe_do_task(struct tasklet_struct *t)
 {
+    /*softirq会依据中断触发此函数执行task*/
 	int cont;
 	int ret;
 	unsigned long flags;
+	/*取tasklet对应的rxe_task*/
 	struct rxe_task *task = from_tasklet(task, t, tasklet);
 
 	spin_lock_irqsave(&task->state_lock, flags);
 	switch (task->state) {
 	case TASK_STATE_START:
+	    /*start转busy状态*/
 		task->state = TASK_STATE_BUSY;
 		spin_unlock_irqrestore(&task->state_lock, flags);
 		break;
 
 	case TASK_STATE_BUSY:
+	    /*状态：busy->armed*/
 		task->state = TASK_STATE_ARMED;
 		fallthrough;
 	case TASK_STATE_ARMED:
+	    /*armed状态情况，函数返回*/
 		spin_unlock_irqrestore(&task->state_lock, flags);
 		return;
 
@@ -65,6 +70,7 @@ void rxe_do_task(struct tasklet_struct *t)
 		switch (task->state) {
 		case TASK_STATE_BUSY:
 			if (ret)
+			    /*func返回非0，状态由busy->start*/
 				task->state = TASK_STATE_START;
 			else
 				cont = 1;
@@ -86,7 +92,7 @@ void rxe_do_task(struct tasklet_struct *t)
 		spin_unlock_irqrestore(&task->state_lock, flags);
 	} while (cont);
 
-	task->ret = ret;
+	task->ret = ret;/*使用func回调返回值*/
 }
 
 int rxe_init_task(void *obj, struct rxe_task *task,

@@ -286,6 +286,7 @@ int rcu_read_lock_any_held(void);
 
 static inline int rcu_read_lock_held(void)
 {
+    /*默认持有rcu read lock*/
 	return 1;
 }
 
@@ -344,6 +345,7 @@ static inline void rcu_preempt_sleep_check(void) { }
 
 #else /* #ifdef CONFIG_PROVE_RCU */
 
+/*空实现*/
 #define RCU_LOCKDEP_WARN(c, s) do { } while (0 && (c))
 #define rcu_sleep_check() do { } while (0)
 
@@ -380,16 +382,20 @@ static inline void rcu_preempt_sleep_check(void) { }
 
 #define __rcu_access_pointer(p, space) \
 ({ \
+    /*取p的值，将值转换为指针__p1*/\
 	typeof(*p) *_________p1 = (typeof(*p) *__force)READ_ONCE(p); \
 	rcu_check_sparse(p, space); \
+	/*返回__p1*/\
 	((typeof(*p) __force __kernel *)(_________p1)); \
 })
 #define __rcu_dereference_check(p, c, space) \
 ({ \
 	/* Dependency order vs. p above. */ \
+	/*取p的值，将值转换为指针__p1*/\
 	typeof(*p) *________p1 = (typeof(*p) *__force)READ_ONCE(p); \
 	RCU_LOCKDEP_WARN(!(c), "suspicious rcu_dereference_check() usage"); \
 	rcu_check_sparse(p, space); \
+	/*返回__p1*/\
 	((typeof(*p) __force __kernel *)(________p1)); \
 })
 #define __rcu_dereference_protected(p, c, space) \

@@ -1861,6 +1861,7 @@ static int __mkroute_input(struct sk_buff *skb,
 	//设置下一跳
 	rt_set_nexthop(rth, daddr, res, fnhe, res->fi, res->type, itag,
 		       do_cache);
+	/*设置lw隧道重定向设置*/
 	lwtunnel_set_redirect(&rth->dst);
 	skb_dst_set(skb, &rth->dst);
 out:
@@ -2415,6 +2416,7 @@ local_input:
 
 		rth->dst.lwtstate = lwtstate_get(nhc->nhc_lwtstate);
 		if (lwtunnel_input_redirect(rth->dst.lwtstate)) {
+		    /*隧道报文input。提前保存旧的input*/
 			WARN_ON(rth->dst.input == lwtunnel_input);
 			rth->dst.lwtstate->orig_input = rth->dst.input;
 			rth->dst.input = lwtunnel_input;
@@ -3045,6 +3047,7 @@ static int rt_fill_info(struct net *net, __be32 dst, __be32 src,
 	if (rt->dst.dev &&
 	    nla_put_u32(skb, RTA_OIF, rt->dst.dev->ifindex))
 		goto nla_put_failure;
+	/*有轻量级隧道信息，执行encap type填充*/
 	if (rt->dst.lwtstate &&
 	    lwtunnel_fill_encap(skb, rt->dst.lwtstate, RTA_ENCAP, RTA_ENCAP_TYPE) < 0)
 		goto nla_put_failure;

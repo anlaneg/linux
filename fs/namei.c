@@ -2798,7 +2798,7 @@ EXPORT_SYMBOL(try_lookup_one_len);
  *
  * The caller must hold base->i_mutex.
  */
-struct dentry *lookup_one_len(const char *name, struct dentry *base, int len)
+struct dentry *lookup_one_len(const char *name, struct dentry *base, int len/*name字符串长度*/)
 {
 	struct dentry *dentry;
 	struct qstr this;

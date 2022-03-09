@@ -786,6 +786,7 @@ static int perf_config__init(void)
 	return config_set == NULL;
 }
 
+/*采用fn进行配置解析*/
 int perf_config_set(struct perf_config_set *set,
 		    config_fn_t fn, void *data)
 {
@@ -794,12 +795,15 @@ int perf_config_set(struct perf_config_set *set,
 	struct perf_config_section *section;
 	struct perf_config_item *item;
 
+	/*遍历set下所有section及其下所有item*/
 	perf_config_set__for_each_entry(set, section, item) {
 		char *value = item->value;
 
 		if (value) {
+		    /*将section及item合并成key*/
 			scnprintf(key, sizeof(key), "%s.%s",
 				  section->name, item->name);
+			/*调用回调，完成value的解析*/
 			ret = fn(key, value, data);
 			if (ret < 0) {
 				pr_err("Error in the given config file: wrong config key-value pair %s=%s\n",
@@ -816,6 +820,7 @@ out:
 	return ret;
 }
 
+/*采用fn进行配置解析，并将结果填充到data*/
 int perf_config(config_fn_t fn, void *data)
 {
 	if (config_set == NULL && perf_config__init())

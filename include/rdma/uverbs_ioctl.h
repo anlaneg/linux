@@ -250,11 +250,11 @@ static inline __attribute_const__ u32 uapi_key_attr(u32 id)
 	 * reduce the length of the attributes array in typical cases.
 	 */
 	if (id & UVERBS_API_NS_FLAG) {
-		id &= ~UVERBS_API_NS_FLAG;
+		id &= ~UVERBS_API_NS_FLAG;/*去除此flags*/
 		id++;
 		if (id >= 1 << (UVERBS_API_ATTR_KEY_BITS - 1))
-			return UVERBS_API_KEY_ERR;
-		id = (id << 1) | 0;
+			return UVERBS_API_KEY_ERR;/*id最大值校验*/
+		id = (id << 1) | 0;/*有ns flag,结尾添加'0'标记*/
 	} else {
 		if (id >= 1 << (UVERBS_API_ATTR_KEY_BITS - 1))
 			return UVERBS_API_KEY_ERR;

@@ -9,12 +9,14 @@
 
 static void perf_thread_map__reset(struct perf_thread_map *map, int start, int nr)
 {
+    /*初始化start位置开始的内存*/
 	size_t size = (nr - start) * sizeof(map->map[0]);
 
 	memset(&map->map[start], 0, size);
 	map->err_thread = -1;
 }
 
+/*扩大map数组空间*/
 struct perf_thread_map *perf_thread_map__realloc(struct perf_thread_map *map, int nr)
 {
 	size_t size = sizeof(*map) + sizeof(map->map[0]) * nr;

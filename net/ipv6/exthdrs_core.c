@@ -183,12 +183,12 @@ EXPORT_SYMBOL_GPL(ipv6_find_tlv);
  * stop at the AH header. If IP6_FH_F_SKIP_RH flag was passed, then this
  * function will skip all those routing headers, where segements_left was 0.
  */
-int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
-		  int target, unsigned short *fragoff, int *flags)
+int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset/*入出参，指明预期header type对应的offset或从哪个位置开始查找*/,
+		  int target/*预期的header type*/, unsigned short *fragoff, int *flags)
 {
     //跳到ipv6头部后面
 	unsigned int start = skb_network_offset(skb) + sizeof(struct ipv6hdr);
-	/*取下一层头部类型*/
+	/*取下一个头部类型*/
 	u8 nexthdr = ipv6_hdr(skb)->nexthdr;
 	bool found;
 
@@ -196,30 +196,36 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
 		*fragoff = 0;
 
 	if (*offset) {
+	    /*指明了offset情况下，自data offset位置后，提取ipv6头部*/
 		struct ipv6hdr _ip6, *ip6;
 
 		ip6 = skb_header_pointer(skb, *offset, sizeof(_ip6), &_ip6);
 		if (!ip6 || (ip6->version != 6))
 			return -EBADMSG;
+		/*自ipv6头部后面开启*/
 		start = *offset + sizeof(struct ipv6hdr);
+		/*取下一个头部类型*/
 		nexthdr = ip6->nexthdr;
 	}
 
 	do {
 		struct ipv6_opt_hdr _hdr, *hp;
 		unsigned int hdrlen;
-		found = (nexthdr == target);
+		found = (nexthdr == target);/*是否为预期的header type*/
 
+		/*nexthdr必须为扩展头*/
 		if ((!ipv6_ext_hdr(nexthdr)) || nexthdr == NEXTHDR_NONE) {
 			if (target < 0 || found)
 				break;
 			return -ENOENT;
 		}
 
+		/*取选项头*/
 		hp = skb_header_pointer(skb, start, sizeof(_hdr), &_hdr);
 		if (!hp)
 			return -EBADMSG;
 
+		/*选项头为routing*/
 		if (nexthdr == NEXTHDR_ROUTING) {
 			struct ipv6_rt_hdr _rh, *rh;
 
@@ -228,6 +234,7 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
 			if (!rh)
 				return -EBADMSG;
 
+			/*如必要，容许跳过segments_left为0的*/
 			if (flags && (*flags & IP6_FH_F_SKIP_RH) &&
 			    rh->segments_left == 0)
 				found = false;
@@ -265,12 +272,14 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset,
 			}
 			hdrlen = 8;
 		} else if (nexthdr == NEXTHDR_AUTH) {
+		    /*ah扩展头*/
 			if (flags && (*flags & IP6_FH_F_AUTH) && (target < 0))
 				break;
 			hdrlen = ipv6_authlen(hp);
 		} else
 			hdrlen = ipv6_optlen(hp);
 
+		/*未查找到，跳转到下一个header*/
 		if (!found) {
 			nexthdr = hp->nexthdr;
 			start += hdrlen;

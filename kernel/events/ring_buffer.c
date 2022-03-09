@@ -127,6 +127,7 @@ again:
 		goto again;
 	}
 
+	/*如有必要，执行唤醒*/
 	if (handle->wakeup != local_read(&rb->wakeup))
 		perf_output_wakeup(handle);
 
@@ -134,9 +135,10 @@ out:
 	preempt_enable();
 }
 
+/*如果ring buffer内容大于size,则仍有空间，否则没有空间*/
 static __always_inline bool
-ring_buffer_has_space(unsigned long head, unsigned long tail,
-		      unsigned long data_size, unsigned int size,
+ring_buffer_has_space(unsigned long head/*ring头指针*/, unsigned long tail/*ring尾指针*/,
+		      unsigned long data_size/*ring大小*/, unsigned int size/*要存放的内容*/,
 		      bool backward)
 {
 	if (!backward)
@@ -149,7 +151,7 @@ static __always_inline int
 __perf_output_begin(struct perf_output_handle *handle,
 		    struct perf_sample_data *data,
 		    struct perf_event *event, unsigned int size,
-		    bool backward)
+		    bool backward/*是否反向*/)
 {
 	struct perf_buffer *rb;
 	unsigned long tail, offset, head;
@@ -196,6 +198,7 @@ __perf_output_begin(struct perf_output_handle *handle,
 			if (unlikely(!ring_buffer_has_space(head, tail,
 							    perf_data_size(rb),
 							    size, backward)))
+			    /*没有足够的空间存放size大小*/
 				goto fail;
 		}
 
@@ -211,10 +214,12 @@ __perf_output_begin(struct perf_output_handle *handle,
 		 * See perf_output_put_handle().
 		 */
 
+		/*更新head*/
 		if (!backward)
 			head += size;
 		else
 			head -= size;
+		/*保证原子变更rb->head*/
 	} while (local_cmpxchg(&rb->head, offset, head) != offset);
 
 	if (backward) {
@@ -232,12 +237,14 @@ __perf_output_begin(struct perf_output_handle *handle,
 
 	page_shift = PAGE_SHIFT + page_order(rb);
 
+	/*记录待填充的地址及大小*/
 	handle->page = (offset >> page_shift) & (rb->nr_pages - 1);
 	offset &= (1UL << page_shift) - 1;
 	handle->addr = rb->data_pages[handle->page] + offset;
 	handle->size = (1UL << page_shift) - offset;
 
 	if (unlikely(have_lost)) {
+	    /*标记有event丢失*/
 		lost_event.header.size = sizeof(lost_event);
 		lost_event.header.type = PERF_RECORD_LOST;
 		lost_event.header.misc = 0;
@@ -287,6 +294,7 @@ int perf_output_begin(struct perf_output_handle *handle,
 unsigned int perf_output_copy(struct perf_output_handle *handle,
 		      const void *buf, unsigned int len)
 {
+    /*将buf开始的len长度，写入到handle中*/
 	return __output_copy(handle, buf, len);
 }
 

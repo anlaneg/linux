@@ -14,17 +14,20 @@ int rxe_cq_chk_attr(struct rxe_dev *rxe, struct rxe_cq *cq,
 	int count;
 
 	if (cqe <= 0) {
+	    /*cqe数目不得小于0*/
 		pr_warn("cqe(%d) <= 0\n", cqe);
 		goto err1;
 	}
 
 	if (cqe > rxe->attr.max_cqe) {
+	    /*cqe数目不得大于rxe限制*/
 		pr_warn("cqe(%d) > max_cqe(%d)\n",
 			cqe, rxe->attr.max_cqe);
 		goto err1;
 	}
 
 	if (cq) {
+	    /*cqe数目不得小于当前队列中已有元素数*/
 		count = queue_count(cq->queue, QUEUE_TYPE_TO_CLIENT);
 		if (cqe < count) {
 			pr_warn("cqe(%d) < current # elements in queue (%d)",
@@ -54,13 +57,15 @@ static void rxe_send_complete(struct tasklet_struct *t)
 	cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 }
 
-int rxe_cq_from_init(struct rxe_dev *rxe, struct rxe_cq *cq, int cqe,
+/*初始化cq*/
+int rxe_cq_from_init(struct rxe_dev *rxe, struct rxe_cq *cq/*出参，待初始化cq*/, int cqe/*cqe数目*/,
 		     int comp_vector, struct ib_udata *udata,
 		     struct rxe_create_cq_resp __user *uresp)
 {
 	int err;
 	enum queue_type type;
 
+	/*初始化队列*/
 	type = QUEUE_TYPE_TO_CLIENT;
 	cq->queue = rxe_queue_init(rxe, &cqe,
 			sizeof(struct rxe_cqe), type);
@@ -125,9 +130,11 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 		return -EBUSY;
 	}
 
+	/*取当前cq的生产者指针对应的元素*/
 	addr = queue_producer_addr(cq->queue, QUEUE_TYPE_TO_CLIENT);
+	/*填充cqe*/
 	memcpy(addr, cqe, sizeof(*cqe));
-
+	/*更新cq的生产者指针*/
 	queue_advance_producer(cq->queue, QUEUE_TYPE_TO_CLIENT);
 
 	spin_unlock_irqrestore(&cq->cq_lock, flags);
@@ -135,6 +142,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 	if ((cq->notify == IB_CQ_NEXT_COMP) ||
 	    (cq->notify == IB_CQ_SOLICITED && solicited)) {
 		cq->notify = 0;
+		/*触发task*/
 		tasklet_schedule(&cq->comp_task);
 	}
 

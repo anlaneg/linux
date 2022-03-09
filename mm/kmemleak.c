@@ -422,6 +422,7 @@ static struct kmemleak_object *mem_pool_alloc(gfp_t gfp)
 
 	/* try the slab allocator first */
 	if (object_cache) {
+	    /*自object cache中申请一个kmemleak_object*/
 		object = kmem_cache_alloc(object_cache, gfp_kmemleak_mask(gfp));
 		if (object)
 			return object;
@@ -590,7 +591,7 @@ static struct kmemleak_object *create_object(unsigned long ptr, size_t size,
 	raw_spin_lock_init(&object->lock);
 	atomic_set(&object->use_count, 1);
 	object->flags = OBJECT_ALLOCATED;
-	object->pointer = ptr;
+	object->pointer = ptr;/*percpu指针*/
 	object->size = kfence_ksize((void *)ptr) ?: size;
 	object->excess_ref = 0;
 	object->min_count = min_count;
@@ -917,6 +918,7 @@ void __ref kmemleak_alloc_percpu(const void __percpu *ptr, size_t size,
 	 * (min_count is set to 0).
 	 */
 	if (kmemleak_enabled && ptr && !IS_ERR(ptr))
+	    /*针对每个cpu创建ptr关联的obj*/
 		for_each_possible_cpu(cpu)
 			create_object((unsigned long)per_cpu_ptr(ptr, cpu),
 				      size, 0, gfp);

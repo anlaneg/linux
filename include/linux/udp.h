@@ -39,7 +39,9 @@ static inline u32 udp_hashfn(const struct net *net, u32 num, u32 mask)
 struct udp_sock {
 	/* inet_sock has to be the first member */
 	struct inet_sock inet;
+	/*记录udp port对应的hash*/
 #define udp_port_hash		inet.sk.__sk_common.skc_u16hashes[0]
+	/*记录udp port+addr对应的hash*/
 #define udp_portaddr_hash	inet.sk.__sk_common.skc_u16hashes[1]
 #define udp_portaddr_node	inet.sk.__sk_common.skc_portaddr_node
 	int		 pending;	/* Any pending frames ? */

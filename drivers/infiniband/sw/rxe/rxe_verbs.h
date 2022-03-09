@@ -61,11 +61,13 @@ struct rxe_cqe {
 struct rxe_cq {
 	struct ib_cq		ibcq;
 	struct rxe_pool_entry	pelem;
+	/*cq队列*/
 	struct rxe_queue	*queue;
 	spinlock_t		cq_lock;
 	u8			notify;
 	bool			is_dying;
 	bool			is_user;
+	/*complete对应的task*/
 	struct tasklet_struct	comp_task;
 };
 
@@ -78,11 +80,11 @@ enum wqe_state {
 };
 
 struct rxe_sq {
-	int			max_wr;
+	int			max_wr;/*seq最大wr数目*/
 	int			max_sge;
 	int			max_inline;
 	spinlock_t		sq_lock; /* guard queue */
-	struct rxe_queue	*queue;
+	struct rxe_queue	*queue;/*sq队列*/
 };
 
 struct rxe_rq {
@@ -115,7 +117,7 @@ enum rxe_qp_state {
 
 struct rxe_req_info {
 	enum rxe_qp_state	state;
-	int			wqe_index;
+	int			wqe_index;/*生产者指针*/
 	u32			psn;
 	int			opcode;
 	atomic_t		rd_atomic;
@@ -217,9 +219,12 @@ struct rxe_qp {
 	unsigned int		mtu;
 	bool			is_user;
 
+	/*所属的pd*/
 	struct rxe_pd		*pd;
 	struct rxe_srq		*srq;
+	/*send对应的cq*/
 	struct rxe_cq		*scq;
+	/*recv对应的cq*/
 	struct rxe_cq		*rcq;
 
 	enum ib_sig_type	sq_sig_type;
@@ -234,6 +239,7 @@ struct rxe_qp {
 	u32			dst_cookie;
 	u16			src_port;
 
+	/*rc,uc两种模式情况下，使用此av*/
 	struct rxe_av		pri_av;
 	struct rxe_av		alt_av;
 
@@ -289,14 +295,16 @@ enum rxe_mr_lookup_type {
 	RXE_LOOKUP_REMOTE,
 };
 
+/*一页中可以存放多少rxe_phys_buf*/
 #define RXE_BUF_PER_MAP		(PAGE_SIZE / sizeof(struct rxe_phys_buf))
 
 struct rxe_phys_buf {
-	u64      addr;
-	u64      size;
+	u64      addr;/*虚地址*/
+	u64      size;/*内存大小*/
 };
 
 struct rxe_map {
+    /*buffer地址及大小信息*/
 	struct rxe_phys_buf	buf[RXE_BUF_PER_MAP];
 };
 
@@ -306,10 +314,13 @@ struct rxe_map_set {
 	/*虚地址*/
 	u64			va;
 	u64			iova;
+	/*内存长度*/
 	size_t			length;
 	u32			offset;
 	u32			nbuf;
+	/*页大小的左移位数*/
 	int			page_shift;
+	/*页的掩码*/
 	int			page_mask;
 };
 
@@ -324,10 +335,14 @@ struct rxe_mr {
 	struct rxe_pool_entry	pelem;
 	struct ib_mr		ibmr;
 
+	/*对应的umem信息*/
 	struct ib_umem		*umem;
 
+	/*本端key*/
 	u32			lkey;
+	/*远端key*/
 	u32			rkey;
+	/*mr状态*/
 	enum rxe_mr_state	state;
 	enum ib_mr_type		type;
 	int			access;
@@ -335,6 +350,7 @@ struct rxe_mr {
 	int			map_shift;
 	int			map_mask;
 
+	/*内存总页数*/
 	u32			num_buf;
 
 	u32			max_buf;
@@ -449,11 +465,13 @@ static inline struct rxe_ucontext *to_ruc(struct ib_ucontext *uc)
 	return uc ? container_of(uc, struct rxe_ucontext, ibuc) : NULL;
 }
 
+/*转pd对应的rxe_pd*/
 static inline struct rxe_pd *to_rpd(struct ib_pd *pd)
 {
 	return pd ? container_of(pd, struct rxe_pd, ibpd) : NULL;
 }
 
+/*由ib_ah转rxe_ah*/
 static inline struct rxe_ah *to_rah(struct ib_ah *ah)
 {
 	return ah ? container_of(ah, struct rxe_ah, ibah) : NULL;

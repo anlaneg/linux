@@ -13,6 +13,7 @@
  */
 u8 rxe_get_next_key(u32 last_key)
 {
+    /*生成一个随机的与last_key不同的key*/
 	u8 key;
 
 	do {
@@ -50,7 +51,9 @@ int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
 
 static void rxe_mr_init(int access, struct rxe_mr *mr)
 {
+    /*本端key为index | 随机值*/
 	u32 lkey = mr->pelem.index << 8 | rxe_get_next_key(-1);
+	/*有remote标记，则使用rkey,否则使用0*/
 	u32 rkey = (access & IB_ACCESS_REMOTE) ? lkey : 0;
 
 	/* set ibmr->l/rkey and also copy into private l/rkey
@@ -181,6 +184,7 @@ int rxe_mr_init_user(struct rxe_pd *pd, u64 start, u64 length, u64 iova,
 	void			*vaddr;
 	int err;
 
+	/*pin请求的内存*/
 	umem = ib_umem_get(pd->ibpd.device, start, length, access);
 	if (IS_ERR(umem)) {
 		pr_warn("%s: Unable to pin memory region err = %d\n",
@@ -189,6 +193,7 @@ int rxe_mr_init_user(struct rxe_pd *pd, u64 start, u64 length, u64 iova,
 		goto err_out;
 	}
 
+	/*请求的内存总页数*/
 	num_buf = ib_umem_num_pages(umem);
 
 	rxe_mr_init(access, mr);
@@ -210,6 +215,7 @@ int rxe_mr_init_user(struct rxe_pd *pd, u64 start, u64 length, u64 iova,
 	if (length > 0) {
 		buf = map[0]->buf;
 
+		/*填充map[0]->buf*/
 		for_each_sgtable_page (&umem->sgt_append.sgt, &sg_iter, 0) {
 			if (num_buf >= RXE_BUF_PER_MAP) {
 				map++;

@@ -184,6 +184,7 @@ struct sock_common {
 		struct {
 		    /*目的端口*/
 			__be16	skc_dport;
+			/*源端口*/
 			__u16	skc_num;
 		};
 	};
@@ -1195,9 +1196,10 @@ static inline void sk_prot_clear_nulls(struct sock *sk, int size)
  * socket layer -> transport layer interface
  */
 struct proto {
-    //协议自已的close方法
+    //协议自已的close方法,一般用于将sk自表中移除，释放协议自身的资源
 	void			(*close)(struct sock *sk,
 					long timeout);
+	/*connect之前，协议钩子点*/
 	int			(*pre_connect)(struct sock *sk,
 					struct sockaddr *uaddr,
 					int addr_len);
@@ -1211,6 +1213,7 @@ struct proto {
 	struct sock *		(*accept)(struct sock *sk, int flags, int *err,
 					  bool kern);
 
+	/*协议相关的ioctl处理*/
 	int			(*ioctl)(struct sock *sk, int cmd,
 					 unsigned long arg);
 	int			(*init)(struct sock *sk);
@@ -1227,6 +1230,7 @@ struct proto {
 	int			(*compat_ioctl)(struct sock *sk,
 					unsigned int cmd, unsigned long arg);
 #endif
+	/*sendmsg协议入口*/
 	int			(*sendmsg)(struct sock *sk, struct msghdr *msg,
 					   size_t len);
 	int			(*recvmsg)(struct sock *sk, struct msghdr *msg,
@@ -1308,7 +1312,8 @@ struct proto {
 
 	union {
 		struct inet_hashinfo	*hashinfo;
-		struct udp_table	*udp_table;/*udp socket表，记录所有打开及监听的socket*/
+		/*udp socket表，记录所有打开及监听的socket*/
+		struct udp_table	*udp_table;
 		struct raw_hashinfo	*raw_hash;
 		struct smc_hashinfo	*smc_hash;
 	} h;
@@ -2139,6 +2144,7 @@ __sk_dst_set(struct sock *sk, struct dst_entry *dst)
 	dst_release(old_dst);
 }
 
+/*在socket中缓存路由项*/
 static inline void
 sk_dst_set(struct sock *sk, struct dst_entry *dst)
 {

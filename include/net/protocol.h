@@ -89,6 +89,7 @@ struct inet_protosw {
 	unsigned short	 protocol; /* This is the L4 protocol number.  */
 
 	struct proto	 *prot;
+	/*协议的操作函数*/
 	const struct proto_ops *ops;
   
 	unsigned char	 flags;      /* See INET_PROTOSW_* below.  */

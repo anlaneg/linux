@@ -12,7 +12,7 @@
 /*
  * Tracepoint for free an sk_buff:
  */
-TRACE_EVENT(kfree_skb,
+TRACE_EVENT(kfree_skb/*针对kfree_skb的trace*/,
 
 	TP_PROTO(struct sk_buff *skb, void *location),
 

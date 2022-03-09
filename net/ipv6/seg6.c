@@ -25,6 +25,7 @@
 #include <net/seg6_hmac.h>
 #endif
 
+/*对srh进行校验*/
 bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 {
 	unsigned int tlv_offset;
@@ -38,6 +39,7 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 		return false;
 
 	if (!reduced && srh->segments_left > srh->first_segment) {
+	    /**/
 		return false;
 	} else {
 		max_last_entry = (srh->hdrlen / 2) - 1;

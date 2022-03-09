@@ -15,6 +15,7 @@
 #include "rxe_queue.h"
 #include "rxe_task.h"
 
+/*能力检查*/
 static int rxe_qp_chk_cap(struct rxe_dev *rxe, struct ib_qp_cap *cap,
 			  int has_srq)
 {
@@ -62,6 +63,7 @@ int rxe_qp_chk_init(struct rxe_dev *rxe, struct ib_qp_init_attr *init)
 	struct rxe_port *port;
 	int port_num = init->port_num;
 
+	/*rxe支持以下qp类型*/
 	switch (init->qp_type) {
 	case IB_QPT_SMI:
 	case IB_QPT_GSI:
@@ -73,11 +75,13 @@ int rxe_qp_chk_init(struct rxe_dev *rxe, struct ib_qp_init_attr *init)
 		return -EOPNOTSUPP;
 	}
 
+	/*必须指明send,recv的cq*/
 	if (!init->recv_cq || !init->send_cq) {
 		pr_warn("missing cq\n");
 		goto err1;
 	}
 
+	/*rxe能力检查*/
 	if (rxe_qp_chk_cap(rxe, cap, !!init->srq))
 		goto err1;
 
@@ -165,8 +169,10 @@ static void rxe_qp_init_misc(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	qp->sq_sig_type		= init->sq_sig_type;
 	qp->attr.path_mtu	= 1;
+	/*初始化mtu*/
 	qp->mtu			= ib_mtu_enum_to_int(qp->attr.path_mtu);
 
+	/*qp number设置*/
 	qpn			= qp->pelem.index;
 	port			= &rxe->port;
 
@@ -249,6 +255,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 		return err;
 	}
 
+	/*生产者指针*/
 	qp->req.wqe_index = queue_get_producer(qp->sq.queue,
 					       QUEUE_TYPE_FROM_CLIENT);
 
@@ -350,10 +357,12 @@ int rxe_qp_from_init(struct rxe_dev *rxe, struct rxe_qp *qp, struct rxe_pd *pd,
 
 	rxe_qp_init_misc(rxe, qp, init);
 
+	/*初始化req*/
 	err = rxe_qp_init_req(rxe, qp, init, udata, uresp);
 	if (err)
 		goto err1;
 
+	/*初始化resp*/
 	err = rxe_qp_init_resp(rxe, qp, init, udata, uresp);
 	if (err)
 		goto err2;

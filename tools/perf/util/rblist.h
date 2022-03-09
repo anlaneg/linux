@@ -21,10 +21,14 @@
 
 struct rblist {
 	struct rb_root_cached entries;
+	/*元素总数*/
 	unsigned int   nr_entries;
 
+	/*比对回调*/
 	int (*node_cmp)(struct rb_node *rbn, const void *entry);
+	/*新建节点回调*/
 	struct rb_node *(*node_new)(struct rblist *rlist, const void *new_entry);
+	/*节点删除回调*/
 	void (*node_delete)(struct rblist *rblist, struct rb_node *rb_node);
 };
 

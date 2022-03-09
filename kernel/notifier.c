@@ -226,7 +226,7 @@ NOKPROBE_SYMBOL(atomic_notifier_call_chain);
  *	Currently always returns zero.
  */
 int blocking_notifier_chain_register(struct blocking_notifier_head *nh,
-		struct notifier_block *n)
+		struct notifier_block *n/*通知用block*/)
 {
 	int ret;
 

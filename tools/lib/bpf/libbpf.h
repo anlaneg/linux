@@ -170,6 +170,7 @@ bpf_object__find_program_by_name(const struct bpf_object *obj,
 
 LIBBPF_API LIBBPF_DEPRECATED_SINCE(0, 7, "track bpf_objects in application code instead")
 struct bpf_object *bpf_object__next(struct bpf_object *prev);
+/*遍历bpf_objects_list链表*/
 #define bpf_object__for_each_safe(pos, tmp)			\
 	for ((pos) = bpf_object__next(NULL),		\
 		(tmp) = bpf_object__next(pos);		\

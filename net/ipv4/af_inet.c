@@ -176,10 +176,12 @@ static int inet_autobind(struct sock *sk)
 	lock_sock(sk);
 	inet = inet_sk(sk);
 	if (!inet->inet_num) {
+	    /*没有指定源端口，这里为其分配并绑定一个端口*/
 		if (sk->sk_prot->get_port(sk, 0)) {
 			release_sock(sk);
 			return -EAGAIN;
 		}
+		/*使用分配的端口*/
 		inet->inet_sport = htons(inet->inet_num);
 	}
 	release_sock(sk);
@@ -373,6 +375,7 @@ lookup_protocol:
 
 	sk_refcnt_debug_inc(sk);
 
+	/*有协议号，执行表插入*/
 	if (inet->inet_num) {
 		/* It assumes that any protocol which allows
 		 * the user to assign a number at socket
@@ -399,6 +402,7 @@ lookup_protocol:
 	}
 
 	if (!kern) {
+	    /*非kernel socket,执行cgroup对应的bpf钩子程序*/
 		err = BPF_CGROUP_RUN_PROG_INET_SOCK(sk);
 		if (err) {
 			sk_common_release(sk);
@@ -551,7 +555,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
-		//检查此srcport是否已占用
+		//检查此srcport是否可占用
 		if (sk->sk_prot->get_port(sk, snum)) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
 			err = -EADDRINUSE;
@@ -598,6 +602,7 @@ int inet_dgram_connect(struct socket *sock, struct sockaddr *uaddr,
 	if (uaddr->sa_family == AF_UNSPEC)
 		return sk->sk_prot->disconnect(sk, flags);
 
+	/*如有必要执行pre_connect进行bpf处理*/
 	if (BPF_CGROUP_PRE_CONNECT_ENABLED(sk)) {
 		err = sk->sk_prot->pre_connect(sk, uaddr, addr_len);
 		if (err)
@@ -686,6 +691,7 @@ int __inet_stream_connect(struct socket *sock, struct sockaddr *uaddr,
 		if (sk->sk_state != TCP_CLOSE)
 			goto out;
 
+		/*如有必要执行pre_connect进行bpf处理*/
 		if (BPF_CGROUP_PRE_CONNECT_ENABLED(sk)) {
 			err = sk->sk_prot->pre_connect(sk, uaddr, addr_len);
 			if (err)
@@ -857,7 +863,7 @@ int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 	if (unlikely(inet_send_prepare(sk)))
 		return -EAGAIN;
 
-	//快速分辨tcp,udp的sendmsg
+	//调用protocol执行sendmsg,快速分辨tcp,udp的sendmsg
 	return INDIRECT_CALL_2(sk->sk_prot->sendmsg, tcp_sendmsg, udp_sendmsg,
 			       sk, msg, size);
 }
@@ -1015,6 +1021,7 @@ int inet_ioctl(struct socket *sock, unsigned int cmd, unsigned long arg)
 		err = devinet_ioctl(net, cmd, &ifr);
 		break;
 	default:
+	    /*socket协议相关的ioctl*/
 		if (sk->sk_prot->ioctl)
 			err = sk->sk_prot->ioctl(sk, cmd, arg);
 		else
@@ -1199,7 +1206,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
-               //注册 ip raw socket
+         //注册 ip raw socket
 	       .type =       SOCK_RAW,
 	       .protocol =   IPPROTO_IP,	/* wild card */
 	       .prot =       &raw_prot,

@@ -46,7 +46,9 @@
 
 #define READ_ONCE(x)							\
 ({									\
+    /*x需要是可一次读取的数据类型*/\
 	compiletime_assert_rwonce_type(x);				\
+	/*返回x对应的值*/\
 	__READ_ONCE(x);							\
 })
 

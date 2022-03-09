@@ -17,13 +17,13 @@ static const struct genl_ops ila_nl_ops[] = {
 	{
 		.cmd = ILA_CMD_ADD,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.doit = ila_xlat_nl_cmd_add_mapping,
+		.doit = ila_xlat_nl_cmd_add_mapping,/*ila信息添加*/
 		.flags = GENL_ADMIN_PERM,
 	},
 	{
 		.cmd = ILA_CMD_DEL,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.doit = ila_xlat_nl_cmd_del_mapping,
+		.doit = ila_xlat_nl_cmd_del_mapping,/*ila信息删除*/
 		.flags = GENL_ADMIN_PERM,
 	},
 	{

@@ -718,6 +718,7 @@ int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount, int *c
 	struct vfsmount *mnt = NULL;
 	spin_lock(&pin_fs_lock);
 	if (unlikely(!*mount)) {
+	    /*此文件系统未mount,执行mount*/
 		spin_unlock(&pin_fs_lock);
 		mnt = vfs_kern_mount(type, SB_KERNMOUNT, type->name, NULL);
 		if (IS_ERR(mnt))

@@ -307,7 +307,9 @@ void dump_stack(void) {}
 void sighandler_dump_stack(int sig)
 {
 	psignal(sig, "perf");
+	/*显示堆栈*/
 	dump_stack();
+	/*更改为默认回调，触发此信号*/
 	signal(sig, SIG_DFL);
 	raise(sig);
 }

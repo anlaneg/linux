@@ -72,7 +72,9 @@ void perf_config__refresh(void);
  * @item: struct perf_config_item iterator
  */
 #define perf_config_set__for_each_entry(set, section, item)			\
+    /*遍历section*/\
 	perf_config_sections__for_each_entry(&set->sections, section)		\
+	/*遍历item*/\
 	perf_config_items__for_each_entry(&section->items, item)
 
 #endif /* __PERF_CONFIG_H */

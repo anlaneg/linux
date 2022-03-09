@@ -43,6 +43,7 @@ extern unsigned long __per_cpu_offset[NR_CPUS];
  * translations for raw_cpu_ptr().
  */
 #ifndef arch_raw_cpu_ptr
+/*算上当前cpu的偏移，获得对应per cpu变量的指针*/
 #define arch_raw_cpu_ptr(ptr) SHIFT_PERCPU_PTR(ptr, __my_cpu_offset)
 #endif
 

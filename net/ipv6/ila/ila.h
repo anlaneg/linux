@@ -69,9 +69,9 @@ static inline struct ila_addr *ila_a2i(struct in6_addr *addr)
 }
 
 struct ila_params {
-	struct ila_locator locator;
-	struct ila_locator locator_match;
-	__wsum csum_diff;
+	struct ila_locator locator;/*位置信息*/
+	struct ila_locator locator_match;/*位置匹配信息*/
+	__wsum csum_diff;/*locator_match与locator在Csum之间的diff*/
 	u8 csum_mode;
 	u8 ident_type;
 };
