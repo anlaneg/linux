@@ -204,6 +204,7 @@ struct mlx5e_encap_entry {
 	//encap后的输出设备
 	struct net_device *out_dev;
 	int route_dev_ifindex;
+	/*tunnel操作函数集*/
 	struct mlx5e_tc_tunnel *tunnel;
 	//隧道封装后，变更为vxlan类型
 	int reformat_type;

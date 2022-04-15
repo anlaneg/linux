@@ -4899,6 +4899,7 @@ int cmd_trace(int argc, const char **argv)
 	 */
 	rlimit__bump_memlock();
 
+	/*解析配置，填充trace结构体*/
 	err = perf_config(trace__config, &trace);
 	if (err)
 		goto out;
@@ -4955,6 +4956,7 @@ int cmd_trace(int argc, const char **argv)
 	if (evsel) {
 		trace.syscalls.events.augmented = evsel;
 
+		/*通过名称查找tracepoint*/
 		evsel = evlist__find_tracepoint_by_name(trace.evlist, "raw_syscalls:sys_enter");
 		if (evsel == NULL) {
 			pr_err("ERROR: raw_syscalls:sys_enter not found in the augmented BPF object\n");

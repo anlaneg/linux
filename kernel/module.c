@@ -349,12 +349,14 @@ EXPORT_SYMBOL(__module_put_and_exit);
 /* Find a module section: 0 means not found. */
 static unsigned int find_sec(const struct load_info *info, const char *name)
 {
+    /*查找名称为name的section*/
 	unsigned int i;
 
 	for (i = 1; i < info->hdr->e_shnum; i++) {
 		Elf_Shdr *shdr = &info->sechdrs[i];
 		/* Alloc bit cleared means "ignore it." */
 		if ((shdr->sh_flags & SHF_ALLOC)
+		        /*比对此section的名称*/
 		    && strcmp(info->secstrings + shdr->sh_name, name) == 0)
 			return i;
 	}
@@ -2535,42 +2537,48 @@ static void set_license(struct module *mod, const char *license)
 static char *next_string(char *string, unsigned long *secsize)
 {
 	/* Skip non-zero chars */
+    /*先找'\0'*/
 	while (string[0]) {
 		string++;
 		if ((*secsize)-- <= 1)
 			return NULL;
 	}
 
+	/*再跳过padding的'\0'*/
 	/* Skip any zero padding. */
 	while (!string[0]) {
 		string++;
 		if ((*secsize)-- <= 1)
 			return NULL;
 	}
+	/*返回string*/
 	return string;
 }
 
+/*modinfo段是由多个kv字符串组成的段，这里通过查询tag(k),返回其对应的value*/
 static char *get_next_modinfo(const struct load_info *info, const char *tag,
 			      char *prev)
 {
 	char *p;
 	unsigned int taglen = strlen(tag);
+	/*取info段*/
 	Elf_Shdr *infosec = &info->sechdrs[info->index.info];
-	unsigned long size = infosec->sh_size;
+	unsigned long size = infosec->sh_size;/*info段长度*/
 
 	/*
 	 * get_modinfo() calls made before rewrite_section_headers()
 	 * must use sh_offset, as sh_addr isn't set!
 	 */
-	char *modinfo = (char *)info->hdr + infosec->sh_offset;
+	char *modinfo = (char *)info->hdr + infosec->sh_offset;/*modinfo段起始位置*/
 
 	if (prev) {
 		size -= prev - modinfo;
 		modinfo = next_string(prev, &size);
 	}
 
-	for (p = modinfo; p; p = next_string(p, &size)) {
+	for (p = modinfo; p; p = next_string(p, &size)/*查找下一个string*/) {
 		if (strncmp(p, tag, taglen) == 0 && p[taglen] == '=')
+		    /*遇到相应的tag,返回其对应的value*/
 			return p + taglen + 1;
 	}
 	return NULL;
@@ -2578,6 +2586,7 @@ static char *get_next_modinfo(const struct load_info *info, const char *tag,
 
 static char *get_modinfo(const struct load_info *info, const char *tag)
 {
+    /*从段首进行查询指定tag，返回其对应的值*/
 	return get_next_modinfo(info, tag, NULL);
 }
 
@@ -2897,8 +2906,9 @@ static int module_sig_check(struct load_info *info, int flags)
 	if (flags == 0 &&
 	    info->len > markerlen &&
 	    memcmp(mod + info->len - markerlen, MODULE_SIG_STRING, markerlen) == 0) {
+	    /*mod以MODULE_SIG_STRING结尾*/
 		/* We truncate the module to discard the signature */
-		info->len -= markerlen;
+		info->len -= markerlen;/*丢弃此内容*/
 		err = mod_verify_sig(mod, info);
 		if (!err) {
 			info->sig_ok = true;
@@ -2958,6 +2968,7 @@ static int validate_section_offset(struct load_info *info, Elf_Shdr *shdr)
 	 * too large.
 	 */
 	secend = shdr->sh_offset + shdr->sh_size;
+	/*section边界有效性检查*/
 	if (secend < shdr->sh_offset || secend > info->len)
 		return -ENOEXEC;
 
@@ -2976,20 +2987,26 @@ static int elf_validity_check(struct load_info *info)
 	Elf_Shdr *shdr, *strhdr;
 	int err;
 
+	/*elf文件长度检查*/
 	if (info->len < sizeof(*(info->hdr))) {
 		pr_err("Invalid ELF header len %lu\n", info->len);
 		goto no_exec;
 	}
 
+	/*必须为elf文件*/
 	if (memcmp(info->hdr->e_ident, ELFMAG, SELFMAG) != 0) {
 		pr_err("Invalid ELF header magic: != %s\n", ELFMAG);
 		goto no_exec;
 	}
+
+	/*必须为ET_REL类型*/
 	if (info->hdr->e_type != ET_REL) {
 		pr_err("Invalid ELF header type: %u != %u\n",
 		       info->hdr->e_type, ET_REL);
 		goto no_exec;
 	}
+
+	/*体系检查*/
 	if (!elf_check_arch(info->hdr)) {
 		pr_err("Invalid architecture in ELF header: %u\n",
 		       info->hdr->e_machine);
@@ -3008,10 +3025,12 @@ static int elf_validity_check(struct load_info *info)
 	if (info->hdr->e_shoff >= info->len
 	    || (info->hdr->e_shnum * sizeof(Elf_Shdr) >
 		info->len - info->hdr->e_shoff)) {
+	    /*长度检查失败*/
 		pr_err("Invalid ELF section header overflow\n");
 		goto no_exec;
 	}
 
+	/*指向section header*/
 	info->sechdrs = (void *)info->hdr + info->hdr->e_shoff;
 
 	/*
@@ -3025,6 +3044,7 @@ static int elf_validity_check(struct load_info *info)
 		goto no_exec;
 	}
 
+	/*取string section*/
 	strhdr = &info->sechdrs[info->hdr->e_shstrndx];
 	err = validate_section_offset(info, strhdr);
 	if (err < 0) {
@@ -3050,11 +3070,13 @@ static int elf_validity_check(struct load_info *info)
 	if (info->sechdrs[0].sh_type != SHT_NULL
 	    || info->sechdrs[0].sh_size != 0
 	    || info->sechdrs[0].sh_addr != 0) {
+	    /*section 0长度必须为0*/
 		pr_err("ELF Spec violation: section 0 type(%d)!=SH_NULL or non-zero len or addr\n",
 		       info->sechdrs[0].sh_type);
 		goto no_exec;
 	}
 
+	/*遍历所有section*/
 	for (i = 1; i < info->hdr->e_shnum; i++) {
 		shdr = &info->sechdrs[i];
 		switch (shdr->sh_type) {
@@ -3062,6 +3084,7 @@ static int elf_validity_check(struct load_info *info)
 		case SHT_NOBITS:
 			continue;
 		case SHT_SYMTAB:
+		    /*符号表对应的段*/
 			if (shdr->sh_link == SHN_UNDEF
 			    || shdr->sh_link >= info->hdr->e_shnum) {
 				pr_err("Invalid ELF sh_link!=SHN_UNDEF(%d) or (sh_link(%d) >= hdr->e_shnum(%d)\n",
@@ -3071,6 +3094,7 @@ static int elf_validity_check(struct load_info *info)
 			}
 			fallthrough;
 		default:
+		    /*检查此段边界*/
 			err = validate_section_offset(info, shdr);
 			if (err < 0) {
 				pr_err("Invalid ELF section in module (section %u type %u)\n",
@@ -3198,7 +3222,7 @@ static int rewrite_section_headers(struct load_info *info, int flags)
 		 * Mark all sections sh_addr with their address in the
 		 * temporary image.
 		 */
-		shdr->sh_addr = (size_t)info->hdr + shdr->sh_offset;
+		shdr->sh_addr = (size_t)info->hdr + shdr->sh_offset;/*更新section 虚地址*/
 
 	}
 
@@ -3224,6 +3248,7 @@ static int setup_load_info(struct load_info *info, int flags)
 	/* Try to find a name early so we can log errors with a module name */
 	info->index.info = find_sec(info, ".modinfo");
 	if (info->index.info)
+	    /*取name对应的tag*/
 		info->name = get_modinfo(info, "name");
 
 	/* Find internal symbols and strings. */
@@ -3243,6 +3268,7 @@ static int setup_load_info(struct load_info *info, int flags)
 		return -ENOEXEC;
 	}
 
+	/*指向.gnu.linkonce.this_module段*/
 	info->index.mod = find_sec(info, ".gnu.linkonce.this_module");
 	if (!info->index.mod) {
 		pr_warn("%s: No module found in object\n",
@@ -3550,8 +3576,10 @@ static bool blacklisted(const char *module_name)
 	size_t len;
 
 	if (!module_blacklist)
+	    /*blacklist为空，返回false*/
 		return false;
 
+	/*检查module名称是否包含在module_blacklist中*/
 	for (p = module_blacklist; *p; p += len) {
 		len = strcspn(p, ",");
 		if (strlen(module_name) == len && !memcmp(module_name, p, len))
@@ -3987,6 +4015,7 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	 */
 	err = elf_validity_check(info);
 	if (err)
+	    /*elf头部校验*/
 		goto free_copy;
 
 	/*
@@ -4002,11 +4031,13 @@ static int load_module(struct load_info *info, const char __user *uargs,
 	 * if it's blacklisted.
 	 */
 	if (blacklisted(info->name)) {
+	    /*模块被指定在blacklist中*/
 		err = -EPERM;
 		pr_err("Module %s is blacklisted\n", info->name);
 		goto free_copy;
 	}
 
+	/*更新section虚地址*/
 	err = rewrite_section_headers(info, flags);
 	if (err)
 		goto free_copy;
@@ -4207,6 +4238,7 @@ SYSCALL_DEFINE3(init_module, void __user *, umod,
 	return load_module(&info, uargs, 0);
 }
 
+/*通过file初始化module*/
 SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 {
 	struct load_info info = { };
@@ -4219,10 +4251,12 @@ SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 
 	pr_debug("finit_module: fd=%d, uargs=%p, flags=%i\n", fd, uargs, flags);
 
+	/*遇到不认识的flags,报错*/
 	if (flags & ~(MODULE_INIT_IGNORE_MODVERSIONS
 		      |MODULE_INIT_IGNORE_VERMAGIC))
 		return -EINVAL;
 
+	/*加载文件内容到hdr对应的buffer中（自动申请），返回文件内容长度*/
 	err = kernel_read_file_from_fd(fd, 0, &hdr, INT_MAX, NULL,
 				       READING_MODULE);
 	if (err < 0)
@@ -4230,6 +4264,7 @@ SYSCALL_DEFINE3(finit_module, int, fd, const char __user *, uargs, int, flags)
 	info.hdr = hdr;
 	info.len = err;
 
+	/*加载module*/
 	return load_module(&info, uargs, flags);
 }
 

@@ -45,6 +45,7 @@ int kernel_read_file(struct file *file, loff_t offset, void **buf,
 	if (offset != 0 && (!*buf || !file_size))
 		return -EINVAL;
 
+	/*必须为普通文件*/
 	if (!S_ISREG(file_inode(file)->i_mode))
 		return -EINVAL;
 
@@ -59,11 +60,13 @@ int kernel_read_file(struct file *file, loff_t offset, void **buf,
 	}
 	/* The file is too big for sane activities. */
 	if (i_size > INT_MAX) {
+	    /*文件内容过大*/
 		ret = -EFBIG;
 		goto out;
 	}
 	/* The entire file cannot be read in one buffer. */
 	if (!file_size && offset == 0 && i_size > buf_size) {
+	    /*未指定file_size,从0开始读取时，文件内容不得大于buf_size*/
 		ret = -EFBIG;
 		goto out;
 	}
@@ -74,9 +77,11 @@ int kernel_read_file(struct file *file, loff_t offset, void **buf,
 		goto out;
 
 	if (file_size)
+	    /*指明文件大小*/
 		*file_size = i_size;
 
 	if (!*buf)
+	    /*申请足够buffer*/
 		*buf = allocated = vmalloc(i_size);
 	if (!*buf) {
 		ret = -ENOMEM;
@@ -175,6 +180,7 @@ int kernel_read_file_from_fd(int fd, loff_t offset, void **buf,
 			     size_t buf_size, size_t *file_size,
 			     enum kernel_read_file_id id)
 {
+    /*获取文件*/
 	struct fd f = fdget(fd);
 	int ret = -EBADF;
 

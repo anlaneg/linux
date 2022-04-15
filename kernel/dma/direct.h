@@ -84,7 +84,9 @@ static inline dma_addr_t dma_direct_map_page(struct device *dev,
 		struct page *page, unsigned long offset, size_t size,
 		enum dma_data_direction dir, unsigned long attrs)
 {
+    /*物理地址*/
 	phys_addr_t phys = page_to_phys(page) + offset;
+	/*转换为dma地址*/
 	dma_addr_t dma_addr = phys_to_dma(dev, phys);
 
 	if (is_swiotlb_force_bounce(dev))

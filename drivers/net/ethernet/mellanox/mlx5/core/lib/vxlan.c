@@ -163,7 +163,7 @@ struct mlx5_vxlan *mlx5_vxlan_create(struct mlx5_core_dev *mdev)
 	hash_init(vxlan->htable);
 
 	/* Hardware adds 4789 (IANA_VXLAN_UDP_PORT) by default */
-	mlx5_vxlan_add_port(vxlan, IANA_VXLAN_UDP_PORT);
+	mlx5_vxlan_add_port(vxlan, IANA_VXLAN_UDP_PORT);/*默认添加4789到vxlan hashtable中*/
 
 	return vxlan;
 }

@@ -2900,6 +2900,7 @@ static int devlink_nl_cmd_eswitch_set_doit(struct sk_buff *skb,
 			return err;
 	}
 
+	/*处理eswitch inline 模式*/
 	if (info->attrs[DEVLINK_ATTR_ESWITCH_INLINE_MODE]) {
 		if (!ops->eswitch_inline_mode_set)
 			return -EOPNOTSUPP;
@@ -2911,6 +2912,7 @@ static int devlink_nl_cmd_eswitch_set_doit(struct sk_buff *skb,
 			return err;
 	}
 
+	/*处理eswitch encap 模式*/
 	if (info->attrs[DEVLINK_ATTR_ESWITCH_ENCAP_MODE]) {
 		if (!ops->eswitch_encap_mode_set)
 			return -EOPNOTSUPP;

@@ -2012,15 +2012,18 @@ static int ethtool_phys_id(struct net_device *dev, void __user *useraddr)
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 	int rc;
 
+	/*网卡驱动需要提供set_phys_id函数*/
 	if (!ops->set_phys_id)
 		return -EOPNOTSUPP;
 
 	if (busy)
+	    /*正在执行，直接返回busy*/
 		return -EBUSY;
 
 	if (copy_from_user(&id, useraddr, sizeof(id)))
 		return -EFAULT;
 
+	/*指明active*/
 	rc = ops->set_phys_id(dev, ETHTOOL_ID_ACTIVE);
 	if (rc < 0)
 		return rc;
@@ -2034,6 +2037,7 @@ static int ethtool_phys_id(struct net_device *dev, void __user *useraddr)
 
 	if (rc == 0) {
 		/* Driver will handle this itself */
+	    /*驱动会自已控制，我们调度离开，超时后再回来进行关闭*/
 		schedule_timeout_interruptible(
 			id.data ? (id.data * HZ) : MAX_SCHEDULE_TIMEOUT);
 	} else {
@@ -2042,12 +2046,14 @@ static int ethtool_phys_id(struct net_device *dev, void __user *useraddr)
 		u64 count = n * id.data, i = 0;
 
 		do {
+		    /*指明id灯亮及关闭*/
 			rtnl_lock();
 			rc = ops->set_phys_id(dev,
 				    (i++ & 1) ? ETHTOOL_ID_OFF : ETHTOOL_ID_ON);
 			rtnl_unlock();
 			if (rc)
 				break;
+			/*调度离开，超时后回来*/
 			schedule_timeout_interruptible(interval);
 		} while (!signal_pending(current) && (!id.data || i < count));
 	}
@@ -2902,6 +2908,7 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 		rc = ethtool_get_strings(dev, useraddr);
 		break;
 	case ETHTOOL_PHYS_ID:
+	    /*标记网卡，进行闪烁*/
 		rc = ethtool_phys_id(dev, useraddr);
 		break;
 	case ETHTOOL_GSTATS:

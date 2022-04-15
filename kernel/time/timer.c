@@ -834,7 +834,7 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 
 	//将entry自list中移除
 	__hlist_del(entry);
-	//按要求清楚entry的pprev
+	//按要求清除entry的pprev
 	if (clear_pending)
 		entry->pprev = NULL;
 	//将entry的next置为一个magic number
@@ -1407,6 +1407,7 @@ int del_timer_sync(struct timer_list *timer)
 EXPORT_SYMBOL(del_timer_sync);
 #endif
 
+/*执尾timer回调*/
 static void call_timer_fn(struct timer_list *timer,
 			  void (*fn)(struct timer_list *),
 			  unsigned long baseclk)
@@ -1478,7 +1479,7 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 		//依flag不同，解除锁，并调用timer的回调函数
 		if (timer->flags & TIMER_IRQSAFE) {
 			raw_spin_unlock(&base->lock);
-			call_timer_fn(timer, fn, baseclk);
+			call_timer_fn(timer, fn, baseclk);/*执行timer*/
 			raw_spin_lock(&base->lock);
 			base->running_timer = NULL;
 		} else {
@@ -1733,7 +1734,7 @@ static inline void __run_timers(struct timer_base *base)
 	struct hlist_head heads[LVL_DEPTH];
 	int levels;
 
-	//如果jiffies < base->clk,则直接退出
+	//如果jiffies < base->next_expiry,则直接退出
 	if (time_before(jiffies, base->next_expiry))
 		return;
 

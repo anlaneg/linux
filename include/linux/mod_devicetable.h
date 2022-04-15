@@ -41,7 +41,7 @@ enum {
  * @override_only:	Match only when dev->driver_override is this driver.
  */
 struct pci_device_id {
-	__u32 vendor, device;		/* Vendor and device ID or PCI_ANY_ID*/
+	__u32 vendor/*厂商*/, device/*设备id*/;		/* Vendor and device ID or PCI_ANY_ID*/
 	__u32 subvendor, subdevice;	/* Subsystem ID's or PCI_ANY_ID */
 	__u32 class, class_mask;	/* (class,subclass,prog-if) triplet */
 	kernel_ulong_t driver_data;	/* Data private to the driver */

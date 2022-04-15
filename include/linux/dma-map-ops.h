@@ -78,6 +78,7 @@ struct dma_map_ops {
 static inline const struct dma_map_ops *get_dma_ops(struct device *dev)
 {
 	if (dev->dma_ops)
+	    /*取设备对应的dma ops*/
 		return dev->dma_ops;
 	return get_arch_dma_ops(dev->bus);
 }

@@ -26,7 +26,7 @@ struct rb_root {
  */
 struct rb_root_cached {
 	struct rb_root rb_root;
-	struct rb_node *rb_leftmost;
+	struct rb_node *rb_leftmost;/*记录最左侧的节点*/
 };
 
 #define RB_ROOT (struct rb_root) { NULL, }

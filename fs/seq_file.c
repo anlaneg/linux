@@ -432,13 +432,14 @@ void seq_bprintf(struct seq_file *m, const char *f, const u32 *binary)
 	int len;
 
 	if (m->count < m->size) {
-		len = bstr_printf(m->buf + m->count, m->size - m->count, f,
+		len = bstr_printf(m->buf + m->count/*起始位置*/, m->size - m->count/*最大容许的长度*/, f/*format*/,
 				  binary);
 		if (m->count + len < m->size) {
 			m->count += len;
 			return;
 		}
 	}
+	/*m中内容超限*/
 	seq_set_overflow(m);
 }
 EXPORT_SYMBOL(seq_bprintf);

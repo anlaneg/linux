@@ -410,6 +410,7 @@ static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
 	rcu_read_lock_bh();
 
 	if (likely(rt->rt_gw_family == AF_INET)) {
+	    /*查询网关对应的邻居表项*/
 		n = ip_neigh_gw4(dev, rt->rt_gw4);
 	} else if (rt->rt_gw_family == AF_INET6) {
 		n = ip_neigh_gw6(dev, &rt->rt_gw6);

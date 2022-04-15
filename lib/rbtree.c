@@ -489,6 +489,7 @@ struct rb_node *rb_last(const struct rb_root *root)
 }
 EXPORT_SYMBOL(rb_last);
 
+/*取node节点的下一个节点*/
 struct rb_node *rb_next(const struct rb_node *node)
 {
 	struct rb_node *parent;
@@ -501,12 +502,14 @@ struct rb_node *rb_next(const struct rb_node *node)
 	 * as we can.
 	 */
 	if (node->rb_right) {
+	    /*有右节点，先选取右节点，然后沿被选取节点的左侧一路走下去即可。*/
 		node = node->rb_right;
 		while (node->rb_left)
 			node = node->rb_left;
 		return (struct rb_node *)node;
 	}
 
+	/*当前没有右节点，则取父节点，如果父节点实际其祖父节点的右侧节点，则继续向上。否则即为父节点*/
 	/*
 	 * No right-hand children. Everything down and left is smaller than us,
 	 * so any 'next' node must be in the general direction of our parent.

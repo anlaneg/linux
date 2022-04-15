@@ -30,11 +30,13 @@ EXPORT_SYMBOL(flow_rule_alloc);
 
 //提取match中指定type的key,mask填充到out中
 #define FLOW_DISSECTOR_MATCH(__rule, __type, __out)				\
+    /*取match字段，本函数仅关心匹配*/\
 	const struct flow_match *__m = &(__rule)->match;			\
+	/*match对应的解析器*/\
 	struct flow_dissector *__d = (__m)->dissector;				\
-	/*取__type对应的key*/									\
+	/*取__type对应的key，填充到__out*/									\
 	(__out)->key = skb_flow_dissector_target(__d, __type, (__m)->key);	\
-	/*取__type对应的mask*/\
+	/*取__type对应的mask,填充到__out*/\
 	(__out)->mask = skb_flow_dissector_target(__d, __type, (__m)->mask);	\
 
 void flow_rule_match_meta(const struct flow_rule *rule,
@@ -142,6 +144,7 @@ void flow_rule_match_mpls(const struct flow_rule *rule,
 EXPORT_SYMBOL(flow_rule_match_mpls);
 
 
+/*自rule中提取FLOW_DISSECTOR_KEY_ENC_CONTROL对应的key,mask*/
 void flow_rule_match_enc_control(const struct flow_rule *rule,
 				 struct flow_match_control *out)
 {

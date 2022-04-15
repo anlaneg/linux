@@ -53,8 +53,11 @@
  * cpu_base->active
  */
 #define MASK_SHIFT		(HRTIMER_BASE_MONOTONIC_SOFT)
+/*所有hard active hrtime*/
 #define HRTIMER_ACTIVE_HARD	((1U << MASK_SHIFT) - 1)
+/*所有soft active hrtime*/
 #define HRTIMER_ACTIVE_SOFT	(HRTIMER_ACTIVE_HARD << MASK_SHIFT)
+/*所有hard and soft active hrtime*/
 #define HRTIMER_ACTIVE_ALL	(HRTIMER_ACTIVE_SOFT | HRTIMER_ACTIVE_HARD)
 
 /*
@@ -488,11 +491,13 @@ __next_base(struct hrtimer_cpu_base *cpu_base, unsigned int *active)
 	unsigned int idx;
 
 	if (!*active)
+	    /*所有clock base均已完成遍历，返回NULL*/
 		return NULL;
 
 	idx = __ffs(*active);
-	*active &= ~(1U << idx);
+	*active &= ~(1U << idx);/*清除idx对应的bit位*/
 
+	/*当前遍历idx号clock*/
 	return &cpu_base->clock_base[idx];
 }
 
@@ -1083,11 +1088,13 @@ static int enqueue_hrtimer(struct hrtimer *timer,
 {
 	debug_activate(timer, mode);
 
+	/*此base上有active timer*/
 	base->cpu_base->active_bases |= 1 << base->index;
 
 	/* Pairs with the lockless read in hrtimer_is_queued() */
 	WRITE_ONCE(timer->state, HRTIMER_STATE_ENQUEUED);
 
+	/*添加timer到base clock,返回true,如果此timer为最选触发的timer*/
 	return timerqueue_add(&base->active, &timer->node);
 }
 
@@ -1113,6 +1120,7 @@ static void __remove_hrtimer(struct hrtimer *timer,
 	if (!(state & HRTIMER_STATE_ENQUEUED))
 		return;
 
+	/*将timer自active链上移除*/
 	if (!timerqueue_del(&base->active, &timer->node))
 		cpu_base->active_bases &= ~(1 << base->index);
 
@@ -1641,7 +1649,7 @@ EXPORT_SYMBOL_GPL(hrtimer_active);
 
 static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 			  struct hrtimer_clock_base *base,
-			  struct hrtimer *timer, ktime_t *now,
+			  struct hrtimer *timer/*要运行的timer*/, ktime_t *now,
 			  unsigned long flags) __must_hold(&cpu_base->lock)
 {
 	enum hrtimer_restart (*fn)(struct hrtimer *);
@@ -1651,6 +1659,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	lockdep_assert_held(&cpu_base->lock);
 
 	debug_deactivate(timer);
+	/*指明当前正在运行的timer*/
 	base->running = timer;
 
 	/*
@@ -1663,7 +1672,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	raw_write_seqcount_barrier(&base->seq);
 
 	__remove_hrtimer(timer, base, HRTIMER_STATE_INACTIVE, 0);
-	fn = timer->function;
+	fn = timer->function;/*取timer的执行函数*/
 
 	/*
 	 * Clear the 'is relative' flag for the TIME_LOW_RES case. If the
@@ -1700,6 +1709,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	 */
 	if (restart != HRTIMER_NORESTART &&
 	    !(timer->state & HRTIMER_STATE_ENQUEUED))
+	    /*timer需要restart,将其重新加入到base*/
 		enqueue_hrtimer(timer, base, HRTIMER_MODE_ABS);
 
 	/*
@@ -1716,17 +1726,19 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 }
 
 static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
-				 unsigned long flags, unsigned int active_mask)
+				 unsigned long flags, unsigned int active_mask/*要执行的clock base*/)
 {
 	struct hrtimer_clock_base *base;
 	unsigned int active = cpu_base->active_bases & active_mask;
 
+	/*按优先级遍历active指定的clock base*/
 	for_each_active_base(base, cpu_base, active) {
 		struct timerqueue_node *node;
 		ktime_t basenow;
 
 		basenow = ktime_add(now, base->offset);
 
+		/*遍历base->active链上的所有timer*/
 		while ((node = timerqueue_getnext(&base->active))) {
 			struct hrtimer *timer;
 
@@ -1745,8 +1757,10 @@ static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
 			 * timer will have to trigger a wakeup anyway.
 			 */
 			if (basenow < hrtimer_get_softexpires_tv64(timer))
+			    /*不再有过期的timer,退出*/
 				break;
 
+			/*此timer过期，执行它*/
 			__run_hrtimer(cpu_base, base, timer, &basenow, flags);
 			if (active_mask == HRTIMER_ACTIVE_SOFT)
 				hrtimer_sync_wait_running(cpu_base, flags);
@@ -1765,7 +1779,7 @@ static __latent_entropy void hrtimer_run_softirq(struct softirq_action *h)
 	raw_spin_lock_irqsave(&cpu_base->lock, flags);
 
 	now = hrtimer_update_base(cpu_base);
-	//运行队列的hrtimer
+	//运行所有soft active 队列的hrtimer
 	__hrtimer_run_queues(cpu_base, now, flags, HRTIMER_ACTIVE_SOFT);
 
 	cpu_base->softirq_activated = 0;

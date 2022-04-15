@@ -4,6 +4,7 @@
 #include "debug.h"
 #include "debug-internal.h"
 
+/*默认通过vfprintf进行日志输出*/
 static int __base_pr(const char *format, ...)
 {
 	va_list args;
@@ -19,6 +20,7 @@ libapi_print_fn_t __pr_warn    = __base_pr;
 libapi_print_fn_t __pr_info    = __base_pr;
 libapi_print_fn_t __pr_debug;
 
+/*设置warn,info,debug日志函数*/
 void libapi_set_print(libapi_print_fn_t warn,
 		      libapi_print_fn_t info,
 		      libapi_print_fn_t debug)

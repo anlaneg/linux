@@ -21,7 +21,7 @@
  * I = VXLAN Network Identifier (VNI) present.
  */
 struct vxlanhdr {
-	__be32 vx_flags;//前8bit为标记为，目前仅第4bit被使用
+	__be32 vx_flags;//前8bit为标记位，目前仅第4bit被使用
 	__be32 vx_vni;//vxlan id号
 };
 

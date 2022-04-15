@@ -309,6 +309,7 @@ struct evsel *evlist__find_tracepoint_by_id(struct evlist *evlist, int id)
 	return NULL;
 }
 
+/*通过$name查找tracepoint*/
 struct evsel *evlist__find_tracepoint_by_name(struct evlist *evlist, const char *name)
 {
 	struct evsel *evsel;

@@ -112,6 +112,7 @@ static bool dma_go_direct(struct device *dev, dma_addr_t mask,
 		const struct dma_map_ops *ops)
 {
 	if (likely(!ops))
+	    /*ops未指定，直接返回true*/
 		return true;
 #ifdef CONFIG_DMA_OPS_BYPASS
 	if (dev->dma_ops_bypass)
@@ -140,7 +141,7 @@ static inline bool dma_map_direct(struct device *dev,
 }
 
 dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
-		size_t offset, size_t size, enum dma_data_direction dir,
+		size_t offset/*页偏移*/, size_t size, enum dma_data_direction dir,
 		unsigned long attrs)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
@@ -497,7 +498,7 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 		return cpu_addr;
 
 	/* let the implementation decide on the zone to allocate from: */
-	//移除以下flag,使实现自主选择
+	//移除以下flag,以便实现自主选择
 	flag &= ~(__GFP_DMA | __GFP_DMA32 | __GFP_HIGHMEM);
 
 	if (dma_alloc_direct(dev, ops))
@@ -507,6 +508,7 @@ void *dma_alloc_attrs(struct device *dev, size_t size, dma_addr_t *dma_handle,
 	    /*通过ops进行申请*/
 		cpu_addr = ops->alloc(dev, size, dma_handle, flag, attrs);
 	else
+	    /*ops存在，但alloc为空，返回NULL*/
 		return NULL;
 
 	debug_dma_alloc_coherent(dev, size, *dma_handle, cpu_addr, attrs);

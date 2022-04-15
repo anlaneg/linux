@@ -9,13 +9,13 @@
 #include <asm/module.h>
 
 struct load_info {
-	const char *name;
+	const char *name;/*来源于modinfo段中的name tag对应value*/
 	/* pointer to module in temporary copy, freed at end of load_module() */
 	struct module *mod;
-	Elf_Ehdr *hdr;
-	unsigned long len;
-	Elf_Shdr *sechdrs;
-	char *secstrings, *strtab;
+	Elf_Ehdr *hdr;/*文件头指针*/
+	unsigned long len;/*文件长度*/
+	Elf_Shdr *sechdrs;/*section header*/
+	char *secstrings/*section name起始地址*/, *strtab;
 	unsigned long symoffs, stroffs, init_typeoffs, core_typeoffs;
 	struct _ddebug *debug;
 	unsigned int num_debug;
@@ -24,7 +24,7 @@ struct load_info {
 	unsigned long mod_kallsyms_init_off;
 #endif
 	struct {
-		unsigned int sym, str, mod, vers, info, pcpu;
+		unsigned int sym, str, mod, vers/*__version段index*/, info/*modinfo段index*/, pcpu/*per cpu段index*/;
 	} index;
 };
 

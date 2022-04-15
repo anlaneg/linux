@@ -77,6 +77,7 @@
 #define PT_REGS_SP(x) ((x)->sp)
 #define PT_REGS_IP(x) ((x)->ip)
 
+/*读取x中的di数据*/
 #define PT_REGS_PARM1_CORE(x) BPF_CORE_READ((x), di)
 #define PT_REGS_PARM2_CORE(x) BPF_CORE_READ((x), si)
 #define PT_REGS_PARM3_CORE(x) BPF_CORE_READ((x), dx)

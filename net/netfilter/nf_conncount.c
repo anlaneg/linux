@@ -81,6 +81,7 @@ static inline bool already_closed(const struct nf_conn *conn)
 		return false;
 }
 
+/*a,b执行内存比对*/
 static int key_diff(const u32 *a, const u32 *b, unsigned int klen)
 {
 	return memcmp(a, b, klen * sizeof(u32));
@@ -91,7 +92,7 @@ static void conn_free(struct nf_conncount_list *list,
 {
 	lockdep_assert_held(&list->list_lock);
 
-	list->count--;
+	list->count--;/*count数减少*/
 	list_del(&conn->node);
 
 	kmem_cache_free(conncount_conn_cachep, conn);
@@ -104,6 +105,7 @@ find_or_evict(struct net *net, struct nf_conncount_list *list,
 {
 	const struct nf_conntrack_tuple_hash *found;
 	unsigned long a, b;
+	/*取当前cpu*/
 	int cpu = raw_smp_processor_id();
 	u32 age;
 
@@ -123,7 +125,7 @@ find_or_evict(struct net *net, struct nf_conncount_list *list,
 	 */
 	age = a - b;
 	if (conn->cpu == cpu || age >= 2) {
-	    /*移除掉此conn*/
+	    /*自链表上移除掉此conn*/
 		conn_free(list, conn);
 		return ERR_PTR(-ENOENT);
 	}
@@ -145,6 +147,7 @@ static int __nf_conncount_add(struct net *net,
 	/* check the saved connections */
 	list_for_each_entry_safe(conn, conn_n, &list->head, node) {
 		if (collect > CONNCOUNT_GC_MAX_NODES)
+		    /*本次维护数量超限，退出（bug:如果这样直接退出，则添加的内容可能会重复）*/
 			break;
 
 		found = find_or_evict(net, list, conn);
@@ -155,9 +158,10 @@ static int __nf_conncount_add(struct net *net,
 				if (nf_ct_tuple_equal(&conn->tuple, tuple) &&
 				    nf_ct_zone_id(&conn->zone, conn->zone.dir) ==
 				    nf_ct_zone_id(zone, zone->dir))
-				    /*连接表里没有，但我们接下来要填加的恰好是它，故直接返回添加成功*/
+				    /*连接表里没有，但我们接下来要填加的恰好是它，故直接返回认为添加成功*/
 					return 0; /* already exists */
 			} else {
+			    /*这种我们已经删除了*/
 				collect++;
 			}
 			continue;
@@ -222,6 +226,7 @@ int nf_conncount_add(struct net *net,
 
 	/* check the saved connections */
 	spin_lock_bh(&list->list_lock);
+	/*执行tuple添加*/
 	ret = __nf_conncount_add(net, list, tuple, zone);
 	spin_unlock_bh(&list->list_lock);
 
@@ -302,6 +307,7 @@ static void tree_nodes_free(struct rb_root *root,
 {
 	struct nf_conncount_rb *rbconn;
 
+	/*移除已经为空的rbconn*/
 	while (gc_count) {
 		rbconn = gc_nodes[--gc_count];
 		spin_lock(&rbconn->list.list_lock);
@@ -323,10 +329,10 @@ static void schedule_gc_worker(struct nf_conncount_data *data, int tree)
 static unsigned int
 insert_tree(struct net *net,
 	    struct nf_conncount_data *data,
-	    struct rb_root *root,
-	    unsigned int hash,
-	    const u32 *key,
-	    const struct nf_conntrack_tuple *tuple,
+	    struct rb_root *root,/*红黑树根节点*/
+	    unsigned int hash,/*key对应的hashcode*/
+	    const u32 *key,/*tuple对应的key*/
+	    const struct nf_conntrack_tuple *tuple,/*待加入的tuple*/
 	    const struct nf_conntrack_zone *zone)
 {
 	struct nf_conncount_rb *gc_nodes[CONNCOUNT_GC_MAX_NODES];
@@ -337,12 +343,14 @@ insert_tree(struct net *net,
 	u8 keylen = data->keylen;
 	bool do_gc = true;
 
+	/*锁此key对应的桶*/
 	spin_lock_bh(&nf_conncount_locks[hash]);
 restart:
 	parent = NULL;
-	rbnode = &(root->rb_node);
+	rbnode = &(root->rb_node);/*取红黑树根节点*/
 	while (*rbnode) {
 		int diff;
+		/*取rbnode对应的rbconn*/
 		rbconn = rb_entry(*rbnode, struct nf_conncount_rb, node);
 
 		parent = *rbnode;
@@ -352,7 +360,7 @@ restart:
 		} else if (diff > 0) {
 			rbnode = &((*rbnode)->rb_right);
 		} else {
-		    /*查找到合适的添加位置，执行tuple添加*/
+		    /*查找到合适的添加位置，将tuple添加到rbconn->list*/
 			int ret;
 
 			ret = nf_conncount_add(net, &rbconn->list, tuple, zone);
@@ -360,7 +368,7 @@ restart:
 			    /*添加失败*/
 				count = 0; /* hotdrop */
 			else
-			    /*添加成功*/
+			    /*添加成功,取当前链表上的count*/
 				count = rbconn->list.count;
 			tree_nodes_free(root, gc_nodes, gc_count);
 			/*处理完成，退出*/
@@ -371,11 +379,14 @@ restart:
 			continue;
 
 		if (do_gc && nf_conncount_gc_list(net, &rbconn->list))
+		    /*此rbconn->list已为空，需要移除，这里先记录*/
 			gc_nodes[gc_count++] = rbconn;
 	}
 
 	if (gc_count) {
+	    /*移除已经为空的rbconn*/
 		tree_nodes_free(root, gc_nodes, gc_count);
+		/*触发gc worker*/
 		schedule_gc_worker(data, hash);
 		gc_count = 0;
 		do_gc = false;
@@ -415,13 +426,14 @@ static unsigned int
 count_tree(struct net *net,
 	   struct nf_conncount_data *data,
 	   const u32 *key/*查询用的key*/,
-	   const struct nf_conntrack_tuple *tuple/*要添加的源组*/,
+	   const struct nf_conntrack_tuple *tuple/*要添加的元组*/,
 	   const struct nf_conntrack_zone *zone)
 {
 	struct rb_root *root;
 	struct rb_node *parent;
 	struct nf_conncount_rb *rbconn;
 	unsigned int hash;
+	/*匹配用的key的大小*/
 	u8 keylen = data->keylen;
 
 	/*计算key的hash*/
@@ -429,20 +441,22 @@ count_tree(struct net *net,
 	/*确定key对应的根节点*/
 	root = &data->root[hash];
 
-	/*如果parent存在，则计算*/
+	/*取红黑树根节点*/
 	parent = rcu_dereference_raw(root->rb_node);
 	while (parent) {
 		int diff;
 
+		/*取parent节点对应的nf_conncount_rb结构体*/
 		rbconn = rb_entry(parent, struct nf_conncount_rb, node);
 
 		diff = key_diff(key, rbconn->key, keylen);
 		if (diff < 0) {
+		    /*key较小，走左分支*/
 			parent = rcu_dereference_raw(parent->rb_left);
 		} else if (diff > 0) {
 			parent = rcu_dereference_raw(parent->rb_right);
 		} else {
-		    /*遇到与key相等的情况*/
+		    /*遇到与待查询的key相等的情况*/
 			int ret;
 
 			if (!tuple) {
@@ -451,16 +465,19 @@ count_tree(struct net *net,
 				return rbconn->list.count;
 			}
 
+			/*加锁保存此链表*/
 			spin_lock_bh(&rbconn->list.list_lock);
 			/* Node might be about to be free'd.
 			 * We need to defer to insert_tree() in this case.
 			 */
 			if (rbconn->list.count == 0) {
+			    /*此链已为空，跳到insert_tree进行处理*/
 				spin_unlock_bh(&rbconn->list.list_lock);
 				break;
 			}
 
 			/* same source network -> be counted! */
+			/*执行加入*/
 			ret = __nf_conncount_add(net, &rbconn->list, tuple, zone);
 			spin_unlock_bh(&rbconn->list.list_lock);
 			if (ret)
@@ -471,9 +488,10 @@ count_tree(struct net *net,
 	}
 
 	if (!tuple)
+	    /*没有查找到此key,也未指定tuple,不进行添加，直接返回0*/
 		return 0;
 
-	/*向树上添加此tuple*/
+	/*没有查询到此key,但指定了tuple,向树上添加此tuple*/
 	return insert_tree(net, data, root, hash, key, tuple, zone);
 }
 

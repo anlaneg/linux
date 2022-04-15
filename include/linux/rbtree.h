@@ -110,6 +110,7 @@ static inline void rb_insert_color_cached(struct rb_node *node,
 					  bool leftmost)
 {
 	if (leftmost)
+	    /*记录最左侧的节点*/
 		root->rb_leftmost = node;
 	rb_insert_color(node, &root->rb_root);
 }
@@ -121,8 +122,12 @@ rb_erase_cached(struct rb_node *node, struct rb_root_cached *root)
 	struct rb_node *leftmost = NULL;
 
 	if (root->rb_leftmost == node)
+	    /*当前节点为最左侧节点，现在要删除它，故选出下一个最左侧节点。
+	     * 选择时，由于当前节点左侧无节点，故沿右节点找到其的左侧节点
+	     * */
 		leftmost = root->rb_leftmost = rb_next(node);
 
+	/*移除当前节点*/
 	rb_erase(node, &root->rb_root);
 
 	return leftmost;
@@ -172,13 +177,16 @@ rb_add_cached(struct rb_node *node, struct rb_root_cached *tree,
 	while (*link) {
 		parent = *link;
 		if (less(node, parent)) {
+		    /*node过期时间小于parent,走左枝*/
 			link = &parent->rb_left;
 		} else {
+		    /*node过期时间大于等于parent,走右枝*/
 			link = &parent->rb_right;
 			leftmost = false;
 		}
 	}
 
+	/*将node挂在parent下*/
 	rb_link_node(node, parent, link);
 	rb_insert_color_cached(node, tree, leftmost);
 

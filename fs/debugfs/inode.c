@@ -55,9 +55,12 @@ static int debugfs_setattr(struct user_namespace *mnt_userns,
 	return simple_setattr(&init_user_ns, dentry, ia);
 }
 
+/*inode文件操作集*/
 static const struct inode_operations debugfs_file_inode_operations = {
 	.setattr	= debugfs_setattr,
 };
+
+/*inode目录操作集*/
 static const struct inode_operations debugfs_dir_inode_operations = {
 	.lookup		= simple_lookup,
 	.setattr	= debugfs_setattr,
@@ -67,8 +70,10 @@ static const struct inode_operations debugfs_symlink_inode_operations = {
 	.setattr	= debugfs_setattr,
 };
 
+/*debugfs申请一个inode*/
 static struct inode *debugfs_get_inode(struct super_block *sb)
 {
+    /*基于此sb创建inode*/
 	struct inode *inode = new_inode(sb);
 	if (inode) {
 		inode->i_ino = get_next_ino();
@@ -277,6 +282,7 @@ static struct dentry *debug_mount(struct file_system_type *fs_type,
 	return mount_single(fs_type, flags, data, debug_fill_super);
 }
 
+/*debug fs文件系统*/
 static struct file_system_type debug_fs_type = {
 	.owner =	THIS_MODULE,
 	.name =		"debugfs",
@@ -314,7 +320,8 @@ struct dentry *debugfs_lookup(const char *name, struct dentry *parent)
 }
 EXPORT_SYMBOL_GPL(debugfs_lookup);
 
-static struct dentry *start_creating(const char *name, struct dentry *parent)
+/*1。先检查debugfs是否初始化，确保其初始化；2。引用debugfs的挂载点；3。确定parent下没有名称为name的dentry;*/
+static struct dentry *start_creating(const char *name/*目录名*/, struct dentry *parent/*父节点*/)
 {
 	struct dentry *dentry;
 	int error;
@@ -323,13 +330,16 @@ static struct dentry *start_creating(const char *name, struct dentry *parent)
 		return ERR_PTR(-EPERM);
 
 	if (!debugfs_initialized())
+	    /*debugfs未初始化，无法进行debugfs创建*/
 		return ERR_PTR(-ENOENT);
 
 	pr_debug("creating file '%s'\n", name);
 
+	/*如果parent指针有误，则直接返回错误*/
 	if (IS_ERR(parent))
 		return parent;
 
+	/*如果debugfs未挂载，则执行挂载，如果已挂载，则增加挂载计数*/
 	error = simple_pin_fs(&debug_fs_type, &debugfs_mount,
 			      &debugfs_mount_count);
 	if (error) {
@@ -343,14 +353,17 @@ static struct dentry *start_creating(const char *name, struct dentry *parent)
 	 * have around.
 	 */
 	if (!parent)
+	    /*未指定parent,使用挂载点*/
 		parent = debugfs_mount->mnt_root;
 
 	inode_lock(d_inode(parent));
 	if (unlikely(IS_DEADDIR(d_inode(parent))))
 		dentry = ERR_PTR(-ENOENT);
 	else
+	    /*检查parent下是否已存在$name的dentry*/
 		dentry = lookup_one_len(name, parent, strlen(name));
 	if (!IS_ERR(dentry) && d_really_is_positive(dentry)) {
+	    /*此名称的dentry已存在，区分是文件还是目录，进行告警*/
 		if (d_is_dir(dentry))
 			pr_err("Directory '%s' with parent '%s' already present!\n",
 			       name, parent->d_name.name);
@@ -361,6 +374,7 @@ static struct dentry *start_creating(const char *name, struct dentry *parent)
 		dentry = ERR_PTR(-EEXIST);
 	}
 
+	/*dentry有误，释放对debugfs mount的引用*/
 	if (IS_ERR(dentry)) {
 		inode_unlock(d_inode(parent));
 		simple_release_fs(&debugfs_mount, &debugfs_mount_count);
@@ -553,13 +567,14 @@ EXPORT_SYMBOL_GPL(debugfs_create_file_size);
  * If debugfs is not enabled in the kernel, the value -%ENODEV will be
  * returned.
  */
-struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
+struct dentry *debugfs_create_dir(const char *name/*目录名*/, struct dentry *parent/*父节点*/)
 {
 	//在debugfs中创建一个目录项
 	struct dentry *dentry = start_creating(name, parent);
 	struct inode *inode;
 
 	if (IS_ERR(dentry))
+	    /*前期准备时遇到错误，返回错误*/
 		return dentry;
 
 	if (!(debugfs_allow & DEBUGFS_ALLOW_API)) {
@@ -567,6 +582,7 @@ struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 		return ERR_PTR(-EPERM);
 	}
 
+	/*申请一个inode*/
 	inode = debugfs_get_inode(dentry->d_sb);
 	if (unlikely(!inode)) {
 		pr_err("out of free dentries, can not create directory '%s'\n",
@@ -582,6 +598,7 @@ struct dentry *debugfs_create_dir(const char *name, struct dentry *parent)
 	inc_nlink(inode);
 	d_instantiate(dentry, inode);
 	inc_nlink(d_inode(dentry->d_parent));
+	/*通知dentry创建*/
 	fsnotify_mkdir(d_inode(dentry->d_parent), dentry);
 	return end_creating(dentry);
 }
@@ -813,6 +830,7 @@ EXPORT_SYMBOL_GPL(debugfs_rename);
  */
 bool debugfs_initialized(void)
 {
+    /*返回debugfs是否已初始化*/
 	return debugfs_registered;
 }
 EXPORT_SYMBOL_GPL(debugfs_initialized);
@@ -836,16 +854,21 @@ static int __init debugfs_init(void)
 	int retval;
 
 	if (!(debugfs_allow & DEBUGFS_ALLOW_MOUNT))
+	    /*如果不容许挂载，则返回失败*/
 		return -EPERM;
 
+	/*创建debug挂载点进行挂载*/
 	retval = sysfs_create_mount_point(kernel_kobj, "debug");
 	if (retval)
 		return retval;
 
+	/*为系统注册debugfs文件系统*/
 	retval = register_filesystem(&debug_fs_type);
 	if (retval)
+	    /*注册失败，解挂载*/
 		sysfs_remove_mount_point(kernel_kobj, "debug");
 	else
+	    /*指明debugfs完成注册*/
 		debugfs_registered = true;
 
 	return retval;

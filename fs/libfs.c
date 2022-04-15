@@ -713,7 +713,7 @@ EXPORT_SYMBOL(simple_fill_super);
 
 static DEFINE_SPINLOCK(pin_fs_lock);
 
-int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount, int *count)
+int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount/*入出参，此fs的挂载点*/, int *count/*此挂载点引用数*/)
 {
 	struct vfsmount *mnt = NULL;
 	spin_lock(&pin_fs_lock);
@@ -725,6 +725,7 @@ int simple_pin_fs(struct file_system_type *type, struct vfsmount **mount, int *c
 			return PTR_ERR(mnt);
 		spin_lock(&pin_fs_lock);
 		if (!*mount)
+		    /*记录挂载点*/
 			*mount = mnt;
 	}
 	mntget(*mount);

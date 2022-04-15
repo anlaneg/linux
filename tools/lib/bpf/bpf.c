@@ -59,6 +59,7 @@ static inline __u64 ptr_to_u64(const void *ptr)
 	return (__u64) (unsigned long) ptr;
 }
 
+/*执行bpf系统调用*/
 static inline int sys_bpf(enum bpf_cmd cmd, union bpf_attr *attr,
 			  unsigned int size)
 {
@@ -70,6 +71,7 @@ static inline int sys_bpf_fd(enum bpf_cmd cmd, union bpf_attr *attr,
 {
 	int fd;
 
+	/*调用bpf系统调用，返回fd*/
 	fd = sys_bpf(cmd, attr, size);
 	return ensure_good_fd(fd);
 }
@@ -80,12 +82,14 @@ static inline int sys_bpf_prog_load(union bpf_attr *attr, unsigned int size)
 	int fd;
 
 	do {
+	    /*加载bpf程序*/
 		fd = sys_bpf_fd(BPF_PROG_LOAD, attr, size);
 	} while (fd < 0 && errno == EAGAIN && retries-- > 0);
 
 	return fd;
 }
 
+/*创建map*/
 int libbpf__bpf_create_map_xattr(const struct bpf_create_map_params *create_attr)
 {
 	union bpf_attr attr;

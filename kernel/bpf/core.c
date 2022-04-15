@@ -1373,6 +1373,7 @@ bool bpf_opcode_in_insntable(u8 code)
 #ifndef CONFIG_BPF_JIT_ALWAYS_ON
 u64 __weak bpf_probe_read_kernel(void *dst, u32 size, const void *unsafe_ptr)
 {
+    /*dst清零*/
 	memset(dst, 0, size);
 	return -EFAULT;
 }

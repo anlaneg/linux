@@ -232,6 +232,9 @@ static __always_inline bool variable_test_bit(long nr, volatile const unsigned l
  */
 static __always_inline unsigned long __ffs(unsigned long word)
 {
+    /*rep 指重复执行该指令后面的一条指令。执行次数由寄存器ecx控制
+     * bsf 扫描word中第一个含'1'的位（自右向左，右侧为低字节位），将结果返回到work中，并返回。
+     * */
 	asm("rep; bsf %1,%0"
 		: "=r" (word)
 		: "rm" (word));

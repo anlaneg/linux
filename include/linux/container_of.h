@@ -19,6 +19,7 @@
 	static_assert(__same_type(*(ptr), ((type *)0)->member) ||	\
 		      __same_type(*(ptr), void),			\
 		      "pointer type mismatch in container_of()");	\
+		      /*由member的指针获取结构体指针*/\
 	((type *)(__mptr - offsetof(type, member))); })
 
 /**

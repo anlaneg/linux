@@ -161,7 +161,9 @@ struct hrtimer_clock_base {
 	unsigned int		index;
 	clockid_t		clockid;
 	seqcount_raw_spinlock_t	seq;
+	/*记录当前正在运行的hrtimer*/
 	struct hrtimer		*running;
+	/*rb树上挂接active的timer*/
 	struct timerqueue_head	active;
 	ktime_t			(*get_time)(void);
 	ktime_t			offset;
@@ -172,7 +174,7 @@ enum  hrtimer_base_type {
 	HRTIMER_BASE_REALTIME,
 	HRTIMER_BASE_BOOTTIME,
 	HRTIMER_BASE_TAI,
-	HRTIMER_BASE_MONOTONIC_SOFT,
+	HRTIMER_BASE_MONOTONIC_SOFT,/*此后为纯软件base,此前为纯硬件base*/
 	HRTIMER_BASE_REALTIME_SOFT,
 	HRTIMER_BASE_BOOTTIME_SOFT,
 	HRTIMER_BASE_TAI_SOFT,

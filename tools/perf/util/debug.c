@@ -35,6 +35,7 @@
 #define LIBTRACEEVENT_VERSION MAKE_LIBTRACEEVENT_VERSION(1, 1, 0)
 #endif
 
+/*当前日志输出级别*/
 int verbose;
 int debug_peo_args;
 bool dump_trace = false, quiet = false;
@@ -44,6 +45,7 @@ int debug_data_convert;
 static FILE *debug_file;
 bool debug_display_time;
 
+/*指明debug文件*/
 void debug_set_file(FILE *file)
 {
 	debug_file = file;
@@ -280,6 +282,7 @@ DEBUG_WRAPPER(debug, 1);
 
 void perf_debug_setup(void)
 {
+    /*指明debug文件为stderr*/
 	debug_set_file(stderr);
 	libapi_set_print(pr_warning_wrapper, pr_warning_wrapper, pr_debug_wrapper);
 }

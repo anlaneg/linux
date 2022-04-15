@@ -1526,7 +1526,7 @@ struct evsel *bpf__setup_output_event(struct evlist *evlist, const char *name)
 	int err;
 	bool need_init = false;
 
-	/*遍历name名称的map*/
+	/*遍历名称为$name的map*/
 	bpf__for_each_map_named(map, obj, tmp, name) {
 		struct bpf_map_priv *priv = bpf_map__priv(map);
 
@@ -1544,6 +1544,7 @@ struct evsel *bpf__setup_output_event(struct evlist *evlist, const char *name)
 	}
 
 	if (!need_init)
+	    /*不需要初始化，直接返回NULL*/
 		return NULL;
 
 	if (!tmpl_priv) {

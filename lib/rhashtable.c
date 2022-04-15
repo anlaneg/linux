@@ -1098,6 +1098,7 @@ int rhltable_init(struct rhltable *hlt, const struct rhashtable_params *params)
 {
 	int err;
 
+	/*用参数初始化ht*/
 	err = rhashtable_init(&hlt->ht, params);
 	hlt->ht.rhlist = true;
 	return err;

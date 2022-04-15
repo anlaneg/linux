@@ -180,6 +180,8 @@ MODULE_PARM_DESC(use_io, "Force use of i/o access mode");
 #define INTEL_8255X_ETHERNET_DEVICE(device_id, ich) {\
 	PCI_VENDOR_ID_INTEL, device_id, PCI_ANY_ID, PCI_ANY_ID, \
 	PCI_CLASS_NETWORK_ETHERNET << 8, 0xFFFF00, ich }
+
+/*列出e100驱动支持的硬件*/
 static const struct pci_device_id e100_id_table[] = {
 	INTEL_8255X_ETHERNET_DEVICE(0x1029, 0),
 	INTEL_8255X_ETHERNET_DEVICE(0x1030, 0),
@@ -534,11 +536,12 @@ struct params {
 	struct param_range cbs;
 };
 
+/*netdev的私有结构*/
 struct nic {
 	/* Begin: frequently used values: keep adjacent for cache effect */
 	u32 msg_enable				____cacheline_aligned;
-	struct net_device *netdev;
-	struct pci_dev *pdev;
+	struct net_device *netdev;/*所属的netdev*/
+	struct pci_dev *pdev;/*关联的pci设备*/
 	u16 (*mdio_ctrl)(struct nic *nic, u32 addr, u32 dir, u32 reg, u16 data);
 
 	struct rx *rxs				____cacheline_aligned;
@@ -1770,6 +1773,7 @@ static int e100_xmit_prepare(struct nic *nic, struct cb *cb,
 	return 0;
 }
 
+/*e100报文发送*/
 static netdev_tx_t e100_xmit_frame(struct sk_buff *skb,
 				   struct net_device *netdev)
 {
@@ -1920,6 +1924,7 @@ static inline void e100_start_receiver(struct nic *nic, struct rx *rx)
 #define RFD_BUF_LEN (sizeof(struct rfd) + VLAN_ETH_FRAME_LEN + ETH_FCS_LEN)
 static int e100_rx_alloc_skb(struct nic *nic, struct rx *rx)
 {
+    /*申请skb*/
 	if (!(rx->skb = netdev_alloc_skb_ip_align(nic->netdev, RFD_BUF_LEN)))
 		return -ENOMEM;
 
@@ -2161,9 +2166,11 @@ static int e100_rx_alloc_list(struct nic *nic)
 	nic->rx_to_use = nic->rx_to_clean = NULL;
 	nic->ru_running = RU_UNINITIALIZED;
 
+	/*申请count个rx*/
 	if (!(nic->rxs = kcalloc(count, sizeof(struct rx), GFP_KERNEL)))
 		return -ENOMEM;
 
+	/*遍历rx*/
 	for (rx = nic->rxs, i = 0; i < count; rx++, i++) {
 		rx->next = (i + 1 < count) ? rx + 1 : nic->rxs;
 		rx->prev = (i == 0) ? nic->rxs + count - 1 : rx - 1;
@@ -2826,12 +2833,14 @@ static const struct net_device_ops e100_netdev_ops = {
 	.ndo_set_features	= e100_set_features,
 };
 
+/*ent对应的pci设备已匹配pdev,这里我们尝试进行驱动初始化*/
 static int e100_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 {
 	struct net_device *netdev;
 	struct nic *nic;
 	int err;
 
+	/*申请单队列netdev*/
 	if (!(netdev = alloc_etherdev(sizeof(struct nic))))
 		return -ENOMEM;
 
@@ -2844,14 +2853,17 @@ static int e100_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 	netdev->watchdog_timeo = E100_WATCHDOG_PERIOD;
 	strncpy(netdev->name, pci_name(pdev), sizeof(netdev->name) - 1);
 
+	/*初始化私有结构体*/
 	nic = netdev_priv(netdev);
+	/*加入napi*/
 	netif_napi_add(netdev, &nic->napi, e100_poll, E100_NAPI_WEIGHT);
 	nic->netdev = netdev;
 	nic->pdev = pdev;
 	nic->msg_enable = (1 << debug) - 1;
 	nic->mdio_ctrl = mdio_ctrl_hw;
-	pci_set_drvdata(pdev, netdev);
+	pci_set_drvdata(pdev, netdev);/*设备的私有数据是netdev*/
 
+	/*pci设备使能*/
 	if ((err = pci_enable_device(pdev))) {
 		netif_err(nic, probe, nic->netdev, "Cannot enable PCI device, aborting\n");
 		goto err_out_free_dev;
@@ -3177,6 +3189,8 @@ static int __init e100_init_module(void)
 		pr_info("%s\n", DRV_DESCRIPTION);
 		pr_info("%s\n", DRV_COPYRIGHT);
 	}
+
+	/*注册e100 pci驱动*/
 	return pci_register_driver(&e100_driver);
 }
 

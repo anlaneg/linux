@@ -43,6 +43,7 @@ int main(int argc, char **argv)
 			continue;
 		}
 
+		/*编译首个可只读打开的文件,默认使用stdin*/
 		break;
 	}
 

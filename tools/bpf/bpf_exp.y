@@ -82,6 +82,7 @@ labelled_instr
 	: labelled instr
 	;
 
+/*定义指令*/
 instr
 	: ldb
 	| ldh
@@ -468,6 +469,7 @@ static int curr_instr = 0;
 static struct sock_filter out[BPF_MAXINSNS];
 static char **labels, **labels_jt, **labels_jf, **labels_k;
 
+/*检查指令数是否超限*/
 static void bpf_assert_max(void)
 {
 	if (curr_instr >= BPF_MAXINSNS) {
@@ -476,6 +478,7 @@ static void bpf_assert_max(void)
 	}
 }
 
+/*设置curr_instr号指令*/
 static void bpf_set_curr_instr(uint16_t code, uint8_t jt, uint8_t jf,
 			       uint32_t k)
 {
@@ -487,6 +490,7 @@ static void bpf_set_curr_instr(uint16_t code, uint8_t jt, uint8_t jf,
 	curr_instr++;
 }
 
+/*记录label对应的指令位置*/
 static void bpf_set_curr_label(char *label)
 {
 	bpf_assert_max();
@@ -513,6 +517,7 @@ static int bpf_find_insns_offset(const char *label)
 {
 	int i, max = curr_instr, ret = -ENOENT;
 
+	/*遍历所有指令，检查labels数组，如果label匹配，返回其对应的指针idx*/
 	for (i = 0; i < max; i++) {
 		if (labels[i] && !strcmp(label, labels[i])) {
 			ret = i;
@@ -520,6 +525,7 @@ static int bpf_find_insns_offset(const char *label)
 		}
 	}
 
+	/*没有找到此指令，退出*/
 	if (ret == -ENOENT) {
 		fprintf(stderr, "no such label \'%s\'!\n", label);
 		exit(1);
@@ -528,6 +534,7 @@ static int bpf_find_insns_offset(const char *label)
 	return ret;
 }
 
+/*执行语法识别*/
 static void bpf_stage_1_insert_insns(void)
 {
 	yyparse();
@@ -612,6 +619,7 @@ static void bpf_init(void)
 {
 	memset(out, 0, sizeof(out));
 
+	/*申请labels数组*/
 	labels = calloc(BPF_MAXINSNS, sizeof(*labels));
 	assert(labels);
 	labels_jt = calloc(BPF_MAXINSNS, sizeof(*labels_jt));
@@ -648,11 +656,15 @@ void bpf_asm_compile(FILE *fp, bool cstyle)
 	yyin = fp;
 
 	bpf_init();
+	/*语法解析，指令记录*/
 	bpf_stage_1_insert_insns();
+	/*label解释*/
 	bpf_stage_2_reduce_labels();
 	bpf_destroy();
 
+	/*指令指令显示*/
 	if (cstyle)
+		/*显示c数组格式的指令*/
 		bpf_pretty_print_c();
 	else
 		bpf_pretty_print();

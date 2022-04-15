@@ -22,7 +22,9 @@ struct flow_dissector_key_control {
 	u32	flags;//分片标记
 };
 
+/*是否为分片*/
 #define FLOW_DIS_IS_FRAGMENT	BIT(0)
+/*是否首片*/
 #define FLOW_DIS_FIRST_FRAG	BIT(1)
 #define FLOW_DIS_ENCAPSULATION	BIT(2)
 
@@ -43,7 +45,7 @@ enum flow_dissect_ret {
  */
 struct flow_dissector_key_basic {
 	__be16	n_proto;//网络层协议（ipv4,ipv6,arp...)
-	u8	ip_proto;//网络层协议号（tcp,udp,icmp...)
+	u8	ip_proto;//传输层协议号（tcp,udp,icmp...)
 	u8	padding;
 };
 
@@ -54,13 +56,13 @@ struct flow_dissector_key_tags {
 struct flow_dissector_key_vlan {
 	union {
 		struct {
-			u16	vlan_id:12,
+			u16	vlan_id:12,/*vlan id*/
 				vlan_dei:1,
 				vlan_priority:3;
 		};
 		__be16	vlan_tci;
 	};
-	__be16	vlan_tpid;
+	__be16	vlan_tpid;/*封装协议*/
 };
 
 struct flow_dissector_mpls_lse {
@@ -108,8 +110,8 @@ struct flow_dissector_key_keyid {
  */
 struct flow_dissector_key_ipv4_addrs {
 	/* (src,dst) must be grouped, in the same way than in IP header */
-	__be32 src;
-	__be32 dst;
+	__be32 src;/*源地址*/
+	__be32 dst;/*目的地址*/
 };
 
 /**
@@ -119,8 +121,8 @@ struct flow_dissector_key_ipv4_addrs {
  */
 struct flow_dissector_key_ipv6_addrs {
 	/* (src,dst) must be grouped, in the same way than in IP header */
-	struct in6_addr src;
-	struct in6_addr dst;
+	struct in6_addr src;/*源地址*/
+	struct in6_addr dst;/*目的地址*/
 };
 
 /**
@@ -138,9 +140,9 @@ struct flow_dissector_key_tipc {
  */
 struct flow_dissector_key_addrs {
 	union {
-		struct flow_dissector_key_ipv4_addrs v4addrs;
-		struct flow_dissector_key_ipv6_addrs v6addrs;
-		struct flow_dissector_key_tipc tipckey;
+		struct flow_dissector_key_ipv4_addrs v4addrs;/*ipv4源目地址情况*/
+		struct flow_dissector_key_ipv6_addrs v6addrs;/*ipv6源目地址情况*/
+		struct flow_dissector_key_tipc tipckey;/*tipc地址情况*/
 	};
 };
 
@@ -172,8 +174,8 @@ struct flow_dissector_key_ports {
 	union {
 		__be32 ports;
 		struct {
-			__be16 src;
-			__be16 dst;
+			__be16 src;/*传输层源port*/
+			__be16 dst;/*传输层目的port*/
 		};
 	};
 };
@@ -272,16 +274,21 @@ enum flow_dissector_key_id {
 	FLOW_DISSECTOR_KEY_GRE_KEYID, /* struct flow_dissector_key_keyid */
 	FLOW_DISSECTOR_KEY_MPLS_ENTROPY, /* struct flow_dissector_key_keyid */
 	FLOW_DISSECTOR_KEY_ENC_KEYID, /* struct flow_dissector_key_keyid */
+	/*ipv4源目的地址*/
 	FLOW_DISSECTOR_KEY_ENC_IPV4_ADDRS, /* struct flow_dissector_key_ipv4_addrs */
+	/*ipv6源目的地址*/
 	FLOW_DISSECTOR_KEY_ENC_IPV6_ADDRS, /* struct flow_dissector_key_ipv6_addrs */
 	FLOW_DISSECTOR_KEY_ENC_CONTROL, /* struct flow_dissector_key_control */
+	/*传输层源目的port*/
 	FLOW_DISSECTOR_KEY_ENC_PORTS, /* struct flow_dissector_key_ports */
 	FLOW_DISSECTOR_KEY_MPLS, /* struct flow_dissector_key_mpls */
+	/*tcp flags信息*/
 	FLOW_DISSECTOR_KEY_TCP, /* struct flow_dissector_key_tcp */
 	//解析并填充ttl,tos
 	FLOW_DISSECTOR_KEY_IP, /* struct flow_dissector_key_ip */
 	FLOW_DISSECTOR_KEY_CVLAN, /* struct flow_dissector_key_vlan */
 	FLOW_DISSECTOR_KEY_ENC_IP, /* struct flow_dissector_key_ip */
+	/*tunnel选项信息*/
 	FLOW_DISSECTOR_KEY_ENC_OPTS, /* struct flow_dissector_key_enc_opts */
 	FLOW_DISSECTOR_KEY_META, /* struct flow_dissector_key_meta */
 	FLOW_DISSECTOR_KEY_CT, /* struct flow_dissector_key_ct */

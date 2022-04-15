@@ -25,6 +25,7 @@
 #define SEC(name) \
 	_Pragma("GCC diagnostic push")					    \
 	_Pragma("GCC diagnostic ignored \"-Wignored-attributes\"")	    \
+	/*指明section*/\
 	__attribute__((section(name), used))				    \
 	_Pragma("GCC diagnostic pop")					    \
 
@@ -65,8 +66,10 @@
  * Helper macros to manipulate data structures
  */
 #ifndef offsetof
+/*提供offsetof*/
 #define offsetof(TYPE, MEMBER)	((unsigned long)&((TYPE *)0)->MEMBER)
 #endif
+/*提供container_of*/
 #ifndef container_of
 #define container_of(ptr, type, member)				\
 	({							\
@@ -151,20 +154,26 @@ enum libbpf_tristate {
 #define __ksym __attribute__((section(".ksyms")))
 
 #ifndef ___bpf_concat
+/*将a,b进行联连*/
 #define ___bpf_concat(a, b) a ## b
 #endif
 #ifndef ___bpf_apply
+/*将fn,n进行联连*/
 #define ___bpf_apply(fn, n) ___bpf_concat(fn, n)
 #endif
 #ifndef ___bpf_nth
+/*返回参数数目*/
 #define ___bpf_nth(_, _1, _2, _3, _4, _5, _6, _7, _8, _9, _a, _b, _c, N, ...) N
 #endif
 #ifndef ___bpf_narg
+/*返回参数数目*/
 #define ___bpf_narg(...) \
 	___bpf_nth(_, ##__VA_ARGS__, 12, 11, 10, 9, 8, 7, 6, 5, 4, 3, 2, 1, 0)
 #endif
 
+/*空填充*/
 #define ___bpf_fill0(arr, p, x) do {} while (0)
+/*填充arr[p] = x*/
 #define ___bpf_fill1(arr, p, x) arr[p] = x
 #define ___bpf_fill2(arr, p, x, args...) arr[p] = x; ___bpf_fill1(arr, p + 1, args)
 #define ___bpf_fill3(arr, p, x, args...) arr[p] = x; ___bpf_fill2(arr, p + 1, args)
@@ -177,6 +186,7 @@ enum libbpf_tristate {
 #define ___bpf_fill10(arr, p, x, args...) arr[p] = x; ___bpf_fill9(arr, p + 1, args)
 #define ___bpf_fill11(arr, p, x, args...) arr[p] = x; ___bpf_fill10(arr, p + 1, args)
 #define ___bpf_fill12(arr, p, x, args...) arr[p] = x; ___bpf_fill11(arr, p + 1, args)
+/*利用格式 arr[i]= args-i的方式进行arr填充*/
 #define ___bpf_fill(arr, args...) \
 	___bpf_apply(___bpf_fill, ___bpf_narg(args))(arr, 0, args)
 
@@ -191,9 +201,11 @@ enum libbpf_tristate {
 								\
 	_Pragma("GCC diagnostic push")				\
 	_Pragma("GCC diagnostic ignored \"-Wint-conversion\"")	\
+	/*利用args填充__param*/\
 	___bpf_fill(___param, args);				\
 	_Pragma("GCC diagnostic pop")				\
 								\
+	/*利用参数__param执行格式化输出*/\
 	bpf_seq_printf(seq, ___fmt, sizeof(___fmt),		\
 		       ___param, sizeof(___param));		\
 })

@@ -906,7 +906,7 @@ struct pci_driver {
 	const char		*name;
 	//支持的设备列表
 	const struct pci_device_id *id_table;	/* Must be non-NULL for probe to be called */
-	//新设备加入后，进行探测
+	//id_table已匹配，进行探测
 	int  (*probe)(struct pci_dev *dev, const struct pci_device_id *id);	/* New device inserted */
 	void (*remove)(struct pci_dev *dev);	/* Device removed (NULL if not a hot-plug capable driver) */
 	//暂停设备

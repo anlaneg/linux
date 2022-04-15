@@ -138,12 +138,12 @@ static char *get_flog_buff(const char *file, unsigned int *klen)
 		goto out;
 
 	len = fi.st_size + 1;
-	buff = malloc(len);
+	buff = malloc(len);/*申请与文件大小相同的buffer*/
 	if (!buff)
 		goto out;
 
 	memset(buff, 0, len);
-	ret = read(fd, buff, len - 1);
+	ret = read(fd, buff, len - 1);/*读取文件内容*/
 	if (ret <= 0)
 		goto out_free;
 
@@ -287,6 +287,7 @@ int main(int argc, char **argv)
 
 	bfd_init();
 
+	/*读取文件内容*/
 	kbuff = get_log_buff(file, &klen);
 	if (!kbuff) {
 		fprintf(stderr, "Could not retrieve log buffer!\n");

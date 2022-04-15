@@ -615,7 +615,7 @@ struct ice_netdev_priv {
 	 * tc_indr_block_cb_priv_list is used to look up indirect callback
 	 * private data
 	 */
-	struct list_head tc_indr_block_priv_list;
+	struct list_head tc_indr_block_priv_list;/*挂接indirect设备*/
 };
 
 /**

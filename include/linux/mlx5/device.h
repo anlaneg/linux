@@ -49,7 +49,7 @@
 #define __mlx5_nullp(typ) ((struct mlx5_ifc_##typ##_bits *)0)
 //成员fld的字节数（因为结构体关系，逻辑上是bits数）
 #define __mlx5_bit_sz(typ, fld) sizeof(__mlx5_nullp(typ)->fld)
-//字段fld在结构体typ中偏移量，字段offset
+//字段fld在结构体mlx5_ifc_##typ##_bits中偏移量，字段offset
 #define __mlx5_bit_off(typ, fld) (offsetof(struct mlx5_ifc_##typ##_bits, fld))
 #define __mlx5_16_off(typ, fld) (__mlx5_bit_off(typ, fld) / 16)
 //字段offset以4字节对齐（双字）

@@ -9,6 +9,7 @@
 struct nf_conncount_data;
 
 struct nf_conncount_list {
+    /*保护list*/
 	spinlock_t list_lock;
 	struct list_head head;	/* connections with the same filtering key */
 	unsigned int count;	/* length of list */

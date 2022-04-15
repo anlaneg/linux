@@ -4691,6 +4691,7 @@ static int mlx5e_vxlan_set_port(struct net_device *netdev, unsigned int table,
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 
+	/*增加vxlan设备port信息*/
 	return mlx5_vxlan_add_port(priv->mdev->vxlan, ntohs(ti->port));
 }
 

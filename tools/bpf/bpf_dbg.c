@@ -1265,6 +1265,7 @@ static int execf(char *arg)
 	for (i = 0; i < array_size(cmds); i++) {
 		if (len != strlen(cmds[i].name))
 			continue;
+		/*如果匹配到正确的cmd,则执行相应回调*/
 		if (strncmp(cmds[i].name, cmd, len) == 0) {
 			ret = cmds[i].func(cont);
 			break;

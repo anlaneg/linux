@@ -321,6 +321,7 @@ struct flow_action {
 	struct flow_action_entry	entries[];/*记录flow动作*/
 };
 
+/*检查action中是否包含entry*/
 static inline bool flow_action_has_entries(const struct flow_action *action)
 {
 	return action->num_entries;
@@ -337,6 +338,7 @@ static inline bool flow_offload_has_one_action(const struct flow_action *action)
 	return action->num_entries == 1;
 }
 
+/*遍历flow_action结构体__act中的每个entry*/
 #define flow_action_for_each(__i, __act, __actions)			\
         for (__i = 0, __act = &(__actions)->entries[0];			\
 	     __i < (__actions)->num_entries;				\
@@ -590,20 +592,21 @@ enum flow_cls_command {
 
 struct flow_cls_common_offload {
 	u32 chain_index;/*chain索引*/
-	__be16 protocol;
-	u32 prio;
-	struct netlink_ext_ack *extack;
+	__be16 protocol;/*filter基于的协议，例如ip/ipv6/arp*/
+	u32 prio;/*优先级*/
+	struct netlink_ext_ack *extack;/*报错用的message buffer*/
 };
 
 struct flow_cls_offload {
 	struct flow_cls_common_offload common;
-	enum flow_cls_command command;
+	enum flow_cls_command command;/*offload命令字*/
 	unsigned long cookie;/*用于标识flow*/
-	struct flow_rule *rule;
+	struct flow_rule *rule;/*要offload的规则匹配/action*/
 	struct flow_stats stats;
 	u32 classid;
 };
 
+/*返回flow_cmd中提定的要offload的规则*/
 static inline struct flow_rule *
 flow_cls_offload_flow_rule(struct flow_cls_offload *flow_cmd)
 {

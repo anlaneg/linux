@@ -467,7 +467,7 @@ int main(int argc, const char **argv)
 	srandom(time(NULL));
 
 	/* Setting $PERF_CONFIG makes perf read _only_ the given config file. */
-	config_exclusive_filename = getenv("PERF_CONFIG");
+	config_exclusive_filename = getenv("PERF_CONFIG");/*取配置文件名*/
 
 	err = perf_config(perf_default_config, NULL);
 	if (err)
@@ -489,6 +489,7 @@ int main(int argc, const char **argv)
 	if (strstarts(cmd, "perf-")) {
 		cmd += 5;
 		argv[0] = cmd;
+		/*命令以perf-开头，执行内部命令*/
 		handle_internal_command(argc, argv);
 		/*
 		 * If the command is handled, the above function does not
@@ -501,6 +502,7 @@ int main(int argc, const char **argv)
 #if defined(HAVE_LIBAUDIT_SUPPORT) || defined(HAVE_SYSCALL_TABLE_SUPPORT)
 		setup_path();
 		argv[0] = "trace";
+		/*执行trace命令*/
 		return cmd_trace(argc, argv);
 #else
 		fprintf(stderr,

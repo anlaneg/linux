@@ -8,7 +8,7 @@
 
 struct timerqueue_node {
 	struct rb_node node;
-	ktime_t expires;
+	ktime_t expires;/*过期时间*/
 };
 
 struct timerqueue_head {

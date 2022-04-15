@@ -87,6 +87,7 @@ static void __dma_direct_free_pages(struct device *dev, struct page *page,
 static struct page *__dma_direct_alloc_pages(struct device *dev, size_t size,
 		gfp_t gfp)
 {
+    /*设备所属的numa node*/
 	int node = dev_to_node(dev);
 	struct page *page = NULL;
 	u64 phys_limit;
@@ -149,6 +150,7 @@ static void *dma_direct_alloc_from_pool(struct device *dev, size_t size,
 	return ret;
 }
 
+/*direct申请*/
 void *dma_direct_alloc(struct device *dev, size_t size,
 		dma_addr_t *dma_handle, gfp_t gfp, unsigned long attrs)
 {
@@ -156,6 +158,7 @@ void *dma_direct_alloc(struct device *dev, size_t size,
 	void *ret;
 	int err;
 
+	/*按页对齐*/
 	size = PAGE_ALIGN(size);
 	if (attrs & DMA_ATTR_NO_WARN)
 		gfp |= __GFP_NOWARN;

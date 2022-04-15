@@ -135,13 +135,16 @@ struct module {
 struct elf_info {
 	size_t size;
 	Elf_Ehdr     *hdr;
+	/*section头部*/
 	Elf_Shdr     *sechdrs;
 	Elf_Sym      *symtab_start;
 	Elf_Sym      *symtab_stop;
 	Elf_Section  export_sec;
 	Elf_Section  export_gpl_sec;
 	char         *strtab;
+	/*modinfo起始位置*/
 	char	     *modinfo;
+	/*modinfo长度*/
 	unsigned int modinfo_len;
 
 	/* support for 32bit section numbers */

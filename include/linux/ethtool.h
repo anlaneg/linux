@@ -651,6 +651,7 @@ struct ethtool_ops {
 				  struct ethtool_pauseparam*);
 	void	(*self_test)(struct net_device *, struct ethtool_test *, u64 *);
 	void	(*get_strings)(struct net_device *, u32 stringset, u8 *);
+	/*提供网卡的物理标识，通过闪烁进行标识*/
 	int	(*set_phys_id)(struct net_device *, enum ethtool_phys_id_state);
 	//获取网卡的统计信息
 	void	(*get_ethtool_stats)(struct net_device *,

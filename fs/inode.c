@@ -924,9 +924,10 @@ repeat:
 #define LAST_INO_BATCH 1024
 static DEFINE_PER_CPU(unsigned int, last_ino);
 
+/*分配一个ino*/
 unsigned int get_next_ino(void)
 {
-	unsigned int *p = &get_cpu_var(last_ino);
+	unsigned int *p = &get_cpu_var(last_ino);/*取当前cpu上的last ino*/
 	unsigned int res = *p;
 
 #ifdef CONFIG_SMP
@@ -941,7 +942,7 @@ unsigned int get_next_ino(void)
 	res++;
 	/* get_next_ino should not provide a 0 inode number */
 	if (unlikely(!res))
-		res++;
+		res++;/*跳过0*/
 	*p = res;
 	put_cpu_var(last_ino);
 	return res;

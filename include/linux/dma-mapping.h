@@ -327,8 +327,8 @@ static inline dma_addr_t dma_map_single_attrs(struct device *dev, void *ptr,
 			  "rejecting DMA map of vmalloc memory\n"))
 		return DMA_MAPPING_ERROR;
 	debug_dma_map_single(dev, ptr, size);
-	return dma_map_page_attrs(dev, virt_to_page(ptr), offset_in_page(ptr),
-			size, dir, attrs);
+	return dma_map_page_attrs(dev, virt_to_page(ptr)/*物理页号*/, offset_in_page(ptr)/*ptr在页中的偏移量*/,
+			size/*ptr内存大小*/, dir/*方向*/, attrs);
 }
 
 static inline void dma_unmap_single_attrs(struct device *dev, dma_addr_t addr,
@@ -403,7 +403,7 @@ static inline void dma_sync_sgtable_for_device(struct device *dev,
 	dma_sync_sg_for_device(dev, sgt->sgl, sgt->orig_nents, dir);
 }
 
-#define dma_map_single(d, a, s, r) dma_map_single_attrs(d, a, s, r, 0)
+#define dma_map_single(d/*设备*/, a/*kernel虚地址（起始地址）*/, s/*内存大小*/, r/*方向*/) dma_map_single_attrs(d, a, s, r, 0)
 #define dma_unmap_single(d, a, s, r) dma_unmap_single_attrs(d, a, s, r, 0)
 #define dma_map_sg(d, s, n, r) dma_map_sg_attrs(d, s, n, r, 0)
 #define dma_unmap_sg(d, s, n, r) dma_unmap_sg_attrs(d, s, n, r, 0)

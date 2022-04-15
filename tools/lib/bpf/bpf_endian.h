@@ -12,16 +12,19 @@
  */
 #define ___bpf_mvb(x, b, n, m) ((__u##b)(x) << (b-(n+1)*8) >> (b-8) << (m*8))
 
+/*ntohs函数实现*/
 #define ___bpf_swab16(x) ((__u16)(			\
 			  ___bpf_mvb(x, 16, 0, 1) |	\
 			  ___bpf_mvb(x, 16, 1, 0)))
 
+/*ntohl函数实现*/
 #define ___bpf_swab32(x) ((__u32)(			\
 			  ___bpf_mvb(x, 32, 0, 3) |	\
 			  ___bpf_mvb(x, 32, 1, 2) |	\
 			  ___bpf_mvb(x, 32, 2, 1) |	\
 			  ___bpf_mvb(x, 32, 3, 0)))
 
+/*ntohll函数实现*/
 #define ___bpf_swab64(x) ((__u64)(			\
 			  ___bpf_mvb(x, 64, 0, 7) |	\
 			  ___bpf_mvb(x, 64, 1, 6) |	\
@@ -48,6 +51,7 @@
  * use different targets.
  */
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
+/*小端情况下处理*/
 # define __bpf_ntohs(x)			__builtin_bswap16(x)
 # define __bpf_htons(x)			__builtin_bswap16(x)
 # define __bpf_constant_ntohs(x)	___bpf_swab16(x)
@@ -77,6 +81,7 @@
 # error "Fix your compiler's __BYTE_ORDER__?!"
 #endif
 
+/*对外提供字节序转换函数*/
 #define bpf_htons(x)				\
 	(__builtin_constant_p(x) ?		\
 	 __bpf_constant_htons(x) : __bpf_htons(x))

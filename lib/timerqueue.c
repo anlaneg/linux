@@ -19,6 +19,7 @@
 
 static inline bool __timerqueue_less(struct rb_node *a, const struct rb_node *b)
 {
+    /*如果a过期时间少于b过期时间，则返回true,否则false*/
 	return __node_2_tq(a)->expires < __node_2_tq(b)->expires;
 }
 
@@ -52,6 +53,7 @@ EXPORT_SYMBOL_GPL(timerqueue_add);
  */
 bool timerqueue_del(struct timerqueue_head *head, struct timerqueue_node *node)
 {
+    /*将node自head上移除*/
 	WARN_ON_ONCE(RB_EMPTY_NODE(&node->node));
 
 	rb_erase_cached(&node->node, &head->rb_root);

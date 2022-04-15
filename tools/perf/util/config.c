@@ -37,11 +37,11 @@
 
 char buildid_dir[MAXPATHLEN]; /* root dir for buildid, binary cache */
 
-static FILE *config_file;
-static const char *config_file_name;
-static int config_linenr;
-static int config_file_eof;
-static struct perf_config_set *config_set;
+static FILE *config_file;/*配置文件*/
+static const char *config_file_name;/*配置文件名称*/
+static int config_linenr;/*配置文件行号*/
+static int config_file_eof;/*配置文件是否达到end of file*/
+static struct perf_config_set *config_set;/*perf config集合*/
 
 const char *config_exclusive_filename;
 
@@ -52,22 +52,27 @@ static int get_next_char(void)
 
 	c = '\n';
 	if ((f = config_file) != NULL) {
-		c = fgetc(f);
+		c = fgetc(f);/*读取一个字符*/
 		if (c == '\r') {
+		    /*如果遇到‘\r\n’,以‘\n’考虑*/
 			/* DOS like systems */
 			c = fgetc(f);
 			if (c != '\n') {
+			    /*非\r\n,退回字符*/
 				ungetc(c, f);
 				c = '\r';
 			}
 		}
 		if (c == '\n')
+		    /*读到换行，增加行数*/
 			config_linenr++;
 		if (c == EOF) {
+		    /*遇到文件结尾*/
 			config_file_eof = 1;
 			c = '\n';
 		}
 	}
+	/*返回读到的字符*/
 	return c;
 }
 
@@ -78,33 +83,45 @@ static char *parse_value(void)
 	size_t len = 0;
 
 	for (;;) {
+	    /*读取一个字符*/
 		int c = get_next_char();
 
+		/*行字符量超限*/
 		if (len >= sizeof(value) - 1)
 			return NULL;
 		if (c == '\n') {
+		    /*遇到换行符，返回行数据*/
 			if (quote)
 				return NULL;
 			value[len] = 0;
 			return value;
 		}
+
+		/*跳过注释行*/
 		if (comment)
 			continue;
+
+
+		/*跳过非引号内的空字符*/
 		if (isspace(c) && !quote) {
 			space = 1;
 			continue;
 		}
 		if (!quote) {
 			if (c == ';' || c == '#') {
+			    /*指明遇到comment*/
 				comment = 1;
 				continue;
 			}
 		}
+
 		if (space) {
 			if (len)
 				value[len++] = ' ';
 			space = 0;
 		}
+
+		/*遇到转义符，进行转义处理*/
 		if (c == '\\') {
 			c = get_next_char();
 			switch (c) {
@@ -126,9 +143,11 @@ static char *parse_value(void)
 			default:
 				return NULL;
 			}
-			value[len++] = c;
+			value[len++] = c;/*写入转义后字符*/
 			continue;
 		}
+
+		/*遇到引号*/
 		if (c == '"') {
 			quote = 1-quote;
 			continue;
@@ -151,25 +170,37 @@ static int get_value(config_fn_t fn, void *data, char *name, unsigned int len)
 	for (;;) {
 		c = get_next_char();
 		if (config_file_eof)
+		    /*达到文件尾，退出*/
 			break;
 		if (!iskeychar(c))
+		    /*是到非key字符，退出*/
 			break;
+		/*填写key字符*/
 		name[len++] = c;
 		if (len >= MAXNAME)
+		    /*长度超限，退出*/
 			return -1;
 	}
+
+	/*置key结尾*/
 	name[len] = 0;
+
+	/*跳过空字符*/
 	while (c == ' ' || c == '\t')
 		c = get_next_char();
 
 	value = NULL;
 	if (c != '\n') {
 		if (c != '=')
+		    /*遇到非‘=’，格式有误*/
 			return -1;
+		/*开始解析value*/
 		value = parse_value();
 		if (!value)
 			return -1;
 	}
+
+	/*处理配置*/
 	return fn(name, value, data);
 }
 
@@ -218,7 +249,10 @@ static int get_base_var(char *name)
 		if (config_file_eof)
 			return -1;
 		if (c == ']')
+		    /*遇到']',返回baselen*/
 			return baselen;
+
+		/*对空格进行特别处理*/
 		if (isspace(c))
 			return get_extended_base_var(name, baselen, c);
 		if (!iskeychar(c) && c != '.')
@@ -229,6 +263,7 @@ static int get_base_var(char *name)
 	}
 }
 
+/*解析配置文件，针对每个key,value对儿，执行fn处理*/
 static int perf_parse_file(config_fn_t fn, void *data)
 {
 	int comment = 0;
@@ -242,6 +277,7 @@ static int perf_parse_file(config_fn_t fn, void *data)
 	for (;;) {
 		int line, c = get_next_char();
 
+		/*utf-8编码处理*/
 		if (bomptr && *bomptr) {
 			/* We are at the file beginning; skip UTF8-encoded BOM
 			 * if present. Sane editors won't put this in on their
@@ -257,18 +293,26 @@ static int perf_parse_file(config_fn_t fn, void *data)
 				bomptr = NULL;
 			}
 		}
+
 		if (c == '\n') {
 			if (config_file_eof)
+			    /*配置文件到达结尾*/
 				return 0;
+			/*行结束，注释结束*/
 			comment = 0;
 			continue;
 		}
+
+		/*忽略空格及注释*/
 		if (comment || isspace(c))
 			continue;
+
+		/*判定注释*/
 		if (c == '#' || c == ';') {
 			comment = 1;
 			continue;
 		}
+
 		if (c == '[') {
 			baselen = get_base_var(var);
 			if (baselen <= 0)
@@ -277,15 +321,18 @@ static int perf_parse_file(config_fn_t fn, void *data)
 			var[baselen] = 0;
 			continue;
 		}
+		/*key必须以字每开头*/
 		if (!isalpha(c))
 			break;
+
+		/*小写字每*/
 		var[baselen] = tolower(c);
 
 		/*
 		 * The get_value function might or might not reach the '\n',
 		 * so saving the current line number for error reporting.
 		 */
-		line = config_linenr;
+		line = config_linenr;/*记录行号*/
 		if (get_value(fn, data, var, baselen+1) < 0) {
 			config_linenr = line;
 			break;
@@ -496,7 +543,7 @@ int perf_default_config(const char *var, const char *value,
 	return 0;
 }
 
-static int perf_config_from_file(config_fn_t fn, const char *filename, void *data)
+static int perf_config_from_file(config_fn_t fn/*配置文件kv解析处理*/, const char *filename/*配置文件*/, void *data/*私有数据*/)
 {
 	int ret;
 	FILE *f = fopen(filename, "r");
@@ -507,7 +554,9 @@ static int perf_config_from_file(config_fn_t fn, const char *filename, void *dat
 		config_file_name = filename;
 		config_linenr = 1;
 		config_file_eof = 0;
+		/*解析配置文件,fn处理key,value*/
 		ret = perf_parse_file(fn, data);
+		/*关闭配置文件*/
 		fclose(f);
 		config_file_name = NULL;
 	}
@@ -692,15 +741,19 @@ static int collect_config(const char *var, const char *value,
 	if (name == NULL || value == NULL)
 		goto out_free;
 
+	/*检查section_name是否已存在*/
 	section = find_section(sections, section_name);
 	if (!section) {
+	    /*添加section*/
 		section = add_section(sections, section_name);
 		if (!section)
 			goto out_free;
 	}
 
+	/*检查此section下是否有此name*/
 	item = find_config_item(name, section);
 	if (!item) {
+	    /*添加此item*/
 		item = add_config_item(section, name);
 		if (!item)
 			goto out_free;
@@ -719,6 +772,7 @@ static int collect_config(const char *var, const char *value,
 		item->from_system_config = false;
 	}
 
+	/*设置此item对应的value*/
 	ret = set_value(item, value);
 
 out_free:
@@ -733,17 +787,22 @@ int perf_config_set__collect(struct perf_config_set *set, const char *file_name,
 	return collect_config(var, value, set);
 }
 
+/*填充set*/
 static int perf_config_set__init(struct perf_config_set *set)
 {
 	int ret = -1;
 
 	/* Setting $PERF_CONFIG makes perf read _only_ the given config file. */
 	if (config_exclusive_filename)
+	    /*解析此配置文件，并填充set*/
 		return perf_config_from_file(collect_config, config_exclusive_filename, set);
 	if (perf_config_system() && !access(perf_etc_perfconfig(), R_OK)) {
+	    /*解析perf_etc_perfconfig配置文件，并填充set*/
 		if (perf_config_from_file(collect_config, perf_etc_perfconfig(), set) < 0)
 			goto out;
 	}
+
+	/*解析perf_home_perfconfig配置文件，并填充set*/
 	if (perf_config_global() && perf_home_perfconfig()) {
 		if (perf_config_from_file(collect_config, perf_home_perfconfig(), set) < 0)
 			goto out;
@@ -753,6 +812,7 @@ out:
 	return ret;
 }
 
+/*加载并解析配置文件，返回set*/
 struct perf_config_set *perf_config_set__new(void)
 {
 	struct perf_config_set *set = zalloc(sizeof(*set));

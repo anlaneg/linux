@@ -21,6 +21,7 @@
 int mod_check_sig(const struct module_signature *ms, size_t file_len,
 		  const char *name)
 {
+    /*签名长度检查*/
 	if (be32_to_cpu(ms->sig_len) >= file_len - sizeof(*ms))
 		return -EBADMSG;
 

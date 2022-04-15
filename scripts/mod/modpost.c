@@ -177,6 +177,7 @@ static struct module *find_module(const char *modname)
 	return mod;
 }
 
+/*新创建module*/
 static struct module *new_module(const char *modname)
 {
 	struct module *mod;
@@ -444,7 +445,7 @@ static void sym_set_crc(const char *name, unsigned int crc)
 	s->crc_valid = 1;
 }
 
-static void *grab_file(const char *filename, size_t *size)
+static void *grab_file(const char *filename, size_t *size/*出参，文件大小*/)
 {
 	struct stat st;
 	void *map = MAP_FAILED;
@@ -456,6 +457,7 @@ static void *grab_file(const char *filename, size_t *size)
 	if (fstat(fd, &st))
 		goto failed;
 
+	/*将此文件映射到内存*/
 	*size = st.st_size;
 	map = mmap(NULL, *size, PROT_READ|PROT_WRITE, MAP_PRIVATE, fd, 0);
 
@@ -482,6 +484,7 @@ static int parse_elf(struct elf_info *info, const char *filename)
 
 	hdr = grab_file(filename, &info->size);
 	if (!hdr) {
+	    /*读取文件内容失败，退出*/
 		if (ignore_missing_files) {
 			fprintf(stderr, "%s: %s (ignored)\n", filename,
 				strerror(errno));
@@ -495,6 +498,7 @@ static int parse_elf(struct elf_info *info, const char *filename)
 		/* file too small, assume this is an empty .o file */
 		return 0;
 	}
+	/*必须是一个Elf文件*/
 	/* Is this a valid ELF file? */
 	if ((hdr->e_ident[EI_MAG0] != ELFMAG0) ||
 	    (hdr->e_ident[EI_MAG1] != ELFMAG1) ||
@@ -522,6 +526,7 @@ static int parse_elf(struct elf_info *info, const char *filename)
 
 	/* Check if file offset is correct */
 	if (hdr->e_shoff > info->size) {
+	    /*section offset数据有误*/
 		fatal("section header offset=%lu in file '%s' is bigger than filesize=%zu\n",
 		      (unsigned long)hdr->e_shoff, filename, info->size);
 		return 0;
@@ -570,6 +575,8 @@ static int parse_elf(struct elf_info *info, const char *filename)
 			      sizeof(*hdr));
 			return 0;
 		}
+
+		/*取此section名称*/
 		secname = secstrings + sechdrs[i].sh_name;
 		if (strcmp(secname, ".modinfo") == 0) {
 			if (nobits)
@@ -779,6 +786,7 @@ static char *get_next_modinfo(struct elf_info *info, const char *tag,
 		modinfo = next_string(prev, &size);
 	}
 
+	/*遍历modinfo在其中查找指定tag,并返回对其对应内容*/
 	for (p = modinfo; p; p = next_string(p, &size)) {
 		if (strncmp(p, tag, taglen) == 0 && p[taglen] == '=')
 			return p + taglen + 1;
@@ -2008,6 +2016,7 @@ static void read_symbols(const char *modname)
 	}
 
 	if (!mod->is_vmlinux) {
+	    /*取license*/
 		license = get_modinfo(&info, "license");
 		if (!license)
 			error("missing MODULE_LICENSE() in %s\n", modname);
@@ -2018,6 +2027,7 @@ static void read_symbols(const char *modname)
 				mod->gpl_compatible = 0;
 				break;
 			}
+			/*取下一个license*/
 			license = get_next_modinfo(&info, "license", license);
 		}
 
@@ -2509,6 +2519,7 @@ int main(int argc, char **argv)
 			external_module = 1;
 			break;
 		case 'i':
+		    /*由-i参数指定输入文件*/
 			*dump_read_iter =
 				NOFAIL(calloc(1, sizeof(**dump_read_iter)));
 			(*dump_read_iter)->file = optarg;
@@ -2581,6 +2592,7 @@ int main(int argc, char **argv)
 		add_moddevtable(&buf, mod);
 		add_srcversion(&buf, mod);
 
+		/*写mod.c文件*/
 		sprintf(fname, "%s.mod.c", mod->name);
 		write_if_changed(&buf, fname);
 	}

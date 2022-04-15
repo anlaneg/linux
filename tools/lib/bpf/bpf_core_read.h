@@ -203,6 +203,7 @@ enum bpf_enum_value_kind {
  * (local) BTF, used to record relocation.
  */
 #define bpf_core_read(dst, sz, src)					    \
+    /*读取src内容到dst中*/\
 	bpf_probe_read_kernel(dst, sz, (const void *)__builtin_preserve_access_index(src))
 
 /* NOTE: see comments for BPF_CORE_READ_USER() about the proper types use. */
@@ -220,8 +221,11 @@ enum bpf_enum_value_kind {
 #define bpf_core_read_user_str(dst, sz, src)				    \
 	bpf_probe_read_user_str(dst, sz, (const void *)__builtin_preserve_access_index(src))
 
+/*实现a,b联接*/
 #define ___concat(a, b) a ## b
+/*将function名称与一个数字，合并成串*/
 #define ___apply(fn, n) ___concat(fn, n)
+/*返回参数数目*/
 #define ___nth(_1, _2, _3, _4, _5, _6, _7, _8, _9, _10, __11, N, ...) N
 
 /*
@@ -246,6 +250,7 @@ enum bpf_enum_value_kind {
 #define ___last8(a, b, c, d, e, f, g, x) x
 #define ___last9(a, b, c, d, e, f, g, h, x) x
 #define ___last10(a, b, c, d, e, f, g, h, i, x) x
+/*调用此macro，将返回最后一个参数*/
 #define ___last(...) ___apply(___last, ___narg(__VA_ARGS__))(__VA_ARGS__)
 
 #define ___nolast2(a, _) a
@@ -257,6 +262,7 @@ enum bpf_enum_value_kind {
 #define ___nolast8(a, b, c, d, e, f, g, _) a, b, c, d, e, f, g
 #define ___nolast9(a, b, c, d, e, f, g, h, _) a, b, c, d, e, f, g, h
 #define ___nolast10(a, b, c, d, e, f, g, h, i, _) a, b, c, d, e, f, g, h, i
+/*丢弃掉最后一个参数*/
 #define ___nolast(...) ___apply(___nolast, ___narg(__VA_ARGS__))(__VA_ARGS__)
 
 #define ___arrow1(a) a
@@ -269,18 +275,24 @@ enum bpf_enum_value_kind {
 #define ___arrow8(a, b, c, d, e, f, g, h) a->b->c->d->e->f->g->h
 #define ___arrow9(a, b, c, d, e, f, g, h, i) a->b->c->d->e->f->g->h->i
 #define ___arrow10(a, b, c, d, e, f, g, h, i, j) a->b->c->d->e->f->g->h->i->j
+/*返回各分量的点操作结果*/
 #define ___arrow(...) ___apply(___arrow, ___narg(__VA_ARGS__))(__VA_ARGS__)
 
+/*取各分量的点操作对应的type*/
 #define ___type(...) typeof(___arrow(__VA_ARGS__))
 
-#define ___read(read_fn, dst, src_type, src, accessor)			    \
+/*通过read_fn函数，将内存src->accessor复制到dst中*/
+#define ___read(read_fn, dst, src_type/*src的类型*/, src, accessor)			    \
 	read_fn((void *)(dst), sizeof(*(dst)), &((src_type)(src))->accessor)
 
 /* "recursively" read a sequence of inner pointers using local __t var */
-#define ___rd_first(fn, src, a) ___read(fn, &__t, ___type(src), src, a);
+#define ___rd_first(fn, src, a) ___read(fn, &__t, ___type(src), src, a);/*将src.a填充到__t*/
+/*将__t中的成员填充到&__t*/
 #define ___rd_last(fn, ...)						    \
 	___read(fn, &__t, ___type(___nolast(__VA_ARGS__)), __t, ___last(__VA_ARGS__));
-#define ___rd_p1(fn, ...) const void *__t; ___rd_first(fn, __VA_ARGS__)
+/*定义__t变量，并将第一个变量对应的值填充到__t变量*/
+#define ___rd_p1(fn, ...) const void *__t/*可容纳uint32/uint64*/; ___rd_first(fn, __VA_ARGS__)
+/*丢弃掉最后一个参数后*/
 #define ___rd_p2(fn, ...) ___rd_p1(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
 #define ___rd_p3(fn, ...) ___rd_p2(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
 #define ___rd_p4(fn, ...) ___rd_p3(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
@@ -289,11 +301,14 @@ enum bpf_enum_value_kind {
 #define ___rd_p7(fn, ...) ___rd_p6(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
 #define ___rd_p8(fn, ...) ___rd_p7(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
 #define ___rd_p9(fn, ...) ___rd_p8(fn, ___nolast(__VA_ARGS__)) ___rd_last(fn, __VA_ARGS__)
+/*递归展开，第一层利用首层定义的变量__t,然后填充这个变量*/
 #define ___read_ptrs(fn, src, ...)					    \
 	___apply(___rd_p, ___narg(__VA_ARGS__))(fn, src, __VA_ARGS__)
 
-#define ___core_read0(fn, fn_ptr, dst, src, a)				    \
+/*定义___core_read0*/
+#define ___core_read0(fn/*复制函数名*/, fn_ptr, dst, src, a/*src的一个成员变量*/)				    \
 	___read(fn, dst, ___type(src), src, a);
+/*多个参数时，先执行点操作*/
 #define ___core_readN(fn, fn_ptr, dst, src, ...)			    \
 	___read_ptrs(fn_ptr, src, ___nolast(__VA_ARGS__))		    \
 	___read(fn, dst, ___type(src, ___nolast(__VA_ARGS__)), __t,	    \
@@ -307,7 +322,7 @@ enum bpf_enum_value_kind {
  * BPF_CORE_READ(), in which final field is read into user-provided storage.
  * See BPF_CORE_READ() below for more details on general usage.
  */
-#define BPF_CORE_READ_INTO(dst, src, a, ...) ({				    \
+#define BPF_CORE_READ_INTO(dst/*待填充内容*/, src/*源数据*/, a/*成员变量*/, ...) ({				    \
 	___core_read(bpf_core_read, bpf_core_read,			    \
 		     dst, (src), a, ##__VA_ARGS__)			    \
 })
@@ -400,8 +415,11 @@ enum bpf_enum_value_kind {
  * than enough for any practical purpose.
  */
 #define BPF_CORE_READ(src, a, ...) ({					    \
+    /*定义r变量*/\
 	___type((src), a, ##__VA_ARGS__) __r;				    \
+	/*读取src中r对应的内容*/\
 	BPF_CORE_READ_INTO(&__r, (src), a, ##__VA_ARGS__);		    \
+	/*返回r*/\
 	__r;								    \
 })
 

@@ -217,7 +217,7 @@ bpf_prog_linfo__lfind_addr_func(const struct bpf_prog_linfo *prog_linfo,
 
 const struct bpf_line_info *
 bpf_prog_linfo__lfind(const struct bpf_prog_linfo *prog_linfo,
-		      __u32 insn_off, __u32 nr_skip)
+		      __u32 insn_off, __u32 nr_skip/*要跳过的nr数目*/)
 {
 	const struct bpf_line_info *linfo;
 	__u32 rec_size, nr_linfo, i;

@@ -217,12 +217,15 @@ bpf_probe_read_kernel_common(void *dst, u32 size, const void *unsafe_ptr)
 {
 	int ret;
 
+	/*将unsafe_ptr size字节复制到dst中*/
 	ret = copy_from_kernel_nofault(dst, unsafe_ptr, size);
 	if (unlikely(ret < 0))
+	    /*处理失败，将dst清0，并返回负数*/
 		memset(dst, 0, size);
 	return ret;
 }
 
+/*定义函数bpf_probe_read_kernel*/
 BPF_CALL_3(bpf_probe_read_kernel, void *, dst, u32, size,
 	   const void *, unsafe_ptr)
 {
@@ -380,8 +383,10 @@ BPF_CALL_5(bpf_trace_printk, char *, fmt, u32, fmt_size, u64, arg1,
 		return ret;
 
 	raw_spin_lock_irqsave(&trace_printk_lock, flags);
+	/*输出到buf*/
 	ret = bstr_printf(buf, sizeof(buf), fmt, bin_args);
 
+	/*执行输出*/
 	trace_bpf_trace_printk(buf);
 	raw_spin_unlock_irqrestore(&trace_printk_lock, flags);
 
@@ -462,6 +467,7 @@ const struct bpf_func_proto *bpf_get_trace_vprintk_proto(void)
 	return &bpf_trace_vprintk_proto;
 }
 
+/*执行bpf格式化输出*/
 BPF_CALL_5(bpf_seq_printf, struct seq_file *, m, char *, fmt, u32, fmt_size,
 	   const void *, data, u32, data_len)
 {
@@ -470,13 +476,16 @@ BPF_CALL_5(bpf_seq_printf, struct seq_file *, m, char *, fmt, u32, fmt_size,
 
 	if (data_len & 7 || data_len > MAX_BPRINTF_VARARGS * 8 ||
 	    (data_len && !data))
+	    /*data_len必须以8字节对齐，data_len长度不得超限*/
 		return -EINVAL;
+	/*参数数量*/
 	num_args = data_len / 8;
 
 	err = bpf_bprintf_prepare(fmt, fmt_size, data, &bin_args, num_args);
 	if (err < 0)
 		return err;
 
+	/*输出到seq_file*/
 	seq_bprintf(m, fmt, bin_args);
 
 	bpf_bprintf_cleanup();

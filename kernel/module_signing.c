@@ -28,6 +28,7 @@ int mod_verify_sig(const void *mod, struct load_info *info)
 	if (modlen <= sizeof(ms))
 		return -EBADMSG;
 
+	/*ms位于module结尾*/
 	memcpy(&ms, mod + (modlen - sizeof(ms)), sizeof(ms));
 
 	ret = mod_check_sig(&ms, modlen, "module");
@@ -36,7 +37,7 @@ int mod_verify_sig(const void *mod, struct load_info *info)
 
 	sig_len = be32_to_cpu(ms.sig_len);
 	modlen -= sig_len + sizeof(ms);
-	info->len = modlen;
+	info->len = modlen;/*更新module实际长度*/
 
 	return verify_pkcs7_signature(mod, modlen, mod + modlen, sig_len,
 				      VERIFY_USE_SECONDARY_KEYRING,

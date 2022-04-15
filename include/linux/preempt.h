@@ -220,6 +220,7 @@ do { \
 do { \
 	barrier(); \
 	if (unlikely(preempt_count_dec_and_test())) \
+	    /*未禁止抢占，执行kernel抢占*/\
 		__preempt_schedule(); \
 } while (0)
 

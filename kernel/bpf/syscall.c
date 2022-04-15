@@ -1965,15 +1965,19 @@ int bpf_prog_new_fd(struct bpf_prog *prog)
 static struct bpf_prog *____bpf_prog_get(struct fd f)
 {
 	if (!f.file)
+	    /*file不得为空*/
 		return ERR_PTR(-EBADF);
 	if (f.file->f_op != &bpf_prog_fops) {
+	    /*必须为bpf_prog类型的file*/
 		fdput(f);
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*取私有数据*/
 	return f.file->private_data;
 }
 
+/*增加i个引用*/
 void bpf_prog_add(struct bpf_prog *prog, int i)
 {
 	atomic64_add(i, &prog->aux->refcnt);
@@ -1991,6 +1995,7 @@ void bpf_prog_sub(struct bpf_prog *prog, int i)
 }
 EXPORT_SYMBOL_GPL(bpf_prog_sub);
 
+/*增加1个引用*/
 void bpf_prog_inc(struct bpf_prog *prog)
 {
 	atomic64_inc(&prog->aux->refcnt);
@@ -2190,6 +2195,7 @@ bpf_prog_load_check_attach(enum bpf_prog_type prog_type,
 	}
 }
 
+/*网络相关的prog*/
 static bool is_net_admin_prog_type(enum bpf_prog_type prog_type)
 {
 	switch (prog_type) {
@@ -2260,6 +2266,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 				 BPF_F_TEST_STATE_FREQ |
 				 BPF_F_SLEEPABLE |
 				 BPF_F_TEST_RND_HI32))
+	    /*遇到不认识的flags,报错*/
 		return -EINVAL;
 
 	if (!IS_ENABLED(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) &&
@@ -2286,8 +2293,11 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 	    !bpf_capable())
 		return -EPERM;
 
+	/*net相关的程序权限检查*/
 	if (is_net_admin_prog_type(type) && !capable(CAP_NET_ADMIN) && !capable(CAP_SYS_ADMIN))
 		return -EPERM;
+
+	/*perf monitor相关的程序权限检查*/
 	if (is_perfmon_prog_type(type) && !perfmon_capable())
 		return -EPERM;
 
@@ -2331,6 +2341,7 @@ static int bpf_prog_load(union bpf_attr *attr, bpfptr_t uattr)
 	}
 
 	/* plain bpf_prog allocation */
+	/*申请包含指定的bpf prog*/
 	prog = bpf_prog_alloc(bpf_prog_size(attr->insn_cnt), GFP_USER);
 	if (!prog) {
 		if (dst_prog)
@@ -2445,6 +2456,7 @@ static int bpf_obj_pin(const union bpf_attr *attr)
 	if (CHECK_ATTR(BPF_OBJ) || attr->file_flags != 0)
 		return -EINVAL;
 
+	/*将bpf obj与指定路径相互关联*/
 	return bpf_obj_pin_user(attr->bpf_fd, u64_to_user_ptr(attr->pathname));
 }
 
@@ -3397,6 +3409,7 @@ static int bpf_prog_test_run(const union bpf_attr *attr,
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);
 
+	/*如果有test_run回调，则调用它，并返回相应的结果*/
 	if (prog->aux->ops->test_run)
 		ret = prog->aux->ops->test_run(prog, attr, uattr);
 
@@ -3427,11 +3440,13 @@ static int bpf_obj_get_next_id(const union bpf_attr *attr,
 	spin_unlock_bh(lock);
 
 	if (!err)
+	    /*填充存在的next_id*/
 		err = put_user(next_id, &uattr->next_id);
 
 	return err;
 }
 
+/*取id号bpf_map，如果其不存在，则获取下一个可用的bpf_map*/
 struct bpf_map *bpf_map_get_curr_or_next(u32 *id)
 {
 	struct bpf_map *map;
@@ -3451,16 +3466,19 @@ again:
 	return map;
 }
 
+/*取id号bpf_prog，如果其不存在，则获取下一个可用的bpf_prog*/
 struct bpf_prog *bpf_prog_get_curr_or_next(u32 *id)
 {
 	struct bpf_prog *prog;
 
 	spin_lock_bh(&prog_idr_lock);
 again:
+    /*取id号对应的prog*/
 	prog = idr_get_next(&prog_idr, id);
 	if (prog) {
 		prog = bpf_prog_inc_not_zero(prog);
 		if (IS_ERR(prog)) {
+		    /*有误，尝试下一个prog*/
 			(*id)++;
 			goto again;
 		}
@@ -3472,6 +3490,7 @@ again:
 
 #define BPF_PROG_GET_FD_BY_ID_LAST_FIELD prog_id
 
+/*通过id获取bpf_prog*/
 struct bpf_prog *bpf_prog_by_id(u32 id)
 {
 	struct bpf_prog *prog;
@@ -3480,10 +3499,12 @@ struct bpf_prog *bpf_prog_by_id(u32 id)
 		return ERR_PTR(-ENOENT);
 
 	spin_lock_bh(&prog_idr_lock);
+	/*通过id查找prog*/
 	prog = idr_find(&prog_idr, id);
 	if (prog)
 		prog = bpf_prog_inc_not_zero(prog);
 	else
+	    /*不存在此id的prog*/
 		prog = ERR_PTR(-ENOENT);
 	spin_unlock_bh(&prog_idr_lock);
 	return prog;
@@ -4224,6 +4245,7 @@ put_file:
 
 #define BPF_MAP_BATCH_LAST_FIELD batch.flags
 
+/*检查fn,如果fn不存在，返回Not support,否则返回调用结果*/
 #define BPF_DO_BATCH(fn)			\
 	do {					\
 		if (!fn) {			\
@@ -4264,12 +4286,16 @@ static int bpf_map_do_batch(const union bpf_attr *attr,
 	}
 
 	if (cmd == BPF_MAP_LOOKUP_BATCH)
+	    /*batch查询*/
 		BPF_DO_BATCH(map->ops->map_lookup_batch);
 	else if (cmd == BPF_MAP_LOOKUP_AND_DELETE_BATCH)
+	    /*batch查询并删除*/
 		BPF_DO_BATCH(map->ops->map_lookup_and_delete_batch);
 	else if (cmd == BPF_MAP_UPDATE_BATCH)
+	    /*batch更新*/
 		BPF_DO_BATCH(map->ops->map_update_batch);
 	else
+	    /*batch删除*/
 		BPF_DO_BATCH(map->ops->map_delete_batch);
 
 err_put:
@@ -4296,14 +4322,14 @@ static int tracing_bpf_link_attach(const union bpf_attr *attr, bpfptr_t uattr,
 static int link_create(union bpf_attr *attr, bpfptr_t uattr)
 {
 	enum bpf_prog_type ptype;
-	struct bpf_prog *prog;
+	struct bpf_prog *prog;	prog = bpf_prog_get(attr->link_create.prog_fd);
+
 	int ret;
 
 	if (CHECK_ATTR(BPF_LINK_CREATE))
 		return -EINVAL;
 
 	/*利用prog fd获得bpf程序*/
-	prog = bpf_prog_get(attr->link_create.prog_fd);
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);
 
@@ -4692,6 +4718,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 		err = bpf_prog_load(&attr, uattr);
 		break;
 	case BPF_OBJ_PIN:
+	    /*bpf obj与路径相互关联*/
 		err = bpf_obj_pin(&attr);
 		break;
 	case BPF_OBJ_GET:
@@ -4748,6 +4775,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 		err = map_lookup_and_delete_elem(&attr);
 		break;
 	case BPF_MAP_LOOKUP_BATCH:
+	    /*执行map的batch查询*/
 		err = bpf_map_do_batch(&attr, uattr.user, BPF_MAP_LOOKUP_BATCH);
 		break;
 	case BPF_MAP_LOOKUP_AND_DELETE_BATCH:
@@ -4755,9 +4783,11 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 				       BPF_MAP_LOOKUP_AND_DELETE_BATCH);
 		break;
 	case BPF_MAP_UPDATE_BATCH:
+	    /*执行map的batch更新*/
 		err = bpf_map_do_batch(&attr, uattr.user, BPF_MAP_UPDATE_BATCH);
 		break;
 	case BPF_MAP_DELETE_BATCH:
+	    /*执行map的batch删除*/
 		err = bpf_map_do_batch(&attr, uattr.user, BPF_MAP_DELETE_BATCH);
 		break;
 	case BPF_LINK_CREATE:
