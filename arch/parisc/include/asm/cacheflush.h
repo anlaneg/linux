@@ -9,16 +9,11 @@
 /* The usual comment is "Caches aren't brain-dead on the <architecture>".
  * Unfortunately, that doesn't apply to PA-RISC. */
 
-/* Internal implementation */
-void flush_data_cache_local(void *);  /* flushes local data-cache only */
-void flush_instruction_cache_local(void *); /* flushes local code-cache only */
-#ifdef CONFIG_SMP
-void flush_data_cache(void); /* flushes data-cache only (all processors) */
-void flush_instruction_cache(void); /* flushes i-cache only (all processors) */
-#else
-#define flush_data_cache() flush_data_cache_local(NULL)
-#define flush_instruction_cache() flush_instruction_cache_local(NULL)
-#endif
+#include <linux/jump_label.h>
+
+DECLARE_STATIC_KEY_TRUE(parisc_has_cache);
+DECLARE_STATIC_KEY_TRUE(parisc_has_dcache);
+DECLARE_STATIC_KEY_TRUE(parisc_has_icache);
 
 #define flush_cache_dup_mm(mm) flush_cache_mm(mm)
 
@@ -50,7 +45,6 @@ void invalidate_kernel_vmap_range(void *vaddr, int size);
 
 #define ARCH_IMPLEMENTS_FLUSH_DCACHE_PAGE 1
 void flush_dcache_page(struct page *page);
-void flush_dcache_folio(struct folio *folio);
 
 #define flush_dcache_mmap_lock(mapping)		xa_lock_irq(&mapping->i_pages)
 #define flush_dcache_mmap_unlock(mapping)	xa_unlock_irq(&mapping->i_pages)

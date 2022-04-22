@@ -215,6 +215,10 @@ unsigned long kallsyms_lookup_name(const char *name)
 	unsigned long i;
 	unsigned int off;
 
+	/* Skip the search for empty string. */
+	if (!*name)
+		return 0;
+
 	//先查内置的symbol
 	for (i = 0, off = 0; i < kallsyms_num_syms; i++) {
 		//解压获得一个符号，返回offset（用于记录下个符号的起点）
@@ -251,6 +255,7 @@ int kallsyms_on_each_symbol(int (*fn)(void *, const char *, struct module *,
 		ret = fn(data, namebuf, NULL, kallsyms_sym_address(i));
 		if (ret != 0)
 			return ret;
+		cond_resched();
 	}
 	return 0;
 }

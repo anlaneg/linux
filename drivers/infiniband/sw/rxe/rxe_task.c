@@ -34,16 +34,15 @@ void rxe_do_task(struct tasklet_struct *t)
     /*softirq会依据中断触发此函数执行task*/
 	int cont;
 	int ret;
-	unsigned long flags;
 	/*取tasklet对应的rxe_task*/
 	struct rxe_task *task = from_tasklet(task, t, tasklet);
 
-	spin_lock_irqsave(&task->state_lock, flags);
+	spin_lock_bh(&task->state_lock);
 	switch (task->state) {
 	case TASK_STATE_START:
 	    /*start转busy状态*/
 		task->state = TASK_STATE_BUSY;
-		spin_unlock_irqrestore(&task->state_lock, flags);
+		spin_unlock_bh(&task->state_lock);
 		break;
 
 	case TASK_STATE_BUSY:
@@ -51,12 +50,12 @@ void rxe_do_task(struct tasklet_struct *t)
 		task->state = TASK_STATE_ARMED;
 		fallthrough;
 	case TASK_STATE_ARMED:
-	    /*armed状态情况，函数返回*/
-		spin_unlock_irqrestore(&task->state_lock, flags);
+	    	/*armed状态情况，函数返回*/
+		spin_unlock_bh(&task->state_lock);
 		return;
 
 	default:
-		spin_unlock_irqrestore(&task->state_lock, flags);
+		spin_unlock_bh(&task->state_lock);
 		pr_warn("%s failed with bad state %d\n", __func__, task->state);
 		return;
 	}
@@ -66,7 +65,7 @@ void rxe_do_task(struct tasklet_struct *t)
 		/*执行此task任务*/
 		ret = task->func(task->arg);
 
-		spin_lock_irqsave(&task->state_lock, flags);
+		spin_lock_bh(&task->state_lock);
 		switch (task->state) {
 		case TASK_STATE_BUSY:
 			if (ret)
@@ -89,7 +88,7 @@ void rxe_do_task(struct tasklet_struct *t)
 			pr_warn("%s failed with bad state %d\n", __func__,
 				task->state);
 		}
-		spin_unlock_irqrestore(&task->state_lock, flags);
+		spin_unlock_bh(&task->state_lock);
 	} while (cont);
 
 	task->ret = ret;/*使用func回调返回值*/
@@ -115,7 +114,6 @@ int rxe_init_task(void *obj, struct rxe_task *task,
 
 void rxe_cleanup_task(struct rxe_task *task)
 {
-	unsigned long flags;
 	bool idle;
 
 	/*
@@ -125,9 +123,9 @@ void rxe_cleanup_task(struct rxe_task *task)
 	task->destroyed = true;
 
 	do {
-		spin_lock_irqsave(&task->state_lock, flags);
+		spin_lock_bh(&task->state_lock);
 		idle = (task->state == TASK_STATE_START);
-		spin_unlock_irqrestore(&task->state_lock, flags);
+		spin_unlock_bh(&task->state_lock);
 	} while (!idle);
 
 	tasklet_kill(&task->tasklet);

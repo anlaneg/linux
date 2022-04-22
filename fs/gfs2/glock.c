@@ -301,9 +301,6 @@ void gfs2_glock_queue_put(struct gfs2_glock *gl)
 
 void gfs2_glock_put(struct gfs2_glock *gl)
 {
-	/* last put could call sleepable dlm api */
-	might_sleep();
-
 	if (lockref_put_or_lock(&gl->gl_lockref))
 		return;
 
@@ -411,14 +408,14 @@ static void do_error(struct gfs2_glock *gl, const int ret)
 static void demote_incompat_holders(struct gfs2_glock *gl,
 				    struct gfs2_holder *new_gh)
 {
-	struct gfs2_holder *gh;
+	struct gfs2_holder *gh, *tmp;
 
 	/*
 	 * Demote incompatible holders before we make ourselves eligible.
 	 * (This holder may or may not allow auto-demoting, but we don't want
 	 * to demote the new holder before it's even granted.)
 	 */
-	list_for_each_entry(gh, &gl->gl_holders, gh_list) {
+	list_for_each_entry_safe(gh, tmp, &gl->gl_holders, gh_list) {
 		/*
 		 * Since holders are at the front of the list, we stop when we
 		 * find the first non-holder.
@@ -477,7 +474,7 @@ find_first_strong_holder(struct gfs2_glock *gl)
 
 /*
  * gfs2_instantiate - Call the glops instantiate function
- * @gl: The glock
+ * @gh: The glock holder
  *
  * Returns: 0 if instantiate was successful, 2 if type specific operation is
  * underway, or error.
@@ -496,7 +493,7 @@ again:
 	 * Since we unlock the lockref lock, we set a flag to indicate
 	 * instantiate is in progress.
 	 */
-	if (test_bit(GLF_INSTANTIATE_IN_PROG, &gl->gl_flags)) {
+	if (test_and_set_bit(GLF_INSTANTIATE_IN_PROG, &gl->gl_flags)) {
 		wait_on_bit(&gl->gl_flags, GLF_INSTANTIATE_IN_PROG,
 			    TASK_UNINTERRUPTIBLE);
 		/*
@@ -509,14 +506,10 @@ again:
 		goto again;
 	}
 
-	set_bit(GLF_INSTANTIATE_IN_PROG, &gl->gl_flags);
-
 	ret = glops->go_instantiate(gh);
 	if (!ret)
 		clear_bit(GLF_INSTANTIATE_NEEDED, &gl->gl_flags);
-	clear_bit(GLF_INSTANTIATE_IN_PROG, &gl->gl_flags);
-	smp_mb__after_atomic();
-	wake_up_bit(&gl->gl_flags, GLF_INSTANTIATE_IN_PROG);
+	clear_and_wake_up_bit(GLF_INSTANTIATE_IN_PROG, &gl->gl_flags);
 	return ret;
 }
 
@@ -549,7 +542,7 @@ restart:
 			 * some reason. If this holder is the head of the list, it
 			 * means we have a blocked holder at the head, so return 1.
 			 */
-			if (gh->gh_list.prev == &gl->gl_holders)
+			if (list_is_first(&gh->gh_list, &gl->gl_holders))
 				return 1;
 			do_error(gl, 0);
 			break;
@@ -676,6 +669,8 @@ static void finish_xmote(struct gfs2_glock *gl, unsigned int ret)
 
 	/* Check for state != intended state */
 	if (unlikely(state != gl->gl_target)) {
+		if (gh && (ret & LM_OUT_CANCELED))
+			gfs2_holder_wake(gh);
 		if (gh && !test_bit(GLF_DEMOTE_IN_PROGRESS, &gl->gl_flags)) {
 			/* move to back of queue and try next entry */
 			if (ret & LM_OUT_CANCELED) {
@@ -1249,7 +1244,7 @@ out:
 }
 
 /**
- * gfs2_holder_init - initialize a struct gfs2_holder in the default way
+ * __gfs2_holder_init - initialize a struct gfs2_holder in the default way
  * @gl: the glock
  * @state: the state we're requesting
  * @flags: the modifier flags
@@ -1266,7 +1261,6 @@ void __gfs2_holder_init(struct gfs2_glock *gl, unsigned int state, u16 flags,
 	gh->gh_owner_pid = get_pid(task_pid(current));
 	gh->gh_state = state;
 	gh->gh_flags = flags;
-	gh->gh_error = 0;
 	gh->gh_iflags = 0;
 	gfs2_glock_hold(gl);
 }
@@ -1572,6 +1566,7 @@ int gfs2_glock_nq(struct gfs2_holder *gh)
 	if (test_bit(GLF_LRU, &gl->gl_flags))
 		gfs2_glock_remove_from_lru(gl);
 
+	gh->gh_error = 0;
 	spin_lock(&gl->gl_lockref.lock);
 	add_to_queue(gh);
 	if (unlikely((LM_FLAG_NOEXP & gh->gh_flags) &&
@@ -1698,6 +1693,14 @@ void gfs2_glock_dq(struct gfs2_holder *gh)
 	struct gfs2_glock *gl = gh->gh_gl;
 
 	spin_lock(&gl->gl_lockref.lock);
+	if (list_is_first(&gh->gh_list, &gl->gl_holders) &&
+	    !test_bit(HIF_HOLDER, &gh->gh_iflags)) {
+		spin_unlock(&gl->gl_lockref.lock);
+		gl->gl_name.ln_sbd->sd_lockstruct.ls_ops->lm_cancel(gl);
+		wait_on_bit(&gh->gh_iflags, HIF_WAIT, TASK_UNINTERRUPTIBLE);
+		spin_lock(&gl->gl_lockref.lock);
+	}
+
 	__gfs2_glock_dq(gh);
 	spin_unlock(&gl->gl_lockref.lock);
 }
@@ -1861,7 +1864,6 @@ void gfs2_glock_dq_m(unsigned int num_gh, struct gfs2_holder *ghs)
 
 void gfs2_glock_cb(struct gfs2_glock *gl, unsigned int state)
 {
-	struct gfs2_holder mock_gh = { .gh_gl = gl, .gh_state = state, };
 	unsigned long delay = 0;
 	unsigned long holdtime;
 	unsigned long now = jiffies;
@@ -1894,8 +1896,13 @@ void gfs2_glock_cb(struct gfs2_glock *gl, unsigned int state)
 	 * keep the glock until the last strong holder is done with it.
 	 */
 	if (!find_first_strong_holder(gl)) {
-		if (state == LM_ST_UNLOCKED)
-			mock_gh.gh_state = LM_ST_EXCLUSIVE;
+		struct gfs2_holder mock_gh = {
+			.gh_gl = gl,
+			.gh_state = (state == LM_ST_UNLOCKED) ?
+				    LM_ST_EXCLUSIVE : state,
+			.gh_iflags = BIT(HIF_HOLDER)
+		};
+
 		demote_incompat_holders(gl, &mock_gh);
 	}
 	handle_callback(gl, state, delay, true);

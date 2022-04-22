@@ -7,6 +7,7 @@
 
 #include <linux/kernel.h>
 #include <linux/thread_info.h>
+#include <linux/mm_types.h>
 #include <uapi/linux/uio.h>
 
 struct page;
@@ -151,6 +152,12 @@ size_t _copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i);
 size_t _copy_from_iter(void *addr, size_t bytes, struct iov_iter *i);
 size_t _copy_from_iter_nocache(void *addr, size_t bytes, struct iov_iter *i);
 
+static inline size_t copy_folio_to_iter(struct folio *folio, size_t offset,
+		size_t bytes, struct iov_iter *i)
+{
+	return copy_page_to_iter(&folio->page, offset, bytes, i);
+}
+
 //将addr指向的bytes字节，复制到i中
 static __always_inline __must_check
 size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
@@ -203,7 +210,7 @@ bool copy_from_iter_full_nocache(void *addr, size_t bytes, struct iov_iter *i)
 #ifdef CONFIG_ARCH_HAS_UACCESS_FLUSHCACHE
 /*
  * Note, users like pmem that depend on the stricter semantics of
- * copy_from_iter_flushcache() than copy_from_iter_nocache() must check for
+ * _copy_from_iter_flushcache() than _copy_from_iter_nocache() must check for
  * IS_ENABLED(CONFIG_ARCH_HAS_UACCESS_FLUSHCACHE) before assuming that the
  * destination is flushed from the cache on return.
  */
@@ -217,24 +224,6 @@ size_t _copy_mc_to_iter(const void *addr, size_t bytes, struct iov_iter *i);
 #else
 #define _copy_mc_to_iter _copy_to_iter
 #endif
-
-static __always_inline __must_check
-size_t copy_from_iter_flushcache(void *addr, size_t bytes, struct iov_iter *i)
-{
-	if (unlikely(!check_copy_size(addr, bytes, false)))
-		return 0;
-	else
-		return _copy_from_iter_flushcache(addr, bytes, i);
-}
-
-static __always_inline __must_check
-size_t copy_mc_to_iter(void *addr, size_t bytes, struct iov_iter *i)
-{
-	if (unlikely(!check_copy_size(addr, bytes, true)))
-		return 0;
-	else
-		return _copy_mc_to_iter(addr, bytes, i);
-}
 
 size_t iov_iter_zero(size_t bytes, struct iov_iter *);
 unsigned long iov_iter_alignment(const struct iov_iter *i);
@@ -289,6 +278,23 @@ static inline void iov_iter_truncate(struct iov_iter *i, u64 count)
 static inline void iov_iter_reexpand(struct iov_iter *i, size_t count)
 {
 	i->count = count;
+}
+
+static inline int
+iov_iter_npages_cap(struct iov_iter *i, int maxpages, size_t max_bytes)
+{
+	size_t shorted = 0;
+	int npages;
+
+	if (iov_iter_count(i) > max_bytes) {
+		shorted = iov_iter_count(i) - max_bytes;
+		iov_iter_truncate(i, max_bytes);
+	}
+	npages = iov_iter_npages(i, INT_MAX);
+	if (shorted)
+		iov_iter_reexpand(i, iov_iter_count(i) + shorted);
+
+	return npages;
 }
 
 struct csum_state {

@@ -570,6 +570,7 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 
 	for (i = 0; i < num_actions; i++) {
 		struct mlx5dr_action_dest_tbl *dest_tbl;
+		struct mlx5dr_icm_chunk *chunk;
 		struct mlx5dr_action *action;
 		int max_actions_type = 1;
 		u32 action_type;
@@ -598,9 +599,9 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 						   matcher->tbl->level,
 						   dest_tbl->tbl->level);
 				}
-				attr.final_icm_addr = rx_rule ?
-					dest_tbl->tbl->rx.s_anchor->chunk->icm_addr :
-					dest_tbl->tbl->tx.s_anchor->chunk->icm_addr;
+				chunk = rx_rule ? dest_tbl->tbl->rx.s_anchor->chunk :
+					dest_tbl->tbl->tx.s_anchor->chunk;
+				attr.final_icm_addr = mlx5dr_icm_pool_get_chunk_icm_addr(chunk);
 			} else {
 				struct mlx5dr_cmd_query_flow_table_details output;
 				int ret;
@@ -669,15 +670,9 @@ int mlx5dr_actions_build_ste_arr(struct mlx5dr_matcher *matcher,
 		case DR_ACTION_TYP_VPORT:
 			attr.hit_gvmi = action->vport->caps->vhca_gvmi;
 			dest_action = action;
-			if (rx_rule) {
-				if (action->vport->caps->num == MLX5_VPORT_UPLINK) {
-					mlx5dr_dbg(dmn, "Device doesn't support Loopback on WIRE vport\n");
-					return -EOPNOTSUPP;
-				}
-				attr.final_icm_addr = action->vport->caps->icm_address_rx;
-			} else {
-				attr.final_icm_addr = action->vport->caps->icm_address_tx;
-			}
+			attr.final_icm_addr = rx_rule ?
+				action->vport->caps->icm_address_rx :
+				action->vport->caps->icm_address_tx;
 			break;
 		case DR_ACTION_TYP_POP_VLAN:
 			if (!rx_rule && !(dmn->ste_ctx->actions_caps &
@@ -1129,7 +1124,8 @@ dr_action_create_reformat_action(struct mlx5dr_domain *dmn,
 		}
 
 		action->rewrite->data = (void *)hw_actions;
-		action->rewrite->index = (action->rewrite->chunk->icm_addr -
+		action->rewrite->index = (mlx5dr_icm_pool_get_chunk_icm_addr
+					  (action->rewrite->chunk) -
 					 dmn->info.caps.hdr_modify_icm_addr) /
 					 ACTION_CACHE_LINE_SIZE;
 
@@ -1562,6 +1558,12 @@ dr_action_modify_check_is_ttl_modify(const void *sw_action)
 	return sw_field == MLX5_ACTION_IN_FIELD_OUT_IP_TTL;
 }
 
+static bool dr_action_modify_ttl_ignore(struct mlx5dr_domain *dmn)
+{
+	return !mlx5dr_ste_supp_ttl_cs_recalc(&dmn->info.caps) &&
+	       !MLX5_CAP_ESW_FLOWTABLE(dmn->mdev, fdb_ipv4_ttl_modify);
+}
+
 static int dr_actions_convert_modify_header(struct mlx5dr_action *action,
 					    u32 max_hw_actions,
 					    u32 num_sw_actions,
@@ -1594,8 +1596,13 @@ static int dr_actions_convert_modify_header(struct mlx5dr_action *action,
 		if (ret)
 			return ret;
 
-		if (!(*modify_ttl))
-			*modify_ttl = dr_action_modify_check_is_ttl_modify(sw_action);
+		if (!(*modify_ttl) &&
+		    dr_action_modify_check_is_ttl_modify(sw_action)) {
+			if (dr_action_modify_ttl_ignore(dmn))
+				continue;
+
+			*modify_ttl = true;
+		}
 
 		/* Convert SW action to HW action */
 		ret = dr_action_modify_sw_to_hw(dmn,
@@ -1634,7 +1641,7 @@ static int dr_actions_convert_modify_header(struct mlx5dr_action *action,
 			 * modify actions doesn't exceeds the limit
 			 */
 			hw_idx++;
-			if ((num_sw_actions + hw_idx - i) >= max_hw_actions) {
+			if (hw_idx >= max_hw_actions) {
 				mlx5dr_dbg(dmn, "Modify header action number exceeds HW limit\n");
 				return -EINVAL;
 			}
@@ -1644,6 +1651,10 @@ static int dr_actions_convert_modify_header(struct mlx5dr_action *action,
 		hw_actions[hw_idx] = hw_action;
 		hw_idx++;
 	}
+
+	/* if the resulting HW actions list is empty, add NOP action */
+	if (!hw_idx)
+		hw_idx++;
 
 	*num_hw_actions = hw_idx;
 
@@ -1697,7 +1708,7 @@ static int dr_action_create_modify_action(struct mlx5dr_domain *dmn,
 	action->rewrite->modify_ttl = modify_ttl;
 	action->rewrite->data = (u8 *)hw_actions;
 	action->rewrite->num_of_actions = num_hw_actions;
-	action->rewrite->index = (chunk->icm_addr -
+	action->rewrite->index = (mlx5dr_icm_pool_get_chunk_icm_addr(chunk) -
 				  dmn->info.caps.hdr_modify_icm_addr) /
 				  ACTION_CACHE_LINE_SIZE;
 
@@ -1796,7 +1807,7 @@ mlx5dr_action_create_dest_vport(struct mlx5dr_domain *dmn,
 
 int mlx5dr_action_destroy(struct mlx5dr_action *action)
 {
-	if (refcount_read(&action->refcount) > 1)
+	if (WARN_ON_ONCE(refcount_read(&action->refcount) > 1))
 		return -EBUSY;
 
 	switch (action->action_type) {

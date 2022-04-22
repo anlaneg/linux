@@ -29,6 +29,7 @@ struct flowi_tunnel {
 struct flowi_common {
 	int	flowic_oif;//出接口
 	int	flowic_iif;//入接口
+	int     flowic_l3mdev;
 	__u32	flowic_mark;
 	__u8	flowic_tos;//tos取值
 	__u8	flowic_scope;
@@ -36,7 +37,6 @@ struct flowi_common {
 	__u8	flowic_flags;
 #define FLOWI_FLAG_ANYSRC		0x01
 #define FLOWI_FLAG_KNOWN_NH		0x02
-#define FLOWI_FLAG_SKIP_NH_OIF		0x04
 	__u32	flowic_secid;
 	kuid_t  flowic_uid;//用户传入的不透明id
 	struct flowi_tunnel flowic_tun_key;
@@ -72,6 +72,7 @@ struct flowi4 {
 #define flowi4_oif		__fl_common.flowic_oif
 	//入接口
 #define flowi4_iif		__fl_common.flowic_iif
+#define flowi4_l3mdev		__fl_common.flowic_l3mdev
 	//报文命中的mark值
 #define flowi4_mark		__fl_common.flowic_mark
 	//报文tos
@@ -115,6 +116,7 @@ static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
 	fl4->flowi4_oif = oif;
 	/*入接口指定为loopback口*/
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
+	fl4->flowi4_l3mdev = 0;
 	fl4->flowi4_mark = mark;
 	fl4->flowi4_tos = tos;
 	fl4->flowi4_scope = scope;
@@ -145,6 +147,7 @@ struct flowi6 {
 	struct flowi_common	__fl_common;
 #define flowi6_oif		__fl_common.flowic_oif
 #define flowi6_iif		__fl_common.flowic_iif
+#define flowi6_l3mdev		__fl_common.flowic_l3mdev
 #define flowi6_mark		__fl_common.flowic_mark
 #define flowi6_scope		__fl_common.flowic_scope
 #define flowi6_proto		__fl_common.flowic_proto
@@ -190,6 +193,7 @@ struct flowi {
 	} u;
 #define flowi_oif	u.__fl_common.flowic_oif
 #define flowi_iif	u.__fl_common.flowic_iif
+#define flowi_l3mdev	u.__fl_common.flowic_l3mdev
 #define flowi_mark	u.__fl_common.flowic_mark
 #define flowi_tos	u.__fl_common.flowic_tos
 #define flowi_scope	u.__fl_common.flowic_scope

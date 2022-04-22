@@ -37,6 +37,7 @@ void xp_destroy(struct xsk_buff_pool *pool)
 	if (!pool)
 		return;
 
+	kvfree(pool->tx_descs);
 	kvfree(pool->heads);
 	kvfree(pool);
 }
@@ -57,6 +58,12 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 	pool->heads = kvcalloc(umem->chunks, sizeof(*pool->heads), GFP_KERNEL);
 	if (!pool->heads)
 		goto out;
+
+	if (xs->tx) {
+		pool->tx_descs = kcalloc(xs->tx->nentries, sizeof(*pool->tx_descs), GFP_KERNEL);
+		if (!pool->tx_descs)
+			goto out;
+	}
 
 	pool->chunk_mask = ~((u64)umem->chunk_size - 1);
 	pool->addrs_cnt = umem->size;
@@ -83,6 +90,7 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 		xskb = &pool->heads[i];
 		xskb->pool = pool;
 		xskb->xdp.frame_sz = umem->chunk_size - umem->headroom;
+		INIT_LIST_HEAD(&xskb->free_list_node);
 		if (pool->unaligned)
 			pool->free_heads[i] = xskb;
 		else
@@ -500,7 +508,7 @@ struct xdp_buff *xp_alloc(struct xsk_buff_pool *pool)
 		pool->free_list_cnt--;
 		xskb = list_first_entry(&pool->free_list, struct xdp_buff_xsk,
 					free_list_node);
-		list_del(&xskb->free_list_node);
+		list_del_init(&xskb->free_list_node);
 	}
 
 	xskb->xdp.data = xskb->xdp.data_hard_start + XDP_PACKET_HEADROOM;
@@ -568,7 +576,7 @@ static u32 xp_alloc_reused(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u3
 	i = nb_entries;
 	while (i--) {
 		xskb = list_first_entry(&pool->free_list, struct xdp_buff_xsk, free_list_node);
-		list_del(&xskb->free_list_node);
+		list_del_init(&xskb->free_list_node);
 
 		*xdp = &xskb->xdp;
 		xdp++;
@@ -583,9 +591,13 @@ u32 xp_alloc_batch(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 max)
 	u32 nb_entries1 = 0, nb_entries2;
 
 	if (unlikely(pool->dma_need_sync)) {
+		struct xdp_buff *buff;
+
 		/* Slow path */
-		*xdp = xp_alloc(pool);
-		return !!*xdp;
+		buff = xp_alloc(pool);
+		if (buff)
+			*xdp = buff;
+		return !!buff;
 	}
 
 	if (unlikely(pool->free_list_cnt)) {
@@ -615,6 +627,9 @@ EXPORT_SYMBOL(xp_can_alloc);
 
 void xp_free(struct xdp_buff_xsk *xskb)
 {
+	if (!list_empty(&xskb->free_list_node))
+		return;
+
 	xskb->pool->free_list_cnt++;
 	list_add(&xskb->free_list_node, &xskb->pool->free_list);
 }

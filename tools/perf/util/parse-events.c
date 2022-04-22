@@ -404,8 +404,10 @@ static int add_event_tool(struct list_head *list, int *idx,
 	if (!evsel)
 		return -ENOMEM;
 	evsel->tool_event = tool_event;
-	if (tool_event == PERF_TOOL_DURATION_TIME)
-		evsel->unit = "ns";
+	if (tool_event == PERF_TOOL_DURATION_TIME) {
+		free((char *)evsel->unit);
+		evsel->unit = strdup("ns");
+	}
 	return 0;
 }
 
@@ -1632,7 +1634,8 @@ int parse_events_add_pmu(struct parse_events_state *parse_state,
 	if (parse_state->fake_pmu)
 		return 0;
 
-	evsel->unit = info.unit;
+	free((char *)evsel->unit);
+	evsel->unit = strdup(info.unit);
 	evsel->scale = info.scale;
 	evsel->per_pkg = info.per_pkg;
 	evsel->snapshot = info.snapshot;
@@ -1647,6 +1650,7 @@ int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 {
 	struct parse_events_term *term;
 	struct list_head *list = NULL;
+	struct list_head *orig_head = NULL;
 	struct perf_pmu *pmu = NULL;
 	int ok = 0;
 	char *config;
@@ -1673,7 +1677,6 @@ int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 	}
 	list_add_tail(&term->list, head);
 
-
 	/* Add it for all PMUs that support the alias */
 	list = malloc(sizeof(struct list_head));
 	if (!list)
@@ -1686,16 +1689,27 @@ int parse_events_multi_pmu_add(struct parse_events_state *parse_state,
 
 		list_for_each_entry(alias, &pmu->aliases, list) {
 			if (!strcasecmp(alias->name, str)) {
+				parse_events_copy_term_list(head, &orig_head);
 				if (!parse_events_add_pmu(parse_state, list,
-							  pmu->name, head,
+							  pmu->name, orig_head,
 							  true, true)) {
 					pr_debug("%s -> %s/%s/\n", str,
 						 pmu->name, alias->str);
 					ok++;
 				}
+				parse_events_terms__delete(orig_head);
 			}
 		}
 	}
+
+	if (parse_state->fake_pmu) {
+		if (!parse_events_add_pmu(parse_state, list, str, head,
+					  true, true)) {
+			pr_debug("%s -> %s/%s/\n", str, "fake_pmu", str);
+			ok++;
+		}
+	}
+
 out_err:
 	if (ok)
 		*listp = list;
@@ -1823,6 +1837,11 @@ out:
 	return ret;
 }
 
+__weak struct evsel *arch_evlist__leader(struct list_head *list)
+{
+	return list_first_entry(list, struct evsel, core.node);
+}
+
 void parse_events__set_leader(char *name, struct list_head *list,
 			      struct parse_events_state *parse_state)
 {
@@ -1836,9 +1855,10 @@ void parse_events__set_leader(char *name, struct list_head *list,
 	if (parse_events__set_leader_for_uncore_aliase(name, list, parse_state))
 		return;
 
-	__perf_evlist__set_leader(list);
-	leader = list_entry(list->next, struct evsel, core.node);
+	leader = arch_evlist__leader(list);
+	__perf_evlist__set_leader(list, &leader->core);
 	leader->group_name = name ? strdup(name) : NULL;
+	list_move(&leader->core.node, list);
 }
 
 /* list_event is assumed to point to malloc'ed memory */
@@ -2091,8 +2111,17 @@ static void perf_pmu__parse_init(void)
 	pmu = NULL;
 	while ((pmu = perf_pmu__scan(pmu)) != NULL) {
 		list_for_each_entry(alias, &pmu->aliases, list) {
-			if (strchr(alias->name, '-'))
+			char *tmp = strchr(alias->name, '-');
+
+			if (tmp) {
+				char *tmp2 = NULL;
+
+				tmp2 = strchr(tmp + 1, '-');
 				len++;
+				if (tmp2)
+					len++;
+			}
+
 			len++;
 		}
 	}
@@ -2112,8 +2141,20 @@ static void perf_pmu__parse_init(void)
 		list_for_each_entry(alias, &pmu->aliases, list) {
 			struct perf_pmu_event_symbol *p = perf_pmu_events_list + len;
 			char *tmp = strchr(alias->name, '-');
+			char *tmp2 = NULL;
 
-			if (tmp != NULL) {
+			if (tmp)
+				tmp2 = strchr(tmp + 1, '-');
+			if (tmp2) {
+				SET_SYMBOL(strndup(alias->name, tmp - alias->name),
+						PMU_EVENT_SYMBOL_PREFIX);
+				p++;
+				tmp++;
+				SET_SYMBOL(strndup(tmp, tmp2 - tmp), PMU_EVENT_SYMBOL_SUFFIX);
+				p++;
+				SET_SYMBOL(strdup(++tmp2), PMU_EVENT_SYMBOL_SUFFIX2);
+				len += 3;
+			} else if (tmp) {
 				SET_SYMBOL(strndup(alias->name, tmp - alias->name),
 						PMU_EVENT_SYMBOL_PREFIX);
 				p++;
@@ -2140,23 +2181,38 @@ err:
  */
 int perf_pmu__test_parse_init(void)
 {
-	struct perf_pmu_event_symbol *list;
+	struct perf_pmu_event_symbol *list, *tmp, symbols[] = {
+		{(char *)"read", PMU_EVENT_SYMBOL},
+		{(char *)"event", PMU_EVENT_SYMBOL_PREFIX},
+		{(char *)"two", PMU_EVENT_SYMBOL_SUFFIX},
+		{(char *)"hyphen", PMU_EVENT_SYMBOL_SUFFIX},
+		{(char *)"hyph", PMU_EVENT_SYMBOL_SUFFIX2},
+	};
+	unsigned long i, j;
 
-	list = malloc(sizeof(*list) * 1);
+	tmp = list = malloc(sizeof(*list) * ARRAY_SIZE(symbols));
 	if (!list)
 		return -ENOMEM;
 
-	list->type   = PMU_EVENT_SYMBOL;
-	list->symbol = strdup("read");
-
-	if (!list->symbol) {
-		free(list);
-		return -ENOMEM;
+	for (i = 0; i < ARRAY_SIZE(symbols); i++, tmp++) {
+		tmp->type = symbols[i].type;
+		tmp->symbol = strdup(symbols[i].symbol);
+		if (!tmp->symbol)
+			goto err_free;
 	}
 
 	perf_pmu_events_list = list;
-	perf_pmu_events_list_num = 1;
+	perf_pmu_events_list_num = ARRAY_SIZE(symbols);
+
+	qsort(perf_pmu_events_list, ARRAY_SIZE(symbols),
+	      sizeof(struct perf_pmu_event_symbol), comp_pmu);
 	return 0;
+
+err_free:
+	for (j = 0, tmp = list; j < i; j++, tmp++)
+		free(tmp->symbol);
+	free(list);
+	return -ENOMEM;
 }
 
 enum perf_pmu_event_symbol_type

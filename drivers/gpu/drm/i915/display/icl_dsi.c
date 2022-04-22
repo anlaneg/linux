@@ -28,14 +28,18 @@
 #include <drm/drm_atomic_helper.h>
 #include <drm/drm_mipi_dsi.h>
 
+#include "icl_dsi.h"
+#include "icl_dsi_regs.h"
 #include "intel_atomic.h"
 #include "intel_backlight.h"
 #include "intel_combo_phy.h"
+#include "intel_combo_phy_regs.h"
 #include "intel_connector.h"
 #include "intel_crtc.h"
 #include "intel_ddi.h"
 #include "intel_de.h"
 #include "intel_dsi.h"
+#include "intel_dsi_vbt.h"
 #include "intel_panel.h"
 #include "intel_vdsc.h"
 #include "skl_scaler.h"
@@ -183,6 +187,8 @@ static int dsi_send_pkt_hdr(struct intel_dsi_host *host,
 
 	if (enable_lpdt)
 		tmp |= LP_DATA_TRANSFER;
+	else
+		tmp &= ~LP_DATA_TRANSFER;
 
 	tmp &= ~(PARAM_WC_MASK | VC_MASK | DT_MASK);
 	tmp |= ((packet->header[0] & VC_MASK) << VC_SHIFT);
@@ -565,7 +571,7 @@ gen11_dsi_setup_dphy_timings(struct intel_encoder *encoder,
 	/* Program T-INIT master registers */
 	for_each_dsi_port(port, intel_dsi->ports) {
 		tmp = intel_de_read(dev_priv, ICL_DSI_T_INIT_MASTER(port));
-		tmp &= ~MASTER_INIT_TIMER_MASK;
+		tmp &= ~DSI_T_INIT_MASTER_MASK;
 		tmp |= intel_dsi->init_count;
 		intel_de_write(dev_priv, ICL_DSI_T_INIT_MASTER(port), tmp);
 	}
@@ -696,10 +702,7 @@ static void gen11_dsi_map_pll(struct intel_encoder *encoder,
 	intel_de_write(dev_priv, ICL_DPCLKA_CFGCR0, val);
 
 	for_each_dsi_phy(phy, intel_dsi->phys) {
-		if (DISPLAY_VER(dev_priv) >= 12)
-			val |= ICL_DPCLKA_CFGCR0_DDI_CLK_OFF(phy);
-		else
-			val &= ~ICL_DPCLKA_CFGCR0_DDI_CLK_OFF(phy);
+		val &= ~ICL_DPCLKA_CFGCR0_DDI_CLK_OFF(phy);
 	}
 	intel_de_write(dev_priv, ICL_DPCLKA_CFGCR0, val);
 
@@ -786,14 +789,14 @@ gen11_dsi_configure_transcoder(struct intel_encoder *encoder,
 		/* program DSI operation mode */
 		if (is_vid_mode(intel_dsi)) {
 			tmp &= ~OP_MODE_MASK;
-			switch (intel_dsi->video_mode_format) {
+			switch (intel_dsi->video_mode) {
 			default:
-				MISSING_CASE(intel_dsi->video_mode_format);
+				MISSING_CASE(intel_dsi->video_mode);
 				fallthrough;
-			case VIDEO_MODE_NON_BURST_WITH_SYNC_EVENTS:
+			case NON_BURST_SYNC_EVENTS:
 				tmp |= VIDEO_MODE_SYNC_EVENT;
 				break;
-			case VIDEO_MODE_NON_BURST_WITH_SYNC_PULSE:
+			case NON_BURST_SYNC_PULSE:
 				tmp |= VIDEO_MODE_SYNC_PULSE;
 				break;
 			}
@@ -958,8 +961,7 @@ gen11_dsi_set_transcoder_timings(struct intel_encoder *encoder,
 
 	/* TRANS_HSYNC register to be programmed only for video mode */
 	if (is_vid_mode(intel_dsi)) {
-		if (intel_dsi->video_mode_format ==
-		    VIDEO_MODE_NON_BURST_WITH_SYNC_PULSE) {
+		if (intel_dsi->video_mode == NON_BURST_SYNC_PULSE) {
 			/* BSPEC: hsync size should be atleast 16 pixels */
 			if (hsync_size < 16)
 				drm_err(&dev_priv->drm,
@@ -1049,7 +1051,7 @@ static void gen11_dsi_enable_transcoder(struct intel_encoder *encoder)
 
 		/* wait for transcoder to be enabled */
 		if (intel_de_wait_for_set(dev_priv, PIPECONF(dsi_trans),
-					  I965_PIPECONF_ACTIVE, 10))
+					  PIPECONF_STATE_ENABLE, 10))
 			drm_err(&dev_priv->drm,
 				"DSI transcoder not enabled\n");
 	}
@@ -1135,8 +1137,6 @@ static void
 gen11_dsi_enable_port_and_phy(struct intel_encoder *encoder,
 			      const struct intel_crtc_state *crtc_state)
 {
-	struct drm_i915_private *dev_priv = to_i915(encoder->base.dev);
-
 	/* step 4a: power up all lanes of the DDI used by DSI */
 	gen11_dsi_power_up_lanes(encoder);
 
@@ -1162,8 +1162,7 @@ gen11_dsi_enable_port_and_phy(struct intel_encoder *encoder,
 	gen11_dsi_configure_transcoder(encoder, crtc_state);
 
 	/* Step 4l: Gate DDI clocks */
-	if (DISPLAY_VER(dev_priv) == 11)
-		gen11_dsi_gate_clocks(encoder);
+	gen11_dsi_gate_clocks(encoder);
 }
 
 static void gen11_dsi_powerup_panel(struct intel_encoder *encoder)
@@ -1232,7 +1231,7 @@ static void gen11_dsi_pre_enable(struct intel_atomic_state *state,
 	/* step5: program and powerup panel */
 	gen11_dsi_powerup_panel(encoder);
 
-	intel_dsc_enable(encoder, pipe_config);
+	intel_dsc_dsi_pps_write(encoder, pipe_config);
 
 	/* step6c: configure transcoder timings */
 	gen11_dsi_set_transcoder_timings(encoder, pipe_config);
@@ -1271,7 +1270,8 @@ static void adlp_set_lp_hs_wakeup_gb(struct intel_encoder *encoder)
 	if (DISPLAY_VER(i915) == 13) {
 		for_each_dsi_port(port, intel_dsi->ports)
 			intel_de_rmw(i915, TGL_DSI_CHKN_REG(port),
-				     TGL_DSI_CHKN_LSHS_GB, 0x4);
+				     TGL_DSI_CHKN_LSHS_GB_MASK,
+				     TGL_DSI_CHKN_LSHS_GB(4));
 	}
 }
 
@@ -1319,7 +1319,7 @@ static void gen11_dsi_disable_transcoder(struct intel_encoder *encoder)
 
 		/* wait for transcoder to be disabled */
 		if (intel_de_wait_for_clear(dev_priv, PIPECONF(dsi_trans),
-					    I965_PIPECONF_ACTIVE, 50))
+					    PIPECONF_STATE_ENABLE, 50))
 			drm_err(&dev_priv->drm,
 				"DSI trancoder not disabled\n");
 	}
@@ -1628,7 +1628,7 @@ static int gen11_dsi_dsc_compute_config(struct intel_encoder *encoder,
 	/* FIXME: initialize from VBT */
 	vdsc_cfg->rc_model_size = DSC_RC_MODEL_SIZE_CONST;
 
-	ret = intel_dsc_compute_params(encoder, crtc_state);
+	ret = intel_dsc_compute_params(crtc_state);
 	if (ret)
 		return ret;
 

@@ -25,7 +25,8 @@ ip_default_ttl - INTEGER
 ip_no_pmtu_disc - INTEGER
 	Disable Path MTU Discovery. If enabled in mode 1 and a
 	fragmentation-required ICMP is received, the PMTU to this
-	destination will be set to min_pmtu (see below). You will need
+	destination will be set to the smallest of the old MTU to
+	this destination and min_pmtu (see below). You will need
 	to raise min_pmtu to the smallest interface MTU on your system
 	manually if you want to avoid locally generated fragments.
 
@@ -49,7 +50,8 @@ ip_no_pmtu_disc - INTEGER
 	Default: FALSE
 
 min_pmtu - INTEGER
-	default 552 - minimum discovered Path MTU
+	default 552 - minimum Path MTU. Unless this is changed mannually,
+	each cached pmtu will never be lower than this setting.
 
 ip_forward_use_pmtu - BOOLEAN
 	By default we don't trust protocol path MTUs while forwarding
@@ -875,6 +877,29 @@ tcp_min_tso_segs - INTEGER
 	if available window is too small.
 
 	Default: 2
+
+tcp_tso_rtt_log - INTEGER
+	Adjustment of TSO packet sizes based on min_rtt
+
+	Starting from linux-5.18, TCP autosizing can be tweaked
+	for flows having small RTT.
+
+	Old autosizing was splitting the pacing budget to send 1024 TSO
+	per second.
+
+	tso_packet_size = sk->sk_pacing_rate / 1024;
+
+	With the new mechanism, we increase this TSO sizing using:
+
+	distance = min_rtt_usec / (2^tcp_tso_rtt_log)
+	tso_packet_size += gso_max_size >> distance;
+
+	This means that flows between very close hosts can use bigger
+	TSO packets, reducing their cpu costs.
+
+	If you want to use the old autosizing, set this sysctl to 0.
+
+	Default: 9  (2^9 = 512 usec)
 
 tcp_pacing_ss_ratio - INTEGER
 	sk->sk_pacing_rate is set by TCP stack using a ratio applied

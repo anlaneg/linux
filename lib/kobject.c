@@ -55,34 +55,6 @@ void kobject_get_ownership(struct kobject *kobj, kuid_t *uid, kgid_t *gid)
 		kobj->ktype->get_ownership(kobj, uid, gid);
 }
 
-/*
- * populate_dir - populate directory with attributes.
- * @kobj: object we're working on.
- *
- * Most subsystems have a set of default attributes that are associated
- * with an object that registers with them.  This is a helper called during
- * object registration that loops through the default attributes of the
- * subsystem and creates attributes files for them in sysfs.
- */
-static int populate_dir(struct kobject *kobj)
-{
-	struct kobj_type *t = get_ktype(kobj);
-	struct attribute *attr;
-	int error = 0;
-	int i;
-
-    //有默认属性，遍历所有默认属性(将其处理为文件）
-	if (t && t->default_attrs) {
-		for (i = 0; (attr = t->default_attrs[i]) != NULL; i++) {
-			//创建attr对应的文件
-			error = sysfs_create_file(kobj, attr);
-			if (error)
-				break;
-		}
-	}
-	return error;
-}
-
 //创建kobj对应的目录,kobj对应的ktype指明的属性及group
 static int create_dir(struct kobject *kobj)
 {
@@ -94,14 +66,6 @@ static int create_dir(struct kobject *kobj)
 	error = sysfs_create_dir_ns(kobj, kobject_namespace(kobj));
 	if (error)
 		return error;
-
-    //创建kobj->ktype->default_attr文件
-	error = populate_dir(kobj);
-	if (error) {
-		//出错，删除对应的attr文件
-		sysfs_remove_dir(kobj);
-		return error;
-	}
 
 	if (ktype) {
 		//创建ktype->default_groups对应的目录及属性
@@ -379,7 +343,7 @@ EXPORT_SYMBOL(kobject_set_name);
  * the memory is cleaned up properly.
  */
 //初始化一个kobj
-void kobject_init(struct kobject *kobj, struct kobj_type *ktype/*object对应的type*/)
+void kobject_init(struct kobject *kobj, const struct kobj_type *ktype/*object对应的type*/)
 {
 	char *err_str;
 
@@ -513,7 +477,7 @@ EXPORT_SYMBOL(kobject_add);
  * same type of error handling after a call to kobject_add() and kobject
  * lifetime rules are the same here.
  */
-int kobject_init_and_add(struct kobject *kobj, struct kobj_type *ktype/*obj类型*/,
+int kobject_init_and_add(struct kobject *kobj, const struct kobj_type *ktype/*obj类型*/,
 			 struct kobject *parent/*obj父节点*/, const char *fmt/*obj名称格式串*/, ...)
 {
 	va_list args;
@@ -733,7 +697,7 @@ EXPORT_SYMBOL(kobject_get_unless_zero);
 static void kobject_cleanup(struct kobject *kobj)
 {
 	struct kobject *parent = kobj->parent;
-	struct kobj_type *t = get_ktype(kobj);
+	const struct kobj_type *t = get_ktype(kobj);
 	const char *name = kobj->name;
 
 	pr_debug("kobject: '%s' (%p): %s, parent %p\n",

@@ -19,10 +19,10 @@
 #include <linux/list.h>
 #include <linux/sysfs.h>
 #include <linux/compiler.h>
+#include <linux/container_of.h>
 #include <linux/spinlock.h>
 #include <linux/kref.h>
 #include <linux/kobject_ns.h>
-#include <linux/kernel.h>
 #include <linux/wait.h>
 #include <linux/atomic.h>
 #include <linux/workqueue.h>
@@ -67,7 +67,7 @@ struct kobject {
 	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
 	struct kset		*kset;/*此kobject从属的kset*/
 	//kobj对应的ktype(可约定一组公共的attr,groups)
-	struct kobj_type	*ktype;
+	const struct kobj_type	*ktype;
 	//其在sysfs中对应的node
 	struct kernfs_node	*sd; /* sysfs directory entry */
 	struct kref		kref;/* kobject的引用计数，初始值为1 */
@@ -92,13 +92,13 @@ static inline const char *kobject_name(const struct kobject *kobj)
 	return kobj->name;
 }
 
-extern void kobject_init(struct kobject *kobj, struct kobj_type *ktype);
+extern void kobject_init(struct kobject *kobj, const struct kobj_type *ktype);
 extern __printf(3, 4) __must_check
 int kobject_add(struct kobject *kobj, struct kobject *parent,
 		const char *fmt, ...);
 extern __printf(4, 5) __must_check
 int kobject_init_and_add(struct kobject *kobj,
-			 struct kobj_type *ktype, struct kobject *parent,
+			 const struct kobj_type *ktype, struct kobject *parent,
 			 const char *fmt, ...);
 
 extern void kobject_del(struct kobject *kobj);
@@ -119,30 +119,11 @@ extern void kobject_get_ownership(struct kobject *kobj,
 				  kuid_t *uid, kgid_t *gid);
 extern char *kobject_get_path(struct kobject *kobj, gfp_t flag);
 
-/**
- * kobject_has_children - Returns whether a kobject has children.
- * @kobj: the object to test
- *
- * This will return whether a kobject has other kobjects as children.
- *
- * It does NOT account for the presence of attribute files, only sub
- * directories. It also assumes there is no concurrent addition or
- * removal of such children, and thus relies on external locking.
- */
-static inline bool kobject_has_children(struct kobject *kobj)
-{
-	WARN_ON_ONCE(kref_read(&kobj->kref) == 0);
-
-	return kobj->sd && kobj->sd->dir.subdirs;
-}
-
 //定义kobj的类型
 struct kobj_type {
 	void (*release)(struct kobject *kobj);
 	//显示某个属性时，或者设置某个属性时的操作集
 	const struct sysfs_ops *sysfs_ops;
-    //所有默认属性
-	struct attribute **default_attrs;	/* use default_groups instead */
 	//所有默认group(会被处理成目录及子文件）
 	const struct attribute_group **default_groups;
 	//
@@ -163,12 +144,11 @@ struct kobj_uevent_env {
 
 struct kset_uevent_ops {
 	//检查kobj对应的event是否可以不向userspace通告（返回0，不通告）
-	int (* const filter)(struct kset *kset, struct kobject *kobj);
+	int (* const filter)(struct kobject *kobj);
 	//返回kobject对应的subsystem
-	const char *(* const name)(struct kset *kset, struct kobject *kobj);
+	const char *(* const name)(struct kobject *kobj);
 	//返回kobject特别需要的env添加
-	int (* const uevent)(struct kset *kset, struct kobject *kobj,
-		      struct kobj_uevent_env *env);
+	int (* const uevent)(struct kobject *kobj, struct kobj_uevent_env *env);
 };
 
 struct kobj_attribute {
@@ -232,7 +212,7 @@ static inline void kset_put(struct kset *k)
 }
 
 //kobj对应的类别（一组kobj具有相同的type)
-static inline struct kobj_type *get_ktype(struct kobject *kobj)
+static inline const struct kobj_type *get_ktype(struct kobject *kobj)
 {
 	return kobj->ktype;
 }

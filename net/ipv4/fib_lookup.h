@@ -4,6 +4,7 @@
 
 #include <linux/types.h>
 #include <linux/list.h>
+#include <net/inet_dscp.h>
 #include <net/ip_fib.h>
 #include <net/nexthop.h>
 
@@ -12,7 +13,7 @@ struct fib_alias {
 	/*路由对应的配置信息*/
 	struct fib_info		*fa_info;
 	/*路由配置项指定的tos*/
-	u8			fa_tos;
+	dscp_t			fa_dscp;
 	////路由类型（看rtnetlink.h中RTN_LOCAL对应结构体）
 	u8			fa_type;
 	u8			fa_state;
@@ -21,10 +22,9 @@ struct fib_alias {
 	//所属的路由表
 	u32			tb_id;
 	s16			fa_default;
-	u8			offload:1,
-				trap:1,
-				offload_failed:1,
-				unused:5;
+	u8			offload;
+	u8			trap;
+	u8			offload_failed;
 	struct rcu_head		rcu;
 };
 

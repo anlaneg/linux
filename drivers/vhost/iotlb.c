@@ -60,6 +60,21 @@ int vhost_iotlb_add_range_ctx(struct vhost_iotlb *iotlb,
 	if (last < start)
 		return -EFAULT;
 
+	/* If the range being mapped is [0, ULONG_MAX], split it into two entries
+	 * otherwise its size would overflow u64.
+	 */
+	if (start == 0 && last == ULONG_MAX) {
+		u64 mid = last / 2;
+		int err = vhost_iotlb_add_range_ctx(iotlb, start, mid, addr,
+				perm, opaque);
+
+		if (err)
+			return err;
+
+		addr += mid + 1;
+		start = mid + 1;
+	}
+
 	/*如果iotlb指定了limit,且达到limit,则依除掉iotlb中首个map*/
 	if (iotlb->limit &&
 	    iotlb->nmaps == iotlb->limit &&

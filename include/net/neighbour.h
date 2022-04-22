@@ -70,6 +70,7 @@ enum {
 struct neigh_parms {
 	possible_net_t net;
 	struct net_device *dev;
+	netdevice_tracker dev_tracker;
 	struct list_head list;
 	//容许在neighbour表项创建后执行初始化
 	int	(*neigh_setup)(struct neighbour *);
@@ -173,6 +174,7 @@ struct neighbour {
 	struct list_head	managed_list;
 	struct rcu_head		rcu;
 	struct net_device	*dev;//邻居表项关联的设备
+	netdevice_tracker	dev_tracker;
 	u8			primary_key[0];//neighbor请求的协议目的地址
 } __randomize_layout;
 
@@ -190,6 +192,7 @@ struct pneigh_entry {
 	struct pneigh_entry	*next;
 	possible_net_t		net;
 	struct net_device	*dev;
+	netdevice_tracker	dev_tracker;
 	u32			flags;
 	u8			protocol;
 	u8			key[];
@@ -363,6 +366,17 @@ static inline struct neighbour *__neigh_lookup_noref(struct neigh_table *tbl,
 	return ___neigh_lookup_noref(tbl, tbl->key_eq, tbl->hash, pkey, dev);
 }
 
+static inline void neigh_confirm(struct neighbour *n)
+{
+	if (n) {
+		unsigned long now = jiffies;
+
+		/* avoid dirtying neighbour */
+		if (READ_ONCE(n->confirmed) != now)
+			WRITE_ONCE(n->confirmed, now);
+	}
+}
+
 void neigh_table_init(int index, struct neigh_table *tbl);
 int neigh_table_clear(int index, struct neigh_table *tbl);
 struct neighbour *neigh_lookup(struct neigh_table *tbl, const void *pkey,
@@ -379,7 +393,8 @@ static inline struct neighbour *neigh_create(struct neigh_table *tbl,
 	return __neigh_create(tbl, pkey, dev, true);
 }
 void neigh_destroy(struct neighbour *neigh);
-int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb);
+int __neigh_event_send(struct neighbour *neigh, struct sk_buff *skb,
+		       const bool immediate_ok);
 int neigh_update(struct neighbour *neigh, const u8 *lladdr, u8 new, u32 flags,
 		 u32 nlmsg_pid);
 void __neigh_set_probe_once(struct neighbour *neigh);
@@ -489,16 +504,23 @@ static inline struct neighbour * neigh_clone(struct neighbour *neigh)
 
 #define neigh_hold(n)	refcount_inc(&(n)->refcnt)
 
-static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
+static __always_inline int neigh_event_send_probe(struct neighbour *neigh,
+						  struct sk_buff *skb,
+						  const bool immediate_ok)
 {
 	unsigned long now = jiffies;
-	
+
 	//更新使用时间
 	if (READ_ONCE(neigh->used) != now)
 		WRITE_ONCE(neigh->used, now);
-	if (!(neigh->nud_state&(NUD_CONNECTED|NUD_DELAY|NUD_PROBE)))
-		return __neigh_event_send(neigh, skb);
+	if (!(neigh->nud_state & (NUD_CONNECTED | NUD_DELAY | NUD_PROBE)))
+		return __neigh_event_send(neigh, skb, immediate_ok);
 	return 0;
+}
+
+static inline int neigh_event_send(struct neighbour *neigh, struct sk_buff *skb)
+{
+	return neigh_event_send_probe(neigh, skb, true);
 }
 
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)

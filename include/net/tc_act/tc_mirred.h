@@ -10,6 +10,7 @@ struct tcf_mirred {
 	int			tcfm_eaction;//方向(ingress,egress)及动作（重定向，mirror)
 	bool			tcfm_mac_header_xmit;
 	struct net_device __rcu	*tcfm_dev;//要重定向的设备
+	netdevice_tracker	tcfm_dev_tracker;
 	struct list_head	tcfm_list;
 };
 #define to_mirred(a) ((struct tcf_mirred *)a)

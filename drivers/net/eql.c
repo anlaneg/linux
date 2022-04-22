@@ -239,7 +239,7 @@ static void eql_kill_one_slave(slave_queue_t *queue, slave_t *slave)
 	/*指定此设备不再为slave*/
 	slave->dev->flags &= ~IFF_SLAVE;
 	/*归还设备*/
-	dev_put(slave->dev);
+	dev_put_track(slave->dev, &slave->dev_tracker);
 	/*释放slave*/
 	kfree(slave);
 }
@@ -435,7 +435,7 @@ static int __eql_insert_slave(slave_queue_t *queue, slave_t *slave)
 			eql_kill_one_slave(queue, duplicate_slave);
 
 		/*增加netdev的引用计数*/
-		dev_hold(slave->dev);
+		dev_hold_track(slave->dev, &slave->dev_tracker, GFP_ATOMIC);
 		/*加入队列*/
 		list_add(&slave->list, &queue->all_slaves);
 		/*增加slave计数*/

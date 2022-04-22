@@ -26,6 +26,7 @@
 typedef struct slave {
 	struct list_head	list;
 	struct net_device	*dev;/*salve对应的网络设备*/
+	netdevice_tracker	dev_tracker;
 	long			priority;/*对应的优先级*/
 	long			priority_bps;/*以bit为单位的优先级*/
 	long			priority_Bps;/*以byte为单位的优先级*/

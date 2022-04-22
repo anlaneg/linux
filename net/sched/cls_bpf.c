@@ -110,6 +110,8 @@ static int cls_bpf_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 			bpf_compute_data_pointers(skb);
 			filter_res = bpf_prog_run(prog->filter, skb);
 		}
+		if (unlikely(!skb->tstamp && skb->mono_delivery_time))
+			skb->mono_delivery_time = 0;
 
 		//如果程序已集成了action,则检查返回值，直接返回
 		if (prog->exts_integrated) {

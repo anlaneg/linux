@@ -49,12 +49,12 @@ bool __list_del_entry_valid(struct list_head *entry)
 			"list_del corruption, %px->prev is LIST_POISON2 (%px)\n",
 			entry, LIST_POISON2) ||
 	    CHECK_DATA_CORRUPTION(prev->next != entry,
-			"list_del corruption. prev->next should be %px, but was %px\n",
-			entry, prev->next) ||
-		//next的前一个与实际的entry不相同，校验失败
+			"list_del corruption. prev->next should be %px, but was %px. (prev=%px)\n",
+			entry, prev->next, prev) ||
+	    //next的前一个与实际的entry不相同，校验失败
 	    CHECK_DATA_CORRUPTION(next->prev != entry,
-			"list_del corruption. next->prev should be %px, but was %px\n",
-			entry, next->prev))
+			"list_del corruption. next->prev should be %px, but was %px. (next=%px)\n",
+			entry, next->prev, next))
 		return false;
 
 	return true;

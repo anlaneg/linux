@@ -65,19 +65,25 @@ enum {
 	BOND_OPT_NUM_PEER_NOTIF_ALIAS,
 	BOND_OPT_PEER_NOTIF_DELAY,
 	BOND_OPT_LACP_ACTIVE,
+	BOND_OPT_MISSED_MAX,
+	BOND_OPT_NS_TARGETS,
 	BOND_OPT_LAST
 };
 
 /* This structure is used for storing option values and for passing option
  * values when changing an option. The logic when used as an arg is as follows:
- * - if string != NULL -> parse it, if the opt is RAW type then return it, else
- *   return the parse result
- * - if string == NULL -> parse value
+ * - if value != ULLONG_MAX -> parse value
+ * - if string != NULL -> parse string
+ * - if the opt is RAW data and length less than maxlen,
+ *   copy the data to extra storage
  */
+
+#define BOND_OPT_EXTRA_MAXLEN 16
 struct bond_opt_value {
 	char *string;
 	u64 value;
 	u32 flags;
+	char extra[BOND_OPT_EXTRA_MAXLEN];
 };
 
 struct bonding;
@@ -121,21 +127,29 @@ const struct bond_opt_value *bond_opt_get_val(unsigned int option, u64 val);
  * When value is ULLONG_MAX then string will be used.
  */
 static inline void __bond_opt_init(struct bond_opt_value *optval,
-				   char *string/*字符串类型配置*/, u64 value/*整数类型配置*/)
+				   char *string/*字符串类型配置*/, u64 value/*整数类型配置*/,
+				   void *extra, size_t extra_len)
 {
 	memset(optval, 0, sizeof(*optval));
 	optval->value = ULLONG_MAX;
 	/*检查使用哪类配置*/
-	if (value == ULLONG_MAX)
-		optval->string = string;
-	else
+	if (value != ULLONG_MAX)
 		optval->value = value;
+	else if (string)
+		optval->string = string;
+	else if (extra_len <= BOND_OPT_EXTRA_MAXLEN)
+		memcpy(optval->extra, extra, extra_len);
 }
 /*初始化整数类型配置*/
-#define bond_opt_initval(optval, value) __bond_opt_init(optval, NULL, value)
+#define bond_opt_initval(optval, value) __bond_opt_init(optval, NULL, value, NULL, 0)
 /*初始化字符串类型配置*/
-#define bond_opt_initstr(optval, str) __bond_opt_init(optval, str, ULLONG_MAX)
+#define bond_opt_initstr(optval, str) __bond_opt_init(optval, str, ULLONG_MAX, NULL, 0)
+#define bond_opt_initextra(optval, extra, extra_len) \
+	__bond_opt_init(optval, NULL, ULLONG_MAX, extra, extra_len)
 
 void bond_option_arp_ip_targets_clear(struct bonding *bond);
+#if IS_ENABLED(CONFIG_IPV6)
+void bond_option_ns_ip6_targets_clear(struct bonding *bond);
+#endif
 
 #endif /* _NET_BOND_OPTIONS_H */

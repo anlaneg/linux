@@ -26,6 +26,8 @@ struct ipv4_devconf {
 //inet4_dev结构体（ipv4设备结构体）
 struct in_device {
 	struct net_device	*dev;//关联(所属）的net_device
+	netdevice_tracker	dev_tracker;
+
 	refcount_t		refcnt;//设备引用计数
 	int			dead;
 	//inet4设备上所有ip地址列表
@@ -162,6 +164,7 @@ struct in_ifaddr {
 	unsigned char		ifa_scope;
 	/*地址前缀长度*/
 	unsigned char		ifa_prefixlen;
+	unsigned char		ifa_proto;
 	/*地址对应的flags*/
 	__u32			ifa_flags;
 	/*标签*/

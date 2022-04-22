@@ -194,11 +194,11 @@ static int vlan_newlink(struct net *src_net, struct net_device *dev,
 		return -EINVAL;//前面用户配置错误（mtu不能大于max_mtu)
 
 	err = vlan_changelink(dev, tb, data, extack);
-	//注册vlan设备
-	if (!err)
-		err = register_vlan_dev(dev, extack);
 	if (err)
-		vlan_dev_uninit(dev);
+		return err;
+	err = register_vlan_dev(dev, extack);
+	if (err)
+		vlan_dev_free_egress_priority(dev);
 	return err;
 }
 

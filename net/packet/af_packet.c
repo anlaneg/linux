@@ -49,6 +49,7 @@
 #define pr_fmt(fmt) KBUILD_MODNAME ": " fmt
 
 #include <linux/ethtool.h>
+#include <linux/filter.h>
 #include <linux/types.h>
 #include <linux/mm.h>
 #include <linux/capability.h>
@@ -465,7 +466,7 @@ static __u32 tpacket_get_timestamp(struct sk_buff *skb, struct timespec64 *ts,
 		return TP_STATUS_TS_RAW_HARDWARE;
 
 	if ((flags & SOF_TIMESTAMPING_SOFTWARE) &&
-	    ktime_to_timespec64_cond(skb->tstamp, ts))
+	    ktime_to_timespec64_cond(skb_tstamp(skb), ts))
 		return TP_STATUS_TS_SOFTWARE;
 
 	return 0;
@@ -1786,6 +1787,7 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 		match->prot_hook.dev = po->prot_hook.dev;
 		match->prot_hook.func = packet_rcv_fanout;
 		match->prot_hook.af_packet_priv = match;
+		match->prot_hook.af_packet_net = read_pnet(&match->net);
 		match->prot_hook.id_match = match_fanout_group;
 		/*将match加入到fanout_list中*/
 		match->max_num_members = args->max_num_members;
@@ -1801,7 +1803,10 @@ static int fanout_add(struct sock *sk, struct fanout_args *args)
 		err = -ENOSPC;
 		if (refcount_read(&match->sk_ref) < match->max_num_members) {
 			__dev_remove_pack(&po->prot_hook);
-			po->fanout = match;
+
+			/* Paired with packet_setsockopt(PACKET_FANOUT_DATA) */
+			WRITE_ONCE(po->fanout, match);
+
 			po->rollover = rollover;
 			rollover = NULL;
 			refcount_set(&match->sk_ref, refcount_read(&match->sk_ref) + 1);
@@ -2211,6 +2216,7 @@ static int packet_rcv(struct sk_buff *skb, struct net_device *dev,
 	spin_lock(&sk->sk_receive_queue.lock);
 	po->stats.stats1.tp_packets++;
 	sock_skb_set_dropcount(sk, skb);
+	skb_clear_delivery_time(skb);
 	__skb_queue_tail(&sk->sk_receive_queue, skb);//将skb置在收接入队列中
 	spin_unlock(&sk->sk_receive_queue.lock);
 	sk->sk_data_ready(sk);
@@ -2329,8 +2335,11 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 					copy_skb = skb_get(skb);
 					skb_head = skb->data;
 				}
-				if (copy_skb)
+				if (copy_skb) {
+					memset(&PACKET_SKB_CB(copy_skb)->sa.ll, 0,
+					       sizeof(PACKET_SKB_CB(copy_skb)->sa.ll));
 					skb_set_owner_r(copy_skb, sk);
+				}
 			}
 			snaplen = po->rx_ring.frame_size - macoff;
 			if ((int)snaplen < 0) {
@@ -2389,6 +2398,7 @@ static int tpacket_rcv(struct sk_buff *skb, struct net_device *dev,
 	po->stats.stats1.tp_packets++;
 	if (copy_skb) {
 		status |= TP_STATUS_COPY;
+		skb_clear_delivery_time(copy_skb);
 		__skb_queue_tail(&sk->sk_receive_queue, copy_skb);
 	}
 	spin_unlock(&sk->sk_receive_queue.lock);
@@ -3120,16 +3130,14 @@ static int packet_release(struct socket *sock)
 	sk_del_node_init_rcu(sk);
 	mutex_unlock(&net->packet.sklist_lock);
 
-	preempt_disable();
 	sock_prot_inuse_add(net, sk->sk_prot, -1);
-	preempt_enable();
 
 	spin_lock(&po->bind_lock);
 	unregister_prot_hook(sk, false);
 	packet_cached_dev_reset(po);
 
 	if (po->prot_hook.dev) {
-		dev_put(po->prot_hook.dev);
+		dev_put_track(po->prot_hook.dev, &po->prot_hook.dev_tracker);
 		po->prot_hook.dev = NULL;
 	}
 	spin_unlock(&po->bind_lock);
@@ -3181,12 +3189,10 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 			  __be16 proto)
 {
 	struct packet_sock *po = pkt_sk(sk);
-	struct net_device *dev_curr;
-	__be16 proto_curr;
-	bool need_rehook;
 	struct net_device *dev = NULL;
-	int ret = 0;
 	bool unlisted = false;
+	bool need_rehook;
+	int ret = 0;
 
 	lock_sock(sk);
 	spin_lock(&po->bind_lock);
@@ -3213,17 +3219,13 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 		}
 	}
 
-	dev_hold(dev);
-
 	//通过type,dev检查是否发生变更，如变更则需要重新hook
-	proto_curr = po->prot_hook.type;
-	dev_curr = po->prot_hook.dev;
-
-	need_rehook = proto_curr != proto || dev_curr != dev;
+	//如果需要重新hook，则检查是否已将packet_type添加，如已添加
+	//则先删除再添加
+	need_rehook = po->prot_hook.type != proto || po->prot_hook.dev != dev;
 
 	if (need_rehook) {
-	    //如果需要重新hook，则检查是否已将packet_type添加，如已添加
-	    //则先删除再添加
+		dev_hold(dev);
 		if (po->running) {
 			rcu_read_unlock();
 			/* prevents packet_notifier() from calling
@@ -3233,7 +3235,6 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 			//移除
 			__unregister_prot_hook(sk, true);
 			rcu_read_lock();
-			dev_curr = po->prot_hook.dev;
 			if (dev)
 				unlisted = !dev_get_by_index_rcu(sock_net(sk),
 								 dev->ifindex);
@@ -3243,20 +3244,21 @@ static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
 		WRITE_ONCE(po->num, proto);
 		po->prot_hook.type = proto;//指定要处理的proto
 
+		dev_put_track(po->prot_hook.dev, &po->prot_hook.dev_tracker);
+
 		if (unlikely(unlisted)) {
-		    //dev不存在当前socket所在namespace时，清除dev
-			dev_put(dev);
 			po->prot_hook.dev = NULL;
 			WRITE_ONCE(po->ifindex, -1);
 			packet_cached_dev_reset(po);
 		} else {
+			dev_hold_track(dev, &po->prot_hook.dev_tracker,
+				       GFP_ATOMIC);
 			po->prot_hook.dev = dev;
 			WRITE_ONCE(po->ifindex, dev ? dev->ifindex : 0);
 			packet_cached_dev_assign(po, dev);
 		}
+		dev_put(dev);
 	}
-	//释放上次占用的dev
-	dev_put(dev_curr);
 
 	if (proto == 0 || !need_rehook)
 		goto out_unlock;
@@ -3388,6 +3390,7 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 		po->prot_hook.func = packet_rcv_spkt;
 
 	po->prot_hook.af_packet_priv = sk;
+	po->prot_hook.af_packet_net = sock_net(sk);
 
 	//如果指明了协议，则注册协议号（all也在其中）
 	//注一个协议可以被注册多次，在函数__netif_receive_skb_core中负责按回调送包
@@ -3402,9 +3405,7 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 	sk_add_node_tail_rcu(sk, &net->packet.sklist);
 	mutex_unlock(&net->packet.sklist_lock);
 
-	preempt_disable();
 	sock_prot_inuse_add(net, &packet_proto, 1);
-	preempt_enable();
 
 	return 0;
 out2:
@@ -3498,6 +3499,8 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	sock_recv_ts_and_drops(msg, sk, skb);
 
 	if (msg->msg_name) {
+		const size_t max_len = min(sizeof(skb->cb),
+					   sizeof(struct sockaddr_storage));
 		int copy_len;
 
 		/* If the address length field is there to be filled
@@ -3519,6 +3522,10 @@ static int packet_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 				       0, sizeof(sll->sll_addr));
 				msg->msg_namelen = sizeof(struct sockaddr_ll);
 			}
+		}
+		if (WARN_ON_ONCE(copy_len > max_len)) {
+			copy_len = max_len;
+			msg->msg_namelen = copy_len;
 		}
 		memcpy(msg->msg_name, &PACKET_SKB_CB(skb)->sa, copy_len);
 	}
@@ -3974,7 +3981,8 @@ packet_setsockopt(struct socket *sock, int level, int optname, sockptr_t optval,
 	}
 	case PACKET_FANOUT_DATA:
 	{
-		if (!po->fanout)
+		/* Paired with the WRITE_ONCE() in fanout_add() */
+		if (!READ_ONCE(po->fanout))
 			return -EINVAL;
 
 		return fanout_set_data(po, optval, optlen);
@@ -4177,7 +4185,8 @@ static int packet_notifier(struct notifier_block *this,
 				if (msg == NETDEV_UNREGISTER) {
 					packet_cached_dev_reset(po);
 					WRITE_ONCE(po->ifindex, -1);
-					dev_put(po->prot_hook.dev);
+					dev_put_track(po->prot_hook.dev,
+						      &po->prot_hook.dev_tracker);
 					po->prot_hook.dev = NULL;
 				}
 				spin_unlock(&po->bind_lock);
@@ -4527,9 +4536,10 @@ static int packet_set_ring(struct sock *sk, union tpacket_req_u *req_u,
 	}
 
 out_free_pg_vec:
-	bitmap_free(rx_owner_map);
-	if (pg_vec)
+	if (pg_vec) {
+		bitmap_free(rx_owner_map);
 		free_pg_vec(pg_vec, order, req->tp_block_nr);
+	}
 out:
 	return err;
 }

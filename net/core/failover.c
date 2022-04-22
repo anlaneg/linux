@@ -288,7 +288,7 @@ struct failover *failover_register(struct net_device *dev,
 
 	//指定failover实例的ops及failover dev
 	rcu_assign_pointer(failover->ops, ops);
-	dev_hold(dev);
+	dev_hold_track(dev, &failover->dev_tracker, GFP_KERNEL);
 	//指明设备是一个failover master device
 	dev->priv_flags |= IFF_FAILOVER;
 	rcu_assign_pointer(failover->failover_dev, dev);
@@ -324,7 +324,7 @@ void failover_unregister(struct failover *failover)
 		    failover_dev->name);
 
 	failover_dev->priv_flags &= ~IFF_FAILOVER;
-	dev_put(failover_dev);
+	dev_put_track(failover_dev, &failover->dev_tracker);
 
 	spin_lock(&failover_lock);
 	list_del(&failover->list);

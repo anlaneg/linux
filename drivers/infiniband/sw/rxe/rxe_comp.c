@@ -459,8 +459,6 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 					   struct rxe_pkt_info *pkt,
 					   struct rxe_send_wqe *wqe)
 {
-	unsigned long flags;
-
 	if (wqe->has_rd_atomic) {
 		wqe->has_rd_atomic = 0;
 		atomic_inc(&qp->req.rd_atomic);
@@ -473,11 +471,11 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 
 	if (unlikely(qp->req.state == QP_STATE_DRAIN)) {
 		/* state_lock used by requester & completer */
-		spin_lock_irqsave(&qp->state_lock, flags);
+		spin_lock_bh(&qp->state_lock);
 		if ((qp->req.state == QP_STATE_DRAIN) &&
 		    (qp->comp.psn == qp->req.psn)) {
 			qp->req.state = QP_STATE_DRAINED;
-			spin_unlock_irqrestore(&qp->state_lock, flags);
+			spin_unlock_bh(&qp->state_lock);
 
 			if (qp->ibqp.event_handler) {
 				struct ib_event ev;
@@ -489,7 +487,7 @@ static inline enum comp_state complete_ack(struct rxe_qp *qp,
 					qp->ibqp.qp_context);
 			}
 		} else {
-			spin_unlock_irqrestore(&qp->state_lock, flags);
+			spin_unlock_bh(&qp->state_lock);
 		}
 	}
 
@@ -530,7 +528,7 @@ static void rxe_drain_resp_pkts(struct rxe_qp *qp, bool notify)
 
 	/*清除qp->resp_pkts上所有skb*/
 	while ((skb = skb_dequeue(&qp->resp_pkts))) {
-		rxe_drop_ref(qp);
+		rxe_put(qp);
 		kfree_skb(skb);
 		ib_device_put(qp->ibqp.device);
 	}
@@ -553,7 +551,7 @@ static void free_pkt(struct rxe_pkt_info *pkt)
 	struct ib_device *dev = qp->ibqp.device;
 
 	kfree_skb(skb);
-	rxe_drop_ref(qp);
+	rxe_put(qp);
 	ib_device_put(dev);
 }
 
@@ -568,7 +566,7 @@ int rxe_completer(void *arg)
 	enum comp_state state;
 	int ret = 0;
 
-	rxe_add_ref(qp);
+	rxe_get(qp);
 
 	if (!qp->valid || qp->req.state == QP_STATE_ERROR ||
 	    qp->req.state == QP_STATE_RESET) {
@@ -769,7 +767,7 @@ int rxe_completer(void *arg)
 done:
 	if (pkt)
 		free_pkt(pkt);
-	rxe_drop_ref(qp);
+	rxe_put(qp);
 
 	return ret;
 }

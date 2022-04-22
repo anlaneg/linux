@@ -135,11 +135,11 @@ bool is_virtio_device(struct device *dev);
 void virtio_break_device(struct virtio_device *dev);
 
 void virtio_config_changed(struct virtio_device *dev);
-int virtio_finalize_features(struct virtio_device *dev);
 #ifdef CONFIG_PM_SLEEP
 int virtio_device_freeze(struct virtio_device *dev);
 int virtio_device_restore(struct virtio_device *dev);
 #endif
+void virtio_reset_device(struct virtio_device *dev);
 
 size_t virtio_max_dma_size(struct virtio_device *vdev);
 
@@ -154,7 +154,6 @@ size_t virtio_max_dma_size(struct virtio_device *vdev);
  * @feature_table_size: number of entries in the feature table array.
  * @feature_table_legacy: same as feature_table but when working in legacy mode.
  * @feature_table_size_legacy: number of entries in feature table legacy array.
- * @suppress_used_validation: set to not have core validate used length
  * @probe: the function to call when a device is found.  Returns 0 or -errno.
  * @scan: optional function to call after successful probe; intended
  *    for virtio-scsi to invoke a scan.
@@ -171,7 +170,6 @@ struct virtio_driver {
 	unsigned int feature_table_size;//feature_table大小
 	const unsigned int *feature_table_legacy;//legacy功能列表
 	unsigned int feature_table_size_legacy;//legacy_table大小
-	bool suppress_used_validation;
 	int (*validate)(struct virtio_device *dev);//probe设备之前驱动对设备进行校验
 	int (*probe)(struct virtio_device *dev);
 	void (*scan)(struct virtio_device *dev);

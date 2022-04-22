@@ -407,14 +407,14 @@ static u32 vdpasim_get_vq_align(struct vdpa_device *vdpa)
 	return VDPASIM_QUEUE_ALIGN;
 }
 
-static u64 vdpasim_get_features(struct vdpa_device *vdpa)
+static u64 vdpasim_get_device_features(struct vdpa_device *vdpa)
 {
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
 
 	return vdpasim->dev_attr.supported_features;
 }
 
-static int vdpasim_set_features(struct vdpa_device *vdpa, u64 features)
+static int vdpasim_set_driver_features(struct vdpa_device *vdpa, u64 features)
 {
 	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
 
@@ -425,6 +425,13 @@ static int vdpasim_set_features(struct vdpa_device *vdpa, u64 features)
 	vdpasim->features = features & vdpasim->dev_attr.supported_features;
 
 	return 0;
+}
+
+static u64 vdpasim_get_driver_features(struct vdpa_device *vdpa)
+{
+	struct vdpasim *vdpasim = vdpa_to_sim(vdpa);
+
+	return vdpasim->features;
 }
 
 static void vdpasim_set_config_cb(struct vdpa_device *vdpa,
@@ -599,8 +606,11 @@ static void vdpasim_free(struct vdpa_device *vdpa)
 		vringh_kiov_cleanup(&vdpasim->vqs[i].in_iov);
 	}
 
-	put_iova_domain(&vdpasim->iova);
-	iova_cache_put();
+	if (vdpa_get_dma_dev(vdpa)) {
+		put_iova_domain(&vdpasim->iova);
+		iova_cache_put();
+	}
+
 	kvfree(vdpasim->buffer);
 	if (vdpasim->iommu)
 		vhost_iotlb_free(vdpasim->iommu);
@@ -619,8 +629,9 @@ static const struct vdpa_config_ops vdpasim_config_ops = {
 	.set_vq_state           = vdpasim_set_vq_state,
 	.get_vq_state           = vdpasim_get_vq_state,
 	.get_vq_align           = vdpasim_get_vq_align,
-	.get_features           = vdpasim_get_features,
-	.set_features           = vdpasim_set_features,
+	.get_device_features    = vdpasim_get_device_features,
+	.set_driver_features    = vdpasim_set_driver_features,
+	.get_driver_features    = vdpasim_get_driver_features,
 	.set_config_cb          = vdpasim_set_config_cb,
 	.get_vq_num_max         = vdpasim_get_vq_num_max,
 	.get_device_id          = vdpasim_get_device_id,
@@ -648,8 +659,9 @@ static const struct vdpa_config_ops vdpasim_batch_config_ops = {
 	.set_vq_state           = vdpasim_set_vq_state,
 	.get_vq_state           = vdpasim_get_vq_state,
 	.get_vq_align           = vdpasim_get_vq_align,
-	.get_features           = vdpasim_get_features,
-	.set_features           = vdpasim_set_features,
+	.get_device_features    = vdpasim_get_device_features,
+	.set_driver_features    = vdpasim_set_driver_features,
+	.get_driver_features    = vdpasim_get_driver_features,
 	.set_config_cb          = vdpasim_set_config_cb,
 	.get_vq_num_max         = vdpasim_get_vq_num_max,
 	.get_device_id          = vdpasim_get_device_id,

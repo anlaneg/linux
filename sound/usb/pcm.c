@@ -581,6 +581,12 @@ static int snd_usb_hw_free(struct snd_pcm_substream *substream)
 	return 0;
 }
 
+/* free-wheeling mode? (e.g. dmix) */
+static int in_free_wheeling_mode(struct snd_pcm_runtime *runtime)
+{
+	return runtime->stop_threshold > runtime->buffer_size;
+}
+
 /* check whether early start is needed for playback stream */
 static int lowlatency_playback_available(struct snd_pcm_runtime *runtime,
 					 struct snd_usb_substream *subs)
@@ -592,8 +598,7 @@ static int lowlatency_playback_available(struct snd_pcm_runtime *runtime,
 	/* disabled via module option? */
 	if (!chip->lowlatency)
 		return false;
-	/* free-wheeling mode? (e.g. dmix) */
-	if (runtime->stop_threshold > runtime->buffer_size)
+	if (in_free_wheeling_mode(runtime))
 		return false;
 	/* implicit feedback mode has own operation mode */
 	if (snd_usb_endpoint_implicit_feedback_sink(subs->data_endpoint))
@@ -635,7 +640,8 @@ static int snd_usb_pcm_prepare(struct snd_pcm_substream *substream)
 	runtime->delay = 0;
 
 	subs->lowlatency_playback = lowlatency_playback_available(runtime, subs);
-	if (!subs->lowlatency_playback)
+	if (substream->stream == SNDRV_PCM_STREAM_PLAYBACK &&
+	    !subs->lowlatency_playback)
 		ret = start_endpoints(subs);
 
  unlock:
@@ -663,9 +669,9 @@ static const struct snd_pcm_hardware snd_usb_hardware =
 				SNDRV_PCM_INFO_PAUSE,
 	.channels_min =		1,
 	.channels_max =		256,
-	.buffer_bytes_max =	1024 * 1024,
+	.buffer_bytes_max =	INT_MAX, /* limited by BUFFER_TIME later */
 	.period_bytes_min =	64,
-	.period_bytes_max =	512 * 1024,
+	.period_bytes_max =	INT_MAX, /* limited by PERIOD_TIME later */
 	.periods_min =		2,
 	.periods_max =		1024,
 };
@@ -1057,6 +1063,18 @@ static int setup_hw_info(struct snd_pcm_runtime *runtime, struct snd_usb_substre
 		if (err < 0)
 			return err;
 	}
+
+	/* set max period and buffer sizes for 1 and 2 seconds, respectively */
+	err = snd_pcm_hw_constraint_minmax(runtime,
+					   SNDRV_PCM_HW_PARAM_PERIOD_TIME,
+					   0, 1000000);
+	if (err < 0)
+		return err;
+	err = snd_pcm_hw_constraint_minmax(runtime,
+					   SNDRV_PCM_HW_PARAM_BUFFER_TIME,
+					   0, 2000000);
+	if (err < 0)
+		return err;
 
 	/* additional hw constraints for implicit fb */
 	err = snd_pcm_hw_rule_add(runtime, 0, SNDRV_PCM_HW_PARAM_FORMAT,
@@ -1552,6 +1570,8 @@ static int snd_usb_substream_playback_trigger(struct snd_pcm_substream *substrea
 					      subs);
 		if (subs->lowlatency_playback &&
 		    cmd == SNDRV_PCM_TRIGGER_START) {
+			if (in_free_wheeling_mode(substream->runtime))
+				subs->lowlatency_playback = false;
 			err = start_endpoints(subs);
 			if (err < 0) {
 				snd_usb_endpoint_set_callback(subs->data_endpoint,

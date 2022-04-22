@@ -55,6 +55,9 @@
  * 0x1000   | SegHdr N+1| Data payload N+1 ...                |
  */
 
+#define WORKSPACE_BUF_LENGTH	(lzo1x_worst_compress(PAGE_SIZE))
+#define WORKSPACE_CBUF_LENGTH	(lzo1x_worst_compress(PAGE_SIZE))
+
 struct workspace {
 	void *mem;
 	void *buf;	/* where decompressed data goes */
@@ -83,8 +86,8 @@ struct list_head *lzo_alloc_workspace(unsigned int level)
 		return ERR_PTR(-ENOMEM);
 
 	workspace->mem = kvmalloc(LZO1X_MEM_COMPRESS, GFP_KERNEL);
-	workspace->buf = kvmalloc(lzo1x_worst_compress(PAGE_SIZE), GFP_KERNEL);
-	workspace->cbuf = kvmalloc(lzo1x_worst_compress(PAGE_SIZE), GFP_KERNEL);
+	workspace->buf = kvmalloc(WORKSPACE_BUF_LENGTH, GFP_KERNEL);
+	workspace->cbuf = kvmalloc(WORKSPACE_CBUF_LENGTH, GFP_KERNEL);
 	if (!workspace->mem || !workspace->buf || !workspace->cbuf)
 		goto fail;
 
@@ -125,6 +128,7 @@ static inline size_t read_compress_length(const char *buf)
 static int copy_compressed_data_to_page(char *compressed_data,
 					size_t compressed_size,
 					struct page **out_pages,
+					unsigned long max_nr_page,
 					u32 *cur_out,
 					const u32 sectorsize)
 {
@@ -132,6 +136,9 @@ static int copy_compressed_data_to_page(char *compressed_data,
 	u32 orig_out;
 	struct page *cur_page;
 	char *kaddr;
+
+	if ((*cur_out / PAGE_SIZE) >= max_nr_page)
+		return -E2BIG;
 
 	/*
 	 * We never allow a segment header crossing sector boundary, previous
@@ -161,6 +168,10 @@ static int copy_compressed_data_to_page(char *compressed_data,
 				     orig_out + compressed_size - *cur_out);
 
 		kunmap(cur_page);
+
+		if ((*cur_out / PAGE_SIZE) >= max_nr_page)
+			return -E2BIG;
+
 		cur_page = out_pages[*cur_out / PAGE_SIZE];
 		/* Allocate a new page */
 		if (!cur_page) {
@@ -203,6 +214,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 	const u32 sectorsize = btrfs_sb(mapping->host->i_sb)->sectorsize;
 	struct page *page_in = NULL;
 	char *sizes_ptr;
+	const unsigned long max_nr_page = *out_pages;
 	int ret = 0;
 	/* Points to the file offset of input data */
 	u64 cur_in = start;
@@ -210,6 +222,7 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 	u32 cur_out = 0;
 	u32 len = *total_out;
 
+	ASSERT(max_nr_page > 0);
 	*out_pages = 0;
 	*total_out = 0;
 	*total_in = 0;
@@ -248,7 +261,8 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 		}
 
 		ret = copy_compressed_data_to_page(workspace->cbuf, out_len,
-						   pages, &cur_out, sectorsize);
+						   pages, max_nr_page,
+						   &cur_out, sectorsize);
 		if (ret < 0)
 			goto out;
 
@@ -279,6 +293,8 @@ int lzo_compress_pages(struct list_head *ws, struct address_space *mapping,
 	*total_out = cur_out;
 	*total_in = cur_in - start;
 out:
+	if (page_in)
+		put_page(page_in);
 	*out_pages = DIV_ROUND_UP(cur_out, PAGE_SIZE);
 	return ret;
 }
@@ -367,6 +383,17 @@ int lzo_decompress_bio(struct list_head *ws, struct compressed_bio *cb)
 		kunmap(cur_page);
 		cur_in += LZO_LEN;
 
+		if (seg_len > WORKSPACE_CBUF_LENGTH) {
+			/*
+			 * seg_len shouldn't be larger than we have allocated
+			 * for workspace->cbuf
+			 */
+			btrfs_err(fs_info, "unexpectedly large lzo segment len %u",
+					seg_len);
+			ret = -EIO;
+			goto out;
+		}
+
 		/* Copy the compressed segment payload into workspace */
 		copy_compressed_segment(cb, workspace->cbuf, seg_len, &cur_in);
 
@@ -409,7 +436,7 @@ int lzo_decompress(struct list_head *ws, unsigned char *data_in,
 	struct workspace *workspace = list_entry(ws, struct workspace, list);
 	size_t in_len;
 	size_t out_len;
-	size_t max_segment_len = lzo1x_worst_compress(PAGE_SIZE);
+	size_t max_segment_len = WORKSPACE_BUF_LENGTH;
 	int ret = 0;
 	char *kaddr;
 	unsigned long bytes;

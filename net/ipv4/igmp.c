@@ -2591,7 +2591,6 @@ int ip_mc_msfget(struct sock *sk, struct ip_msfilter *msf,
 	msf->imsf_fmode = pmc->sfmode;
 	psl = rtnl_dereference(pmc->sflist);
 	if (!psl) {
-		len = 0;
 		count = 0;
 	} else {
 		count = psl->sl_count;

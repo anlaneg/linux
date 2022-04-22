@@ -120,6 +120,11 @@ enum mlx5_flow_steering_mode {
 	MLX5_FLOW_STEERING_MODE_SMFS
 };
 
+enum mlx5_flow_steering_capabilty {
+	MLX5_FLOW_STEERING_CAP_VLAN_PUSH_ON_RX = 1UL << 0,
+	MLX5_FLOW_STEERING_CAP_VLAN_POP_ON_TX = 1UL << 1,
+};
+
 struct mlx5_flow_steering {
 	struct mlx5_core_dev *dev;
 	enum   mlx5_flow_steering_mode	mode;
@@ -216,7 +221,7 @@ struct mlx5_ft_underlay_qp {
 	u32 qpn;
 };
 
-#define MLX5_FTE_MATCH_PARAM_RESERVED	reserved_at_c00
+#define MLX5_FTE_MATCH_PARAM_RESERVED	reserved_at_e00
 /* Calculate the fte_match_param length and without the reserved length.
  * Make sure the reserved field is the last.
  */
@@ -330,6 +335,8 @@ int mlx5_fs_egress_acls_init(struct mlx5_core_dev *dev, int total_vports);
 void mlx5_fs_egress_acls_cleanup(struct mlx5_core_dev *dev);
 int mlx5_fs_ingress_acls_init(struct mlx5_core_dev *dev, int total_vports);
 void mlx5_fs_ingress_acls_cleanup(struct mlx5_core_dev *dev);
+
+u32 mlx5_fs_get_capabilities(struct mlx5_core_dev *dev, enum mlx5_flow_namespace_type type);
 
 struct mlx5_flow_root_namespace *find_root(struct fs_node *node);
 

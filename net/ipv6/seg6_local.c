@@ -7,6 +7,7 @@
  *  eBPF support: Mathieu Xhonneux <m.xhonneux@gmail.com>
  */
 
+#include <linux/filter.h>
 #include <linux/types.h>
 #include <linux/skbuff.h>
 #include <linux/net.h>
@@ -150,44 +151,12 @@ static struct seg6_local_lwt *seg6_local_lwtunnel(struct lwtunnel_state *lwt)
 	return (struct seg6_local_lwt *)lwt->data;
 }
 
-static struct ipv6_sr_hdr *get_srh(struct sk_buff *skb, int flags)
-{
-	struct ipv6_sr_hdr *srh;
-	int len, srhoff = 0;
-
-	/*在ipv6 header后面查找IPPROTO_ROUTING扩展头*/
-	if (ipv6_find_hdr(skb, &srhoff, IPPROTO_ROUTING, NULL, &flags) < 0)
-		return NULL;
-
-	/*查找到sr_hdr,取其对应的内容+srhoff*/
-	if (!pskb_may_pull(skb, srhoff + sizeof(*srh)))
-		return NULL;
-
-	srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
-
-	len = (srh->hdrlen + 1) << 3;
-
-	if (!pskb_may_pull(skb, srhoff + len))
-		return NULL;
-
-	/* note that pskb_may_pull may change pointers in header;
-	 * for this reason it is necessary to reload them when needed.
-	 */
-	srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
-
-	/*执行seg6校验*/
-	if (!seg6_validate_srh(srh, len, true))
-		return NULL;
-
-	return srh;
-}
-
 /*取sr_hdr*/
 static struct ipv6_sr_hdr *get_and_validate_srh(struct sk_buff *skb)
 {
 	struct ipv6_sr_hdr *srh;
 
-	srh = get_srh(skb, IP6_FH_F_SKIP_RH);
+	srh = seg6_get_srh(skb, IP6_FH_F_SKIP_RH);
 	if (!srh)
 		return NULL;
 
@@ -204,7 +173,7 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 	struct ipv6_sr_hdr *srh;
 	unsigned int off = 0;
 
-	srh = get_srh(skb, 0);
+	srh = seg6_get_srh(skb, 0);
 	if (srh && srh->segments_left > 0)
 		return false;
 

@@ -216,6 +216,10 @@ int lwtunnel_valid_encap_type_attr(struct nlattr *attr, int remaining,
 
 			/*encap类型校验,确保此encap_type在kernel中有对应的ops,如不存在，则返回not support*/
 			if (nla_entype) {
+				if (nla_len(nla_entype) < sizeof(u16)) {
+					NL_SET_ERR_MSG(extack, "Invalid RTA_ENCAP_TYPE");
+					return -EINVAL;
+				}
 				encap_type = nla_get_u16(nla_entype);
 
 				if (lwtunnel_valid_encap_type(encap_type,

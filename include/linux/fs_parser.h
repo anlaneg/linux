@@ -45,7 +45,7 @@ struct fs_parameter_spec {
 	unsigned short		flags;
 	//指明noxxx是反选项
 #define fs_param_neg_with_no	0x0002	/* "noxxx" is negative param */
-#define fs_param_neg_with_empty	0x0004	/* "xxx=" is negative param */
+#define fs_param_can_be_empty	0x0004	/* "xxx=" is allowed */
 #define fs_param_deprecated	0x0008	/* The param is deprecated */
 	const void		*data;
 };

@@ -50,7 +50,7 @@ static void pic_unlock(struct kvm_pic *s)
 {
 	bool wakeup = s->wakeup_needed;
 	struct kvm_vcpu *vcpu;
-	int i;
+	unsigned long i;
 
 	s->wakeup_needed = false;
 
@@ -289,7 +289,8 @@ int kvm_pic_read_irq(struct kvm *kvm)
 
 static void kvm_pic_reset(struct kvm_kpic_state *s)
 {
-	int irq, i;
+	int irq;
+	unsigned long i;
 	struct kvm_vcpu *vcpu;
 	u8 edge_irr = s->irr & ~s->elcr;
 	bool found = false;
@@ -459,14 +460,14 @@ static u32 pic_ioport_read(void *opaque, u32 addr)
 }
 
 //填充elcr字段（elcr_mask字段控制可写部分）
-static void elcr_ioport_write(void *opaque, u32 addr, u32 val)
+static void elcr_ioport_write(void *opaque, u32 val)
 {
 	struct kvm_kpic_state *s = opaque;
 	s->elcr = val & s->elcr_mask;
 }
 
 //返回elcr字段内容
-static u32 elcr_ioport_read(void *opaque, u32 addr1)
+static u32 elcr_ioport_read(void *opaque)
 {
 	struct kvm_kpic_state *s = opaque;
 	return s->elcr;
@@ -499,7 +500,7 @@ static int picdev_write(struct kvm_pic *s,
 	case 0x4d1:
 		pic_lock(s);
 		//elcr字段的写
-		elcr_ioport_write(&s->pics[addr & 1], addr, data);
+		elcr_ioport_write(&s->pics[addr & 1], data);
 		pic_unlock(s);
 		break;
 	default:
@@ -533,7 +534,7 @@ static int picdev_read(struct kvm_pic *s,
 	case 0x4d1://即0b 0100 1101 0001
 		pic_lock(s);
 		//elcr字段的读取
-		*data = elcr_ioport_read(&s->pics[addr & 1], addr);
+		*data = elcr_ioport_read(&s->pics[addr & 1]);
 		pic_unlock(s);
 		break;
 	default:

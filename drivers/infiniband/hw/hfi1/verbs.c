@@ -1397,8 +1397,7 @@ static int query_port(struct rvt_dev_info *rdi, u32 port_num,
 				      4096 : hfi1_max_mtu), IB_MTU_4096);
 	props->active_mtu = !valid_ib_mtu(ppd->ibmtu) ? props->max_mtu :
 		mtu_to_enum(ppd->ibmtu, IB_MTU_4096);
-	props->phys_mtu = HFI1_CAP_IS_KSET(AIP) ? hfi1_max_mtu :
-				ib_mtu_enum_to_int(props->max_mtu);
+	props->phys_mtu = hfi1_max_mtu;
 
 	return 0;
 }
@@ -1628,8 +1627,7 @@ static int init_cntr_names(const char *names_in, const size_t names_len,
 			n++;
 
 	names_out =
-		kmalloc((n + num_extra_names) * sizeof(struct rdma_stat_desc) +
-				names_len,
+		kzalloc((n + num_extra_names) * sizeof(*q) + names_len,
 			GFP_KERNEL);
 	if (!names_out) {
 		*num_cntrs = 0;
@@ -1637,7 +1635,7 @@ static int init_cntr_names(const char *names_in, const size_t names_len,
 		return -ENOMEM;
 	}
 
-	p = names_out + (n + num_extra_names) * sizeof(struct rdma_stat_desc);
+	p = names_out + (n + num_extra_names) * sizeof(*q);
 	memcpy(p, names_in, names_len);
 
 	q = (struct rdma_stat_desc *)names_out;

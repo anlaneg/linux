@@ -445,7 +445,7 @@ static void __init setup_lowcore_dat_off(void)
 	lc->lpp = LPP_MAGIC;
 	lc->machine_flags = S390_lowcore.machine_flags;
 	lc->preempt_count = S390_lowcore.preempt_count;
-	nmi_alloc_boot_cpu(lc);
+	nmi_alloc_mcesa_early(&lc->mcesad);
 	lc->sys_enter_timer = S390_lowcore.sys_enter_timer;
 	lc->exit_timer = S390_lowcore.exit_timer;
 	lc->user_timer = S390_lowcore.user_timer;
@@ -481,16 +481,15 @@ static void __init setup_lowcore_dat_off(void)
 	lc->mcck_stack = mcck_stack + STACK_INIT_OFFSET;
 
 	/* Setup absolute zero lowcore */
-	mem_assign_absolute(S390_lowcore.restart_stack, lc->restart_stack);
-	mem_assign_absolute(S390_lowcore.restart_fn, lc->restart_fn);
-	mem_assign_absolute(S390_lowcore.restart_data, lc->restart_data);
-	mem_assign_absolute(S390_lowcore.restart_source, lc->restart_source);
-	mem_assign_absolute(S390_lowcore.restart_psw, lc->restart_psw);
+	put_abs_lowcore(restart_stack, lc->restart_stack);
+	put_abs_lowcore(restart_fn, lc->restart_fn);
+	put_abs_lowcore(restart_data, lc->restart_data);
+	put_abs_lowcore(restart_source, lc->restart_source);
+	put_abs_lowcore(restart_psw, lc->restart_psw);
 
 	lc->spinlock_lockval = arch_spin_lockval(0);
 	lc->spinlock_index = 0;
 	arch_spin_lock_setup(0);
-	lc->br_r1_trampoline = 0x07f1;	/* br %r1 */
 	lc->return_lpswe = gen_lpswe(__LC_RETURN_PSW);
 	lc->return_mcck_lpswe = gen_lpswe(__LC_RETURN_MCCK_PSW);
 	lc->preempt_count = PREEMPT_DISABLED;
@@ -502,6 +501,7 @@ static void __init setup_lowcore_dat_off(void)
 static void __init setup_lowcore_dat_on(void)
 {
 	struct lowcore *lc = lowcore_ptr[0];
+	int cr;
 
 	__ctl_clear_bit(0, 28);
 	S390_lowcore.external_new_psw.mask |= PSW_MASK_DAT;
@@ -510,10 +510,10 @@ static void __init setup_lowcore_dat_on(void)
 	S390_lowcore.io_new_psw.mask |= PSW_MASK_DAT;
 	__ctl_store(S390_lowcore.cregs_save_area, 0, 15);
 	__ctl_set_bit(0, 28);
-	mem_assign_absolute(S390_lowcore.restart_flags, RESTART_FLAG_CTLREGS);
-	mem_assign_absolute(S390_lowcore.program_new_psw, lc->program_new_psw);
-	memcpy_absolute(&S390_lowcore.cregs_save_area, lc->cregs_save_area,
-			sizeof(S390_lowcore.cregs_save_area));
+	put_abs_lowcore(restart_flags, RESTART_FLAG_CTLREGS);
+	put_abs_lowcore(program_new_psw, lc->program_new_psw);
+	for (cr = 0; cr < ARRAY_SIZE(lc->cregs_save_area); cr++)
+		put_abs_lowcore(cregs_save_area[cr], lc->cregs_save_area[cr]);
 }
 
 static struct resource code_resource = {
@@ -606,7 +606,7 @@ static void __init setup_resources(void)
 
 static void __init setup_memory_end(void)
 {
-	memblock_remove(ident_map_size, ULONG_MAX);
+	memblock_remove(ident_map_size, PHYS_ADDR_MAX - ident_map_size);
 	max_pfn = max_low_pfn = PFN_DOWN(ident_map_size);
 	pr_notice("The maximum memory size is %luMB\n", ident_map_size >> 20);
 }
@@ -636,14 +636,6 @@ static struct notifier_block kdump_mem_nb = {
 };
 
 #endif
-
-/*
- * Make sure that the area above identity mapping is protected
- */
-static void __init reserve_above_ident_map(void)
-{
-	memblock_reserve(ident_map_size, ULONG_MAX);
-}
 
 /*
  * Reserve memory for kdump kernel to be loaded with kexec
@@ -785,7 +777,6 @@ static void __init memblock_add_mem_detect_info(void)
 	}
 	memblock_set_bottom_up(false);
 	memblock_set_node(0, ULONG_MAX, &memblock.memory, 0);
-	memblock_dump_all();
 }
 
 /*
@@ -809,6 +800,8 @@ static void __init check_initrd(void)
 static void __init reserve_kernel(void)
 {
 	memblock_reserve(0, STARTUP_NORMAL_OFFSET);
+	memblock_reserve(OLDMEM_BASE, sizeof(unsigned long));
+	memblock_reserve(OLDMEM_SIZE, sizeof(unsigned long));
 	memblock_reserve(__amode31_base, __eamode31 - __samode31);
 	memblock_reserve(__pa(sclp_early_sccb), EXT_SCCB_READ_SCP);
 	memblock_reserve(__pa(_stext), _end - _stext);
@@ -826,9 +819,6 @@ static void __init setup_memory(void)
 		storage_key_init_range(start, end);
 
 	psw_set_key(PAGE_DEFAULT_KEY);
-
-	/* Only cosmetics */
-	memblock_enforce_memory_limit(memblock_end_of_DRAM());
 }
 
 static void __init relocate_amode31_section(void)
@@ -999,24 +989,24 @@ void __init setup_arch(char **cmdline_p)
 	setup_control_program_code();
 
 	/* Do some memory reservations *before* memory is added to memblock */
-	reserve_above_ident_map();
 	reserve_kernel();
 	reserve_initrd();
 	reserve_certificate_list();
 	reserve_mem_detect_info();
+	memblock_set_current_limit(ident_map_size);
 	memblock_allow_resize();
 
 	/* Get information about *all* installed memory */
 	memblock_add_mem_detect_info();
 
 	free_mem_detect_info();
+	setup_memory_end();
+	memblock_dump_all();
+	setup_memory();
 
 	relocate_amode31_section();
 	setup_cr();
-
 	setup_uv();
-	setup_memory_end();
-	setup_memory();
 	dma_contiguous_reserve(ident_map_size);
 	vmcp_cma_reserve();
 	if (MACHINE_HAS_EDAT2)

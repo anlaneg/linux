@@ -17,6 +17,7 @@
 #include <linux/rcupdate.h>
 #include <net/fib_notifier.h>
 #include <net/fib_rules.h>
+#include <net/inet_dscp.h>
 #include <net/inetpeer.h>
 #include <linux/percpu.h>
 #include <linux/notifier.h>
@@ -24,7 +25,7 @@
 
 struct fib_config {
 	u8			fc_dst_len;//目的地址的掩码位长度
-	u8			fc_tos;//路由指定的tos值
+	dscp_t			fc_dscp;//路由指定的tos值
 	u8			fc_protocol;//下发路由的协议，例如ospf,bgp,kernel
 	//地址范围，看结构体rt_scope_t
 	u8			fc_scope;
@@ -94,6 +95,7 @@ struct fnhe_hash_bucket {
 struct fib_nh_common {
     /*出接口对应的设备*/
 	struct net_device	*nhc_dev;
+	netdevice_tracker	nhc_dev_tracker;
 	/*出接口*/
 	int			nhc_oif;
 	unsigned char		nhc_scope;
@@ -135,6 +137,7 @@ struct fib_nh {
 #define fib_nh_family		nh_common.nhc_family
 	/*下一跳出接口对应的设备*/
 #define fib_nh_dev		nh_common.nhc_dev
+#define fib_nh_dev_tracker	nh_common.nhc_dev_tracker
 	/*下一跳对应出接口*/
 #define fib_nh_oif		nh_common.nhc_oif
 #define fib_nh_flags		nh_common.nhc_flags
@@ -500,7 +503,7 @@ int fib_validate_source(struct sk_buff *skb, __be32 src, __be32 dst,
 #ifdef CONFIG_IP_ROUTE_CLASSID
 static inline int fib_num_tclassid_users(struct net *net)
 {
-	return net->ipv4.fib_num_tclassid_users;
+	return atomic_read(&net->ipv4.fib_num_tclassid_users);
 }
 #else
 static inline int fib_num_tclassid_users(struct net *net)

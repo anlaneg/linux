@@ -152,6 +152,12 @@ static int mlx5_cmd_stub_destroy_ns(struct mlx5_flow_root_namespace *ns)
 	return 0;
 }
 
+static u32 mlx5_cmd_stub_get_capabilities(struct mlx5_flow_root_namespace *ns,
+					  enum fs_flow_table_type ft_type)
+{
+	return 0;
+}
+
 static int mlx5_cmd_set_slave_root_fdb(struct mlx5_core_dev *master,
 				       struct mlx5_core_dev *slave,
 				       bool ft_id_valid,
@@ -459,7 +465,8 @@ static int mlx5_set_extended_dest(struct mlx5_core_dev *dev,
 	list_for_each_entry(dst, &fte->node.children, node.list) {
 		if (dst->dest_attr.type == MLX5_FLOW_DESTINATION_TYPE_COUNTER)
 			continue;
-		if (dst->dest_attr.type == MLX5_FLOW_DESTINATION_TYPE_VPORT &&
+		if ((dst->dest_attr.type == MLX5_FLOW_DESTINATION_TYPE_VPORT ||
+		     dst->dest_attr.type == MLX5_FLOW_DESTINATION_TYPE_UPLINK) &&
 		    dst->dest_attr.vport.flags & MLX5_FLOW_DEST_VPORT_REFORMAT_ID)
 			num_encap++;
 		num_fwd_destinations++;
@@ -824,7 +831,8 @@ static int mlx5_cmd_packet_reformat_alloc(struct mlx5_flow_root_namespace *ns,
 	int err;
 	u32 *in;
 
-	if (namespace == MLX5_FLOW_NAMESPACE_FDB)
+	if (namespace == MLX5_FLOW_NAMESPACE_FDB ||
+	    namespace == MLX5_FLOW_NAMESPACE_FDB_BYPASS)
 		max_encap_size = MLX5_CAP_ESW(dev, max_encap_header_size);
 	else
 		max_encap_size = MLX5_CAP_FLOWTABLE(dev, max_encap_header_size);
@@ -896,6 +904,7 @@ static int mlx5_cmd_modify_header_alloc(struct mlx5_flow_root_namespace *ns,
 
 	switch (namespace) {
 	case MLX5_FLOW_NAMESPACE_FDB:
+	case MLX5_FLOW_NAMESPACE_FDB_BYPASS:
 		max_actions = MLX5_CAP_ESW_FLOWTABLE_FDB(dev, max_modify_header_actions);
 		table_type = FS_FT_FDB;
 		break;
@@ -1007,6 +1016,12 @@ static int mlx5_cmd_create_match_definer(struct mlx5_flow_root_namespace *ns,
 	return err ? err : MLX5_GET(general_obj_out_cmd_hdr, out, obj_id);
 }
 
+static u32 mlx5_cmd_get_capabilities(struct mlx5_flow_root_namespace *ns,
+				     enum fs_flow_table_type ft_type)
+{
+	return 0;
+}
+
 //dmfs下流表方式（旧的下流方式）已支持的table type的cmds处理
 static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	//告知fw创建flow table
@@ -1030,6 +1045,7 @@ static const struct mlx5_flow_cmds mlx5_flow_cmds = {
 	.set_peer = mlx5_cmd_stub_set_peer,
 	.create_ns = mlx5_cmd_stub_create_ns,
 	.destroy_ns = mlx5_cmd_stub_destroy_ns,
+	.get_capabilities = mlx5_cmd_get_capabilities,
 };
 
 //暂不支持的table type的cmds处理（打桩）
@@ -1052,6 +1068,7 @@ static const struct mlx5_flow_cmds mlx5_flow_cmd_stubs = {
 	.set_peer = mlx5_cmd_stub_set_peer,
 	.create_ns = mlx5_cmd_stub_create_ns,
 	.destroy_ns = mlx5_cmd_stub_destroy_ns,
+	.get_capabilities = mlx5_cmd_stub_get_capabilities,
 };
 
 const struct mlx5_flow_cmds *mlx5_fs_cmd_get_fw_cmds(void)
