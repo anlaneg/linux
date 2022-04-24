@@ -34,7 +34,7 @@ struct nf_conntrack_man {
 };
 
 /* This contains the information to distinguish a connection. */
-struct
+struct nf_conntrack_tuple
  {
     //源地址，源端口及l3协议
 	struct nf_conntrack_man src;

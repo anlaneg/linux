@@ -4800,6 +4800,7 @@ static long kvm_vm_compat_ioctl(struct file *filp,
 
 //vm对应的文件操作集
 static const struct file_operations kvm_vm_fops = {
+	.release        = kvm_vm_release,
 	.unlocked_ioctl = kvm_vm_ioctl,
 	.llseek		= noop_llseek,
 	KVM_COMPAT(kvm_vm_compat_ioctl),
