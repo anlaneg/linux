@@ -29,10 +29,10 @@
 //定义各bpf程序类型对应的verifier操作集
 static const struct bpf_verifier_ops * const bpf_verifier_ops[] = {
 #define BPF_PROG_TYPE(_id, _name, prog_ctx_type, kern_ctx_type) \
-	[_id] = & _name ## _verifier_ops,
+	[_id] = & _name ## _verifier_ops,/*拼bpf_verifier_ops类型的变量名称*/
 #define BPF_MAP_TYPE(_id, _ops)
 #define BPF_LINK_TYPE(_id, _name)
-#include <linux/bpf_types.h>
+#include <linux/bpf_types.h> /*包含所有prog type的verifier*/
 #undef BPF_PROG_TYPE
 #undef BPF_MAP_TYPE
 #undef BPF_LINK_TYPE
@@ -6616,6 +6616,7 @@ static int check_get_func_ip(struct bpf_verifier_env *env)
 	return -ENOTSUPP;
 }
 
+/*检查此指令，针对helper function的调用是否合法*/
 static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn,
 			     int *insn_idx_p)
 {
@@ -6630,7 +6631,7 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 
 	/* find function prototype */
 	func_id = insn->imm;
-	/*校验func id是否有效*/
+	/*校验func id是否在合适范围*/
 	if (func_id < 0 || func_id >= __BPF_FUNC_MAX_ID) {
 		verbose(env, "invalid func %s#%d\n", func_id_name(func_id),
 			func_id);
@@ -6641,7 +6642,7 @@ static int check_helper_call(struct bpf_verifier_env *env, struct bpf_insn *insn
 	if (env->ops->get_func_proto)
 		fn = env->ops->get_func_proto(func_id, env->prog);
 	if (!fn) {
-	    /*对应的function不存在*/
+	    /*对应的function不存在，报错*/
 		verbose(env, "unknown func %s#%d\n", func_id_name(func_id),
 			func_id);
 		return -EINVAL;
@@ -11668,7 +11669,7 @@ static int do_check(struct bpf_verifier_env *env)
 
 			env->jmps_processed++;
 			if (opcode == BPF_CALL) {
-			    //call指令
+			    //遇到call指令
 				if (BPF_SRC(insn->code) != BPF_K ||
 				    (insn->src_reg != BPF_PSEUDO_KFUNC_CALL
 				     && insn->off != 0) ||
@@ -11692,7 +11693,7 @@ static int do_check(struct bpf_verifier_env *env)
 				else if (insn->src_reg == BPF_PSEUDO_KFUNC_CALL)
 					err = check_kfunc_call(env, insn, &env->insn_idx);
 				else
-				    	/*指令中的立即数保存的是bpf heler函数的id号，来源于bpf_func_id枚举类型*/
+				    /*指令中的立即数保存的是bpf heler函数的id号，来源于bpf_func_id枚举类型，这里检查helper调用是否合法*/
 					err = check_helper_call(env, insn, &env->insn_idx);
 				if (err)
 					return err;

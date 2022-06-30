@@ -189,7 +189,7 @@ static inline bool cgroup_bpf_sock_enabled(struct sock *sk,
 	__ret;								      \
 })
 
-/*cgroup egress钩子点回调触发*/
+/*cgroup inet egress钩子点回调触发*/
 #define BPF_CGROUP_RUN_PROG_INET_EGRESS(sk, skb)			       \
 ({									       \
 	int __ret = 0;							       \

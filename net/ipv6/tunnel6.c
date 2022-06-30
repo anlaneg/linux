@@ -260,6 +260,7 @@ static int __init tunnel6_init(void)
 		pr_err("%s: can't add protocol\n", __func__);
 		return -EAGAIN;
 	}
+	/*添加ipip协议处理*/
 	if (inet6_add_protocol(&tunnel46_protocol, IPPROTO_IPIP)) {
 		pr_err("%s: can't add protocol\n", __func__);
 		inet6_del_protocol(&tunnel6_protocol, IPPROTO_IPV6);

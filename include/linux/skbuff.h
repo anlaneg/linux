@@ -1073,7 +1073,7 @@ struct sk_buff {
 	__be16			protocol;//链路层指明的协议，如arp,ip协议,802.2等
 	__u16			transport_header;//到传输层的偏移量
 	__u16			network_header;//到网络头的偏移量
-	__u16			mac_header;//到mac头的偏移量
+	__u16			mac_header;//从skb->head到mac头的偏移量
 
 #ifdef CONFIG_KCOV
 	u64			kcov_handle;
@@ -2840,11 +2840,13 @@ static inline unsigned char *skb_mac_header(const struct sk_buff *skb)
 	return skb->head + skb->mac_header;
 }
 
+/*以太头指针与skb->data之间的offset*/
 static inline int skb_mac_offset(const struct sk_buff *skb)
 {
 	return skb_mac_header(skb) - skb->data;
 }
 
+/*mac header的长度*/
 static inline u32 skb_mac_header_len(const struct sk_buff *skb)
 {
 	return skb->network_header - skb->mac_header;
@@ -2861,12 +2863,13 @@ static inline void skb_unset_mac_header(struct sk_buff *skb)
 	skb->mac_header = (typeof(skb->mac_header))~0U;
 }
 
-//定义当前skb->data所指向的位置为以太头位置
+//定义当前skb->data所指向的位置为以太头位置，采用skb->mac_header记录此位置
 static inline void skb_reset_mac_header(struct sk_buff *skb)
 {
 	skb->mac_header = skb->data - skb->head;
 }
 
+/*定义当前skb->data + offset所对应的位置为以太头位置，采用skb->mac_header记录此位置*/
 static inline void skb_set_mac_header(struct sk_buff *skb, const int offset)
 {
 	skb_reset_mac_header(skb);
@@ -2893,10 +2896,13 @@ static inline void skb_probe_transport_header(struct sk_buff *skb)
 static inline void skb_mac_header_rebuild(struct sk_buff *skb)
 {
 	if (skb_mac_header_was_set(skb)) {
+	    /*报文旧的mac header指针*/
 		const unsigned char *old_mac = skb_mac_header(skb);
 
+		/*当前skb->data指向网络头，向其后移skb->mac_len即为mac header头*/
 		skb_set_mac_header(skb, -skb->mac_len);
-		memmove(skb_mac_header(skb), old_mac, skb->mac_len);
+		/*将old_mac的内容复制到新的mac header指针*/
+		memmove(skb_mac_header(skb)/*报文新的mac header指针*/, old_mac, skb->mac_len);
 	}
 }
 
@@ -4668,6 +4674,7 @@ static inline void skb_ext_del(struct sk_buff *skb, enum skb_ext_id id)
 		__skb_ext_del(skb, id);
 }
 
+/*自skb扩展中，查找指定id对应的赋值*/
 static inline void *skb_ext_find(const struct sk_buff *skb, enum skb_ext_id id)
 {
 	if (skb_ext_exist(skb, id)) {
@@ -4826,6 +4833,7 @@ static inline bool skb_get_dst_pending_confirm(const struct sk_buff *skb)
 	return skb->dst_pending_confirm != 0;
 }
 
+/*取sec_path的skb扩展信息*/
 static inline struct sec_path *skb_sec_path(const struct sk_buff *skb)
 {
 #ifdef CONFIG_XFRM

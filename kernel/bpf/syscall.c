@@ -4142,6 +4142,7 @@ static int bpf_btf_load(const union bpf_attr *attr, bpfptr_t uattr)
 	if (!bpf_capable())
 		return -EPERM;
 
+	/*加载解析btf,创建其对应的fd*/
 	return btf_new_fd(attr, uattr);
 }
 
@@ -4807,7 +4808,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 		err = bpf_raw_tracepoint_open(&attr);
 		break;
 	case BPF_BTF_LOAD:
-		/*加载BTF段，用于bpf调试*/
+		/*加载BTF段*/
 		err = bpf_btf_load(&attr, uattr);
 		break;
 	case BPF_BTF_GET_FD_BY_ID:

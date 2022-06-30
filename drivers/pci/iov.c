@@ -16,6 +16,7 @@
 
 #define VIRTFN_ID_LEN	16
 
+/*生成vf_id对应的bus信息*/
 int pci_iov_virtfn_bus(struct pci_dev *dev, int vf_id)
 {
 	if (!dev->is_physfn)
@@ -183,14 +184,17 @@ int pci_iov_sysfs_link(struct pci_dev *dev,
 	char buf[VIRTFN_ID_LEN];
 	int rc;
 
+	/*在dev下创建virtfn%u的link,使其指向vf*/
 	sprintf(buf, "virtfn%u", id);
 	rc = sysfs_create_link(&dev->dev.kobj, &virtfn->dev.kobj, buf);
 	if (rc)
 		goto failed;
+	/*在vf设备下创建physfn,使其指向pf*/
 	rc = sysfs_create_link(&virtfn->dev.kobj, &dev->dev.kobj, "physfn");
 	if (rc)
 		goto failed1;
 
+	/*通知uevent*/
 	kobject_uevent(&virtfn->dev.kobj, KOBJ_CHANGE);
 
 	return 0;
@@ -287,6 +291,7 @@ const struct attribute_group sriov_vf_dev_attr_group = {
 	.is_visible = sriov_vf_attrs_are_visible,
 };
 
+/*添加编号为id的vf*/
 int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 {
 	int i;
@@ -297,6 +302,7 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 	struct pci_sriov *iov = dev->sriov;
 	struct pci_bus *bus;
 
+	/*尝试添加id号vf对应的bus*/
 	bus = virtfn_add_bus(dev->bus, pci_iov_virtfn_bus(dev, id));
 	if (!bus)
 		goto failed;
@@ -336,6 +342,7 @@ int pci_iov_add_virtfn(struct pci_dev *dev, int id)
 	}
 
 	pci_device_add(virtfn, virtfn->bus);
+	/*创建physfn及virtfn%u两个link,使其分别指向vf的pf,pf的第id个vf*/
 	rc = pci_iov_sysfs_link(dev, virtfn, id);
 	if (rc)
 		goto failed1;
@@ -597,6 +604,7 @@ static int sriov_add_vfs(struct pci_dev *dev, u16 num_vfs)
 	if (dev->no_vf_scan)
 		return 0;
 
+	/*添加num_vfs个vf*/
 	for (i = 0; i < num_vfs; i++) {
 		rc = pci_iov_add_virtfn(dev, i);
 		if (rc)
@@ -610,7 +618,7 @@ failed:
 	return rc;
 }
 
-static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
+static int sriov_enable(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量*/)
 {
 	int rc;
 	int i;
@@ -628,7 +636,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	if (iov->num_VFs)
 		return -EINVAL;
 
-	//需要多少个虚设备
+	//当前有多少个虚设备
 	pci_read_config_word(dev, iov->pos + PCI_SRIOV_INITIAL_VF, &initial);
 	if (initial > iov->total_VFs ||
 	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (initial != iov->total_VFs)))
@@ -636,6 +644,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 
 	if (nr_virtfn < 0 || nr_virtfn > iov->total_VFs ||
 	    (!(iov->cap & PCI_SRIOV_CAP_VFM) && (nr_virtfn > initial)))
+	    /*要求的数量小于0，或者大于total,或者不支持sriov或者大于当前的initial,报错*/
 		return -EINVAL;
 
 	nres = 0;
@@ -650,8 +659,10 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 		return -ENOMEM;
 	}
 
+	/*取最后一个vf对应的bus号*/
 	bus = pci_iov_virtfn_bus(dev, nr_virtfn - 1);
 	if (bus > dev->bus->busn_res.end) {
+	    /*如果最后一个bus的资源大于dev->bus能提供的，则报错*/
 		pci_err(dev, "can't enable %d VFs (bus %02x out of range of %pR)\n",
 			nr_virtfn, bus, &dev->bus->busn_res);
 		return -ENOMEM;
@@ -696,7 +707,7 @@ static int sriov_enable(struct pci_dev *dev, int nr_virtfn)
 	msleep(100);
 	pci_cfg_access_unlock(dev);
 
-	//添加sriov的虚设备$i
+	//添加initial个sriov的vf设备
 	rc = sriov_add_vfs(dev, initial);
 	if (rc)
 		goto err_pcibios;
@@ -1083,7 +1094,7 @@ int pci_iov_bus_range(struct pci_bus *bus)
  *
  * Returns 0 on success, or negative on failure.
  */
-int pci_enable_sriov(struct pci_dev *dev, int nr_virtfn)
+int pci_enable_sriov(struct pci_dev *dev, int nr_virtfn/*要开启的vf数量*/)
 {
 	might_sleep();
 

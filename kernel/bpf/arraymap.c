@@ -1105,7 +1105,7 @@ static void prog_array_map_free(struct bpf_map *map)
  * and map_meta_equal is not implemented.
  */
 static int prog_array_map_btf_id;
-/*BPF_MAP_TYPE_PROG_ARRAY类型map对应的ops*/
+/*BPF_MAP_TYPE_PROG_ARRAY类型map对应的ops,tail call时采用*/
 const struct bpf_map_ops prog_array_map_ops = {
 	.map_alloc_check = fd_array_map_alloc_check,
 	.map_alloc = prog_array_map_alloc,

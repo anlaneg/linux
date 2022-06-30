@@ -747,7 +747,9 @@ tc_cls_common_offload_init(struct flow_cls_common_offload *cls_common,
 {
 	cls_common->chain_index = tp->chain->index;
 	cls_common->protocol = tp->protocol;
+	/*提取优先级,这样驱动就不必再对优先级进行右移操作了*/
 	cls_common->prio = tp->prio >> 16;
+	/*只有flags要求跳过software或者指明verbose,才会给extack赋值*/
 	if (tc_skip_sw(flags) || flags & TCA_CLS_FLAGS_VERBOSE)
 		cls_common->extack = extack;
 }

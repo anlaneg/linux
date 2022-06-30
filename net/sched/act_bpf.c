@@ -36,7 +36,7 @@ static struct tc_action_ops act_bpf_ops;
 static int tcf_bpf_act(struct sk_buff *skb, const struct tc_action *act,
 		       struct tcf_result *res)
 {
-	bool at_ingress = skb_at_tc_ingress(skb);
+	bool at_ingress = skb_at_tc_ingress(skb);/*是否处于ingress方向*/
 	struct tcf_bpf *prog = to_bpf(act);
 	struct bpf_prog *filter;
 	int action, filter_res;
@@ -46,10 +46,12 @@ static int tcf_bpf_act(struct sk_buff *skb, const struct tc_action *act,
 
 	filter = rcu_dereference(prog->filter);
 	if (at_ingress) {
-	    //指向mac头，并运行epbf程序，运行结束后，还原data指针
+	    //回退指向mac头，并运行epbf程序，运行结束后，还原data指针
 		__skb_push(skb, skb->mac_len);
 		bpf_compute_data_pointers(skb);
+		/*运行bpf程序*/
 		filter_res = bpf_prog_run(filter, skb);
+		/*跳过mac头*/
 		__skb_pull(skb, skb->mac_len);
 	} else {
 		bpf_compute_data_pointers(skb);
@@ -75,9 +77,11 @@ static int tcf_bpf_act(struct sk_buff *skb, const struct tc_action *act,
 	case TC_ACT_RECLASSIFY:
 	case TC_ACT_OK:
 	case TC_ACT_REDIRECT:
+	    /*以上结果，直接返回action*/
 		action = filter_res;
 		break;
 	case TC_ACT_SHOT:
+	    /*丢包action,增加计数*/
 		action = filter_res;
 		qstats_drop_inc(this_cpu_ptr(prog->common.cpu_qstats));
 		break;
@@ -296,18 +300,21 @@ static int tcf_bpf_init(struct net *net, struct nlattr *nla,
 	if (!nla)
 		return -EINVAL;
 
+	/*解析传递过来的消息*/
 	ret = nla_parse_nested_deprecated(tb, TCA_ACT_BPF_MAX, nla,
 					  act_bpf_policy, NULL);
 	if (ret < 0)
 		return ret;
 
 	if (!tb[TCA_ACT_BPF_PARMS])
+	    /*bpf parms为必配置参数*/
 		return -EINVAL;
 
 	parm = nla_data(tb[TCA_ACT_BPF_PARMS]);
 	index = parm->index;
 	ret = tcf_idr_check_alloc(tn, &index, act, bind);
 	if (!ret) {
+	    /*创建此action*/
 		ret = tcf_idr_create(tn, index, est, act,
 				     &act_bpf_ops, bind, true, flags);
 		if (ret < 0) {
@@ -333,16 +340,20 @@ static int tcf_bpf_init(struct net *net, struct nlattr *nla,
 	if (ret < 0)
 		goto release_idr;
 
+	/*是否为bpf操作*/
 	is_bpf = tb[TCA_ACT_BPF_OPS_LEN] && tb[TCA_ACT_BPF_OPS];
+	/*是否为ebpf*/
 	is_ebpf = tb[TCA_ACT_BPF_FD];
 
 	if ((!is_bpf && !is_ebpf) || (is_bpf && is_ebpf)) {
+	    /*同时指定或同时不指定，则报错*/
 		ret = -EINVAL;
 		goto put_chain;
 	}
 
 	memset(&cfg, 0, sizeof(cfg));
 
+	/*收集配置*/
 	ret = is_bpf ? tcf_bpf_init_from_ops(tb, &cfg) :
 		       tcf_bpf_init_from_efd(tb, &cfg);
 	if (ret < 0)
@@ -352,6 +363,7 @@ static int tcf_bpf_init(struct net *net, struct nlattr *nla,
 
 	spin_lock_bh(&prog->tcf_lock);
 	if (res != ACT_P_CREATED)
+	    /*提取之前保存的配置,准备释放*/
 		tcf_bpf_prog_fill_cfg(prog, &old);
 
 	prog->bpf_ops = cfg.bpf_ops;
@@ -360,6 +372,7 @@ static int tcf_bpf_init(struct net *net, struct nlattr *nla,
 	if (cfg.bpf_num_ops)
 		prog->bpf_num_ops = cfg.bpf_num_ops;
 
+	/*设置goto chain*/
 	goto_ch = tcf_action_set_ctrlact(*act, parm->action, goto_ch);
 	rcu_assign_pointer(prog->filter, cfg.filter);
 	spin_unlock_bh(&prog->tcf_lock);
@@ -368,6 +381,7 @@ static int tcf_bpf_init(struct net *net, struct nlattr *nla,
 		tcf_chain_put_by_act(goto_ch);
 
 	if (res != ACT_P_CREATED) {
+	    /*释放旧的配置*/
 		/* make sure the program being replaced is no longer executing */
 		synchronize_rcu();
 		tcf_bpf_cfg_cleanup(&old);

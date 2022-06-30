@@ -41,7 +41,7 @@ static unsigned int csum_net_id;
 static struct tc_action_ops act_csum_ops;
 
 static int tcf_csum_init(struct net *net, struct nlattr *nla,
-			 struct nlattr *est, struct tc_action **a,
+			 struct nlattr *est, struct tc_action **a/*出参，创建的action*/,
 			 struct tcf_proto *tp,
 			 u32 flags, struct netlink_ext_ack *extack)
 {
@@ -58,18 +58,22 @@ static int tcf_csum_init(struct net *net, struct nlattr *nla,
 	if (nla == NULL)
 		return -EINVAL;
 
+	/*消息解码*/
 	err = nla_parse_nested_deprecated(tb, TCA_CSUM_MAX, nla, csum_policy,
 					  NULL);
 	if (err < 0)
 		return err;
 
 	if (tb[TCA_CSUM_PARMS] == NULL)
+	    /*必须包含此选项*/
 		return -EINVAL;
 	parm = nla_data(tb[TCA_CSUM_PARMS]);
+	/*设置index或者申请index*/
 	index = parm->index;
 	err = tcf_idr_check_alloc(tn, &index, a, bind);
 	if (!err) {
-		ret = tcf_idr_create_from_flags(tn, index, est, a,
+	    /*创建action，并设置a*/
+		ret = tcf_idr_create_from_flags(tn, index, est, a/*出参，ops对应的action变量*/,
 						&act_csum_ops, bind, flags);
 		if (ret) {
 			tcf_idr_cleanup(tn, index);
@@ -77,6 +81,7 @@ static int tcf_csum_init(struct net *net, struct nlattr *nla,
 		}
 		ret = ACT_P_CREATED;
 	} else if (err > 0) {
+	    /*指定的index对应的action已存在*/
 		if (bind)/* dont override defaults */
 			return 0;
 		if (!(flags & TCA_ACT_FLAGS_REPLACE)) {
@@ -84,13 +89,16 @@ static int tcf_csum_init(struct net *net, struct nlattr *nla,
 			return -EEXIST;
 		}
 	} else {
+	    /*申请index失败*/
 		return err;
 	}
 
+	/*action检查处理*/
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0)
 		goto release_idr;
 
+	/*转为自身action结构体*/
 	p = to_tcf_csum(*a);
 
 	params_new = kzalloc(sizeof(*params_new), GFP_KERNEL);
@@ -101,7 +109,9 @@ static int tcf_csum_init(struct net *net, struct nlattr *nla,
 	params_new->update_flags = parm->update_flags;
 
 	spin_lock_bh(&p->tcf_lock);
+	/*设置action及goto chain*/
 	goto_ch = tcf_action_set_ctrlact(*a, parm->action, goto_ch);
+	/*替换parameter*/
 	params_new = rcu_replace_pointer(p->params, params_new,
 					 lockdep_is_held(&p->tcf_lock));
 	spin_unlock_bh(&p->tcf_lock);

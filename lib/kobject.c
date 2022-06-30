@@ -194,7 +194,7 @@ static void kobj_kset_leave(struct kobject *kobj)
 	kset_put(kobj->kset);
 }
 
-//做kobject初始化
+//kobject初始化
 static void kobject_init_internal(struct kobject *kobj)
 {
 	if (!kobj)
@@ -987,7 +987,7 @@ static struct kobj_type kset_ktype = {
  *
  * If the kset was not able to be created, NULL will be returned.
  */
-static struct kset *kset_create(const char *name,
+static struct kset *kset_create(const char *name/*kset名称*/,
 				const struct kset_uevent_ops *uevent_ops/*kset对应的uevent操作集*/,
 				struct kobject *parent_kobj/*kset对应的父kobj*/)
 {
@@ -1046,6 +1046,7 @@ struct kset *kset_create_and_add(const char *name,
 	kset = kset_create(name, uevent_ops, parent_kobj);
 	if (!kset)
 		return NULL;
+
 	//创建$name的目录
 	error = kset_register(kset);
 	if (error) {

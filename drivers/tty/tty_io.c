@@ -179,6 +179,7 @@ static inline struct tty_struct *file_tty(struct file *file)
 	return ((struct tty_file_private *)file->private_data)->tty;
 }
 
+/*申请结构体tty_file_private，并设置file->private_data*/
 int tty_alloc_file(struct file *file)
 {
 	struct tty_file_private *priv;
@@ -1883,12 +1884,15 @@ static struct tty_struct *tty_open_current_tty(dev_t device, struct file *filp)
 	int retval;
 
 	if (device != MKDEV(TTYAUX_MAJOR, 0))
+	    /*device number必须为确定的常量值*/
 		return NULL;
 
+	/*取此进程的tty,如果此进程无tty,则返回错误*/
 	tty = get_current_tty();
 	if (!tty)
 		return ERR_PTR(-ENXIO);
 
+	/*默认为非阻塞*/
 	filp->f_flags |= O_NONBLOCK; /* Don't let /dev/tty block */
 	/* noctty = 1; */
 	tty_lock(tty);
@@ -3587,15 +3591,20 @@ void console_sysfs_notify(void)
  */
 int __init tty_init(void)
 {
+    /*tty对应的sysctl路径*/
 	tty_sysctl_init();
+	/*初始化tty_cdev结构体*/
 	cdev_init(&tty_cdev, &tty_fops);
 	if (cdev_add(&tty_cdev, MKDEV(TTYAUX_MAJOR, 0), 1) ||
+	        /*注册/dev/tty字符设备*/
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 0), 1, "/dev/tty") < 0)
 		panic("Couldn't register /dev/tty driver\n");
 	device_create(tty_class, NULL, MKDEV(TTYAUX_MAJOR, 0), NULL, "tty");
 
+	/*初始化console_cdev结构体*/
 	cdev_init(&console_cdev, &console_fops);
 	if (cdev_add(&console_cdev, MKDEV(TTYAUX_MAJOR, 1), 1) ||
+	        /*注册/dev/console字符设备*/
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 1), 1, "/dev/console") < 0)
 		panic("Couldn't register /dev/console driver\n");
 	consdev = device_create_with_groups(tty_class, NULL,

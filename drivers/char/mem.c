@@ -719,16 +719,21 @@ static int memory_open(struct inode *inode, struct file *filp)
 	const struct memdev *dev;
 
 	minor = iminor(inode);
+	/*minor不得大于devlist长度（内定的minor)*/
 	if (minor >= ARRAY_SIZE(devlist))
 		return -ENXIO;
 
+	/*取对应的设备*/
 	dev = &devlist[minor];
 	if (!dev->fops)
+	    /*设备没有提供fops*/
 		return -ENXIO;
 
+	/*设置file的ops及mode*/
 	filp->f_op = dev->fops;
 	filp->f_mode |= dev->fmode;
 
+	/*如果有open回调，则在此处解发*/
 	if (dev->fops->open)
 		return dev->fops->open(inode, filp);
 
@@ -737,7 +742,7 @@ static int memory_open(struct inode *inode, struct file *filp)
 
 static const struct file_operations memory_fops = {
 	.open = memory_open,
-	.llseek = noop_llseek,
+	.llseek = noop_llseek,/*不支持Seek,返回当前位置*/
 };
 
 static char *mem_devnode(struct device *dev, umode_t *mode)
@@ -753,6 +758,7 @@ static int __init chr_dev_init(void)
 {
 	int minor;
 
+	/*注册mem字符设备*/
 	if (register_chrdev(MEM_MAJOR, "mem", &memory_fops))
 		printk("unable to get major %d for memory devs\n", MEM_MAJOR);
 
@@ -763,18 +769,21 @@ static int __init chr_dev_init(void)
 	mem_class->devnode = mem_devnode;
 	for (minor = 1; minor < ARRAY_SIZE(devlist); minor++) {
 		if (!devlist[minor].name)
+		    /*忽略掉没有name的设备*/
 			continue;
 
 		/*
 		 * Create /dev/port?
 		 */
 		if ((minor == DEVPORT_MINOR) && !arch_has_dev_port())
+		    /*如果此体系不支持dev/port,则忽略*/
 			continue;
 
 		device_create(mem_class, NULL, MKDEV(MEM_MAJOR, minor),
 			      NULL, devlist[minor].name);
 	}
 
+	/*初始化tty设备*/
 	return tty_init();
 }
 

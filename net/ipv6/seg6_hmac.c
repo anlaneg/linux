@@ -70,6 +70,7 @@ static const struct rhashtable_params rht_params = {
 	.obj_cmpfn		= seg6_hmac_cmpfn,
 };
 
+/*hmac支持的算法*/
 static struct seg6_hmac_algo hmac_algos[] = {
 	{
 		.alg_id = SEG6_HMAC_ALGO_SHA1,
@@ -81,6 +82,7 @@ static struct seg6_hmac_algo hmac_algos[] = {
 	},
 };
 
+/*自srh中提取hmac*/
 static struct sr6_tlv_hmac *seg6_get_tlv_hmac(struct ipv6_sr_hdr *srh)
 {
 	struct sr6_tlv_hmac *tlv;
@@ -100,6 +102,7 @@ static struct sr6_tlv_hmac *seg6_get_tlv_hmac(struct ipv6_sr_hdr *srh)
 	return tlv;
 }
 
+/*给定算法id获取算法信息*/
 static struct seg6_hmac_algo *__hmac_get_algo(u8 alg_id)
 {
 	struct seg6_hmac_algo *algo;
@@ -158,7 +161,7 @@ failed:
 }
 
 int seg6_hmac_compute(struct seg6_hmac_info *hinfo, struct ipv6_sr_hdr *hdr,
-		      struct in6_addr *saddr, u8 *output)
+		      struct in6_addr *saddr, u8 *output/*出参，输出内容*/)
 {
 	__be32 hmackeyid = cpu_to_be32(hinfo->hmackeyid);
 	u8 tmp_out[SEG6_HMAC_MAX_DIGESTSIZE];
@@ -176,6 +179,7 @@ int seg6_hmac_compute(struct seg6_hmac_info *hinfo, struct ipv6_sr_hdr *hdr,
 	if (plen >= SEG6_HMAC_RING_SIZE)
 		return -EMSGSIZE;
 
+	/*构造ring buffer*/
 	/* Let's build the HMAC text on the ring buffer. The text is composed
 	 * as follows, in order:
 	 *
@@ -210,7 +214,7 @@ int seg6_hmac_compute(struct seg6_hmac_info *hinfo, struct ipv6_sr_hdr *hdr,
 		off += 16;
 	}
 
-	dgsize = __do_hmac(hinfo, ring, plen, tmp_out,
+	dgsize = __do_hmac(hinfo, ring, plen/*ring buffer长度*/, tmp_out,
 			   SEG6_HMAC_MAX_DIGESTSIZE);
 	local_bh_enable();
 
@@ -335,10 +339,12 @@ int seg6_push_hmac(struct net *net, struct in6_addr *saddr,
 
 	rcu_read_lock();
 
+	/*利用key查询hmac表*/
 	hinfo = seg6_hmac_info_lookup(net, be32_to_cpu(tlv->hmackeyid));
 	if (!hinfo)
 		goto out;
 
+	/*清空hmac，计算获得tvl->hmac*/
 	memset(tlv->hmac, 0, SEG6_HMAC_FIELD_LEN);
 	err = seg6_hmac_compute(hinfo, srh, saddr, tlv->hmac);
 

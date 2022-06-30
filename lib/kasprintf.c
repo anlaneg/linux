@@ -43,9 +43,12 @@ EXPORT_SYMBOL(kvasprintf);
 const char *kvasprintf_const(gfp_t gfp, const char *fmt, va_list ap)
 {
 	if (!strchr(fmt, '%'))
+	    /*fmt中没有‘%’符，常量输出*/
 		return kstrdup_const(fmt, gfp);
 	if (!strcmp(fmt, "%s"))
+	    /*fmt包含'%s',有字符串格式化*/
 		return kstrdup_const(va_arg(ap, const char*), gfp);
+	/*fmt包含其它格式字符*/
 	return kvasprintf(gfp, fmt, ap);
 }
 EXPORT_SYMBOL(kvasprintf_const);

@@ -18,7 +18,7 @@ static inline __u8 ipv4_get_dsfield(const struct iphdr *iph)
 	return iph->tos;
 }
 
-
+/*取ipv6头中的tos相关*/
 static inline __u8 ipv6_get_dsfield(const struct ipv6hdr *ipv6h)
 {
 	return ntohs(*(__force const __be16 *)ipv6h) >> 4;

@@ -25,7 +25,7 @@ enum {
 struct lwtunnel_state {
 	__u16		type;
 	__u16		flags;
-	__u16		headroom;
+	__u16		headroom;/*封装增加的长度*/
 	atomic_t	refcnt;
 	/*保存原始的路由output函数*/
 	int		(*orig_output)(struct net *net, struct sock *sk, struct sk_buff *skb);

@@ -244,10 +244,12 @@ nf_nat_masquerade_ipv6(struct sk_buff *skb, const struct nf_nat_range2 *range,
 	struct nf_conn *ct;
 	struct nf_nat_range2 newrange;
 
+	/*取skb对应的ct*/
 	ct = nf_ct_get(skb, &ctinfo);
 	WARN_ON(!(ct && (ctinfo == IP_CT_NEW || ctinfo == IP_CT_RELATED ||
 			 ctinfo == IP_CT_RELATED_REPLY)));
 
+	/*取源ip地址*/
 	if (nat_ipv6_dev_get_saddr(nf_ct_net(ct), out,
 				   &ipv6_hdr(skb)->daddr, 0, &src) < 0)
 		return NF_DROP;

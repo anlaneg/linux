@@ -26,20 +26,22 @@
 #endif
 
 /*对srh进行校验*/
-bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
+bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len/*srh长度*/, bool reduced)
 {
 	unsigned int tlv_offset;
 	int max_last_entry;
 	int trailing;
 
 	if (srh->type != IPV6_SRCRT_TYPE_4)
+	    /*type必须为segment routing*/
 		return false;
 
 	if (((srh->hdrlen + 1) << 3) != len)
+	    /*+1后左移3位必须与长度相等*/
 		return false;
 
 	if (!reduced && srh->segments_left > srh->first_segment) {
-	    /**/
+	    /*segments_left不得大于first_segment位置*/
 		return false;
 	} else {
 		max_last_entry = (srh->hdrlen / 2) - 1;
@@ -51,8 +53,10 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 			return false;
 	}
 
+	/*srh结构体后面，frist_segment的最后一个字段为ipv6地址故 <<4 即*16*/
 	tlv_offset = sizeof(*srh) + ((srh->first_segment + 1) << 4);
 
+	/*hmac长度检查*/
 	trailing = len - tlv_offset;
 	if (trailing < 0)
 		return false;
@@ -64,9 +68,11 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 		if (trailing < sizeof(*tlv))
 			return false;
 
+		/*取此tlv*/
 		tlv = (struct sr6_tlv *)((unsigned char *)srh + tlv_offset);
 		tlv_len = sizeof(*tlv) + tlv->len;
 
+		/*检查其长度*/
 		trailing -= tlv_len;
 		if (trailing < 0)
 			return false;
@@ -77,21 +83,26 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len, bool reduced)
 	return true;
 }
 
+/*获取报文中的srv6头*/
 struct ipv6_sr_hdr *seg6_get_srh(struct sk_buff *skb, int flags)
 {
 	struct ipv6_sr_hdr *srh;
 	int len, srhoff = 0;
 
+	/*查找srv6头*/
 	if (ipv6_find_hdr(skb, &srhoff, IPPROTO_ROUTING, NULL, &flags) < 0)
 		return NULL;
 
+	/*buffer必须足够*/
 	if (!pskb_may_pull(skb, srhoff + sizeof(*srh)))
 		return NULL;
 
+	/*指向srv6头*/
 	srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
 
 	len = (srh->hdrlen + 1) << 3;
 
+	/*buffer必须足够完整的srv6头*/
 	if (!pskb_may_pull(skb, srhoff + len))
 		return NULL;
 
@@ -100,6 +111,7 @@ struct ipv6_sr_hdr *seg6_get_srh(struct sk_buff *skb, int flags)
 	 */
 	srh = (struct ipv6_sr_hdr *)(skb->data + srhoff);
 
+	/*srv6头校验*/
 	if (!seg6_validate_srh(srh, len, true))
 		return NULL;
 
@@ -241,7 +253,7 @@ static int seg6_genl_set_tunsrc(struct sk_buff *skb, struct genl_info *info)
 	if (!info->attrs[SEG6_ATTR_DST])
 		return -EINVAL;
 
-	val = nla_data(info->attrs[SEG6_ATTR_DST]);
+	val = nla_data(info->attrs[SEG6_ATTR_DST]);/*取地址*/
 	t_new = kmemdup(val, sizeof(*val), GFP_KERNEL);
 	if (!t_new)
 		return -ENOMEM;
@@ -249,7 +261,7 @@ static int seg6_genl_set_tunsrc(struct sk_buff *skb, struct genl_info *info)
 	mutex_lock(&sdata->lock);
 
 	t_old = sdata->tun_src;
-	rcu_assign_pointer(sdata->tun_src, t_new);
+	rcu_assign_pointer(sdata->tun_src, t_new);/*设置tunnel源地址*/
 
 	mutex_unlock(&sdata->lock);
 
@@ -276,8 +288,10 @@ static int seg6_genl_get_tunsrc(struct sk_buff *skb, struct genl_info *info)
 		goto free_msg;
 
 	rcu_read_lock();
+	/*取此network中对应的tunnel src*/
 	tun_src = rcu_dereference(seg6_pernet(net)->tun_src);
 
+	/*填充并返回*/
 	if (nla_put(msg, SEG6_ATTR_DST, sizeof(struct in6_addr), tun_src))
 		goto nla_put_failure;
 
@@ -426,6 +440,7 @@ static int __net_init seg6_net_init(struct net *net)
 
 	mutex_init(&sdata->lock);
 
+	/*初始化tunnel src*/
 	sdata->tun_src = kzalloc(sizeof(*sdata->tun_src), GFP_KERNEL);
 	if (!sdata->tun_src) {
 		kfree(sdata);

@@ -17,9 +17,9 @@
 
 #include "sysfs.h"
 
-static int sysfs_do_create_link_sd(struct kernfs_node *parent,
-				   struct kobject *target_kobj,
-				   const char *name, int warn)
+static int sysfs_do_create_link_sd(struct kernfs_node *parent/*父节点*/,
+				   struct kobject *target_kobj/*目标obj*/,
+				   const char *name/*link名称*/, int warn)
 {
 	struct kernfs_node *kn, *target = NULL;
 
@@ -42,7 +42,7 @@ static int sysfs_do_create_link_sd(struct kernfs_node *parent,
 		return -ENOENT;
 
 	//通过kernfs来创建链接
-	kn = kernfs_create_link(parent, name, target);
+	kn = kernfs_create_link(parent, name/*link名称*/, target/*link的目标*/);
 	kernfs_put(target);
 
 	if (!IS_ERR(kn))

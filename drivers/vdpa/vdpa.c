@@ -371,6 +371,7 @@ int vdpa_mgmtdev_register(struct vdpa_mgmt_dev *mdev)
 
 	INIT_LIST_HEAD(&mdev->list);
 	mutex_lock(&vdpa_dev_mutex);
+	/*mdev串连到mdev_head*/
 	list_add_tail(&mdev->list, &mdev_head);
 	mutex_unlock(&vdpa_dev_mutex);
 	return 0;

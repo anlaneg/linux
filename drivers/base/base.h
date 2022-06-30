@@ -62,6 +62,8 @@ struct driver_private {
 	struct module_kobject *mkobj;
 	struct device_driver *driver;//与device_driver互指
 };
+
+/*obj是结构体driver_private的kobj成员，取结构体driver_private指针*/
 #define to_driver(obj) container_of(obj, struct driver_private, kobj)
 
 /**

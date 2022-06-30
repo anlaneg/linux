@@ -1090,7 +1090,7 @@ static void ip6_rt_init_dst(struct rt6_info *rt, const struct fib6_result *res)
 	}
 
 	rt->dst.error = 0;
-	rt->dst.output = ip6_output;
+	rt->dst.output = ip6_output;/*默认走output*/
 
 	if (res->fib6_type == RTN_LOCAL || res->fib6_type == RTN_ANYCAST) {
 	    /*主机路由，走ip6_input*/
@@ -1104,6 +1104,7 @@ static void ip6_rt_init_dst(struct rt6_info *rt, const struct fib6_result *res)
 	}
 
 	if (res->nh->fib_nh_lws) {
+	    /*下一跳为轻量级隧道，变更input回调*/
 		rt->dst.lwtstate = lwtstate_get(res->nh->fib_nh_lws);
 		lwtunnel_set_redirect(&rt->dst);
 	}
@@ -2618,7 +2619,7 @@ struct dst_entry *ip6_route_output_flags_noref(struct net *net,
 			return dst;
 	}
 
-	fl6->flowi6_iif = LOOPBACK_IFINDEX;
+	fl6->flowi6_iif = LOOPBACK_IFINDEX;/*以loopback口做为in port查询*/
 
 	flags |= RT6_LOOKUP_F_DST_NOREF;
 	any_src = ipv6_addr_any(&fl6->saddr);

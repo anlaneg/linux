@@ -255,6 +255,7 @@ static inline bool ipv6_is_mld(struct sk_buff *skb, int nexthdr, int offset)
 
 	if (nexthdr != IPPROTO_ICMPV6 ||
 	    !pskb_network_may_pull(skb, offset + sizeof(struct icmp6hdr)))
+	    /*非icmpv6报文或者报文不足icmp6hdr，均认为非mld报文*/
 		return false;
 
 	hdr = (struct icmp6hdr *)(skb_network_header(skb) + offset);
@@ -266,6 +267,7 @@ static inline bool ipv6_is_mld(struct sk_buff *skb, int nexthdr, int offset)
 	case ICMPV6_MLD2_REPORT:
 		return true;
 	default:
+	    /*其它消息，返回false*/
 		break;
 	}
 	return false;

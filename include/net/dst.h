@@ -32,9 +32,9 @@ struct dst_entry {
 #else
 	void			*__pad1;
 #endif
-	/*路由input钩子*/
+	/*路由input钩子,从network层到传输层*/
 	int			(*input)(struct sk_buff *);
-	/*路由output钩子*/
+	/*路由output钩子，从传输层到network层*/
 	int			(*output)(struct net *net, struct sock *sk, struct sk_buff *skb);
 
 	unsigned short		flags;
@@ -454,7 +454,7 @@ INDIRECT_CALLABLE_DECLARE(int ip_output(struct net *, struct sock *,
 /* Output packet to network from transport.  */
 static inline int dst_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
-	//从传输层输出到网络层，例如ip_output,ip6_output，调用路由的output钩子
+	//输出报文，从传输层输出到网络层，例如ip_output,ip6_output，调用路由的output钩子
 	return INDIRECT_CALL_INET(skb_dst(skb)->output,
 				  ip6_output, ip_output,
 				  net, sk, skb);
@@ -465,9 +465,9 @@ INDIRECT_CALLABLE_DECLARE(int ip_local_deliver(struct sk_buff *));
 /* Input packet from network to transport.  */
 static inline int dst_input(struct sk_buff *skb)
 {
-    /*输出报文，自网络层到传输层，调用路由的input钩子*/
+    /*输入报文，自网络层到传输层，调用路由的input钩子*/
 	return INDIRECT_CALL_INET(skb_dst(skb)->input,
-				  ip6_input, ip_local_deliver, skb);
+				  ip6_input/*ipv6送本机*/, ip_local_deliver/*ipv4送本机*/, skb);
 }
 
 INDIRECT_CALLABLE_DECLARE(struct dst_entry *ip6_dst_check(struct dst_entry *,

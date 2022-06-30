@@ -967,11 +967,12 @@ static struct ctl_table nf_ct_sysctl_table[] = {
 #endif
 #ifdef CONFIG_LWTUNNEL
 	[NF_SYSCTL_CT_LWTUNNEL] = {
+	    /*默认关闭，可以开启，但开启后不可关闭。开启后轻量隧道的netfilter钩子将被开启*/
 		.procname	= "nf_hooks_lwtunnel",
 		.data		= NULL,
 		.maxlen		= sizeof(int),
 		.mode		= 0644,
-		.proc_handler	= nf_hooks_lwtunnel_sysctl_handler,
+		.proc_handler	= nf_hooks_lwtunnel_sysctl_handler,/*控制lwtunnel*/
 	},
 #endif
 	{}

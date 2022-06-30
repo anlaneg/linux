@@ -613,7 +613,7 @@ enum flow_cls_command {
 struct flow_cls_common_offload {
 	u32 chain_index;/*chain索引*/
 	__be16 protocol;/*filter基于的协议，例如ip/ipv6/arp*/
-	u32 prio;/*优先级*/
+	u32 prio;/*规则对应的优先级*/
 	struct netlink_ext_ack *extack;/*报错用的message buffer*/
 };
 

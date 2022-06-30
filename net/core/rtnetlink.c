@@ -2672,7 +2672,7 @@ static int do_setlink(const struct sk_buff *skb,
 
 	if (tb[IFLA_NET_NS_PID] || tb[IFLA_NET_NS_FD] || tb[IFLA_TARGET_NETNSID]) {
 		const char *pat = ifname && ifname[0] ? ifname : NULL;
-	    	//确定net namespace
+	    //确定net namespace
 		struct net *net;
 		int new_ifindex;
 

@@ -13,12 +13,12 @@ struct module;
 
 //字符设备
 struct cdev {
-	struct kobject kobj;//用于将自身存入到cdev_map中
+	struct kobject kobj;//字符设备对应的kojb,用于将自身存入到cdev_map中
 	struct module *owner;
 	const struct file_operations *ops;//字符设备操作集
 	struct list_head list;//用于串连
-	dev_t dev;//设备编号(major，minior)
-	unsigned int count;//字符设备数量（当前dev可以表示多个字符设备）
+	dev_t dev;//首个device number(major，minior)
+	unsigned int count;//device number数量（当前dev可以表示多个字符设备）
 } __randomize_layout;
 
 void cdev_init(struct cdev *, const struct file_operations *);

@@ -700,8 +700,8 @@ struct bpf_nh_params {
 };
 
 struct bpf_redirect_info {
-	u32 flags;
-	u32 tgt_index;//目标ifindex
+	u32 flags;/*redirect标记，控制数据走向*/
+	u32 tgt_index;//要redirect的目标ifindex
 	void *tgt_value;//
 	struct bpf_map *map;
 	u32 map_id;
@@ -1579,7 +1579,7 @@ static __always_inline int __bpf_xdp_redirect_map(struct bpf_map *map, u32 ifind
 		return flags & action_mask;
 	}
 
-	ri->tgt_index = ifindex;
+	ri->tgt_index = ifindex;/*设置重定向的设备*/
 	ri->map_id = map->id;
 	ri->map_type = map->map_type;
 

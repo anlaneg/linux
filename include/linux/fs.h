@@ -2778,12 +2778,14 @@ extern void __unregister_chrdev(unsigned int major, unsigned int baseminor,
 extern void unregister_chrdev_region(dev_t, unsigned);
 extern void chrdev_show(struct seq_file *,off_t);
 
-static inline int register_chrdev(unsigned int major, const char *name,
-				  const struct file_operations *fops)
+/*注册字符设备(占用major,且自0开始的256个字符设备）*/
+static inline int register_chrdev(unsigned int major, const char *name/*设备名称*/,
+				  const struct file_operations *fops/*设备操作函数集*/)
 {
 	return __register_chrdev(major, 0, 256, name, fops);
 }
 
+/*解注册字符设备(释放占用的major,且自0开始的256个字符设备）*/
 static inline void unregister_chrdev(unsigned int major, const char *name)
 {
 	__unregister_chrdev(major, 0, 256, name);

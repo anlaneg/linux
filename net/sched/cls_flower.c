@@ -391,6 +391,7 @@ static int fl_classify(struct sk_buff *skb, const struct tcf_proto *tp,
 		f = fl_mask_lookup(mask, &skb_key);
 		if (f && !tc_skip_sw(f->flags)) {
 			*res = f->res;
+			/*执行flower对应的action,并返回执行返回值*/
 			return tcf_exts_exec(skb, &f->exts, res);
 		}
 	}
@@ -503,6 +504,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
     /*取tp对应的block,注意，有可能为share block*/
 	struct tcf_block *block = tp->chain->block;
 	struct flow_cls_offload cls_flower = {};
+	/*是否跳过软件规则*/
 	bool skip_sw = tc_skip_sw(f->flags);
 	int err = 0;
 
@@ -2128,7 +2130,7 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 	return 0;
 }
 
-//添加删除flower规则
+//添加或修改flower规则
 static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报文*/,
 		     struct tcf_proto *tp, unsigned long base,
 		     u32 handle/*规则对应的handle*/, struct nlattr **tca/*netlink消息*/,
@@ -2216,7 +2218,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 	if (err)
 		goto errout_mask;
 
-	//如果规则不要求跳过hw,则按要求执行hw的替换
+	//如果规则不要求跳过hw,则针对新规则执行hw的添加
 	if (!tc_skip_hw(fnew->flags)) {
 		err = fl_hw_replace_filter(tp, fnew, rtnl_held, extack);
 		if (err)
@@ -2274,7 +2276,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 
 		fl_mask_put(head, fold->mask);
 		if (!tc_skip_hw(fold->flags))
-			/*自硬件中移除规则*/
+			/*自硬件中移除掉旧规则*/
 			fl_hw_destroy_filter(tp, fold, rtnl_held, NULL);
 		tcf_unbind_filter(tp, &fold->res);
 		/* Caller holds reference to fold, so refcnt is always > 0

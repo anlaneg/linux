@@ -937,7 +937,8 @@ static const struct nf_br_ops br_ops = {
  * br_dev_queue_push_xmit is called afterwards */
 static const struct nf_hook_ops br_nf_ops[] = {
 	{
-		.hook = br_nf_pre_routing,//复用已注册的inet(ipv4,ipv6)的pre_routing钩子点逻辑
+	    //复用已注册的inet(ipv4,ipv6)的pre_routing钩子点逻辑
+		.hook = br_nf_pre_routing,
 		.pf = NFPROTO_BRIDGE,
 		.hooknum = NF_BR_PRE_ROUTING,
 		.priority = NF_BR_PRI_BRNF,

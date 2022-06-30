@@ -76,7 +76,7 @@ int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 		return NET_RX_SUCCESS;
 	ip6_rcv_finish_core(net, sk, skb);
 
-	/*按路由进行投递*/
+	/*按路由进行input投递*/
 	return dst_input(skb);
 }
 
@@ -200,6 +200,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	if (hdr->version != 6)
 		goto err;
 
+	/*按ecn标记进行计数统计0，1，2，3*/
 	__IP6_ADD_STATS(net, idev,
 			IPSTATS_MIB_NOECTPKTS +
 				(ipv6_get_dsfield(hdr) & INET_ECN_MASK),
@@ -215,6 +216,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	     ipv6_addr_loopback(&hdr->daddr)) &&
 	    !(dev->flags & IFF_LOOPBACK) &&
 	    !netif_is_l3_master(dev))
+	    /*在非loopback口上收到loopback地址，丢包*/
 		goto err;
 
 	/* RFC4291 Errata ID: 3480
@@ -237,6 +239,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	    (skb->pkt_type == PACKET_BROADCAST ||
 	     skb->pkt_type == PACKET_MULTICAST) &&
 	    idev->cnf.drop_unicast_in_l2_multicast)
+	    /*mac层是组播，但目的ip不是组播，丢包*/
 		goto err;
 
 	/* RFC4291 2.7
@@ -379,18 +382,19 @@ void ip6_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int nexthdr,
 
 resubmit:
 	idev = ip6_dst_idev(skb_dst(skb));
-	/*取next_header*/
+	/*取next_header字段对应的偏移量*/
 	nhoff = IP6CB(skb)->nhoff;
 	if (!have_final) {
 		if (!pskb_pull(skb, skb_transport_offset(skb)))
 			goto discard;
-		/*取最后一层的nexthdr*/
+		/*取下一层的nexthdr*/
 		nexthdr = skb_network_header(skb)[nhoff];
 	}
 
 resubmit_final:
-    /*通过nexthdr查raw socket*/
+    /*通过nexthdr查是否有对应的raw socket*/
 	raw = raw6_local_deliver(skb, nexthdr);
+	/*通过nexthdr取4层协议对应的ipprot对象*/
 	ipprot = rcu_dereference(inet6_protos[nexthdr]);
 	if (ipprot) {
 		int ret;
@@ -405,6 +409,7 @@ resubmit_final:
 				goto discard;
 			}
 		} else if (ipprot->flags & INET6_PROTO_FINAL) {
+		    /*ipprot有final标记*/
 			const struct ipv6hdr *hdr;
 			int sdif = inet6_sdif(skb);
 			struct net_device *dev;
@@ -430,20 +435,24 @@ resubmit_final:
 				dev = skb->dev;
 			}
 
+			/*目的地址是组播地址时，如果校验组播组及组播源是确认为不接收，且不是mld报文，则丢包*/
 			if (ipv6_addr_is_multicast(&hdr->daddr) &&
 			    !ipv6_chk_mcast_addr(dev, &hdr->daddr,
 						 &hdr->saddr) &&
 			    !ipv6_is_mld(skb, nexthdr, skb_network_header_len(skb)))
 				goto discard;
 		}
+
+		/*如果未注明no policy标记，则执行xfrm6的policy检查*/
 		if (!(ipprot->flags & INET6_PROTO_NOPOLICY) &&
 		    !xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))
 			goto discard;
 
-		//送udp/tcp协议
+		//由l4协议处理报文，例如送udp/tcp协议
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v6_rcv, udpv6_rcv,
 				      skb);
 		if (ret > 0) {
+		    /*返回值大于0，表示本次已处理，没有消耗报文，重查下一层*/
 			if (ipprot->flags & INET6_PROTO_FINAL) {
 				/* Not an extension header, most likely UDP
 				 * encapsulation. Use return value as nexthdr
@@ -451,7 +460,7 @@ resubmit_final:
 				 * not set by handler).
 				 */
 				nexthdr = ret;
-				goto resubmit_final;
+				goto resubmit_final;/*返回值，指定了nexthdr,执行l4协议查询*/
 			} else {
 				goto resubmit;
 			}
@@ -459,6 +468,7 @@ resubmit_final:
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDELIVERS);
 		}
 	} else {
+	    /*没有找到此协议对应的报文，丢弃*/
 		if (!raw) {
 			if (xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 				__IP6_INC_STATS(net, idev,
@@ -490,7 +500,7 @@ static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *sk
 	return 0;
 }
 
-/*路由确定ipv6报文送主机，此函数走local_in钩子点*/
+/*路由确定此ipv6报文送主机，此函数走local_in钩子点*/
 int ip6_input(struct sk_buff *skb)
 {
     /*ipv6走local in流程*/

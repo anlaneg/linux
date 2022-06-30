@@ -56,9 +56,13 @@ enum
 	IPSTATS_MIB_INBCASTOCTETS,		/* InBcastOctets */
 	IPSTATS_MIB_OUTBCASTOCTETS,		/* OutBcastOctets */
 	IPSTATS_MIB_CSUMERRORS,			/* InCsumErrors */
+	//Non ECN-Capable Transport, Non-ECT
 	IPSTATS_MIB_NOECTPKTS,			/* InNoECTPkts */
+	//ECN Capable Transport, ECT(0)
 	IPSTATS_MIB_ECT1PKTS,			/* InECT1Pkts */
+	//ECN Capable Transport, ECT(1)
 	IPSTATS_MIB_ECT0PKTS,			/* InECT0Pkts */
+	//Congestion Encountered, CE.
 	IPSTATS_MIB_CEPKTS,			/* InCEPkts */
 	IPSTATS_MIB_REASM_OVERLAPS,		/* ReasmOverlaps */
 	__IPSTATS_MIB_MAX

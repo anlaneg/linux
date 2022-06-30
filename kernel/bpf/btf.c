@@ -214,18 +214,18 @@ struct btf_kfunc_set_tab {
 };
 
 struct btf {
-	void *data;//btf数据
-	struct btf_type **types;
+	void *data;/*btf数据内容*/
+	struct btf_type **types;/*解析type section获得的type信息*/
 	u32 *resolved_ids;
 	u32 *resolved_sizes;
-	const char *strings;
-	void *nohdr_data;
-	struct btf_header hdr;
-	u32 nr_types; /* includes VOID for base BTF */
-	u32 types_size;
+	const char *strings;/*btf strings section起始指针*/
+	void *nohdr_data;/*btf非header数据内容*/
+	struct btf_header hdr;/*bft header数据内容*/
+	u32 nr_types; /* includes VOID for base BTF */ /*types数组内容大小*/
+	u32 types_size;/*typeso数组最大大小，超过后需要扩充空间*/
 	u32 data_size;//btf数据大小
 	refcount_t refcnt;
-	u32 id;
+	u32 id;/*btf关联的id*/
 	struct rcu_head rcu;
 	struct btf_kfunc_set_tab *kfunc_set_tab;
 
@@ -1367,6 +1367,7 @@ __printf(2, 3) static void btf_verifier_log(struct btf_verifier_env *env,
 	if (!bpf_verifier_log_needed(log))
 		return;
 
+	/*执行日志输出*/
 	va_start(args, fmt);
 	bpf_verifier_vlog(log, fmt, args);
 	va_end(args);
@@ -1490,6 +1491,7 @@ static void btf_verifier_log_vsi(struct btf_verifier_env *env,
 	__btf_verifier_log(log, "\n");
 }
 
+/*通过日志显示btf_header*/
 static void btf_verifier_log_hdr(struct btf_verifier_env *env,
 				 u32 btf_data_size)
 {
@@ -1518,6 +1520,7 @@ static int btf_add_type(struct btf_verifier_env *env, struct btf_type *t)
 {
 	struct btf *btf = env->btf;
 
+	/*内容达到极限，扩充btf->types数组*/
 	if (btf->types_size == btf->nr_types) {
 		/* Expand 'types' array */
 
@@ -1545,6 +1548,7 @@ static int btf_add_type(struct btf_verifier_env *env, struct btf_type *t)
 				btf->nr_types++;
 			}
 		} else {
+		    /*复制原有数据*/
 			memcpy(new_types, btf->types,
 			       sizeof(*btf->types) * btf->nr_types);
 		}
@@ -1554,17 +1558,20 @@ static int btf_add_type(struct btf_verifier_env *env, struct btf_type *t)
 		btf->types_size = new_size;
 	}
 
+	/*存入type*/
 	btf->types[btf->nr_types++] = t;
 
 	return 0;
 }
 
+/*为btf申请id*/
 static int btf_alloc_id(struct btf *btf)
 {
 	int id;
 
 	idr_preload(GFP_KERNEL);
 	spin_lock_bh(&btf_idr_lock);
+	/*申请一个id,并联btf*/
 	id = idr_alloc_cyclic(&btf_idr, btf, 1, INT_MAX, GFP_ATOMIC);
 	if (id > 0)
 		btf->id = id;
@@ -4177,19 +4184,22 @@ static const struct btf_kind_operations * const kind_ops[NR_BTF_KINDS] = {
 
 static s32 btf_check_meta(struct btf_verifier_env *env,
 			  const struct btf_type *t,
-			  u32 meta_left)
+			  u32 meta_left/*剩余内容长度*/)
 {
 	u32 saved_meta_left = meta_left;
 	s32 var_meta_size;
 
 	if (meta_left < sizeof(*t)) {
+	    /*t的内容不完整*/
 		btf_verifier_log(env, "[%u] meta_left:%u meta_needed:%zu",
 				 env->log_type_id, meta_left, sizeof(*t));
 		return -EINVAL;
 	}
+	/*t被解析后，剩余的内容长度*/
 	meta_left -= sizeof(*t);
 
 	if (t->info & ~BTF_INFO_MASK) {
+	    /*遇到不认识的t->info标记*/
 		btf_verifier_log(env, "[%u] Invalid btf_info:%x",
 				 env->log_type_id, t->info);
 		return -EINVAL;
@@ -4197,6 +4207,7 @@ static s32 btf_check_meta(struct btf_verifier_env *env,
 
 	if (BTF_INFO_KIND(t->info) > BTF_KIND_MAX ||
 	    BTF_INFO_KIND(t->info) == BTF_KIND_UNKN) {
+	    /*kind内容无效*/
 		btf_verifier_log(env, "[%u] Invalid kind:%u",
 				 env->log_type_id, BTF_INFO_KIND(t->info));
 		return -EINVAL;
@@ -4217,6 +4228,7 @@ static s32 btf_check_meta(struct btf_verifier_env *env,
 	return saved_meta_left - meta_left;
 }
 
+/*解析type section内容并填充*/
 static int btf_check_all_metas(struct btf_verifier_env *env)
 {
 	struct btf *btf = env->btf;
@@ -4224,8 +4236,8 @@ static int btf_check_all_metas(struct btf_verifier_env *env)
 	void *cur, *end;
 
 	hdr = &btf->hdr;
-	cur = btf->nohdr_data + hdr->type_off;
-	end = cur + hdr->type_len;
+	cur = btf->nohdr_data + hdr->type_off;/*type section起始地址*/
+	end = cur + hdr->type_len;/*type section终止地址*/
 
 	env->log_type_id = btf->base_btf ? btf->start_id : 1;
 	while (cur < end) {
@@ -4236,7 +4248,7 @@ static int btf_check_all_metas(struct btf_verifier_env *env)
 		if (meta_size < 0)
 			return meta_size;
 
-		btf_add_type(env, t);
+		btf_add_type(env, t);/*将t加入*/
 		cur += meta_size;
 		env->log_type_id++;
 	}
@@ -4359,6 +4371,7 @@ static int btf_parse_type_sec(struct btf_verifier_env *env)
 
 	/* Type section must align to 4 bytes */
 	if (hdr->type_off & (sizeof(u32) - 1)) {
+	    /*type section必须4字节对齐*/
 		btf_verifier_log(env, "Unaligned type_off");
 		return -EINVAL;
 	}
@@ -4368,6 +4381,7 @@ static int btf_parse_type_sec(struct btf_verifier_env *env)
 		return -EINVAL;
 	}
 
+	/*type内容检查，并收集*/
 	err = btf_check_all_metas(env);
 	if (err)
 		return err;
@@ -4382,16 +4396,18 @@ static int btf_parse_str_sec(struct btf_verifier_env *env)
 	const char *start, *end;
 
 	hdr = &btf->hdr;
-	start = btf->nohdr_data + hdr->str_off;
-	end = start + hdr->str_len;
+	start = btf->nohdr_data + hdr->str_off;/*str起始地址*/
+	end = start + hdr->str_len;/*str结束地址*/
 
 	if (end != btf->data + btf->data_size) {
+	    /*string section必须为最后一个段*/
 		btf_verifier_log(env, "String section is not at the end");
 		return -EINVAL;
 	}
 
 	btf->strings = start;
 
+	/*string section校验*/
 	if (btf->base_btf && !hdr->str_len)
 		return 0;
 	if (!hdr->str_len || hdr->str_len - 1 > BTF_MAX_NAME_OFFSET || end[-1]) {
@@ -4419,6 +4435,7 @@ static int btf_sec_info_cmp(const void *a, const void *b)
 	return (int)(x->off - y->off) ? : (int)(x->len - y->len);
 }
 
+/*此函数用于检查btf_data内容填充是否合法*/
 static int btf_check_sec_info(struct btf_verifier_env *env,
 			      u32 btf_data_size)
 {
@@ -4443,28 +4460,34 @@ static int btf_check_sec_info(struct btf_verifier_env *env,
 	expected_total = btf_data_size - hdr->hdr_len;
 	for (i = 0; i < ARRAY_SIZE(btf_sec_info_offset); i++) {
 		if (expected_total < secs[i].off) {
+		    /*expected_total是整个数据的剩余长度，现在其小于offset,则section填充有误*/
 			btf_verifier_log(env, "Invalid section offset");
 			return -EINVAL;
 		}
+		/*section之间有空隙，报错*/
 		if (total < secs[i].off) {
 			/* gap */
 			btf_verifier_log(env, "Unsupported section found");
 			return -EINVAL;
 		}
+		/*此section与上一个section内容有重叠，报错*/
 		if (total > secs[i].off) {
 			btf_verifier_log(env, "Section overlap found");
 			return -EINVAL;
 		}
 		if (expected_total - total < secs[i].len) {
+		    /*section长度填充有误*/
 			btf_verifier_log(env,
 					 "Total section length too long");
 			return -EINVAL;
 		}
+		/*记录已校验的section长度*/
 		total += secs[i].len;
 	}
 
 	/* There is data other than hdr and known sections */
 	if (expected_total != total) {
+	    /*所有section的长度加起来与实际不相符，报错*/
 		btf_verifier_log(env, "Unsupported section found");
 		return -EINVAL;
 	}
@@ -4482,6 +4505,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 	btf = env->btf;
 	btf_data_size = btf->data_size;
 
+	/*内容长度有误，报错*/
 	if (btf_data_size < offsetofend(struct btf_header, hdr_len)) {
 		btf_verifier_log(env, "hdr_len not found");
 		return -EINVAL;
@@ -4490,6 +4514,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 	hdr = btf->data;
 	hdr_len = hdr->hdr_len;
 	if (btf_data_size < hdr_len) {
+	    /*btf长度小于hdr_len,内容有误，报错*/
 		btf_verifier_log(env, "btf_header not found");
 		return -EINVAL;
 	}
@@ -4499,6 +4524,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 		u8 *expected_zero = btf->data + sizeof(btf->hdr);
 		u8 *end = btf->data + hdr_len;
 
+		/*自btf->hdr之后到bf->data+hdr_len结尾，均需要为全零。*/
 		for (; expected_zero < end; expected_zero++) {
 			if (*expected_zero) {
 				btf_verifier_log(env, "Unsupported btf_header");
@@ -4507,6 +4533,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 		}
 	}
 
+	/*复制，填充btf->hdr*/
 	hdr_copy = min_t(u32, hdr_len, sizeof(btf->hdr));
 	memcpy(&btf->hdr, btf->data, hdr_copy);
 
@@ -4515,25 +4542,30 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 	btf_verifier_log_hdr(env, btf_data_size);
 
 	if (hdr->magic != BTF_MAGIC) {
+	    /*magic检查失败*/
 		btf_verifier_log(env, "Invalid magic");
 		return -EINVAL;
 	}
 
 	if (hdr->version != BTF_VERSION) {
+	    /*版本检查失败*/
 		btf_verifier_log(env, "Unsupported version");
 		return -ENOTSUPP;
 	}
 
 	if (hdr->flags) {
+	    /*hdr->flags必须为0*/
 		btf_verifier_log(env, "Unsupported flags");
 		return -ENOTSUPP;
 	}
 
 	if (!btf->base_btf && btf_data_size == hdr->hdr_len) {
+	    /*只有header,没有数据*/
 		btf_verifier_log(env, "No data");
 		return -EINVAL;
 	}
 
+	/*校验btf 数据*/
 	err = btf_check_sec_info(env, btf_data_size);
 	if (err)
 		return err;
@@ -4550,7 +4582,7 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 	u8 *data;
 	int err;
 
-	/*btf不能过大*/
+	/*btf内容不能过大*/
 	if (btf_data_size > BTF_MAX_SIZE)
 		return ERR_PTR(-E2BIG);
 
@@ -4570,6 +4602,7 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 
 		/* log attributes have to be sane */
 		if (!bpf_verifier_log_attr_valid(log)) {
+		    /*log属性必须满足要求*/
 			err = -EINVAL;
 			goto errout;
 		}
@@ -4580,6 +4613,7 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 		err = -ENOMEM;
 		goto errout;
 	}
+	/*设置btf*/
 	env->btf = btf;
 
 	//填充用户态传入的btf_data
@@ -4597,12 +4631,14 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 		goto errout;
 	}
 
+	/*btf内容校验*/
 	err = btf_parse_hdr(env);
 	if (err)
 		goto errout;
 
 	btf->nohdr_data = btf->data + btf->hdr.hdr_len;
 
+	/*string sectiong校验*/
 	err = btf_parse_str_sec(env);
 	if (err)
 		goto errout;
@@ -4616,9 +4652,10 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 		goto errout;
 	}
 
+	/*释放env*/
 	btf_verifier_env_free(env);
 	refcount_set(&btf->refcnt, 1);
-	return btf;
+	return btf;/*返回btf*/
 
 errout:
 	btf_verifier_env_free(env);
@@ -6221,7 +6258,7 @@ static void bpf_btf_show_fdinfo(struct seq_file *m, struct file *filp)
 {
 	const struct btf *btf = filp->private_data;
 
-	seq_printf(m, "btf_id:\t%u\n", btf->id);
+	seq_printf(m, "btf_id:\t%u\n", btf->id);/*显示fdinfo,指明btf id*/
 }
 #endif
 
@@ -6248,6 +6285,7 @@ int btf_new_fd(const union bpf_attr *attr, bpfptr_t uattr)
 	struct btf *btf;
 	int ret;
 
+	/*解析传入的buffer,生成btf*/
 	btf = btf_parse(make_bpfptr(attr->btf, uattr.is_kernel),
 			attr->btf_size, attr->btf_log_level,
 			u64_to_user_ptr(attr->btf_log_buf),
@@ -6255,6 +6293,7 @@ int btf_new_fd(const union bpf_attr *attr, bpfptr_t uattr)
 	if (IS_ERR(btf))
 		return PTR_ERR(btf);
 
+	/*为btf分配id*/
 	ret = btf_alloc_id(btf);
 	if (ret) {
 		btf_free(btf);
@@ -6267,7 +6306,7 @@ int btf_new_fd(const union bpf_attr *attr, bpfptr_t uattr)
 	 * now on (i.e. free by calling btf_put()).
 	 */
 
-	ret = __btf_new_fd(btf);
+	ret = __btf_new_fd(btf);/*为此btf关联fd*/
 	if (ret < 0)
 		btf_put(btf);
 

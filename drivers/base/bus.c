@@ -24,21 +24,25 @@
 /* /sys/devices/system */
 static struct kset *system_kset;
 
+/*_attr是结构体struct bus_attribute中成员attr的指针，取结构体struct bus_attribute指针*/
 #define to_bus_attr(_attr) container_of(_attr, struct bus_attribute, attr)
 
 /*
  * sysfs bindings for drivers
  */
 
+/*_attr是结构体struct driver_attribute中成员attr的指针，取结构体struct driver_attribute指针*/
 #define to_drv_attr(_attr) container_of(_attr, struct driver_attribute, attr)
 
-#define DRIVER_ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store) \
+/*定义一个driver_attribute结构体，并设置属性名称，属性权限及相关回调*/
+#define DRIVER_ATTR_IGNORE_LOCKDEP(_name/*属性名称*/, _mode/*属性权限*/, _show/*显示回调*/, _store/*存储回调*/) \
 	struct driver_attribute driver_attr_##_name =		\
 		__ATTR_IGNORE_LOCKDEP(_name, _mode, _show, _store)
 
 static int __must_check bus_rescan_devices_helper(struct device *dev,
 						void *data);
 
+/*bus_type引用计数加1*/
 static struct bus_type *bus_get(struct bus_type *bus)
 {
 	if (bus) {
@@ -48,6 +52,7 @@ static struct bus_type *bus_get(struct bus_type *bus)
 	return NULL;
 }
 
+/*bus_type引用计数减1*/
 static void bus_put(struct bus_type *bus)
 {
 	if (bus)
@@ -144,6 +149,7 @@ int bus_create_file(struct bus_type *bus, struct bus_attribute *attr)
 }
 EXPORT_SYMBOL_GPL(bus_create_file);
 
+/*移除bus下的属性文件*/
 void bus_remove_file(struct bus_type *bus, struct bus_attribute *attr)
 {
 	if (bus_get(bus)) {
@@ -180,7 +186,8 @@ static const struct kset_uevent_ops bus_uevent_ops = {
 	.filter = bus_uevent_filter,
 };
 
-static struct kset *bus_kset;//所有bus从属于此集合
+//所有bus从属于此集合
+static struct kset *bus_kset;
 
 /* Manually detach a device from its associated driver. */
 static ssize_t unbind_store(struct device_driver *drv, const char *buf,
@@ -199,7 +206,9 @@ static ssize_t unbind_store(struct device_driver *drv, const char *buf,
 	bus_put(bus);
 	return err;
 }
-static DRIVER_ATTR_IGNORE_LOCKDEP(unbind, 0200, NULL, unbind_store);
+
+/*创建名称为unbind的dirver attribute*/
+static DRIVER_ATTR_IGNORE_LOCKDEP(unbind, 0200, NULL/*不支持show*/, unbind_store);
 
 /*
  * Manually attach a device to a driver.
@@ -225,6 +234,8 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 	bus_put(bus);
 	return err;
 }
+
+/*创建名称为bind的dirver attribute,支持手动绑定驱动*/
 static DRIVER_ATTR_IGNORE_LOCKDEP(bind, 0200, NULL, bind_store);
 
 static ssize_t drivers_autoprobe_show(struct bus_type *bus, char *buf)
@@ -259,7 +270,8 @@ static ssize_t drivers_probe_store(struct bus_type *bus,
 
 static struct device *next_device(struct klist_iter *i)
 {
-	struct klist_node *n = klist_next(i);//取i的下一个元素
+    //取i的下一个元素
+	struct klist_node *n = klist_next(i);
 	struct device *dev = NULL;
 	struct device_private *dev_prv;
 
@@ -553,6 +565,7 @@ static int __must_check add_bind_files(struct device_driver *drv)
 {
 	int ret;
 
+	/*在driver下添加unbind,bind两个文件*/
 	ret = driver_create_file(drv, &driver_attr_unbind);
 	if (ret == 0) {
 		ret = driver_create_file(drv, &driver_attr_bind);
@@ -564,10 +577,12 @@ static int __must_check add_bind_files(struct device_driver *drv)
 
 static void remove_bind_files(struct device_driver *drv)
 {
+    /*移除driver下bind,unbind两个文件*/
 	driver_remove_file(drv, &driver_attr_bind);
 	driver_remove_file(drv, &driver_attr_unbind);
 }
 
+/*定义drivers_probe只写属性*/
 static BUS_ATTR_WO(drivers_probe);
 static BUS_ATTR_RW(drivers_autoprobe);
 

@@ -14,7 +14,7 @@
  * @member:	the name of the member within the struct.
  *
  */
-#define container_of(ptr, type, member) ({				\
+#define container_of(ptr/*ptr是类型type中成员member的指针*/, type, member) ({				\
 	void *__mptr = (void *)(ptr);					\
 	static_assert(__same_type(*(ptr), ((type *)0)->member) ||	\
 		      __same_type(*(ptr), void),			\

@@ -46,7 +46,7 @@ struct seg6_local_lwtunnel_ops {
 
 struct seg6_action_desc {
 	int action;/*对应的action*/
-	unsigned long attrs;
+	unsigned long attrs;/*必须出现的属性*/
 
 	/* The optattrs field is used for specifying all the optional
 	 * attributes supported by a specific behavior.
@@ -60,7 +60,7 @@ struct seg6_action_desc {
 	 * required the same attribute CANNOT be set as optional and vice
 	 * versa.
 	 */
-	unsigned long optattrs;
+	unsigned long optattrs;/*可选的属性*/
 
 	int (*input)(struct sk_buff *skb, struct seg6_local_lwt *slwt);
 	int static_headroom;
@@ -69,7 +69,7 @@ struct seg6_action_desc {
 };
 
 struct bpf_lwt_prog {
-	struct bpf_prog *prog;
+	struct bpf_prog *prog;/*bpf程序配置*/
 	char *name;
 };
 
@@ -87,7 +87,7 @@ struct seg6_end_dt_info {
 	 * End.DT4/DT6 behavior for routing IPv4/IPv6 packets.
 	 */
 	int vrf_ifindex;
-	int vrf_table;
+	int vrf_table;/*来源于vrf table配置*/
 
 	/* tunneled packet family (IPv4 or IPv6).
 	 * Protocol and header length are inferred from family.
@@ -125,25 +125,25 @@ struct seg6_local_counters {
 #define SEG6_F_LOCAL_COUNTERS	SEG6_F_ATTR(SEG6_LOCAL_COUNTERS)
 
 struct seg6_local_lwt {
-	int action;
-	struct ipv6_sr_hdr *srh;
-	int table;
-	struct in_addr nh4;
-	struct in6_addr nh6;
-	int iif;
-	int oif;
-	struct bpf_lwt_prog bpf;
+	int action;/*来源于配置的action*/
+	struct ipv6_sr_hdr *srh;/*配置的srh*/
+	int table;/*来源于local table配置*/
+	struct in_addr nh4;/*来源于nh4配置*/
+	struct in6_addr nh6;/*来源于nh6配置*/
+	int iif;/*入接口配置*/
+	int oif;/*出接口配置*/
+	struct bpf_lwt_prog bpf;/*endpoint配置*/
 #ifdef CONFIG_NET_L3_MASTER_DEV
 	struct seg6_end_dt_info dt_info;
 #endif
 	struct pcpu_seg6_local_counters __percpu *pcpu_counters;
 
 	int headroom;
-	struct seg6_action_desc *desc;
+	struct seg6_action_desc *desc;/*action对应的action desc,见seg6_action_table列表*/
 	/* unlike the required attrs, we have to track the optional attributes
 	 * that have been effectively parsed.
 	 */
-	unsigned long parsed_optattrs;
+	unsigned long parsed_optattrs;/*记录解析了哪些属性*/
 };
 
 static struct seg6_local_lwt *seg6_local_lwtunnel(struct lwtunnel_state *lwt)
@@ -158,6 +158,7 @@ static struct ipv6_sr_hdr *get_and_validate_srh(struct sk_buff *skb)
 
 	srh = seg6_get_srh(skb, IP6_FH_F_SKIP_RH);
 	if (!srh)
+	    /*没有获得srh头，返回NULL*/
 		return NULL;
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
@@ -173,8 +174,10 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 	struct ipv6_sr_hdr *srh;
 	unsigned int off = 0;
 
+	/*先取srv6 header*/
 	srh = seg6_get_srh(skb, 0);
 	if (srh && srh->segments_left > 0)
+	    /*srh存在情况下，segments_left不得大于0*/
 		return false;
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
@@ -192,6 +195,7 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 
 	skb_postpull_rcsum(skb, skb_network_header(skb), off);
 
+	/*更新skb为内层*/
 	skb_reset_network_header(skb);
 	skb_reset_transport_header(skb);
 	if (iptunnel_pull_offloads(skb))
@@ -205,7 +209,7 @@ static void advance_nextseg(struct ipv6_sr_hdr *srh, struct in6_addr *daddr/*出
 {
 	struct in6_addr *addr;
 
-	srh->segments_left--;
+	srh->segments_left--;/*left减一*/
 	/*自srh->segments中提取addr*/
 	addr = srh->segments + srh->segments_left;
 	*daddr = *addr;
@@ -307,6 +311,7 @@ static int input_action_end_x(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
 
+	/*自skb中提取sr_hdr*/
 	srh = get_and_validate_srh(skb);
 	if (!srh)
 		goto drop;
@@ -382,6 +387,7 @@ static int input_action_end_dx2(struct sk_buff *skb,
 	 * the correct type.
 	 */
 	if (odev->type != ARPHRD_ETHER)
+	    /*必须为以太设备*/
 		goto drop;
 
 	/*设备必须up*/
@@ -426,7 +432,7 @@ static int input_action_end_dx6_finish(struct net *net, struct sock *sk,
 	 * inner packet's DA. Otherwise, use the specified nexthop.
 	 */
 	if (!ipv6_addr_any(&slwt->nh6))
-		nhaddr = &slwt->nh6;
+		nhaddr = &slwt->nh6;/*如果指定了nh6，则查nh6对应的路由项*/
 
 	seg6_lookup_nexthop(skb, nhaddr, 0);
 
@@ -848,10 +854,12 @@ static int input_action_end_b6(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	struct ipv6_sr_hdr *srh;
 	int err = -EINVAL;
 
+	/*取srh,如果没有，则丢弃*/
 	srh = get_and_validate_srh(skb);
 	if (!srh)
 		goto drop;
 
+	/*在srh头的前面再增加一个srh*/
 	err = seg6_do_srh_inline(skb, slwt->srh);
 	if (err)
 		goto drop;
@@ -934,11 +942,14 @@ static int input_action_end_bpf(struct sk_buff *skb,
 	struct ipv6_sr_hdr *srh;
 	int ret;
 
+	/*skb中必须要有srv6头*/
 	srh = get_and_validate_srh(skb);
 	if (!srh) {
 		kfree_skb(skb);
 		return -EINVAL;
 	}
+
+	/*segments移除,替换目的ip*/
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
 	/* preempt_disable is needed to protect the per-CPU buffer srh_state,
@@ -951,6 +962,7 @@ static int input_action_end_bpf(struct sk_buff *skb,
 
 	rcu_read_lock();
 	bpf_compute_data_pointers(skb);
+	/*运行bpf程序*/
 	ret = bpf_prog_run_save_cb(slwt->bpf.prog, skb);
 	rcu_read_unlock();
 
@@ -972,6 +984,7 @@ static int input_action_end_bpf(struct sk_buff *skb,
 	if (ret != BPF_REDIRECT)
 		seg6_lookup_nexthop(skb, NULL, 0);
 
+	/*按路由走input钩子点*/
 	return dst_input(skb);
 
 drop:
@@ -986,39 +999,42 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END,
 		.attrs		= 0,
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*segment->left --后，提取对应的地址做目的地址进行转发，查目的地址对应出接口*/
 		.input		= input_action_end,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_X,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*segment->left --后，提取对庆的目的地址做转发，查slwt->nh6对应的出接口*/
 		.input		= input_action_end_x,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_T,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_TABLE),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*segment->left --后，提取对应的地址做目的地址进行转发，查slwt->table对应的路由表*/
 		.input		= input_action_end_t,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX2,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_OIF),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*解封装，并将内层的l2报文自指定设备发出*/
+		/*解l2封装，并将内层的l2报文自slwt->oif设备发出*/
 		.input		= input_action_end_dx2,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX6,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*解封装，并将内存的ipv6报文通过查路由填充以太头后，自设备发出*/
+		/*解l3 ipv6封装，并将内层的ipv6报文通过查路由填充以太头后（如果设置了slwt->nh6，则查其对应的路由项），自设备发出*/
 		.input		= input_action_end_dx6,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX4,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH4),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*解封装，并将内部存的ipv4报文通过查路由，送路由input钩子点*/
+		/*解ipip封装，并将内部存的ipv4报文通过查路由，送路由input钩子点*/
 		.input		= input_action_end_dx4,
 	},
 	{
@@ -1063,6 +1079,7 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END_B6,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_SRH),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		/*在原有的srh头上，再增加一层srh头（顶部）*/
 		.input		= input_action_end_b6,
 	},
 	{
@@ -1076,7 +1093,7 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END_BPF,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_BPF),
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		.input		= input_action_end_bpf,
+		.input		= input_action_end_bpf,/*bpf action*/
 	},
 
 };
@@ -1132,6 +1149,7 @@ static int seg6_local_input_core(struct net *net, struct sock *sk,
 	slwt = seg6_local_lwtunnel(orig_dst->lwtstate);
 	desc = slwt->desc;
 
+	/*依据action desc调用其对应的input*/
 	rc = desc->input(skb, slwt);
 
 	if (!seg6_lwtunnel_counters_enabled(slwt))
@@ -1145,14 +1163,16 @@ static int seg6_local_input_core(struct net *net, struct sock *sk,
 static int seg6_local_input(struct sk_buff *skb)
 {
 	if (skb->protocol != htons(ETH_P_IPV6)) {
+	    /*非ipv6报文，丢包*/
 		kfree_skb(skb);
 		return -EINVAL;
 	}
 
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
+	    /*如果hooks开启，则解发local in钩子点*/
 		return NF_HOOK(NFPROTO_IPV6, NF_INET_LOCAL_IN,
 			       dev_net(skb->dev), NULL, skb, skb->dev, NULL,
-			       seg6_local_input_core);
+			       seg6_local_input_core);/*在local in加钩子*/
 
 	return seg6_local_input_core(dev_net(skb->dev), NULL, skb);
 }
@@ -1172,6 +1192,7 @@ static const struct nla_policy seg6_local_policy[SEG6_LOCAL_MAX + 1] = {
 	[SEG6_LOCAL_COUNTERS]	= { .type = NLA_NESTED },
 };
 
+/*解析local srh属性*/
 static int parse_nla_srh(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
@@ -1182,6 +1203,7 @@ static int parse_nla_srh(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 
 	/* SRH must contain at least one segment */
 	if (len < sizeof(*srh) + sizeof(struct in6_addr))
+	    /*无效长度*/
 		return -EINVAL;
 
 	if (!seg6_validate_srh(srh, len, false))
@@ -1191,11 +1213,12 @@ static int parse_nla_srh(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 	if (!slwt->srh)
 		return -ENOMEM;
 
-	slwt->headroom += len;
+	slwt->headroom += len;/*增加srh引入的长度*/
 
 	return 0;
 }
 
+/*向netlink buffer中添加seg6_local_srh*/
 static int put_nla_srh(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
@@ -1216,14 +1239,17 @@ static int put_nla_srh(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 
 static int cmp_nla_srh(struct seg6_local_lwt *a, struct seg6_local_lwt *b)
 {
+    //长度必须一致
 	int len = (a->srh->hdrlen + 1) << 3;
 
 	if (len != ((b->srh->hdrlen + 1) << 3))
 		return 1;
 
+	/*比对srh内容*/
 	return memcmp(a->srh, b->srh, len);
 }
 
+/*销毁srh内容*/
 static void destroy_attr_srh(struct seg6_local_lwt *slwt)
 {
 	kfree(slwt->srh);
@@ -1270,6 +1296,7 @@ static int parse_nla_vrftable(struct nlattr **attrs,
 	if (IS_ERR(info))
 		return PTR_ERR(info);
 
+	/*取用户态配置*/
 	info->vrf_table = nla_get_u32(attrs[SEG6_LOCAL_VRFTABLE]);
 
 	return 0;
@@ -1424,14 +1451,16 @@ static int parse_nla_bpf(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 	if (!slwt->bpf.name)
 		return -ENOMEM;
 
+	/*取bpf程序指明的fd*/
 	fd = nla_get_u32(tb[SEG6_LOCAL_BPF_PROG]);
+	/*由fd获得prog*/
 	p = bpf_prog_get_type(fd, BPF_PROG_TYPE_LWT_SEG6LOCAL);
 	if (IS_ERR(p)) {
 		kfree(slwt->bpf.name);
 		return PTR_ERR(p);
 	}
 
-	slwt->bpf.prog = p;
+	slwt->bpf.prog = p;/*指明prog*/
 	return 0;
 }
 
@@ -1506,7 +1535,7 @@ static int parse_nla_counters(struct nlattr **attrs,
 	if (!pcounters)
 		return -ENOMEM;
 
-	slwt->pcpu_counters = pcounters;
+	slwt->pcpu_counters = pcounters;/*申请per cpu计数器*/
 
 	return 0;
 }
@@ -1581,18 +1610,22 @@ static void destroy_attr_counters(struct seg6_local_lwt *slwt)
 }
 
 struct seg6_action_param {
+    /*从netlink消息中解析slwt内容*/
 	int (*parse)(struct nlattr **attrs, struct seg6_local_lwt *slwt);
+	/*将slwt内容编码到skb*/
 	int (*put)(struct sk_buff *skb, struct seg6_local_lwt *slwt);
+	/*比对两个slwt内容是否一致*/
 	int (*cmp)(struct seg6_local_lwt *a, struct seg6_local_lwt *b);
 
 	/* optional destroy() callback useful for releasing resources which
 	 * have been previously acquired in the corresponding parse()
 	 * function.
 	 */
-	void (*destroy)(struct seg6_local_lwt *slwt);
+	void (*destroy)(struct seg6_local_lwt *slwt);/*移除slwt内容*/
 };
 
 static struct seg6_action_param seg6_action_params[SEG6_LOCAL_MAX + 1] = {
+        /*srh参数处理*/
 	[SEG6_LOCAL_SRH]	= { .parse = parse_nla_srh,
 				    .put = put_nla_srh,
 				    .cmp = cmp_nla_srh,
@@ -1673,6 +1706,7 @@ static void destroy_attrs(struct seg6_local_lwt *slwt)
 	__destroy_attrs(attrs, SEG6_LOCAL_MAX + 1, slwt);
 }
 
+/*解析可选内容*/
 static int parse_nla_optional_attrs(struct nlattr **attrs,
 				    struct seg6_local_lwt *slwt)
 {
@@ -1683,13 +1717,14 @@ static int parse_nla_optional_attrs(struct nlattr **attrs,
 
 	for (i = 0; i < SEG6_LOCAL_MAX + 1; ++i) {
 		if (!(desc->optattrs & SEG6_F_ATTR(i)) || !attrs[i])
-			continue;
+			continue;/*如果此attr不可选或者未提供，则跳过*/
 
 		/* once here, the i-th attribute is provided by the
 		 * userspace AND it is identified optional as well.
 		 */
 		param = &seg6_action_params[i];
 
+		/*解析并填充此属性*/
 		err = param->parse(attrs, slwt);
 		if (err < 0)
 			goto parse_optattrs_err;
@@ -1723,8 +1758,10 @@ seg6_local_lwtunnel_build_state(struct seg6_local_lwt *slwt, const void *cfg,
 
 	ops = &desc->slwt_ops;
 	if (!ops->build_state)
+	    /*如果无回调，则成功返回*/
 		return 0;
 
+	/*调action对应的build_state*/
 	return ops->build_state(slwt, cfg, extack);
 }
 
@@ -1750,11 +1787,13 @@ static int parse_nla_action(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 	unsigned long invalid_attrs;
 	int i, err;
 
+	/*由用户匹配的action获得action desc*/
 	desc = __get_action_desc(slwt->action);
 	if (!desc)
 		return -EINVAL;
 
 	if (!desc->input)
+	    /*desc必须指供input回调*/
 		return -EOPNOTSUPP;
 
 	slwt->desc = desc;
@@ -1782,9 +1821,11 @@ static int parse_nla_action(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 	/* parse the required attributes */
 	for (i = 0; i < SEG6_LOCAL_MAX + 1; i++) {
 		if (desc->attrs & SEG6_F_ATTR(i)) {
+		    /*描述符指明包含此attr,但未配置，报错*/
 			if (!attrs[i])
 				return -EINVAL;
 
+			/*解析并填充slwt中此参数的内容*/
 			param = &seg6_action_params[i];
 
 			err = param->parse(attrs, slwt);
@@ -1794,7 +1835,7 @@ static int parse_nla_action(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 	}
 
 	/* parse the optional attributes, if any */
-	err = parse_nla_optional_attrs(attrs, slwt);
+	err = parse_nla_optional_attrs(attrs, slwt);/*可选参数解析*/
 	if (err < 0)
 		goto parse_attrs_err;
 
@@ -1831,6 +1872,7 @@ static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 		return err;
 
 	if (!tb[SEG6_LOCAL_ACTION])
+	    /*action是必配项*/
 		return -EINVAL;
 
 	newts = lwtunnel_state_alloc(sizeof(*slwt));
@@ -1840,6 +1882,7 @@ static int seg6_local_build_state(struct net *net, struct nlattr *nla,
 	slwt = seg6_local_lwtunnel(newts);
 	slwt->action = nla_get_u32(tb[SEG6_LOCAL_ACTION]);
 
+	/*依据action,解析action对应的参数，填充slwt*/
 	err = parse_nla_action(tb, slwt);
 	if (err < 0)
 		goto out_free;
@@ -1978,6 +2021,7 @@ static int seg6_local_cmp_encap(struct lwtunnel_state *a,
 	return 0;
 }
 
+/*seg6 local方式encap*/
 static const struct lwtunnel_encap_ops seg6_local_ops = {
 	.build_state	= seg6_local_build_state,
 	.destroy_state	= seg6_local_destroy_state,
@@ -1999,6 +2043,7 @@ int __init seg6_local_init(void)
 	 */
 	BUILD_BUG_ON(SEG6_LOCAL_MAX + 1 > BITS_PER_TYPE(unsigned long));
 
+	/*添加seg6 local*/
 	return lwtunnel_encap_add_ops(&seg6_local_ops,
 				      LWTUNNEL_ENCAP_SEG6_LOCAL);
 }

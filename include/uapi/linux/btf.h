@@ -15,6 +15,7 @@ struct btf_header {
 	__u32	hdr_len;
 
 	/* All offsets are in bytes relative to the end of this header */
+	/*两个section的offset 及length*/
 	__u32	type_off;	/* offset of type section	*/
 	__u32	type_len;	/* length of type section	*/
 	__u32	str_off;	/* offset of string section	*/
@@ -52,6 +53,7 @@ struct btf_type {
 	};
 };
 
+/*取info中包含的kind*/
 #define BTF_INFO_KIND(info)	(((info) >> 24) & 0x1f)
 #define BTF_INFO_VLEN(info)	((info) & 0xffff)
 #define BTF_INFO_KFLAG(info)	((info) >> 31)

@@ -66,6 +66,7 @@ static void show_tty_range(struct seq_file *m, struct tty_driver *p,
 	seq_putc(m, '\n');
 }
 
+/*tty/drivers内容显示*/
 static int show_tty_driver(struct seq_file *m, void *v)
 {
 	struct tty_driver *p = list_entry(v, struct tty_driver, tty_drivers);

@@ -5155,7 +5155,7 @@ int netif_rx(struct sk_buff *skb)
 	if (need_bh_off)
 		local_bh_disable();
 	trace_netif_rx_entry(skb);
-	ret = netif_rx_internal(skb);
+	ret = netif_rx_internal(skb);/*报文入队*/
 	trace_netif_rx_exit(ret);
 	if (need_bh_off)
 		local_bh_enable();
@@ -5311,7 +5311,7 @@ sch_handle_ingress(struct sk_buff *skb, struct packet_type **pt_prev, int *ret,
 		 * we can safely push the L2 header back before
 		 * redirecting to another netdev
 		 */
-		__skb_push(skb, skb->mac_len);
+		__skb_push(skb, skb->mac_len);/*回退到指向mac头*/
 		/*将报文redirect到另一个设备*/
 		if (skb_do_redirect(skb) == -EAGAIN) {
 			__skb_pull(skb, skb->mac_len);

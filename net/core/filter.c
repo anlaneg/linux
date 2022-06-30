@@ -2135,11 +2135,11 @@ static inline int __bpf_tx_skb(struct net_device *dev, struct sk_buff *skb)
 		return -ENETDOWN;
 	}
 
-	skb->dev = dev;
+	skb->dev = dev;/*变更设备*/
 	skb_clear_tstamp(skb);
 
 	dev_xmit_recursion_inc();
-	ret = dev_queue_xmit(skb);
+	ret = dev_queue_xmit(skb);/*将报文自此设备送出*/
 	dev_xmit_recursion_dec();
 
 	return ret;
@@ -2178,13 +2178,15 @@ static int __bpf_redirect_common(struct sk_buff *skb, struct net_device *dev,
 
 	bpf_push_mac_rcsum(skb);
 	return flags & BPF_F_INGRESS ?
-	       __bpf_rx_skb(dev, skb) : __bpf_tx_skb(dev, skb);
+	        /*重定向到rx方向，变更设备后走协议栈*/
+	       __bpf_rx_skb(dev, skb) : __bpf_tx_skb(dev, skb)/*重定向到tx方向*/;
 }
 
 static int __bpf_redirect(struct sk_buff *skb, struct net_device *dev,
 			  u32 flags)
 {
 	if (dev_is_mac_header_xmit(dev))
+	    /*mac header的设备redirect*/
 		return __bpf_redirect_common(skb, dev, flags);
 	else
 		return __bpf_redirect_no_mac(skb, dev, flags);
@@ -2362,10 +2364,12 @@ static int __bpf_redirect_neigh_v4(struct sk_buff *skb, struct net_device *dev,
 		};
 		struct rtable *rt;
 
+		/*查询路由表*/
 		rt = ip_route_output_flow(net, &fl4, NULL);
 		if (IS_ERR(rt))
 			goto out_drop;
 		if (rt->rt_type != RTN_UNICAST && rt->rt_type != RTN_LOCAL) {
+		    /*非单播且非local，则丢掉*/
 			ip_rt_put(rt);
 			goto out_drop;
 		}
@@ -2373,6 +2377,7 @@ static int __bpf_redirect_neigh_v4(struct sk_buff *skb, struct net_device *dev,
 		skb_dst_set(skb, &rt->dst);
 	}
 
+	/*查询neigh,确认目的mac,并发出*/
 	err = bpf_out_neigh_v4(net, skb, dev, nh);
 	if (unlikely(net_xmit_eval(err)))
 		dev->stats.tx_errors++;
@@ -2410,6 +2415,7 @@ static int __bpf_redirect_neigh(struct sk_buff *skb, struct net_device *dev,
 	skb_unset_mac_header(skb);
 	skb_reset_network_header(skb);
 
+	/*按协议进行路由，并查询neigh后进行redirect*/
 	if (skb->protocol == htons(ETH_P_IP))
 		return __bpf_redirect_neigh_v4(skb, dev, nh);
 	else if (skb->protocol == htons(ETH_P_IPV6))
@@ -2467,6 +2473,7 @@ static const struct bpf_func_proto bpf_clone_redirect_proto = {
 	.arg3_type      = ARG_ANYTHING,
 };
 
+/*每个cpu上一个此变量，用于指明报文执行的redirect信息*/
 DEFINE_PER_CPU(struct bpf_redirect_info, bpf_redirect_info);
 EXPORT_PER_CPU_SYMBOL_GPL(bpf_redirect_info);
 
@@ -2482,33 +2489,41 @@ int skb_do_redirect(struct sk_buff *skb)
 	ri->tgt_index = 0;
 	ri->flags = 0;
 	if (unlikely(!dev))
+	    /*要求redirect的设备不存在，丢包*/
 		goto out_drop;
+
 	if (flags & BPF_F_PEER) {
-	    /*通过dev->netdev_ops获取对端设备，并变更skb->dev*/
+	    /*有peer标记，通过dev->netdev_ops获取对端设备，并变更skb->dev*/
 		const struct net_device_ops *ops = dev->netdev_ops;
 
 		if (unlikely(!ops->ndo_get_peer_dev ||
 			     !skb_at_tc_ingress(skb)))
+		    /*设备没有实现此函数或skb不在ingress方向，则丢包*/
 			goto out_drop;
 		dev = ops->ndo_get_peer_dev(dev);
 		if (unlikely(!dev ||
 			     !(dev->flags & IFF_UP) ||
 			     net_eq(net, dev_net(dev))))
+		    /*对端设备不存在/没有up/不属于当前net namespace，则丢包*/
 			goto out_drop;
+
 		/*变更报文到对端设备*/
 		skb->dev = dev;
 		return -EAGAIN;
 	}
 
 	return flags & BPF_F_NEIGH ?
+	        /*有neigh标记，*/
 	       __bpf_redirect_neigh(skb, dev, flags & BPF_F_NEXTHOP ?
 				    &ri->nh : NULL) :
+				    /*无neigh标记时的redirect*/
 	       __bpf_redirect(skb, dev, flags);
 out_drop:
 	kfree_skb(skb);
 	return -EINVAL;
 }
 
+/*设置bpf redirect信息*/
 BPF_CALL_2(bpf_redirect, u32, ifindex, u64, flags)
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
@@ -2530,6 +2545,7 @@ static const struct bpf_func_proto bpf_redirect_proto = {
 	.arg2_type      = ARG_ANYTHING,
 };
 
+/*bpf设置重定向到对端*/
 BPF_CALL_2(bpf_redirect_peer, u32, ifindex, u64, flags)
 {
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);

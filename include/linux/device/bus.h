@@ -136,10 +136,13 @@ struct bus_attribute {
 	ssize_t (*store)(struct bus_type *bus, const char *buf, size_t count);
 };
 
+/*定义bus读写属性*/
 #define BUS_ATTR_RW(_name) \
 	struct bus_attribute bus_attr_##_name = __ATTR_RW(_name)
+/*定义bus只读属性*/
 #define BUS_ATTR_RO(_name) \
 	struct bus_attribute bus_attr_##_name = __ATTR_RO(_name)
+/*定义bus只写属性*/
 #define BUS_ATTR_WO(_name) \
 	struct bus_attribute bus_attr_##_name = __ATTR_WO(_name)
 

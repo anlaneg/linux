@@ -52,14 +52,16 @@ struct fwnode_handle;
  * connected or how they work.
  */
 struct class {
-	const char		*name;
+	const char		*name;/*class名称*/
 	struct module		*owner;
 
 	const struct attribute_group	**class_groups;
+	/*设备公共属性*/
 	const struct attribute_group	**dev_groups;
 	struct kobject			*dev_kobj;
 
 	int (*dev_uevent)(struct device *dev, struct kobj_uevent_env *env);
+	/*设备在vduse下的节点名称*/
 	char *(*devnode)(struct device *dev, umode_t *mode);
 
 	void (*class_release)(struct class *class);

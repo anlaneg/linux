@@ -851,5 +851,6 @@ static struct ctl_table tty_root_table[] = {
 
 void tty_sysctl_init(void)
 {
+    /*注册tty对应的sysctl路径*/
 	register_sysctl_table(tty_root_table);
 }

@@ -525,6 +525,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @member:	the name of the list_head within the struct.
  */
 #define list_entry(ptr, type, member) \
+    /*ptr是结构体type的成员变量member的指针，取对应的type结构体指令*/\
 	container_of(ptr, type, member)
 
 /**
@@ -536,6 +537,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * Note, that list is expected to be not empty.
  */
 #define list_first_entry(ptr, type, member) \
+    /*ptr是一个链表头，取其next对应的结构体type*/\
 	list_entry((ptr)->next, type, member)
 
 /**
@@ -569,6 +571,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * @member:	the name of the list_head within the struct.
  */
 #define list_next_entry(pos, member) \
+    /*取下一个元素*/\
 	list_entry((pos)->member.next, typeof(*(pos)), member)
 
 /**
@@ -644,7 +647,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  */
 #define list_for_each_entry(pos/*当前位置*/, head/*链表头*/, member)				\
 	for (pos = list_first_entry(head, typeof(*pos), member);/*首个成员*/	\
-	     !list_entry_is_head(pos, head, member);			\
+	     !list_entry_is_head(pos, head, member);/*检查pos是否为head*/			\
 	     pos = list_next_entry(pos, member))
 
 /**

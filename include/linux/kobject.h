@@ -62,10 +62,14 @@ enum kobject_action {
 };
 
 struct kobject {
-	const char		*name;/* kobject对象的名字，对应sysfs中的目录名 */
-	struct list_head	entry;//用于挂接成链，例如挂接给kset
-	struct kobject		*parent;/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
-	struct kset		*kset;/*此kobject从属的kset*/
+    /* kobject对象的名字，对应sysfs中的目录名 */
+	const char		*name;
+	//用于挂接成链，例如挂接给kset
+	struct list_head	entry;
+	/* 用于构建sysfs中kobjects的层次结构，指向父目录 */
+	struct kobject		*parent;
+	/*此kobject从属的kset*/
+	struct kset		*kset;
 	//kobj对应的ktype(可约定一组公共的attr,groups)
 	const struct kobj_type	*ktype;
 	//其在sysfs中对应的node
@@ -186,6 +190,7 @@ struct kset {
 	struct list_head list;
 	spinlock_t list_lock;//保护list成员
 	struct kobject kobj;
+	/*uevent操作集*/
 	const struct kset_uevent_ops *uevent_ops;
 } __randomize_layout;
 

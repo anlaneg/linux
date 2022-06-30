@@ -1049,6 +1049,7 @@ int __init icmpv6_init(void)
 	}
 
 	err = -EAGAIN;
+	/*添加icmpv6协议处理*/
 	if (inet6_add_protocol(&icmpv6_protocol, IPPROTO_ICMPV6) < 0)
 		goto fail;
 

@@ -4,6 +4,7 @@
 #include <net/lwtunnel.h>
 #include <net/netfilter/nf_hooks_lwtunnel.h>
 
+/*检查是否enable*/
 static inline int nf_hooks_lwtunnel_get(void)
 {
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled))
@@ -16,8 +17,10 @@ static inline int nf_hooks_lwtunnel_set(int enable)
 {
 	if (static_branch_unlikely(&nf_hooks_lwtunnel_enabled)) {
 		if (!enable)
+		    /*已经开始后，要求关闭的话，报错*/
 			return -EBUSY;
 	} else if (enable) {
+	    /*执行开启*/
 		static_branch_enable(&nf_hooks_lwtunnel_enabled);
 	}
 

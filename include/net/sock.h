@@ -463,17 +463,20 @@ struct sock {
 		/* public: */
 	};
 #ifdef CONFIG_XFRM
+	/*针对socket的in,out两个方向的策略*/
 	struct xfrm_policy __rcu *sk_policy[2];
 #endif
 
 	/*socket中缓存的dst_entry，减少每次查询*/
 	struct dst_entry __rcu	*sk_dst_cache;
 	atomic_t		sk_omem_alloc;
-	int			sk_sndbuf;//发送缓冲区大小
+	//发送缓冲区大小
+	int			sk_sndbuf;
 
 	/* ===== cache line for TX ===== */
 	int			sk_wmem_queued;
-	refcount_t		sk_wmem_alloc;/*已申请的发送缓冲区大小*/
+	/*已申请的发送缓冲区大小*/
+	refcount_t		sk_wmem_alloc;
 	unsigned long		sk_tsq_flags;
 	union {
 		struct sk_buff	*sk_send_head;

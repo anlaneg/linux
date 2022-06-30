@@ -198,10 +198,10 @@ static int vxcan_newlink(struct net *net, struct net_device *dev,
 
 	if (ifmp && tbp[IFLA_IFNAME]) {
 		nla_strscpy(ifname, tbp[IFLA_IFNAME], IFNAMSIZ);
-		name_assign_type = NET_NAME_USER;
+		name_assign_type = NET_NAME_USER;/*指明来源于user space*/
 	} else {
 		snprintf(ifname, IFNAMSIZ, DRV_NAME "%%d");
-		name_assign_type = NET_NAME_ENUM;
+		name_assign_type = NET_NAME_ENUM;/*指明属于kernel枚举*/
 	}
 
 	peer_net = rtnl_link_get_net(net, tbp);

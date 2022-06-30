@@ -19,36 +19,36 @@
 struct kobj_map {
 	struct probe {
 		struct probe *next;//挂接多个probe,各probe之前按range自小向大排列
-		dev_t dev;
-		unsigned long range;
+		dev_t dev;/*首个device number*/
+		unsigned long range;/*可用device number数目*/
 		struct module *owner;//依赖的module
 		kobj_probe_t *get;//获取kobj的回调函数
 		int (*lock)(dev_t, void *);//加锁函数
-		void *data;
+		void *data;/*私有数据*/
 	} *probes[255];
 	struct mutex *lock;
 };
 
-//向domain中加入dev
-int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
+//创建range个向domain中加入dev
+int kobj_map(struct kobj_map *domain, dev_t dev/*首个device number*/, unsigned long range/*可用deivce nubmer数量*/,
 	     struct module *module, kobj_probe_t *probe,
-	     int (*lock)(dev_t, void *), void *data)
+	     int (*lock)(dev_t, void *), void *data/*私有数据*/)
 {
-	//需要占用多少个major
+	//需要多少个probe
 	unsigned int n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;
-	unsigned int index = MAJOR(dev);//起始的major
+	unsigned int index = MAJOR(dev);//首个device nubmer对应的major
 	unsigned int i;
 	struct probe *p;
 
 	if (n > 255)
-		n = 255;//最多容许占用255个major
+		n = 255;//最多支持255个probe
 
-	//申请n个probe
+	//申请n个probe对象数组
 	p = kmalloc_array(n, sizeof(struct probe), GFP_KERNEL);
 	if (p == NULL)
 		return -ENOMEM;
 
-	//初始化n个probe
+	//逐个初始化probe对象
 	for (i = 0; i < n; i++, p++) {
 		p->owner = module;
 		p->get = probe;
@@ -58,7 +58,7 @@ int kobj_map(struct kobj_map *domain, dev_t dev, unsigned long range,
 		p->data = data;
 	}
 	mutex_lock(domain->lock);
-	for (i = 0, p -= n; i < n; i++, p++, index++) {
+	for (i = 0, p -= n/*使p指向数组第一个位置*/; i < n; i++, p++, index++) {
 		struct probe **s = &domain->probes[index % 255];
 		//插入p,使得probes链上按range自小向大排列
 		while (*s && (*s)->range < range)

@@ -49,7 +49,7 @@ struct in6_ifreq {
 struct ipv6_rt_hdr {
 	__u8		nexthdr;
 	__u8		hdrlen;
-	__u8		type;
+	__u8		type;/*4为segment routing*/
 	__u8		segments_left;
 
 	/*
@@ -116,7 +116,7 @@ struct ipv6_destopt_hao {
 
 struct ipv6hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8			priority:4,//通信分类（占4bits)
+	__u8			priority:4,//通信分类（占4bits)，后两位为ecn标记
 				version:4;//版本
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u8			version:4,

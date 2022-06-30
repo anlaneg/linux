@@ -110,7 +110,7 @@ int lwtunnel_encap_del_ops(const struct lwtunnel_encap_ops *ops,
 }
 EXPORT_SYMBOL_GPL(lwtunnel_encap_del_ops);
 
-int lwtunnel_build_state(struct net *net, u16 encap_type,
+int lwtunnel_build_state(struct net *net, u16 encap_type/*封装方式*/,
 			 struct nlattr *encap, unsigned int family,
 			 const void *cfg, struct lwtunnel_state **lws/*出参，创建的轻量级隧道状态*/,
 			 struct netlink_ext_ack *extack)
@@ -351,7 +351,7 @@ int lwtunnel_cmp_encap(struct lwtunnel_state *a, struct lwtunnel_state *b)
 }
 EXPORT_SYMBOL_GPL(lwtunnel_cmp_encap);
 
-/*调用ops->output 完成轻量tunnel输出*/
+/*轻量级隧道output入口，调用ops->output 完成轻量tunnel输出*/
 int lwtunnel_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);

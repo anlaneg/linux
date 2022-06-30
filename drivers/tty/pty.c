@@ -937,7 +937,9 @@ static void __init unix98_pty_init(void)
 	tty_default_fops(&ptmx_fops);
 	ptmx_fops.open = ptmx_open;
 
+	/*初始化ptmx_cdev*/
 	cdev_init(&ptmx_cdev, &ptmx_fops);
+	/*注册/dev/ptmx*/
 	if (cdev_add(&ptmx_cdev, MKDEV(TTYAUX_MAJOR, 2), 1) ||
 	    register_chrdev_region(MKDEV(TTYAUX_MAJOR, 2), 1, "/dev/ptmx") < 0)
 		panic("Couldn't register /dev/ptmx driver");

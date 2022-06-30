@@ -1831,7 +1831,7 @@ static int veth_newlink(struct net *src_net, struct net_device *dev,
 	} else {
 	    /*使用动态的接口名称*/
 		snprintf(ifname, IFNAMSIZ, DRV_NAME "%%d");
-		name_assign_type = NET_NAME_ENUM;
+		name_assign_type = NET_NAME_ENUM;/*指明按枚举产生的name*/
 	}
 
 	net = rtnl_link_get_net(src_net, tbp);

@@ -69,6 +69,7 @@ static void tcf_set_action_cookie(struct tc_cookie __rcu **old_cookie,
 		call_rcu(&old->rcu, tcf_free_cookie_rcu);
 }
 
+/*检查act,针对goto chain提取chain id*/
 int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
 			     struct tcf_chain **newchain/*出参，如goto chain,则获取对应的chain*/,
 			     struct netlink_ext_ack *extack/*出参，错误信息*/)
@@ -727,21 +728,23 @@ static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 
 //创建并初始化action
 int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
-		   struct tc_action **a, const struct tc_action_ops *ops,
+		   struct tc_action **a/*出参，创建的ops对应的action*/, const struct tc_action_ops *ops,
 		   int bind, bool cpustats, u32 flags)
 {
-	//为action申请空间
+	//针对各ops自定义size为action申请空间
 	struct tc_action *p = kzalloc(ops->size, GFP_KERNEL);
 	struct tcf_idrinfo *idrinfo = tn->idrinfo;
 	int err = -ENOMEM;
 
 	if (unlikely(!p))
+	    /*申请tc_action失败*/
 		return -ENOMEM;
 	refcount_set(&p->tcfa_refcnt, 1);
 	if (bind)
 		atomic_set(&p->tcfa_bindcnt, 1);
 
 	if (cpustats) {
+	    /*申请cpu统计结构体*/
 		p->cpu_bstats = netdev_alloc_pcpu_stats(struct gnet_stats_basic_sync);
 		if (!p->cpu_bstats)
 			goto err1;
@@ -752,11 +755,13 @@ int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 		if (!p->cpu_qstats)
 			goto err3;
 	}
+	/*初始化*/
 	gnet_stats_basic_sync_init(&p->tcfa_bstats);
 	gnet_stats_basic_sync_init(&p->tcfa_bstats_hw);
 	spin_lock_init(&p->tcfa_lock);
 	//指明此action对应的index
 	p->tcfa_index = index;
+	/*指明install,lastuse,firstuse时间*/
 	p->tcfa_tm.install = jiffies;
 	p->tcfa_tm.lastuse = jiffies;
 	p->tcfa_tm.firstuse = 0;
@@ -816,7 +821,7 @@ EXPORT_SYMBOL(tcf_idr_cleanup);
  * index) and return 0.
  */
 
-int tcf_idr_check_alloc(struct tc_action_net *tn, u32 *index,
+int tcf_idr_check_alloc(struct tc_action_net *tn, u32 *index/*入出参，如果index不存在或者未指定，则申请一个可用index*/,
 			struct tc_action **a/*出参，如果有*index对应的action，则非0*/, int bind)
 {
 	struct tcf_idrinfo *idrinfo = tn->idrinfo;
@@ -837,6 +842,7 @@ again:
 		}
 
 		if (p) {
+		    /*action已存在，增加引用计数，如果bind,则增加bind引数*/
 			refcount_inc(&p->tcfa_refcnt);
 			if (bind)
 				atomic_inc(&p->tcfa_bindcnt);

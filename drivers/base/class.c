@@ -161,11 +161,13 @@ int __class_register(struct class *cls, struct lock_class_key *key)
 	cp = kzalloc(sizeof(*cp), GFP_KERNEL);
 	if (!cp)
 		return -ENOMEM;
+
 	//将在cp的klist_devices上添加class,指明class的引用计数增加减少函数
 	klist_init(&cp->klist_devices, klist_class_dev_get, klist_class_dev_put);
 	INIT_LIST_HEAD(&cp->interfaces);
 	kset_init(&cp->glue_dirs);
 	__mutex_init(&cp->mutex, "subsys mutex", key);
+
 	//设置class名称
 	error = kobject_set_name(&cp->subsys.kobj, "%s", cls->name);
 	if (error) {
@@ -226,7 +228,7 @@ static void class_create_release(struct class *cls)
  * Note, the pointer created here is to be destroyed when finished by
  * making a call to class_destroy().
  */
-struct class *__class_create(struct module *owner, const char *name,
+struct class *__class_create(struct module *owner, const char *name/*class名称*/,
 			     struct lock_class_key *key)
 {
 	struct class *cls;

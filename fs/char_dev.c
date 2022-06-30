@@ -27,6 +27,7 @@
 
 static struct kobj_map *cdev_map;
 
+/*保存结构体chrdevs*/
 static DEFINE_MUTEX(chrdevs_lock);
 
 #define CHRDEV_MAJOR_HASH_SIZE 255
@@ -44,8 +45,8 @@ static struct char_device_struct {
 	struct cdev *cdev;		/* will die */
 } *chrdevs[CHRDEV_MAJOR_HASH_SIZE];
 //*chardevs用于保存系统中所有char设备，在chardevs中存放时，采用major_to_index定位到具体
-//的桶，然后按照baseminor进行排序，支持baseminor，minorct合起来指定多个char设备，故在插入时
-//需要检查(baseminor,baseminor+minorct)集合间是否有重叠，如果无重叠，则会按升序均放在冲突链上
+//的桶，然后按照major进行自小及大排序，如果major相等，则按minor范围自小及大排序（需排除重叠）
+//同时chrdevs支持两种分配方式，1静态major;2.动态major
 
 /* index in the above */
 static inline int major_to_index(unsigned major)
@@ -55,7 +56,7 @@ static inline int major_to_index(unsigned major)
 
 #ifdef CONFIG_PROC_FS
 
-//用于显示所有字符设备
+//用于显示指定major的字符设备（名称及其对应的major)
 void chrdev_show(struct seq_file *f, off_t offset)
 {
 	struct char_device_struct *cd;
@@ -71,28 +72,32 @@ void chrdev_show(struct seq_file *f, off_t offset)
 #endif /* CONFIG_PROC_FS */
 
 //获取空闲的major
-//优先占用234-255之间的chardev,如果这段空间被用，则采用hash方式在0-255之间
-//在冲突链上进行查找（分配的id号是从384到511之间）
+//优先占用234-255之间的chardev,如果这段空间被用，则采用hash方式在384-511之间通过
+//冲突链上进行查找（分配的id号在384到511之间）
+//0-234之间为静态分配
 static int find_dynamic_major(void)
 {
 	int i;
 	struct char_device_struct *cd;
 
-	//检查chrdevs中是否存在空的设备位置（234到255之间，采用数组方式存储）
+	//检查chrdevs中是否存在空的设备位置
+	//（在234{CHRDEV_MAJOR_HASH_SIZE}到255{CHRDEV_MAJOR_DYN_END}之间查找，采用数组方式存储）
 	for (i = ARRAY_SIZE(chrdevs)-1; i >= CHRDEV_MAJOR_DYN_END; i--) {
 		if (chrdevs[i] == NULL)
 			return i;
 	}
 
-	//384到511之间的为动态扩展，此时采用hash链方式存储
+	//384（CHRDEV_MAJOR_DYN_EXT_END）到511（CHRDEV_MAJOR_DYN_EXT_START）之间的为动态扩展，
+	//此时采用hash链方式存储
 	for (i = CHRDEV_MAJOR_DYN_EXT_START;
 	     i >= CHRDEV_MAJOR_DYN_EXT_END; i--) {
 		//0-255之间采用的是链式存储
 		for (cd = chrdevs[major_to_index(i)]; cd; cd = cd->next)
 			if (cd->major == i)
-				break;//如果major相同，则跳出
+			    //如果major相同，则跳出，不再此链上继续检查
+				break;
 
-		//查找到了可用的chardev
+		//i位置为空，查找到了可用的chardev
 		if (cd == NULL)
 			return i;
 	}
@@ -108,22 +113,24 @@ static int find_dynamic_major(void)
  * with given major.
  *
  */
-//申请minorct个major的字符设备，同时占用[baseminor,baseminor+minor)之间的minor
+//申请minorct个编号为major的字符设备，同时占用[baseminor,baseminor+minor)之间的minor
 static struct char_device_struct *
-__register_chrdev_region(unsigned int major, unsigned int baseminor,
-			   int minorct, const char *name/*字符设备名称*/)
+__register_chrdev_region(unsigned int major/*字符设备的major*/, unsigned int baseminor/*字符设备的起始minor*/,
+			   int minorct/*字符设备的minor数目*/, const char *name/*字符设备名称*/)
 {
 	struct char_device_struct *cd, *curr, *prev = NULL;
 	int ret;
 	int i;
 
 	if (major >= CHRDEV_MAJOR_MAX) {
+	    /*major超过限制，报错*/
 		pr_err("CHRDEV \"%s\" major requested (%u) is greater than the maximum (%u)\n",
 		       name, major, CHRDEV_MAJOR_MAX-1);
 		return ERR_PTR(-EINVAL);
 	}
 
 	if (minorct > MINORMASK + 1 - baseminor) {
+	    /*baseminor + minorct超过 minor范围，报错*/
 		pr_err("CHRDEV \"%s\" minor range requested (%u-%u) is out of range of maximum range (%u-%u) for a single major\n",
 			name, baseminor, baseminor + minorct - 1, 0, MINORMASK);
 		return ERR_PTR(-EINVAL);
@@ -145,40 +152,45 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 			       name);
 			goto out;
 		}
-		//为其申请一个major
+		//为其申请一个空闲major
 		major = ret;
 	}
 
 	ret = -EBUSY;
-	//计算hash
+
+	//计算hash（静态分配与动态分配均通过此函数可以找到正确的index)
 	i = major_to_index(major);
+
 	//准备将curr存放入chrdevs中（采用hash方式存放）
 	for (curr = chrdevs[i]; curr; prev = curr, curr = curr->next) {
-		//按major进行排序，如果major相等，按baseminor进行排序
-		//如果baseminor小于我们，则检查baseminor＋minorct是否大于我们的baseminor
-		//如果大于我们的baseminor，则我们需要排在其前面(此时不是重叠的吗？后面针对这种报错)
 		if (curr->major < major)
+		    /*链上的major比我们的major小，则尝试下一个（保证链表按major自小向大排序）*/
 			continue;
 
 		if (curr->major > major)
+		    /*链上的major比我们的major大，找到了插入位置，需要插入到curr的前面，先跳出*/
 			break;
 
-		//检查是否发生了范围重叠，如果有重叠，则报错
-		//cp->baseminor+cp->minorct　不能与我们的baseminor＋minorct重复
 		if (curr->baseminor + curr->minorct <= baseminor)
+		    /*链上的minor范围比我们的minor范围小，则尝试下一个
+		     *（保证链表在major相等的情况下，按minor自小向大排序）*/
 			continue;
 
 		if (curr->baseminor >= baseminor + minorct)
+		    /*链上的minor范围比我们的minor范围大，找到了插入位置，需要插入到curr的前面，先跳出*/
 			break;
 
+		/*链表上的minor范围与我们的minor范围有重叠，返回失败*/
 		goto out;
 	}
 
+	/*确认当前申请的内容可插入，先填充cd结构体*/
 	cd->major = major;
 	cd->baseminor = baseminor;
 	cd->minorct = minorct;
 	strlcpy(cd->name, name, sizeof(cd->name));
 
+	/*cd需要插入到curr的前面*/
 	if (!prev) {
 		cd->next = curr;
 		chrdevs[i] = cd;
@@ -187,6 +199,7 @@ __register_chrdev_region(unsigned int major, unsigned int baseminor,
 		prev->next = cd;
 	}
 
+	/*解锁返回*/
 	mutex_unlock(&chrdevs_lock);
 	return cd;
 out:
@@ -195,7 +208,8 @@ out:
 	return ERR_PTR(ret);
 }
 
-//归还major,返回其对应的char_dev
+//归还指定major的major（需保证其之前申请过的minor范围），自chrdevs中移除，但不释放对应的char_dev
+//将其返回
 static struct char_device_struct *
 __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
 {
@@ -228,17 +242,19 @@ __unregister_chrdev_region(unsigned major, unsigned baseminor, int minorct)
  *
  * Return value is zero on success, a negative error code on failure.
  */
-//注册一组chardev设备号(静态注册)
-int register_chrdev_region(dev_t from, unsigned count, const char *name)
+//自from开始，占用一组数量为count个的device number,这种device number可以跨major
+int register_chrdev_region(dev_t from, unsigned count, const char *name/*字符设备名称*/)
 {
 	struct char_device_struct *cd;
 	dev_t to = from + count;
 	dev_t n, next;
 
 	for (n = from; n < to; n = next) {
+	    /*构造下一个dev*/
 		next = MKDEV(MAJOR(n)+1, 0);
 		if (next > to)
 			next = to;
+		/*占用major(n)中所有的其它minor范围*/
 		cd = __register_chrdev_region(MAJOR(n), MINOR(n),
 			       next - n, name);
 		if (IS_ERR(cd))
@@ -266,9 +282,10 @@ fail:
  * chosen dynamically, and returned (along with the first minor number)
  * in @dev.  Returns zero or a negative error code.
  */
-//申请一组（count个）char设备，major动态申请，minor占用[baseminor,baseminor+count)
-int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
-			const char *name)
+//动态申请major编号，并占用一组device number，返回首个device number
+//申请count个char设备，major动态申请，minor占用范围为[baseminor,baseminor+count)
+int alloc_chrdev_region(dev_t *dev/*出参，返回首个可用的device number*/, unsigned baseminor, unsigned count/*字符设备数量*/,
+			const char *name/*字符设备名称*/)
 {
 	//注册char设备(明确传入的major＝0，即major采用动态申请，自baseminor开始，占用count个），并设置dev_t
 	struct char_device_struct *cd;
@@ -301,10 +318,10 @@ int alloc_chrdev_region(dev_t *dev, unsigned baseminor, unsigned count,
  * your module name has only one type of devices it's ok to use e.g. the name
  * of the module here.
  */
-//申请count个name字符设备，并字符设备注册对应的fops
-int __register_chrdev(unsigned int major, unsigned int baseminor,
-		      unsigned int count, const char *name,
-		      const struct file_operations *fops)
+//指定major(动态或静态），申请count个名称为name的字符设备，起始minor为baseminor，并设置字符设备对应的fops
+int __register_chrdev(unsigned int major, unsigned int baseminor/*起始minor*/,
+		      unsigned int count/*要注册的字符设备数量*/, const char *name/*设备名称*/,
+		      const struct file_operations *fops/*字符设备操作集*/)
 {
 	struct char_device_struct *cd;
 	struct cdev *cdev;
@@ -533,7 +550,7 @@ static int exact_lock(dev_t dev, void *data)
  * live immediately.  A negative error code is returned on failure.
  */
 //添加cdev到cdev_map（用于保证字符设备在打开时，进入chrdev_open函数，从而进入到用户定义的ops）
-int cdev_add(struct cdev *p, dev_t dev, unsigned count)
+int cdev_add(struct cdev *p, dev_t dev/*首个device number*/, unsigned count/*device number数量*/)
 {
 	int error;
 

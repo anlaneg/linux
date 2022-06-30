@@ -10,7 +10,7 @@
 
 struct dst_cache {
 	struct dst_cache_pcpu __percpu *cache;
-	unsigned long reset_ts;
+	unsigned long reset_ts;/*reset的时间*/
 };
 
 /**

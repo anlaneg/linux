@@ -129,6 +129,7 @@ int sysctl_mld_qrv __read_mostly = MLD_QRV_DEFAULT;
 	     psf;						\
 	     psf = mc_dereference(psf->sf_next, mc->idev))
 
+/*遍历mca_sources列表*/
 #define for_each_psf_rcu(mc, psf)				\
 	for (psf = rcu_dereference((mc)->mca_sources);		\
 	     psf;						\
@@ -144,6 +145,7 @@ int sysctl_mld_qrv __read_mostly = MLD_QRV_DEFAULT;
 	     mc;						\
 	     mc = mc_dereference(mc->next, idev))
 
+/*遍历idev设备上的组播地址*/
 #define for_each_mc_rcu(idev, mc)				\
 	for (mc = rcu_dereference((idev)->mc_list);             \
 	     mc;                                                \
@@ -1023,23 +1025,29 @@ bool ipv6_chk_mcast_addr(struct net_device *dev, const struct in6_addr *group,
 	if (idev) {
 		for_each_mc_rcu(idev, mc) {
 			if (ipv6_addr_equal(&mc->mca_addr, group))
+			    /*此组播组地址与mc中的地址一致，此时mac不为NULL*/
 				break;
 		}
 		if (mc) {
+		    /*group地址与idev中的组播地址一致，检查源地址*/
 			if (src_addr && !ipv6_addr_any(src_addr)) {
 				struct ip6_sf_list *psf;
 
+				/*遍历mc中的mca_sources，检查是否包含*/
 				for_each_psf_rcu(mc, psf) {
 					if (ipv6_addr_equal(&psf->sf_addr, src_addr))
 						break;
 				}
 				if (psf)
+				    /*psf匹配，检查是否在include列表/不在exclude列表*/
 					rv = psf->sf_count[MCAST_INCLUDE] ||
 						psf->sf_count[MCAST_EXCLUDE] !=
 						mc->mca_sfcount[MCAST_EXCLUDE];
 				else
+				    /*psf没有匹配，检查是否有exclude*/
 					rv = mc->mca_sfcount[MCAST_EXCLUDE] != 0;
 			} else
+			    /*src_addr地址未指定*/
 				rv = true; /* don't filter unspecified source */
 		}
 	}

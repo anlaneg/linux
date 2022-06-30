@@ -53,7 +53,7 @@ struct vduse_virtqueue {
 	spinlock_t irq_lock;
 	struct eventfd_ctx *kickfd;
 	struct vdpa_callback cb;
-	struct work_struct inject;
+	struct work_struct inject;/*中断注入work*/
 	struct work_struct kick;
 };
 
@@ -69,13 +69,15 @@ struct vduse_dev {
 	struct device *dev;
 	struct vduse_virtqueue *vqs;
 	struct vduse_iova_domain *domain;
-	char *name;
+	char *name;/*设备名称*/
 	struct mutex lock;
 	spinlock_t msg_lock;
 	u64 msg_unique;
 	u32 msg_timeout;
 	wait_queue_head_t waitq;
+	/*挂接vduse_dev_msg*/
 	struct list_head send_list;
+	/*挂接vduse_dev_msg，vduse_dev_read_iter负责将send_list移动到recv_list*/
 	struct list_head recv_list;
 	struct vdpa_callback config_cb;
 	struct work_struct inject;
@@ -90,10 +92,10 @@ struct vduse_dev {
 	u32 device_id;
 	u32 vendor_id;
 	u32 generation;
-	u32 config_size;
+	u32 config_size;/*config buffer大小*/
 	void *config;
 	u8 status;
-	u32 vq_num;
+	u32 vq_num;/*vq数目，见vqs*/
 	u32 vq_align;
 };
 
@@ -156,6 +158,7 @@ static struct vduse_dev_msg *vduse_dequeue_msg(struct list_head *head)
 	struct vduse_dev_msg *msg = NULL;
 
 	if (!list_empty(head)) {
+	    /*head不为空，则自head中提取第一个entry,并返回*/
 		msg = list_first_entry(head, struct vduse_dev_msg, list);
 		list_del(&msg->list);
 	}
@@ -312,11 +315,13 @@ static ssize_t vduse_dev_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		if (msg)
 			break;
 
+		/*没有msg,如果flag为非阻塞，则返回eagain*/
 		ret = -EAGAIN;
 		if (file->f_flags & O_NONBLOCK)
 			goto unlock;
 
 		spin_unlock(&dev->msg_lock);
+		/*等待dev->send_list不为空*/
 		ret = wait_event_interruptible_exclusive(dev->waitq,
 					!list_empty(&dev->send_list));
 		if (ret)
@@ -325,6 +330,7 @@ static ssize_t vduse_dev_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		spin_lock(&dev->msg_lock);
 	}
 	spin_unlock(&dev->msg_lock);
+	/*将msg->req复制到to中*/
 	ret = copy_to_iter(&msg->req, size, to);
 	spin_lock(&dev->msg_lock);
 	if (ret != size) {
@@ -358,20 +364,24 @@ static ssize_t vduse_dev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	struct vduse_dev_msg *msg;
 	size_t ret;
 
+	/*from数据复制到resp中*/
 	ret = copy_from_iter(&resp, sizeof(resp), from);
 	if (ret != sizeof(resp))
 		return -EINVAL;
 
+	/*reserved必须为0*/
 	if (!is_mem_zero((const char *)resp.reserved, sizeof(resp.reserved)))
 		return -EINVAL;
 
 	spin_lock(&dev->msg_lock);
+	/*自recv_list中查找request_id对应的msg*/
 	msg = vduse_find_msg(&dev->recv_list, resp.request_id);
 	if (!msg) {
 		ret = -ENOENT;
 		goto unlock;
 	}
 
+	/*将msg->resp复制到resp中*/
 	memcpy(&msg->resp, &resp, sizeof(resp));
 	msg->completed = 1;
 	wake_up(&msg->waitq);
@@ -1244,19 +1254,24 @@ static bool features_is_valid(u64 features)
 
 static bool vduse_validate_config(struct vduse_dev_config *config)
 {
+    /*当前预留字段必须为0*/
 	if (!is_mem_zero((const char *)config->reserved,
 			 sizeof(config->reserved)))
 		return false;
 
+	/*vq_align必须以页对齐*/
 	if (config->vq_align > PAGE_SIZE)
 		return false;
 
+	/*config_size必须以页对齐*/
 	if (config->config_size > PAGE_SIZE)
 		return false;
 
+	/*是否容许的device id*/
 	if (!device_is_allowed(config->device_id))
 		return false;
 
+	/*校验features*/
 	if (!features_is_valid(config->features))
 		return false;
 
@@ -1300,10 +1315,12 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 	int i, ret;
 	struct vduse_dev *dev;
 
+	/*设备是否已存在*/
 	ret = -EEXIST;
 	if (vduse_find_dev(config->name))
 		goto err;
 
+	/*创建dev*/
 	ret = -ENOMEM;
 	dev = vduse_dev_create();
 	if (!dev)
@@ -1338,6 +1355,7 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 		spin_lock_init(&dev->vqs[i].irq_lock);
 	}
 
+	/*为待创建的设备，申请minor*/
 	ret = idr_alloc(&vduse_idr, dev, 1, VDUSE_DEV_MAX, GFP_KERNEL);
 	if (ret < 0)
 		goto err_idr;
@@ -1378,11 +1396,13 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 	mutex_lock(&vduse_lock);
 	switch (cmd) {
 	case VDUSE_GET_API_VERSION:
+	    /*取control的api_version*/
 		ret = put_user(control->api_version, (u64 __user *)argp);
 		break;
 	case VDUSE_SET_API_VERSION: {
 		u64 api_version;
 
+		/*自用户态拿配置的api version*/
 		ret = -EFAULT;
 		if (get_user(api_version, (u64 __user *)argp))
 			break;
@@ -1391,28 +1411,35 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 		if (api_version > VDUSE_API_VERSION)
 			break;
 
+		/*设置用户态要求的api version*/
 		ret = 0;
 		control->api_version = api_version;
 		break;
 	}
 	case VDUSE_CREATE_DEV: {
+	    /*创建vduse设备*/
 		struct vduse_dev_config config;
 		unsigned long size = offsetof(struct vduse_dev_config, config);
 		void *buf;
 
+		/*自用户态读取config结构体*/
 		ret = -EFAULT;
 		if (copy_from_user(&config, argp, size))
 			break;
 
+		/*配置结构体校验*/
 		ret = -EINVAL;
 		if (vduse_validate_config(&config) == false)
 			break;
 
+		/*取用户态提供的config_size*/
 		buf = vmemdup_user(argp + size, config.config_size);
 		if (IS_ERR(buf)) {
 			ret = PTR_ERR(buf);
 			break;
 		}
+
+		/*vduse设备创建*/
 		config.name[VDUSE_NAME_MAX - 1] = '\0';
 		ret = vduse_create_dev(&config, buf, control->api_version);
 		if (ret)
@@ -1420,6 +1447,7 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 		break;
 	}
 	case VDUSE_DESTROY_DEV: {
+	    /*移除vduse设备*/
 		char name[VDUSE_NAME_MAX];
 
 		ret = -EFAULT;
@@ -1470,6 +1498,7 @@ static const struct file_operations vduse_ctrl_fops = {
 	.llseek		= noop_llseek,
 };
 
+/*设备在vduse下的节点名称*/
 static char *vduse_devnode(struct device *dev, umode_t *mode)
 {
 	return kasprintf(GFP_KERNEL, "vduse/%s", dev_name(dev));
@@ -1590,6 +1619,7 @@ static int vduse_init(void)
 	int ret;
 	struct device *dev;
 
+	/*添加vduse class*/
 	vduse_class = class_create(THIS_MODULE, "vduse");
 	if (IS_ERR(vduse_class))
 		return PTR_ERR(vduse_class);
@@ -1597,12 +1627,13 @@ static int vduse_init(void)
 	vduse_class->devnode = vduse_devnode;
 	vduse_class->dev_groups = vduse_dev_groups;
 
+	/*申请字符设备*/
 	ret = alloc_chrdev_region(&vduse_major, 0, VDUSE_DEV_MAX, "vduse");
 	if (ret)
 		goto err_chardev_region;
 
 	/* /dev/vduse/control */
-	cdev_init(&vduse_ctrl_cdev, &vduse_ctrl_fops);
+	cdev_init(&vduse_ctrl_cdev, &vduse_ctrl_fops);/*control设备操作函数*/
 	vduse_ctrl_cdev.owner = THIS_MODULE;
 	ret = cdev_add(&vduse_ctrl_cdev, vduse_major, 1);
 	if (ret)
@@ -1615,7 +1646,7 @@ static int vduse_init(void)
 	}
 
 	/* /dev/vduse/$DEVICE */
-	cdev_init(&vduse_cdev, &vduse_dev_fops);
+	cdev_init(&vduse_cdev, &vduse_dev_fops);/*vduse字符设备操作集*/
 	vduse_cdev.owner = THIS_MODULE;
 	ret = cdev_add(&vduse_cdev, MKDEV(MAJOR(vduse_major), 1),
 		       VDUSE_DEV_MAX - 1);

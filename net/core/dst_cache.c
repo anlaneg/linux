@@ -139,6 +139,7 @@ EXPORT_SYMBOL_GPL(dst_cache_get_ip6);
 
 int dst_cache_init(struct dst_cache *dst_cache, gfp_t gfp)
 {
+    /*申请cache结构*/
 	dst_cache->cache = alloc_percpu_gfp(struct dst_cache_pcpu,
 					    gfp | __GFP_ZERO);
 	if (!dst_cache->cache)

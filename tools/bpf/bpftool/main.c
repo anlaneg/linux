@@ -50,6 +50,7 @@ void usage(void)
 	clean_and_exit(-1);
 }
 
+/*bpftool帮助信息*/
 static int do_help(int argc, char **argv)
 {
 	if (json_output) {

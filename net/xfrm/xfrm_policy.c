@@ -658,6 +658,7 @@ static inline int xfrm_byidx_should_resize(struct net *net, int total)
 	return 0;
 }
 
+/*自给定的net namespace中提取 policy的统计信息*/
 void xfrm_spd_getinfo(struct net *net, struct xfrmk_spdinfo *si)
 {
 	si->incnt = net->xfrm.policy_count[XFRM_POLICY_IN];
@@ -3279,20 +3280,23 @@ xfrm_policy_ok(const struct xfrm_tmpl *tmpl, const struct sec_path *sp, int star
 	return start;
 }
 
+/*解析ipv4,将解析的内容填充到fl中，reverse控制是否进行反转填充*/
 static void
 decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 {
 	const struct iphdr *iph = ip_hdr(skb);
 	int ihl = iph->ihl;/*ip头部长度*/
+	/*指向ip负载起始位置*/
 	u8 *xprth = skb_network_header(skb) + ihl * 4;
 	struct flowi4 *fl4 = &fl->u.ip4;
 	int oif = 0;
 
 	if (skb_dst(skb) && skb_dst(skb)->dev)
-		oif = skb_dst(skb)->dev->ifindex;
+		oif = skb_dst(skb)->dev->ifindex;/*出接口ifindex*/
 
 	memset(fl4, 0, sizeof(struct flowi4));
 	fl4->flowi4_mark = skb->mark;
+	/*按reverse要求，取in ifindex/out ifindex*/
 	fl4->flowi4_oif = reverse ? skb->skb_iif : oif;
 
 	fl4->flowi4_proto = iph->protocol;
@@ -3300,7 +3304,7 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 	fl4->saddr = reverse ? iph->daddr : iph->saddr;
 	fl4->flowi4_tos = iph->tos & ~INET_ECN_MASK;
 
-	/*非分片报文解析*/
+	/*非分片报文,则解析ipv4的上层协议*/
 	if (!ip_is_fragment(iph)) {
 		switch (iph->protocol) {
 		case IPPROTO_UDP:
@@ -3310,6 +3314,7 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 		case IPPROTO_DCCP:
 			if (xprth + 4 < skb->data ||
 			    pskb_may_pull(skb, xprth + 4 - skb->data)) {
+			    /*长度合适的情况下，提取src port,dst port*/
 				__be16 *ports;
 
 				xprth = skb_network_header(skb) + ihl * 4;
@@ -3322,6 +3327,7 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 		case IPPROTO_ICMP:
 			if (xprth + 2 < skb->data ||
 			    pskb_may_pull(skb, xprth + 2 - skb->data)) {
+			    /*长度合适的情况下，提取icmp的type,code*/
 				u8 *icmp;
 
 				xprth = skb_network_header(skb) + ihl * 4;
@@ -3334,6 +3340,7 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 		case IPPROTO_GRE:
 			if (xprth + 12 < skb->data ||
 			    pskb_may_pull(skb, xprth + 12 - skb->data)) {
+			    /*长度合适的情况下，提取gre的key值*/
 				__be16 *greflags;
 				__be32 *gre_hdr;
 
@@ -3355,27 +3362,31 @@ decode_session4(struct sk_buff *skb, struct flowi *fl, bool reverse)
 }
 
 #if IS_ENABLED(CONFIG_IPV6)
+/*解析ipv6,将解析的内容填充到fl中，reverse控制是否进行反转填充*/
 static void
 decode_session6(struct sk_buff *skb, struct flowi *fl, bool reverse)
 {
 	struct flowi6 *fl6 = &fl->u.ip6;
 	int onlyproto = 0;
-	const struct ipv6hdr *hdr = ipv6_hdr(skb);
+	const struct ipv6hdr *hdr = ipv6_hdr(skb);/*ipv6头指针*/
 	u32 offset = sizeof(*hdr);
 	struct ipv6_opt_hdr *exthdr;
+	/*取网络头指针，即ipv6 hdr*/
 	const unsigned char *nh = skb_network_header(skb);
 	u16 nhoff = IP6CB(skb)->nhoff;
 	int oif = 0;
 	u8 nexthdr;
 
 	if (!nhoff)
+	    /*如果cb还未填充nhoff,则自ipv6hdr中取偏移量*/
 		nhoff = offsetof(struct ipv6hdr, nexthdr);
 
-	nexthdr = nh[nhoff];
+	nexthdr = nh[nhoff];/*取l4协议号*/
 
 	if (skb_dst(skb) && skb_dst(skb)->dev)
 		oif = skb_dst(skb)->dev->ifindex;
 
+	/*取mark,oif,saddr,daddr*/
 	memset(fl6, 0, sizeof(struct flowi6));
 	fl6->flowi6_mark = skb->mark;
 	fl6->flowi6_oif = reverse ? skb->skb_iif : oif;
@@ -3396,13 +3407,14 @@ decode_session6(struct sk_buff *skb, struct flowi *fl, bool reverse)
 		case NEXTHDR_HOP:
 		case NEXTHDR_DEST:
 			offset += ipv6_optlen(exthdr);
-			nexthdr = exthdr->nexthdr;
+			nexthdr = exthdr->nexthdr;/*准备循环，继续下一层的头*/
 			break;
 		case IPPROTO_UDP:
 		case IPPROTO_UDPLITE:
 		case IPPROTO_TCP:
 		case IPPROTO_SCTP:
 		case IPPROTO_DCCP:
+		    /*遇到udp,tcp等，提取sport,dstport*/
 			if (!onlyproto && (nh + offset + 4 < skb->data ||
 			     pskb_may_pull(skb, nh + offset + 4 - skb->data))) {
 				__be16 *ports;
@@ -3413,8 +3425,9 @@ decode_session6(struct sk_buff *skb, struct flowi *fl, bool reverse)
 				fl6->fl6_dport = ports[!reverse];
 			}
 			fl6->flowi6_proto = nexthdr;
-			return;
+			return;/*解析成功，直接返回*/
 		case IPPROTO_ICMPV6:
+		    /*遇到icmpv6提取type,code*/
 			if (!onlyproto && (nh + offset + 2 < skb->data ||
 			    pskb_may_pull(skb, nh + offset + 2 - skb->data))) {
 				u8 *icmp;
@@ -3427,6 +3440,7 @@ decode_session6(struct sk_buff *skb, struct flowi *fl, bool reverse)
 			fl6->flowi6_proto = nexthdr;
 			return;
 		case IPPROTO_GRE:
+		    /*遇到gre，提取gre key*/
 			if (!onlyproto &&
 			    (nh + offset + 12 < skb->data ||
 			     pskb_may_pull(skb, nh + offset + 12 - skb->data))) {
@@ -3461,13 +3475,14 @@ decode_session6(struct sk_buff *skb, struct flowi *fl, bool reverse)
 			return;
 #endif
 		default:
-			fl6->flowi6_proto = nexthdr;
+			fl6->flowi6_proto = nexthdr;/*遇到非内置协议，只记录nexthdr*/
 			return;
 		}
 	}
 }
 #endif
 
+/*按协议族，解析skb,填充fl*/
 int __xfrm_decode_session(struct sk_buff *skb, struct flowi *fl,
 			  unsigned int family, int reverse)
 {
@@ -3523,6 +3538,7 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 	ifcb = xfrm_if_get_cb();
 
 	if (ifcb) {
+	    /*如果有ifcb，则自回调中解if_id及net namespace*/
 		xi = ifcb->decode_session(skb, family);
 		if (xi) {
 			if_id = xi->p.if_id;
@@ -3531,8 +3547,8 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 	}
 	rcu_read_unlock();
 
-	reverse = dir & ~XFRM_POLICY_MASK;
-	dir &= XFRM_POLICY_MASK;
+	reverse = dir & ~XFRM_POLICY_MASK;/*是否设置有reverse标记*/
+	dir &= XFRM_POLICY_MASK;/*提取方向信息，例如in,out,fwd*/
 
 	//解析skb的元组信息，并填充到fl
 	if (__xfrm_decode_session(skb, &fl, family, reverse) < 0) {
@@ -3540,6 +3556,7 @@ int __xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb,
 		return 0;
 	}
 
+	/*如果有nf_nat_hook，则调用其对应的decode_session*/
 	nf_nat_decode_session(skb, &fl, family);
 
 	/* First, check used SA against their selectors. */
@@ -4046,6 +4063,7 @@ static int __net_init xfrm_policy_init(struct net *net)
 	for (dir = 0; dir < XFRM_POLICY_MAX; dir++) {
 		struct xfrm_policy_hash *htab;
 
+		/*将policy计数置为0*/
 		net->xfrm.policy_count[dir] = 0;
 		net->xfrm.policy_count[XFRM_POLICY_MAX + dir] = 0;
 		INIT_HLIST_HEAD(&net->xfrm.policy_inexact[dir]);

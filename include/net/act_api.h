@@ -30,7 +30,9 @@ struct tc_action {
 
 	//action对应的index
 	u32				tcfa_index;
+	/*action引用计数*/
 	refcount_t			tcfa_refcnt;
+	/*action绑定次数*/
 	atomic_t			tcfa_bindcnt;
 	/*指明的tc action返回值*/
 	int				tcfa_action;

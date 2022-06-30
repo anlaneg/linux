@@ -1099,10 +1099,12 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir,
 				       struct sk_buff *skb,
 				       unsigned int family, int reverse)
 {
+    /*取skb对应的net namespace*/
 	struct net *net = dev_net(skb->dev);
+	/*reverse为真时，打上XFRM_POLICY_MASK + 1标记*/
 	int ndir = dir | (reverse ? XFRM_POLICY_MASK + 1 : 0);
 
-	/*socket有policy,执行sock policy检查*/
+	/*指明了sk,且socket有policy,执行sock policy检查*/
 	if (sk && sk->sk_policy[XFRM_POLICY_IN])
 		return __xfrm_policy_check(sk, ndir, skb, family);
 
@@ -1111,18 +1113,19 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir,
 	       __xfrm_policy_check(sk, ndir, skb, family);
 }
 
-static inline int xfrm_policy_check(struct sock *sk, int dir, struct sk_buff *skb, unsigned short family)
+static inline int xfrm_policy_check(struct sock *sk, int dir/*策略方向*/, struct sk_buff *skb, unsigned short family/*协议族*/)
 {
 	return __xfrm_policy_check2(sk, dir, skb, family, 0);
 }
 
-//策略检查
+//ipv4策略检查
 static inline int xfrm4_policy_check(struct sock *sk, int dir, struct sk_buff *skb)
 {
 	return xfrm_policy_check(sk, dir, skb, AF_INET);
 }
 
-static inline int xfrm6_policy_check(struct sock *sk, int dir, struct sk_buff *skb)
+//ipv6策略检查
+static inline int xfrm6_policy_check(struct sock *sk, int dir/*策略方向*/, struct sk_buff *skb)
 {
 	return xfrm_policy_check(sk, dir, skb, AF_INET6);
 }
@@ -1542,9 +1545,9 @@ struct xfrmk_sadinfo {
 };
 
 struct xfrmk_spdinfo {
-	u32 incnt;
-	u32 outcnt;
-	u32 fwdcnt;
+	u32 incnt;/*in方向统计*/
+	u32 outcnt;/*out方向统计*/
+	u32 fwdcnt;/*fwd方向统计*/
 	u32 inscnt;
 	u32 outscnt;
 	u32 fwdscnt;

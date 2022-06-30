@@ -378,6 +378,7 @@ static void seg6_update_csum(struct sk_buff *skb)
 			   (__be32 *)addr);
 }
 
+/*srv6报文接收*/
 static int ipv6_srh_rcv(struct sk_buff *skb)
 {
 	struct inet6_skb_parm *opt = IP6CB(skb);
@@ -396,6 +397,7 @@ static int ipv6_srh_rcv(struct sk_buff *skb)
 		accept_seg6 = idev->cnf.seg6_enabled;
 
 	if (!accept_seg6) {
+	    /*如果不容许接收seg6,则丢包,默认不开启*/
 		kfree_skb(skb);
 		return -1;
 	}
@@ -409,6 +411,7 @@ static int ipv6_srh_rcv(struct sk_buff *skb)
 
 looped_back:
 	if (hdr->segments_left == 0) {
+	    /*segments_left为0时，下一层为ipv4/ipv6,则剥掉srv6头，使其重走协议栈*/
 		if (hdr->nexthdr == NEXTHDR_IPV6 || hdr->nexthdr == NEXTHDR_IPV4) {
 			int offset = (hdr->hdrlen + 1) << 3;
 
@@ -422,15 +425,17 @@ looped_back:
 			skb_postpull_rcsum(skb, skb_transport_header(skb),
 					   offset);
 
-			skb_reset_network_header(skb);
+			/*剥掉srv6头，重走协议栈*/
+			skb_reset_network_header(skb);/*定义当前位置为network起始*/
 			skb_reset_transport_header(skb);
 			skb->encapsulation = 0;
 			if (hdr->nexthdr == NEXTHDR_IPV4)
+			    /*如果下层为ipv4,则变更protocol*/
 				skb->protocol = htons(ETH_P_IP);
-			__skb_tunnel_rx(skb, skb->dev, net);
+			__skb_tunnel_rx(skb, skb->dev, net);/*skb所属设备不变*/
 
-			netif_rx(skb);
-			return -1;
+			netif_rx(skb);/*使报文重走协议栈*/
+			return -1;/*报文已入队，返回-1表示丢包*/
 		}
 
 		opt->srcrt = skb_network_header_len(skb);
@@ -440,6 +445,8 @@ looped_back:
 
 		return 1;
 	}
+
+	/*此情况下segments不为0，需要减1后，重新查找*/
 
 	if (hdr->segments_left >= (hdr->hdrlen >> 1)) {
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
@@ -460,7 +467,7 @@ looped_back:
 
 	hdr = (struct ipv6_sr_hdr *)skb_transport_header(skb);
 
-	hdr->segments_left--;
+	hdr->segments_left--;/*移除一层segments*/
 	addr = hdr->segments + hdr->segments_left;
 
 	skb_push(skb, sizeof(struct ipv6hdr));
@@ -468,11 +475,11 @@ looped_back:
 	if (skb->ip_summed == CHECKSUM_COMPLETE)
 		seg6_update_csum(skb);
 
-	ipv6_hdr(skb)->daddr = *addr;
+	ipv6_hdr(skb)->daddr = *addr;/*变更目的地址*/
 
 	skb_dst_drop(skb);
 
-	ip6_route_input(skb);
+	ip6_route_input(skb);/*按目的ip重新执行路由查询*/
 
 	if (skb_dst(skb)->error) {
 		dst_input(skb);
@@ -493,7 +500,7 @@ looped_back:
 		goto looped_back;
 	}
 
-	dst_input(skb);
+	dst_input(skb);/*按路由结果进行投递*/
 
 	return -1;
 }
@@ -694,6 +701,7 @@ looped_back:
 /* called with rcu_read_lock() */
 static int ipv6_rthdr_rcv(struct sk_buff *skb)
 {
+    /*ipv6头部后面遇到routing header,走此流程*/
 	struct inet6_dev *idev = __in6_dev_get(skb->dev);
 	struct inet6_skb_parm *opt = IP6CB(skb);
 	struct in6_addr *addr = NULL;
@@ -715,10 +723,12 @@ static int ipv6_rthdr_rcv(struct sk_buff *skb)
 		return -1;
 	}
 
+	/*拿到rt header*/
 	hdr = (struct ipv6_rt_hdr *)skb_transport_header(skb);
 
 	if (ipv6_addr_is_multicast(&ipv6_hdr(skb)->daddr) ||
 	    skb->pkt_type != PACKET_HOST) {
+	    /*只接收送本机的单播报文*/
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INADDRERRORS);
 		kfree_skb(skb);
 		return -1;
@@ -727,7 +737,7 @@ static int ipv6_rthdr_rcv(struct sk_buff *skb)
 	switch (hdr->type) {
 	case IPV6_SRCRT_TYPE_4:
 		/* segment routing */
-		return ipv6_srh_rcv(skb);
+		return ipv6_srh_rcv(skb);/*srv6头处理*/
 	case IPV6_SRCRT_TYPE_3:
 		/* rpl segment routing */
 		return ipv6_rpl_srh_rcv(skb);
@@ -899,6 +909,7 @@ int __init ipv6_exthdrs_init(void)
 {
 	int ret;
 
+	/*添加routing协议*/
 	ret = inet6_add_protocol(&rthdr_protocol, IPPROTO_ROUTING);
 	if (ret)
 		goto out;

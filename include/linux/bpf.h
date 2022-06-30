@@ -2077,6 +2077,7 @@ static inline bool unprivileged_ebpf_enabled(void)
 void __bpf_free_used_btfs(struct bpf_prog_aux *aux,
 			  struct btf_mod_pair *used_btfs, u32 len);
 
+/*通过fd及prog_type获得bpf_prog*/
 static inline struct bpf_prog *bpf_prog_get_type(u32 ufd,
 						 enum bpf_prog_type type)
 {

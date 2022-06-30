@@ -393,6 +393,7 @@ static inline bool bpf_verifier_log_full(const struct bpf_verifier_log *log)
 #define BPF_LOG_MIN_ALIGNMENT 8U
 #define BPF_LOG_ALIGNMENT 40U
 
+/*是否需要日志输出*/
 static inline bool bpf_verifier_log_needed(const struct bpf_verifier_log *log)
 {
 	return log &&

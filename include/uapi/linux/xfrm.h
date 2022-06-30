@@ -133,9 +133,9 @@ enum {
 };
 
 enum {
-	XFRM_POLICY_IN	= 0,
-	XFRM_POLICY_OUT	= 1,
-	XFRM_POLICY_FWD	= 2,
+	XFRM_POLICY_IN	= 0,/*去本机的报文*/
+	XFRM_POLICY_OUT	= 1,/*自本机出来的报文*/
+	XFRM_POLICY_FWD	= 2,/*转发的报文*/
 	XFRM_POLICY_MASK = 3,
 	XFRM_POLICY_MAX	= 3
 };

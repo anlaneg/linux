@@ -1379,6 +1379,7 @@ int __init ip6_mr_init(void)
 	if (err)
 		goto reg_notif_fail;
 #ifdef CONFIG_IPV6_PIMSM_V2
+	/*注册pim协议处理*/
 	if (inet6_add_protocol(&pim6_protocol, IPPROTO_PIM) < 0) {
 		pr_err("%s: can't add PIM protocol\n", __func__);
 		err = -EAGAIN;

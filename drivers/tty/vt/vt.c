@@ -3587,8 +3587,10 @@ ATTRIBUTE_GROUPS(vt_dev);
 
 int __init vty_init(const struct file_operations *console_fops)
 {
+    /*初始化vc0_cdev*/
 	cdev_init(&vc0_cdev, console_fops);
 	if (cdev_add(&vc0_cdev, MKDEV(TTY_MAJOR, 0), 1) ||
+	        /*创建/dev/vc/0设备*/
 	    register_chrdev_region(MKDEV(TTY_MAJOR, 0), 1, "/dev/vc/0") < 0)
 		panic("Couldn't register /dev/tty0 driver\n");
 	tty0dev = device_create_with_groups(tty_class, NULL,
