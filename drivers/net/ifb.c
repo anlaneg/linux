@@ -48,7 +48,7 @@ struct ifb_q_private {
 	struct net_device	*dev;
 	struct tasklet_struct   ifb_tasklet;
 	int			tasklet_pending;
-	int			txqnum;
+	int			txqnum;/*队列编号*/
 	struct sk_buff_head     rq;
 	struct sk_buff_head     tq;
 	struct ifb_q_stats	rx_stats;
@@ -92,19 +92,24 @@ static void ifb_ri_tasklet(struct tasklet_struct *t)
 	struct netdev_queue *txq;
 	struct sk_buff *skb;
 
+	/*取txp对应的tx队列*/
 	txq = netdev_get_tx_queue(txp->dev, txp->txqnum);
-	skb = skb_peek(&txp->tq);
+	skb = skb_peek(&txp->tq);/*peek看一下，是否有包*/
 	if (!skb) {
+	    /*tq上没有报文*/
 		if (!__netif_tx_trylock(txq))
 			goto resched;
+		/*将rq队列中的内容移动到tq队列*/
 		skb_queue_splice_tail_init(&txp->rq, &txp->tq);
 		__netif_tx_unlock(txq);
 	}
 
+	/*逐个针对tq进行出队*/
 	while ((skb = __skb_dequeue(&txp->tq)) != NULL) {
 		/* Skip tc and netfilter to prevent redirection loop. */
 		skb->redirected = 0;
 #ifdef CONFIG_NET_CLS_ACT
+		/*指明此skb需要跳过tc classify*/
 		skb->tc_skip_classify = 1;
 #endif
 		nf_skip_egress(skb, true);
@@ -112,8 +117,10 @@ static void ifb_ri_tasklet(struct tasklet_struct *t)
 		ifb_update_q_stats(&txp->tx_stats, skb->len);
 
 		rcu_read_lock();
+		/*取设备的inport,并将设备更新为从属于此设备*/
 		skb->dev = dev_get_by_index_rcu(dev_net(txp->dev), skb->skb_iif);
 		if (!skb->dev) {
+		    /*设备已不存在，丢包*/
 			rcu_read_unlock();
 			dev_kfree_skb(skb);
 			txp->dev->stats.tx_dropped++;
@@ -122,11 +129,14 @@ static void ifb_ri_tasklet(struct tasklet_struct *t)
 			break;
 		}
 		rcu_read_unlock();
+		/*更新inport*/
 		skb->skb_iif = txp->dev->ifindex;
 
 		if (!skb->from_ingress) {
+		    /*skb原来来源于egress,走报文发送*/
 			dev_queue_xmit(skb);
 		} else {
+		    /*skb来源于ingress,走报文接收*/
 			skb_pull_rcsum(skb, skb->mac_len);
 			netif_receive_skb(skb);
 		}
@@ -135,10 +145,12 @@ static void ifb_ri_tasklet(struct tasklet_struct *t)
 	if (__netif_tx_trylock(txq)) {
 		skb = skb_peek(&txp->rq);
 		if (!skb) {
+		    /*rq上没有报文了，本烨不再触发*/
 			txp->tasklet_pending = 0;
 			if (netif_tx_queue_stopped(txq))
 				netif_tx_wake_queue(txq);
 		} else {
+		    /*rq上仍有报文，本轮继续触发*/
 			__netif_tx_unlock(txq);
 			goto resched;
 		}
@@ -187,17 +199,19 @@ static int ifb_dev_init(struct net_device *dev)
 	struct ifb_q_private *txp;
 	int i;
 
+	/*申请num_tx_queues个队列*/
 	txp = kcalloc(dev->num_tx_queues, sizeof(*txp), GFP_KERNEL);
 	if (!txp)
 		return -ENOMEM;
 	dp->tx_private = txp;
 	for (i = 0; i < dev->num_tx_queues; i++,txp++) {
-		txp->txqnum = i;
+		txp->txqnum = i;/*队列编号*/
 		txp->dev = dev;
 		__skb_queue_head_init(&txp->rq);
 		__skb_queue_head_init(&txp->tq);
 		u64_stats_init(&txp->rx_stats.sync);
 		u64_stats_init(&txp->tx_stats.sync);
+		/*指明ifb_tasklet的指行函数*/
 		tasklet_setup(&txp->ifb_tasklet, ifb_ri_tasklet);
 		netif_tx_start_queue(netdev_get_tx_queue(dev, i));
 	}
@@ -273,15 +287,17 @@ static void ifb_get_ethtool_stats(struct net_device *dev,
 	}
 }
 
+/*ifb设备操作集*/
 static const struct net_device_ops ifb_netdev_ops = {
 	.ndo_open	= ifb_open,
 	.ndo_stop	= ifb_close,
 	.ndo_get_stats64 = ifb_stats64,
-	.ndo_start_xmit	= ifb_xmit,
+	.ndo_start_xmit	= ifb_xmit,/*设备发包*/
 	.ndo_validate_addr = eth_validate_addr,
 	.ndo_init	= ifb_dev_init,
 };
 
+/*ifb设备ethtool操作集*/
 static const struct ethtool_ops ifb_ethtool_ops = {
 	.get_strings		= ifb_get_strings,
 	.get_sset_count		= ifb_get_sset_count,
@@ -340,9 +356,11 @@ static netdev_tx_t ifb_xmit(struct sk_buff *skb, struct net_device *dev)
 	struct ifb_dev_private *dp = netdev_priv(dev);
 	struct ifb_q_private *txp = dp->tx_private + skb_get_queue_mapping(skb);
 
+	/*更新计数*/
 	ifb_update_q_stats(&txp->rx_stats, skb->len);
 
 	if (!skb->redirected || !skb->skb_iif) {
+	    /*无inport或者报文非redirected过来的，则丢包*/
 		dev_kfree_skb(skb);
 		dev->stats.rx_dropped++;
 		return NETDEV_TX_OK;
@@ -351,9 +369,11 @@ static netdev_tx_t ifb_xmit(struct sk_buff *skb, struct net_device *dev)
 	if (skb_queue_len(&txp->rq) >= dev->tx_queue_len)
 		netif_tx_stop_queue(netdev_get_tx_queue(dev, txp->txqnum));
 
+	/*报文加入到rq队列*/
 	__skb_queue_tail(&txp->rq, skb);
 	if (!txp->tasklet_pending) {
 		txp->tasklet_pending = 1;
+		/*促使ifb_tasklet运行*/
 		tasklet_schedule(&txp->ifb_tasklet);
 	}
 
@@ -404,12 +424,14 @@ static int __init ifb_init_one(int index)
 	struct net_device *dev_ifb;
 	int err;
 
+	/*创建ifb设备*/
 	dev_ifb = alloc_netdev(sizeof(struct ifb_dev_private), "ifb%d",
 			       NET_NAME_UNKNOWN, ifb_setup);
 
 	if (!dev_ifb)
 		return -ENOMEM;
 
+	/*注册ifb设备*/
 	dev_ifb->rtnl_link_ops = &ifb_link_ops;
 	err = register_netdevice(dev_ifb);
 	if (err < 0)
@@ -428,10 +450,14 @@ static int __init ifb_init_module(void)
 
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock();
+	/*为ifb注册link接口
+	 * （今天从顺议练摩托车坐公交车回来路上看了微信公众号发现了这个模块，
+	 * 所以在机器洗衣服间隔读了这个模块，挺有意思）*/
 	err = __rtnl_link_register(&ifb_link_ops);
 	if (err < 0)
 		goto out;
 
+	/*初始化指定数量的ifb接口*/
 	for (i = 0; i < numifbs && !err; i++) {
 		err = ifb_init_one(i);
 		cond_resched();
