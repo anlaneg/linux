@@ -156,6 +156,7 @@ tunnel_key_copy_vxlan_opt(const struct nlattr *nla, void *dst, int dst_len,
 	}
 
 	if (dst) {
+	    /*设置metadata*/
 		struct vxlan_metadata *md = dst;
 
 		md->gbp = nla_get_u32(tb[TCA_TUNNEL_KEY_ENC_OPT_VXLAN_GBP]);
@@ -230,7 +231,7 @@ static int tunnel_key_copy_opts(const struct nlattr *nla, u8 *dst,
 		return err;
 
 	nla_for_each_attr(attr, head, len, rem) {
-		switch (nla_type(attr)) {
+		switch (nla_type(attr)/*隧道类型*/) {
 		case TCA_TUNNEL_KEY_ENC_OPTS_GENEVE:
 			if (type && type != TUNNEL_GENEVE_OPT) {
 				NL_SET_ERR_MSG(extack, "Duplicate type for geneve options");
@@ -253,6 +254,7 @@ static int tunnel_key_copy_opts(const struct nlattr *nla, u8 *dst,
 			break;
 		case TCA_TUNNEL_KEY_ENC_OPTS_VXLAN:
 			if (type) {
+			    /*重复设置vxlan配置*/
 				NL_SET_ERR_MSG(extack, "Duplicate type for vxlan options");
 				return -EINVAL;
 			}
@@ -363,7 +365,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			   struct netlink_ext_ack *extack)
 {
 	struct tc_action_net *tn = net_generic(net, tunnel_key_net_id);
-	bool bind = act_flags & TCA_ACT_FLAGS_BIND;
+	bool bind = act_flags & TCA_ACT_FLAGS_BIND;/*指明是否绑定对应的action*/
 	struct nlattr *tb[TCA_TUNNEL_KEY_MAX + 1];
 	struct tcf_tunnel_key_params *params_new;
 	struct metadata_dst *metadata = NULL;
@@ -385,6 +387,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	/*解析netlink消息*/
 	err = nla_parse_nested_deprecated(tb, TCA_TUNNEL_KEY_MAX, nla,
 					  tunnel_key_policy, extack);
 	if (err < 0) {
@@ -398,6 +401,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		return -EINVAL;
 	}
 
+	/*提取tunnel参数*/
 	parm = nla_data(tb[TCA_TUNNEL_KEY_PARMS]);
 	index = parm->index;
 	err = tcf_idr_check_alloc(tn, &index, a, bind);
@@ -405,14 +409,15 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		return err;
 	exists = err;
 	if (exists && bind)
+	    /*如果index存在，则指明了bind，则直接返回*/
 		return 0;
 
 	switch (parm->t_action) {
-	case TCA_TUNNEL_KEY_ACT_RELEASE:
+	case TCA_TUNNEL_KEY_ACT_RELEASE/*decap情况*/:
 		break;
-	case TCA_TUNNEL_KEY_ACT_SET:
-		//如果是set action,则使用netlink中包含的信息，填充
+	case TCA_TUNNEL_KEY_ACT_SET/*encap情况*/:
 		if (tb[TCA_TUNNEL_KEY_ENC_KEY_ID]) {
+		    /*设置tunnel key*/
 			__be32 key32;
 
 			key32 = nla_get_be32(tb[TCA_TUNNEL_KEY_ENC_KEY_ID]);
@@ -423,12 +428,15 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		flags |= TUNNEL_CSUM;
 		if (tb[TCA_TUNNEL_KEY_NO_CSUM] &&
 		    nla_get_u8(tb[TCA_TUNNEL_KEY_NO_CSUM]))
+		    /*指明不进行checksum更新*/
 			flags &= ~TUNNEL_CSUM;
 
 		if (tb[TCA_TUNNEL_KEY_ENC_DST_PORT])
+		    /*指明目的端口*/
 			dst_port = nla_get_be16(tb[TCA_TUNNEL_KEY_ENC_DST_PORT]);
 
 		if (tb[TCA_TUNNEL_KEY_ENC_OPTS]) {
+		    /*获知选项长度*/
 			opts_len = tunnel_key_get_opts_len(tb[TCA_TUNNEL_KEY_ENC_OPTS],
 							   extack);
 			if (opts_len < 0) {
@@ -437,9 +445,11 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			}
 		}
 
+		/*取tos*/
 		tos = 0;
 		if (tb[TCA_TUNNEL_KEY_ENC_TOS])
 			tos = nla_get_u8(tb[TCA_TUNNEL_KEY_ENC_TOS]);
+		/*取ttl*/
 		ttl = 0;
 		if (tb[TCA_TUNNEL_KEY_ENC_TTL])
 			ttl = nla_get_u8(tb[TCA_TUNNEL_KEY_ENC_TTL]);
@@ -486,7 +496,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 			goto release_tun_meta;
 #endif
 
-		//指定了选项长度，则设置tunnel选项
+		//设置tunnel选项
 		if (opts_len) {
 			ret = tunnel_key_opts_set(tb[TCA_TUNNEL_KEY_ENC_OPTS],
 						  &metadata->u.tun_info,
@@ -498,13 +508,14 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		metadata->u.tun_info.mode |= IP_TUNNEL_INFO_TX;
 		break;
 	default:
+	    /*不认识的action,报错*/
 		NL_SET_ERR_MSG(extack, "Unknown tunnel key action");
 		ret = -EINVAL;
 		goto err_out;
 	}
 
 	if (!exists) {
-		//创建action
+		//执行创建action
 		ret = tcf_idr_create_from_flags(tn, index, est, a,
 						&act_tunnel_key_ops, bind,
 						act_flags);
@@ -520,7 +531,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		goto release_tun_meta;
 	}
 
-	//对action进行检查
+	//对ctrl action进行检查
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0) {
 		ret = err;
@@ -867,6 +878,7 @@ static struct tc_action_ops act_tunnel_key_ops = {
 
 static __net_init int tunnel_key_init_net(struct net *net)
 {
+    /*取net namespace中此action结构体*/
 	struct tc_action_net *tn = net_generic(net, tunnel_key_net_id);
 
 	return tc_action_net_init(net, tn, &act_tunnel_key_ops);
@@ -884,6 +896,7 @@ static struct pernet_operations tunnel_key_net_ops = {
 	.size = sizeof(struct tc_action_net),
 };
 
+/*注册tunnel key对应的ops*/
 static int __init tunnel_key_init_module(void)
 {
 	return tcf_register_action(&act_tunnel_key_ops, &tunnel_key_net_ops);

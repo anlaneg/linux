@@ -100,6 +100,7 @@ int lwtunnel_encap_del_ops(const struct lwtunnel_encap_ops *ops,
 	    encap_type > LWTUNNEL_ENCAP_MAX)
 		return -ERANGE;
 
+	/*将此encap type移除*/
 	ret = (cmpxchg((const struct lwtunnel_encap_ops **)
 		       &lwtun_encaps[encap_type],
 		       ops, NULL) == ops) ? 0 : -1;

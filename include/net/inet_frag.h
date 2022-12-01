@@ -99,13 +99,16 @@ struct inet_frag_queue {
 };
 
 struct inet_frags {
+    /*分片cache大小*/
 	unsigned int		qsize;
 
 	void			(*constructor)(struct inet_frag_queue *q,
 					       const void *arg);
 	void			(*destructor)(struct inet_frag_queue *);
 	void			(*frag_expire)(struct timer_list *t);
+	/*分片cache*/
 	struct kmem_cache	*frags_cachep;
+	/*分片cache名称*/
 	const char		*frags_cache_name;
 	struct rhashtable_params rhash_params;
 	refcount_t		refcnt;

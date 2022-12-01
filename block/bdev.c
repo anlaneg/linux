@@ -736,6 +736,7 @@ static void blkdev_put_part(struct block_device *part, fmode_t mode)
 	blkdev_put_whole(whole, mode);
 }
 
+/*由dev获得块设备*/
 struct block_device *blkdev_get_no_open(dev_t dev)
 {
 	struct block_device *bdev;
@@ -800,10 +801,11 @@ struct block_device *blkdev_get_by_dev(dev_t dev, fmode_t mode, void *holder)
 	if (ret)
 		return ERR_PTR(ret);
 
+	/*取对应的块设备*/
 	bdev = blkdev_get_no_open(dev);
 	if (!bdev)
 		return ERR_PTR(-ENXIO);
-	disk = bdev->bd_disk;
+	disk = bdev->bd_disk;/*取此块设备的gernal disk*/
 
 	if (mode & FMODE_EXCL) {
 		ret = bd_prepare_to_claim(bdev, holder);
@@ -876,7 +878,7 @@ EXPORT_SYMBOL(blkdev_get_by_dev);
  * RETURNS:
  * Reference to the block_device on success, ERR_PTR(-errno) on failure.
  */
-struct block_device *blkdev_get_by_path(const char *path, fmode_t mode,
+struct block_device *blkdev_get_by_path(const char *path/*块设备名称*/, fmode_t mode,
 					void *holder)
 {
 	struct block_device *bdev;
@@ -888,6 +890,7 @@ struct block_device *blkdev_get_by_path(const char *path, fmode_t mode,
 	if (error)
 		return ERR_PTR(error);
 
+	/*取此path对应块设备*/
 	bdev = blkdev_get_by_dev(dev, mode, holder);
 	if (!IS_ERR(bdev) && (mode & FMODE_WRITE) && bdev_read_only(bdev)) {
 		blkdev_put(bdev, mode);

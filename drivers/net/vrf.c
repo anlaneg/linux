@@ -115,6 +115,7 @@ struct net_vrf {
 #if IS_ENABLED(CONFIG_IPV6)
 	struct fib6_table	*fib6_table;
 #endif
+	/*此vrf对应的table id*/
 	u32                     tb_id;
 
 	struct list_head	me_list;   /* entry in vrf_map_elem */
@@ -612,6 +613,7 @@ static netdev_tx_t is_ip_tx_frame(struct sk_buff *skb, struct net_device *dev)
 static netdev_tx_t vrf_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	int len = skb->len;
+	/*完成报文发送*/
 	netdev_tx_t ret = is_ip_tx_frame(skb, dev);
 
 	if (likely(ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN)) {
@@ -1122,11 +1124,13 @@ static int do_vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 	 * The vrf device acts as the loopback for the vrf.
 	 */
 	if (port_dev == dev_net(dev)->loopback_dev) {
+	    /*不容许loopback为salve*/
 		NL_SET_ERR_MSG(extack,
 			       "Can not enslave loopback device to a VRF");
 		return -EOPNOTSUPP;
 	}
 
+	/*标记此设备为l3mdev_slave*/
 	port_dev->priv_flags |= IFF_L3MDEV_SLAVE;
 	ret = netdev_master_upper_dev_link(port_dev, dev, NULL, NULL, extack);
 	if (ret < 0)
@@ -1142,7 +1146,7 @@ err:
 }
 
 /*向vrf中添加slave设备*/
-static int vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
+static int vrf_add_slave(struct net_device *dev/*master设备*/, struct net_device *port_dev,
 			 struct netlink_ext_ack *extack)
 {
 	if (netif_is_l3_master(port_dev)) {
@@ -1156,6 +1160,7 @@ static int vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 	if (netif_is_l3_slave(port_dev))
 		return -EINVAL;
 
+	/*向dev设备中添加slave设备*/
 	return do_vrf_add_slave(dev, port_dev, extack);
 }
 
@@ -1224,7 +1229,7 @@ static const struct net_device_ops vrf_netdev_ops = {
 	//vrf设备发包函数
 	.ndo_start_xmit		= vrf_xmit,
 	.ndo_set_mac_address	= eth_mac_addr,
-	.ndo_get_stats64	= vrf_get_stats64,
+	.ndo_get_stats64	= vrf_get_stats64,/*接口通计信息*/
 	.ndo_add_slave		= vrf_add_slave,
 	.ndo_del_slave		= vrf_del_slave,
 };
@@ -1501,6 +1506,7 @@ static struct sk_buff *vrf_l3_rcv(struct net_device *vrf_dev,
 {
 	switch (proto) {
 	case AF_INET:
+	    /*vrf ipv4收包*/
 		return vrf_ip_rcv(vrf_dev, skb);
 	case AF_INET6:
 		return vrf_ip6_rcv(vrf_dev, skb);
@@ -1545,7 +1551,7 @@ static struct dst_entry *vrf_link_scope_lookup(const struct net_device *dev,
 
 static const struct l3mdev_ops vrf_l3mdev_ops = {
 	.l3mdev_fib_table	= vrf_fib_table,
-	.l3mdev_l3_rcv		= vrf_l3_rcv,
+	.l3mdev_l3_rcv		= vrf_l3_rcv,/*l3mdev收包*/
 	.l3mdev_l3_out		= vrf_l3_out,
 #if IS_ENABLED(CONFIG_IPV6)
 	.l3mdev_link_scope_lookup = vrf_link_scope_lookup,
@@ -1684,7 +1690,7 @@ static void vrf_setup(struct net_device *dev)
 
 	/* Initialize the device structure. */
 	dev->netdev_ops = &vrf_netdev_ops;//设置设备的操作集
-	dev->l3mdev_ops = &vrf_l3mdev_ops;
+	dev->l3mdev_ops = &vrf_l3mdev_ops;/*设置vrf的l3mdev的ops*/
 	dev->ethtool_ops = &vrf_ethtool_ops;
 	dev->needs_free_netdev = true;
 

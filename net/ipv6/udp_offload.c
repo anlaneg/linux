@@ -115,6 +115,7 @@ out:
 static struct sock *udp6_gro_lookup_skb(struct sk_buff *skb, __be16 sport,
 					__be16 dport)
 {
+	/*gro skb查询udp socket表*/
 	const struct ipv6hdr *iph = skb_gro_network_header(skb);
 
 	return __udp6_lib_lookup(dev_net(skb->dev), &iph->saddr, sport,
@@ -147,6 +148,7 @@ skip:
 	NAPI_GRO_CB(skb)->is_ipv6 = 1;
 
 	if (static_branch_unlikely(&udpv6_encap_needed_key))
+		/*以上开关打开时，查询此udp对应的socket*/
 		sk = udp6_gro_lookup_skb(skb, uh->source, uh->dest);
 
 	pp = udp_gro_receive(head, skb, uh, sk);

@@ -37,7 +37,7 @@ struct seg6_pernet_data {
 	struct mutex lock;
 	struct in6_addr __rcu *tun_src;/*seg6对应的源地址*/
 #ifdef CONFIG_IPV6_SEG6_HMAC
-	struct rhashtable hmac_infos;
+	struct rhashtable hmac_infos;/*存储hmac*/
 #endif
 };
 

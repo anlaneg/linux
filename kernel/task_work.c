@@ -159,6 +159,7 @@ void task_work_run(void)
 		raw_spin_lock_irq(&task->pi_lock);
 		raw_spin_unlock_irq(&task->pi_lock);
 
+		/*遍历执行task_works指明的一组work*/
 		do {
 			next = work->next;
 			work->func(work);

@@ -64,7 +64,8 @@ static int dir_commit_chunk(struct page *page, loff_t pos, unsigned len)
 	return err;
 }
 
-static struct page * dir_get_page(struct inode *dir, unsigned long n)
+/*读取目录对应的inode的第n号页，并返回其对应的内容*/
+static struct page * dir_get_page(struct inode *dir, unsigned long n/*页序号*/)
 {
 	struct address_space *mapping = dir->i_mapping;
 	struct page *page = read_mapping_page(mapping, n, NULL);
@@ -84,17 +85,18 @@ static int minix_readdir(struct file *file, struct dir_context *ctx)
 	struct super_block *sb = inode->i_sb;
 	struct minix_sb_info *sbi = minix_sb(sb);
 	unsigned chunk_size = sbi->s_dirsize;
-	unsigned long npages = dir_pages(inode);
+	unsigned long npages = dir_pages(inode);/*目录占有多少page*/
 	unsigned long pos = ctx->pos;
 	unsigned offset;
 	unsigned long n;
 
 	ctx->pos = pos = ALIGN(pos, chunk_size);
 	if (pos >= inode->i_size)
+	    /*pos超过了inode大小，返回0*/
 		return 0;
 
-	offset = pos & ~PAGE_MASK;
-	n = pos >> PAGE_SHIFT;
+	offset = pos & ~PAGE_MASK;/*pos在页中的偏移*/
+	n = pos >> PAGE_SHIFT;/*pos对应的页号*/
 
 	for ( ; n < npages; n++, offset = 0) {
 		char *p, *kaddr, *limit;
@@ -103,7 +105,7 @@ static int minix_readdir(struct file *file, struct dir_context *ctx)
 		if (IS_ERR(page))
 			continue;
 		kaddr = (char *)page_address(page);
-		p = kaddr+offset;
+		p = kaddr+offset;/*指向对应的dirent*/
 		limit = kaddr + minix_last_byte(inode, n) - chunk_size;
 		for ( ; p <= limit; p = minix_next_entry(p, sbi)) {
 			const char *name;
@@ -119,13 +121,14 @@ static int minix_readdir(struct file *file, struct dir_context *ctx)
 			}
 			if (inumber) {
 				unsigned l = strnlen(name, sbi->s_namelen);
+				/*调用ctx->actor函数*/
 				if (!dir_emit(ctx, name, l,
 					      inumber, DT_UNKNOWN)) {
 					dir_put_page(page);
 					return 0;
 				}
 			}
-			ctx->pos += chunk_size;
+			ctx->pos += chunk_size;/*增加pos*/
 		}
 		dir_put_page(page);
 	}
@@ -136,7 +139,9 @@ static inline int namecompare(int len, int maxlen,
 	const char * name, const char * buffer)
 {
 	if (len < maxlen && buffer[len])
+	    /*长度在范围，但内容不匹配*/
 		return 0;
+	/*内容匹配成功*/
 	return !memcmp(name, buffer, len);
 }
 
@@ -150,12 +155,17 @@ static inline int namecompare(int len, int maxlen,
  */
 minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 {
+    /*dentry名称*/
 	const char * name = dentry->d_name.name;
+	/*dentry名称长度*/
 	int namelen = dentry->d_name.len;
+	/*取父目录对应的inode*/
 	struct inode * dir = d_inode(dentry->d_parent);
+	/*取它对应的super_block*/
 	struct super_block * sb = dir->i_sb;
 	struct minix_sb_info * sbi = minix_sb(sb);
 	unsigned long n;
+	/*取目录大小需要多少个页*/
 	unsigned long npages = dir_pages(dir);
 	struct page *page = NULL;
 	char *p;
@@ -167,6 +177,7 @@ minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 	for (n = 0; n < npages; n++) {
 		char *kaddr, *limit;
 
+		/*取此目录的n号页*/
 		page = dir_get_page(dir, n);
 		if (IS_ERR(page))
 			continue;
@@ -174,6 +185,7 @@ minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 		kaddr = (char*)page_address(page);
 		limit = kaddr + minix_last_byte(dir, n) - sbi->s_dirsize;
 		for (p = kaddr; p <= limit; p = minix_next_entry(p, sbi)) {
+		    /*取目录下成员名称及inumber*/
 			if (sbi->s_version == MINIX_V3) {
 				minix3_dirent *de3 = (minix3_dirent *)p;
 				namx = de3->name;
@@ -184,7 +196,9 @@ minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 				inumber = de->inode;
 			}
 			if (!inumber)
+			    /*忽略没有ino的节点*/
 				continue;
+			/*要查询的namx与此目录下的文件de->name匹配，跳found*/
 			if (namecompare(namelen, sbi->s_namelen, name, namx))
 				goto found;
 		}
@@ -193,18 +207,22 @@ minix_dirent *minix_find_entry(struct dentry *dentry, struct page **res_page)
 	return NULL;
 
 found:
-	*res_page = page;
-	return (minix_dirent *)p;
+	*res_page = page;/*在此页命中*/
+	return (minix_dirent *)p;/*返回对应的dirent指针*/
 }
 
 int minix_add_link(struct dentry *dentry, struct inode *inode)
 {
+    /*取dentry父节点*/
 	struct inode *dir = d_inode(dentry->d_parent);
+	/*dentry节点名称*/
 	const char * name = dentry->d_name.name;
+	/*本节点名称长度*/
 	int namelen = dentry->d_name.len;
 	struct super_block * sb = dir->i_sb;
 	struct minix_sb_info * sbi = minix_sb(sb);
 	struct page *page = NULL;
+	/*此目录中占用多少page*/
 	unsigned long npages = dir_pages(dir);
 	unsigned long n;
 	char *kaddr, *p;
@@ -223,6 +241,7 @@ int minix_add_link(struct dentry *dentry, struct inode *inode)
 	for (n = 0; n <= npages; n++) {
 		char *limit, *dir_end;
 
+		/*读取目录的第n个页*/
 		page = dir_get_page(dir, n);
 		err = PTR_ERR(page);
 		if (IS_ERR(page))
@@ -375,6 +394,7 @@ int minix_empty_dir(struct inode * inode)
 
 		kaddr = (char *)page_address(page);
 		limit = kaddr + minix_last_byte(inode, i) - sbi->s_dirsize;
+		/*遍历dirent*/
 		for (p = kaddr; p <= limit; p = minix_next_entry(p, sbi)) {
 			if (sbi->s_version == MINIX_V3) {
 				minix3_dirent *de3 = (minix3_dirent *)p;
@@ -386,16 +406,21 @@ int minix_empty_dir(struct inode * inode)
 				inumber = de->inode;
 			}
 
+			/*dirent的inode不为0*/
 			if (inumber != 0) {
 				/* check for . and .. */
 				if (name[0] != '.')
+				    /*内容名称为以'.'开头*/
 					goto not_empty;
 				if (!name[1]) {
+				    /*遇到名称为'.'的文件，inumber不为自身，则为非空*/
 					if (inumber != inode->i_ino)
 						goto not_empty;
 				} else if (name[1] != '.')
+				    /*遇到隐藏文件，则为非空*/
 					goto not_empty;
 				else if (name[2])
+				    /*遇到'..??'文件，则为非空*/
 					goto not_empty;
 			}
 		}
@@ -451,6 +476,7 @@ struct minix_dir_entry * minix_dotdot (struct inode *dir, struct page **p)
 ino_t minix_inode_by_name(struct dentry *dentry)
 {
 	struct page *page;
+	/*取dentry对应的dir_entry，并返回对应指针*/
 	struct minix_dir_entry *de = minix_find_entry(dentry, &page);
 	ino_t res = 0;
 
@@ -459,6 +485,7 @@ ino_t minix_inode_by_name(struct dentry *dentry)
 		struct inode *inode = mapping->host;
 		struct minix_sb_info *sbi = minix_sb(inode->i_sb);
 
+		/*取此dentry对应的inode编号*/
 		if (sbi->s_version == MINIX_V3)
 			res = ((minix3_dirent *) de)->inode;
 		else

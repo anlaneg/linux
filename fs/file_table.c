@@ -131,6 +131,7 @@ static int __init init_fs_stat_sysctls(void)
 fs_initcall(init_fs_stat_sysctls);
 #endif
 
+/*创建一个file结构体*/
 static struct file *__alloc_file(int flags, const struct cred *cred)
 {
 	struct file *f;

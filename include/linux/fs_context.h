@@ -27,6 +27,7 @@ struct vfsmount;
 struct path;
 
 enum fs_context_purpose {
+    /*申请fs_context为mount*/
 	FS_CONTEXT_FOR_MOUNT,		/* New superblock for explicit mount */
 	FS_CONTEXT_FOR_SUBMOUNT,	/* New superblock for automatic submount */
 	FS_CONTEXT_FOR_RECONFIGURE,	/* Superblock reconfiguration (remount) */
@@ -90,7 +91,7 @@ struct p_log {
  * See Documentation/filesystems/mount_api.rst
  */
 struct fs_context {
-    //可由各fs定制的操作集
+    //可由各fs定制的操作集(默认legacy_fs_context_ops）
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	//文件系统类型
@@ -105,6 +106,7 @@ struct fs_context {
 	struct net		*net_ns;	/* The network namespace for this mount */
 	const struct cred	*cred;		/* The mounter's credentials */
 	struct p_log		log;		/* Logging buffer */
+	/*source提供的数值*/
 	const char		*source;	/* The source name (eg. dev path) */
 	void			*security;	/* Linux S&M options */
 	void			*s_fs_info;	/* Proposed s_fs_info */
@@ -112,6 +114,7 @@ struct fs_context {
 	unsigned int		sb_flags_mask;	/* Superblock flags that were changed */
 	unsigned int		s_iflags;	/* OR'd with sb->s_iflags */
 	unsigned int		lsm_flags;	/* Information flags from the fs to the LSM */
+	/*申请此结构的目的*/
 	enum fs_context_purpose	purpose:8;
 	enum fs_context_phase	phase:8;	/* The phase the context is in */
 	//指明是否有必要调用ops->free回调，用于释放fs_context中fs定制的私有数据
@@ -130,6 +133,7 @@ struct fs_context_operations {
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
 	//如果此回调不提供，则使用generic_parse_monolithic,用于解析data数据
 	int (*parse_monolithic)(struct fs_context *fc, void *data);
+	/*获取并填充文件系统的root节点*/
 	int (*get_tree)(struct fs_context *fc);
 	int (*reconfigure)(struct fs_context *fc);
 };

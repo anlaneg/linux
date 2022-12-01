@@ -1422,7 +1422,7 @@ void kthread_use_mm(struct mm_struct *mm)
 		mmgrab(mm);
 		tsk->active_mm = mm;
 	}
-	tsk->mm = mm;
+	tsk->mm = mm;/*引用给定的mm*/
 	membarrier_update_current_mm(mm);
 	switch_mm_irqs_off(active_mm, mm, tsk);
 	local_irq_enable();

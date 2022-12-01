@@ -58,7 +58,9 @@ struct genl_family {
 	u8			netnsok:1;
 	/*是否支持并行操作，如果不支持，则会进行genetlink消息加锁*/
 	u8			parallel_ops:1;
+	/*ops数组结构体长度*/
 	u8			n_ops;
+	/*small数组结构体长度*/
 	u8			n_small_ops;
 	//组播组数目（mcgrps结sqqcwsg大小）
 	u8			n_mcgrps;

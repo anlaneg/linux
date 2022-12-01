@@ -121,6 +121,7 @@ ipv6frag_thdr_truncated(struct sk_buff *skb, int start, u8 *nexthdrp)
 
 	offset = ipv6_skip_exthdr(skb, start, &nexthdr, &frag_off);
 	if (offset < 0 || (frag_off & htons(IP6_OFFSET)))
+	    /*检查出错，或非首片*/
 		return false;
 	switch (nexthdr) {
 	case NEXTHDR_TCP:
@@ -136,6 +137,7 @@ ipv6frag_thdr_truncated(struct sk_buff *skb, int start, u8 *nexthdrp)
 		offset += 1;
 	}
 	if (offset > skb->len)
+	    /*确认报文内容长度不足*/
 		return true;
 	return false;
 }

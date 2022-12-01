@@ -492,10 +492,12 @@ struct blk_mq_tag_set {
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
 	unsigned int		nr_maps;
 	const struct blk_mq_ops	*ops;
+	/*队列数目*/
 	unsigned int		nr_hw_queues;
 	unsigned int		queue_depth;
 	unsigned int		reserved_tags;
 	unsigned int		cmd_size;
+	/*对应的numa节点*/
 	int			numa_node;
 	unsigned int		timeout;
 	unsigned int		flags;
@@ -516,7 +518,7 @@ struct blk_mq_tag_set {
  * @last: If it is the last request in the queue.
  */
 struct blk_mq_queue_data {
-	struct request *rq;
+	struct request *rq;/*请求*/
 	bool last;
 };
 
@@ -744,6 +746,7 @@ static inline struct request *blk_mq_tag_to_rq(struct blk_mq_tags *tags,
 					       unsigned int tag)
 {
 	if (tag < tags->nr_tags) {
+	    /*tag小于tags->nr_tags,表示在范围以内，返回此tag对应的request*/
 		prefetch(tags->rqs[tag]);
 		return tags->rqs[tag];
 	}
@@ -899,6 +902,7 @@ static inline bool blk_should_fake_timeout(struct request_queue *q)
  */
 static inline struct request *blk_mq_rq_from_pdu(void *pdu)
 {
+    /*由pdu地址获取request结构体*/
 	return pdu - sizeof(struct request);
 }
 
@@ -913,6 +917,7 @@ static inline struct request *blk_mq_rq_from_pdu(void *pdu)
  */
 static inline void *blk_mq_rq_to_pdu(struct request *rq)
 {
+    /*由request获得pdu*/
 	return rq + 1;
 }
 

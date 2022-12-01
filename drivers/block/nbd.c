@@ -50,6 +50,7 @@
 static DEFINE_IDR(nbd_index_idr);
 static DEFINE_MUTEX(nbd_index_mutex);
 static struct workqueue_struct *nbd_del_wq;
+/*系统中总nbd设备数目*/
 static int nbd_total_devices = 0;
 
 struct nbd_sock {
@@ -58,6 +59,7 @@ struct nbd_sock {
 	struct request *pending;
 	int sent;
 	bool dead;
+	/*如果此socket失败，处于dead状态，则回退到此index指向的nbd_sock*/
 	int fallback_index;
 	int cookie;
 };
@@ -89,15 +91,16 @@ struct link_dead_args {
 
 struct nbd_config {
 	u32 flags;
-	unsigned long runtime_flags;
+	unsigned long runtime_flags;/*标记位，例如NBD_RT_DISCONNECT_REQUESTED*/
 	u64 dead_conn_timeout;
 
+	/*记录依据配置生成的多个nbd sock*/
 	struct nbd_sock **socks;
-	int num_connections;//连接总数（对应socks数组大小）
+	int num_connections;//socket连接总数（对应socks数组大小）
 	atomic_t live_connections;
 	wait_queue_head_t conn_wait;
 
-	atomic_t recv_threads;
+	atomic_t recv_threads;/*recv线程数*/
 	wait_queue_head_t recv_wq;
 	unsigned int blksize_bits;
 	loff_t bytesize;
@@ -119,7 +122,7 @@ struct nbd_device {
 	refcount_t refs;
 	struct nbd_config *config;//nbd设备配置
 	struct mutex config_lock;
-	struct gendisk *disk;
+	struct gendisk *disk;/*对应的disk结构*/
 	struct workqueue_struct *recv_workq;
 	struct work_struct remove_work;
 
@@ -141,7 +144,7 @@ struct nbd_device {
 #define NBD_CMD_INFLIGHT	2
 
 struct nbd_cmd {
-	struct nbd_device *nbd;
+	struct nbd_device *nbd;/*对应的nbd设备*/
 	struct mutex lock;
 	int index;
 	int cookie;
@@ -496,8 +499,8 @@ done:
  *  Send or receive packet. Return a positive value on success and
  *  negtive value on failue, and never return 0.
  */
-static int sock_xmit(struct nbd_device *nbd, int index, int send,
-		     struct iov_iter *iter, int msg_flags, int *sent)
+static int sock_xmit(struct nbd_device *nbd, int index/*socket索引，即指定的socket*/, int send,
+		     struct iov_iter *iter/*要读写的内容*/, int msg_flags, int *sent/*入出参，非空时表示send,返回时指明发送了多少字节*/)
 {
 	struct nbd_config *config = nbd->config;
 	struct socket *sock = config->socks[index]->sock;
@@ -506,6 +509,7 @@ static int sock_xmit(struct nbd_device *nbd, int index, int send,
 	unsigned int noreclaim_flag;
 
 	if (unlikely(!sock)) {
+	    /*socket为空，报错*/
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 			"Attempted %s on closed socket in sock_xmit\n",
 			(send ? "send" : "recv"));
@@ -524,8 +528,10 @@ static int sock_xmit(struct nbd_device *nbd, int index, int send,
 		msg.msg_flags = msg_flags | MSG_NOSIGNAL;
 
 		if (send)
+		    /*向socket发送消息*/
 			result = sock_sendmsg(sock, &msg);
 		else
+		    /*自socket收取消息*/
 			result = sock_recvmsg(sock, &msg, msg.msg_flags);
 
 		if (result <= 0) {
@@ -534,8 +540,9 @@ static int sock_xmit(struct nbd_device *nbd, int index, int send,
 			break;
 		}
 		if (sent)
+		    /*记录发送的字节数*/
 			*sent += result;
-	} while (msg_data_left(&msg));
+	} while (msg_data_left(&msg));/*如果仍有数据，则继续发送或读取*/
 
 	memalloc_noreclaim_restore(noreclaim_flag);
 
@@ -554,8 +561,10 @@ static inline int was_interrupted(int result)
 /* always call with the tx_lock held */
 static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
 {
+    /*取cmd对应的request*/
 	struct request *req = blk_mq_rq_from_pdu(cmd);
 	struct nbd_config *config = nbd->config;
+	/*取要操作的socket*/
 	struct nbd_sock *nsock = config->socks[index];
 	int result;
 	struct nbd_request request = {.magic = htonl(NBD_REQUEST_MAGIC)};
@@ -572,8 +581,10 @@ static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
 
 	type = req_to_nbd_cmd_type(req);
 	if (type == U32_MAX)
+	    /*遇到不支持的操作，返回EIO*/
 		return -EIO;
 
+	/*针对read-only执行写，返回EIO*/
 	if (rq_data_dir(req) == WRITE &&
 	    (config->flags & NBD_FLAG_READ_ONLY)) {
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
@@ -617,6 +628,7 @@ static int nbd_send_cmd(struct nbd_device *nbd, struct nbd_cmd *cmd, int index)
 	dev_dbg(nbd_to_dev(nbd), "request %p: sending control (%s@%llu,%uB)\n",
 		req, nbdcmd_to_ascii(type),
 		(unsigned long long)blk_rq_pos(req) << 9, blk_rq_bytes(req));
+	/*向对端执行发送操作*/
 	result = sock_xmit(nbd, index, 1, &from,
 			(type == NBD_CMD_WRITE) ? MSG_MORE : 0, &sent);
 	trace_nbd_header_sent(req, handle);
@@ -707,20 +719,23 @@ static int nbd_read_reply(struct nbd_device *nbd, int index,
 
 	reply->magic = 0;
 	iov_iter_kvec(&to, READ, &iov, 1, sizeof(*reply));
-	result = sock_xmit(nbd, index, 0, &to, MSG_WAITALL, NULL);
+	result = sock_xmit(nbd, index, 0, &to, MSG_WAITALL, NULL/*指明为socket接收*/);
 	if (result < 0) {
+	    /*读取响应失败，断开连接*/
 		if (!nbd_disconnected(nbd->config))
 			dev_err(disk_to_dev(nbd->disk),
 				"Receive control failed (result %d)\n", result);
 		return result;
 	}
 
+	/*检查响应的magic是否正确*/
 	if (ntohl(reply->magic) != NBD_REPLY_MAGIC) {
 		dev_err(disk_to_dev(nbd->disk), "Wrong magic (0x%lx)\n",
 				(unsigned long)ntohl(reply->magic));
 		return -EPROTO;
 	}
 
+	/*读取响应成功*/
 	return 0;
 }
 
@@ -740,14 +755,17 @@ static struct nbd_cmd *nbd_handle_reply(struct nbd_device *nbd, int index,
 	tag = nbd_handle_to_tag(handle);
 	hwq = blk_mq_unique_tag_to_hwq(tag);
 	if (hwq < nbd->tag_set.nr_hw_queues)
+	    /*确定收到的响应对应的是哪个请求*/
 		req = blk_mq_tag_to_rq(nbd->tag_set.tags[hwq],
 				       blk_mq_unique_tag_to_tag(tag));
 	if (!req || !blk_mq_request_started(req)) {
+	    /*校验内容是否正确*/
 		dev_err(disk_to_dev(nbd->disk), "Unexpected reply (%d) %p\n",
 			tag, req);
 		return ERR_PTR(-ENOENT);
 	}
 	trace_nbd_header_received(req, handle);
+	/*由req获取cmd*/
 	cmd = blk_mq_rq_to_pdu(req);
 
 	mutex_lock(&cmd->lock);
@@ -758,6 +776,7 @@ static struct nbd_cmd *nbd_handle_reply(struct nbd_device *nbd, int index,
 		goto out;
 	}
 	if (cmd->index != index) {
+	    /*cmd指定的socket与读取响应的index不同，内容有误*/
 		dev_err(disk_to_dev(nbd->disk), "Unexpected reply %d from different sock %d (expected %d)",
 			tag, index, cmd->index);
 		ret = -ENOENT;
@@ -782,6 +801,7 @@ static struct nbd_cmd *nbd_handle_reply(struct nbd_device *nbd, int index,
 		goto out;
 	}
 	if (ntohl(reply->error)) {
+	    /*对端响应了错误码*/
 		dev_err(disk_to_dev(nbd->disk), "Other side returned error (%d)\n",
 			ntohl(reply->error));
 		cmd->status = BLK_STS_IOERR;
@@ -790,6 +810,7 @@ static struct nbd_cmd *nbd_handle_reply(struct nbd_device *nbd, int index,
 
 	dev_dbg(nbd_to_dev(nbd), "request %p: got reply\n", req);
 	if (rq_data_dir(req) != WRITE) {
+	    /*获得对端的read响应*/
 		struct req_iterator iter;
 		struct bio_vec bvec;
 		struct iov_iter to;
@@ -823,23 +844,28 @@ out:
 	return ret ? ERR_PTR(ret) : cmd;
 }
 
-//收取请求并执行
+//不断自socket中收取数据，并查找对应的io请求,针对完成的io响应执行complete request
 static void recv_work(struct work_struct *work)
 {
+    /*通过work取传入的参数*/
 	struct recv_thread_args *args = container_of(work,
 						     struct recv_thread_args,
 						     work);
+	/*获知当前work对应的nbd设备*/
 	struct nbd_device *nbd = args->nbd;
+	/*获知当前nbd设备对应的config*/
 	struct nbd_config *config = nbd->config;
 	struct request_queue *q = nbd->disk->queue;
 	struct nbd_sock *nsock;
 	struct nbd_cmd *cmd;
 	struct request *rq;
 
+	/*不断的自args->index号socket中读取数据，如果对应的请求完成了io，则触发complete_request*/
 	while (1) {
 		struct nbd_reply reply;
 
-		if (nbd_read_reply(nbd, args->index, &reply))
+		/*自nbd设备对应的args->index号socket中读取reply*/
+		if (nbd_read_reply(nbd, args->index/*对应的socket索引*/, &reply))
 			break;
 
 		/*
@@ -854,18 +880,22 @@ static void recv_work(struct work_struct *work)
 			break;
 		}
 
+		/*处理nbd设备对应的args->index号socket对应的reply*/
 		cmd = nbd_handle_reply(nbd, args->index, &reply);
 		if (IS_ERR(cmd)) {
 			percpu_ref_put(&q->q_usage_counter);
 			break;
 		}
 
+		/*已完成request*/
 		rq = blk_mq_rq_from_pdu(cmd);
 		if (likely(!blk_should_fake_timeout(rq->q)))
+		    /*指明此request请求完成*/
 			blk_mq_complete_request(rq);
 		percpu_ref_put(&q->q_usage_counter);
 	}
 
+	/*读取中出错，指明此socket dead*/
 	nsock = config->socks[args->index];
 	mutex_lock(&nsock->tx_lock);
 	nbd_mark_nsock_dead(nbd, nsock, 1);
@@ -905,6 +935,7 @@ static void nbd_clear_que(struct nbd_device *nbd)
 	dev_dbg(disk_to_dev(nbd->disk), "queue cleared\n");
 }
 
+/*查找index号socket对应的fallback index*/
 static int find_fallback(struct nbd_device *nbd, int index)
 {
 	struct nbd_config *config = nbd->config;
@@ -916,11 +947,13 @@ static int find_fallback(struct nbd_device *nbd, int index)
 		return new_index;
 
 	if (config->num_connections <= 1) {
+	    /*当前socket量不足以执行fallback*/
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 				    "Dead connection, failed to find a fallback\n");
 		return new_index;
 	}
 
+	/*检查fallback是否有效，有效，则返回fallback索引*/
 	if (fallback >= 0 && fallback < config->num_connections &&
 	    !config->socks[fallback]->dead)
 		return fallback;
@@ -928,6 +961,7 @@ static int find_fallback(struct nbd_device *nbd, int index)
 	if (nsock->fallback_index < 0 ||
 	    nsock->fallback_index >= config->num_connections ||
 	    config->socks[nsock->fallback_index]->dead) {
+	    /*无效，重新设置fallback index*/
 		int i;
 		for (i = 0; i < config->num_connections; i++) {
 			if (i == index)
@@ -944,6 +978,8 @@ static int find_fallback(struct nbd_device *nbd, int index)
 			return new_index;
 		}
 	}
+
+	/*返回new index做为fallback索引*/
 	new_index = nsock->fallback_index;
 	return new_index;
 }
@@ -976,6 +1012,7 @@ static int nbd_handle_cmd(struct nbd_cmd *cmd, int index)
 	config = nbd->config;
 
 	if (index >= config->num_connections) {
+	    /*index要求的socket不存在*/
 		dev_err_ratelimited(disk_to_dev(nbd->disk),
 				    "Attempted send on invalid socket\n");
 		nbd_config_put(nbd);
@@ -983,13 +1020,17 @@ static int nbd_handle_cmd(struct nbd_cmd *cmd, int index)
 	}
 	cmd->status = BLK_STS_OK;
 again:
+    /*取出nbd对应的socket*/
 	nsock = config->socks[index];
 	mutex_lock(&nsock->tx_lock);
 	if (nsock->dead) {
+	    /*当前socket处于dead状态*/
 		int old_index = index;
+		/*取此socket对应的fallback socket*/
 		index = find_fallback(nbd, index);
 		mutex_unlock(&nsock->tx_lock);
 		if (index < 0) {
+		    /*fallback socket获取失败，待待重连*/
 			if (wait_for_reconnect(nbd)) {
 				index = old_index;
 				goto again;
@@ -1045,6 +1086,7 @@ out:
 static blk_status_t nbd_queue_rq(struct blk_mq_hw_ctx *hctx,
 			const struct blk_mq_queue_data *bd)
 {
+    /*取request对应的cmd*/
 	struct nbd_cmd *cmd = blk_mq_rq_to_pdu(bd->rq);
 	int ret;
 
@@ -1075,17 +1117,20 @@ static blk_status_t nbd_queue_rq(struct blk_mq_hw_ctx *hctx,
 	return ret;
 }
 
+/*通过fd查找对应的socket，并返回。*/
 static struct socket *nbd_get_socket(struct nbd_device *nbd, unsigned long fd,
 				     int *err)
 {
 	struct socket *sock;
 
 	*err = 0;
+	/*查找fd对应的socket*/
 	sock = sockfd_lookup(fd, err);
 	if (!sock)
 		return NULL;
 
 	if (sock->ops->shutdown == sock_no_shutdown) {
+	    /*此socket不支持shutdown,报错*/
 		dev_err(disk_to_dev(nbd->disk), "Unsupported socket: shutdown callout must be supported.\n");
 		*err = -EINVAL;
 		sockfd_put(sock);
@@ -1095,7 +1140,7 @@ static struct socket *nbd_get_socket(struct nbd_device *nbd, unsigned long fd,
 	return sock;
 }
 
-static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
+static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg/*socket fd*/,
 			  bool netlink)
 {
 	struct nbd_config *config = nbd->config;
@@ -1128,12 +1173,14 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
 		goto put_socket;
 	}
 
+	/*申请nbd_sock结构体*/
 	nsock = kzalloc(sizeof(*nsock), GFP_KERNEL);
 	if (!nsock) {
 		err = -ENOMEM;
 		goto put_socket;
 	}
 
+	/*扩充nbd socket数组*/
 	socks = krealloc(config->socks, (config->num_connections + 1) *
 			 sizeof(struct nbd_sock *), GFP_KERNEL);
 	if (!socks) {
@@ -1147,11 +1194,13 @@ static int nbd_add_socket(struct nbd_device *nbd, unsigned long arg,
 	nsock->fallback_index = -1;
 	nsock->dead = false;
 	mutex_init(&nsock->tx_lock);
-	nsock->sock = sock;//设置对应的socket
+	//设置此nbd sock对应的socket
+	nsock->sock = sock;
 	nsock->pending = NULL;
 	nsock->sent = 0;
 	nsock->cookie = 0;
-	socks[config->num_connections++] = nsock;//增加连接数
+	//增加nbd sock
+	socks[config->num_connections++] = nsock;
 	atomic_inc(&config->live_connections);
 	blk_mq_unfreeze_queue(nbd->disk->queue);
 
@@ -1171,6 +1220,7 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 	int i;
 	int err;
 
+	/*取fd对应的socket*/
 	sock = nbd_get_socket(nbd, arg, &err);
 	if (!sock)
 		return err;
@@ -1185,10 +1235,12 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 		struct nbd_sock *nsock = config->socks[i];
 
 		if (!nsock->dead)
+		    /*跳过未处于dead状态的nbd socket*/
 			continue;
 
 		mutex_lock(&nsock->tx_lock);
 		if (!nsock->dead) {
+		    /*加锁后确认为no dead,解锁继续*/
 			mutex_unlock(&nsock->tx_lock);
 			continue;
 		}
@@ -1197,16 +1249,16 @@ static int nbd_reconnect_socket(struct nbd_device *nbd, unsigned long arg)
 			sock->sk->sk_sndtimeo = nbd->tag_set.timeout;
 		atomic_inc(&config->recv_threads);
 		refcount_inc(&nbd->config_refs);
-		old = nsock->sock;
+		old = nsock->sock;/*取出旧的socket*/
 		nsock->fallback_index = -1;
-		nsock->sock = sock;
-		nsock->dead = false;
+		nsock->sock = sock;/*存入新的socket*/
+		nsock->dead = false;/*指明非dead*/
 		INIT_WORK(&args->work, recv_work);
 		args->index = i;
 		args->nbd = nbd;
 		nsock->cookie++;
 		mutex_unlock(&nsock->tx_lock);
-		sockfd_put(old);
+		sockfd_put(old);/*不再引用旧的socket*/
 
 		clear_bit(NBD_RT_DISCONNECTED, &config->runtime_flags);
 
@@ -1250,7 +1302,7 @@ static void nbd_parse_flags(struct nbd_device *nbd)
 		blk_queue_write_cache(nbd->disk->queue, false, false);
 }
 
-//发送disconnect命令
+//向所有连接发送disconnect命令
 static void send_disconnects(struct nbd_device *nbd)
 {
 	struct nbd_config *config = nbd->config;
@@ -1268,7 +1320,8 @@ static void send_disconnects(struct nbd_device *nbd)
 
 		iov_iter_kvec(&from, WRITE, &iov, 1, sizeof(request));
 		mutex_lock(&nsock->tx_lock);
-		ret = sock_xmit(nbd, i, 1, &from, 0, NULL);//通过sock发送（走网络流程）
+		//通过sock发送（走网络流程）
+		ret = sock_xmit(nbd, i, 1, &from, 0, NULL);
 		if (ret < 0)
 			dev_err(disk_to_dev(nbd->disk),
 				"Send disconnect failed %d\n", ret);
@@ -1317,6 +1370,7 @@ static void nbd_config_put(struct nbd_device *nbd)
 			nbd->backend = NULL;
 		}
 		nbd_clear_sock(nbd);
+		/*遍历所有连接，释放socket引用*/
 		if (config->num_connections) {
 			int i;
 			for (i = 0; i < config->num_connections; i++) {
@@ -1376,6 +1430,7 @@ static int nbd_start_device(struct nbd_device *nbd)
 
 		args = kzalloc(sizeof(*args), GFP_KERNEL);
 		if (!args) {
+		    /*申请线程参数失败*/
 			sock_shutdown(nbd);
 			/*
 			 * If num_connections is m (2 < m),
@@ -1408,6 +1463,7 @@ static int nbd_start_device_ioctl(struct nbd_device *nbd, struct block_device *b
 	struct nbd_config *config = nbd->config;
 	int ret;
 
+	/*启动nbd设备*/
 	ret = nbd_start_device(nbd);
 	if (ret)
 		return ret;
@@ -1460,25 +1516,33 @@ static int __nbd_ioctl(struct block_device *bdev, struct nbd_device *nbd,
 
 	switch (cmd) {
 	case NBD_DISCONNECT:
+	    /*与所有连接断开连接*/
 		return nbd_disconnect(nbd);
 	case NBD_CLEAR_SOCK:
+	    /*清除所有连接*/
 		nbd_clear_sock_ioctl(nbd, bdev);
 		return 0;
 	case NBD_SET_SOCK:
+	    /*向nbd设备添加新的socket fd*/
 		return nbd_add_socket(nbd, arg, false);
 	case NBD_SET_BLKSIZE:
+	    /*设置块大小*/
 		return nbd_set_size(nbd, config->bytesize, arg);
 	case NBD_SET_SIZE:
+	    /*设置size*/
 		return nbd_set_size(nbd, arg, nbd_blksize(config));
 	case NBD_SET_SIZE_BLOCKS:
+	    /*设置size*/
 		if (check_shl_overflow(arg, config->blksize_bits, &bytesize))
 			return -EINVAL;
 		return nbd_set_size(nbd, bytesize, nbd_blksize(config));
 	case NBD_SET_TIMEOUT:
+	    /*设置超时时间*/
 		nbd_set_cmd_timeout(nbd, arg);
 		return 0;
 
 	case NBD_SET_FLAGS:
+	    /*设置flags*/
 		config->flags = arg;
 		return 0;
 	case NBD_DO_IT:
@@ -1529,6 +1593,7 @@ static int nbd_ioctl(struct block_device *bdev, fmode_t mode,
 	return error;
 }
 
+/*nbd设备申请nbd_config结构，并初始化*/
 static struct nbd_config *nbd_alloc_config(void)
 {
 	struct nbd_config *config;
@@ -1606,7 +1671,7 @@ static const struct block_device_operations nbd_fops =
 	.owner =	THIS_MODULE,
 	.open =		nbd_open,
 	.release =	nbd_release,
-	.ioctl =	nbd_ioctl,
+	.ioctl =	nbd_ioctl,/*nbd设置ioctl处理*/
 	.compat_ioctl =	nbd_ioctl,
 };
 
@@ -1683,6 +1748,7 @@ static int nbd_dbg_init(void)
 {
 	struct dentry *dbg_dir;
 
+	/*创建nbd对应的debugfs根目录*/
 	dbg_dir = debugfs_create_dir("nbd", NULL);
 	if (!dbg_dir)
 		return -EIO;
@@ -1743,6 +1809,7 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 	struct gendisk *disk;
 	int err = -ENOMEM;
 
+	/*创建nbd设备*/
 	nbd = kzalloc(sizeof(struct nbd_device), GFP_KERNEL);
 	if (!nbd)
 		goto out;
@@ -1778,6 +1845,7 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 	if (err < 0)
 		goto out_free_tags;
 
+	/*alloc general disk结构体*/
 	disk = blk_mq_alloc_disk(&nbd->tag_set, NULL);
 	if (IS_ERR(disk)) {
 		err = PTR_ERR(disk);
@@ -1828,8 +1896,10 @@ static struct nbd_device *nbd_dev_add(int index, unsigned int refs)
 	}
 
 	disk->minors = 1 << part_shift;
-	disk->fops = &nbd_fops;//ndb磁盘操作集
+	//ndb磁盘操作集
+	disk->fops = &nbd_fops;
 	disk->private_data = nbd;
+	/*磁盘索引*/
 	sprintf(disk->disk_name, "nbd%d", index);
 	err = add_disk(disk);//向系统添加磁盘文件
 	if (err)
@@ -2291,6 +2361,7 @@ static int nbd_genl_reconfigure(struct sk_buff *skb, struct genl_info *info)
 			}
 			if (!socks[NBD_SOCK_FD])
 				continue;
+			/*指明重连的socket*/
 			fd = (int)nla_get_u32(socks[NBD_SOCK_FD]);
 			ret = nbd_reconnect_socket(nbd, fd);
 			if (ret) {
@@ -2341,12 +2412,13 @@ static const struct genl_multicast_group nbd_mcast_grps[] = {
 	{ .name = NBD_GENL_MCAST_GROUP_NAME, },
 };
 
+/*nbd对应的netlink family*/
 static struct genl_family nbd_genl_family __ro_after_init = {
 	.hdrsize	= 0,
 	.name		= NBD_GENL_FAMILY_NAME,
 	.version	= NBD_GENL_VERSION,
 	.module		= THIS_MODULE,
-	.small_ops	= nbd_connect_genl_ops,//各命令处理
+	.small_ops	= nbd_connect_genl_ops,//nbd各命令处理
 	.n_small_ops	= ARRAY_SIZE(nbd_connect_genl_ops),
 	.maxattr	= NBD_ATTR_MAX,
 	.policy = nbd_attr_policy,
@@ -2506,6 +2578,7 @@ static int __init nbd_init(void)
 	BUILD_BUG_ON(sizeof(struct nbd_request) != 28);
 
 	if (max_part < 0) {
+	    //必须配置为大于0的数
 		printk(KERN_ERR "nbd: max_part must be >= 0\n");
 		return -EINVAL;
 	}
@@ -2527,11 +2600,11 @@ static int __init nbd_init(void)
 		max_part = (1UL << part_shift) - 1;
 	}
 
-	//合法性校验，防止超过kernel限制
+	//合法性校验，防止max配置超过kernel限制
 	if ((1UL << part_shift) > DISK_MAX_PARTS)
 		return -EINVAL;
 
-	//?????
+	//防止nbds_max配置过大
 	if (nbds_max > 1UL << (MINORBITS - part_shift))
 		return -EINVAL;
 
@@ -2553,9 +2626,9 @@ static int __init nbd_init(void)
 	}
 	nbd_dbg_init();
 
-	//向系统添加nbd设备
+	//向系统添加nbds_max个nbd设备
 	for (i = 0; i < nbds_max; i++)
-		nbd_dev_add(i, 1);
+		nbd_dev_add(i/*设备索引*/, 1/*引用计数*/);
 	return 0;
 }
 

@@ -158,11 +158,13 @@ static const struct file_operations socket_file_ops = {
 	.write_iter =	sock_write_iter,
 	//socket对应的poll函数
 	.poll =		sock_poll,
+	/*针对socket fd执行ioctl*/
 	.unlocked_ioctl = sock_ioctl,
 #ifdef CONFIG_COMPAT
 	/*提供socket支持的ioctl命令*/
 	.compat_ioctl = compat_sock_ioctl,
 #endif
+	/*针对socket fd支持mmap*/
 	.mmap =		sock_mmap,
 	.release =	sock_close,
 	.fasync =	sock_fasync,
@@ -305,6 +307,7 @@ static int move_addr_to_user(struct sockaddr_storage *kaddr, int klen,
 	return __put_user(klen, ulen);
 }
 
+/*memory cache,用于socket_alloc的分配*/
 static struct kmem_cache *sock_inode_cachep __ro_after_init;
 
 /*自cache中提取socket_alloc,返回对应的inode*/
@@ -312,6 +315,7 @@ static struct inode *sock_alloc_inode(struct super_block *sb)
 {
 	struct socket_alloc *ei;
 
+	/*申请socket_alloc*/
 	ei = alloc_inode_sb(sb, sock_inode_cachep, GFP_KERNEL);
 	if (!ei)
 		return NULL;
@@ -417,9 +421,11 @@ static const struct xattr_handler *sockfs_xattr_handlers[] = {
 	NULL
 };
 
+/*sockfs初始化fs_context*/
 static int sockfs_init_fs_context(struct fs_context *fc)
 {
-	struct pseudo_fs_context *ctx = init_pseudo(fc, SOCKFS_MAGIC);
+    /*初始化context*/
+	struct pseudo_fs_context *ctx = init_pseudo(fc, SOCKFS_MAGIC/*sockfs对应的magic*/);
 	if (!ctx)
 		return -ENOMEM;
 	ctx->ops = &sockfs_ops;
@@ -433,6 +439,7 @@ static struct vfsmount *sock_mnt __read_mostly;
 /*socket对应的文件系统，由其上申请inet强转成socket结构*/
 static struct file_system_type sock_fs_type = {
 	.name =		"sockfs",
+	/*挂载时，先执行init_fs_context*/
 	.init_fs_context = sockfs_init_fs_context,
 	.kill_sb =	kill_anon_super,
 };
@@ -478,7 +485,7 @@ struct file *sock_alloc_file(struct socket *sock, int flags, const char *dname)
 	//为socket申请一个假的struct file，并与其关联
 	file = alloc_file_pseudo(SOCK_INODE(sock), sock_mnt/*socket对应的文件挂载点*/, dname/*dentry对应的名称*/,
 				O_RDWR | (flags & O_NONBLOCK),
-				&socket_file_ops);
+				&socket_file_ops/*socket文件描述符对应的操作集*/);
 	if (IS_ERR(file)) {
 		sock_release(sock);
 		return file;
@@ -731,8 +738,8 @@ static inline int sock_sendmsg_nosec(struct socket *sock, struct msghdr *msg)
 {
     //调用不同ops的sendmsg完成处理
 	int ret = INDIRECT_CALL_INET(sock->ops->sendmsg, inet6_sendmsg,
-				     inet_sendmsg, sock, msg,
-				     msg_data_left(msg));
+				     inet_sendmsg/*ipv4消息发送*/, sock, msg,
+				     msg_data_left(msg)/*要发送的数据长度*/);
 	BUG_ON(ret == -EIOCBQUEUED);
 	return ret;
 }
@@ -972,12 +979,13 @@ INDIRECT_CALLABLE_DECLARE(int inet_recvmsg(struct socket *, struct msghdr *,
 					   size_t, int));
 INDIRECT_CALLABLE_DECLARE(int inet6_recvmsg(struct socket *, struct msghdr *,
 					    size_t, int));
+/*socket消息读取函数入口*/
 static inline int sock_recvmsg_nosec(struct socket *sock, struct msghdr *msg,
 				     int flags)
 {
     //调用sock自已的recvmsg回调
 	return INDIRECT_CALL_INET(sock->ops->recvmsg, inet6_recvmsg,
-				  inet_recvmsg, sock, msg, msg_data_left(msg),
+				  inet_recvmsg/*ipv4消息读取*/, sock, msg, msg_data_left(msg),
 				  flags);
 }
 
@@ -1053,39 +1061,45 @@ static ssize_t sock_splice_read(struct file *file, loff_t *ppos,
 }
 
 //socket对应的fd读操作
-static ssize_t sock_read_iter(struct kiocb *iocb, struct iov_iter *to)
+static ssize_t sock_read_iter(struct kiocb *iocb/*io控制块*/, struct iov_iter *to/*入出参，读操作对应的迭代器*/)
 {
+    /*取待读取的文件*/
 	struct file *file = iocb->ki_filp;
-	//由file获得正在被操作的socket
+	//由file获得其对应的socket结构体
 	struct socket *sock = file->private_data;
 	struct msghdr msg = {.msg_iter = *to,
 			     .msg_iocb = iocb};
 	ssize_t res;
 
+	/*文件有非阻塞标记，或者iocb有no wait标记，则消息指明非等待*/
 	if (file->f_flags & O_NONBLOCK || (iocb->ki_flags & IOCB_NOWAIT))
 		msg.msg_flags = MSG_DONTWAIT;
 
+	/*针对socket读取时，读写位置必须为0*/
 	if (iocb->ki_pos != 0)
 		return -ESPIPE;
 
+	/*要读取的长度不能为0*/
 	if (!iov_iter_count(to))	/* Match SYS5 behaviour */
 		return 0;
 
 	//通过sock的recvmsg函数完成内容收取
 	res = sock_recvmsg(sock, &msg, msg.msg_flags);
-	*to = msg.msg_iter;
+	*to = msg.msg_iter;/*更新迭代器*/
 	return res;
 }
 
 //socket调用write时，标记位只有以下几种(见msg.msg_flags赋值）
 static ssize_t sock_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
+    /*取要操作的文件*/
 	struct file *file = iocb->ki_filp;
 	struct socket *sock = file->private_data;
 	struct msghdr msg = {.msg_iter = *from,
 			     .msg_iocb = iocb};
 	ssize_t res;
 
+	/*socket写位置必须为0*/
 	if (iocb->ki_pos != 0)
 		return -ESPIPE;
 
@@ -3254,6 +3268,7 @@ static int __init sock_init(void)
 	err = register_filesystem(&sock_fs_type);
 	if (err)
 		goto out;
+
 	//挂载sockfs文件系统
 	sock_mnt = kern_mount(&sock_fs_type);
 	if (IS_ERR(sock_mnt)) {
@@ -3372,6 +3387,7 @@ static int compat_ifr_data_ioctl(struct net *net, unsigned int cmd,
 	void __user *data;
 
 	if (!is_socket_ioctl_cmd(cmd))
+	    /*只处理socket类型的ioctl*/
 		return -ENOTTY;
 	if (get_user_ifreq(&ifreq, &data, u_ifreq32))
 		return -EFAULT;
@@ -3405,6 +3421,7 @@ static int compat_sock_ioctl_trans(struct file *file, struct socket *sock,
 	case SIOCBONDINFOQUERY:
 	case SIOCSHWTSTAMP:
 	case SIOCGHWTSTAMP:
+	    /*ifreq类型数据的ioctl*/
 		return compat_ifr_data_ioctl(net, cmd, argp);
 
 	case FIOSETOWN:

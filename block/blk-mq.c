@@ -1111,7 +1111,7 @@ EXPORT_SYMBOL_GPL(blk_mq_complete_request_remote);
 void blk_mq_complete_request(struct request *rq)
 {
 	if (!blk_mq_complete_request_remote(rq))
-		rq->q->mq_ops->complete(rq);
+		rq->q->mq_ops->complete(rq);/*完成了一个io请求*/
 }
 EXPORT_SYMBOL(blk_mq_complete_request);
 
@@ -3918,6 +3918,7 @@ struct request_queue *blk_mq_init_queue(struct blk_mq_tag_set *set)
 }
 EXPORT_SYMBOL(blk_mq_init_queue);
 
+/*创建genernal disk*/
 struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
 		struct lock_class_key *lkclass)
 {
@@ -4256,6 +4257,7 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 		return -EINVAL;
 
 	if (!set->ops->queue_rq)
+	    /*必须包含queue_rq回调*/
 		return -EINVAL;
 
 	if (!set->ops->get_budget ^ !set->ops->put_budget)

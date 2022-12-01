@@ -869,6 +869,7 @@ int security_bprm_check(struct linux_binprm *bprm)
 	ret = call_int_hook(bprm_check_security, 0, bprm);
 	if (ret)
 		return ret;
+	/*无调用，或上述调用返回0，则执行以下函数*/
 	return ima_bprm_check(bprm);
 }
 

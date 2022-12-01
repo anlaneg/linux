@@ -304,16 +304,19 @@ int seg6_hmac_info_add(struct net *net, u32 key, struct seg6_hmac_info *hinfo)
 }
 EXPORT_SYMBOL(seg6_hmac_info_add);
 
+/*按照key删除hinfo*/
 int seg6_hmac_info_del(struct net *net, u32 key)
 {
 	struct seg6_pernet_data *sdata = seg6_pernet(net);
 	struct seg6_hmac_info *hinfo;
 	int err = -ENOENT;
 
+	/*查询hinfo*/
 	hinfo = rhashtable_lookup_fast(&sdata->hmac_infos, &key, rht_params);
 	if (!hinfo)
 		goto out;
 
+	/*删除指定hinfo*/
 	err = rhashtable_remove_fast(&sdata->hmac_infos, &hinfo->node,
 				     rht_params);
 	if (err)

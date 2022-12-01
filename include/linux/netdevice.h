@@ -1525,9 +1525,11 @@ struct net_device_ops {
 						     u16 rxq_index,
 						     u32 flow_id);
 #endif
-	int			(*ndo_add_slave)(struct net_device *dev,
+	/*添加slave设备*/
+	int			(*ndo_add_slave)(struct net_device *dev/*master设备*/,
 						 struct net_device *slave_dev,
 						 struct netlink_ext_ack *extack);
+	/*删除slave设备*/
 	int			(*ndo_del_slave)(struct net_device *dev,
 						 struct net_device *slave_dev);
 	struct net_device*	(*ndo_get_xmit_slave)(struct net_device *dev,
@@ -2709,6 +2711,7 @@ static inline void dev_sw_netstats_rx_add(struct net_device *dev, unsigned int l
 	u64_stats_update_end(&tstats->syncp);
 }
 
+/*对tx统计计数进行增加（percpu)*/
 static inline void dev_sw_netstats_tx_add(struct net_device *dev,
 					  unsigned int packets,
 					  unsigned int len)
@@ -3565,6 +3568,7 @@ static inline u16 netdev_cap_txqueue(struct net_device *dev, u16 queue_index)
  */
 static inline bool netif_running(const struct net_device *dev)
 {
+    /*检查接口是否running*/
 	return test_bit(__LINK_STATE_START, &dev->state);
 }
 
@@ -3975,6 +3979,7 @@ static __always_inline bool __is_skb_forwardable(const struct net_device *dev,
 
 struct net_device_core_stats *netdev_core_stats_alloc(struct net_device *dev);
 
+/*取设备中对应的core_stats*/
 static inline struct net_device_core_stats *dev_core_stats(struct net_device *dev)
 {
 	/* This READ_ONCE() pairs with the write in netdev_core_stats_alloc() */
@@ -5105,11 +5110,13 @@ static inline bool netif_has_l3_rx_handler(const struct net_device *dev)
 	return dev->priv_flags & IFF_L3MDEV_RX_HANDLER;
 }
 
+/*dev是否为l3mdev的master设备*/
 static inline bool netif_is_l3_master(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_L3MDEV_MASTER;
 }
 
+/*dev是否为l3mdev的Slave设备*/
 static inline bool netif_is_l3_slave(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_L3MDEV_SLAVE;

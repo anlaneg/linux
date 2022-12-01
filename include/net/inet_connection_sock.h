@@ -158,6 +158,7 @@ static inline struct inet_connection_sock *inet_csk(const struct sock *sk)
 	return (struct inet_connection_sock *)sk;
 }
 
+/*取socket中的拥塞私有数据*/
 static inline void *inet_csk_ca(const struct sock *sk)
 {
 	return (void *)inet_csk(sk)->icsk_ca_priv;

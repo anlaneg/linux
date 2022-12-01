@@ -461,11 +461,11 @@ static inline unsigned int ip_dst_mtu_maybe_forward(const struct dst_entry *dst,
 	}
 
 	/* 'forwarding = true' case should always honour route mtu */
-	mtu = dst_metric_raw(dst, RTAX_MTU);
+	mtu = dst_metric_raw(dst, RTAX_MTU);/*自路由项中提取*/
 	if (mtu)
 		goto out;
 
-	mtu = READ_ONCE(dst->dev->mtu);
+	mtu = READ_ONCE(dst->dev->mtu);/*自设备中提取mtu*/
 
 	if (unlikely(ip_mtu_locked(dst))) {
 		if (rt->rt_uses_gateway && mtu > 576)

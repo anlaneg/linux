@@ -2553,7 +2553,7 @@ static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 	return err;
 }
 
-/*将dev添加到ifindex接口*/
+/*如果dev有upper_dev,则将dev自upper_dev中移除，否则将dev添加进ifdex指明的master中，做为slave接口*/
 static int do_set_master(struct net_device *dev/*成员口*/, int ifindex/*master接口*/,
 			 struct netlink_ext_ack *extack)
 {
@@ -2577,16 +2577,18 @@ static int do_set_master(struct net_device *dev/*成员口*/, int ifindex/*maste
 	}
 
 	if (ifindex) {
-	    /*通过ifindex获取master设备*/
+	    /*指明了ifindex,通过ifindex获取master设备,并增加dev为slave接口*/
 		upper_dev = __dev_get_by_index(dev_net(dev), ifindex);
 		if (!upper_dev)
 			return -EINVAL;
-		ops = upper_dev->netdev_ops;
+		ops = upper_dev->netdev_ops;/*取master的ops*/
 		if (ops->ndo_add_slave) {
+		    /*有add_slave回调，则触发此回调，完成slave添加*/
 			err = ops->ndo_add_slave(upper_dev, dev, extack);
 			if (err)
 				return err;
 		} else {
+		    /*无add_slave回调，报错*/
 			return -EOPNOTSUPP;
 		}
 	}

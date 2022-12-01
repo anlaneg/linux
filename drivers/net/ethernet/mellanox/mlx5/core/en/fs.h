@@ -119,7 +119,7 @@ struct mlx5e_ethtool_table {
 struct mlx5e_ethtool_steering {
 	struct mlx5e_ethtool_table      l3_l4_ft[ETHTOOL_NUM_L3_L4_FTS];
 	struct mlx5e_ethtool_table      l2_ft[ETHTOOL_NUM_L2_FTS];
-	struct list_head                rules;
+	struct list_head                rules;/*用于串连ethtool下发的规则*/
 	int                             tot_num_rules;
 };
 

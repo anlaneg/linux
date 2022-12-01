@@ -47,9 +47,9 @@ struct netns_sysctl_ipv6 {
 	int idgen_delay;
 	int flowlabel_reflect;
 	int max_dst_opts_cnt;
-	int max_hbh_opts_cnt;
+	int max_hbh_opts_cnt;/*支持的最大hop-by-hop选项数*/
 	int max_dst_opts_len;
-	int max_hbh_opts_len;
+	int max_hbh_opts_len;/*支持的最大Hop-by-Hop Options Header长度*/
 	int seg6_flowlabel;
 	u32 ioam6_id;
 	u64 ioam6_id_wide;
@@ -70,6 +70,7 @@ struct netns_ipv6 {
 	struct rt6_info		*ip6_null_entry;
 	struct rt6_statistics   *rt6_stats;
 	struct timer_list       ip6_fib_timer;
+	/*ipv6路由表hash table*/
 	struct hlist_head       *fib_table_hash;
 	struct fib6_table       *fib6_main_tbl;
 	struct list_head	fib6_walkers;

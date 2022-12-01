@@ -60,6 +60,7 @@ static void minix_put_super(struct super_block *sb)
 
 static struct kmem_cache * minix_inode_cachep;
 
+/*自memory cache中申请inode*/
 static struct inode *minix_alloc_inode(struct super_block *sb)
 {
 	struct minix_inode_info *ei;
@@ -69,11 +70,13 @@ static struct inode *minix_alloc_inode(struct super_block *sb)
 	return &ei->vfs_inode;
 }
 
+/*向memory cache释放inode*/
 static void minix_free_in_core_inode(struct inode *inode)
 {
 	kmem_cache_free(minix_inode_cachep, minix_i(inode));
 }
 
+/*memory cache中对象初始化函数，初始化inode_info*/
 static void init_once(void *foo)
 {
 	struct minix_inode_info *ei = (struct minix_inode_info *) foo;
@@ -83,11 +86,12 @@ static void init_once(void *foo)
 
 static int __init init_inodecache(void)
 {
+    /*创建memory cache,用于minix inode分配*/
 	minix_inode_cachep = kmem_cache_create("minix_inode_cache",
 					     sizeof(struct minix_inode_info),
 					     0, (SLAB_RECLAIM_ACCOUNT|
 						SLAB_MEM_SPREAD|SLAB_ACCOUNT),
-					     init_once);
+					     init_once/*minix_inode_info初始化函数*/);
 	if (minix_inode_cachep == NULL)
 		return -ENOMEM;
 	return 0;
@@ -104,6 +108,7 @@ static void destroy_inodecache(void)
 }
 
 static const struct super_operations minix_sops = {
+    /*inode申请函数*/
 	.alloc_inode	= minix_alloc_inode,
 	.free_inode	= minix_free_in_core_inode,
 	.write_inode	= minix_write_inode,
@@ -169,7 +174,8 @@ static bool minix_check_superblock(struct super_block *sb)
 	return true;
 }
 
-static int minix_fill_super(struct super_block *s, void *data, int silent)
+/*填充超级块*/
+static int minix_fill_super(struct super_block *s/*待填充的超级块*/, void *data/*挂载配置的参数*/, int silent)
 {
 	struct buffer_head *bh;
 	struct buffer_head **map;
@@ -180,6 +186,7 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	struct minix_sb_info *sbi;
 	int ret = -EINVAL;
 
+	/*申请minix_sb_info结构体*/
 	sbi = kzalloc(sizeof(struct minix_sb_info), GFP_KERNEL);
 	if (!sbi)
 		return -ENOMEM;
@@ -188,13 +195,18 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	BUILD_BUG_ON(32 != sizeof (struct minix_inode));
 	BUILD_BUG_ON(64 != sizeof(struct minix2_inode));
 
+	/*设置block size*/
 	if (!sb_set_blocksize(s, BLOCK_SIZE))
 		goto out_bad_hblock;
 
+	/*加载第一个block对应数据,其为super block*/
 	if (!(bh = sb_bread(s, 1)))
 		goto out_bad_sb;
 
+	/*指向第一个block上读到的数据*/
 	ms = (struct minix_super_block *) bh->b_data;
+
+	/*利用自磁盘读取的数据填充sbi*/
 	sbi->s_ms = ms;
 	sbi->s_sbh = bh;
 	sbi->s_mount_state = ms->s_state;
@@ -247,6 +259,7 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	} else
 		goto out_no_fs;
 
+	/*检查超级块*/
 	if (!minix_check_superblock(s))
 		goto out_illegal_sb;
 
@@ -254,24 +267,29 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	 * Allocate the buffer map to keep the superblock small.
 	 */
 	i = (sbi->s_imap_blocks + sbi->s_zmap_blocks) * sizeof(bh);
-	map = kzalloc(i, GFP_KERNEL);
+	map = kzalloc(i, GFP_KERNEL);/*申请inode map,block map所需要内存*/
 	if (!map)
 		goto out_no_map;
+	/*指向imap,block map*/
 	sbi->s_imap = &map[0];
 	sbi->s_zmap = &map[sbi->s_imap_blocks];
 
+	/*自block 2开始，加载sbi->s_imap_blocks个block(加载imap)*/
 	block=2;
 	for (i=0 ; i < sbi->s_imap_blocks ; i++) {
 		if (!(sbi->s_imap[i]=sb_bread(s, block)))
 			goto out_no_bitmap;
 		block++;
 	}
+
+	/*自sbi->s_imap_blocks + 2 开始加载sbi->s_zmap(加载block map)*/
 	for (i=0 ; i < sbi->s_zmap_blocks ; i++) {
 		if (!(sbi->s_zmap[i]=sb_bread(s, block)))
 			goto out_no_bitmap;
 		block++;
 	}
 
+	/*0号inode,0号block置为‘0’*/
 	minix_set_bit(0,sbi->s_imap[0]->b_data);
 	minix_set_bit(0,sbi->s_zmap[0]->b_data);
 
@@ -281,6 +299,8 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	 */
 	block = minix_blocks_needed(sbi->s_ninodes, s->s_blocksize);
 	if (sbi->s_imap_blocks < block) {
+	    /*sbi->s_ninodes为系统总inode数目，通过其可计算其占用的block总数，这里imap_blocks
+	     * 更大，则说明当前bitmap不足以表示inode*/
 		printk("MINIX-fs: file system does not have enough "
 				"imap blocks allocated.  Refusing to mount.\n");
 		goto out_no_bitmap;
@@ -299,6 +319,7 @@ static int minix_fill_super(struct super_block *s, void *data, int silent)
 	s->s_op = &minix_sops;
 	s->s_time_min = 0;
 	s->s_time_max = U32_MAX;
+	/*取root inode*/
 	root_inode = minix_iget(s, MINIX_ROOT_INO);
 	if (IS_ERR(root_inode)) {
 		ret = PTR_ERR(root_inode);
@@ -378,7 +399,9 @@ static int minix_statfs(struct dentry *dentry, struct kstatfs *buf)
 	buf->f_type = sb->s_magic;
 	buf->f_bsize = sb->s_blocksize;
 	buf->f_blocks = (sbi->s_nzones - sbi->s_firstdatazone) << sbi->s_log_zone_size;
+	/*空闲的block字节数目*/
 	buf->f_bfree = minix_count_free_blocks(sb);
+	/*可以使用的block数目*/
 	buf->f_bavail = buf->f_bfree;
 	buf->f_files = sbi->s_ninodes;
 	buf->f_ffree = minix_count_free_inodes(sb);
@@ -388,9 +411,10 @@ static int minix_statfs(struct dentry *dentry, struct kstatfs *buf)
 	return 0;
 }
 
-static int minix_get_block(struct inode *inode, sector_t block,
+static int minix_get_block(struct inode *inode, sector_t block/*要读取的block*/,
 		    struct buffer_head *bh_result, int create)
 {
+    /*依据inode版本，调用不同版本的get_block*/
 	if (INODE_VERSION(inode) == MINIX_V1)
 		return V1_minix_get_block(inode, block, bh_result, create);
 	else
@@ -460,18 +484,22 @@ static const struct inode_operations minix_symlink_inode_operations = {
 void minix_set_inode(struct inode *inode, dev_t rdev)
 {
 	if (S_ISREG(inode->i_mode)) {
+	    /*文件*/
 		inode->i_op = &minix_file_inode_operations;
 		inode->i_fop = &minix_file_operations;
 		inode->i_mapping->a_ops = &minix_aops;
 	} else if (S_ISDIR(inode->i_mode)) {
+	    /*目录*/
 		inode->i_op = &minix_dir_inode_operations;
 		inode->i_fop = &minix_dir_operations;
 		inode->i_mapping->a_ops = &minix_aops;
 	} else if (S_ISLNK(inode->i_mode)) {
+	    /*软链接*/
 		inode->i_op = &minix_symlink_inode_operations;
 		inode_nohighmem(inode);
 		inode->i_mapping->a_ops = &minix_aops;
 	} else
+	    /*其它特殊文件类型*/
 		init_special_inode(inode, inode->i_mode, rdev);
 }
 
@@ -487,16 +515,20 @@ static struct inode *V1_minix_iget(struct inode *inode)
 
 	raw_inode = minix_V1_raw_inode(inode->i_sb, inode->i_ino, &bh);
 	if (!raw_inode) {
+	    /*读取inode raw数据失败*/
 		iget_failed(inode);
 		return ERR_PTR(-EIO);
 	}
 	if (raw_inode->i_nlinks == 0) {
+	    /*此inode link数为0*/
 		printk("MINIX-fs: deleted inode referenced: %lu\n",
 		       inode->i_ino);
 		brelse(bh);
 		iget_failed(inode);
 		return ERR_PTR(-ESTALE);
 	}
+
+	/*利用读取的raw_inode填充inode*/
 	inode->i_mode = raw_inode->i_mode;
 	i_uid_write(inode, raw_inode->i_uid);
 	i_gid_write(inode, raw_inode->i_gid);
@@ -525,6 +557,7 @@ static struct inode *V2_minix_iget(struct inode *inode)
 	struct minix_inode_info *minix_inode = minix_i(inode);
 	int i;
 
+	/*自磁盘读取inode*/
 	raw_inode = minix_V2_raw_inode(inode->i_sb, inode->i_ino, &bh);
 	if (!raw_inode) {
 		iget_failed(inode);
@@ -549,6 +582,7 @@ static struct inode *V2_minix_iget(struct inode *inode)
 	inode->i_atime.tv_nsec = 0;
 	inode->i_ctime.tv_nsec = 0;
 	inode->i_blocks = 0;
+	/*填充i2_data*/
 	for (i = 0; i < 10; i++)
 		minix_inode->u.i2_data[i] = raw_inode->i_zone[i];
 	minix_set_inode(inode, old_decode_dev(raw_inode->i_zone[0]));
@@ -560,16 +594,19 @@ static struct inode *V2_minix_iget(struct inode *inode)
 /*
  * The global function to read an inode.
  */
-struct inode *minix_iget(struct super_block *sb, unsigned long ino)
+struct inode *minix_iget(struct super_block *sb, unsigned long ino/*inode编号*/)
 {
 	struct inode *inode;
 
 	inode = iget_locked(sb, ino);
 	if (!inode)
+	    /*未查找到此inode,返错*/
 		return ERR_PTR(-ENOMEM);
 	if (!(inode->i_state & I_NEW))
+	    /*无new标记，则此inode之前已存在，直接返回*/
 		return inode;
 
+	/*inode有I_NEW标记，需要加载/新建？*/
 	if (INODE_VERSION(inode) == MINIX_V1)
 		return V1_minix_iget(inode);
 	else
@@ -615,7 +652,10 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 
 	raw_inode = minix_V2_raw_inode(inode->i_sb, inode->i_ino, &bh);
 	if (!raw_inode)
+	    /*读取raw inode失败，返回NULL*/
 		return NULL;
+
+	/*利用inode更新raw_inode*/
 	raw_inode->i_mode = inode->i_mode;
 	raw_inode->i_uid = fs_high2lowuid(i_uid_read(inode));
 	raw_inode->i_gid = fs_high2lowgid(i_gid_read(inode));
@@ -627,6 +667,7 @@ static struct buffer_head * V2_minix_update_inode(struct inode * inode)
 	if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode))
 		raw_inode->i_zone[0] = old_encode_dev(inode->i_rdev);
 	else for (i = 0; i < 10; i++)
+	    /*更新i_zone*/
 		raw_inode->i_zone[i] = minix_inode->u.i2_data[i];
 	mark_buffer_dirty(bh);
 	return bh;
@@ -637,6 +678,7 @@ static int minix_write_inode(struct inode *inode, struct writeback_control *wbc)
 	int err = 0;
 	struct buffer_head *bh;
 
+	/*依据inode不同版本，执行update inode*/
 	if (INODE_VERSION(inode) == MINIX_V1)
 		bh = V1_minix_update_inode(inode);
 	else
@@ -644,6 +686,7 @@ static int minix_write_inode(struct inode *inode, struct writeback_control *wbc)
 	if (!bh)
 		return -EIO;
 	if (wbc->sync_mode == WB_SYNC_ALL && buffer_dirty(bh)) {
+	    /*向块设备更新*/
 		sync_dirty_buffer(bh);
 		if (buffer_req(bh) && !buffer_uptodate(bh)) {
 			printk("IO error syncing minix inode [%s:%08lx]\n",
@@ -683,12 +726,14 @@ void minix_truncate(struct inode * inode)
 		V2_minix_truncate(inode);
 }
 
+/*minix文件系统挂载*/
 static struct dentry *minix_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, minix_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, minix_fill_super/*填充块填充函数*/);
 }
 
+/*minix文件系统对应的fs_type*/
 static struct file_system_type minix_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "minix",
@@ -703,6 +748,7 @@ static int __init init_minix_fs(void)
 	int err = init_inodecache();
 	if (err)
 		goto out1;
+	/*注册minix fs*/
 	err = register_filesystem(&minix_fs_type);
 	if (err)
 		goto out;
@@ -715,7 +761,7 @@ out1:
 
 static void __exit exit_minix_fs(void)
 {
-        unregister_filesystem(&minix_fs_type);
+    unregister_filesystem(&minix_fs_type);
 	destroy_inodecache();
 }
 

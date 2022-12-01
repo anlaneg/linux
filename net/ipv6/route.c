@@ -2201,7 +2201,7 @@ redo_rt6_select:
 	return 0;
 }
 
-struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table,
+struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table/*要查询哪些表*/,
 			       int oif, struct flowi6 *fl6,
 			       const struct sk_buff *skb, int flags)
 {

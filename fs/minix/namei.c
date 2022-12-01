@@ -24,11 +24,14 @@ static struct dentry *minix_lookup(struct inode * dir, struct dentry *dentry, un
 	struct inode * inode = NULL;
 	ino_t ino;
 
+	/*名称长度超过minix_sb限制*/
 	if (dentry->d_name.len > minix_sb(dir->i_sb)->s_namelen)
 		return ERR_PTR(-ENAMETOOLONG);
 
+	/*取此dentry对应的inode编号*/
 	ino = minix_inode_by_name(dentry);
 	if (ino)
+	    /*通过此inode编号读取inode对象*/
 		inode = minix_iget(dir->i_sb, ino);
 	return d_splice_alias(inode, dentry);
 }
@@ -42,6 +45,7 @@ static int minix_mknod(struct user_namespace *mnt_userns, struct inode *dir,
 	if (!old_valid_dev(rdev))
 		return -EINVAL;
 
+	/*创建一个inode*/
 	inode = minix_new_inode(dir, mode, &error);
 
 	if (inode) {
@@ -119,6 +123,7 @@ static int minix_mkdir(struct user_namespace *mnt_userns, struct inode *dir,
 
 	inode_inc_link_count(dir);
 
+	/*申请inode,指明为目录类型*/
 	inode = minix_new_inode(dir, S_IFDIR | mode, &err);
 	if (!inode)
 		goto out_dir;
@@ -266,7 +271,7 @@ const struct inode_operations minix_dir_inode_operations = {
 	.link		= minix_link,
 	.unlink		= minix_unlink,
 	.symlink	= minix_symlink,
-	.mkdir		= minix_mkdir,
+	.mkdir		= minix_mkdir,/*创建目录*/
 	.rmdir		= minix_rmdir,
 	.mknod		= minix_mknod,
 	.rename		= minix_rename,

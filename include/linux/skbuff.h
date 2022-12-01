@@ -999,6 +999,7 @@ struct sk_buff {
 	__u8			dst_pending_confirm:1;
 	__u8			mono_delivery_time:1;	/* See SKB_MONO_DELIVERY_TIME_MASK */
 #ifdef CONFIG_NET_CLS_ACT
+	/*指明此报文是否需要跳过tc classify*/
 	__u8			tc_skip_classify:1;
 	__u8			tc_at_ingress:1;	/* See TC_AT_INGRESS_MASK */
 #endif
@@ -2262,8 +2263,10 @@ static inline void skb_queue_splice_tail_init(struct sk_buff_head *list,
 					      struct sk_buff_head *head)
 {
 	if (!skb_queue_empty(list)) {
+	    /*将list上的内容移动到head*/
 		__skb_queue_splice(list, head->prev, (struct sk_buff *) head);
 		head->qlen += list->qlen;
+		/*将list置为空*/
 		__skb_queue_head_init(list);
 	}
 }
@@ -2360,6 +2363,7 @@ static inline struct sk_buff *__skb_dequeue(struct sk_buff_head *list)
 {
 	struct sk_buff *skb = skb_peek(list);
 	if (skb)
+	    /*存在skb,自list上移除*/
 		__skb_unlink(skb, list);
 	return skb;
 }
@@ -3807,7 +3811,9 @@ int pskb_trim_rcsum_slow(struct sk_buff *skb, unsigned int len);
 static inline int pskb_trim_rcsum(struct sk_buff *skb, unsigned int len)
 {
 	if (likely(len >= skb->len))
+	    /*所给的len比buffer的长度大，直接返回0*/
 		return 0;
+	/*更新checksum并trim收到的报文*/
 	return pskb_trim_rcsum_slow(skb, len);
 }
 
@@ -3832,6 +3838,7 @@ static inline int __skb_grow_rcsum(struct sk_buff *skb, unsigned int len)
 #define skb_rb_next(skb)   rb_to_skb(rb_next(&(skb)->rbnode))
 #define skb_rb_prev(skb)   rb_to_skb(rb_prev(&(skb)->rbnode))
 
+/*通过next指针，遍历queue上所有元素*/
 #define skb_queue_walk(queue, skb) \
 		for (skb = (queue)->next;					\
 		     skb != (struct sk_buff *)(queue);				\
@@ -4016,7 +4023,7 @@ __skb_header_pointer(const struct sk_buff *skb, int offset, int len,
 static inline void * __must_check
 skb_header_pointer(const struct sk_buff *skb, int offset, int len, void *buffer)
 {
-	//自skb->data的offset位置取数据，长度为len,将报到的数据存入到buffer中
+	//自skb->data的offset位置取数据，长度为len,如果内容不连续，则存入buffer
 	return __skb_header_pointer(skb, offset, len, skb->data,
 				    skb_headlen(skb), buffer);
 }

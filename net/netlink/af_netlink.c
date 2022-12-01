@@ -2189,7 +2189,9 @@ int __netlink_change_ngroups(struct sock *sk, unsigned int groups)
 		if (!new)
 			return -ENOMEM;
 		old = nl_deref_protected(tbl->listeners);
+		/*复制旧的内容，填充到new*/
 		memcpy(new->masks, old->masks, NLGRPSZ(tbl->groups));
+		/*更新到new*/
 		rcu_assign_pointer(tbl->listeners, new);
 
 		kfree_rcu(old, rcu);

@@ -186,6 +186,7 @@ static int __ip6_finish_output(struct net *net, struct sock *sk, struct sk_buff 
 	if ((skb->len > mtu && !skb_is_gso(skb)) ||
 	    dst_allfrag(skb_dst(skb)) ||
 	    (IP6CB(skb)->frag_max_size && skb->len > IP6CB(skb)->frag_max_size))
+	    /*ipv6报文分片*/
 		return ip6_fragment(net, sk, skb, ip6_finish_output2);
 	else
 		return ip6_finish_output2(net, sk, skb);
@@ -1643,6 +1644,7 @@ alloc_new_skb:
 				skb = sock_alloc_send_skb(sk, alloclen,
 						(flags & MSG_DONTWAIT), &err);
 			} else {
+			    /*申请skb*/
 				skb = NULL;
 				if (refcount_read(&sk->sk_wmem_alloc) + wmem_alloc_delta <=
 				    2 * sk->sk_sndbuf)
@@ -1712,6 +1714,7 @@ alloc_new_skb:
 				skb->sk = sk;
 				wmem_alloc_delta += skb->truesize;
 			}
+			/*添加报文到write队列*/
 			__skb_queue_tail(queue, skb);
 			continue;
 		}
@@ -1815,6 +1818,7 @@ int ip6_append_data(struct sock *sk,
 		transhdrlen = 0;
 	}
 
+	/*报文添加进write queue*/
 	return __ip6_append_data(sk, &sk->sk_write_queue, &inet->cork,
 				 &np->cork, sk_page_frag(sk), getfrag,
 				 from, length, transhdrlen, flags, ipc6);
@@ -1944,6 +1948,7 @@ int ip6_send_skb(struct sk_buff *skb)
 	return err;
 }
 
+/*向下发送报文*/
 int ip6_push_pending_frames(struct sock *sk)
 {
 	struct sk_buff *skb;
@@ -1952,6 +1957,7 @@ int ip6_push_pending_frames(struct sock *sk)
 	if (!skb)
 		return 0;
 
+	/*报文发送*/
 	return ip6_send_skb(skb);
 }
 EXPORT_SYMBOL_GPL(ip6_push_pending_frames);

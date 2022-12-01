@@ -773,7 +773,7 @@ SYSCALL_DEFINE3(fchown, unsigned int, fd, uid_t, user, gid_t, group)
 
 //open函数，inode唯一对应了一个文件
 static int do_dentry_open(struct file *f,
-			  struct inode *inode,
+			  struct inode *inode/*文件对应的inode*/,
 			  int (*open)(struct inode *, struct file *))
 {
 	static const struct file_operations empty_fops = {};
@@ -964,9 +964,10 @@ EXPORT_SYMBOL(file_path);
  */
 int vfs_open(const struct path *path, struct file *file)
 {
+    /*指定文件路径*/
 	file->f_path = *path;
 	//通过path->dentry获取到其对应的inode
-	return do_dentry_open(file, d_backing_inode(path->dentry), NULL);
+	return do_dentry_open(file, d_backing_inode(path->dentry)/*文件对应的inode*/, NULL);
 }
 
 struct file *dentry_open(const struct path *path, int flags,
@@ -1013,6 +1014,7 @@ EXPORT_SYMBOL(open_with_fake_path);
 #define WILL_CREATE(flags)	(flags & (O_CREAT | __O_TMPFILE))
 #define O_PATH_FLAGS		(O_DIRECTORY | O_NOFOLLOW | O_PATH | O_CLOEXEC)
 
+/*通过flags,mode构造struct open_how*/
 inline struct open_how build_open_how(int flags, umode_t mode)
 {
 	struct open_how how = {
@@ -1205,18 +1207,20 @@ struct file *file_open_root(const struct path *root,
 }
 EXPORT_SYMBOL(file_open_root);
 
-//具体实现文件打开(dfd指要打开的目录fd)
-static long do_sys_openat2(int dfd, const char __user *filename,
+//具体实现文件打开(dfd指定定位方式，例如基于当前工作目录)
+static long do_sys_openat2(int dfd, const char __user *filename/*文件名称或文件路径*/,
 			   struct open_how *how)
 {
 	struct open_flags op;
+	/*检查flags*/
 	int fd = build_open_flags(how, &op);
 	struct filename *tmp;
 
 	if (fd)
+	    /*检查flags失败，返回错误码*/
 		return fd;
 
-	//构造filename结构体
+	//申请filename,构造filename结构体，填充文件名称
 	tmp = getname(filename);
 	if (IS_ERR(tmp))
 		return PTR_ERR(tmp);
@@ -1243,17 +1247,17 @@ static long do_sys_openat2(int dfd, const char __user *filename,
 
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
-	//在当前工作目录解析filename,并将其打开
 	struct open_how how = build_open_how(flags, mode);
-	return do_sys_openat2(dfd, filename, &how);
+	return do_sys_openat2(dfd, filename/*要打开的文件名称*/, &how);
 }
 
 
 //实现open系统调用
-SYSCALL_DEFINE3(open, const char __user *, filename, int, flags, umode_t, mode)
+SYSCALL_DEFINE3(open, const char __user *, filename/*要打开的文件*/, int, flags, umode_t, mode)
 {
 	if (force_o_largefile())
 		flags |= O_LARGEFILE;
+	//在当前工作目录解析filename,并将其打开
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }
 

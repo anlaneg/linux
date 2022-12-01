@@ -87,7 +87,7 @@ struct udp_sock {
 						int nhoff);
 
 	/* udp_recvmsg try to use this before splicing sk_receive_queue */
-	//自此队列上收取报文（用户空间将从此队列上收取报文，由于读可能是一次读少于一个buf的字节）
+	//用户首先在此队列上收取报文(为了减少对sk_receive_queue的加锁次数）
 	struct sk_buff_head	reader_queue ____cacheline_aligned_in_smp;
 
 	/* This field is dirtied by udp_recvmsg() */

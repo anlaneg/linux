@@ -70,6 +70,7 @@ mlx5e_rss_get_default_tt_config(enum mlx5_traffic_types tt)
 struct mlx5e_rss {
 	struct mlx5e_rss_params_hash hash;
 	struct mlx5e_rss_params_indir indir;
+	/*各traffic type支持的hash字段*/
 	u32 rx_hash_fields[MLX5E_NUM_INDIR_TIRS];
 	struct mlx5e_tir *tir[MLX5E_NUM_INDIR_TIRS];
 	struct mlx5e_tir *inner_tir[MLX5E_NUM_INDIR_TIRS];
@@ -566,10 +567,13 @@ int mlx5e_rss_set_hash_fields(struct mlx5e_rss *rss, enum mlx5_traffic_types tt,
 	old_rx_hash_fields = rss->rx_hash_fields[tt];
 
 	if (old_rx_hash_fields == rx_hash_fields)
+	    /*要设置的字段与之前的相等，不处理*/
 		return 0;
 
+	/*更新为新字段*/
 	rss->rx_hash_fields[tt] = rx_hash_fields;
 
+	/*更新tir*/
 	err = mlx5e_rss_update_tir(rss, tt, false);
 	if (err) {
 		rss->rx_hash_fields[tt] = old_rx_hash_fields;

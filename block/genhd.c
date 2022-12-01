@@ -241,7 +241,7 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
  * Use register_blkdev instead for any new code.
  */
 //块设备注册
-int __register_blkdev(unsigned int major, const char *name,
+int __register_blkdev(unsigned int major, const char *name/*块设备名称*/,
 		void (*probe)(dev_t devt))
 {
 	struct blk_major_name **n, *p;
@@ -251,7 +251,7 @@ int __register_blkdev(unsigned int major, const char *name,
 
 	/* temporary */
 	if (major == 0) {
-		//找一个空的major位置
+		//major为0，动态申请major,这里逆序找一个空的major位置
 		for (index = ARRAY_SIZE(major_names)-1; index > 0; index--) {
 			if (major_names[index] == NULL)
 				break;
@@ -269,7 +269,7 @@ int __register_blkdev(unsigned int major, const char *name,
 		ret = major;
 	}
 
-	//合法性检查（不容许超过BLKDEV_MAJOR_MAX）
+	//major合法性检查（不容许超过BLKDEV_MAJOR_MAX）
 	if (major >= BLKDEV_MAJOR_MAX) {
 		pr_err("%s: major requested (%u) is greater than the maximum (%u) for %s\n",
 		       __func__, major, BLKDEV_MAJOR_MAX-1, name);
@@ -287,6 +287,7 @@ int __register_blkdev(unsigned int major, const char *name,
 
 	p->major = major;//填充major
 #ifdef CONFIG_BLOCK_LEGACY_AUTOLOAD
+	/*填充Probe回调*/
 	p->probe = probe;
 #endif
 	strlcpy(p->name, name, sizeof(p->name));//填充名称
@@ -472,6 +473,7 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 
 	ddev->parent = parent;
 	ddev->groups = groups;
+	/*设置disk设备名称*/
 	dev_set_name(ddev, "%s", disk->disk_name);
 	if (!(disk->flags & GENHD_FL_HIDDEN))
 		ddev->devt = MKDEV(disk->major, disk->first_minor);
@@ -1371,6 +1373,7 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 	if (!blk_get_queue(q))
 		return NULL;
 
+	/*申请general disk*/
 	disk = kzalloc_node(sizeof(struct gendisk), GFP_KERNEL, node_id);
 	if (!disk)
 		goto out_put_queue;

@@ -171,9 +171,10 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 		master = netdev_master_upper_dev_get_rcu(skb->dev);
 	else if (netif_is_l3_master(skb->dev) ||
 		 netif_has_l3_rx_handler(skb->dev))
+	    /*skb所属的设备为master或者此设备有l3 rx handler*/
 		master = skb->dev;
 
-	//如果有master的ops中有l3mdev_l3_rcv回调，则调用
+	//l3 master不为空，且master的ops中有l3mdev_l3_rcv回调，则调用
 	if (master && master->l3mdev_ops->l3mdev_l3_rcv)
 		skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
 

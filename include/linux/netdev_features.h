@@ -98,6 +98,7 @@ enum {
 	 * in Documentation/networking/netdev-features.rst.
 	 */
 
+	/*kernel支持的netdev feature最大值*/
 	/**/NETDEV_FEATURE_COUNT
 };
 

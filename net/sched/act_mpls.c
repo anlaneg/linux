@@ -292,6 +292,7 @@ static int tcf_mpls_init(struct net *net, struct nlattr *nla,
 	if (goto_ch)
 		tcf_chain_put_by_act(goto_ch);
 	if (p)
+	    /*释放p的旧值*/
 		kfree_rcu(p, rcu);
 
 	return ret;

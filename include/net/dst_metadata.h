@@ -53,6 +53,7 @@ skb_tunnel_info(const struct sk_buff *skb)
 	if (dst && dst->lwtstate &&
 	    (dst->lwtstate->type == LWTUNNEL_ENCAP_IP ||
 	     dst->lwtstate->type == LWTUNNEL_ENCAP_IP6))
+	    /*返回lwt tunnel对应的info*/
 		return lwt_tun_info(dst->lwtstate);
 
 	return NULL;

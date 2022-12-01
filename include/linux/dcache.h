@@ -87,7 +87,7 @@ struct dentry {
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
 	struct hlist_bl_node d_hash;	/* lookup hash list */
-	//指向父dentry项
+	//指向父dentry
 	struct dentry *d_parent;	/* parent directory */
 	//指向此dentry的名称
 	struct qstr d_name;
@@ -98,6 +98,7 @@ struct dentry {
 	unsigned char d_iname[DNAME_INLINE_LEN];	/* small names */
 
 	/* Ref lookup also touches following */
+	/*引用计数*/
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
 	/*dentry对应的操作集*/
 	const struct dentry_operations *d_op;
@@ -111,7 +112,7 @@ struct dentry {
 		struct list_head d_lru;		/* LRU list */
 		wait_queue_head_t *d_wait;	/* in-lookup ones only */
 	};
-	//用于提供链连接给父dentry
+	//用于串连到父dentry的d_subdirs中
 	struct list_head d_child;	/* child of parent list */
 	//用于串连所有从属于自已的dentry
 	struct list_head d_subdirs;	/* our children */

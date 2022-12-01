@@ -553,7 +553,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
-		//检查此srcport是否可占用
+		//检查此srcport是否可占用,实现接口绑定
 		if (sk->sk_prot->get_port(sk, snum)) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
 			err = -EADDRINUSE;
@@ -855,7 +855,7 @@ int inet_send_prepare(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(inet_send_prepare);
 
-//ipv4 报文发送入口
+//ipv4 报文socket发送入口
 int inet_sendmsg(struct socket *sock, struct msghdr *msg, size_t size)
 {
 	struct sock *sk = sock->sk;
@@ -886,7 +886,7 @@ EXPORT_SYMBOL(inet_sendpage);
 INDIRECT_CALLABLE_DECLARE(int udp_recvmsg(struct sock *, struct msghdr *,
 					  size_t, int, int, int *));
 //ipv4 消息收取
-int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
+int inet_recvmsg(struct socket *sock, struct msghdr *msg/*读取控制信息*/, size_t size/*要读取的内空长度*/,
 		 int flags)
 {
 	struct sock *sk = sock->sk;
@@ -894,12 +894,13 @@ int inet_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 	int err;
 
 	if (likely(!(flags & MSG_ERRQUEUE)))
+	    /*更新此socket读取的cpu*/
 		sock_rps_record_flow(sk);
 
 	//通过协议的recvmsg回调来完成
-	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg, udp_recvmsg,
-			      sk, msg, size, flags & MSG_DONTWAIT,
-			      flags & ~MSG_DONTWAIT, &addr_len);
+	err = INDIRECT_CALL_2(sk->sk_prot->recvmsg, tcp_recvmsg/*tcp消息读取*/, udp_recvmsg/*udp消息读取*/,
+			      sk, msg, size/*要读取的内容长度*/, flags & MSG_DONTWAIT/*是否非阻塞*/,
+			      flags & ~MSG_DONTWAIT/*读消息flags*/, &addr_len/*地址长度*/);
 	if (err >= 0)
 		msg->msg_namelen = addr_len;
 	return err;
@@ -1063,6 +1064,7 @@ static int inet_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned lon
 	case SIOCDELRT:
 		return inet_compat_routing_ioctl(sk, cmd, argp);
 	default:
+	    /*其它的ioctl命令处理由协议处理*/
 		if (!sk->sk_prot->compat_ioctl)
 			return -ENOIOCTLCMD;
 		return sk->sk_prot->compat_ioctl(sk, cmd, arg);

@@ -103,6 +103,7 @@ static const struct genl_family *genl_family_find_byname(char *name)
 	return NULL;
 }
 
+/*返回cmd数量*/
 static int genl_get_cmd_cnt(const struct genl_family *family)
 {
 	return family->n_ops + family->n_small_ops;
@@ -113,6 +114,7 @@ static void genl_op_from_full(const struct genl_family *family,
 {
 	*op = family->ops[i];
 
+	/*使用family中提供的maxattr,policy成员*/
 	if (!op->maxattr)
 		op->maxattr = family->maxattr;
 	if (!op->policy)
@@ -171,12 +173,12 @@ static int genl_get_cmd(u32 cmd, const struct genl_family *family,
 	return genl_get_cmd_small(cmd, family, op);
 }
 
-static void genl_get_cmd_by_index(unsigned int i,
+static void genl_get_cmd_by_index(unsigned int i/*cmd索引*/,
 				  const struct genl_family *family,
-				  struct genl_ops *op)
+				  struct genl_ops *op/*出参*/)
 {
 	if (i < family->n_ops)
-	    /*i索引小于n_ops,填充op*/
+	    /*i索引小于n_ops,此时读取family->ops[i]并填充op*/
 		genl_op_from_full(family, i, op);
 	else if (i < family->n_ops + family->n_small_ops)
 	    /*自small_ops提取信息，填充op*/
@@ -264,6 +266,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 	bool groups_allocated = false;
 
 	if (!n_groups)
+	    /*组播组数量为0，直接退出*/
 		return 0;
 
 	/*组播组名称校验处理*/
@@ -271,7 +274,9 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		const struct genl_multicast_group *grp = &family->mcgrps[i];
 
 		if (WARN_ON(grp->name[0] == '\0'))
+		    /*用称为空，报错*/
 			return -EINVAL;
+
 		/*group名称中必须包含'\0'*/
 		if (WARN_ON(memchr(grp->name, '\0', GENL_NAMSIZ) == NULL))
 			return -EINVAL;
@@ -291,7 +296,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		first_id = GENL_ID_PMCRAID;
 		BUG_ON(n_groups != 1);
 	} else {
-	    /*申请一组n_groups个id*/
+	    /*申请一组id（n_groups个)*/
 		groups_allocated = true;
 		err = genl_allocate_reserve_groups(n_groups, &first_id);
 		if (err)
@@ -306,11 +311,12 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		return 0;
 
 	if (family->netnsok) {
+	    /*此family支持netns,遍历已存在所有net ns*/
 		struct net *net;
 
 		netlink_table_grab();
 		rcu_read_lock();
-		/*遍历每个net namespace*/
+		/*遍历每个net namespace,针对每个ns,检查是否需要调整group*/
 		for_each_net_rcu(net) {
 			err = __netlink_change_ngroups(net->genl_sock,
 					mc_groups_longs * BITS_PER_LONG);
@@ -327,6 +333,7 @@ static int genl_validate_assign_mc_groups(struct genl_family *family)
 		rcu_read_unlock();
 		netlink_table_ungrab();
 	} else {
+	    /*更改init_net的group大小*/
 		err = netlink_change_ngroups(init_net.genl_sock,
 					     mc_groups_longs * BITS_PER_LONG);
 	}
@@ -374,7 +381,7 @@ static int genl_validate_ops(const struct genl_family *family)
 	    //参数有误，有ops计数，但无ops指针
 		return -EINVAL;
 
-	/*计算family中有多少cmd*/
+	/*校验family下所有cmd*/
 	for (i = 0; i < genl_get_cmd_cnt(family); i++) {
 		struct genl_ops op;
 

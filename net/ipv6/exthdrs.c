@@ -76,7 +76,26 @@ static bool ip6_tlvopt_unknown(struct sk_buff *skb, int optoff,
 		goto drop;
 	}
 
-	//取选项type的6，7bit位（这里缺少解释）
+	//取选项type的6，7bit位，以下是ipv6 rfc对其不认识选项的处理解释
+	/**
+	 * The Option Type identifiers are internally encoded such that their
+   highest-order two bits specify the action that must be taken if the
+   processing IPv6 node does not recognize the Option Type:
+
+      00 - skip over this option and continue processing the header.
+
+      01 - discard the packet.
+
+      10 - discard the packet and, regardless of whether or not the
+           packet's Destination Address was a multicast address, send an
+           ICMP Parameter Problem, Code 2, message to the packet's
+           Source Address, pointing to the unrecognized Option Type.
+
+      11 - discard the packet and, only if the packet's Destination
+           Address was not a multicast address, send an ICMP Parameter
+           Problem, Code 2, message to the packet's Source Address,
+           pointing to the unrecognized Option Type.
+	 */
 	switch ((skb_network_header(skb)[optoff] & 0xC0) >> 6) {
 	case 0: /* ignore */
 		return true;
@@ -115,7 +134,7 @@ static bool ip6_parse_tlv(bool hopbyhop,
 			  struct sk_buff *skb,
 			  int max_count/*容许的最大tlv数目*/)
 {
-    	/*当前采用的是ipv6,其ipv6 header之后有options,options格式为:
+	/*当前采用的是ipv6,其ipv6 header之后有options,options格式为:
 	 * {
 	 *      Next Header (8bits)
 	 *      Hdr Ext Len (8bits) 注：其表示的为扩展头的长度（需要*8），但不含next header
@@ -123,13 +142,14 @@ static bool ip6_parse_tlv(bool hopbyhop,
 	 *  }
 	 * */
 	int len = (skb_transport_header(skb)[1] + 1) << 3;/*扩展头长度*/
-	const unsigned char *nh = skb_network_header(skb);/*l3指针*/
+	const unsigned char *nh = skb_network_header(skb);/*next header指针*/
 	int off = skb_network_header_len(skb);/*传输层到网络层之间的增量，即l3头部长度*/
 	bool disallow_unknowns = false;
 	int tlv_count = 0;
 	int padlen = 0;
 
 	if (unlikely(max_count < 0)) {
+		/*如果max_count配置为小于0的数，则disallow_unknows为true*/
 		disallow_unknowns = true;
 		max_count = -max_count;
 	}
@@ -138,11 +158,11 @@ static bool ip6_parse_tlv(bool hopbyhop,
 	if (skb_transport_offset(skb) + len > skb_headlen(skb))
 		goto bad;
 
-	off += 2;
+	off += 2;/*跳过type+length*/
 	len -= 2;
 
 	while (len > 0) {
-	    	/*nh指向ipv6头，off结合nh,指向选项起始位置(Type)，off+1指向选项中的Length*/
+		/*nh指向next header，off结合nh,指向选项起始位置(Type)，off+1指向选项中的Length*/
 		int optlen, i;
 
 		/*按option的type进行检查处理*/
@@ -156,9 +176,11 @@ static bool ip6_parse_tlv(bool hopbyhop,
 			continue;
 		}
 		if (len < 2)
+			/*已不足2字节，退出*/
 			goto bad;
 		optlen = nh[off + 1] + 2;
 		if (optlen > len)
+			/*内容不足选项长度要求，退出*/
 			goto bad;
 
 		if (nh[off] == IPV6_TLV_PADN) {
@@ -186,7 +208,7 @@ static bool ip6_parse_tlv(bool hopbyhop,
 			    /*除pading外，tlv结构数量超过max_count,丢包*/
 				goto bad;
 
-			if (hopbyhop) {
+			if (hopbyhop/*当前为hopbyhop选项头解析*/) {
 				switch (nh[off]) {
 				case IPV6_TLV_ROUTERALERT:
 					if (!ipv6_hop_ra(skb, off))
@@ -205,12 +227,14 @@ static bool ip6_parse_tlv(bool hopbyhop,
 						return false;
 					break;
 				default:
+					/*遇到不认识的tlv选项*/
 					if (!ip6_tlvopt_unknown(skb, off,
 								disallow_unknowns))
 						return false;
 					break;
 				}
 			} else {
+				/*非hop-by-hop选项*/
 				switch (nh[off]) {
 #if IS_ENABLED(CONFIG_IPV6_MIP6)
 				case IPV6_TLV_HAO:
@@ -488,6 +512,7 @@ looped_back:
 
 	if (skb_dst(skb)->dev->flags & IFF_LOOPBACK) {
 		if (ipv6_hdr(skb)->hop_limit <= 1) {
+		    /*ttl不足，icmp告错*/
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
 			icmpv6_send(skb, ICMPV6_TIME_EXCEED,
 				    ICMPV6_EXC_HOPLIMIT, 0);
@@ -982,6 +1007,7 @@ static bool ipv6_hop_ioam(struct sk_buff *skb, int optoff)
 
 	/* Ignore if IOAM is not enabled on ingress */
 	if (!__in6_dev_get(skb->dev)->cnf.ioam6_enabled)
+		/*收到ioam选项，但设备未开启ioam6*/
 		goto ignore;
 
 	/* Truncated Option header */
@@ -1089,6 +1115,7 @@ drop:
 	return false;
 }
 
+/*ipv6 header的nh== NEXTHDR_HOP，此函数解析它的内容*/
 int ipv6_parse_hopopts(struct sk_buff *skb)
 {
 	struct inet6_skb_parm *opt = IP6CB(skb);
@@ -1103,24 +1130,25 @@ int ipv6_parse_hopopts(struct sk_buff *skb)
 	 */
 	if (!pskb_may_pull(skb, sizeof(struct ipv6hdr) + 8) ||
 	    !pskb_may_pull(skb, (sizeof(struct ipv6hdr) +
-	            /*选项头长度*/
+	            /*选项头长度(len不包含第一个8字节，故这里加1）*/
 				 ((skb_transport_header(skb)[1] + 1) << 3)))) {
 fail_and_free:
 		kfree_skb(skb);
 		return -1;
 	}
 
-	/*扩展头长度*/
+	/*扩展头实际长度*/
 	extlen = (skb_transport_header(skb)[1] + 1) << 3;
 	if (extlen > net->ipv6.sysctl.max_hbh_opts_len)
+	    /*长度超过配置要求，丢包*/
 		goto fail_and_free;
 
-	opt->flags |= IP6SKB_HOPBYHOP;
+	opt->flags |= IP6SKB_HOPBYHOP;/*标记收到hop-by-hop*/
 	if (ip6_parse_tlv(true, skb, net->ipv6.sysctl.max_hbh_opts_cnt)) {
-	    	/*跳过ipv6选项头*/
+	    /*跳过ipv6选项头*/
 		skb->transport_header += extlen;
 		opt = IP6CB(skb);
-		/*使用选项中的next-header*/
+		/*使用选项中的next-header,由于其正好在ip6头后面第一个字节，故增加ipv6hdr*/
 		opt->nhoff = sizeof(struct ipv6hdr);
 		return 1;
 	}

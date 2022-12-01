@@ -113,6 +113,7 @@ static inline void hlist_bl_add_behind(struct hlist_bl_node *n,
 		n->next->pprev = &n->next;
 }
 
+/*bl_node移除*/
 static inline void __hlist_bl_del(struct hlist_bl_node *n)
 {
 	struct hlist_bl_node *next = n->next;

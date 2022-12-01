@@ -286,7 +286,7 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 		} while (++first != last);
 		goto fail;/*实在是找不到合适的port*/
 	} else {
-	    /*查询此udp port对应的slot*/
+	    /*函数指定了snum,查询此udp port对应的slot*/
 		hslot = udp_hashslot(udptable, net, snum);
 		spin_lock_bh(&hslot->lock);
 		if (hslot->count > 10) {
@@ -296,6 +296,7 @@ int udp_lib_get_port(struct sock *sk, unsigned short snum,
 			slot2          &= udptable->mask;
 			hash2_nulladdr &= udptable->mask;
 
+			/*查询对应的slot2*/
 			hslot2 = udp_hashslot2(udptable, slot2);
 			if (hslot->count < hslot2->count)
 				goto scan_primary_hash;
@@ -320,6 +321,7 @@ found:
 	udp_sk(sk)->udp_port_hash = snum;
 	udp_sk(sk)->udp_portaddr_hash ^= snum;/*合上后一半hash*/
 	if (sk_unhashed(sk)) {
+		/*socket没有加入到hash table中，如果需要，则将其加入到table中*/
 		if (sk->sk_reuseport &&
 		    udp_reuseport_add_sock(sk, hslot)) {
 			inet_sk(sk)->inet_num = 0;
@@ -365,7 +367,7 @@ int udp_v4_get_port(struct sock *sk, unsigned short snum/*待检查的srcport*/)
 		ipv4_portaddr_hash(sock_net(sk), inet_sk(sk)->inet_rcv_saddr, 0);
 
 	/* precompute partial secondary hash */
-	udp_sk(sk)->udp_portaddr_hash = hash2_partial;
+	udp_sk(sk)->udp_portaddr_hash = hash2_partial;/*填充部分hash2*/
 	return udp_lib_get_port(sk, snum, hash2_nulladdr);
 }
 
@@ -1119,6 +1121,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 	 */
 
 	if (msg->msg_flags & MSG_OOB) /* Mirror BSD error message compatibility */
+	    /*oob标记不支持*/
 		return -EOPNOTSUPP;
 
 	getfrag = is_udplite ? udplite_getfrag : ip_generic_getfrag/*udp对应的分片回调*/;
@@ -1266,6 +1269,7 @@ int udp_sendmsg(struct sock *sk, struct msghdr *msg, size_t len/*要发送的长
 		rt = (struct rtable *)sk_dst_check(sk, 0);
 
 	if (!rt) {
+	    /*rt未指定，查询rt并设置*/
 		struct net *net = sock_net(sk);
 		__u8 flow_flags = inet_sk_flowi_flags(sk);
 
@@ -1309,11 +1313,13 @@ back_from_confirm:
 	if (!corkreq) {
 		struct inet_cork cork;
 
+		/*构造skb*/
 		skb = ip_make_skb(sk, fl4, getfrag, msg, ulen,
 				  sizeof(struct udphdr), &ipc, &rt,
 				  &cork, msg->msg_flags);
 		err = PTR_ERR(skb);
 		if (!IS_ERR_OR_NULL(skb))
+		    /*执行skb发送*/
 			err = udp_send_skb(skb, fl4, &cork);
 		goto out;
 	}
@@ -1608,12 +1614,13 @@ int __udp_enqueue_schedule_skb(struct sock *sk, struct sk_buff *skb)
 	 * - Less cache line misses at copyout() time
 	 * - Less work at consume_skb() (less alien page frag freeing)
 	 */
-	//超过按收缓冲区门限的一半
+	//超过接收缓冲区门限的一半
 	if (rmem > (sk->sk_rcvbuf >> 1)) {
 		skb_condense(skb);
 
 		busy = busylock_acquire(sk);
 	}
+
 	//记录报文有多少字节
 	size = skb->truesize;
 	udp_set_dev_scratch(skb);
@@ -1801,9 +1808,11 @@ int udp_ioctl(struct sock *sk, int cmd, unsigned long arg)
 }
 EXPORT_SYMBOL(udp_ioctl);
 
+/*自udp_sk(sk)->reader_queue收取skb,如果其为空，则将sk->sk_receive_queue移动到此队列，再尝试重新收取*/
 struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			       int noblock, int *off, int *err)
 {
+    /*取接收队列*/
 	struct sk_buff_head *sk_queue = &sk->sk_receive_queue;
 	struct sk_buff_head *queue;
 	struct sk_buff *last;
@@ -1816,6 +1825,7 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 	do {
 		struct sk_buff *skb;
 
+		/*检查socket是否处于error状态*/
 		error = sock_error(sk);
 		if (error)
 			break;
@@ -1827,6 +1837,7 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			skb = __skb_try_recv_from_queue(sk, queue, flags, off,
 							err, &last);
 			if (skb) {
+			    /*返回此队列上对应的一个skb*/
 				if (!(flags & MSG_PEEK))
 					udp_skb_destructor(sk, skb);
 				spin_unlock_bh(&queue->lock);
@@ -1834,7 +1845,7 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			}
 
 			if (skb_queue_empty_lockless(sk_queue)) {
-				//收取列目前为空，可能需要阻塞等待报文来
+				//没有自queue上收到报文，并且sk_queue队列目前为空，可能需要阻塞，以便等待报文来
 				spin_unlock_bh(&queue->lock);
 				goto busy_check;
 			}
@@ -1846,10 +1857,10 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			 * is needed.
 			 */
 			spin_lock(&sk_queue->lock);
-			//sk_queue添加到queue队列尾部，并初始化sk_queue为空
+			//sk_queue的内容移动到queue队列，并初始化sk_queue为空
 			skb_queue_splice_tail_init(sk_queue, queue);
 
-			//重新尝试读取
+			//重新尝试自read queue上并进行读取
 			skb = __skb_try_recv_from_queue(sk, queue, flags, off,
 							err, &last);
 			if (skb && !(flags & MSG_PEEK))
@@ -1857,12 +1868,14 @@ struct sk_buff *__skb_recv_udp(struct sock *sk, unsigned int flags,
 			spin_unlock(&sk_queue->lock);
 			spin_unlock_bh(&queue->lock);
 			if (skb)
+			    /*读取到一个skb,返回*/
 				return skb;
 
 busy_check:
 			if (!sk_can_busy_loop(sk))
 				break;
 
+			/*触发网卡poll一次*/
 			sk_busy_loop(sk, flags & MSG_DONTWAIT);
 		} while (!skb_queue_empty_lockless(sk_queue));
 
@@ -1923,16 +1936,16 @@ EXPORT_SYMBOL(udp_read_sock);
  * 	This should be easy, if there is something there we
  * 	return it, otherwise we block.
  */
-
-int udp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
-		int flags, int *addr_len)
+/*udp消息读取*/
+int udp_recvmsg(struct sock *sk/*待读取的udp socket*/, struct msghdr *msg, size_t len/*要读取的长度*/, int noblock/*是否非阻塞*/,
+		int flags, int *addr_len/*出参，地址长度*/)
 {
 	struct inet_sock *inet = inet_sk(sk);
 	DECLARE_SOCKADDR(struct sockaddr_in *, sin, msg->msg_name);
 	struct sk_buff *skb;
 	unsigned int ulen, copied;
 	int off, err, peeking = flags & MSG_PEEK;
-	int is_udplite = IS_UDPLITE(sk);
+	int is_udplite = IS_UDPLITE(sk);/*是否udp lite socket*/
 	bool checksum_valid = false;
 
 	if (flags & MSG_ERRQUEUE)
@@ -1940,11 +1953,14 @@ int udp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int noblock,
 
 try_again:
 	off = sk_peek_offset(sk, flags);
+	/*选择要收取的skb*/
 	skb = __skb_recv_udp(sk, flags, noblock, &off, &err);
 	if (!skb)
+	    /*取skb失败，报错*/
 		return err;
 
-	ulen = udp_skb_len(skb);
+	ulen = udp_skb_len(skb);/*udp负载长度*/
+	/*确定可复制的内容长度（如果可复制的内容长度小于报文实长，则返回MSG_TRUNC标记)*/
 	copied = len;
 	if (copied > ulen - off)
 		copied = ulen - off;
@@ -1967,6 +1983,7 @@ try_again:
 
 	if (checksum_valid || udp_skb_csum_unnecessary(skb)) {
 		if (udp_skb_is_linear(skb))
+		    /*复制内容到msg->msg_iter中*/
 			err = copy_linear_skb(skb, copied, off, &msg->msg_iter);
 		else
 			err = skb_copy_datagram_msg(skb, off, msg, copied);
@@ -1995,6 +2012,7 @@ try_again:
 
 	/* Copy the address. */
 	if (sin) {
+	    /*复制src地址*/
 		sin->sin_family = AF_INET;
 		sin->sin_port = udp_hdr(skb)->source;
 		sin->sin_addr.s_addr = ip_hdr(skb)->saddr;
@@ -2009,6 +2027,7 @@ try_again:
 		udp_cmsg_recv(msg, sk, skb);
 
 	if (inet->cmsg_flags)
+	    /*按flags要求，填充其它额外信息*/
 		ip_cmsg_recv_offset(msg, sk, skb, sizeof(struct udphdr), off);
 
 	err = copied;
@@ -2086,11 +2105,14 @@ EXPORT_SYMBOL(udp_disconnect);
 void udp_lib_unhash(struct sock *sk)
 {
 	if (sk_hashed(sk)) {
+		/*取udp table*/
 		struct udp_table *udptable = sk->sk_prot->h.udp_table;
 		struct udp_hslot *hslot, *hslot2;
 
+		/*按port进行hash*/
 		hslot  = udp_hashslot(udptable, sock_net(sk),
 				      udp_sk(sk)->udp_port_hash);
+		/*按addr + port进行hash*/
 		hslot2 = udp_hashslot2(udptable, udp_sk(sk)->udp_portaddr_hash);
 
 		spin_lock_bh(&hslot->lock);

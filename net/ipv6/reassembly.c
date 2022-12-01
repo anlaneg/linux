@@ -96,8 +96,10 @@ fq_find(struct net *net, __be32 id, const struct ipv6hdr *hdr, int iif)
 					    IPV6_ADDR_LINKLOCAL)))
 		key.iif = 0;
 
+	/*查询key指定的内容在分片表中是否存在*/
 	q = inet_frag_find(net->ipv6.fqdir, &key);
 	if (!q)
+	    /*查询失败*/
 		return NULL;
 
 	return container_of(q, struct frag_queue, q);
@@ -115,6 +117,7 @@ static int ip6_frag_queue(struct frag_queue *fq, struct sk_buff *skb,
 	u8 ecn;
 
 	if (fq->q.flags & INET_FRAG_COMPLETE)
+	    /*分片已完全*/
 		goto err;
 
 	err = -EINVAL;
@@ -216,6 +219,7 @@ static int ip6_frag_queue(struct frag_queue *fq, struct sk_buff *skb,
 		unsigned long orefdst = skb->_skb_refdst;
 
 		skb->_skb_refdst = 0UL;
+		/*尝试组装*/
 		err = ip6_frag_reasm(fq, skb, prev_tail, dev);
 		skb->_skb_refdst = orefdst;
 		return err;
@@ -237,6 +241,7 @@ discard_fq:
 	__IP6_INC_STATS(net, ip6_dst_idev(skb_dst(skb)),
 			IPSTATS_MIB_REASMFAILS);
 err:
+    /*丢包*/
 	kfree_skb(skb);
 	return err;
 }
@@ -323,7 +328,9 @@ static int ipv6_frag_rcv(struct sk_buff *skb)
 {
 	struct frag_hdr *fhdr;
 	struct frag_queue *fq;
+	/*取ipv6头*/
 	const struct ipv6hdr *hdr = ipv6_hdr(skb);
+	/*此报文所在net namespace*/
 	struct net *net = dev_net(skb_dst(skb)->dev);
 	u8 nexthdr;
 	int iif;
@@ -342,8 +349,10 @@ static int ipv6_frag_rcv(struct sk_buff *skb)
 		goto fail_hdr;
 
 	hdr = ipv6_hdr(skb);
+	/*取ipv6分片头*/
 	fhdr = (struct frag_hdr *)skb_transport_header(skb);
 
+	/*如果没有分片more标记,offset为0，则非分片报文*/
 	if (!(fhdr->frag_off & htons(IP6_OFFSET | IP6_MF))) {
 		/* It is not a fragmented frame */
 		skb->transport_header += sizeof(struct frag_hdr);
@@ -354,6 +363,7 @@ static int ipv6_frag_rcv(struct sk_buff *skb)
 		IP6CB(skb)->flags |= IP6SKB_FRAGMENTED;
 		IP6CB(skb)->frag_max_size = ntohs(hdr->payload_len) +
 					    sizeof(struct ipv6hdr);
+		/*非分片报文，但有一个分片头，使传输层指向分片后面*/
 		return 1;
 	}
 
@@ -365,8 +375,10 @@ static int ipv6_frag_rcv(struct sk_buff *skb)
 	 */
 	nexthdr = hdr->nexthdr;
 	if (ipv6frag_thdr_truncated(skb, skb_transport_offset(skb), &nexthdr)) {
+	    /*报文头有误*/
 		__IP6_INC_STATS(net, __in6_dev_get_safely(skb->dev),
 				IPSTATS_MIB_INHDRERRORS);
+		/*发送icmpv6*/
 		icmpv6_param_prob(skb, ICMPV6_HDR_INCOMP, 0);
 		return -1;
 	}
@@ -380,6 +392,7 @@ static int ipv6_frag_rcv(struct sk_buff *skb)
 		spin_lock(&fq->q.lock);
 
 		fq->iif = iif;
+		/*报文入队，如果返回ret==1,则重组完成*/
 		ret = ip6_frag_queue(fq, skb, fhdr, IP6CB(skb)->nhoff,
 				     &prob_offset);
 
@@ -405,6 +418,7 @@ fail_hdr:
 	return -1;
 }
 
+/*负责处理ipv6分片接收*/
 static const struct inet6_protocol frag_protocol = {
 	.handler	=	ipv6_frag_rcv,
 	.flags		=	INET6_PROTO_NOPOLICY,
@@ -579,6 +593,7 @@ int __init ipv6_frag_init(void)
 	if (ret)
 		goto out;
 
+	/*初始化分片协议*/
 	ret = inet6_add_protocol(&frag_protocol, IPPROTO_FRAGMENT);
 	if (ret)
 		goto err_protocol;

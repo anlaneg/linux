@@ -74,22 +74,22 @@ int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
 			     struct tcf_chain **newchain/*出参，如goto chain,则获取对应的chain*/,
 			     struct netlink_ext_ack *extack/*出参，错误信息*/)
 {
-	int opcode = TC_ACT_EXT_OPCODE(action), ret = -EINVAL;
+	int opcode = TC_ACT_EXT_OPCODE(action)/*取操作标记*/, ret = -EINVAL;
 	u32 chain_index;
 
-	//opcode检查
 	if (!opcode)
+	    /*没有操作标记，则为非goto,jump类操作，检查action范围*/
 		ret = action > TC_ACT_VALUE_MAX ? -EINVAL : 0;
 	else if (opcode <= TC_ACT_EXT_OPCODE_MAX || action == TC_ACT_UNSPEC)
+	    /*有操作标记，先检查opcode范围*/
 		ret = 0;
 	if (ret) {
 		NL_SET_ERR_MSG(extack, "invalid control action");
 		goto end;
 	}
 
-	//action属于goto chain
 	if (TC_ACT_EXT_CMP(action, TC_ACT_GOTO_CHAIN)) {
-		//提取action对应的chain_index
+		//action为goto,提取action对应的chain_index
 		chain_index = action & TC_ACT_EXT_VAL_MASK;
 		if (!tp || !newchain) {
 			ret = -EINVAL;
@@ -98,7 +98,7 @@ int tcf_action_check_ctrlact(int action, struct tcf_proto *tp,
 			goto end;
 		}
 
-		//确保chain_index对应的chain存在
+		//确保chain_index对应的chain存在(不存在就创建）
 		*newchain = tcf_chain_get_by_act(tp->chain->block, chain_index);
 		if (!*newchain) {
 			ret = -ENOMEM;
@@ -115,7 +115,8 @@ EXPORT_SYMBOL(tcf_action_check_ctrlact);
 struct tcf_chain *tcf_action_set_ctrlact(struct tc_action *a, int action,
 					 struct tcf_chain *goto_chain)
 {
-	a->tcfa_action = action;
+	a->tcfa_action = action;/*填充此act对应的返回值*/
+	/*指明下一次匹配的chain*/
 	goto_chain = rcu_replace_pointer(a->goto_chain, goto_chain, 1);
 	return goto_chain;
 }
@@ -729,7 +730,7 @@ static int tcf_idr_delete_index(struct tcf_idrinfo *idrinfo, u32 index)
 //创建并初始化action
 int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 		   struct tc_action **a/*出参，创建的ops对应的action*/, const struct tc_action_ops *ops,
-		   int bind, bool cpustats, u32 flags)
+		   int bind/*是否被绑定*/, bool cpustats, u32 flags)
 {
 	//针对各ops自定义size为action申请空间
 	struct tc_action *p = kzalloc(ops->size, GFP_KERNEL);
@@ -741,6 +742,7 @@ int tcf_idr_create(struct tc_action_net *tn, u32 index, struct nlattr *est,
 		return -ENOMEM;
 	refcount_set(&p->tcfa_refcnt, 1);
 	if (bind)
+	    /*增加bind引用计数*/
 		atomic_set(&p->tcfa_bindcnt, 1);
 
 	if (cpustats) {
@@ -1498,6 +1500,7 @@ int tcf_action_init(struct net *net, struct tcf_proto *tp, struct nlattr *nla,
 		//存储生成的action
 		actions[i - 1] = act;
 		if (tc_act_bind(flags)) {
+		    /*指明了进行action bind*/
 			bool skip_sw = tc_skip_sw(fl_flags);
 			bool skip_hw = tc_skip_hw(fl_flags);
 

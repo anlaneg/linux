@@ -28,7 +28,7 @@
 #endif
 
 struct ptr_ring {
-	//生产者可存放的位置
+	//生产者可存放的位置，如果生产者指针对应的位置不为NULL，则队列为满
 	int producer ____cacheline_aligned_in_smp;
 	//生产者锁
 	spinlock_t producer_lock;
@@ -41,8 +41,9 @@ struct ptr_ring {
 	/* Read-only by both the producer and the consumer */
 	//队列大小
 	int size ____cacheline_aligned_in_smp; /* max entries in queue */
+	/*一次性操作的batch大小*/
 	int batch; /* number of entries to consume in a batch */
-	void **queue;
+	void **queue;/*存放内容的array*/
 };
 
 /* Note: callers invoking this in a loop must use a compiler barrier,
@@ -108,8 +109,8 @@ static inline bool ptr_ring_full_bh(struct ptr_ring *r)
  */
 static inline int __ptr_ring_produce(struct ptr_ring *r, void *ptr)
 {
-    //无可用空间
-	if (unlikely(!r->size) || r->queue[r->producer])
+    //队列长度为0，或者队列无可用空间
+	if (unlikely(!r->size) || r->queue[r->producer]/*此指针不为NULL，还未出队*/)
 		return -ENOSPC;
 
 	/* Make sure the pointer we are storing points to a valid data. */
@@ -178,7 +179,9 @@ static inline int ptr_ring_produce_bh(struct ptr_ring *r, void *ptr)
 static inline void *__ptr_ring_peek(struct ptr_ring *r)
 {
 	if (likely(r->size))
+	    /*取消费者指针标记的元素*/
 		return READ_ONCE(r->queue[r->consumer_head]);
+	/*队列size为0，返回NULL*/
 	return NULL;
 }
 
@@ -203,6 +206,7 @@ static inline void *__ptr_ring_peek(struct ptr_ring *r)
 static inline bool __ptr_ring_empty(struct ptr_ring *r)
 {
 	if (likely(r->size))
+	    /*队列长度非0，检查消费者当前位置是否为空*/
 		return !r->queue[READ_ONCE(r->consumer_head)];
 	return true;
 }
@@ -290,15 +294,18 @@ static inline void __ptr_ring_discard_one(struct ptr_ring *r)
 			r->queue[head--] = NULL;
 		r->consumer_tail = consumer_head;
 	}
+
 	if (unlikely(consumer_head >= r->size)) {
+	    /*当前指针已超过ring的长度，将指针指回0号位置*/
 		consumer_head = 0;
-		r->consumer_tail = 0;
+		r->consumer_tail = 0;//？？？
 	}
 	/* matching READ_ONCE in __ptr_ring_empty for lockless tests */
 	//更新消费头
 	WRITE_ONCE(r->consumer_head, consumer_head);
 }
 
+/*消费一个元素*/
 static inline void *__ptr_ring_consume(struct ptr_ring *r)
 {
 	void *ptr;
@@ -315,20 +322,23 @@ static inline void *__ptr_ring_consume(struct ptr_ring *r)
 	return ptr;
 }
 
+/*自ptr_ring中消费最多n个元素，将其填充到array中*/
 static inline int __ptr_ring_consume_batched(struct ptr_ring *r,
 					     void **array, int n)
 {
 	void *ptr;
 	int i;
 
+	/*逐个进行消费*/
 	for (i = 0; i < n; i++) {
 		ptr = __ptr_ring_consume(r);
 		if (!ptr)
+		    /*内容为空，停止消费，退出*/
 			break;
 		array[i] = ptr;
 	}
 
-	return i;
+	return i;/*返回消费指针位置*/
 }
 
 /*
@@ -382,6 +392,7 @@ static inline void *ptr_ring_consume_bh(struct ptr_ring *r)
 	return ptr;
 }
 
+/*自ptr_ring中消费最多n个元素，将其填充到array中(加锁）*/
 static inline int ptr_ring_consume_batched(struct ptr_ring *r,
 					   void **array, int n)
 {
@@ -391,7 +402,7 @@ static inline int ptr_ring_consume_batched(struct ptr_ring *r,
 	ret = __ptr_ring_consume_batched(r, array, n);
 	spin_unlock(&r->consumer_lock);
 
-	return ret;
+	return ret;/*返回消费指针位置*/
 }
 
 static inline int ptr_ring_consume_batched_irq(struct ptr_ring *r,
@@ -480,13 +491,17 @@ static inline int ptr_ring_consume_batched_bh(struct ptr_ring *r,
 static inline void **__ptr_ring_init_queue_alloc(unsigned int size, gfp_t gfp)
 {
 	if (size > KMALLOC_MAX_SIZE / sizeof(void *))
+	    /*size过大，返回NULL*/
 		return NULL;
+	/*申请长度为size的数组，元素为(void*)*/
 	return kvmalloc_array(size, sizeof(void *), gfp | __GFP_ZERO);
 }
 
+/*设置ring长度*/
 static inline void __ptr_ring_set_size(struct ptr_ring *r, int size)
 {
 	r->size = size;
+	/*计算batch大小，并进行修正*/
 	r->batch = SMP_CACHE_BYTES * 2 / sizeof(*(r->queue));
 	/* We need to set batch at least to 1 to make logic
 	 * in __ptr_ring_discard_one work correctly.
@@ -500,7 +515,7 @@ static inline void __ptr_ring_set_size(struct ptr_ring *r, int size)
 //初始化ring
 static inline int ptr_ring_init(struct ptr_ring *r, int size, gfp_t gfp)
 {
-	//申请queue队列
+	//申请长度为size的queue队列
 	r->queue = __ptr_ring_init_queue_alloc(size, gfp);
 	if (!r->queue)
 		return -ENOMEM;
@@ -571,7 +586,7 @@ done:
 	spin_unlock_irqrestore(&r->consumer_lock, flags);
 }
 
-static inline void **__ptr_ring_swap_queue(struct ptr_ring *r, void **queue,
+static inline void **__ptr_ring_swap_queue(struct ptr_ring *r, void **queue/*新队列*/,
 					   int size, gfp_t gfp,
 					   void (*destroy)(void *))
 {
@@ -579,6 +594,7 @@ static inline void **__ptr_ring_swap_queue(struct ptr_ring *r, void **queue,
 	void **old;
 	void *ptr;
 
+	/*自旧的ring中出队，并入队到queue中，多余的将通过destroy移除掉*/
 	while ((ptr = __ptr_ring_consume(r)))
 		if (producer < size)
 			queue[producer++] = ptr;
@@ -592,9 +608,9 @@ static inline void **__ptr_ring_swap_queue(struct ptr_ring *r, void **queue,
 	r->consumer_head = 0;
 	r->consumer_tail = 0;
 	old = r->queue;
-	r->queue = queue;
+	r->queue = queue;/*更新为新的队列指针*/
 
-	return old;
+	return old;/*返回旧的队列指针*/
 }
 
 /*
@@ -607,6 +623,7 @@ static inline int ptr_ring_resize(struct ptr_ring *r, int size, gfp_t gfp,
 				  void (*destroy)(void *))
 {
 	unsigned long flags;
+	/*申请一个新队列*/
 	void **queue = __ptr_ring_init_queue_alloc(size, gfp);
 	void **old;
 
@@ -616,6 +633,7 @@ static inline int ptr_ring_resize(struct ptr_ring *r, int size, gfp_t gfp,
 	spin_lock_irqsave(&(r)->consumer_lock, flags);
 	spin_lock(&(r)->producer_lock);
 
+	/*利用新队列交换旧队列，多余的元素将被调用destroy*/
 	old = __ptr_ring_swap_queue(r, queue, size, gfp, destroy);
 
 	spin_unlock(&(r)->producer_lock);
@@ -679,6 +697,7 @@ noqueues:
 	return -ENOMEM;
 }
 
+/*针对r中的所有元素，调用destroy回调*/
 static inline void ptr_ring_cleanup(struct ptr_ring *r, void (*destroy)(void *))
 {
 	void *ptr;
@@ -686,6 +705,7 @@ static inline void ptr_ring_cleanup(struct ptr_ring *r, void (*destroy)(void *))
 	if (destroy)
 		while ((ptr = ptr_ring_consume(r)))
 			destroy(ptr);
+	/*释放ring本身*/
 	kvfree(r->queue);
 }
 

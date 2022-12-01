@@ -1203,6 +1203,7 @@ static int __init inet6_init(void)
 	if (err)
 		goto calipso_fail;
 
+	/*初始化seg6*/
 	err = seg6_init();
 	if (err)
 		goto seg6_fail;

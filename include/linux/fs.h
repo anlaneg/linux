@@ -332,7 +332,7 @@ struct kiocb {
 	/* The 'ki_filp' pointer is shared in a union for aio */
 	randomized_struct_fields_start
 
-	loff_t			ki_pos;//读写的偏移量
+	loff_t			ki_pos;//读写的起始位置（偏移量）
 	//操作完成后回调
 	void (*ki_complete)(struct kiocb *iocb, long ret);
 	void			*private;
@@ -596,9 +596,12 @@ struct fsnotify_mark_connector;
  * of the 'struct inode'
  */
 struct inode {
-	umode_t			i_mode;/*inode权限位等*/
+    /*inode权限位，文件类型等*/
+	umode_t			i_mode;
 	unsigned short		i_opflags;
+	/*用户id*/
 	kuid_t			i_uid;
+	/*组id*/
 	kgid_t			i_gid;
 	unsigned int		i_flags;
 
@@ -634,7 +637,7 @@ struct inode {
 	};
 	//指向对应的设备编号
 	dev_t			i_rdev;
-	//文件大小
+	//以字节为单位的文件大小
 	loff_t			i_size;
 	struct timespec64	i_atime;/*访问时间*/
 	struct timespec64	i_mtime;/*修改时间*/
@@ -687,7 +690,7 @@ struct inode {
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
 	union {
-	    //对应的file操作函数集
+	    //对应的file操作函数集,open文件时，使用此file操作集
 		const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 		//inode空间释放函数
 		void (*free_inode)(struct inode *);
@@ -970,24 +973,29 @@ struct file {
 		struct llist_node	fu_llist;
 		struct rcu_head 	fu_rcuhead;
 	} f_u;
-	struct path		f_path;//文件路径
+	//文件路径
+	struct path		f_path;
 	//文件对应的inode
 	struct inode		*f_inode;	/* cached value */
 	//kernel向用户态展示的是fd,当用户态通过系统调用传递fd到kernel后，kernel将其转换为file
 	//通过file_operations来实现各底层差异.
 	//file的f_op取值一般在file open时来源于inode->i_fop成员
-	const struct file_operations	*f_op;//文件操作对应的函数集（例如读写）
+	//文件操作对应的函数集（例如读写）
+	const struct file_operations	*f_op;
 
 	/*
 	 * Protects f_ep, f_flags.
 	 * Must not be taken from IRQ context.
 	 */
 	spinlock_t		f_lock;
-	atomic_long_t		f_count;//引用计数
+	//引用计数
+	atomic_long_t		f_count;
 	unsigned int 		f_flags;
-	fmode_t			f_mode;//文件模式位（含offset是否为无符号的等）
+	//文件模式位（含offset是否为无符号的等）
+	fmode_t			f_mode;
 	struct mutex		f_pos_lock;
-	loff_t			f_pos;//当前读到哪个位置了
+	//当前读到哪个位置了
+	loff_t			f_pos;
 	struct fown_struct	f_owner;
 	const struct cred	*f_cred;
 	struct file_ra_state	f_ra;
@@ -1473,22 +1481,29 @@ struct sb_writers {
 };
 
 struct super_block {
+    /*用于挂接到super_blocks链表上*/
 	struct list_head	s_list;		/* Keep this first */
 	//所属的设备编号(通过此字段可唯一确定super_block)
 	dev_t			s_dev;		/* search index; _not_ kdev_t */
-	unsigned char		s_blocksize_bits;//文件系统块大小的bits数（掩码数）
-	unsigned long		s_blocksize;//文件系统的块大小
+	//文件系统块大小的bits数（掩码数）
+	unsigned char		s_blocksize_bits;
+	//文件系统的块大小
+	unsigned long		s_blocksize;
 	//文件系统支持的最大文件大小
 	loff_t			s_maxbytes;	/* Max file size */
-	struct file_system_type	*s_type;//属于那种文件系统
-	const struct super_operations	*s_op;//super block操作函数
+	//属于那种文件系统
+	struct file_system_type	*s_type;
+	//super block操作函数
+	const struct super_operations	*s_op;
 	const struct dquot_operations	*dq_op;
 	const struct quotactl_ops	*s_qcop;
 	const struct export_operations *s_export_op;
 	unsigned long		s_flags;
 	unsigned long		s_iflags;	/* internal SB_I_* flags */
-	unsigned long		s_magic;//每个文件系统均有一个magic
-	struct dentry		*s_root;//文件系统根目录项
+	//每个文件系统均有一个magic
+	unsigned long		s_magic;
+	//文件系统根目录项
+	struct dentry		*s_root;
 	struct rw_semaphore	s_umount;
 	int			s_count;
 	atomic_t		s_active;
@@ -1510,10 +1525,11 @@ struct super_block {
 	struct hlist_bl_head	s_roots;	/* alternate root dentries for NFS */
 	//用于串连某一文件系统的superblock被挂载在哪几个位置
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
-	struct block_device	*s_bdev;//超级块所属的块设备
+	//超级块所属的块设备
+	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
-	struct hlist_node	s_instances;
+	struct hlist_node	s_instances;/*用于挂接在此文件系统对应的fs_supers链*/
 	unsigned int		s_quota_types;	/* Bitmask of supported quota types */
 	struct quota_info	s_dquot;	/* Diskquota specific options */
 
@@ -1537,7 +1553,8 @@ struct super_block {
 	struct fsnotify_mark_connector __rcu	*s_fsnotify_marks;
 #endif
 
-	char			s_id[32];	/* Informational name *///文件系统名称
+	//文件系统名称
+	char			s_id[32];	/* Informational name */
 	uuid_t			s_uuid;		/* UUID */
 
 	unsigned int		s_max_links;
@@ -2010,7 +2027,7 @@ struct file_operations {
 	loff_t (*llseek) (struct file *, loff_t, int);
 	//read,read_iter两个函数实现其一，即可用于读文件
 	//文件读功能
-	ssize_t (*read) (struct file *, char __user *, size_t, loff_t *);
+	ssize_t (*read) (struct file */*要读取的文件*/, char __user */*读者提供的buffer*/, size_t/*读者期待的读长度*/, loff_t */*在文件中的读起始位置*/);
 	//文件写功能
 	ssize_t (*write) (struct file *, const char __user *, size_t, loff_t *);
 	//支持iov方式的读
@@ -2271,7 +2288,7 @@ static inline int iocb_flags(struct file *file);
 static inline void init_sync_kiocb(struct kiocb *kiocb, struct file *filp)
 {
 	*kiocb = (struct kiocb) {
-		.ki_filp = filp,
+		.ki_filp = filp,/*要执行io的文件*/
 		.ki_flags = iocb_flags(filp),
 		.ki_ioprio = get_current_ioprio(),
 	};
@@ -2473,15 +2490,16 @@ struct file_system_type {
 	//初始化当前fs对应的fs_context,如果此回调不提供，则默认使用legacy_init_fs_context
 	//此函数针对各fs提供fs context的ops
 	int (*init_fs_context)(struct fs_context *);
+	/*fs参数*/
 	const struct fs_parameter_spec *parameters;
-	//文件系统挂载回调
+	//文件系统挂载回调，采用此函数完成挂载，返回根节点
 	struct dentry *(*mount) (struct file_system_type *, int,
 		       const char *, void *);
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
 	//用于将文件系统串成链表
 	struct file_system_type * next;
-	//已被实例化的super_block统一挂在这个链上
+	//此文件系统已被实例化的super_block统一挂在这个链上
 	struct hlist_head fs_supers;
 
 	struct lock_class_key s_lock_key;
@@ -3060,6 +3078,7 @@ alloc_inode_sb(struct super_block *sb, struct kmem_cache *cache, gfp_t gfp)
 	return kmem_cache_alloc_lru(cache, &sb->s_inode_lru, gfp);
 }
 
+/*将inode加入到hashtable*/
 extern void __insert_inode_hash(struct inode *, unsigned long hashval);
 static inline void insert_inode_hash(struct inode *inode)
 {

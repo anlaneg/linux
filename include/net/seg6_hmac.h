@@ -28,8 +28,8 @@ struct seg6_hmac_info {
 
 	u32 hmackeyid;
 	char secret[SEG6_HMAC_SECRET_LEN];
-	u8 slen;
-	u8 alg_id;
+	u8 slen;/*secret长度*/
+	u8 alg_id;/*算法类别*/
 };
 
 struct seg6_hmac_algo {

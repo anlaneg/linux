@@ -519,6 +519,7 @@ int sock_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 	if (err)
 		return err;
 
+	/*将skb挂接到socket,知会数据ready*/
 	return __sock_queue_rcv_skb(sk, skb);
 }
 EXPORT_SYMBOL(sock_queue_rcv_skb);
@@ -594,7 +595,7 @@ struct dst_entry *sk_dst_check(struct sock *sk, u32 cookie)
 {
 	struct dst_entry *dst = sk_dst_get(sk);
 
-	if (dst && dst->obsolete &&
+	if (dst && dst->obsolete /*dst过期*/&&
 	    INDIRECT_CALL_INET(dst->ops->check, ip6_dst_check, ipv4_dst_check,
 			       dst, cookie) == NULL) {
 		sk_dst_reset(sk);

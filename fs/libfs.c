@@ -38,6 +38,7 @@ int simple_getattr(struct user_namespace *mnt_userns, const struct path *path,
 }
 EXPORT_SYMBOL(simple_getattr);
 
+/*取fs对应的stat*/
 int simple_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	buf->f_type = dentry->d_sb->s_magic;
@@ -342,7 +343,7 @@ static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
 	 * after this must take care not to collide with it (by passing
 	 * max_reserved of 1 to iunique).
 	 */
-	root->i_ino = 1;//将super_block的ino置为１
+	root->i_ino = 1;//将此根节点的ino置为１
 	root->i_mode = S_IFDIR | S_IRUSR | S_IWUSR;
 	//此节点的access time，modify time,create time置为相等
 	root->i_atime = root->i_mtime = root->i_ctime = current_time(root);
@@ -350,6 +351,7 @@ static int pseudo_fs_fill_super(struct super_block *s, struct fs_context *fc)
 	s->s_root = d_make_root(root);
 	if (!s->s_root)
 		return -ENOMEM;
+	/*设置dentry的设置操作集*/
 	s->s_d_op = ctx->dops;
 	return 0;
 }
@@ -364,8 +366,10 @@ static void pseudo_fs_free(struct fs_context *fc)
 	kfree(fc->fs_private);
 }
 
+/*假fs对应的fs context osp*/
 static const struct fs_context_operations pseudo_fs_context_ops = {
 	.free		= pseudo_fs_free,
+	/*get_tree用于获取此文件系统的根节点（当前为申请一个假的root节点）*/
 	.get_tree	= pseudo_fs_get_tree,
 };
 

@@ -439,9 +439,11 @@ struct request_queue *blk_alloc_queue(int node_id, bool alloc_srcu)
 	struct request_queue *q;
 	int ret;
 
+	/*自cache申请request_queue结构体*/
 	q = kmem_cache_alloc_node(blk_get_queue_kmem_cache(alloc_srcu),
 			GFP_KERNEL | __GFP_ZERO, node_id);
 	if (!q)
+	    /*申请结构体失败，返回NULL*/
 		return NULL;
 
 	if (alloc_srcu) {

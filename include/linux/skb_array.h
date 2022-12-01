@@ -183,6 +183,7 @@ static inline int skb_array_init(struct skb_array *a, int size, gfp_t gfp)
 	return ptr_ring_init(&a->ring, size, gfp);
 }
 
+/*释放此skb*/
 static void __skb_array_destroy_skb(void *ptr)
 {
 	kfree_skb(ptr);

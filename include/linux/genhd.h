@@ -123,6 +123,7 @@ struct gendisk {
 	int minors;                     /* maximum number of minors, =1 for
                                          * disks that can't be partitioned. */
 
+	/*磁盘名称*/
 	char disk_name[DISK_NAME_LEN];	/* name of major driver */
 
 	unsigned short events;		/* supported events */

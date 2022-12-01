@@ -239,6 +239,7 @@ struct ifreq {
 #define IFHWADDRLEN	6
 	union
 	{
+	    /*接口名称*/
 		char	ifrn_name[IFNAMSIZ];		/* if name, e.g. "en0" */
 	} ifr_ifrn;
 	
@@ -247,6 +248,7 @@ struct ifreq {
 		struct	sockaddr ifru_dstaddr;
 		struct	sockaddr ifru_broadaddr;
 		struct	sockaddr ifru_netmask;
+		/*接口硬件地址*/
 		struct  sockaddr ifru_hwaddr;
 		short	ifru_flags;
 		int	ifru_ivalue;
@@ -254,6 +256,7 @@ struct ifreq {
 		struct  ifmap ifru_map;
 		char	ifru_slave[IFNAMSIZ];	/* Just fits the size */
 		char	ifru_newname[IFNAMSIZ];
+		/*ioctl命令私有数据*/
 		void __user *	ifru_data;
 		struct	if_settings ifru_settings;
 	} ifr_ifru;
@@ -262,6 +265,7 @@ struct ifreq {
 
 //接口名称
 #define ifr_name	ifr_ifrn.ifrn_name	/* interface name 	*/
+/*mac地址*/
 #define ifr_hwaddr	ifr_ifru.ifru_hwaddr	/* MAC address 		*/
 #define	ifr_addr	ifr_ifru.ifru_addr	/* address		*/
 #define	ifr_dstaddr	ifr_ifru.ifru_dstaddr	/* other end of p-p lnk	*/

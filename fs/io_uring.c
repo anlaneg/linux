@@ -300,7 +300,7 @@ struct io_sq_data {
 	struct wait_queue_head	wait;
 
 	unsigned		sq_thread_idle;
-	int			sq_cpu;
+	int			sq_cpu;/*要给sq线程绑定的cpu mask*/
 	pid_t			task_pid;
 	pid_t			task_tgid;
 
@@ -1500,6 +1500,7 @@ static __cold struct io_ring_ctx *io_ring_ctx_alloc(struct io_uring_params *p)
 	struct io_ring_ctx *ctx;
 	int i, hash_bits;
 
+	/*申请ctx*/
 	ctx = kzalloc(sizeof(*ctx), GFP_KERNEL);
 	if (!ctx)
 		return NULL;
@@ -3730,6 +3731,7 @@ static bool io_rw_should_retry(struct io_kiocb *req)
 	return true;
 }
 
+/*向文件执行读操作*/
 static inline int io_iter_do_read(struct io_kiocb *req, struct iov_iter *iter)
 {
 	if (likely(req->file->f_op->read_iter))
@@ -7119,11 +7121,13 @@ static int io_issue_sqe(struct io_kiocb *req, unsigned int issue_flags)
 	case IORING_OP_READV:
 	case IORING_OP_READ_FIXED:
 	case IORING_OP_READ:
+	    /*执行读操作*/
 		ret = io_read(req, issue_flags);
 		break;
 	case IORING_OP_WRITEV:
 	case IORING_OP_WRITE_FIXED:
 	case IORING_OP_WRITE:
+	    /*执行写操作*/
 		ret = io_write(req, issue_flags);
 		break;
 	case IORING_OP_FSYNC:
@@ -7957,10 +7961,12 @@ static int io_sq_thread(void *data)
 	char buf[TASK_COMM_LEN];
 	DEFINE_WAIT(wait);
 
+	/*设置task名称*/
 	snprintf(buf, sizeof(buf), "iou-sqp-%d", sqd->task_pid);
 	set_task_comm(current, buf);
 
 	if (sqd->sq_cpu != -1)
+	    /*绑定cpu*/
 		set_cpus_allowed_ptr(current, cpumask_of(sqd->sq_cpu));
 	else
 		set_cpus_allowed_ptr(current, cpu_online_mask);
@@ -7978,8 +7984,10 @@ static int io_sq_thread(void *data)
 			timeout = jiffies + sqd->sq_thread_idle;
 		}
 
+		/*遍历挂载在sqd上的所有ctx*/
 		cap_entries = !list_is_singular(&sqd->ctx_list);
 		list_for_each_entry(ctx, &sqd->ctx_list, sqd_list) {
+		    /*对当前ctx进行io sq服务*/
 			int ret = __io_sq_thread(ctx, cap_entries);
 
 			if (!sqt_spin && (ret > 0 || !wq_list_empty(&ctx->iopoll_list)))
@@ -9267,9 +9275,10 @@ static __cold int io_sq_offload_create(struct io_ring_ctx *ctx,
 			sqd->sq_cpu = -1;
 		}
 
+		/*创建sq io线程*/
 		sqd->task_pid = current->pid;
 		sqd->task_tgid = current->tgid;
-		tsk = create_io_thread(io_sq_thread, sqd, NUMA_NO_NODE);
+		tsk = create_io_thread(io_sq_thread/*sq线程入口*/, sqd, NUMA_NO_NODE);
 		if (IS_ERR(tsk)) {
 			ret = PTR_ERR(tsk);
 			goto err_sqpoll;
@@ -11038,6 +11047,7 @@ static int io_uring_install_fd(struct io_ring_ctx *ctx, struct file *file)
 {
 	int ret, fd;
 
+	/*申请一个未用的fd*/
 	fd = get_unused_fd_flags(O_RDWR | O_CLOEXEC);
 	if (fd < 0)
 		return fd;
@@ -11047,6 +11057,8 @@ static int io_uring_install_fd(struct io_ring_ctx *ctx, struct file *file)
 		put_unused_fd(fd);
 		return ret;
 	}
+
+	/*利用此file关联fd*/
 	fd_install(fd, file);
 	return fd;
 }
@@ -11063,12 +11075,15 @@ static struct file *io_uring_get_file(struct io_ring_ctx *ctx)
 #if defined(CONFIG_UNIX)
 	int ret;
 
+	/*创建unix raw socket*/
 	ret = sock_create_kern(&init_net, PF_UNIX, SOCK_RAW, IPPROTO_IP,
 				&ctx->ring_sock);
 	if (ret)
+	    /*创建出错，返回*/
 		return ERR_PTR(ret);
 #endif
 
+	/*创建file*/
 	file = anon_inode_getfile_secure("[io_uring]", &io_uring_fops, ctx,
 					 O_RDWR | O_CLOEXEC, NULL);
 #if defined(CONFIG_UNIX)
@@ -11083,7 +11098,7 @@ static struct file *io_uring_get_file(struct io_ring_ctx *ctx)
 }
 
 static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
-				  struct io_uring_params __user *params)
+				  struct io_uring_params __user *params/*用户态传入的参数*/)
 {
 	struct io_ring_ctx *ctx;
 	struct file *file;
@@ -11091,6 +11106,8 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 
 	if (!entries)
 		return -EINVAL;
+
+	/*entries不得超过IORING_MAX_ENTRIES*/
 	if (entries > IORING_MAX_ENTRIES) {
 		if (!(p->flags & IORING_SETUP_CLAMP))
 			return -EINVAL;
@@ -11105,6 +11122,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 	 * set IORING_SETUP_CQSIZE, it will have passed in the desired number
 	 * of CQ ring entries manually.
 	 */
+	/*依据entries生成sq_entries*/
 	p->sq_entries = roundup_pow_of_two(entries);
 	if (p->flags & IORING_SETUP_CQSIZE) {
 		/*
@@ -11123,6 +11141,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 		if (p->cq_entries < p->sq_entries)
 			return -EINVAL;
 	} else {
+	    /*设置cq_entries是sq_entries的2倍*/
 		p->cq_entries = 2 * p->sq_entries;
 	}
 
@@ -11155,6 +11174,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 		goto err;
 	io_rsrc_node_switch(ctx, NULL);
 
+	/*初始化kernel中定义的sq各字段对应的偏移量*/
 	memset(&p->sq_off, 0, sizeof(p->sq_off));
 	p->sq_off.head = offsetof(struct io_rings, sq.head);
 	p->sq_off.tail = offsetof(struct io_rings, sq.tail);
@@ -11164,6 +11184,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 	p->sq_off.dropped = offsetof(struct io_rings, sq_dropped);
 	p->sq_off.array = (char *)ctx->sq_array - (char *)ctx->rings;
 
+	/*初始化kernel中定义的cq各字段对应的偏移量*/
 	memset(&p->cq_off, 0, sizeof(p->cq_off));
 	p->cq_off.head = offsetof(struct io_rings, cq.head);
 	p->cq_off.tail = offsetof(struct io_rings, cq.tail);
@@ -11173,6 +11194,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 	p->cq_off.cqes = offsetof(struct io_rings, cqes);
 	p->cq_off.flags = offsetof(struct io_rings, cq_flags);
 
+	/*指明kernel当前支持的功能*/
 	p->features = IORING_FEAT_SINGLE_MMAP | IORING_FEAT_NODROP |
 			IORING_FEAT_SUBMIT_STABLE | IORING_FEAT_RW_CUR_POS |
 			IORING_FEAT_CUR_PERSONALITY | IORING_FEAT_FAST_POLL |
@@ -11180,6 +11202,7 @@ static __cold int io_uring_create(unsigned entries, struct io_uring_params *p,
 			IORING_FEAT_EXT_ARG | IORING_FEAT_NATIVE_WORKERS |
 			IORING_FEAT_RSRC_TAGS | IORING_FEAT_CQE_SKIP;
 
+	/*将p结构体中的内容返回给用户态*/
 	if (copy_to_user(params, p, sizeof(*p))) {
 		ret = -EFAULT;
 		goto err;
@@ -11219,13 +11242,17 @@ static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
 	struct io_uring_params p;
 	int i;
 
+	/*复制参数*/
 	if (copy_from_user(&p, params, sizeof(p)))
 		return -EFAULT;
+
+	/*当前预留的参数需要填充为0*/
 	for (i = 0; i < ARRAY_SIZE(p.resv); i++) {
 		if (p.resv[i])
 			return -EINVAL;
 	}
 
+	/*遇到不支持的flags,报错*/
 	if (p.flags & ~(IORING_SETUP_IOPOLL | IORING_SETUP_SQPOLL |
 			IORING_SETUP_SQ_AFF | IORING_SETUP_CQSIZE |
 			IORING_SETUP_CLAMP | IORING_SETUP_ATTACH_WQ |
@@ -11238,6 +11265,7 @@ static long io_uring_setup(u32 entries, struct io_uring_params __user *params)
 SYSCALL_DEFINE2(io_uring_setup, u32, entries,
 		struct io_uring_params __user *, params)
 {
+    /*定义系统调用io_uring_setup*/
 	return io_uring_setup(entries, params);
 }
 
@@ -11734,6 +11762,7 @@ SYSCALL_DEFINE4(io_uring_register, unsigned int, fd, unsigned int, opcode,
 	if (!f.file)
 		return -EBADF;
 
+	/*必须为io_uring对应的fd*/
 	ret = -EOPNOTSUPP;
 	if (f.file->f_op != &io_uring_fops)
 		goto out_fput;

@@ -44,8 +44,11 @@ static u32 flow_type_mask(u32 flow_type)
 
 struct mlx5e_ethtool_rule {
 	struct list_head             list;
+	/*FD规则匹配条件*/
 	struct ethtool_rx_flow_spec  flow_spec;
+	/*下发的规则*/
 	struct mlx5_flow_handle	     *rule;
+	/*规则所属的flow table*/
 	struct mlx5e_ethtool_table   *eth_ft;
 	struct mlx5e_rss             *rss;
 };
@@ -64,7 +67,7 @@ static void put_flow_table(struct mlx5e_ethtool_table *eth_ft)
 #define MLX5E_ETHTOOL_NUM_GROUPS  10
 static struct mlx5e_ethtool_table *get_flow_table(struct mlx5e_priv *priv,
 						  struct ethtool_rx_flow_spec *fs,
-						  int num_tuples)
+						  int num_tuples/*要匹配的tuple数*/)
 {
 	struct mlx5_flow_table_attr ft_attr = {};
 	struct mlx5e_ethtool_table *eth_ft;
@@ -103,6 +106,7 @@ static struct mlx5e_ethtool_table *get_flow_table(struct mlx5e_priv *priv,
 	if (eth_ft->ft)
 		return eth_ft;
 
+	/*创建eth_ft*/
 	ns = mlx5_get_flow_namespace(priv->mdev,
 				     MLX5_FLOW_NAMESPACE_ETHTOOL);
 	if (!ns)
@@ -386,6 +390,7 @@ static void add_rule_to_list(struct mlx5e_priv *priv,
 	struct list_head *head = &priv->fs.ethtool.rules;
 
 	list_for_each_entry(iter, &priv->fs.ethtool.rules, list) {
+	    /*按location从小到大进行排列*/
 		if (iter->flow_spec.location > rule->flow_spec.location)
 			break;
 		head = &iter->list;
@@ -411,6 +416,7 @@ static int flow_get_tirn(struct mlx5e_priv *priv,
 			 u32 rss_context, u32 *tirn)
 {
 	if (fs->flow_type & FLOW_RSS) {
+	    /*规则送指定queue*/
 		struct mlx5e_packet_merge_param pkt_merge_param;
 		struct mlx5e_rss *rss;
 		u32 flow_type;
@@ -462,12 +468,14 @@ add_ethtool_flow_rule(struct mlx5e_priv *priv,
 	spec = kvzalloc(sizeof(*spec), GFP_KERNEL);
 	if (!spec)
 		return ERR_PTR(-ENOMEM);
+	/*转换fs规则到spec*/
 	err = set_flow_attrs(spec->match_criteria, spec->match_value,
 			     fs);
 	if (err)
 		goto free;
 
 	if (fs->ring_cookie == RX_CLS_FLOW_DISC) {
+	    /*规则指明匹配后丢包*/
 		flow_act.action = MLX5_FLOW_CONTEXT_ACTION_DROP;
 	} else {
 		dst = kzalloc(sizeof(*dst), GFP_KERNEL);
@@ -486,6 +494,7 @@ add_ethtool_flow_rule(struct mlx5e_priv *priv,
 
 	spec->match_criteria_enable = (!outer_header_zero(spec->match_criteria));
 	spec->flow_context.flow_tag = MLX5_FS_DEFAULT_FLOW_TAG;
+	/*执行flow rule添加，最终下发到fw*/
 	rule = mlx5_add_flow_rules(ft, spec, &flow_act, dst, dst ? 1 : 0);
 	if (IS_ERR(rule)) {
 		err = PTR_ERR(rule);
@@ -531,12 +540,15 @@ static struct mlx5e_ethtool_rule *get_ethtool_rule(struct mlx5e_priv *priv,
 
 	eth_rule = find_ethtool_rule(priv, location);
 	if (eth_rule)
+	    /*规则已存在，先删除掉*/
 		del_ethtool_rule(priv, eth_rule);
 
+	/*规则不存在，先申请空的buffer*/
 	eth_rule = kzalloc(sizeof(*eth_rule), GFP_KERNEL);
 	if (!eth_rule)
 		return ERR_PTR(-ENOMEM);
 
+	/*将规则串到priv下*/
 	add_rule_to_list(priv, eth_rule);
 	return eth_rule;
 }
@@ -547,12 +559,14 @@ static struct mlx5e_ethtool_rule *get_ethtool_rule(struct mlx5e_priv *priv,
 #define all_zeros_or_all_ones(field)		\
 	((field) == 0 || (field) == (__force typeof(field))-1)
 
+/*检查ethter要匹配几个tuple*/
 static int validate_ethter(struct ethtool_rx_flow_spec *fs)
 {
 	struct ethhdr *eth_mask = &fs->m_u.ether_spec;
 	int ntuples = 0;
 
 	if (!is_zero_ether_addr(eth_mask->h_dest))
+	    /*目的mac非零，要匹配的tuples增加*/
 		ntuples++;
 	if (!is_zero_ether_addr(eth_mask->h_source))
 		ntuples++;
@@ -567,6 +581,7 @@ static int validate_tcpudp4(struct ethtool_rx_flow_spec *fs)
 	int ntuples = 0;
 
 	if (l4_mask->tos)
+	    /*tos不得配置为0*/
 		return -EINVAL;
 
 	if (l4_mask->ip4src)
@@ -659,9 +674,11 @@ static int validate_flow(struct mlx5e_priv *priv,
 	int ret = 0;
 
 	if (fs->location >= MAX_NUM_OF_ETHTOOL_RULES)
+	    /*规则序号超限无效*/
 		return -ENOSPC;
 
 	if (fs->ring_cookie != RX_CLS_FLOW_DISC)
+	    /*非丢包cookie,校验cookie*/
 		if (!mlx5e_qid_validate(priv->profile, &priv->channels.params,
 					fs->ring_cookie))
 			return -EINVAL;
@@ -699,6 +716,8 @@ static int validate_flow(struct mlx5e_priv *priv,
 	default:
 		return -ENOTSUPP;
 	}
+
+	/*扩展匹配项*/
 	if ((fs->flow_type & FLOW_EXT)) {
 		ret = validate_vlan(fs);
 		if (ret < 0)
@@ -710,12 +729,13 @@ static int validate_flow(struct mlx5e_priv *priv,
 	    !is_zero_ether_addr(fs->m_ext.h_dest))
 		num_tuples++;
 
+	/*返回有哪些字段需要匹配*/
 	return num_tuples;
 }
 
 static int
 mlx5e_ethtool_flow_replace(struct mlx5e_priv *priv,
-			   struct ethtool_rx_flow_spec *fs, u32 rss_context)
+			   struct ethtool_rx_flow_spec *fs/*要添加的规则*/, u32 rss_context/*规则action*/)
 {
 	struct mlx5e_ethtool_table *eth_ft;
 	struct mlx5e_ethtool_rule *eth_rule;
@@ -725,15 +745,18 @@ mlx5e_ethtool_flow_replace(struct mlx5e_priv *priv,
 
 	num_tuples = validate_flow(priv, fs);
 	if (num_tuples <= 0) {
+	    /*flow没有指定要匹配的字段或者校验不通过，返回*/
 		netdev_warn(priv->netdev, "%s: flow is not valid %d\n",
 			    __func__, num_tuples);
 		return num_tuples;
 	}
 
+	/*获得规则对应的eth_ft*/
 	eth_ft = get_flow_table(priv, fs, num_tuples);
 	if (IS_ERR(eth_ft))
 		return PTR_ERR(eth_ft);
 
+	/*申请存入规则的空间*/
 	eth_rule = get_ethtool_rule(priv, fs->location);
 	if (IS_ERR(eth_rule)) {
 		put_flow_table(eth_ft);
@@ -746,13 +769,15 @@ mlx5e_ethtool_flow_replace(struct mlx5e_priv *priv,
 		err = -EINVAL;
 		goto del_ethtool_rule;
 	}
+
+	/*创建规则，将规则加入到fw*/
 	rule = add_ethtool_flow_rule(priv, eth_rule, eth_ft->ft, fs, rss_context);
 	if (IS_ERR(rule)) {
 		err = PTR_ERR(rule);
 		goto del_ethtool_rule;
 	}
 
-	eth_rule->rule = rule;
+	eth_rule->rule = rule;/*记录创建的规则*/
 
 	return 0;
 
@@ -771,12 +796,14 @@ mlx5e_ethtool_flow_remove(struct mlx5e_priv *priv, int location)
 	if (location >= MAX_NUM_OF_ETHTOOL_RULES)
 		return -ENOSPC;
 
+	/*找到相应规则*/
 	eth_rule = find_ethtool_rule(priv, location);
 	if (!eth_rule) {
 		err =  -ENOENT;
 		goto out;
 	}
 
+	/*删除对应的规则*/
 	del_ethtool_rule(priv, eth_rule);
 out:
 	return err;
@@ -784,27 +811,36 @@ out:
 
 static int
 mlx5e_ethtool_get_flow(struct mlx5e_priv *priv,
-		       struct ethtool_rxnfc *info, int location)
+		       struct ethtool_rxnfc *info, int location/*规则序号*/)
 {
 	struct mlx5e_ethtool_rule *eth_rule;
 
 	if (location < 0 || location >= MAX_NUM_OF_ETHTOOL_RULES)
+	    /*流规则序号有误，返回失败*/
 		return -EINVAL;
 
+	/*遍历fs.ethtool.rules*/
 	list_for_each_entry(eth_rule, &priv->fs.ethtool.rules, list) {
 		int index;
 
 		if (eth_rule->flow_spec.location != location)
+		    /*序号不匹配，继续*/
 			continue;
 		if (!info)
+		    /*未指定待填充的变量，返回0*/
 			return 0;
+
+		/*填充info*/
 		info->fs = eth_rule->flow_spec;
 		if (!eth_rule->rss)
 			return 0;
+
+		/*此规则对应的queue index*/
 		index = mlx5e_rx_res_rss_index(priv->rx_res, eth_rule->rss);
 		if (index < 0)
+		    /*返回错误码*/
 			return index;
-		info->rss_context = index;
+		info->rss_context = index;/*规则索引*/
 		return 0;
 	}
 
@@ -813,15 +849,17 @@ mlx5e_ethtool_get_flow(struct mlx5e_priv *priv,
 
 static int
 mlx5e_ethtool_get_all_flows(struct mlx5e_priv *priv,
-			    struct ethtool_rxnfc *info, u32 *rule_locs)
+			    struct ethtool_rxnfc *info, u32 *rule_locs/*各规则对应的索引*/)
 {
 	int location = 0;
 	int idx = 0;
 	int err = 0;
 
+	/*设置支持的最大flow条目数*/
 	info->data = MAX_NUM_OF_ETHTOOL_RULES;
 	while ((!err || err == -ENOENT) && idx < info->rule_cnt) {
-		err = mlx5e_ethtool_get_flow(priv, NULL, location);
+	    /*二参数传入NULL，用于填充各规则对应的seq*/
+		err = mlx5e_ethtool_get_flow(priv, NULL, location/*流规则序号*/);
 		if (!err)
 			rule_locs[idx++] = location;
 		location++;
@@ -890,12 +928,15 @@ static int mlx5e_set_rss_hash_opt(struct mlx5e_priv *priv,
 	    nfc->flow_type != TCP_V6_FLOW &&
 	    nfc->flow_type != UDP_V4_FLOW &&
 	    nfc->flow_type != UDP_V6_FLOW)
+	    /*rss仅支持以上flow type*/
 		return -EOPNOTSUPP;
 
 	if (nfc->data & ~(RXH_IP_SRC | RXH_IP_DST |
 			  RXH_L4_B_0_1 | RXH_L4_B_2_3))
+	    /*rss仅支持以上4种字段*/
 		return -EOPNOTSUPP;
 
+	/*设置用户请求的字段*/
 	if (nfc->data & RXH_IP_SRC)
 		rx_hash_field |= MLX5_HASH_FIELD_SEL_SRC_IP;
 	if (nfc->data & RXH_IP_DST)
@@ -906,6 +947,7 @@ static int mlx5e_set_rss_hash_opt(struct mlx5e_priv *priv,
 		rx_hash_field |= MLX5_HASH_FIELD_SEL_L4_DPORT;
 
 	mutex_lock(&priv->state_lock);
+	/*设置配置的rss hash字段*/
 	err = mlx5e_rx_res_rss_set_hash_fields(priv->rx_res, tt, rx_hash_field);
 	mutex_unlock(&priv->state_lock);
 
@@ -918,21 +960,23 @@ static int mlx5e_get_rss_hash_opt(struct mlx5e_priv *priv,
 	u32 hash_field = 0;
 	int tt;
 
+	/*通过flow type获得对应的traffic type*/
 	tt = flow_type_to_traffic_type(nfc->flow_type);
 	if (tt < 0)
 		return tt;
 
+	/*取此traffic type情况下，支持哪种字段*/
 	hash_field = mlx5e_rx_res_rss_get_hash_fields(priv->rx_res, tt);
 	nfc->data = 0;
 
 	if (hash_field & MLX5_HASH_FIELD_SEL_SRC_IP)
-		nfc->data |= RXH_IP_SRC;
+		nfc->data |= RXH_IP_SRC;/*源ip*/
 	if (hash_field & MLX5_HASH_FIELD_SEL_DST_IP)
-		nfc->data |= RXH_IP_DST;
+		nfc->data |= RXH_IP_DST;/*目的ip*/
 	if (hash_field & MLX5_HASH_FIELD_SEL_L4_SPORT)
-		nfc->data |= RXH_L4_B_0_1;
+		nfc->data |= RXH_L4_B_0_1;/*源port*/
 	if (hash_field & MLX5_HASH_FIELD_SEL_L4_DPORT)
-		nfc->data |= RXH_L4_B_2_3;
+		nfc->data |= RXH_L4_B_2_3;/*目的port*/
 
 	return 0;
 }
@@ -943,12 +987,15 @@ int mlx5e_ethtool_set_rxnfc(struct mlx5e_priv *priv, struct ethtool_rxnfc *cmd)
 
 	switch (cmd->cmd) {
 	case ETHTOOL_SRXCLSRLINS:
+	    /*添加rx class rule*/
 		err = mlx5e_ethtool_flow_replace(priv, &cmd->fs, cmd->rss_context);
 		break;
 	case ETHTOOL_SRXCLSRLDEL:
+	    /*移除指定索引的rx class rule*/
 		err = mlx5e_ethtool_flow_remove(priv, cmd->fs.location);
 		break;
 	case ETHTOOL_SRXFH:
+	    /*更新rss hash对应的字段*/
 		err = mlx5e_set_rss_hash_opt(priv, cmd);
 		break;
 	default:
@@ -966,15 +1013,19 @@ int mlx5e_ethtool_get_rxnfc(struct mlx5e_priv *priv,
 
 	switch (info->cmd) {
 	case ETHTOOL_GRXCLSRLCNT:
+	    /*返回rx cls规则总数*/
 		info->rule_cnt = priv->fs.ethtool.tot_num_rules;
 		break;
 	case ETHTOOL_GRXCLSRULE:
+	    /*按rx cls规则索引填充规则内容到info*/
 		err = mlx5e_ethtool_get_flow(priv, info, info->fs.location);
 		break;
 	case ETHTOOL_GRXCLSRLALL:
+	    /*返回所有rx cls规则索引*/
 		err = mlx5e_ethtool_get_all_flows(priv, info, rule_locs);
 		break;
 	case ETHTOOL_GRXFH:
+	    /*显示rx flow type支持的字段*/
 		err =  mlx5e_get_rss_hash_opt(priv, info);
 		break;
 	default:

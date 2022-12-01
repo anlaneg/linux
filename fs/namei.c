@@ -1645,10 +1645,11 @@ static struct dentry *__lookup_hash(const struct qstr *name,
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
 
+	/*在给定的目录下dir，查找对应的dentry(仅有名称），返回其对应的dentry*/
 	old = dir->i_op->lookup(dir, dentry, flags);
 	if (unlikely(old)) {
-		dput(dentry);
-		dentry = old;
+		dput(dentry);/*释放查询用的空间*/
+		dentry = old;/*指向查询到的dentry*/
 	}
 	return dentry;
 }
@@ -1722,8 +1723,8 @@ static struct dentry *lookup_fast(struct nameidata *nd,
 }
 
 /* Fast lookup failed, do it the slow way */
-static struct dentry *__lookup_slow(const struct qstr *name,
-				    struct dentry *dir,
+static struct dentry *__lookup_slow(const struct qstr *name/*要查询的文件或目录名称*/,
+				    struct dentry *dir/*父dentry节点*/,
 				    unsigned int flags)
 {
 	struct dentry *dentry, *old;
@@ -1763,8 +1764,8 @@ again:
 }
 
 //通过in lookup优化查询，最坏的情况通过inode->lookup完成查询
-static struct dentry *lookup_slow(const struct qstr *name,
-				  struct dentry *dir,
+static struct dentry *lookup_slow(const struct qstr *name/*要查询的文件或目录名称*/,
+				  struct dentry *dir/*父dentry节点*/,
 				  unsigned int flags)
 {
 	struct inode *inode = dir->d_inode;
@@ -2084,7 +2085,7 @@ static const char *walk_component(struct nameidata *nd, int flags)
 	if (IS_ERR(dentry))
 		return ERR_CAST(dentry);
 	if (unlikely(!dentry)) {
-		//未查找到dentry，执行慢路查询
+		//未在dcache中查找到dentry，执行慢路查询
 		dentry = lookup_slow(&nd->last, nd->path.dentry, nd->flags);
 		if (IS_ERR(dentry))
 			return ERR_CAST(dentry);
@@ -2346,10 +2347,11 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 	if (IS_ERR(name))
 		return PTR_ERR(name);
 
-	//跳过前导的文件路径分隔符（支持出现多个）
+	//跳过前导的文件路径分隔符（支持出现多个‘/’）
 	while (*name=='/')
 		name++;
-	//文件或者目录名为空，成功返回0
+
+	//name字符串已达到结尾，例如以'/'结尾的路径。
 	if (!*name) {
 		nd->dir_mode = 0; // short-circuit the 'hardening' idiocy
 		return 0;
@@ -2369,14 +2371,14 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		if (err)
 			return err;
 
-		//利用dentry,name计算hashcode(返回值为hash+length)
+		//利用dentry,name计算hashcode(返回值为hash+length（文件名称长度）)
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
 		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
-		if (name[0] == '.'/*名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
+		if (name[0] == '.'/*文件名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
 			case 2:
-				//name长度为2，且name[1]='.',即本层名称为'..'
+				//文件长度为2，且name[1]='.',即本层名称为'..'
 				if (name[1] == '.') {
 					type = LAST_DOTDOT;
 					nd->state |= ND_JUMPED;
@@ -2389,10 +2391,11 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 
 		//普通文件情况（非'..','.'这种）
 		if (likely(type == LAST_NORM)) {
-		    //取当前位置的dentry
+		    //取当前nd分析位置对应的父dentry
 			struct dentry *parent = nd->path.dentry;
 			nd->state &= ~ND_JUMPED;
-			//如果目录需要执行d_hash,则构造this,并触发回调，进行hash调整
+
+			//如果父dentry需要执行d_hash,则构造this,并触发d_hash回调，进行hash调整
 			if (unlikely(parent->d_flags & DCACHE_OP_HASH)) {
 				struct qstr this = { { .hash_len = hash_len }, .name = name };
 				err = parent->d_op->d_hash(parent, &this);
@@ -2974,7 +2977,7 @@ int path_pts(struct path *path)
 
 //name 目录字符串，获得其对应的path
 int user_path_at_empty(int dfd, const char __user *name/*路径名称*/, unsigned flags,
-		 struct path *path, int *empty)
+		 struct path *path/*出参，确定路径对应的dentry*/, int *empty)
 {
 	struct filename *filename = getname_flags(name, flags, empty);
 	int ret = filename_lookup(dfd, filename, flags, path, NULL);
@@ -3437,6 +3440,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	}
 
 	if (d_in_lookup(dentry)) {
+	    /*在dir下查询dentry(仅名称），返回查询结果*/
 		struct dentry *res = dir_inode->i_op->lookup(dir_inode, dentry,
 							     nd->flags);
 		d_lookup_done(dentry);
@@ -3445,8 +3449,8 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 				error = PTR_ERR(res);
 				goto out_dput;
 			}
-			dput(dentry);
-			dentry = res;
+			dput(dentry);/*释放查询用的dentry变量*/
+			dentry = res;/*指向查询获得的结果*/
 		}
 	}
 
@@ -3532,6 +3536,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 		inode_lock(dir->d_inode);
 	else
 		inode_lock_shared(dir->d_inode);
+	/*查询文件对应的dentry*/
 	dentry = lookup_open(nd, file, op, got_write);
 	if (!IS_ERR(dentry) && (file->f_mode & FMODE_CREATED))
 		fsnotify_create(dir->d_inode, dentry);
@@ -3734,7 +3739,7 @@ static struct file *path_openat(struct nameidata *nd,
 		return file;
 
 	if (unlikely(file->f_flags & __O_TMPFILE)) {
-		//临时文件
+		//创建临时文件
 		error = do_tmpfile(nd, flags, op, file);
 	} else if (unlikely(file->f_flags & O_PATH)) {
 		error = do_o_path(nd, flags, file);
@@ -3745,6 +3750,7 @@ static struct file *path_openat(struct nameidata *nd,
 		       (s = open_last_lookups(nd, file, op)) != NULL)//再通过do_last解决具体文件的解析
 			;
 		if (!error)
+		    /*执行文件打开*/
 			error = do_open(nd, file, op);
 		terminate_walk(nd);
 	}
@@ -3764,7 +3770,7 @@ static struct file *path_openat(struct nameidata *nd,
 	return ERR_PTR(error);
 }
 
-struct file *do_filp_open(int dfd, struct filename *pathname,
+struct file *do_filp_open(int dfd, struct filename *pathname/*文件路径*/,
 		const struct open_flags *op)
 {
 	struct nameidata nd;

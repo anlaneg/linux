@@ -119,7 +119,7 @@ int __skb_wait_for_more_packets(struct sock *sk, struct sk_buff_head *queue,
 		goto interrupted;
 
 	error = 0;
-	/*请求调度，超时时间为timeo*/
+	/*请求调度走，并指定超时时间为timeo，在这个时间等待报文*/
 	*timeo_p = schedule_timeout(*timeo_p);
 out:
 	finish_wait(sk_sleep(sk), &wait);
@@ -180,12 +180,15 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
 		_off = *off;
 	}
 
+	/*取queue的最后一个元素*/
 	*last = queue->prev;
+
 	//遍历queue上每个skb
 	skb_queue_walk(queue, skb) {
 		if (flags & MSG_PEEK) {
 			if (peek_at_off && _off >= skb->len &&
 			    (_off || skb->peeked)) {
+			    /*减去offset,继续查看下一个skb,并执行peek*/
 				_off -= skb->len;
 				continue;
 			}
@@ -198,13 +201,13 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
 			}
 			refcount_inc(&skb->users);
 		} else {
-			//自queue上摘掉skb
+			//自queue上摘掉此skb
 			__skb_unlink(skb, queue);
 		}
 		*off = _off;
-		return skb;
+		return skb;/*返回摘取的skb*/
 	}
-	return NULL;
+	return NULL;/*此队列上没有skb,返回NULL*/
 }
 
 /**
@@ -243,7 +246,7 @@ struct sk_buff *__skb_try_recv_from_queue(struct sock *sk,
  *	the standard around please.
  */
 struct sk_buff *__skb_try_recv_datagram(struct sock *sk,
-					struct sk_buff_head *queue,
+					struct sk_buff_head *queue/*接收报文的队列*/,
 					unsigned int flags, int *off, int *err/*出参，错误编号*/,
 					struct sk_buff **last)
 {

@@ -30,10 +30,10 @@ struct flowi_common {
 	int	flowic_oif;//出接口
 	int	flowic_iif;//入接口
 	int     flowic_l3mdev;
-	__u32	flowic_mark;
+	__u32	flowic_mark;/*skb mark取值*/
 	__u8	flowic_tos;//tos取值
 	__u8	flowic_scope;
-	__u8	flowic_proto;//协议号
+	__u8	flowic_proto;//下层协议号
 	__u8	flowic_flags;
 #define FLOWI_FLAG_ANYSRC		0x01
 #define FLOWI_FLAG_KNOWN_NH		0x02
@@ -146,6 +146,7 @@ static inline void flowi4_update_output(struct flowi4 *fl4, int oif, __u8 tos,
 struct flowi6 {
 	struct flowi_common	__fl_common;
 #define flowi6_oif		__fl_common.flowic_oif
+	/*设备入接口*/
 #define flowi6_iif		__fl_common.flowic_iif
 #define flowi6_l3mdev		__fl_common.flowic_l3mdev
 #define flowi6_mark		__fl_common.flowic_mark
@@ -158,7 +159,7 @@ struct flowi6 {
 	struct in6_addr		daddr;//目的地址
 	struct in6_addr		saddr;//源地址
 	/* Note: flowi6_tos is encoded in flowlabel, too. */
-	__be32			flowlabel;
+	__be32			flowlabel;/*ipv6头部flowlabel*/
 	union flowi_uli		uli;
 #define fl6_sport		uli.ports.sport
 #define fl6_dport		uli.ports.dport

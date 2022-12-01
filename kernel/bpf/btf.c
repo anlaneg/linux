@@ -6813,6 +6813,7 @@ static bool __btf_kfunc_id_set_contains(const struct btf *btf,
 	return btf_id_set_contains(set, kfunc_btf_id);
 }
 
+/*程序类型*/
 static int bpf_prog_type_to_kfunc_hook(enum bpf_prog_type prog_type)
 {
 	switch (prog_type) {

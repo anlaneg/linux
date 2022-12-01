@@ -94,7 +94,7 @@ static int icmpv6_err(struct sk_buff *skb, struct inet6_skb_parm *opt,
 static int icmpv6_rcv(struct sk_buff *skb);
 
 static const struct inet6_protocol icmpv6_protocol = {
-	.handler	=	icmpv6_rcv,
+	.handler	=	icmpv6_rcv,/*icmpv6报文处理*/
 	.err_handler	=	icmpv6_err,
 	.flags		=	INET6_PROTO_NOPOLICY|INET6_PROTO_FINAL,
 };
@@ -273,8 +273,10 @@ void icmpv6_push_pending_frames(struct sock *sk, struct flowi6 *fl6,
 
 	skb = skb_peek(&sk->sk_write_queue);
 	if (!skb)
+	    /*队列为空，退出*/
 		return;
 
+	/*取icmpv6头*/
 	icmp6h = icmp6_hdr(skb);
 	memcpy(icmp6h, thdr, sizeof(struct icmp6hdr));
 	icmp6h->icmp6_cksum = 0;
@@ -289,6 +291,7 @@ void icmpv6_push_pending_frames(struct sock *sk, struct flowi6 *fl6,
 	} else {
 		__wsum tmp_csum = 0;
 
+		/*遍历挂接在sk_wirte_queue上的skb*/
 		skb_queue_walk(&sk->sk_write_queue, skb) {
 			tmp_csum = csum_add(tmp_csum, skb->csum);
 		}
@@ -300,6 +303,7 @@ void icmpv6_push_pending_frames(struct sock *sk, struct flowi6 *fl6,
 						      len, fl6->flowi6_proto,
 						      tmp_csum);
 	}
+	/*向下推送pending的报文*/
 	ip6_push_pending_frames(sk);
 }
 
@@ -703,6 +707,7 @@ int ip6_err_gen_icmpv6_unreach(struct sk_buff *skb, int nhs, int type,
 }
 EXPORT_SYMBOL(ip6_err_gen_icmpv6_unreach);
 
+/*收取icmpv6 echo request，回复echo reply*/
 static void icmpv6_echo_reply(struct sk_buff *skb)
 {
 	struct net *net = dev_net(skb->dev);
@@ -734,6 +739,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	    !(net->ipv6.sysctl.anycast_src_echo_reply && acast))
 		saddr = NULL;
 
+	/*确定响应type*/
 	if (icmph->icmp6_type == ICMPV6_EXT_ECHO_REQUEST)
 		type = ICMPV6_EXT_ECHO_REPLY;
 	else
@@ -742,6 +748,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	memcpy(&tmp_hdr, icmph, sizeof(tmp_hdr));
 	tmp_hdr.icmp6_type = type;
 
+	/*填充flow6,准备查询路由*/
 	memset(&fl6, 0, sizeof(fl6));
 	if (net->ipv6.sysctl.flowlabel_reflect & FLOWLABEL_REFLECT_ICMPV6_ECHO_REPLIES)
 		fl6.flowlabel = ip6_flowlabel(ipv6_hdr(skb));
@@ -767,6 +774,7 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	else if (!fl6.flowi6_oif)
 		fl6.flowi6_oif = np->ucast_oif;
 
+	/*路由查询*/
 	if (ip6_dst_lookup(net, sk, &dst, &fl6))
 		goto out;
 	dst = xfrm_lookup(net, dst, flowi6_to_flowi(&fl6), sk, 0);
@@ -790,16 +798,20 @@ static void icmpv6_echo_reply(struct sk_buff *skb)
 	ipc6.sockc.mark = mark;
 
 	if (icmph->icmp6_type == ICMPV6_EXT_ECHO_REQUEST)
+	    /*构造probe*/
 		if (!icmp_build_probe(skb, (struct icmphdr *)&tmp_hdr))
 			goto out_dst_release;
 
+	/*增加负载头*/
 	if (ip6_append_data(sk, icmpv6_getfrag, &msg,
 			    skb->len + sizeof(struct icmp6hdr),
 			    sizeof(struct icmp6hdr), &ipc6, &fl6,
 			    (struct rt6_info *)dst, MSG_DONTWAIT)) {
 		__ICMP6_INC_STATS(net, idev, ICMP6_MIB_OUTERRORS);
+		/*出错，丢弃掉报文*/
 		ip6_flush_pending_frames(sk);
 	} else {
+	    /*向下推送报文*/
 		icmpv6_push_pending_frames(sk, &fl6, &tmp_hdr,
 					   skb->len + sizeof(struct icmp6hdr));
 	}
@@ -864,6 +876,7 @@ out:
 
 static int icmpv6_rcv(struct sk_buff *skb)
 {
+    /*报文所属net namespace*/
 	struct net *net = dev_net(skb->dev);
 	struct net_device *dev = icmp6_dev(skb);
 	struct inet6_dev *idev = __in6_dev_get(dev);
@@ -894,6 +907,7 @@ static int icmpv6_rcv(struct sk_buff *skb)
 
 	__ICMP6_INC_STATS(dev_net(dev), idev, ICMP6_MIB_INMSGS);
 
+	/*ipv6源目的地址*/
 	saddr = &ipv6_hdr(skb)->saddr;
 	daddr = &ipv6_hdr(skb)->daddr;
 
@@ -903,6 +917,7 @@ static int icmpv6_rcv(struct sk_buff *skb)
 		goto csum_error;
 	}
 
+	/*header长度不足，退出*/
 	if (!pskb_pull(skb, sizeof(*hdr)))
 		goto discard_it;
 
@@ -912,8 +927,10 @@ static int icmpv6_rcv(struct sk_buff *skb)
 
 	ICMP6MSGIN_INC_STATS(dev_net(dev), idev, type);
 
+	/*检查icmp type*/
 	switch (type) {
 	case ICMPV6_ECHO_REQUEST:
+	    /*收到echo rquest报文，响应echo reply*/
 		if (!net->ipv6.sysctl.icmpv6_echo_ignore_all)
 			icmpv6_echo_reply(skb);
 		break;
@@ -924,10 +941,12 @@ static int icmpv6_rcv(struct sk_buff *skb)
 		break;
 
 	case ICMPV6_ECHO_REPLY:
+	    /*收到echo reply报文*/
 		success = ping_rcv(skb);
 		break;
 
 	case ICMPV6_EXT_ECHO_REPLY:
+	    /*收到ext echo reply报文*/
 		success = ping_rcv(skb);
 		break;
 

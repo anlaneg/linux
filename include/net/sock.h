@@ -210,6 +210,7 @@ struct sock_common {
 
 #if IS_ENABLED(CONFIG_IPV6)
 	struct in6_addr		skc_v6_daddr;
+	/*收端地址*/
 	struct in6_addr		skc_v6_rcv_saddr;
 #endif
 
@@ -482,13 +483,13 @@ struct sock {
 		struct sk_buff	*sk_send_head;
 		struct rb_root	tcp_rtx_queue;
 	};
-	//socket待写入下层的buffer队列
+	//socket待写入下层的buffer队列（tun_napi_receive会读取此队列上内容，并上送协议栈）
 	struct sk_buff_head	sk_write_queue;
 	__s32			sk_peek_off;
 	int			sk_write_pending;
 	__u32			sk_dst_pending_confirm;
 	u32			sk_pacing_status; /* see enum sk_pacing */
-	long			sk_sndtimeo;
+	long			sk_sndtimeo;/*发送超时时间*/
 	/*keepalive定时器*/
 	struct timer_list	sk_timer;
 	__u32			sk_priority;
@@ -720,6 +721,7 @@ static inline struct sock *sk_nulls_next(const struct sock *sk)
 
 static inline bool sk_unhashed(const struct sock *sk)
 {
+	/*检查sk是否已被list到链表中*/
 	return hlist_unhashed(&sk->sk_node);
 }
 
@@ -966,6 +968,7 @@ static inline void sock_valbool_flag(struct sock *sk, enum sock_flags bit,
 		sock_reset_flag(sk, bit);
 }
 
+/*检查socket上是否有指定标记*/
 static inline bool sock_flag(const struct sock *sk, enum sock_flags flag)
 {
 	return test_bit(flag, &sk->sk_flags);
@@ -1139,7 +1142,7 @@ static inline void sock_rps_record_flow(const struct sock *sk)
 		 * [1] : sk_state and sk_prot are in the same cache line.
 		 */
 		if (sk->sk_state == TCP_ESTABLISHED)
-		    /*socket达到稳定连接，记录其hash对应的cpu*/
+		    /*socket达到稳定连接，记录此socket对应的cpu(其hash对应的cpu)*/
 			sock_rps_record_flow_hash(sk->sk_rxhash);
 	}
 #endif
@@ -1571,7 +1574,7 @@ static inline int __sk_prot_rehash(struct sock *sk)
 
 struct socket_alloc {
 	struct socket socket;
-	struct inode vfs_inode;
+	struct inode vfs_inode;/*socket对应的inode*/
 };
 
 //由inode获得socket_alloc,然后返回socket_alloc->socket

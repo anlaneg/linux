@@ -2992,7 +2992,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 {
 	struct vfsmount *mnt;
 	struct mountpoint *mp;
-	/*被挂载文件系统对应的super_block*/
+	/*取被挂载文件系统根节点对应的super_block*/
 	struct super_block *sb = fc->root->d_sb;
 	int error;
 
@@ -3050,6 +3050,7 @@ static int do_new_mount(struct path *path, const char *fstype/*文件系统名�
 	if (type->fs_flags & FS_HAS_SUBTYPE) {
 		subtype = strchr(fstype, '.');
 		if (subtype) {
+		    /*跳过符号'.',使subtype指向相应类型*/
 			subtype++;
 			if (!*subtype) {
 				put_filesystem(type);
@@ -3071,6 +3072,7 @@ static int do_new_mount(struct path *path, const char *fstype/*文件系统名�
 	//解析source参数
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
+
 	/*解析data数据参数*/
 	if (!err)
 		err = parse_monolithic_mount_data(fc, data);
@@ -3404,7 +3406,6 @@ int path_mount(const char *dev_name/*设备名称*/, struct path *path/*挂载�
 	if ((flags & (MS_REMOUNT | MS_BIND)) == (MS_REMOUNT | MS_BIND))
 		return do_reconfigure_mnt(path, mnt_flags);
 	if (flags & MS_REMOUNT)
-		//处理普通挂载
 		return do_remount(path, flags, sb_flags, mnt_flags, data_page);
 	if (flags & MS_BIND)
 		return do_loopback(path, dev_name, flags & MS_REC);
@@ -3413,20 +3414,22 @@ int path_mount(const char *dev_name/*设备名称*/, struct path *path/*挂载�
 	if (flags & MS_MOVE)
 		return do_move_mount_old(path, dev_name);
 
+    //处理普通挂载
 	return do_new_mount(path, type_page, sb_flags, mnt_flags, dev_name,
 			    data_page);
 }
 
-long do_mount(const char *dev_name/*设备名称*/, const char __user *dir_name,
+long do_mount(const char *dev_name/*设备名称*/, const char __user *dir_name/*挂载点目录名称*/,
 		const char *type_page/*文件系统类型*/, unsigned long flags, void *data_page)
 {
 	struct path path;
 	int ret;
 
+	/*确定dir_name对应的路径信息*/
 	ret = user_path_at(AT_FDCWD, dir_name, LOOKUP_FOLLOW, &path);
 	if (ret)
 		return ret;
-	ret = path_mount(dev_name, &path, type_page, flags, data_page);
+	ret = path_mount(dev_name/*设备名称*/, &path/*挂载点路径*/, type_page/*文件系统类型*/, flags, data_page);
 	path_put(&path);
 	return ret;
 }
@@ -3617,8 +3620,8 @@ struct dentry *mount_subtree(struct vfsmount *m, const char *name)
 EXPORT_SYMBOL(mount_subtree);
 
 //处理mount系统调用
-SYSCALL_DEFINE5(mount, char __user *, dev_name, char __user *, dir_name,
-		char __user *, type, unsigned long, flags, void __user *, data)
+SYSCALL_DEFINE5(mount, char __user *, dev_name/*要挂载的设备*/, char __user *, dir_name/*要挂载的目标目录*/,
+		char __user *, type/*fs类型*/, unsigned long, flags, void __user *, data)
 {
 	int ret;
 	char *kernel_type/*文件系统名称*/;

@@ -1137,6 +1137,7 @@ struct ethtool_rxnfc {
 	__u32				cmd;
 	__u32				flow_type;
 	__u64				data;
+	/*匹配条件*/
 	struct ethtool_rx_flow_spec	fs;
 	union {
 		__u32			rule_cnt;
@@ -1546,10 +1547,15 @@ enum ethtool_fec_config_bits {
 #define ETHTOOL_GGRO		0x0000002b /* Get GRO enable (ethtool_value) */
 #define ETHTOOL_SGRO		0x0000002c /* Set GRO enable (ethtool_value) */
 #define ETHTOOL_GRXRINGS	0x0000002d /* Get RX rings available for LB */
+//取rx cls规则总数
 #define ETHTOOL_GRXCLSRLCNT	0x0000002e /* Get RX class rule count */
+//给定索引取指定的rx cls规则详情
 #define ETHTOOL_GRXCLSRULE	0x0000002f /* Get RX classification rule */
+//返回所用rx cls规则总数及规则索引
 #define ETHTOOL_GRXCLSRLALL	0x00000030 /* Get all RX classification rule */
+/*删除指定索引的rx class rule*/
 #define ETHTOOL_SRXCLSRLDEL	0x00000031 /* Delete RX classification rule */
+/*添加指定索引的rx class rule*/
 #define ETHTOOL_SRXCLSRLINS	0x00000032 /* Insert RX classification rule */
 #define ETHTOOL_FLASHDEV	0x00000033 /* Flash firmware to device */
 #define ETHTOOL_RESET		0x00000034 /* Reset hardware */

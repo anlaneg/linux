@@ -30,23 +30,29 @@ static int block_to_path(struct inode * inode, long block, int offsets[DEPTH])
 	struct super_block *sb = inode->i_sb;
 
 	if (block < 0) {
+	    /*block需要大于等于0，返回0*/
 		printk("MINIX-fs: block_to_path: block %ld < 0 on dev %pg\n",
 			block, sb->s_bdev);
 		return 0;
 	}
+	/*要求的内容超过文件系统可提供的最大file尺寸，返回0*/
 	if ((u64)block * (u64)sb->s_blocksize >= sb->s_maxbytes)
 		return 0;
 
 	if (block < DIRCOUNT) {
+	    /*将block直接填充到offsets数组,样式1*/
 		offsets[n++] = block;
 	} else if ((block -= DIRCOUNT) < INDIRCOUNT(sb)) {
+	    /*先填充DIRCOUNT,再填充减掉DIRCOUNT后的block,样式2*/
 		offsets[n++] = DIRCOUNT;
 		offsets[n++] = block;
 	} else if ((block -= INDIRCOUNT(sb)) < INDIRCOUNT(sb) * INDIRCOUNT(sb)) {
+	    /*样式3*/
 		offsets[n++] = DIRCOUNT + 1;
 		offsets[n++] = block / INDIRCOUNT(sb);
 		offsets[n++] = block % INDIRCOUNT(sb);
 	} else {
+	    /*样式4*/
 		block -= INDIRCOUNT(sb) * INDIRCOUNT(sb);
 		offsets[n++] = DIRCOUNT + 2;
 		offsets[n++] = (block / INDIRCOUNT(sb)) / INDIRCOUNT(sb);

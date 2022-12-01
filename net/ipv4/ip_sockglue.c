@@ -176,6 +176,7 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 
 	/* Ordered by supposed usage frequency */
 	if (flags & IP_CMSG_PKTINFO) {
+	    /*按flags填充pktinfo*/
 		ip_cmsg_recv_pktinfo(msg, skb);
 
 		flags &= ~IP_CMSG_PKTINFO;
@@ -184,6 +185,7 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 	}
 
 	if (flags & IP_CMSG_TTL) {
+	    /*按flags要求，填充ttl*/
 		ip_cmsg_recv_ttl(msg, skb);
 
 		flags &= ~IP_CMSG_TTL;
@@ -192,6 +194,7 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 	}
 
 	if (flags & IP_CMSG_TOS) {
+	    /*按flag要求，填充tos*/
 		ip_cmsg_recv_tos(msg, skb);
 
 		flags &= ~IP_CMSG_TOS;
@@ -200,6 +203,7 @@ void ip_cmsg_recv_offset(struct msghdr *msg, struct sock *sk,
 	}
 
 	if (flags & IP_CMSG_RECVOPTS) {
+	    /*按flag要求，填充Opts*/
 		ip_cmsg_recv_opts(msg, skb);
 
 		flags &= ~IP_CMSG_RECVOPTS;

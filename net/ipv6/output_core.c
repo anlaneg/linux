@@ -117,8 +117,10 @@ int ip6_dst_hoplimit(struct dst_entry *dst)
 		rcu_read_lock();
 		idev = __in6_dev_get(dev);
 		if (idev)
+		    /*使用dev上配置的ttl*/
 			hoplimit = idev->cnf.hop_limit;
 		else
+		    /*使用net中配置的ttl*/
 			hoplimit = dev_net(dev)->ipv6.devconf_all->hop_limit;
 		rcu_read_unlock();
 	}

@@ -307,7 +307,7 @@ out_free_cache:
  */
 struct kmem_cache *
 kmem_cache_create_usercopy(const char *name/*要创建的slab名称*/,
-		  unsigned int size/*要创建的obj大小*/, unsigned int align,
+		  unsigned int size/*要创建的obj大小*/, unsigned int align/*obj对齐方式*/,
 		  slab_flags_t flags,
 		  unsigned int useroffset, unsigned int usersize,
 		  void (*ctor)(void *))

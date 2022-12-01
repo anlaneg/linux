@@ -91,6 +91,7 @@ static inline struct udp_hslot *udp_hashslot(struct udp_table *table,
 static inline struct udp_hslot *udp_hashslot2(struct udp_table *table,
 					      unsigned int hash)
 {
+	/*给定hash值，取udp hash表对应的slot*/
 	return &table->hash2[hash & table->mask];
 }
 
@@ -378,15 +379,17 @@ static inline bool udp_skb_is_linear(struct sk_buff *skb)
 }
 #endif
 
-static inline int copy_linear_skb(struct sk_buff *skb, int len, int off,
+static inline int copy_linear_skb(struct sk_buff *skb, int len/*可复制长度*/, int off,
 				  struct iov_iter *to)
 {
 	int n;
 
+	/*自offset位置开启，复制len长度到iov_iter中*/
 	n = copy_to_iter(skb->data + off, len, to);
 	if (n == len)
 		return 0;
 
+	/*copy_to_iter修改了一些内容，复原它*/
 	iov_iter_revert(to, n);
 	return -EFAULT;
 }

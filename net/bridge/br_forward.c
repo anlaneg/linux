@@ -36,6 +36,7 @@ int br_dev_queue_push_xmit(struct net *net, struct sock *sk, struct sk_buff *skb
 	if (!is_skb_forwardable(skb->dev, skb))
 		goto drop;
 
+	/*丢弃掉假的rtable*/
 	br_drop_fake_rtable(skb);
 
 	if (skb->ip_summed == CHECKSUM_PARTIAL &&
@@ -90,7 +91,7 @@ static void __br_forward(const struct net_bridge_port *to,
 	if (!skb)
 		return;
 
-	indev = skb->dev;
+	indev = skb->dev;/*保存入接口设备*/
 	skb->dev = to->dev;//指定出接口
 	if (!local_orig) {
 		//非本机来源，则触发forward钩子点

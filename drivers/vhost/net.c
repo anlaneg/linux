@@ -35,6 +35,7 @@
 
 #include "vhost.h"
 
+/*默认当前不开启0copy*/
 static int experimental_zcopytx = 0;
 module_param(experimental_zcopytx, int, 0444);
 MODULE_PARM_DESC(experimental_zcopytx, "Enable Zero Copy TX;"
@@ -99,7 +100,7 @@ struct vhost_net_ubuf_ref {
 
 #define VHOST_NET_BATCH 64
 struct vhost_net_buf {
-	void **queue;
+	void **queue;/*用于存放元素*/
 	int tail;/*队列尾指针*/
 	int head;/*队列头指针*/
 };
@@ -108,7 +109,7 @@ struct vhost_net_virtqueue {
 	struct vhost_virtqueue vq;
 	/*协商出来的vhost头部长度*/
 	size_t vhost_hlen;
-	/*协商出来的socket头部长度*/
+	/*协商出来的socket消息头部长度*/
 	size_t sock_hlen;
 	/* vhost zerocopy support fields below: */
 	/* last used idx for outstanding DMA zerocopy buffers */
@@ -125,15 +126,18 @@ struct vhost_net_virtqueue {
 	 * Protected by vq mutex. Writers must also take device mutex. */
 	struct vhost_net_ubuf_ref *ubufs;
 	struct ptr_ring *rx_ring;
-	struct vhost_net_buf rxq;/*收队列buffer*/
+	/*收队列buffer,用于按batch自rx_ring中获取报文*/
+	struct vhost_net_buf rxq;
 	/* Batched XDP buffs */
 	struct xdp_buff *xdp;
 };
 
 struct vhost_net {
+    /*vhost设备*/
 	struct vhost_dev dev;
 	//设备收发队列
 	struct vhost_net_virtqueue vqs[VHOST_NET_VQ_MAX];
+	/*rx,tx两个队列分别对应的一个vhost_poll*/
 	struct vhost_poll poll[VHOST_NET_VQ_MAX];
 	/* Number of TX recently submitted.
 	 * Protected by tx vq lock. */
@@ -167,6 +171,7 @@ static int vhost_net_buf_get_size(struct vhost_net_buf *rxq)
 
 static int vhost_net_buf_is_empty(struct vhost_net_buf *rxq)
 {
+    /*检查vhost net buffer是否为空*/
 	return rxq->tail == rxq->head;
 }
 
@@ -183,9 +188,10 @@ static int vhost_net_buf_produce(struct vhost_net_virtqueue *nvq)
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	rxq->head = 0;
+	/*自rx_ring中最多出VHOST_NET_BATCH个元素，并将其填充到rxq->queue中*/
 	rxq->tail = ptr_ring_consume_batched(nvq->rx_ring, rxq->queue,
 					      VHOST_NET_BATCH);
-	return rxq->tail;
+	return rxq->tail;/*返回消费指针位置*/
 }
 
 static void vhost_net_buf_unproduce(struct vhost_net_virtqueue *nvq)
@@ -194,8 +200,8 @@ static void vhost_net_buf_unproduce(struct vhost_net_virtqueue *nvq)
 
 	if (nvq->rx_ring && !vhost_net_buf_is_empty(rxq)) {
 		ptr_ring_unconsume(nvq->rx_ring, rxq->queue + rxq->head,
-				   vhost_net_buf_get_size(rxq),
-				   tun_ptr_free);
+				   vhost_net_buf_get_size(rxq)/*rx队列元素数目*/,
+				   tun_ptr_free/*释放rxq中的元素*/);
 		rxq->head = rxq->tail = 0;
 	}
 }
@@ -203,21 +209,26 @@ static void vhost_net_buf_unproduce(struct vhost_net_virtqueue *nvq)
 static int vhost_net_buf_peek_len(void *ptr)
 {
 	if (tun_is_xdp_frame(ptr)) {
+	    /*取xdp报文长度*/
 		struct xdp_frame *xdpf = tun_ptr_to_xdp(ptr);
 
 		return xdpf->len;
 	}
 
+	/*按skb考虑其对应长度*/
 	return __skb_array_len_with_tag(ptr);
 }
 
+/*peer待处理报文的长度*/
 static int vhost_net_buf_peek(struct vhost_net_virtqueue *nvq)
 {
 	struct vhost_net_buf *rxq = &nvq->rxq;
 
 	if (!vhost_net_buf_is_empty(rxq))
+	    /*rxq队列不为空，去out*/
 		goto out;
 
+	/*尝试从nvq中出一个batch到rxq,如果nvq中无内容，则退出*/
 	if (!vhost_net_buf_produce(nvq))
 		return 0;
 
@@ -230,6 +241,7 @@ static void vhost_net_buf_init(struct vhost_net_buf *rxq)
 	rxq->head = rxq->tail = 0;
 }
 
+/*为vq队列开启零copy*/
 static void vhost_net_enable_zcopy(int vq)
 {
 	vhost_net_zcopy_mask |= 0x1 << vq;
@@ -241,6 +253,7 @@ vhost_net_ubuf_alloc(struct vhost_virtqueue *vq, bool zcopy)
 	struct vhost_net_ubuf_ref *ubufs;
 	/* No zero copy backend? Nothing to count. */
 	if (!zcopy)
+	    /*没有开启零copy，则不处理*/
 		return NULL;
 	ubufs = kmalloc(sizeof(*ubufs), GFP_KERNEL);
 	if (!ubufs)
@@ -348,6 +361,7 @@ static bool vhost_net_tx_select_zcopy(struct vhost_net *net)
 
 static bool vhost_sock_zcopy(struct socket *sock)
 {
+    /*socket必须与vhost-net同时开启zcopy*/
 	return unlikely(experimental_zcopytx) &&
 		sock_flag(sock->sk, SOCK_ZEROCOPY);
 }
@@ -433,7 +447,9 @@ static void vhost_net_disable_vq(struct vhost_net *n,
 		container_of(vq, struct vhost_net_virtqueue, vq);
 	struct vhost_poll *poll = n->poll + (nvq - n->vqs);
 	if (!vhost_vq_get_backend(vq))
+	    /*如果此vq没有后端，则直接返回*/
 		return;
+	/*将poll自等待队列中移除*/
 	vhost_poll_stop(poll);
 }
 
@@ -447,6 +463,7 @@ static int vhost_net_enable_vq(struct vhost_net *n,
 
 	sock = vhost_vq_get_backend(vq);
 	if (!sock)
+	    /*此vq后端socket不存在*/
 		return 0;
 
 	return vhost_poll_start(poll, sock->file);
@@ -503,10 +520,12 @@ signal_used:
 
 static int sock_has_rx_data(struct socket *sock)
 {
+    /*检查sock是否有数据待处理*/
 	if (unlikely(!sock))
 		return 0;
 
 	if (sock->ops->peek_len)
+	    /*如果有peek_len，则通过peek_len检查*/
 		return sock->ops->peek_len(sock);
 
 	return skb_queue_empty(&sock->sk->sk_receive_queue);
@@ -516,6 +535,7 @@ static void vhost_net_busy_poll_try_queue(struct vhost_net *net,
 					  struct vhost_virtqueue *vq)
 {
 	if (!vhost_vq_avail_empty(&net->dev, vq)) {
+	    /*poll work入队，交付vhost kernel thread运行*/
 		vhost_poll_queue(&vq->poll);
 	} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {
 		vhost_disable_notify(&net->dev, vq);
@@ -542,6 +562,7 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 		return;
 
 	vhost_disable_notify(&net->dev, vq);
+	/*取后端socket*/
 	sock = vhost_vq_get_backend(rvq);
 
 	busyloop_timeout = poll_rx ? rvq->busyloop_timeout:
@@ -552,6 +573,7 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 
 	while (vhost_can_busy_poll(endtime)) {
 		if (vhost_has_work(&net->dev)) {
+		    /*vhost kernel thread 已经有工作了*/
 			*busyloop_intr = true;
 			break;
 		}
@@ -559,6 +581,7 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 		if ((sock_has_rx_data(sock) &&
 		     !vhost_vq_avail_empty(&net->dev, rvq)) ||
 		    !vhost_vq_avail_empty(&net->dev, tvq))
+		    /*socket有数据*/
 			break;
 
 		cpu_relax();
@@ -633,7 +656,7 @@ static int get_tx_bufs(struct vhost_net *net,
 	struct vhost_virtqueue *vq = &nvq->vq;
 	int ret;
 
-	//取可用描述符索引
+	//取tx可用描述符索引
 	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
 
 	//提取失败或者无可用描述符，直接返回
@@ -801,7 +824,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		if (nvq->done_idx == VHOST_NET_BATCH)
 			vhost_tx_batch(net, nvq, sock, &msg);
 
-		//获取描述符索引及其指明的buffer
+		//获取描述符索引及其指明的buffer,填充到msg中
 		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len,
 				   &busyloop_intr);
 		/* On error, stop handling until the next kick. */
@@ -848,10 +871,11 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 				msg.msg_flags &= ~MSG_MORE;
 		}
 
-		/*自msg中复制数据，构造skb,并向sock中发送报文*/
+		/*向sock中发送msg指定的报文*/
 		err = sock->ops->sendmsg(sock, &msg, len);
 		if (unlikely(err < 0)) {
 			if (err == -EAGAIN || err == -ENOMEM || err == -ENOBUFS) {
+			    /*向对方发送失败，回退描述符*/
 				vhost_discard_vq_desc(vq, 1);
 				vhost_net_enable_vq(net, vq);
 				break;
@@ -861,6 +885,7 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 			pr_debug("Truncated TX packet: len %d != %zd\n",
 				 err, len);
 done:
+        /*发送完成，完成更新*/
 		vq->heads[nvq->done_idx].id = cpu_to_vhost32(vq, head);
 		vq->heads[nvq->done_idx].len = 0;
 		++nvq->done_idx;
@@ -1010,17 +1035,22 @@ static int peek_head_len(struct vhost_net_virtqueue *rvq, struct sock *sk)
 	unsigned long flags;
 
 	if (rvq->rx_ring)
+	    /*采用rx_ring方式时，peek首包文长度*/
 		return vhost_net_buf_peek(rvq);
 
 	spin_lock_irqsave(&sk->sk_receive_queue.lock, flags);
+	/*peer socket的receive queue上的首个报文*/
 	head = skb_peek(&sk->sk_receive_queue);
 	if (likely(head)) {
+	    /*receive_queue上有内容，取报文长度*/
 		len = head->len;
 		if (skb_vlan_tag_present(head))
+		    /*如果我们的报文上有tag,则加上tag头*/
 			len += VLAN_HLEN;
 	}
 
 	spin_unlock_irqrestore(&sk->sk_receive_queue.lock, flags);
+	/*返回peek的长度*/
 	return len;
 }
 
@@ -1031,9 +1061,11 @@ static int vhost_net_rx_peek_head_len(struct vhost_net *net, struct sock *sk,
 	struct vhost_net_virtqueue *tnvq = &net->vqs[VHOST_NET_VQ_TX];
 	struct vhost_virtqueue *rvq = &rnvq->vq;
 	struct vhost_virtqueue *tvq = &tnvq->vq;
+	/*peek一下rx队列上首个报文的长度*/
 	int len = peek_head_len(rnvq, sk);
 
 	if (!len && rvq->busyloop_timeout) {
+	    /*rx队列上没有报文，且用户指定了busyloop的超时时间*/
 		/* Flush batched heads first */
 		vhost_net_signal_used(rnvq);
 		/* Both tx vq and rx socket were polled here */
@@ -1064,7 +1096,8 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 		       unsigned int quota/*容许占用的描述符数目上限*/)
 {
 	unsigned int out, in;
-	int seg = 0;/*当前vq->iov已占用segment大小*/
+	/*当前vq->iov已占用segment大小*/
+	int seg = 0;
 	int headcount = 0;
 	unsigned d;
 	int r, nlogs = 0;
@@ -1075,14 +1108,14 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	while (datalen > 0 && headcount < quota) {
 		if (unlikely(seg >= UIO_MAXIOV)) {
-		    //数据片段过多超过配额，报错
+		    //数据片段过多超过极限，报错
 			r = -ENOBUFS;
 			goto err;
 		}
 
 		//取可用描述符索引
-		r = vhost_get_vq_desc(vq, vq->iov + seg,
-				      ARRAY_SIZE(vq->iov) - seg, &out,
+		r = vhost_get_vq_desc(vq, vq->iov + seg/*iov起始位置*/,
+				      ARRAY_SIZE(vq->iov) - seg/*可用iov数目*/, &out,
 				      &in, log, log_num);
 		if (unlikely(r < 0))
 			goto err;
@@ -1119,6 +1152,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 	/* Detect overrun */
 	if (unlikely(datalen > 0)) {
+	    /*内容过大，超过quota*/
 		r = UIO_MAXIOV + 1;
 		goto err;
 	}
@@ -1130,10 +1164,12 @@ err:
 
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
-//从tap口拿到报文，将其写入到net->vqs rx队列中
+//从后端socket拿到报文，将其写入到net->vqs rx队列中
 static void handle_rx(struct vhost_net *net)
 {
+    /*取vhost net vq*/
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_RX];
+	/*取vhost vq*/
 	struct vhost_virtqueue *vq = &nvq->vq;
 	unsigned in, log;
 	struct vhost_log *vq_log;
@@ -1142,7 +1178,7 @@ static void handle_rx(struct vhost_net *net)
 		.msg_namelen = 0,
 		.msg_control = NULL, /* FIXME: get and handle RX aux data. */
 		.msg_controllen = 0,
-		.msg_flags = MSG_DONTWAIT,
+		.msg_flags = MSG_DONTWAIT,/*指明非阻塞*/
 	};
 	struct virtio_net_hdr hdr = {
 		.flags = 0,
@@ -1159,8 +1195,10 @@ static void handle_rx(struct vhost_net *net)
 	__virtio16 num_buffers;
 	int recv_pkts = 0;
 
+	/*锁住此队列*/
 	mutex_lock_nested(&vq->mutex, VHOST_NET_VQ_RX);
-	//取vq对应的后端
+
+	//取vq对应的后端socket
 	sock = vhost_vq_get_backend(vq);
 	if (!sock)
 		goto out;
@@ -1181,18 +1219,20 @@ static void handle_rx(struct vhost_net *net)
 	mergeable = vhost_has_feature(vq, VIRTIO_NET_F_MRG_RXBUF);
 
 	do {
-	    //确定要发送的pkt长度
+	    //通过peek首先确定要接收的pkt长度
 		sock_len = vhost_net_rx_peek_head_len(net, sock->sk,
 						      &busyloop_intr);
 		if (!sock_len)
+		    /*无数据，跳出*/
 			break;
+
 		//需要读取的buffer总长为vhost_len,获取足够描述符，以便可以存入它
-		sock_len += sock_hlen;
-		vhost_len = sock_len + vhost_hlen;
+		sock_len += sock_hlen;/*socket负载长度（含socket header）*/
+		vhost_len = sock_len + vhost_hlen;/*vhost负载长度（含vhost header)*/
 
 		//获取足够容纳报文的描述符
 		headcount = get_rx_bufs(vq, vq->heads + nvq->done_idx,
-					vhost_len, &in, vq_log, &log,
+					vhost_len/*vhost负载长度*/, &in, vq_log, &log,
 					likely(mergeable) ? UIO_MAXIOV : 1);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(headcount < 0))
@@ -1200,9 +1240,9 @@ static void handle_rx(struct vhost_net *net)
 			goto out;
 		/* OK, now we need to know about added descriptors. */
 		if (!headcount) {
-		    /*未获取到可用描述符,加入poll队列等待，开启通知*/
+		    /*有报文，但未获取到足够的可用描述符,加入poll队列等待，开启通知*/
 			if (unlikely(busyloop_intr)) {
-				vhost_poll_queue(&vq->poll);
+				vhost_poll_queue(&vq->poll);/*尝试下次继续收取*/
 			} else if (unlikely(vhost_enable_notify(&net->dev, vq))) {
 				/* They have slipped one in as we were
 				 * doing that: check again. */
@@ -1228,7 +1268,7 @@ static void handle_rx(struct vhost_net *net)
 			continue;
 		}
 		/* We don't need to be notified again. */
-		iov_iter_init(&msg.msg_iter, READ, vq->iov, in, vhost_len);
+		iov_iter_init(&msg.msg_iter, READ, vq->iov, in, vhost_len);/*设置可供写入的iov*/
 		fixup = msg.msg_iter;
 		if (unlikely((vhost_hlen))) {
 			/* We will supply the header ourselves
@@ -1250,6 +1290,7 @@ static void handle_rx(struct vhost_net *net)
 			vhost_discard_vq_desc(vq, headcount);
 			continue;
 		}
+
 		/*自tap,tun口完成了报文收取*/
 		/* Supply virtio_net_hdr if VHOST_NET_F_VIRTIO_NET_HDR */
 		if (unlikely(vhost_hlen)) {
@@ -1327,12 +1368,14 @@ static void handle_tx_net(struct vhost_work *work)
 /*vhost rx队列处理入口，报文将被送给vm*/
 static void handle_rx_net(struct vhost_work *work)
 {
+    /*通过work获得其对应的vhost_net结构*/
 	struct vhost_net *net = container_of(work, struct vhost_net,
 					     poll[VHOST_NET_VQ_RX].work);
+	/*针对vhost_net进行收包处理*/
 	handle_rx(net);
 }
 
-//处理vhost-net设备打开
+//处理vhost-net字符设备打开
 static int vhost_net_open(struct inode *inode, struct file *f)
 {
 	struct vhost_net *n;
@@ -1342,17 +1385,19 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	struct xdp_buff *xdp;
 	int i;
 
+	/*申请vhost_net*/
 	n = kvmalloc(sizeof *n, GFP_KERNEL | __GFP_RETRY_MAYFAIL);
 	if (!n)
 		return -ENOMEM;
-	//申请多个vqs
+
+	//申请一对儿vq指针
 	vqs = kmalloc_array(VHOST_NET_VQ_MAX, sizeof(*vqs), GFP_KERNEL);
 	if (!vqs) {
 		kvfree(n);
 		return -ENOMEM;
 	}
 
-	/*初始化收队列buffer*/
+	/*初始化rx队列buffer*/
 	queue = kmalloc_array(VHOST_NET_BATCH, sizeof(void *),
 			      GFP_KERNEL);
 	if (!queue) {
@@ -1360,6 +1405,8 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 		kvfree(n);
 		return -ENOMEM;
 	}
+
+	/*设置vhost net设备的rx队列*/
 	n->vqs[VHOST_NET_VQ_RX].rxq.queue = queue;
 
 	/*初始化xdp发队列buffer*/
@@ -1373,6 +1420,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	n->vqs[VHOST_NET_VQ_TX].xdp = xdp;
 
 	dev = &n->dev;
+	/*rx,tx分别指向vhost-net设备的vq*/
 	vqs[VHOST_NET_VQ_TX] = &n->vqs[VHOST_NET_VQ_TX].vq;
 	vqs[VHOST_NET_VQ_RX] = &n->vqs[VHOST_NET_VQ_RX].vq;
 
@@ -1380,7 +1428,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	n->vqs[VHOST_NET_VQ_TX].vq.handle_kick = handle_tx_kick;
 	n->vqs[VHOST_NET_VQ_RX].vq.handle_kick = handle_rx_kick;
 
-	/*初始化vq*/
+	/*初始化rx,tx对应的vq*/
 	for (i = 0; i < VHOST_NET_VQ_MAX; i++) {
 		n->vqs[i].ubufs = NULL;
 		n->vqs[i].ubuf_info = NULL;
@@ -1390,18 +1438,18 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 		n->vqs[i].vhost_hlen = 0;
 		n->vqs[i].sock_hlen = 0;
 		n->vqs[i].rx_ring = NULL;
-		vhost_net_buf_init(&n->vqs[i].rxq);
+		vhost_net_buf_init(&n->vqs[i].rxq);/*初始化rxq，指向空*/
 	}
 
 	/*vqs指向n->vqs，已完成初始化,这里初始化virtio-net设备*/
-	vhost_dev_init(dev, vqs, VHOST_NET_VQ_MAX,
-		       UIO_MAXIOV + VHOST_NET_BATCH,
+	vhost_dev_init(dev, vqs, VHOST_NET_VQ_MAX/*队列数目*/,
+		       UIO_MAXIOV + VHOST_NET_BATCH/*？？？？*/,
 		       VHOST_NET_PKT_WEIGHT, VHOST_NET_WEIGHT, true,
 		       NULL);
 
-	/*n->poll的回调函数*/
-	vhost_poll_init(n->poll + VHOST_NET_VQ_TX, handle_tx_net, EPOLLOUT, dev);
-	vhost_poll_init(n->poll + VHOST_NET_VQ_RX, handle_rx_net, EPOLLIN, dev);
+	/*设置n->poll的回调函数，这些函数最终会被vhost-xx线程执行*/
+	vhost_poll_init(n->poll + VHOST_NET_VQ_TX, handle_tx_net/*tx处理*/, EPOLLOUT, dev);
+	vhost_poll_init(n->poll + VHOST_NET_VQ_RX, handle_rx_net/*rx处理*/, EPOLLIN, dev);
 
 	f->private_data = n;
 	n->page_frag.page = NULL;
@@ -1419,17 +1467,21 @@ static struct socket *vhost_net_stop_vq(struct vhost_net *n,
 		container_of(vq, struct vhost_net_virtqueue, vq);
 
 	mutex_lock(&vq->mutex);
+	/*vq的后端为socket,取得它的引用*/
 	sock = vhost_vq_get_backend(vq);
 	vhost_net_disable_vq(n, vq);
+	/*将vq的后端socket置为NULL*/
 	vhost_vq_set_backend(vq, NULL);
 	vhost_net_buf_unproduce(nvq);
 	nvq->rx_ring = NULL;
 	mutex_unlock(&vq->mutex);
+	/*返回vq后端对应的socket*/
 	return sock;
 }
 
-static void vhost_net_stop(struct vhost_net *n, struct socket **tx_sock,
-			   struct socket **rx_sock)
+/*停止rx,tx队列，并返回rx,tx对应的后端socket*/
+static void vhost_net_stop(struct vhost_net *n, struct socket **tx_sock/*出参，tx对应的socket*/,
+			   struct socket **rx_sock/*出参，rx对应的socket*/)
 {
 	*tx_sock = vhost_net_stop_vq(n, &n->vqs[VHOST_NET_VQ_TX].vq);
 	*rx_sock = vhost_net_stop_vq(n, &n->vqs[VHOST_NET_VQ_RX].vq);
@@ -1460,6 +1512,7 @@ static void vhost_net_flush(struct vhost_net *n)
 
 static int vhost_net_release(struct inode *inode, struct file *f)
 {
+    /*获得file对应的私有数据vhost-net设备*/
 	struct vhost_net *n = f->private_data;
 	struct socket *tx_sock;
 	struct socket *rx_sock;
@@ -1469,6 +1522,7 @@ static int vhost_net_release(struct inode *inode, struct file *f)
 	vhost_dev_stop(&n->dev);
 	vhost_dev_cleanup(&n->dev);
 	vhost_net_vq_reset(n);
+	/*减少tx socket,rx socket的引用计数/关闭此socket*/
 	if (tx_sock)
 		sockfd_put(tx_sock);
 	if (rx_sock)
@@ -1483,6 +1537,7 @@ static int vhost_net_release(struct inode *inode, struct file *f)
 	kfree(n->dev.vqs);
 	if (n->page_frag.page)
 		__page_frag_cache_drain(n->page_frag.page, n->refcnt_bias);
+	/*释放vhost-net设备*/
 	kvfree(n);
 	return 0;
 }
@@ -1537,11 +1592,12 @@ static struct socket *get_tap_socket(int fd)
 
 	if (!file)
 		return ERR_PTR(-EBADF);
-	/*如果为tun接口，则返回tun对应的socket*/
+	/*如果为tap接口，取此tun设备对应的socket*/
 	sock = tun_get_socket(file);
 	if (!IS_ERR(sock))
 		return sock;
-	/*如果为tap接口，则返回tap对应的socket*/
+
+	/*如果为tap接口，取此tap设备对应的socket*/
 	sock = tap_get_socket(file);
 	if (IS_ERR(sock))
 		fput(file);
@@ -1560,6 +1616,7 @@ static struct socket *get_socket(int fd)
 	sock = get_raw_socket(fd);
 	if (!IS_ERR(sock))
 		return sock;
+	/*检查是否为tap设备对应的socket*/
 	sock = get_tap_socket(fd);
 	if (!IS_ERR(sock))
 		return sock;
@@ -1567,7 +1624,7 @@ static struct socket *get_socket(int fd)
 }
 
 /*更新vhost_net设备指定队列的后端设备*/
-static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd)
+static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd/*对列对应的fd*/)
 {
 	struct socket *sock, *oldsock;
 	struct vhost_virtqueue *vq;
@@ -1576,7 +1633,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	int r;
 
 	mutex_lock(&n->dev.mutex);
-	//设置后端的必须为owner
+	//当前进程必须为vhost设备的owner
 	r = vhost_dev_check_owner(&n->dev);
 	if (r)
 		goto err;
@@ -1588,8 +1645,8 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	}
 
 	//取收/发队列对应的vq
-	vq = &n->vqs[index].vq;
-	nvq = &n->vqs[index];
+	vq = &n->vqs[index].vq;/*取此index对应的vhost_vq*/
+	nvq = &n->vqs[index];/*取此index对应的vhost_net_vq*/
 	mutex_lock(&vq->mutex);
 
 	/* Verify that ring has been setup correctly. */
@@ -1598,17 +1655,18 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 		goto err_vq;
 	}
 
-	//取fd对应的socket（raw-socket,tap-socket等）
+	//取此fd对应的socket（raw-socket,tap-socket等）
 	sock = get_socket(fd);
 	if (IS_ERR(sock)) {
+	    /*fd不是一个socket,报错*/
 		r = PTR_ERR(sock);
 		goto err_vq;
 	}
 
 	/* start polling new socket */
-	oldsock = vhost_vq_get_backend(vq);
+	oldsock = vhost_vq_get_backend(vq);/*取vq旧的后端*/
 	if (sock != oldsock) {
-	    /*如果两者提供的socket不一致，则执行更新*/
+	    /*如果前后两次回调提供的后端socket不一致，则执行更新*/
 		ubufs = vhost_net_ubuf_alloc(vq,
 					     sock && vhost_sock_zcopy(sock));
 		if (IS_ERR(ubufs)) {
@@ -1616,14 +1674,17 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 			goto err_ubufs;
 		}
 
-		/*关闭对旧队列的poll,设置新的后端，丢弃nvq中缓存数据*/
+		/*将poll自等待队列中移除*/
 		vhost_net_disable_vq(n, vq);
+		/*设置vq的后端socket*/
 		vhost_vq_set_backend(vq, sock);
 		vhost_net_buf_unproduce(nvq);
-		r = vhost_vq_init_access(vq);//重新初始化vq
+		//重新初始化vq
+		r = vhost_vq_init_access(vq);
 		if (r)
 			goto err_used;
-		r = vhost_net_enable_vq(n, vq);//开启对新队列的poll
+		//开启对新队列的poll
+		r = vhost_net_enable_vq(n, vq);
 		if (r)
 			goto err_used;
 		if (index == VHOST_NET_VQ_RX)
@@ -1683,6 +1744,8 @@ static long vhost_net_reset_owner(struct vhost_net *n)
 	err = vhost_dev_check_owner(&n->dev);
 	if (err)
 		goto done;
+
+	/*申请iotlb*/
 	umem = vhost_dev_reset_owner_prepare();
 	if (!umem) {
 		err = -ENOMEM;
@@ -1763,6 +1826,7 @@ static long vhost_net_set_owner(struct vhost_net *n)
 	r = vhost_net_set_ubuf_info(n);
 	if (r)
 		goto out;
+
 	//确定vhost-dev的owner，创建相应内核线程
 	r = vhost_dev_set_owner(&n->dev);
 	if (r)
@@ -1777,6 +1841,7 @@ out:
 static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 			    unsigned long arg)
 {
+    /*取此文件对应的vhost_net结构体*/
 	struct vhost_net *n = f->private_data;
 	void __user *argp = (void __user *)arg;
 	u64 __user *featurep = argp;
@@ -1786,12 +1851,12 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 
 	switch (ioctl) {
 	case VHOST_NET_SET_BACKEND:
-	    /*设置收/发队列的后端设备fd*/
+	    /*用于：设置收/发队列的后端socket*/
 		if (copy_from_user(&backend, argp, sizeof backend))
 			return -EFAULT;
 		return vhost_net_set_backend(n, backend.index, backend.fd);
 	case VHOST_GET_FEATURES:
-	    /*返回vhost支持的features*/
+	    /*返回vhost-net支持的features*/
 		features = VHOST_NET_FEATURES;
 		if (copy_to_user(featurep, &features, sizeof features))
 			return -EFAULT;
@@ -1819,7 +1884,7 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 		vhost_set_backend_features(&n->dev, features);
 		return 0;
 	case VHOST_RESET_OWNER:
-	    /*重置owner*/
+	    /*重置此设备的owner*/
 		return vhost_net_reset_owner(n);
 	case VHOST_SET_OWNER:
 	    /*为vhost-net设置owner,创建vhost work线程,处理work*/
@@ -1842,10 +1907,14 @@ static long vhost_net_ioctl(struct file *f, unsigned int ioctl,
 static ssize_t vhost_net_chr_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
+	/*获得此文件对应的私有数据vhost-net结构*/
 	struct vhost_net *n = file->private_data;
+	/*获得vhost设备*/
 	struct vhost_dev *dev = &n->dev;
+	/*检查此文件是否非阻塞*/
 	int noblock = file->f_flags & O_NONBLOCK;
 
+	/*以noblock规定的方式读取vhost设备，将内容写入到to*/
 	return vhost_chr_read_iter(dev, to, noblock);
 }
 
@@ -1854,16 +1923,20 @@ static ssize_t vhost_net_chr_write_iter(struct kiocb *iocb,
 					struct iov_iter *from)
 {
 	struct file *file = iocb->ki_filp;
+	/*获得此文件对应的私有数据vhost-net结构*/
 	struct vhost_net *n = file->private_data;
+	/*获得vhost设备*/
 	struct vhost_dev *dev = &n->dev;
 
-	/*向vhost_dev设备进行写操作*/
+	/*接收用户态写入的消息，并进行响应*/
 	return vhost_chr_write_iter(dev, from);
 }
 
 static __poll_t vhost_net_chr_poll(struct file *file, poll_table *wait)
 {
+    /*取此文件对应的vhost_net结构*/
 	struct vhost_net *n = file->private_data;
+	/*获得vhost_dev设备*/
 	struct vhost_dev *dev = &n->dev;
 
 	return vhost_chr_poll(file, dev, wait);
@@ -1877,12 +1950,16 @@ static __poll_t vhost_net_chr_poll(struct file *file, poll_table *wait)
  */
 static const struct file_operations vhost_net_fops = {
 	.owner          = THIS_MODULE,
+	/*关闭vhost-net设备*/
 	.release        = vhost_net_release,
+	/*自dev->read_list上获取iotlb消息，并填充到to中，同时将此消息移至dev->pending_list*/
 	.read_iter      = vhost_net_chr_read_iter,
+	/*响应用户态传入的iotlb更新/无效消息*/
 	.write_iter     = vhost_net_chr_write_iter,
 	.poll           = vhost_net_chr_poll,
 	.unlocked_ioctl = vhost_net_ioctl,
 	.compat_ioctl   = compat_ptr_ioctl,
+	/*vhost-net字符设备open函数，创建vhost-net设备，并将其设置为file的私有数据*/
 	.open           = vhost_net_open,
 	.llseek		= noop_llseek,
 };

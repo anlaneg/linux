@@ -138,7 +138,7 @@ static int vfat_hashi(const struct dentry *dentry, struct qstr *qstr)
 	unsigned int len;
 	unsigned long hash;
 
-	name = qstr->name;
+	name = qstr->name;/*文件名称*/
 	len = vfat_striptail_len(qstr);
 
 	hash = init_name_hash(dentry);

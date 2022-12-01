@@ -345,7 +345,7 @@ static inline struct sock *
 					 ntohs(dport), dif, 0);
 }
 
-//查询对应的此状态对应的sock
+//查询4元组对应的sock
 static inline struct sock *__inet_lookup(struct net *net,
 					 struct inet_hashinfo *hashinfo,
 					 struct sk_buff *skb, int doff,//tcp头部长度

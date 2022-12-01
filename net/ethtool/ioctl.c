@@ -102,6 +102,7 @@ static int ethtool_get_features(struct net_device *dev, void __user *useraddr)
 		features[i].available = (u32)(dev->hw_features >> (32 * i));
 		features[i].requested = (u32)(dev->wanted_features >> (32 * i));
 		features[i].active = (u32)(dev->features >> (32 * i));
+		/*禁止变更的功能*/
 		features[i].never_changed =
 			(u32)(NETIF_F_NEVER_CHANGE >> (32 * i));
 	}
@@ -139,6 +140,7 @@ static int ethtool_set_features(struct net_device *dev, void __user *useraddr)
 	if (cmd.size != ETHTOOL_DEV_FEATURE_WORDS)
 		return -EINVAL;
 
+	/*取用户态写入的features配置*/
 	if (copy_from_user(features, useraddr, sizeof(features)))
 		return -EFAULT;
 
@@ -147,12 +149,14 @@ static int ethtool_set_features(struct net_device *dev, void __user *useraddr)
 		wanted |= (netdev_features_t)features[i].requested << (32 * i);
 	}
 
+	/*存在当前kernel不支持的features,报错*/
 	if (valid & ~NETIF_F_ETHTOOL_BITS)
 		return -EINVAL;
 
+	/*存在硬件不支持features,将请求缩减为硬件支持的*/
 	if (valid & ~dev->hw_features) {
 		valid &= dev->hw_features;
-		ret |= ETHTOOL_F_UNSUPPORTED;
+		ret |= ETHTOOL_F_UNSUPPORTED;/*指明含unspported*/
 	}
 
 	dev->wanted_features &= ~valid;
@@ -165,16 +169,18 @@ static int ethtool_set_features(struct net_device *dev, void __user *useraddr)
 	return ret;
 }
 
-//返回各string集合的成员数
-static int __ethtool_get_sset_count(struct net_device *dev, int sset)
+//返回各string set的成员数
+static int __ethtool_get_sset_count(struct net_device *dev, int sset/*string set编号*/)
 {
 	const struct ethtool_phy_ops *phy_ops = ethtool_phy_ops;
 	const struct ethtool_ops *ops = dev->ethtool_ops;
 
 	if (sset == ETH_SS_FEATURES)
+	    /*返回features对应的string set集数目*/
 		return ARRAY_SIZE(netdev_features_strings);
 
 	if (sset == ETH_SS_RSS_HASH_FUNCS)
+	    /*返回hash func对应的string set集数目*/
 		return ARRAY_SIZE(rss_hash_func_strings);
 
 	if (sset == ETH_SS_TUNABLES)
@@ -183,6 +189,7 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 	if (sset == ETH_SS_PHY_TUNABLES)
 		return ARRAY_SIZE(phy_tunable_strings);
 
+	/*一般不会使用这个分支，phy_ops只容许有一个实例，对设备多样性不友好，用处不大*/
 	if (sset == ETH_SS_PHY_STATS && dev->phydev &&
 	    !ops->get_ethtool_phy_stats &&
 	    phy_ops && phy_ops->get_sset_count)
@@ -191,6 +198,7 @@ static int __ethtool_get_sset_count(struct net_device *dev, int sset)
 	if (sset == ETH_SS_LINK_MODES)
 		return __ETHTOOL_LINK_MODE_MASK_NBITS;
 
+	/*dev自定义的string set count回调*/
 	if (ops->get_sset_count && ops->get_strings)
 		return ops->get_sset_count(dev, sset);
 	else
@@ -790,6 +798,7 @@ ethtool_get_drvinfo(struct net_device *dev, struct ethtool_devlink_compat *rsp)
 	return 0;
 }
 
+/*针对指定网络设备，取info.sset_mask指定的每一个set对应的count*/
 static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 						    void __user *useraddr)
 {
@@ -807,12 +816,13 @@ static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 		return 0;
 
 	/* calculate size of return buffer */
-	//需要多少buffer
+	//记录有多少个bit位被打上了'1'
 	n_bits = hweight64(sset_mask);
 
 	memset(&info, 0, sizeof(info));
 	info.cmd = ETHTOOL_GSSET_INFO;
 
+	/*每个bit用一个u32来申请空间*/
 	info_buf = kcalloc(n_bits, sizeof(u32), GFP_USER);
 	if (!info_buf)
 		return -ENOMEM;
@@ -823,18 +833,21 @@ static noinline_for_stack int ethtool_get_sset_info(struct net_device *dev,
 	 */
 	for (i = 0; i < 64; i++) {
 		if (!(sset_mask & (1ULL << i)))
-			//跳过不关心的set集
+			//跳过不关心的bit位（没有被置1）
 			continue;
 
 		//取i号set集的元素数
 		rc = __ethtool_get_sset_count(dev, i);
 		if (rc >= 0) {
+		    /*标记此数据被提取到*/
 			info.sset_mask |= (1ULL << i);
+			/*按顺序填充*/
 			info_buf[idx++] = rc;
 		}
 	}
 
 	ret = -EFAULT;
+	/*填充info,用于指明收集到哪个bit位关联的数据*/
 	if (copy_to_user(useraddr, &info, sizeof(info)))
 		goto out;
 
@@ -1038,6 +1051,7 @@ static noinline_for_stack int ethtool_get_rxnfc(struct net_device *dev,
 
 	if (info.cmd == ETHTOOL_GRXCLSRLALL) {
 		if (info.rule_cnt > 0) {
+		    /*申请辅助buffer,填充各规则索引*/
 			if (info.rule_cnt <= KMALLOC_MAX_SIZE / sizeof(u32))
 				rule_buf = kcalloc(info.rule_cnt, sizeof(u32),
 						   GFP_USER);
@@ -2821,8 +2835,10 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 	case ETHTOOL_PHY_GTUNABLE:
 	case ETHTOOL_GLINKSETTINGS:
 	case ETHTOOL_GFECPARAM:
+	    /*无权限要求的命令*/
 		break;
 	default:
+	    /*需要权限检查的命令*/
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 	}
@@ -2835,11 +2851,14 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 		goto out;
 	}
 
+	/*有begin回调，则在ethtool命令执行前，先调用此回调*/
 	if (dev->ethtool_ops->begin) {
 		rc = dev->ethtool_ops->begin(dev);
 		if (rc < 0)
 			goto out;
 	}
+
+	/*记录设备的feature,用于在操作执行后检查是否有变更*/
 	old_features = dev->features;
 
 	switch (ethcmd) {
@@ -2979,8 +2998,8 @@ __dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr,
 	case ETHTOOL_SRSSH:
 		rc = ethtool_set_rxfh(dev, useraddr);
 		break;
-		//一般性功能状态获取
 	case ETHTOOL_GFEATURES:
+	    //一般性功能状态获取
 		rc = ethtool_get_features(dev, useraddr);
 		break;
 	case ETHTOOL_SFEATURES:
@@ -3075,6 +3094,7 @@ out:
 	return rc;
 }
 
+/*针对接口的SIOCETHTOOL命令处理*/
 int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 {
 	struct ethtool_devlink_compat *state;
@@ -3111,6 +3131,7 @@ int dev_ethtool(struct net *net, struct ifreq *ifr, void __user *useraddr)
 							 state->efl.data);
 		break;
 	case ETHTOOL_GDRVINFO:
+	    /*通过ethtool获取接口的driver info*/
 		if (state->devlink)
 			devlink_compat_running_version(state->devlink,
 						       state->info.fw_version,

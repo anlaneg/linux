@@ -89,15 +89,18 @@ struct buffer_head {
 #define BUFFER_FNS(bit, name)						\
 static __always_inline void set_buffer_##name(struct buffer_head *bh)	\
 {									\
+    /*如果bh没有对应标记，则添加此标记*/\
 	if (!test_bit(BH_##bit, &(bh)->b_state))			\
 		set_bit(BH_##bit, &(bh)->b_state);			\
 }									\
 static __always_inline void clear_buffer_##name(struct buffer_head *bh)	\
 {									\
+    /*清除bh上指定标记（不考虑是否存在）*/\
 	clear_bit(BH_##bit, &(bh)->b_state);				\
 }									\
 static __always_inline int buffer_##name(const struct buffer_head *bh)	\
 {									\
+    /*为bh添加标记(不考虑是否存在）*/\
 	return test_bit(BH_##bit, &(bh)->b_state);			\
 }
 
@@ -323,6 +326,7 @@ sb_breadahead_unmovable(struct super_block *sb, sector_t block)
 	__breadahead_gfp(sb->s_bdev, block, sb->s_blocksize, 0);
 }
 
+/*获取此block对应的buffer*/
 static inline struct buffer_head *
 sb_getblk(struct super_block *sb, sector_t block)
 {
@@ -345,6 +349,7 @@ sb_find_get_block(struct super_block *sb, sector_t block)
 static inline void
 map_bh(struct buffer_head *bh, struct super_block *sb, sector_t block)
 {
+    /*添加mapped标记*/
 	set_buffer_mapped(bh);
 	bh->b_bdev = sb->s_bdev;
 	bh->b_blocknr = block;

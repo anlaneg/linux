@@ -35,7 +35,7 @@
 #define min(a, b)		((a < b) ? (a) : (b))
 
 struct io_sq_ring {
-	unsigned *head;
+	unsigned *head;/*队列读者指针*/
 	unsigned *tail;
 	unsigned *ring_mask;
 	unsigned *ring_entries;
@@ -44,11 +44,11 @@ struct io_sq_ring {
 };
 
 struct io_cq_ring {
-	unsigned *head;
-	unsigned *tail;
+	unsigned *head;/*读者指针*/
+	unsigned *tail;/*写者指针*/
 	unsigned *ring_mask;
 	unsigned *ring_entries;
-	struct io_uring_cqe *cqes;
+	struct io_uring_cqe *cqes;/*保存cqe指针的数组*/
 };
 
 #define DEPTH			128
@@ -63,9 +63,9 @@ struct io_cq_ring {
 static unsigned sq_ring_mask, cq_ring_mask;
 
 struct file {
-	unsigned long max_blocks;
+	unsigned long max_blocks;/*占用的块数*/
 	unsigned pending_ios;
-	int real_fd;
+	int real_fd;/*文件对应的fd*/
 	int fixed_fd;
 };
 
@@ -73,13 +73,13 @@ struct submitter {
 	pthread_t thread;
 	int ring_fd;
 	struct drand48_data rand;
-	struct io_sq_ring sq_ring;
+	struct io_sq_ring sq_ring;/*发送队列（读请求）*/
 	struct io_uring_sqe *sqes;
-	struct iovec iovecs[DEPTH];
-	struct io_cq_ring cq_ring;
-	int inflight;
-	unsigned long reaps;
-	unsigned long done;
+	struct iovec iovecs[DEPTH];/*读取缓冲区*/
+	struct io_cq_ring cq_ring;/*响应队列（读完成）*/
+	int inflight;/*待完成的io请求（已发出）*/
+	unsigned long reaps;/*已响应的io请求*/
+	unsigned long done;/*已完成的io请求*/
 	unsigned long calls;
 	volatile int finish;
 
@@ -109,7 +109,7 @@ static int io_uring_register_buffers(struct submitter *s)
 	if (do_nop)
 		return 0;
 
-	return io_uring_register(s->ring_fd, IORING_REGISTER_BUFFERS, s->iovecs,
+	return io_uring_register(s->ring_fd, IORING_REGISTER_BUFFERS/*注册固定buffer*/, s->iovecs,
 					DEPTH);
 }
 
@@ -126,7 +126,7 @@ static int io_uring_register_files(struct submitter *s)
 		s->files[i].fixed_fd = i;
 	}
 
-	return io_uring_register(s->ring_fd, IORING_REGISTER_FILES, s->fds,
+	return io_uring_register(s->ring_fd, IORING_REGISTER_FILES/*注册固定文件*/, s->fds,
 					s->nr_files);
 }
 
@@ -142,29 +142,37 @@ static unsigned file_depth(struct submitter *s)
 
 static void init_io(struct submitter *s, unsigned index)
 {
+    /*取sqe*/
 	struct io_uring_sqe *sqe = &s->sqes[index];
 	unsigned long offset;
 	struct file *f;
 	long r;
 
 	if (do_nop) {
+	    /*不做操作，只设置NOP*/
 		sqe->opcode = IORING_OP_NOP;
 		return;
 	}
 
 	if (s->nr_files == 1) {
+	    /*仅有一个文件的情况，取0号文件*/
 		f = &s->files[0];
 	} else {
+	    /*有多个文件，取当前索引对应的文件*/
 		f = &s->files[s->cur_file];
 		if (f->pending_ios >= file_depth(s)) {
+		    /*当前索引对应的文件pending的io数过多，换一个文件*/
 			s->cur_file++;
 			if (s->cur_file == s->nr_files)
 				s->cur_file = 0;
 			f = &s->files[s->cur_file];
 		}
 	}
+
+	/*此文件pending的io数加1*/
 	f->pending_ios++;
 
+	/*产生随机数，生成一个随机的读写偏移位置*/
 	lrand48_r(&s->rand, &r);
 	offset = (r % (f->max_blocks - 1)) * BS;
 
@@ -176,11 +184,13 @@ static void init_io(struct submitter *s, unsigned index)
 		sqe->fd = f->real_fd;
 	}
 	if (fixedbufs) {
+	    /*固定读取*/
 		sqe->opcode = IORING_OP_READ_FIXED;
 		sqe->addr = (unsigned long) s->iovecs[index].iov_base;
 		sqe->len = BS;
 		sqe->buf_index = index;
 	} else {
+	    /*readv读取*/
 		sqe->opcode = IORING_OP_READV;
 		sqe->addr = (unsigned long) &s->iovecs[index];
 		sqe->len = 1;
@@ -191,25 +201,31 @@ static void init_io(struct submitter *s, unsigned index)
 	sqe->user_data = (unsigned long) f;
 }
 
+/*尽量准备max_ios个sqe io*/
 static int prep_more_ios(struct submitter *s, unsigned max_ios)
 {
 	struct io_sq_ring *ring = &s->sq_ring;
 	unsigned index, tail, next_tail, prepped = 0;
 
+	/*取ring->tail*/
 	next_tail = tail = *ring->tail;
 	do {
 		next_tail++;
 		read_barrier();
 		if (next_tail == *ring->head)
+		    /*队列为满，退出*/
 			break;
 
+		/*确定要写入的seq index*/
 		index = tail & sq_ring_mask;
+		/*填充seq*/
 		init_io(s, index);
 		ring->array[index] = index;
 		prepped++;
 		tail = next_tail;
 	} while (prepped < max_ios);
 
+	/*更新tail指针*/
 	if (*ring->tail != tail) {
 		/* order tail store with writes to sqes above */
 		write_barrier();
@@ -219,6 +235,7 @@ static int prep_more_ios(struct submitter *s, unsigned max_ios)
 	return prepped;
 }
 
+/*取文件大小*/
 static int get_file_size(struct file *f)
 {
 	struct stat st;
@@ -226,6 +243,7 @@ static int get_file_size(struct file *f)
 	if (fstat(f->real_fd, &st) < 0)
 		return -1;
 	if (S_ISBLK(st.st_mode)) {
+	    /*针对块设备，取占用的块数*/
 		unsigned long long bytes;
 
 		if (ioctl(f->real_fd, BLKGETSIZE64, &bytes) != 0)
@@ -234,6 +252,7 @@ static int get_file_size(struct file *f)
 		f->max_blocks = bytes / BS;
 		return 0;
 	} else if (S_ISREG(st.st_mode)) {
+	    /*针对普通文件，取占用的块数*/
 		f->max_blocks = st.st_size / BS;
 		return 0;
 	}
@@ -247,15 +266,19 @@ static int reap_events(struct submitter *s)
 	struct io_uring_cqe *cqe;
 	unsigned head, reaped = 0;
 
+	/*取cq的指针*/
 	head = *ring->head;
 	do {
 		struct file *f;
 
 		read_barrier();
 		if (head == *ring->tail)
+		    /*队列已为空，退出*/
 			break;
+		/*拿到cqe*/
 		cqe = &ring->cqes[head & cq_ring_mask];
 		if (!do_nop) {
+		    /*获得cqe对应的file*/
 			f = (struct file *) (uintptr_t) cqe->user_data;
 			f->pending_ios--;
 			if (cqe->res != BS) {
@@ -265,14 +288,14 @@ static int reap_events(struct submitter *s)
 				return -1;
 			}
 		}
-		reaped++;
-		head++;
+		reaped++;/*记录收获的数目*/
+		head++;/*head指针前移*/
 	} while (1);
 
 	s->inflight -= reaped;
-	*ring->head = head;
+	*ring->head = head;/*更新head*/
 	write_barrier();
-	return reaped;
+	return reaped;/*返回reap的数目*/
 }
 
 static void *submitter_fn(void *data)
@@ -283,6 +306,7 @@ static void *submitter_fn(void *data)
 
 	printf("submitter=%d\n", lk_gettid());
 
+	/*初始化随机值*/
 	srand48_r(pthread_self(), &s->rand);
 
 	prepped = 0;
@@ -291,8 +315,10 @@ static void *submitter_fn(void *data)
 
 		if (!prepped && s->inflight < DEPTH) {
 			to_prep = min(DEPTH - s->inflight, BATCH_SUBMIT);
+			/*尽量准备足够大的(to_prep)io*/
 			prepped = prep_more_ios(s, to_prep);
 		}
+		/*待响应的io数增大*/
 		s->inflight += prepped;
 submit_more:
 		to_submit = prepped;
@@ -328,6 +354,7 @@ submit:
 			int r;
 			r = reap_events(s);
 			if (r == -1) {
+			    /*不支持poll*/
 				s->finish = 1;
 				break;
 			} else if (r > 0)
@@ -406,6 +433,7 @@ static int setup_ring(struct submitter *s)
 		}
 	}
 
+	/*请求kernel创建io_uring，kernel会填充p结构体部分字段*/
 	fd = io_uring_setup(DEPTH, &p);
 	if (fd < 0) {
 		perror("io_uring_setup");
@@ -414,6 +442,7 @@ static int setup_ring(struct submitter *s)
 	s->ring_fd = fd;
 
 	if (fixedbufs) {
+	    /*注册固定buffer*/
 		ret = io_uring_register_buffers(s);
 		if (ret < 0) {
 			perror("io_uring_register_buffers");
@@ -422,6 +451,7 @@ static int setup_ring(struct submitter *s)
 	}
 
 	if (register_files) {
+	    /*注册固定文件*/
 		ret = io_uring_register_files(s);
 		if (ret < 0) {
 			perror("io_uring_register_files");
@@ -429,6 +459,7 @@ static int setup_ring(struct submitter *s)
 		}
 	}
 
+	/*映射生产者ring*/
 	ptr = mmap(0, p.sq_off.array + p.sq_entries * sizeof(__u32),
 			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
 			IORING_OFF_SQ_RING);
@@ -441,11 +472,13 @@ static int setup_ring(struct submitter *s)
 	sring->array = ptr + p.sq_off.array;
 	sq_ring_mask = *sring->ring_mask;
 
+	/*映射sqe数组*/
 	s->sqes = mmap(0, p.sq_entries * sizeof(struct io_uring_sqe),
 			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
 			IORING_OFF_SQES);
 	printf("sqes ptr    = 0x%p\n", s->sqes);
 
+	/*映射消费者ring*/
 	ptr = mmap(0, p.cq_off.cqes + p.cq_entries * sizeof(struct io_uring_cqe),
 			PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
 			IORING_OFF_CQ_RING);
@@ -486,22 +519,28 @@ int main(int argc, char *argv[])
 	void *ret;
 
 	if (!do_nop && argc < 2) {
+	    /*参数不足*/
 		printf("%s: filename\n", argv[0]);
 		return 1;
 	}
 
+	/*只读打开，测试读操作*/
 	flags = O_RDONLY | O_NOATIME;
 	if (!buffered)
 		flags |= O_DIRECT;
 
+	/*打开用户提定的文件，填充s->files*/
 	i = 1;
 	while (!do_nop && i < argc) {
 		struct file *f;
 
 		if (s->nr_files == MAX_FDS) {
+		    /*文件数目达到最大值，退出*/
 			printf("Max number of files (%d) reached\n", MAX_FDS);
 			break;
 		}
+
+		/*打开此文件*/
 		fd = open(argv[i], flags);
 		if (fd < 0) {
 			perror("open");
@@ -511,10 +550,12 @@ int main(int argc, char *argv[])
 		f = &s->files[s->nr_files];
 		f->real_fd = fd;
 		if (get_file_size(f)) {
+		    /*获取文件大小失败*/
 			printf("failed getting size of device/file\n");
 			return 1;
 		}
 		if (f->max_blocks <= 1) {
+		    /*文件块数过小*/
 			printf("Zero file/device size?\n");
 			return 1;
 		}
@@ -538,6 +579,7 @@ int main(int argc, char *argv[])
 
 	arm_sig_int();
 
+	/*申请DEPTH个BS（用于数据读取缓冲区），按BS大小进行对齐*/
 	for (i = 0; i < DEPTH; i++) {
 		void *buf;
 
@@ -549,6 +591,7 @@ int main(int argc, char *argv[])
 		s->iovecs[i].iov_len = BS;
 	}
 
+	/*初始化ring*/
 	err = setup_ring(s);
 	if (err) {
 		printf("ring setup failed: %s, %d\n", strerror(errno), err);
@@ -557,6 +600,7 @@ int main(int argc, char *argv[])
 	printf("polled=%d, fixedbufs=%d, buffered=%d", polled, fixedbufs, buffered);
 	printf(" QD=%d, sq_ring=%d, cq_ring=%d\n", DEPTH, *s->sq_ring.ring_entries, *s->cq_ring.ring_entries);
 
+	/*创建线程，执行submitter_fn*/
 	pthread_create(&s->thread, NULL, submitter_fn, s);
 
 	fdepths = malloc(8 * s->nr_files);
@@ -577,6 +621,7 @@ int main(int argc, char *argv[])
 		} else
 			rpc = ipc = -1;
 		file_depths(fdepths);
+		/*计算并显示iops*/
 		printf("IOPS=%lu, IOS/call=%ld/%ld, inflight=%u (%s)\n",
 				this_done - done, rpc, ipc, s->inflight,
 				fdepths);

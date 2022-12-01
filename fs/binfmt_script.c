@@ -58,30 +58,35 @@ static int load_script(struct linux_binprm *bprm)
 	 * arguments is fine: the interpreter can re-read the script to
 	 * parse them on its own.
 	 */
+	/*指向buffer结尾部分*/
 	buf_end = bprm->buf + sizeof(bprm->buf) - 1;
+	/*在buffer中查找'\n'符*/
 	i_end = strnchr(bprm->buf, sizeof(bprm->buf), '\n');
 	if (!i_end) {
-	    /*没有找到换行符，定义i_end为首个非空格，非table字符*/
+	    /*没有找到换行符，自buf[2]开始，至buf_end，查找首个非（空格，TAB）字符，定义为i_end*/
 		i_end = next_non_spacetab(bprm->buf + 2, buf_end);
 		if (!i_end)
+		    /*没有找到i_end,即整个buf全是TAB与空格*/
 			return -ENOEXEC; /* Entire buf is spaces/tabs */
 		/*
 		 * If there is no later space/tab/NUL we must assume the
 		 * interpreter path is truncated.
 		 */
 		if (!next_terminator(i_end, buf_end))
-		    /*不存在下一个terminal字符，失败*/
+		    /*i_end与buf_end间不存在（空格，TAB，'\0')字符，失败*/
 			return -ENOEXEC;
-		/*bprm->buf中存储的文字，没有包含换行符，但存在两个terminal字符，这种情况下指向字符结尾*/
+		/*bprm->buf中存储的文字，没有包含换行符，但存在两个terminal字符，
+		 * 这种情况下i_end指向字符串结尾*/
 		i_end = buf_end;
 	}
 
 	/* Trim any trailing spaces/tabs from i_end */
 	while (spacetab(i_end[-1]))
-		i_end--;/*回退到最后一个非空字符*/
+		i_end--;/*回退到最后一个非（空格，TAB）字符*/
 
 	/* Skip over leading spaces/tabs */
-	i_name = next_non_spacetab(bprm->buf+2, i_end);/*跳过前导的空字符*/
+	/*跳过前导的空字符，获得解析器名称起始位置*/
+	i_name = next_non_spacetab(bprm->buf+2, i_end);
 	if (!i_name || (i_name == i_end))
 		return -ENOEXEC; /* No interpreter name found */
 
@@ -89,7 +94,8 @@ static int load_script(struct linux_binprm *bprm)
 	i_arg = NULL;
 	i_sep = next_terminator(i_name, i_end);
 	if (i_sep && (*i_sep != '\0'))
-		i_arg = next_non_spacetab(i_sep, i_end);/*指向参数*/
+	    /*i_sep存在，则在i_sep,i_end之间取解析器参数*/
+		i_arg = next_non_spacetab(i_sep, i_end);
 
 	/*
 	 * If the script filename will be inaccessible after exec, typically
@@ -159,6 +165,7 @@ static int __init init_script_binfmt(void)
 
 static void __exit exit_script_binfmt(void)
 {
+    /*移除script可执行文件格式*/
 	unregister_binfmt(&script_format);
 }
 

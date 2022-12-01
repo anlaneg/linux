@@ -155,6 +155,7 @@ void dst_cache_destroy(struct dst_cache *dst_cache)
 	int i;
 
 	if (!dst_cache->cache)
+	    /*cache为空，直接返回*/
 		return;
 
 	for_each_possible_cpu(i)

@@ -812,6 +812,7 @@ static int br_nf_dev_queue_xmit(struct net *net, struct sock *sk, struct sk_buff
 						 data->size);
 
 		if (v6ops)
+		    /*ipv6分片*/
 			return v6ops->fragment(net, sk, skb, br_nf_push_frag_xmit);
 
 		kfree_skb(skb);

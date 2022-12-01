@@ -45,8 +45,10 @@ struct seg6_local_lwtunnel_ops {
 };
 
 struct seg6_action_desc {
-	int action;/*对应的action*/
-	unsigned long attrs;/*必须出现的属性*/
+    /*对应的action*/
+	int action;
+	/*必须出现的属性*/
+	unsigned long attrs;
 
 	/* The optattrs field is used for specifying all the optional
 	 * attributes supported by a specific behavior.
@@ -60,9 +62,11 @@ struct seg6_action_desc {
 	 * required the same attribute CANNOT be set as optional and vice
 	 * versa.
 	 */
-	unsigned long optattrs;/*可选的属性*/
+	/*可选的属性*/
+	unsigned long optattrs;
 
 	int (*input)(struct sk_buff *skb, struct seg6_local_lwt *slwt);
+	/*此处理需要的headroom空间*/
 	int static_headroom;
 
 	struct seg6_local_lwtunnel_ops slwt_ops;
@@ -151,7 +155,7 @@ static struct seg6_local_lwt *seg6_local_lwtunnel(struct lwtunnel_state *lwt)
 	return (struct seg6_local_lwt *)lwt->data;
 }
 
-/*取sr_hdr*/
+/*取srv6 header*/
 static struct ipv6_sr_hdr *get_and_validate_srh(struct sk_buff *skb)
 {
 	struct ipv6_sr_hdr *srh;
@@ -177,7 +181,7 @@ static bool decap_and_validate(struct sk_buff *skb, int proto)
 	/*先取srv6 header*/
 	srh = seg6_get_srh(skb, 0);
 	if (srh && srh->segments_left > 0)
-	    /*srh存在情况下，segments_left不得大于0*/
+	    /*srh存在情况下，segments_left不得大于0,由于为无符号数，即要求segments_left必须为0*/
 		return false;
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
@@ -209,15 +213,16 @@ static void advance_nextseg(struct ipv6_sr_hdr *srh, struct in6_addr *daddr/*出
 {
 	struct in6_addr *addr;
 
-	srh->segments_left--;/*left减一*/
+	/*left减一*/
+	srh->segments_left--;
 	/*自srh->segments中提取addr*/
 	addr = srh->segments + srh->segments_left;
 	*daddr = *addr;
 }
 
 static int
-seg6_lookup_any_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
-			u32 tbl_id, bool local_delivery)
+seg6_lookup_any_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr/*下一跳地址，如果为空，则使用ipv6 header目的地址*/,
+			u32 tbl_id/*表id*/, bool local_delivery/*是否本地交付*/)
 {
 	struct net *net = dev_net(skb->dev);
 	struct ipv6hdr *hdr = ipv6_hdr(skb);
@@ -227,16 +232,16 @@ seg6_lookup_any_nexthop(struct sk_buff *skb, struct in6_addr *nhaddr,
 	struct flowi6 fl6;
 	int dev_flags = 0;
 
-	fl6.flowi6_iif = skb->dev->ifindex;
+	fl6.flowi6_iif = skb->dev->ifindex;/*入接口设备*/
 	/*如果nhaddr有值，则使用nhaddr提供的，否则使用hdr->daddr*/
 	fl6.daddr = nhaddr ? *nhaddr : hdr->daddr;
 	fl6.saddr = hdr->saddr;
 	fl6.flowlabel = ip6_flowinfo(hdr);
-	fl6.flowi6_mark = skb->mark;
-	fl6.flowi6_proto = hdr->nexthdr;
+	fl6.flowi6_mark = skb->mark;/*取skb mark*/
+	fl6.flowi6_proto = hdr->nexthdr;/*取next header*/
 
 	if (nhaddr)
-		fl6.flowi6_flags = FLOWI_FLAG_KNOWN_NH;
+		fl6.flowi6_flags = FLOWI_FLAG_KNOWN_NH;/*已知的下一条*/
 
 	if (!tbl_id) {
 	    /*未提供具体路由表，执行默认路由查询*/
@@ -287,16 +292,16 @@ static int input_action_end(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
 	struct ipv6_sr_hdr *srh;
 
-	/*自skb中提取sr_hdr*/
+	/*自skb中提取srv6 header*/
 	srh = get_and_validate_srh(skb);
 	if (!srh)
 		goto drop;
 
-	/*自srh头部提取并更新目的地址*/
+	/*segment_left减一，自srh->segments提取segment_left对应的目的地址，并更新到iphdr目地地址中*/
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
 	/*按更新后的目的地址，进行路由查询*/
-	seg6_lookup_nexthop(skb, NULL, 0/*未指明路由表项*/);
+	seg6_lookup_nexthop(skb, NULL/*未指明目的地址*/, 0/*未指明路由表id*/);
 
 	/*调用route的input钩子点*/
 	return dst_input(skb);
@@ -320,7 +325,7 @@ static int input_action_end_x(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
 
 	/*查询到slwt->nh6的路由*/
-	seg6_lookup_nexthop(skb, &slwt->nh6, 0);
+	seg6_lookup_nexthop(skb, &slwt->nh6, 0/*指明查main表*/);
 
 	return dst_input(skb);
 
@@ -447,7 +452,7 @@ static int input_action_end_dx6(struct sk_buff *skb,
 	 * an SRH with SL=0, or no SRH.
 	 */
 
-    /*自ipv6头部后面查找ipv6头，并解封装*/
+    /*自ipv6头部后面查找ipv6头，要求segment_left为0，并解封装*/
 	if (!decap_and_validate(skb, IPPROTO_IPV6))
 		goto drop;
 
@@ -498,7 +503,7 @@ static int input_action_end_dx4_finish(struct net *net, struct sock *sk,
 static int input_action_end_dx4(struct sk_buff *skb,
 				struct seg6_local_lwt *slwt)
 {
-    /*在ipv6头后查询ipip协议，并剥掉头部*/
+    /*在ipv6头后查询ipip协议，要求srhdr的segments_left为0，并剥掉头部*/
 	if (!decap_and_validate(skb, IPPROTO_IPIP))
 		goto drop;
 
@@ -999,47 +1004,50 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END,
 		.attrs		= 0,
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*segment->left --后，提取对应的地址做目的地址进行转发，查目的地址对应出接口*/
+		/*segment->left--后，自segments提取对应的地址做目的地址进行转发，查此目的地址对应出接口
+		 * 并进行转发*/
 		.input		= input_action_end,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_X,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),/*必须配置nh6*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*segment->left --后，提取对庆的目的地址做转发，查slwt->nh6对应的出接口*/
+		/*segment->left --后，自segments提取对应的目的地址做转发，查slwt->nh6对应的出接口
+		 *并进行转发 */
 		.input		= input_action_end_x,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_T,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_TABLE),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_TABLE),/*必须配置local table*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*segment->left --后，提取对应的地址做目的地址进行转发，查slwt->table对应的路由表*/
+		/*segment->left --后，自segments提取对应的地址做目的地址进行转发，查slwt->table对应的路由表
+		 * 并转发*/
 		.input		= input_action_end_t,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX2,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_OIF),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_OIF),/*需要配置local oif*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
 		/*解l2封装，并将内层的l2报文自slwt->oif设备发出*/
 		.input		= input_action_end_dx2,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX6,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),/*需要配置nh6*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
-		/*解l3 ipv6封装，并将内层的ipv6报文通过查路由填充以太头后（如果设置了slwt->nh6，则查其对应的路由项），自设备发出*/
+		/* ***解l3 ipv6封装，并将内层的ipv6报文通过查路由填充以太头后（如果设置了slwt->nh6，则查其对应的路由项），自设备发出*/
 		.input		= input_action_end_dx6,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DX4,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH4),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH4),/*需要配置nh4*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
 		/*解ipip封装，并将内部存的ipv4报文通过查路由，送路由input钩子点*/
 		.input		= input_action_end_dx4,
 	},
 	{
 		.action		= SEG6_LOCAL_ACTION_END_DT4,
-		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_VRFTABLE),
+		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_VRFTABLE),/*需要配置vrftable*/
 		.optattrs	= SEG6_F_LOCAL_COUNTERS,
 #ifdef CONFIG_NET_L3_MASTER_DEV
 		.input		= input_action_end_dt4,
@@ -1625,12 +1633,13 @@ struct seg6_action_param {
 };
 
 static struct seg6_action_param seg6_action_params[SEG6_LOCAL_MAX + 1] = {
-        /*srh参数处理*/
+    /*srh参数处理*/
 	[SEG6_LOCAL_SRH]	= { .parse = parse_nla_srh,
 				    .put = put_nla_srh,
 				    .cmp = cmp_nla_srh,
 				    .destroy = destroy_attr_srh },
 
+    /*local table参数处理*/
 	[SEG6_LOCAL_TABLE]	= { .parse = parse_nla_table,
 				    .put = put_nla_table,
 				    .cmp = cmp_nla_table },
@@ -1717,7 +1726,8 @@ static int parse_nla_optional_attrs(struct nlattr **attrs,
 
 	for (i = 0; i < SEG6_LOCAL_MAX + 1; ++i) {
 		if (!(desc->optattrs & SEG6_F_ATTR(i)) || !attrs[i])
-			continue;/*如果此attr不可选或者未提供，则跳过*/
+		    /*如果此attr不可选或者未提供，则跳过*/
+			continue;
 
 		/* once here, the i-th attribute is provided by the
 		 * userspace AND it is identified optional as well.
@@ -1818,6 +1828,7 @@ static int parse_nla_action(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 		return -EINVAL;
 	}
 
+	/*action已确定desc,这里desc要求的内容进行解析*/
 	/* parse the required attributes */
 	for (i = 0; i < SEG6_LOCAL_MAX + 1; i++) {
 		if (desc->attrs & SEG6_F_ATTR(i)) {
@@ -1825,17 +1836,18 @@ static int parse_nla_action(struct nlattr **attrs, struct seg6_local_lwt *slwt)
 			if (!attrs[i])
 				return -EINVAL;
 
-			/*解析并填充slwt中此参数的内容*/
+			/*描述符指明了此attr,且也有相应配置，解析并填充slwt中此参数的内容*/
 			param = &seg6_action_params[i];
 
-			err = param->parse(attrs, slwt);
+			err = param->parse(attrs/*待解析的配置*/, slwt/*待填充的配置*/);
 			if (err < 0)
 				goto parse_attrs_err;
 		}
 	}
 
+	/*可选参数解析*/
 	/* parse the optional attributes, if any */
-	err = parse_nla_optional_attrs(attrs, slwt);/*可选参数解析*/
+	err = parse_nla_optional_attrs(attrs, slwt);
 	if (err < 0)
 		goto parse_attrs_err;
 
@@ -2043,7 +2055,7 @@ int __init seg6_local_init(void)
 	 */
 	BUILD_BUG_ON(SEG6_LOCAL_MAX + 1 > BITS_PER_TYPE(unsigned long));
 
-	/*添加seg6 local*/
+	/*添加seg6 local轻量隧道*/
 	return lwtunnel_encap_add_ops(&seg6_local_ops,
 				      LWTUNNEL_ENCAP_SEG6_LOCAL);
 }

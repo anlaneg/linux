@@ -59,6 +59,7 @@ void icmpv6_ndo_send(struct sk_buff *skb_in, u8 type, u8 code, __u32 info)
 
 	ct = nf_ct_get(skb_in, &ctinfo);
 	if (!ct || !(ct->status & IPS_SRC_NAT)) {
+	    /*没有ct或者有ct但不做snat,则直接回复*/
 		__icmpv6_send(skb_in, type, code, info, &parm);
 		return;
 	}

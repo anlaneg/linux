@@ -145,9 +145,12 @@ struct ip_tunnel_info;
  */
 
 struct frag_hdr {
+    /*下一层头*/
 	__u8	nexthdr;
 	__u8	reserved;
+	/*分片offset+flags*/
 	__be16	frag_off;
+	/*报文标识*/
 	__be32	identification;
 };
 
@@ -330,10 +333,13 @@ struct ip6_flowlabel {
 	struct net		*fl_net;
 };
 
+/*class + flowable共占用28位*/
 #define IPV6_FLOWINFO_MASK		cpu_to_be32(0x0FFFFFFF)
+/*flowlable占用20位*/
 #define IPV6_FLOWLABEL_MASK		cpu_to_be32(0x000FFFFF)
 #define IPV6_FLOWLABEL_STATELESS_FLAG	cpu_to_be32(0x00080000)
 
+/*tclass 共占用8位*/
 #define IPV6_TCLASS_MASK (IPV6_FLOWINFO_MASK & ~IPV6_FLOWLABEL_MASK)
 #define IPV6_TCLASS_SHIFT	20
 
@@ -965,20 +971,23 @@ static inline u32 ip6_multipath_hash_fields(const struct net *net)
 static inline void ip6_flow_hdr(struct ipv6hdr *hdr, unsigned int tclass,
 				__be32 flowlabel)
 {
+    /*利用version,tclass,flowlabel，填充ipv6头部前4个字节*/
 	*(__be32 *)hdr = htonl(0x60000000 | (tclass << 20)) | flowlabel;
 }
 
-//取ipv6流标签
+/*自报文中提取flowinfo*/
 static inline __be32 ip6_flowinfo(const struct ipv6hdr *hdr)
 {
 	return *(__be32 *)hdr & IPV6_FLOWINFO_MASK;
 }
 
+/*自报文中提取flowlabel*/
 static inline __be32 ip6_flowlabel(const struct ipv6hdr *hdr)
 {
 	return *(__be32 *)hdr & IPV6_FLOWLABEL_MASK;
 }
 
+/*自flowinfo中提取tclass*/
 static inline u8 ip6_tclass(__be32 flowinfo)
 {
 	return ntohl(flowinfo & IPV6_TCLASS_MASK) >> IPV6_TCLASS_SHIFT;

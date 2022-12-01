@@ -56,7 +56,7 @@
 
 static unsigned int i_hash_mask __read_mostly;
 static unsigned int i_hash_shift __read_mostly;
-//inode哈希表，负责保存系统用到的inode
+//inode哈希表，负责保存系统用到的所有inode
 static struct hlist_head *inode_hashtable __read_mostly;
 //保护inode哈希表的锁
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
@@ -428,6 +428,7 @@ EXPORT_SYMBOL(address_space_init_once);
  */
 void inode_init_once(struct inode *inode)
 {
+    /*初始化inode*/
 	memset(inode, 0, sizeof(*inode));
 	INIT_HLIST_NODE(&inode->i_hash);
 	INIT_LIST_HEAD(&inode->i_devices);
@@ -538,6 +539,7 @@ static unsigned long hash(struct super_block *sb, unsigned long hashval)
  */
 void __insert_inode_hash(struct inode *inode, unsigned long hashval)
 {
+    /*计算hash 桶指针*/
 	struct hlist_head *b = inode_hashtable + hash(inode->i_sb, hashval);
 
 	spin_lock(&inode_hash_lock);
@@ -1294,6 +1296,7 @@ again:
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
 	if (inode) {
+	    /*在hash表中查找到inode*/
 		if (IS_ERR(inode))
 			return NULL;
 		wait_on_inode(inode);
@@ -1304,7 +1307,8 @@ again:
 		return inode;
 	}
 
-	//未在inode_hashtable中查找到inode,现申请一个inode
+	//未在inode_hashtable中查找到inode,
+	//现结合filesystem申请一个inode,这样fs可以控制inode实际大小
 	inode = alloc_inode(sb);
 	if (inode) {
 		struct inode *old;
@@ -1319,7 +1323,7 @@ again:
 			//仍没有查询到，填充inode并插入到inode_hashtable哈希表
 			inode->i_ino = ino;
 			spin_lock(&inode->i_lock);
-			inode->i_state = I_NEW;
+			inode->i_state = I_NEW;/*指明此inode为new(需要新建）*/
 			hlist_add_head_rcu(&inode->i_hash, head);//将inode加入到inode_hashtable表
 			spin_unlock(&inode->i_lock);
 			inode_sb_list_add(inode);

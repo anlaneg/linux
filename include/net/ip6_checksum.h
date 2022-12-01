@@ -36,6 +36,7 @@ __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 			__u32 len, __u8 proto, __wsum csum);
 #endif
 
+/*ipv6 为头checksum计算*/
 static inline __wsum ip6_compute_pseudo(struct sk_buff *skb, int proto)
 {
 	return ~csum_unfold(csum_ipv6_magic(&ipv6_hdr(skb)->saddr,

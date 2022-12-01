@@ -757,7 +757,7 @@ struct net_device *dev_get_by_name_rcu(struct net *net, const char *name)
 {
 	struct netdev_name_node *node_name;
 
-	//查找名称为name的网络设备，如果找不到返回NULL
+	//在给定net namespace下查找名称为name的网络设备，如果找不到返回NULL
 	node_name = netdev_name_node_lookup_rcu(net, name);
 	return node_name ? node_name->dev : NULL;
 }
@@ -892,7 +892,7 @@ EXPORT_SYMBOL(dev_get_by_napi_id);
  *	@name: a pointer to the buffer where the name will be stored.
  *	@ifindex: the ifindex of the interface to get the name from.
  */
-int netdev_get_name(struct net *net, char *name, int ifindex)
+int netdev_get_name(struct net *net, char *name/*出参，接口名称*/, int ifindex/*接口ifindex*/)
 {
 	struct net_device *dev;
 	int ret;
@@ -6463,6 +6463,7 @@ restart:
 			have_poll_lock = netpoll_poll_lock(napi);
 			napi_poll = napi->poll;
 		}
+		/*使napi进行网卡收包*/
 		work = napi_poll(napi, budget);
 		trace_napi_poll(napi, work, budget);
 		gro_normal_list(napi);
@@ -7863,7 +7864,7 @@ static void __netdev_adjacent_dev_unlink_neighbour(struct net_device *dev,
 }
 
 static int __netdev_upper_dev_link(struct net_device *dev,
-				   struct net_device *upper_dev, bool master,
+				   struct net_device *upper_dev/*master设备*/, bool master,
 				   void *upper_priv, void *upper_info,
 				   struct netdev_nested_priv *priv,
 				   struct netlink_ext_ack *extack)
@@ -7979,7 +7980,7 @@ EXPORT_SYMBOL(netdev_upper_dev_link);
  * counts are adjusted and the function returns zero.
  */
 int netdev_master_upper_dev_link(struct net_device *dev,
-				 struct net_device *upper_dev,
+				 struct net_device *upper_dev/*master设备*/,
 				 void *upper_priv, void *upper_info,
 				 struct netlink_ext_ack *extack)
 {
@@ -8754,6 +8755,7 @@ unsigned int dev_get_flags(const struct net_device *dev)
 {
 	unsigned int flags;
 
+	/*获取设备上的flags,部分标记来源于dev->gflags,部分标记需要更多检查*/
 	flags = (dev->flags & ~(IFF_PROMISC |
 				IFF_ALLMULTI |
 				IFF_RUNNING |
@@ -8762,6 +8764,7 @@ unsigned int dev_get_flags(const struct net_device *dev)
 		(dev->gflags & (IFF_PROMISC |
 				IFF_ALLMULTI));
 
+	/*由设备状态确定以下三个标记*/
 	if (netif_running(dev)) {
 		if (netif_oper_up(dev))
 			flags |= IFF_RUNNING;
@@ -9108,7 +9111,8 @@ int dev_set_mac_address_user(struct net_device *dev, struct sockaddr *sa,
 }
 EXPORT_SYMBOL(dev_set_mac_address_user);
 
-int dev_get_mac_address(struct sockaddr *sa, struct net *net, char *dev_name)
+/*返回给定设备的mac地址*/
+int dev_get_mac_address(struct sockaddr *sa/*出参，此设备对应的硬件地址*/, struct net *net, char *dev_name/*设备名称*/)
 {
 	size_t size = sizeof(sa->sa_data);
 	struct net_device *dev;
@@ -9117,16 +9121,20 @@ int dev_get_mac_address(struct sockaddr *sa, struct net *net, char *dev_name)
 	down_read(&dev_addr_sem);
 	rcu_read_lock();
 
+	/*通过名称在指定net namespace中查找net_device*/
 	dev = dev_get_by_name_rcu(net, dev_name);
 	if (!dev) {
 		ret = -ENODEV;
 		goto unlock;
 	}
 	if (!dev->addr_len)
+	    /*此设备地址长度为0，返回全0*/
 		memset(sa->sa_data, 0, size);
 	else
+	    /*填充硬件地址*/
 		memcpy(sa->sa_data, dev->dev_addr,
 		       min_t(size_t, size, dev->addr_len));
+	/*返回设备类型*/
 	sa->sa_family = dev->type;
 
 unlock:

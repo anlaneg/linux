@@ -287,6 +287,7 @@ static const struct lwtunnel_encap_ops mpls_iptun_ops = {
 	.owner = THIS_MODULE,
 };
 
+/*注册mpls轻量隧道*/
 static int __init mpls_iptunnel_init(void)
 {
 	return lwtunnel_encap_add_ops(&mpls_iptun_ops, LWTUNNEL_ENCAP_MPLS);

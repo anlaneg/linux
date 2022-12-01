@@ -24,7 +24,7 @@
 		/*skip后剩余长度*/\
 		len = min(n, __p->iov_len - skip);		\
 		if (likely(len)) {				\
-	    		/*剩余长度不为0，构造新的__p，命名为__v*/\
+	    	/*剩余长度不为0，构造新的__p，命名为__v*/\
 			base = __p->iov_base + skip;		\
 			len -= (STEP);				\
 			off += len;				\
@@ -108,15 +108,17 @@ __out:								\
 	n = __off;						\
 }
 
-#define __iterate_and_advance(i/*待遍历的iov_iter*/, n/*需要复制的字节数*/, base, len, off, I/*内存复制函数*/, K) {	\
+#define __iterate_and_advance(i/*待遍历的iov_iter*/, n/*可复制长度*/, base, len, off, I/*内存复制函数*/, K) {	\
 	if (unlikely(i->count < n))				\
 	    /*需要复制的字节数大于实际字节数，截短*/\
 		n = i->count;					\
 	if (likely(n)) {					\
 		if (likely(iter_is_iovec(i))) {			\
+		    /*iter为io vector类型*/\
 			const struct iovec *iov = i->iov;	\
 			void __user *base;			\
 			size_t len;				\
+			/*逐个填充iov*/\
 			iterate_iovec(i, n, base, len, off,	\
 						iov, (I))	\
 			i->nr_segs -= iov - i->iov;		\
@@ -509,11 +511,12 @@ size_t fault_in_iov_iter_writeable(const struct iov_iter *i, size_t size)
 }
 EXPORT_SYMBOL(fault_in_iov_iter_writeable);
 
+/*初始化iov_iter结构体*/
 void iov_iter_init(struct iov_iter *i/*出参，待填充*/, unsigned int direction/*操作*/,
-			const struct iovec *iov, unsigned long nr_segs,
-			size_t count)
+			const struct iovec *iov/*io vector指针*/, unsigned long nr_segs/*io vector长度*/,
+			size_t count/*io vector总的内容长度*/)
 {
-    //当前仅支持read/write两种方向
+    //当前仅支持read/write两种操作方向
 	WARN_ON(direction & ~(READ | WRITE));
 	*i = (struct iov_iter) {
 		.iter_type = ITER_IOVEC,
@@ -664,7 +667,7 @@ static size_t csum_and_copy_to_pipe_iter(const void *addr, size_t bytes,
 }
 
 /*将from指向的bytes字节内存，复制到i指向的一片或多片内存中*/
-size_t _copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
+size_t _copy_to_iter(const void *addr/*源数据起始位置*/, size_t bytes/*可复制长度*/, struct iov_iter *i/*待填充的iter*/)
 {
 	if (unlikely(iov_iter_is_pipe(i)))
 		return copy_pipe_to_iter(addr, bytes, i);
@@ -1071,6 +1074,7 @@ static void iov_iter_iovec_advance(struct iov_iter *i, size_t size)
 void iov_iter_advance(struct iov_iter *i, size_t size)
 {
 	if (unlikely(i->count < size))
+	    /*i->count过小，以i->count为准*/
 		size = i->count;
 	if (likely(iter_is_iovec(i) || iov_iter_is_kvec(i))) {
 		/* iovec and kvec have identical layouts */

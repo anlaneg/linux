@@ -26,6 +26,7 @@
 #define SIOCINQ		FIONREAD
 #define SIOCOUTQ	TIOCOUTQ        /* output queue size (not sent + not acked) */
 
+/*socket类型的ioctl*/
 #define SOCK_IOC_TYPE	0x89
 
 /*

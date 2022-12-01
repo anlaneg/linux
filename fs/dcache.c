@@ -499,9 +499,11 @@ static void ___d_drop(struct dentry *dentry)
 	if (unlikely(IS_ROOT(dentry)))
 		b = &dentry->d_sb->s_roots;
 	else
+	    /*利用hash获取对应的桶*/
 		b = d_hash(dentry->d_name.hash);
 
 	hlist_bl_lock(b);
+	/*dentry被移除*/
 	__hlist_bl_del(&dentry->d_hash);
 	hlist_bl_unlock(b);
 }
@@ -1702,8 +1704,8 @@ void shrink_dcache_for_umount(struct super_block *sb)
 
 	WARN(down_read_trylock(&sb->s_umount), "s_umount should've been locked");
 
-	dentry = sb->s_root;
-	sb->s_root = NULL;
+	dentry = sb->s_root;/*取根节点*/
+	sb->s_root = NULL;/*置根节点为NULL*/
 	do_one_tree(dentry);
 
 	while (!hlist_bl_empty(&sb->s_roots)) {
@@ -1827,6 +1829,7 @@ static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dent
 	dentry->d_parent = dentry;
 	/*设置所属的sb*/
 	dentry->d_sb = sb;
+	/*先将dentry的操作集置为NULL*/
 	dentry->d_op = NULL;
 	dentry->d_fsdata = NULL;
 	INIT_HLIST_BL_NODE(&dentry->d_hash);
@@ -1834,7 +1837,7 @@ static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dent
 	INIT_LIST_HEAD(&dentry->d_subdirs);
 	INIT_HLIST_NODE(&dentry->d_u.d_alias);
 	INIT_LIST_HEAD(&dentry->d_child);
-	//使用dentry对应super block的dentry_ops
+	//再使用dentry对应super block的dentry_ops填充dentry->d_op
 	d_set_d_op(dentry, dentry->d_sb->s_d_op);
 
 	//如有d_init回调，则对dentry进行初始化
@@ -1874,7 +1877,9 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	 * to concurrency here
 	 */
 	__dget_dlock(parent);
+	/*设置node指向父节点*/
 	dentry->d_parent = parent;
+	/*将此dentry挂载到父节点的subdirs上*/
 	list_add(&dentry->d_child, &parent->d_subdirs);
 	spin_unlock(&parent->d_lock);
 
@@ -1943,7 +1948,7 @@ void d_set_d_op(struct dentry *dentry, const struct dentry_operations *op)
 				DCACHE_OP_WEAK_REVALIDATE	|
 				DCACHE_OP_DELETE	|
 				DCACHE_OP_REAL));
-	dentry->d_op = op;
+	dentry->d_op = op;/*填充dentry的操作集*/
 	if (!op)
 		return;
 	if (op->d_hash)
@@ -2092,8 +2097,10 @@ struct dentry *d_make_root(struct inode *root_inode)
 	struct dentry *res = NULL;
 
 	if (root_inode) {
+	    /*构造dentry*/
 		res = d_alloc_anon(root_inode->i_sb);
 		if (res)
+		    /*使dentry与root_inode关联*/
 			d_instantiate(res, root_inode);
 		else
 			iput(root_inode);
@@ -3144,6 +3151,7 @@ struct dentry *d_splice_alias(struct inode *inode, struct dentry *dentry)
 	security_d_instantiate(dentry, inode);
 	spin_lock(&inode->i_lock);
 	if (S_ISDIR(inode->i_mode)) {
+	    /*inode为目录*/
 		struct dentry *new = __d_find_any_alias(inode);
 		if (unlikely(new)) {
 			/* The reference to new ensures it remains an alias */

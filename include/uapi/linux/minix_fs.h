@@ -100,6 +100,7 @@ struct minix_dir_entry {
 	char name[0];
 };
 
+/*目录实体*/
 struct minix3_dir_entry {
 	__u32 inode;
 	char name[0];

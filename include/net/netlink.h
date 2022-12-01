@@ -1243,7 +1243,7 @@ static inline int nla_parse_nested_deprecated(struct nlattr *tb[], int maxtype,
 					      const struct nla_policy *policy,
 					      struct netlink_ext_ack *extack)
 {
-	return __nla_parse(tb, maxtype, nla_data(nla), nla_len(nla), policy,
+	return __nla_parse(tb, maxtype/*最大属性type*/, nla_data(nla), nla_len(nla), policy,
 			   NL_VALIDATE_LIBERAL, extack);
 }
 

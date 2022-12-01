@@ -16,8 +16,8 @@
  */
 struct minix_inode_info {
 	union {
-		__u16 i1_data[16];
-		__u32 i2_data[16];
+		__u16 i1_data[16];/*v1版本采用u16*/
+		__u32 i2_data[16];/*v2版本扩充为u32*/
 	} u;
 	struct inode vfs_inode;
 };
@@ -26,16 +26,19 @@ struct minix_inode_info {
  * minix super-block data in memory
  */
 struct minix_sb_info {
-	unsigned long s_ninodes;
+	unsigned long s_ninodes;/**/
 	unsigned long s_nzones;
-	unsigned long s_imap_blocks;
-	unsigned long s_zmap_blocks;
-	unsigned long s_firstdatazone;
+	unsigned long s_imap_blocks;/*imap的block数目*/
+	unsigned long s_zmap_blocks;/*zmap的block数目*/
+	unsigned long s_firstdatazone;/*指明首个block起始位置*/
 	unsigned long s_log_zone_size;
 	int s_dirsize;
 	int s_namelen;
+	/*指向s_imap_blocks个buffer指针，内容为inode bitmap,用于指明inode占用情况*/
 	struct buffer_head ** s_imap;
+	/*指向s_zmap_blocks个buffer指针，内容为block bitmap,用于指明block占用情况*/
 	struct buffer_head ** s_zmap;
+	/*指向super block对应的buffer header*/
 	struct buffer_head * s_sbh;
 	struct minix_super_block * s_ms;
 	unsigned short s_mount_state;

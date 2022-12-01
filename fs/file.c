@@ -939,6 +939,7 @@ static inline struct file *__fget_files_rcu(struct files_struct *files,
 		struct file __rcu **fdentry;
 
 		if (unlikely(fd >= fdt->max_fds))
+		    /*超过当前进程打开的最大fd,返回NULL*/
 			return NULL;
 
 		fdentry = fdt->fd + array_index_nospec(fd, fdt->max_fds);

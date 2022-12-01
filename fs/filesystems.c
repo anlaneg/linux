@@ -72,7 +72,6 @@ static struct file_system_type **find_filesystem(const char *name, unsigned len)
  *	unregistered.
  */
 //文件系统注册
- 
 int register_filesystem(struct file_system_type * fs)
 {
 	int res = 0;
@@ -82,8 +81,9 @@ int register_filesystem(struct file_system_type * fs)
 	    !fs_validate_description(fs->name, fs->parameters))
 		return -EINVAL;
 
-	//不容许名称中含'.'
+	//fs不容许名称中含'.'
 	BUG_ON(strchr(fs->name, '.'));
+
 	if (fs->next)
 	    //已被挂接在文件系统链上
 		return -EBUSY;

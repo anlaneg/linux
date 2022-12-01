@@ -478,6 +478,7 @@ static int __init teql_init(void)
 		struct net_device *dev;
 		struct teql_master *master;
 
+		/*创建netdev*/
 		dev = alloc_netdev(sizeof(struct teql_master), "teql%d",
 				   NET_NAME_UNKNOWN, teql_master_setup);
 		if (!dev) {
@@ -485,6 +486,7 @@ static int __init teql_init(void)
 			break;
 		}
 
+		/*在系统中注册netdev*/
 		if ((err = register_netdev(dev))) {
 			free_netdev(dev);
 			break;

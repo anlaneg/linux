@@ -858,6 +858,7 @@ void br_vlan_flush(struct net_bridge *br)
 	__vlan_group_free(vg);
 }
 
+/*通过vlan id查找net bridge vlan*/
 struct net_bridge_vlan *br_vlan_find(struct net_bridge_vlan_group *vg, u16 vid)
 {
 	if (!vg)

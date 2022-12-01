@@ -270,6 +270,7 @@ struct fib6_table *fib6_new_table(struct net *net, u32 id)
 }
 EXPORT_SYMBOL_GPL(fib6_new_table);
 
+/*给定表id,获取fib6_table*/
 struct fib6_table *fib6_get_table(struct net *net, u32 id)
 {
 	struct fib6_table *tb;
@@ -277,7 +278,10 @@ struct fib6_table *fib6_get_table(struct net *net, u32 id)
 	unsigned int h;
 
 	if (id == 0)
+	    /*main表*/
 		id = RT6_TABLE_MAIN;
+
+	/*在hash表上进行查询，找对应的fib table*/
 	h = id & (FIB6_TABLE_HASHSZ - 1);
 	rcu_read_lock();
 	head = &net->ipv6.fib_table_hash[h];

@@ -780,6 +780,7 @@ static void unix_show_fdinfo(struct seq_file *m, struct socket *sock)
 #define unix_show_fdinfo NULL
 #endif
 
+/*stream类型的unix socket*/
 static const struct proto_ops unix_stream_ops = {
 	.family =	PF_UNIX,
 	.owner =	THIS_MODULE,
@@ -806,6 +807,7 @@ static const struct proto_ops unix_stream_ops = {
 	.show_fdinfo =	unix_show_fdinfo,
 };
 
+/*raw/dgram格式的unix socket*/
 static const struct proto_ops unix_dgram_ops = {
 	.family =	PF_UNIX,
 	.owner =	THIS_MODULE,
@@ -831,6 +833,7 @@ static const struct proto_ops unix_dgram_ops = {
 	.show_fdinfo =	unix_show_fdinfo,
 };
 
+/*seq packet格式的socket*/
 static const struct proto_ops unix_seqpacket_ops = {
 	.family =	PF_UNIX,
 	.owner =	THIS_MODULE,
@@ -1869,6 +1872,7 @@ static int unix_dgram_sendmsg(struct socket *sock, struct msghdr *msg,
 	} else {
 		sunaddr = NULL;
 		err = -ENOTCONN;
+		/*取此socket对应的对端*/
 		other = unix_peer_get(sk);
 		if (!other)
 			goto out;
@@ -2024,6 +2028,7 @@ restart_locked:
 		__net_timestamp(skb);
 	maybe_add_creds(skb, sock, other);
 	scm_stat_add(other, skb);
+	/*将报文直接加入到对端的recv queue上*/
 	skb_queue_tail(&other->sk_receive_queue, skb);
 	unix_state_unlock(other);
 	other->sk_data_ready(other);
@@ -2391,6 +2396,7 @@ int __unix_dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t size,
 		skb = __skb_try_recv_datagram(sk, &sk->sk_receive_queue, flags,
 					      &skip, &err, &last);
 		if (skb) {
+		    /*成功接收，跳出*/
 			if (!(flags & MSG_PEEK))
 				scm_stat_del(sk, skb);
 			break;
@@ -2427,6 +2433,7 @@ int __unix_dgram_recvmsg(struct sock *sk, struct msghdr *msg, size_t size,
 	else if (size < skb->len - skip)
 		msg->msg_flags |= MSG_TRUNC;
 
+	/*复制报文内容*/
 	err = skb_copy_datagram_msg(skb, skip, msg, size);
 	if (err)
 		goto out_free;
@@ -2474,6 +2481,7 @@ out:
 	return err;
 }
 
+/*unix socket报文接收*/
 static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, size_t size,
 			      int flags)
 {
@@ -2483,9 +2491,11 @@ static int unix_dgram_recvmsg(struct socket *sock, struct msghdr *msg, size_t si
 	const struct proto *prot = READ_ONCE(sk->sk_prot);
 
 	if (prot != &unix_dgram_proto)
+	    /*除dgram类型socket，均由此进入处理*/
 		return prot->recvmsg(sk, msg, size, flags & MSG_DONTWAIT,
 					    flags & ~MSG_DONTWAIT, NULL);
 #endif
+	/*dgram类型socket处理方式*/
 	return __unix_dgram_recvmsg(sk, msg, size, flags);
 }
 
@@ -3558,6 +3568,7 @@ static const struct seq_operations bpf_iter_unix_seq_ops = {
 #endif
 #endif
 
+/*unix socket创建*/
 static const struct net_proto_family unix_family_ops = {
 	.family = PF_UNIX,
 	.create = unix_create,
@@ -3677,19 +3688,21 @@ static int __init af_unix_init(void)
 	for (i = 0; i < 2 * UNIX_HASH_SIZE; i++)
 		spin_lock_init(&unix_table_locks[i]);
 
-	//注册af_unix协议
+	//注册af_unix协议(报文式协议）
 	rc = proto_register(&unix_dgram_proto, 1);
 	if (rc != 0) {
 		pr_crit("%s: Cannot create unix_sock SLAB cache!\n", __func__);
 		goto out;
 	}
 
+	//注册af_unix协议(流式协议）
 	rc = proto_register(&unix_stream_proto, 1);
 	if (rc != 0) {
 		pr_crit("%s: Cannot create unix_sock SLAB cache!\n", __func__);
 		goto out;
 	}
 
+	/*注册unix socket操作函数集*/
 	sock_register(&unix_family_ops);
 	register_pernet_subsys(&unix_net_ops);
 	unix_bpf_build_proto();

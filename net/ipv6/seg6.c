@@ -26,7 +26,8 @@
 #endif
 
 /*对srh进行校验*/
-bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len/*srh长度*/, bool reduced)
+bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len/*srh长度*/,
+        bool reduced/*reduce情况下，segments中不包含当前目的地址*/)
 {
 	unsigned int tlv_offset;
 	int max_last_entry;
@@ -36,19 +37,22 @@ bool seg6_validate_srh(struct ipv6_sr_hdr *srh, int len/*srh长度*/, bool reduc
 	    /*type必须为segment routing*/
 		return false;
 
+	/*头部长度不足，报错*/
 	if (((srh->hdrlen + 1) << 3) != len)
-	    /*+1后左移3位必须与长度相等*/
 		return false;
 
 	if (!reduced && srh->segments_left > srh->first_segment) {
-	    /*segments_left不得大于first_segment位置*/
+	    /*reduce为false情况下，segments_left不得大于first_segment位置*/
 		return false;
 	} else {
+	    /*srh中最大entry数目*/
 		max_last_entry = (srh->hdrlen / 2) - 1;
 
 		if (srh->first_segment > max_last_entry)
+		    /*first segment不得大于max last entry*/
 			return false;
 
+		/*????*/
 		if (srh->segments_left > srh->first_segment + 1)
 			return false;
 	}
@@ -163,6 +167,7 @@ static const struct nla_policy seg6_genl_policy[SEG6_ATTR_MAX + 1] = {
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 
+/*删除或者修改，创建hmac_info*/
 static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 {
 	struct net *net = genl_info_net(info);
@@ -174,6 +179,7 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 	u8 algid;
 	u8 slen;
 
+	/*取此net namespace中的seg6*/
 	sdata = seg6_pernet(net);
 
 	if (!info->attrs[SEG6_ATTR_HMACKEYID] ||
@@ -191,10 +197,13 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 	if (slen > SEG6_HMAC_SECRET_LEN)
 		return -EINVAL;
 
+	/*由于设置的前提是加锁先删除，故获取时，需要先加锁，才能读取*/
 	mutex_lock(&sdata->lock);
+	/*查询hmackeyid*/
 	hinfo = seg6_hmac_info_lookup(net, hmackeyid);
 
 	if (!slen) {
+	    /*未指定长度，执行删除*/
 		err = seg6_hmac_info_del(net, hmackeyid);
 
 		goto out_unlock;
@@ -205,6 +214,7 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 		goto out_unlock;
 	}
 
+	/*之前已有hinfo,先执行删除*/
 	if (hinfo) {
 		err = seg6_hmac_info_del(net, hmackeyid);
 		if (err)
@@ -219,11 +229,13 @@ static int seg6_genl_sethmac(struct sk_buff *skb, struct genl_info *info)
 		goto out_unlock;
 	}
 
+	/*填充hinfo*/
 	memcpy(hinfo->secret, secret, slen);
 	hinfo->slen = slen;
 	hinfo->alg_id = algid;
 	hinfo->hmackeyid = hmackeyid;
 
+	/*以hmackeyid进行映射，加入到net namesapce中*/
 	err = seg6_hmac_info_add(net, hmackeyid, hinfo);
 	if (err)
 		kfree(hinfo);
@@ -251,17 +263,20 @@ static int seg6_genl_set_tunsrc(struct sk_buff *skb, struct genl_info *info)
 	sdata = seg6_pernet(net);
 
 	if (!info->attrs[SEG6_ATTR_DST])
+	    /*必须填充dst地址*/
 		return -EINVAL;
 
-	val = nla_data(info->attrs[SEG6_ATTR_DST]);/*取地址*/
+	/*取地址*/
+	val = nla_data(info->attrs[SEG6_ATTR_DST]);
 	t_new = kmemdup(val, sizeof(*val), GFP_KERNEL);
 	if (!t_new)
 		return -ENOMEM;
 
 	mutex_lock(&sdata->lock);
 
+	/*设置tunnel源地址*/
 	t_old = sdata->tun_src;
-	rcu_assign_pointer(sdata->tun_src, t_new);/*设置tunnel源地址*/
+	rcu_assign_pointer(sdata->tun_src, t_new);
 
 	mutex_unlock(&sdata->lock);
 
@@ -309,6 +324,7 @@ free_msg:
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
 
+/*填充hmac_info到msg中*/
 static int __seg6_hmac_fill_info(struct seg6_hmac_info *hinfo,
 				 struct sk_buff *msg)
 {
@@ -331,6 +347,7 @@ static int __seg6_genl_dumphmac_element(struct seg6_hmac_info *hinfo,
 	if (!hdr)
 		return -ENOMEM;
 
+	/*填充hinfo到skb中*/
 	if (__seg6_hmac_fill_info(hinfo, skb) < 0)
 		goto nla_put_failure;
 
@@ -359,6 +376,7 @@ static int seg6_genl_dumphmac_start(struct netlink_callback *cb)
 		cb->args[0] = (long)iter;
 	}
 
+	/*填充hmac*/
 	rhashtable_walk_enter(&sdata->hmac_infos, iter);
 
 	return 0;
@@ -479,26 +497,30 @@ static struct pernet_operations ip6_segments_ops = {
 
 static const struct genl_ops seg6_genl_ops[] = {
 	{
+	    /*设置hmac*/
 		.cmd	= SEG6_CMD_SETHMAC,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit	= seg6_genl_sethmac,
 		.flags	= GENL_ADMIN_PERM,
 	},
 	{
+	    /*显示hmac*/
 		.cmd	= SEG6_CMD_DUMPHMAC,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.start	= seg6_genl_dumphmac_start,
+		.start	= seg6_genl_dumphmac_start,/*设置iter*/
 		.dumpit	= seg6_genl_dumphmac,
 		.done	= seg6_genl_dumphmac_done,
 		.flags	= GENL_ADMIN_PERM,
 	},
 	{
+	    /*设置tunnel src*/
 		.cmd	= SEG6_CMD_SET_TUNSRC,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit	= seg6_genl_set_tunsrc,
 		.flags	= GENL_ADMIN_PERM,
 	},
 	{
+	    /*显示tunnel src*/
 		.cmd	= SEG6_CMD_GET_TUNSRC,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit	= seg6_genl_get_tunsrc,
@@ -523,10 +545,12 @@ int __init seg6_init(void)
 {
 	int err;
 
+	/*注册seg6 netlink消息，用于hmac,tunnel src设置显示*/
 	err = genl_register_family(&seg6_genl_family);
 	if (err)
 		goto out;
 
+	/*hmac,tunnel src针对每个net namespace进行填充，故每个netns需要单独初始化*/
 	err = register_pernet_subsys(&ip6_segments_ops);
 	if (err)
 		goto out_unregister_genl;

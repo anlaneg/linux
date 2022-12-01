@@ -167,11 +167,11 @@ struct virtio_blk_config {
  */
 struct virtio_blk_outhdr {
 	/* VIRTIO_BLK_T* */
-	__virtio32 type;
+	__virtio32 type;/*操作类型*/
 	/* io priority. */
-	__virtio32 ioprio;
+	__virtio32 ioprio;/*io优先级*/
 	/* Sector (ie. 512 byte offset) */
-	__virtio64 sector;
+	__virtio64 sector;/*操作位置*/
 };
 
 /* Unmap this range (only valid for write zeroes command) */

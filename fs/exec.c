@@ -79,7 +79,9 @@ static int bprm_creds_from_file(struct linux_binprm *bprm);
 
 int suid_dumpable = 0;
 
+/*用于记录系统中所有可执行二进制格式*/
 static LIST_HEAD(formats);
+/*可执行二进制格式读写锁*/
 static DEFINE_RWLOCK(binfmt_lock);
 
 //注册可执行的二进制格式
@@ -104,6 +106,7 @@ void unregister_binfmt(struct linux_binfmt * fmt)
 
 EXPORT_SYMBOL(unregister_binfmt);
 
+/*释放可执行二进制格式对应的module*/
 static inline void put_binfmt(struct linux_binfmt * fmt)
 {
 	module_put(fmt->module);
@@ -1659,7 +1662,7 @@ static int prepare_binprm(struct linux_binprm *bprm)
 	loff_t pos = 0;
 
 	memset(bprm->buf, 0, BINPRM_BUF_SIZE);
-	//从pos（０）位置开始读文件file,将读的内容存入buf,读取BINPRM_BUF_SIZE
+	//从pos（０）位置开始读文件file,将读的内容存入buf,读取长度为BINPRM_BUF_SIZE
 	return kernel_read(bprm->file, bprm->buf, BINPRM_BUF_SIZE, &pos);
 }
 
@@ -1679,6 +1682,7 @@ int remove_arg_zero(struct linux_binprm *bprm)
 	    /*没有参数，直接返回*/
 		return 0;
 
+	/*有参数，则准备参数页*/
 	do {
 		offset = bprm->p & ~PAGE_MASK;
 		page = get_arg_page(bprm, bprm->p, 0);
@@ -1711,15 +1715,17 @@ EXPORT_SYMBOL(remove_arg_zero);
  */
 static int search_binary_handler(struct linux_binprm *bprm)
 {
+    /*如果可启了module,则容许retry*/
 	bool need_retry = IS_ENABLED(CONFIG_MODULES);
 	struct linux_binfmt *fmt;
 	int retval;
 
-	/*预读进buffer*/
+	/*预读BINPRM_BUF_SIZE长度的文件内容进buffer*/
 	retval = prepare_binprm(bprm);
 	if (retval < 0)
 		return retval;
 
+	/*触发安全钩子*/
 	retval = security_bprm_check(bprm);
 	if (retval)
 		return retval;
@@ -1730,14 +1736,16 @@ static int search_binary_handler(struct linux_binprm *bprm)
 	//遍历formats，查找可处理此文件的exec fmt
 	list_for_each_entry(fmt, &formats, lh) {
 		if (!try_module_get(fmt->module))
+		    /*get模块失败，忽略此binfmt*/
 			continue;
 		read_unlock(&binfmt_lock);
 
-		//尝试采用fmt进行加载
+		//尝试利用采用binfmt进行加载
 		retval = fmt->load_binary(bprm);
 
 		read_lock(&binfmt_lock);
 		put_binfmt(fmt);
+
 		//如果解析成功则返回
 		if (bprm->point_of_no_return || (retval != -ENOEXEC)) {
 			read_unlock(&binfmt_lock);
@@ -1760,6 +1768,7 @@ static int search_binary_handler(struct linux_binprm *bprm)
 	return retval;
 }
 
+/*执行bprm文件*/
 static int exec_binprm(struct linux_binprm *bprm)
 {
 	pid_t old_pid, old_vpid;
@@ -1777,7 +1786,7 @@ static int exec_binprm(struct linux_binprm *bprm)
 		if (depth > 5)
 			return -ELOOP;
 
-		//查找解析器
+		//查找此bprm对应的解析器
 		ret = search_binary_handler(bprm);
 		if (ret < 0)
 			return ret;
@@ -2015,6 +2024,7 @@ int kernel_execve(const char *kernel_filename,
 	if (retval < 0)
 		goto out_free;
 
+	/*执行bprm对应的程序*/
 	retval = bprm_execve(bprm, fd, filename, 0);
 out_free:
 	free_bprm(bprm);

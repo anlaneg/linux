@@ -21,6 +21,7 @@ typedef void (*vhost_work_fn_t)(struct vhost_work *work);
 #define VHOST_WORK_QUEUED 1
 struct vhost_work {
 	struct llist_node	node;
+	/*vhost work的工作函数*/
 	vhost_work_fn_t		fn;
 	unsigned long		flags;
 };
@@ -29,7 +30,9 @@ struct vhost_work {
 /* Note: there's nothing vhost specific about this structure. */
 struct vhost_poll {
 	poll_table		table;
+	/*从属于哪个等待队列*/
 	wait_queue_head_t	*wqh;
+	/*等待队列entry*/
 	wait_queue_entry_t	wait;
 	struct vhost_work	work;
 	__poll_t		mask;
@@ -80,7 +83,7 @@ struct vhost_virtqueue {
 	vring_avail_t __user *avail;
 	/*用户态指定的use表起始地址*/
 	vring_used_t __user *used;
-	/*iotlb缓存（仅一个）*/
+	/*iotlb缓存（仅一个），可被__vhost_vq_meta_reset置为无效*/
 	const struct vhost_iotlb_map *meta_iotlb[VHOST_NUM_ADDRS];
 	/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
 	struct file *kick;
@@ -92,7 +95,6 @@ struct vhost_virtqueue {
 	struct vhost_poll poll;
 
 	/* The routine to call when the Guest pings us, or timeout. */
-	//guest与我们相互ping时通过rx,tx队列的handle_kick进行
 	vhost_work_fn_t handle_kick;
 
 	/* Last available index we saw. */
@@ -124,7 +126,9 @@ struct vhost_virtqueue {
 
 	struct iovec iov[UIO_MAXIOV];
 	struct iovec iotlb_iov[64];
+	/*指向申请的UIO_MAXIOV个iovec*/
 	struct iovec *indirect;
+	/*指向申请的dev->iov_limit个vring_used_elem结构*/
 	struct vring_used_elem *heads;
 	/* Protected by virtqueue mutex. */
 	/*用户态指定的memory region情况*/
@@ -139,6 +143,7 @@ struct vhost_virtqueue {
 	/* Log write descriptors */
 	/*用户态指定的log base*/
 	void __user *log_base;
+	/*指向申请的dev->iov_limit个vhost_log结构*/
 	struct vhost_log *log;
 	struct iovec log_iov[64];
 
@@ -159,13 +164,13 @@ struct vhost_msg_node {
 	  struct vhost_msg_v2 msg_v2;
   };
   struct vhost_virtqueue *vq;
-  struct list_head node;
+  struct list_head node;/*用于串入list*/
 };
 
 struct vhost_dev {
 	struct mm_struct *mm;
 	struct mutex mutex;
-	/*设备虚拟队列*/
+	/*设备虚拟队列（指向从属于自已的虚拟队列）*/
 	struct vhost_virtqueue **vqs;
 	/*虚队列数目*/
 	int nvqs;
@@ -173,7 +178,7 @@ struct vhost_dev {
 	struct eventfd_ctx *log_ctx;
 	/*内核线程vhost-$(owner-pid)将执行挂接在此链表上的所有work*/
 	struct llist_head work_list;
-	//内核线程，用于处理work_list上所有的vhost_work的回调
+	//内核线程vhost-$(owner-pid)，用于处理work_list上所有的vhost_work的回调
 	struct task_struct *worker;
 	/*用户态指定的mem region*/
 	struct vhost_iotlb *umem;
@@ -190,7 +195,7 @@ struct vhost_dev {
 	int byte_weight;
 	u64 kcov_handle;
 	bool use_worker;
-	/*消息处理回调（由vhost_dev_init设置）*/
+	/*负责用户态传入的消息处理（由vhost_dev_init设置）*/
 	int (*msg_handler)(struct vhost_dev *dev,
 			   struct vhost_iotlb_msg *msg);
 };

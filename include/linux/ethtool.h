@@ -678,19 +678,20 @@ struct ethtool_ops {
 	int	(*set_pauseparam)(struct net_device *,
 				  struct ethtool_pauseparam*);
 	void	(*self_test)(struct net_device *, struct ethtool_test *, u64 *);
+	/*string set用于指定某个字符串集合id，参数3为出参，此函数用于返回此字符串集合的内容*/
 	void	(*get_strings)(struct net_device *, u32 stringset, u8 *);
 	/*提供网卡的物理标识，通过闪烁进行标识*/
 	int	(*set_phys_id)(struct net_device *, enum ethtool_phys_id_state);
 	//获取网卡的统计信息
 	void	(*get_ethtool_stats)(struct net_device *,
 				     struct ethtool_stats *, u64 *);
-	//ethtool命令行执行前调用
+	//如果此回调不为空，则ethtool命令行执行前会先调用此函数
 	int	(*begin)(struct net_device *);
-	//ethtool命令执行后调用
+	//如果此回调不为空，则ethtool命令执行后会调用此函数
 	void	(*complete)(struct net_device *);
 	u32	(*get_priv_flags)(struct net_device *);
 	int	(*set_priv_flags)(struct net_device *, u32);
-	//返回指定string_id的集合总数目
+	//通过此函数返回指定 string set集的总成员数目
 	int	(*get_sset_count)(struct net_device *, int);
 	int	(*get_rxnfc)(struct net_device *,
 			     struct ethtool_rxnfc *, u32 *rule_locs);

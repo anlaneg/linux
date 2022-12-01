@@ -154,7 +154,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	u32 pkt_len;
 	struct inet6_dev *idev;
 
-	//丢掉送其它主机的报文
+	//丢掉二层送其它主机的报文
 	if (skb->pkt_type == PACKET_OTHERHOST) {
 		kfree_skb(skb);
 		return NULL;
@@ -264,25 +264,28 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	skb->transport_header = skb->network_header + sizeof(*hdr);
 	IP6CB(skb)->nhoff = offsetof(struct ipv6hdr, nexthdr);
 
+	/*ipv6层payload长度*/
 	pkt_len = ntohs(hdr->payload_len);
 
 	/* pkt_len may be zero if Jumbo payload option is present */
 	if (pkt_len || hdr->nexthdr != NEXTHDR_HOP) {
 		if (pkt_len + sizeof(struct ipv6hdr) > skb->len) {
-		    /*ipv6报文不足，丢弃*/
+		    /*指定的payload len大于buffer len，丢弃*/
 			__IP6_INC_STATS(net,
 					idev, IPSTATS_MIB_INTRUNCATEDPKTS);
 			goto drop;
 		}
-		/*checksum校验*/
+
+		/*packet_len与buffer_len相比，当buffer len更大时，将被截短*/
 		if (pskb_trim_rcsum(skb, pkt_len + sizeof(struct ipv6hdr))) {
+		    /*不能截短，则丢包*/
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
 			goto drop;
 		}
 		hdr = ipv6_hdr(skb);
 	}
 
-	/*ipv6的下一层为nexthdr_hop,解析ipv6选项*/
+	/*刚才没有处理nexthdr_hop情况，这里处理,解析ipv6选项*/
 	if (hdr->nexthdr == NEXTHDR_HOP) {
 		if (ipv6_parse_hopopts(skb) < 0) {
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
@@ -462,6 +465,7 @@ resubmit_final:
 				nexthdr = ret;
 				goto resubmit_final;/*返回值，指定了nexthdr,执行l4协议查询*/
 			} else {
+			    /*未达到final,执行重查，例如分片重组*/
 				goto resubmit;
 			}
 		} else if (ret == 0) {

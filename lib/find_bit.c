@@ -32,13 +32,14 @@
 //找一个bit是1的，自start位置开始，最大有nbits位，addr是考虑了掩码情况
 //invert是考虑了bitmap中实现时，支持需要找‘0’的情况
 unsigned long _find_next_bit(const unsigned long *addr1,
-		const unsigned long *addr2, unsigned long nbits,
-		unsigned long start, unsigned long invert, unsigned long le)
+		const unsigned long *addr2, unsigned long nbits/*总bits数目*/,
+		unsigned long start/*起始bits位置*/, unsigned long invert/*如果为全1，则反转*/, unsigned long le/*是否小端机器*/)
 {
 	unsigned long tmp, mask;
 
 	if (unlikely(start >= nbits))
-		return nbits;//start已超限，返回最大值（无空闲）
+	    //start已超限，返回最大值（无空闲）
+		return nbits;
 
 	tmp = addr1[start / BITS_PER_LONG];//取start对应的位置
 	if (addr2)

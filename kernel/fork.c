@@ -1374,7 +1374,7 @@ struct mm_struct *get_task_mm(struct task_struct *task)
 		if (task->flags & PF_KTHREAD)
 			mm = NULL;
 		else
-			mmget(mm);
+			mmget(mm);/*增加引用*/
 	}
 	task_unlock(task);
 	return mm;
@@ -2579,7 +2579,7 @@ struct task_struct *create_io_thread(int (*fn)(void *), void *arg, int node)
 		.flags		= ((lower_32_bits(flags) | CLONE_VM |
 				    CLONE_UNTRACED) & ~CSIGNAL),
 		.exit_signal	= (lower_32_bits(flags) & CSIGNAL),
-		.stack		= (unsigned long)fn,
+		.stack		= (unsigned long)fn,/*io执行函数*/
 		.stack_size	= (unsigned long)arg,
 		.io_thread	= 1,
 	};

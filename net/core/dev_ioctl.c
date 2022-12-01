@@ -86,6 +86,7 @@ static int dev_getifmap(struct net_device *dev, struct ifreq *ifr)
 	if (in_compat_syscall()) {
 		struct compat_ifmap *cifmap = (struct compat_ifmap *)ifmap;
 
+		/*填充compat_ifmap格式*/
 		cifmap->mem_start = dev->mem_start;
 		cifmap->mem_end   = dev->mem_end;
 		cifmap->base_addr = dev->base_addr;
@@ -96,6 +97,7 @@ static int dev_getifmap(struct net_device *dev, struct ifreq *ifr)
 		return 0;
 	}
 
+	/*填充ifmap格式*/
 	ifmap->mem_start  = dev->mem_start;
 	ifmap->mem_end    = dev->mem_end;
 	ifmap->base_addr  = dev->base_addr;
@@ -135,6 +137,7 @@ static int dev_setifmap(struct net_device *dev, struct ifreq *ifr)
 static int dev_ifsioc_locked(struct net *net, struct ifreq *ifr, unsigned int cmd)
 {
 	int err;
+	/*取网络设备*/
 	struct net_device *dev = dev_get_by_name_rcu(net, ifr->ifr_name);
 
 	if (!dev)
@@ -142,30 +145,37 @@ static int dev_ifsioc_locked(struct net *net, struct ifreq *ifr, unsigned int cm
 
 	switch (cmd) {
 	case SIOCGIFFLAGS:	/* Get interface flags */
+	    /*读取网络接口上的flags*/
 		ifr->ifr_flags = (short) dev_get_flags(dev);
 		return 0;
 
 	case SIOCGIFMETRIC:	/* Get the metric on the interface
 				   (currently unused) */
+	    /*恒返回0*/
 		ifr->ifr_metric = 0;
 		return 0;
 
 	case SIOCGIFMTU:	/* Get the MTU of a device */
+	    /*取接口上的mtu*/
 		ifr->ifr_mtu = dev->mtu;
 		return 0;
 
 	case SIOCGIFSLAVE:
+	    /*不支持取slave*/
 		err = -EINVAL;
 		break;
 
 	case SIOCGIFMAP:
+	    /*？？？目的是啥？*/
 		return dev_getifmap(dev, ifr);
 
 	case SIOCGIFINDEX:
+	    /*取接口的ifindex*/
 		ifr->ifr_ifindex = dev->ifindex;
 		return 0;
 
 	case SIOCGIFTXQLEN:
+	    /*取接口上的发送队列长度*/
 		ifr->ifr_qlen = dev->tx_queue_len;
 		return 0;
 
@@ -439,10 +449,12 @@ void dev_load(struct net *net, const char *name)
 	int no_module;
 
 	rcu_read_lock();
+	/*尝试获取dev*/
 	dev = dev_get_by_name_rcu(net, name);
 	rcu_read_unlock();
 
 	no_module = !dev;
+
 	//设备不存在时，加载相应module
 	if (no_module && capable(CAP_NET_ADMIN))
 		no_module = request_module("netdev-%s", name);
@@ -469,8 +481,8 @@ EXPORT_SYMBOL(dev_load);
  *	positive or a negative errno code on error.
  */
 
-int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
-	      void __user *data, bool *need_copyout)
+int dev_ioctl(struct net *net, unsigned int cmd/*ioctl命令*/, struct ifreq *ifr/*ifreq参数*/,
+	      void __user *data/*命令相关的参数*/, bool *need_copyout)
 {
 	int ret;
 	char *colon;
@@ -478,13 +490,15 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 	if (need_copyout)
 		*need_copyout = true;
 	if (cmd == SIOCGIFNAME)
-		//返回取设备名称
+		//此命令用于取接口名称，返回取设备名称
 		return dev_ifname(net, ifr);
 
+	/*防止未填充'\0'*/
 	ifr->ifr_name[IFNAMSIZ-1] = 0;
 
 	colon = strchr(ifr->ifr_name, ':');
 	if (colon)
+	    /*包含':'情况下，从':'号隔断*/
 		*colon = 0;
 
 	/*
@@ -493,9 +507,11 @@ int dev_ioctl(struct net *net, unsigned int cmd, struct ifreq *ifr,
 
 	switch (cmd) {
 	case SIOCGIFHWADDR:
+	    /*通过接口名称获取接口硬件地址*/
 		dev_load(net, ifr->ifr_name);
 		ret = dev_get_mac_address(&ifr->ifr_hwaddr, net, ifr->ifr_name);
 		if (colon)
+		    /*还原':'*/
 			*colon = ':';
 		return ret;
 	/*

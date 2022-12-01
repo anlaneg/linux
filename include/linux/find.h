@@ -233,6 +233,7 @@ static inline unsigned long find_first_zero_bit_le(const void *addr,
 #elif defined(__BIG_ENDIAN)
 
 #ifndef find_next_zero_bit_le
+/*在[addr,addr+size]区间，自offset位置开始找0 bit,如果找到返回其对应的索引*/
 static inline
 unsigned long find_next_zero_bit_le(const void *addr, unsigned
 		long size, unsigned long offset)
@@ -241,13 +242,14 @@ unsigned long find_next_zero_bit_le(const void *addr, unsigned
 		unsigned long val = *(const unsigned long *)addr;
 
 		if (unlikely(offset >= size))
+		    /*offset大于size,返回size*/
 			return size;
 
 		val = swab(val) | ~GENMASK(size - 1, offset);
 		return val == ~0UL ? size : ffz(val);
 	}
 
-	return _find_next_bit(addr, NULL, size, offset, ~0UL, 1);
+	return _find_next_bit(addr, NULL, size, offset, ~0UL/*要求反转*/, 1);
 }
 #endif
 

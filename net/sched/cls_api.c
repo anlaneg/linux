@@ -270,6 +270,7 @@ static bool tcf_proto_is_unlocked(const char *kind)
 	if (IS_ERR(ops))
 		return false;
 
+	/*检查此tcf是否需要unlocked,当前只有flower支持此标记*/
 	ret = !!(ops->flags & TCF_PROTO_OPS_DOIT_UNLOCKED);
 	module_put(ops->owner);
 	return ret;
@@ -3299,7 +3300,7 @@ int tcf_exts_validate_ex(struct net *net, struct tcf_proto *tp, struct nlattr **
 			if (IS_ERR(a_o))
 				return PTR_ERR(a_o);
 			flags |= TCA_ACT_FLAGS_POLICE | TCA_ACT_FLAGS_BIND;
-		        //如果指定了exts->police,且其对应的netlink字段存在，则解析exts->police对应的action
+		    //如果指定了exts->police,且其对应的netlink字段存在，则解析exts->police对应的action
 			act = tcf_action_init_1(net, tp, tb[exts->police],
 						rate_tlv, a_o, init_res, flags,
 						extack);
@@ -3314,8 +3315,8 @@ int tcf_exts_validate_ex(struct net *net, struct tcf_proto *tp, struct nlattr **
 		} else if (exts->action && tb[exts->action]) {
 			int err;
 
+            //解析并生成action,容许action bind
 			flags |= TCA_ACT_FLAGS_BIND;
-			//解析并生成action
 			err = tcf_action_init(net, tp, tb[exts->action]/*要解析的action*/,
 					      rate_tlv, exts->actions/*待填充的action*/, init_res,
 					      &attr_size, flags, fl_flags,

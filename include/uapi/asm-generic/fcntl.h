@@ -86,6 +86,7 @@
 #endif
 
 #ifndef __O_TMPFILE
+/*创建临时文件*/
 #define __O_TMPFILE	020000000
 #endif
 

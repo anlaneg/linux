@@ -22,28 +22,32 @@ static inline block_t *i_data(struct inode *inode)
 	return (block_t *)minix_i(inode)->u.i1_data;
 }
 
+/*依据block的编号值，按布局填充offsets*/
 static int block_to_path(struct inode * inode, long block, int offsets[DEPTH])
 {
 	int n = 0;
 
 	if (block < 0) {
+	    /*block编号为负，参数有误*/
 		printk("MINIX-fs: block_to_path: block %ld < 0 on dev %pg\n",
 			block, inode->i_sb->s_bdev);
 		return 0;
 	}
 	if ((u64)block * BLOCK_SIZE >= inode->i_sb->s_maxbytes)
+	    /*block超过了super block的文件最大字节数，block编号有误*/
 		return 0;
 
 	if (block < 7) {
+	    /*block编号小于7，则offsets为block本身*/
 		offsets[n++] = block;
 	} else if ((block -= 7) < 512) {
-		offsets[n++] = 7;
-		offsets[n++] = block;
+		offsets[n++] = 7;/*标记为减去7*/
+		offsets[n++] = block;/*减去7的偏移量*/
 	} else {
 		block -= 512;
-		offsets[n++] = 8;
-		offsets[n++] = block>>9;
-		offsets[n++] = block & 511;
+		offsets[n++] = 8;/*标记为减去512*/
+		offsets[n++] = block>>9;/*除以512的商*/
+		offsets[n++] = block & 511;/*除以512的余数*/
 	}
 	return n;
 }

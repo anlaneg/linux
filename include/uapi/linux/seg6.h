@@ -17,16 +17,21 @@
 
 #include <linux/types.h>
 #include <linux/in6.h>		/* For struct in6_addr. */
-
+//此格式来源于：https://datatracker.ietf.org/doc/html/draft-ietf-6man-segment-routing-header-15
+//rfc8200 4.4节Routing Header 定义了routing header
 /*
  * SRH
  */
 struct ipv6_sr_hdr {
+    /*指明此选项后面的header type*/
 	__u8	nexthdr;
-	/*头部长度*/
+	/*指明此选项的长度，8个字节一个单位，不包括前8个字节(hdrlen+1)*8为实际长度*/
 	__u8	hdrlen;
+	/*针对sr扩展头，此值为4*/
 	__u8	type;
+	/*剩余的segments数目，以0为base,比如在到达目标前有多少个节点*/
 	__u8	segments_left;
+	/*segments中最后一个元素的索引*/
 	__u8	first_segment; /* Represents the last_entry field of SRH */
 	__u8	flags;
 	__u16	tag;

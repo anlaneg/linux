@@ -23,6 +23,7 @@ enum {
 
 
 struct lwtunnel_state {
+    /*指明tunnel类型*/
 	__u16		type;
 	__u16		flags;
 	__u16		headroom;/*封装增加的长度*/

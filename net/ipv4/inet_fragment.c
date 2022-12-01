@@ -356,13 +356,16 @@ struct inet_frag_queue *inet_frag_find(struct fqdir *fqdir, void *key)
 	long high_thresh = READ_ONCE(fqdir->high_thresh);
 	struct inet_frag_queue *fq = NULL, *prev;
 
+	/*检查占用的内存是否超过门限*/
 	if (!high_thresh || frag_mem_limit(fqdir) > high_thresh)
 		return NULL;
 
 	rcu_read_lock();
 
+	/*检查key是否在hashtable中存在，如不存在，则执行创建，否则执行返回*/
 	prev = rhashtable_lookup(&fqdir->rhashtable, key, fqdir->f->rhash_params);
 	if (!prev)
+	    /*创建首片*/
 		fq = inet_frag_create(fqdir, key, &prev);
 	if (!IS_ERR_OR_NULL(prev)) {
 		fq = prev;

@@ -99,16 +99,18 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 
 	brmctx = &p->br->multicast_ctx;
 	pmctx = &p->multicast_ctx;
-	if (!br_allowed_ingress(p->br, nbp_vlan_group_rcu(p), skb, &vid,
+	if (!br_allowed_ingress(p->br, nbp_vlan_group_rcu(p), skb, &vid/*出参，取vlan*/,
 				&state, &vlan))
 		goto out;
 
 	if (p->flags & BR_PORT_LOCKED) {
+	    /*利用smac,查询fdb表*/
 		struct net_bridge_fdb_entry *fdb_src =
 			br_fdb_find_rcu(br, eth_hdr(skb)->h_source, vid);
 
 		if (!fdb_src || READ_ONCE(fdb_src->dst) != p ||
 		    test_bit(BR_FDB_LOCAL, &fdb_src->flags))
+		    /*没有查询到fdb表项，表项有local标记，表项的dst与入接口不相等，丢包*/
 			goto drop;
 	}
 
@@ -119,6 +121,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 		//fdb学习
 		br_fdb_update(br, p, eth_hdr(skb)->h_source, vid, 0);
 
+	/*此设备是否开启混杂*/
 	local_rcv = !!(br->dev->flags & IFF_PROMISC);
 	if (is_multicast_ether_addr(eth_hdr(skb)->h_dest)) {
 		//广播报文，组播报文标记处理
@@ -136,7 +139,8 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	}
 
 	if (state == BR_STATE_LEARNING)
-		goto drop;//当前不转发报文，但学习fdb
+	    //当前不转发报文，但学习fdb
+		goto drop;
 
 	BR_INPUT_SKB_CB(skb)->brdev = br->dev;
 	BR_INPUT_SKB_CB(skb)->src_port_isolated = !!(p->flags & BR_ISOLATED);
@@ -207,6 +211,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 	}
 
 	if (local_rcv)
+	    /*送local*/
 		return br_pass_frame_up(skb);
 
 out:
@@ -256,15 +261,17 @@ static int nf_hook_bridge_pre(struct sk_buff *skb, struct sk_buff **pskb)
 		goto frame_finish;
 #endif
 
-	//调用bridge的PRE_ROUTING钩子
+	//解发bridge的PRE_ROUTING钩子
 	e = rcu_dereference(net->nf.hooks_bridge[NF_BR_PRE_ROUTING]);
 	if (!e)
 		goto frame_finish;
 
+	/*1.1 初始化state*/
 	nf_hook_state_init(&state, NF_BR_PRE_ROUTING,
 			   NFPROTO_BRIDGE, skb->dev, NULL, NULL,
 			   net, br_handle_frame_finish);
 
+	/*1.2 逐个触发hook*/
 	for (i = 0; i < e->num_hook_entries; i++) {
 		verdict = nf_hook_entry_hookfn(&e->hooks[i], skb, &state);
 		switch (verdict & NF_VERDICT_MASK) {
@@ -275,9 +282,11 @@ static int nf_hook_bridge_pre(struct sk_buff *skb, struct sk_buff **pskb)
 			}
 			break;
 		case NF_DROP:
+		    /*丢包处理*/
 			kfree_skb(skb);
 			return RX_HANDLER_CONSUMED;
 		case NF_QUEUE:
+		    /*入队处理*/
 			ret = nf_queue(skb, &state, i, verdict);
 			if (ret == 1)
 				continue;
@@ -287,6 +296,7 @@ static int nf_hook_bridge_pre(struct sk_buff *skb, struct sk_buff **pskb)
 		}
 	}
 frame_finish:
+    /*执行转发*/
 	net = dev_net(skb->dev);
 	br_handle_frame_finish(net, NULL, skb);
 #else
@@ -303,6 +313,7 @@ static int br_process_frame_type(struct net_bridge_port *p,
 {
 	struct br_frame_type *tmp;
 
+	/*如果协议匹配，则此协议交由tmp对应的frame_handler进行处理，桥不再处理*/
 	hlist_for_each_entry_rcu(tmp, &p->br->frame_type_list, list)
 		if (unlikely(tmp->type == skb->protocol))
 			return tmp->frame_handler(p, skb);
@@ -336,6 +347,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 
 	p = br_port_get_rcu(skb->dev);
 	if (p->flags & BR_VLAN_TUNNEL)
+	    /*实现vlan与tunnel之间的某种映射*/
 		br_handle_ingress_vlan_tunnel(skb, p, nbp_vlan_group_rcu(p));
 
 	//如果是local链路以太地址（二层协议），则处理
@@ -403,7 +415,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 		}
 	}
 
-	/*检查skb是否为预定要收取的帧*/
+	/*检查此skb是否为预定的需特别处理的帧类型*/
 	if (unlikely(br_process_frame_type(p, skb)))
 		return RX_HANDLER_PASS;
 
@@ -417,7 +429,8 @@ forward:
 	case BR_STATE_LEARNING:
 defer_stp_filtering:
 		if (ether_addr_equal(p->br->dev->dev_addr, dest))
-			skb->pkt_type = PACKET_HOST;//目的地址与br上连口mac一致，送3层
+		    //目的地址与br上连口mac一致，送3层
+			skb->pkt_type = PACKET_HOST;
 
 		//触发bridge路由前hook点
 		return nf_hook_bridge_pre(skb, pskb);
@@ -455,6 +468,7 @@ void br_add_frame(struct net_bridge *br, struct br_frame_type *ft)
 	hlist_add_head_rcu(&ft->list, &br->frame_type_list);
 }
 
+/*移除br要收取的帧类型*/
 void br_del_frame(struct net_bridge *br, struct br_frame_type *ft)
 {
 	struct br_frame_type *tmp;

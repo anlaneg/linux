@@ -1448,7 +1448,7 @@ out_err:
 }
 EXPORT_SYMBOL_GPL(tcp_sendmsg_locked);
 
-//tcp数据发送入口
+//tcp数据socket发送入口
 int tcp_sendmsg(struct sock *sk, struct msghdr *msg, size_t size)
 {
 	int ret;
@@ -2581,6 +2581,7 @@ recv_sndq:
 	goto out;
 }
 
+/*tcp消息接收*/
 int tcp_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int nonblock,
 		int flags, int *addr_len)
 {

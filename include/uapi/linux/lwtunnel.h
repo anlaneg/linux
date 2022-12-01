@@ -4,7 +4,7 @@
 
 #include <linux/types.h>
 
-/*当前支持的tunnel类型*/
+/*当前支持的轻量隧道类型*/
 enum lwtunnel_encap_types {
 	LWTUNNEL_ENCAP_NONE,
 	LWTUNNEL_ENCAP_MPLS,

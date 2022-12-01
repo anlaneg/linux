@@ -166,7 +166,7 @@ void ping_unhash(struct sock *sk)
 }
 EXPORT_SYMBOL_GPL(ping_unhash);
 
-static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
+static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident/*ping id号*/)
 {
 	struct hlist_nulls_head *hslot = ping_hashslot(&ping_table, net, ident);
 	struct sock *sk = NULL;
@@ -175,6 +175,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 	int dif, sdif;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+	    /*取入接口*/
 		dif = inet_iif(skb);
 		sdif = inet_sdif(skb);
 		pr_debug("try to find: num = %d, daddr = %pI4, dif = %d\n",
@@ -192,6 +193,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 
 	read_lock_bh(&ping_table.lock);
 
+	/*遍历socket*/
 	ping_portaddr_for_each_entry(sk, hnode, hslot) {
 		isk = inet_sk(sk);
 
@@ -201,6 +203,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 
 		if (skb->protocol == htons(ETH_P_IP) &&
 		    sk->sk_family == AF_INET) {
+		    /*ipv4情况*/
 			pr_debug("found: %p: num=%d, daddr=%pI4, dif=%d\n", sk,
 				 (int) isk->inet_num, &isk->inet_rcv_saddr,
 				 sk->sk_bound_dev_if);
@@ -211,6 +214,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 #if IS_ENABLED(CONFIG_IPV6)
 		} else if (skb->protocol == htons(ETH_P_IPV6) &&
 			   sk->sk_family == AF_INET6) {
+		    /*ipv6情况*/
 
 			pr_debug("found: %p: num=%d, daddr=%pI6c, dif=%d\n", sk,
 				 (int) isk->inet_num,
@@ -230,6 +234,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident)
 		    sk->sk_bound_dev_if != sdif)
 			continue;
 
+	    /*返回找到的socket*/
 		sock_hold(sk);
 		goto exit;
 	}
@@ -934,6 +939,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(ping_recvmsg);
 
+/*ping socket收到报文*/
 int ping_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 {
 	pr_debug("ping_queue_rcv_skb(sk=%p,sk->num=%d,skb=%p)\n",
@@ -951,7 +957,7 @@ EXPORT_SYMBOL_GPL(ping_queue_rcv_skb);
 /*
  *	All we need to do is get the socket.
  */
-//收到ping报文
+//收到ping报文(ipv4 & ipv6)
 bool ping_rcv(struct sk_buff *skb)
 {
 	struct sock *sk;
@@ -967,11 +973,13 @@ bool ping_rcv(struct sk_buff *skb)
 	/* Push ICMP header back */
 	skb_push(skb, skb->data - (u8 *)icmph);//跳到icmp头部
 
+	/*通过id查询socket*/
 	sk = ping_lookup(net, skb, ntohs(icmph->un.echo.id));
 	if (sk) {
 		struct sk_buff *skb2 = skb_clone(skb, GFP_ATOMIC);
 
 		pr_debug("rcv on socket %p\n", sk);
+		/*处理ping socket收包*/
 		if (skb2 && !ping_queue_rcv_skb(sk, skb2))
 			rc = true;
 		sock_put(sk);

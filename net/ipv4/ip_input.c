@@ -557,7 +557,10 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 	 * is IP we can trim to the true length of the frame.
 	 * Note this now means skb->len holds ntohs(iph->tot_len).
 	 */
+	//如果报文中填充的total_len小于packet buffer len,
+	//会将buffer截断使之与total_len一致，继续向上送。
 	if (pskb_trim_rcsum(skb, len)) {
+	    /*不能截断，丢包*/
 		__IP_INC_STATS(net, IPSTATS_MIB_INDISCARDS);
 		goto drop;
 	}

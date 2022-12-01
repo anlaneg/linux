@@ -167,6 +167,7 @@ int iptunnel_handle_offloads(struct sk_buff *skb,
 	int err;
 
 	if (likely(!skb->encapsulation)) {
+	    /*指明inner header*/
 		skb_reset_inner_headers(skb);
 		skb->encapsulation = 1;
 	}

@@ -1178,6 +1178,7 @@ static struct buffer_head *__bread_slow(struct buffer_head *bh)
 		bh->b_end_io = end_buffer_read_sync;
 		submit_bh(REQ_OP_READ, 0, bh);
 		wait_on_buffer(bh);
+		/*标记uptodate*/
 		if (buffer_uptodate(bh))
 			return bh;
 	}
@@ -1333,11 +1334,12 @@ struct buffer_head *
 __getblk_gfp(struct block_device *bdev, sector_t block,
 	     unsigned size, gfp_t gfp)
 {
-	//尝试在缓存中加载此块
+	//尝试自缓存中获取此buffer
 	struct buffer_head *bh = __find_get_block(bdev, block, size);
 
 	might_sleep();
 	if (bh == NULL)
+	    /*尝试自块设备中获取此buffer*/
 		bh = __getblk_slow(bdev, block, size, gfp);
 	return bh;
 }
@@ -1380,13 +1382,13 @@ EXPORT_SYMBOL(__breadahead_gfp);
  *  It returns NULL if the block was unreadable.
  */
 struct buffer_head *
-__bread_gfp(struct block_device *bdev, sector_t block,
+__bread_gfp(struct block_device *bdev/*块设备*/, sector_t block,
 		   unsigned size/*要读取的大小*/, gfp_t gfp)
 {
 	struct buffer_head *bh = __getblk_gfp(bdev, block, size, gfp);
 
 	if (likely(bh) && !buffer_uptodate(bh))
-		//自硬件设备中读取
+		//自块设备中读取
 		bh = __bread_slow(bh);
 	return bh;
 }
@@ -2289,6 +2291,7 @@ int block_read_full_page(struct page *page, get_block_t *get_block)
 			fully_mapped = 0;
 			if (iblock < lblock) {
 				WARN_ON(bh->b_size != blocksize);
+				/*读取inode的iblock号块，填充到bh中*/
 				err = get_block(inode, iblock, bh, 0);
 				if (err)
 					SetPageError(page);
@@ -3395,6 +3398,7 @@ void __init buffer_init(void)
 	unsigned long nrpages;
 	int ret;
 
+	/*创建buffer_head memory cache*/
 	bh_cachep = kmem_cache_create("buffer_head",
 			sizeof(struct buffer_head), 0,
 				(SLAB_RECLAIM_ACCOUNT|SLAB_PANIC|

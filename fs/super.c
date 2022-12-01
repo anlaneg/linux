@@ -539,7 +539,7 @@ retry:
 	}
 
 	s->s_fs_info = fc->s_fs_info;
-	err = set(s, fc);
+	err = set(s, fc);/*通过set回调，设置super block*/
 	if (err) {
 		s->s_fs_info = NULL;
 		spin_unlock(&sb_lock);
@@ -550,8 +550,9 @@ retry:
 	s->s_type = fc->fs_type;
 	s->s_iflags |= fc->s_iflags;
 	strlcpy(s->s_id, s->s_type->name, sizeof(s->s_id));
-	//将超级块加入链表
+	//将超级块加入super_blocks链表
 	list_add_tail(&s->s_list, &super_blocks);
+	/*将超级块加入到其文件系统对应的fs_supers链表上*/
 	hlist_add_head(&s->s_instances, &s->s_type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(s->s_type);
@@ -579,7 +580,7 @@ EXPORT_SYMBOL(sget_fc);
  *	@flags:	  mount flags
  *	@data:	  argument to each of them
  */
-struct super_block *sget(struct file_system_type *type,
+struct super_block *sget(struct file_system_type *type/*文件系统*/,
 			int (*test)(struct super_block *,void *),
 			int (*set)(struct super_block *,void *),
 			int flags,
@@ -631,7 +632,9 @@ retry:
 		destroy_unused_super(s);
 		return ERR_PTR(err);
 	}
+	/*设置文件系统类型*/
 	s->s_type = type;
+	/*设置文件系统类型名称*/
 	strlcpy(s->s_id, type->name, sizeof(s->s_id));
 	//将s串连到super_blocks上
 	list_add_tail(&s->s_list, &super_blocks);
@@ -664,12 +667,14 @@ static void __iterate_supers(void (*f)(struct super_block *))
 	struct super_block *sb, *p = NULL;
 
 	spin_lock(&sb_lock);
+	/*遍历系统中所有super block*/
 	list_for_each_entry(sb, &super_blocks, s_list) {
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
 		sb->s_count++;
 		spin_unlock(&sb_lock);
 
+		/*通过function访问super block*/
 		f(sb);
 
 		spin_lock(&sb_lock);
@@ -694,6 +699,7 @@ void iterate_supers(void (*f)(struct super_block *, void *), void *arg)
 	struct super_block *sb, *p = NULL;
 
 	spin_lock(&sb_lock);
+	/*遍历系统中所有super block*/
 	list_for_each_entry(sb, &super_blocks, s_list) {
 		if (hlist_unhashed(&sb->s_instances))
 			continue;
@@ -1018,7 +1024,7 @@ void emergency_thaw_all(void)
 	}
 }
 
-static DEFINE_IDA(unnamed_dev_ida);
+static DEFINE_IDA(unnamed_dev_ida);/*系统中无名块设备id管理*/
 
 /**
  * get_anon_bdev - Allocate a block device for filesystems which don't have one.
@@ -1047,6 +1053,7 @@ int get_anon_bdev(dev_t *p)
 	if (dev < 0)
 		return dev;
 
+	/*返回申请到的块设备id*/
 	*p = MKDEV(0, dev);
 	return 0;
 }
@@ -1060,6 +1067,7 @@ EXPORT_SYMBOL(free_anon_bdev);
 
 int set_anon_super(struct super_block *s, void *data)
 {
+    /*设置此super block对应的块设备为unnamed块设备*/
 	return get_anon_bdev(&s->s_dev);
 }
 EXPORT_SYMBOL(set_anon_super);
@@ -1139,12 +1147,14 @@ int vfs_get_super(struct fs_context *fc,
 		test = test_keyed_super;
 		break;
 	case vfs_get_independent_super:
+	    /*此情况test为空*/
 		test = NULL;
 		break;
 	default:
 		BUG();
 	}
 
+	/*申请并设置sb,其对应的块设备为unnamed块设备*/
 	sb = sget_fc(fc, test, set_anon_super_fc);
 	if (IS_ERR(sb))
 		return PTR_ERR(sb);
@@ -1182,7 +1192,7 @@ int get_tree_nodev(struct fs_context *fc,
 		  int (*fill_super/*fs对应的super block填充函数*/)(struct super_block *sb,
 				    struct fs_context *fc))
 {
-	return vfs_get_super(fc, vfs_get_independent_super, fill_super);
+	return vfs_get_super(fc, vfs_get_independent_super, fill_super/*root dentry节点设置*/);
 }
 EXPORT_SYMBOL(get_tree_nodev);
 
@@ -1328,8 +1338,8 @@ static int test_bdev_super(struct super_block *s, void *data)
 }
 
 //块设备挂载
-struct dentry *mount_bdev(struct file_system_type *fs_type,
-	int flags, const char *dev_name, void *data,
+struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
+	int flags, const char *dev_name/*设备名称*/, void *data,
 	int (*fill_super)(struct super_block *, void *, int))
 {
 	struct block_device *bdev;
@@ -1358,7 +1368,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	}
 
 	//取块设备上的super block
-	s = sget(fs_type, test_bdev_super, set_bdev_super, flags | SB_NOSEC,
+	s = sget(fs_type, test_bdev_super/*测试回调*/, set_bdev_super/*设置回调*/, flags | SB_NOSEC,
 		 bdev);
 	mutex_unlock(&bdev->bd_fsfreeze_mutex);
 	if (IS_ERR(s))
@@ -1384,8 +1394,9 @@ struct dentry *mount_bdev(struct file_system_type *fs_type,
 	} else {
 		s->s_mode = mode;
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
+		/*super block设置块大小*/
 		sb_set_blocksize(s, block_size(bdev));
-		//填充超级块
+		//通过参数回调填充超级块
 		error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 		if (error) {
 			deactivate_locked_super(s);
@@ -1527,6 +1538,7 @@ int vfs_get_tree(struct fs_context *fc)
 		return error;
 
 	if (!fc->root) {
+	    /*获得root失败，报错*/
 		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
 		       fc->fs_type->name);
 		/* We don't know what the locking state of the superblock is -

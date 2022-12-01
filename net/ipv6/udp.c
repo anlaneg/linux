@@ -102,8 +102,8 @@ void udp_v6_rehash(struct sock *sk)
 }
 
 static int compute_score(struct sock *sk, struct net *net,
-			 const struct in6_addr *saddr, __be16 sport,
-			 const struct in6_addr *daddr, unsigned short hnum,
+			 const struct in6_addr *saddr/*源地址*/, __be16 sport/*源端口*/,
+			 const struct in6_addr *daddr/*目的地址*/, unsigned short hnum/*目的端口*/,
 			 int dif, int sdif)
 {
 	int score;
@@ -113,9 +113,11 @@ static int compute_score(struct sock *sk, struct net *net,
 	if (!net_eq(sock_net(sk), net) ||
 	    udp_sk(sk)->udp_port_hash != hnum ||
 	    sk->sk_family != PF_INET6)
+		/*跳过net namespace不相等;目的端口不相等;非ipv6的socket*/
 		return -1;
 
 	if (!ipv6_addr_equal(&sk->sk_v6_rcv_saddr, daddr))
+		/*跳过与目的地址不同的*/
 		return -1;
 
 	score = 0;
@@ -165,8 +167,8 @@ static struct sock *lookup_reuseport(struct net *net, struct sock *sk,
 
 /* called with rcu_read_lock() */
 static struct sock *udp6_lib_lookup2(struct net *net,
-		const struct in6_addr *saddr, __be16 sport,
-		const struct in6_addr *daddr, unsigned int hnum,
+		const struct in6_addr *saddr/*源ip*/, __be16 sport,
+		const struct in6_addr *daddr/*目的ip*/, unsigned int hnum,
 		int dif, int sdif, struct udp_hslot *hslot2,
 		struct sk_buff *skb)
 {
@@ -175,6 +177,7 @@ static struct sock *udp6_lib_lookup2(struct net *net,
 
 	result = NULL;
 	badness = -1;
+	/*遍历hslot2上的链表，每个成员为sock*/
 	udp_portaddr_for_each_entry_rcu(sk, &hslot2->head) {
 		score = compute_score(sk, net, saddr, sport,
 				      daddr, hnum, dif, sdif);
@@ -219,9 +222,9 @@ static inline struct sock *udp6_lookup_run_bpf(struct net *net,
 
 /* rcu_read_lock() must be held */
 struct sock *__udp6_lib_lookup(struct net *net,
-			       const struct in6_addr *saddr, __be16 sport,
-			       const struct in6_addr *daddr, __be16 dport,
-			       int dif, int sdif, struct udp_table *udptable,
+			       const struct in6_addr *saddr/*源ip*/, __be16 sport,
+			       const struct in6_addr *daddr/*目的ip*/, __be16 dport,
+			       int dif, int sdif, struct udp_table *udptable/*udp socket表*/,
 			       struct sk_buff *skb)
 {
 	unsigned short hnum = ntohs(dport);
@@ -270,7 +273,7 @@ done:
 EXPORT_SYMBOL_GPL(__udp6_lib_lookup);
 
 static struct sock *__udp6_lib_lookup_skb(struct sk_buff *skb,
-					  __be16 sport, __be16 dport,
+					  __be16 sport/*源端口*/, __be16 dport/*目的端口*/,
 					  struct udp_table *udptable)
 {
 	const struct ipv6hdr *iph = ipv6_hdr(skb);
@@ -283,6 +286,7 @@ static struct sock *__udp6_lib_lookup_skb(struct sk_buff *skb,
 struct sock *udp6_lib_lookup_skb(const struct sk_buff *skb,
 				 __be16 sport, __be16 dport)
 {
+	/*利用ip header及srcport,dstport查询对应的socket*/
 	const struct ipv6hdr *iph = ipv6_hdr(skb);
 
 	return __udp6_lib_lookup(dev_net(skb->dev), &iph->saddr, sport,
@@ -644,6 +648,7 @@ static int __udpv6_queue_rcv_skb(struct sock *sk, struct sk_buff *skb)
 		sk_mark_napi_id_once(sk, skb);
 	}
 
+	/*报文入队*/
 	rc = __udp_enqueue_schedule_skb(sk, skb);
 	if (rc < 0) {
 		int is_udplite = IS_UDPLITE(sk);
@@ -672,7 +677,7 @@ static __inline__ int udpv6_err(struct sk_buff *skb,
 
 static int udpv6_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 {
-	struct udp_sock *up = udp_sk(sk);
+	struct udp_sock *up = udp_sk(sk);/*转换为udp socket*/
 	int is_udplite = IS_UDPLITE(sk);
 
 	if (!xfrm6_policy_check(sk, XFRM_POLICY_IN, skb))
@@ -694,7 +699,7 @@ static int udpv6_queue_rcv_one_skb(struct sock *sk, struct sk_buff *skb)
 
 		/* if we're overly short, let UDP handle it */
 		encap_rcv = READ_ONCE(up->encap_rcv);
-		if (encap_rcv) {
+		if (encap_rcv) {/*有encap rcv回调，按此回调处理报文*/
 			int ret;
 
 			/* Verify checksum before giving to encap */
@@ -819,7 +824,7 @@ static int __udp6_lib_mcast_deliver(struct net *net, struct sk_buff *skb,
 {
 	struct sock *sk, *first = NULL;
 	const struct udphdr *uh = udp_hdr(skb);
-	unsigned short hnum = ntohs(uh->dest);
+	unsigned short hnum = ntohs(uh->dest);/*目的port*/
 	struct udp_hslot *hslot = udp_hashslot(udptable, net, hnum);
 	unsigned int offset = offsetof(typeof(*sk), sk_node);
 	unsigned int hash2 = 0, hash2_any = 0, use_hash2 = (hslot->count > 10);
@@ -911,7 +916,7 @@ static int udp6_unicast_rcv_skb(struct sock *sk, struct sk_buff *skb,
 }
 
 int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
-		   int proto)
+		   int proto/*协议类型（udp/udplite)*/)
 {
 	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	const struct in6_addr *saddr, *daddr;
@@ -921,15 +926,18 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	bool refcounted;
 	u32 ulen = 0;
 
+	/*取udp header*/
 	if (!pskb_may_pull(skb, sizeof(struct udphdr)))
 		goto discard;
 
+	/*取源，目的ipv6地址*/
 	saddr = &ipv6_hdr(skb)->saddr;
 	daddr = &ipv6_hdr(skb)->daddr;
 	uh = udp_hdr(skb);
 
 	ulen = ntohs(uh->len);
 	if (ulen > skb->len)
+		/*udp header中标明的长度大于skb长度，丢包*/
 		goto short_packet;
 
 	if (proto == IPPROTO_UDP) {
@@ -937,12 +945,14 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 
 		/* Check for jumbo payload */
 		if (ulen == 0)
+			/*udp header中标明的长度为0，使用skb->len*/
 			ulen = skb->len;
 
 		if (ulen < sizeof(*uh))
 			goto short_packet;
 
 		if (ulen < skb->len) {
+			/*udp长度过小，截断，重新更新源目的地址（意义不大）*/
 			if (pskb_trim_rcsum(skb, ulen))
 				goto short_packet;
 			saddr = &ipv6_hdr(skb)->saddr;
@@ -957,6 +967,7 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	/* Check if the socket is already available, e.g. due to early demux */
 	sk = skb_steal_sock(skb, &refcounted);
 	if (sk) {
+		/*skb中已有socket设置*/
 		struct dst_entry *dst = skb_dst(skb);
 		int ret;
 
@@ -979,14 +990,17 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 	 *	Multicast receive code
 	 */
 	if (ipv6_addr_is_multicast(daddr))
+		/*目标为组播地址*/
 		return __udp6_lib_mcast_deliver(net, skb,
 				saddr, daddr, udptable, proto);
 
 	/* Unicast */
+	/*单播报文，执行socket查询*/
 	sk = __udp6_lib_lookup_skb(skb, uh->source, uh->dest, udptable);
 	if (sk) {
 		if (!uh->check && !udp_sk(sk)->no_check6_rx)
 			goto report_csum_error;
+		/*报文送socket*/
 		return udp6_unicast_rcv_skb(sk, skb, uh);
 	}
 
@@ -1093,6 +1107,7 @@ INDIRECT_CALLABLE_SCOPE void udp_v6_early_demux(struct sk_buff *skb)
 	}
 }
 
+/*udp v6处理入口*/
 INDIRECT_CALLABLE_SCOPE int udpv6_rcv(struct sk_buff *skb)
 {
 	return __udp6_lib_rcv(skb, &udp_table, IPPROTO_UDP);
@@ -1746,6 +1761,7 @@ struct proto udpv6_prot = {
 	.sysctl_wmem_offset     = offsetof(struct net, ipv4.sysctl_udp_wmem_min),
 	.sysctl_rmem_offset     = offsetof(struct net, ipv4.sysctl_udp_rmem_min),
 	.obj_size		= sizeof(struct udp6_sock),
+	/*存储udp表*/
 	.h.udp_table		= &udp_table,
 	.diag_destroy		= udp_abort,
 };

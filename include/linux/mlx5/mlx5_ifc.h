@@ -1811,6 +1811,7 @@ enum mlx5_flow_destination_type {
 	MLX5_FLOW_DESTINATION_TYPE_VPORT        = 0x0,
 	//标记报文目的地址是传给指定flow table
 	MLX5_FLOW_DESTINATION_TYPE_FLOW_TABLE   = 0x1,
+	//标记报文止的地址是传给指定的rss queue ?
 	MLX5_FLOW_DESTINATION_TYPE_TIR          = 0x2,
 	MLX5_FLOW_DESTINATION_TYPE_FLOW_SAMPLER = 0x6,
 	MLX5_FLOW_DESTINATION_TYPE_UPLINK       = 0x8,

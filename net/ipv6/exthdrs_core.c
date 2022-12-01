@@ -16,8 +16,8 @@ bool ipv6_ext_hdr(u8 nexthdr)
 	 * find out if nexthdr is an extension header or a protocol
 	 */
 	return   (nexthdr == NEXTHDR_HOP)	||
-		 (nexthdr == NEXTHDR_ROUTING)	||
-		 (nexthdr == NEXTHDR_FRAGMENT)	||
+		 (nexthdr == NEXTHDR_ROUTING) /*routing头*/	||
+		 (nexthdr == NEXTHDR_FRAGMENT)/*分片头*/	||
 		 (nexthdr == NEXTHDR_AUTH)	||
 		 (nexthdr == NEXTHDR_NONE)	||
 		 (nexthdr == NEXTHDR_DEST);
@@ -72,6 +72,7 @@ EXPORT_SYMBOL(ipv6_ext_hdr);
 int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 		     __be16 *frag_offp)
 {
+    /*取next header*/
 	u8 nexthdr = *nexthdrp;
 
 	*frag_offp = 0;
@@ -81,11 +82,15 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 		int hdrlen;
 
 		if (nexthdr == NEXTHDR_NONE)
+		    /*遇到None类型的头*/
 			return -1;
+		/*取选项头*/
 		hp = skb_header_pointer(skb, start, sizeof(_hdr), &_hdr);
 		if (!hp)
+		    /*长度不足，丢包*/
 			return -1;
 		if (nexthdr == NEXTHDR_FRAGMENT) {
+		    /*下一层为分片头*/
 			__be16 _frag_off, *fp;
 			fp = skb_header_pointer(skb,
 						start+offsetof(struct frag_hdr,
@@ -97,19 +102,22 @@ int ipv6_skip_exthdr(const struct sk_buff *skb, int start, u8 *nexthdrp,
 
 			*frag_offp = *fp;
 			if (ntohs(*frag_offp) & ~0x7)
+			    /*offset不为0*/
 				break;
 			hdrlen = 8;
 		} else if (nexthdr == NEXTHDR_AUTH)
+		    /*auth头*/
 			hdrlen = ipv6_authlen(hp);
 		else
+		    /*其它头，取header length*/
 			hdrlen = ipv6_optlen(hp);
 
 		nexthdr = hp->nexthdr;
 		start += hdrlen;
 	}
 
-	*nexthdrp = nexthdr;
-	return start;
+	*nexthdrp = nexthdr;/*返回下一层协议*/
+	return start;/*下一层协议起始位置*/
 }
 EXPORT_SYMBOL(ipv6_skip_exthdr);
 
@@ -193,16 +201,19 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset/*入出参，�
 	bool found;
 
 	if (fragoff)
+	    /*指定了fragoff指针，先清零*/
 		*fragoff = 0;
 
 	if (*offset) {
 	    /*指明了offset情况下，自data offset位置后，提取ipv6头部*/
 		struct ipv6hdr _ip6, *ip6;
 
+		/*自offset位置开始提取ipv6 header*/
 		ip6 = skb_header_pointer(skb, *offset, sizeof(_ip6), &_ip6);
 		if (!ip6 || (ip6->version != 6))
 			return -EBADMSG;
-		/*自ipv6头部后面开启*/
+
+		/*自ipv6头部后面开始*/
 		start = *offset + sizeof(struct ipv6hdr);
 		/*取下一个头部类型*/
 		nexthdr = ip6->nexthdr;
@@ -217,6 +228,7 @@ int ipv6_find_hdr(const struct sk_buff *skb, unsigned int *offset/*入出参，�
 		if ((!ipv6_ext_hdr(nexthdr)) || nexthdr == NEXTHDR_NONE) {
 			if (target < 0 || found)
 				break;
+			/*未知扩展头*/
 			return -ENOENT;
 		}
 

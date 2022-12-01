@@ -943,8 +943,9 @@ vhost_scsi_handle_vq(struct vhost_scsi *vs, struct vhost_virtqueue *vq)
 	 * We can handle the vq only after the endpoint is setup by calling the
 	 * VHOST_SCSI_SET_ENDPOINT ioctl.
 	 */
-	vs_tpg = vhost_vq_get_backend(vq);
+	vs_tpg = vhost_vq_get_backend(vq);/*取vq的后端，后端为vhost_scsi_tpg*/
 	if (!vs_tpg)
+	    /*后端未设置，退出*/
 		goto out;
 
 	memset(&vc, 0, sizeof(vc));
@@ -1613,6 +1614,7 @@ vhost_scsi_set_endpoint(struct vhost_scsi *vs,
 				goto destroy_vq_cmds;
 		}
 
+		/*为每个vq设置后端vs_tpg*/
 		for (i = 0; i < VHOST_SCSI_MAX_VQ; i++) {
 			vq = &vs->vqs[i].vq;
 			mutex_lock(&vq->mutex);
@@ -1780,6 +1782,7 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	struct vhost_virtqueue **vqs;
 	int r = -ENOMEM, i;
 
+	/*申请vhost_scsi结构体*/
 	vs = kvzalloc(sizeof(*vs), GFP_KERNEL);
 	if (!vs)
 		goto err_vs;
@@ -1798,6 +1801,7 @@ static int vhost_scsi_open(struct inode *inode, struct file *f)
 	vqs[VHOST_SCSI_VQ_EVT] = &vs->vqs[VHOST_SCSI_VQ_EVT].vq;
 	vs->vqs[VHOST_SCSI_VQ_CTL].vq.handle_kick = vhost_scsi_ctl_handle_kick;
 	vs->vqs[VHOST_SCSI_VQ_EVT].vq.handle_kick = vhost_scsi_evt_handle_kick;
+	/*针对每个队列，设置handle_kick*/
 	for (i = VHOST_SCSI_VQ_IO; i < VHOST_SCSI_MAX_VQ; i++) {
 		vqs[i] = &vs->vqs[i].vq;
 		vs->vqs[i].vq.handle_kick = vhost_scsi_handle_kick;

@@ -157,8 +157,10 @@ static void vhost_poll_func(struct file *file, wait_queue_head_t *wqh,
 {
 	struct vhost_poll *poll;
 
+	/*由poll_table获取vhost_poll结构体*/
 	poll = container_of(pt, struct vhost_poll, table);
 	poll->wqh = wqh;
+	/*将vhost_poll加入等待队列*/
 	add_wait_queue(wqh, &poll->wait);
 }
 
@@ -166,6 +168,7 @@ static void vhost_poll_func(struct file *file, wait_queue_head_t *wqh,
 static int vhost_poll_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync,
 			     void *key)
 {
+    /*由等待队列entry获得vhost_poll结构*/
 	struct vhost_poll *poll = container_of(wait, struct vhost_poll, wait);
 	struct vhost_work *work = &poll->work;
 
@@ -173,8 +176,10 @@ static int vhost_poll_wakeup(wait_queue_entry_t *wait, unsigned mode, int sync,
 		return 0;
 
 	if (!poll->dev->use_worker)
+	    /*直接触发work函数*/
 		work->fn(work);
 	else
+	    /*使work函数入队，促使kernel thread处理*/
 		vhost_poll_queue(poll);
 
 	return 0;
@@ -212,6 +217,7 @@ int vhost_poll_start(struct vhost_poll *poll, struct file *file)
 	if (poll->wqh)
 		return 0;
 
+	/*poll此文件*/
 	mask = vfs_poll(file, &poll->table);
 	if (mask)
 		vhost_poll_wakeup(&poll->wait, 0, 0, poll_to_key(mask));
@@ -229,6 +235,7 @@ EXPORT_SYMBOL_GPL(vhost_poll_start);
 void vhost_poll_stop(struct vhost_poll *poll)
 {
 	if (poll->wqh) {
+	    /*如果vhost poll已被加入到等待队列，则将其自等待队列中移除*/
 		remove_wait_queue(poll->wqh, &poll->wait);
 		poll->wqh = NULL;
 	}
@@ -258,10 +265,11 @@ void vhost_poll_flush(struct vhost_poll *poll)
 }
 EXPORT_SYMBOL_GPL(vhost_poll_flush);
 
-//为dev增加work,vhost-$(owner-pid）线程会处理这些工作
+//为vhost-dev增加work,vhost-$(owner-pid）线程会处理这些工作
 void vhost_work_queue(struct vhost_dev *dev, struct vhost_work *work)
 {
 	if (!dev->worker)
+	    /*vhost线程未创建，忽略*/
 		return;
 
 	//如此work不在队列中，则将其加入队列
@@ -271,7 +279,8 @@ void vhost_work_queue(struct vhost_dev *dev, struct vhost_work *work)
 		 * test_and_set_bit() implies a memory barrier.
 		 */
 		llist_add(&work->node, &dev->work_list);
-		wake_up_process(dev->worker);/*唤醒kernel进程*/
+		/*唤醒kernel进程*/
+		wake_up_process(dev->worker);
 	}
 }
 EXPORT_SYMBOL_GPL(vhost_work_queue);
@@ -284,7 +293,7 @@ bool vhost_has_work(struct vhost_dev *dev)
 }
 EXPORT_SYMBOL_GPL(vhost_has_work);
 
-//将poll设备对应的work入队到vhost work中，使其执行
+//将poll设备对应的work入队到vhost dev 工作队列中，使其可以被vhost内核线程执行
 void vhost_poll_queue(struct vhost_poll *poll)
 {
 	vhost_work_queue(poll->dev, &poll->work);
@@ -300,6 +309,7 @@ static void __vhost_vq_meta_reset(struct vhost_virtqueue *vq)
 		vq->meta_iotlb[j] = NULL;
 }
 
+/*重置所有vq对应的meta_iotlb信息*/
 static void vhost_vq_meta_reset(struct vhost_dev *d)
 {
 	int i;
@@ -351,13 +361,18 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 	__vhost_vq_meta_reset(vq);
 }
 
-//内核vhost-$(owner-pid)线程用于执行vhost的worker（遍历dev->work_list的元素，针对各个work进行fn调用）
+/*
+ * 内核vhost-$(owner-pid)线程工作函数，
+ * 用于执行vhost的worker（遍历dev->work_list的元素，针对各个work进行fn调用）
+*/
 static int vhost_worker(void *data)
 {
+    /*获得vhost设备*/
 	struct vhost_dev *dev = data;
 	struct vhost_work *work, *work_next;
 	struct llist_node *node;
 
+	/*在开始工作前，使当前kthread可见vhost_dev的mm*/
 	kthread_use_mm(dev->mm);
 
 	for (;;) {
@@ -365,10 +380,12 @@ static int vhost_worker(void *data)
 		set_current_state(TASK_INTERRUPTIBLE);
 
 		if (kthread_should_stop()) {
+		    /*如果需要停止，则退出循环*/
 			__set_current_state(TASK_RUNNING);
 			break;
 		}
 
+		/*提取工作队列上所有work*/
 		node = llist_del_all(&dev->work_list);
 		if (!node)
 		    /*无work,则调度此进程让出cpu*/
@@ -411,7 +428,9 @@ static long vhost_dev_alloc_iovecs(struct vhost_dev *dev)
 	int i;
 
 	for (i = 0; i < dev->nvqs; ++i) {
+	    /*取dev的i号队列*/
 		vq = dev->vqs[i];
+		/*申请UIO_MAXIOV个iovec*/
 		vq->indirect = kmalloc_array(UIO_MAXIOV,
 					     sizeof(*vq->indirect),
 					     GFP_KERNEL);
@@ -506,6 +525,7 @@ void vhost_dev_init(struct vhost_dev *dev,
 	dev->byte_weight = byte_weight;
 	dev->use_worker = use_worker;
 	dev->msg_handler = msg_handler;
+	/*初始化worker线程的工作队列*/
 	init_llist_head(&dev->work_list);
 	init_waitqueue_head(&dev->wait);
 	INIT_LIST_HEAD(&dev->read_list);
@@ -513,9 +533,9 @@ void vhost_dev_init(struct vhost_dev *dev,
 	spin_lock_init(&dev->iotlb_lock);
 
 
-	//初始化所有vq
+	//初始化此设备的所有vq
 	for (i = 0; i < dev->nvqs; ++i) {
-		vq = dev->vqs[i];
+		vq = dev->vqs[i];/*取i号队列*/
 		vq->log = NULL;
 		vq->indirect = NULL;
 		vq->heads = NULL;
@@ -523,7 +543,7 @@ void vhost_dev_init(struct vhost_dev *dev,
 		mutex_init(&vq->mutex);
 		vhost_vq_reset(dev, vq);
 		if (vq->handle_kick)
-			vhost_poll_init(&vq->poll, vq->handle_kick,
+			vhost_poll_init(&vq->poll, vq->handle_kick/*此vq的work函数*/,
 					EPOLLIN, dev);
 	}
 }
@@ -556,8 +576,11 @@ static int vhost_attach_cgroups(struct vhost_dev *dev)
 	struct vhost_attach_cgroups_struct attach;
 
 	attach.owner = current;
+	/*指明此worker工作函数*/
 	vhost_work_init(&attach.work, vhost_attach_cgroups_work);
+	/*这里对work进入队列（注意：这里入队的是局部变量）*/
 	vhost_work_queue(dev, &attach.work);
+	/*由于上一句入队的是局部变量，故下面这句阻塞等待上面的worker完成工作*/
 	vhost_work_dev_flush(dev);
 	return attach.ret;
 }
@@ -574,6 +597,7 @@ static void vhost_attach_mm(struct vhost_dev *dev)
 {
 	/* No owner, become one */
 	if (dev->use_worker) {
+	    /*此进程的内存均可被dev可见*/
 		dev->mm = get_task_mm(current);
 	} else {
 		/* vDPA device does not use worker thead, so there's
@@ -613,7 +637,7 @@ long vhost_dev_set_owner(struct vhost_dev *dev)
 		goto err_mm;
 	}
 
-	/*与当前进程共享同一份mm*/
+	/*增加当前进程的mm引用，确保此设备可见*/
 	vhost_attach_mm(dev);
 
 	dev->kcov_handle = kcov_common_handle();
@@ -626,6 +650,7 @@ long vhost_dev_set_owner(struct vhost_dev *dev)
 			goto err_worker;
 		}
 
+		/*记录此内核线程*/
 		dev->worker = worker;
 		wake_up_process(worker); /* avoid contributing to loadavg */
 
@@ -641,6 +666,7 @@ long vhost_dev_set_owner(struct vhost_dev *dev)
 	return 0;
 err_cgroup:
 	if (dev->worker) {
+	    /*停止worker线程*/
 		kthread_stop(dev->worker);
 		dev->worker = NULL;
 	}
@@ -1030,6 +1056,7 @@ static inline int vhost_put_used_idx(struct vhost_virtqueue *vq)
 ({ \
 	int ret; \
 	if (!vq->iotlb) { \
+	    /*没有软件模拟的iotlb*/\
 		ret = __get_user(x, ptr); \
 	} else { \
 		__typeof__(ptr) from = \
@@ -1053,6 +1080,7 @@ static inline int vhost_put_used_idx(struct vhost_virtqueue *vq)
 #define vhost_get_used(vq, x, ptr) \
 	vhost_get_user(vq, x, ptr, VHOST_ADDR_USED)
 
+/*采用mutex锁住所有vqs*/
 static void vhost_dev_lock_vqs(struct vhost_dev *d)
 {
 	int i = 0;
@@ -1071,6 +1099,7 @@ static void vhost_dev_unlock_vqs(struct vhost_dev *d)
 static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq,
 				      __virtio16 *idx/*出参，索引位置*/)
 {
+    /*取vq->avail->idx*/
 	return vhost_get_avail(vq, *idx, &vq->avail->idx);
 }
 
@@ -1169,7 +1198,10 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 			ret = -EFAULT;
 			break;
 		}
+
+		/*所有vq对应的meta_iotlb信息置为无效*/
 		vhost_vq_meta_reset(dev);
+
 		/*在设备iotlb中添加地址映射*/
 		if (vhost_iotlb_add_range(dev->iotlb, msg->iova,
 					  msg->iova + msg->size - 1,
@@ -1177,7 +1209,8 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 			ret = -ENOMEM;
 			break;
 		}
-		/*收到iotlb更新，检查是否有pending,如有，促使其运行*/
+
+		/*当前已完成iotlb更新，检查是否有pending的iotlb msg,如有促使其运行*/
 		vhost_iotlb_notify_vq(dev, msg);
 		break;
 	case VHOST_IOTLB_INVALIDATE:
@@ -1185,7 +1218,9 @@ static int vhost_process_iotlb_msg(struct vhost_dev *dev,
 			ret = -EFAULT;
 			break;
 		}
+		/*所有vq对应的meta_iotlb信息置为无效*/
 		vhost_vq_meta_reset(dev);
+
 		/*自设备iotlb中移除指定范围的地址映射*/
 		vhost_iotlb_del_range(dev->iotlb, msg->iova,
 				      msg->iova + msg->size - 1);
@@ -1209,6 +1244,7 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 	size_t offset;
 	int type, ret;
 
+	/*自from中读取type*/
 	ret = copy_from_iter(&type, sizeof(type), from);
 	if (ret != sizeof(type)) {
 		ret = -EINVAL;
@@ -1232,6 +1268,7 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 	}
 
 	iov_iter_advance(from, offset);
+	/*自from填充msg*/
 	ret = copy_from_iter(&msg, sizeof(msg), from);
 	if (ret != sizeof(msg)) {
 		ret = -EINVAL;
@@ -1245,10 +1282,11 @@ ssize_t vhost_chr_write_iter(struct vhost_dev *dev,
 		goto done;
 	}
 
-	/*如果有msg_handler，则处理，否则不处理*/
+	/*如果有msg_handler，则利用handler响应消息*/
 	if (dev->msg_handler)
 		ret = dev->msg_handler(dev, &msg);
 	else
+	    /*未设置msg_handler，利用以下函数完成iotlb update/invalidate消息响应*/
 		ret = vhost_process_iotlb_msg(dev, &msg);
 	if (ret) {
 		ret = -EFAULT;
@@ -1296,13 +1334,14 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 			prepare_to_wait(&dev->wait, &wait,
 					TASK_INTERRUPTIBLE);
 
+		/*自dev->read_list上出一个vhost_msg_node结构*/
 		node = vhost_dequeue_msg(dev, &dev->read_list);
 
-		/*有可处理消息，跳出*/
+		/*有消息可处理，跳出*/
 		if (node)
 			break;
 
-		/*不容许阻塞，返回EAGAIN*/
+		/*暂无消息，不容许阻塞，返回EAGAIN*/
 		if (noblock) {
 			ret = -EAGAIN;
 			break;
@@ -1320,7 +1359,7 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 			break;
 		}
 
-		/*无数据，且容许阻塞，调度到其它进程*/
+		/*暂无消息，且当前容许阻塞，调度到其它进程*/
 		schedule();
 	}
 
@@ -1330,20 +1369,21 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 	/*消息type校验及copy准备*/
 	if (node) {
 		struct vhost_iotlb_msg *msg;
-		void *start = &node->msg;
+		void *start = &node->msg;/*消息内容起始位置*/
 
 		switch (node->msg.type) {
 		case VHOST_IOTLB_MSG:
-		    /*v1 iotlb消息*/
+		    /*v1版本 iotlb消息*/
 			size = sizeof(node->msg);
 			msg = &node->msg.iotlb;
 			break;
 		case VHOST_IOTLB_MSG_V2:
-		    /*v2 iotlb消息*/
+		    /*v2版本 iotlb消息*/
 			size = sizeof(node->msg_v2);
 			msg = &node->msg_v2.iotlb;
 			break;
 		default:
+		    /*消息格式有误*/
 			BUG();
 			break;
 		}
@@ -1351,7 +1391,7 @@ ssize_t vhost_chr_read_iter(struct vhost_dev *dev, struct iov_iter *to,
 		/*将msg copy到to中*/
 		ret = copy_to_iter(start, size, to);
 		if (ret != size || msg->type != VHOST_IOTLB_MISS) {
-		    /*copy失败，且消息类型非iotlb miss的，直接丢弃*/
+		    /*copy失败，或消息类型非iotlb miss的，直接丢弃*/
 			kfree(node);
 			return ret;
 		}
@@ -1424,7 +1464,7 @@ static void vhost_vq_meta_update(struct vhost_virtqueue *vq,
 
 /*查询addr,addr+len区间对应的iotlb是否存在映射且权限正确，如不存在构造tlb miss,如存在返回true*/
 static bool iotlb_access_ok(struct vhost_virtqueue *vq,
-			    int access, u64 addr, u64 len, int type)
+			    int access/*访问形式:RO,WO,RW*/, u64 addr/*地址*/, u64 len/*访问长度*/, int type)
 {
 	const struct vhost_iotlb_map *map;
 	struct vhost_iotlb *umem = vq->iotlb;
@@ -1463,9 +1503,11 @@ static bool iotlb_access_ok(struct vhost_virtqueue *vq,
 
 int vq_meta_prefetch(struct vhost_virtqueue *vq)
 {
+    /*取队列长度*/
 	unsigned int num = vq->num;
 
 	if (!vq->iotlb)
+	    /*取队列没有iotlb,返回1*/
 		return 1;
 
 	/*提前预取desc,avail,used表的iotlb表映射，如返回false,则存在miss情况*/
@@ -2191,9 +2233,9 @@ err:
 }
 EXPORT_SYMBOL_GPL(vhost_vq_init_access);
 
-/*通过iotlb转换内存区间[addr,addr+len]的地址信息*/
-static int translate_desc(struct vhost_virtqueue *vq, u64 addr/*待转换地址*/, u32 len,
-			  struct iovec iov[]/*出参，转换后的虚地址情况*/, int iov_size, int access/*访问权限*/)
+/*通过iotlb转换内存区间[addr,addr+len]的地址信息，填充iov*/
+static int translate_desc(struct vhost_virtqueue *vq, u64 addr/*待转换地址*/, u32 len/*内存长度*/,
+			  struct iovec iov[]/*出参，转换后的虚地址情况*/, int iov_size/*iov数组长度*/, int access/*访问权限*/)
 {
 	const struct vhost_iotlb_map *map;
 	struct vhost_dev *dev = vq->dev;
@@ -2361,7 +2403,7 @@ static int get_indirect(struct vhost_virtqueue *vq,
  * returned on error. */
 //自vq中处理一个avail指定的描述符索引，并返回其指明的数据片信息
 int vhost_get_vq_desc(struct vhost_virtqueue *vq,
-		      struct iovec iov[]/*出参，描述符指定的数据片*/, unsigned int iov_size,
+		      struct iovec iov[]/*出参，描述符指定的数据片*/, unsigned int iov_size/*iov数组长度*/,
 		      unsigned int *out_num/*出参，与in_num互斥，记录可读的数据片数目*/, unsigned int *in_num/*出参，可写的数据片数目*/,
 		      struct vhost_log *log/*出参，描述符指定的地址及长度*/, unsigned int *log_num/*出参，log数组长度*/)
 {
@@ -2375,9 +2417,10 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 	/* Check it isn't doing very strange things with descriptor numbers. */
 	last_avail_idx = vq->last_avail_idx;
 
-	/*上次我们获取的user端avail_idx与last_avail_idx相等，则本次更新vq->avail_idx*/
+	/*上次我们获取的avail_idx与last_avail_idx相等，则尝试更新vq->avail_idx*/
 	if (vq->avail_idx == vq->last_avail_idx) {
-	    /*取vq当前可用位置，并将其值转换为cpu序*/
+
+	    /*取avail_idx，并更新（按协议要求将其值转换为cpu序）*/
 		if (unlikely(vhost_get_avail_idx(vq, &avail_idx))) {
 			vq_err(vq, "Failed to access avail idx at %p\n",
 				&vq->avail->idx);
@@ -2385,7 +2428,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		}
 		vq->avail_idx = vhost16_to_cpu(vq, avail_idx);
 
-		/*两个索引相差不能超过队列本身的长度*/
+		/*两个索引相差不可能超过队列本身的长度（如超过，则报错）*/
 		if (unlikely((u16)(vq->avail_idx - last_avail_idx) > vq->num)) {
 			vq_err(vq, "Guest moved used index from %u to %u",
 				last_avail_idx, vq->avail_idx);
@@ -2395,7 +2438,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		/* If there's nothing new since last we looked, return
 		 * invalid.
 		 */
-		//当前没有可用的描述符，返回队列长度
+		//与我们上次更新相比，没有更新，返回队列长度
 		if (vq->avail_idx == last_avail_idx)
 			return vq->num;
 
@@ -2453,7 +2496,8 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 			       i, vq->desc + i);
 			return -EFAULT;
 		}
-		/*如果描述符为间接性的，则通过get_indirect处理*/
+
+		/*如果描述符指明indirect，则通过get_indirect处理*/
 		if (desc.flags & cpu_to_vhost16(vq, VRING_DESC_F_INDIRECT)) {
 			ret = get_indirect(vq, iov, iov_size,
 					   out_num, in_num,
@@ -2658,7 +2702,7 @@ void vhost_signal(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
 	/* Signal the Guest tell them we used something up. */
 	if (vq->call_ctx.ctx && vhost_notify(dev, vq))
-	    	//触发一次通知事件
+	    //触发一次通知事件
 		eventfd_signal(vq->call_ctx.ctx, 1);
 }
 EXPORT_SYMBOL_GPL(vhost_signal);
@@ -2797,10 +2841,10 @@ struct vhost_msg_node *vhost_dequeue_msg(struct vhost_dev *dev,
 
 	spin_lock(&dev->iotlb_lock);
 	if (!list_empty(head)) {
-	    //队列不为空，出首个node
+	    //队列不为空，引用首个node
 		node = list_first_entry(head, struct vhost_msg_node,
 					node);
-		list_del(&node->node);
+		list_del(&node->node);/*移除此node*/
 	}
 	spin_unlock(&dev->iotlb_lock);
 

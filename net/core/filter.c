@@ -3427,10 +3427,12 @@ static u32 bpf_skb_net_base_len(const struct sk_buff *skb)
 					 BPF_F_ADJ_ROOM_ENCAP_L2( \
 					  BPF_ADJ_ROOM_ENCAP_L2_MASK))
 
+/*内容扩充情况*/
 static int bpf_skb_net_grow(struct sk_buff *skb, u32 off, u32 len_diff,
 			    u64 flags)
 {
 	u8 inner_mac_len = flags >> BPF_ADJ_ROOM_ENCAP_L2_SHIFT;
+	/*指明了encap情况*/
 	bool encap = flags & BPF_F_ADJ_ROOM_ENCAP_L3_MASK;
 	u16 mac_len = 0, inner_net = 0, inner_trans = 0;
 	unsigned int gso_type = SKB_GSO_DODGY;
@@ -3450,14 +3452,17 @@ static int bpf_skb_net_grow(struct sk_buff *skb, u32 off, u32 len_diff,
 	if (encap) {
 		if (skb->protocol != htons(ETH_P_IP) &&
 		    skb->protocol != htons(ETH_P_IPV6))
+		    /*encap模式只支持ipv4与ipv6*/
 			return -ENOTSUPP;
 
 		if (flags & BPF_F_ADJ_ROOM_ENCAP_L3_IPV4 &&
 		    flags & BPF_F_ADJ_ROOM_ENCAP_L3_IPV6)
+		    /*flags不能同时使能两种encap*/
 			return -EINVAL;
 
 		if (flags & BPF_F_ADJ_ROOM_ENCAP_L4_GRE &&
 		    flags & BPF_F_ADJ_ROOM_ENCAP_L4_UDP)
+		    /*互斥的flags*/
 			return -EINVAL;
 
 		if (flags & BPF_F_ADJ_ROOM_ENCAP_L2_ETH &&
@@ -3519,6 +3524,7 @@ static int bpf_skb_net_grow(struct sk_buff *skb, u32 off, u32 len_diff,
 	}
 
 	if (skb_is_gso(skb)) {
+	    /*gso报文处理*/
 		struct skb_shared_info *shinfo = skb_shinfo(skb);
 
 		/* Due to header grow, MSS needs to be downgraded. */
@@ -3628,11 +3634,14 @@ BPF_CALL_4(bpf_skb_adjust_room, struct sk_buff *, skb, s32, len_diff,
 
 	if (unlikely(flags & ~(BPF_F_ADJ_ROOM_MASK |
 			       BPF_F_ADJ_ROOM_NO_CSUM_RESET)))
+	    /*遇到当前不认识的flags,报错*/
 		return -EINVAL;
 	if (unlikely(len_diff_abs > 0xfffU))
+	    /*diff长度超限*/
 		return -EFAULT;
 	if (unlikely(proto != htons(ETH_P_IP) &&
 		     proto != htons(ETH_P_IPV6)))
+	    /*当前只能处理ipv4/ipv6报文*/
 		return -ENOTSUPP;
 
 	off = skb_mac_header_len(skb);
@@ -3643,6 +3652,7 @@ BPF_CALL_4(bpf_skb_adjust_room, struct sk_buff *, skb, s32, len_diff,
 	case BPF_ADJ_ROOM_MAC:
 		break;
 	default:
+	    /*mode不支持，只支持以上情况*/
 		return -ENOTSUPP;
 	}
 
@@ -3653,8 +3663,8 @@ BPF_CALL_4(bpf_skb_adjust_room, struct sk_buff *, skb, s32, len_diff,
 			 !skb_is_gso(skb))))
 		return -ENOTSUPP;
 
-	ret = shrink ? bpf_skb_net_shrink(skb, off, len_diff_abs, flags) :
-		       bpf_skb_net_grow(skb, off, len_diff_abs, flags);
+	ret = shrink ? bpf_skb_net_shrink(skb, off, len_diff_abs, flags)/*收缩情况*/ :
+		       bpf_skb_net_grow(skb, off, len_diff_abs, flags)/*扩大情况*/;
 	if (!ret && !(flags & BPF_F_ADJ_ROOM_NO_CSUM_RESET))
 		__skb_reset_checksum_unnecessary(skb);
 
@@ -5816,6 +5826,7 @@ static int bpf_ipv4_fib_lookup(struct net *net, struct bpf_fib_lookup *params,
 	if (check_mtu) {
 		mtu = ip_mtu_from_fib_result(&res, params->ipv4_dst);
 		if (params->tot_len > mtu) {
+		    /*mtu比totoal len小，需要分片*/
 			params->mtu_result = mtu; /* union with tot_len */
 			return BPF_FIB_LKUP_RET_FRAG_NEEDED;
 		}
@@ -6465,13 +6476,14 @@ static const struct bpf_func_proto bpf_lwt_seg6_adjust_srh_proto = {
 #endif /* CONFIG_IPV6_SEG6_BPF */
 
 #ifdef CONFIG_INET
-static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple,
+static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple/*4元组*/,
 			      int dif, int sdif, u8 family, u8 proto)
 {
 	bool refcounted = false;
 	struct sock *sk = NULL;
 
 	if (family == AF_INET) {
+		/*ipv4 socket查询*/
 		__be32 src4 = tuple->ipv4.saddr;
 		__be32 dst4 = tuple->ipv4.daddr;
 
@@ -6486,6 +6498,7 @@ static struct sock *sk_lookup(struct net *net, struct bpf_sock_tuple *tuple,
 					       dif, sdif, &udp_table, NULL);
 #if IS_ENABLED(CONFIG_IPV6)
 	} else {
+		/*ipv6 socket查询*/
 		struct in6_addr *src6 = (struct in6_addr *)&tuple->ipv6.saddr;
 		struct in6_addr *dst6 = (struct in6_addr *)&tuple->ipv6.daddr;
 

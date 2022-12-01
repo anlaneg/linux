@@ -1190,7 +1190,7 @@ static void virtio_skb_set_hash(const struct virtio_net_hdr_v1_hash *hdr_hash,
 
 //解析buf，并组装成skb,使其走kernel协议栈
 static void receive_buf(struct virtnet_info *vi, struct receive_queue *rq,
-			void *buf, unsigned int len/*报文长度*/, void **ctx,
+			void *buf/*报文buffer*/, unsigned int len/*报文长度*/, void **ctx,
 			unsigned int *xdp_xmit,
 			struct virtnet_rq_stats *stats)
 {
@@ -2748,9 +2748,11 @@ static int virtnet_get_rxnfc(struct net_device *dev, struct ethtool_rxnfc *info,
 
 	switch (info->cmd) {
 	case ETHTOOL_GRXRINGS:
+	    /*返回当前rx队列数*/
 		info->data = vi->curr_queue_pairs;
 		break;
 	case ETHTOOL_GRXFH:
+	    /*返回rx支持的字段*/
 		virtnet_get_hashflow(vi, info);
 		break;
 	default:

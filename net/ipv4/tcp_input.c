@@ -6927,7 +6927,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	__u32 isn = TCP_SKB_CB(skb)->tcp_tw_isn;
 	struct tcp_options_received tmp_opt;
 	struct tcp_sock *tp = tcp_sk(sk);
-	struct net *net = sock_net(sk);
+	struct net *net = sock_net(sk);/*取net namespace*/
 	struct sock *fastopen_sk = NULL;
 	struct request_sock *req;
 	bool want_cookie = false;

@@ -74,7 +74,7 @@ struct virtio_blk {
 
 	/* num of vqs */
 	int num_vqs;
-	struct virtio_blk_vq *vqs;
+	struct virtio_blk_vq *vqs;/*blk_vq数组，共有num_vqs个vq*/
 };
 
 struct virtblk_req {
@@ -115,6 +115,7 @@ static int virtblk_add_req(struct virtqueue *vq, struct virtblk_req *vbr,
 	sg_init_one(&status, &vbr->status, sizeof(vbr->status));
 	sgs[num_out + num_in++] = &status;
 
+	/*将数据填充到sgs中*/
 	return virtqueue_add_sgs(vq, sgs, num_out, num_in, vbr, GFP_ATOMIC);
 }
 
@@ -200,7 +201,7 @@ static void virtblk_cleanup_cmd(struct request *req)
 
 static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 				      struct request *req,
-				      struct virtblk_req *vbr)
+				      struct virtblk_req *vbr/*出参*/)
 {
 	bool unmap = false;
 	u32 type;
@@ -210,11 +211,13 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 	switch (req_op(req)) {
 	case REQ_OP_READ:
 		type = VIRTIO_BLK_T_IN;
+		/*记录读的位置*/
 		vbr->out_hdr.sector = cpu_to_virtio64(vdev,
 						      blk_rq_pos(req));
 		break;
 	case REQ_OP_WRITE:
 		type = VIRTIO_BLK_T_OUT;
+		/*记录写的位置*/
 		vbr->out_hdr.sector = cpu_to_virtio64(vdev,
 						      blk_rq_pos(req));
 		break;
@@ -268,6 +271,7 @@ static void virtblk_done(struct virtqueue *vq)
 	spin_lock_irqsave(&vblk->vqs[qid].lock, flags);
 	do {
 		virtqueue_disable_cb(vq);
+		/*自vq中出队vbr,然后据此得到req,指明req complete*/
 		while ((vbr = virtqueue_get_buf(vblk->vqs[qid].vq, &len)) != NULL) {
 			struct request *req = blk_mq_rq_from_pdu(vbr);
 
@@ -302,6 +306,7 @@ static void virtio_commit_rqs(struct blk_mq_hw_ctx *hctx)
 static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 			   const struct blk_mq_queue_data *bd)
 {
+    /*取block设备*/
 	struct virtio_blk *vblk = hctx->queue->queuedata;
 	struct request *req = bd->rq;
 	struct virtblk_req *vbr = blk_mq_rq_to_pdu(req);
@@ -327,6 +332,7 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	spin_lock_irqsave(&vblk->vqs[qid].lock, flags);
 	err = virtblk_add_req(vblk->vqs[qid].vq, vbr, vbr->sg_table.sgl, num);
 	if (err) {
+	    /*添加请求失败*/
 		virtqueue_kick(vblk->vqs[qid].vq);
 		/* Don't stop the queue if -ENOMEM: we may have failed to
 		 * bounce the buffer due to global resource outage.
@@ -351,6 +357,7 @@ static blk_status_t virtio_queue_rq(struct blk_mq_hw_ctx *hctx,
 	spin_unlock_irqrestore(&vblk->vqs[qid].lock, flags);
 
 	if (notify)
+	    /*通知对端*/
 		virtqueue_notify(vblk->vqs[qid].vq);
 	return BLK_STS_OK;
 }
@@ -491,6 +498,7 @@ static void virtblk_update_capacity(struct virtio_blk *vblk, bool resize)
 
 static void virtblk_config_changed_work(struct work_struct *work)
 {
+    /*由work获得block*/
 	struct virtio_blk *vblk =
 		container_of(work, struct virtio_blk, config_work);
 
@@ -501,6 +509,7 @@ static void virtblk_config_changed(struct virtio_device *vdev)
 {
 	struct virtio_blk *vblk = vdev->priv;
 
+	/*config work入队列，进行执行*/
 	queue_work(virtblk_wq, &vblk->config_work);
 }
 
@@ -519,22 +528,29 @@ static int init_vq(struct virtio_blk *vblk)
 				   struct virtio_blk_config, num_queues,
 				   &num_vqs);
 	if (err)
+	    /*无此功能，置vq数量为1*/
 		num_vqs = 1;
 	if (!err && !num_vqs) {
+	    /*采用0队列，报错*/
 		dev_err(&vdev->dev, "MQ advertised but zero queues reported\n");
 		return -EINVAL;
 	}
 
+	/*队列数不得超过cpu数*/
 	num_vqs = min_t(unsigned int,
 			min_not_zero(num_request_queues, nr_cpu_ids),
 			num_vqs);
 
+	/*创建多个vq结构*/
 	vblk->vqs = kmalloc_array(num_vqs, sizeof(*vblk->vqs), GFP_KERNEL);
 	if (!vblk->vqs)
 		return -ENOMEM;
 
+	/*创建字符串指针数组*/
 	names = kmalloc_array(num_vqs, sizeof(*names), GFP_KERNEL);
+	/*创建callback指针数组*/
 	callbacks = kmalloc_array(num_vqs, sizeof(*callbacks), GFP_KERNEL);
+	/*创建vq指针数组*/
 	vqs = kmalloc_array(num_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!names || !callbacks || !vqs) {
 		err = -ENOMEM;
@@ -542,16 +558,18 @@ static int init_vq(struct virtio_blk *vblk)
 	}
 
 	for (i = 0; i < num_vqs; i++) {
-		callbacks[i] = virtblk_done;
+		callbacks[i] = virtblk_done;/*设置回调*/
+		/*设置vq名称*/
 		snprintf(vblk->vqs[i].name, VQ_NAME_LEN, "req.%d", i);
-		names[i] = vblk->vqs[i].name;
+		names[i] = vblk->vqs[i].name;/*指针数组收集vq名称*/
 	}
 
 	/* Discover virtqueues and write information to configuration.  */
-	err = virtio_find_vqs(vdev, num_vqs, vqs, callbacks, names, &desc);
+	err = virtio_find_vqs(vdev, num_vqs, vqs/*出参，*/, callbacks, names, &desc);
 	if (err)
 		goto out;
 
+	/*设置各block vq对应的virtual queue*/
 	for (i = 0; i < num_vqs; i++) {
 		spin_lock_init(&vblk->vqs[i].lock);
 		vblk->vqs[i].vq = vqs[i];
@@ -574,22 +592,26 @@ out:
 static int virtblk_name_format(char *prefix, int index, char *buf, int buflen)
 {
 	const int base = 'z' - 'a' + 1;
-	char *begin = buf + strlen(prefix);
-	char *end = buf + buflen;
+	char *begin = buf + strlen(prefix);/*名称起始位置*/
+	char *end = buf + buflen;/*名称结束位置*/
 	char *p;
 	int unit;
 
 	p = end - 1;
-	*p = '\0';
+	*p = '\0';/*指明字符串结尾*/
 	unit = base;
 	do {
 		if (p == begin)
+		    /*长度过长*/
 			return -EINVAL;
+		/*反序将index编号成26进制*/
 		*--p = 'a' + (index % unit);
 		index = (index / unit) - 1;
 	} while (index >= 0);
 
+	/*将格式化好的内容，放在begin位置*/
 	memmove(begin, p, end - p);
+	/*设置前缀*/
 	memcpy(buf, prefix, strlen(prefix));
 
 	return 0;
@@ -691,6 +713,7 @@ static const struct attribute_group *virtblk_attr_groups[] = {
 
 static int virtblk_map_queues(struct blk_mq_tag_set *set)
 {
+    /*取对应的block设备*/
 	struct virtio_blk *vblk = set->driver_data;
 
 	return blk_mq_virtio_map_queues(&set->map[HCTX_TYPE_DEFAULT],
@@ -724,6 +747,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 		return -EINVAL;
 	}
 
+	/*申请设备index*/
 	err = ida_simple_get(&vd_index_ida, 0, minor_to_index(1 << MINORBITS),
 			     GFP_KERNEL);
 	if (err < 0)
@@ -742,6 +766,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	/* Prevent integer overflows and honor max vq size */
 	sg_elems = min_t(u32, sg_elems, VIRTIO_BLK_MAX_SG_ELEMS - 2);
 
+	/*创建virtio block*/
 	vdev->priv = vblk = kmalloc(sizeof(*vblk), GFP_KERNEL);
 	if (!vblk) {
 		err = -ENOMEM;
@@ -752,6 +777,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 
 	vblk->vdev = vdev;
 
+	/*初始化config_work,在driver调用config_changed时执行此work*/
 	INIT_WORK(&vblk->config_work, virtblk_config_changed_work);
 
 	err = init_vq(vblk);
@@ -768,6 +794,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 		queue_depth = virtblk_queue_depth;
 	}
 
+	/*初始化tag_set*/
 	memset(&vblk->tag_set, 0, sizeof(vblk->tag_set));
 	vblk->tag_set.ops = &virtio_mq_ops;
 	vblk->tag_set.queue_depth = queue_depth;
@@ -783,6 +810,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	if (err)
 		goto out_free_vq;
 
+	/*创建genernal disk*/
 	vblk->disk = blk_mq_alloc_disk(&vblk->tag_set, vblk);
 	if (IS_ERR(vblk->disk)) {
 		err = PTR_ERR(vblk->disk);
@@ -790,7 +818,8 @@ static int virtblk_probe(struct virtio_device *vdev)
 	}
 	q = vblk->disk->queue;
 
-	virtblk_name_format("vd", index, vblk->disk->disk_name, DISK_NAME_LEN);
+	/*设置disk名称*/
+	virtblk_name_format("vd"/*disk前缀*/, index/*disk编号*/, vblk->disk->disk_name/*要设置的buffer*/, DISK_NAME_LEN);
 
 	vblk->disk->major = major;
 	vblk->disk->first_minor = index_to_minor(index);
@@ -901,6 +930,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	virtblk_update_capacity(vblk, false);
 	virtio_device_ready(vdev);
 
+	/*添加磁盘到系统*/
 	err = device_add_disk(&vdev->dev, vblk->disk, virtblk_attr_groups);
 	if (err)
 		goto out_cleanup_disk;
@@ -984,6 +1014,7 @@ static int virtblk_restore(struct virtio_device *vdev)
 }
 #endif
 
+/*匹配block设备*/
 static const struct virtio_device_id id_table[] = {
 	{ VIRTIO_ID_BLOCK, VIRTIO_DEV_ANY_ID },
 	{ 0 },
@@ -1024,16 +1055,19 @@ static int __init virtio_blk_init(void)
 {
 	int error;
 
+	/*申请工作队列*/
 	virtblk_wq = alloc_workqueue("virtio-blk", 0, 0);
 	if (!virtblk_wq)
 		return -ENOMEM;
 
+	/*注册virtblk block device,动态申请major*/
 	major = register_blkdev(0, "virtblk");
 	if (major < 0) {
 		error = major;
 		goto out_destroy_workqueue;
 	}
 
+	/*注册virtio driver*/
 	error = register_virtio_driver(&virtio_blk);
 	if (error)
 		goto out_unregister_blkdev;

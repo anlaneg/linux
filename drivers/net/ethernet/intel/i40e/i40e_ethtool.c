@@ -3421,6 +3421,7 @@ static int i40e_get_rxnfc(struct net_device *netdev, struct ethtool_rxnfc *cmd,
 
 	switch (cmd->cmd) {
 	case ETHTOOL_GRXRINGS:
+	    /*返回rx队列数*/
 		cmd->data = vsi->rss_size;
 		ret = 0;
 		break;
@@ -3517,6 +3518,7 @@ static int i40e_set_rss_hash_opt(struct i40e_pf *pf, struct ethtool_rxnfc *nfc)
 	 */
 	if (nfc->data & ~(RXH_IP_SRC | RXH_IP_DST |
 			  RXH_L4_B_0_1 | RXH_L4_B_2_3))
+	    /*只支持以上四种字段*/
 		return -EINVAL;
 
 	switch (nfc->flow_type) {

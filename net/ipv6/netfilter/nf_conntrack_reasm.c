@@ -470,6 +470,7 @@ int nf_ct_frag6_gather(struct net *net, struct sk_buff *skb, u32 user)
 	fhdr = (struct frag_hdr *)skb_transport_header(skb);
 
 	skb_orphan(skb);
+	/*查询此分片*/
 	fq = fq_find(net, fhdr->identification, user, hdr,
 		     skb->dev ? skb->dev->ifindex : 0);
 	if (fq == NULL) {
@@ -479,6 +480,7 @@ int nf_ct_frag6_gather(struct net *net, struct sk_buff *skb, u32 user)
 
 	spin_lock_bh(&fq->q.lock);
 
+	/*分片入队或者重组*/
 	ret = nf_ct_frag6_queue(fq, skb, fhdr, nhoff);
 	if (ret == -EPROTO) {
 		skb->transport_header = savethdr;

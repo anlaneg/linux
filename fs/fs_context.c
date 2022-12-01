@@ -98,15 +98,19 @@ static int vfs_parse_sb_flag(struct fs_context *fc, const char *key)
  */
 int vfs_parse_fs_param_source(struct fs_context *fc, struct fs_parameter *param)
 {
+    /*param的key不为source不处理*/
 	if (strcmp(param->key, "source") != 0)
 		return -ENOPARAM;
 
+	/*source必须为字符串类型*/
 	if (param->type != fs_value_is_string)
 		return invalf(fc, "Non-string source");
 
+	/*source必须只出现一次*/
 	if (fc->source)
 		return invalf(fc, "Multiple sources");
 
+	/*设置source*/
 	fc->source = param->string;
 	param->string = NULL;
 	return 0;
@@ -173,7 +177,7 @@ EXPORT_SYMBOL(vfs_parse_fs_param);
  * vfs_parse_fs_string - Convenience function to just parse a string.
  */
 int vfs_parse_fs_string(struct fs_context *fc, const char *key,
-			const char *value, size_t v_size)
+			const char *value, size_t v_size/*value长度*/)
 {
 	int ret;
 
@@ -183,6 +187,7 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 		.size	= v_size,
 	};
 
+	/*复制value*/
 	if (value) {
 		param.string = kmemdup_nul(value, v_size, GFP_KERNEL);
 		if (!param.string)
@@ -636,9 +641,11 @@ static int legacy_get_tree(struct fs_context *fc)
 	if (IS_ERR(root))
 		return PTR_ERR(root);
 
+	/*sb必须为非空*/
 	sb = root->d_sb;
 	BUG_ON(!sb);
 
+	/*填充root节点*/
 	fc->root = root;
 	return 0;
 }
@@ -663,6 +670,7 @@ const struct fs_context_operations legacy_fs_context_ops = {
 	.dup			= legacy_fs_context_dup,
 	.parse_param		= legacy_parse_param,
 	.parse_monolithic	= legacy_parse_monolithic,
+	/*获取并填充文件系统的root节点*/
 	.get_tree		= legacy_get_tree,
 	.reconfigure		= legacy_reconfigure,
 };

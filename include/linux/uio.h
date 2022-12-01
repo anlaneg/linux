@@ -35,7 +35,7 @@ struct iov_iter_state {
 };
 
 struct iov_iter {
-    	//读操作或写操作(另外会依据此类型取不同的union值，例如iov,kvec等）
+    //读操作或写操作(另外会依据此类型取不同的union值，例如iov（ITER_IOVEC）,kvec等）
 	u8 iter_type;
 	bool nofault;
 	bool data_source;
@@ -43,6 +43,7 @@ struct iov_iter {
 	size_t iov_offset;
 	//要读写入的长度
 	size_t count;
+	/*被迭代的数据集*/
 	union {
 		const struct iovec *iov;
 		const struct kvec *kvec;
@@ -74,6 +75,7 @@ static inline void iov_iter_save_state(struct iov_iter *iter,
 	state->nr_segs = iter->nr_segs;
 }
 
+/*是否为iovec类型的iov_iter*/
 static inline bool iter_is_iovec(const struct iov_iter *i)
 {
 	return iov_iter_type(i) == ITER_IOVEC;
@@ -89,6 +91,7 @@ static inline bool iov_iter_is_bvec(const struct iov_iter *i)
 	return iov_iter_type(i) == ITER_BVEC;
 }
 
+/*pipe类型的iter*/
 static inline bool iov_iter_is_pipe(const struct iov_iter *i)
 {
 	return iov_iter_type(i) == ITER_PIPE;
@@ -160,7 +163,7 @@ static inline size_t copy_folio_to_iter(struct folio *folio, size_t offset,
 
 //将addr指向的bytes字节，复制到i中
 static __always_inline __must_check
-size_t copy_to_iter(const void *addr, size_t bytes, struct iov_iter *i)
+size_t copy_to_iter(const void *addr/*源数据起始位置*/, size_t bytes/*可复制长度*/, struct iov_iter *i/*待填充的iter*/)
 {
 	if (unlikely(!check_copy_size(addr, bytes, true)))
 		return 0;

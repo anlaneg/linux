@@ -2,13 +2,14 @@
 /* Generic part */
 
 typedef struct {
-	block_t	*p;
-	block_t	key;
+	block_t	*p;/*指向offset值对应的地址*/
+	block_t	key;/*offset值*/
 	struct buffer_head *bh;
 } Indirect;
 
 static DEFINE_RWLOCK(pointers_lock);
 
+/*填充Indirect*/
 static inline void add_chain(Indirect *p, struct buffer_head *bh, block_t *v)
 {
 	p->key = *(p->p = v);
@@ -17,8 +18,10 @@ static inline void add_chain(Indirect *p, struct buffer_head *bh, block_t *v)
 
 static inline int verify_chain(Indirect *from, Indirect *to)
 {
+    /*from一定小于to,且from到to之间，key一定等于*p*/
 	while (from <= to && from->key == *from->p)
 		from++;
+	/*from如果大于to,则校验成功，否则失败*/
 	return (from > to);
 }
 
@@ -28,27 +31,35 @@ static inline block_t *block_end(struct buffer_head *bh)
 }
 
 static inline Indirect *get_branch(struct inode *inode,
-					int depth,
+					int depth/*offsets数组有效长度*/,
 					int *offsets,
-					Indirect chain[DEPTH],
+					Indirect chain[DEPTH]/*出参，填充chain情况*/,
 					int *err)
 {
 	struct super_block *sb = inode->i_sb;
-	Indirect *p = chain;
+	Indirect *p = chain;/*指向chain,用于chain填充*/
 	struct buffer_head *bh;
 
 	*err = 0;
+
 	/* i_data is not going away, no lock needed */
 	add_chain (chain, NULL, i_data(inode) + *offsets);
 	if (!p->key)
+	    /*offset为0，block用完，报错*/
 		goto no_block;
+
 	while (--depth) {
+	    /*读取p->key对应的block*/
 		bh = sb_bread(sb, block_to_cpu(p->key));
 		if (!bh)
 			goto failure;
+
 		read_lock(&pointers_lock);
+		/*chain与p之间key,p值校验，如果校验失败，则失败*/
 		if (!verify_chain(chain, p))
 			goto changed;
+
+		/*填充下一个chain，待读取的block位于*offsets位置处（其由bh->b_data间接获得block)*/
 		add_chain(++p, bh, (block_t *)bh->b_data + *++offsets);
 		read_unlock(&pointers_lock);
 		if (!p->key)
@@ -74,41 +85,54 @@ static int alloc_branch(struct inode *inode,
 {
 	int n = 0;
 	int i;
+	/*申请一个block*/
 	int parent = minix_new_block(inode);
 	int err = -ENOSPC;
 
+	/*记录0号block*/
 	branch[0].key = cpu_to_block(parent);
 	if (parent) for (n = 1; n < num; n++) {
 		struct buffer_head *bh;
 		/* Allocate the next block */
-		int nr = minix_new_block(inode);
+		int nr = minix_new_block(inode);/*申请一个block*/
 		if (!nr)
+		    /*申请失败跳出*/
 			break;
+		/*记录n号block*/
 		branch[n].key = cpu_to_block(nr);
+
+		/*读取n-1号block内容*/
 		bh = sb_getblk(inode->i_sb, parent);
 		if (!bh) {
+		    /*读取失败，退出*/
 			minix_free_block(inode, nr);
 			err = -ENOMEM;
 			break;
 		}
 		lock_buffer(bh);
+		/*将n-1号block内容清零*/
 		memset(bh->b_data, 0, bh->b_size);
 		branch[n].bh = bh;
-		branch[n].p = (block_t*) bh->b_data + offsets[n];
-		*branch[n].p = branch[n].key;
+		branch[n].p = (block_t*) bh->b_data + offsets[n];/*满足偏移量*/
+		*branch[n].p = branch[n].key;/*在此偏移量位置写入 next block id*/
 		set_buffer_uptodate(bh);
 		unlock_buffer(bh);
 		mark_buffer_dirty_inode(bh, inode);
 		parent = nr;
 	}
 	if (n == num)
+	    /*成功完成，返回0*/
 		return 0;
 
 	/* Allocation failed, free what we already allocated */
 	for (i = 1; i < n; i++)
+	    /*释放成功加载的buffer header*/
 		bforget(branch[i].bh);
+
 	for (i = 0; i < n; i++)
+	    /*释放成功申请的block*/
 		minix_free_block(inode, block_to_cpu(branch[i].key));
+	/*返回错误原因*/
 	return err;
 }
 
@@ -149,21 +173,23 @@ changed:
 	return -EAGAIN;
 }
 
-static int get_block(struct inode * inode, sector_t block,
+static int get_block(struct inode * inode, sector_t block/*要读取的block*/,
 			struct buffer_head *bh, int create)
 {
 	int err = -EIO;
-	int offsets[DEPTH];
+	int offsets[DEPTH];/*依据于block转换为offsets数组*/
 	Indirect chain[DEPTH];
 	Indirect *partial;
 	int left;
-	int depth = block_to_path(inode, block, offsets);
+	/*共3种，1）block小于7（占一格）；2）block小于512（占2格）；3）block大于512（占3格）*/
+	int depth = block_to_path(inode, block, offsets/*出叁，由block转换来*/);
 
 	if (depth == 0)
+	    /*未填充offsets,转发出错*/
 		goto out;
 
 reread:
-	partial = get_branch(inode, depth, offsets, chain, &err);
+	partial = get_branch(inode, depth/*offsets的长度*/, offsets, chain, &err);
 
 	/* Simplest case - block found, no allocation needed */
 	if (!partial) {
@@ -201,6 +227,7 @@ out:
 	if (splice_branch(inode, chain, partial, left) < 0)
 		goto changed;
 
+	/*为bh添加new标记*/
 	set_buffer_new(bh);
 	goto got_it;
 

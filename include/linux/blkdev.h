@@ -464,7 +464,7 @@ struct request_queue {
 	unsigned int		max_active_zones;
 #endif /* CONFIG_BLK_DEV_ZONED */
 
-	int			node;
+	int			node;/*所属的numa node*/
 	struct mutex		debugfs_mutex;
 #ifdef CONFIG_BLK_DEV_IO_TRACE
 	struct blk_trace __rcu	*blk_trace;
@@ -824,7 +824,8 @@ void blk_cleanup_disk(struct gendisk *disk);
 
 int __register_blkdev(unsigned int major, const char *name,
 		void (*probe)(dev_t devt));
-#define register_blkdev(major, name) \
+/*注册block设备*/
+#define register_blkdev(major, name/*block设备名称*/) \
 	__register_blkdev(major, name, NULL)
 void unregister_blkdev(unsigned int major, const char *name);
 

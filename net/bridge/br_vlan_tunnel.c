@@ -179,6 +179,7 @@ void br_handle_ingress_vlan_tunnel(struct sk_buff *skb,
 
 	skb_dst_drop(skb);
 
+	/*设置vlan id及协议*/
 	__vlan_hwaccel_put_tag(skb, p->br->vlan_proto, vlan->vid);
 }
 

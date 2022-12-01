@@ -102,7 +102,7 @@ static void set_tun_src(struct net *net, struct net_device *dev,
 	    /*tunnel src不为0，设置saddr为tunnel src*/
 		memcpy(saddr, tun_src, sizeof(struct in6_addr));
 	} else {
-	    /*选源地址*/
+	    /*通过出接口选源地址*/
 		ipv6_dev_get_saddr(net, dev, daddr, IPV6_PREFER_SRC_PUBLIC,
 				   saddr);
 	}
@@ -119,17 +119,19 @@ static __be32 seg6_make_flowlabel(struct net *net, struct sk_buff *skb,
 	u32 hash;
 
 	if (do_flowlabel > 0) {
+	    /*取skb的hash，并利用其产生flowlabel*/
 		hash = skb_get_hash(skb);
 		hash = rol32(hash, 16);
 		flowlabel = (__force __be32)hash & IPV6_FLOWLABEL_MASK;
 	} else if (!do_flowlabel && skb->protocol == htons(ETH_P_IPV6)) {
+	    /*取inner header中对应的flow label*/
 		flowlabel = ip6_flowlabel(inner_hdr);
 	}
 	return flowlabel;
 }
 
 /* encapsulate an IPv6 packet within an outer IPv6 header with a given SRH */
-int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
+int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh/*要添加的sr_hdr*/, int proto/*内层协议*/)
 {
 	struct dst_entry *dst = skb_dst(skb);
 	struct net *net = dev_net(dst->dev);
@@ -138,7 +140,9 @@ int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 	int hdrlen, tot_len, err;
 	__be32 flowlabel;
 
+	/*srv6 header长度*/
 	hdrlen = (osrh->hdrlen + 1) << 3;
+	/*增加的封装长度*/
 	tot_len = hdrlen + sizeof(*hdr);
 
 	err = skb_cow_head(skb, tot_len + skb->mac_len);
@@ -147,13 +151,18 @@ int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 
 	/*取此报文的内层header*/
 	inner_hdr = ipv6_hdr(skb);
+
+	/*取flowlabel*/
 	flowlabel = seg6_make_flowlabel(net, skb, inner_hdr);
 
 	/*左侧空出tot_len长度*/
 	skb_push(skb, tot_len);
-	skb_reset_network_header(skb);/*定义新位置为network头*/
-	skb_mac_header_rebuild(skb);/*设置mac头*/
-	hdr = ipv6_hdr(skb);/*取新的ipv6 header*/
+	/*定义新位置为network头*/
+	skb_reset_network_header(skb);
+	/*先依据之前内容，设置mac头*/
+	skb_mac_header_rebuild(skb);
+	/*取新的ipv6 header*/
+	hdr = ipv6_hdr(skb);
 
 	/* inherit tc, flowlabel and hlim
 	 * hlim will be decremented in ip6_forward() afterwards and
@@ -161,11 +170,15 @@ int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 	 */
 
 	if (skb->protocol == htons(ETH_P_IPV6)) {
+	    /*待封装的skb为ipv6，填充新的ipv6前4个字节*/
 		ip6_flow_hdr(hdr, ip6_tclass(ip6_flowinfo(inner_hdr)),
 			     flowlabel);
+		/*继承内层的hop limit*/
 		hdr->hop_limit = inner_hdr->hop_limit;
 	} else {
+	    /*tclass置为0，flowlabel来源于上面*/
 		ip6_flow_hdr(hdr, 0, flowlabel);
+		/*使用配置的TTL*/
 		hdr->hop_limit = ip6_dst_hoplimit(skb_dst(skb));
 
 		memset(IP6CB(skb), 0, sizeof(*IP6CB(skb)));
@@ -179,14 +192,19 @@ int seg6_do_srh_encap(struct sk_buff *skb, struct ipv6_sr_hdr *osrh, int proto)
 		IP6CB(skb)->iif = skb->skb_iif;
 	}
 
-	hdr->nexthdr = NEXTHDR_ROUTING;/*指明下层为routing*/
+	/*指明下层为routing*/
+	hdr->nexthdr = NEXTHDR_ROUTING;
 
+	/*复制osrh中的内容*/
 	isrh = (void *)hdr + sizeof(*hdr);
-	memcpy(isrh, osrh, hdrlen);/*复制osrh中的内容*/
+	memcpy(isrh, osrh, hdrlen);
 
-	isrh->nexthdr = proto;/*指明负载的协议*/
+	/*指明负载的协议*/
+	isrh->nexthdr = proto;
 
-	hdr->daddr = isrh->segments[isrh->first_segment];/*指定目的地址为first segment*/
+	/*指定目的地址为first segment*/
+	hdr->daddr = isrh->segments[isrh->first_segment];
+	/*选择tunnel源地址*/
 	set_tun_src(net, dst->dev, &hdr->daddr, &hdr->saddr/*出参，选择源地址*/);
 
 #ifdef CONFIG_IPV6_SEG6_HMAC
@@ -222,13 +240,14 @@ int seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh/*要插入�
 
 	/*剥掉此skb上的ipv6头部*/
 	skb_pull(skb, sizeof(struct ipv6hdr));
+	/*更新checksum*/
 	skb_postpull_rcsum(skb, skb_network_header(skb),
 			   sizeof(struct ipv6hdr));
 
 	/*增加新的ipv6头+srv6头*/
 	skb_push(skb, sizeof(struct ipv6hdr) + hdrlen);
 	skb_reset_network_header(skb);/*指明data现在的位置为network头*/
-	skb_mac_header_rebuild(skb);
+	skb_mac_header_rebuild(skb);/*先修改旧的mac header到新位置*/
 
 	/*取新的ipv6 header*/
 	hdr = ipv6_hdr(skb);
@@ -260,12 +279,14 @@ int seg6_do_srh_inline(struct sk_buff *skb, struct ipv6_sr_hdr *osrh/*要插入�
 	}
 #endif
 
+	/*checksum更新*/
 	skb_postpush_rcsum(skb, hdr, sizeof(struct ipv6hdr) + hdrlen);
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(seg6_do_srh_inline);
 
+/*执行srv6封装*/
 static int seg6_do_srh(struct sk_buff *skb)
 {
 	struct dst_entry *dst = skb_dst(skb);
@@ -291,6 +312,7 @@ static int seg6_do_srh(struct sk_buff *skb)
 		if (err)
 			return err;
 
+		/*获知要封装的协议,当前encap仅支持ipv4/ipv6*/
 		if (skb->protocol == htons(ETH_P_IPV6))
 			proto = IPPROTO_IPV6;
 		else if (skb->protocol == htons(ETH_P_IP))
@@ -341,7 +363,7 @@ static int seg6_input_finish(struct net *net, struct sock *sk,
 	return dst_input(skb);
 }
 
-static int seg6_input_core(struct net *net, struct sock *sk,
+static int seg6_input_core(struct net *net/*skb所属的net namespace*/, struct sock *sk,
 			   struct sk_buff *skb)
 {
 	struct dst_entry *orig_dst = skb_dst(skb);
@@ -349,7 +371,8 @@ static int seg6_input_core(struct net *net, struct sock *sk,
 	struct seg6_lwt *slwt;
 	int err;
 
-	err = seg6_do_srh(skb);/*增加srv6头，执行封装*/
+	/*增加srv6头，执行封装*/
+	err = seg6_do_srh(skb);
 	if (unlikely(err)) {
 		kfree_skb(skb);
 		return err;
@@ -423,7 +446,8 @@ static int seg6_output_core(struct net *net, struct sock *sk,
 	struct seg6_lwt *slwt;
 	int err;
 
-	err = seg6_do_srh(skb);/*增加srv6头，执行封装*/
+	/*增加srv6头，执行封装*/
+	err = seg6_do_srh(skb);
 	if (unlikely(err))
 		goto drop;
 
@@ -499,6 +523,7 @@ static int seg6_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 	return seg6_output_core(net, sk, skb);
 }
 
+/*依据netlink消息填充并构造lwtunnel_state*/
 static int seg6_build_state(struct net *net, struct nlattr *nla,
 			    unsigned int family, const void *cfg,
 			    struct lwtunnel_state **ts/*出参，构造好的隧道状态*/,
@@ -511,6 +536,7 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	struct seg6_lwt *slwt;
 	int err;
 
+	/*family必须为inet/inet6*/
 	if (family != AF_INET && family != AF_INET6)
 		return -EINVAL;
 
@@ -521,6 +547,7 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	if (err < 0)
 		return err;
 
+	/*必须配置有iptunnel-srh*/
 	if (!tb[SEG6_IPTUNNEL_SRH])
 		return -EINVAL;
 
@@ -531,22 +558,25 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	/* tuninfo must contain at least the iptunnel encap structure,
 	 * the SRH and one segment
 	 */
+	/*最小的大小，指出tunnel mode + srv6 header + 一个ipv6地址*/
 	min_size = sizeof(*tuninfo) + sizeof(struct ipv6_sr_hdr) +
 		   sizeof(struct in6_addr);
 	if (tuninfo_len < min_size)
 	    /*给的长度不足以存放一个ipv6_sr_hdr,长度有误，报错*/
 		return -EINVAL;
 
+	/*针对mode进行校验*/
 	switch (tuninfo->mode) {
-	/*tunnel info为inline模式*/
 	case SEG6_IPTUN_MODE_INLINE:
+	    /*tunnel info为inline模式时,family必须为ipv6*/
 		if (family != AF_INET6)
 			return -EINVAL;
-
 		break;
 	case SEG6_IPTUN_MODE_ENCAP:
+	    /*l3层encap*/
 		break;
 	case SEG6_IPTUN_MODE_L2ENCAP:
+	    /*l2层encap*/
 		break;
 	default:
 		return -EINVAL;
@@ -556,11 +586,12 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	if (!seg6_validate_srh(tuninfo->srh, tuninfo_len - sizeof(*tuninfo), false))
 		return -EINVAL;
 
+	/*申请lwtunnel_state*/
 	newts = lwtunnel_state_alloc(tuninfo_len + sizeof(*slwt));
 	if (!newts)
 		return -ENOMEM;
 
-	/*取其对应的私有结构*/
+	/*取其对应的私有结构*slwt*/
 	slwt = seg6_lwt_lwtunnel(newts);
 
 	err = dst_cache_init(&slwt->cache, GFP_ATOMIC);
@@ -575,6 +606,7 @@ static int seg6_build_state(struct net *net, struct nlattr *nla,
 	newts->type = LWTUNNEL_ENCAP_SEG6;
 	newts->flags |= LWTUNNEL_STATE_INPUT_REDIRECT;
 
+	/*针对非l2encap，再加output redirect*/
 	if (tuninfo->mode != SEG6_IPTUN_MODE_L2ENCAP)
 		newts->flags |= LWTUNNEL_STATE_OUTPUT_REDIRECT;
 
@@ -639,5 +671,6 @@ int __init seg6_iptunnel_init(void)
 
 void seg6_iptunnel_exit(void)
 {
+    /*解注册seg6隧道*/
 	lwtunnel_encap_del_ops(&seg6_iptun_ops, LWTUNNEL_ENCAP_SEG6);
 }

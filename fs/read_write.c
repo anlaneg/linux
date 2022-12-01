@@ -34,6 +34,7 @@ const struct file_operations generic_ro_fops = {
 
 EXPORT_SYMBOL(generic_ro_fops);
 
+/*检查当前文件是否采用unsinged offset方式，如不是，则所有offset为有符号整数*/
 static inline bool unsigned_offsets(struct file *file)
 {
 	return file->f_mode & FMODE_UNSIGNED_OFFSET;
@@ -370,6 +371,7 @@ out_putf:
 int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t count)
 {
 	if (unlikely((ssize_t) count < 0))
+	    /*计划读取的长度小于0，报错*/
 		return -EINVAL;
 
 	if (ppos) {
@@ -377,6 +379,7 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 
 		if (unlikely(pos < 0)) {
 			if (!unsigned_offsets(file))
+			    /*文件为有符号offsets,当前长度为负，报错*/
 				return -EINVAL;
 			if (count >= -pos) /* both values are in 0..LLONG_MAX */
 				return -EOVERFLOW;
@@ -391,8 +394,9 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 }
 EXPORT_SYMBOL(rw_verify_area);
 
-static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, loff_t *ppos)
+static ssize_t new_sync_read(struct file *filp/*要读取的文件*/, char __user *buf/*读者提供的buffer*/, size_t len/*读者期待的读长度*/, loff_t *ppos/*入出参，在文件中的读起始位置*/)
 {
+    /*填写buffer信息*/
 	struct iovec iov = { .iov_base = buf, .iov_len = len };
 	struct kiocb kiocb;
 	struct iov_iter iter;
@@ -400,12 +404,14 @@ static ssize_t new_sync_read(struct file *filp, char __user *buf, size_t len, lo
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
+	/*初始化iter迭代器*/
 	iov_iter_init(&iter, READ, &iov, 1, len);
 
+	/*调用此文件的read_iter回调*/
 	ret = call_read_iter(filp, &kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
 	if (ppos)
-		*ppos = kiocb.ki_pos;
+		*ppos = kiocb.ki_pos;/*更新新的读写位置*/
 	return ret;
 }
 
@@ -467,19 +473,22 @@ ssize_t kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 EXPORT_SYMBOL(kernel_read);
 
 //vfs实现数据读取
-ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
+ssize_t vfs_read(struct file *file/*要读取的文件*/, char __user *buf/*待填充的buffer*/, size_t count/*待填充buffer长度*/, loff_t *pos/*文件当前位置*/)
 {
 	ssize_t ret;
 
 	if (!(file->f_mode & FMODE_READ))
+	    /*无读权限，报错*/
 		return -EBADF;
 	if (!(file->f_mode & FMODE_CAN_READ))
+	    /*不可读，报错*/
 		return -EINVAL;
+
 	//检查buf规定的长度是否可读取（通过检查进程的地址范围获得结论）
 	if (unlikely(!access_ok(buf, count)))
 		return -EFAULT;
 
-	//读范围检查
+	//读范围检查，参数有效性检查
 	ret = rw_verify_area(READ, file, pos, count);
 	if (ret)
 		return ret;
@@ -502,7 +511,7 @@ ssize_t vfs_read(struct file *file, char __user *buf, size_t count, loff_t *pos)
 	return ret;
 }
 
-static ssize_t new_sync_write(struct file *filp, const char __user *buf, size_t len, loff_t *ppos)
+static ssize_t new_sync_write(struct file *filp/*要写入的文件*/, const char __user *buf/*要写入的内容*/, size_t len/*要写入的内容长度*/, loff_t *ppos/*当前文件位置*/)
 {
 	struct iovec iov = { .iov_base = (void __user *)buf, .iov_len = len };
 	struct kiocb kiocb;
@@ -599,6 +608,7 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	if (count > MAX_RW_COUNT)
 		count =  MAX_RW_COUNT;
 	file_start_write(file);
+	/*通过回调，实现文件写*/
 	if (file->f_op->write)
 		ret = file->f_op->write(file, buf, count, pos);
 	else if (file->f_op->write_iter)
@@ -648,7 +658,7 @@ ssize_t ksys_read(unsigned int fd, char __user *buf, size_t count)
 //实现系统调用read
 SYSCALL_DEFINE3(read, unsigned int, fd, char __user *, buf, size_t, count)
 {
-	return ksys_read(fd, buf, count);
+	return ksys_read(fd/*要读取的fd*/, buf/*内容填充buffer*/, count/*buffer长度*/);
 }
 
 ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)

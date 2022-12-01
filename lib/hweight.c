@@ -38,7 +38,24 @@ EXPORT_SYMBOL(__sw_hweight16);
 
 unsigned int __sw_hweight8(unsigned int w)
 {
-	//
+    /*
+     * https://www.cnblogs.com/graphics/archive/2010/06/21/1752421.html
+     * 已知w是一个8bits的值，将它的每一位都看成是一个未知数。
+     * （即有a,b,c,d,e,f,g,h 共八未知数，未知数取值只能是{0,1})
+     * 则有w=128a+64b+32c+16d+8e+4f+2g+h
+     *    w>>1 即为 (w>>1)=64a+32b+16c+8d+4e+2f+g
+     *    res=w-((w>>1) & 0x55) = (128a+64b+32c+16d+8e+4f+2g+h) - (64a+16c+4e+g)\
+     *                      = 64a+64b+16c+16d+4e+4f+g+h (此操作下，a,b,c,d,e...8个未知数仍在）
+     *    res = (res & 0x33) + ((res >> 2) & 0x33) =
+     *      (16c+16d+g+h) + ((16a+16b+4c+4d+e+f) & 0x33)
+     *      = (16c+16d+g+h) + (16a+16b+e+f) = 16a+16b+16c+16d+e+f+g+h
+     *
+     *    (res + (res >> 4)) & 0x0f =
+     *      ((16a+16b+16c+16d+e+f+g+h) + (a+b+c+d)) & 0x0f
+     *      = （16a+16b+16c+16d+(a+b+c+d+e+f+g+h)）& 0x0f
+     *   通过讨论可知道，如果a，b，c，d中有‘1’,则结果会大于16，与0xf与可清除这部分计算
+     *      = a+b+c+d+e+f+g+h 即获得w中有多少个1
+     * */
 	unsigned int res = w - ((w >> 1) & 0x55);
 	res = (res & 0x33) + ((res >> 2) & 0x33);
 	return (res + (res >> 4)) & 0x0F;
