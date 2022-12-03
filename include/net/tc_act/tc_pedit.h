@@ -16,6 +16,7 @@ struct tcf_pedit {
 	struct tc_action	common;
 	unsigned char		tcfp_nkeys;//tcfp_keys数目
 	unsigned char		tcfp_flags;
+	u32			tcfp_off_max_hint;
 	//要修改的key参数
 	struct tc_pedit_key	*tcfp_keys;
 	/*修改方式及修改基准*/

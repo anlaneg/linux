@@ -28,11 +28,21 @@ static inline void *kzalloc(size_t size, gfp_t gfp)
 	return kmalloc(size, gfp | __GFP_ZERO);
 }
 
-void *kmem_cache_alloc(struct kmem_cache *cachep, int flags);
+struct list_lru;
+
+void *kmem_cache_alloc_lru(struct kmem_cache *cachep, struct list_lru *, int flags);
+static inline void *kmem_cache_alloc(struct kmem_cache *cachep, int flags)
+{
+	return kmem_cache_alloc_lru(cachep, NULL, flags);
+}
 void kmem_cache_free(struct kmem_cache *cachep, void *objp);
 
 struct kmem_cache *kmem_cache_create(const char *name, unsigned int size,
 			unsigned int align, unsigned int flags,
 			void (*ctor)(void *));
+
+void kmem_cache_free_bulk(struct kmem_cache *cachep, size_t size, void **list);
+int kmem_cache_alloc_bulk(struct kmem_cache *cachep, gfp_t gfp, size_t size,
+			  void **list);
 
 #endif		/* _TOOLS_SLAB_H */

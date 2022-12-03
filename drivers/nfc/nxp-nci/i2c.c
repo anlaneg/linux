@@ -128,7 +128,9 @@ static int nxp_nci_i2c_fw_read(struct nxp_nci_i2c_phy *phy,
 
 	//收取fw头部指定的长度
 	r = i2c_master_recv(client, skb_put(*skb, frame_len), frame_len);
-	if (r != frame_len) {
+	if (r < 0) {
+		goto fw_read_exit_free_skb;
+	} else if (r != frame_len) {
 		nfc_err(&client->dev,
 			"Invalid frame length: %u (expected %zu)\n",
 			r, frame_len);
@@ -172,9 +174,14 @@ static int nxp_nci_i2c_nci_read(struct nxp_nci_i2c_phy *phy,
 	//将数据头部放入skb
 	skb_put_data(*skb, (void *)&header, NCI_CTRL_HDR_SIZE);
 
+	if (!header.plen)
+		return 0;
+
 	//按header中长度指定，收取数据，并填充进skb
 	r = i2c_master_recv(client, skb_put(*skb, header.plen), header.plen);
-	if (r != header.plen) {
+	if (r < 0) {
+		goto nci_read_exit_free_skb;
+	} else if (r != header.plen) {
 		nfc_err(&client->dev,
 			"Invalid frame payload length: %u (expected %u)\n",
 			r, header.plen);
@@ -323,14 +330,12 @@ static int nxp_nci_i2c_probe(struct i2c_client *client,
 	return r;
 }
 
-static int nxp_nci_i2c_remove(struct i2c_client *client)
+static void nxp_nci_i2c_remove(struct i2c_client *client)
 {
 	struct nxp_nci_i2c_phy *phy = i2c_get_clientdata(client);
 
 	nxp_nci_remove(phy->ndev);
 	free_irq(client->irq, phy);
-
-	return 0;
 }
 
 static const struct i2c_device_id nxp_nci_i2c_id_table[] = {

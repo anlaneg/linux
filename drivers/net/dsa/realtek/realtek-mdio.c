@@ -245,8 +245,6 @@ static void realtek_mdio_remove(struct mdio_device *mdiodev)
 	/* leave the device reset asserted */
 	if (priv->reset)
 		gpiod_set_value(priv->reset, 1);
-
-	dev_set_drvdata(&mdiodev->dev, NULL);
 }
 
 static void realtek_mdio_shutdown(struct mdio_device *mdiodev)
@@ -267,7 +265,6 @@ static const struct of_device_id realtek_mdio_of_match[] = {
 #endif
 #if IS_ENABLED(CONFIG_NET_DSA_REALTEK_RTL8365MB)
 	{ .compatible = "realtek,rtl8365mb", .data = &rtl8365mb_variant, },
-	{ .compatible = "realtek,rtl8367s", .data = &rtl8365mb_variant, },
 #endif
 	{ /* sentinel */ },
 };

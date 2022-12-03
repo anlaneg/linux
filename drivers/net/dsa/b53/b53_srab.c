@@ -491,10 +491,8 @@ static const struct b53_io_ops b53_srab_ops = {
 	.irq_disable = b53_srab_irq_disable,
 	.phylink_get_caps = b53_srab_phylink_get_caps,
 #if IS_ENABLED(CONFIG_B53_SERDES)
+	.phylink_mac_select_pcs = b53_serdes_phylink_mac_select_pcs,
 	.serdes_map_lane = b53_srab_serdes_map_lane,
-	.serdes_link_state = b53_serdes_link_state,
-	.serdes_config = b53_serdes_config,
-	.serdes_an_restart = b53_serdes_an_restart,
 	.serdes_link_set = b53_serdes_link_set,
 #endif
 };
@@ -668,8 +666,6 @@ static int b53_srab_remove(struct platform_device *pdev)
 
 	b53_srab_intr_set(dev->priv, false);
 	b53_switch_remove(dev);
-
-	platform_set_drvdata(pdev, NULL);
 
 	return 0;
 }

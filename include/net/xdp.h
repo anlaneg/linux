@@ -166,13 +166,15 @@ struct xdp_frame {
 	void *data;/*指向报文起始位置*/
 	u16 len;/*报文长度*/
 	u16 headroom;/*报文headroom大小，在data之前*/
-	u32 metasize:8;/*frame的data前面存放的是metadata*/
-	u32 frame_sz:24;/*buffer大小*/
+	/*frame的data前面存放的是metadata*/
+	/*buffer大小*/
+	u32 metasize; /* uses lower 8-bits */
 	/* Lifetime of xdp_rxq_info is limited to NAPI/enqueue time,
 	 * while mem info is valid on remote CPU.
 	 */
 	struct xdp_mem_info mem;
 	struct net_device *dev_rx; /* used by cpumap */
+	u32 frame_sz;
 	u32 flags; /* supported values defined in xdp_buff_flags */
 };
 

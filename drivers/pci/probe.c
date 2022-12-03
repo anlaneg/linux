@@ -1320,7 +1320,7 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 
 	if ((secondary || subordinate) && !pcibios_assign_all_busses() &&
 	    !is_cardbus && !broken) {
-		unsigned int cmax;
+		unsigned int cmax, buses;
 
 		/*
 		 * Bus already configured by firmware, process it in the
@@ -1345,7 +1345,8 @@ static int pci_scan_bridge_extend(struct pci_bus *bus, struct pci_dev *dev,
 			child->bridge_ctl = bctl;
 		}
 
-		cmax = pci_scan_child_bus(child);
+		buses = subordinate - secondary;
+		cmax = pci_scan_child_bus_extend(child, buses);
 		if (cmax > subordinate)
 			pci_warn(dev, "bridge has subordinate %02x but max busn %02x\n",
 				 subordinate, cmax);
@@ -1923,6 +1924,9 @@ int pci_setup_device(struct pci_dev *dev)
 
 	dev->broken_intx_masking = pci_intx_mask_broken(dev);
 
+	/* Clear errors left from system firmware */
+	pci_write_config_word(dev, PCI_STATUS, 0xffff);
+
 	switch (dev->hdr_type) {		    /* header type */
 	//‘0’型头部用于一般的pci设备
 	case PCI_HEADER_TYPE_NORMAL:		    /* standard header */
@@ -2350,7 +2354,7 @@ EXPORT_SYMBOL(pci_alloc_dev);
 
 static bool pci_bus_crs_vendor_id(u32 l)
 {
-	return (l & 0xffff) == 0x0001;//vendor_id==1是revert的，不参与分配
+	return (l & 0xffff) == PCI_VENDOR_ID_PCI_SIG;//vendor_id==1是revert的，不参与分配
 }
 
 static bool pci_bus_wait_crs(struct pci_bus *bus, int devfn, u32 *l,
@@ -2629,33 +2633,39 @@ struct pci_dev *pci_scan_single_device(struct pci_bus *bus, int devfn)
 }
 EXPORT_SYMBOL(pci_scan_single_device);
 
-static unsigned int next_fn(struct pci_bus *bus, struct pci_dev *dev,
-			    unsigned int fn)
+static int next_ari_fn(struct pci_bus *bus, struct pci_dev *dev, int fn)
 {
 	int pos;
 	u16 cap = 0;
 	unsigned int next_fn;
 
-	if (pci_ari_enabled(bus)) {
-		if (!dev)
-			return 0;
-		pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ARI);
-		if (!pos)
-			return 0;
+	if (!dev)
+		return -ENODEV;
 
-		pci_read_config_word(dev, pos + PCI_ARI_CAP, &cap);
-		next_fn = PCI_ARI_CAP_NFN(cap);
-		if (next_fn <= fn)
-			return 0;	/* protect against malformed list */
+	pos = pci_find_ext_capability(dev, PCI_EXT_CAP_ID_ARI);
+	if (!pos)
+		return -ENODEV;
 
-		return next_fn;
-	}
+	pci_read_config_word(dev, pos + PCI_ARI_CAP, &cap);
+	next_fn = PCI_ARI_CAP_NFN(cap);
+	if (next_fn <= fn)
+		return -ENODEV;	/* protect against malformed list */
 
-	/* dev may be NULL for non-contiguous multifunction devices */
-	if (!dev || dev->multifunction)
-		return (fn + 1) % 8;
+	return next_fn;
+}
 
-	return 0;
+static int next_fn(struct pci_bus *bus, struct pci_dev *dev, int fn)
+{
+	if (pci_ari_enabled(bus))
+		return next_ari_fn(bus, dev, fn);
+
+	if (fn >= 7)
+		return -ENODEV;
+	/* only multifunction devices may have more functions */
+	if (dev && !dev->multifunction)
+		return -ENODEV;
+
+	return fn + 1;
 }
 
 static int only_one_child(struct pci_bus *bus)
@@ -2694,28 +2704,32 @@ static int only_one_child(struct pci_bus *bus)
 //在$bus上扫描devfn(这里dev和fn被和在一起了，每个设备最多有８个fn）
 int pci_scan_slot(struct pci_bus *bus, int devfn)
 {
-	unsigned int fn, nr = 0;
 	struct pci_dev *dev;
+	int fn = 0, nr = 0;
 
 	if (only_one_child(bus) && (devfn > 0))
 		return 0; /* Already scanned the entire slot */
 
-	//扫描一个设备，function为0
-	dev = pci_scan_single_device(bus, devfn);
-	if (!dev)
-		return 0;//没有扫出来device,退出
-	if (!pci_dev_is_added(dev))
-		nr++;
-
-    //扫描下一个fn
-	for (fn = next_fn(bus, dev, 0); fn > 0; fn = next_fn(bus, dev, fn)) {
+	do {
+		//扫描一个设备，function为0
 		dev = pci_scan_single_device(bus, devfn + fn);
 		if (dev) {
 			if (!pci_dev_is_added(dev))
 				nr++;
-			dev->multifunction = 1;
+			if (fn > 0)
+				dev->multifunction = 1;
+		} else if (fn == 0) {
+			/*
+			 * Function 0 is required unless we are running on
+			 * a hypervisor that passes through individual PCI
+			 * functions.
+			 */
+			if (!hypervisor_isolated_pci_functions())
+				break;
 		}
-	}
+		//扫描下一个fn
+		fn = next_fn(bus, dev, fn);
+	} while (fn >= 0);
 
 	/* Only one slot has PCIe device */
 	if (bus->self && nr)
@@ -2911,31 +2925,16 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 {
 	unsigned int used_buses, normal_bridges = 0, hotplug_bridges = 0;
 	unsigned int start = bus->busn_res.start;
-	unsigned int devfn, fn, cmax, max = start;
+	unsigned int devfn, cmax, max = start;
 	struct pci_dev *dev;
-	int nr_devs;
 
 	dev_dbg(&bus->dev, "scanning bus\n");
 
 	/* Go find them, Rover! */
-    //最多支持0x100(256)个dev-function,每个pci_san_slot尝试扫8个
-    //每个设备最多有8个function
-	for (devfn = 0; devfn < 256; devfn += 8) {
-		nr_devs = pci_scan_slot(bus, devfn);
-
-		/*
-		 * The Jailhouse hypervisor may pass individual functions of a
-		 * multi-function device to a guest without passing function 0.
-		 * Look for them as well.
-		 */
-		if (jailhouse_paravirt() && nr_devs == 0) {
-			for (fn = 1; fn < 8; fn++) {
-				dev = pci_scan_single_device(bus, devfn + fn);
-				if (dev)
-					dev->multifunction = 1;
-			}
-		}
-	}
+	//最多支持0x100(256)个dev-function,每个pci_san_slot尝试扫8个
+	//每个设备最多有8个function
+	for (devfn = 0; devfn < 256; devfn += 8)
+		pci_scan_slot(bus, devfn);
 
 	/* Reserve buses for SR-IOV capability */
 	used_buses = pci_iov_bus_range(bus);
@@ -2977,8 +2976,8 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 		 * hotplug bridges too much during the second scan below.
 		 */
 		used_buses++;
-		if (cmax - max > 1)
-			used_buses += cmax - max - 1;
+		if (max - cmax > 1)
+			used_buses += max - cmax - 1;
 	}
 
 	/* Scan bridges that need to be reconfigured */
@@ -2986,7 +2985,6 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 		unsigned int buses = 0;
 
 		if (!hotplug_bridges && normal_bridges == 1) {
-
 			/*
 			 * There is only one bridge on the bus (upstream
 			 * port) so it gets all available buses which it
@@ -2995,7 +2993,6 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 			 */
 			buses = available_buses;
 		} else if (dev->is_hotplug_bridge) {
-
 			/*
 			 * Distribute the extra buses between hotplug
 			 * bridges if any.
@@ -3014,7 +3011,7 @@ static unsigned int pci_scan_child_bus_extend(struct pci_bus *bus,
 	/*
 	 * Make sure a hotplug bridge has at least the minimum requested
 	 * number of buses but allow it to grow up to the maximum available
-	 * bus number of there is room.
+	 * bus number if there is room.
 	 */
 	if (bus->self && bus->self->is_hotplug_bridge) {
 		used_buses = max_t(unsigned int, available_buses,

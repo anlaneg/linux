@@ -130,8 +130,10 @@ struct ipv6hdr {
 	__u8			nexthdr;//下一头部
 	__u8			hop_limit;//跳限制数
 
-	struct	in6_addr	saddr;/*源地址*/
-	struct	in6_addr	daddr;/*目的地址*/
+	__struct_group(/* no tag */, addrs, /* no attrs */,
+		struct	in6_addr	saddr;/*源地址*/
+		struct	in6_addr	daddr;/*目的地址*/
+	);
 };
 
 
@@ -194,6 +196,7 @@ enum {
 	DEVCONF_IOAM6_ID,
 	DEVCONF_IOAM6_ID_WIDE,
 	DEVCONF_NDISC_EVICT_NOCARRIER,
+	DEVCONF_ACCEPT_UNTRACKED_NA,
 	DEVCONF_MAX
 };
 

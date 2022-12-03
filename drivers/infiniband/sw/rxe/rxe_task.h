@@ -19,7 +19,6 @@ enum {
  * called again.
  */
 struct rxe_task {
-	void			*obj;
 	/*task对应的softirq的tasklet*/
 	struct tasklet_struct	tasklet;
 	int			state;
@@ -38,7 +37,7 @@ struct rxe_task {
  *	arg  => parameter to pass to fcn
  *	func => function to call until it returns != 0
  */
-int rxe_init_task(void *obj, struct rxe_task *task,
+int rxe_init_task(struct rxe_task *task,
 		  void *arg, int (*func)(void *), char *name);
 
 /* cleanup task */

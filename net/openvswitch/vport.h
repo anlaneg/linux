@@ -91,13 +91,15 @@ struct vport {
  * @type: New vport's type.
  * @options: %OVS_VPORT_ATTR_OPTIONS attribute from Netlink message, %NULL if
  * none was supplied.
+ * @desired_ifindex: New vport's ifindex.
  * @dp: New vport's datapath.
  * @port_no: New vport's port number.
  */
 struct vport_parms {
 	const char *name;//vport名称
 	enum ovs_vport_type type;//vport类型
-	struct nlattr *options;//vport配置选项
+	int desired_ifindex;//vport配置选项
+	struct nlattr *options;
 
 	/* For ovs_vport_alloc(). */
 	struct datapath *dp;//vport所属的datapath
@@ -132,7 +134,7 @@ struct vport_ops {
 	int (*get_options)(const struct vport *, struct sk_buff *);
 
 	//完在报文自对应的vport发送出去
-	netdev_tx_t (*send) (struct sk_buff *skb);
+	int (*send)(struct sk_buff *skb);
 	struct module *owner;
 	struct list_head list;
 };

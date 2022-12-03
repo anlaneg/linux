@@ -29,15 +29,15 @@
  * change between calls to kernel_read_file().
  *
  * Returns number of bytes read (no single read will be bigger
- * than INT_MAX), or negative on error.
+ * than SSIZE_MAX), or negative on error.
  *
  */
-int kernel_read_file(struct file *file, loff_t offset, void **buf,
-		     size_t buf_size, size_t *file_size,
-		     enum kernel_read_file_id id)
+ssize_t kernel_read_file(struct file *file, loff_t offset, void **buf,
+			 size_t buf_size, size_t *file_size,
+			 enum kernel_read_file_id id)
 {
 	loff_t i_size, pos;
-	size_t copied;
+	ssize_t copied;
 	void *allocated = NULL;
 	bool whole_file;
 	int ret;
@@ -59,8 +59,8 @@ int kernel_read_file(struct file *file, loff_t offset, void **buf,
 		goto out;
 	}
 	/* The file is too big for sane activities. */
-	if (i_size > INT_MAX) {
-	    /*文件内容过大*/
+	if (i_size > SSIZE_MAX) {
+		/*文件内容过大*/
 		ret = -EFBIG;
 		goto out;
 	}
@@ -129,12 +129,12 @@ out:
 }
 EXPORT_SYMBOL_GPL(kernel_read_file);
 
-int kernel_read_file_from_path(const char *path, loff_t offset, void **buf,
-			       size_t buf_size, size_t *file_size,
-			       enum kernel_read_file_id id)
+ssize_t kernel_read_file_from_path(const char *path, loff_t offset, void **buf,
+				   size_t buf_size, size_t *file_size,
+				   enum kernel_read_file_id id)
 {
 	struct file *file;
-	int ret;
+	ssize_t ret;
 
 	if (!path || !*path)
 		return -EINVAL;
@@ -149,14 +149,14 @@ int kernel_read_file_from_path(const char *path, loff_t offset, void **buf,
 }
 EXPORT_SYMBOL_GPL(kernel_read_file_from_path);
 
-int kernel_read_file_from_path_initns(const char *path, loff_t offset,
-				      void **buf, size_t buf_size,
-				      size_t *file_size,
-				      enum kernel_read_file_id id)
+ssize_t kernel_read_file_from_path_initns(const char *path, loff_t offset,
+					  void **buf, size_t buf_size,
+					  size_t *file_size,
+					  enum kernel_read_file_id id)
 {
 	struct file *file;
 	struct path root;
-	int ret;
+	ssize_t ret;
 
 	if (!path || !*path)
 		return -EINVAL;
@@ -176,13 +176,13 @@ int kernel_read_file_from_path_initns(const char *path, loff_t offset,
 }
 EXPORT_SYMBOL_GPL(kernel_read_file_from_path_initns);
 
-int kernel_read_file_from_fd(int fd, loff_t offset, void **buf,
-			     size_t buf_size, size_t *file_size,
-			     enum kernel_read_file_id id)
+ssize_t kernel_read_file_from_fd(int fd, loff_t offset, void **buf,
+				 size_t buf_size, size_t *file_size,
+				 enum kernel_read_file_id id)
 {
     /*获取文件*/
 	struct fd f = fdget(fd);
-	int ret = -EBADF;
+	ssize_t ret = -EBADF;
 
 	if (!f.file || !(f.file->f_mode & FMODE_READ))
 		goto out;

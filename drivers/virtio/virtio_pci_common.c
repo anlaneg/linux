@@ -112,8 +112,8 @@ static int vp_request_msix_vectors(struct virtio_device *vdev, int nvectors/*请
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	/*virtio设备名称*/
 	const char *name = dev_name(&vp_dev->vdev.dev);
-	unsigned flags = PCI_IRQ_MSIX;/*默认请求msi-x类型中断*/
-	unsigned i, v;
+	unsigned int flags = PCI_IRQ_MSIX;/*默认请求msi-x类型中断*/
+	unsigned int i, v;
 	int err = -ENOMEM;
 
 	vp_dev->msix_vectors = nvectors;
@@ -188,7 +188,7 @@ error:
 }
 
 //创建vq,设置vq物理地址，中断号
-static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned index/*虚队列index*/,
+static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int index/*虚队列index*/,
 				     void (*callback/*虚队列报文中断回调*/)(struct virtqueue *vq),
 				     const char *name/*虚队列名称*/,
 				     bool ctx/*虚队列是否有context*/,
@@ -233,9 +233,15 @@ static void vp_del_vq(struct virtqueue *vq)
 	struct virtio_pci_vq_info *info = vp_dev->vqs[vq->index];
 	unsigned long flags;
 
-	spin_lock_irqsave(&vp_dev->lock, flags);
-	list_del(&info->node);
-	spin_unlock_irqrestore(&vp_dev->lock, flags);
+	/*
+	 * If it fails during re-enable reset vq. This way we won't rejoin
+	 * info->node to the queue. Prevent unexpected irqs.
+	 */
+	if (!vq->reset) {
+		spin_lock_irqsave(&vp_dev->lock, flags);
+		list_del(&info->node);
+		spin_unlock_irqrestore(&vp_dev->lock, flags);
+	}
 
 	vp_dev->del_vq(info);
 	kfree(info);
@@ -273,8 +279,7 @@ void vp_del_vqs(struct virtio_device *vdev)
 
 	if (vp_dev->msix_affinity_masks) {
 		for (i = 0; i < vp_dev->msix_vectors; i++)
-			if (vp_dev->msix_affinity_masks[i])
-				free_cpumask_var(vp_dev->msix_affinity_masks[i]);
+			free_cpumask_var(vp_dev->msix_affinity_masks[i]);
 	}
 
 	if (vp_dev->msix_enabled) {
@@ -295,9 +300,9 @@ void vp_del_vqs(struct virtio_device *vdev)
 	vp_dev->vqs = NULL;
 }
 
-static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned nvqs,/*虚队列数目*/
+static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
 		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx报文中断回调*/,
-		const char * const names[]/*各vq名称*/, bool per_vq_vectors,/*是否每个队列一个msi-x向量*/
+		const char * const names[]/*各vq名称*/, bool per_vq_vectors/*是否每个队列一个msi-x向量*/,
 		const bool *ctx,
 		struct irq_affinity *desc)
 {
@@ -375,7 +380,7 @@ error_find:
 	return err;
 }
 
-static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned nvqs,
+static int vp_find_vqs_intx(struct virtio_device *vdev, unsigned int nvqs,
 		struct virtqueue *vqs[], vq_callback_t *callbacks[],
 		const char * const names[], const bool *ctx)
 {
@@ -415,9 +420,9 @@ out_del_vqs:
 }
 
 /* the config->find_vqs() implementation */
-int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
-		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[],/*指出各队列对应的callback*/
-		const char * const names[]/*指出各队列名称*/, const bool *ctx,//指出各队列是否有context
+int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
+		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*指出各队列对应的callback*/,
+		const char * const names[]/*指出各队列名称*/, const bool *ctx/*指出各队列是否有context*/,
 		struct irq_affinity *desc)
 {
 	int err;
@@ -433,6 +438,9 @@ int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,//虚队列数目
 	err = vp_find_vqs_msix(vdev, nvqs, vqs, callbacks, names, false, ctx, desc);
 	if (!err)
 		return 0;
+	/* Is there an interrupt? If not give up. */
+	if (!(to_vp_device(vdev)->pci_dev->irq))
+		return err;
 	/* Finally fall back to regular interrupts. */
 	return vp_find_vqs_intx(vdev, nvqs, vqs, callbacks, names, ctx);
 }

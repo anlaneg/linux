@@ -97,11 +97,13 @@ struct iphdr {
 	__be16	tot_len;
 	__be16	id;
 	__be16	frag_off;//分片相关
-	__u8	ttl;//ttl
+	__u8	ttl;
 	__u8	protocol;//协议
 	__sum16	check;//check sum
-	__be32	saddr;//源地址
-	__be32	daddr;//目的地址
+	__struct_group(/* no tag */, addrs, /* no attrs */,
+		__be32	saddr;//源地址
+		__be32	daddr;//目的地址
+	);
 	/*The options start here. */
 };
 
@@ -113,7 +115,7 @@ struct ip_auth_hdr {
 	__be16 reserved;
 	__be32 spi;
 	__be32 seq_no;		/* Sequence number */
-	__u8  auth_data[0];	/* Variable len but >=4. Mind the 64 bit alignment! */
+	__u8  auth_data[];	/* Variable len but >=4. Mind the 64 bit alignment! */
 };
 
 //esp协议头
@@ -122,7 +124,7 @@ struct ip_esp_hdr {
 	//序号
 	__be32 seq_no;		/* Sequence number */
 	//负载数据（可变长度，例如tcp payload）
-	__u8  enc_data[0];	/* Variable len but >=8. Mind the 64 bit alignment! */
+	__u8  enc_data[];	/* Variable len but >=8. Mind the 64 bit alignment! */
 };
 
 struct ip_comp_hdr {

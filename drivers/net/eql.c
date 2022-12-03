@@ -239,7 +239,7 @@ static void eql_kill_one_slave(slave_queue_t *queue, slave_t *slave)
 	/*指定此设备不再为slave*/
 	slave->dev->flags &= ~IFF_SLAVE;
 	/*归还设备*/
-	dev_put_track(slave->dev, &slave->dev_tracker);
+	netdev_put(slave->dev, &slave->dev_tracker);
 	/*释放slave*/
 	kfree(slave);
 }
@@ -435,7 +435,7 @@ static int __eql_insert_slave(slave_queue_t *queue, slave_t *slave)
 			eql_kill_one_slave(queue, duplicate_slave);
 
 		/*增加netdev的引用计数*/
-		dev_hold_track(slave->dev, &slave->dev_tracker, GFP_ATOMIC);
+		netdev_hold(slave->dev, &slave->dev_tracker, GFP_ATOMIC);
 		/*加入队列*/
 		list_add(&slave->list, &queue->all_slaves);
 		/*增加slave计数*/
@@ -467,14 +467,13 @@ static int eql_enslave(struct net_device *master_dev, slaving_request_t __user *
 	if ((master_dev->flags & IFF_UP) == IFF_UP) {
 		/* slave is not a master & not already a slave: */
 		if (!eql_is_master(slave_dev) && !eql_is_slave(slave_dev)) {
-			slave_t *s = kmalloc(sizeof(*s), GFP_KERNEL);
+			slave_t *s = kzalloc(sizeof(*s), GFP_KERNEL);
 			equalizer_t *eql = netdev_priv(master_dev);
 			int ret;
 
 			if (!s)
 				return -ENOMEM;
 
-			memset(s, 0, sizeof(*s));
 			s->dev = slave_dev;/*指定此slave对应的netdev*/
 			s->priority = srq.priority;/*优先级*/
 			s->priority_bps = srq.priority;

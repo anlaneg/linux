@@ -143,6 +143,9 @@ static int __nf_conncount_add(struct net *net,
 	struct nf_conn *found_ct;
 	unsigned int collect = 0;
 
+	if (time_is_after_eq_jiffies((unsigned long)list->last_gc))
+		goto add_new_node;
+
 	/*当前我们需要添加给定的tuple,在添加之前我们检查下list中保存的ct还在连接跟踪表中存在（这个实现太难受了）*/
 	/* check the saved connections */
 	list_for_each_entry_safe(conn, conn_n, &list->head, node) {
@@ -196,6 +199,7 @@ static int __nf_conncount_add(struct net *net,
 		nf_ct_put(found_ct);
 	}
 
+add_new_node:
 	/*计数overflow,跳过*/
 	if (WARN_ON_ONCE(list->count > INT_MAX))
 		return -EOVERFLOW;
@@ -213,6 +217,7 @@ static int __nf_conncount_add(struct net *net,
 	list_add_tail(&conn->node, &list->head);
 	/*总数增加*/
 	list->count++;
+	list->last_gc = (u32)jiffies;
 	return 0;
 }
 
@@ -239,6 +244,7 @@ void nf_conncount_list_init(struct nf_conncount_list *list)
 	spin_lock_init(&list->list_lock);
 	INIT_LIST_HEAD(&list->head);
 	list->count = 0;
+	list->last_gc = (u32)jiffies;
 }
 EXPORT_SYMBOL_GPL(nf_conncount_list_init);
 
@@ -251,6 +257,10 @@ bool nf_conncount_gc_list(struct net *net,
 	struct nf_conn *found_ct;
 	unsigned int collected = 0;
 	bool ret = false;
+
+	/* don't bother if we just did GC */
+	if (time_is_after_eq_jiffies((unsigned long)READ_ONCE(list->last_gc)))
+		return false;
 
 	/* don't bother if other cpu is already doing GC */
 	if (!spin_trylock(&list->list_lock))
@@ -286,6 +296,7 @@ bool nf_conncount_gc_list(struct net *net,
 
 	if (!list->count)
 		ret = true;
+	list->last_gc = (u32)jiffies;
 	spin_unlock(&list->list_lock);
 
 	return ret;

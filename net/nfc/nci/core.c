@@ -551,7 +551,7 @@ static int nci_open_device(struct nci_dev *ndev)
 
 		/*失败了，执行关闭*/
 		ndev->ops->close(ndev);
-		ndev->flags = 0;
+		ndev->flags &= BIT(NCI_UNREG);
 	}
 
 done:

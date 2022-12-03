@@ -386,7 +386,7 @@ int br_sysfs_addif(struct net_bridge_port *p)
 			return err;
 	}
 
-	strlcpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
+	strscpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
 	return sysfs_create_link(br->ifobj, &p->kobj, p->sysfs_name);
 }
 
@@ -408,7 +408,7 @@ int br_sysfs_renameif(struct net_bridge_port *p)
 		netdev_notice(br->dev, "unable to rename link %s to %s",
 			      p->sysfs_name, p->dev->name);
 	else
-		strlcpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
+		strscpy(p->sysfs_name, p->dev->name, IFNAMSIZ);
 
 	return err;
 }

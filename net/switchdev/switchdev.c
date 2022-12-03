@@ -68,7 +68,7 @@ void switchdev_deferred_process(void)
 	//自deferred链表中出所有元素，并调用每个远程的func回调
 	while ((dfitem = switchdev_deferred_dequeue())) {
 		dfitem->func(dfitem->dev, dfitem->data);
-		dev_put_track(dfitem->dev, &dfitem->dev_tracker);
+		netdev_put(dfitem->dev, &dfitem->dev_tracker);
 		kfree(dfitem);
 	}
 }
@@ -98,7 +98,7 @@ static int switchdev_deferred_enqueue(struct net_device *dev/*回调函数第一
 	dfitem->dev = dev;
 	dfitem->func = func;
 	memcpy(dfitem->data, data, data_len);
-	dev_hold_track(dev, &dfitem->dev_tracker, GFP_ATOMIC);
+	netdev_hold(dev, &dfitem->dev_tracker, GFP_ATOMIC);
 	spin_lock_bh(&deferred_lock);
 	list_add_tail(&dfitem->list, &deferred);
 	spin_unlock_bh(&deferred_lock);

@@ -96,6 +96,17 @@
 #define VRING_USED_ALIGN_SIZE 4
 #define VRING_DESC_ALIGN_SIZE 16
 
+/**
+ * struct vring_desc - Virtio ring descriptors,
+ * 16 bytes long. These can chain together via @next.
+ *
+ * @addr: buffer address (guest-physical)
+ * @len: buffer length
+ * @flags: descriptor flags
+ * @next: index of the next descriptor in the chain,
+ *        if the VRING_DESC_F_NEXT flag is set. We chain unused
+ *        descriptors via this, too.
+ */
 /* Virtio ring descriptors: 16 bytes.  These can chain together via "next". */
 //如virtio 1.0 spec所言
 //The descriptor table refers to the buffers the driver is using for the device. addr is a physical address, and
@@ -103,13 +114,9 @@
 //(“device-readable”) or write-only for the device (“device-writable”), but a chain of descriptors can contain
 //both device-readable and device-writable buffers.
 struct vring_desc {
-	/* Address (guest-physical). */
 	__virtio64 addr;
-	/* Length. */
 	__virtio32 len;
-	/* The flags as indicated above. */
 	__virtio16 flags;//见VRING_DESC_F_NEXT相关标记
-	/* We chain unused descriptors via this, too */
 	__virtio16 next;//指向下一个vring_desc索引
 };
 

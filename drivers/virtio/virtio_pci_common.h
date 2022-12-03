@@ -38,7 +38,7 @@ struct virtio_pci_vq_info {
 	struct list_head node;
 
 	/* MSI-X vector (or none) */
-	unsigned msix_vector;
+	unsigned int msix_vector;
 };
 
 /* Our device structure */
@@ -70,9 +70,9 @@ struct virtio_pci_device {
 	 * and I'm too lazy to allocate each name separately. */
 	char (*msix_names)[256];/*中断名称*/
 	/* Number of available vectors */
-	unsigned msix_vectors;/*有效中断数*/
+	unsigned int msix_vectors;/*有效中断数*/
 	/* Vectors allocated, excluding per-vq vectors if any */
-	unsigned msix_used_vectors;//已使用的中断数目
+	unsigned int msix_used_vectors;//已使用的中断数目
 
 	/* Whether we have vector per vq */
 	bool per_vq_vectors;/*是否每个vq一个中断向量*/
@@ -80,9 +80,9 @@ struct virtio_pci_device {
 	//创建virtqueue
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,
 				      struct virtio_pci_vq_info *info,
-				      unsigned idx,
+				      unsigned int idx,
 				      void (*callback/*中断通知回调*/)(struct virtqueue *vq),
-				      const char *name/**/,
+				      const char *name,
 				      bool ctx,
 				      u16 msix_vec);
 	//销毁virtqueue
@@ -112,7 +112,7 @@ bool vp_notify(struct virtqueue *vq);
 /* the config->del_vqs() implementation */
 void vp_del_vqs(struct virtio_device *vdev);
 /* the config->find_vqs() implementation */
-int vp_find_vqs(struct virtio_device *vdev, unsigned nvqs,
+int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs,
 		struct virtqueue *vqs[], vq_callback_t *callbacks[],
 		const char * const names[], const bool *ctx,
 		struct irq_affinity *desc);

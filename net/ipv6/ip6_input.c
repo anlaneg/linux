@@ -45,20 +45,22 @@
 #include <net/inet_ecn.h>
 #include <net/dst_metadata.h>
 
-INDIRECT_CALLABLE_DECLARE(void tcp_v6_early_demux(struct sk_buff *));
 static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 				struct sk_buff *skb)
 {
-	void (*edemux)(struct sk_buff *skb);
-
 	/*通过est socket反向确定sbk->dst,尝试跳过ip6_route_input*/
-	if (net->ipv4.sysctl_ip_early_demux && !skb_dst(skb) && skb->sk == NULL) {
-		const struct inet6_protocol *ipprot;
-
-		ipprot = rcu_dereference(inet6_protos[ipv6_hdr(skb)->nexthdr]);
-		if (ipprot && (edemux = READ_ONCE(ipprot->early_demux)))
-			INDIRECT_CALL_2(edemux, tcp_v6_early_demux,
-					udp_v6_early_demux, skb);
+	if (READ_ONCE(net->ipv4.sysctl_ip_early_demux) &&
+	    !skb_dst(skb) && !skb->sk) {
+		switch (ipv6_hdr(skb)->nexthdr) {
+		case IPPROTO_TCP:
+			if (READ_ONCE(net->ipv4.sysctl_tcp_early_demux))
+				tcp_v6_early_demux(skb);
+			break;
+		case IPPROTO_UDP:
+			if (READ_ONCE(net->ipv4.sysctl_udp_early_demux))
+				udp_v6_early_demux(skb);
+			break;
+		}
 	}
 
 	/*执行ipv6路由查询*/
@@ -150,13 +152,15 @@ static void ip6_list_rcv_finish(struct net *net, struct sock *sk,
 static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 				    struct net *net)
 {
+	enum skb_drop_reason reason;
 	const struct ipv6hdr *hdr;
 	u32 pkt_len;
 	struct inet6_dev *idev;
 
 	//丢掉二层送其它主机的报文
 	if (skb->pkt_type == PACKET_OTHERHOST) {
-		kfree_skb(skb);
+		dev_core_stats_rx_otherhost_dropped_inc(skb->dev);
+		kfree_skb_reason(skb, SKB_DROP_REASON_OTHERHOST);
 		return NULL;
 	}
 
@@ -168,9 +172,12 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	//ipv6 in报文计数
 	__IP6_UPD_PO_STATS(net, idev, IPSTATS_MIB_IN, skb->len);
 
+	SKB_DR_SET(reason, NOT_SPECIFIED);
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL ||
 	    !idev/*设备无inet6_dev，丢包*/ || unlikely(idev->cnf.disable_ipv6)) {
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDISCARDS);
+		if (idev && unlikely(idev->cnf.disable_ipv6))
+			SKB_DR_SET(reason, IPV6DISABLED);
 		goto drop;
 	}
 
@@ -197,8 +204,10 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	hdr = ipv6_hdr(skb);
 
 	//版本必须为6
-	if (hdr->version != 6)
+	if (hdr->version != 6) {
+		SKB_DR_SET(reason, UNHANDLED_PROTO);
 		goto err;
+	}
 
 	/*按ecn标记进行计数统计0，1，2，3*/
 	__IP6_ADD_STATS(net, idev,
@@ -238,9 +247,11 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	if (!ipv6_addr_is_multicast(&hdr->daddr) &&
 	    (skb->pkt_type == PACKET_BROADCAST ||
 	     skb->pkt_type == PACKET_MULTICAST) &&
-	    idev->cnf.drop_unicast_in_l2_multicast)
-	    /*mac层是组播，但目的ip不是组播，丢包*/
+	    idev->cnf.drop_unicast_in_l2_multicast) {
+		SKB_DR_SET(reason, UNICAST_IN_L2_MULTICAST);
+		/*mac层是组播，但目的ip不是组播，丢包*/
 		goto err;
+	}
 
 	/* RFC4291 2.7
 	 * Nodes must not originate a packet to a multicast address whose scope
@@ -273,15 +284,13 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 		    /*指定的payload len大于buffer len，丢弃*/
 			__IP6_INC_STATS(net,
 					idev, IPSTATS_MIB_INTRUNCATEDPKTS);
+			SKB_DR_SET(reason, PKT_TOO_SMALL);
 			goto drop;
 		}
-
 		/*packet_len与buffer_len相比，当buffer len更大时，将被截短*/
-		if (pskb_trim_rcsum(skb, pkt_len + sizeof(struct ipv6hdr))) {
-		    /*不能截短，则丢包*/
-			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
-			goto drop;
-		}
+		if (pskb_trim_rcsum(skb, pkt_len + sizeof(struct ipv6hdr)))
+			/*不能截短，则丢包*/
+			goto err;
 		hdr = ipv6_hdr(skb);
 	}
 
@@ -303,9 +312,10 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	return skb;
 err:
 	__IP6_INC_STATS(net, idev, IPSTATS_MIB_INHDRERRORS);
+	SKB_DR_OR(reason, IP_INHDR);
 drop:
 	rcu_read_unlock();
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 	return NULL;
 }
 
@@ -377,6 +387,7 @@ void ip6_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int nexthdr,
 	const struct inet6_protocol *ipprot;
 	struct inet6_dev *idev;
 	unsigned int nhoff;
+	SKB_DR(reason);
 	bool raw;
 
 	/*
@@ -442,14 +453,18 @@ resubmit_final:
 			if (ipv6_addr_is_multicast(&hdr->daddr) &&
 			    !ipv6_chk_mcast_addr(dev, &hdr->daddr,
 						 &hdr->saddr) &&
-			    !ipv6_is_mld(skb, nexthdr, skb_network_header_len(skb)))
+			    !ipv6_is_mld(skb, nexthdr, skb_network_header_len(skb))) {
+				SKB_DR_SET(reason, IP_INADDRERRORS);
 				goto discard;
+			}
 		}
 
 		/*如果未注明no policy标记，则执行xfrm6的policy检查*/
 		if (!(ipprot->flags & INET6_PROTO_NOPOLICY) &&
-		    !xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb))
+		    !xfrm6_policy_check(NULL, XFRM_POLICY_IN, skb)) {
+			SKB_DR_SET(reason, XFRM_POLICY);
 			goto discard;
+		}
 
 		//由l4协议处理报文，例如送udp/tcp协议
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v6_rcv, udpv6_rcv,
@@ -479,8 +494,11 @@ resubmit_final:
 						IPSTATS_MIB_INUNKNOWNPROTOS);
 				icmpv6_send(skb, ICMPV6_PARAMPROB,
 					    ICMPV6_UNK_NEXTHDR, nhoff);
+				SKB_DR_SET(reason, IP_NOPROTO);
+			} else {
+				SKB_DR_SET(reason, XFRM_POLICY);
 			}
-			kfree_skb(skb);
+			kfree_skb_reason(skb, reason);
 		} else {
 			__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDELIVERS);
 			consume_skb(skb);
@@ -490,7 +508,7 @@ resubmit_final:
 
 discard:
 	__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDISCARDS);
-	kfree_skb(skb);
+	kfree_skb_reason(skb, reason);
 }
 
 static int ip6_input_finish(struct net *net, struct sock *sk, struct sk_buff *skb)

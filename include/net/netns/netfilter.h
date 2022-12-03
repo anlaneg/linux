@@ -28,9 +28,6 @@ struct netns_nf {
 	//桥对应的hooks
 	struct nf_hook_entries __rcu *hooks_bridge[NF_INET_NUMHOOKS];
 #endif
-#if IS_ENABLED(CONFIG_DECNET)
-	struct nf_hook_entries __rcu *hooks_decnet[NF_DN_NUMHOOKS];
-#endif
 #if IS_ENABLED(CONFIG_NF_DEFRAG_IPV4)
 	unsigned int defrag_ipv4_users;
 #endif

@@ -19,8 +19,6 @@
 #include "xdp_umem.h"
 #include "xsk_queue.h"
 
-#define XDP_UMEM_MIN_CHUNK_SIZE 2048
-
 //管理umem内存块的id分配
 static DEFINE_IDA(umem_ida);
 
@@ -58,7 +56,7 @@ static int xdp_umem_addr_map(struct xdp_umem *umem, struct page **pages,
 static void xdp_umem_release(struct xdp_umem *umem)
 {
 	umem->zc = false;
-	ida_simple_remove(&umem_ida, umem->id);
+	ida_free(&umem_ida, umem->id);
 
 	xdp_umem_addr_unmap(umem);
 	xdp_umem_unpin_pages(umem);
@@ -255,7 +253,7 @@ struct xdp_umem *xdp_umem_create(struct xdp_umem_reg *mr)
 		return ERR_PTR(-ENOMEM);
 
 	//为umem分配id号
-	err = ida_simple_get(&umem_ida, 0, 0, GFP_KERNEL);
+	err = ida_alloc(&umem_ida, GFP_KERNEL);
 	if (err < 0) {
 		kfree(umem);
 		return ERR_PTR(err);
@@ -266,7 +264,7 @@ struct xdp_umem *xdp_umem_create(struct xdp_umem_reg *mr)
 	err = xdp_umem_reg(umem, mr);
 	if (err) {
 	    /*注册失败，释放此id*/
-		ida_simple_remove(&umem_ida, umem->id);
+		ida_free(&umem_ida, umem->id);
 		kfree(umem);
 		return ERR_PTR(err);
 	}

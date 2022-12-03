@@ -26,7 +26,7 @@ enum {
 
 struct seg6_iptunnel_encap {
 	int mode;/*封装方式*/
-	struct ipv6_sr_hdr srh[0];/*用户指定的segs*/
+	struct ipv6_sr_hdr srh[];/*用户指定的segs*/
 };
 
 #define SEG6_IPTUN_ENCAP_SIZE(x) ((sizeof(*x)) + (((x)->srh->hdrlen + 1) << 3))
@@ -35,6 +35,8 @@ enum {
 	SEG6_IPTUN_MODE_INLINE,/*内层封装报文本身*/
 	SEG6_IPTUN_MODE_ENCAP,/*内层封装网络层*/
 	SEG6_IPTUN_MODE_L2ENCAP,/*内层封装以太帧*/
+	SEG6_IPTUN_MODE_ENCAP_RED,
+	SEG6_IPTUN_MODE_L2ENCAP_RED,
 };
 
 #endif

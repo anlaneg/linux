@@ -119,6 +119,11 @@ static inline int page_order(struct perf_buffer *rb)
 }
 #endif
 
+static inline int data_page_nr(struct perf_buffer *rb)
+{
+	return rb->nr_pages << page_order(rb);
+}
+
 /*此buffer大小*/
 static inline unsigned long perf_data_size(struct perf_buffer *rb)
 {

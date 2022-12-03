@@ -131,7 +131,7 @@ struct ipt_entry {
 	//matchs的总长度为ipt中的target_offset字段隐含给出
 	//target为xt_entry_target结构，由其内的target_size指定其长度
 	//每个ipt_entry结构由其内的next_offset指向下一个ipt_entry
-	unsigned char elems[0];//matches+targets
+	unsigned char elems[];
 };
 
 /*
@@ -213,7 +213,7 @@ struct ipt_replace {
 	struct xt_counters __user *counters;
 
 	/* The entries (hang off end: not really an array). */
-	struct ipt_entry entries[0];
+	struct ipt_entry entries[];
 };
 
 /* The argument to IPT_SO_GET_ENTRIES. */
@@ -225,7 +225,7 @@ struct ipt_get_entries {
 	unsigned int size;
 
 	/* The entries. */
-	struct ipt_entry entrytable[0];
+	struct ipt_entry entrytable[];
 };
 
 /* Helper functions */

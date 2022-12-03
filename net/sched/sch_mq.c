@@ -265,12 +265,8 @@ static void mq_walk(struct Qdisc *sch, struct qdisc_walker *arg)
 
 	arg->count = arg->skip;
 	for (ntx = arg->skip; ntx < dev->num_tx_queues; ntx++) {
-		//通过回调，访问ntx号队列
-		if (arg->fn(sch, ntx + 1, arg) < 0) {
-			arg->stop = 1;//出错停止
+		if (!tc_qdisc_stats_dump(sch, ntx + 1, arg))
 			break;
-		}
-		arg->count++;//访问总数
 	}
 }
 

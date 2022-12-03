@@ -113,7 +113,6 @@ struct kmem_cache {
 	struct kmem_cache_order_objects oo;
 
 	/* Allocation and freeing of slabs */
-	struct kmem_cache_order_objects max;
 	//与oo相同，但考虑申请page时以obj大小来考虑
 	struct kmem_cache_order_objects min;
 	gfp_t allocflags;	/* gfp flags to use on each alloc */

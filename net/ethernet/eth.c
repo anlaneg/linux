@@ -419,7 +419,7 @@ struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
 				      unsigned int rxqs)
 {
 	//规定设备名称为eth%d
-	return alloc_netdev_mqs(sizeof_priv, "eth%d", NET_NAME_UNKNOWN,
+	return alloc_netdev_mqs(sizeof_priv, "eth%d", NET_NAME_ENUM,
 				ether_setup/*以太设备setup函数*/, txqs, rxqs);
 }
 EXPORT_SYMBOL(alloc_etherdev_mqs);
@@ -442,12 +442,9 @@ struct sk_buff *eth_gro_receive(struct list_head *head, struct sk_buff *skb)
 
 	off_eth = skb_gro_offset(skb);
 	hlen = off_eth + sizeof(*eh);//获得以太头负载部分
-	eh = skb_gro_header_fast(skb, off_eth);//取skb的以太头指针
-	if (skb_gro_header_hard(skb, hlen)) {
-		eh = skb_gro_header_slow(skb, hlen, off_eth);
-		if (unlikely(!eh))
-			goto out;
-	}
+	eh = skb_gro_header(skb, hlen, off_eth);//取skb的以太头指针
+	if (unlikely(!eh))
+		goto out;
 
 	flush = 0;
 

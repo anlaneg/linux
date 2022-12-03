@@ -267,7 +267,6 @@ static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 			   int flags)
 {
-	int noblock = flags & MSG_DONTWAIT;/*是否非阻塞收取*/
 	struct sock *sk = sock->sk;
 	struct sk_buff *skb;
 	int copied;
@@ -276,7 +275,7 @@ static int rawsock_recvmsg(struct socket *sock, struct msghdr *msg, size_t len,
 	pr_debug("sock=%p sk=%p len=%zu flags=%d\n", sock, sk, len, flags);
 
 	//自sk_receive_queue中摘取一个skb
-	skb = skb_recv_datagram(sk, flags, noblock, &rc);
+	skb = skb_recv_datagram(sk, flags, &rc);
 	if (!skb)
 		return rc;
 

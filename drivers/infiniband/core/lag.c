@@ -7,8 +7,7 @@
 #include <rdma/ib_cache.h>
 #include <rdma/lag.h>
 
-static struct sk_buff *rdma_build_skb(struct ib_device *device,
-				      struct net_device *netdev,
+static struct sk_buff *rdma_build_skb(struct net_device *netdev,
 				      struct rdma_ah_attr *ah_attr,
 				      gfp_t flags)
 {
@@ -87,7 +86,7 @@ static struct net_device *rdma_get_xmit_slave_udp(struct ib_device *device,
 	struct sk_buff *skb;
 
 	/*构造一个skb,并针对此skb选择slave接口*/
-	skb = rdma_build_skb(device, master, ah_attr, flags);
+	skb = rdma_build_skb(master, ah_attr, flags);
 	if (!skb)
 		return ERR_PTR(-ENOMEM);
 

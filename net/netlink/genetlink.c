@@ -80,9 +80,28 @@ static unsigned long mc_group_start = 0x3 | BIT(GENL_ID_CTRL) |
 static unsigned long *mc_groups = &mc_group_start;
 static unsigned long mc_groups_longs = 1;
 
+/* We need the last attribute with non-zero ID therefore a 2-entry array */
+static struct nla_policy genl_policy_reject_all[] = {
+	{ .type = NLA_REJECT },
+	{ .type = NLA_REJECT },
+};
+
 static int genl_ctrl_event(int event, const struct genl_family *family,
 			   const struct genl_multicast_group *grp,
 			   int grp_id);
+
+static void
+genl_op_fill_in_reject_policy(const struct genl_family *family,
+			      struct genl_ops *op)
+{
+	BUILD_BUG_ON(ARRAY_SIZE(genl_policy_reject_all) - 1 != 1);
+
+	if (op->policy || op->cmd < family->resv_start_op)
+		return;
+
+	op->policy = genl_policy_reject_all;
+	op->maxattr = 1;
+}
 
 //给定id,获得genl_family
 static const struct genl_family *genl_family_find_byid(unsigned int id)
@@ -119,6 +138,8 @@ static void genl_op_from_full(const struct genl_family *family,
 		op->maxattr = family->maxattr;
 	if (!op->policy)
 		op->policy = family->policy;
+
+	genl_op_fill_in_reject_policy(family, op);
 }
 
 static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
@@ -149,6 +170,8 @@ static void genl_op_from_small(const struct genl_family *family,
 
 	op->maxattr = family->maxattr;
 	op->policy = family->policy;
+
+	genl_op_fill_in_reject_policy(family, op);
 }
 
 static int genl_get_cmd_small(u32 cmd, const struct genl_family *family,
@@ -389,7 +412,8 @@ static int genl_validate_ops(const struct genl_family *family)
 		/*dumpit与doit必须至少提供一个*/
 		if (op.dumpit == NULL && op.doit == NULL)
 			return -EINVAL;
-
+		if (WARN_ON(op.cmd >= family->resv_start_op && op.validate))
+			return -EINVAL;
 		/*ops间的cmd不能重复*/
 		for (j = i + 1; j < genl_get_cmd_cnt(family); j++) {
 			struct genl_ops op2;
@@ -786,6 +810,36 @@ out:
 	return err;
 }
 
+static int genl_header_check(const struct genl_family *family,
+			     struct nlmsghdr *nlh, struct genlmsghdr *hdr,
+			     struct netlink_ext_ack *extack)
+{
+	u16 flags;
+
+	/* Only for commands added after we started validating */
+	if (hdr->cmd < family->resv_start_op)
+		return 0;
+
+	if (hdr->reserved) {
+		NL_SET_ERR_MSG(extack, "genlmsghdr.reserved field is not 0");
+		return -EINVAL;
+	}
+
+	/* Old netlink flags have pretty loose semantics, allow only the flags
+	 * consumed by the core where we can enforce the meaning.
+	 */
+	flags = nlh->nlmsg_flags;
+	if ((flags & NLM_F_DUMP) == NLM_F_DUMP) /* DUMP is 2 bits */
+		flags &= ~NLM_F_DUMP;
+	if (flags & ~(NLM_F_REQUEST | NLM_F_ACK | NLM_F_ECHO)) {
+		NL_SET_ERR_MSG(extack,
+			       "ambiguous or reserved bits set in nlmsg_flags");
+		return -EINVAL;
+	}
+
+	return 0;
+}
+
 //采用指定的family来解析处理general netlink消息
 static int genl_family_rcv_msg(const struct genl_family *family,
 			       struct sk_buff *skb,
@@ -805,6 +859,9 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 
 	hdrlen = GENL_HDRLEN + family->hdrsize;
 	if (nlh->nlmsg_len < nlmsg_msg_size(hdrlen))
+		return -EINVAL;
+
+	if (genl_header_check(family, nlh, hdr, extack))
 		return -EINVAL;
 
 	//根据头部的cmd查找family中对应的ops
@@ -1239,13 +1296,17 @@ static int ctrl_dumppolicy_start(struct netlink_callback *cb)
 							     op.policy,
 							     op.maxattr);
 			if (err)
-				return err;
+				goto err_free_state;
 		}
 	}
 
 	if (!ctx->state)
 		return -ENODATA;
 	return 0;
+
+err_free_state:
+	netlink_policy_dump_free(ctx->state);
+	return err;
 }
 
 static void *ctrl_dumppolicy_prep(struct sk_buff *skb,
@@ -1411,6 +1472,7 @@ static struct genl_family genl_ctrl __ro_after_init = {
 	.module = THIS_MODULE,
 	.ops = genl_ctrl_ops,
 	.n_ops = ARRAY_SIZE(genl_ctrl_ops),
+	.resv_start_op = CTRL_CMD_GETPOLICY + 1,
 	.mcgrps = genl_ctrl_groups,
 	.n_mcgrps = ARRAY_SIZE(genl_ctrl_groups),
 	.id = GENL_ID_CTRL,
@@ -1425,7 +1487,7 @@ static int genl_bind(struct net *net, int group)
 	unsigned int id;
 	int ret = 0;
 
-	genl_lock_all();
+	down_read(&cb_lock);
 
 	idr_for_each_entry(&genl_fam_idr, family, id) {
 		const struct genl_multicast_group *grp;
@@ -1446,7 +1508,7 @@ static int genl_bind(struct net *net, int group)
 		break;
 	}
 
-	genl_unlock_all();
+	up_read(&cb_lock);
 	return ret;
 }
 

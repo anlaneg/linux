@@ -246,7 +246,7 @@ EXPORT_SYMBOL(__sg_free_table);
  **/
 void sg_free_append_table(struct sg_append_table *table)
 {
-	__sg_free_table(&table->sgt, SG_MAX_SINGLE_ALLOC, false, sg_kfree,
+	__sg_free_table(&table->sgt, SG_MAX_SINGLE_ALLOC, 0, sg_kfree,
 			table->total_nents);
 }
 EXPORT_SYMBOL(sg_free_append_table);
@@ -259,7 +259,7 @@ EXPORT_SYMBOL(sg_free_append_table);
  **/
 void sg_free_table(struct sg_table *table)
 {
-	__sg_free_table(table, SG_MAX_SINGLE_ALLOC, false, sg_kfree,
+	__sg_free_table(table, SG_MAX_SINGLE_ALLOC, 0, sg_kfree,
 			table->orig_nents);
 }
 EXPORT_SYMBOL(sg_free_table);

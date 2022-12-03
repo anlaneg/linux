@@ -20,9 +20,9 @@ int rxe_cq_chk_attr(struct rxe_dev *rxe, struct rxe_cq *cq,
 	}
 
 	if (cqe > rxe->attr.max_cqe) {
-	    /*cqe数目不得大于rxe限制*/
-		pr_warn("cqe(%d) > max_cqe(%d)\n",
-			cqe, rxe->attr.max_cqe);
+		/*cqe数目不得大于rxe限制*/
+		pr_debug("cqe(%d) > max_cqe(%d)\n",
+				cqe, rxe->attr.max_cqe);
 		goto err1;
 	}
 
@@ -30,8 +30,8 @@ int rxe_cq_chk_attr(struct rxe_dev *rxe, struct rxe_cq *cq,
 	    /*cqe数目不得小于当前队列中已有元素数*/
 		count = queue_count(cq->queue, QUEUE_TYPE_TO_CLIENT);
 		if (cqe < count) {
-			pr_warn("cqe(%d) < current # elements in queue (%d)",
-				cqe, count);
+			pr_debug("cqe(%d) < current # elements in queue (%d)",
+					cqe, count);
 			goto err1;
 		}
 	}
