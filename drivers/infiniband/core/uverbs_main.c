@@ -691,12 +691,14 @@ static int ib_uverbs_mmap(struct file *filp, struct vm_area_struct *vma)
 	int srcu_key;
 
 	srcu_key = srcu_read_lock(&file->device->disassociate_srcu);
+	/*取此文件对应的ucontext*/
 	ucontext = ib_uverbs_get_ucontext_file(file);
 	if (IS_ERR(ucontext)) {
 		ret = PTR_ERR(ucontext);
 		goto out;
 	}
 	vma->vm_ops = &rdma_umap_ops;
+	/*调用设备对应的mmap*/
 	ret = ucontext->device->ops.mmap(ucontext, vma);
 out:
 	srcu_read_unlock(&file->device->disassociate_srcu, srcu_key);
@@ -997,7 +999,7 @@ static const struct file_operations uverbs_fops = {
 static const struct file_operations uverbs_mmap_fops = {
 	.owner	 = THIS_MODULE,
 	.write	 = ib_uverbs_write,
-	.mmap    = ib_uverbs_mmap,
+	.mmap    = ib_uverbs_mmap,/*响应mmap调用*/
 	.open	 = ib_uverbs_open,
 	.release = ib_uverbs_close,
 	.llseek	 = no_llseek,

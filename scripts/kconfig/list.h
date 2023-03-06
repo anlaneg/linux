@@ -28,6 +28,7 @@ struct list_head {
 
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
+/*定义并初始化list_head，指向自身，按约定链表为空*/
 #define LIST_HEAD(name) \
 	struct list_head name = LIST_HEAD_INIT(name)
 

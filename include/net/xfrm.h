@@ -1102,6 +1102,7 @@ static inline bool __xfrm_check_nopolicy(struct net *net, struct sk_buff *skb,
 					 int dir)
 {
 	if (!net->xfrm.policy_count[dir] && !secpath_exists(skb))
+		/*此方向没有xfrm policy且不存在secpath,则检查默认policy是否容许放通*/
 		return net->xfrm.policy_default[dir] == XFRM_USERPOLICY_ACCEPT;
 
 	return false;
@@ -1114,21 +1115,21 @@ static inline bool __xfrm_check_dev_nopolicy(struct sk_buff *skb,
 		/* same dst may be used for traffic originating from
 		 * devices with different policy settings.
 		 */
-		return IPCB(skb)->flags & IPSKB_NOPOLICY;
+		return IPCB(skb)->flags & IPSKB_NOPOLICY;/*cb中指明不查policy*/
 	}
-	return skb_dst(skb) && (skb_dst(skb)->flags & DST_NOPOLICY);
+	return skb_dst(skb) && (skb_dst(skb)->flags & DST_NOPOLICY);/*路由中指明不查policy*/
 }
 
-static inline int __xfrm_policy_check2(struct sock *sk, int dir,
+static inline int __xfrm_policy_check2(struct sock *sk, int dir/*报文方向，例如：XFRM_POLICY_IN*/,
 				       struct sk_buff *skb,
 				       unsigned int family, int reverse)
 {
     /*取skb对应的net namespace*/
 	struct net *net = dev_net(skb->dev);
-	/*reverse为真时，打上XFRM_POLICY_MASK + 1标记*/
+	/*reverse为真时，打上XFRM_POLICY_MASK + 1标记（reverse标记）*/
 	int ndir = dir | (reverse ? XFRM_POLICY_MASK + 1 : 0);
 
-	/*指明了sk,且socket有policy,执行sock policy检查*/
+	/*指明了sk,且socket有in方向有policy,执行sock policy检查*/
 	if (sk && sk->sk_policy[XFRM_POLICY_IN])
 		return __xfrm_policy_check(sk, ndir, skb, family);
 
@@ -1137,13 +1138,13 @@ static inline int __xfrm_policy_check2(struct sock *sk, int dir,
 	       __xfrm_policy_check(sk, ndir, skb, family);
 }
 
-static inline int xfrm_policy_check(struct sock *sk, int dir/*策略方向*/, struct sk_buff *skb, unsigned short family/*协议族*/)
+static inline int xfrm_policy_check(struct sock *sk/*关联socket*/, int dir/*策略方向*/, struct sk_buff *skb, unsigned short family/*协议族*/)
 {
-	return __xfrm_policy_check2(sk, dir, skb, family, 0);
+	return __xfrm_policy_check2(sk, dir, skb, family, 0/*不反转*/);
 }
 
 //ipv4策略检查
-static inline int xfrm4_policy_check(struct sock *sk, int dir, struct sk_buff *skb)
+static inline int xfrm4_policy_check(struct sock *sk/*关联socket*/, int dir/*策略方向*/, struct sk_buff *skb/*关联报文*/)
 {
 	return xfrm_policy_check(sk, dir, skb, AF_INET);
 }
@@ -1157,7 +1158,7 @@ static inline int xfrm6_policy_check(struct sock *sk, int dir/*策略方向*/, s
 static inline int xfrm4_policy_check_reverse(struct sock *sk, int dir,
 					     struct sk_buff *skb)
 {
-	return __xfrm_policy_check2(sk, dir, skb, AF_INET, 1);
+	return __xfrm_policy_check2(sk, dir, skb, AF_INET, 1/*需要反转*/);
 }
 
 static inline int xfrm6_policy_check_reverse(struct sock *sk, int dir,

@@ -5445,6 +5445,7 @@ struct wiphy {
 	u8 ema_max_profile_periodicity;
 	u16 max_num_akm_suites;
 
+	/*私有数据*/
 	char priv[] __aligned(NETDEV_ALIGN);
 };
 
@@ -5467,7 +5468,7 @@ static inline void wiphy_net_set(struct wiphy *wiphy, struct net *net)
 static inline void *wiphy_priv(struct wiphy *wiphy)
 {
 	BUG_ON(!wiphy);
-	return &wiphy->priv;
+	return &wiphy->priv;/*返回私有数据*/
 }
 
 /**
@@ -5490,6 +5491,7 @@ static inline struct wiphy *priv_to_wiphy(void *priv)
  */
 static inline void set_wiphy_dev(struct wiphy *wiphy, struct device *dev)
 {
+	/*为wiphy设置其对应的device*/
 	wiphy->dev.parent = dev;
 }
 
@@ -5501,6 +5503,7 @@ static inline void set_wiphy_dev(struct wiphy *wiphy, struct device *dev)
  */
 static inline struct device *wiphy_dev(struct wiphy *wiphy)
 {
+	/*取wiphy对应的device*/
 	return wiphy->dev.parent;
 }
 

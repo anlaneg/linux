@@ -177,6 +177,7 @@ static void ipv6_ifa_notify(int event, struct inet6_ifaddr *ifa);
 static void inet6_prefix_notify(int event, struct inet6_dev *idev,
 				struct prefix_info *pinfo);
 
+/*init_net对应的ip6设备配置（all)*/
 static struct ipv6_devconf ipv6_devconf __read_mostly = {
 	.forwarding		= 0,
 	.hop_limit		= IPV6_DEFAULT_HOPLIMIT,
@@ -237,6 +238,7 @@ static struct ipv6_devconf ipv6_devconf __read_mostly = {
 	.ndisc_evict_nocarrier	= 1,
 };
 
+/*init_net对应的ip6设备配置(default)*/
 static struct ipv6_devconf ipv6_devconf_dflt __read_mostly = {
 	.forwarding		= 0,
 	.hop_limit		= IPV6_DEFAULT_HOPLIMIT,
@@ -331,6 +333,7 @@ static void addrconf_mod_dad_work(struct inet6_ifaddr *ifp,
 		in6_ifa_put(ifp);
 }
 
+/*为inet6设备申请snmp6统计相关的内存*/
 static int snmp6_alloc_dev(struct inet6_dev *idev)
 {
 	int i;
@@ -373,6 +376,7 @@ static struct inet6_dev *ipv6_add_dev(struct net_device *dev)
 	ASSERT_RTNL();
 
 	if (dev->mtu < IPV6_MIN_MTU && dev != blackhole_netdev)
+		/*网络设备不能添加inet6设备，参数有误*/
 		return ERR_PTR(-EINVAL);
 
 	ndev = kzalloc(sizeof(*ndev), GFP_KERNEL_ACCOUNT);
@@ -383,6 +387,7 @@ static struct inet6_dev *ipv6_add_dev(struct net_device *dev)
 	ndev->dev = dev;
 	INIT_LIST_HEAD(&ndev->addr_list);
 	timer_setup(&ndev->rs_timer, addrconf_rs_timer, 0);
+	/*利用default devconf填充新创建的ipv6 net dev*/
 	memcpy(&ndev->cnf, dev_net(dev)->ipv6.devconf_dflt, sizeof(ndev->cnf));
 
 	if (ndev->cnf.stable_secret.initialized)
@@ -395,6 +400,8 @@ static struct inet6_dev *ipv6_add_dev(struct net_device *dev)
 		kfree(ndev);
 		return ERR_PTR(err);
 	}
+
+	/*设备未开启forward,禁用lro*/
 	if (ndev->cnf.forwarding)
 		dev_disable_lro(dev);
 	/* We refer to the device */
@@ -455,8 +462,9 @@ static struct inet6_dev *ipv6_add_dev(struct net_device *dev)
 		}
 	}
 	/* protected by rtnl_lock */
-	rcu_assign_pointer(dev->ip6_ptr, ndev);
+	rcu_assign_pointer(dev->ip6_ptr, ndev);/*设置ipv6 net dev*/
 
+	/*加入必要的组播组*/
 	if (dev != blackhole_netdev) {
 		/* Join interface-local all-node multicast group */
 		ipv6_dev_mc_inc(dev, &in6addr_interfacelocal_allnodes);
@@ -485,6 +493,7 @@ static struct inet6_dev *ipv6_find_idev(struct net_device *dev)
 
 	idev = __in6_dev_get(dev);
 	if (!idev) {
+		/*此网络设备不存在inet6设备，向其添加*/
 		idev = ipv6_add_dev(dev);
 		if (IS_ERR(idev))
 			return idev;
@@ -660,6 +669,7 @@ static int inet6_netconf_get_devconf(struct sk_buff *in_skb,
 		return err;
 
 	if (!tb[NETCONFA_IFINDEX])
+		/*必须指定接口ifindex*/
 		return -EINVAL;
 
 	err = -EINVAL;
@@ -672,12 +682,15 @@ static int inet6_netconf_get_devconf(struct sk_buff *in_skb,
 		devconf = net->ipv6.devconf_dflt;
 		break;
 	default:
+		/*通过ifindex查找网络设备*/
 		dev = dev_get_by_index(net, ifindex);
 		if (!dev)
 			return -EINVAL;
+		/*取此网络设备对应的ipv6设备*/
 		in6_dev = in6_dev_get(dev);
 		if (!in6_dev)
 			goto errout;
+		/*取设备配置*/
 		devconf = &in6_dev->cnf;
 		break;
 	}
@@ -1103,6 +1116,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 		goto out;
 	}
 
+	/*申请路由项*/
 	f6i = addrconf_f6i_alloc(net, idev, cfg->pfx, false, gfp_flags);
 	if (IS_ERR(f6i)) {
 		err = PTR_ERR(f6i);
@@ -1117,6 +1131,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 		ifa->peer_addr = *cfg->peer_pfx;
 
 	spin_lock_init(&ifa->lock);
+	/*初始化dad work*/
 	INIT_DELAYED_WORK(&ifa->dad_work, addrconf_dad_work);
 	INIT_HLIST_NODE(&ifa->addr_lst);
 	ifa->scope = cfg->scope;
@@ -1931,7 +1946,7 @@ __ipv6_chk_addr_and_flags(struct net *net, const struct in6_addr *addr,
 		dev = NULL;
 
 	hlist_for_each_entry_rcu(ifp, &net->ipv6.inet6_addr_lst[hash], addr_lst) {
-		ndev = ifp->idev->dev;
+		ndev = ifp->idev->dev;/*此地址对应的netdev*/
 
 		if (l3mdev_master_dev_rcu(ndev) != l3mdev)
 			continue;
@@ -2028,6 +2043,7 @@ struct net_device *ipv6_dev_find(struct net *net, const struct in6_addr *addr,
 }
 EXPORT_SYMBOL(ipv6_dev_find);
 
+/*在netns中查找addr对应的inet6_ifaddr*/
 struct inet6_ifaddr *ipv6_get_ifaddr(struct net *net, const struct in6_addr *addr,
 				     struct net_device *dev, int strict)
 {
@@ -2179,9 +2195,12 @@ void addrconf_join_solict(struct net_device *dev, const struct in6_addr *addr)
 	struct in6_addr maddr;
 
 	if (dev->flags&(IFF_LOOPBACK|IFF_NOARP))
+		/*设备为loopback or noarp的将忽略*/
 		return;
 
+	/*计算此地址对应的请求组播地址*/
 	addrconf_addr_solict_mult(addr, &maddr);
+	/*将请求组播地址加入到组播组*/
 	ipv6_dev_mc_inc(dev, &maddr);
 }
 
@@ -2193,7 +2212,9 @@ void addrconf_leave_solict(struct inet6_dev *idev, const struct in6_addr *addr)
 	if (idev->dev->flags&(IFF_LOOPBACK|IFF_NOARP))
 		return;
 
+	/*计算此地址对应的请求组播地址*/
 	addrconf_addr_solict_mult(addr, &maddr);
+	/*将请求组播地址离开此组播组*/
 	__ipv6_dev_mc_dec(idev, &maddr);
 }
 
@@ -2484,31 +2505,37 @@ static void addrconf_add_mroute(struct net_device *dev)
 		.fc_ifindex = dev->ifindex,
 		.fc_dst_len = 8,
 		.fc_flags = RTF_UP,
-		.fc_type = RTN_MULTICAST,
+		.fc_type = RTN_MULTICAST,/*组播路由*/
 		.fc_nlinfo.nl_net = dev_net(dev),
 		.fc_protocol = RTPROT_KERNEL,
 	};
 
+	/*设置目的地址为ff00::/8*/
 	ipv6_addr_set(&cfg.fc_dst, htonl(0xFF000000), 0, 0, 0);
 
+	/*添加此路由*/
 	ip6_route_add(&cfg, GFP_KERNEL, NULL);
 }
 
+/*添加inet6_dev,并添加默认组播路由*/
 static struct inet6_dev *addrconf_add_dev(struct net_device *dev)
 {
 	struct inet6_dev *idev;
 
 	ASSERT_RTNL();
 
+	/*查找此dev上的ipv6 dev，如果不存这类设备，则添加它*/
 	idev = ipv6_find_idev(dev);
 	if (IS_ERR(idev))
 		return idev;
 
 	if (idev->cnf.disable_ipv6)
+		/*设备禁用了ipv6,返回失败*/
 		return ERR_PTR(-EACCES);
 
 	/* Add default multicast route */
 	if (!(dev->flags & IFF_LOOPBACK) && !netif_is_l3_master(dev))
+		/*为此设备添加默认的组播路由*/
 		addrconf_add_mroute(dev);
 
 	return idev;
@@ -2912,8 +2939,8 @@ static int ipv6_mc_config(struct sock *sk, bool join,
 /*
  *	Manual configuration of address on an interface
  */
-static int inet6_addr_add(struct net *net, int ifindex,
-			  struct ifa6_config *cfg,
+static int inet6_addr_add(struct net *net, int ifindex/*关联的接口*/,
+			  struct ifa6_config *cfg/*地址*/,
 			  struct netlink_ext_ack *extack)
 {
 	struct inet6_ifaddr *ifp;
@@ -2926,19 +2953,23 @@ static int inet6_addr_add(struct net *net, int ifindex,
 	ASSERT_RTNL();
 
 	if (cfg->plen > 128)
+		/*参数有误，前缀过长*/
 		return -EINVAL;
 
 	/* check the lifetime */
 	if (!cfg->valid_lft || cfg->preferred_lft > cfg->valid_lft)
+		/*life time如果配置了，则要求pref life time要更少一些*/
 		return -EINVAL;
 
 	if (cfg->ifa_flags & IFA_F_MANAGETEMPADDR && cfg->plen != 64)
+		/*有manage temp addr标记的地址其前缀长度必须为64*/
 		return -EINVAL;
 
 	dev = __dev_get_by_index(net, ifindex);
 	if (!dev)
 		return -ENODEV;
 
+	/*添加inet6 dev*/
 	idev = addrconf_add_dev(dev);
 	if (IS_ERR(idev))
 		return PTR_ERR(idev);
@@ -2971,6 +3002,7 @@ static int inet6_addr_add(struct net *net, int ifindex,
 		cfg->preferred_lft = timeout;
 	}
 
+	/*增加地址*/
 	ifp = ipv6_add_addr(idev, cfg, true, extack);
 	if (!IS_ERR(ifp)) {
 		if (!(cfg->ifa_flags & IFA_F_NOPREFIXROUTE)) {
@@ -2989,7 +3021,7 @@ static int inet6_addr_add(struct net *net, int ifindex,
 		 * that the Optimistic flag should not be set for
 		 * manually configured addresses
 		 */
-		addrconf_dad_start(ifp);
+		addrconf_dad_start(ifp);/*开始dad检测*/
 		if (cfg->ifa_flags & IFA_F_MANAGETEMPADDR)
 			manage_tempaddrs(idev, ifp, cfg->valid_lft,
 					 cfg->preferred_lft, true, jiffies);
@@ -3994,7 +4026,7 @@ static void addrconf_dad_begin(struct inet6_ifaddr *ifp)
 	bool bump_id, notify = false;
 	struct net *net;
 
-	addrconf_join_solict(dev, &ifp->addr);
+	addrconf_join_solict(dev, &ifp->addr/*地址*/);
 
 	read_lock_bh(&idev->lock);
 	spin_lock(&ifp->lock);
@@ -4067,6 +4099,7 @@ static void addrconf_dad_start(struct inet6_ifaddr *ifp)
 	}
 	spin_unlock_bh(&ifp->lock);
 
+	/*触发开始执行dad检测*/
 	if (begin_dad)
 		addrconf_mod_dad_work(ifp, 0);
 }
@@ -4108,7 +4141,7 @@ static void addrconf_dad_work(struct work_struct *w)
 			if (!ipv6_generate_eui64(addr.s6_addr + 8, idev->dev) &&
 			    ipv6_addr_equal(&ifp->addr, &addr)) {
 				/* DAD failed for link-local based on MAC */
-				idev->cnf.disable_ipv6 = 1;
+				idev->cnf.disable_ipv6 = 1;/*dad失败，禁用ipv6*/
 
 				pr_info("%s: IPv6 being disabled!\n",
 					ifp->idev->dev->name);
@@ -4173,7 +4206,7 @@ static void addrconf_dad_work(struct work_struct *w)
 	write_unlock_bh(&idev->lock);
 
 	/* send a neighbour solicitation for our addr */
-	addrconf_addr_solict_mult(&ifp->addr, &mcaddr);
+	addrconf_addr_solict_mult(&ifp->addr, &mcaddr);/*配置地址对应的组播地址*/
 	ndisc_send_ns(ifp->idev->dev, &ifp->addr, &mcaddr, &in6addr_any,
 		      ifp->dad_nonce);
 out:
@@ -4212,7 +4245,7 @@ static void addrconf_dad_completed(struct inet6_ifaddr *ifp, bool bump_id,
 	 *	Configure the address for reception. Now it is valid.
 	 */
 
-	ipv6_ifa_notify(RTM_NEWADDR, ifp);
+	ipv6_ifa_notify(RTM_NEWADDR, ifp);/*通知地址生效*/
 
 	/* If added prefix is link local and we are prepared to process
 	   router advertisements, start sending router solicitations.
@@ -4852,6 +4885,7 @@ static int inet6_addr_modify(struct net *net, struct inet6_ifaddr *ifp,
 	return 0;
 }
 
+/*为设备添加ipv6地址*/
 static int
 inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		  struct netlink_ext_ack *extack)
@@ -4866,6 +4900,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 	struct ifa6_config cfg;
 	int err;
 
+	/*解析消息体*/
 	err = nlmsg_parse_deprecated(nlh, sizeof(*ifm), tb, IFA_MAX,
 				     ifa_ipv6_policy, extack);
 	if (err < 0)
@@ -4897,6 +4932,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		cfg.preferred_lft = ci->ifa_prefered;
 	}
 
+	/*取对应的设备*/
 	dev =  __dev_get_by_index(net, ifm->ifa_index);
 	if (!dev)
 		return -ENODEV;
@@ -4907,10 +4943,12 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		cfg.ifa_flags = ifm->ifa_flags;
 
 	/* We ignore other flags so far. */
+	/*忽略掉不支持的flags*/
 	cfg.ifa_flags &= IFA_F_NODAD | IFA_F_HOMEADDRESS |
 			 IFA_F_MANAGETEMPADDR | IFA_F_NOPREFIXROUTE |
 			 IFA_F_MCAUTOJOIN | IFA_F_OPTIMISTIC;
 
+	/*取ipv6设备*/
 	idev = ipv6_find_idev(dev);
 	if (IS_ERR(idev))
 		return PTR_ERR(idev);
@@ -4920,6 +4958,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (cfg.ifa_flags & IFA_F_NODAD &&
 	    cfg.ifa_flags & IFA_F_OPTIMISTIC) {
+		/*不容许同时设置*/
 		NL_SET_ERR_MSG(extack, "IFA_F_NODAD and IFA_F_OPTIMISTIC are mutually exclusive");
 		return -EINVAL;
 	}
@@ -4933,10 +4972,12 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return inet6_addr_add(net, ifm->ifa_index, &cfg, extack);
 	}
 
+	/*此地址已存在*/
 	if (nlh->nlmsg_flags & NLM_F_EXCL ||
 	    !(nlh->nlmsg_flags & NLM_F_REPLACE))
 		err = -EEXIST;
 	else
+		/*执行地址修改*/
 		err = inet6_addr_modify(net, ifa, &cfg);
 
 	in6_ifa_put(ifa);
@@ -5517,6 +5558,7 @@ errout:
 		rtnl_set_sk_err(net, RTNLGRP_IPV6_IFADDR, err);
 }
 
+/*填写devconf情况*/
 static inline void ipv6_store_devconf(struct ipv6_devconf *cnf,
 				__s32 *array, int bytes)
 {
@@ -5570,7 +5612,7 @@ static inline void ipv6_store_devconf(struct ipv6_devconf *cnf,
 #ifdef CONFIG_IPV6_MROUTE
 	array[DEVCONF_MC_FORWARDING] = atomic_read(&cnf->mc_forwarding);
 #endif
-	array[DEVCONF_DISABLE_IPV6] = cnf->disable_ipv6;
+	array[DEVCONF_DISABLE_IPV6] = cnf->disable_ipv6;/*禁止ipv6*/
 	array[DEVCONF_ACCEPT_DAD] = cnf->accept_dad;
 	array[DEVCONF_FORCE_TLLAO] = cnf->force_tllao;
 	array[DEVCONF_NDISC_NOTIFY] = cnf->ndisc_notify;
@@ -5687,9 +5729,11 @@ static int inet6_fill_ifla6_attrs(struct sk_buff *skb, struct inet6_dev *idev,
 	ci.retrans_time = jiffies_to_msecs(NEIGH_VAR(idev->nd_parms, RETRANS_TIME));
 	if (nla_put(skb, IFLA_INET6_CACHEINFO, sizeof(ci), &ci))
 		goto nla_put_failure;
+	/*准备DEVCONF数据空间*/
 	nla = nla_reserve(skb, IFLA_INET6_CONF, DEVCONF_MAX * sizeof(s32));
 	if (!nla)
 		goto nla_put_failure;
+	/*填充dev配置情况*/
 	ipv6_store_devconf(&idev->cnf, nla_data(nla), nla_len(nla));
 
 	/* XXX - MC not implemented */
@@ -6869,6 +6913,7 @@ static const struct ctl_table addrconf_sysctl[] = {
 	},
 #endif
 	{
+			/*禁止ipv6*/
 		.procname	= "disable_ipv6",
 		.data		= &ipv6_devconf.disable_ipv6,
 		.maxlen		= sizeof(int),
@@ -7068,10 +7113,13 @@ static int __addrconf_sysctl_register(struct net *net, char *dev_name,
 	struct ctl_table *table;
 	char path[sizeof("net/ipv6/conf/") + IFNAMSIZ];
 
+	/*复制一份addrconf_sysctl*/
 	table = kmemdup(addrconf_sysctl, sizeof(addrconf_sysctl), GFP_KERNEL_ACCOUNT);
 	if (!table)
 		goto out;
 
+	/*遍历addrconf_sysctl指定的可配置项,由于支持了net ns,每个ns一份，
+	 * 故这里需要改table的data,使其映射到p指向的内存*/
 	for (i = 0; table[i].data; i++) {
 		table[i].data += (char *)p - (char *)&ipv6_devconf;
 		/* If one of these is already set, then it is not safe to
@@ -7086,10 +7134,12 @@ static int __addrconf_sysctl_register(struct net *net, char *dev_name,
 
 	snprintf(path, sizeof(path), "net/ipv6/conf/%s", dev_name);
 
+	/*注册，例如 /proc/sys/net/ipv6/conf/all 路径*/
 	p->sysctl_header = register_net_sysctl(net, path, table);
 	if (!p->sysctl_header)
 		goto free;
 
+	/*取各设备对应的ifindex,'all','default'为系统预留*/
 	if (!strcmp(dev_name, "all"))
 		ifindex = NETCONFA_IFINDEX_ALL;
 	else if (!strcmp(dev_name, "default"))
@@ -7164,23 +7214,28 @@ static int __net_init addrconf_init_net(struct net *net)
 	if (!net->ipv6.inet6_addr_lst)
 		goto err_alloc_addr;
 
+	/*复制ipv6_devconf(用于配置所有ipv6设备）*/
 	all = kmemdup(&ipv6_devconf, sizeof(ipv6_devconf), GFP_KERNEL);
 	if (!all)
 		goto err_alloc_all;
 
+	/*复制ipv6_devconf_dflt(用于所有ipv6设备默认配置）*/
 	dflt = kmemdup(&ipv6_devconf_dflt, sizeof(ipv6_devconf_dflt), GFP_KERNEL);
 	if (!dflt)
 		goto err_alloc_dflt;
 
 	if (!net_eq(net, &init_net)) {
-		switch (net_inherit_devconf()) {
+		/*当前netns不是init_net*/
+		switch (net_inherit_devconf()/*取devconf的继承方式*/) {
 		case 1:  /* copy from init_net */
+			/*自init_net继承*/
 			memcpy(all, init_net.ipv6.devconf_all,
 			       sizeof(ipv6_devconf));
 			memcpy(dflt, init_net.ipv6.devconf_dflt,
 			       sizeof(ipv6_devconf_dflt));
 			break;
 		case 3: /* copy from the current netns */
+			/*自当前进程所在的netns继承*/
 			memcpy(all, current->nsproxy->net_ns->ipv6.devconf_all,
 			       sizeof(ipv6_devconf));
 			memcpy(dflt,
@@ -7189,6 +7244,7 @@ static int __net_init addrconf_init_net(struct net *net)
 			break;
 		case 0:
 		case 2:
+			/*使用代码中的默认值*/
 			/* use compiled values */
 			break;
 		}
@@ -7196,11 +7252,12 @@ static int __net_init addrconf_init_net(struct net *net)
 
 	/* these will be inherited by all namespaces */
 	dflt->autoconf = ipv6_defaults.autoconf;
-	dflt->disable_ipv6 = ipv6_defaults.disable_ipv6;
+	dflt->disable_ipv6 = ipv6_defaults.disable_ipv6;/*默认不禁止ipv6*/
 
 	dflt->stable_secret.initialized = false;
 	all->stable_secret.initialized = false;
 
+	/*指定当前netns对应的devconf_all/devconf_dflt*/
 	net->ipv6.devconf_all = all;
 	net->ipv6.devconf_dflt = dflt;
 
@@ -7317,28 +7374,33 @@ int __init addrconf_init(void)
 	if (err < 0)
 		goto errout;
 
-    //ipv6的地址添加
+    //注册ipv6的地址添加对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_NEWADDR,
 				   inet6_rtm_newaddr, NULL, 0);
 	if (err < 0)
 		goto errout;
+	//注册ipv6的地址移除对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_DELADDR,
 				   inet6_rtm_deladdr, NULL, 0);
 	if (err < 0)
 		goto errout;
+	//注册ipv6的地址dump对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETADDR,
 				   inet6_rtm_getaddr, inet6_dump_ifaddr,
 				   RTNL_FLAG_DOIT_UNLOCKED);
 	if (err < 0)
 		goto errout;
+	//注册ipv6的组播地址dump对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETMULTICAST,
 				   NULL, inet6_dump_ifmcaddr, 0);
 	if (err < 0)
 		goto errout;
+	//注册ipv6的任播地址dump对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETANYCAST,
 				   NULL, inet6_dump_ifacaddr, 0);
 	if (err < 0)
 		goto errout;
+	//注册ipv6的设备配置信息dump对应的netlink响应
 	err = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETNETCONF,
 				   inet6_netconf_get_devconf,
 				   inet6_netconf_dump_devconf,

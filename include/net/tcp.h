@@ -792,6 +792,7 @@ void tcp_send_window_probe(struct sock *sk);
  */
 #define TCP_TS_HZ	1000
 
+/*获取当前纳秒数*/
 static inline u64 tcp_clock_ns(void)
 {
 	return ktime_get_ns();
@@ -836,6 +837,7 @@ static inline u32 tcp_skb_timestamp(const struct sk_buff *skb)
 /* provide the departure time in us unit */
 static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
 {
+	/*将时间换算为us*/
 	return div_u64(skb->skb_mstamp_ns, NSEC_PER_USEC);
 }
 
@@ -2091,7 +2093,7 @@ struct tcp_sock_af_ops {
 };
 
 struct tcp_request_sock_ops {
-	u16 mss_clamp;
+	u16 mss_clamp;/*此协议族默认的mss*/
 #ifdef CONFIG_TCP_MD5SIG
 	struct tcp_md5sig_key *(*req_md5_lookup)(const struct sock *sk,
 						 const struct sock *addr_sk);
@@ -2104,12 +2106,16 @@ struct tcp_request_sock_ops {
 	__u32 (*cookie_init_seq)(const struct sk_buff *skb,
 				 __u16 *mss);
 #endif
+	//查询请求报文地址pair的反方向响应报文对应的路由，如果查不到就丢包了
 	struct dst_entry *(*route_req)(const struct sock *sk,
 				       struct sk_buff *skb,
 				       struct flowi *fl,
 				       struct request_sock *req);
+	/*生成tcp seq*/
 	u32 (*init_seq)(const struct sk_buff *skb);
+	/*用于生成时间签固定offset，真实时间会加上此offset成为tcp的时间签*/
 	u32 (*init_ts_off)(const struct net *net, const struct sk_buff *skb);
+	/*用于发送syn + ack进行连接请求响应*/
 	int (*send_synack)(const struct sock *sk, struct dst_entry *dst,
 			   struct flowi *fl, struct request_sock *req,
 			   struct tcp_fastopen_cookie *foc,

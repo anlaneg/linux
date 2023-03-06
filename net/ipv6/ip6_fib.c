@@ -126,11 +126,13 @@ void fib6_update_sernum(struct net *net, struct fib6_info *f6i)
  *	test bit
  */
 #if defined(__LITTLE_ENDIAN)
+/*0x18*/
 # define BITOP_BE32_SWIZZLE	(0x1F & ~7)
 #else
 # define BITOP_BE32_SWIZZLE	0
 #endif
 
+/*检查token的fn_bit位*/
 static __be32 addr_bit_set(const void *token, int fn_bit)
 {
 	const __be32 *addr = token;
@@ -141,18 +143,24 @@ static __be32 addr_bit_set(const void *token, int fn_bit)
 	 *	htonl(1 << ((~fn_bit)&0x1F))
 	 * See include/asm-generic/bitops/le.h.
 	 */
+	/*fn_bit >> 5 相当于除32,即换算到最后一个bit所在的uint32_t,
+	 * 0x1f = 31，fn_bit & 31 即为在这个uint32_t中的指定数目位
+	 * 32-(fn_bit & 31) 是具体的位数 被简化为(~fn_bit) & 0x1f
+	 * */
 	return (__force __be32)(1 << ((~fn_bit ^ BITOP_BE32_SWIZZLE) & 0x1f)) &
 	       addr[fn_bit >> 5];
 }
 
-struct fib6_info *fib6_info_alloc(gfp_t gfp_flags, bool with_fib6_nh)
+struct fib6_info *fib6_info_alloc(gfp_t gfp_flags, bool with_fib6_nh/*是否包含fib6_nh*/)
 {
 	struct fib6_info *f6i;
 	size_t sz = sizeof(*f6i);
 
 	if (with_fib6_nh)
+		/*需要包含fib6_nh结构体，多申请空间*/
 		sz += sizeof(struct fib6_nh);
 
+	/*申请fib6_info*/
 	f6i = kzalloc(sz, gfp_flags);
 	if (!f6i)
 		return NULL;
@@ -180,6 +188,7 @@ void fib6_info_destroy_rcu(struct rcu_head *head)
 }
 EXPORT_SYMBOL_GPL(fib6_info_destroy_rcu);
 
+/*申请fib6_node*/
 static struct fib6_node *node_alloc(struct net *net)
 {
 	struct fib6_node *fn;
@@ -236,6 +245,7 @@ static void fib6_link_table(struct net *net, struct fib6_table *tb)
 
 #ifdef CONFIG_IPV6_MULTIPLE_TABLES
 
+/*创建指定id的fib6 table*/
 static struct fib6_table *fib6_alloc_table(struct net *net, u32 id)
 {
 	struct fib6_table *table;
@@ -243,8 +253,10 @@ static struct fib6_table *fib6_alloc_table(struct net *net, u32 id)
 	table = kzalloc(sizeof(*table), GFP_ATOMIC);
 	if (table) {
 		table->tb6_id = id;
+		/*初始化根节点的叶子为null_entry*/
 		rcu_assign_pointer(table->tb6_root.leaf,
 				   net->ipv6.fib6_null_entry);
+		/*标记根节点，？？？，标记包含路由项*/
 		table->tb6_root.fn_flags = RTN_ROOT | RTN_TL_ROOT | RTN_RTINFO;
 		inet_peer_base_init(&table->tb6_peers);
 	}
@@ -252,6 +264,7 @@ static struct fib6_table *fib6_alloc_table(struct net *net, u32 id)
 	return table;
 }
 
+/*创建指定id的fib6_table*/
 struct fib6_table *fib6_new_table(struct net *net, u32 id)
 {
 	struct fib6_table *tb;
@@ -260,8 +273,10 @@ struct fib6_table *fib6_new_table(struct net *net, u32 id)
 		id = RT6_TABLE_MAIN;
 	tb = fib6_get_table(net, id);
 	if (tb)
+		/*表存在，直接返回*/
 		return tb;
 
+	/*表不存在，创建此表*/
 	tb = fib6_alloc_table(net, id);
 	if (tb)
 		fib6_link_table(net, tb);
@@ -744,9 +759,9 @@ void fib6_metric_set(struct fib6_info *f6i, int metric, u32 val)
 
 static struct fib6_node *fib6_add_1(struct net *net,
 				    struct fib6_table *table,
-				    struct fib6_node *root,
-				    struct in6_addr *addr, int plen,
-				    int offset, int allow_create,
+				    struct fib6_node *root/*根节点*/,
+				    struct in6_addr *addr/*地址*/, int plen/*前缀长度*/,
+				    int offset, int allow_create/*是否容许创建*/,
 				    int replace_required,
 				    struct netlink_ext_ack *extack)
 {
@@ -772,44 +787,56 @@ static struct fib6_node *fib6_add_1(struct net *net,
 		 */
 		if (plen < fn->fn_bit ||
 		    !ipv6_prefix_equal(&key->addr, addr, fn->fn_bit)) {
+			/*addr与key->addr完全不相等或者本次循环时，plen较小，即是key->addr的子集前缀*/
 			if (!allow_create) {
+				/*不匹配，但不容许创建，按情况报错*/
 				if (replace_required) {
 					NL_SET_ERR_MSG(extack,
 						       "Can not replace route - no match found");
 					pr_warn("Can't replace route, no match found\n");
 					return ERR_PTR(-ENOENT);
 				}
+				/*忽略不容许创建的标记*/
 				pr_warn("NLM_F_CREATE should be set when creating new route\n");
 			}
-			goto insert_above;
+			goto insert_above;/*按需创建*/
 		}
+		/*与当前pn前缀完全匹配*/
 
 		/*
 		 *	Exact match ?
 		 */
 
 		if (plen == fn->fn_bit) {
+			/*要添加的恰好也是此前缀长度，相当于重复添加*/
 			/* clean up an intermediate node */
 			if (!(fn->fn_flags & RTN_RTINFO)) {
+				/*此fn上没有路由项，释放节点（删除时，只清标记吗？）*/
 				RCU_INIT_POINTER(fn->leaf, NULL);
 				fib6_info_release(leaf);
 			/* remove null_entry in the root node */
 			} else if (fn->fn_flags & RTN_TL_ROOT &&
 				   rcu_access_pointer(fn->leaf) ==
 				   net->ipv6.fib6_null_entry) {
+				/*此节点有路由项，但是fn为根节点，且指向null_entry,也需要清空leaf
+				 * 但并不删除。*/
 				RCU_INIT_POINTER(fn->leaf, NULL);
 			}
 
 			return fn;
 		}
+		/*完全匹配，但要添加的前缀要比当前节点更长一些*/
 
 		/*
 		 *	We have more bits to go
 		 */
 
 		/* Try to walk down on tree. */
+		/*在addr数组中，取fn->fn_bit位*/
 		dir = addr_bit_set(addr, fn->fn_bit);
-		pn = fn;
+		pn = fn;/*记录父节点，以防止子节点为空*/
+
+		/*按bit位的取值，决定方向（0走右侧，1走左侧），取fib6_node*/
 		fn = dir ?
 		     rcu_dereference_protected(fn->right,
 					lockdep_is_held(&table->tb6_lock)) :
@@ -817,6 +844,7 @@ static struct fib6_node *fib6_add_1(struct net *net,
 					lockdep_is_held(&table->tb6_lock));
 	} while (fn);
 
+	/*树上没有，需要创建，但标记没有给出，按情况报错*/
 	if (!allow_create) {
 		/* We should not create new node because
 		 * NLM_F_REPLACE was specified without NLM_F_CREATE
@@ -840,13 +868,14 @@ static struct fib6_node *fib6_add_1(struct net *net,
 	 *	Create new leaf node without children.
 	 */
 
-	ln = node_alloc(net);
+	ln = node_alloc(net);/*申请新节点*/
 
 	if (!ln)
 		return ERR_PTR(-ENOMEM);
-	ln->fn_bit = plen;
-	RCU_INIT_POINTER(ln->parent, pn);
+	ln->fn_bit = plen;/*指明此前缀长度*/
+	RCU_INIT_POINTER(ln->parent, pn);/*指向自已父节点*/
 
+	/*按方向插入ln*/
 	if (dir)
 		rcu_assign_pointer(pn->right, ln);
 	else
@@ -855,6 +884,7 @@ static struct fib6_node *fib6_add_1(struct net *net,
 	return ln;
 
 
+	/*插入情况下补节点情况*/
 insert_above:
 	/*
 	 * split since we don't have a common prefix anymore or
@@ -1250,15 +1280,15 @@ add:
 
 		rcu_assign_pointer(rt->fib6_next, iter);
 		fib6_info_hold(rt);
-		rcu_assign_pointer(rt->fib6_node, fn);
-		rcu_assign_pointer(*ins, rt);
+		rcu_assign_pointer(rt->fib6_node, fn);/*指向fib6 node*/
+		rcu_assign_pointer(*ins, rt);/*使叶子指针指向fib info*/
 		if (!info->skip_notify)
 			inet6_rt_notify(RTM_NEWROUTE, rt, info, nlflags);
 		info->nl_net->ipv6.rt6_stats->fib_rt_entries++;
 
 		if (!(fn->fn_flags & RTN_RTINFO)) {
 			info->nl_net->ipv6.rt6_stats->fib_route_nodes++;
-			fn->fn_flags |= RTN_RTINFO;
+			fn->fn_flags |= RTN_RTINFO;/*标记此节点上包含有有效路由信息*/
 		}
 
 	} else {
@@ -1280,9 +1310,9 @@ add:
 		}
 
 		fib6_info_hold(rt);
-		rcu_assign_pointer(rt->fib6_node, fn);
-		rt->fib6_next = iter->fib6_next;
-		rcu_assign_pointer(*ins, rt);
+		rcu_assign_pointer(rt->fib6_node, fn);/*使rt->fib6_node节点指向fn*/
+		rt->fib6_next = iter->fib6_next;/*指向已有fib*/
+		rcu_assign_pointer(*ins, rt);/*将rt加入*/
 		if (!info->skip_notify)
 			inet6_rt_notify(RTM_NEWROUTE, rt, info, NLM_F_REPLACE);
 		if (!(fn->fn_flags & RTN_RTINFO)) {
@@ -1376,7 +1406,7 @@ void fib6_update_sernum_stub(struct net *net, struct fib6_info *f6i)
  *	Need to own table->tb6_lock
  */
 
-int fib6_add(struct fib6_node *root, struct fib6_info *rt,
+int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
 	     struct nl_info *info, struct netlink_ext_ack *extack)
 {
 	struct fib6_table *table = rt->fib6_table;
@@ -1394,11 +1424,13 @@ int fib6_add(struct fib6_node *root, struct fib6_info *rt,
 	if (!allow_create && !replace_required)
 		pr_warn("RTM_NEWROUTE with no NLM_F_CREATE or NLM_F_REPLACE\n");
 
+	/*查询root,并返回对应的fn*/
 	fn = fib6_add_1(info->nl_net, table, root,
 			&rt->fib6_dst.addr, rt->fib6_dst.plen,
 			offsetof(struct fib6_info, fib6_dst), allow_create,
 			replace_required, extack);
 	if (IS_ERR(fn)) {
+		/*查询不存在创建失败/参数有误*/
 		err = PTR_ERR(fn);
 		fn = NULL;
 		goto out;
@@ -1479,6 +1511,7 @@ int fib6_add(struct fib6_node *root, struct fib6_info *rt,
 	}
 #endif
 
+	/*为fibnode添加路由信息*/
 	err = fib6_add_rt2node(fn, rt, info, extack);
 	if (!err) {
 		if (rt->nh)
@@ -1557,41 +1590,49 @@ static struct fib6_node *fib6_node_lookup_1(struct fib6_node *root,
 	__be32 dir;
 
 	if (unlikely(args->offset == 0))
+		/*offset为0，为空查询，直接返回NULL*/
 		return NULL;
 
 	/*
 	 *	Descend on a tree
 	 */
 
-	fn = root;
+	fn = root;/*指向根节点*/
 
 	for (;;) {
 		struct fib6_node *next;
 
+		/*先确定分叉检测位*/
 		dir = addr_bit_set(args->addr, fn->fn_bit);
 
 		next = dir ? rcu_dereference(fn->right) :
 			     rcu_dereference(fn->left);
 
 		if (next) {
+			/*子节点有值，继续查找*/
 			fn = next;
 			continue;
 		}
+		/*子节点无值，查找失败，退出*/
 		break;
 	}
 
+	/*通过上面的查找，我们确定了位置fn,只考虑前缀，当前这个位置是最长的*/
 	while (fn) {
 		struct fib6_node *subtree = FIB6_SUBTREE(fn);
 
 		if (subtree || fn->fn_flags & RTN_RTINFO) {
+			/*此fn节点有路由项，取leaf,进行检查*/
 			struct fib6_info *leaf = rcu_dereference(fn->leaf);
 			struct rt6key *key;
 
 			if (!leaf)
 				goto backtrack;
 
+			/*偏移到key的地址位置*/
 			key = (struct rt6key *) ((u8 *)leaf + args->offset);
 
+			/*两者比对相等*/
 			if (ipv6_prefix_equal(&key->addr, args->addr, key->plen)) {
 #ifdef CONFIG_IPV6_SUBTREES
 				if (subtree) {
@@ -1604,23 +1645,24 @@ static struct fib6_node *fib6_node_lookup_1(struct fib6_node *root,
 				}
 #endif
 				if (fn->fn_flags & RTN_RTINFO)
-					return fn;
+					return fn;/*比对相等，且fn含路由项，则返回*/
 			}
 		}
-backtrack:
+backtrack:/*回溯*/
 		if (fn->fn_flags & RTN_ROOT)
-			break;
+			break;/*已到树根，查询结束*/
 
+		/*沿父节点向上查，由于本次不匹配，则缩短前缀后，再尝试*/
 		fn = rcu_dereference(fn->parent);
 	}
 
-	return NULL;
+	return NULL;/*遍查整棵树，查询失败*/
 }
 
 /* called with rcu_read_lock() held
  */
 struct fib6_node *fib6_node_lookup(struct fib6_node *root,
-				   const struct in6_addr *daddr,
+				   const struct in6_addr *daddr/*目的参数为空时，查saddr*/,
 				   const struct in6_addr *saddr)
 {
 	struct fib6_node *fn;
@@ -1632,7 +1674,7 @@ struct fib6_node *fib6_node_lookup(struct fib6_node *root,
 #ifdef CONFIG_IPV6_SUBTREES
 		{
 			.offset = offsetof(struct fib6_info, fib6_src),
-			.addr = saddr,
+			.addr = saddr,/*查源地址*/
 		},
 #endif
 		{
@@ -1642,7 +1684,7 @@ struct fib6_node *fib6_node_lookup(struct fib6_node *root,
 
 	fn = fib6_node_lookup_1(root, daddr ? args : args + 1);
 	if (!fn || fn->fn_flags & RTN_TL_ROOT)
-		fn = root;
+		fn = root;/*没有查询到，则返回root*/
 
 	return fn;
 }
@@ -2381,6 +2423,7 @@ static int __net_init fib6_net_init(struct net *net)
 	if (!net->ipv6.fib_table_hash)
 		goto out_rt6_stats;
 
+	/*初始化fib6的main路由表*/
 	net->ipv6.fib6_main_tbl = kzalloc(sizeof(*net->ipv6.fib6_main_tbl),
 					  GFP_KERNEL);
 	if (!net->ipv6.fib6_main_tbl)
@@ -2394,6 +2437,7 @@ static int __net_init fib6_net_init(struct net *net)
 	inet_peer_base_init(&net->ipv6.fib6_main_tbl->tb6_peers);
 
 #ifdef CONFIG_IPV6_MULTIPLE_TABLES
+	/*初始化fib6的local路由表*/
 	net->ipv6.fib6_local_tbl = kzalloc(sizeof(*net->ipv6.fib6_local_tbl),
 					   GFP_KERNEL);
 	if (!net->ipv6.fib6_local_tbl)

@@ -322,7 +322,9 @@ static ssize_t usbdev_read(struct file *file, char __user *buf, size_t nbytes,
 		/* 18 bytes - fits on the stack */
 		struct usb_device_descriptor temp_desc;
 
+		/*将设备描述信息复制到temp_desc中*/
 		memcpy(&temp_desc, &dev->descriptor, sizeof(dev->descriptor));
+		/*小端转cpu序*/
 		le16_to_cpus(&temp_desc.bcdUSB);
 		le16_to_cpus(&temp_desc.idVendor);
 		le16_to_cpus(&temp_desc.idProduct);
@@ -342,6 +344,7 @@ static ssize_t usbdev_read(struct file *file, char __user *buf, size_t nbytes,
 		ret += len;
 	}
 
+	/*读写位置在设备配置描述符附近*/
 	pos = sizeof(struct usb_device_descriptor);
 	for (i = 0; nbytes && i < dev->descriptor.bNumConfigurations; i++) {
 		struct usb_config_descriptor *config =
@@ -1432,8 +1435,10 @@ static int proc_getdriver(struct usb_dev_state *ps, void __user *arg)
 		return -EFAULT;
 	intf = usb_ifnum_to_if(ps->dev, gd.interface);
 	if (!intf || !intf->dev.driver)
+		/*未查询到接口*/
 		ret = -ENODATA;
 	else {
+		/*返回驱动名称*/
 		strscpy(gd.driver, intf->dev.driver->name,
 				sizeof(gd.driver));
 		ret = (copy_to_user(arg, &gd, sizeof(gd)) ? -EFAULT : 0);
@@ -2429,6 +2434,7 @@ static int proc_release_port(struct usb_dev_state *ps, void __user *arg)
 	return usb_hub_release_port(ps->dev, portnum, ps);
 }
 
+/*返回设备能力*/
 static int proc_get_capabilities(struct usb_dev_state *ps, void __user *arg)
 {
 	__u32 caps;
@@ -2663,6 +2669,7 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case USBDEVFS_GETDRIVER:
+		/*获取驱动名称*/
 		snoop(&dev->dev, "%s: GETDRIVER\n", __func__);
 		ret = proc_getdriver(ps, p);
 		break;
@@ -2757,6 +2764,7 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 		ret = proc_release_port(ps, p);
 		break;
 	case USBDEVFS_GET_CAPABILITIES:
+		/*获取capablility*/
 		ret = proc_get_capabilities(ps, p);
 		break;
 	case USBDEVFS_DISCONNECT_CLAIM:
@@ -2831,7 +2839,7 @@ const struct file_operations usbdev_file_operations = {
 	.llseek =	  no_seek_end_llseek,
 	.read =		  usbdev_read,
 	.poll =		  usbdev_poll,
-	.unlocked_ioctl = usbdev_ioctl,
+	.unlocked_ioctl = usbdev_ioctl,/*usb设备ioctl响应*/
 	.compat_ioctl =   compat_ptr_ioctl,
 	.mmap =           usbdev_mmap,
 	.open =		  usbdev_open,
@@ -2881,6 +2889,7 @@ int __init usb_devio_init(void)
 {
 	int retval;
 
+	/*注册usb字符设备，用于设备通信*/
 	retval = register_chrdev_region(USB_DEVICE_DEV, USB_DEVICE_MAX,
 					"usb_device");
 	if (retval) {

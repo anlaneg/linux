@@ -969,6 +969,7 @@ _uverbs_get_const_unsigned(u64 *to,
 #define uverbs_get_const_signed(_to, _attrs_bundle, _idx)                      \
 	({                                                                     \
 		s64 _val;                                                      \
+		/*有符号数据*/\
 		int _ret =                                                     \
 			_uverbs_get_const_signed(&_val, _attrs_bundle, _idx,   \
 					  type_min(typeof(*(_to))),            \

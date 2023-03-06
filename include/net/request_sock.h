@@ -25,9 +25,9 @@ struct dst_entry;
 struct proto;
 
 struct request_sock_ops {
-	int		family;
-	unsigned int	obj_size;
-	//申请空间用的slab
+	int		family;/*负责哪个协议族的处理*/
+	unsigned int	obj_size;/*需要创建的socket对象大小*/
+	//申请rquest sock空间用的slab
 	struct kmem_cache	*slab;
 	//request_sock slab名称
 	char		*slab_name;
@@ -56,6 +56,7 @@ struct request_sock {
 	struct sock_common		__req_common;
 #define rsk_refcnt			__req_common.skc_refcnt
 #define rsk_hash			__req_common.skc_hash
+	/*指明此socket由哪个listen socket生成*/
 #define rsk_listener			__req_common.skc_listener
 #define rsk_window_clamp		__req_common.skc_window_clamp
 #define rsk_rcv_wnd			__req_common.skc_rcv_wnd
@@ -66,13 +67,13 @@ struct request_sock {
 	u8				syncookie:1; /* syncookie: encode tcpopts in timestamp */
 	u8				num_timeout:7; /* number of timeouts */
 	u32				ts_recent;
-	struct timer_list		rsk_timer;
-	const struct request_sock_ops	*rsk_ops;
+	struct timer_list		rsk_timer;/*request socket timer,用于超时维护*/
+	const struct request_sock_ops	*rsk_ops;/*此request socket对应的ops*/
 	struct sock			*sk;
 	struct saved_syn		*saved_syn;
 	u32				secid;
 	u32				peer_secid;
-	u32				timeout;
+	u32				timeout;/*超时时间*/
 };
 
 static inline struct request_sock *inet_reqsk(const struct sock *sk)
@@ -85,9 +86,10 @@ static inline struct sock *req_to_sk(struct request_sock *req)
 	return (struct sock *)req;
 }
 
+/*通过ops创建request_sock*/
 static inline struct request_sock *
 reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
-	    bool attach_listener)
+	    bool attach_listener/*是否attach listener*/)
 {
 	struct request_sock *req;
 
@@ -97,6 +99,7 @@ reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
 		return NULL;
 	req->rsk_listener = NULL;
 	if (attach_listener) {
+		/*需要attach listener*/
 		if (unlikely(!refcount_inc_not_zero(&sk_listener->sk_refcnt))) {
 			kmem_cache_free(ops->slab, req);
 			return NULL;
@@ -104,7 +107,7 @@ reqsk_alloc(const struct request_sock_ops *ops, struct sock *sk_listener,
 		req->rsk_listener = sk_listener;
 	}
 	req->rsk_ops = ops;
-	req_to_sk(req)->sk_prot = sk_listener->sk_prot;
+	req_to_sk(req)->sk_prot = sk_listener->sk_prot;/*自listen socket中取sk_prot*/
 	sk_node_init(&req_to_sk(req)->sk_node);
 	sk_tx_queue_clear(req_to_sk(req));
 	req->saved_syn = NULL;

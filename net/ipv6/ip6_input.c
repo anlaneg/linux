@@ -63,9 +63,9 @@ static void ip6_rcv_finish_core(struct net *net, struct sock *sk,
 		}
 	}
 
-	/*执行ipv6路由查询*/
+	/*如果无路由结果，执行ipv6路由查询*/
 	if (!skb_valid_dst(skb))
-		ip6_route_input(skb);
+		ip6_route_input(skb);/*ipv6路由查询*/
 }
 
 int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
@@ -76,6 +76,7 @@ int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	skb = l3mdev_ip6_rcv(skb);
 	if (!skb)
 		return NET_RX_SUCCESS;
+	/*路由查询*/
 	ip6_rcv_finish_core(net, sk, skb);
 
 	/*按路由进行input投递*/
@@ -174,7 +175,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 
 	SKB_DR_SET(reason, NOT_SPECIFIED);
 	if ((skb = skb_share_check(skb, GFP_ATOMIC)) == NULL ||
-	    !idev/*设备无inet6_dev，丢包*/ || unlikely(idev->cnf.disable_ipv6)) {
+	    !idev/*设备无inet6_dev，丢包*/ || unlikely(idev->cnf.disable_ipv6)/*inet6设置禁止了ipv6*/) {
 		__IP6_INC_STATS(net, idev, IPSTATS_MIB_INDISCARDS);
 		if (idev && unlikely(idev->cnf.disable_ipv6))
 			SKB_DR_SET(reason, IPV6DISABLED);
@@ -327,6 +328,7 @@ int ipv6_rcv(struct sk_buff *skb, struct net_device *dev, struct packet_type *pt
 	skb = ip6_rcv_core(skb, dev, net);
 	if (skb == NULL)
 		return NET_RX_DROP;
+
 	//走pre routing钩子点
 	return NF_HOOK(NFPROTO_IPV6, NF_INET_PRE_ROUTING,
 		       net, NULL, skb, dev, NULL,
@@ -434,7 +436,7 @@ resubmit_final:
 			/* Free reference early: we don't need it any more,
 			   and it may hold ip_conntrack module loaded
 			   indefinitely. */
-			nf_reset_ct(skb);
+			nf_reset_ct(skb);/*清除ct*/
 
 			skb_postpull_rcsum(skb, skb_network_header(skb),
 					   skb_network_header_len(skb));
@@ -558,6 +560,7 @@ int ip6_mc_input(struct sk_buff *skb)
 	}
 
 	hdr = ipv6_hdr(skb);
+	/*检查是否接收此组播地址*/
 	deliver = ipv6_chk_mcast_addr(dev, &hdr->daddr, NULL);
 	if (sdif)
 		rcu_read_unlock();
@@ -621,7 +624,7 @@ int ip6_mc_input(struct sk_buff *skb)
 out:
 #endif
 	if (likely(deliver))
-		ip6_input(skb);
+		ip6_input(skb);/*本机可交付，送local*/
 	else {
 		/* discard */
 		kfree_skb(skb);

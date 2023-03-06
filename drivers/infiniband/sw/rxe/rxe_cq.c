@@ -42,6 +42,7 @@ err1:
 	return -EINVAL;
 }
 
+/*触发此cq的cmplete handler*/
 static void rxe_send_complete(struct tasklet_struct *t)
 {
 	struct rxe_cq *cq = from_tasklet(cq, t, comp_task);
@@ -58,7 +59,7 @@ static void rxe_send_complete(struct tasklet_struct *t)
 }
 
 /*初始化cq*/
-int rxe_cq_from_init(struct rxe_dev *rxe, struct rxe_cq *cq/*出参，待初始化cq*/, int cqe/*cqe数目*/,
+int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参，待初始化cq*/, int cqe/*cqe数目*/,
 		     int comp_vector, struct ib_udata *udata,
 		     struct rxe_create_cq_resp __user *uresp)
 {
@@ -68,14 +69,15 @@ int rxe_cq_from_init(struct rxe_dev *rxe, struct rxe_cq *cq/*出参，待初始�
 	/*初始化队列*/
 	type = QUEUE_TYPE_TO_CLIENT;
 	cq->queue = rxe_queue_init(rxe, &cqe,
-			sizeof(struct rxe_cqe), type);
+			sizeof(struct rxe_cqe)/*元素大小*/, type);
 	if (!cq->queue) {
 		pr_warn("unable to create cq\n");
 		return -ENOMEM;
 	}
 
+	/*将cq->queue->buf映射到用户态*/
 	err = do_mmap_info(rxe, uresp ? &uresp->mi : NULL, udata,
-			   cq->queue->buf, cq->queue->buf_size, &cq->queue->ip);
+			   cq->queue->buf/*要映射的内存*/, cq->queue->buf_size/*buffer大小*/, &cq->queue->ip);
 	if (err) {
 		vfree(cq->queue->buf);
 		kfree(cq->queue);
@@ -86,6 +88,7 @@ int rxe_cq_from_init(struct rxe_dev *rxe, struct rxe_cq *cq/*出参，待初始�
 
 	cq->is_dying = false;
 
+	/*初始化complete task*/
 	tasklet_setup(&cq->comp_task, rxe_send_complete);
 
 	spin_lock_init(&cq->cq_lock);

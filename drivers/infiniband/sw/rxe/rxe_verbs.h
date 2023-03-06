@@ -127,7 +127,7 @@ struct rxe_req_info {
 	int			need_retry;
 	int			wait_for_rnr_timer;
 	int			noack_pkts;
-	struct rxe_task		task;
+	struct rxe_task		task;//指明rxe_requester回调
 };
 
 struct rxe_comp_info {
@@ -139,7 +139,7 @@ struct rxe_comp_info {
 	int			started_retry;
 	u32			retry_cnt;
 	u32			rnr_retry;
-	struct rxe_task		task;
+	struct rxe_task		task;//指明rxe_completer回调
 };
 
 enum rdatm_res_state {
@@ -266,7 +266,7 @@ struct rxe_qp {
 	 * started. The responder resets it whenever an ack is
 	 * received.
 	 */
-	struct timer_list retrans_timer;
+	struct timer_list retrans_timer;/*重传定时器*/
 	u64 qp_timeout_jiffies;
 
 	/* Timer for handling RNR NAKS. */
@@ -409,7 +409,7 @@ struct rxe_dev {
 	struct rxe_pool		pd_pool;
 	struct rxe_pool		ah_pool;
 	struct rxe_pool		srq_pool;
-	struct rxe_pool		qp_pool;
+	struct rxe_pool		qp_pool;/*收集qp*/
 	struct rxe_pool		cq_pool;
 	struct rxe_pool		mr_pool;
 	struct rxe_pool		mw_pool;
@@ -421,7 +421,7 @@ struct rxe_dev {
 	atomic_t		mcg_attach;
 
 	spinlock_t		pending_lock; /* guard pending_mmaps */
-	struct list_head	pending_mmaps;
+	struct list_head	pending_mmaps;/*待执行mmap的rxe_mmap_info*/
 
 	spinlock_t		mmap_offset_lock; /* guard mmap_offset */
 	u64			mmap_offset;

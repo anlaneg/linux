@@ -173,6 +173,7 @@ void copy_port_attr_to_resp(struct ib_port_attr *attr,
 	resp->link_layer = rdma_port_get_link_layer(ib_dev, port_num);
 }
 
+/*定义ib_uverbs handler函数，处理query port*/
 static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_PORT)(
 	struct uverbs_attr_bundle *attrs)
 {
@@ -186,17 +187,19 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_PORT)(
 	ucontext = ib_uverbs_get_ucontext(attrs);
 	if (IS_ERR(ucontext))
 		return PTR_ERR(ucontext);
-	ib_dev = ucontext->device;
+	ib_dev = ucontext->device;/*取对应的ib设备*/
 
 	/* FIXME: Extend the UAPI_DEF_OBJ_NEEDS_FN stuff.. */
 	if (!ib_dev->ops.query_port)
 		return -EOPNOTSUPP;
 
+	/*取port_num*/
 	ret = uverbs_get_const(&port_num, attrs,
 			       UVERBS_ATTR_QUERY_PORT_PORT_NUM);
 	if (ret)
 		return ret;
 
+	/*针对ib_dev查询给定的port_num对应的属性*/
 	ret = ib_query_port(ib_dev, port_num, &attr);
 	if (ret)
 		return ret;
@@ -490,6 +493,7 @@ DECLARE_UVERBS_NAMED_METHOD(
 					       netdev_ifindex),
 			    UA_MANDATORY));
 
+/*定义device object*/
 DECLARE_UVERBS_GLOBAL_METHODS(UVERBS_OBJECT_DEVICE,
 			      &UVERBS_METHOD(UVERBS_METHOD_GET_CONTEXT),
 			      &UVERBS_METHOD(UVERBS_METHOD_INVOKE_WRITE),

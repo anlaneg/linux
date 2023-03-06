@@ -2814,7 +2814,7 @@ static int tcp_close_state(struct sock *sk)
 	int next = (int)new_state[sk->sk_state];
 	int ns = next & TCP_STATE_MASK;
 
-	tcp_set_state(sk, ns);
+	tcp_set_state(sk, ns);/*设置状态*/
 
 	return next & TCP_ACTION_FIN;
 }
@@ -2839,7 +2839,7 @@ void tcp_shutdown(struct sock *sk, int how)
 	     TCPF_SYN_RECV | TCPF_CLOSE_WAIT)) {
 		/* Clear out any half completed packets.  FIN if needed. */
 		if (tcp_close_state(sk))
-			tcp_send_fin(sk);
+			tcp_send_fin(sk);/*发送fin*/
 	}
 }
 EXPORT_SYMBOL(tcp_shutdown);
@@ -3558,7 +3558,7 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		name[val] = 0;
 
 		sockopt_lock_sock(sk);
-		err = tcp_set_ulp(sk, name);
+		err = tcp_set_ulp(sk, name);/*更正socket为上层协议*/
 		sockopt_release_sock(sk);
 		return err;
 	}

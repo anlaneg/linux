@@ -66,12 +66,14 @@ static struct proc_dir_entry *pde_subdir_next(struct proc_dir_entry *dir)
 			     subdir_node);
 }
 
-static struct proc_dir_entry *pde_subdir_find(struct proc_dir_entry *dir,
-					      const char *name,
-					      unsigned int len)
+/*在dir中查找name,len对应的proc_dir_entry*/
+static struct proc_dir_entry *pde_subdir_find(struct proc_dir_entry *dir/*目录*/,
+					      const char *name/*文件名称，不以'\0'结尾*/,
+					      unsigned int len/*文件名称长度*/)
 {
 	struct rb_node *node = dir->subdir.rb_node;
 
+	/*红黑树进行查询匹配*/
 	while (node) {
 		struct proc_dir_entry *de = rb_entry(node,
 						     struct proc_dir_entry,
@@ -170,17 +172,18 @@ static int __xlate_proc_name(const char *name, struct proc_dir_entry **ret,
 	const char     		*cp = name, *next;
 	struct proc_dir_entry	*de;
 
-	de = *ret ?: &proc_root;
+	de = *ret ?: &proc_root;/*如果目录给定，则用给定的目录，否则使用root*/
 	while ((next = strchr(cp, '/')) != NULL) {
 		de = pde_subdir_find(de, cp, next - cp);
 		if (!de) {
+			/*路径有误*/
 			WARN(1, "name '%s'\n", name);
 			return -ENOENT;
 		}
 		cp = next + 1;
 	}
-	*residual = cp;
-	*ret = de;
+	*residual = cp;/*剩余部分*/
+	*ret = de;/*查询到的proc_dir_entry*/
 	return 0;
 }
 
@@ -378,7 +381,7 @@ struct proc_dir_entry *proc_register(struct proc_dir_entry *dir,
 		goto out_free_entry;
 
 	write_lock(&proc_subdir_lock);
-	dp->parent = dir;
+	dp->parent = dir;/*指向父目录*/
 	if (pde_subdir_insert(dir, dp) == false) {
 		//已加入，有重复
 		WARN(1, "proc_dir_entry '%s/%s' already registered\n",
@@ -397,6 +400,7 @@ out_free_entry:
 	return NULL;
 }
 
+/*在parent下创建name对应的entry(name名称可以包含路径）*/
 static struct proc_dir_entry *__proc_create(struct proc_dir_entry **parent,
 					  const char *name,
 					  umode_t mode,
@@ -411,18 +415,22 @@ static struct proc_dir_entry *__proc_create(struct proc_dir_entry **parent,
 	qstr.name = fn;
 	qstr.len = strlen(fn);
 	if (qstr.len == 0 || qstr.len >= 256) {
+		/*剩余的名称为空或者名称过长，报错*/
 		WARN(1, "name len %u\n", qstr.len);
 		return NULL;
 	}
 	if (qstr.len == 1 && fn[0] == '.') {
+		/*无效的名称'.'*/
 		WARN(1, "name '.'\n");
 		return NULL;
 	}
 	if (qstr.len == 2 && fn[0] == '.' && fn[1] == '.') {
+		/*无效的名称'..'*/
 		WARN(1, "name '..'\n");
 		return NULL;
 	}
 	if (*parent == &proc_root && name_to_int(&qstr) != ~0U) {
+		/*根目录下，不容许创建纯数字文件名*/
 		WARN(1, "create '/proc/%s' by hand\n", qstr.name);
 		return NULL;
 	}
@@ -431,13 +439,16 @@ static struct proc_dir_entry *__proc_create(struct proc_dir_entry **parent,
 		return NULL;
 	}
 
+	/*申请一个entry*/
 	ent = kmem_cache_zalloc(proc_dir_entry_cache, GFP_KERNEL);
 	if (!ent)
 		goto out;
 
 	if (qstr.len + 1 <= SIZEOF_PDE_INLINE_NAME) {
+		/*entry保存名称使用inline_name空间*/
 		ent->name = ent->inline_name;
 	} else {
+		/*entry保存名称使用kmalloc名称*/
 		ent->name = kmalloc(qstr.len + 1, GFP_KERNEL);
 		if (!ent->name) {
 			pde_free(ent);
@@ -445,6 +456,7 @@ static struct proc_dir_entry *__proc_create(struct proc_dir_entry **parent,
 		}
 	}
 
+	/*初始化entry*/
 	memcpy(ent->name, fn, qstr.len + 1);
 	ent->namelen = qstr.len;
 	ent->mode = mode;
@@ -559,6 +571,7 @@ struct proc_dir_entry *proc_create_reg(const char *name, umode_t mode,
 	if (WARN_ON_ONCE(!S_ISREG(mode)))
 		return NULL;
 
+	/*创建dir entry*/
 	p = __proc_create(parent, name, mode, 1);
 	if (p) {
 		p->proc_iops = &proc_file_inode_operations;

@@ -219,7 +219,7 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
-//生成inode池
+//生成ext2 inode池
 static int __init init_inodecache(void)
 {
 	ext2_inode_cachep = kmem_cache_create_usercopy("ext2_inode_cache",
@@ -369,7 +369,7 @@ static const struct super_operations ext2_sops = {
 };
 
 static struct inode *ext2_nfs_get_inode(struct super_block *sb,
-		u64 ino, u32 generation)
+		u64 ino/*inode编号*/, u32 generation)
 {
 	struct inode *inode;
 
@@ -1115,6 +1115,8 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 			 (u64)sbi->s_groups_count * sbi->s_inodes_per_group);
 		goto failed_mount;
 	}
+
+	/*申请group_desc对应的内存空间*/
 	db_count = (sbi->s_groups_count + EXT2_DESC_PER_BLOCK(sb) - 1) /
 		   EXT2_DESC_PER_BLOCK(sb);
 	sbi->s_group_desc = kvmalloc_array(db_count,
@@ -1132,6 +1134,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 		ext2_msg(sb, KERN_ERR, "error: not enough memory");
 		goto failed_mount_group_desc;
 	}
+	/*加载group desc*/
 	for (i = 0; i < db_count; i++) {
 		block = descriptor_loc(sb, logic_sb_block, i);
 		sbi->s_group_desc[i] = sb_bread(sb, block);
@@ -1677,7 +1680,7 @@ static int __init init_ext2_fs(void)
 		return err;
 
 	//注册ext2文件系统
-        err = register_filesystem(&ext2_fs_type);
+    err = register_filesystem(&ext2_fs_type);
 	if (err)
 		goto out;
 	return 0;

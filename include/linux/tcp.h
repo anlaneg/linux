@@ -159,6 +159,7 @@ struct tcp_request_sock_ops;
 
 struct tcp_request_sock {
 	struct inet_request_sock 	req;
+	/*各协议族自主的特别ops*/
 	const struct tcp_request_sock_ops *af_specific;
 	u64				snt_synack; /* first SYNACK sent time */
 	bool				tfo_listener;
@@ -167,11 +168,14 @@ struct tcp_request_sock {
 	bool				drop_req;
 #endif
 	u32				txhash;
+	/*收到的seq号*/
 	u32				rcv_isn;
 	//发送时的seq号
 	u32				snt_isn;
+	/*生成的时间签固定偏移量*/
 	u32				ts_off;
 	u32				last_oow_ack_time; /* last SYNACK */
+	/*预期接下来收到的seq号*/
 	u32				rcv_nxt; /* the ack # by SYNACK. For
 						  * FastOpen it's the seq#
 						  * after data-in-SYN.
@@ -489,6 +493,7 @@ enum tsq_flags {
 	TCPF_MTU_REDUCED_DEFERRED	= (1UL << TCP_MTU_REDUCED_DEFERRED),
 };
 
+/*将sock转为tcp_socket*/
 static inline struct tcp_sock *tcp_sk(const struct sock *sk)
 {
 	return (struct tcp_sock *)sk;

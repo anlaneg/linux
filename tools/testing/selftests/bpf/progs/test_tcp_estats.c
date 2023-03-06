@@ -74,7 +74,9 @@ struct sock_common {
 struct sock {
 	struct sock_common	__sk_common;
 #define sk_family		__sk_common.skc_family
+	/*到对端地址*/
 #define sk_v6_daddr		__sk_common.skc_v6_daddr
+	/*本端地址*/
 #define sk_v6_rcv_saddr		__sk_common.skc_v6_rcv_saddr
 };
 

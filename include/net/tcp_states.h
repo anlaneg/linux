@@ -27,7 +27,7 @@ enum {
 	TCP_LISTEN,
 	/*本机向对端发送了fin,但对端没有针以此fin回复ack,而是发送了fin,此时认定两端同时关闭*/
 	TCP_CLOSING,	/* Now a valid state */
-	TCP_NEW_SYN_RECV,//收到syn报文
+	TCP_NEW_SYN_RECV,//收到syn报文，创建req_socket
 
 	TCP_MAX_STATES	/* Leave at the end! */
 };

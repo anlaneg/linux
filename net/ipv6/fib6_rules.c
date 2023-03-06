@@ -97,6 +97,7 @@ struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 				   int flags, pol_lookup_t lookup)
 {
 	if (net->ipv6.fib6_has_custom_rules) {
+		/*配置有策略路由，执行策略路由查询*/
 		struct fib6_result res = {};
 		struct fib_lookup_arg arg = {
 			.lookup_ptr = lookup,
@@ -123,7 +124,7 @@ struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 		if (rt != net->ipv6.ip6_null_entry && rt->dst.error != -EAGAIN)
 			return &rt->dst;
 		ip6_rt_put_flags(rt, flags);
-		//查询main 路由表
+		//通过lookup函数查询main 路由表
 		rt = pol_lookup_func(lookup,
 			     net, net->ipv6.fib6_main_tbl, fl6, skb, flags);
 		if (rt->dst.error != -EAGAIN)
@@ -183,11 +184,13 @@ static int fib6_rule_action_alt(struct fib_rule *rule, struct flowi *flp,
 		return -EINVAL;
 	}
 
+	/*确定要查询的路由表*/
 	tb_id = fib_rule_get_table(rule, arg);
 	table = fib6_get_table(net, tb_id);
 	if (!table)
 		return -EAGAIN;
 
+	/*针对此路由表进行查询*/
 	oif = (int *)arg->lookup_data;
 	err = fib6_table_lookup(net, table, *oif, flp6, res, flags);
 	if (!err && res->f6i != net->ipv6.fib6_null_entry)

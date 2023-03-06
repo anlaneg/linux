@@ -166,6 +166,7 @@ static const struct file_operations socket_file_ops = {
 #endif
 	/*针对socket fd支持mmap*/
 	.mmap =		sock_mmap,
+	/*针对socket fd支持关闭*/
 	.release =	sock_close,
 	.fasync =	sock_fasync,
 	.sendpage =	sock_sendpage,
@@ -682,6 +683,7 @@ static void __sock_release(struct socket *sock, struct inode *inode)
 			inode_lock(inode);
 		/*解发sock的release回调*/
 		sock->ops->release(sock);
+		/*默认成功，直接进行后续处理*/
 		sock->sk = NULL;
 		if (inode)
 			inode_unlock(inode);
@@ -1431,7 +1433,8 @@ static int sock_mmap(struct file *file, struct vm_area_struct *vma)
 
 static int sock_close(struct inode *inode, struct file *filp)
 {
-	__sock_release(SOCKET_I(inode), inode);
+	/*执行socket关闭*/
+	__sock_release(SOCKET_I(inode)/*取对应的socket*/, inode);
 	return 0;
 }
 

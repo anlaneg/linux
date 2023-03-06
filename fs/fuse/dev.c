@@ -31,6 +31,7 @@ MODULE_ALIAS("devname:fuse");
 
 static struct kmem_cache *fuse_req_cachep;
 
+/*私有数据为fuse_dev*/
 static struct fuse_dev *fuse_get_dev(struct file *file)
 {
 	/*
@@ -229,8 +230,8 @@ __releases(fiq->lock)
 	req->in.h.len = sizeof(struct fuse_in_header) +
 		fuse_len_args(req->args->in_numargs,
 			      (struct fuse_arg *) req->args->in_args);
-	list_add_tail(&req->list, &fiq->pending);
-	fiq->ops->wake_pending_and_unlock(fiq);
+	list_add_tail(&req->list, &fiq->pending);/*将请求加入链表*/
+	fiq->ops->wake_pending_and_unlock(fiq);/*唤醒对端*/
 }
 
 void fuse_queue_forget(struct fuse_conn *fc, struct fuse_forget_link *forget,
@@ -414,14 +415,15 @@ static void __fuse_request_send(struct fuse_req *req)
 	BUG_ON(test_bit(FR_BACKGROUND, &req->flags));
 	spin_lock(&fiq->lock);
 	if (!fiq->connected) {
+		/*未建立连接，报错*/
 		spin_unlock(&fiq->lock);
 		req->out.h.error = -ENOTCONN;
 	} else {
 		req->in.h.unique = fuse_get_unique(fiq);
 		/* acquire extra reference, since request is still needed
 		   after fuse_request_end() */
-		__fuse_get_request(req);
-		queue_request_and_unlock(fiq, req);
+		__fuse_get_request(req);/*增加请求引用*/
+		queue_request_and_unlock(fiq, req);/*req入队*/
 
 		request_wait_answer(req);
 		/* Pairs with smp_wmb() in fuse_request_end() */
@@ -508,7 +510,7 @@ ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 
 	if (!args->noreply)
 		__set_bit(FR_ISREPLY, &req->flags);
-	__fuse_request_send(req);
+	__fuse_request_send(req);/*发送请求*/
 	ret = req->out.h.error;
 	if (!ret && args->out_argvar) {
 		BUG_ON(args->out_numargs == 0);
@@ -1336,6 +1338,7 @@ out_end:
 	return err;
 }
 
+/*初始私有数据为NULL*/
 static int fuse_dev_open(struct inode *inode, struct file *file)
 {
 	/*
@@ -1351,6 +1354,7 @@ static ssize_t fuse_dev_read(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct fuse_copy_state cs;
 	struct file *file = iocb->ki_filp;
+	/*取此文件对应的fud,读写时此fud必须已通过ioctl设置*/
 	struct fuse_dev *fud = fuse_get_dev(file);
 
 	if (!fud)
@@ -2164,7 +2168,7 @@ void fuse_abort_conn(struct fuse_conn *fc)
 		spin_unlock(&fc->bg_lock);
 
 		spin_lock(&fiq->lock);
-		fiq->connected = 0;
+		fiq->connected = 0;/*标明断开连接*/
 		list_for_each_entry(req, &fiq->pending, list)
 			clear_bit(FR_PENDING, &req->flags);
 		list_splice_tail_init(&fiq->pending, &to_end);
@@ -2236,8 +2240,10 @@ static int fuse_device_clone(struct fuse_conn *fc, struct file *new)
 	struct fuse_dev *fud;
 
 	if (new->private_data)
+		/*调用时private_data不能有值*/
 		return -EINVAL;
 
+	/*申请并安装fud，并设置private_data*/
 	fud = fuse_dev_alloc_install(fc);
 	if (!fud)
 		return -ENOMEM;
@@ -2259,7 +2265,7 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	case FUSE_DEV_IOC_CLONE:
 		res = -EFAULT;
 		if (!get_user(oldfd, (__u32 __user *)arg)) {
-			struct file *old = fget(oldfd);
+			struct file *old = fget(oldfd);/*取用户态指定的file*/
 
 			res = -EINVAL;
 			if (old) {
@@ -2269,7 +2275,7 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 				 */
 				if (old->f_op == file->f_op &&
 				    old->f_cred->user_ns == file->f_cred->user_ns)
-					fud = fuse_get_dev(old);
+					fud = fuse_get_dev(old);/*取指定文件对应的fud*/
 
 				if (fud) {
 					mutex_lock(&fuse_mutex);
@@ -2318,6 +2324,7 @@ int __init fuse_dev_init(void)
 	if (!fuse_req_cachep)
 		goto out;
 
+	/*misc设备注册*/
 	err = misc_register(&fuse_miscdevice);
 	if (err)
 		goto out_cache_clean;

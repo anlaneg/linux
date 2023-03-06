@@ -78,14 +78,20 @@ struct inet_request_sock {
 #define ir_v6_loc_addr		req.__req_common.skc_v6_rcv_saddr
 #define ir_iif			req.__req_common.skc_bound_dev_if
 #define ir_cookie		req.__req_common.skc_cookie
+	/*此request socket对应的net namespace*/
 #define ireq_net		req.__req_common.skc_net
+	/*此request socket当前的状态*/
 #define ireq_state		req.__req_common.skc_state
+	/*此request socket对应的family*/
 #define ireq_family		req.__req_common.skc_family
 
-	u16			snd_wscale : 4,
+	u16			snd_wscale : 4,/*窗口放大因子*/
 				rcv_wscale : 4,
+				/*时间签是否开启*/
 				tstamp_ok  : 1,
+				/*是否开启sack*/
 				sack_ok	   : 1,
+				/*窗口放大因子是否有效*/
 				wscale_ok  : 1,
 				/*是否开启enc标记*/
 				ecn_ok	   : 1,
@@ -222,8 +228,9 @@ struct inet_sock {
 #define inet_daddr		sk.__sk_common.skc_daddr
 //设置接收的地址（报文中的目的ip,一般情况下我们在bind时设置的是0）
 #define inet_rcv_saddr		sk.__sk_common.skc_rcv_saddr
-	/*sk中记录的dst port*/
+/*sk中记录的目的端口（dst port，网络序）*/
 #define inet_dport		sk.__sk_common.skc_dport
+/*sk中记录的源端口（主机序）*/
 #define inet_num		sk.__sk_common.skc_num
 
 	/*源地址*/
@@ -233,7 +240,7 @@ struct inet_sock {
 	__u16			cmsg_flags;
 	/*记录ipv4层选项*/
 	struct ip_options_rcu __rcu	*inet_opt;
-	/*sk中记录的src port（网络序）*/
+	/*sk中记录的源端口（网络序）*/
 	__be16			inet_sport;
 	__u16			inet_id;
 

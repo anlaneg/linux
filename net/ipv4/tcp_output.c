@@ -3600,7 +3600,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	mss = tcp_mss_clamp(tp, dst_metric_advmss(dst));
 
 	memset(&opts, 0, sizeof(opts));
-	now = tcp_clock_ns();
+	now = tcp_clock_ns();/*取当前时间*/
 #ifdef CONFIG_SYN_COOKIES
 	if (unlikely(synack_type == TCP_SYNACK_COOKIE && ireq->tstamp_ok))
 		skb_set_delivery_time(skb, cookie_init_timestamp(req, now),
@@ -3641,7 +3641,7 @@ struct sk_buff *tcp_make_synack(const struct sock *sk, struct dst_entry *dst,
 	skb->ip_summed = CHECKSUM_PARTIAL;
 	th->seq = htonl(tcp_rsk(req)->snt_isn);//填充seq
 	/* XXX data is queued and acked as is. No buffer/window check */
-	th->ack_seq = htonl(tcp_rsk(req)->rcv_nxt);
+	th->ack_seq = htonl(tcp_rsk(req)->rcv_nxt);/*填充对方ack*/
 
 	/* RFC1323: The window in SYN & SYN/ACK segments is never scaled. */
 	th->window = htons(min(req->rsk_rcv_wnd, 65535U));
@@ -4167,7 +4167,9 @@ int tcp_rtx_synack(const struct sock *sk, struct request_sock *req)
 
 	/* Paired with WRITE_ONCE() in sock_setsockopt() */
 	if (READ_ONCE(sk->sk_txrehash) == SOCK_TXREHASH_ENABLED)
+		/*如果开启tx rehash,则重新生成txhash(随机值）*/
 		tcp_rsk(req)->txhash = net_tx_rndhash();
+	/*响应syn ack*/
 	res = af_ops->send_synack(sk, NULL, &fl, req, NULL, TCP_SYNACK_NORMAL,
 				  NULL);
 	if (!res) {

@@ -22,6 +22,7 @@
 
 #define LIST_HEAD_INIT(name) { &(name), &(name) }
 
+/*定义并初始化list_head，指向自身，按约定链表为空*/
 #define LIST_HEAD(name) \
 	struct list_head name = LIST_HEAD_INIT(name)
 
@@ -293,6 +294,7 @@ static inline int list_is_head(const struct list_head *list, const struct list_h
  */
 static inline int list_empty(const struct list_head *head)
 {
+	/*head->next指向自身，则链表为空*/
 	return READ_ONCE(head->next) == head;
 }
 
@@ -537,7 +539,7 @@ static inline void list_splice_tail_init(struct list_head *list,
  * Note, that list is expected to be not empty.
  */
 #define list_first_entry(ptr, type, member) \
-    /*ptr是一个链表头，取其next对应的结构体type*/\
+    /*ptr是list_head，取其next对应的结构体type*/\
 	list_entry((ptr)->next, type, member)
 
 /**

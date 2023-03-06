@@ -10,13 +10,14 @@
 #include "rxe_queue.h"
 
 int do_mmap_info(struct rxe_dev *rxe, struct mminfo __user *outbuf,
-		 struct ib_udata *udata, struct rxe_queue_buf *buf,
-		 size_t buf_size, struct rxe_mmap_info **ip_p)
+		 struct ib_udata *udata, struct rxe_queue_buf *buf/*要映射的内存起始地址*/,
+		 size_t buf_size/*内存大小*/, struct rxe_mmap_info **ip_p)
 {
 	int err;
 	struct rxe_mmap_info *ip = NULL;
 
 	if (outbuf) {
+		/*创建mmap信息*/
 		ip = rxe_create_mmap_info(rxe, buf_size, udata, buf);
 		if (IS_ERR(ip)) {
 			err = PTR_ERR(ip);
@@ -29,6 +30,7 @@ int do_mmap_info(struct rxe_dev *rxe, struct mminfo __user *outbuf,
 		}
 
 		spin_lock_bh(&rxe->pending_lock);
+		/*将此映射信息加入到rxe->pending_mmaps*/
 		list_add(&ip->pending_mmaps, &rxe->pending_mmaps);
 		spin_unlock_bh(&rxe->pending_lock);
 	}
@@ -52,6 +54,7 @@ inline void rxe_queue_reset(struct rxe_queue *q)
 	memset(q->buf->data, 0, q->buf_size - sizeof(struct rxe_queue_buf));
 }
 
+/*创建rxe队列*/
 struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参，队列元素数目*/,
 			unsigned int elem_size/*队列元素大小*/, enum queue_type type/*队列类型*/)
 {
@@ -64,7 +67,7 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参�
 	    /*必须指定正的队列元素数*/
 		goto err1;
 
-	/*申请queue*/
+	/*申请rxe queue*/
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		goto err1;
@@ -79,12 +82,13 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参�
 	if (elem_size < cache_line_size())
 	    /*elem_size最小为cache line size*/
 		elem_size = cache_line_size();
-	elem_size = roundup_pow_of_two(elem_size);
+	elem_size = roundup_pow_of_two(elem_size);/*提升elem_size,使其是2的N次方*/
 
 	q->log2_elem_size = order_base_2(elem_size);
 
+	/*计算队列长度*/
 	num_slots = *num_elem + 1;
-	num_slots = roundup_pow_of_two(num_slots);
+	num_slots = roundup_pow_of_two(num_slots);/*提升队列长度，使其为2的N次方*/
 	q->index_mask = num_slots - 1;
 
 	/*buffer指向一个rxe_queue_buf结构，后面跟num_slot个elem(大小为elem_size)*/

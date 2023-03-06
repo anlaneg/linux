@@ -573,6 +573,7 @@ static void nh_base_seq_inc(struct net *net)
 /* no reference taken; rcu lock or rtnl must be held */
 struct nexthop *nexthop_find_by_id(struct net *net, u32 id)
 {
+	/*按id在net->nexthop.rb_root.rb_node树上查找nexthop*/
 	struct rb_node **pp, *parent = NULL, *next;
 
 	pp = &net->nexthop.rb_root.rb_node;
@@ -584,6 +585,7 @@ struct nexthop *nexthop_find_by_id(struct net *net, u32 id)
 			break;
 		parent = next;
 
+		/*依照红黑树进行查找*/
 		nh = rb_entry(parent, struct nexthop, rb_node);
 		if (id < nh->id)
 			pp = &next->rb_left;
@@ -1259,6 +1261,7 @@ static int check_src_addr(const struct in6_addr *saddr,
 			  struct netlink_ext_ack *extack)
 {
 	if (!ipv6_addr_any(saddr)) {
+		/*源地址非0时，不得使用nexthop*/
 		NL_SET_ERR_MSG(extack, "IPv6 routes using source address can not use nexthop objects");
 		return -EINVAL;
 	}
@@ -1278,6 +1281,7 @@ int fib6_check_nexthop(struct nexthop *nh, struct fib6_config *cfg,
 	 * fib6_src on routes.
 	 */
 	if (cfg && check_src_addr(&cfg->fc_src, extack) < 0)
+		/*指明了nexthop时，fc_src必须为0*/
 		return -EINVAL;
 
 	if (nh->is_group) {

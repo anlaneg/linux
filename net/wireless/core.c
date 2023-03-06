@@ -654,6 +654,7 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 	return 0;
 }
 
+/*注册wiphy设备*/
 int wiphy_register(struct wiphy *wiphy)
 {
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);

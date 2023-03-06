@@ -188,11 +188,14 @@ static void snmp6_seq_show_item(struct seq_file *seq, void __percpu *pcpumib,
 	if (pcpumib) {
 		memset(buff, 0, sizeof(unsigned long) * SNMP_MIB_MAX);
 
+		/*汇总per cpu数据*/
 		snmp_get_cpu_field_batch(buff, itemlist, pcpumib);
+		/*显示汇总结果*/
 		for (i = 0; itemlist[i].name; i++)
 			seq_printf(seq, "%-32s\t%lu\n",
 				   itemlist[i].name, buff[i]);
 	} else {
+		/*非per cpu数据，无需汇总直接显示*/
 		for (i = 0; itemlist[i].name; i++)
 			seq_printf(seq, "%-32s\t%lu\n", itemlist[i].name,
 				   atomic_long_read(smib + itemlist[i].entry));
@@ -253,6 +256,7 @@ int snmp6_register_dev(struct inet6_dev *idev)
 	if (!net->mib.proc_net_devsnmp6)
 		return -ENOENT;
 
+	/*在/proc/net/dev_snmp6下创建设备对应的snmp6统计信息*/
 	p = proc_create_single_data(idev->dev->name, 0444,
 			net->mib.proc_net_devsnmp6, snmp6_dev_seq_show, idev);
 	if (!p)

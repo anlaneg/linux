@@ -57,12 +57,12 @@ struct proc_dir_entry {
 	kgid_t gid;
 	loff_t size;
 	struct proc_dir_entry *parent;
-	struct rb_root subdir;
-	struct rb_node subdir_node;
+	struct rb_root subdir;/*子目录*/
+	struct rb_node subdir_node;/*子目录节点，用于将自身挂接在父目录的subdir中*/
 	char *name;
 	umode_t mode;
 	u8 flags;
-	u8 namelen;
+	u8 namelen;/*目录名称长度*/
 	char inline_name[];
 } __randomize_layout;
 

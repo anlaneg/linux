@@ -416,7 +416,8 @@ static int rxe_post_srq_recv(struct ib_srq *ibsrq, const struct ib_recv_wr *wr,
 	return err;
 }
 
-static int rxe_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init,
+/*初始化qp*/
+static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_init_attr *init,
 			 struct ib_udata *udata)
 {
 	int err;
@@ -432,6 +433,7 @@ static int rxe_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init,
 	}
 
 	if (init->create_flags)
+		/*flags必须为0*/
 		return -EOPNOTSUPP;
 
 	err = rxe_qp_chk_init(rxe, init);
@@ -442,6 +444,7 @@ static int rxe_create_qp(struct ib_qp *ibqp, struct ib_qp_init_attr *init,
 		if (udata->inlen)
 			return -EINVAL;
 
+		/*包含udata,指明用户态qp*/
 		qp->is_user = true;
 	} else {
 	    /*非用户态qp*/
@@ -764,6 +767,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 		return rxe_post_send_kernel(qp, wr, bad_wr);
 }
 
+/*qp收取wr*/
 static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 			 const struct ib_recv_wr **bad_wr)
 {
@@ -807,13 +811,13 @@ err1:
 }
 
 /*rxe 创建cq*/
-static int rxe_create_cq(struct ib_cq *ibcq, const struct ib_cq_init_attr *attr,
+static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct ib_cq_init_attr *attr,
 			 struct ib_udata *udata)
 {
 	int err;
 	struct ib_device *dev = ibcq->device;
-	struct rxe_dev *rxe = to_rdev(dev);
-	struct rxe_cq *cq = to_rcq(ibcq);
+	struct rxe_dev *rxe = to_rdev(dev);/*cq对应的rxe设备*/
+	struct rxe_cq *cq = to_rcq(ibcq);/*结构体转为rxe_cq*/
 	struct rxe_create_cq_resp __user *uresp = NULL;
 
 	if (udata) {
@@ -1105,12 +1109,12 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.alloc_hw_port_stats = rxe_ib_alloc_hw_port_stats,
 	.alloc_mr = rxe_alloc_mr,
 	.alloc_mw = rxe_alloc_mw,
-	.alloc_pd = rxe_alloc_pd,
+	.alloc_pd = rxe_alloc_pd,/*申请pd*/
 	.alloc_ucontext = rxe_alloc_ucontext,
 	.attach_mcast = rxe_attach_mcast,
 	.create_ah = rxe_create_ah,
-	.create_cq = rxe_create_cq,
-	.create_qp = rxe_create_qp,
+	.create_cq = rxe_create_cq,/*初始化cq*/
+	.create_qp = rxe_create_qp,/*初始化qp*/
 	.create_srq = rxe_create_srq,
 	.create_user_ah = rxe_create_ah,
 	.dealloc_driver = rxe_dealloc,
@@ -1130,7 +1134,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.get_link_layer = rxe_get_link_layer,
 	.get_port_immutable = rxe_port_immutable,
 	.map_mr_sg = rxe_map_mr_sg,
-	.mmap = rxe_mmap,
+	.mmap = rxe_mmap,/*响应mmap*/
 	/*更新ah*/
 	.modify_ah = rxe_modify_ah,
 	/*更新ib_device*/
@@ -1147,7 +1151,7 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.query_ah = rxe_query_ah,
 	.query_device = rxe_query_device,
 	.query_pkey = rxe_query_pkey,
-	.query_port = rxe_query_port,
+	.query_port = rxe_query_port,/*查询port属性*/
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
 	.reg_user_mr = rxe_reg_user_mr,

@@ -75,5 +75,6 @@ static const struct net_offload tcpv6_offload = {
 
 int __init tcpv6_offload_init(void)
 {
+	/*设置inet6 offload设置tcpv6_offload*/
 	return inet6_add_offload(&tcpv6_offload, IPPROTO_TCP);
 }

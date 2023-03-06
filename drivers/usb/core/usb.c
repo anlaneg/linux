@@ -269,7 +269,7 @@ EXPORT_SYMBOL_GPL(usb_find_alt_setting);
  * if found. %NULL otherwise.
  */
 struct usb_interface *usb_ifnum_to_if(const struct usb_device *dev,
-				      unsigned ifnum)
+				      unsigned ifnum/*usb接口编号*/)
 {
 	struct usb_host_config *config = dev->actconfig;
 	int i;
@@ -279,6 +279,7 @@ struct usb_interface *usb_ifnum_to_if(const struct usb_device *dev,
 	for (i = 0; i < config->desc.bNumInterfaces; i++)
 		if (config->interface[i]->altsetting[0]
 				.desc.bInterfaceNumber == ifnum)
+			/*通过ifnum获得接口结构体*/
 			return config->interface[i];
 
 	return NULL;
@@ -993,6 +994,7 @@ static struct notifier_block usb_bus_nb = {
 
 static void usb_debugfs_init(void)
 {
+	/*devices目录*/
 	debugfs_create_file("devices", 0444, usb_debug_root, NULL,
 			    &usbfs_devices_fops);
 }
@@ -1030,6 +1032,7 @@ static int __init usb_init(void)
 	retval = usb_register(&usbfs_driver);
 	if (retval)
 		goto driver_register_failed;
+	/*注册usb设备字符设备*/
 	retval = usb_devio_init();
 	if (retval)
 		goto usb_devio_init_failed;

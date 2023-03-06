@@ -93,7 +93,8 @@ struct link_dead_args {
 
 struct nbd_config {
 	u32 flags;
-	unsigned long runtime_flags;/*标记位，例如NBD_RT_DISCONNECT_REQUESTED*/
+	/*标记位，例如NBD_RT_DISCONNECT_REQUESTED*/
+	unsigned long runtime_flags;
 	u64 dead_conn_timeout;
 
 	/*记录依据配置生成的多个nbd sock*/

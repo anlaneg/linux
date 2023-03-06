@@ -28,7 +28,9 @@
 //文件的sticky位
 #define S_ISVTX  0001000
 
+/*是否link*/
 #define S_ISLNK(m)	(((m) & S_IFMT) == S_IFLNK)
+/*是否普通文件*/
 #define S_ISREG(m)	(((m) & S_IFMT) == S_IFREG)
 /*是否目录*/
 #define S_ISDIR(m)	(((m) & S_IFMT) == S_IFDIR)

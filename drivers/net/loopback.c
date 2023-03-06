@@ -60,7 +60,7 @@
  * This is global device (instead of per-net-ns) since it's not needed
  * to be per-ns and gets initialized at boot time.
  */
-struct net_device *blackhole_netdev;
+struct net_device *blackhole_netdev;/*指向black hole网络设备*/
 EXPORT_SYMBOL(blackhole_netdev);
 
 /* The higher levels take care of making this non-reentrant (it's

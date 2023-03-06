@@ -38,10 +38,10 @@
 //检查b是否在[frist,first+len)范围以内
 #define in_range(b, first, len)	((b) >= (first) && (b) <= (first) + (len) - 1)
 
-//利用block_group取ext2_group_desc
+//利用block_group编号取ext2_group_desc
 struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
-					     unsigned int block_group,
-					     struct buffer_head ** bh)
+					     unsigned int block_group/*block group编号*/,
+					     struct buffer_head ** bh/*出参，此group对应的group desc*/)
 {
 	unsigned long group_desc;
 	unsigned long offset;
@@ -62,6 +62,7 @@ struct ext2_group_desc * ext2_get_group_desc(struct super_block * sb,
 	//取在描述组中的偏移
 	offset = block_group & (EXT2_DESC_PER_BLOCK(sb) - 1);
 	if (!sbi->s_group_desc[group_desc]) {
+		/*此group未加载,返回NULL，ext2_fill_super函数负责加载*/
 		WARN(1, "Group descriptor not loaded - "
 		     "block_group = %d, group_desc = %lu, desc = %lu",
 		      block_group, group_desc, offset);
@@ -86,9 +87,11 @@ static int ext2_valid_block_bitmap(struct super_block *sb,
 	ext2_fsblk_t bitmap_blk;
 	ext2_fsblk_t group_first_block;
 
+	/*此group的首个block位置*/
 	group_first_block = ext2_group_first_block_no(sb, block_group);
 
 	/* check whether block bitmap block number is set */
+	/*bh是bitmap对应的block，其一定是被set的*/
 	bitmap_blk = le32_to_cpu(desc->bg_block_bitmap);
 	offset = bitmap_blk - group_first_block;
 	if (!ext2_test_bit(offset, bh->b_data))
@@ -96,6 +99,7 @@ static int ext2_valid_block_bitmap(struct super_block *sb,
 		goto err_out;
 
 	/* check whether the inode bitmap block number is set */
+	/*inode bitmap对应的block，也一定是被set的*/
 	bitmap_blk = le32_to_cpu(desc->bg_inode_bitmap);
 	offset = bitmap_blk - group_first_block;
 	if (!ext2_test_bit(offset, bh->b_data))
@@ -103,6 +107,7 @@ static int ext2_valid_block_bitmap(struct super_block *sb,
 		goto err_out;
 
 	/* check whether the inode table block number is set */
+	/*inode table对应的block，也一定是被set的*/
 	bitmap_blk = le32_to_cpu(desc->bg_inode_table);
 	offset = bitmap_blk - group_first_block;
 	next_zero_bit = ext2_find_next_zero_bit(bh->b_data,
@@ -138,7 +143,7 @@ read_block_bitmap(struct super_block *sb, unsigned int block_group)
 	if (!desc)
 		return NULL;
 	bitmap_blk = le32_to_cpu(desc->bg_block_bitmap);
-	bh = sb_getblk(sb, bitmap_blk);
+	bh = sb_getblk(sb, bitmap_blk);/*加载此block对应的内容*/
 	if (unlikely(!bh)) {
 		ext2_error(sb, __func__,
 			    "Cannot read block bitmap - "
@@ -158,6 +163,7 @@ read_block_bitmap(struct super_block *sb, unsigned int block_group)
 		return NULL;
 	}
 
+	/*通过此bh中应有三个block被占用来校验bh有效性*/
 	ext2_valid_block_bitmap(sb, desc, block_group, bh);
 	/*
 	 * file system mounted not to panic on error, continue with corrupt
@@ -622,12 +628,14 @@ find_next_usable_block(int start, struct buffer_head *bh, int maxblocks)
 		ext2_grpblk_t end_goal = (start + 63) & ~63;
 		if (end_goal > maxblocks)
 			end_goal = maxblocks;
+		/*在start与end之间查找空闲的bit,并返回其对应的索引*/
 		here = ext2_find_next_zero_bit(bh->b_data, end_goal, start);
 		if (here < end_goal)
 			return here;
 		ext2_debug("Bit not found near goal\n");
 	}
 
+	/*start与end_goal之间没有找到*/
 	here = start;
 	if (here < 0)
 		here = 0;
@@ -671,13 +679,14 @@ ext2_try_to_allocate(struct super_block *sb, int group,
 			unsigned long *count,
 			struct ext2_reserve_window *my_rsv)
 {
+	/*取此group对应的首个block,最后一个block*/
 	ext2_fsblk_t group_first_block = ext2_group_first_block_no(sb, group);
 	ext2_fsblk_t group_last_block = ext2_group_last_block_no(sb, group);
        	ext2_grpblk_t start, end;
 	unsigned long num = 0;
 
 	start = 0;
-	end = group_last_block - group_first_block + 1;
+	end = group_last_block - group_first_block + 1;/*此group block总数*/
 	/* we do allocation within the reservation window if we have a window */
 	if (my_rsv) {
 		if (my_rsv->_rsv_start >= group_first_block)
@@ -1302,6 +1311,7 @@ retry_alloc:
 		 * read_block_bitmap().
 		 */
 		brelse(bitmap_bh);
+		/*取此group对应的block bitmap*/
 		bitmap_bh = read_block_bitmap(sb, group_no);
 		if (!bitmap_bh)
 			goto io_error;
@@ -1352,6 +1362,7 @@ retry_alloc:
 		grp_alloc_blk = ext2_try_to_allocate_with_rsv(sb, group_no,
 					bitmap_bh, -1, my_rsv, &num);
 		if (grp_alloc_blk >= 0)
+			/*申请block成功*/
 			goto allocated;
 	}
 	/*
@@ -1441,6 +1452,7 @@ ext2_fsblk_t ext2_new_block(struct inode *inode, unsigned long goal, int *errp)
 {
 	unsigned long count = 1;
 
+	/*申请一个block*/
 	return ext2_new_blocks(inode, goal, &count, errp);
 }
 

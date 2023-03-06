@@ -203,6 +203,7 @@ struct sock_common {
 	};
 	//设置协议ops,例如udp_prot
 	struct proto		*skc_prot;
+	/*socket对应的net namespace*/
 	possible_net_t		skc_net;
 
 #if IS_ENABLED(CONFIG_IPV6)
@@ -228,7 +229,7 @@ struct sock_common {
 	 * are not copied in sock_copy()
 	 */
 	/* private: */
-	int			skc_dontcopy_begin[0];
+	int			skc_dontcopy_begin[0];/*此位置后的内容不得简单复制*/
 	/* public: */
 	union {
 		struct hlist_node	skc_node;
@@ -247,7 +248,7 @@ struct sock_common {
 
 	refcount_t		skc_refcnt;
 	/* private: */
-	int                     skc_dontcopy_end[0];
+	int                     skc_dontcopy_end[0];/*此位置前的内容不得简单复制*/
 	union {
 		u32		skc_rxhash;
 		u32		skc_window_clamp;
@@ -377,9 +378,12 @@ struct sock {
 #define sk_rx_queue_mapping	__sk_common.skc_rx_queue_mapping
 #endif
 
+/*此位置后的sk_common成员，不得复制*/
 #define sk_dontcopy_begin	__sk_common.skc_dontcopy_begin
+/*此位置前的sk_common成员，不得复制*/
 #define sk_dontcopy_end		__sk_common.skc_dontcopy_end
 #define sk_hash			__sk_common.skc_hash
+	/*port合并信息（源+目的）*/
 #define sk_portpair		__sk_common.skc_portpair
 #define sk_num			__sk_common.skc_num
 #define sk_dport		__sk_common.skc_dport
@@ -520,7 +524,7 @@ struct sock {
 	int			sk_err,
 				sk_err_soft;
 	u32			sk_ack_backlog;//当前接受的backlog
-	u32			sk_max_ack_backlog;//配置的最大backlog
+	u32			sk_max_ack_backlog;//配置的最大ack backlog
 	kuid_t			sk_uid;
 	u8			sk_txrehash;
 #ifdef CONFIG_NET_RX_BUSY_POLL
@@ -557,6 +561,7 @@ struct sock {
 	//socket的cgroup数据
 	struct sock_cgroup_data	sk_cgrp_data;
 	struct mem_cgroup	*sk_memcg;
+	/*socket状态变更时此函数将被调用*/
 	void			(*sk_state_change)(struct sock *sk);
 	//收到数据时，通过此回调通知
 	void			(*sk_data_ready)(struct sock *sk);
@@ -685,6 +690,7 @@ struct net *sock_net(const struct sock *sk)
 	return read_pnet(&sk->sk_net);
 }
 
+/*更新socket对应的net namespace*/
 static inline
 void sock_net_set(struct sock *sk, struct net *net)
 {
@@ -771,12 +777,13 @@ static inline struct sock *sk_nulls_next(const struct sock *sk)
 
 static inline bool sk_unhashed(const struct sock *sk)
 {
-	/*检查sk是否已被list到链表中*/
+	/*检查sk是否未被list到链表中*/
 	return hlist_unhashed(&sk->sk_node);
 }
 
 static inline bool sk_hashed(const struct sock *sk)
 {
+	/*检查sk是否已被list到链表中*/
 	return !sk_unhashed(sk);
 }
 
@@ -836,6 +843,7 @@ static inline bool sk_del_node_init(struct sock *sk)
 static inline bool __sk_nulls_del_node_init_rcu(struct sock *sk)
 {
 	if (sk_hashed(sk)) {
+		/*sk被加入到list中，先自list中移除*/
 		hlist_nulls_del_init_rcu(&sk->sk_nulls_node);
 		return true;
 	}
@@ -2910,6 +2918,7 @@ static inline struct sock *
 skb_steal_sock(struct sk_buff *skb, bool *refcounted)
 {
 	if (skb->sk) {
+		/*skb已有sk赋值，拿走，并返回*/
 		struct sock *sk = skb->sk;
 
 		*refcounted = true;
@@ -2919,6 +2928,7 @@ skb_steal_sock(struct sk_buff *skb, bool *refcounted)
 		skb->sk = NULL;
 		return sk;
 	}
+	/*skb还没有设置sk,返回NULL*/
 	*refcounted = false;
 	return NULL;
 }

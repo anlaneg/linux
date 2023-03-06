@@ -238,7 +238,7 @@ static u16 get_segment_reg(struct task_struct *task, unsigned long offset)
 		if (task == current) {
 			/* Older gas can't assemble movq %?s,%r?? */
 			asm("movl %%fs,%0" : "=r" (seg));
-			return seg;
+			return seg;/*读取fs寄存器*/
 		}
 		return task->thread.fsindex;
 	case offsetof(struct user_regs_struct, gs):
@@ -724,20 +724,26 @@ long arch_ptrace(struct task_struct *child, long request,
 	switch (request) {
 	/* read the word at location addr in the USER area. */
 	case PTRACE_PEEKUSR: {
+		/*读取user区域，USER结构为core文件的前面一部分，
+		 * 它描述了进程中止时的一些状态，如：寄存器值，代码、
+		 * 数据段大小，代码、数据段开始地址等。*/
 		unsigned long tmp;
 
 		ret = -EIO;
 		if ((addr & (sizeof(data) - 1)) || addr >= sizeof(struct user))
+			/*addr没有按sizeof(data)对齐，addr offset过大，超过sizeof(struct user)*/
 			break;
 
 		tmp = 0;  /* Default return condition */
 		if (addr < sizeof(struct user_regs_struct))
+			/*读取寄存器内容到tmp*/
 			tmp = getreg(child, addr);
 		else if (addr >= offsetof(struct user, u_debugreg[0]) &&
 			 addr <= offsetof(struct user, u_debugreg[7])) {
 			addr -= offsetof(struct user, u_debugreg[0]);
 			tmp = ptrace_get_debugreg(child, addr / sizeof(data));
 		}
+		/*将tmp内容存入到datap中*/
 		ret = put_user(tmp, datap);
 		break;
 	}

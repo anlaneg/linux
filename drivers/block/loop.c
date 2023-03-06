@@ -54,7 +54,7 @@ struct loop_device {
 	int		lo_flags;
 	char		lo_file_name[LO_NAME_SIZE];
 
-	struct file *	lo_backing_file;
+	struct file *	lo_backing_file;/*lo后端文件*/
 	struct block_device *lo_device;
 
 	gfp_t		old_gfp_mask;
@@ -246,6 +246,7 @@ static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos)
 	iov_iter_bvec(&i, WRITE, bvec, 1, bvec->bv_len);
 
 	file_start_write(file);
+	/*执行文件写*/
 	bw = vfs_iter_write(file, &i, ppos, 0);
 	file_end_write(file);
 
@@ -287,6 +288,7 @@ static int lo_read_simple(struct loop_device *lo, struct request *rq,
 
 	rq_for_each_segment(bvec, rq, iter) {
 		iov_iter_bvec(&i, READ, &bvec, 1, bvec.bv_len);
+		/*执行文件读*/
 		len = vfs_iter_read(lo->lo_backing_file, &i, &pos, 0);
 		if (len < 0)
 			return len;
@@ -460,6 +462,7 @@ static int lo_rw_aio(struct loop_device *lo, struct loop_cmd *cmd,
 	return 0;
 }
 
+/*针对后端文件完成块请求*/
 static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 {
 	struct loop_cmd *cmd = blk_mq_rq_to_pdu(rq);
@@ -489,11 +492,13 @@ static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 	case REQ_OP_DISCARD:
 		return lo_fallocate(lo, rq, pos, FALLOC_FL_PUNCH_HOLE);
 	case REQ_OP_WRITE:
+		/*写操作*/
 		if (cmd->use_aio)
 			return lo_rw_aio(lo, cmd, pos, WRITE);
 		else
 			return lo_write_simple(lo, rq, pos);
 	case REQ_OP_READ:
+		/*读操作*/
 		if (cmd->use_aio)
 			return lo_rw_aio(lo, cmd, pos, READ);
 		else
@@ -606,7 +611,7 @@ static int loop_change_fd(struct loop_device *lo, struct block_device *bdev,
 	disk_force_media_change(lo->lo_disk, DISK_EVENT_MEDIA_CHANGE);
 	blk_mq_freeze_queue(lo->lo_queue);
 	mapping_set_gfp_mask(old_file->f_mapping, lo->old_gfp_mask);
-	lo->lo_backing_file = file;
+	lo->lo_backing_file = file;/*更新后端文件*/
 	lo->old_gfp_mask = mapping_gfp_mask(file->f_mapping);
 	mapping_set_gfp_mask(file->f_mapping,
 			     lo->old_gfp_mask & ~(__GFP_IO|__GFP_FS));
@@ -1072,7 +1077,7 @@ static int loop_configure(struct loop_device *lo, fmode_t mode,
 
 	lo->use_dio = lo->lo_flags & LO_FLAGS_DIRECT_IO;
 	lo->lo_device = bdev;
-	lo->lo_backing_file = file;
+	lo->lo_backing_file = file;/*设置后端文件*/
 	lo->old_gfp_mask = mapping_gfp_mask(mapping);
 	mapping_set_gfp_mask(mapping, lo->old_gfp_mask & ~(__GFP_IO|__GFP_FS));
 
@@ -1545,11 +1550,12 @@ static int lo_ioctl(struct block_device *bdev, fmode_t mode,
 		struct loop_config config;
 
 		memset(&config, 0, sizeof(config));
-		config.fd = arg;
+		config.fd = arg;/*设置后端文件fd*/
 
 		return loop_configure(lo, mode, bdev, &config);
 	}
 	case LOOP_CONFIGURE: {
+		/*用户态提供完整的loop_config*/
 		struct loop_config config;
 
 		if (copy_from_user(&config, argp, sizeof(config)))
@@ -1558,6 +1564,7 @@ static int lo_ioctl(struct block_device *bdev, fmode_t mode,
 		return loop_configure(lo, mode, bdev, &config);
 	}
 	case LOOP_CHANGE_FD:
+		/*变更后端文件fd*/
 		return loop_change_fd(lo, bdev, arg);
 	case LOOP_CLR_FD:
 		return loop_clr_fd(lo);
@@ -1891,12 +1898,13 @@ static void loop_process_work(struct loop_worker *worker,
 	current->flags |= PF_LOCAL_THROTTLE | PF_MEMALLOC_NOIO;
 	spin_lock_irq(&lo->lo_work_lock);
 	while (!list_empty(cmd_list)) {
+		/*自cmd_list上获取cmd*/
 		cmd = container_of(
 			cmd_list->next, struct loop_cmd, list_entry);
-		list_del(cmd_list->next);
+		list_del(cmd_list->next);/*准备执行，先移除它*/
 		spin_unlock_irq(&lo->lo_work_lock);
 
-		loop_handle_cmd(cmd);
+		loop_handle_cmd(cmd);/*处理此cmd*/
 		cond_resched();
 
 		spin_lock_irq(&lo->lo_work_lock);
@@ -1935,7 +1943,7 @@ static const struct blk_mq_ops loop_mq_ops = {
 	.complete	= lo_complete_rq,
 };
 
-static int loop_add(int i)
+static int loop_add(int i/*设备编号*/)
 {
 	struct loop_device *lo;
 	struct gendisk *disk;
@@ -1960,12 +1968,14 @@ static int loop_add(int i)
 		if (err == -ENOSPC)
 			err = -EEXIST;
 	} else {
+		/*传入的参数小于0，用于获取一个空闲的idx*/
 		err = idr_alloc(&loop_index_idr, lo, 0, 0, GFP_KERNEL);
 	}
 	mutex_unlock(&loop_ctl_mutex);
 	if (err < 0)
+		/*占用设备id失败*/
 		goto out_free_dev;
-	i = err;
+	i = err;/*占用设备id成功*/
 
 	lo->tag_set.ops = &loop_mq_ops;
 	lo->tag_set.nr_hw_queues = 1;
@@ -2031,9 +2041,9 @@ static int loop_add(int i)
 	disk->queue		= lo->lo_queue;
 	disk->events		= DISK_EVENT_MEDIA_CHANGE;
 	disk->event_flags	= DISK_EVENT_FLAG_UEVENT;
-	sprintf(disk->disk_name, "loop%d", i);
+	sprintf(disk->disk_name, "loop%d", i);/*设置磁盘名称*/
 	/* Make this loop device reachable from pathname. */
-	err = add_disk(disk);
+	err = add_disk(disk);/*添加disk*/
 	if (err)
 		goto out_cleanup_disk;
 
@@ -2141,7 +2151,7 @@ static int loop_control_get_free(int idx)
 			goto found;
 	}
 	mutex_unlock(&loop_ctl_mutex);
-	return loop_add(-1);
+	return loop_add(-1);/*没有找到有效的lo,这里尝试创建一个*/
 found:
 	mutex_unlock(&loop_ctl_mutex);
 	return id;
@@ -2152,10 +2162,13 @@ static long loop_control_ioctl(struct file *file, unsigned int cmd,
 {
 	switch (cmd) {
 	case LOOP_CTL_ADD:
+		/*添加编号为parm的loop设备*/
 		return loop_add(parm);
 	case LOOP_CTL_REMOVE:
+		/*移除编号为parm的loop设备*/
 		return loop_control_remove(parm);
 	case LOOP_CTL_GET_FREE:
+		/*获取空闲的loop设备idx*/
 		return loop_control_get_free(parm);
 	default:
 		return -ENOSYS;
@@ -2173,7 +2186,7 @@ static const struct file_operations loop_ctl_fops = {
 static struct miscdevice loop_misc = {
 	.minor		= LOOP_CTRL_MINOR,
 	.name		= "loop-control",
-	.fops		= &loop_ctl_fops,
+	.fops		= &loop_ctl_fops,/*loop-control设备操作函数*/
 };
 
 MODULE_ALIAS_MISCDEV(LOOP_CTRL_MINOR);
@@ -2196,10 +2209,11 @@ static int __init loop_init(void)
 		 * Note that -1 is required because partition 0 is reserved
 		 * for the whole disk.
 		 */
-		max_part = (1UL << part_shift) - 1;
+		max_part = (1UL << part_shift) - 1;/*更正max_part*/
 	}
 
 	if ((1UL << part_shift) > DISK_MAX_PARTS) {
+		/*指定的max_part过大*/
 		err = -EINVAL;
 		goto err_out;
 	}
@@ -2220,13 +2234,15 @@ static int __init loop_init(void)
 	if (max_loop)
 		nr = max_loop;
 	else
+		/*使用默认数目*/
 		nr = CONFIG_BLK_DEV_LOOP_MIN_COUNT;
 
+	/*注册misc类设备loop_misc*/
 	err = misc_register(&loop_misc);
 	if (err < 0)
 		goto err_out;
 
-
+	/*注册块设备*/
 	if (__register_blkdev(LOOP_MAJOR, "loop", loop_probe)) {
 		err = -EIO;
 		goto misc_out;
@@ -2234,7 +2250,7 @@ static int __init loop_init(void)
 
 	/* pre-create number of devices given by config or max_loop */
 	for (i = 0; i < nr; i++)
-		loop_add(i);
+		loop_add(i);/*预创建loop设备*/
 
 	printk(KERN_INFO "loop: module loaded\n");
 	return 0;

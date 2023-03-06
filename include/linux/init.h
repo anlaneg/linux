@@ -302,7 +302,9 @@ extern bool initcall_debug;
 #define console_initcall(fn)	___define_initcall(fn, con, .con_initcall)
 
 struct obs_kernel_param {
+	/*kernel参数名称*/
 	const char *str;
+	/*参数处理函数*/
 	int (*setup_func)(char *);
 	int early;
 };
@@ -314,6 +316,7 @@ struct obs_kernel_param {
  * obs_kernel_param "array" too far apart in .init.setup.
  */
 #define __setup_param(str, unique_id, fn, early)			\
+	/*记录kernel参数名称*/\
 	static const char __setup_str_##unique_id[] __initconst		\
 		__aligned(1) = str; 					\
 	static struct obs_kernel_param __setup_##unique_id		\

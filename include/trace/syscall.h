@@ -23,15 +23,15 @@
  * @exit_event: associated syscall_exit trace event
  */
 struct syscall_metadata {
-	const char	*name;
+	const char	*name;/*系统调用名称，含sys前缀*/
 	int		syscall_nr;
-	int		nb_args;
-	const char	**types;
-	const char	**args;
+	int		nb_args;/*参数数目*/
+	const char	**types;/*各参数类型对应的字符串名称*/
+	const char	**args;/*各参数类型对应的字符串变量名*/
 	struct list_head enter_fields;
 
-	struct trace_event_call *enter_event;
-	struct trace_event_call *exit_event;
+	struct trace_event_call *enter_event;/*enter event对应的变量*/
+	struct trace_event_call *exit_event;/*exit event对应的变量*/
 };
 
 #if defined(CONFIG_TRACEPOINTS) && defined(CONFIG_HAVE_SYSCALL_TRACEPOINTS)

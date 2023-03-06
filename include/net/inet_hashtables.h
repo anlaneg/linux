@@ -150,9 +150,9 @@ struct inet_hashinfo {
 	 *
 	 */
 	struct inet_ehash_bucket	*ehash;//已建立稳定连接的sockets表
-	spinlock_t			*ehash_locks;
+	spinlock_t			*ehash_locks;/*锁对应的桶*/
 	unsigned int			ehash_mask;//ehash表桶mask
-	unsigned int			ehash_locks_mask;
+	unsigned int			ehash_locks_mask;/*锁桶对应的mask*/
 
 	/* Ok, let's try this, I give up, we do need a local binding
 	 * TCP hash as well as the others for fast bind/connect.
@@ -181,6 +181,7 @@ static inline struct inet_hashinfo *tcp_or_dccp_get_hashinfo(const struct sock *
 	return sk->sk_prot->h.hashinfo ? :
 		sock_net(sk)->ipv4.tcp_death_row.hashinfo;
 #else
+	/*返回sk对应的hashtble*/
 	return sock_net(sk)->ipv4.tcp_death_row.hashinfo;
 #endif
 }
@@ -188,6 +189,7 @@ static inline struct inet_hashinfo *tcp_or_dccp_get_hashinfo(const struct sock *
 static inline struct inet_listen_hashbucket *
 inet_lhash2_bucket(struct inet_hashinfo *h, u32 hash)
 {
+	/*取监听表对应的桶*/
 	return &h->lhash2[hash & h->lhash2_mask];
 }
 
@@ -195,9 +197,11 @@ static inline struct inet_ehash_bucket *inet_ehash_bucket(
 	struct inet_hashinfo *hashinfo,
 	unsigned int hash)
 {
+	/*取est表对应的桶*/
 	return &hashinfo->ehash[hash & hashinfo->ehash_mask];
 }
 
+/*通过hash确定锁*/
 static inline spinlock_t *inet_ehash_lockp(
 	struct inet_hashinfo *hashinfo,
 	unsigned int hash)

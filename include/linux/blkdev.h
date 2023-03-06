@@ -1178,6 +1178,7 @@ static inline unsigned queue_logical_block_size(const struct request_queue *q)
 	int retval = 512;
 
 	if (q && q->limits.logical_block_size)
+		/*有指定则用指定的块大小*/
 		retval = q->limits.logical_block_size;
 
 	return retval;

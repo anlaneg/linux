@@ -54,7 +54,7 @@
 /*
  * Head entry for the doubly linked miscdevice list
  */
-static LIST_HEAD(misc_list);
+static LIST_HEAD(misc_list);/*记录系统中所有misc设备*/
 static DEFINE_MUTEX(misc_mtx);
 
 /*
@@ -85,11 +85,12 @@ static int misc_seq_show(struct seq_file *seq, void *v)
 {
 	const struct miscdevice *p = list_entry(v, struct miscdevice, list);
 
+	/*显示minor及设备名称*/
 	seq_printf(seq, "%3i %s\n", p->minor, p->name ? p->name : "");
 	return 0;
 }
 
-
+/*遍历misc_list，显示系统中所有misc设备的minor及名称，用于/proc/misc文件显示函数*/
 static const struct seq_operations misc_seq_ops = {
 	.start = misc_seq_start,
 	.next  = misc_seq_next,
@@ -107,19 +108,24 @@ static int misc_open(struct inode *inode, struct file *file)
 
 	mutex_lock(&misc_mtx);
 
+	/*遍历misc_list上串连的misc设备*/
 	list_for_each_entry(iter, &misc_list, list) {
 		if (iter->minor != minor)
+			/*minor不相等，忽略*/
 			continue;
+		/*匹配，返回其对应的设备及操作集*/
 		c = iter;
 		new_fops = fops_get(iter->fops);
 		break;
 	}
 
 	if (!new_fops) {
+		/*没有查找到设备，动态请求加载模块*/
 		mutex_unlock(&misc_mtx);
 		request_module("char-major-%d-%d", MISC_MAJOR, minor);
 		mutex_lock(&misc_mtx);
 
+		/*再查询一遍*/
 		list_for_each_entry(iter, &misc_list, list) {
 			if (iter->minor != minor)
 				continue;
@@ -136,11 +142,12 @@ static int misc_open(struct inode *inode, struct file *file)
 	 * private_data so it can be used by the
 	 * file operations, including f_op->open below
 	 */
-	file->private_data = c;
+	file->private_data = c;/*更新私有数据为misc设备*/
 
 	err = 0;
-	replace_fops(file, new_fops);
+	replace_fops(file, new_fops);/*更新fops*/
 	if (file->f_op->open)
+		/*使用新的fops->open进行进一步处理*/
 		err = file->f_op->open(inode, file);
 fail:
 	mutex_unlock(&misc_mtx);
@@ -255,7 +262,7 @@ void misc_deregister(struct miscdevice *misc)
 		return;
 
 	mutex_lock(&misc_mtx);
-	list_del(&misc->list);
+	list_del(&misc->list);/*移除注册*/
 	device_destroy(misc_class, MKDEV(MISC_MAJOR, misc->minor));
 	if (i < DYNAMIC_MINORS && i >= 0)
 		clear_bit(i, misc_minors);
@@ -279,13 +286,16 @@ static int __init misc_init(void)
 	int err;
 	struct proc_dir_entry *ret;
 
+	/*创建/proc/misc文件，显示各misc设备对应的minor*/
 	ret = proc_create_seq("misc", 0, NULL, &misc_seq_ops);
+	/*注册misc class*/
 	misc_class = class_create(THIS_MODULE, "misc");
 	err = PTR_ERR(misc_class);
 	if (IS_ERR(misc_class))
 		goto fail_remove;
 
 	err = -EIO;
+	/*注册misc字符设备，通过其可定位具体的misc设备*/
 	if (register_chrdev(MISC_MAJOR, "misc", &misc_fops))
 		goto fail_printk;
 	misc_class->devnode = misc_devnode;

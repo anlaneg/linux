@@ -30,11 +30,13 @@
 
 static inline unsigned int xa_lock_type(const struct xarray *xa)
 {
+	/*取lock type*/
 	return (__force unsigned int)xa->xa_flags & 3;
 }
 
 static inline void xas_lock_type(struct xa_state *xas, unsigned int lock_type)
 {
+	/*按不同lock type进行加锁*/
 	if (lock_type == XA_LOCK_IRQ)
 		xas_lock_irq(xas);
 	else if (lock_type == XA_LOCK_BH)
@@ -45,6 +47,7 @@ static inline void xas_lock_type(struct xa_state *xas, unsigned int lock_type)
 
 static inline void xas_unlock_type(struct xa_state *xas, unsigned int lock_type)
 {
+	/*按不同lock type进行解锁*/
 	if (lock_type == XA_LOCK_IRQ)
 		xas_unlock_irq(xas);
 	else if (lock_type == XA_LOCK_BH)
@@ -779,12 +782,12 @@ static void update_node(struct xa_state *xas, struct xa_node *node,
 void *xas_store(struct xa_state *xas, void *entry)
 {
 	struct xa_node *node;
-	void __rcu **slot = &xas->xa->xa_head;
+	void __rcu **slot = &xas->xa->xa_head;/*指向xarray中首个元素*/
 	unsigned int offset, max;
 	int count = 0;
 	int values = 0;
 	void *first, *next;
-	bool value = xa_is_value(entry);
+	bool value = xa_is_value(entry);/*待存入的是entry*/
 
 	if (entry) {
 		bool allow_root = !xa_is_node(entry) && !xa_is_zero(entry);
@@ -1541,12 +1544,13 @@ EXPORT_SYMBOL(xa_erase);
  */
 void *__xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 {
-	XA_STATE(xas, xa, index);
+	XA_STATE(xas, xa, index);/*定义并初始化xas*/
 	void *curr;
 
 	if (WARN_ON_ONCE(xa_is_advanced(entry)))
 		return XA_ERROR(-EINVAL);
 	if (xa_track_free(xa) && !entry)
+		/*NULL实际上为一个特别的internal entry,这里完成更换*/
 		entry = XA_ZERO_ENTRY;
 
 	do {
@@ -1580,6 +1584,7 @@ void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 {
 	void *curr;
 
+	/*加锁保护并存储entry*/
 	xa_lock(xa);
 	curr = __xa_store(xa, index, entry, gfp);
 	xa_unlock(xa);

@@ -176,6 +176,7 @@ typedef struct {
 } atomic64_t;
 #endif
 
+/*list_head节点*/
 struct list_head {
 	struct list_head *next, *prev;
 };

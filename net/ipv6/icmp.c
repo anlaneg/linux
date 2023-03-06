@@ -931,6 +931,7 @@ static int icmpv6_rcv(struct sk_buff *skb)
 
 	type = hdr->icmp6_type;
 
+	/*按type统计*/
 	ICMP6MSGIN_INC_STATS(dev_net(dev), idev, type);
 
 	/*检查icmp type*/
@@ -979,6 +980,7 @@ static int icmpv6_rcv(struct sk_buff *skb)
 	case NDISC_NEIGHBOUR_SOLICITATION:
 	case NDISC_NEIGHBOUR_ADVERTISEMENT:
 	case NDISC_REDIRECT:
+		/*收到rs,ra,ns,na及nr报文*/
 		ndisc_rcv(skb);
 		break;
 

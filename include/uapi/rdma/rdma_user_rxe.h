@@ -215,14 +215,14 @@ struct rxe_modify_srq_cmd {
  * memory outside of the data area
  */
 struct rxe_queue_buf {
-	__u32			log2_elem_size;
-	__u32			index_mask;
+	__u32			log2_elem_size;/*队列元素大小针对log2的对数，1<<log2_elem_size即为元素大小*/
+	__u32			index_mask;/*队列长度是2的N次方的整数，index_mask是其对应的掩码*/
 	__u32			pad_1[30];
-	__u32			producer_index;
+	__u32			producer_index;/*生产者指针*/
 	__u32			pad_2[31];
-	__u32			consumer_index;
+	__u32			consumer_index;/*消费者指针*/
 	__u32			pad_3[31];
-	__u8			data[];
+	__u8			data[];/*指向队列元素*/
 };
 
 #endif /* RDMA_USER_RXE_H */

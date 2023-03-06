@@ -111,8 +111,8 @@ void bpf_iter_fini_seq_net(void *priv_data)
 #endif
 }
 
-struct proc_dir_entry *proc_create_net_data(const char *name, umode_t mode,
-		struct proc_dir_entry *parent, const struct seq_operations *ops,
+struct proc_dir_entry *proc_create_net_data(const char *name/*文件名称*/, umode_t mode,
+		struct proc_dir_entry *parent/*父节点*/, const struct seq_operations *ops,
 		unsigned int state_size, void *data)
 {
 	struct proc_dir_entry *p;
@@ -357,17 +357,18 @@ static __net_init int proc_net_ns_init(struct net *net)
 	 * net->proc_net_stat inode is instantiated normally.
 	 */
 	err = -ENOMEM;
+	/*申请net dir对应的entry*/
 	netd = kmem_cache_zalloc(proc_dir_entry_cache, GFP_KERNEL);
 	if (!netd)
 		goto out;
 
 	netd->subdir = RB_ROOT;
-	netd->data = net;
+	netd->data = net;/*设置此目录的data为netns结构体*/
 	netd->nlink = 2;
 	netd->namelen = 3;
-	netd->parent = &proc_root;
+	netd->parent = &proc_root;/*父节点为proc_root,指向根*/
 	netd->name = netd->inline_name;
-	memcpy(netd->name, "net", 4);
+	memcpy(netd->name, "net", 4);/*设置entry名称*/
 
 	uid = make_kuid(net->user_ns, 0);
 	if (!uid_valid(uid))
@@ -387,8 +388,8 @@ static __net_init int proc_net_ns_init(struct net *net)
 	if (!net_statd)
 		goto free_net;
 
-	net->proc_net = netd;
-	net->proc_net_stat = net_statd;
+	net->proc_net = netd;/*设置此netns对应的proc_net*/
+	net->proc_net_stat = net_statd;/*设置此netns对应的net_statd*/
 	return 0;
 
 free_net:
@@ -403,6 +404,7 @@ static __net_exit void proc_net_ns_exit(struct net *net)
 	pde_free(net->proc_net);
 }
 
+/*proc对应的netns初始化/销毁函数*/
 static struct pernet_operations __net_initdata proc_net_ns_ops = {
 	.init = proc_net_ns_init,
 	.exit = proc_net_ns_exit,

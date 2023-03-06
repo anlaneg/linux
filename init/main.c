@@ -215,10 +215,11 @@ static bool __init obsolete_checksetup(char *line)
 				if (line[n] == '\0' || line[n] == '=')
 					had_early_param = true;
 			} else if (!p->setup_func) {
+				/*参数没有提供setup_func,告警*/
 				pr_warn("Parameter %s is obsolete, ignored\n",
 					p->str);
 				return true;
-			} else if (p->setup_func(line + n))
+			} else if (p->setup_func(line + n/*跳过参数名称*/))
 				return true;
 		}
 		p++;

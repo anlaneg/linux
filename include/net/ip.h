@@ -299,6 +299,7 @@ void ip_send_unicast_reply(struct sock *sk, struct sk_buff *skb,
 
 static inline u64 snmp_get_cpu_field(void __percpu *mib, int cpu, int offt)
 {
+	/*取mib[offt]*/
 	return  *(((unsigned long *)per_cpu_ptr(mib, cpu)) + offt);
 }
 
@@ -321,14 +322,15 @@ static inline u64 snmp_fold_field64(void __percpu *mib, int offt, size_t syncp_o
 }
 #endif
 
-#define snmp_get_cpu_field64_batch(buff64, stats_list, mib_statistic, offset) \
+/*汇总各cpu关于snmp的统计计数*/
+#define snmp_get_cpu_field64_batch(buff64/*出参*/, stats_list, mib_statistic, offset) \
 { \
 	int i, c; \
 	for_each_possible_cpu(c) { \
 		for (i = 0; stats_list[i].name; i++) \
 			buff64[i] += snmp_get_cpu_field64( \
-					mib_statistic, \
-					c, stats_list[i].entry, \
+					mib_statistic/*统计数组*/, \
+					c, stats_list[i].entry/*i号统计数据，在数组中的下标*/, \
 					offset); \
 	} \
 }

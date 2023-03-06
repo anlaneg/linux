@@ -95,8 +95,8 @@ struct net {
 
 	/*挂接此network下所有net_device*/
 	struct list_head 	dev_base_head;
-	struct proc_dir_entry 	*proc_net;
-	struct proc_dir_entry 	*proc_net_stat;
+	struct proc_dir_entry 	*proc_net;/*/proc/net目录节点*/
+	struct proc_dir_entry 	*proc_net_stat;/*proc/net/stat目录节点*/
 
 #ifdef CONFIG_SYSCTL
 	struct ctl_table_set	sysctls;

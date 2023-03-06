@@ -33,9 +33,10 @@ u32 inet6_ehashfn(const struct net *net,
 	net_get_random_once(&inet6_ehash_secret, sizeof(inet6_ehash_secret));
 	net_get_random_once(&ipv6_hash_secret, sizeof(ipv6_hash_secret));
 
-	lhash = (__force u32)laddr->s6_addr32[3];
+	lhash = (__force u32)laddr->s6_addr32[3];/*本端hash*/
 	fhash = __ipv6_addr_jhash(faddr, ipv6_hash_secret);
 
+	/*计算hashcode*/
 	return __inet6_ehashfn(lhash, lport, fhash, fport,
 			       inet6_ehash_secret + net_hash_mix(net));
 }
@@ -56,29 +57,35 @@ struct sock *__inet6_lookup_established(struct net *net,
 {
 	struct sock *sk;
 	const struct hlist_nulls_node *node;
+	/*构造port队*/
 	const __portpair ports = INET_COMBINED_PORTS(sport, hnum);
 	/* Optimize here for direct hit, only listening connections can
 	 * have wildcards anyways.
 	 */
 	unsigned int hash = inet6_ehashfn(net, daddr, hnum, saddr, sport);
 	unsigned int slot = hash & hashinfo->ehash_mask;
-	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];
+	struct inet_ehash_bucket *head = &hashinfo->ehash[slot];/*取hash对应的hash桶*/
 
 
 begin:
     /*ipv6 est状态下socket查询*/
 	sk_nulls_for_each_rcu(sk, node, &head->chain) {
 		if (sk->sk_hash != hash)
+			/*忽略hashcode不相同情况*/
 			continue;
 		if (!inet6_match(net, sk, saddr, daddr, ports, dif, sdif))
+			/*忽略五元组不相同的情况*/
 			continue;
 		if (unlikely(!refcount_inc_not_zero(&sk->sk_refcnt)))
+			/*增加引用*/
 			goto out;
 
+		/*再查询一遍*/
 		if (unlikely(!inet6_match(net, sk, saddr, daddr, ports, dif, sdif))) {
 			sock_gen_put(sk);
 			goto begin;
 		}
+		/*查找成功*/
 		goto found;
 	}
 	if (get_nulls_value(node) != slot)

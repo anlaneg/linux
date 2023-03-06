@@ -273,7 +273,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 	if (!inode)
 		return NULL;
 
-	//inode初始化
+	//inode基本初始化
 	if (unlikely(inode_init_always(sb, inode))) {
 		//初始化失败，销毁inode
 		if (ops->destroy_inode) {
@@ -1329,7 +1329,7 @@ again:
 			inode->i_state = I_NEW;/*指明此inode为new(需要新建）*/
 			hlist_add_head_rcu(&inode->i_hash, head);//将inode加入到inode_hashtable表
 			spin_unlock(&inode->i_lock);
-			inode_sb_list_add(inode);
+			inode_sb_list_add(inode);/*将inode加入到sb对应的链表中*/
 			spin_unlock(&inode_hash_lock);
 
 			/* Return the locked inode with I_NEW set, the

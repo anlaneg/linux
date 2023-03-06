@@ -74,13 +74,14 @@ struct ext2_sb_info {
 	unsigned long s_frags_per_block;/* Number of fragments per block */
 	unsigned long s_inodes_per_block;/* Number of inodes per block */
 	unsigned long s_frags_per_group;/* Number of fragments in a group */
+	/*一个block group中包含有多少个block*/
 	unsigned long s_blocks_per_group;/* Number of blocks in a group */
 	//每个group中有多少个inodes
 	unsigned long s_inodes_per_group;/* Number of inodes in a group */
 	unsigned long s_itb_per_group;	/* Number of inode table blocks per group */
 	unsigned long s_gdb_count;	/* Number of group descriptor blocks */
 	unsigned long s_desc_per_block;	/* Number of group descriptors per block */
-	//文件系统中有多少个group
+	//文件系统中有多少个block groups
 	unsigned long s_groups_count;	/* Number of groups in the fs */
 	unsigned long s_overhead_last;  /* Last calculated overhead */
 	unsigned long s_blocks_last;    /* Last seen block count */
@@ -188,6 +189,7 @@ static inline struct ext2_sb_info *EXT2_SB(struct super_block *sb)
 #define EXT2_BLOCK_SIZE_BITS(s)		((s)->s_blocksize_bits)
 #define	EXT2_ADDR_PER_BLOCK_BITS(s)	(EXT2_SB(s)->s_addr_per_block_bits)
 #define EXT2_INODE_SIZE(s)		(EXT2_SB(s)->s_inode_size)
+/*首个ext2 inode编号*/
 #define EXT2_FIRST_INO(s)		(EXT2_SB(s)->s_first_ino)
 
 /*
@@ -204,10 +206,14 @@ static inline struct ext2_sb_info *EXT2_SB(struct super_block *sb)
  */
 struct ext2_group_desc
 {
+	/*blocks bitmap对应的block id*/
 	__le32	bg_block_bitmap;		/* Blocks bitmap block */
+	/*inode bitmap对应的block id*/
 	__le32	bg_inode_bitmap;		/* Inodes bitmap block */
 	__le32	bg_inode_table;		/* Inodes table block */
+	/*空闲的block数目*/
 	__le16	bg_free_blocks_count;	/* Free blocks count */
+	/*空闲的inodes数目*/
 	__le16	bg_free_inodes_count;	/* Free inodes count */
 	__le16	bg_used_dirs_count;	/* Directories count */
 	__le16	bg_pad;
@@ -217,7 +223,7 @@ struct ext2_group_desc
 /*
  * Macro-instructions used to manage group descriptors
  */
-#define EXT2_BLOCKS_PER_GROUP(s)	(EXT2_SB(s)->s_blocks_per_group)
+#define EXT2_BLOCKS_PER_GROUP(s)	(EXT2_SB(s)->s_blocks_per_group) /*取每个group中包含有多少block*/
 #define EXT2_DESC_PER_BLOCK(s)		(EXT2_SB(s)->s_desc_per_block)
 #define EXT2_INODES_PER_GROUP(s)	(EXT2_SB(s)->s_inodes_per_group)
 #define EXT2_DESC_PER_BLOCK_BITS(s)	(EXT2_SB(s)->s_desc_per_block_bits)
@@ -416,11 +422,14 @@ struct ext2_inode {
  * Structure of the super block
  */
 struct ext2_super_block {
+	/*文件系统inodes的总数*/
 	__le32	s_inodes_count;		/* Inodes count */
+	/*文件系统block总数*/
 	__le32	s_blocks_count;		/* Blocks count */
 	__le32	s_r_blocks_count;	/* Reserved blocks count */
 	__le32	s_free_blocks_count;	/* Free blocks count */
 	__le32	s_free_inodes_count;	/* Free inodes count */
+	/*首个data_block位置(其后紧跟block group desc数组)*/
 	__le32	s_first_data_block;	/* First Data Block */
 	__le32	s_log_block_size;	/* Block size */
 	__le32	s_log_frag_size;	/* Fragment size */
@@ -681,7 +690,7 @@ struct ext2_inode_info {
 	 * ext2_reserve_window_node.
 	 */
 	struct mutex truncate_mutex;
-	struct inode	vfs_inode;
+	struct inode	vfs_inode;/*vfs依赖的inode结构*/
 	struct list_head i_orphan;	/* unlinked but open inodes */
 #ifdef CONFIG_QUOTA
 	struct dquot *i_dquot[MAXQUOTAS];
@@ -705,6 +714,7 @@ struct ext2_inode_info {
 
 static inline struct ext2_inode_info *EXT2_I(struct inode *inode)
 {
+	/*由inode换算到ext2_inode_info*/
 	return container_of(inode, struct ext2_inode_info, vfs_inode);
 }
 
@@ -810,6 +820,7 @@ extern const struct inode_operations ext2_special_inode_operations;
 extern const struct inode_operations ext2_fast_symlink_inode_operations;
 extern const struct inode_operations ext2_symlink_inode_operations;
 
+/*取指定block group对应的首个block*/
 static inline ext2_fsblk_t
 ext2_group_first_block_no(struct super_block *sb, unsigned long group_no)
 {
@@ -817,16 +828,18 @@ ext2_group_first_block_no(struct super_block *sb, unsigned long group_no)
 		le32_to_cpu(EXT2_SB(sb)->s_es->s_first_data_block);
 }
 
+/*取指定block group对应的最后一个block*/
 static inline ext2_fsblk_t
 ext2_group_last_block_no(struct super_block *sb, unsigned long group_no)
 {
 	struct ext2_sb_info *sbi = EXT2_SB(sb);
 
 	if (group_no == sbi->s_groups_count - 1)
+		/*文件系统中最后一个group,其最后一个block为系统中最后一个block,故采用如下算法*/
 		return le32_to_cpu(sbi->s_es->s_blocks_count) - 1;
 	else
 		return ext2_group_first_block_no(sb, group_no) +
-			EXT2_BLOCKS_PER_GROUP(sb) - 1;
+			EXT2_BLOCKS_PER_GROUP(sb)/*每个block group中有多少个block*/ - 1;
 }
 
 #define ext2_set_bit	__test_and_set_bit_le

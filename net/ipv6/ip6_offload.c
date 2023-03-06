@@ -229,7 +229,7 @@ INDIRECT_CALLABLE_SCOPE struct sk_buff *ipv6_gro_receive(struct list_head *head,
 
 	flush += ntohs(iph->payload_len) != skb_gro_len(skb);
 
-	proto = iph->nexthdr;
+	proto = iph->nexthdr;/*取下一层协议*/
 	ops = rcu_dereference(inet6_offloads[proto]);
 	if (!ops || !ops->callbacks.gro_receive) {
 		pskb_pull(skb, skb_gro_offset(skb));
@@ -297,6 +297,7 @@ not_same_flow:
 
 	skb_gro_postpull_rcsum(skb, iph, nlen);
 
+	/*触发l4的gro receive*/
 	pp = indirect_call_gro_receive_l4(tcp6_gro_receive, udp6_gro_receive,
 					 ops->callbacks.gro_receive, head, skb);
 

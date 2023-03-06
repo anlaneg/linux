@@ -52,6 +52,7 @@ EXPORT_SYMBOL(inet6_del_protocol);
 const struct net_offload __rcu *inet6_offloads[MAX_INET_PROTOS] __read_mostly;
 EXPORT_SYMBOL(inet6_offloads);
 
+/*为指定协议添加offload*/
 int inet6_add_offload(const struct net_offload *prot, unsigned char protocol)
 {
 	return !cmpxchg((const struct net_offload **)&inet6_offloads[protocol],
@@ -59,6 +60,7 @@ int inet6_add_offload(const struct net_offload *prot, unsigned char protocol)
 }
 EXPORT_SYMBOL(inet6_add_offload);
 
+/*移除指定协议的offload*/
 int inet6_del_offload(const struct net_offload *prot, unsigned char protocol)
 {
 	int ret;

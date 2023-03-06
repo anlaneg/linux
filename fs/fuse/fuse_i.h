@@ -416,7 +416,7 @@ extern const struct fuse_iqueue_ops fuse_dev_fiq_ops;
 
 struct fuse_iqueue {
 	/** Connection established */
-	unsigned connected;
+	unsigned connected;/*标明是否连接*/
 
 	/** Lock protecting accesses to members of this structure */
 	spinlock_t lock;
@@ -428,7 +428,7 @@ struct fuse_iqueue {
 	u64 reqctr;
 
 	/** The list of pending requests */
-	struct list_head pending;
+	struct list_head pending;/*记录等待处理的请求（链表头）*/
 
 	/** Pending interrupts */
 	struct list_head interrupts;

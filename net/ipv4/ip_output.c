@@ -163,7 +163,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 	skb_reset_network_header(skb);
 	iph = ip_hdr(skb);
 	iph->version  = 4;
-	iph->ihl      = 5;
+	iph->ihl      = 5;/*明确ip头长度*/
 	iph->tos      = tos;/*来源于socket的tos*/
 	iph->ttl      = ip_select_ttl(inet, &rt->dst);
 	iph->daddr    = (opt && opt->opt.srr ? opt->opt.faddr : daddr);
@@ -186,7 +186,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 
 	//如果有选项，则构造ip选项
 	if (opt && opt->opt.optlen) {
-		iph->ihl += opt->opt.optlen>>2;
+		iph->ihl += opt->opt.optlen>>2;/*增加选项多出的ipheader长度*/
 		ip_options_build(skb, &opt->opt, daddr, rt);
 	}
 
@@ -195,7 +195,7 @@ int ip_build_and_send_pkt(struct sk_buff *skb, const struct sock *sk,
 		skb->mark = sk->sk_mark;
 
 	/* Send it out. */
-	//向外发送ip报文
+	//local向外发送ip报文
 	return ip_local_out(net, skb->sk, skb);
 }
 EXPORT_SYMBOL_GPL(ip_build_and_send_pkt);

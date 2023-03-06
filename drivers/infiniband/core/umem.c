@@ -162,11 +162,12 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	 * If the combination of the addr and size requested for this memory
 	 * region causes an integer overflow, return error.
 	 */
-	if (((addr + size) < addr)/*地址绕回*/ ||
-	    PAGE_ALIGN(addr + size) < (addr + size)/*页对齐后绕回*/)
+	if (((addr + size) < addr)/*防地址绕回*/ ||
+	    PAGE_ALIGN(addr + size) < (addr + size)/*防所属页结尾绕回*/)
 		return ERR_PTR(-EINVAL);
 
 	if (!can_do_mlock())
+		/*不容许mlock*/
 		return ERR_PTR(-EPERM);
 
 	if (access & IB_ACCESS_ON_DEMAND)
@@ -203,6 +204,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 		goto out;
 	}
 
+	/*当前进程容许lock的内存大小*/
 	lock_limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
 
 	/*算上新需要pin的内存，检查是否超过limit*/

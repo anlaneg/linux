@@ -133,7 +133,7 @@ static struct dst_entry *rxe_find_route(struct net_device *ndev,
 	return dst;
 }
 
-/*udp隧道encap收到报文*/
+/*rxe报文收取(为roce协议挂udp隧道接口)*/
 static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 {
 	struct udphdr *udph;
@@ -145,6 +145,7 @@ static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	/* takes a reference on rxe->ib_dev
 	 * drop when skb is freed
 	 */
+	/*取此netdev对应的rxe设备*/
 	rxe = rxe_get_dev_from_net(ndev);
 	if (!rxe && is_vlan_dev(ndev))
 	    /*无rxe设备，当前ndev为vlan设备,自real_dev中获取rxe设备*/
@@ -160,7 +161,7 @@ static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 
 	udph = udp_hdr(skb);
 	pkt->rxe = rxe;
-	pkt->port_num = 1;
+	pkt->port_num = 1;/*默认port number为1*/
 	/*跳给udp头部*/
 	pkt->hdr = (u8 *)(udph + 1);
 	pkt->mask = RXE_GRH_MASK;
@@ -192,7 +193,7 @@ static struct socket *rxe_setup_udp_tunnel(struct net *net, __be16 port,
 		udp_cfg.family = AF_INET;
 	}
 
-	udp_cfg.local_udp_port = port;
+	udp_cfg.local_udp_port = port;/*指明本机端口号*/
 
 	/* Create UDP socket */
 	err = udp_sock_create(net, &udp_cfg, &sock/*创建的udp socket*/);
@@ -443,6 +444,7 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 	rxe_icrc_generate(skb, pkt);
 
 	if (pkt->mask & RXE_LOOPBACK_MASK)
+		/*到本地的报文*/
 		err = rxe_loopback(skb, pkt);
 	else
 		err = rxe_send(skb, pkt);
@@ -655,6 +657,7 @@ static struct notifier_block rxe_net_notifier = {
 	.notifier_call = rxe_notify,
 };
 
+/*初始化ipv4 udp roce报文收取*/
 static int rxe_net_ipv4_init(void)
 {
 	recv_sockets.sk4 = rxe_setup_udp_tunnel(&init_net,
@@ -668,6 +671,7 @@ static int rxe_net_ipv4_init(void)
 	return 0;
 }
 
+/*初始化ipv6 udp roce报文收取*/
 static int rxe_net_ipv6_init(void)
 {
 #if IS_ENABLED(CONFIG_IPV6)
@@ -702,9 +706,11 @@ int rxe_net_init(void)
 
 	recv_sockets.sk6 = NULL;
 
+	/*注册收方向ipv4 roce报文*/
 	err = rxe_net_ipv4_init();
 	if (err)
 		return err;
+	/*注册收方向ipv6 roce报文*/
 	err = rxe_net_ipv6_init();
 	if (err)
 		goto err_out;

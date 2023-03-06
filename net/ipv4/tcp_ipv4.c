@@ -94,7 +94,7 @@ EXPORT_SYMBOL(tcp_hashinfo);
 
 static DEFINE_PER_CPU(struct sock *, ipv4_tcp_sk);
 
-/*生成tcp seq*/
+/*tcp v4通过4元组生成tcp seq*/
 static u32 tcp_v4_init_seq(const struct sk_buff *skb)
 {
 	return secure_tcp_seq(ip_hdr(skb)->daddr,
@@ -834,6 +834,7 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb)
 	arg.tos = ip_hdr(skb)->tos;
 	arg.uid = sock_net_uid(net, sk && sk_fullsock(sk) ? sk : NULL);
 	local_bh_disable();
+	/*读此cpu对应的ctl_sk,通过它响应rst报文*/
 	ctl_sk = this_cpu_read(ipv4_tcp_sk);
 	sock_net_set(ctl_sk, net);
 	if (sk) {
@@ -854,7 +855,7 @@ static void tcp_v4_send_reset(const struct sock *sk, struct sk_buff *skb)
 
 	ctl_sk->sk_mark = 0;
 	xfrm_sk_free_policy(ctl_sk);
-	sock_net_set(ctl_sk, &init_net);
+	sock_net_set(ctl_sk, &init_net);/*还原ctl_sk对应的net namespace*/
 	__TCP_INC_STATS(net, TCP_MIB_OUTSEGS);
 	__TCP_INC_STATS(net, TCP_MIB_OUTRSTS);
 	local_bh_enable();
@@ -1025,7 +1026,7 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 	u8 tos;
 
 	/* First, grab a route. */
-	//检查到对端的路由是否存在
+	//如果dst未给定，则检查到对端的路由是否存在
 	if (!dst && (dst = inet_csk_route_req(sk, &fl4, req)) == NULL)
 		return -1;
 
@@ -1052,7 +1053,7 @@ static int tcp_v4_send_synack(const struct sock *sk, struct dst_entry *dst,
 					    rcu_dereference(ireq->ireq_opt),
 					    tos);
 		rcu_read_unlock();
-		err = net_xmit_eval(err);
+		err = net_xmit_eval(err);/*检查返回值*/
 	}
 
 	return err;
@@ -1453,6 +1454,7 @@ static void tcp_v4_init_req(struct request_sock *req,
 	RCU_INIT_POINTER(ireq->ireq_opt, tcp_v4_save_options(net, skb));
 }
 
+/*反转收到报文地址（源变目的，目的变源），查询路由*/
 static struct dst_entry *tcp_v4_route_req(const struct sock *sk,
 					  struct sk_buff *skb,
 					  struct flowi *fl,
@@ -1460,12 +1462,14 @@ static struct dst_entry *tcp_v4_route_req(const struct sock *sk,
 {
 	tcp_v4_init_req(req, sk, skb);
 
+	/*触发connect request钩子*/
 	if (security_inet_conn_request(sk, skb, req))
 		return NULL;
 
 	return inet_csk_route_req(sk, &fl->u.ip4, req);
 }
 
+/*ipv4对应的tcp request sock操作集*/
 struct request_sock_ops tcp_request_sock_ops __read_mostly = {
 	.family		=	PF_INET,
 	.obj_size	=	sizeof(struct tcp_request_sock),
@@ -1485,13 +1489,13 @@ const struct tcp_request_sock_ops tcp_request_sock_ipv4_ops = {
 #ifdef CONFIG_SYN_COOKIES
 	.cookie_init_seq =	cookie_v4_init_sequence,
 #endif
-	.route_req	=	tcp_v4_route_req,//查询到对应的路由
+	.route_req	=	tcp_v4_route_req,//查询请求报文反方向对应的路由
 	.init_seq	=	tcp_v4_init_seq,//生成seq号
 	.init_ts_off	=	tcp_v4_init_ts_off,//生成ts offset
 	.send_synack	=	tcp_v4_send_synack,//向外发送syn+ack报文
 };
 
-//收到syn标记，处理tcp连接请求
+//listen状态下收到合法的syn标记，处理tcp连接请求
 int tcp_v4_conn_request(struct sock *sk, struct sk_buff *skb)
 {
 	/* Never answer to SYNs send to broadcast or multicast */
@@ -1533,8 +1537,10 @@ struct sock *tcp_v4_syn_recv_sock(const struct sock *sk, struct sk_buff *skb,
 	struct ip_options_rcu *inet_opt;
 
 	if (sk_acceptq_is_full(sk))
+		/*listen的socket backlog超限，丢包*/
 		goto exit_overflow;
 
+	/*创建新的socket*/
 	newsk = tcp_create_openreq_child(sk, req, skb);
 	if (!newsk)
 		goto exit_nonewsk;
@@ -1694,6 +1700,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 				dst_release(dst);
 			}
 		}
+		/*tcp est状态下收到报文*/
 		tcp_rcv_established(sk, skb);
 		return 0;
 	}
@@ -1719,13 +1726,13 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 			return 0;
 		}
 	} else
+		/*非listen状态，如有必要更新rxhash*/
 		sock_rps_save_rxhash(sk, skb);
 
-	//检查tcp状态，是否可接受此报文
+	//收方向按状态处理此tcp报文
 	if (tcp_rcv_state_process(sk, skb)) {
-		//协议不合适的报文，回复rest
 		rsk = sk;
-		goto reset;
+		goto reset;//回复rest
 	}
 	return 0;
 
@@ -1930,6 +1937,7 @@ static void tcp_v4_restore_cb(struct sk_buff *skb)
 		sizeof(struct inet_skb_parm));
 }
 
+/*设置ipv4的skb 控制块*/
 static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 			   const struct tcphdr *th)
 {
@@ -1940,10 +1948,10 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 		sizeof(struct inet_skb_parm));
 	barrier();
 
-	TCP_SKB_CB(skb)->seq = ntohl(th->seq);
+	TCP_SKB_CB(skb)->seq = ntohl(th->seq);/*设置报文seq*/
 	TCP_SKB_CB(skb)->end_seq = (TCP_SKB_CB(skb)->seq + th->syn + th->fin +
-				    skb->len - th->doff * 4);
-	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);
+				    skb->len - th->doff * 4);/*设置end seq*/
+	TCP_SKB_CB(skb)->ack_seq = ntohl(th->ack_seq);/*设置报文指明的ack_seq*/
 	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);
 	TCP_SKB_CB(skb)->tcp_tw_isn = 0;
 	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
@@ -2011,7 +2019,7 @@ lookup:
 			       skb, __tcp_hdrlen(th)/*tcp头部长度*/, th->source/*源端口*/,
 			       th->dest/*目的端口*/, sdif/*报文入接口*/, &refcounted);
 	if (!sk)
-	    //不存在对应的socket,（含listen socket）
+	    //不存在对应的socket（含listen socket）
 		goto no_tcp_socket;
 
 process:
@@ -2021,13 +2029,14 @@ process:
 		//如果是其它报文，则可能是之前重发的报文，丢弃
 		goto do_time_wait;
 
-	//socket已收到syn报文,并回复了syn+ack时处理此状态
 	if (sk->sk_state == TCP_NEW_SYN_RECV) {
+		//先前我们收到syn报文,创建reqeust_sock并回复了syn+ack
+		//现在对端又给我们发来了报文。
 		struct request_sock *req = inet_reqsk(sk);
 		bool req_stolen = false;
 		struct sock *nsk;
 
-		sk = req->rsk_listener;
+		sk = req->rsk_listener;/*取关联的listen socket*/
 		if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb))
 			drop_reason = SKB_DROP_REASON_XFRM_POLICY;
 		else
@@ -2044,6 +2053,7 @@ process:
 			goto csum_error;
 		}
 		if (unlikely(sk->sk_state != TCP_LISTEN)) {
+			/*我们关联的socket已不再listen*/
 			nsk = reuseport_migrate_sock(sk, req_to_sk(req), skb);
 			if (!nsk) {
 				inet_csk_reqsk_queue_drop_and_put(sk, req);
@@ -2064,12 +2074,15 @@ process:
 		if (!tcp_filter(sk, skb)) {
 			th = (const struct tcphdr *)skb->data;
 			iph = ip_hdr(skb);
-			tcp_v4_fill_cb(skb, iph, th);
+			tcp_v4_fill_cb(skb, iph, th);/*填充skb控制块*/
+			/*检查并生成new big socket*/
 			nsk = tcp_check_req(sk, skb, req, false, &req_stolen);
 		} else {
+			/*被filter要求丢包*/
 			drop_reason = SKB_DROP_REASON_SOCKET_FILTER;
 		}
 		if (!nsk) {
+			/*因非规报文或其它原因导致生成new socket失败*/
 			reqsk_put(req);
 			if (req_stolen) {
 				/* Another cpu got exclusive access to req
@@ -2085,6 +2098,7 @@ process:
 		}
 		nf_reset_ct(skb);
 		if (nsk == sk) {
+			/*仍返回了listener socket，没有生成new socket*/
 			reqsk_put(req);
 			tcp_v4_restore_cb(skb);
 		} else if (tcp_child_process(sk, nsk, skb)) {
@@ -2122,6 +2136,7 @@ process:
 		drop_reason = SKB_DROP_REASON_SOCKET_FILTER;
 		goto discard_and_relse;
 	}
+
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
 	//skb cb初始化
@@ -2255,8 +2270,10 @@ const struct inet_connection_sock_af_ops ipv4_specific = {
 	.send_check	   = tcp_v4_send_check,
 	.rebuild_header	   = inet_sk_rebuild_header,
 	.sk_rx_dst_set	   = inet_sk_rx_dst_set,
-	//处理tcp连接请求
+	//listen状态下收到合法的syn报文，交此函数处理tcp连接请求
 	.conn_request	   = tcp_v4_conn_request,
+	//new_syn_rcv状态下收到对方发来的ack报文，三次握手完成，建立新的sock
+	//并置tcp_syn_recv状态
 	.syn_recv_sock	   = tcp_v4_syn_recv_sock,
 	.net_header_len	   = sizeof(struct iphdr),
 	.setsockopt	   = ip_setsockopt,
@@ -2652,7 +2669,7 @@ static void get_tcp4_sock(struct sock *sk, struct seq_file *f, int i)
 {
 	int timer_active;
 	unsigned long timer_expires;
-	const struct tcp_sock *tp = tcp_sk(sk);
+	const struct tcp_sock *tp = tcp_sk(sk);/*转为tcp socket*/
 	const struct inet_connection_sock *icsk = inet_csk(sk);
 	const struct inet_sock *inet = inet_sk(sk);
 	const struct fastopen_queue *fastopenq = &icsk->icsk_accept_queue.fastopenq;
@@ -2738,6 +2755,7 @@ static int tcp4_seq_show(struct seq_file *seq, void *v)
 
 	seq_setwidth(seq, TMPSZ - 1);
 	if (v == SEQ_START_TOKEN) {
+		/*首个token,显示标题栏*/
 		seq_puts(seq, "  sl  local_address rem_address   st tx_queue "
 			   "rx_queue tr tm->when retrnsmt   uid  timeout "
 			   "inode");
@@ -2746,10 +2764,13 @@ static int tcp4_seq_show(struct seq_file *seq, void *v)
 	st = seq->private;
 
 	if (sk->sk_state == TCP_TIME_WAIT)
+		/*处理time wait状态的tcp socket，此时v是inet_timewait_sock*/
 		get_timewait4_sock(v, seq, st->num);
 	else if (sk->sk_state == TCP_NEW_SYN_RECV)
+		/*处理tcp new syn recv状态的tcp socket,此时v是inet_request_sock*/
 		get_openreq4(v, seq, st->num);
 	else
+		/*处理其它状态的tcp socket,此时v是tcp_sock*/
 		get_tcp4_sock(v, seq, st->num);
 out:
 	seq_pad(seq, '\n');
@@ -3060,6 +3081,7 @@ static struct tcp_seq_afinfo tcp4_seq_afinfo = {
 
 static int __net_init tcp4_proc_init_net(struct net *net)
 {
+	/*创建/proc/net/tcp文件*/
 	if (!proc_create_net_data("tcp", 0444, net->proc_net, &tcp4_seq_ops,
 			sizeof(struct tcp_iter_state), &tcp4_seq_afinfo))
 		return -ENOMEM;
@@ -3078,6 +3100,7 @@ static struct pernet_operations tcp4_net_ops = {
 
 int __init tcp4_proc_init(void)
 {
+	/*为tcp注册proc目录节点*/
 	return register_pernet_subsys(&tcp4_net_ops);
 }
 
@@ -3104,7 +3127,7 @@ EXPORT_SYMBOL(tcp_stream_memory_free);
 struct proto tcp_prot = {
 	.name			= "TCP",
 	.owner			= THIS_MODULE,
-	.close			= tcp_close,
+	.close			= tcp_close,/*具体实现tcp协议的关闭调用，当socket要release时，此函数被调用*/
 	.pre_connect		= tcp_v4_pre_connect,
 	.connect		= tcp_v4_connect,/*实现tcp v4连接到远端*/
 	.disconnect		= tcp_disconnect,
@@ -3121,7 +3144,7 @@ struct proto tcp_prot = {
 	.sendmsg		= tcp_sendmsg,
 	.sendpage		= tcp_sendpage,/*page数据发送*/
 	.backlog_rcv		= tcp_v4_do_rcv,
-	.release_cb		= tcp_release_cb,
+	.release_cb		= tcp_release_cb,/*释放控制块*/
 	//注册tcp socket
 	.hash			= inet_hash,
 	.unhash			= inet_unhash,
@@ -3194,6 +3217,7 @@ fallback:
 	net->ipv4.sysctl_max_syn_backlog = max(128U, ehash_entries / 128);
 }
 
+/*为各net namespace设置独立的sysctl配置*/
 static int __net_init tcp_sk_init(struct net *net)
 {
 	net->ipv4.sysctl_tcp_ecn = 2;
@@ -3392,6 +3416,7 @@ void __init tcp_v4_init(void)
 		 */
 		inet_sk(sk)->pmtudisc = IP_PMTUDISC_DO;
 
+		/*初始化此sk,用于kernel发送rst,ack报文*/
 		per_cpu(ipv4_tcp_sk, cpu) = sk;
 	}
 	if (register_pernet_subsys(&tcp_sk_ops))

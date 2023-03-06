@@ -4171,6 +4171,7 @@ void tcp_parse_options(const struct net *net,
 					break;
 				}
 
+				/*smc选项解析*/
 				if (smc_parse_options(th, opt_rx, ptr, opsize))
 					break;
 
@@ -6515,7 +6516,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			SKB_DR_SET(reason, TCP_RESET);
 			goto discard;
 		}
-		//仅接收有syn标记的报文
+		//listen状态下仅接收有syn标记的报文，其它报文丢弃
 		if (th->syn) {
 			if (th->fin) {
 				//有syn标记，但也有fin标记，则直接丢包
@@ -6528,7 +6529,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			rcu_read_lock();
 			local_bh_disable();
 
-			//listen状态下，收到syn标记，检查连接是否可被接受
+			//listen状态下，收到syn标记，检查连接是否可被接受，如可接受，则响应报文。
 			//走tcp_ipv4.c文件，ipv4_specific结构体的tcp_v4_conn_request
 			//返回>=0时，为可接收报文
 			acceptable = icsk->icsk_af_ops->conn_request(sk, skb) >= 0;
@@ -6539,7 +6540,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			if (!acceptable)
 				return 1;
 
-			//可接收此报文，由于syn报文中不包含data直接移除skb
+			//可接收此报文，由于syn报文中不包含data直接消耗掉此skb
 			consume_skb(skb);
 			return 0;
 		}
@@ -6614,7 +6615,7 @@ int tcp_rcv_state_process(struct sock *sk, struct sk_buff *skb)
 			WRITE_ONCE(tp->copied_seq, tp->rcv_nxt);
 		}
 		smp_mb();
-		tcp_set_state(sk, TCP_ESTABLISHED);
+		tcp_set_state(sk, TCP_ESTABLISHED);/*由syn_recv转为est状态*/
 		sk->sk_state_change(sk);
 
 		/* Note, that this wakeup is only for marginal crossed SYN case.
@@ -6823,7 +6824,7 @@ static void tcp_ecn_create_request(struct request_sock *req,
 }
 
 static void tcp_openreq_init(struct request_sock *req,
-			     const struct tcp_options_received *rx_opt,
+			     const struct tcp_options_received *rx_opt/*收到的tcp选项*/,
 			     struct sk_buff *skb, const struct sock *sk)
 {
 	struct inet_request_sock *ireq = inet_rsk(req);
@@ -6851,7 +6852,7 @@ static void tcp_openreq_init(struct request_sock *req,
 #endif
 }
 
-//为此流申请inet_request_sock,置为syn_recv状态
+//为inet/inet6申请request_sock,初始化,置为syn_recv状态
 struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 				      struct sock *sk_listener,
 				      bool attach_listener)
@@ -6860,12 +6861,12 @@ struct request_sock *inet_reqsk_alloc(const struct request_sock_ops *ops,
 					       attach_listener);
 
 	if (req) {
-	    /*取inet对应的inet_request_sock*/
+	    /*强转为inet对应的inet_request_sock,ops已保证空间*/
 		struct inet_request_sock *ireq = inet_rsk(req);
 
 		ireq->ireq_opt = NULL;
 #if IS_ENABLED(CONFIG_IPV6)
-		ireq->pktopts = NULL;
+		ireq->pktopts = NULL;/*ipv6初始化*/
 #endif
 		atomic64_set(&ireq->ir_cookie, 0);
 
@@ -6972,8 +6973,8 @@ u16 tcp_get_syncookie_mss(struct request_sock_ops *rsk_ops,
 }
 EXPORT_SYMBOL_GPL(tcp_get_syncookie_mss);
 
-int tcp_conn_request(struct request_sock_ops *rsk_ops,
-		     const struct tcp_request_sock_ops *af_ops,
+int tcp_conn_request(struct request_sock_ops *rsk_ops/*request socket对应的操作集*/,
+		     const struct tcp_request_sock_ops *af_ops/*此协议族对应的special ops*/,
 		     struct sock *sk, struct sk_buff *skb)
 {
 	struct tcp_fastopen_cookie foc = { .len = -1 };
@@ -7022,16 +7023,18 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 
 	tcp_clear_options(&tmp_opt);
 	tmp_opt.mss_clamp = af_ops->mss_clamp;
+	/*使用listen socket指明的mss*/
 	tmp_opt.user_mss  = tp->rx_opt.user_mss;
 
 	//解析tcp选项
-	tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0,
+	tcp_parse_options(sock_net(sk), skb, &tmp_opt/*出参，tcp选项*/, 0/*非est情况*/,
 			  want_cookie ? NULL : &foc);
 
 	if (want_cookie && !tmp_opt.saw_tstamp)
 		tcp_clear_options(&tmp_opt);
 
 	if (IS_ENABLED(CONFIG_SMC) && want_cookie)
+		/*want_cookie与smc不兼容*/
 		tmp_opt.smc_ok = 0;
 
 	tmp_opt.tstamp_ok = tmp_opt.saw_tstamp;
@@ -7043,11 +7046,13 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	/* Note: tcp_v6_init_req() might override ir_iif for link locals */
 	inet_rsk(req)->ir_iif = inet_request_bound_dev_if(sk, skb);
 
-	//查询到对应的路由
+	//通过反转请求的地址对，查询响应报文对应的路由
 	dst = af_ops->route_req(sk, skb, &fl, req);
 	if (!dst)
+		/*查询路由失败，丢包*/
 		goto drop_and_free;
 
+	/*生成时间签固定偏移量*/
 	if (tmp_opt.tstamp_ok)
 		tcp_rsk(req)->ts_off = af_ops->init_ts_off(net, skb);
 
@@ -7078,15 +7083,15 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 	tcp_ecn_create_request(req, skb, sk, dst);
 
 	if (want_cookie) {
-	    //使用syn cookie来生成seq号
+	    //want_cookie情况下，使用syn cookie来生成seq号
 		isn = cookie_init_sequence(af_ops, sk, skb, &req->mss);
 		if (!tmp_opt.tstamp_ok)
 			inet_rsk(req)->ecn_ok = 0;
 	}
 
 	tcp_rsk(req)->snt_isn = isn;
-	tcp_rsk(req)->txhash = net_tx_rndhash();
-	tcp_rsk(req)->syn_tos = TCP_SKB_CB(skb)->ip_dsfield;
+	tcp_rsk(req)->txhash = net_tx_rndhash();/*产生txhash*/
+	tcp_rsk(req)->syn_tos = TCP_SKB_CB(skb)->ip_dsfield;/*使用与对端相同的tos*/
 	tcp_openreq_init_rwin(req, sk, dst);
 	/*设置req对应socket的rx queue*/
 	sk_rx_queue_set(req_to_sk(req), skb);
@@ -7095,6 +7100,7 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 		fastopen_sk = tcp_try_fastopen(sk, skb, req, &foc, dst);
 	}
 	if (fastopen_sk) {
+		/*fastopen情况，回应syn ack*/
 		af_ops->send_synack(fastopen_sk, dst, &fl, req,
 				    &foc, TCP_SYNACK_FASTOPEN, skb);
 		/* Add the child socket directly into the accept queue */
@@ -7104,13 +7110,13 @@ int tcp_conn_request(struct request_sock_ops *rsk_ops,
 			sock_put(fastopen_sk);
 			goto drop_and_free;
 		}
-		sk->sk_data_ready(sk);
+		sk->sk_data_ready(sk);/*通知syn中的数据*/
 		bh_unlock_sock(fastopen_sk);
 		sock_put(fastopen_sk);
 	} else {
 		tcp_rsk(req)->tfo_listener = false;
 		if (!want_cookie) {
-		    	/*将新建立的socket加入到request socket队列中*/
+		    /*将新建立的socket加入到request socket队列中*/
 			req->timeout = tcp_timeout_init((struct sock *)req);
 			inet_csk_reqsk_queue_hash_add(sk, req, req->timeout);
 		}

@@ -242,6 +242,7 @@ extern int sysctl_mld_qrv;
 ({									\
 	struct inet6_dev *_idev = (idev);				\
 	if (likely(_idev != NULL))					\
+	/*有设备记录在设备上*/\
 		SNMP_INC_STATS_ATOMIC_LONG((_idev)->stats.statname##dev, (field)); \
 	SNMP_INC_STATS_ATOMIC_LONG((net)->mib.statname##_statistics, (field));\
 })
@@ -576,15 +577,16 @@ ipv6_masked_addr_cmp(const struct in6_addr *a1, const struct in6_addr *m,
 #endif
 }
 
+/*复制ipv6 addr前缀到pfx*/
 static inline void ipv6_addr_prefix(struct in6_addr *pfx,
 				    const struct in6_addr *addr,
 				    int plen)
 {
 	/* caller must guarantee 0 <= plen <= 128 */
-	int o = plen >> 3,
-	    b = plen & 0x7;
+	int o = plen >> 3,/*除以8，获得字节数*/
+	    b = plen & 0x7;/*不足字节的bit*/
 
-	memset(pfx->s6_addr, 0, sizeof(pfx->s6_addr));
+	memset(pfx->s6_addr, 0, sizeof(pfx->s6_addr));/*清零*/
 	memcpy(pfx->s6_addr, addr, o);
 	if (b != 0)
 		pfx->s6_addr[o] = addr->s6_addr[o] & (0xff00 >> b);
@@ -625,7 +627,8 @@ static inline void __ipv6_addr_set_half(__be32 *addr,
 	addr[1] = wl;
 }
 
-static inline void ipv6_addr_set(struct in6_addr *addr,
+/*将addr设置为wl,w2,w3,w4*/
+static inline void ipv6_addr_set(struct in6_addr *addr/*出参*/,
 				     __be32 w1, __be32 w2,
 				     __be32 w3, __be32 w4)
 {
@@ -696,6 +699,7 @@ static inline bool ipv6_prefix_equal(const struct in6_addr *addr1,
 }
 #endif
 
+/*检查地址是否为0*/
 static inline bool ipv6_addr_any(const struct in6_addr *a)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) && BITS_PER_LONG == 64
@@ -703,6 +707,7 @@ static inline bool ipv6_addr_any(const struct in6_addr *a)
 
 	return (ul[0] | ul[1]) == 0UL;
 #else
+	/*a地址是否为0*/
 	return (a->s6_addr32[0] | a->s6_addr32[1] |
 		a->s6_addr32[2] | a->s6_addr32[3]) == 0;
 #endif
@@ -803,6 +808,7 @@ static inline bool ipv6_addr_is_multicast(const struct in6_addr *addr)
 static inline void ipv6_addr_set_v4mapped(const __be32 addr,
 					  struct in6_addr *v4mapped)
 {
+	/*v4映射地址格式：::FFFF:$addr*/
 	ipv6_addr_set(v4mapped,
 			0, 0,
 			htonl(0x0000FFFF),

@@ -827,7 +827,7 @@ static bool tcp_error(const struct tcphdr *th,
 		      unsigned int dataoff,
 		      const struct nf_hook_state *state)
 {
-	unsigned int tcplen = skb->len - dataoff;
+	unsigned int tcplen = skb->len - dataoff;/*tcp负载长度*/
 	u8 tcpflags;
 
 	/* Not whole TCP header or malformed packet */
@@ -845,7 +845,7 @@ static bool tcp_error(const struct tcphdr *th,
 	//checksum检查
 	if (state->net->ct.sysctl_checksum &&
 	    state->hook == NF_INET_PRE_ROUTING &&
-	    nf_checksum(skb, state->hook, dataoff, IPPROTO_TCP, state->pf)) {
+	    nf_checksum(skb, state->hook, dataoff/*skb->data到l4的offset*/, IPPROTO_TCP, state->pf)) {
 		tcp_error_log(skb, state, "bad checksum");
 		return true;
 	}

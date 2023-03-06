@@ -73,12 +73,15 @@ int rxe_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	 * CQ, QP, or SRQ is soon followed by a call to mmap().
 	 */
 	spin_lock_bh(&rxe->pending_lock);
+	/*遍历待执行mmap的rxe_mmap_info*/
 	list_for_each_entry_safe(ip, pp, &rxe->pending_mmaps, pending_mmaps) {
 		if (context != ip->context || (__u64)offset != ip->info.offset)
+			/*context或者offset不同，则忽略*/
 			continue;
 
 		/* Don't allow a mmap larger than the object. */
 		if (size > ip->info.size) {
+			/*mmap的内存过大*/
 			pr_err("mmap region is larger than the object!\n");
 			spin_unlock_bh(&rxe->pending_lock);
 			ret = -EINVAL;
@@ -93,9 +96,11 @@ int rxe_mmap(struct ib_ucontext *context, struct vm_area_struct *vma)
 	goto done;
 
 found_it:
+	/*自pending链表上移除*/
 	list_del_init(&ip->pending_mmaps);
 	spin_unlock_bh(&rxe->pending_lock);
 
+	/*映射此内存给用户态*/
 	ret = remap_vmalloc_range(vma, ip->obj, 0);
 	if (ret) {
 		pr_err("err %d from remap_vmalloc_range\n", ret);
@@ -112,8 +117,8 @@ done:
 /*
  * Allocate information for rxe_mmap
  */
-struct rxe_mmap_info *rxe_create_mmap_info(struct rxe_dev *rxe, u32 size,
-					   struct ib_udata *udata, void *obj)
+struct rxe_mmap_info *rxe_create_mmap_info(struct rxe_dev *rxe, u32 size/*内存大小*/,
+					   struct ib_udata *udata, void *obj/*要映射的起始位置*/)
 {
 	struct rxe_mmap_info *ip;
 
@@ -124,24 +129,27 @@ struct rxe_mmap_info *rxe_create_mmap_info(struct rxe_dev *rxe, u32 size,
 	if (!ip)
 		return ERR_PTR(-ENOMEM);
 
-	size = PAGE_ALIGN(size);
+	size = PAGE_ALIGN(size);/*使内存大小按页对齐*/
 
 	spin_lock_bh(&rxe->mmap_offset_lock);
 
 	if (rxe->mmap_offset == 0)
+		/*初始化mmap_offset*/
 		rxe->mmap_offset = ALIGN(PAGE_SIZE, SHMLBA);
 
+	/*为此块内存分配offset*/
 	ip->info.offset = rxe->mmap_offset;
+	/*更新mmap offset,以便下次使用*/
 	rxe->mmap_offset += ALIGN(size, SHMLBA);
 
 	spin_unlock_bh(&rxe->mmap_offset_lock);
 
 	INIT_LIST_HEAD(&ip->pending_mmaps);
-	ip->info.size = size;
+	ip->info.size = size;/*内存大小*/
 	ip->context =
 		container_of(udata, struct uverbs_attr_bundle, driver_udata)
 			->context;
-	ip->obj = obj;
+	ip->obj = obj;/*起始地址*/
 	kref_init(&ip->ref);
 
 	return ip;

@@ -62,9 +62,9 @@ struct rxe_queue {
 	size_t			buf_size;
 	/*queue中元素个体大小*/
 	size_t			elem_size;
-	/*无素个体大小的log2的对数*/
+	/*元素个体大小的log2的对数*/
 	unsigned int		log2_elem_size;
-	/*buffer中共有num_slot个元素,是2的N次，index_mask恰为num_slot -1*/
+	/*buffer中共有num_slot个元素（队列长度）,是2的N次，index_mask恰为num_slot -1*/
 	u32			index_mask;
 	/*队列类型*/
 	enum queue_type		type;

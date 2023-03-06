@@ -62,7 +62,7 @@ struct in6_validator_info {
 
 struct ifa6_config {
 	const struct in6_addr	*pfx;
-	unsigned int		plen;
+	unsigned int		plen;/*前缀长度*/
 
 	u8			ifa_proto;
 
@@ -361,6 +361,7 @@ static inline struct inet6_dev *__in6_dev_get_safely(const struct net_device *de
  */
 static inline struct inet6_dev *in6_dev_get(const struct net_device *dev)
 {
+	/*取网络设备对应的inet6_dev*/
 	struct inet6_dev *idev;
 
 	rcu_read_lock();
@@ -443,12 +444,30 @@ static inline void in6_ifa_hold(struct inet6_ifaddr *ifp)
 static inline void addrconf_addr_solict_mult(const struct in6_addr *addr,
 					     struct in6_addr *solicited)
 {
+	/*
+	 * Solicited-node 组播地址由节点的单播地址和任播地址计算而来。
+	 * 它的低 24 位为单播或任播地址的低 24 位，
+	 * 高 104 位为 FF02:0:0:0:0:1:FF00::/104。由此我们可以得到
+	 *  Solicited-node 组播地址的范围为
+	 *  FF02:0:0:0:0:1:FF00:0000 到 FF02:0:0:0:0:1:FFFF:FFFF.
+	 *  举个栗子，假设一个节点具有一个 IPv6 地址 4037::01:800:200E:8C6C，
+	 *  则它对应的 solicited-node 组播地址为 FF02::1:FF0E:8C6C。
+	 *  所以如果两个 IPv6 地址只是 104 位的前缀不同，
+	 *  则它们的 solicited-node 组播地址是相同的，
+	 *  这种机制限制了加入一个组播组中节点的最大数量。
+	 *  当在一个节点上的接口上配置单播或者任播地址(自动或手动)时，
+	 *  它会自动计算对应的 solicited-node 组播地址，然后加入这个组播组。
+	 *  https://switch-router.gitee.io/blog/ipv6-solicited-node-multicast/
+	 */
+
+	/*设置solicited为ff02::1:ff00:0000/104*/
 	ipv6_addr_set(solicited,
 		      htonl(0xFF020000), 0,
 		      htonl(0x1),
 		      htonl(0xFF000000) | addr->s6_addr32[3]);
 }
 
+/*检查是否为地址ff02::1*/
 static inline bool ipv6_addr_is_ll_all_nodes(const struct in6_addr *addr)
 {
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS) && BITS_PER_LONG == 64

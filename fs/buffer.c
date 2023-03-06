@@ -198,8 +198,11 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 	int all_mapped = 1;
 	static DEFINE_RATELIMIT_STATE(last_warned, HZ, 1);
 
-	//换算成需要读取的起始页号
+	/*换算成需要读取的起始页号（1个block占bd_inode->i_blkbits个位，一页可以存
+	 * (PAGE_SHIFT - bd_inode->i_blkbits) 个块，故index为block所在的页索引
+	 */
 	index = block >> (PAGE_SHIFT - bd_inode->i_blkbits);
+	/*在block dev的mapping中查找index号页*/
 	page = find_get_page_flags(bd_mapping, index, FGP_ACCESSED);
 	if (!page)
 		goto out;
@@ -213,11 +216,12 @@ __find_get_block_slow(struct block_device *bdev, sector_t block)
 		if (!buffer_mapped(bh))
 			all_mapped = 0;
 		else if (bh->b_blocknr == block) {
+			/*与block区配，查找成功*/
 			ret = bh;
 			get_bh(bh);
 			goto out_unlock;
 		}
-		bh = bh->b_this_page;
+		bh = bh->b_this_page;/*尝试下一个buffer head*/
 	} while (bh != head);
 
 	/* we might be here because some of the buffers on this page are
@@ -1020,6 +1024,7 @@ __getblk_slow(struct block_device *bdev, sector_t block,
 	/* Size must be multiple of hard sectorsize */
 	if (unlikely(size & (bdev_logical_block_size(bdev)-1) ||
 			(size < 512 || size > PAGE_SIZE))) {
+		/*block大小检查不通过*/
 		printk(KERN_ERR "getblk(): invalid block size %d requested\n",
 					size);
 		printk(KERN_ERR "logical block size: %d\n",
@@ -1141,6 +1146,7 @@ EXPORT_SYMBOL(mark_buffer_write_io_error);
 void __brelse(struct buffer_head * buf)
 {
 	if (atomic_read(&buf->b_count)) {
+		/*减少计数*/
 		put_bh(buf);
 		return;
 	}
@@ -1206,6 +1212,8 @@ struct bh_lru {
 	struct buffer_head *bhs[BH_LRU_SIZE];
 };
 
+/*每个cpu有一个Least Recently Used链表，链表头上记录最近被使用的buffer_head
+ * 最多有BH_LRU_SIZE个buffer_head*/
 static DEFINE_PER_CPU(struct bh_lru, bh_lrus) = {{ NULL }};
 
 #ifdef CONFIG_SMP
@@ -1248,6 +1256,7 @@ static void bh_lru_install(struct buffer_head *bh)
 		return;
 	}
 
+	/*将evictee放在第一个位置，其它后移。*/
 	b = this_cpu_ptr(&bh_lrus);
 	for (i = 0; i < BH_LRU_SIZE; i++) {
 		swap(evictee, b->bhs[i]);
@@ -1259,13 +1268,13 @@ static void bh_lru_install(struct buffer_head *bh)
 
 	get_bh(bh);
 	bh_lru_unlock();
-	brelse(evictee);
+	brelse(evictee);/*释放最后一个bh*/
 }
 
 /*
  * Look up the bh in this cpu's LRU.  If it's there, move it to the head.
  */
-//在cpu的bh_lrus缓存表，检查是否有此设备指定块的信息
+//在当前cpu的bh_lru缓存表中，检查是否有此设备指定块的信息（小缓存大小为BH_LRU_SIZE）
 static struct buffer_head *
 lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 {
@@ -1275,13 +1284,14 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 	check_irqs_on();
 	bh_lru_lock();
 	for (i = 0; i < BH_LRU_SIZE; i++) {
+		/*每个cpu有自已的bhs，最多只查询BH_LRU_SIZE个buffer_head*/
 		struct buffer_head *bh = __this_cpu_read(bh_lrus.bhs[i]);
 
 		//块号相等，设备相等，大小相等时，认为匹配,由于采用lru算法，故将命中的移到链表头部
 		if (bh && bh->b_blocknr == block && bh->b_bdev == bdev &&
 		    bh->b_size == size) {
 			if (i) {
-				//如果i不等于０，即bh未在链表头，则需要将其移动
+				//如果i不等于０，即bh未在链表头，则需要将其移动到链表头
 				while (i) {
 					__this_cpu_write(bh_lrus.bhs[i],
 						__this_cpu_read(bh_lrus.bhs[i - 1]));
@@ -1289,7 +1299,7 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 				}
 				__this_cpu_write(bh_lrus.bhs[0], bh);
 			}
-			get_bh(bh);
+			get_bh(bh);/*增加引用*/
 			ret = bh;
 			break;
 		}
@@ -1306,15 +1316,15 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 struct buffer_head *
 __find_get_block(struct block_device *bdev, sector_t block, unsigned size)
 {
+	/*先在bh_lru缓存中查找*/
 	struct buffer_head *bh = lookup_bh_lru(bdev, block, size);
 
-	//未在bh_lru中找到此块的信息（未缓存）
 	if (bh == NULL) {
 		/* __find_get_block_slow will mark the page accessed */
 		//尝试在块文件缓存中查找
 		bh = __find_get_block_slow(bdev, block);
 		if (bh)
-			bh_lru_install(bh);
+			bh_lru_install(bh);/*将bh增加到缓存中*/
 	} else
 		touch_buffer(bh);
 
@@ -1331,15 +1341,15 @@ EXPORT_SYMBOL(__find_get_block);
  * try_to_free_buffers() attempt is failing.  FIXME, perhaps?
  */
 struct buffer_head *
-__getblk_gfp(struct block_device *bdev, sector_t block,
-	     unsigned size, gfp_t gfp)
+__getblk_gfp(struct block_device *bdev, sector_t block/*block编号*/,
+	     unsigned size/*内容长度*/, gfp_t gfp)
 {
 	//尝试自缓存中获取此buffer
 	struct buffer_head *bh = __find_get_block(bdev, block, size);
 
 	might_sleep();
 	if (bh == NULL)
-	    /*尝试自块设备中获取此buffer*/
+	    /*尝试自block设备中获取此buffer*/
 		bh = __getblk_slow(bdev, block, size, gfp);
 	return bh;
 }
@@ -1371,8 +1381,8 @@ EXPORT_SYMBOL(__breadahead);
  *  It returns NULL if the block was unreadable.
  */
 struct buffer_head *
-__bread_gfp(struct block_device *bdev/*块设备*/, sector_t block,
-		   unsigned size/*要读取的大小*/, gfp_t gfp)
+__bread_gfp(struct block_device *bdev/*块设备*/, sector_t block/*block编号*/,
+		   unsigned size/*要读取的block大小*/, gfp_t gfp)
 {
 	struct buffer_head *bh = __getblk_gfp(bdev, block, size, gfp);
 

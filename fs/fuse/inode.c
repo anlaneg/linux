@@ -320,9 +320,11 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr)
 	inode->i_ctime.tv_sec  = attr->ctime;
 	inode->i_ctime.tv_nsec = attr->ctimensec;
 	if (S_ISREG(inode->i_mode)) {
+		/*普通文件*/
 		fuse_init_common(inode);
 		fuse_init_file_inode(inode, attr->flags);
 	} else if (S_ISDIR(inode->i_mode))
+		/*目录*/
 		fuse_init_dir(inode);
 	else if (S_ISLNK(inode->i_mode))
 		fuse_init_symlink(inode);
@@ -351,7 +353,7 @@ static int fuse_inode_set(struct inode *inode, void *_nodeidp)
 	return 0;
 }
 
-struct inode *fuse_iget(struct super_block *sb, u64 nodeid,
+struct inode *fuse_iget(struct super_block *sb, u64 nodeid/*inode编号*/,
 			int generation, struct fuse_attr *attr,
 			u64 attr_valid, u64 attr_version)
 {
@@ -1331,16 +1333,19 @@ struct fuse_dev *fuse_dev_alloc(void)
 	struct fuse_dev *fud;
 	struct list_head *pq;
 
+	/*申请fud*/
 	fud = kzalloc(sizeof(struct fuse_dev), GFP_KERNEL);
 	if (!fud)
 		return NULL;
 
+	/*申请一组pq*/
 	pq = kcalloc(FUSE_PQ_HASH_SIZE, sizeof(struct list_head), GFP_KERNEL);
 	if (!pq) {
 		kfree(fud);
 		return NULL;
 	}
 
+	/*初始化pqueue*/
 	fud->pq.processing = pq;
 	fuse_pqueue_init(&fud->pq);
 
@@ -1352,6 +1357,7 @@ void fuse_dev_install(struct fuse_dev *fud, struct fuse_conn *fc)
 {
 	fud->fc = fuse_conn_get(fc);
 	spin_lock(&fc->lock);
+	/*添加fud到链表*/
 	list_add_tail(&fud->entry, &fc->devices);
 	spin_unlock(&fc->lock);
 }
@@ -1361,6 +1367,7 @@ struct fuse_dev *fuse_dev_alloc_install(struct fuse_conn *fc)
 {
 	struct fuse_dev *fud;
 
+	/*申请fud并添加到fc中*/
 	fud = fuse_dev_alloc();
 	if (!fud)
 		return NULL;
@@ -1815,12 +1822,13 @@ static void fuse_kill_sb_anon(struct super_block *sb)
 	fuse_mount_destroy(get_fuse_mount_super(sb));
 }
 
+/*fuse文件系统*/
 static struct file_system_type fuse_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "fuse",
 	.fs_flags	= FS_HAS_SUBTYPE | FS_USERNS_MOUNT,
 	.init_fs_context = fuse_init_fs_context,
-	.parameters	= fuse_fs_parameters,
+	.parameters	= fuse_fs_parameters,/*文件系统参数*/
 	.kill_sb	= fuse_kill_sb_anon,
 };
 MODULE_ALIAS_FS("fuse");
@@ -1837,7 +1845,7 @@ static struct file_system_type fuseblk_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "fuseblk",
 	.init_fs_context = fuse_init_fs_context,
-	.parameters	= fuse_fs_parameters,
+	.parameters	= fuse_fs_parameters,/*文件系统参数*/
 	.kill_sb	= fuse_kill_sb_blk,
 	.fs_flags	= FS_REQUIRES_DEV | FS_HAS_SUBTYPE,
 };
@@ -1845,6 +1853,7 @@ MODULE_ALIAS_FS("fuseblk");
 
 static inline int register_fuseblk(void)
 {
+	/*注册fuse对应的block文件系统*/
 	return register_filesystem(&fuseblk_fs_type);
 }
 
@@ -1874,6 +1883,7 @@ static int __init fuse_fs_init(void)
 {
 	int err;
 
+	/*初始化fuse inode缓存*/
 	fuse_inode_cachep = kmem_cache_create("fuse_inode",
 			sizeof(struct fuse_inode), 0,
 			SLAB_HWCACHE_ALIGN|SLAB_ACCOUNT|SLAB_RECLAIM_ACCOUNT,
@@ -1882,10 +1892,12 @@ static int __init fuse_fs_init(void)
 	if (!fuse_inode_cachep)
 		goto out;
 
+	/*注册fuseblk文件系统*/
 	err = register_fuseblk();
 	if (err)
 		goto out2;
 
+	/*注册fuse文件系统*/
 	err = register_filesystem(&fuse_fs_type);
 	if (err)
 		goto out3;
@@ -1951,19 +1963,19 @@ static int __init fuse_init(void)
 		FUSE_KERNEL_VERSION, FUSE_KERNEL_MINOR_VERSION);
 
 	INIT_LIST_HEAD(&fuse_conn_list);
-	res = fuse_fs_init();
+	res = fuse_fs_init();/*文件系统注册+inode cache创建*/
 	if (res)
 		goto err;
 
-	res = fuse_dev_init();
+	res = fuse_dev_init();/*初始化fuse_dev字符设备*/
 	if (res)
 		goto err_fs_cleanup;
 
-	res = fuse_sysfs_init();
+	res = fuse_sysfs_init();/*fs文件类创建*/
 	if (res)
 		goto err_dev_cleanup;
 
-	res = fuse_ctl_init();
+	res = fuse_ctl_init();/*注册fusectl文件系统*/
 	if (res)
 		goto err_sysfs_cleanup;
 

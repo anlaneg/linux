@@ -871,7 +871,7 @@ struct sk_buff {
 	};
 
 	union {
-		ktime_t		tstamp;/*收报时的时间签*/
+		ktime_t		tstamp;/*收发包时的时间签*/
 		u64		skb_mstamp_ns; /* earliest departure time */
 	};
 	/*

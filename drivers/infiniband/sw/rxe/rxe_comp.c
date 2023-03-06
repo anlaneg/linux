@@ -557,7 +557,7 @@ static void free_pkt(struct rxe_pkt_info *pkt)
 	ib_device_put(dev);
 }
 
-/*completer任务处理函数*/
+/*completer任务处理函数，例如：发送完成*/
 int rxe_completer(void *arg)
 {
 	struct rxe_qp *qp = (struct rxe_qp *)arg;

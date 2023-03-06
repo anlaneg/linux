@@ -23,6 +23,7 @@
 #include <net/xfrm.h>
 #include <net/busy_poll.h>
 
+/*检查seq,end_seq是否在window之内*/
 static bool tcp_in_window(u32 seq, u32 end_seq, u32 s_win, u32 e_win)
 {
 	if (seq == s_win)
@@ -471,6 +472,7 @@ struct sock *tcp_create_openreq_child(const struct sock *sk,
 				      struct request_sock *req,
 				      struct sk_buff *skb)
 {
+	/*申请并创建新的socket(在三次握手前我们用的是小socket(request_sock))*/
 	struct sock *newsk = inet_csk_clone_lock(sk, req, GFP_ATOMIC);
 	const struct inet_request_sock *ireq = inet_rsk(req);
 	struct tcp_request_sock *treq = tcp_rsk(req);
@@ -588,13 +590,14 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 {
 	struct tcp_options_received tmp_opt;
 	struct sock *child;
-	const struct tcphdr *th = tcp_hdr(skb);
+	const struct tcphdr *th = tcp_hdr(skb);/*取此skb对应的tcp header*/
 	__be32 flg = tcp_flag_word(th) & (TCP_FLAG_RST|TCP_FLAG_SYN|TCP_FLAG_ACK);
 	bool paws_reject = false;
 	bool own_req;
 
 	tmp_opt.saw_tstamp = 0;
 	if (th->doff > (sizeof(struct tcphdr)>>2)) {
+		/*存在tcp选项，先解析tcp选项*/
 		tcp_parse_options(sock_net(sk), skb, &tmp_opt, 0, NULL);
 
 		if (tmp_opt.saw_tstamp) {
@@ -611,6 +614,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	}
 
 	/* Check for pure retransmitted SYN. */
+	/*如果本次报文中的seq与上次收到的seq相等，且有syn标记，则为syn重传*/
 	if (TCP_SKB_CB(skb)->seq == tcp_rsk(req)->rcv_isn &&
 	    flg == TCP_FLAG_SYN &&
 	    !paws_reject) {
@@ -713,6 +717,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	if ((flg & TCP_FLAG_ACK) && !fastopen &&
 	    (TCP_SKB_CB(skb)->ack_seq !=
 	     tcp_rsk(req)->snt_isn + 1))
+		/*包含ack,且ack seq与我们发送的不一致，无效的报文，返回sk*/
 		return sk;
 
 	/* Also, it would be not so bad idea to check rcv_tsecr, which
@@ -725,6 +730,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	if (paws_reject || !tcp_in_window(TCP_SKB_CB(skb)->seq, TCP_SKB_CB(skb)->end_seq,
 					  tcp_rsk(req)->rcv_nxt, tcp_rsk(req)->rcv_nxt + req->rsk_rcv_wnd)) {
 		/* Out of window: send ACK and drop. */
+		/* 收到窗口之外的ack,返回NULL*/
 		if (!(flg & TCP_FLAG_RST) &&
 		    !tcp_oow_rate_limited(sock_net(sk), skb,
 					  LINUX_MIB_TCPACKSKIPPEDSYNRECV,
@@ -761,6 +767,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	 * following check needs to be removed.
 	 */
 	if (!(flg & TCP_FLAG_ACK))
+		/*没有ack标记*/
 		return NULL;
 
 	/* For Fast Open no more processing is needed (sk is the
@@ -786,6 +793,7 @@ struct sock *tcp_check_req(struct sock *sk, struct sk_buff *skb,
 	child = inet_csk(sk)->icsk_af_ops->syn_recv_sock(sk, skb, req, NULL,
 							 req, &own_req);
 	if (!child)
+		/*创建大socket失败*/
 		goto listen_overflow;
 
 	if (own_req && rsk_drop_req(req)) {
@@ -848,7 +856,7 @@ int tcp_child_process(struct sock *parent, struct sock *child,
 	__releases(&((child)->sk_lock.slock))
 {
 	int ret = 0;
-	int state = child->sk_state;
+	int state = child->sk_state;/*取当前socket状态*/
 
 	/* record sk_napi_id and sk_rx_queue_mapping of child. */
 	sk_mark_napi_id_set(child, skb);

@@ -20,6 +20,7 @@ static int rxe_qp_chk_cap(struct rxe_dev *rxe, struct ib_qp_cap *cap,
 			  int has_srq)
 {
 	if (cap->max_send_wr > rxe->attr.max_qp_wr) {
+		/*超过max_send_wr限制*/
 		pr_debug("invalid send wr = %u > %d\n",
 			 cap->max_send_wr, rxe->attr.max_qp_wr);
 		goto err1;
@@ -74,7 +75,7 @@ int rxe_qp_chk_init(struct rxe_dev *rxe, struct ib_qp_init_attr *init)
 		return -EOPNOTSUPP;
 	}
 
-	/*必须指明send,recv的cq*/
+	/*必须指明send用cq,recv用cq*/
 	if (!init->recv_cq || !init->send_cq) {
 		pr_debug("missing cq\n");
 		goto err1;
@@ -172,7 +173,7 @@ static void rxe_qp_init_misc(struct rxe_dev *rxe, struct rxe_qp *qp,
 		break;
 
 	default:
-		qp->ibqp.qp_num		= qpn;
+		qp->ibqp.qp_num		= qpn;/*设置qp编号*/
 		break;
 	}
 
@@ -202,7 +203,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	err = sock_create_kern(&init_net, AF_INET, SOCK_DGRAM, 0, &qp->sk);
 	if (err < 0)
 		return err;
-	qp->sk->sk->sk_user_data = qp;
+	qp->sk->sk->sk_user_data = qp;/*指明此socket对应私有数据为此qp*/
 
 	/* pick a source UDP port number for this QP based on
 	 * the source QPN. this spreads traffic for different QPs
@@ -216,6 +217,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->sq.max_wr		= init->cap.max_send_wr;
 
 	/* These caps are limited by rxe_qp_chk_cap() done by the caller */
+	/*计算wqe大小*/
 	wqe_size = max_t(int, init->cap.max_send_sge * sizeof(struct ib_sge),
 			 init->cap.max_inline_data);
 	qp->sq.max_sge = init->cap.max_send_sge =
@@ -223,13 +225,14 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->sq.max_inline = init->cap.max_inline_data = wqe_size;
 	wqe_size += sizeof(struct rxe_send_wqe);
 
-	/*创建sq*/
+	/*创建发送队列*/
 	type = QUEUE_TYPE_FROM_CLIENT;
-	qp->sq.queue = rxe_queue_init(rxe, &qp->sq.max_wr,
+	qp->sq.queue = rxe_queue_init(rxe, &qp->sq.max_wr/*队列长度*/,
 				wqe_size, type);
 	if (!qp->sq.queue)
 		return -ENOMEM;
 
+	/*生成sq的映射信息*/
 	err = do_mmap_info(rxe, uresp ? &uresp->sq_mi : NULL, udata,
 			   qp->sq.queue->buf, qp->sq.queue->buf_size,
 			   &qp->sq.queue->ip);
@@ -252,7 +255,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	skb_queue_head_init(&qp->req_pkts);
 
-	/*wqe消息处理任务，处理收到的请求*/
+	/*wqe消息处理任务，向外发送报文*/
 	rxe_init_task(&qp->req.task, qp,
 		      rxe_requester, "req");
 	/*wqe处理完成后，此任务将被调度，用于进行响应处理*/
@@ -261,6 +264,7 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
 	if (init->qp_type == IB_QPT_RC) {
+		/*针对rc初始化两个timer*/
 		timer_setup(&qp->rnr_nak_timer, rnr_nak_timer, 0);
 		timer_setup(&qp->retrans_timer, retransmit_timer, 0);
 	}
@@ -285,12 +289,14 @@ static int rxe_qp_init_resp(struct rxe_dev *rxe, struct rxe_qp *qp,
 		pr_debug("qp#%d max_wr = %d, max_sge = %d, wqe_size = %d\n",
 			 qp_num(qp), qp->rq.max_wr, qp->rq.max_sge, wqe_size);
 
+		/*创建rq*/
 		type = QUEUE_TYPE_FROM_CLIENT;
 		qp->rq.queue = rxe_queue_init(rxe, &qp->rq.max_wr,
 					wqe_size, type);
 		if (!qp->rq.queue)
 			return -ENOMEM;
 
+		/*构造rq对应的映射信息*/
 		err = do_mmap_info(rxe, uresp ? &uresp->rq_mi : NULL, udata,
 				   qp->rq.queue->buf, qp->rq.queue->buf_size,
 				   &qp->rq.queue->ip);
@@ -343,7 +349,7 @@ int rxe_qp_from_init(struct rxe_dev *rxe, struct rxe_qp *qp, struct rxe_pd *pd,
 
 	rxe_qp_init_misc(rxe, qp, init);
 
-	/*初始化req*/
+	/*创建sq,初始化req*/
 	err = rxe_qp_init_req(rxe, qp, init, udata, uresp);
 	if (err)
 		goto err1;

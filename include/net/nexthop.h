@@ -59,7 +59,7 @@ struct nh_info {
 	struct nexthop		*nh_parent;
 
 	u8			family;
-	bool			reject_nh;
+	bool			reject_nh;/*标记是否为blackhole*/
 	bool			fdb_nh;
 
 	union {
@@ -123,11 +123,11 @@ struct nh_group {
 	bool			is_multipath;/*是否为多路径*/
 	bool			hash_threshold;
 	bool			resilient;
-	bool			fdb_nh;
+	bool			fdb_nh;/*标记是否为fib nexthop?*/
 	bool			has_v4;
 
 	struct nh_res_table __rcu *res_table;
-	struct nh_grp_entry	nh_entries[];
+	struct nh_grp_entry	nh_entries[];/*一组nexthop*/
 };
 
 struct nexthop {
@@ -138,7 +138,7 @@ struct nexthop {
 	struct list_head	grp_list;   /* nh group entries using this nh */
 	struct net		*net;
 
-	u32			id;
+	u32			id;/*nexthop id,可以通过此id被其它路由项引用*/
 
 	u8			protocol;   /* app managing this nh */
 	u8			nh_flags;
@@ -150,7 +150,7 @@ struct nexthop {
 
 	union {
 		struct nh_info	__rcu *nh_info;
-		struct nh_group __rcu *nh_grp;
+		struct nh_group __rcu *nh_grp;/*一组next hop*/
 	};
 };
 
@@ -303,6 +303,7 @@ static inline unsigned int nexthop_num_path(const struct nexthop *nh)
 	return rc;
 }
 
+/*ngh指向一组nexthop,本函数按索引nhsel取nexthop*/
 static inline
 struct nexthop *nexthop_mpath_select(const struct nh_group *nhg, int nhsel)
 {
@@ -351,7 +352,7 @@ static inline bool nexthop_is_blackhole(const struct nexthop *nh)
 	}
 
 	nhi = rcu_dereference_rtnl(nh->nh_info);
-	return nhi->reject_nh;
+	return nhi->reject_nh;/*如果reject_nh被置true,则为blackhole*/
 }
 
 static inline void nexthop_path_fib_result(struct fib_result *res, int hash)
@@ -487,6 +488,7 @@ static inline struct fib6_nh *nexthop_fib6_nh(struct nexthop *nh)
 	struct nh_info *nhi;
 
 	if (nh->is_group) {
+		/*nh_grp结构体有效，有一组nexthop,返回0号nexthop*/
 		struct nh_group *nh_grp;
 
 		nh_grp = rcu_dereference_rtnl(nh->nh_grp);

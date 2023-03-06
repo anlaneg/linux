@@ -24,7 +24,9 @@ enum {
 #define NETCONFA_MAX	(__NETCONFA_MAX - 1)
 #define NETCONFA_ALL	-1
 
+/*all对应的ifindex*/
 #define NETCONFA_IFINDEX_ALL		-1
+/*default对应的ifindex*/
 #define NETCONFA_IFINDEX_DEFAULT	-2
 
 #endif /* _UAPI_LINUX_NETCONF_H_ */

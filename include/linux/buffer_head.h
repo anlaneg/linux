@@ -60,10 +60,13 @@ typedef void (bh_end_io_t)(struct buffer_head *bh, int uptodate);
  */
 struct buffer_head {
 	unsigned long b_state;		/* buffer state bitmap (see above) */
+	/*指向下一个buffer_head(循环链）*/
 	struct buffer_head *b_this_page;/* circular list of page's buffers */
 	struct page *b_page;		/* the page this bh is mapped to */
 
+	/*对应的block编号*/
 	sector_t b_blocknr;		/* start block number */
+	/*映射的大小*/
 	size_t b_size;			/* size of mapping */
 	char *b_data;			/* pointer to data within the page */
 
@@ -316,6 +319,7 @@ void buffer_init(void);
 
 static inline void get_bh(struct buffer_head *bh)
 {
+	/*增加buffer_head的引用*/
         atomic_inc(&bh->b_count);
 }
 
@@ -337,7 +341,7 @@ static inline void bforget(struct buffer_head *bh)
 		__bforget(bh);
 }
 
-//自sb所属设备上读取block块
+//自super block所属设备上读取指定block，并返回buffer_head
 static inline struct buffer_head *
 sb_bread(struct super_block *sb, sector_t block/*块编号*/)
 {

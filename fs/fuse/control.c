@@ -375,6 +375,7 @@ MODULE_ALIAS_FS("fusectl");
 
 int __init fuse_ctl_init(void)
 {
+	/*注册fusectl文件系统*/
 	return register_filesystem(&fuse_ctl_fs_type);
 }
 

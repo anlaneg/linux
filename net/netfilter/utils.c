@@ -72,22 +72,23 @@ __sum16 nf_ip6_checksum(struct sk_buff *skb, unsigned int hook,
 		if (hook != NF_INET_PRE_ROUTING && hook != NF_INET_LOCAL_IN)
 			break;
 		if (!csum_ipv6_magic(&ip6h->saddr, &ip6h->daddr,
-				     skb->len - dataoff, protocol,
+				     skb->len - dataoff/*4层负载长度*/, protocol,
 				     csum_sub(skb->csum,
 					      skb_checksum(skb, 0,
-							   dataoff, 0)))) {
+							   dataoff, 0)/*计算skb->data到l4之间的checksum*/))) {
 			skb->ip_summed = CHECKSUM_UNNECESSARY;
 			break;
 		}
 		fallthrough;
 	case CHECKSUM_NONE:
+		/*更新csum*/
 		skb->csum = ~csum_unfold(
 				csum_ipv6_magic(&ip6h->saddr, &ip6h->daddr,
 					     skb->len - dataoff,
 					     protocol,
 					     csum_sub(0,
 						      skb_checksum(skb, 0,
-								   dataoff, 0))));
+								   dataoff, 0)/*计算skb->data到l4之间的checksum*/)));
 		csum = __skb_checksum_complete(skb);
 	}
 	return csum;

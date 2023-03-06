@@ -115,7 +115,7 @@ struct neigh_table nd_tbl = {
 	.constructor =	ndisc_constructor,
 	.pconstructor =	pndisc_constructor,
 	.pdestructor =	pndisc_destructor,
-	.proxy_redo =	pndisc_redo,
+	.proxy_redo =	pndisc_redo,/*邻居请求代答*/
 	.is_multicast =	ndisc_is_multicast,
 	.allow_add  =   ndisc_allow_add,
 	.id =		"ndisc_cache",
@@ -796,6 +796,7 @@ static void ndisc_recv_ns(struct sk_buff *skb)
 	struct inet6_ifaddr *ifp;
 	struct inet6_dev *idev = NULL;
 	struct neighbour *neigh;
+	/*源地址为0*/
 	int dad = ipv6_addr_any(saddr);
 	bool inc;
 	int is_router = -1;
@@ -807,6 +808,7 @@ static void ndisc_recv_ns(struct sk_buff *skb)
 	}
 
 	if (ipv6_addr_is_multicast(&msg->target)) {
+		/*target为组播报错*/
 		ND_PRINTK(2, warn, "NS: multicast target address\n");
 		return;
 	}
@@ -816,6 +818,7 @@ static void ndisc_recv_ns(struct sk_buff *skb)
 	 * DAD has to be destined for solicited node multicast address.
 	 */
 	if (dad && !ipv6_addr_is_solict_mult(daddr)) {
+		/*dad情况下，daddr必须为solict地址*/
 		ND_PRINTK(2, warn, "NS: bad DAD packet (wrong destination)\n");
 		return;
 	}
@@ -954,6 +957,7 @@ have_ifp:
 			     NEIGH_UPDATE_F_OVERRIDE,
 			     NDISC_NEIGHBOUR_SOLICITATION, &ndopts);
 	if (neigh || !dev->header_ops) {
+		/*响应na*/
 		ndisc_send_na(dev, saddr, &msg->target, !!is_router,
 			      true, (ifp != NULL && inc), inc);
 		if (neigh)
@@ -1147,6 +1151,7 @@ static void ndisc_recv_rs(struct sk_buff *skb)
 
 	/* Don't accept RS if we're not in router mode */
 	if (!idev->cnf.forwarding)
+		/*非转发模式下，rs将被移除*/
 		goto out;
 
 	/*
@@ -1819,12 +1824,14 @@ int ndisc_rcv(struct sk_buff *skb)
 	__skb_push(skb, skb->data - skb_transport_header(skb));
 
 	if (ipv6_hdr(skb)->hop_limit != 255) {
+		/*ttl必须是255*/
 		ND_PRINTK(2, warn, "NDISC: invalid hop-limit: %d\n",
 			  ipv6_hdr(skb)->hop_limit);
 		return 0;
 	}
 
 	if (msg->icmph.icmp6_code != 0) {
+		/*code必须为0*/
 		ND_PRINTK(2, warn, "NDISC: invalid ICMPv6 code: %d\n",
 			  msg->icmph.icmp6_code);
 		return 0;
@@ -1832,23 +1839,28 @@ int ndisc_rcv(struct sk_buff *skb)
 
 	switch (msg->icmph.icmp6_type) {
 	case NDISC_NEIGHBOUR_SOLICITATION:
+		/*收到领居请求报文*/
 		memset(NEIGH_CB(skb), 0, sizeof(struct neighbour_cb));
 		ndisc_recv_ns(skb);
 		break;
 
 	case NDISC_NEIGHBOUR_ADVERTISEMENT:
+		/*收到领居响应报文*/
 		ndisc_recv_na(skb);
 		break;
 
 	case NDISC_ROUTER_SOLICITATION:
+		/*收到RS*/
 		ndisc_recv_rs(skb);
 		break;
 
 	case NDISC_ROUTER_ADVERTISEMENT:
+		/*收到RA*/
 		ndisc_router_discovery(skb);
 		break;
 
 	case NDISC_REDIRECT:
+		/*收到redirect*/
 		ndisc_redirect_rcv(skb);
 		break;
 	}

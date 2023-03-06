@@ -63,8 +63,8 @@ struct atomic_notifier_head {
 };
 
 struct blocking_notifier_head {
-	struct rw_semaphore rwsem;
-	struct notifier_block __rcu *head;
+	struct rw_semaphore rwsem;/*信号量保护*/
+	struct notifier_block __rcu *head;/*通知链链表*/
 };
 
 struct raw_notifier_head {

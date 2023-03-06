@@ -114,6 +114,7 @@ enum landlock_rule_type;
 #define __MAP4(m,t,a,...) m(t,a), __MAP3(m,__VA_ARGS__)
 #define __MAP5(m,t,a,...) m(t,a), __MAP4(m,__VA_ARGS__)
 #define __MAP6(m,t,a,...) m(t,a), __MAP5(m,__VA_ARGS__)
+/*将n展到宏名称中去，此函数参数2将被传入后面的两个参数*/
 #define __MAP(n,...) __MAP##n(__VA_ARGS__)
 
 #define __SC_DECL(t, a)	t a
@@ -147,6 +148,7 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 		.data			= (void *)&__syscall_meta_##sname,\
 		.flags                  = TRACE_EVENT_FL_CAP_ANY,	\
 	};								\
+	/*在_ftrace_events section中收集event_call结构体指针*/\
 	static struct trace_event_call __used				\
 	  __section("_ftrace_events")					\
 	 *__event_enter_##sname = &event_enter_##sname;
@@ -163,19 +165,23 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 		.data			= (void *)&__syscall_meta_##sname,\
 		.flags                  = TRACE_EVENT_FL_CAP_ANY,	\
 	};								\
+	/*在_ftrace_events section中收集event_call结构体指针*/\
 	static struct trace_event_call __used				\
 	  __section("_ftrace_events")					\
 	*__event_exit_##sname = &event_exit_##sname;
 
-#define SYSCALL_METADATA(sname, nb, ...)			\
+#define SYSCALL_METADATA(sname/*函数名称*/, nb/*参数数目*/, ...)			\
+		/*各参数类型名称列表*/\
 	static const char *types_##sname[] = {			\
-		__MAP(nb,__SC_STR_TDECL,__VA_ARGS__)		\
+		__MAP(nb,__SC_STR_TDECL/*用于展开类型名称*/,__VA_ARGS__)		\
 	};							\
+	/*各参数变量名称列表*/\
 	static const char *args_##sname[] = {			\
-		__MAP(nb,__SC_STR_ADECL,__VA_ARGS__)		\
+		__MAP(nb,__SC_STR_ADECL/*用于展开参数名称*/,__VA_ARGS__)		\
 	};							\
 	SYSCALL_TRACE_ENTER_EVENT(sname);			\
 	SYSCALL_TRACE_EXIT_EVENT(sname);			\
+	/*设置syscall的metadata*/\
 	static struct syscall_metadata __used			\
 	  __syscall_meta_##sname = {				\
 		.name 		= "sys"#sname,			\
@@ -187,12 +193,14 @@ extern struct trace_event_functions exit_syscall_print_funcs;
 		.exit_event	= &event_exit_##sname,		\
 		.enter_fields	= LIST_HEAD_INIT(__syscall_meta_##sname.enter_fields), \
 	};							\
+	/*存入__syscalls_metadata section*/\
 	static struct syscall_metadata __used			\
 	  __section("__syscalls_metadata")			\
 	 *__p_syscall_meta_##sname = &__syscall_meta_##sname;
 
 static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 {
+	/*检查class是否为以下两类中的任一类*/
 	return tp_event->class == &event_class_syscall_enter ||
 	       tp_event->class == &event_class_syscall_exit;
 }
@@ -226,7 +234,7 @@ static inline int is_syscall_trace_event(struct trace_event_call *tp_event)
 
 #define SYSCALL_DEFINE_MAXARGS	6
 
-#define SYSCALL_DEFINEx(x, sname, ...)				\
+#define SYSCALL_DEFINEx(x/*参数数目*/, sname/*函数名称*/, ...)				\
 	SYSCALL_METADATA(sname, x, __VA_ARGS__)			\
 	__SYSCALL_DEFINEx(x, sname, __VA_ARGS__)
 

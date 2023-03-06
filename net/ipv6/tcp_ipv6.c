@@ -1175,6 +1175,7 @@ static int tcp_v6_conn_request(struct sock *sk, struct sk_buff *skb)
 		return 0;
 	}
 
+	/*ipv6响应tcp连接请求*/
 	return tcp_conn_request(&tcp6_request_sock_ops,
 				&tcp_request_sock_ipv6_ops, sk, skb);
 
@@ -1613,17 +1614,19 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 	 */
 	__TCP_INC_STATS(net, TCP_MIB_INSEGS);
 
-	/*必须完整的tcp头困定头*/
+	/*长度必须大于tcp头*/
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
 		goto discard_it;
 
 	th = (const struct tcphdr *)skb->data;
 
-	/*tcp必须有完整长度*/
+	/*检查th->doff数据项*/
 	if (unlikely(th->doff < sizeof(struct tcphdr) / 4)) {
 		drop_reason = SKB_DROP_REASON_PKT_TOO_SMALL;
 		goto bad_packet;
 	}
+
+	/*确保hdr内容*/
 	if (!pskb_may_pull(skb, th->doff*4))
 		goto discard_it;
 
@@ -1636,7 +1639,7 @@ INDIRECT_CALLABLE_SCOPE int tcp_v6_rcv(struct sk_buff *skb)
 
 lookup:
 	/*查询socket*/
-	sk = __inet6_lookup_skb(net->ipv4.tcp_death_row.hashinfo, skb, __tcp_hdrlen(th),
+	sk = __inet6_lookup_skb(net->ipv4.tcp_death_row.hashinfo, skb, __tcp_hdrlen(th)/*tcp头部长度*/,
 				th->source, th->dest, inet6_iif(skb), sdif,
 				&refcounted);
 	if (!sk)
@@ -1867,9 +1870,9 @@ void tcp_v6_early_demux(struct sk_buff *skb)
 	/*查询est状态的socket,检查是否存在*/
 	/* Note : We use inet6_iif() here, not tcp_v6_iif() */
 	sk = __inet6_lookup_established(net, net->ipv4.tcp_death_row.hashinfo,
-					&hdr->saddr, th->source,
-					&hdr->daddr, ntohs(th->dest),
-					inet6_iif(skb), inet6_sdif(skb));
+					&hdr->saddr/*源地址*/, th->source/*源端口*/,
+					&hdr->daddr/*目的地址*/, ntohs(th->dest)/*目的端口*/,
+					inet6_iif(skb)/*入接口*/, inet6_sdif(skb));
 	if (sk) {
 	    /*填充此skb对应的socket*/
 		skb->sk = sk;
@@ -1902,7 +1905,7 @@ const struct inet_connection_sock_af_ops ipv6_specific = {
 	.send_check	   = tcp_v6_send_check,
 	.rebuild_header	   = inet6_sk_rebuild_header,
 	.sk_rx_dst_set	   = inet6_sk_rx_dst_set,
-	.conn_request	   = tcp_v6_conn_request,
+	.conn_request	   = tcp_v6_conn_request,/*tcp v6响应连接请求*/
 	.syn_recv_sock	   = tcp_v6_syn_recv_sock,
 	.net_header_len	   = sizeof(struct ipv6hdr),
 	.net_frag_header_len = sizeof(struct frag_hdr),

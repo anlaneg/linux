@@ -352,9 +352,9 @@ enum {
 
 struct trace_event_call {
 	struct list_head	list;
-	struct trace_event_class *class;
+	struct trace_event_class *class;/*指明event类型，例如syscall enter*/
 	union {
-		char			*name;
+		char			*name;/*事件名称*/
 		/* Set TRACE_EVENT_FL_TRACEPOINT flag when using "tp" */
 		struct tracepoint	*tp;
 	};

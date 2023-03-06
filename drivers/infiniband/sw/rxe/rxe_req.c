@@ -800,6 +800,7 @@ int rxe_requester(void *arg)
 	update_wqe_state(qp, wqe, &pkt);
 	update_wqe_psn(qp, wqe, &pkt, payload);
 
+	/*qp发送报文*/
 	err = rxe_xmit_packet(qp, &pkt, skb);
 	if (err) {
 		qp->need_req_skb = 1;

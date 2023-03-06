@@ -1209,7 +1209,7 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	if (!dev->ops.create_qp)
 		return ERR_PTR(-EOPNOTSUPP);
 
-	/*申请qp*/
+	/*依据dev申请qp所需要的内存*/
 	qp = rdma_zalloc_drv_obj_numa(dev, ib_qp);
 	if (!qp)
 		return ERR_PTR(-ENOMEM);
@@ -1282,10 +1282,11 @@ struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
 {
 	struct ib_qp *qp, *xrc_qp;
 
-	/*创建qp*/
 	if (attr->qp_type == IB_QPT_XRC_TGT)
+		/*创建IB_QPT_XRC_TGT类型的qp*/
 		qp = create_qp(dev, pd, attr, NULL, NULL, caller);
 	else
+		/*创建例如IB_QPT_UD，IB_QPT_RC等类型的qp*/
 		qp = create_qp(dev, pd, attr, udata, uobj, NULL);
 	if (attr->qp_type != IB_QPT_XRC_TGT || IS_ERR(qp))
 		return qp;

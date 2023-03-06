@@ -422,6 +422,7 @@ struct task_struct *find_task_by_vpid(pid_t vnr)
 	return find_task_by_pid_ns(vnr, task_active_pid_ns(current));
 }
 
+/*给定pid,查找其对应的task_struct(进程）*/
 struct task_struct *find_get_task_by_vpid(pid_t nr)
 {
 	struct task_struct *task;
@@ -429,6 +430,7 @@ struct task_struct *find_get_task_by_vpid(pid_t nr)
 	rcu_read_lock();
 	task = find_task_by_vpid(nr);
 	if (task)
+		/*查找到，增加引用*/
 		get_task_struct(task);
 	rcu_read_unlock();
 
@@ -504,6 +506,7 @@ pid_t __task_pid_nr_ns(struct task_struct *task, enum pid_type type,
 }
 EXPORT_SYMBOL(__task_pid_nr_ns);
 
+/*取给定进程的pid namespace*/
 struct pid_namespace *task_active_pid_ns(struct task_struct *tsk)
 {
 	return ns_of_pid(task_pid(tsk));

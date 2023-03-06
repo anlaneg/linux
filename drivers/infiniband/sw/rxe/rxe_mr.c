@@ -120,7 +120,7 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 	mr->type = IB_MR_TYPE_DMA;
 }
 
-int rxe_mr_init_user(struct rxe_dev *rxe, u64 start, u64 length, u64 iova,
+int rxe_mr_init_user(struct rxe_dev *rxe, u64 start/*内存起始地址*/, u64 length/*内存长度*/, u64 iova,
 		     int access, struct rxe_mr *mr)
 {
 	struct rxe_map		**map;

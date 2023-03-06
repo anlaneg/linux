@@ -79,6 +79,7 @@ static void set_caps(struct ib_qp_init_attr *attr,
 	}
 }
 
+/*定义qp创建*/
 static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	struct uverbs_attr_bundle *attrs)
 {
@@ -105,6 +106,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 		ret = uverbs_copy_from(&user_handle, attrs,
 				       UVERBS_ATTR_CREATE_QP_USER_HANDLE);
 	if (!ret)
+		/*取要创建的qp类型*/
 		ret = uverbs_get_const(&attr.qp_type, attrs,
 				       UVERBS_ATTR_CREATE_QP_TYPE);
 	if (ret)
@@ -148,6 +150,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 			attr.qp_type == IB_QPT_XRC_INI))
 			return -EINVAL;
 
+		/*取传入的pd*/
 		pd = uverbs_attr_get_obj(attrs,
 					 UVERBS_ATTR_CREATE_QP_PD_HANDLE);
 		if (IS_ERR(pd))
@@ -248,6 +251,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QP_CREATE)(
 	set_caps(&attr, &cap, true);
 	mutex_init(&obj->mcast_lock);
 
+	/*按照请求数据，创建qp*/
 	qp = ib_create_qp_user(device, pd, &attr, &attrs->driver_udata, obj,
 			       KBUILD_MODNAME);
 	if (IS_ERR(qp)) {

@@ -724,6 +724,7 @@ not_empty:
 	return 0;
 }
 
+/*ext2 dir对应的文件操作集*/
 const struct file_operations ext2_dir_operations = {
 	.llseek		= generic_file_llseek,
 	.read		= generic_read_dir,

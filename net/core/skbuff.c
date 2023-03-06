@@ -955,20 +955,21 @@ void skb_dump(const char *level, const struct sk_buff *skb, bool full_pkt)
 	       "shinfo(txflags=%u nr_frags=%u gso(size=%hu type=%u segs=%hu))\n"
 	       "csum(0x%x ip_summed=%u complete_sw=%u valid=%u level=%u)\n"
 	       "hash(0x%x sw=%u l4=%u) proto=0x%04x pkttype=%u iif=%d\n",
-	       level, skb->len, headroom, skb_headlen(skb), tailroom,
-	       has_mac ? skb->mac_header : -1,
-	       has_mac ? skb_mac_header_len(skb) : -1,
-	       skb->network_header,
-	       has_trans ? skb_network_header_len(skb) : -1,
-	       has_trans ? skb->transport_header : -1,
+	       level/*日志级别*/, skb->len, headroom, skb_headlen(skb), tailroom,
+	       has_mac ? skb->mac_header : -1,/*由skb->head到mac头的偏移量*/
+	       has_mac ? skb_mac_header_len(skb) : -1,/*mac头长度*/
+	       skb->network_header,/*由skb->head到network头的偏移量*/
+	       has_trans ? skb_network_header_len(skb) : -1,/*network头长度*/
+	       has_trans ? skb->transport_header : -1,/*到传输层偏移量*/
 	       sh->tx_flags, sh->nr_frags,
 	       sh->gso_size, sh->gso_type, sh->gso_segs,
-	       skb->csum, skb->ip_summed, skb->csum_complete_sw,
+	       skb->csum/*skb csum取值*/, skb->ip_summed, skb->csum_complete_sw,
 	       skb->csum_valid, skb->csum_level,
 	       skb->hash, skb->sw_hash, skb->l4_hash,
 	       ntohs(skb->protocol), skb->pkt_type, skb->skb_iif);
 
 	if (dev)
+		/*显示设备名称及网卡开启的功能*/
 		printk("%sdev name=%s feat=%pNF\n",
 		       level, dev->name, &dev->features);
 	if (sk)
@@ -981,6 +982,7 @@ void skb_dump(const char *level, const struct sk_buff *skb, bool full_pkt)
 
 	seg_len = min_t(int, skb_headlen(skb), len);
 	if (seg_len)
+		/*显示报文内容*/
 		print_hex_dump(level, "skb linear:   ", DUMP_PREFIX_OFFSET,
 			       16, 1, skb->data, seg_len, false);
 	len -= seg_len;

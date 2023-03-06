@@ -1292,8 +1292,9 @@ static int ext2_setsize(struct inode *inode, loff_t newsize)
 	return 0;
 }
 
+/*指定super block及inode number,自block设备获取inode信息*/
 static struct ext2_inode *ext2_get_inode(struct super_block *sb, ino_t ino,
-					struct buffer_head **p)
+					struct buffer_head **p/*出参，此inode所在的buffer_head*/)
 {
 	struct buffer_head * bh;
 	unsigned long block_group;
@@ -1307,10 +1308,11 @@ static struct ext2_inode *ext2_get_inode(struct super_block *sb, ino_t ino,
 	    ino > le32_to_cpu(EXT2_SB(sb)->s_es->s_inodes_count))
 		goto Einval;
 
-	//获取ino对应的group编号
+	//获取ino所属的group编号
 	block_group = (ino - 1) / EXT2_INODES_PER_GROUP(sb);
 	gdp = ext2_get_group_desc(sb, block_group, NULL);
 	if (!gdp)
+		/*获取group desc失败*/
 		goto Egdp;
 	/*
 	 * Figure out the offset within the block group inode table
@@ -1318,7 +1320,7 @@ static struct ext2_inode *ext2_get_inode(struct super_block *sb, ino_t ino,
 	offset = ((ino - 1) % EXT2_INODES_PER_GROUP(sb)) * EXT2_INODE_SIZE(sb);
 	block = le32_to_cpu(gdp->bg_inode_table) +
 		(offset >> EXT2_BLOCK_SIZE_BITS(sb));
-	if (!(bh = sb_bread(sb, block)))
+	if (!(bh = sb_bread(sb, block)))/*读取block对应的内容*/
 		goto Eio;
 
 	*p = bh;
@@ -1380,7 +1382,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 	uid_t i_uid;
 	gid_t i_gid;
 
-	//获取ino对应的inode
+	//获取ino对应的inode或者创建此inode
 	inode = iget_locked(sb, ino);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
@@ -1394,6 +1396,7 @@ struct inode *ext2_iget (struct super_block *sb, unsigned long ino)
 
 	raw_inode = ext2_get_inode(inode->i_sb, ino, &bh);
 	if (IS_ERR(raw_inode)) {
+		/*inode有误*/
 		ret = PTR_ERR(raw_inode);
  		goto bad_inode;
 	}

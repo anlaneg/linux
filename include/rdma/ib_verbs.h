@@ -412,7 +412,7 @@ struct ib_device_attr {
 	int			max_recv_sge;
 	int			max_sge_rd;
 	int			max_cq;
-	/*cqe最大数目*/
+	/*支持的cqe最大数目*/
 	int			max_cqe;
 	int			max_mr;
 	int			max_pd;
@@ -1520,7 +1520,7 @@ struct ib_rdmacg_object {
 };
 
 struct ib_ucontext {
-	struct ib_device       *device;
+	struct ib_device       *device;/*从属的ib device*/
 	struct ib_uverbs_file  *ufile;
 
 	struct ib_rdmacg_object	cg_obj;
@@ -1558,7 +1558,7 @@ struct ib_udata {
 struct ib_pd {
 	u32			local_dma_lkey;
 	u32			flags;
-	/*所属的device*/
+	/*所属的ib device*/
 	struct ib_device       *device;
 	struct ib_uobject      *uobject;
 	atomic_t          	usecnt; /* count all resources */
@@ -1810,6 +1810,7 @@ struct ib_qp {
 	/* count times opened, mcast attaches, flow attaches */
 	atomic_t		usecnt;
 	struct list_head	open_list;
+	/*直接申请的qp内存*/
 	struct ib_qp           *real_qp;
 	/*对应的uobject*/
 	struct ib_uqp_object   *uobject;
@@ -1855,7 +1856,7 @@ struct ib_mr {
 	u32		   lkey;
 	u32		   rkey;
 	u64		   iova;
-	u64		   length;
+	u64		   length;/*内存长度*/
 	unsigned int	   page_size;
 	/*内存类型*/
 	enum ib_mr_type	   type;
@@ -2332,8 +2333,8 @@ struct iw_cm_conn_param;
 				      struct ib_struct)))
 
 /*申请一个driver对应的ib_type类型的obj*/
-#define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type, gfp)                          \
-	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type, \
+#define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type/*obj类型*/, gfp)                          \
+	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*obj元素大小*/, \
 					   gfp, false))
 
 #define rdma_zalloc_drv_obj_numa(ib_dev, ib_type)                              \
@@ -2722,7 +2723,7 @@ struct ib_device_ops {
 	 */
 	int (*get_numa_node)(struct ib_device *dev);/*取此设备对应numa node*/
 
-	/*各obj的大小*/
+	/*各obj的大小，名称格式约定*/
 	DECLARE_RDMA_OBJ_SIZE(ib_ah);
 	DECLARE_RDMA_OBJ_SIZE(ib_counters);
 	DECLARE_RDMA_OBJ_SIZE(ib_cq);
@@ -3103,6 +3104,7 @@ static inline bool rdma_cap_ib_switch(const struct ib_device *device)
  */
 static inline u32 rdma_start_port(const struct ib_device *device)
 {
+	/*ib switch的设备port起始id为0*/
 	return rdma_cap_ib_switch(device) ? 0 : 1;
 }
 
@@ -3128,6 +3130,7 @@ static inline u32 rdma_start_port(const struct ib_device *device)
  */
 static inline u32 rdma_end_port(const struct ib_device *device)
 {
+	/*ib switch的end_port为0*/
 	return rdma_cap_ib_switch(device) ? 0 : device->phys_port_cnt;
 }
 
@@ -3177,6 +3180,7 @@ static inline bool rdma_protocol_roce_eth_encap(const struct ib_device *device,
 	       RDMA_CORE_CAP_PROT_ROCE;
 }
 
+/*指定port是否使能了iwarp*/
 static inline bool rdma_protocol_iwarp(const struct ib_device *device,
 				       u32 port_num)
 {

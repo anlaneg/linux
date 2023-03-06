@@ -935,12 +935,14 @@ EXPORT_SYMBOL(seq_list_start);
 struct list_head *seq_list_start_head(struct list_head *head, loff_t pos)
 {
 	if (!pos)
+		/*pos为0，则返回head*/
 		return head;
 
 	return seq_list_start(head, pos - 1);
 }
 EXPORT_SYMBOL(seq_list_start_head);
 
+/*取v的next,并更新ppos使其增加1,如果v->next == head,则返回NULL*/
 struct list_head *seq_list_next(void *v, struct list_head *head, loff_t *ppos)
 {
 	struct list_head *lh;

@@ -295,10 +295,12 @@ static int rxe_chk_dgid(struct rxe_dev *rxe, struct sk_buff *skb)
 		return 0;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
+		/*将目的地址映射为v6地址，后以目的地址做为pdgid*/
 		ipv6_addr_set_v4mapped(ip_hdr(skb)->daddr,
 				       (struct in6_addr *)&dgid);
 		pdgid = &dgid;
 	} else {
+		/*以目的地址做为pdgid*/
 		pdgid = (union ib_gid *)&ipv6_hdr(skb)->daddr;
 	}
 
@@ -323,6 +325,7 @@ void rxe_rcv(struct sk_buff *skb)
 	struct rxe_dev *rxe = pkt->rxe;
 
 	if (unlikely(skb->len < RXE_BTH_BYTES))
+		/*报文长度不足*/
 		goto drop;
 
 	if (rxe_chk_dgid(rxe, skb) < 0)

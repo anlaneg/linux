@@ -554,7 +554,7 @@ got:
 	inode->i_blocks = 0;
 	//inode的创建时间，修改时间，访问时间均为当前时间
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
-	memset(ei->i_data, 0, sizeof(ei->i_data));
+	memset(ei->i_data, 0, sizeof(ei->i_data));/*i_data均为0*/
 	ei->i_flags =
 		ext2_mask_flags(mode, EXT2_I(dir)->i_flags & EXT2_FL_INHERITED);
 	ei->i_faddr = 0;

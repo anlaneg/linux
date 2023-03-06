@@ -40,13 +40,13 @@
  * Source/target buffer must be kernel space,
  * Do not walk the page table directly, use get_user_pages
  */
-int ptrace_access_vm(struct task_struct *tsk, unsigned long addr,
-		     void *buf, int len, unsigned int gup_flags)
+int ptrace_access_vm(struct task_struct *tsk, unsigned long addr/*要读取的位置*/,
+		     void *buf/*出参，读取的内容*/, int len/*内容长度*/, unsigned int gup_flags)
 {
 	struct mm_struct *mm;
 	int ret;
 
-	mm = get_task_mm(tsk);
+	mm = get_task_mm(tsk);/*取此task对应的mm*/
 	if (!mm)
 		return 0;
 
@@ -510,6 +510,7 @@ static int ptrace_traceme(void)
 	write_lock_irq(&tasklist_lock);
 	/* Are we already being traced? */
 	if (!current->ptrace) {
+		/*触发安全钩子检查*/
 		ret = security_ptrace_traceme(current->parent);
 		/*
 		 * Check PF_EXITING to ensure ->real_parent has not passed
@@ -825,6 +826,7 @@ static long ptrace_get_rseq_configuration(struct task_struct *task,
 }
 #endif
 
+/*是否单步执行*/
 #define is_singlestep(request)		((request) == PTRACE_SINGLESTEP)
 
 #ifdef PTRACE_SINGLEBLOCK
@@ -863,8 +865,9 @@ static int ptrace_resume(struct task_struct *child, long request,
 		user_enable_block_step(child);
 	} else if (is_singlestep(request) || is_sysemu_singlestep(request)) {
 		if (unlikely(!arch_has_single_step()))
+			/*arch是否支持单步调试*/
 			return -EIO;
-		user_enable_single_step(child);
+		user_enable_single_step(child);/*开启单步调试*/
 	} else {
 		user_disable_single_step(child);
 	}
@@ -1040,9 +1043,11 @@ int ptrace_request(struct task_struct *child, long request,
 	switch (request) {
 	case PTRACE_PEEKTEXT:
 	case PTRACE_PEEKDATA:
+		/*peek text或者data*/
 		return generic_ptrace_peekdata(child, addr, data);
 	case PTRACE_POKETEXT:
 	case PTRACE_POKEDATA:
+		/*更新 text或者data*/
 		return generic_ptrace_pokedata(child, addr, data);
 
 #ifdef PTRACE_OLDSETOPTIONS
@@ -1205,7 +1210,7 @@ int ptrace_request(struct task_struct *child, long request,
 	}
 #endif
 
-	case PTRACE_SINGLESTEP:
+	case PTRACE_SINGLESTEP:/*请求单步执行*/
 #ifdef PTRACE_SINGLEBLOCK
 	case PTRACE_SINGLEBLOCK:
 #endif
@@ -1266,6 +1271,7 @@ int ptrace_request(struct task_struct *child, long request,
 	return ret;
 }
 
+/*定义ptrace系统调用*/
 SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 		unsigned long, data)
 {
@@ -1273,12 +1279,15 @@ SYSCALL_DEFINE4(ptrace, long, request, long, pid, unsigned long, addr,
 	long ret;
 
 	if (request == PTRACE_TRACEME) {
+		/*ptrace_traceme时不需要参数*/
 		ret = ptrace_traceme();
 		goto out;
 	}
 
+	/*通过pid查找对应的进程*/
 	child = find_get_task_by_vpid(pid);
 	if (!child) {
+		/*找子进程失败，报错*/
 		ret = -ESRCH;
 		goto out;
 	}
@@ -1309,7 +1318,7 @@ int generic_ptrace_peekdata(struct task_struct *tsk, unsigned long addr,
 	unsigned long tmp;
 	int copied;
 
-	copied = ptrace_access_vm(tsk, addr, &tmp, sizeof(tmp), FOLL_FORCE);
+	copied = ptrace_access_vm(tsk, addr, &tmp/*出参，读取的内容*/, sizeof(tmp), FOLL_FORCE);
 	if (copied != sizeof(tmp))
 		return -EIO;
 	return put_user(tmp, (unsigned long __user *)data);

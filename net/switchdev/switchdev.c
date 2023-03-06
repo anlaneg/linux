@@ -19,7 +19,7 @@
 #include <linux/rtnetlink.h>
 #include <net/switchdev.h>
 
-//deferred链表及其锁
+//定义deferred链表及其锁
 static LIST_HEAD(deferred);
 static DEFINE_SPINLOCK(deferred_lock);
 
@@ -41,15 +41,19 @@ static struct switchdev_deferred_item *switchdev_deferred_dequeue(void)
 
 	spin_lock_bh(&deferred_lock);
 	if (list_empty(&deferred)) {
+		/*链表为空*/
 		dfitem = NULL;
 		goto unlock;
 	}
+
+	/*自链表取首个元素*/
 	dfitem = list_first_entry(&deferred,
 				  struct switchdev_deferred_item, list);
-	//自链表上移除
+	//自链表上移除此元素
 	list_del(&dfitem->list);
 unlock:
 	spin_unlock_bh(&deferred_lock);
+	/*返回此元素*/
 	return dfitem;
 }
 
@@ -65,7 +69,7 @@ void switchdev_deferred_process(void)
 
 	ASSERT_RTNL();
 
-	//自deferred链表中出所有元素，并调用每个远程的func回调
+	//自deferred链表中移除所有元素，并针对每个元素触发func回调
 	while ((dfitem = switchdev_deferred_dequeue())) {
 		dfitem->func(dfitem->dev, dfitem->data);
 		netdev_put(dfitem->dev, &dfitem->dev_tracker);
@@ -74,7 +78,7 @@ void switchdev_deferred_process(void)
 }
 EXPORT_SYMBOL_GPL(switchdev_deferred_process);
 
-//deferred链表元素调用func回调
+//处理deferred链表中所有元素，并调用各元素对应的func回调
 static void switchdev_deferred_process_work(struct work_struct *work)
 {
 	rtnl_lock();
@@ -82,12 +86,12 @@ static void switchdev_deferred_process_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
-//定义worker
+//定义deferred_process_worker
 static DECLARE_WORK(deferred_process_work, switchdev_deferred_process_work);
 
 //向deferred链表中添加元素及回调
 static int switchdev_deferred_enqueue(struct net_device *dev/*回调函数第一个参数*/,
-				      const void *data/*回调函数第二个参数*/, size_t data_len,
+				      const void *data/*回调函数第二个参数*/, size_t data_len/*第二个参数内容长度*/,
 				      switchdev_deferred_func_t *func/*设置回调函数*/)
 {
 	struct switchdev_deferred_item *dfitem;
@@ -100,9 +104,10 @@ static int switchdev_deferred_enqueue(struct net_device *dev/*回调函数第一
 	memcpy(dfitem->data, data, data_len);
 	netdev_hold(dev, &dfitem->dev_tracker, GFP_ATOMIC);
 	spin_lock_bh(&deferred_lock);
+	/*元素入队列*/
 	list_add_tail(&dfitem->list, &deferred);
 	spin_unlock_bh(&deferred_lock);
-	//向deferred中添加了元素，并调度process_work
+	//向deferred中添加了元素，调度process_work
 	schedule_work(&deferred_process_work);
 	return 0;
 }

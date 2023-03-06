@@ -760,7 +760,7 @@ struct task_struct {
 	refcount_t			usage;
 	/* Per task flags (PF_*), defined further below: */
 	unsigned int			flags;
-	unsigned int			ptrace;
+	unsigned int			ptrace;/*此数据不为0时，表示此进程已被trace*/
 
 #ifdef CONFIG_SMP
 	int				on_cpu;

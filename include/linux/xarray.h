@@ -53,7 +53,7 @@
  */
 static inline void *xa_mk_value(unsigned long v)
 {
-    //左移一位，并打上标记‘1’，指明为value
+    //左移一位，并打上标记‘1’，将v转换为Xarray entry
 	WARN_ON((long)v < 0);
 	return (void *)((v << 1) | 1);
 }
@@ -67,7 +67,7 @@ static inline void *xa_mk_value(unsigned long v)
  */
 static inline unsigned long xa_to_value(const void *entry)
 {
-    //还原value（原来左移了一位，并打上了'1'标记）
+    //将Xarray entry还原为value（原来左移了一位，并打上了'1'标记，现在移除）
 	return (unsigned long)entry >> 1;
 }
 
@@ -80,7 +80,7 @@ static inline unsigned long xa_to_value(const void *entry)
  */
 static inline bool xa_is_value(const void *entry)
 {
-    //检查entry是否为value
+    //检查xarray entry是否为value
 	return (unsigned long)entry & 1;
 }
 
@@ -99,7 +99,7 @@ static inline bool xa_is_value(const void *entry)
  */
 static inline void *xa_tag_pointer(void *p, unsigned long tag)
 {
-    //为p打上 tag (目前为 0，1，3）
+    //为指针p打上 tag (目前为 0，1，3）
 	return (void *)((unsigned long)p | tag);
 }
 
@@ -115,7 +115,7 @@ static inline void *xa_tag_pointer(void *p, unsigned long tag)
  */
 static inline void *xa_untag_pointer(void *entry)
 {
-    //移除tag
+    //移除指定xarray entry的tag
 	return (void *)((unsigned long)entry & ~3UL);
 }
 
@@ -131,7 +131,7 @@ static inline void *xa_untag_pointer(void *entry)
  */
 static inline unsigned int xa_pointer_tag(void *entry)
 {
-    //取出指针上的tag
+    //取指针p的tag
 	return (unsigned long)entry & 3UL;
 }
 
@@ -150,7 +150,7 @@ static inline unsigned int xa_pointer_tag(void *entry)
  */
 static inline void *xa_mk_internal(unsigned long v)
 {
-    //为v打上internal标记 （左移 2位，并打上'10'标记）
+    //为v打上internal标记 （左移 2位，并打上'10'标记）,标明为internal entry
 	return (void *)((v << 2) | 2);
 }
 
@@ -163,7 +163,7 @@ static inline void *xa_mk_internal(unsigned long v)
  */
 static inline unsigned long xa_to_internal(const void *entry)
 {
-    //取出internal标记前的值
+    //解析internal entry的实际value
 	return (unsigned long)entry >> 2;
 }
 
@@ -176,11 +176,11 @@ static inline unsigned long xa_to_internal(const void *entry)
  */
 static inline bool xa_is_internal(const void *entry)
 {
-    //检查是否有internal标记
+    //检查entry是否有internal标记
 	return ((unsigned long)entry & 3) == 2;
 }
 
-//定义zero entry(其为一个等值于 257的内部entry)
+//定义zero entry(其为一个等值于 257的internal entry)
 #define XA_ZERO_ENTRY		xa_mk_internal(257)
 
 /**
@@ -194,7 +194,7 @@ static inline bool xa_is_internal(const void *entry)
  */
 static inline bool xa_is_zero(const void *entry)
 {
-    //检查是否为zero entry
+    //检查entry是否为zero entry
 	return unlikely(entry == XA_ZERO_ENTRY);
 }
 
@@ -211,7 +211,9 @@ static inline bool xa_is_zero(const void *entry)
  */
 static inline bool xa_is_err(const void *entry)
 {
-    //检查entry是否为error,error必须是internal类型，且必须是合法的error number
+    /*检查entry是否为error,error是internal entry，
+     * 且必须是合法的error number(由于存负值，故其总大于-MAX_ERRNO)
+     */
 	return unlikely(xa_is_internal(entry) &&
 			entry >= xa_mk_internal(-MAX_ERRNO));
 }
@@ -394,6 +396,7 @@ void xa_destroy(struct xarray *);
  */
 static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
 {
+	/*初始化xarray*/
 	spin_lock_init(&xa->xa_lock);
 	xa->xa_flags = flags;
 	xa->xa_head = NULL;
@@ -421,6 +424,7 @@ static inline void xa_init(struct xarray *xa)
  */
 static inline bool xa_empty(const struct xarray *xa)
 {
+	/*检查xarray是否为空*/
 	return xa->xa_head == NULL;
 }
 
@@ -1367,7 +1371,7 @@ struct xa_state {
 
 #define __XA_STATE(array, index, shift, sibs)  {	\
 	.xa = array,/*要操作的array*/					\
-	.xa_index = index,				\
+	.xa_index = index,/*关心的索引*/				\
 	.xa_shift = shift,				\
 	.xa_sibs = sibs,				\
 	.xa_offset = 0,					\
@@ -1386,8 +1390,8 @@ struct xa_state {
  *
  * Declare and initialise an xa_state on the stack.
  */
-#define XA_STATE(name/*变量名称*/, array/*被操作的xarray*/, index)				\
-        /*定义名称为name的xa_state*/\
+#define XA_STATE(name/*变量名称*/, array/*被操作的xarray*/, index/*关心的索引*/)				\
+    /*定义名称为name的xa_state*/\
 	struct xa_state name = __XA_STATE(array, index, 0, 0)
 
 /**

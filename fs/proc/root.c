@@ -369,7 +369,7 @@ struct proc_dir_entry proc_root = {
 	.refcnt		= REFCOUNT_INIT(1),
 	.proc_iops	= &proc_root_inode_operations, 
 	.proc_dir_ops	= &proc_root_operations,
-	.parent		= &proc_root,
+	.parent		= &proc_root,/*指向自已*/
 	.subdir		= RB_ROOT,
-	.name		= "/proc",
+	.name		= "/proc",/*proc根节点名称*/
 };

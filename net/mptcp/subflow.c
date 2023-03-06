@@ -1606,7 +1606,7 @@ int mptcp_subflow_create_socket(struct sock *sk, struct socket **new_sock)
 	sf->sk->sk_net_refcnt = 1;
 	get_net_track(net, &sf->sk->ns_tracker, GFP_KERNEL);
 	sock_inuse_add(net, 1);
-	err = tcp_set_ulp(sf->sk, "mptcp");
+	err = tcp_set_ulp(sf->sk, "mptcp");/*将socket更新为mptcp*/
 	release_sock(sf->sk);
 
 	if (err) {

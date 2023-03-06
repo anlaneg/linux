@@ -930,6 +930,7 @@ static bool reqsk_queue_unlink(struct request_sock *req)
 	bool found = false;
 
 	if (sk_hashed(sk)) {
+		/*自req socket已加入链表，这里将其移除*/
 		struct inet_hashinfo *hashinfo = tcp_or_dccp_get_hashinfo(sk);
 		spinlock_t *lock = inet_ehash_lockp(hashinfo, req->rsk_hash);
 
@@ -937,6 +938,8 @@ static bool reqsk_queue_unlink(struct request_sock *req)
 		found = __sk_nulls_del_node_init_rcu(sk);
 		spin_unlock(lock);
 	}
+
+	/*time没有触发，则将其移除掉*/
 	if (timer_pending(&req->rsk_timer) && del_timer_sync(&req->rsk_timer))
 		reqsk_put(req);
 	return found;
@@ -963,6 +966,7 @@ EXPORT_SYMBOL(inet_csk_reqsk_queue_drop_and_put);
 
 static void reqsk_timer_handler(struct timer_list *t)
 {
+	/*取此timer对应的request socket*/
 	struct request_sock *req = from_timer(req, t, rsk_timer);
 	struct request_sock *nreq = NULL, *oreq = req;
 	struct sock *sk_listener = req->rsk_listener;
@@ -1076,7 +1080,7 @@ drop:
 static void reqsk_queue_hash_req(struct request_sock *req,
 				 unsigned long timeout)
 {
-    //初始化rsk_timer,并指定触发时间为timeout
+    //初始化rsk_timer,并指定触发时间为timeout,超时回收
 	timer_setup(&req->rsk_timer, reqsk_timer_handler, TIMER_PINNED);
 	mod_timer(&req->rsk_timer, jiffies + timeout);
 
@@ -1090,10 +1094,10 @@ static void reqsk_queue_hash_req(struct request_sock *req,
 }
 
 void inet_csk_reqsk_queue_hash_add(struct sock *sk, struct request_sock *req,
-				   unsigned long timeout)
+				   unsigned long timeout/*超时时间*/)
 {
-	reqsk_queue_hash_req(req, timeout);
-	inet_csk_reqsk_queue_added(sk);
+	reqsk_queue_hash_req(req, timeout);/*加入到est表中*/
+	inet_csk_reqsk_queue_added(sk);/*增加计数*/
 }
 EXPORT_SYMBOL_GPL(inet_csk_reqsk_queue_hash_add);
 
@@ -1121,12 +1125,13 @@ struct sock *inet_csk_clone_lock(const struct sock *sk,
 				 const struct request_sock *req,
 				 const gfp_t priority)
 {
+	/*申请newsk,自sk中复制内容，并初始化*/
 	struct sock *newsk = sk_clone_lock(sk, priority);
 
 	if (newsk) {
 		struct inet_connection_sock *newicsk = inet_csk(newsk);
 
-		inet_sk_set_state(newsk, TCP_SYN_RECV);
+		inet_sk_set_state(newsk, TCP_SYN_RECV);/*状态变更为syn_recv*/
 		newicsk->icsk_bind_hash = NULL;
 		newicsk->icsk_bind2_hash = NULL;
 
@@ -1278,7 +1283,7 @@ struct sock *inet_csk_reqsk_queue_add(struct sock *sk,
 		inet_child_forget(sk, req, child);
 		child = NULL;
 	} else {
-		req->sk = child;
+		req->sk = child;/*设置此request对应的后续socket*/
 		req->dl_next = NULL;
 		//队列为空时，将其直接写入，不为空时存入队列尾部
 		if (queue->rskq_accept_head == NULL)
@@ -1298,7 +1303,9 @@ struct sock *inet_csk_complete_hashdance(struct sock *sk, struct sock *child,
 					 struct request_sock *req, bool own_req)
 {
 	if (own_req) {
+		/*将req自est链表中移除，并停止timer*/
 		inet_csk_reqsk_queue_drop(req->rsk_listener, req);
+		/*移除此req*/
 		reqsk_queue_removed(&inet_csk(req->rsk_listener)->icsk_accept_queue, req);
 
 		if (sk != req->rsk_listener) {

@@ -447,6 +447,7 @@ int inet_release(struct socket *sock)
 		if (sock_flag(sk, SOCK_LINGER) &&
 		    !(current->flags & PF_EXITING))
 			timeout = sk->sk_lingertime;
+		/*触发协议的close函数*/
 		sk->sk_prot->close(sk, timeout);
 		sock->sk = NULL;
 	}
@@ -1086,6 +1087,7 @@ static int inet_compat_ioctl(struct socket *sock, unsigned int cmd, unsigned lon
 const struct proto_ops inet_stream_ops = {
 	.family		   = PF_INET,
 	.owner		   = THIS_MODULE,
+	/*socket关闭时此函数将被调起*/
 	.release	   = inet_release,
 	.bind		   = inet_bind,
 	.connect	   = inet_stream_connect,/*ipv4/ipv6 stream方式connect实现*/
@@ -1744,6 +1746,7 @@ int inet_ctl_sock_create(struct sock **sk, unsigned short family,
 			 struct net *net)
 {
 	struct socket *sock;
+	/*创建kernel用socket*/
 	int rc = sock_create_kern(net, family, type, protocol, &sock);
 
 	if (rc == 0) {
@@ -1814,8 +1817,7 @@ static const struct net_protocol igmp_protocol = {
 
 //tcp协议处理
 static const struct net_protocol tcp_protocol = {
-	//指明tcp报文入口
-	.handler	=	tcp_v4_rcv,
+	.handler	=	tcp_v4_rcv,//tcp报文处理入口
 	.err_handler	=	tcp_v4_err,
 	//不执行policy检查
 	.no_policy	=	1,
@@ -1824,14 +1826,14 @@ static const struct net_protocol tcp_protocol = {
 
 //注册udp协议
 static const struct net_protocol udp_protocol = {
-	.handler =	udp_rcv,//udp报文入口
+	.handler =	udp_rcv,//udp报文处理入口
 	.err_handler =	udp_err,
 	.no_policy =	1,
 };
 
 //icmp协议注册
 static const struct net_protocol icmp_protocol = {
-	.handler =	icmp_rcv,/*icmp报文处理*/
+	.handler =	icmp_rcv,/*icmp报文处理入口*/
 	.err_handler =	icmp_err,
 	.no_policy =	1,
 };

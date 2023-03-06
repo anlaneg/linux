@@ -209,7 +209,7 @@ static void virt_wifi_cancel_scan(struct wiphy *wiphy)
 
 struct virt_wifi_netdev_priv {
 	struct delayed_work connect;
-	struct net_device *lowerdev;
+	struct net_device *lowerdev;/*底层以太设备*/
 	struct net_device *upperdev;
 	u32 tx_packets;
 	u32 tx_failed;
@@ -229,6 +229,7 @@ static int virt_wifi_connect(struct wiphy *wiphy, struct net_device *netdev,
 	if (priv->being_deleted || !priv->is_up)
 		return -EBUSY;
 
+	/*延迟执行connect任务*/
 	could_schedule = schedule_delayed_work(&priv->connect, HZ * 2);
 	if (!could_schedule)
 		return -EBUSY;
@@ -251,6 +252,7 @@ static void virt_wifi_connect_complete(struct work_struct *work)
 	struct virt_wifi_netdev_priv *priv =
 		container_of(work, struct virt_wifi_netdev_priv, connect.work);
 	u8 *requested_bss = priv->connect_requested_bss;
+	/*请求的bss与fake_router是否相等*/
 	bool right_addr = ether_addr_equal(requested_bss, fake_router_bssid);
 	u16 status = WLAN_STATUS_SUCCESS;
 
@@ -260,7 +262,7 @@ static void virt_wifi_connect_complete(struct work_struct *work)
 	if (!priv->is_up || (requested_bss && !right_addr))
 		status = WLAN_STATUS_UNSPECIFIED_FAILURE;
 	else
-		priv->is_connected = true;
+		priv->is_connected = true;/*指明已连接*/
 
 	/* Schedules an event that acquires the rtnl lock. */
 	cfg80211_connect_result(priv->upperdev, requested_bss, NULL, 0, NULL, 0,
@@ -343,6 +345,7 @@ static int virt_wifi_dump_station(struct wiphy *wiphy, struct net_device *dev,
 	return virt_wifi_get_station(wiphy, dev, fake_router_bssid, sinfo);
 }
 
+/*指明此wifi的配置ops*/
 static const struct cfg80211_ops virt_wifi_cfg80211_ops = {
 	.scan = virt_wifi_scan,
 
@@ -360,6 +363,7 @@ static struct wiphy *virt_wifi_make_wiphy(void)
 	struct virt_wifi_wiphy_priv *priv;
 	int err;
 
+	/*创建一个wiphy*/
 	wiphy = wiphy_new(&virt_wifi_cfg80211_ops, sizeof(*priv));
 
 	if (!wiphy)
@@ -380,7 +384,7 @@ static struct wiphy *virt_wifi_make_wiphy(void)
 	priv->scan_request = NULL;
 	INIT_DELAYED_WORK(&priv->scan_result, virt_wifi_scan_result);
 
-	err = wiphy_register(wiphy);
+	err = wiphy_register(wiphy);/*注册wiphy*/
 	if (err < 0) {
 		wiphy_free(wiphy);
 		return NULL;
@@ -419,6 +423,7 @@ static netdev_tx_t virt_wifi_start_xmit(struct sk_buff *skb,
 		return NET_XMIT_DROP;
 	}
 
+	/*替换当前skb所属设备为底层wifi设备并发送出去*/
 	skb->dev = priv->lowerdev;
 	return dev_queue_xmit(skb);
 }
@@ -456,6 +461,7 @@ static int virt_wifi_net_device_get_iflink(const struct net_device *dev)
 	return priv->lowerdev->ifindex;
 }
 
+/*virt wifi设备发包*/
 static const struct net_device_ops virt_wifi_ops = {
 	.ndo_start_xmit = virt_wifi_start_xmit,
 	.ndo_open	= virt_wifi_net_device_open,
@@ -489,6 +495,7 @@ static rx_handler_result_t virt_wifi_rx_handler(struct sk_buff **pskb)
 		rcu_dereference(skb->dev->rx_handler_data);
 
 	if (!priv->is_connected)
+		/*未连接，报文由当前设备继续处理*/
 		return RX_HANDLER_PASS;
 
 	/* GFP_ATOMIC because this is a packet interrupt handler. */
@@ -498,6 +505,7 @@ static rx_handler_result_t virt_wifi_rx_handler(struct sk_buff **pskb)
 		return RX_HANDLER_CONSUMED;
 	}
 
+	/*报文上送，指明已更换设备为wifi设备，重新查找回调*/
 	*pskb = skb;
 	skb->dev = priv->upperdev;
 	skb->pkt_type = PACKET_HOST;
@@ -513,6 +521,7 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 	int err;
 
 	if (!tb[IFLA_LINK])
+		/*必须指定底层设备ifindex*/
 		return -EINVAL;
 
 	netif_carrier_off(dev);
@@ -522,12 +531,16 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 					    nla_get_u32(tb[IFLA_LINK]));
 
 	if (!priv->lowerdev)
+		/*底层设备不存在，报错退出*/
 		return -ENODEV;
+
+	/*mtu设置*/
 	if (!tb[IFLA_MTU])
 		dev->mtu = priv->lowerdev->mtu;
 	else if (dev->mtu > priv->lowerdev->mtu)
 		return -EINVAL;
 
+	/*设置底层设备的rx_handler,使底层设备收到报文后走此流程*/
 	err = netdev_rx_handler_register(priv->lowerdev, virt_wifi_rx_handler,
 					 priv);
 	if (err) {
@@ -536,6 +549,7 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 		return err;
 	}
 
+	/*继承底层设备的物理地址*/
 	eth_hw_addr_inherit(dev, priv->lowerdev);
 	netif_stacked_transfer_operstate(priv->lowerdev, dev);
 
@@ -550,6 +564,7 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 	dev->ieee80211_ptr->iftype = NL80211_IFTYPE_STATION;
 	dev->ieee80211_ptr->wiphy = common_wiphy;
 
+	/*注册此网络设备*/
 	err = register_netdevice(dev);
 	if (err) {
 		dev_err(&priv->lowerdev->dev, "can't register_netdevice: %d\n",
@@ -566,7 +581,7 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 
 	dev->priv_destructor = virt_wifi_net_device_destructor;
 	priv->being_deleted = false;
-	priv->is_connected = false;
+	priv->is_connected = false;/*初始为未连接*/
 	priv->is_up = false;
 	INIT_DELAYED_WORK(&priv->connect, virt_wifi_connect_complete);
 	__module_get(THIS_MODULE);
@@ -608,7 +623,7 @@ static void virt_wifi_dellink(struct net_device *dev,
 static struct rtnl_link_ops virt_wifi_link_ops = {
 	.kind		= "virt_wifi",
 	.setup		= virt_wifi_setup,
-	.newlink	= virt_wifi_newlink,
+	.newlink	= virt_wifi_newlink/*新建link*/,
 	.dellink	= virt_wifi_dellink,
 	.priv_size	= sizeof(struct virt_wifi_netdev_priv),
 };
@@ -655,7 +670,7 @@ static int __init virt_wifi_init_module(void)
 	int err;
 
 	/* Guaranteed to be locally-administered and not multicast. */
-	eth_random_addr(fake_router_bssid);
+	eth_random_addr(fake_router_bssid);/*生成随机的本地mac地址*/
 
 	err = register_netdevice_notifier(&virt_wifi_notifier);
 	if (err)
@@ -666,6 +681,7 @@ static int __init virt_wifi_init_module(void)
 	if (!common_wiphy)
 		goto notifier;
 
+	/*注册virt wifi链路ops*/
 	err = rtnl_link_register(&virt_wifi_link_ops);
 	if (err)
 		goto destroy_wiphy;

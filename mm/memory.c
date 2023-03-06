@@ -5497,12 +5497,12 @@ EXPORT_SYMBOL_GPL(generic_access_phys);
 /*
  * Access another process' address space as given in mm.
  */
-int __access_remote_vm(struct mm_struct *mm, unsigned long addr, void *buf,
-		       int len, unsigned int gup_flags)
+int __access_remote_vm(struct mm_struct *mm, unsigned long addr/*要读取的位置*/, void *buf/*出参，用于返回内容*/,
+		       int len/*buffer长度*/, unsigned int gup_flags)
 {
 	struct vm_area_struct *vma;
 	void *old_buf = buf;
-	int write = gup_flags & FOLL_WRITE;
+	int write = gup_flags & FOLL_WRITE;/*是否读操作*/
 
 	if (mmap_read_lock_killable(mm))
 		return 0;
@@ -5525,8 +5525,10 @@ int __access_remote_vm(struct mm_struct *mm, unsigned long addr, void *buf,
 			 */
 			vma = vma_lookup(mm, addr);
 			if (!vma)
+				/*未查询到vma*/
 				break;
 			if (vma->vm_ops && vma->vm_ops->access)
+				/*有access函数，执行访问*/
 				ret = vma->vm_ops->access(vma, addr, buf,
 							  len, write);
 			if (ret <= 0)

@@ -71,6 +71,7 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
 	long __##abi##_##name(const struct pt_regs *regs)		\
 		__alias(__do_##name);
 
+/*定义abi函数，并调用__se_##name函数*/
 #define __SYS_STUBx(abi, name, ...)					\
 	long __##abi##_##name(const struct pt_regs *regs);		\
 	ALLOW_ERROR_INJECTION(__##abi##_##name, ERRNO);			\
@@ -95,7 +96,7 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
 
 #define __X64_SYS_STUBx(x, name, ...)					\
 	__SYS_STUBx(x64, sys##name,					\
-		    SC_X86_64_REGS_TO_ARGS(x, __VA_ARGS__))
+		    SC_X86_64_REGS_TO_ARGS(x, __VA_ARGS__)/*展开寄存器做为参数传入*/)
 
 #define __X64_COND_SYSCALL(name)					\
 	__COND_SYSCALL(x64, sys_##name)
@@ -225,18 +226,20 @@ extern long __ia32_sys_ni_syscall(const struct pt_regs *regs);
 
 #endif /* CONFIG_COMPAT */
 
-#define __SYSCALL_DEFINEx(x, name, ...)					\
+#define __SYSCALL_DEFINEx(x/*参数数目*/, name/*函数名称*/, ...)					\
 	static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__));	\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__));\
 	__X64_SYS_STUBx(x, name, __VA_ARGS__)				\
 	__IA32_SYS_STUBx(x, name, __VA_ARGS__)				\
 	static long __se_sys##name(__MAP(x,__SC_LONG,__VA_ARGS__))	\
 	{								\
+		/*调用__do_sys_##name,并传入参数*/\
 		long ret = __do_sys##name(__MAP(x,__SC_CAST,__VA_ARGS__));\
 		__MAP(x,__SC_TEST,__VA_ARGS__);				\
 		__PROTECT(x, ret,__MAP(x,__SC_ARGS,__VA_ARGS__));	\
 		return ret;						\
 	}								\
+	/*定义函数头部*/\
 	static inline long __do_sys##name(__MAP(x,__SC_DECL,__VA_ARGS__))
 
 /*

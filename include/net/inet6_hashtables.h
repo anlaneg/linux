@@ -74,6 +74,7 @@ static inline struct sock *__inet6_lookup(struct net *net,
 	*refcounted = true;
 	if (sk)
 		return sk;
+
 	/*再查listener状态的socket*/
 	*refcounted = false;
 	return inet6_lookup_listener(net, hashinfo, skb, doff, saddr, sport,
@@ -81,9 +82,9 @@ static inline struct sock *__inet6_lookup(struct net *net,
 }
 
 static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
-					      struct sk_buff *skb, int doff,
-					      const __be16 sport,
-					      const __be16 dport,
+					      struct sk_buff *skb, int doff/*data offset*/,
+					      const __be16 sport/*源端口*/,
+					      const __be16 dport/*目的端口*/,
 					      int iif, int sdif,
 					      bool *refcounted)
 {
@@ -94,7 +95,7 @@ static inline struct sock *__inet6_lookup_skb(struct inet_hashinfo *hashinfo,
 
 	return __inet6_lookup(dev_net(skb_dst(skb)->dev), hashinfo, skb,
 			      doff, &ipv6_hdr(skb)->saddr, sport,
-			      &ipv6_hdr(skb)->daddr, ntohs(dport),
+			      &ipv6_hdr(skb)->daddr, ntohs(dport)/*转为主机序*/,
 			      iif, sdif, refcounted);
 }
 
@@ -117,6 +118,7 @@ static inline bool inet6_match(struct net *net, const struct sock *sk,
 	    sk->sk_portpair != ports ||
 	    !ipv6_addr_equal(&sk->sk_v6_daddr, saddr) ||
 	    !ipv6_addr_equal(&sk->sk_v6_rcv_saddr, daddr))
+		/*五元组不同，返回false*/
 		return false;
 
 	/* READ_ONCE() paired with WRITE_ONCE() in sock_bindtoindex_locked() */

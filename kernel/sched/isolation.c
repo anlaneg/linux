@@ -119,13 +119,13 @@ static int __init housekeeping_setup(char *str, unsigned long flags)
 		}
 	}
 
-	alloc_bootmem_cpumask_var(&non_housekeeping_mask);
+	alloc_bootmem_cpumask_var(&non_housekeeping_mask);/*申请cpu mask空间*/
 	if (cpulist_parse(str, non_housekeeping_mask) < 0) {
 		pr_warn("Housekeeping: nohz_full= or isolcpus= incorrect CPU range\n");
 		goto free_non_housekeeping_mask;
 	}
 
-	alloc_bootmem_cpumask_var(&housekeeping_staging);
+	alloc_bootmem_cpumask_var(&housekeeping_staging);/*申请cpu staging空间*/
 	cpumask_andnot(housekeeping_staging,
 		       cpu_possible_mask, non_housekeeping_mask);
 
@@ -188,6 +188,7 @@ static int __init housekeeping_nohz_full_setup(char *str)
 }
 __setup("nohz_full=", housekeeping_nohz_full_setup);
 
+/*isolcpus=参数处理*/
 static int __init housekeeping_isolcpus_setup(char *str)
 {
 	unsigned long flags = 0;
@@ -195,22 +196,22 @@ static int __init housekeeping_isolcpus_setup(char *str)
 	char *par;
 	int len;
 
-	while (isalpha(*str)) {
+	while (isalpha(*str)/*以字每开头*/) {
 		if (!strncmp(str, "nohz,", 5)) {
 			str += 5;
-			flags |= HK_FLAG_TICK;
+			flags |= HK_FLAG_TICK;/*nohz标记*/
 			continue;
 		}
 
 		if (!strncmp(str, "domain,", 7)) {
 			str += 7;
-			flags |= HK_FLAG_DOMAIN;
+			flags |= HK_FLAG_DOMAIN;/*domain标记*/
 			continue;
 		}
 
 		if (!strncmp(str, "managed_irq,", 12)) {
 			str += 12;
-			flags |= HK_FLAG_MANAGED_IRQ;
+			flags |= HK_FLAG_MANAGED_IRQ;/*managed_irq标记*/
 			continue;
 		}
 
@@ -220,10 +221,11 @@ static int __init housekeeping_isolcpus_setup(char *str)
 		 */
 		for (par = str, len = 0; *str && *str != ','; str++, len++) {
 			if (!isalpha(*str) && *str != '_')
-				illegal = true;
+				illegal = true;/*遇到不认识的参数*/
 		}
 
 		if (illegal) {
+			/*对不认识的参数进行告警*/
 			pr_warn("isolcpus: Invalid flag %.*s\n", len, par);
 			return 0;
 		}
@@ -234,8 +236,9 @@ static int __init housekeeping_isolcpus_setup(char *str)
 
 	/* Default behaviour for isolcpus without flags */
 	if (!flags)
-		flags |= HK_FLAG_DOMAIN;
+		flags |= HK_FLAG_DOMAIN;/*如果没有配置，则默认提供domain参数*/
 
 	return housekeeping_setup(str, flags);
 }
+/*注册isolcpus=参数的处理*/
 __setup("isolcpus=", housekeeping_isolcpus_setup);

@@ -13,8 +13,9 @@ __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 	int carry;
 	__u32 ulen;
 	__u32 uproto;
-	__u32 sum = (__force u32)csum;
+	__u32 sum = (__force u32)csum;/*初始化csum*/
 
+	/*折叠saddr*/
 	sum += (__force u32)saddr->s6_addr32[0];
 	carry = (sum < (__force u32)saddr->s6_addr32[0]);
 	sum += carry;
@@ -31,6 +32,7 @@ __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 	carry = (sum < (__force u32)saddr->s6_addr32[3]);
 	sum += carry;
 
+	/*折叠daddr*/
 	sum += (__force u32)daddr->s6_addr32[0];
 	carry = (sum < (__force u32)daddr->s6_addr32[0]);
 	sum += carry;
@@ -47,11 +49,13 @@ __sum16 csum_ipv6_magic(const struct in6_addr *saddr,
 	carry = (sum < (__force u32)daddr->s6_addr32[3]);
 	sum += carry;
 
+	/*折叠长度*/
 	ulen = (__force u32)htonl((__u32) len);
 	sum += ulen;
 	carry = (sum < ulen);
 	sum += carry;
 
+	/*折叠protocol*/
 	uproto = (__force u32)htonl(proto);
 	sum += uproto;
 	carry = (sum < uproto);

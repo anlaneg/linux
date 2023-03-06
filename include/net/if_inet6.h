@@ -95,7 +95,7 @@ struct ip6_sf_socklist {
 #define IP6_SFBLOCK	10	/* allocate this many at once */
 
 struct ipv6_mc_socklist {
-	struct in6_addr		addr;
+	struct in6_addr		addr;/*组播组地址*/
 	int			ifindex;
 	unsigned int		sfmode;		/* MCAST_{INCLUDE,EXCLUDE} */
 	struct ipv6_mc_socklist __rcu *next;
@@ -104,8 +104,8 @@ struct ipv6_mc_socklist {
 };
 
 struct ip6_sf_list {
-	struct ip6_sf_list __rcu *sf_next;
-	struct in6_addr		sf_addr;
+	struct ip6_sf_list __rcu *sf_next;/*指向下一个sf_list(source filter)*/
+	struct in6_addr		sf_addr;/*组播源*/
 	unsigned long		sf_count[2];	/* include/exclude counts */
 	unsigned char		sf_gsresp;	/* include in g & s response? */
 	unsigned char		sf_oldin;	/* change state */
@@ -120,18 +120,18 @@ struct ip6_sf_list {
 #define MAF_GSQUERY		0x10
 
 struct ifmcaddr6 {
-	struct in6_addr		mca_addr;
-	struct inet6_dev	*idev;
-	struct ifmcaddr6	__rcu *next;
-	struct ip6_sf_list	__rcu *mca_sources;
+	struct in6_addr		mca_addr;/*组播地址*/
+	struct inet6_dev	*idev;/*所属设备*/
+	struct ifmcaddr6	__rcu *next;/*用于将ifmcaddr6串连成链表*/
+	struct ip6_sf_list	__rcu *mca_sources;/*此组播地址关联的组播源（过滤/包含）*/
 	struct ip6_sf_list	__rcu *mca_tomb;
-	unsigned int		mca_sfmode;
+	unsigned int		mca_sfmode;/*此组播地址的关注模式，例如MCAST_INCLUDE*/
 	unsigned char		mca_crcount;
 	unsigned long		mca_sfcount[2];
 	struct delayed_work	mca_work;
 	unsigned int		mca_flags;
-	int			mca_users;
-	refcount_t		mca_refcnt;
+	int			mca_users;/*地址被引入的用户计数*/
+	refcount_t		mca_refcnt;/*此结构体引用计数*/
 	unsigned long		mca_cstamp;
 	unsigned long		mca_tstamp;
 	struct rcu_head		rcu;
@@ -163,9 +163,9 @@ struct ifacaddr6 {
 
 struct ipv6_devstat {
 	struct proc_dir_entry	*proc_dir_entry;
-	DEFINE_SNMP_STAT(struct ipstats_mib, ipv6);
-	DEFINE_SNMP_STAT_ATOMIC(struct icmpv6_mib_device, icmpv6dev);
-	DEFINE_SNMP_STAT_ATOMIC(struct icmpv6msg_mib_device, icmpv6msgdev);
+	DEFINE_SNMP_STAT(struct ipstats_mib, ipv6);/*统计ipv6报文情况*/
+	DEFINE_SNMP_STAT_ATOMIC(struct icmpv6_mib_device, icmpv6dev);/*统计icmp6报文总数情况*/
+	DEFINE_SNMP_STAT_ATOMIC(struct icmpv6msg_mib_device, icmpv6msgdev);/*icmp type统计*/
 };
 
 struct inet6_dev {
@@ -175,7 +175,7 @@ struct inet6_dev {
 	/*串连地址列表*/
 	struct list_head	addr_list;
 
-	struct ifmcaddr6	__rcu *mc_list;
+	struct ifmcaddr6	__rcu *mc_list;/*组播地址链表*/
 	struct ifmcaddr6	__rcu *mc_tomb;
 
 	unsigned char		mc_qrv;		/* Query Robustness Variable */
@@ -191,14 +191,19 @@ struct inet6_dev {
 	struct delayed_work	mc_gq_work;	/* general query work */
 	struct delayed_work	mc_ifc_work;	/* interface change work */
 	struct delayed_work	mc_dad_work;	/* dad complete mc work */
+	/*负责处理mc_query_queue中的查询任务*/
 	struct delayed_work	mc_query_work;	/* mld query work */
+	/*负责处理mc_report_queue中的report任务*/
 	struct delayed_work	mc_report_work;	/* mld report work */
 
+	/*需要执行mld查询的报文入此队列，并触发mc_query_work work*/
 	struct sk_buff_head	mc_query_queue;		/* mld query queue */
+	/*需要执行mld report的报文入此队列，并触发mc_report_work work*/
 	struct sk_buff_head	mc_report_queue;	/* mld report queue */
 
 	spinlock_t		mc_query_lock;	/* mld query queue lock */
 	spinlock_t		mc_report_lock;	/* mld query report lock */
+	/*保护mc_list*/
 	struct mutex		mc_lock;	/* mld global lock */
 
 	struct ifacaddr6	*ac_list;

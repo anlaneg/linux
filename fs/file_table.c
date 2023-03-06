@@ -333,6 +333,8 @@ static void __fput(struct file *file)
 		if (file->f_op->fasync)
 			file->f_op->fasync(-1, file, 0);
 	}
+
+	/*有release回调，例如socket fd会通过release回调进入关闭*/
 	if (file->f_op->release)
 		file->f_op->release(inode, file);
 	if (unlikely(S_ISCHR(inode->i_mode) && inode->i_cdev != NULL &&
@@ -362,6 +364,7 @@ static void delayed_fput(struct work_struct *unused)
 
 static void ____fput(struct callback_head *work)
 {
+	/*关闭文件*/
 	__fput(container_of(work, struct file, f_rcuhead));
 }
 
@@ -389,7 +392,7 @@ void fput(struct file *file)
 		struct task_struct *task = current;
 
 		if (likely(!in_interrupt() && !(task->flags & PF_KTHREAD))) {
-			init_task_work(&file->f_rcuhead, ____fput);
+			init_task_work(&file->f_rcuhead, ____fput);/*延迟关闭文件*/
 			if (!task_work_add(task, &file->f_rcuhead, TWA_RESUME))
 				return;
 			/*

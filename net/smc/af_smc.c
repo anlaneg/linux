@@ -865,6 +865,7 @@ static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
 
 	mutex_lock(&smc->clcsock_release_lock);
 	if (!smc->clcsock) {
+		/*smc没有clsock,报错*/
 		rc = -EBADF;
 		goto out;
 	}
@@ -874,7 +875,7 @@ static int smc_switch_to_fallback(struct smc_sock *smc, int reason_code)
 	smc_stat_fallback(smc);
 	trace_smc_switch_to_fallback(smc, reason_code);
 	if (smc->sk.sk_socket && smc->sk.sk_socket->file) {
-		smc->clcsock->file = smc->sk.sk_socket->file;
+		smc->clcsock->file = smc->sk.sk_socket->file;/*将文件更新回去*/
 		smc->clcsock->file->private_data = smc->clcsock;
 		smc->clcsock->wq.fasync_list =
 			smc->sk.sk_socket->wq.fasync_list;
@@ -2663,6 +2664,7 @@ static int smc_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	if (smc->use_fallback) {
+		/*回退到tcp进行处理*/
 		rc = smc->clcsock->ops->sendmsg(smc->clcsock, msg, len);
 	} else {
 		rc = smc_tx_sendmsg(smc, msg, len);
@@ -3223,14 +3225,16 @@ static int __smc_create(struct net *net, struct socket *sock, int protocol,
 
 	rc = -ESOCKTNOSUPPORT;
 	if (sock->type != SOCK_STREAM)
+		/*只支持stream*/
 		goto out;
 
 	rc = -EPROTONOSUPPORT;
 	if (protocol != SMCPROTO_SMC && protocol != SMCPROTO_SMC6)
+		/*只支持ipv4 smc/ipv6 smc*/
 		goto out;
 
 	rc = -ENOBUFS;
-	sock->ops = &smc_sock_ops;
+	sock->ops = &smc_sock_ops;/*为此socket设置ops*/
 	sock->state = SS_UNCONNECTED;
 	sk = smc_sock_alloc(net, sock, protocol);
 	if (!sk)
@@ -3246,6 +3250,7 @@ static int __smc_create(struct net *net, struct socket *sock, int protocol,
 
 	rc = 0;
 	if (!clcsock) {
+		/*创建内层socket(tcp)*/
 		rc = sock_create_kern(net, family, SOCK_STREAM, IPPROTO_TCP,
 				      &smc->clcsock);
 		if (rc) {
@@ -3282,6 +3287,7 @@ static int smc_ulp_init(struct sock *sk)
 	/* only TCP can be replaced */
 	if (tcp->type != SOCK_STREAM || sk->sk_protocol != IPPROTO_TCP ||
 	    (sk->sk_family != AF_INET && sk->sk_family != AF_INET6))
+		/*只支持替换tcp*/
 		return -ESOCKTNOSUPPORT;
 	/* don't handle wq now */
 	if (tcp->state != SS_UNCONNECTED || !tcp->file || tcp->wq.fasync_list)
@@ -3298,18 +3304,19 @@ static int smc_ulp_init(struct sock *sk)
 
 	smcsock->type = SOCK_STREAM;
 	__module_get(THIS_MODULE); /* tried in __tcp_ulp_find_autoload */
-	ret = __smc_create(net, smcsock, protocol, 1, tcp);
+	ret = __smc_create(net, smcsock, protocol, 1, tcp);/*创建SMC socket*/
 	if (ret) {
 		sock_release(smcsock); /* module_put() which ops won't be NULL */
 		return ret;
 	}
 
 	/* replace tcp socket to smc */
+	/*更正tcp socket到smc*/
 	smcsock->file = tcp->file;
 	smcsock->file->private_data = smcsock;
 	smcsock->file->f_inode = SOCK_INODE(smcsock); /* replace inode when sock_close */
 	smcsock->file->f_path.dentry->d_inode = SOCK_INODE(smcsock); /* dput() in __fput */
-	tcp->file = NULL;
+	tcp->file = NULL;/*将tcp socket的file置空*/
 
 	return ret;
 }
@@ -3451,6 +3458,7 @@ static int __init smc_init(void)
 		goto out_sock;
 	}
 
+	/*注册ulp*/
 	rc = tcp_register_ulp(&smc_ulp_ops);
 	if (rc) {
 		pr_err("%s: tcp_ulp_register fails with %d\n", __func__, rc);

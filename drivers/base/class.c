@@ -156,7 +156,7 @@ int __class_register(struct class *cls, struct lock_class_key *key)
 	struct subsys_private *cp;
 	int error;
 
-	pr_debug("device class '%s': registering\n", cls->name);
+	pr_debug("device class '%s': registering\n", cls->name);/*注册新的设备class*/
 
 	cp = kzalloc(sizeof(*cp), GFP_KERNEL);
 	if (!cp)
@@ -244,6 +244,7 @@ struct class *__class_create(struct module *owner, const char *name/*class名称
 	cls->owner = owner;
 	cls->class_release = class_create_release;
 
+	/*注册新的class*/
 	retval = __class_register(cls, key);
 	if (retval)
 		goto error;

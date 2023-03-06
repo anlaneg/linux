@@ -141,13 +141,13 @@ static int __tcp_set_ulp(struct sock *sk, const struct tcp_ulp_ops *ulp_ops)
 
 	err = -EEXIST;
 	if (icsk->icsk_ulp_ops)
-		/*重复设置*/
+		/*重复设置,报错*/
 		goto out_err;
 
 	if (sk->sk_socket)
 		clear_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);
 
-	err = ulp_ops->init(sk);
+	err = ulp_ops->init(sk);/*替换原有socket*/
 	if (err)
 		goto out_err;
 

@@ -58,6 +58,7 @@ static int uverbs_free_cq(struct ib_uobject *uobject,
 	return 0;
 }
 
+/*cq创建函数*/
 static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	struct uverbs_attr_bundle *attrs)
 {
@@ -72,12 +73,14 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	struct ib_uverbs_completion_event_file    *ev_file = NULL;
 	struct ib_uobject *ev_file_uobj;
 
+	/*ib设备必须有create_cq,destroy_cq两个回调*/
 	if (!ib_dev->ops.create_cq || !ib_dev->ops.destroy_cq)
 		return -EOPNOTSUPP;
 
 	ret = uverbs_copy_from(&attr.comp_vector, attrs,
 			       UVERBS_ATTR_CREATE_CQ_COMP_VECTOR);
 	if (!ret)
+		/*取cqe数目*/
 		ret = uverbs_copy_from(&attr.cqe, attrs,
 				       UVERBS_ATTR_CREATE_CQ_CQE);
 	if (!ret)
@@ -112,6 +115,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	INIT_LIST_HEAD(&obj->comp_list);
 	INIT_LIST_HEAD(&obj->uevent.event_list);
 
+	/*创建cq对象*/
 	cq = rdma_zalloc_drv_obj(ib_dev, ib_cq);
 	if (!cq) {
 		ret = -ENOMEM;
@@ -128,6 +132,7 @@ static int UVERBS_HANDLER(UVERBS_METHOD_CQ_CREATE)(
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, NULL);
 
+	/*调用create_cq对cq进行初始化*/
 	ret = ib_dev->ops.create_cq(cq, &attr, &attrs->driver_udata);
 	if (ret)
 		goto err_free;

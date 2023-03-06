@@ -82,7 +82,7 @@ struct dst_metrics *ip_fib_metrics_init(struct net *net, struct nlattr *fc_mx,
 	int err;
 
 	if (!fc_mx)
-	    /*无配置，使用default*/
+	    /*没有配置metric，使用default metric*/
 		return (struct dst_metrics *)&dst_default_metrics;
 
 	/*申请dst_metrics*/

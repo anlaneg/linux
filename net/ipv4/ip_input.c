@@ -192,44 +192,45 @@ void ip_protocol_deliver_rcu(struct net *net, struct sk_buff *skb, int protocol)
 	int raw, ret;
 
 resubmit:
-	//尝试raw socket传递(复制传递）
+	//检查是否需要给相关的raw socket传递此报文的副本
 	raw = raw_local_deliver(skb, protocol);
 
 	//按ip->protocol查找协议处理函数(例如：tcp_protocol，udp_protocol，igmp_protocol）
 	ipprot = rcu_dereference(inet_protos[protocol]);
 	if (ipprot) {
-		//协议栈上有对应的协议处理模块
 		if (!ipprot->no_policy) {
-			//协议打未打上 no_policy标记，则执行xfrm4_policy_check
+			//协议no_policy标记为0，执行xfrm4_policy_check，检查不通过，则丢包
 			if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 				kfree_skb_reason(skb,
 						 SKB_DROP_REASON_XFRM_POLICY);
 				return;
 			}
+			/*准备送协议栈，可能被缓存，清除ct引用*/
 			nf_reset_ct(skb);
 		}
+
 		//协议报文处理(交给ip上层协议进行处理）
 		ret = INDIRECT_CALL_2(ipprot->handler, tcp_v4_rcv, udp_rcv,
 				      skb);
 		if (ret < 0) {
-			//如果handle返回负数，则取abs后会得到相应的协议，并将
-			//用指定的协议进行重新处理。
+			//如果handle返回负数，则取abs后会得到新的protocol，并重新处理。
 			protocol = -ret;
 			goto resubmit;
 		}
 		__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 	} else {
+		//协议栈上没有protocol对应的处理模块
 		if (!raw) {
-		    //无raw socket收取情况
 			if (xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb)) {
 				__IP_INC_STATS(net, IPSTATS_MIB_INUNKNOWNPROTOS);
-				//目的不可达，端口不可达
+				//响应icmp协议不可达
 				icmp_send(skb, ICMP_DEST_UNREACH,
 					  ICMP_PROT_UNREACH, 0);
 			}
 			//释放报文
 			kfree_skb_reason(skb, SKB_DROP_REASON_IP_NOPROTO);
 		} else {
+			//有raw socket收取此报文，上面已复制交付，这里释放原件
 			__IP_INC_STATS(net, IPSTATS_MIB_INDELIVERS);
 			consume_skb(skb);
 		}

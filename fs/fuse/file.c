@@ -3202,7 +3202,7 @@ void fuse_init_file_inode(struct inode *inode, unsigned int flags)
 {
 	struct fuse_inode *fi = get_fuse_inode(inode);
 
-	inode->i_fop = &fuse_file_operations;
+	inode->i_fop = &fuse_file_operations;/*文件操作ops*/
 	inode->i_data.a_ops = &fuse_file_aops;
 
 	INIT_LIST_HEAD(&fi->write_files);

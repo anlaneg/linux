@@ -124,6 +124,7 @@ int sysctl_mld_qrv __read_mostly = MLD_QRV_DEFAULT;
 	     pmc;						\
 	     pmc = rcu_dereference(pmc->next))
 
+/*遍历mc对应的组播源配置*/
 #define for_each_psf_mclock(mc, psf)				\
 	for (psf = mc_dereference((mc)->mca_sources, mc->idev);	\
 	     psf;						\
@@ -140,6 +141,7 @@ int sysctl_mld_qrv __read_mostly = MLD_QRV_DEFAULT;
 	     psf;						\
 	     psf = mc_dereference(psf->sf_next, mc->idev))
 
+/*遍历idev设备上的组播地址*/
 #define for_each_mc_mclock(idev, mc)				\
 	for (mc = mc_dereference((idev)->mc_list, idev);	\
 	     mc;						\
@@ -168,8 +170,9 @@ static int unsolicited_report_interval(struct inet6_dev *idev)
 	return iv > 0 ? iv : 1;
 }
 
-static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
-			       const struct in6_addr *addr, unsigned int mode)
+/*ipv6 socket加入组播组*/
+static int __ipv6_sock_mc_join(struct sock *sk, int ifindex/*如果不关注ifindex,则传0*/,
+			       const struct in6_addr *addr/*组播组*/, unsigned int mode)
 {
 	struct net_device *dev = NULL;
 	struct ipv6_mc_socklist *mc_lst;
@@ -180,8 +183,10 @@ static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
 	ASSERT_RTNL();
 
 	if (!ipv6_addr_is_multicast(addr))
+		/*必须为组播地址*/
 		return -EINVAL;
 
+	/*检查此组播地址是否已存在，如果已存在，则返回失败*/
 	for_each_pmc_socklock(np, sk, mc_lst) {
 		if ((ifindex == 0 || mc_lst->ifindex == ifindex) &&
 		    ipv6_addr_equal(&mc_lst->addr, addr))
@@ -197,6 +202,7 @@ static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
 	mc_lst->addr = *addr;
 
 	if (ifindex == 0) {
+		/*未指定接口，通过路由查询确定接口*/
 		struct rt6_info *rt;
 		rt = rt6_lookup(net, addr, NULL, 0, NULL, 0);
 		if (rt) {
@@ -204,6 +210,7 @@ static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
 			ip6_rt_put(rt);
 		}
 	} else
+		/*指定了接口，通过ifindex查询接口*/
 		dev = __dev_get_by_index(net, ifindex);
 
 	if (!dev) {
@@ -219,13 +226,14 @@ static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
 	 *	now add/increase the group membership on the device
 	 */
 
-	err = __ipv6_dev_mc_inc(dev, addr, mode);
+	err = __ipv6_dev_mc_inc(dev, addr, mode);/*添加此组播组到设备（socket触发）*/
 
 	if (err) {
 		sock_kfree_s(sk, mc_lst, sizeof(*mc_lst));
 		return err;
 	}
 
+	/*将此节点加入到np->ipv6_mc_list的链表头*/
 	mc_lst->next = np->ipv6_mc_list;
 	rcu_assign_pointer(np->ipv6_mc_list, mc_lst);
 
@@ -234,6 +242,7 @@ static int __ipv6_sock_mc_join(struct sock *sk, int ifindex,
 
 int ipv6_sock_mc_join(struct sock *sk, int ifindex, const struct in6_addr *addr)
 {
+	/*加入组播组addr,对其源采用eclude模式（当前exclude源为0，故全部加入）*/
 	return __ipv6_sock_mc_join(sk, ifindex, addr, MCAST_EXCLUDE);
 }
 EXPORT_SYMBOL(ipv6_sock_mc_join);
@@ -772,7 +781,7 @@ static void mld_add_delrec(struct inet6_dev *idev, struct ifmcaddr6 *im)
 static void mld_del_delrec(struct inet6_dev *idev, struct ifmcaddr6 *im)
 {
 	struct ip6_sf_list *psf, *sources, *tomb;
-	struct in6_addr *pmca = &im->mca_addr;
+	struct in6_addr *pmca = &im->mca_addr;/*组播地址*/
 	struct ifmcaddr6 *pmc, *pmc_prev;
 
 	pmc_prev = NULL;
@@ -893,10 +902,11 @@ static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
 	refcount_set(&mc->mca_refcnt, 1);
 
 	mc->mca_sfmode = mode;
-	mc->mca_sfcount[mode] = 1;
+	mc->mca_sfcount[mode] = 1;/*指定此模式下sf数量为1*/
 
 	if (ipv6_addr_is_ll_all_nodes(&mc->mca_addr) ||
 	    IPV6_ADDR_MC_SCOPE(&mc->mca_addr) < IPV6_ADDR_SCOPE_LINKLOCAL)
+		/*指明此组播不用report*/
 		mc->mca_flags |= MAF_NOREPORT;
 
 	return mc;
@@ -906,7 +916,7 @@ static struct ifmcaddr6 *mca_alloc(struct inet6_dev *idev,
  *	device multicast group inc (add if not found)
  */
 static int __ipv6_dev_mc_inc(struct net_device *dev,
-			     const struct in6_addr *addr, unsigned int mode)
+			     const struct in6_addr *addr/*组播地址*/, unsigned int mode)
 {
 	struct ifmcaddr6 *mc;
 	struct inet6_dev *idev;
@@ -927,7 +937,9 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 	mutex_lock(&idev->mc_lock);
 	for_each_mc_mclock(idev, mc) {
 		if (ipv6_addr_equal(&mc->mca_addr, addr)) {
+			/*此组播组在设备上已存在，重复加入，增加引用*/
 			mc->mca_users++;
+			/*指明收取所有组播源*/
 			ip6_mc_add_src(idev, &mc->mca_addr, mode, 0, NULL, 0);
 			mutex_unlock(&idev->mc_lock);
 			in6_dev_put(idev);
@@ -935,6 +947,7 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 		}
 	}
 
+	/*此组播组不存在，申请并初始化mc*/
 	mc = mca_alloc(idev, addr, mode);
 	if (!mc) {
 		mutex_unlock(&idev->mc_lock);
@@ -942,6 +955,7 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 		return -ENOMEM;
 	}
 
+	/*将mc加入到链表头*/
 	rcu_assign_pointer(mc->next, idev->mc_list);
 	rcu_assign_pointer(idev->mc_list, mc);
 
@@ -956,6 +970,7 @@ static int __ipv6_dev_mc_inc(struct net_device *dev,
 
 int ipv6_dev_mc_inc(struct net_device *dev, const struct in6_addr *addr)
 {
+	/*添加组播组（dev触发）指明此addr的源exclude为0，即来自任意源的都被include*/
 	return __ipv6_dev_mc_inc(dev, addr, MCAST_EXCLUDE);
 }
 EXPORT_SYMBOL(ipv6_dev_mc_inc);
@@ -1023,9 +1038,10 @@ bool ipv6_chk_mcast_addr(struct net_device *dev, const struct in6_addr *group,
 	rcu_read_lock();
 	idev = __in6_dev_get(dev);
 	if (idev) {
+		/*遍历此设备所有组播地址*/
 		for_each_mc_rcu(idev, mc) {
 			if (ipv6_addr_equal(&mc->mca_addr, group))
-			    /*此组播组地址与mc中的地址一致，此时mac不为NULL*/
+			    /*此组播组地址与mc中的地址一致，此时mc不为NULL*/
 				break;
 		}
 		if (mc) {
@@ -1033,13 +1049,14 @@ bool ipv6_chk_mcast_addr(struct net_device *dev, const struct in6_addr *group,
 			if (src_addr && !ipv6_addr_any(src_addr)) {
 				struct ip6_sf_list *psf;
 
-				/*遍历mc中的mca_sources，检查是否包含*/
+				/*遍历mc中的mca_sources，检查是否接收此组播源*/
 				for_each_psf_rcu(mc, psf) {
 					if (ipv6_addr_equal(&psf->sf_addr, src_addr))
 						break;
 				}
 				if (psf)
-				    /*psf匹配，检查是否在include列表/不在exclude列表*/
+				    /*psf匹配，确认有针对此组播源的规定，
+				     * 检查是否在include列表/不在exclude列表*/
 					rv = psf->sf_count[MCAST_INCLUDE] ||
 						psf->sf_count[MCAST_EXCLUDE] !=
 						mc->mca_sfcount[MCAST_EXCLUDE];
@@ -1047,12 +1064,12 @@ bool ipv6_chk_mcast_addr(struct net_device *dev, const struct in6_addr *group,
 				    /*psf没有匹配，检查是否有exclude*/
 					rv = mc->mca_sfcount[MCAST_EXCLUDE] != 0;
 			} else
-			    /*src_addr地址未指定*/
+			    /*参数src_addr地址未指定，不进行过滤*/
 				rv = true; /* don't filter unspecified source */
 		}
 	}
 	rcu_read_unlock();
-	return rv;
+	return rv;/*没有此组播组处理信息，默认不接收*/
 }
 
 /* called with mc_lock */
@@ -1389,6 +1406,7 @@ void igmp6_event_query(struct sk_buff *skb)
 	spin_lock_bh(&idev->mc_query_lock);
 	if (skb_queue_len(&idev->mc_query_queue) < MLD_MAX_SKBS) {
 		__skb_queue_tail(&idev->mc_query_queue, skb);
+		/*队列中有内容，触发query_work*/
 		if (!mod_delayed_work(mld_wq, &idev->mc_query_work, 0))
 			in6_dev_hold(idev);
 		skb = NULL;
@@ -1522,13 +1540,14 @@ static void mld_query_work(struct work_struct *work)
 	bool rework = false;
 	int cnt = 0;
 
-	skb_queue_head_init(&q);
+	skb_queue_head_init(&q);/*初始化q队列*/
 
 	spin_lock_bh(&idev->mc_query_lock);
 	while ((skb = __skb_dequeue(&idev->mc_query_queue))) {
-		__skb_queue_tail(&q, skb);
+		__skb_queue_tail(&q, skb);/*将mc_query_queue中的报文出队列q*/
 
 		if (++cnt >= MLD_MAX_QUEUE) {
+			/*队列内容过多，需要立即再运行*/
 			rework = true;
 			break;
 		}
@@ -1536,11 +1555,13 @@ static void mld_query_work(struct work_struct *work)
 	spin_unlock_bh(&idev->mc_query_lock);
 
 	mutex_lock(&idev->mc_lock);
+	/*q出队，针对每一个skb执行mld查询工作*/
 	while ((skb = __skb_dequeue(&q)))
 		__mld_query_work(skb);
 	mutex_unlock(&idev->mc_lock);
 
 	if (rework && queue_delayed_work(mld_wq, &idev->mc_query_work, 0))
+		/*mc_query_queue中仍有内容，要求再运行*/
 		return;
 
 	in6_dev_put(idev);
@@ -1626,12 +1647,14 @@ static void mld_report_work(struct work_struct *work)
 	bool rework = false;
 	int cnt = 0;
 
-	skb_queue_head_init(&q);
+	skb_queue_head_init(&q);/*初始化一个队列*/
 	spin_lock_bh(&idev->mc_report_lock);
 	while ((skb = __skb_dequeue(&idev->mc_report_queue))) {
+		/*将mc_report_queue队列出的skb出到q中*/
 		__skb_queue_tail(&q, skb);
 
 		if (++cnt >= MLD_MAX_QUEUE) {
+			/*q队列中内容过多，需要再次主动触发mc_report_work再运行*/
 			rework = true;
 			break;
 		}
@@ -1639,10 +1662,12 @@ static void mld_report_work(struct work_struct *work)
 	spin_unlock_bh(&idev->mc_report_lock);
 
 	mutex_lock(&idev->mc_lock);
+	/*针对q中的报文，逐个执行report工作*/
 	while ((skb = __skb_dequeue(&q)))
 		__mld_report_work(skb);
 	mutex_unlock(&idev->mc_lock);
 
+	/*如有必要再入队*/
 	if (rework && queue_delayed_work(mld_wq, &idev->mc_report_work, 0))
 		return;
 
@@ -2386,10 +2411,11 @@ static int ip6_mc_add1_src(struct ifmcaddr6 *pmc, int sfmode,
 	psf_prev = NULL;
 	for_each_psf_mclock(pmc, psf) {
 		if (ipv6_addr_equal(&psf->sf_addr, psfsrc))
-			break;
+			break;/*已存在，修改计数*/
 		psf_prev = psf;
 	}
 	if (!psf) {
+		/*组播地址pmc，还没有配置srouce filter,申请并添加*/
 		psf = kzalloc(sizeof(*psf), GFP_KERNEL);
 		if (!psf)
 			return -ENOBUFS;
@@ -2401,6 +2427,7 @@ static int ip6_mc_add1_src(struct ifmcaddr6 *pmc, int sfmode,
 			rcu_assign_pointer(pmc->mca_sources, psf);
 		}
 	}
+	/*此源地址对应source filter mode 加1*/
 	psf->sf_count[sfmode]++;
 	return 0;
 }
@@ -2409,8 +2436,10 @@ static int ip6_mc_add1_src(struct ifmcaddr6 *pmc, int sfmode,
 static void sf_markstate(struct ifmcaddr6 *pmc)
 {
 	struct ip6_sf_list *psf;
+	/*此组播被exclude的数目*/
 	int mca_xcount = pmc->mca_sfcount[MCAST_EXCLUDE];
 
+	/*遍历此组播地址对应的所有source filter*/
 	for_each_psf_mclock(pmc, psf) {
 		if (pmc->mca_sfcount[MCAST_EXCLUDE]) {
 			psf->sf_oldin = mca_xcount ==
@@ -2492,8 +2521,8 @@ static int sf_setstate(struct ifmcaddr6 *pmc)
  * Add multicast source filter list to the interface list
  * called with mc_lock
  */
-static int ip6_mc_add_src(struct inet6_dev *idev, const struct in6_addr *pmca,
-			  int sfmode, int sfcount, const struct in6_addr *psfsrc,
+static int ip6_mc_add_src(struct inet6_dev *idev, const struct in6_addr *pmca/*组播地址*/,
+			  int sfmode/*源过滤模式*/, int sfcount, const struct in6_addr *psfsrc/*源地址*/,
 			  int delta)
 {
 	struct ifmcaddr6 *pmc;
@@ -2503,6 +2532,7 @@ static int ip6_mc_add_src(struct inet6_dev *idev, const struct in6_addr *pmca,
 	if (!idev)
 		return -ENODEV;
 
+	/*此组播地址必须已在此接口上被关注*/
 	for_each_mc_mclock(idev, pmc) {
 		if (ipv6_addr_equal(pmca, &pmc->mca_addr))
 			break;
@@ -2515,12 +2545,14 @@ static int ip6_mc_add_src(struct inet6_dev *idev, const struct in6_addr *pmca,
 	if (!delta)
 		pmc->mca_sfcount[sfmode]++;
 	err = 0;
+	/*针对组播地址pmc添加source filter*/
 	for (i = 0; i < sfcount; i++) {
 		err = ip6_mc_add1_src(pmc, sfmode, &psfsrc[i]);
 		if (err)
 			break;
 	}
 	if (err) {
+		/*添加过程中遇到错误，回退添加*/
 		int j;
 
 		if (!delta)
@@ -2578,6 +2610,7 @@ static void igmp6_join_group(struct ifmcaddr6 *ma)
 	unsigned long delay;
 
 	if (ma->mca_flags & MAF_NOREPORT)
+		/*忽略掉不需要report的组播地址*/
 		return;
 
 	igmp6_send(&ma->mca_addr, ma->idev->dev, ICMPV6_MGM_REPORT);
@@ -2774,10 +2807,12 @@ void ipv6_mc_init_dev(struct inet6_dev *idev)
 	idev->mc_ifc_count = 0;
 	INIT_DELAYED_WORK(&idev->mc_ifc_work, mld_ifc_work);
 	INIT_DELAYED_WORK(&idev->mc_dad_work, mld_dad_work);
+	/*负责mld查询*/
 	INIT_DELAYED_WORK(&idev->mc_query_work, mld_query_work);
+	/*负责mld report*/
 	INIT_DELAYED_WORK(&idev->mc_report_work, mld_report_work);
-	skb_queue_head_init(&idev->mc_query_queue);
-	skb_queue_head_init(&idev->mc_report_queue);
+	skb_queue_head_init(&idev->mc_query_queue);/*mld query work的输入队列*/
+	skb_queue_head_init(&idev->mc_report_queue);/*mld report work的输入队列*/
 	spin_lock_init(&idev->mc_query_lock);
 	spin_lock_init(&idev->mc_report_lock);
 	mutex_init(&idev->mc_lock);

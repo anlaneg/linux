@@ -2011,7 +2011,7 @@ static inline void sock_lock_init(struct sock *sk)
  * even temporarly, because of RCU lookups. sk_node should also be left as is.
  * We must not copy fields between sk_dontcopy_begin and sk_dontcopy_end
  */
-static void sock_copy(struct sock *nsk, const struct sock *osk)
+static void sock_copy(struct sock *nsk/*新socket*/, const struct sock *osk/*旧socket*/)
 {
 	const struct proto *prot = READ_ONCE(osk->sk_prot);
 #ifdef CONFIG_SECURITY_NETWORK
@@ -2027,6 +2027,7 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 		     offsetof(struct sock, sk_tx_queue_mapping) >=
 		     offsetof(struct sock, sk_dontcopy_end));
 
+	/*通过memcpy复制osk中的内容到nsk中*/
 	memcpy(nsk, osk, offsetof(struct sock, sk_dontcopy_begin));
 
 	memcpy(&nsk->sk_dontcopy_end, &osk->sk_dontcopy_end,
@@ -2034,7 +2035,7 @@ static void sock_copy(struct sock *nsk, const struct sock *osk)
 
 #ifdef CONFIG_SECURITY_NETWORK
 	nsk->sk_security = sptr;
-	security_sk_clone(osk, nsk);
+	security_sk_clone(osk, nsk);/*触发sk_clone钩子点*/
 #endif
 }
 
@@ -2256,11 +2257,12 @@ struct sock *sk_clone_lock(const struct sock *sk, const gfp_t priority)
 	bool is_charged = true;
 	struct sock *newsk;
 
+	/*按family申请socket*/
 	newsk = sk_prot_alloc(prot, priority, sk->sk_family);
 	if (!newsk)
 		goto out;
 
-	sock_copy(newsk, sk);
+	sock_copy(newsk, sk);/*利用sk的内容填充newsk*/
 
 	newsk->sk_prot_creator = prot;
 
@@ -2942,7 +2944,7 @@ void __release_sock(struct sock *sk)
 			prefetch(next);
 			DEBUG_NET_WARN_ON_ONCE(skb_dst_is_noref(skb));
 			skb_mark_not_on_list(skb);
-			sk_backlog_rcv(sk, skb);
+			sk_backlog_rcv(sk, skb);/*处理backlog*/
 
 			cond_resched();
 
@@ -3522,7 +3524,7 @@ void release_sock(struct sock *sk)
 	 * ie call sock_release_ownership(sk) before us.
 	 */
 	if (sk->sk_prot->release_cb)
-		sk->sk_prot->release_cb(sk);
+		sk->sk_prot->release_cb(sk);/*释放控制块*/
 
 	sock_release_ownership(sk);
 	if (waitqueue_active(&sk->sk_lock.wq))

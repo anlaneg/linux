@@ -431,6 +431,7 @@ static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
+	/*申请pd object*/
 	uobj = uobj_alloc(UVERBS_OBJECT_PD, attrs, &ib_dev);
 	if (IS_ERR(uobj))
 		return PTR_ERR(uobj);
@@ -712,7 +713,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
-	/*两者与之后地址结果应是一致的（但上层传入的是相同的值）*/
+	/*两个地址按页对齐后，不足一页的地址应是一致的*/
 	if ((cmd.start & ~PAGE_MASK) != (cmd.hca_va & ~PAGE_MASK))
 		return -EINVAL;
 
@@ -734,7 +735,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 	}
 
 	/*此pd对应的device执行user space内存注册*/
-	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*内存地址*/,
+	mr = pd->device->ops.reg_user_mr(pd, cmd.start/*内存地址*/, cmd.length/*内存长度*/, cmd.hca_va/*hca地址*/,
 					 cmd.access_flags/*访问标记*/,
 					 &attrs->driver_udata);
 	if (IS_ERR(mr)) {
@@ -744,7 +745,7 @@ static int ib_uverbs_reg_mr(struct uverbs_attr_bundle *attrs)
 
 	mr->device  = pd->device;
 	mr->pd      = pd;
-	mr->type    = IB_MR_TYPE_USER;
+	mr->type    = IB_MR_TYPE_USER;/*此内存从属于user*/
 	mr->dm	    = NULL;
 	mr->sig_attrs = NULL;
 	mr->uobject = uobj;
@@ -1941,6 +1942,7 @@ out:
 	return ret;
 }
 
+/*执行qp属性修改*/
 static int ib_uverbs_modify_qp(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_ex_modify_qp cmd;
@@ -2056,6 +2058,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 	if (!user_wr)
 		return -ENOMEM;
 
+	/*取对应的qp*/
 	qp = uobj_get_obj_read(qp, UVERBS_OBJECT_QP, cmd.qp_handle, attrs);
 	if (!qp) {
 		ret = -EINVAL;
@@ -3889,7 +3892,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 				     UAPI_DEF_METHOD_NEEDS_FN(dereg_mr)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_REG_MR,
-			ib_uverbs_reg_mr,
+			ib_uverbs_reg_mr,/*注册mr*/
 			UAPI_DEF_WRITE_UDATA_IO(struct ib_uverbs_reg_mr,
 						struct ib_uverbs_reg_mr_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(reg_user_mr)),
@@ -3966,7 +3969,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_post_recv,
 					  struct ib_uverbs_post_recv_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(post_recv)),
-			/*收到发送结束通知，调用post_send*/
+			/*用户态准备完成，收到发送结束通知，调用post_send*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_POST_SEND,
 			ib_uverbs_post_send,

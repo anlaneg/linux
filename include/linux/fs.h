@@ -662,13 +662,13 @@ struct inode {
 #endif
 
 	/* Misc */
-	unsigned long		i_state;
+	unsigned long		i_state;/*inode状态，例如：I_NEW*/
 	struct rw_semaphore	i_rwsem;
 
 	unsigned long		dirtied_when;	/* jiffies of first dirtying */
 	unsigned long		dirtied_time_when;
 
-	struct hlist_node	i_hash;
+	struct hlist_node	i_hash;/*用于加入到系统inode_hashtable表中*/
 	struct list_head	i_io_list;	/* backing dev IO list */
 #ifdef CONFIG_CGROUP_WRITEBACK
 	struct bdi_writeback	*i_wb;		/* the associated cgroup wb */
@@ -1558,7 +1558,7 @@ struct super_block {
 	 * s_fsnotify_marks together for cache efficiency. They are frequently
 	 * accessed and rarely modified.
 	 */
-	//文件系统的私有数据
+	//文件系统的私有数据（各文件系统自由定义）
 	void			*s_fs_info;	/* Filesystem private info */
 
 	/* Granularity of c/m/atime in ns (cannot be worse than a second) */
@@ -2539,7 +2539,7 @@ static inline void kiocb_clone(struct kiocb *kiocb, struct kiocb *kiocb_src,
 #define I_DIRTY_DATASYNC	(1 << 1)
 #define I_DIRTY_PAGES		(1 << 2)
 #define __I_NEW			3
-//新增的inode处于此状态
+//新增的inode处于此状态（这种需要自磁盘加载文件信息）
 #define I_NEW			(1 << __I_NEW)
 #define I_WILL_FREE		(1 << 4)
 #define I_FREEING		(1 << 5)

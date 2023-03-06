@@ -63,16 +63,16 @@ struct netns_ipv6 {
 
 	struct netns_sysctl_ipv6 sysctl;
 	struct ipv6_devconf	*devconf_all;
-	struct ipv6_devconf	*devconf_dflt;
+	struct ipv6_devconf	*devconf_dflt;/*默认配置*/
 	struct inet_peer_base	*peers;
 	struct fqdir		*fqdir;
-	struct fib6_info	*fib6_null_entry;
+	struct fib6_info	*fib6_null_entry;/*用来表示路由项中的空节点*/
 	struct rt6_info		*ip6_null_entry;
 	struct rt6_statistics   *rt6_stats;
 	struct timer_list       ip6_fib_timer;
 	/*ipv6路由表hash table*/
 	struct hlist_head       *fib_table_hash;
-	struct fib6_table       *fib6_main_tbl;
+	struct fib6_table       *fib6_main_tbl;/*main路由表*/
 	struct list_head	fib6_walkers;
 	rwlock_t		fib6_walker_lock;
 	spinlock_t		fib6_gc_lock;
@@ -80,22 +80,22 @@ struct netns_ipv6 {
 	unsigned long		ip6_rt_last_gc;
 	unsigned char		flowlabel_has_excl;
 #ifdef CONFIG_IPV6_MULTIPLE_TABLES
-	bool			fib6_has_custom_rules;
+	bool			fib6_has_custom_rules;/*是否有策略路由*/
 	unsigned int		fib6_rules_require_fldissect;
 #ifdef CONFIG_IPV6_SUBTREES
 	unsigned int		fib6_routes_require_src;
 #endif
 	struct rt6_info         *ip6_prohibit_entry;
 	struct rt6_info         *ip6_blk_hole_entry;
-	struct fib6_table       *fib6_local_tbl;
-	struct fib_rules_ops    *fib6_rules_ops;
+	struct fib6_table       *fib6_local_tbl;/*local路由表*/
+	struct fib_rules_ops    *fib6_rules_ops;/*策略路由表*/
 #endif
 	struct sock             *ndisc_sk;
 	struct sock             *tcp_sk;
 	struct sock             *igmp_sk;
 	struct sock		*mc_autojoin_sk;
 
-	struct hlist_head	*inet6_addr_lst;
+	struct hlist_head	*inet6_addr_lst;/*记录所有ipv6地址*/
 	spinlock_t		addrconf_hash_lock;
 	struct delayed_work	addr_chk_work;
 

@@ -152,12 +152,15 @@ static bool ipv6_raw_deliver(struct sk_buff *skb, int nexthdr)
 	saddr = &ipv6_hdr(skb)->saddr;
 	daddr = saddr + 1;
 
+	/*取raw socket对应的hash*/
 	hash = nexthdr & (RAW_HTABLE_SIZE - 1);
 	hlist = &raw_v6_hashinfo.ht[hash];
 	rcu_read_lock();
+	/*遍历桶*/
 	sk_nulls_for_each(sk, hnode, hlist) {
 		int filtered;
 
+		/*raw socket匹配*/
 		if (!raw_v6_match(net, sk, nexthdr, daddr, saddr,
 				  inet6_iif(skb), inet6_sdif(skb)))
 			continue;

@@ -605,7 +605,6 @@ static u64 inet_sk_port_offset(const struct sock *sk)
 /* Searches for an exsiting socket in the ehash bucket list.
  * Returns true if found, false otherwise.
  */
-//将socket加入到ehash表中
 static bool inet_ehash_lookup_by_sk(struct sock *sk,
 				    struct hlist_nulls_head *list)
 {
@@ -618,10 +617,13 @@ static bool inet_ehash_lookup_by_sk(struct sock *sk,
 
 	INET_ADDR_COOKIE(acookie, sk->sk_daddr, sk->sk_rcv_saddr);
 
+	/*遍历list上所有socket*/
 	sk_nulls_for_each_rcu(esk, node, list) {
 		if (esk->sk_hash != sk->sk_hash)
+			/*hash不同的忽略*/
 			continue;
 		if (sk->sk_family == AF_INET) {
+			/*ipv4匹配检查，如果匹配返回true,表示此sk已存在*/
 			if (unlikely(inet_match(net, esk, acookie,
 						ports, dif, sdif))) {
 				return true;
@@ -629,6 +631,7 @@ static bool inet_ehash_lookup_by_sk(struct sock *sk,
 		}
 #if IS_ENABLED(CONFIG_IPV6)
 		else if (sk->sk_family == AF_INET6) {
+			/*ipv6匹配检查*/
 			if (unlikely(inet6_match(net, esk,
 						 &sk->sk_v6_daddr,
 						 &sk->sk_v6_rcv_saddr,
@@ -646,7 +649,8 @@ static bool inet_ehash_lookup_by_sk(struct sock *sk,
  * If an existing socket already exists, socket sk is not inserted,
  * and sets found_dup_sk parameter to true.
  */
-bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
+//将socket加入到ehash表中
+bool inet_ehash_insert(struct sock *sk, struct sock *osk/*旧的socket*/, bool *found_dup_sk)
 {
 	struct inet_hashinfo *hashinfo = tcp_or_dccp_get_hashinfo(sk);
 	struct inet_ehash_bucket *head;
@@ -657,21 +661,27 @@ bool inet_ehash_insert(struct sock *sk, struct sock *osk, bool *found_dup_sk)
 	WARN_ON_ONCE(!sk_unhashed(sk));
 
 	sk->sk_hash = sk_ehashfn(sk);
+	/*通过hash确定桶*/
 	head = inet_ehash_bucket(hashinfo, sk->sk_hash);
 	list = &head->chain;
+	/*通过hash确定lock*/
 	lock = inet_ehash_lockp(hashinfo, sk->sk_hash);
 
-	spin_lock(lock);
+	spin_lock(lock);/*加锁*/
 	if (osk) {
 		WARN_ON_ONCE(sk->sk_hash != osk->sk_hash);
+		/*如果osk的sk_nulls_node节点已在其它list中，则将其移除*/
 		ret = sk_nulls_del_node_init_rcu(osk);
 	} else if (found_dup_sk) {
+		/*检查此sk在list是否存在*/
 		*found_dup_sk = inet_ehash_lookup_by_sk(sk, list);
 		if (*found_dup_sk)
+			/*已存在，返回false*/
 			ret = false;
 	}
 
 	if (ret)
+		/*通过sk_nulls_node节点加入到list中*/
 		__sk_nulls_add_node_rcu(sk, list);
 
 	spin_unlock(lock);
@@ -1222,6 +1232,7 @@ int inet_hashinfo2_init_mod(struct inet_hashinfo *h)
 }
 EXPORT_SYMBOL_GPL(inet_hashinfo2_init_mod);
 
+/*初始化锁hash表，用于保护socket表*/
 int inet_ehash_locks_alloc(struct inet_hashinfo *hashinfo)
 {
 	unsigned int locksz = sizeof(spinlock_t);
@@ -1235,7 +1246,7 @@ int inet_ehash_locks_alloc(struct inet_hashinfo *hashinfo)
 		/* no more locks than number of hash buckets */
 		nblocks = min(nblocks, hashinfo->ehash_mask + 1);
 
-		hashinfo->ehash_locks = kvmalloc_array(nblocks, locksz, GFP_KERNEL);
+		hashinfo->ehash_locks = kvmalloc_array(nblocks/*锁的数目*/, locksz, GFP_KERNEL);
 		if (!hashinfo->ehash_locks)
 			return -ENOMEM;
 

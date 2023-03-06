@@ -296,7 +296,7 @@ unlock:
  */
 int rtnl_register_module(struct module *owner,
 			 int protocol, int msgtype,
-			 rtnl_doit_func doit, rtnl_dumpit_func dumpit,
+			 rtnl_doit_func doit/*执行函数*/, rtnl_dumpit_func dumpit/*dump函数*/,
 			 unsigned int flags)
 {
 	return rtnl_register_internal(owner, protocol, msgtype,
