@@ -89,7 +89,7 @@ static int failover_slave_register(struct net_device *slave_dev)
 	}
 
 	//指明为failover_slave设备
-	slave_dev->priv_flags |= (IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
+	slave_dev->priv_flags |= (IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 
 	//调用slave register回调
 	if (fops && fops->slave_register &&
@@ -98,7 +98,7 @@ static int failover_slave_register(struct net_device *slave_dev)
 
 	//处理失败，回退
 	netdev_upper_dev_unlink(slave_dev, failover_dev);
-	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
+	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 err_upper_link:
 	netdev_rx_handler_unregister(slave_dev);
 done:
@@ -135,7 +135,7 @@ int failover_slave_unregister(struct net_device *slave_dev)
 	//解注册slave_dev
 	netdev_rx_handler_unregister(slave_dev);
 	netdev_upper_dev_unlink(slave_dev, failover_dev);
-	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_LIVE_RENAME_OK);
+	slave_dev->priv_flags &= ~(IFF_FAILOVER_SLAVE | IFF_NO_ADDRCONF);
 
 	if (fops && fops->slave_unregister &&
 	    !fops->slave_unregister(slave_dev, failover_dev))

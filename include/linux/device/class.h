@@ -60,9 +60,9 @@ struct class {
 	const struct attribute_group	**dev_groups;
 	struct kobject			*dev_kobj;
 
-	int (*dev_uevent)(struct device *dev, struct kobj_uevent_env *env);
+	int (*dev_uevent)(const struct device *dev, struct kobj_uevent_env *env);
 	/*设备在vduse下的节点名称*/
-	char *(*devnode)(struct device *dev, umode_t *mode);
+	char *(*devnode)(const struct device *dev, umode_t *mode);
 
 	void (*class_release)(struct class *class);
 	void (*dev_release)(struct device *dev);
@@ -70,9 +70,9 @@ struct class {
 	int (*shutdown_pre)(struct device *dev);
 
 	const struct kobj_ns_type_operations *ns_type;
-	const void *(*namespace)(struct device *dev);
+	const void *(*namespace)(const struct device *dev);
 
-	void (*get_ownership)(struct device *dev, kuid_t *uid, kgid_t *gid);
+	void (*get_ownership)(const struct device *dev, kuid_t *uid, kgid_t *gid);
 
 	const struct dev_pm_ops *pm;
 

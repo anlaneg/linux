@@ -62,7 +62,29 @@ static DEFINE_MUTEX(misc_mtx);
  */
 #define DYNAMIC_MINORS 128 /* like dynamic majors */
 //记录哪些动态minors已分配（bitmap)
-static DECLARE_BITMAP(misc_minors, DYNAMIC_MINORS);
+static DEFINE_IDA(misc_minors_ida);
+
+static int misc_minor_alloc(void)
+{
+	int ret;
+
+	ret = ida_alloc_max(&misc_minors_ida, DYNAMIC_MINORS - 1, GFP_KERNEL);
+	if (ret >= 0) {
+		ret = DYNAMIC_MINORS - ret - 1;
+	} else {
+		ret = ida_alloc_range(&misc_minors_ida, MISC_DYNAMIC_MINOR + 1,
+				      MINORMASK, GFP_KERNEL);
+	}
+	return ret;
+}
+
+static void misc_minor_free(int minor)
+{
+	if (minor < DYNAMIC_MINORS)
+		ida_free(&misc_minors_ida, DYNAMIC_MINORS - minor - 1);
+	else if (minor > MISC_DYNAMIC_MINOR)
+		ida_free(&misc_minors_ida, minor);
+}
 
 #ifdef CONFIG_PROC_FS
 static void *misc_seq_start(struct seq_file *seq, loff_t *pos)
@@ -192,18 +214,16 @@ int misc_register(struct miscdevice *misc)
 	mutex_lock(&misc_mtx);
 
 	if (is_dynamic) {
-	    //为动态minor分配一个编号
-		int i = find_first_zero_bit(misc_minors, DYNAMIC_MINORS);
+	    	//为动态minor分配一个编号
+		int i = misc_minor_alloc();
 
-		if (i >= DYNAMIC_MINORS) {
-		    //查找不到时，返回最大值
+		if (i < 0) {
+		    	//查找不到时，返回最大值
 			err = -EBUSY;
 			goto out;
 		}
-
 		//自最后一个位置开始分配，方便bitmap的查询更快速（起始情况下时）
-		misc->minor = DYNAMIC_MINORS - i - 1;
-		set_bit(i, misc_minors);
+		misc->minor = i;
 	} else {
 	    //指定了minor，故先检查是否此minor是否已分配
 		struct miscdevice *c;
@@ -224,10 +244,7 @@ int misc_register(struct miscdevice *misc)
 	if (IS_ERR(misc->this_device)) {
 	    //注册失败，回退动态minor占用的那个编号
 		if (is_dynamic) {
-			int i = DYNAMIC_MINORS - misc->minor - 1;
-
-			if (i < DYNAMIC_MINORS && i >= 0)
-				clear_bit(i, misc_minors);
+			misc_minor_free(misc->minor);
 			misc->minor = MISC_DYNAMIC_MINOR;
 		}
 		err = PTR_ERR(misc->this_device);
@@ -255,8 +272,6 @@ EXPORT_SYMBOL(misc_register);
 //解注册misc类设备
 void misc_deregister(struct miscdevice *misc)
 {
-	int i = DYNAMIC_MINORS - misc->minor - 1;
-
 	//检查是否已被解注册
 	if (WARN_ON(list_empty(&misc->list)))
 		return;
@@ -264,15 +279,14 @@ void misc_deregister(struct miscdevice *misc)
 	mutex_lock(&misc_mtx);
 	list_del(&misc->list);/*移除注册*/
 	device_destroy(misc_class, MKDEV(MISC_MAJOR, misc->minor));
-	if (i < DYNAMIC_MINORS && i >= 0)
-		clear_bit(i, misc_minors);
+	misc_minor_free(misc->minor);
 	mutex_unlock(&misc_mtx);
 }
 EXPORT_SYMBOL(misc_deregister);
 
-static char *misc_devnode(struct device *dev, umode_t *mode)
+static char *misc_devnode(const struct device *dev, umode_t *mode)
 {
-	struct miscdevice *c = dev_get_drvdata(dev);
+	const struct miscdevice *c = dev_get_drvdata(dev);
 
 	if (mode && c->mode)
 		*mode = c->mode;

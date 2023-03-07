@@ -14,8 +14,8 @@
 #include "tracing_path.h"
 
 static char tracing_mnt[PATH_MAX]  = "/sys/kernel/debug";
-static char tracing_path[PATH_MAX]        = "/sys/kernel/debug/tracing";
-static char tracing_events_path[PATH_MAX] = "/sys/kernel/debug/tracing/events";
+static char tracing_path[PATH_MAX]        = "/sys/kernel/tracing";
+static char tracing_events_path[PATH_MAX] = "/sys/kernel/tracing/events";
 
 /*设置这些全局变量*/
 static void __tracing_path_set(const char *tracing, const char *mountpoint)
@@ -121,6 +121,23 @@ DIR *tracing_events__opendir(void)
 	}
 
 	return dir;
+}
+
+int tracing_events__scandir_alphasort(struct dirent ***namelist)
+{
+	/*打开并返回events目录*/
+	char *path = get_tracing_file("events");
+	int ret;
+
+	if (!path) {
+		*namelist = NULL;
+		return 0;
+	}
+
+	ret = scandir(path, namelist, NULL, alphasort);
+	put_events_file(path);
+
+	return ret;
 }
 
 int tracing_path__strerror_open_tp(int err, char *buf, size_t size,

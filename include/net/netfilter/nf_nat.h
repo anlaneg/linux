@@ -105,6 +105,10 @@ unsigned int
 nf_nat_inet_fn(void *priv, struct sk_buff *skb,
 	       const struct nf_hook_state *state);
 
+int nf_ct_nat(struct sk_buff *skb, struct nf_conn *ct,
+	      enum ip_conntrack_info ctinfo, int *action,
+	      const struct nf_nat_range2 *range, bool commit);
+
 //检查ct上是否已完成snat或dnat初始化
 static inline int nf_nat_initialized(const struct nf_conn *ct,
 				     enum nf_nat_manip_type manip)

@@ -1018,7 +1018,7 @@ ip_vs_prepare_tunneled_skb(struct sk_buff *skb, int skb_af,
 		//取隧道封装后的ttl
 		*ttl = old_iph->ttl;
 		if (payload_len)
-			*payload_len = ntohs(old_iph->tot_len);
+			*payload_len = skb_ip_totlen(skb);
 	}
 
 	/* Implement full-functionality option for ECN encapsulation */

@@ -5,7 +5,7 @@
 extern const struct dma_map_ops *dma_ops;
 
 //直接返回dma_ops变量(例如x86下pci-dma.c)
-static inline const struct dma_map_ops *get_arch_dma_ops(struct bus_type *bus)
+static inline const struct dma_map_ops *get_arch_dma_ops(void)
 {
 	return dma_ops;
 }

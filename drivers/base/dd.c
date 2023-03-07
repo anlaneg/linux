@@ -257,12 +257,10 @@ static int deferred_devs_show(struct seq_file *s, void *data)
 DEFINE_SHOW_ATTRIBUTE(deferred_devs);
 
 #ifdef CONFIG_MODULES
-int driver_deferred_probe_timeout = 10;
+static int driver_deferred_probe_timeout = 10;
 #else
-int driver_deferred_probe_timeout;
+static int driver_deferred_probe_timeout;
 #endif
-
-EXPORT_SYMBOL_GPL(driver_deferred_probe_timeout);
 
 static int __init deferred_probe_timeout_setup(char *str)
 {
@@ -372,7 +370,7 @@ late_initcall(deferred_probe_initcall);
 
 static void __exit deferred_probe_exit(void)
 {
-	debugfs_remove_recursive(debugfs_lookup("devices_deferred", NULL));
+	debugfs_lookup_and_remove("devices_deferred", NULL);
 }
 __exitcall(deferred_probe_exit);
 
@@ -416,11 +414,8 @@ static void driver_bound(struct device *dev)
 	driver_deferred_probe_del(dev);
 	driver_deferred_probe_trigger();
 
-	if (dev->bus)
         //知会dev已完成绑定
-		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-					     BUS_NOTIFY_BOUND_DRIVER, dev);
-
+	bus_notify(dev, BUS_NOTIFY_BOUND_DRIVER);
 	kobject_uevent(&dev->kobj, KOBJ_BIND);
 }
 
@@ -439,10 +434,8 @@ static int driver_sysfs_add(struct device *dev)
 {
 	int ret;
 
-	if (dev->bus)
-		//触发通知
-		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-					     BUS_NOTIFY_BIND_DRIVER, dev);
+	//触发通知
+	bus_notify(dev, BUS_NOTIFY_BIND_DRIVER);
 
 	//创建设备到driver的链接
 	ret = sysfs_create_link(&dev->driver->p->kobj, &dev->kobj,
@@ -508,9 +501,8 @@ int device_bind_driver(struct device *dev)
 		device_links_force_bind(dev);
 		driver_bound(dev);
 	}
-	else if (dev->bus)
-		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-					     BUS_NOTIFY_DRIVER_NOT_BOUND, dev);
+	else
+		bus_notify(dev, BUS_NOTIFY_DRIVER_NOT_BOUND);
 	return ret;
 }
 EXPORT_SYMBOL_GPL(device_bind_driver);
@@ -705,10 +697,8 @@ dev_groups_failed:
 probe_failed:
 	driver_sysfs_remove(dev);
 sysfs_failed:
-	if (dev->bus)
-		//probe失败，通知未绑定成功事件
-		blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-					     BUS_NOTIFY_DRIVER_NOT_BOUND, dev);
+	//probe失败，通知未绑定成功事件
+	bus_notify(dev, BUS_NOTIFY_DRIVER_NOT_BOUND);
 	if (dev->bus && dev->bus->dma_cleanup)
 		dev->bus->dma_cleanup(dev);
 pinctrl_bind_failed:
@@ -857,7 +847,7 @@ static int __init save_async_options(char *buf)
 __setup("driver_async_probe=", save_async_options);
 
 //由dirver的probe_type来决定是否采用async方式来probe
-bool driver_allows_async_probing(struct device_driver *drv)
+static bool driver_allows_async_probing(struct device_driver *drv)
 {
 	switch (drv->probe_type) {
 	case PROBE_PREFER_ASYNCHRONOUS:
@@ -1199,7 +1189,11 @@ static int __driver_attach(struct device *dev, void *data)
 	} else if (ret < 0) {
 		//匹配时失败
 		dev_dbg(dev, "Bus failed to match device: %d\n", ret);
-		return ret;
+		/*
+		 * Driver could not match with device, but may match with
+		 * another device on the bus.
+		 */
+		return 0;
 	} /* ret > 0 means positive match */
 
 	if (driver_allows_async_probing(drv)) {
@@ -1278,10 +1272,7 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 
 		driver_sysfs_remove(dev);
 
-		if (dev->bus)
-			blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-						     BUS_NOTIFY_UNBIND_DRIVER,
-						     dev);
+		bus_notify(dev, BUS_NOTIFY_UNBIND_DRIVER);
 
 		pm_runtime_put_sync(dev);
 
@@ -1295,11 +1286,8 @@ static void __device_release_driver(struct device *dev, struct device *parent)
 
 		klist_remove(&dev->p->knode_driver);
 		device_pm_check_callbacks(dev);
-		if (dev->bus)
-			blocking_notifier_call_chain(&dev->bus->p->bus_notifier,
-						     BUS_NOTIFY_UNBOUND_DRIVER,
-						     dev);
 
+		bus_notify(dev, BUS_NOTIFY_UNBOUND_DRIVER);
 		kobject_uevent(&dev->kobj, KOBJ_UNBIND);
 	}
 }

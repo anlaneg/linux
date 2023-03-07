@@ -16,6 +16,7 @@
 #include <net/pkt_sched.h>
 #include <net/dst.h>
 #include <net/pkt_cls.h>
+#include <net/tc_wrapper.h>
 
 #include <linux/tc_act/tc_tunnel_key.h>
 #include <net/tc_act/tc_tunnel_key.h>
@@ -23,8 +24,9 @@
 static struct tc_action_ops act_tunnel_key_ops;
 
 //隧道参数添加，或者隧道参数丢弃
-static int tunnel_key_act(struct sk_buff *skb, const struct tc_action *a,
-			  struct tcf_result *res)
+TC_INDIRECT_SCOPE int tunnel_key_act(struct sk_buff *skb,
+				     const struct tc_action *a,
+				     struct tcf_result *res)
 {
 	struct tcf_tunnel_key *t = to_tunnel_key(a);
 	struct tcf_tunnel_key_params *params;

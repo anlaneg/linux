@@ -136,10 +136,10 @@ static void gnet_stats_add_basic_cpu(struct gnet_stats_basic_sync *bstats,
 		u64 bytes, packets;
 
 		do {
-			start = u64_stats_fetch_begin_irq(&bcpu->syncp);
+			start = u64_stats_fetch_begin(&bcpu->syncp);
 			bytes = u64_stats_read(&bcpu->bytes);
 			packets = u64_stats_read(&bcpu->packets);
-		} while (u64_stats_fetch_retry_irq(&bcpu->syncp, start));
+		} while (u64_stats_fetch_retry(&bcpu->syncp, start));
 
 		t_bytes += bytes;
 		t_packets += packets;
@@ -163,10 +163,10 @@ void gnet_stats_add_basic(struct gnet_stats_basic_sync *bstats,
 	}
 	do {
 		if (running)
-			start = u64_stats_fetch_begin_irq(&b->syncp);
+			start = u64_stats_fetch_begin(&b->syncp);
 		bytes = u64_stats_read(&b->bytes);
 		packets = u64_stats_read(&b->packets);
-	} while (running && u64_stats_fetch_retry_irq(&b->syncp, start));
+	} while (running && u64_stats_fetch_retry(&b->syncp, start));
 
 	_bstats_update(bstats, bytes, packets);
 }
@@ -188,10 +188,10 @@ static void gnet_stats_read_basic(u64 *ret_bytes, u64 *ret_packets,
 			u64 bytes, packets;
 
 			do {
-				start = u64_stats_fetch_begin_irq(&bcpu->syncp);
+				start = u64_stats_fetch_begin(&bcpu->syncp);
 				bytes = u64_stats_read(&bcpu->bytes);
 				packets = u64_stats_read(&bcpu->packets);
-			} while (u64_stats_fetch_retry_irq(&bcpu->syncp, start));
+			} while (u64_stats_fetch_retry(&bcpu->syncp, start));
 
 			t_bytes += bytes;
 			t_packets += packets;
@@ -202,10 +202,10 @@ static void gnet_stats_read_basic(u64 *ret_bytes, u64 *ret_packets,
 	}
 	do {
 		if (running)
-			start = u64_stats_fetch_begin_irq(&b->syncp);
+			start = u64_stats_fetch_begin(&b->syncp);
 		*ret_bytes = u64_stats_read(&b->bytes);
 		*ret_packets = u64_stats_read(&b->packets);
-	} while (running && u64_stats_fetch_retry_irq(&b->syncp, start));
+	} while (running && u64_stats_fetch_retry(&b->syncp, start));
 }
 
 static int

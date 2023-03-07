@@ -557,7 +557,7 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 		goto csum_error;
 
 	//ip层总长度
-	len = ntohs(iph->tot_len);
+	len = iph_totlen(skb, iph);
 	if (skb->len < len) {
 		drop_reason = SKB_DROP_REASON_PKT_TOO_SMALL;
 		//待分析的报文长度小于len,报文格式有误

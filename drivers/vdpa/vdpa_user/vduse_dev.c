@@ -1453,6 +1453,9 @@ static bool vduse_validate_config(struct vduse_dev_config *config)
 	if (config->config_size > PAGE_SIZE)
 		return false;
 
+	if (config->vq_num > 0xffff)
+		return false;
+
 	/*是否容许的device id*/
 	if (!device_is_allowed(config->device_id))
 		return false;
@@ -1685,7 +1688,7 @@ static const struct file_operations vduse_ctrl_fops = {
 };
 
 /*设备在vduse下的节点名称*/
-static char *vduse_devnode(struct device *dev, umode_t *mode)
+static char *vduse_devnode(const struct device *dev, umode_t *mode)
 {
 	return kasprintf(GFP_KERNEL, "vduse/%s", dev_name(dev));
 }

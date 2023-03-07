@@ -32,6 +32,7 @@
 
 #include <linux/tc_act/tc_csum.h>
 #include <net/tc_act/tc_csum.h>
+#include <net/tc_wrapper.h>
 
 static const struct nla_policy csum_policy[TCA_CSUM_MAX + 1] = {
 	[TCA_CSUM_PARMS] = { .len = sizeof(struct tc_csum), },
@@ -578,8 +579,9 @@ fail:
 }
 
 //完成check sum更新
-static int tcf_csum_act(struct sk_buff *skb, const struct tc_action *a,
-			struct tcf_result *res)
+TC_INDIRECT_SCOPE int tcf_csum_act(struct sk_buff *skb,
+				   const struct tc_action *a,
+				   struct tcf_result *res)
 {
 	struct tcf_csum *p = to_tcf_csum(a);
 	bool orig_vlan_tag_present = false;

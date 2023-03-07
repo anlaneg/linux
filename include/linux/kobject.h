@@ -118,10 +118,10 @@ extern struct kobject * __must_check kobject_get_unless_zero(
 						struct kobject *kobj);
 extern void kobject_put(struct kobject *kobj);
 
-extern const void *kobject_namespace(struct kobject *kobj);
-extern void kobject_get_ownership(struct kobject *kobj,
+extern const void *kobject_namespace(const struct kobject *kobj);
+extern void kobject_get_ownership(const struct kobject *kobj,
 				  kuid_t *uid, kgid_t *gid);
-extern char *kobject_get_path(struct kobject *kobj, gfp_t flag);
+extern char *kobject_get_path(const struct kobject *kobj, gfp_t flag);
 
 //定义kobj的类型
 struct kobj_type {
@@ -130,11 +130,10 @@ struct kobj_type {
 	const struct sysfs_ops *sysfs_ops;
 	//所有默认group(会被处理成目录及子文件）
 	const struct attribute_group **default_groups;
-	//
-	const struct kobj_ns_type_operations *(*child_ns_type)(struct kobject *kobj);
-	const void *(*namespace)(struct kobject *kobj);
+	const struct kobj_ns_type_operations *(*child_ns_type)(const struct kobject *kobj);
+	const void *(*namespace)(const struct kobject *kobj);
 	//获取kobj对应uid,gid
-	void (*get_ownership)(struct kobject *kobj, kuid_t *uid, kgid_t *gid);
+	void (*get_ownership)(const struct kobject *kobj, kuid_t *uid, kgid_t *gid);
 };
 
 struct kobj_uevent_env {
@@ -148,11 +147,11 @@ struct kobj_uevent_env {
 
 struct kset_uevent_ops {
 	//检查kobj对应的event是否可以不向userspace通告（返回0，不通告）
-	int (* const filter)(struct kobject *kobj);
+	int (* const filter)(const struct kobject *kobj);
 	//返回kobject对应的subsystem
-	const char *(* const name)(struct kobject *kobj);
+	const char *(* const name)(const struct kobject *kobj);
 	//返回kobject特别需要的env添加
-	int (* const uevent)(struct kobject *kobj, struct kobj_uevent_env *env);
+	int (* const uevent)(const struct kobject *kobj, struct kobj_uevent_env *env);
 };
 
 struct kobj_attribute {
@@ -217,7 +216,7 @@ static inline void kset_put(struct kset *k)
 }
 
 //kobj对应的类别（一组kobj具有相同的type)
-static inline const struct kobj_type *get_ktype(struct kobject *kobj)
+static inline const struct kobj_type *get_ktype(const struct kobject *kobj)
 {
 	return kobj->ktype;
 }

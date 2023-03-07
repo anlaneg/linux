@@ -62,7 +62,10 @@ struct buffer_head {
 	unsigned long b_state;		/* buffer state bitmap (see above) */
 	/*指向下一个buffer_head(循环链）*/
 	struct buffer_head *b_this_page;/* circular list of page's buffers */
-	struct page *b_page;		/* the page this bh is mapped to */
+	union {
+		struct page *b_page;	/* the page this bh is mapped to */
+		struct folio *b_folio;	/* the folio this bh is mapped to */
+	};
 
 	/*对应的block编号*/
 	sector_t b_blocknr;		/* start block number */

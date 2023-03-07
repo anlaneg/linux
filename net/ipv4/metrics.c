@@ -1,5 +1,6 @@
 // SPDX-License-Identifier: GPL-2.0-only
 #include <linux/netlink.h>
+#include <linux/nospec.h>
 #include <linux/rtnetlink.h>
 #include <linux/types.h>
 #include <net/ip.h>
@@ -15,9 +16,6 @@ static int ip_metrics_convert(struct net *net, struct nlattr *fc_mx,
 	struct nlattr *nla;
 	int remaining;
 
-	if (!fc_mx)
-		return 0;
-
 	nla_for_each_attr(nla, fc_mx, fc_mx_len, remaining) {
 		int type = nla_type(nla);
 		u32 val;
@@ -30,6 +28,7 @@ static int ip_metrics_convert(struct net *net, struct nlattr *fc_mx,
 			return -EINVAL;
 		}
 
+		type = array_index_nospec(type, RTAX_MAX + 1);
 		if (type == RTAX_CC_ALGO) {
 		    /*处理拥塞算法，其为字符串，长度非u32*/
 			char tmp[TCP_CA_NAME_MAX];

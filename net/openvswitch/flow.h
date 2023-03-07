@@ -240,7 +240,7 @@ struct sw_flow {
 					 */
 	struct sw_flow_key key;
 	struct sw_flow_id id;
-	struct cpumask cpu_used_mask;
+	struct cpumask *cpu_used_mask;
 	struct sw_flow_mask *mask;
 	struct sw_flow_actions __rcu *sf_acts;/*flow对应的action*/
 	struct sw_flow_stats __rcu *stats[]; /* One for each CPU.  First one

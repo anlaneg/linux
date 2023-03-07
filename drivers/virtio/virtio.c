@@ -18,7 +18,7 @@ static ssize_t device_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
-	return sprintf(buf, "0x%04x\n", dev->id.device);
+	return sysfs_emit(buf, "0x%04x\n", dev->id.device);
 }
 
 //定义变量指出采用device_show回调（定义device属性）
@@ -29,7 +29,7 @@ static ssize_t vendor_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
-	return sprintf(buf, "0x%04x\n", dev->id.vendor);
+	return sysfs_emit(buf, "0x%04x\n", dev->id.vendor);
 }
 static DEVICE_ATTR_RO(vendor);//定义vendor属性
 
@@ -38,7 +38,7 @@ static ssize_t status_show(struct device *_d,
 			   struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
-	return sprintf(buf, "0x%08x\n", dev->config->get_status(dev));
+	return sysfs_emit(buf, "0x%08x\n", dev->config->get_status(dev));
 }
 static DEVICE_ATTR_RO(status);//定义status属性
 
@@ -48,7 +48,7 @@ static ssize_t modalias_show(struct device *_d,
 			     struct device_attribute *attr, char *buf)
 {
 	struct virtio_device *dev = dev_to_virtio(_d);
-	return sprintf(buf, "virtio:d%08Xv%08X\n",
+	return sysfs_emit(buf, "virtio:d%08Xv%08X\n",
 		       dev->id.device, dev->id.vendor);
 }
 static DEVICE_ATTR_RO(modalias);//模块别名
@@ -66,9 +66,9 @@ static ssize_t features_show(struct device *_d,
 	 * arbitrary length in future. */
 	//遍历所有features位，列出当前支持的features
 	for (i = 0; i < sizeof(dev->features)*8; i++)
-		len += sprintf(buf+len, "%c",
+		len += sysfs_emit_at(buf, len, "%c",
 			       __virtio_test_bit(dev, i) ? '1' : '0');
-	len += sprintf(buf+len, "\n");
+	len += sysfs_emit_at(buf, len, "\n");
 	return len;
 }
 static DEVICE_ATTR_RO(features);//功能属性
@@ -113,9 +113,9 @@ static int virtio_dev_match(struct device *_dv, struct device_driver *_dr)
 }
 
 //virtio添加的uevent环境变量
-static int virtio_uevent(struct device *_dv, struct kobj_uevent_env *env)
+static int virtio_uevent(const struct device *_dv, struct kobj_uevent_env *env)
 {
-	struct virtio_device *dev = dev_to_virtio(_dv);
+	const struct virtio_device *dev = dev_to_virtio(_dv);
 
 	//添加设备模块别名
 	return add_uevent_var(env, "MODALIAS=virtio:d%08Xv%08X",

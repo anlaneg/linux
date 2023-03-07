@@ -391,7 +391,7 @@ static ssize_t new_sync_read(struct file *filp/*要读取的文件*/, char __use
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
 	/*初始化iter迭代器*/
-	iov_iter_ubuf(&iter, READ, buf, len);
+	iov_iter_ubuf(&iter, ITER_DEST, buf, len);
 
 	/*调用此文件的read_iter回调*/
 	ret = call_read_iter(filp, &kiocb, &iter);
@@ -434,7 +434,7 @@ ssize_t __kernel_read(struct file *file, void *buf, size_t count, loff_t *pos)
 
 	init_sync_kiocb(&kiocb, file);
 	kiocb.ki_pos = pos ? *pos : 0;
-	iov_iter_kvec(&iter, READ, &iov, 1, iov.iov_len);
+	iov_iter_kvec(&iter, ITER_DEST, &iov, 1, iov.iov_len);
 	ret = file->f_op->read_iter(&kiocb, &iter);
 	if (ret > 0) {
 		if (pos)
@@ -505,7 +505,7 @@ static ssize_t new_sync_write(struct file *filp/*要写入的文件*/, const cha
 
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_ubuf(&iter, WRITE, (void __user *)buf, len);
+	iov_iter_ubuf(&iter, ITER_SOURCE, (void __user *)buf, len);
 
 	ret = call_write_iter(filp, &kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
@@ -552,7 +552,7 @@ ssize_t __kernel_write(struct file *file, const void *buf, size_t count, loff_t 
 		.iov_len	= min_t(size_t, count, MAX_RW_COUNT),
 	};
 	struct iov_iter iter;
-	iov_iter_kvec(&iter, WRITE, &iov, 1, iov.iov_len);
+	iov_iter_kvec(&iter, ITER_SOURCE, &iov, 1, iov.iov_len);
 	return __kernel_write_iter(file, &iter, pos);
 }
 /*
@@ -943,7 +943,7 @@ static ssize_t vfs_readv(struct file *file, const struct iovec __user *vec,
 	struct iov_iter iter;
 	ssize_t ret;
 
-	ret = import_iovec(READ, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
+	ret = import_iovec(ITER_DEST, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
 	if (ret >= 0) {
 		ret = do_iter_read(file, &iter, pos, flags);
 		kfree(iov);
@@ -960,7 +960,7 @@ static ssize_t vfs_writev(struct file *file, const struct iovec __user *vec,
 	struct iov_iter iter;
 	ssize_t ret;
 
-	ret = import_iovec(WRITE, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
+	ret = import_iovec(ITER_SOURCE, vec, vlen, ARRAY_SIZE(iovstack), &iov, &iter);
 	if (ret >= 0) {
 		file_start_write(file);
 		ret = do_iter_write(file, &iter, pos, flags);

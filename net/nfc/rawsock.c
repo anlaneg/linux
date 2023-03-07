@@ -12,6 +12,7 @@
 #include <net/tcp_states.h>
 #include <linux/nfc.h>
 #include <linux/export.h>
+#include <linux/kcov.h>
 
 #include "nfc.h"
 
@@ -211,6 +212,7 @@ static void rawsock_tx_work(struct work_struct *work)
 
 	/*自写队列中提取一个skb*/
 	skb = skb_dequeue(&sk->sk_write_queue);
+	kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 	sock_hold(sk);
 	/*交付给驱动，完成数据交换*/
@@ -221,6 +223,7 @@ static void rawsock_tx_work(struct work_struct *work)
 		rawsock_report_error(sk, rc);
 		sock_put(sk);
 	}
+	kcov_remote_stop();
 }
 
 static int rawsock_sendmsg(struct socket *sock, struct msghdr *msg, size_t len)

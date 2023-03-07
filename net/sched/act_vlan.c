@@ -12,6 +12,7 @@
 #include <net/netlink.h>
 #include <net/pkt_sched.h>
 #include <net/pkt_cls.h>
+#include <net/tc_wrapper.h>
 
 #include <linux/tc_act/tc_vlan.h>
 #include <net/tc_act/tc_vlan.h>
@@ -19,8 +20,9 @@
 static struct tc_action_ops act_vlan_ops;
 
 //vlan pop,vlan push处理过程
-static int tcf_vlan_act(struct sk_buff *skb, const struct tc_action *a,
-			struct tcf_result *res)
+TC_INDIRECT_SCOPE int tcf_vlan_act(struct sk_buff *skb,
+				   const struct tc_action *a,
+				   struct tcf_result *res)
 {
 	struct tcf_vlan *v = to_vlan(a);
 	struct tcf_vlan_params *p;

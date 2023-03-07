@@ -170,9 +170,6 @@ typedef struct page *pgtable_t;
 #define ARCH_PFN_OFFSET		(PFN_START)
 //取地址kaddr对应的页号
 #define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
-#ifdef CONFIG_FLATMEM
-#define pfn_valid(pfn)		((pfn) >= min_low_pfn && (pfn) < max_low_pfn)
-#endif
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
 
 #include <asm-generic/memory_model.h>

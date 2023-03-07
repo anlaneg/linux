@@ -234,7 +234,7 @@ void minix_free_inode(struct inode * inode)
 	mark_buffer_dirty(bh);
 }
 
-struct inode *minix_new_inode(const struct inode *dir, umode_t mode, int *error)
+struct inode *minix_new_inode(const struct inode *dir, umode_t mode)
 {
 	struct super_block *sb = dir->i_sb;
 	struct minix_sb_info *sbi = minix_sb(sb);
@@ -246,14 +246,11 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode, int *error)
 	unsigned long j;
 	int i;
 
-	if (!inode) {
-	    /*申请inode失败*/
-		*error = -ENOMEM;
-		return NULL;
-	}
+	if (!inode)
+	    	/*申请inode失败*/
+		return ERR_PTR(-ENOMEM);
 	j = bits_per_zone;
 	bh = NULL;
-	*error = -ENOSPC;
 	spin_lock(&bitmap_lock);
 	/*查找空闲的inode编号*/
 	for (i = 0; i < sbi->s_imap_blocks; i++) {
@@ -268,7 +265,7 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode, int *error)
 	    /*没有找到空闲的bit*/
 		spin_unlock(&bitmap_lock);
 		iput(inode);
-		return NULL;
+		return ERR_PTR(-ENOSPC);
 	}
 
 	/*占用此bit*/
@@ -276,16 +273,16 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode, int *error)
 		spin_unlock(&bitmap_lock);
 		printk("minix_new_inode: bit already set\n");
 		iput(inode);
-		return NULL;
+		return ERR_PTR(-ENOSPC);
 	}
 	spin_unlock(&bitmap_lock);
 	mark_buffer_dirty(bh);/*此buffer已被更改，置dirty*/
 	j += i * bits_per_zone;/*更新j到逻辑位置*/
 	if (!j || j > sbi->s_ninodes) {
 		iput(inode);
-		return NULL;
+		return ERR_PTR(-ENOSPC);
 	}
-	inode_init_owner(&init_user_ns, inode, dir, mode);
+	inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 	inode->i_ino = j;/*指明inode编号*/
 	/*更新inode修改时间，访问时间，更新时间*/
 	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
@@ -294,7 +291,6 @@ struct inode *minix_new_inode(const struct inode *dir, umode_t mode, int *error)
 	insert_inode_hash(inode);
 	mark_inode_dirty(inode);
 
-	*error = 0;
 	return inode;
 }
 

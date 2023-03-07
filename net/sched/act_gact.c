@@ -18,6 +18,7 @@
 #include <net/pkt_cls.h>
 #include <linux/tc_act/tc_gact.h>
 #include <net/tc_act/tc_gact.h>
+#include <net/tc_wrapper.h>
 
 static struct tc_action_ops act_gact_ops;
 
@@ -25,7 +26,7 @@ static struct tc_action_ops act_gact_ops;
 static int gact_net_rand(struct tcf_gact *gact)
 {
 	smp_rmb(); /* coupled with smp_wmb() in tcf_gact_init() */
-	if (prandom_u32_max(gact->tcfg_pval))
+	if (get_random_u32_below(gact->tcfg_pval))
 		/*随机值余非0时返回此action*/
 		return gact->tcf_action;
 	/*随机值余0时返回此action*/
@@ -154,8 +155,9 @@ release_idr:
 }
 
 //返回goto chain
-static int tcf_gact_act(struct sk_buff *skb, const struct tc_action *a,
-			struct tcf_result *res)
+TC_INDIRECT_SCOPE int tcf_gact_act(struct sk_buff *skb,
+				   const struct tc_action *a,
+				   struct tcf_result *res)
 {
 	struct tcf_gact *gact = to_gact(a);
 	/*默认返回此action*/

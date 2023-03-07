@@ -27,16 +27,16 @@ static const struct rxe_type_info {
 		.size		= sizeof(struct rxe_ucontext),
 		.elem_offset	= offsetof(struct rxe_ucontext, elem),
 		.min_index	= 1,
-		.max_index	= UINT_MAX,
-		.max_elem	= UINT_MAX,
+		.max_index	= RXE_MAX_UCONTEXT,
+		.max_elem	= RXE_MAX_UCONTEXT,
 	},
 	[RXE_TYPE_PD] = {
 		.name		= "pd",
 		.size		= sizeof(struct rxe_pd),
 		.elem_offset	= offsetof(struct rxe_pd, elem),
 		.min_index	= 1,
-		.max_index	= UINT_MAX,
-		.max_elem	= UINT_MAX,
+		.max_index	= RXE_MAX_PD,
+		.max_elem	= RXE_MAX_PD,
 	},
 	[RXE_TYPE_AH] = {
 		.name		= "ah",
@@ -44,7 +44,7 @@ static const struct rxe_type_info {
 		.elem_offset	= offsetof(struct rxe_ah, elem),
 		.min_index	= RXE_MIN_AH_INDEX,
 		.max_index	= RXE_MAX_AH_INDEX,
-		.max_elem	= RXE_MAX_AH_INDEX - RXE_MIN_AH_INDEX + 1,
+		.max_elem	= RXE_MAX_AH,
 	},
 	[RXE_TYPE_SRQ] = {
 		.name		= "srq",
@@ -53,7 +53,7 @@ static const struct rxe_type_info {
 		.cleanup	= rxe_srq_cleanup,
 		.min_index	= RXE_MIN_SRQ_INDEX,
 		.max_index	= RXE_MAX_SRQ_INDEX,
-		.max_elem	= RXE_MAX_SRQ_INDEX - RXE_MIN_SRQ_INDEX + 1,
+		.max_elem	= RXE_MAX_SRQ,
 	},
 	[RXE_TYPE_QP] = {
 		.name		= "qp",
@@ -62,7 +62,7 @@ static const struct rxe_type_info {
 		.cleanup	= rxe_qp_cleanup,
 		.min_index	= RXE_MIN_QP_INDEX,
 		.max_index	= RXE_MAX_QP_INDEX,
-		.max_elem	= RXE_MAX_QP_INDEX - RXE_MIN_QP_INDEX + 1,
+		.max_elem	= RXE_MAX_QP,
 	},
 	[RXE_TYPE_CQ] = {
 		.name		= "cq",
@@ -70,8 +70,8 @@ static const struct rxe_type_info {
 		.elem_offset	= offsetof(struct rxe_cq, elem),
 		.cleanup	= rxe_cq_cleanup,
 		.min_index	= 1,
-		.max_index	= UINT_MAX,
-		.max_elem	= UINT_MAX,
+		.max_index	= RXE_MAX_CQ,
+		.max_elem	= RXE_MAX_CQ,
 	},
 	[RXE_TYPE_MR] = {
 		.name		= "mr",
@@ -80,7 +80,7 @@ static const struct rxe_type_info {
 		.cleanup	= rxe_mr_cleanup,
 		.min_index	= RXE_MIN_MR_INDEX,
 		.max_index	= RXE_MAX_MR_INDEX,
-		.max_elem	= RXE_MAX_MR_INDEX - RXE_MIN_MR_INDEX + 1,
+		.max_elem	= RXE_MAX_MR,
 	},
 	[RXE_TYPE_MW] = {
 		.name		= "mw",
@@ -89,7 +89,7 @@ static const struct rxe_type_info {
 		.cleanup	= rxe_mw_cleanup,
 		.min_index	= RXE_MIN_MW_INDEX,
 		.max_index	= RXE_MAX_MW_INDEX,
-		.max_elem	= RXE_MAX_MW_INDEX - RXE_MIN_MW_INDEX + 1,
+		.max_elem	= RXE_MAX_MW,
 	},
 };
 
@@ -121,56 +121,12 @@ void rxe_pool_cleanup(struct rxe_pool *pool)
 	WARN_ON(!xa_empty(&pool->xa));
 }
 
-/*自pool中申请一个对象*/
-void *rxe_alloc(struct rxe_pool *pool)
-{
-	struct rxe_pool_elem *elem;
-	void *obj;
-	int err;
-
-	if (WARN_ON(!(pool->type == RXE_TYPE_MR)))
-		return NULL;
-
-	if (atomic_inc_return(&pool->num_elem) > pool->max_elem)
-		goto err_cnt;
-
-	obj = kzalloc(pool->elem_size, GFP_KERNEL);
-	if (!obj)
-		goto err_cnt;
-
-	elem = (struct rxe_pool_elem *)((u8 *)obj + pool->elem_offset);
-
-	elem->pool = pool;
-	elem->obj = obj;
-	kref_init(&elem->ref_cnt);
-	init_completion(&elem->complete);
-
-	/* allocate index in array but leave pointer as NULL so it
-	 * can't be looked up until rxe_finalize() is called
-	 */
-	err = xa_alloc_cyclic(&pool->xa, &elem->index, NULL, pool->limit,
-			      &pool->next, GFP_KERNEL);
-	if (err < 0)
-		goto err_free;
-
-	return obj;
-
-err_free:
-	kfree(obj);
-err_cnt:
-	atomic_dec(&pool->num_elem);
-	return NULL;
-}
-
 /*初始化elem对应的pool*/
 int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_elem *elem,
 				bool sleepable)
 {
 	int err;
 	gfp_t gfp_flags;
-
-	if (WARN_ON(pool->type == RXE_TYPE_MR))
-		return -EINVAL;
 
 	if (atomic_inc_return(&pool->num_elem) > pool->max_elem)
 		goto err_cnt;
@@ -281,9 +237,6 @@ int __rxe_cleanup(struct rxe_pool_elem *elem, bool sleepable)
 
 	if (pool->cleanup)
 		pool->cleanup(elem);
-
-	if (pool->type == RXE_TYPE_MR)
-		kfree_rcu(elem->obj);
 
 	atomic_dec(&pool->num_elem);
 

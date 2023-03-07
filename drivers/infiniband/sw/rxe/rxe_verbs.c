@@ -186,10 +186,6 @@ static int rxe_create_ah(struct ib_ah *ibah,
 		ah->is_user = false;
 	}
 
-	err = rxe_av_chk_attr(rxe, init_attr->ah_attr);
-	if (err)
-		return err;
-
 	/*添加ah到ah_pool*/
 	err = rxe_add_to_pool_ah(&rxe->ah_pool, ah,
 			init_attr->flags & RDMA_CREATE_AH_SLEEPABLE);
@@ -198,6 +194,12 @@ static int rxe_create_ah(struct ib_ah *ibah,
 
 	/* create index > 0 */
 	ah->ah_num = ah->elem.index;
+
+	err = rxe_ah_chk_attr(ah, init_attr->ah_attr);
+	if (err) {
+		rxe_cleanup(ah);
+		return err;
+	}
 
 	if (uresp) {
 		/* only if new user provider */
@@ -221,10 +223,9 @@ static int rxe_create_ah(struct ib_ah *ibah,
 static int rxe_modify_ah(struct ib_ah *ibah, struct rdma_ah_attr *attr)
 {
 	int err;
-	struct rxe_dev *rxe = to_rdev(ibah->device);
 	struct rxe_ah *ah = to_rah(ibah);
 
-	err = rxe_av_chk_attr(rxe, attr);
+	err = rxe_ah_chk_attr(ah, attr);
 	if (err)
 		return err;
 
@@ -253,7 +254,6 @@ static int rxe_destroy_ah(struct ib_ah *ibah, u32 flags)
 
 static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 {
-	int err;
 	int i;
 	u32 length;
 	struct rxe_recv_wqe *recv_wqe;
@@ -261,17 +261,13 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	int full;
 
 	/*检查队列是否为满*/
-	full = queue_full(rq->queue, QUEUE_TYPE_TO_DRIVER);
-	if (unlikely(full)) {
-		err = -ENOMEM;
-		goto err1;
-	}
+	full = queue_full(rq->queue, QUEUE_TYPE_FROM_ULP);
+	if (unlikely(full))
+		return -ENOMEM;
 
 	/*num_sge过大，接收失败*/
-	if (unlikely(num_sge > rq->max_sge)) {
-		err = -EINVAL;
-		goto err1;
-	}
+	if (unlikely(num_sge > rq->max_sge))
+		return -EINVAL;
 
 	/*取接收buffer长度*/
 	length = 0;
@@ -279,7 +275,7 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 		length += ibwr->sg_list[i].length;
 
 	/*取recv wqe*/
-	recv_wqe = queue_producer_addr(rq->queue, QUEUE_TYPE_TO_DRIVER);
+	recv_wqe = queue_producer_addr(rq->queue, QUEUE_TYPE_FROM_ULP);
 	recv_wqe->wr_id = ibwr->wr_id;
 
 	/*复制ib_sge指针到ibwr->sg_list*/
@@ -293,12 +289,9 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 	recv_wqe->dma.sge_offset	= 0;
 
 	/*更新生产者指针*/
-	queue_advance_producer(rq->queue, QUEUE_TYPE_TO_DRIVER);
+	queue_advance_producer(rq->queue, QUEUE_TYPE_FROM_ULP);
 
 	return 0;
-
-err1:
-	return err;
 }
 
 /*创建srq*/
@@ -365,10 +358,7 @@ static int rxe_modify_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr,
 	if (err)
 		return err;
 
-	err = rxe_srq_from_attr(rxe, srq, attr, mask, &ucmd, udata);
-	if (err)
-		return err;
-	return 0;
+	return rxe_srq_from_attr(rxe, srq, attr, mask, &ucmd, udata);
 }
 
 static int rxe_query_srq(struct ib_srq *ibsrq, struct ib_srq_attr *attr)
@@ -482,11 +472,11 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 
 	err = rxe_qp_chk_attr(rxe, qp, attr, mask);
 	if (err)
-		goto err1;
+		return err;
 
 	err = rxe_qp_from_attr(qp, attr, mask, udata);
 	if (err)
-		goto err1;
+		return err;
 
 	if ((mask & IB_QP_AV) && (attr->ah_attr.ah_flags & IB_AH_GRH))
 		qp->src_port = rdma_get_udp_sport(attr->ah_attr.grh.flow_label,
@@ -494,9 +484,6 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 						  qp->attr.dest_qp_num);
 
 	return 0;
-
-err1:
-	return err;
 }
 
 /*查询qp*/
@@ -533,24 +520,21 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	struct rxe_sq *sq = &qp->sq;
 
 	if (unlikely(num_sge > sq->max_sge))
-		goto err1;
+		return -EINVAL;
 
 	if (unlikely(mask & WR_ATOMIC_MASK)) {
 		if (length < 8)
-			goto err1;
+			return -EINVAL;
 
 		if (atomic_wr(ibwr)->remote_addr & 0x7)
-			goto err1;
+			return -EINVAL;
 	}
 
 	if (unlikely((ibwr->send_flags & IB_SEND_INLINE) &&
 		     (length > sq->max_inline)))
-		goto err1;
+		return -EINVAL;
 
 	return 0;
-
-err1:
-	return -EINVAL;
 }
 
 static void init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
@@ -673,7 +657,7 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	spin_lock_irqsave(&qp->sq.sq_lock, flags);
 
 	/*检查队列是否已满*/
-	full = queue_full(sq->queue, QUEUE_TYPE_TO_DRIVER);
+	full = queue_full(sq->queue, QUEUE_TYPE_FROM_ULP);
 
 	if (unlikely(full)) {
 		spin_unlock_irqrestore(&qp->sq.sq_lock, flags);
@@ -681,12 +665,12 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	}
 
 	/*取生产者对应的wqe*/
-	send_wqe = queue_producer_addr(sq->queue, QUEUE_TYPE_TO_DRIVER);
+	send_wqe = queue_producer_addr(sq->queue, QUEUE_TYPE_FROM_ULP);
 	/*更新send_wqe*/
 	init_send_wqe(qp, ibwr, mask, length, send_wqe);
 
 	/*更新新产者指针*/
-	queue_advance_producer(sq->queue, QUEUE_TYPE_TO_DRIVER);
+	queue_advance_producer(sq->queue, QUEUE_TYPE_FROM_ULP);
 
 	spin_unlock_irqrestore(&qp->sq.sq_lock, flags);
 
@@ -736,9 +720,9 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 		wr = next;
 	}
 
-	rxe_run_task(&qp->req.task, 1);
+	rxe_sched_task(&qp->req.task);
 	if (unlikely(qp->req.state == QP_STATE_ERROR))
-		rxe_run_task(&qp->comp.task, 1);
+		rxe_sched_task(&qp->comp.task);
 
 	return err;
 }
@@ -761,7 +745,7 @@ static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 
 	if (qp->is_user) {
 		/* Utilize process context to do protocol processing */
-		rxe_run_task(&qp->req.task, 0);
+		rxe_run_task(&qp->req.task);
 		return 0;
 	} else
 		return rxe_post_send_kernel(qp, wr, bad_wr);
@@ -778,15 +762,13 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 
 	if (unlikely((qp_state(qp) < IB_QPS_INIT) || !qp->valid)) {
 		*bad_wr = wr;
-		err = -EINVAL;
-		goto err1;
+		return -EINVAL;
 	}
 
 	/*srq不为空，报错*/
 	if (unlikely(qp->srq)) {
 		*bad_wr = wr;
-		err = -EINVAL;
-		goto err1;
+		return -EINVAL;
 	}
 
 	spin_lock_irqsave(&rq->producer_lock, flags);
@@ -804,9 +786,8 @@ static int rxe_post_recv(struct ib_qp *ibqp, const struct ib_recv_wr *wr,
 	spin_unlock_irqrestore(&rq->producer_lock, flags);
 
 	if (qp->resp.state == QP_STATE_ERROR)
-		rxe_run_task(&qp->resp.task, 1);
+		rxe_sched_task(&qp->resp.task);
 
-err1:
 	return err;
 }
 
@@ -873,16 +854,9 @@ static int rxe_resize_cq(struct ib_cq *ibcq, int cqe, struct ib_udata *udata)
 
 	err = rxe_cq_chk_attr(rxe, cq, cqe, 0);
 	if (err)
-		goto err1;
+		return err;
 
-	err = rxe_cq_resize_queue(cq, cqe, uresp, udata);
-	if (err)
-		goto err1;
-
-	return 0;
-
-err1:
-	return err;
+	return rxe_cq_resize_queue(cq, cqe, uresp, udata);
 }
 
 static int rxe_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
@@ -894,12 +868,12 @@ static int rxe_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
 
 	spin_lock_irqsave(&cq->cq_lock, flags);
 	for (i = 0; i < num_entries; i++) {
-		cqe = queue_head(cq->queue, QUEUE_TYPE_FROM_DRIVER);
+		cqe = queue_head(cq->queue, QUEUE_TYPE_TO_ULP);
 		if (!cqe)
 			break;
 
 		memcpy(wc++, &cqe->ibwc, sizeof(*wc));
-		queue_advance_consumer(cq->queue, QUEUE_TYPE_FROM_DRIVER);
+		queue_advance_consumer(cq->queue, QUEUE_TYPE_TO_ULP);
 	}
 	spin_unlock_irqrestore(&cq->cq_lock, flags);
 
@@ -911,7 +885,7 @@ static int rxe_peek_cq(struct ib_cq *ibcq, int wc_cnt)
 	struct rxe_cq *cq = to_rcq(ibcq);
 	int count;
 
-	count = queue_count(cq->queue, QUEUE_TYPE_FROM_DRIVER);
+	count = queue_count(cq->queue, QUEUE_TYPE_TO_ULP);
 
 	return (count > wc_cnt) ? wc_cnt : count;
 }
@@ -927,7 +901,7 @@ static int rxe_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 	if (cq->notify != IB_CQ_NEXT_COMP)
 		cq->notify = flags & IB_CQ_SOLICITED_MASK;
 
-	empty = queue_empty(cq->queue, QUEUE_TYPE_FROM_DRIVER);
+	empty = queue_empty(cq->queue, QUEUE_TYPE_TO_ULP);
 
 	if ((flags & IB_CQ_REPORT_MISSED_EVENTS) && !empty)
 		ret = 1;
@@ -942,21 +916,33 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
 	struct rxe_pd *pd = to_rpd(ibpd);
 	struct rxe_mr *mr;
+	int err;
 
 	/*申请mr*/
-	mr = rxe_alloc(&rxe->mr_pool);
-	if (!mr)
-		return ERR_PTR(-ENOMEM);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
+	if (!mr) {
+		err = -ENOMEM;
+		goto err_out;
+	}
+
+	err = rxe_add_to_pool(&rxe->mr_pool, mr);
+	if (err)
+		goto err_free;
 
 	/*pd引用增加*/
 	rxe_get(pd);
 	/*加入到pool中*/
 	mr->ibmr.pd = ibpd;
+	mr->ibmr.device = ibpd->device;
 
 	rxe_mr_init_dma(access, mr);
 	rxe_finalize(mr);
-
 	return &mr->ibmr;
+
+err_free:
+	kfree(mr);
+err_out:
+	return ERR_PTR(err);
 }
 
 /*rxe设备注册mr*/
@@ -972,27 +958,33 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
 	struct rxe_mr *mr;
 
 	/*申请一个rxe_mr*/
-	mr = rxe_alloc(&rxe->mr_pool);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		err = -ENOMEM;
-		goto err2;
+		goto err_out;
 	}
+
+	err = rxe_add_to_pool(&rxe->mr_pool, mr);
+	if (err)
+		goto err_free;
 
 	rxe_get(pd);
 	mr->ibmr.pd = ibpd;
+	mr->ibmr.device = ibpd->device;
 
 	/*初始化mr，pin住相应的内存页*/
 	err = rxe_mr_init_user(rxe, start, length, iova, access, mr);
 	if (err)
-		goto err3;
+		goto err_cleanup;
 
 	rxe_finalize(mr);
-
 	return &mr->ibmr;
 
-err3:
+err_cleanup:
 	rxe_cleanup(mr);
-err2:
+err_free:
+	kfree(mr);
+err_out:
 	return ERR_PTR(err);
 }
 
@@ -1010,64 +1002,34 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 		return ERR_PTR(-EINVAL);
 
 	/*申请mr*/
-	mr = rxe_alloc(&rxe->mr_pool);
+	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr) {
 		err = -ENOMEM;
-		goto err1;
+		goto err_out;
 	}
+
+	err = rxe_add_to_pool(&rxe->mr_pool, mr);
+	if (err)
+		goto err_free;
 
 	/*pd引用数增加*/
 	rxe_get(pd);
 	mr->ibmr.pd = ibpd;
+	mr->ibmr.device = ibpd->device;
 
 	err = rxe_mr_init_fast(max_num_sg, mr);
 	if (err)
-		goto err2;
+		goto err_cleanup;
 
 	rxe_finalize(mr);
-
 	return &mr->ibmr;
 
-err2:
+err_cleanup:
 	rxe_cleanup(mr);
-err1:
+err_free:
+	kfree(mr);
+err_out:
 	return ERR_PTR(err);
-}
-
-static int rxe_set_page(struct ib_mr *ibmr, u64 addr)
-{
-	struct rxe_mr *mr = to_rmr(ibmr);
-	struct rxe_map *map;
-	struct rxe_phys_buf *buf;
-
-	if (unlikely(mr->nbuf == mr->num_buf))
-		return -ENOMEM;
-
-	map = mr->map[mr->nbuf / RXE_BUF_PER_MAP];
-	buf = &map->buf[mr->nbuf % RXE_BUF_PER_MAP];
-
-	buf->addr = addr;
-	buf->size = ibmr->page_size;
-	mr->nbuf++;
-
-	return 0;
-}
-
-static int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sg,
-			 int sg_nents, unsigned int *sg_offset)
-{
-	struct rxe_mr *mr = to_rmr(ibmr);
-	int n;
-
-	mr->nbuf = 0;
-
-	n = ib_sg_to_pages(ibmr, sg, sg_nents, sg_offset, rxe_set_page);
-
-	mr->page_shift = ilog2(ibmr->page_size);
-	mr->page_mask = ibmr->page_size - 1;
-	mr->offset = ibmr->iova & mr->page_mask;
-
-	return n;
 }
 
 /*rxe设备父设备名称（及网络接口名称）*/
@@ -1198,7 +1160,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name/*ib设备名
 	/*注册此ib设备*/
 	err = ib_register_device(dev, ibdev_name, NULL);
 	if (err)
-		pr_warn("%s failed with error %d\n", __func__, err);
+		rxe_dbg(rxe, "failed with error %d\n", err);
 
 	/*
 	 * Note that rxe may be invalid at this point if another thread

@@ -18,6 +18,7 @@ struct sock_reuseport {
 	//记录已使用的可reuse的sockets数目(即socks的数组有效表项的长度）
 	u16			num_socks;		/* elements in socks */
 	u16			num_closed_socks;	/* closed elements in socks */
+	u16			incoming_cpu;
 	/* The last synq overflow event timestamp of this
 	 * reuse->socks[] group.
 	 */
@@ -61,5 +62,6 @@ static inline bool reuseport_has_conns(struct sock *sk)
 }
 
 void reuseport_has_conns_set(struct sock *sk);
+void reuseport_update_incoming_cpu(struct sock *sk, int val);
 
 #endif  /* _SOCK_REUSEPORT_H */

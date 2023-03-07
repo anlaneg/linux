@@ -269,7 +269,9 @@ static int tcf_em_validate(struct tcf_proto *tp,
 			 * the value carried.
 			 */
 			if (em_hdr->flags & TCF_EM_SIMPLE) {
-			    /*简单数据，直接置data*/
+				if (em->ops->datalen > 0)
+					goto errout;
+				/*简单数据，直接置data*/
 				if (data_len < sizeof(u32))
 					goto errout;
 				em->data = *(u32 *) data;

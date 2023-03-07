@@ -10,6 +10,7 @@
 #include <linux/kernel.h>
 #include <linux/errno.h>
 #include <linux/jiffies.h>
+#include <linux/nospec.h>
 #include <linux/skbuff.h>
 #include <linux/string.h>
 #include <linux/types.h>
@@ -384,6 +385,7 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		/*类型校验失败*/
 		return 0;
 
+	type = array_index_nospec(type, maxtype + 1);
 	pt = &policy[type];/*取此类型的policy*/
 
 	BUG_ON(pt->type > NLA_TYPE_MAX);
@@ -616,7 +618,7 @@ static int __nla_validate_parse(const struct nlattr *head/*属性起始指针*/,
 			}
 			continue;
 		}
-
+		type = array_index_nospec(type, maxtype + 1);
 		if (policy) {
 			//有policy,采用policy检查字段
 			int err = validate_nla(nla, maxtype, policy,
@@ -670,7 +672,7 @@ EXPORT_SYMBOL(__nla_validate);
 
 /**
  * nla_policy_len - Determine the max. length of a policy
- * @policy: policy to use
+ * @p: policy to use
  * @n: number of policies
  *
  * Determines the max. length of the policy.  It is currently used

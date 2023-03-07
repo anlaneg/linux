@@ -1282,8 +1282,7 @@ static void goodix_disable_regulators(void *arg)
 	regulator_disable(ts->avdd28);
 }
 
-static int goodix_ts_probe(struct i2c_client *client,
-			   const struct i2c_device_id *id)
+static int goodix_ts_probe(struct i2c_client *client)
 {
 	struct goodix_ts_data *ts;
 	const char *cfg_name;
@@ -1402,7 +1401,7 @@ static void goodix_ts_remove(struct i2c_client *client)
 		wait_for_completion(&ts->firmware_loading_complete);
 }
 
-static int __maybe_unused goodix_suspend(struct device *dev)
+static int goodix_suspend(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct goodix_ts_data *ts = i2c_get_clientdata(client);
@@ -1449,7 +1448,7 @@ static int __maybe_unused goodix_suspend(struct device *dev)
 	return 0;
 }
 
-static int __maybe_unused goodix_resume(struct device *dev)
+static int goodix_resume(struct device *dev)
 {
 	struct i2c_client *client = to_i2c_client(dev);
 	struct goodix_ts_data *ts = i2c_get_clientdata(client);
@@ -1498,7 +1497,7 @@ static int __maybe_unused goodix_resume(struct device *dev)
 	return 0;
 }
 
-static SIMPLE_DEV_PM_OPS(goodix_pm_ops, goodix_suspend, goodix_resume);
+static DEFINE_SIMPLE_DEV_PM_OPS(goodix_pm_ops, goodix_suspend, goodix_resume);
 
 static const struct i2c_device_id goodix_ts_id[] = {
 	{ "GDIX1001:00", 0 },
@@ -1537,14 +1536,14 @@ MODULE_DEVICE_TABLE(of, goodix_of_match);
 #endif
 
 static struct i2c_driver goodix_ts_driver = {
-	.probe = goodix_ts_probe,
+	.probe_new = goodix_ts_probe,
 	.remove = goodix_ts_remove,
 	.id_table = goodix_ts_id,
 	.driver = {
 		.name = "Goodix-TS",
 		.acpi_match_table = ACPI_PTR(goodix_acpi_match),
 		.of_match_table = of_match_ptr(goodix_of_match),
-		.pm = &goodix_pm_ops,
+		.pm = pm_sleep_ptr(&goodix_pm_ops),
 	},
 };
 module_i2c_driver(goodix_ts_driver);

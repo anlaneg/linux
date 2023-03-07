@@ -20,6 +20,7 @@
 #include <net/tc_act/tc_sample.h>
 #include <net/psample.h>
 #include <net/pkt_cls.h>
+#include <net/tc_wrapper.h>
 
 #include <linux/if_arp.h>
 
@@ -54,8 +55,8 @@ static int tcf_sample_init(struct net *net, struct nlattr *nla,
 					  sample_policy, NULL);
 	if (ret < 0)
 		return ret;
-	if (!tb[TCA_SAMPLE_PARMS] || !tb[TCA_SAMPLE_RATE] ||
-	    !tb[TCA_SAMPLE_PSAMPLE_GROUP])
+
+	if (!tb[TCA_SAMPLE_PARMS])
 		return -EINVAL;
 
 	parm = nla_data(tb[TCA_SAMPLE_PARMS]);
@@ -79,6 +80,13 @@ static int tcf_sample_init(struct net *net, struct nlattr *nla,
 		tcf_idr_release(*a, bind);
 		return -EEXIST;
 	}
+
+	if (!tb[TCA_SAMPLE_RATE] || !tb[TCA_SAMPLE_PSAMPLE_GROUP]) {
+		NL_SET_ERR_MSG(extack, "sample rate and group are required");
+		err = -EINVAL;
+		goto release_idr;
+	}
+
 	err = tcf_action_check_ctrlact(parm->action, tp, &goto_ch, extack);
 	if (err < 0)
 		goto release_idr;
@@ -156,8 +164,9 @@ static bool tcf_sample_dev_ok_push(struct net_device *dev)
 }
 
 //执行报文采样
-static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
-			  struct tcf_result *res)
+TC_INDIRECT_SCOPE int tcf_sample_act(struct sk_buff *skb,
+				     const struct tc_action *a,
+				     struct tcf_result *res)
 {
     //采样参数
 	struct tcf_sample *s = to_sample(a);
@@ -173,7 +182,7 @@ static int tcf_sample_act(struct sk_buff *skb, const struct tc_action *a,
 
 	/* randomly sample packets according to rate */
 	//随机数恰好为rate的倍数时，执行采样
-	if (psample_group && (prandom_u32_max(s->rate) == 0)) {
+	if (psample_group && (get_random_u32_below(s->rate) == 0)) {
 		if (!skb_at_tc_ingress(skb)) {
 		    //egress方向采样
 			md.in_ifindex = skb->skb_iif;

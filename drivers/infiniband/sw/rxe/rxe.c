@@ -197,7 +197,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 	if (exists) {
 	    /*设备已存在，报错*/
 		ib_device_put(&exists->ib_dev);
-		pr_err("already configured on %s\n", ndev->name);
+		rxe_dbg(exists, "already configured on %s\n", ndev->name);
 		err = -EEXIST;
 		goto err;
 	}
@@ -205,7 +205,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 	/*依赖ndev添加名称为ibdev_name的ib设备*/
 	err = rxe_net_add(ibdev_name, ndev);
 	if (err) {
-		pr_err("failed to add %s\n", ndev->name);
+		rxe_dbg(exists, "failed to add %s\n", ndev->name);
 		goto err;
 	}
 err:

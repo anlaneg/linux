@@ -319,7 +319,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 
 	//要创建的队列数不能超过硬件支持的最大队列数
 	if (index >= vp_modern_get_num_queues(mdev))
-		return ERR_PTR(-ENOENT);
+		return ERR_PTR(-EINVAL);
 
 	/* Check if queue is either not available or already active. */
 	//取硬件支持的index号队列大小，如果大小为０，查询此队列是否使能
@@ -329,7 +329,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 		return ERR_PTR(-ENOENT);
 
 	//队列数必须为2的N次方
-	if (num & (num - 1)) {
+	if (!is_power_of_2(num)) {
 		dev_warn(&vp_dev->pci_dev->dev, "bad queue size %u", num);
 		return ERR_PTR(-EINVAL);
 	}

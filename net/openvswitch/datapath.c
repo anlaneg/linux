@@ -219,12 +219,35 @@ static struct vport *new_vport(const struct vport_parms *parms)
 	return vport;
 }
 
+static void ovs_vport_update_upcall_stats(struct sk_buff *skb,
+					  const struct dp_upcall_info *upcall_info,
+					  bool upcall_result)
+{
+	struct vport *p = OVS_CB(skb)->input_vport;
+	struct vport_upcall_stats_percpu *stats;
+
+	if (upcall_info->cmd != OVS_PACKET_CMD_MISS &&
+	    upcall_info->cmd != OVS_PACKET_CMD_ACTION)
+		return;
+
+	stats = this_cpu_ptr(p->upcall_stats);
+	u64_stats_update_begin(&stats->syncp);
+	if (upcall_result)
+		u64_stats_inc(&stats->n_success);
+	else
+		u64_stats_inc(&stats->n_fail);
+	u64_stats_update_end(&stats->syncp);
+}
+
 void ovs_dp_detach_port(struct vport *p)
 {
 	ASSERT_OVSL();
 
 	/* First drop references to device. */
 	hlist_del_rcu(&p->dp_hash_node);
+
+	/* Free percpu memory */
+	free_percpu(p->upcall_stats);
 
 	/* Then destroy it. */
 	ovs_vport_del(p);
@@ -321,6 +344,8 @@ int ovs_dp_upcall(struct datapath *dp, struct sk_buff *skb,
 		err = queue_userspace_packet(dp, skb, key, upcall_info, cutlen);
 	else
 		err = queue_gso_packets(dp, skb, key, upcall_info, cutlen);
+
+	ovs_vport_update_upcall_stats(skb, upcall_info, !err);
 	if (err)
 		goto err;
 
@@ -752,9 +777,9 @@ static void get_dp_stats(const struct datapath *dp, struct ovs_dp_stats *stats,
 		percpu_stats = per_cpu_ptr(dp->stats_percpu, i);
 
 		do {
-			start = u64_stats_fetch_begin_irq(&percpu_stats->syncp);
+			start = u64_stats_fetch_begin(&percpu_stats->syncp);
 			local_stats = *percpu_stats;
-		} while (u64_stats_fetch_retry_irq(&percpu_stats->syncp, start));
+		} while (u64_stats_fetch_retry(&percpu_stats->syncp, start));
 
 		stats->n_hit += local_stats.n_hit;
 		stats->n_missed += local_stats.n_missed;
@@ -987,6 +1012,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	struct sw_flow_mask mask;
 	struct sk_buff *reply;
 	struct datapath *dp;
+	struct sw_flow_key *key;
 	struct sw_flow_actions *acts;
 	struct sw_flow_match match;
 	u32 ufid_flags = ovs_nla_get_ufid_flags(a[OVS_FLOW_ATTR_UFID_FLAGS]);
@@ -1015,23 +1041,25 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 
 	/* Extract key. */
 	//解析并注入key,mask
-	ovs_match_init(&match, &new_flow->key, false, &mask);
+	key = kzalloc(sizeof(*key), GFP_KERNEL);
+	if (!key) {
+		error = -ENOMEM;
+		goto err_kfree_flow;
+	}
+
+	ovs_match_init(&match, key, false, &mask);
 	error = ovs_nla_get_match(net, &match, a[OVS_FLOW_ATTR_KEY],
 				  a[OVS_FLOW_ATTR_MASK], log);
 	if (error)
-		goto err_kfree_flow;
+		goto err_kfree_key;
+
+	ovs_flow_mask_key(&new_flow->key, key, true, &mask);
 
 	/* Extract flow identifier. */
 	error = ovs_nla_get_identifier(&new_flow->id, a[OVS_FLOW_ATTR_UFID],
-				       &new_flow->key, log);
+				       key, log);
 	if (error)
-		goto err_kfree_flow;
-
-	/* unmasked key is needed to match when ufid is not used. */
-	if (ovs_identifier_is_key(&new_flow->id))
-		match.key = new_flow->id.unmasked_key;
-
-	ovs_flow_mask_key(&new_flow->key, &new_flow->key, true, &mask);
+		goto err_kfree_key;
 
 	/* Validate actions. */
 	//解析并填充action到acts
@@ -1039,7 +1067,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 				     &new_flow->key, &acts, log);
 	if (error) {
 		OVS_NLERR(log, "Flow actions may not be safe on all matching packets.");
-		goto err_kfree_flow;
+		goto err_kfree_key;
 	}
 
 	reply = ovs_flow_cmd_alloc_info(acts, &new_flow->id, info, false,
@@ -1063,7 +1091,7 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		flow = ovs_flow_tbl_lookup_ufid(&dp->table, &new_flow->id);
 	if (!flow)
 		//通过key再查一次flow(检查是否重复）
-		flow = ovs_flow_tbl_lookup(&dp->table, &new_flow->key);
+		flow = ovs_flow_tbl_lookup(&dp->table, key);
 	if (likely(!flow)) {
 		rcu_assign_pointer(new_flow->sf_acts, acts);
 
@@ -1136,6 +1164,8 @@ static int ovs_flow_cmd_new(struct sk_buff *skb, struct genl_info *info)
 
 	if (reply)
 		ovs_notify(&dp_flow_genl_family, reply, info);
+
+	kfree(key);
 	return 0;
 
 err_unlock_ovs:
@@ -1143,6 +1173,8 @@ err_unlock_ovs:
 	kfree_skb(reply);
 err_kfree_acts:
 	ovs_nla_free_flow_actions(acts);
+err_kfree_key:
+	kfree(key);
 err_kfree_flow:
 	ovs_flow_free(new_flow, false);
 error:
@@ -1894,6 +1926,12 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 		goto err_destroy_portids;
 	}
 
+	vport->upcall_stats = netdev_alloc_pcpu_stats(struct vport_upcall_stats_percpu);
+	if (!vport->upcall_stats) {
+		err = -ENOMEM;
+		goto err_destroy_vport;
+	}
+
 	err = ovs_dp_cmd_fill_info(dp, reply, info->snd_portid,
 				   info->snd_seq, 0, OVS_DP_CMD_NEW);
 	BUG_ON(err < 0);
@@ -1907,6 +1945,8 @@ static int ovs_dp_cmd_new(struct sk_buff *skb, struct genl_info *info)
 	ovs_notify(&dp_datapath_genl_family, reply, info);
 	return 0;
 
+err_destroy_vport:
+	ovs_dp_detach_port(vport);
 err_destroy_portids:
 	kfree(rcu_dereference_raw(dp->upcall_portids));
 err_unlock_and_destroy_meters:
@@ -2169,6 +2209,9 @@ static int ovs_vport_cmd_fill_info(struct vport *vport, struct sk_buff *skb,
 			  OVS_VPORT_ATTR_PAD))
 		goto nla_put_failure;
 
+	if (ovs_vport_get_upcall_stats(vport, skb))
+		goto nla_put_failure;
+
 	if (ovs_vport_get_upcall_portids(vport, skb))
 		goto nla_put_failure;
 
@@ -2365,6 +2408,12 @@ restart:
 		goto exit_unlock_free;
 	}
 
+	vport->upcall_stats = netdev_alloc_pcpu_stats(struct vport_upcall_stats_percpu);
+	if (!vport->upcall_stats) {
+		err = -ENOMEM;
+		goto exit_unlock_free_vport;
+	}
+
 	//构造vport 创建响应消息
 	err = ovs_vport_cmd_fill_info(vport, reply, genl_info_net(info),
 				      info->snd_portid, info->snd_seq, 0,
@@ -2384,6 +2433,8 @@ restart:
 	ovs_notify(&dp_vport_genl_family, reply, info);
 	return 0;
 
+exit_unlock_free_vport:
+	ovs_dp_detach_port(vport);
 exit_unlock_free:
 	ovs_unlock();
 	kfree_skb(reply);
@@ -2600,6 +2651,7 @@ static const struct nla_policy vport_policy[OVS_VPORT_ATTR_MAX + 1] = {
 	[OVS_VPORT_ATTR_OPTIONS] = { .type = NLA_NESTED },
 	[OVS_VPORT_ATTR_IFINDEX] = { .type = NLA_U32 },
 	[OVS_VPORT_ATTR_NETNSID] = { .type = NLA_S32 },
+	[OVS_VPORT_ATTR_UPCALL_STATS] = { .type = NLA_NESTED },
 };
 
 static const struct genl_small_ops dp_vport_genl_ops[] = {

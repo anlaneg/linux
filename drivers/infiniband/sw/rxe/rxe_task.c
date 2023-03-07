@@ -4,10 +4,6 @@
  * Copyright (c) 2015 System Fabric Works, Inc. All rights reserved.
  */
 
-#include <linux/kernel.h>
-#include <linux/interrupt.h>
-#include <linux/hardirq.h>
-
 #include "rxe.h"
 
 /*rxe_task运行，直到遇到非0返回*/
@@ -29,21 +25,22 @@ int __rxe_do_task(struct rxe_task *task)
  * a second caller finds the task already running
  * but looks just after the last call to func
  */
-void rxe_do_task(struct tasklet_struct *t)
+static void do_task(struct tasklet_struct *t)
 {
     /*softirq会依据中断触发此函数执行task*/
 	int cont;
 	int ret;
 	/*取tasklet对应的rxe_task*/
 	struct rxe_task *task = from_tasklet(task, t, tasklet);
+	struct rxe_qp *qp = (struct rxe_qp *)task->arg;
 	unsigned int iterations = RXE_MAX_ITERATIONS;
 
-	spin_lock_bh(&task->state_lock);
+	spin_lock_bh(&task->lock);
 	switch (task->state) {
 	case TASK_STATE_START:
 	    /*start转busy状态*/
 		task->state = TASK_STATE_BUSY;
-		spin_unlock_bh(&task->state_lock);
+		spin_unlock_bh(&task->lock);
 		break;
 
 	case TASK_STATE_BUSY:
@@ -52,12 +49,12 @@ void rxe_do_task(struct tasklet_struct *t)
 		fallthrough;
 	case TASK_STATE_ARMED:
 	    	/*armed状态情况，函数返回*/
-		spin_unlock_bh(&task->state_lock);
+		spin_unlock_bh(&task->lock);
 		return;
 
 	default:
-		spin_unlock_bh(&task->state_lock);
-		pr_warn("%s failed with bad state %d\n", __func__, task->state);
+		spin_unlock_bh(&task->lock);
+		rxe_dbg_qp(qp, "failed with bad state %d\n", task->state);
 		return;
 	}
 
@@ -66,7 +63,7 @@ void rxe_do_task(struct tasklet_struct *t)
 		/*执行此task任务*/
 		ret = task->func(task->arg);
 
-		spin_lock_bh(&task->state_lock);
+		spin_lock_bh(&task->lock);
 		switch (task->state) {
 		case TASK_STATE_BUSY:
 			if (ret) {
@@ -93,28 +90,26 @@ void rxe_do_task(struct tasklet_struct *t)
 			break;
 
 		default:
-			pr_warn("%s failed with bad state %d\n", __func__,
-				task->state);
+			rxe_dbg_qp(qp, "failed with bad state %d\n",
+					task->state);
 		}
-		spin_unlock_bh(&task->state_lock);
+		spin_unlock_bh(&task->lock);
 	} while (cont);
 
 	task->ret = ret;/*使用func回调返回值*/
 }
 
-int rxe_init_task(struct rxe_task *task,
-		  void *arg, int (*func)(void *), char *name)
+int rxe_init_task(struct rxe_task *task, void *arg, int (*func)(void *))
 {
 	task->arg	= arg;
 	/*设置此task对应的工作函数*/
 	task->func	= func;
-	snprintf(task->name, sizeof(task->name), "%s", name);
 	task->destroyed	= false;
 
-	tasklet_setup(&task->tasklet, rxe_do_task);
+	tasklet_setup(&task->tasklet, do_task);
 
 	task->state = TASK_STATE_START;
-	spin_lock_init(&task->state_lock);
+	spin_lock_init(&task->lock);
 
 	return 0;
 }
@@ -130,23 +125,28 @@ void rxe_cleanup_task(struct rxe_task *task)
 	task->destroyed = true;
 
 	do {
-		spin_lock_bh(&task->state_lock);
+		spin_lock_bh(&task->lock);
 		idle = (task->state == TASK_STATE_START);
-		spin_unlock_bh(&task->state_lock);
+		spin_unlock_bh(&task->lock);
 	} while (!idle);
 
 	tasklet_kill(&task->tasklet);
 }
 
-void rxe_run_task(struct rxe_task *task, int sched)
+void rxe_run_task(struct rxe_task *task)
 {
 	if (task->destroyed)
 		return;
 
-	if (sched)
-		tasklet_schedule(&task->tasklet);
-	else
-		rxe_do_task(&task->tasklet);
+	do_task(&task->tasklet);
+}
+
+void rxe_sched_task(struct rxe_task *task)
+{
+	if (task->destroyed)
+		return;
+
+	tasklet_schedule(&task->tasklet);
 }
 
 void rxe_disable_task(struct rxe_task *task)

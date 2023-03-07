@@ -78,7 +78,7 @@ static inline bool is_vlan_dev(const struct net_device *dev)
 }
 
 //检查是否有vlan
-#define skb_vlan_tag_present(__skb)	((__skb)->vlan_present)
+#define skb_vlan_tag_present(__skb)	(!!(__skb)->vlan_all)
 #define skb_vlan_tag_get(__skb)		((__skb)->vlan_tci)
 //提取vlan id
 #define skb_vlan_tag_get_id(__skb)	((__skb)->vlan_tci & VLAN_VID_MASK)
@@ -477,7 +477,7 @@ static inline struct sk_buff *vlan_insert_tag_set_proto(struct sk_buff *skb,
  */
 static inline void __vlan_hwaccel_clear_tag(struct sk_buff *skb)
 {
-	skb->vlan_present = 0;
+	skb->vlan_all = 0;
 }
 
 /**
@@ -489,9 +489,7 @@ static inline void __vlan_hwaccel_clear_tag(struct sk_buff *skb)
  */
 static inline void __vlan_hwaccel_copy_tag(struct sk_buff *dst, const struct sk_buff *src)
 {
-	dst->vlan_present = src->vlan_present;
-	dst->vlan_proto = src->vlan_proto;
-	dst->vlan_tci = src->vlan_tci;
+	dst->vlan_all = src->vlan_all;
 }
 
 /*
@@ -526,7 +524,6 @@ static inline void __vlan_hwaccel_put_tag(struct sk_buff *skb,
 	//设置vlan协议，设置vlan编号
 	skb->vlan_proto = vlan_proto;
 	skb->vlan_tci = vlan_tci;
-	skb->vlan_present = 1;
 }
 
 /**

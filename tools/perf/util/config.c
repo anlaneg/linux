@@ -605,7 +605,7 @@ static char *home_perfconfig(void)
 
 	config = strdup(mkpath("%s/.perfconfig", home));
 	if (config == NULL) {
-		pr_warning("Not enough memory to process %s/.perfconfig, ignoring it.", home);
+		pr_warning("Not enough memory to process %s/.perfconfig, ignoring it.\n", home);
 		return NULL;
 	}
 
@@ -613,7 +613,7 @@ static char *home_perfconfig(void)
 		goto out_free;
 
 	if (st.st_uid && (st.st_uid != geteuid())) {
-		pr_warning("File %s not owned by current user or root, ignoring it.", config);
+		pr_warning("File %s not owned by current user or root, ignoring it.\n", config);
 		goto out_free;
 	}
 

@@ -85,6 +85,13 @@ struct rxe_send_wr {
 	union {
 		struct {
 			__aligned_u64 remote_addr;
+			__u32	length;
+			__u32	rkey;
+			__u8	type;
+			__u8	level;
+		} flush;
+		struct {
+			__aligned_u64 remote_addr;
 			__u32	rkey;
 			__u32	reserved;
 		} rdma;
@@ -150,6 +157,7 @@ struct rxe_dma_info {
 	union {
 	    /*inline数据*/
 		__DECLARE_FLEX_ARRAY(__u8, inline_data);
+		__DECLARE_FLEX_ARRAY(__u8, atomic_wr);
 		/*sge数组*/
 		__DECLARE_FLEX_ARRAY(struct rxe_sge, sge);
 	};
