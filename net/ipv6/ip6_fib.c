@@ -2603,17 +2603,22 @@ static struct fib6_table *ipv6_route_seq_next_table(struct fib6_table *tbl,
 	struct hlist_node *node;
 
 	if (tbl) {
+		/*tbl不为空，故其下一个表*/
 		h = (tbl->tb6_id & (FIB6_TABLE_HASHSZ - 1)) + 1;
 		node = rcu_dereference_bh(hlist_next_rcu(&tbl->tb6_hlist));
 	} else {
+		/*0号表*/
 		h = 0;
 		node = NULL;
 	}
 
+	/*查找hash表中可用的一个node*/
 	while (!node && h < FIB6_TABLE_HASHSZ) {
 		node = rcu_dereference_bh(
 			hlist_first_rcu(&net->ipv6.fib_table_hash[h++]));
 	}
+
+	/*由此node取fib6_table*/
 	return hlist_entry_safe(node, struct fib6_table, tb6_hlist);
 }
 
@@ -2673,6 +2678,7 @@ static void *ipv6_route_seq_start(struct seq_file *seq, loff_t *pos)
 	struct ipv6_route_iter *iter = seq->private;
 
 	rcu_read_lock_bh();
+	/*取首个table*/
 	iter->tbl = ipv6_route_seq_next_table(NULL, net);
 	iter->skip = *pos;
 
@@ -2682,6 +2688,7 @@ static void *ipv6_route_seq_start(struct seq_file *seq, loff_t *pos)
 		ipv6_route_seq_setup_walk(iter, net);
 		return ipv6_route_seq_next(seq, NULL, &p);
 	} else {
+		/*无table,返回NULL*/
 		return NULL;
 	}
 }

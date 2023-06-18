@@ -119,6 +119,7 @@ struct hci_dev *hci_dev_get(int index)
 		return NULL;
 
 	read_lock(&hci_dev_list_lock);
+	/*遍历hci_dev_list,查找与index匹配的hdev*/
 	list_for_each_entry(d, &hci_dev_list, list) {
 		if (d->id == index) {
 			hdev = hci_dev_hold(d);
@@ -2640,7 +2641,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	}
 
 	write_lock(&hci_dev_list_lock);
-	list_add(&hdev->list, &hci_dev_list);
+	list_add(&hdev->list, &hci_dev_list);/*将此hdev设备注册到hci_dev_list列表*/
 	write_unlock(&hci_dev_list_lock);
 
 	/* Devices that are marked for raw-only usage are unconfigured

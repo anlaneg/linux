@@ -23,6 +23,7 @@ static void mlx5e_xsk_unmap_pool(struct mlx5e_priv *priv,
 static int mlx5e_xsk_get_pools(struct mlx5e_xsk *xsk)
 {
 	if (!xsk->pools) {
+		/*初始化xsk对应的pools*/
 		xsk->pools = kcalloc(MLX5E_MAX_NUM_CHANNELS,
 				     sizeof(*xsk->pools), GFP_KERNEL);
 		if (unlikely(!xsk->pools))
@@ -43,6 +44,7 @@ static void mlx5e_xsk_put_pools(struct mlx5e_xsk *xsk)
 	}
 }
 
+/*为xsk变更ix队列对应的pool*/
 static int mlx5e_xsk_add_pool(struct mlx5e_xsk *xsk, struct xsk_buff_pool *pool, u16 ix)
 {
 	int err;
@@ -51,10 +53,12 @@ static int mlx5e_xsk_add_pool(struct mlx5e_xsk *xsk, struct xsk_buff_pool *pool,
 	if (unlikely(err))
 		return err;
 
+	/*更新ix队列对应的pool*/
 	xsk->pools[ix] = pool;
 	return 0;
 }
 
+/*移除ix队列对应的xsk pool*/
 static void mlx5e_xsk_remove_pool(struct mlx5e_xsk *xsk, u16 ix)
 {
 	xsk->pools[ix] = NULL;
@@ -84,6 +88,7 @@ static int mlx5e_xsk_enable_locked(struct mlx5e_priv *priv,
 	int err;
 
 	if (unlikely(mlx5e_xsk_get_pool(&priv->channels.params, &priv->xsk, ix)))
+		/*ix号队列已存在此pool,返回busy*/
 		return -EBUSY;
 
 	if (unlikely(!mlx5e_xsk_is_pool_sane(pool)))
@@ -167,6 +172,7 @@ static int mlx5e_xsk_disable_locked(struct mlx5e_priv *priv, u16 ix)
 	struct mlx5e_channel *c;
 
 	if (unlikely(!pool))
+		/*pool未设置，无法禁用*/
 		return -EINVAL;
 
 	if (!test_bit(MLX5E_STATE_OPENED, &priv->state))
@@ -194,6 +200,7 @@ remove_pool:
 	return 0;
 }
 
+/*为idx号队列使能xsk buffer pool*/
 static int mlx5e_xsk_enable_pool(struct mlx5e_priv *priv, struct xsk_buff_pool *pool,
 				 u16 ix)
 {
@@ -217,14 +224,16 @@ static int mlx5e_xsk_disable_pool(struct mlx5e_priv *priv, u16 ix)
 	return err;
 }
 
-int mlx5e_xsk_setup_pool(struct net_device *dev, struct xsk_buff_pool *pool, u16 qid)
+int mlx5e_xsk_setup_pool(struct net_device *dev, struct xsk_buff_pool *pool/*要使能的pool*/, u16 qid/*队列编号*/)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
 	struct mlx5e_params *params = &priv->channels.params;
 
 	if (unlikely(qid >= params->num_channels))
+		/*qid过大，返回错误*/
 		return -EINVAL;
 
+	/*按参数约定，如果pool为NULL，则为禁用pool,否则为使能pool*/
 	return pool ? mlx5e_xsk_enable_pool(priv, pool, qid) :
 		      mlx5e_xsk_disable_pool(priv, qid);
 }

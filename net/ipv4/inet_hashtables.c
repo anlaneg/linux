@@ -307,6 +307,7 @@ inet_lhash2_bucket_sk(struct inet_hashinfo *h, struct sock *sk)
 		hash = ipv4_portaddr_hash(sock_net(sk),
 					  inet_sk(sk)->inet_rcv_saddr,
 					  inet_sk(sk)->inet_num);
+	/*按hash取相应的桶*/
 	return inet_lhash2_bucket(h, hash);
 }
 
@@ -318,7 +319,7 @@ static inline int compute_score(struct sock *sk, struct net *net,
 
 	if (net_eq(sock_net(sk), net) && sk->sk_num == hnum &&
 			!ipv6_only_sock(sk)) {
-	    	//端口号必须一致且非ipv6　socket,否则继续匹配
+	    	//端口号必须一致且非ipv6 only socket,否则继续匹配
 		if (sk->sk_rcv_saddr != daddr)
 			return -1;
 
@@ -778,7 +779,7 @@ int __inet_hash(struct sock *sk, struct sock *osk)
 		sk->sk_family == AF_INET6)
 		__sk_nulls_add_node_tail_rcu(sk, &ilb2->nulls_head);
 	else
-	//将sk加入到lhash2表中
+		//将sk加入到lhash2表中
 		__sk_nulls_add_node_rcu(sk, &ilb2->nulls_head);
 	sock_set_flag(sk, SOCK_RCU_FREE);
 	sock_prot_inuse_add(sock_net(sk), sk->sk_prot, 1);

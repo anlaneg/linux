@@ -41,7 +41,7 @@
 
 static int thaw_super_locked(struct super_block *sb);
 
-//用于维护系统所有super_blocks
+//用于维护系统中所有super_blocks
 static LIST_HEAD(super_blocks);
 static DEFINE_SPINLOCK(sb_lock);
 
@@ -197,7 +197,7 @@ static void destroy_unused_super(struct super_block *s)
  *	Allocates and initializes a new &struct super_block.  alloc_super()
  *	returns a pointer new superblock or %NULL if allocation had failed.
  */
-//申请超级块
+//申请super block
 static struct super_block *alloc_super(struct file_system_type *type, int flags,
 				       struct user_namespace *user_ns)
 {
@@ -207,7 +207,8 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	int i;
 
 	if (!s)
-		return NULL;//申请失败
+		//申请失败
+		return NULL;
 
 	INIT_LIST_HEAD(&s->s_mounts);
 	s->s_user_ns = get_user_ns(user_ns);
@@ -230,6 +231,7 @@ static struct super_block *alloc_super(struct file_system_type *type, int flags,
 	 */
 	down_write_nested(&s->s_umount, SINGLE_DEPTH_NESTING);
 
+	/*触发安全钩子点*/
 	if (security_sb_alloc(s))
 		goto fail;
 
@@ -554,8 +556,8 @@ bool mount_capable(struct fs_context *fc)
  * as yet unset.
  */
 struct super_block *sget_fc(struct fs_context *fc,
-			    int (*test)(struct super_block *, struct fs_context *),
-			    int (*set)(struct super_block *, struct fs_context *))
+			    int (*test/*检查super block是否可共享*/)(struct super_block *, struct fs_context *),
+			    int (*set/*用于设置super block,返回非零表示失败*/)(struct super_block *, struct fs_context *))
 {
 	struct super_block *s = NULL;
 	struct super_block *old;
@@ -565,6 +567,7 @@ struct super_block *sget_fc(struct fs_context *fc,
 
 retry:
 	spin_lock(&sb_lock);
+	/*通过此回调，检查是否与即有的super block share，可则返回*/
 	if (test) {
 		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
 			if (test(old, fc))
@@ -573,7 +576,7 @@ retry:
 	}
 	if (!s) {
 		spin_unlock(&sb_lock);
-		/*申请超级块*/
+		/*申请super block对象*/
 		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
@@ -581,7 +584,8 @@ retry:
 	}
 
 	s->s_fs_info = fc->s_fs_info;
-	err = set(s, fc);/*通过set回调，设置super block*/
+	/*通过set回调，设置super block*/
+	err = set(s, fc);
 	if (err) {
 		s->s_fs_info = NULL;
 		spin_unlock(&sb_lock);
@@ -643,9 +647,11 @@ struct super_block *sget(struct file_system_type *type/*文件系统*/,
 retry:
 	spin_lock(&sb_lock);
 	if (test) {
-		//type->fs_supers是类型super_block类型的s_instances指针，遍历所有super_block
+		//type->fs_supers是此文件系统已被实例化的所有super_block
+		//这里遍历这些实例，采用test函数检查是否可以share的super block
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
 			if (!test(old, data))
+				/*不可share,忽略*/
 				continue;
 			if (user_ns != old->s_user_ns) {
 				spin_unlock(&sb_lock);
@@ -658,7 +664,8 @@ retry:
 			return old;
 		}
 	}
-	//无超级块，则申请超级块
+
+	//无super block，在此处申请
 	if (!s) {
 		spin_unlock(&sb_lock);
 		s = alloc_super(type, (flags & ~SB_SUBMOUNT), user_ns);
@@ -680,7 +687,7 @@ retry:
 	strlcpy(s->s_id, type->name, sizeof(s->s_id));
 	//将s串连到super_blocks上
 	list_add_tail(&s->s_list, &super_blocks);
-	//将超级块加入到type->fs_supers
+	//将super block加入到自身file type->fs_supers
 	hlist_add_head(&s->s_instances, &type->fs_supers);
 	spin_unlock(&sb_lock);
 	get_filesystem(type);
@@ -1109,7 +1116,7 @@ EXPORT_SYMBOL(free_anon_bdev);
 
 int set_anon_super(struct super_block *s, void *data)
 {
-    /*设置此super block对应的块设备为unnamed块设备*/
+    /*分配dev id,设置此super block对应的块设备为unnamed块设备*/
 	return get_anon_bdev(&s->s_dev);
 }
 EXPORT_SYMBOL(set_anon_super);
@@ -1132,6 +1139,7 @@ EXPORT_SYMBOL(kill_litter_super);
 
 int set_anon_super_fc(struct super_block *sb, struct fs_context *fc)
 {
+	/*设置dev*/
 	return set_anon_super(sb, NULL);
 }
 EXPORT_SYMBOL(set_anon_super_fc);
@@ -1146,9 +1154,9 @@ static int test_single_super(struct super_block *s, struct fs_context *fc)
 	return 1;
 }
 
-static int vfs_get_super(struct fs_context *fc, bool reconf,
-		int (*test)(struct super_block *, struct fs_context *),
-		int (*fill_super)(struct super_block *sb,
+static int vfs_get_super(struct fs_context *fc, bool reconf/*如果sb->root在sget_fc中已加载，且此值为true,则调用reconfigure_super*/,
+		int (*test/*测试是否可共享即有的super block*/)(struct super_block *, struct fs_context *),
+		int (*fill_super/*如果sb->s_root未在sget_fc中未实现加载，则通过fill_super进行设置*/)(struct super_block *sb,
 				  struct fs_context *fc))
 {
 	struct super_block *sb;
@@ -1160,7 +1168,7 @@ static int vfs_get_super(struct fs_context *fc, bool reconf,
 		return PTR_ERR(sb);
 
 	if (!sb->s_root) {
-	    /*当sb->s_root未加载时，通过fill_super进行设置*/
+	    /*如果sb->s_root未在sget_fc中未实现加载，则通过fill_super进行设置*/
 		err = fill_super(sb, fc);
 		if (err)
 			goto error;
@@ -1191,7 +1199,7 @@ int get_tree_nodev(struct fs_context *fc,
 		  int (*fill_super/*fs对应的super block填充函数*/)(struct super_block *sb,
 				    struct fs_context *fc))
 {
-	return vfs_get_super(fc, false, NULL, fill_super/*root dentry节点设置*/);
+	return vfs_get_super(fc, false/*不重配置*/, NULL/*不共享*/, fill_super/*填充root dentry节点设置*/);
 }
 EXPORT_SYMBOL(get_tree_nodev);
 
@@ -1439,7 +1447,7 @@ EXPORT_SYMBOL(kill_block_super);
 //执行无设备挂载
 struct dentry *mount_nodev(struct file_system_type *fs_type,
 	int flags, void *data,
-	int (*fill_super)(struct super_block *, void *, int))
+	int (*fill_super/*super block填充函数*/)(struct super_block *, void *, int))
 {
 	int error;
 	//创建super block
@@ -1448,6 +1456,7 @@ struct dentry *mount_nodev(struct file_system_type *fs_type,
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 
+	/*设置super block*/
 	error = fill_super(s, data, flags & SB_SILENT ? 1 : 0);
 	if (error) {
 		deactivate_locked_super(s);
@@ -1523,19 +1532,20 @@ EXPORT_SYMBOL(mount_single);
  * be used for mounting.  The filesystem places a pointer to the root to be
  * used for mounting in @fc->root.
  */
-//获得被挂载设备的root dentry
+//获得被挂载设备的root dentry（需要设置fc->root)
 int vfs_get_tree(struct fs_context *fc)
 {
 	struct super_block *sb;
 	int error;
 
 	if (fc->root)
+		/*已被设置root*/
 		return -EBUSY;
 
 	/* Get the mountable root in fc->root, with a ref on the root and a ref
 	 * on the superblock.
 	 */
-	//获得文件系统的root dentry
+	//通过fs_context回调，获得文件系统的root dentry,并设置fc->root
 	error = fc->ops->get_tree(fc);
 	if (error < 0)
 		return error;
@@ -1550,7 +1560,7 @@ int vfs_get_tree(struct fs_context *fc)
 		BUG();
 	}
 
-	/*取root dentry对应的sb*/
+	/*取root dentry对应的super block*/
 	sb = fc->root->d_sb;
 	WARN_ON(!sb->s_bdi);
 

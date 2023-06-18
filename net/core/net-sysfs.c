@@ -42,13 +42,14 @@ static inline int dev_isalive(const struct net_device *dev)
 /* use same locking rules as GIF* ioctl's */
 static ssize_t netdev_show(const struct device *dev,
 			   struct device_attribute *attr, char *buf,
-			   ssize_t (*format)(const struct net_device *, char *))
+			   ssize_t (*format/*格式化回调*/)(const struct net_device *, char *))
 {
 	struct net_device *ndev = to_net_dev(dev);
 	ssize_t ret = -EINVAL;
 
 	read_lock(&dev_base_lock);
 	if (dev_isalive(ndev))
+		/*格式化到buffer中*/
 		ret = (*format)(ndev, buf);
 	read_unlock(&dev_base_lock);
 
@@ -59,15 +60,17 @@ static ssize_t netdev_show(const struct device *dev,
 #define NETDEVICE_SHOW(field, format_string)				\
 static ssize_t format_##field(const struct net_device *dev, char *buf)	\
 {									\
+	/*字段格式化输出到buf*/\
 	return sysfs_emit(buf, format_string, dev->field);		\
 }									\
 static ssize_t field##_show(struct device *dev,				\
 			    struct device_attribute *attr, char *buf)	\
 {									\
-	return netdev_show(dev, attr, buf, format_##field);		\
+	return netdev_show(dev, attr, buf, format_##field/*格式化回调*/);		\
 }									\
 
-#define NETDEVICE_SHOW_RO(field, format_string)				\
+/*netdevice属性显示*/
+#define NETDEVICE_SHOW_RO(field/*net_device字段*/, format_string/*格式化字符串*/)				\
 NETDEVICE_SHOW(field, format_string);					\
 static DEVICE_ATTR_RO(field)
 
@@ -109,8 +112,8 @@ NETDEVICE_SHOW_RO(dev_id, fmt_hex);
 NETDEVICE_SHOW_RO(dev_port, fmt_dec);
 NETDEVICE_SHOW_RO(addr_assign_type, fmt_dec);
 NETDEVICE_SHOW_RO(addr_len, fmt_dec);
-NETDEVICE_SHOW_RO(ifindex, fmt_dec);
-NETDEVICE_SHOW_RO(type, fmt_dec);
+NETDEVICE_SHOW_RO(ifindex, fmt_dec);/*显示netdevice的ifindex*/
+NETDEVICE_SHOW_RO(type, fmt_dec);/*显示netdeivce的type*/
 NETDEVICE_SHOW_RO(link_mode, fmt_dec);
 
 static ssize_t iflink_show(struct device *dev, struct device_attribute *attr,
@@ -522,6 +525,7 @@ static ssize_t phys_port_id_show(struct device *dev,
 }
 static DEVICE_ATTR_RO(phys_port_id);
 
+/*显示phys_port_name*/
 static ssize_t phys_port_name_show(struct device *dev,
 				   struct device_attribute *attr, char *buf)
 {
@@ -533,6 +537,7 @@ static ssize_t phys_port_name_show(struct device *dev,
 	 */
 	if (!netdev->netdev_ops->ndo_get_phys_port_name &&
 	    !netdev->devlink_port)
+		/*必须有相应回调，两选1*/
 		return -EOPNOTSUPP;
 
 	if (!rtnl_trylock())
@@ -541,6 +546,7 @@ static ssize_t phys_port_name_show(struct device *dev,
 	if (dev_isalive(netdev)) {
 		char name[IFNAMSIZ];
 
+		/*提供内存让Ops去填充*/
 		ret = dev_get_phys_port_name(netdev, name, sizeof(name));
 		if (!ret)
 			ret = sysfs_emit(buf, "%s\n", name);

@@ -1837,6 +1837,7 @@ static void update_and_free_pages_bulk(struct hstate *h, struct list_head *list)
 	}
 }
 
+/*通过size获取hstate*/
 struct hstate *size_to_hstate(unsigned long size)
 {
 	struct hstate *h;
@@ -4219,7 +4220,7 @@ static int __init hugetlb_init(void)
 	 * Make sure HPAGE_SIZE (HUGETLB_PAGE_ORDER) hstate exists.  Some
 	 * architectures depend on setup being done here.
 	 */
-	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);
+	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);/*添加2M大页*/
 	if (!parsed_default_hugepagesz) {
 		/*
 		 * If we did not parse a default huge page size, set
@@ -4286,19 +4287,23 @@ void __init hugetlb_add_hstate(unsigned int order)
 	unsigned long i;
 
 	if (size_to_hstate(PAGE_SIZE << order)) {
+		/*此order的大页已存在，返回*/
 		return;
 	}
 	BUG_ON(hugetlb_max_hstate >= HUGE_MAX_HSTATE);
 	BUG_ON(order == 0);
+	/*占用一个空位*/
 	h = &hstates[hugetlb_max_hstate++];
 	mutex_init(&h->resize_lock);
 	h->order = order;
 	h->mask = ~(huge_page_size(h) - 1);
+	/*初始化在各个numa node上的freelists*/
 	for (i = 0; i < MAX_NUMNODES; ++i)
 		INIT_LIST_HEAD(&h->hugepage_freelists[i]);
 	INIT_LIST_HEAD(&h->hugepage_activelist);
 	h->next_nid_to_alloc = first_memory_node;
 	h->next_nid_to_free = first_memory_node;
+	/*大页size名称*/
 	snprintf(h->name, HSTATE_NAME_LEN, "hugepages-%lukB",
 					huge_page_size(h)/SZ_1K);
 
@@ -4477,6 +4482,7 @@ static int __init default_hugepagesz_setup(char *s)
 
 	parsed_valid_hugepagesz = false;
 	if (parsed_default_hugepagesz) {
+		/*多次配置时，仅首次生效*/
 		pr_err("HugeTLB: default_hugepagesz previously specified, ignoring %s\n", s);
 		return 1;
 	}
@@ -4512,7 +4518,7 @@ static int __init default_hugepagesz_setup(char *s)
 
 	return 1;
 }
-__setup("default_hugepagesz=", default_hugepagesz_setup);
+__setup("default_hugepagesz=", default_hugepagesz_setup);/*处理默认hugepage size的配置*/
 
 static nodemask_t *policy_mbind_nodemask(gfp_t gfp)
 {
@@ -4642,27 +4648,31 @@ void hugetlb_report_meminfo(struct seq_file *m)
 	unsigned long total = 0;
 
 	if (!hugepages_supported())
+		/*不支持大页，则返回*/
 		return;
 
+	/*遍历所有大页*/
 	for_each_hstate(h) {
 		unsigned long count = h->nr_huge_pages;
 
 		total += huge_page_size(h) * count;
 
 		if (h == &default_hstate)
+			/*只显示默认大页情况*/
 			seq_printf(m,
 				   "HugePages_Total:   %5lu\n"
 				   "HugePages_Free:    %5lu\n"
 				   "HugePages_Rsvd:    %5lu\n"
 				   "HugePages_Surp:    %5lu\n"
 				   "Hugepagesize:   %8lu kB\n",
-				   count,
-				   h->free_huge_pages,
+				   count,/*显示大页总数*/
+				   h->free_huge_pages,/*显示可用的大页数*/
 				   h->resv_huge_pages,
 				   h->surplus_huge_pages,
 				   huge_page_size(h) / SZ_1K);
 	}
 
+	/*显示总的大页占用的tlb*/
 	seq_printf(m, "Hugetlb:        %8lu kB\n", total / SZ_1K);
 }
 

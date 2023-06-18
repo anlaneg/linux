@@ -34,28 +34,28 @@ struct xdp_buff_xsk {
 #define XSK_CHECK_PRIV_TYPE(t) BUILD_BUG_ON(sizeof(t) > offsetofend(struct xdp_buff_xsk, cb))
 
 struct xsk_dma_map {
-	dma_addr_t *dma_pages;
-	struct device *dev;
-	struct net_device *netdev;
+	dma_addr_t *dma_pages;/*dma页面，由dma_pages_cnt指明页数*/
+	struct device *dev;/*对应的设备*/
+	struct net_device *netdev;/*对应的网络设备*/
 	refcount_t users;
 	struct list_head list; /* Protected by the RTNL_LOCK */
-	u32 dma_pages_cnt;
+	u32 dma_pages_cnt;/*dma页数*/
 	bool dma_need_sync;
 };
 
 struct xsk_buff_pool {
 	/* Members only used in the control path first. */
 	struct device *dev;
-	struct net_device *netdev;
-	struct list_head xsk_tx_list;
+	struct net_device *netdev;/*pool对应的netdev*/
+	struct list_head xsk_tx_list;/*记录使用此pool的xsk socket*/
 	/* Protects modifications to the xsk_tx_list */
 	spinlock_t xsk_tx_list_lock;
 	refcount_t users;
 	struct xdp_umem *umem;
 	struct work_struct work;
-	struct list_head free_list;
+	struct list_head free_list;/*空闲链，用于挂接xsk buffer*/
 	u32 heads_cnt;
-	u16 queue_id;
+	u16 queue_id;/*pool对应的netdev queue*/
 
 	/* Data path members as close to free_heads at the end as possible. */
 	struct xsk_queue *fq ____cacheline_aligned_in_smp;
@@ -65,10 +65,10 @@ struct xsk_buff_pool {
 	 */
 	dma_addr_t *dma_pages;
 	struct xdp_buff_xsk *heads;
-	struct xdp_desc *tx_descs;
+	struct xdp_desc *tx_descs;/*tx描述符数组，长度为tx队列长度*/
 	u64 chunk_mask;
 	u64 addrs_cnt;
-	u32 free_list_cnt;
+	u32 free_list_cnt;/*指明free_list链表长度*/
 	u32 dma_pages_cnt;
 	u32 free_heads_cnt;
 	u32 headroom;

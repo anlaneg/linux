@@ -274,8 +274,10 @@ int __hci_cmd_sync_status(struct hci_dev *hdev, u16 opcode, u32 plen,
 }
 EXPORT_SYMBOL(__hci_cmd_sync_status);
 
+/*执行sync worker*/
 static void hci_cmd_sync_work(struct work_struct *work)
 {
+	/*获得对应的hci设备*/
 	struct hci_dev *hdev = container_of(work, struct hci_dev, cmd_sync_work);
 
 	bt_dev_dbg(hdev, "");
@@ -285,6 +287,7 @@ static void hci_cmd_sync_work(struct work_struct *work)
 		struct hci_cmd_sync_work_entry *entry;
 
 		mutex_lock(&hdev->cmd_sync_work_lock);
+		/*取同步工作entry*/
 		entry = list_first_entry_or_null(&hdev->cmd_sync_work_list,
 						 struct hci_cmd_sync_work_entry,
 						 list);
@@ -301,7 +304,9 @@ static void hci_cmd_sync_work(struct work_struct *work)
 			int err;
 
 			hci_req_sync_lock(hdev);
+			/*执行回调函数*/
 			err = entry->func(hdev, entry->data);
+			/*执行destroy函数*/
 			if (entry->destroy)
 				entry->destroy(hdev, entry->data, err);
 			hci_req_sync_unlock(hdev);
@@ -625,6 +630,7 @@ unlock:
 
 void hci_cmd_sync_init(struct hci_dev *hdev)
 {
+	/*注册此hci_dev对应的同步命令工作函数*/
 	INIT_WORK(&hdev->cmd_sync_work, hci_cmd_sync_work);
 	INIT_LIST_HEAD(&hdev->cmd_sync_work_list);
 	mutex_init(&hdev->cmd_sync_work_lock);
@@ -701,6 +707,7 @@ int hci_cmd_sync_queue(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	list_add_tail(&entry->list, &hdev->cmd_sync_work_list);
 	mutex_unlock(&hdev->cmd_sync_work_lock);
 
+	/*work入队*/
 	queue_work(hdev->req_workqueue, &hdev->cmd_sync_work);
 
 	return 0;
@@ -5218,6 +5225,7 @@ static int hci_power_off_sync(struct hci_dev *hdev)
 int hci_set_powered_sync(struct hci_dev *hdev, u8 val)
 {
 	if (val)
+		/*开启power*/
 		return hci_power_on_sync(hdev);
 
 	return hci_power_off_sync(hdev);

@@ -13,7 +13,7 @@ struct netns_core {
 	struct ctl_table_header	*sysctl_hdr;
 
 	int	sysctl_somaxconn;
-	u8	sysctl_txrehash;
+	u8	sysctl_txrehash;/*是否容许tx方向rethink hash*/
 
 #ifdef CONFIG_PROC_FS
 	struct prot_inuse __percpu *prot_inuse;

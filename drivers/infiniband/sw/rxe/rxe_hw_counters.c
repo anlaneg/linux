@@ -35,6 +35,7 @@ int rxe_ib_get_hw_stats(struct ib_device *ibdev,
 	if (!port || !stats)
 		return -EINVAL;
 
+	/*读取统计列表，自dev中提取，并填充到stats中*/
 	for (cnt = 0; cnt < ARRAY_SIZE(rxe_counter_descs); cnt++)
 		stats->value[cnt] = atomic64_read(&dev->stats_counters[cnt]);
 

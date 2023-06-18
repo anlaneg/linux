@@ -6,6 +6,7 @@
 
 #include "en.h"
 
+/*取ix对应的xsk pool*/
 static inline struct xsk_buff_pool *mlx5e_xsk_get_pool(struct mlx5e_params *params,
 						       struct mlx5e_xsk *xsk, u16 ix)
 {

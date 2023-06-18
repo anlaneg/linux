@@ -707,7 +707,7 @@ out:
 static int mlx5e_update_vf_tunnel(struct mlx5_eswitch *esw,
 				  struct mlx5_esw_flow_attr *attr,
 				  struct mlx5e_tc_mod_hdr_acts *mod_hdr_acts,
-				  struct net_device *out_dev,
+				  struct net_device *out_dev/*出接口设备*/,
 				  int route_dev_ifindex,
 				  int out_index)
 {
@@ -717,6 +717,7 @@ static int mlx5e_update_vf_tunnel(struct mlx5_eswitch *esw,
 	int err = 0;
 	u32 data;
 
+	/*通过路由ifindex查询route_dev*/
 	route_dev = dev_get_by_index(dev_net(out_dev), route_dev_ifindex);
 
 	if (!route_dev || route_dev->netdev_ops != &mlx5e_netdev_ops ||

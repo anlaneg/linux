@@ -154,10 +154,12 @@ static int xsk_diag_dump(struct sk_buff *nlskb, struct netlink_callback *cb)
 
 	mutex_lock(&net->xdp.lock);
 
+	/*遍历此net namespace上所有xdp socket*/
 	sk_for_each(sk, &net->xdp.list) {
 		if (!net_eq(sock_net(sk), net))
 			continue;
 		if (num++ < s_num)
+			/*未到起始number*/
 			continue;
 
 		if (xsk_diag_fill(sk, nlskb, req,

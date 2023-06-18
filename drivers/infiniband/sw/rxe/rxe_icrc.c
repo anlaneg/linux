@@ -71,6 +71,7 @@ static __be32 rxe_crc32(struct rxe_dev *rxe, __be32 crc, void *next, size_t len)
  */
 static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 {
+	/*计算消息头部的icrc*/
 	unsigned int bth_offset = 0;
 	struct iphdr *ip4h = NULL;
 	struct ipv6hdr *ip6h = NULL;
@@ -144,14 +145,17 @@ int rxe_icrc_check(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	__be32 pkt_icrc;
 	__be32 icrc;
 
+	/*指向icrc*/
 	icrcp = (__be32 *)(pkt->hdr + pkt->paylen - RXE_ICRC_SIZE);
-	pkt_icrc = *icrcp;
+	pkt_icrc = *icrcp;/*取icrc*/
 
+	/*计算icrc*/
 	icrc = rxe_icrc_hdr(skb, pkt);
 	icrc = rxe_crc32(pkt->rxe, icrc, (u8 *)payload_addr(pkt),
 				payload_size(pkt) + bth_pad(pkt));
 	icrc = ~icrc;
 
+	/*计算的icrc与报文自带的icrc计算不相等，报错*/
 	if (unlikely(icrc != pkt_icrc))
 		return -EINVAL;
 

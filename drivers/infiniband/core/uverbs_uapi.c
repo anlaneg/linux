@@ -13,15 +13,17 @@ static int ib_uverbs_notsupp(struct uverbs_attr_bundle *attrs)
 	return -EOPNOTSUPP;
 }
 
+/*添加key与其element之间的映射关系（此时element为空值）*/
 static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 {
 	void *elm;
 	int rc;
 
 	if (key == UVERBS_API_KEY_ERR)
+		/*调用错误*/
 		return ERR_PTR(-EOVERFLOW);
 
-	/*申请空间*/
+	/*申请key对应的空间*/
 	elm = kzalloc(alloc_size, GFP_KERNEL);
 	if (!elm)
 		return ERR_PTR(-ENOMEM);
@@ -36,6 +38,7 @@ static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 	return elm;
 }
 
+/*添加/获取key与element的映射关系*/
 static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key/*要添加的key*/,
 			      size_t alloc_size/*key对应的ele大小*/, bool *exists/*出参，是否已存在*/)
 {
@@ -44,11 +47,13 @@ static void *uapi_add_get_elm(struct uverbs_api *uapi, u32 key/*要添加的key*
 	/*添加key对应的内存映射到uapi->redix*/
 	elm = uapi_add_elm(uapi, key, alloc_size);
 	if (!IS_ERR(elm)) {
+		/*添加成功*/
 		*exists = false;
 		return elm;
 	}
 
 	if (elm != ERR_PTR(-EEXIST))
+		/*添加失败*/
 		return elm;
 
 	/*已存在，查询key对应的elem*/
@@ -76,13 +81,14 @@ static int uapi_create_write(struct uverbs_api *uapi,
 	else
 		method_key |= uapi_key_write_method(def->write.command_num);
 
-	/*添加method_key对应的method_elem*/
+	/*write类函数，对应的method_elem为uverbs_api_write_method*/
 	method_elm = uapi_add_get_elm(uapi, method_key, sizeof(*method_elm),
 				      &exists);
 	if (IS_ERR(method_elm))
 		return PTR_ERR(method_elm);
 
 	if (WARN_ON(exists && (def->write.is_ex != method_elm->is_ex)))
+		/*重复定义*/
 		return -EINVAL;
 
 	/*初始化method_elm*/
@@ -239,8 +245,8 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 {
 	bool exists;
 
-	/*禁止此obj*/
 	if (def->scope == UAPI_SCOPE_OBJECT) {
+		/*此def的范围是object,故禁止此obj*/
 		struct uverbs_api_object *obj_elm;
 
 		obj_elm = uapi_add_get_elm(
@@ -251,9 +257,9 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 		return 0;
 	}
 
-	/*禁止此method*/
 	if (def->scope == UAPI_SCOPE_METHOD &&
 	    uapi_key_is_ioctl_method(method_key)) {
+		/*此def的范围是method,且此method是ioctl类method,禁止此method*/
 		struct uverbs_api_ioctl_method *method_elm;
 
 		method_elm = uapi_add_get_elm(uapi, method_key,
@@ -264,10 +270,10 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 		return 0;
 	}
 
-	/*禁止此Method*/
 	if (def->scope == UAPI_SCOPE_METHOD &&
 	    (uapi_key_is_write_method(method_key) ||
 	     uapi_key_is_write_ex_method(method_key))) {
+		/*此def的范围是method,且此method是write/wirte-ex类method,禁止此method*/
 		struct uverbs_api_write_method *write_elm;
 
 		write_elm = uapi_add_get_elm(uapi, method_key,
@@ -284,7 +290,7 @@ static int uapi_disable_elm(struct uverbs_api *uapi,
 
 static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			  const struct uapi_definition *def_list/*uverbs api列表*/,
-			  bool is_driver)
+			  bool is_driver/*是否驱动的uapi_definition*/)
 {
 	const struct uapi_definition *def = def_list;
 	u32 cur_obj_key = UVERBS_API_KEY_ERR;
@@ -293,14 +299,14 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 	int rc;
 
 	if (!def_list)
-	    /*列表为空，退出*/
+	    /*列表为空，合并结束，直接退出*/
 		return 0;
 
 	/*遍历def_list*/
 	for (;; def++) {
 		switch ((enum uapi_definition_kind)def->kind) {
 		case UAPI_DEF_CHAIN:
-		    /*遇到chain类型的uapi，递归调用*/
+		    /*遇到chain类型的uapi，此时def->chain指向的是一组uapi_definition，故递归调用来合并*/
 			rc = uapi_merge_def(uapi, ibdev, def->chain, is_driver);
 			if (rc)
 				return rc;
@@ -312,6 +318,7 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 				    def->chain_obj_tree->id))
 				return -EINVAL;
 
+			/*更新当前object key*/
 			cur_obj_key = uapi_key_obj(def->object_start.object_id);
 			rc = uapi_merge_obj_tree(uapi, def->chain_obj_tree,
 						 is_driver);
@@ -320,7 +327,7 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			continue;
 
 		case UAPI_DEF_END:
-		    /*处理结束*/
+		    /*遇到定义结束标记，处理结束*/
 			return 0;
 
 		case UAPI_DEF_IS_SUPPORTED_DEV_FN: {
@@ -331,7 +338,7 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 			if (*ibdev_fn)
 			    /*此函数存在，处理结束*/
 				continue;
-			/*此函数不存在，禁止此function/此对象*/
+			/*此函数在设备上不存在，禁止此obj或此obj对应的method*/
 			rc = uapi_disable_elm(
 				uapi, def, cur_obj_key, cur_method_key);
 			if (rc)
@@ -340,10 +347,11 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 		}
 
 		case UAPI_DEF_IS_SUPPORTED_FUNC:
-		    /*指明此uapi_definitions是针对method的，通过回调检查是否支持*/
+		    /*此uapi_definitions需要通过执行回调来检查是否支持*/
 			if (def->func_is_supported(ibdev))
 				continue;
-			/*确认不支持此method,禁止此function/此对象*/
+
+			/*回调确认不支持此method,禁止此obj或此obj对应的method*/
 			rc = uapi_disable_elm(
 				uapi, def, cur_obj_key, cur_method_key);
 			if (rc)
@@ -354,8 +362,9 @@ static int uapi_merge_def(struct uverbs_api *uapi, struct ib_device *ibdev,
 		    /*指明接下来的uapi_definitions是一组object(本uapi_definition是obj的起始）*/
 			struct uverbs_api_object *obj_elm;
 
-			/*取起始的obj id*/
+			/*更新当前obj_key*/
 			cur_obj_key = uapi_key_obj(def->object_start.object_id);
+			/*创建或获取此obj key对应的element*/
 			obj_elm = uapi_add_get_elm(uapi, cur_obj_key,
 						   sizeof(*obj_elm), &exists);
 			if (IS_ERR(obj_elm))
@@ -654,6 +663,7 @@ void uverbs_destroy_api(struct uverbs_api *uapi)
 	kfree(uapi);
 }
 
+/*指明core api*/
 static const struct uapi_definition uverbs_core_api[] = {
 	UAPI_DEF_CHAIN(uverbs_def_obj_async_fd),
 	UAPI_DEF_CHAIN(uverbs_def_obj_counters),
@@ -668,9 +678,10 @@ static const struct uapi_definition uverbs_core_api[] = {
 	UAPI_DEF_CHAIN(uverbs_def_obj_wq),
 	/*write相关的接口*/
 	UAPI_DEF_CHAIN(uverbs_def_write_intf),
-	{},
+	{},/*标记结束*/
 };
 
+/*返回此设备对应的uverbs_api*/
 struct uverbs_api *uverbs_alloc_api(struct ib_device *ibdev)
 {
 	struct uverbs_api *uapi;
@@ -683,11 +694,12 @@ struct uverbs_api *uverbs_alloc_api(struct ib_device *ibdev)
 	INIT_RADIX_TREE(&uapi->radix, GFP_KERNEL);
 	uapi->driver_id = ibdev->ops.driver_id;
 
-	/*合并uverbs_core_api*/
+	/*先合并uverbs_core_api*/
 	rc = uapi_merge_def(uapi, ibdev, uverbs_core_api, false);
 	if (rc)
 		goto err;
-	/*合并驱动引入的api*/
+
+	/*再合并驱动引入的api*/
 	rc = uapi_merge_def(uapi, ibdev, ibdev->driver_def, true);
 	if (rc)
 		goto err;

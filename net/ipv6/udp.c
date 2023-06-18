@@ -1006,6 +1006,7 @@ int __udp6_lib_rcv(struct sk_buff *skb, struct udp_table *udptable,
 			udp6_sk_rx_dst_set(sk, dst);
 
 		if (!uh->check && !udp_sk(sk)->no_check6_rx) {
+			/*checksum为0时，且socket没有要求不检查，则报错*/
 			if (refcounted)
 				sock_put(sk);
 			goto report_csum_error;
@@ -1815,6 +1816,7 @@ int __init udpv6_init(void)
 	if (ret)
 		goto out;
 
+	/*注册udp ipv6 socket*/
 	ret = inet6_register_protosw(&udpv6_protosw);
 	if (ret)
 		goto out_udpv6_protocol;

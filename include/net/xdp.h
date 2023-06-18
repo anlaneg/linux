@@ -80,7 +80,7 @@ enum xdp_buff_flags {
 struct xdp_buff {
 	void *data;/*指向报文起始位置*/
 	void *data_end;/*指向报文结尾位置*/
-	void *data_meta;/*如果驱动不支持data_meta，则指向data+1,否则指向data_meta*/
+	void *data_meta;/*如果驱动不支持data_meta，则指向data+1(大于data,表示不支持meta),否则指向data_meta*/
 	void *data_hard_start;//buffer的起始位置(其后跟xdp_frame结构+headroom为xdp_frame data)
 	/*所属的接收队列信息*/
 	struct xdp_rxq_info *rxq;
@@ -399,6 +399,7 @@ xdp_set_data_meta_invalid(struct xdp_buff *xdp)
 static __always_inline bool
 xdp_data_meta_unsupported(const struct xdp_buff *xdp)
 {
+	/*如果xdp->data_meta大于xdp->data,则表示不支持meta*/
 	return unlikely(xdp->data_meta > xdp->data);
 }
 

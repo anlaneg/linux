@@ -2390,38 +2390,9 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 		refcount_dec(&fold->refcnt);
 		__fl_put(fold);
 	} else {
-<<<<<<< HEAD
-		if (handle) {
-			/* user specifies a handle and it doesn't exist */
-			//用户指定了一个不存在的handle,申请一个
-			err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
-					    handle, GFP_ATOMIC);
-
-			/* Filter with specified handle was concurrently
-			 * inserted after initial check in cls_api. This is not
-			 * necessarily an error if NLM_F_EXCL is not set in
-			 * message flags. Returning EAGAIN will cause cls_api to
-			 * try to update concurrently inserted rule.
-			 */
-			if (err == -ENOSPC)
-				err = -EAGAIN;
-		} else {
-			//未指定handle,申请一个
-			handle = 1;
-			err = idr_alloc_u32(&head->handle_idr, fnew, &handle,
-					    INT_MAX, GFP_ATOMIC);
-		}
-		if (err)
-			goto errout_hw;
-
-		refcount_inc(&fnew->refcnt);
-		//用于挂接filter到mask->filters链上
-		fnew->handle = handle;
-=======
 		idr_replace(&head->handle_idr, fnew, fnew->handle);
 
 		refcount_inc(&fnew->refcnt);
->>>>>>> upstream/master
 		list_add_tail_rcu(&fnew->list, &fnew->mask->filters);
 		spin_unlock(&tp->lock);
 	}

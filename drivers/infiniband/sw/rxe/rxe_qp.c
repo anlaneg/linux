@@ -251,9 +251,9 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	skb_queue_head_init(&qp->req_pkts);
 
-	/*wqe消息处理任务，向外发送报文*/
+	/*wqe消息处理任务，负责向外发送请求类报文*/
 	rxe_init_task(&qp->req.task, qp, rxe_requester);
-	/*wqe处理完成后，此任务将被调度，用于进行响应处理*/
+	/*wqe处理完成后，此任务将被调度，用于进行响应处理；处理外部发送过来的响应类报文*/
 	rxe_init_task(&qp->comp.task, qp, rxe_completer);
 
 	qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
@@ -301,7 +301,7 @@ static int rxe_qp_init_resp(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	skb_queue_head_init(&qp->resp_pkts);
 
-	/*初始化qp->resp上的Task,读取request，并做为响应*/
+	/*处理收取到的请求类报文，针对这些报文进行响应*/
 	rxe_init_task(&qp->resp.task, qp, rxe_responder);
 
 	qp->resp.opcode		= OPCODE_NONE;
@@ -339,7 +339,7 @@ int rxe_qp_from_init(struct rxe_dev *rxe, struct rxe_qp *qp, struct rxe_pd *pd,
 
 	rxe_qp_init_misc(rxe, qp, init);
 
-	/*创建sq,初始化req*/
+	/*创建sq,初始化req，complete*/
 	err = rxe_qp_init_req(rxe, qp, init, udata, uresp);
 	if (err)
 		goto err1;

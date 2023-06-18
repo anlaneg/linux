@@ -287,6 +287,7 @@ static int __init dctcp_register(void)
 	ret = register_btf_kfunc_id_set(BPF_PROG_TYPE_STRUCT_OPS, &tcp_dctcp_kfunc_set);
 	if (ret < 0)
 		return ret;
+	/*注册dctcp cc算法*/
 	return tcp_register_congestion_control(&dctcp);
 }
 

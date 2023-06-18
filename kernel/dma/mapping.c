@@ -150,6 +150,7 @@ dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
 
 	BUG_ON(!valid_dma_direction(dir));
 
+	/*dev的dma_mask为0，映射失败*/
 	if (WARN_ON_ONCE(!dev->dma_mask))
 		return DMA_MAPPING_ERROR;
 

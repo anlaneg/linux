@@ -433,7 +433,7 @@ static int ib_uverbs_run_method(struct bundle_priv *pbundle,
 	int ret;
 
 	/* See uverbs_disassociate_api() */
-	/*取handler函数*/
+	/*取此cmd对应的handler函数*/
 	handler = srcu_dereference(
 		pbundle->method_elm->handler,
 		&pbundle->bundle.ufile->device->disassociate_srcu);
@@ -562,7 +562,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 			       struct ib_uverbs_attr __user *user_attrs/*来自用户态的属性数组内容*/)
 {
 	const struct uverbs_api_ioctl_method *method_elm;
-	/*由ufile获得uapi*/
+	/*由ufile获得uapi（此结构体中记录了适用于此设备的所有obj及cmd处理函数）*/
 	struct uverbs_api *uapi = ufile->device->uapi;
 	struct radix_tree_iter attrs_iter;
 	struct bundle_priv *pbundle;
@@ -574,7 +574,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 	    /*传入的driver_id必须与uapi的driver_id相等*/
 		return -EINVAL;
 
-	/*通过key查询value*/
+	/*通过key(object_id,method_id)查询value*/
 	slot = radix_tree_iter_lookup(
 		&uapi->radix, &attrs_iter,
 		uapi_key_obj(hdr->object_id) |
@@ -629,6 +629,7 @@ static int ib_uverbs_cmd_verbs(struct ib_uverbs_file *ufile,
 	return ret;
 }
 
+/*uverbs接口ioctl处理*/
 long ib_uverbs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 {
 	struct ib_uverbs_file *file = filp->private_data;

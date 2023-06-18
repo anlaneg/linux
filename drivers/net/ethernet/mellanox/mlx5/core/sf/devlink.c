@@ -311,6 +311,7 @@ mlx5_sf_new_check_attr(struct mlx5_core_dev *dev, const struct devlink_port_new_
 		       struct netlink_ext_ack *extack)
 {
 	if (new_attr->flavour != DEVLINK_PORT_FLAVOUR_PCI_SF) {
+		/*仅支持sf这一种flavor*/
 		NL_SET_ERR_MSG_MOD(extack, "Driver supports only SF port addition");
 		return -EOPNOTSUPP;
 	}
@@ -330,6 +331,7 @@ mlx5_sf_new_check_attr(struct mlx5_core_dev *dev, const struct devlink_port_new_
 		return -EOPNOTSUPP;
 	}
 	if (new_attr->pfnum != mlx5_get_dev_index(dev)) {
+		/*指定的pfnum与当前dev不匹配*/
 		NL_SET_ERR_MSG_MOD(extack, "Invalid pfnum supplied");
 		return -EOPNOTSUPP;
 	}
@@ -341,6 +343,7 @@ int mlx5_devlink_sf_port_new(struct devlink *devlink,
 			     struct netlink_ext_ack *extack,
 			     unsigned int *new_port_index)
 {
+	/*由devlink找mlx5_core_dev*/
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
 	struct mlx5_sf_table *table;
 	int err;
@@ -351,6 +354,7 @@ int mlx5_devlink_sf_port_new(struct devlink *devlink,
 
 	table = mlx5_sf_table_try_get(dev);
 	if (!table) {
+		/*仅switchdev模式下支持sf port*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Port add is only supported in eswitch switchdev mode or SF ports are disabled.");
 		return -EOPNOTSUPP;

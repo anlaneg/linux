@@ -53,6 +53,7 @@ struct path;
 			    MNT_DOOMED | MNT_SYNC_UMOUNT | MNT_MARKED | \
 			    MNT_CURSOR)
 
+/*标记为内部挂载*/
 #define MNT_INTERNAL	0x4000
 
 #define MNT_LOCK_ATIME		0x040000

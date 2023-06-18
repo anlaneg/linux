@@ -3494,6 +3494,7 @@ int ib_send_cm_sidr_req(struct ib_cm_id *cm_id,
 		goto out_unlock;
 	}
 
+	/*构造msg*/
 	msg = cm_alloc_priv_msg(cm_id_priv);
 	if (IS_ERR(msg)) {
 		ret = PTR_ERR(msg);
@@ -4498,6 +4499,7 @@ static int __init ib_cm_init(void)
 	get_random_bytes(&cm.random_id_operand, sizeof cm.random_id_operand);
 	INIT_LIST_HEAD(&cm.timewait_list);
 
+	/*创建cm对应的wq*/
 	cm.wq = alloc_workqueue("ib_cm", 0, 1);
 	if (!cm.wq) {
 		ret = -ENOMEM;

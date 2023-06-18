@@ -45,6 +45,7 @@ struct ib_field {
  * macro rather than worrying about adding together other constants.
 */
 #define IB_OPCODE(transport, op) \
+	/*定义具体的transport操作编号，例如rc的send_first即为ip_opcode_rc + send_first*/\
 	IB_OPCODE_ ## transport ## _ ## op = \
 		IB_OPCODE_ ## transport + IB_OPCODE_ ## op
 
@@ -62,6 +63,7 @@ enum {
 	/* Manufacturer specific */
 	IB_OPCODE_MSP                               = 0xe0,
 
+	/*具体操作*/
 	/* operations -- just used to define real constants */
 	IB_OPCODE_SEND_FIRST                        = 0x00,
 	IB_OPCODE_SEND_MIDDLE                       = 0x01,
@@ -93,6 +95,7 @@ enum {
 	/* real constants follow -- see comment about above IB_OPCODE()
 	   macro for more details */
 
+	/*揉合qp type与操作，形成opcode*/
 	/* RC */
 	IB_OPCODE(RC, SEND_FIRST),
 	IB_OPCODE(RC, SEND_MIDDLE),

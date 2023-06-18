@@ -179,6 +179,7 @@ static const struct dentry_operations ovl_dentry_operations = {
 
 static struct kmem_cache *ovl_inode_cachep;
 
+/*负责创建inode*/
 static struct inode *ovl_alloc_inode(struct super_block *sb)
 {
 	struct ovl_inode *oi = alloc_inode_sb(sb, ovl_inode_cachep, GFP_KERNEL);
@@ -518,6 +519,7 @@ static int ovl_parse_redirect_mode(struct ovl_config *config, const char *mode)
 	return 0;
 }
 
+/*利用opt填充config*/
 static int ovl_parse_opt(char *opt, struct ovl_config *config)
 {
 	char *p;
@@ -992,9 +994,9 @@ static unsigned int ovl_split_lowerdirs(char *str)
 
 	for (s = d = str;; s++, d++) {
 		if (*s == '\\') {
-			s++;
+			s++;/*跳过转义*/
 		} else if (*s == ':') {
-			*d = '\0';
+			*d = '\0';/*遇到目录分隔符，断开*/
 			ctr++;
 			continue;
 		}
@@ -1866,6 +1868,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 		.lowerpath = lowerpath,
 	};
 
+	/*构造root dentry*/
 	root = d_make_root(ovl_new_inode(sb, S_IFDIR, 0));
 	if (!root)
 		return NULL;
@@ -1891,6 +1894,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 	return root;
 }
 
+/*overlayfs填充super block*/
 static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct path upperpath = { };
@@ -1922,6 +1926,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	/* Is there a reason anyone would want not to share whiteouts? */
 	ofs->share_whiteout = true;
 
+	/*填充ofs->config*/
 	ofs->config.index = ovl_index_def;
 	ofs->config.uuid = true;
 	ofs->config.nfs_export = ovl_nfs_export_def;
@@ -1933,6 +1938,7 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 
 	err = -EINVAL;
 	if (!ofs->config.lowerdir) {
+		/*必须提供loverdir*/
 		if (!silent)
 			pr_err("missing 'lowerdir'\n");
 		goto out_err;
@@ -1946,11 +1952,13 @@ static int ovl_fill_super(struct super_block *sb, void *data, int silent)
 	err = -EINVAL;
 	numlower = ovl_split_lowerdirs(splitlower);
 	if (numlower > OVL_MAX_STACK) {
+		/*split lower后，发现提供的目录有点多*/
 		pr_err("too many lower directories, limit is %d\n",
 		       OVL_MAX_STACK);
 		goto out_err;
 	}
 
+	/*每一个lower对应一个ovl_layer结构体*/
 	err = -ENOMEM;
 	layers = kcalloc(numlower + 1, sizeof(struct ovl_layer), GFP_KERNEL);
 	if (!layers)
@@ -2098,6 +2106,7 @@ static struct file_system_type ovl_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "overlay",
 	.fs_flags	= FS_USERNS_MOUNT,
+	/*仅提供mount回调，走legacy_init_fs_context,并在get_tree时，通过此回调完成文件系统挂载*/
 	.mount		= ovl_mount,
 	.kill_sb	= kill_anon_super,
 };

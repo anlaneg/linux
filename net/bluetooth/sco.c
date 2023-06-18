@@ -1460,6 +1460,7 @@ int __init sco_init(void)
 	if (err < 0)
 		return err;
 
+	/*注册sco协议*/
 	err = bt_sock_register(BTPROTO_SCO, &sco_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("SCO socket registration failed");

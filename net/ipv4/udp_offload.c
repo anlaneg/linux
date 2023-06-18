@@ -164,6 +164,7 @@ struct sk_buff *skb_udp_tunnel_segment(struct sk_buff *skb,
 
 	switch (skb->inner_protocol_type) {
 	case ENCAP_TYPE_ETHER:
+		/*内层封装的是以太包，采用mac gso进行分片*/
 		protocol = skb->inner_protocol;
 		gso_inner_segment = skb_mac_gso_segment;
 		break;
@@ -377,7 +378,8 @@ static struct sk_buff *udp4_ufo_fragment(struct sk_buff *skb,
 	if (skb->encapsulation &&
 	    (skb_shinfo(skb)->gso_type &
 	     (SKB_GSO_UDP_TUNNEL|SKB_GSO_UDP_TUNNEL_CSUM))) {
-		segs = skb_udp_tunnel_segment(skb, features, false);
+
+		segs = skb_udp_tunnel_segment(skb, features, false/*非ipv6*/);
 		goto out;
 	}
 

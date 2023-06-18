@@ -3274,7 +3274,7 @@ SYSCALL_DEFINE2(socketcall, int, call, unsigned long __user *, args)
  *	socket interface. The value ops->family corresponds to the
  *	socket system call protocol family.
  */
-//为某一协议注册socket操作集
+//为某一协议family注册socket操作集
 int sock_register(const struct net_proto_family *ops)
 {
 	int err;

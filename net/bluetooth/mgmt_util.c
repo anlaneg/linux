@@ -221,8 +221,10 @@ struct mgmt_pending_cmd *mgmt_pending_find(unsigned short channel, u16 opcode,
 
 	list_for_each_entry(cmd, &hdev->mgmt_pending, list) {
 		if (hci_sock_get_channel(cmd->sk) != channel)
+			/*channel必须相等*/
 			continue;
 		if (cmd->opcode == opcode)
+			/*opcode必须相等*/
 			return cmd;
 	}
 
@@ -246,6 +248,7 @@ struct mgmt_pending_cmd *mgmt_pending_find_data(unsigned short channel,
 	return NULL;
 }
 
+/*针对hdev->mgmt_pending队列，针对opcode一致的，执行回调cb*/
 void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev,
 			  void (*cb)(struct mgmt_pending_cmd *cmd, void *data),
 			  void *data)
@@ -254,6 +257,7 @@ void mgmt_pending_foreach(u16 opcode, struct hci_dev *hdev,
 
 	list_for_each_entry_safe(cmd, tmp, &hdev->mgmt_pending, list) {
 		if (opcode > 0 && cmd->opcode != opcode)
+			/*忽略掉与opcode不一致的cmd*/
 			continue;
 
 		cb(cmd, data);
@@ -287,6 +291,7 @@ struct mgmt_pending_cmd *mgmt_pending_new(struct sock *sk, u16 opcode,
 	return cmd;
 }
 
+/*构造pending_cmd,并挂接到mgmt_pending队列*/
 struct mgmt_pending_cmd *mgmt_pending_add(struct sock *sk, u16 opcode,
 					  struct hci_dev *hdev,
 					  void *data, u16 len)

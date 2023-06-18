@@ -4694,11 +4694,12 @@ unlock:
 }
 
 //监测tx queue超时
-static void mlx5e_tx_timeout(struct net_device *dev, unsigned int txqueue)
+static void mlx5e_tx_timeout(struct net_device *dev, unsigned int txqueue/*超时队列id*/)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
 
 	netdev_err(dev, "TX timeout detected\n");
+	/*将timeout work加入到wq*/
 	queue_work(priv->wq, &priv->tx_timeout_work);
 }
 
@@ -4818,6 +4819,7 @@ static int mlx5e_xdp(struct net_device *dev, struct netdev_bpf *xdp)
 	    //设置xdp程序
 		return mlx5e_xdp_set(dev, xdp->prog);
 	case XDP_SETUP_XSK_POOL:
+		/*使能xsk pool，以支持zero copy*/
 		return mlx5e_xsk_setup_pool(dev, xdp->xsk.pool,
 					    xdp->xsk.queue_id);
 	default:
@@ -5580,6 +5582,7 @@ int mlx5e_priv_init(struct mlx5e_priv *priv,
 	INIT_WORK(&priv->tx_timeout_work, mlx5e_tx_timeout_work);
 	INIT_WORK(&priv->update_stats_work, mlx5e_update_stats_work);
 
+	/*创建单线程wq*/
 	priv->wq = create_singlethread_workqueue("mlx5e");
 	if (!priv->wq)
 		goto err_free_selq;

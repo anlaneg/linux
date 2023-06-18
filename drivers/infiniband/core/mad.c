@@ -243,6 +243,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	/* Validate parameters */
 	qpn = get_spl_qp_index(qp_type);
 	if (qpn == -1) {
+		/*只支持smi,gsi类型的qp*/
 		dev_dbg_ratelimited(&device->dev, "%s: invalid QP Type %d\n",
 				    __func__, qp_type);
 		goto error1;
@@ -1031,6 +1032,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	spin_lock_irqsave(&qp_info->send_queue.lock, flags);
 	if (qp_info->send_queue.count < qp_info->send_queue.max_active) {
 		trace_ib_mad_ib_send_mad(mad_send_wr, qp_info);
+		/*向qp发送此wr*/
 		ret = ib_post_send(mad_agent->qp, &mad_send_wr->send_wr.wr,
 				   NULL);
 		list = &qp_info->send_queue.list;

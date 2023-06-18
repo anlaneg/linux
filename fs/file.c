@@ -1083,12 +1083,8 @@ static unsigned long __fget_light(unsigned int fd, fmode_t mask)
 			return 0;
 		return (unsigned long)file;
 	} else {
-<<<<<<< HEAD
 		//查找fd对应的file
-		file = __fget(fd, mask, 1);
-=======
 		file = __fget(fd, mask);
->>>>>>> upstream/master
 		if (!file)
 			return 0;
 		return FDPUT_FPUT | (unsigned long)file;

@@ -520,6 +520,7 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	struct rxe_sq *sq = &qp->sq;
 
 	if (unlikely(num_sge > sq->max_sge))
+		/*sge超限*/
 		return -EINVAL;
 
 	if (unlikely(mask & WR_ATOMIC_MASK)) {
@@ -532,6 +533,7 @@ static int validate_send_wr(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 
 	if (unlikely((ibwr->send_flags & IB_SEND_INLINE) &&
 		     (length > sq->max_inline)))
+		/*指明了inline,但提供的数据超过sq inline限制*/
 		return -EINVAL;
 
 	return 0;
@@ -594,6 +596,7 @@ static void init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 	}
 }
 
+/*支持数据inline，将ibwr中的数据写入到inline中*/
 static void copy_inline_data_to_wqe(struct rxe_send_wqe *wqe,
 				    const struct ib_send_wr *ibwr)
 {
@@ -607,12 +610,14 @@ static void copy_inline_data_to_wqe(struct rxe_send_wqe *wqe,
 	}
 }
 
+/*初始化send wqe*/
 static void init_send_wqe(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 			 unsigned int mask, unsigned int length,
 			 struct rxe_send_wqe *wqe)
 {
 	int num_sge = ibwr->num_sge;
 
+	/*设置weq->wr*/
 	init_send_wr(qp, &wqe->wr, ibwr);
 
 	/* local operation */
@@ -623,8 +628,10 @@ static void init_send_wqe(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	}
 
 	if (unlikely(ibwr->send_flags & IB_SEND_INLINE))
+		/*支持数据inline，将ibwr中的数据写入到inline中*/
 		copy_inline_data_to_wqe(wqe, ibwr);
 	else
+		/*非inline数据，将sge元数据写入到dma.sge*/
 		memcpy(wqe->dma.sge, ibwr->sg_list,
 		       num_sge * sizeof(struct ib_sge));
 
@@ -636,12 +643,12 @@ static void init_send_wqe(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	wqe->dma.num_sge	= num_sge;
 	wqe->dma.cur_sge	= 0;
 	wqe->dma.sge_offset	= 0;
-	wqe->state		= wqe_state_posted;
-	wqe->ssn		= atomic_add_return(1, &qp->ssn);
+	wqe->state		= wqe_state_posted;/*初始状态为posted*/
+	wqe->ssn		= atomic_add_return(1, &qp->ssn);/*为此wqe提供唯一编号*/
 }
 
 static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
-			 unsigned int mask, u32 length)
+			 unsigned int mask/*此wr操作对应的mask*/, u32 length/*要发送的数据长度*/)
 {
 	int err;
 	struct rxe_sq *sq = &qp->sq;
@@ -664,9 +671,10 @@ static int post_one_send(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 		return -ENOMEM;
 	}
 
-	/*取生产者对应的wqe*/
+	/*取生产者索引对应的wqe*/
 	send_wqe = queue_producer_addr(sq->queue, QUEUE_TYPE_FROM_ULP);
-	/*更新send_wqe*/
+
+	/*利用ibwr初始化send_wqe*/
 	init_send_wqe(qp, ibwr, mask, length, send_wqe);
 
 	/*更新新产者指针*/
@@ -687,8 +695,10 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 	struct ib_send_wr *next;
 
 	while (wr) {
+		/*此操作对应的mask,例如send_write对应的WR_INLINE_MASK | WR_SEND_MASK*/
 		mask = wr_opcode_mask(wr->opcode, qp);
 		if (unlikely(!mask)) {
+			/*无效操作*/
 			err = -EINVAL;
 			*bad_wr = wr;
 			break;
@@ -696,19 +706,20 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 
 		if (unlikely((wr->send_flags & IB_SEND_INLINE) &&
 			     !(mask & WR_INLINE_MASK))) {
+			/*此操作不容许inline发送，但用户指定有inline发送标记*/
 			err = -EINVAL;
 			*bad_wr = wr;
 			break;
 		}
 
-		next = wr->next;
+		next = wr->next;/*保存下一个send_wr*/
 
-		/*取此wr的数据总长度*/
+		/*取此wr的要发送的数据总长度*/
 		length = 0;
 		for (i = 0; i < wr->num_sge; i++)
 			length += wr->sg_list[i].length;
 
-		/*发送此wr*/
+		/*将此wr转换为send wqe,并入队，准备发送此wr*/
 		err = post_one_send(qp, wr, mask, length);
 
 		if (err) {
@@ -720,6 +731,7 @@ static int rxe_post_send_kernel(struct rxe_qp *qp, const struct ib_send_wr *wr,
 		wr = next;
 	}
 
+	/*队列准备完成，调度task 向外发送*/
 	rxe_sched_task(&qp->req.task);
 	if (unlikely(qp->req.state == QP_STATE_ERROR))
 		rxe_sched_task(&qp->comp.task);

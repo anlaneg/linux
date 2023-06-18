@@ -1711,7 +1711,7 @@ static void udp_destruct_sock(struct sock *sk)
 //udp的socket初始化函数，socket创建期间调用
 int udp_init_sock(struct sock *sk)
 {
-    	/*初始化reader_queue*/
+    /*初始化reader_queue*/
 	udp_lib_init_sock(sk);
 	sk->sk_destruct = udp_destruct_sock;
 	set_bit(SOCK_SUPPORT_ZC, &sk->sk_socket->flags);

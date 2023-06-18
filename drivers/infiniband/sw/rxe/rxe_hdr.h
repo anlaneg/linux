@@ -18,14 +18,18 @@ struct rxe_pkt_info {
 	struct rxe_qp		*qp;		/* qp that owns packet */
 	/*报文对应的wqe*/
 	struct rxe_send_wqe	*wqe;		/* send wqe */
-	/*跳过udp头部，指向udp负载*/
+	/*跳过udp头部，指向udp负载（roce头部）*/
 	u8			*hdr;		/* points to bth */
+	/*opcode对应的mask,见rxe_opcode*/
 	u32			mask;		/* useful info about pkt */
+	/*此报文对应的psn*/
 	u32			psn;		/* bth psn of packet */
 	u16			pkey_index;	/* partition of pkt */
 	/*udp负载长度*/
 	u16			paylen;		/* length of bth - icrc */
+	/*收方向port number*/
 	u8			port_num;	/* port pkt received on */
+	/*此报文对应的opcode,bth 操作码，高3bits为pkt type,例如：IB_QPT_RC*/
 	u8			opcode;		/* bth opcode of packet */
 };
 
@@ -64,21 +68,39 @@ static inline struct sk_buff *PKT_TO_SKB(struct rxe_pkt_info *pkt)
  * Base Transport Header
  ******************************************************************************/
 struct rxe_bth {
-    /*bth头部12字节*/
 	u8			opcode;/*操作码*/
+	/*分别对应SE标记(1bit)，MIG标记(1bit)，PAD（2bit)，低4位为tver*/
 	u8			flags;
+	/*
+	 * rxe中针对pkey采用的是IB_DEFAULT_PKEY_FULL
+	 * P_Key identifies the partition that the destination
+	 * QP (RC, UC, UD, XRC) or EE Context (RD) is a member.*/
 	__be16			pkey;
-	/*低24位用于表示qpn*/
+	/*分别对应FECN标记（1bit),BECN标记（1bit),预留位（6bit),低24位用于表示目标qpn*/
 	__be32			qpn;
-	__be32			apsn;
+	__be32			apsn;/*分别对应ACKREQ（1bit),预留位（7bit),低24位用于表示psn*/
 };
 
 #define BTH_TVER		(0)
 #define BTH_DEF_PKEY		(0xffff)
 
+/*
+ * 此请求需要调用CQ event
+ * The requester sets this bit to 1 to indicate that
+ * the responder shall invoke the CQ event handler*/
 #define BTH_SE_MASK		(0x80)
+/*
+ * Automatic Path Migration 相关
+ * Used to communicate migration state. If set to one,
+ * indicates the connec- 31 tion or EE context has been migrated;
+ * if set to zero, it means there is no 32 change in the current
+ * migration state.
+ */
 #define BTH_MIG_MASK		(0x40)
+/*bth报文的长度必须是4的整数倍，故需要pad,此字段即用于
+ * 指定pad的字节数（占2位：0，1，2，3）*/
 #define BTH_PAD_MASK		(0x30)
+/*报文采用的IBA transport版本号，当前版本号为0*/
 #define BTH_TVER_MASK		(0x0f)
 #define BTH_FECN_MASK		(0x80000000)
 #define BTH_BECN_MASK		(0x40000000)
@@ -88,6 +110,7 @@ struct rxe_bth {
 #define BTH_RESV7_MASK		(0x7f000000)
 #define BTH_PSN_MASK		(0x00ffffff)
 
+/*取bth的opcode*/
 static inline u8 __bth_opcode(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -103,6 +126,7 @@ static inline void __bth_set_opcode(void *arg, u8 opcode)
 	bth->opcode = opcode;
 }
 
+/*检查bth头部是否有SE标记*/
 static inline u8 __bth_se(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -137,6 +161,7 @@ static inline void __bth_set_mig(void *arg, u8 mig)
 		bth->flags &= ~BTH_MIG_MASK;
 }
 
+/*取pad字节数*/
 static inline u8 __bth_pad(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -152,6 +177,7 @@ static inline void __bth_set_pad(void *arg, u8 pad)
 			(~BTH_PAD_MASK & bth->flags);
 }
 
+/*取transport版本号*/
 static inline u8 __bth_tver(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -246,6 +272,7 @@ static inline void __bth_set_resv6a(void *arg)
 	bth->qpn = cpu_to_be32(~BTH_RESV6A_MASK);
 }
 
+/*检查是否有ackreq标记*/
 static inline int __bth_ack(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -270,13 +297,16 @@ static inline void __bth_set_resv7(void *arg)
 	bth->apsn &= ~cpu_to_be32(BTH_RESV7_MASK);
 }
 
+/*取psn*/
 static inline u32 __bth_psn(void *arg)
 {
 	struct rxe_bth *bth = arg;
 
+	/*psn有效位为24位，故这里只提取低24位*/
 	return BTH_PSN_MASK & be32_to_cpu(bth->apsn);
 }
 
+/*设置psn*/
 static inline void __bth_set_psn(void *arg, u32 psn)
 {
 	struct rxe_bth *bth = arg;
@@ -286,11 +316,13 @@ static inline void __bth_set_psn(void *arg, u32 psn)
 			(~BTH_PSN_MASK & apsn));
 }
 
+/*取bth对应的opcode*/
 static inline u8 bth_opcode(struct rxe_pkt_info *pkt)
 {
 	return __bth_opcode(pkt->hdr);
 }
 
+/*设置bth对应的opcode*/
 static inline void bth_set_opcode(struct rxe_pkt_info *pkt, u8 opcode)
 {
 	__bth_set_opcode(pkt->hdr, opcode);
@@ -316,31 +348,37 @@ static inline void bth_set_mig(struct rxe_pkt_info *pkt, u8 mig)
 	__bth_set_mig(pkt->hdr, mig);
 }
 
+/*取此报文pad的字节长度*/
 static inline u8 bth_pad(struct rxe_pkt_info *pkt)
 {
 	return __bth_pad(pkt->hdr);
 }
 
+/*设置此pkt要pad的字节长度*/
 static inline void bth_set_pad(struct rxe_pkt_info *pkt, u8 pad)
 {
 	__bth_set_pad(pkt->hdr, pad);
 }
 
+/*取tver*/
 static inline u8 bth_tver(struct rxe_pkt_info *pkt)
 {
 	return __bth_tver(pkt->hdr);
 }
 
+/*设置tver*/
 static inline void bth_set_tver(struct rxe_pkt_info *pkt, u8 tver)
 {
 	__bth_set_tver(pkt->hdr, tver);
 }
 
+/*取pkey*/
 static inline u16 bth_pkey(struct rxe_pkt_info *pkt)
 {
 	return __bth_pkey(pkt->hdr);
 }
 
+/*设置pkey*/
 static inline void bth_set_pkey(struct rxe_pkt_info *pkt, u16 pkey)
 {
 	__bth_set_pkey(pkt->hdr, pkey);
@@ -413,8 +451,8 @@ static inline void bth_set_psn(struct rxe_pkt_info *pkt, u32 psn)
 	__bth_set_psn(pkt->hdr, psn);
 }
 
-static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se,
-			    int mig, int pad, u16 pkey, u32 qpn, int ack_req,
+static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否有se标记*/,
+			    int mig/*是否有mig标记*/, int pad/*pad长度*/, u16 pkey, u32 qpn/*24位有效的qpn*/, int ack_req,
 			    u32 psn)
 {
 	struct rxe_bth *bth = (struct rxe_bth *)(pkt->hdr);
@@ -427,7 +465,7 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se,
 	if (mig)
 		bth->flags |= BTH_MIG_MASK;
 	bth->pkey = cpu_to_be16(pkey);
-	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置qpn*/
+	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置目标qpn*/
 	psn &= BTH_PSN_MASK;
 	if (ack_req)
 		psn |= BTH_ACK_MASK;
@@ -437,8 +475,14 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se,
 /******************************************************************************
  * Reliable Datagram Extended Transport Header
  ******************************************************************************/
+/*扩展头*/
 struct rxe_rdeth {
-	__be32			een;
+	__be32			een;/*24位有效，高8位为预留位，This field indicates the End-to-End (EE)
+	Context used for this packet. EE 29 context is a unique endnode identifier used
+	to multiplex / demultiplex reli- 30 able datagram packets between any two end nodes.
+	The EE-Context pro- 31 vides a context for reliable transfer state similar to that
+	used for reliable 32 connection.
+	*/
 };
 
 #define RDETH_EEN_MASK		(0x00ffffff)
@@ -474,7 +518,7 @@ static inline void rdeth_set_een(struct rxe_pkt_info *pkt, u32 een)
  ******************************************************************************/
 struct rxe_deth {
 	__be32			qkey;
-	__be32			sqp;
+	__be32			sqp;/*源qp number(低24位有效）*/
 };
 
 #define GSI_QKEY		(0x80010000)
@@ -508,6 +552,7 @@ static inline void __deth_set_sqp(void *arg, u32 sqp)
 	deth->sqp = cpu_to_be32(DETH_SQP_MASK & sqp);
 }
 
+/*取deth头部的qkey*/
 static inline u32 deth_qkey(struct rxe_pkt_info *pkt)
 {
 	return __deth_qkey(pkt->hdr +
@@ -536,9 +581,9 @@ static inline void deth_set_sqp(struct rxe_pkt_info *pkt, u32 sqp)
  * RDMA Extended Transport Header
  ******************************************************************************/
 struct rxe_reth {
-	__be64			va;
+	__be64			va;/*buffer起始地址*/
 	__be32			rkey;
-	__be32			len;
+	__be32			len;/*dma长度*/
 };
 
 static inline u64 __reth_va(void *arg)
@@ -958,32 +1003,37 @@ static inline void ieth_set_rkey(struct rxe_pkt_info *pkt, u32 rkey)
 }
 
 enum rxe_hdr_length {
-	RXE_BTH_BYTES		= sizeof(struct rxe_bth),
-	RXE_DETH_BYTES		= sizeof(struct rxe_deth),
+	RXE_BTH_BYTES		= sizeof(struct rxe_bth),/*base transport header长度*/
+	RXE_DETH_BYTES		= sizeof(struct rxe_deth),/*Datagram Extended Transport Header长度*/
 	RXE_IMMDT_BYTES		= sizeof(struct rxe_immdt),
 	RXE_RETH_BYTES		= sizeof(struct rxe_reth),
 	RXE_AETH_BYTES		= sizeof(struct rxe_aeth),
 	RXE_ATMACK_BYTES	= sizeof(struct rxe_atmack),
 	RXE_ATMETH_BYTES	= sizeof(struct rxe_atmeth),
 	RXE_IETH_BYTES		= sizeof(struct rxe_ieth),
-	RXE_RDETH_BYTES		= sizeof(struct rxe_rdeth),
+	RXE_RDETH_BYTES		= sizeof(struct rxe_rdeth),/*Reliable Datagram Extended Transport Header长度*/
 	RXE_FETH_BYTES		= sizeof(struct rxe_feth),
 };
 
+/*取指定opcode对应的消息header长度*/
 static inline size_t header_size(struct rxe_pkt_info *pkt)
 {
 	return rxe_opcode[pkt->opcode].length;
 }
 
+/*取此报文payload起始地址*/
 static inline void *payload_addr(struct rxe_pkt_info *pkt)
 {
 	return pkt->hdr + rxe_opcode[pkt->opcode].offset[RXE_PAYLOAD];
 }
 
+/*提取pkt->opcode对应的消息中payload长度
+ * 这个值等于 报文总长度-pad长度-icrc-此消息到payload的offset
+ * */
 static inline size_t payload_size(struct rxe_pkt_info *pkt)
 {
 	return pkt->paylen - rxe_opcode[pkt->opcode].offset[RXE_PAYLOAD]
-		- bth_pad(pkt) - RXE_ICRC_SIZE;
+		- bth_pad(pkt)/*报文中pad的字节*/ - RXE_ICRC_SIZE;
 }
 
 #endif /* RXE_HDR_H */

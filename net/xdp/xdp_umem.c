@@ -109,6 +109,7 @@ static int xdp_umem_pin_pages(struct xdp_umem *umem, unsigned long address)
 			      gup_flags | FOLL_LONGTERM, &umem->pgs[0]/*出参，各页指针*/, NULL);
 	mmap_read_unlock(current->mm);
 
+	/*注册的内存未完全pin住，报错*/
 	if (npgs != umem->npgs) {
 		if (npgs >= 0) {
 			umem->npgs = npgs;
@@ -152,16 +153,18 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 }
 
 //注册用户态的内存
-static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
+static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr/*用户传入的mr*/)
 {
 	/*chunk大小及headroom大小*/
 	u32 npgs_rem, chunk_size = mr->chunk_size, headroom = mr->headroom;
-    	/*是否为不对齐的chunks*/
+    /*是否为不对齐的chunks*/
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
+	/*用户态传入的memory起始地址及长度*/
 	u64 npgs, addr = mr->addr, size = mr->len;
 	unsigned int chunks, chunks_rem;
 	int err;
 
+	/*chunk_size过小或过大检查*/
 	if (chunk_size < XDP_UMEM_MIN_CHUNK_SIZE || chunk_size > PAGE_SIZE) {
 		/* Strictly speaking we could support this, if:
 		 * - huge pages, or*
@@ -172,13 +175,15 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 		return -EINVAL;
 	}
 
-	//当前仅支持unaligned,need_wakeup两种标记
+	//检查是否遇到不支持的flags,例如当前仅支持unaligned一种标记
 	if (mr->flags & ~XDP_UMEM_UNALIGNED_CHUNK_FLAG)
 		return -EINVAL;
 
+	/*如果未指明chunk对齐，则要求chunk_size必须为2的N次幂取值*/
 	if (!unaligned_chunks && !is_power_of_2(chunk_size))
 		return -EINVAL;
 
+	/*addr必面按page对齐*/
 	if (!PAGE_ALIGNED(addr)) {
 		/* Memory area has to be page size aligned. For
 		 * simplicity, this might change.
@@ -186,25 +191,28 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 		return -EINVAL;
 	}
 
-	//防地址超界
+	//防地址绕回
 	if ((addr + size) < addr)
 		return -EINVAL;
 
-	npgs = div_u64_rem(size, PAGE_SIZE, &npgs_rem);
+	/*注册的内存占用多少页（npgs)*/
+	npgs = div_u64_rem(size, PAGE_SIZE, &npgs_rem/*保存余数*/);
 	if (npgs_rem)
 		npgs++;
 	if (npgs > U32_MAX)
 		return -EINVAL;
 
-	/*获得chunk的数目*/
+	/*注册的内存共包含多少chunk*/
 	chunks = (unsigned int)div_u64_rem(size, chunk_size, &chunks_rem);
 	if (chunks == 0)
 		return -EINVAL;
 
+	/*没有指明“不对齐”情况下，不容许有余数*/
 	if (!unaligned_chunks && chunks_rem)
 		return -EINVAL;
 
-	/*可用于存放实际报文的大小（减去headroom,减去xdp packet headroom)*/
+	/*检查headroom配置，可用于存放实际报文的大小不得为0
+	 * （减去headroom,减去xdp packet headroom)*/
 	if (headroom >= chunk_size - XDP_PACKET_HEADROOM)
 		return -EINVAL;
 
@@ -220,16 +228,17 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr)
 	INIT_LIST_HEAD(&umem->xsk_dma_list);
 	refcount_set(&umem->users, 1);
 
+	/*检查是否触发memory limit*/
 	err = xdp_umem_account_pages(umem);
 	if (err)
 		return err;
 
+	/*pin用户态注册的内存*/
 	err = xdp_umem_pin_pages(umem, (unsigned long)addr);
 	if (err)
 		goto out_account;
 
-	/*申请与umem相同的一组umem_page*/
-	/*映射umem_page与用户内存的映射*/
+	/*映射umem_page与用户内存的映射，内核可使用的虚地址*/
 	err = xdp_umem_addr_map(umem, umem->pgs, umem->npgs);
 	if (err)
 		goto out_unpin;

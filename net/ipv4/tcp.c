@@ -3542,6 +3542,7 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		name[val] = 0;
 
 		sockopt_lock_sock(sk);
+		/*设置拥塞算法*/
 		err = tcp_set_congestion_control(sk, name, !has_current_bpf_ctx(),
 						 sockopt_ns_capable(sock_net(sk)->user_ns,
 								    CAP_NET_ADMIN));
@@ -4860,6 +4861,7 @@ void __init tcp_init(void)
 
 	tcp_v4_init();
 	tcp_metrics_init();
+	/*注册reno算法*/
 	BUG_ON(tcp_register_congestion_control(&tcp_reno) != 0);
 	tcp_tasklet_init();
 	mptcp_init();

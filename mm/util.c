@@ -539,10 +539,12 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	unsigned long populate;
 	LIST_HEAD(uf);
 
+	/*触发安全钩子*/
 	ret = security_mmap_file(file, prot, flag);
 	if (!ret) {
 		if (mmap_write_lock_killable(mm))
 			return -EINTR;
+		/*完成实际mmap*/
 		ret = do_mmap(file, addr, len, prot, flag, pgoff, &populate,
 			      &uf);
 		mmap_write_unlock(mm);

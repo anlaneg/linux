@@ -508,7 +508,7 @@ void inet_csk_update_fastreuse(struct inet_bind_bucket *tb,
  * if snum is zero it means select any available local port.
  * We try to allocate an odd port (and leave even ports for connect())
  */
-int inet_csk_get_port(struct sock *sk, unsigned short snum)
+int inet_csk_get_port(struct sock *sk, unsigned short snum/*要占用的port*/)
 {
 	struct inet_hashinfo *hinfo = tcp_or_dccp_get_hashinfo(sk);
 	bool reuse = sk->sk_reuse && sk->sk_state != TCP_LISTEN;
@@ -524,7 +524,7 @@ int inet_csk_get_port(struct sock *sk, unsigned short snum)
 	l3mdev = inet_sk_bound_l3mdev(sk);
 
 	if (!port) {
-		/*使用动态port情况，获取一个可使用的port*/
+		/*未指定port，动态port情况，即分配一个可使用的port*/
 		head = inet_csk_find_open_port(sk, &tb, &tb2, &head2, &port);
 		if (!head)
 			return ret;
@@ -544,10 +544,10 @@ int inet_csk_get_port(struct sock *sk, unsigned short snum)
 	}
 
 	if (!tb) {
+		/*未在hash表中查找到，此port无人使用，尝试占用*/
 		tb = inet_bind_bucket_create(hinfo->bind_bucket_cachep, net,
 					     head, port, l3mdev);
 		if (!tb)
-			/*port无人使用*/
 			goto fail_unlock;
 		bhash_created = true;
 	}

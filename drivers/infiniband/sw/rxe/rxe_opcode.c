@@ -15,6 +15,7 @@ struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
 	[IB_WR_RDMA_WRITE]				= {
 		.name	= "IB_WR_RDMA_WRITE",
 		.mask	= {
+				/*不同qp对应的mask*/
 			[IB_QPT_RC]	= WR_INLINE_MASK | WR_WRITE_MASK,
 			[IB_QPT_UC]	= WR_INLINE_MASK | WR_WRITE_MASK,
 		},
@@ -85,7 +86,7 @@ struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
 	[IB_WR_LOCAL_INV]				= {
 		.name	= "IB_WR_LOCAL_INV",
 		.mask	= {
-			[IB_QPT_RC]	= WR_LOCAL_OP_MASK,
+			[IB_QPT_RC]	= WR_LOCAL_OP_MASK/*标记为本地操作*/,
 		},
 	},
 	[IB_WR_REG_MR]					= {
@@ -116,9 +117,10 @@ struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
 };
 
 struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
+		/*rc相关的操作*/
 	[IB_OPCODE_RC_SEND_FIRST]			= {
 		.name	= "IB_OPCODE_RC_SEND_FIRST",
-		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK | RXE_RWR_MASK |
+		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK/*请求类操作*/ | RXE_RWR_MASK |
 			  RXE_SEND_MASK | RXE_START_MASK,
 		.length = RXE_BTH_BYTES,
 		.offset = {
@@ -414,6 +416,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		}
 	},
 
+	/*uc相关的操作*/
 	/* UC */
 	[IB_OPCODE_UC_SEND_FIRST]			= {
 		.name	= "IB_OPCODE_UC_SEND_FIRST",
@@ -557,6 +560,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		}
 	},
 
+	/*rd相关的操作*/
 	/* RD */
 	[IB_OPCODE_RD_SEND_FIRST]			= {
 		.name	= "IB_OPCODE_RD_SEND_FIRST",
@@ -941,6 +945,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		}
 	},
 
+	/*ud相关的操作*/
 	/* UD */
 	[IB_OPCODE_UD_SEND_ONLY]			= {
 		.name	= "IB_OPCODE_UD_SEND_ONLY",

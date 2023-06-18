@@ -47,11 +47,11 @@ static const struct inode_operations hugetlbfs_inode_operations;
 enum hugetlbfs_size_type { NO_SIZE, SIZE_STD, SIZE_PERCENT };
 
 struct hugetlbfs_fs_context {
-	struct hstate		*hstate;
+	struct hstate		*hstate;/*此文件系统对应的hstate(由pagesize参数指定）*/
 	unsigned long long	max_size_opt;
 	unsigned long long	min_size_opt;
-	long			max_hpages;
-	long			nr_inodes;
+	long			max_hpages;/*容许使用的最大大页数*/
+	long			nr_inodes;/*容许使用的最大inode数*/
 	long			min_hpages;
 	enum hugetlbfs_size_type max_val_type;
 	enum hugetlbfs_size_type min_val_type;
@@ -72,6 +72,7 @@ enum hugetlb_param {
 	Opt_uid,
 };
 
+/*hugetlb文件系统支持的参数列表*/
 static const struct fs_parameter_spec hugetlb_fs_parameters[] = {
 	fsparam_u32   ("gid",		Opt_gid),
 	fsparam_string("min_size",	Opt_min_size),
@@ -118,10 +119,12 @@ static inline void hugetlb_drop_vma_policy(struct vm_area_struct *vma)
 
 static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 {
+	/*取文件对应的inode*/
 	struct inode *inode = file_inode(file);
 	struct hugetlbfs_inode_info *info = HUGETLBFS_I(inode);
 	loff_t len, vma_len;
 	int ret;
+	/*取此文件对应的hstate*/
 	struct hstate *h = hstate_file(file);
 
 	/*
@@ -934,10 +937,11 @@ static struct inode *hugetlbfs_get_root(struct super_block *sb,
 {
 	struct inode *inode;
 
+	/*创建一个inode做为大页文件系统的根*/
 	inode = new_inode(sb);
 	if (inode) {
 		inode->i_ino = get_next_ino();
-		inode->i_mode = S_IFDIR | ctx->mode;
+		inode->i_mode = S_IFDIR | ctx->mode;/*标明是目录*/
 		inode->i_uid = ctx->uid;
 		inode->i_gid = ctx->gid;
 		inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
@@ -960,7 +964,7 @@ static struct lock_class_key hugetlbfs_i_mmap_rwsem_key;
 
 static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 					struct inode *dir,
-					umode_t mode, dev_t dev)
+					umode_t mode/*inode类型权限*/, dev_t dev)
 {
 	struct inode *inode;
 	struct resv_map *resv_map = NULL;
@@ -975,11 +979,12 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 			return NULL;
 	}
 
+	/*申请inode*/
 	inode = new_inode(sb);
 	if (inode) {
 		struct hugetlbfs_inode_info *info = HUGETLBFS_I(inode);
 
-		inode->i_ino = get_next_ino();
+		inode->i_ino = get_next_ino();/*申请inode*/
 		inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 		lockdep_set_class(&inode->i_mapping->i_mmap_rwsem,
 				&hugetlbfs_i_mmap_rwsem_key);
@@ -989,13 +994,16 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 		info->seals = F_SEAL_SEAL;
 		switch (mode & S_IFMT) {
 		default:
+			/*其它特别的文件ops*/
 			init_special_inode(inode, mode, dev);
 			break;
 		case S_IFREG:
+			/*设置普通文件ops*/
 			inode->i_op = &hugetlbfs_inode_operations;
 			inode->i_fop = &hugetlbfs_file_operations;
 			break;
 		case S_IFDIR:
+			/*设置目录文件ops*/
 			inode->i_op = &hugetlbfs_dir_inode_operations;
 			inode->i_fop = &simple_dir_operations;
 
@@ -1003,6 +1011,7 @@ static struct inode *hugetlbfs_get_inode(struct super_block *sb,
 			inc_nlink(inode);
 			break;
 		case S_IFLNK:
+			/*设置link对应的ops*/
 			inode->i_op = &page_symlink_inode_operations;
 			inode_nohighmem(inode);
 			break;
@@ -1033,11 +1042,12 @@ static int hugetlbfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	return 0;
 }
 
+/*大页创建目录*/
 static int hugetlbfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 			   struct dentry *dentry, umode_t mode)
 {
 	int retval = hugetlbfs_mknod(&nop_mnt_idmap, dir, dentry,
-				     mode | S_IFDIR, 0);
+				     mode | S_IFDIR/*创建目录*/, 0);
 	if (!retval)
 		inc_nlink(dir);
 	return retval;
@@ -1047,7 +1057,7 @@ static int hugetlbfs_create(struct mnt_idmap *idmap,
 			    struct inode *dir, struct dentry *dentry,
 			    umode_t mode, bool excl)
 {
-	return hugetlbfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG, 0);
+	return hugetlbfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG/*创建普通文件*/, 0);
 }
 
 static int hugetlbfs_tmpfile(struct mnt_idmap *idmap,
@@ -1284,6 +1294,7 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
+/*大页对应的文件操作ops*/
 const struct file_operations hugetlbfs_file_operations = {
 	.read_iter		= hugetlbfs_read_iter,
 	.mmap			= hugetlbfs_file_mmap,
@@ -1293,6 +1304,7 @@ const struct file_operations hugetlbfs_file_operations = {
 	.fallocate		= hugetlbfs_fallocate,
 };
 
+/*大页inode操作集*/
 static const struct inode_operations hugetlbfs_dir_inode_operations = {
 	.create		= hugetlbfs_create,
 	.lookup		= simple_lookup,
@@ -1331,14 +1343,17 @@ hugetlbfs_size_to_hpages(struct hstate *h, unsigned long long size_opt,
 			 enum hugetlbfs_size_type val_type)
 {
 	if (val_type == NO_SIZE)
+		/*针对no_size直接返回-1*/
 		return -1;
 
 	if (val_type == SIZE_PERCENT) {
+		/*百分比换算成总数*/
 		size_opt <<= huge_page_shift(h);
 		size_opt *= h->max_huge_pages;
 		do_div(size_opt, 100);
 	}
 
+	/*返回可用页数*/
 	size_opt >>= huge_page_shift(h);
 	return size_opt;
 }
@@ -1354,12 +1369,15 @@ static int hugetlbfs_parse_param(struct fs_context *fc, struct fs_parameter *par
 	unsigned long ps;
 	int opt;
 
+	/*利用hugetlb_fs_parameters描述的标准，解析param,结果填入result*/
 	opt = fs_parse(fc, hugetlb_fs_parameters, param, &result);
 	if (opt < 0)
 		return opt;
 
+	/*依据解析结果，填充参数*/
 	switch (opt) {
 	case Opt_uid:
+		/*指明uid*/
 		ctx->uid = make_kuid(current_user_ns(), result.uint_32);
 		if (!uid_valid(ctx->uid))
 			goto bad_val;
@@ -1372,6 +1390,7 @@ static int hugetlbfs_parse_param(struct fs_context *fc, struct fs_parameter *par
 		return 0;
 
 	case Opt_mode:
+		/*指明mode*/
 		ctx->mode = result.uint_32 & 01777U;
 		return 0;
 
@@ -1379,6 +1398,7 @@ static int hugetlbfs_parse_param(struct fs_context *fc, struct fs_parameter *par
 		/* memparse() will accept a K/M/G without a digit */
 		if (!param->string || !isdigit(param->string[0]))
 			goto bad_val;
+		/*通过size指明大小*/
 		ctx->max_size_opt = memparse(param->string, &rest);
 		ctx->max_val_type = SIZE_STD;
 		if (*rest == '%')
@@ -1389,10 +1409,12 @@ static int hugetlbfs_parse_param(struct fs_context *fc, struct fs_parameter *par
 		/* memparse() will accept a K/M/G without a digit */
 		if (!param->string || !isdigit(param->string[0]))
 			goto bad_val;
+		/*指明容许的最大inode数*/
 		ctx->nr_inodes = memparse(param->string, &rest);
 		return 0;
 
 	case Opt_pagesize:
+		/*通过size获取此文件系统对应的hstate*/
 		ps = memparse(param->string, &rest);
 		ctx->hstate = size_to_hstate(ps);
 		if (!ctx->hstate) {
@@ -1441,7 +1463,7 @@ static int hugetlbfs_validate(struct fs_context *fc)
 	/*
 	 * If max_size was specified, then min_size must be smaller
 	 */
-	if (ctx->max_val_type > NO_SIZE &&
+	if (ctx->max_val_type > NO_SIZE/*仅非no size时检查生效（未指定size时生效）*/ &&
 	    ctx->min_hpages > ctx->max_hpages) {
 		pr_err("Minimum size can not be greater than maximum size\n");
 		return -EINVAL;
@@ -1456,6 +1478,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct hugetlbfs_fs_context *ctx = fc->fs_private;
 	struct hugetlbfs_sb_info *sbinfo;
 
+	/*申请sbinfo*/
 	sbinfo = kmalloc(sizeof(struct hugetlbfs_sb_info), GFP_KERNEL);
 	if (!sbinfo)
 		return -ENOMEM;
@@ -1475,6 +1498,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	 * when the subpool is created.
 	 */
 	if (ctx->max_hpages != -1 || ctx->min_hpages != -1) {
+		/*对大页使用有限制时*/
 		sbinfo->spool = hugepage_new_subpool(ctx->hstate,
 						     ctx->max_hpages,
 						     ctx->min_hpages);
@@ -1485,7 +1509,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_blocksize = huge_page_size(ctx->hstate);
 	sb->s_blocksize_bits = huge_page_shift(ctx->hstate);
 	sb->s_magic = HUGETLBFS_MAGIC;
-	sb->s_op = &hugetlbfs_ops;
+	sb->s_op = &hugetlbfs_ops;/*大页对应的ops*/
 	sb->s_time_gran = 1;
 
 	/*
@@ -1493,6 +1517,7 @@ hugetlbfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	 * not work well as a stacking filesystem.
 	 */
 	sb->s_stack_depth = FILESYSTEM_MAX_STACK_DEPTH;
+	/*构建并设置inode*/
 	sb->s_root = d_make_root(hugetlbfs_get_root(sb, ctx));
 	if (!sb->s_root)
 		goto out_free;
@@ -1507,7 +1532,9 @@ static int hugetlbfs_get_tree(struct fs_context *fc)
 {
 	int err = hugetlbfs_validate(fc);
 	if (err)
+		/*校验失败，返回err*/
 		return err;
+	/*设置大页root*/
 	return get_tree_nodev(fc, hugetlbfs_fill_super);
 }
 
@@ -1518,8 +1545,8 @@ static void hugetlbfs_fs_context_free(struct fs_context *fc)
 
 static const struct fs_context_operations hugetlbfs_fs_context_ops = {
 	.free		= hugetlbfs_fs_context_free,
-	.parse_param	= hugetlbfs_parse_param,
-	.get_tree	= hugetlbfs_get_tree,
+	.parse_param	= hugetlbfs_parse_param/*huge提供的mount时data参数解析函数*/,
+	.get_tree	= hugetlbfs_get_tree,/*用于获取root，设置fc->root*/
 };
 
 static int hugetlbfs_init_fs_context(struct fs_context *fc)
@@ -1539,18 +1566,22 @@ static int hugetlbfs_init_fs_context(struct fs_context *fc)
 	ctx->min_hpages	= -1; /* No default minimum size */
 	ctx->max_val_type = NO_SIZE;
 	ctx->min_val_type = NO_SIZE;
+	/*设置fs_context的私有数据为hugetlbfs_fs_context*/
 	fc->fs_private = ctx;
+	/*设置fs_context操作集*/
 	fc->ops	= &hugetlbfs_fs_context_ops;
 	return 0;
 }
 
 static struct file_system_type hugetlbfs_fs_type = {
 	.name			= "hugetlbfs",
+	/*用于初始化fs_context*/
 	.init_fs_context	= hugetlbfs_init_fs_context,
 	.parameters		= hugetlb_fs_parameters,
 	.kill_sb		= kill_litter_super,
 };
 
+/*记录各种类型大页的挂载点*/
 static struct vfsmount *hugetlbfs_vfsmount[HUGE_MAX_HSTATE];
 
 static int can_do_hugetlb_shm(void)
@@ -1565,7 +1596,10 @@ static int get_hstate_idx(int page_size_log)
 	struct hstate *h = hstate_sizelog(page_size_log);
 
 	if (!h)
+		/*未查找到，返回-1*/
 		return -1;
+
+	/*返回其对应的index*/
 	return hstate_index(h);
 }
 
@@ -1573,21 +1607,24 @@ static int get_hstate_idx(int page_size_log)
  * Note that size should be aligned to proper hugepage size in caller side,
  * otherwise hugetlb_reserve_pages reserves one less hugepages than intended.
  */
-struct file *hugetlb_file_setup(const char *name, size_t size,
+struct file *hugetlb_file_setup(const char *name, size_t size/*文件大小*/,
 				vm_flags_t acctflag, int creat_flags,
-				int page_size_log)
+				int page_size_log/*页面大小，采用对数*/)
 {
 	struct inode *inode;
 	struct vfsmount *mnt;
 	int hstate_idx;
 	struct file *file;
 
+	/*获取page_size对应的index*/
 	hstate_idx = get_hstate_idx(page_size_log);
 	if (hstate_idx < 0)
 		return ERR_PTR(-ENODEV);
 
+	/*通过idx获取mount*/
 	mnt = hugetlbfs_vfsmount[hstate_idx];
 	if (!mnt)
+		/*未挂载，返回失败*/
 		return ERR_PTR(-ENOENT);
 
 	if (creat_flags == HUGETLB_SHMFS_INODE && !can_do_hugetlb_shm()) {
@@ -1602,21 +1639,24 @@ struct file *hugetlb_file_setup(const char *name, size_t size,
 	}
 
 	file = ERR_PTR(-ENOSPC);
+	/*创建一个普通文件对应的inode*/
 	inode = hugetlbfs_get_inode(mnt->mnt_sb, NULL, S_IFREG | S_IRWXUGO, 0);
 	if (!inode)
 		goto out;
 	if (creat_flags == HUGETLB_SHMFS_INODE)
 		inode->i_flags |= S_PRIVATE;
 
-	inode->i_size = size;
+	inode->i_size = size;/*设置文件大小*/
 	clear_nlink(inode);
 
 	if (!hugetlb_reserve_pages(inode, 0,
 			size >> huge_page_shift(hstate_inode(inode)), NULL,
 			acctflag))
+		/*预留内存失败*/
 		file = ERR_PTR(-ENOMEM);
 	else
-		file = alloc_file_pseudo(inode, mnt, name, O_RDWR,
+		/*利用此inode申请file*/
+		file = alloc_file_pseudo(inode, mnt, name/*文件名称*/, O_RDWR,
 					&hugetlbfs_file_operations);
 	if (!IS_ERR(file))
 		return file;
@@ -1626,18 +1666,25 @@ out:
 	return file;
 }
 
+/*创建fs_context,并完成挂载*/
 static struct vfsmount *__init mount_one_hugetlbfs(struct hstate *h)
 {
 	struct fs_context *fc;
 	struct vfsmount *mnt;
 
+	/*为hugepage创建fs_context,指明sb_flags为kernel mount*/
 	fc = fs_context_for_mount(&hugetlbfs_fs_type, SB_KERNMOUNT);
 	if (IS_ERR(fc)) {
 		mnt = ERR_CAST(fc);
 	} else {
 		struct hugetlbfs_fs_context *ctx = fc->fs_private;
+		/*指定fs_context对应的hstate*/
 		ctx->hstate = h;
+
+		/*fs_context挂载*/
 		mnt = fc_mount(fc);
+
+		/*释放fs_context*/
 		put_fs_context(fc);
 	}
 	if (IS_ERR(mnt))
@@ -1655,6 +1702,7 @@ static int __init init_hugetlbfs_fs(void)
 	int i;
 
 	if (!hugepages_supported()) {
+		/*当前系统不支持大页，显示告警*/
 		pr_info("disabling because there are no supported hugepage sizes\n");
 		return -ENOTSUPP;
 	}
@@ -1667,16 +1715,19 @@ static int __init init_hugetlbfs_fs(void)
 	if (hugetlbfs_inode_cachep == NULL)
 		goto out;
 
+	/*注册hugetlbfs文件系统*/
 	error = register_filesystem(&hugetlbfs_fs_type);
 	if (error)
 		goto out_free;
 
 	/* default hstate mount is required */
-	mnt = mount_one_hugetlbfs(&default_hstate);
+	mnt = mount_one_hugetlbfs(&default_hstate);/*挂载默认类型大页*/
 	if (IS_ERR(mnt)) {
 		error = PTR_ERR(mnt);
 		goto out_unreg;
 	}
+
+	/*记录默认页号挂载点*/
 	hugetlbfs_vfsmount[default_hstate_idx] = mnt;
 
 	/* other hstates are optional */
@@ -1684,9 +1735,10 @@ static int __init init_hugetlbfs_fs(void)
 	for_each_hstate(h) {
 		if (i == default_hstate_idx) {
 			i++;
-			continue;
+			continue;/*默认大页已处理*/
 		}
 
+		/*挂载其它大页*/
 		mnt = mount_one_hugetlbfs(h);
 		if (IS_ERR(mnt))
 			hugetlbfs_vfsmount[i] = NULL;

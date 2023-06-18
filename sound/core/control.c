@@ -853,7 +853,7 @@ struct snd_kcontrol *snd_ctl_find_id(struct snd_card *card,
 }
 EXPORT_SYMBOL(snd_ctl_find_id);
 
-static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
+static int snd_ctl_card_info(struct snd_card *card/*要获取信息的声卡*/, struct snd_ctl_file * ctl,
 			     unsigned int cmd, void __user *arg)
 {
 	struct snd_ctl_card_info *info;
@@ -862,7 +862,8 @@ static int snd_ctl_card_info(struct snd_card *card, struct snd_ctl_file * ctl,
 	if (! info)
 		return -ENOMEM;
 	down_read(&snd_ioctl_rwsem);
-	info->card = card->number;
+	/*填充info回应给用户态*/
+	info->card = card->number;/*card编号*/
 	strscpy(info->id, card->id, sizeof(info->id));
 	strscpy(info->driver, card->driver, sizeof(info->driver));
 	strscpy(info->name, card->shortname, sizeof(info->name));
@@ -1932,6 +1933,7 @@ static long snd_ctl_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 	case SNDRV_CTL_IOCTL_PVERSION:
 		return put_user(SNDRV_CTL_VERSION, ip) ? -EFAULT : 0;
 	case SNDRV_CTL_IOCTL_CARD_INFO:
+		/*取声卡信息*/
 		return snd_ctl_card_info(card, ctl, cmd, argp);
 	case SNDRV_CTL_IOCTL_ELEM_LIST:
 		return snd_ctl_elem_list_user(card, argp);
@@ -1993,7 +1995,7 @@ static ssize_t snd_ctl_read(struct file *file, char __user *buffer,
 	int err = 0;
 	ssize_t result = 0;
 
-	ctl = file->private_data;
+	ctl = file->private_data;/*取ctl设备*/
 	if (snd_BUG_ON(!ctl || !ctl->card))
 		return -ENXIO;
 	if (!ctl->subscribed)
@@ -2307,7 +2309,7 @@ static int snd_ctl_dev_register(struct snd_device *device)
 	int err;
 
 	err = snd_register_device(SNDRV_DEVICE_TYPE_CONTROL, card, -1,
-				  &snd_ctl_f_ops, card, &card->ctl_dev);
+				  &snd_ctl_f_ops/*控制设备fops*/, card, &card->ctl_dev);
 	if (err < 0)
 		return err;
 	down_read(&card->controls_rwsem);
@@ -2388,6 +2390,7 @@ int snd_ctl_create(struct snd_card *card)
 		return -ENXIO;
 
 	snd_device_initialize(&card->ctl_dev, card);
+	/*指定声卡控制设备名称*/
 	dev_set_name(&card->ctl_dev, "controlC%d", card->number);
 
 	err = snd_device_new(card, SNDRV_DEV_CONTROL, card, &ops);

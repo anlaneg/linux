@@ -187,9 +187,10 @@ EXPORT_SYMBOL_GPL(devlink_unregister);
  *	and name.
  */
 struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
-				 size_t priv_size, struct net *net,
+				 size_t priv_size/*私有结构体大小*/, struct net *net,
 				 struct device *dev)
 {
+	/*申请devlink实例，指定devlink对应的ops,关联的device*/
 	struct devlink *devlink;
 	static u32 last_id;
 	int ret;
@@ -198,6 +199,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (!devlink_reload_actions_valid(ops))
 		return NULL;
 
+	/*申请devlink结构体*/
 	devlink = kzalloc(sizeof(*devlink) + priv_size, GFP_KERNEL);
 	if (!devlink)
 		return NULL;
@@ -207,6 +209,7 @@ struct devlink *devlink_alloc_ns(const struct devlink_ops *ops,
 	if (ret < 0)
 		goto err_xa_alloc;
 
+	/*注册devlink关联设备的通知事件，以便调整*/
 	devlink->netdevice_nb.notifier_call = devlink_port_netdevice_event;
 	ret = register_netdevice_notifier(&devlink->netdevice_nb);
 	if (ret)

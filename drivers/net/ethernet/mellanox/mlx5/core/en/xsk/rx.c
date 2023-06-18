@@ -31,6 +31,7 @@ int mlx5e_xsk_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 
 	BUILD_BUG_ON(sizeof(wi->alloc_units[0]) != sizeof(wi->alloc_units[0].xsk));
 	XSK_CHECK_PRIV_TYPE(struct mlx5e_xdp_buff);
+	/*申请rq->mpwqe.pages_per_wqe个xdp_buff*/
 	batch = xsk_buff_alloc_batch(rq->xsk_pool, (struct xdp_buff **)wi->alloc_units,
 				     rq->mpwqe.pages_per_wqe);
 
@@ -40,6 +41,7 @@ int mlx5e_xsk_alloc_rx_mpwqe(struct mlx5e_rq *rq, u16 ix)
 	 * In either case, try to continue allocating frames one by one, until
 	 * the first error, which will mean there are no more valid descriptors.
 	 */
+	/*如果没有申请到足够的xdp buffer,则回退到逐个申请*/
 	for (; batch < rq->mpwqe.pages_per_wqe; batch++) {
 		wi->alloc_units[batch].xsk = xsk_buff_alloc(rq->xsk_pool);
 		if (unlikely(!wi->alloc_units[batch].xsk))

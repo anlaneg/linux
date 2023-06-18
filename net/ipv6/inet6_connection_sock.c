@@ -88,7 +88,7 @@ static struct dst_entry *inet6_csk_route_socket(struct sock *sk,
 	fl6->flowi6_proto = sk->sk_protocol;
 	fl6->daddr = sk->sk_v6_daddr;
 	fl6->saddr = np->saddr;
-	fl6->flowlabel = np->flow_label;
+	fl6->flowlabel = np->flow_label;/*设置flow label*/
 	IP6_ECN_flow_xmit(sk, fl6->flowlabel);
 	fl6->flowi6_oif = sk->sk_bound_dev_if;
 	fl6->flowi6_mark = sk->sk_mark;
@@ -111,7 +111,7 @@ static struct dst_entry *inet6_csk_route_socket(struct sock *sk,
 	return dst;
 }
 
-/*上层送报文到ipv6协议栈*/
+/*上层协议发送报文到ipv6协议栈(处理封ipv6头）*/
 int inet6_csk_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl_unused)
 {
 	struct ipv6_pinfo *np = inet6_sk(sk);
@@ -131,7 +131,7 @@ int inet6_csk_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl_unused
 	skb_dst_set_noref(skb, dst);
 
 	/* Restore final destination back after routing done */
-	fl6.daddr = sk->sk_v6_daddr;
+	fl6.daddr = sk->sk_v6_daddr;/*设置目的地址*/
 
 	res = ip6_xmit(sk, skb, &fl6, sk->sk_mark, rcu_dereference(np->opt),
 		       np->tclass,  sk->sk_priority);

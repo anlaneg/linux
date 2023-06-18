@@ -91,7 +91,7 @@ struct p_log {
  * See Documentation/filesystems/mount_api.rst
  */
 struct fs_context {
-    //可由各fs定制的操作集(默认legacy_fs_context_ops）
+    //可由各fs定制的针对fs_context的操作集(默认legacy_fs_context_ops）
 	const struct fs_context_operations *ops;
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	//文件系统类型
@@ -102,7 +102,7 @@ struct fs_context {
 	/*记录sb的root dentry*/
 	struct dentry		*root;		/* The root and superblock */
 	struct user_namespace	*user_ns;	/* The user namespace for this mount */
-	/*此挂载的net namespace*/
+	/*此挂载对应的net namespace*/
 	struct net		*net_ns;	/* The network namespace for this mount */
 	const struct cred	*cred;		/* The mounter's credentials */
 	struct p_log		log;		/* Logging buffer */
@@ -119,7 +119,7 @@ struct fs_context {
 	enum fs_context_phase	phase:8;	/* The phase the context is in */
 	//指明是否有必要调用ops->free回调，用于释放fs_context中fs定制的私有数据
 	bool			need_free:1;	/* Need to call ops->free() */
-	/*是否使用全局的user_ns*/
+	/*是否使用全局的init_user_ns*/
 	bool			global:1;	/* Goes into &init_user_ns */
 	bool			oldapi:1;	/* Coming from mount(2) */
 };
@@ -129,11 +129,11 @@ struct fs_context_operations {
 	void (*free)(struct fs_context *fc);
 	//各fs在通过src_fc拷贝制作一份副本时，填充fc中私有结构
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
-	//各fs定制的文件系统参数解析函数
+	//各fs定制的文件系统mount时data参数解析函数，每次调用仅传入一个参数
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
-	//如果此回调不提供，则使用generic_parse_monolithic,用于解析data数据
+	//此函数用于mount时data参数整块解析用，如果此回调不提供，则使用generic_parse_monolithic,
 	int (*parse_monolithic)(struct fs_context *fc, void *data);
-	/*获取并填充文件系统的root节点*/
+	/*此函数获取并填充文件系统的root节点，此函数必须设置fc->root*/
 	int (*get_tree)(struct fs_context *fc);
 	int (*reconfigure)(struct fs_context *fc);
 };

@@ -1449,6 +1449,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
 	if (level != SOL_IP)
 		return -ENOPROTOOPT;
 
+	/*处理ip相关的socketopt*/
 	err = do_ip_setsockopt(sk, level, optname, optval, optlen);
 #if IS_ENABLED(CONFIG_BPFILTER_UMH)
 	if (optname >= BPFILTER_IPT_SO_SET_REPLACE &&

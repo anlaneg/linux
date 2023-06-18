@@ -72,7 +72,7 @@ struct addr_req {
 static atomic_t ib_nl_addr_request_seq = ATOMIC_INIT(0);
 
 static DEFINE_SPINLOCK(lock);
-static LIST_HEAD(req_list);
+static LIST_HEAD(req_list);/*记录所有addr请求*/
 static struct workqueue_struct *addr_wq;
 
 static const struct nla_policy ib_nl_addr_policy[LS_NLA_TYPE_MAX] = {
@@ -310,6 +310,7 @@ static void set_timeout(struct addr_req *req, unsigned long time)
 	mod_delayed_work(addr_wq, &req->work, delay);
 }
 
+/*将addr request入队到req_list中*/
 static void queue_req(struct addr_req *req)
 {
 	spin_lock_bh(&lock);
@@ -527,6 +528,7 @@ static int rdma_set_src_addr_rcu(struct rdma_dev_addr *dev_addr,
 			return -ENODEV;
 	}
 
+	/*设置源地址*/
 	return copy_src_l2_addr(dev_addr, dst_in, dst, ndev);
 }
 
@@ -625,6 +627,7 @@ done:
 	 * derived from GID attribute in this context.
 	 */
 	if (resolve_by_gid_attr)
+		/*设置为init_net*/
 		rdma_addr_set_net_defaults(addr);
 	return ret;
 }
@@ -654,7 +657,7 @@ static void process_one_req(struct work_struct *_work)
 		}
 	}
 
-	/*执行回调*/
+	/*执行地址请求对应的回调*/
 	req->callback(req->status, (struct sockaddr *)&req->src_addr,
 		req->addr, req->context);
 	req->callback = NULL;
@@ -666,6 +669,7 @@ static void process_one_req(struct work_struct *_work)
 	 */
 	cancel_delayed_work(&req->work);
 	if (!list_empty(&req->list)) {
+		/*处理完成，将自身自list中移除*/
 		list_del_init(&req->list);
 		kfree(req);
 	}
@@ -682,6 +686,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 	struct addr_req *req;
 	int ret = 0;
 
+	/*申请addr reqeust变量，并填充*/
 	req = kzalloc(sizeof *req, GFP_KERNEL);
 	if (!req)
 		return -ENOMEM;
@@ -703,10 +708,10 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 
 	memcpy(dst_in, dst_addr, rdma_addr_size(dst_addr));
 	req->addr = addr;
-	req->callback = callback;
+	req->callback = callback;/*指明此请求的callback*/
 	req->context = context;
 	req->resolve_by_gid_attr = resolve_by_gid_attr;
-	INIT_DELAYED_WORK(&req->work, process_one_req);
+	INIT_DELAYED_WORK(&req->work, process_one_req);/*初始化work来处理此请求*/
 	req->seq = (u32)atomic_inc_return(&ib_nl_addr_request_seq);
 
 	/*地址解析*/
@@ -714,6 +719,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 				   req->resolve_by_gid_attr, req->seq);
 	switch (req->status) {
 	case 0:
+		/*解析成功，将request入队 req->timeout时间后超时*/
 		req->timeout = jiffies;
 		queue_req(req);
 		break;
@@ -723,7 +729,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 		break;
 	default:
 		ret = req->status;
-		goto err;
+		goto err;/*处理出错，不入队*/
 	}
 	return ret;
 err:
@@ -789,6 +795,7 @@ void rdma_addr_cancel(struct rdma_dev_addr *addr)
 	spin_lock_bh(&lock);
 	list_for_each_entry_safe(req, temp_req, &req_list, list) {
 		if (req->addr == addr) {
+			/*要取消的地址匹配，将此请求自list中移除*/
 			/*
 			 * Removing from the list means we take ownership of
 			 * the req

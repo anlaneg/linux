@@ -188,6 +188,7 @@ int mlx5e_napi_poll(struct napi_struct *napi, int budget)
 	if (unlikely(mlx5e_ktls_rx_pending_resync_list(c, budget)))
 		busy |= mlx5e_ktls_rx_handle_resync_list(c, budget);
 
+	/*申请buffer处理收包*/
 	busy |= INDIRECT_CALL_2(rq->post_wqes,
 				mlx5e_post_rx_mpwqes,
 				mlx5e_post_rx_wqes,

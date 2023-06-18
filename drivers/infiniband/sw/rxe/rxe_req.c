@@ -108,6 +108,7 @@ void rnr_nak_timer(struct timer_list *t)
 	rxe_sched_task(&qp->req.task);
 }
 
+/*自sq取wqe*/
 static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
@@ -117,8 +118,11 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 	unsigned int cons;
 	unsigned int prod;
 
+	/*消费者对应的wqe*/
 	wqe = queue_head(q, QUEUE_TYPE_FROM_CLIENT);
+	/*消费者对应的index*/
 	cons = queue_get_consumer(q, QUEUE_TYPE_FROM_CLIENT);
+	/*生产者对应的index*/
 	prod = queue_get_producer(q, QUEUE_TYPE_FROM_CLIENT);
 
 	if (unlikely(qp->req.state == QP_STATE_DRAIN)) {
@@ -158,6 +162,7 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 	if (index == prod)
 		return NULL;
 
+	/*消费者对应的wqe*/
 	wqe = queue_addr_from_index(q, index);
 
 	if (unlikely((qp->req.state == QP_STATE_DRAIN ||
@@ -325,6 +330,7 @@ static int next_opcode_uc(struct rxe_qp *qp, u32 opcode, int fits)
 	return -EINVAL;
 }
 
+/*取opcode对应的next opcode*/
 static int next_opcode(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       u32 opcode)
 {
@@ -375,6 +381,7 @@ static inline int check_init_depth(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	return -EAGAIN;
 }
 
+/*取此qp对应的mtu*/
 static inline int get_mtu(struct rxe_qp *qp)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -394,7 +401,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	struct rxe_dev		*rxe = to_rdev(qp->ibqp.device);
 	struct sk_buff		*skb;
 	struct rxe_send_wr	*ibwr = &wqe->wr;
-	int			pad = (-payload) & 0x3;
+	int			pad = (-payload) & 0x3;/*内容必须以4字节对齐*/
 	int			paylen;
 	int			solicited;
 	u32			qp_num;
@@ -519,6 +526,7 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 	return 0;
 }
 
+/*更新状态到wqe_state_processing*/
 static void update_wqe_state(struct rxe_qp *qp,
 		struct rxe_send_wqe *wqe,
 		struct rxe_pkt_info *pkt)
@@ -541,16 +549,19 @@ static void update_wqe_psn(struct rxe_qp *qp,
 
 	/* handle zero length packet case */
 	if (num_pkt == 0)
-		num_pkt = 1;
+		num_pkt = 1;/*整除为0，最少一个包*/
 
 	if (pkt->mask & RXE_START_MASK) {
+		/*设置psn,记录first,last psn*/
 		wqe->first_psn = qp->req.psn;
 		wqe->last_psn = (qp->req.psn + num_pkt - 1) & BTH_PSN_MASK;
 	}
 
 	if (pkt->mask & RXE_READ_MASK)
+		/*读情况，更新到尾包psn*/
 		qp->req.psn = (wqe->first_psn + num_pkt) & BTH_PSN_MASK;
 	else
+		/*非读情况，更新到首个包psn*/
 		qp->req.psn = (qp->req.psn + 1) & BTH_PSN_MASK;
 }
 
@@ -581,12 +592,14 @@ static void update_state(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	qp->req.opcode = pkt->opcode;
 
 	if (pkt->mask & RXE_END_MASK)
+		/*更新wqe发送指针*/
 		qp->req.wqe_index = queue_next_index(qp->sq.queue,
 						     qp->req.wqe_index);
 
 	qp->need_req_skb = 0;
 
 	if (qp->qp_timeout_jiffies && !timer_pending(&qp->retrans_timer))
+		/*启动重传定时器*/
 		mod_timer(&qp->retrans_timer,
 			  jiffies + qp->qp_timeout_jiffies);
 }
@@ -643,6 +656,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	return 0;
 }
 
+/*处理向外发送报文*/
 int rxe_requester(void *arg)
 {
 	struct rxe_qp *qp = (struct rxe_qp *)arg;
@@ -702,7 +716,7 @@ int rxe_requester(void *arg)
 		qp->req.need_retry = 0;
 	}
 
-	/*自send->queue中提取一个wqe*/
+	/*自sq中提取一个用户态填充好的wqe*/
 	wqe = req_next_wqe(qp);
 	if (unlikely(!wqe))
 		goto exit;
@@ -712,6 +726,7 @@ int rxe_requester(void *arg)
 		goto exit;
 	}
 
+	/*处理本机操作*/
 	if (wqe->mask & WR_LOCAL_OP_MASK) {
 		err = rxe_do_local_ops(qp, wqe);
 		if (unlikely(err))
@@ -723,6 +738,7 @@ int rxe_requester(void *arg)
 	if (unlikely(qp_type(qp) == IB_QPT_RC &&
 		psn_compare(qp->req.psn, (qp->comp.psn +
 				RXE_MAX_UNACKED_PSNS)) > 0)) {
+		/*超过窗口大小，需要等待，退出*/
 		qp->req.wait_psn = 1;
 		goto exit;
 	}
@@ -734,6 +750,7 @@ int rxe_requester(void *arg)
 		goto exit;
 	}
 
+	/*取next opcode*/
 	opcode = next_opcode(qp, wqe, wqe->wr.opcode);
 	if (unlikely(opcode < 0)) {
 		wqe->status = IB_WC_LOC_QP_OP_ERR;
@@ -748,6 +765,7 @@ int rxe_requester(void *arg)
 	}
 
 	mtu = get_mtu(qp);
+	/*取报文payload长度*/
 	payload = (mask & (RXE_WRITE_OR_SEND_MASK | RXE_ATOMIC_WRITE_MASK)) ?
 			wqe->dma.resid : 0;
 	if (payload > mtu) {
@@ -774,12 +792,13 @@ int rxe_requester(void *arg)
 	}
 
 	pkt.rxe = rxe;
-	pkt.opcode = opcode;
+	pkt.opcode = opcode;/*指明为next opcode*/
 	pkt.qp = qp;
 	pkt.psn = qp->req.psn;
 	pkt.mask = rxe_opcode[opcode].mask;
 	pkt.wqe = wqe;
 
+	/*取ah,av*/
 	av = rxe_get_av(&pkt, &ah);
 	if (unlikely(!av)) {
 		rxe_dbg_qp(qp, "Failed no address vector\n");
@@ -820,7 +839,7 @@ int rxe_requester(void *arg)
 	 * rxe_xmit_packet().
 	 * Otherwise, completer might initiate an unjustified retry flow.
 	 */
-	save_state(wqe, qp, &rollback_wqe, &rollback_psn);
+	save_state(wqe, qp, &rollback_wqe, &rollback_psn);/*保存点，记录rollback情况*/
 	update_wqe_state(qp, wqe, &pkt);
 	update_wqe_psn(qp, wqe, &pkt, payload);
 
@@ -829,6 +848,7 @@ int rxe_requester(void *arg)
 	if (err) {
 		qp->need_req_skb = 1;
 
+		/*发送失败，rollback*/
 		rollback_state(wqe, qp, &rollback_wqe, rollback_psn);
 
 		if (err == -EAGAIN) {
@@ -836,7 +856,7 @@ int rxe_requester(void *arg)
 			goto exit;
 		}
 
-		wqe->status = IB_WC_LOC_QP_OP_ERR;
+		wqe->status = IB_WC_LOC_QP_OP_ERR;/*标记此wqe失败*/
 		goto err;
 	}
 

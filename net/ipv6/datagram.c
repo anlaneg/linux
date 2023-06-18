@@ -163,6 +163,7 @@ int __ip6_datagram_connect(struct sock *sk, struct sockaddr *uaddr,
 		return -EAFNOSUPPORT;
 
 	if (np->sndflow)
+		/*使用connect地址中指定的flowlabel*/
 		fl6_flowlabel = usin->sin6_flowinfo & IPV6_FLOWINFO_MASK;
 
 	if (ipv6_addr_any(&usin->sin6_addr)) {

@@ -622,7 +622,7 @@ void tcp_write_timer_handler(struct sock *sk)
 		break;
 	case ICSK_TIME_RETRANS:
 		icsk->icsk_pending = 0;
-		tcp_retransmit_timer(sk);
+		tcp_retransmit_timer(sk);/*重传超时*/
 		break;
 	case ICSK_TIME_PROBE0:
 		icsk->icsk_pending = 0;

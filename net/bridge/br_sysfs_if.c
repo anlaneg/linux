@@ -400,6 +400,7 @@ int br_sysfs_renameif(struct net_bridge_port *p)
 	 * rename call with the existing name.
 	 */
 	if (!strncmp(p->sysfs_name, p->dev->name, IFNAMSIZ))
+		/*名称相等，返回0*/
 		return 0;
 
 	err = sysfs_rename_link(br->ifobj, &p->kobj,

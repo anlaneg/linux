@@ -453,6 +453,7 @@ unsigned int cpumask_nth_and_andnot(unsigned int cpu, const struct cpumask *srcp
  */
 static __always_inline void cpumask_set_cpu(unsigned int cpu, struct cpumask *dstp)
 {
+	/*将指定cpu存入dstp集合中*/
 	set_bit(cpumask_check(cpu), cpumask_bits(dstp));
 }
 
@@ -968,11 +969,13 @@ void init_cpu_present(const struct cpumask *src);
 void init_cpu_possible(const struct cpumask *src);
 void init_cpu_online(const struct cpumask *src);
 
+/*将possible集合置为空*/
 static inline void reset_cpu_possible_mask(void)
 {
 	bitmap_zero(cpumask_bits(&__cpu_possible_mask), NR_CPUS);
 }
 
+/*为possible集合清除/设置cpu*/
 static inline void
 set_cpu_possible(unsigned int cpu, bool possible)
 {
@@ -982,6 +985,7 @@ set_cpu_possible(unsigned int cpu, bool possible)
 		cpumask_clear_cpu(cpu, &__cpu_possible_mask);
 }
 
+/*为present集合清除/设置cpu*/
 static inline void
 set_cpu_present(unsigned int cpu, bool present)
 {
@@ -991,8 +995,10 @@ set_cpu_present(unsigned int cpu, bool present)
 		cpumask_clear_cpu(cpu, &__cpu_present_mask);
 }
 
+/*为online集合清除/设置cpu*/
 void set_cpu_online(unsigned int cpu, bool online);
 
+/*为active集合清除/设置cpu*/
 static inline void
 set_cpu_active(unsigned int cpu, bool active)
 {
@@ -1002,6 +1008,7 @@ set_cpu_active(unsigned int cpu, bool active)
 		cpumask_clear_cpu(cpu, &__cpu_active_mask);
 }
 
+/*为dying集合清除/设置cpu*/
 static inline void
 set_cpu_dying(unsigned int cpu, bool dying)
 {
@@ -1064,26 +1071,31 @@ static __always_inline unsigned int num_online_cpus(void)
 #define num_present_cpus()	cpumask_weight(cpu_present_mask)
 #define num_active_cpus()	cpumask_weight(cpu_active_mask)
 
+/*检查指定cpu是否在online集合中*/
 static inline bool cpu_online(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_online_mask);
 }
 
+/*检查指定cpu是否在possible集合中*/
 static inline bool cpu_possible(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_possible_mask);
 }
 
+/*检查指定cpu是否在present集合中*/
 static inline bool cpu_present(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_present_mask);
 }
 
+/*检查指定cpu是否在active集合中*/
 static inline bool cpu_active(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_active_mask);
 }
 
+/*检查指定cpu是否在dying集合中*/
 static inline bool cpu_dying(unsigned int cpu)
 {
 	return cpumask_test_cpu(cpu, cpu_dying_mask);

@@ -426,6 +426,7 @@ static int rxe_loopback(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 		return -EIO;
 	}
 
+	/*走rocev2收包函数*/
 	rxe_rcv(skb);
 
 	return 0;
@@ -451,6 +452,7 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 		/*到本地的报文*/
 		err = rxe_loopback(skb, pkt);
 	else
+		/*外送的报文*/
 		err = rxe_send(skb, pkt);
 	if (err) {
 		rxe_counter_inc(rxe, RXE_CNT_SEND_ERR);
@@ -459,9 +461,9 @@ int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 
 	if ((qp_type(qp) != IB_QPT_RC) &&
 	    (pkt->mask & RXE_END_MASK)) {
-	    /*标记此wqe发送完成*/
+	    /*发送成功，标记此wqe发送完成*/
 		pkt->wqe->state = wqe_state_done;
-		/*触发qp->comp.task运行*/
+		/*触发qp->comp.task运行，知会用户态，此wqe发送完成*/
 		rxe_sched_task(&qp->comp.task);
 	}
 
@@ -482,7 +484,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 	struct sk_buff *skb = NULL;
 	struct net_device *ndev;
 	const struct ib_gid_attr *attr;
-	const int port_num = 1;
+	const int port_num = 1;/*port number为常量1*/
 
 	attr = rdma_get_gid_attr(&rxe->ib_dev, port_num, av->grh.sgid_index);
 	if (IS_ERR(attr))

@@ -39,6 +39,7 @@ static void xsk_map_node_free(struct xsk_map_node *node)
 static void xsk_map_sock_add(struct xdp_sock *xs, struct xsk_map_node *node)
 {
 	spin_lock_bh(&xs->map_list_lock);
+	/*node节点加入到xs->map_list*/
 	list_add_tail(&node->node, &xs->map_list);
 	spin_unlock_bh(&xs->map_list_lock);
 }
@@ -49,6 +50,7 @@ static void xsk_map_sock_delete(struct xdp_sock *xs,
 	struct xsk_map_node *n, *tmp;
 
 	spin_lock_bh(&xs->map_list_lock);
+	/*遍历xs->map_list上所有xsk_map_node，针对匹配的map_entry执行删除*/
 	list_for_each_entry_safe(n, tmp, &xs->map_list, node) {
 		if (map_entry == n->map_entry) {
 			list_del(&n->node);
@@ -95,26 +97,32 @@ static void xsk_map_free(struct bpf_map *map)
 
 static int xsk_map_get_next_key(struct bpf_map *map, void *key, void *next_key)
 {
+	/*依据bpf_map获取xsk_map*/
 	struct xsk_map *m = container_of(map, struct xsk_map, map);
 	u32 index = key ? *(u32 *)key : U32_MAX;
 	u32 *next = next_key;
 
+	/*index超过map元素最大数，next必为NULL*/
 	if (index >= m->map.max_entries) {
 		*next = 0;
 		return 0;
 	}
 
+	/*index为最后一个元素索引时，返回no entry*/
 	if (index == m->map.max_entries - 1)
 		return -ENOENT;
+
+	/*其它index指明的元素在，填充next*/
 	*next = index + 1;
 	return 0;
 }
 
-static int xsk_map_gen_lookup(struct bpf_map *map, struct bpf_insn *insn_buf)
+static int xsk_map_gen_lookup(struct bpf_map *map, struct bpf_insn *insn_buf/*出参，填充的bpf指令*/)
 {
 	const int ret = BPF_REG_0, mp = BPF_REG_1, index = BPF_REG_2;
 	struct bpf_insn *insn = insn_buf;
 
+	/*填充指令*/
 	*insn++ = BPF_LDX_MEM(BPF_W, ret, index, 0);
 	*insn++ = BPF_JMP_IMM(BPF_JGE, ret, map->max_entries, 5);
 	*insn++ = BPF_ALU64_IMM(BPF_LSH, ret, ilog2(sizeof(struct xsk_sock *)));
@@ -123,6 +131,7 @@ static int xsk_map_gen_lookup(struct bpf_map *map, struct bpf_insn *insn_buf)
 	*insn++ = BPF_LDX_MEM(BPF_SIZEOF(struct xsk_sock *), ret, ret, 0);
 	*insn++ = BPF_JMP_IMM(BPF_JA, 0, 0, 1);
 	*insn++ = BPF_MOV64_IMM(ret, 0);
+	/*返回指令长度*/
 	return insn - insn_buf;
 }
 
@@ -132,6 +141,7 @@ static int xsk_map_gen_lookup(struct bpf_map *map, struct bpf_insn *insn_buf)
  */
 static void *__xsk_map_lookup_elem(struct bpf_map *map, u32 key)
 {
+	/*通过key获取m->xsk_map[key]*/
 	struct xsk_map *m = container_of(map, struct xsk_map, map);
 
 	if (key >= map->max_entries)
@@ -151,8 +161,8 @@ static void *xsk_map_lookup_elem_sys_only(struct bpf_map *map, void *key)
 	return ERR_PTR(-EOPNOTSUPP);
 }
 
-static int xsk_map_update_elem(struct bpf_map *map, void *key, void *value,
-			       u64 map_flags)
+static int xsk_map_update_elem(struct bpf_map *map, void *key/*map索引*/, void *value/*入参，需要为af_xdp socket*/,
+			       u64 map_flags/*添加或修改控制标记*/)
 {
 	struct xsk_map *m = container_of(map, struct xsk_map, map);
 	struct xdp_sock __rcu **map_entry;
@@ -167,6 +177,7 @@ static int xsk_map_update_elem(struct bpf_map *map, void *key, void *value,
 	if (unlikely(i >= m->map.max_entries))
 		return -E2BIG;
 
+	/*通过fd获取对应的af_xdp socket*/
 	sock = sockfd_lookup(fd, &err);
 	if (!sock)
 		return err;
@@ -186,20 +197,27 @@ static int xsk_map_update_elem(struct bpf_map *map, void *key, void *value,
 	}
 
 	spin_lock_bh(&m->lock);
+	/*取xsk_map中i 号内容*/
 	old_xs = rcu_dereference_protected(*map_entry, lockdep_is_held(&m->lock));
 	if (old_xs == xs) {
+		/*要设置的内容与原内容相同*/
 		err = 0;
 		goto out;
 	} else if (old_xs && map_flags == BPF_NOEXIST) {
+		/*存在旧的内容，flags要求添加时必不存在，报错*/
 		err = -EEXIST;
 		goto out;
 	} else if (!old_xs && map_flags == BPF_EXIST) {
+		/*不存在旧的内容，flags要求添加时必存在，报错*/
 		err = -ENOENT;
 		goto out;
 	}
+	/*将此node统一挂接在链表上*/
 	xsk_map_sock_add(xs, node);
+	/*设置map内容*/
 	rcu_assign_pointer(*map_entry, xs);
 	if (old_xs)
+		/*存在旧的内容，释放它*/
 		xsk_map_sock_delete(old_xs, map_entry);
 	spin_unlock_bh(&m->lock);
 	sockfd_put(sock);
@@ -219,13 +237,14 @@ static int xsk_map_delete_elem(struct bpf_map *map, void *key)
 	struct xdp_sock *old_xs;
 	int k = *(u32 *)key;
 
-	/*要加入的k起过限制*/
+	/*要删除的索引k超过最大值，参数无效*/
 	if (k >= map->max_entries)
 		return -EINVAL;
 
 	spin_lock_bh(&m->lock);
-	//存放xdp socket
+	//取k位置存放的xdp socket
 	map_entry = &m->xsk_map[k];
+	/*将其置为NULL*/
 	old_xs = unrcu_pointer(xchg(map_entry, NULL));
 	if (old_xs)
 		xsk_map_sock_delete(old_xs, map_entry);
@@ -259,6 +278,7 @@ static bool xsk_map_meta_equal(const struct bpf_map *meta0,
 }
 
 BTF_ID_LIST_SINGLE(xsk_map_btf_ids, struct, xsk_map)
+
 //定义xdp socket对应的ops
 const struct bpf_map_ops xsk_map_ops = {
 	.map_meta_equal = xsk_map_meta_equal,

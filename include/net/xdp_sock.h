@@ -19,24 +19,24 @@ struct xsk_queue;
 struct xdp_buff;
 
 struct xdp_umem {
-	void *addrs;
-	u64 size;/*用户内存大小*/
-	u32 headroom;/*报文的headroom大小*/
-	u32 chunk_size;
-	u32 chunks;
-	u32 npgs;/*用户指定内存占用的页数目*/
+	void *addrs;/*用户态注册的内存起始地址*/
+	u64 size;/*用户态注册的内存大小*/
+	u32 headroom;/*用户态指明的报文headroom大小*/
+	u32 chunk_size;/*用户态指明的chunk_size*/
+	u32 chunks;/*用户态注册的内存可划分成多少个chunk*/
+	u32 npgs;/*用户态注册的内存实际占用的页数*/
 	struct user_struct *user;
 	refcount_t users;
-	u8 flags;
-	bool zc;
-	struct page **pgs;/*用户内存的各页指针*/
-	int id;
-	struct list_head xsk_dma_list;
+	u8 flags;/*用户态注册内存时指明的flags*/
+	bool zc;/*指明zero copy是否被使能*/
+	struct page **pgs;/*pin住用户态注册的内存，所对应的页指针数组，大小为npgs*/
+	int id;/*唯一标识umem*/
+	struct list_head xsk_dma_list;/*用于挂接所有dma_map*/
 	struct work_struct work;
 };
 
 struct xsk_map {
-	struct bpf_map map;
+	struct bpf_map map;/*bpf_map结构*/
 	spinlock_t lock; /* Synchronize map updates */
 	struct xdp_sock __rcu *xsk_map[];
 };
@@ -46,12 +46,12 @@ struct xdp_sock {
 	struct sock sk;
 	//socket对应的rx队列
 	struct xsk_queue *rx ____cacheline_aligned_in_smp;
-	struct net_device *dev;
-	struct xdp_umem *umem;
+	struct net_device *dev;/*关联的底层设备*/
+	struct xdp_umem *umem;/*指向用户态注册的memory*/
 	struct list_head flush_node;
-	struct xsk_buff_pool *pool;
+	struct xsk_buff_pool *pool;/*收包用的buffer pool*/
 	u16 queue_id;
-	bool zc;
+	bool zc;/*是否支持零copy*/
 	enum {
 		XSK_READY = 0,
 		XSK_BOUND,
@@ -65,8 +65,8 @@ struct xdp_sock {
 	spinlock_t rx_lock;
 
 	/* Statistics */
-	u64 rx_dropped;
-	u64 rx_queue_full;
+	u64 rx_dropped;/*收方向丢包统计*/
+	u64 rx_queue_full;/*统计收方向队列满的次数*/
 
 	struct list_head map_list;
 	/* Protects map_list */

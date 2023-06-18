@@ -2271,6 +2271,7 @@ void __init inode_init_early(void)
 void __init inode_init(void)
 {
 	/* inode slab cache */
+	/*为super block未提供alloc_inode回调情况（即不定制inode cache）而专门设置的inode 申请池*/
 	inode_cachep = kmem_cache_create("inode_cache",
 					 sizeof(struct inode),
 					 0,
@@ -2282,6 +2283,7 @@ void __init inode_init(void)
 	if (!hashdist)
 		return;
 
+	/*inode哈希表，用于保证系统中所有inode*/
 	inode_hashtable =
 		alloc_large_system_hash("Inode-cache",
 					sizeof(struct hlist_head),

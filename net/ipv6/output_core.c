@@ -148,6 +148,7 @@ int __ip6_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_SYMBOL_GPL(__ip6_local_out);
 
+/*local向外发送ipv6报文（不负责ipv6头封装处理）*/
 int ip6_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 {
 	int err;

@@ -113,6 +113,7 @@ struct rdma_cm_id {
 	struct ib_device	*device;
 	void			*context;
 	struct ib_qp		*qp;
+	/*event处理函数，例如ucma_event_hadler*/
 	rdma_cm_event_handler	 event_handler;
 	struct rdma_route	 route;
 	enum rdma_ucm_port_space ps;

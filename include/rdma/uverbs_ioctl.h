@@ -125,7 +125,7 @@ struct uverbs_attr_spec {
  * framework.
  */
 enum uapi_radix_data {
-	UVERBS_API_NS_FLAG = 1U << UVERBS_ID_NS_SHIFT,
+	UVERBS_API_NS_FLAG = 1U << UVERBS_ID_NS_SHIFT,/*namespace标记*/
 
 	UVERBS_API_ATTR_KEY_BITS = 6,
 	UVERBS_API_ATTR_KEY_MASK = GENMASK(UVERBS_API_ATTR_KEY_BITS - 1, 0),
@@ -160,11 +160,15 @@ enum uapi_radix_data {
 static inline __attribute_const__ u32 uapi_key_obj(u32 id)
 {
 	if (id & UVERBS_API_NS_FLAG) {
+		/*id有ns标记的，先移除ns标记*/
 		id &= ~UVERBS_API_NS_FLAG;
 		if (id >= UVERBS_API_OBJ_KEY_NUM_DRIVER)
+			/*id合法性检查*/
 			return UVERBS_API_KEY_ERR;
+		/*id映射*/
 		id = id + UVERBS_API_OBJ_KEY_NUM_CORE;
 	} else {
+		/*不含ns标记的,用原值进行合法性检查*/
 		if (id >= UVERBS_API_OBJ_KEY_NUM_CORE)
 			return UVERBS_API_KEY_ERR;
 	}
@@ -180,11 +184,13 @@ static inline __attribute_const__ bool uapi_key_is_object(u32 key)
 static inline __attribute_const__ u32 uapi_key_ioctl_method(u32 id)
 {
 	if (id & UVERBS_API_NS_FLAG) {
+		/*method id有ns标记的，先移除ns标记，再进行合法性检查*/
 		id &= ~UVERBS_API_NS_FLAG;
 		if (id >= UVERBS_API_METHOD_KEY_NUM_DRIVER)
 			return UVERBS_API_KEY_ERR;
 		id = id + UVERBS_API_METHOD_KEY_NUM_CORE;
 	} else {
+		/*无ns标记的，直接将id+1*/
 		id++;
 		if (id >= UVERBS_API_METHOD_KEY_NUM_CORE)
 			return UVERBS_API_KEY_ERR;
@@ -217,6 +223,7 @@ uapi_key_attr_to_ioctl_method(u32 attr_key)
 	       (UVERBS_API_OBJ_KEY_MASK | UVERBS_API_METHOD_KEY_MASK);
 }
 
+/*检查此key是否为ioctl类method*/
 static inline __attribute_const__ bool uapi_key_is_ioctl_method(u32 key)
 {
 	unsigned int method = key & UVERBS_API_METHOD_KEY_MASK;
@@ -225,11 +232,13 @@ static inline __attribute_const__ bool uapi_key_is_ioctl_method(u32 key)
 	       (key & UVERBS_API_ATTR_KEY_MASK) == 0;
 }
 
+/*检查此key是否为write method*/
 static inline __attribute_const__ bool uapi_key_is_write_method(u32 key)
 {
 	return (key & UVERBS_API_METHOD_KEY_MASK) == UVERBS_API_METHOD_IS_WRITE;
 }
 
+/*检查此key是否为write-ex method*/
 static inline __attribute_const__ bool uapi_key_is_write_ex_method(u32 key)
 {
 	return (key & UVERBS_API_METHOD_KEY_MASK) ==
@@ -319,12 +328,13 @@ struct uverbs_object_def {
 };
 
 enum uapi_definition_kind {
-	UAPI_DEF_END = 0,
+	UAPI_DEF_END = 0,/*标记结束*/
 	UAPI_DEF_OBJECT_START,/*标记后续是一组对象*/
-	UAPI_DEF_WRITE,
+	UAPI_DEF_WRITE,/*标记响应write操作*/
 	UAPI_DEF_CHAIN_OBJ_TREE,
-	UAPI_DEF_CHAIN,
-	UAPI_DEF_IS_SUPPORTED_FUNC,
+	UAPI_DEF_CHAIN,/*指明chain数据有效*/
+	UAPI_DEF_IS_SUPPORTED_FUNC,/*指明通过回调检查是否支持*/
+	/*指明此函数被dev支持*/
 	UAPI_DEF_IS_SUPPORTED_DEV_FN,
 };
 
@@ -334,38 +344,42 @@ enum uapi_definition_scope {
 };
 
 struct uapi_definition {
-    /*uapi_definition_kind类型*/
+    /*union成员说明，看uapi_definition_kind类型*/
 	u8 kind;
+	/*此操作范围，看uapi_definition_scope结构体*/
 	u8 scope;
 	union {
 		struct {
-		    /*标记后续为哪种objdect_id*/
+		    /*标记后续为哪种objdect_id，例如UVERBS_OBJECT_AH*/
 			u16 object_id;
 		} object_start;
 		struct {
-		    /*cmd对应的枚举*/
+		    /*cmd对应的枚举id*/
 			u16 command_num;
 			/*是否扩展类write方法*/
 			u8 is_ex:1;
+			/*是否有udata*/
 			u8 has_udata:1;
-			/*是否有resp*/
+			/*是否有响应*/
 			u8 has_resp:1;
 			/*请求结构体大小*/
 			u8 req_size;
 			/*响应结构体大小*/
 			u8 resp_size;
-		} write;
+		} write;/*kind为UAPI_DEF_WRITE时有效*/
 	};
 
 	union {
+		/*(kind为UAPI_DEF_IS_SUPPORTED_FUNC时）用于通过此回调检查是否支持*/
 		bool (*func_is_supported)(struct ib_device *device);
-		/*cmd对应的调用函数*/
+		/*（kind为UAPI_DEF_WRITE时）此cmd对应的调用函数*/
 		int (*func_write)(struct uverbs_attr_bundle *attrs);
-		/*chain类型时有效，指向一组uapi_definition*/
+		/*（kind为UAPI_DEF_CHAIN时），此指针指向一组uapi_definition*/
 		const struct uapi_definition *chain;
-		/*tree类型时有效，指向uverbs_object_def的指针*/
+		/*（kind为UAPI_DEF_CHAIN_OBJ_TREE时），指向uverbs_object_def的指针*/
 		const struct uverbs_object_def *chain_obj_tree;
-		size_t needs_fn_offset;/*到具体函数指针的偏移量*/
+		/*(kind为UAPI_DEF_IS_SUPPORTED_DEV_FN时）到ib_device_ops支持函数的指针偏移量*/
+		size_t needs_fn_offset;
 	};
 };
 
@@ -378,12 +392,12 @@ struct uapi_definition {
 		##__VA_ARGS__
 
 /* Use in a var_args of DECLARE_UVERBS_OBJECT */
-/*write类非扩展方法*/
-#define DECLARE_UVERBS_WRITE(_command_num, _func, _cmd_desc, ...)              \
+/*write类非扩展方法（容许写成一串，实际定义的为数组的单个元素）*/
+#define DECLARE_UVERBS_WRITE(_command_num/*命令id*/, _func/*命令响应函数*/, _cmd_desc/*命令描述信息*/, ...)              \
 	{                                                                      \
 		.kind = UAPI_DEF_WRITE,                                        \
 		.scope = UAPI_SCOPE_OBJECT,                                    \
-		.write = { .is_ex = 0, .command_num = _command_num },          \
+		.write = { .is_ex = 0/*非扩展命令*/, .command_num = _command_num/*命令id*/ },          \
 		.func_write = _func,                                           \
 		_cmd_desc,                                                     \
 	},                                                                     \
@@ -394,7 +408,7 @@ struct uapi_definition {
 	{                                                                      \
 		.kind = UAPI_DEF_WRITE,                                        \
 		.scope = UAPI_SCOPE_OBJECT,                                    \
-		.write = { .is_ex = 1, .command_num = _command_num },          \
+		.write = { .is_ex = 1/*扩展命令*/, .command_num = _command_num/*命令id*/ },          \
 		.func_write = _func,                                           \
 		_cmd_desc,                                                     \
 	},                                                                     \
@@ -406,10 +420,11 @@ struct uapi_definition {
  */
 #define UAPI_DEF_OBJ_NEEDS_FN(ibdev_fn)                                        \
 	{                                                                      \
-		.kind = UAPI_DEF_IS_SUPPORTED_DEV_FN,                          \
+		.kind = UAPI_DEF_IS_SUPPORTED_DEV_FN,/*此函数被ib设备支持*/                          \
 		.scope = UAPI_SCOPE_OBJECT,                                    \
 		.needs_fn_offset =                                             \
 			offsetof(struct ib_device_ops, ibdev_fn) +             \
+			/*用于断言此函数指定存在*/\
 			BUILD_BUG_ON_ZERO(sizeof_field(struct ib_device_ops,   \
 						       ibdev_fn) !=            \
 					  sizeof(void *)),                     \

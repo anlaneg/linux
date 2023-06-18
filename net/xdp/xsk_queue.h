@@ -42,11 +42,13 @@ struct xdp_umem_ring {
 struct xsk_queue {
 	u32 ring_mask;//队列长度掩码
 	u32 nentries;//队列长度
-	u32 cached_prod;
-	u32 cached_cons;
-	struct xdp_ring *ring;/*ring队列*/
+	u32 cached_prod;/*生产者位置（缓存的，非实时更新）*/
+	u32 cached_cons;/*消费者位置（缓存的，非实时更新）*/
+	/*ring队列（ring后跟nentries个desc),desc依队列的类型而结构不同*/
+	struct xdp_ring *ring;
 	u64 invalid_descs;
 	u64 queue_empty_descs;
+	/*ring创建时vmalloc申请用的size*/
 	size_t ring_vmalloc_size;
 };
 
@@ -183,6 +185,7 @@ static inline bool xskq_cons_is_valid_desc(struct xsk_queue *q,
 					   struct xdp_desc *d,
 					   struct xsk_buff_pool *pool)
 {
+	/*校验描述符内容是否有效*/
 	if (!xp_validate_desc(pool, d)) {
 		q->invalid_descs++;
 		return false;
@@ -190,15 +193,16 @@ static inline bool xskq_cons_is_valid_desc(struct xsk_queue *q,
 	return true;
 }
 
+/*读取当前消费者位置对应的描述符*/
 static inline bool xskq_cons_read_desc(struct xsk_queue *q,
 				       struct xdp_desc *desc,
 				       struct xsk_buff_pool *pool)
 {
 	while (q->cached_cons != q->cached_prod) {
 		struct xdp_rxtx_ring *ring = (struct xdp_rxtx_ring *)q->ring;
-		u32 idx = q->cached_cons & q->ring_mask;
+		u32 idx = q->cached_cons & q->ring_mask;/*取消费者位置*/
 
-		*desc = ring->desc[idx];
+		*desc = ring->desc[idx];/*取描述符*/
 		if (xskq_cons_is_valid_desc(q, desc, pool))
 			return true;
 
@@ -243,6 +247,7 @@ static inline u32 xskq_cons_read_desc_batch(struct xsk_queue *q, struct xsk_buff
 
 static inline void __xskq_cons_release(struct xsk_queue *q)
 {
+	/*更新消费者指针*/
 	smp_store_release(&q->ring->consumer, q->cached_cons); /* D, matchees A */
 }
 
@@ -252,6 +257,7 @@ static inline void __xskq_cons_peek(struct xsk_queue *q)
 	q->cached_prod = smp_load_acquire(&q->ring->producer);  /* C, matches B */
 }
 
+/*更新生产者及消费者指针位置*/
 static inline void xskq_cons_get_entries(struct xsk_queue *q)
 {
 	__xskq_cons_release(q);
@@ -288,7 +294,10 @@ static inline bool xskq_cons_peek_desc(struct xsk_queue *q,
 				       struct xsk_buff_pool *pool)
 {
 	if (q->cached_prod == q->cached_cons)
+		/*从缓存视解看，队列为空，更新消费者与生产者指针位置*/
 		xskq_cons_get_entries(q);
+
+	/*尝试读取一个描述符*/
 	return xskq_cons_read_desc(q, desc, pool);
 }
 
@@ -311,11 +320,14 @@ static inline u32 xskq_cons_present_entries(struct xsk_queue *q)
 
 static inline u32 xskq_prod_nb_free(struct xsk_queue *q, u32 max)
 {
+	/*取空闲实体数*/
 	u32 free_entries = q->nentries - (q->cached_prod - q->cached_cons);
 
 	if (free_entries >= max)
+		/*空闲实体大于要求的最大空闲数，返回max*/
 		return max;
 
+	/*空间不足，刷新下消费者指针，再尝试下*/
 	/* Refresh the local tail pointer */
 	q->cached_cons = READ_ONCE(q->ring->consumer);
 	free_entries = q->nentries - (q->cached_prod - q->cached_cons);
@@ -323,8 +335,10 @@ static inline u32 xskq_prod_nb_free(struct xsk_queue *q, u32 max)
 	return free_entries >= max ? max : free_entries;
 }
 
+/*检查队列生产者视角是否已满*/
 static inline bool xskq_prod_is_full(struct xsk_queue *q)
 {
+	/*生产者请求一个空闲空间，如果返回0，则队列为满*/
 	return xskq_prod_nb_free(q, 1) ? false : true;
 }
 
@@ -368,7 +382,7 @@ static inline void xskq_prod_write_addr_batch(struct xsk_queue *q, struct xdp_de
 	q->cached_prod = cached_prod;
 }
 
-//将xdp buffer入队
+//预留并填充描述符
 static inline int xskq_prod_reserve_desc(struct xsk_queue *q,
 					 u64 addr, u32 len)
 {
@@ -376,10 +390,12 @@ static inline int xskq_prod_reserve_desc(struct xsk_queue *q,
 	u32 idx;
 
 	if (xskq_prod_is_full(q))
+		/*生产者队列已满，不能再入队*/
 		return -ENOBUFS;
 
 	/* A, matches D */
-	idx = q->cached_prod++ & q->ring_mask;
+	idx = q->cached_prod++ & q->ring_mask;/*取生产者索引*/
+	/*填充buffer的起始位置及长度*/
 	ring->desc[idx].addr = addr;
 	ring->desc[idx].len = len;
 
@@ -391,6 +407,7 @@ static inline void __xskq_prod_submit(struct xsk_queue *q, u32 idx)
 	smp_store_release(&q->ring->producer, idx); /* B, matches C */
 }
 
+/*提交生产者索引*/
 static inline void xskq_prod_submit(struct xsk_queue *q)
 {
 	__xskq_prod_submit(q, q->cached_prod);

@@ -150,6 +150,7 @@ static inline void sk_mark_napi_id_set(struct sock *sk,
 	sk_rx_queue_set(sk, skb);
 }
 
+/*设置此socket对应的napi_id*/
 static inline void __sk_mark_napi_id_once(struct sock *sk, unsigned int napi_id)
 {
 #ifdef CONFIG_NET_RX_BUSY_POLL

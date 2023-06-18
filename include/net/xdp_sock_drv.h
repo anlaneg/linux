@@ -79,11 +79,14 @@ static inline dma_addr_t xsk_buff_xdp_get_dma(struct xdp_buff *xdp)
 
 static inline dma_addr_t xsk_buff_xdp_get_frame_dma(struct xdp_buff *xdp)
 {
+	/*由xdp_buff结构获取xdp_buff_xsk*/
 	struct xdp_buff_xsk *xskb = container_of(xdp, struct xdp_buff_xsk, xdp);
 
+	/*取帧对应的dma地址*/
 	return xp_get_frame_dma(xskb);
 }
 
+/*自xsk_buff_pool中申请一个xdp_buffer*/
 static inline struct xdp_buff *xsk_buff_alloc(struct xsk_buff_pool *pool)
 {
 	return xp_alloc(pool);
@@ -92,6 +95,7 @@ static inline struct xdp_buff *xsk_buff_alloc(struct xsk_buff_pool *pool)
 /* Returns as many entries as possible up to max. 0 <= N <= max. */
 static inline u32 xsk_buff_alloc_batch(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 max)
 {
+	/*自xsk buffer pool中申请一组xdp buffer*/
 	return xp_alloc_batch(pool, xdp, max);
 }
 

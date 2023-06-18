@@ -364,6 +364,7 @@ static inline bool sysctl_dev_name_is_allowed(const char *name)
 	return strcmp(name, "default") != 0  && strcmp(name, "all") != 0;
 }
 
+/*检查port是否小于需要权限的绑定*/
 static inline bool inet_port_requires_bind_service(struct net *net, unsigned short port)
 {
 	return port < READ_ONCE(net->ipv4.sysctl_ip_prot_sock);

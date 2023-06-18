@@ -327,6 +327,7 @@ static const struct devlink_ops mlx5_devlink_ops = {
 	.port_fn_migratable_set = mlx5_devlink_port_fn_migratable_set,
 #endif
 #ifdef CONFIG_MLX5_SF_MANAGER
+	/*创建sf port*/
 	.port_new = mlx5_devlink_sf_port_new,
 	.port_del = mlx5_devlink_sf_port_del,
 	.port_fn_state_get = mlx5_devlink_sf_port_fn_state_get,

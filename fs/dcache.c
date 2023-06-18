@@ -74,6 +74,7 @@
 int sysctl_vfs_cache_pressure __read_mostly = 100;
 EXPORT_SYMBOL_GPL(sysctl_vfs_cache_pressure);
 
+/*定义seq lock*/
 __cacheline_aligned_in_smp DEFINE_SEQLOCK(rename_lock);
 
 EXPORT_SYMBOL(rename_lock);
@@ -99,17 +100,17 @@ EXPORT_SYMBOL(dotdot_name);
 
 static unsigned int d_hash_shift __read_mostly;
 
-//系统中用于缓存的dentry的hash表
+//系统中用于缓存所有dentry的hash表
 static struct hlist_bl_head *dentry_hashtable __read_mostly;
 
-//利用hash对应的桶
+//利用hash code确定其对应的dir entry hash table的桶
 static inline struct hlist_bl_head *d_hash(unsigned int hash)
 {
 	return dentry_hashtable + (hash >> d_hash_shift);
 }
 
-/*记录系统中当前正在执行dentry查询的dentry，用于防止重复慢速查询*/
 #define IN_LOOKUP_SHIFT 10
+/*记录系统中当前正在执行dentry查询的dentry，用于防止重复慢速查询*/
 static struct hlist_bl_head in_lookup_hashtable[1 << IN_LOOKUP_SHIFT];
 
 static inline struct hlist_bl_head *in_lookup_hash(const struct dentry *parent,
@@ -497,13 +498,14 @@ static void ___d_drop(struct dentry *dentry)
 	 * d_obtain_root, which are always IS_ROOT:
 	 */
 	if (unlikely(IS_ROOT(dentry)))
+		/*此dentry为root*/
 		b = &dentry->d_sb->s_roots;
 	else
 	    /*利用hash获取对应的桶*/
 		b = d_hash(dentry->d_name.hash);
 
 	hlist_bl_lock(b);
-	/*dentry被移除*/
+	/*将dentry自链表中移除*/
 	__hlist_bl_del(&dentry->d_hash);
 	hlist_bl_unlock(b);
 }
@@ -512,7 +514,7 @@ void __d_drop(struct dentry *dentry)
 {
 	if (!d_unhashed(dentry)) {
 		___d_drop(dentry);
-		dentry->d_hash.pprev = NULL;
+		dentry->d_hash.pprev = NULL;/*断开前半部分*/
 		write_seqcount_invalidate(&dentry->d_seq);
 	}
 }
@@ -539,6 +541,7 @@ EXPORT_SYMBOL(__d_drop);
 void d_drop(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
+	/*移除一个dentry(使查询失效）*/
 	__d_drop(dentry);
 	spin_unlock(&dentry->d_lock);
 }
@@ -1511,6 +1514,7 @@ int d_set_mounted(struct dentry *dentry)
 	struct dentry *p;
 	int ret = -ENOENT;
 	write_seqlock(&rename_lock);
+	/*反向到root,校验dentry均加入到hash表*/
 	for (p = dentry->d_parent; !IS_ROOT(p); p = p->d_parent) {
 		/* Need exclusion wrt. d_invalidate() */
 		spin_lock(&p->d_lock);
@@ -1734,6 +1738,7 @@ void d_invalidate(struct dentry *dentry)
 	bool had_submounts = false;
 	spin_lock(&dentry->d_lock);
 	if (d_unhashed(dentry)) {
+		/*已执行无效处理，退出*/
 		spin_unlock(&dentry->d_lock);
 		return;
 	}
@@ -1826,7 +1831,7 @@ static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dent
 	spin_lock_init(&dentry->d_lock);
 	seqcount_spinlock_init(&dentry->d_seq, &dentry->d_lock);
 	dentry->d_inode = NULL;
-	dentry->d_parent = dentry;
+	dentry->d_parent = dentry;/*注意：父节点指向了自已*/
 	/*设置所属的sb*/
 	dentry->d_sb = sb;
 	/*先将dentry的操作集置为NULL*/
@@ -1877,7 +1882,7 @@ struct dentry *d_alloc(struct dentry * parent, const struct qstr *name)
 	 * to concurrency here
 	 */
 	__dget_dlock(parent);
-	/*设置node指向父节点*/
+	/*更新node.dparent指向父节点*/
 	dentry->d_parent = parent;
 	/*将此dentry挂载到父节点的subdirs上*/
 	list_add(&dentry->d_child, &parent->d_subdirs);
@@ -2293,11 +2298,12 @@ bool d_same_name(const struct dentry *dentry, const struct dentry *parent,
 		 const struct qstr *name)
 {
 	if (likely(!(parent->d_flags & DCACHE_OP_COMPARE))) {
-		//比较名称是否相等
+		//未指明op compare,则直接通过strcmp比较名称是否相等
 		if (dentry->d_name.len != name->len)
 			return false;
 		return dentry_cmp(dentry, name->name, name->len) == 0;
 	}
+	/*有op compare回调，按回调进行处理*/
 	return parent->d_op->d_compare(dentry,
 				       dentry->d_name.len, dentry->d_name.name,
 				       name) == 0;
@@ -2395,6 +2401,7 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 	 */
 
 	if (unlikely(parent->d_flags & DCACHE_OP_COMPARE))
+		/*提明采用compare回调进行比对*/
 		return __d_lookup_rcu_op_compare(parent, name, seqp);
 
 	/*
@@ -2438,10 +2445,13 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
 		    /*跳过还未加入的*/
 			continue;
 		if (dentry->d_name.hash_len != hashlen)
+			/*跳过名称长度不同的*/
 			continue;
 		if (dentry_cmp(dentry, str, hashlen_len(hashlen)) != 0)
+			/*跳过名称不一致的*/
 			continue;
 		*seqp = seq;
+		/*命中*/
 		return dentry;
 	}
 	return NULL;
@@ -2460,6 +2470,7 @@ struct dentry *__d_lookup_rcu(const struct dentry *parent,
  */
 struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 {
+	/*通过parent dir entry,子项name查询其对应的dentry*/
 	struct dentry *dentry;
 	unsigned seq;
 
@@ -2492,7 +2503,7 @@ EXPORT_SYMBOL(d_lookup);
 struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 {
 	unsigned int hash = name->hash;
-	/*在dentry_hashtable哈希表中找到对应的链表头*/
+	/*利用hash code在dentry_hashtable哈希表中找到对应的链表头*/
 	struct hlist_bl_head *b = d_hash(hash);
 	struct hlist_bl_node *node;
 	struct dentry *found = NULL;
@@ -2523,25 +2534,25 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 	//遍历b指出的hash链中挂载的每一个dentry
 	hlist_bl_for_each_entry_rcu(dentry, node, b, d_hash) {
 
-		//跳过hash不相等的
 		if (dentry->d_name.hash != hash)
+			//跳过hash不相等的
 			continue;
 
 		spin_lock(&dentry->d_lock);
 
-		//跳过非同一父节点的
 		if (dentry->d_parent != parent)
+			//跳过非同一父节点的
 			goto next;
 
-		//是否已自hash表中移除？？
 		if (d_unhashed(dentry))
+			/*此dentry的前半部分指针已被移除，忽略*/
 			goto next;
 
-		//如果dentry与name不相等，则跳过
 		if (!d_same_name(dentry, parent, name))
+			//跳过名称不相等的
 			goto next;
 
-		//查找成功
+		//查找成功,增加引用
 		dentry->d_lockref.count++;
 		found = dentry;
 		spin_unlock(&dentry->d_lock);
@@ -2570,10 +2581,13 @@ struct dentry *d_hash_and_lookup(struct dentry *dir, struct qstr *name)
 	 */
 	name->hash = full_name_hash(dir, name->name, name->len);
 	if (dir->d_flags & DCACHE_OP_HASH) {
+		/*dir指明需要执行op hash，则调用初始化hash*/
 		int err = dir->d_op->d_hash(dir, name);
 		if (unlikely(err < 0))
 			return ERR_PTR(err);
 	}
+
+	/*执行查询*/
 	return d_lookup(dir, name);
 }
 EXPORT_SYMBOL(d_hash_and_lookup);
@@ -2624,6 +2638,7 @@ static void __d_rehash(struct dentry *entry)
 	struct hlist_bl_head *b = d_hash(entry->d_name.hash);
 
 	hlist_bl_lock(b);
+	/*将dentry加入到hash表，以便可被查询到*/
 	hlist_bl_add_head_rcu(&entry->d_hash, b);
 	hlist_bl_unlock(b);
 }
@@ -2684,6 +2699,7 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 	/*确定此hash在in lookup哈希表中的桶头*/
 	struct hlist_bl_head *b = in_lookup_hash(parent, hash);
 	struct hlist_bl_node *node;
+	/*在parent下创建子项name,返回对应的dentry*/
 	struct dentry *new = d_alloc(parent, name);
 	struct dentry *dentry;
 	unsigned seq, r_seq, d_seq;
@@ -2710,7 +2726,7 @@ retry:
 			goto retry;
 		}
 		rcu_read_unlock();
-		dput(new);
+		dput(new);/*释放旧的*/
 		return dentry;
 	}
 	if (unlikely(read_seqretry(&rename_lock, r_seq))) {
@@ -2740,10 +2756,13 @@ retry:
 	//如果存在，等待其查询结果，如果不存在，则新建并返回
 	hlist_bl_for_each_entry(dentry, node, b, d_u.d_in_lookup_hash) {
 		if (dentry->d_name.hash != hash)
+			/*忽略掉hash不一致的*/
 			continue;
 		if (dentry->d_parent != parent)
+			/*忽略掉parent不同的*/
 			continue;
 		if (!d_same_name(dentry, parent, name))
+			/*忽略掉名称不同的*/
 			continue;
 		hlist_bl_unlock(b);
 		/* now we can try to grab a reference */
@@ -2848,6 +2867,7 @@ static inline void __d_add(struct dentry *dentry, struct inode *inode)
 		raw_write_seqcount_end(&dentry->d_seq);
 		fsnotify_update_flags(dentry);
 	}
+	/*将dentry加入到cache*/
 	__d_rehash(dentry);
 	if (dir)
 		end_dir_add(dir, n, d_wait);
@@ -3086,6 +3106,7 @@ static void __d_move(struct dentry *dentry, struct dentry *target,
 void d_move(struct dentry *dentry, struct dentry *target)
 {
 	write_seqlock(&rename_lock);
+	/*支持dir entry重命名*/
 	__d_move(dentry, target, false);
 	write_sequnlock(&rename_lock);
 }
@@ -3343,6 +3364,7 @@ static void __init dcache_init_early(void)
 	if (hashdist)
 		return;
 
+	/*初始化dir entry cache表*/
 	dentry_hashtable =
 		alloc_large_system_hash("Dentry cache",
 					sizeof(struct hlist_bl_head),
@@ -3371,6 +3393,7 @@ static void __init dcache_init(void)
 	if (!hashdist)
 		return;
 
+	/*初始化dir entry cache表*/
 	dentry_hashtable =
 		alloc_large_system_hash("Dentry cache",
 					sizeof(struct hlist_bl_head),

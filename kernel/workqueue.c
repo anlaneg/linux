@@ -147,10 +147,11 @@ enum {
 
 struct worker_pool {
 	raw_spinlock_t		lock;		/* the pool lock */
-	//pool关联的cpu
+	//pool关联的cpu,如果>=0，则此pool绑定了cpu
 	int			cpu;		/* I: the associated cpu */
 	//pool关联的cpu所属的numa节点
 	int			node;		/* I: the associated node ID */
+	/*pool的唯一编号，来源于worker_pool_idr*/
 	int			id;		/* I: pool ID */
 	unsigned int		flags;		/* X: flags */
 
@@ -164,11 +165,12 @@ struct worker_pool {
 	 */
 	int			nr_running;
 
-	//待执行工作队列（worker线程将此其上提取work)
+	//待执行的工作队列（worker线程将自此队列上提取work_struct)
 	struct list_head	worklist;	/* L: list of pending works */
 
 	//worker数目
 	int			nr_workers;	/* L: total number of workers */
+	/*当前空闲的worker数量*/
 	int			nr_idle;	/* L: currently idle workers */
 
 	struct list_head	idle_list;	/* L: list of idle workers */
@@ -235,7 +237,8 @@ struct pool_workqueue {
 	 */
 	int			nr_active;	/* L: nr of active works */
 	int			max_active;	/* L: max active works */
-	struct list_head	inactive_works;	/* L: inactive works *///当pool中的活跃太多时，将存入此处
+	//当pool中的活跃的worker太多时，worker将被存入此处
+	struct list_head	inactive_works;	/* L: inactive works */
 	struct list_head	pwqs_node;	/* WR: node on wq->pwqs */
 	struct list_head	mayday_node;	/* MD: node on wq->maydays */
 
@@ -283,6 +286,7 @@ struct workqueue_struct {
 	int			saved_max_active; /* WQ: saved pwq max_active */
 
 	struct workqueue_attrs	*unbound_attrs;	/* PW: only for unbound wqs */
+	/*(非绑定情况下）未明确指定node时，使用此pool_workqueue*/
 	struct pool_workqueue	*dfl_pwq;	/* PW: only for unbound wqs */
 
 #ifdef CONFIG_SYSFS
@@ -304,19 +308,21 @@ struct workqueue_struct {
 	struct rcu_head		rcu;
 
 	/* hot fields used during command issue, aligned to cacheline */
+	/*应用在此wq上的标记*/
 	unsigned int		flags ____cacheline_aligned; /* WQ: WQ_* flags */
-	//此工作队列在每个cpu上的pool_workqueue(按cpu做索引）
+	//(绑定情况下）此工作队列在每个cpu上有一个pool_workqueue,按cpu进行索引
 	struct pool_workqueue __percpu *cpu_pwqs; /* I: per-cpu pwqs */
-	//此工作队列在每个node上的pool_workqueue(非绑定情况下）
+	//(非绑定情况下）此工作队列在每个node上有一个pool_workqueue,指明node时，按node为索引取对应的pwd
 	struct pool_workqueue __rcu *numa_pwq_tbl[]; /* PWR: unbound pwqs indexed by node */
 };
 
 static struct kmem_cache *pwq_cache;
 
+/*记录每个numa node上可能的cpu集合*/
 static cpumask_var_t *wq_numa_possible_cpumask;
 					/* possible CPUs of each node */
 
-static bool wq_disable_numa;
+static bool wq_disable_numa;/*禁用numa亲合性*/
 module_param_named(disable_numa, wq_disable_numa, bool, 0444);
 
 /* see the comment above the definition of WQ_POWER_EFFICIENT */
@@ -325,6 +331,7 @@ module_param_named(power_efficient, wq_power_efficient, bool, 0444);
 
 static bool wq_online;			/* can kworkers be created yet? */
 
+/*标记unbound情况下numa亲合性是否被开启*/
 static bool wq_numa_enabled;		/* unbound NUMA affinity enabled */
 
 /* buf for wq_update_unbound_numa_attrs(), protected by CPU hotplug exclusion */
@@ -341,7 +348,7 @@ static LIST_HEAD(workqueues);		/* PR: list of all workqueues */
 static bool workqueue_freezing;		/* PL: have wqs started freezing? */
 
 /* PL&A: allowable cpus for unbound wqs and work items */
-static cpumask_var_t wq_unbound_cpumask;
+static cpumask_var_t wq_unbound_cpumask;/*可以执行wq任务的cpu集合*/
 
 /* CPU where unbound work was last round robin scheduled from this CPU */
 static DEFINE_PER_CPU(int, wq_rr_cpu_last);
@@ -358,19 +365,24 @@ static bool wq_debug_force_rr_cpu = false;
 #endif
 module_param_named(debug_force_rr_cpu, wq_debug_force_rr_cpu, bool, 0644);
 
-//为每个cpu定义worker-pool
+/*为每个cpu定义一个worker-pool，
+ * worker-pool有两种优先级下标0是普通优先级，1是高优先级
+ * */
 /* the per-cpu worker pools */
 static DEFINE_PER_CPU_SHARED_ALIGNED(struct worker_pool [NR_STD_WORKER_POOLS], cpu_worker_pools);
 
 static DEFINE_IDR(worker_pool_idr);	/* PR: idr of all pools */
 
 /* PL: hash of all unbound pools keyed by pool->attrs */
+/*记录系统中所有unbound pools*/
 static DEFINE_HASHTABLE(unbound_pool_hash, UNBOUND_POOL_HASH_ORDER);
 
 /* I: attributes used when instantiating standard unbound pools on demand */
+/*标准的（非按序）pool使用的wq属性（unbound pools)*/
 static struct workqueue_attrs *unbound_std_wq_attrs[NR_STD_WORKER_POOLS];
 
 /* I: attributes used when instantiating ordered pools on demand */
+/*按序pool使用的wq属性（unbound pools)*/
 static struct workqueue_attrs *ordered_wq_attrs[NR_STD_WORKER_POOLS];
 
 struct workqueue_struct *system_wq __read_mostly;
@@ -407,7 +419,7 @@ static void show_one_worker_pool(struct worker_pool *pool);
 			 !lockdep_is_held(&wq_pool_mutex),		\
 			 "RCU, wq->mutex or wq_pool_mutex should be held")
 
-//遍历当前cpu上每个worker_pool
+//遍历当前cpu上每个worker_pool(一个cpu有多个cpu_worker_pools)
 #define for_each_cpu_worker_pool(pool, cpu)				\
 	for ((pool) = &per_cpu(cpu_worker_pools, cpu)[0];		\
 	     (pool) < &per_cpu(cpu_worker_pools, cpu)[NR_STD_WORKER_POOLS]; \
@@ -571,7 +583,7 @@ static int worker_pool_assign_id(struct worker_pool *pool)
 
 	lockdep_assert_held(&wq_pool_mutex);
 
-	//为pool申请id并赋给他
+	//为worker pool申请id并赋给他
 	ret = idr_alloc(&worker_pool_idr, pool, 0, WORK_OFFQ_POOL_NONE,
 			GFP_KERNEL);
 	if (ret >= 0) {
@@ -605,8 +617,10 @@ static struct pool_workqueue *unbound_pwq_by_node(struct workqueue_struct *wq,
 	 * happens, this workaround can be removed.
 	 */
 	if (unlikely(node == NUMA_NO_NODE))
+		/*如果未指定node,则使用此pwq*/
 		return wq->dfl_pwq;
 
+	/*否则使用node对对应的pwq*/
 	return rcu_dereference_raw(wq->numa_pwq_tbl[node]);
 }
 
@@ -653,6 +667,7 @@ static inline void set_work_data(struct work_struct *work, unsigned long data,
 	atomic_long_set(&work->data, data | flags | work_static(work));
 }
 
+/*为此work存入pwq及其它flags*/
 static void set_work_pwq(struct work_struct *work, struct pool_workqueue *pwq,
 			 unsigned long extra_flags)
 {
@@ -748,13 +763,16 @@ static struct worker_pool *get_work_pool(struct work_struct *work)
 	assert_rcu_or_pool_mutex();
 
 	if (data & WORK_STRUCT_PWQ)
+		/*data中包含了pwd指针*/
 		return ((struct pool_workqueue *)
 			(data & WORK_STRUCT_WQ_DATA_MASK))->pool;
 
+	/*无此标记时，data中记录的为worker pool id,取worker pool id*/
 	pool_id = data >> WORK_OFFQ_POOL_SHIFT;
 	if (pool_id == WORK_OFFQ_POOL_NONE)
 		return NULL;
 
+	/*通过pool id获得worker_pool*/
 	return idr_find(&worker_pool_idr, pool_id);
 }
 
@@ -1013,6 +1031,7 @@ static inline void worker_set_flags(struct worker *worker, unsigned int flags)
  */
 static inline void worker_clr_flags(struct worker *worker, unsigned int flags)
 {
+	/*清除worker上的指定标记*/
 	struct worker_pool *pool = worker->pool;
 	unsigned int oflags = worker->flags;
 
@@ -1381,9 +1400,11 @@ static void insert_work(struct pool_workqueue *pwq, struct work_struct *work,
 
 	/* we own @work, set data and link */
 	set_work_pwq(work, pwq, extra_flags);
+	/*将此work加入到链表*/
 	list_add_tail(&work->entry, head);
-	get_pwq(pwq);
+	get_pwq(pwq);/*有work在此pwq中，增加其引用*/
 
+	/*如果pool中当前在执行数目为0，则唤醒*/
 	if (__need_more_worker(pool))
 		wake_up_worker(pool);
 }
@@ -1416,6 +1437,7 @@ static int wq_select_unbound_cpu(int cpu)
 
 	if (likely(!wq_debug_force_rr_cpu)) {
 		if (cpumask_test_cpu(cpu, wq_unbound_cpumask))
+			/*给定的cpu在wq_unbound_cpumask集合中，使用此cpu*/
 			return cpu;
 	} else if (!printed_dbg_warning) {
 		pr_warn("workqueue: round-robin CPU selection forced, expect performance impact\n");
@@ -1423,18 +1445,22 @@ static int wq_select_unbound_cpu(int cpu)
 	}
 
 	if (cpumask_empty(wq_unbound_cpumask))
-	    /*未提供wq_unbond_cpumask,直接返回传入的cpu*/
+	    /*wq_unbond_cpumask集合为空,使用此cpu*/
 		return cpu;
 
-	//先取出上次一次选择的cpu
+	//不能选择传入的cpu,需要重选cpu,先取出上次一次选择的cpu
 	new_cpu = __this_cpu_read(wq_rr_cpu_last);
+	/*自new_cpu找即在wq_unbound_cpumask集合中，又在cpu_online_mask集合中的cpu*/
 	new_cpu = cpumask_next_and(new_cpu, wq_unbound_cpumask, cpu_online_mask);
 	if (unlikely(new_cpu >= nr_cpu_ids)) {
+		/*在以上集合中没有找到，找两个集合中的首个*/
 		new_cpu = cpumask_first_and(wq_unbound_cpumask, cpu_online_mask);
 		if (unlikely(new_cpu >= nr_cpu_ids))
+			/*这两集集合并集为空，返回此cpu*/
 			return cpu;
 	}
-	//记录本次选项的cpu
+
+	//记录本次选择的cpu
 	__this_cpu_write(wq_rr_cpu_last, new_cpu);
 
 	return new_cpu;
@@ -1448,7 +1474,7 @@ static void __queue_work(int cpu, struct workqueue_struct *wq,
 	struct worker_pool *last_pool;
 	struct list_head *worklist;
 	unsigned int work_flags;
-	unsigned int req_cpu = cpu;
+	unsigned int req_cpu = cpu;/*请求使用的cpu*/
 
 	/*
 	 * While a work item is PENDING && off queue, a task trying to
@@ -1472,7 +1498,9 @@ retry:
 	/* pwq which will be used unless @work is executing elsewhere */
 	if (wq->flags & WQ_UNBOUND) {
 		if (req_cpu == WORK_CPU_UNBOUND)
+			/*未指定cpu,使用当前cpu*/
 			cpu = wq_select_unbound_cpu(raw_smp_processor_id()/*当前cpu*/);
+		/*通过cpu所属node取pwq*/
 		pwq = unbound_pwq_by_node(wq, cpu_to_node(cpu));
 	} else {
 		if (req_cpu == WORK_CPU_UNBOUND)
@@ -1487,7 +1515,7 @@ retry:
 	 * running there, in which case the work needs to be queued on that
 	 * pool to guarantee non-reentrancy.
 	 */
-	last_pool = get_work_pool(work);
+	last_pool = get_work_pool(work);/*取此work的worker_pool*/
 	if (last_pool && last_pool != pwq->pool) {
 		struct worker *worker;
 
@@ -1535,21 +1563,22 @@ retry:
 	pwq->nr_in_flight[pwq->work_color]++;
 	work_flags = work_color_to_flags(pwq->work_color);
 
+	/*选择worklist*/
 	if (likely(pwq->nr_active < pwq->max_active)) {
-		//活跃的较少，直接存入pwq->pool->worklist中
+		//活跃的较少，需要存入pwq->pool->worklist中
 		trace_workqueue_activate_work(work);
 		pwq->nr_active++;
 		worklist = &pwq->pool->worklist;
 		if (list_empty(worklist))
 			pwq->pool->watchdog_ts = jiffies;
 	} else {
-		//活跃的较多，将其存入到pwq->delayed_works中
+		//活跃的较多，需要将其存入到pwq->delayed_works中
 		work_flags |= WORK_STRUCT_INACTIVE;
 		worklist = &pwq->inactive_works;
 	}
 
 	debug_work_activate(work);
-	//将work移至worklist中
+	//将work移至对应的worklist中
 	insert_work(pwq, work, worklist, work_flags);
 
 out:
@@ -1577,7 +1606,7 @@ bool queue_work_on(int cpu, struct workqueue_struct *wq,
 
 	local_irq_save(flags);
 
-	//置pending_bit
+	//置pending_bit,如果成功，则加其入队，否则其它cpu可能已将其入队，直接返回即可
 	if (!test_and_set_bit(WORK_STRUCT_PENDING_BIT, work_data_bits(work))) {
 		__queue_work(cpu, wq, work);
 		ret = true;
@@ -1876,7 +1905,7 @@ static void worker_leave_idle(struct worker *worker)
 	if (WARN_ON_ONCE(!(worker->flags & WORKER_IDLE)))
 		return;
 	worker_clr_flags(worker, WORKER_IDLE);
-	pool->nr_idle--;
+	pool->nr_idle--;/*空闲数减少*/
 	list_del_init(&worker->entry);
 }
 
@@ -1991,14 +2020,15 @@ static struct worker *create_worker(struct worker_pool *pool)
 	worker->id = id;
 
 	if (pool->cpu >= 0)
-		//绑定在cpu上的kworker
+		//此pool绑定了cpu,名称按$cpu:$worker_id$nic来命名
 		snprintf(id_buf, sizeof(id_buf), "%d:%d%s", pool->cpu, id,
 			 pool->attrs->nice < 0  ? "H" : "");
 	else
-		//未绑定在cpu上的kworker
+		//未绑定在cpu的pool,名称按u$pool_id:$worker_id来命名
 		snprintf(id_buf, sizeof(id_buf), "u%d:%d", pool->id, id);
 
-	//产生worker线程
+	//产生worker对应的线程
+	//例如： [kworker/u2:3]
 	worker->task = kthread_create_on_node(worker_thread, worker, pool->node,
 					      "kworker/%s", id_buf);
 	if (IS_ERR(worker->task))
@@ -2327,13 +2357,14 @@ static bool manage_workers(struct worker *worker)
  * CONTEXT:
  * raw_spin_lock_irq(pool->lock) which is released and regrabbed.
  */
-//处理work
+//处理work_struct
 static void process_one_work(struct worker *worker, struct work_struct *work)
 __releases(&pool->lock)
 __acquires(&pool->lock)
 {
 	struct pool_workqueue *pwq = get_work_pwq(work);
 	struct worker_pool *pool = worker->pool;
+	/*此时pwq必存在*/
 	bool cpu_intensive = pwq->wq->flags & WQ_CPU_INTENSIVE;
 	unsigned long work_data;
 	struct worker *collision;
@@ -2442,7 +2473,8 @@ __acquires(&pool->lock)
 	 */
 	lockdep_invariant_state(true);
 	trace_workqueue_execute_start(work);
-	worker->current_func(work);//执行work的工作函数
+	//执行work的工作函数
+	worker->current_func(work);
 	/*
 	 * While we must be careful to not use "work" after this, the trace
 	 * point will only record its address.
@@ -2514,6 +2546,7 @@ static void set_pf_worker(bool val)
 {
 	mutex_lock(&wq_pool_attach_mutex);
 	if (val)
+		/*标记当前进程是wq worker*/
 		current->flags |= PF_WQ_WORKER;
 	else
 		current->flags &= ~PF_WQ_WORKER;
@@ -2545,7 +2578,7 @@ woke_up:
 
 	/* am I supposed to die? */
 	if (unlikely(worker->flags & WORKER_DIE)) {
-		//停止worker线程
+		//已标记die，停止worker线程
 		raw_spin_unlock_irq(&pool->lock);
 		set_pf_worker(false);
 
@@ -2584,7 +2617,7 @@ recheck:
 	worker_clr_flags(worker, WORKER_PREP | WORKER_REBOUND);
 
 	do {
-		//处理为worker分配的工作
+		//处理为此worker分配的工作
 		struct work_struct *work =
 			list_first_entry(&pool->worklist,
 					 struct work_struct, entry);
@@ -2617,8 +2650,8 @@ sleep:
 	worker_enter_idle(worker);
 	__set_current_state(TASK_IDLE);
 	raw_spin_unlock_irq(&pool->lock);
-	schedule();
-	goto woke_up;
+	schedule();/*主动放弃cpu*/
+	goto woke_up;/*被唤醒*/
 }
 
 /**
@@ -3563,6 +3596,7 @@ struct workqueue_attrs *alloc_workqueue_attrs(void)
 	if (!alloc_cpumask_var(&attrs->cpumask, GFP_KERNEL))
 		goto fail;
 
+	/*默认容许所有possible集合*/
 	cpumask_copy(attrs->cpumask, cpu_possible_mask);
 	return attrs;
 fail:
@@ -3619,7 +3653,7 @@ static int init_worker_pool(struct worker_pool *pool)
 {
 	raw_spin_lock_init(&pool->lock);
 	pool->id = -1;
-	pool->cpu = -1;
+	pool->cpu = -1;/*初始化cpu为-1，表明未绑定cpu*/
 	pool->node = NUMA_NO_NODE;
 	pool->flags |= POOL_DISASSOCIATED;
 	pool->watchdog_ts = jiffies;
@@ -3819,7 +3853,7 @@ static struct worker_pool *get_unbound_pool(const struct workqueue_attrs *attrs)
 	/* do we already have a matching pool? */
 	hash_for_each_possible(unbound_pool_hash, pool, hash_node, hash) {
 		if (wqattrs_equal(pool->attrs, attrs)) {
-			pool->refcnt++;
+			pool->refcnt++;/*查询到，使用此pool,引用计数增加*/
 			return pool;
 		}
 	}
@@ -3858,7 +3892,7 @@ static struct worker_pool *get_unbound_pool(const struct workqueue_attrs *attrs)
 		goto fail;
 
 	/* install */
-	hash_add(unbound_pool_hash, &pool->hash_node, hash);
+	hash_add(unbound_pool_hash, &pool->hash_node, hash);/*记录unbound pool*/
 
 	return pool;
 fail:
@@ -4107,8 +4141,8 @@ struct apply_wqattrs_ctx {
 	struct workqueue_struct	*wq;		/* target workqueue */
 	struct workqueue_attrs	*attrs;		/* attrs to apply */
 	struct list_head	list;		/* queued for batching commit */
-	struct pool_workqueue	*dfl_pwq;
-	struct pool_workqueue	*pwq_tbl[];
+	struct pool_workqueue	*dfl_pwq;/*由apply_wqattrs_prepare函数创建，用于未指明node时的pwq*/
+	struct pool_workqueue	*pwq_tbl[];/*用于指明node时的pwq*/
 };
 
 /* free the resources after success or abort */
@@ -4169,10 +4203,11 @@ apply_wqattrs_prepare(struct workqueue_struct *wq,
 	 * the default pwq covering whole @attrs->cpumask.  Always create
 	 * it even if we don't use it immediately.
 	 */
-	ctx->dfl_pwq = alloc_unbound_pwq(wq, new_attrs);
+	ctx->dfl_pwq = alloc_unbound_pwq(wq, new_attrs);/*创建默认pwq*/
 	if (!ctx->dfl_pwq)
 		goto out_free;
 
+	/*为每个node创建pwq*/
 	for_each_node(node) {
 		if (wq_calc_node_cpumask(new_attrs, node, -1, tmp_attrs->cpumask)) {
 			ctx->pwq_tbl[node] = alloc_unbound_pwq(wq, tmp_attrs);
@@ -4242,16 +4277,20 @@ static int apply_workqueue_attrs_locked(struct workqueue_struct *wq,
 
 	/* only unbound workqueues can change attributes */
 	if (WARN_ON(!(wq->flags & WQ_UNBOUND)))
+		/*此wq必须是不绑定到任意cpu的*/
 		return -EINVAL;
 
 	/* creating multiple pwqs breaks ordering guarantee */
 	if (!list_empty(&wq->pwqs)) {
 		if (WARN_ON(wq->flags & __WQ_ORDERED_EXPLICIT))
+			/*此情况下不能是显示指明ordered*/
 			return -EINVAL;
 
+		/*由于是隐式指明ordered,故移除掉此标记*/
 		wq->flags &= ~__WQ_ORDERED;
 	}
 
+	/*创建对应的pwq*/
 	ctx = apply_wqattrs_prepare(wq, attrs, wq_unbound_cpumask);
 	if (!ctx)
 		return -ENOMEM;
@@ -4386,16 +4425,20 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 	int cpu, ret;
 
 	if (!(wq->flags & WQ_UNBOUND)) {
+		/*为此wq绑定了cpu*/
 		wq->cpu_pwqs = alloc_percpu(struct pool_workqueue);
 		if (!wq->cpu_pwqs)
 			return -ENOMEM;
 
 		for_each_possible_cpu(cpu) {
+			/*每个cpu一个pwq(从属于此wq的pwd)*/
 			struct pool_workqueue *pwq =
 				per_cpu_ptr(wq->cpu_pwqs, cpu);
+			/*每个cpu一个cpu_pools,cpu_pools共有两个成员元素，分别表示两种优先级(高优/非高优）*/
 			struct worker_pool *cpu_pools =
 				per_cpu(cpu_worker_pools, cpu);
 
+			/*初始化pwq*/
 			init_pwq(pwq, wq, &cpu_pools[highpri]);
 
 			mutex_lock(&wq->mutex);
@@ -4405,6 +4448,7 @@ static int alloc_and_link_pwqs(struct workqueue_struct *wq)
 		return 0;
 	}
 
+	/*以下wq是没有绑定到cpu的*/
 	cpus_read_lock();
 	if (wq->flags & __WQ_ORDERED) {
 		ret = apply_workqueue_attrs(wq, ordered_wq_attrs[highpri]);
@@ -4465,9 +4509,9 @@ static int init_rescuer(struct workqueue_struct *wq)
 
 //创建一个工作队列
 __printf(1, 4)
-struct workqueue_struct *alloc_workqueue(const char *fmt,
-					 unsigned int flags,
-					 int max_active, ...)
+struct workqueue_struct *alloc_workqueue(const char *fmt/*wq名称format*/,
+					 unsigned int flags/*wq创建标记*/,
+					 int max_active/*最大容许的活跃数，0表示不限制*/, .../*wq名称格式化参数*/)
 {
 	size_t tbl_size = 0;
 	va_list args;
@@ -4482,6 +4526,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	 * on NUMA.
 	 */
 	if ((flags & WQ_UNBOUND) && max_active == 1)
+		/*flag未绑定任意cpu,且max_active为1，则强加按序执行标记（隐式按序）*/
 		flags |= __WQ_ORDERED;
 
 	/* see the comment above the definition of WQ_POWER_EFFICIENT */
@@ -4490,6 +4535,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 
 	/* allocate wq and format name */
 	if (flags & WQ_UNBOUND)
+		/*每个node上一个wq->numa_pwq_tbl*/
 		tbl_size = nr_node_ids * sizeof(wq->numa_pwq_tbl[0]);
 
 	//申请工作队列，及table大小
@@ -4530,6 +4576,7 @@ struct workqueue_struct *alloc_workqueue(const char *fmt,
 	if (wq_online && init_rescuer(wq) < 0)
 		goto err_destroy;
 
+	/*向sysfs注册此wq*/
 	if ((wq->flags & WQ_SYSFS) && workqueue_sysfs_register(wq))
 		goto err_destroy;
 
@@ -5040,6 +5087,7 @@ void show_one_workqueue(struct workqueue_struct *wq)
 
 	pr_info("workqueue %s: flags=0x%x\n", wq->name, wq->flags);
 
+	/*遍历此wq的所有pwq,逐个进行显示*/
 	for_each_pwq(pwq, wq) {
 		raw_spin_lock_irqsave(&pwq->pool->lock, flags);
 		if (pwq->nr_active || !list_empty(&pwq->inactive_works)) {
@@ -5084,6 +5132,7 @@ static void show_one_worker_pool(struct worker_pool *pool)
 	printk_deferred_enter();
 	pr_info("pool %d:", pool->id);
 	pr_cont_pool_info(pool);
+	/*指明此worker已hung多少时间（长时间未更新watchdog_ts)*/
 	pr_cont(" hung=%us workers=%d",
 		jiffies_to_msecs(jiffies - pool->watchdog_ts) / 1000,
 		pool->nr_workers);
@@ -5124,6 +5173,7 @@ void show_all_workqueues(void)
 
 	pr_info("Showing busy workqueues and worker pools:\n");
 
+	/*由于所有wq均被挂接在workqueues上，故通过遍历此链表显示所有wq*/
 	list_for_each_entry_rcu(wq, &workqueues, list)
 		show_one_workqueue(wq);
 
@@ -5940,6 +5990,7 @@ int workqueue_sysfs_register(struct workqueue_struct *wq)
 	 * workqueues.
 	 */
 	if (WARN_ON(wq->flags & __WQ_ORDERED_EXPLICIT))
+		/*此类wq不容许注册到sysfs，不容许调整max_active*/
 		return -EINVAL;
 
 	wq->wq_dev = wq_dev = kzalloc(sizeof(*wq_dev), GFP_KERNEL);
@@ -6156,13 +6207,16 @@ static void __init wq_numa_init(void)
 	int node, cpu;
 
 	if (num_possible_nodes() <= 1)
-		return;//非numa机器退出
+		//非numa机器退出
+		return;
 
 	if (wq_disable_numa) {
+		/*numa亲合性被禁用，退出*/
 		pr_info("workqueue: NUMA affinity support disabled\n");
 		return;
 	}
 
+	/*检查在线cpu，如果其未映射numa,则显示告警后，按禁止numa亲合性处理并退出*/
 	for_each_possible_cpu(cpu) {
 		if (WARN_ON(cpu_to_node(cpu) == NUMA_NO_NODE)) {
 			pr_warn("workqueue: NUMA node mapping not available for cpu%d, disabling NUMA support\n", cpu);
@@ -6185,8 +6239,9 @@ static void __init wq_numa_init(void)
 		BUG_ON(!zalloc_cpumask_var_node(&tbl[node], GFP_KERNEL,
 				node_online(node) ? node : NUMA_NO_NODE));
 
+	/*tbl[node]用于表示此node上的cpu集合，这里通过遍历cpu将其填充到此集合*/
 	for_each_possible_cpu(cpu) {
-		node = cpu_to_node(cpu);//cpu对应的node
+		node = cpu_to_node(cpu);
 		cpumask_set_cpu(cpu, tbl[node]);
 	}
 
@@ -6211,6 +6266,7 @@ void __init workqueue_init_early(void)
 
 	BUILD_BUG_ON(__alignof__(struct pool_workqueue) < __alignof__(long long));
 
+	/*初始化wq_unbound cpu集合*/
 	BUG_ON(!alloc_cpumask_var(&wq_unbound_cpumask, GFP_KERNEL));
 	cpumask_copy(wq_unbound_cpumask, housekeeping_cpumask(HK_TYPE_WQ));
 	cpumask_and(wq_unbound_cpumask, wq_unbound_cpumask, housekeeping_cpumask(HK_TYPE_DOMAIN));
@@ -6224,14 +6280,17 @@ void __init workqueue_init_early(void)
 		i = 0;
 		for_each_cpu_worker_pool(pool, cpu) {
 			BUG_ON(init_worker_pool(pool));
-			pool->cpu = cpu;
+			pool->cpu = cpu;/*为此类pool指明cpu(bound情况）*/
+			/*此类pool只容许1个cpu*/
 			cpumask_copy(pool->attrs->cpumask, cpumask_of(cpu));
+			/*每个cpu上共有NR_STD_WORKER_POOLS个worker pool,故取此pool对应的nice*/
 			pool->attrs->nice = std_nice[i++];
 			pool->node = cpu_to_node(cpu);
 
 			/* alloc pool ID */
 			mutex_lock(&wq_pool_mutex);
-			BUG_ON(worker_pool_assign_id(pool));//申请pool id
+			//为此pool申请pool id
+			BUG_ON(worker_pool_assign_id(pool));
 			mutex_unlock(&wq_pool_mutex);
 		}
 	}
@@ -6240,6 +6299,7 @@ void __init workqueue_init_early(void)
 	for (i = 0; i < NR_STD_WORKER_POOLS; i++) {
 		struct workqueue_attrs *attrs;
 
+		/*unbound标准wq属性设置（此类容许所有possible集合cpu)*/
 		BUG_ON(!(attrs = alloc_workqueue_attrs()));
 		attrs->nice = std_nice[i];
 		unbound_std_wq_attrs[i] = attrs;
@@ -6251,11 +6311,14 @@ void __init workqueue_init_early(void)
 		 */
 		BUG_ON(!(attrs = alloc_workqueue_attrs()));
 		attrs->nice = std_nice[i];
+		/*按序wq属性numa被强制关闭（只容许所有numa node）*/
 		attrs->no_numa = true;
 		ordered_wq_attrs[i] = attrs;
 	}
 
+	/*创建events workqueue*/
 	system_wq = alloc_workqueue("events", 0, 0);
+	/**/
 	system_highpri_wq = alloc_workqueue("events_highpri", WQ_HIGHPRI, 0);
 	system_long_wq = alloc_workqueue("events_long", 0, 0);
 	system_unbound_wq = alloc_workqueue("events_unbound", WQ_UNBOUND,
@@ -6302,6 +6365,7 @@ void __init workqueue_init(void)
 	mutex_lock(&wq_pool_mutex);
 
 	for_each_possible_cpu(cpu) {
+		/*每个cpu上已创建了worker_pools,设置worker_pool对应的numa node*/
 		for_each_cpu_worker_pool(pool, cpu) {
 			pool->node = cpu_to_node(cpu);
 		}
@@ -6321,12 +6385,13 @@ void __init workqueue_init(void)
 	for_each_online_cpu(cpu) {
 		for_each_cpu_worker_pool(pool, cpu) {
 			pool->flags &= ~POOL_DISASSOCIATED;
-			BUG_ON(!create_worker(pool));
+			BUG_ON(!create_worker(pool));/*创建worker*/
 		}
 	}
 
+	/*创建unbound pool对应的worker*/
 	hash_for_each(unbound_pool_hash, bkt, pool, hash_node)
-		BUG_ON(!create_worker(pool));
+		BUG_ON(!create_worker(pool));/*创建worker*/
 
 	wq_online = true;
 	wq_watchdog_init();

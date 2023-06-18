@@ -811,6 +811,7 @@ struct netdev_rx_queue {
 	netdevice_tracker		dev_tracker;
 
 #ifdef CONFIG_XDP_SOCKETS
+	/*对应的xdp pool*/
 	struct xsk_buff_pool            *pool;
 #endif
 } ____cacheline_aligned_in_smp;
@@ -1019,6 +1020,7 @@ enum bpf_netdev_command {
 	/* BPF program for offload callbacks, invoked at program load time. */
 	BPF_OFFLOAD_MAP_ALLOC,
 	BPF_OFFLOAD_MAP_FREE,
+	/*通过支持此cmd可将xsk pool注入到驱动，以实现zero copy*/
 	XDP_SETUP_XSK_POOL,
 };
 
@@ -2470,9 +2472,6 @@ struct net_device {
 };
 #define to_net_dev(d) container_of(d, struct net_device, dev)
 
-<<<<<<< HEAD
-//如果网卡没有开启GRO功能，则返回true
-=======
 /*
  * Driver should use this to assign devlink port instance to a netdevice
  * before it registers the netdevice. Therefore devlink_port is static
@@ -2484,7 +2483,7 @@ struct net_device {
 	((dev)->devlink_port = (port));				\
 })
 
->>>>>>> upstream/master
+//如果网卡没有开启GRO功能，则返回true
 static inline bool netif_elide_gro(const struct net_device *dev)
 {
 	if (!(dev->features & NETIF_F_GRO) || dev->xdp_prog)
@@ -3273,14 +3272,8 @@ struct softnet_data {
 	struct sk_buff_head	process_queue;
 
 	/* stats */
-<<<<<<< HEAD
 	unsigned int		processed;/*当前cpu已处理的报文数目*/
 	unsigned int		time_squeeze;/*收取超时或者满收取的次数*/
-	unsigned int		received_rps;
-=======
-	unsigned int		processed;
-	unsigned int		time_squeeze;
->>>>>>> upstream/master
 #ifdef CONFIG_RPS
 	struct softnet_data	*rps_ipi_list;
 #endif
@@ -3314,11 +3307,8 @@ struct softnet_data {
 	unsigned int		cpu;
 	unsigned int		input_queue_tail;
 #endif
-<<<<<<< HEAD
-	/*超过backlog被丢弃的数目*/
-=======
 	unsigned int		received_rps;
->>>>>>> upstream/master
+	/*超过backlog被丢弃的数目*/
 	unsigned int		dropped;
 	//处理设备间转发，也接收其它cpu因rps等转交过来的报文
 	struct sk_buff_head	input_pkt_queue;

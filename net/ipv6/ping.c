@@ -285,6 +285,7 @@ int __init pingv6_init(void)
 	pingv6_ops.icmpv6_err_convert = icmpv6_err_convert;
 	pingv6_ops.ipv6_icmp_error = ipv6_icmp_error;
 	pingv6_ops.ipv6_chk_addr = ipv6_chk_addr;
+	/*注册icmpv6 ping对应的socket*/
 	return inet6_register_protosw(&pingv6_protosw);
 }
 

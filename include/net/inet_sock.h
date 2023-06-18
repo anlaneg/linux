@@ -244,6 +244,7 @@ struct inet_sock {
 	__be16			inet_sport;
 	__u16			inet_id;
 
+	/*此流使用的tos值*/
 	__u8			tos;
 	//ttl小于此值，将被丢包
 	__u8			min_ttl;
@@ -326,7 +327,7 @@ static inline struct sock *skb_to_full_sk(const struct sk_buff *skb)
 	return sk_to_full_sk(skb->sk);
 }
 
-/*由sock转为ipv4 socket*/
+/*由sock转为inet socket(同时包含ipv4/ipv6支持）*/
 static inline struct inet_sock *inet_sk(const struct sock *sk)
 {
 	return (struct inet_sock *)sk;

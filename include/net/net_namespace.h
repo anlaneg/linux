@@ -181,7 +181,7 @@ struct net {
 	struct netns_can	can;
 #endif
 #ifdef CONFIG_XDP_SOCKETS
-	//xdp socket相关信息
+	//用于挂接所有xdp socket相关信息
 	struct netns_xdp	xdp;
 #endif
 #if IS_ENABLED(CONFIG_MCTP)

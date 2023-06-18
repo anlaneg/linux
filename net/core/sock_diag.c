@@ -191,6 +191,7 @@ int sock_diag_register(const struct sock_diag_handler *hndl)
 
 	mutex_lock(&sock_diag_table_mutex);
 	if (sock_diag_handlers[hndl->family])
+		/*此family已注册*/
 		err = -EBUSY;
 	else
 		sock_diag_handlers[hndl->family] = hndl;
@@ -227,16 +228,21 @@ static int __sock_diag_cmd(struct sk_buff *skb, struct nlmsghdr *nlh)
 		return -EINVAL;
 	req->sdiag_family = array_index_nospec(req->sdiag_family, AF_MAX);
 
+	/*如果此handler还未设置，则尝试加载module*/
 	if (sock_diag_handlers[req->sdiag_family] == NULL)
 		sock_load_diag_module(req->sdiag_family, 0);
 
 	mutex_lock(&sock_diag_table_mutex);
+	/*加锁后，再查询一遍handler*/
 	hndl = sock_diag_handlers[req->sdiag_family];
 	if (hndl == NULL)
+		/*未找到，返回no entry*/
 		err = -ENOENT;
 	else if (nlh->nlmsg_type == SOCK_DIAG_BY_FAMILY)
+		/*msg_type为按family处理，调dump回调*/
 		err = hndl->dump(skb, nlh);
 	else if (nlh->nlmsg_type == SOCK_DESTROY && hndl->destroy)
+		/*调destroy回调*/
 		err = hndl->destroy(skb, nlh);
 	else
 		err = -EOPNOTSUPP;

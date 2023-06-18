@@ -344,7 +344,7 @@ static BLOCKING_NOTIFIER_HEAD(switchdev_blocking_notif_chain);
  */
 int register_switchdev_notifier(struct notifier_block *nb)
 {
-	//switchdev通知链注册
+	//switchdev设备通知链注册
 	return atomic_notifier_chain_register(&switchdev_notif_chain, nb);
 }
 EXPORT_SYMBOL_GPL(register_switchdev_notifier);

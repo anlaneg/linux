@@ -241,8 +241,10 @@ static inline int rdma_is_multicast_addr(struct in6_addr *addr)
 	__be32 ipv4_addr;
 
 	if (addr->s6_addr[0] == 0xff)
+		/*ipv6确认组播*/
 		return 1;
 
+	/*如果是v4 mapped,检查ipv4是否组播*/
 	ipv4_addr = addr->s6_addr32[3];
 	return (ipv6_addr_v4mapped(addr) && ipv4_is_multicast(ipv4_addr));
 }

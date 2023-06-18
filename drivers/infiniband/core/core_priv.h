@@ -112,7 +112,7 @@ struct ib_client_nl_info {
 	struct sk_buff *nl_msg;
 	struct device *cdev;/*对应的字符设备*/
 	u32 port;
-	u64 abi;
+	u64 abi;/*abi版本号*/
 };
 int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 			  struct ib_client_nl_info *res);

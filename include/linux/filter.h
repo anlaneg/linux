@@ -1537,8 +1537,9 @@ static inline bool bpf_sk_lookup_run_v6(struct net *net, int protocol,
 
 static __always_inline int __bpf_xdp_redirect_map(struct bpf_map *map, u64 index,
 						  u64 flags, const u64 flag_mask,
-						  void *lookup_elem(struct bpf_map *map, u32 key))
+						  void *lookup_elem(struct bpf_map *map, u32 key)/*map查询函数*/)
 {
+	/*取当前cpu上的redirect_info*/
 	struct bpf_redirect_info *ri = this_cpu_ptr(&bpf_redirect_info);
 	const u64 action_mask = XDP_ABORTED | XDP_DROP | XDP_PASS | XDP_TX;
 
@@ -1546,6 +1547,7 @@ static __always_inline int __bpf_xdp_redirect_map(struct bpf_map *map, u64 index
 	if (unlikely(flags & ~(action_mask | flag_mask)))
 		return XDP_ABORTED;
 
+	/*取index号element*/
 	ri->tgt_value = lookup_elem(map, index);
 	if (unlikely(!ri->tgt_value) && !(flags & BPF_F_BROADCAST)) {
 		/* If the lookup fails we want to clear out the state in the

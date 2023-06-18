@@ -253,7 +253,7 @@ struct bpf_map {
 	u32 key_size;
 	//map的value大小
 	u32 value_size;
-	//map的最大数目
+	//map中entry的最大数目
 	u32 max_entries;
 	u64 map_extra; /* any per-map-type extra fields */
 	u32 map_flags;

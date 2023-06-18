@@ -66,8 +66,10 @@ struct snd_device_ops {
 
 struct snd_device {
 	struct list_head list;		/* list of registered devices */
+	/*从属于哪张声卡*/
 	struct snd_card *card;		/* card which holds this device */
 	enum snd_device_state state;	/* state of the device */
+	/*声卡设备控制类型*/
 	enum snd_device_type type;	/* device type */
 	void *device_data;		/* device structure */
 	const struct snd_device_ops *ops;	/* operations */
@@ -78,6 +80,7 @@ struct snd_device {
 /* main structure for soundcard */
 
 struct snd_card {
+	/*声卡编号*/
 	int number;			/* number of soundcard (index to
 								snd_cards) */
 

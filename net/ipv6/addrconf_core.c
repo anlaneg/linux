@@ -35,11 +35,12 @@ static inline unsigned int ipv6_addr_scope2type(unsigned int scope)
 	return IPV6_ADDR_SCOPE_TYPE(scope);
 }
 
+/*取ipv6地址类型*/
 int __ipv6_addr_type(const struct in6_addr *addr)
 {
 	__be32 st;
 
-	st = addr->s6_addr32[0];
+	st = addr->s6_addr32[0];/*ipv6地址的前4个字节*/
 
 	/* Consider all addresses with the first three bits different of
 	   000 and 111 as unicasts.
@@ -49,6 +50,7 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 		return (IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));
 
+	/*FF00::/8地址范围为组播地址*/
 	if ((st & htonl(0xFF000000)) == htonl(0xFF000000)) {
 		/* multicast */
 		/* addr-select 3.1 */
@@ -56,9 +58,11 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 			ipv6_addr_scope2type(IPV6_ADDR_MC_SCOPE(addr)));
 	}
 
+	/*FE80::/10地址范围的为linklocal地址，见rfc2373 2.5.8节*/
 	if ((st & htonl(0xFFC00000)) == htonl(0xFE800000))
 		return (IPV6_ADDR_LINKLOCAL | IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_LINKLOCAL));		/* addr-select 3.1 */
+
 	if ((st & htonl(0xFFC00000)) == htonl(0xFEC00000))
 		return (IPV6_ADDR_SITELOCAL | IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_SITELOCAL));		/* addr-select 3.1 */
@@ -69,16 +73,20 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 	if ((addr->s6_addr32[0] | addr->s6_addr32[1]) == 0) {
 		if (addr->s6_addr32[2] == 0) {
 			if (addr->s6_addr32[3] == 0)
+				/*::/128,全0地址,见rfc2373 2.5.2节*/
 				return IPV6_ADDR_ANY;
 
 			if (addr->s6_addr32[3] == htonl(0x00000001))
+				/*::1/128 为loopback地址，见rfc2373 2.5.3节*/
 				return (IPV6_ADDR_LOOPBACK | IPV6_ADDR_UNICAST |
 					IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_LINKLOCAL));	/* addr-select 3.4 */
 
+			/*::/96范围为v4监容地址，见rfc2373 2.5.4节*/
 			return (IPV6_ADDR_COMPATv4 | IPV6_ADDR_UNICAST |
 				IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));	/* addr-select 3.3 */
 		}
 
+		/*::ffff00000000/96范围的为映射地址，见2.5.4节（第二种map形式）*/
 		if (addr->s6_addr32[2] == htonl(0x0000ffff))
 			return (IPV6_ADDR_MAPPED |
 				IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));	/* addr-select 3.3 */

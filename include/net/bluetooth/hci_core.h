@@ -511,7 +511,7 @@ struct hci_dev {
 	struct delayed_work	power_off;
 	struct work_struct	error_reset;
 	struct work_struct	cmd_sync_work;
-	struct list_head	cmd_sync_work_list;
+	struct list_head	cmd_sync_work_list;/*同步命令工作列表*/
 	struct mutex		cmd_sync_work_lock;
 	struct work_struct	cmd_sync_cancel_work;
 	struct work_struct	reenable_adv_work;

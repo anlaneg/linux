@@ -42,6 +42,7 @@ static struct devlink_port *mlx5_esw_dl_port_alloc(struct mlx5_eswitch *esw, u16
 		controller_num = dev->priv.eswitch->offloads.host_number + 1;
 
 	if (vport_num == MLX5_VPORT_UPLINK) {
+		/*指明此port为物理口*/
 		attrs.flavour = DEVLINK_PORT_FLAVOUR_PHYSICAL;
 		attrs.phys.port_number = pfnum;
 		memcpy(attrs.switch_id.id, ppid.id, ppid.id_len);

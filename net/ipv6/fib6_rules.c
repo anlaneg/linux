@@ -82,10 +82,11 @@ int fib6_lookup(struct net *net, int oif, struct flowi6 *fl6,
 		err = fib_rules_lookup(net->ipv6.fib6_rules_ops,
 				       flowi6_to_flowi(fl6), flags, &arg);
 	} else {
-		err = fib6_table_lookup(net, net->ipv6.fib6_local_tbl, oif,
+		/*执行ipv6路由表查询*/
+		err = fib6_table_lookup(net, net->ipv6.fib6_local_tbl/*查local表*/, oif,
 					fl6, res, flags);
 		if (err || res->f6i == net->ipv6.fib6_null_entry)
-			err = fib6_table_lookup(net, net->ipv6.fib6_main_tbl,
+			err = fib6_table_lookup(net, net->ipv6.fib6_main_tbl/*查main表*/,
 						oif, fl6, res, flags);
 	}
 

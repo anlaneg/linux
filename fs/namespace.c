@@ -69,7 +69,7 @@ static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
 static struct hlist_head *mount_hashtable __read_mostly;
-//按dentry索引的mount point hash表
+//按dentry索引的mountpoint hash表，用于记录系统中所有mountpoint
 static struct hlist_head *mountpoint_hashtable __read_mostly;
 //负责系统中struct mount结构体的分配
 static struct kmem_cache *mnt_cache __read_mostly;
@@ -111,6 +111,7 @@ static inline void unlock_mount_hash(void)
 	write_sequnlock(&mount_lock);
 }
 
+/*通过vfsmount,dentry确定挂载点对应的hash桶（查询mount_hashtable）*/
 static inline struct hlist_head *m_hash(struct vfsmount *mnt, struct dentry *dentry)
 {
 	unsigned long tmp = ((unsigned long)mnt / L1_CACHE_BYTES);
@@ -119,7 +120,7 @@ static inline struct hlist_head *m_hash(struct vfsmount *mnt, struct dentry *den
 	return &mount_hashtable[tmp & m_hash_mask];
 }
 
-//获取dentry对应的挂载点hash表桶头
+//获取dentry对应的hash表桶头（查询mountpoint_hashtable）
 static inline struct hlist_head *mp_hash(struct dentry *dentry)
 {
 	unsigned long tmp = ((unsigned long)dentry / L1_CACHE_BYTES);
@@ -198,10 +199,10 @@ int mnt_get_count(struct mount *mnt)
 #endif
 }
 
-//申请并初始化mount
+//申请并初始化mount结构体
 static struct mount *alloc_vfsmnt(const char *name/*待挂载设备名称*/)
 {
-	//申请mnt节点
+	//自mnt_cache申请mnt节点
 	struct mount *mnt = kmem_cache_zalloc(mnt_cache, GFP_KERNEL);
 	if (mnt) {
 		int err;
@@ -211,7 +212,7 @@ static struct mount *alloc_vfsmnt(const char *name/*待挂载设备名称*/)
 		if (err)
 			goto out_free_cache;
 
-		//填充mount设备名称
+		//填充要mount的设备名称
 		if (name) {
 			mnt->mnt_devname = kstrdup_const(name,
 							 GFP_KERNEL_ACCOUNT);
@@ -672,9 +673,11 @@ static bool legitimize_mnt(struct vfsmount *bastard, unsigned seq)
  */
 struct mount *__lookup_mnt(struct vfsmount *mnt, struct dentry *dentry)
 {
+	/*取hash桶*/
 	struct hlist_head *head = m_hash(mnt, dentry);
 	struct mount *p;
 
+	/*遍历樋，检查是否已存在此mount与dentry的映射，有则返回p,否则返回NULL*/
 	hlist_for_each_entry_rcu(p, head, mnt_hash)
 		if (&p->mnt_parent->mnt == mnt && p->mnt_mountpoint == dentry)
 			return p;
@@ -699,6 +702,7 @@ struct mount *__lookup_mnt(struct vfsmount *mnt, struct dentry *dentry)
  */
 struct vfsmount *lookup_mnt(const struct path *path)
 {
+	/*查询此path下首个挂载点*/
 	struct mount *child_mnt;
 	struct vfsmount *m;
 	unsigned seq;
@@ -809,7 +813,7 @@ mountpoint:
 
 
 	/* Exactly one processes may set d_mounted */
-	ret = d_set_mounted(dentry);
+	ret = d_set_mounted(dentry);/*设置mountd标记*/
 
 	/* Someone else set d_mounted? */
 	if (ret == -EBUSY)
@@ -822,7 +826,7 @@ mountpoint:
 
 	/* Add the new mountpoint to the hash table */
 	read_seqlock_excl(&mount_lock);
-	new->m_dentry = dget(dentry);
+	new->m_dentry = dget(dentry);/*记录挂载点对应的dentry*/
 	new->m_count = 1;
 	/*加入到mountpoint_hashtable*/
 	hlist_add_head(&new->m_hash, mp_hash(dentry));
@@ -1032,15 +1036,16 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
 
+	/*有kernelmount标记*/
 	if (fc->sb_flags & SB_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
 	//填充mnt(使之指向被挂载设备的根）
 	atomic_inc(&fc->root->d_sb->s_active);
-	mnt->mnt.mnt_sb		= fc->root->d_sb;
-	mnt->mnt.mnt_root	= dget(fc->root);
-	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;
-	mnt->mnt_parent		= mnt;
+	mnt->mnt.mnt_sb		= fc->root->d_sb;/*设置super block*/
+	mnt->mnt.mnt_root	= dget(fc->root);/*设置挂载点对应的root dentry*/
+	mnt->mnt_mountpoint	= mnt->mnt.mnt_root;/*为什么要指两遍？*/
+	mnt->mnt_parent		= mnt;/*父挂载点为其自身*/
 
 	lock_mount_hash();
 	//记录挂载情况
@@ -1052,10 +1057,11 @@ EXPORT_SYMBOL(vfs_create_mount);
 
 struct vfsmount *fc_mount(struct fs_context *fc)
 {
-    //创建superblock,获取文件系统对应的root dentry
+    //创建superblock,获取此文件系统对应的root dentry
 	int err = vfs_get_tree(fc);
 	if (!err) {
 		up_write(&fc->root->d_sb->s_umount);
+		/*返回mount*/
 		return vfs_create_mount(fc);
 	}
 	return ERR_PTR(err);
@@ -1788,6 +1794,7 @@ out_unlock:
  */
 bool may_mount(void)
 {
+	/*检查是否容许挂载*/
 	return ns_capable(current->nsproxy->mnt_ns->user_ns, CAP_SYS_ADMIN);
 }
 
@@ -2142,6 +2149,7 @@ int count_mounts(struct mnt_namespace *ns, struct mount *mnt)
 	struct mount *p;
 
 	if (ns->mounts >= max)
+		/*此ns中mounts超限*/
 		return -ENOSPC;
 	max -= ns->mounts;
 	if (ns->pending_mounts >= max)
@@ -2243,6 +2251,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 
 	/* Is there space to add these mounts to the mount namespace? */
 	if (!moving) {
+		/*检查是否mounts数目超限*/
 		err = count_mounts(ns, source_mnt);
 		if (err)
 			goto out;
@@ -2270,6 +2279,7 @@ static int attach_recursive_mnt(struct mount *source_mnt,
 			/* move from anon - the caller will destroy */
 			list_del_init(&source_mnt->mnt_ns->list);
 		}
+		/*设置挂载点*/
 		mnt_set_mountpoint(dest_mnt, dest_mp, source_mnt);
 		commit_tree(source_mnt);
 	}
@@ -2323,9 +2333,10 @@ retry:
 		return ERR_PTR(-ENOENT);
 	}
 	namespace_lock();
-	mnt = lookup_mnt(path);//检查path下是否有mnt信息
+	//检查path下是否有mnt信息
+	mnt = lookup_mnt(path);
 	if (likely(!mnt)) {
-		//没有发现此path上对应的mnt
+		//没有发现此path上有对应的mnt，创建mountpoint
 		struct mountpoint *mp = get_mountpoint(dentry);
 		if (IS_ERR(mp)) {
 			namespace_unlock();
@@ -2334,14 +2345,17 @@ retry:
 		}
 		return mp;
 	}
-	//如果path上有mnt,则替换path的dentry为mnt的根dentry
+
+	/*什么情况走下面流程？*/
+	//如果path上有mnt,则替换path的dentry为mnt的根dentry，再查询
 	namespace_unlock();
 	inode_unlock(path->dentry->d_inode);
 	path_put(path);
+	/*更新path->mnt*/
 	path->mnt = mnt;
 	//替换为mnt->mnt_root(被挂载设备的根dentry)
 	dentry = path->dentry = dget(mnt->mnt_root);
-	goto retry;
+	goto retry;/*再次尝试查询*/
 }
 
 static void unlock_mount(struct mountpoint *where)
@@ -2359,10 +2373,12 @@ static void unlock_mount(struct mountpoint *where)
 static int graft_tree(struct mount *mnt, struct mount *p, struct mountpoint *mp)
 {
 	if (mnt->mnt.mnt_sb->s_flags & SB_NOUSER)
+		/*不能有nouser标记*/
 		return -EINVAL;
 
 	if (d_is_dir(mp->m_dentry) !=
 	      d_is_dir(mnt->mnt.mnt_root))
+		/*必须非dir*/
 		return -ENOTDIR;
 
 	return attach_recursive_mnt(mnt, p, mp, false);
@@ -2953,8 +2969,8 @@ static int do_move_mount_old(struct path *path, const char *old_name)
 /*
  * add a mount into a namespace's mount tree
  */
-static int do_add_mount(struct mount *newmnt, struct mountpoint *mp,
-			const struct path *path, int mnt_flags)
+static int do_add_mount(struct mount *newmnt/*要挂载的文件系统*/, struct mountpoint *mp,
+			const struct path *path/*目标挂载点*/, int mnt_flags)
 {
 	struct mount *parent = real_mount(path->mnt);
 
@@ -2980,7 +2996,7 @@ static int do_add_mount(struct mount *newmnt, struct mountpoint *mp,
 		return -EINVAL;
 
 	newmnt->mnt.mnt_flags = mnt_flags;
-	return graft_tree(newmnt, parent, mp);
+	return graft_tree(newmnt, parent/*父mount*/, mp);
 }
 
 static bool mount_too_revealing(const struct super_block *sb, int *new_mnt_flags);
@@ -2989,7 +3005,7 @@ static bool mount_too_revealing(const struct super_block *sb, int *new_mnt_flags
  * Create a new mount using a superblock configuration and request it
  * be added to the namespace tree.
  */
-static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
+static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint/*设备挂载目标点*/,
 			   unsigned int mnt_flags)
 {
 	struct vfsmount *mnt;
@@ -2998,6 +3014,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 	struct super_block *sb = fc->root->d_sb;
 	int error;
 
+	/*触发安全钩子*/
 	error = security_sb_kern_mount(sb);
 	if (!error && mount_too_revealing(sb, &mnt_flags))
 		error = -EPERM;
@@ -3009,19 +3026,20 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
 
 	up_write(&sb->s_umount);
 
-	//创建vfsmount
+	//利用fs_context创建vfsmount
 	mnt = vfs_create_mount(fc);
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 
 	mnt_warn_timestamp_expiry(mountpoint, mnt);
 
+	/*创建或获取mountpoint*/
 	mp = lock_mount(mountpoint);
 	if (IS_ERR(mp)) {
 		mntput(mnt);
 		return PTR_ERR(mp);
 	}
-	error = do_add_mount(real_mount(mnt), mp, mountpoint, mnt_flags);
+	error = do_add_mount(real_mount(mnt)/*传入mount结构体*/, mp, mountpoint/*目标挂载点*/, mnt_flags);
 	unlock_mount(mp);
 	if (error < 0)
 		mntput(mnt);
@@ -3032,7 +3050,7 @@ static int do_new_mount_fc(struct fs_context *fc, struct path *mountpoint,
  * create a new mount for userspace and request it to be added into the
  * namespace's tree
  */
-static int do_new_mount(struct path *path, const char *fstype/*文件系统名称*/, int sb_flags,
+static int do_new_mount(struct path *path/*目标挂载点*/, const char *fstype/*文件系统名称*/, int sb_flags/*super block标记*/,
 			int mnt_flags/*挂载标记*/, const char *name/*source参数取值,指明设备地址*/, void *data/*各fs自定义的数据*/)
 {
 	struct file_system_type *type;
@@ -3071,20 +3089,26 @@ static int do_new_mount(struct path *path, const char *fstype/*文件系统名�
 	if (subtype)
 		err = vfs_parse_fs_string(fc, "subtype",
 					  subtype, strlen(subtype));
-	//解析source参数
+
+	//解析source参数并设置fc->source
 	if (!err && name)
 		err = vfs_parse_fs_string(fc, "source", name, strlen(name));
 
-	/*解析data数据参数*/
+	/*解析data数据参数(整体),填充fc*/
 	if (!err)
 		err = parse_monolithic_mount_data(fc, data);
+
+	/*权限检查*/
 	if (!err && !mount_capable(fc))
 		err = -EPERM;
+
+	/*获得fs对应的root dentry*/
 	if (!err)
-	    /*获得fs对应的root dentry*/
 		err = vfs_get_tree(fc);
+
+	/*完成mount*/
 	if (!err)
-		err = do_new_mount_fc(fc, path, mnt_flags);
+		err = do_new_mount_fc(fc, path/*目标挂载点*/, mnt_flags);
 
 	put_fs_context(fc);
 	return err;
@@ -3360,8 +3384,12 @@ int path_mount(const char *dev_name/*设备名称*/, struct path *path/*挂载�
 	ret = security_sb_mount(dev_name, path, type_page, flags, data_page);
 	if (ret)
 		return ret;
+
+	/*权限检查*/
 	if (!may_mount())
 		return -EPERM;
+
+	/*mandlock标记已废弃*/
 	if (flags & SB_MANDLOCK)
 		warn_mandlock();
 
@@ -3416,18 +3444,18 @@ int path_mount(const char *dev_name/*设备名称*/, struct path *path/*挂载�
 	if (flags & MS_MOVE)
 		return do_move_mount_old(path, dev_name);
 
-    //处理普通挂载
+    //处理普通挂载（常见flags为0）
 	return do_new_mount(path, type_page, sb_flags, mnt_flags, dev_name,
 			    data_page);
 }
 
 long do_mount(const char *dev_name/*设备名称*/, const char __user *dir_name/*挂载点目录名称*/,
-		const char *type_page/*文件系统类型*/, unsigned long flags, void *data_page)
+		const char *type_page/*文件系统类型*/, unsigned long flags/*挂载flags*/, void *data_page/*文件系统私有选项*/)
 {
 	struct path path;
 	int ret;
 
-	/*确定dir_name对应的路径信息*/
+	/*在当前工作路径，确定dir_name对应的路径信息（挂载的目标点）*/
 	ret = user_path_at(AT_FDCWD, dir_name, LOOKUP_FOLLOW, &path);
 	if (ret)
 		return ret;
@@ -3623,8 +3651,10 @@ struct dentry *mount_subtree(struct vfsmount *m, const char *name)
 EXPORT_SYMBOL(mount_subtree);
 
 //处理mount系统调用
+//例如大页挂载：dev_name="nodev",dir_name="/mnt/huge",type="hugetlbfs",flags="0",data="pagesize=1GB"
+//例如overlayfs挂载：dev_name="overlay",dir_name="merge",type="overlay",flags="0",data="lowerdir=lower,upperdir=upper,workdir=work"
 SYSCALL_DEFINE5(mount, char __user *, dev_name/*要挂载的设备*/, char __user *, dir_name/*要挂载的目标目录*/,
-		char __user *, type/*fs类型*/, unsigned long, flags, void __user *, data)
+		char __user *, type/*文件系统类型*/, unsigned long, flags/*挂载flags*/, void __user *, data)
 {
 	int ret;
 	char *kernel_type/*文件系统名称*/;
@@ -4473,6 +4503,7 @@ void __init mnt_init(void)
 {
 	int err;
 
+	/*负责分配系统中的mount结构*/
 	mnt_cache = kmem_cache_create("mnt_cache", sizeof(struct mount),
 			0, SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT, NULL);
 
@@ -4658,6 +4689,7 @@ static bool mount_too_revealing(const struct super_block *sb, int *new_mnt_flags
 	unsigned long s_iflags;
 
 	if (ns->user_ns == &init_user_ns)
+		/*init_user_ns不处理*/
 		return false;
 
 	/* Can this filesystem be too revealing? */

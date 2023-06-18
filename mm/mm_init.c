@@ -191,6 +191,7 @@ __initcall(mm_compute_batch_init);
 
 static int __init mm_sysfs_init(void)
 {
+	/*创建mm目录对应的kobj*/
 	mm_kobj = kobject_create_and_add("mm", kernel_kobj);
 	if (!mm_kobj)
 		return -ENOMEM;

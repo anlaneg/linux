@@ -96,6 +96,7 @@ u32 hci_sock_get_cookie(struct sock *sk)
 	return hci_pi(sk)->cookie;
 }
 
+/*如果未生成cookie,则生成cookie*/
 static bool hci_sock_gen_cookie(struct sock *sk)
 {
 	int id = hci_pi(sk)->cookie;
@@ -106,6 +107,7 @@ static bool hci_sock_gen_cookie(struct sock *sk)
 			id = 0xffffffff;
 
 		hci_pi(sk)->cookie = id;
+		/*记录此socket对应的进程名称*/
 		get_task_comm(hci_pi(sk)->comm, current);
 		return true;
 	}
@@ -272,6 +274,7 @@ static void __hci_send_to_channel(unsigned short channel, struct sk_buff *skb,
 
 	BT_DBG("channel %u len %d", channel, skb->len);
 
+	/*遍历hci_sk_list上所有socket,将skb复制并交给满足要求的socket*/
 	sk_for_each(sk, &hci_sk_list.head) {
 		struct sk_buff *nskb;
 
@@ -284,15 +287,18 @@ static void __hci_send_to_channel(unsigned short channel, struct sk_buff *skb,
 			continue;
 
 		if (sk->sk_state != BT_BOUND)
+			/*忽略掉未绑定的socket*/
 			continue;
 
 		if (hci_pi(sk)->channel != channel)
+			/*channel不相同的socket*/
 			continue;
 
 		nskb = skb_clone(skb, GFP_ATOMIC);
 		if (!nskb)
 			continue;
 
+		/*将此nskb交给socket*/
 		if (sock_queue_rcv_skb(sk, nskb))
 			kfree_skb(nskb);
 	}
@@ -511,6 +517,7 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 	if (!hci_pi(sk)->cookie)
 		return NULL;
 
+	/*针对请求类型，响应不同的skb*/
 	switch (hci_pi(sk)->channel) {
 	case HCI_CHANNEL_RAW:
 		format = 0x0000;
@@ -537,15 +544,18 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 
 	flags = hci_sock_test_flag(sk, HCI_SOCK_TRUSTED) ? 0x1 : 0x0;
 
+	/*设置cookie id*/
 	put_unaligned_le32(hci_pi(sk)->cookie, skb_put(skb, 4));
 	put_unaligned_le16(format, skb_put(skb, 2));
 	skb_put_data(skb, ver, sizeof(ver));
 	put_unaligned_le32(flags, skb_put(skb, 4));
 	skb_put_u8(skb, TASK_COMM_LEN);
+	/*填充进程名称*/
 	skb_put_data(skb, hci_pi(sk)->comm, TASK_COMM_LEN);
 
 	__net_timestamp(skb);
 
+	/*添加monitor header*/
 	hdr = skb_push(skb, HCI_MON_HDR_SIZE);
 	hdr->opcode = cpu_to_le16(HCI_MON_CTRL_OPEN);
 	if (hci_pi(sk)->hdev)
@@ -783,6 +793,7 @@ void hci_sock_dev_event(struct hci_dev *hdev, int event)
 	}
 }
 
+/*遍历mgmt_chan_list 查找channel相等的mgmt_chan*/
 static struct hci_mgmt_chan *__hci_mgmt_chan_find(unsigned short channel)
 {
 	struct hci_mgmt_chan *c;
@@ -799,6 +810,7 @@ static struct hci_mgmt_chan *hci_mgmt_chan_find(unsigned short channel)
 {
 	struct hci_mgmt_chan *c;
 
+	/*加锁查询*/
 	mutex_lock(&mgmt_chan_list_lock);
 	c = __hci_mgmt_chan_find(channel);
 	mutex_unlock(&mgmt_chan_list_lock);
@@ -809,14 +821,17 @@ static struct hci_mgmt_chan *hci_mgmt_chan_find(unsigned short channel)
 int hci_mgmt_chan_register(struct hci_mgmt_chan *c)
 {
 	if (c->channel < HCI_CHANNEL_CONTROL)
+		/*channel id校验*/
 		return -EINVAL;
 
 	mutex_lock(&mgmt_chan_list_lock);
 	if (__hci_mgmt_chan_find(c->channel)) {
+		/*此mgmt channel已存在，报错*/
 		mutex_unlock(&mgmt_chan_list_lock);
 		return -EALREADY;
 	}
 
+	/*将其注册到mgmt_chan_list*/
 	list_add_tail(&c->list, &mgmt_chan_list);
 
 	mutex_unlock(&mgmt_chan_list_lock);
@@ -1102,11 +1117,13 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 	if (!addr)
 		return -EINVAL;
 
+	/*将此地址结构体转换为hci地址结构体*/
 	memset(&haddr, 0, sizeof(haddr));
 	len = min_t(unsigned int, sizeof(haddr), addr_len);
 	memcpy(&haddr, addr, len);
 
 	if (haddr.hci_family != AF_BLUETOOTH)
+		/*地址类型必须为bluetooth*/
 		return -EINVAL;
 
 	lock_sock(sk);
@@ -1124,6 +1141,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 	hdev = NULL;
 
 	if (sk->sk_state == BT_BOUND) {
+		/*已bond返回失败*/
 		err = -EALREADY;
 		goto done;
 	}
@@ -1313,11 +1331,14 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		break;
 
 	default:
+		/*例如haddr.hci_channel = HCI_CHANNEL_CONTROL情况*/
 		if (!hci_mgmt_chan_find(haddr.hci_channel)) {
+			/*此hci_channel不存在，报错*/
 			err = -EINVAL;
 			goto done;
 		}
 
+		/*此情况必须指定hci_dev为None*/
 		if (haddr.hci_dev != HCI_DEV_NONE) {
 			err = -EINVAL;
 			goto done;
@@ -1331,6 +1352,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		if (capable(CAP_NET_ADMIN))
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
+		/*为socket绑定此channel*/
 		hci_pi(sk)->channel = haddr.hci_channel;
 
 		/* At the moment the index and unconfigured index events
@@ -1379,8 +1401,10 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 
 	/* Default MTU to HCI_MAX_FRAME_SIZE if not set */
 	if (!hci_pi(sk)->mtu)
+		/*未设置mtu的，设置默认mtu*/
 		hci_pi(sk)->mtu = HCI_MAX_FRAME_SIZE;
 
+	/*指明绑定成功*/
 	sk->sk_state = BT_BOUND;
 
 done:
@@ -1511,6 +1535,7 @@ static int hci_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	return err ? : copied;
 }
 
+/*指定channel处理sk收到的请求报文（skb)*/
 static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 			struct sk_buff *skb)
 {
@@ -1528,7 +1553,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		return -EINVAL;
 
 	hdr = (void *)skb->data;
-	opcode = __le16_to_cpu(hdr->opcode);
+	opcode = __le16_to_cpu(hdr->opcode);/*操作符*/
 	index = __le16_to_cpu(hdr->index);
 	len = __le16_to_cpu(hdr->len);
 
@@ -1537,6 +1562,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		goto done;
 	}
 
+	/*发送event给monitor*/
 	if (chan->channel == HCI_CHANNEL_CONTROL) {
 		struct sk_buff *cmd;
 
@@ -1550,14 +1576,16 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		}
 	}
 
-	if (opcode >= chan->handler_count ||
-	    chan->handlers[opcode].func == NULL) {
+	if (opcode >= chan->handler_count/*opcode超过channel的处理最大值*/ ||
+	    chan->handlers[opcode].func == NULL/*此channel不支持此opcode*/) {
+		/*响应失败*/
 		BT_DBG("Unknown op %u", opcode);
 		err = mgmt_cmd_status(sk, index, opcode,
 				      MGMT_STATUS_UNKNOWN_COMMAND);
 		goto done;
 	}
 
+	/*取此channel针对此opcode的处理器*/
 	handler = &chan->handlers[opcode];
 
 	if (!hci_sock_test_flag(sk, HCI_SOCK_TRUSTED) &&
@@ -1568,8 +1596,10 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	}
 
 	if (index != MGMT_INDEX_NONE) {
+		/*利用index查找对应的hdev*/
 		hdev = hci_dev_get(index);
 		if (!hdev) {
+			/*未找到设备，响应index无效*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1592,6 +1622,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	}
 
 	if (!(handler->flags & HCI_MGMT_HDEV_OPTIONAL)) {
+		/*handle是否指定no_hdev*/
 		no_hdev = (handler->flags & HCI_MGMT_NO_HDEV);
 		if (no_hdev != !hdev) {
 			err = mgmt_cmd_status(sk, index, opcode,
@@ -1608,11 +1639,13 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		goto done;
 	}
 
+	/*有hdev，则先初始化hdev*/
 	if (hdev && chan->hdev_init)
 		chan->hdev_init(sk, hdev);
 
 	cp = skb->data + sizeof(*hdr);
 
+	/*调用回调，完成cmd响应*/
 	err = handler->func(sk, hdev, cp, len);
 	if (err < 0)
 		goto done;
@@ -1730,11 +1763,15 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		err = hci_logging_frame(sk, skb, flags);
 		goto drop;
 	default:
+		/*针对例如HCI_CHANNEL_CONTROL*/
 		mutex_lock(&mgmt_chan_list_lock);
+		/*取此socket对应的channel*/
 		chan = __hci_mgmt_chan_find(hci_pi(sk)->channel);
 		if (chan)
+			/*将对应的cmd传递给此channel去处理*/
 			err = hci_mgmt_cmd(chan, sk, skb);
 		else
+			/*无效的调用，未找到对应channel*/
 			err = -EINVAL;
 
 		mutex_unlock(&mgmt_chan_list_lock);
@@ -2067,6 +2104,7 @@ static void hci_sock_destruct(struct sock *sk)
 	skb_queue_purge(&sk->sk_write_queue);
 }
 
+/*hci协议对应的socket ops*/
 static const struct proto_ops hci_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
@@ -2096,6 +2134,7 @@ static struct proto hci_sk_proto = {
 	.obj_size	= sizeof(struct hci_pinfo)
 };
 
+/*hci协议socket创建函数*/
 static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 			   int kern)
 {
@@ -2104,9 +2143,10 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 	BT_DBG("sock %p", sock);
 
 	if (sock->type != SOCK_RAW)
+		/*当前只支持raw socket*/
 		return -ESOCKTNOSUPPORT;
 
-	sock->ops = &hci_sock_ops;
+	sock->ops = &hci_sock_ops;/*hci协议对应的ops*/
 
 	sk = sk_alloc(net, PF_BLUETOOTH, GFP_ATOMIC, &hci_sk_proto, kern);
 	if (!sk)
@@ -2126,6 +2166,7 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
+/*hci socket创建*/
 static const struct net_proto_family hci_sock_family_ops = {
 	.family	= PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
@@ -2142,6 +2183,7 @@ int __init hci_sock_init(void)
 	if (err < 0)
 		return err;
 
+	/*注册hci协议操作集*/
 	err = bt_sock_register(BTPROTO_HCI, &hci_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("HCI socket registration failed");

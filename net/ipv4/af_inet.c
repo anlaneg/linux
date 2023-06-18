@@ -364,6 +364,7 @@ lookup_protocol:
 	sk->sk_destruct	   = inet_sock_destruct;
 	sk->sk_protocol	   = protocol;
 	sk->sk_backlog_rcv = sk->sk_prot->backlog_rcv;
+	/*指明是否容许rehash*/
 	sk->sk_txrehash = READ_ONCE(net->core.sysctl_txrehash);
 
 	inet->uc_ttl	= -1;
@@ -552,7 +553,7 @@ int __inet_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
-		//检查此srcport是否可占用,实现接口绑定
+		//检查此srcport是否可占用,实现端口绑定
 		err = sk->sk_prot->get_port(sk, snum);
 		if (err) {
 			inet->inet_saddr = inet->inet_rcv_saddr = 0;
@@ -1087,7 +1088,7 @@ const struct proto_ops inet_stream_ops = {
 	.owner		   = THIS_MODULE,
 	/*socket关闭时此函数将被调起*/
 	.release	   = inet_release,
-	.bind		   = inet_bind,
+	.bind		   = inet_bind,/*地址绑定*/
 	.connect	   = inet_stream_connect,/*ipv4/ipv6 stream方式connect实现*/
 	.socketpair	   = sock_no_socketpair,
 	.accept		   = inet_accept,
@@ -1131,14 +1132,14 @@ const struct proto_ops inet_dgram_ops = {
 	.poll		   = udp_poll,
 	.ioctl		   = inet_ioctl,
 	.gettstamp	   = sock_gettstamp,
-	.listen		   = sock_no_listen,//udp socket不支持监听
+	.listen		   = sock_no_listen,//udp socket不支持listen
 	.shutdown	   = inet_shutdown,
 	.setsockopt	   = sock_common_setsockopt,
 	.getsockopt	   = sock_common_getsockopt,
 	.sendmsg	   = inet_sendmsg,
 	.read_skb	   = udp_read_skb,
 	.recvmsg	   = inet_recvmsg,
-	.mmap		   = sock_no_mmap,
+	.mmap		   = sock_no_mmap,/*udp socket不支持mmap*/
 	.sendpage	   = inet_sendpage,
 	.set_peek_off	   = sk_set_peek_off,
 #ifdef CONFIG_COMPAT
@@ -1210,7 +1211,7 @@ static struct inet_protosw inetsw_array[] =
        },
 
        {
-        //注册icmp socket
+        //注册icmp dgram类socket（这种对多个ping程序友好，不需要下bpf filter)
 		.type =       SOCK_DGRAM,
 		.protocol =   IPPROTO_ICMP,
 		.prot =       &ping_prot,
@@ -1461,8 +1462,10 @@ struct sk_buff *inet_gso_segment(struct sk_buff *skb,
 			goto out;
 	}
 
+	/*取此协议对应的gso 操作集*/
 	ops = rcu_dereference(inet_offloads[proto]);
 	if (likely(ops && ops->callbacks.gso_segment)) {
+		/*执行gso分片*/
 		segs = ops->callbacks.gso_segment(skb, features);
 		if (!segs)
 			skb->network_header = skb_mac_header(skb) + nhoff - skb->head;
@@ -1930,6 +1933,7 @@ static __net_init int inet_init_net(struct net *net)
 	 * Sane defaults - nobody may create ping sockets.
 	 * Boot scripts should set this to distro-specific group.
 	 */
+	/*设置默认range*/
 	net->ipv4.ping_group_range.range[0] = make_kgid(&init_user_ns, 1);
 	net->ipv4.ping_group_range.range[1] = make_kgid(&init_user_ns, 0);
 
@@ -2009,7 +2013,7 @@ static int __init ipv4_offload_init(void)
 	if (ipip_offload_init() < 0)
 		pr_crit("%s: Cannot add IPIP protocol offload\n", __func__);
 
-	//添加ip层对应的缷载给dev
+	//添加ip层对应的缷载
 	dev_add_offload(&ip_packet_offload);
 	return 0;
 }

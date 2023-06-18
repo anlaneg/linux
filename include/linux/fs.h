@@ -1232,7 +1232,7 @@ struct super_block {
 	struct block_device	*s_bdev;
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
-	struct hlist_node	s_instances;/*用于挂接在此文件系统对应的fs_supers链*/
+	struct hlist_node	s_instances;/*instance节点，用于将自身挂接到文件系统对应的fs_supers链*/
 	unsigned int		s_quota_types;	/* Bitmask of supported quota types */
 	struct quota_info	s_dquot;	/* Diskquota specific options */
 
@@ -1304,7 +1304,7 @@ struct super_block {
 	 * interpret filesystem uids, gids, quotas, device nodes,
 	 * xattrs and security labels.
 	 */
-	struct user_namespace *s_user_ns;
+	struct user_namespace *s_user_ns;/*指明对应的user namespace*/
 
 	/*
 	 * The list_lru structure is essentially just a pointer to a table
@@ -1326,7 +1326,7 @@ struct super_block {
 	/* s_inode_list_lock protects s_inodes */
 	//保护s_inodes链表
 	spinlock_t		s_inode_list_lock ____cacheline_aligned_in_smp;
-	/*链表，记录此文件系统中所有inode*/
+	/*super block链表，记录关联于此文件系统中所有inode*/
 	struct list_head	s_inodes;	/* all inodes */
 
 	spinlock_t		s_inode_wblist_lock;
@@ -1841,7 +1841,7 @@ struct file_operations {
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
-	//文件打开函数
+	//文件打开函数(通过inode打开file)
 	int (*open) (struct inode *, struct file *);
 	//close时此回调将被先调用
 	int (*flush) (struct file *, fl_owner_t id);
@@ -1886,13 +1886,15 @@ struct inode_operations {
 
 	int (*readlink) (struct dentry *, char __user *,int);
 
-	int (*create) (struct mnt_idmap *, struct inode *,struct dentry *,
-		       umode_t, bool);
+	/*创建普通文件*/
+	int (*create) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此文件对应的dentry*/,
+		       umode_t/*文件mode*/, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
 	int (*symlink) (struct mnt_idmap *, struct inode *,struct dentry *,
 			const char *);
-	int (*mkdir) (struct mnt_idmap *, struct inode *,struct dentry *,
+	/*创建目录*/
+	int (*mkdir) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此目录对应的dentry*/,
 		      umode_t);
 	int (*rmdir) (struct inode *,struct dentry *);
 	int (*mknod) (struct mnt_idmap *, struct inode *,struct dentry *,
@@ -2283,6 +2285,7 @@ struct file_system_type {
     //文件系统名称
 	const char *name;
 	int fs_flags;
+	/*标记此文件系统是否需要dev,如果不需要，则显示nodev*/
 #define FS_REQUIRES_DEV		1 
 #define FS_BINARY_MOUNTDATA	2
 	//标记文件系统支持子类型，此时名称通过'.'号划分，'.'号后的为子类型
@@ -2291,19 +2294,22 @@ struct file_system_type {
 #define FS_DISALLOW_NOTIFY_PERM	16	/* Disable fanotify permission events */
 #define FS_ALLOW_IDMAP         32      /* FS has been updated to handle vfs idmappings. */
 #define FS_RENAME_DOES_D_MOVE	32768	/* FS will handle d_move() during rename() internally. */
-	//初始化当前fs对应的fs_context,如果此回调不提供，则默认使用legacy_init_fs_context
-	//此函数针对各fs提供fs context的ops
+	//初始化fs_context结构体,如果当前fs不提供此回调，则默认使用legacy_init_fs_context
+	//此函数针对各fs提供fs context的ops（例如创建私有结构）
 	int (*init_fs_context)(struct fs_context *);
-	/*fs参数*/
+	/*fs参数列表*/
 	const struct fs_parameter_spec *parameters;
-	//文件系统挂载回调，采用此函数完成挂载，返回根节点
+	//如果init_fs_context回调未被提供，则legacy_init_fs_context将被使用
+	//其会设置fs_context->ops为legacy_fs_context_ops，故当文件系统被挂载时
+	//legacy_fs_context_ops.get_tree函数实现将促使此mount回调被调用，
+	//完成文件系统加载并返回根节点
 	struct dentry *(*mount) (struct file_system_type *, int,
 		       const char *, void *);
 	void (*kill_sb) (struct super_block *);
 	struct module *owner;
 	//用于将文件系统串成链表
 	struct file_system_type * next;
-	//此文件系统已被实例化的super_block统一挂在这个链上
+	//此文件系统已被实例化的所有super_block统一挂在这个链上
 	struct hlist_head fs_supers;
 
 	struct lock_class_key s_lock_key;

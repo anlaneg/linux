@@ -49,7 +49,7 @@ static inline void INIT_HLIST_BL_NODE(struct hlist_bl_node *h)
 
 #define hlist_bl_entry(ptr, type, member) container_of(ptr,type,member)
 
-/*h是否未被加入到hashtable中*/
+/*h是否未被加入到hashtable中（前半部分断开）*/
 static inline bool  hlist_bl_unhashed(const struct hlist_bl_node *h)
 {
 	return !h->pprev;

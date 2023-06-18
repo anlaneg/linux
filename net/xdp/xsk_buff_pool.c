@@ -8,11 +8,13 @@
 #include "xdp_umem.h"
 #include "xsk.h"
 
+/*将此xdp socket添加到pool->xsk_tx_list上*/
 void xp_add_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 {
 	unsigned long flags;
 
 	if (!xs->tx)
+		/*xs必须要有tx队列*/
 		return;
 
 	spin_lock_irqsave(&pool->xsk_tx_list_lock, flags);
@@ -20,6 +22,7 @@ void xp_add_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 	spin_unlock_irqrestore(&pool->xsk_tx_list_lock, flags);
 }
 
+/*移除挂接在pool->xsk_tx_list上的xdp socket*/
 void xp_del_xsk(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 {
 	unsigned long flags;
@@ -42,6 +45,7 @@ void xp_destroy(struct xsk_buff_pool *pool)
 	kvfree(pool);
 }
 
+/*按xs初始化pool对应的tx desc*/
 int xp_alloc_tx_descs(struct xsk_buff_pool *pool, struct xdp_sock *xs)
 {
 	pool->tx_descs = kvcalloc(xs->tx->nentries, sizeof(*pool->tx_descs),
@@ -61,10 +65,12 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 	u32 i, entries;
 
 	entries = unaligned ? umem->chunks : 0;
+	/*申请xsk_buff_pool,要求其后有entries个元素，每个元素为struct xdp_buff_xsk类型*/
 	pool = kvzalloc(struct_size(pool, free_heads, entries),	GFP_KERNEL);
 	if (!pool)
 		goto out;
 
+	/*申请umem->chunks个struct xdp_buff_xsk*/
 	pool->heads = kvcalloc(umem->chunks, sizeof(*pool->heads), GFP_KERNEL);
 	if (!pool->heads)
 		goto out;
@@ -91,6 +97,7 @@ struct xsk_buff_pool *xp_create_and_assign_umem(struct xdp_sock *xs,
 	spin_lock_init(&pool->cq_lock);
 	refcount_set(&pool->users, 1);
 
+	/*指明pool的fq,cq(来源于socket)*/
 	pool->fq = xs->fq_tmp;
 	pool->cq = xs->cq_tmp;
 
@@ -121,6 +128,7 @@ void xp_set_rxq_info(struct xsk_buff_pool *pool, struct xdp_rxq_info *rxq)
 }
 EXPORT_SYMBOL(xp_set_rxq_info);
 
+/*禁止driver的zero copy功能*/
 static void xp_disable_drv_zc(struct xsk_buff_pool *pool)
 {
 	struct netdev_bpf bpf;
@@ -129,6 +137,7 @@ static void xp_disable_drv_zc(struct xsk_buff_pool *pool)
 	ASSERT_RTNL();
 
 	if (pool->umem->zc) {
+		/*通过将pool置为NULL，禁用zero copy*/
 		bpf.command = XDP_SETUP_XSK_POOL;
 		bpf.xsk.pool = NULL;
 		bpf.xsk.queue_id = pool->queue_id;
@@ -153,8 +162,8 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 
 	ASSERT_RTNL();
 
-	force_zc = flags & XDP_ZEROCOPY;
-	force_copy = flags & XDP_COPY;
+	force_zc = flags & XDP_ZEROCOPY;/*是否强制零copy*/
+	force_copy = flags & XDP_COPY;/*是否强制copy*/
 
 	if (force_zc && force_copy)
 		return -EINVAL;
@@ -164,6 +173,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 
 	pool->netdev = netdev;
 	pool->queue_id = queue_id;
+	/*为此netdev的对应rx,tx队列设置buffer pool*/
 	err = xsk_reg_pool_at_qid(netdev, pool, queue_id);
 	if (err)
 		return err;
@@ -187,6 +197,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 		goto err_unreg_pool;
 	}
 
+	/*通过ndo_bpf回调，使驱动基于xsk pool实现zero copy*/
 	bpf.command = XDP_SETUP_XSK_POOL;
 	bpf.xsk.pool = pool;
 	bpf.xsk.queue_id = queue_id;
@@ -195,6 +206,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	if (err)
 		goto err_unreg_pool;
 
+	/*驱动填充pool->dma_pages来标明支持零copy*/
 	if (!pool->dma_pages) {
 		WARN(1, "Driver did not DMA map zero-copy buffers");
 		err = -EINVAL;
@@ -204,6 +216,7 @@ int xp_assign_dev(struct xsk_buff_pool *pool,
 	return 0;
 
 err_unreg_xsk:
+	/*禁止 zero copy*/
 	xp_disable_drv_zc(pool);
 err_unreg_pool:
 	if (!force_zc)
@@ -235,11 +248,16 @@ int xp_assign_dev_shared(struct xsk_buff_pool *pool, struct xdp_sock *umem_xs,
 void xp_clear_dev(struct xsk_buff_pool *pool)
 {
 	if (!pool->netdev)
+		/*dev已被清除*/
 		return;
 
+	/*禁止零copy*/
 	xp_disable_drv_zc(pool);
+	/*清除netdev指定queue_id的pool*/
 	xsk_clear_pool_at_qid(pool->netdev, pool->queue_id);
+	/*不引用*/
 	dev_put(pool->netdev);
+	/*将netdev设置为NULL*/
 	pool->netdev = NULL;
 }
 
@@ -249,28 +267,34 @@ static void xp_release_deferred(struct work_struct *work)
 						  work);
 
 	rtnl_lock();
+	/*解除netdev对此pool的引用*/
 	xp_clear_dev(pool);
 	rtnl_unlock();
 
 	if (pool->fq) {
+		/*销毁fq*/
 		xskq_destroy(pool->fq);
 		pool->fq = NULL;
 	}
 
 	if (pool->cq) {
+		/*销毁cq*/
 		xskq_destroy(pool->cq);
 		pool->cq = NULL;
 	}
 
 	xdp_put_umem(pool->umem, false);
+	/*销毁pool*/
 	xp_destroy(pool);
 }
 
+/*增加pool的引用*/
 void xp_get_pool(struct xsk_buff_pool *pool)
 {
 	refcount_inc(&pool->users);
 }
 
+/*移除pool的引用*/
 bool xp_put_pool(struct xsk_buff_pool *pool)
 {
 	if (!pool)
@@ -289,6 +313,7 @@ static struct xsk_dma_map *xp_find_dma_map(struct xsk_buff_pool *pool)
 {
 	struct xsk_dma_map *dma_map;
 
+	/*遍历xsk dma list,查找与pool关联的netdev,如果找到则返回对应的dma map*/
 	list_for_each_entry(dma_map, &pool->umem->xsk_dma_list, list) {
 		if (dma_map->netdev == pool->netdev)
 			return dma_map;
@@ -297,8 +322,9 @@ static struct xsk_dma_map *xp_find_dma_map(struct xsk_buff_pool *pool)
 	return NULL;
 }
 
+/*创建dma map*/
 static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_device *netdev,
-					     u32 nr_pages, struct xdp_umem *umem)
+					     u32 nr_pages/*页数*/, struct xdp_umem *umem)
 {
 	struct xsk_dma_map *dma_map;
 
@@ -306,6 +332,7 @@ static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_devi
 	if (!dma_map)
 		return NULL;
 
+	/*申请dma_pages数组所需空间*/
 	dma_map->dma_pages = kvcalloc(nr_pages, sizeof(*dma_map->dma_pages), GFP_KERNEL);
 	if (!dma_map->dma_pages) {
 		kfree(dma_map);
@@ -314,16 +341,19 @@ static struct xsk_dma_map *xp_create_dma_map(struct device *dev, struct net_devi
 
 	dma_map->netdev = netdev;
 	dma_map->dev = dev;
-	dma_map->dma_need_sync = false;
-	dma_map->dma_pages_cnt = nr_pages;
+	dma_map->dma_need_sync = false;/*dma不需要同步*/
+	dma_map->dma_pages_cnt = nr_pages;/*页数*/
 	refcount_set(&dma_map->users, 1);
+	/*将此dma_map挂接到list*/
 	list_add(&dma_map->list, &umem->xsk_dma_list);
 	return dma_map;
 }
 
 static void xp_destroy_dma_map(struct xsk_dma_map *dma_map)
 {
+	/*自list上移除*/
 	list_del(&dma_map->list);
+	/*释放dma_pages*/
 	kvfree(dma_map->dma_pages);
 	kfree(dma_map);
 }
@@ -381,6 +411,7 @@ static void xp_check_dma_contiguity(struct xsk_dma_map *dma_map)
 	}
 }
 
+/*初始化pool对应的dma_map*/
 static int xp_init_dma_info(struct xsk_buff_pool *pool, struct xsk_dma_map *dma_map)
 {
 	if (!pool->unaligned) {
@@ -393,6 +424,7 @@ static int xp_init_dma_info(struct xsk_buff_pool *pool, struct xsk_dma_map *dma_
 		}
 	}
 
+	/*申请pool自已的dma_pages(只申请数组空间）*/
 	pool->dma_pages = kvcalloc(dma_map->dma_pages_cnt, sizeof(*pool->dma_pages), GFP_KERNEL);
 	if (!pool->dma_pages)
 		return -ENOMEM;
@@ -400,6 +432,7 @@ static int xp_init_dma_info(struct xsk_buff_pool *pool, struct xsk_dma_map *dma_
 	pool->dev = dma_map->dev;
 	pool->dma_pages_cnt = dma_map->dma_pages_cnt;
 	pool->dma_need_sync = dma_map->dma_need_sync;
+	/*填充dma_map中的页信息到pool中*/
 	memcpy(pool->dma_pages, dma_map->dma_pages,
 	       pool->dma_pages_cnt * sizeof(*pool->dma_pages));
 
@@ -414,8 +447,10 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 	int err;
 	u32 i;
 
+	/*查找此pool对应的dma map*/
 	dma_map = xp_find_dma_map(pool);
 	if (dma_map) {
+		/*此pool对应的dma_map已存在，为此pool设置自已的dma map(为了性能）*/
 		err = xp_init_dma_info(pool, dma_map);
 		if (err)
 			return err;
@@ -424,11 +459,14 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 		return 0;
 	}
 
+	/*创建dma_map*/
 	dma_map = xp_create_dma_map(dev, pool->netdev, nr_pages, pool->umem);
 	if (!dma_map)
 		return -ENOMEM;
 
+	/*为dma_map设置dma page*/
 	for (i = 0; i < dma_map->dma_pages_cnt; i++) {
+		/*映射一页,并返回dma地址*/
 		dma = dma_map_page_attrs(dev, pages[i], 0, PAGE_SIZE,
 					 DMA_BIDIRECTIONAL, attrs);
 		if (dma_mapping_error(dev, dma)) {
@@ -437,12 +475,13 @@ int xp_dma_map(struct xsk_buff_pool *pool, struct device *dev,
 		}
 		if (dma_need_sync(dev, dma))
 			dma_map->dma_need_sync = true;
-		dma_map->dma_pages[i] = dma;
+		dma_map->dma_pages[i] = dma;/*设置dma地址*/
 	}
 
 	if (pool->unaligned)
 		xp_check_dma_contiguity(dma_map);
 
+	/*填充pool中的信息*/
 	err = xp_init_dma_info(pool, dma_map);
 	if (err) {
 		__xp_dma_unmap(dma_map, attrs);
@@ -475,6 +514,7 @@ static bool xp_check_aligned(struct xsk_buff_pool *pool, u64 *addr)
 	return *addr < pool->addrs_cnt;
 }
 
+/*自xsk_buffer_pool中申请一个xdp_buffer_xsk*/
 static struct xdp_buff_xsk *__xp_alloc(struct xsk_buff_pool *pool)
 {
 	struct xdp_buff_xsk *xskb;
@@ -513,6 +553,7 @@ static struct xdp_buff_xsk *__xp_alloc(struct xsk_buff_pool *pool)
 	return xskb;
 }
 
+/*自pool中申请一个xdp buffer*/
 struct xdp_buff *xp_alloc(struct xsk_buff_pool *pool)
 {
 	struct xdp_buff_xsk *xskb;
@@ -556,6 +597,7 @@ static u32 xp_alloc_new_from_fq(struct xsk_buff_pool *pool, struct xdp_buff **xd
 		u64 addr;
 		bool ok;
 
+		/*自fq上消费一个xdp_buffer_xsk*/
 		__xskq_cons_read_addr_unchecked(pool->fq, cached_cons++, &addr);
 
 		ok = pool->unaligned ? xp_check_unaligned(pool, &addr) :
@@ -583,6 +625,7 @@ static u32 xp_alloc_new_from_fq(struct xsk_buff_pool *pool, struct xdp_buff **xd
 	return nb_entries;
 }
 
+/*自free_list上申请最多nb_entries个xdp_buffer_xsk*/
 static u32 xp_alloc_reused(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 nb_entries)
 {
 	struct xdp_buff_xsk *xskb;
@@ -592,9 +635,11 @@ static u32 xp_alloc_reused(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u3
 
 	i = nb_entries;
 	while (i--) {
+		/*自free_list上移除一个xskb*/
 		xskb = list_first_entry(&pool->free_list, struct xdp_buff_xsk, free_list_node);
 		list_del_init(&xskb->free_list_node);
 
+		/*利用此xskb填充xdp数组*/
 		*xdp = &xskb->xdp;
 		xdp++;
 	}
@@ -603,6 +648,7 @@ static u32 xp_alloc_reused(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u3
 	return nb_entries;
 }
 
+/*自pool中申请max个xdp buffer*/
 u32 xp_alloc_batch(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 max)
 {
 	u32 nb_entries1 = 0, nb_entries2;
@@ -617,9 +663,11 @@ u32 xp_alloc_batch(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 max)
 		return !!buff;
 	}
 
+	/*free_list上有空闲元素，自free_list上申请*/
 	if (unlikely(pool->free_list_cnt)) {
 		nb_entries1 = xp_alloc_reused(pool, xdp, max);
 		if (nb_entries1 == max)
+			/*申请到了max个，返回*/
 			return nb_entries1;
 
 		max -= nb_entries1;
@@ -634,6 +682,7 @@ u32 xp_alloc_batch(struct xsk_buff_pool *pool, struct xdp_buff **xdp, u32 max)
 }
 EXPORT_SYMBOL(xp_alloc_batch);
 
+/*检查pool是否可申请count个xdp_buffer*/
 bool xp_can_alloc(struct xsk_buff_pool *pool, u32 count)
 {
 	if (pool->free_list_cnt >= count)
@@ -642,6 +691,7 @@ bool xp_can_alloc(struct xsk_buff_pool *pool, u32 count)
 }
 EXPORT_SYMBOL(xp_can_alloc);
 
+/*将xskb释放回其所属的pool中*/
 void xp_free(struct xdp_buff_xsk *xskb)
 {
 	if (!list_empty(&xskb->free_list_node))
@@ -652,6 +702,7 @@ void xp_free(struct xdp_buff_xsk *xskb)
 }
 EXPORT_SYMBOL(xp_free);
 
+/*通过addr转data addr*/
 void *xp_raw_get_data(struct xsk_buff_pool *pool, u64 addr)
 {
 	addr = pool->unaligned ? xp_unaligned_add_offset_to_addr(addr) : addr;

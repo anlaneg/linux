@@ -30,7 +30,7 @@ struct mnt_pcp {
 };
 
 struct mountpoint {
-	struct hlist_node m_hash;
+	struct hlist_node m_hash;/*用于串连进xx链表*/
 	struct dentry *m_dentry;/*挂载点对应的dentry*/
 	struct hlist_head m_list;
 	int m_count;/*此结构的引用计数*/
@@ -47,6 +47,8 @@ struct mount {
 		struct rcu_head mnt_rcu;
 		struct llist_node mnt_llist;
 	};
+
+	/*统计*/
 #ifdef CONFIG_SMP
 	struct mnt_pcp __percpu *mnt_pcp;
 #else
@@ -55,6 +57,7 @@ struct mount {
 #endif
 	struct list_head mnt_mounts;	/* list of children, anchored here */
 	struct list_head mnt_child;	/* and going through their mnt_child */
+	/*用于挂接到此文件系统对应的super block的s_mounts链表上*/
 	struct list_head mnt_instance;	/* mount instance on sb->s_mounts */
 	//要挂载的设备名称，例如none,nsfs等
 	const char *mnt_devname;	/* Name of device e.g. /dev/dsk/hda1 */

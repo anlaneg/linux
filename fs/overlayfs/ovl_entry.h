@@ -49,10 +49,10 @@ struct ovl_path {
 
 /* private information held for overlayfs's superblock */
 struct ovl_fs {
-	unsigned int numlayer;
+	unsigned int numlayer;/*layers数组大小*/
 	/* Number of unique fs among layers including upper fs */
 	unsigned int numfs;
-	const struct ovl_layer *layers;
+	const struct ovl_layer *layers;/*每个lower对应一个layers结构体*/
 	struct ovl_sb *fs;
 	/* workbasedir is the path at workdir= mount option */
 	struct dentry *workbasedir;

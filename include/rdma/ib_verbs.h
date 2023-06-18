@@ -153,7 +153,7 @@ struct ib_gid_attr {
 	struct net_device __rcu	*ndev;
 	struct ib_device	*device;
 	union ib_gid		gid;
-	enum ib_gid_type	gid_type;
+	enum ib_gid_type	gid_type;/*ib传输类型*/
 	u16			index;
 	u32			port_num;
 };
@@ -199,6 +199,7 @@ static inline enum ib_gid_type ib_network_to_gid_type(enum rdma_network_type net
 		return IB_GID_TYPE_IB;
 }
 
+/*取rdma网络类型*/
 static inline enum rdma_network_type
 rdma_gid_attr_network_type(const struct ib_gid_attr *attr)
 {
@@ -940,7 +941,7 @@ struct ib_ah_attr {
 };
 
 struct roce_ah_attr {
-	u8			dmac[ETH_ALEN];
+	u8			dmac[ETH_ALEN];/*目的mac*/
 };
 
 struct opa_ah_attr {
@@ -953,7 +954,7 @@ struct rdma_ah_attr {
 	struct ib_global_route	grh;/*路由情况*/
 	u8			sl;
 	u8			static_rate;
-	u32			port_num;
+	u32			port_num;/*port编号*/
 	u8			ah_flags;
 	enum rdma_ah_attr_type type;
 	union {
@@ -1592,7 +1593,7 @@ struct ib_xrcd {
 
 struct ib_ah {
 	struct ib_device	*device;
-	struct ib_pd		*pd;
+	struct ib_pd		*pd;/*从属的pd*/
 	struct ib_uobject	*uobject;
 	const struct ib_gid_attr *sgid_attr;
 	enum rdma_ah_attr_type	type;
@@ -1833,7 +1834,7 @@ struct ib_qp {
 	u32			qp_num;
 	u32			max_write_sge;
 	u32			max_read_sge;
-	/*指出qp类型*/
+	/*qp类型*/
 	enum ib_qp_type		qp_type;
 	struct ib_rwq_ind_table *rwq_ind_tbl;
 	struct ib_qp_security  *qp_sec;
@@ -3928,6 +3929,7 @@ static inline int ib_post_send(struct ib_qp *qp,
 {
 	const struct ib_send_wr *dummy;
 
+	/*应用设备的post_send向外发送数据*/
 	return qp->device->ops.post_send(qp, send_wr, bad_send_wr ? : &dummy);
 }
 
@@ -4604,11 +4606,13 @@ static inline bool rdma_ah_get_make_grd(const struct rdma_ah_attr *attr)
 	return false;
 }
 
+/*设置port number*/
 static inline void rdma_ah_set_port_num(struct rdma_ah_attr *attr, u32 port_num)
 {
 	attr->port_num = port_num;
 }
 
+/*取port number*/
 static inline u32 rdma_ah_get_port_num(const struct rdma_ah_attr *attr)
 {
 	return attr->port_num;

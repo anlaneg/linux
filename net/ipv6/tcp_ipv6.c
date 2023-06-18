@@ -2168,8 +2168,10 @@ struct proto tcpv6_prot = {
 	.sendpage		= tcp_sendpage,
 	.backlog_rcv		= tcp_v6_do_rcv,
 	.release_cb		= tcp_release_cb,
+	/*注册此socket*/
 	.hash			= inet6_hash,
 	.unhash			= inet_unhash,
+	/*尝试占用给定的port*/
 	.get_port		= inet_csk_get_port,
 	.put_port		= inet_put_port,
 #ifdef CONFIG_BPF_SYSCALL
@@ -2246,6 +2248,7 @@ int __init tcpv6_init(void)
 		goto out;
 
 	/* register inet6 protocol */
+	/*注册tcp over ipv6 socket*/
 	ret = inet6_register_protosw(&tcpv6_protosw);
 	if (ret)
 		goto out_tcpv6_protocol;

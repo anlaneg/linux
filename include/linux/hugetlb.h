@@ -522,6 +522,7 @@ struct hugetlbfs_inode_info {
 	unsigned int seals;
 };
 
+/*利用inode获得hugetlbfs_inode_info*/
 static inline struct hugetlbfs_inode_info *HUGETLBFS_I(struct inode *inode)
 {
 	return container_of(inode, struct hugetlbfs_inode_info, vfs_inode);
@@ -535,11 +536,13 @@ struct file *hugetlb_file_setup(const char *name, size_t size, vm_flags_t acct,
 static inline bool is_file_hugepages(struct file *file)
 {
 	if (file->f_op == &hugetlbfs_file_operations)
+		/*大页文件*/
 		return true;
 
 	return is_file_shm_hugepages(file);
 }
 
+/*取此inode对应的hstate*/
 static inline struct hstate *hstate_inode(struct inode *i)
 {
 	return HUGETLBFS_SB(i->i_sb)->hstate;
@@ -688,9 +691,9 @@ struct hstate {
 	struct mutex resize_lock;
 	int next_nid_to_alloc;
 	int next_nid_to_free;
-	unsigned int order;
+	unsigned int order;/*大页的页size (PAGE_SIZE << order）*/
 	unsigned int demote_order;
-	unsigned long mask;
+	unsigned long mask;/*大页size对应的掩码 ~((PAGE_SIZE << order)-1)*/
 	unsigned long max_huge_pages;
 	unsigned long nr_huge_pages;
 	unsigned long free_huge_pages;
@@ -773,14 +776,17 @@ static inline void hugetlb_set_page_subpool(struct page *hpage,
 
 static inline struct hstate *hstate_file(struct file *f)
 {
+	/*取file对应的hstate*/
 	return hstate_inode(file_inode(f));
 }
 
 static inline struct hstate *hstate_sizelog(int page_size_log)
 {
+	/*未指定size_log,返回默认hstate*/
 	if (!page_size_log)
 		return &default_hstate;
 
+	/*获取page_size_log对应的struct hstate*/
 	if (page_size_log < BITS_PER_LONG)
 		return size_to_hstate(1UL << page_size_log);
 
@@ -792,6 +798,7 @@ static inline struct hstate *hstate_vma(struct vm_area_struct *vma)
 	return hstate_file(vma->vm_file);
 }
 
+/*大页大小*/
 static inline unsigned long huge_page_size(const struct hstate *h)
 {
 	return (unsigned long)PAGE_SIZE << h->order;

@@ -120,6 +120,7 @@ SYSCALL_DEFINE2(fsopen, const char __user *, _fs_name, unsigned int, flags)
 	int ret;
 
 	if (!may_mount())
+		/*权限问题*/
 		return -EPERM;
 
 	if (flags & ~FSOPEN_CLOEXEC)
@@ -135,6 +136,7 @@ SYSCALL_DEFINE2(fsopen, const char __user *, _fs_name, unsigned int, flags)
 	if (!fs_type)
 		return -ENODEV;
 
+	/*创建fs context*/
 	fc = fs_context_for_mount(fs_type, 0);
 	put_filesystem(fs_type);
 	if (IS_ERR(fc))

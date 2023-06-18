@@ -558,13 +558,13 @@ static ssize_t verify_hdr(struct ib_uverbs_cmd_hdr *hdr,
 	return 0;
 }
 
-/*uverbs文件写操作处理*/
+/*uverbs文件write操作处理*/
 static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 			     size_t count, loff_t *pos)
 {
 	struct ib_uverbs_file *file = filp->private_data;
 	const struct uverbs_api_write_method *method_elm;
-	/*取对应的uapi*/
+	/*取此设备对应的uapi（此结构体中记录了适用于此设备的所有obj及cmd处理函数）*/
 	struct uverbs_api *uapi = file->device->uapi;
 	struct ib_uverbs_ex_cmd_hdr ex_hdr;
 	struct ib_uverbs_cmd_hdr hdr;
@@ -671,7 +671,7 @@ static ssize_t ib_uverbs_write(struct file *filp, const char __user *buf,
 
 	}
 
-	/*调用具体方法*/
+	/*调用具体方法完成write接口请求*/
 	ret = method_elm->handler(&bundle);
 	if (bundle.uobject)
 		uverbs_finalize_object(bundle.uobject, UVERBS_ACCESS_NEW, true,
@@ -937,7 +937,7 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 		goto err;
 	}
 
-	file->device	 = dev;
+	file->device	 = dev;/*文件与设备关联*/
 	kref_init(&file->ref);
 	mutex_init(&file->ucontext_lock);
 
@@ -1099,6 +1099,7 @@ static const struct attribute_group dev_attr_group = {
 static CLASS_ATTR_STRING(abi_version, S_IRUGO,
 			 __stringify(IB_USER_VERBS_ABI_VERSION));
 
+/*针对此ib设备，初始化uverbs_dev的uapi*/
 static int ib_uverbs_create_uapi(struct ib_device *device,
 				 struct ib_uverbs_device *uverbs_dev)
 {
@@ -1162,6 +1163,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	else
 		base = IB_UVERBS_BASE_DEV + devnum;
 
+	/*设置适用于此设备的uapi*/
 	ret = ib_uverbs_create_uapi(device, uverbs_dev);
 	if (ret)
 		goto err_uapi;

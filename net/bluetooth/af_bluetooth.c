@@ -39,6 +39,7 @@
 
 /* Bluetooth sockets */
 #define BT_MAX_PROTO	(BTPROTO_LAST + 1)
+/*记录bluetooth各协议socket的创建方式*/
 static const struct net_proto_family *bt_proto[BT_MAX_PROTO];
 static DEFINE_RWLOCK(bt_proto_lock);
 
@@ -79,6 +80,7 @@ void bt_sock_reclassify_lock(struct sock *sk, int proto)
 }
 EXPORT_SYMBOL(bt_sock_reclassify_lock);
 
+/*蓝牙各协议注册，指明socket处理的ops*/
 int bt_sock_register(int proto, const struct net_proto_family *ops)
 {
 	int err = 0;
@@ -116,18 +118,22 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 	int err;
 
 	if (net != &init_net)
+		/*暂不支持多net ns*/
 		return -EAFNOSUPPORT;
 
 	if (proto < 0 || proto >= BT_MAX_PROTO)
+		/*协议无效*/
 		return -EINVAL;
 
 	if (!bt_proto[proto])
+		/*如果此proto不存在，则请求加载相应模块*/
 		request_module("bt-proto-%d", proto);
 
 	err = -EPROTONOSUPPORT;
 
 	read_lock(&bt_proto_lock);
 
+	/*按照给定的协议调用create完成socket创建*/
 	if (bt_proto[proto] && try_module_get(bt_proto[proto]->owner)) {
 		err = bt_proto[proto]->create(net, sock, proto, kern);
 		if (!err)
@@ -352,6 +358,7 @@ int bt_sock_stream_recvmsg(struct socket *sock, struct msghdr *msg,
 		struct sk_buff *skb;
 		int chunk;
 
+		/*自此socket取数据*/
 		skb = skb_dequeue(&sk->sk_receive_queue);
 		if (!skb) {
 			if (copied >= target)
@@ -707,6 +714,7 @@ void bt_procfs_cleanup(struct net *net, const char *name)
 EXPORT_SYMBOL(bt_procfs_init);
 EXPORT_SYMBOL(bt_procfs_cleanup);
 
+/*负责bluetooth socket创建*/
 static const struct net_proto_family bt_sock_family_ops = {
 	.owner	= THIS_MODULE,
 	.family	= PF_BLUETOOTH,
@@ -731,6 +739,7 @@ static int __init bt_init(void)
 	if (err < 0)
 		return err;
 
+	/*创建bluetooth目录*/
 	bt_debugfs = debugfs_create_dir("bluetooth", NULL);
 
 	bt_leds_init();
@@ -739,24 +748,29 @@ static int __init bt_init(void)
 	if (err < 0)
 		goto cleanup_led;
 
+	/*注册family*/
 	err = sock_register(&bt_sock_family_ops);
 	if (err)
 		goto cleanup_sysfs;
 
 	BT_INFO("HCI device and connection manager initialized");
 
+	/*注册hci协议操作集*/
 	err = hci_sock_init();
 	if (err)
 		goto unregister_socket;
 
+	/*注册l2cap协议*/
 	err = l2cap_init();
 	if (err)
 		goto cleanup_socket;
 
+	/*注册sco协议*/
 	err = sco_init();
 	if (err)
 		goto cleanup_cap;
 
+	/*mgmt channel初始化*/
 	err = mgmt_init();
 	if (err)
 		goto cleanup_sco;

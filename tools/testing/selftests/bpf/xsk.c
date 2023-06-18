@@ -59,13 +59,13 @@ struct xsk_umem {
 	int fd;/*afxdp socket*/
 	int refcount;
 	struct list_head ctx_list;
-	bool rx_ring_setup_done;
-	bool tx_ring_setup_done;
+	bool rx_ring_setup_done;/*标记rx创建完成*/
+	bool tx_ring_setup_done;/*标记tx创建完成*/
 };
 
 struct xsk_ctx {
-	struct xsk_ring_prod *fill;
-	struct xsk_ring_cons *comp;
+	struct xsk_ring_prod *fill;/*指明fill队列*/
+	struct xsk_ring_cons *comp;/*指明comp队列*/
 	__u32 queue_id;
 	struct xsk_umem *umem;
 	int refcount;
@@ -76,7 +76,7 @@ struct xsk_ctx {
 struct xsk_socket {
 	struct xsk_ring_cons *rx;//rx信息
 	struct xsk_ring_prod *tx;//tx信息
-	struct xsk_ctx *ctx;
+	struct xsk_ctx *ctx;/*此socket对应的context*/
 	struct xsk_socket_config config;//rx,tx配置信息
 	int fd;
 };
@@ -102,7 +102,7 @@ static void xsk_set_umem_config(struct xsk_umem_config *cfg,
 				const struct xsk_umem_config *usr_cfg)
 {
 	if (!usr_cfg) {
-	    /*用户未提供配置，使用默认值*/
+	    /*用户未提供配置时，使用默认值*/
 		cfg->fill_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
 		cfg->comp_size = XSK_RING_CONS__DEFAULT_NUM_DESCS;
 		cfg->frame_size = XSK_UMEM__DEFAULT_FRAME_SIZE;
@@ -121,6 +121,7 @@ static void xsk_set_umem_config(struct xsk_umem_config *cfg,
 static int xsk_set_xdp_socket_config(struct xsk_socket_config *cfg,
 				     const struct xsk_socket_config *usr_cfg)
 {
+	/*如果未提供cfg,则使用默认配置，初始化rx_size,tx_size*/
 	if (!usr_cfg) {
 		cfg->rx_size = XSK_RING_CONS__DEFAULT_NUM_DESCS;
 		cfg->tx_size = XSK_RING_PROD__DEFAULT_NUM_DESCS;
@@ -141,6 +142,7 @@ static int xsk_get_mmap_offsets(int fd, struct xdp_mmap_offsets *off)
 	int err;
 
 	optlen = sizeof(*off);
+	/*取各ring, rx,tx,cr,fr结构体成员在内存中位置的偏移量*/
 	err = getsockopt(fd, SOL_XDP, XDP_MMAP_OFFSETS, off, &optlen);
 	if (err)
 		return err;
@@ -151,6 +153,7 @@ static int xsk_get_mmap_offsets(int fd, struct xdp_mmap_offsets *off)
 	return -EINVAL;
 }
 
+/*要求kernel创建umem ring(cr,fr)并将其映射到用户态，填充fill,comp*/
 static int xsk_create_umem_rings(struct xsk_umem *umem, int fd,
 				 struct xsk_ring_prod *fill,
 				 struct xsk_ring_cons *comp)
@@ -159,29 +162,29 @@ static int xsk_create_umem_rings(struct xsk_umem *umem, int fd,
 	void *map;
 	int err;
 
-	//创建fill队列，队列长度为fill_size
+	//要求kernel创建fill队列，队列长度为fill_size
 	err = setsockopt(fd, SOL_XDP, XDP_UMEM_FILL_RING,
 			 &umem->config.fill_size,
 			 sizeof(umem->config.fill_size));
 	if (err)
 		return -errno;
 
-	//创建complete队列，队列长度为comp_size
+	//要求kernel创建complete队列，队列长度为comp_size
 	err = setsockopt(fd, SOL_XDP, XDP_UMEM_COMPLETION_RING,
 			 &umem->config.comp_size,
 			 sizeof(umem->config.comp_size));
 	if (err)
 		return -errno;
 
-	//获取各ring成员的offset，用于与kernel对齐数据结构
+	//获取各ring结构体成员在内存中位置的offset，用于与kernel对齐数据结构
 	err = xsk_get_mmap_offsets(fd, &off);
 	if (err)
 		return -errno;
 
-	//映射fill队列
-	map = mmap(NULL, off.fr.desc + umem->config.fill_size * sizeof(__u64),
+	//针对af_xdp socket，调用mmap,将kernel创建的fill队列映射到用户态
+	map = mmap(NULL, off.fr.desc + umem->config.fill_size * sizeof(__u64)/*描述符指针起始位置 + 标识符数组总长度*/,
 		   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
-		   XDP_UMEM_PGOFF_FILL_RING);
+		   XDP_UMEM_PGOFF_FILL_RING/*通过此offset指明为fill队列映射*/);
 	if (map == MAP_FAILED)
 		return -errno;
 
@@ -192,9 +195,10 @@ static int xsk_create_umem_rings(struct xsk_umem *umem, int fd,
 	fill->consumer = map + off.fr.consumer;
 	fill->flags = map + off.fr.flags;
 	fill->ring = map + off.fr.desc;
+	//????
 	fill->cached_cons = umem->config.fill_size;
 
-	//映射complete队列
+	//针对af_xdp socket，调用mmap,将kernel创建的complete队列映射到用户态
 	map = mmap(NULL, off.cr.desc + umem->config.comp_size * sizeof(__u64),
 		   PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE, fd,
 		   XDP_UMEM_PGOFF_COMPLETION_RING);
@@ -214,14 +218,15 @@ static int xsk_create_umem_rings(struct xsk_umem *umem, int fd,
 	return 0;
 
 out_mmap:
+	/*遇射cr失败，释放映射的fr*/
 	munmap(map, off.fr.desc + umem->config.fill_size * sizeof(__u64));
 	return err;
 }
 
-int xsk_umem__create(struct xsk_umem **umem_ptr, void *umem_area,
-		     __u64 size, struct xsk_ring_prod *fill,
-		     struct xsk_ring_cons *comp,
-		     const struct xsk_umem_config *usr_config)
+int xsk_umem__create(struct xsk_umem **umem_ptr/*出参，xsk用户态内存信息*/, void *umem_area/*要注册的内存区域*/,
+		     __u64 size/*umem_area内存长度*/, struct xsk_ring_prod *fill/*出参，fill ring信息*/,
+		     struct xsk_ring_cons *comp/*出参，comp ring信息*/,
+		     const struct xsk_umem_config *usr_config/*umem配置，可以为空*/)
 {
 	struct xdp_umem_reg mr;
 	struct xsk_umem *umem;
@@ -231,7 +236,7 @@ int xsk_umem__create(struct xsk_umem **umem_ptr, void *umem_area,
 	if (!umem_area || !umem_ptr || !fill || !comp)
 		return -EFAULT;
 
-	/*申请的umem_area必须以页对齐*/
+	/*size不得为0，且申请的umem_area必须以页对齐*/
 	if (!size && !xsk_page_aligned(umem_area))
 		return -EINVAL;
 
@@ -260,13 +265,14 @@ int xsk_umem__create(struct xsk_umem **umem_ptr, void *umem_area,
 	mr.headroom = umem->config.frame_headroom;
 	mr.flags = umem->config.flags;
 
-	//向kernel注册用户态的内存
+	//通过sockopt向kernel注册用户态的内存
 	err = setsockopt(umem->fd, SOL_XDP, XDP_UMEM_REG, &mr, sizeof(mr));
 	if (err) {
 		err = -errno;
 		goto out_socket;
 	}
 
+	/*创建并映射fill,comp两个队列*/
 	err = xsk_create_umem_rings(umem, umem->fd, fill, comp);
 	if (err)
 		goto out_socket;
@@ -346,6 +352,7 @@ static struct xsk_ctx *xsk_get_ctx(struct xsk_umem *umem, int ifindex,
 	if (list_empty(&umem->ctx_list))
 		return NULL;
 
+	/*查找是否已存在xsk_ctx*/
 	list_for_each_entry(ctx, &umem->ctx_list, list) {
 		if (ctx->ifindex == ifindex && ctx->queue_id == queue_id) {
 			ctx->refcount++;
@@ -396,6 +403,7 @@ static struct xsk_ctx *xsk_create_ctx(struct xsk_socket *xsk,
 		return NULL;
 
 	if (!umem->fill_save) {
+		/*未设置fill_save,映射fill,comp*/
 		err = xsk_create_umem_rings(umem, xsk->fd, fill, comp);
 		if (err) {
 			free(ctx);
@@ -414,7 +422,7 @@ static struct xsk_ctx *xsk_create_ctx(struct xsk_socket *xsk,
 
 	ctx->fill = fill;
 	ctx->comp = comp;
-	list_add(&ctx->list, &umem->ctx_list);
+	list_add(&ctx->list, &umem->ctx_list);/*加入链表*/
 	return ctx;
 }
 
@@ -449,6 +457,7 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 		goto out_xsk_alloc;
 
 	if (umem->refcount++ > 0) {
+		/*umem原引用计数不为0时，创建新的af_xdp socket*/
 		xsk->fd = socket(AF_XDP, SOCK_RAW | SOCK_CLOEXEC, 0);
 		if (xsk->fd < 0) {
 			err = -errno;
@@ -463,10 +472,12 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 	ctx = xsk_get_ctx(umem, ifindex, queue_id);
 	if (!ctx) {
 		if (!fill || !comp) {
+			/*ctx未创建，且未给定fill,comp,报错退出*/
 			err = -EFAULT;
 			goto out_socket;
 		}
 
+		/*创建xsk context*/
 		ctx = xsk_create_ctx(xsk, umem, ifindex, queue_id, fill, comp);
 		if (!ctx) {
 			err = -ENOMEM;
@@ -476,7 +487,7 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 	xsk->ctx = ctx;
 
 	if (rx && !rx_setup_done) {
-	    //创建并初始化kernel中的rx队列
+	    //rx未创建，要求kernel创建rx队列
 		err = setsockopt(xsk->fd, SOL_XDP, XDP_RX_RING,
 				 &xsk->config.rx_size,
 				 sizeof(xsk->config.rx_size));
@@ -488,7 +499,7 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 			umem->rx_ring_setup_done = true;
 	}
 	if (tx && !tx_setup_done) {
-	    //创建并初始化kernel中的tx队列
+	    //tx未创建，要求kernel创建tx队列
 		err = setsockopt(xsk->fd, SOL_XDP, XDP_TX_RING,
 				 &xsk->config.tx_size,
 				 sizeof(xsk->config.tx_size));
@@ -500,19 +511,19 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 			umem->tx_ring_setup_done = true;
 	}
 
-	//取rx,tx队列的offset信息
+	//取af_xdp所有ring结构体成员在内存中的位置信息
 	err = xsk_get_mmap_offsets(xsk->fd, &off);
 	if (err) {
 		err = -errno;
 		goto out_put_ctx;
 	}
 
-	//映射rx队列
 	if (rx) {
+		//映射rx队列
 		rx_map = mmap(NULL, off.rx.desc +
 			      xsk->config.rx_size * sizeof(struct xdp_desc),
 			      PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
-			      xsk->fd, XDP_PGOFF_RX_RING);
+			      xsk->fd, XDP_PGOFF_RX_RING/*指明映射rx ring*/);
 		if (rx_map == MAP_FAILED) {
 			err = -errno;
 			goto out_put_ctx;
@@ -529,12 +540,12 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 	}
 	xsk->rx = rx;
 
-	//映射tx队列
 	if (tx) {
+		//映射tx队列
 		tx_map = mmap(NULL, off.tx.desc +
 			      xsk->config.tx_size * sizeof(struct xdp_desc),
 			      PROT_READ | PROT_WRITE, MAP_SHARED | MAP_POPULATE,
-			      xsk->fd, XDP_PGOFF_TX_RING);
+			      xsk->fd, XDP_PGOFF_TX_RING/*指明映射tx ring*/);
 		if (tx_map == MAP_FAILED) {
 			err = -errno;
 			goto out_mmap_rx;
@@ -556,8 +567,8 @@ int xsk_socket__create_shared(struct xsk_socket **xsk_ptr,
 
 	//xdp socket绑定
 	sxdp.sxdp_family = PF_XDP;
-	sxdp.sxdp_ifindex = ctx->ifindex;
-	sxdp.sxdp_queue_id = ctx->queue_id;
+	sxdp.sxdp_ifindex = ctx->ifindex;/*接口ifindex*/
+	sxdp.sxdp_queue_id = ctx->queue_id;/*队列编号*/
 	if (umem->refcount > 1) {
 		sxdp.sxdp_flags |= XDP_SHARED_UMEM;
 		sxdp.sxdp_shared_umem_fd = umem->fd;
@@ -601,8 +612,10 @@ int xsk_socket__create(struct xsk_socket **xsk_ptr, int ifindex,
 		       const struct xsk_socket_config *usr_config)
 {
 	if (!umem)
+		/*umem必须已初始化*/
 		return -EFAULT;
 
+	/*创建rx,tx ring,为netdev使能xsk pool*/
 	return xsk_socket__create_shared(xsk_ptr, ifindex, queue_id, umem,
 					 rx, tx, umem->fill_save,
 					 umem->comp_save, usr_config);

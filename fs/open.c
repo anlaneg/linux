@@ -1380,6 +1380,7 @@ static long do_sys_openat2(int dfd, const char __user *filename/*文件名称或
 	return fd;
 }
 
+/*open函数实现入口*/
 long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 {
 	struct open_how how = build_open_how(flags, mode);

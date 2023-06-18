@@ -54,10 +54,10 @@ union rxe_gid {
 
 struct rxe_global_route {
 	union rxe_gid	dgid;
-	__u32		flow_label;
+	__u32		flow_label;/*ipv6 flow label*/
 	__u8		sgid_index;
-	__u8		hop_limit;
-	__u8		traffic_class;
+	__u8		hop_limit;/*ttl填充*/
+	__u8		traffic_class;/*ipv6 traffic class*/
 };
 
 struct rxe_av {
@@ -70,16 +70,16 @@ struct rxe_av {
 	union {
 		struct sockaddr_in	_sockaddr_in;
 		struct sockaddr_in6	_sockaddr_in6;
-	} sgid_addr, dgid_addr;/*源地址，目的地址*/
+	} sgid_addr/*源地址*/, dgid_addr;/*目的地址*/
 };
 
 struct rxe_send_wr {
-	__aligned_u64		wr_id;
+	__aligned_u64		wr_id;/*wr编号*/
 	__u32			reserved;
-	__u32			opcode;
+	__u32			opcode;/*操作码，见enum ib_wr_opcode*/
 	__u32			send_flags;
 	union {
-		__be32		imm_data;
+		__be32		imm_data;/*包含的立即数*/
 		__u32		invalidate_rkey;
 	} ex;
 	union {
@@ -103,14 +103,14 @@ struct rxe_send_wr {
 			__u32	reserved;
 		} atomic;
 		struct {
-			__u32	remote_qpn;
-			__u32	remote_qkey;
+			__u32	remote_qpn;/*远端qpn*/
+			__u32	remote_qkey;/*远端qkey*/
 			__u16	pkey_index;
 			__u16	reserved;
-			__u32	ah_num;
+			__u32	ah_num;/*ah编号*/
 			__u32	pad[4];
-			struct rxe_av av;
-		} ud;
+			struct rxe_av av;/* only old user provider for UD sends*/
+		} ud;/*ud类型qp*/
 		struct {
 			__aligned_u64	addr;
 			__aligned_u64	length;
@@ -146,19 +146,19 @@ struct mminfo {
 };
 
 struct rxe_dma_info {
-    /*数据长度*/
+    /*数据总长度*/
 	__u32			length;
-	__u32			resid;
+	__u32			resid;/*数据总长度*/
 	__u32			cur_sge;
 	/*seg数组长度*/
 	__u32			num_sge;
 	__u32			sge_offset;
 	__u32			reserved;
 	union {
-	    /*inline数据*/
+	    /*记录inline数据*/
 		__DECLARE_FLEX_ARRAY(__u8, inline_data);
 		__DECLARE_FLEX_ARRAY(__u8, atomic_wr);
-		/*sge数组*/
+		/*sge数组,记录非inline的要执行dma的数据段*/
 		__DECLARE_FLEX_ARRAY(struct rxe_sge, sge);
 	};
 };
@@ -169,12 +169,12 @@ struct rxe_send_wqe {
 	__u32			state;
 	__aligned_u64		iova;
 	__u32			mask;
-	__u32			first_psn;
-	__u32			last_psn;
+	__u32			first_psn;/*首包psn(packet send number)*/
+	__u32			last_psn;/*属包psn*/
 	__u32			ack_length;
-	__u32			ssn;
+	__u32			ssn;/*此send wqe关联的全局唯一number*/
 	__u32			has_rd_atomic;
-	struct rxe_dma_info	dma;
+	struct rxe_dma_info	dma;/*数据*/
 };
 
 struct rxe_recv_wqe {

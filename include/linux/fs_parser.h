@@ -71,8 +71,8 @@ extern int __fs_parse(struct p_log *log,
 		    struct fs_parse_result *result);
 
 static inline int fs_parse(struct fs_context *fc,
-	     const struct fs_parameter_spec *desc,
-	     struct fs_parameter *param,
+	     const struct fs_parameter_spec *desc/*参数结构体说明*/,
+	     struct fs_parameter *param/*入参，当前待解析的参数*/,
 	     struct fs_parse_result *result/*出参，param被转换后结果*/)
 {
 	return __fs_parse(&fc->log, desc, param, result);

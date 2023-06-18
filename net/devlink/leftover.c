@@ -1395,6 +1395,7 @@ out:
 	return err;
 }
 
+/*处理devlink port add命令*/
 static int devlink_nl_cmd_port_new_doit(struct sk_buff *skb,
 					struct genl_info *info)
 {
@@ -1404,15 +1405,20 @@ static int devlink_nl_cmd_port_new_doit(struct sk_buff *skb,
 	unsigned int new_port_index;
 	int err;
 
+	/*devlink必须提供以下两个回调*/
 	if (!devlink->ops->port_new || !devlink->ops->port_del)
 		return -EOPNOTSUPP;
 
+	/*必须同时指明flavor,pf number*/
 	if (!info->attrs[DEVLINK_ATTR_PORT_FLAVOUR] ||
 	    !info->attrs[DEVLINK_ATTR_PORT_PCI_PF_NUMBER]) {
 		NL_SET_ERR_MSG(extack, "Port flavour or PCI PF are not specified");
 		return -EINVAL;
 	}
+
+	/*取flavour类型*/
 	new_attrs.flavour = nla_get_u16(info->attrs[DEVLINK_ATTR_PORT_FLAVOUR]);
+	/*取pf number*/
 	new_attrs.pfnum =
 		nla_get_u16(info->attrs[DEVLINK_ATTR_PORT_PCI_PF_NUMBER]);
 
@@ -1427,17 +1433,21 @@ static int devlink_nl_cmd_port_new_doit(struct sk_buff *skb,
 			nla_get_u16(info->attrs[DEVLINK_ATTR_PORT_CONTROLLER_NUMBER]);
 		new_attrs.controller_valid = true;
 	}
+
+	/*指定flavour为sf设备时，设置sf number*/
 	if (new_attrs.flavour == DEVLINK_PORT_FLAVOUR_PCI_SF &&
 	    info->attrs[DEVLINK_ATTR_PORT_PCI_SF_NUMBER]) {
 		new_attrs.sfnum = nla_get_u32(info->attrs[DEVLINK_ATTR_PORT_PCI_SF_NUMBER]);
 		new_attrs.sfnum_valid = true;
 	}
 
+	/*执行新建port*/
 	err = devlink->ops->port_new(devlink, &new_attrs, extack,
-				     &new_port_index);
+				     &new_port_index/*出参，port index*/);
 	if (err)
 		return err;
 
+	/*执行响应，如果响应失败，则执行port_del*/
 	err = devlink_port_new_notify(devlink, new_port_index, info);
 	if (err && err != -ENODEV) {
 		/* Fail to send the response; destroy newly created port. */
@@ -6396,7 +6406,7 @@ const struct genl_small_ops devlink_nl_ops[56] = {
 	},
 	{
 		.cmd = DEVLINK_CMD_PORT_NEW,
-		.doit = devlink_nl_cmd_port_new_doit,
+		.doit = devlink_nl_cmd_port_new_doit,/*处理devlink port add命令*/
 		.flags = GENL_ADMIN_PERM,
 	},
 	{

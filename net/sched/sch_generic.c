@@ -550,7 +550,7 @@ static void dev_watchdog(struct timer_list *t)
 			//调用ndo_tx_timeout完成超时处理
 			if (unlikely(some_queue_timedout)) {
 				trace_net_dev_xmit_timeout(dev, i);
-				//显示网络设备第i个队列超时
+				//显示网络设备第i个队列超时，打印堆栈
 				WARN_ONCE(1, KERN_INFO "NETDEV WATCHDOG: %s (%s): transmit queue %u timed out\n",
 				       dev->name, netdev_drivername(dev), i);
 				netif_freeze_queues(dev);

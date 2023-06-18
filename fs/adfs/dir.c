@@ -399,15 +399,20 @@ adfs_hash(const struct dentry *parent, struct qstr *qstr)
 	u32 len;
 
 	if (qstr->len > ADFS_SB(parent->d_sb)->s_namelen)
+		/*qstr->len中存的为本层目录/文件名称的长度，其超过super block规则的名称最大值，返回失败*/
 		return -ENAMETOOLONG;
 
 	len = qstr->len;
-	name = qstr->name;
+	name = qstr->name;/*注意：这个名称的实际内容可能超过qstr->len指明的长度*/
+	/*开始计算hash*/
 	hash = init_name_hash(parent);
 	while (len--)
 		hash = partial_name_hash(adfs_tolower(*name++), hash);
+
+	/*更新计算的hash,用于返回*/
 	qstr->hash = end_name_hash(hash);
 
+	/*标记成功处理*/
 	return 0;
 }
 

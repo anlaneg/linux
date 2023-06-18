@@ -35,6 +35,7 @@ struct tcp_congestion_ops *tcp_ca_find(const char *name)
 	return NULL;
 }
 
+/*更新拥塞状态*/
 void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 {
 	struct inet_connection_sock *icsk = inet_csk(sk);
@@ -184,14 +185,16 @@ void tcp_assign_congestion_control(struct sock *sk)
 	/*取默认的拥塞算法*/
 	ca = rcu_dereference(net->ipv4.tcp_congestion_control);
 	if (unlikely(!bpf_try_module_get(ca, ca->owner)))
-		ca = &tcp_reno;
-	icsk->icsk_ca_ops = ca;
+		ca = &tcp_reno;/*回退到reno算法*/
+	icsk->icsk_ca_ops = ca;/*指定拥塞算法*/
 	rcu_read_unlock();
 
 	memset(icsk->icsk_ca_priv, 0, sizeof(icsk->icsk_ca_priv));
 	if (ca->flags & TCP_CONG_NEEDS_ECN)
+		/*拥塞算法依赖ecn，添加INET_ECN_ECT_0标记*/
 		INET_ECN_xmit(sk);
 	else
+		/*不依赖ecn,清除tos上设置的ecn标记*/
 		INET_ECN_dontxmit(sk);
 }
 
@@ -229,6 +232,7 @@ static void tcp_reinit_congestion_control(struct sock *sk,
 	else
 		INET_ECN_dontxmit(sk);
 
+	/*重新初始化cc*/
 	if (!((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_LISTEN)))
 		tcp_init_congestion_control(sk);
 }

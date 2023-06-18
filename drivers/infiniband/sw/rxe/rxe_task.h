@@ -21,13 +21,14 @@ enum {
 struct rxe_task {
 	/*task对应的softirq的tasklet*/
 	struct tasklet_struct	tasklet;
-	int			state;
+	int			state;/*记录task状态*/
 	spinlock_t		lock;
+	/*此task工作函数对应的参数*/
 	void			*arg;
 	/*TASK工作函数*/
 	int			(*func)(void *arg);
 	int			ret;
-	bool			destroyed;
+	bool			destroyed;/*标记task正在销毁*/
 };
 
 /*

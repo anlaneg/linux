@@ -262,6 +262,7 @@ static int ip_finish_output_gso(struct net *net, struct sock *sk,
 	/* common case: seglen is <= mtu
 	 */
 	if (skb_gso_validate_network_len(skb, mtu))
+		/*gso报文长度小于mtu,走普通发送*/
 		return ip_finish_output2(net, sk, skb);
 
 	/* Slowpath -  GSO segment length exceeds the egress MTU.
@@ -576,7 +577,7 @@ no_route:
 }
 EXPORT_SYMBOL(__ip_queue_xmit);
 
-/*上层协议栈送报文到ip协议栈*/
+/*上层协议栈送报文到ip协议栈(处理封ipv4头）*/
 int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl)
 {
 	return __ip_queue_xmit(sk, skb, fl, inet_sk(sk)->tos);

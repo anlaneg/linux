@@ -1948,6 +1948,7 @@ int __init l2cap_init_sockets(void)
 	if (err < 0)
 		return err;
 
+	/*注册l2cap协议*/
 	err = bt_sock_register(BTPROTO_L2CAP, &l2cap_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("L2CAP socket registration failed");

@@ -1552,14 +1552,17 @@ set_sndbuf:
 	}
 
 	case SO_TXREHASH:
+		/*通过setsockopt开启rehash*/
 		if (val < -1 || val > 1) {
+			/*val只能选择-1/1/0*/
 			ret = -EINVAL;
 			break;
 		}
 		if ((u8)val == SOCK_TXREHASH_DEFAULT)
+			/*使用net ns中sysctl中关于txrehash的规定*/
 			val = READ_ONCE(sock_net(sk)->core.sysctl_txrehash);
 		/* Paired with READ_ONCE() in tcp_rtx_synack() */
-		WRITE_ONCE(sk->sk_txrehash, (u8)val);
+		WRITE_ONCE(sk->sk_txrehash, (u8)val);/*设置sk_txrehash*/
 		break;
 
 	default:
@@ -2771,6 +2774,7 @@ struct sk_buff *sock_alloc_send_pskb(struct sock *sk, unsigned long header_len,
 			goto interrupted;
 		timeo = sock_wait_for_wmem(sk, timeo);
 	}
+
 	/*申请skb，并容许多个frag组成data_len*/
 	skb = alloc_skb_with_frags(header_len, data_len, max_page_order,
 				   errcode, sk->sk_allocation);
@@ -3950,7 +3954,7 @@ static int req_prot_init(const struct proto *prot)
 }
 
 //协议注册
-int proto_register(struct proto *prot, int alloc_slab)
+int proto_register(struct proto *prot, int alloc_slab/*是否申请slab*/)
 {
 	int ret = -ENOBUFS;
 

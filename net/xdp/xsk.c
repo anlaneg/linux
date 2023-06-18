@@ -35,9 +35,11 @@
 
 static DEFINE_PER_CPU(struct list_head, xskmap_flush_list);
 
+/*设置rx方向需要wakeup*/
 void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
 	if (pool->cached_need_wakeup & XDP_WAKEUP_RX)
+		/*已置此标记，直接返回*/
 		return;
 
 	pool->fq->ring->flags |= XDP_RING_NEED_WAKEUP;
@@ -45,11 +47,13 @@ void xsk_set_rx_need_wakeup(struct xsk_buff_pool *pool)
 }
 EXPORT_SYMBOL(xsk_set_rx_need_wakeup);
 
+/*设置tx方向需要wakeup*/
 void xsk_set_tx_need_wakeup(struct xsk_buff_pool *pool)
 {
 	struct xdp_sock *xs;
 
 	if (pool->cached_need_wakeup & XDP_WAKEUP_TX)
+		/*已置此标记，直接返回*/
 		return;
 
 	rcu_read_lock();
@@ -62,6 +66,7 @@ void xsk_set_tx_need_wakeup(struct xsk_buff_pool *pool)
 }
 EXPORT_SYMBOL(xsk_set_tx_need_wakeup);
 
+/*清除rx方向需要wakeup的标记*/
 void xsk_clear_rx_need_wakeup(struct xsk_buff_pool *pool)
 {
 	if (!(pool->cached_need_wakeup & XDP_WAKEUP_RX))
@@ -72,6 +77,7 @@ void xsk_clear_rx_need_wakeup(struct xsk_buff_pool *pool)
 }
 EXPORT_SYMBOL(xsk_clear_rx_need_wakeup);
 
+/*清除tx方向需要wakeup的标记*/
 void xsk_clear_tx_need_wakeup(struct xsk_buff_pool *pool)
 {
 	struct xdp_sock *xs;
@@ -89,6 +95,7 @@ void xsk_clear_tx_need_wakeup(struct xsk_buff_pool *pool)
 }
 EXPORT_SYMBOL(xsk_clear_tx_need_wakeup);
 
+/*检查此pool是否需要wakeup(不论rx/tx方向）*/
 bool xsk_uses_need_wakeup(struct xsk_buff_pool *pool)
 {
 	return pool->uses_need_wakeup;
@@ -98,6 +105,7 @@ EXPORT_SYMBOL(xsk_uses_need_wakeup);
 struct xsk_buff_pool *xsk_get_pool_from_qid(struct net_device *dev,
 					    u16 queue_id)
 {
+	/*通过queue_id获取对应的pool(rx的queue_id与tx的queue_id是连续的，且tx queue_id更大）*/
 	if (queue_id < dev->real_num_rx_queues)
 		return dev->_rx[queue_id].pool;
 	if (queue_id < dev->real_num_tx_queues)
@@ -107,6 +115,7 @@ struct xsk_buff_pool *xsk_get_pool_from_qid(struct net_device *dev,
 }
 EXPORT_SYMBOL(xsk_get_pool_from_qid);
 
+/*移除指定queue_id对应的pool*/
 void xsk_clear_pool_at_qid(struct net_device *dev, u16 queue_id)
 {
 	if (queue_id < dev->num_rx_queues)
@@ -125,8 +134,10 @@ int xsk_reg_pool_at_qid(struct net_device *dev, struct xsk_buff_pool *pool,
 	if (queue_id >= max_t(unsigned int,
 			      dev->real_num_rx_queues,
 			      dev->real_num_tx_queues))
+		/*queue_id不超过设备rx/tx队列数*/
 		return -EINVAL;
 
+	/*更新rx或tx对应的xdp pool*/
 	if (queue_id < dev->real_num_rx_queues)
 		dev->_rx[queue_id].pool = pool;
 	if (queue_id < dev->real_num_tx_queues)
@@ -144,6 +155,7 @@ static int __xsk_rcv_zc(struct xdp_sock *xs, struct xdp_buff *xdp, u32 len)
 	addr = xp_get_handle(xskb);
 	err = xskq_prod_reserve_desc(xs->rx, addr, len);
 	if (err) {
+		/*队列为满*/
 		xs->rx_queue_full++;
 		return err;
 	}
@@ -158,15 +170,18 @@ static void xsk_copy_xdp(struct xdp_buff *to, struct xdp_buff *from, u32 len)
 	u32 metalen;
 
 	if (unlikely(xdp_data_meta_unsupported(from))) {
+		/*此buffer不包含meta,故metalen为0*/
 		from_buf = from->data;
 		to_buf = to->data;
 		metalen = 0;
 	} else {
+		/*支持meta,自data_meta位置开始copy*/
 		from_buf = from->data_meta;
 		metalen = from->data - from->data_meta;
 		to_buf = to->data - metalen;
 	}
 
+	/*利用from_buf填充to_buf*/
 	memcpy(to_buf, from_buf, len + metalen);
 }
 
@@ -177,18 +192,22 @@ static int __xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 	int err;
 	u32 len;
 
+	/*报文长度*/
 	len = xdp->data_end - xdp->data;
 	if (len > xsk_pool_get_rx_frame_size(xs->pool)) {
+		/*报文过长，此pool无法收取，丢包*/
 		xs->rx_dropped++;
 		return -ENOSPC;
 	}
 
 	xsk_xdp = xsk_buff_alloc(xs->pool);
 	if (!xsk_xdp) {
+		/*申请xdp buffer失败，丢包*/
 		xs->rx_dropped++;
 		return -ENOMEM;
 	}
 
+	/*复制xdp内容填充xsk_xdp*/
 	xsk_copy_xdp(xsk_xdp, xdp, len);
 	err = __xsk_rcv_zc(xs, xsk_xdp, len);
 	if (err) {
@@ -243,7 +262,9 @@ int xsk_generic_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 	spin_lock_bh(&xs->rx_lock);
 	err = xsk_rcv_check(xs, xdp);
 	if (!err) {
+		/*收取此xdp*/
 		err = __xsk_rcv(xs, xdp);
+		/*更新位置*/
 		xsk_flush(xs);
 	}
 	spin_unlock_bh(&xs->rx_lock);
@@ -268,6 +289,7 @@ static int xsk_rcv(struct xdp_sock *xs, struct xdp_buff *xdp)
 		return __xsk_rcv_zc(xs, xdp, len);
 	}
 
+	/*复制并存放到rx队列中*/
 	err = __xsk_rcv(xs, xdp);
 	if (!err)
 		xdp_return_buff(xdp);
@@ -285,6 +307,7 @@ int __xsk_map_redirect(struct xdp_sock *xs, struct xdp_buff *xdp)
 	if (err)
 		return err;
 
+	/*将此xs加入到flush_list中*/
 	if (!xs->flush_node.prev)
 		list_add(&xs->flush_node, flush_list);
 
@@ -304,6 +327,7 @@ void __xsk_map_flush(void)
 
 void xsk_tx_completed(struct xsk_buff_pool *pool, u32 nb_entries)
 {
+	/*生产者一次性提交nb_entries个元素*/
 	xskq_prod_submit_n(pool->cq, nb_entries);
 }
 EXPORT_SYMBOL(xsk_tx_completed);
@@ -478,6 +502,7 @@ static struct sk_buff *xsk_build_skb_zerocopy(struct xdp_sock *xs,
 	return skb;
 }
 
+/*利用xdp描述符构造skb*/
 static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 				     struct xdp_desc *desc)
 {
@@ -521,6 +546,7 @@ static struct sk_buff *xsk_build_skb(struct xdp_sock *xs,
 	return skb;
 }
 
+/*取tx描述符，构造skb并执行发送，发送如果失败，用户态需要retry*/
 static int __xsk_generic_xmit(struct sock *sk)
 {
 	struct xdp_sock *xs = xdp_sk(sk);
@@ -540,10 +566,13 @@ static int __xsk_generic_xmit(struct sock *sk)
 	}
 
 	if (xs->queue_id >= xs->dev->real_num_tx_queues)
+		/*队列id异常，退出*/
 		goto out;
 
+	/*自tx队列中取一个描述符*/
 	while (xskq_cons_peek_desc(xs->tx, &desc, xs->pool)) {
 		if (max_batch-- == 0) {
+			/*tx队列中仍有报文，但batch用尽,需要用户态重新尝试发送，故返回EAGAIN*/
 			err = -EAGAIN;
 			goto out;
 		}
@@ -560,6 +589,7 @@ static int __xsk_generic_xmit(struct sock *sk)
 		}
 		spin_unlock_irqrestore(&xs->pool->cq_lock, flags);
 
+		/*利用描述符中的信息构造skb*/
 		skb = xsk_build_skb(xs, &desc);
 		if (IS_ERR(skb)) {
 			err = PTR_ERR(skb);
@@ -569,8 +599,10 @@ static int __xsk_generic_xmit(struct sock *sk)
 			goto out;
 		}
 
+		/*将构造好的skb自xs->queue_id号队列发出*/
 		err = __dev_direct_xmit(skb, xs->queue_id);
 		if  (err == NETDEV_TX_BUSY) {
+			/*遇这种错误，需要重新尝试发送，故返回EAGAIN*/
 			/* Tell user-space to retry the send */
 			skb->destructor = sock_wfree;
 			spin_lock_irqsave(&xs->pool->cq_lock, flags);
@@ -604,12 +636,14 @@ out:
 	return err;
 }
 
+/*非零copy的xdp socket发送流程（用于将tx队列中的报文申请skb后，并给dev)*/
 static int xsk_generic_xmit(struct sock *sk)
 {
 	int ret;
 
 	/* Drop the RCU lock since the SKB path might sleep. */
 	rcu_read_unlock();
+	/*通过描述符生成skb,并发送*/
 	ret = __xsk_generic_xmit(sk);
 	/* Reaquire RCU lock before going into common code. */
 	rcu_read_lock();
@@ -617,6 +651,7 @@ static int xsk_generic_xmit(struct sock *sk)
 	return ret;
 }
 
+/*是否跳过wakeup*/
 static bool xsk_no_wakeup(struct sock *sk)
 {
 #ifdef CONFIG_NET_RX_BUSY_POLL
@@ -633,6 +668,7 @@ static int xsk_check_common(struct xdp_sock *xs)
 	if (unlikely(!xsk_is_bound(xs)))
 		return -ENXIO;
 	if (unlikely(!(xs->dev->flags & IFF_UP)))
+		/*底层设备需要up*/
 		return -ENETDOWN;
 
 	return 0;
@@ -640,6 +676,7 @@ static int xsk_check_common(struct xdp_sock *xs)
 
 static int __xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len)
 {
+	/*用户态是否在等待*/
 	bool need_wait = !(m->msg_flags & MSG_DONTWAIT);
 	struct sock *sk = sock->sk;
 	struct xdp_sock *xs = xdp_sk(sk);
@@ -650,10 +687,13 @@ static int __xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len
 	if (err)
 		return err;
 	if (unlikely(need_wait))
+		/*当前不支持等待*/
 		return -EOPNOTSUPP;
 	if (unlikely(!xs->tx))
+		/*tx队列不存在，无法发送*/
 		return -ENOBUFS;
 
+	/*如果socket容许，则执行busy poll*/
 	if (sk_can_busy_loop(sk)) {
 		if (xs->zc)
 			__sk_mark_napi_id_once(sk, xsk_pool_get_napi_id(xs->pool));
@@ -666,7 +706,9 @@ static int __xsk_sendmsg(struct socket *sock, struct msghdr *m, size_t total_len
 	pool = xs->pool;
 	if (pool->cached_need_wakeup & XDP_WAKEUP_TX) {
 		if (xs->zc)
+			/*支持零copy情况下，唤醒设备执行tx*/
 			return xsk_wakeup(xs, XDP_WAKEUP_TX);
+		/*不支持零copy,走一般发送流程*/
 		return xsk_generic_xmit(sk);
 	}
 	return 0;
@@ -757,12 +799,13 @@ skip_tx:
 	return mask;
 }
 
-static int xsk_init_queue(u32 entries, struct xsk_queue **queue/*出参，返回创建好的队列*/,
-			  bool umem_queue)
+/*初始化xsk queue*/
+static int xsk_init_queue(u32 entries/*队列长度*/, struct xsk_queue **queue/*出参，返回创建好的队列*/,
+			  bool umem_queue/*是否为umem queue*/)
 {
 	struct xsk_queue *q;
 
-	//队列长度
+	//队列长度不得为0，且必须为2的N次幂
 	if (entries == 0 || *queue || !is_power_of_2(entries))
 		return -EINVAL;
 
@@ -872,6 +915,7 @@ static int xsk_release(struct socket *sock)
 	return 0;
 }
 
+/*通过fd取其对应的af_xdp socket*/
 static struct socket *xsk_lookup_xsk_from_fd(int fd)
 {
 	struct socket *sock;
@@ -905,7 +949,9 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 
 	if (addr_len < sizeof(struct sockaddr_xdp))
 		return -EINVAL;
+
 	if (sxdp->sxdp_family != AF_XDP)
+		/*socket必须为af_xdp*/
 		return -EINVAL;
 
 	/*当前支持的flags检查*/
@@ -916,24 +962,26 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 
 	rtnl_lock();
 	mutex_lock(&xs->mutex);
+	/*socket必须处于ready状态*/
 	if (xs->state != XSK_READY) {
 		err = -EBUSY;
 		goto out_release;
 	}
 
-	//取指定的设备
+	//通过ifindex获取要绑定的netdev
 	dev = dev_get_by_index(sock_net(sk), sxdp->sxdp_ifindex);
 	if (!dev) {
 		err = -ENODEV;
 		goto out_release;
 	}
 
+	/*绑定时，rx,tx队列必须已完成初始化*/
 	if (!xs->rx && !xs->tx) {
 		err = -EINVAL;
 		goto out_unlock;
 	}
 
-	//取关联的队列id
+	//取要关联的queue id
 	qid = sxdp->sxdp_queue_id;
 
 	if (flags & XDP_SHARED_UMEM) {
@@ -953,6 +1001,7 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 			goto out_unlock;
 		}
 
+		/*通过fd查找要share的af_xdp socket*/
 		sock = xsk_lookup_xsk_from_fd(sxdp->sxdp_shared_umem_fd);
 		if (IS_ERR(sock)) {
 			err = PTR_ERR(sock);
@@ -1020,12 +1069,13 @@ static int xsk_bind(struct socket *sock, struct sockaddr *addr, int addr_len)
 		goto out_unlock;
 	} else {
 		/* This xsk has its own umem. */
-		xs->pool = xp_create_and_assign_umem(xs, xs->umem);
+		xs->pool = xp_create_and_assign_umem(xs, xs->umem);/*创建pool*/
 		if (!xs->pool) {
 			err = -ENOMEM;
 			goto out_unlock;
 		}
 
+		/*将xs pool赋给netdev,这要求网卡驱动支持ndo_bpf接口*/
 		err = xp_assign_dev(xs->pool, dev, qid, flags);
 		if (err) {
 			xp_destroy(xs->pool);
@@ -1082,7 +1132,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	case XDP_RX_RING:
 	case XDP_TX_RING:
 	{
-		//XDP socket对应的RX,TX RING的设置
+		//创建XDP socket对应的RX,TX RING
 		struct xsk_queue **q;
 		int entries;
 
@@ -1092,17 +1142,18 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		if (copy_from_sockptr(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 
-		//socket必须处理ready状态
 		mutex_lock(&xs->mutex);
+		//socket必须处理ready状态
 		if (xs->state != XSK_READY) {
 			mutex_unlock(&xs->mutex);
 			return -EBUSY;
 		}
+		/*依据optname确认要初始化的queue类型*/
 		q = (optname == XDP_TX_RING) ? &xs->tx : &xs->rx;
-		err = xsk_init_queue(entries, q, false);
+		err = xsk_init_queue(entries, q, false/*由于创建的非umem queue,故传入false*/);
 		if (!err && optname == XDP_TX_RING)
 			/* Tx needs to be explicitly woken up the first time */
-			xs->tx->ring->flags |= XDP_RING_NEED_WAKEUP;
+			xs->tx->ring->flags |= XDP_RING_NEED_WAKEUP;/*指明tx需要被wakeup*/
 		mutex_unlock(&xs->mutex);
 		return err;
 	}
@@ -1114,8 +1165,10 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		struct xdp_umem *umem;
 
 		if (optlen < sizeof(struct xdp_umem_reg_v1))
+			/*提供的内容过短，报错*/
 			return -EINVAL;
 		else if (optlen < sizeof(mr))
+			/*提供的内容为v1版本的注册信息*/
 			mr_size = sizeof(struct xdp_umem_reg_v1);
 
 		//获取用户态传入的umem
@@ -1124,6 +1177,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 
 		mutex_lock(&xs->mutex);
 		if (xs->state != XSK_READY || xs->umem) {
+			/*必须在ready情况下配置，且xs->umem未初始化(重复注册）*/
 			mutex_unlock(&xs->mutex);
 			return -EBUSY;
 		}
@@ -1142,26 +1196,28 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 		return 0;
 	}
 	case XDP_UMEM_FILL_RING:
-	    //创建fq队列
+	    //创建 fill ring（与complete ring流程一致）
 	case XDP_UMEM_COMPLETION_RING:
 	{
-	    //创建cq队列
+	    //创建 complete ring
 		struct xsk_queue **q;
 		int entries;
 
-		/*取用户态传入的ring大小*/
+		/*取用户态传入的ring长度*/
 		if (copy_from_sockptr(&entries, optval, sizeof(entries)))
 			return -EFAULT;
 
 		mutex_lock(&xs->mutex);
 		if (xs->state != XSK_READY) {
+			/*socket必须处于ready状态*/
 			mutex_unlock(&xs->mutex);
 			return -EBUSY;
 		}
 
-		//按不同opt对应不同的xsk_queue
+		//按不同opt取对应的xsk_queue（fill ring与complte ring)
 		q = (optname == XDP_UMEM_FILL_RING) ? &xs->fq_tmp :
 			&xs->cq_tmp;
+
 		//初始化对应的umem_queue
 		err = xsk_init_queue(entries/*queue长度*/, q, true);
 		mutex_unlock(&xs->mutex);
@@ -1174,7 +1230,7 @@ static int xsk_setsockopt(struct socket *sock, int level, int optname,
 	return -ENOPROTOOPT;
 }
 
-//获取rxtx ring格式对应的指针offset
+//获取rxtx ring格式对应的各成员在内存中位置offset
 static void xsk_enter_rxtx_offsets(struct xdp_ring_offset_v1 *ring)
 {
 	ring->producer = offsetof(struct xdp_rxtx_ring, ptrs.producer);
@@ -1182,7 +1238,7 @@ static void xsk_enter_rxtx_offsets(struct xdp_ring_offset_v1 *ring)
 	ring->desc = offsetof(struct xdp_rxtx_ring, desc);
 }
 
-//获取umem ring格式对应的指针offset
+//获取umem ring格式对应的各成员在内存中位置offset
 static void xsk_enter_umem_offsets(struct xdp_ring_offset_v1 *ring)
 {
 	ring->producer = offsetof(struct xdp_umem_ring, ptrs.producer);
@@ -1255,19 +1311,22 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 	    //获取成员间offset，用于与kernel间数据结构对齐
 		struct xdp_mmap_offsets off;
 		struct xdp_mmap_offsets_v1 off_v1;
-		bool flags_supported = true;
+		bool flags_supported = true;/*出参内容中是否包含flags*/
 		void *to_copy;
 
 		if (len < sizeof(off_v1))
+			/*出参长度过小*/
 			return -EINVAL;
 		else if (len < sizeof(off))
+			/*出参长度采用的为v1版本，不包含flags*/
 			flags_supported = false;
 
 		if (flags_supported) {
 			/* xdp_ring_offset is identical to xdp_ring_offset_v1
 			 * except for the flags field added to the end.
 			 */
-		    //各ring 生产者，消费者，描述符的offset（rx,tx,fill ring,completion ring)
+		    //各ring结构体成员在内存中位置偏移量，例如生产者，消费者，描述符的offset
+			//由于rx,tx为xdp_rxtx_ring类型，fr,cr为xdp_umem_ring类型，故填充函数不同
 			xsk_enter_rxtx_offsets((struct xdp_ring_offset_v1 *)
 					       &off.rx);
 			xsk_enter_rxtx_offsets((struct xdp_ring_offset_v1 *)
@@ -1276,7 +1335,8 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 					       &off.fr);
 			xsk_enter_umem_offsets((struct xdp_ring_offset_v1 *)
 					       &off.cr);
-			//各ring的flags的offset
+
+			//填充各ring结构体flags成员在内存中位置的偏移量
 			off.rx.flags = offsetof(struct xdp_rxtx_ring,
 						ptrs.flags);
 			off.tx.flags = offsetof(struct xdp_rxtx_ring,
@@ -1299,6 +1359,7 @@ static int xsk_getsockopt(struct socket *sock, int level, int optname,
 			to_copy = &off_v1;
 		}
 
+		/*将填充结果返回给用户态*/
 		if (copy_to_user(optval, to_copy, len))
 			return -EFAULT;
 		if (put_user(len, optlen))
@@ -1345,7 +1406,7 @@ static int xsk_mmap(struct file *file, struct socket *sock,
 	if (READ_ONCE(xs->state) != XSK_READY)
 		return -EBUSY;
 
-	//区分当前是在映射哪个队列（rx,tx,umem的fq/cq)
+	//通过mmap的offset来区分当前是在映射哪个队列（rx,tx,fq,cq)
 	if (offset == XDP_PGOFF_RX_RING) {
 		q = READ_ONCE(xs->rx);
 	} else if (offset == XDP_PGOFF_TX_RING) {
@@ -1360,26 +1421,31 @@ static int xsk_mmap(struct file *file, struct socket *sock,
 	}
 
 	if (!q)
+		/*提供的offset有误，导致没有查找到对应的ring*/
 		return -EINVAL;
 
 	/* Matches the smp_wmb() in xsk_init_queue */
 	smp_rmb();
 	if (size > q->ring_vmalloc_size)
+		/*要求映射的内存超过实际申请的内存长度，报错*/
 		return -EINVAL;
 
-	/*完成ring的内存映射*/
+	/*完成对应ring的内存映射*/
 	return remap_vmalloc_range(vma, q->ring, 0);
 }
 
 static int xsk_notifier(struct notifier_block *this,
 			unsigned long msg, void *ptr)
 {
+	/*取产生事件的netdev*/
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	/*取此netdev对应的net ns*/
 	struct net *net = dev_net(dev);
 	struct sock *sk;
 
 	switch (msg) {
 	case NETDEV_UNREGISTER:
+		/*设备解注册时，如果存在与此设备关联的xdp socket,则将此socket置为dead状态*/
 		mutex_lock(&net->xdp.lock);
 		sk_for_each(sk, &net->xdp.list) {
 			struct xdp_sock *xs = xdp_sk(sk);
@@ -1414,20 +1480,25 @@ static const struct proto_ops xsk_proto_ops = {
 	.family		= PF_XDP,
 	.owner		= THIS_MODULE,
 	.release	= xsk_release,
+	/*实现接口队列与af_xdp socket绑定*/
 	.bind		= xsk_bind,
 	.connect	= sock_no_connect,
 	.socketpair	= sock_no_socketpair,
 	.accept		= sock_no_accept,
 	.getname	= sock_no_getname,
+	/*读写事件检测*/
 	.poll		= xsk_poll,
 	.ioctl		= sock_no_ioctl,
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
+	/*mr注册，ring创建等*/
 	.setsockopt	= xsk_setsockopt,
 	.getsockopt	= xsk_getsockopt,
+	/*通过write/send接口向外发送报文*/
 	.sendmsg	= xsk_sendmsg,
+	/*通过read,recv接口收取报文*/
 	.recvmsg	= xsk_recvmsg,
-	//实现ring的映射
+	//实现4种ring的内存映射（用于用户态ring轮询）
 	.mmap		= xsk_mmap,
 	.sendpage	= sock_no_sendpage,
 };
@@ -1453,10 +1524,11 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 	if (!ns_capable(net->user_ns, CAP_NET_RAW))
 		return -EPERM;
 
-	//仅支持raw格式
+	//当前仅支持type为raw的情况
 	if (sock->type != SOCK_RAW)
 		return -ESOCKTNOSUPPORT;
 
+	/*当前仅支持protocol为0的情况*/
 	if (protocol)
 		return -EPROTONOSUPPORT;
 
@@ -1466,7 +1538,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 	if (!sk)
 		return -ENOBUFS;
 
-	sock->ops = &xsk_proto_ops;
+	sock->ops = &xsk_proto_ops;/*指定socket对应的ops*/
 
 	sock_init_data(sock, sk);
 
@@ -1486,6 +1558,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 	spin_lock_init(&xs->map_list_lock);
 
 	mutex_lock(&net->xdp.lock);
+	/*将此socket挂接在net->xdp.list链表上*/
 	sk_add_node_rcu(sk, &net->xdp.list);
 	mutex_unlock(&net->xdp.lock);
 
@@ -1494,6 +1567,7 @@ static int xsk_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
+/*创建af_xdp对应的socket*/
 static const struct net_proto_family xsk_family_ops = {
 	.family = PF_XDP,
 	.create = xsk_create,
@@ -1513,6 +1587,7 @@ static int __net_init xsk_net_init(struct net *net)
 
 static void __net_exit xsk_net_exit(struct net *net)
 {
+	/*此net ns退出时，xpd list必定为空*/
 	WARN_ON_ONCE(!hlist_empty(&net->xdp.list));
 }
 
@@ -1538,10 +1613,12 @@ static int __init xsk_init(void)
 	if (err)
 		goto out_sk;
 
+	/*注册设备notifier，用于底层设备移除时，关闭xdp socket*/
 	err = register_netdevice_notifier(&xsk_netdev_notifier);
 	if (err)
 		goto out_pernet;
 
+	/*初始化xskmap_flush_list链表*/
 	for_each_possible_cpu(cpu)
 		INIT_LIST_HEAD(&per_cpu(xskmap_flush_list, cpu));
 	return 0;

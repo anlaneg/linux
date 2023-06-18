@@ -755,7 +755,7 @@ static void __tasklet_schedule_common(struct tasklet_struct *t,
 
 	local_irq_save(flags);
 	head = this_cpu_ptr(headp);
-	//将t加入到head队列的结尾
+	//将t加入到tasklet head队列的结尾
 	t->next = NULL;
 	*head->tail = t;
 	head->tail = &(t->next);

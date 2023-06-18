@@ -33,7 +33,7 @@ struct udp_port_cfg {
 	int			bind_ifindex;//要绑定的ifindex
 	unsigned int		use_udp_checksums:1,
 				use_udp6_tx_checksums:1,
-				use_udp6_rx_checksums:1,
+				use_udp6_rx_checksums:1,/*ipv6时rx是否需要udp checksum校验*/
 				ipv6_v6only:1;
 };
 

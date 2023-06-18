@@ -5,6 +5,7 @@
 #include <asm/page.h>
 #include <asm-generic/hugetlb.h>
 
+/*检查cpu是否支持大页*/
 #define hugepages_supported() boot_cpu_has(X86_FEATURE_PSE)
 
 #endif /* _ASM_X86_HUGETLB_H */

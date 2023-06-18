@@ -2530,6 +2530,7 @@ static int dev_uevent(const struct kobject *kobj, struct kobj_uevent_env *env)
 		}
 	}
 
+	/*设备类型添加到uevent（例如devtype=ARPHRD_ETHER)*/
 	if (dev->type && dev->type->name)
 		add_uevent_var(env, "DEVTYPE=%s", dev->type->name);
 
@@ -2615,6 +2616,7 @@ static ssize_t uevent_show(struct device *dev, struct device_attribute *attr,
 
 	/* copy keys to file */
 	for (i = 0; i < env->envp_idx; i++)
+		/*将内容复制到buffer用于用户态输出*/
 		len += sysfs_emit_at(buf, len, "%s\n", env->envp[i]);
 out:
 	kfree(env);
@@ -2635,6 +2637,7 @@ static ssize_t uevent_store(struct device *dev, struct device_attribute *attr,
 
 	return count;
 }
+/*定义uevent文件*/
 static DEVICE_ATTR_RW(uevent);
 
 static ssize_t online_show(struct device *dev, struct device_attribute *attr,

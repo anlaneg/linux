@@ -359,7 +359,7 @@ EXPORT_SYMBOL_GPL(cpu_subsys);
  *
  * Initialize and register the CPU device.
  */
-int register_cpu(struct cpu *cpu, int num)
+int register_cpu(struct cpu *cpu, int num/*要注册的cpu编号*/)
 {
 	int error;
 
@@ -374,6 +374,7 @@ int register_cpu(struct cpu *cpu, int num)
 	cpu->dev.groups = common_cpu_attr_groups;
 	if (cpu->hotpluggable)
 		cpu->dev.groups = hotplugable_cpu_attr_groups;
+	/*注册cpu设备*/
 	error = device_register(&cpu->dev);
 	if (error) {
 		put_device(&cpu->dev);

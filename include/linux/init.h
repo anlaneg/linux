@@ -318,7 +318,7 @@ struct obs_kernel_param {
  * Force the alignment so the compiler doesn't space elements of the
  * obs_kernel_param "array" too far apart in .init.setup.
  */
-#define __setup_param(str, unique_id, fn, early)			\
+#define __setup_param(str/*参数*/, unique_id/*变量唯一标识*/, fn/*处理函数*/, early)			\
 	/*记录kernel参数名称*/\
 	static const char __setup_str_##unique_id[] __initconst		\
 		__aligned(1) = str; 					\
@@ -333,7 +333,7 @@ struct obs_kernel_param {
  * and returns 0 if the option argument is "not handled".
  */
 #define __setup(str, fn)						\
-	__setup_param(str, fn, fn, 0)
+	__setup_param(str, fn/*用函数做唯一标识*/, fn, 0)
 
 /*
  * NOTE: @fn is as per module_param, not __setup!

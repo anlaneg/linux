@@ -275,7 +275,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 	if (rule->iifindex && (rule->iifindex != fl->flowi_iif))
 		goto out;
 
-	/*为什么会有出接口，出接口还未知呀？？？*/
+	/*为什么会有匹配出接口，出接口当前还未知呀？？？*/
 	if (rule->oifindex && (rule->oifindex != fl->flowi_oif))
 		goto out;
 

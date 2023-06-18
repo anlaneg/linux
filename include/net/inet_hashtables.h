@@ -163,7 +163,7 @@ struct inet_hashinfo {
 	 */
 	struct kmem_cache		*bind_bucket_cachep;
 	/* This bind table is hashed by local port */
-	struct inet_bind_hashbucket	*bhash;
+	struct inet_bind_hashbucket	*bhash;/*绑定表*/
 	struct kmem_cache		*bind2_bucket_cachep;
 	/* This bind table is hashed by local port and sk->sk_rcv_saddr (ipv4)
 	 * or sk->sk_v6_rcv_saddr (ipv6). This 2nd bind table is used

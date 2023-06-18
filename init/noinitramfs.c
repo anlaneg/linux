@@ -20,6 +20,7 @@ static int __init default_rootfs(void)
 	int err;
 
 	usermodehelper_enable();
+	/*初始化目录/dev*/
 	err = init_mkdir("/dev", 0755);
 	if (err < 0)
 		goto out;
@@ -29,6 +30,7 @@ static int __init default_rootfs(void)
 	if (err < 0)
 		goto out;
 
+	/*初始化目录/root*/
 	err = init_mkdir("/root", 0700);
 	if (err < 0)
 		goto out;

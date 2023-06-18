@@ -223,12 +223,14 @@ static int handle_create(const char *nodename, umode_t mode, kuid_t uid,
 
 	dentry = kern_path_create(AT_FDCWD, nodename, &path, 0);
 	if (dentry == ERR_PTR(-ENOENT)) {
+		/*此dentry不存在，创建它*/
 		create_path(nodename);
 		dentry = kern_path_create(AT_FDCWD, nodename, &path, 0);
 	}
 	if (IS_ERR(dentry))
 		return PTR_ERR(dentry);
 
+	/*dentry创建成功，调用vfs_mknode创建此文件*/
 	err = vfs_mknod(&nop_mnt_idmap, d_inode(path.dentry), dentry, mode,
 			dev->devt);
 	if (!err) {

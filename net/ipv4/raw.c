@@ -522,7 +522,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	 */
 
 	if (msg->msg_namelen) {
-	    /*取目的地址*/
+	    /*自msg中取目的地址*/
 		DECLARE_SOCKADDR(struct sockaddr_in *, usin, msg->msg_name);
 		err = -EINVAL;
 
@@ -546,6 +546,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 		 * IP_HDRINCL is much more convenient.
 		 */
 	} else {
+		/*自socket中提取目的地址*/
 		err = -EDESTADDRREQ;
 		if (sk->sk_state != TCP_ESTABLISHED)
 			goto out;
@@ -711,7 +712,7 @@ static void raw_destroy(struct sock *sk)
 static int raw_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
 	struct inet_sock *inet = inet_sk(sk);
-	struct sockaddr_in *addr = (struct sockaddr_in *) uaddr;
+	struct sockaddr_in *addr = (struct sockaddr_in *) uaddr;/*要绑定的地址*/
 	struct net *net = sock_net(sk);
 	u32 tb_id = RT_TABLE_LOCAL;
 	int ret = -EINVAL;
@@ -948,9 +949,9 @@ struct proto raw_prot = {
 	.init		   = raw_sk_init,
 	.setsockopt	   = raw_setsockopt,
 	.getsockopt	   = raw_getsockopt,
-	.sendmsg	   = raw_sendmsg,
-	.recvmsg	   = raw_recvmsg,
-	.bind		   = raw_bind,
+	.sendmsg	   = raw_sendmsg,/*raw socket发包*/
+	.recvmsg	   = raw_recvmsg,/*raw socket收包*/
+	.bind		   = raw_bind,/*绑定到指定地址/ip*/
 	.backlog_rcv	   = raw_rcv_skb,
 	.release_cb	   = ip4_datagram_release_cb,
 	.hash		   = raw_hash_sk,

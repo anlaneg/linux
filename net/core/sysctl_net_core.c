@@ -688,6 +688,7 @@ static struct ctl_table netns_core_table[] = {
 		.proc_handler	= proc_dointvec_minmax
 	},
 	{
+		/*设置rethink hash的默认行为*/
 		.procname	= "txrehash",
 		.data		= &init_net.core.sysctl_txrehash,
 		.maxlen		= sizeof(u8),

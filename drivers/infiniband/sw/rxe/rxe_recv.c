@@ -16,22 +16,26 @@ static int check_type_state(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 	unsigned int pkt_type;
 
 	if (unlikely(!qp->valid))
-		/*qp无效直接返回*/
+		/*qp无效,直接返回*/
 		return -EINVAL;
 
+	/*报文中高3位为pkt_type,取pkt_type*/
 	pkt_type = pkt->opcode & 0xe0;
 
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
+		/*rc时，pkt_type必须为rc*/
 		if (unlikely(pkt_type != IB_OPCODE_RC))
 			return -EINVAL;
 		break;
 	case IB_QPT_UC:
+		/*uc时，pkt_type必须为uc*/
 		if (unlikely(pkt_type != IB_OPCODE_UC))
 			return -EINVAL;
 		break;
 	case IB_QPT_UD:
 	case IB_QPT_GSI:
+		/*ud/gsi时，pkt_type必须为ud*/
 		if (unlikely(pkt_type != IB_OPCODE_UD))
 			return -EINVAL;
 		break;
@@ -39,6 +43,7 @@ static int check_type_state(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 		return -EINVAL;
 	}
 
+	/*qp状态检查*/
 	if (pkt->mask & RXE_REQ_MASK) {
 		if (unlikely(qp->resp.state != QP_STATE_READY))
 			return -EINVAL;
@@ -69,18 +74,21 @@ static int check_keys(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 		      u32 qpn, struct rxe_qp *qp)
 {
 	struct rxe_port *port = &rxe->port;
-	u16 pkey = bth_pkey(pkt);
+	u16 pkey = bth_pkey(pkt);/*取报文中使用的pkey*/
 
 	pkt->pkey_index = 0;
 
+	/*pkey的最低15位不为0x7fff时，报错*/
 	if (!pkey_match(pkey, IB_DEFAULT_PKEY_FULL)) {
 		set_bad_pkey_cntr(port);
 		return -EINVAL;
 	}
 
 	if (qp_type(qp) == IB_QPT_UD || qp_type(qp) == IB_QPT_GSI) {
+		/*ud,gsi情况下，取qkey*/
 		u32 qkey = (qpn == 1) ? GSI_QKEY : qp->attr.qkey;
 
+		/*deth头部中提供的qkey与qp不一致，报错*/
 		if (unlikely(deth_qkey(pkt) != qkey)) {
 			set_qkey_viol_cntr(port);
 			return -EINVAL;
@@ -95,26 +103,28 @@ static int check_addr(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 {
 	struct sk_buff *skb = PKT_TO_SKB(pkt);
 
+	/*非rc,uc的不检查addr*/
 	if (qp_type(qp) != IB_QPT_RC && qp_type(qp) != IB_QPT_UC)
 		return 0;
 
-	/*设备Port 校验*/
+	/*设备Port number 校验*/
 	if (unlikely(pkt->port_num != qp->attr.port_num))
 		return -EINVAL;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
-	    /*端目的ip校验*/
+	    /*ipv4端目的ip校验*/
 		struct in_addr *saddr =
 			&qp->pri_av.sgid_addr._sockaddr_in.sin_addr;
 		struct in_addr *daddr =
 			&qp->pri_av.dgid_addr._sockaddr_in.sin_addr;
 
+		/*报文中与qp中保存的地址不同，报错*/
 		if ((ip_hdr(skb)->daddr != saddr->s_addr) ||
 		    (ip_hdr(skb)->saddr != daddr->s_addr))
 			return -EINVAL;
 
 	} else if (skb->protocol == htons(ETH_P_IPV6)) {
-	    /*源目的ip校验*/
+	    /*ipv6源目的ip校验*/
 		struct in6_addr *saddr =
 			&qp->pri_av.sgid_addr._sockaddr_in6.sin6_addr;
 		struct in6_addr *daddr =
@@ -128,15 +138,17 @@ static int check_addr(struct rxe_dev *rxe, struct rxe_pkt_info *pkt,
 	return 0;
 }
 
+/*header检查，设置qp*/
 static int hdr_check(struct rxe_pkt_info *pkt)
 {
 	struct rxe_dev *rxe = pkt->rxe;
 	struct rxe_port *port = &rxe->port;
 	struct rxe_qp *qp = NULL;
-	u32 qpn = bth_qpn(pkt);
+	u32 qpn = bth_qpn(pkt);/*取报文中提明的qpn*/
 	int index;
 	int err;
 
+	/*transport版本号不符合，报错*/
 	if (unlikely(bth_tver(pkt) != BTH_TVER))
 		goto err1;
 
@@ -146,28 +158,34 @@ static int hdr_check(struct rxe_pkt_info *pkt)
 
 	/*非组播qpn情况处理*/
 	if (qpn != IB_MULTICAST_QPN) {
-		index = (qpn == 1) ? port->qp_gsi_index/*qpn为1情况下*/ : qpn;
+		/*qpn为1情况下，采用port->qp_gsi_index做为qpn,否则采用原始qpn*/
+		index = (qpn == 1) ? port->qp_gsi_index : qpn;
 
-		/*通过indexs查询对应的qp*/
+		/*通过index查询对应的qp*/
 		qp = rxe_pool_get_index(&rxe->qp_pool, index);
 		if (unlikely(!qp))
 			goto err1;
 
+		/*报文pkt_type字段检查，qp状态与pkt匹配检查*/
 		err = check_type_state(rxe, pkt, qp);
 		if (unlikely(err))
 			goto err2;
 
-		/*地址校验*/
+		/*源地址与目的地址校验*/
 		err = check_addr(rxe, pkt, qp);
 		if (unlikely(err))
 			goto err2;
 
+		/*pkey及qkey检验*/
 		err = check_keys(rxe, pkt, qpn, qp);
 		if (unlikely(err))
 			goto err2;
 	} else {
+		/*qpn为IB_MULTICAST_QPN时，报文mask必须有RXE_GRH_MASK标记*/
 		if (unlikely((pkt->mask & RXE_GRH_MASK) == 0))
 			goto err1;
+
+		/*注意此时qp为NULL*/
 	}
 
 	/*设置pkt对应的qp*/
@@ -180,13 +198,17 @@ err1:
 	return -EINVAL;
 }
 
+/*基本校验通过后，此函数用于收取roce报文*/
 static inline void rxe_rcv_pkt(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	if (pkt->mask & RXE_REQ_MASK)
-	    /*request报文，添加qp->req_pkts*/
+	    /*request类报文，添加报文至qp->req_pkts，
+	     * 触发qp->resp.task，即rxe_responder函数
+	     **/
 		rxe_resp_queue_pkt(pkt->qp, skb);
 	else
-	    /*response报文，添加qp->resp_pkts*/
+	    /*response类报文，添加报文至qp->resp_pkts，
+	     * 触发qp->comp.task，即rxe_completer函数*/
 		rxe_comp_queue_pkt(pkt->qp, skb);
 }
 
@@ -304,6 +326,7 @@ static int rxe_chk_dgid(struct rxe_dev *rxe, struct sk_buff *skb)
 		pdgid = (union ib_gid *)&ipv6_hdr(skb)->daddr;
 	}
 
+	/*pdgid为组播*/
 	if (rdma_is_multicast_addr((struct in6_addr *)pdgid))
 		return 0;
 
@@ -331,29 +354,32 @@ void rxe_rcv(struct sk_buff *skb)
 	if (rxe_chk_dgid(rxe, skb) < 0)
 		goto drop;
 
-	pkt->opcode = bth_opcode(pkt);
-	pkt->psn = bth_psn(pkt);
-	pkt->qp = NULL;
-	pkt->mask |= rxe_opcode[pkt->opcode].mask;
+	pkt->opcode = bth_opcode(pkt);/*取opcode*/
+	pkt->psn = bth_psn(pkt);/*取psn*/
+	pkt->qp = NULL;/*初始化此pkt对应的qp*/
+	pkt->mask |= rxe_opcode[pkt->opcode].mask;/*按opcode合入mask*/
 
 	if (unlikely(skb->len < header_size(pkt)))
-	    /*报文长度不足*/
+	    /*报文长度不足header*/
 		goto drop;
 
+	/*检查header*/
 	err = hdr_check(pkt);
 	if (unlikely(err))
 		goto drop;
 
+	/*icrc校验*/
 	err = rxe_icrc_check(skb, pkt);
 	if (unlikely(err))
 		goto drop;
 
-	rxe_counter_inc(rxe, RXE_CNT_RCVD_PKTS);
+	rxe_counter_inc(rxe, RXE_CNT_RCVD_PKTS);/*统计收到的报文数*/
 
 	if (unlikely(bth_qpn(pkt) == IB_MULTICAST_QPN))
 	    /*multicast_qpn类型*/
 		rxe_rcv_mcast_pkt(rxe, skb);
 	else
+		/*单播性qp报文收取*/
 		rxe_rcv_pkt(pkt, skb);
 
 	return;

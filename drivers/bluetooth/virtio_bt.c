@@ -364,6 +364,7 @@ static int virtbt_probe(struct virtio_device *vdev)
 	if (virtio_has_feature(vdev, VIRTIO_BT_F_AOSP_EXT))
 		hci_set_aosp_capable(hdev);
 
+	/*注册hci设备*/
 	if (hci_register_dev(hdev) < 0) {
 		hci_free_dev(hdev);
 		err = -EBUSY;
@@ -400,6 +401,7 @@ static void virtbt_remove(struct virtio_device *vdev)
 	kfree(vbt);
 }
 
+/*驱动支持的bt设备列表*/
 static struct virtio_device_id virtbt_table[] = {
 	{ VIRTIO_ID_BT, VIRTIO_DEV_ANY_ID },
 	{ 0 },
@@ -420,7 +422,7 @@ static struct virtio_driver virtbt_driver = {
 	.feature_table       = virtbt_features,
 	.feature_table_size  = ARRAY_SIZE(virtbt_features),
 	.id_table            = virtbt_table,
-	.probe               = virtbt_probe,
+	.probe               = virtbt_probe,/*驱动探测设备*/
 	.remove              = virtbt_remove,
 };
 

@@ -695,7 +695,7 @@ noinline void __ref rest_init(void)
 	 * the init task will end up wanting to create kthreads, which, if
 	 * we schedule it before we create kthreadd, will OOPS.
 	 */
-	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);
+	pid = user_mode_thread(kernel_init, NULL, CLONE_FS);/*创建第一个进程*/
 	/*
 	 * Pin init on the boot CPU. Task migration is not properly working
 	 * until sched_init_smp() has been run. It will set the allowed
@@ -1582,7 +1582,9 @@ static int __ref kernel_init(void *unused)
 			return 0;
 	}
 
-	/*在以下位置运行init进程*/
+	/*在以下位置尝试运行init进程,systemd可能被启动
+	 * lrwxrwxrwx 1 root root 20 Jul  8  2021 /sbin/init -> /lib/systemd/systemd
+	 * */
 	if (!try_to_run_init_process("/sbin/init") ||
 	    !try_to_run_init_process("/etc/init") ||
 	    !try_to_run_init_process("/bin/init") ||
@@ -1622,7 +1624,8 @@ static noinline void __init kernel_init_freeable(void)
 
 	smp_prepare_cpus(setup_max_cpus);
 
-	workqueue_init();//工作队列初始化
+	//工作队列初始化
+	workqueue_init();
 
 	init_mm_internals();
 

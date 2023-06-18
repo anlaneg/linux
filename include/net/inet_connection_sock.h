@@ -108,7 +108,7 @@ struct inet_connection_sock {
 	__u8			  icsk_ca_state:5,
 	/*指明拥塞算法是否已初始化*/
 				  icsk_ca_initialized:1,
-	/*是否设置了拥塞控制算法*/
+	/*是否通过setcockopt设置了拥塞控制算法*/
 				  icsk_ca_setsockopt:1,
 				  icsk_ca_dst_locked:1;
 	__u8			  icsk_retransmits;

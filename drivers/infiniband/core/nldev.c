@@ -1801,7 +1801,7 @@ static int nldev_dellink(struct sk_buff *skb, struct nlmsghdr *nlh,
 	return 0;
 }
 
-//取指定编号设备对应的chardev
+//取指定编号设备对应的chardev的信息
 static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 			     struct netlink_ext_ack *extack)
 {
@@ -1844,6 +1844,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
+	/*构造响应消息*/
 	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
 	if (!msg) {
 		err = -ENOMEM;
@@ -1859,6 +1860,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	data.nl_msg = msg;
+	/*添加client名称*/
 	err = ib_get_client_nl_info(ibdev, client_name, &data);
 	if (err)
 		goto out_nlmsg;
@@ -1868,10 +1870,13 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 				RDMA_NLDEV_ATTR_PAD);
 	if (err)
 		goto out_data;
+
+	/*添加abi版本*/
 	err = nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_CHARDEV_ABI, data.abi,
 				RDMA_NLDEV_ATTR_PAD);
 	if (err)
 		goto out_data;
+
 	/*对应字符设备的名称*/
 	if (nla_put_string(msg, RDMA_NLDEV_ATTR_CHARDEV_NAME,
 			   dev_name(data.cdev))) {

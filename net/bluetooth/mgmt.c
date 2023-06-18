@@ -355,6 +355,7 @@ static u8 le_addr_type(u8 mgmt_addr_type)
 		return ADDR_LE_DEV_RANDOM;
 }
 
+/*填充响应消息*/
 void mgmt_fill_version_info(void *ver)
 {
 	struct mgmt_rp_read_version *rp = ver;
@@ -372,6 +373,7 @@ static int read_version(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	mgmt_fill_version_info(&rp);
 
+	/*向此socket响应此response*/
 	return mgmt_cmd_complete(sk, MGMT_INDEX_NONE, MGMT_OP_READ_VERSION, 0,
 				 &rp, sizeof(rp));
 }
@@ -387,11 +389,11 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (hci_sock_test_flag(sk, HCI_SOCK_TRUSTED)) {
-		num_commands = ARRAY_SIZE(mgmt_commands);
-		num_events = ARRAY_SIZE(mgmt_events);
+		num_commands = ARRAY_SIZE(mgmt_commands);/*trusted模式支持的命令数*/
+		num_events = ARRAY_SIZE(mgmt_events);/*trusted模式支持的事件数*/
 	} else {
-		num_commands = ARRAY_SIZE(mgmt_untrusted_commands);
-		num_events = ARRAY_SIZE(mgmt_untrusted_events);
+		num_commands = ARRAY_SIZE(mgmt_untrusted_commands);/*untrusted模式支持的命令数*/
+		num_events = ARRAY_SIZE(mgmt_untrusted_events);/*untrusted模式支持的事件数*/
 	}
 
 	rp_size = sizeof(*rp) + ((num_commands + num_events) * sizeof(u16));
@@ -400,15 +402,17 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 	if (!rp)
 		return -ENOMEM;
 
-	rp->num_commands = cpu_to_le16(num_commands);
+	rp->num_commands = cpu_to_le16(num_commands);/*响应commands总数*/
 	rp->num_events = cpu_to_le16(num_events);
 
 	if (hci_sock_test_flag(sk, HCI_SOCK_TRUSTED)) {
 		__le16 *opcode = rp->opcodes;
 
+		/*响应各command对应的opcode*/
 		for (i = 0; i < num_commands; i++, opcode++)
 			put_unaligned_le16(mgmt_commands[i], opcode);
 
+		/*响应各event对应的opcode*/
 		for (i = 0; i < num_events; i++, opcode++)
 			put_unaligned_le16(mgmt_events[i], opcode);
 	} else {
@@ -947,6 +951,7 @@ static u32 get_current_settings(struct hci_dev *hdev)
 	return settings;
 }
 
+/*在controll channel上找opcode类型的未绝cmd*/
 static struct mgmt_pending_cmd *pending_find(u16 opcode, struct hci_dev *hdev)
 {
 	return mgmt_pending_find(HCI_CHANNEL_CONTROL, opcode, hdev);
@@ -1143,6 +1148,7 @@ static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 	hci_dev_set_flag(hdev, HCI_MGMT);
 }
 
+/*请求读取指定设备hdev的info信息*/
 static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 				void *data, u16 data_len)
 {
@@ -1156,6 +1162,7 @@ static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 
 	bacpy(&rp.bdaddr, &hdev->bdaddr);
 
+	/*此设备版本信息*/
 	rp.version = hdev->hci_ver;
 	rp.manufacturer = cpu_to_le16(hdev->manufacturer);
 
@@ -1164,6 +1171,7 @@ static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 
 	memcpy(rp.dev_class, hdev->dev_class, 3);
 
+	/*设备名称*/
 	memcpy(rp.name, hdev->dev_name, sizeof(hdev->dev_name));
 	memcpy(rp.short_name, hdev->short_name, sizeof(hdev->short_name));
 
@@ -1328,6 +1336,7 @@ static void mgmt_set_powered_complete(struct hci_dev *hdev, void *data, int err)
 
 	/* Make sure cmd still outstanding. */
 	if (cmd != pending_find(MGMT_OP_SET_POWERED, hdev))
+		/*取对应的cmd*/
 		return;
 
 	cp = cmd->param;
@@ -1354,6 +1363,7 @@ static void mgmt_set_powered_complete(struct hci_dev *hdev, void *data, int err)
 				mgmt_status(err));
 	}
 
+	/*自pending上移除*/
 	mgmt_pending_remove(cmd);
 }
 
@@ -1367,6 +1377,7 @@ static int set_powered_sync(struct hci_dev *hdev, void *data)
 	return hci_set_powered_sync(hdev, cp->val);
 }
 
+/*响应对powered的设置*/
 static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 		       u16 len)
 {
@@ -1377,28 +1388,34 @@ static int set_powered(struct sock *sk, struct hci_dev *hdev, void *data,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (cp->val != 0x00 && cp->val != 0x01)
+		/*只支持true/false两种情况*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_POWERED,
 				       MGMT_STATUS_INVALID_PARAMS);
 
 	hci_dev_lock(hdev);
 
+	/*此hdev已在set powered,响应busy*/
 	if (pending_find(MGMT_OP_SET_POWERED, hdev)) {
 		err = mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_POWERED,
 				      MGMT_STATUS_BUSY);
 		goto failed;
 	}
 
+	/*两者状态一致，响应已设置*/
 	if (!!cp->val == hdev_is_powered(hdev)) {
 		err = send_settings_rsp(sk, MGMT_OP_SET_POWERED, hdev);
 		goto failed;
 	}
 
+	/*将请求添加到hdev->mgmt_pending队列（仅记录要做的工作）*/
 	cmd = mgmt_pending_add(sk, MGMT_OP_SET_POWERED, hdev, data, len);
 	if (!cmd) {
 		err = -ENOMEM;
 		goto failed;
 	}
 
+	/*同步cmd入队，使set_powered_sync执行powered处理，
+	 * 使mgmt_set_powered_complete移除上述的mgmt_pending中对应的工作*/
 	err = hci_cmd_sync_queue(hdev, set_powered_sync, cmd,
 				 mgmt_set_powered_complete);
 
@@ -9241,17 +9258,21 @@ static int get_adv_size_info(struct sock *sk, struct hci_dev *hdev,
 
 static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ NULL }, /* 0x0000 (no command) */
+	/*mgmt版本号读取*/
 	{ read_version,            MGMT_READ_VERSION_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	/*返回支持的commands/events总数及对应的opcode读取*/
 	{ read_commands,           MGMT_READ_COMMANDS_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 	{ read_index_list,         MGMT_READ_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	/*请求读取指定设备的info信息*/
 	{ read_controller_info,    MGMT_READ_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED },
+						/*处理powered设置*/
 	{ set_powered,             MGMT_SETTING_SIZE },
 	{ set_discoverable,        MGMT_SET_DISCOVERABLE_SIZE },
 	{ set_connectable,         MGMT_SETTING_SIZE },
@@ -10531,15 +10552,17 @@ void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 	mgmt_event(MGMT_EV_CONTROLLER_RESUME, hdev, &ev, sizeof(ev), NULL);
 }
 
+/*control类型的channel*/
 static struct hci_mgmt_chan chan = {
 	.channel	= HCI_CHANNEL_CONTROL,
 	.handler_count	= ARRAY_SIZE(mgmt_handlers),
-	.handlers	= mgmt_handlers,
+	.handlers	= mgmt_handlers,/*各opcode对应的handler数组*/
 	.hdev_init	= mgmt_init_hdev,
 };
 
 int mgmt_init(void)
 {
+	/*注册control channel*/
 	return hci_mgmt_chan_register(&chan);
 }
 

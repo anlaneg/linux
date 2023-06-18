@@ -41,8 +41,11 @@ enum {
 
 	WORK_STRUCT_COLOR_BITS	= 4,
 
+	/*此标记指明，此work待执行*/
 	WORK_STRUCT_PENDING	= 1 << WORK_STRUCT_PENDING_BIT,
+	/*此标记指明，此work因为pwq上活跃的过多，而被存入inactive队列*/
 	WORK_STRUCT_INACTIVE	= 1 << WORK_STRUCT_INACTIVE_BIT,
+	/*此标记指明(work->data)中包含了pwq指针*/
 	WORK_STRUCT_PWQ		= 1 << WORK_STRUCT_PWQ_BIT,
 	WORK_STRUCT_LINKED	= 1 << WORK_STRUCT_LINKED_BIT,
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
@@ -76,6 +79,8 @@ enum {
 	 * indicate that no pool is associated.
 	 */
 	WORK_OFFQ_FLAG_BITS	= 1,
+	/*此指段指明（work->data）右移此位数后，即为worker pool id,
+	 * 可自worker_pool_idr中通过id查询获得worker pool*/
 	WORK_OFFQ_POOL_SHIFT	= WORK_OFFQ_FLAG_BASE + WORK_OFFQ_FLAG_BITS,
 	WORK_OFFQ_LEFT		= BITS_PER_LONG - WORK_OFFQ_POOL_SHIFT,
 	WORK_OFFQ_POOL_BITS	= WORK_OFFQ_LEFT <= 31 ? WORK_OFFQ_LEFT : 31,
@@ -138,7 +143,7 @@ struct workqueue_attrs {
 	/**
 	 * @cpumask: allowed CPUs
 	 */
-	cpumask_var_t cpumask;
+	cpumask_var_t cpumask;/*wq容许的cpu集合*/
 
 	/**
 	 * @no_numa: disable NUMA affinity
@@ -308,13 +313,14 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
  * Documentation/core-api/workqueue.rst.
  */
 enum {
-    //工作队列未绑定
+    //工作队列不绑定到任意cpu
 	WQ_UNBOUND		= 1 << 1, /* not bound to any cpu */
 	WQ_FREEZABLE		= 1 << 2, /* freeze during suspend */
 	WQ_MEM_RECLAIM		= 1 << 3, /* may be used for memory reclaim */
+	/*高优队列*/
 	WQ_HIGHPRI		= 1 << 4, /* high priority */
 	WQ_CPU_INTENSIVE	= 1 << 5, /* cpu intensive workqueue */
-	/*此工作队列将在sysfs中出现*/
+	/*有此标记，则此wq将在sysfs中出现*/
 	WQ_SYSFS		= 1 << 6, /* visible in sysfs, see workqueue_sysfs_register() */
 
 	/*
@@ -346,12 +352,16 @@ enum {
 
 	__WQ_DESTROYING		= 1 << 15, /* internal: workqueue is destroying */
 	__WQ_DRAINING		= 1 << 16, /* internal: workqueue is draining */
+	/*需要按序执行（如果无__WQ_ORDERED_EXPLICIT标记修饰，可能会被撤消）*/
 	__WQ_ORDERED		= 1 << 17, /* internal: workqueue is ordered */
 	__WQ_LEGACY		= 1 << 18, /* internal: create*_workqueue() */
+	/*显式指明按序执行*/
 	__WQ_ORDERED_EXPLICIT	= 1 << 19, /* internal: alloc_ordered_workqueue() */
 
+	/*最大容许的active数目*/
 	WQ_MAX_ACTIVE		= 512,	  /* I like 512, better ideas? */
 	WQ_MAX_UNBOUND_PER_CPU	= 4,	  /* 4 * #cpus for unbound wq */
+	/*默认的active数目*/
 	WQ_DFL_ACTIVE		= WQ_MAX_ACTIVE / 2,
 };
 
@@ -426,8 +436,9 @@ alloc_workqueue(const char *fmt, unsigned int flags, int max_active, ...);
  * Pointer to the allocated workqueue on success, %NULL on failure.
  */
 #define alloc_ordered_workqueue(fmt, flags, args...)			\
+	/*按序执行，且任意时间只有一个在执行*/\
 	alloc_workqueue(fmt, WQ_UNBOUND | __WQ_ORDERED |		\
-			__WQ_ORDERED_EXPLICIT | (flags), 1, ##args)
+			__WQ_ORDERED_EXPLICIT | (flags), 1/*最大活跃数为1*/, ##args)
 
 #define create_workqueue(name)						\
 	alloc_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, 1, (name))
@@ -435,7 +446,7 @@ alloc_workqueue(const char *fmt, unsigned int flags, int max_active, ...);
 	alloc_workqueue("%s", __WQ_LEGACY | WQ_FREEZABLE | WQ_UNBOUND |	\
 			WQ_MEM_RECLAIM, 1, (name))
 //创建单线程的workqueue
-#define create_singlethread_workqueue(name)				\
+#define create_singlethread_workqueue(name/*workqueue名称*/)				\
 	alloc_ordered_workqueue("%s", __WQ_LEGACY | WQ_MEM_RECLAIM, name)
 
 extern void destroy_workqueue(struct workqueue_struct *wq);
@@ -512,7 +523,7 @@ static inline bool queue_work(struct workqueue_struct *wq,
 			      struct work_struct *work)
 {
 	//将work入队到wq队列中，CPU未指定
-	return queue_work_on(WORK_CPU_UNBOUND, wq, work);
+	return queue_work_on(WORK_CPU_UNBOUND/*未绑定cpu*/, wq, work);
 }
 
 /**

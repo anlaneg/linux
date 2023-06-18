@@ -5772,8 +5772,9 @@ EXPORT_SYMBOL_GPL(skb_scrub_packet);
 static unsigned int skb_gso_transport_seglen(const struct sk_buff *skb)
 {
 	const struct skb_shared_info *shinfo = skb_shinfo(skb);
-	unsigned int thlen = 0;
+	unsigned int thlen = 0;/*传输层长度*/
 
+	/*获取传输层协议头长度*/
 	if (skb->encapsulation) {
 		thlen = skb_inner_transport_header(skb) -
 			skb_transport_header(skb);
@@ -5806,9 +5807,11 @@ static unsigned int skb_gso_transport_seglen(const struct sk_buff *skb)
  */
 static unsigned int skb_gso_network_seglen(const struct sk_buff *skb)
 {
+	/*网络层协议长度*/
 	unsigned int hdr_len = skb_transport_header(skb) -
 			       skb_network_header(skb);
 
+	/*加上下层传输层及总负载长度*/
 	return hdr_len + skb_gso_transport_seglen(skb);
 }
 
@@ -5881,6 +5884,7 @@ static inline bool skb_gso_size_check(const struct sk_buff *skb,
  */
 bool skb_gso_validate_network_len(const struct sk_buff *skb, unsigned int mtu)
 {
+	/*检查gso报文长度是否小于mtu*/
 	return skb_gso_size_check(skb, skb_gso_network_seglen(skb), mtu);
 }
 EXPORT_SYMBOL_GPL(skb_gso_validate_network_len);

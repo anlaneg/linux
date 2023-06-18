@@ -461,9 +461,10 @@ static int bpf_obj_do_pin(const char __user *pathname/*路径名*/, void *raw/*b
 	umode_t mode;
 	int ret;
 
-	/*创建pathname对应的dentry*/
+	/*查询此path对应的dentry*/
 	dentry = user_path_create(AT_FDCWD, pathname, &path, 0);
 	if (IS_ERR(dentry))
+		/*查询失败*/
 		return PTR_ERR(dentry);
 
 	mode = S_IFREG | ((S_IRUSR | S_IWUSR) & ~current_umask());
@@ -472,7 +473,7 @@ static int bpf_obj_do_pin(const char __user *pathname/*路径名*/, void *raw/*b
 	if (ret)
 		goto out;
 
-	/*目录必须使用bpf fs*/
+	/*path必须使用bpf fs，且必须为dir*/
 	dir = d_inode(path.dentry);
 	if (dir->i_op != &bpf_dir_iops) {
 		ret = -EPERM;

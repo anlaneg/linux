@@ -2191,16 +2191,18 @@ static inline u32 net_tx_rndhash(void)
 	return v ?: 1;
 }
 
+/*使用随机值做为txhash*/
 static inline void sk_set_txhash(struct sock *sk)
 {
 	/* This pairs with READ_ONCE() in skb_set_hash_from_sk() */
 	WRITE_ONCE(sk->sk_txhash, net_tx_rndhash());
 }
 
+/*重新更新txhash*/
 static inline bool sk_rethink_txhash(struct sock *sk)
 {
 	if (sk->sk_txhash && sk->sk_txrehash == SOCK_TXREHASH_ENABLED) {
-		sk_set_txhash(sk);
+		sk_set_txhash(sk);/*利用随机值设置sk_txhash*/
 		return true;
 	}
 	return false;
@@ -2462,6 +2464,7 @@ static inline void sock_poll_wait(struct file *filp, struct socket *sock,
 	}
 }
 
+/*自sk中提取txhash,并填充到skb*/
 static inline void skb_set_hash_from_sk(struct sk_buff *skb, struct sock *sk)
 {
 	/* This pairs with WRITE_ONCE() in sk_set_txhash() */

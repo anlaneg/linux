@@ -2058,7 +2058,7 @@ static int ib_uverbs_post_send(struct uverbs_attr_bundle *attrs)
 	if (!user_wr)
 		return -ENOMEM;
 
-	/*取对应的qp*/
+	/*取操作对应的qp*/
 	qp = uobj_get_obj_read(qp, UVERBS_OBJECT_QP, cmd.qp_handle, attrs);
 	if (!qp) {
 		ret = -EINVAL;
@@ -3736,11 +3736,12 @@ static int ib_uverbs_ex_modify_cq(struct uverbs_attr_bundle *attrs)
 					    sizeof(u64)),                      \
 	.write.req_size = sizeof(req)/*请求结构体大小*/, .write.resp_size = sizeof(resp)/*响应结构体大小*/
 
+/*无响应，仅指明请求结构体大小*/
 #define UAPI_DEF_WRITE_I(req) .write.req_size = sizeof(req)
 
 /*有udata的*/
 #define UAPI_DEF_WRITE_UDATA_IO(req, resp)                                     \
-	UAPI_DEF_WRITE_IO(req, resp),                                          \
+	UAPI_DEF_WRITE_IO(req, resp)/*需要响应，指明请求响应结构体大小*/,                                          \
 		.write.has_udata =                                             \
 			1 /*包含udata*/+                                                    \
 			BUILD_BUG_ON_ZERO(offsetof(req, driver_data) !=        \
@@ -3749,7 +3750,7 @@ static int ib_uverbs_ex_modify_cq(struct uverbs_attr_bundle *attrs)
 					  sizeof(resp))/*响应/请求大小等于driver_data之前大小*/
 
 #define UAPI_DEF_WRITE_UDATA_I(req)                                            \
-	UAPI_DEF_WRITE_I(req),                                                 \
+	UAPI_DEF_WRITE_I(req)/*不需要响应，仅指明请求结构体大小*/,                                                 \
 		.write.has_udata =                                             \
 			1 /*包含udata*/+ BUILD_BUG_ON_ZERO(offsetof(req, driver_data) !=    \
 					      sizeof(req))
@@ -3759,15 +3760,21 @@ static int ib_uverbs_ex_modify_cq(struct uverbs_attr_bundle *attrs)
  * to be specified. Buffers that do not include that member will be rejected.
  */
 #define UAPI_DEF_WRITE_IO_EX(req, req_last_member, resp, resp_last_member)     \
+	/*有响应，请求结构体及响应结构体大小以last_member成员偏移为准*/\
 	.write.has_resp = 1,                                                   \
 	.write.req_size = offsetofend(req, req_last_member),                   \
 	.write.resp_size = offsetofend(resp, resp_last_member)
 
 #define UAPI_DEF_WRITE_I_EX(req, req_last_member)                              \
+	/*无响应，请求结构体大小以last_member成员偏移为准*/\
 	.write.req_size = offsetofend(req, req_last_member)
 
-/*write 接口*/
+/*write 接口
+ * 定义了各object及其对应的cmd命令处理函数
+ * 并指明了这些cmd是否需要响应，请求及响应结构体大小
+ * */
 const struct uapi_definition uverbs_def_write_intf[] = {
+		/*ah object定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_AH,
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_CREATE_AH,
@@ -3782,6 +3789,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UAPI_DEF_OBJ_NEEDS_FN(create_user_ah),
 		UAPI_DEF_OBJ_NEEDS_FN(destroy_ah)),
 
+		/*comp channel obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_COMP_CHANNEL,
 		DECLARE_UVERBS_WRITE(
@@ -3791,6 +3799,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 				struct ib_uverbs_create_comp_channel,
 				struct ib_uverbs_create_comp_channel_resp))),
 
+	/*cq obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_CQ,
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_CREATE_CQ,
@@ -3836,6 +3845,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_I(struct ib_uverbs_ex_modify_cq),
 			UAPI_DEF_METHOD_NEEDS_FN(modify_cq))),
 
+			/*device obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_DEVICE,
 		/*通过write方式执行get_context函数*/
@@ -3849,7 +3859,6 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			ib_uverbs_query_device,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_device,
 					  struct ib_uverbs_query_device_resp)),
-			/*查询port的属性*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_QUERY_PORT,
 			ib_uverbs_query_port,
@@ -3868,6 +3877,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UAPI_DEF_OBJ_NEEDS_FN(alloc_ucontext),
 		UAPI_DEF_OBJ_NEEDS_FN(dealloc_ucontext)),
 
+		/*flow obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_FLOW,
 		DECLARE_UVERBS_WRITE_EX(
@@ -3884,6 +3894,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_I(struct ib_uverbs_destroy_flow),
 			UAPI_DEF_METHOD_NEEDS_FN(destroy_flow))),
 
+			/*mr obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_MR,
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_DEREG_MR,
@@ -3903,6 +3914,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 						struct ib_uverbs_rereg_mr_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(rereg_user_mr))),
 
+			/*mw obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_MW,
 		DECLARE_UVERBS_WRITE(
@@ -3917,6 +3929,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_I(struct ib_uverbs_dealloc_mw),
 			UAPI_DEF_METHOD_NEEDS_FN(dealloc_mw))),
 
+			/*pd object定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_PD,
 		DECLARE_UVERBS_WRITE(
@@ -3931,6 +3944,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_I(struct ib_uverbs_dealloc_pd),
 			UAPI_DEF_METHOD_NEEDS_FN(dealloc_pd))),
 
+			/*qp object定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_QP,
 		DECLARE_UVERBS_WRITE(
@@ -3969,7 +3983,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_post_recv,
 					  struct ib_uverbs_post_recv_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(post_recv)),
-			/*用户态准备完成，收到发送结束通知，调用post_send*/
+			/*用户态post_send数据准备完成，通过此cmd触发kernel处理*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_POST_SEND,
 			ib_uverbs_post_send,
@@ -3999,6 +4013,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 					     response_length),
 			UAPI_DEF_METHOD_NEEDS_FN(modify_qp))),
 
+			/*rwq_ind_tbl obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_RWQ_IND_TBL,
 		DECLARE_UVERBS_WRITE_EX(
@@ -4017,6 +4032,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 				struct ib_uverbs_ex_destroy_rwq_ind_table),
 			UAPI_DEF_METHOD_NEEDS_FN(destroy_rwq_ind_table))),
 
+			/*wq obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_WQ,
 		DECLARE_UVERBS_WRITE_EX(
@@ -4042,6 +4058,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 					    curr_wq_state),
 			UAPI_DEF_METHOD_NEEDS_FN(modify_wq))),
 
+			/*srq obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_SRQ,
 		DECLARE_UVERBS_WRITE(IB_USER_VERBS_CMD_CREATE_SRQ,
@@ -4080,6 +4097,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 					  struct ib_uverbs_query_srq_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(query_srq))),
 
+			/*xrcd obj定义*/
 	DECLARE_UVERBS_OBJECT(
 		UVERBS_OBJECT_XRCD,
 		DECLARE_UVERBS_WRITE(

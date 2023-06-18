@@ -839,7 +839,7 @@ typedef struct {
  * @sl: Name of the seqlock_t instance
  */
 #define DEFINE_SEQLOCK(sl) \
-		seqlock_t sl = __SEQLOCK_UNLOCKED(sl)
+		seqlock_t sl = __SEQLOCK_UNLOCKED(sl)/*定义seq lock*/
 
 /**
  * read_seqbegin() - start a seqlock_t read side critical section

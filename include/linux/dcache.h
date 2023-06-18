@@ -50,7 +50,7 @@ struct vfsmount;
 struct qstr {
 	union {
 		struct {
-		    //hash值及字符串长度
+		    //定义两个成员：hash值及字符串长度
 			HASH_LEN_DECLARE;
 		};
 		u64 hash_len;//hashcode+length
@@ -81,12 +81,14 @@ extern const struct qstr dotdot_name;
 
 #define d_lock	d_lockref.lock
 
-//定义目录项数据结构
+//定义dir entry数据结构（注意它并不只有目录才有dentry,link,file均有）
+// 用于反映名称与inode之间的关系
 struct dentry {
 	/* RCU lookup touched fields */
 	//看DCACHE_OP_*定义
 	unsigned int d_flags;		/* protected by d_lock */
 	seqcount_spinlock_t d_seq;	/* per dentry seqlock */
+	/*用于挂接到dentry_hashtable，用于查询*/
 	struct hlist_bl_node d_hash;	/* lookup hash list */
 	//指向父dentry
 	struct dentry *d_parent;	/* parent directory */
@@ -140,9 +142,10 @@ enum dentry_d_lock_class
 };
 
 struct dentry_operations {
+	/*用于校验dentry是否有效，返回>0表示有效，返回<0表示无效，返回0也表示无效，但需要多些操作*/
 	int (*d_revalidate)(struct dentry *, unsigned int);
 	int (*d_weak_revalidate)(struct dentry *, unsigned int);
-	/*计算dentry下对应name的hash值*/
+	/*计算dentry下对应name的hash值，结果填充到qstr中*/
 	int (*d_hash)(const struct dentry *, struct qstr *);
 	/*检查dentry是否与qstr相匹配*/
 	int (*d_compare)(const struct dentry *,
@@ -170,7 +173,7 @@ struct dentry_operations {
 /* d_flags entries */
 //标记有d_hash回调
 #define DCACHE_OP_HASH			0x00000001
-//标记有d_compare回调
+//标记有d_compare回调，需要采用此回调进行比对
 #define DCACHE_OP_COMPARE		0x00000002
 //标记有d_revalidate回调
 #define DCACHE_OP_REVALIDATE		0x00000004
@@ -194,7 +197,7 @@ struct dentry_operations {
 
 #define DCACHE_DONTCACHE		0x00000080 /* Purge from memory on final dput() */
 
-//dentry不能被挂载
+//指明此dentry不能被挂载
 #define DCACHE_CANT_MOUNT		0x00000100
 #define DCACHE_GENOCIDE			0x00000200
 #define DCACHE_SHRINK_LIST		0x00000400
@@ -211,6 +214,7 @@ struct dentry_operations {
 
 #define DCACHE_DENTRY_KILLED		0x00008000
 
+/*标记是一个挂载点*/
 #define DCACHE_MOUNTED			0x00010000 /* is a mountpoint */
 #define DCACHE_NEED_AUTOMOUNT		0x00020000 /* handle automount on this dir */
 #define DCACHE_MANAGE_TRANSIT		0x00040000 /* manage transit from this dirent */
@@ -364,6 +368,7 @@ static inline int d_unhashed(const struct dentry *dentry)
 
 static inline int d_unlinked(const struct dentry *dentry)
 {
+	/*dentry非root,且dentry已自hashtable中移除*/
 	return d_unhashed(dentry) && !IS_ROOT(dentry);
 }
 
@@ -373,6 +378,7 @@ static inline int cant_mount(const struct dentry *dentry)
 	return (dentry->d_flags & DCACHE_CANT_MOUNT);
 }
 
+/*设置标记，指明此dentry不能被mount*/
 static inline void dont_mount(struct dentry *dentry)
 {
 	spin_lock(&dentry->d_lock);
@@ -411,11 +417,13 @@ static inline bool d_mountpoint(const struct dentry *dentry)
  */
 static inline unsigned __d_entry_type(const struct dentry *dentry)
 {
+	/*返回此dentry的文件类型*/
 	return dentry->d_flags & DCACHE_ENTRY_TYPE;
 }
 
 static inline bool d_is_miss(const struct dentry *dentry)
 {
+	/*此dentry是否无类型*/
 	return __d_entry_type(dentry) == DCACHE_MISS_TYPE;
 }
 
@@ -447,17 +455,19 @@ static inline bool d_is_symlink(const struct dentry *dentry)
 	return __d_entry_type(dentry) == DCACHE_SYMLINK_TYPE;
 }
 
-//检查dentry是否为文件
+//检查此dentry是否为普通文件类型
 static inline bool d_is_reg(const struct dentry *dentry)
 {
 	return __d_entry_type(dentry) == DCACHE_REGULAR_TYPE;
 }
 
+//检查此dentry是否为special文件类型
 static inline bool d_is_special(const struct dentry *dentry)
 {
 	return __d_entry_type(dentry) == DCACHE_SPECIAL_TYPE;
 }
 
+/*检查此dentry是否为文件类型*/
 static inline bool d_is_file(const struct dentry *dentry)
 {
 	return d_is_reg(dentry) || d_is_special(dentry);
@@ -466,7 +476,7 @@ static inline bool d_is_file(const struct dentry *dentry)
 static inline bool d_is_negative(const struct dentry *dentry)
 {
 	// TODO: check d_is_whiteout(dentry) also.
-	return d_is_miss(dentry);
+	return d_is_miss(dentry);/*此dentry无设置类型*/
 }
 
 static inline bool d_flags_negative(unsigned flags)

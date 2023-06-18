@@ -126,9 +126,9 @@
 
 #define EMBEDDED_NAME_MAX	(PATH_MAX - offsetof(struct filename, iname))
 
-//依据用户空间传入的文件名称，构造filename
+//依据用户空间传入的文件/目录路径名称，构造filename
 struct filename *
-getname_flags(const char __user *filename/*文件路径名称*/, int flags, int *empty/*出参，文件路径名称是否为空*/)
+getname_flags(const char __user *filename/*路径名称*/, int flags, int *empty/*出参，文件路径名称是否为空*/)
 {
 	struct filename *result;
 	char *kname;
@@ -583,7 +583,7 @@ struct nameidata {
 	struct path	path;
 	//记录分析位置（为了避免在路径分析过程中传递分析点文件名称指针及长度）
 	struct qstr	last;
-	//记录根路径（１。为了避免'..'方式穿透根目录)
+	//记录根路径（１.为了避免'..'方式穿透根目录)
 	struct path	root;
 	//当前分析位置路径对应的inode
 	struct inode	*inode; /* path.dentry.d_inode */
@@ -611,6 +611,7 @@ struct nameidata {
 	umode_t		dir_mode;
 } __randomize_layout;
 
+/*标明提供了nameidata.root*/
 #define ND_ROOT_PRESET 1
 #define ND_ROOT_GRABBED 2
 #define ND_JUMPED 4
@@ -639,6 +640,7 @@ static inline void set_nameidata(struct nameidata *p, int dfd, struct filename *
 	__set_nameidata(p, dfd, name);
 	p->state = 0;
 	if (unlikely(root)) {
+		/*提供了root*/
 		p->state = ND_ROOT_PRESET;
 		p->root = *root;
 	}
@@ -886,8 +888,10 @@ out_dput:
 static inline int d_revalidate(struct dentry *dentry, unsigned int flags)
 {
 	if (unlikely(dentry->d_flags & DCACHE_OP_REVALIDATE))
+		/*指明需要op revalidate,调用相应回调*/
 		return dentry->d_op->d_revalidate(dentry, flags);
 	else
+		/*默认有效*/
 		return 1;
 }
 
@@ -959,7 +963,7 @@ static int complete_walk(struct nameidata *nd)
 //利用current->fs->root填充nd->root
 static int set_root(struct nameidata *nd)
 {
-	struct fs_struct *fs = current->fs;
+	struct fs_struct *fs = current->fs;/*取当前进程的fs*/
 
 	/*
 	 * Jumping to the real root in a scoped-lookup is a BUG in namei, but we
@@ -1603,9 +1607,11 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 {
 	struct dentry *dentry = d_lookup(dir, name);
 	if (dentry) {
+		/*查询dentry成功，对其进行校验*/
 		int error = d_revalidate(dentry, flags);
 		if (unlikely(error <= 0)) {
 			if (!error)
+				/*校验失败，对此dentry进行无效处理*/
 				d_invalidate(dentry);
 			dput(dentry);
 			return ERR_PTR(error);
@@ -1624,22 +1630,27 @@ static struct dentry *lookup_dcache(const struct qstr *name,
 static struct dentry *__lookup_hash(const struct qstr *name,
 		struct dentry *base, unsigned int flags)
 {
+	/*在base dentry下执行dentry查询*/
 	struct dentry *dentry = lookup_dcache(name, base, flags);
 	struct dentry *old;
 	struct inode *dir = base->d_inode;
 
 	if (dentry)
+		/*查询dentry成功，返回*/
 		return dentry;
 
 	/* Don't create child dentry for a dead directory. */
 	if (unlikely(IS_DEADDIR(dir)))
 		return ERR_PTR(-ENOENT);
 
+	/*未查询到，并申请dentry,在dir node下进行查询*/
 	dentry = d_alloc(base, name);
 	if (unlikely(!dentry))
 		return ERR_PTR(-ENOMEM);
 
-	/*在给定的目录下dir，查找对应的dentry(仅有名称），返回其对应的dentry*/
+	/*在给定的目录下dir，查找对应的dentry(仅有名称），返回其对应的dentry
+	 * %框架居然还要求此函数中完成dentry向table中的添加动作（至少改个名称嘛）。
+	 * */
 	old = dir->i_op->lookup(dir, dentry, flags);
 	if (unlikely(old)) {
 		dput(dentry);/*释放查询用的空间*/
@@ -1690,9 +1701,11 @@ static struct dentry *lookup_fast(struct nameidata *nd)
 		if (unlikely(!dentry))
 			//没有查找到，返回0
 			return NULL;
+		/*校验此dentry*/
 		status = d_revalidate(dentry, nd->flags);
 	}
 	if (unlikely(status <= 0)) {
+		/*校验后认识此dentry状态有误*/
 		if (!status)
 			d_invalidate(dentry);
 		dput(dentry);
@@ -2347,17 +2360,17 @@ static int link_path_walk(const char *name, struct nameidata *nd)
 		hash_len = hash_name(nd->path.dentry, name);
 
 		type = LAST_NORM;
-		//通过名称及长度，区分　隐藏文件，'..'文件，'.'文件
+		//通过名称及长度，区分'..'文件，'.'文件，普通文件三种情况
 		if (name[0] == '.'/*文件名称首字符为'.'*/) switch (hashlen_len(hash_len)) {
 			case 2:
-				//文件长度为2，且name[1]='.',即本层名称为'..'
 				if (name[1] == '.') {
+					//文件长度为2，且name[0/1]='.',即本层名称为'..'
 					type = LAST_DOTDOT;
 					nd->state |= ND_JUMPED;
 				}
 				break;
 			case 1:
-				//本层名称为'.'
+				//文件名长度为1，且name[0]='.',即本层名称为'.'
 				type = LAST_DOT;
 		}
 
@@ -2439,11 +2452,11 @@ OK:
 }
 
 /* must be paired with terminate_walk() */
-//初始化nd,设置nd对应的root,path
+//初始化nd,设置nd对应的root,path(此时path与root一致）
 static const char *path_init(struct nameidata *nd, unsigned flags)
 {
 	int error;
-	//取文件路径名称
+	//取路径名称
 	const char *s = nd->name->name;
 
 	/* LOOKUP_CACHED requires RCU, ask caller to retry */
@@ -2490,13 +2503,14 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 
 	/* Absolute pathname -- fetch the root (LOOKUP_IN_ROOT uses nd->dfd). */
 	if (*s == '/' && !(flags & LOOKUP_IN_ROOT)) {
-		//文件路径名称给出的是绝对路径，设置当前进程fs->root为nd->root
+		//文件路径名称给出的是绝对路径，设置当前进程fs->root为nd->root,设置nd->path
 		error = nd_jump_root(nd);
 		if (unlikely(error))
 			return ERR_PTR(error);
 		return s;
 	}
 
+	/*通过相对路径，确定root*/
 	/* Relative pathname -- get the starting-point it is relative to. */
 	if (nd->dfd == AT_FDCWD) {
 		//文件路径名称给出的是相对路径，且相对于当前工作目录，则进入
@@ -2617,15 +2631,17 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 	return err;
 }
 
-int filename_lookup(int dfd, struct filename *name, unsigned flags,
-		    struct path *path, struct path *root/*指定的root path*/)
+int filename_lookup(int dfd/*位置信息*/, struct filename *name/*路径名称*/, unsigned flags,
+		    struct path *path/*出参，确定路径对应的dentry*/, struct path *root/*指定的root path*/)
 {
 	int retval;
 	struct nameidata nd;
 	if (IS_ERR(name))
 		return PTR_ERR(name);
+
 	//设置当前进程的nameidata(设置要查询的路径及其相对的目录fd)
 	set_nameidata(&nd, dfd, name, root);
+
 	//确认(dfd,name)对应的path
 	retval = path_lookupat(&nd, flags | LOOKUP_RCU, path);
 	if (unlikely(retval == -ECHILD))
@@ -2999,12 +3015,12 @@ int path_pts(struct path *path)
 }
 #endif
 
-//name 目录字符串，获得其对应的path
-int user_path_at_empty(int dfd, const char __user *name/*路径名称*/, unsigned flags,
+//name为路径名称字符串，获得其对应的path
+int user_path_at_empty(int dfd/*位置信息*/, const char __user *name/*路径名称*/, unsigned flags,
 		 struct path *path/*出参，确定路径对应的dentry*/, int *empty)
 {
 	struct filename *filename = getname_flags(name, flags, empty);
-	int ret = filename_lookup(dfd, filename, flags, path, NULL);
+	int ret = filename_lookup(dfd, filename, flags, path, NULL/*不提供root path*/);
 
 	putname(filename);
 	return ret;
@@ -3239,12 +3255,14 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 		return error;
 
 	if (!dir->i_op->create)
+		/*必须提供create回调*/
 		return -EACCES;	/* shouldn't it be ENOSYS? */
 
 	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG);
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
+	/*调用回调，完成普通文件创建*/
 	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
 	if (!error)
 		fsnotify_create(dir, dentry);
@@ -3453,7 +3471,9 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 				  bool got_write)
 {
 	struct mnt_idmap *idmap;
+	/*父目录*/
 	struct dentry *dir = nd->path.dentry;
+	/*父目录对应的inode*/
 	struct inode *dir_inode = dir->d_inode;
 	int open_flag = op->open_flag;
 	struct dentry *dentry;
@@ -3469,12 +3489,13 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
 		if (!dentry) {
-			//nd->last指出的文件不存在，创建此文件
+			//nd->last不存在，创建dentry
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
 			if (IS_ERR(dentry))
 				return dentry;
 		}
 		if (d_in_lookup(dentry))
+			/*查询中状态，退出*/
 			break;
 
 		error = d_revalidate(dentry, nd->flags);
@@ -3567,6 +3588,7 @@ out_dput:
 static const char *open_last_lookups(struct nameidata *nd,
 		   struct file *file, const struct open_flags *op)
 {
+	/*取目录对应的dentry*/
 	struct dentry *dir = nd->path.dentry;
 	int open_flag = op->open_flag;
 	bool got_write = false;
@@ -3618,7 +3640,7 @@ static const char *open_last_lookups(struct nameidata *nd,
 		inode_lock(dir->d_inode);
 	else
 		inode_lock_shared(dir->d_inode);
-	/*查询文件对应的dentry*/
+	/*查询文件对应的dentry,如果其不存在，则创建*/
 	dentry = lookup_open(nd, file, op, got_write);
 	if (!IS_ERR(dentry) && (file->f_mode & FMODE_CREATED))
 		fsnotify_create(dir->d_inode, dentry);
@@ -3695,6 +3717,7 @@ static int do_open(struct nameidata *nd,
 	}
 	error = may_open(idmap, &nd->path, acc_mode, open_flag);
 	if (!error && !(file->f_mode & FMODE_OPENED))
+		/*调用vfs_open*/
 		error = vfs_open(&nd->path, file);
 	if (!error)
 		error = ima_file_check(file, op->acc_mode);
@@ -3846,15 +3869,16 @@ static struct file *path_openat(struct nameidata *nd,
 		//创建临时文件
 		error = do_tmpfile(nd, flags, op, file);
 	} else if (unlikely(file->f_flags & O_PATH)) {
+		/*有o_path标记的open*/
 		error = do_o_path(nd, flags, file);
 	} else {
 		//初始化nd,返回路径名称
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&//先解决父目录的解析
-		       (s = open_last_lookups(nd, file, op)) != NULL)//再通过do_last解决具体文件的解析
+		       (s = open_last_lookups(nd, file, op)/*如果last不存在，则会被创建*/) != NULL)//再通过do_last解决具体文件的解析
 			;
 		if (!error)
-		    /*执行文件打开*/
+		    /*具体执行文件打开（不考虑创建）*/
 			error = do_open(nd, file, op);
 		terminate_walk(nd);
 	}
@@ -3951,12 +3975,14 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	if (last.name[last.len] && !want_dir)
 		create_flags = 0;
 	inode_lock_nested(path->dentry->d_inode, I_MUTEX_PARENT);
+	/*查询last对应的dentry,如果不存在，则创建dentry（此函数还会加入到dcache表）*/
 	dentry = __lookup_hash(&last, path->dentry, reval_flag | create_flags);
 	if (IS_ERR(dentry))
 		goto unlock;
 
 	error = -EEXIST;
 	if (d_is_positive(dentry))
+		/*此dentry有明确的文件类型，不需要创建*/
 		goto fail;
 
 	/*
@@ -3966,6 +3992,7 @@ static struct dentry *filename_create(int dfd, struct filename *name,
 	 * been asking for (non-existent) directory. -ENOENT for you.
 	 */
 	if (unlikely(!create_flags)) {
+		/*此dentry不确在，但未指明create标记，返回no ent*/
 		error = -ENOENT;
 		goto fail;
 	}
@@ -4170,6 +4197,7 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 		return error;
 
 	if (!dir->i_op->mkdir)
+		/*必须有mkdir回调*/
 		return -EPERM;
 
 	mode = vfs_prepare_mode(idmap, dir, mode, S_IRWXUGO | S_ISVTX, 0);
@@ -4180,6 +4208,7 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		return -EMLINK;
 
+	/*采用mkdir创建对应目录*/
 	error = dir->i_op->mkdir(idmap, dir, dentry, mode);
 	if (!error)
 		fsnotify_mkdir(dir, dentry);
@@ -4203,8 +4232,8 @@ retry:
 	error = security_path_mkdir(&path, dentry,
 			mode_strip_umask(path.dentry->d_inode, mode));
 	if (!error) {
-		error = vfs_mkdir(mnt_idmap(path.mnt), path.dentry->d_inode,
-				  dentry, mode);
+		error = vfs_mkdir(mnt_idmap(path.mnt), path.dentry->d_inode/*父目录对应的inode*/,
+				  dentry/*父目录对应的dentry*/, mode);
 	}
 	done_path_create(&path, dentry);
 	if (retry_estale(error, lookup_flags)) {

@@ -2471,7 +2471,7 @@ bool __mpol_equal(struct mempolicy *a, struct mempolicy *b)
 static struct sp_node *
 sp_lookup(struct shared_policy *sp, unsigned long start, unsigned long end)
 {
-	struct rb_node *n = sp->root.rb_node;
+	struct rb_node *n = sp->root.rb_node;/*取根节点*/
 
 	while (n) {
 		struct sp_node *p = rb_entry(n, struct sp_node, nd);
@@ -2481,9 +2481,11 @@ sp_lookup(struct shared_policy *sp, unsigned long start, unsigned long end)
 		else if (end <= p->start)
 			n = n->rb_left;
 		else
+			/*遇到恰好在此范围的，退出*/
 			break;
 	}
 	if (!n)
+		/*没到找到，返回NULL*/
 		return NULL;
 	for (;;) {
 		struct sp_node *w = NULL;
@@ -2534,6 +2536,7 @@ mpol_shared_policy_lookup(struct shared_policy *sp, unsigned long idx)
 	if (!sp->root.rb_node)
 		return NULL;
 	read_lock(&sp->lock);
+	/*查询获取mempolicy*/
 	sn = sp_lookup(sp, idx, idx+1);
 	if (sn) {
 		mpol_get(sn->policy);

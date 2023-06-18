@@ -38,7 +38,7 @@ static void do_task(struct tasklet_struct *t)
 	spin_lock_bh(&task->lock);
 	switch (task->state) {
 	case TASK_STATE_START:
-	    /*start转busy状态*/
+	    /*加锁进入后，由start转busy状态，此状态直接运行回调*/
 		task->state = TASK_STATE_BUSY;
 		spin_unlock_bh(&task->lock);
 		break;
@@ -48,11 +48,12 @@ static void do_task(struct tasklet_struct *t)
 		task->state = TASK_STATE_ARMED;
 		fallthrough;
 	case TASK_STATE_ARMED:
-	    	/*armed状态情况，函数返回*/
+	    /*armed状态情况，函数返回*/
 		spin_unlock_bh(&task->lock);
 		return;
 
 	default:
+		/*错误的状态*/
 		spin_unlock_bh(&task->lock);
 		rxe_dbg_qp(qp, "failed with bad state %d\n", task->state);
 		return;
@@ -63,18 +64,21 @@ static void do_task(struct tasklet_struct *t)
 		/*执行此task任务*/
 		ret = task->func(task->arg);
 
+		/*用行完task任务，加锁检查状态，防止重入*/
 		spin_lock_bh(&task->lock);
 		switch (task->state) {
 		case TASK_STATE_BUSY:
 			if (ret) {
-				/*func返回非0，状态由busy->start*/
+				/*func返回非0，状态由busy->start（还原为start)，放弃运行*/
 				task->state = TASK_STATE_START;
 			} else if (iterations--) {
+				/*未达到重复次数上限，继续运行*/
 				cont = 1;
 			} else {
 				/* reschedule the tasklet and exit
 				 * the loop to give up the cpu
 				 */
+				/*已达到重复运行上限，状态置为start，放弃运行*/
 				tasklet_schedule(&task->tasklet);
 				task->state = TASK_STATE_START;
 			}
@@ -85,11 +89,14 @@ static void do_task(struct tasklet_struct *t)
 		 * return value
 		 */
 		case TASK_STATE_ARMED:
+			/*我们在执行task时，此函数重入了
+			 * (但当时用户并未真实执行，故加一次），还原为busy，继续运行（返回值被忽略）*/
 			task->state = TASK_STATE_BUSY;
 			cont = 1;
 			break;
 
 		default:
+			/*错误的状态*/
 			rxe_dbg_qp(qp, "failed with bad state %d\n",
 					task->state);
 		}
@@ -133,11 +140,13 @@ void rxe_cleanup_task(struct rxe_task *task)
 	tasklet_kill(&task->tasklet);
 }
 
+/*直接运行此task*/
 void rxe_run_task(struct rxe_task *task)
 {
 	if (task->destroyed)
 		return;
 
+	/*尝试运行此task*/
 	do_task(&task->tasklet);
 }
 
@@ -146,7 +155,7 @@ void rxe_sched_task(struct rxe_task *task)
 	if (task->destroyed)
 		return;
 
-	tasklet_schedule(&task->tasklet);
+	tasklet_schedule(&task->tasklet);/*触发此tasklet,使其待运行*/
 }
 
 void rxe_disable_task(struct rxe_task *task)

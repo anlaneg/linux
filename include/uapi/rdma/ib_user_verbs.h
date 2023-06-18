@@ -155,6 +155,7 @@ struct ib_uverbs_cq_moderation_caps {
 #define IB_USER_VERBS_CMD_COMMAND_MASK 0xff
 #define IB_USER_VERBS_CMD_FLAG_EXTENDED 0x80000000u
 
+/*uverbs命令共公头部结构*/
 struct ib_uverbs_cmd_hdr {
 	__u32 command;
 	__u16 in_words;
@@ -786,6 +787,7 @@ struct ib_uverbs_sge {
 	__u32 lkey;
 };
 
+/*uverbs支持以下wr opcode*/
 enum ib_uverbs_wr_opcode {
 	IB_UVERBS_WR_RDMA_WRITE = 0,
 	IB_UVERBS_WR_RDMA_WRITE_WITH_IMM = 1,
@@ -838,7 +840,7 @@ struct ib_uverbs_send_wr {
 };
 
 struct ib_uverbs_post_send {
-	__aligned_u64 response;
+	__aligned_u64 response;/*响应结构体指针*/
 	__u32 qp_handle;
 	__u32 wr_count;/*写了多少个wr*/
 	__u32 sge_count;

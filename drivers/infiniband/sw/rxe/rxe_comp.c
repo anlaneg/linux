@@ -112,6 +112,7 @@ static enum ib_wc_opcode wr_to_wc_opcode(enum ib_wr_opcode opcode)
 	}
 }
 
+/*重传定时器被触发*/
 void retransmit_timer(struct timer_list *t)
 {
 	struct rxe_qp *qp = from_timer(qp, t, retrans_timer);
@@ -119,7 +120,7 @@ void retransmit_timer(struct timer_list *t)
 	rxe_dbg_qp(qp, "retransmit timer fired\n");
 
 	if (qp->valid) {
-		qp->comp.timeout = 1;
+		qp->comp.timeout = 1;/*标记timeout*/
 		rxe_sched_task(&qp->comp.task);
 	}
 }
@@ -129,10 +130,12 @@ void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 {
 	int must_sched;
 
-	skb_queue_tail(&qp->resp_pkts, skb);
+	skb_queue_tail(&qp->resp_pkts, skb);/*报文入队*/
 
+	/*队列长度大于1，则需要调度（保证前面的报文先处理）*/
 	must_sched = skb_queue_len(&qp->resp_pkts) > 1;
 	if (must_sched != 0)
+		/*complete调度统计增加*/
 		rxe_counter_inc(SKB_TO_PKT(skb)->rxe, RXE_CNT_COMPLETER_SCHED);
 
 	if (must_sched)
@@ -574,7 +577,7 @@ static void free_pkt(struct rxe_pkt_info *pkt)
 	ib_device_put(dev);
 }
 
-/*completer任务处理函数，例如：发送完成*/
+/*处理响应类报文；completer任务处理函数，例如：发送完成*/
 int rxe_completer(void *arg)
 {
 	struct rxe_qp *qp = (struct rxe_qp *)arg;

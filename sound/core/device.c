@@ -42,7 +42,7 @@ int snd_device_new(struct snd_card *card, enum snd_device_type type,
 	dev->type = type;
 	dev->state = SNDRV_DEV_BUILD;
 	dev->device_data = device_data;
-	dev->ops = ops;
+	dev->ops = ops;/*声卡函数操作集*/
 
 	/* insert the entry in an incrementally sorted list */
 	list_for_each_prev(p, &card->devices) {

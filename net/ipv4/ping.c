@@ -59,7 +59,7 @@ struct ping_table {
 	spinlock_t		lock;
 };
 
-static struct ping_table ping_table;
+static struct ping_table ping_table;/*ping对应的socket列表*/
 struct pingv6_ops pingv6_ops;
 EXPORT_SYMBOL_GPL(pingv6_ops);
 
@@ -80,6 +80,7 @@ static inline struct hlist_nulls_head *ping_hashslot(struct ping_table *table,
 	return &table->hash[ping_hashfn(net, num, PING_HTABLE_MASK)];
 }
 
+/*为ping分配一个id*/
 int ping_get_port(struct sock *sk, unsigned short ident)
 {
 	struct hlist_nulls_node *node;
@@ -90,6 +91,7 @@ int ping_get_port(struct sock *sk, unsigned short ident)
 	isk = inet_sk(sk);
 	spin_lock(&ping_table.lock);
 	if (ident == 0) {
+		/*自动分配一个id*/
 		u32 i;
 		u16 result = ping_port_rover + 1;
 
@@ -98,15 +100,17 @@ int ping_get_port(struct sock *sk, unsigned short ident)
 				result++; /* avoid zero */
 			hlist = ping_hashslot(&ping_table, sock_net(sk),
 					    result);
+			/*遍历此桶，检查result对应的id是否已分配*/
 			ping_portaddr_for_each_entry(sk2, node, hlist) {
 				isk2 = inet_sk(sk2);
 
 				if (isk2->inet_num == result)
+					/*确认已分配，尝试下一个*/
 					goto next_port;
 			}
 
 			/* found */
-			ping_port_rover = ident = result;
+			ping_port_rover = ident = result;/*确认一个空闲的port*/
 			break;
 next_port:
 			;
@@ -114,6 +118,7 @@ next_port:
 		if (i >= (1L << 16))
 			goto fail;
 	} else {
+		/*使用指定的id*/
 		hlist = ping_hashslot(&ping_table, sock_net(sk), ident);
 		ping_portaddr_for_each_entry(sk2, node, hlist) {
 			isk2 = inet_sk(sk2);
@@ -130,7 +135,7 @@ next_port:
 	}
 
 	pr_debug("found port/ident = %d\n", ident);
-	isk->inet_num = ident;
+	isk->inet_num = ident;/*设置分配的icmp id*/
 	if (sk_unhashed(sk)) {
 		pr_debug("was not hashed\n");
 		sock_hold(sk);
@@ -175,6 +180,7 @@ EXPORT_SYMBOL_GPL(ping_unhash);
 /* Called under rcu_read_lock() */
 static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident/*ping id号*/)
 {
+	/*取相应的hash桶*/
 	struct hlist_nulls_head *hslot = ping_hashslot(&ping_table, net, ident);
 	struct sock *sk = NULL;
 	struct inet_sock *isk;
@@ -204,6 +210,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident/
 
 		pr_debug("iterate\n");
 		if (isk->inet_num != ident)
+			/*忽略掉id不相等的*/
 			continue;
 
 		if (skb->protocol == htons(ETH_P_IP) &&
@@ -215,6 +222,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident/
 
 			if (isk->inet_rcv_saddr &&
 			    isk->inet_rcv_saddr != ip_hdr(skb)->daddr)
+				/*忽略掉收地址不一致的*/
 				continue;
 #if IS_ENABLED(CONFIG_IPV6)
 		} else if (skb->protocol == htons(ETH_P_IPV6) &&
@@ -229,6 +237,7 @@ static struct sock *ping_lookup(struct net *net, struct sk_buff *skb, u16 ident/
 			if (!ipv6_addr_any(&sk->sk_v6_rcv_saddr) &&
 			    !ipv6_addr_equal(&sk->sk_v6_rcv_saddr,
 					     &ipv6_hdr(skb)->daddr))
+				/*忽略掉收地址不匹配的*/
 				continue;
 #endif
 		} else {
@@ -249,6 +258,7 @@ exit:
 	return sk;
 }
 
+/*取配置的group range*/
 static void inet_get_ping_group_range_net(struct net *net, kgid_t *low,
 					  kgid_t *high)
 {
@@ -276,10 +286,12 @@ int ping_init_sock(struct sock *sk)
 	if (sk->sk_family == AF_INET6)
 		sk->sk_ipv6only = 1;
 
+	/*针对ping_group_range进行权限检查*/
 	inet_get_ping_group_range_net(net, &low, &high);
 	if (gid_lte(low, group) && gid_lte(group, high))
 		return 0;
 
+	/*组权限检查*/
 	group_info = get_current_groups();
 	for (i = 0; i < group_info->ngroups; i++) {
 		kgid_t gid = group_info->gid[i];
@@ -288,6 +300,7 @@ int ping_init_sock(struct sock *sk)
 			goto out_release_group;
 	}
 
+	/*权限检查不通过，直接返回失败*/
 	ret = -EACCES;
 
 out_release_group:
@@ -490,6 +503,7 @@ EXPORT_SYMBOL_GPL(ping_bind);
 
 static inline int ping_supported(int family, int type, int code)
 {
+	/*仅支持以下type及code*/
 	return (family == AF_INET && type == ICMP_ECHO && code == 0) ||
 	       (family == AF_INET && type == ICMP_EXT_ECHO && code == 0) ||
 	       (family == AF_INET6 && type == ICMPV6_ECHO_REQUEST && code == 0) ||
@@ -701,6 +715,7 @@ int ping_common_sendmsg(int family, struct msghdr *msg, size_t len,
 		BUG();
 	}
 
+	/*检查type,code*/
 	if (!ping_supported(family, type, code))
 		return -EINVAL;
 
@@ -839,6 +854,7 @@ back_from_confirm:
 	pfh.wcheck = 0;
 	pfh.family = AF_INET;
 
+	/*报文送ip层*/
 	err = ip_append_data(sk, &fl4, ping_getfrag, &pfh, len,
 			     sizeof(struct icmphdr), &ipc, &rt,
 			     msg->msg_flags);
@@ -885,6 +901,7 @@ int ping_recvmsg(struct sock *sk, struct msghdr *msg, size_t len, int flags,
 	if (flags & MSG_ERRQUEUE)
 		return inet_recv_error(sk, msg, len, addr_len);
 
+	/*取收到的报文*/
 	skb = skb_recv_datagram(sk, flags, &err);
 	if (!skb)
 		goto out;
@@ -1024,15 +1041,15 @@ EXPORT_SYMBOL_GPL(ping_rcv);
 struct proto ping_prot = {
 	.name =		"PING",
 	.owner =	THIS_MODULE,
-	.init =		ping_init_sock,
+	.init =		ping_init_sock,/*权限检查*/
 	.close =	ping_close,
 	.pre_connect =	ping_pre_connect,
 	.connect =	ip4_datagram_connect,
 	.disconnect =	__udp_disconnect,
-	.setsockopt =	ip_setsockopt,
+	.setsockopt =	ip_setsockopt,/*利用ip相关的setsockopt*/
 	.getsockopt =	ip_getsockopt,
-	.sendmsg =	ping_v4_sendmsg,
-	.recvmsg =	ping_recvmsg,
+	.sendmsg =	ping_v4_sendmsg,/*向下发送报文*/
+	.recvmsg =	ping_recvmsg,/*收取报文*/
 	.bind =		ping_bind,
 	.backlog_rcv =	ping_queue_rcv_skb,
 	.release_cb =	ip4_datagram_release_cb,
@@ -1046,7 +1063,7 @@ EXPORT_SYMBOL(ping_prot);
 
 #ifdef CONFIG_PROC_FS
 
-static struct sock *ping_get_first(struct seq_file *seq, int start)
+static struct sock *ping_get_first(struct seq_file *seq, int start/*桶编号*/)
 {
 	struct sock *sk;
 	struct ping_iter_state *state = seq->private;
@@ -1065,6 +1082,7 @@ static struct sock *ping_get_first(struct seq_file *seq, int start)
 		sk_nulls_for_each(sk, node, hslot) {
 			if (net_eq(sock_net(sk), net) &&
 			    sk->sk_family == state->family)
+				/*找到一个socket*/
 				goto found;
 		}
 	}
@@ -1083,15 +1101,18 @@ static struct sock *ping_get_next(struct seq_file *seq, struct sock *sk)
 	} while (sk && (!net_eq(sock_net(sk), net)));
 
 	if (!sk)
+		/*当前桶被遍历完，切到下一个桶*/
 		return ping_get_first(seq, state->bucket + 1);
 	return sk;
 }
 
 static struct sock *ping_get_idx(struct seq_file *seq, loff_t pos)
 {
+	/*取0号桶首个socket*/
 	struct sock *sk = ping_get_first(seq, 0);
 
 	if (sk)
+		/*更新到下一个socket,找齐pos*/
 		while (pos && (sk = ping_get_next(seq, sk)) != NULL)
 			--pos;
 	return pos ? NULL : sk;
@@ -1106,15 +1127,18 @@ void *ping_seq_start(struct seq_file *seq, loff_t *pos, sa_family_t family)
 
 	rcu_read_lock();
 
-	return *pos ? ping_get_idx(seq, *pos-1) : SEQ_START_TOKEN;
+	/*按pos找相应的socket*/
+	return *pos ? ping_get_idx(seq, *pos-1) : SEQ_START_TOKEN/*起始标记*/;
 }
 EXPORT_SYMBOL_GPL(ping_seq_start);
 
 static void *ping_v4_seq_start(struct seq_file *seq, loff_t *pos)
 {
+	/*获取pos对应的socket*/
 	return ping_seq_start(seq, pos, AF_INET);
 }
 
+/*取下一个socket*/
 void *ping_seq_next(struct seq_file *seq, void *v, loff_t *pos)
 {
 	struct sock *sk;
@@ -1147,7 +1171,7 @@ static void ping_v4_format_sock(struct sock *sp, struct seq_file *f,
 
 	seq_printf(f, "%5d: %08X:%04X %08X:%04X"
 		" %02X %08X:%08X %02X:%08lX %08X %5u %8d %lu %d %pK %u",
-		bucket, src, srcp, dest, destp, sp->sk_state,
+		bucket, src/*源地址*/, srcp/*源端口*/, dest, destp, sp->sk_state,
 		sk_wmem_alloc_get(sp),
 		sk_rmem_alloc_get(sp),
 		0, 0L, 0,
@@ -1161,12 +1185,14 @@ static int ping_v4_seq_show(struct seq_file *seq, void *v)
 {
 	seq_setwidth(seq, 127);
 	if (v == SEQ_START_TOKEN)
+		/*显示标题栏*/
 		seq_puts(seq, "  sl  local_address rem_address   st tx_queue "
 			   "rx_queue tr tm->when retrnsmt   uid  timeout "
 			   "inode ref pointer drops");
 	else {
 		struct ping_iter_state *state = seq->private;
 
+		/*显示此socket*/
 		ping_v4_format_sock(v, seq, state->bucket);
 	}
 	seq_pad(seq, '\n');
@@ -1182,6 +1208,7 @@ static const struct seq_operations ping_v4_seq_ops = {
 
 static int __net_init ping_v4_proc_init_net(struct net *net)
 {
+	/*创建icmp目录，用于显示此net ns下所有ping对应的socket*/
 	if (!proc_create_net("icmp", 0444, net->proc_net, &ping_v4_seq_ops,
 			sizeof(struct ping_iter_state)))
 		return -ENOMEM;
@@ -1214,6 +1241,7 @@ void __init ping_init(void)
 {
 	int i;
 
+	/*初始化ping hashtable*/
 	for (i = 0; i < PING_HTABLE_SIZE; i++)
 		INIT_HLIST_NULLS_HEAD(&ping_table.hash[i], i);
 	spin_lock_init(&ping_table.lock);

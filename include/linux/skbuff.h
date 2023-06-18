@@ -585,7 +585,7 @@ struct skb_shared_info {
 	__u8		meta_len;
 	__u8		nr_frags;//有多少个分片
 	__u8		tx_flags;
-	unsigned short	gso_size;
+	unsigned short	gso_size;/*所有segment合并后长度*/
 	/* Warning: this field is not always filled in (UFO)! */
 	unsigned short	gso_segs;
 	struct sk_buff	*frag_list;
@@ -645,6 +645,7 @@ enum {
 };
 
 enum {
+	/*tcp报文with ipv4*/
 	SKB_GSO_TCPV4 = 1 << 0,
 
 	/* This indicates the skb is from an untrusted source. */
@@ -655,6 +656,7 @@ enum {
 
 	SKB_GSO_TCP_FIXEDID = 1 << 3,
 
+	/*tcp报文with ipv6*/
 	SKB_GSO_TCPV6 = 1 << 4,
 
 	SKB_GSO_FCOE = 1 << 5,
@@ -951,7 +953,7 @@ struct sk_buff {
 	__u8			ooo_okay:1;
 
 	__u8			l4_hash:1;
-	__u8			sw_hash:1;
+	__u8			sw_hash:1;/*软件计算的hash*/
 	__u8			wifi_acked_valid:1;
 	__u8			wifi_acked:1;
 	__u8			no_fcs:1;

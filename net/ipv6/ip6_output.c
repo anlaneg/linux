@@ -316,7 +316,7 @@ int ip6_xmit(const struct sock *sk, struct sk_buff *skb, struct flowi6 *fl6,
 		hlimit = ip6_dst_hoplimit(dst);
 
 	ip6_flow_hdr(hdr, tclass, ip6_make_flowlabel(net, skb, fl6->flowlabel,
-				ip6_autoflowlabel(net, np), fl6));
+				ip6_autoflowlabel(net, np), fl6)/*设置flow label*/);
 
 	hdr->payload_len = htons(seg_len);
 	hdr->nexthdr = proto;
@@ -1959,13 +1959,14 @@ struct sk_buff *__ip6_make_skb(struct sock *sk,
 	if (opt && opt->opt_nflen)
 		ipv6_push_nfrag_opts(skb, opt, &proto, &final_dst, &fl6->saddr);
 
+	/*填充ipv6头部*/
 	skb_push(skb, sizeof(struct ipv6hdr));
 	skb_reset_network_header(skb);
 	hdr = ipv6_hdr(skb);
 
 	ip6_flow_hdr(hdr, v6_cork->tclass,
 		     ip6_make_flowlabel(net, skb, fl6->flowlabel,
-					ip6_autoflowlabel(net, np), fl6));
+					ip6_autoflowlabel(net, np), fl6)/*构造flowlabel*/);
 	hdr->hop_limit = v6_cork->hop_limit;
 	hdr->nexthdr = proto;
 	hdr->saddr = fl6->saddr;

@@ -967,6 +967,7 @@ static void cma_id_put(struct rdma_id_private *id_priv)
 		complete(&id_priv->comp);
 }
 
+/*创建rdma_id_private结构体*/
 static struct rdma_id_private *
 __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
 		 void *context, enum rdma_ucm_port_space ps,
@@ -980,6 +981,7 @@ __rdma_create_id(struct net *net, rdma_cm_event_handler event_handler,
 
 	id_priv->state = RDMA_CM_IDLE;/*设置初始化状态*/
 	id_priv->id.context = context;
+	/*设置event 在kernel中的交付函数，采用ucma_event_hadler*/
 	id_priv->id.event_handler = event_handler;
 	id_priv->id.ps = ps;
 	id_priv->id.qp_type = qp_type;
@@ -1030,6 +1032,7 @@ struct rdma_cm_id *rdma_create_user_id(rdma_cm_event_handler event_handler,
 {
 	struct rdma_id_private *ret;
 
+	/*构造rdma_id_private结构体*/
 	ret = __rdma_create_id(current->nsproxy->net_ns, event_handler, context,
 			       ps, qp_type, NULL);
 	if (IS_ERR(ret))
@@ -2130,7 +2133,7 @@ static void cma_set_rep_event_data(struct rdma_cm_event *event,
 	event->ece.attr_mod = rep_data->ece.attr_mod;
 }
 
-/*事件处理（有部分会通知给用户态）*/
+/*将事件交给id_priv->id.event_handler来处理（大部分会通知给用户态）*/
 static int cma_cm_event_handler(struct rdma_id_private *id_priv,
 				struct rdma_cm_event *event)
 {
@@ -3495,6 +3498,7 @@ static void addr_handler(int status, struct sockaddr *src_addr,
 	}
 
 	if (status) {
+		/*地址解析失败*/
 		memcpy(addr, &old_addr,
 		       rdma_addr_size((struct sockaddr *)&old_addr));
 		if (!cma_comp_exch(id_priv, RDMA_CM_ADDR_RESOLVED,
@@ -3503,8 +3507,10 @@ static void addr_handler(int status, struct sockaddr *src_addr,
 		event.event = RDMA_CM_EVENT_ADDR_ERROR;
 		event.status = status;
 	} else
+		/*地址解析成功*/
 		event.event = RDMA_CM_EVENT_ADDR_RESOLVED;
 
+	/*处理此event*/
 	if (cma_cm_event_handler(id_priv, &event)) {
 		destroy_id_handler_unlock(id_priv);
 		return;
@@ -4106,9 +4112,11 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 		return ret;
 
 	if (cma_any_addr(dst_addr)) {
+		/*目标地址为any*/
 		ret = cma_resolve_loopback(id_priv);
 	} else {
 		if (dst_addr->sa_family == AF_IB) {
+			/*目标地址为ib*/
 			ret = cma_resolve_ib_addr(id_priv);
 		} else {
 			/*

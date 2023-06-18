@@ -4242,6 +4242,7 @@ static int vxlan_nl2conf(struct nlattr *tb[], struct nlattr *data[],
 			return err;
 	}
 
+	/*自配置中，设置VXLAN_F_UDP_ZERO_CSUM6_RX*/
 	if (data[IFLA_VXLAN_UDP_ZERO_CSUM6_RX]) {
 		err = vxlan_nl2flag(conf, data, IFLA_VXLAN_UDP_ZERO_CSUM6_RX,
 				    VXLAN_F_UDP_ZERO_CSUM6_RX, changelink,

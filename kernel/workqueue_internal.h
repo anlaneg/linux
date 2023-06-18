@@ -29,13 +29,16 @@ struct worker {
 	};
 
 	struct work_struct	*current_work;	/* L: work being processed */
+	/*对应的工作函数*/
 	work_func_t		current_func;	/* L: current_work's fn */
+	/*所属的pwq*/
 	struct pool_workqueue	*current_pwq;	/* L: current_work's pwq */
 	unsigned int		current_color;	/* L: current_work's color */
 	struct list_head	scheduled;	/* L: scheduled works */
 
 	/* 64 bytes boundary on 64bit, 32 on 32bit */
 
+	/*worker对应的线程，其工作函数为worker_thread*/
 	struct task_struct	*task;		/* I: worker task */
 	//对应的pool
 	struct worker_pool	*pool;		/* A: the associated pool */
@@ -46,6 +49,7 @@ struct worker {
 
 	unsigned long		last_active;	/* L: last active timestamp */
 	unsigned int		flags;		/* X: flags */
+	/*worker id,来源于pool->worker_ida*/
 	int			id;		/* I: worker id */
 	int			sleeping;	/* None */
 

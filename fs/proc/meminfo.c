@@ -29,6 +29,7 @@ static void show_val_kb(struct seq_file *m, const char *s, unsigned long num)
 	seq_write(m, " kB\n", 4);
 }
 
+/*meminfo文件内容显示*/
 static int meminfo_proc_show(struct seq_file *m, void *v)
 {
 	struct sysinfo i;
@@ -155,6 +156,7 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 		    global_zone_page_state(NR_FREE_CMA_PAGES));
 #endif
 
+	/*大页信息在/proc/meminfo中的显示*/
 	hugetlb_report_meminfo(m);
 
 	arch_report_meminfo(m);
@@ -166,6 +168,7 @@ static int __init proc_meminfo_init(void)
 {
 	struct proc_dir_entry *pde;
 
+	/*注册文件meminfo*/
 	pde = proc_create_single("meminfo", 0, NULL, meminfo_proc_show);
 	pde_make_permanent(pde);
 	return 0;

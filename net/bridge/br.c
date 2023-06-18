@@ -37,6 +37,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 	int err;
 
 	if (netif_is_bridge_master(dev)) {
+		/*此设备是桥的master设备*/
 		err = br_vlan_bridge_event(dev, event, ptr);
 		if (err)
 			return notifier_from_errno(err);
@@ -116,6 +117,7 @@ static int br_device_event(struct notifier_block *unused, unsigned long event, v
 		break;
 
 	case NETDEV_CHANGENAME:
+		/*设备从属于桥，但此设备正在被改名称*/
 		err = br_sysfs_renameif(p);
 		if (err)
 			return notifier_from_errno(err);

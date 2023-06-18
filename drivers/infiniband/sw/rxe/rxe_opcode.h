@@ -19,7 +19,7 @@ enum rxe_wr_mask {
 	WR_SEND_MASK			= BIT(2),
 	WR_READ_MASK			= BIT(3),
 	WR_WRITE_MASK			= BIT(4),
-	WR_LOCAL_OP_MASK		= BIT(5),
+	WR_LOCAL_OP_MASK		= BIT(5),/*指明本地操作*/
 	WR_FLUSH_MASK			= BIT(6),
 	WR_ATOMIC_WRITE_MASK		= BIT(7),
 
@@ -69,7 +69,7 @@ enum rxe_hdr_mask {
 	RXE_FETH_MASK		= BIT(RXE_FETH),
 	RXE_PAYLOAD_MASK	= BIT(RXE_PAYLOAD),
 
-	/*标记为request报文*/
+	/*标记为request类，如无此标记，则为response报文*/
 	RXE_REQ_MASK		= BIT(NUM_HDR_TYPES + 0),
 	RXE_ACK_MASK		= BIT(NUM_HDR_TYPES + 1),
 	RXE_SEND_MASK		= BIT(NUM_HDR_TYPES + 2),
@@ -85,6 +85,7 @@ enum rxe_hdr_mask {
 	RXE_MIDDLE_MASK		= BIT(NUM_HDR_TYPES + 10),
 	RXE_END_MASK		= BIT(NUM_HDR_TYPES + 11),
 
+	/*标记为loopback类型报文*/
 	RXE_LOOPBACK_MASK	= BIT(NUM_HDR_TYPES + 12),
 
 	RXE_ATOMIC_WRITE_MASK   = BIT(NUM_HDR_TYPES + 14),
@@ -102,8 +103,9 @@ struct rxe_opcode_info {
 	char			*name;
 	/*opcode对应的mask*/
 	enum rxe_hdr_mask	mask;
-	/*此op对应的消息长度*/
+	/*此op对应的消息header长度*/
 	int			length;
+	/*此op对应的消息到指定消息标签起始位置的offset*/
 	int			offset[NUM_HDR_TYPES];
 };
 

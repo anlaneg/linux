@@ -6490,7 +6490,7 @@ static void busy_poll_stop(struct napi_struct *napi, void *have_poll_lock, bool 
 }
 
 void napi_busy_loop(unsigned int napi_id,
-		    bool (*loop_end)(void *, unsigned long),
+		    bool (*loop_end/*用于检测是否loop结束*/)(void *, unsigned long),
 		    void *loop_end_arg, bool prefer_busy_poll, u16 budget)
 {
 	unsigned long start_time = loop_end ? busy_loop_current_time() : 0;
@@ -6507,6 +6507,7 @@ restart:
 	if (!napi)
 		goto out;
 
+	/*禁止抢占*/
 	preempt_disable();
 	for (;;) {
 		int work = 0;
@@ -6545,6 +6546,7 @@ count:
 		local_bh_enable();
 
 		if (!loop_end || loop_end(loop_end_arg, start_time))
+			/*未提供loop_end或者loop_end回调返回true,退出*/
 			break;
 
 		if (unlikely(need_resched())) {
@@ -9287,6 +9289,7 @@ int dev_get_phys_port_name(struct net_device *dev,
 	int err;
 
 	if (ops->ndo_get_phys_port_name) {
+		/*驱动自行返回*/
 		err = ops->ndo_get_phys_port_name(dev, name, len);
 		if (err != -EOPNOTSUPP)
 			return err;
@@ -10895,6 +10898,7 @@ struct rtnl_link_stats64 *dev_get_stats(struct net_device *dev,
 			storage->tx_dropped += READ_ONCE(core_stats->tx_dropped);
 			/*报文被收到了协议栈，但没有handler，被丢弃*/
 			storage->rx_nohandler += READ_ONCE(core_stats->rx_nohandler);
+			/*按口被收到了协议栈，但mac地址不正确，被丢弃*/
 			storage->rx_otherhost_dropped += READ_ONCE(core_stats->rx_otherhost_dropped);
 		}
 	}
@@ -11229,6 +11233,7 @@ void synchronize_net(void)
 {
 	might_sleep();
 	if (rtnl_is_locked())
+		/*rtnl被lock*/
 		synchronize_rcu_expedited();
 	else
 		synchronize_rcu();
@@ -11430,6 +11435,7 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 	/* Don't allow namespace local devices to be moved. */
 	err = -EINVAL;
 	if (dev->features & NETIF_F_NETNS_LOCAL)
+		/*dev指明此设备不容许在netns间移动*/
 		goto out;
 
 	/* Ensure the device has been registrered */
@@ -11439,6 +11445,7 @@ int __dev_change_net_namespace(struct net_device *dev, struct net *net,
 	/* Get out if there is nothing todo */
 	err = 0;
 	if (net_eq(net_old, net))
+		/*前后netns相同，不执行退出*/
 		goto out;
 
 	/* Pick the destination device name, and ensure

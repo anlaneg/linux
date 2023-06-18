@@ -173,7 +173,7 @@ static const struct proto_ops bnep_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,
 	.release	= bnep_sock_release,
-	.ioctl		= bnep_sock_ioctl,
+	.ioctl		= bnep_sock_ioctl,/*主要是支持ioctl*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= bnep_sock_compat_ioctl,
 #endif
@@ -211,7 +211,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 
 	sock_init_data(sock, sk);
 
-	sock->ops = &bnep_sock_ops;
+	sock->ops = &bnep_sock_ops;/*此类socket对应的ops*/
 
 	sock->state = SS_UNCONNECTED;
 
@@ -224,6 +224,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
+/*bnep 类型的socket对应的ops*/
 static const struct net_proto_family bnep_sock_family_ops = {
 	.family = PF_BLUETOOTH,
 	.owner	= THIS_MODULE,
@@ -234,10 +235,12 @@ int __init bnep_sock_init(void)
 {
 	int err;
 
+	/*注册bnep协议对应的socket大小*/
 	err = proto_register(&bnep_proto, 0);
 	if (err < 0)
 		return err;
 
+	/*bnep协议对应的ops*/
 	err = bt_sock_register(BTPROTO_BNEP, &bnep_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register BNEP socket");

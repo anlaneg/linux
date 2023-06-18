@@ -222,6 +222,7 @@ lookup_protocol:
 	np->pmtudisc	= IPV6_PMTUDISC_WANT;
 	np->repflow	= net->ipv6.sysctl.flowlabel_reflect & FLOWLABEL_REFLECT_ESTABLISHED;
 	sk->sk_ipv6only	= net->ipv6.sysctl.bindv6only;
+	/*指明是否容许rehash*/
 	sk->sk_txrehash = READ_ONCE(net->core.sysctl_txrehash);
 
 	/* Init the ipv4 part of the socket since we can have sockets
@@ -288,16 +289,19 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	int err = 0;
 
 	if (addr->sin6_family != AF_INET6)
+		/*被绑定的地址必须是af_inet6*/
 		return -EAFNOSUPPORT;
 
 	addr_type = ipv6_addr_type(&addr->sin6_addr);
 	if ((addr_type & IPV6_ADDR_MULTICAST) && sk->sk_type == SOCK_STREAM)
+		/*针对stream，不得bind组播地址*/
 		return -EINVAL;
 
 	snum = ntohs(addr->sin6_port);
 	if (!(flags & BIND_NO_CAP_NET_BIND_SERVICE) &&
 	    snum && inet_port_requires_bind_service(net, snum) &&
 	    !ns_capable(net->user_ns, CAP_NET_BIND_SERVICE))
+		/*snum小于1024，且没有绑定权限*/
 		return -EACCES;
 
 	if (flags & BIND_WITH_LOCK)
@@ -318,6 +322,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 		 * makes no sense
 		 */
 		if (ipv6_only_sock(sk)) {
+			/*socket被指定为v6 only,报错*/
 			err = -EINVAL;
 			goto out;
 		}
@@ -332,7 +337,7 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 		}
 
 		/* Reproduce AF_INET checks to make the bindings consistent */
-		v4addr = addr->sin6_addr.s6_addr32[3];
+		v4addr = addr->sin6_addr.s6_addr32[3];/*直接取v4地址*/
 		chk_addr_ret = inet_addr_type_dev_table(net, dev, v4addr);
 		rcu_read_unlock();
 
@@ -394,15 +399,20 @@ static int __inet6_bind(struct sock *sk, struct sockaddr *uaddr, int addr_len,
 	if (!(addr_type & IPV6_ADDR_MULTICAST))
 		np->saddr = addr->sin6_addr;
 
+	/*保存旧的ipv6 only标记*/
 	saved_ipv6only = sk->sk_ipv6only;
+
+	/*除以下两种地址类型外，其它均设为ipv6 only*/
 	if (addr_type != IPV6_ADDR_ANY && addr_type != IPV6_ADDR_MAPPED)
 		sk->sk_ipv6only = 1;
 
 	/* Make sure we are allowed to bind here. */
 	if (snum || !(inet->bind_address_no_port ||
 		      (flags & BIND_FORCE_ADDRESS_NO_PORT))) {
+		/*确认此port可被绑定*/
 		err = sk->sk_prot->get_port(sk, snum);
 		if (err) {
+			/*获取port失败，还原ipv6 only标记*/
 			sk->sk_ipv6only = saved_ipv6only;
 			inet_reset_saddr(sk);
 			goto out;
@@ -436,6 +446,7 @@ out_unlock:
 }
 
 /* bind for INET6 API */
+/*实现ipv6 tcp/udp/raw socket的绑定*/
 int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 {
 	struct sock *sk = sock->sk;
@@ -447,6 +458,7 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	prot = READ_ONCE(sk->sk_prot);
 	/* If the socket has its own bind function then use it. */
 	if (prot->bind)
+		/*如果prot->bind回调存在，则调用*/
 		return prot->bind(sk, uaddr, addr_len);
 
 	if (addr_len < SIN6_LEN_RFC2133)
@@ -460,6 +472,7 @@ int inet6_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (err)
 		return err;
 
+	/*使用默认的ipv6 bind回调*/
 	return __inet6_bind(sk, uaddr, addr_len, flags);
 }
 EXPORT_SYMBOL(inet6_bind);
@@ -678,7 +691,7 @@ const struct proto_ops inet6_stream_ops = {
 	.family		   = PF_INET6,
 	.owner		   = THIS_MODULE,
 	.release	   = inet6_release,
-	.bind		   = inet6_bind,
+	.bind		   = inet6_bind,/*地址绑定*/
 	.connect	   = inet_stream_connect,	/* ok		*/
 	.socketpair	   = sock_no_socketpair,	/* a do nothing	*/
 	.accept		   = inet_accept,		/* ok		*/

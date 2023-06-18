@@ -15,9 +15,9 @@
 
 static inline int pkey_match(u16 key1, u16 key2)
 {
-	return (((key1 & 0x7fff) != 0) &&
-		((key1 & 0x7fff) == (key2 & 0x7fff)) &&
-		((key1 & 0x8000) || (key2 & 0x8000))) ? 1 : 0;
+	return (((key1 & 0x7fff) != 0/*key1的低15位有值*/) &&
+		((key1 & 0x7fff) == (key2 & 0x7fff)/*key1与key2的低15位相等*/) &&
+		((key1 & 0x8000) || (key2 & 0x8000))/*key1或key2高位为1*/) ? 1 : 0;
 }
 
 /* Return >0 if psn_a > psn_b
@@ -28,6 +28,7 @@ static inline int psn_compare(u32 psn_a, u32 psn_b)
 {
 	s32 diff;
 
+	/*当前psn的有效位为24位，故相减后（绕回时仍正确），左移8位*/
 	diff = (psn_a - psn_b) << 8;
 	return diff;
 }
@@ -47,7 +48,7 @@ struct rxe_ah {
 	struct rxe_pool_elem	elem;
 	struct rxe_av		av;
 	bool			is_user;
-	int			ah_num;
+	int			ah_num;/*ah对应的编号*/
 };
 
 struct rxe_cqe {
@@ -118,12 +119,12 @@ enum rxe_qp_state {
 struct rxe_req_info {
 	enum rxe_qp_state	state;
 	int			wqe_index;/*生产者指针*/
-	u32			psn;
+	u32			psn;/*packet对应的唯一编号*/
 	int			opcode;
 	atomic_t		rd_atomic;
 	int			wait_fence;
 	int			need_rd_atomic;
-	int			wait_psn;
+	int			wait_psn;/*指明有等待psn(需要发送，但窗口已满）*/
 	int			need_retry;
 	int			wait_for_rnr_timer;
 	int			noack_pkts;
@@ -179,12 +180,12 @@ struct resp_res {
 struct rxe_resp_info {
 	enum rxe_qp_state	state;
 	u32			msn;
-	u32			psn;
+	u32			psn;/*已确认的psn*/
 	u32			ack_psn;
 	int			opcode;
 	int			drop_msg;
 	int			goto_error;
-	int			sent_psn_nak;
+	int			sent_psn_nak;/*需要发送nack*/
 	enum ib_wc_status	status;
 	u8			aeth_syndrome;
 
@@ -213,7 +214,7 @@ struct rxe_resp_info {
 	unsigned int		res_head;
 	unsigned int		res_tail;
 	struct resp_res		*res;
-	struct rxe_task		task;
+	struct rxe_task		task;/*指向rxe_responder函数，处理请求报文*/
 };
 
 struct rxe_qp {
@@ -251,19 +252,23 @@ struct rxe_qp {
 
 	atomic_t		mcg_num;
 
-	/*rxe_resp_queue_pkt函数负责向其中添加skb，这些skb是roce收到的报文，后续会用它填充wr*/
+	/*rxe_resp_queue_pkt函数负责向其中添加skb，
+	 * 这些skb是roce收到的request类报文
+	 * qp->resp.task 对应的task负责处理这些报文（即rxe_responder函数）*/
 	struct sk_buff_head	req_pkts;
-	/*rxe_comp_queue_pkt函数负责向其中添加skb*/
+	/*rxe_comp_queue_pkt函数负责向其中添加skb，
+	 * 这些skb是roce收到的response类报文
+	 * qp->comp.task 对应的task负责处理这些报文(即rxe_completer函数）*/
 	struct sk_buff_head	resp_pkts;
 
 	/*处理发送请求，处理req_pkts*/
 	struct rxe_req_info	req;
 	/*对接收内容进行响应*/
 	struct rxe_comp_info	comp;
-	/*处理接收请求,处理resp_pkts*/
+	/*处理req_pkts链表上的请求类报文，故为response*/
 	struct rxe_resp_info	resp;
 
-	atomic_t		ssn;
+	atomic_t		ssn;/*此qp上全局id,用于为发送分配id*/
 	atomic_t		skb_out;
 	int			need_req_skb;
 
@@ -272,7 +277,7 @@ struct rxe_qp {
 	 * started. The responder resets it whenever an ack is
 	 * received.
 	 */
-	struct timer_list retrans_timer;/*重传定时器*/
+	struct timer_list retrans_timer;/*重传定时器，回调：retransmit_timer*/
 	u64 qp_timeout_jiffies;
 
 	/* Timer for handling RNR NAKS. */
@@ -397,9 +402,9 @@ struct rxe_dev {
 
 	struct rxe_pool		uc_pool;
 	struct rxe_pool		pd_pool;
-	struct rxe_pool		ah_pool;
+	struct rxe_pool		ah_pool;/*收集ah,通过ah_num索引ah*/
 	struct rxe_pool		srq_pool;
-	struct rxe_pool		qp_pool;/*收集qp*/
+	struct rxe_pool		qp_pool;/*收集qp，通过qpn索引qp*/
 	struct rxe_pool		cq_pool;
 	struct rxe_pool		mr_pool;
 	struct rxe_pool		mw_pool;

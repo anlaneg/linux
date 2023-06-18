@@ -74,6 +74,7 @@ struct dentry *simple_lookup(struct inode *dir, struct dentry *dentry, unsigned 
 		return ERR_PTR(-ENAMETOOLONG);
 	if (!dentry->d_sb->s_d_op)
 		d_set_d_op(dentry, &simple_dentry_operations);
+	/*将此dentry加入到hashtable,不关联inode*/
 	d_add(dentry, NULL);
 	return NULL;
 }
@@ -230,6 +231,7 @@ ssize_t generic_read_dir(struct file *filp, char __user *buf, size_t siz, loff_t
 }
 EXPORT_SYMBOL(generic_read_dir);
 
+/*大页dir文件操作集*/
 const struct file_operations simple_dir_operations = {
 	.open		= dcache_dir_open,
 	.release	= dcache_dir_close,

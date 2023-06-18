@@ -31,6 +31,7 @@ enum legacy_fs_param {
 };
 
 struct legacy_fs_context {
+	/*mount时传入的选项参数*/
 	char			*legacy_data;	/* Data page for legacy filesystems */
 	size_t			data_size;
 	enum legacy_fs_param	param_type;
@@ -98,7 +99,7 @@ static int vfs_parse_sb_flag(struct fs_context *fc, const char *key)
  */
 int vfs_parse_fs_param_source(struct fs_context *fc, struct fs_parameter *param)
 {
-    /*param的key不为source不处理*/
+    /*param的key不为source时，此函数不处理*/
 	if (strcmp(param->key, "source") != 0)
 		return -ENOPARAM;
 
@@ -164,7 +165,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	/* If the filesystem doesn't take any arguments, give it the
 	 * default handling of source.
 	 */
-	ret = vfs_parse_fs_param_source(fc, param);
+	ret = vfs_parse_fs_param_source(fc, param);/*处理source key*/
 	if (ret != -ENOPARAM)
 		return ret;
 
@@ -181,6 +182,7 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 {
 	int ret;
 
+	/*构造解析用key*/
 	struct fs_parameter param = {
 		.key	= key,
 		.type	= fs_value_is_flag,
@@ -213,7 +215,7 @@ EXPORT_SYMBOL(vfs_parse_fs_string);
  * Returns 0 on success or the error returned by the ->parse_option() fs_context
  * operation on failure.
  */
-int generic_parse_monolithic(struct fs_context *fc, void *data)
+int generic_parse_monolithic(struct fs_context *fc, void *data/*整块的参数*/)
 {
 	char *options = data, *key;
 	int ret = 0;
@@ -239,7 +241,7 @@ int generic_parse_monolithic(struct fs_context *fc, void *data)
 				*value++ = 0;
 				v_len = strlen(value);
 			}
-			//解析key,value参数
+			//解析单个key,value参数
 			ret = vfs_parse_fs_string(fc, key, value, v_len);
 			if (ret < 0)
 				break;
@@ -269,6 +271,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 				      unsigned int sb_flags_mask,
 				      enum fs_context_purpose purpose)
 {
+	/*创建并初始化fs_context*/
 	int (*init_fs_context)(struct fs_context *);
 	struct fs_context *fc;
 	int ret = -ENOMEM;
@@ -285,7 +288,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	fc->fs_type	= get_filesystem(fs_type);
 	fc->cred	= get_current_cred();
 	fc->net_ns	= get_net(current->nsproxy->net_ns);
-	fc->log.prefix	= fs_type->name;
+	fc->log.prefix	= fs_type->name;/*前缀为文件系统名称*/
 
 	mutex_init(&fc->uapi_mutex);
 
@@ -309,6 +312,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	    /*如果文件系统(fs_type)未提供此回调，则使用默认值*/
 		init_fs_context = legacy_init_fs_context;
 
+	/*通过函数初始化刚申请的fc*/
 	ret = init_fs_context(fc);
 	if (ret < 0)
 		goto err_fc;
@@ -324,6 +328,7 @@ err_fc:
 struct fs_context *fs_context_for_mount(struct file_system_type *fs_type,
 					unsigned int sb_flags)
 {
+	/*为指定文件系统创建fs_context(目的是mount用）*/
 	return alloc_fs_context(fs_type, NULL, sb_flags, 0,
 					FS_CONTEXT_FOR_MOUNT);
 }
@@ -333,6 +338,7 @@ struct fs_context *fs_context_for_reconfigure(struct dentry *dentry,
 					unsigned int sb_flags,
 					unsigned int sb_flags_mask)
 {
+	/*为指定文件系统创建fs_context(目的是reconfigure用）*/
 	return alloc_fs_context(dentry->d_sb->s_type, dentry, sb_flags,
 				sb_flags_mask, FS_CONTEXT_FOR_RECONFIGURE);
 }
@@ -635,7 +641,7 @@ static int legacy_get_tree(struct fs_context *fc)
 	struct super_block *sb;
 	struct dentry *root;
 
-	//调用fs_type的mount函数进行挂载
+	//调用fs_type的mount函数进行挂载并返回root节点
 	root = fc->fs_type->mount(fc->fs_type, fc->sb_flags,
 				      fc->source, ctx->legacy_data);
 	if (IS_ERR(root))
@@ -668,7 +674,9 @@ static int legacy_reconfigure(struct fs_context *fc)
 const struct fs_context_operations legacy_fs_context_ops = {
 	.free			= legacy_fs_context_free,
 	.dup			= legacy_fs_context_dup,
+	/*解析文件系统挂载参数（单个）*/
 	.parse_param		= legacy_parse_param,
+	/*解析文件系统挂载参数（整体）*/
 	.parse_monolithic	= legacy_parse_monolithic,
 	/*获取并填充文件系统的root节点*/
 	.get_tree		= legacy_get_tree,
@@ -689,6 +697,7 @@ static int legacy_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+/*解析mount传入的整块data*/
 int parse_monolithic_mount_data(struct fs_context *fc, void *data)
 {
 	int (*monolithic_mount_data)(struct fs_context *, void *);
@@ -698,7 +707,7 @@ int parse_monolithic_mount_data(struct fs_context *fc, void *data)
 	    /*未提供回调，使用默认回调*/
 		monolithic_mount_data = generic_parse_monolithic;
 
-	/*解析data参数*/
+	/*解析data参数，一次性传入整块*/
 	return monolithic_mount_data(fc, data);
 }
 

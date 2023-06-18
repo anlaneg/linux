@@ -2182,7 +2182,7 @@ void rt6_age_exceptions(struct fib6_info *f6i,
 }
 
 /* must be called with rcu lock held */
-int fib6_table_lookup(struct net *net, struct fib6_table *table, int oif,
+int fib6_table_lookup(struct net *net, struct fib6_table *table/*要查询的路由表*/, int oif,
 		      struct flowi6 *fl6, struct fib6_result *res, int strict)
 {
 	struct fib6_node *fn, *saved_fn;
@@ -2593,6 +2593,7 @@ void ip6_route_input(struct sk_buff *skb)
 	};
 	struct flow_keys *flkeys = NULL, _flkeys;
 
+	/*取tunnel info*/
 	tun_info = skb_tunnel_info(skb);
 	if (tun_info && !(tun_info->mode & IP_TUNNEL_INFO_TX))
 		fl6.flowi6_tun_key.tun_id = tun_info->key.tun_id;
@@ -2603,6 +2604,7 @@ void ip6_route_input(struct sk_buff *skb)
 	if (unlikely(fl6.flowi6_proto == IPPROTO_ICMPV6))
 		/*针对icmpv6计算多路径hash*/
 		fl6.mp_hash = rt6_multipath_hash(net, &fl6, skb, flkeys);
+
 	skb_dst_drop(skb);
 	/*通过ip6_route_input_lookup查询路由，并设置路由结果到skb*/
 	skb_dst_set_noref(skb, ip6_route_input_lookup(net, skb->dev,

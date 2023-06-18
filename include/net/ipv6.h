@@ -814,6 +814,7 @@ static inline u32 ipv6_portaddr_hash(const struct net *net,
 	unsigned int hash, mix = net_hash_mix(net);
 
 	if (ipv6_addr_any(addr6))
+		/*这一句和ipv4_portaddr_hash要保证一致*/
 		hash = jhash_1word(0, mix);
 	else if (ipv6_addr_v4mapped(addr6))
 		hash = jhash_1word((__force u32)addr6->s6_addr32[3], mix);
@@ -971,6 +972,7 @@ static inline bool ipv6_can_nonlocal_bind(struct net *net,
 
 #define IP6_DEFAULT_AUTO_FLOW_LABELS	IP6_AUTO_FLOW_LABEL_OPTOUT
 
+/*产生ipv6 flow label*/
 static inline __be32 ip6_make_flowlabel(struct net *net, struct sk_buff *skb,
 					__be32 flowlabel, bool autolabel,
 					struct flowi6 *fl6)
@@ -986,8 +988,13 @@ static inline __be32 ip6_make_flowlabel(struct net *net, struct sk_buff *skb,
 	    net->ipv6.sysctl.auto_flowlabels == IP6_AUTO_FLOW_LABEL_OFF ||
 	    (!autolabel &&
 	     net->ipv6.sysctl.auto_flowlabels != IP6_AUTO_FLOW_LABEL_FORCED))
+		/*1。如果flowlabel非零提供，则直接使用
+		 * 2.net.ipv6.auto_flowlabels 被配置为0，则返回0
+		 * 3.autolabel 为false 且net.ipv6.auto_flowlabels 配置为非3,则返回0
+		 * */
 		return flowlabel;
 
+	/*否则以skb->hash映射flowlabel*/
 	hash = skb_get_hash_flowi6(skb, fl6);
 
 	/* Since this is being sent on the wire obfuscate hash a bit
@@ -999,6 +1006,7 @@ static inline __be32 ip6_make_flowlabel(struct net *net, struct sk_buff *skb,
 	flowlabel = (__force __be32)hash & IPV6_FLOWLABEL_MASK;
 
 	if (net->ipv6.sysctl.flowlabel_state_ranges)
+		/*如果开启，则flowlable被强制变更在高位为1的区间*/
 		flowlabel |= IPV6_FLOWLABEL_STATELESS_FLAG;
 
 	return flowlabel;

@@ -796,6 +796,7 @@ static bool devx_is_obj_create_cmd(const void *in, u16 *opcode)
 	case MLX5_CMD_OP_CREATE_XRQ:
 	case MLX5_CMD_OP_ATTACH_TO_MCG:
 	case MLX5_CMD_OP_ALLOC_XRCD:
+		/*支持以上obj创建*/
 		return true;
 	case MLX5_CMD_OP_SET_FLOW_TABLE_ENTRY:
 	{
@@ -1444,9 +1445,11 @@ static bool is_apu_cq(struct mlx5_ib_dev *dev, const void *in)
 	return true;
 }
 
+/*定义devx obj创建函数*/
 static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_OBJ_CREATE)(
 	struct uverbs_attr_bundle *attrs)
 {
+	/*取传入的cmd_in属性*/
 	void *cmd_in = uverbs_attr_get_alloced_ptr(attrs, MLX5_IB_ATTR_DEVX_OBJ_CREATE_CMD_IN);
 	int cmd_out_len =  uverbs_attr_get_len(attrs,
 					MLX5_IB_ATTR_DEVX_OBJ_CREATE_CMD_OUT);
@@ -1467,6 +1470,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_OBJ_CREATE)(
 	u16 opcode;
 
 	if (MLX5_GET(general_obj_in_cmd_hdr, cmd_in, vhca_tunnel_id))
+		/*cmd_in未填充vhca_tunnel_id,返回失败*/
 		return -EINVAL;
 
 	uid = devx_get_uid(c, cmd_in);

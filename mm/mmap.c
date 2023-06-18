@@ -1228,6 +1228,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 
 	/* offset overflow? */
 	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
+		/*数字绕回*/
 		return -EOVERFLOW;
 
 	/* Too many mappings? */
@@ -1370,7 +1371,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 }
 
 //实现mmap
-unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
+unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len/*要映射的大小*/,
 			      unsigned long prot, unsigned long flags,
 			      unsigned long fd, unsigned long pgoff)
 {
@@ -1378,8 +1379,10 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
+		/*当前flags中未指明anonymous,由fd获取file*/
 		audit_mmap_fd(fd, flags);
-		file = fget(fd);//由fd获得file
+		//由fd获得file
+		file = fget(fd);
 		if (!file)
 			return -EBADF;
 		if (is_file_hugepages(file)) {
@@ -1401,7 +1404,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 		 * VM_NORESERVE is used because the reservations will be
 		 * taken when vm_ops->mmap() is called
 		 */
-		file = hugetlb_file_setup(HUGETLB_ANON_FILE, len,
+		file = hugetlb_file_setup(HUGETLB_ANON_FILE/*文件名称*/, len/*内存大小*/,
 				VM_NORESERVE,
 				HUGETLB_ANONHUGE_INODE,
 				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
@@ -1409,6 +1412,7 @@ unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			return PTR_ERR(file);
 	}
 
+	/*映射文件address*/
 	retval = vm_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 out_fput:
 	if (file)

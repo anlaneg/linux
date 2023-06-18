@@ -185,6 +185,7 @@ void rxe_resp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb);
 
 void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb);
 
+/*取指定opcode,qp_type对应的mask*/
 static inline unsigned int wr_opcode_mask(int opcode, struct rxe_qp *qp)
 {
 	return rxe_wr_opcode_info[opcode].mask[qp->ibqp.qp_type];

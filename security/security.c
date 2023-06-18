@@ -937,6 +937,7 @@ int security_fs_context_parse_param(struct fs_context *fc,
 	return rc;
 }
 
+/*触发sb_alloc_security回调*/
 int security_sb_alloc(struct super_block *sb)
 {
 	int rc = lsm_superblock_alloc(sb);

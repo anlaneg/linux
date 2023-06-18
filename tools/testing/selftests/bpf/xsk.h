@@ -27,14 +27,14 @@ extern "C" {
 /*定义各ring的结构*/
 #define DEFINE_XSK_RING(name) \
 struct name { \
-	__u32 cached_prod; \
-	__u32 cached_cons; \
+	__u32 cached_prod; /*缓存的生产者指针*/\
+	__u32 cached_cons; /*缓存的消费者指针*/\
 	__u32 mask; /*ring的size对应的掩码*/\
 	__u32 size; /*ring的大小*/\
-	__u32 *producer; /*ring生产者对应的指针*/\
-	__u32 *consumer; /*ring消费者对应的指针*/\
-	void *ring; /*desc ring的起始地址*/\
-	__u32 *flags; /*ring flags对应的指针*/\
+	__u32 *producer; /*ring中生产者成员变量对应的内存位置*/\
+	__u32 *consumer; /*ring中消费者成员变量对应的内存位置*/\
+	void *ring;      /*ring中描述符成员变量对应的内存位置*/\
+	__u32 *flags;    /*ring中flags成员变量对应的内存位置*/\
 }
 
 DEFINE_XSK_RING(xsk_ring_prod);
@@ -47,11 +47,14 @@ DEFINE_XSK_RING(xsk_ring_cons);
 struct xsk_umem;
 struct xsk_socket;
 
+/*取fill ring第idx号描述符对应的地址（描述符类型为uint64_t)*/
 static inline __u64 *xsk_ring_prod__fill_addr(struct xsk_ring_prod *fill,
 					      __u32 idx)
 {
+	/*取fill ring描述符起始地址（描述符类型为uint64_t)*/
 	__u64 *addrs = (__u64 *)fill->ring;
 
+	/*取idx号描述符对应的地址*/
 	return &addrs[idx & fill->mask];
 }
 
@@ -71,6 +74,7 @@ static inline struct xdp_desc *xsk_ring_prod__tx_desc(struct xsk_ring_prod *tx,
 	return &descs[idx & tx->mask];
 }
 
+/*取idx索引对应的描述符*/
 static inline const struct xdp_desc *
 xsk_ring_cons__rx_desc(const struct xsk_ring_cons *rx, __u32 idx)
 {
@@ -79,6 +83,7 @@ xsk_ring_cons__rx_desc(const struct xsk_ring_cons *rx, __u32 idx)
 	return &descs[idx & rx->mask];
 }
 
+/*检查此q是否有wakeup标记*/
 static inline int xsk_ring_prod__needs_wakeup(const struct xsk_ring_prod *r)
 {
 	return *r->flags & XDP_RING_NEED_WAKEUP;
@@ -86,9 +91,11 @@ static inline int xsk_ring_prod__needs_wakeup(const struct xsk_ring_prod *r)
 
 static inline __u32 xsk_prod_nb_free(struct xsk_ring_prod *r, __u32 nb)
 {
+	/*可生产的元素数*/
 	__u32 free_entries = r->cached_cons - r->cached_prod;
 
 	if (free_entries >= nb)
+		/*元素数大于计划填充数，返回实际可填充元素数*/
 		return free_entries;
 
 	/* Refresh the local tail pointer.
@@ -99,34 +106,40 @@ static inline __u32 xsk_prod_nb_free(struct xsk_ring_prod *r, __u32 nb)
 	 * free_entries = r->cached_prod - r->cached_cons + r->size.
 	 */
 	r->cached_cons = __atomic_load_n(r->consumer, __ATOMIC_ACQUIRE);
-	r->cached_cons += r->size;
+	r->cached_cons += r->size;/*刷新一次后，再尝试*/
 
 	return r->cached_cons - r->cached_prod;
 }
 
 static inline __u32 xsk_cons_nb_avail(struct xsk_ring_cons *r, __u32 nb)
 {
+	/*可消费的元素数*/
 	__u32 entries = r->cached_prod - r->cached_cons;
 
 	if (entries == 0) {
+		/*可消费的元素数为零，加载生产者指针，再尝试一次*/
 		r->cached_prod = __atomic_load_n(r->producer, __ATOMIC_ACQUIRE);
 		entries = r->cached_prod - r->cached_cons;
 	}
 
+	/*返回实际可消费的数目*/
 	return (entries > nb) ? nb : entries;
 }
 
 static inline __u32 xsk_ring_prod__reserve(struct xsk_ring_prod *prod, __u32 nb, __u32 *idx)
 {
 	if (xsk_prod_nb_free(prod, nb) < nb)
+		/*可生产的元素数小于请求预留的，返回0*/
 		return 0;
 
+	/*可正常生产*/
 	*idx = prod->cached_prod;
 	prod->cached_prod += nb;
 
 	return nb;
 }
 
+/*修改生产者位置标识（kernel将同步可见）*/
 static inline void xsk_ring_prod__submit(struct xsk_ring_prod *prod, __u32 nb)
 {
 	/* Make sure everything has been written to the ring before indicating
@@ -140,10 +153,12 @@ static inline __u32 xsk_ring_cons__peek(struct xsk_ring_cons *cons, __u32 nb, __
 	__u32 entries = xsk_cons_nb_avail(cons, nb);
 
 	if (entries > 0) {
+		/*可消费entries个，修改cached_cons，通过*idx记录原来的消费者位置*/
 		*idx = cons->cached_cons;
 		cons->cached_cons += entries;
 	}
 
+	/*返回可消费数*/
 	return entries;
 }
 
@@ -205,8 +220,8 @@ void xsk_clear_xskmap(struct bpf_map *map);
 bool xsk_is_in_mode(u32 ifindex, int mode);
 
 struct xsk_socket_config {
-	__u32 rx_size;
-	__u32 tx_size;
+	__u32 rx_size;/*rx描述符数目*/
+	__u32 tx_size;/*tx描述符数目*/
 	__u16 bind_flags;
 };
 

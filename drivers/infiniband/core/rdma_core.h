@@ -120,7 +120,7 @@ struct uverbs_api_attr {
 
 struct uverbs_api {
 	/* radix tree contains struct uverbs_api_* pointers */
-	struct radix_tree_root radix;
+	struct radix_tree_root radix;/*映射key与element的关系*/
 	/*对应的driver id*/
 	enum rdma_driver_id driver_id;
 
@@ -176,7 +176,7 @@ extern const struct uapi_definition uverbs_def_obj_srq[];
 extern const struct uapi_definition uverbs_def_obj_wq[];
 extern const struct uapi_definition uverbs_def_write_intf[];
 
-/*获取cmd对应的method*/
+/*通过uapi,获取cmd对应的method*/
 static inline const struct uverbs_api_write_method *
 uapi_get_method(const struct uverbs_api *uapi, u32 command)
 {

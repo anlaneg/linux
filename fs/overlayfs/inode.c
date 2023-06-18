@@ -1019,7 +1019,7 @@ void ovl_inode_init(struct inode *inode, struct ovl_inode_params *oip,
 	ovl_map_ino(inode, ino, fsid);
 }
 
-/*overlay文件系统inode填充*/
+/*overlay文件系统按照mode对inode进行填充*/
 static void ovl_fill_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
@@ -1158,6 +1158,7 @@ fail:
 	return fallback;
 }
 
+/*新建inode并按照mode进行创建*/
 struct inode *ovl_new_inode(struct super_block *sb, umode_t mode, dev_t rdev)
 {
 	struct inode *inode;

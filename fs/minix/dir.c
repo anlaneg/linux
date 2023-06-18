@@ -225,10 +225,12 @@ int minix_add_link(struct dentry *dentry, struct inode *inode)
 	const char * name = dentry->d_name.name;
 	/*本节点名称长度*/
 	int namelen = dentry->d_name.len;
+	/*取super block*/
 	struct super_block * sb = dir->i_sb;
+	/*由super block取得minix super block info*/
 	struct minix_sb_info * sbi = minix_sb(sb);
 	struct page *page = NULL;
-	/*此目录中占用多少page*/
+	/*父目录中占用了多少page*/
 	unsigned long npages = dir_pages(dir);
 	unsigned long n;
 	char *kaddr, *p;
@@ -247,7 +249,7 @@ int minix_add_link(struct dentry *dentry, struct inode *inode)
 	for (n = 0; n <= npages; n++) {
 		char *limit, *dir_end;
 
-		/*读取目录的第n个页*/
+		/*读取父目录的第n个页*/
 		page = dir_get_page(dir, n);
 		err = PTR_ERR(page);
 		if (IS_ERR(page))
@@ -256,9 +258,11 @@ int minix_add_link(struct dentry *dentry, struct inode *inode)
 		kaddr = (char*)page_address(page);
 		dir_end = kaddr + minix_last_byte(dir, n);
 		limit = kaddr + PAGE_SIZE - sbi->s_dirsize;
+		/*遍历记录在此页的direntry*/
 		for (p = kaddr; p <= limit; p = minix_next_entry(p, sbi)) {
 			de = (minix_dirent *)p;
 			de3 = (minix3_dirent *)p;
+			/*取当前访问的dir entry对应的name,inode*/
 			if (sbi->s_version == MINIX_V3) {
 				namx = de3->name;
 				inumber = de3->inode;
@@ -276,6 +280,8 @@ int minix_add_link(struct dentry *dentry, struct inode *inode)
 			}
 			if (!inumber)
 				goto got_it;
+
+			/*文件已存在*/
 			err = -EEXIST;
 			if (namecompare(namelen, sbi->s_namelen, name, namx))
 				goto out_unlock;
@@ -291,7 +297,9 @@ got_it:
 	err = minix_prepare_chunk(page, pos, sbi->s_dirsize);
 	if (err)
 		goto out_unlock;
+	/*设置文件名称*/
 	memcpy (namx, name, namelen);
+	/*设置dir entry对应的inode编号*/
 	if (sbi->s_version == MINIX_V3) {
 		memset (namx + namelen, 0, sbi->s_dirsize - namelen - 4);
 		de3->inode = inode->i_ino;
@@ -299,6 +307,7 @@ got_it:
 		memset (namx + namelen, 0, sbi->s_dirsize - namelen - 2);
 		de->inode = inode->i_ino;
 	}
+	/*落盘*/
 	dir_commit_chunk(page, pos, sbi->s_dirsize);
 	dir->i_mtime = dir->i_ctime = current_time(dir);
 	mark_inode_dirty(dir);

@@ -12,26 +12,28 @@
 #include "xsk_queue.h"
 
 
-//计算ring需要的内存大小
-static size_t xskq_get_ring_size(struct xsk_queue *q, bool umem_queue)
+//计算创建不同的ring需要的内存大小（非umem_queue队列为rxtx_ring)
+static size_t xskq_get_ring_size(struct xsk_queue *q, bool umem_queue/*是否为umem queue*/)
 {
 	struct xdp_umem_ring *umem_ring;
 	struct xdp_rxtx_ring *rxtx_ring;
 
 	if (umem_queue)
-	    //umem_ring结构体后 + q->nentries * desc个元素
+	    //umem_ring结构体后包含desc个q->nentries[0]元素，需要多少字节
+		//即 struct_size = sizeof(umem_ring) + (sizeof(umem_ring->desc[0])* q->nentries)
 		return struct_size(umem_ring, desc, q->nentries);
-	//rxtx_ring结构体后 + q->nentries * desc个元素
+
+	//非umem_queue,则为rxtx_ring结构体后 + q->nentries * sizeof(rxtx_ring->desc[0])
 	return struct_size(rxtx_ring, desc, q->nentries);
 }
 
 //创建指定大小的xsk队列
-struct xsk_queue *xskq_create(u32 nentries, bool umem_queue/*是否umem队列*/)
+struct xsk_queue *xskq_create(u32 nentries/*队列长度*/, bool umem_queue/*是否为umem队列*/)
 {
 	struct xsk_queue *q;
 	size_t size;
 
-	/*申请队列*/
+	/*申请xsk_queue*/
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
 		return NULL;
@@ -39,7 +41,7 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue/*是否umem队列*/)
 	q->nentries = nentries;
 	q->ring_mask = nentries - 1;
 
-	/*确认ring内存大小*/
+	/*确认要创建的ring内存大小，且大小需要以页对齐*/
 	size = xskq_get_ring_size(q, umem_queue);
 	size = PAGE_ALIGN(size);
 
@@ -54,6 +56,7 @@ struct xsk_queue *xskq_create(u32 nentries, bool umem_queue/*是否umem队列*/)
 	return q;
 }
 
+/*销毁指定queue*/
 void xskq_destroy(struct xsk_queue *q)
 {
 	if (!q)

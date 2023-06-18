@@ -209,9 +209,10 @@ static ssize_t new_id_store(struct device_driver *driver, const char *buf,
 			&vendor, &device, &subvendor, &subdevice,
 			&class, &class_mask, &driver_data);
 	if (fields < 2)
+		/*不得小于两个值*/
 		return -EINVAL;
 
-	//如果是7个值，则填充
+	//如果不是7个值，则填充
 	if (fields != 7) {
 		struct pci_dev *pdev = kzalloc(sizeof(*pdev), GFP_KERNEL);
 		if (!pdev)

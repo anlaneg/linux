@@ -37,10 +37,10 @@ struct devlink {
 	struct list_head trap_group_list;
 	struct list_head trap_policer_list;
 	struct list_head linecard_list;
-	const struct devlink_ops *ops;
+	const struct devlink_ops *ops;/*devlink接口操作集*/
 	struct xarray snapshot_ids;
 	struct devlink_dev_stats stats;
-	struct device *dev;
+	struct device *dev;/*关联的设备*/
 	possible_net_t _net;
 	/* Serializes access to devlink instance specific objects such as
 	 * port, sb, dpipe, resource, params, region, traps and more.

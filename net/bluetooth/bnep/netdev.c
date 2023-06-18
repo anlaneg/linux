@@ -189,7 +189,7 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	 * on the sk_sleep(sk).
 	 */
 	netif_trans_update(dev);
-	skb_queue_tail(&sk->sk_write_queue, skb);
+	skb_queue_tail(&sk->sk_write_queue, skb);/*将此报文交给socket*/
 	wake_up_interruptible(sk_sleep(sk));
 
 	if (skb_queue_len(&sk->sk_write_queue) >= BNEP_TX_QUEUE_LEN) {
@@ -203,10 +203,11 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
+/*蓝牙网络设备*/
 static const struct net_device_ops bnep_netdev_ops = {
 	.ndo_open            = bnep_net_open,
 	.ndo_stop            = bnep_net_close,
-	.ndo_start_xmit	     = bnep_net_xmit,
+	.ndo_start_xmit	     = bnep_net_xmit,/*将报文交给对应的socket*/
 	.ndo_validate_addr   = eth_validate_addr,
 	.ndo_set_rx_mode     = bnep_net_set_mc_list,
 	.ndo_set_mac_address = bnep_net_set_mac_addr,

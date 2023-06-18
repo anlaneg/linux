@@ -780,6 +780,7 @@ int sysfs_emit(char *buf, const char *fmt, ...)
 		return 0;
 
 	va_start(args, fmt);
+	/*格式化参数输出到buffer*/
 	len = vscnprintf(buf, PAGE_SIZE, fmt, args);
 	va_end(args);
 

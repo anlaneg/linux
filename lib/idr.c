@@ -377,7 +377,7 @@ EXPORT_SYMBOL(idr_replace);
  * Return: The allocated ID, or %-ENOMEM if memory could not be allocated,
  * or %-ENOSPC if there are no free IDs.
  */
-int ida_alloc_range(struct ida *ida, unsigned int min, unsigned int max,
+int ida_alloc_range(struct ida *ida, unsigned int min/*最小id*/, unsigned int max/*最大id*/,
 			gfp_t gfp)
 {
 	XA_STATE(xas, &ida->xa, min / IDA_BITMAP_BITS);
