@@ -1247,15 +1247,17 @@ error_vma_iter_prealloc:
 
 }
 
+/*mmap实现函数，注：此函数不支持大页*/
 unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len,
 			      unsigned long prot, unsigned long flags,
-			      unsigned long fd, unsigned long pgoff)
+			      unsigned long fd, unsigned long pgoff/*页数*/)
 {
 	struct file *file = NULL;
 	unsigned long retval = -EBADF;
 
 	audit_mmap_fd(fd, flags);
 	if (!(flags & MAP_ANONYMOUS)) {
+		/*未提供MAP_ANONYMOUS标记，尝试fd对应的文件*/
 		file = fget(fd);
 		if (!file)
 			goto out;

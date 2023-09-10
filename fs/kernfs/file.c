@@ -367,6 +367,7 @@ static void kernfs_vma_open(struct vm_area_struct *vma)
 	if (!kernfs_get_active(of->kn))
 		return;
 
+	/*执行open回调*/
 	if (of->vm_ops->open)
 		of->vm_ops->open(vma);
 

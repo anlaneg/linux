@@ -732,6 +732,7 @@ static struct sock *__vsock_create(struct net *net,
 	struct vsock_sock *psk;
 	struct vsock_sock *vsk;
 
+	/*申请af_vsock*/
 	sk = sk_alloc(net, AF_VSOCK, priority, &vsock_proto, kern);
 	if (!sk)
 		return NULL;
@@ -743,7 +744,7 @@ static struct sock *__vsock_create(struct net *net,
 	 * setting it here if needed.
 	 */
 	if (!sock)
-		sk->sk_type = type;
+		sk->sk_type = type;/*指明socket类型*/
 
 	vsk = vsock_sk(sk);
 	vsock_addr_init(&vsk->local_addr, VMADDR_CID_ANY, VMADDR_PORT_ANY);
@@ -763,7 +764,7 @@ static struct sock *__vsock_create(struct net *net,
 	vsk->ignore_connecting_rst = false;
 	vsk->peer_shutdown = 0;
 	INIT_DELAYED_WORK(&vsk->connect_work, vsock_connect_timeout);
-	INIT_DELAYED_WORK(&vsk->pending_work, vsock_pending_work);
+	INIT_DELAYED_WORK(&vsk->pending_work, vsock_pending_work);/*初始化可延迟work*/
 
 	psk = parent ? vsock_sk(parent) : NULL;
 	if (parent) {
@@ -786,6 +787,7 @@ static struct sock *__vsock_create(struct net *net,
 	return sk;
 }
 
+/*socket type是否为可连接的*/
 static bool sock_type_connectible(u16 type)
 {
 	return (type == SOCK_STREAM) || (type == SOCK_SEQPACKET);
@@ -1547,11 +1549,13 @@ static int vsock_listen(struct socket *sock, int backlog)
 	lock_sock(sk);
 
 	if (!sock_type_connectible(sk->sk_type)) {
+		/*只支持connectiable*/
 		err = -EOPNOTSUPP;
 		goto out;
 	}
 
 	if (sock->state != SS_UNCONNECTED) {
+		/*sock必须处于unconnected状态*/
 		err = -EINVAL;
 		goto out;
 	}
@@ -1559,6 +1563,7 @@ static int vsock_listen(struct socket *sock, int backlog)
 	vsk = vsock_sk(sk);
 
 	if (!vsock_addr_bound(&vsk->local_addr)) {
+		/*local addr必须为VMADDR_PORT_ANY*/
 		err = -EINVAL;
 		goto out;
 	}
@@ -2213,6 +2218,7 @@ static const struct proto_ops vsock_seqpacket_ops = {
 	.sendpage = sock_no_sendpage,
 };
 
+/*创建vsock*/
 static int vsock_create(struct net *net, struct socket *sock,
 			int protocol, int kern)
 {
@@ -2224,8 +2230,10 @@ static int vsock_create(struct net *net, struct socket *sock,
 		return -EINVAL;
 
 	if (protocol && protocol != PF_VSOCK)
+		/*protocol必须为pf_vsock*/
 		return -EPROTONOSUPPORT;
 
+	/*当前支持以下几种ops*/
 	switch (sock->type) {
 	case SOCK_DGRAM:
 		sock->ops = &vsock_dgram_ops;
@@ -2242,6 +2250,7 @@ static int vsock_create(struct net *net, struct socket *sock,
 
 	sock->state = SS_UNCONNECTED;
 
+	/*创建vsock*/
 	sk = __vsock_create(net, sock, NULL, GFP_KERNEL, 0, kern);
 	if (!sk)
 		return -ENOMEM;
@@ -2256,6 +2265,7 @@ static int vsock_create(struct net *net, struct socket *sock,
 		}
 	}
 
+	/*添加进unbound链表*/
 	vsock_insert_unbound(vsk);
 
 	return 0;
@@ -2263,7 +2273,7 @@ static int vsock_create(struct net *net, struct socket *sock,
 
 static const struct net_proto_family vsock_family_ops = {
 	.family = AF_VSOCK,
-	.create = vsock_create,
+	.create = vsock_create,/*创建vsock*/
 	.owner = THIS_MODULE,
 };
 

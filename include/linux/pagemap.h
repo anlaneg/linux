@@ -428,6 +428,7 @@ static inline void folio_attach_private(struct folio *folio, void *data)
  */
 static inline void *folio_change_private(struct folio *folio, void *data)
 {
+	/*更新private数据为NULL，并返回旧的private指针*/
 	void *old = folio_get_private(folio);
 
 	folio->private = data;

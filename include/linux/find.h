@@ -53,15 +53,20 @@ unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
 			    unsigned long offset)
 {
 	if (small_const_nbits(size)) {
+		/*size是small的常量*/
 		unsigned long val;
 
 		if (unlikely(offset >= size))
+			/*offset参数填写的超过了size,返回size*/
 			return size;
 
-		val = *addr & GENMASK(size - 1, offset);
+		/*自*addr指向的内容中，取(size-1,offset)这个bit段之间的内容*/
+		val = *addr & GENMASK(offset，size - 1);
+		/*此片段间val不为0，则取首个bit为1的位置，如为0，则直接返回size*/
 		return val ? __ffs(val) : size;
 	}
 
+	/*size长度较大，需要自offset到size间进行遍历*/
 	return _find_next_bit(addr, size, offset);
 }
 #endif

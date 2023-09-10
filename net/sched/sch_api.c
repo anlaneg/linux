@@ -124,10 +124,10 @@ static DEFINE_RWLOCK(qdisc_mod_lock);
 
 /* The list of all installed queueing disciplines. */
 
-static struct Qdisc_ops *qdisc_base;/*注册所有的qdisc_ops*/
+static struct Qdisc_ops *qdisc_base;/*注册系统所有的qdisc_ops*/
 
 /* Register/unregister queueing discipline */
-//qdisc_ops注册
+//为qdisc_base队列上增加新的qdisc_ops，完成qdisc_ops的注册
 int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 {
 	struct Qdisc_ops *q, **qp;
@@ -140,7 +140,7 @@ int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 		if (!strcmp(qops->id, q->id))
 			goto out;
 
-	//提供默认的enqueue,dequeue,peek
+	//为qops提供默认的enqueue,dequeue,peek
 	if (qops->enqueue == NULL)
 		qops->enqueue = noop_qdisc_ops.enqueue;
 	if (qops->peek == NULL) {
@@ -157,9 +157,11 @@ int register_qdisc(struct Qdisc_ops *qops/*排队规则操作集*/)
 		const struct Qdisc_class_ops *cops = qops->cl_ops;
 
 		if (!(cops->find && cops->walk && cops->leaf))
+			/*这三个回调必须提供*/
 			goto out_einval;
 
 		if (cops->tcf_block && !(cops->bind_tcf && cops->unbind_tcf))
+			/*tcf_block不为空时，上述两个回调必须提供*/
 			goto out_einval;
 	}
 
@@ -198,7 +200,7 @@ void unregister_qdisc(struct Qdisc_ops *qops)
 EXPORT_SYMBOL(unregister_qdisc);
 
 /* Get default qdisc if not otherwise specified */
-//取排队队列名称
+//取default排队队列名称
 void qdisc_get_default(char *name, size_t len)
 {
 	read_lock(&qdisc_mod_lock);
@@ -223,7 +225,7 @@ static struct Qdisc_ops *qdisc_lookup_default(const char *name)
 }
 
 /* Set new default qdisc to use */
-//设置默认排队队列default_qdisc_ops
+//此函数用于设备系统的默认qdisc_ops
 int qdisc_set_default(const char *name)
 {
 	const struct Qdisc_ops *ops;
@@ -272,7 +274,7 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	struct Qdisc *q;
 
 	if (!qdisc_dev(root))
-		/*root队列对应的dev不存在，检查是否root队列*/
+		/*队列对应的dev不存在，检查handle是否匹配*/
 		return (root->handle == handle ? root : NULL);
 
 	if (!(root->flags & TCQ_F_BUILTIN) &&
@@ -280,7 +282,7 @@ static struct Qdisc *qdisc_match_from_root(struct Qdisc *root, u32 handle)
 	    /*如果为非内建队列，且handle匹配，则直接返回*/
 		return root;
 
-	//自netdev中查找的qdisc
+	//自netdev中查找匹配handle的qdisc
 	hash_for_each_possible_rcu(qdisc_dev(root)->qdisc_hash, q, hash, handle,
 				   lockdep_rtnl_is_held()) {
 		if (q->handle == handle)
@@ -302,7 +304,7 @@ void qdisc_hash_add(struct Qdisc *q, bool invisible)
 }
 EXPORT_SYMBOL(qdisc_hash_add);
 
-//除根队列，ingress队列外，删除指定队列
+//除根队列，ingress队列外，自hash中移除指定队列
 void qdisc_hash_del(struct Qdisc *q)
 {
 	if ((q->parent != TC_H_ROOT) && !(q->flags & TCQ_F_INGRESS)) {
@@ -354,19 +356,22 @@ out:
 	return q;
 }
 
-/*通过classid查找其对应的qdisc*/
+/*通过classid查找qdisc对应的 leaf qdisc*/
 static struct Qdisc *qdisc_leaf(struct Qdisc *p, u32 classid)
 {
 	unsigned long cl;
 	const struct Qdisc_class_ops *cops = p->ops->cl_ops;
 
+	/*无分类ops,直接返回NULL*/
 	if (cops == NULL)
 		return NULL;
+
 	//通过classid找到对应的class
 	cl = cops->find(p, classid);
 
 	if (cl == 0)
 		return NULL;
+
 	//找指定class绑定的队列
 	return cops->leaf(p, cl);
 }
@@ -448,11 +453,13 @@ struct qdisc_rate_table *qdisc_get_rtab(struct tc_ratespec *r,
 	for (rtab = qdisc_rtab_list; rtab; rtab = rtab->next) {
 		if (!memcmp(&rtab->rate, r, sizeof(struct tc_ratespec)) &&
 		    !memcmp(&rtab->data, nla_data(tab), 1024)) {
+			/*tab与当前遍历项rtab相等，增加引用计数，并返回*/
 			rtab->refcnt++;
 			return rtab;
 		}
 	}
 
+	/*没有找到相同的，执执申请rtab,并填充后，添加到qdisc_rtab_list的头部*/
 	rtab = kmalloc(sizeof(*rtab), GFP_KERNEL);
 	if (rtab) {
 		rtab->rate = *r;
@@ -463,6 +470,7 @@ struct qdisc_rate_table *qdisc_get_rtab(struct tc_ratespec *r,
 		rtab->next = qdisc_rtab_list;
 		qdisc_rtab_list = rtab;
 	} else {
+		/*申请内存失败*/
 		NL_SET_ERR_MSG(extack, "Failed to allocate new qdisc rate table");
 	}
 	return rtab;
@@ -480,6 +488,7 @@ void qdisc_put_rtab(struct qdisc_rate_table *tab)
 	     (rtab = *rtabp) != NULL;
 	     rtabp = &rtab->next) {
 		if (rtab == tab) {
+			/*沿qdisc_rtabl_list查找到要put且引用计数为0的tab,执行释放*/
 			*rtabp = rtab->next;
 			kfree(rtab);
 			return;
@@ -530,6 +539,7 @@ static struct qdisc_size_table *qdisc_get_stab(struct nlattr *opt,
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*遍历qdisc_stab_list，如果发现有相等的，则增加引用计数，并返回*/
 	list_for_each_entry(stab, &qdisc_stab_list, list) {
 		if (memcmp(&stab->szopts, s, sizeof(*s)))
 			continue;
@@ -540,6 +550,7 @@ static struct qdisc_size_table *qdisc_get_stab(struct nlattr *opt,
 		return stab;
 	}
 
+	/*没有发现相等的，则执行申请，填充后，添加到链表qdisc_stab_list*/
 	if (s->size_log > STAB_SIZE_LOG_MAX ||
 	    s->cell_log > STAB_SIZE_LOG_MAX) {
 		NL_SET_ERR_MSG(extack, "Invalid logarithmic size of size table");
@@ -566,6 +577,7 @@ void qdisc_put_stab(struct qdisc_size_table *tab)
 		return;
 
 	if (--tab->refcnt == 0) {
+		/*引用计数减为0，执行释放*/
 		list_del(&tab->list);
 		kfree_rcu(tab, rcu);
 	}
@@ -576,6 +588,7 @@ static int qdisc_dump_stab(struct sk_buff *skb, struct qdisc_size_table *stab)
 {
 	struct nlattr *nest;
 
+	/*填充TCA_STAB*/
 	nest = nla_nest_start_noflag(skb, TCA_STAB);
 	if (nest == NULL)
 		goto nla_put_failure;
@@ -685,6 +698,7 @@ void qdisc_watchdog_cancel(struct qdisc_watchdog *wd)
 }
 EXPORT_SYMBOL(qdisc_watchdog_cancel);
 
+/*申请桶数为n的hash list*/
 static struct hlist_head *qdisc_class_hash_alloc(unsigned int n)
 {
 	struct hlist_head *h;
@@ -710,6 +724,7 @@ void qdisc_class_hash_grow(struct Qdisc *sch, struct Qdisc_class_hash *clhash)
 	/* Rehash when load factor exceeds 0.75 */
 	if (clhash->hashelems * 4 <= clhash->hashsize * 3)
 		return;
+	/*桶数翻倍*/
 	nsize = clhash->hashsize * 2;
 	nmask = nsize - 1;
 	nhash = qdisc_class_hash_alloc(nsize);
@@ -720,6 +735,7 @@ void qdisc_class_hash_grow(struct Qdisc *sch, struct Qdisc_class_hash *clhash)
 	osize = clhash->hashsize;
 
 	sch_tree_lock(sch);
+	/*内容搬迁*/
 	for (i = 0; i < osize; i++) {
 		hlist_for_each_entry_safe(cl, next, &ohash[i], hnode) {
 			h = qdisc_class_hash(cl->classid, nmask);
@@ -735,6 +751,7 @@ void qdisc_class_hash_grow(struct Qdisc *sch, struct Qdisc_class_hash *clhash)
 }
 EXPORT_SYMBOL(qdisc_class_hash_grow);
 
+/*初始化clhash,默认桶数为4*/
 int qdisc_class_hash_init(struct Qdisc_class_hash *clhash)
 {
 	unsigned int size = 4;
@@ -755,6 +772,7 @@ void qdisc_class_hash_destroy(struct Qdisc_class_hash *clhash)
 }
 EXPORT_SYMBOL(qdisc_class_hash_destroy);
 
+/*将cl添加进hash表*/
 void qdisc_class_hash_insert(struct Qdisc_class_hash *clhash,
 			     struct Qdisc_class_common *cl)
 {
@@ -763,10 +781,11 @@ void qdisc_class_hash_insert(struct Qdisc_class_hash *clhash,
 	INIT_HLIST_NODE(&cl->hnode);
 	h = qdisc_class_hash(cl->classid, clhash->hashmask);
 	hlist_add_head(&cl->hnode, &clhash->hash[h]);
-	clhash->hashelems++;
+	clhash->hashelems++;/*元素数增加*/
 }
 EXPORT_SYMBOL(qdisc_class_hash_insert);
 
+/*移除clhash中的cl*/
 void qdisc_class_hash_remove(struct Qdisc_class_hash *clhash,
 			     struct Qdisc_class_common *cl)
 {
@@ -854,12 +873,15 @@ int qdisc_offload_dump_helper(struct Qdisc *sch, enum tc_setup_type type,
 
 	sch->flags &= ~TCQ_F_OFFLOADED;
 	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
+		/*设备未开启tc offload或者未提供ndo_setup_tc回调，则直接返回*/
 		return 0;
 
+	/*触发回调*/
 	err = dev->netdev_ops->ndo_setup_tc(dev, type, type_data);
 	if (err == -EOPNOTSUPP)
 		return 0;
 
+	/*如果无错误，则qdisc打上offloaded标记*/
 	if (!err)
 		sch->flags |= TCQ_F_OFFLOADED;
 
@@ -876,8 +898,10 @@ void qdisc_offload_graft_helper(struct net_device *dev, struct Qdisc *sch,
 	int err;
 
 	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
+		/*设备未开启tc offload或者未提供ndo_setup_tc回调，则直接返回*/
 		return;
 
+	/*触发回调*/
 	err = dev->netdev_ops->ndo_setup_tc(dev, type, type_data);
 
 	/* Don't report error if the graft is part of destroy operation. */
@@ -896,6 +920,7 @@ void qdisc_offload_graft_helper(struct net_device *dev, struct Qdisc *sch,
 }
 EXPORT_SYMBOL(qdisc_offload_graft_helper);
 
+/*执行offload能力查询*/
 void qdisc_offload_query_caps(struct net_device *dev,
 			      enum tc_setup_type type,
 			      void *caps, size_t caps_len)
@@ -924,6 +949,7 @@ static void qdisc_offload_graft_root(struct net_device *dev,
 				  (old && old->flags & TCQ_F_INGRESS),
 	};
 
+	/*触发setup root qdisc类型回调*/
 	qdisc_offload_graft_helper(dev, NULL, new, old,
 				   TC_SETUP_ROOT_QDISC, &graft_offload, extack);
 }
@@ -984,6 +1010,7 @@ static int tc_fill_qdisc(struct sk_buff *skb, struct Qdisc *q, u32 clid/*qdisc�
 		goto nla_put_failure;
 	qlen = qdisc_qlen_sum(q);
 
+	/*填充stab*/
 	stab = rtnl_dereference(q->stab);
 	if (stab && qdisc_dump_stab(skb, stab) < 0)
 		goto nla_put_failure;
@@ -1108,13 +1135,14 @@ static int qdisc_graft(struct net_device *dev, struct Qdisc *parent,
 	struct net *net = dev_net(dev);
 
 	if (parent == NULL) {
+		/*父qdisc为NULL的情况*/
 		unsigned int i, num_q, ingress;
 
 		ingress = 0;
-		num_q = dev->num_tx_queues;
+		num_q = dev->num_tx_queues;/*设备tx队列数*/
 		if ((q && q->flags & TCQ_F_INGRESS) ||
 		    (new && new->flags & TCQ_F_INGRESS)) {
-			num_q = 1;
+			num_q = 1;/*ingress的q定为1*/
 			ingress = 1;
 			if (!dev_ingress_queue(dev)) {
 			    /*ingress情况下，dev必须要有ingress_queue*/
@@ -1123,20 +1151,24 @@ static int qdisc_graft(struct net_device *dev, struct Qdisc *parent,
 			}
 		}
 
+		/*时间关系，没有看进此函数20230819*/
 		if (dev->flags & IFF_UP)
 			dev_deactivate(dev);
 
 		qdisc_offload_graft_root(dev, new, old, extack);
 
 		if (new && new->ops->attach && !ingress)
+			/*如果有attach回调，且非ingress，则跳过*/
 			goto skip;
 
 		for (i = 0; i < num_q; i++) {
 			struct netdev_queue *dev_queue = dev_ingress_queue(dev);
 
 			if (!ingress)
+				/*非ingress队列情况，取dev的tx队列*/
 				dev_queue = netdev_get_tx_queue(dev, i);
 
+			/*设置dev_queue->qdisc，dev_queue->qdisc_sleeping*/
 			old = dev_graft_qdisc(dev_queue, new);
 			if (new && i > 0)
 				qdisc_refcount_inc(new);
@@ -1202,7 +1234,7 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 	u32 block_index;
 
 	if (tca[TCA_INGRESS_BLOCK]) {
-		//设置ingress block_index
+		//配置设置ingress block_index
 		block_index = nla_get_u32(tca[TCA_INGRESS_BLOCK]);
 
 		if (!block_index) {
@@ -1216,6 +1248,7 @@ static int qdisc_block_indexes_set(struct Qdisc *sch, struct nlattr **tca,
 		}
 		sch->ops->ingress_block_set(sch, block_index);
 	}
+
 	if (tca[TCA_EGRESS_BLOCK]) {
 		//设置egress block
 		block_index = nla_get_u32(tca[TCA_EGRESS_BLOCK]);
@@ -1247,7 +1280,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 				  struct netlink_ext_ack *extack/*出参，保存出错信息*/)
 {
 	int err;
-	struct nlattr *kind = tca[TCA_KIND];
+	struct nlattr *kind = tca[TCA_KIND];/*要创建的qdisc类型*/
 	struct Qdisc *sch;
 	struct Qdisc_ops *ops;
 	struct qdisc_size_table *stab;
@@ -1255,7 +1288,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	//依据kind查找对应类型的qdisc_ops
 	ops = qdisc_lookup_ops(kind);
 #ifdef CONFIG_MODULES
-	//如果ops不存在，则尝试加载
+	//如果ops不存在，则尝试加载对应模块
 	if (ops == NULL && kind != NULL) {
 		char name[IFNAMSIZ];
 		if (nla_strscpy(name, kind, IFNAMSIZ) >= 0) {
@@ -1290,18 +1323,19 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	}
 
 	//通过ops创建对应的qdisc，并初始化
-	sch = qdisc_alloc(dev_queue, ops, extack);
+	sch = qdisc_alloc(dev_queue/*qdisc关联的dev_queue*/, ops, extack);
 	if (IS_ERR(sch)) {
 		err = PTR_ERR(sch);
 		goto err_out2;
 	}
 
+	/*指明父qdisc*/
 	sch->parent = parent;
 
 	if (handle == TC_H_INGRESS) {
 		//如果要求创建的为ingress队列，则添加相应标记
 		sch->flags |= TCQ_F_INGRESS;
-		handle = TC_H_MAKE(TC_H_INGRESS, 0);
+		handle = TC_H_MAKE(TC_H_INGRESS, 0);/*更新handle*/
 	} else {
 		if (handle == 0) {
 			//未指定队列id，为队列申请id号
@@ -1313,11 +1347,12 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 			}
 		}
 
-		//指明此队列为单队列
+		//如果netdev为单队列，则标记此qdisc为单队列
 		if (!netif_is_multiqueue(dev))
 			sch->flags |= TCQ_F_ONETXQUEUE;
 	}
 
+	/*更新handle*/
 	sch->handle = handle;
 
 	/* This exist to keep backward compatible with a userspace
@@ -1327,15 +1362,17 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 	 * before again attaching a qdisc.
 	 */
 	if ((dev->priv_flags & IFF_NO_QUEUE) && (dev->tx_queue_len == 0)) {
+		/*此设备没有队列，更新其队列长度*/
 		dev->tx_queue_len = DEFAULT_TX_QUEUE_LEN;
 		netdev_info(dev, "Caught tx_queue_len zero misconfig\n");
 	}
 
-	//设置sch对应的block_index
+	//设置sch对应的ingress block index与egress block index
 	err = qdisc_block_indexes_set(sch, tca, extack);
 	if (err)
 		goto err_out3;
 
+	/*设置stab*/
 	if (tca[TCA_STAB]) {
 		stab = qdisc_get_stab(tca[TCA_STAB], extack);
 		if (IS_ERR(stab)) {
@@ -1345,6 +1382,7 @@ static struct Qdisc *qdisc_create(struct net_device *dev/*qdisc关联的dev*/,
 		rcu_assign_pointer(sch->stab, stab);
 	}
 
+	/*初始化qdisc*/
 	if (ops->init) {
 		err = ops->init(sch, tca[TCA_OPTIONS], extack);
 		if (err != 0)
@@ -1394,6 +1432,7 @@ err_out:
 	return NULL;
 }
 
+/*对qdisc配置进行变更*/
 static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 			struct netlink_ext_ack *extack)
 {
@@ -1402,6 +1441,7 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 
 	if (tca[TCA_OPTIONS]) {
 		if (!sch->ops->change) {
+			/*未提供change回调，无法执行配置变更*/
 			NL_SET_ERR_MSG(extack, "Change operation not supported by specified qdisc");
 			return -EINVAL;
 		}
@@ -1416,11 +1456,13 @@ static int qdisc_change(struct Qdisc *sch, struct nlattr **tca,
 	}
 
 	if (tca[TCA_STAB]) {
+		/*获取配置指定的stab*/
 		stab = qdisc_get_stab(tca[TCA_STAB], extack);
 		if (IS_ERR(stab))
 			return PTR_ERR(stab);
 	}
 
+	/*替换旧的stab*/
 	ostab = rtnl_dereference(sch->stab);
 	rcu_assign_pointer(sch->stab, stab);
 	qdisc_put_stab(ostab);
@@ -1482,7 +1524,7 @@ check_loop_fn(struct Qdisc *q, unsigned long cl, struct qdisc_walker *w)
 }
 
 const struct nla_policy rtm_tca_policy[TCA_MAX + 1] = {
-	[TCA_KIND]		= { .type = NLA_STRING },//filter名称
+	[TCA_KIND]		= { .type = NLA_STRING },//filter，qdisc名称
 	[TCA_RATE]		= { .type = NLA_BINARY,
 				    .len = sizeof(struct tc_estimator) },
 	[TCA_STAB]		= { .type = NLA_NESTED },
@@ -1600,13 +1642,15 @@ static int tc_modify_qdisc(struct sk_buff *skb, struct nlmsghdr *n,
 
 replay:
 	/* Reinit, just in case something touches this. */
+	/*解析n位置向后偏sizeof(*tcm)后的属性内容*/
 	err = nlmsg_parse_deprecated(n, sizeof(*tcm), tca, TCA_MAX,
 				     rtm_tca_policy, extack);
 	if (err < 0)
 		return err;
 
+	/*取sizeof(*tcm)内容*/
 	tcm = nlmsg_data(n);
-	clid = tcm->tcm_parent;
+	clid = tcm->tcm_parent;/*qdisc创建修改时，其值为class id*/
 	q = p = NULL;
 
 	//通过ifindex找到对应的dev
@@ -1616,6 +1660,11 @@ replay:
 
 
 	if (clid) {
+		/*class id被指定的情况处理，共有3种情况：
+		 * 1。clid 为TC_H_ROOT；
+		 * 2。clid为TC_H_INGRESS，
+		 * 3。其它情况,此时clid分两部分（高16bits 与低16bits),
+		 * 	  先用major查找到qdisc,然后clid结合qdisc,查找class,并最终通过leaf回调用class找到对应的qdisc*/
 		if (clid != TC_H_ROOT) {
 			if (clid != TC_H_INGRESS) {
 				//非根qdisc,非ingress qdisc情况,取major来做为handle(队列的minor必须为0）
@@ -1626,17 +1675,18 @@ replay:
 				}
 				/*clid是一个由major:minor组成，现在查此class绑定的队列*/
 				q = qdisc_leaf(p, clid);
-			} else if (/*指明为ingress qdisc情况,创建ingress qdisc*/dev_ingress_queue_create(dev)) {
-				//创建dev->ingress_queue成功
+			} else if (/*指明为ingress qdisc情况,尝试创建ingress qdisc*/dev_ingress_queue_create(dev)) {
+				//创建/获取dev->ingress_queue成功，使用TC_H_INGRESS qdisc
 				q = dev_ingress_queue(dev)->qdisc_sleeping;
 			}
 		} else {
-			//指明为根qdisc,则使用设备对应的根qdisc
+			//clid为TC_H_ROOT,指明为根qdisc,则使用设备对应的根qdisc
 			q = rtnl_dereference(dev->qdisc);
 		}
 
 		/* It may be default qdisc, ignore it */
 		if (q && q->handle == 0)
+			/*handle为0的qdisc将被忽略*/
 			q = NULL;
 
 		//队列未找到，或者队列handle与传的不同，或者未传入handle
@@ -1667,13 +1717,14 @@ replay:
 
 				if (tca[TCA_KIND] &&
 				    nla_strcmp(tca[TCA_KIND], q->ops->id)) {
-					//队列类型名称不一致
+					//配置指明的队列类型，与查找到的队列类型不一致
 					NL_SET_ERR_MSG(extack, "Invalid qdisc name");
 					return -EINVAL;
 				}
 
 				if (q == p ||
 				    (p && check_loop(q, p, 0))) {
+					/*指定的p与q相同*/
 					NL_SET_ERR_MSG(extack, "Qdisc parent/child loop detected");
 					return -ELOOP;
 				}
@@ -1739,6 +1790,7 @@ replay:
 	//qdisc队列配置变更
 	err = qdisc_change(q, tca, extack);
 	if (err == 0)
+		/*向用户态通知，qdisc发生变更*/
 		qdisc_notify(net, skb, n, clid, NULL, q, extack);
 	return err;
 
@@ -1755,7 +1807,7 @@ create_n_graft:
 					 tcm->tcm_parent, tcm->tcm_parent,
 					 tca, &err, extack);
 		} else {
-		    /*此情况下ingress queue必须存在*/
+		    /*此情况下ingress queue必须存在（由于本函数创建ingress queue,故不常发生）*/
 			NL_SET_ERR_MSG(extack, "Cannot find ingress queue for specified device");
 			err = -ENOENT;
 		}
@@ -1764,25 +1816,30 @@ create_n_graft:
 		struct netdev_queue *dev_queue;
 
 		if (p && p->ops->cl_ops && p->ops->cl_ops->select_queue)
+			/*有parent queue,且通过回调，选中对应的dev_queue*/
 			dev_queue = p->ops->cl_ops->select_queue(p, tcm);
 		else if (p)
+			/*使用parent queue对应的dev_queue*/
 			dev_queue = p->dev_queue;
 		else
-			//取0号tx队列
+			//取设备的0号tx队列
 			dev_queue = netdev_get_tx_queue(dev, 0);
 
+		/*创建qdisc*/
 		q = qdisc_create(dev, dev_queue,
 				 tcm->tcm_parent, tcm->tcm_handle,
 				 tca, &err, extack);
 	}
+
 	if (q == NULL) {
+		/*创建qdisc不成功，如有必要再尝试一遍*/
 		if (err == -EAGAIN)
 			goto replay;
 		return err;
 	}
 
 graft:
-	err = qdisc_graft(dev, p, skb, n, clid, q, NULL, extack);
+	err = qdisc_graft(dev, p/*parent qdisc*/, skb, n, clid, q/*创建成功的qdisc*/, NULL, extack);
 	if (err) {
 		if (q)
 			qdisc_put(q);
@@ -2350,6 +2407,7 @@ done:
 #ifdef CONFIG_PROC_FS
 static int psched_show(struct seq_file *seq, void *v)
 {
+	/*显示此项的目的？*/
 	seq_printf(seq, "%08x %08x %08x %08x\n",
 		   (u32)NSEC_PER_USEC, (u32)PSCHED_TICKS2NS(1),
 		   1000000,
@@ -2362,6 +2420,7 @@ static int __net_init psched_net_init(struct net *net)
 {
 	struct proc_dir_entry *e;
 
+	/*创建psched文件*/
 	e = proc_create_single("psched", 0, net->proc_net, psched_show);
 	if (e == NULL)
 		return -ENOMEM;

@@ -1426,6 +1426,7 @@ static void m_stop(struct seq_file *m, void *v)
 	up_read(&namespace_sem);
 }
 
+/*调用show回调，显示mount信息*/
 static int m_show(struct seq_file *m, void *v)
 {
 	struct proc_mounts *p = m->private;

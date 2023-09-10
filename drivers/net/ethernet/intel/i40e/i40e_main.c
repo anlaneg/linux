@@ -13174,6 +13174,7 @@ static int i40e_ndo_bridge_setlink(struct net_device *dev,
 		__u16 mode;
 
 		if (nla_type(attr) != IFLA_BRIDGE_MODE)
+			/*仅支持修改bridge mode*/
 			continue;
 
 		mode = nla_get_u16(attr);

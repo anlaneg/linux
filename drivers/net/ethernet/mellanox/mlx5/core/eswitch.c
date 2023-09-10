@@ -88,6 +88,7 @@ struct mlx5_eswitch *mlx5_devlink_eswitch_get(struct devlink *devlink)
 	return dev->priv.eswitch;
 }
 
+/*给定vf number返回对应的vport*/
 struct mlx5_vport *__must_check
 mlx5_eswitch_get_vport(struct mlx5_eswitch *esw, u16 vport_num)
 {
@@ -96,7 +97,7 @@ mlx5_eswitch_get_vport(struct mlx5_eswitch *esw, u16 vport_num)
 	if (!esw || !MLX5_CAP_GEN(esw->dev, vport_group_manager))
 		return ERR_PTR(-EPERM);
 
-	vport = xa_load(&esw->vports, vport_num);
+	vport = xa_load(&esw->vports, vport_num);/*按索引返回*/
 	if (!vport) {
 		esw_debug(esw->dev, "vport out of range: num(0x%x)\n", vport_num);
 		return ERR_PTR(-EINVAL);
@@ -1528,6 +1529,7 @@ static int mlx5_esw_vport_alloc(struct mlx5_eswitch *esw, struct mlx5_core_dev *
 	vport->index = index;
 	vport->info.link_state = MLX5_VPORT_ADMIN_STATE_AUTO;
 	INIT_WORK(&vport->vport_change_handler, esw_vport_change_handler);
+	/*将此vf对应的port加入到vports*/
 	err = xa_insert(&esw->vports, vport_num, vport, GFP_KERNEL);
 	if (err)
 		goto insert_err;
@@ -1542,10 +1544,12 @@ insert_err:
 
 static void mlx5_esw_vport_free(struct mlx5_eswitch *esw, struct mlx5_vport *vport)
 {
+	/*移除指定索引*/
 	xa_erase(&esw->vports, vport->vport);
-	kfree(vport);
+	kfree(vport);/*内存释放*/
 }
 
+/*移除并释放eswitch上所有vports*/
 static void mlx5_esw_vports_cleanup(struct mlx5_eswitch *esw)
 {
 	struct mlx5_vport *vport;
@@ -1567,6 +1571,7 @@ static int mlx5_esw_vports_init(struct mlx5_eswitch *esw)
 
 	xa_init(&esw->vports);
 
+	/*pf对应的vport为0号*/
 	err = mlx5_esw_vport_alloc(esw, dev, idx, MLX5_VPORT_PF);
 	if (err)
 		goto err;
@@ -1574,6 +1579,7 @@ static int mlx5_esw_vports_init(struct mlx5_eswitch *esw)
 		xa_set_mark(&esw->vports, idx, MLX5_ESW_VPT_HOST_FN);
 	idx++;
 
+	/*初始化vf接口*/
 	for (i = 0; i < mlx5_core_max_vfs(dev); i++) {
 		err = mlx5_esw_vport_alloc(esw, dev, idx, idx);
 		if (err)
@@ -1582,6 +1588,8 @@ static int mlx5_esw_vports_init(struct mlx5_eswitch *esw)
 		xa_set_mark(&esw->vports, idx, MLX5_ESW_VPT_HOST_FN);
 		idx++;
 	}
+
+	/*初始化sf接口*/
 	base_sf_num = mlx5_sf_start_function_id(dev);
 	for (i = 0; i < mlx5_sf_max_functions(dev); i++) {
 		err = mlx5_esw_vport_alloc(esw, dev, idx, base_sf_num + i);
@@ -1602,12 +1610,15 @@ static int mlx5_esw_vports_init(struct mlx5_eswitch *esw)
 		idx++;
 	}
 
+	/*初始化ecpf接口*/
 	if (mlx5_ecpf_vport_exists(dev)) {
 		err = mlx5_esw_vport_alloc(esw, dev, idx, MLX5_VPORT_ECPF);
 		if (err)
 			goto err;
 		idx++;
 	}
+
+	/*初始化uplink口*/
 	err = mlx5_esw_vport_alloc(esw, dev, idx, MLX5_VPORT_UPLINK);
 	if (err)
 		goto err;

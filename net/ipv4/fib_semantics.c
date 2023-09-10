@@ -1354,7 +1354,7 @@ __be32 fib_info_update_nhc_saddr(struct net *net, struct fib_nh_common *nhc,
 	struct fib_nh *nh;
 
 	if (nhc->nhc_family != AF_INET)
-	    /*非inet选源*/
+	    /*非inet4的选源*/
 		return inet_select_addr(nhc->nhc_dev, 0, scope);
 
 	nh = container_of(nhc, struct fib_nh, nh_common);

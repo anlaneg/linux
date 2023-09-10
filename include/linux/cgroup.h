@@ -87,6 +87,7 @@ extern struct css_set init_css_set;
  * @ss: subsystem in question
  */
 #define cgroup_subsys_enabled(ss)						\
+	/*检查指定key是否被设置开启*/\
 	static_branch_likely(&ss ## _enabled_key)
 
 /**
@@ -434,7 +435,8 @@ static inline struct css_set *task_css_set(struct task_struct *task)
 static inline struct cgroup_subsys_state *task_css(struct task_struct *task,
 						   int subsys_id)
 {
-	return task_css_check(task, subsys_id, false);
+	/*返回指定进程task中关于subsys_id的cgroup state指针*/
+	return task_css_check(task, subsys_id/*cgroup子系统id*/, false);
 }
 
 /**

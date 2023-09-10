@@ -631,7 +631,7 @@ static const struct latch_tree_ops bpf_tree_ops = {
 };
 
 static DEFINE_SPINLOCK(bpf_lock);
-static LIST_HEAD(bpf_kallsyms);
+static LIST_HEAD(bpf_kallsyms);/*用于记录系统所有bpf符号*/
 static struct latch_tree_root bpf_tree __cacheline_aligned;
 
 void bpf_ksym_add(struct bpf_ksym *ksym)
@@ -774,7 +774,7 @@ int bpf_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
 		strncpy(sym, ksym->name, KSYM_NAME_LEN);
 
 		*value = ksym->start;
-		*type  = BPF_SYM_ELF_TYPE;
+		*type  = BPF_SYM_ELF_TYPE;/*符号类型*/
 
 		ret = 0;
 		break;

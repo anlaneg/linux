@@ -375,7 +375,7 @@ struct sock {
 #define sk_node			__sk_common.skc_node
 #define sk_nulls_node		__sk_common.skc_nulls_node
 #define sk_refcnt		__sk_common.skc_refcnt
-/*此socket使用哪个tx queue进行发包*/
+/*记录此socket使用哪个tx queue进行发包*/
 #define sk_tx_queue_mapping	__sk_common.skc_tx_queue_mapping
 #ifdef CONFIG_SOCK_RX_QUEUE_MAPPING
 #define sk_rx_queue_mapping	__sk_common.skc_rx_queue_mapping

@@ -1918,6 +1918,7 @@ struct folio *__filemap_get_folio(struct address_space *mapping, pgoff_t index,
 	struct folio *folio;
 
 repeat:
+	/*自mapping中查找index号folio*/
 	folio = mapping_get_entry(mapping, index);
 	if (xa_is_value(folio)) {
 		if (fgp_flags & FGP_ENTRY)
@@ -1969,9 +1970,10 @@ no_page:
 			gfp |= GFP_NOWAIT | __GFP_NOWARN;
 		}
 
+		/*申请page*/
 		folio = filemap_alloc_folio(gfp, 0);
 		if (!folio)
-			return NULL;//申请页内存失败
+			return NULL;
 
 		if (WARN_ON_ONCE(!(fgp_flags & (FGP_LOCK | FGP_FOR_MMAP))))
 			fgp_flags |= FGP_LOCK;
@@ -1980,6 +1982,7 @@ no_page:
 		if (fgp_flags & FGP_ACCESSED)
 			__folio_set_referenced(folio);
 
+		/*添加进mapping*/
 		err = filemap_add_folio(mapping, folio, index, gfp);
 		if (unlikely(err)) {
 			folio_put(folio);

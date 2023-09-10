@@ -20,8 +20,10 @@ struct multiq_sched_data {
 	u16 bands;
 	u16 max_bands;
 	u16 curband;
+	/*q上会有规则，规则操作queue_mapping来完成划分(需要用到skbedit)*/
 	struct tcf_proto __rcu *filter_list;
 	struct tcf_block *block;
+	/*每个band对应一个qdisc,共有bands个qdisc*/
 	struct Qdisc **queues;
 };
 
@@ -36,7 +38,7 @@ multiq_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 	int err;
 
 	*qerr = NET_XMIT_SUCCESS | __NET_XMIT_BYPASS;
-	//执行队列filter针对skb进行分类
+	//执行q队列上的filter针对skb进行分类
 	err = tcf_classify(skb, NULL, fl, &res, false);
 #ifdef CONFIG_NET_CLS_ACT
 	switch (err) {
@@ -49,6 +51,7 @@ multiq_classify(struct sk_buff *skb, struct Qdisc *sch, int *qerr)
 		return NULL;
 	}
 #endif
+	/*划分到band*/
 	band = skb_get_queue_mapping(skb);
 
 	if (band >= q->bands)
@@ -64,10 +67,12 @@ multiq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	struct Qdisc *qdisc;
 	int ret;
 
+	/*先分类，并映射到qdisc*/
 	qdisc = multiq_classify(skb, sch, &ret);
 #ifdef CONFIG_NET_CLS_ACT
 	if (qdisc == NULL) {
 
+		/*报文被规则丢弃*/
 		if (ret & __NET_XMIT_BYPASS)
 			qdisc_qstats_drop(sch);
 		__qdisc_drop(skb, to_free);
@@ -75,11 +80,14 @@ multiq_enqueue(struct sk_buff *skb, struct Qdisc *sch,
 	}
 #endif
 
+	/*再按分类结果入到相应qdisc*/
 	ret = qdisc_enqueue(skb, qdisc, to_free);
 	if (ret == NET_XMIT_SUCCESS) {
 		sch->q.qlen++;
 		return NET_XMIT_SUCCESS;
 	}
+
+	/*入队失败，丢包*/
 	if (net_xmit_drop_count(ret))
 		qdisc_qstats_drop(sch);
 	return ret;
@@ -92,6 +100,7 @@ static struct sk_buff *multiq_dequeue(struct Qdisc *sch)
 	struct sk_buff *skb;
 	int band;
 
+	/*各band间优先级是公平的*/
 	for (band = 0; band < q->bands; band++) {
 		/* cycle through bands to ensure fairness */
 		q->curband++;
@@ -104,7 +113,7 @@ static struct sk_buff *multiq_dequeue(struct Qdisc *sch)
 		if (!netif_xmit_stopped(
 		    netdev_get_tx_queue(qdisc_dev(sch), q->curband))) {
 			qdisc = q->queues[q->curband];
-			skb = qdisc->dequeue(qdisc);
+			skb = qdisc->dequeue(qdisc);/*针对curband进入出队*/
 			if (skb) {
 				qdisc_bstats_update(sch, skb);
 				sch->q.qlen--;
@@ -124,6 +133,7 @@ static struct sk_buff *multiq_peek(struct Qdisc *sch)
 	struct sk_buff *skb;
 	int band;
 
+	/*推算下一个出队的报文*/
 	for (band = 0; band < q->bands; band++) {
 		/* cycle through bands to ensure fairness */
 		curband++;

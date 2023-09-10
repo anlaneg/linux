@@ -37,6 +37,7 @@ int vsock_addr_validate(const struct sockaddr_vm *addr)
 }
 EXPORT_SYMBOL_GPL(vsock_addr_validate);
 
+/*如果svm_port为VMADDR_PORT_ANY,则返回false,否则true*/
 bool vsock_addr_bound(const struct sockaddr_vm *addr)
 {
 	return addr->svm_port != VMADDR_PORT_ANY;

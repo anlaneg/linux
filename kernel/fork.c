@@ -446,11 +446,12 @@ struct kmem_cache *files_cachep;
 struct kmem_cache *fs_cachep;
 
 /* SLAB cache for vm_area_struct structures */
-static struct kmem_cache *vm_area_cachep;
+static struct kmem_cache *vm_area_cachep;/*负责系统vm_area_struct结构体分配*/
 
 /* SLAB cache for mm_struct structures (tsk->mm) */
 static struct kmem_cache *mm_cachep;
 
+/*申请vm_area_struct，并初始化，指定其所属的mm*/
 struct vm_area_struct *vm_area_alloc(struct mm_struct *mm)
 {
 	struct vm_area_struct *vma;

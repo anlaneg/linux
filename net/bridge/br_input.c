@@ -181,7 +181,7 @@ int br_handle_frame_finish(struct net *net, struct sock *sk, struct sk_buff *skb
 				 sizeof(struct nd_msg)) &&
 		   ipv6_hdr(skb)->nexthdr == IPPROTO_ICMPV6) {
 
-		    //nd抑制处理
+		    //ipv6 nd抑制处理
 			struct nd_msg *msg, _msg;
 			msg = br_is_nd_neigh_msg(skb, &_msg);
 			if (msg)
@@ -371,7 +371,7 @@ static rx_handler_result_t br_handle_frame(struct sk_buff **pskb)
 
 	p = br_port_get_rcu(skb->dev);
 	if (p->flags & BR_VLAN_TUNNEL)
-	    /*实现vlan与tunnel之间的某种映射*/
+	    /*实现与tunnel到vlan的映射*/
 		br_handle_ingress_vlan_tunnel(skb, p, nbp_vlan_group_rcu(p));
 
 	//如果是local链路以太地址（二层协议），则处理

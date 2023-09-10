@@ -527,6 +527,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 		return skip_sw ? err : 0;
 	}
 
+	/*触发向驱动下发clsflower规则*/
 	err = tc_setup_cb_add(block, tp, TC_SETUP_CLSFLOWER, &cls_flower,
 			      skip_sw, &f->flags, &f->in_hw_count, rtnl_held);
 	tc_cleanup_offload_action(&cls_flower.rule->action);

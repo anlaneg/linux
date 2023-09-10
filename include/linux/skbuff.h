@@ -946,14 +946,16 @@ struct sk_buff {
 	/* private: */
 	__u8			__pkt_type_offset[0];
 	/* public: */
-	__u8			pkt_type:3; /* see PKT_TYPE_MAX *///通过mac检查报文类别，例如组播等（见if_packet.h中PACKET_MULTICAST等定义）
+	//通过mac检查报文类别，例如组播等（见if_packet.h中PACKET_MULTICAST等定义）
+	__u8			pkt_type:3; /* see PKT_TYPE_MAX */
 	__u8			ignore_df:1;
 	__u8			nf_trace:1;
 	__u8			ip_summed:2;
 	__u8			ooo_okay:1;
 
 	__u8			l4_hash:1;
-	__u8			sw_hash:1;/*软件计算的hash*/
+	/*软件计算的hash*/
+	__u8			sw_hash:1;
 	__u8			wifi_acked_valid:1;
 	__u8			wifi_acked:1;
 	__u8			no_fcs:1;
@@ -1013,7 +1015,7 @@ struct sk_buff {
 			__u16	csum_offset;/*checksum字段的填充位置*/
 		};
 	};
-	__u32			priority;
+	__u32			priority;/*报文优先级*/
 	int			skb_iif;//入接口ifindex
 	__u32			hash;//报文对应的hash值，例如rss hash
 	union {

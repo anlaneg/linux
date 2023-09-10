@@ -32,7 +32,7 @@
 #include <net/xfrm.h>
 
 /* Qdisc to use by default */
-const struct Qdisc_ops *default_qdisc_ops = &pfifo_fast_ops;
+const struct Qdisc_ops *default_qdisc_ops = &pfifo_fast_ops;/*单队列设备的默认qdisc ops*/
 EXPORT_SYMBOL(default_qdisc_ops);
 
 static void qdisc_maybe_clear_missed(struct Qdisc *q,
@@ -144,6 +144,7 @@ static inline void qdisc_enqueue_skb_bad_txq(struct Qdisc *q,
 		spin_unlock(lock);
 }
 
+/*发送失败，报文再入qdisc*/
 static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 {
 	spinlock_t *lock = NULL;
@@ -160,6 +161,7 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 
 		/* it's still part of the queue */
 		if (qdisc_is_percpu_stats(q)) {
+			/*增加requeue记数*/
 			qdisc_qstats_cpu_requeues_inc(q);
 			qdisc_qstats_cpu_backlog_inc(q, skb);
 			qdisc_qstats_cpu_qlen_inc(q);
@@ -177,6 +179,7 @@ static inline void dev_requeue_skb(struct sk_buff *skb, struct Qdisc *q)
 		spin_unlock(lock);
 		set_bit(__QDISC_STATE_MISSED, &q->state);
 	} else {
+		/*此队列有报文需要出队，打上调度标记，触发tx软中断*/
 		__netif_schedule(q);
 	}
 }
@@ -189,7 +192,7 @@ static void try_bulk_dequeue_skb(struct Qdisc *q,
 {
 	int bytelimit = qdisc_avail_bulklimit(txq) - skb->len;
 
-	while (bytelimit > 0) {
+	while (bytelimit > 0/*检查是否容许出包*/) {
 		//出一个skb
 		struct sk_buff *nskb = q->dequeue(q);
 
@@ -201,6 +204,8 @@ static void try_bulk_dequeue_skb(struct Qdisc *q,
 		skb = nskb;
 		(*packets)++; /* GSO counts as one pkt */
 	}
+
+	/*置链表结尾*/
 	skb_mark_not_on_list(skb);
 }
 
@@ -231,6 +236,7 @@ static void try_bulk_dequeue_skb_slow(struct Qdisc *q,
 		skb = nskb;
 	} while (++cnt < 8);//最多出8个包
 	(*packets) += cnt;
+
 	/*将最后一个skb的next置为空*/
 	skb_mark_not_on_list(skb);
 }
@@ -304,6 +310,7 @@ validate:
 			return NULL;
 		goto bulk;
 	}
+
 	//自队列中出一个报文（这一过程可使能tc配置的qos)
 	skb = q->dequeue(q);
 	if (skb) {
@@ -328,7 +335,7 @@ trace:
  *				false  - hardware queue frozen backoff
  *				true   - feel free to send more pkts
  */
-bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdisc *q,
+bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdisc *q/*报文来源对应的qdisc*/,
 		     struct net_device *dev, struct netdev_queue *txq/*发送到指定txq队列*/,
 		     spinlock_t *root_lock, bool validate)
 {
@@ -356,6 +363,7 @@ bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdi
 	if (likely(skb)) {
 		HARD_TX_LOCK(dev, txq, smp_processor_id());
 		if (!netif_xmit_frozen_or_stopped(txq))
+			/*tx队列可用，执行硬件发送*/
 			skb = dev_hard_start_xmit(skb, dev, txq, &ret);
 		else
 			qdisc_maybe_clear_missed(q, txq);
@@ -377,6 +385,7 @@ bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdi
 			net_warn_ratelimited("BUG %s code %d qlen %d\n",
 					     dev->name, ret, q->q.qlen);
 
+		/*再入队*/
 		dev_requeue_skb(skb, q);
 		return false;
 	}
@@ -412,8 +421,9 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 	bool validate;
 
 	/* Dequeue packet */
-	skb = dequeue_skb(q, &validate, packets);
+	skb = dequeue_skb(q, &validate, packets);/*出队一组报文*/
 	if (unlikely(!skb))
+		/*队列为空，直接返回*/
 		return false;
 
 	if (!(q->flags & TCQ_F_NOLOCK))
@@ -665,7 +675,7 @@ static int noop_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 {
 	//将skb串给to_free链上
 	__qdisc_drop(skb, to_free);
-	return NET_XMIT_CN;
+	return NET_XMIT_CN;/*拥塞通知*/
 }
 
 static struct sk_buff *noop_dequeue(struct Qdisc *qdisc)
@@ -688,6 +698,7 @@ static struct netdev_queue noop_netdev_queue = {
 	.qdisc_sleeping	=	&noop_qdisc,
 };
 
+/*中间结果，用于标记采用默认队列处理*/
 struct Qdisc noop_qdisc = {
 	.enqueue	=	noop_enqueue,
 	.dequeue	=	noop_dequeue,
@@ -722,7 +733,7 @@ static int noqueue_init(struct Qdisc *qdisc, struct nlattr *opt,
 	return 0;
 }
 
-//报文将被丢弃
+//报文将被丢弃(无队列设备默认的qdisc)
 struct Qdisc_ops noqueue_qdisc_ops __read_mostly = {
 	.id		=	"noqueue",
 	.priv_size	=	0,
@@ -733,6 +744,7 @@ struct Qdisc_ops noqueue_qdisc_ops __read_mostly = {
 	.owner		=	THIS_MODULE,
 };
 
+/*tos共有4位，按tos映射到band*/
 static const u8 prio2band[TC_PRIO_MAX + 1] = {
 	1, 2, 2, 2, 1, 2, 0, 0 , 1, 1, 1, 1, 1, 1, 1, 1
 };
@@ -748,9 +760,11 @@ static const u8 prio2band[TC_PRIO_MAX + 1] = {
  *	- rings for priority bands
  */
 struct pfifo_fast_priv {
+	/*每个q对应一个band*/
 	struct skb_array q[PFIFO_FAST_BANDS];
 };
 
+/*给定bind取对应的queue*/
 static inline struct skb_array *band2list(struct pfifo_fast_priv *priv,
 					  int band)
 {
@@ -769,11 +783,11 @@ static int pfifo_fast_enqueue(struct sk_buff *skb, struct Qdisc *qdisc,
 	unsigned int pkt_len = qdisc_pkt_len(skb);
 	int err;
 
-	//将skb存入q
+	//将skb存入band对应的q
 	err = skb_array_produce(q, skb);
 
 	if (unlikely(err)) {
-	    /*存入q失败*/
+	    /*存入q失败，确认统计方式并统计*/
 		if (qdisc_is_percpu_stats(qdisc))
 		    /*按percpu统计状态*/
 			return qdisc_drop_cpu(skb, qdisc, to_free/*出参，指明需要丢弃的报文*/);
@@ -799,6 +813,7 @@ retry:
 		struct skb_array *q = band2list(priv, band);
 
 		if (__skb_array_empty(q))
+			/*队列为空，忽略*/
 			continue;
 
 		skb = __skb_array_consume(q);
@@ -898,7 +913,7 @@ nla_put_failure:
 static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 			   struct netlink_ext_ack *extack)
 {
-	//对应设备的tx_queue_len
+	//对应netdev设备的tx队列长度
 	unsigned int qlen = qdisc_dev(qdisc)->tx_queue_len;
 	struct pfifo_fast_priv *priv = qdisc_priv(qdisc);
 	int prio;
@@ -912,13 +927,14 @@ static int pfifo_fast_init(struct Qdisc *qdisc, struct nlattr *opt,
 		struct skb_array *q = band2list(priv, prio);
 		int err;
 
+		/*依据tx ring长度，设置q*/
 		err = skb_array_init(q, qlen/*ring大小*/, GFP_KERNEL);
 		if (err)
 			return -ENOMEM;
 	}
 
 	/* Can by-pass the queue discipline */
-	qdisc->flags |= TCQ_F_CAN_BYPASS;
+	qdisc->flags |= TCQ_F_CAN_BYPASS;/*指明此qdisck可以bypass*/
 	return 0;
 }
 
@@ -962,12 +978,12 @@ static int pfifo_fast_change_tx_queue_len(struct Qdisc *sch,
 					 GFP_KERNEL);
 }
 
-//定义先进先出型队列
+//按packet限制的先进先出型队列(单队列设备根队列默认的qdisc类型）
 struct Qdisc_ops pfifo_fast_ops __read_mostly = {
 	.id		=	"pfifo_fast",
 	.priv_size	=	sizeof(struct pfifo_fast_priv),
-	.enqueue	=	pfifo_fast_enqueue,
-	.dequeue	=	pfifo_fast_dequeue,
+	.enqueue	=	pfifo_fast_enqueue,/*按tos分类后进行入队*/
+	.dequeue	=	pfifo_fast_dequeue,/*按band优先级出队*/
 	.peek		=	pfifo_fast_peek,
 	.init		=	pfifo_fast_init,
 	.destroy	=	pfifo_fast_destroy,
@@ -993,6 +1009,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	struct net_device *dev;
 
 	if (!dev_queue) {
+		/*必须指定dev_queue,否则不能创建qdisc*/
 		NL_SET_ERR_MSG(extack, "No device queue given");
 		err = -EINVAL;
 		goto errout;
@@ -1037,7 +1054,7 @@ struct Qdisc *qdisc_alloc(struct netdev_queue *dev_queue,
 	//使用队列ops的enqueue,dequeue
 	sch->enqueue = ops->enqueue;
 	sch->dequeue = ops->dequeue;
-	sch->dev_queue = dev_queue;
+	sch->dev_queue = dev_queue;/*设置此qdisc关联的dev_queue*/
 	netdev_hold(dev, &sch->dev_tracker, GFP_KERNEL);
 	refcount_set(&sch->refcnt, 1);
 
@@ -1172,7 +1189,7 @@ void qdisc_put_unlocked(struct Qdisc *qdisc)
 EXPORT_SYMBOL(qdisc_put_unlocked);
 
 /* Attach toplevel qdisc to device queue. */
-//替换dev_queue对应的qdisc
+//替换dev_queue->qdisc，dev_queue->qdisc_sleeping两项内容
 struct Qdisc *dev_graft_qdisc(struct netdev_queue *dev_queue,
 			      struct Qdisc *qdisc)
 {
@@ -1183,7 +1200,7 @@ struct Qdisc *dev_graft_qdisc(struct netdev_queue *dev_queue,
 	spin_lock_bh(root_lock);
 
 	/* ... and graft new one */
-	//新的为NULL时，使和noop_qdisc
+	//新的qdisc为NULL时，使用noop_qdisc
 	if (qdisc == NULL)
 		qdisc = &noop_qdisc;
 
@@ -1213,12 +1230,13 @@ static void shutdown_scheduler_queue(struct net_device *dev,
 	}
 }
 
+/*attach并设置默认qdisc*/
 static void attach_one_default_qdisc(struct net_device *dev,
 				     struct netdev_queue *dev_queue,
 				     void *_unused)
 {
 	struct Qdisc *qdisc;
-	//默认先进先出队列
+	//默认为先进先出队列
 	const struct Qdisc_ops *ops = default_qdisc_ops;
 
 	if (dev->priv_flags & IFF_NO_QUEUE)
@@ -1226,6 +1244,7 @@ static void attach_one_default_qdisc(struct net_device *dev,
 	else if(dev->type == ARPHRD_CAN)
 		ops = &pfifo_fast_ops;
 
+	/*申请并初始化qdisc*/
 	qdisc = qdisc_create_dflt(dev_queue, ops, TC_H_ROOT, NULL);
 	if (!qdisc)
 		return;
@@ -1249,6 +1268,7 @@ static void attach_default_qdiscs(struct net_device *dev)
 		rcu_assign_pointer(dev->qdisc, qdisc);
 		qdisc_refcount_inc(qdisc);
 	} else {
+		/*多队列设备，根默认采用mqdisc*/
 		qdisc = qdisc_create_dflt(txq, &mq_qdisc_ops, TC_H_ROOT, NULL);
 		if (qdisc) {
 			//设置qdisc
@@ -1260,6 +1280,7 @@ static void attach_default_qdiscs(struct net_device *dev)
 
 	/* Detect default qdisc setup/init failed and fallback to "noqueue" */
 	if (qdisc == &noop_qdisc) {
+		/*检查设备是否仍采用noop_qdisc,如果告警*/
 		netdev_warn(dev, "default qdisc (%s) fail, fallback to %s\n",
 			    default_qdisc_ops->id, noqueue_qdisc_ops.id);
 		netdev_for_each_tx_queue(dev, shutdown_scheduler_queue, &noop_qdisc);
@@ -1305,7 +1326,7 @@ void dev_activate(struct net_device *dev)
 	 */
 
 	if (rtnl_dereference(dev->qdisc) == &noop_qdisc)
-		//设置default的qdiscs
+		//如果dev的qdisc为noop_qdisc,则更新并设置为default的qdiscs
 		attach_default_qdiscs(dev);
 
 	if (!netif_carrier_ok(dev))

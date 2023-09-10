@@ -2375,7 +2375,7 @@ EXPORT_SYMBOL_GPL(dev_queue_xmit_nit);
  * expected that drivers will fix this mapping if they can before
  * calling netif_set_real_num_tx_queues.
  */
-static void netif_setup_tc(struct net_device *dev, unsigned int txq)
+static void netif_setup_tc(struct net_device *dev, unsigned int txq/*变更后的txq总数*/)
 {
 	int i;
 	struct netdev_tc_txq *tc = &dev->tc_to_txq[0];
@@ -2383,6 +2383,7 @@ static void netif_setup_tc(struct net_device *dev, unsigned int txq)
 	/* If TC0 is invalidated disable TC mapping */
 	if (tc->offset + tc->count > txq) {
 		netdev_warn(dev, "Number of in use tx queues changed invalidating tc mappings. Priority traffic classification disabled!\n");
+		/*txq数目已不足tc0,故tc mapping被禁用*/
 		dev->num_tc = 0;
 		return;
 	}
@@ -2395,6 +2396,7 @@ static void netif_setup_tc(struct net_device *dev, unsigned int txq)
 		if (tc->offset + tc->count > txq) {
 			netdev_warn(dev, "Number of in use tx queues changed. Priority %i to tc mapping %i is no longer valid. Setting map to 0\n",
 				    i, q);
+			/*由于此tc中的队列编号已超过txq,故将此tc映射到tc0*/
 			netdev_set_prio_tc_map(dev, i, 0);
 		}
 	}
@@ -2515,6 +2517,7 @@ static void clean_xps_maps(struct net_device *dev, enum xps_map_type type,
 	}
 }
 
+/*自offset开始，共有count个txq需要被清除*/
 static void netif_reset_xps_queues(struct net_device *dev, u16 offset,
 				   u16 count)
 {
@@ -2533,9 +2536,10 @@ static void netif_reset_xps_queues(struct net_device *dev, u16 offset,
 	cpus_read_unlock();
 }
 
-static void netif_reset_xps_queues_gt(struct net_device *dev, u16 index)
+/*dev对应的txq数目减少，xps进行相应处理*/
+static void netif_reset_xps_queues_gt(struct net_device *dev, u16 index/*减少后的总数目*/)
 {
-	netif_reset_xps_queues(dev, index, dev->num_tx_queues - index);
+	netif_reset_xps_queues(dev, index, dev->num_tx_queues - index/*实际减少的txq数目*/);
 }
 
 static struct xps_map *expand_xps_map(struct xps_map *map, int attr_index,
@@ -2838,6 +2842,7 @@ void netdev_reset_tc(struct net_device *dev)
 #endif
 	netdev_unbind_all_sb_channels(dev);
 
+	/*tc相关的配置全部清空*/
 	/* Reset TC configuration of device */
 	dev->num_tc = 0;
 	memset(dev->tc_to_txq, 0, sizeof(dev->tc_to_txq));
@@ -2860,6 +2865,7 @@ int netdev_set_tc_queue(struct net_device *dev, u8 tc, u16 count, u16 offset)
 }
 EXPORT_SYMBOL(netdev_set_tc_queue);
 
+/*用于更新设备的tc数目（驱动调用）*/
 int netdev_set_num_tc(struct net_device *dev, u8 num_tc)
 {
     /*num_tc不得超过TC_MAX_QUEUE*/
@@ -2945,11 +2951,12 @@ EXPORT_SYMBOL(netdev_set_sb_channel);
  * Routine to help set real_num_tx_queues. To avoid skbs mapped to queues
  * greater than real_num_tx_queues stale skbs on the qdisc must be flushed.
  */
-int netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq)
+int netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq/*txq总数目*/)
 {
 	bool disabling;
 	int rc;
 
+	/*检查txq数是否相对于之前减少了*/
 	disabling = txq < dev->real_num_tx_queues;
 
 	/*要设置的txq不得超过dev->num_tx_queues*/
@@ -2960,26 +2967,33 @@ int netif_set_real_num_tx_queues(struct net_device *dev, unsigned int txq)
 	    dev->reg_state == NETREG_UNREGISTERING) {
 		ASSERT_RTNL();
 
+		/*更新sysfs中关于txq的kobject*/
 		rc = netdev_queue_update_kobjects(dev, dev->real_num_tx_queues,
 						  txq);
 		if (rc)
 			return rc;
 
+		/*当前使能了tc,txq变更需要tc也进行相应处理*/
 		if (dev->num_tc)
 			netif_setup_tc(dev, txq);
 
+		/*设备上可能有qdisc,针对txq变更进行相应处理*/
 		dev_qdisc_change_real_num_tx(dev, txq);
 
+		/*变更txq*/
 		dev->real_num_tx_queues = txq;
 
 		if (disabling) {
+			/*txq数相对之前减少了，重启所有对应的qdisc,*/
 			synchronize_net();
 			qdisc_reset_all_tx_gt(dev, txq);
 #ifdef CONFIG_XPS
+			/*dev对应的txq减少，xps进行相应处理*/
 			netif_reset_xps_queues_gt(dev, txq);
 #endif
 		}
 	} else {
+		/*直接更新设备使能的tx queue总数*/
 		dev->real_num_tx_queues = txq;
 	}
 
@@ -3279,13 +3293,14 @@ static u16 skb_tx_hash(const struct net_device *dev,
 	u16 qcount = dev->real_num_tx_queues;
 
 	if (dev->num_tc) {
-	    /*设备开启了tc,由优先级获得tc,并更新qoffset,qcount*/
+	    /*设备开启了tc,由优先级（实际上是tos?)获得tc,并更新qoffset,qcount*/
 		u8 tc = netdev_get_prio_tc_map(dev, skb->priority);
 
-		/*取此tc对应的一组队列（qoffset,qcount)*/
+		/*取此tc映射到一组队列，用（qoffset,qcount)来表示(以sb_dev为准）*/
 		qoffset = sb_dev->tc_to_txq[tc].offset;
 		qcount = sb_dev->tc_to_txq[tc].count;
 		if (unlikely(!qcount)) {
+			/*tc_to_txq内容无效情况下，告警并处理使用整个范围*/
 			net_warn_ratelimited("%s: invalid qcount, qoffset %u for tc %u\n",
 					     sb_dev->name, qoffset, tc);
 			qoffset = 0;
@@ -3298,6 +3313,8 @@ static u16 skb_tx_hash(const struct net_device *dev,
 		hash = skb_get_rx_queue(skb);
 		if (hash >= qoffset)
 			hash -= qoffset;
+
+		/*映射到选中的区间。（下面的循环为什么不直接采用hash %= qcount）*/
 		while (unlikely(hash >= qcount))
 			hash -= qcount;
 		return hash + qoffset;
@@ -3702,6 +3719,7 @@ struct sk_buff *dev_hard_start_xmit(struct sk_buff *first/*待发送的一组skb
 		//发送此skb
 		rc = xmit_one(skb, dev, txq, next != NULL);
 		if (unlikely(!dev_xmit_complete(rc))) {
+			/*发送未完成，不继续发送，跳出*/
 			skb->next = next;
 			goto out;
 		}
@@ -3724,6 +3742,7 @@ static struct sk_buff *validate_xmit_vlan(struct sk_buff *skb,
 {
 	if (skb_vlan_tag_present(skb) &&
 	    !vlan_hw_offload_capable(features, skb->vlan_proto))
+		/*硬件不支持添加vlan,软件添加vlan*/
 		skb = __vlan_hwaccel_push_inside(skb);
 	return skb;
 }
@@ -3755,6 +3774,7 @@ static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device 
 	netdev_features_t features;
 
 	features = netif_skb_features(skb);
+	/*检查硬件能力，处理vlan头的插入，如果硬件不支持，则软件处理*/
 	skb = validate_xmit_vlan(skb, features);
 	if (unlikely(!skb))
 		goto out_null;
@@ -3763,8 +3783,9 @@ static struct sk_buff *validate_xmit_skb(struct sk_buff *skb, struct net_device 
 	if (unlikely(!skb))
 		goto out_null;
 
+	//检查是否需要处理gso
 	if (netif_needs_gso(skb, features)) {
-		//检查是否需要处理gso
+		//硬件不支持处理gso,这里采用软件处理
 		struct sk_buff *segs;
 
 		//软件处理gso分段
@@ -3877,6 +3898,7 @@ static void qdisc_pkt_len_init(struct sk_buff *skb)
 	}
 }
 
+/*skb入队列q,如果入队失败，则报文挂接在to_free上。*/
 static int dev_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *q,
 			     struct sk_buff **to_free,
 			     struct netdev_queue *txq)
@@ -3890,9 +3912,9 @@ static int dev_qdisc_enqueue(struct sk_buff *skb, struct Qdisc *q,
 }
 
 //带qdisc方式的报文发送
-static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
-				 struct net_device *dev,
-				 struct netdev_queue *txq)
+static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q/*txq对应的qdisc*/,
+				 struct net_device *dev/*此报文对应的设备*/,
+				 struct netdev_queue *txq/*选中的txq*/)
 {
 	spinlock_t *root_lock = qdisc_lock(q);
 	/*记录需要释放的报文*/
@@ -3903,31 +3925,35 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q,
 	qdisc_calculate_pkt_len(skb, q);
 
 	if (q->flags & TCQ_F_NOLOCK) {
-		//报文入队（例如）
+		//报文入队（例如pfifo qdisc）
 		if (q->flags & TCQ_F_CAN_BYPASS && nolock_qdisc_is_empty(q) &&
 		    qdisc_run_begin(q)) {
 			/* Retest nolock_qdisc_is_empty() within the protection
 			 * of q->seqlock to protect from racing with requeuing.
 			 */
 			if (unlikely(!nolock_qdisc_is_empty(q))) {
-				rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
-				__qdisc_run(q);
+				rc = dev_qdisc_enqueue(skb, q, &to_free/*入队失败挂在此链表*/, txq);/*先入队*/
+				__qdisc_run(q);/*再出队并发送*/
 				qdisc_run_end(q);
 
-				goto no_lock_out;
+				goto no_lock_out;/*出队完成，离开*/
 			}
 
+			/*容许bypass,则更新跳过enqueue，dequeue,直接向硬件发送*/
 			qdisc_bstats_cpu_update(q, skb);
 			if (sch_direct_xmit(skb, q, dev, txq, NULL, true) &&
 			    !nolock_qdisc_is_empty(q))
+				/*发送成功，且队列此时已不为空，则调度queue*/
 				__qdisc_run(q);
 
 			qdisc_run_end(q);
 			return NET_XMIT_SUCCESS;
 		}
 
+		/*不能bytepass,或队列不为空，
+		 * 先将skb入队列q,如果入队失败，则挂接在to_free上*/
 		rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
-		qdisc_run(q);
+		qdisc_run(q);/*再出队并发送*/
 
 no_lock_out:
 		/*释放掉需要free的报文*/
@@ -3951,6 +3977,7 @@ no_lock_out:
 	if (unlikely(contended))
 		spin_lock(&q->busylock);
 
+	/*由于缺少标记，这里对qdisc加锁保护*/
 	spin_lock(root_lock);
 	if (unlikely(test_bit(__QDISC_STATE_DEACTIVATED, &q->state))) {
 		__qdisc_drop(skb, &to_free);
@@ -3963,6 +3990,7 @@ no_lock_out:
 		 * xmit the skb directly.
 		 */
 
+		/*队列为空，容许bypass,则更新跳过enqueue，dequeue,直接向硬件发送*/
 		qdisc_bstats_update(q, skb);
 
 		if (sch_direct_xmit(skb, q, dev, txq, root_lock, true)) {
@@ -3970,23 +3998,25 @@ no_lock_out:
 				spin_unlock(&q->busylock);
 				contended = false;
 			}
-			__qdisc_run(q);
+			__qdisc_run(q);/*再出队并发送*/
 		}
 
 		qdisc_run_end(q);
 		rc = NET_XMIT_SUCCESS;
 	} else {
+		/*不容许bypass,则先入队*/
 		rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
 		if (qdisc_run_begin(q)) {
 			if (unlikely(contended)) {
 				spin_unlock(&q->busylock);
 				contended = false;
 			}
-			__qdisc_run(q);
+			__qdisc_run(q);/*再出队并发送*/
 			qdisc_run_end(q);
 		}
 	}
 	spin_unlock(root_lock);
+	/*释放入队失败的报文*/
 	if (unlikely(to_free))
 		kfree_skb_list_reason(to_free, SKB_DROP_REASON_QDISC_DROP);
 	if (unlikely(contended))
@@ -4054,6 +4084,7 @@ sch_handle_egress(struct sk_buff *skb, int *ret, struct net_device *dev)
 	struct tcf_result cl_res;
 
 	if (!miniq)
+		/*此dev未设置miniq,则不必执行filter*/
 		return skb;
 
 	/* qdisc_skb_cb(skb)->pkt_len was already set by the caller. */
@@ -4105,11 +4136,13 @@ netdev_tx_queue_mapping(struct net_device *dev, struct sk_buff *skb)
 
 static bool netdev_xmit_txqueue_skipped(void)
 {
+	/*获取skip_txqueue*/
 	return __this_cpu_read(softnet_data.xmit.skip_txqueue);
 }
 
 void netdev_xmit_skip_txqueue(bool skip)
 {
+	/*设置skip_txqueue*/
 	__this_cpu_write(softnet_data.xmit.skip_txqueue, skip);
 }
 EXPORT_SYMBOL_GPL(netdev_xmit_skip_txqueue);
@@ -4213,11 +4246,13 @@ u16 netdev_pick_tx(struct net_device *dev, struct sk_buff *skb,
 	/*默认使用socket层关联的tx queue，防止多次选择*/
 	int queue_index = sk_tx_queue_get(sk);
 
+	/*如果提供了sb_dev,则采用sb_dev，否则采用dev*/
 	sb_dev = sb_dev ? : dev;
 
 	/*如果sk中记录的sk_tx_queue_mapping未更新/无效，则更新*/
 	if (queue_index < 0 || skb->ooo_okay ||
 	    queue_index >= dev->real_num_tx_queues) {
+		/*优先尝试xps队列*/
 		int new_index = get_xps_queue(dev, sb_dev, skb);
 
 		if (new_index < 0)
@@ -4263,13 +4298,13 @@ struct netdev_queue *netdev_core_pick_tx(struct net_device *dev,
 			//通过驱动操作函数选择
 			queue_index = ops->ndo_select_queue(dev, skb, sb_dev);
 		else
-		    /*驱动未提供queue,默认选择方式*/
+		    /*驱动未提供queue,使用默认选择方式*/
 			queue_index = netdev_pick_tx(dev, skb, sb_dev);
 
 		queue_index = netdev_cap_txqueue(dev, queue_index);
 	}
 
-	//指定映射到哪个tx队列
+	//记录此skb映射到哪个tx队列
 	skb_set_queue_mapping(skb, queue_index);
 	return netdev_get_tx_queue(dev, queue_index);
 }
@@ -4320,17 +4355,19 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 	qdisc_pkt_len_init(skb);
 #ifdef CONFIG_NET_CLS_ACT
-	//报文正在发送，当前处于tc的egress方向
+	//报文正在发送，指明当前处于tc的egress方向
 	skb->tc_at_ingress = 0;
 #endif
 #ifdef CONFIG_NET_EGRESS
 	if (static_branch_unlikely(&egress_needed_key)) {
 		if (nf_hook_egress_active()) {
+			/*触发netfilter egress钩子点*/
 			skb = nf_hook_egress(skb, &rc, dev);
 			if (!skb)
 				goto out;
 		}
 
+		/*初始化不跳过txqueue*/
 		netdev_xmit_skip_txqueue(false);
 
 		nf_skip_egress(skb, true);
@@ -4340,6 +4377,8 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			goto out;
 		nf_skip_egress(skb, false);
 
+		/*egress filter中的action可能会变更此skb的skip_txqueue,
+		 * 如果已变更，则txq需要更新*/
 		if (netdev_xmit_txqueue_skipped())
 			txq = netdev_tx_queue_mapping(dev, skb);
 	}
@@ -4352,15 +4391,16 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 	else
 		skb_dst_force(skb);
 
-	//选择投递队列
+	//按需选择投递队列txq
 	if (!txq)
 		txq = netdev_core_pick_tx(dev, skb, sb_dev);
 
+	/*取此txq对应的qdisc*/
 	q = rcu_dereference_bh(txq->qdisc);
 
 	trace_net_dev_queue(skb);
 	if (q->enqueue) {
-		//如果有入队函数，则调用enqueue并完成发送（qos入口）
+		//如果此qdisc有入队函数，则调用enqueue并完成发送（qos入口）
 		rc = __dev_xmit_skb(skb, q, dev, txq);
 		goto out;
 	}
@@ -4385,7 +4425,7 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 		 * to -1 or to their cpu id, but not to our id.
 		 */
 		if (READ_ONCE(txq->xmit_lock_owner) != cpu) {
-		    /*此txq 的xmit_lock的owner不是当前cpu*/
+		    /*此txq的xmit_lock的owner不是当前cpu*/
 			if (dev_xmit_recursion())
 			    /*递归层数超限*/
 				goto recursion_alert;
@@ -4398,15 +4438,16 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 
 			//如果txq没有stop,则执行报文发送
 			if (!netif_xmit_stopped(txq)) {
-			    //递归层数增加
+			    //xmit递归层数增加
 				dev_xmit_recursion_inc();
 
-				//调用ndo_start_xmit完成dev设备单个skb的发送
+				//调用ndo_start_xmit一组skb发送，返回的skb指向未完成的skb_list
 				skb = dev_hard_start_xmit(skb, dev, txq, &rc);
 
 				//递归层数减少
 				dev_xmit_recursion_dec();
 				if (dev_xmit_complete(rc)) {
+					/*发送完成，跳出*/
 					HARD_TX_UNLOCK(dev, txq);
 					goto out;
 				}
@@ -4415,6 +4456,7 @@ int __dev_queue_xmit(struct sk_buff *skb, struct net_device *sb_dev)
 			net_crit_ratelimited("Virtual device %s asks to queue packet!\n",
 					     dev->name);
 		} else {
+			/*递归调用，告警（含递归层数过多告警）*/
 			/* Recursion is detected! It is possible,
 			 * unfortunately
 			 */
@@ -9454,7 +9496,9 @@ static struct bpf_prog *dev_xdp_prog(struct net_device *dev,
 	struct bpf_xdp_link *link = dev_xdp_link(dev, mode);
 
 	if (link)
+		/*有link,则依据link返回*/
 		return link->link.prog;
+	/*无link,则以xdp_state相应mode进行返回*/
 	return dev->xdp_state[mode].prog;
 }
 
@@ -9470,6 +9514,7 @@ u8 dev_xdp_prog_count(struct net_device *dev)
 }
 EXPORT_SYMBOL_GPL(dev_xdp_prog_count);
 
+/*查询dev设备指定mode类型的xdp程序id*/
 u32 dev_xdp_prog_id(struct net_device *dev, enum bpf_xdp_mode mode)
 {
 	struct bpf_prog *prog = dev_xdp_prog(dev, mode);
@@ -9477,6 +9522,7 @@ u32 dev_xdp_prog_id(struct net_device *dev, enum bpf_xdp_mode mode)
 	return prog ? prog->aux->id : 0;
 }
 
+/*设置指定mode的xdp link信息*/
 static void dev_xdp_set_link(struct net_device *dev, enum bpf_xdp_mode mode,
 			     struct bpf_xdp_link *link)
 {
@@ -9484,6 +9530,7 @@ static void dev_xdp_set_link(struct net_device *dev, enum bpf_xdp_mode mode,
 	dev->xdp_state[mode].prog = NULL;
 }
 
+/*设置指定mode的xdp prog信息*/
 static void dev_xdp_set_prog(struct net_device *dev, enum bpf_xdp_mode mode,
 			     struct bpf_prog *prog)
 {
@@ -10962,14 +11009,15 @@ struct netdev_queue *dev_ingress_queue_create(struct net_device *dev)
 
 #ifdef CONFIG_NET_CLS_ACT
 	if (queue)
-		//ingress queue已存在，则直接返回
+		//设备的ingress queue已存在，则直接返回
 		return queue;
 
-	//创建queue,并设置dev->ingress_queue
+	//创建netdev_queue,并设置dev->ingress_queue
 	queue = kzalloc(sizeof(*queue), GFP_KERNEL);
 	if (!queue)
 		return NULL;
 
+	/*执行队列关联的dev*/
 	netdev_init_one_queue(dev, queue, NULL);
 	//将排队规则定义为noop_qdisc(默认方式）
 	RCU_INIT_POINTER(queue->qdisc, &noop_qdisc);

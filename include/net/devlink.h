@@ -1274,6 +1274,7 @@ struct devlink_ops {
 	int (*reload_up)(struct devlink *devlink, enum devlink_reload_action action,
 			 enum devlink_reload_limit limit, u32 *actions_performed,
 			 struct netlink_ext_ack *extack);
+	/*变更devlink端口类型，例如eth切ib(当前仅mlx4需要）*/
 	int (*port_type_set)(struct devlink_port *devlink_port,
 			     enum devlink_port_type port_type);
 	int (*port_split)(struct devlink *devlink, struct devlink_port *port,
@@ -1316,15 +1317,17 @@ struct devlink_ops {
 				       u16 tc_index,
 				       enum devlink_sb_pool_type pool_type,
 				       u32 *p_cur, u32 *p_max);
-
+	/*eswitch mode获取*/
 	int (*eswitch_mode_get)(struct devlink *devlink, u16 *p_mode);
 	/*eswitch mode设置*/
 	int (*eswitch_mode_set)(struct devlink *devlink, u16 mode,
 				struct netlink_ext_ack *extack);
+	/*eswitch inline mode获取*/
 	int (*eswitch_inline_mode_get)(struct devlink *devlink, u8 *p_inline_mode);
 	/*eswitch inline mode设置*/
 	int (*eswitch_inline_mode_set)(struct devlink *devlink, u8 inline_mode,
 				       struct netlink_ext_ack *extack);
+	/*eswitch encap mode获取*/
 	int (*eswitch_encap_mode_get)(struct devlink *devlink,
 				      enum devlink_eswitch_encap_mode *p_encap_mode);
 	/*eswitch encap mode设置*/

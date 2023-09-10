@@ -4354,6 +4354,7 @@ parse_tc_fdb_actions(struct mlx5e_priv *priv,
 	mlx5e_tc_act_init_parse_state(parse_state, flow, flow_action, extack);
 	parse_state->ct_priv = get_ct_priv(priv);
 
+	/*解析tc action*/
 	err = parse_tc_actions(parse_state, flow_action);
 	if (err)
 		return err;

@@ -124,6 +124,7 @@ static DEFINE_XARRAY_FLAGS(rdma_nets, XA_FLAGS_ALLOC);
  */
 static DECLARE_RWSEM(rdma_nets_rwsem);
 
+/*默认ib设备在ns间是共享的，容许变更*/
 bool ib_devices_shared_netns = true;
 module_param_named(netns_mode, ib_devices_shared_netns, bool, 0444);
 MODULE_PARM_DESC(netns_mode,
@@ -182,7 +183,7 @@ static void *xan_find_marked(struct xarray *xa, unsigned long *indexp,
 
 /* RCU hash table mapping netdevice pointers to struct ib_port_data */
 static DEFINE_SPINLOCK(ndev_hash_lock);
-/*记录系统所有ib设备与netdev映射关系*/
+/*记录系统中所有ib设备与netdev映射关系*/
 static DECLARE_HASHTABLE(ndev_hash, 5);
 
 static void free_netdevs(struct ib_device *ib_dev);
@@ -263,6 +264,7 @@ static int rdma_dev_change_netns(struct ib_device *device, struct net *cur_net,
 /* Pointer to the RCU head at the start of the ib_port_data array */
 struct ib_port_data_rcu {
 	struct rcu_head rcu_head;
+	/*依据ib_port数目申请此成员长度，其长度为rdma_end_port(device) + 1*/
 	struct ib_port_data pdata[];
 };
 
@@ -474,20 +476,24 @@ static int alloc_name(struct ib_device *ibdev, const char *name)
 	xa_for_each (&devices, index, device) {
 		char buf[IB_DEVICE_NAME_MAX];
 
+		/*按name格式解析此设备，尝试获取索引i*/
 		if (sscanf(dev_name(&device->dev), name, &i) != 1)
 			continue;
 		if (i < 0 || i >= INT_MAX)
+			/*获取失败，忽略*/
 			continue;
+		/*再格式化一遍，与原名称进行比对，防止sscanf获取索引i有误*/
 		snprintf(buf, sizeof buf, name, i);
 		if (strcmp(buf, dev_name(&device->dev)) != 0)
 			continue;
 
+		/*设置已用的索引*/
 		rc = ida_alloc_range(&inuse, i, i, GFP_KERNEL);
 		if (rc < 0)
 			goto out;
 	}
 
-	/*申请一个空闲id*/
+	/*在inuse中申请一个空闲id*/
 	rc = ida_alloc(&inuse, GFP_KERNEL);
 	if (rc < 0)
 		goto out;
@@ -496,6 +502,7 @@ static int alloc_name(struct ib_device *ibdev, const char *name)
 	rc = dev_set_name(&ibdev->dev, name, rc);
 out:
 	ida_destroy(&inuse);
+	/*返回名称索引*/
 	return rc;
 }
 
@@ -583,13 +590,14 @@ static void rdma_init_coredev(struct ib_core_device *coredev,
  * ib_dealloc_device() must be used to free structures allocated with
  * ib_alloc_device().
  */
-struct ib_device *_ib_alloc_device(size_t size)
+struct ib_device *_ib_alloc_device(size_t size/*结构体大小（含私有成员）*/)
 {
     /*申请并初始化ib_device*/
 	struct ib_device *device;
 	unsigned int i;
 
 	if (WARN_ON(size < sizeof(struct ib_device)))
+		/*结构体大小*/
 		return NULL;
 
 	device = kzalloc(size, GFP_KERNEL);
@@ -708,6 +716,7 @@ static int add_client_context(struct ib_device *device,
 	int ret = 0;
 
 	if (!device->kverbs_provider && !client->no_kverbs_req)
+		/*device不需要kernel provider 或者client会显示进行请求*/
 		return 0;
 
 	down_write(&device->client_data_rwsem);
@@ -810,10 +819,12 @@ static int alloc_port_data(struct ib_device *device)
 
 	/* This can only be called once the physical port range is defined */
 	if (WARN_ON(!device->phys_port_cnt))
+		/*此ib设备没有物理port,参数有误退出*/
 		return -EINVAL;
 
 	/* Reserve U32_MAX so the logic to go over all the ports is sane */
 	if (WARN_ON(device->phys_port_cnt == U32_MAX))
+		/*不容许物理port数量为u32_max*/
 		return -EINVAL;
 
 	/*
@@ -835,8 +846,9 @@ static int alloc_port_data(struct ib_device *device)
 	 */
 	device->port_data = pdata_rcu->pdata;
 
-	/*遍历所有port*/
+	/*遍历所有ib device上所有port index*/
 	rdma_for_each_port (device, port) {
+
 	    /*初始化每个port对应的ib_port_data*/
 		struct ib_port_data *pdata = &device->port_data[port];
 
@@ -1234,6 +1246,7 @@ static int assign_name(struct ib_device *device, const char *name)
 	down_write(&devices_rwsem);
 	/* Assign a unique name to the device */
 	if (strchr(name, '%'))
+		/*名称中包含'%',申请一个未使用索引，替换'%'，更新device名称，并返回索引ret*/
 		ret = alloc_name(device, name);
 	else
 		ret = dev_set_name(&device->dev, name);
@@ -1245,10 +1258,11 @@ static int assign_name(struct ib_device *device, const char *name)
 		ret = -ENFILE;
 		goto out;
 	}
+
 	//设置device名称
 	strscpy(device->name, dev_name(&device->dev), IB_DEVICE_NAME_MAX);
 
-	//将device加入
+	//将device加入devices中
 	ret = xa_alloc_cyclic(&devices, &device->index, device, xa_limit_31b,
 			&last_id, GFP_KERNEL);
 	if (ret > 0)
@@ -1269,6 +1283,7 @@ static int setup_device(struct ib_device *device)
 	struct ib_udata uhw = {.outlen = 0, .inlen = 0};
 	int ret;
 
+	/*设置device->kverbs_provider*/
 	ib_device_check_mandatory(device);
 
 	/*分配并初始化port_data*/
@@ -1278,7 +1293,7 @@ static int setup_device(struct ib_device *device)
 		return ret;
 	}
 
-	/*查询并填充device属性*/
+	/*通过ops回调查询并填充device属性*/
 	memset(&device->attrs, 0, sizeof(device->attrs));
 	ret = device->ops.query_device(device, &device->attrs, &uhw);
 	if (ret) {
@@ -1345,6 +1360,7 @@ static int enable_device_and_get(struct ib_device *device)
 	 */
 	refcount_set(&device->refcount, 2);
 	down_write(&devices_rwsem);
+	/*标记设备已注册*/
 	xa_set_mark(&devices, device->index, DEVICE_REGISTERED);
 
 	/*
@@ -1361,7 +1377,7 @@ static int enable_device_and_get(struct ib_device *device)
 	}
 
 	down_read(&clients_rwsem);
-	/*遍历当前注册的client*/
+	/*遍历当前注册的client，为此device触发add回调,附加client*/
 	xa_for_each_marked (&clients, index, client, CLIENT_REGISTERED) {
 		ret = add_client_context(device, client);
 		if (ret)
@@ -1403,7 +1419,7 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 {
 	int ret;
 
-	//设置设备名称
+	//为ib设备设置名称
 	ret = assign_name(device, name);
 	if (ret)
 		return ret;
@@ -1414,9 +1430,10 @@ int ib_register_device(struct ib_device *device, const char *name/*ib设备名�
 	 * virtual address into the address field.
 	 */
 	WARN_ON(dma_device && !dma_device->dma_parms);
+	/*指定此device关联的dma设备*/
 	device->dma_device = dma_device;
 
-	/*设备属性查询*/
+	/*设备属性设置*/
 	ret = setup_device(device);
 	if (ret)
 		return ret;
@@ -1779,7 +1796,7 @@ static int assign_client_id(struct ib_client *client)
 	 * registration order.
 	 */
 	client->client_id = highest_client_id;
-	/*注册此client*/
+	/*注册此client到clients*/
 	ret = xa_insert(&clients, client->client_id, client, GFP_KERNEL);
 	if (ret)
 		goto out;
@@ -1830,7 +1847,7 @@ int ib_register_client(struct ib_client *client)
 		return ret;
 
 	down_read(&devices_rwsem);
-	//遍历所有已注册的devices，为此client补add事件
+	//遍历所有已注册的devices，为它们补发当前正注册的client的add回调
 	xa_for_each_marked (&devices, index, device, DEVICE_REGISTERED) {
 		ret = add_client_context(device, client);
 		if (ret) {
@@ -1923,7 +1940,7 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 	int ret = -ENOENT;
 
 	down_read(&ibdev->client_data_rwsem);
-	//遍历ibdev设备对应的所有clients,找出名称为client_name的client
+	//遍历ibdev设备对应的所有clients,并通过index找出名称为client_name的client
 	xan_for_each_marked (&ibdev->client_data, index, client_data,
 			     CLIENT_DATA_REGISTERED) {
 		struct ib_client *client = xa_load(&clients, index);
@@ -1931,11 +1948,14 @@ static int __ib_get_client_nl_info(struct ib_device *ibdev,
 		if (!client || strcmp(client->name, client_name) != 0)
 		    /*与client_name不匹配，退出*/
 			continue;
+
 		if (!client->get_nl_info) {
+			/*此client必须提供回调*/
 			ret = -EOPNOTSUPP;
 			break;
 		}
-		//取其对应的netlink info,填充到res中
+
+		//通过回调，取其对应的netlink info,填充到res中
 		ret = client->get_nl_info(ibdev, client_data, res);
 		if (WARN_ON(ret == -ENOENT))
 			ret = -EINVAL;
@@ -1973,8 +1993,9 @@ int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 		ret = __ib_get_global_client_nl_info(client_name, res);
 #ifdef CONFIG_MODULES
 	if (ret == -ENOENT) {
-	    /*加载module后，再获取一次*/
+	    /*加载module*/
 		request_module("rdma-client-%s", client_name);
+		/*再获取一次*/
 		if (ibdev)
 			ret = __ib_get_client_nl_info(ibdev, client_name, res);
 		else
@@ -2007,6 +2028,7 @@ int ib_get_client_nl_info(struct ib_device *ibdev, const char *client_name,
 void ib_set_client_data(struct ib_device *device, struct ib_client *client,
 			void *data)
 {
+	/*设置device的关于client->client_id的私有数据data*/
 	void *rc;
 
 	if (WARN_ON(IS_ERR(data)))
@@ -2066,6 +2088,7 @@ void ib_dispatch_event_clients(struct ib_event *event)
 	up_read(&event->device->event_handler_rwsem);
 }
 
+//查询指定port的属性(iwrap属性）
 static int iw_query_port(struct ib_device *device,
 			   u32 port_num,
 			   struct ib_port_attr *port_attr)
@@ -2105,7 +2128,7 @@ static int iw_query_port(struct ib_device *device,
 	return device->ops.query_port(device, port_num, port_attr);
 }
 
-/*查询指定port的属性*/
+/*查询指定port的属性(ib属性）*/
 static int __ib_query_port(struct ib_device *device,
 			   u32 port_num,
 			   struct ib_port_attr *port_attr)
@@ -2163,6 +2186,7 @@ static void add_ndev_hash(struct ib_port_data *pdata)
 
 	spin_lock_irqsave(&ndev_hash_lock, flags);
 	if (hash_hashed(&pdata->ndev_hash_link)) {
+		/*已被加入hash,需要先移除*/
 		hash_del_rcu(&pdata->ndev_hash_link);
 		spin_unlock_irqrestore(&ndev_hash_lock, flags);
 		/*
@@ -2172,6 +2196,8 @@ static void add_ndev_hash(struct ib_port_data *pdata)
 		synchronize_rcu();
 		spin_lock_irqsave(&ndev_hash_lock, flags);
 	}
+
+	/*如果其有关联netdev,则再将其加入*/
 	if (pdata->netdev)
 		hash_add_rcu(ndev_hash, &pdata->ndev_hash_link,
 			     (uintptr_t)pdata->netdev);
@@ -2193,9 +2219,10 @@ static void add_ndev_hash(struct ib_port_data *pdata)
  * ib_device_set_netdev() is called with NULL when the ndev sends a
  * NETDEV_UNREGISTER event.
  */
-int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev,
-			 u32 port)
+int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev/*关联的netdev*/,
+			 u32 port/*对应的port*/)
 {
+	/*为ib设备的指定port关联netdev设备*/
 	struct net_device *old_ndev;
 	struct ib_port_data *pdata;
 	unsigned long flags;
@@ -2205,15 +2232,18 @@ int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev,
 	 * Drivers wish to call this before ib_register_driver, so we have to
 	 * setup the port data early.
 	 */
-	ret = alloc_port_data(ib_dev);
+	ret = alloc_port_data(ib_dev);/*初始化port_data*/
 	if (ret)
 		return ret;
 
 	if (!rdma_is_port_valid(ib_dev, port))
+		/*传入的port id无效*/
 		return -EINVAL;
 
+	/*取要关联的ib_port对应的port data*/
 	pdata = &ib_dev->port_data[port];
 	spin_lock_irqsave(&pdata->netdev_lock, flags);
+	/*更新此port关联的netdev*/
 	old_ndev = rcu_dereference_protected(
 		pdata->netdev, lockdep_is_held(&pdata->netdev_lock));
 	if (old_ndev == ndev) {
@@ -2228,6 +2258,7 @@ int ib_device_set_netdev(struct ib_device *ib_dev, struct net_device *ndev,
 	rcu_assign_pointer(pdata->netdev, ndev);
 	spin_unlock_irqrestore(&pdata->netdev_lock, flags);
 
+	/*更新ndev_hash*/
 	add_ndev_hash(pdata);
 	if (old_ndev)
 		__dev_put(old_ndev);
@@ -2322,7 +2353,7 @@ struct net_device *ib_device_get_netdev(struct ib_device *ib_dev,
 struct ib_device *ib_device_get_by_netdev(struct net_device *ndev,
 					  enum rdma_driver_id driver_id)
 {
-    /*查找匹配的driver_id与ndev*/
+    /*查找与driver_id匹配的ib设备，其必须与ndev相关联*/
 	struct ib_device *res = NULL;
 	struct ib_port_data *cur;
 
@@ -2644,22 +2675,25 @@ EXPORT_SYMBOL(ib_get_net_dev_by_params);
 //利用ops设置dev->ops
 void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 {
+	/*指向要设置的ops*/
 	struct ib_device_ops *dev_ops = &dev->ops;
-#define SET_DEVICE_OP(ptr, name)                                               \
+
+#define SET_DEVICE_OP(ptr/*目标ops指针*/, name/*结构体成员指针*/)                                               \
 	do {                                                                   \
-	    /*ops如果有$name指针，且ptr的$name指针不为空，则将使ptr->name=ops->name*/\
+	    /*ops(参数提供的ops）如果有$name指针，且ptr的$name指针不为空，则将使ptr->name=ops->name*/\
 		if (ops->name)                                                 \
 			if (!((ptr)->name))				       \
 				(ptr)->name = ops->name;                       \
 	} while (0)
 
 	/*ptr->size_$name = ops->size_$name*/
-#define SET_OBJ_SIZE(ptr, name) SET_DEVICE_OP(ptr, size_##name)
+#define SET_OBJ_SIZE(ptr/*目标ops指针*/, name/*结构体成员名后缀*/) \
+	SET_DEVICE_OP(ptr, size_##name)
 
 	/*driver_id设置*/
 	if (ops->driver_id != RDMA_DRIVER_UNKNOWN) {
 		WARN_ON(dev_ops->driver_id != RDMA_DRIVER_UNKNOWN &&
-			dev_ops->driver_id != ops->driver_id);
+			dev_ops->driver_id != ops->driver_id);/*只容许unkown改非unkown或者相同设置*/
 		dev_ops->driver_id = ops->driver_id;
 	}
 
@@ -2673,10 +2707,11 @@ void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 	if (ops->uverbs_abi_ver)
 		dev_ops->uverbs_abi_ver = ops->uverbs_abi_ver;
 
+	/*uverbs_no_driver_id_binding设置*/
 	dev_ops->uverbs_no_driver_id_binding |=
 		ops->uverbs_no_driver_id_binding;
 
-	/*填充以下字段*/
+	/*填充以下函数指针*/
 	SET_DEVICE_OP(dev_ops, add_gid);
 	SET_DEVICE_OP(dev_ops, advise_mr);
 	SET_DEVICE_OP(dev_ops, alloc_dm);
@@ -2793,6 +2828,7 @@ void ib_set_device_ops(struct ib_device *dev, const struct ib_device_ops *ops)
 	SET_DEVICE_OP(dev_ops, set_vf_guid);
 	SET_DEVICE_OP(dev_ops, set_vf_link_state);
 
+	/*填充以下结构体成员*/
 	SET_OBJ_SIZE(dev_ops, ib_ah);
 	SET_OBJ_SIZE(dev_ops, ib_counters);
 	SET_OBJ_SIZE(dev_ops, ib_cq);

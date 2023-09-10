@@ -104,6 +104,7 @@ struct ib_uverbs_device {
 	/* First group for device attributes, NULL terminated array */
 	const struct attribute_group		*groups[2];
 	struct ib_device	__rcu	       *ib_dev;
+	/*uverbs设备序号*/
 	int					devnum;
 	struct cdev			        cdev;
 	struct rb_root				xrcd_tree;

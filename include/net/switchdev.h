@@ -245,7 +245,7 @@ struct switchdev_notifier_info {
 struct switchdev_notifier_fdb_info {
 	struct switchdev_notifier_info info; /* must be first */
 	const unsigned char *addr;
-	u16 vid;
+	u16 vid;/*vlan id号*/
 	u8 added_by_user:1,
 	   is_local:1,
 	   locked:1,

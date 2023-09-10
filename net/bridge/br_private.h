@@ -168,8 +168,8 @@ struct net_bridge_mcast {
 };
 
 struct br_tunnel_info {
-	__be64				tunnel_id;
-	struct metadata_dst __rcu	*tunnel_dst;
+	__be64				tunnel_id;/*id号*/
+	struct metadata_dst __rcu	*tunnel_dst;/*此tunnel对应的metadata数据*/
 };
 
 /* private vlan flags */
@@ -207,23 +207,23 @@ enum {
  * the entry flags that are set.
  */
 struct net_bridge_vlan {
-	struct rhash_head		vnode;
-	struct rhash_head		tnode;
-	u16				vid;
+	struct rhash_head		vnode;/*用于挂接到vg->vlan_hash*/
+	struct rhash_head		tnode;/*用于挂接到vlan group的vg->tunnel_hash上*/
+	u16				vid;/*vlan id*/
 	u16				flags;
 	u16				priv_flags;
 	u8				state;
 	struct pcpu_sw_netstats __percpu *stats;
 	union {
-		struct net_bridge	*br;
-		struct net_bridge_port	*port;
+		struct net_bridge	*br;/*此vlan属于br*/
+		struct net_bridge_port	*port;/*此vlan属于bridge port*/
 	};
 	union {
 		refcount_t		refcnt;
 		struct net_bridge_vlan	*brvlan;
 	};
 
-	struct br_tunnel_info		tinfo;
+	struct br_tunnel_info		tinfo;/*对应的隧道信息*/
 
 	union {
 		struct net_bridge_mcast		br_mcast_ctx;
@@ -253,11 +253,16 @@ struct net_bridge_vlan {
  *            if there're "real" entries in the bridge please test @num_vlans
  */
 struct net_bridge_vlan_group {
-	struct rhashtable		vlan_hash;//按vlanid保存net_bridge_vlan结构
+	//按vlanid索引net_bridge_vlan结构
+	struct rhashtable		vlan_hash;
+	/*按tunnel id索引net_bridge_vlan结构*/
 	struct rhashtable		tunnel_hash;
+	/*指出此vlan group中有哪些vlan信息（net_bridge_vlan结构，链表形式，方便遍历）*/
 	struct list_head		vlan_list;
-	u16				num_vlans;//子vlan数
-	u16				pvid;//vlan id号
+	//vlan group中vlan的数目
+	u16				num_vlans;
+	//此vlan group对应的pvid(其从属于当前vlan group)，当某个接口收到无vlan标记报文时，按此pvid进行转发
+	u16				pvid;
 	u8				pvid_state;
 };
 
@@ -266,7 +271,7 @@ enum {
 	BR_FDB_LOCAL,
 	BR_FDB_STATIC,
 	BR_FDB_STICKY,
-	BR_FDB_ADDED_BY_USER,
+	BR_FDB_ADDED_BY_USER,/*标记用户态添加的fdb表项*/
 	BR_FDB_ADDED_BY_EXT_LEARN,
 	BR_FDB_OFFLOADED,
 	BR_FDB_NOTIFY,
@@ -275,22 +280,22 @@ enum {
 };
 
 struct net_bridge_fdb_key {
-	mac_addr addr;
-	u16 vlan_id;
+	mac_addr addr;/*mac地址*/
+	u16 vlan_id;/*vlan id号*/
 };
 
 struct net_bridge_fdb_entry {
-	struct rhash_head		rhnode;
-	struct net_bridge_port		*dst;
+	struct rhash_head		rhnode;/*用于串连进fdb hashtable*/
+	struct net_bridge_port		*dst;/*fdb项对应的dst port*/
 
-	struct net_bridge_fdb_key	key;
-	struct hlist_node		fdb_node;
+	struct net_bridge_fdb_key	key;/*fdb匹配对应的key*/
+	struct hlist_node		fdb_node;/*用于串连进fdb list*/
 	//是否为local fdb表项（即本机接口）
 	//是否为静态fdb表项
-	unsigned long			flags;
+	unsigned long			flags;/*fdb项标记*/
 
 	/* write-heavy members should not affect lookups */
-	unsigned long			updated ____cacheline_aligned_in_smp;
+	unsigned long			updated ____cacheline_aligned_in_smp;/*更新时间*/
 	unsigned long			used;//上次查询到的时间
 
 	struct rcu_head			rcu;
@@ -382,8 +387,9 @@ struct net_bridge_port {
 	netdevice_tracker		dev_tracker;
 	struct list_head		list;
 
-	unsigned long			flags;
+	unsigned long			flags;/*接口功能标记位*/
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING
+	/*此bridge port对应的vlan group*/
 	struct net_bridge_vlan_group	__rcu *vlgrp;
 #endif
 	struct net_bridge_port		__rcu *backup_port;
@@ -443,6 +449,7 @@ struct net_bridge_port {
 #define kobj_to_brport(obj)	container_of(obj, struct net_bridge_port, kobj)
 
 #define br_auto_port(p) ((p)->flags & BR_AUTO_MASK)
+/*检查接口是否开启混杂模式*/
 #define br_promisc_port(p) ((p)->flags & BR_PROMISC)
 
 static inline struct net_bridge_port *br_port_get_rcu(const struct net_device *dev)
@@ -469,7 +476,7 @@ enum net_bridge_opts {
 	BROPT_NF_CALL_IP6TABLES,
 	BROPT_NF_CALL_ARPTABLES,
 	BROPT_GROUP_ADDR_SET,
-	BROPT_MULTICAST_ENABLED,
+	BROPT_MULTICAST_ENABLED,/*标记桥是否开启了组播*/
 	BROPT_MULTICAST_QUERY_USE_IFADDR,
 	BROPT_MULTICAST_STATS_ENABLED,
 	BROPT_HAS_IPV6_ADDR,
@@ -484,6 +491,7 @@ enum net_bridge_opts {
 
 struct net_bridge {
 	spinlock_t			lock;
+	/*保护fdb_hash_tbl*/
 	spinlock_t			hash_lock;
 	struct hlist_head		frame_type_list;
 	struct net_device		*dev;
@@ -496,7 +504,8 @@ struct net_bridge {
 	struct net_bridge_vlan_group	__rcu *vlgrp;
 #endif
 
-	struct rhashtable		fdb_hash_tbl;//fdb表
+	//fdb表(hashtable)
+	struct rhashtable		fdb_hash_tbl;
 	struct list_head		port_list;
 #if IS_ENABLED(CONFIG_BRIDGE_NETFILTER)
 	union {
@@ -542,7 +551,7 @@ struct net_bridge {
 
 	spinlock_t			multicast_lock;
 
-        //组播表
+    //组播表
 	struct rhashtable		mdb_hash_tbl;
 	struct rhashtable		sg_port_tbl;
 
@@ -567,7 +576,7 @@ struct net_bridge {
 	/* Bit mask of hardware domain numbers in use */
 	unsigned long			busy_hwdoms;
 #endif
-	struct hlist_head		fdb_list;
+	struct hlist_head		fdb_list;/*fdb列表(list)*/
 
 #if IS_ENABLED(CONFIG_BRIDGE_MRP)
 	struct hlist_head		mrp_list;
@@ -644,6 +653,7 @@ static inline int br_is_root_bridge(const struct net_bridge *br)
 /* check if a VLAN entry is global */
 static inline bool br_vlan_is_master(const struct net_bridge_vlan *v)
 {
+	/*由于此vlan有属于master标记，故v.br有效*/
 	return v->flags & BRIDGE_VLAN_INFO_MASTER;
 }
 
@@ -671,6 +681,7 @@ static inline bool nbp_state_should_learn(const struct net_bridge_port *p)
 	return p->state == BR_STATE_LEARNING || p->state == BR_STATE_FORWARDING;
 }
 
+/*检查vlan有效性*/
 static inline bool br_vlan_valid_id(u16 vid, struct netlink_ext_ack *extack)
 {
 	bool ret = vid > 0 && vid < VLAN_VID_MASK;
@@ -687,6 +698,7 @@ static inline bool br_vlan_valid_range(const struct bridge_vlan_info *cur,
 {
 	/* pvid flag is not allowed in ranges */
 	if (cur->flags & BRIDGE_VLAN_INFO_PVID) {
+		/*如果是一组vlan,则不容许有pvid标记*/
 		NL_SET_ERR_MSG_MOD(extack, "Pvid isn't allowed in a range");
 		return false;
 	}
@@ -1569,6 +1581,7 @@ static inline int br_vlan_get_tag(const struct sk_buff *skb, u16 *vid)
 	return err;
 }
 
+/*取此vlan group对应的pvid*/
 static inline u16 br_get_pvid(const struct net_bridge_vlan_group *vg)
 {
 	if (!vg)

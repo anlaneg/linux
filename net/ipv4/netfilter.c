@@ -49,7 +49,7 @@ int ip_route_me_harder(struct net *net, struct sock *sk, struct sk_buff *skb, un
 	fl4.flowi4_mark = skb->mark;
 	fl4.flowi4_flags = flags;
 	fib4_rules_early_flow_dissect(net, skb, &fl4, &flkeys);
-	rt = ip_route_output_key(net, &fl4);
+	rt = ip_route_output_key(net, &fl4);/*执行路由查询*/
 	if (IS_ERR(rt))
 		return PTR_ERR(rt);
 

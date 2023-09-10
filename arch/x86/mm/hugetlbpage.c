@@ -117,10 +117,12 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 	struct mm_struct *mm = current->mm;
 	struct vm_area_struct *vma;
 
+	/*长度未按大页对齐*/
 	if (len & ~huge_page_mask(h))
 		return -EINVAL;
 
 	if (len > TASK_SIZE)
+		/*指定的长度过大*/
 		return -ENOMEM;
 
 	/* No address checking. See comment at mmap_address_hint_valid() */
@@ -130,6 +132,7 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 		return addr;
 	}
 
+	/*检查addr不为NULL情况*/
 	if (addr) {
 		addr &= huge_page_mask(h);
 		if (!mmap_address_hint_valid(addr, len))
@@ -141,6 +144,7 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 	}
 
 get_unmapped_area:
+	/*找一个可用的vma*/
 	if (mm->get_unmapped_area == arch_get_unmapped_area)
 		return hugetlb_get_unmapped_area_bottomup(file, addr, len,
 				pgoff, flags);

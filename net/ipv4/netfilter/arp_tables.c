@@ -1612,6 +1612,7 @@ static struct nf_sockopt_ops arpt_sockopts = {
 
 static int __net_init arp_tables_net_init(struct net *net)
 {
+	/*初始化arp对应的tables proc文件*/
 	return xt_proto_init(net, NFPROTO_ARP);
 }
 

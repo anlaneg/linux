@@ -10,11 +10,13 @@
 
 #include <linux/pkt_cls.h>
 
+/*以参数中的priority为准*/
 #define SKBEDIT_F_PRIORITY		0x1
 #define SKBEDIT_F_QUEUE_MAPPING		0x2
 #define SKBEDIT_F_MARK			0x4
 #define SKBEDIT_F_PTYPE			0x8
 #define SKBEDIT_F_MASK			0x10
+/*自报文中提取，并设置skb->priority*/
 #define SKBEDIT_F_INHERITDSFIELD	0x20
 #define SKBEDIT_F_TXQ_SKBHASH		0x40
 

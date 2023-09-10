@@ -128,12 +128,14 @@ static int __init vsock_loopback_init(void)
 	struct vsock_loopback *vsock = &the_vsock_loopback;
 	int ret;
 
+	/*申请工作队列*/
 	vsock->workqueue = alloc_workqueue("vsock-loopback", 0, 0);
 	if (!vsock->workqueue)
 		return -ENOMEM;
 
 	spin_lock_init(&vsock->pkt_list_lock);
 	skb_queue_head_init(&vsock->pkt_queue);
+	/*初始化work*/
 	INIT_WORK(&vsock->pkt_work, vsock_loopback_work);
 
 	ret = vsock_core_register(&loopback_transport.transport,

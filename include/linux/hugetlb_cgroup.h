@@ -45,12 +45,12 @@ struct hugetlb_cgroup {
 	/*
 	 * the counter to account for hugepages from hugetlb.
 	 */
-	struct page_counter hugepage[HUGE_MAX_HSTATE];
+	struct page_counter hugepage[HUGE_MAX_HSTATE];/*针对RES_LIMIT的配置*/
 
 	/*
 	 * the counter to account for hugepage reservations from hugetlb.
 	 */
-	struct page_counter rsvd_hugepage[HUGE_MAX_HSTATE];
+	struct page_counter rsvd_hugepage[HUGE_MAX_HSTATE];/*针对RES_RSVD_LIMIT的配置*/
 
 	atomic_long_t events[HUGE_MAX_HSTATE][HUGETLB_NR_MEMORY_EVENTS];
 	atomic_long_t events_local[HUGE_MAX_HSTATE][HUGETLB_NR_MEMORY_EVENTS];
@@ -198,6 +198,7 @@ static inline void set_hugetlb_cgroup_rsvd(struct folio *folio,
 
 static inline bool hugetlb_cgroup_disabled(void)
 {
+	/*大页cgroup是否被禁用*/
 	return true;
 }
 

@@ -976,6 +976,7 @@ static struct ib_mr *rxe_reg_user_mr(struct ib_pd *ibpd,
 		goto err_out;
 	}
 
+	/*此mr信息添加进mr pool*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err)
 		goto err_free;
@@ -1123,12 +1124,12 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.post_send = rxe_post_send,
 	.post_srq_recv = rxe_post_srq_recv,
 	.query_ah = rxe_query_ah,
-	.query_device = rxe_query_device,
+	.query_device = rxe_query_device,/*针对设备进行属性查询*/
 	.query_pkey = rxe_query_pkey,
 	.query_port = rxe_query_port,/*查询port属性*/
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,
-	.reg_user_mr = rxe_reg_user_mr,
+	.reg_user_mr = rxe_reg_user_mr,/*rxe注册mr*/
 	.req_notify_cq = rxe_req_notify_cq,
 	.resize_cq = rxe_resize_cq,
 
@@ -1141,7 +1142,8 @@ static const struct ib_device_ops rxe_dev_ops = {
 	INIT_RDMA_OBJ_SIZE(ib_mw, rxe_mw, ibmw),
 };
 
-int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name/*ib设备名称*/)
+/*rxe设备注册*/
+int rxe_register_device(struct rxe_dev *rxe/*要注册的rxe设备*/, const char *ibdev_name/*ib设备名称*/)
 {
 	int err;
 	struct ib_device *dev = &rxe->ib_dev;
@@ -1153,14 +1155,17 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name/*ib设备名
 	dev->phys_port_cnt = 1;
 	dev->num_comp_vectors = num_possible_cpus();
 	dev->local_dma_lkey = 0;
+	/*利用底层设备的mac做node的全局唯一id*/
 	addrconf_addr_eui48((unsigned char *)&dev->node_guid,
 			    rxe->ndev->dev_addr);
 
 	dev->uverbs_cmd_mask |= BIT_ULL(IB_USER_VERBS_CMD_POST_SEND) |
 				BIT_ULL(IB_USER_VERBS_CMD_REQ_NOTIFY_CQ);
 
-	/*设置ib设备操作集*/
+	/*设置ib设备对应的操作集为rxe_dev_ops*/
 	ib_set_device_ops(dev, &rxe_dev_ops);
+
+	/*为rxe设备的1号port关联底层设备rxe->ndev*/
 	err = ib_device_set_netdev(&rxe->ib_dev, rxe->ndev, 1);
 	if (err)
 		return err;
@@ -1170,7 +1175,7 @@ int rxe_register_device(struct rxe_dev *rxe, const char *ibdev_name/*ib设备名
 		return err;
 
 	/*注册此ib设备*/
-	err = ib_register_device(dev, ibdev_name, NULL);
+	err = ib_register_device(dev, ibdev_name, NULL/*dma设备为空*/);
 	if (err)
 		rxe_dbg(rxe, "failed with error %d\n", err);
 

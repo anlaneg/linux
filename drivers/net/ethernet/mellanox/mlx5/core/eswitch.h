@@ -190,10 +190,10 @@ struct mlx5_vport {
 		struct mlx5_esw_rate_group *group;
 	} qos;
 
-	u16 vport;
+	u16 vport;/*vport编号*/
 	bool                    enabled;//标明此口被启用
 	enum mlx5_eswitch_vport_event enabled_events;
-	int index;
+	int index;/*vport在vports中对应的索引*/
 	struct devlink_port *dl_port;
 	struct dentry *dbgfs;
 };
@@ -313,9 +313,9 @@ struct mlx5_eswitch {
 	struct esw_mc_addr mc_promisc;
 	/* end of legacy */
 	struct workqueue_struct *work_queue;
-	struct xarray vports;//vport数组
+	struct xarray vports;//vport数组（0号为pf,1-max_vf为vf,sf_base_id开始为sf)
 	u32 flags;
-	int                     total_vports;//vport总数
+	int                     total_vports;//vports数组长度
 	int                     enabled_vports;
 	/* Synchronize between vport change events
 	 * and async SRIOV admin state changes
@@ -350,7 +350,7 @@ struct mlx5_eswitch {
 		u32             large_group_num;
 	}  params;
 	struct blocking_notifier_head n_head;
-	struct dentry *dbgfs;
+	struct dentry *dbgfs;/*eswitch的debugfs根节点*/
 };
 
 void esw_offloads_disable(struct mlx5_eswitch *esw);

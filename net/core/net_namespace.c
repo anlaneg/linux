@@ -31,6 +31,7 @@
  */
 
 static LIST_HEAD(pernet_list);
+/*执行pernet*/
 static struct list_head *first_device = &pernet_list;
 
 //记录系统中所有的namespace，将其串连在此链上

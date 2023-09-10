@@ -80,6 +80,7 @@ static void rxe_init_device_param(struct rxe_dev *rxe)
 /* initialize port attributes */
 static void rxe_init_port_param(struct rxe_port *port)
 {
+	/*初始化rxe port的参数*/
 	port->attr.state		= IB_PORT_DOWN;
 	port->attr.max_mtu		= IB_MTU_4096;
 	port->attr.active_mtu		= IB_MTU_256;
@@ -122,11 +123,11 @@ static void rxe_init_ports(struct rxe_dev *rxe)
 static void rxe_init_pools(struct rxe_dev *rxe)
 {
 	/*创建各个pool*/
-	rxe_pool_init(rxe, &rxe->uc_pool, RXE_TYPE_UC);
+	rxe_pool_init(rxe, &rxe->uc_pool, RXE_TYPE_UC);/*ucontext*/
 	rxe_pool_init(rxe, &rxe->pd_pool, RXE_TYPE_PD);
 	rxe_pool_init(rxe, &rxe->ah_pool, RXE_TYPE_AH);
 	rxe_pool_init(rxe, &rxe->srq_pool, RXE_TYPE_SRQ);
-	rxe_pool_init(rxe, &rxe->qp_pool, RXE_TYPE_QP);
+	rxe_pool_init(rxe, &rxe->qp_pool, RXE_TYPE_QP);/*queue pair*/
 	rxe_pool_init(rxe, &rxe->cq_pool, RXE_TYPE_CQ);
 	rxe_pool_init(rxe, &rxe->mr_pool, RXE_TYPE_MR);
 	rxe_pool_init(rxe, &rxe->mw_pool, RXE_TYPE_MW);
@@ -139,6 +140,7 @@ static void rxe_init(struct rxe_dev *rxe)
 	rxe_init_device_param(rxe);
 
 	rxe_init_ports(rxe);
+	/*初始化各种类型的pool*/
 	rxe_init_pools(rxe);
 
 	/* init pending mmap list */
@@ -158,28 +160,33 @@ void rxe_set_mtu(struct rxe_dev *rxe, unsigned int ndev_mtu)
 	struct rxe_port *port = &rxe->port;
 	enum ib_mtu mtu;
 
+	/*将mtu转换为枚举*/
 	mtu = eth_mtu_int_to_enum(ndev_mtu);
 
 	/* Make sure that new MTU in range */
 	mtu = mtu ? min_t(enum ib_mtu, mtu, IB_MTU_4096) : IB_MTU_256;
 
+	/*指明port应用的mtu类型*/
 	port->attr.active_mtu = mtu;
+	/*对应的mtu大小*/
 	port->mtu_cap = ib_mtu_enum_to_int(mtu);
 }
 
 /* called by ifc layer to create new rxe device.
  * The caller should allocate memory for rxe by calling ib_alloc_device.
  */
-int rxe_add(struct rxe_dev *rxe, unsigned int mtu, const char *ibdev_name/*ib设备名称*/)
+int rxe_add(struct rxe_dev *rxe, unsigned int mtu/*底层netdev对应的mtu*/, const char *ibdev_name/*ib设备名称*/)
 {
 	/*初始化rxe设备*/
 	rxe_init(rxe);
+	/*利用mtu设置rxe port的mtu枚举*/
 	rxe_set_mtu(rxe, mtu);
 
 	/*注册设备*/
 	return rxe_register_device(rxe, ibdev_name);
 }
 
+/*负责创建rxe类型的ib设备，指定名称为ibdev_name,底层的网络设备为ndev*/
 static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 {
 	struct rxe_dev *exists;
@@ -202,7 +209,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 		goto err;
 	}
 
-	/*依赖ndev添加名称为ibdev_name的ib设备*/
+	/*添加名称为ibdev_name的ib设备，其与ndev关联*/
 	err = rxe_net_add(ibdev_name, ndev);
 	if (err) {
 		rxe_dbg(exists, "failed to add %s\n", ndev->name);

@@ -263,6 +263,7 @@ static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 	if (fill_nldev_handle(msg, device))
 		return -EMSGSIZE;
 
+	/*设置此设备最大的port*/
 	if (nla_put_u32(msg, RDMA_NLDEV_ATTR_PORT_INDEX, rdma_end_port(device)))
 		return -EMSGSIZE;
 
@@ -279,17 +280,19 @@ static int fill_dev_info(struct sk_buff *msg, struct ib_device *device)
 	if (strlen(fw) && nla_put_string(msg, RDMA_NLDEV_ATTR_FW_VERSION, fw))
 		return -EMSGSIZE;
 
-	//ib设备所属的numa信息
+	//设备的node唯一id
 	if (nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_NODE_GUID,
 			      be64_to_cpu(device->node_guid),
 			      RDMA_NLDEV_ATTR_PAD))
 		return -EMSGSIZE;
+
 	//ib设备系统image信息
 	if (nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_SYS_IMAGE_GUID,
 			      be64_to_cpu(device->attrs.sys_image_guid),
 			      RDMA_NLDEV_ATTR_PAD))
 		return -EMSGSIZE;
-	//？？？？
+
+	//设置设备类型
 	if (nla_put_u8(msg, RDMA_NLDEV_ATTR_DEV_NODE_TYPE, device->node_type))
 		return -EMSGSIZE;
 	//？？？？
@@ -1133,6 +1136,7 @@ put_done:
 	return err;
 }
 
+/*dump设备device*/
 static int _nldev_get_dumpit(struct ib_device *device/*待dump的ib设备*/,
 			     struct sk_buff *skb,
 			     struct netlink_callback *cb/*dump上下文*/,
@@ -1675,11 +1679,12 @@ RES_GET_FUNCS(counter, RDMA_RESTRACK_COUNTER);
 RES_GET_FUNCS(ctx, RDMA_RESTRACK_CTX);
 RES_GET_FUNCS(srq, RDMA_RESTRACK_SRQ);
 
-/*用于记录系统中所有rdma_link_ops*/
+/*用于记录系统中所有rdma link ops*/
 static LIST_HEAD(link_ops);
+/*用于保护link_ops链表*/
 static DECLARE_RWSEM(link_ops_rwsem);
 
-/*给定type获得rdma_link_ops*/
+/*给定link type获得rdma_link_ops*/
 static const struct rdma_link_ops *link_ops_get(const char *type)
 {
 	const struct rdma_link_ops *ops;
@@ -1700,6 +1705,7 @@ void rdma_link_register(struct rdma_link_ops *ops)
 	if (WARN_ON_ONCE(link_ops_get(ops->type)))
 	    /*此link类型已存在，退出*/
 		goto out;
+
 	/*添加此link类型的定义*/
 	list_add(&ops->list, &link_ops);
 out:
@@ -1715,7 +1721,7 @@ void rdma_link_unregister(struct rdma_link_ops *ops)
 }
 EXPORT_SYMBOL(rdma_link_unregister);
 
-/*ib设备创建*/
+/*通过netlink创建ib设备*/
 static int nldev_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			  struct netlink_ext_ack *extack)
 {
@@ -1732,34 +1738,36 @@ static int nldev_newlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 				     nldev_policy, extack);
 	if (err || !tb[RDMA_NLDEV_ATTR_DEV_NAME] ||
 	    !tb[RDMA_NLDEV_ATTR_LINK_TYPE] || !tb[RDMA_NLDEV_ATTR_NDEV_NAME])
-	    /*这三个参数为必须参数*/
+	    /*这三个参数为必须参数（要创建的ib设备名称，ib设备类型，底层netdev设备名称*/
 		return -EINVAL;
 
 	/*取要创建的ib设备名称*/
 	nla_strscpy(ibdev_name, tb[RDMA_NLDEV_ATTR_DEV_NAME],
 		    sizeof(ibdev_name));
 	if (strchr(ibdev_name, '%') || strlen(ibdev_name) == 0)
-	    /*ib设备名称有效性检查*/
+	    /*ib设备名称有效性检查，不得为空，不得包含%号*/
 		return -EINVAL;
 
-	/*link type名称*/
+	/*取link type名称*/
 	nla_strscpy(type, tb[RDMA_NLDEV_ATTR_LINK_TYPE], sizeof(type));
 
-	/*所属netdev名称*/
+	/*取底层netdev名称*/
 	nla_strscpy(ndev_name, tb[RDMA_NLDEV_ATTR_NDEV_NAME],
 		    sizeof(ndev_name));
 
-	/*取所属的网络设备*/
+	/*取此net namespace下的指定名称的netdev*/
 	ndev = dev_get_by_name(sock_net(skb->sk), ndev_name);
 	if (!ndev)
 		return -ENODEV;
 
+	/*加锁保护link_ops*/
 	down_read(&link_ops_rwsem);
+
 	/*取link type所属的操作集*/
 	ops = link_ops_get(type);
 #ifdef CONFIG_MODULES
 	if (!ops) {
-	    /*尝试加载模块后重试*/
+	    /*未查找到此type,尝试加载模块后重试*/
 		up_read(&link_ops_rwsem);
 		request_module("rdma-link-%s", type);
 		down_read(&link_ops_rwsem);
@@ -1838,6 +1846,7 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 				goto out_put;
 			}
 		} else {
+			/*未指定port，按-1处理*/
 			data.port = -1;
 		}
 	} else if (tb[RDMA_NLDEV_ATTR_PORT_INDEX]) {
@@ -1860,18 +1869,19 @@ static int nldev_get_chardev(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	data.nl_msg = msg;
-	/*添加client名称*/
+	/*获取ib设备的名称为$client_name的client信息*/
 	err = ib_get_client_nl_info(ibdev, client_name, &data);
 	if (err)
 		goto out_nlmsg;
 
+	/*添加字符设备devt*/
 	err = nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_CHARDEV,
 				huge_encode_dev(data.cdev->devt),
 				RDMA_NLDEV_ATTR_PAD);
 	if (err)
 		goto out_data;
 
-	/*添加abi版本*/
+	/*添加client abi版本*/
 	err = nla_put_u64_64bit(msg, RDMA_NLDEV_ATTR_CHARDEV_ABI, data.abi,
 				RDMA_NLDEV_ATTR_PAD);
 	if (err)
@@ -2521,12 +2531,14 @@ err:
 static const struct rdma_nl_cbs nldev_cb_table[RDMA_NLDEV_NUM_OPS] = {
     //用于ib设备信息获取
 	[RDMA_NLDEV_CMD_GET] = {
-		.doit = nldev_get_doit,//通过index获取指定ib设备信息
+		//通过index获取指定ib设备信息
+		.doit = nldev_get_doit,
 		//dump系统所有ib设备
 		.dump = nldev_get_dumpit,
 	},
 	[RDMA_NLDEV_CMD_GET_CHARDEV] = {
-		.doit = nldev_get_chardev,/*取ib设备指定名称的字符设备信息*/
+		/*取ib设备对应的字符设备信息*/
+		.doit = nldev_get_chardev,
 	},
 	[RDMA_NLDEV_CMD_SET] = {
 		.doit = nldev_set_doit,

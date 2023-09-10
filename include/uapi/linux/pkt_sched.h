@@ -722,11 +722,14 @@ enum {
 #define __TC_MQPRIO_SHAPER_MAX (__TC_MQPRIO_SHAPER_MAX - 1)
 
 struct tc_mqprio_qopt {
+	/*要使能的tc数目*/
 	__u8	num_tc;
 	/*优先级到tc的映射*/
 	__u8	prio_tc_map[TC_QOPT_BITMASK + 1];
 	//是否支持硬件offload
 	__u8	hw;
+	/*一共有TC_QOPT_BITMASK种tc,每一种tc id映射一组txq,
+	 * 通过(offset,count)来标记每组的映射情况*/
 	__u16	count[TC_QOPT_MAX_QUEUE];
 	__u16	offset[TC_QOPT_MAX_QUEUE];
 };

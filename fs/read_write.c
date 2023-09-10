@@ -236,6 +236,7 @@ loff_t default_llseek(struct file *file, loff_t offset, int whence)
 	inode_lock(inode);
 	switch (whence) {
 		case SEEK_END:
+			/*变更offset到inode结尾*/
 			offset += i_size_read(inode);
 			break;
 		case SEEK_CUR:

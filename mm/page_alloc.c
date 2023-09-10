@@ -9375,7 +9375,7 @@ int alloc_contig_range(unsigned long start, unsigned long end,
 	struct compact_control cc = {
 		.nr_migratepages = 0,
 		.order = -1,
-		.zone = page_zone(pfn_to_page(start)),
+		.zone = page_zone(pfn_to_page(start)),/*设置所属的zone*/
 		.mode = MIGRATE_SYNC,
 		.ignore_skip_hint = true,
 		.no_set_skip_hint = true,
@@ -9506,25 +9506,32 @@ static bool pfn_range_valid_contig(struct zone *z, unsigned long start_pfn,
 	unsigned long i, end_pfn = start_pfn + nr_pages;
 	struct page *page;
 
+	/*自start_pfn到end_pfn遍历每个页*/
 	for (i = start_pfn; i < end_pfn; i++) {
 		page = pfn_to_online_page(i);
 		if (!page)
+			/*此页帧号无效*/
 			return false;
 
 		if (page_zone(page) != z)
+			/*此page对应的zone与参数指明的zone不相等*/
 			return false;
 
 		if (PageReserved(page))
+			/*此页已被reserved*/
 			return false;
 	}
+	/*这些页均有效*/
 	return true;
 }
 
 static bool zone_spans_last_pfn(const struct zone *zone,
 				unsigned long start_pfn, unsigned long nr_pages)
 {
+	/*页帧号自start_pfn开始，nr_pages为需要的页数，取last_pfn*/
 	unsigned long last_pfn = start_pfn + nr_pages - 1;
 
+	/*检查此zone是否包含last_pfn*/
 	return zone_spans_pfn(zone, last_pfn);
 }
 
@@ -9549,7 +9556,7 @@ static bool zone_spans_last_pfn(const struct zone *zone,
  *
  * Return: pointer to contiguous pages on success, or NULL if not successful.
  */
-struct page *alloc_contig_pages(unsigned long nr_pages, gfp_t gfp_mask,
+struct page *alloc_contig_pages(unsigned long nr_pages/*普页数目*/, gfp_t gfp_mask,
 				int nid, nodemask_t *nodemask)
 {
 	unsigned long ret, pfn, flags;
@@ -9562,9 +9569,12 @@ struct page *alloc_contig_pages(unsigned long nr_pages, gfp_t gfp_mask,
 					gfp_zone(gfp_mask), nodemask) {
 		spin_lock_irqsave(&zone->lock, flags);
 
+		/*使页帧号与页数对齐*/
 		pfn = ALIGN(zone->zone_start_pfn, nr_pages);
 		while (zone_spans_last_pfn(zone, pfn, nr_pages)) {
+			/*此zone包含有pfn开始到pfn+nr_pages结束的页帧号*/
 			if (pfn_range_valid_contig(zone, pfn, nr_pages)) {
+				/*自pfn开始到pfn+nr_pages结束的页帧号可用*/
 				/*
 				 * We release the zone lock here because
 				 * alloc_contig_range() will also lock the zone

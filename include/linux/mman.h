@@ -127,7 +127,7 @@ static inline bool arch_validate_flags(unsigned long flags)
  * ("bit1" and "bit2" must be single bits)
  */
 #define _calc_vm_trans(x, bit1, bit2) \
-  ((!(bit1) || !(bit2)) ? 0 : \
+  ((!(bit1) || !(bit2)) ? 0 /*两者任一为0，转换为0*/ : \
   ((bit1) <= (bit2) ? ((x) & (bit1)) * ((bit2) / (bit1)) \
    : ((x) & (bit1)) / ((bit1) / (bit2))))
 

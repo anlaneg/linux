@@ -282,6 +282,7 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_MAYREAD	0x00000010	/* limits for mprotect() etc */
 #define VM_MAYWRITE	0x00000020
 #define VM_MAYEXEC	0x00000040
+/*标记此内存共享*/
 #define VM_MAYSHARE	0x00000080
 
 #define VM_GROWSDOWN	0x00000100	/* general info on the segment */
@@ -306,6 +307,7 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_LOCKONFAULT	0x00080000	/* Lock the pages covered when they are faulted in */
 #define VM_ACCOUNT	0x00100000	/* Is a VM accounted object */
 #define VM_NORESERVE	0x00200000	/* should the VM suppress accounting */
+/*标明大页vm*/
 #define VM_HUGETLB	0x00400000	/* Huge TLB Page VM */
 #define VM_SYNC		0x00800000	/* Synchronous page faults */
 #define VM_ARCH_1	0x01000000	/* Architecture-specific flag */
@@ -626,6 +628,7 @@ struct vm_operations_struct {
 					  unsigned long addr);
 };
 
+/*初始化vma,指明其属于哪个mm*/
 static inline void vma_init(struct vm_area_struct *vma, struct mm_struct *mm)
 {
 	static const struct vm_operations_struct dummy_vm_ops = {};
@@ -876,12 +879,12 @@ static inline unsigned int folio_order(struct folio *folio)
 static inline int put_page_testzero(struct page *page)
 {
 	VM_BUG_ON_PAGE(page_ref_count(page) == 0, page);
-	return page_ref_dec_and_test(page);
+	return page_ref_dec_and_test(page);/*put此页*/
 }
 
 static inline int folio_put_testzero(struct folio *folio)
 {
-	return put_page_testzero(&folio->page);
+	return put_page_testzero(&folio->page);/*put此页*/
 }
 
 /*
@@ -1126,6 +1129,7 @@ static inline void set_compound_order(struct page *page, unsigned int order)
 /* Returns the number of bytes in this potentially compound page. */
 static inline unsigned long page_size(struct page *page)
 {
+	/*返回页大小*/
 	return PAGE_SIZE << compound_order(page);
 }
 
@@ -1473,6 +1477,7 @@ static inline int page_to_nid(const struct page *page)
 
 static inline int folio_nid(const struct folio *folio)
 {
+	/*取此page对应的node id*/
 	return page_to_nid(&folio->page);
 }
 
@@ -1665,9 +1670,10 @@ static inline void page_kasan_tag_reset(struct page *page) { }
 
 #endif /* CONFIG_KASAN_SW_TAGS || CONFIG_KASAN_HW_TAGS */
 
+/*取此page对应的zone*/
 static inline struct zone *page_zone(const struct page *page)
 {
-	return &NODE_DATA(page_to_nid(page))->node_zones[page_zonenum(page)];
+	return &NODE_DATA(page_to_nid(page))->node_zones[page_zonenum(page)/*由page获得zone type*/];
 }
 
 static inline pg_data_t *page_pgdat(const struct page *page)
@@ -1692,6 +1698,7 @@ static inline void set_page_section(struct page *page, unsigned long section)
 	page->flags |= (section & SECTIONS_MASK) << SECTIONS_PGSHIFT;
 }
 
+/*由page获取section number*/
 static inline unsigned long page_to_section(const struct page *page)
 {
 	return (page->flags >> SECTIONS_PGSHIFT) & SECTIONS_MASK;

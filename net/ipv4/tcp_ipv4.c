@@ -203,7 +203,7 @@ static int tcp_v4_pre_connect(struct sock *sk, struct sockaddr *uaddr,
 /*实现tcp v4连接到远端*/
 int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 {
-	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;
+	struct sockaddr_in *usin = (struct sockaddr_in *)uaddr;/*远端地址*/
 	struct inet_timewait_death_row *tcp_death_row;
 	struct inet_sock *inet = inet_sk(sk);
 	struct tcp_sock *tp = tcp_sk(sk);
@@ -235,7 +235,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	orig_sport = inet->inet_sport;/*目端端口*/
 	orig_dport = usin->sin_port;/*远端的目的port*/
 	fl4 = &inet->cork.fl.u.ip4;
-	rt = ip_route_connect(fl4, nexthop, inet->inet_saddr/*本端地址*/,
+	rt = ip_route_connect(fl4, nexthop/*目的地址*/, inet->inet_saddr/*本端地址，可以为0.0.0.0*/,
 			      sk->sk_bound_dev_if, IPPROTO_TCP, orig_sport,
 			      orig_dport, sk);
 	if (IS_ERR(rt)) {
@@ -290,7 +290,7 @@ int tcp_v4_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len)
 	 * lock select source port, enter ourselves into the hash tables and
 	 * complete initialization after this.
 	 */
-	tcp_set_state(sk, TCP_SYN_SENT);
+	tcp_set_state(sk, TCP_SYN_SENT);/*进入syn_sent状态*/
 	err = inet_hash_connect(tcp_death_row, sk);
 	if (err)
 		goto failure;

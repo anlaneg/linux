@@ -3,12 +3,14 @@
 #define _LINUX_NUMA_H
 #include <linux/types.h>
 
+/*CONFIG_NODES_SHIFT由.config文件负责定义*/
 #ifdef CONFIG_NODES_SHIFT
 #define NODES_SHIFT     CONFIG_NODES_SHIFT
 #else
 #define NODES_SHIFT     0
 #endif
 
+/*支持的numa最大值*/
 #define MAX_NUMNODES    (1 << NODES_SHIFT)
 
 #define	NUMA_NO_NODE	(-1)

@@ -260,13 +260,16 @@ static int check_pfn_span(unsigned long pfn, unsigned long nr_pages)
  */
 struct page *pfn_to_online_page(unsigned long pfn)
 {
+	/*页帧号对应的section number*/
 	unsigned long nr = pfn_to_section_nr(pfn);
 	struct dev_pagemap *pgmap;
 	struct mem_section *ms;
 
+	/*section number无效*/
 	if (nr >= NR_MEM_SECTIONS)
 		return NULL;
 
+	/*取nr号mem_section,如果此section不在线，则直接返回NULL*/
 	ms = __nr_to_section(nr);
 	if (!online_section(ms))
 		return NULL;
@@ -297,6 +300,7 @@ struct page *pfn_to_online_page(unsigned long pfn)
 	if (pgmap)
 		return NULL;
 
+	/*由页帧号获得page结构体*/
 	return pfn_to_page(pfn);
 }
 EXPORT_SYMBOL_GPL(pfn_to_online_page);

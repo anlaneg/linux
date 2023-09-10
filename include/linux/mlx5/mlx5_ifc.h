@@ -6338,11 +6338,12 @@ struct mlx5_ifc_general_obj_query_param_bits {
 	u8         obj_offset[0x1f];
 };
 
+/*obj公共头*/
 struct mlx5_ifc_general_obj_in_cmd_hdr_bits {
 	u8         opcode[0x10];
 	u8         uid[0x10];
 
-	u8         vhca_tunnel_id[0x10];
+	u8         vhca_tunnel_id[0x10];/*提供tunnel_id*/
 	u8         obj_type[0x10];
 
 	u8         obj_id[0x20];

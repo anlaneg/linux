@@ -325,6 +325,7 @@ static void copy_query_dev_fields(struct ib_ucontext *ucontext,
 				  struct ib_uverbs_query_device_resp *resp,
 				  struct ib_device_attr *attr)
 {
+	/*由ucontext拿到ib设备*/
 	struct ib_device *ib_dev = ucontext->device;
 
 	resp->fw_ver		= attr->fw_ver;
@@ -367,6 +368,7 @@ static void copy_query_dev_fields(struct ib_ucontext *ucontext,
 	resp->phys_port_cnt = min_t(u32, ib_dev->phys_port_cnt, U8_MAX);
 }
 
+/*执行ib设备属性查询（不含扩展属性）*/
 static int ib_uverbs_query_device(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_query_device      cmd;
@@ -383,11 +385,13 @@ static int ib_uverbs_query_device(struct uverbs_attr_bundle *attrs)
 		return ret;
 
 	memset(&resp, 0, sizeof resp);
-	copy_query_dev_fields(ucontext, &resp, &ucontext->device->attrs);
+	/*填充此设备属性*/
+	copy_query_dev_fields(ucontext, &resp, &ucontext->device->attrs/*设备属性*/);
 
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 
+/*ib设备指定port的属性查询*/
 static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_query_port      cmd;
@@ -397,6 +401,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	struct ib_ucontext *ucontext;
 	struct ib_device *ib_dev;
 
+	/*由ufile拿到ucontext,由ucontext拿到ib device*/
 	ucontext = ib_uverbs_get_ucontext(attrs);
 	if (IS_ERR(ucontext))
 		return PTR_ERR(ucontext);
@@ -417,7 +422,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 
-/*执行pd创建*/
+/*针对指定ib设备执行pd创建*/
 static int ib_uverbs_alloc_pd(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_alloc_pd_resp resp = {};
@@ -3629,6 +3634,7 @@ static int ib_uverbs_destroy_srq(struct uverbs_attr_bundle *attrs)
 	return uverbs_response(attrs, &resp, sizeof(resp));
 }
 
+/*执行ib设备属性查询（含扩展属性）*/
 static int ib_uverbs_ex_query_device(struct uverbs_attr_bundle *attrs)
 {
 	struct ib_uverbs_ex_query_device_resp resp = {};
@@ -3638,9 +3644,11 @@ static int ib_uverbs_ex_query_device(struct uverbs_attr_bundle *attrs)
 	struct ib_device *ib_dev;
 	int err;
 
+	/*由ufile获得ucontext*/
 	ucontext = ib_uverbs_get_ucontext(attrs);
 	if (IS_ERR(ucontext))
 		return PTR_ERR(ucontext);
+	/*由ucontext拿到ib device*/
 	ib_dev = ucontext->device;
 
 	err = uverbs_request(attrs, &cmd, sizeof(cmd));
@@ -3657,6 +3665,7 @@ static int ib_uverbs_ex_query_device(struct uverbs_attr_bundle *attrs)
 	if (err)
 		return err;
 
+	/*基本信息填充*/
 	copy_query_dev_fields(ucontext, &resp.base, &attr);
 
 	resp.odp_caps.general_caps = attr.odp_caps.general_caps;
@@ -3854,17 +3863,20 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 				     UAPI_DEF_WRITE_UDATA_IO(
 					     struct ib_uverbs_get_context,
 					     struct ib_uverbs_get_context_resp)),
+			/*ib设备属性查询*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_QUERY_DEVICE,
 			ib_uverbs_query_device,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_device,
 					  struct ib_uverbs_query_device_resp)),
+			/*ib设备指定port的属性查询*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_QUERY_PORT,
 			ib_uverbs_query_port,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_port,
 					  struct ib_uverbs_query_port_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(query_port)),
+			/*ib设备扩展属性查询*/
 		DECLARE_UVERBS_WRITE_EX(
 			IB_USER_VERBS_EX_CMD_QUERY_DEVICE,
 			ib_uverbs_ex_query_device,
@@ -3934,7 +3946,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 		UVERBS_OBJECT_PD,
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_ALLOC_PD,
-			ib_uverbs_alloc_pd,/*创建pd*/
+			ib_uverbs_alloc_pd,/*为指定ib设备创建pd*/
 			UAPI_DEF_WRITE_UDATA_IO(struct ib_uverbs_alloc_pd,
 						struct ib_uverbs_alloc_pd_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(alloc_pd)),

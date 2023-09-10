@@ -23,16 +23,19 @@
 #include <linux/hugetlb.h>
 #include <linux/hugetlb_cgroup.h>
 
-#define MEMFILE_PRIVATE(x, val)	(((x) << 16) | (val))
+#define MEMFILE_PRIVATE(x/*index编号*/, val/*标记是文件类型*/)	(((x) << 16) | (val))
+/*如上MEMFILE_PRIVATE函数构造了 “标记” + index,故以下函数用于获取index*/
 #define MEMFILE_IDX(val)	(((val) >> 16) & 0xffff)
+/*取标记*/
 #define MEMFILE_ATTR(val)	((val) & 0xffff)
 
 static struct hugetlb_cgroup *root_h_cgroup __read_mostly;
 
 static inline struct page_counter *
 __hugetlb_cgroup_counter_from_cgroup(struct hugetlb_cgroup *h_cg, int idx,
-				     bool rsvd)
+				     bool rsvd/*是否为预留数据*/)
 {
+	/*依据rsvd，获取相应的counter*/
 	if (rsvd)
 		return &h_cg->rsvd_hugepage[idx];
 	return &h_cg->hugepage[idx];
@@ -41,21 +44,23 @@ __hugetlb_cgroup_counter_from_cgroup(struct hugetlb_cgroup *h_cg, int idx,
 static inline struct page_counter *
 hugetlb_cgroup_counter_from_cgroup(struct hugetlb_cgroup *h_cg, int idx)
 {
-	return __hugetlb_cgroup_counter_from_cgroup(h_cg, idx, false);
+	return __hugetlb_cgroup_counter_from_cgroup(h_cg, idx, false/*非预留数据*/);
 }
 
 static inline struct page_counter *
 hugetlb_cgroup_counter_from_cgroup_rsvd(struct hugetlb_cgroup *h_cg, int idx)
 {
-	return __hugetlb_cgroup_counter_from_cgroup(h_cg, idx, true);
+	return __hugetlb_cgroup_counter_from_cgroup(h_cg, idx, true/*预留数据*/);
 }
 
+/*由cgroup_state获取hugetlb_cgroup*/
 static inline
 struct hugetlb_cgroup *hugetlb_cgroup_from_css(struct cgroup_subsys_state *s)
 {
 	return s ? container_of(s, struct hugetlb_cgroup, css) : NULL;
 }
 
+/*取task对应的hugetlb_cgroup配置*/
 static inline
 struct hugetlb_cgroup *hugetlb_cgroup_from_task(struct task_struct *task)
 {
@@ -97,11 +102,13 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 		int ret;
 
 		if (parent_h_cgroup) {
+			/*取parent中此idx的counter/预留counter*/
 			fault_parent = hugetlb_cgroup_counter_from_cgroup(
 				parent_h_cgroup, idx);
 			rsvd_parent = hugetlb_cgroup_counter_from_cgroup_rsvd(
 				parent_h_cgroup, idx);
 		}
+		/*初始化counter/预留counter*/
 		page_counter_init(hugetlb_cgroup_counter_from_cgroup(h_cgroup,
 								     idx),
 				  fault_parent);
@@ -112,6 +119,7 @@ static void hugetlb_cgroup_init(struct hugetlb_cgroup *h_cgroup,
 		limit = round_down(PAGE_COUNTER_MAX,
 				   pages_per_huge_page(&hstates[idx]));
 
+		/*设置counter/预留counter的最大值*/
 		ret = page_counter_set_max(
 			hugetlb_cgroup_counter_from_cgroup(h_cgroup, idx),
 			limit);
@@ -143,6 +151,7 @@ hugetlb_cgroup_css_alloc(struct cgroup_subsys_state *parent_css)
 			   GFP_KERNEL);
 
 	if (!h_cgroup)
+		/*申请内存失败*/
 		return ERR_PTR(-ENOMEM);
 
 	if (!parent_h_cgroup)
@@ -261,15 +270,18 @@ static int __hugetlb_cgroup_charge_cgroup(int idx, unsigned long nr_pages,
 	struct hugetlb_cgroup *h_cg = NULL;
 
 	if (hugetlb_cgroup_disabled())
+		/*hugetlb cgroup功能被禁用，直接返回0*/
 		goto done;
 	/*
 	 * We don't charge any cgroup if the compound page have less
 	 * than 3 pages.
 	 */
 	if (huge_page_order(&hstates[idx]) < HUGETLB_CGROUP_MIN_ORDER)
+		/*小尺寸的不检查，为什么？*/
 		goto done;
 again:
 	rcu_read_lock();
+	/*取当前进程的大页cgroup配置*/
 	h_cg = hugetlb_cgroup_from_task(current);
 	if (!css_tryget(&h_cg->css)) {
 		rcu_read_unlock();
@@ -280,6 +292,7 @@ again:
 	if (!page_counter_try_charge(
 		    __hugetlb_cgroup_counter_from_cgroup(h_cg, idx, rsvd),
 		    nr_pages, &counter)) {
+		/*cgroup检查余额不足*/
 		ret = -ENOMEM;
 		hugetlb_event(h_cg, idx, HUGETLB_MAX);
 		css_put(&h_cg->css);
@@ -301,7 +314,7 @@ int hugetlb_cgroup_charge_cgroup(int idx, unsigned long nr_pages,
 	return __hugetlb_cgroup_charge_cgroup(idx, nr_pages, ptr, false);
 }
 
-int hugetlb_cgroup_charge_cgroup_rsvd(int idx, unsigned long nr_pages,
+int hugetlb_cgroup_charge_cgroup_rsvd(int idx, unsigned long nr_pages/*占用的页数（普通页）*/,
 				      struct hugetlb_cgroup **ptr)
 {
 	return __hugetlb_cgroup_charge_cgroup(idx, nr_pages, ptr, true);
@@ -517,6 +530,7 @@ static int hugetlb_cgroup_read_numa_stat(struct seq_file *seq, void *dummy)
 	return 0;
 }
 
+/*完成对cft当前配置的格式化*/
 static u64 hugetlb_cgroup_read_u64(struct cgroup_subsys_state *css,
 				   struct cftype *cft)
 {
@@ -524,9 +538,11 @@ static u64 hugetlb_cgroup_read_u64(struct cgroup_subsys_state *css,
 	struct page_counter *rsvd_counter;
 	struct hugetlb_cgroup *h_cg = hugetlb_cgroup_from_css(css);
 
+	/*依据index取此index对应大页配置*/
 	counter = &h_cg->hugepage[MEMFILE_IDX(cft->private)];
 	rsvd_counter = &h_cg->rsvd_hugepage[MEMFILE_IDX(cft->private)];
 
+	/*依据attr，返回相应的文件配置*/
 	switch (MEMFILE_ATTR(cft->private)) {
 	case RES_USAGE:
 		return (u64)page_counter_read(counter) * PAGE_SIZE;
@@ -596,7 +612,7 @@ static ssize_t hugetlb_cgroup_write(struct kernfs_open_file *of,
 				    const char *max)
 {
 	int ret, idx;
-	unsigned long nr_pages;
+	unsigned long nr_pages;/*页数*/
 	struct hugetlb_cgroup *h_cg = hugetlb_cgroup_from_css(of_css(of));
 	bool rsvd = false;
 
@@ -608,12 +624,13 @@ static ssize_t hugetlb_cgroup_write(struct kernfs_open_file *of,
 	if (ret)
 		return ret;
 
-	idx = MEMFILE_IDX(of_cft(of)->private);
+	idx = MEMFILE_IDX(of_cft(of)->private);/*大页索引*/
 	nr_pages = round_down(nr_pages, pages_per_huge_page(&hstates[idx]));
 
+	/*依据cgroup文件类型*/
 	switch (MEMFILE_ATTR(of_cft(of)->private)) {
 	case RES_RSVD_LIMIT:
-		rsvd = true;
+		rsvd = true;/*指明当前设置的是rsvd*/
 		fallthrough;
 	case RES_LIMIT:
 		mutex_lock(&hugetlb_limit_mutex);
@@ -671,6 +688,7 @@ static ssize_t hugetlb_cgroup_reset(struct kernfs_open_file *of,
 	return ret ?: nbytes;
 }
 
+/*依据hsize实际大小，格式化字符串*/
 static char *mem_fmt(char *buf, int size, unsigned long hsize)
 {
 	if (hsize >= SZ_1G)
@@ -711,6 +729,7 @@ static int hugetlb_events_local_show(struct seq_file *seq, void *v)
 	return __hugetlb_events_show(seq, true);
 }
 
+/*初始化hugetlb cgroup控制文件*/
 static void __init __hugetlb_cgroup_file_dfl_init(int idx)
 {
 	char buf[32];
@@ -718,41 +737,41 @@ static void __init __hugetlb_cgroup_file_dfl_init(int idx)
 	struct hstate *h = &hstates[idx];
 
 	/* format the size */
-	mem_fmt(buf, sizeof(buf), huge_page_size(h));
+	mem_fmt(buf, sizeof(buf), huge_page_size(h));/*大页尺寸*/
 
 	/* Add the limit file */
 	cft = &h->cgroup_files_dfl[0];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.max", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.max", buf/*大页尺寸*/);/*设置.max文件*/
 	cft->private = MEMFILE_PRIVATE(idx, RES_LIMIT);
 	cft->seq_show = hugetlb_cgroup_read_u64_max;
-	cft->write = hugetlb_cgroup_write_dfl;
+	cft->write = hugetlb_cgroup_write_dfl;/*.max配置*/
 	cft->flags = CFTYPE_NOT_ON_ROOT;
 
 	/* Add the reservation limit file */
 	cft = &h->cgroup_files_dfl[1];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.max", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.max", buf);/*设置.rsvd.max文件*/
 	cft->private = MEMFILE_PRIVATE(idx, RES_RSVD_LIMIT);
 	cft->seq_show = hugetlb_cgroup_read_u64_max;
-	cft->write = hugetlb_cgroup_write_dfl;
+	cft->write = hugetlb_cgroup_write_dfl;/*.resvd.max设置*/
 	cft->flags = CFTYPE_NOT_ON_ROOT;
 
 	/* Add the current usage file */
 	cft = &h->cgroup_files_dfl[2];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.current", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.current", buf);/*设置.current文件*/
 	cft->private = MEMFILE_PRIVATE(idx, RES_USAGE);
 	cft->seq_show = hugetlb_cgroup_read_u64_max;
 	cft->flags = CFTYPE_NOT_ON_ROOT;
 
 	/* Add the current reservation usage file */
 	cft = &h->cgroup_files_dfl[3];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.current", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.current", buf);/*设置.rsvd.current文件*/
 	cft->private = MEMFILE_PRIVATE(idx, RES_RSVD_USAGE);
 	cft->seq_show = hugetlb_cgroup_read_u64_max;
 	cft->flags = CFTYPE_NOT_ON_ROOT;
 
 	/* Add the events file */
 	cft = &h->cgroup_files_dfl[4];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.events", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.events", buf);/*设置.events文件*/
 	cft->private = MEMFILE_PRIVATE(idx, 0);
 	cft->seq_show = hugetlb_events_show;
 	cft->file_offset = offsetof(struct hugetlb_cgroup, events_file[idx]);
@@ -760,7 +779,7 @@ static void __init __hugetlb_cgroup_file_dfl_init(int idx)
 
 	/* Add the events.local file */
 	cft = &h->cgroup_files_dfl[5];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.events.local", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.events.local", buf);/*设置.events.local文件*/
 	cft->private = MEMFILE_PRIVATE(idx, 0);
 	cft->seq_show = hugetlb_events_local_show;
 	cft->file_offset = offsetof(struct hugetlb_cgroup,
@@ -769,14 +788,14 @@ static void __init __hugetlb_cgroup_file_dfl_init(int idx)
 
 	/* Add the numa stat file */
 	cft = &h->cgroup_files_dfl[6];
-	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.numa_stat", buf);
+	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.numa_stat", buf);/*设置.numa_stat文件*/
 	cft->private = MEMFILE_PRIVATE(idx, 0);
 	cft->seq_show = hugetlb_cgroup_read_numa_stat;
 	cft->flags = CFTYPE_NOT_ON_ROOT;
 
 	/* NULL terminate the last cft */
 	cft = &h->cgroup_files_dfl[7];
-	memset(cft, 0, sizeof(*cft));
+	memset(cft, 0, sizeof(*cft));/*最后一项置为NULL*/
 
 	WARN_ON(cgroup_add_dfl_cftypes(&hugetlb_cgrp_subsys,
 				       h->cgroup_files_dfl));
@@ -789,30 +808,30 @@ static void __init __hugetlb_cgroup_file_legacy_init(int idx)
 	struct hstate *h = &hstates[idx];
 
 	/* format the size */
-	mem_fmt(buf, sizeof(buf), huge_page_size(h));
+	mem_fmt(buf, sizeof(buf), huge_page_size(h));/*页大小*/
 
 	/* Add the limit file */
-	cft = &h->cgroup_files_legacy[0];
+	cft = &h->cgroup_files_legacy[0];/*0号为limit_in_bytes，设置此类型大页可使用的最大数*/
 	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.limit_in_bytes", buf);
 	cft->private = MEMFILE_PRIVATE(idx, RES_LIMIT);
-	cft->read_u64 = hugetlb_cgroup_read_u64;
-	cft->write = hugetlb_cgroup_write_legacy;
+	cft->read_u64 = hugetlb_cgroup_read_u64;/*指明read回调*/
+	cft->write = hugetlb_cgroup_write_legacy;/*指明write回调，设置.limit_in_bytes*/
 
 	/* Add the reservation limit file */
-	cft = &h->cgroup_files_legacy[1];
+	cft = &h->cgroup_files_legacy[1];/*rsvd.limit_in_bytes*/
 	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.limit_in_bytes", buf);
 	cft->private = MEMFILE_PRIVATE(idx, RES_RSVD_LIMIT);
 	cft->read_u64 = hugetlb_cgroup_read_u64;
 	cft->write = hugetlb_cgroup_write_legacy;
 
 	/* Add the usage file */
-	cft = &h->cgroup_files_legacy[2];
+	cft = &h->cgroup_files_legacy[2];/*此大页当前用量*/
 	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.usage_in_bytes", buf);
 	cft->private = MEMFILE_PRIVATE(idx, RES_USAGE);
 	cft->read_u64 = hugetlb_cgroup_read_u64;
 
 	/* Add the reservation usage file */
-	cft = &h->cgroup_files_legacy[3];
+	cft = &h->cgroup_files_legacy[3];/*此大页当前预留的使用量*/
 	snprintf(cft->name, MAX_CFTYPE_NAME, "%s.rsvd.usage_in_bytes", buf);
 	cft->private = MEMFILE_PRIVATE(idx, RES_RSVD_USAGE);
 	cft->read_u64 = hugetlb_cgroup_read_u64;
@@ -855,16 +874,20 @@ static void __init __hugetlb_cgroup_file_legacy_init(int idx)
 	cft = &h->cgroup_files_legacy[9];
 	memset(cft, 0, sizeof(*cft));
 
+	/*添加hugetlb对应的cgroup文件*/
 	WARN_ON(cgroup_add_legacy_cftypes(&hugetlb_cgrp_subsys,
 					  h->cgroup_files_legacy));
 }
 
+/*hugetlb cgroup控制文件初始化*/
 static void __init __hugetlb_cgroup_file_init(int idx)
 {
+	/*这里有两类控制文件，1类为dfl,1类为legacy*/
 	__hugetlb_cgroup_file_dfl_init(idx);
 	__hugetlb_cgroup_file_legacy_init(idx);
 }
 
+/*遍历按各大页类型生成hugetlb的cgroup控制文件*/
 void __init hugetlb_cgroup_file_init(void)
 {
 	struct hstate *h;
@@ -911,6 +934,7 @@ static struct cftype hugetlb_files[] = {
 	{} /* terminate */
 };
 
+/*hugetlb对应的cgroup子系统，cgroup_init_early负责初始化此变量其它成员*/
 struct cgroup_subsys hugetlb_cgrp_subsys = {
 	.css_alloc	= hugetlb_cgroup_css_alloc,
 	.css_offline	= hugetlb_cgroup_css_offline,

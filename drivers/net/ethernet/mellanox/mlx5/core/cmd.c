@@ -1140,6 +1140,7 @@ static int wait_func(struct mlx5_core_dev *dev, struct mlx5_cmd_work_ent *ent)
 
 	if (!wait_for_completion_timeout(&ent->handling, timeout) &&
 	    cancel_work_sync(&ent->work)) {
+		/*等待超时，且取消失败*/
 		ent->ret = -ECANCELED;
 		goto out_err;
 	}
@@ -1241,7 +1242,7 @@ static int mlx5_cmd_invoke(struct mlx5_core_dev *dev, struct mlx5_cmd_msg *in,
 		++stats->n;
 		spin_unlock_irq(&stats->lock);
 	}
-	//显示fw执行某cmd所用时间
+	//显示fw执行此cmd所用时间
 	mlx5_core_dbg_mask(dev, 1 << MLX5_CMD_TIME,
 			   "fw exec time for %s is %lld nsec\n",
 			   mlx5_command_str(ent->op), ds);
@@ -1566,6 +1567,7 @@ static void create_debugfs_files(struct mlx5_core_dev *dev)
 {
 	struct mlx5_cmd_debug *dbg = &dev->cmd.dbg;
 
+	/*创建cmd debug目录*/
 	dbg->dbg_root = debugfs_create_dir("cmd", mlx5_debugfs_get_dev_root(dev));
 
 	debugfs_create_file("in", 0400, dbg->dbg_root, dev, &dfops);

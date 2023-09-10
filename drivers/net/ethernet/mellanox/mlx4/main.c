@@ -3877,6 +3877,7 @@ err_disable_pdev:
 	return err;
 }
 
+/*设置mlx4的port类型*/
 static int mlx4_devlink_port_type_set(struct devlink_port *devlink_port,
 				      enum devlink_port_type port_type)
 {

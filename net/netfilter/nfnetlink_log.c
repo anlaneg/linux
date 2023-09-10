@@ -1170,6 +1170,7 @@ static int __init nfnetlink_log_init(void)
 		goto cleanup_netlink_notifier;
 	}
 
+	/*注册所有pf,使其采用netlink log*/
 	status = nf_log_register(NFPROTO_UNSPEC, &nfulnl_logger);
 	if (status < 0) {
 		pr_err("failed to register logger\n");

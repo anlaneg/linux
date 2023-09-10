@@ -517,7 +517,7 @@ static inline void mmu_notifier_range_init(struct mmu_notifier_range *range,
 					   unsigned long start,
 					   unsigned long end)
 {
-	range->event = event;
+	range->event = event;/*标记event id*/
 	range->mm = mm;
 	range->start = start;
 	range->end = end;

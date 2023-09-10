@@ -27,6 +27,7 @@ static int mqprio_validate_queue_counts(struct net_device *dev,
 		unsigned int last = qopt->offset[i] + qopt->count[i];
 
 		if (!qopt->count[i]) {
+			/*i号TC映射的队列数为0*/
 			NL_SET_ERR_MSG_FMT_MOD(extack, "No queues for TC %d",
 					       i);
 			return -EINVAL;
@@ -37,6 +38,7 @@ static int mqprio_validate_queue_counts(struct net_device *dev,
 		 */
 		if (qopt->offset[i] >= dev->real_num_tx_queues ||
 		    last > dev->real_num_tx_queues) {
+			/*i号tc映射的队列列表中，有无效队列（超过设备的实际tx队列数）*/
 			NL_SET_ERR_MSG_FMT_MOD(extack,
 					       "Queues %d:%d for TC %d exceed the %d TX queues available",
 					       qopt->count[i], qopt->offset[i],
@@ -74,6 +76,7 @@ int mqprio_validate_qopt(struct net_device *dev, struct tc_mqprio_qopt *qopt,
 
 	/* Verify num_tc is not out of max range */
 	if (qopt->num_tc > TC_MAX_QUEUE) {
+		/*tc数目超限*/
 		NL_SET_ERR_MSG(extack,
 			       "Number of traffic classes is outside valid range");
 		return -EINVAL;
@@ -82,6 +85,7 @@ int mqprio_validate_qopt(struct net_device *dev, struct tc_mqprio_qopt *qopt,
 	/* Verify priority mapping uses valid tcs */
 	for (i = 0; i <= TC_BITMASK; i++) {
 		if (qopt->prio_tc_map[i] >= qopt->num_tc) {
+			/*优先级到tc id的映射超出了tc的最大数*/
 			NL_SET_ERR_MSG(extack,
 				       "Invalid traffic class in priority to traffic class mapping");
 			return -EINVAL;

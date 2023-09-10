@@ -68,6 +68,7 @@ extern void macvlan_dellink(struct net_device *dev, struct list_head *head);
 extern int macvlan_link_register(struct rtnl_link_ops *ops);
 
 #if IS_ENABLED(CONFIG_MACVLAN)
+/*取macvlan的lowerdev*/
 static inline struct net_device *
 macvlan_dev_real_dev(const struct net_device *dev)
 {

@@ -36,6 +36,7 @@ static int ipt_init_target(struct net *net, struct xt_entry_target *t,
 	struct ipt_entry e = {};
 	int ret = 0;
 
+	/*通过t指定的target名称及target修订号查找注册在xt中的target*/
 	target = xt_request_find_target(AF_INET, t->u.user.name,
 					t->u.user.revision);
 	if (IS_ERR(target))
@@ -44,9 +45,9 @@ static int ipt_init_target(struct net *net, struct xt_entry_target *t,
 	t->u.kernel.target = target;
 	memset(&par, 0, sizeof(par));
 	par.net       = net;
-	par.table     = table;
+	par.table     = table;/*表名称*/
 	par.entryinfo = &e;
-	par.target    = target;
+	par.target    = target;/*要执行的target*/
 	par.targinfo  = t->data;
 	par.hook_mask = hook;
 	par.family    = NFPROTO_IPV4;
@@ -172,7 +173,7 @@ static int __tcf_ipt_init(struct net *net, unsigned int id, struct nlattr *nla,
 	if (unlikely(!t))
 		goto err2;
 
-	err = ipt_init_target(net, t, tname, hook);
+	err = ipt_init_target(net, t, tname/*表名称*/, hook);
 	if (err < 0)
 		goto err3;
 
@@ -228,7 +229,7 @@ TC_INDIRECT_SCOPE int tcf_ipt_act(struct sk_buff *skb,
 		.net	= dev_net(skb->dev),
 		.in	= skb->dev,
 		.hook	= ipt->tcfi_hook,
-		.pf	= NFPROTO_IPV4,
+		.pf	= NFPROTO_IPV4,/*指明ipv4*/
 	};
 
 	if (skb_unclone(skb, GFP_ATOMIC))
@@ -245,7 +246,9 @@ TC_INDIRECT_SCOPE int tcf_ipt_act(struct sk_buff *skb,
 	 */
 	par.state    = &state;
 	par.target   = ipt->tcfi_t->u.kernel.target;
+	/*指定target对应的私有数据*/
 	par.targinfo = ipt->tcfi_t->data;
+	/*执行par对应的target*/
 	ret = par.target->target(skb, &par);
 
 	switch (ret) {

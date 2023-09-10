@@ -38,17 +38,20 @@ EXPORT_SYMBOL(mem_section);
  * node the page belongs to.
  */
 #if MAX_NUMNODES <= 256
+/*映射：由section number 到numa id*/
 static u8 section_to_node_table[NR_MEM_SECTIONS] __cacheline_aligned;
 #else
 static u16 section_to_node_table[NR_MEM_SECTIONS] __cacheline_aligned;
 #endif
 
+/*取page对应的numa id*/
 int page_to_nid(const struct page *page)
 {
 	return section_to_node_table[page_to_section(page)];
 }
 EXPORT_SYMBOL(page_to_nid);
 
+/*设置section number与numa id之间的映射*/
 static void set_section_nid(unsigned long section_nr, int nid)
 {
 	section_to_node_table[section_nr] = nid;

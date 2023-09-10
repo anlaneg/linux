@@ -186,8 +186,8 @@ struct xt_match {
 struct xt_target {
 	struct list_head list;
 
-	const char name[XT_EXTENSION_MAXNAMELEN];
-	u_int8_t revision;
+	const char name[XT_EXTENSION_MAXNAMELEN];/*target名称*/
+	u_int8_t revision;/*修订号*/
 
 	/* Returns verdict. Argument order changed since 2.6.9, as this
 	   must now handle non-linear skbs, using skb_copy_bits and

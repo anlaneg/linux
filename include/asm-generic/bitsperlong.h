@@ -33,6 +33,7 @@
  * can unconditionally dereference the pointer(s).
  */
 #define small_const_nbits(nbits) \
+	/*nbits是一个无符号整数，故(nbits)>0实为其不为0，同时其为常量，且为小于long的bit数，则返回true*/\
 	(__builtin_constant_p(nbits) && (nbits) <= BITS_PER_LONG && (nbits) > 0)
 
 #endif /* __ASM_GENERIC_BITS_PER_LONG */

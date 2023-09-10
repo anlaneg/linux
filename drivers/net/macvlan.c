@@ -1785,6 +1785,7 @@ int macvlan_link_register(struct rtnl_link_ops *ops)
 };
 EXPORT_SYMBOL_GPL(macvlan_link_register);
 
+/*取link所在的netns*/
 static struct net *macvlan_get_link_net(const struct net_device *dev)
 {
 	return dev_net(macvlan_dev_real_dev(dev));

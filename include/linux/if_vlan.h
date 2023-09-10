@@ -419,6 +419,7 @@ static inline struct sk_buff *vlan_insert_inner_tag(struct sk_buff *skb,
 {
 	int err;
 
+	/*软件添加vlan头*/
 	err = __vlan_insert_inner_tag(skb, vlan_proto, vlan_tci, mac_len);
 	if (err) {
 		dev_kfree_skb_any(skb);
@@ -506,6 +507,7 @@ static inline struct sk_buff *__vlan_hwaccel_push_inside(struct sk_buff *skb)
 	skb = vlan_insert_tag_set_proto(skb, skb->vlan_proto,
 					skb_vlan_tag_get(skb));
 	if (likely(skb))
+		/*软件已处理，故清除掉vlan标记*/
 		__vlan_hwaccel_clear_tag(skb);
 	return skb;
 }

@@ -530,9 +530,10 @@ int account_locked_vm(struct mm_struct *mm, unsigned long pages, bool inc)
 }
 EXPORT_SYMBOL_GPL(account_locked_vm);
 
-unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
-	unsigned long len, unsigned long prot,
-	unsigned long flag, unsigned long pgoff)
+/*针对文件完成mmap(如果为匿名映射，则file为NULL）*/
+unsigned long vm_mmap_pgoff(struct file *file/*关联的文件（可以为NULL）*/, unsigned long addr,
+	unsigned long len/*要映射的内存长度*/, unsigned long prot,
+	unsigned long flag, unsigned long pgoff/*页数目*/)
 {
 	unsigned long ret;
 	struct mm_struct *mm = current->mm;
@@ -544,11 +545,14 @@ unsigned long vm_mmap_pgoff(struct file *file, unsigned long addr,
 	if (!ret) {
 		if (mmap_write_lock_killable(mm))
 			return -EINTR;
+
 		/*完成实际mmap*/
 		ret = do_mmap(file, addr, len, prot, flag, pgoff, &populate,
 			      &uf);
 		mmap_write_unlock(mm);
+		/**/
 		userfaultfd_unmap_complete(mm, &uf);
+		/*populate处理*/
 		if (populate)
 			mm_populate(ret, populate);
 	}
@@ -811,6 +815,7 @@ void folio_copy(struct folio *dst, struct folio *src)
 int sysctl_overcommit_memory __read_mostly = OVERCOMMIT_GUESS;
 int sysctl_overcommit_ratio __read_mostly = 50;
 unsigned long sysctl_overcommit_kbytes __read_mostly;
+/*支持的最大map数目*/
 int sysctl_max_map_count __read_mostly = DEFAULT_MAX_MAP_COUNT;
 unsigned long sysctl_user_reserve_kbytes __read_mostly = 1UL << 17; /* 128MB */
 unsigned long sysctl_admin_reserve_kbytes __read_mostly = 1UL << 13; /* 8MB */

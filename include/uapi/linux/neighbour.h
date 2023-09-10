@@ -17,14 +17,14 @@ struct ndmsg {
 
 enum {
 	NDA_UNSPEC,
-	NDA_DST,
-	NDA_LLADDR,
+	NDA_DST,/*目的地址*/
+	NDA_LLADDR,/*目的mac*/
 	NDA_CACHEINFO,
 	NDA_PROBES,
-	NDA_VLAN,
-	NDA_PORT,
-	NDA_VNI,
-	NDA_IFINDEX,
+	NDA_VLAN,/*vlan信息*/
+	NDA_PORT,/*udp port信息*/
+	NDA_VNI,/*vxlan id信息*/
+	NDA_IFINDEX,/*via(通过的)设备对应的ifindex*/
 	NDA_MASTER,
 	NDA_LINK_NETNSID,
 	NDA_SRC_VNI,
@@ -68,7 +68,7 @@ enum {
 
 /* Dummy states */
 #define NUD_NOARP	0x40
-/*静态的表项*/
+/*静态的表项/本机表项，永久的*/
 #define NUD_PERMANENT	0x80
 #define NUD_NONE	0x00
 

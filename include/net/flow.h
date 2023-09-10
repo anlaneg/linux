@@ -40,7 +40,7 @@ struct flowi_common {
 #define FLOWI_FLAG_KNOWN_NH		0x02
 	__u32	flowic_secid;
 	kuid_t  flowic_uid;//用户传入的不透明id
-	struct flowi_tunnel flowic_tun_key;
+	struct flowi_tunnel flowic_tun_key;/*隧道id*/
 	__u32		flowic_multipath_hash;
 };
 
@@ -102,21 +102,21 @@ struct flowi4 {
 } __attribute__((__aligned__(BITS_PER_LONG/8)));
 
 /*初始化flowi4*/
-static inline void flowi4_init_output(struct flowi4 *fl4, int oif,
-				      __u32 mark, __u8 tos, __u8 scope,
+static inline void flowi4_init_output(struct flowi4 *fl4, int oif/*出接口*/,
+				      __u32 mark/*fwmark*/, __u8 tos, __u8 scope/*地址范围*/,
 				      __u8 proto, __u8 flags,
 				      __be32 daddr, __be32 saddr,
 				      __be16 dport, __be16 sport,
 				      kuid_t uid)
 {
 	fl4->flowi4_oif = oif;
-	/*入接口指定为loopback口*/
+	/*入接口默认指定为loopback口*/
 	fl4->flowi4_iif = LOOPBACK_IFINDEX;
 	fl4->flowi4_l3mdev = 0;
 	fl4->flowi4_mark = mark;
 	fl4->flowi4_tos = tos;
 	fl4->flowi4_scope = scope;
-	fl4->flowi4_proto = proto;
+	fl4->flowi4_proto = proto;/*对应的4层协议*/
 	fl4->flowi4_flags = flags;
 	fl4->flowi4_secid = 0;
 	fl4->flowi4_tun_key.tun_id = 0;

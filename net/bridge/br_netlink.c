@@ -694,11 +694,11 @@ static int br_vlan_info(struct net_bridge *br, struct net_bridge_port *p,
 			 * per-VLAN entry as well
 			 */
 			err = nbp_vlan_add(p, vinfo->vid, vinfo->flags,
-					   &curr_change, extack);
+					   &curr_change, extack);/*为此port添加vlan*/
 		} else {
 			vinfo->flags |= BRIDGE_VLAN_INFO_BRENTRY;
 			err = br_vlan_add(br, vinfo->vid, vinfo->flags,
-					  &curr_change, extack);
+					  &curr_change, extack);/*为bridge添加vlan*/
 		}
 		if (curr_change)
 			*changed = true;
@@ -737,6 +737,7 @@ int br_process_vlan_info(struct net_bridge *br,
 	rtm_cmd = br_afspec_cmd_to_rtm(cmd);
 
 	if (vinfo_curr->flags & BRIDGE_VLAN_INFO_RANGE_BEGIN) {
+		/*检查vlan range配置*/
 		if (!br_vlan_valid_range(vinfo_curr, *vinfo_last, extack))
 			return -EINVAL;
 		*vinfo_last = vinfo_curr;
@@ -744,6 +745,7 @@ int br_process_vlan_info(struct net_bridge *br,
 	}
 
 	if (*vinfo_last) {
+		/*执行一组vlan range处理*/
 		struct bridge_vlan_info tmp_vinfo;
 		int v, v_change_start = 0;
 
@@ -756,6 +758,7 @@ int br_process_vlan_info(struct net_bridge *br,
 			bool curr_change = false;
 
 			tmp_vinfo.vid = v;
+			/*逐个进行vlan添加*/
 			err = br_vlan_info(br, p, cmd, &tmp_vinfo, &curr_change,
 					   extack);
 			if (err)
@@ -784,6 +787,7 @@ int br_process_vlan_info(struct net_bridge *br,
 		return err;
 	}
 
+	/*执行单个vlan添加*/
 	err = br_vlan_info(br, p, cmd, vinfo_curr, changed, extack);
 	if (*changed)
 		br_vlan_notify(br, p, vinfo_curr->vid, 0, rtm_cmd);
@@ -808,8 +812,10 @@ static int br_afspec(struct net_bridge *br,
 		err = 0;
 		switch (nla_type(attr)) {
 		case IFLA_BRIDGE_VLAN_TUNNEL_INFO:
+			/*一个vlan与vni对应的情况/一组vlan与vni对应情况*/
 			if (!p || !(p->flags & BR_VLAN_TUNNEL))
 				return -EINVAL;
+			/*取配置指定的vlan id,vni ,flags*/
 			err = br_parse_vlan_tunnel_info(attr, &tinfo_curr);
 			if (err)
 				return err;
@@ -821,6 +827,7 @@ static int br_afspec(struct net_bridge *br,
 				return err;
 			break;
 		case IFLA_BRIDGE_VLAN_INFO:
+			/*一个vlan或者一组vlan的添加配置*/
 			if (nla_len(attr) != sizeof(struct bridge_vlan_info))
 				return -EINVAL;
 			vinfo_curr = nla_data(attr);
@@ -920,8 +927,10 @@ static void br_set_port_flag(struct net_bridge_port *p, struct nlattr *tb[],
 			     int attrtype, unsigned long mask)
 {
 	if (!tb[attrtype])
+		/*未配置此属性，则直接退出*/
 		return;
 
+	/*按照配置值进行打开，关闭*/
 	if (nla_get_u8(tb[attrtype]))
 		p->flags |= mask;
 	else
@@ -939,6 +948,7 @@ static int br_setport(struct net_bridge_port *p, struct nlattr *tb[],
 	old_flags = p->flags;
 	br_vlan_tunnel_old = (old_flags & BR_VLAN_TUNNEL) ? true : false;
 
+	/*按照配置设置以下标记位*/
 	br_set_port_flag(p, tb, IFLA_BRPORT_MODE, BR_HAIRPIN_MODE);
 	br_set_port_flag(p, tb, IFLA_BRPORT_GUARD, BR_BPDU_GUARD);
 	br_set_port_flag(p, tb, IFLA_BRPORT_FAST_LEAVE,
@@ -986,6 +996,7 @@ static int br_setport(struct net_bridge_port *p, struct nlattr *tb[],
 
 	br_port_flags_change(p, changed_mask);
 
+	/*设置path cost*/
 	if (tb[IFLA_BRPORT_COST]) {
 		err = br_stp_set_path_cost(p, nla_get_u32(tb[IFLA_BRPORT_COST]));
 		if (err)
@@ -1077,13 +1088,16 @@ int br_setlink(struct net_device *dev, struct nlmsghdr *nlh, u16 flags,
 	protinfo = nlmsg_find_attr(nlh, sizeof(struct ifinfomsg), IFLA_PROTINFO);
 	afspec = nlmsg_find_attr(nlh, sizeof(struct ifinfomsg), IFLA_AF_SPEC);
 	if (!protinfo && !afspec)
+		/*这两个消息头都没有配置，则认为不合法消息，忽略*/
 		return 0;
 
+	/*取dev对应的bridge port*/
 	p = br_port_get_rtnl(dev);
 	/* We want to accept dev as bridge itself if the AF_SPEC
 	 * is set to see if someone is setting vlan info on the bridge
 	 */
 	if (!p && !afspec)
+		/*此dev非bridge port且afspec未提供，则忽略*/
 		return -EINVAL;
 
 	if (p && protinfo) {
@@ -1113,6 +1127,7 @@ int br_setlink(struct net_device *dev, struct nlmsghdr *nlh, u16 flags,
 	}
 
 	if (afspec)
+		/*这里处理afspec消息，例如bridge vlan add命令处理*/
 		err = br_afspec(br, p, afspec, RTM_SETLINK, &changed, extack);
 
 	if (changed)
@@ -1868,7 +1883,7 @@ struct rtnl_link_ops br_link_ops __read_mostly = {
 	.maxtype		= IFLA_BR_MAX,
 	.policy			= br_policy,
 	.validate		= br_validate,
-	.newlink		= br_dev_newlink,
+	.newlink		= br_dev_newlink,/*通过ip link创建bridge*/
 	.changelink		= br_changelink,
 	.dellink		= br_dev_delete,
 	.get_size		= br_get_size,

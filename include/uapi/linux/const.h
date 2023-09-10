@@ -29,9 +29,13 @@
 #define _BITULL(x)	(_ULL(1) << (x))
 
 #define __ALIGN_KERNEL(x, a)		__ALIGN_KERNEL_MASK(x, (typeof(x))(a) - 1)
+/*x按照mask进行对齐*/
 #define __ALIGN_KERNEL_MASK(x, mask)	(((x) + (mask)) & ~(mask))
 
-/*先使n按d进行对齐，再除以d,取其的整数商*/
+/*先使n按d进行对齐，再除以d,取其的整数商（向上取整）
+ * 例如n=3,d=2 有3/2=1.5
+ * 应用本函数后，(3+(2-1))/2 = 4/2 = 2
+ * */
 #define __KERNEL_DIV_ROUND_UP(n, d) (((n) + (d) - 1) / (d))
 
 #endif /* _UAPI_LINUX_CONST_H */

@@ -19,12 +19,14 @@ static int pedit_header_offsets[] = {
 
 static int
 set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
-	      struct pedit_headers_action *hdrs,
+	      struct pedit_headers_action *hdrs/*出参，pedit设置key,value*/,
 	      struct netlink_ext_ack *extack)
 {
 	u32 *curr_pmask, *curr_pval;
 
+	/*字段的mask对应的地址*/
 	curr_pmask = (u32 *)(pedit_header(&hdrs->masks, hdr_type) + offset);
+	/*字段的value对应的地址*/
 	curr_pval  = (u32 *)(pedit_header(&hdrs->vals, hdr_type) + offset);
 
 	if (*curr_pmask & mask) { /* disallow acting twice on the same location */
@@ -33,6 +35,7 @@ set_pedit_val(u8 hdr_type, u32 mask, u32 val, u32 offset,
 		goto out_err;
 	}
 
+	/*设置mask*/
 	*curr_pmask |= mask;
 	*curr_pval  |= (val & mask);
 
@@ -45,7 +48,7 @@ out_err:
 int
 mlx5e_tc_act_pedit_parse_action(struct mlx5e_priv *priv,
 				const struct flow_action_entry *act, int namespace,
-				struct pedit_headers_action *hdrs,
+				struct pedit_headers_action *hdrs/*出参，pedit对应的转化后action*/,
 				struct netlink_ext_ack *extack)
 {
 	u8 cmd = (act->id == FLOW_ACTION_MANGLE) ? 0 : 1;

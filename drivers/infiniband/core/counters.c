@@ -624,6 +624,7 @@ int rdma_counter_get_mode(struct ib_device *dev, u32 port,
 	return 0;
 }
 
+/*rdma counter初始化*/
 void rdma_counter_init(struct ib_device *dev)
 {
 	struct rdma_port_counter *port_counter;

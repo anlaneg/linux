@@ -1333,12 +1333,14 @@ static int br_mdb_config_init(struct net *net, const struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
+	/*通过ifindex获取bridge*/
 	dev = __dev_get_by_index(net, bpm->ifindex);
 	if (!dev) {
 		NL_SET_ERR_MSG_MOD(extack, "Bridge device doesn't exist");
 		return -ENODEV;
 	}
 
+	/*此dev必须为bridge*/
 	if (!netif_is_bridge_master(dev)) {
 		NL_SET_ERR_MSG_MOD(extack, "Device is not a bridge");
 		return -EOPNOTSUPP;
@@ -1346,16 +1348,19 @@ static int br_mdb_config_init(struct net *net, const struct nlmsghdr *nlh,
 
 	cfg->br = netdev_priv(dev);
 
+	/*uplink口必须up*/
 	if (!netif_running(cfg->br->dev)) {
 		NL_SET_ERR_MSG_MOD(extack, "Bridge device is not running");
 		return -EINVAL;
 	}
 
+	/*桥必须开启组播*/
 	if (!br_opt_get(cfg->br, BROPT_MULTICAST_ENABLED)) {
 		NL_SET_ERR_MSG_MOD(extack, "Bridge's multicast processing is disabled");
 		return -EINVAL;
 	}
 
+	/*必须有配置项MDBA_SET_ENTRY*/
 	if (NL_REQ_ATTR_CHECK(extack, NULL, tb, MDBA_SET_ENTRY)) {
 		NL_SET_ERR_MSG_MOD(extack, "Missing MDBA_SET_ENTRY attribute");
 		return -EINVAL;
@@ -1539,8 +1544,11 @@ static int br_mdb_del(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 void br_mdb_init(void)
 {
+	/*dump mdb*/
 	rtnl_register_module(THIS_MODULE, PF_BRIDGE, RTM_GETMDB, NULL, br_mdb_dump, 0);
+	/*添加新的mdb*/
 	rtnl_register_module(THIS_MODULE, PF_BRIDGE, RTM_NEWMDB, br_mdb_add, NULL, 0);
+	/*删除mdb*/
 	rtnl_register_module(THIS_MODULE, PF_BRIDGE, RTM_DELMDB, br_mdb_del, NULL, 0);
 }
 

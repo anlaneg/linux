@@ -166,6 +166,7 @@ int ip_forward(struct sk_buff *skb)
 		ip_rt_send_redirect(skb);//发送重定向
 
 	if (READ_ONCE(net->ipv4.sysctl_ip_fwd_update_priority))
+		/*利用tos映射优先级*/
 		skb->priority = rt_tos2priority(iph->tos);
 
 	//走forward钩子点

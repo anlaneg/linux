@@ -420,6 +420,7 @@ struct ib_device_attr {
 	/*支持的cqe最大数目*/
 	int			max_cqe;
 	int			max_mr;
+	/*支持的pd最大数目*/
 	int			max_pd;
 	int			max_qp_rd_atom;
 	int			max_ee_rd_atom;
@@ -687,6 +688,7 @@ struct ib_port_attr {
     /*链路层为infiniban时此字段有效*/
 	u64			subnet_prefix;
 	enum ib_port_state	state;
+	/*支持的最大mtu*/
 	enum ib_mtu		max_mtu;
 	enum ib_mtu		active_mtu;
 	u32                     phys_mtu;
@@ -2244,7 +2246,7 @@ struct ib_port_immutable {
 };
 
 struct ib_port_data {
-    /*此port对应的ib_dev*/
+    /*此ib port对应的(从属于的）ib_dev*/
 	struct ib_device *ib_dev;
 
 	struct ib_port_immutable immutable;
@@ -2257,6 +2259,7 @@ struct ib_port_data {
 
 	struct ib_port_cache cache;
 
+	/*关联此ib_dev的netdev设备*/
 	struct net_device __rcu *netdev;
 	netdevice_tracker netdev_tracker;
 	/*加入hashtable中使用*/
@@ -2381,6 +2384,7 @@ rdma_user_mmap_get_offset(const struct rdma_user_mmap_entry *entry)
  */
 struct ib_device_ops {
 	struct module *owner;
+	/*此设备的driver_id*/
 	enum rdma_driver_id driver_id;
 	/*此设备支持的uverbs api版本*/
 	u32 uverbs_abi_ver;
@@ -2434,9 +2438,10 @@ struct ib_device_ops {
 	 * structure to avoid cache line misses when accessing struct ib_device
 	 * in fast paths.
 	 */
+	/*获取此device设备port_num号设备immutable,见setup_port_data函数*/
 	int (*get_port_immutable)(struct ib_device *device, u32 port_num,
 				  struct ib_port_immutable *immutable);
-	/*取对应的链路层类型*/
+	/*获取此device设备对应的链路层类型*/
 	enum rdma_link_layer (*get_link_layer)(struct ib_device *device,
 					       u32 port_num);
 	/**
@@ -2675,7 +2680,7 @@ struct ib_device_ops {
 	 * Called after the device becomes registered, before clients are
 	 * attached
 	 */
-	int (*enable_driver)(struct ib_device *dev);
+	int (*enable_driver)(struct ib_device *dev);/*开启driver*/
 	/*
 	 * This is called as part of ib_dealloc_device().
 	 */
@@ -2764,6 +2769,7 @@ struct ib_device {
 	/* Do not access @dma_device directly from ULP nor from HW drivers. */
 	struct device                *dma_device;
 	struct ib_device_ops	     ops;/*ib设备操作集*/
+	/*ib设备名称*/
 	char                          name[IB_DEVICE_NAME_MAX];
 	struct rcu_head rcu_head;
 
@@ -2775,7 +2781,7 @@ struct ib_device {
 	spinlock_t qp_open_list_lock;
 
 	struct rw_semaphore	      client_data_rwsem;
-	/*此设备对应的所有client_data*/
+	/*此设备对应的所有client_data（按client id进行索引,每个client有自已的私有数据）*/
 	struct xarray                 client_data;
 	struct mutex                  unregistration_lock;
 
@@ -2784,7 +2790,7 @@ struct ib_device {
 	/**
 	 * port_data is indexed by port number
 	 */
-	//每个port对应的私有数据
+	//数组类型，按port number索引每个ib_port_data
 	struct ib_port_data *port_data;
 
 	int			      num_comp_vectors;
@@ -2806,17 +2812,21 @@ struct ib_device {
 
 	/*设备描述信息*/
 	char			     node_desc[IB_DEVICE_NODE_DESC_MAX];
+	/*node的全局唯一id*/
 	__be64			     node_guid;
 	u32			     local_dma_lkey;
+	/*是否为ib switch*/
 	u16                          is_switch:1;
 	/* Indicates kernel verbs support, should not be used in drivers */
-	/*标记是否为kernel verbs*/
+	/*标记是否支持kernel verbs，通过函数ib_device_check_mandatory来界定*/
 	u16                          kverbs_provider:1;
 	/* CQ adaptive moderation (RDMA DIM) */
 	u16                          use_cq_dim:1;
+	/*ib设备类型，看枚举类型RDMA_NODE_IB_CA*/
 	u8                           node_type;
+	/*物理port数目，例如rxe仅支持1个*/
 	u32			     phys_port_cnt;
-	/*来源于硬件的设备属性*/
+	/*来源于硬件的设备属性，可通过device->ops.query_device查询*/
 	struct ib_device_attr        attrs;
 	struct hw_stats_device_data *hw_stats_data;
 
@@ -2907,7 +2917,7 @@ struct ib_client {
 	u32 client_id;
 
 	/* kverbs are not required by the client */
-	u8 no_kverbs_req:1;
+	u8 no_kverbs_req:1;/*是否不强制要求专门请求*/
 };
 
 /*
@@ -2925,9 +2935,11 @@ struct ib_block_iter {
 	unsigned int __pg_bit;		/* alignment of current block */
 };
 
-struct ib_device *_ib_alloc_device(size_t size);
+/*申请ib_device*/
+struct ib_device *_ib_alloc_device(size_t size/*结构体大小*/);
 #define ib_alloc_device(drv_struct, member)                                    \
 	container_of(_ib_alloc_device(sizeof(struct drv_struct) +              \
+			/*member必须为结构体drv_struct的第一个成员*/\
 				      BUILD_BUG_ON_ZERO(offsetof(              \
 					      struct drv_struct, member))),    \
 		     struct drv_struct, member)
@@ -3116,7 +3128,7 @@ static inline bool rdma_cap_ib_switch(const struct ib_device *device)
  */
 static inline u32 rdma_start_port(const struct ib_device *device)
 {
-	/*ib switch的设备port起始id为0*/
+	/*ib switch的设备port起始id为0,其它port起始id为1*/
 	return rdma_cap_ib_switch(device) ? 0 : 1;
 }
 
@@ -3126,11 +3138,11 @@ static inline u32 rdma_start_port(const struct ib_device *device)
  * @iter - The unsigned int to store the port number
  */
 //遍历ib device的所有port
-#define rdma_for_each_port(device, iter)                                       \
+#define rdma_for_each_port(device, iter/*索引变量*/)                                       \
 	for (iter = rdma_start_port(device +				       \
 				    BUILD_BUG_ON_ZERO(!__same_type(u32,	       \
-								   iter)));    \
-	     iter <= rdma_end_port(device); iter++)
+								   iter)/*iter类型校验*/))/*起始索引*/;    \
+	     iter <= rdma_end_port(device)/*终止索引*/; iter++)
 
 /**
  * rdma_end_port - Return the last valid port number for the device
@@ -4107,6 +4119,7 @@ void ib_cq_pool_put(struct ib_cq *cq, unsigned int nr_cqe);
  */
 static inline bool ib_uses_virt_dma(struct ib_device *dev)
 {
+	/*检查是否为virt dma*/
 	return IS_ENABLED(CONFIG_INFINIBAND_VIRT_DMA) && !dev->dma_device;
 }
 

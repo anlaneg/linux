@@ -1179,6 +1179,7 @@ int inet_hash_connect(struct inet_timewait_death_row *death_row,
 	u64 port_offset = 0;
 
 	if (!inet_sk(sk)->inet_num)
+		/*未指定port*/
 		port_offset = inet_sk_port_offset(sk);
 	return __inet_hash_connect(death_row, sk, port_offset,
 				   __inet_check_established);

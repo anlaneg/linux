@@ -240,9 +240,11 @@ int kstrtouint(const char *s, unsigned int base, unsigned int *res)
 	unsigned long long tmp;
 	int rv;
 
+	/*字符串转无符号long long类型*/
 	rv = kstrtoull(s, base, &tmp);
 	if (rv < 0)
 		return rv;
+	/*转为uint，检查是否超限*/
 	if (tmp != (unsigned int)tmp)
 		return -ERANGE;
 	*res = tmp;

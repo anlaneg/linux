@@ -7,13 +7,15 @@
 #include "rxe.h"
 
 #define RXE_POOL_TIMEOUT	(200)
+/*pool中元素按16字节对齐*/
 #define RXE_POOL_ALIGN		(16)
 
 static const struct rxe_type_info {
+	/*pool类型名称，例如uc,pd*/
 	const char *name;
 	/*pool单个元素大小*/
 	size_t size;
-	/*obj指针位置到rxe_pool_entry位置的offset*/
+	/*obj指针位置到rxe_pool_entry位置的offset，可据此推算出elem结构体*/
 	size_t elem_offset;
 	void (*cleanup)(struct rxe_pool_elem *elem);
 	/*针对有RXE_POOL_INDEX标记的pool必须提供min,max两个index范围*/
@@ -93,9 +95,9 @@ static const struct rxe_type_info {
 	},
 };
 
-/*初始化pool*/
+/*利用rxe_type_info按type初始化pool*/
 void rxe_pool_init(struct rxe_dev *rxe, struct rxe_pool *pool/*待初始化的pool*/,
-		   enum rxe_elem_type type)
+		   enum rxe_elem_type type/*待初始化的pool类型*/)
 {
 	const struct rxe_type_info *info = &rxe_type_info[type];
 
@@ -129,9 +131,11 @@ int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_elem *elem,
 	gfp_t gfp_flags;
 
 	if (atomic_inc_return(&pool->num_elem) > pool->max_elem)
+		/*元素数超限*/
 		goto err_cnt;
 
 	elem->pool = pool;
+	/*由element反推obj起始指针*/
 	elem->obj = (u8 *)elem - pool->elem_offset;
 	kref_init(&elem->ref_cnt);
 	init_completion(&elem->complete);
@@ -144,6 +148,7 @@ int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_elem *elem,
 
 	if (sleepable)
 		might_sleep();
+	/*将elem加入到xa数组*/
 	err = xa_alloc_cyclic(&pool->xa, &elem->index, NULL, pool->limit,
 			      &pool->next, gfp_flags);
 	if (err < 0)

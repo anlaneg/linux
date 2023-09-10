@@ -129,6 +129,7 @@ static void arch_pick_mmap_base(unsigned long *base, unsigned long *legacy_base,
 void arch_pick_mmap_layout(struct mm_struct *mm, struct rlimit *rlim_stack)
 {
 	if (mmap_is_legacy())
+		/*当前进程采用legacy mmap*/
 		mm->get_unmapped_area = arch_get_unmapped_area;
 	else
 		mm->get_unmapped_area = arch_get_unmapped_area_topdown;

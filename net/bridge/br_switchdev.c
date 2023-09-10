@@ -15,8 +15,10 @@ static bool nbp_switchdev_can_offload_tx_fwd(const struct net_bridge_port *p,
 					     const struct sk_buff *skb)
 {
 	if (!static_branch_unlikely(&br_switchdev_tx_fwd_offload))
+		/*此开关未开*/
 		return false;
 
+	/*port有tx fwd offload标记，且hwdom与src_hwdom相等*/
 	return (p->flags & BR_TX_FWD_OFFLOAD) &&
 	       (p->hwdom != BR_INPUT_SKB_CB(skb)->src_hwdom);
 }
@@ -293,6 +295,7 @@ br_switchdev_fdb_replay_one(struct net_bridge *br, struct notifier_block *nb,
 	struct switchdev_notifier_fdb_info item;
 	int err;
 
+	/*填充item*/
 	br_switchdev_fdb_populate(br, &item, fdb, ctx);
 
 	err = nb->notifier_call(nb, action, &item);
@@ -323,6 +326,7 @@ br_switchdev_fdb_replay(const struct net_device *br_dev, const void *ctx,
 
 	rcu_read_lock();
 
+	/*遍历fdb列表*/
 	hlist_for_each_entry_rcu(fdb, &br->fdb_list, fdb_node) {
 		err = br_switchdev_fdb_replay_one(br, nb, fdb, action, ctx);
 		if (err)

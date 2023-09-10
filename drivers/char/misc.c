@@ -214,7 +214,7 @@ int misc_register(struct miscdevice *misc)
 	mutex_lock(&misc_mtx);
 
 	if (is_dynamic) {
-	    	//为动态minor分配一个编号
+	    //为动态minor分配一个编号
 		int i = misc_minor_alloc();
 
 		if (i < 0) {

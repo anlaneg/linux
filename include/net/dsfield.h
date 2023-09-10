@@ -12,13 +12,13 @@
 #include <linux/ipv6.h>
 #include <asm/byteorder.h>
 
-//取ip头中的tos
+//取ipv4头中的tos字段，共占用8bits
 static inline __u8 ipv4_get_dsfield(const struct iphdr *iph)
 {
 	return iph->tos;
 }
 
-/*取ipv6头中的tos相关*/
+/*取ipv6头中的traffic class字段，共占用8bits*/
 static inline __u8 ipv6_get_dsfield(const struct ipv6hdr *ipv6h)
 {
 	return ntohs(*(__force const __be16 *)ipv6h) >> 4;

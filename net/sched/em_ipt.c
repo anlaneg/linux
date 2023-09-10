@@ -27,7 +27,8 @@ struct em_ipt_match {
 
 struct em_ipt_xt_match {
 	char *match_name;
-	int (*validate_match_data)(struct nlattr **tb, u8 mrev);
+	/*校验用户传入的match的私有数据*/
+	int (*validate_match_data)(struct nlattr **tb, u8 mrev/*match的版本号*/);
 };
 
 static const struct nla_policy em_ipt_policy[TCA_EM_IPT_MAX + 1] = {
@@ -101,25 +102,32 @@ static struct xt_match *get_xt_match(struct nlattr **tb)
 	u8 nfproto, mrev = 0;
 	int ret;
 
+	/*传入的name属性必须为em_ipt_xt_matches中指定的*/
 	mname_attr = tb[TCA_EM_IPT_MATCH_NAME];
 	for (m = em_ipt_xt_matches; m->match_name; m++) {
 		if (!nla_strcmp(mname_attr, m->match_name))
 			break;
 	}
 
+	/*给定的名称在em_ipt_xt_matches中没有指定*/
 	if (!m->match_name) {
 		pr_err("Unsupported xt match");
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*取match的修订号*/
 	if (tb[TCA_EM_IPT_MATCH_REVISION])
 		mrev = nla_get_u8(tb[TCA_EM_IPT_MATCH_REVISION]);
 
+	/*校验match数据*/
 	ret = m->validate_match_data(tb, mrev);
 	if (ret < 0)
 		return ERR_PTR(ret);
 
+	/*取要查找match协议族*/
 	nfproto = nla_get_u8(tb[TCA_EM_IPT_NFPROTO]);
+
+	/*查找对应的match*/
 	return xt_request_find_match(nfproto, m->match_name, mrev);
 }
 

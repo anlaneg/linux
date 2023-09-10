@@ -1470,7 +1470,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_OBJ_CREATE)(
 	u16 opcode;
 
 	if (MLX5_GET(general_obj_in_cmd_hdr, cmd_in, vhca_tunnel_id))
-		/*cmd_in未填充vhca_tunnel_id,返回失败*/
+		/*cmd_in被填充vhca_tunnel_id,返回失败*/
 		return -EINVAL;
 
 	uid = devx_get_uid(c, cmd_in);
@@ -1509,6 +1509,7 @@ static int UVERBS_HANDLER(MLX5_IB_METHOD_DEVX_OBJ_CREATE)(
 				     cmd_in, cmd_in_len, cmd_out,
 				     cmd_out_len);
 	} else {
+		/*其它opcode自此处入*/
 		err = mlx5_cmd_do(dev->mdev, cmd_in, cmd_in_len,
 				  cmd_out, cmd_out_len);
 	}

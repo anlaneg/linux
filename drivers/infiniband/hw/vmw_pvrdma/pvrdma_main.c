@@ -1126,6 +1126,7 @@ static int __init pvrdma_init(void)
 	if (!event_wq)
 		return -ENOMEM;
 
+	/*pci驱动注册*/
 	err = pci_register_driver(&pvrdma_driver);
 	if (err)
 		destroy_workqueue(event_wq);

@@ -1490,6 +1490,7 @@ static int rtnl_fill_link_ifmap(struct sk_buff *skb, struct net_device *dev)
 	return 0;
 }
 
+/*skb类xdp程序id获取*/
 static u32 rtnl_xdp_prog_skb(struct net_device *dev)
 {
 	const struct bpf_prog *generic_xdp_prog;
@@ -1502,32 +1503,37 @@ static u32 rtnl_xdp_prog_skb(struct net_device *dev)
 	return generic_xdp_prog->aux->id;
 }
 
+/*driver形式xdp程序id获取*/
 static u32 rtnl_xdp_prog_drv(struct net_device *dev)
 {
 	return dev_xdp_prog_id(dev, XDP_MODE_DRV);
 }
 
+/*hw形式xdp程序id获取*/
 static u32 rtnl_xdp_prog_hw(struct net_device *dev)
 {
 	return dev_xdp_prog_id(dev, XDP_MODE_HW);
 }
 
 static int rtnl_xdp_report_one(struct sk_buff *skb, struct net_device *dev,
-			       u32 *prog_id, u8 *mode, u8 tgt_mode, u32 attr,
+			       u32 *prog_id/*出参，xdp程序id*/, u8 *mode, u8 tgt_mode, u32 attr/*要填充的消息type*/,
 			       u32 (*get_prog_id)(struct net_device *dev))
 {
 	u32 curr_id;
 	int err;
 
+	/*通过回调，获取程序id*/
 	curr_id = get_prog_id(dev);
 	if (!curr_id)
 		return 0;
 
 	*prog_id = curr_id;
+	/*填充xdp程序属性及其id*/
 	err = nla_put_u32(skb, attr, curr_id);
 	if (err)
 		return err;
 
+	/*返回taget模式*/
 	if (*mode != XDP_ATTACHED_NONE)
 		*mode = XDP_ATTACHED_MULTI;
 	else
@@ -1543,10 +1549,12 @@ static int rtnl_xdp_fill(struct sk_buff *skb, struct net_device *dev)
 	int err;
 	u8 mode;
 
+	/*xdp信息起始标记*/
 	xdp = nla_nest_start_noflag(skb, IFLA_XDP);
 	if (!xdp)
 		return -EMSGSIZE;
 
+	/*尝试各种xdp程序类型，检查此dev具体是哪一种，填充消息body*/
 	prog_id = 0;
 	mode = XDP_ATTACHED_NONE;
 	err = rtnl_xdp_report_one(skb, dev, &prog_id, &mode, XDP_ATTACHED_SKB,
@@ -1655,6 +1663,7 @@ static int rtnl_fill_link_netnsid(struct sk_buff *skb,
 	if (dev->rtnl_link_ops && dev->rtnl_link_ops->get_link_net) {
 		struct net *link_net = dev->rtnl_link_ops->get_link_net(dev);
 
+		/*dev的netns与link netns不相同时，申请并填充netns id*/
 		if (!net_eq(dev_net(dev), link_net)) {
 			int id = peernet2id_alloc(src_net, link_net, gfp);
 
@@ -2085,7 +2094,7 @@ static bool link_master_filtered(struct net_device *dev, int master_idx)
 	if (!master_idx)
 		return false;
 
-	master = netdev_master_upper_dev_get(dev);
+	master = netdev_master_upper_dev_get(dev);/*取此设备对应的master*/
 
 	/* 0 is already used to denote IFLA_MASTER wasn't passed, therefore need
 	 * another invalid value for ifindex to denote "no master".
@@ -2093,6 +2102,7 @@ static bool link_master_filtered(struct net_device *dev, int master_idx)
 	if (master_idx == -1)
 		return !!master;
 
+	/*没有master,或者master的ifindex与指定的不匹配，返回true*/
 	if (!master || master->ifindex != master_idx)
 		return true;
 
@@ -2195,7 +2205,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 	struct netlink_ext_ack *extack = cb->extack;
 	const struct nlmsghdr *nlh = cb->nlh;
 	struct net *net = sock_net(skb->sk);
-	struct net *tgt_net = net;
+	struct net *tgt_net = net;/*默认取当前socket对应的net ns*/
 	int h, s_h;
 	int idx = 0, s_idx;
 	struct net_device *dev;
@@ -2237,6 +2247,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 			ext_filter_mask = nla_get_u32(tb[i]);
 			break;
 		case IFLA_MASTER:
+			/*指出master ifindex*/
 			master_idx = nla_get_u32(tb[i]);
 			break;
 		case IFLA_LINKINFO:
@@ -2256,6 +2267,7 @@ static int rtnl_dump_ifinfo(struct sk_buff *skb, struct netlink_callback *cb)
 walk_entries:
 	for (h = s_h; h < NETDEV_HASHENTRIES; h++, s_idx = 0) {
 		idx = 0;
+		/*遍历目标netns下的所有netdev*/
 		head = &tgt_net->dev_index_head[h];
 		hlist_for_each_entry(dev, head, index_hlist) {
 			if (link_dump_filtered(dev, master_idx, kind_ops))
@@ -2552,6 +2564,7 @@ static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 			return err;
 	}
 
+	/*vf速率配置*/
 	if (tb[IFLA_VF_RATE]) {
 		struct ifla_vf_rate *ivt = nla_data(tb[IFLA_VF_RATE]);
 
@@ -2606,6 +2619,7 @@ static int do_setvfinfo(struct net_device *dev, struct nlattr **tb)
 			return err;
 	}
 
+	/*vf trust配置*/
 	if (tb[IFLA_VF_TRUST]) {
 		struct ifla_vf_trust *ivt = nla_data(tb[IFLA_VF_TRUST]);
 
@@ -4274,6 +4288,7 @@ int ndo_dflt_fdb_add(struct ndmsg *ndm,
 }
 EXPORT_SYMBOL(ndo_dflt_fdb_add);
 
+/*解析vlan属性*/
 static int fdb_vid_parse(struct nlattr *vlan_attr, u16 *p_vid,
 			 struct netlink_ext_ack *extack)
 {
@@ -4296,6 +4311,7 @@ static int fdb_vid_parse(struct nlattr *vlan_attr, u16 *p_vid,
 	return 0;
 }
 
+/*实现fdb表项添加(当前linux bridge fdb,vxlan fdb均走此接口）*/
 static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 			struct netlink_ext_ack *extack)
 {
@@ -4318,12 +4334,14 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
+	/*查找表项对应的netdev*/
 	dev = __dev_get_by_index(net, ndm->ndm_ifindex);
 	if (dev == NULL) {
 		NL_SET_ERR_MSG(extack, "unknown ifindex");
 		return -ENODEV;
 	}
 
+	/*链路地址校验*/
 	if (!tb[NDA_LLADDR] || nla_len(tb[NDA_LLADDR]) != ETH_ALEN) {
 		NL_SET_ERR_MSG(extack, "invalid address");
 		return -EINVAL;
@@ -4334,8 +4352,10 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 	}
 
+	/*取链路地址*/
 	addr = nla_data(tb[NDA_LLADDR]);
 
+	/*取vlan id*/
 	err = fdb_vid_parse(tb[NDA_VLAN], &vid, extack);
 	if (err)
 		return err;
@@ -4345,12 +4365,15 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 	/* Support fdb on master device the net/bridge default case */
 	if ((!ndm->ndm_flags || ndm->ndm_flags & NTF_MASTER) &&
 	    netif_is_bridge_port(dev)) {
+		/*dev是master情况*/
 		struct net_device *br_dev = netdev_master_upper_dev_get(dev);
 		const struct net_device_ops *ops = br_dev->netdev_ops;
 
-		err = ops->ndo_fdb_add(ndm, tb, dev, addr, vid,
+		/*添加fdb*/
+		err = ops->ndo_fdb_add(ndm/*消息头*/, tb/*其它配置*/, dev/*表项关联的设备*/, addr/*mac地址*/, vid/*vlan信息*/,
 				       nlh->nlmsg_flags, extack);
 		if (err)
+			/*配置出错*/
 			goto out;
 		else
 			ndm->ndm_flags &= ~NTF_MASTER;
@@ -4358,7 +4381,9 @@ static int rtnl_fdb_add(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	/* Embedded bridge, macvlan, and any other device support */
 	if ((ndm->ndm_flags & NTF_SELF)) {
+		/*dev是其它设备*/
 		if (dev->netdev_ops->ndo_fdb_add)
+			/*通过回调触发*/
 			err = dev->netdev_ops->ndo_fdb_add(ndm, tb, dev, addr,
 							   vid,
 							   nlh->nlmsg_flags,
@@ -5091,6 +5116,7 @@ static int valid_bridge_getlink_req(const struct nlmsghdr *nlh,
 	return 0;
 }
 
+/*显示af_bridge的link*/
 static int rtnl_bridge_getlink(struct sk_buff *skb, struct netlink_callback *cb)
 {
 	const struct nlmsghdr *nlh = cb->nlh;
@@ -5108,6 +5134,7 @@ static int rtnl_bridge_getlink(struct sk_buff *skb, struct netlink_callback *cb)
 		return err;
 
 	rcu_read_lock();
+	/*遍历此netns下所有netdev*/
 	for_each_netdev_rcu(net, dev) {
 		const struct net_device_ops *ops = dev->netdev_ops;
 		struct net_device *br_dev = netdev_master_upper_dev_get(dev);
@@ -5127,6 +5154,7 @@ static int rtnl_bridge_getlink(struct sk_buff *skb, struct netlink_callback *cb)
 			idx++;
 		}
 
+		/*此设备有ndo_bridge_getlink回调，则执行此回调进行填充*/
 		if (ops->ndo_bridge_getlink) {
 			if (idx >= cb->args[0]) {
 				err = ops->ndo_bridge_getlink(skb, portid,
@@ -5202,6 +5230,7 @@ errout:
 	return err;
 }
 
+/*实现bridge link设置（针对flags来调用master或self的ndo_bridge_setlink回调完成具体工作）*/
 static int rtnl_bridge_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 			       struct netlink_ext_ack *extack)
 {
@@ -5217,9 +5246,11 @@ static int rtnl_bridge_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 		return -EINVAL;
 
 	ifm = nlmsg_data(nlh);
+	/*family必须填pf_bridge*/
 	if (ifm->ifi_family != AF_BRIDGE)
 		return -EPFNOSUPPORT;
 
+	/*确定操作的设备*/
 	dev = __dev_get_by_index(net, ifm->ifi_index);
 	if (!dev) {
 		NL_SET_ERR_MSG(extack, "unknown ifindex");
@@ -5234,32 +5265,40 @@ static int rtnl_bridge_setlink(struct sk_buff *skb, struct nlmsghdr *nlh,
 					return -EINVAL;
 
 				have_flags = true;
-				flags = nla_get_u16(attr);
+				flags = nla_get_u16(attr);/*取flags*/
 				break;
 			}
 		}
 	}
 
 	if (!flags || (flags & BRIDGE_FLAGS_MASTER)) {
+		/*未设置flags,则默认处理成为配置master情况，即bridge dev*/
+
+		/*取此dev对应的桥设备*/
 		struct net_device *br_dev = netdev_master_upper_dev_get(dev);
 
 		if (!br_dev || !br_dev->netdev_ops->ndo_bridge_setlink) {
+			/*桥设备无对应回调*/
 			err = -EOPNOTSUPP;
 			goto out;
 		}
 
+		/*针对桥设备触发回调进行设置*/
 		err = br_dev->netdev_ops->ndo_bridge_setlink(dev, nlh, flags,
 							     extack);
 		if (err)
 			goto out;
 
+		/*master处理完成，清除标记*/
 		flags &= ~BRIDGE_FLAGS_MASTER;
 	}
 
 	if ((flags & BRIDGE_FLAGS_SELF)) {
 		if (!dev->netdev_ops->ndo_bridge_setlink)
+			/*设备必须有ndo_bridge_setlink回调*/
 			err = -EOPNOTSUPP;
 		else
+			/*触发回调，对自身进行设置*/
 			err = dev->netdev_ops->ndo_bridge_setlink(dev, nlh,
 								  flags,
 								  extack);
@@ -6445,6 +6484,7 @@ void __init rtnetlink_init(void)
 		      RTNL_FLAG_BULK_DEL_SUPPORTED);
 	rtnl_register(PF_BRIDGE, RTM_GETNEIGH, rtnl_fdb_get, rtnl_fdb_dump, 0);
 
+	/*linux bridge link 显示，删除，设置*/
 	rtnl_register(PF_BRIDGE, RTM_GETLINK, NULL, rtnl_bridge_getlink, 0);
 	rtnl_register(PF_BRIDGE, RTM_DELLINK, rtnl_bridge_dellink, NULL, 0);
 	rtnl_register(PF_BRIDGE, RTM_SETLINK, rtnl_bridge_setlink, NULL, 0);

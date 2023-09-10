@@ -31,7 +31,7 @@
 #define GENMASK_INPUT_CHECK(h, l) 0
 #endif
 
-/*保证l到h位全为1*/
+/*保证l(low)位到h(high)位全为1*/
 #define __GENMASK(h, l) \
 	(((~UL(0)) - (UL(1) << (l)) + 1) /*将l位后面全部清为0，l位前面全置为1*/& \
 	 (~UL(0) >> (BITS_PER_LONG - 1 - (h)))/*将h位前面全置为0*/)

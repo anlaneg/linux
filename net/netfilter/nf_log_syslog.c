@@ -850,8 +850,10 @@ static void nf_log_ip_packet(struct net *net, u_int8_t pf,
 	if (in)
 		dump_mac_header(m, loginfo, skb);
 
+	/*dump报文到m*/
 	dump_ipv4_packet(net, m, loginfo, skb, skb_network_offset(skb));
 
+	/*log信息输出*/
 	nf_log_buf_close(m);
 }
 
@@ -1019,6 +1021,7 @@ static int __init nf_log_syslog_init(void)
 	if (ret < 0)
 		return ret;
 
+	/*为ipv4注册ip_logger*/
 	ret = nf_log_register(NFPROTO_IPV4, &nf_ip_logger);
 	if (ret < 0)
 		goto err1;

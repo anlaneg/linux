@@ -53,8 +53,10 @@ extern unsigned int pageblock_order;
 #endif /* CONFIG_HUGETLB_PAGE */
 
 #define pageblock_nr_pages	(1UL << pageblock_order)
+/*pfn按照pageblock_nr_pages对齐*/
 #define pageblock_align(pfn)	ALIGN((pfn), pageblock_nr_pages)
 #define pageblock_aligned(pfn)	IS_ALIGNED((pfn), pageblock_nr_pages)
+/*pfn按照pageblock_nr_pages向下对齐*/
 #define pageblock_start_pfn(pfn)	ALIGN_DOWN((pfn), pageblock_nr_pages)
 #define pageblock_end_pfn(pfn)		ALIGN((pfn) + 1, pageblock_nr_pages)
 

@@ -1130,10 +1130,12 @@ struct anon_vma *find_mergeable_anon_vma(struct vm_area_struct *vma)
  */
 static inline unsigned long round_hint_to_min(unsigned long hint)
 {
-	hint &= PAGE_MASK;
+	hint &= PAGE_MASK;/*将hint按页对齐*/
 	if (((void *)hint != NULL) &&
 	    (hint < mmap_min_addr))
+		/*归化到mmap_min_addr*/
 		return PAGE_ALIGN(mmap_min_addr);
+	/*>mmap_min_addr,使用对齐后的hint*/
 	return hint;
 }
 
@@ -1157,6 +1159,7 @@ int mlock_future_check(struct mm_struct *mm, unsigned long flags,
 static inline u64 file_mmap_size_max(struct file *file, struct inode *inode)
 {
 	if (S_ISREG(inode->i_mode))
+		/*普通文件，返回容许的最大size*/
 		return MAX_LFS_FILESIZE;
 
 	if (S_ISBLK(inode->i_mode))
@@ -1173,15 +1176,18 @@ static inline u64 file_mmap_size_max(struct file *file, struct inode *inode)
 	return ULONG_MAX;
 }
 
+/*检查文件是否容许这么大的映射*/
 static inline bool file_mmap_ok(struct file *file, struct inode *inode,
 				unsigned long pgoff, unsigned long len)
 {
 	u64 maxsize = file_mmap_size_max(file, inode);
 
 	if (maxsize && len > maxsize)
+		/*要映射的长度超过了maxsize*/
 		return false;
 	maxsize -= len;
 	if (pgoff > maxsize >> PAGE_SHIFT)
+		/*pgoff + len超过了maxsize*/
 		return false;
 	return true;
 }
@@ -1191,7 +1197,7 @@ static inline bool file_mmap_ok(struct file *file, struct inode *inode,
  */
 unsigned long do_mmap(struct file *file, unsigned long addr,
 			unsigned long len, unsigned long prot,
-			unsigned long flags, unsigned long pgoff,
+			unsigned long flags, unsigned long pgoff/*页数*/,
 			unsigned long *populate, struct list_head *uf)
 {
 	struct mm_struct *mm = current->mm;
@@ -1199,9 +1205,10 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	int pkey = 0;
 
 	validate_mm(mm);
-	*populate = 0;
+	*populate = 0;/*先将populate置为0*/
 
 	if (!len)
+		/*mmap映射的内存长度不得为0*/
 		return -EINVAL;
 
 	/*
@@ -1218,21 +1225,23 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (flags & MAP_FIXED_NOREPLACE)
 		flags |= MAP_FIXED;
 
+	/*没有给定MAP_FIXED标记，addr不是固定地址，更新addr地址*/
 	if (!(flags & MAP_FIXED))
 		addr = round_hint_to_min(addr);
 
 	/* Careful about overflows.. */
-	len = PAGE_ALIGN(len);
+	len = PAGE_ALIGN(len);/*映射的内存长度对齐到页*/
 	if (!len)
 		return -ENOMEM;
 
 	/* offset overflow? */
 	if ((pgoff + (len >> PAGE_SHIFT)) < pgoff)
-		/*数字绕回*/
+		/*自pgoff开始增加len长度的字节后，数字绕回*/
 		return -EOVERFLOW;
 
 	/* Too many mappings? */
 	if (mm->map_count > sysctl_max_map_count)
+		/*此进程映射的数目过多*/
 		return -ENOMEM;
 
 	/* Obtain the address to map to. we verify (or select) it and ensure
@@ -1240,6 +1249,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 */
 	addr = get_unmapped_area(file, addr, len, pgoff, flags);
 	if (IS_ERR_VALUE(addr))
+		/*没有找到未映射的区域*/
 		return addr;
 
 	if (flags & MAP_FIXED_NOREPLACE) {
@@ -1257,7 +1267,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	 * to. we assume access permissions have been handled by the open
 	 * of the memory object, so we don't do any here.
 	 */
-	vm_flags = calc_vm_prot_bits(prot, pkey) | calc_vm_flag_bits(flags) |
+	vm_flags = calc_vm_prot_bits(prot, pkey) /*转换为vm_flags*/| calc_vm_flag_bits(flags) |
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
 	if (flags & MAP_LOCKED)
@@ -1267,11 +1277,13 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (mlock_future_check(mm, vm_flags, len))
 		return -EAGAIN;
 
+	/*如果file不为NULL，则为有名映射*/
 	if (file) {
-		struct inode *inode = file_inode(file);
+		struct inode *inode = file_inode(file);/*file对应的inode*/
 		unsigned long flags_mask;
 
 		if (!file_mmap_ok(file, inode, pgoff, len))
+			/*file不容许这么大的映射*/
 			return -EOVERFLOW;
 
 		flags_mask = LEGACY_MAP_MASK | file->f_op->mmap_supported_flags;
@@ -1292,6 +1304,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 				return -EOPNOTSUPP;
 			if (prot & PROT_WRITE) {
 				if (!(file->f_mode & FMODE_WRITE))
+					/*协议要求write,但文件没有write权限*/
 					return -EACCES;
 				if (IS_SWAPFILE(file->f_mapping->host))
 					return -ETXTBSY;
@@ -1310,6 +1323,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			fallthrough;
 		case MAP_PRIVATE:
 			if (!(file->f_mode & FMODE_READ))
+				/*文件必须要有读权限*/
 				return -EACCES;
 			if (path_noexec(&file->f_path)) {
 				if (vm_flags & VM_EXEC)
@@ -1318,8 +1332,10 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			}
 
 			if (!file->f_op->mmap)
+				/*没有提供mmap回调*/
 				return -ENODEV;
 			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
+				/*私有不支持以上两个flags*/
 				return -EINVAL;
 			break;
 
@@ -1327,6 +1343,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			return -EINVAL;
 		}
 	} else {
+		/*执行匿名映射*/
 		switch (flags & MAP_TYPE) {
 		case MAP_SHARED:
 			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
@@ -1359,60 +1376,67 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 
 		/* hugetlb applies strict overcommit unless MAP_NORESERVE */
 		if (file && is_file_hugepages(file))
+			/*大页内存映射时，加VM_NORESERVE标记*/
 			vm_flags |= VM_NORESERVE;
 	}
 
+	/*执行此文件的映射*/
 	addr = mmap_region(file, addr, len, vm_flags, pgoff, uf);
 	if (!IS_ERR_VALUE(addr) &&
 	    ((vm_flags & VM_LOCKED) ||
 	     (flags & (MAP_POPULATE | MAP_NONBLOCK)) == MAP_POPULATE))
+		/*指明了MAP_POPULATE,指明populate长度*/
 		*populate = len;
 	return addr;
 }
 
 //实现mmap
-unsigned long ksys_mmap_pgoff(unsigned long addr, unsigned long len/*要映射的大小*/,
-			      unsigned long prot, unsigned long flags,
-			      unsigned long fd, unsigned long pgoff)
+unsigned long ksys_mmap_pgoff(unsigned long addr/*起始地址*/, unsigned long len/*要映射的大小*/,
+			      unsigned long prot, unsigned long flags/*映射标记*/,
+			      unsigned long fd/*映射的fd*/, unsigned long pgoff/*偏移量（页数目）*/)
 {
 	struct file *file = NULL;
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
-		/*当前flags中未指明anonymous,由fd获取file*/
+		/*当前flags中指明非anonymous,由fd获取file*/
 		audit_mmap_fd(fd, flags);
 		//由fd获得file
 		file = fget(fd);
 		if (!file)
 			return -EBADF;
 		if (is_file_hugepages(file)) {
-			//是否为大页fs的文件
+			//如果是大页fs的文件，按大页size执行len对齐
 			len = ALIGN(len, huge_page_size(hstate_file(file)));
 		} else if (unlikely(flags & MAP_HUGETLB)) {
+			/*不是大页，但给出了MAP_HUGETLB标记，报错*/
 			retval = -EINVAL;
 			goto out_fput;
 		}
 	} else if (flags & MAP_HUGETLB) {
+		/*当前flag指明anyonymous|MAP_HUGETLB,通过flags获取hs,
+		 * 并创建匿名大页文件，再映射相应文件*/
 		struct hstate *hs;
 
 		hs = hstate_sizelog((flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
 		if (!hs)
 			return -EINVAL;
 
+		//是大页fs的文件，按大页size执行len对齐
 		len = ALIGN(len, huge_page_size(hs));
 		/*
 		 * VM_NORESERVE is used because the reservations will be
 		 * taken when vm_ops->mmap() is called
 		 */
-		file = hugetlb_file_setup(HUGETLB_ANON_FILE/*文件名称*/, len/*内存大小*/,
-				VM_NORESERVE,
+		file = hugetlb_file_setup(HUGETLB_ANON_FILE/*匿名文件名称*/, len/*内存大小*/,
+				VM_NORESERVE/*不预留内存，仅创建文件，后续函数会预留*/,
 				HUGETLB_ANONHUGE_INODE,
-				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK);
+				(flags >> MAP_HUGE_SHIFT) & MAP_HUGE_MASK/*大页size*/);
 		if (IS_ERR(file))
 			return PTR_ERR(file);
 	}
 
-	/*映射文件address*/
+	/*针对file执行mmap*/
 	retval = vm_mmap_pgoff(file, addr, len, prot, flags, pgoff);
 out_fput:
 	if (file)
@@ -1729,8 +1753,10 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	if (len > TASK_SIZE)
 		return -ENOMEM;
 
+	/*默认取此进程对应的unmapped_area回调*/
 	get_area = current->mm->get_unmapped_area;
 	if (file) {
+		/*指明了file,且file中有此回调，则自file中取此回调*/
 		if (file->f_op->get_unmapped_area)
 			get_area = file->f_op->get_unmapped_area;
 	} else if (flags & MAP_SHARED) {
@@ -1740,15 +1766,19 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		 * do_mmap() will clear pgoff, so match alignment.
 		 */
 		pgoff = 0;
-		get_area = shmem_get_unmapped_area;
+		get_area = shmem_get_unmapped_area;/*共享内存对应的unmapped_area回调*/
 	}
 
+	/*触发回调*/
 	addr = get_area(file, addr, len, pgoff, flags);
 	if (IS_ERR_VALUE(addr))
 		return addr;
 
+	/*地址将超限*/
 	if (addr > TASK_SIZE - len)
 		return -ENOMEM;
+
+	/*addr不是页首地址*/
 	if (offset_in_page(addr))
 		return -EINVAL;
 
@@ -2481,8 +2511,8 @@ unsigned long mmap_region(struct file *file, unsigned long addr,
 	struct vm_area_struct *next, *prev, *merge;
 	pgoff_t pglen = len >> PAGE_SHIFT;
 	unsigned long charged = 0;
-	unsigned long end = addr + len;
-	unsigned long merge_start = addr, merge_end = end;
+	unsigned long end = addr + len;/*内存映射终止位置*/
+	unsigned long merge_start = addr/*内存起始地址*/, merge_end = end/*内存终止地址*/;
 	pgoff_t vm_pgoff;
 	int error;
 	VMA_ITERATOR(vmi, mm, addr);
@@ -2576,7 +2606,9 @@ cannot_expand:
 				goto free_vma;
 		}
 
+		/*设置映射的文件*/
 		vma->vm_file = get_file(file);
+		/*调用file的mmap,使其映射到此vma*/
 		error = call_mmap(file, vma);
 		if (error)
 			goto unmap_and_free_vma;

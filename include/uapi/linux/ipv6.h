@@ -117,7 +117,8 @@ struct ipv6_destopt_hao {
 
 struct ipv6hdr {
 #if defined(__LITTLE_ENDIAN_BITFIELD)
-	__u8			priority:4,//通信分类（占4bits)，后两位为ecn标记
+	/*如注释所言，Traffic class共占用8字节，故flow_lbl[0]的前4个bits也会被包含在内，后两位为ecn标记*/
+	__u8			priority:4,
 				version:4;//版本
 #elif defined(__BIG_ENDIAN_BITFIELD)
 	__u8			version:4,
@@ -125,7 +126,7 @@ struct ipv6hdr {
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
-	__u8			flow_lbl[3];//流标签（20bits)
+	__u8			flow_lbl[3];//流标签（实际20bits，traffic class占用4bits)
 
 	__be16			payload_len;//负载大小（16bits)
 	__u8			nexthdr;//下一头部

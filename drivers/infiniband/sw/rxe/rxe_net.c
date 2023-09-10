@@ -547,13 +547,13 @@ const char *rxe_parent_name(struct rxe_dev *rxe, unsigned int port_num)
 	return rxe->ndev->name;
 }
 
-/*基于ndev创建名称为ibdev_name的rxe设备*/
+/*基于ndev网络设备创建名称为ibdev_name的rxe设备*/
 int rxe_net_add(const char *ibdev_name, struct net_device *ndev)
 {
 	int err;
 	struct rxe_dev *rxe = NULL;
 
-	/*申请rxe设备*/
+	/*申请rxe设备结构体*/
 	rxe = ib_alloc_device(rxe_dev, ib_dev);
 	if (!rxe)
 		return -ENOMEM;

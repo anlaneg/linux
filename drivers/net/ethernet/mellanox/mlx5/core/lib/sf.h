@@ -8,6 +8,7 @@
 
 static inline u16 mlx5_sf_start_function_id(const struct mlx5_core_dev *dev)
 {
+	/*返回此设备sf编号基准点*/
 	return MLX5_CAP_GEN(dev, sf_base_id);
 }
 

@@ -16,7 +16,7 @@ struct timer_list {
 	struct hlist_node	entry;//用于挂在list上（双链表）
 	unsigned long		expires;//过期时间
 	void			(*function)(struct timer_list *);//timer回调函数
-	u32			flags;/*指出timer标记，及所在cpu*/
+	u32			flags;/*指出timer标记，及所在cpu(低位包含timer初始化是对应的cpu id)*/
 
 #ifdef CONFIG_LOCKDEP
 	struct lockdep_map	lockdep_map;
@@ -61,18 +61,24 @@ struct timer_list {
  * should be placed on a particular CPU, then add_timer_on() has to be
  * used.
  */
-#define TIMER_CPUMASK		0x0003FFFF
+#define TIMER_CPUMASK		0x0003FFFF /*timer flags利用低18位来表示cpu id*/
+/*标记此timer正在迁移（被修改为在cpu间移动）*/
 #define TIMER_MIGRATING		0x00040000
 #define TIMER_BASEMASK		(TIMER_CPUMASK | TIMER_MIGRATING)
 #define TIMER_DEFERRABLE	0x00080000
 #define TIMER_PINNED		0x00100000
 #define TIMER_IRQSAFE		0x00200000
 #define TIMER_INIT_FLAGS	(TIMER_DEFERRABLE | TIMER_PINNED | TIMER_IRQSAFE)
+/*timer flags利用高位标记指明自已所处的timer base index,
+ * arrayshift即定义此数值在flags上的起始标记位*/
 #define TIMER_ARRAYSHIFT	22
+/*从TIMER_ARRAYSHIFT位开始，当前共有10位来表示timer base index
+ * 由此可知WHEEL_SIZE不能超过 ((1<<11) -1)*/
 #define TIMER_ARRAYMASK		0xFFC00000
 
 #define TIMER_TRACE_FLAGMASK	(TIMER_MIGRATING | TIMER_DEFERRABLE | TIMER_PINNED | TIMER_IRQSAFE)
 
+/*timer结构体初始化，设置timer flags及触发函数回调*/
 #define __TIMER_INITIALIZER(_function, _flags) {		\
 		.entry = { .next = TIMER_ENTRY_STATIC },	\
 		.function = (_function),			\
@@ -81,6 +87,7 @@ struct timer_list {
 			__FILE__ ":" __stringify(__LINE__))	\
 	}
 
+/*定义名称为_name的timer，并设置其对应的触发函数*/
 #define DEFINE_TIMER(_name, _function)				\
 	struct timer_list _name =				\
 		__TIMER_INITIALIZER(_function, 0)
@@ -166,6 +173,7 @@ static inline void destroy_timer_on_stack(struct timer_list *timer) { }
  */
 static inline int timer_pending(const struct timer_list * timer)
 {
+	/*如果此timer entry不为空，则其已被加入到系统*/
 	return !hlist_unhashed_lockless(&timer->entry);
 }
 

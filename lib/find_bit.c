@@ -49,12 +49,14 @@
  */
 #define FIND_NEXT_BIT(FETCH, MUNGE, size, start)				\
 ({										\
-	unsigned long mask, idx, tmp, sz = (size), __start = (start);		\
+	unsigned long mask, idx, tmp, sz = (size)/*总长度*/, __start = (start)/*起始位置*/;		\
 										\
 	if (unlikely(__start >= sz))						\
+		/*起始位置超过了size,不可能找到有效的bit,直接返回*/\
 		goto out;							\
 										\
 	mask = MUNGE(BITMAP_FIRST_WORD_MASK(__start));				\
+	/*确定采用unsigned long来理解数据，其索引为idx*/\
 	idx = __start / BITS_PER_LONG;						\
 										\
 	for (tmp = (FETCH) & mask; !tmp; tmp = (FETCH)) {			\

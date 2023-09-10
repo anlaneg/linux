@@ -45,6 +45,8 @@
 #define IB_UVERBS_ACCESS_OPTIONAL_LAST (1 << 29)
 
 enum ib_uverbs_core_support {
+	/*标记是否支持optional mr access标记，如果不支持，
+	 * 则access的IB_UVERBS_ACCESS_OPTIONAL_RANGE范围内标记会被清零*/
 	IB_UVERBS_CORE_SUPPORT_OPTIONAL_MR_ACCESS = 1 << 0,
 };
 
@@ -61,7 +63,7 @@ enum ib_uverbs_access_flags {
 	IB_UVERBS_ACCESS_FLUSH_PERSISTENT = 1 << 9,
 
 	IB_UVERBS_ACCESS_RELAXED_ORDERING = IB_UVERBS_ACCESS_OPTIONAL_FIRST,
-	/*可选访问范围*/
+	/*access标记，取值范围（first-last之间为1）*/
 	IB_UVERBS_ACCESS_OPTIONAL_RANGE =
 		((IB_UVERBS_ACCESS_OPTIONAL_LAST << 1) - 1) &
 		~(IB_UVERBS_ACCESS_OPTIONAL_FIRST - 1)

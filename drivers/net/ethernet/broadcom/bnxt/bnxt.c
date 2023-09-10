@@ -13108,6 +13108,7 @@ static int bnxt_bridge_setlink(struct net_device *dev, struct nlmsghdr *nlh,
 		u16 mode;
 
 		if (nla_type(attr) != IFLA_BRIDGE_MODE)
+			/*仅支持对bridge mode进行设置*/
 			continue;
 
 		if (nla_len(attr) < sizeof(mode))

@@ -651,22 +651,23 @@ int sprint_backtrace_build_id(char *buffer, unsigned long address)
 /* To avoid using get_symbol_offset for every symbol, we carry prefix along. */
 struct kallsym_iter {
 	loff_t pos;
-	loff_t pos_arch_end;
-	loff_t pos_mod_end;
+	loff_t pos_arch_end;/*arch符号结束位置*/
+	loff_t pos_mod_end;/*module符号结束位置*/
 	loff_t pos_ftrace_mod_end;
 	loff_t pos_bpf_end;
-	unsigned long value;
+	unsigned long value;/*符号地址*/
 	unsigned int nameoff; /* If iterating in core kernel symbols. */
-	char type;
-	char name[KSYM_NAME_LEN];
-	char module_name[MODULE_NAME_LEN];
-	int exported;
-	int show_value;
+	char type;/*符号标记，例如't','a','d'*/
+	char name[KSYM_NAME_LEN];/*符号名称*/
+	char module_name[MODULE_NAME_LEN];/*符号对应的模块名称*/
+	int exported;/*是否被导出*/
+	int show_value;/*非零时显示vlaue,零时不显示value*/
 };
 
 int __weak arch_get_kallsym(unsigned int symnum, unsigned long *value,
 			    char *type, char *name)
 {
+	/*指明弱符号，默认由各体系提供此函数实现*/
 	return -EINVAL;
 }
 
@@ -754,7 +755,7 @@ static unsigned long get_ksymbol_core(struct kallsym_iter *iter)
 	unsigned off = iter->nameoff;
 
 	iter->module_name[0] = '\0';
-	iter->value = kallsyms_sym_address(iter->pos);
+	iter->value = kallsyms_sym_address(iter->pos);/*取符号地址*/
 
 	iter->type = kallsyms_get_symbol_type(off);
 
@@ -785,10 +786,12 @@ static int update_iter_mod(struct kallsym_iter *iter, loff_t pos)
 {
 	iter->pos = pos;
 
+	/*显示arch符号*/
 	if ((!iter->pos_arch_end || iter->pos_arch_end > pos) &&
 	    get_ksymbol_arch(iter))
 		return 1;
 
+	/*显示kernel moudle符号*/
 	if ((!iter->pos_mod_end || iter->pos_mod_end > pos) &&
 	    get_ksymbol_mod(iter))
 		return 1;
@@ -823,7 +826,7 @@ static int update_iter(struct kallsym_iter *iter, loff_t pos)
 
 static void *s_next(struct seq_file *m, void *p, loff_t *pos)
 {
-	(*pos)++;
+	(*pos)++;/*索引编号增加*/
 
 	if (!update_iter(m->private, *pos))
 		return NULL;
@@ -841,6 +844,7 @@ static void s_stop(struct seq_file *m, void *p)
 {
 }
 
+/*显示kernel符号*/
 static int s_show(struct seq_file *m, void *p)
 {
 	void *value;
@@ -848,6 +852,7 @@ static int s_show(struct seq_file *m, void *p)
 
 	/* Some debugging symbols have no name.  Ignore them. */
 	if (!iter->name[0])
+		/*不显示名称为空的符号*/
 		return 0;
 
 	value = iter->show_value ? (void *)iter->value : NULL;
@@ -859,10 +864,10 @@ static int s_show(struct seq_file *m, void *p)
 		 * Label it "global" if it is exported,
 		 * "local" if not exported.
 		 */
-		type = iter->exported ? toupper(iter->type) :
-					tolower(iter->type);
+		type = iter->exported ? toupper(iter->type) /*被导出用大写字每*/:
+					tolower(iter->type)/*未导出用小写字每*/;
 		seq_printf(m, "%px %c %s\t[%s]\n", value,
-			   type, iter->name, iter->module_name);
+			   type, iter->name, iter->module_name);/*符号从属于模块的，显示模块名称*/
 	} else
 		seq_printf(m, "%px %c %s\n", value,
 			   iter->type, iter->name);
@@ -1051,6 +1056,7 @@ static const struct proc_ops kallsyms_proc_ops = {
 
 static int __init kallsyms_init(void)
 {
+	/*创建proc文件‘/proc/kallsyms’*/
 	proc_create("kallsyms", 0444, NULL, &kallsyms_proc_ops);
 	return 0;
 }

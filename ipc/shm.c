@@ -680,6 +680,7 @@ static const struct file_operations shm_file_operations_huge = {
 
 bool is_file_shm_hugepages(struct file *file)
 {
+	/*是否为大页文件*/
 	return file->f_op == &shm_file_operations_huge;
 }
 

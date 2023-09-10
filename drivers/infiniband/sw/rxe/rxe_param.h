@@ -11,6 +11,7 @@
 
 #define DEFAULT_MAX_VALUE (1 << 20)
 
+/*将mtu划分成枚举*/
 static inline enum ib_mtu rxe_mtu_int_to_enum(int mtu)
 {
 	if (mtu < 256)

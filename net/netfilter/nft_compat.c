@@ -82,6 +82,7 @@ static void nft_target_eval_xt(const struct nft_expr *expr,
 
 	nft_compat_set_par(&xt, pkt, target, info);
 
+	/*针对skb执行target*/
 	ret = target->target(skb, &xt);
 
 	if (xt.hotdrop)
@@ -887,6 +888,7 @@ nft_target_select_ops(const struct nft_ctx *ctx,
 	ops->data = target;
 	ops->reduce = NFT_REDUCE_READONLY;
 
+	/*设置ops的执行函数*/
 	if (family == NFPROTO_BRIDGE)
 		ops->eval = nft_target_eval_bridge;
 	else

@@ -381,6 +381,7 @@ struct rxe_mca {
 struct rxe_port {
     /*port属性*/
 	struct ib_port_attr	attr;
+	/*port的全局唯一id*/
 	__be64			port_guid;
 	__be64			subnet_prefix;
 	spinlock_t		port_lock; /* guard port */
@@ -390,6 +391,7 @@ struct rxe_port {
 };
 
 struct rxe_dev {
+	/*此类型的成员必须为首个成员*/
 	struct ib_device	ib_dev;
 	/*设备属性*/
 	struct ib_device_attr	attr;
@@ -397,16 +399,16 @@ struct rxe_dev {
 	int			max_inline_data;
 	struct mutex	usdev_lock;
 
-	/*所属的netdev设备*/
+	/*所属的netdev设备(利用此网络设备进行收发）*/
 	struct net_device	*ndev;
 
-	struct rxe_pool		uc_pool;
-	struct rxe_pool		pd_pool;
+	struct rxe_pool		uc_pool;/*ucontext pool*/
+	struct rxe_pool		pd_pool;/*pd pool，负责分配pd*/
 	struct rxe_pool		ah_pool;/*收集ah,通过ah_num索引ah*/
 	struct rxe_pool		srq_pool;
 	struct rxe_pool		qp_pool;/*收集qp，通过qpn索引qp*/
 	struct rxe_pool		cq_pool;
-	struct rxe_pool		mr_pool;
+	struct rxe_pool		mr_pool;/*负责分配mr*/
 	struct rxe_pool		mw_pool;
 
 	/* multicast support */

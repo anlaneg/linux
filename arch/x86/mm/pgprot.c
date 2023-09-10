@@ -34,8 +34,9 @@ void add_encrypt_protection_map(void)
 
 pgprot_t vm_get_page_prot(unsigned long vm_flags)
 {
+	/*利用protection_map表进行vm_flags到例如PAGE_READONLY进行映射*/
 	unsigned long val = pgprot_val(protection_map[vm_flags &
-				      (VM_READ|VM_WRITE|VM_EXEC|VM_SHARED)]);
+				      (VM_READ|VM_WRITE|VM_EXEC|VM_SHARED)/*取标记*/]);
 
 #ifdef CONFIG_X86_INTEL_MEMORY_PROTECTION_KEYS
 	/*

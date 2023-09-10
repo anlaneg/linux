@@ -569,7 +569,7 @@ struct mlx5_adev {
 };
 
 struct mlx5_debugfs_entries {
-	struct dentry *dbg_root;
+	struct dentry *dbg_root;/*debug根目录*/
 	struct dentry *qp_debugfs;
 	struct dentry *eq_debugfs;
 	struct dentry *cq_debugfs;
@@ -1244,6 +1244,7 @@ static inline bool mlx5_ecpf_vport_exists(const struct mlx5_core_dev *dev)
 
 static inline u16 mlx5_core_max_vfs(const struct mlx5_core_dev *dev)
 {
+	/*返回此设备支持的最大vf数量*/
 	return dev->priv.sriov.max_vfs;
 }
 

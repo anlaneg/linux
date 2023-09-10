@@ -330,6 +330,7 @@ const struct file_operations proc_mounts_operations = {
 	.poll		= mounts_poll,
 };
 
+/*进程对应的mountinfo文件信息*/
 const struct file_operations proc_mountinfo_operations = {
 	.open		= mountinfo_open,
 	.read_iter	= seq_read_iter,

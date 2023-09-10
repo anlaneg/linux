@@ -498,10 +498,12 @@ int mlx5_eswitch_set_vport_trust(struct mlx5_eswitch *esw,
 		return PTR_ERR(evport);
 
 	mutex_lock(&esw->state_lock);
+	/*仅在legacy的模式下支持修改*/
 	if (esw->mode != MLX5_ESWITCH_LEGACY) {
 		err = -EOPNOTSUPP;
 		goto unlock;
 	}
+	/*修改port的trusted模式*/
 	evport->info.trusted = setting;
 	if (evport->enabled)
 		esw_vport_change_handle_locked(evport);

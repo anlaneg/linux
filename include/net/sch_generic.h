@@ -76,13 +76,17 @@ struct Qdisc {
 					   struct sk_buff **to_free);
 	//出队函数（来源于ops成员的enqueue)
 	struct sk_buff *	(*dequeue)(struct Qdisc *sch);
+	/*队列标记*/
 	unsigned int		flags;
 	//内建队列
 #define TCQ_F_BUILTIN		1
 //ingress队列标记
 #define TCQ_F_INGRESS		2
+	/*指明此qdisc可以bypass*/
 #define TCQ_F_CAN_BYPASS	4
+	/*多队列对应的root qdisc*/
 #define TCQ_F_MQROOT		8
+	/*标记此qdisc为单tx队列情况*/
 #define TCQ_F_ONETXQUEUE	0x10 /* dequeue_skb() can assume all skbs are for
 				      * q->dev_queue : It can test
 				      * netif_xmit_frozen_or_stopped() before
@@ -93,17 +97,19 @@ struct Qdisc {
 #define TCQ_F_WARN_NONWC	(1 << 16)
 	//采用percpu的统计信息
 #define TCQ_F_CPUSTATS		0x20 /* run using percpu statistics */
+	/*指明无parent,即为根*/
 #define TCQ_F_NOPARENT		0x40 /* root of its hierarchy :
 				      * qdisc_tree_decrease_qlen() should stop.
 				      */
 	//dump不可见队列
 #define TCQ_F_INVISIBLE		0x80 /* invisible by default in dump */
-	//标记q不需要加锁
+	//标记此qdisc不需要加锁保护
 #define TCQ_F_NOLOCK		0x100 /* qdisc does not require locking */
 #define TCQ_F_OFFLOADED		0x200 /* qdisc is offloaded to HW */
 	u32			limit;//队列容许的最大长度
 	//队列操作集
 	const struct Qdisc_ops	*ops;
+	/*队列对应的stab配置*/
 	struct qdisc_size_table	__rcu *stab;
 	//用于将队列加入hashtable
 	struct hlist_node       hash;
@@ -117,7 +123,7 @@ struct Qdisc {
 	struct net_rate_estimator __rcu *rate_est;
 	//基本统计信息
 	struct gnet_stats_basic_sync __percpu *cpu_bstats;
-	//队列统计信息
+	//队列统计信息(percpu)
 	struct gnet_stats_queue	__percpu *cpu_qstats;
 	//qdisc为了内存对齐，浪费了头部padded字节的内存（记录起来方便释放）
 	int			pad;
@@ -126,6 +132,7 @@ struct Qdisc {
 	/*
 	 * For performance sake on SMP, we put highly modified fields at the end
 	 */
+	/*出队的报文，如果硬件busy，则再入队，放在此队列上，见函数dev_requeue_skb*/
 	struct sk_buff_head	gso_skb ____cacheline_aligned_in_smp;
 	struct qdisc_skb_head	q;//保存skb的队列
 	struct gnet_stats_basic_sync bstats;
@@ -234,7 +241,7 @@ static inline void qdisc_run_end(struct Qdisc *qdisc)
 
 		if (unlikely(test_bit(__QDISC_STATE_MISSED,
 				      &qdisc->state)))
-			__netif_schedule(qdisc);
+			__netif_schedule(qdisc);/*有missed标记，此队列再调度*/
 	} else {
 		__clear_bit(__QDISC_STATE2_RUNNING, &qdisc->state2);
 	}
@@ -243,9 +250,11 @@ static inline void qdisc_run_end(struct Qdisc *qdisc)
 //检查队列是否可以批量出队
 static inline bool qdisc_may_bulk(const struct Qdisc *qdisc)
 {
+	/*如果仅有一个tx队列，则可批量出队*/
 	return qdisc->flags & TCQ_F_ONETXQUEUE;
 }
 
+/*检查此txq可用的极限值*/
 static inline int qdisc_avail_bulklimit(const struct netdev_queue *txq)
 {
 #ifdef CONFIG_BQL
@@ -259,7 +268,7 @@ static inline int qdisc_avail_bulklimit(const struct netdev_queue *txq)
 struct Qdisc_class_ops {
 	unsigned int		flags;
 	/* Child qdisc manipulation */
-	//通过tcmsg获得qisc对应的具体netdev_queue队列
+	//通过tcmsg获得qisc对应的具体netdev_queue队列，创建qdisc时使用
 	struct netdev_queue *	(*select_queue)(struct Qdisc *, struct tcmsg *);
 	//用于将一个排队规则绑定到一个类，并返回先前绑定到这个类的排队规则
 	int			(*graft)(struct Qdisc *, unsigned long cl/*类*/,
@@ -318,13 +327,13 @@ struct Qdisc_ops {
 	int			priv_size;
 	unsigned int		static_flags;
 
-	//使报文入队（如果不提供此回调，则给值为noop_qdisc_ops.enqueue）
+	//使报文入队（如果不提供此回调，则给值为noop_qdisc_ops.enqueue，最终会采用默认qdisc）
 	int 			(*enqueue)(struct sk_buff *skb,
 					   struct Qdisc *sch,
 					   struct sk_buff **to_free);
 	//出队一个报文（如果不提供此回调，则给值为noop_qdisc_ops.dequeue）
 	struct sk_buff *	(*dequeue)(struct Qdisc *);
-	//peek一个报文，返回但不出队（如果不提供此回调，则给值为noop_qdisc_ops.peek）
+	//peek一个报文，返回但不出队（如果不提供此回调且不提供dequeue，则给值为noop_qdisc_ops.peek）
 	struct sk_buff *	(*peek)(struct Qdisc *);
 
 	//qdisc队列初始化时调用
@@ -334,14 +343,14 @@ struct Qdisc_ops {
 	void			(*reset)(struct Qdisc *);
 	//队列销毁
 	void			(*destroy)(struct Qdisc *);
-	//队列配置变更
+	//队列配置变更用，如果不提供，则qdisc无法进行配置变更
 	int			(*change)(struct Qdisc *sch,
 					  struct nlattr *arg,
 					  struct netlink_ext_ack *extack);
 	void			(*attach)(struct Qdisc *sch);
 	//更新tx队列长度
 	int			(*change_tx_queue_len)(struct Qdisc *, unsigned int);
-	/*修改tx队列数目*/
+	/*修改tx队列总数目*/
 	void			(*change_real_num_tx)(struct Qdisc *sch,
 						      unsigned int new_real_tx);
 
@@ -673,7 +682,7 @@ struct Qdisc_class_hash {
 	struct hlist_head	*hash;//桶指针
 	unsigned int		hashsize;//桶数
 	unsigned int		hashmask;//hash表hashcode对应的掩码
-	unsigned int		hashelems;
+	unsigned int		hashelems;/*元素数*/
 };
 
 static inline unsigned int qdisc_class_hash(u32 id, u32 mask)

@@ -270,6 +270,7 @@ extern const __u8 ip_tos2prio[16];
 
 static inline char rt_tos2priority(u8 tos)
 {
+	/*这里tos字段共提取4bits，故数组长度为16*/
 	return ip_tos2prio[IPTOS_TOS(tos)>>1];
 }
 
@@ -297,8 +298,8 @@ static inline char rt_tos2priority(u8 tos)
  * ip_route_newports() calls.
  */
 
-static inline void ip_route_connect_init(struct flowi4 *fl4, __be32 dst,
-					 __be32 src, int oif, u8 protocol/*协议号*/,
+static inline void ip_route_connect_init(struct flowi4 *fl4, __be32 dst/*目的地址*/,
+					 __be32 src/*源地址*/, int oif, u8 protocol/*协议号*/,
 					 __be16 sport, __be16 dport,
 					 const struct sock *sk)
 {
@@ -313,8 +314,8 @@ static inline void ip_route_connect_init(struct flowi4 *fl4, __be32 dst,
 			   src, dport, sport, sk->sk_uid);
 }
 
-static inline struct rtable *ip_route_connect(struct flowi4 *fl4, __be32 dst,
-					      __be32 src, int oif, u8 protocol,
+static inline struct rtable *ip_route_connect(struct flowi4 *fl4, __be32 dst/*目的地址*/,
+					      __be32 src, int oif, u8 protocol/*协议*/,
 					      __be16 sport, __be16 dport,
 					      struct sock *sk)
 {
@@ -324,14 +325,17 @@ static inline struct rtable *ip_route_connect(struct flowi4 *fl4, __be32 dst,
 	ip_route_connect_init(fl4, dst, src, oif, protocol, sport, dport, sk);
 
 	if (!dst || !src) {
+		/*源或者目的地址为空时，采用此函数进行查找*/
 		rt = __ip_route_output_key(net, fl4);
 		if (IS_ERR(rt))
 			return rt;
 		ip_rt_put(rt);
+		/*利用查询，更新fl4*/
 		flowi4_update_output(fl4, oif, fl4->flowi4_tos, fl4->daddr,
 				     fl4->saddr);
 	}
 	security_sk_classify_flow(sk, flowi4_to_flowi_common(fl4));
+	/*更新源目的后，再查一遍，返回rtable*/
 	return ip_route_output_flow(net, fl4, sk);
 }
 

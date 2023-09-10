@@ -34,6 +34,7 @@ struct kernfs_open_file;
 struct seq_file;
 struct poll_table_struct;
 
+/*cgroup子系统最大名称长度*/
 #define MAX_CGROUP_TYPE_NAMELEN 32
 #define MAX_CGROUP_ROOT_NAMELEN 64
 #define MAX_CFTYPE_NAME		64
@@ -43,7 +44,7 @@ struct poll_table_struct;
 #define SUBSYS(_x) _x ## _cgrp_id,
 enum cgroup_subsys_id {
 #include <linux/cgroup_subsys.h>
-	CGROUP_SUBSYS_COUNT,
+	CGROUP_SUBSYS_COUNT,/*标明cgroup子系统总数*/
 };
 #undef SUBSYS
 
@@ -131,6 +132,7 @@ enum {
 	/* internal flags, do not use outside cgroup core proper */
 	__CFTYPE_ONLY_ON_DFL	= (1 << 16),	/* only on default hierarchy */
 	__CFTYPE_NOT_ON_DFL	= (1 << 17),	/* not on default hierarchy */
+	/*标明已添加*/
 	__CFTYPE_ADDED		= (1 << 18),
 };
 
@@ -158,7 +160,7 @@ struct cgroup_subsys_state {
 	struct cgroup *cgroup;
 
 	/* PI: the cgroup subsystem that this css is attached to */
-	struct cgroup_subsys *ss;
+	struct cgroup_subsys *ss;/*指明关联的子系统*/
 
 	/* reference count - access via css_[try]get() and css_put() */
 	struct percpu_ref refcnt;
@@ -216,7 +218,7 @@ struct css_set {
 	 * immutable after creation apart from the init_css_set during
 	 * subsystem registration (at boot time).
 	 */
-	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];
+	struct cgroup_subsys_state *subsys[CGROUP_SUBSYS_COUNT];/*各子系统指针*/
 
 	/* reference count */
 	refcount_t refcount;
@@ -593,7 +595,9 @@ struct cftype {
 	 * Fields used for internal bookkeeping.  Initialized automatically
 	 * during registration.
 	 */
+	/*对应的是哪个子系统*/
 	struct cgroup_subsys *ss;	/* NULL for cgroup core files */
+	/*用于串连到ss->cfts*/
 	struct list_head node;		/* anchored at ss->cfts */
 	struct kernfs_ops *kf_ops;/*文件操作集*/
 
@@ -619,6 +623,7 @@ struct cftype {
 	int (*seq_show)(struct seq_file *sf, void *v);
 
 	/* optional ops, implement all or none */
+	/*有seq_start回调，使用cgroup_kf_ops，否则用cgroup_kf_single_ops*/
 	void *(*seq_start)(struct seq_file *sf, loff_t *ppos);
 	void *(*seq_next)(struct seq_file *sf, void *v, loff_t *ppos);
 	void (*seq_stop)(struct seq_file *sf, void *v);
@@ -662,6 +667,7 @@ struct cftype {
  * See Documentation/admin-guide/cgroup-v1/cgroups.rst for details
  */
 struct cgroup_subsys {
+	/*用于申请cgroup_subsys_state结构体，parent_css为NULL时为子系统cgroup*/
 	struct cgroup_subsys_state *(*css_alloc)(struct cgroup_subsys_state *parent_css);
 	int (*css_online)(struct cgroup_subsys_state *css);
 	void (*css_offline)(struct cgroup_subsys_state *css);
@@ -684,7 +690,7 @@ struct cgroup_subsys {
 	void (*release)(struct task_struct *task);
 	void (*bind)(struct cgroup_subsys_state *root_css);
 
-	bool early_init:1;
+	bool early_init:1;/*标记在cgroup_init_early时进行初始化*/
 
 	/*
 	 * If %true, the controller, on the default hierarchy, doesn't show
@@ -716,7 +722,7 @@ struct cgroup_subsys {
 	const char *name;//子系统名称
 
 	/* optional, initialized automatically during boot if not set */
-	const char *legacy_name;
+	const char *legacy_name;/*来源于cgroup_subsys_name，用于指出子系统名称*/
 
 	/* link to parent, protected by cgroup_lock() */
 	struct cgroup_root *root;

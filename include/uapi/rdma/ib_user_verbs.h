@@ -351,11 +351,11 @@ struct ib_uverbs_close_xrcd {
 
 struct ib_uverbs_reg_mr {
 	__aligned_u64 response;
-	__aligned_u64 start;
-	__aligned_u64 length;
-	__aligned_u64 hca_va;
+	__aligned_u64 start;/*待注册的地址*/
+	__aligned_u64 length;/*待注册地址长度*/
+	__aligned_u64 hca_va;/*待注册地址*/
 	__u32 pd_handle;
-	__u32 access_flags;
+	__u32 access_flags;/*访问权限标记*/
 	__aligned_u64 driver_data[];
 };
 

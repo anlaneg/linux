@@ -40,6 +40,7 @@ void br_recalculate_neigh_suppress_enabled(struct net_bridge *br)
 }
 
 #if IS_ENABLED(CONFIG_INET)
+/*执行arp响应*/
 static void br_arp_send(struct net_bridge *br, struct net_bridge_port *p,
 			struct net_device *dev, __be32 dest_ip, __be32 src_ip,
 			const unsigned char *dest_hw,
@@ -70,6 +71,7 @@ static void br_arp_send(struct net_bridge *br, struct net_bridge_port *p,
 	else
 		vg = br_vlan_group_rcu(br);
 	pvid = br_get_pvid(vg);
+	/*针对pvid处理为vlan为0*/
 	if (pvid == (vlan_tci & VLAN_VID_MASK))
 		vlan_tci = 0;
 
@@ -77,8 +79,10 @@ static void br_arp_send(struct net_bridge *br, struct net_bridge_port *p,
 		__vlan_hwaccel_put_tag(skb, vlan_proto, vlan_tci);
 
 	if (p) {
+		/*指明了port,执行发送*/
 		arp_xmit(skb);
 	} else {
+		/*未指明port，沿uplink口上三层*/
 		skb_reset_mac_header(skb);
 		__skb_pull(skb, skb_network_offset(skb));
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
@@ -122,6 +126,7 @@ static bool br_is_local_ip(struct net_device *dev, __be32 ip)
 	return false;
 }
 
+/*处理arp抑制*/
 void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 			      u16 vid, struct net_bridge_port *p)
 {
@@ -165,6 +170,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 		return;
 
 	if (br_opt_get(br, BROPT_NEIGH_SUPPRESS_ENABLED)) {
+		/*bridge开启了neigh suppress机制*/
 		if (p && (p->flags & BR_NEIGH_SUPPRESS))
 			return;
 		if (parp->ar_op != htons(ARPOP_RREQUEST) &&
@@ -196,6 +202,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 		return;
 	}
 
+	/*查询领居表项*/
 	n = neigh_lookup(&arp_tbl, &tip, vlandev);
 	if (n) {
 		struct net_bridge_fdb_entry *f;
@@ -214,6 +221,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 			    (f->dst && (f->dst->flags & (BR_PROXYARP_WIFI |
 							 BR_NEIGH_SUPPRESS)))) {
 				if (!vid)
+					/*无vlan的情况*/
 					br_arp_send(br, p, skb->dev, sip, tip,
 						    sha, n->ha, sha, 0, 0);
 				else
@@ -238,6 +246,7 @@ void br_do_proxy_suppress_arp(struct sk_buff *skb, struct net_bridge *br,
 #endif
 
 #if IS_ENABLED(CONFIG_IPV6)
+/*检查是否为nd消息*/
 struct nd_msg *br_is_nd_neigh_msg(struct sk_buff *skb, struct nd_msg *msg)
 {
 	struct nd_msg *m;

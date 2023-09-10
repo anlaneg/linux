@@ -33,6 +33,7 @@ nflog_tg(struct sk_buff *skb, const struct xt_action_param *par)
 	if (info->flags & XT_NFLOG_F_COPY_LEN)
 		li.u.ulog.flags |= NF_LOG_F_COPY_LEN;
 
+	/*log指定的报文skb*/
 	nf_log_packet(net, xt_family(par), xt_hooknum(par), skb, xt_in(par),
 		      xt_out(par), &li, "%s", info->prefix);
 

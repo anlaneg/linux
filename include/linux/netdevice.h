@@ -106,8 +106,11 @@ void netdev_sw_irq_coalesce_default_on(struct net_device *dev);
  */
 
 /* qdisc ->enqueue() return codes. */
+/*发送成功*/
 #define NET_XMIT_SUCCESS	0x00
+/*发送时丢弃*/
 #define NET_XMIT_DROP		0x01	/* skb dropped			*/
+/*发送时拥塞*/
 #define NET_XMIT_CN		0x02	/* congestion notification	*/
 #define NET_XMIT_MASK		0x0f	/* qdisc flags in net/sch_generic.h */
 
@@ -630,7 +633,8 @@ struct netdev_queue {
 	netdevice_tracker	dev_tracker;
 
 	struct Qdisc __rcu	*qdisc;//队列调度器（qdisc = queueing discipline 排队规则)
-	struct Qdisc		*qdisc_sleeping;//ingress对应的qdisc
+	//ingress对应的qdisc
+	struct Qdisc		*qdisc_sleeping;
 #ifdef CONFIG_SYSFS
 	struct kobject		kobj;
 #endif
@@ -1788,6 +1792,7 @@ enum netdev_priv_flags {
 #define IFF_MACVLAN			IFF_MACVLAN
 #define IFF_XMIT_DST_RELEASE_PERM	IFF_XMIT_DST_RELEASE_PERM
 #define IFF_L3MDEV_MASTER		IFF_L3MDEV_MASTER
+/*标记此netdev无队列*/
 #define IFF_NO_QUEUE			IFF_NO_QUEUE
 #define IFF_OPENVSWITCH			IFF_OPENVSWITCH
 #define IFF_L3MDEV_SLAVE		IFF_L3MDEV_SLAVE
@@ -2209,9 +2214,9 @@ struct net_device {
 	spinlock_t		addr_list_lock;
 	int			irq;
 
-	struct netdev_hw_addr_list	uc;//此设备上配置的单播mac地址
-	struct netdev_hw_addr_list	mc;//此设备上配置的组播mac地址
-	struct netdev_hw_addr_list	dev_addrs;//设备硬件地址列表
+	struct netdev_hw_addr_list	uc;//此设备上配置的单播mac地址（链表）
+	struct netdev_hw_addr_list	mc;//此设备上配置的组播mac地址（链表）
+	struct netdev_hw_addr_list	dev_addrs;//设备硬件地址列表（链表）
 
 #ifdef CONFIG_SYSFS
 	struct kset		*queues_kset;
@@ -2276,7 +2281,7 @@ struct net_device {
 
 	/*
 	 * 当驱动不支持ndo_bpf时，generic_xdp_install函数将安装bpf程度在此变量
-	 * 函数__netif_receive_skb_core将在收包时触发此bpf程序
+	 * 函数__netif_receive_skb_core将在收包时触发此bpf程序(skb类xdp程序）
 	 */
 	struct bpf_prog __rcu	*xdp_prog;
 	unsigned long		gro_flush_timeout;
@@ -2294,7 +2299,7 @@ struct net_device {
 #ifdef CONFIG_NET_CLS_ACT
 	struct mini_Qdisc __rcu	*miniq_ingress;
 #endif
-	/*设备的ingress queue*/
+	/*设备的ingress queue,每个设备仅一个*/
 	struct netdev_queue __rcu *ingress_queue;
 #ifdef CONFIG_NETFILTER_INGRESS
 	//设备的ingress　hook
@@ -2318,9 +2323,9 @@ struct net_device {
 	unsigned int		num_tx_queues;
 	//有效的tx队列数
 	unsigned int		real_num_tx_queues;
-	//根排队队列（root qdisc)
+	//根qdisc
 	struct Qdisc __rcu	*qdisc;
-	//tx队列大小
+	//tx队列长度（深度）
 	unsigned int		tx_queue_len;
 	spinlock_t		tx_global_lock;
 
@@ -2432,9 +2437,9 @@ struct net_device {
 #endif
 	/*tc数目*/
 	s16			num_tc;
-	/*tc索引与txq的映射关系*/
+	/*tc索引到txq的映射关系*/
 	struct netdev_tc_txq	tc_to_txq[TC_MAX_QUEUE];
-	/*优先级与tc的映射*/
+	/*优先级到tc的映射*/
 	u8			prio_tc_map[TC_BITMASK + 1];
 
 #if IS_ENABLED(CONFIG_FCOE)
@@ -2460,7 +2465,7 @@ struct net_device {
 	struct udp_tunnel_nic	*udp_tunnel_nic;
 
 	/* protected by rtnl_lock */
-	struct bpf_xdp_entity	xdp_state[__MAX_XDP_MODE];
+	struct bpf_xdp_entity	xdp_state[__MAX_XDP_MODE];/*不同类型的xdp程序*/
 
 	u8 dev_addr_shadow[MAX_ADDR_LEN];
 	netdevice_tracker	linkwatch_dev_tracker;
@@ -3163,13 +3168,14 @@ int __dev_direct_xmit(struct sk_buff *skb, u16 queue_id);
 
 static inline int dev_queue_xmit(struct sk_buff *skb)
 {
-	/*报文入队发送*/
+	/*报文发送（支持qdisc处理）*/
 	return __dev_queue_xmit(skb, NULL);
 }
 
 static inline int dev_queue_xmit_accel(struct sk_buff *skb,
 				       struct net_device *sb_dev)
 {
+	/*报文发送（支持qdisc处理，仅在选队列时表现不同）*/
 	return __dev_queue_xmit(skb, sb_dev);
 }
 
@@ -3476,6 +3482,7 @@ static inline bool netif_xmit_stopped(const struct netdev_queue *dev_queue)
 static inline bool
 netif_xmit_frozen_or_stopped(const struct netdev_queue *dev_queue)
 {
+	/*检查此队列是否frozen或stopped*/
 	return dev_queue->state & QUEUE_STATE_ANY_XOFF_OR_FROZEN;
 }
 
@@ -5209,6 +5216,7 @@ static inline bool netif_is_l3_slave(const struct net_device *dev)
 	return dev->priv_flags & IFF_L3MDEV_SLAVE;
 }
 
+/*检查dev是否为bridge master*/
 static inline bool netif_is_bridge_master(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_EBRIDGE;

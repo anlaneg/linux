@@ -209,6 +209,7 @@ static int fs_param_bad_value(struct p_log *log, struct fs_parameter *param)
 	return inval_plog(log, "Bad value for '%s'", param->key);
 }
 
+/*文件系统参数转bool类型*/
 int fs_param_is_bool(struct p_log *log, const struct fs_parameter_spec *p,
 		     struct fs_parameter *param, struct fs_parse_result *result)
 {
@@ -225,13 +226,16 @@ int fs_param_is_bool(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_bool);
 
-int fs_param_is_u32(struct p_log *log, const struct fs_parameter_spec *p,
-		    struct fs_parameter *param, struct fs_parse_result *result)
+/*文件系统参数转u32类型*/
+int fs_param_is_u32(struct p_log *log, const struct fs_parameter_spec *p/*转换源的元数据*/,
+		    struct fs_parameter *param/*转换源*/, struct fs_parse_result *result/*转换结果*/)
 {
 	int base = (unsigned long)p->data;
 	if (param->type != fs_value_is_string)
+		/*必须为string类型*/
 		return fs_param_bad_value(log, param);
 	if (!*param->string && (p->flags & fs_param_can_be_empty))
+		/*容许为空时，采用0*/
 		return 0;
 	if (kstrtouint(param->string, base, &result->uint_32) < 0)
 		return fs_param_bad_value(log, param);
@@ -239,6 +243,7 @@ int fs_param_is_u32(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_u32);
 
+/*文件系统参数转s32类型*/
 int fs_param_is_s32(struct p_log *log, const struct fs_parameter_spec *p,
 		    struct fs_parameter *param, struct fs_parse_result *result)
 {
@@ -252,6 +257,7 @@ int fs_param_is_s32(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_s32);
 
+/*文件系统参数转u64类型*/
 int fs_param_is_u64(struct p_log *log, const struct fs_parameter_spec *p,
 		    struct fs_parameter *param, struct fs_parse_result *result)
 {
@@ -265,6 +271,7 @@ int fs_param_is_u64(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_u64);
 
+/*文件系统参数转枚举类型*/
 int fs_param_is_enum(struct p_log *log, const struct fs_parameter_spec *p,
 		     struct fs_parameter *param, struct fs_parse_result *result)
 {
@@ -281,6 +288,7 @@ int fs_param_is_enum(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_enum);
 
+/*文件系统参数转字符串类型*/
 int fs_param_is_string(struct p_log *log, const struct fs_parameter_spec *p,
 		       struct fs_parameter *param, struct fs_parse_result *result)
 {

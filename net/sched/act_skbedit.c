@@ -52,8 +52,10 @@ TC_INDIRECT_SCOPE int tcf_skbedit_act(struct sk_buff *skb,
 	params = rcu_dereference_bh(d->params);
 	action = READ_ONCE(d->tcf_action);
 
+	/*自params中设置priority*/
 	if (params->flags & SKBEDIT_F_PRIORITY)
 		skb->priority = params->priority;
+
 	//提取报文tos，填充skb->priority
 	if (params->flags & SKBEDIT_F_INHERITDSFIELD) {
 		int wlen = skb_network_offset(skb);
@@ -63,6 +65,7 @@ TC_INDIRECT_SCOPE int tcf_skbedit_act(struct sk_buff *skb,
 			wlen += sizeof(struct iphdr);
 			if (!pskb_may_pull(skb, wlen))
 				goto err;
+			/*丢弃掉低位的2个bits*/
 			skb->priority = ipv4_get_dsfield(ip_hdr(skb)) >> 2;
 			break;
 
@@ -75,18 +78,22 @@ TC_INDIRECT_SCOPE int tcf_skbedit_act(struct sk_buff *skb,
 		}
 	}
 
-	//置mark,queue_mapping,pkt_type
 	if (params->flags & SKBEDIT_F_QUEUE_MAPPING &&
 	    skb->dev->real_num_tx_queues > params->queue_mapping) {
+		/*参数指明要变更，且参数合规，则更新报文的queue_mapping*/
 #ifdef CONFIG_NET_EGRESS
 		netdev_xmit_skip_txqueue(true);
 #endif
 		skb_set_queue_mapping(skb, tcf_skbedit_hash(params, skb));
 	}
+
+	/*取params中指定的mark*/
 	if (params->flags & SKBEDIT_F_MARK) {
 		skb->mark &= ~params->mask;
 		skb->mark |= params->mark & params->mask;
 	}
+
+	/*取params中指定的pkt_type*/
 	if (params->flags & SKBEDIT_F_PTYPE)
 		skb->pkt_type = params->ptype;
 	return action;

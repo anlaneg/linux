@@ -280,6 +280,7 @@ static int sock_diag_rcv_msg(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 static DEFINE_MUTEX(sock_diag_mutex);
 
+/*接收*/
 static void sock_diag_rcv(struct sk_buff *skb)
 {
 	mutex_lock(&sock_diag_mutex);

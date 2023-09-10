@@ -3341,6 +3341,7 @@ static int mlx5e_modify_channels_vsd(struct mlx5e_channels *chs, bool vsd)
 	return 0;
 }
 
+/*默认初始化为每个tc可发任意队列*/
 static void mlx5e_mqprio_build_default_tc_to_txq(struct netdev_tc_txq *tc_to_txq,
 						 int ntc, int nch)
 {
@@ -3419,11 +3420,12 @@ static int mlx5e_setup_tc_mqprio_dcb(struct mlx5e_priv *priv,
 				     struct tc_mqprio_qopt *mqprio)
 {
 	struct mlx5e_params new_params;
-	u8 tc = mqprio->num_tc;
+	u8 tc = mqprio->num_tc;/*支持的tc数目*/
 	int err;
 
 	mqprio->hw = TC_MQPRIO_HW_OFFLOAD_TCS;
 
+	/*检查tc num是否合适*/
 	if (tc && tc != MLX5E_MAX_NUM_TC)
 		return -EINVAL;
 
@@ -3469,10 +3471,12 @@ static int mlx5e_mqprio_channel_validate(struct mlx5e_priv *priv,
 			return -EINVAL;
 		}
 		if (mqprio->min_rate[i]) {
+			/*此模式当前不支持min rate*/
 			netdev_err(netdev, "Min tx rate is not supported\n");
 			return -EINVAL;
 		}
 
+		/*支持最大rate*/
 		if (mqprio->max_rate[i]) {
 			int err;
 
@@ -3616,6 +3620,7 @@ static int mlx5e_setup_tc(struct net_device *dev, enum tc_setup_type type,
 						  priv, priv, true);
 	}
 	case TC_SETUP_QDISC_MQPRIO:
+		/*针对mqprio进行卸载*/
 		mutex_lock(&priv->state_lock);
 		err = mlx5e_setup_tc_mqprio(priv, type_data);
 		mutex_unlock(&priv->state_lock);
@@ -4447,6 +4452,7 @@ static int mlx5e_set_vf_spoofchk(struct net_device *dev, int vf, bool setting)
 	return mlx5_eswitch_set_vport_spoofchk(mdev->priv.eswitch, vf + 1, setting);
 }
 
+/*设置vf trust*/
 static int mlx5e_set_vf_trust(struct net_device *dev, int vf, bool setting)
 {
 	struct mlx5e_priv *priv = netdev_priv(dev);
@@ -4500,6 +4506,7 @@ static int mlx5e_set_vf_link_state(struct net_device *dev, int vf,
 					    mlx5_ifla_link2vport(link_state));
 }
 
+/*获取vf配置信息*/
 int mlx5e_get_vf_config(struct net_device *dev,
 			int vf, struct ifla_vf_info *ivi)
 {
@@ -4510,7 +4517,7 @@ int mlx5e_get_vf_config(struct net_device *dev,
 	if (!netif_device_present(dev))
 		return -EOPNOTSUPP;
 
-	err = mlx5_eswitch_get_vport_config(mdev->priv.eswitch, vf + 1, ivi);
+	err = mlx5_eswitch_get_vport_config(mdev->priv.eswitch, vf + 1/*vf编号从1开始，但kernel从零开始*/, ivi);
 	if (err)
 		return err;
 	ivi->linkstate = mlx5_vport_link2ifla(ivi->linkstate);
@@ -4860,6 +4867,7 @@ static int mlx5e_bridge_setlink(struct net_device *dev, struct nlmsghdr *nlh,
 	if (!br_spec)
 		return -EINVAL;
 
+	/*当前仅支持对bridge mode进行设置*/
 	nla_for_each_nested(attr, br_spec, rem) {
 		if (nla_type(attr) != IFLA_BRIDGE_MODE)
 			continue;

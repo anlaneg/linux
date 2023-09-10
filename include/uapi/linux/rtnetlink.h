@@ -630,7 +630,7 @@ struct tcmsg {
 	int		tcm_ifindex;
 	//唯一确定一条filter或者qdisc
 	__u32		tcm_handle;
-	/*如果申请ingress类型qdisc,则此值为TC_H_INGRESS*/
+	/*各类型自已解析，如果申请ingress类型qdisc,则此值为TC_H_INGRESS*/
 	__u32		tcm_parent;
 /* tcm_block_index is used instead of tcm_parent
  * in case tcm_ifindex == TCM_IFINDEX_MAGIC_BLOCK

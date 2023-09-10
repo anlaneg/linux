@@ -306,7 +306,7 @@ struct mlx5e_params {
 	u16 num_channels;//生效的channel数目
 	struct {
 		u16 mode;
-		u8 num_tc;
+		u8 num_tc;/*tc的数目*/
 		struct netdev_tc_txq tc_to_txq[TC_MAX_QUEUE];
 		struct {
 			u64 max_rate[TC_MAX_QUEUE];

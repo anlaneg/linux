@@ -89,6 +89,7 @@ struct ib_ucontext *ib_uverbs_get_ucontext_file(struct ib_uverbs_file *ufile)
 	 * srcu is used. It does not matter if someone races this with
 	 * get_context, we get NULL or valid ucontext.
 	 */
+	/*由ufile获得ib_ucontext*/
 	struct ib_ucontext *ucontext = smp_load_acquire(&ufile->ucontext);
 
 	if (!srcu_dereference(ufile->device->ib_dev,
@@ -897,6 +898,7 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 	int module_dependent;
 	int srcu_key;
 
+	/*取得uverbs_device*/
 	dev = container_of(inode->i_cdev, struct ib_uverbs_device, cdev);
 	if (!refcount_inc_not_zero(&dev->refcount))
 		return -ENXIO;
@@ -912,6 +914,7 @@ static int ib_uverbs_open(struct inode *inode, struct file *filp)
 	}
 
 	if (!rdma_dev_access_netns(ib_dev, current->nsproxy->net_ns)) {
+		/*在此netns下，此设备不容许被访问*/
 		ret = -EPERM;
 		goto err;
 	}
@@ -1038,9 +1041,9 @@ static int ib_uverbs_get_nl_info(struct ib_device *ibdev, void *client_data,
 static struct ib_client uverbs_client = {
 	.name   = "uverbs",
 	.no_kverbs_req = true,
-	/*添加一个ib-device设备时调用*/
+	/*为ib设备添加uverbs_dev*/
 	.add    = ib_uverbs_add_one,
-	/*移除一个ib-device设备时调用*/
+	/*移除设备的uverbs_dev*/
 	.remove = ib_uverbs_remove_one,
 	.get_nl_info = ib_uverbs_get_nl_info,
 };
@@ -1113,7 +1116,7 @@ static int ib_uverbs_create_uapi(struct ib_device *device,
 	return 0;
 }
 
-/*ib_device加入时，uverbs模块的此函数将被调用*/
+/*ib_device被加入时，uverbs模块的此函数将被调用，用于为device附加uvers client*/
 static int ib_uverbs_add_one(struct ib_device *device)
 {
 	int devnum;
@@ -1122,6 +1125,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	int ret;
 
 	if (!device->ops.alloc_ucontext)
+		/*ib设备必须支持alloc ucontext*/
 		return -EOPNOTSUPP;
 
 	/*uverbs_dev内存申请*/
@@ -1136,7 +1140,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	}
 
 	device_initialize(&uverbs_dev->dev);
-	uverbs_dev->dev.class = uverbs_class;
+	uverbs_dev->dev.class = uverbs_class;/*此设备为uverbs class*/
 	uverbs_dev->dev.parent = device->dev.parent;
 	uverbs_dev->dev.release = ib_uverbs_release_dev;
 	uverbs_dev->groups[0] = &dev_attr_group;
@@ -1150,7 +1154,7 @@ static int ib_uverbs_add_one(struct ib_device *device)
 	rcu_assign_pointer(uverbs_dev->ib_dev, device);
 	uverbs_dev->num_comp_vectors = device->num_comp_vectors;
 
-	/*分配devnum*/
+	/*为此设备分配uverbs的devnum*/
 	devnum = ida_alloc_max(&uverbs_ida, IB_UVERBS_MAX_DEVICES - 1,
 			       GFP_KERNEL);
 	if (devnum < 0) {

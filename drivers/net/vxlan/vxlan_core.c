@@ -1196,6 +1196,7 @@ static int vxlan_fdb_parse(struct nlattr *tb[], struct vxlan_dev *vxlan,
 		*port = vxlan->cfg.dst_port;
 	}
 
+	/*解析vni信息*/
 	if (tb[NDA_VNI]) {
 		if (nla_len(tb[NDA_VNI]) != sizeof(u32)) {
 			NL_SET_ERR_MSG(extack, "Invalid vni");
@@ -1276,6 +1277,7 @@ static int vxlan_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 
 	hash_index = fdb_head_index(vxlan, addr, src_vni);
 	spin_lock_bh(&vxlan->hash_lock[hash_index]);
+	/*更新vxlan fdb表*/
 	err = vxlan_fdb_update(vxlan, addr, &ip, ndm->ndm_state, flags,
 			       port, src_vni, vni, ifindex,
 			       ndm->ndm_flags | NTF_VXLAN_ADDED_BY_USER,

@@ -413,16 +413,18 @@ out:
 }
 
 int module_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
-		       char *name, char *module_name, int *exported)
+		       char *name, char *module_name/*出参，符号所属的模块名称*/, int *exported/*出参，标明符号是否为导出符号*/)
 {
 	struct module *mod;
 
 	preempt_disable();
+	/*遍历当前加载的所有kernel module*/
 	list_for_each_entry_rcu(mod, &modules, list) {
 		struct mod_kallsyms *kallsyms;
 
 		if (mod->state == MODULE_STATE_UNFORMED)
 			continue;
+		/*取此module所有符号*/
 		kallsyms = rcu_dereference_sched(mod->kallsyms);
 		if (symnum < kallsyms->num_symtab) {
 			const Elf_Sym *sym = &kallsyms->symtab[symnum];
@@ -435,6 +437,7 @@ int module_get_kallsym(unsigned int symnum, unsigned long *value, char *type,
 			preempt_enable();
 			return 0;
 		}
+		/*当前modules已被遍历，减少偏移量，尝试下一个模块*/
 		symnum -= kallsyms->num_symtab;
 	}
 	preempt_enable();

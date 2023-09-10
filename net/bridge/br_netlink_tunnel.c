@@ -206,11 +206,13 @@ int br_vlan_tunnel_info(const struct net_bridge_port *p, int cmd,
 
 	switch (cmd) {
 	case RTM_SETLINK:
+		/*执行vlan tunnel添加*/
 		err = nbp_vlan_tunnel_info_add(p, vid, tun_id);
 		if (!err)
 			*changed = true;
 		break;
 	case RTM_DELLINK:
+		/*执行vlan tunnel移除*/
 		if (!nbp_vlan_tunnel_info_delete(p, vid))
 			*changed = true;
 		break;
@@ -219,6 +221,7 @@ int br_vlan_tunnel_info(const struct net_bridge_port *p, int cmd,
 	return err;
 }
 
+/*取配置指定的vlan id,vni ,flags*/
 int br_parse_vlan_tunnel_info(struct nlattr *attr,
 			      struct vtunnel_info *tinfo)
 {
@@ -266,6 +269,7 @@ static void __vlan_tunnel_handle_range(const struct net_bridge_port *p,
 	if (!vg)
 		return;
 
+	/*在vlan group中查找此vlan*/
 	v = br_vlan_find(vg, v_curr);
 
 	if (!*v_start)
@@ -292,23 +296,30 @@ int br_process_vlan_tunnel_info(const struct net_bridge *br,
 	int err;
 
 	if (tinfo_curr->flags & BRIDGE_VLAN_INFO_RANGE_BEGIN) {
+		/*begin已配置*/
 		if (tinfo_last->flags & BRIDGE_VLAN_INFO_RANGE_BEGIN)
 			return -EINVAL;
+		/*第一次遇到begin,记录在tinfo_last中*/
 		memcpy(tinfo_last, tinfo_curr, sizeof(struct vtunnel_info));
 	} else if (tinfo_curr->flags & BRIDGE_VLAN_INFO_RANGE_END) {
+		/*遇到end,开始处理，begin保存在tinfo_last中*/
 		struct net_bridge_vlan *v_start = NULL, *v_end = NULL;
 		int t, v;
 
 		if (!(tinfo_last->flags & BRIDGE_VLAN_INFO_RANGE_BEGIN))
+			/*tinfo_last必须为begin*/
 			return -EINVAL;
 		if ((tinfo_curr->vid - tinfo_last->vid) !=
 		    (tinfo_curr->tunid - tinfo_last->tunid))
+			/*vid必须与tunnel id一一对应*/
 			return -EINVAL;
+
+		/*逐个调用br_vlan_tunnel_info进行添加*/
 		t = tinfo_last->tunid;
 		for (v = tinfo_last->vid; v <= tinfo_curr->vid; v++) {
 			bool curr_change = false;
 
-			err = br_vlan_tunnel_info(p, cmd, v, t, &curr_change);
+			err = br_vlan_tunnel_info(p, cmd, v/*当前vlan id*/, t/*当前tunnel id*/, &curr_change);
 			if (err)
 				break;
 			t++;
@@ -327,8 +338,10 @@ int br_process_vlan_tunnel_info(const struct net_bridge *br,
 		memset(tinfo_last, 0, sizeof(struct vtunnel_info));
 		memset(tinfo_curr, 0, sizeof(struct vtunnel_info));
 	} else {
+		/*这种是单个vlan tunnel info的情况，直接处理*/
 		if (tinfo_last->flags)
 			return -EINVAL;
+		/*执行添加*/
 		err = br_vlan_tunnel_info(p, cmd, tinfo_curr->vid,
 					  tinfo_curr->tunid, changed);
 		if (err)

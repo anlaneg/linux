@@ -999,7 +999,7 @@ repeat:
 #define LAST_INO_BATCH 1024
 static DEFINE_PER_CPU(unsigned int, last_ino);
 
-/*分配一个ino*/
+/*分配一个ino编号*/
 unsigned int get_next_ino(void)
 {
 	unsigned int *p = &get_cpu_var(last_ino);/*取当前cpu上的last ino*/

@@ -113,12 +113,12 @@ struct work_struct {
 	ATOMIC_LONG_INIT((unsigned long)(WORK_STRUCT_NO_POOL | WORK_STRUCT_STATIC))
 
 struct delayed_work {
-	struct work_struct work;
+	struct work_struct work;//要延迟执行的work
 	struct timer_list timer;//延迟用定时器
 
 	/* target workqueue and CPU ->timer uses to queue ->work */
-	struct workqueue_struct *wq;
-	int cpu;
+	struct workqueue_struct *wq;/*在哪个workqueue上延迟执行*/
+	int cpu;/*在哪个cpu上延迟执行*/
 };
 
 struct rcu_work {
@@ -188,15 +188,19 @@ struct execute_work {
 	__WORK_INIT_LOCKDEP_MAP(#n, &(n))				\
 	}
 
+/*设置要延迟指定的work function*/
 #define __DELAYED_WORK_INITIALIZER(n, f, tflags) {			\
 	.work = __WORK_INITIALIZER((n).work, (f)),			\
+	/*设置timer到期时，将此work加入到工作队列*/\
 	.timer = __TIMER_INITIALIZER(delayed_work_timer_fn,\
 				     (tflags) | TIMER_IRQSAFE),		\
 	}
 
+/*声明并初始化work的工作函数*/
 #define DECLARE_WORK(n, f)						\
 	struct work_struct n = __WORK_INITIALIZER(n, f)
 
+/*声明并初始化可延迟work的工作函数*/
 #define DECLARE_DELAYED_WORK(n, f)					\
 	struct delayed_work n = __DELAYED_WORK_INITIALIZER(n, f, 0)
 
@@ -240,6 +244,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 /*初始化work结构体*/
 #define __INIT_WORK(_work, _func, _onstack)				\
 	do {								\
+		/*debug用，常实现为空*/\
 		__init_work((_work), _onstack);				\
 		(_work)->data = (atomic_long_t) WORK_DATA_INIT();	\
 		INIT_LIST_HEAD(&(_work)->entry);			\
@@ -248,14 +253,14 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 	} while (0)
 #endif
 
-/*设置work的执行函数*/
+/*work初始化，设置work的执行函数*/
 #define INIT_WORK(_work, _func)						\
 	__INIT_WORK((_work), (_func), 0)
 
 #define INIT_WORK_ONSTACK(_work, _func)					\
 	__INIT_WORK((_work), (_func), 1)
 
-//初始化延迟work
+//初始化可延迟work，见delayed_work结构体
 #define __INIT_DELAYED_WORK(_work, _func, _tflags)			\
 	do {								\
 		/*设置work的回调*/\
@@ -274,7 +279,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 				      (_tflags) | TIMER_IRQSAFE);	\
 	} while (0)
 
-/*初始化延迟work*/
+/*初始化可延迟work，见rcu_work*/
 #define INIT_DELAYED_WORK(_work, _func)					\
 	__INIT_DELAYED_WORK(_work, _func, 0)
 
@@ -287,6 +292,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 #define INIT_DEFERRABLE_WORK_ONSTACK(_work, _func)			\
 	__INIT_DELAYED_WORK_ONSTACK(_work, _func, TIMER_DEFERRABLE)
 
+/*初始化rcu work*/
 #define INIT_RCU_WORK(_work, _func)					\
 	INIT_WORK(&(_work)->work, (_func))
 

@@ -27,6 +27,7 @@ struct rdma_counter_mode {
 
 struct rdma_port_counter {
 	struct rdma_counter_mode mode;
+	/*port统计数据，由alloc_hw_port_stats回调负责空间申请*/
 	struct rdma_hw_stats *hstats;
 	unsigned int num_counters;
 	struct mutex lock;

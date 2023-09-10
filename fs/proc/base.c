@@ -3274,6 +3274,7 @@ static const struct pid_entry tgid_base_stuff[] = {
 	LNK("root",       proc_root_link),
 	LNK("exe",        proc_exe_link),
 	REG("mounts",     S_IRUGO, proc_mounts_operations),
+	/*显示当前进程的挂载信息*/
 	REG("mountinfo",  S_IRUGO, proc_mountinfo_operations),
 	REG("mountstats", S_IRUSR, proc_mountstats_operations),
 #ifdef CONFIG_PROC_PAGE_MONITOR

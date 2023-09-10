@@ -1839,6 +1839,7 @@ struct file_operations {
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
 	/*用于提供未被do_vfs_ioctl支持的定制版ioctl命令*/
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
+	/*将此file映射到给定的vm_area区域*/
 	int (*mmap) (struct file *, struct vm_area_struct *);
 	unsigned long mmap_supported_flags;
 	//文件打开函数(通过inode打开file)

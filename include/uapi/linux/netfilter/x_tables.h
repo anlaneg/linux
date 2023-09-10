@@ -46,7 +46,7 @@ struct xt_entry_target {
 			__u16 target_size;
 
 			/* Used inside the kernel */
-			struct xt_target *target;
+			struct xt_target *target;/*记录对应的kernel iptables target*/
 		} kernel;
 
 		/* Total length */

@@ -7310,6 +7310,7 @@ int ftrace_mod_get_kallsym(unsigned int symnum, unsigned long *value,
 	int ret;
 
 	preempt_disable();
+	/*遍历ftrace_mod_map*/
 	list_for_each_entry_rcu(mod_map, &ftrace_mod_maps, list) {
 
 		if (symnum >= mod_map->num_funcs) {
@@ -7323,11 +7324,12 @@ int ftrace_mod_get_kallsym(unsigned int symnum, unsigned long *value,
 				continue;
 			}
 
+			/*取符号地址*/
 			*value = mod_func->ip;
-			*type = 'T';
+			*type = 'T';/*类型为T*/
 			strlcpy(name, mod_func->name, KSYM_NAME_LEN);
 			strlcpy(module_name, mod_map->mod->name, MODULE_NAME_LEN);
-			*exported = 1;
+			*exported = 1;/*指明导出*/
 			preempt_enable();
 			return 0;
 		}

@@ -107,7 +107,7 @@ struct file_region {
 struct hugetlb_vma_lock {
 	struct kref refs;
 	struct rw_semaphore rw_sema;
-	struct vm_area_struct *vma;
+	struct vm_area_struct *vma;/*对应的vma*/
 };
 
 extern struct resv_map *resv_map_alloc(void);
@@ -115,6 +115,7 @@ void resv_map_release(struct kref *ref);
 
 extern spinlock_t hugetlb_lock;
 extern int hugetlb_max_hstate __read_mostly;
+/*遍历hstates数组*/
 #define for_each_hstate(h) \
 	for ((h) = hstates; (h) < &hstates[hugetlb_max_hstate]; (h)++)
 
@@ -533,6 +534,7 @@ extern const struct vm_operations_struct hugetlb_vm_ops;
 struct file *hugetlb_file_setup(const char *name, size_t size, vm_flags_t acct,
 				int creat_flags, int page_size_log);
 
+/*检查这个文件是否为大页文件*/
 static inline bool is_file_hugepages(struct file *file)
 {
 	if (file->f_op == &hugetlbfs_file_operations)
@@ -623,29 +625,36 @@ enum hugetlb_page_flags {
 static __always_inline						\
 bool folio_test_hugetlb_##flname(struct folio *folio)		\
 	{	void *private = &folio->private;		\
+		/*检查folio->private是否有标记HPG_##flname(大页相关标记）*/\
 		return test_bit(HPG_##flname, private);		\
 	}							\
 static inline int HPage##uname(struct page *page)		\
+	/*检查page->private是否有标记HPG_##flname(大页相关标记）*/\
 	{ return test_bit(HPG_##flname, &(page->private)); }
 
 #define SETHPAGEFLAG(uname, flname)				\
 static __always_inline						\
 void folio_set_hugetlb_##flname(struct folio *folio)		\
 	{	void *private = &folio->private;		\
+		/*为folio->private添加HPG_##flname标记（大页相关标记）*/\
 		set_bit(HPG_##flname, private);			\
 	}							\
 static inline void SetHPage##uname(struct page *page)		\
+	/*为page->private添加HPG_##flname标记（大页相关标记）*/\
 	{ set_bit(HPG_##flname, &(page->private)); }
 
 #define CLEARHPAGEFLAG(uname, flname)				\
 static __always_inline						\
 void folio_clear_hugetlb_##flname(struct folio *folio)		\
 	{	void *private = &folio->private;		\
+		/*移除folio->private上的HPG_##flname标记（大页相关标记）*/\
 		clear_bit(HPG_##flname, private);		\
 	}							\
 static inline void ClearHPage##uname(struct page *page)		\
+	/*移除page->private上的HPG_##flname标记（大页相关标记）*/\
 	{ clear_bit(HPG_##flname, &(page->private)); }
 #else
+	/*将以上函数的实现置为空*/
 #define TESTHPAGEFLAG(uname, flname)				\
 static inline bool						\
 folio_test_hugetlb_##flname(struct folio *folio)		\
@@ -668,6 +677,7 @@ static inline void ClearHPage##uname(struct page *page)		\
 	{ }
 #endif
 
+/*定义Huge page的 test/set/clear三种描记函数（folio,page参数）*/
 #define HPAGEFLAG(uname, flname)				\
 	TESTHPAGEFLAG(uname, flname)				\
 	SETHPAGEFLAG(uname, flname)				\
@@ -679,7 +689,7 @@ static inline void ClearHPage##uname(struct page *page)		\
 HPAGEFLAG(RestoreReserve, restore_reserve)
 HPAGEFLAG(Migratable, migratable)
 HPAGEFLAG(Temporary, temporary)
-HPAGEFLAG(Freed, freed)
+HPAGEFLAG(Freed, freed)/*freed标记，标明此大页已释放*/
 HPAGEFLAG(VmemmapOptimized, vmemmap_optimized)
 HPAGEFLAG(RawHwpUnreliable, raw_hwp_unreliable)
 
@@ -691,27 +701,30 @@ struct hstate {
 	struct mutex resize_lock;
 	int next_nid_to_alloc;
 	int next_nid_to_free;
-	unsigned int order;/*大页的页size (PAGE_SIZE << order）*/
+	unsigned int order;/*大页的页大小： (PAGE_SIZE << order），1<<order即为当前大页占用的普页数*/
 	unsigned int demote_order;
-	unsigned long mask;/*大页size对应的掩码 ~((PAGE_SIZE << order)-1)*/
+	unsigned long mask;/*大页size对应的掩码，与上此值即可页号： ~((PAGE_SIZE << order)-1)*/
 	unsigned long max_huge_pages;
-	unsigned long nr_huge_pages;
-	unsigned long free_huge_pages;
-	unsigned long resv_huge_pages;
-	unsigned long surplus_huge_pages;
+	unsigned long nr_huge_pages;/*此类型大页总可用数目（各node总和）*/
+	unsigned long free_huge_pages;/*此类型大页空闲数目（各node总和)*/
+	unsigned long resv_huge_pages;/*预留的此类型大页数目*/
+	unsigned long surplus_huge_pages;/*需要释放，但还未释放的大页数目*/
+	/*指定如果应用程序请求比nr_hugepages更多的大页面，大页面池可以增长多大*/
 	unsigned long nr_overcommit_huge_pages;
 	struct list_head hugepage_activelist;
 	struct list_head hugepage_freelists[MAX_NUMNODES];
 	unsigned int max_huge_pages_node[MAX_NUMNODES];
+	/*此类型大页总可用数目（关心node的情况，按node进行划分）*/
 	unsigned int nr_huge_pages_node[MAX_NUMNODES];
-	unsigned int free_huge_pages_node[MAX_NUMNODES];
+	unsigned int free_huge_pages_node[MAX_NUMNODES];/*此类型大页空闲数目（区分numa node)*/
 	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
 #ifdef CONFIG_CGROUP_HUGETLB
 	/* cgroup control files */
-	struct cftype cgroup_files_dfl[8];
+	struct cftype cgroup_files_dfl[8];/*cgroup控制文件*/
+	/*对应的各cgroup限制维度*/
 	struct cftype cgroup_files_legacy[10];
 #endif
-	char name[HSTATE_NAME_LEN];
+	char name[HSTATE_NAME_LEN];/*各大页名称，例如hugepages-2048kB*/
 };
 
 struct huge_bootmem_page {
@@ -747,6 +760,7 @@ struct hstate *size_to_hstate(unsigned long size);
 extern struct hstate hstates[HUGE_MAX_HSTATE];
 extern unsigned int default_hstate_idx;
 
+/*default_hstate_idx是default的索引,故定义default hstate*/
 #define default_hstate (hstates[default_hstate_idx])
 
 static inline struct hugepage_subpool *hugetlb_folio_subpool(struct folio *folio)
@@ -793,12 +807,13 @@ static inline struct hstate *hstate_sizelog(int page_size_log)
 	return NULL;
 }
 
+/*通过vma获取其对应的hstate*/
 static inline struct hstate *hstate_vma(struct vm_area_struct *vma)
 {
 	return hstate_file(vma->vm_file);
 }
 
-/*大页大小*/
+/*取hstate对应的大页大小*/
 static inline unsigned long huge_page_size(const struct hstate *h)
 {
 	return (unsigned long)PAGE_SIZE << h->order;
@@ -813,6 +828,7 @@ static inline unsigned long huge_page_mask(struct hstate *h)
 	return h->mask;
 }
 
+/*返回hstate对应的order,这个值是针对page_size而言的order*/
 static inline unsigned int huge_page_order(struct hstate *h)
 {
 	return h->order;
@@ -828,6 +844,7 @@ static inline bool hstate_is_gigantic(struct hstate *h)
 	return huge_page_order(h) >= MAX_ORDER;
 }
 
+/*此大页的页size，占普通页的页数*/
 static inline unsigned int pages_per_huge_page(const struct hstate *h)
 {
 	return 1 << h->order;
@@ -1260,6 +1277,7 @@ bool want_pmd_share(struct vm_area_struct *vma, unsigned long addr);
 
 static inline bool __vma_shareable_lock(struct vm_area_struct *vma)
 {
+	/*检查此vm area是否share*/
 	return (vma->vm_flags & VM_MAYSHARE) && vma->vm_private_data;
 }
 
@@ -1286,6 +1304,7 @@ hugetlb_walk(struct vm_area_struct *vma, unsigned long addr, unsigned long sz)
 			     !lockdep_is_held(
 				 &vma->vm_file->f_mapping->i_mmap_rwsem));
 #endif
+	/*结合当前进程的mm,确定地址对应的pte_t*/
 	return huge_pte_offset(vma->vm_mm, addr, sz);
 }
 

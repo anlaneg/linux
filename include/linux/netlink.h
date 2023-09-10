@@ -182,6 +182,7 @@ struct netlink_ext_ack {
 								\
 	__retval = !__tb[__attr];				\
 	if (__retval)						\
+	/*此属性未配置*/\
 		NL_SET_ERR_ATTR_MISS((extack), (nest), __attr);	\
 	__retval;						\
 })

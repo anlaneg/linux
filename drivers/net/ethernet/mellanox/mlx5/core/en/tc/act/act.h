@@ -38,6 +38,7 @@ struct mlx5e_tc_act_branch_ctrl {
 };
 
 struct mlx5e_tc_act {
+	/*检查是否容许offload*/
 	bool (*can_offload)(struct mlx5e_tc_act_parse_state *parse_state,
 			    const struct flow_action_entry *act,
 			    int act_index,

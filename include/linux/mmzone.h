@@ -1017,11 +1017,13 @@ static inline unsigned long zone_cma_pages(struct zone *zone)
 #endif
 }
 
+/*检查此zone的页帧尾号*/
 static inline unsigned long zone_end_pfn(const struct zone *zone)
 {
 	return zone->zone_start_pfn + zone->spanned_pages;
 }
 
+/*检查此zone是否可包含pfn对应的页帧编号*/
 static inline bool zone_spans_pfn(const struct zone *zone, unsigned long pfn)
 {
 	return zone->zone_start_pfn <= pfn && pfn < zone_end_pfn(zone);
@@ -1083,6 +1085,7 @@ static inline bool zone_is_empty(struct zone *zone)
 #define KASAN_TAG_MASK		((1UL << KASAN_TAG_WIDTH) - 1)
 #define ZONEID_MASK		((1UL << ZONEID_SHIFT) - 1)
 
+/*由page获得zone type*/
 static inline enum zone_type page_zonenum(const struct page *page)
 {
 	ASSERT_EXCLUSIVE_BITS(page->flags, ZONES_MASK << ZONES_PGSHIFT);
@@ -1754,6 +1757,7 @@ static inline bool movable_only_nodes(nodemask_t *nodes)
 #define PA_SECTION_SHIFT	(SECTION_SIZE_BITS)
 #define PFN_SECTION_SHIFT	(SECTION_SIZE_BITS - PAGE_SHIFT)
 
+/*最大有NR_MEM_SECTIONS个mem_seciton*/
 #define NR_MEM_SECTIONS		(1UL << SECTIONS_SHIFT)
 
 #define PAGES_PER_SECTION       (1UL << PFN_SECTION_SHIFT)
@@ -1766,10 +1770,13 @@ static inline bool movable_only_nodes(nodemask_t *nodes)
 #error Allocator MAX_ORDER exceeds SECTION_SIZE
 #endif
 
+/*由页帧编号映射到section number*/
 static inline unsigned long pfn_to_section_nr(unsigned long pfn)
 {
 	return pfn >> PFN_SECTION_SHIFT;
 }
+
+/*由section number映射到页帧编号*/
 static inline unsigned long section_nr_to_pfn(unsigned long sec)
 {
 	return sec << PFN_SECTION_SHIFT;
@@ -1837,16 +1844,21 @@ struct mem_section {
 };
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
+/*一个页里可以用多少个mem_section*/
 #define SECTIONS_PER_ROOT       (PAGE_SIZE / sizeof (struct mem_section))
 #else
 #define SECTIONS_PER_ROOT	1
 #endif
-
+/*sec号mem_section在第几个页里*/
 #define SECTION_NR_TO_ROOT(sec)	((sec) / SECTIONS_PER_ROOT)
+/*最大有NR_MEM_SECTIONS个mem_seciton,故共有NR_SECTION_ROOTS个页*/
 #define NR_SECTION_ROOTS	DIV_ROUND_UP(NR_MEM_SECTIONS, SECTIONS_PER_ROOT)
 #define SECTION_ROOT_MASK	(SECTIONS_PER_ROOT - 1)
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
+/*记录系统中所有mem_section
+ * (从实现来看，其是连续内存，共有NR_SECTION_ROOTS个页，
+ * 且每个页中有SECTIONS_PER_ROOT个struct mem_section)*/
 extern struct mem_section **mem_section;
 #else
 extern struct mem_section mem_section[NR_SECTION_ROOTS][SECTIONS_PER_ROOT];
@@ -1857,17 +1869,21 @@ static inline unsigned long *section_to_usemap(struct mem_section *ms)
 	return ms->usage->pageblock_flags;
 }
 
+/*取nr号mem_section*/
 static inline struct mem_section *__nr_to_section(unsigned long nr)
 {
 	unsigned long root = SECTION_NR_TO_ROOT(nr);
 
+	/*mem_section所属的page无效，返回NULL*/
 	if (unlikely(root >= NR_SECTION_ROOTS))
 		return NULL;
 
 #ifdef CONFIG_SPARSEMEM_EXTREME
+	/*mem_section为空或者root号section为空，返回NULL*/
 	if (!mem_section || !mem_section[root])
 		return NULL;
 #endif
+	/*取nr对应的mem_section*/
 	return &mem_section[root][nr & SECTION_ROOT_MASK];
 }
 extern size_t mem_section_usage_size(void);
@@ -1942,6 +1958,7 @@ static inline int valid_section_nr(unsigned long nr)
 	return valid_section(__nr_to_section(nr));
 }
 
+/*检查此section是否online*/
 static inline int online_section(struct mem_section *section)
 {
 	return (section && (section->section_mem_map & SECTION_IS_ONLINE));

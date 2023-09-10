@@ -37,17 +37,19 @@ fs_param_type fs_param_is_bool, fs_param_is_u32, fs_param_is_s32, fs_param_is_u6
  * should be used to generate elements of this type.
  */
 struct fs_parameter_spec {
+	/*文件参数名称*/
 	const char		*name;
-	//此值为NULL时，标记是一个flag参数，否则表示回调，完成参数到值的转换
+	//此值为NULL时，标记是一个flag参数，否则表示回调函数，用于完成字符串参数到值的转换
 	fs_param_type		*type;	/* The desired parameter type */
 	//选项编号
 	u8			opt;	/* Option number (returned by fs_parse()) */
+	/*文件参数标记，如下示，例如容许为空*/
 	unsigned short		flags;
 	//指明noxxx是反选项
 #define fs_param_neg_with_no	0x0002	/* "noxxx" is negative param */
 #define fs_param_can_be_empty	0x0004	/* "xxx=" is allowed */
 #define fs_param_deprecated	0x0008	/* The param is deprecated */
-	const void		*data;
+	const void		*data;/*各type回调进行解释，例如u32类型时，可表示数据基数，例如10进制*/
 };
 
 /*
@@ -122,7 +124,7 @@ static inline bool fs_validate_description(const char *name,
 #define fsparam_flag_no(NAME, OPT) \
 			__fsparam(NULL, NAME, OPT, fs_param_neg_with_no, NULL)
 #define fsparam_bool(NAME, OPT)	__fsparam(fs_param_is_bool, NAME, OPT, 0, NULL)
-#define fsparam_u32(NAME, OPT)	__fsparam(fs_param_is_u32, NAME, OPT, 0, NULL)
+#define fsparam_u32(NAME/*参数名称*/, OPT/*参数对应的选项id*/)	__fsparam(fs_param_is_u32, NAME, OPT, 0, NULL)
 #define fsparam_u32oct(NAME, OPT) \
 			__fsparam(fs_param_is_u32, NAME, OPT, 0, (void *)8)
 #define fsparam_u32hex(NAME, OPT) \

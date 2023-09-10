@@ -854,6 +854,7 @@ int switchdev_bridge_port_offload(struct net_device *brport_dev,
 				  bool tx_fwd_offload,
 				  struct netlink_ext_ack *extack)
 {
+	/*初始化brport_info*/
 	struct switchdev_notifier_brport_info brport_info = {
 		.brport = {
 			.dev = dev,

@@ -25,6 +25,7 @@ static void propagate_protected_usage(struct page_counter *c,
 	protected = min(usage, READ_ONCE(c->min));
 	old_protected = atomic_long_read(&c->min_usage);
 	if (protected != old_protected) {
+		/*更新min_usage*/
 		old_protected = atomic_long_xchg(&c->min_usage, protected);
 		delta = protected - old_protected;
 		if (delta)
@@ -34,6 +35,7 @@ static void propagate_protected_usage(struct page_counter *c,
 	protected = min(usage, READ_ONCE(c->low));
 	old_protected = atomic_long_read(&c->low_usage);
 	if (protected != old_protected) {
+		/*更新low_usage*/
 		old_protected = atomic_long_xchg(&c->low_usage, protected);
 		delta = protected - old_protected;
 		if (delta)
@@ -95,7 +97,7 @@ void page_counter_charge(struct page_counter *counter, unsigned long nr_pages)
  * of its ancestors has hit its configured limit.
  */
 bool page_counter_try_charge(struct page_counter *counter,
-			     unsigned long nr_pages,
+			     unsigned long nr_pages/*计划要预留的页数*/,
 			     struct page_counter **fail)
 {
 	struct page_counter *c;
@@ -116,17 +118,18 @@ bool page_counter_try_charge(struct page_counter *counter,
 		 * we either see the new limit or the setter sees the
 		 * counter has changed and retries.
 		 */
-		new = atomic_long_add_return(nr_pages, &c->usage);
+		new = atomic_long_add_return(nr_pages, &c->usage);/*增加用量*/
 		if (new > c->max) {
+			/*超过此counter用量最大值*/
 			atomic_long_sub(nr_pages, &c->usage);
 			/*
 			 * This is racy, but we can live with some
 			 * inaccuracy in the failcnt which is only used
 			 * to report stats.
 			 */
-			data_race(c->failcnt++);
+			data_race(c->failcnt++);/*统计超限次数*/
 			*fail = c;
-			goto failed;
+			goto failed;/*执行counter回退*/
 		}
 		propagate_protected_usage(c, new);
 		/*
@@ -134,11 +137,13 @@ bool page_counter_try_charge(struct page_counter *counter,
 		 * inaccuracy in the watermark.
 		 */
 		if (new > READ_ONCE(c->watermark))
+			/*更新watermark*/
 			WRITE_ONCE(c->watermark, new);
 	}
 	return true;
 
 failed:
+	/*回归已经更新的couter*/
 	for (c = counter; c != *fail; c = c->parent)
 		page_counter_cancel(c, nr_pages);
 
@@ -188,13 +193,16 @@ int page_counter_set_max(struct page_counter *counter, unsigned long nr_pages)
 		usage = page_counter_read(counter);
 
 		if (usage > nr_pages)
+			/*此counter当前用量大于要配置的值，直接失败*/
 			return -EBUSY;
 
 		old = xchg(&counter->max, nr_pages);
 
+		/*再取一次当前用量，检查是否可返回*/
 		if (page_counter_read(counter) <= usage || nr_pages >= old)
 			return 0;
 
+		/*条件不再满足，再试*/
 		counter->max = old;
 		cond_resched();
 	}
@@ -250,14 +258,17 @@ int page_counter_memparse(const char *buf, const char *max,
 	u64 bytes;
 
 	if (!strcmp(buf, max)) {
+		/*buffer指定与max一致，置为counter_max*/
 		*nr_pages = PAGE_COUNTER_MAX;
 		return 0;
 	}
 
+	/*转换配置的数字及单位*/
 	bytes = memparse(buf, &end);
 	if (*end != '\0')
 		return -EINVAL;
 
+	/*更新为页数*/
 	*nr_pages = min(bytes / PAGE_SIZE, (u64)PAGE_COUNTER_MAX);
 
 	return 0;

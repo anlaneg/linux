@@ -104,7 +104,7 @@ void rxe_rcv(struct sk_buff *skb);
 /* The caller must do a matching ib_device_put(&dev->ib_dev) */
 static inline struct rxe_dev *rxe_get_dev_from_net(struct net_device *ndev)
 {
-    /*取与ndev关联的rxe类型设备*/
+    /*取与netdev关联的rxe类型设备*/
 	struct ib_device *ibdev =
 		ib_device_get_by_netdev(ndev, RDMA_DRIVER_RXE);
 

@@ -38,9 +38,11 @@ static void __vlan_add_pvid(struct net_bridge_vlan_group *vg,
 			    const struct net_bridge_vlan *v)
 {
 	if (vg->pvid == v->vid)
+		/*pvid不变*/
 		return;
 
 	smp_wmb();
+	/*设置pvid state*/
 	br_vlan_set_pvid_state(vg, v->state);
 	vg->pvid = v->vid;
 }
@@ -65,6 +67,7 @@ static bool __vlan_flags_update(struct net_bridge_vlan *v, u16 flags,
 	bool change;
 
 	if (br_vlan_is_master(v))
+		/*此vlan作用于bridge,故通过bridge找对应的vlan group*/
 		vg = br_vlan_group(v->br);
 	else
 		vg = nbp_vlan_group(v->port);
@@ -79,8 +82,10 @@ static bool __vlan_flags_update(struct net_bridge_vlan *v, u16 flags,
 	if (flags & BRIDGE_VLAN_INFO_PVID)
 		__vlan_add_pvid(vg, v);
 	else
+		/*移除pvid*/
 		__vlan_delete_pvid(vg, v->vid);
 
+	/*针对此vlan容许untag,打上此标记*/
 	if (flags & BRIDGE_VLAN_INFO_UNTAGGED)
 		v->flags |= BRIDGE_VLAN_INFO_UNTAGGED;
 	else
@@ -267,7 +272,7 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 
 	if (br_vlan_is_master(v)) {
 		br = v->br;
-		dev = br->dev;
+		dev = br->dev;/*取bridge对应的dev*/
 		vg = br_vlan_group(br);
 	} else {
 		p = v->port;
@@ -287,8 +292,10 @@ static int __vlan_add(struct net_bridge_vlan *v, u16 flags,
 
 		/* need to work on the master vlan too */
 		if (flags & BRIDGE_VLAN_INFO_MASTER) {
+			/*此vlan添加至master*/
 			bool changed;
 
+			/*为master添加此vlan*/
 			err = br_vlan_add(br, v->vid,
 					  flags | BRIDGE_VLAN_INFO_BRENTRY,
 					  &changed, extack);
@@ -488,7 +495,7 @@ struct sk_buff *br_handle_vlan(struct net_bridge *br,
 	 * send untagged; otherwise, send tagged.
 	 */
 	br_vlan_get_tag(skb, &vid);
-	v = br_vlan_find(vg, vid);
+	v = br_vlan_find(vg, vid);/*检查报文的vlan是否在此vlan group中*/
 	/* Vlan entry must be configured at this point.  The
 	 * only exception is the bridge is set in promisc mode and the
 	 * packet is destined for the bridge device.  In this case
@@ -496,12 +503,16 @@ struct sk_buff *br_handle_vlan(struct net_bridge *br,
 	 */
 	if (!v || !br_vlan_should_use(v)) {
 		if ((br->dev->flags & IFF_PROMISC) && skb->dev == br->dev) {
+			/*接口开混杂且dev匹配，则goto out*/
 			goto out;
 		} else {
+			/*丢包*/
 			kfree_skb(skb);
 			return NULL;
 		}
 	}
+
+	/*执行统计*/
 	if (br_opt_get(br, BROPT_VLAN_STATS_ENABLED)) {
 		stats = this_cpu_ptr(v->stats);
 		u64_stats_update_begin(&stats->syncp);
@@ -519,8 +530,9 @@ struct sk_buff *br_handle_vlan(struct net_bridge *br,
 	 */
 	if (v->flags & BRIDGE_VLAN_INFO_UNTAGGED &&
 	    !br_switchdev_frame_uses_tx_fwd_offload(skb))
-		__vlan_hwaccel_clear_tag(skb);
+		__vlan_hwaccel_clear_tag(skb);/*此vlan标记了untagged,不进行vlan封装*/
 
+	/*接口上有vlan tunnel标记，则处理此skb的tunnel metadata*/
 	if (p && (p->flags & BR_VLAN_TUNNEL) &&
 	    br_handle_egress_vlan_tunnel(skb, v)) {
 		kfree_skb(skb);
@@ -571,7 +583,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			skb_pull(skb, ETH_HLEN);
 			skb_reset_mac_len(skb);
 			*vid = 0;
-			tagged = false;
+			tagged = false;/*认为无tagged*/
 		} else {
 			//报文上有vlan
 			tagged = true;
@@ -582,7 +594,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 	}
 
 	if (!*vid) {
-		//无vlan时，取默认vlan
+		//无vlan时，按pvid vlan进行对待(如access口处理）
 		u16 pvid = br_get_pvid(vg);
 
 		/* Frame had a tag with VID 0 or did not have a tag.
@@ -590,16 +602,16 @@ static bool __allowed_ingress(const struct net_bridge *br,
 		 * vlan untagged or priority-tagged traffic belongs to.
 		 */
 		if (!pvid)
-			goto drop;//无private vlan,接口有vlan,丢包
+			//未配置pvid,且当前接口配置有vlan,丢包
+			goto drop;
 
 		/* PVID is set on this port.  Any untagged or priority-tagged
 		 * ingress frame is considered to belong to this vlan.
 		 */
-		//有private vlan id,按private vlan id转发
 		*vid = pvid;
 		if (likely(!tagged))
 			/* Untagged Frame. */
-			//将其处理为加标签进入（这样处理会统一）
+			//无vlan的报文，设置vlanid为pvid
 			__vlan_hwaccel_put_tag(skb, br->vlan_proto, pvid);
 		else
 			/* Priority-tagged Frame.
@@ -607,7 +619,7 @@ static bool __allowed_ingress(const struct net_bridge *br,
 			 * field was 0.
 			 * We update only VID field and preserve PCP field.
 			 */
-			skb->vlan_tci |= pvid;//更正vlanid(加标签了，但标签上的vlanid为0）
+			skb->vlan_tci |= pvid;//更正vlanid(报文加tag了，但标签上的vlanid为0）
 
 		/* if snooping and stats are disabled we can avoid the lookup */
 		if (!br_opt_get(br, BROPT_MCAST_VLAN_SNOOPING_ENABLED) &&
@@ -780,7 +792,7 @@ err_fdb_insert:
  * Must be called with vid in range from 1 to 4094 inclusive.
  * changed must be true only if the vlan was created or updated
  */
-int br_vlan_add(struct net_bridge *br, u16 vid, u16 flags, bool *changed,
+int br_vlan_add(struct net_bridge *br, u16 vid/*vlan id*/, u16 flags, bool *changed,
 		struct netlink_ext_ack *extack)
 {
 	struct net_bridge_vlan_group *vg;
@@ -796,6 +808,7 @@ int br_vlan_add(struct net_bridge *br, u16 vid, u16 flags, bool *changed,
 		return br_vlan_add_existing(br, vg, vlan, flags, changed,
 					    extack);
 
+	/*此vlan在bridge上不存在，申请bridge vlan并初始化*/
 	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
 	if (!vlan)
 		return -ENOMEM;
@@ -807,7 +820,7 @@ int br_vlan_add(struct net_bridge *br, u16 vid, u16 flags, bool *changed,
 	}
 	vlan->vid = vid;
 	vlan->flags = flags | BRIDGE_VLAN_INFO_MASTER;
-	vlan->flags &= ~BRIDGE_VLAN_INFO_PVID;
+	vlan->flags &= ~BRIDGE_VLAN_INFO_PVID;/*移除掉pvid标记*/
 	vlan->br = br;
 	if (flags & BRIDGE_VLAN_INFO_BRENTRY)
 		refcount_set(&vlan->refcnt, 1);
@@ -858,7 +871,7 @@ void br_vlan_flush(struct net_bridge *br)
 	__vlan_group_free(vg);
 }
 
-/*通过vlan id查找net bridge vlan*/
+/*通过vlan id在vlan group中查找到bridge vlan*/
 struct net_bridge_vlan *br_vlan_find(struct net_bridge_vlan_group *vg, u16 vid)
 {
 	if (!vg)
@@ -1072,6 +1085,7 @@ static bool vlan_default_pvid(struct net_bridge_vlan_group *vg, u16 vid)
 	struct net_bridge_vlan *v;
 
 	if (vid != vg->pvid)
+		/*此vlan id不是pvid*/
 		return false;
 
 	v = br_vlan_lookup(&vg->vlan_hash, vid);
@@ -1328,6 +1342,7 @@ int nbp_vlan_add(struct net_bridge_port *port, u16 vid, u16 flags,
 	*changed = false;
 	vlan = br_vlan_find(nbp_vlan_group(port), vid);
 	if (vlan) {
+		/*此port对应的vlan group中已包含此vlan*/
 		bool would_change = __vlan_flags_would_change(vlan, flags);
 
 		if (would_change) {
@@ -1344,6 +1359,7 @@ int nbp_vlan_add(struct net_bridge_port *port, u16 vid, u16 flags,
 		return 0;
 	}
 
+	/*此vlan在此port上不存在，申请vlan并加入*/
 	vlan = kzalloc(sizeof(*vlan), GFP_KERNEL);
 	if (!vlan)
 		return -ENOMEM;

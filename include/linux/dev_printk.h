@@ -151,12 +151,14 @@ void _dev_info(const struct device *dev, const char *fmt, ...)
 
 #if defined(CONFIG_DYNAMIC_DEBUG) || \
 	(defined(CONFIG_DYNAMIC_DEBUG_CORE) && defined(DYNAMIC_DEBUG_MODULE))
+/*依赖于动态debug开关*/
 #define dev_dbg(dev, fmt, ...)						\
 	dynamic_dev_dbg(dev, dev_fmt(fmt), ##__VA_ARGS__)
 #elif defined(DEBUG)
 #define dev_dbg(dev, fmt, ...)						\
 	dev_printk(KERN_DEBUG, dev, dev_fmt(fmt), ##__VA_ARGS__)
 #else
+/*此情况下dev_dbg将被禁用*/
 #define dev_dbg(dev, fmt, ...)						\
 ({									\
 	if (0)								\

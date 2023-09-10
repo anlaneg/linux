@@ -34,8 +34,9 @@ static inline int pfn_valid(unsigned long pfn)
 #elif defined(CONFIG_SPARSEMEM_VMEMMAP)
 
 /* memmap is virtually contiguous.  */
-/*由页帧对应的page指针*/
+/*由pfn(页帧）映射到page指针*/
 #define __pfn_to_page(pfn)	(vmemmap + (pfn))
+/*由page指针，映射到pfn*/
 #define __page_to_pfn(page)	(unsigned long)((page) - vmemmap)
 
 #elif defined(CONFIG_SPARSEMEM)
@@ -59,9 +60,9 @@ static inline int pfn_valid(unsigned long pfn)
 /*
  * Convert a physical address to a Page Frame Number and back
  */
-//由物理地址获得物理页帧（直接移除掉page offset字段即可）
+//由物理地址获得pfn(页帧)（直接移除掉page offset即可）
 #define	__phys_to_pfn(paddr)	PHYS_PFN(paddr)
-//由物理页帧获得页首物理地址
+//由pfn(页帧)获得页首物理地址
 #define	__pfn_to_phys(pfn)	PFN_PHYS(pfn)
 
 //page地址到物理页帧编号

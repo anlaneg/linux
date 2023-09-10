@@ -34,6 +34,7 @@ static int mq_offload(struct Qdisc *sch, enum tc_mq_command cmd)
 	if (!tc_can_offload(dev) || !dev->netdev_ops->ndo_setup_tc)
 		return -EOPNOTSUPP;
 
+	/*触发qdisc mq的offload通知*/
 	return dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_MQ, &opt);
 }
 
@@ -67,6 +68,7 @@ static void mq_destroy(struct Qdisc *sch)
 	kfree(priv->qdiscs);
 }
 
+/*mq初始化主要是针对每一个tx队列创建一个qdisc*/
 static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 		   struct netlink_ext_ack *extack)
 {
@@ -85,7 +87,7 @@ static int mq_init(struct Qdisc *sch, struct nlattr *opt,
 		return -EOPNOTSUPP;
 
 	/* pre-allocate qdiscs, attachment can't fail */
-	//申请dev->num_tx_queues个队列
+	//申请dev->num_tx_queues个队列(每个tx对应一个qdisc)
 	priv->qdiscs = kcalloc(dev->num_tx_queues, sizeof(priv->qdiscs[0]),
 			       GFP_KERNEL);
 	if (!priv->qdiscs)
@@ -120,7 +122,9 @@ static void mq_attach(struct Qdisc *sch)
 	unsigned int ntx;
 
 	for (ntx = 0; ntx < dev->num_tx_queues; ntx++) {
+		/*取ntx号队列对应的qdisc*/
 		qdisc = priv->qdiscs[ntx];
+		/*替换此dev_queue对应的qdisc*/
 		old = dev_graft_qdisc(qdisc->dev_queue, qdisc);
 		if (old)
 			qdisc_put(old);
@@ -280,6 +284,7 @@ static const struct Qdisc_class_ops mq_class_ops = {
 	.dump_stats	= mq_dump_class_stats,
 };
 
+/*针对多队列设备，根默认采用的qdisc*/
 struct Qdisc_ops mq_qdisc_ops __read_mostly = {
 	.cl_ops		= &mq_class_ops,
 	.id		= "mq",

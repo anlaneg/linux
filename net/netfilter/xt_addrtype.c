@@ -217,6 +217,7 @@ static struct xt_match addrtype_mt_reg[] __read_mostly = {
 	}
 };
 
+/*注册addrtype match项*/
 static int __init addrtype_mt_init(void)
 {
 	return xt_register_matches(addrtype_mt_reg,

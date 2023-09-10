@@ -235,15 +235,17 @@ static int mlx5_devlink_trap_init(struct devlink *devlink, const struct devlink_
 		return -ENOMEM;
 
 	dl_trap->trap.id = trap->id;
-	dl_trap->trap.action = DEVLINK_TRAP_ACTION_DROP;
+	dl_trap->trap.action = DEVLINK_TRAP_ACTION_DROP;/*默认为drop action*/
 	dl_trap->item = trap_ctx;
 
 	if (mlx5_find_trap_by_id(dev, trap->id)) {
+		/*这个trap已存在*/
 		kfree(dl_trap);
 		mlx5_core_err(dev, "Devlink trap: Trap 0x%x already found", trap->id);
 		return -EEXIST;
 	}
 
+	/*添加trap*/
 	list_add_tail(&dl_trap->list, &dev->priv.traps);
 	return 0;
 }
@@ -274,27 +276,34 @@ static int mlx5_devlink_trap_action_set(struct devlink *devlink,
 	struct mlx5_devlink_trap *dl_trap;
 	int err;
 
+	/*switchdev开启时，不生效*/
 	if (is_mdev_switchdev_mode(dev)) {
 		NL_SET_ERR_MSG_MOD(extack, "Devlink traps can't be set in switchdev mode");
 		return -EOPNOTSUPP;
 	}
 
+	/*找到id对应的trap*/
 	dl_trap = mlx5_find_trap_by_id(dev, trap->id);
 	if (!dl_trap) {
 		mlx5_core_err(dev, "Devlink trap: Set action on invalid trap id 0x%x", trap->id);
 		return -EINVAL;
 	}
 
+	/*当前支持以下两个action*/
 	if (action != DEVLINK_TRAP_ACTION_DROP && action != DEVLINK_TRAP_ACTION_TRAP)
 		return -EOPNOTSUPP;
 
 	if (action == dl_trap->trap.action)
+		/*action相等，不更新*/
 		return 0;
 
+	/*保存旧的action*/
 	action_orig = dl_trap->trap.action;
+	/*更新action*/
 	dl_trap->trap.action = action;
 	trap_event_ctx.trap = &dl_trap->trap;
 	trap_event_ctx.err = 0;
+	/*触发通知*/
 	err = mlx5_blocking_notifier_call_chain(dev, MLX5_DRIVER_EVENT_TYPE_TRAP,
 						&trap_event_ctx);
 	if (err == NOTIFY_BAD)

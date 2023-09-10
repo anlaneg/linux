@@ -50,6 +50,7 @@ SUBSYS(net_prio)
 #endif
 
 #if IS_ENABLED(CONFIG_CGROUP_HUGETLB)
+/*针对hugetlb设置*/
 SUBSYS(hugetlb)
 #endif
 

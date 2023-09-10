@@ -137,7 +137,7 @@ static inline __must_check size_t __ab_c_size(size_t n, size_t size, size_t c)
  * Return: number of bytes needed or SIZE_MAX on overflow.
  */
 #define struct_size(p, member, n)					\
-	/*p为结构体指针，p->member为一个数组指定，需要计算p结构体后面跟n个p->member[0]类型的元素，需要多少字节*/\
+	/*p为结构体指针，p->member为一个数组指针，需要计算p结构体后面跟n个p->member[0]类型的元素，需要多少字节*/\
 	__ab_c_size(n,							\
 		    sizeof(*(p)->member) + __must_be_array((p)->member),\
 		    sizeof(*(p)))

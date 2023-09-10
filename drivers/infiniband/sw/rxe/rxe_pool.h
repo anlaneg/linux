@@ -34,8 +34,9 @@ struct rxe_pool_elem {
 struct rxe_pool {
     /*pool所属的rxe设备*/
 	struct rxe_dev		*rxe;
+	/*pool名称，例如pd,ucontext，ah等*/
 	const char		*name;
-	/*各entry的清理函数*/
+	/*各entry的清理函数,来源看rxe_type_info*/
 	void			(*cleanup)(struct rxe_pool_elem *elem);
 	/*pool对应的类型*/
 	enum rxe_elem_type	type;
@@ -44,10 +45,17 @@ struct rxe_pool {
 	unsigned int		max_elem;
 	/*已使用元素数*/
 	atomic_t		num_elem;
+	/*单个元素size*/
 	size_t			elem_size;
+	/*obj指针位置到rxe_pool_entry位置的offset，可据此推算出elem结构体
+	 * 例如结构体struct rxe_ucontext的elem_offset = offsetof(struct rxe_ucontext, elem)
+	 * 则增加此偏移可推出rxe_ucontext->elem成员
+	 * */
 	size_t			elem_offset;
 
+	/*存放元素的xarray*/
 	struct xarray		xa;
+	/*元素的最大，最小索引*/
 	struct xa_limit		limit;
 	u32			next;
 };
@@ -65,6 +73,7 @@ void rxe_pool_cleanup(struct rxe_pool *pool);
 /* connect already allocated object to pool */
 int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_elem *elem,
 				bool sleepable);
+/*将obj添加进pool*/
 #define rxe_add_to_pool(pool, obj) __rxe_add_to_pool(pool, &(obj)->elem, true)
 #define rxe_add_to_pool_ah(pool, obj, sleepable) __rxe_add_to_pool(pool, \
 				&(obj)->elem, sleepable)

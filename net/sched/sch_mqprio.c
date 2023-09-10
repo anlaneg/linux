@@ -20,6 +20,7 @@
 #include "sch_mqprio_lib.h"
 
 struct mqprio_sched {
+	/*每个tx queue对应的一个qdisc*/
 	struct Qdisc		**qdiscs;
 	u16 mode;
 	u16 shaper;
@@ -60,6 +61,7 @@ static int mqprio_enable_offload(struct Qdisc *sch,
 		return -EINVAL;
 	}
 
+	/*尝试mqprio卸载*/
 	err = dev->netdev_ops->ndo_setup_tc(dev, TC_SETUP_QDISC_MQPRIO,
 					    &mqprio);
 	if (err)
@@ -70,6 +72,7 @@ static int mqprio_enable_offload(struct Qdisc *sch,
 	return 0;
 }
 
+/*禁止mqprio offload到网卡*/
 static void mqprio_disable_offload(struct Qdisc *sch)
 {
 	struct tc_mqprio_qopt_offload mqprio = { { 0 } };
@@ -192,6 +195,7 @@ static int mqprio_parse_nlattr(struct Qdisc *sch, struct tc_mqprio_qopt *qopt,
 	if (tb[TCA_MQPRIO_MIN_RATE64]) {
 		if (priv->shaper != TC_MQPRIO_SHAPER_BW_RATE)
 			return -EINVAL;
+		/*收集针对各tc配置的min_rate*/
 		i = 0;
 		nla_for_each_nested(attr, tb[TCA_MQPRIO_MIN_RATE64],
 				    rem) {
@@ -208,6 +212,7 @@ static int mqprio_parse_nlattr(struct Qdisc *sch, struct tc_mqprio_qopt *qopt,
 	if (tb[TCA_MQPRIO_MAX_RATE64]) {
 		if (priv->shaper != TC_MQPRIO_SHAPER_BW_RATE)
 			return -EINVAL;
+		/*收集针对各tc配置的max_rate*/
 		i = 0;
 		nla_for_each_nested(attr, tb[TCA_MQPRIO_MAX_RATE64],
 				    rem) {
@@ -281,14 +286,14 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 	for (i = 0; i < dev->num_tx_queues; i++) {
 		dev_queue = netdev_get_tx_queue(dev, i);
 		qdisc = qdisc_create_dflt(dev_queue,
-					  get_default_qdisc_ops(dev, i),
+					  get_default_qdisc_ops(dev, i)/*使用默认qdisc*/,
 					  TC_H_MAKE(TC_H_MAJ(sch->handle),
 						    TC_H_MIN(i + 1)), extack);
 		if (!qdisc)
 			return -ENOMEM;
 
 		priv->qdiscs[i] = qdisc;
-		qdisc->flags |= TCQ_F_ONETXQUEUE | TCQ_F_NOPARENT;
+		qdisc->flags |= TCQ_F_ONETXQUEUE | TCQ_F_NOPARENT;/*为每个qdisc打上one txq标记*/
 	}
 
 	/* If the mqprio options indicate that hardware should own
@@ -296,13 +301,14 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 	 * supplied and verified mapping
 	 */
 	if (qopt->hw) {
-		//触发驱动调用ndo_setup_tc
+		//需要卸载到硬件，触发驱动调用ndo_setup_tc
 		err = mqprio_enable_offload(sch, qopt, extack);
 		if (err)
 			return err;
 	} else {
-	    /*填充dev->num_tc,dev->tc_to_txq*/
+	    /*填充dev->num_tc*/
 		netdev_set_num_tc(dev, qopt->num_tc);
+		/*各tc id对应哪些txq*/
 		for (i = 0; i < qopt->num_tc; i++)
 			netdev_set_tc_queue(dev, i,
 					    qopt->count[i], qopt->offset[i]);
@@ -319,6 +325,7 @@ static int mqprio_init(struct Qdisc *sch, struct nlattr *opt,
 
 static void mqprio_attach(struct Qdisc *sch)
 {
+	/*取此qdisc对应的netdev*/
 	struct net_device *dev = qdisc_dev(sch);
 	struct mqprio_sched *priv = qdisc_priv(sch);
 	struct Qdisc *qdisc, *old;
@@ -341,7 +348,7 @@ static struct netdev_queue *mqprio_queue_get(struct Qdisc *sch,
 					     unsigned long cl)
 {
 	struct net_device *dev = qdisc_dev(sch);
-	unsigned long ntx = cl - 1;
+	unsigned long ntx = cl - 1;/*通过cl选中tx队列*/
 
 	if (ntx >= dev->num_tx_queues)
 		return NULL;

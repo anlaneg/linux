@@ -153,6 +153,7 @@ EXPORT_SYMBOL(jiffies_64);
 #define LVL_CLK_SHIFT	3
 #define LVL_CLK_DIV	(1UL << LVL_CLK_SHIFT)
 #define LVL_CLK_MASK	(LVL_CLK_DIV - 1)
+/*定义每一级需要shift多少位，例如n=1时 shift为3，n=2时shit为6*/
 #define LVL_SHIFT(n)	((n) * LVL_CLK_SHIFT)
 #define LVL_GRAN(n)	(1UL << LVL_SHIFT(n))
 
@@ -161,11 +162,17 @@ EXPORT_SYMBOL(jiffies_64);
  * time. We start from the last possible delta of the previous level
  * so that we can later add an extra LVL_GRAN(n) to n (see calc_index()).
  */
+/*定义每一级的判定标准，以power(a,b)表示以a为底，b个a相乘，
+ * 则此标准即为power((LVL_SIZE - 1),power(LVL_CLK_SHIFT,(n)-1))
+ * 其等价于power((LVL_SIZE - 1),(((n) - 1) * LVL_CLK_SHIFT)))
+ **/
 #define LVL_START(n)	((LVL_SIZE - 1) << (((n) - 1) * LVL_CLK_SHIFT))
 
 /* Size of each clock level */
 #define LVL_BITS	6
+/*每一级轮子有LVL_SIZE个刻度*/
 #define LVL_SIZE	(1UL << LVL_BITS)
+/*LVL_MASK用来定义LVL_SIZE的掩码*/
 #define LVL_MASK	(LVL_SIZE - 1)
 #define LVL_OFFS(n)	((n) * LVL_SIZE)
 
@@ -206,12 +213,14 @@ struct timer_base {
 #endif
 	//当前指针，逻辑时间最小单位，每次增加1
 	unsigned long		clk;
-	unsigned long		next_expiry;
-	unsigned int		cpu;
+	unsigned long		next_expiry;/*此base上下一个过期时间（即最近的timer过期时间)*/
+	unsigned int		cpu;/*此base对应的cpu*/
 	bool			next_expiry_recalc;
 	bool			is_idle;
 	bool			timers_pending;
+	/*每个刻度一个bit,来标记，此刻度上有悬而未绝的timer*/
 	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
+	/*定义总的刻度列表（注：越靠后的刻度其一格表示的时间越长，见calc_wheel_index）*/
 	struct hlist_head	vectors[WHEEL_SIZE];
 } ____cacheline_aligned;
 
@@ -527,16 +536,18 @@ static inline unsigned calc_index(unsigned long expires, unsigned lvl,
 	 *
 	 * Round up with level granularity to prevent this.
 	 */
-	expires = (expires >> LVL_SHIFT(lvl)) + 1;
+	expires = (expires >> LVL_SHIFT(lvl)) + 1;/*移除掉门槛（offset)*/
 	*bucket_expiry = expires << LVL_SHIFT(lvl);
+	/*当前为lvl级轮子，通过LVL_OFFS知道其起始刻度，然后
+	 * 通过expires & LVL_MASK获知，将其放在哪个刻度上*/
 	return LVL_OFFS(lvl) + (expires & LVL_MASK);
 }
 
-//决定timer要存放的wheel位置
-static int calc_wheel_index(unsigned long expires, unsigned long clk,
+//决定timer要存放哪级轮子对应的刻度位置
+static int calc_wheel_index(unsigned long expires/*timer的过期时间*/, unsigned long clk/*当前表盘上的时间*/,
 			    unsigned long *bucket_expiry)
 {
-	//过期时间与当前指针之间的差值（时间差）
+	//过期时间与当前表盘时间之间的差值（时间差）
 	unsigned long delta = expires - clk;
 	unsigned int idx;
 
@@ -555,9 +566,12 @@ static int calc_wheel_index(unsigned long expires, unsigned long clk,
 	} else if (delta < LVL_START(7)) {
 		idx = calc_index(expires, 6, bucket_expiry);
 	} else if (LVL_DEPTH > 8 && delta < LVL_START(8)) {
+		/*注：LVL_DEPTH如果小于等于8时，则不再分辨这一级*/
 		idx = calc_index(expires, 7, bucket_expiry);
 	} else if ((long) delta < 0) {
-		//要加入的timer已过期
+		/*上面相减采用的是无符号数，可能会出现以小减大的问题，
+		 * 此时delta会剧大，这里改为有符号，检查是否小于clk,
+		 * 即要加入的timer已过期*/
 		idx = clk & LVL_MASK;
 		*bucket_expiry = clk;
 	} else {
@@ -608,8 +622,11 @@ static void enqueue_timer(struct timer_base *base, struct timer_list *timer,
 			  unsigned int idx, unsigned long bucket_expiry)
 {
 
+	/*将timer存放于idx位置对应链表的头部*/
 	hlist_add_head(&timer->entry, base->vectors + idx);
+	/*标记此刻度上有timer待触发*/
 	__set_bit(idx, base->pending_map);
+	/*在timer上也记录其所在的idx*/
 	timer_set_idx(timer, idx);
 
 	trace_timer_start(timer, timer->expires, timer->flags);
@@ -624,6 +641,7 @@ static void enqueue_timer(struct timer_base *base, struct timer_list *timer,
 		 * Set the next expiry time and kick the CPU so it
 		 * can reevaluate the wheel:
 		 */
+		/*bucket_expiry更小，故此base上下一个过期时间需更新*/
 		base->next_expiry = bucket_expiry;
 		base->timers_pending = true;
 		base->next_expiry_recalc = false;
@@ -845,15 +863,16 @@ static inline void debug_assert_init(struct timer_list *timer)
 }
 
 //初始化timer
-static void do_init_timer(struct timer_list *timer,
-			  void (*func)(struct timer_list *),
-			  unsigned int flags,
+static void do_init_timer(struct timer_list *timer/*要初始化的timer*/,
+			  void (*func)(struct timer_list *)/*timer对应的触发函数*/,
+			  unsigned int flags/*timer标记*/,
 			  const char *name, struct lock_class_key *key)
 {
 	timer->entry.pprev = NULL;
 	timer->function = func;
 	if (WARN_ON_ONCE(flags & ~TIMER_INIT_FLAGS))
 		flags &= TIMER_INIT_FLAGS;
+	/*timer的标记位，低位包含timer初始化是对应的cpu id*/
 	timer->flags = flags | raw_smp_processor_id();
 	lockdep_init_map(&timer->lockdep_map, name, key, 0);
 }
@@ -870,8 +889,8 @@ static void do_init_timer(struct timer_list *timer,
  * init_timer_key() must be done to a timer prior calling *any* of the
  * other timer functions.
  */
-void init_timer_key(struct timer_list *timer,
-		    void (*func)(struct timer_list *)/*timer对应的回调*/, unsigned int flags,
+void init_timer_key(struct timer_list *timer/*要初始化的timer*/,
+		    void (*func)(struct timer_list *)/*timer对应的回调*/, unsigned int flags/*timer标记位*/,
 		    const char *name, struct lock_class_key *key)
 {
 	debug_init(timer);
@@ -897,12 +916,14 @@ static inline void detach_timer(struct timer_list *timer, bool clear_pending)
 static int detach_if_pending(struct timer_list *timer, struct timer_base *base,
 			     bool clear_pending)
 {
-	unsigned idx = timer_get_idx(timer);
+	unsigned idx = timer_get_idx(timer);/*取timer所在的idx*/
 
 	if (!timer_pending(timer))
+		/*此timer没有被加入系统，返回0,注意：此情况下timer可能正在准备运行*/
 		return 0;
 
 	if (hlist_is_singular_node(&timer->entry, base->vectors + idx)) {
+		/*此timer是此wheel最后一个节点，则取除idx标记*/
 		__clear_bit(idx, base->pending_map);
 		base->next_expiry_recalc = true;
 	}
@@ -914,6 +935,7 @@ static int detach_if_pending(struct timer_list *timer, struct timer_base *base,
 //取指定的timer_base
 static inline struct timer_base *get_timer_cpu_base(u32 tflags, u32 cpu)
 {
+	/*默认取base_std的per cpu指针*/
 	struct timer_base *base = per_cpu_ptr(&timer_bases[BASE_STD], cpu);
 
 	/*
@@ -938,6 +960,7 @@ static inline struct timer_base *get_timer_this_cpu_base(u32 tflags)
 	return base;
 }
 
+/*依据tflags取timer_base*/
 static inline struct timer_base *get_timer_base(u32 tflags)
 {
 	return get_timer_cpu_base(tflags, tflags & TIMER_CPUMASK);
@@ -954,6 +977,7 @@ get_target_base(struct timer_base *base, unsigned tflags)
 	return get_timer_this_cpu_base(tflags);
 }
 
+/*更新base->clk*/
 static inline void forward_timer_base(struct timer_base *base)
 {
 	unsigned long jnow = READ_ONCE(jiffies);
@@ -1007,12 +1031,16 @@ static struct timer_base *lock_timer_base(struct timer_list *timer,
 		tf = READ_ONCE(timer->flags);
 
 		if (!(tf & TIMER_MIGRATING)) {
+			/*此timer未在迁移，取其base并加锁*/
 			base = get_timer_base(tf);
 			raw_spin_lock_irqsave(&base->lock, *flags);
+			/*再检查一遍，防止flags当前有变更*/
 			if (timer->flags == tf)
+				/*确认未变更，返回base*/
 				return base;
 			raw_spin_unlock_irqrestore(&base->lock, *flags);
 		}
+		/*此timer正在迁移，等待，再尝试*/
 		cpu_relax();
 	}
 }
@@ -1055,7 +1083,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 		 * just update the expiry time and avoid the whole
 		 * dequeue/enqueue dance.
 		 */
-		base = lock_timer_base(timer, &flags);
+		base = lock_timer_base(timer, &flags);/*取此timer对应的base*/
 		/*
 		 * Has @timer been shutdown? This needs to be evaluated
 		 * while holding base lock to prevent a race against the
@@ -1130,7 +1158,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 
 	debug_timer_activate(timer);
 
-	timer->expires = expires;
+	timer->expires = expires;/*设置过期时间*/
 	/*
 	 * If 'idx' was calculated above and the base time did not advance
 	 * between calculating 'idx' and possibly switching the base, only
@@ -1166,6 +1194,7 @@ out_unlock:
  */
 int mod_timer_pending(struct timer_list *timer, unsigned long expires)
 {
+	/*pending的timer被修改*/
 	return __mod_timer(timer, expires, MOD_TIMER_PENDING_ONLY);
 }
 EXPORT_SYMBOL(mod_timer_pending);
@@ -1199,6 +1228,7 @@ EXPORT_SYMBOL(mod_timer_pending);
  */
 int mod_timer(struct timer_list *timer, unsigned long expires)
 {
+	/*通用的修改timer*/
 	return __mod_timer(timer, expires, 0);
 }
 EXPORT_SYMBOL(mod_timer);
@@ -1252,6 +1282,7 @@ EXPORT_SYMBOL(timer_reduce);
 void add_timer(struct timer_list *timer)
 {
 	if (WARN_ON_ONCE(timer_pending(timer)))
+		/*如果timer被pending*/
 		return;
 	__mod_timer(timer, timer->expires, MOD_TIMER_NOTPENDING);
 }
@@ -1266,7 +1297,7 @@ EXPORT_SYMBOL(add_timer);
  *
  * See add_timer() for further details.
  */
-void add_timer_on(struct timer_list *timer, int cpu)
+void add_timer_on(struct timer_list *timer, int cpu/*加入到指定cpu上*/)
 {
 	struct timer_base *new_base, *base;
 	unsigned long flags;
@@ -1276,6 +1307,7 @@ void add_timer_on(struct timer_list *timer, int cpu)
 	if (WARN_ON_ONCE(timer_pending(timer)))
 		return;
 
+	/*取timer base*/
 	new_base = get_timer_cpu_base(timer->flags, cpu);
 
 	/*
@@ -1283,20 +1315,26 @@ void add_timer_on(struct timer_list *timer, int cpu)
 	 * old base locked to prevent other operations proceeding with the
 	 * wrong base locked.  See lock_timer_base().
 	 */
-	base = lock_timer_base(timer, &flags);
+	base = lock_timer_base(timer, &flags);/*取当前timer base*/
 	/*
 	 * Has @timer been shutdown? This needs to be evaluated while
 	 * holding base lock to prevent a race against the shutdown code.
 	 */
 	if (!timer->function)
+		/*此timer没有回调，直接返回*/
 		goto out_unlock;
 
 	if (base != new_base) {
+		/*标记此timer正在迁移*/
 		timer->flags |= TIMER_MIGRATING;
 
+		/*可能会变更base,先提前解锁*/
 		raw_spin_unlock(&base->lock);
+		/*更新当前local base指针*/
 		base = new_base;
+		/*对base进行加锁以便操作*/
 		raw_spin_lock(&base->lock);
+		/*更新此timer所属的cpu*/
 		WRITE_ONCE(timer->flags,
 			   (timer->flags & ~TIMER_BASEMASK) | cpu);
 	}
@@ -1345,7 +1383,7 @@ static int __timer_delete(struct timer_list *timer, bool shutdown)
 	 * that the callback cannot requeue the timer.
 	 */
 	if (timer_pending(timer) || shutdown) {
-		//timer 未触发时，尝试摘掉timer
+		//timer 被加入系统，或者shutdown被指明尝试摘掉timer
 		base = lock_timer_base(timer, &flags);
 		ret = detach_if_pending(timer, base, true);
 		if (shutdown)
@@ -1426,13 +1464,18 @@ static int __try_to_del_timer_sync(struct timer_list *timer, bool shutdown)
 
 	debug_assert_init(timer);
 
+	/*获取timer所处的base,并加锁*/
 	base = lock_timer_base(timer, &flags);
 
 	if (base->running_timer != timer)
+		/*timer所在的base上正在运行的不是此timer,尝试将其移除*/
 		ret = detach_if_pending(timer, base, true);
+	//如果上面的if没有进入，则说明此base是其它cpu的指针，且timer正在其它cpu上被运行
 	if (shutdown)
+		/*shutdown为真，将回调置为NULL*/
 		timer->function = NULL;
 
+	/*对base进行解锁*/
 	raw_spin_unlock_irqrestore(&base->lock, flags);
 
 	return ret;
@@ -1588,6 +1631,7 @@ static int __timer_delete_sync(struct timer_list *timer, bool shutdown)
 		ret = __try_to_del_timer_sync(timer, shutdown);
 
 		if (unlikely(ret < 0)) {
+			/*此timer正在其它cpu上运行，等待，并重试*/
 			del_timer_wait_running(timer);
 			cpu_relax();
 		}
@@ -1640,6 +1684,7 @@ static int __timer_delete_sync(struct timer_list *timer, bool shutdown)
  */
 int timer_delete_sync(struct timer_list *timer)
 {
+	/*同步删除，不将回调置为NULL*/
 	return __timer_delete_sync(timer, false);
 }
 EXPORT_SYMBOL(timer_delete_sync);
@@ -1682,11 +1727,12 @@ EXPORT_SYMBOL(timer_delete_sync);
  */
 int timer_shutdown_sync(struct timer_list *timer)
 {
+	/*同步删除，且将回调置为NULL*/
 	return __timer_delete_sync(timer, true);
 }
 EXPORT_SYMBOL_GPL(timer_shutdown_sync);
 
-/*执尾timer回调*/
+/*执行timer回调*/
 static void call_timer_fn(struct timer_list *timer,
 			  void (*fn)(struct timer_list *),
 			  unsigned long baseclk)
@@ -1732,6 +1778,7 @@ static void call_timer_fn(struct timer_list *timer,
 	}
 }
 
+/*遍历执行过期的timers*/
 static void expire_timers(struct timer_base *base, struct hlist_head *head)
 {
 	/*
@@ -1748,13 +1795,14 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 		//取head上的一个timer
 		timer = hlist_entry(head->first, struct timer_list, entry);
 
-		//记录当前正在触发的timer
+		//首先指明当前正在触发的timer
 		base->running_timer = timer;
-		//将timer自原待触发链表中移除
+		//再将timer自原待触发链表中移除
 		detach_timer(timer, true);
 
 		fn = timer->function;
 
+		/*此fn为空，尝试下一个*/
 		if (WARN_ON_ONCE(!fn)) {
 			/* Should never happen. Emphasis on should! */
 			base->running_timer = NULL;
@@ -1769,7 +1817,7 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 			base->running_timer = NULL;
 		} else {
 			raw_spin_unlock_irq(&base->lock);
-			call_timer_fn(timer, fn, baseclk);
+			call_timer_fn(timer, fn, baseclk);/*执行timer*/
 			raw_spin_lock_irq(&base->lock);
 			base->running_timer = NULL;
 			timer_sync_wait_running(base);
@@ -1777,26 +1825,44 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 	}
 }
 
+/*收集过期的timer
+ *
+ * 当前实现最本质的改变是消除了 cascade 。
+ * 但付出的代价是精度不准。
+ * timer 自被注册后就固定不动了，该在哪一 level 就在哪一 level，
+ * 	然后以不同的时间间隔去检查各 level。比如 level 0 是每个 jiffies 检查一次，
+ * 	而 level 1 要每 8 ms（粒度）才检查一次。也就是说，
+ * 	如果有一个 timer 是 68 jiffies 超时的，
+ * 	那么需要等到 64 + 8 = 72 jiffies 时才会被检查到，
+ * 	相当于晚了 4 jiffies 才超时。更严重的是，
+ * 	level 越高，粒度越大，检查出超时和实际超时时间的差就可能越大。
+ * */
 static int collect_expired_timers(struct timer_base *base,
 				  struct hlist_head *heads)
 {
+	/*当前base存在过期的timer,而第一个过期的timer为base->next_expiry*/
 	unsigned long clk = base->clk = base->next_expiry;
 	struct hlist_head *vec;
 	int i, levels = 0;
 	unsigned int idx;
 
+	/*heads是一个长度为LVL_DEPTH的struct hlist_head*数组*/
 	for (i = 0; i < LVL_DEPTH; i++) {
 		idx = (clk & LVL_MASK) + i * LVL_SIZE;
 
 		if (__test_and_clear_bit(idx, base->pending_map)) {
+			/*这个刻度上有timer,取此刻度上的list(vec)*/
 			vec = base->vectors + idx;
-			//将vec移到heads中
+			//将list（vec）移到heads中
 			hlist_move_list(vec, heads++);
+			/*我们已处理此刻度上所有元素，此时上一级的第一个刻度上有些可能已过期，level增加*/
 			levels++;
 		}
 		/* Is it time to look at the next level? */
 		if (clk & LVL_CLK_MASK)
+			/*我们仅在上一级第一个刻度中所有元素均过期后，才开始处理*/
 			break;
+		/*层次变更，clk划分成上一级单位（例如秒换算成分钟）*/
 		/* Shift clock for the next level granularity */
 		clk >>= LVL_CLK_SHIFT;
 	}
@@ -1814,12 +1880,15 @@ static int next_pending_bucket(struct timer_base *base, unsigned offset,
 	unsigned pos, start = offset + clk;
 	unsigned end = offset + LVL_SIZE;
 
+	/*在start,end之间查找一个有效的bit*/
 	pos = find_next_bit(base->pending_map, end, start);
 	if (pos < end)
+		/*start,end范围之间有pos,返回索引自start的偏移量*/
 		return pos - start;
 
+	/*在offset，start之间查找一个有效bit,如果找到，则返回索引，否则返回-1*/
 	pos = find_next_bit(base->pending_map, start, offset);
-	return pos < start ? pos + LVL_SIZE - start : -1;
+	return pos < start ? pos + LVL_SIZE - start : -1/*未找到*/;
 }
 
 /*
@@ -2016,18 +2085,22 @@ void timer_clear_idle(void)
  */
 static inline void __run_timers(struct timer_base *base)
 {
+	/*负责运行指定base上的已过期的所有timer*/
 	struct hlist_head heads[LVL_DEPTH];
 	int levels;
 
-	//如果jiffies < base->next_expiry,则直接退出
+	//如果jiffies < base->next_expiry（当前base上过期时间最近的timer),
+	// 则说明此base上所有timer均还未过期，直接退出
 	if (time_before(jiffies, base->next_expiry))
 		return;
 
+	/*有已经过期的timer,首先对base进行加锁*/
 	timer_base_lock_expiry(base);
 	raw_spin_lock_irq(&base->lock);
 
 	while (time_after_eq(jiffies, base->clk) &&
 	       time_after_eq(jiffies, base->next_expiry)) {
+		/*首先收集过期timer(注意：此版本为低精度timer,level越高精度越低，故不会散列到下一级轮子)*/
 		levels = collect_expired_timers(base, heads);
 		/*
 		 * The two possible reasons for not finding any expired
@@ -2055,9 +2128,10 @@ static inline void __run_timers(struct timer_base *base)
 static __latent_entropy void run_timer_softirq(struct softirq_action *h)
 {
 	//取当前cpu对应的timer base,开始响应timer软中断
-	struct timer_base *base = this_cpu_ptr(&timer_bases[BASE_STD]);
+	struct timer_base *base = this_cpu_ptr(&timer_bases[BASE_STD]);/*先运行base_std*/
 
 	__run_timers(base);
+	/*如果开启了no-hz,则timer共有两种，这里还需要运行base_def*/
 	if (IS_ENABLED(CONFIG_NO_HZ_COMMON))
 		__run_timers(this_cpu_ptr(&timer_bases[BASE_DEF]));
 }
@@ -2268,6 +2342,7 @@ int timers_prepare_cpu(unsigned int cpu)
 	return 0;
 }
 
+/*将cpu对应的timer base上的timer逐个进行迁移*/
 int timers_dead_cpu(unsigned int cpu)
 {
 	struct timer_base *old_base;
@@ -2275,7 +2350,9 @@ int timers_dead_cpu(unsigned int cpu)
 	int b, i;
 
 	for (b = 0; b < NR_BASES; b++) {
+		/*给定cpu对应的base*/
 		old_base = per_cpu_ptr(&timer_bases[b], cpu);
+		/*当前cpu对应的base*/
 		new_base = get_cpu_ptr(&timer_bases[b]);
 		/*
 		 * The caller is globally serialized and nobody else
@@ -2314,12 +2391,14 @@ static void __init init_timer_cpu(int cpu)
 		base = per_cpu_ptr(&timer_bases[i], cpu);
 		base->cpu = cpu;
 		raw_spin_lock_init(&base->lock);
-		base->clk = jiffies;
+		base->clk = jiffies;/*初始化为jiffies*/
+		/*现在此base下还没有timer,故下一个过期的timer时间先设置成max-delta*/
 		base->next_expiry = base->clk + NEXT_TIMER_MAX_DELTA;
 		timer_base_init_expiry_lock(base);
 	}
 }
 
+/*针对各cpu进行timer子系统初始化*/
 static void __init init_timer_cpus(void)
 {
 	int cpu;

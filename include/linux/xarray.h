@@ -1347,7 +1347,7 @@ void xa_delete_node(struct xa_node *, xa_update_node_t);
  * end of the allocated nodes, it is set to %XAS_BOUNDS.
  */
 struct xa_state {
-	struct xarray *xa;
+	struct xarray *xa;/*要操作的xarray*/
 	unsigned long xa_index;
 	unsigned char xa_shift;
 	unsigned char xa_sibs;

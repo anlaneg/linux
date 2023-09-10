@@ -71,6 +71,7 @@ static inline unsigned long hold_time(const struct net_bridge *br)
 static inline int has_expired(const struct net_bridge *br,
 				  const struct net_bridge_fdb_entry *fdb)
 {
+	/*检查指定fdb表是否已过期*/
 	return !test_bit(BR_FDB_STATIC, &fdb->flags) &&
 	       !test_bit(BR_FDB_ADDED_BY_EXT_LEARN, &fdb->flags) &&
 	       time_before_eq(fdb->updated + hold_time(br), jiffies);
@@ -87,12 +88,16 @@ static int fdb_to_nud(const struct net_bridge *br,
 		      const struct net_bridge_fdb_entry *fdb)
 {
 	if (test_bit(BR_FDB_LOCAL, &fdb->flags))
+		/*本地fdb表项,永久的*/
 		return NUD_PERMANENT;
 	else if (test_bit(BR_FDB_STATIC, &fdb->flags))
+		/*静态表项，无arp*/
 		return NUD_NOARP;
 	else if (has_expired(br, fdb))
+		/*表项过期*/
 		return NUD_STALE;
 	else
+		/*其它情况，确认可达*/
 		return NUD_REACHABLE;
 }
 
@@ -237,6 +242,7 @@ static struct net_bridge_fdb_entry *br_fdb_find(struct net_bridge *br,
 
 	lockdep_assert_held_once(&br->hash_lock);
 
+	/*通过mac,vlan查询fdb表*/
 	rcu_read_lock();
 	fdb = fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
 	rcu_read_unlock();
@@ -287,8 +293,10 @@ static void fdb_add_hw_addr(struct net_bridge *br, const unsigned char *addr)
 
 	ASSERT_RTNL();
 
+	/*为br下所有port添加此单播mac*/
 	list_for_each_entry(p, &br->port_list, list) {
 		if (!br_promisc_port(p)) {
+			/*接口未开启混杂，为其添加单播mac*/
 			err = dev_uc_add(p->dev, addr);
 			if (err)
 				goto undo;
@@ -297,6 +305,7 @@ static void fdb_add_hw_addr(struct net_bridge *br, const unsigned char *addr)
 
 	return;
 undo:
+	/*回退*/
 	list_for_each_entry_continue_reverse(p, &br->port_list, list) {
 		if (!br_promisc_port(p))
 			dev_uc_del(p->dev, addr);
@@ -386,24 +395,28 @@ void br_fdb_find_delete_local(struct net_bridge *br,
 	spin_unlock_bh(&br->hash_lock);
 }
 
+/*创建fdb表项*/
 static struct net_bridge_fdb_entry *fdb_create(struct net_bridge *br,
 					       struct net_bridge_port *source,
-					       const unsigned char *addr,
-					       __u16 vid,
+					       const unsigned char *addr/*fdb对应的mac*/,
+					       __u16 vid/*匹配对应的vlan*/,
 					       unsigned long flags)
 {
 	struct net_bridge_fdb_entry *fdb;
 	int err;
 
+	/*申请fdb*/
 	fdb = kmem_cache_alloc(br_fdb_cache, GFP_ATOMIC);
 	if (!fdb)
 		return NULL;
 
+	/*填充mac,vlan*/
 	memcpy(fdb->key.addr.addr, addr, ETH_ALEN);
 	WRITE_ONCE(fdb->dst, source);
 	fdb->key.vlan_id = vid;
-	fdb->flags = flags;
-	fdb->updated = fdb->used = jiffies;
+	fdb->flags = flags;/*fdb表项对应的flags*/
+	fdb->updated = fdb->used = jiffies;/*初始化时间*/
+	/*添加到fdb表（hashtable)*/
 	err = rhashtable_lookup_insert_fast(&br->fdb_hash_tbl, &fdb->rhnode,
 					    br_fdb_rht_params);
 	if (err) {
@@ -411,6 +424,7 @@ static struct net_bridge_fdb_entry *fdb_create(struct net_bridge *br,
 		return NULL;
 	}
 
+	/*添加到fdb表（list)*/
 	hlist_add_head_rcu(&fdb->fdb_node, &br->fdb_list);
 
 	return fdb;
@@ -861,7 +875,7 @@ static bool __fdb_mark_active(struct net_bridge_fdb_entry *fdb)
 }
 
 //fdb学习
-void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
+void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source/*目的接口*/,
 		   const unsigned char *addr, u16 vid, unsigned long flags)
 {
 	struct net_bridge_fdb_entry *fdb;
@@ -872,17 +886,19 @@ void br_fdb_update(struct net_bridge *br, struct net_bridge_port *source,
 
 	fdb = fdb_find_rcu(&br->fdb_hash_tbl, addr, vid);
 	if (likely(fdb)) {
-		//已存在对应的fdb表项，如果为用户配置的表项，则不容许更新
+		//已存在对应的fdb表项，如果为local表项，则不容许更新
 		/* attempt to update an entry for a local interface */
 		if (unlikely(test_bit(BR_FDB_LOCAL, &fdb->flags))) {
 			if (net_ratelimit())
 				br_warn(br, "received packet on %s with own address as source address (addr:%pM, vlan:%u)\n",
 					source->dev->name, addr, vid);
 		} else {
+			/*其它表项容许更改*/
 			unsigned long now = jiffies;
 			bool fdb_modified = false;
 
 			if (now != fdb->updated) {
+				/*变更fdb update时间*/
 				fdb->updated = now;
 				fdb_modified = __fdb_mark_active(fdb);
 			}
@@ -1065,20 +1081,25 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 			return -EINVAL;
 	}
 
+	/*查fdb表项*/
 	fdb = br_fdb_find(br, addr, vid);
 	if (fdb == NULL) {
 		if (!(flags & NLM_F_CREATE))
+			/*此fdb表项未创建，但flags未指定create,则报错*/
 			return -ENOENT;
 
-		fdb = fdb_create(br, source, addr, vid, 0);
+		/*容许创建，创建此fdb表项*/
+		fdb = fdb_create(br, source, addr, vid, 0/*flag为零*/);
 		if (!fdb)
 			return -ENOMEM;
 
 		modified = true;
 	} else {
 		if (flags & NLM_F_EXCL)
+			/*表项已存在，指明了excl标记，则返回exist*/
 			return -EEXIST;
 
+		/*如果目的端口不相等，则更新目的端口*/
 		if (READ_ONCE(fdb->dst) != source) {
 			WRITE_ONCE(fdb->dst, source);
 			modified = true;
@@ -1086,18 +1107,20 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 	}
 
 	if (fdb_to_nud(br, fdb) != state) {
+		/*fdb表项对应的状态与ndm->ndm_state不同*/
 		if (state & NUD_PERMANENT) {
-			set_bit(BR_FDB_LOCAL, &fdb->flags);
+			set_bit(BR_FDB_LOCAL, &fdb->flags);/*添加local标记*/
 			if (!test_and_set_bit(BR_FDB_STATIC, &fdb->flags))
-				fdb_add_hw_addr(br, addr);
+				fdb_add_hw_addr(br, addr);/*添加单播mac*/
 		} else if (state & NUD_NOARP) {
+			/*移除local标记*/
 			clear_bit(BR_FDB_LOCAL, &fdb->flags);
 			if (!test_and_set_bit(BR_FDB_STATIC, &fdb->flags))
-				fdb_add_hw_addr(br, addr);
+				fdb_add_hw_addr(br, addr);/*添加单播mac*/
 		} else {
 			clear_bit(BR_FDB_LOCAL, &fdb->flags);
 			if (test_and_clear_bit(BR_FDB_STATIC, &fdb->flags))
-				fdb_del_hw_addr(br, addr);
+				fdb_del_hw_addr(br, addr);/*移除单播mac*/
 		}
 
 		modified = true;
@@ -1119,16 +1142,17 @@ static int fdb_add_entry(struct net_bridge *br, struct net_bridge_port *source,
 	fdb->used = jiffies;
 	if (modified) {
 		if (refresh)
-			fdb->updated = jiffies;
+			fdb->updated = jiffies;/*更新fdb更新时间*/
 		fdb_notify(br, fdb, RTM_NEWNEIGH, true);
 	}
 
 	return 0;
 }
 
-static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
-			struct net_bridge_port *p, const unsigned char *addr,
-			u16 nlh_flags, u16 vid, struct nlattr *nfea_tb[],
+/*fdb表项添加*/
+static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br/*所属的bridge*/,
+			struct net_bridge_port *p/*目的端口*/, const unsigned char *addr/*mac地址*/,
+			u16 nlh_flags, u16 vid/*vlan信息*/, struct nlattr *nfea_tb[],
 			struct netlink_ext_ack *extack)
 {
 	int err = 0;
@@ -1144,7 +1168,7 @@ static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
 
 		local_bh_disable();
 		rcu_read_lock();
-		br_fdb_update(br, p, addr, vid, BIT(BR_FDB_ADDED_BY_USER));
+		br_fdb_update(br, p, addr, vid, BIT(BR_FDB_ADDED_BY_USER)/*指明用户态添加表项*/);
 		rcu_read_unlock();
 		local_bh_enable();
 	} else if (ndm->ndm_flags & NTF_EXT_LEARNED) {
@@ -1156,6 +1180,7 @@ static int __br_fdb_add(struct ndmsg *ndm, struct net_bridge *br,
 		err = br_fdb_external_learn_add(br, p, addr, vid, false, true);
 	} else {
 		spin_lock_bh(&br->hash_lock);
+		/*添加*/
 		err = fdb_add_entry(br, p, addr, ndm, nlh_flags, vid, nfea_tb);
 		spin_unlock_bh(&br->hash_lock);
 	}
@@ -1189,21 +1214,24 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 		return -EINVAL;
 	}
 
+	/*mac地址不能为0*/
 	if (is_zero_ether_addr(addr)) {
 		pr_info("bridge: RTM_NEWNEIGH with invalid ether address\n");
 		return -EINVAL;
 	}
 
 	if (netif_is_bridge_master(dev)) {
-		br = netdev_priv(dev);
-		vg = br_vlan_group(br);
+		br = netdev_priv(dev);/*取得bridge*/
+		vg = br_vlan_group(br);/*取得vlan group*/
 	} else {
+		/*取得bridge port*/
 		p = br_port_get_rtnl(dev);
 		if (!p) {
 			pr_info("bridge: RTM_NEWNEIGH %s not a bridge port\n",
 				dev->name);
 			return -EINVAL;
 		}
+		/*由bridge port获得bridge,vlan group*/
 		br = p->br;
 		vg = nbp_vlan_group(p);
 	}
@@ -1212,6 +1240,7 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 		ext_flags = nla_get_u32(tb[NDA_FLAGS_EXT]);
 
 	if (ext_flags & NTF_EXT_LOCKED) {
+		/*不支持locked标记*/
 		NL_SET_ERR_MSG_MOD(extack, "Cannot add FDB entry with \"locked\" flag set");
 		return -EINVAL;
 	}
@@ -1229,15 +1258,16 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 	if (vid) {
 		v = br_vlan_find(vg, vid);
 		if (!v || !br_vlan_should_use(v)) {
+			/*这个接口没有配置此vlan,不能配置此vlan对应的fdb表项*/
 			pr_info("bridge: RTM_NEWNEIGH with unconfigured vlan %d on %s\n", vid, dev->name);
 			return -EINVAL;
 		}
 
 		/* VID was specified, so use it. */
-		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, vid, nfea_tb,
+		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, vid/*添加指定vid*/, nfea_tb,
 				   extack);
 	} else {
-		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, 0, nfea_tb,
+		err = __br_fdb_add(ndm, br, p, addr, nlh_flags, 0/*无vlan*/, nfea_tb,
 				   extack);
 		if (err || !vg || !vg->num_vlans)
 			goto out;
@@ -1246,9 +1276,11 @@ int br_fdb_add(struct ndmsg *ndm, struct nlattr *tb[],
 		 * specify a VLAN.  To be nice, add/update entry for every
 		 * vlan on this port.
 		 */
+		/*这个接口上是有vlan的，为其它vlan补加一条fdb表信息*/
 		list_for_each_entry(v, &vg->vlan_list, vlist) {
 			if (!br_vlan_should_use(v))
 				continue;
+			/*为每个vlan添加此fdb表项*/
 			err = __br_fdb_add(ndm, br, p, addr, nlh_flags, v->vid,
 					   nfea_tb, extack);
 			if (err)
@@ -1407,15 +1439,19 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 
 	fdb = br_fdb_find(br, addr, vid);
 	if (!fdb) {
+		/*表项不存在，指明表项被ext-learn添加*/
 		unsigned long flags = BIT(BR_FDB_ADDED_BY_EXT_LEARN);
 
 		if (swdev_notify)
+			/*添加added_by_user标记*/
 			flags |= BIT(BR_FDB_ADDED_BY_USER);
 
 		if (!p)
+			/*如果p为空，则添加local标记*/
 			flags |= BIT(BR_FDB_LOCAL);
 
 		if (locked)
+			/*如果有locked标记*/
 			flags |= BIT(BR_FDB_LOCKED);
 
 		fdb = fdb_create(br, p, addr, vid, flags);
@@ -1434,6 +1470,7 @@ int br_fdb_external_learn_add(struct net_bridge *br, struct net_bridge_port *p,
 
 		fdb->updated = jiffies;
 
+		/*更新目的接口*/
 		if (READ_ONCE(fdb->dst) != p) {
 			WRITE_ONCE(fdb->dst, p);
 			modified = true;

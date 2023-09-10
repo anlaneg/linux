@@ -82,6 +82,7 @@ int nf_log_register(u_int8_t pf, struct nf_logger *logger)
 	int ret = 0;
 
 	if (pf >= ARRAY_SIZE(init_net.nf.nf_loggers))
+		/*pf无效*/
 		return -EINVAL;
 
 	mutex_lock(&nf_log_mutex);
@@ -89,10 +90,12 @@ int nf_log_register(u_int8_t pf, struct nf_logger *logger)
 	if (pf == NFPROTO_UNSPEC) {
 		for (i = NFPROTO_UNSPEC; i < NFPROTO_NUMPROTO; i++) {
 			if (rcu_access_pointer(loggers[i][logger->type])) {
+				/*此loggers已设置*/
 				ret = -EEXIST;
 				goto unlock;
 			}
 		}
+		/*pf未明确指定，故全量设置*/
 		for (i = NFPROTO_UNSPEC; i < NFPROTO_NUMPROTO; i++)
 			rcu_assign_pointer(loggers[i][logger->type], logger);
 	} else {
@@ -100,6 +103,7 @@ int nf_log_register(u_int8_t pf, struct nf_logger *logger)
 			ret = -EEXIST;
 			goto unlock;
 		}
+		/*仅设置相应pf对应的logger*/
 		rcu_assign_pointer(loggers[pf][logger->type], logger);
 	}
 
@@ -216,6 +220,7 @@ void nf_log_packet(struct net *net,
 	const struct nf_logger *logger;
 
 	rcu_read_lock();
+	/*确定logger*/
 	if (loginfo != NULL)
 		logger = rcu_dereference(loggers[pf][loginfo->type]);
 	else
@@ -223,9 +228,11 @@ void nf_log_packet(struct net *net,
 
 	if (logger) {
 		va_start(args, fmt);
+		/*格式化出前缀*/
 		vsnprintf(prefix, sizeof(prefix), fmt, args);
 		va_end(args);
-		logger->logfn(net, pf, hooknum, skb, in, out, loginfo, prefix);
+		/*调用logfn完成报文log*/
+		logger->logfn(net, pf, hooknum, skb, in, out, loginfo, prefix/*前缀*/);
 	}
 	rcu_read_unlock();
 }
@@ -301,7 +308,7 @@ EXPORT_SYMBOL_GPL(nf_log_buf_open);
 void nf_log_buf_close(struct nf_log_buf *m)
 {
 	m->buf[m->count] = 0;
-	printk("%s\n", m->buf);
+	printk("%s\n", m->buf);/*通过printk输出log信息*/
 
 	if (likely(m != &emergency))
 		kfree(m);

@@ -86,6 +86,7 @@ static void __br_forward(const struct net_bridge_port *to,
 	 */
 	nbp_switchdev_frame_mark_tx_fwd_offload(to, skb);
 
+	/*此目的接口的vlan group,并进行vlan处理*/
 	vg = nbp_vlan_group_rcu(to);
 	skb = br_handle_vlan(to->br, to, vg, skb);
 	if (!skb)

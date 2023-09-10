@@ -4506,6 +4506,7 @@ static int __init ib_cm_init(void)
 		goto error2;
 	}
 
+	/*注册cm client*/
 	ret = ib_register_client(&cm_client);
 	if (ret)
 		goto error3;

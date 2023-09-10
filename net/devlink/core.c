@@ -313,9 +313,11 @@ static int __init devlink_init(void)
 {
 	int err;
 
+	/*注册generic netlink family（devlink)*/
 	err = genl_register_family(&devlink_nl_family);
 	if (err)
 		goto out;
+	/*为每个netns注册操作集*/
 	err = register_pernet_subsys(&devlink_pernet_ops);
 
 out:

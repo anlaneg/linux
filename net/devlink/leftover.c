@@ -305,6 +305,7 @@ struct devlink_sb {
 	u16 egress_tc_count;
 };
 
+/*此devlink sb的pool总数*/
 static u16 devlink_sb_pool_count(struct devlink_sb *devlink_sb)
 {
 	return devlink_sb->ingress_pools_count + devlink_sb->egress_pools_count;
@@ -356,13 +357,14 @@ static struct devlink_sb *devlink_sb_get_from_info(struct devlink *devlink,
 
 static int devlink_sb_pool_index_get_from_attrs(struct devlink_sb *devlink_sb,
 						struct nlattr **attrs,
-						u16 *p_pool_index)
+						u16 *p_pool_index/*出参，返回指定的sb_pool index*/)
 {
 	u16 val;
 
 	if (!attrs[DEVLINK_ATTR_SB_POOL_INDEX])
 		return -EINVAL;
 
+	/*校验sb_pool index*/
 	val = nla_get_u16(attrs[DEVLINK_ATTR_SB_POOL_INDEX]);
 	if (val >= devlink_sb_pool_count(devlink_sb))
 		return -EINVAL;
@@ -2086,6 +2088,7 @@ static int devlink_nl_cmd_linecard_set_doit(struct sk_buff *skb,
 	return 0;
 }
 
+/*填充此devlink_sb到msg*/
 static int devlink_nl_sb_fill(struct sk_buff *msg, struct devlink *devlink,
 			      struct devlink_sb *devlink_sb,
 			      enum devlink_command cmd, u32 portid,
@@ -2530,6 +2533,7 @@ const struct devlink_cmd devl_cmd_sb_port_pool_get = {
 	.dump_one		= devlink_nl_cmd_sb_port_pool_get_dump_one,
 };
 
+/*通过devlink sb_port_pool_set回调进行设置*/
 static int devlink_sb_port_pool_set(struct devlink_port *devlink_port,
 				    unsigned int sb_index, u16 pool_index,
 				    u32 threshold,
@@ -2554,15 +2558,18 @@ static int devlink_nl_cmd_sb_port_pool_set_doit(struct sk_buff *skb,
 	u32 threshold;
 	int err;
 
+	/*取得指定的devlink_sb*/
 	devlink_sb = devlink_sb_get_from_info(devlink, info);
 	if (IS_ERR(devlink_sb))
 		return PTR_ERR(devlink_sb);
 
+	/*取得指定的pool_index*/
 	err = devlink_sb_pool_index_get_from_info(devlink_sb, info,
 						  &pool_index);
 	if (err)
 		return err;
 
+	/*必须配置sb_threshold*/
 	if (GENL_REQ_ATTR_CHECK(info, DEVLINK_ATTR_SB_THRESHOLD))
 		return -EINVAL;
 

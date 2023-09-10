@@ -317,8 +317,8 @@ struct folio {
 				};
 	/* public: */
 			};
-			struct address_space *mapping;
-			pgoff_t index;
+			struct address_space *mapping;/*所属的mapping*/
+			pgoff_t index;/*在i_pages中存放此folio对应的索引*/
 			void *private;
 			atomic_t _mapcount;
 			atomic_t _refcount;
@@ -482,7 +482,9 @@ struct anon_vma_name {
 struct vm_area_struct {
 	/* The first cache line has the info for VMA tree walking. */
 
+	/*区域起始地址*/
 	unsigned long vm_start;		/* Our start address within vm_mm. */
+	/*区域结束地址*/
 	unsigned long vm_end;		/* The first byte after our end address
 					   within vm_mm. */
 
@@ -492,7 +494,7 @@ struct vm_area_struct {
 	 * Access permissions of this VMA.
 	 * See vmf_insert_mixed_prot() for discussion.
 	 */
-	pgprot_t vm_page_prot;
+	pgprot_t vm_page_prot;/*区域权限*/
 
 	/*
 	 * Flags, see mm.h.
@@ -527,8 +529,10 @@ struct vm_area_struct {
 	const struct vm_operations_struct *vm_ops;
 
 	/* Information about our backing store: */
+	/*在page范围内的起始offset*/
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units */
+	/*此区域映射到哪个文件*/
 	struct file * vm_file;		/* File we map to (can be NULL). */
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 
@@ -569,7 +573,8 @@ struct mm_struct {
 		unsigned long mmap_compat_legacy_base;
 #endif
 		unsigned long task_size;	/* size of task vm space */
-		pgd_t * pgd;//进程对应的page global directory
+		//进程对应的page global directory,由其中的表项可查询page midle directory
+		pgd_t * pgd;
 
 #ifdef CONFIG_MEMBARRIER
 		/**

@@ -56,6 +56,7 @@ bool __list_del_entry_valid(struct list_head *entry)
 	    CHECK_DATA_CORRUPTION(prev == LIST_POISON2,
 			"list_del corruption, %px->prev is LIST_POISON2 (%px)\n",
 			entry, LIST_POISON2) ||
+		/*next指定与预期不符，校验失败*/
 	    CHECK_DATA_CORRUPTION(prev->next != entry,
 			"list_del corruption. prev->next should be %px, but was %px. (prev=%px)\n",
 			entry, prev->next, prev) ||

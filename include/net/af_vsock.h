@@ -29,8 +29,8 @@ struct vsock_sock {
 	/* sk must be the first member. */
 	struct sock sk;
 	const struct vsock_transport *transport;
-	struct sockaddr_vm local_addr;
-	struct sockaddr_vm remote_addr;
+	struct sockaddr_vm local_addr;/*本端地址*/
+	struct sockaddr_vm remote_addr;/*远端地址*/
 	/* Links for the global tables of bound and connected sockets. */
 	struct list_head bound_table;
 	struct list_head connected_table;

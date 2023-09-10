@@ -21,15 +21,39 @@
 #include <linux/stddef.h>
 #include <asm/byteorder.h>
 
+/*tos共有8个bit，其中前3bit弃用，中间4bit表示如下示：
+ * 1000 minimize delay,即IPTOS_LOWDELAY
+ * 0100 maximize throughput 即IPTOS_THROUGHPUT
+ * 0010 maximize reliability 即IPTOS_RELIABILITY
+ * 0001 minimize monetary cost 即IPTOS_MINCOST
+ * 0000 normal service
+ * 最后一bit必须为0，故这里采用0x1E*/
 #define IPTOS_TOS_MASK		0x1E
+/*通过此宏取出tos值*/
 #define IPTOS_TOS(tos)		((tos)&IPTOS_TOS_MASK)
+/*以下各宏均包含有最后一bit*/
 #define	IPTOS_LOWDELAY		0x10
 #define	IPTOS_THROUGHPUT	0x08
 #define	IPTOS_RELIABILITY	0x04
 #define	IPTOS_MINCOST		0x02
 
+/**
+ * tos中优先级掩码，共占用3bits，即上面提到的"其中前3bit弃用"(RFC1122)
+ * 故掩码为0xe0
+ * 其取值有：
+ * 111  network control
+ * 110  internetwork control
+ * 101  critic
+ * 100  flash override
+ * 011  flash
+ * 010  immediate
+ * 001  priority
+ * 0000 routine
+ */
 #define IPTOS_PREC_MASK		0xE0
+/*通过此宏取prec字段（即优先级）*/
 #define IPTOS_PREC(tos)		((tos)&IPTOS_PREC_MASK)
+/*以下各宏与IPTOS_PREC的返回值进行比较*/
 #define IPTOS_PREC_NETCONTROL           0xe0
 #define IPTOS_PREC_INTERNETCONTROL      0xc0
 #define IPTOS_PREC_CRITIC_ECP           0xa0
@@ -94,7 +118,7 @@ struct iphdr {
 #else
 #error	"Please fix <asm/byteorder.h>"
 #endif
-	__u8	tos;
+	__u8	tos;/*tos字段*/
 	__be16	tot_len;
 	__be16	id;
 	__be16	frag_off;//分片相关

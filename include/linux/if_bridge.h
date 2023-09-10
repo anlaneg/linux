@@ -44,6 +44,7 @@ struct br_ip_list {
 #define BR_LEARNING		BIT(5)
 #define BR_FLOOD		BIT(6)
 #define BR_AUTO_MASK		(BR_FLOOD | BR_LEARNING)
+/*标记接口开启混杂*/
 #define BR_PROMISC		BIT(7)
 #define BR_PROXYARP		BIT(8)
 #define BR_LEARNING_SYNC	BIT(9)

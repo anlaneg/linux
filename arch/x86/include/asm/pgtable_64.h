@@ -254,6 +254,7 @@ extern void cleanup_highmap(void);
 
 #define __HAVE_ARCH_PTE_SAME
 
+/*系统所有page数组地址地址*/
 #define vmemmap ((struct page *)VMEMMAP_START)
 
 extern void init_extra_mapping_uc(unsigned long phys, unsigned long size);

@@ -112,8 +112,9 @@ bool rdma_nl_chk_listeners(unsigned int group);
 
 struct rdma_link_ops {
 	struct list_head list;
-	const char *type;
-	int (*newlink)(const char *ibdev_name/*待创建的设备名称*/, struct net_device *ndev/*基于此设备创建*/);
+	const char *type;/*要创建的link类型*/
+	/*link新建函数*/
+	int (*newlink)(const char *ibdev_name/*待创建的设备名称*/, struct net_device *ndev/*底层netdev设备*/);
 };
 
 void rdma_link_register(struct rdma_link_ops *ops);

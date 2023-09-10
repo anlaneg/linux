@@ -47,8 +47,11 @@
 #include "internal.h"
 #include "hugetlb_vmemmap.h"
 
+/*hstates数组有效长度*/
 int hugetlb_max_hstate __read_mostly;
+/*指向huge states数组中的default尺寸*/
 unsigned int default_hstate_idx;
+/*记录系统中所有大页*/
 struct hstate hstates[HUGE_MAX_HSTATE];
 
 #ifdef CONFIG_CMA
@@ -70,7 +73,7 @@ static unsigned long hugetlb_cma_size __initdata;
 __initdata LIST_HEAD(huge_boot_pages);
 
 /* for command line parsing */
-static struct hstate * __initdata parsed_hstate;
+static struct hstate * __initdata parsed_hstate;/*指向解析参数获得的hstate*/
 static unsigned long __initdata default_hstate_max_huge_pages;
 static bool __initdata parsed_valid_hugepagesz = true;
 static bool __initdata parsed_default_hugepagesz;
@@ -247,6 +250,7 @@ static long hugepage_subpool_put_pages(struct hugepage_subpool *spool,
 	return ret;
 }
 
+/*由inode获得hugepage_subpool*/
 static inline struct hugepage_subpool *subpool_inode(struct inode *inode)
 {
 	return HUGETLBFS_SB(inode->i_sb)->spool;
@@ -281,6 +285,7 @@ void hugetlb_vma_unlock_read(struct vm_area_struct *vma)
 void hugetlb_vma_lock_write(struct vm_area_struct *vma)
 {
 	if (__vma_shareable_lock(vma)) {
+		/*此区域共享，加写锁*/
 		struct hugetlb_vma_lock *vma_lock = vma->vm_private_data;
 
 		down_write(&vma_lock->rw_sema);
@@ -369,6 +374,7 @@ static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma)
 
 	/* Only establish in (flags) sharable vmas */
 	if (!vma || !(vma->vm_flags & VM_MAYSHARE))
+		/*vma为空，则直接返回*/
 		return;
 
 	/* Should never get here with non-NULL vm_private_data */
@@ -393,7 +399,7 @@ static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma)
 
 	kref_init(&vma_lock->refs);
 	init_rwsem(&vma_lock->rw_sema);
-	vma_lock->vma = vma;
+	vma_lock->vma = vma;/*设置对应的vma*/
 	vma->vm_private_data = vma_lock;
 }
 
@@ -1269,6 +1275,7 @@ static bool vma_has_reserves(struct vm_area_struct *vma, long chg)
 	return false;
 }
 
+/*将folio空闲页放回到hugepage_freelists中*/
 static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 {
 	int nid = folio_nid(folio);
@@ -1276,10 +1283,11 @@ static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 	lockdep_assert_held(&hugetlb_lock);
 	VM_BUG_ON_FOLIO(folio_ref_count(folio), folio);
 
+	/*按照numa id分类存入到此大页的freelists中*/
 	list_move(&folio->lru, &h->hugepage_freelists[nid]);
-	h->free_huge_pages++;
+	h->free_huge_pages++;/*空闲页数增加*/
 	h->free_huge_pages_node[nid]++;
-	folio_set_hugetlb_freed(folio);
+	folio_set_hugetlb_freed(folio);/*标记此大页已释放*/
 }
 
 static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
@@ -1524,9 +1532,10 @@ static void free_gigantic_folio(struct folio *folio, unsigned int order)
 
 #ifdef CONFIG_CONTIG_ALLOC
 static struct folio *alloc_gigantic_folio(struct hstate *h, gfp_t gfp_mask,
-		int nid, nodemask_t *nodemask)
+		int nid/*对应的numa node*/, nodemask_t *nodemask)
 {
 	struct page *page;
+	/*取此大页对应的普页数目*/
 	unsigned long nr_pages = pages_per_huge_page(h);
 	if (nid == NUMA_NO_NODE)
 		nid = numa_mem_id();
@@ -1656,7 +1665,7 @@ static void remove_hugetlb_folio_for_demote(struct hstate *h, struct folio *foli
 }
 
 static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
-			     bool adjust_surplus)
+			     bool adjust_surplus/*是否调整surplus计数*/)
 {
 	int zeroed;
 	int nid = folio_nid(folio);
@@ -1666,20 +1675,22 @@ static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
 	lockdep_assert_held(&hugetlb_lock);
 
 	INIT_LIST_HEAD(&folio->lru);
-	h->nr_huge_pages++;
-	h->nr_huge_pages_node[nid]++;
+	h->nr_huge_pages++;/*可见页数增加*/
+	h->nr_huge_pages_node[nid]++;/*此node上可见页数增加*/
 
+	/*如果surplus计数也需要更新*/
 	if (adjust_surplus) {
-		h->surplus_huge_pages++;
+		h->surplus_huge_pages++;/*正要释放的huge_pages页数增加*/
 		h->surplus_huge_pages_node[nid]++;
 	}
 
 	folio_set_compound_dtor(folio, HUGETLB_PAGE_DTOR);
-	folio_change_private(folio, NULL);
+	folio_change_private(folio, NULL);/*清空标记位*/
 	/*
 	 * We have to set hugetlb_vmemmap_optimized again as above
 	 * folio_change_private(folio, NULL) cleared it.
 	 */
+	/*为此folio添加vmemmap_optimized标记*/
 	folio_set_hugetlb_vmemmap_optimized(folio);
 
 	/*
@@ -1695,13 +1706,15 @@ static void add_hugetlb_folio(struct hstate *h, struct folio *folio,
 		 * hugetlb destructor (free_huge_page) will be called
 		 * when this other ref is dropped.
 		 */
-		return;
+		return;/*此页被put后引用数为0*/
 
 	arch_clear_hugepage_flags(&folio->page);
+	/*将此folio入队到对应大页的freelists中*/
 	enqueue_hugetlb_folio(h, folio);
 }
 
-static void __update_and_free_hugetlb_folio(struct hstate *h,
+/*向h还回folio大页*/
+static void __update_and_free_hugetlb_folio(struct hstate *h/*folio对应的大页类型*/,
 						struct folio *folio)
 {
 	int i;
@@ -1753,6 +1766,7 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
 		destroy_compound_gigantic_folio(folio, huge_page_order(h));
 		free_gigantic_folio(folio, huge_page_order(h));
 	} else {
+		/*普通页释放*/
 		__free_pages(&folio->page, huge_page_order(h));
 	}
 }
@@ -1768,12 +1782,14 @@ static void __update_and_free_hugetlb_folio(struct hstate *h,
  * to be cleared in free_hpage_workfn() anyway, it is reused as the llist_node
  * structure of a lockless linked list of huge pages to be freed.
  */
-static LLIST_HEAD(hpage_freelist);
+static LLIST_HEAD(hpage_freelist);/*记录系统要释放的大页*/
 
+/*此函数负责释放挂接在hpage_freelist上的所有大页*/
 static void free_hpage_workfn(struct work_struct *work)
 {
 	struct llist_node *node;
 
+	/*取此list上待释放的大页*/
 	node = llist_del_all(&hpage_freelist);
 
 	while (node) {
@@ -1782,8 +1798,8 @@ static void free_hpage_workfn(struct work_struct *work)
 
 		page = container_of((struct address_space **)node,
 				     struct page, mapping);
-		node = node->next;
-		page->mapping = NULL;
+		node = node->next;/*取下一个*/
+		page->mapping = NULL;/*自链上摘取*/
 		/*
 		 * The VM_BUG_ON_PAGE(!PageHuge(page), page) in page_hstate()
 		 * is going to trigger because a previous call to
@@ -1791,7 +1807,7 @@ static void free_hpage_workfn(struct work_struct *work)
 		 * (folio, NULL_COMPOUND_DTOR), so do not use page_hstate()
 		 * directly.
 		 */
-		h = size_to_hstate(page_size(page));
+		h = size_to_hstate(page_size(page));/*获知是哪种尺寸的大页*/
 
 		__update_and_free_hugetlb_folio(h, page_folio(page));
 
@@ -1810,6 +1826,7 @@ static void update_and_free_hugetlb_folio(struct hstate *h, struct folio *folio,
 				 bool atomic)
 {
 	if (!folio_test_hugetlb_vmemmap_optimized(folio) || !atomic) {
+		/*直接返回folio*/
 		__update_and_free_hugetlb_folio(h, folio);
 		return;
 	}
@@ -1821,7 +1838,7 @@ static void update_and_free_hugetlb_folio(struct hstate *h, struct folio *folio,
 	 * empty. Otherwise, schedule_work() had been called but the workfn
 	 * hasn't retrieved the list yet.
 	 */
-	if (llist_add((struct llist_node *)&folio->mapping, &hpage_freelist))
+	if (llist_add((struct llist_node *)&folio->mapping, &hpage_freelist))/*增加要释放的页，并触发此work*/
 		schedule_work(&free_hpage_work);
 }
 
@@ -1837,7 +1854,7 @@ static void update_and_free_pages_bulk(struct hstate *h, struct list_head *list)
 	}
 }
 
-/*通过size获取hstate*/
+/*通过大页size获取hstate*/
 struct hstate *size_to_hstate(unsigned long size)
 {
 	struct hstate *h;
@@ -2362,7 +2379,10 @@ int dissolve_free_huge_pages(unsigned long start_pfn, unsigned long end_pfn)
 	if (!hugepages_supported())
 		return rc;
 
+	/*取默认尺寸的order*/
 	order = huge_page_order(&default_hstate);
+
+	/*取最小的大页尺寸对应的order*/
 	for_each_hstate(h)
 		order = min(order, huge_page_order(h));
 
@@ -2539,12 +2559,14 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 retry:
 	spin_unlock_irq(&hugetlb_lock);
 	for (i = 0; i < needed; i++) {
+		/*申请一个大页*/
 		folio = alloc_surplus_hugetlb_folio(h, htlb_alloc_mask(h),
 				NUMA_NO_NODE, NULL);
 		if (!folio) {
 			alloc_ok = false;
 			break;
 		}
+		/*将其挂接到surplus_list上*/
 		list_add(&folio->lru, &surplus_list);
 		cond_resched();
 	}
@@ -3432,7 +3454,7 @@ found:
 }
 
 #define persistent_huge_pages(h) (h->nr_huge_pages - h->surplus_huge_pages)
-static int set_max_huge_pages(struct hstate *h, unsigned long count, int nid,
+static int set_max_huge_pages(struct hstate *h, unsigned long count/*大页数目*/, int nid/*numa node id*/,
 			      nodemask_t *nodes_allowed)
 {
 	unsigned long min_count, ret;
@@ -3686,6 +3708,7 @@ static int demote_pool_huge_page(struct hstate *h, nodemask_t *nodes_allowed)
 	static struct kobj_attribute _name##_attr = __ATTR_RW(_name)
 
 static struct kobject *hugepages_kobj;
+/*记录各大页类型对应的kobject*/
 static struct kobject *hstate_kobjs[HUGE_MAX_HSTATE];
 
 static struct hstate *kobj_to_node_hstate(struct kobject *kobj, int *nidp);
@@ -3694,6 +3717,7 @@ static struct hstate *kobj_to_hstate(struct kobject *kobj, int *nidp)
 {
 	int i;
 
+	/*查找kobj具体是哪个类型的大页*/
 	for (i = 0; i < HUGE_MAX_HSTATE; i++)
 		if (hstate_kobjs[i] == kobj) {
 			if (nidp)
@@ -3701,6 +3725,7 @@ static struct hstate *kobj_to_hstate(struct kobject *kobj, int *nidp)
 			return &hstates[i];
 		}
 
+	/*利用node id方式查找*/
 	return kobj_to_node_hstate(kobj, nidp);
 }
 
@@ -3713,8 +3738,10 @@ static ssize_t nr_hugepages_show_common(struct kobject *kobj,
 
 	h = kobj_to_hstate(kobj, &nid);
 	if (nid == NUMA_NO_NODE)
+		/*不区分node的情况*/
 		nr_huge_pages = h->nr_huge_pages;
 	else
+		/*需要区分node的情况*/
 		nr_huge_pages = h->nr_huge_pages_node[nid];
 
 	return sysfs_emit(buf, "%lu\n", nr_huge_pages);
@@ -3745,7 +3772,7 @@ static ssize_t __nr_hugepages_store_common(bool obey_mempolicy,
 		 * set_max_huge_pages() after acquiring hugetlb_lock.
 		 */
 		init_nodemask_of_node(&nodes_allowed, nid);
-		n_mask = &nodes_allowed;
+		n_mask = &nodes_allowed;/*指明了node id,只容许此nid*/
 	}
 
 	err = set_max_huge_pages(h, count, nid, n_mask);
@@ -3762,23 +3789,27 @@ static ssize_t nr_hugepages_store_common(bool obey_mempolicy,
 	int nid;
 	int err;
 
-	err = kstrtoul(buf, 10, &count);
+	/*获取用户配置的总数*/
+	err = kstrtoul(buf, 10/*10进制*/, &count);
 	if (err)
 		return err;
 
+	/*确认配置的是哪种类型的大页*/
 	h = kobj_to_hstate(kobj, &nid);
-	return __nr_hugepages_store_common(obey_mempolicy, h, nid, count, len);
+	return __nr_hugepages_store_common(obey_mempolicy, h, nid/*numa node*/, count/*大页总数*/, len);
 }
 
 static ssize_t nr_hugepages_show(struct kobject *kobj,
 				       struct kobj_attribute *attr, char *buf)
 {
+	/*显示大页数目*/
 	return nr_hugepages_show_common(kobj, attr, buf);
 }
 
 static ssize_t nr_hugepages_store(struct kobject *kobj,
 	       struct kobj_attribute *attr, const char *buf, size_t len)
 {
+	/*设置大页数目*/
 	return nr_hugepages_store_common(false, kobj, buf, len);
 }
 HSTATE_ATTR(nr_hugepages);
@@ -3827,13 +3858,14 @@ static ssize_t nr_overcommit_hugepages_store(struct kobject *kobj,
 		return err;
 
 	spin_lock_irq(&hugetlb_lock);
-	h->nr_overcommit_huge_pages = input;
+	h->nr_overcommit_huge_pages = input;/*设置容许分配的最大数*/
 	spin_unlock_irq(&hugetlb_lock);
 
 	return count;
 }
 HSTATE_ATTR(nr_overcommit_hugepages);
 
+/*显示当前空闲大页数*/
 static ssize_t free_hugepages_show(struct kobject *kobj,
 					struct kobj_attribute *attr, char *buf)
 {
@@ -3841,7 +3873,9 @@ static ssize_t free_hugepages_show(struct kobject *kobj,
 	unsigned long free_huge_pages;
 	int nid;
 
+	/*搞清楚当前需要显示哪种类型的大页*/
 	h = kobj_to_hstate(kobj, &nid);
+	/*显示此类型大页对应的空闲页数*/
 	if (nid == NUMA_NO_NODE)
 		free_huge_pages = h->free_huge_pages;
 	else
@@ -3851,6 +3885,7 @@ static ssize_t free_hugepages_show(struct kobject *kobj,
 }
 HSTATE_ATTR_RO(free_hugepages);
 
+/*显示预留（为了防止分配过程中被其它过程抢占，提前预留）的大页内存大小*/
 static ssize_t resv_hugepages_show(struct kobject *kobj,
 					struct kobj_attribute *attr, char *buf)
 {
@@ -3972,10 +4007,10 @@ static ssize_t demote_size_store(struct kobject *kobj,
 HSTATE_ATTR(demote_size);
 
 static struct attribute *hstate_attrs[] = {
-	&nr_hugepages_attr.attr,
+	&nr_hugepages_attr.attr,/*设置的大页可用总数目*/
 	&nr_overcommit_hugepages_attr.attr,
-	&free_hugepages_attr.attr,
-	&resv_hugepages_attr.attr,
+	&free_hugepages_attr.attr,/*空闲大页数目*/
+	&resv_hugepages_attr.attr,/*预留大页数目（为了mmap等函数成功执行，在执行期间需要预留内存以防被其它进程抢占）*/
 	&surplus_hugepages_attr.attr,
 #ifdef CONFIG_NUMA
 	&nr_hugepages_mempolicy_attr.attr,
@@ -4004,10 +4039,12 @@ static int hugetlb_sysfs_add_hstate(struct hstate *h, struct kobject *parent,
 	int retval;
 	int hi = hstate_index(h);
 
+	/*增加此大页类型对应的目录*/
 	hstate_kobjs[hi] = kobject_create_and_add(h->name, parent);
 	if (!hstate_kobjs[hi])
 		return -ENOMEM;
 
+	/*创建此大页类型对应的group属性*/
 	retval = sysfs_create_group(hstate_kobjs[hi], hstate_attr_group);
 	if (retval) {
 		kobject_put(hstate_kobjs[hi]);
@@ -4016,6 +4053,7 @@ static int hugetlb_sysfs_add_hstate(struct hstate *h, struct kobject *parent,
 	}
 
 	if (h->demote_order) {
+		/*创建此大页demote属性组*/
 		retval = sysfs_create_group(hstate_kobjs[hi],
 					    &hstate_demote_attr_group);
 		if (retval) {
@@ -4041,9 +4079,10 @@ static bool hugetlb_sysfs_initialized __ro_after_init;
  * the base kernel, on the hugetlb module.
  */
 struct node_hstate {
-	struct kobject		*hugepages_kobj;
-	struct kobject		*hstate_kobjs[HUGE_MAX_HSTATE];
+	struct kobject		*hugepages_kobj;/*此node下大页对应的kobject*/
+	struct kobject		*hstate_kobjs[HUGE_MAX_HSTATE];/*各类型对应的大页kobject*/
 };
+/*记录各node对应的hstate*/
 static struct node_hstate node_hstates[MAX_NUMNODES];
 
 /*
@@ -4068,6 +4107,7 @@ static struct hstate *kobj_to_node_hstate(struct kobject *kobj, int *nidp)
 {
 	int nid;
 
+	/*遍历node_hstates,在各node对应的hstate_kobjs中查找定位kobj,以便获知具体是哪种类型大页*/
 	for (nid = 0; nid < nr_node_ids; nid++) {
 		struct node_hstate *nhs = &node_hstates[nid];
 		int i;
@@ -4124,16 +4164,20 @@ void hugetlb_register_node(struct node *node)
 	int err;
 
 	if (!hugetlb_sysfs_initialized)
+		/*非numa的大页还未初始化*/
 		return;
 
 	if (nhs->hugepages_kobj)
+		/*此类型大页对应的kobj已初始化*/
 		return;		/* already allocated */
 
+	/*创建hugepage在此node节点下的目录,例如：/sys/devices/system/node/node0/hugepages*/
 	nhs->hugepages_kobj = kobject_create_and_add("hugepages",
 							&node->dev.kobj);
 	if (!nhs->hugepages_kobj)
 		return;
 
+	/*在此大页目录下创建各种大页类型，并创建hstate attr group*/
 	for_each_hstate(h) {
 		err = hugetlb_sysfs_add_hstate(h, nhs->hugepages_kobj,
 						nhs->hstate_kobjs,
@@ -4156,6 +4200,7 @@ static void __init hugetlb_register_all_nodes(void)
 {
 	int nid;
 
+	/*为各node注册大页*/
 	for_each_online_node(nid)
 		hugetlb_register_node(node_devices[nid]);
 }
@@ -4186,13 +4231,14 @@ static void __init hugetlb_sysfs_init(void)
 	struct hstate *h;
 	int err;
 
+	//创建hugepages目录，注册非node相关的大页sysfs，例如/sys/kernel/mm/hugepages
 	hugepages_kobj = kobject_create_and_add("hugepages", mm_kobj);
 	if (!hugepages_kobj)
 		return;
 
 	for_each_hstate(h) {
 		err = hugetlb_sysfs_add_hstate(h, hugepages_kobj,
-					 hstate_kobjs, &hstate_attr_group);
+					 hstate_kobjs, &hstate_attr_group/*大页属性组*/);
 		if (err)
 			pr_err("HugeTLB: Unable to add hstate %s", h->name);
 	}
@@ -4200,6 +4246,7 @@ static void __init hugetlb_sysfs_init(void)
 #ifdef CONFIG_NUMA
 	hugetlb_sysfs_initialized = true;
 #endif
+	/*为各node注册大页*/
 	hugetlb_register_all_nodes();
 }
 
@@ -4211,6 +4258,7 @@ static int __init hugetlb_init(void)
 			__NR_HPAGEFLAGS);
 
 	if (!hugepages_supported()) {
+		/*不支持大页，忽略大页相关的配置，并告警*/
 		if (hugetlb_max_hstate || default_hstate_max_huge_pages)
 			pr_warn("HugeTLB: huge pages not supported, ignoring associated command-line parameters\n");
 		return 0;
@@ -4220,7 +4268,8 @@ static int __init hugetlb_init(void)
 	 * Make sure HPAGE_SIZE (HUGETLB_PAGE_ORDER) hstate exists.  Some
 	 * architectures depend on setup being done here.
 	 */
-	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);/*添加2M大页*/
+	/*添加2M大页*/
+	hugetlb_add_hstate(HUGETLB_PAGE_ORDER);
 	if (!parsed_default_hugepagesz) {
 		/*
 		 * If we did not parse a default huge page size, set
@@ -4256,7 +4305,9 @@ static int __init hugetlb_init(void)
 	gather_bootmem_prealloc();
 	report_hugepages();
 
+	/*初始化大页对应的sysfs*/
 	hugetlb_sysfs_init();
+	/*初始化大页对应的cgroup控制文件*/
 	hugetlb_cgroup_file_init();
 
 #ifdef CONFIG_SMP
@@ -4281,6 +4332,7 @@ bool __init __attribute((weak)) arch_hugetlb_valid_size(unsigned long size)
 	return size == HPAGE_SIZE;
 }
 
+/*增加指定尺寸的大页,order= ilog2(size) - PAGE_SHIFT*/
 void __init hugetlb_add_hstate(unsigned int order)
 {
 	struct hstate *h;
@@ -4291,19 +4343,20 @@ void __init hugetlb_add_hstate(unsigned int order)
 		return;
 	}
 	BUG_ON(hugetlb_max_hstate >= HUGE_MAX_HSTATE);
-	BUG_ON(order == 0);
+	BUG_ON(order == 0);/*如果为0，则大页与page_size就无异了*/
+
 	/*占用一个空位*/
 	h = &hstates[hugetlb_max_hstate++];
 	mutex_init(&h->resize_lock);
 	h->order = order;
 	h->mask = ~(huge_page_size(h) - 1);
-	/*初始化在各个numa node上的freelists*/
+	/*初始化各个numa node上的freelists*/
 	for (i = 0; i < MAX_NUMNODES; ++i)
 		INIT_LIST_HEAD(&h->hugepage_freelists[i]);
 	INIT_LIST_HEAD(&h->hugepage_activelist);
 	h->next_nid_to_alloc = first_memory_node;
 	h->next_nid_to_free = first_memory_node;
-	/*大页size名称*/
+	/*设备各大页size名称*/
 	snprintf(h->name, HSTATE_NAME_LEN, "hugepages-%lukB",
 					huge_page_size(h)/SZ_1K);
 
@@ -4427,15 +4480,16 @@ __setup("hugepages=", hugepages_setup);
  * variable 'parsed_valid_hugepagesz' is used to determine if prior
  * hugepagesz argument was valid.
  */
-static int __init hugepagesz_setup(char *s)
+static int __init hugepagesz_setup(char *s/*解析hugepagesz参数*/)
 {
 	unsigned long size;
 	struct hstate *h;
 
 	parsed_valid_hugepagesz = false;
-	size = (unsigned long)memparse(s, NULL);
+	size = (unsigned long)memparse(s, NULL);/*解析配置的参数*/
 
 	if (!arch_hugetlb_valid_size(size)) {
+		/*此体系不支持此类型大页*/
 		pr_err("HugeTLB: unsupported hugepagesz=%s\n", s);
 		return 1;
 	}
@@ -4465,11 +4519,12 @@ static int __init hugepagesz_setup(char *s)
 		return 1;
 	}
 
+	/*添加此类型大页*/
 	hugetlb_add_hstate(ilog2(size) - PAGE_SHIFT);
 	parsed_valid_hugepagesz = true;
 	return 1;
 }
-__setup("hugepagesz=", hugepagesz_setup);
+__setup("hugepagesz=", hugepagesz_setup);/*解析hugepagesz配置*/
 
 /*
  * default_hugepagesz command line input
@@ -4487,9 +4542,11 @@ static int __init default_hugepagesz_setup(char *s)
 		return 1;
 	}
 
+	/*default hugepagesz对应的size*/
 	size = (unsigned long)memparse(s, NULL);
 
 	if (!arch_hugetlb_valid_size(size)) {
+		/*arch不支持此size*/
 		pr_err("HugeTLB: unsupported default_hugepagesz=%s\n", s);
 		return 1;
 	}
@@ -4497,6 +4554,7 @@ static int __init default_hugepagesz_setup(char *s)
 	hugetlb_add_hstate(ilog2(size) - PAGE_SHIFT);
 	parsed_valid_hugepagesz = true;
 	parsed_default_hugepagesz = true;
+	/*设置默认index*/
 	default_hstate_idx = hstate_index(size_to_hstate(size));
 
 	/*
@@ -4633,7 +4691,7 @@ int hugetlb_overcommit_handler(struct ctl_table *table, int write,
 
 	if (write) {
 		spin_lock_irq(&hugetlb_lock);
-		h->nr_overcommit_huge_pages = tmp;
+		h->nr_overcommit_huge_pages = tmp;/*配置默认大页的overcommit*/
 		spin_unlock_irq(&hugetlb_lock);
 	}
 out:
@@ -6773,13 +6831,14 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 }
 
 /* Return true if reservation was successful, false otherwise.  */
-bool hugetlb_reserve_pages(struct inode *inode,
-					long from, long to,
-					struct vm_area_struct *vma,
+/*实现大页内存预留*/
+bool hugetlb_reserve_pages(struct inode *inode/*关联的inode*/,
+					long from/*大页起始序号*/, long to/*大页终止序号*/,
+					struct vm_area_struct *vma/*关联的vma*/,
 					vm_flags_t vm_flags)
 {
 	long chg = -1, add = -1;
-	struct hstate *h = hstate_inode(inode);
+	struct hstate *h = hstate_inode(inode);/*inode对应的大页类型*/
 	struct hugepage_subpool *spool = subpool_inode(inode);
 	struct resv_map *resv_map;
 	struct hugetlb_cgroup *h_cg = NULL;
@@ -6787,6 +6846,7 @@ bool hugetlb_reserve_pages(struct inode *inode,
 
 	/* This should never happen */
 	if (from > to) {
+		/*from必须小于to*/
 		VM_WARN(1, "%s called with a negative range\n", __func__);
 		return false;
 	}
@@ -6803,6 +6863,7 @@ bool hugetlb_reserve_pages(struct inode *inode,
 	 * without using reserves
 	 */
 	if (vm_flags & VM_NORESERVE)
+		/*有no reserve标记,不预留内存，直接返回*/
 		return true;
 
 	/*
@@ -6812,6 +6873,7 @@ bool hugetlb_reserve_pages(struct inode *inode,
 	 * called to make the mapping read-write. Assume !vma is a shm mapping
 	 */
 	if (!vma || vma->vm_flags & VM_MAYSHARE) {
+		/*共享大页情况*/
 		/*
 		 * resv_map can not be NULL as hugetlb_reserve_pages is only
 		 * called for inodes for which resv_maps were created (see
@@ -6821,12 +6883,13 @@ bool hugetlb_reserve_pages(struct inode *inode,
 
 		chg = region_chg(resv_map, from, to, &regions_needed);
 	} else {
+		/*私有大页情况*/
 		/* Private mapping. */
 		resv_map = resv_map_alloc();
 		if (!resv_map)
 			goto out_err;
 
-		chg = to - from;
+		chg = to - from;/*有多少块大页*/
 
 		set_vma_resv_map(vma, resv_map);
 		set_vma_resv_flags(vma, HPAGE_RESV_OWNER);
@@ -6835,8 +6898,10 @@ bool hugetlb_reserve_pages(struct inode *inode,
 	if (chg < 0)
 		goto out_err;
 
+	/*cgroup检查是否超限*/
 	if (hugetlb_cgroup_charge_cgroup_rsvd(hstate_index(h),
-				chg * pages_per_huge_page(h), &h_cg) < 0)
+				chg * pages_per_huge_page(h)/*总请求的页大小（普通页）*/, &h_cg) < 0)
+		/*cgroup预留失败*/
 		goto out_err;
 
 	if (vma && !(vma->vm_flags & VM_MAYSHARE) && h_cg) {
@@ -7130,7 +7195,7 @@ int huge_pmd_unshare(struct mm_struct *mm, struct vm_area_struct *vma,
 		return 0;
 
 	pud_clear(pud);
-	put_page(virt_to_page(ptep));
+	put_page(virt_to_page(ptep));/*put此页*/
 	mm_dec_nr_pmds(mm);
 	return 1;
 }
@@ -7207,13 +7272,18 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 	pud_t *pud;
 	pmd_t *pmd;
 
+	/*取地址对应的pgd*/
 	pgd = pgd_offset(mm, addr);
 	if (!pgd_present(*pgd))
+		/*此pgd现在无效*/
 		return NULL;
+
+	/*由pgd结合地址查询p4d*/
 	p4d = p4d_offset(pgd, addr);
 	if (!p4d_present(*p4d))
 		return NULL;
 
+	/*由p4d结合地址查询pud*/
 	pud = pud_offset(p4d, addr);
 	if (sz == PUD_SIZE)
 		/* must be pud huge, non-present or none */
@@ -7222,6 +7292,7 @@ pte_t *huge_pte_offset(struct mm_struct *mm,
 		return NULL;
 	/* must have a valid entry and size to go further */
 
+	/*由pud结合地址查询pmd*/
 	pmd = pmd_offset(pud, addr);
 	/* must be pmd huge, non-present or none */
 	return (pte_t *)pmd;
@@ -7366,17 +7437,19 @@ static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 				   unsigned long end)
 {
 	struct hstate *h = hstate_vma(vma);
-	unsigned long sz = huge_page_size(h);
-	struct mm_struct *mm = vma->vm_mm;
+	unsigned long sz = huge_page_size(h);/*大页尺寸*/
+	struct mm_struct *mm = vma->vm_mm;/*从属于哪个mm*/
 	struct mmu_notifier_range range;
 	unsigned long address;
 	spinlock_t *ptl;
 	pte_t *ptep;
 
 	if (!(vma->vm_flags & VM_MAYSHARE))
+		/*内存不共享，退出*/
 		return;
 
 	if (start >= end)
+		/*参数有误*/
 		return;
 
 	flush_cache_range(vma, start, end);
@@ -7390,6 +7463,7 @@ static void hugetlb_unshare_pmds(struct vm_area_struct *vma,
 	hugetlb_vma_lock_write(vma);
 	i_mmap_lock_write(vma->vm_file->f_mapping);
 	for (address = start; address < end; address += PUD_SIZE) {
+		/*依据地址获取得page table entries*/
 		ptep = hugetlb_walk(vma, address, sz);
 		if (!ptep)
 			continue;

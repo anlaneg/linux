@@ -7913,6 +7913,7 @@ ice_bridge_setlink(struct net_device *dev, struct nlmsghdr *nlh,
 		__u16 mode;
 
 		if (nla_type(attr) != IFLA_BRIDGE_MODE)
+			/*仅支持修改bridge mode*/
 			continue;
 		mode = nla_get_u16(attr);
 		if (mode != BRIDGE_MODE_VEPA && mode != BRIDGE_MODE_VEB)

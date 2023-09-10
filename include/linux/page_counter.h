@@ -12,7 +12,7 @@ struct page_counter {
 	 * Make sure 'usage' does not share cacheline with any other field. The
 	 * memcg->memory.usage is a hot member of struct mem_cgroup.
 	 */
-	atomic_long_t usage;
+	atomic_long_t usage;/*此counter当前用量*/
 	CACHELINE_PADDING(_pad1_);
 
 	/* effective memory.min and memory.min usage tracking */
@@ -26,7 +26,7 @@ struct page_counter {
 	atomic_long_t children_low_usage;
 
 	unsigned long watermark;
-	unsigned long failcnt;
+	unsigned long failcnt;/*统计此counter超限次数*/
 
 	/* Keep all the read most fields in a separete cacheline. */
 	CACHELINE_PADDING(_pad2_);
@@ -34,8 +34,8 @@ struct page_counter {
 	unsigned long min;
 	unsigned long low;
 	unsigned long high;
-	unsigned long max;
-	struct page_counter *parent;
+	unsigned long max;/*此couter当前用量（usage)容许的最大值*/
+	struct page_counter *parent;/*设置此counter,对应的parnet counter*/
 } ____cacheline_internodealigned_in_smp;
 
 #if BITS_PER_LONG == 32
@@ -47,11 +47,12 @@ struct page_counter {
 static inline void page_counter_init(struct page_counter *counter,
 				     struct page_counter *parent)
 {
-	atomic_long_set(&counter->usage, 0);
-	counter->max = PAGE_COUNTER_MAX;
-	counter->parent = parent;
+	atomic_long_set(&counter->usage, 0);/*用量置为0*/
+	counter->max = PAGE_COUNTER_MAX;/*默认无限量*/
+	counter->parent = parent;/*设置此counter对应的parent*/
 }
 
+/*取此counter的当前用量*/
 static inline unsigned long page_counter_read(struct page_counter *counter)
 {
 	return atomic_long_read(&counter->usage);

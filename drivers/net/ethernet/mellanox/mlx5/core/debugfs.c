@@ -105,6 +105,7 @@ struct dentry *mlx5_debugfs_get_dev_root(struct mlx5_core_dev *dev)
 }
 EXPORT_SYMBOL(mlx5_debugfs_get_dev_root);
 
+/*创建qps debug目录*/
 void mlx5_qp_debugfs_init(struct mlx5_core_dev *dev)
 {
 	dev->priv.dbg.qp_debugfs = debugfs_create_dir("QPs", dev->priv.dbg.dbg_root);
@@ -196,6 +197,7 @@ void mlx5_cmdif_debugfs_init(struct mlx5_core_dev *dev)
 	const char *namep;
 	int i;
 
+	/*创建commands debug目录*/
 	cmd = &dev->priv.dbg.cmdif_debugfs;
 	*cmd = debugfs_create_dir("commands", dev->priv.dbg.dbg_root);
 

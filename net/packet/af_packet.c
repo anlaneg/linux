@@ -3199,7 +3199,7 @@ static int packet_release(struct socket *sock)
  *	Attach a packet hook.
  */
 
-static int packet_do_bind(struct sock *sk, const char *name, int ifindex,
+static int packet_do_bind(struct sock *sk, const char *name, int ifindex/*要绑定的接口index*/,
 			  __be16 proto)
 {
 	struct packet_sock *po = pkt_sk(sk);
@@ -3333,7 +3333,7 @@ static int packet_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len
 	if (sll->sll_family != AF_PACKET)
 		return -EINVAL;
 
-	return packet_do_bind(sk, NULL, sll->sll_ifindex,
+	return packet_do_bind(sk, NULL, sll->sll_ifindex/*绑定接口*/,
 			      sll->sll_protocol ? : pkt_sk(sk)->num);
 }
 

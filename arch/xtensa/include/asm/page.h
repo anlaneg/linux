@@ -192,6 +192,7 @@ static inline unsigned long ___pa(unsigned long va)
 #define __va(x)	\
 	((void *)((unsigned long) (x) - PHYS_OFFSET + PAGE_OFFSET))
 
+/*由kaddr转物理地址，然后换算成所属pfn*/
 #define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
 #define page_to_virt(page)	__va(page_to_pfn(page) << PAGE_SHIFT)
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)

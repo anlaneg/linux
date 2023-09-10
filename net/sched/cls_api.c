@@ -3956,6 +3956,7 @@ void tc_cleanup_offload_action(struct flow_action *flow_action)
 }
 EXPORT_SYMBOL(tc_cleanup_offload_action);
 
+/*触发action offload,转换action 到flow_action_entry*/
 static int tc_setup_offload_act(struct tc_action *act,
 				struct flow_action_entry *entry,
 				u32 *index_inc,

@@ -54,6 +54,7 @@ struct xt_template {
 static struct list_head xt_templates[NFPROTO_NUMPROTO];
 
 struct xt_pernet {
+	/*记录当前netns中创建的各af xt_tables*/
 	struct list_head tables[NFPROTO_NUMPROTO];
 };
 
@@ -63,9 +64,9 @@ struct compat_delta {
 };
 
 struct xt_af {
-	struct mutex mutex;
-	struct list_head match;//记录系统提供的match(例如vlan match)
-	struct list_head target;//记录系统提供的target
+	struct mutex mutex;/*保护xt_af结构*/
+	struct list_head match;//记录系统注册的match项(例如vlan match)
+	struct list_head target;//记录系统注册的target项
 #ifdef CONFIG_NETFILTER_XTABLES_COMPAT
 	struct mutex compat_mutex;
 	struct compat_delta *compat_tab;
@@ -75,7 +76,7 @@ struct xt_af {
 };
 
 static unsigned int xt_pernet_id __read_mostly;
-//每个address family一个xt_af,用于记录某一address family的match,target等信息
+//每个address family一个xt_af,系统用于记录指定address family的match,target等信息
 static struct xt_af *xt __read_mostly;
 
 static const char *const xt_prefix[NFPROTO_NUMPROTO] = {
@@ -135,6 +136,7 @@ err:
 }
 EXPORT_SYMBOL(xt_register_targets);
 
+/*移除一组target注册*/
 void
 xt_unregister_targets(struct xt_target *target, unsigned int n)
 {
@@ -170,7 +172,7 @@ EXPORT_SYMBOL(xt_unregister_match);
 
 //注册一组xt_match
 int
-xt_register_matches(struct xt_match *match, unsigned int n/*要注册的数目*/)
+xt_register_matches(struct xt_match *match, unsigned int n/*要注册的数组长度*/)
 {
 	unsigned int i;
 	int err = 0;
@@ -189,6 +191,7 @@ err:
 }
 EXPORT_SYMBOL(xt_register_matches);
 
+/*移除一组match*/
 void
 xt_unregister_matches(struct xt_match *match, unsigned int n)
 {
@@ -238,7 +241,7 @@ struct xt_match *xt_find_match(u8 af, const char *name, u8 revision)
 }
 EXPORT_SYMBOL(xt_find_match);
 
-//找到给定协议族指定名称的match回调
+//找到给定协议族指定名称的match回调（name,revision必须全匹配）
 struct xt_match *
 xt_request_find_match(uint8_t nfproto, const char *name, uint8_t revision)
 {
@@ -271,6 +274,7 @@ static struct xt_target *xt_find_target(u8 af, const char *name, u8 revision)
 		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&xt[af].mutex);
+	/*遍历此af下所有已注册的target,如果name,revision匹配，则返回*/
 	list_for_each_entry(t, &xt[af].target, list) {
 		if (strcmp(t->name, name) == 0) {
 			if (t->revision == revision) {
@@ -284,7 +288,7 @@ static struct xt_target *xt_find_target(u8 af, const char *name, u8 revision)
 	}
 	mutex_unlock(&xt[af].mutex);
 
-	//如果没有找到，且af不为unspecal,则令af为unsepcal继续查询
+	//如果没有找到，且af不为unspecal,则令af为unsepcal后再查询一遍
 	if (af != NFPROTO_UNSPEC)
 		/* Try searching again in the family-independent list */
 		return xt_find_target(NFPROTO_UNSPEC, name, revision);
@@ -1488,11 +1492,13 @@ xt_replace_table(struct xt_table *table,
 }
 EXPORT_SYMBOL_GPL(xt_replace_table);
 
+/*为当前netns增加新的xt_table*/
 struct xt_table *xt_register_table(struct net *net,
 				   const struct xt_table *input_table,
 				   struct xt_table_info *bootstrap,
 				   struct xt_table_info *newinfo)
 {
+	/*取此net namespace对应私有结构*/
 	struct xt_pernet *xt_net = net_generic(net, xt_pernet_id);
 	struct xt_table_info *private;
 	struct xt_table *t, *table;
@@ -1540,6 +1546,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(xt_register_table);
 
+/*移除指定的table*/
 void *xt_unregister_table(struct xt_table *table)
 {
 	struct xt_table_info *private;
@@ -1588,6 +1595,7 @@ static void xt_table_seq_stop(struct seq_file *seq, void *v)
 	mutex_unlock(&xt[af].mutex);
 }
 
+/*显示各xt_table名称*/
 static int xt_table_seq_show(struct seq_file *seq, void *v)
 {
 	struct xt_table *table = list_entry(v, struct xt_table, list);
@@ -1857,6 +1865,7 @@ void xt_unregister_template(const struct xt_table *table)
 }
 EXPORT_SYMBOL_GPL(xt_unregister_template);
 
+/*初始化af对应的proc文件*/
 int xt_proto_init(struct net *net, u_int8_t af)
 {
 #ifdef CONFIG_PROC_FS
@@ -1874,8 +1883,11 @@ int xt_proto_init(struct net *net, u_int8_t af)
 	root_uid = make_kuid(net->user_ns, 0);
 	root_gid = make_kgid(net->user_ns, 0);
 
+	/*设置xt前缀*/
 	strscpy(buf, xt_prefix[af], sizeof(buf));
+	/*设置文件名称（FORMAT_TABLES）*/
 	strlcat(buf, FORMAT_TABLES, sizeof(buf));
+	/*用于显示此af定义的各table*/
 	proc = proc_create_net_data(buf, 0440, net->proc_net, &xt_table_seq_ops,
 			sizeof(struct seq_net_private),
 			(void *)(unsigned long)af);
@@ -1884,8 +1896,10 @@ int xt_proto_init(struct net *net, u_int8_t af)
 	if (uid_valid(root_uid) && gid_valid(root_gid))
 		proc_set_user(proc, root_uid, root_gid);
 
+	/*设置文件名称（FORMAT_MATCHES）*/
 	strscpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_MATCHES, sizeof(buf));
+	/*用于显示此af定义的各match*/
 	proc = proc_create_seq_private(buf, 0440, net->proc_net,
 			&xt_match_seq_ops, sizeof(struct nf_mttg_trav),
 			(void *)(unsigned long)af);
@@ -1896,6 +1910,7 @@ int xt_proto_init(struct net *net, u_int8_t af)
 
 	strscpy(buf, xt_prefix[af], sizeof(buf));
 	strlcat(buf, FORMAT_TARGETS, sizeof(buf));
+	/*用于显示此af定义的各targets*/
 	proc = proc_create_seq_private(buf, 0440, net->proc_net,
 			 &xt_target_seq_ops, sizeof(struct nf_mttg_trav),
 			 (void *)(unsigned long)af);

@@ -365,6 +365,7 @@ ip6t_do_table(void *priv, struct sk_buff *skb,
 		acpar.target   = t->u.kernel.target;
 		acpar.targinfo = t->data;
 
+		/*执行target*/
 		verdict = t->u.kernel.target->target(skb, &acpar);
 		if (verdict == XT_CONTINUE)
 			e = ip6t_next_entry(e);

@@ -82,6 +82,7 @@ static int ipvlan_port_create(struct net_device *dev)
 	ida_init(&port->ida);
 	port->dev_id_start = 1;
 
+	/*为底层设备挂接ipvlan收包处理*/
 	err = netdev_rx_handler_register(dev, ipvlan_handle_frame, port);
 	if (err)
 		goto err;
@@ -154,6 +155,7 @@ static int ipvlan_init(struct net_device *dev)
 		return -ENOMEM;
 
 	if (!netif_is_ipvlan_port(phy_dev)) {
+		/*针对物理设备，创建ipvlan接口*/
 		err = ipvlan_port_create(phy_dev);
 		if (err < 0) {
 			free_percpu(ipvlan->pcpu_stats);

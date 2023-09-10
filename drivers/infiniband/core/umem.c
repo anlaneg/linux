@@ -186,7 +186,7 @@ struct ib_umem *ib_umem_get(struct ib_device *device, unsigned long addr,
 	 */
 	umem->iova = addr;
 	umem->writable   = ib_access_writable(access);
-	umem->owning_mm = mm = current->mm;
+	umem->owning_mm = mm = current->mm;/*对应哪个进程的mm*/
 	mmgrab(mm);
 
 	/*申请一个空闲页*/
