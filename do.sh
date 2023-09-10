@@ -7,4 +7,4 @@ cat $dot_config_file_path/.config | sed 's/^CONFIG_LOCALVERSION.*$/CONFIG_LOCALV
 make olddefconfig
 make -j88 bindeb-pkg
 
-
+#cat .config | grep CONFIG | sed 's/^\(.*\)CONFIG\(.*\)$/\1#define CONFIG\2/g' > linux-kernel-config.h
