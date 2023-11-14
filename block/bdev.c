@@ -30,16 +30,19 @@
 #include "../fs/internal.h"
 #include "blk.h"
 
+/*系统块设备对应的inode*/
 struct bdev_inode {
 	struct block_device bdev;
 	struct inode vfs_inode;
 };
 
+/*由inode获得bdev_inode*/
 static inline struct bdev_inode *BDEV_I(struct inode *inode)
 {
 	return container_of(inode, struct bdev_inode, vfs_inode);
 }
 
+/*由inode获得block_device*/
 struct block_device *I_BDEV(struct inode *inode)
 {
 	return &BDEV_I(inode)->bdev;
@@ -54,6 +57,7 @@ static void bdev_write_inode(struct block_device *bdev)
 	spin_lock(&inode->i_lock);
 	while (inode->i_state & I_DIRTY) {
 		spin_unlock(&inode->i_lock);
+		/*将此inode信息写到磁盘*/
 		ret = write_inode_now(inode, true);
 		if (ret)
 			pr_warn_ratelimited(
@@ -312,6 +316,7 @@ EXPORT_SYMBOL(thaw_bdev);
 static  __cacheline_aligned_in_smp DEFINE_SPINLOCK(bdev_lock);
 static struct kmem_cache * bdev_cachep __read_mostly;
 
+/*申请bdev_inode*/
 static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
 	struct bdev_inode *ei = alloc_inode_sb(sb, bdev_cachep, GFP_KERNEL);
@@ -370,7 +375,7 @@ static int bd_init_fs_context(struct fs_context *fc)
 	if (!ctx)
 		return -ENOMEM;
 	fc->s_iflags |= SB_I_CGROUPWB;
-	ctx->ops = &bdev_sops;
+	ctx->ops = &bdev_sops;/*指明super block操作集*/
 	return 0;
 }
 
@@ -381,7 +386,7 @@ static struct file_system_type bd_type = {
 	.kill_sb	= kill_anon_super,
 };
 
-//块设备文件系统super_block
+//块设备（bdev)文件系统的super_block（所有块设备均在此文件系统中有记录）
 struct super_block *blockdev_superblock __read_mostly;
 EXPORT_SYMBOL_GPL(blockdev_superblock);
 
@@ -390,55 +395,64 @@ void __init bdev_cache_init(void)
 	int err;
 	static struct vfsmount *bd_mnt;
 
-	//构造bdev　cache
+	//构造bdev_inode cache，负责分配bdev_inode结构体
 	bdev_cachep = kmem_cache_create("bdev_cache", sizeof(struct bdev_inode),
 			0, (SLAB_HWCACHE_ALIGN|SLAB_RECLAIM_ACCOUNT|
 				SLAB_MEM_SPREAD|SLAB_ACCOUNT|SLAB_PANIC),
 			init_once);
+
 	//注册块设备文件系统
 	err = register_filesystem(&bd_type);
 	if (err)
 		panic("Cannot register bdev pseudo-fs");
+
 	//挂载块设备文件系统，并获得挂载点(促使bd_mount函数被调用）
 	bd_mnt = kern_mount(&bd_type);
 	if (IS_ERR(bd_mnt))
 		panic("Cannot create bdev pseudo-fs");
+
+	/*记录bdev设备的超级块*/
 	blockdev_superblock = bd_mnt->mnt_sb;   /* For writeback */
 }
 
+/*针对gendisk,分区号创建block_device*/
 struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 {
 	struct block_device *bdev;
 	struct inode *inode;
 
+	/*创建inode*/
 	inode = new_inode(blockdev_superblock);
 	if (!inode)
 		return NULL;
-	inode->i_mode = S_IFBLK;
+	inode->i_mode = S_IFBLK;/*指明为block设备*/
 	inode->i_rdev = 0;
 	inode->i_data.a_ops = &def_blk_aops;
 	mapping_set_gfp_mask(&inode->i_data, GFP_USER);
 
+	/*取此bdev对应的block device结构体，并开始初始化它*/
 	bdev = I_BDEV(inode);
 	mutex_init(&bdev->bd_fsfreeze_mutex);
 	spin_lock_init(&bdev->bd_size_lock);
 	bdev->bd_partno = partno;
-	bdev->bd_inode = inode;
+	bdev->bd_inode = inode;/*设置它关联的inode*/
 	bdev->bd_queue = disk->queue;
 	bdev->bd_stats = alloc_percpu(struct disk_stats);
 	if (!bdev->bd_stats) {
 		iput(inode);
 		return NULL;
 	}
-	bdev->bd_disk = disk;
+	bdev->bd_disk = disk;/*为此块设备关联gendisk*/
 	return bdev;
 }
 
 void bdev_add(struct block_device *bdev, dev_t dev)
 {
 	bdev->bd_dev = dev;
+	/*如下示，即为设备编号，又是inode id*/
 	bdev->bd_inode->i_rdev = dev;
 	bdev->bd_inode->i_ino = dev;
+	/*将其加入到inode hash表中*/
 	insert_inode_hash(bdev->bd_inode);
 }
 
@@ -668,6 +682,7 @@ struct block_device *blkdev_get_no_open(dev_t dev)
 	struct block_device *bdev;
 	struct inode *inode;
 
+	/*查找inode id为dev且super blok为blockdev_superblock的inode,此即为dev对应的块设备*/
 	inode = ilookup(blockdev_superblock, dev);
 	if (!inode && IS_ENABLED(CONFIG_BLOCK_LEGACY_AUTOLOAD)) {
 		blk_request_module(dev);
@@ -680,7 +695,7 @@ struct block_device *blkdev_get_no_open(dev_t dev)
 		return NULL;
 
 	/* switch from the inode reference to a device mode one: */
-	bdev = &BDEV_I(inode)->bdev;
+	bdev = &BDEV_I(inode)->bdev;/*取块设备*/
 	if (!kobject_get_unless_zero(&bdev->bd_device.kobj))
 		bdev = NULL;
 	iput(inode);
@@ -713,7 +728,7 @@ void blkdev_put_no_open(struct block_device *bdev)
  * RETURNS:
  * Reference to the block_device on success, ERR_PTR(-errno) on failure.
  */
-struct block_device *blkdev_get_by_dev(dev_t dev, fmode_t mode, void *holder)
+struct block_device *blkdev_get_by_dev(dev_t dev/*设备编号*/, fmode_t mode, void *holder)
 {
 	bool unblock_events = true;
 	struct block_device *bdev;
@@ -811,12 +826,12 @@ struct block_device *blkdev_get_by_path(const char *path/*块设备名称*/, fmo
 	dev_t dev;
 	int error;
 
-	//取path对应的块设备
+	//取path对应的块设备id
 	error = lookup_bdev(path, &dev);
 	if (error)
 		return ERR_PTR(error);
 
-	/*取此path对应块设备*/
+	/*取此dev对应的块设备*/
 	bdev = blkdev_get_by_dev(dev, mode, holder);
 	if (!IS_ERR(bdev) && (mode & FMODE_WRITE) && bdev_read_only(bdev)) {
 		blkdev_put(bdev, mode);
@@ -903,7 +918,7 @@ EXPORT_SYMBOL(blkdev_put);
  * Return: 0 if succeeded, negative errno otherwise.
  */
 //通过pathname查找其对应的块设备
-int lookup_bdev(const char *pathname, dev_t *dev)
+int lookup_bdev(const char *pathname, dev_t *dev/*出参，确认pathname对应的块设备*/)
 {
 	struct inode *inode;
 	struct path path;
@@ -918,12 +933,14 @@ int lookup_bdev(const char *pathname, dev_t *dev)
 	if (error)
 		return error;
 
-	//取此path对应的目录项所对应的inode
+	//取此pathname对应的dentry所对应的inode
 	inode = d_backing_inode(path.dentry);
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))
-		//inode指出，非块设备，跳出
+		//inode如果非块设备，则跳出
 		goto out_path_put;
+
+	/*path指定的是一个块设备*/
 	error = -EACCES;
 	if (!may_open_dev(&path))
 		goto out_path_put;

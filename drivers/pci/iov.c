@@ -843,7 +843,7 @@ found:
 	iov->ctrl = ctrl;
 	iov->total_VFs = total;
 	/*设置最大支持的vf数量*/
-	iov->driver_max_VFs = total;
+	iov->driver_max_VFs = total;/*设置设备的最大VFS*/
 	pci_read_config_word(dev, pos + PCI_SRIOV_VF_DID, &iov->vf_device);
 	iov->pgsz = pgsz;
 	iov->self = dev;
@@ -859,7 +859,7 @@ found:
 		iov->dev = dev;
 
 	dev->sriov = iov;
-	dev->is_physfn = 1;
+	dev->is_physfn = 1;/*指明此dev为pf*/
 	rc = compute_max_vf_buses(dev);
 	if (rc)
 		goto fail_max_buses;
@@ -868,7 +868,7 @@ found:
 
 fail_max_buses:
 	dev->sriov = NULL;
-	dev->is_physfn = 0;
+	dev->is_physfn = 0;/*指明此设备非pf*/
 failed:
 	for (i = 0; i < PCI_SRIOV_NUM_BARS; i++) {
 		res = &dev->resource[i + PCI_IOV_RESOURCES];
@@ -1131,7 +1131,7 @@ int pci_num_vf(struct pci_dev *dev)
 	if (!dev->is_physfn)
 		return 0;
 
-	return dev->sriov->num_VFs;
+	return dev->sriov->num_VFs;/*此设备vf数目*/
 }
 EXPORT_SYMBOL_GPL(pci_num_vf);
 

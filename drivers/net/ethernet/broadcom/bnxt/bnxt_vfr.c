@@ -123,10 +123,12 @@ static netdev_tx_t bnxt_vf_rep_xmit(struct sk_buff *skb,
 	skb_dst_drop(skb);
 	dst_hold((struct dst_entry *)vf_rep->dst);
 	skb_dst_set(skb, (struct dst_entry *)vf_rep->dst);
+	/*将报文所属的设备变更为vf_rep对应的底层设备*/
 	skb->dev = vf_rep->dst->u.port_info.lower_dev;
 
 	rc = dev_queue_xmit(skb);
 	if (!rc) {
+		/*rep接口发包统计*/
 		vf_rep->tx_stats.packets++;
 		vf_rep->tx_stats.bytes += len;
 	}
@@ -188,6 +190,7 @@ struct net_device *bnxt_get_vf_rep(struct bnxt *bp, u16 cfa_code)
 	u16 vf_idx;
 
 	if (cfa_code && bp->cfa_code_map && BNXT_PF(bp)) {
+		/*已知vf_idx，获取其对应的net_device*/
 		vf_idx = bp->cfa_code_map[cfa_code];
 		if (vf_idx != VF_IDX_INVALID)
 			return bp->vf_reps[vf_idx]->dev;
@@ -212,8 +215,8 @@ static int bnxt_vf_rep_get_phys_port_name(struct net_device *dev, char *buf,
 	struct pci_dev *pf_pdev = vf_rep->bp->pdev;
 	int rc;
 
-	rc = snprintf(buf, len, "pf%dvf%d", PCI_FUNC(pf_pdev->devfn),
-		      vf_rep->vf_idx);
+	rc = snprintf(buf, len, "pf%dvf%d", PCI_FUNC(pf_pdev->devfn)/*function编号*/,
+		      vf_rep->vf_idx/*vf索引号*/);
 	if (rc >= len)
 		return -EOPNOTSUPP;
 	return 0;
@@ -237,15 +240,15 @@ static int bnxt_vf_rep_get_port_parent_id(struct net_device *dev,
 }
 
 static const struct ethtool_ops bnxt_vf_rep_ethtool_ops = {
-	.get_drvinfo		= bnxt_vf_rep_get_drvinfo
+	.get_drvinfo		= bnxt_vf_rep_get_drvinfo/*vf_rep接口返回驱动信息*/
 };
 
 static const struct net_device_ops bnxt_vf_rep_netdev_ops = {
 	.ndo_open		= bnxt_vf_rep_open,
 	.ndo_stop		= bnxt_vf_rep_close,
-	.ndo_start_xmit		= bnxt_vf_rep_xmit,
+	.ndo_start_xmit		= bnxt_vf_rep_xmit,/*rep接口的发包时变更dev为其底层设备*/
 	.ndo_get_stats64	= bnxt_vf_rep_get_stats64,
-	.ndo_setup_tc		= bnxt_vf_rep_setup_tc,
+	.ndo_setup_tc		= bnxt_vf_rep_setup_tc,/*针对vf rep接口处理tc请求*/
 	.ndo_get_port_parent_id	= bnxt_vf_rep_get_port_parent_id,
 	.ndo_get_phys_port_name = bnxt_vf_rep_get_phys_port_name
 };
@@ -340,6 +343,7 @@ void bnxt_vf_reps_destroy(struct bnxt *bp)
 	bool closed = false;
 
 	if (bp->eswitch_mode != DEVLINK_ESWITCH_MODE_SWITCHDEV)
+		/*本身模式即为不switchdev,直接返回*/
 		return;
 
 	if (!bp->vf_reps)
@@ -457,6 +461,7 @@ static void bnxt_vf_rep_eth_addr_gen(u8 *src_mac, u16 vf_idx, u8 *mac)
 	mac[5] = (u8)((addr >> 16) & 0xFF);
 }
 
+/*初始化vf rep设备*/
 static void bnxt_vf_rep_netdev_init(struct bnxt *bp, struct bnxt_vf_rep *vf_rep,
 				    struct net_device *dev)
 {
@@ -473,6 +478,7 @@ static void bnxt_vf_rep_netdev_init(struct bnxt *bp, struct bnxt_vf_rep *vf_rep,
 	dev->vlan_features = pf_dev->vlan_features;
 	dev->hw_enc_features = pf_dev->hw_enc_features;
 	dev->features |= pf_dev->features;
+	/*利用pf的mac地址生成vf的rep接口mac*/
 	bnxt_vf_rep_eth_addr_gen(bp->pf.mac_addr, vf_rep->vf_idx,
 				 dev->perm_addr);
 	eth_hw_addr_set(dev, dev->perm_addr);
@@ -492,6 +498,7 @@ static int bnxt_vf_reps_create(struct bnxt *bp)
 	if (!(bp->flags & BNXT_FLAG_DSN_VALID))
 		return -ENODEV;
 
+	/*为每个vf申请一个vf_rep*/
 	bp->vf_reps = kcalloc(num_vfs, sizeof(vf_rep), GFP_KERNEL);
 	if (!bp->vf_reps)
 		return -ENOMEM;
@@ -507,6 +514,7 @@ static int bnxt_vf_reps_create(struct bnxt *bp)
 		cfa_code_map[i] = VF_IDX_INVALID;
 
 	for (i = 0; i < num_vfs; i++) {
+		/*申请单队列以太设备*/
 		dev = alloc_etherdev(sizeof(*vf_rep));
 		if (!dev) {
 			rc = -ENOMEM;
@@ -520,11 +528,14 @@ static int bnxt_vf_reps_create(struct bnxt *bp)
 		vf_rep->vf_idx = i;
 		vf_rep->tx_cfa_action = CFA_HANDLE_INVALID;
 
+		/*向fw申请创建vf_rep*/
 		rc = bnxt_alloc_vf_rep(bp, vf_rep, cfa_code_map);
 		if (rc)
 			goto err;
 
+		/*初始化rep接口*/
 		bnxt_vf_rep_netdev_init(bp, vf_rep, dev);
+		/*向kernel注册此网络设备*/
 		rc = register_netdev(dev);
 		if (rc) {
 			/* no need for unregister_netdev in cleanup */
@@ -535,7 +546,7 @@ static int bnxt_vf_reps_create(struct bnxt *bp)
 
 	/* publish cfa_code_map only after all VF-reps have been initialized */
 	bp->cfa_code_map = cfa_code_map;
-	bp->eswitch_mode = DEVLINK_ESWITCH_MODE_SWITCHDEV;
+	bp->eswitch_mode = DEVLINK_ESWITCH_MODE_SWITCHDEV;/*切换到switchdev模式*/
 	netif_keep_dst(bp->dev);
 	return 0;
 
@@ -561,6 +572,7 @@ int bnxt_dl_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	struct bnxt *bp = bnxt_get_bp_from_dl(devlink);
 
 	if (bp->eswitch_mode == mode) {
+		/*模式无变化，直接返回*/
 		netdev_info(bp->dev, "already in %s eswitch mode\n",
 			    mode == DEVLINK_ESWITCH_MODE_LEGACY ?
 			    "legacy" : "switchdev");
@@ -569,19 +581,24 @@ int bnxt_dl_eswitch_mode_set(struct devlink *devlink, u16 mode,
 
 	switch (mode) {
 	case DEVLINK_ESWITCH_MODE_LEGACY:
+		/*切至legacy模式*/
 		bnxt_vf_reps_destroy(bp);
 		return 0;
 
 	case DEVLINK_ESWITCH_MODE_SWITCHDEV:
 		if (bp->hwrm_spec_code < 0x10803) {
+			/*这种不支持切至switchdev模式*/
 			netdev_warn(bp->dev, "FW does not support SRIOV E-Switch SWITCHDEV mode\n");
 			return -ENOTSUPP;
 		}
 
 		if (pci_num_vf(bp->pdev) == 0) {
+			/*eswitch模式切换前，vf num数必须为0*/
 			netdev_info(bp->dev, "Enable VFs before setting switchdev mode\n");
 			return -EPERM;
 		}
+
+		/*创建rep接口*/
 		return bnxt_vf_reps_create(bp);
 
 	default:

@@ -290,10 +290,12 @@ static inline long __static_call_return0(void)
 
 #define __DEFINE_STATIC_CALL(name, _func, _func_init)			\
 	DECLARE_STATIC_CALL(name, _func);				\
+	/*定义call key，并初始化其对应的func字段*/\
 	struct static_call_key STATIC_CALL_KEY(name) = {		\
 		.func = _func_init,					\
 	}
 
+/*定义static_call_key变量并初始化func字段*/
 #define DEFINE_STATIC_CALL(name, _func)					\
 	__DEFINE_STATIC_CALL(name, _func, _func)
 

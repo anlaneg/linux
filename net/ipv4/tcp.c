@@ -4168,6 +4168,7 @@ int do_tcp_getsockopt(struct sock *sk, int level,
 		if (copy_from_sockptr(&len, optlen, sizeof(int)))
 			return -EFAULT;
 
+		/*填写cc（拥塞）相关的信息*/
 		ca_ops = icsk->icsk_ca_ops;
 		if (ca_ops && ca_ops->get_info)
 			sz = ca_ops->get_info(sk, ~0U, &attr, &info);

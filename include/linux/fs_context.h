@@ -129,11 +129,11 @@ struct fs_context_operations {
 	void (*free)(struct fs_context *fc);
 	//各fs在通过src_fc拷贝制作一份副本时，填充fc中私有结构
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
-	//各fs定制的文件系统mount时data参数解析函数，每次调用仅传入一个参数
+	//各fs定制的文件系统mount时data参数解析函数，每次调用仅传入一个参数,如果返回ENOPARAM，表示参数不被认识
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
 	//此函数用于mount时data参数整块解析用，如果此回调不提供，则使用generic_parse_monolithic,
 	int (*parse_monolithic)(struct fs_context *fc, void *data);
-	/*此函数获取并填充文件系统的root节点，此函数必须设置fc->root*/
+	/*此函数用于获取并填充文件系统的root节点，此函数必须设置fc->root*/
 	int (*get_tree)(struct fs_context *fc);
 	int (*reconfigure)(struct fs_context *fc);
 };

@@ -22,6 +22,7 @@ int vsock_add_tap(struct vsock_tap *vt)
 	__module_get(vt->module);
 
 	spin_lock(&vsock_tap_lock);
+	/*将此vt添加进vsock_tap_all*/
 	list_add_rcu(&vt->list, &vsock_tap_all);
 	spin_unlock(&vsock_tap_lock);
 
@@ -29,6 +30,7 @@ int vsock_add_tap(struct vsock_tap *vt)
 }
 EXPORT_SYMBOL_GPL(vsock_add_tap);
 
+/*自vsock_tap_all中移除指定vt*/
 int vsock_remove_tap(struct vsock_tap *vt)
 {
 	struct vsock_tap *tmp;
@@ -67,7 +69,7 @@ static int __vsock_deliver_tap_skb(struct sk_buff *skb,
 		dev_hold(dev);
 
 		nskb->dev = dev;
-		ret = dev_queue_xmit(nskb);
+		ret = dev_queue_xmit(nskb);/*将报文发送给nskb(其实现会直接丢包）*/
 		if (unlikely(ret > 0))
 			ret = net_xmit_errno(ret);
 

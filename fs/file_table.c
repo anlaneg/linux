@@ -227,10 +227,11 @@ struct file *alloc_empty_file_noaccount(int flags, const struct cred *cred)
  * @fop: the 'struct file_operations' for the new file
  */
 static struct file *alloc_file(const struct path *path/*文件路径*/, int flags,
-		const struct file_operations *fop)
+		const struct file_operations *fop/*文件对应的fop*/)
 {
 	struct file *file;
 
+	/*申请file*/
 	file = alloc_empty_file(flags, current_cred());
 	if (IS_ERR(file))
 		return file;
@@ -265,7 +266,7 @@ static struct file *alloc_file(const struct path *path/*文件路径*/, int flag
 }
 
 //创建假的一个文件
-struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
+struct file *alloc_file_pseudo(struct inode *inode/*文件对应的inode*/, struct vfsmount *mnt/*文件系统对应的mnt*/,
 				const char *name/*dentry的名称*/, int flags,
 				const struct file_operations *fops/*文件对应的ops*/)
 {
@@ -284,9 +285,10 @@ struct file *alloc_file_pseudo(struct inode *inode, struct vfsmount *mnt,
 	if (!mnt->mnt_sb->s_d_op)
 		/*如果未提供dentry的ops,则使用anonymous ops*/
 		d_set_d_op(path.dentry, &anon_ops);
+	/*设置此文件对应的mnt*/
 	path.mnt = mntget(mnt);
 	d_instantiate(path.dentry, inode);
-	/*申请file*/
+	/*依据path,fops，申请file*/
 	file = alloc_file(&path, flags, fops);
 	if (IS_ERR(file)) {
 		ihold(inode);
@@ -430,7 +432,7 @@ EXPORT_SYMBOL(__fput_sync);
 
 void __init files_init(void)
 {
-	//创建file的cache
+	//创建用于file分配的cache
 	filp_cachep = kmem_cache_create("filp", sizeof(struct file), 0,
 			SLAB_HWCACHE_ALIGN | SLAB_PANIC | SLAB_ACCOUNT, NULL);
 	//记录系统文件数为0

@@ -2163,7 +2163,6 @@ static int esw_offloads_start(struct mlx5_eswitch *esw,
 {
 	int err;
 
-	//先关闭旧的sriov
 	esw->mode = MLX5_ESWITCH_OFFLOADS;
 	//再开启sriov
 	err = mlx5_eswitch_enable_locked(esw, esw->dev->priv.sriov.num_vfs);
@@ -2398,6 +2397,7 @@ int mlx5_esw_offloads_rep_load(struct mlx5_eswitch *esw, u16 vport_num)
 	int err;
 
 	rep = mlx5_eswitch_get_rep(esw, vport_num);
+	/*加载此vport对应的所有类型rep*/
 	for (rep_type = 0; rep_type < NUM_REP_TYPES; rep_type++)
 		if (atomic_cmpxchg(&rep->rep_data[rep_type].state,
 				   REP_REGISTERED, REP_LOADED) == REP_REGISTERED) {
@@ -3434,7 +3434,8 @@ static int esw_inline_mode_to_devlink(u8 mlx5_mode, u8 *mode)
 	return 0;
 }
 
-int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
+/*eswitch模式设置*/
+int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode/*eswitch模式*/,
 				  struct netlink_ext_ack *extack)
 {
 	u16 cur_mlx5_mode, mlx5_mode = 0;
@@ -3445,11 +3446,12 @@ int mlx5_devlink_eswitch_mode_set(struct devlink *devlink, u16 mode,
 	if (IS_ERR(esw))
 		return PTR_ERR(esw);
 
+	/*取eswitch mode对应的mlx5的模式*/
 	if (esw_mode_from_devlink(mode, &mlx5_mode))
 		return -EINVAL;
 
 	mlx5_lag_disable_change(esw->dev);
-	err = mlx5_esw_try_lock(esw);
+	err = mlx5_esw_try_lock(esw);/*取当前eswitch模式*/
 	if (err < 0) {
 		NL_SET_ERR_MSG_MOD(extack, "Can't change mode, E-Switch is busy");
 		goto enable_lag;
@@ -3690,6 +3692,7 @@ mlx5_eswitch_vport_has_rep(const struct mlx5_eswitch *esw, u16 vport_num)
 	return true;
 }
 
+/*注册此类型rep接口对应的ops*/
 void mlx5_eswitch_register_vport_reps(struct mlx5_eswitch *esw,
 				      const struct mlx5_eswitch_rep_ops *ops,
 				      u8 rep_type)

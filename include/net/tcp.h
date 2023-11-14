@@ -710,8 +710,9 @@ static inline void __tcp_fast_path_on(struct tcp_sock *tp, u32 snd_wnd)
 	if (sk_is_mptcp((struct sock *)tp))
 		return;
 
+	/*设置pred_flags,以区分快慢路*/
 	tp->pred_flags = htonl((tp->tcp_header_len << 26) |
-			       ntohl(TCP_FLAG_ACK) |
+			       ntohl(TCP_FLAG_ACK)/*必须只有ack标记*/ |
 			       snd_wnd);
 }
 
@@ -841,7 +842,7 @@ static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
 	return div_u64(skb->skb_mstamp_ns, NSEC_PER_USEC);
 }
 
-
+/*取tcp flags对应的那一个byte*/
 #define tcp_flag_byte(th) (((u_int8_t *)th)[13])
 
 #define TCPHDR_FIN 0x01
@@ -862,9 +863,9 @@ static inline u64 tcp_skb_timestamp_us(const struct sk_buff *skb)
  * If this grows please adjust skbuff.h:skbuff->cb[xxx] size appropriately.
  */
 struct tcp_skb_cb {
-	//报文起始序列号
+	//此报文对应的起始序列号
 	__u32		seq;		/* Starting sequence number	*/
-	//报文终止序列号
+	//此报文对应终止序列号（含fin/syn)
 	__u32		end_seq;	/* SEQ + FIN + SYN + datalen	*/
 	union {
 		/* Note : tcp_tw_isn is used in input path only
@@ -882,6 +883,7 @@ struct tcp_skb_cb {
 	//tcp标记位
 	__u8		tcp_flags;	/* TCP header flags. (tcp[13])	*/
 
+	/*记录到sack选项的偏移（相对于tcp头）*/
 	__u8		sacked;		/* State flags for SACK.	*/
 #define TCPCB_SACKED_ACKED	0x01	/* SKB ACK'd by a SACK block	*/
 #define TCPCB_SACKED_RETRANS	0x02	/* SKB retransmitted		*/
@@ -896,9 +898,10 @@ struct tcp_skb_cb {
 	__u8		ip_dsfield;	/* IPv4 tos or IPv6 dsfield	*/
 	__u8		txstamp_ack:1,	/* Record TX timestamp for ack? */
 			eor:1,		/* Is skb MSG_EOR marked? */
+			/*标记收方向是否有时间签（软件打或者硬件打）*/
 			has_rxtstamp:1,	/* SKB has a RX timestamp	*/
 			unused:5;
-	//报文包含的tcp确认序号
+	//此报文上指明的tcp确认序号
 	__u32		ack_seq;	/* Sequence number ACK'd	*/
 	union {
 		struct {
@@ -1085,10 +1088,10 @@ struct tcp_congestion_ops {
 	void (*cong_avoid)(struct sock *sk, u32 ack, u32 acked);
 
 	/* call before changing ca_state (optional) */
-	void (*set_state)(struct sock *sk, u8 new_state);
+	void (*set_state)(struct sock *sk, u8 new_state);/*拥塞状态更新前调用*/
 
 	/* call when cwnd event occurs (optional) */
-	void (*cwnd_event)(struct sock *sk, enum tcp_ca_event ev);
+	void (*cwnd_event)(struct sock *sk, enum tcp_ca_event ev);/*窗口事件发生时调用*/
 
 	/* call when ack arrives (optional) */
 	void (*in_ack_event)(struct sock *sk, u32 flags);
@@ -1097,7 +1100,7 @@ struct tcp_congestion_ops {
 	void (*pkts_acked)(struct sock *sk, const struct ack_sample *sample);
 
 	/* override sysctl_tcp_min_tso_segs */
-	u32 (*min_tso_segs)(struct sock *sk);
+	u32 (*min_tso_segs)(struct sock *sk);/*获取此socket支持的最小tso*/
 
 	/* call when packets are delivered to update cwnd and pacing rate,
 	 * after all the ca_state processing. (optional)
@@ -1112,7 +1115,7 @@ struct tcp_congestion_ops {
 
 /* control/slow paths put last */
 	/* get info for inet_diag (optional) */
-	/*扩展信息获取*/
+	/*cc相关扩展信息获取*/
 	size_t (*get_info)(struct sock *sk, u32 ext, int *attr,
 			   union tcp_cc_info *info);
 
@@ -1123,9 +1126,9 @@ struct tcp_congestion_ops {
 	u32			flags;
 
 	/* initialize private data (optional) */
-	void (*init)(struct sock *sk);/*私有数据初始化*/
+	void (*init)(struct sock *sk);/*拥塞私有数据初始化*/
 	/* cleanup private data  (optional) */
-	void (*release)(struct sock *sk);/*私有数据清除*/
+	void (*release)(struct sock *sk);/*拥塞私有数据清除*/
 } ____cacheline_aligned_in_smp;
 
 int tcp_register_congestion_control(struct tcp_congestion_ops *type);

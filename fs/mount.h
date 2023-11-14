@@ -42,6 +42,7 @@ struct mount {
 	struct mount *mnt_parent;
 	//被挂载文件系统的root dentry
 	struct dentry *mnt_mountpoint;
+	/*vfs要使用的mount结构体*/
 	struct vfsmount mnt;
 	union {
 		struct rcu_head mnt_rcu;

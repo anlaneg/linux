@@ -37,7 +37,9 @@ struct static_call_site {
 };
 
 #define DECLARE_STATIC_CALL(name, func)					\
+	/*提前声明key*/\
 	extern struct static_call_key STATIC_CALL_KEY(name);		\
+	/*提前声明tramp函数*/\
 	extern typeof(func) STATIC_CALL_TRAMP(name);
 
 #ifdef CONFIG_HAVE_STATIC_CALL

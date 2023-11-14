@@ -182,6 +182,7 @@ static void ext2_put_super (struct super_block * sb)
 	kfree(sbi);
 }
 
+/*负责系统中分配ext2_inode_info结构体*/
 static struct kmem_cache * ext2_inode_cachep;
 
 //自inode池中申请有inode
@@ -824,6 +825,7 @@ static unsigned long descriptor_loc(struct super_block *sb,
 	return ext2_group_first_block_no(sb, bg) + ext2_bg_has_super(sb, bg);
 }
 
+/*读取磁盘，填充super block及 root dentry*/
 static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 {
 	struct buffer_head * bh;
@@ -1206,6 +1208,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 	sb->s_quota_types = QTYPE_MASK_USR | QTYPE_MASK_GRP;
 #endif
 
+	/*读取root inode*/
 	root = ext2_iget(sb, EXT2_ROOT_INO);
 	if (IS_ERR(root)) {
 		ret = PTR_ERR(root);
@@ -1217,6 +1220,7 @@ static int ext2_fill_super(struct super_block *sb, void *data, int silent)
 		goto failed_mount3;
 	}
 
+	/*设置root dentry*/
 	sb->s_root = d_make_root(root);
 	if (!sb->s_root) {
 		ext2_msg(sb, KERN_ERR, "error: get root inode failed");
@@ -1507,10 +1511,10 @@ static int ext2_statfs (struct dentry * dentry, struct kstatfs * buf)
 }
 
 //ext2文件系统挂载
-static struct dentry *ext2_mount(struct file_system_type *fs_type,
-	int flags, const char *dev_name/*待挂载的设备*/, void *data)
+static struct dentry *ext2_mount(struct file_system_type *fs_type/*要挂载的文件系统*/,
+	int flags, const char *dev_name/*待挂载的设备*/, void *data/*挂载参数*/)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, ext2_fill_super);
+	return mount_bdev(fs_type, flags, dev_name, data, ext2_fill_super/*负责此dev_name中读取并填充super block,特别是root dentry*/);
 }
 
 #ifdef CONFIG_QUOTA
@@ -1664,6 +1668,7 @@ out:
 static struct file_system_type ext2_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "ext2",
+	/*负责在get_tree时完成ext2设备挂载*/
 	.mount		= ext2_mount,
 	.kill_sb	= kill_block_super,
 	.fs_flags	= FS_REQUIRES_DEV,

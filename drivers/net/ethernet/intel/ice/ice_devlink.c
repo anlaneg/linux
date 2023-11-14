@@ -1260,7 +1260,7 @@ static const struct devlink_ops ice_devlink_ops = {
 	.port_split = ice_devlink_port_split,
 	.port_unsplit = ice_devlink_port_unsplit,
 	.eswitch_mode_get = ice_eswitch_mode_get,
-	.eswitch_mode_set = ice_eswitch_mode_set,
+	.eswitch_mode_set = ice_eswitch_mode_set,/*设置eswitch模式*/
 	.info_get = ice_devlink_info_get,
 	.flash_update = ice_devlink_flash_update,
 

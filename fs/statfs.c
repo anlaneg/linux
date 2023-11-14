@@ -52,6 +52,7 @@ static int calculate_f_flags(struct vfsmount *mnt)
 		flags_by_sb(mnt->mnt_sb->s_flags);
 }
 
+/*通过dentry完成statfs系统调用*/
 static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 {
 	int retval;
@@ -64,7 +65,7 @@ static int statfs_by_dentry(struct dentry *dentry, struct kstatfs *buf)
 	retval = security_sb_statfs(dentry);
 	if (retval)
 		return retval;
-	//通过回调获取超级块的s_op完成统计信息获取
+	//通过dentry取超级块，然后针对super block的s_op完成统计信息获取
 	retval = dentry->d_sb->s_op->statfs(dentry, buf);
 	if (retval == 0 && buf->f_frsize == 0)
 		buf->f_frsize = buf->f_bsize;
@@ -89,6 +90,7 @@ int vfs_statfs(const struct path *path, struct kstatfs *buf)
 {
 	int error;
 
+	/*通过path拿到dentry,然后针对dentry完成statfs调用*/
 	error = statfs_by_dentry(path->dentry, buf);
 	if (!error)
 		buf->f_flags = calculate_f_flags(path->mnt);
@@ -102,6 +104,7 @@ int user_statfs(const char __user *pathname, struct kstatfs *st)
 	int error;
 	unsigned int lookup_flags = LOOKUP_FOLLOW|LOOKUP_AUTOMOUNT;
 retry:
+	/*先由pathname获得path信息，然后针对path获得statfs*/
 	error = user_path_at(AT_FDCWD, pathname, lookup_flags, &path);
 	if (!error) {
 		error = vfs_statfs(&path, st);
@@ -116,6 +119,7 @@ retry:
 
 int fd_statfs(int fd, struct kstatfs *st)
 {
+	/*针对fd拿到struct fd,然后针对fd拿到path,再调用statfs*/
 	struct fd f = fdget_raw(fd);
 	int error = -EBADF;
 	if (f.file) {
@@ -237,11 +241,13 @@ SYSCALL_DEFINE3(fstatfs64, unsigned int, fd, size_t, sz, struct statfs64 __user 
 
 static int vfs_ustat(dev_t dev, struct kstatfs *sbuf)
 {
+	/*取得super block*/
 	struct super_block *s = user_get_super(dev, false);
 	int err;
 	if (!s)
 		return -EINVAL;
 
+	/*再通过super block调用statfs*/
 	err = statfs_by_dentry(s->s_root, sbuf);
 	drop_super(s);
 	return err;
@@ -364,6 +370,7 @@ int kcompat_sys_statfs64(const char __user * pathname, compat_size_t sz, struct 
 
 COMPAT_SYSCALL_DEFINE3(statfs64, const char __user *, pathname, compat_size_t, sz, struct compat_statfs64 __user *, buf)
 {
+	/*给定路径，获取statfs*/
 	return kcompat_sys_statfs64(pathname, sz, buf);
 }
 
@@ -375,6 +382,7 @@ int kcompat_sys_fstatfs64(unsigned int fd, compat_size_t sz, struct compat_statf
 	if (sz != sizeof(*buf))
 		return -EINVAL;
 
+	/*通过fd获取statfs*/
 	error = fd_statfs(fd, &tmp);
 	if (!error)
 		error = put_compat_statfs64(buf, &tmp);

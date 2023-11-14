@@ -571,6 +571,7 @@ u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 start, int cap)
 	ttl = (PCI_CFG_SPACE_EXP_SIZE - PCI_CFG_SPACE_SIZE) / 8;
 
 	if (dev->cfg_size <= PCI_CFG_SPACE_SIZE)
+		/*无扩展配置空间，直接返回0*/
 		return 0;
 
 	if (start)

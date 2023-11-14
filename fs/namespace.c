@@ -1036,7 +1036,7 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	if (!mnt)
 		return ERR_PTR(-ENOMEM);
 
-	/*有kernelmount标记*/
+	/*有kernelmount标记，则添加MNT_INTERNAL标记*/
 	if (fc->sb_flags & SB_KERNMOUNT)
 		mnt->mnt.mnt_flags = MNT_INTERNAL;
 
@@ -1070,7 +1070,7 @@ EXPORT_SYMBOL(fc_mount);
 
 /*创建superblock，获得root dentry,并据此创建vfsmount*/
 struct vfsmount *vfs_kern_mount(struct file_system_type *type/*要挂载的文件系统*/,
-				int flags, const char *name/*文件系统名称*/,
+				int flags, const char *name/*文件系统名称/设备名*/,
 				void *data)
 {
 	struct fs_context *fc;
@@ -1080,11 +1080,12 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type/*要挂载的文�
 	if (!type)
 		return ERR_PTR(-EINVAL);
 
+	/*申请并初始化fs_context*/
 	fc = fs_context_for_mount(type, flags);
 	if (IS_ERR(fc))
 		return ERR_CAST(fc);
 
-	/*填充fc->source为$name*/
+	/*填充fc->source为$name（文件系统名称）*/
 	if (name)
 		ret = vfs_parse_fs_string(fc, "source",
 					  name, strlen(name));
@@ -1092,6 +1093,7 @@ struct vfsmount *vfs_kern_mount(struct file_system_type *type/*要挂载的文�
 	    /*其它选项解析*/
 		ret = parse_monolithic_mount_data(fc, data);
 	if (!ret)
+		/*执行挂载，产生vfsmount对象*/
 		mnt = fc_mount(fc);
 	else
 		mnt = ERR_PTR(ret);
@@ -4558,6 +4560,7 @@ struct vfsmount *kern_mount(struct file_system_type *type)
 		*/
 		real_mount(mnt)->mnt_ns = MNT_NS_INTERNAL;
 	}
+	/*返回挂载点*/
 	return mnt;
 }
 EXPORT_SYMBOL_GPL(kern_mount);

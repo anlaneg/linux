@@ -148,6 +148,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	    /*为sb_flags控制参数，已处理，返回*/
 		return ret;
 
+	/*param->key处理时，返回了NOPARAM*/
 	ret = security_fs_context_parse_param(fc, param);
 	if (ret != -ENOPARAM)
 		/* Param belongs to the LSM or is disallowed by the LSM; so
@@ -292,6 +293,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 
 	mutex_init(&fc->uapi_mutex);
 
+	/*依据不同目的设置user_ns*/
 	switch (purpose) {
 	case FS_CONTEXT_FOR_MOUNT:
 		fc->user_ns = get_user_ns(fc->cred->user_ns);
@@ -671,6 +673,7 @@ static int legacy_reconfigure(struct fs_context *fc)
 				    ctx ? ctx->legacy_data : NULL);
 }
 
+/*系统默认的fs_context操作变量*/
 const struct fs_context_operations legacy_fs_context_ops = {
 	.free			= legacy_fs_context_free,
 	.dup			= legacy_fs_context_dup,
@@ -678,7 +681,7 @@ const struct fs_context_operations legacy_fs_context_ops = {
 	.parse_param		= legacy_parse_param,
 	/*解析文件系统挂载参数（整体）*/
 	.parse_monolithic	= legacy_parse_monolithic,
-	/*获取并填充文件系统的root节点*/
+	/*获取并填充文件系统的root节点，此函数会调用fc->fs_type->mount*/
 	.get_tree		= legacy_get_tree,
 	.reconfigure		= legacy_reconfigure,
 };

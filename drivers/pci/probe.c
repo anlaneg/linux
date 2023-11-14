@@ -1899,7 +1899,7 @@ int pci_setup_device(struct pci_dev *dev)
 		early_dump_pci_device(dev);
 
 	/* Need to have dev->class ready */
-	dev->cfg_size = pci_cfg_space_size(dev);
+	dev->cfg_size = pci_cfg_space_size(dev);/*设置设备cfg大小*/
 
 	/* Need to have dev->cfg_size ready */
 	set_pcie_thunderbolt(dev);
@@ -2516,6 +2516,7 @@ static void pci_init_capabilities(struct pci_dev *dev)
 	pci_pm_init(dev);		/* Power Management */
 	pci_vpd_init(dev);		/* Vital Product Data */
 	pci_configure_ari(dev);		/* Alternative Routing-ID Forwarding */
+	/*sriov初始化*/
 	pci_iov_init(dev);		/* Single Root I/O Virtualization */
 	pci_ats_init(dev);		/* Address Translation Services */
 	pci_pri_init(dev);		/* Page Request Interface */

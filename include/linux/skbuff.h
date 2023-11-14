@@ -953,8 +953,9 @@ struct sk_buff {
 	__u8			ip_summed:2;
 	__u8			ooo_okay:1;
 
+	/*是否利用l4计算的hash*/
 	__u8			l4_hash:1;
-	/*软件计算的hash*/
+	/*是否软件计算的hash*/
 	__u8			sw_hash:1;
 	__u8			wifi_acked_valid:1;
 	__u8			wifi_acked:1;
@@ -1458,7 +1459,7 @@ static inline void skb_clear_hash_if_not_l4(struct sk_buff *skb)
 }
 
 static inline void
-__skb_set_hash(struct sk_buff *skb, __u32 hash, bool is_sw, bool is_l4)
+__skb_set_hash(struct sk_buff *skb, __u32 hash/*skb对应的hashcode*/, bool is_sw/*是否软件hash*/, bool is_l4/*是否l4hash*/)
 {
 	skb->l4_hash = is_l4;
 	skb->sw_hash = is_sw;
@@ -2256,6 +2257,7 @@ static inline void skb_queue_splice_init(struct sk_buff_head *list,
 					 struct sk_buff_head *head)
 {
 	if (!skb_queue_empty(list)) {
+		/*将list上的内容移到head上*/
 		__skb_queue_splice(list, (struct sk_buff *) head, head->next);
 		head->qlen += list->qlen;
 		__skb_queue_head_init(list);

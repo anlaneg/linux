@@ -64,7 +64,7 @@ static DEFINE_IDA(blk_queue_ida);//负责request queue id的申请释放
 /*
  * For queue allocation
  */
-static struct kmem_cache *blk_requestq_cachep;//负责request queue申请释放
+static struct kmem_cache *blk_requestq_cachep;//负责block request queue申请释放
 
 /*
  * Controlling structure to kblockd
@@ -395,6 +395,7 @@ static void blk_timeout_work(struct work_struct *work)
 {
 }
 
+/*申请request queue*/
 struct request_queue *blk_alloc_queue(int node_id)
 {
 	struct request_queue *q;
@@ -408,6 +409,7 @@ struct request_queue *blk_alloc_queue(int node_id)
 
 	q->last_merge = NULL;
 
+	/*设置id*/
 	q->id = ida_alloc(&blk_queue_ida, GFP_KERNEL);
 	if (q->id < 0)
 		goto fail_q;
@@ -416,10 +418,11 @@ struct request_queue *blk_alloc_queue(int node_id)
 	if (!q->stats)
 		goto fail_id;
 
-	q->node = node_id;
+	q->node = node_id;/*设置numa node id*/
 
 	atomic_set(&q->nr_active_requests_shared_tags, 0);
 
+	/*初始化timout定时器回调*/
 	timer_setup(&q->timeout, blk_rq_timed_out_timer, 0);
 	INIT_WORK(&q->timeout_work, blk_timeout_work);
 	INIT_LIST_HEAD(&q->icq_list);

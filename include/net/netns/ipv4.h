@@ -146,11 +146,11 @@ struct netns_ipv4 {
 	u8 sysctl_tcp_tw_reuse;
 	int sysctl_tcp_fin_timeout;
 	unsigned int sysctl_tcp_notsent_lowat;
-	//是否开启tcp sack
+	//配置是否开启tcp sack
 	u8 sysctl_tcp_sack;
-	//开启tcp窗口扩大选项
+	//配置开启了tcp窗口扩大选项
 	u8 sysctl_tcp_window_scaling;
-	u8 sysctl_tcp_timestamps;/*是否开启时间签*/
+	u8 sysctl_tcp_timestamps;/*配置是否开启时间签*/
 	u8 sysctl_tcp_early_retrans;
 	u8 sysctl_tcp_recovery;
 	u8 sysctl_tcp_thin_linear_timeouts;

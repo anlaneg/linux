@@ -1398,6 +1398,7 @@ void mlx5_lag_disable_change(struct mlx5_core_dev *dev)
 
 	ldev = mlx5_lag_dev(dev);
 	if (!ldev)
+		/*无lag，直接返回*/
 		return;
 
 	mlx5_dev_list_lock();

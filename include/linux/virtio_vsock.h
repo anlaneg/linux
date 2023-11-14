@@ -56,6 +56,7 @@ static inline void virtio_vsock_skb_rx_put(struct sk_buff *skb)
 		skb_put(skb, len);
 }
 
+/*申请一个skb*/
 static inline struct sk_buff *virtio_vsock_alloc_skb(unsigned int size, gfp_t mask)
 {
 	struct sk_buff *skb;
@@ -143,9 +144,10 @@ struct virtio_vsock_sock {
 };
 
 struct virtio_vsock_pkt_info {
+	/*对端cid,对端port*/
 	u32 remote_cid, remote_port;
 	struct vsock_sock *vsk;
-	struct msghdr *msg;
+	struct msghdr *msg;/*报文负载*/
 	u32 pkt_len;
 	u16 type;
 	u16 op;

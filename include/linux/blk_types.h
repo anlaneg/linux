@@ -38,13 +38,17 @@ struct bio_crypt_ctx;
 #define SECTOR_MASK		(PAGE_SECTORS - 1)
 
 struct block_device {
+	/*此块设备对应的起始扇区*/
 	sector_t		bd_start_sect;
+	/*此块设备对应的总扇区数*/
 	sector_t		bd_nr_sectors;
+	/*块设备统计信息*/
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
 	bool			bd_read_only;	/* read-only policy */
-	dev_t			bd_dev;
+	dev_t			bd_dev;/*块设备对应的设备编号（inode编号）*/
 	atomic_t		bd_openers;
+	/*此block device对应的inode*/
 	struct inode *		bd_inode;	/* will die */
 	struct super_block *	bd_super;
 	void *			bd_claiming;
@@ -53,6 +57,7 @@ struct block_device {
 	int			bd_holders;
 	bool			bd_write_holder;
 	struct kobject		*bd_holder_dir;
+	/*块设备分区号*/
 	u8			bd_partno;
 	spinlock_t		bd_size_lock; /* for bd_inode->i_size updates */
 	struct gendisk *	bd_disk;

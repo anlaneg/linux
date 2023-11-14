@@ -468,13 +468,14 @@ int __init devtmpfs_init(void)
 	char opts[] = "mode=0755";
 	int err;
 
+	/*挂载internal_fs_type*/
 	mnt = vfs_kern_mount(&internal_fs_type, 0, "devtmpfs", opts);
 	if (IS_ERR(mnt)) {
 		pr_err("unable to create devtmpfs %ld\n", PTR_ERR(mnt));
 		return PTR_ERR(mnt);
 	}
 
-	//注册devfs文件系统
+	//注册devtmpfs文件系统
 	err = register_filesystem(&dev_fs_type);
 	if (err) {
 		pr_err("unable to register devtmpfs type %d\n", err);

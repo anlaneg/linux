@@ -1741,8 +1741,8 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 		dst = rcu_dereference_protected(sk->sk_rx_dst,
 						lockdep_sock_is_held(sk));
 
-		sock_rps_save_rxhash(sk, skb);
-		sk_mark_napi_id(sk, skb);
+		sock_rps_save_rxhash(sk, skb);/*更新此流收方向hash*/
+		sk_mark_napi_id(sk, skb);/*更新napi id*/
 		if (dst) {
 			if (sk->sk_rx_dst_ifindex != skb->skb_iif ||
 			    !INDIRECT_CALL_1(dst->ops->check, ipv4_dst_check,
@@ -1757,8 +1757,7 @@ int tcp_v4_do_rcv(struct sock *sk, struct sk_buff *skb)
 	}
 
 	reason = SKB_DROP_REASON_NOT_SPECIFIED;
-	//未达到稳定状态，慢路径处理
-	//tcp checksum校验
+	//未达到稳定状态，tcp checksum校验
 	if (tcp_checksum_complete(skb))
 		goto csum_err;
 
@@ -1988,7 +1987,7 @@ static void tcp_v4_restore_cb(struct sk_buff *skb)
 		sizeof(struct inet_skb_parm));
 }
 
-/*设置ipv4的skb 控制块*/
+/*设置ipv4的skb control block*/
 static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 			   const struct tcphdr *th)
 {
@@ -1996,7 +1995,7 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 	 * barrier() makes sure compiler wont play fool^Waliasing games.
 	 */
 	memmove(&TCP_SKB_CB(skb)->header.h4, IPCB(skb),
-		sizeof(struct inet_skb_parm));
+		sizeof(struct inet_skb_parm));/*保存ip层设置的ip控制块到header.h4*/
 	barrier();
 
 	TCP_SKB_CB(skb)->seq = ntohl(th->seq);/*设置报文seq*/
@@ -2006,7 +2005,7 @@ static void tcp_v4_fill_cb(struct sk_buff *skb, const struct iphdr *iph,
 	TCP_SKB_CB(skb)->tcp_flags = tcp_flag_byte(th);
 	TCP_SKB_CB(skb)->tcp_tw_isn = 0;
 	TCP_SKB_CB(skb)->ip_dsfield = ipv4_get_dsfield(iph);
-	TCP_SKB_CB(skb)->sacked	 = 0;
+	TCP_SKB_CB(skb)->sacked	 = 0;/*默认认为没有sack对应的选项*/
 	TCP_SKB_CB(skb)->has_rxtstamp =
 			skb->tstamp || skb_hwtstamps(skb)->hwtstamp;
 }
@@ -2033,15 +2032,16 @@ int tcp_v4_rcv(struct sk_buff *skb)
 		goto discard_it;
 
 	/* Count it even if it's bad */
-	__TCP_INC_STATS(net, TCP_MIB_INSEGS);/*tcp总入报数*/
+	__TCP_INC_STATS(net, TCP_MIB_INSEGS);/*tcp总入包数*/
 
 	//报文长度不足tcp头长度，丢包
 	if (!pskb_may_pull(skb, sizeof(struct tcphdr)))
 		goto discard_it;
 
+	/*取tcp头*/
 	th = (const struct tcphdr *)skb->data;
 
-	//tcp头部长度非4字节对齐
+	//tcp头部长度必须按4字节对齐
 	if (unlikely(th->doff < sizeof(struct tcphdr) / 4)) {
 		drop_reason = SKB_DROP_REASON_PKT_TOO_SMALL;
 		goto bad_packet;
@@ -2125,7 +2125,8 @@ process:
 		if (!tcp_filter(sk, skb)) {
 			th = (const struct tcphdr *)skb->data;
 			iph = ip_hdr(skb);
-			tcp_v4_fill_cb(skb, iph, th);/*填充skb控制块*/
+			/*填充skb控制块*/
+			tcp_v4_fill_cb(skb, iph, th);
 			/*检查并生成new big socket*/
 			nsk = tcp_check_req(sk, skb, req, false, &req_stolen);
 		} else {
@@ -2161,8 +2162,8 @@ process:
 		}
 	}
 
-	//ttl检查
 	if (static_branch_unlikely(&ip4_min_ttl)) {
+		/*系统开启了min ttl检查（由某一个或几个socket触发而开启），检查当前socket是否满足*/
 		/* min_ttl can be changed concurrently from do_ip_setsockopt() */
 		if (unlikely(iph->ttl < READ_ONCE(inet_sk(sk)->min_ttl))) {
 			__NET_INC_STATS(net, LINUX_MIB_TCPMINTTLDROP);
@@ -2171,6 +2172,7 @@ process:
 		}
 	}
 
+	//????
 	if (!xfrm4_policy_check(sk, XFRM_POLICY_IN, skb)) {
 		drop_reason = SKB_DROP_REASON_XFRM_POLICY;
 		goto discard_and_relse;
@@ -2191,7 +2193,8 @@ process:
 
 	th = (const struct tcphdr *)skb->data;
 	iph = ip_hdr(skb);
-	//skb cb初始化
+
+	/*初始化并填充skb控制块*/
 	tcp_v4_fill_cb(skb, iph, th);
 
 	skb->dev = NULL;
@@ -2206,9 +2209,10 @@ process:
 	sk_incoming_cpu_update(sk);
 
 	bh_lock_sock_nested(sk);
-	tcp_segs_in(tcp_sk(sk), skb);
+	tcp_segs_in(tcp_sk(sk), skb);/*更新计数*/
 	ret = 0;
 	if (!sock_owned_by_user(sk)) {
+		/*其它状态收包入口*/
 		ret = tcp_v4_do_rcv(sk, skb);
 	} else {
 		/*kernel正在执行函数lock_sock_fast来操作此socket*/
@@ -2229,6 +2233,7 @@ no_tcp_socket:
 	if (!xfrm4_policy_check(NULL, XFRM_POLICY_IN, skb))
 		goto discard_it;
 
+	/*填充skb控制块*/
 	tcp_v4_fill_cb(skb, iph, th);
 
 	if (tcp_checksum_complete(skb)) {
@@ -2243,7 +2248,8 @@ bad_packet:
 		tcp_v4_send_reset(NULL, skb);
 	}
 
-discard_it:/*直接丢包*/
+discard_it:
+	/*直接丢包*/
 	SKB_DR_OR(drop_reason, NOT_SPECIFIED);
 	/* Discard frame. */
 	kfree_skb_reason(skb, drop_reason);
@@ -2263,6 +2269,7 @@ do_time_wait:
 		goto discard_it;
 	}
 
+	/*填充skb控制块*/
 	tcp_v4_fill_cb(skb, iph, th);
 
 	if (tcp_checksum_complete(skb)) {

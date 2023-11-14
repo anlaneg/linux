@@ -265,6 +265,7 @@ static inline struct page *alloc_pages_node(int nid/*内存对应的node*/, gfp_
 }
 
 #ifdef CONFIG_NUMA
+//按order,gfp_mask申请多页内存，使用当前cpu对应的numa node id
 struct page *alloc_pages(gfp_t gfp, unsigned int order);
 struct folio *folio_alloc(gfp_t gfp, unsigned order);
 struct folio *vma_alloc_folio(gfp_t gfp, int order, struct vm_area_struct *vma,

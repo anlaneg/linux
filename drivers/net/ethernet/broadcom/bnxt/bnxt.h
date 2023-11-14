@@ -864,10 +864,10 @@ struct bnxt_coal {
 };
 
 struct bnxt_tpa_info {
-	void			*data;
-	u8			*data_ptr;
-	dma_addr_t		mapping;
-	u16			len;
+	void			*data;/*buffer起始位置*/
+	u8			*data_ptr;/*报文起始位置*/
+	dma_addr_t		mapping;/*dma映射起始位置*/
+	u16			len;/*报文长度*/
 	unsigned short		gso_type;
 	u32			flags2;
 	u32			metadata;
@@ -1449,9 +1449,9 @@ struct bnxt_vf_rep_stats {
 
 struct bnxt_vf_rep {
 	struct bnxt			*bp;
-	struct net_device		*dev;
+	struct net_device		*dev;/*vf_rep对应的以太设备*/
 	struct metadata_dst		*dst;
-	u16				vf_idx;
+	u16				vf_idx;/*rep对应的vf index*/
 	u16				tx_cfa_action;
 	u16				rx_cfa_code;
 
@@ -1772,7 +1772,7 @@ struct bnxt {
 	char			board_partno[BNXT_VPD_FLD_LEN];
 	char			board_serialno[BNXT_VPD_FLD_LEN];
 
-	struct net_device	*dev;
+	struct net_device	*dev;/*pf接口对应的netdev*/
 	struct pci_dev		*pdev;
 
 	atomic_t		intr_sem;
@@ -2158,6 +2158,7 @@ struct bnxt {
 	struct devlink		*dl;
 	struct devlink_port	dl_port;
 	enum devlink_eswitch_mode eswitch_mode;
+	/*以vf索引的vf_rep结构体数组*/
 	struct bnxt_vf_rep	**vf_reps; /* array of vf-rep ptrs */
 	u16			*cfa_code_map; /* cfa_code -> vf_idx map */
 	u8			dsn[8];

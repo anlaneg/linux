@@ -81,7 +81,8 @@ static inline bool itimerspec64_valid(const struct itimerspec64 *its)
  * be converted to 64-bit values (e.g. due to disk format or wire protocol
  * issues) when it is known that the times are less than 68 years apart.
  */
-#define time_after32(a, b)	((s32)((u32)(b) - (u32)(a)) < 0)
+#define time_after32(a, b)	((s32)((u32)(b) - (u32)(a)) < 0)/*a是否大于b*/
+/*b是否小于a*/
 #define time_before32(b, a)	time_after32(a, b)
 
 /**

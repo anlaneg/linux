@@ -60,7 +60,9 @@ void set_capacity(struct gendisk *disk, sector_t sectors)
 	struct block_device *bdev = disk->part0;
 
 	spin_lock(&bdev->bd_size_lock);
+	/*设置此disk在块设备文件中文件大小*/
 	i_size_write(bdev->bd_inode, (loff_t)sectors << SECTOR_SHIFT);
+	/*设置此disk对应的总扇区大小*/
 	bdev->bd_nr_sectors = sectors;
 	spin_unlock(&bdev->bd_size_lock);
 }
@@ -1408,12 +1410,14 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 		goto out_free_bioset;
 
 	/* bdev_alloc() might need the queue, set before the first call */
-	disk->queue = q;
+	disk->queue = q;/*设置request queue*/
 
+	/*创建块设备*/
 	disk->part0 = bdev_alloc(disk, 0);
 	if (!disk->part0)
 		goto out_free_bdi;
 
+	/*设备所属numa id*/
 	disk->node_id = node_id;
 	mutex_init(&disk->open_mutex);
 	xa_init(&disk->part_tbl);
@@ -1455,10 +1459,12 @@ struct gendisk *__blk_alloc_disk(int node, struct lock_class_key *lkclass)
 	struct request_queue *q;
 	struct gendisk *disk;
 
+	/*先申请request queue*/
 	q = blk_alloc_queue(node);
 	if (!q)
 		return NULL;
 
+	/*再创建对应的disk*/
 	disk = __alloc_disk_node(q, node, lkclass);
 	if (!disk) {
 		blk_put_queue(q);

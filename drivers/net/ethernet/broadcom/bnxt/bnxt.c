@@ -1613,10 +1613,11 @@ static inline struct sk_buff *bnxt_gro_skb(struct bnxt *bp,
  */
 static struct net_device *bnxt_get_pkt_dev(struct bnxt *bp, u16 cfa_code)
 {
+	/*依据cfa_code确定收包函数是哪个设备*/
 	struct net_device *dev = bnxt_get_vf_rep(bp, cfa_code);
 
 	/* if vf-rep dev is NULL, the must belongs to the PF */
-	return dev ? dev : bp->dev;
+	return dev ? dev : bp->dev/*如果无对应的vf_rep接口，则归并到pf接口*/;
 }
 
 static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
@@ -1674,10 +1675,10 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 		}
 		gro = !!TPA_END_GRO(tpa_end);
 	}
-	data = tpa_info->data;
-	data_ptr = tpa_info->data_ptr;
+	data = tpa_info->data;/*data起始位置*/
+	data_ptr = tpa_info->data_ptr;/*报文起始位置*/
 	prefetch(data_ptr);
-	len = tpa_info->len;
+	len = tpa_info->len;/*报文长度*/
 	mapping = tpa_info->mapping;
 
 	if (unlikely(agg_bufs > MAX_SKB_FRAGS || TPA_END_ERRORS(tpa_end1))) {
@@ -1689,6 +1690,7 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 	}
 
 	if (len <= bp->rx_copy_thresh) {
+		/*报文长度小，直接采用copy的方式生成skb*/
 		skb = bnxt_copy_skb(bnapi, data_ptr, len, mapping);
 		if (!skb) {
 			bnxt_abort_tpa(cpr, idx, agg_bufs);
@@ -1706,10 +1708,12 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 			return NULL;
 		}
 
+		/*新补一个buffer*/
 		tpa_info->data = new_data;
 		tpa_info->data_ptr = new_data + bp->rx_offset;
 		tpa_info->mapping = new_mapping;
 
+		/*将tpa_info中原有的buffer由skb带走*/
 		skb = build_skb(data, bp->rx_buf_size);
 		dma_unmap_single_attrs(&bp->pdev->dev, mapping,
 				       bp->rx_buf_use_size, bp->rx_dir,
@@ -1721,7 +1725,7 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 			cpr->sw_stats.rx.rx_oom_discards += 1;
 			return NULL;
 		}
-		skb_reserve(skb, bp->rx_offset);
+		skb_reserve(skb, bp->rx_offset);/*使skb指向报文起始位置*/
 		skb_put(skb, len);
 	}
 
@@ -1734,10 +1738,12 @@ static inline struct sk_buff *bnxt_tpa_end(struct bnxt *bp,
 		}
 	}
 
+	/*区分清楚是哪个设备的报文并进行归属，确定报文l3协议*/
 	skb->protocol =
-		eth_type_trans(skb, bnxt_get_pkt_dev(bp, tpa_info->cfa_code));
+		eth_type_trans(skb, bnxt_get_pkt_dev(bp, tpa_info->cfa_code)/*获取skb逻辑对应的dev设备*/);
 
 	if (tpa_info->hash_type != PKT_HASH_TYPE_NONE)
+		/*设置报文对应的hash*/
 		skb_set_hash(skb, tpa_info->rss_hash, tpa_info->hash_type);
 
 	if ((tpa_info->flags2 & RX_CMP_FLAGS2_META_FORMAT_VLAN) &&

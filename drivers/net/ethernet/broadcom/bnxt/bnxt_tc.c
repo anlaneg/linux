@@ -51,6 +51,7 @@ static u16 bnxt_flow_get_dst_fid(struct bnxt *pf_bp, struct net_device *dev)
 
 	/* check if dev belongs to the same switch */
 	if (!netdev_port_same_parent_id(pf_bp->dev, dev)) {
+		/*两者必须同属于一个switch*/
 		netdev_info(pf_bp->dev, "dev(ifindex=%d) not on same switch\n",
 			    dev->ifindex);
 		return BNXT_FID_INVALID;
@@ -58,6 +59,7 @@ static u16 bnxt_flow_get_dst_fid(struct bnxt *pf_bp, struct net_device *dev)
 
 	/* Is dev a VF-rep? */
 	if (bnxt_dev_is_vf_rep(dev))
+		/*目标接口为vf-rep时，替换为vf*/
 		return bnxt_vf_rep_get_fid(dev);
 
 	bp = netdev_priv(dev);
@@ -75,8 +77,8 @@ static int bnxt_tc_parse_redir(struct bnxt *bp,
 		return -EINVAL;
 	}
 
-	actions->flags |= BNXT_TC_ACTION_FLAG_FWD;
-	actions->dst_dev = dev;
+	actions->flags |= BNXT_TC_ACTION_FLAG_FWD;/*指明需要转发*/
+	actions->dst_dev = dev;/*指明目标口*/
 	return 0;
 }
 
@@ -204,17 +206,19 @@ bnxt_tc_parse_pedit(struct bnxt *bp, struct bnxt_tc_actions *actions,
 		}
 		actions->flags |= BNXT_TC_ACTION_FLAG_L2_REWRITE;
 
+		/*将l2要做的重写smac,dstmac填充到eth_addr,eth_addr_mask中*/
 		bnxt_set_l2_key_mask(val, mask, &eth_addr[offset],
 				     &eth_addr_mask[offset]);
 		break;
 	case FLOW_ACT_MANGLE_HDR_TYPE_IP4:
+		/*指明要做nat*/
 		actions->flags |= BNXT_TC_ACTION_FLAG_NAT_XLATE;
 		actions->nat.l3_is_ipv4 = true;
 		if (offset ==  offsetof(struct iphdr, saddr)) {
-			actions->nat.src_xlate = true;
+			actions->nat.src_xlate = true;/*指明要做src变换*/
 			actions->nat.l3.ipv4.saddr.s_addr = htonl(val);
 		} else if (offset ==  offsetof(struct iphdr, daddr)) {
-			actions->nat.src_xlate = false;
+			actions->nat.src_xlate = false;/*指明要做dst变换*/
 			actions->nat.l3.ipv4.daddr.s_addr = htonl(val);
 		} else {
 			netdev_err(bp->dev,
@@ -263,6 +267,7 @@ bnxt_tc_parse_pedit(struct bnxt *bp, struct bnxt_tc_actions *actions,
 			return -EINVAL;
 		}
 		if (actions->nat.src_xlate)
+			/*l3有重写的情况下，支持对l4进行重写*/
 			actions->nat.l4.ports.sport = htons(val);
 		else
 			actions->nat.l4.ports.dport = htons(val);
@@ -297,6 +302,7 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 	int i, rc;
 
 	if (!flow_action_has_entries(flow_action)) {
+		/*flow无action*/
 		netdev_info(bp->dev, "no actions\n");
 		return -EINVAL;
 	}
@@ -307,9 +313,11 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 	flow_action_for_each(i, act, flow_action) {
 		switch (act->id) {
 		case FLOW_ACTION_DROP:
+			/*遇到drop action*/
 			actions->flags |= BNXT_TC_ACTION_FLAG_DROP;
 			return 0; /* don't bother with other actions */
 		case FLOW_ACTION_REDIRECT:
+			/*遇到redirect action*/
 			rc = bnxt_tc_parse_redir(bp, actions, act);
 			if (rc)
 				return rc;
@@ -322,15 +330,18 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 				return rc;
 			break;
 		case FLOW_ACTION_TUNNEL_ENCAP:
+			/*vxlan encap*/
 			rc = bnxt_tc_parse_tunnel_set(bp, actions, act);
 			if (rc)
 				return rc;
 			break;
 		case FLOW_ACTION_TUNNEL_DECAP:
+			/*指明做vxlan decap*/
 			actions->flags |= BNXT_TC_ACTION_FLAG_TUNNEL_DECAP;
 			break;
 		/* Packet edit: L2 rewrite, NAT, NAPT */
 		case FLOW_ACTION_MANGLE:
+			/*重写卸载*/
 			rc = bnxt_tc_parse_pedit(bp, actions, act, i,
 						 (u8 *)eth_addr,
 						 (u8 *)eth_addr_mask);
@@ -342,6 +353,7 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 		}
 	}
 
+	/*将l2的重写（原来是写到eth_addr中）落实到actions中*/
 	if (actions->flags & BNXT_TC_ACTION_FLAG_L2_REWRITE) {
 		rc = bnxt_fill_l2_rewrite_fields(actions, eth_addr,
 						 eth_addr_mask);
@@ -352,11 +364,11 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 	if (actions->flags & BNXT_TC_ACTION_FLAG_FWD) {
 		if (actions->flags & BNXT_TC_ACTION_FLAG_TUNNEL_ENCAP) {
 			/* dst_fid is PF's fid */
-			actions->dst_fid = bp->pf.fw_fid;
+			actions->dst_fid = bp->pf.fw_fid;/*encap出接口指向pf*/
 		} else {
 			/* find the FID from dst_dev */
 			actions->dst_fid =
-				bnxt_flow_get_dst_fid(bp, actions->dst_dev);
+				bnxt_flow_get_dst_fid(bp, actions->dst_dev);/*decap出接口指向vf*/
 			if (actions->dst_fid == BNXT_FID_INVALID)
 				return -EINVAL;
 		}
@@ -366,15 +378,16 @@ static int bnxt_tc_parse_actions(struct bnxt *bp,
 }
 
 static int bnxt_tc_parse_flow(struct bnxt *bp,
-			      struct flow_cls_offload *tc_flow_cmd,
+			      struct flow_cls_offload *tc_flow_cmd/*待解析的规则*/,
 			      struct bnxt_tc_flow *flow)
 {
 	struct flow_rule *rule = flow_cls_offload_flow_rule(tc_flow_cmd);
-	struct flow_dissector *dissector = rule->match.dissector;
+	struct flow_dissector *dissector = rule->match.dissector;/*取match字段*/
 
 	/* KEY_CONTROL and KEY_BASIC are needed for forming a meaningful key */
 	if ((dissector->used_keys & BIT(FLOW_DISSECTOR_KEY_CONTROL)) == 0 ||
 	    (dissector->used_keys & BIT(FLOW_DISSECTOR_KEY_BASIC)) == 0) {
+		/*规则必须匹配接口，指明l2或（且）l3协议*/
 		netdev_info(bp->dev, "cannot form TC key: used_keys = 0x%x\n",
 			    dissector->used_keys);
 		return -EOPNOTSUPP;
@@ -383,12 +396,14 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_BASIC)) {
 		struct flow_match_basic match;
 
+		/*确认l3层协议类型及掩码*/
 		flow_rule_match_basic(rule, &match);
 		flow->l2_key.ether_type = match.key->n_proto;
 		flow->l2_mask.ether_type = match.mask->n_proto;
 
 		if (match.key->n_proto == htons(ETH_P_IP) ||
 		    match.key->n_proto == htons(ETH_P_IPV6)) {
+			/*确认l4层协议类型及掩码*/
 			flow->l4_key.ip_proto = match.key->ip_proto;
 			flow->l4_mask.ip_proto = match.mask->ip_proto;
 		}
@@ -397,6 +412,7 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ETH_ADDRS)) {
 		struct flow_match_eth_addrs match;
 
+		/*提明需要匹配以太地址（smac,dmac同步处理）*/
 		flow_rule_match_eth_addrs(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_ETH_ADDRS;
 		ether_addr_copy(flow->l2_key.dmac, match.key->dst);
@@ -408,21 +424,23 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_VLAN)) {
 		struct flow_match_vlan match;
 
+		/*指明需要匹配vlan*/
 		flow_rule_match_vlan(rule, &match);
 		flow->l2_key.inner_vlan_tci =
 			cpu_to_be16(VLAN_TCI(match.key->vlan_id,
-					     match.key->vlan_priority));
+					     match.key->vlan_priority));/*vlan id*/
 		flow->l2_mask.inner_vlan_tci =
 			cpu_to_be16((VLAN_TCI(match.mask->vlan_id,
 					      match.mask->vlan_priority)));
-		flow->l2_key.inner_vlan_tpid = htons(ETH_P_8021Q);
-		flow->l2_mask.inner_vlan_tpid = htons(0xffff);
+		flow->l2_key.inner_vlan_tpid = htons(ETH_P_8021Q);/*默认匹配0x8100*/
+		flow->l2_mask.inner_vlan_tpid = htons(0xffff);/*指明全匹配*/
 		flow->l2_key.num_vlans = 1;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_IPV4_ADDRS)) {
 		struct flow_match_ipv4_addrs match;
 
+		/*指明需要匹配saddr,daddr(同步处理源目的地址）*/
 		flow_rule_match_ipv4_addrs(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_IPV4_ADDRS;
 		flow->l3_key.ipv4.daddr.s_addr = match.key->dst;
@@ -454,6 +472,7 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ICMP)) {
 		struct flow_match_icmp match;
 
+		/*指明icmp匹配*/
 		flow_rule_match_icmp(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_ICMP;
 		flow->l4_key.icmp.type = match.key->type;
@@ -465,6 +484,7 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_IPV4_ADDRS)) {
 		struct flow_match_ipv4_addrs match;
 
+		/*指明tunnel匹配src,dst地址*/
 		flow_rule_match_enc_ipv4_addrs(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_TUNL_IPV4_ADDRS;
 		flow->tun_key.u.ipv4.dst = match.key->dst;
@@ -473,12 +493,14 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 		flow->tun_mask.u.ipv4.src = match.mask->src;
 	} else if (flow_rule_match_key(rule,
 				      FLOW_DISSECTOR_KEY_ENC_IPV6_ADDRS)) {
+		/*暂不支持ipv6 tunnel匹配*/
 		return -EOPNOTSUPP;
 	}
 
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_KEYID)) {
 		struct flow_match_enc_keyid match;
 
+		/*指明tunnel匹配tun_id*/
 		flow_rule_match_enc_keyid(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_TUNL_ID;
 		flow->tun_key.tun_id = key32_to_tunnel_id(match.key->keyid);
@@ -488,6 +510,7 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	if (flow_rule_match_key(rule, FLOW_DISSECTOR_KEY_ENC_PORTS)) {
 		struct flow_match_ports match;
 
+		/*指明tunnel匹配port*/
 		flow_rule_match_enc_ports(rule, &match);
 		flow->flags |= BNXT_TC_FLOW_FLAGS_TUNL_PORTS;
 		flow->tun_key.tp_dst = match.key->dst;
@@ -496,6 +519,7 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 		flow->tun_mask.tp_src = match.mask->src;
 	}
 
+	/*解析action*/
 	return bnxt_tc_parse_actions(bp, &flow->actions, &rule->action,
 				     tc_flow_cmd->common.extack);
 }
@@ -599,6 +623,7 @@ static int bnxt_hwrm_cfa_flow_alloc(struct bnxt *bp, struct bnxt_tc_flow *flow,
 	if (rc)
 		return rc;
 
+	/*填充req*/
 	req->src_fid = cpu_to_le16(flow->src_fid);
 	req->ref_flow_handle = ref_flow_handle;
 
@@ -765,7 +790,7 @@ static int bnxt_hwrm_cfa_flow_alloc(struct bnxt *bp, struct bnxt_tc_flow *flow,
 	req->action_flags = cpu_to_le16(action_flags);
 
 	resp = hwrm_req_hold(bp, req);
-	rc = hwrm_req_send_silent(bp, req);
+	rc = hwrm_req_send_silent(bp, req);/*向fw请求*/
 	if (!rc) {
 		/* CFA_FLOW_ALLOC response interpretation:
 		 *		    fw with	     fw with
@@ -1419,6 +1444,7 @@ static int bnxt_tc_get_encap_handle(struct bnxt *bp, struct bnxt_tc_flow *flow,
 	if (encap_node->tunnel_handle != INVALID_TUNNEL_HANDLE)
 		goto done;
 
+	/*查询kernel相关表项，获取encap l2层信息*/
 	rc = bnxt_tc_resolve_tunnel_hdrs(bp, encap_key, &encap_node->l2_info);
 	if (rc)
 		goto put_encap;
@@ -1495,6 +1521,7 @@ static int __bnxt_tc_del_flow(struct bnxt *bp,
 static void bnxt_tc_set_flow_dir(struct bnxt *bp, struct bnxt_tc_flow *flow,
 				 u16 src_fid)
 {
+	/*指明流的方向*/
 	flow->l2_key.dir = (bp->pf.fw_fid == src_fid) ? BNXT_DIR_RX : BNXT_DIR_TX;
 }
 
@@ -1539,6 +1566,7 @@ static int bnxt_tc_add_flow(struct bnxt *bp, u16 src_fid,
 	new_node->cookie = tc_flow_cmd->cookie;
 	flow = &new_node->flow;
 
+	/*解析规则,获得flow*/
 	rc = bnxt_tc_parse_flow(bp, tc_flow_cmd, flow);
 	if (rc)
 		goto free_node;
@@ -1547,6 +1575,7 @@ static int bnxt_tc_add_flow(struct bnxt *bp, u16 src_fid,
 	bnxt_tc_set_flow_dir(bp, flow, flow->src_fid);
 
 	if (!bnxt_tc_can_offload(bp, flow)) {
+		/*规则不能卸载，报错*/
 		rc = -EOPNOTSUPP;
 		kfree_rcu(new_node, rcu);
 		return rc;
@@ -1557,6 +1586,7 @@ static int bnxt_tc_add_flow(struct bnxt *bp, u16 src_fid,
 					  &tc_flow_cmd->cookie,
 					  tc_info->flow_ht_params);
 	if (old_node)
+		/*存在旧的flow,移除它（自硬件及hashtable中均移除）*/
 		__bnxt_tc_del_flow(bp, old_node);
 
 	/* Check if the L2 part of the flow has been offloaded already.
@@ -1574,7 +1604,7 @@ static int bnxt_tc_add_flow(struct bnxt *bp, u16 src_fid,
 
 	/* send HWRM cmd to alloc the flow */
 	rc = bnxt_hwrm_cfa_flow_alloc(bp, flow, ref_flow_handle,
-				      tunnel_handle, new_node);
+				      tunnel_handle, new_node);/*向fw申请并下发flow*/
 	if (rc)
 		goto put_tunnel;
 
@@ -1827,6 +1857,7 @@ void bnxt_tc_flow_stats_work(struct bnxt *bp)
 
 	rhashtable_walk_enter(&tc_info->flow_table, &tc_info->iter);
 
+	/*遍历flow_table中所有flow,自fw中获取flow对应统计数*/
 	for (;;) {
 		rc = bnxt_tc_flow_stats_batch_prep(bp, tc_info->stats_batch,
 						   &num_flows);
@@ -1851,6 +1882,7 @@ int bnxt_tc_setup_flower(struct bnxt *bp, u16 src_fid,
 {
 	switch (cls_flower->command) {
 	case FLOW_CLS_REPLACE:
+		/*flower规则增删除*/
 		return bnxt_tc_add_flow(bp, src_fid, cls_flower);
 	case FLOW_CLS_DESTROY:
 		return bnxt_tc_del_flow(bp, cls_flower);

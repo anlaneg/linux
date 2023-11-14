@@ -519,6 +519,7 @@ static int fl_hw_replace_filter(struct tcf_proto *tp,
 	cls_flower.rule->match.key = &f->mkey;
 	cls_flower.classid = f->res.classid;
 
+	/*action转换*/
 	err = tc_setup_offload_action(&cls_flower.rule->action, &f->exts,
 				      cls_flower.common.extack);
 	if (err) {
@@ -2209,6 +2210,27 @@ static int fl_ht_insert_unique(struct cls_fl_filter *fnew,
 	return 0;
 }
 
+/**
+ * root@host:/usr/share/bcc/tools# ./trace -K '::__mlx5e_add_fdb_flow'
+PID     TID     COMM            FUNC
+1595781 1595781 tc              __mlx5e_add_fdb_flow
+        __mlx5e_add_fdb_flow+0x1 [mlx5_core]
+        mlx5e_configure_flower+0x8df [mlx5_core]
+        tc_setup_cb_add+0xf8 [kernel]
+        fl_hw_replace_filter+0x17c [cls_flower]
+        fl_change+0xa3f [cls_flower]
+        tc_new_tfilter+0x4ec [kernel]
+        rtnetlink_rcv_msg+0xfa [kernel]
+        netlink_rcv_skb+0xdb [kernel]
+        netlink_unicast+0x1b8 [kernel]
+        netlink_sendmsg+0x2f9 [kernel]
+        sock_sendmsg+0x30 [kernel]
+        ____sys_sendmsg+0x237 [kernel]
+        ___sys_sendmsg+0x88 [kernel]
+        __sys_sendmsg+0x63 [kernel]
+        do_syscall_64+0x59 [kernel]
+        entry_SYSCALL_64_after_hwframe+0x44 [kernel]
+ */
 //添加或修改flower规则
 static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报文*/,
 		     struct tcf_proto *tp, unsigned long base,
@@ -2326,6 +2348,7 @@ static int fl_change(struct net *net, struct sk_buff *in_skb/*netlink消息报�
 
 	//如果规则不要求跳过hw,则针对新规则执行hw的添加
 	if (!tc_skip_hw(fnew->flags)) {
+		/****执行硬件规则添加*/
 		err = fl_hw_replace_filter(tp, fnew, rtnl_held, extack);
 		if (err)
 			goto errout_ht;

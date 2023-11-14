@@ -4087,10 +4087,12 @@ struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
 	struct request_queue *q;
 	struct gendisk *disk;
 
+	/*依据参数创建request queue*/
 	q = blk_mq_init_queue_data(set, queuedata);
 	if (IS_ERR(q))
 		return ERR_CAST(q);
 
+	/*申请genernal disk*/
 	disk = __alloc_disk_node(q, set->numa_node, lkclass);
 	if (!disk) {
 		blk_mq_destroy_queue(q);

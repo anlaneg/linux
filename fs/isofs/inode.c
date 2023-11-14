@@ -907,7 +907,7 @@ root_found:
 	 * the s_rock flag. Once we have the final s_rock value,
 	 * we then decide whether to use the Joliet descriptor.
 	 */
-	inode = isofs_iget(s, sbi->s_firstdatazone, 0);
+	inode = isofs_iget(s, sbi->s_firstdatazone, 0);/*读取root inode*/
 	if (IS_ERR(inode))
 		goto out_no_root;
 
@@ -1558,10 +1558,11 @@ struct inode *__isofs_iget(struct super_block *sb,
 	return inode;
 }
 
+/*对iso文件执行挂载，获得root dentry*/
 static struct dentry *isofs_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, isofs_fill_super);
+	return mount_bdev(fs_type, flags, dev_name/*源设备*/, data, isofs_fill_super);
 }
 
 static struct file_system_type iso9660_fs_type = {
@@ -1584,6 +1585,7 @@ static int __init init_iso9660_fs(void)
 	if (err)
 		goto out1;
 #endif
+	/*注册iso9660 file system*/
 	err = register_filesystem(&iso9660_fs_type);
 	if (err)
 		goto out2;

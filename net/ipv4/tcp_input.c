@@ -108,6 +108,7 @@ int sysctl_tcp_max_orphans __read_mostly = NR_FILE;
 #define FLAG_FORWARD_PROGRESS	(FLAG_ACKED|FLAG_DATA_SACKED)
 
 #define TCP_REMNANT (TCP_FLAG_FIN|TCP_FLAG_URG|TCP_FLAG_SYN|TCP_FLAG_PSH)
+/*将预留位及Push位置为0*/
 #define TCP_HP_BITS (~(TCP_RESERVED_BITS|TCP_FLAG_PSH))
 
 #define REXMIT_NONE	0 /* no loss recovery to do */
@@ -142,14 +143,15 @@ EXPORT_SYMBOL_GPL(clean_acked_data_flush);
 #ifdef CONFIG_CGROUP_BPF
 static void bpf_skops_parse_hdr(struct sock *sk, struct sk_buff *skb)
 {
-	bool unknown_opt = tcp_sk(sk)->rx_opt.saw_unknown &&
+	bool unknown_opt = tcp_sk(sk)->rx_opt.saw_unknown/*解析过程中遇到了不认识的opt*/ &&
 		BPF_SOCK_OPS_TEST_FLAG(tcp_sk(sk),
-				       BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG);
+				       BPF_SOCK_OPS_PARSE_UNKNOWN_HDR_OPT_CB_FLAG)/*socket上也有标记容许处理未知opt*/;
 	bool parse_all_opt = BPF_SOCK_OPS_TEST_FLAG(tcp_sk(sk),
-						    BPF_SOCK_OPS_PARSE_ALL_HDR_OPT_CB_FLAG);
+						    BPF_SOCK_OPS_PARSE_ALL_HDR_OPT_CB_FLAG);/*要重解析所有opt吗？*/
 	struct bpf_sock_ops_kern sock_ops;
 
 	if (likely(!unknown_opt && !parse_all_opt))
+		/*两者如皆为false,则直接返回*/
 		return;
 
 	/* The skb will be handled in the
@@ -160,6 +162,7 @@ static void bpf_skops_parse_hdr(struct sock *sk, struct sk_buff *skb)
 	case TCP_SYN_RECV:
 	case TCP_SYN_SENT:
 	case TCP_LISTEN:
+		/*以上三种状态在此处不处理*/
 		return;
 	}
 
@@ -171,6 +174,7 @@ static void bpf_skops_parse_hdr(struct sock *sk, struct sk_buff *skb)
 	sock_ops.sk = sk;
 	bpf_skops_init_skb(&sock_ops, skb, tcp_hdrlen(skb));
 
+	/*来，让bpf钩子上进行处理*/
 	BPF_CGROUP_RUN_PROG_SOCK_OPS(&sock_ops);
 }
 
@@ -3766,8 +3770,8 @@ static int tcp_ack(struct sock *sk, const struct sk_buff *skb, int flag)
 	struct rate_sample rs = { .prior_delivered = 0 };
 	u32 prior_snd_una = tp->snd_una;
 	bool is_sack_reneg = tp->is_sack_reneg;
-	u32 ack_seq = TCP_SKB_CB(skb)->seq;
-	u32 ack = TCP_SKB_CB(skb)->ack_seq;
+	u32 ack_seq = TCP_SKB_CB(skb)->seq;/*此报文首个字节对应的seq*/
+	u32 ack = TCP_SKB_CB(skb)->ack_seq;/*此报文ack了对端的seq*/
 	int num_dupack = 0;
 	int prior_packets = tp->packets_out;
 	u32 delivered = tp->delivered;
@@ -3950,19 +3954,23 @@ old_ack:
 	return 0;
 }
 
-static void tcp_parse_fastopen_option(int len, const unsigned char *cookie,
-				      bool syn, struct tcp_fastopen_cookie *foc,
+/*解析TCPOPT_FASTOPEN选项*/
+static void tcp_parse_fastopen_option(int len/*tlv中v的长度*/, const unsigned char *cookie/*选项起始指针*/,
+				      bool syn/*当前报文是否包含syn标记*/, struct tcp_fastopen_cookie *foc/*出参，填充选项提供的fastopen*/,
 				      bool exp_opt)
 {
 	/* Valid only in SYN or SYN-ACK with an even length.  */
-	if (!foc || !syn || len < 0 || (len & 1))
+	if (!foc /*未提供出参*/|| !syn/*无syn标记*/ || len < 0 /*选项长度异常*/|| (len & 1)/*长度没有对齐*/)
 		return;
 
 	if (len >= TCP_FASTOPEN_COOKIE_MIN &&
 	    len <= TCP_FASTOPEN_COOKIE_MAX)
+		/*取cookie填充到foc->val*/
 		memcpy(foc->val, cookie, len);
 	else if (len != 0)
+		/*标记长度异常*/
 		len = -1;
+
 	foc->len = len;
 	foc->exp = exp_opt;
 }
@@ -4036,11 +4044,11 @@ EXPORT_SYMBOL_GPL(tcp_parse_mss_option);
 void tcp_parse_options(const struct net *net,
 		       const struct sk_buff *skb,
 		       struct tcp_options_received *opt_rx/*出参，收到的选项信息*/, int estab/*是否已稳定连接*/,
-		       struct tcp_fastopen_cookie *foc)
+		       struct tcp_fastopen_cookie *foc/*出参，fastopen相关选项信息*/)
 {
 	const unsigned char *ptr;
 	const struct tcphdr *th = tcp_hdr(skb);
-	//取得tcp选项长度
+	//取得tcp选项总长度
 	int length = (th->doff * 4) - sizeof(struct tcphdr);
 
 	//tcp选项首地址
@@ -4049,38 +4057,40 @@ void tcp_parse_options(const struct net *net,
 	opt_rx->saw_unknown = 0;
 
 	while (length > 0) {
-		int opcode = *ptr++;//提取选项类型
+		int opcode = *ptr++;//提取选项类型（指针向后跳1）
 		int opsize;
 
 		switch (opcode) {
-		case TCPOPT_EOL://选项结束标记
+		case TCPOPT_EOL:
+			//遇到选项结束符，结束本函数运行。
 			return;
 		case TCPOPT_NOP:	/* Ref: RFC 793 section 3.1 */
-			length--;//空选项，用于补长度
+			length--;//空选项，用于补长度，消耗length
 			continue;
 		default:
-			//采用tlv格式，故小于2是错误的报文
+			//遇到其它选项，采用tlv格式，故小于2一定是错误的报文
 			if (length < 2)
 				return;
-			//提取选项长度
-			opsize = *ptr++;
+
+			opsize = *ptr++;//提取选项长度（指针向后跳1）
 			if (opsize < 2) /* "silly options" */
+				/*由于长度是包括自身与opcode的，故一定不小于2*/
 				return;
 			if (opsize > length)
+				/*opsize一定不能超过选项总长度，这种情况，结束本函数运行*/
 				return;	/* don't parse partial options */
 			switch (opcode) {
 			case TCPOPT_MSS:
-			    //mss只能在syn包中存在，否则不生效
-				if (opsize == TCPOLEN_MSS && th->syn && !estab) {
-					//取两字节的大端数字，用于对方给出的mss
+			    //遇到mss，其只能在syn包中存在，否则不生效
+				if (opsize == TCPOLEN_MSS && th->syn && !estab/*且不是est状态链接*/) {
+					//取两字节的mss值（大端数字）
 					u16 in_mss = get_unaligned_be16(ptr);
 					if (in_mss) {
-						//如果用户通过user_mss设置了mss且小于in_mss,则使用
-						//用户设置的mss
 						if (opt_rx->user_mss &&
 						    opt_rx->user_mss < in_mss)
+							/*用户设置了mss，且用户设置的mss更小一些,则使用用户设置的*/
 							in_mss = opt_rx->user_mss;
-						//记录协商的mss
+						//记录协商的mss（小者更完美）
 						opt_rx->mss_clamp = in_mss;
 					}
 				}
@@ -4102,8 +4112,8 @@ void tcp_parse_options(const struct net *net,
 				不做任何的扩大（The Window field in a SYN (i.e., a <SYN> or <SYN,ACK>)
 				segment itself is never scaled.）。
 				 */
-				if (opsize == TCPOLEN_WINDOW && th->syn &&
-				    !estab && READ_ONCE(net->ipv4.sysctl_tcp_window_scaling)) {
+				if (opsize == TCPOLEN_WINDOW && th->syn/*仅syn标记时有效*/ &&
+				    !estab/*仅未达到est时有效*/ && READ_ONCE(net->ipv4.sysctl_tcp_window_scaling)/*配置开启了此选项*/) {
 					__u8 snd_wscale = *(__u8 *)ptr;
 					opt_rx->wscale_ok = 1;
 					if (snd_wscale > TCP_MAX_WSCALE) {
@@ -4119,18 +4129,19 @@ void tcp_parse_options(const struct net *net,
 				break;
 			case TCPOPT_TIMESTAMP:
 				if ((opsize == TCPOLEN_TIMESTAMP) &&
-				    ((estab && opt_rx->tstamp_ok) ||
-				     (!estab && READ_ONCE(net->ipv4.sysctl_tcp_timestamps)))) {
+				    ((estab && opt_rx->tstamp_ok)/*稳定连接情况下tstmap_ok必须为1*/ ||
+				     (!estab && READ_ONCE(net->ipv4.sysctl_tcp_timestamps))/*非est情况下，必须开启tcp时间签*/)) {
 					//时间签处理（收到的是大端4字节）
 					opt_rx->saw_tstamp = 1;
+					/*设置rcv_tsval,rcv_tsecr*/
 					opt_rx->rcv_tsval = get_unaligned_be32(ptr);
 					opt_rx->rcv_tsecr = get_unaligned_be32(ptr + 4);
 				}
 				break;
 			case TCPOPT_SACK_PERM:
 			    /*sack标记只在syn报文中生效*/
-				if (opsize == TCPOLEN_SACK_PERM && th->syn &&
-				    !estab && READ_ONCE(net->ipv4.sysctl_tcp_sack)) {
+				if (opsize == TCPOLEN_SACK_PERM && th->syn/*必须有syn标记*/ &&
+				    !estab && READ_ONCE(net->ipv4.sysctl_tcp_sack)/*必须开启tcp sack*/) {
 					//收到有效的sack协商
 					opt_rx->sack_ok = TCP_SACK_SEEN;
 					tcp_sack_reset(opt_rx);
@@ -4139,13 +4150,15 @@ void tcp_parse_options(const struct net *net,
 
 			case TCPOPT_SACK:
 				if ((opsize >= (TCPOLEN_SACK_BASE + TCPOLEN_SACK_PERBLOCK)) &&
-				   !((opsize - TCPOLEN_SACK_BASE) % TCPOLEN_SACK_PERBLOCK) &&
-				   opt_rx->sack_ok) {
+				   !((opsize - TCPOLEN_SACK_BASE) % TCPOLEN_SACK_PERBLOCK)/*value须对齐*/ &&
+				   opt_rx->sack_ok/*必须sack协商成功*/) {
+					/*记录到sack选项的偏移（相对于tcp头）*/
 					TCP_SKB_CB(skb)->sacked = (ptr - 2) - (unsigned char *)th;
 				}
 				break;
 #ifdef CONFIG_TCP_MD5SIG
 			case TCPOPT_MD5SIG:
+				/*跳过md5sig选项*/
 				/*
 				 * The MD5 Hash has already been
 				 * checked (see tcp_v{4,6}_do_rcv()).
@@ -4153,37 +4166,38 @@ void tcp_parse_options(const struct net *net,
 				break;
 #endif
 			case TCPOPT_FASTOPEN:
-				//fastopen仅在syn标记下有效
+				//fastopen选项解析（仅在syn标记下有效）（非RFC6994格式）
 				tcp_parse_fastopen_option(
 					opsize - TCPOLEN_FASTOPEN_BASE,
 					ptr, th->syn, foc, false);
 				break;
 
 			case TCPOPT_EXP:
+				//fastopen选项解析（仅在syn标记下有效）（RFC6994格式）
 				/* Fast Open option shares code 254 using a
 				 * 16 bits magic number.
 				 */
 				if (opsize >= TCPOLEN_EXP_FASTOPEN_BASE &&
 				    get_unaligned_be16(ptr) ==
-				    TCPOPT_FASTOPEN_MAGIC) {
+				    TCPOPT_FASTOPEN_MAGIC/*有个magic用于标记*/) {
 					tcp_parse_fastopen_option(opsize -
 						TCPOLEN_EXP_FASTOPEN_BASE,
 						ptr + 2, th->syn, foc, true);
 					break;
 				}
 
-				/*smc选项解析*/
+				/*smc tcp选项解析*/
 				if (smc_parse_options(th, opt_rx, ptr, opsize))
 					break;
 
-				opt_rx->saw_unknown = 1;
+				opt_rx->saw_unknown = 1;/*遇到格式不正确的option*/
 				break;
 
 			default:
-				opt_rx->saw_unknown = 1;
+				opt_rx->saw_unknown = 1;/*遇到不认识的opcode*/
 			}
 
-			//跳过（已解析或不认识的）选项
+			//此选项已被解析或者直接不认识，使解析头移至下一个选项
 			ptr += opsize-2;
 			length -= opsize;
 		}
@@ -4201,8 +4215,8 @@ static bool tcp_parse_aligned_timestamp(struct tcp_sock *tp, const struct tcphdr
 	if (*ptr == htonl((TCPOPT_NOP << 24) | (TCPOPT_NOP << 16)
 			  | (TCPOPT_TIMESTAMP << 8) | TCPOLEN_TIMESTAMP)) {
 
-		tp->rx_opt.saw_tstamp = 1;
-		++ptr;//跳过{nop,nop,timestamp,10}
+		tp->rx_opt.saw_tstamp = 1;/*确认时间签*/
+		++ptr;//跳过{nop,nop,TIMESTAMP,10}
 		tp->rx_opt.rcv_tsval = ntohl(*ptr);//取第一个时间
 		++ptr;
 		if (*ptr)
@@ -4226,19 +4240,22 @@ static bool tcp_fast_parse_options(const struct net *net,
 	 * values.  Because equality is used, short doff can be ignored here.
 	 */
 	if (th->doff == (sizeof(*th) / 4)) {
+		//从长度可知，此报文无tcp选项，则必也没有时间签
 		tp->rx_opt.saw_tstamp = 0;
-		//此报文无tcp选项
 		return false;
 	} else if (tp->rx_opt.tstamp_ok &&
 		   th->doff == ((sizeof(*th) + TCPOLEN_TSTAMP_ALIGNED) / 4)) {
+		//如果之前有发现过时间签，且tcp选项长度恰好和包含时间签一样长，那么尝试着
+		//赌一把，试着解析加速。
 		//nop,nop,timestamp方式
 		if (tcp_parse_aligned_timestamp(tp, th))
-			return true;
+			return true;/*赌赢了*/
 	}
 
-	tcp_parse_options(net, skb, &tp->rx_opt, 1, NULL);
+	/*解析此报文包含的tcp option*/
+	tcp_parse_options(net, skb, &tp->rx_opt, 1/*此时为est状态*/, NULL);
 	if (tp->rx_opt.saw_tstamp && tp->rx_opt.rcv_tsecr)
-		tp->rx_opt.rcv_tsecr -= tp->tsoffset;
+		tp->rx_opt.rcv_tsecr -= tp->tsoffset;/*减去offset，换算成实际值？*/
 
 	return true;
 }
@@ -4981,9 +4998,10 @@ static int __must_check tcp_queue_rcv(struct sock *sk, struct sk_buff *skb,
 	eaten = (tail &&
 		 tcp_try_coalesce(sk, tail,
 				  skb, fragstolen)) ? 1 : 0;
+	/*记录下一个收取点序号*/
 	tcp_rcv_nxt_update(tcp_sk(sk), TCP_SKB_CB(skb)->end_seq);
 	if (!eaten) {
-		__skb_queue_tail(&sk->sk_receive_queue, skb);
+		__skb_queue_tail(&sk->sk_receive_queue, skb);/*报文直接挂在receive_queue*/
 		skb_set_owner_r(skb, sk);
 	}
 	return eaten;
@@ -5755,7 +5773,9 @@ static bool tcp_validate_incoming(struct sock *sk, struct sk_buff *skb,
 	if (tcp_fast_parse_options(sock_net(sk), skb, th, tp) &&
 	    tp->rx_opt.saw_tstamp &&
 	    tcp_paws_discard(sk, skb)) {
+		/*包含tcp选项头，且包含时间签，且从时间签上看应该丢掉*/
 		if (!th->rst) {
+			/*这个报文没有rst,告警并丢弃*/
 			NET_INC_STATS(sock_net(sk), LINUX_MIB_PAWSESTABREJECTED);
 			if (!tcp_oow_rate_limited(sock_net(sk), skb,
 						  LINUX_MIB_TCPACKSKIPPEDPAWS,
@@ -5852,6 +5872,7 @@ syn_challenge:
 		goto discard;
 	}
 
+	/*通过此钩子点可以支持tcp自定义头的处理，但这里目前只能改报文，不能将解析结果向后传。*/
 	bpf_skops_parse_hdr(sk, skb);
 
 	return true;
@@ -5891,8 +5912,8 @@ reset:
  */
 void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 {
-	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	//tcp稳定状态下收到报文
+	enum skb_drop_reason reason = SKB_DROP_REASON_NOT_SPECIFIED;
 	const struct tcphdr *th = (const struct tcphdr *)skb->data;
 	struct tcp_sock *tp = tcp_sk(sk);
 	unsigned int len = skb->len;
@@ -5930,9 +5951,10 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 	 */
 
 	if ((tcp_flag_word(th) & TCP_HP_BITS) == tp->pred_flags &&
-	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt &&
-	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)) {
-		int tcp_header_len = tp->tcp_header_len;
+	    TCP_SKB_CB(skb)->seq == tp->rcv_nxt/*没有乱序*/ &&
+	    !after(TCP_SKB_CB(skb)->ack_seq, tp->snd_nxt)/*ack的是我们发出的包*/) {
+		/*确认tcp快路（这条路是不处理拥塞相关的，上面检查时没有发现ecn)*/
+		int tcp_header_len = tp->tcp_header_len;/*取tcp头部长度*/
 
 		/* Timestamp header prediction: tcp_header_len
 		 * is automatically equal to th->doff*4 due to pred_flags
@@ -5958,6 +5980,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 		}
 
 		if (len <= tcp_header_len) {
+			/*报文实际长度不大于tcp header长度*/
 			/* Bulk data transfer: sender */
 			if (len == tcp_header_len) {
 				/* Predicted packet is in window by definition.
@@ -5983,7 +6006,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 				return;
 			} else { /* Header too small */
 				reason = SKB_DROP_REASON_PKT_TOO_SMALL;
-				TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);
+				TCP_INC_STATS(sock_net(sk), TCP_MIB_INERRS);/*报文长度不足header,直接丢包*/
 				goto discard;
 			}
 		} else {
@@ -6011,7 +6034,7 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 
 			/* Bulk data transfer: receiver */
 			skb_dst_drop(skb);
-			__skb_pull(skb, tcp_header_len);
+			__skb_pull(skb, tcp_header_len);/*skb跳过选项头*/
 			eaten = tcp_queue_rcv(sk, skb, &fragstolen);
 
 			tcp_event_data_recv(sk, skb);
@@ -6026,12 +6049,13 @@ void tcp_rcv_established(struct sock *sk, struct sk_buff *skb)
 				tcp_update_wl(tp, TCP_SKB_CB(skb)->seq);
 			}
 
+			/*回应ack*/
 			__tcp_ack_snd_check(sk, 0);
 no_ack:
 			if (eaten)
 				kfree_skb_partial(skb, fragstolen);
 			tcp_data_ready(sk);
-			return;
+			return;/*快路处理完成，直接退出*/
 		}
 	}
 
@@ -6041,7 +6065,7 @@ slow_path:
 		goto csum_error;
 
 	if (!th->ack && !th->rst && !th->syn) {
-		//标记不正确
+		//以上三个标记都没有，标记不正确
 		reason = SKB_DROP_REASON_TCP_FLAGS;
 		goto discard;
 	}
@@ -6051,6 +6075,7 @@ slow_path:
 	 */
 
 	if (!tcp_validate_incoming(sk, skb, th, 1))
+		/*incoming校验失败，报文已丢，直接返回*/
 		return;
 
 step5:

@@ -252,6 +252,7 @@ static const struct device_attribute backend_attr = {
 	.show = backend_show,
 };
 
+/*nbd设备移除*/
 static void nbd_dev_remove(struct nbd_device *nbd)
 {
 	struct gendisk *disk = nbd->disk;
@@ -324,7 +325,7 @@ static void nbd_mark_nsock_dead(struct nbd_device *nbd, struct nbd_sock *nsock,
 }
 
 static int nbd_set_size(struct nbd_device *nbd, loff_t bytesize,
-		loff_t blksize)
+		loff_t blksize/*block大小*/)
 {
 	if (!blksize)
 		blksize = 1u << NBD_DEF_BLKSIZE_BITS;

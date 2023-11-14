@@ -340,7 +340,9 @@ SYSCALL_DEFINE2(memfd_create,
 	if (!name)
 		return -ENOMEM;
 
+	/*先写前缀*/
 	strcpy(name, MFD_NAME_PREFIX);
+	/*再写uname*/
 	if (copy_from_user(&name[MFD_NAME_PREFIX_LEN], uname, len)) {
 		error = -EFAULT;
 		goto err_name;
@@ -366,6 +368,7 @@ SYSCALL_DEFINE2(memfd_create,
 					(flags >> MFD_HUGE_SHIFT) &
 					MFD_HUGE_MASK);
 	} else
+		/*指出普通文件（非大页）*/
 		file = shmem_file_setup(name, 0, VM_NORESERVE);
 	if (IS_ERR(file)) {
 		error = PTR_ERR(file);
@@ -377,7 +380,7 @@ SYSCALL_DEFINE2(memfd_create,
 	if (flags & MFD_NOEXEC_SEAL) {
 		struct inode *inode = file_inode(file);
 
-		inode->i_mode &= ~0111;
+		inode->i_mode &= ~0111;/*清除执行权限*/
 		file_seals = memfd_file_seals_ptr(file);
 		*file_seals &= ~F_SEAL_SEAL;
 		*file_seals |= F_SEAL_EXEC;
@@ -387,6 +390,7 @@ SYSCALL_DEFINE2(memfd_create,
 		*file_seals &= ~F_SEAL_SEAL;
 	}
 
+	/*返回关联此file的fd*/
 	fd_install(fd, file);
 	kfree(name);
 	return fd;

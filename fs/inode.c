@@ -159,8 +159,8 @@ static int no_open(struct inode *inode, struct file *file)
  */
 int inode_init_always(struct super_block *sb, struct inode *inode)
 {
-	static const struct inode_operations empty_iops;
-	static const struct file_operations no_open_fops = {.open = no_open};
+	static const struct inode_operations empty_iops;/*这种inode的ops函数恒为空*/
+	static const struct file_operations no_open_fops = {.open = no_open};/*这种inod的file ops恒为空（open除外）*/
 	struct address_space *const mapping = &inode->i_data;
 
 	inode->i_sb = sb;
@@ -172,7 +172,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	inode->i_op = &empty_iops;
 	/*设置inode的file op为空回调*/
 	inode->i_fop = &no_open_fops;
-	inode->i_ino = 0;
+	inode->i_ino = 0;/*inode number恒为0*/
 	inode->__i_nlink = 1;
 	inode->i_opflags = 0;
 	if (sb->s_xattr)
@@ -268,7 +268,7 @@ static struct inode *alloc_inode(struct super_block *sb)
 		//如果有alloc_inode，则采用alloc_inode进行申请
 		inode = ops->alloc_inode(sb);
 	else
-		//无alloc_inode回调，则自inode的cache中申请node
+		//如super block无alloc_inode回调，则自inode的cache中申请node
 		inode = alloc_inode_sb(sb, inode_cachep, GFP_KERNEL);
 
 	if (!inode)
@@ -917,21 +917,27 @@ static void __wait_on_freeing_inode(struct inode *inode);
 /*
  * Called with the inode lock held.
  */
-static struct inode *find_inode(struct super_block *sb,
-				struct hlist_head *head,
-				int (*test)(struct inode *, void *),
-				void *data)
+static struct inode *find_inode(struct super_block *sb/*inode所属super block*/,
+				struct hlist_head *head/*在此链表上查找指定inode*/,
+				int (*test)(struct inode *, void *)/*匹配函数*/,
+				void *data/*匹配函数参数*/)
 {
 	struct inode *inode = NULL;
 
 repeat:
 	hlist_for_each_entry(inode, head, i_hash) {
 		if (inode->i_sb != sb)
+			/*跳过super block不同的*/
 			continue;
 		if (!test(inode, data))
+			/*通过test函数进行检查，如果返回0，则匹配失败，跳过*/
 			continue;
+
+		/*匹配成功*/
 		spin_lock(&inode->i_lock);
+		/*匹配成功后，校验inode状态*/
 		if (inode->i_state & (I_FREEING|I_WILL_FREE)) {
+			/*此inode正在被删除/将要释放，我们等它被彻底移除后，再重试*/
 			__wait_on_freeing_inode(inode);
 			goto repeat;
 		}
@@ -939,8 +945,10 @@ repeat:
 			spin_unlock(&inode->i_lock);
 			return ERR_PTR(-ESTALE);
 		}
+		/*成功可用，增加计数*/
 		__iget(inode);
 		spin_unlock(&inode->i_lock);
+		/*返回*/
 		return inode;
 	}
 	return NULL;
@@ -1036,6 +1044,7 @@ EXPORT_SYMBOL(get_next_ino);
  */
 struct inode *new_inode_pseudo(struct super_block *sb)
 {
+	/*依据super block生成一个inode*/
 	struct inode *inode = alloc_inode(sb);
 
 	if (inode) {
@@ -1186,10 +1195,12 @@ struct inode *inode_insert5(struct inode *inode, unsigned long hashval,
 			    int (*test)(struct inode *, void *),
 			    int (*set)(struct inode *, void *), void *data)
 {
+	/*先确定此inode在哪个桶*/
 	struct hlist_head *head = inode_hashtable + hash(inode->i_sb, hashval);
 	struct inode *old;
 
 again:
+	/*加锁尝试查询*/
 	spin_lock(&inode_hash_lock);
 	old = find_inode(inode->i_sb, head, test, data);
 	if (unlikely(old)) {
@@ -1205,9 +1216,11 @@ again:
 			iput(old);
 			goto again;
 		}
+		/*在hash表中查询到已有inode,直接返回，不插入*/
 		return old;
 	}
 
+	/*有set回调，采用set回调初始化此inode*/
 	if (set && unlikely(set(inode, data))) {
 		inode = NULL;
 		goto unlock;
@@ -1218,7 +1231,8 @@ again:
 	 * caller is responsible for filling in the contents
 	 */
 	spin_lock(&inode->i_lock);
-	inode->i_state |= I_NEW;
+	inode->i_state |= I_NEW;/*标记此inode为新建*/
+	/*将此inode加入到桶上*/
 	hlist_add_head_rcu(&inode->i_hash, head);
 	spin_unlock(&inode->i_lock);
 
@@ -1227,6 +1241,7 @@ again:
 	 * point, so it should be safe to test i_sb_list locklessly.
 	 */
 	if (list_empty(&inode->i_sb_list))
+		/*将此inode串到其对应的super block上*/
 		inode_sb_list_add(inode);
 unlock:
 	spin_unlock(&inode_hash_lock);
@@ -1256,18 +1271,22 @@ EXPORT_SYMBOL(inode_insert5);
  * sleep.
  */
 struct inode *iget5_locked(struct super_block *sb, unsigned long hashval,
-		int (*test)(struct inode *, void *),
+		int (*test)(struct inode *, void *)/*inode是否存在的检测匹配函数*/,
 		int (*set)(struct inode *, void *), void *data)
 {
+	/*通过以上5个参数查找指定的inode,如果未查询到，则创建*/
 	struct inode *inode = ilookup5(sb, hashval, test, data);
 
 	if (!inode) {
+		/*没有找到此inode,创建一个*/
 		struct inode *new = alloc_inode(sb);
 
 		if (new) {
-			new->i_state = 0;
+			new->i_state = 0;/*先将状态标为0*/
+			/*将此inode插入*/
 			inode = inode_insert5(new, hashval, test, set, data);
 			if (unlikely(inode != new))
+				/*在inode_inser5中会再查询一次，此流程走到时为查询成功，故new不再需要，丢弃*/
 				destroy_inode(new);
 		}
 	}
@@ -1288,7 +1307,7 @@ EXPORT_SYMBOL(iget5_locked);
  * hashed, and with the I_NEW flag set.  The file system gets to fill it in
  * before unlocking it via unlock_new_inode().
  */
-//通过ino获得其对应的inode
+//通过ino获得其对应的inode，如果未查询到，则创建
 struct inode *iget_locked(struct super_block *sb, unsigned long ino)
 {
 	//找到合适的hash桶
@@ -1453,9 +1472,10 @@ EXPORT_SYMBOL(igrab);
  *
  * Note2: @test is called with the inode_hash_lock held, so can't sleep.
  */
-struct inode *ilookup5_nowait(struct super_block *sb, unsigned long hashval,
-		int (*test)(struct inode *, void *), void *data)
+struct inode *ilookup5_nowait(struct super_block *sb/*inode所属super block*/, unsigned long hashval,
+		int (*test)(struct inode *, void *)/*匹配检测函数*/, void *data/*匹配检测函数的2号参数*/)
 {
+	/*先确定其在inode_hashtable中的桶头*/
 	struct hlist_head *head = inode_hashtable + hash(sb, hashval);
 	struct inode *inode;
 
@@ -1485,7 +1505,7 @@ EXPORT_SYMBOL(ilookup5_nowait);
  * Note: @test is called with the inode_hash_lock held, so can't sleep.
  */
 struct inode *ilookup5(struct super_block *sb, unsigned long hashval,
-		int (*test)(struct inode *, void *), void *data)
+		int (*test)(struct inode *, void *)/*用于检查inode匹配的函数*/, void *data)
 {
 	struct inode *inode;
 again:
@@ -1493,6 +1513,7 @@ again:
 	if (inode) {
 		wait_on_inode(inode);
 		if (unlikely(inode_unhashed(inode))) {
+			/*inode还未加个hash表，再尝试*/
 			iput(inode);
 			goto again;
 		}
@@ -1511,10 +1532,12 @@ EXPORT_SYMBOL(ilookup5);
  */
 struct inode *ilookup(struct super_block *sb, unsigned long ino)
 {
-	struct hlist_head *head = inode_hashtable + hash(sb, ino);
+	/*查询inode hashtable,通过inode id查找对应的inode*/
+	struct hlist_head *head = inode_hashtable + hash(sb, ino);/*确定桶头*/
 	struct inode *inode;
 again:
 	spin_lock(&inode_hash_lock);
+	/*在桶内查找inode与super block匹配的inode*/
 	inode = find_inode_fast(sb, head, ino);
 	spin_unlock(&inode_hash_lock);
 
@@ -2224,6 +2247,7 @@ EXPORT_SYMBOL(inode_needs_sync);
  */
 static void __wait_on_freeing_inode(struct inode *inode)
 {
+	/*等待此inode被彻底删除*/
 	wait_queue_head_t *wq;
 	DEFINE_WAIT_BIT(wait, &inode->i_state, __I_NEW);
 	wq = bit_waitqueue(&inode->i_state, __I_NEW);
@@ -2283,7 +2307,7 @@ void __init inode_init(void)
 	if (!hashdist)
 		return;
 
-	/*inode哈希表，用于保证系统中所有inode*/
+	/*inode哈希表，用于保存系统中所有inode*/
 	inode_hashtable =
 		alloc_large_system_hash("Inode-cache",
 					sizeof(struct hlist_head),

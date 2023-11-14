@@ -50,7 +50,7 @@ static void sysfs_fs_context_free(struct fs_context *fc)
 
 static const struct fs_context_operations sysfs_fs_context_ops = {
 	.free		= sysfs_fs_context_free,
-	.get_tree	= sysfs_get_tree,
+	.get_tree	= sysfs_get_tree,/*取sysfs的root entry*/
 };
 
 static int sysfs_init_fs_context(struct fs_context *fc)

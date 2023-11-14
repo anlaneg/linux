@@ -172,6 +172,7 @@ static void debug_print_probes(struct tracepoint_func *funcs)
 	if (!tracepoint_debug || !funcs)
 		return;
 
+	/*显示funcs*/
 	for (i = 0; funcs[i].func; i++)
 		printk(KERN_DEBUG "Probe %d : %p\n", i, funcs[i].func);
 }
@@ -343,6 +344,7 @@ static int tracepoint_add_func(struct tracepoint *tp,
 	if (tp->regfunc && !static_key_enabled(&tp->key)) {
 		ret = tp->regfunc();
 		if (ret < 0)
+			/*调用regfunc，如失败，则直接返回*/
 			return ret;
 	}
 
@@ -351,6 +353,7 @@ static int tracepoint_add_func(struct tracepoint *tp,
 			lockdep_is_held(&tracepoints_mutex));
 	old = func_add(&tp_funcs, func, prio);
 	if (IS_ERR(old)) {
+		/*添加新回调失败，返回*/
 		WARN_ON_ONCE(warn && PTR_ERR(old) != -ENOMEM);
 		return PTR_ERR(old);
 	}
@@ -520,6 +523,7 @@ int tracepoint_probe_register_prio(struct tracepoint *tp, void *probe/*tracepoin
 	int ret;
 
 	mutex_lock(&tracepoints_mutex);
+	/*填充tp_func*/
 	tp_func.func = probe;
 	tp_func.data = data;
 	tp_func.prio = prio;
@@ -759,10 +763,10 @@ __initcall(init_tracepoints);
  * @fct: callback
  * @priv: private data
  */
-void for_each_kernel_tracepoint(void (*fct)(struct tracepoint *tp, void *priv),
-		void *priv)
+void for_each_kernel_tracepoint(void (*fct/*遍历函数*/)(struct tracepoint *tp, void *priv),
+		void *priv/*遍历函数参数*/)
 {
-    /*遍历kernel中所有tracepoint*/
+    /*遍历kernel中所有定义的tracepoint*/
 	for_each_tracepoint_range(__start___tracepoints_ptrs,
 		__stop___tracepoints_ptrs, fct, priv);
 }

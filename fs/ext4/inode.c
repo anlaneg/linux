@@ -4862,8 +4862,10 @@ struct inode *__ext4_iget(struct super_block *sb, unsigned long ino,
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
 	if (!(inode->i_state & I_NEW))
+		/*此ino对应的inode在系统加载，直接返回*/
 		return inode;
 
+	/*此时inode处于I_NEW状态*/
 	ei = EXT4_I(inode);
 	iloc.bh = NULL;
 

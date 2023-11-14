@@ -28,6 +28,7 @@ void delayed_work_timer_fn(struct timer_list *t);
 #define work_data_bits(work) ((unsigned long *)(&(work)->data))
 
 enum {
+	/*已加入等待执行*/
 	WORK_STRUCT_PENDING_BIT	= 0,	/* work item is pending execution */
 	WORK_STRUCT_INACTIVE_BIT= 1,	/* work item is inactive */
 	WORK_STRUCT_PWQ_BIT	= 2,	/* data points to pwq */
@@ -43,9 +44,11 @@ enum {
 
 	/*此标记指明，此work待执行*/
 	WORK_STRUCT_PENDING	= 1 << WORK_STRUCT_PENDING_BIT,
-	/*此标记指明，此work因为pwq上活跃的过多，而被存入inactive队列*/
+	/*此标记指明，此work因为pwq上活跃的work过多，而被存入inactive队列*/
 	WORK_STRUCT_INACTIVE	= 1 << WORK_STRUCT_INACTIVE_BIT,
-	/*此标记指明(work->data)中包含了pwq指针*/
+	/*此标记指明(work->data)中通过WORK_STRUCT_WQ_DATA_MASK掩码指明了pool_workqueue指针
+	 * 如果无此标记，则work->data >> WORK_OFFQ_POOL_SHIFT 指明了worker_pool id号
+	 * */
 	WORK_STRUCT_PWQ		= 1 << WORK_STRUCT_PWQ_BIT,
 	WORK_STRUCT_LINKED	= 1 << WORK_STRUCT_LINKED_BIT,
 #ifdef CONFIG_DEBUG_OBJECTS_WORK
@@ -79,11 +82,12 @@ enum {
 	 * indicate that no pool is associated.
 	 */
 	WORK_OFFQ_FLAG_BITS	= 1,
-	/*此指段指明（work->data）右移此位数后，即为worker pool id,
+	/*此指段指明（work->data）右移此位数后，即为worker_pool id,
 	 * 可自worker_pool_idr中通过id查询获得worker pool*/
 	WORK_OFFQ_POOL_SHIFT	= WORK_OFFQ_FLAG_BASE + WORK_OFFQ_FLAG_BITS,
 	WORK_OFFQ_LEFT		= BITS_PER_LONG - WORK_OFFQ_POOL_SHIFT,
 	WORK_OFFQ_POOL_BITS	= WORK_OFFQ_LEFT <= 31 ? WORK_OFFQ_LEFT : 31,
+	/*指明此work无关联worker_pool*/
 	WORK_OFFQ_POOL_NONE	= (1LU << WORK_OFFQ_POOL_BITS) - 1,
 
 	/* convenience constants */
@@ -100,7 +104,7 @@ enum {
 };
 
 struct work_struct {
-	atomic_long_t data;//work函数func的参数
+	atomic_long_t data;//work函数func的参数（也包含标记位）
 	struct list_head entry;//用于将work串起来
 	work_func_t func;//work函数
 #ifdef CONFIG_LOCKDEP
@@ -279,7 +283,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 				      (_tflags) | TIMER_IRQSAFE);	\
 	} while (0)
 
-/*初始化可延迟work，见rcu_work*/
+/*初始化可延迟work*/
 #define INIT_DELAYED_WORK(_work, _func)					\
 	__INIT_DELAYED_WORK(_work, _func, 0)
 
@@ -592,6 +596,7 @@ static inline bool schedule_work_on(int cpu, struct work_struct *work)
  */
 static inline bool schedule_work(struct work_struct *work)
 {
+	/*不指定cpu,将work放入到system_wq中*/
 	return queue_work(system_wq, work);
 }
 
@@ -684,6 +689,7 @@ extern void __warn_flushing_systemwide_wq(void)
 static inline bool schedule_delayed_work_on(int cpu, struct delayed_work *dwork,
 					    unsigned long delay)
 {
+	/*指定cpu并work放在system_wq上进行延迟运行*/
 	return queue_delayed_work_on(cpu, system_wq, dwork, delay);
 }
 

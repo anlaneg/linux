@@ -132,7 +132,7 @@ static struct proto vsock_proto = {
 #define VSOCK_DEFAULT_BUFFER_MIN_SIZE 128
 
 /* Transport used for host->guest communication */
-static const struct vsock_transport *transport_h2g;
+static const struct vsock_transport *transport_h2g;//由主机到guest
 /* Transport used for guest->host communication */
 static const struct vsock_transport *transport_g2h;/*guest到主机的传输层*/
 /* Transport used for DGRAM communication */
@@ -160,12 +160,14 @@ static DEFINE_MUTEX(vsock_register_mutex);
 #define MAX_PORT_RETRIES        24
 
 #define VSOCK_HASH(addr)        ((addr)->svm_port % VSOCK_HASH_SIZE)
+/*通过addr查询对应的bind表桶头*/
 #define vsock_bound_sockets(addr) (&vsock_bind_table[VSOCK_HASH(addr)])
 #define vsock_unbound_sockets     (&vsock_bind_table[VSOCK_HASH_SIZE])
 
 /* XXX This can probably be implemented in a better way. */
 #define VSOCK_CONN_HASH(src, dst)				\
 	(((src)->svm_cid ^ (dst)->svm_port) % VSOCK_HASH_SIZE)
+/*通过src,dst查询对应的连接表桶头*/
 #define vsock_connected_sockets(src, dst)		\
 	(&vsock_connected_table[VSOCK_CONN_HASH(src, dst)])
 #define vsock_connected_sockets_vsk(vsk)				\
@@ -173,6 +175,7 @@ static DEFINE_MUTEX(vsock_register_mutex);
 
 struct list_head vsock_bind_table[VSOCK_HASH_SIZE + 1];
 EXPORT_SYMBOL_GPL(vsock_bind_table);
+/*vsock连接表*/
 struct list_head vsock_connected_table[VSOCK_HASH_SIZE];
 EXPORT_SYMBOL_GPL(vsock_connected_table);
 DEFINE_SPINLOCK(vsock_table_lock);
@@ -231,10 +234,13 @@ static struct sock *__vsock_find_bound_socket(struct sockaddr_vm *addr)
 {
 	struct vsock_sock *vsk;
 
+	/*遍历bind表*/
 	list_for_each_entry(vsk, vsock_bound_sockets(addr), bound_table) {
 		if (vsock_addr_equals_addr(addr, &vsk->local_addr))
+			/*addr与local_addr严格相等，则直接返回*/
 			return sk_vsock(vsk);
 
+		/*svm_port相等，cid为VMADDR_CID_ANY*/
 		if (addr->svm_port == vsk->local_addr.svm_port &&
 		    (vsk->local_addr.svm_cid == VMADDR_CID_ANY ||
 		     addr->svm_cid == VMADDR_CID_ANY))
@@ -251,6 +257,7 @@ static struct sock *__vsock_find_connected_socket(struct sockaddr_vm *src,
 
 	list_for_each_entry(vsk, vsock_connected_sockets(src, dst),
 			    connected_table) {
+		/*src地址匹配 并且dst->svm_port与本端地址的svm_port一致，则返回sock*/
 		if (vsock_addr_equals_addr(src, &vsk->remote_addr) &&
 		    dst->svm_port == vsk->local_addr.svm_port) {
 			return sk_vsock(vsk);
@@ -301,6 +308,7 @@ struct sock *vsock_find_bound_socket(struct sockaddr_vm *addr)
 	struct sock *sk;
 
 	spin_lock_bh(&vsock_table_lock);
+	/*查询bind表*/
 	sk = __vsock_find_bound_socket(addr);
 	if (sk)
 		sock_hold(sk);
@@ -311,6 +319,7 @@ struct sock *vsock_find_bound_socket(struct sockaddr_vm *addr)
 }
 EXPORT_SYMBOL_GPL(vsock_find_bound_socket);
 
+/*通过src,dst查询*/
 struct sock *vsock_find_connected_socket(struct sockaddr_vm *src,
 					 struct sockaddr_vm *dst)
 {
@@ -1538,6 +1547,7 @@ out:
 	return err;
 }
 
+/*实现监听*/
 static int vsock_listen(struct socket *sock, int backlog)
 {
 	int err;

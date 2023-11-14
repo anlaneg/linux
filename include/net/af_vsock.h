@@ -172,7 +172,7 @@ struct vsock_transport {
 	int (*shutdown)(struct vsock_sock *, int);
 
 	/* Addressing. */
-	u32 (*get_local_cid)(void);
+	u32 (*get_local_cid)(void);/*取本端cid*/
 };
 
 /**** CORE ****/

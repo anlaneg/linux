@@ -15,11 +15,11 @@ enum { MAX_NESTED_LINKS = 8 };
 /*
  * Type of the last component on LOOKUP_PARENT
  */
-enum {LAST_NORM/*普通文件*/, LAST_ROOT, LAST_DOT/*名称为'.'的文件*/, LAST_DOTDOT/*名称为'..'的文件*/};
+enum {LAST_NORM/*普通文件*/, LAST_ROOT/*根节点*/, LAST_DOT/*名称为'.'的文件*/, LAST_DOTDOT/*名称为'..'的文件*/};
 
 /* pathwalk mode */
 #define LOOKUP_FOLLOW		0x0001	/* follow links at the end */
-/*标志查询目录*/
+/*标志查询的是目录*/
 #define LOOKUP_DIRECTORY	0x0002	/* require a directory */
 #define LOOKUP_AUTOMOUNT	0x0004  /* force terminal automount */
 /*容许空的文件路径名称*/

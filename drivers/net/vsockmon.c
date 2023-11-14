@@ -36,6 +36,7 @@ static int vsockmon_open(struct net_device *dev)
 
 	vsockmon->vt.dev = dev;
 	vsockmon->vt.module = THIS_MODULE;
+	/*将此设备加入到系统*/
 	return vsock_add_tap(&vsockmon->vt);
 }
 
@@ -43,9 +44,11 @@ static int vsockmon_close(struct net_device *dev)
 {
 	struct vsockmon *vsockmon = netdev_priv(dev);
 
+	/*自系统移除此设备*/
 	return vsock_remove_tap(&vsockmon->vt);
 }
 
+/*给一个直接丢包的xmit函数（不走此流程发送/接收）*/
 static netdev_tx_t vsockmon_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	dev_lstats_add(dev, skb->len);
@@ -97,6 +100,7 @@ static const struct ethtool_ops vsockmon_ethtool_ops = {
 	.get_link = always_on,
 };
 
+/*初始化vsockmon对应的netdev*/
 static void vsockmon_setup(struct net_device *dev)
 {
 	dev->type = ARPHRD_VSOCKMON;
@@ -122,6 +126,7 @@ static struct rtnl_link_ops vsockmon_link_ops __read_mostly = {
 
 static __init int vsockmon_register(void)
 {
+	/*注册vsockmon link，用于af_vsock报文monitor*/
 	return rtnl_link_register(&vsockmon_link_ops);
 }
 

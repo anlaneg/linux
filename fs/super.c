@@ -927,6 +927,7 @@ int reconfigure_super(struct fs_context *fc)
 	if (sb->s_writers.frozen != SB_UNFROZEN)
 		return -EBUSY;
 
+	/*触发sb_remount钩子点*/
 	retval = security_sb_remount(sb, fc->security);
 	if (retval)
 		return retval;
@@ -1116,7 +1117,7 @@ EXPORT_SYMBOL(free_anon_bdev);
 
 int set_anon_super(struct super_block *s, void *data)
 {
-    /*分配dev id,设置此super block对应的块设备为unnamed块设备*/
+    /*分配dev id,并设置此super block对应的块设备为unnamed块设备*/
 	return get_anon_bdev(&s->s_dev);
 }
 EXPORT_SYMBOL(set_anon_super);
@@ -1139,7 +1140,7 @@ EXPORT_SYMBOL(kill_litter_super);
 
 int set_anon_super_fc(struct super_block *sb, struct fs_context *fc)
 {
-	/*设置dev*/
+	/*设置super block,这里将dev*/
 	return set_anon_super(sb, NULL);
 }
 EXPORT_SYMBOL(set_anon_super_fc);
@@ -1177,6 +1178,7 @@ static int vfs_get_super(struct fs_context *fc, bool reconf/*如果sb->root在sg
 		/*设置root dentry*/
 		fc->root = dget(sb->s_root);
 	} else {
+		/*sb->s_root已设置，设置root dentry*/
 		fc->root = dget(sb->s_root);
 		if (reconf) {
 			err = reconfigure_super(fc);
@@ -1348,7 +1350,7 @@ static int test_bdev_super(struct super_block *s, void *data)
 
 //块设备挂载
 struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
-	int flags, const char *dev_name/*设备名称*/, void *data,
+	int flags, const char *dev_name/*设备名称*/, void *data/*挂载参数*/,
 	int (*fill_super)(struct super_block *, void *, int))
 {
 	struct block_device *bdev;
@@ -1376,7 +1378,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
 		goto error_bdev;
 	}
 
-	//取块设备上的super block
+	//取此块设备上的super block
 	s = sget(fs_type, test_bdev_super/*测试回调*/, set_bdev_super/*设置回调*/, flags | SB_NOSEC,
 		 bdev);
 	mutex_unlock(&bdev->bd_fsfreeze_mutex);
@@ -1384,6 +1386,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
 		goto error_s;
 
 	if (s->s_root) {
+		/*s_root已填充情况，例如复用的super block*/
 		if ((flags ^ s->s_flags) & SB_RDONLY) {
 			deactivate_locked_super(s);
 			error = -EBUSY;
@@ -1401,6 +1404,7 @@ struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
 		blkdev_put(bdev, mode);
 		down_write(&s->s_umount);
 	} else {
+		/*s_root未填充情况，通过fill_super回调完成填充*/
 		s->s_mode = mode;
 		snprintf(s->s_id, sizeof(s->s_id), "%pg", bdev);
 		shrinker_debugfs_rename(&s->s_shrink, "sb-%s:%s",
@@ -1562,7 +1566,7 @@ int vfs_get_tree(struct fs_context *fc)
 
 	/*取root dentry对应的super block*/
 	sb = fc->root->d_sb;
-	WARN_ON(!sb->s_bdi);
+	WARN_ON(!sb->s_bdi);/*后端设备信息不得为空*/
 
 	/*
 	 * Write barrier is for super_cache_count(). We place it before setting
@@ -1571,7 +1575,7 @@ int vfs_get_tree(struct fs_context *fc)
 	 * flag.
 	 */
 	smp_wmb();
-	sb->s_flags |= SB_BORN;
+	sb->s_flags |= SB_BORN;/*标记此sb初始完成*/
 
 	error = security_sb_set_mnt_opts(sb, fc->security, 0, NULL);
 	if (unlikely(error)) {

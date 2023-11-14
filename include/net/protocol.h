@@ -39,6 +39,7 @@ struct net_protocol {
 	int			(*handler)(struct sk_buff *skb);
 
 	/* This returns an error if we weren't able to handle the error. */
+	/*一般由icmp模块触发，icmp收到错误通知报文，依据内层嵌套的协议，触发相应回调*/
 	int			(*err_handler)(struct sk_buff *skb, u32 info);
 
 	//协议是否跳过xfrm4_policy_check

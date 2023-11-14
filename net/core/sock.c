@@ -1133,9 +1133,11 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 			sock_valbool_flag(sk, SOCK_DBG, valbool);
 		break;
 	case SO_REUSEADDR:
+		/*设置地址重用*/
 		sk->sk_reuse = (valbool ? SK_CAN_REUSE : SK_NO_REUSE);
 		break;
 	case SO_REUSEPORT:
+		/*设置port重用*/
 		sk->sk_reuseport = valbool;
 		break;
 	case SO_TYPE:

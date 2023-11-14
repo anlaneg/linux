@@ -315,7 +315,7 @@ static int mlx5_devlink_trap_action_set(struct devlink *devlink,
 //mlx5的devlink操作集
 static const struct devlink_ops mlx5_devlink_ops = {
 #ifdef CONFIG_MLX5_ESWITCH
-	.eswitch_mode_set = mlx5_devlink_eswitch_mode_set,
+	.eswitch_mode_set = mlx5_devlink_eswitch_mode_set,/*eswitch模式设置*/
 	.eswitch_mode_get = mlx5_devlink_eswitch_mode_get,
 	.eswitch_inline_mode_set = mlx5_devlink_eswitch_inline_mode_set,
 	.eswitch_inline_mode_get = mlx5_devlink_eswitch_inline_mode_get,

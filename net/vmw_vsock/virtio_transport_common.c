@@ -59,6 +59,7 @@ virtio_transport_alloc_skb(struct virtio_vsock_pkt_info *info,
 	if (!skb)
 		return NULL;
 
+	/*填充header*/
 	hdr = virtio_vsock_hdr(skb);
 	hdr->type	= cpu_to_le16(info->type);
 	hdr->op		= cpu_to_le16(info->op);
@@ -70,6 +71,7 @@ virtio_transport_alloc_skb(struct virtio_vsock_pkt_info *info,
 	hdr->len	= cpu_to_le32(len);
 
 	if (info->msg && len > 0) {
+		/*填充payload*/
 		payload = skb_put(skb, len);
 		err = memcpy_from_msg(payload, info->msg, len);
 		if (err)
@@ -180,6 +182,8 @@ void virtio_transport_deliver_tap_pkt(struct sk_buff *skb)
 
 	//否则完成tap设备交付
 	vsock_deliver_tap(virtio_transport_build_skb, skb);
+
+	/*标记此报文已提交了tap*/
 	virtio_vsock_skb_set_tap_delivered(skb);
 }
 EXPORT_SYMBOL_GPL(virtio_transport_deliver_tap_pkt);
@@ -1214,6 +1218,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 		return -ENOMEM;
 	}
 
+	/*创建子socket*/
 	child = vsock_create_connected(sk);
 	if (!child) {
 		virtio_transport_reset_no_sock(t, skb);
@@ -1224,6 +1229,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 
 	lock_sock_nested(child, SINGLE_DEPTH_NESTING);
 
+	/*达到est状态*/
 	child->sk_state = TCP_ESTABLISHED;
 
 	vchild = vsock_sk(child);
@@ -1246,6 +1252,7 @@ virtio_transport_recv_listen(struct sock *sk, struct sk_buff *skb,
 	if (virtio_transport_space_update(child, skb))
 		child->sk_write_space(child);
 
+	/*将vchild加入到connected表中*/
 	vsock_insert_connected(vchild);
 	vsock_enqueue_accept(sk, child);
 	virtio_transport_send_response(vchild, skb);
@@ -1289,6 +1296,7 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 					le32_to_cpu(hdr->buf_alloc),
 					le32_to_cpu(hdr->fwd_cnt));
 
+	/*检查Type是否有效*/
 	if (!virtio_transport_valid_type(le16_to_cpu(hdr->type))) {
 		(void)virtio_transport_reset_no_sock(t, skb);
 		goto free_pkt;
@@ -1299,14 +1307,17 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 	 */
 	sk = vsock_find_connected_socket(&src, &dst);
 	if (!sk) {
+		/*没有connected socket,查找bound socket*/
 		sk = vsock_find_bound_socket(&dst);
 		if (!sk) {
+			/*没有查找到socket，发送reset*/
 			(void)virtio_transport_reset_no_sock(t, skb);
 			goto free_pkt;
 		}
 	}
 
 	if (virtio_transport_get_type(sk) != le16_to_cpu(hdr->type)) {
+		/*两者type不相等，发送reset*/
 		(void)virtio_transport_reset_no_sock(t, skb);
 		sock_put(sk);
 		goto free_pkt;
@@ -1318,6 +1329,7 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 
 	/* Check if sk has been closed before lock_sock */
 	if (sock_flag(sk, SOCK_DONE)) {
+		/*sock有done标记，回复reset*/
 		(void)virtio_transport_reset_no_sock(t, skb);
 		release_sock(sk);
 		sock_put(sk);
@@ -1335,6 +1347,7 @@ void virtio_transport_recv_pkt(struct virtio_transport *t,
 
 	switch (sk->sk_state) {
 	case TCP_LISTEN:
+		/*listen情况下收到报文*/
 		virtio_transport_recv_listen(sk, skb, t);
 		kfree_skb(skb);
 		break;

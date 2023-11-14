@@ -1055,7 +1055,7 @@ EXPORT_SYMBOL(file_path);
  * @file: newly allocated file with f_flag initialized
  * @cred: credentials to use
  */
-int vfs_open(const struct path *path, struct file *file)
+int vfs_open(const struct path *path/*要打开的path*/, struct file *file)
 {
     /*指定文件路径*/
 	file->f_path = *path;

@@ -88,7 +88,9 @@ static int (*check_part[])(struct parsed_partitions *) = {
 static void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors)
 {
 	spin_lock(&bdev->bd_size_lock);
+	/*设置此块设备文件大小（即总扇区的字节总数）*/
 	i_size_write(bdev->bd_inode, (loff_t)sectors << SECTOR_SHIFT);
+	/*设置此块设备总扇区数*/
 	bdev->bd_nr_sectors = sectors;
 	spin_unlock(&bdev->bd_size_lock);
 }
@@ -302,7 +304,7 @@ static DEVICE_ATTR(whole_disk, 0444, whole_disk_show, NULL);
  * Must be called either with open_mutex held, before a disk can be opened or
  * after all disk users are gone.
  */
-static struct block_device *add_partition(struct gendisk *disk, int partno,
+static struct block_device *add_partition(struct gendisk *disk, int partno/*分区号*/,
 				sector_t start, sector_t len, int flags,
 				struct partition_meta_info *info)
 {
@@ -316,6 +318,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 	lockdep_assert_held(&disk->open_mutex);
 
 	if (partno >= DISK_MAX_PARTS)
+		/*分区号超限*/
 		return ERR_PTR(-EINVAL);
 
 	/*
@@ -342,6 +345,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 	/* ensure we always have a reference to the whole disk */
 	get_device(disk_to_dev(disk));
 
+	/*针对partno号分区，创建块设备*/
 	err = -ENOMEM;
 	bdev = bdev_alloc(disk, partno);
 	if (!bdev)
@@ -352,6 +356,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 
 	pdev = &bdev->bd_device;
 	dname = dev_name(ddev);
+	/*设置设备名称（含分区号）*/
 	if (isdigit(dname[strlen(dname) - 1]))
 		dev_set_name(pdev, "%sp%d", dname, partno);
 	else
@@ -406,6 +411,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno,
 
 	/* suppress uevent if the disk suppresses it */
 	if (!dev_get_uevent_suppress(ddev))
+		/*块设备增加，向上发送uevent*/
 		kobject_uevent(&pdev->kobj, KOBJ_ADD);
 	return bdev;
 

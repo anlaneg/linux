@@ -213,6 +213,7 @@ int bnxt_get_vf_config(struct net_device *dev, int vf_id,
 	return 0;
 }
 
+/*设置vf mac*/
 int bnxt_set_vf_mac(struct net_device *dev, int vf_id, u8 *mac)
 {
 	struct bnxt *bp = netdev_priv(dev);
@@ -286,6 +287,7 @@ int bnxt_set_vf_vlan(struct net_device *dev, int vf_id, u16 vlan_id, u8 qos,
 	return rc;
 }
 
+/*设置vf的bandwith*/
 int bnxt_set_vf_bw(struct net_device *dev, int vf_id, int min_tx_rate,
 		   int max_tx_rate)
 {

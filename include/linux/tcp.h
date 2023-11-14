@@ -91,8 +91,10 @@ static inline unsigned int tcp_optlen(const struct sk_buff *skb)
 
 /* TCP Fast Open Cookie as stored in memory */
 struct tcp_fastopen_cookie {
+	/*记录选项*/
 	__le64	val[DIV_ROUND_UP(TCP_FASTOPEN_COOKIE_MAX, sizeof(u64))];
-	s8	len;
+	s8	len;/*标记选项长度*/
+	/*标记是否为RFC6994格式*/
 	bool	exp;	/* In RFC6994 experimental option format */
 };
 
@@ -119,11 +121,11 @@ struct tcp_options_received {
 	u32	rcv_tsval;	/* Time stamp value             	*/
 	//本端收到对方echo回来的时间签
 	u32	rcv_tsecr;	/* Time stamp echo reply        	*/
-	//上一个报文收到了时间签
+	//标记是否有时间签选项，(如有，则rcv_tsval，rcv_tsecr数据有效）
 	u16 	saw_tstamp : 1,	/* Saw TIMESTAMP on last packet		*/
 		tstamp_ok : 1,	/* TIMESTAMP seen on SYN packet		*/
 		dsack : 1,	/* D-SACK is scheduled			*/
-		//在syn报文中发现窗口扩大选项
+		//在syn报文中发现窗口扩大选项（标记snd_wscale值有效）
 		wscale_ok : 1,	/* Wscale seen on SYN packet		*/
 		//在syn中发现sack
 		sack_ok : 3,	/* SACK seen on SYN packet		*/
@@ -131,6 +133,7 @@ struct tcp_options_received {
 		//协商的窗口放大因子
 		snd_wscale : 4,	/* Window scaling received from sender	*/
 		rcv_wscale : 4;	/* Window scaling to send to receiver	*/
+	/*标记在tcp选项解析过程中，我们遇到了不认识的option*/
 	u8	saw_unknown:1,	/* Received unknown option		*/
 		unused:7;
 	u8	num_sacks;	/* Number of SACK blocks		*/
@@ -326,7 +329,7 @@ struct tcp_sock {
 /*
  *      Options received (usually on last packet, some only on SYN packets).
  */
-	struct tcp_options_received rx_opt;//接受到报文的选项
+	struct tcp_options_received rx_opt;//接收到报文的选项
 
 /*
  *	Slow start and congestion control (see also Nagle, and Karn & Partridge)

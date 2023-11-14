@@ -114,7 +114,7 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 /* file is open for writing */
 #define FMODE_WRITE		((__force fmode_t)0x2)
 /* file is seekable */
-#define FMODE_LSEEK		((__force fmode_t)0x4)
+#define FMODE_LSEEK		((__force fmode_t)0x4) /*指明文件可以seek*/
 /* file can be accessed using pread */
 #define FMODE_PREAD		((__force fmode_t)0x8)
 /* file can be accessed using pwrite */
@@ -620,7 +620,7 @@ struct inode {
 	struct posix_acl	*i_default_acl;
 #endif
 
-	//inode对应的操作集
+	//inode对应的操作集（不同类型文件此值不同）
 	const struct inode_operations	*i_op;
 	//指向inode所属的super_block
 	struct super_block	*i_sb;
@@ -681,7 +681,9 @@ struct inode {
 	u16			i_wb_frn_history;
 #endif
 	struct list_head	i_lru;		/* inode LRU list */
-	//用于将inode串连到super block链表上，看super_block->s_inodes
+	/*用于将inode串连到super block链表上，
+	 * 看super_block->s_inodes，
+	 * 以此知道系统加载了此super block多少inode*/
 	struct list_head	i_sb_list;
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
@@ -700,7 +702,7 @@ struct inode {
 	atomic_t		i_readcount; /* struct files open RO */
 #endif
 	union {
-	    //对应的file操作函数集,open文件时，使用此file操作集
+	    //对应的file操作函数集,open文件时，使用此file操作集（不同类型文件此值不同）
 		const struct file_operations	*i_fop;	/* former ->i_op->default_file_ops */
 		//inode空间释放函数
 		void (*free_inode)(struct inode *);
@@ -1121,6 +1123,7 @@ extern int send_sigurg(struct fown_struct *fown);
 #define SB_SILENT	32768
 #define SB_POSIXACL	(1<<16)	/* VFS does not apply the umask */
 #define SB_INLINECRYPT	(1<<17)	/* Use blk-crypto for encrypted files */
+/*指明此为kernel mount调用*/
 #define SB_KERNMOUNT	(1<<22) /* this is a kern_mount call */
 #define SB_I_VERSION	(1<<23) /* Update inode I_version field */
 #define SB_LAZYTIME	(1<<25) /* Update the on-disk [acm]times lazily */
@@ -1230,6 +1233,7 @@ struct super_block {
 	struct list_head	s_mounts;	/* list of mounts; _not_ for fs use */
 	//超级块所属的块设备
 	struct block_device	*s_bdev;
+	/*后端设备信息*/
 	struct backing_dev_info *s_bdi;
 	struct mtd_info		*s_mtd;
 	struct hlist_node	s_instances;/*instance节点，用于将自身挂接到文件系统对应的fs_supers链*/
@@ -2196,7 +2200,9 @@ static inline void kiocb_clone(struct kiocb *kiocb, struct kiocb *kiocb_src,
 #define __I_NEW			3
 //新增的inode处于此状态（这种需要自磁盘加载文件信息）
 #define I_NEW			(1 << __I_NEW)
+/*此inode将被free*/
 #define I_WILL_FREE		(1 << 4)
+/*此inode正在被free*/
 #define I_FREEING		(1 << 5)
 #define I_CLEAR			(1 << 6)
 #define __I_SYNC		7

@@ -42,7 +42,7 @@
 #include <linux/iversion.h>
 #include "swap.h"
 
-static struct vfsmount *shm_mnt;
+static struct vfsmount *shm_mnt;/*tmpfs文件系统对应的全局挂载信息*/
 
 #ifdef CONFIG_SHMEM
 /*
@@ -107,7 +107,7 @@ struct shmem_falloc {
 };
 
 struct shmem_options {
-	unsigned long long blocks;
+	unsigned long long blocks;/*此文件系统有多少个页*/
 	unsigned long long inodes;
 	struct mempolicy *mpol;
 	kuid_t uid;
@@ -116,18 +116,24 @@ struct shmem_options {
 	bool full_inums;
 	int huge;
 	int seen;
+	/*标明blocks被设置*/
 #define SHMEM_SEEN_BLOCKS 1
+	/*标明inodes被设置*/
 #define SHMEM_SEEN_INODES 2
+	/*标明huge是否被设置*/
 #define SHMEM_SEEN_HUGE 4
+	/*标明full_inums是否被设置*/
 #define SHMEM_SEEN_INUMS 8
 };
 
 #ifdef CONFIG_TMPFS
+/*定义tmpfs支持的最大blocks*/
 static unsigned long shmem_default_max_blocks(void)
 {
-	return totalram_pages() / 2;
+	return totalram_pages() / 2;/*系统raw数除以2*/
 }
 
+/*定义tmpfs支持的最大inodes*/
 static unsigned long shmem_default_max_inodes(void)
 {
 	unsigned long nr_pages = totalram_pages();
@@ -278,6 +284,7 @@ static int shmem_reserve_inode(struct super_block *sb, ino_t *inop)
 			sbinfo->free_inodes--;
 		}
 		if (inop) {
+			/*分配inode id*/
 			ino = sbinfo->next_ino++;
 			if (unlikely(is_zero_ino(ino)))
 				ino = sbinfo->next_ino++;
@@ -2344,8 +2351,9 @@ static void shmem_set_inode_flags(struct inode *inode, unsigned int fsflags)
 #define shmem_initxattrs NULL
 #endif
 
+/*依据mode申请一个inode*/
 static struct inode *shmem_get_inode(struct mnt_idmap *idmap, struct super_block *sb,
-				     struct inode *dir, umode_t mode, dev_t dev,
+				     struct inode *dir, umode_t mode/*包含文件类型*/, dev_t dev,
 				     unsigned long flags)
 {
 	struct inode *inode;
@@ -2356,15 +2364,17 @@ static struct inode *shmem_get_inode(struct mnt_idmap *idmap, struct super_block
 	if (shmem_reserve_inode(sb, &ino))
 		return NULL;
 
+	/*申请inode*/
 	inode = new_inode(sb);
 	if (inode) {
-		inode->i_ino = ino;
+		inode->i_ino = ino;/*指定inode编号*/
 		inode_init_owner(idmap, inode, dir, mode);
 		inode->i_blocks = 0;
+		/*设置时间*/
 		inode->i_atime = inode->i_mtime = inode->i_ctime = current_time(inode);
 		inode->i_generation = get_random_u32();
 		info = SHMEM_I(inode);
-		memset(info, 0, (char *)inode - (char *)info);
+		memset(info, 0, (char *)inode - (char *)info);/*初始化info除vfs_inode以外字段为0*/
 		spin_lock_init(&info->lock);
 		atomic_set(&info->stop_eviction, 0);
 		info->seals = F_SEAL_SEAL;
@@ -2382,10 +2392,12 @@ static struct inode *shmem_get_inode(struct mnt_idmap *idmap, struct super_block
 
 		switch (mode & S_IFMT) {
 		default:
+			/*特殊文件*/
 			inode->i_op = &shmem_special_inode_operations;
 			init_special_inode(inode, mode, dev);
 			break;
 		case S_IFREG:
+			/*普通文件*/
 			inode->i_mapping->a_ops = &shmem_aops;
 			inode->i_op = &shmem_inode_operations;
 			inode->i_fop = &shmem_file_operations;
@@ -2393,6 +2405,7 @@ static struct inode *shmem_get_inode(struct mnt_idmap *idmap, struct super_block
 						 shmem_get_sbmpol(sbinfo));
 			break;
 		case S_IFDIR:
+			/*目录*/
 			inc_nlink(inode);
 			/* Some things misbehave if size == 0 on a directory */
 			inode->i_size = 2 * BOGO_DIRENT_SIZE;
@@ -3473,6 +3486,7 @@ static const struct constant_table shmem_param_enums_huge[] = {
 	{}
 };
 
+/*tmpfs文件系统参数*/
 const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_u32   ("gid",		Opt_gid),
 	fsparam_enum  ("huge",		Opt_huge,  shmem_param_enums_huge),
@@ -3495,6 +3509,7 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 	char *rest;
 	int opt;
 
+	/*解析文件系统挂载参数*/
 	opt = fs_parse(fc, shmem_fs_parameters, param, &result);
 	if (opt < 0)
 		return opt;
@@ -3503,6 +3518,7 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_size:
 		size = memparse(param->string, &rest);
 		if (*rest == '%') {
+			/*按百分比指定size*/
 			size <<= PAGE_SHIFT;
 			size *= totalram_pages();
 			do_div(size, 100);
@@ -3510,16 +3526,19 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 		}
 		if (*rest)
 			goto bad_value;
+		/*依据size获得blocks数目*/
 		ctx->blocks = DIV_ROUND_UP(size, PAGE_SIZE);
 		ctx->seen |= SHMEM_SEEN_BLOCKS;
 		break;
 	case Opt_nr_blocks:
+		/*通过参数指定blocks*/
 		ctx->blocks = memparse(param->string, &rest);
 		if (*rest || ctx->blocks > S64_MAX)
 			goto bad_value;
 		ctx->seen |= SHMEM_SEEN_BLOCKS;
 		break;
 	case Opt_nr_inodes:
+		/*通过参数指定inode数目*/
 		ctx->inodes = memparse(param->string, &rest);
 		if (*rest)
 			goto bad_value;
@@ -3539,6 +3558,7 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 			goto bad_value;
 		break;
 	case Opt_huge:
+		/*tmpfs文件系统关于大页的使用约定*/
 		ctx->huge = result.uint_32;
 		if (ctx->huge != SHMEM_HUGE_NEVER &&
 		    !(IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE) &&
@@ -3576,6 +3596,7 @@ bad_value:
 	return invalfc(fc, "Bad value for '%s'", param->key);
 }
 
+/*文件系统参数整块解析*/
 static int shmem_parse_options(struct fs_context *fc, void *data)
 {
 	char *options = data;
@@ -3765,8 +3786,10 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbinfo = kzalloc(max((int)sizeof(struct shmem_sb_info),
 				L1_CACHE_BYTES), GFP_KERNEL);
 	if (!sbinfo)
+		/*申请sbinfo失败*/
 		return -ENOMEM;
 
+	/*设置super block对应私有数据*/
 	sb->s_fs_info = sbinfo;
 
 #ifdef CONFIG_TMPFS
@@ -3777,10 +3800,13 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	 */
 	if (!(sb->s_flags & SB_KERNMOUNT)) {
 		if (!(ctx->seen & SHMEM_SEEN_BLOCKS))
+			/*没有配置blocks，则取默认最大数*/
 			ctx->blocks = shmem_default_max_blocks();
 		if (!(ctx->seen & SHMEM_SEEN_INODES))
+			/*没有配置inodes，则取默认最大数*/
 			ctx->inodes = shmem_default_max_inodes();
 		if (!(ctx->seen & SHMEM_SEEN_INUMS))
+			/*没有设置inums,检查是否开启inode64*/
 			ctx->full_inums = IS_ENABLED(CONFIG_TMPFS_INODE64);
 	} else {
 		sb->s_flags |= SB_NOUSER;
@@ -3793,6 +3819,7 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	sbinfo->max_blocks = ctx->blocks;
 	sbinfo->free_inodes = sbinfo->max_inodes = ctx->inodes;
 	if (sb->s_flags & SB_KERNMOUNT) {
+		/*针对kernel mount,初始化per cpu的ino*/
 		sbinfo->ino_batch = alloc_percpu(ino_t);
 		if (!sbinfo->ino_batch)
 			goto failed;
@@ -3814,7 +3841,7 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_maxbytes = MAX_LFS_FILESIZE;
 	sb->s_blocksize = PAGE_SIZE;
 	sb->s_blocksize_bits = PAGE_SHIFT;
-	sb->s_magic = TMPFS_MAGIC;
+	sb->s_magic = TMPFS_MAGIC;/*指明文件系统magic*/
 	sb->s_op = &shmem_ops;
 	sb->s_time_gran = 1;
 #ifdef CONFIG_TMPFS_XATTR
@@ -3823,14 +3850,16 @@ static int shmem_fill_super(struct super_block *sb, struct fs_context *fc)
 #ifdef CONFIG_TMPFS_POSIX_ACL
 	sb->s_flags |= SB_POSIXACL;
 #endif
-	uuid_gen(&sb->s_uuid);
+	uuid_gen(&sb->s_uuid);/*生成一个uuid*/
 
+	/*生成root entry对应的inode*/
 	inode = shmem_get_inode(&nop_mnt_idmap, sb, NULL, S_IFDIR | sbinfo->mode, 0,
 				VM_NORESERVE);
 	if (!inode)
 		goto failed;
 	inode->i_uid = sbinfo->uid;
 	inode->i_gid = sbinfo->gid;
+	/*利用root inode构造root entry*/
 	sb->s_root = d_make_root(inode);
 	if (!sb->s_root)
 		goto failed;
@@ -3843,7 +3872,7 @@ failed:
 
 static int shmem_get_tree(struct fs_context *fc)
 {
-	return get_tree_nodev(fc, shmem_fill_super);
+	return get_tree_nodev(fc, shmem_fill_super/*填充super block*/);
 }
 
 static void shmem_free_fc(struct fs_context *fc)
@@ -3858,7 +3887,7 @@ static void shmem_free_fc(struct fs_context *fc)
 
 static const struct fs_context_operations shmem_fs_context_ops = {
 	.free			= shmem_free_fc,
-	.get_tree		= shmem_get_tree,
+	.get_tree		= shmem_get_tree,/*tmpfs加载root entry*/
 #ifdef CONFIG_TMPFS
 	.parse_monolithic	= shmem_parse_options,
 	.parse_param		= shmem_parse_one,
@@ -3929,6 +3958,7 @@ const struct address_space_operations shmem_aops = {
 };
 EXPORT_SYMBOL(shmem_aops);
 
+/*tmpfs文件系统对应的操作集*/
 static const struct file_operations shmem_file_operations = {
 	.mmap		= shmem_mmap,
 	.open		= generic_file_open,
@@ -4039,7 +4069,7 @@ int shmem_init_fs_context(struct fs_context *fc)
 	ctx->gid = current_fsgid();
 
 	fc->fs_private = ctx;
-	fc->ops = &shmem_fs_context_ops;
+	fc->ops = &shmem_fs_context_ops;/*指明tmpfs对应的fc context操作ops*/
 	return 0;
 }
 
@@ -4064,12 +4094,14 @@ void __init shmem_init(void)
 
 	shmem_init_inodecache();
 
+	/*注册tmpfs文件系统*/
 	error = register_filesystem(&shmem_fs_type);
 	if (error) {
 		pr_err("Could not register tmpfs\n");
 		goto out2;
 	}
 
+	/*挂载tmpfs文件系统*/
 	shm_mnt = kern_mount(&shmem_fs_type);
 	if (IS_ERR(shm_mnt)) {
 		error = PTR_ERR(shm_mnt);
@@ -4215,7 +4247,7 @@ EXPORT_SYMBOL_GPL(shmem_truncate_range);
 
 /* common code */
 
-static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name, loff_t size,
+static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name, loff_t size/*文件大小*/,
 				       unsigned long flags, unsigned int i_flags)
 {
 	struct inode *inode;
@@ -4225,16 +4257,19 @@ static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name, l
 		return ERR_CAST(mnt);
 
 	if (size < 0 || size > MAX_LFS_FILESIZE)
+		/*文件大小检查*/
 		return ERR_PTR(-EINVAL);
 
 	if (shmem_acct_size(flags, size))
 		return ERR_PTR(-ENOMEM);
 
+	/*检查mnt*/
 	if (is_idmapped_mnt(mnt))
 		return ERR_PTR(-EINVAL);
 
+	/*申请文件对应的inode*/
 	inode = shmem_get_inode(&nop_mnt_idmap, mnt->mnt_sb, NULL,
-				S_IFREG | S_IRWXUGO, 0, flags);
+				S_IFREG | S_IRWXUGO/*普通文件*/, 0, flags);
 	if (unlikely(!inode)) {
 		shmem_unacct_size(flags, size);
 		return ERR_PTR(-ENOSPC);
@@ -4244,6 +4279,7 @@ static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name, l
 	clear_nlink(inode);	/* It is unlinked */
 	res = ERR_PTR(ramfs_nommu_expand_for_mapping(inode, size));
 	if (!IS_ERR(res))
+		/*针对此inode创建一个pseudo文件*/
 		res = alloc_file_pseudo(inode, mnt, name, O_RDWR,
 				&shmem_file_operations);
 	if (IS_ERR(res))
@@ -4263,7 +4299,7 @@ static struct file *__shmem_file_setup(struct vfsmount *mnt, const char *name, l
  */
 struct file *shmem_kernel_file_setup(const char *name, loff_t size, unsigned long flags)
 {
-	return __shmem_file_setup(shm_mnt, name, size, flags, S_PRIVATE);
+	return __shmem_file_setup(shm_mnt/*tmpfs文件系统全局挂载点*/, name, size, flags, S_PRIVATE);
 }
 
 /**
@@ -4272,9 +4308,10 @@ struct file *shmem_kernel_file_setup(const char *name, loff_t size, unsigned lon
  * @size: size to be set for the file
  * @flags: VM_NORESERVE suppresses pre-accounting of the entire object size
  */
-struct file *shmem_file_setup(const char *name, loff_t size, unsigned long flags)
+struct file *shmem_file_setup(const char *name/*文件名*/, loff_t size, unsigned long flags)
 {
-	return __shmem_file_setup(shm_mnt, name, size, flags, 0);
+	/*创建shmem_file*/
+	return __shmem_file_setup(shm_mnt/*tmpfs文件系统全局挂载点*/, name, size, flags, 0);
 }
 EXPORT_SYMBOL_GPL(shmem_file_setup);
 

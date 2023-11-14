@@ -151,7 +151,7 @@ struct dentry_operations {
 	int (*d_compare)(const struct dentry *,
 			unsigned int/*dentry名称长度*/, const char */*dentry名称*/, const struct qstr */*待匹配名称*/);
 	int (*d_delete)(const struct dentry *);
-	/*申请dentry后，此回调用于初始化dentry*/
+	/*新申请dentry后，可以通过此回调初始化dentry*/
 	int (*d_init)(struct dentry *);
 	void (*d_release)(struct dentry *);
 	void (*d_prune)(struct dentry *);
@@ -223,13 +223,19 @@ struct dentry_operations {
 
 #define DCACHE_LRU_LIST			0x00080000
 
+/*指明当前dentry类型占用3个bit位（最多表示8种）*/
 #define DCACHE_ENTRY_TYPE		0x00700000
+/*dentry未指明dentry type*/
 #define DCACHE_MISS_TYPE		0x00000000 /* Negative dentry (maybe fallthru to nowhere) */
 #define DCACHE_WHITEOUT_TYPE		0x00100000 /* Whiteout dentry (stop pathwalk) */
+/*dentry为dir类型*/
 #define DCACHE_DIRECTORY_TYPE		0x00200000 /* Normal directory */
 #define DCACHE_AUTODIR_TYPE		0x00300000 /* Lookupless directory (presumed automount) */
+/*dentry为普通文件*/
 #define DCACHE_REGULAR_TYPE		0x00400000 /* Regular file type (or fallthru to such) */
+/*dentry为特殊类型文件*/
 #define DCACHE_SPECIAL_TYPE		0x00500000 /* Other file type (or fallthru to such) */
+/*dentry为link类型文件*/
 #define DCACHE_SYMLINK_TYPE		0x00600000 /* Symlink (or fallthru to such) */
 
 #define DCACHE_MAY_FREE			0x00800000
@@ -583,6 +589,7 @@ static inline struct inode *d_inode_rcu(const struct dentry *dentry)
  */
 static inline struct inode *d_backing_inode(const struct dentry *upper)
 {
+	/*取dentry对应的inode*/
 	struct inode *inode = upper->d_inode;
 
 	return inode;

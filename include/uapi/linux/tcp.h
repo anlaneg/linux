@@ -67,21 +67,23 @@ union tcp_word_hdr {
 	__be32        words[5];
 };
 
-//返回一个32位整数，其高16位为offset+标记位，其低16位为window
+//返回一个32位整数，其高16位为offset（4bits)+预留标记位(4bits)+标记位(8bits)，其低16位为window
 #define tcp_flag_word(tp) (((union tcp_word_hdr *)(tp))->words[3])
 
 enum {
 	TCP_FLAG_CWR = __constant_cpu_to_be32(0x00800000),
+	/*ECE：ECN响应标志被用来在TCP3次握手时表明一个TCP端是具备ECN功能的，
+	 * 并且表明接收到的TCP包的IP头部的ECN被设置为11。更多信息请参考RFC793。*/
 	TCP_FLAG_ECE = __constant_cpu_to_be32(0x00400000),
-	TCP_FLAG_URG = __constant_cpu_to_be32(0x00200000),
-	TCP_FLAG_ACK = __constant_cpu_to_be32(0x00100000),
-	TCP_FLAG_PSH = __constant_cpu_to_be32(0x00080000),
-	TCP_FLAG_RST = __constant_cpu_to_be32(0x00040000),
-	TCP_FLAG_SYN = __constant_cpu_to_be32(0x00020000),
-	TCP_FLAG_FIN = __constant_cpu_to_be32(0x00010000),
-	//预留的标记位
+	TCP_FLAG_URG = __constant_cpu_to_be32(0x00200000),/*urg标记位*/
+	TCP_FLAG_ACK = __constant_cpu_to_be32(0x00100000),/*ack标记位*/
+	TCP_FLAG_PSH = __constant_cpu_to_be32(0x00080000),/*push标记位*/
+	TCP_FLAG_RST = __constant_cpu_to_be32(0x00040000),/*rst标记位*/
+	TCP_FLAG_SYN = __constant_cpu_to_be32(0x00020000),/*syn标记位*/
+	TCP_FLAG_FIN = __constant_cpu_to_be32(0x00010000),/*fin标记位*/
+	//tcp预留的标记位(占4bit)
 	TCP_RESERVED_BITS = __constant_cpu_to_be32(0x0F000000),
-	//tcp data的偏移量
+	//tcp data的偏移量(占4bit)
 	TCP_DATA_OFFSET = __constant_cpu_to_be32(0xF0000000)
 };
 

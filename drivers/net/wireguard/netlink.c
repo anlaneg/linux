@@ -631,6 +631,7 @@ static struct genl_family genl_family __ro_after_init = {
 
 int __init wg_genetlink_init(void)
 {
+	/*注册wireguard netlink*/
 	return genl_register_family(&genl_family);
 }
 

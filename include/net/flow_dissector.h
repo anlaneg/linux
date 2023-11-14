@@ -249,7 +249,7 @@ struct flow_dissector_key_ip {
  */
 struct flow_dissector_key_meta {
 	int ingress_ifindex;/*入接口ifindex*/
-	u16 ingress_iftype;
+	u16 ingress_iftype;/*入接口类型，例如ingress,egress*/
 };
 
 /**

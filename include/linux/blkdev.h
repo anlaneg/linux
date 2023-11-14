@@ -133,7 +133,7 @@ struct gendisk {
 	unsigned short event_flags;	/* flags related to event processing */
 
 	struct xarray part_tbl;
-	struct block_device *part0;
+	struct block_device *part0;/*0分区对应的块设备*/
 
 	const struct block_device_operations *fops;
 	struct request_queue *queue;
@@ -399,7 +399,7 @@ struct request_queue {
 
 	struct percpu_ref	q_usage_counter;
 
-	struct blk_queue_stats	*stats;
+	struct blk_queue_stats	*stats;/*统计信息*/
 	struct rq_qos		*rq_qos;
 
 	const struct blk_mq_ops	*mq_ops;
@@ -433,7 +433,7 @@ struct request_queue {
 	 * ida allocated id for this queue.  Used to index queues from
 	 * ioctx.
 	 */
-	int			id;
+	int			id;/*request queue唯一编号*/
 
 	spinlock_t		queue_lock;
 
@@ -473,7 +473,7 @@ struct request_queue {
 	struct blk_stat_callback	*poll_cb;
 	struct blk_rq_stat	*poll_stat;
 
-	struct timer_list	timeout;
+	struct timer_list	timeout;/*对应回调blk_rq_timed_out_timer*/
 	struct work_struct	timeout_work;
 
 	atomic_t		nr_active_requests_shared_tags;

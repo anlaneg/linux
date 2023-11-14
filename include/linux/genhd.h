@@ -130,10 +130,10 @@ struct gendisk {
 	unsigned short event_flags;	/* flags related to event processing */
 
 	struct xarray part_tbl;//分区表
-	struct block_device *part0;
+	struct block_device *part0;/*0号分区对应的块设备*/
 
 	const struct block_device_operations *fops;//设备操作集
-	struct request_queue *queue;
+	struct request_queue *queue;/*此disk对应的request queue*/
 	void *private_data;
 
 	int flags;

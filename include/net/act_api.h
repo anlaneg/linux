@@ -155,6 +155,7 @@ struct tc_action_ops {
 	struct psample_group *
 	(*get_psample_group)(const struct tc_action *a,
 			     tc_action_priv_destructor *destructor/*出参，action引用移除*/);
+	/*offload情况下，各act完成自已的转换*/
 	int     (*offload_act_setup)(struct tc_action *act, void *entry_data,
 				     u32 *index_inc, bool bind,
 				     struct netlink_ext_ack *extack);

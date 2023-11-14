@@ -23,6 +23,7 @@ esw_acl_table_create(struct mlx5_eswitch *esw, struct mlx5_vport *vport, int ns,
 	if (!acl_supported)
 		return ERR_PTR(-EOPNOTSUPP);
 
+	/*针对vport创建acl table*/
 	vport_num = vport->vport;
 	esw_debug(dev, "Create vport[%d] %s ACL table\n", vport_num,
 		  ns == MLX5_FLOW_NAMESPACE_ESW_INGRESS ? "ingress" : "egress");
@@ -34,6 +35,7 @@ esw_acl_table_create(struct mlx5_eswitch *esw, struct mlx5_vport *vport, int ns,
 		return ERR_PTR(-EOPNOTSUPP);
 	}
 
+	/*创建flow table*/
 	ft_attr.max_fte = size;
 	ft_attr.flags = MLX5_FLOW_TABLE_OTHER_VPORT;
 	acl = mlx5_create_vport_flow_table(root_ns, &ft_attr, vport_num);

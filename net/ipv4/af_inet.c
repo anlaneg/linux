@@ -124,6 +124,7 @@
 /* The inetsw table contains everything that inet_create needs to
  * build a new socket.
  */
+/*用于保存系统通过inet_register_protosw存入的所有inet_protosw*/
 static struct list_head inetsw[SOCK_MAX];
 static DEFINE_SPINLOCK(inetsw_lock);
 
@@ -2027,6 +2028,7 @@ static struct packet_type ip_packet_type __read_mostly = {
 	.list_func = ip_list_rcv,//支持收取一组ip
 };
 
+/*ipv4协议栈初始化*/
 static int __init inet_init(void)
 {
 	struct inet_protosw *q;
@@ -2092,7 +2094,7 @@ static int __init inet_init(void)
 #endif
 
 	/* Register the socket-side information for inet_create. */
-	//初始化inetsw指针链表为空
+	//初始化inetsw指针链表为空，用于注册各protosw
 	for (r = &inetsw[0]; r < &inetsw[SOCK_MAX]; ++r)
 		INIT_LIST_HEAD(r);
 

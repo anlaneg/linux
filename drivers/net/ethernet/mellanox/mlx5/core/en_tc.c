@@ -3626,6 +3626,7 @@ static bool modify_header_match_supported(struct mlx5e_priv *priv,
 	ip_proto = MLX5_GET(fte_match_set_lyr_2_4, headers_v, ip_protocol);
 	if (modify_ip_header && ip_proto != IPPROTO_TCP &&
 	    ip_proto != IPPROTO_UDP && ip_proto != IPPROTO_ICMP) {
+		/*未指明协议*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "can't offload re-write of non TCP/UDP");
 		netdev_info(priv->netdev, "can't offload re-write of ip proto %d\n",
@@ -4611,6 +4612,7 @@ __mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	if (err)
 		goto err_free;
 
+	/*解析action*/
 	err = parse_tc_fdb_actions(priv, &rule->action, flow, extack);
 	if (err)
 		goto err_free;
@@ -4700,13 +4702,14 @@ mlx5e_add_fdb_flow(struct mlx5e_priv *priv,
 	struct mlx5e_tc_flow *flow;
 	int err;
 
+	/*执行flow添加*/
 	flow = __mlx5e_add_fdb_flow(priv, f, flow_flags, filter_dev, in_rep,
 				    in_mdev);
 	if (IS_ERR(flow))
 		return PTR_ERR(flow);
 
 	if (is_peer_flow_needed(flow)) {
-		//vf lag 场景
+		//遇到vf lag 场景，则在peer上也需要添加一次
 		err = mlx5e_tc_add_fdb_peer_flow(f, flow, flow_flags);
 		if (err) {
 			mlx5e_tc_del_fdb_flow(priv, flow);
@@ -4862,6 +4865,7 @@ rcu_unlock:
 		goto out;
 
 	trace_mlx5e_configure_flower(f);
+
 	//执行flow添加
 	err = mlx5e_tc_add_flow(priv, f/*要添加的flow*/, flags, dev, &flow);
 	if (err)

@@ -1005,7 +1005,7 @@ static int mlx5_init_once(struct mlx5_core_dev *dev)
 		goto err_rl_cleanup;
 	}
 
-	err = mlx5_sriov_init(dev);
+	err = mlx5_sriov_init(dev);/*mlx5初始化sriov*/
 	if (err) {
 		mlx5_core_err(dev, "Failed to init sriov %d\n", err);
 		goto err_mpfs_cleanup;
@@ -1730,7 +1730,7 @@ void mlx5_mdev_uninit(struct mlx5_core_dev *dev)
 	lockdep_unregister_key(&dev->lock_key);
 }
 
-static int probe_one(struct pci_dev *pdev/*待匹配的pci设备*/, const struct pci_device_id *id)
+static int probe_one(struct pci_dev *pdev/*待匹配的pci设备*/, const struct pci_device_id *id/*待匹配的设备id*/)
 {
 	struct mlx5_core_dev *dev;
 	struct devlink *devlink;

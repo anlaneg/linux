@@ -66,6 +66,7 @@ static void debugfs_dim_ring_init(struct dim *dim, int ring_idx,
 {
 	static char qname[16];
 
+	/*针对每个ring index，创建相应的文件*/
 	snprintf(qname, 10, "%d", ring_idx);
 	debugfs_create_file(qname, 0600, dd, dim, &debugfs_dim_fops);
 }
@@ -76,6 +77,7 @@ void bnxt_debug_dev_init(struct bnxt *bp)
 	struct dentry *dir;
 	int i;
 
+	/*创建此设备对应的目录*/
 	bp->debugfs_pdev = debugfs_create_dir(pname, bnxt_debug_mnt);
 	dir = debugfs_create_dir("dim", bp->debugfs_pdev);
 
@@ -98,6 +100,7 @@ void bnxt_debug_dev_exit(struct bnxt *bp)
 
 void bnxt_debug_init(void)
 {
+	/*初始化debugfs的mnt*/
 	bnxt_debug_mnt = debugfs_create_dir("bnxt_en", NULL);
 }
 

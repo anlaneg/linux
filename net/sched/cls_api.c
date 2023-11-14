@@ -3963,6 +3963,7 @@ static int tc_setup_offload_act(struct tc_action *act,
 				struct netlink_ext_ack *extack)
 {
 #ifdef CONFIG_NET_CLS_ACT
+	/*交给各action进行offload转换*/
 	if (act->ops->offload_act_setup) {
 		return act->ops->offload_act_setup(act, entry, index_inc, true,
 						   extack);
@@ -4005,6 +4006,7 @@ int tc_setup_action(struct flow_action *flow_action/*出参，记录转换后的
 			goto err_out_locked;
 
 		index = 0;
+		/*针对此action由相应回调完成转换*/
 		err = tc_setup_offload_act(act, entry, &index, extack);
 		if (err)
 			goto err_out_locked;
@@ -4044,6 +4046,7 @@ int tc_setup_offload_action(struct flow_action *flow_action,
 
 	miss_cookie_base = exts->miss_cookie_node ?
 			   exts->miss_cookie_node->miss_cookie_base : 0;
+	/*action转换*/
 	return tc_setup_action(flow_action, exts->actions, miss_cookie_base,
 			       extack);
 #else

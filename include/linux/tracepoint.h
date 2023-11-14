@@ -169,6 +169,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		it_func_ptr =						\
 			rcu_dereference_raw((&__tracepoint_##name)->funcs); \
 		if (it_func_ptr) {					\
+			/*调用funcs*/\
 			__data = (it_func_ptr)->data;			\
 			static_call(tp_func_##name)(__data, args);	\
 		}							\
@@ -197,6 +198,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		int __maybe_unused __idx = 0;				\
 									\
 		if (!(cond))						\
+			/*如条件为假，则直接返回*/\
 			return;						\
 									\
 		if (WARN_ON_ONCE(RCUIDLE_COND(rcuidle)))		\
@@ -215,7 +217,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		}							\
 									\
 		/*调用此tracepoint的入口函数*/\
-		__DO_TRACE_CALL(name, TP_ARGS(args));			\
+		__DO_TRACE_CALL(name/*trace名*/, TP_ARGS(args));			\
 									\
 		if (rcuidle) {						\
 			ct_irq_exit_irqson();				\
@@ -250,10 +252,11 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
  * even when this tracepoint is off. This code has no purpose other than
  * poking RCU a bit.
  */
-#define __DECLARE_TRACE(name, proto, args, cond, data_proto)		\
+#define __DECLARE_TRACE(name, proto, args, cond/*条件语句*/, data_proto)		\
 	extern int __traceiter_##name(data_proto);			\
 	DECLARE_STATIC_CALL(tp_func_##name, __traceiter_##name);	\
-	extern struct tracepoint __tracepoint_##name;			\
+	extern struct tracepoint __tracepoint_##name;/*定义在何处？*/			\
+	/*定义函数trace_$name*/\
 	static inline void trace_##name(proto)				\
 	{								\
 		if (static_key_false(&__tracepoint_##name.key))		\
@@ -269,6 +272,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	}								\
 	__DECLARE_TRACE_RCU(name, PARAMS(proto), PARAMS(args),		\
 			    PARAMS(cond))				\
+	/*定义trace注册函数（无优先级）*/\
 	static inline int						\
 	register_trace_##name(void (*probe/*回调函数*/)(data_proto), void *data)	\
 	{								\
@@ -276,6 +280,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		return tracepoint_probe_register(&__tracepoint_##name,	\
 						(void *)probe, data);	\
 	}								\
+	/*定义trace注册函数（有优先级）*/\
 	static inline int						\
 	register_trace_prio_##name(void (*probe)(data_proto), void *data,\
 				   int prio)				\
@@ -284,6 +289,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 		return tracepoint_probe_register_prio(&__tracepoint_##name, \
 					      (void *)probe, data, prio); \
 	}								\
+	/*trace注册移除*/\
 	static inline int						\
 	unregister_trace_##name(void (*probe)(data_proto), void *data)	\
 	{								\
@@ -295,6 +301,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	check_trace_callback_type_##name(void (*cb)(data_proto))	\
 	{								\
 	}								\
+	/*检查此trace是否开启*/\
 	static inline bool						\
 	trace_##name##_enabled(void)					\
 	{								\
@@ -308,22 +315,26 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
  * on the tracepoints.
  */
 #define DEFINE_TRACE_FN(_name, _reg, _unreg, proto, args)		\
+	/*定义__tpstrtab_$_name变量，设置tracepoint名称*/	\
 	static const char __tpstrtab_##_name[]				\
-	__section("__tracepoints_strings") = #_name;/*tracepoint名称*/			\
+	__section("__tracepoints_strings") = #_name;	\
+	/*提前声明key变量__SCK__tp_func_$_name*/ \
 	extern struct static_call_key STATIC_CALL_KEY(tp_func_##_name);	\
 	/*提前声明__traceiter_$_name函数*/\
 	int __traceiter_##_name(void *__data, proto);			\
+	/*定义变量__tracepoint_$_name并初始化*/\
 	struct tracepoint __tracepoint_##_name	__used			\
 	__section("__tracepoints") = {					\
-		.name = __tpstrtab_##_name,				\
-		/*默认初始化为False*/\
+		.name = __tpstrtab_##_name,	/*指定tracepoint名称*/			\
+		/*key 默认初始化为False*/\
 		.key = STATIC_KEY_INIT_FALSE,				\
+		/*引用此tracepoint对应的key*/\
 		.static_call_key = &STATIC_CALL_KEY(tp_func_##_name),	\
 		.static_call_tramp = STATIC_CALL_TRAMP_ADDR(tp_func_##_name), \
 		.iterator = &__traceiter_##_name,/*trace遍历回调*/			\
 		.regfunc = _reg,					\
 		.unregfunc = _unreg,					\
-		.funcs = NULL };					\
+		.funcs = NULL /*默认为NULL，容许有一组结构体，会被iterator逐个触发*/};					\
 	__TRACEPOINT_ENTRY(_name);					\
 	/*定义__traceiter_$_name函数，遍历触发注册的回调*/\
 	int __traceiter_##_name(void *__data, proto)			\
@@ -339,20 +350,25 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 				it_func = READ_ONCE((it_func_ptr)->func);/*函数回调*/ \
 				__data = (it_func_ptr)->data;/*函数回调参数*/		\
 				/*触发回调*/\
-				((void(*)(void *, proto))(it_func))(__data, args); \
-			} while ((++it_func_ptr)->func);		\
+				((void(*)(void *, proto))(it_func))(__data, args/*传入参数*/); \
+			} while ((++it_func_ptr)->func);/*逐个触发*/		\
 		}							\
 		return 0;						\
 	}								\
+	/*初始化此tracepoint对应的key，设置其function__traceiter_$_name*/\
 	DEFINE_STATIC_CALL(tp_func_##_name, __traceiter_##_name);
 
+/*定义tracepoint变量并初始化*/
 #define DEFINE_TRACE(name/*trace的函数名称*/, proto, args)		\
 	DEFINE_TRACE_FN(name, NULL, NULL, PARAMS(proto), PARAMS(args));
 
+/*导出tracepoint相关符号*/
 #define EXPORT_TRACEPOINT_SYMBOL_GPL(name)				\
 	EXPORT_SYMBOL_GPL(__tracepoint_##name);				\
 	EXPORT_SYMBOL_GPL(__traceiter_##name);				\
 	EXPORT_STATIC_CALL_GPL(tp_func_##name)
+
+/*导出tracepoint相关符号*/
 #define EXPORT_TRACEPOINT_SYMBOL(name)					\
 	EXPORT_SYMBOL(__tracepoint_##name);				\
 	EXPORT_SYMBOL(__traceiter_##name);				\
@@ -571,6 +587,7 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 	DECLARE_TRACE_CONDITION(name, PARAMS(proto),		\
 				PARAMS(args), PARAMS(cond))
 
+/*定义trace event宏*/
 #define TRACE_EVENT(name, proto, args, struct, assign, print)	\
 	DECLARE_TRACE(name, PARAMS(proto), PARAMS(args))
 #define TRACE_EVENT_FN(name, proto, args, struct,		\

@@ -671,8 +671,8 @@ static enum devlink_selftest_status bnxt_dl_selftest_run(struct devlink *dl,
 
 static const struct devlink_ops bnxt_dl_ops = {
 #ifdef CONFIG_BNXT_SRIOV
-	.eswitch_mode_set = bnxt_dl_eswitch_mode_set,
-	.eswitch_mode_get = bnxt_dl_eswitch_mode_get,
+	.eswitch_mode_set = bnxt_dl_eswitch_mode_set,/*eswitch模式切换*/
+	.eswitch_mode_get = bnxt_dl_eswitch_mode_get,/*获取eswitch模式*/
 #endif /* CONFIG_BNXT_SRIOV */
 	.info_get	  = bnxt_dl_info_get,
 	.flash_update	  = bnxt_dl_flash_update,

@@ -2515,6 +2515,7 @@ struct mlx5_flow_namespace *mlx5_get_flow_vport_acl_namespace(struct mlx5_core_d
 	case MLX5_FLOW_NAMESPACE_ESW_EGRESS:
 		if (vport >= steering->esw_egress_acl_vports)
 			return NULL;
+		/*取这个vport对应的egress_root_ns*/
 		if (steering->esw_egress_root_ns &&
 		    steering->esw_egress_root_ns[vport])
 			return &steering->esw_egress_root_ns[vport]->ns;

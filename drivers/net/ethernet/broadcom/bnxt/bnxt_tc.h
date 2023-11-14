@@ -23,7 +23,7 @@ struct bnxt_tc_l2_key {
 	__be16		inner_vlan_tci;
 	__be16		ether_type;
 	u8		num_vlans;
-	u8		dir;
+	u8		dir;/*流的方向，rx/tx*/
 #define BNXT_DIR_RX	1
 #define BNXT_DIR_TX	0
 };

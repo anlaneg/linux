@@ -1775,7 +1775,7 @@ EXPORT_SYMBOL(d_invalidate);
  * copied and the copy passed in may be reused after this call.
  */
  
-//申请并构造一个dentry实体
+//针对super block申请并构造一个dentry实体
 static struct dentry *__d_alloc(struct super_block *sb/*申请从属于sb的dentry*/, const struct qstr *name)
 {
 	struct dentry *dentry;
@@ -1956,6 +1956,7 @@ void d_set_d_op(struct dentry *dentry, const struct dentry_operations *op)
 	dentry->d_op = op;/*填充dentry的操作集*/
 	if (!op)
 		return;
+	/*依据op提供的回调，设置相应的标记*/
 	if (op->d_hash)
 		dentry->d_flags |= DCACHE_OP_HASH;
 	if (op->d_compare)
@@ -3387,13 +3388,13 @@ static void __init dcache_init(void)
 	 */
 	dentry_cache = KMEM_CACHE_USERCOPY(dentry,
 		SLAB_RECLAIM_ACCOUNT|SLAB_PANIC|SLAB_MEM_SPREAD|SLAB_ACCOUNT,
-		d_iname);
+		d_iname);/*负责分配dentry*/
 
 	/* Hash may have been set up in dcache_init_early */
 	if (!hashdist)
 		return;
 
-	/*初始化dir entry cache表*/
+	/*初始化dir entry cache表，用于缓存系统中所有dentry*/
 	dentry_hashtable =
 		alloc_large_system_hash("Dentry cache",
 					sizeof(struct hlist_bl_head),
@@ -3408,7 +3409,7 @@ static void __init dcache_init(void)
 }
 
 /* SLAB cache for __getname() consumers */
-struct kmem_cache *names_cachep __read_mostly;
+struct kmem_cache *names_cachep __read_mostly;/*负责struct filename结构体申请*/
 EXPORT_SYMBOL(names_cachep);
 
 void __init vfs_caches_init_early(void)

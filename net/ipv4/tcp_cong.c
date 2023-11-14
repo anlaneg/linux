@@ -42,9 +42,10 @@ void tcp_set_ca_state(struct sock *sk, const u8 ca_state)
 
 	trace_tcp_cong_state_set(sk, ca_state);
 
+	/*拥塞如果有set_state回调，则调用*/
 	if (icsk->icsk_ca_ops->set_state)
 		icsk->icsk_ca_ops->set_state(sk, ca_state);
-	icsk->icsk_ca_state = ca_state;
+	icsk->icsk_ca_state = ca_state;/*更新ca状态*/
 }
 
 /* Must be called with rcu lock held */

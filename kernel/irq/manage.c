@@ -1798,7 +1798,7 @@ __setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中�
 				irq, omsk, nmsk);
 	}
 
-	*old_ptr = new;
+	*old_ptr = new;/*添加新的action到链表*/
 
 	irq_pm_install_action(desc, new);
 
@@ -2257,7 +2257,7 @@ EXPORT_SYMBOL(request_threaded_irq);
  *	it returns either IRQC_IS_HARDIRQ or IRQC_IS_NESTED.
  */
 int request_any_context_irq(unsigned int irq, irq_handler_t handler,
-			    unsigned long flags, const char *name, void *dev_id)
+			    unsigned long flags, const char *name/*设备名称*/, void *dev_id)
 {
 	struct irq_desc *desc;
 	int ret;

@@ -1228,8 +1228,10 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 		}
 
 		if (optname == IP_ADD_MEMBERSHIP)
+			/*加入组播组*/
 			err = ip_mc_join_group(sk, &mreq);
 		else
+			/*离开组播组*/
 			err = ip_mc_leave_group(sk, &mreq);
 		break;
 	}
@@ -1356,12 +1358,14 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 		break;
 
 	case IP_MINTTL:
+		/*指定此socket容许的最小ttl*/
 		if (optlen < 1)
 			goto e_inval;
 		if (val < 0 || val > 255)
 			goto e_inval;
 
 		if (val)
+			/*开启ipv4 min ttl检查*/
 			static_branch_enable(&ip4_min_ttl);
 
 		/* tcp_v4_err() and tcp_v4_rcv() might read min_ttl

@@ -13,17 +13,18 @@
 #include <linux/virtio_vsock.h>
 
 struct vsock_loopback {
-	struct workqueue_struct *workqueue;
+	struct workqueue_struct *workqueue;/*负责排队处理pkt_work*/
 
 	spinlock_t pkt_list_lock; /* protects pkt_list */
-	struct sk_buff_head pkt_queue;
-	struct work_struct pkt_work;
+	struct sk_buff_head pkt_queue;/*用于存入待处理的loopback报文*/
+	struct work_struct pkt_work;/*报文处理具体work,初始化为vsock_loopback_work*/
 };
 
 static struct vsock_loopback the_vsock_loopback;
 
 static u32 vsock_loopback_get_local_cid(void)
 {
+	/*local用的cid*/
 	return VMADDR_CID_LOCAL;
 }
 
@@ -33,9 +34,11 @@ static int vsock_loopback_send_pkt(struct sk_buff *skb)
 	int len = skb->len;
 
 	spin_lock_bh(&vsock->pkt_list_lock);
+	/*将此skb添加到the_vsock_loopback队列上*/
 	skb_queue_tail(&vsock->pkt_queue, skb);
 	spin_unlock_bh(&vsock->pkt_list_lock);
 
+	/*使the_vsock_loopback work入队*/
 	queue_work(vsock->workqueue, &vsock->pkt_work);
 
 	return len;
@@ -52,6 +55,7 @@ static int vsock_loopback_cancel_pkt(struct vsock_sock *vsk)
 
 static bool vsock_loopback_seqpacket_allow(u32 remote_cid);
 
+/*loopback通信用*/
 static struct virtio_transport loopback_transport = {
 	.transport = {
 		.module                   = THIS_MODULE,
@@ -96,6 +100,7 @@ static struct virtio_transport loopback_transport = {
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
 	},
 
+	/*报文发送函数*/
 	.send_pkt = vsock_loopback_send_pkt,
 };
 
@@ -104,6 +109,7 @@ static bool vsock_loopback_seqpacket_allow(u32 remote_cid)
 	return true;
 }
 
+/*取vsock->pkt_queue上挂接的报文，并逐个处理*/
 static void vsock_loopback_work(struct work_struct *work)
 {
 	struct vsock_loopback *vsock =
@@ -113,12 +119,16 @@ static void vsock_loopback_work(struct work_struct *work)
 
 	skb_queue_head_init(&pkts);
 
+	/*收集待处理的报文*/
 	spin_lock_bh(&vsock->pkt_list_lock);
 	skb_queue_splice_init(&vsock->pkt_queue, &pkts);
 	spin_unlock_bh(&vsock->pkt_list_lock);
 
+	/*逐个处理报文*/
 	while ((skb = __skb_dequeue(&pkts))) {
+		/*交付tap处理（当前用于dump)*/
 		virtio_transport_deliver_tap_pkt(skb);
+		/*查找并交给socket*/
 		virtio_transport_recv_pkt(&loopback_transport, skb);
 	}
 }
@@ -135,9 +145,10 @@ static int __init vsock_loopback_init(void)
 
 	spin_lock_init(&vsock->pkt_list_lock);
 	skb_queue_head_init(&vsock->pkt_queue);
-	/*初始化work*/
+	/*初始化the_vsock_loopback work，用于loopback报文处理*/
 	INIT_WORK(&vsock->pkt_work, vsock_loopback_work);
 
+	/*注册loopback*/
 	ret = vsock_core_register(&loopback_transport.transport,
 				  VSOCK_TRANSPORT_F_LOCAL);
 	if (ret)
