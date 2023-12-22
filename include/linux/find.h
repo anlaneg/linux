@@ -61,7 +61,7 @@ unsigned long find_next_bit(const unsigned long *addr, unsigned long size,
 			return size;
 
 		/*自*addr指向的内容中，取(size-1,offset)这个bit段之间的内容*/
-		val = *addr & GENMASK(offset，size - 1);
+		val = *addr & GENMASK(size - 1, offset);
 		/*此片段间val不为0，则取首个bit为1的位置，如为0，则直接返回size*/
 		return val ? __ffs(val) : size;
 	}

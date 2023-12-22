@@ -3177,6 +3177,7 @@ errout:
 }
 
 static struct net_device *rtnl_dev_get(struct net *net,
+		                       struct nlattr *tb[])
 {
 	char ifname[ALTIFNAMSIZ];
 
