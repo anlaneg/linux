@@ -294,10 +294,12 @@ static char **parse_bytes(char **argv, const char *name, unsigned char *val,
 	char *endptr;
 
 	if (is_prefix(*argv, "hex")) {
+		/*按16进制进行解析*/
 		base = 16;
 		argv++;
 	}
 
+	/*按base解释内容*/
 	while (i < n && argv[i]) {
 		val[i] = strtoul(argv[i], &endptr, base);
 		if (*endptr) {
@@ -341,6 +343,7 @@ static int parse_elem(char **argv, struct bpf_map_info *info,
 	}
 
 	if (is_prefix(*argv, "key")) {
+		/*解析key的内容*/
 		if (!key) {
 			if (key_size)
 				p_err("duplicate key");
@@ -408,6 +411,7 @@ static int parse_elem(char **argv, struct bpf_map_info *info,
 			*value_fd = value;
 			**value_fd = fd;
 		} else {
+			/*解析value内容*/
 			argv = parse_bytes(argv, "value", value, value_size);
 			if (!argv)
 				return -1;
@@ -771,9 +775,11 @@ static int maps_have_btf(int *fds, int nb_fds)
 		}
 
 		if (!info.btf_id)
+			/*btf_id为0，没有对应的btf*/
 			return 0;
 	}
 
+	/*包含btf*/
 	return 1;
 }
 
@@ -785,14 +791,17 @@ static int get_map_kv_btf(const struct bpf_map_info *info, struct btf **btf)
 
 	if (info->btf_vmlinux_value_type_id) {
 		if (!btf_vmlinux) {
+			/*加载kernel提供的btf*/
 			btf_vmlinux = libbpf_find_kernel_btf();
 			if (!btf_vmlinux) {
+				/*加载失败，报错*/
 				p_err("failed to get kernel btf");
 				return -errno;
 			}
 		}
 		*btf = btf_vmlinux;
 	} else if (info->btf_value_type_id) {
+		/*通过btf_id加载btf*/
 		*btf = btf__load_from_kernel_by_id(info->btf_id);
 		if (!*btf) {
 			err = -errno;
@@ -854,6 +863,8 @@ map_dump(int fd, struct bpf_map_info *info, json_writer_t *wtr,
 		p_info("Warning: cannot read values from %s map with value_size != 8",
 		       map_type_str);
 	}
+
+	/*遍历此fd对应的key*/
 	while (true) {
 		err = bpf_map_get_next_key(fd, prev_key, key);
 		if (err) {
@@ -901,6 +912,7 @@ static int do_dump(int argc, char **argv)
 		p_err("mem alloc failed");
 		return -1;
 	}
+	/*按参数获取bpf map fds*/
 	nb_fds = map_parse_fds(&argc, &argv, &fds);
 	if (nb_fds < 1)
 		goto exit_free;
@@ -914,7 +926,7 @@ static int do_dump(int argc, char **argv)
 		if (do_plain_btf < 0)
 			goto exit_close;
 
-		if (do_plain_btf) {
+		if (do_plain_btf/*此fds包含btf*/) {
 			btf_wtr = get_btf_writer();
 			wtr = btf_wtr;
 			if (!btf_wtr)
@@ -989,19 +1001,23 @@ static int do_update(int argc, char **argv)
 	if (argc < 2)
 		usage();
 
+	/*获得此map对应的fd*/
 	fd = map_parse_fd_and_info(&argc, &argv, &info, &len);
 	if (fd < 0)
 		return -1;
 
+	/*按照map info申请key,value对应的空间*/
 	err = alloc_key_value(&info, &key, &value);
 	if (err)
 		goto exit_free;
 
+	/*解析key,value*/
 	err = parse_elem(argv, &info, key, value, info.key_size,
 			 info.value_size, &flags, &value_fd);
 	if (err)
 		goto exit_free;
 
+	/*通过系统调用update map*/
 	err = bpf_map_update_elem(fd, key, value, flags);
 	if (err) {
 		p_err("update failed: %s", strerror(errno));
@@ -1253,6 +1269,7 @@ static int do_create(int argc, char **argv)
 				goto exit;
 			}
 
+			/*map类型*/
 			map_type = map_type_from_str(*argv);
 			if ((int)map_type < 0) {
 				p_err("unrecognized map type: %s", *argv);
@@ -1261,24 +1278,30 @@ static int do_create(int argc, char **argv)
 			NEXT_ARG();
 		} else if (is_prefix(*argv, "name")) {
 			NEXT_ARG();
+			/*map名称*/
 			map_name = GET_ARG();
 		} else if (is_prefix(*argv, "key")) {
+			/*map对应的key size*/
 			if (parse_u32_arg(&argc, &argv, &key_size,
 					  "key size"))
 				goto exit;
 		} else if (is_prefix(*argv, "value")) {
+			/*map对应的value size*/
 			if (parse_u32_arg(&argc, &argv, &value_size,
 					  "value size"))
 				goto exit;
 		} else if (is_prefix(*argv, "entries")) {
+			/*map对应的实体总数*/
 			if (parse_u32_arg(&argc, &argv, &max_entries,
 					  "max entries"))
 				goto exit;
 		} else if (is_prefix(*argv, "flags")) {
+			/*通过u32指定flags*/
 			if (parse_u32_arg(&argc, &argv, &attr.map_flags,
 					  "flags"))
 				goto exit;
 		} else if (is_prefix(*argv, "dev")) {
+			/*指定map 对应的offload设备*/
 			NEXT_ARG();
 
 			if (attr.map_ifindex) {
@@ -1286,6 +1309,7 @@ static int do_create(int argc, char **argv)
 				goto exit;
 			}
 
+			/*通过name获取设备的ifindex*/
 			attr.map_ifindex = if_nametoindex(*argv);
 			if (!attr.map_ifindex) {
 				p_err("unrecognized netdevice '%s': %s",
@@ -1301,10 +1325,12 @@ static int do_create(int argc, char **argv)
 			NEXT_ARG();
 			if (!REQ_ARGS(2))
 				usage();
+			/*取inner_map对应的fd*/
 			inner_map_fd = map_parse_fd_and_info(&argc, &argv,
 							     &info, &len);
 			if (inner_map_fd < 0)
 				return -1;
+			/*设置inner map fd*/
 			attr.inner_map_fd = inner_map_fd;
 		} else {
 			p_err("unknown arg %s", *argv);
@@ -1319,12 +1345,14 @@ static int do_create(int argc, char **argv)
 
 	set_max_rlimit();
 
+	/*创建指定的bpf map*/
 	fd = bpf_map_create(map_type, map_name, key_size, value_size, max_entries, &attr);
 	if (fd < 0) {
 		p_err("map create failed: %s", strerror(errno));
 		goto exit;
 	}
 
+	/*将bpf map pin到指定路径*/
 	err = do_pin_fd(fd, pinfile);
 	close(fd);
 	if (err)
@@ -1464,16 +1492,16 @@ static const struct cmd cmds[] = {
 	{ "list",	do_show },
 	{ "help",	do_help },
 	{ "dump",	do_dump },
-	{ "update",	do_update },
+	{ "update",	do_update },/*更新表项内容*/
 	{ "lookup",	do_lookup },
 	{ "getnext",	do_getnext },
 	{ "delete",	do_delete },
-	{ "pin",	do_pin },
+	{ "pin",	do_pin },/*将map pin到指定路径上*/
 	{ "event_pipe",	do_event_pipe },
-	{ "create",	do_create },
+	{ "create",	do_create },/*执行map创建*/
 	{ "peek",	do_lookup },
 	{ "push",	do_update },
-	{ "enqueue",	do_update },
+	{ "enqueue",	do_update },/*执行map更新*/
 	{ "pop",	do_pop_dequeue },
 	{ "dequeue",	do_pop_dequeue },
 	{ "freeze",	do_freeze },

@@ -256,7 +256,7 @@ static void free_trace_kprobe(struct trace_kprobe *tk)
 static struct trace_kprobe *alloc_trace_kprobe(const char *group,
 					     const char *event,
 					     void *addr,
-					     const char *symbol,
+					     const char *symbol,/*kprobe函数名称*/
 					     unsigned long offs,
 					     int maxactive,
 					     int nargs, bool is_return)
@@ -505,9 +505,9 @@ static int __register_trace_kprobe(struct trace_kprobe *tk)
 		tk->rp.kp.flags |= KPROBE_FLAG_DISABLED;
 
 	if (trace_kprobe_is_return(tk))
-		ret = register_kretprobe(&tk->rp);
+		ret = register_kretprobe(&tk->rp);/*注册kretprobe*/
 	else
-		ret = register_kprobe(&tk->rp.kp);
+		ret = register_kprobe(&tk->rp.kp);/*注册此kprobe*/
 
 	return ret;
 }

@@ -375,6 +375,7 @@ static int ksmbd_tcp_writev(struct ksmbd_transport *t, struct kvec *iov,
 {
 	struct msghdr smb_msg = {.msg_flags = MSG_NOSIGNAL};
 
+	/*tcp写流程*/
 	return kernel_sendmsg(TCP_TRANS(t)->sock, &smb_msg, iov, nvecs, size);
 }
 

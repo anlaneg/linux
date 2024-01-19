@@ -4413,6 +4413,7 @@ static int bpf_obj_get_info_by_fd(const union bpf_attr *attr,
 		err = bpf_map_get_info_by_fd(f.file, f.file->private_data, attr,
 					     uattr);
 	else if (f.file->f_op == &btf_fops)
+		/*为btf文件*/
 		err = bpf_btf_get_info_by_fd(f.file, f.file->private_data, attr, uattr);
 	else if (f.file->f_op == &bpf_link_fops)
 		err = bpf_link_get_info_by_fd(f.file, f.file->private_data,
@@ -5028,7 +5029,7 @@ out_prog_put:
 	return ret;
 }
 
-//定义bpf系统调用
+//bpf系统调用实现
 static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 {
 	union bpf_attr attr;
@@ -5140,6 +5141,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 		err = bpf_btf_load(&attr, uattr);
 		break;
 	case BPF_BTF_GET_FD_BY_ID:
+		/*由id获取btf fd*/
 		err = bpf_btf_get_fd_by_id(&attr);
 		break;
 	case BPF_TASK_FD_QUERY:
@@ -5200,6 +5202,7 @@ static int __sys_bpf(int cmd, bpfptr_t uattr, unsigned int size)
 /*bpf系统调用*/
 SYSCALL_DEFINE3(bpf, int, cmd, union bpf_attr __user *, uattr, unsigned int, size)
 {
+	/*走bpf系统调用（用户态发起）*/
 	return __sys_bpf(cmd, USER_BPFPTR(uattr), size);
 }
 
@@ -5229,8 +5232,10 @@ BPF_CALL_3(bpf_sys_bpf, int, cmd, union bpf_attr *, attr, u32, attr_size)
 	case BPF_RAW_TRACEPOINT_OPEN:
 		break;
 	default:
+		/*遇到其它不支持的cmd*/
 		return -EINVAL;
 	}
+	/*走bpf系统调用（kernel中发起）*/
 	return __sys_bpf(cmd, KERNEL_BPFPTR(attr), attr_size);
 }
 

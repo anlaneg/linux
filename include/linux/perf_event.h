@@ -808,7 +808,7 @@ struct perf_event {
 	void				*overflow_handler_context;
 #ifdef CONFIG_BPF_SYSCALL
 	perf_overflow_handler_t		orig_overflow_handler;
-	struct bpf_prog			*prog;
+	struct bpf_prog			*prog;/*此perf event关联的ebpf程序*/
 	u64				bpf_cookie;
 #endif
 

@@ -255,12 +255,12 @@ static inline struct tracepoint *tracepoint_ptr_deref(tracepoint_ptr_t *p)
 #define __DECLARE_TRACE(name, proto, args, cond/*条件语句*/, data_proto)		\
 	extern int __traceiter_##name(data_proto);			\
 	DECLARE_STATIC_CALL(tp_func_##name, __traceiter_##name);	\
-	extern struct tracepoint __tracepoint_##name;/*定义在何处？*/			\
+	extern struct tracepoint __tracepoint_##name;/*定义见EXPORT_TRACEPOINT_SYMBOL*/			\
 	/*定义函数trace_$name*/\
 	static inline void trace_##name(proto)				\
 	{								\
 		if (static_key_false(&__tracepoint_##name.key))		\
-		    /*调用trace回调*/\
+		    /*此key被开启，调用trace回调*/\
 			__DO_TRACE(name,				\
 				TP_ARGS(args),				\
 				TP_CONDITION(cond), 0);			\

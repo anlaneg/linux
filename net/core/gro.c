@@ -515,7 +515,7 @@ static enum gro_result dev_gro_receive(struct napi_struct *napi, struct sk_buff 
 	int same_flow;
 	int grow;
 
-	//网卡未开启gso功能的，直接走normal
+	//网卡未开启gro功能的，直接走normal
 	if (netif_elide_gro(skb->dev))
 		goto normal;
 

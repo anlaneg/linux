@@ -787,6 +787,7 @@ int xprt_rdma_init(void)
 {
 	int rc;
 
+	/*支持rdma传输*/
 	rc = xprt_register_transport(&xprt_rdma);
 	if (rc)
 		return rc;

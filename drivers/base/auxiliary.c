@@ -166,12 +166,14 @@ static const struct auxiliary_device_id *auxiliary_match_id(const struct auxilia
 		int match_size;
 
 		if (!p)
+			/*设备名称中没有'.',忽略*/
 			continue;
 		match_size = p - dev_name(&auxdev->dev);
 
 		/* use dev_name(&auxdev->dev) prefix before last '.' char to match to */
 		if (strlen(id->name) == match_size &&
 		    !strncmp(dev_name(&auxdev->dev), id->name, match_size))
+			/*长度及名称相等，返回对应的id*/
 			return id;
 	}
 	return NULL;
@@ -316,16 +318,19 @@ int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname)
 	int ret;
 
 	if (!modname) {
+		/*必须指明modname*/
 		dev_err(dev, "auxiliary device modname is NULL\n");
 		return -EINVAL;
 	}
 
+	/*设置辅助设备的名称为modname.devname.id*/
 	ret = dev_set_name(dev, "%s.%s.%d", modname, auxdev->name, auxdev->id);
 	if (ret) {
 		dev_err(dev, "auxiliary device dev_set_name failed: %d\n", ret);
 		return ret;
 	}
 
+	/*将设备添加进kernel系统，执行发现*/
 	ret = device_add(dev);
 	if (ret)
 		dev_err(dev, "adding auxiliary device failed!: %d\n", ret);
@@ -380,12 +385,15 @@ int __auxiliary_driver_register(struct auxiliary_driver *auxdrv,
 	int ret;
 
 	if (WARN_ON(!auxdrv->probe) || WARN_ON(!auxdrv->id_table))
+		/*必须指定probe函数及id_table列表*/
 		return -EINVAL;
 
 	if (auxdrv->name)
+		/*指定了辅助驱动名称。添加模块名*/
 		auxdrv->driver.name = kasprintf(GFP_KERNEL, "%s.%s", modname,
 						auxdrv->name);
 	else
+		/*未指定辅助驱动名称。使用模块名*/
 		auxdrv->driver.name = kasprintf(GFP_KERNEL, "%s", modname);
 	if (!auxdrv->driver.name)
 		return -ENOMEM;

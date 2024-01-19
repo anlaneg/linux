@@ -943,10 +943,12 @@ struct mlx5_ib_stage {
 	void (*cleanup)(struct mlx5_ib_dev *dev);
 };
 
+/*定义指定阶段的init,cleanup函数*/
 #define STAGE_CREATE(_stage, _init, _cleanup) \
 	.stage[_stage] = {.init = _init, .cleanup = _cleanup}
 
 struct mlx5_ib_profile {
+	/*定义各阶段*/
 	struct mlx5_ib_stage stage[MLX5_IB_STAGE_MAX];
 };
 

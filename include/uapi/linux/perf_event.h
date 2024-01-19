@@ -466,6 +466,7 @@ struct perf_event_attr {
 	__u32			bp_type;
 	union {
 		__u64		bp_addr;
+		/*kprobe要求的函数名称*/
 		__u64		kprobe_func; /* for perf_kprobe */
 		__u64		uprobe_path; /* for perf_uprobe */
 		__u64		config1; /* extension of config */
@@ -473,6 +474,7 @@ struct perf_event_attr {
 	union {
 		__u64		bp_len;
 		__u64		kprobe_addr; /* when kprobe_func == NULL */
+		/*kprobe要求的指定offset*/
 		__u64		probe_offset; /* for perf_[k,u]probe */
 		__u64		config2; /* extension of config1 */
 	};

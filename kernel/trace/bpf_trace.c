@@ -361,6 +361,7 @@ static const struct bpf_func_proto bpf_probe_write_user_proto = {
 	.arg3_type	= ARG_CONST_SIZE,
 };
 
+/*返回bpf_probe_write_user回调*/
 static const struct bpf_func_proto *bpf_get_probe_write_proto(void)
 {
 	if (!capable(CAP_SYS_ADMIN))
@@ -1396,6 +1397,7 @@ late_initcall(bpf_key_sig_kfuncs_init);
 static const struct bpf_func_proto *
 bpf_tracing_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 {
+	/*依据func_id获得对应的func_proto结构体*/
 	switch (func_id) {
 	case BPF_FUNC_map_lookup_elem:
 		return &bpf_map_lookup_elem_proto;

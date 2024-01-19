@@ -1741,11 +1741,11 @@ init_cifs(void)
 	if (rc)
 		goto out_cifs_swn_init;
 
-	rc = register_filesystem(&cifs_fs_type);
+	rc = register_filesystem(&cifs_fs_type);/*注册cifs*/
 	if (rc)
 		goto out_init_cifs_idmap;
 
-	rc = register_filesystem(&smb3_fs_type);
+	rc = register_filesystem(&smb3_fs_type);/*注册smb3*/
 	if (rc) {
 		unregister_filesystem(&cifs_fs_type);
 		goto out_init_cifs_idmap;

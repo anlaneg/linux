@@ -198,13 +198,14 @@ int open_obj_pinned(const char *path, bool quiet)
 	char *pname;
 	int fd = -1;
 
-	pname = strdup(path);
+	pname = strdup(path);/*复制路径名称*/
 	if (!pname) {
 		if (!quiet)
 			p_err("mem alloc failed");
 		goto out_ret;
 	}
 
+	/*向kernel请求此ebpf object 对应的fd*/
 	fd = bpf_obj_get(pname);
 	if (fd < 0) {
 		if (!quiet)
@@ -230,12 +231,14 @@ int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type)
 	if (fd < 0)
 		return -1;
 
+	/*取此fd对应的type*/
 	type = get_fd_type(fd);
 	if (type < 0) {
 		close(fd);
 		return type;
 	}
 	if (type != exp_type) {
+		/*此fd对应的path与期待的type不一致，报错*/
 		p_err("incorrect object type: %s", get_fd_type_name(type));
 		close(fd);
 		return -1;
@@ -258,9 +261,10 @@ int mount_bpffs_for_pin(const char *name)
 	}
 
 	strcpy(file, name);
-	dir = dirname(file);
+	dir = dirname(file);/*取此文件对应的目录*/
 
 	if (is_bpffs(dir))
+		/*此目录已是bpf文件系统*/
 		/* nothing to do if already mounted */
 		goto out_free;
 
@@ -270,6 +274,7 @@ int mount_bpffs_for_pin(const char *name)
 		goto out_free;
 	}
 
+	/*将此目录挂载bpf文件系统*/
 	err = mnt_fs(dir, "bpf", err_str, ERR_MAX_LEN);
 	if (err) {
 		err_str[ERR_MAX_LEN - 1] = '\0';
@@ -286,6 +291,7 @@ int do_pin_fd(int fd, const char *name)
 {
 	int err;
 
+	/*持载bpf文件系统*/
 	err = mount_bpffs_for_pin(name);
 	if (err)
 		return err;
@@ -305,6 +311,7 @@ int do_pin_any(int argc, char **argv, int (*get_fd)(int *, char ***))
 	if (!REQ_ARGS(3))
 		return -EINVAL;
 
+	/*依据参数拿到map的fd*/
 	fd = get_fd(&argc, &argv);
 	if (fd < 0)
 		return fd;
@@ -381,6 +388,7 @@ int get_fd_type(int fd)
 
 	snprintf(path, sizeof(path), "/proc/self/fd/%d", fd);
 
+	/*读取此link对应的target*/
 	n = readlink(path, buf, sizeof(buf));
 	if (n < 0) {
 		p_err("can't read link type: %s", strerror(errno));
@@ -391,7 +399,9 @@ int get_fd_type(int fd)
 		return -1;
 	}
 
+	/*依据返回值，确定object对应的type*/
 	if (strstr(buf, "bpf-map"))
+		/*对应的是map*/
 		return BPF_OBJ_MAP;
 	else if (strstr(buf, "bpf-prog"))
 		return BPF_OBJ_PROG;
@@ -479,14 +489,18 @@ static int do_build_table_cb(const char *fpath, const struct stat *sb,
 	if (typeflag != FTW_F)
 		goto out_ret;
 
+	/*获取此fpath对应的fd*/
 	fd = open_obj_pinned(fpath, true);
 	if (fd < 0)
 		goto out_ret;
 
+	/*取此fd对应的object类型*/
 	objtype = get_fd_type(fd);
 	if (objtype != build_fn_type)
+		/*不是我们关注的objtype,直接关闭fd*/
 		goto out_close;
 
+	/*取此object对应的属性*/
 	memset(&pinned_info, 0, sizeof(pinned_info));
 	if (bpf_prog_get_info_by_fd(fd, &pinned_info, &len))
 		goto out_close;
@@ -497,6 +511,7 @@ static int do_build_table_cb(const char *fpath, const struct stat *sb,
 		goto out_close;
 	}
 
+	/*记录object id与pathname的映射关系*/
 	err = hashmap__append(build_fn_table, pinned_info.id, path);
 	if (err) {
 		p_err("failed to append entry to hashmap for ID %u, path '%s': %s",
@@ -511,6 +526,7 @@ out_ret:
 	return err;
 }
 
+//构建此类型object id及path之间的映射关系
 int build_pinned_obj_table(struct hashmap *tab,
 			   enum bpf_obj_type type)
 {
@@ -520,18 +536,23 @@ int build_pinned_obj_table(struct hashmap *tab,
 	int nopenfd = 16;
 	int err = 0;
 
+	/*解析mnt文件*/
 	mntfile = setmntent("/proc/mounts", "r");
 	if (!mntfile)
 		return -1;
 
+	/*指明要构建的hashmap及要构建的object type*/
 	build_fn_table = tab;
 	build_fn_type = type;
 
+	/*自mntfile中读取mntent*/
 	while ((mntent = getmntent(mntfile))) {
-		char *path = mntent->mnt_dir;
+		char *path = mntent->mnt_dir;/*挂载点*/
 
 		if (strncmp(mntent->mnt_type, "bpf", 3) != 0)
+			/*跳过非bpf文件系统*/
 			continue;
+		/*针对此path下所有内容，调用do_build_table_cb,构建此类型object id及path之间的映射关系*/
 		err = nftw(path, do_build_table_cb, nopenfd, flags);
 		if (err)
 			break;
@@ -891,7 +912,7 @@ exit_free:
 
 static int map_fd_by_name(char *name, int **fds)
 {
-	unsigned int id = 0;
+	unsigned int id = 0/*自零开始遍历map*/;
 	int fd, nb_fds = 0;
 	void *tmp;
 	int err;
@@ -909,6 +930,7 @@ static int map_fd_by_name(char *name, int **fds)
 			return nb_fds;
 		}
 
+		/*通过map id拿到map对应的fd*/
 		fd = bpf_map_get_fd_by_id(id);
 		if (fd < 0) {
 			p_err("can't get map by id (%u): %s",
@@ -916,6 +938,7 @@ static int map_fd_by_name(char *name, int **fds)
 			goto err_close_fds;
 		}
 
+		/*通过map fd拿到map对应的info*/
 		err = bpf_map_get_info_by_fd(fd, &info, &len);
 		if (err) {
 			p_err("can't get map info (%u): %s",
@@ -923,12 +946,14 @@ static int map_fd_by_name(char *name, int **fds)
 			goto err_close_fd;
 		}
 
+		/*检查此map对应的名称是否为$name对应的map*/
 		if (strncmp(name, info.name, BPF_OBJ_NAME_LEN)) {
 			close(fd);
-			continue;
+			continue;/*不是，忽略*/
 		}
 
 		if (nb_fds > 0) {
+			/*扩展fd数组*/
 			tmp = realloc(*fds, (nb_fds + 1) * sizeof(int));
 			if (!tmp) {
 				p_err("failed to realloc");
@@ -936,7 +961,7 @@ static int map_fd_by_name(char *name, int **fds)
 			}
 			*fds = tmp;
 		}
-		(*fds)[nb_fds++] = fd;
+		(*fds)[nb_fds++] = fd;/*填充map对应的fd(容许有多个）*/
 	}
 
 err_close_fd:
@@ -947,6 +972,7 @@ err_close_fds:
 	return -1;
 }
 
+/*通过id,name,path方式获取bpf map对应的fd*/
 int map_parse_fds(int *argc, char ***argv, int **fds)
 {
 	if (is_prefix(**argv, "id")) {
@@ -962,6 +988,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 		}
 		NEXT_ARGP();
 
+		/*通过id查找对应的bpf map对应的fd*/
 		(*fds)[0] = bpf_map_get_fd_by_id(id);
 		if ((*fds)[0] < 0) {
 			p_err("get map by id (%u): %s", id, strerror(errno));
@@ -980,6 +1007,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 		}
 		NEXT_ARGP();
 
+		/*通过name查找对应的map fd(容许有多个）*/
 		return map_fd_by_name(name, fds);
 	} else if (is_prefix(**argv, "pinned")) {
 		char *path;
@@ -989,6 +1017,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 		path = **argv;
 		NEXT_ARGP();
 
+		/*通过pinned path获取对应的bpf map的fd*/
 		(*fds)[0] = open_obj_pinned_any(path, BPF_OBJ_MAP);
 		if ((*fds)[0] < 0)
 			return -1;
@@ -999,6 +1028,7 @@ int map_parse_fds(int *argc, char ***argv, int **fds)
 	return -1;
 }
 
+/*通过参数获得map对应的fd*/
 int map_parse_fd(int *argc, char ***argv)
 {
 	int *fds = NULL;
@@ -1036,6 +1066,7 @@ int map_parse_fd_and_info(int *argc, char ***argv, struct bpf_map_info *info,
 	if (fd < 0)
 		return -1;
 
+	/*通过map fd获取其对应的info*/
 	err = bpf_map_get_info_by_fd(fd, info, info_len);
 	if (err) {
 		p_err("can't get map info: %s", strerror(errno));

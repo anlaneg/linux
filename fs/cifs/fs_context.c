@@ -160,7 +160,7 @@ const struct fs_parameter_spec smb3_fs_parameters[] = {
 	fsparam_string("username", Opt_user),
 	fsparam_string("pass", Opt_pass),
 	fsparam_string("password", Opt_pass),
-	fsparam_string("ip", Opt_ip),
+	fsparam_string("ip", Opt_ip),/*ip地址*/
 	fsparam_string("addr", Opt_ip),
 	fsparam_string("domain", Opt_domain),
 	fsparam_string("dom", Opt_domain),

@@ -1394,6 +1394,7 @@ static void xs_data_ready(struct sock *sk)
 		 */
 		if (xprt->reestablish_timeout)
 			xprt->reestablish_timeout = 0;
+		/*入队，使之收发包*/
 		if (!test_and_set_bit(XPRT_SOCK_DATA_READY, &transport->sock_state))
 			queue_work(xprtiod_workqueue, &transport->recv_worker);
 	}
@@ -1881,7 +1882,7 @@ static int xs_local_finish_connecting(struct rpc_xprt *xprt,
 		xs_save_old_callbacks(transport, sk);
 
 		sk->sk_user_data = xprt;
-		sk->sk_data_ready = xs_data_ready;
+		sk->sk_data_ready = xs_data_ready;/*指明socket数据ready后处理*/
 		sk->sk_write_space = xs_udp_write_space;
 		sk->sk_state_change = xs_local_state_change;
 		sk->sk_error_report = xs_error_report;
@@ -2223,6 +2224,7 @@ static void xs_tcp_set_connect_timeout(struct rpc_xprt *xprt,
 	spin_unlock(&xprt->transport_lock);
 }
 
+/*处理到对端的连接*/
 static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 {
 	struct sock_xprt *transport = container_of(xprt, struct sock_xprt, xprt);
@@ -2304,6 +2306,7 @@ static void xs_tcp_setup_socket(struct work_struct *work)
 			       &transport->sock_state) ||
 	    !sock) {
 		xs_reset_transport(transport);
+		/*创建tcp socket*/
 		sock = xs_create_sock(xprt, transport, xs_addr(xprt)->sa_family,
 				      SOCK_STREAM, IPPROTO_TCP, true);
 		if (IS_ERR(sock)) {
@@ -2982,7 +2985,7 @@ static const struct rpc_timeout xs_tcp_default_timeout = {
  */
 static struct rpc_xprt *xs_setup_tcp(struct xprt_create *args)
 {
-	struct sockaddr *addr = args->dstaddr;
+	struct sockaddr *addr = args->dstaddr;/*目的地址*/
 	struct rpc_xprt *xprt;
 	struct sock_xprt *transport;
 	struct rpc_xprt *ret;
@@ -3012,8 +3015,10 @@ static struct rpc_xprt *xs_setup_tcp(struct xprt_create *args)
 	xprt->connect_timeout = xprt->timeout->to_initval *
 		(xprt->timeout->to_retries + 1);
 
+	/*指明数据处理worker*/
 	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn);
 	INIT_WORK(&transport->error_worker, xs_error_handle);
+	/*指明连接worker*/
 	INIT_DELAYED_WORK(&transport->connect_worker, xs_tcp_setup_socket);
 
 	switch (addr->sa_family) {
@@ -3179,9 +3184,9 @@ int init_socket_xprt(void)
 	if (!sunrpc_table_header)
 		sunrpc_table_header = register_sysctl_table(sunrpc_table);
 
-	xprt_register_transport(&xs_local_transport);
+	xprt_register_transport(&xs_local_transport);/*支持af_unix传输*/
 	xprt_register_transport(&xs_udp_transport);
-	xprt_register_transport(&xs_tcp_transport);
+	xprt_register_transport(&xs_tcp_transport);/*支持tcp传输*/
 	xprt_register_transport(&xs_bc_tcp_transport);
 
 	return 0;

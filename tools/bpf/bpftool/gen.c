@@ -64,6 +64,7 @@ static void get_obj_name(char *name, const char *file)
 	sanitize_identifier(name);
 }
 
+/*生成守护宏*/
 static void get_header_guard(char *guard, const char *obj_name, const char *suffix)
 {
 	int i;
@@ -73,6 +74,7 @@ static void get_header_guard(char *guard, const char *obj_name, const char *suff
 		guard[i] = toupper(guard[i]);
 }
 
+/*取map的名称*/
 static bool get_map_ident(const struct bpf_map *map, char *buf, size_t buf_sz)
 {
 	static const char *sfxs[] = { ".data", ".rodata", ".bss", ".kconfig" };
@@ -80,16 +82,17 @@ static bool get_map_ident(const struct bpf_map *map, char *buf, size_t buf_sz)
 	int i, n;
 
 	if (!bpf_map__is_internal(map)) {
-		snprintf(buf, buf_sz, "%s", name);
+		snprintf(buf, buf_sz, "%s", name);/*使用map名称*/
 		return true;
 	}
 
+	/*internal map情况*/
 	for  (i = 0, n = ARRAY_SIZE(sfxs); i < n; i++) {
 		const char *sfx = sfxs[i], *p;
 
 		p = strstr(name, sfx);
 		if (p) {
-			snprintf(buf, buf_sz, "%s", p + 1);
+			snprintf(buf, buf_sz, "%s", p + 1);/*丢弃掉'.'*/
 			sanitize_identifier(buf);
 			return true;
 		}
@@ -107,6 +110,7 @@ static bool get_datasec_ident(const char *sec_name, char *buf, size_t buf_sz)
 		const char *pfx = pfxs[i];
 
 		if (str_has_prefix(sec_name, pfx)) {
+			/*跳过'.'*/
 			snprintf(buf, buf_sz, "%s", sec_name + 1);
 			sanitize_identifier(buf);
 			return true;
@@ -116,6 +120,7 @@ static bool get_datasec_ident(const char *sec_name, char *buf, size_t buf_sz)
 	return false;
 }
 
+/*按格式输出字符串到stdout*/
 static void codegen_btf_dump_printf(void *ctx, const char *fmt, va_list args)
 {
 	vprintf(fmt, args);
@@ -141,6 +146,7 @@ static int codegen_datasec_def(struct bpf_object *obj,
 
 	printf("	struct %s__%s {\n", obj_name, sec_ident);
 	for (i = 0; i < vlen; i++, sec_var++) {
+		/*取变量*/
 		const struct btf_type *var = btf__type_by_id(btf, sec_var->type);
 		const char *var_name = btf__name_by_offset(btf, var->name_off);
 		DECLARE_LIBBPF_OPTS(btf_dump_emit_type_decl_opts, opts,
@@ -209,23 +215,27 @@ static int codegen_datasec_def(struct bpf_object *obj,
 	return 0;
 }
 
-static const struct btf_type *find_type_for_map(struct btf *btf, const char *map_ident)
+static const struct btf_type *find_type_for_map(struct btf *btf, const char *map_ident/*map标识*/)
 {
-	int n = btf__type_cnt(btf), i;
+	int n = btf__type_cnt(btf)/*类型数目*/, i;
 	char sec_ident[256];
 
 	for (i = 1; i < n; i++) {
+		/*取i号btf type*/
 		const struct btf_type *t = btf__type_by_id(btf, i);
 		const char *name;
 
 		if (!btf_is_datasec(t))
+			/*跳过非data section*/
 			continue;
 
+		/*取此类型名称*/
 		name = btf__str_by_offset(btf, t->name_off);
 		if (!get_datasec_ident(name, sec_ident, sizeof(sec_ident)))
 			continue;
 
 		if (strcmp(sec_ident, map_ident) == 0)
+			/*两者相等*/
 			return t;
 	}
 	return NULL;
@@ -234,9 +244,11 @@ static const struct btf_type *find_type_for_map(struct btf *btf, const char *map
 static bool is_internal_mmapable_map(const struct bpf_map *map, char *buf, size_t sz)
 {
 	if (!bpf_map__is_internal(map) || !(bpf_map__map_flags(map) & BPF_F_MMAPABLE))
+		/*跳过非internal map,非mmapable map*/
 		return false;
 
 	if (!get_map_ident(map, buf, sz))
+		/*取map名称失败，返回false*/
 		return false;
 
 	return true;
@@ -251,13 +263,16 @@ static int codegen_datasecs(struct bpf_object *obj, const char *obj_name)
 	char map_ident[256];
 	int err = 0;
 
+	/*初始化btf_dump*/
 	d = btf_dump__new(btf, codegen_btf_dump_printf, NULL, NULL);
 	if (!d)
 		return -errno;
 
+	/*遍历所有map*/
 	bpf_object__for_each_map(map, obj) {
 		/* only generate definitions for memory-mapped internal maps */
 		if (!is_internal_mmapable_map(map, map_ident, sizeof(map_ident)))
+			/*跳过internal,mmapable map*/
 			continue;
 
 		sec = find_type_for_map(btf, map_ident);
@@ -270,6 +285,7 @@ static int codegen_datasecs(struct bpf_object *obj, const char *obj_name)
 		 * accessible from user-space through BPF skeleton.
 		 */
 		if (!sec) {
+			/*sec未找到，输出空的结构体定义*/
 			printf("	struct %s__%s {\n", obj_name, map_ident);
 			printf("	} *%s;\n", map_ident);
 		} else {
@@ -393,14 +409,14 @@ static void codegen(const char *template, ...)
 	/* find out "baseline" indentation to skip */
 	while ((c = *src++)) {
 		if (c == '\t') {
-			skip_tabs++;
+			skip_tabs++;/*跳过的空格数*/
 		} else if (c == '\n') {
-			break;
+			break;/*遇到换行，跳出*/
 		} else {
 			p_err("unrecognized character at pos %td in template '%s': '%c'",
 			      src - template - 1, template, c);
 			free(s);
-			exit(-1);
+			exit(-1);/*遇到其它字符*/
 		}
 	}
 
@@ -408,6 +424,7 @@ static void codegen(const char *template, ...)
 		/* skip baseline indentation tabs */
 		for (n = skip_tabs; n > 0; n--, src++) {
 			if (*src != '\t') {
+				/*缩进不正确*/
 				p_err("not enough tabs at pos %td in template '%s'",
 				      src - template - 1, template);
 				free(s);
@@ -428,7 +445,7 @@ static void codegen(const char *template, ...)
 
 	/* print out using adjusted template */
 	va_start(args, template);
-	n = vprintf(s, args);
+	n = vprintf(s, args);/*格式化输出*/
 	va_end(args);
 
 	free(s);
@@ -529,6 +546,7 @@ static void codegen_asserts(struct bpf_object *obj, const char *obj_name)
 		");
 }
 
+/*生成attach,detach函数*/
 static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 {
 	struct bpf_program *prog;
@@ -536,6 +554,7 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 	bpf_object__for_each_program(prog, obj) {
 		const char *tp_name;
 
+		/*针对此obj中的一个prog生成attach函数，拿到其对应的prog_fd*/
 		codegen("\
 			\n\
 			\n\
@@ -558,9 +577,12 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 				printf("\tint fd = skel_raw_tracepoint_open(NULL, prog_fd);\n");
 			break;
 		default:
+			/*其它类型的prog暂不支持*/
 			printf("\tint fd = ((void)prog_fd, 0); /* auto-attach not supported */\n");
 			break;
 		}
+
+		/*返回对应的fd*/
 		codegen("\
 			\n\
 										    \n\
@@ -571,6 +593,7 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 			", bpf_program__name(prog));
 	}
 
+	/*生成obj attach函数*/
 	codegen("\
 		\n\
 									    \n\
@@ -581,6 +604,7 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 									    \n\
 		", obj_name);
 
+	/*obj attach函数中遍历调用每个子程序的attach函数*/
 	bpf_object__for_each_program(prog, obj) {
 		codegen("\
 			\n\
@@ -588,6 +612,7 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 			", obj_name, bpf_program__name(prog));
 	}
 
+	/*仅在所有子程序的attach函数均成功，才返回成功*/
 	codegen("\
 		\n\
 			return ret < 0 ? ret : 0;			    \n\
@@ -598,6 +623,7 @@ static void codegen_attach_detach(struct bpf_object *obj, const char *obj_name)
 		{							    \n\
 		", obj_name);
 
+	/*obj的detach针对所有子程序的fd,调用skel_closenz*/
 	bpf_object__for_each_program(prog, obj) {
 		codegen("\
 			\n\
@@ -686,6 +712,7 @@ static int gen_trace(struct bpf_object *obj, const char *obj_name, const char *h
 
 	codegen_destroy(obj, obj_name);
 
+	/*生成${obj_name}__open函数，1。申请skel结构体*/
 	codegen("\
 		\n\
 		static inline struct %1$s *				    \n\
@@ -699,6 +726,8 @@ static int gen_trace(struct bpf_object *obj, const char *obj_name, const char *h
 			skel->ctx.sz = (void *)&skel->links - (void *)skel; \n\
 		",
 		obj_name, opts.data_sz);
+
+	/*2。针对obj中所有map,调用skel_prep_map_data*/
 	bpf_object__for_each_map(map, obj) {
 		const void *mmap_data = NULL;
 		size_t mmap_size = 0;
@@ -803,6 +832,7 @@ static int gen_trace(struct bpf_object *obj, const char *obj_name, const char *h
 
 	codegen_asserts(obj, obj_name);
 
+	/*生成守护宏结尾*/
 	codegen("\
 		\n\
 									    \n\
@@ -905,6 +935,7 @@ codegen_progs_skeleton(struct bpf_object *obj, size_t prog_cnt, bool populate_li
 
 static int do_skeleton(int argc, char **argv)
 {
+	/*保存守护宏*/
 	char header_guard[MAX_OBJ_NAME_LEN + sizeof("__SKEL_H__")];
 	size_t map_cnt = 0, prog_cnt = 0, file_sz, mmap_sz;
 	DECLARE_LIBBPF_OPTS(bpf_object_open_opts, opts);
@@ -919,16 +950,18 @@ static int do_skeleton(int argc, char **argv)
 	struct stat st;
 
 	if (!REQ_ARGS(1)) {
+		/*参数过少，报错*/
 		usage();
 		return -1;
 	}
-	file = GET_ARG();
+	file = GET_ARG();/*文件名称*/
 
 	while (argc) {
 		if (!REQ_ARGS(2))
 			return -1;
 
 		if (is_prefix(*argv, "name")) {
+			/*命令以name开头*/
 			NEXT_ARG();
 
 			if (obj_name[0] != '\0') {
@@ -936,9 +969,11 @@ static int do_skeleton(int argc, char **argv)
 				return -1;
 			}
 
+			/*取obj_name*/
 			strncpy(obj_name, *argv, MAX_OBJ_NAME_LEN - 1);
 			obj_name[MAX_OBJ_NAME_LEN - 1] = '\0';
 		} else {
+			/*遇到不认识的参数*/
 			p_err("unknown arg %s", *argv);
 			return -1;
 		}
@@ -951,30 +986,36 @@ static int do_skeleton(int argc, char **argv)
 		return -1;
 	}
 
+	/*文件必须存在*/
 	if (stat(file, &st)) {
 		p_err("failed to stat() %s: %s", file, strerror(errno));
 		return -1;
 	}
-	file_sz = st.st_size;
+	file_sz = st.st_size;/*文件大小*/
 	mmap_sz = roundup(file_sz, sysconf(_SC_PAGE_SIZE));
+
+	/*打开此文件*/
 	fd = open(file, O_RDONLY);
 	if (fd < 0) {
 		p_err("failed to open() %s: %s", file, strerror(errno));
 		return -1;
 	}
+
+	/*映射fd到内存*/
 	obj_data = mmap(NULL, mmap_sz, PROT_READ, MAP_PRIVATE, fd, 0);
 	if (obj_data == MAP_FAILED) {
 		obj_data = NULL;
 		p_err("failed to mmap() %s: %s", file, strerror(errno));
 		goto out;
 	}
+	/*获取obj名称*/
 	if (obj_name[0] == '\0')
 		get_obj_name(obj_name, file);
 	opts.object_name = obj_name;
 	if (verifier_logs)
 		/* log_level1 + log_level2 + stats, but not stable UAPI */
 		opts.kernel_log_level = 1 + 2 + 4;
-	obj = bpf_object__open_mem(obj_data, file_sz, &opts);
+	obj = bpf_object__open_mem(obj_data/*映射内存*/, file_sz/*文件大小*/, &opts);
 	if (!obj) {
 		char err_buf[256];
 
@@ -986,18 +1027,22 @@ static int do_skeleton(int argc, char **argv)
 
 	bpf_object__for_each_map(map, obj) {
 		if (!get_map_ident(map, ident, sizeof(ident))) {
+			/*获取map名称失败*/
 			p_err("ignoring unrecognized internal map '%s'...",
 			      bpf_map__name(map));
 			continue;
 		}
-		map_cnt++;
+		map_cnt++;/*对obj中的所有map进行计数*/
 	}
 	bpf_object__for_each_program(prog, obj) {
-		prog_cnt++;
+		prog_cnt++;/*对obj中所有prog进行计数*/
 	}
 
+	/*生成守护宏*/
 	get_header_guard(header_guard, obj_name, "SKEL_H");
 	if (use_loader) {
+		/*直接添加头文件：<bpf/skel_internal.h>*/
+		/*生成守护宏，生成obj_name对应的结构体，添加ctx成员*/
 		codegen("\
 		\n\
 		/* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */   \n\
@@ -1013,6 +1058,7 @@ static int do_skeleton(int argc, char **argv)
 		obj_name, header_guard
 		);
 	} else {
+		/*生成守护宏，生成obj_name的结构体，添加obj,skeleton成员*/
 		codegen("\
 		\n\
 		/* SPDX-License-Identifier: (LGPL-2.1 OR BSD-2-Clause) */   \n\
@@ -1033,44 +1079,49 @@ static int do_skeleton(int argc, char **argv)
 		);
 	}
 
+	/*有map，定义出相应的map变量*/
 	if (map_cnt) {
-		printf("\tstruct {\n");
+		printf("\tstruct {\n");/*匿名结构体*/
 		bpf_object__for_each_map(map, obj) {
+			/*获得map名称*/
 			if (!get_map_ident(map, ident, sizeof(ident)))
 				continue;
 			if (use_loader)
-				printf("\t\tstruct bpf_map_desc %s;\n", ident);
+				printf("\t\tstruct bpf_map_desc %s;\n", ident);/*生成此map对应的desc*/
 			else
-				printf("\t\tstruct bpf_map *%s;\n", ident);
+				printf("\t\tstruct bpf_map *%s;\n", ident);/*生成bpf_map成员*/
 		}
-		printf("\t} maps;\n");
+		printf("\t} maps;\n");/*定义maps变量*/
 	}
 
+	/*有多个prog，定义出相应的prog变量*/
 	if (prog_cnt) {
-		printf("\tstruct {\n");
+		printf("\tstruct {\n");/*匿名结构体*/
 		bpf_object__for_each_program(prog, obj) {
 			if (use_loader)
 				printf("\t\tstruct bpf_prog_desc %s;\n",
-				       bpf_program__name(prog));
+				       bpf_program__name(prog));/*生成此prog对应的desc*/
 			else
 				printf("\t\tstruct bpf_program *%s;\n",
-				       bpf_program__name(prog));
+				       bpf_program__name(prog));/*生成prog变量*/
 		}
-		printf("\t} progs;\n");
-		printf("\tstruct {\n");
+		printf("\t} progs;\n");/*定义progs变量*/
+
+		printf("\tstruct {\n");/*匿名结构体*/
 		bpf_object__for_each_program(prog, obj) {
 			if (use_loader)
 				printf("\t\tint %s_fd;\n",
-				       bpf_program__name(prog));
+				       bpf_program__name(prog));/*定义此prog对应的fd*/
 			else
 				printf("\t\tstruct bpf_link *%s;\n",
-				       bpf_program__name(prog));
+				       bpf_program__name(prog));/*定义此prog对应的link*/
 		}
-		printf("\t} links;\n");
+		printf("\t} links;\n");/*定义link变量*/
 	}
 
 	btf = bpf_object__btf(obj);
 	if (btf) {
+		/*此obj包含了btf,生成此map相关的btf*/
 		err = codegen_datasecs(obj, obj_name);
 		if (err)
 			goto out;
@@ -1080,6 +1131,7 @@ static int do_skeleton(int argc, char **argv)
 		goto out;
 	}
 
+	/*非loader情况下处理*/
 	codegen("\
 		\n\
 									    \n\
@@ -1179,6 +1231,7 @@ static int do_skeleton(int argc, char **argv)
 		obj_name
 	);
 
+	/*创建skeleton,生成bpf_object_skeleton结构体*/
 	codegen("\
 		\n\
 									    \n\
@@ -1203,9 +1256,12 @@ static int do_skeleton(int argc, char **argv)
 		obj_name
 	);
 
+	/*生成map信息*/
 	codegen_maps_skeleton(obj, map_cnt, true /*mmaped*/);
+	/*生成prog信息*/
 	codegen_progs_skeleton(obj, prog_cnt, true /*populate_links*/);
 
+	/*设置bpf程序字节码*/
 	codegen("\
 		\n\
 									    \n\
@@ -1226,7 +1282,7 @@ static int do_skeleton(int argc, char **argv)
 		, file_sz, obj_name);
 
 	/* embed contents of BPF object file */
-	print_hex(obj_data, file_sz);
+	print_hex(obj_data, file_sz);/**/
 
 	codegen("\
 		\n\
@@ -1579,6 +1635,7 @@ static int do_object(int argc, char **argv)
 		return -1;
 	}
 
+	/*参数为output_file*/
 	output_file = GET_ARG();
 
 	linker = bpf_linker__new(output_file, NULL);
@@ -1588,8 +1645,10 @@ static int do_object(int argc, char **argv)
 	}
 
 	while (argc) {
+		/*后面的参数全为input file*/
 		file = GET_ARG();
 
+		/*将此input file加入到linker中*/
 		err = bpf_linker__add_file(linker, file, NULL);
 		if (err) {
 			p_err("failed to link '%s': %s (%d)", file, strerror(errno), errno);

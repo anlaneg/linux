@@ -48,14 +48,17 @@ void hashmap__init(struct hashmap *map, hashmap_hash_fn hash_fn,
 	map->sz = 0;
 }
 
-struct hashmap *hashmap__new(hashmap_hash_fn hash_fn,
-			     hashmap_equal_fn equal_fn,
-			     void *ctx)
+struct hashmap *hashmap__new(hashmap_hash_fn hash_fn/*hash生成函数*/,
+			     hashmap_equal_fn equal_fn/*hash比对函数*/,
+			     void *ctx/*用户函数私有变量*/)
 {
+	/*申请hashmap结构体*/
 	struct hashmap *map = malloc(sizeof(struct hashmap));
 
 	if (!map)
 		return ERR_PTR(-ENOMEM);
+
+	/*初始化hashmap*/
 	hashmap__init(map, hash_fn, equal_fn, ctx);
 	return map;
 }

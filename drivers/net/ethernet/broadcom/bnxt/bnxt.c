@@ -13791,6 +13791,7 @@ static int bnxt_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	bnxt_dl_fw_reporters_create(bp);
 
+	/*初始化rdma设备*/
 	bnxt_rdma_aux_device_init(bp);
 
 	bnxt_print_device_info(bp);

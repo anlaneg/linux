@@ -103,6 +103,7 @@ int build_obj_refs_table(struct hashmap **map, enum bpf_obj_type type)
 	int err, ret, fd = -1, i;
 	libbpf_print_fn_t default_print;
 
+	/*创建hashmap*/
 	*map = hashmap__new(hash_fn_for_key_as_id, equal_fn_for_key_as_id, NULL);
 	if (IS_ERR(*map)) {
 		p_err("failed to create hashmap for PID references");
@@ -121,9 +122,9 @@ int build_obj_refs_table(struct hashmap **map, enum bpf_obj_type type)
 	/* we don't want output polluted with libbpf errors if bpf_iter is not
 	 * supported
 	 */
-	default_print = libbpf_set_print(libbpf_print_none);
+	default_print = libbpf_set_print(libbpf_print_none/*空输出*/);
 	err = pid_iter_bpf__load(skel);
-	libbpf_set_print(default_print);
+	libbpf_set_print(default_print);/*还原输出*/
 	if (err) {
 		/* too bad, kernel doesn't support BPF iterators yet */
 		err = 0;

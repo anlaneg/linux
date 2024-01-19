@@ -534,6 +534,7 @@ static void print_prog_plain(struct bpf_prog_info *info, int fd)
 	print_prog_header_plain(info, fd);
 
 	if (info->load_time) {
+		/*加载时间*/
 		char buf[32];
 
 		print_boot_time(info->load_time, buf, sizeof(buf));
@@ -554,9 +555,11 @@ static void print_prog_plain(struct bpf_prog_info *info, int fd)
 		printf("  memlock %sB", memlock);
 	free(memlock);
 
+	/*对应的map id*/
 	if (info->nr_map_ids)
 		show_prog_maps(fd, info->nr_map_ids);
 
+	/*显示其pin的路径*/
 	if (!hashmap__empty(prog_table)) {
 		struct hashmap_entry *entry;
 
@@ -580,6 +583,7 @@ static int show_prog(int fd)
 	__u32 len = sizeof(info);
 	int err;
 
+	/*通过fd获取此bpf prog对应的属性*/
 	err = bpf_prog_get_info_by_fd(fd, &info, &len);
 	if (err) {
 		p_err("can't get prog info: %s", strerror(errno));
@@ -589,6 +593,7 @@ static int show_prog(int fd)
 	if (json_output)
 		print_prog_json(&info, fd);
 	else
+		/*显示此prog对应的属性*/
 		print_prog_plain(&info, fd);
 
 	return 0;
@@ -635,14 +640,17 @@ static int do_show(int argc, char **argv)
 	int fd;
 
 	if (show_pinned) {
+		/*创建一个prog_table(hashtable)*/
 		prog_table = hashmap__new(hash_fn_for_key_as_id,
 					  equal_fn_for_key_as_id, NULL);
 		if (IS_ERR(prog_table)) {
 			p_err("failed to create hashmap for pinned paths");
 			return -1;
 		}
+		/*构建ebpf程序对应的hash table*/
 		build_pinned_obj_table(prog_table, BPF_OBJ_PROG);
 	}
+	/*构造此table的目的？*/
 	build_obj_refs_table(&refs_table, BPF_OBJ_PROG);
 
 	if (argc == 2)
@@ -654,6 +662,7 @@ static int do_show(int argc, char **argv)
 	if (json_output)
 		jsonw_start_array(json_wtr);
 	while (true) {
+		/*获取下一个prog id*/
 		err = bpf_prog_get_next_id(id, &id);
 		if (err) {
 			if (errno == ENOENT) {
@@ -666,6 +675,7 @@ static int do_show(int argc, char **argv)
 			break;
 		}
 
+		/*取此id对应的prog fd*/
 		fd = bpf_prog_get_fd_by_id(id);
 		if (fd < 0) {
 			if (errno == ENOENT)
@@ -676,6 +686,7 @@ static int do_show(int argc, char **argv)
 			break;
 		}
 
+		/*通过此fd显示此prog对应的属性*/
 		err = show_prog(fd);
 		close(fd);
 		if (err)
@@ -2466,7 +2477,7 @@ static int do_help(int argc, char **argv)
 }
 
 static const struct cmd cmds[] = {
-	{ "show",	do_show },
+	{ "show",	do_show },/*显示所有prog对应的属性*/
 	{ "list",	do_show },
 	{ "help",	do_help },
 	{ "dump",	do_dump },
@@ -2481,7 +2492,9 @@ static const struct cmd cmds[] = {
 	{ 0 }
 };
 
+/*bpftool prog命令实现*/
 int do_prog(int argc, char **argv)
 {
+	/*prog命令有子命令，检查子命令*/
 	return cmd_select(cmds, argc, argv, do_help);
 }

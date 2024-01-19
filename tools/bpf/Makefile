@@ -109,9 +109,11 @@ install: $(PROGS) bpftool_install
 	$(call QUIET_INSTALL, bpf_asm)
 	$(Q)$(INSTALL) $(OUTPUT)bpf_asm $(DESTDIR)$(prefix)/bin/bpf_asm
 
+#进入到bpftool目录进行编译，target为默认，当前这个target仅负责目录创建
 bpftool:
 	$(call descend,bpftool)
 
+#进入到abpftool目录进行编译，target为install,当前这个target负责编译并安装
 bpftool_install:
 	$(call descend,bpftool,install)
 

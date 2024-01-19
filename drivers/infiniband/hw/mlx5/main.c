@@ -2482,6 +2482,7 @@ static struct attribute *mlx5_class_attributes[] = {
 	NULL,
 };
 
+/*mlx5设备属性组*/
 static const struct attribute_group mlx5_attr_group = {
 	.attrs = mlx5_class_attributes,
 };
@@ -4022,6 +4023,7 @@ static int mlx5_ib_stage_ib_reg_init(struct mlx5_ib_dev *dev)
 	const char *name;
 
 	if (!mlx5_lag_is_active(dev->mdev))
+		/*lag未使能情况下，传入的网络设备名称*/
 		name = "mlx5_%d";
 	else
 		name = "mlx5_bond_%d";
@@ -4119,6 +4121,7 @@ void __mlx5_ib_remove(struct mlx5_ib_dev *dev,
 
 	/* Number of stages to cleanup */
 	while (stage) {
+		/*各个阶段反向执行一遍*/
 		stage--;
 		if (profile->stage[stage].cleanup)
 			profile->stage[stage].cleanup(dev);
@@ -4136,6 +4139,7 @@ int __mlx5_ib_add(struct mlx5_ib_dev *dev,
 
 	dev->profile = profile;
 
+	/*逐个阶段正向执行一遍*/
 	for (i = 0; i < MLX5_IB_STAGE_MAX; i++) {
 		if (profile->stage[i].init) {
 			err = profile->stage[i].init(dev);
@@ -4207,7 +4211,7 @@ static const struct mlx5_ib_profile pf_profile = {
 		     mlx5_ib_devx_init,
 		     mlx5_ib_devx_cleanup),
 	STAGE_CREATE(MLX5_IB_STAGE_IB_REG,
-		     mlx5_ib_stage_ib_reg_init,
+		     mlx5_ib_stage_ib_reg_init,/*注册ib设备*/
 		     mlx5_ib_stage_ib_reg_cleanup),
 	STAGE_CREATE(MLX5_IB_STAGE_POST_IB_REG_UMR,
 		     mlx5_ib_stage_post_ib_reg_umr_init,
@@ -4364,11 +4368,13 @@ static int mlx5r_probe(struct auxiliary_device *adev,
 	dev->mdev = mdev;
 	dev->num_ports = num_ports;
 
+	/*按link laye确定profile*/
 	if (ll == IB_LINK_LAYER_ETHERNET && !mlx5_get_roce_state(mdev))
 		profile = &raw_eth_profile;
 	else
 		profile = &pf_profile;
 
+	/*按照profile添加此ib设备*/
 	ret = __mlx5_ib_add(dev, profile);
 	if (ret) {
 		kfree(dev->port);
@@ -4440,6 +4446,7 @@ static int __init mlx5_ib_init(void)
 	ret = auxiliary_driver_register(&mlx5r_mp_driver);
 	if (ret)
 		goto mp_err;
+	/*注册辅助驱动*/
 	ret = auxiliary_driver_register(&mlx5r_driver);
 	if (ret)
 		goto drv_err;

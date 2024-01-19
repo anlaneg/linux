@@ -112,7 +112,7 @@ struct nfs_fs_context {
 	struct {
 		union {
 			struct sockaddr	address;
-			struct sockaddr_storage	_address;
+			struct sockaddr_storage	_address;/*指明server端地址*/
 		};
 		size_t			addrlen;
 		char			*hostname;

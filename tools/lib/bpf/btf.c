@@ -33,7 +33,7 @@ struct btf {
 	void *raw_data;
 	/* raw BTF data in non-native endianness */
 	void *raw_data_swapped;
-	__u32 raw_size;
+	__u32 raw_size;/*raw_data对应的内存大小*/
 	/* whether target endianness differs from the native one */
 	bool swapped_endian;
 
@@ -76,7 +76,7 @@ struct btf {
 	 */
 	struct btf_header *hdr;
 
-	void *types_data;
+	void *types_data;/*指向type section数据*/
 	size_t types_data_cap; /* used size stored in hdr->type_len */
 
 	/* type ID to `struct btf_type *` lookup index
@@ -84,13 +84,13 @@ struct btf {
 	 *   - for base BTF it's type [1];
 	 *   - for split BTF it's the first non-base BTF type.
 	 */
-	__u32 *type_offs;
+	__u32 *type_offs;/*记录各type对应的offset*/
 	size_t type_offs_cap;
 	/* number of types in this BTF instance:
 	 *   - doesn't include special [0] void type;
 	 *   - for split BTF counts number of types added on top of base BTF.
 	 */
-	__u32 nr_types;
+	__u32 nr_types;/*type数目*/
 	/* if not NULL, points to the base BTF on top of which the current
 	 * split BTF is based
 	 */
@@ -110,7 +110,7 @@ struct btf {
 	 * whether BTF is in a modifiable state (strs_set is used) or not
 	 * (strs_data points inside raw_data)
 	 */
-	void *strs_data;
+	void *strs_data;/*指向string section数据*/
 	/* a set of unique strings */
 	struct strset *strs_set;
 	/* whether strings are already deduplicated */
@@ -138,17 +138,19 @@ static inline __u64 ptr_to_u64(const void *ptr)
  * On success, memory pointer to the beginning of unused memory is returned.
  * On error, NULL is returned.
  */
-void *libbpf_add_mem(void **data, size_t *cap_cnt, size_t elem_sz,
-		     size_t cur_cnt, size_t max_cnt, size_t add_cnt)
+void *libbpf_add_mem(void **data, size_t *cap_cnt/*当前容量count*/, size_t elem_sz/*每个elem的大小*/,
+		     size_t cur_cnt/*当前count*/, size_t max_cnt/*容许的最大count*/, size_t add_cnt/*要增加的count*/)
 {
 	size_t new_cnt;
 	void *new_data;
 
 	if (cur_cnt + add_cnt <= *cap_cnt)
+		/*足够分配，直接返回起始地址*/
 		return *data + cur_cnt * elem_sz;
 
 	/* requested more than the set limit */
 	if (cur_cnt + add_cnt > max_cnt)
+		/*不足分配，且已超过上限，直接返回NULL*/
 		return NULL;
 
 	new_cnt = *cap_cnt;
@@ -199,6 +201,7 @@ static int btf_add_type_idx_entry(struct btf *btf, __u32 type_off)
 {
 	__u32 *p;
 
+	/*记录此type对应的offset*/
 	p = btf_add_type_offs_mem(btf, 1);
 	if (!p)
 		return -ENOMEM;
@@ -223,41 +226,47 @@ static int btf_parse_hdr(struct btf *btf)
 	__u32 meta_left;
 
 	if (btf->raw_size < sizeof(struct btf_header)) {
+		/*raw size远小于btf_header*/
 		pr_debug("BTF header not found\n");
 		return -EINVAL;
 	}
 
 	if (hdr->magic == bswap_16(BTF_MAGIC)) {
-		btf->swapped_endian = true;
+		btf->swapped_endian = true;/*magic匹配，当前为大端*/
 		if (bswap_32(hdr->hdr_len) != sizeof(struct btf_header)) {
 			pr_warn("Can't load BTF with non-native endianness due to unsupported header length %u\n",
 				bswap_32(hdr->hdr_len));
 			return -ENOTSUP;
 		}
-		btf_bswap_hdr(hdr);
+		btf_bswap_hdr(hdr);/*大小端不一致，修改raw_data*/
 	} else if (hdr->magic != BTF_MAGIC) {
+		/*magic不匹配*/
 		pr_debug("Invalid BTF magic: %x\n", hdr->magic);
 		return -EINVAL;
 	}
 
 	if (btf->raw_size < hdr->hdr_len) {
+		/*raw_size比hdr_len小*/
 		pr_debug("BTF header len %u larger than data size %u\n",
 			 hdr->hdr_len, btf->raw_size);
 		return -EINVAL;
 	}
 
+	/*meta数据长度*/
 	meta_left = btf->raw_size - hdr->hdr_len;
 	if (meta_left < (long long)hdr->str_off + hdr->str_len) {
 		pr_debug("Invalid BTF total size: %u\n", btf->raw_size);
 		return -EINVAL;
 	}
 
+	/*type与string两个段有重叠*/
 	if ((long long)hdr->type_off + hdr->type_len > hdr->str_off) {
 		pr_debug("Invalid BTF data sections layout: type data at %u + %u, strings data at %u + %u\n",
 			 hdr->type_off, hdr->type_len, hdr->str_off, hdr->str_len);
 		return -EINVAL;
 	}
 
+	/*type大小必须按4字节对齐*/
 	if (hdr->type_off % 4) {
 		pr_debug("BTF type section is not aligned to 4 bytes\n");
 		return -EINVAL;
@@ -269,12 +278,15 @@ static int btf_parse_hdr(struct btf *btf)
 static int btf_parse_str_sec(struct btf *btf)
 {
 	const struct btf_header *hdr = btf->hdr;
-	const char *start = btf->strs_data;
-	const char *end = start + btf->hdr->str_len;
+	const char *start = btf->strs_data;/*string section起始*/
+	const char *end = start + btf->hdr->str_len;/*string section终了*/
 
 	if (btf->base_btf && hdr->str_len == 0)
+		/*如已指明base_btf,且str_len为0，则直接返回*/
 		return 0;
+
 	if (!hdr->str_len || hdr->str_len - 1 > BTF_MAX_STR_OFFSET || end[-1]) {
+		/*string section长度为0*/
 		pr_debug("Invalid BTF string section\n");
 		return -EINVAL;
 	}
@@ -285,6 +297,7 @@ static int btf_parse_str_sec(struct btf *btf)
 	return 0;
 }
 
+/*依据类型确认其对应的字节大小*/
 static int btf_type_size(const struct btf_type *t)
 {
 	const int base_size = sizeof(struct btf_type);
@@ -413,13 +426,13 @@ static int btf_bswap_type_rest(struct btf_type *t)
 static int btf_parse_type_sec(struct btf *btf)
 {
 	struct btf_header *hdr = btf->hdr;
-	void *next_type = btf->types_data;
-	void *end_type = next_type + hdr->type_len;
+	void *next_type = btf->types_data;/*type section起始*/
+	void *end_type = next_type + hdr->type_len;/*type section终了*/
 	int err, type_size;
 
 	while (next_type + sizeof(struct btf_type) <= end_type) {
 		if (btf->swapped_endian)
-			btf_bswap_type_base(next_type);
+			btf_bswap_type_base(next_type);/*对type进行字节序调整*/
 
 		type_size = btf_type_size(next_type);
 		if (type_size < 0)
@@ -429,15 +442,17 @@ static int btf_parse_type_sec(struct btf *btf)
 			return -EINVAL;
 		}
 
+		/*对type剩余的内容进行字节序调整*/
 		if (btf->swapped_endian && btf_bswap_type_rest(next_type))
 			return -EINVAL;
 
+		/*增加此type*/
 		err = btf_add_type_idx_entry(btf, next_type - btf->types_data);
 		if (err)
 			return err;
 
 		next_type += type_size;
-		btf->nr_types++;
+		btf->nr_types++;/*type数目增加*/
 	}
 
 	if (next_type != end_type) {
@@ -878,30 +893,33 @@ static struct btf *btf_new(const void *data, __u32 size, struct btf *base_btf)
 	btf->start_str_off = 0;
 	btf->fd = -1;
 
+	/*如提供base_btf，则设置*/
 	if (base_btf) {
 		btf->base_btf = base_btf;
 		btf->start_id = btf__type_cnt(base_btf);
 		btf->start_str_off = base_btf->hdr->str_len;
 	}
 
+	/*申请size大小内存raw_data*/
 	btf->raw_data = malloc(size);
 	if (!btf->raw_data) {
 		err = -ENOMEM;
 		goto done;
 	}
+	/*将data写入到raw_data*/
 	memcpy(btf->raw_data, data, size);
 	btf->raw_size = size;
 
-	btf->hdr = btf->raw_data;
-	err = btf_parse_hdr(btf);
+	btf->hdr = btf->raw_data;/*初始化hdr指向raw_data*/
+	err = btf_parse_hdr(btf);/*完成btf header校验*/
 	if (err)
 		goto done;
 
 	btf->strs_data = btf->raw_data + btf->hdr->hdr_len + btf->hdr->str_off;
 	btf->types_data = btf->raw_data + btf->hdr->hdr_len + btf->hdr->type_off;
 
-	err = btf_parse_str_sec(btf);
-	err = err ?: btf_parse_type_sec(btf);
+	err = btf_parse_str_sec(btf);/*string sections校验*/
+	err = err ?: btf_parse_type_sec(btf);/*type section集息收集*/
 	if (err)
 		goto done;
 
@@ -944,6 +962,7 @@ static struct btf *btf_parse_elf(const char *path, struct btf *base_btf,
 
 	err = -LIBBPF_ERRNO__FORMAT;
 
+	/*按elf文件进行解析*/
 	elf = elf_begin(fd, ELF_C_READ, NULL);
 	if (!elf) {
 		pr_warn("failed to open %s as ELF file\n", path);
@@ -1066,6 +1085,7 @@ static struct btf *btf_parse_raw(const char *path, struct btf *base_btf)
 	int err = 0;
 	long sz;
 
+	/*打开path对应的文件*/
 	f = fopen(path, "rb");
 	if (!f) {
 		err = -errno;
@@ -1077,6 +1097,8 @@ static struct btf *btf_parse_raw(const char *path, struct btf *base_btf)
 		err = -EIO;
 		goto err_out;
 	}
+
+	/*比对path中指明的magic*/
 	if (magic != BTF_MAGIC && magic != bswap_16(BTF_MAGIC)) {
 		/* definitely not a raw BTF */
 		err = -EPROTO;
@@ -1088,11 +1110,12 @@ static struct btf *btf_parse_raw(const char *path, struct btf *base_btf)
 		err = -errno;
 		goto err_out;
 	}
-	sz = ftell(f);
+	sz = ftell(f);/*跳到文件结尾后，获知文件大小*/
 	if (sz < 0) {
 		err = -errno;
 		goto err_out;
 	}
+
 	/* rewind to the start */
 	if (fseek(f, 0, SEEK_SET)) {
 		err = -errno;
@@ -1105,6 +1128,8 @@ static struct btf *btf_parse_raw(const char *path, struct btf *base_btf)
 		err = -ENOMEM;
 		goto err_out;
 	}
+
+	/*将文件内容全部读入到data中*/
 	if (fread(data, 1, sz, f) < sz) {
 		err = -EIO;
 		goto err_out;
@@ -1117,7 +1142,7 @@ err_out:
 	free(data);
 	if (f)
 		fclose(f);
-	return err ? ERR_PTR(err) : btf;
+	return err ? ERR_PTR(err) : btf;/*构造btf成功*/
 }
 
 struct btf *btf__parse_raw(const char *path)
@@ -1359,6 +1384,7 @@ struct btf *btf_get_from_fd(int btf_fd, struct btf *base_btf)
 	if (!ptr)
 		return ERR_PTR(-ENOMEM);
 
+	/*通过btf id获得btf info*/
 	memset(&btf_info, 0, sizeof(btf_info));
 	btf_info.btf = ptr_to_u64(ptr);
 	btf_info.btf_size = last_size;
@@ -1400,6 +1426,7 @@ struct btf *btf__load_from_kernel_by_id_split(__u32 id, struct btf *base_btf)
 	struct btf *btf;
 	int btf_fd;
 
+	/*通过btf id获取并构造btf*/
 	btf_fd = bpf_btf_get_fd_by_id(id);
 	if (btf_fd < 0)
 		return libbpf_err_ptr(-errno);
@@ -4785,21 +4812,24 @@ struct btf *btf__load_vmlinux_btf(void)
 	struct btf *btf;
 	int i, err;
 
-	uname(&buf);
+	uname(&buf);/*取当前kernel版本*/
 
 	for (i = 0; i < ARRAY_SIZE(locations); i++) {
+		/*构造path*/
 		snprintf(path, PATH_MAX, locations[i], buf.release);
 
+		/*在当前目录访问此path*/
 		if (faccessat(AT_FDCWD, path, R_OK, AT_EACCESS))
-			continue;
+			continue;/*path不存在，尝试下一个*/
 
+		/*解析此path*/
 		btf = btf__parse(path, NULL);
 		err = libbpf_get_error(btf);
 		pr_debug("loading kernel BTF '%s': %d\n", path, err);
 		if (err)
-			continue;
+			continue;/*解析出错，尝试下一个*/
 
-		return btf;
+		return btf;/*解析成功，返回*/
 	}
 
 	pr_warn("failed to find valid kernel BTF\n");
@@ -4812,6 +4842,7 @@ struct btf *btf__load_module_btf(const char *module_name, struct btf *vmlinux_bt
 {
 	char path[80];
 
+	/*构造模块名称*/
 	snprintf(path, sizeof(path), "/sys/kernel/btf/%s", module_name);
 	return btf__parse_split(path, vmlinux_btf);
 }

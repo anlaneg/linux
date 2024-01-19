@@ -72,6 +72,7 @@ libdir_relative_SQ = $(subst ','\'',$(libdir_relative))
 OBJ		= $@
 N		=
 
+#定义lib需要生成的目标
 LIB_TARGET	= libbpf.a libbpf.so.$(LIBBPF_VERSION)
 LIB_FILE	= libbpf.a libbpf.so*
 PC_FILE		= libbpf.pc
@@ -116,8 +117,10 @@ STATIC_OBJDIR	:= $(OUTPUT)staticobjs/
 BPF_IN_SHARED	:= $(SHARED_OBJDIR)libbpf-in.o
 BPF_IN_STATIC	:= $(STATIC_OBJDIR)libbpf-in.o
 BPF_HELPER_DEFS	:= $(OUTPUT)bpf_helper_defs.h
+#指明bpf生成文件路径及名称
 BPF_GENERATED	:= $(BPF_HELPER_DEFS)
 
+#指明lib需要放置的位置(target)
 LIB_TARGET	:= $(addprefix $(OUTPUT),$(LIB_TARGET))
 LIB_FILE	:= $(addprefix $(OUTPUT),$(LIB_FILE))
 PC_FILE		:= $(addprefix $(OUTPUT),$(PC_FILE))
@@ -139,6 +142,7 @@ CMD_TARGETS = $(LIB_TARGET) $(PC_FILE)
 all: fixdep
 	$(Q)$(MAKE) all_cmd
 
+#要求生成CMD_TARGETS,引发lib_target,pc_file的生成
 all_cmd: $(CMD_TARGETS) check
 
 $(BPF_IN_SHARED): force $(BPF_GENERATED)
@@ -153,9 +157,11 @@ $(BPF_IN_SHARED): force $(BPF_GENERATED)
 	echo "Warning: Kernel ABI header at 'tools/include/uapi/linux/if_xdp.h' differs from latest version at 'include/uapi/linux/if_xdp.h'" >&2 )) || true
 	$(Q)$(MAKE) $(build)=libbpf OUTPUT=$(SHARED_OBJDIR) CFLAGS="$(CFLAGS) $(SHLIB_FLAGS)"
 
+#指明bpf_in_static如何生成，重新make本目录，并指定output,指定target为默认target
 $(BPF_IN_STATIC): force $(BPF_GENERATED)
 	$(Q)$(MAKE) $(build)=libbpf OUTPUT=$(STATIC_OBJDIR)
 
+#指明bpf_helper_defs文件如何动态生成（借助bpf_doc.py直接生成）
 $(BPF_HELPER_DEFS): $(srctree)/tools/include/uapi/linux/bpf.h
 	$(QUIET_GEN)$(srctree)/scripts/bpf_doc.py --header \
 		--file $(srctree)/tools/include/uapi/linux/bpf.h > $(BPF_HELPER_DEFS)
@@ -169,6 +175,7 @@ $(OUTPUT)libbpf.so.$(LIBBPF_VERSION): $(BPF_IN_SHARED) $(VERSION_SCRIPT)
 	@ln -sf $(@F) $(OUTPUT)libbpf.so
 	@ln -sf $(@F) $(OUTPUT)libbpf.so.$(LIBBPF_MAJOR_VERSION)
 
+#指明libbpf.a如何生成
 $(OUTPUT)libbpf.a: $(BPF_IN_STATIC)
 	$(QUIET_LINK)$(RM) -f $@; $(AR) rcs $@ $^
 
@@ -246,6 +253,7 @@ INSTALL_PFX := $(DESTDIR)$(prefix)/include/bpf
 INSTALL_SRC_HDRS := $(addprefix $(INSTALL_PFX)/, $(SRC_HDRS))
 INSTALL_GEN_HDRS := $(addprefix $(INSTALL_PFX)/, $(notdir $(GEN_HDRS)))
 
+#执行对应的.h文件安装
 $(INSTALL_SRC_HDRS): $(INSTALL_PFX)/%.h: %.h
 	$(call QUIET_INSTALL, $@) \
 		$(call do_install,$<,$(prefix)/include/bpf,644)
@@ -254,6 +262,8 @@ $(INSTALL_GEN_HDRS): $(INSTALL_PFX)/%.h: $(OUTPUT)%.h
 	$(call QUIET_INSTALL, $@) \
 		$(call do_install,$<,$(prefix)/include/bpf,644)
 
+#1.执行BPF_GENERATED生成bpf_helper_defs，2。INSTALL_SRC_HDRS安装相应头文件；
+#3。INSTALL_GEN_HDRS，执行bpf_helper_defs文件安装
 install_headers: $(BPF_GENERATED) $(INSTALL_SRC_HDRS) $(INSTALL_GEN_HDRS)
 	$(call QUIET_INSTALL, libbpf_headers)
 

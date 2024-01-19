@@ -153,7 +153,7 @@ int strset__add_str(struct strset *set, const char *s)
 	 * other hand, if the string is unique, it's already appended and
 	 * ready to be used, only a simple set->strs_data_len increment away.
 	 */
-	len = strlen(s) + 1;
+	len = strlen(s) + 1;/*字符串长度*/
 	p = strset_add_str_mem(set, len);
 	if (!p)
 		return -ENOMEM;

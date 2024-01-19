@@ -208,9 +208,11 @@ static inline struct auxiliary_driver *to_auxiliary_drv(struct device_driver *dr
 	return container_of(drv, struct auxiliary_driver, driver);
 }
 
+/*初始化辅助设备*/
 int auxiliary_device_init(struct auxiliary_device *auxdev);
+/*向系统添加辅助设备*/
 int __auxiliary_device_add(struct auxiliary_device *auxdev, const char *modname);
-#define auxiliary_device_add(auxdev) __auxiliary_device_add(auxdev, KBUILD_MODNAME)
+#define auxiliary_device_add(auxdev) __auxiliary_device_add(auxdev, KBUILD_MODNAME/*指明当前build模块名称*/)
 
 static inline void auxiliary_device_uninit(struct auxiliary_device *auxdev)
 {
@@ -222,6 +224,7 @@ static inline void auxiliary_device_delete(struct auxiliary_device *auxdev)
 	device_del(&auxdev->dev);
 }
 
+/*注册辅助设备驱动*/
 int __auxiliary_driver_register(struct auxiliary_driver *auxdrv, struct module *owner,
 				const char *modname);
 #define auxiliary_driver_register(auxdrv) \

@@ -1457,6 +1457,7 @@ static int match_server(struct TCP_Server_Info *server, struct smb3_fs_context *
 	return 1;
 }
 
+/*检查是否可以复用*/
 struct TCP_Server_Info *
 cifs_find_tcp_session(struct smb3_fs_context *ctx)
 {

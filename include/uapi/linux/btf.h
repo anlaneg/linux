@@ -9,10 +9,10 @@
 #define BTF_VERSION	1
 
 struct btf_header {
-	__u16	magic;
+	__u16	magic;/*btf段的magic，常为BTF_MAGIC*/
 	__u8	version;
 	__u8	flags;
-	__u32	hdr_len;
+	__u32	hdr_len;/*head长度*/
 
 	/* All offsets are in bytes relative to the end of this header */
 	/*两个section的offset 及length*/

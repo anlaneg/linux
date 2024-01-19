@@ -291,6 +291,7 @@ struct bpf_program;
 LIBBPF_API struct bpf_program *
 bpf_object__next_program(const struct bpf_object *obj, struct bpf_program *prog);
 
+/*遍历此obj中所有prog*/
 #define bpf_object__for_each_program(pos, obj)			\
 	for ((pos) = bpf_object__next_program((obj), NULL);	\
 	     (pos) != NULL;					\
@@ -786,6 +787,7 @@ bpf_object__find_map_fd_by_name(const struct bpf_object *obj, const char *name);
 LIBBPF_API struct bpf_map *
 bpf_object__next_map(const struct bpf_object *obj, const struct bpf_map *map);
 
+/*遍历此obj中的所有map*/
 #define bpf_object__for_each_map(pos, obj)		\
 	for ((pos) = bpf_object__next_map((obj), NULL);	\
 	     (pos) != NULL;				\

@@ -225,12 +225,12 @@ struct btf_id_dtor_kfunc_tab {
 };
 
 struct btf {
-	void *data;/*btf数据内容*/
+	void *data;/*btf数据内容，指向header*/
 	struct btf_type **types;/*解析type section获得的type信息*/
 	u32 *resolved_ids;
 	u32 *resolved_sizes;
 	const char *strings;/*btf strings section起始指针*/
-	void *nohdr_data;/*btf非header数据内容*/
+	void *nohdr_data;/*btf不含header数据的内容（跳过了header)*/
 	struct btf_header hdr;/*bft header数据内容*/
 	u32 nr_types; /* includes VOID for base BTF */ /*types数组内容大小*/
 	u32 types_size;/*typeso数组最大大小，超过后需要扩充空间*/
@@ -718,6 +718,7 @@ static const struct btf_enum64 *btf_type_enum64(const struct btf_type *t)
 	return (const struct btf_enum64 *)(t + 1);
 }
 
+/*返回此type对应的operation*/
 static const struct btf_kind_operations *btf_type_ops(const struct btf_type *t)
 {
 	return kind_ops[BTF_INFO_KIND(t->info)];
@@ -5029,6 +5030,7 @@ static int btf_check_all_metas(struct btf_verifier_env *env)
 	end = cur + hdr->type_len;/*type section终止地址*/
 
 	env->log_type_id = btf->base_btf ? btf->start_id : 1;
+	/*cur到end之间是有多个btf_type结构，遍历这些结构*/
 	while (cur < end) {
 		struct btf_type *t = cur;
 		s32 meta_size;
@@ -5133,11 +5135,12 @@ static int btf_check_all_types(struct btf_verifier_env *env)
 	env->phase++;
 	for (i = btf->base_btf ? 0 : 1; i < btf->nr_types; i++) {
 		type_id = btf->start_id + i;
-		t = btf_type_by_id(btf, type_id);
+		t = btf_type_by_id(btf, type_id);/*通过type_id找到type*/
 
 		env->log_type_id = type_id;
 		if (btf_type_needs_resolve(t) &&
 		    !env_type_is_resolved(env, type_id)) {
+			/*解决此type*/
 			err = btf_resolve(env, t, type_id);
 			if (err)
 				return err;
@@ -5185,8 +5188,8 @@ static int btf_parse_str_sec(struct btf_verifier_env *env)
 	const char *start, *end;
 
 	hdr = &btf->hdr;
-	start = btf->nohdr_data + hdr->str_off;/*str起始地址*/
-	end = start + hdr->str_len;/*str结束地址*/
+	start = btf->nohdr_data + hdr->str_off;/*str section起始地址*/
+	end = start + hdr->str_len;/*str section结束地址*/
 
 	if (end != btf->data + btf->data_size) {
 	    /*string section必须为最后一个段*/
@@ -5234,10 +5237,11 @@ static int btf_check_sec_info(struct btf_verifier_env *env,
 	const struct btf *btf;
 
 	btf = env->btf;
-	hdr = &btf->hdr;
+	hdr = &btf->hdr;/*btf头信息*/
 
 	/* Populate the secs from hdr */
 	for (i = 0; i < ARRAY_SIZE(btf_sec_info_offset); i++)
+		/*填充各section起始地址*/
 		secs[i] = *(struct btf_sec_info *)((void *)hdr +
 						   btf_sec_info_offset[i]);
 
@@ -5246,30 +5250,34 @@ static int btf_check_sec_info(struct btf_verifier_env *env,
 
 	/* Check for gaps and overlap among sections */
 	total = 0;
-	expected_total = btf_data_size - hdr->hdr_len;
+	expected_total = btf_data_size - hdr->hdr_len;/*预期的两个section的总长度*/
 	for (i = 0; i < ARRAY_SIZE(btf_sec_info_offset); i++) {
 		if (expected_total < secs[i].off) {
 		    /*expected_total是整个数据的剩余长度，现在其小于offset,则section填充有误*/
 			btf_verifier_log(env, "Invalid section offset");
 			return -EINVAL;
 		}
+
 		/*section之间有空隙，报错*/
 		if (total < secs[i].off) {
 			/* gap */
 			btf_verifier_log(env, "Unsupported section found");
 			return -EINVAL;
 		}
+
 		/*此section与上一个section内容有重叠，报错*/
 		if (total > secs[i].off) {
 			btf_verifier_log(env, "Section overlap found");
 			return -EINVAL;
 		}
+
 		if (expected_total - total < secs[i].len) {
 		    /*section长度填充有误*/
 			btf_verifier_log(env,
 					 "Total section length too long");
 			return -EINVAL;
 		}
+
 		/*记录已校验的section长度*/
 		total += secs[i].len;
 	}
@@ -5353,7 +5361,7 @@ static int btf_parse_hdr(struct btf_verifier_env *env)
 		return -EINVAL;
 	}
 
-	/*校验btf 数据*/
+	/*校验btf section数据长度*/
 	return btf_check_sec_info(env, btf_data_size);
 }
 
@@ -5586,11 +5594,12 @@ static struct btf *btf_parse(bpfptr_t btf_data/*btf起始地址*/, u32 btf_data_
 
 	btf->nohdr_data = btf->data + btf->hdr.hdr_len;
 
-	/*string sectiong校验*/
+	/*string section校验*/
 	err = btf_parse_str_sec(env);
 	if (err)
 		goto errout;
 
+	/*type section解析*/
 	err = btf_parse_type_sec(env);
 	if (err)
 		goto errout;
@@ -5774,6 +5783,7 @@ int get_kern_ctx_btf_id(struct bpf_verifier_log *log, enum bpf_prog_type prog_ty
 BTF_ID_LIST(bpf_ctx_convert_btf_id)
 BTF_ID(struct, bpf_ctx_convert)
 
+/*解析vmlinux*/
 struct btf *btf_parse_vmlinux(void)
 {
 	struct btf_verifier_env *env = NULL;
@@ -5795,18 +5805,20 @@ struct btf *btf_parse_vmlinux(void)
 	}
 	env->btf = btf;
 
-	btf->data = __start_BTF;
-	btf->data_size = __stop_BTF - __start_BTF;
+	btf->data = __start_BTF;/*btf数据*/
+	btf->data_size = __stop_BTF - __start_BTF;/*btf数据大小*/
 	btf->kernel_btf = true;
 	snprintf(btf->name, sizeof(btf->name), "vmlinux");
 
+	/*解析btf header*/
 	err = btf_parse_hdr(env);
 	if (err)
 		goto errout;
 
+	/*指明不含hdr的data指针*/
 	btf->nohdr_data = btf->data + btf->hdr.hdr_len;
 
-	err = btf_parse_str_sec(env);
+	err = btf_parse_str_sec(env);/*解析str section*/
 	if (err)
 		goto errout;
 
@@ -7340,6 +7352,7 @@ int btf_get_fd_by_id(u32 id)
 	int fd;
 
 	rcu_read_lock();
+	/*通过id找到btf*/
 	btf = idr_find(&btf_idr, id);
 	if (!btf || !refcount_inc_not_zero(&btf->refcnt))
 		btf = ERR_PTR(-ENOENT);
@@ -7348,6 +7361,7 @@ int btf_get_fd_by_id(u32 id)
 	if (IS_ERR(btf))
 		return PTR_ERR(btf);
 
+	/*由btf关联fd*/
 	fd = __btf_new_fd(btf);
 	if (fd < 0)
 		btf_put(btf);

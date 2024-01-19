@@ -198,6 +198,7 @@ int ksmbd_conn_write(struct ksmbd_work *work)
 	}
 
 	ksmbd_conn_lock(conn);
+	/*执行写*/
 	sent = conn->transport->ops->writev(conn->transport, &iov[0],
 					iov_idx, len,
 					work->need_invalidate_rkey,

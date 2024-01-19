@@ -592,10 +592,10 @@ struct elf_sec_desc {
 
 struct elf_state {
 	int fd;
-	const void *obj_buf;
-	size_t obj_buf_sz;
-	Elf *elf;
-	Elf64_Ehdr *ehdr;
+	const void *obj_buf;/*obj对应的内存起始地址*/
+	size_t obj_buf_sz;/*obj大小*/
+	Elf *elf;/*对应的elf文件*/
+	Elf64_Ehdr *ehdr;/*指向elf header结构*/
 	Elf_Data *symbols;
 	Elf_Data *st_ops_data;
 	size_t shstrndx; /* section index for section name strings */
@@ -612,14 +612,14 @@ struct elf_state {
 struct usdt_manager;
 
 struct bpf_object {
-	char name[BPF_OBJ_NAME_LEN];
+	char name[BPF_OBJ_NAME_LEN];/*object名称*/
 	char license[64];
-	__u32 kern_version;
+	__u32 kern_version;/*当前kernel版本号*/
 
-	struct bpf_program *programs;
-	size_t nr_programs;
-	struct bpf_map *maps;
-	size_t nr_maps;
+	struct bpf_program *programs;/*数组，逻辑对应的prog*/
+	size_t nr_programs;/*programs数组的大小*/
+	struct bpf_map *maps;/*数组，罗列所有map*/
+	size_t nr_maps;/*maps数组的大小*/
 	size_t maps_cap;
 
 	char *kconfig;
@@ -636,7 +636,7 @@ struct bpf_object {
 	/* Information when doing ELF related work. Only valid if efile.elf is not NULL */
 	struct elf_state efile;
 
-	struct btf *btf;
+	struct btf *btf;/*obj中如果不包含btf,则为NULL*/
 	struct btf_ext *btf_ext;
 
 	/* Parse and load BTF vmlinux if any of the programs in the object need
@@ -656,8 +656,8 @@ struct bpf_object {
 	size_t btf_module_cap;
 
 	/* optional log settings passed to BPF_BTF_LOAD and BPF_PROG_LOAD commands */
-	char *log_buf;
-	size_t log_size;
+	char *log_buf;/*log buffer指针*/
+	size_t log_size;/*log大小*/
 	__u32 log_level;
 
 	int *fd_array;
@@ -666,7 +666,7 @@ struct bpf_object {
 
 	struct usdt_manager *usdt_man;
 
-	char path[];
+	char path[];/*object路径*/
 };
 
 static const char *elf_sym_str(const struct bpf_object *obj, size_t off);
@@ -1215,8 +1215,8 @@ static int bpf_object__init_struct_ops_maps(struct bpf_object *obj)
 }
 
 static struct bpf_object *bpf_object__new(const char *path,
-					  const void *obj_buf,
-					  size_t obj_buf_sz,
+					  const void *obj_buf/*object的内容*/,
+					  size_t obj_buf_sz/*object内容大小*/,
 					  const char *obj_name)
 {
 	struct bpf_object *obj;
@@ -1228,6 +1228,7 @@ static struct bpf_object *bpf_object__new(const char *path,
 		return ERR_PTR(-ENOMEM);
 	}
 
+	/*填充path*/
 	strcpy(obj->path, path);
 	if (obj_name) {
 		libbpf_strlcpy(obj->name, obj_name, sizeof(obj->name));
@@ -1290,6 +1291,7 @@ static int bpf_object__elf_init(struct bpf_object *obj)
 		/* obj_buf should have been validated by bpf_object__open_mem(). */
 		elf = elf_memory((char *)obj->efile.obj_buf, obj->efile.obj_buf_sz);
 	} else {
+		/*未给定obj_buf,打开此文件，并解析elf*/
 		obj->efile.fd = open(obj->path, O_RDONLY | O_CLOEXEC);
 		if (obj->efile.fd < 0) {
 			char errmsg[STRERR_BUFSIZE], *cp;
@@ -1312,17 +1314,20 @@ static int bpf_object__elf_init(struct bpf_object *obj)
 	obj->efile.elf = elf;
 
 	if (elf_kind(elf) != ELF_K_ELF) {
+		/*只处理elf类型*/
 		err = -LIBBPF_ERRNO__FORMAT;
 		pr_warn("elf: '%s' is not a proper ELF object\n", obj->path);
 		goto errout;
 	}
 
 	if (gelf_getclass(elf) != ELFCLASS64) {
+		/*只处理64 bit*/
 		err = -LIBBPF_ERRNO__FORMAT;
 		pr_warn("elf: '%s' is not a 64-bit ELF object\n", obj->path);
 		goto errout;
 	}
 
+	/*指向此obj文件的elf header*/
 	obj->efile.ehdr = ehdr = elf64_getehdr(elf);
 	if (!obj->efile.ehdr) {
 		pr_warn("elf: failed to get ELF header from %s: %s\n", obj->path, elf_errmsg(-1));
@@ -1347,6 +1352,7 @@ static int bpf_object__elf_init(struct bpf_object *obj)
 
 	/* Old LLVM set e_machine to EM_NONE */
 	if (ehdr->e_type != ET_REL || (ehdr->e_machine && ehdr->e_machine != EM_BPF)) {
+		/*只考虑ebpf机器码*/
 		pr_warn("elf: %s is not a valid eBPF object file\n", obj->path);
 		err = -LIBBPF_ERRNO__FORMAT;
 		goto errout;
@@ -1362,6 +1368,7 @@ static int bpf_object__check_endianness(struct bpf_object *obj)
 {
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
 	if (obj->efile.ehdr->e_ident[EI_DATA] == ELFDATA2LSB)
+		/*obj对应的是小端*/
 		return 0;
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
 	if (obj->efile.ehdr->e_ident[EI_DATA] == ELFDATA2MSB)
@@ -1369,6 +1376,7 @@ static int bpf_object__check_endianness(struct bpf_object *obj)
 #else
 # error "Unrecognized __BYTE_ORDER__"
 #endif
+	/*字节序与当前不匹配*/
 	pr_warn("elf: endianness mismatch in %s.\n", obj->path);
 	return -LIBBPF_ERRNO__ENDIAN;
 }
@@ -3026,6 +3034,7 @@ static int bpf_object__load_vmlinux_btf(struct bpf_object *obj, bool force)
 	if (!force && !obj_needs_vmlinux_btf(obj))
 		return 0;
 
+	/*加载btf vmlinux*/
 	obj->btf_vmlinux = btf__load_vmlinux_btf();
 	err = libbpf_get_error(obj->btf_vmlinux);
 	if (err) {
@@ -7190,6 +7199,7 @@ static struct bpf_object *bpf_object_open(const char *path, const void *obj_buf,
 	size_t log_size;
 	__u32 log_level;
 
+	/*设置elf version*/
 	if (elf_version(EV_CURRENT) == EV_NONE) {
 		pr_warn("failed to init libelf for %s\n",
 			path ? : "(mem buf)");
@@ -7219,6 +7229,7 @@ static struct bpf_object *bpf_object_open(const char *path, const void *obj_buf,
 	if (log_size && !log_buf)
 		return ERR_PTR(-EINVAL);
 
+	/*创建obj对象*/
 	obj = bpf_object__new(path, obj_buf, obj_buf_sz, obj_name);
 	if (IS_ERR(obj))
 		return obj;
@@ -7249,8 +7260,8 @@ static struct bpf_object *bpf_object_open(const char *path, const void *obj_buf,
 		}
 	}
 
-	err = bpf_object__elf_init(obj);
-	err = err ? : bpf_object__check_endianness(obj);
+	err = bpf_object__elf_init(obj);/*elf相关的初始化*/
+	err = err ? : bpf_object__check_endianness(obj);/*检查字节序*/
 	err = err ? : bpf_object__elf_collect(obj);
 	err = err ? : bpf_object__collect_externs(obj);
 	err = err ? : bpf_object_fixup_btf(obj);
@@ -8259,28 +8270,31 @@ int bpf_object__gen_loader(struct bpf_object *obj, struct gen_loader_opts *opts)
 
 static struct bpf_program *
 __bpf_program__iter(const struct bpf_program *p, const struct bpf_object *obj,
-		    bool forward)
+		    bool forward/*是否为前向遍历*/)
 {
 	size_t nr_programs = obj->nr_programs;
 	ssize_t idx;
 
 	if (!nr_programs)
+		/*obj的程序数为0*/
 		return NULL;
 
 	if (!p)
 		/* Iter from the beginning */
-		return forward ? &obj->programs[0] :
-			&obj->programs[nr_programs - 1];
+		return forward ? &obj->programs[0] /*无prev,如果为前向访问，取首个*/:
+			&obj->programs[nr_programs - 1]/*无prev,如果为反向访问，取末尾*/;
 
 	if (p->obj != obj) {
+		/*prev对应的object与当前object不是同一个*/
 		pr_warn("error: program handler doesn't match object\n");
 		return errno = EINVAL, NULL;
 	}
 
+	/*按方向，获取下一个prog对应的idx*/
 	idx = (p - obj->programs) + (forward ? 1 : -1);
 	if (idx >= obj->nr_programs || idx < 0)
 		return NULL;
-	return &obj->programs[idx];
+	return &obj->programs[idx];/*返回idx对应的prog*/
 }
 
 struct bpf_program *
@@ -8289,7 +8303,7 @@ bpf_object__next_program(const struct bpf_object *obj, struct bpf_program *prev)
 	struct bpf_program *prog = prev;
 
 	do {
-		prog = __bpf_program__iter(prog, obj, true);
+		prog = __bpf_program__iter(prog, obj, true/*正向遍历*/);
 	} while (prog && prog_is_subprog(obj, prog));
 
 	return prog;
@@ -8301,7 +8315,7 @@ bpf_object__prev_program(const struct bpf_object *obj, struct bpf_program *next)
 	struct bpf_program *prog = next;
 
 	do {
-		prog = __bpf_program__iter(prog, obj, false);
+		prog = __bpf_program__iter(prog, obj, false/*反向遍历*/);
 	} while (prog && prog_is_subprog(obj, prog));
 
 	return prog;
@@ -8312,6 +8326,7 @@ void bpf_program__set_ifindex(struct bpf_program *prog, __u32 ifindex)
 	prog->prog_ifindex = ifindex;
 }
 
+/*取程序名称*/
 const char *bpf_program__name(const struct bpf_program *prog)
 {
 	return prog->name;
@@ -9352,28 +9367,30 @@ __bpf_map__iter(const struct bpf_map *m, const struct bpf_object *obj, int i)
 	if (!obj || !obj->maps)
 		return errno = EINVAL, NULL;
 
-	s = obj->maps;
-	e = obj->maps + obj->nr_maps;
+	s = obj->maps;/*此obj的首个map*/
+	e = obj->maps + obj->nr_maps;/*此obj的最后一个map*/
 
 	if ((m < s) || (m >= e)) {
+		/*当前提供的前一个map不存在此汇围内，报错*/
 		pr_warn("error in %s: map handler doesn't belong to object\n",
 			 __func__);
 		return errno = EINVAL, NULL;
 	}
 
-	idx = (m - obj->maps) + i;
+	idx = (m - obj->maps) + i;/*当前提供的前一个map的索引，添加i后得到预期的map索引*/
 	if (idx >= obj->nr_maps || idx < 0)
 		return NULL;
-	return &obj->maps[idx];
+	return &obj->maps[idx];/*返回此索引对应的map*/
 }
 
 struct bpf_map *
 bpf_object__next_map(const struct bpf_object *obj, const struct bpf_map *prev)
 {
 	if (prev == NULL)
-	    /*取Obj对应的maps*/
+	    /*前一个为空，取Obj对应的maps*/
 		return obj->maps;
 
+	/*由prev获取此obj的下一个map*/
 	return __bpf_map__iter(prev, obj, 1);
 }
 

@@ -17648,8 +17648,10 @@ static int check_attach_btf_id(struct bpf_verifier_env *env)
 struct btf *bpf_get_btf_vmlinux(void)
 {
 	if (!btf_vmlinux && IS_ENABLED(CONFIG_DEBUG_INFO_BTF)) {
+		/*btf_vmlinux未初始化，且debug_info_btf已开启，初始化btf_vmlinux*/
 		mutex_lock(&bpf_verifier_lock);
 		if (!btf_vmlinux)
+			/*解析vmlinux,产生btf_vmlinux*/
 			btf_vmlinux = btf_parse_vmlinux();
 		mutex_unlock(&bpf_verifier_lock);
 	}
@@ -17666,7 +17668,7 @@ int bpf_check(struct bpf_prog **prog, union bpf_attr *attr, bpfptr_t uattr)
 
 	/* no program is valid */
 	if (ARRAY_SIZE(bpf_verifier_ops) == 0)
-		return -EINVAL;
+		return -EINVAL;/*ops为空，返回失败*/
 
 	/* 'struct bpf_verifier_env' can be global, but since it's not small,
 	 * allocate/free it every time bpf_check() is called

@@ -85,6 +85,7 @@ __u32 get_kernel_version(void)
 	/* Check if this is an Ubuntu kernel. */
 	version = get_ubuntu_kernel_version();
 	if (version != 0)
+		/*对ubuntu kernel做特殊处理*/
 		return version;
 
 	uname(&info);
@@ -92,6 +93,7 @@ __u32 get_kernel_version(void)
 	/* Check if this is a Debian kernel. */
 	version = get_debian_kernel_version(&info);
 	if (version != 0)
+		/*对debian kernel做特殊处理*/
 		return version;
 
 	if (sscanf(info.release, "%u.%u.%u", &major, &minor, &patch) != 3)

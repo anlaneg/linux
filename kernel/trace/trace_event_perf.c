@@ -251,6 +251,7 @@ int perf_kprobe_init(struct perf_event *p_event, bool is_retprobe)
 	struct trace_event_call *tp_event;
 
 	if (p_event->attr.kprobe_func) {
+		/*取func名称*/
 		func = strndup_user(u64_to_user_ptr(p_event->attr.kprobe_func),
 				    KSYM_NAME_LEN);
 		if (IS_ERR(func)) {
@@ -259,6 +260,7 @@ int perf_kprobe_init(struct perf_event *p_event, bool is_retprobe)
 		}
 
 		if (func[0] == '\0') {
+			/*名称为空串*/
 			kfree(func);
 			func = NULL;
 		}

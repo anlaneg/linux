@@ -319,12 +319,14 @@ static struct mlx5_adev *add_adev(struct mlx5_core_dev *dev, int idx)
 	madev->mdev = dev;
 	madev->idx = idx;
 
+	/*初始化辅助设备，其从属于辅助总线*/
 	ret = auxiliary_device_init(adev);
 	if (ret) {
 		kfree(madev);
 		return ERR_PTR(ret);
 	}
 
+	/*添加此辅助设备*/
 	ret = auxiliary_device_add(adev);
 	if (ret) {
 		auxiliary_device_uninit(adev);
@@ -367,6 +369,7 @@ int mlx5_attach_device(struct mlx5_core_dev *dev)
 			if (!is_supported)
 				continue;
 
+			/*添加i号辅助设备*/
 			priv->adev[i] = add_adev(dev, i);
 			if (IS_ERR(priv->adev[i])) {
 				ret = PTR_ERR(priv->adev[i]);
@@ -471,6 +474,7 @@ static int add_drivers(struct mlx5_core_dev *dev)
 		bool is_supported = false;
 
 		if (priv->adev[i])
+			/*已初始化，跳过*/
 			continue;
 
 		if (mlx5_adev_devices[i].is_supported)
@@ -479,6 +483,7 @@ static int add_drivers(struct mlx5_core_dev *dev)
 		if (!is_supported)
 			continue;
 
+		/*添加此辅助设备*/
 		priv->adev[i] = add_adev(dev, i);
 		if (IS_ERR(priv->adev[i])) {
 			mlx5_core_warn(dev, "Device[%d] (%s) failed to load\n",

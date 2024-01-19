@@ -158,7 +158,7 @@ int nfs_mount(struct nfs_mount_request *info, int timeo, int retrans)
 	struct rpc_create_args args = {
 		.net		= info->net,
 		.protocol	= info->protocol,
-		.address	= (struct sockaddr *)info->sap,
+		.address	= (struct sockaddr *)info->sap,/*远端地址*/
 		.addrsize	= info->salen,
 		.timeout	= &mnt_timeout,
 		.servername	= info->hostname,
@@ -181,7 +181,7 @@ int nfs_mount(struct nfs_mount_request *info, int timeo, int retrans)
 		args.flags |= RPC_CLNT_CREATE_NONPRIVPORT;
 
 	nfs_init_timeout_values(&mnt_timeout, info->protocol, timeo, retrans);
-	mnt_clnt = rpc_create(&args);
+	mnt_clnt = rpc_create(&args);/*创建rcp client*/
 	if (IS_ERR(mnt_clnt))
 		goto out_clnt_err;
 

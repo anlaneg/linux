@@ -376,6 +376,7 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	aux_dev->dev.parent = &bp->pdev->dev;
 	aux_dev->dev.release = bnxt_aux_dev_release;
 
+	/*初始化rdma设备，其从属于辅助总线*/
 	rc = auxiliary_device_init(aux_dev);
 	if (rc) {
 		ida_free(&bnxt_aux_dev_ids, bp->aux_priv->id);
@@ -400,6 +401,7 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	bp->edev = edev;
 	bnxt_set_edev_info(edev, bp);
 
+	/*添加辅助设备aux_dev(rdma设备）*/
 	rc = auxiliary_device_add(aux_dev);
 	if (rc) {
 		netdev_warn(bp->dev,

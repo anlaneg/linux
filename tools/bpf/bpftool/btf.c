@@ -709,12 +709,14 @@ static int btf_parse_fd(int *argc, char ***argv)
 	char *endptr;
 	int fd;
 
+	/*前缀必须为id*/
 	if (!is_prefix(*argv[0], "id")) {
 		p_err("expected 'id', got: '%s'?", **argv);
 		return -1;
 	}
 	NEXT_ARGP();
 
+	/*转换为id*/
 	id = strtoul(**argv, &endptr, 0);
 	if (*endptr) {
 		p_err("can't parse %s as ID", **argv);
@@ -722,6 +724,7 @@ static int btf_parse_fd(int *argc, char ***argv)
 	}
 	NEXT_ARGP();
 
+	/*通过id查找btf fd*/
 	fd = bpf_btf_get_fd_by_id(id);
 	if (fd < 0)
 		p_err("can't get BTF object by id (%u): %s",
@@ -744,6 +747,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 	int fd;
 
 	while (true) {
+		/*按照type获取next_id*/
 		switch (type) {
 		case BPF_OBJ_PROG:
 			err = bpf_prog_get_next_id(id, &id);
@@ -752,10 +756,13 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			err = bpf_map_get_next_id(id, &id);
 			break;
 		default:
+			/*遇到不认识的object type*/
 			err = -1;
 			p_err("unexpected object type: %d", type);
 			goto err_free;
 		}
+
+		/*错误信息显示*/
 		if (err) {
 			if (errno == ENOENT) {
 				err = 0;
@@ -767,6 +774,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			goto err_free;
 		}
 
+		/*通过id获取fd*/
 		switch (type) {
 		case BPF_OBJ_PROG:
 			fd = bpf_prog_get_fd_by_id(id);
@@ -779,6 +787,8 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			p_err("unexpected object type: %d", type);
 			goto err_free;
 		}
+
+		/*查询fd失败*/
 		if (fd < 0) {
 			if (errno == ENOENT)
 				continue;
@@ -788,6 +798,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			goto err_free;
 		}
 
+		/*通过fd查找info信息*/
 		memset(info, 0, *len);
 		if (type == BPF_OBJ_PROG)
 			err = bpf_prog_get_info_by_fd(fd, info, len);
@@ -800,6 +811,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 			goto err_free;
 		}
 
+		/*通过info获取相应的btf id号*/
 		switch (type) {
 		case BPF_OBJ_PROG:
 			btf_id = ((struct bpf_prog_info *)info)->btf_id;
@@ -815,6 +827,7 @@ build_btf_type_table(struct hashmap *tab, enum bpf_obj_type type,
 		if (!btf_id)
 			continue;
 
+		/*添加btf_id与id映射*/
 		err = hashmap__append(tab, btf_id, id);
 		if (err) {
 			p_err("failed to append entry to hashmap for BTF ID %u, object ID %u: %s",
@@ -840,11 +853,13 @@ build_btf_tables(struct hashmap *btf_prog_table,
 	__u32 map_len = sizeof(map_info);
 	int err = 0;
 
+	/*创建prog id与btf_id映射*/
 	err = build_btf_type_table(btf_prog_table, BPF_OBJ_PROG, &prog_info,
 				   &prog_len);
 	if (err)
 		return err;
 
+	/*创建map id与btf_id映射*/
 	err = build_btf_type_table(btf_map_table, BPF_OBJ_MAP, &map_info,
 				   &map_len);
 	if (err) {
@@ -969,19 +984,23 @@ static int do_show(int argc, char **argv)
 	__u32 id = 0;
 
 	if (argc == 2) {
+		/*通过id <uint16> 获取btf fd*/
 		fd = btf_parse_fd(&argc, &argv);
 		if (fd < 0)
 			return -1;
 	}
 
 	if (argc) {
+		/*如仍有参数，则参数有误*/
 		if (fd >= 0)
 			close(fd);
 		return BAD_ARG();
 	}
 
+	/*生成btf prog table*/
 	btf_prog_table = hashmap__new(hash_fn_for_key_as_id,
 				      equal_fn_for_key_as_id, NULL);
+	/*生成btf map table*/
 	btf_map_table = hashmap__new(hash_fn_for_key_as_id,
 				     equal_fn_for_key_as_id, NULL);
 	if (IS_ERR(btf_prog_table) || IS_ERR(btf_map_table)) {
@@ -992,6 +1011,8 @@ static int do_show(int argc, char **argv)
 		p_err("failed to create hashmap for object references");
 		return -1;
 	}
+
+	/*构造table*/
 	err = build_btf_tables(btf_prog_table, btf_map_table);
 	if (err) {
 		if (fd >= 0)
@@ -1082,6 +1103,7 @@ static const struct cmd cmds[] = {
 	{ 0 }
 };
 
+/*执行btf相关的操作，list,dump*/
 int do_btf(int argc, char **argv)
 {
 	return cmd_select(cmds, argc, argv, do_help);

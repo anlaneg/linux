@@ -2046,7 +2046,7 @@ struct rpc_xprt *xprt_create_transport(struct xprt_create *args)
 		return ERR_PTR(-EIO);
 	}
 
-	xprt = t->setup(args);
+	xprt = t->setup(args);/*依据args生成xprt*/
 	xprt_class_release(t);
 
 	if (IS_ERR(xprt))

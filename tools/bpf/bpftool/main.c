@@ -25,7 +25,7 @@ static char **last_argv;
 static int (*last_do_help)(int argc, char **argv);
 json_writer_t *json_wtr;
 bool pretty_output;
-bool json_output;
+bool json_output;/*是否进行json输出*/
 bool show_pinned;
 bool block_mount;
 bool verifier_logs;
@@ -75,20 +75,20 @@ static int do_batch(int argc, char **argv);
 static int do_version(int argc, char **argv);
 
 static const struct cmd commands[] = {
-	{ "help",	do_help },
-	{ "batch",	do_batch },
+	{ "help",	do_help },/*默认为help函数*/
+	{ "batch",	do_batch },/*bpftool支持命令批处理*/
 	{ "prog",	do_prog },
-	{ "map",	do_map },
+	{ "map",	do_map },/*bpf map相关的操作*/
 	{ "link",	do_link },
 	{ "cgroup",	do_cgroup },
 	{ "perf",	do_perf },
 	{ "net",	do_net },
 	{ "feature",	do_feature },
 	{ "btf",	do_btf },
-	{ "gen",	do_gen },
+	{ "gen",	do_gen },/*bpf gen相关命令处理*/
 	{ "struct_ops",	do_struct_ops },
 	{ "iter",	do_iter },
-	{ "version",	do_version },
+	{ "version",	do_version },/*显示版本*/
 	{ 0 }
 };
 
@@ -119,6 +119,7 @@ static int do_version(int argc, char **argv)
 #else
 	const bool has_libbfd = false;
 #endif
+	/*是否有llvm支持*/
 #ifdef HAVE_LLVM_SUPPORT
 	const bool has_llvm = true;
 #else
@@ -132,6 +133,7 @@ static int do_version(int argc, char **argv)
 	bool bootstrap = false;
 	int i;
 
+	/*检查command prog对应的func是否为空*/
 	for (i = 0; commands[i].cmd; i++) {
 		if (!strcmp(commands[i].cmd, "prog")) {
 			/* Assume we run a bootstrap version if "bpftool prog"
@@ -194,9 +196,11 @@ int cmd_select(const struct cmd *cmds, int argc, char **argv,
 	last_argv = argv;
 	last_do_help = help;
 
+	/*默认使用首个cmd*/
 	if (argc < 1 && cmds[0].func)
 		return cmds[0].func(argc, argv);
 
+	/*前缀匹配成功，执行相应命令*/
 	for (i = 0; cmds[i].cmd; i++) {
 		if (is_prefix(*argv, cmds[i].cmd)) {
 			if (!cmds[i].func) {
@@ -208,6 +212,7 @@ int cmd_select(const struct cmd *cmds, int argc, char **argv,
 		}
 	}
 
+	/*未找到cmd,直接输出help信息*/
 	help(argc - 1, argv + 1);
 
 	return -1;
@@ -276,7 +281,7 @@ void fprint_hex(FILE *f, void *arg, unsigned int n, const char *sep)
 /* Split command line into argument vector. */
 static int make_args(char *line, char *n_argv[], int maxargs, int cmd_nb)
 {
-	static const char ws[] = " \t\r\n";
+	static const char ws[] = " \t\r\n";/*定义参数分隔符*/
 	char *cp = line;
 	int n_argc = 0;
 
@@ -285,6 +290,7 @@ static int make_args(char *line, char *n_argv[], int maxargs, int cmd_nb)
 		cp += strspn(cp, ws);
 
 		if (*cp == '\0')
+			/*分析已达到结尾*/
 			break;
 
 		if (n_argc >= (maxargs - 1)) {
@@ -294,6 +300,8 @@ static int make_args(char *line, char *n_argv[], int maxargs, int cmd_nb)
 
 		/* Word begins with quote. */
 		if (*cp == '\'' || *cp == '"') {
+			/*遇到单引号，双引号，记录参数起始位置（移除相应引号），
+			 * 并跳到其后第一个对应的引号处（无转义支持）*/
 			char quote = *cp++;
 
 			n_argv[n_argc++] = cp;
@@ -305,6 +313,7 @@ static int make_args(char *line, char *n_argv[], int maxargs, int cmd_nb)
 				return -1;
 			}
 		} else {
+			/*记录参数起始位置*/
 			n_argv[n_argc++] = cp;
 
 			/* Find end of word. */
@@ -333,20 +342,25 @@ static int do_batch(int argc, char **argv)
 	int i;
 
 	if (argc < 2) {
+		/*参数过少*/
 		p_err("too few parameters for batch");
 		return -1;
 	} else if (argc > 2) {
+		/*参数过多*/
 		p_err("too many parameters for batch");
 		return -1;
 	} else if (!is_prefix(*argv, "file")) {
+		/*1号参数需要为"file"*/
 		p_err("expected 'file', got: %s", *argv);
 		return -1;
 	}
 	NEXT_ARG();
 
 	if (!strcmp(*argv, "-"))
+		/*支持文件内容来源于stdin*/
 		fp = stdin;
 	else
+		/*指明了file,直接打开*/
 		fp = fopen(*argv, "r");
 	if (!fp) {
 		p_err("Can't open file (%s): %s", *argv, strerror(errno));
@@ -355,12 +369,15 @@ static int do_batch(int argc, char **argv)
 
 	if (json_output)
 		jsonw_start_array(json_wtr);
+	/*循环读取此文件的每一行内容*/
 	while (fgets(buf, sizeof(buf), fp)) {
 		cp = strchr(buf, '#');
 		if (cp)
+			/*'#'后面的内容是注释，直接丢弃*/
 			*cp = '\0';
 
 		if (strlen(buf) == sizeof(buf) - 1) {
+			/*单行内容过长，报错*/
 			errno = E2BIG;
 			break;
 		}
@@ -369,6 +386,7 @@ static int do_batch(int argc, char **argv)
 		 * with '\' in the batch file).
 		 */
 		while ((cp = strstr(buf, "\\\n")) != NULL) {
+			/*cp指向的位置是一个续行符，继续读取，并合并对应续行，移除续行符*/
 			if (!fgets(contline, sizeof(contline), fp) ||
 			    strlen(contline) == 0) {
 				p_err("missing continuation line on command %d",
@@ -379,9 +397,11 @@ static int do_batch(int argc, char **argv)
 
 			cp = strchr(contline, '#');
 			if (cp)
+				/*续行符有注释，移除（这样处理注释符就对续行符不起作用了）*/
 				*cp = '\0';
 
 			if (strlen(buf) + strlen(contline) + 1 > sizeof(buf)) {
+				/*内容过长*/
 				p_err("command %d is too long", lines);
 				err = -1;
 				goto err_close;
@@ -390,7 +410,8 @@ static int do_batch(int argc, char **argv)
 			strcat(buf, contline);
 		}
 
-		n_argc = make_args(buf, n_argv, BATCH_ARG_NB_MAX, lines);
+		/*将此行内容按照空字符定义，打散成参数（双引号，单引号将被移除）*/
+		n_argc = make_args(buf, n_argv/*出参*/, BATCH_ARG_NB_MAX, lines/*行号*/);
 		if (!n_argc)
 			continue;
 		if (n_argc < 0) {
@@ -408,6 +429,7 @@ static int do_batch(int argc, char **argv)
 			jsonw_name(json_wtr, "output");
 		}
 
+		/*利用commands解析打散的参数，并进行执行*/
 		err = cmd_select(commands, n_argc, n_argv, do_help);
 
 		if (json_output)
@@ -478,6 +500,7 @@ int main(int argc, char **argv)
 				  options, NULL)) >= 0) {
 		switch (opt) {
 		case 'V':
+			/*要求显示版本*/
 			version_requested = true;
 			break;
 		case 'h':
@@ -486,6 +509,7 @@ int main(int argc, char **argv)
 			pretty_output = true;
 			/* fall through */
 		case 'j':
+			/*指明按json格式输出*/
 			if (!json_output) {
 				json_wtr = jsonw_new(stdout);
 				if (!json_wtr) {
@@ -535,6 +559,7 @@ int main(int argc, char **argv)
 		usage();
 
 	if (version_requested)
+		/*显示版本*/
 		return do_version(argc, argv);
 
 	ret = cmd_select(commands, argc, argv, do_help);

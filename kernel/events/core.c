@@ -402,7 +402,7 @@ static atomic_t nr_cgroup_events __read_mostly;
 static atomic_t nr_text_poke_events __read_mostly;
 static atomic_t nr_build_id_events __read_mostly;
 
-static LIST_HEAD(pmus);
+static LIST_HEAD(pmus);/*用于串连所有pmu*/
 static DEFINE_MUTEX(pmus_lock);
 static struct srcu_struct pmus_srcu;
 static cpumask_var_t perf_online_mask;
@@ -5862,12 +5862,12 @@ static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned lon
 	case PERF_EVENT_IOC_SET_FILTER:
 		return perf_event_set_filter(event, (void __user *)arg);
 
-	case PERF_EVENT_IOC_SET_BPF:
+	case PERF_EVENT_IOC_SET_BPF:/*使perf event与bpf相互关联*/
 	{
 		struct bpf_prog *prog;
 		int err;
 
-		prog = bpf_prog_get(arg);
+		prog = bpf_prog_get(arg/*参数为bpf对应的fd*/);
 		if (IS_ERR(prog))
 			return PTR_ERR(prog);
 
@@ -5919,6 +5919,7 @@ static long _perf_ioctl(struct perf_event *event, unsigned int cmd, unsigned lon
 	return 0;
 }
 
+/*perf event fd的ioctl处理*/
 static long perf_ioctl(struct file *file, unsigned int cmd, unsigned long arg)
 {
 	struct perf_event *event = file->private_data;
@@ -10232,7 +10233,7 @@ static const struct attribute_group *kprobe_attr_groups[] = {
 static int perf_kprobe_event_init(struct perf_event *event);
 static struct pmu perf_kprobe = {
 	.task_ctx_nr	= perf_sw_context,
-	.event_init	= perf_kprobe_event_init,
+	.event_init	= perf_kprobe_event_init,/*处理函数probe*/
 	.add		= perf_trace_add,
 	.del		= perf_trace_del,
 	.start		= perf_swevent_start,
@@ -10258,6 +10259,7 @@ static int perf_kprobe_event_init(struct perf_event *event)
 	if (has_branch_stack(event))
 		return -EOPNOTSUPP;
 
+	/*是否为retprobe*/
 	is_retprobe = event->attr.config & PERF_PROBE_CONFIG_IS_RETPROBE;
 	err = perf_kprobe_init(event, is_retprobe);
 	if (err)
@@ -10334,6 +10336,7 @@ static inline void perf_tp_register(void)
 {
 	perf_pmu_register(&perf_tracepoint, "tracepoint", PERF_TYPE_TRACEPOINT);
 #ifdef CONFIG_KPROBE_EVENTS
+	/*kprobe注册到pmu*/
 	perf_pmu_register(&perf_kprobe, "kprobe", -1);
 #endif
 #ifdef CONFIG_UPROBE_EVENTS
@@ -10364,6 +10367,7 @@ static void bpf_overflow_handler(struct perf_event *event,
 	rcu_read_lock();
 	prog = READ_ONCE(event->prog);
 	if (prog) {
+		/*运行bpf程序*/
 		perf_prepare_sample(data, event, regs);
 		ret = bpf_prog_run(prog, &ctx);
 	}
@@ -11429,7 +11433,7 @@ int perf_pmu_register(struct pmu *pmu, const char *name, int type)
 	pmu->type = -1;
 	if (!name)
 		goto skip_type;
-	pmu->name = name;
+	pmu->name = name;/*设置名称*/
 
 	if (type != PERF_TYPE_SOFTWARE) {
 		if (type >= 0)
@@ -11501,7 +11505,7 @@ skip_type:
 	if (type == PERF_TYPE_SOFTWARE || !name)
 		list_add_rcu(&pmu->entry, &pmus);
 	else
-		list_add_tail_rcu(&pmu->entry, &pmus);
+		list_add_tail_rcu(&pmu->entry, &pmus);/*将pmu加入到pmus*/
 
 	atomic_set(&pmu->exclusive_cnt, 0);
 	ret = 0;
@@ -11581,7 +11585,7 @@ static int perf_try_init_event(struct pmu *pmu, struct perf_event *event)
 	}
 
 	event->pmu = pmu;
-	ret = pmu->event_init(event);
+	ret = pmu->event_init(event);/*执行此event初始化*/
 
 	if (ctx)
 		perf_event_ctx_unlock(event->group_leader, ctx);
@@ -11657,6 +11661,7 @@ again:
 		goto unlock;
 	}
 
+	/*遍历注册在pmus上的pmu,逐个进行初始化*/
 	list_for_each_entry_rcu(pmu, &pmus, entry, lockdep_is_held(&pmus_srcu)) {
 		ret = perf_try_init_event(pmu, event);
 		if (!ret)
@@ -11848,7 +11853,7 @@ perf_event_alloc(struct perf_event_attr *attr, int cpu,
 
 	atomic_long_set(&event->refcount, 1);
 	event->cpu		= cpu;
-	event->attr		= *attr;
+	event->attr		= *attr;/*设置event属性*/
 	event->group_leader	= group_leader;
 	event->pmu		= NULL;
 	event->oncpu		= -1;
@@ -12351,6 +12356,7 @@ SYSCALL_DEFINE5(perf_event_open,
 	if (flags & ~PERF_FLAG_ALL)
 		return -EINVAL;
 
+	/*复制产生参数的attr*/
 	err = perf_copy_attr(attr_uptr, &attr);
 	if (err)
 		return err;
@@ -12403,7 +12409,7 @@ SYSCALL_DEFINE5(perf_event_open,
 		return -EINVAL;
 
 	if (flags & PERF_FLAG_FD_CLOEXEC)
-		f_flags |= O_CLOEXEC;
+		f_flags |= O_CLOEXEC;/*指定fd flags*/
 
 	//分配一个没有使用的fd
 	event_fd = get_unused_fd_flags(f_flags);
@@ -12618,6 +12624,7 @@ SYSCALL_DEFINE5(perf_event_open,
 
 	WARN_ON_ONCE(ctx->parent_ctx);
 
+	/*创建event对应的伪文件*/
 	event_file = anon_inode_getfile("[perf_event]", &perf_fops, event, f_flags);
 	if (IS_ERR(event_file)) {
 		err = PTR_ERR(event_file);

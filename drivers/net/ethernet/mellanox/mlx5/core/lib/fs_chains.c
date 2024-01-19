@@ -105,10 +105,10 @@ bool mlx5_chains_backwards_supported(struct mlx5_fs_chains *chains)
 u32 mlx5_chains_get_chain_range(struct mlx5_fs_chains *chains)
 {
 	if (!mlx5_chains_prios_supported(chains))
-		return 1;
+		return 1;/*不支持优先级*/
 
 	if (mlx5_chains_ignore_flow_level_supported(chains))
-		return UINT_MAX - 1;
+		return UINT_MAX - 1;/*flow level将被忽略*/
 
 	/* We should get here only for eswitch case */
 	return FDB_TC_MAX_CHAIN;
@@ -122,11 +122,11 @@ u32 mlx5_chains_get_nf_ft_chain(struct mlx5_fs_chains *chains)
 u32 mlx5_chains_get_prio_range(struct mlx5_fs_chains *chains)
 {
 	if (mlx5_chains_ignore_flow_level_supported(chains))
-		return UINT_MAX;
+		return UINT_MAX;/*flow level将会被忽略*/
 
 	if (!chains->dev->priv.eswitch ||
 	    chains->dev->priv.eswitch->mode != MLX5_ESWITCH_OFFLOADS)
-		return 1;
+		return 1;/*此情况下，仅支持1个优先级*/
 
 	/* We should get here only for eswitch case */
 	return FDB_TC_MAX_PRIO;
@@ -729,6 +729,7 @@ mlx5_chains_init(struct mlx5_core_dev *dev, struct mlx5_chains_attr *attr)
 	max_flow_counter = (MLX5_CAP_GEN(dev, max_flow_counter_31_16) << 16) |
 			    MLX5_CAP_GEN(dev, max_flow_counter_15_0);
 
+	/*显示支持的最大core,最大group number,最大flow table size*/
 	mlx5_core_dbg(dev,
 		      "Init flow table chains, max counters(%d), groups(%d), max flow table size(%d)\n",
 		      max_flow_counter, attr->max_grp_num, attr->max_ft_sz);

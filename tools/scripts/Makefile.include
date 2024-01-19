@@ -143,6 +143,9 @@ endif
 #
 # Call by doing: $(call descend,directory[,target])
 #
+# 首先创建$(OUTPUT)$(1)对应的目录
+# 接着进入到$(1)目录执行编译，编译时采用$(2) target
+# 编译时定义subdir变量。
 descend = \
 	+mkdir -p $(OUTPUT)$(1) && \
 	$(MAKE) $(COMMAND_O) subdir=$(if $(subdir),$(subdir)/$(1),$(1)) $(PRINT_DIR) -C $(1) $(2)

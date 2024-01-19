@@ -222,11 +222,13 @@ struct bpf_linker *bpf_linker__new(const char *filename, struct bpf_linker_opts 
 	if (!OPTS_VALID(opts, bpf_linker_opts))
 		return errno = EINVAL, NULL;
 
+	/*设置version*/
 	if (elf_version(EV_CURRENT) == EV_NONE) {
 		pr_warn_elf("libelf initialization failed");
 		return errno = EINVAL, NULL;
 	}
 
+	/*创建linker对象*/
 	linker = calloc(1, sizeof(*linker));
 	if (!linker)
 		return errno = ENOMEM, NULL;
@@ -247,8 +249,10 @@ err_out:
 static struct dst_sec *add_dst_sec(struct bpf_linker *linker, const char *sec_name)
 {
 	struct dst_sec *secs = linker->secs, *sec;
+	/*获得新的cnt*/
 	size_t new_cnt = linker->sec_cnt ? linker->sec_cnt + 1 : 2;
 
+	/*扩展section array*/
 	secs = libbpf_reallocarray(secs, new_cnt, sizeof(*secs));
 	if (!secs)
 		return NULL;
@@ -259,13 +263,13 @@ static struct dst_sec *add_dst_sec(struct bpf_linker *linker, const char *sec_na
 	linker->secs = secs;
 	linker->sec_cnt = new_cnt;
 
-	sec = &linker->secs[new_cnt - 1];
-	sec->id = new_cnt - 1;
-	sec->sec_name = strdup(sec_name);
+	sec = &linker->secs[new_cnt - 1];/*指向新增加的section*/
+	sec->id = new_cnt - 1;/*指明此section id*/
+	sec->sec_name = strdup(sec_name);/*指明此section name*/
 	if (!sec->sec_name)
 		return NULL;
 
-	return sec;
+	return sec;/*返回新增的section*/
 }
 
 static Elf64_Sym *add_new_sym(struct bpf_linker *linker, size_t *sym_idx)
@@ -292,7 +296,7 @@ static Elf64_Sym *add_new_sym(struct bpf_linker *linker, size_t *sym_idx)
 	return sym;
 }
 
-static int init_output_elf(struct bpf_linker *linker, const char *file)
+static int init_output_elf(struct bpf_linker *linker, const char *file/*输出文件名称*/)
 {
 	int err, str_off;
 	Elf64_Sym *init_sym;
@@ -302,6 +306,7 @@ static int init_output_elf(struct bpf_linker *linker, const char *file)
 	if (!linker->filename)
 		return -ENOMEM;
 
+	/*创建文件*/
 	linker->fd = open(file, O_WRONLY | O_CREAT | O_TRUNC | O_CLOEXEC, 0644);
 	if (linker->fd < 0) {
 		err = -errno;
@@ -309,6 +314,7 @@ static int init_output_elf(struct bpf_linker *linker, const char *file)
 		return err;
 	}
 
+	/*构造link->elf结构体*/
 	linker->elf = elf_begin(linker->fd, ELF_C_WRITE, NULL);
 	if (!linker->elf) {
 		pr_warn_elf("failed to create ELF object");
@@ -322,22 +328,23 @@ static int init_output_elf(struct bpf_linker *linker, const char *file)
 		return -EINVAL;
 	}
 
-	linker->elf_hdr->e_machine = EM_BPF;
+	linker->elf_hdr->e_machine = EM_BPF;/*指明machine为bpf*/
 	linker->elf_hdr->e_type = ET_REL;
 #if __BYTE_ORDER__ == __ORDER_LITTLE_ENDIAN__
-	linker->elf_hdr->e_ident[EI_DATA] = ELFDATA2LSB;
+	linker->elf_hdr->e_ident[EI_DATA] = ELFDATA2LSB;/*指明小端*/
 #elif __BYTE_ORDER__ == __ORDER_BIG_ENDIAN__
-	linker->elf_hdr->e_ident[EI_DATA] = ELFDATA2MSB;
+	linker->elf_hdr->e_ident[EI_DATA] = ELFDATA2MSB;/*指明大端*/
 #else
 #error "Unknown __BYTE_ORDER__"
 #endif
 
 	/* STRTAB */
 	/* initialize strset with an empty string to conform to ELF */
-	linker->strtab_strs = strset__new(INT_MAX, "", sizeof(""));
+	linker->strtab_strs = strset__new(INT_MAX, "", sizeof(""));/*构造strtab*/
 	if (libbpf_get_error(linker->strtab_strs))
 		return libbpf_get_error(linker->strtab_strs);
 
+	/*增加.strtab section*/
 	sec = add_dst_sec(linker, ".strtab");
 	if (!sec)
 		return -ENOMEM;
@@ -1031,6 +1038,7 @@ static int init_sec(struct bpf_linker *linker, struct dst_sec *dst_sec, struct s
 	return 0;
 }
 
+/*返回相同名称的dst_sec*/
 static struct dst_sec *find_dst_sec_by_name(struct bpf_linker *linker, const char *sec_name)
 {
 	struct dst_sec *sec;
@@ -1166,8 +1174,10 @@ static int linker_append_sec_data(struct bpf_linker *linker, struct src_obj *obj
 		if (!is_data_sec(src_sec))
 			continue;
 
+		/*在linker中查找到sec_name相同的section*/
 		dst_sec = find_dst_sec_by_name(linker, src_sec->sec_name);
 		if (!dst_sec) {
+			/*没有找到相同的section,添加进linker*/
 			dst_sec = add_dst_sec(linker, src_sec->sec_name);
 			if (!dst_sec)
 				return -ENOMEM;
@@ -1177,6 +1187,7 @@ static int linker_append_sec_data(struct bpf_linker *linker, struct src_obj *obj
 				return err;
 			}
 		} else {
+			/*检查两个section类型是否相等*/
 			if (!secs_match(dst_sec, src_sec)) {
 				pr_warn("ELF sections %s are incompatible\n", src_sec->sec_name);
 				return -1;
@@ -1185,6 +1196,7 @@ static int linker_append_sec_data(struct bpf_linker *linker, struct src_obj *obj
 			/* "license" and "version" sections are deduped */
 			if (strcmp(src_sec->sec_name, "license") == 0
 			    || strcmp(src_sec->sec_name, "version") == 0) {
+				/*这两类section需要检查内容是否一致*/
 				if (!sec_content_is_same(dst_sec, src_sec)) {
 					pr_warn("non-identical contents of section '%s' are not supported\n", src_sec->sec_name);
 					return -EINVAL;

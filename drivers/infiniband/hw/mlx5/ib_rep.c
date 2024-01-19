@@ -235,6 +235,7 @@ static struct auxiliary_driver mlx5r_rep_driver = {
 
 int mlx5r_rep_init(void)
 {
+	/*mlx5 rep驱动初始化*/
 	return auxiliary_driver_register(&mlx5r_rep_driver);
 }
 

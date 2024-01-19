@@ -70,11 +70,11 @@ struct hashmap_entry {
 };
 
 struct hashmap {
-	hashmap_hash_fn hash_fn;
-	hashmap_equal_fn equal_fn;
+	hashmap_hash_fn hash_fn;/*hash函数*/
+	hashmap_equal_fn equal_fn;/*比对函数*/
 	void *ctx;
 
-	struct hashmap_entry **buckets;
+	struct hashmap_entry **buckets;/*hash桶*/
 	size_t cap;
 	size_t cap_bits;
 	size_t sz;

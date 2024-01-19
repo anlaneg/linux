@@ -406,6 +406,7 @@ static void json_print_metric(void *ps __maybe_unused, const char *group,
 	strbuf_release(&buf);
 }
 
+/*列出*/
 int cmd_list(int argc, const char **argv)
 {
 	int i, ret = 0;
@@ -484,6 +485,7 @@ int cmd_list(int argc, const char **argv)
 	if (argc == 0) {
 		default_ps.metrics = true;
 		default_ps.metricgroups = true;
+		/*列出所有events*/
 		print_events(&print_cb, ps);
 		goto out;
 	}
@@ -492,7 +494,7 @@ int cmd_list(int argc, const char **argv)
 		char *sep, *s;
 
 		if (strcmp(argv[i], "tracepoint") == 0)
-		/*显示tracepoint对应的events,其常见/sys/kernel/debug/tracing/events目录下*/
+			/*显示tracepoint对应的events,其常见/sys/kernel/debug/tracing/events目录下*/
 			print_tracepoint_events(&print_cb, ps);
 		else if (strcmp(argv[i], "hw") == 0 ||
 			 strcmp(argv[i], "hardware") == 0)

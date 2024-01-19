@@ -159,6 +159,7 @@ struct btf_dump *btf_dump__new(const struct btf *btf,
 	if (!printf_fn)
 		return libbpf_err_ptr(-EINVAL);
 
+	/*来一个btf_dump结构体*/
 	d = calloc(1, sizeof(struct btf_dump));
 	if (!d)
 		return libbpf_err_ptr(-ENOMEM);
@@ -168,12 +169,15 @@ struct btf_dump *btf_dump__new(const struct btf *btf,
 	d->cb_ctx = ctx;
 	d->ptr_sz = btf__pointer_size(btf) ? : sizeof(void *);
 
+	/*来一个hash表*/
 	d->type_names = hashmap__new(str_hash_fn, str_equal_fn, NULL);
 	if (IS_ERR(d->type_names)) {
 		err = PTR_ERR(d->type_names);
 		d->type_names = NULL;
 		goto err;
 	}
+
+	/*再来一个hash表*/
 	d->ident_names = hashmap__new(str_hash_fn, str_equal_fn, NULL);
 	if (IS_ERR(d->ident_names)) {
 		err = PTR_ERR(d->ident_names);

@@ -40,7 +40,7 @@ static inline void *u64_to_ptr(__u64 ptr)
 		int _cnt = (cnt);					\
 		bool _res;						\
 									\
-		if (argc < _cnt) {					\
+		if (argc < _cnt) {/*参数较少*/					\
 			p_err("'%s' needs at least %d arguments, %d found", \
 			      argv[-1], _cnt, argc);			\
 			_res = false;					\
@@ -126,8 +126,8 @@ void print_dev_plain(__u32 ifindex, __u64 ns_dev, __u64 ns_inode);
 void print_dev_json(__u32 ifindex, __u64 ns_dev, __u64 ns_inode);
 
 struct cmd {
-	const char *cmd;
-	int (*func)(int argc, char **argv);
+	const char *cmd;/*命令字符*/
+	int (*func)(int argc, char **argv);/*命令对应的函数*/
 };
 
 int cmd_select(const struct cmd *cmds, int argc, char **argv,

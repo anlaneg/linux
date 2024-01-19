@@ -584,6 +584,7 @@ int bpf_obj_pin(int fd, const char *pathname)
 	union bpf_attr attr;
 	int ret;
 
+	/*将指定fd pin到对应的路径上。*/
 	memset(&attr, 0, attr_sz);
 	attr.pathname = ptr_to_u64((void *)pathname);
 	attr.bpf_fd = fd;
@@ -597,6 +598,7 @@ int bpf_obj_get(const char *pathname)
 	return bpf_obj_get_opts(pathname, NULL);
 }
 
+/*通过path获取bpf对应的fd*/
 int bpf_obj_get_opts(const char *pathname, const struct bpf_obj_get_opts *opts)
 {
 	const size_t attr_sz = offsetofend(union bpf_attr, file_flags);
@@ -606,10 +608,12 @@ int bpf_obj_get_opts(const char *pathname, const struct bpf_obj_get_opts *opts)
 	if (!OPTS_VALID(opts, bpf_obj_get_opts))
 		return libbpf_err(-EINVAL);
 
-	memset(&attr, 0, attr_sz);
+	memset(&attr, 0, attr_sz);/*结构体清零*/
+	/*指定path名称*/
 	attr.pathname = ptr_to_u64((void *)pathname);
 	attr.file_flags = OPTS_GET(opts, file_flags, 0);
 
+	/*给定path,获取此path对应的bpf object对应的fd*/
 	fd = sys_bpf_fd(BPF_OBJ_GET, &attr, attr_sz);
 	return libbpf_err_errno(fd);
 }
@@ -815,6 +819,7 @@ int bpf_iter_create(int link_fd)
 	union bpf_attr attr;
 	int fd;
 
+	/*创建iter*/
 	memset(&attr, 0, attr_sz);
 	attr.iter_create.link_fd = link_fd;
 
@@ -913,15 +918,18 @@ static int bpf_obj_get_next_id(__u32 start_id, __u32 *next_id, int cmd)
 	memset(&attr, 0, attr_sz);
 	attr.start_id = start_id;
 
+	/*要求获取next_id*/
 	err = sys_bpf(cmd, &attr, attr_sz);
 	if (!err)
+		/*填充next_id*/
 		*next_id = attr.next_id;
 
 	return libbpf_err_errno(err);
 }
 
-int bpf_prog_get_next_id(__u32 start_id, __u32 *next_id)
+int bpf_prog_get_next_id(__u32 start_id/*起始id*/, __u32 *next_id)
 {
+	/*获取下一个prog id*/
 	return bpf_obj_get_next_id(start_id, next_id, BPF_PROG_GET_NEXT_ID);
 }
 
@@ -954,15 +962,18 @@ int bpf_prog_get_fd_by_id_opts(__u32 id,
 	attr.prog_id = id;
 	attr.open_flags = OPTS_GET(opts, open_flags, 0);
 
+	/*通过prog id获取prog对应的fd*/
 	fd = sys_bpf_fd(BPF_PROG_GET_FD_BY_ID, &attr, attr_sz);
 	return libbpf_err_errno(fd);
 }
 
+/*通过prog id获得其对应的prog fd*/
 int bpf_prog_get_fd_by_id(__u32 id)
 {
 	return bpf_prog_get_fd_by_id_opts(id, NULL);
 }
 
+/*通过id查找bpf map对应的fd*/
 int bpf_map_get_fd_by_id_opts(__u32 id,
 			      const struct bpf_get_fd_by_id_opts *opts)
 {
@@ -1000,10 +1011,12 @@ int bpf_btf_get_fd_by_id_opts(__u32 id,
 	attr.btf_id = id;
 	attr.open_flags = OPTS_GET(opts, open_flags, 0);
 
+	/*通过id查找btf对应的fd*/
 	fd = sys_bpf_fd(BPF_BTF_GET_FD_BY_ID, &attr, attr_sz);
 	return libbpf_err_errno(fd);
 }
 
+/*通过id查找btf id*/
 int bpf_btf_get_fd_by_id(__u32 id)
 {
 	return bpf_btf_get_fd_by_id_opts(id, NULL);
@@ -1041,21 +1054,24 @@ int bpf_obj_get_info_by_fd(int bpf_fd, void *info, __u32 *info_len)
 	memset(&attr, 0, attr_sz);
 	attr.info.bpf_fd = bpf_fd;
 	attr.info.info_len = *info_len;
-	attr.info.info = ptr_to_u64(info);
+	attr.info.info = ptr_to_u64(info);/*待填充的内存*/
 
+	/*通过bpf fd获取此object对应的属性*/
 	err = sys_bpf(BPF_OBJ_GET_INFO_BY_FD, &attr, attr_sz);
 	if (!err)
-		*info_len = attr.info.info_len;
+		*info_len = attr.info.info_len;/*出参，指明出参内容有效长度*/
 	return libbpf_err_errno(err);
 }
 
 int bpf_prog_get_info_by_fd(int prog_fd, struct bpf_prog_info *info, __u32 *info_len)
 {
+	/*通过prog fd获取此prog对应的info信息*/
 	return bpf_obj_get_info_by_fd(prog_fd, info, info_len);
 }
 
 int bpf_map_get_info_by_fd(int map_fd, struct bpf_map_info *info, __u32 *info_len)
 {
+	/*通过map fd获取bpf map对应的info*/
 	return bpf_obj_get_info_by_fd(map_fd, info, info_len);
 }
 

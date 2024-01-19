@@ -528,7 +528,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 		.net = args->net,
 		.ident = args->protocol,
 		.srcaddr = args->saddress,
-		.dstaddr = args->address,
+		.dstaddr = args->address,/*设置目的地址*/
 		.addrlen = args->addrsize,
 		.servername = args->servername,
 		.bc_xprt = args->bc_xprt,
@@ -562,6 +562,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 		struct sockaddr_in6 *sin6 =
 				(struct sockaddr_in6 *)args->address;
 
+		/*支持以下三种方式，af_unix,af_inet,af_inet6*/
 		servername[0] = '\0';
 		switch (args->address->sa_family) {
 		case AF_LOCAL:
