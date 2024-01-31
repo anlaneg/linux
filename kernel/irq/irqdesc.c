@@ -153,6 +153,7 @@ static unsigned int irq_find_at_or_after(unsigned int offset)
 	return desc ? irq_desc_get_irq(desc) : nr_irqs;
 }
 
+//添加中断irq对应的描述符
 static void irq_insert_desc(unsigned int irq, struct irq_desc *desc)
 {
 	MA_STATE(mas, &sparse_irqs, irq, irq);
@@ -375,14 +376,6 @@ static void irq_sysfs_add(int irq, struct irq_desc *desc) {}
 static void irq_sysfs_del(struct irq_desc *desc) {}
 
 #endif /* CONFIG_SYSFS */
-
-static RADIX_TREE(irq_desc_tree, GFP_KERNEL);
-
-//添加中断irq对应的描述符
-static void irq_insert_desc(unsigned int irq, struct irq_desc *desc)
-{
-	radix_tree_insert(&irq_desc_tree, irq, desc);
-}
 
 //取irq对应的中断描述符
 struct irq_desc *irq_to_desc(unsigned int irq)
@@ -614,7 +607,7 @@ int __init early_irq_init(void)
 		mutex_init(&desc[i].request_mutex);
 		init_waitqueue_head(&desc[i].wait_for_threads);
 		desc_set_defaults(i, &desc[i], node, NULL, NULL);
-		irq_resend_init(desc);
+		irq_resend_init(&desc[i]);
 	}
 	return arch_early_irq_init();
 }
