@@ -1672,6 +1672,7 @@ static int __init nvmet_init(void)
 	if (error)
 		goto out_free_nvmet_work_queue;
 
+	/*初始化nvmet模块对应的configfs目录*/
 	error = nvmet_init_configfs();
 	if (error)
 		goto out_exit_discovery;

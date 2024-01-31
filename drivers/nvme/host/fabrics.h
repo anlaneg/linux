@@ -37,7 +37,7 @@ struct nvmf_host {
 	struct kref		ref;
 	struct list_head	list;
 	char			nqn[NVMF_NQN_SIZE];
-	uuid_t			id;
+	uuid_t			id;/*主机的uuid*/
 };
 
 /**
@@ -119,14 +119,14 @@ enum {
 struct nvmf_ctrl_options {
 	unsigned		mask;
 	int			max_reconnects;
-	char			*transport;
+	char			*transport;/*用户通过transport提定的值，例如tcp*/
 	char			*subsysnqn;
 	char			*traddr;
 	char			*trsvcid;
 	char			*host_traddr;
-	char			*host_iface;
+	char			*host_iface;/*主机接口名称*/
 	size_t			queue_size;
-	unsigned int		nr_io_queues;
+	unsigned int		nr_io_queues;/*io队列数目*/
 	unsigned int		reconnect_delay;
 	bool			discovery_nqn;
 	bool			duplicate_connect;
@@ -175,7 +175,7 @@ struct nvmf_transport_ops {
 	struct list_head	entry;
 	struct module		*module;
 	const char		*name;
-	int			required_opts;
+	int			required_opts;/*此transport必需的opts*/
 	int			allowed_opts;
 	struct nvme_ctrl	*(*create_ctrl)(struct device *dev,
 					struct nvmf_ctrl_options *opts);

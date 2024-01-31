@@ -71,6 +71,7 @@ static int configfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_op = &configfs_ops;
 	sb->s_time_gran = 1;
 
+	/*创建根inode*/
 	inode = configfs_new_inode(S_IFDIR | S_IRWXU | S_IRUGO | S_IXUGO,
 				   &configfs_root, sb);
 	if (inode) {
@@ -111,6 +112,7 @@ static int configfs_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+/*定义configfs文件系统*/
 static struct file_system_type configfs_fs_type = {
 	.owner		= THIS_MODULE,
 	.name		= "configfs",

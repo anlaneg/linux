@@ -54,6 +54,7 @@ static struct nvmf_host *nvmf_host_add(const char *hostnqn, uuid_t *id)
 		bool same_hostid = uuid_equal(&host->id, id);
 
 		if (same_hostnqn && same_hostid) {
+			/*nqn,id均相等，已在nvmf_hosts上存在*/
 			kref_get(&host->ref);
 			goto out_unlock;
 		}
@@ -71,12 +72,14 @@ static struct nvmf_host *nvmf_host_add(const char *hostnqn, uuid_t *id)
 		}
 	}
 
+	/*通过hostnqn,id创建host*/
 	host = nvmf_host_alloc(hostnqn, id);
 	if (!host) {
 		host = ERR_PTR(-ENOMEM);
 		goto out_unlock;
 	}
 
+	/*将host添加进nvmf_hosts中*/
 	list_add_tail(&host->list, &nvmf_hosts);
 out_unlock:
 	mutex_unlock(&nvmf_hosts_mutex);
@@ -89,15 +92,17 @@ static struct nvmf_host *nvmf_host_default(void)
 	char nqn[NVMF_NQN_SIZE];
 	uuid_t id;
 
-	uuid_gen(&id);
+	uuid_gen(&id);/*生成uuid*/
 	snprintf(nqn, NVMF_NQN_SIZE,
 		"nqn.2014-08.org.nvmexpress:uuid:%pUb", &id);
 
+	/*创建nvmf_host*/
 	host = nvmf_host_alloc(nqn, &id);
 	if (!host)
 		return NULL;
 
 	mutex_lock(&nvmf_hosts_mutex);
+	/*将新申请的host加入到nvmf_hosts*/
 	list_add_tail(&host->list, &nvmf_hosts);
 	mutex_unlock(&nvmf_hosts_mutex);
 
@@ -581,6 +586,7 @@ EXPORT_SYMBOL_GPL(nvmf_should_reconnect);
 int nvmf_register_transport(struct nvmf_transport_ops *ops)
 {
 	if (!ops->create_ctrl)
+		/*必须有create_ctrl回调*/
 		return -EINVAL;
 
 	down_write(&nvmf_transports_rwsem);
@@ -617,6 +623,7 @@ static struct nvmf_transport_ops *nvmf_lookup_transport(
 
 	list_for_each_entry(ops, &nvmf_transports, entry) {
 		if (strcmp(ops->name, opts->transport) == 0)
+			/*检查确认注册有用户指定的transport，返回此transport对应的ops*/
 			return ops;
 	}
 
@@ -674,9 +681,10 @@ static const match_table_t opt_tokens = {
 #ifdef CONFIG_NVME_TCP_TLS
 	{ NVMF_OPT_TLS,			"tls"			},
 #endif
-	{ NVMF_OPT_ERR,			NULL			}
+	{ NVMF_OPT_ERR,			NULL			}/*恒匹配所有其它项*/
 };
 
+/*解析创建nvmf_ctrl_options*/
 static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 		const char *buf)
 {
@@ -691,7 +699,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 
 	/* Set defaults */
 	opts->queue_size = NVMF_DEF_QUEUE_SIZE;
-	opts->nr_io_queues = num_online_cpus();
+	opts->nr_io_queues = num_online_cpus();/*io队列数为当前online cpu总数*/
 	opts->reconnect_delay = NVMF_DEF_RECONNECT_DELAY;
 	opts->kato = 0;
 	opts->duplicate_connect = false;
@@ -713,12 +721,14 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 
 	while ((p = strsep(&o, ",\n")) != NULL) {
 		if (!*p)
+			/*遇到连续分隔符的情况，继续查找*/
 			continue;
 
 		token = match_token(p, opt_tokens, args);
-		opts->mask |= token;
+		opts->mask |= token;/*指明匹配了哪项*/
 		switch (token) {
 		case NVMF_OPT_TRANSPORT:
+			/*指明了transport*/
 			p = match_strdup(args);
 			if (!p) {
 				ret = -ENOMEM;
@@ -728,6 +738,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 			opts->transport = p;
 			break;
 		case NVMF_OPT_NQN:
+			/*指明了nqn参数*/
 			p = match_strdup(args);
 			if (!p) {
 				ret = -ENOMEM;
@@ -747,6 +758,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 					 NVME_DISC_SUBSYS_NAME));
 			break;
 		case NVMF_OPT_TRADDR:
+			/*解析traddr参数*/
 			p = match_strdup(args);
 			if (!p) {
 				ret = -ENOMEM;
@@ -792,6 +804,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 				break;
 			}
 
+			/*按参数更新io队列数*/
 			opts->nr_io_queues = min_t(unsigned int,
 					num_online_cpus(), token);
 			break;
@@ -809,7 +822,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 				/* Allowed for debug */
 				pr_warn("keep_alive_tmo 0 won't execute keep alives!!!\n");
 			}
-			opts->kato = token;
+			opts->kato = token;/*超时时间*/
 			break;
 		case NVMF_OPT_CTRL_LOSS_TMO:
 			if (match_int(args, &token)) {
@@ -1047,6 +1060,7 @@ static int nvmf_parse_options(struct nvmf_ctrl_options *opts,
 				opts->fast_io_fail_tmo, ctrl_loss_tmo);
 	}
 
+	/*按配置创建host*/
 	opts->host = nvmf_host_add(hostnqn, &hostid);
 	if (IS_ERR(opts->host)) {
 		ret = PTR_ERR(opts->host);
@@ -1144,6 +1158,7 @@ static int nvmf_check_required_opts(struct nvmf_ctrl_options *opts,
 		for (i = 0; i < ARRAY_SIZE(opt_tokens); i++) {
 			if ((opt_tokens[i].token & required_opts) &&
 			    !(opt_tokens[i].token & opts->mask)) {
+				/*指出必须但没有提供的选项*/
 				pr_warn("missing parameter '%s'\n",
 					opt_tokens[i].pattern);
 			}
@@ -1202,11 +1217,13 @@ static int nvmf_check_allowed_opts(struct nvmf_ctrl_options *opts,
 		unsigned int allowed_opts)
 {
 	if (opts->mask & ~allowed_opts) {
+		/*存在此opts不支持的选项*/
 		unsigned int i;
 
 		for (i = 0; i < ARRAY_SIZE(opt_tokens); i++) {
 			if ((opt_tokens[i].token & opts->mask) &&
 			    (opt_tokens[i].token & ~allowed_opts)) {
+				/*指明此opts被指明了，但opts没有指明容许此opts,故报错*/
 				pr_warn("invalid parameter '%s'\n",
 					opt_tokens[i].pattern);
 			}
@@ -1255,11 +1272,13 @@ nvmf_create_ctrl(struct device *dev, const char *buf)
 	if (!opts)
 		return ERR_PTR(-ENOMEM);
 
+	/*通过用户传入的内容，解析成opts*/
 	ret = nvmf_parse_options(opts, buf);
 	if (ret)
 		goto out_free_opts;
 
 
+	/*尝试加载用户指定的transport*/
 	request_module("nvme-%s", opts->transport);
 
 	/*
@@ -1269,12 +1288,14 @@ nvmf_create_ctrl(struct device *dev, const char *buf)
 	 */
 	ret = nvmf_check_required_opts(opts, NVMF_REQUIRED_OPTS);
 	if (ret)
+		/*存在未提供的必须选项，报错*/
 		goto out_free_opts;
 	opts->mask &= ~NVMF_REQUIRED_OPTS;
 
 	down_read(&nvmf_transports_rwsem);
 	ops = nvmf_lookup_transport(opts);
 	if (!ops) {
+		/*没有找到此transport对应的ops*/
 		pr_info("no handler found for transport %s.\n",
 			opts->transport);
 		ret = -EINVAL;
@@ -1287,14 +1308,18 @@ nvmf_create_ctrl(struct device *dev, const char *buf)
 	}
 	up_read(&nvmf_transports_rwsem);
 
+	/*针对transport检查transport要求的必须选项*/
 	ret = nvmf_check_required_opts(opts, ops->required_opts);
 	if (ret)
 		goto out_module_put;
+
+	/*针对transport检查是否存在此transport不容许，但被指定的选项*/
 	ret = nvmf_check_allowed_opts(opts, NVMF_ALLOWED_OPTS |
 				ops->allowed_opts | ops->required_opts);
 	if (ret)
 		goto out_module_put;
 
+	/*按照配置的参数，触发create_ctrl回调，创建相应的transport*/
 	ctrl = ops->create_ctrl(dev, opts);
 	if (IS_ERR(ctrl)) {
 		ret = PTR_ERR(ctrl);
@@ -1329,6 +1354,7 @@ static ssize_t nvmf_dev_write(struct file *file, const char __user *ubuf,
 	if (count > PAGE_SIZE)
 		return -ENOMEM;
 
+	/*获得用户态指定的buffer内容*/
 	buf = memdup_user_nul(ubuf, count);
 	if (IS_ERR(buf))
 		return PTR_ERR(buf);
@@ -1339,7 +1365,8 @@ static ssize_t nvmf_dev_write(struct file *file, const char __user *ubuf,
 		goto out_unlock;
 	}
 
-	ctrl = nvmf_create_ctrl(nvmf_device, buf);
+	/*创建ctrl*/
+	ctrl = nvmf_create_ctrl(nvmf_device, buf/*用户指定的参数*/);
 	if (IS_ERR(ctrl)) {
 		ret = PTR_ERR(ctrl);
 		goto out_unlock;
@@ -1420,6 +1447,7 @@ static const struct file_operations nvmf_dev_fops = {
 	.release	= nvmf_dev_release,
 };
 
+/*字符设备nvme-fabrics*/
 static struct miscdevice nvmf_misc = {
 	.minor		= MISC_DYNAMIC_MINOR,
 	.name           = "nvme-fabrics",
@@ -1432,6 +1460,7 @@ static int __init nvmf_init(void)
 
 	nvmf_default_host = nvmf_host_default();
 	if (!nvmf_default_host)
+		/*创建默认host失败*/
 		return -ENOMEM;
 
 	nvmf_class = class_create("nvme-fabrics");
@@ -1449,6 +1478,7 @@ static int __init nvmf_init(void)
 		goto out_destroy_class;
 	}
 
+	/*注册字符设备/dev/nvme-fabrics*/
 	ret = misc_register(&nvmf_misc);
 	if (ret) {
 		pr_err("couldn't register misc device: %d\n", ret);

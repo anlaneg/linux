@@ -298,6 +298,7 @@ out:
 }
 EXPORT_SYMBOL(in6_pton);
 
+/*将ipv4地址，port_num转换为sockaddr*/
 static int inet4_pton(const char *src, u16 port_num,
 		struct sockaddr_storage *addr)
 {
@@ -373,6 +374,7 @@ int inet_pton_with_scope(struct net *net, __kernel_sa_family_t af,
 	int ret = -EINVAL;
 
 	if (port) {
+		/*将字符串port转换为number*/
 		if (kstrtou16(port, 0, &port_num))
 			return -EINVAL;
 	} else {

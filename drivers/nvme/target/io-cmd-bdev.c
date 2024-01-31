@@ -326,7 +326,7 @@ static void nvmet_bdev_execute_rw(struct nvmet_req *req)
 		}
 	}
 
-	submit_bio(bio);
+	submit_bio(bio);/*向块设备提交io*/
 	blk_finish_plug(&plug);
 }
 

@@ -37,23 +37,28 @@ static int match_one(char *s, const char *p, substring_t args[])
 	int argc = 0;
 
 	if (!p)
+		/*p为空，默认总与s匹配（即兜底p)*/
 		return 1;
 
 	while(1) {
 		int len = -1;
 		meta = strchr(p, '%');
 		if (!meta)
+			/*p中没有meta,直接检查p与s是否字符串相等*/
 			return strcmp(p, s) == 0;
 
 		if (strncmp(p, s, meta-p))
+			/*有meta,检查meta前两字符串确认不相等，返回0*/
 			return 0;
 
 		s += meta - p;
 		p = meta + 1;
 
 		if (isdigit(*p))
+			/*%后面是一个数字，将其按10进制解析*/
 			len = simple_strtoul(p, (char **) &p, 10);
 		else if (*p == '%') {
+			/*遇到%%,则为转义，此时要求s也必须有s,否则返回0*/
 			if (*s++ != '%')
 				return 0;
 			p++;
@@ -61,8 +66,10 @@ static int match_one(char *s, const char *p, substring_t args[])
 		}
 
 		if (argc >= MAX_OPT_ARGS)
+			/*达到参数最大值，返回不相等*/
 			return 0;
 
+		/*按照格式（p字符指明）解析s字符串，产生出参args[*]*/
 		args[argc].from = s;
 		switch (*p++) {
 		case 's': {
@@ -116,10 +123,11 @@ int match_token(char *s, const match_table_t table, substring_t args[])
 {
 	const struct match_token *p;
 
+	/*在table中查找与s区配的内容，如果不匹配，则继续循环，否则跳出，table中最后一项恒匹配任何一项*/
 	for (p = table; !match_one(s, p->pattern, args) ; p++)
 		;
 
-	return p->token;
+	return p->token;/*返回match table的项*/
 }
 EXPORT_SYMBOL(match_token);
 

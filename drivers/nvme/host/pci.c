@@ -3507,7 +3507,7 @@ MODULE_DEVICE_TABLE(pci, nvme_id_table);
 
 static struct pci_driver nvme_driver = {
 	.name		= "nvme",
-	.id_table	= nvme_id_table,
+	.id_table	= nvme_id_table,/*支持的设备*/
 	.probe		= nvme_probe,
 	.remove		= nvme_remove,
 	.shutdown	= nvme_shutdown,

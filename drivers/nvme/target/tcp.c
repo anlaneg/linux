@@ -612,7 +612,7 @@ static int nvmet_try_send_data_pdu(struct nvmet_tcp_cmd *cmd)
 
 	bvec_set_virt(&bvec, (void *)cmd->data_pdu + cmd->offset, left);
 	iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, &bvec, 1, left);
-	ret = sock_sendmsg(cmd->queue->sock, &msg);
+	ret = sock_sendmsg(cmd->queue->sock, &msg);/*向socket发送*/
 	if (ret <= 0)
 		return ret;
 
@@ -1069,6 +1069,7 @@ static int nvmet_tcp_done_recv_pdu(struct nvmet_tcp_queue *queue)
 	req = &queue->cmd->req;
 	memcpy(req->cmd, nvme_cmd, sizeof(*nvme_cmd));
 
+	/*初始化请求*/
 	if (unlikely(!nvmet_req_init(req, &queue->nvme_cq,
 			&queue->nvme_sq, &nvmet_tcp_ops))) {
 		pr_err("failed cmd %p id %d opcode %d, data_len: %d\n",
@@ -1187,7 +1188,7 @@ recv:
 		msg.msg_controllen = sizeof(cbuf);
 	}
 	len = kernel_recvmsg(queue->sock, &msg, &iov, 1,
-			iov.iov_len, msg.msg_flags);
+			iov.iov_len, msg.msg_flags);/*自socket收取报文*/
 	if (unlikely(len < 0))
 		return len;
 	if (queue->tls_pskid) {
@@ -1336,18 +1337,21 @@ static int nvmet_tcp_try_recv_one(struct nvmet_tcp_queue *queue)
 		return 0;
 
 	if (queue->rcv_state == NVMET_TCP_RECV_PDU) {
+		/*收取pdu*/
 		result = nvmet_tcp_try_recv_pdu(queue);
 		if (result != 0)
 			goto done_recv;
 	}
 
 	if (queue->rcv_state == NVMET_TCP_RECV_DATA) {
+		/*收取data*/
 		result = nvmet_tcp_try_recv_data(queue);
 		if (result != 0)
 			goto done_recv;
 	}
 
 	if (queue->rcv_state == NVMET_TCP_RECV_DDGST) {
+		/*收取ddgst*/
 		result = nvmet_tcp_try_recv_ddgst(queue);
 		if (result != 0)
 			goto done_recv;
@@ -1367,6 +1371,7 @@ static int nvmet_tcp_try_recv(struct nvmet_tcp_queue *queue,
 {
 	int i, ret = 0;
 
+	/*最多收取budget次*/
 	for (i = 0; i < budget; i++) {
 		ret = nvmet_tcp_try_recv_one(queue);
 		if (unlikely(ret < 0)) {
@@ -1431,12 +1436,14 @@ static void nvmet_tcp_io_work(struct work_struct *w)
 	do {
 		pending = false;
 
+		/*收取*/
 		ret = nvmet_tcp_try_recv(queue, NVMET_TCP_RECV_BUDGET, &ops);
 		if (ret > 0)
 			pending = true;
 		else if (ret < 0)
 			return;
 
+		/*发送*/
 		ret = nvmet_tcp_try_send(queue, NVMET_TCP_SEND_BUDGET, &ops);
 		if (ret > 0)
 			pending = true;
@@ -1887,7 +1894,7 @@ static void nvmet_tcp_alloc_queue(struct nvmet_tcp_port *port,
 	}
 
 	INIT_WORK(&queue->release_work, nvmet_tcp_release_queue_work);
-	INIT_WORK(&queue->io_work, nvmet_tcp_io_work);
+	INIT_WORK(&queue->io_work, nvmet_tcp_io_work);/*初始化io_work*/
 	kref_init(&queue->kref);
 	queue->sock = newsock;
 	queue->port = port;
@@ -2042,10 +2049,11 @@ static int nvmet_tcp_add_port(struct nvmet_port *nport)
 	}
 
 	port->nport = nport;
-	INIT_WORK(&port->accept_work, nvmet_tcp_accept_work);
+	INIT_WORK(&port->accept_work, nvmet_tcp_accept_work);/*指明此port对应的accept work*/
 	if (port->nport->inline_data_size < 0)
 		port->nport->inline_data_size = NVMET_TCP_DEF_INLINE_DATA_SIZE;
 
+	/*创建socket*/
 	ret = sock_create(port->addr.ss_family, SOCK_STREAM,
 				IPPROTO_TCP, &port->sock);
 	if (ret) {

@@ -178,8 +178,8 @@ struct nvme_tcp_ctrl {
 	/* other member variables */
 	struct list_head	list;
 	struct blk_mq_tag_set	admin_tag_set;
-	struct sockaddr_storage addr;
-	struct sockaddr_storage src_addr;
+	struct sockaddr_storage addr;/*目的地址*/
+	struct sockaddr_storage src_addr;/*源地址*/
 	struct nvme_ctrl	ctrl;
 
 	struct work_struct	err_work;
@@ -2008,7 +2008,7 @@ static int nvme_tcp_configure_io_queues(struct nvme_ctrl *ctrl, bool new)
 
 	if (new) {
 		ret = nvme_alloc_io_tag_set(ctrl, &to_tcp_ctrl(ctrl)->tag_set,
-				&nvme_tcp_mq_ops,
+				&nvme_tcp_mq_ops,/*tcp多队列操作*/
 				ctrl->opts->nr_poll_queues ? HCTX_MAX_TYPES : 2,
 				sizeof(struct nvme_tcp_request));
 		if (ret)
@@ -2679,10 +2679,10 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&ctrl->list);
-	ctrl->ctrl.opts = opts;
+	ctrl->ctrl.opts = opts;/*设置配置的选项*/
 	ctrl->ctrl.queue_count = opts->nr_io_queues + opts->nr_write_queues +
-				opts->nr_poll_queues + 1;
-	ctrl->ctrl.sqsize = opts->queue_size - 1;
+				opts->nr_poll_queues + 1;/*指明队列总数*/
+	ctrl->ctrl.sqsize = opts->queue_size - 1;/*队列大小*/
 	ctrl->ctrl.kato = opts->kato;
 
 	INIT_DELAYED_WORK(&ctrl->connect_work,
@@ -2701,7 +2701,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 	}
 
 	ret = inet_pton_with_scope(&init_net, AF_UNSPEC,
-			opts->traddr, opts->trsvcid, &ctrl->addr);
+			opts->traddr/*解析为地址*/, opts->trsvcid/*解析为port*/, &ctrl->addr);
 	if (ret) {
 		pr_err("malformed address passed: %s:%s\n",
 			opts->traddr, opts->trsvcid);
@@ -2710,7 +2710,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 
 	if (opts->mask & NVMF_OPT_HOST_TRADDR) {
 		ret = inet_pton_with_scope(&init_net, AF_UNSPEC,
-			opts->host_traddr, NULL, &ctrl->src_addr);
+			opts->host_traddr/*解析为源地址*/, NULL, &ctrl->src_addr);
 		if (ret) {
 			pr_err("malformed src address passed: %s\n",
 			       opts->host_traddr);
@@ -2720,6 +2720,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 
 	if (opts->mask & NVMF_OPT_HOST_IFACE) {
 		if (!__dev_get_by_name(&init_net, opts->host_iface)) {
+			/*init_net中没有找到此接口*/
 			pr_err("invalid interface passed: %s\n",
 			       opts->host_iface);
 			ret = -ENODEV;
@@ -2732,6 +2733,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 		goto out_free_ctrl;
 	}
 
+	/*创建队列*/
 	ctrl->queues = kcalloc(ctrl->ctrl.queue_count, sizeof(*ctrl->queues),
 				GFP_KERNEL);
 	if (!ctrl->queues) {
@@ -2757,6 +2759,7 @@ static struct nvme_ctrl *nvme_tcp_create_ctrl(struct device *dev,
 		nvmf_ctrl_subsysnqn(&ctrl->ctrl), &ctrl->addr);
 
 	mutex_lock(&nvme_tcp_ctrl_mutex);
+	/*收集ctrl*/
 	list_add_tail(&ctrl->list, &nvme_tcp_ctrl_list);
 	mutex_unlock(&nvme_tcp_ctrl_mutex);
 
@@ -2775,6 +2778,7 @@ out_free_ctrl:
 	return ERR_PTR(ret);
 }
 
+/*定义tcp transport*/
 static struct nvmf_transport_ops nvme_tcp_transport = {
 	.name		= "tcp",
 	.module		= THIS_MODULE,
@@ -2785,6 +2789,7 @@ static struct nvmf_transport_ops nvme_tcp_transport = {
 			  NVMF_OPT_NR_WRITE_QUEUES | NVMF_OPT_NR_POLL_QUEUES |
 			  NVMF_OPT_TOS | NVMF_OPT_HOST_IFACE | NVMF_OPT_TLS |
 			  NVMF_OPT_KEYRING | NVMF_OPT_TLS_KEY,
+	/*创建tcp transport*/
 	.create_ctrl	= nvme_tcp_create_ctrl,
 };
 
@@ -2804,7 +2809,7 @@ static int __init nvme_tcp_init_module(void)
 	if (!nvme_tcp_wq)
 		return -ENOMEM;
 
-	nvmf_register_transport(&nvme_tcp_transport);
+	nvmf_register_transport(&nvme_tcp_transport);/*注册tcp传输层*/
 	return 0;
 }
 

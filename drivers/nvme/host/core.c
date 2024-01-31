@@ -3643,13 +3643,14 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	if (!ns)
 		return;
 
+	/*申请多队列gendisk*/
 	disk = blk_mq_alloc_disk(ctrl->tagset, ns);
 	if (IS_ERR(disk))
 		goto out_free_ns;
 	disk->fops = &nvme_bdev_ops;
 	disk->private_data = ns;
 
-	ns->disk = disk;
+	ns->disk = disk;/*指定disk*/
 	ns->queue = disk->queue;
 
 	if (ctrl->opts && ctrl->opts->data_digest)
@@ -3705,6 +3706,7 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	up_write(&ctrl->namespaces_rwsem);
 	nvme_get_ctrl(ctrl);
 
+	/*将disk加入到系统*/
 	if (device_add_disk(ctrl->device, ns->disk, nvme_ns_attr_groups))
 		goto out_cleanup_ns_from_list;
 
@@ -4544,6 +4546,7 @@ int nvme_init_ctrl(struct nvme_ctrl *ctrl, struct device *dev,
 		goto out;
 	}
 
+	/*申请一个nvme设备id*/
 	ret = ida_alloc(&nvme_instance_ida, GFP_KERNEL);
 	if (ret < 0)
 		goto out;
@@ -4561,6 +4564,7 @@ int nvme_init_ctrl(struct nvme_ctrl *ctrl, struct device *dev,
 		ctrl->device->groups = nvme_dev_attr_groups;
 	ctrl->device->release = nvme_free_ctrl;
 	dev_set_drvdata(ctrl->device, ctrl);
+	/*设置字符设备名称*/
 	ret = dev_set_name(ctrl->device, "nvme%d", ctrl->instance);
 	if (ret)
 		goto out_release_instance;
@@ -4568,6 +4572,7 @@ int nvme_init_ctrl(struct nvme_ctrl *ctrl, struct device *dev,
 	nvme_get_ctrl(ctrl);
 	cdev_init(&ctrl->cdev, &nvme_dev_fops);
 	ctrl->cdev.owner = ops->module;
+	/*将此字符设备加入到系统*/
 	ret = cdev_device_add(&ctrl->cdev, ctrl->device);
 	if (ret)
 		goto out_free_name;

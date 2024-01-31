@@ -313,8 +313,9 @@ char *strchr(const char *s, int c)
 {
 	for (; *s != (char)c; ++s)
 		if (*s == '\0')
+			/*在字符串中未找到c,返回NULL*/
 			return NULL;
-	return (char *)s;
+	return (char *)s;/*查找成功*/
 }
 EXPORT_SYMBOL(strchr);
 #endif
@@ -470,11 +471,13 @@ char *strpbrk(const char *cs, const char *ct)
 {
 	const char *sc;
 
+	/*cs指向的是一组字符串，遍历每个字符，检查其是否在ct中存在，如存在，则返回存在的字符位置*/
 	for (sc = cs; *sc != '\0'; ++sc) {
 		if (strchr(ct, *sc))
+			/*在ct中查找'*sc'成功，返回对应的指向'*sc'的指针*/
 			return (char *)sc;
 	}
-	return NULL;
+	return NULL;/*ct中没有cs字符串中的内容*/
 }
 EXPORT_SYMBOL(strpbrk);
 #endif
@@ -491,7 +494,7 @@ EXPORT_SYMBOL(strpbrk);
  * of that name. In fact, it was stolen from glibc2 and de-fancy-fied.
  * Same semantics, slimmer shape. ;)
  */
-char *strsep(char **s, const char *ct)
+char *strsep(char **s/*入参，一组字符串，出参，下次调用时的字符串起始位置*/, const char *ct/*分隔符列表*/)
 {
 	char *sbegin = *s;
 	char *end;
@@ -499,11 +502,12 @@ char *strsep(char **s, const char *ct)
 	if (sbegin == NULL)
 		return NULL;
 
+	/*自sbegin字符串中查找ct指明的字符，发现任意一个，返回发现位置*/
 	end = strpbrk(sbegin, ct);
 	if (end)
-		*end++ = '\0';
-	*s = end;
-	return sbegin;
+		*end++ = '\0';/*将字符串断开*/
+	*s = end;/*出参，保存下次遍历位置*/
+	return sbegin;/*返回查找到的位置（已在分隔符位断开）*/
 }
 EXPORT_SYMBOL(strsep);
 #endif
