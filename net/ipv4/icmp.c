@@ -367,6 +367,7 @@ static void icmp_push_reply(struct sock *sk,
 {
 	struct sk_buff *skb;
 
+	/*复用*/
 	if (ip_append_data(sk, fl4, icmp_glue_bits, icmp_param,
 			   icmp_param->data_len+icmp_param->head_len,
 			   icmp_param->head_len,
@@ -519,7 +520,7 @@ static struct rtable *icmp_route_lookup(struct net *net,
 	} else
 		return rt;
 
-	err = xfrm_decode_session_reverse(skb_in, flowi4_to_flowi(&fl4_dec), AF_INET);
+	err = xfrm_decode_session_reverse(net, skb_in, flowi4_to_flowi(&fl4_dec), AF_INET);
 	if (err)
 		goto relookup_failed;
 
@@ -751,6 +752,11 @@ void __icmp_send(struct sk_buff *skb_in, int type, int code, __be32 info,
 		room = 576;
 	room -= sizeof(struct iphdr) + icmp_param.replyopts.opt.opt.optlen;
 	room -= sizeof(struct icmphdr);
+	/* Guard against tiny mtu. We need to include at least one
+	 * IP network header for this message to make any sense.
+	 */
+	if (room <= (int)sizeof(struct iphdr))
+		goto ende;
 
 	icmp_param.data_len = skb_in->len - icmp_param.offset;
 	if (icmp_param.data_len > room)
@@ -1010,11 +1016,11 @@ static enum skb_drop_reason icmp_echo(struct sk_buff *skb)
 	if (READ_ONCE(net->ipv4.sysctl_icmp_echo_ignore_all))
 		return SKB_NOT_DROPPED_YET;
 
-	icmp_param.data.icmph	   = *icmp_hdr(skb);
-	icmp_param.skb		   = skb;
+	icmp_param.data.icmph	   = *icmp_hdr(skb);/*复用原报文中的icmp header位置*/
+	icmp_param.skb		   = skb;/*原始报文*/
 	icmp_param.offset	   = 0;
-	icmp_param.data_len	   = skb->len;
-	icmp_param.head_len	   = sizeof(struct icmphdr);
+	icmp_param.data_len	   = skb->len;/*原报文中负载*/
+	icmp_param.head_len	   = sizeof(struct icmphdr);/*head长度*/
 
 	if (icmp_param.data.icmph.type == ICMP_ECHO)
 		//将type变更为reply
@@ -1022,7 +1028,7 @@ static enum skb_drop_reason icmp_echo(struct sk_buff *skb)
 	else if (!icmp_build_probe(skb, &icmp_param.data.icmph))
 		return SKB_NOT_DROPPED_YET;
 
-	icmp_reply(&icmp_param, skb);
+	icmp_reply(&icmp_param, skb);/*执行响应*/
 	return SKB_NOT_DROPPED_YET;
 }
 

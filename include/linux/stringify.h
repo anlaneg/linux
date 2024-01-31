@@ -11,4 +11,6 @@
 /*将参数x...格式化为字符串*/
 #define __stringify(x...)	__stringify_1(x)
 
+#define FILE_LINE	__FILE__ ":" __stringify(__LINE__)
+
 #endif	/* !__LINUX_STRINGIFY_H */

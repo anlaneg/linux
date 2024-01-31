@@ -37,6 +37,7 @@ struct tracepoint {
 	void *static_call_tramp;
 	/*指向funcs的遍历函数*/
 	void *iterator;
+	void *probestub;
 	int (*regfunc)(void);
 	void (*unregfunc)(void);
 	/*指向一组注册的trace回调*/

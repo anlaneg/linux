@@ -190,11 +190,12 @@ struct fib_info {
 	int			fib_nhs;
 	bool			fib_nh_is_v6;
 	bool			nh_updated;
+	bool			pfsrc_removed;
 	/*通过nh_id引用的其它位置的下一跳*/
 	struct nexthop		*nh;
 	struct rcu_head		rcu;
 	//取第一个next hop做为出接口设备
-	struct fib_nh		fib_nh[];/*包含0/多个next hop*/
+	struct fib_nh		fib_nh[] __counted_by(fib_nhs);/*包含0/多个next hop*/
 };
 
 
@@ -480,7 +481,10 @@ static inline bool fib4_rules_early_flow_dissect(struct net *net,
 		return false;
 
 	//解析报文获得port信息
-	skb_flow_dissect_flow_keys(skb, flkeys, flag);
+	memset(flkeys, 0, sizeof(*flkeys));
+	__skb_flow_dissect(net, skb, &flow_keys_dissector,
+			   flkeys, NULL, 0, 0, 0, flag);
+
 	fl4->fl4_sport = flkeys->ports.src;
 	fl4->fl4_dport = flkeys->ports.dst;
 	fl4->flowi4_proto = flkeys->basic.ip_proto;

@@ -135,6 +135,7 @@ void nla_get_range_unsigned(const struct nla_policy *pt,
 		range->max = U32_MAX;
 		break;
 	case NLA_U64:
+	case NLA_UINT:
 	case NLA_MSECS:
 		range->max = U64_MAX;
 		break;
@@ -183,6 +184,9 @@ static int nla_validate_range_unsigned(const struct nla_policy *pt,
 		break;
 	case NLA_U64:
 		value = nla_get_u64(nla);
+		break;
+	case NLA_UINT:
+		value = nla_get_uint(nla);
 		break;
 	case NLA_MSECS:
 		value = nla_get_u64(nla);
@@ -249,6 +253,7 @@ void nla_get_range_signed(const struct nla_policy *pt,
 		range->max = S32_MAX;
 		break;
 	case NLA_S64:
+	case NLA_SINT:
 		range->min = S64_MIN;
 		range->max = S64_MAX;
 		break;
@@ -296,6 +301,9 @@ static int nla_validate_int_range_signed(const struct nla_policy *pt,
 	case NLA_S64:
 		value = nla_get_s64(nla);
 		break;
+	case NLA_SINT:
+		value = nla_get_sint(nla);
+		break;
 	default:
 		return -EINVAL;
 	}
@@ -321,6 +329,7 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	case NLA_U16:
 	case NLA_U32:
 	case NLA_U64:
+	case NLA_UINT:
 	case NLA_MSECS:
 	case NLA_BINARY:
 	case NLA_BE16:
@@ -330,6 +339,7 @@ static int nla_validate_int_range(const struct nla_policy *pt,
 	case NLA_S16:
 	case NLA_S32:
 	case NLA_S64:
+	case NLA_SINT:
 		return nla_validate_int_range_signed(pt, nla, extack);
 	default:
 		WARN_ON(1);
@@ -355,6 +365,15 @@ static int nla_validate_mask(const struct nla_policy *pt,
 		break;
 	case NLA_U64:
 		value = nla_get_u64(nla);
+		break;
+	case NLA_UINT:
+		value = nla_get_uint(nla);
+		break;
+	case NLA_BE16:
+		value = ntohs(nla_get_be16(nla));
+		break;
+	case NLA_BE32:
+		value = ntohl(nla_get_be32(nla));
 		break;
 	default:
 		return -EINVAL;
@@ -435,6 +454,15 @@ static int validate_nla(const struct nlattr *nla, int maxtype,
 		//flag时，长度为0
 		if (attrlen > 0)
 			goto out_err;
+		break;
+
+	case NLA_SINT:
+	case NLA_UINT:
+		if (attrlen != sizeof(u32) && attrlen != sizeof(u64)) {
+			NL_SET_ERR_MSG_ATTR_POL(extack, nla, pt,
+						"invalid attribute length");
+			return -EINVAL;
+		}
 		break;
 
 	case NLA_BITFIELD32:

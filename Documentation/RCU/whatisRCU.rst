@@ -59,8 +59,8 @@ experiment with should focus on Section 2.  People who prefer to start
 with example uses should focus on Sections 3 and 4.  People who need to
 understand the RCU implementation should focus on Section 5, then dive
 into the kernel source code.  People who reason best by analogy should
-focus on Section 6.  Section 7 serves as an index to the docbook API
-documentation, and Section 8 is the traditional answer key.
+focus on Section 6 and 7.  Section 8 serves as an index to the docbook
+API documentation, and Section 9 is the traditional answer key.
 
 So, start with the section that makes the most sense to you and your
 preferred method of learning.  If you need to know everything about
@@ -597,10 +597,10 @@ to avoid having to write your own callback::
 If the occasional sleep is permitted, the single-argument form may
 be used, omitting the rcu_head structure from struct foo.
 
-	kfree_rcu(old_fp);
+	kfree_rcu_mightsleep(old_fp);
 
-This variant of kfree_rcu() almost never blocks, but might do so by
-invoking synchronize_rcu() in response to memory-allocation failure.
+This variant almost never blocks, but might do so by invoking
+synchronize_rcu() in response to memory-allocation failure.
 
 Again, see checklist.rst for additional rules governing the use of RCU.
 
@@ -1117,7 +1117,6 @@ All: lockdep-checked RCU utility APIs::
 
 	RCU_LOCKDEP_WARN
 	rcu_sleep_check
-	RCU_NONIDLE
 
 All: Unchecked RCU-protected pointer access::
 

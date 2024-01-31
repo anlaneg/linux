@@ -38,7 +38,7 @@
 	/*使term指向上文term成员的位置（已对齐）*/\
 	term = (struct type##_error *)&(((char *)tbl)[term_offset]); \
 	/*设置表名*/\
-	strncpy(tbl->repl.name, info->name, sizeof(tbl->repl.name)); \
+	strscpy_pad(tbl->repl.name, info->name, sizeof(tbl->repl.name)); \
 	/*填充term*/                                      \
 	*term = (struct type##_error)typ2##_ERROR_INIT;  \
 	/*设置需要挂接的hook点掩码*/\

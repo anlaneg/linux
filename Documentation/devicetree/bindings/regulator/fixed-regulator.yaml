@@ -17,7 +17,7 @@ description:
   to be the same.
 
 allOf:
-  - $ref: "regulator.yaml#"
+  - $ref: regulator.yaml#
   - if:
       properties:
         compatible:
@@ -99,6 +99,13 @@ properties:
 
   vin-supply:
     description: Input supply phandle.
+
+  interrupts:
+    maxItems: 1
+    description:
+      Interrupt signaling a critical under-voltage event.
+
+  system-critical-regulator: true
 
 required:
   - compatible

@@ -15,13 +15,13 @@ int rxe_cq_chk_attr(struct rxe_dev *rxe, struct rxe_cq *cq,
 
 	if (cqe <= 0) {
 		/*cqe数目不得小于0*/
-		rxe_dbg(rxe, "cqe(%d) <= 0\n", cqe);
+		rxe_dbg_dev(rxe, "cqe(%d) <= 0\n", cqe);
 		goto err1;
 	}
 
 	if (cqe > rxe->attr.max_cqe) {
 		/*cqe数目不得大于rxe限制*/
-		rxe_dbg(rxe, "cqe(%d) > max_cqe(%d)\n",
+		rxe_dbg_dev(rxe, "cqe(%d) > max_cqe(%d)\n",
 				cqe, rxe->attr.max_cqe);
 		goto err1;
 	}
@@ -42,22 +42,6 @@ err1:
 	return -EINVAL;
 }
 
-/*触发此cq的cmplete handler*/
-static void rxe_send_complete(struct tasklet_struct *t)
-{
-	struct rxe_cq *cq = from_tasklet(cq, t, comp_task);
-	unsigned long flags;
-
-	spin_lock_irqsave(&cq->cq_lock, flags);
-	if (cq->is_dying) {
-		spin_unlock_irqrestore(&cq->cq_lock, flags);
-		return;
-	}
-	spin_unlock_irqrestore(&cq->cq_lock, flags);
-
-	cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
-}
-
 /*初始化cq*/
 int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参，待初始化cq*/, int cqe/*cqe数目*/,
 		     int comp_vector, struct ib_udata *udata,
@@ -71,7 +55,7 @@ int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参
 	cq->queue = rxe_queue_init(rxe, &cqe,
 			sizeof(struct rxe_cqe)/*元素大小*/, type);
 	if (!cq->queue) {
-		rxe_dbg(rxe, "unable to create cq\n");
+		rxe_dbg_dev(rxe, "unable to create cq\n");
 		return -ENOMEM;
 	}
 
@@ -85,11 +69,6 @@ int rxe_cq_from_init(struct rxe_dev *rxe/*rxe设备*/, struct rxe_cq *cq/*出参
 	}
 
 	cq->is_user = uresp;
-
-	cq->is_dying = false;
-
-	/*初始化complete task*/
-	tasklet_setup(&cq->comp_task, rxe_send_complete);
 
 	spin_lock_init(&cq->cq_lock);
 	cq->ibcq.cqe = cqe;
@@ -111,6 +90,7 @@ int rxe_cq_resize_queue(struct rxe_cq *cq, int cqe,
 	return err;
 }
 
+/* caller holds reference to cq */
 int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 {
 	struct ib_event ev;
@@ -122,6 +102,7 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 
 	full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
 	if (unlikely(full)) {
+		rxe_err_cq(cq, "queue full");
 		spin_unlock_irqrestore(&cq->cq_lock, flags);
 		if (cq->ibcq.event_handler) {
 			ev.device = cq->ibcq.device;
@@ -140,25 +121,16 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 	/*更新cq的生产者指针*/
 	queue_advance_producer(cq->queue, QUEUE_TYPE_TO_CLIENT);
 
-	spin_unlock_irqrestore(&cq->cq_lock, flags);
-
-	if ((cq->notify == IB_CQ_NEXT_COMP) ||
-	    (cq->notify == IB_CQ_SOLICITED && solicited)) {
+	if ((cq->notify & IB_CQ_NEXT_COMP) ||
+	    (cq->notify & IB_CQ_SOLICITED && solicited)) {
 		cq->notify = 0;
 		/*触发task*/
-		tasklet_schedule(&cq->comp_task);
+		cq->ibcq.comp_handler(&cq->ibcq, cq->ibcq.cq_context);
 	}
 
-	return 0;
-}
-
-void rxe_cq_disable(struct rxe_cq *cq)
-{
-	unsigned long flags;
-
-	spin_lock_irqsave(&cq->cq_lock, flags);
-	cq->is_dying = true;
 	spin_unlock_irqrestore(&cq->cq_lock, flags);
+
+	return 0;
 }
 
 void rxe_cq_cleanup(struct rxe_pool_elem *elem)

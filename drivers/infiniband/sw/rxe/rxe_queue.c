@@ -65,12 +65,12 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参�
 	/* num_elem == 0 is allowed, but uninteresting */
 	if (*num_elem < 0)
 	    /*必须指定正的队列元素数*/
-		goto err1;
+		return NULL;
 
 	/*申请rxe queue*/
 	q = kzalloc(sizeof(*q), GFP_KERNEL);
 	if (!q)
-		goto err1;
+		return NULL;
 
 	q->rxe = rxe;
 	q->type = type;
@@ -109,7 +109,6 @@ struct rxe_queue *rxe_queue_init(struct rxe_dev *rxe, int *num_elem/*入出参�
 
 err2:
 	kfree(q);
-err1:
 	return NULL;
 }
 

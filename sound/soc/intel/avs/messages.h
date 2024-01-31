@@ -9,9 +9,11 @@
 #ifndef __SOUND_SOC_INTEL_AVS_MSGS_H
 #define __SOUND_SOC_INTEL_AVS_MSGS_H
 
+#include <linux/sizes.h>
+
 struct avs_dev;
 
-#define AVS_MAILBOX_SIZE 4096
+#define AVS_MAILBOX_SIZE SZ_4K
 
 enum avs_msg_target {
 	AVS_FW_GEN_MSG = 0,
@@ -619,7 +621,7 @@ enum avs_channel_config {
 	AVS_CHANNEL_CONFIG_DUAL_MONO = 9,
 	AVS_CHANNEL_CONFIG_I2S_DUAL_STEREO_0 = 10,
 	AVS_CHANNEL_CONFIG_I2S_DUAL_STEREO_1 = 11,
-	AVS_CHANNEL_CONFIG_4_CHANNEL = 12,
+	AVS_CHANNEL_CONFIG_7_1 = 12,
 	AVS_CHANNEL_CONFIG_INVALID
 };
 

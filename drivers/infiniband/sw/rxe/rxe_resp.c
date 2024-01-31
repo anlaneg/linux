@@ -42,7 +42,6 @@ static char *resp_state_name[] = {
 	[RESPST_ERR_LENGTH]			= "ERR_LENGTH",
 	[RESPST_ERR_CQ_OVERFLOW]		= "ERR_CQ_OVERFLOW",
 	[RESPST_ERROR]				= "ERROR",
-	[RESPST_RESET]				= "RESET",
 	[RESPST_DONE]				= "DONE",
 	[RESPST_EXIT]				= "EXIT",
 };
@@ -73,18 +72,6 @@ static inline enum resp_states get_req(struct rxe_qp *qp,
 				       struct rxe_pkt_info **pkt_p/*出参，首个qp->req_pkts的pkt_info*/)
 {
 	struct sk_buff *skb;
-
-	if (qp->resp.state == QP_STATE_ERROR) {
-	    /*qp->resp状态已处于error状态，释放qp上所有的req_pkts*/
-		while ((skb = skb_dequeue(&qp->req_pkts))) {
-			rxe_put(qp);
-			kfree_skb(skb);
-			ib_device_put(qp->ibqp.device);
-		}
-
-		/* go drain recv wr queue */
-		return RESPST_CHK_RESOURCE;
-	}
 
 	/*peek首个报文*/
 	skb = skb_peek(&qp->req_pkts);
@@ -349,25 +336,6 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 {
 	struct rxe_srq *srq = qp->srq;
 
-	if (qp->resp.state == QP_STATE_ERROR) {
-		if (qp->resp.wqe) {
-			qp->resp.status = IB_WC_WR_FLUSH_ERR;
-			return RESPST_COMPLETE;
-		} else if (!srq) {
-		    /*取可使用的wqe*/
-			qp->resp.wqe = queue_head(qp->rq.queue,
-					QUEUE_TYPE_FROM_CLIENT);
-			if (qp->resp.wqe) {
-				qp->resp.status = IB_WC_WR_FLUSH_ERR;
-				return RESPST_COMPLETE;
-			} else {
-				return RESPST_EXIT;
-			}
-		} else {
-			return RESPST_EXIT;
-		}
-	}
-
 	if (pkt->mask & (RXE_READ_OR_ATOMIC_MASK | RXE_ATOMIC_WRITE_MASK)) {
 		/* it is the requesters job to not send
 		 * too many read/atomic ops, we just
@@ -383,6 +351,7 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 		if (srq)
 			return get_srq_wqe(qp);
 
+		    /*取可使用的wqe*/
 		qp->resp.wqe = queue_head(qp->rq.queue,
 				QUEUE_TYPE_FROM_CLIENT);
 		return (qp->resp.wqe) ? RESPST_CHK_LENGTH : RESPST_ERR_RNR;
@@ -433,7 +402,10 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 		}
 	}
 
-	return RESPST_CHK_RKEY;
+	if (pkt->mask & RXE_RDMA_OP_MASK)
+		return RESPST_CHK_RKEY;
+	else
+		return RESPST_EXECUTE;
 }
 
 /* if the reth length field is zero we can assume nothing
@@ -480,6 +452,10 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	enum resp_states state;
 	int access = 0;
 
+	/* parse RETH or ATMETH header for first/only packets
+	 * for va, length, rkey, etc. or use current value for
+	 * middle/last packets.
+	 */
 	if (pkt->mask & (RXE_READ_OR_WRITE_MASK | RXE_ATOMIC_WRITE_MASK)) {
 		if (pkt->mask & RXE_RETH_MASK)
 			qp_resp_from_reth(qp, pkt);
@@ -500,7 +476,8 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		qp_resp_from_atmeth(qp, pkt);
 		access = IB_ACCESS_REMOTE_ATOMIC;
 	} else {
-		return RESPST_EXECUTE;
+		/* shouldn't happen */
+		WARN_ON(1);
 	}
 
 	/* A zero-byte read or write op is not required to
@@ -535,8 +512,9 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		if (mw->access & IB_ZERO_BASED)
 			qp->resp.offset = mw->addr;
 
-		rxe_put(mw);
 		rxe_get(mr);
+		rxe_put(mw);
+		mw = NULL;
 	} else {
 		mr = lookup_mr(qp->pd, access, rkey, RXE_LOOKUP_REMOTE);
 		if (!mr) {
@@ -1096,6 +1074,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 	struct ib_uverbs_wc *uwc = &cqe.uibwc;
 	struct rxe_recv_wqe *wqe = qp->resp.wqe;
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
+	unsigned long flags;
 
 	if (!wqe)
 		goto finish;
@@ -1170,6 +1149,10 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 
 			wc->port_num		= qp->attr.port_num;
 		}
+	} else {
+		if (wc->status != IB_WC_WR_FLUSH_ERR)
+			rxe_err_qp(qp, "non-flush error status = %d",
+				wc->status);
 	}
 
 	/* have copy for srq and reference for !srq */
@@ -1184,8 +1167,13 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 		return RESPST_ERR_CQ_OVERFLOW;
 
 finish:
-	if (unlikely(qp->resp.state == QP_STATE_ERROR))
+	spin_lock_irqsave(&qp->state_lock, flags);
+	if (unlikely(qp_state(qp) == IB_QPS_ERR)) {
+		spin_unlock_irqrestore(&qp->state_lock, flags);
 		return RESPST_CHK_RESOURCE;
+	}
+	spin_unlock_irqrestore(&qp->state_lock, flags);
+
 	if (unlikely(!pkt))
 		return RESPST_DONE;
 	if (qp_type(qp) == IB_QPT_RC)
@@ -1447,10 +1435,10 @@ static enum resp_states do_class_d1e_error(struct rxe_qp *qp)
 	}
 }
 
-static void rxe_drain_req_pkts(struct rxe_qp *qp, bool notify)
+/* drain incoming request packet queue */
+static void drain_req_pkts(struct rxe_qp *qp)
 {
 	struct sk_buff *skb;
-	struct rxe_queue *q = qp->rq.queue;
 
 	/*将qp->req_pkts上所有报文均释放*/
 	while ((skb = skb_dequeue(&qp->req_pkts))) {
@@ -1458,42 +1446,96 @@ static void rxe_drain_req_pkts(struct rxe_qp *qp, bool notify)
 		kfree_skb(skb);
 		ib_device_put(qp->ibqp.device);
 	}
+}
 
-	if (notify)
+/* complete receive wqe with flush error */
+static int flush_recv_wqe(struct rxe_qp *qp, struct rxe_recv_wqe *wqe)
+{
+	struct rxe_cqe cqe = {};
+	struct ib_wc *wc = &cqe.ibwc;
+	struct ib_uverbs_wc *uwc = &cqe.uibwc;
+	int err;
+
+	if (qp->rcq->is_user) {
+		uwc->wr_id = wqe->wr_id;
+		uwc->status = IB_WC_WR_FLUSH_ERR;
+		uwc->qp_num = qp_num(qp);
+	} else {
+		wc->wr_id = wqe->wr_id;
+		wc->status = IB_WC_WR_FLUSH_ERR;
+		wc->qp = &qp->ibqp;
+	}
+
+	err = rxe_cq_post(qp->rcq, &cqe, 0);
+	if (err)
+		rxe_dbg_cq(qp->rcq, "post cq failed err = %d", err);
+
+	return err;
+}
+
+/* drain and optionally complete the recive queue
+ * if unable to complete a wqe stop completing and
+ * just flush the remaining wqes
+ */
+static void flush_recv_queue(struct rxe_qp *qp, bool notify)
+{
+	struct rxe_queue *q = qp->rq.queue;
+	struct rxe_recv_wqe *wqe;
+	int err;
+
+	if (qp->srq) {
+		if (notify && qp->ibqp.event_handler) {
+			struct ib_event ev;
+
+			ev.device = qp->ibqp.device;
+			ev.element.qp = &qp->ibqp;
+			ev.event = IB_EVENT_QP_LAST_WQE_REACHED;
+			qp->ibqp.event_handler(&ev, qp->ibqp.qp_context);
+		}
+		return;
+	}
+
+	/* recv queue not created. nothing to do. */
+	if (!qp->rq.queue)
 		return;
 
-	while (!qp->srq && q && queue_head(q, q->type))
+	while ((wqe = queue_head(q, q->type))) {
+		if (notify) {
+			err = flush_recv_wqe(qp, wqe);
+			if (err)
+				notify = 0;
+		}
 		queue_advance_consumer(q, q->type);
+	}
+
+	qp->resp.wqe = NULL;
 }
 
 /*处理收到的请求类报文（已串到qp->req_pkts链表）并进行响应*/
-int rxe_responder(void *arg)
+int rxe_responder(struct rxe_qp *qp)
 {
-	struct rxe_qp *qp = (struct rxe_qp *)arg;
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	enum resp_states state;
 	struct rxe_pkt_info *pkt = NULL;
 	int ret;
+	unsigned long flags;
 
-	if (!rxe_get(qp))
-		/*引用qp失败，返回错误*/
-		return -EAGAIN;
+	spin_lock_irqsave(&qp->state_lock, flags);
+	if (!qp->valid || qp_state(qp) == IB_QPS_ERR ||
+			  qp_state(qp) == IB_QPS_RESET) {
+		bool notify = qp->valid && (qp_state(qp) == IB_QPS_ERR);
+
+		drain_req_pkts(qp);
+		flush_recv_queue(qp, notify);
+		spin_unlock_irqrestore(&qp->state_lock, flags);
+		/*qp已无效，put后退出*/
+		goto exit;
+	}
+	spin_unlock_irqrestore(&qp->state_lock, flags);
 
 	qp->resp.aeth_syndrome = AETH_ACK_UNLIMITED;
 
-	if (!qp->valid)
-		/*qp已无效，put后退出*/
-		goto exit;
-
-	switch (qp->resp.state) {
-	case QP_STATE_RESET:
-		state = RESPST_RESET;
-		break;
-
-	default:
-		state = RESPST_GET_REQ;/*一般为起始状态*/
-		break;
-	}
+	state = RESPST_GET_REQ;
 
 	while (1) {
 		/*显示当前state*/
@@ -1665,11 +1707,6 @@ int rxe_responder(void *arg)
 
 			goto exit;
 
-		case RESPST_RESET:
-			rxe_drain_req_pkts(qp, false);
-			qp->resp.wqe = NULL;
-			goto exit;
-
 		case RESPST_ERROR:
 		    /*达到错误状态*/
 			qp->resp.goto_error = 0;
@@ -1683,7 +1720,7 @@ int rxe_responder(void *arg)
 	}
 
 	/* A non-zero return value will cause rxe_do_task to
-	 * exit its loop and end the tasklet. A zero return
+	 * exit its loop and end the work item. A zero return
 	 * will continue looping and return to rxe_responder
 	 */
 done:
@@ -1692,6 +1729,5 @@ done:
 exit:
 	ret = -EAGAIN;
 out:
-	rxe_put(qp);
 	return ret;
 }

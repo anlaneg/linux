@@ -73,14 +73,6 @@ int mdev_register_parent(struct mdev_parent *parent, struct device *dev,
 	parent->nr_types = nr_types;
 	atomic_set(&parent->available_instances, mdev_driver->max_instances);
 
-	//如未赋值，则为其赋值
-	if (!mdev_bus_compat_class) {
-	    //在/sys/class下创建mdev_bus
-		mdev_bus_compat_class = class_compat_register("mdev_bus");
-		if (!mdev_bus_compat_class)
-			return -ENOMEM;
-	}
-
 	/*创建parent以应的sysfs文件*/
 	ret = parent_create_sysfs_files(parent);
 	if (ret)
@@ -264,13 +256,24 @@ int mdev_device_remove(struct mdev_device *mdev)
 //mdev bus初始化
 static int __init mdev_init(void)
 {
-	return bus_register(&mdev_bus_type);
+	int ret;
+
+	ret = bus_register(&mdev_bus_type);
+	if (ret)
+		return ret;
+
+	mdev_bus_compat_class = class_compat_register("mdev_bus");
+	if (!mdev_bus_compat_class) {
+		bus_unregister(&mdev_bus_type);
+		return -ENOMEM;
+	}
+
+	return 0;
 }
 
 static void __exit mdev_exit(void)
 {
-	if (mdev_bus_compat_class)
-		class_compat_unregister(mdev_bus_compat_class);
+	class_compat_unregister(mdev_bus_compat_class);
 	bus_unregister(&mdev_bus_type);
 }
 

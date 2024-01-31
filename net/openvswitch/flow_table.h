@@ -48,7 +48,7 @@ struct mask_array {
 	int count/*mask数组长度*/, max/*mask数组长度的最大值*/;
 	struct mask_array_stats __percpu *masks_usage_stats;
 	u64 *masks_usage_zero_cntr;
-	struct sw_flow_mask __rcu *masks[];
+	struct sw_flow_mask __rcu *masks[] __counted_by(max);
 };
 
 struct table_instance {

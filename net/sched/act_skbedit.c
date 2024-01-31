@@ -223,7 +223,7 @@ static int tcf_skbedit_init(struct net *net, struct nlattr *nla,
 		return err;
 	exists = err;
 	if (exists && bind)
-		return 0;
+		return ACT_P_BOUND;
 
 	if (!flags) {
 		if (exists)

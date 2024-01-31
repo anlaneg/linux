@@ -41,13 +41,13 @@ struct dp_meter {
 	//定义此meter被命中的包数及字节数
 	struct ovs_flow_stats stats;
 	//记录配置的bands
-	struct dp_meter_band bands[];
+	struct dp_meter_band bands[] __counted_by(n_bands);
 };
 
 struct dp_meter_instance {
 	struct rcu_head rcu;
 	u32 n_meters;//dp_meter的数目
-	struct dp_meter __rcu *dp_meters[];
+	struct dp_meter __rcu *dp_meters[] __counted_by(n_meters);
 };
 
 struct dp_meter_table {

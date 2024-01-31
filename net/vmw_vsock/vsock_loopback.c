@@ -15,7 +15,6 @@
 struct vsock_loopback {
 	struct workqueue_struct *workqueue;/*负责排队处理pkt_work*/
 
-	spinlock_t pkt_list_lock; /* protects pkt_list */
 	struct sk_buff_head pkt_queue;/*用于存入待处理的loopback报文*/
 	struct work_struct pkt_work;/*报文处理具体work,初始化为vsock_loopback_work*/
 };
@@ -33,11 +32,8 @@ static int vsock_loopback_send_pkt(struct sk_buff *skb)
 	struct vsock_loopback *vsock = &the_vsock_loopback;
 	int len = skb->len;
 
-	spin_lock_bh(&vsock->pkt_list_lock);
 	/*将此skb添加到the_vsock_loopback队列上*/
-	skb_queue_tail(&vsock->pkt_queue, skb);
-	spin_unlock_bh(&vsock->pkt_list_lock);
-
+	virtio_vsock_skb_queue_tail(&vsock->pkt_queue, skb);
 	/*使the_vsock_loopback work入队*/
 	queue_work(vsock->workqueue, &vsock->pkt_work);
 
@@ -54,6 +50,10 @@ static int vsock_loopback_cancel_pkt(struct vsock_sock *vsk)
 }
 
 static bool vsock_loopback_seqpacket_allow(u32 remote_cid);
+static bool vsock_loopback_msgzerocopy_allow(void)
+{
+	return true;
+}
 
 /*loopback通信用*/
 static struct virtio_transport loopback_transport = {
@@ -87,6 +87,8 @@ static struct virtio_transport loopback_transport = {
 		.seqpacket_allow          = vsock_loopback_seqpacket_allow,
 		.seqpacket_has_data       = virtio_transport_seqpacket_has_data,
 
+		.msgzerocopy_allow        = vsock_loopback_msgzerocopy_allow,
+
 		.notify_poll_in           = virtio_transport_notify_poll_in,
 		.notify_poll_out          = virtio_transport_notify_poll_out,
 		.notify_recv_init         = virtio_transport_notify_recv_init,
@@ -98,6 +100,9 @@ static struct virtio_transport loopback_transport = {
 		.notify_send_pre_enqueue  = virtio_transport_notify_send_pre_enqueue,
 		.notify_send_post_enqueue = virtio_transport_notify_send_post_enqueue,
 		.notify_buffer_size       = virtio_transport_notify_buffer_size,
+		.notify_set_rcvlowat      = virtio_transport_notify_set_rcvlowat,
+
+		.read_skb = virtio_transport_read_skb,
 	},
 
 	/*报文发送函数*/
@@ -120,9 +125,9 @@ static void vsock_loopback_work(struct work_struct *work)
 	skb_queue_head_init(&pkts);
 
 	/*收集待处理的报文*/
-	spin_lock_bh(&vsock->pkt_list_lock);
+	spin_lock_bh(&vsock->pkt_queue.lock);
 	skb_queue_splice_init(&vsock->pkt_queue, &pkts);
-	spin_unlock_bh(&vsock->pkt_list_lock);
+	spin_unlock_bh(&vsock->pkt_queue.lock);
 
 	/*逐个处理报文*/
 	while ((skb = __skb_dequeue(&pkts))) {
@@ -143,7 +148,6 @@ static int __init vsock_loopback_init(void)
 	if (!vsock->workqueue)
 		return -ENOMEM;
 
-	spin_lock_init(&vsock->pkt_list_lock);
 	skb_queue_head_init(&vsock->pkt_queue);
 	/*初始化the_vsock_loopback work，用于loopback报文处理*/
 	INIT_WORK(&vsock->pkt_work, vsock_loopback_work);
@@ -169,9 +173,7 @@ static void __exit vsock_loopback_exit(void)
 
 	flush_work(&vsock->pkt_work);
 
-	spin_lock_bh(&vsock->pkt_list_lock);
 	virtio_vsock_skb_queue_purge(&vsock->pkt_queue);
-	spin_unlock_bh(&vsock->pkt_list_lock);
 
 	destroy_workqueue(vsock->workqueue);
 }

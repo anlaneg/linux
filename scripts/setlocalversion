@@ -2,7 +2,7 @@
 # SPDX-License-Identifier: GPL-2.0
 #
 # This scripts adds local version information from the version
-# control systems git, mercurial (hg) and subversion (svn).
+# control system git.
 #
 # If something goes wrong, send a mail the kernel build mailinglist
 # (see MAINTAINERS) and CC Nico Schottelius
@@ -11,9 +11,15 @@
 #
 
 usage() {
-	echo "Usage: $0 [srctree]" >&2
+	echo "Usage: $0 [--no-local] [srctree]" >&2
 	exit 1
 }
+
+no_local=false
+if test "$1" = "--no-local"; then
+	no_local=true
+	shift
+fi
 
 srctree=.
 if test $# -gt 0; then
@@ -26,14 +32,22 @@ fi
 
 scm_version()
 {
-	local short
+	local short=false
+	local no_dirty=false
 	local tag
-	short=false
+
+	while [ $# -gt 0 ];
+	do
+		case "$1" in
+		--short)
+			short=true;;
+		--no-dirty)
+			no_dirty=true;;
+		esac
+		shift
+	done
 
 	cd "$srctree"
-	if test "$1" = "--short"; then
-		short=true
-	fi
 
 	if test -n "$(git rev-parse --show-cdup 2>/dev/null)"; then
 		return
@@ -43,21 +57,37 @@ scm_version()
 		return
 	fi
 
-	# If a localversion*' file and the corresponding annotated tag exist,
-	# use it. This is the case in linux-next.
+	# mainline kernel:  6.2.0-rc5  ->  v6.2-rc5
+	# stable kernel:    6.1.7      ->  v6.1.7
+	version_tag=v$(echo "${KERNELVERSION}" | sed -E 's/^([0-9]+\.[0-9]+)\.0(.*)$/\1\2/')
+
+	# If a localversion* file exists, and the corresponding
+	# annotated tag exists and is an ancestor of HEAD, use
+	# it. This is the case in linux-next.
 	tag=${file_localversion#-}
-	tag=$(git describe --exact-match --match=$tag $tag 2>/dev/null)
+	desc=
+	if [ -n "${tag}" ]; then
+		desc=$(git describe --match=$tag 2>/dev/null)
+	fi
+
+	# Otherwise, if a localversion* file exists, and the tag
+	# obtained by appending it to the tag derived from
+	# KERNELVERSION exists and is an ancestor of HEAD, use
+	# it. This is e.g. the case in linux-rt.
+	if [ -z "${desc}" ] && [ -n "${file_localversion}" ]; then
+		tag="${version_tag}${file_localversion}"
+		desc=$(git describe --match=$tag 2>/dev/null)
+	fi
 
 	# Otherwise, default to the annotated tag derived from KERNELVERSION.
-	#   mainline kernel:  6.2.0-rc5  ->  v6.2-rc5
-	#   stable kernel:    6.1.7      ->  v6.1.7
-	if [ -z "${tag}" ]; then
-		tag=v$(echo "${KERNELVERSION}" | sed -E 's/^([0-9]+\.[0-9]+)\.0(.*)$/\1\2/')
+	if [ -z "${desc}" ]; then
+		tag="${version_tag}"
+		desc=$(git describe --match=$tag 2>/dev/null)
 	fi
 
 	# If we are at the tagged commit, we ignore it because the version is
 	# well-defined.
-	if [ -z "$(git describe --exact-match --match=$tag 2>/dev/null)" ]; then
+	if [ "${tag}" != "${desc}" ]; then
 
 		# If only the short version is requested, don't bother
 		# running further git commands
@@ -67,12 +97,16 @@ scm_version()
 		fi
 		# If we are past the tagged commit, we pretty print it.
 		# (like 6.1.0-14595-g292a089d78d3)
-		if atag="$(git describe --match=$tag 2>/dev/null)"; then
-			echo "$atag" | awk -F- '{printf("-%05d", $(NF-1))}'
+		if [ -n "${desc}" ]; then
+			echo "${desc}" | awk -F- '{printf("-%05d", $(NF-1))}'
 		fi
 
 		# Add -g and exactly 12 hex chars.
 		printf '%s%s' -g "$(echo $head | cut -c1-12)"
+	fi
+
+	if ${no_dirty}; then
+		return
 	fi
 
 	# Check for uncommitted changes.
@@ -110,11 +144,6 @@ collect_files()
 	echo "$res"
 }
 
-if ! test -e include/config/auto.conf; then
-	echo "Error: kernelrelease not valid - run 'make prepare' to update it" >&2
-	exit 1
-fi
-
 if [ -z "${KERNELVERSION}" ]; then
 	echo "KERNELVERSION is not set" >&2
 	exit 1
@@ -124,6 +153,16 @@ fi
 file_localversion="$(collect_files localversion*)"
 if test ! "$srctree" -ef .; then
 	file_localversion="${file_localversion}$(collect_files "$srctree"/localversion*)"
+fi
+
+if ${no_local}; then
+	echo "${KERNELVERSION}$(scm_version --no-dirty)"
+	exit 0
+fi
+
+if ! test -e include/config/auto.conf; then
+	echo "Error: kernelrelease not valid - run 'make prepare' to update it" >&2
+	exit 1
 fi
 
 # version string from CONFIG_LOCALVERSION

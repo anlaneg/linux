@@ -42,39 +42,37 @@ static inline void nf_skip_indirect_calls_enable(void) { }
 #endif
 
 //有trace标记的报文，将被记录
-static noinline void __nft_trace_packet(struct nft_traceinfo *info,
-					const struct nft_chain *chain,
+static noinline void __nft_trace_packet(const struct nft_pktinfo *pkt,
+					const struct nft_verdict *verdict,
+					const struct nft_rule_dp *rule,
+					struct nft_traceinfo *info,
 					enum nft_trace_types type)
 {
 	if (!info->trace || !info->nf_trace)
 		return;
 
-	info->chain = chain;
 	info->type = type;
 
-	nft_trace_notify(info);
+	nft_trace_notify(pkt, verdict, rule, info);
 }
 
 static inline void nft_trace_packet(const struct nft_pktinfo *pkt,
+				    struct nft_verdict *verdict,
 				    struct nft_traceinfo *info,
-				    const struct nft_chain *chain,
 				    const struct nft_rule_dp *rule,
 				    enum nft_trace_types type)
 {
 	if (static_branch_unlikely(&nft_trace_enabled)) {
 		info->nf_trace = pkt->skb->nf_trace;
-		info->rule = rule;
-		__nft_trace_packet(info, chain, type);
+		__nft_trace_packet(pkt, verdict, rule, info, type);
 	}
 }
 
 static inline void nft_trace_copy_nftrace(const struct nft_pktinfo *pkt,
 					  struct nft_traceinfo *info)
 {
-	if (static_branch_unlikely(&nft_trace_enabled)) {
-		if (info->trace)
-			info->nf_trace = pkt->skb->nf_trace;
-	}
+	if (static_branch_unlikely(&nft_trace_enabled))
+		info->nf_trace = pkt->skb->nf_trace;
 }
 
 static void nft_bitwise_fast_eval(const struct nft_expr *expr,
@@ -112,13 +110,14 @@ static void nft_cmp16_fast_eval(const struct nft_expr *expr,
 	regs->verdict.code = NFT_BREAK;
 }
 
-static noinline void __nft_trace_verdict(struct nft_traceinfo *info,
-					 const struct nft_chain *chain,
+static noinline void __nft_trace_verdict(const struct nft_pktinfo *pkt,
+					 struct nft_traceinfo *info,
+					 const struct nft_rule_dp *rule,
 					 const struct nft_regs *regs)
 {
 	enum nft_trace_types type;
 
-	switch (regs->verdict.code) {
+	switch (regs->verdict.code & NF_VERDICT_MASK) {
 	case NFT_CONTINUE:
 	case NFT_RETURN:
 		type = NFT_TRACETYPE_RETURN;
@@ -131,22 +130,20 @@ static noinline void __nft_trace_verdict(struct nft_traceinfo *info,
 		type = NFT_TRACETYPE_RULE;
 
 		if (info->trace)
-			info->nf_trace = info->pkt->skb->nf_trace;
+			info->nf_trace = pkt->skb->nf_trace;
 		break;
 	}
 
-	__nft_trace_packet(info, chain, type);
+	__nft_trace_packet(pkt, &regs->verdict, rule, info, type);
 }
 
-static inline void nft_trace_verdict(struct nft_traceinfo *info,
-				     const struct nft_chain *chain,
+static inline void nft_trace_verdict(const struct nft_pktinfo *pkt,
+				     struct nft_traceinfo *info,
 				     const struct nft_rule_dp *rule,
 				     const struct nft_regs *regs)
 {
-	if (static_branch_unlikely(&nft_trace_enabled)) {
-		info->rule = rule;
-		__nft_trace_verdict(info, chain, regs);
-	}
+	if (static_branch_unlikely(&nft_trace_enabled))
+		__nft_trace_verdict(pkt, info, rule, regs);
 }
 
 static bool nft_payload_fast_eval(const struct nft_expr *expr,
@@ -163,7 +160,7 @@ static bool nft_payload_fast_eval(const struct nft_expr *expr,
 	else {
 		if (!(pkt->flags & NFT_PKTINFO_L4PROTO))
 			return false;
-		ptr = skb_network_header(skb) + nft_thoff(pkt);
+		ptr = skb->data + nft_thoff(pkt);
 	}
 
 	ptr += priv->offset;
@@ -205,9 +202,7 @@ static noinline void nft_update_chain_stats(const struct nft_chain *chain,
 }
 
 struct nft_jumpstack {
-	const struct nft_chain *chain;
 	const struct nft_rule_dp *rule;
-	const struct nft_rule_dp *last_rule;
 };
 
 //执行表达式
@@ -254,7 +249,6 @@ indirect_call:
 #define nft_rule_expr_first(rule)	(struct nft_expr *)&rule->data[0]
 #define nft_rule_expr_next(expr)	((void *)expr) + expr->ops->size
 #define nft_rule_expr_last(rule)	(struct nft_expr *)&rule->data[rule->dlen]
-#define nft_rule_next(rule)		(void *)rule + sizeof(*rule) + rule->dlen
 
 #define nft_rule_dp_for_each_expr(expr, last, rule) \
         for ((expr) = nft_rule_expr_first(rule), (last) = nft_rule_expr_last(rule); \
@@ -266,9 +260,9 @@ unsigned int
 nft_do_chain(struct nft_pktinfo *pkt, void *priv/*要执行规则的chain*/)
 {
 	const struct nft_chain *chain = priv, *basechain = chain;
-	const struct nft_rule_dp *rule, *last_rule;
 	const struct net *net = nft_net(pkt);
 	const struct nft_expr *expr, *last;
+	const struct nft_rule_dp *rule;
 	struct nft_regs regs = {};
 	unsigned int stackptr = 0;
 	struct nft_jumpstack jumpstack[NFT_JUMP_STACK_SIZE];
@@ -278,7 +272,7 @@ nft_do_chain(struct nft_pktinfo *pkt, void *priv/*要执行规则的chain*/)
 
 	info.trace = false;
 	if (static_branch_unlikely(&nft_trace_enabled))
-		nft_trace_init(&info, pkt, &regs.verdict, basechain);
+		nft_trace_init(&info, pkt, basechain);
 do_chain:
 	if (genbit)
 		blob = rcu_dereference(chain->blob_gen_1);
@@ -286,11 +280,10 @@ do_chain:
 		blob = rcu_dereference(chain->blob_gen_0);
 
 	rule = (struct nft_rule_dp *)blob->data;
-	last_rule = (void *)blob->data + blob->size;
 next_rule:
 	regs.verdict.code = NFT_CONTINUE;
 	//遍历rules数组，针对每个rule的表达式进行执行
-	for (; rule < last_rule; rule = nft_rule_next(rule)) {
+	for (; !rule->is_last ; rule = nft_rule_next(rule)) {
 		/*遍历rule中的所有表达式*/
 		nft_rule_dp_for_each_expr(expr, last, rule) {
 			if (expr->ops == &nft_cmp_fast_ops)
@@ -319,7 +312,7 @@ next_rule:
 			continue;
 		case NFT_CONTINUE:
 			//跟踪报文的命中情况
-			nft_trace_packet(pkt, &info, chain, rule,
+			nft_trace_packet(pkt, &regs.verdict,  &info, rule,
 					 NFT_TRACETYPE_RULE);
 			continue;
 		}
@@ -328,15 +321,16 @@ next_rule:
 		break;
 	}
 
-	nft_trace_verdict(&info, chain, rule, &regs);
+	nft_trace_verdict(pkt, &info, rule, &regs);
 
 	//检查对报文的结果
 	switch (regs.verdict.code & NF_VERDICT_MASK) {
 	case NF_ACCEPT:
-	case NF_DROP:
 	case NF_QUEUE:
 	case NF_STOLEN:
 		return regs.verdict.code;
+	case NF_DROP:
+		return NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 	}
 
 	switch (regs.verdict.code) {
@@ -345,9 +339,7 @@ next_rule:
 		    //栈超限
 			return NF_DROP;
 		//将当前chain及rule压栈
-		jumpstack[stackptr].chain = chain;
 		jumpstack[stackptr].rule = nft_rule_next(rule);
-		jumpstack[stackptr].last_rule = last_rule;
 		stackptr++;
 		fallthrough;
 	case NFT_GOTO:
@@ -365,16 +357,17 @@ next_rule:
 	//弹出堆栈后，继续匹配
 	if (stackptr > 0) {
 		stackptr--;
-		chain = jumpstack[stackptr].chain;
 		rule = jumpstack[stackptr].rule;
-		last_rule = jumpstack[stackptr].last_rule;
 		goto next_rule;
 	}
 
-	nft_trace_packet(pkt, &info, basechain, NULL, NFT_TRACETYPE_POLICY);
+	nft_trace_packet(pkt, &regs.verdict, &info, NULL, NFT_TRACETYPE_POLICY);
 
 	if (static_branch_unlikely(&nft_counters_enabled))
 		nft_update_chain_stats(basechain, pkt);
+
+	if (nft_base_chain(basechain)->policy == NF_DROP)
+		return NF_DROP_REASON(pkt->skb, SKB_DROP_REASON_NETFILTER_DROP, EPERM);
 
 	//如果整个链都没有规则匹配，则使用链的policy做为结果
 	return nft_base_chain(basechain)->policy;

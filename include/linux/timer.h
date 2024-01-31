@@ -7,21 +7,7 @@
 #include <linux/stddef.h>
 #include <linux/debugobjects.h>
 #include <linux/stringify.h>
-
-struct timer_list {
-	/*
-	 * All fields that change during normal runtime grouped to the
-	 * same cacheline
-	 */
-	struct hlist_node	entry;//用于挂在list上（双链表）
-	unsigned long		expires;//过期时间
-	void			(*function)(struct timer_list *);//timer回调函数
-	u32			flags;/*指出timer标记，及所在cpu(低位包含timer初始化是对应的cpu id)*/
-
-#ifdef CONFIG_LOCKDEP
-	struct lockdep_map	lockdep_map;
-#endif
-};
+#include <linux/timer_types.h>
 
 #ifdef CONFIG_LOCKDEP
 /*
@@ -83,8 +69,7 @@ struct timer_list {
 		.entry = { .next = TIMER_ENTRY_STATIC },	\
 		.function = (_function),			\
 		.flags = (_flags),				\
-		__TIMER_LOCKDEP_MAP_INITIALIZER(		\
-			__FILE__ ":" __stringify(__LINE__))	\
+		__TIMER_LOCKDEP_MAP_INITIALIZER(FILE_LINE)	\
 	}
 
 /*定义名称为_name的timer，并设置其对应的触发函数*/

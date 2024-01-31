@@ -78,7 +78,6 @@ static inline int ns_alloc_inum(struct ns_common *ns)
 
 #define ns_free_inum(ns) proc_free_inum((ns)->inum)
 
-extern struct file *proc_ns_fget(int fd);
 /*通过inode获得ns的公共结构体*/
 #define get_proc_ns(inode) ((struct ns_common *)(inode)->i_private)
 extern int ns_get_path(struct path *path, struct task_struct *task,

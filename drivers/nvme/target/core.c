@@ -285,6 +285,7 @@ int nvmet_register_transport(const struct nvmet_fabrics_ops *ops)
 {
 	int ret = 0;
 
+	/*记录传输层*/
 	down_write(&nvmet_config_sem);
 	if (nvmet_transports[ops->type])
 		ret = -EINVAL;
@@ -326,6 +327,7 @@ int nvmet_enable_port(struct nvmet_port *port)
 	ops = nvmet_transports[port->disc_addr.trtype];
 	if (!ops) {
 		up_write(&nvmet_config_sem);
+		/*加载module后重试*/
 		request_module("nvmet-transport-%d", port->disc_addr.trtype);
 		down_write(&nvmet_config_sem);
 		ops = nvmet_transports[port->disc_addr.trtype];
@@ -756,8 +758,10 @@ static void __nvmet_req_complete(struct nvmet_req *req, u16 status)
 
 void nvmet_req_complete(struct nvmet_req *req, u16 status)
 {
+	struct nvmet_sq *sq = req->sq;
+
 	__nvmet_req_complete(req, status);
-	percpu_ref_put(&req->sq->ref);
+	percpu_ref_put(&sq->ref);
 }
 EXPORT_SYMBOL_GPL(nvmet_req_complete);
 
@@ -1422,9 +1426,6 @@ u16 nvmet_alloc_ctrl(const char *subsysnqn, const char *hostnqn,
 			GFP_KERNEL);
 	if (!ctrl->sqs)
 		goto out_free_changed_ns_list;
-
-	if (subsys->cntlid_min > subsys->cntlid_max)
-		goto out_free_sqs;
 
 	ret = ida_alloc_range(&cntlid_ida,
 			     subsys->cntlid_min, subsys->cntlid_max,

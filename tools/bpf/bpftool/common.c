@@ -68,7 +68,7 @@ void p_info(const char *fmt, ...)
 	va_end(ap);
 }
 
-static bool is_bpffs(char *path)
+static bool is_bpffs(const char *path)
 {
 	struct statfs st_fs;
 
@@ -247,12 +247,15 @@ int open_obj_pinned_any(const char *path, enum bpf_obj_type exp_type)
 	return fd;
 }
 
-int mount_bpffs_for_pin(const char *name)
+int mount_bpffs_for_pin(const char *name, bool is_dir)
 {
 	char err_str[ERR_MAX_LEN];
 	char *file;
 	char *dir;
 	int err = 0;
+
+	if (is_dir && is_bpffs(name))
+		return err;
 
 	file = malloc(strlen(name) + 1);
 	if (!file) {
@@ -292,7 +295,7 @@ int do_pin_fd(int fd, const char *name)
 	int err;
 
 	/*持载bpf文件系统*/
-	err = mount_bpffs_for_pin(name);
+	err = mount_bpffs_for_pin(name, false);
 	if (err)
 		return err;
 
@@ -1121,4 +1124,18 @@ const char *bpf_attach_type_input_str(enum bpf_attach_type t)
 	case BPF_SK_REUSEPORT_SELECT_OR_MIGRATE:	return "sk_skb_reuseport_select_or_migrate";
 	default:	return libbpf_bpf_attach_type_str(t);
 	}
+}
+
+int pathname_concat(char *buf, int buf_sz, const char *path,
+		    const char *name)
+{
+	int len;
+
+	len = snprintf(buf, buf_sz, "%s/%s", path, name);
+	if (len < 0)
+		return -EINVAL;
+	if (len >= buf_sz)
+		return -ENAMETOOLONG;
+
+	return 0;
 }

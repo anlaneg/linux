@@ -3,9 +3,10 @@
 /generate_rust_target
 /insert-sys-cert
 /kallsyms
-/list-gitignored
 /module.lds
 /recordmcount
+/rustdoc_test_builder
+/rustdoc_test_gen
 /sign-file
 /sorttable
 /target.json

@@ -126,11 +126,12 @@ static int internal_create_group(struct kobject *kobj, int update,
 	//参数合法性检查
 	if (unlikely(update && !kobj->sd))
 		return -EINVAL;
+
 	if (!grp->attrs && !grp->bin_attrs) {
 		//只能是普通attr或者二进制attr
-		WARN(1, "sysfs: (bin_)attrs not set by subsystem for group: %s/%s\n",
-			kobj->name, grp->name ?: "");
-		return -EINVAL;
+		pr_debug("sysfs: (bin_)attrs not set by subsystem for group: %s/%s, skipping\n",
+			 kobj->name, grp->name ?: "");
+		return 0;
 	}
 
 	//取kobj对应的uid,gid
@@ -155,8 +156,10 @@ static int internal_create_group(struct kobject *kobj, int update,
 				return PTR_ERR(kn);
 			}
 		}
-	} else
+	} else {
 		kn = kobj->sd;//如果未指定名称，则取kobj中对应的kernfs节点
+	}
+
 	kernfs_get(kn);
 	//创建group下所有文件
 	error = create_files(kn, kobj, uid, gid, grp, update);

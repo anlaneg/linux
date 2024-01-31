@@ -106,7 +106,7 @@ static int xdp_umem_pin_pages(struct xdp_umem *umem, unsigned long address)
 	mmap_read_lock(current->mm);
 	/*获取用户内存的每个页指针，将其pin在内存里*/
 	npgs = pin_user_pages(address, umem->npgs,
-			      gup_flags | FOLL_LONGTERM, &umem->pgs[0]/*出参，各页指针*/, NULL);
+			      gup_flags | FOLL_LONGTERM, &umem->pgs[0]/*出参，各页指针*/);
 	mmap_read_unlock(current->mm);
 
 	/*注册的内存未完全pin住，报错*/
@@ -152,16 +152,22 @@ static int xdp_umem_account_pages(struct xdp_umem *umem)
 	return 0;
 }
 
+#define XDP_UMEM_FLAGS_VALID ( \
+		XDP_UMEM_UNALIGNED_CHUNK_FLAG | \
+		XDP_UMEM_TX_SW_CSUM | \
+	0)
+
 //注册用户态的内存
 static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr/*用户传入的mr*/)
 {
-	/*chunk大小及headroom大小*/
-	u32 npgs_rem, chunk_size = mr->chunk_size, headroom = mr->headroom;
-    /*是否为不对齐的chunks*/
+	/*是否为不对齐的chunks*/
 	bool unaligned_chunks = mr->flags & XDP_UMEM_UNALIGNED_CHUNK_FLAG;
+	/*chunk大小及headroom大小*/
+	u32 chunk_size = mr->chunk_size, headroom = mr->headroom;
 	/*用户态传入的memory起始地址及长度*/
-	u64 npgs, addr = mr->addr, size = mr->len;
-	unsigned int chunks, chunks_rem;
+	u64 addr = mr->addr, size = mr->len;
+	u32 chunks_rem, npgs_rem;
+	u64 chunks, npgs;
 	int err;
 
 	/*chunk_size过小或过大检查*/
@@ -176,7 +182,7 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr/*用户�
 	}
 
 	//检查是否遇到不支持的flags,例如当前仅支持unaligned一种标记
-	if (mr->flags & ~XDP_UMEM_UNALIGNED_CHUNK_FLAG)
+	if (mr->flags & ~XDP_UMEM_FLAGS_VALID)
 		return -EINVAL;
 
 	/*如果未指明chunk对齐，则要求chunk_size必须为2的N次幂取值*/
@@ -203,8 +209,8 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr/*用户�
 		return -EINVAL;
 
 	/*注册的内存共包含多少chunk*/
-	chunks = (unsigned int)div_u64_rem(size, chunk_size, &chunks_rem);
-	if (chunks == 0)
+	chunks = div_u64_rem(size, chunk_size, &chunks_rem);
+	if (!chunks || chunks > U32_MAX)
 		return -EINVAL;
 
 	/*没有指明“不对齐”情况下，不容许有余数*/
@@ -216,14 +222,18 @@ static int xdp_umem_reg(struct xdp_umem *umem, struct xdp_umem_reg *mr/*用户�
 	if (headroom >= chunk_size - XDP_PACKET_HEADROOM)
 		return -EINVAL;
 
+	if (mr->tx_metadata_len >= 256 || mr->tx_metadata_len % 8)
+		return -EINVAL;
+
 	umem->size = size;
 	umem->headroom = headroom;
 	umem->chunk_size = chunk_size;
 	umem->chunks = chunks;
-	umem->npgs = (u32)npgs;
+	umem->npgs = npgs;
 	umem->pgs = NULL;
 	umem->user = NULL;
 	umem->flags = mr->flags;
+	umem->tx_metadata_len = mr->tx_metadata_len;
 
 	INIT_LIST_HEAD(&umem->xsk_dma_list);
 	refcount_set(&umem->users, 1);

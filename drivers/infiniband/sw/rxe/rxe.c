@@ -170,6 +170,8 @@ void rxe_set_mtu(struct rxe_dev *rxe, unsigned int ndev_mtu)
 	port->attr.active_mtu = mtu;
 	/*对应的mtu大小*/
 	port->mtu_cap = ib_mtu_enum_to_int(mtu);
+
+	rxe_info_dev(rxe, "Set mtu to %d", port->mtu_cap);
 }
 
 /* called by ifc layer to create new rxe device.
@@ -189,22 +191,22 @@ int rxe_add(struct rxe_dev *rxe, unsigned int mtu/*底层netdev对应的mtu*/, c
 /*负责创建rxe类型的ib设备，指定名称为ibdev_name,底层的网络设备为ndev*/
 static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 {
-	struct rxe_dev *exists;
+	struct rxe_dev *rxe;
 	int err = 0;
 
 	if (is_vlan_dev(ndev)) {
-	    /*不能是vlan设备*/
-		pr_err("rxe creation allowed on top of a real device only\n");
+	    	/*不能是vlan设备*/
+		rxe_err("rxe creation allowed on top of a real device only");
 		err = -EPERM;
 		goto err;
 	}
 
 	/*检查此ndev是否已有存在的rxe设备*/
-	exists = rxe_get_dev_from_net(ndev);
-	if (exists) {
-	    /*设备已存在，报错*/
-		ib_device_put(&exists->ib_dev);
-		rxe_dbg(exists, "already configured on %s\n", ndev->name);
+	rxe = rxe_get_dev_from_net(ndev);
+	if (rxe) {
+	    	/*设备已存在，报错*/
+		ib_device_put(&rxe->ib_dev);
+		rxe_err_dev(rxe, "already configured on %s", ndev->name);
 		err = -EEXIST;
 		goto err;
 	}
@@ -212,7 +214,7 @@ static int rxe_newlink(const char *ibdev_name, struct net_device *ndev)
 	/*添加名称为ibdev_name的ib设备，其与ndev关联*/
 	err = rxe_net_add(ibdev_name, ndev);
 	if (err) {
-		rxe_dbg(exists, "failed to add %s\n", ndev->name);
+		rxe_err("failed to add %s\n", ndev->name);
 		goto err;
 	}
 err:
@@ -228,9 +230,15 @@ static int __init rxe_module_init(void)
 {
 	int err;
 
-	err = rxe_net_init();
+	err = rxe_alloc_wq();
 	if (err)
 		return err;
+
+	err = rxe_net_init();
+	if (err) {
+		rxe_destroy_wq();
+		return err;
+	}
 
 	/*注册rxe类型link*/
 	rdma_link_register(&rxe_link_ops);
@@ -243,6 +251,7 @@ static void __exit rxe_module_exit(void)
 	rdma_link_unregister(&rxe_link_ops);
 	ib_unregister_driver(RDMA_DRIVER_RXE);
 	rxe_net_exit();
+	rxe_destroy_wq();
 
 	pr_info("unloaded\n");
 }

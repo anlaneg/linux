@@ -412,7 +412,7 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 	exists = err;
 	if (exists && bind)
 	    /*如果index存在，则指明了bind，则直接返回*/
-		return 0;
+		return ACT_P_BOUND;
 
 	switch (parm->t_action) {
 	case TCA_TUNNEL_KEY_ACT_RELEASE/*decap情况*/:
@@ -432,6 +432,9 @@ static int tunnel_key_init(struct net *net, struct nlattr *nla,
 		    nla_get_u8(tb[TCA_TUNNEL_KEY_NO_CSUM]))
 		    /*指明不进行checksum更新*/
 			flags &= ~TUNNEL_CSUM;
+
+		if (nla_get_flag(tb[TCA_TUNNEL_KEY_NO_FRAG]))
+			flags |= TUNNEL_DONT_FRAGMENT;
 
 		if (tb[TCA_TUNNEL_KEY_ENC_DST_PORT])
 		    /*指明目的端口*/
@@ -770,6 +773,8 @@ static int tunnel_key_dump(struct sk_buff *skb, struct tc_action *a,
 				   key->tp_dst)) ||
 		    nla_put_u8(skb, TCA_TUNNEL_KEY_NO_CSUM,
 			       !(key->tun_flags & TUNNEL_CSUM)) ||
+		    ((key->tun_flags & TUNNEL_DONT_FRAGMENT) &&
+		     nla_put_flag(skb, TCA_TUNNEL_KEY_NO_FRAG)) ||
 		    tunnel_key_opts_dump(skb, info))
 			goto nla_put_failure;
 

@@ -133,6 +133,7 @@ struct vport *ovs_vport_alloc(int priv_size/*私有数据大小*/, const struct 
 {
 	struct vport *vport;
 	size_t alloc_size;
+	int err;
 
 	//vport申请大小
 	alloc_size = sizeof(struct vport);
@@ -146,6 +147,12 @@ struct vport *ovs_vport_alloc(int priv_size/*私有数据大小*/, const struct 
 	if (!vport)
 		return ERR_PTR(-ENOMEM);
 
+	vport->upcall_stats = netdev_alloc_pcpu_stats(struct vport_upcall_stats_percpu);
+	if (!vport->upcall_stats) {
+		err = -ENOMEM;
+		goto err_kfree_vport;
+	}
+
 	//设置vport对应的datapath,port-number,port操作集
 	vport->dp = parms->dp;
 	vport->port_no = parms->port_no;
@@ -153,11 +160,17 @@ struct vport *ovs_vport_alloc(int priv_size/*私有数据大小*/, const struct 
 	INIT_HLIST_NODE(&vport->dp_hash_node);
 
 	if (ovs_vport_set_upcall_portids(vport, parms->upcall_portids)) {
-		kfree(vport);
-		return ERR_PTR(-EINVAL);
+		err = -EINVAL;
+		goto err_free_percpu;
 	}
 
 	return vport;
+
+err_free_percpu:
+	free_percpu(vport->upcall_stats);
+err_kfree_vport:
+	kfree(vport);
+	return ERR_PTR(err);
 }
 EXPORT_SYMBOL_GPL(ovs_vport_alloc);
 
@@ -177,6 +190,7 @@ void ovs_vport_free(struct vport *vport)
 	 * it is safe to use raw dereference.
 	 */
 	kfree(rcu_dereference_raw(vport->upcall_portids));
+	free_percpu(vport->upcall_stats);
 	kfree(vport);
 }
 EXPORT_SYMBOL_GPL(ovs_vport_free);

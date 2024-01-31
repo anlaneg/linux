@@ -63,7 +63,7 @@ unsigned int _parse_integer_limit(const char *s/*整数字符串*/, unsigned int
 	rv = 0;
 	while (max_chars--) {
 		unsigned int c = *s;
-		unsigned int lc = c | 0x20; /* don't tolower() this line */
+		unsigned int lc = _tolower(c);
 		unsigned int val;
 
 		if ('0' <= c && c <= '9')

@@ -36,7 +36,7 @@ problems and bugs in particular.
 
    reporting-issues
    reporting-regressions
-   security-bugs
+   quickly-build-trimmed-linux
    bug-hunting
    bug-bisect
    tainted-kernels
@@ -119,6 +119,7 @@ configure specific aspects of kernel behavior to your liking.
    parport
    perf-security
    pm/index
+   pmf
    pnp
    rapidio
    ras

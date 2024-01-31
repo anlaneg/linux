@@ -55,8 +55,6 @@ struct nfnetlink_subsystem {
 	//变更中止
 	int (*abort)(struct net *net, struct sk_buff *skb,
 		     enum nfnl_abort_action action);
-	//无论最终是commit或者abort，均用于执行cleanup
-	void (*cleanup)(struct net *net);
 	//批量型消息时，校验genid
 	bool (*valid_genid)(struct net *net, u32 genid);
 };

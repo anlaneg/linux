@@ -2,8 +2,6 @@
 #ifndef _NETNS_NFTABLES_H_
 #define _NETNS_NFTABLES_H_
 
-#include <linux/list.h>
-
 struct netns_nftables {
 	u8			gencursor;//记录当前的generations(目前仅两种）
 };

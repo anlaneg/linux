@@ -27,7 +27,9 @@ PROVIDE(__efistub__text			= _text);
 PROVIDE(__efistub__end			= _end);
 PROVIDE(__efistub___inittext_end       	= __inittext_end);
 PROVIDE(__efistub__edata		= _edata);
+#if defined(CONFIG_EFI_EARLYCON) || defined(CONFIG_SYSFB)
 PROVIDE(__efistub_screen_info		= screen_info);
+#endif
 PROVIDE(__efistub__ctype		= _ctype);
 
 PROVIDE(__pi___memcpy			= __pi_memcpy);
@@ -107,5 +109,9 @@ KVM_NVHE_ALIAS(__hyp_rodata_end);
 KVM_NVHE_ALIAS(kvm_protected_mode_initialized);
 
 #endif /* CONFIG_KVM */
+
+#ifdef CONFIG_EFI_ZBOOT
+_kernel_codesize = ABSOLUTE(__inittext_end - _text);
+#endif
 
 #endif /* __ARM64_KERNEL_IMAGE_VARS_H */

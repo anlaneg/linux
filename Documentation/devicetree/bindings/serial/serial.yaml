@@ -1,8 +1,8 @@
 # SPDX-License-Identifier: (GPL-2.0-only OR BSD-2-Clause)
 %YAML 1.2
 ---
-$id: "http://devicetree.org/schemas/serial/serial.yaml#"
-$schema: "http://devicetree.org/meta-schemas/core.yaml#"
+$id: http://devicetree.org/schemas/serial/serial.yaml#
+$schema: http://devicetree.org/meta-schemas/core.yaml#
 
 title: Serial Interface Generic
 
@@ -87,16 +87,8 @@ properties:
     description:
       TX FIFO threshold configuration (in bytes).
 
-if:
-  required:
-    - uart-has-rtscts
-then:
-  properties:
-    cts-gpios: false
-    rts-gpios: false
-
 patternProperties:
-  "^bluetooth|gnss|gps|mcu$":
+  "^(bluetooth|bluetooth-gnss|gnss|gps|mcu)$":
     if:
       type: object
     then:
@@ -135,6 +127,14 @@ patternProperties:
 
       required:
         - compatible
+
+if:
+  required:
+    - uart-has-rtscts
+then:
+  properties:
+    cts-gpios: false
+    rts-gpios: false
 
 additionalProperties: true
 

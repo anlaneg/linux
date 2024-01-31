@@ -5,10 +5,10 @@ Hugetlbfs Reservation
 Overview
 ========
 
-Huge pages as described at Documentation/mm/hugetlbpage.rst are typically
-preallocated for application use.  These huge pages are instantiated in a
-task's address space at page fault time if the VMA indicates huge pages are
-to be used.  If no huge page exists at page fault time, the task is sent
+Huge pages as described at Documentation/admin-guide/mm/hugetlbpage.rst are
+typically preallocated for application use.  These huge pages are instantiated
+in a task's address space at page fault time if the VMA indicates huge pages
+are to be used.  If no huge page exists at page fault time, the task is sent
 a SIGBUS and often dies an unhappy death.  Shortly after huge page support
 was added, it was determined that it would be better to detect a shortage
 of huge pages at mmap() time.  The idea is that if there were not enough
@@ -271,12 +271,12 @@ to the global reservation count (resv_huge_pages).
 Freeing Huge Pages
 ==================
 
-Huge page freeing is performed by the routine free_huge_page().  This routine
-is the destructor for hugetlbfs compound pages.  As a result, it is only
-passed a pointer to the page struct.  When a huge page is freed, reservation
-accounting may need to be performed.  This would be the case if the page was
-associated with a subpool that contained reserves, or the page is being freed
-on an error path where a global reserve count must be restored.
+Huge pages are freed by free_huge_folio().  It is only passed a pointer
+to the folio as it is called from the generic MM code.  When a huge page
+is freed, reservation accounting may need to be performed.  This would
+be the case if the page was associated with a subpool that contained
+reserves, or the page is being freed on an error path where a global
+reserve count must be restored.
 
 The page->private field points to any subpool associated with the page.
 If the PagePrivate flag is set, it indicates the global reserve count should
@@ -525,7 +525,7 @@ However, there are several instances where errors are encountered after a huge
 page is allocated but before it is instantiated.  In this case, the page
 allocation has consumed the reservation and made the appropriate subpool,
 reservation map and global count adjustments.  If the page is freed at this
-time (before instantiation and clearing of PagePrivate), then free_huge_page
+time (before instantiation and clearing of PagePrivate), then free_huge_folio
 will increment the global reservation count.  However, the reservation map
 indicates the reservation was consumed.  This resulting inconsistent state
 will cause the 'leak' of a reserved huge page.  The global reserve count will

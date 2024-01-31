@@ -91,7 +91,7 @@ slow:
 	/*使inode与ns编号一致*/
 	inode->i_ino = ns->inum;
 	/*更新inode的创建，修改，访问时间*/
-	inode->i_mtime = inode->i_atime = inode->i_ctime = current_time(inode);
+	simple_inode_init_ts(inode);
 	inode->i_flags |= S_IMMUTABLE;
 	/*指明此inode为普通文件，给设置权限*/
 	inode->i_mode = S_IFREG | S_IRUGO;
@@ -100,14 +100,10 @@ slow:
 	/*指明inode的私有数据为namespace*/
 	inode->i_private = ns;
 
-	/*申请dentry并与此inode相关联*/
-	dentry = d_alloc_anon(mnt->mnt_sb);
-	if (!dentry) {
-		iput(inode);
-		return -ENOMEM;
-	}
-	d_instantiate(dentry, inode);
 	/*设置dentry的私有数据为ns的ops函数集*/
+	dentry = d_make_root(inode);	/* not the normal use, but... */
+	if (!dentry)
+		return -ENOMEM;
 	dentry->d_fsdata = (void *)ns->ops;
 	/*在ns的stashed中存放dentry的指针*/
 	d = atomic_long_cmpxchg(&ns->stashed, 0, (unsigned long)dentry);
@@ -255,26 +251,6 @@ int ns_get_name(char *buf, size_t size, struct task_struct *task,
 bool proc_ns_file(const struct file *file)
 {
 	return file->f_op == &ns_file_operations;
-}
-
-struct file *proc_ns_fget(int fd)
-{
-	struct file *file;
-
-	//取fd对应的文件
-	file = fget(fd);
-	if (!file)
-		return ERR_PTR(-EBADF);
-
-	//此文件的操作集必须为ns_file_operations
-	if (file->f_op != &ns_file_operations)
-		goto out_invalid;
-
-	return file;
-
-out_invalid:
-	fput(file);
-	return ERR_PTR(-EINVAL);
 }
 
 /**

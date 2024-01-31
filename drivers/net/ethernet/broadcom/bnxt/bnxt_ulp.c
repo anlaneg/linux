@@ -42,13 +42,10 @@ static void bnxt_fill_msix_vecs(struct bnxt *bp, struct bnxt_msix_entry *ent)
 	for (i = 0; i < num_msix; i++) {
 		ent[i].vector = bp->irq_tbl[idx + i].vector;
 		ent[i].ring_idx = idx + i;
-		if (bp->flags & BNXT_FLAG_CHIP_P5) {
-			ent[i].db_offset = DB_PF_OFFSET_P5;
-			if (BNXT_VF(bp))
-				ent[i].db_offset = DB_VF_OFFSET_P5;
-		} else {
+		if (bp->flags & BNXT_FLAG_CHIP_P5_PLUS)
+			ent[i].db_offset = bp->db_offset;
+		else
 			ent[i].db_offset = (idx + i) * 0x80;
-		}
 	}
 }
 
@@ -304,7 +301,7 @@ void bnxt_rdma_aux_device_uninit(struct bnxt *bp)
 	struct auxiliary_device *adev;
 
 	/* Skip if no auxiliary device init was done. */
-	if (!(bp->flags & BNXT_FLAG_ROCE_CAP))
+	if (!bp->aux_priv)
 		return;
 
 	aux_priv = bp->aux_priv;
@@ -317,11 +314,14 @@ static void bnxt_aux_dev_release(struct device *dev)
 {
 	struct bnxt_aux_priv *aux_priv =
 		container_of(dev, struct bnxt_aux_priv, aux_dev.dev);
+	struct bnxt *bp = netdev_priv(aux_priv->edev->net);
 
 	ida_free(&bnxt_aux_dev_ids, aux_priv->id);
 	kfree(aux_priv->edev->ulp_tbl);
+	bp->edev = NULL;
 	kfree(aux_priv->edev);
 	kfree(aux_priv);
+	bp->aux_priv = NULL;
 }
 
 static void bnxt_set_edev_info(struct bnxt_en_dev *edev, struct bnxt *bp)
@@ -330,6 +330,7 @@ static void bnxt_set_edev_info(struct bnxt_en_dev *edev, struct bnxt *bp)
 	edev->pdev = bp->pdev;
 	edev->l2_db_size = bp->db_size;
 	edev->l2_db_size_nc = bp->db_size;
+	edev->l2_db_offset = bp->db_offset;
 
 	if (bp->flags & BNXT_FLAG_ROCEV1_CAP)
 		edev->flags |= BNXT_EN_FLAG_ROCEV1_CAP;
@@ -342,7 +343,7 @@ static void bnxt_set_edev_info(struct bnxt_en_dev *edev, struct bnxt *bp)
 	edev->hw_ring_stats_size = bp->hw_ring_stats_size;
 	edev->pf_port_id = bp->pf.port_id;
 	edev->en_state = bp->state;
-
+	edev->bar0 = bp->bar0;
 	edev->ulp_tbl->msix_requested = bnxt_get_ulp_msix_num(bp);
 }
 
@@ -357,19 +358,18 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	if (!(bp->flags & BNXT_FLAG_ROCE_CAP))
 		return;
 
-	bp->aux_priv = kzalloc(sizeof(*bp->aux_priv), GFP_KERNEL);
-	if (!bp->aux_priv)
+	aux_priv = kzalloc(sizeof(*bp->aux_priv), GFP_KERNEL);
+	if (!aux_priv)
 		goto exit;
 
-	bp->aux_priv->id = ida_alloc(&bnxt_aux_dev_ids, GFP_KERNEL);
-	if (bp->aux_priv->id < 0) {
+	aux_priv->id = ida_alloc(&bnxt_aux_dev_ids, GFP_KERNEL);
+	if (aux_priv->id < 0) {
 		netdev_warn(bp->dev,
 			    "ida alloc failed for ROCE auxiliary device\n");
-		kfree(bp->aux_priv);
+		kfree(aux_priv);
 		goto exit;
 	}
 
-	aux_priv = bp->aux_priv;
 	aux_dev = &aux_priv->aux_dev;
 	aux_dev->id = aux_priv->id;
 	aux_dev->name = "rdma";
@@ -379,10 +379,11 @@ void bnxt_rdma_aux_device_init(struct bnxt *bp)
 	/*初始化rdma设备，其从属于辅助总线*/
 	rc = auxiliary_device_init(aux_dev);
 	if (rc) {
-		ida_free(&bnxt_aux_dev_ids, bp->aux_priv->id);
-		kfree(bp->aux_priv);
+		ida_free(&bnxt_aux_dev_ids, aux_priv->id);
+		kfree(aux_priv);
 		goto exit;
 	}
+	bp->aux_priv = aux_priv;
 
 	/* From this point, all cleanup will happen via the .release callback &
 	 * any error unwinding will need to include a call to

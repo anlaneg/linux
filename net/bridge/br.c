@@ -236,6 +236,14 @@ static int br_switchdev_blocking_event(struct notifier_block *nb,
 		br_switchdev_port_unoffload(p, b->ctx, b->atomic_nb,
 					    b->blocking_nb);
 		break;
+	case SWITCHDEV_BRPORT_REPLAY:
+		brport_info = ptr;
+		b = &brport_info->brport;
+
+		err = br_switchdev_port_replay(p, b->dev, b->ctx, b->atomic_nb,
+					       b->blocking_nb, extack);
+		err = notifier_from_errno(err);
+		break;
 	}
 
 out:
@@ -473,3 +481,4 @@ module_exit(br_deinit)
 MODULE_LICENSE("GPL");
 MODULE_VERSION(BR_VERSION);
 MODULE_ALIAS_RTNL_LINK("bridge");
+MODULE_DESCRIPTION("Ethernet bridge driver");

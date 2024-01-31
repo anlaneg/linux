@@ -46,9 +46,9 @@ void mark_page_accessed(struct page *page)
 }
 EXPORT_SYMBOL(mark_page_accessed);
 
-bool set_page_writeback(struct page *page)
+void set_page_writeback(struct page *page)
 {
-	return folio_start_writeback(page_folio(page));
+	folio_start_writeback(page_folio(page));
 }
 EXPORT_SYMBOL(set_page_writeback);
 
@@ -77,12 +77,6 @@ bool redirty_page_for_writepage(struct writeback_control *wbc,
 }
 EXPORT_SYMBOL(redirty_page_for_writepage);
 
-void lru_cache_add_inactive_or_unevictable(struct page *page,
-		struct vm_area_struct *vma)
-{
-	folio_add_lru_vma(page_folio(page), vma);
-}
-
 int add_to_page_cache_lru(struct page *page, struct address_space *mapping,
 		pgoff_t index, gfp_t gfp)
 {
@@ -92,13 +86,13 @@ EXPORT_SYMBOL(add_to_page_cache_lru);
 
 noinline
 struct page *pagecache_get_page(struct address_space *mapping, pgoff_t index,
-		int fgp_flags, gfp_t gfp)
+		fgf_t fgp_flags, gfp_t gfp)
 {
 	struct folio *folio;
 
 	folio = __filemap_get_folio(mapping, index, fgp_flags, gfp);
-	if (!folio || xa_is_value(folio))
-		return &folio->page;
+	if (IS_ERR(folio))
+		return NULL;
 	return folio_file_page(folio, index);
 }
 EXPORT_SYMBOL(pagecache_get_page);
@@ -106,9 +100,7 @@ EXPORT_SYMBOL(pagecache_get_page);
 struct page *grab_cache_page_write_begin(struct address_space *mapping,
 					pgoff_t index)
 {
-	unsigned fgp_flags = FGP_LOCK | FGP_WRITE | FGP_CREAT | FGP_STABLE;
-
-	return pagecache_get_page(mapping, index, fgp_flags,
+	return pagecache_get_page(mapping, index, FGP_WRITEBEGIN,
 			mapping_gfp_mask(mapping));
 }
 EXPORT_SYMBOL(grab_cache_page_write_begin);
@@ -124,13 +116,3 @@ void putback_lru_page(struct page *page)
 {
 	folio_putback_lru(page_folio(page));
 }
-
-#ifdef CONFIG_MMU
-void page_add_new_anon_rmap(struct page *page, struct vm_area_struct *vma,
-		unsigned long address)
-{
-	VM_BUG_ON_PAGE(PageTail(page), page);
-
-	return folio_add_new_anon_rmap((struct folio *)page, vma, address);
-}
-#endif

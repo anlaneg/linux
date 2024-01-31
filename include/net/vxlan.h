@@ -3,6 +3,7 @@
 #define __NET_VXLAN_H 1
 
 #include <linux/if_vlan.h>
+#include <linux/rhashtable-types.h>
 #include <net/udp_tunnel.h>
 #include <net/dst_metadata.h>
 #include <net/rtnetlink.h>
@@ -209,32 +210,33 @@ struct vxlan_rdst {
 };
 
 struct vxlan_config {
-    //vxlan隧道远端地址（可为组播地址）
-	union vxlan_addr	remote_ip;
+	//vxlan隧道远端地址（可为组播地址）
+	union vxlan_addr		remote_ip;
 	//vxlan隧道本端的ip地址
-	union vxlan_addr	saddr;
+	union vxlan_addr		saddr;
 	//配置的vni
-	__be32			vni;
+	__be32				vni;
 	//去远端时出接口设备ifindex
-	int			remote_ifindex;
-	int			mtu;//隧道mtu
-	__be16			dst_port;//隧道目的port
+	int				remote_ifindex;
+	int				mtu;//隧道mtu
+	__be16				dst_port;//隧道目的port
 	//可使用的源port范围
-	u16			port_min;
-	u16			port_max;
+	u16				port_min;
+	u16				port_max;
 	//封装用的tos（为1时指inherit)
-	u8			tos;
+	u8				tos;
 	//隧道封装时使用的ttl
-	u8			ttl;
-	__be32			label;
+	u8				ttl;
+	__be32				label;
+	enum ifla_vxlan_label_policy	label_policy;
 	//vxlan设备功能标记，例如VXLAN_F_COLLECT_METADATA
-	u32			flags;
+	u32				flags;
 	/*vxlan fdb的过期间隔*/
-	unsigned long		age_interval;
-	unsigned int		addrmax;
-	bool			no_share;
+	unsigned long			age_interval;
+	unsigned int			addrmax;
+	bool				no_share;
 	//vxlan封装的分片标记
-	enum ifla_vxlan_df	df;
+	enum ifla_vxlan_df		df;
 };
 
 enum {
@@ -314,6 +316,10 @@ struct vxlan_dev {
 
 	//vxlan设备转发表(fdb表）
 	struct hlist_head fdb_head[FDB_HASH_SIZE];
+
+	struct rhashtable mdb_tbl;
+	struct hlist_head mdb_list;
+	unsigned int mdb_seq;
 };
 
 //如果有此标记，则vxlan需要学习fdb表（外层ip,内层源mac,出接口）
@@ -338,6 +344,8 @@ struct vxlan_dev {
 #define VXLAN_F_IPV6_LINKLOCAL		0x8000
 #define VXLAN_F_TTL_INHERIT		0x10000
 #define VXLAN_F_VNIFILTER               0x20000
+#define VXLAN_F_MDB			0x40000
+#define VXLAN_F_LOCALBYPASS		0x80000
 
 /* Flags that are used in the receive path. These flags must match in
  * order for a socket to be shareable
@@ -358,7 +366,8 @@ struct vxlan_dev {
 					 VXLAN_F_UDP_ZERO_CSUM6_TX |	\
 					 VXLAN_F_UDP_ZERO_CSUM6_RX |	\
 					 VXLAN_F_COLLECT_METADATA  |	\
-					 VXLAN_F_VNIFILTER)
+					 VXLAN_F_VNIFILTER         |    \
+					 VXLAN_F_LOCALBYPASS)
 
 struct net_device *vxlan_dev_create(struct net *net, const char *name,
 				    u8 name_assign_type, struct vxlan_config *conf);
@@ -394,10 +403,15 @@ static inline netdev_features_t vxlan_features_check(struct sk_buff *skb,
 	return features;
 }
 
-/* IP header + UDP + VXLAN + Ethernet header */
-#define VXLAN_HEADROOM (20 + 8 + 8 + 14)
-/* IPv6 header + UDP + VXLAN + Ethernet header */
-#define VXLAN6_HEADROOM (40 + 8 + 8 + 14)
+static inline int vxlan_headroom(u32 flags)
+{
+	/* VXLAN:     IP4/6 header + UDP + VXLAN + Ethernet header */
+	/* VXLAN-GPE: IP4/6 header + UDP + VXLAN */
+	return (flags & VXLAN_F_IPV6 ? sizeof(struct ipv6hdr) :
+				       sizeof(struct iphdr)) +
+	       sizeof(struct udphdr) + sizeof(struct vxlanhdr) +
+	       (flags & VXLAN_F_GPE ? 0 : ETH_HLEN);
+}
 
 //取vxlan头部
 static inline struct vxlanhdr *vxlan_hdr(struct sk_buff *skb)
@@ -560,12 +574,12 @@ static inline void vxlan_flag_attr_error(int attrtype,
 }
 
 static inline bool vxlan_fdb_nh_path_select(struct nexthop *nh,
-					    int hash,
+					    u32 hash,
 					    struct vxlan_rdst *rdst)
 {
 	struct fib_nh_common *nhc;
 
-	nhc = nexthop_path_fdb_result(nh, hash);
+	nhc = nexthop_path_fdb_result(nh, hash >> 1);
 	if (unlikely(!nhc))
 		return false;
 
@@ -581,6 +595,25 @@ static inline bool vxlan_fdb_nh_path_select(struct nexthop *nh,
 	}
 
 	return true;
+}
+
+static inline void vxlan_build_gbp_hdr(struct vxlanhdr *vxh, const struct vxlan_metadata *md)
+{
+	struct vxlanhdr_gbp *gbp;
+
+	if (!md->gbp)
+		return;
+
+	gbp = (struct vxlanhdr_gbp *)vxh;
+	vxh->vx_flags |= VXLAN_HF_GBP;
+
+	if (md->gbp & VXLAN_GBP_DONT_LEARN)
+		gbp->dont_learn = 1;
+
+	if (md->gbp & VXLAN_GBP_POLICY_APPLIED)
+		gbp->policy_applied = 1;
+
+	gbp->policy_id = htons(md->gbp & VXLAN_GBP_ID_MASK);
 }
 
 #endif

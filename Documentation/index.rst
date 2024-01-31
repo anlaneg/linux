@@ -99,7 +99,7 @@ Architecture-specific documentation
 .. toctree::
    :maxdepth: 2
 
-   arch
+   arch/index
 
 
 Other documentation
@@ -113,6 +113,7 @@ to ReStructured Text format, or are simply too old.
    :maxdepth: 1
 
    staging/index
+   RAS/ras
 
 
 Translations

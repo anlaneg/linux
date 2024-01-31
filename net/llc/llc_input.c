@@ -131,10 +131,16 @@ static inline int llc_fixup_skb(struct sk_buff *skb)
 	skb_pull(skb, llc_len);
 
 	if (skb->protocol == htons(ETH_P_802_2)) {
+		__be16 pdulen;
+		s32 data_size;
+
+		if (skb->mac_len < ETH_HLEN)
+			return 0;
+
 		//此时为802.2帧，故h_proto表示的为长度
-		__be16 pdulen = eth_hdr(skb)->h_proto;
+		pdulen = eth_hdr(skb)->h_proto;
 		//计算出负载长度（h_proto中包含llc_len长度）
-		s32 data_size = ntohs(pdulen) - llc_len;
+		data_size = ntohs(pdulen) - llc_len;
 
 		if (data_size < 0 ||
 		    !pskb_may_pull(skb, data_size))
@@ -172,9 +178,6 @@ int llc_rcv(struct sk_buff *skb, struct net_device *dev,
 		   struct packet_type *, struct net_device *);
 	void (*sta_handler)(struct sk_buff *skb);
 	void (*sap_handler)(struct llc_sap *sap, struct sk_buff *skb);
-
-	if (!net_eq(dev_net(dev), &init_net))
-		goto drop;
 
 	/*
 	 * When the interface is in promisc. mode, drop all the crap that it

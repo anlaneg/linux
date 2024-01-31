@@ -50,6 +50,7 @@ enum xfs_refcount_intent_type {
 
 struct xfs_refcount_intent {
 	struct list_head			ri_list;
+	struct xfs_perag			*ri_pag;
 	enum xfs_refcount_intent_type		ri_type;
 	xfs_extlen_t				ri_blockcount;
 	xfs_fsblock_t				ri_startblock;
@@ -66,6 +67,9 @@ xfs_refcount_check_domain(
 		return false;
 	return true;
 }
+
+void xfs_refcount_update_get_group(struct xfs_mount *mp,
+		struct xfs_refcount_intent *ri);
 
 void xfs_refcount_increase_extent(struct xfs_trans *tp,
 		struct xfs_bmbt_irec *irec);
@@ -107,12 +111,14 @@ extern int xfs_refcount_recover_cow_leftovers(struct xfs_mount *mp,
  */
 #define XFS_REFCOUNT_ITEM_OVERHEAD	32
 
-extern int xfs_refcount_has_record(struct xfs_btree_cur *cur,
+extern int xfs_refcount_has_records(struct xfs_btree_cur *cur,
 		enum xfs_refc_domain domain, xfs_agblock_t bno,
-		xfs_extlen_t len, bool *exists);
+		xfs_extlen_t len, enum xbtree_recpacking *outcome);
 union xfs_btree_rec;
 extern void xfs_refcount_btrec_to_irec(const union xfs_btree_rec *rec,
 		struct xfs_refcount_irec *irec);
+xfs_failaddr_t xfs_refcount_check_irec(struct xfs_perag *pag,
+		const struct xfs_refcount_irec *irec);
 extern int xfs_refcount_insert(struct xfs_btree_cur *cur,
 		struct xfs_refcount_irec *irec, int *stat);
 
@@ -120,5 +126,15 @@ extern struct kmem_cache	*xfs_refcount_intent_cache;
 
 int __init xfs_refcount_intent_init_cache(void);
 void xfs_refcount_intent_destroy_cache(void);
+
+typedef int (*xfs_refcount_query_range_fn)(
+	struct xfs_btree_cur		*cur,
+	const struct xfs_refcount_irec	*rec,
+	void				*priv);
+
+int xfs_refcount_query_range(struct xfs_btree_cur *cur,
+		const struct xfs_refcount_irec *low_rec,
+		const struct xfs_refcount_irec *high_rec,
+		xfs_refcount_query_range_fn fn, void *priv);
 
 #endif	/* __XFS_REFCOUNT_H__ */

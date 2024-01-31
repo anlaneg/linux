@@ -165,10 +165,10 @@ static int erofs_fscache_read_folios_async(struct fscache_cookie *cookie,
 static int erofs_fscache_meta_read_folio(struct file *data, struct folio *folio)
 {
 	int ret;
-	struct erofs_fscache *ctx = folio_mapping(folio)->host->i_private;
+	struct erofs_fscache *ctx = folio->mapping->host->i_private;
 	struct erofs_fscache_request *req;
 
-	req = erofs_fscache_req_alloc(folio_mapping(folio),
+	req = erofs_fscache_req_alloc(folio->mapping,
 				folio_pos(folio), folio_size(folio));
 	if (IS_ERR(req)) {
 		folio_unlock(folio);
@@ -209,8 +209,8 @@ static int erofs_fscache_data_read_slice(struct erofs_fscache_request *primary)
 		void *src;
 
 		/* For tail packing layout, the offset may be non-zero. */
-		offset = erofs_blkoff(map.m_pa);
-		blknr = erofs_blknr(map.m_pa);
+		offset = erofs_blkoff(sb, map.m_pa);
+		blknr = erofs_blknr(sb, map.m_pa);
 		size = map.m_llen;
 
 		src = erofs_read_metabuf(&buf, sb, blknr, EROFS_KMAP);
@@ -276,7 +276,7 @@ static int erofs_fscache_read_folio(struct file *file, struct folio *folio)
 	struct erofs_fscache_request *req;
 	int ret;
 
-	req = erofs_fscache_req_alloc(folio_mapping(folio),
+	req = erofs_fscache_req_alloc(folio->mapping,
 			folio_pos(folio), folio_size(folio));
 	if (IS_ERR(req)) {
 		folio_unlock(folio);
@@ -460,6 +460,7 @@ static struct erofs_fscache *erofs_fscache_acquire_cookie(struct super_block *sb
 	inode->i_size = OFFSET_MAX;
 	inode->i_mapping->a_ops = &erofs_fscache_meta_aops;
 	mapping_set_gfp_mask(inode->i_mapping, GFP_NOFS);
+	inode->i_blkbits = EROFS_SB(sb)->blkszbits;
 	inode->i_private = ctx;
 
 	ctx->cookie = cookie;

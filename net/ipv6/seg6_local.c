@@ -113,15 +113,19 @@ struct bpf_lwt_prog {
 #define next_csid_chk_lcnode_fn_bits(flen)		\
 	next_csid_chk_lcblock_bits(flen)
 
+/* flag indicating that flavors are set up for a given End* behavior */
+#define SEG6_F_LOCAL_FLAVORS		SEG6_F_ATTR(SEG6_LOCAL_FLAVORS)
+
 #define SEG6_F_LOCAL_FLV_OP(flvname)	BIT(SEG6_LOCAL_FLV_OP_##flvname)
+#define SEG6_F_LOCAL_FLV_NEXT_CSID	SEG6_F_LOCAL_FLV_OP(NEXT_CSID)
 #define SEG6_F_LOCAL_FLV_PSP		SEG6_F_LOCAL_FLV_OP(PSP)
 
 /* Supported RFC8986 Flavor operations are reported in this bitmask */
 #define SEG6_LOCAL_FLV8986_SUPP_OPS	SEG6_F_LOCAL_FLV_PSP
 
-/* Supported Flavor operations are reported in this bitmask */
-#define SEG6_LOCAL_FLV_SUPP_OPS		(SEG6_F_LOCAL_FLV_OP(NEXT_CSID) | \
+#define SEG6_LOCAL_END_FLV_SUPP_OPS	(SEG6_F_LOCAL_FLV_NEXT_CSID | \
 					 SEG6_LOCAL_FLV8986_SUPP_OPS)
+#define SEG6_LOCAL_END_X_FLV_SUPP_OPS	SEG6_F_LOCAL_FLV_NEXT_CSID
 
 struct seg6_flavors_info {
 	/* Flavor operations */
@@ -432,9 +436,75 @@ static int end_next_csid_core(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 	return input_action_end_finish(skb, slwt);
 }
 
+static int input_action_end_x_finish(struct sk_buff *skb,
+				     struct seg6_local_lwt *slwt)
+{
+	/*查询到slwt->nh6的路由*/
+	seg6_lookup_nexthop(skb, &slwt->nh6, 0/*指明查main表*/);
+
+	return dst_input(skb);
+}
+
+static int input_action_end_x_core(struct sk_buff *skb,
+				   struct seg6_local_lwt *slwt)
+{
+	struct ipv6_sr_hdr *srh;
+
+	/*自skb中提取sr_hdr*/
+	srh = get_and_validate_srh(skb);
+	if (!srh)
+		goto drop;
+
+	/*更新目的地址*/
+	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
+
+	return input_action_end_x_finish(skb, slwt);
+
+drop:
+	kfree_skb(skb);
+	return -EINVAL;
+}
+
+static int end_x_next_csid_core(struct sk_buff *skb,
+				struct seg6_local_lwt *slwt)
+{
+	const struct seg6_flavors_info *finfo = &slwt->flv_info;
+	struct in6_addr *daddr = &ipv6_hdr(skb)->daddr;
+
+	if (seg6_next_csid_is_arg_zero(daddr, finfo))
+		return input_action_end_x_core(skb, slwt);
+
+	/* update DA */
+	seg6_next_csid_advance_arg(daddr, finfo);
+
+	return input_action_end_x_finish(skb, slwt);
+}
+
 static bool seg6_next_csid_enabled(__u32 fops)
 {
-	return fops & BIT(SEG6_LOCAL_FLV_OP_NEXT_CSID);
+	return fops & SEG6_F_LOCAL_FLV_NEXT_CSID;
+}
+
+/* Processing of SRv6 End, End.X, and End.T behaviors can be extended through
+ * the flavors framework. These behaviors must report the subset of (flavor)
+ * operations they currently implement. In this way, if a user specifies a
+ * flavor combination that is not supported by a given End* behavior, the
+ * kernel refuses to instantiate the tunnel reporting the error.
+ */
+static int seg6_flv_supp_ops_by_action(int action, __u32 *fops)
+{
+	switch (action) {
+	case SEG6_LOCAL_ACTION_END:
+		*fops = SEG6_LOCAL_END_FLV_SUPP_OPS;
+		break;
+	case SEG6_LOCAL_ACTION_END_X:
+		*fops = SEG6_LOCAL_END_X_FLV_SUPP_OPS;
+		break;
+	default:
+		return -EOPNOTSUPP;
+	}
+
+	return 0;
 }
 
 /* We describe the packet state in relation to the absence/presence of the SRH
@@ -767,24 +837,14 @@ static int input_action_end(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 /* regular endpoint, and forward to specified nexthop */
 static int input_action_end_x(struct sk_buff *skb, struct seg6_local_lwt *slwt)
 {
-	struct ipv6_sr_hdr *srh;
+	const struct seg6_flavors_info *finfo = &slwt->flv_info;
+	__u32 fops = finfo->flv_ops;
 
-	/*自skb中提取sr_hdr*/
-	srh = get_and_validate_srh(skb);
-	if (!srh)
-		goto drop;
+	/* check for the presence of NEXT-C-SID since it applies first */
+	if (seg6_next_csid_enabled(fops))
+		return end_x_next_csid_core(skb, slwt);
 
-	/*更新目的地址*/
-	advance_nextseg(srh, &ipv6_hdr(skb)->daddr);
-
-	/*查询到slwt->nh6的路由*/
-	seg6_lookup_nexthop(skb, &slwt->nh6, 0/*指明查main表*/);
-
-	return dst_input(skb);
-
-drop:
-	kfree_skb(skb);
-	return -EINVAL;
+	return input_action_end_x_core(skb, slwt);
 }
 
 static int input_action_end_t(struct sk_buff *skb, struct seg6_local_lwt *slwt)
@@ -1455,7 +1515,7 @@ static struct seg6_action_desc seg6_action_table[] = {
 		.action		= SEG6_LOCAL_ACTION_END,
 		.attrs		= 0,
 		.optattrs	= SEG6_F_LOCAL_COUNTERS |
-				  SEG6_F_ATTR(SEG6_LOCAL_FLAVORS),
+				  SEG6_F_LOCAL_FLAVORS,
 		/*segment->left--后，自segments提取对应的地址做目的地址进行转发，查此目的地址对应出接口
 		 * 并进行转发*/
 		.input		= input_action_end,
@@ -1463,7 +1523,8 @@ static struct seg6_action_desc seg6_action_table[] = {
 	{
 		.action		= SEG6_LOCAL_ACTION_END_X,
 		.attrs		= SEG6_F_ATTR(SEG6_LOCAL_NH6),/*必须配置nh6*/
-		.optattrs	= SEG6_F_LOCAL_COUNTERS,
+		.optattrs	= SEG6_F_LOCAL_COUNTERS |
+				  SEG6_F_LOCAL_FLAVORS,
 		/*segment->left --后，自segments提取对应的目的地址做转发，查slwt->nh6对应的出接口
 		 *并进行转发 */
 		.input		= input_action_end_x,
@@ -2144,7 +2205,8 @@ static int parse_nla_flavors(struct nlattr **attrs, struct seg6_local_lwt *slwt,
 {
 	struct seg6_flavors_info *finfo = &slwt->flv_info;
 	struct nlattr *tb[SEG6_LOCAL_FLV_MAX + 1];
-	unsigned long fops;
+	int action = slwt->action;
+	__u32 fops, supp_fops;
 	int rc;
 
 	rc = nla_parse_nested_deprecated(tb, SEG6_LOCAL_FLV_MAX,
@@ -2160,7 +2222,8 @@ static int parse_nla_flavors(struct nlattr **attrs, struct seg6_local_lwt *slwt,
 		return -EINVAL;
 
 	fops = nla_get_u32(tb[SEG6_LOCAL_FLV_OPERATION]);
-	if (fops & ~SEG6_LOCAL_FLV_SUPP_OPS) {
+	rc = seg6_flv_supp_ops_by_action(action, &supp_fops);
+	if (rc < 0 || (fops & ~supp_fops)) {
 		NL_SET_ERR_MSG(extack, "Unsupported Flavor operation(s)");
 		return -EOPNOTSUPP;
 	}
@@ -2712,6 +2775,11 @@ int __init seg6_local_init(void)
 	 * exceeds the allowed value.
 	 */
 	BUILD_BUG_ON(SEG6_LOCAL_MAX + 1 > BITS_PER_TYPE(unsigned long));
+
+	/* Check whether the number of defined flavors exceeds the maximum
+	 * allowed value.
+	 */
+	BUILD_BUG_ON(SEG6_LOCAL_FLV_OP_MAX + 1 > BITS_PER_TYPE(__u32));
 
 	/* If the default NEXT-C-SID Locator-Block/Node Function lengths (in
 	 * bits) have been changed with invalid values, kernel build stops

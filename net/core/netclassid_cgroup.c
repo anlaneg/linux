@@ -92,6 +92,12 @@ static void update_classid_task(struct task_struct *p, u32 classid)
 	};
 	unsigned int fd = 0;
 
+	/* Only update the leader task, when many threads in this task,
+	 * so it can avoid the useless traversal.
+	 */
+	if (p != p->group_leader)
+		return;
+
 	do {
 		task_lock(p);
 		//更新此进程所有socket file的classid,一次最大容许更新class_batch个

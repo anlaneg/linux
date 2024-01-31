@@ -68,7 +68,7 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 
 	read_lock(&tasklist_lock);
 	/*遍历所有进程，如果其fs->root或者fs->pwd与old_root相同，则将其更新为new_root*/
-	do_each_thread(g, p) {
+	for_each_process_thread(g, p) {
 		task_lock(p);
 		/*取此进程的fs*/
 		fs = p->fs;
@@ -87,7 +87,7 @@ void chroot_fs_refs(const struct path *old_root, const struct path *new_root)
 			spin_unlock(&fs->lock);
 		}
 		task_unlock(p);
-	} while_each_thread(g, p);
+	}
 	read_unlock(&tasklist_lock);
 	/*相应的减少对old_root的引用*/
 	while (count--)

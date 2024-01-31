@@ -385,10 +385,10 @@ static int bnxt_tc_parse_flow(struct bnxt *bp,
 	struct flow_dissector *dissector = rule->match.dissector;/*取match字段*/
 
 	/* KEY_CONTROL and KEY_BASIC are needed for forming a meaningful key */
-	if ((dissector->used_keys & BIT(FLOW_DISSECTOR_KEY_CONTROL)) == 0 ||
-	    (dissector->used_keys & BIT(FLOW_DISSECTOR_KEY_BASIC)) == 0) {
+	if ((dissector->used_keys & BIT_ULL(FLOW_DISSECTOR_KEY_CONTROL)) == 0 ||
+	    (dissector->used_keys & BIT_ULL(FLOW_DISSECTOR_KEY_BASIC)) == 0) {
 		/*规则必须匹配接口，指明l2或（且）l3协议*/
-		netdev_info(bp->dev, "cannot form TC key: used_keys = 0x%x\n",
+		netdev_info(bp->dev, "cannot form TC key: used_keys = 0x%llx\n",
 			    dissector->used_keys);
 		return -EOPNOTSUPP;
 	}
@@ -2115,6 +2115,7 @@ destroy_flow_table:
 	rhashtable_destroy(&tc_info->flow_table);
 free_tc_info:
 	kfree(tc_info);
+	bp->tc_info = NULL;
 	return rc;
 }
 

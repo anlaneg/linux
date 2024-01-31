@@ -519,8 +519,6 @@ static int seg6_input_core(struct net *net/*skb所属的net namespace*/, struct 
 	dst = dst_cache_get(&slwt->cache);
 	preempt_enable();
 
-	skb_dst_drop(skb);
-
 	if (!dst) {
 		ip6_route_input(skb);
 		dst = skb_dst(skb);
@@ -531,6 +529,7 @@ static int seg6_input_core(struct net *net/*skb所属的net namespace*/, struct 
 			preempt_enable();
 		}
 	} else {
+		skb_dst_drop(skb);
 		skb_dst_set(skb, dst);
 	}
 

@@ -2263,30 +2263,31 @@ static long fuse_dev_ioctl(struct file *file, unsigned int cmd,
 	int res;
 	int oldfd;
 	struct fuse_dev *fud = NULL;
+	struct fd f;
 
 	switch (cmd) {
 	case FUSE_DEV_IOC_CLONE:
-		res = -EFAULT;
-		if (!get_user(oldfd, (__u32 __user *)arg)) {
-			struct file *old = fget(oldfd);/*取用户态指定的file*/
+		if (get_user(oldfd, (__u32 __user *)arg))
+			return -EFAULT;
 
-			res = -EINVAL;
-			if (old) {
-				/*
-				 * Check against file->f_op because CUSE
-				 * uses the same ioctl handler.
-				 */
-				if (old->f_op == file->f_op)
-					fud = fuse_get_dev(old);/*取指定文件对应的fud*/
+		f = fdget(oldfd);/*取用户态指定的file*/
+		if (!f.file)
+			return -EINVAL;
 
-				if (fud) {
-					mutex_lock(&fuse_mutex);
-					res = fuse_device_clone(fud->fc, file);
-					mutex_unlock(&fuse_mutex);
-				}
-				fput(old);
-			}
+		/*
+		 * Check against file->f_op because CUSE
+		 * uses the same ioctl handler.
+		 */
+		if (f.file->f_op == file->f_op)
+			fud = fuse_get_dev(f.file);
+
+		res = -EINVAL;
+		if (fud) {
+			mutex_lock(&fuse_mutex);
+			res = fuse_device_clone(fud->fc, file);
+			mutex_unlock(&fuse_mutex);
 		}
+		fdput(f);
 		break;
 	default:
 		res = -ENOTTY;
