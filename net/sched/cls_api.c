@@ -1666,13 +1666,14 @@ tcf_block_playback_offloads(struct tcf_block *block, flow_setup_cb_t *cb/*驱动
 	     chain_prev = chain,/*保存上一个chain*/
 		     chain = __tcf_get_next_chain(block, chain),/*取下一个chain*/
 		     tcf_chain_put(chain_prev)/*减少chain_prev的计数*/) {
-
+		if (chain->tmplt_ops && add)
+			chain->tmplt_ops->tmplt_reoffload(chain, true, cb,
+							  cb_priv);
 		//遍历此chain上所有tp
 		for (tp = __tcf_get_next_proto(chain, NULL)/*取首个tp*/; tp;
 		     tp_prev = tp,/*保存上一个tp*/
 			     tp = __tcf_get_next_proto(chain, tp),/*取下一个tp*/
 			     tcf_proto_put(tp_prev, true, NULL)/*减少tp_prv的计数*/) {
-
 			//调用reoffload，完成此tp的规则再下发
 			if (tp->ops->reoffload) {
 				err = tp->ops->reoffload(tp, add, cb, cb_priv,
@@ -1686,6 +1687,9 @@ tcf_block_playback_offloads(struct tcf_block *block, flow_setup_cb_t *cb/*驱动
 				goto err_playback_remove;
 			}
 		}
+		if (chain->tmplt_ops && !add)
+			chain->tmplt_ops->tmplt_reoffload(chain, false, cb,
+							  cb_priv);
 	}
 
 	return 0;
@@ -3216,9 +3220,9 @@ static int tc_chain_tmplt_add(struct tcf_chain *chain, struct net *net,
 	ops = tcf_proto_lookup_ops(name, true, extack);
 	if (IS_ERR(ops))
 		return PTR_ERR(ops);
-
 	/*必须要提供以下三个回调*/
-	if (!ops->tmplt_create || !ops->tmplt_destroy || !ops->tmplt_dump) {
+	if (!ops->tmplt_create || !ops->tmplt_destroy || !ops->tmplt_dump ||
+	    !ops->tmplt_reoffload) {
 		NL_SET_ERR_MSG(extack, "Chain templates are not supported with specified classifier");
 		module_put(ops->owner);
 		return -EOPNOTSUPP;

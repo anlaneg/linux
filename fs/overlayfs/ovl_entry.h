@@ -40,6 +40,8 @@ struct ovl_layer {
 	int idx;
 	/* One fsid per unique underlying sb (upper fsid == 0) */
 	int fsid;
+	/* xwhiteouts were found on this layer */
+	bool has_xwhiteouts;
 };
 
 struct ovl_path {
@@ -59,7 +61,7 @@ struct ovl_fs {
 	unsigned int numfs;
 	/* Number of data-only lower layers */
 	unsigned int numdatalayer;
-	const struct ovl_layer *layers;/*每个lower对应一个layers结构体*/
+	struct ovl_layer *layers;/*每个lower对应一个layers结构体*/
 	struct ovl_sb *fs;
 	/* workbasedir is the path at workdir= mount option */
 	struct dentry *workbasedir;

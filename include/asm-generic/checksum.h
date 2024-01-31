@@ -2,6 +2,8 @@
 #ifndef __ASM_GENERIC_CHECKSUM_H
 #define __ASM_GENERIC_CHECKSUM_H
 
+#include <linux/bitops.h>
+
 /*
  * computes the checksum of a memory block at buff, length len,
  * and adds in "sum" (32-bit)
@@ -44,10 +46,8 @@ static inline __sum16 csum_fold(__wsum csum)
     //      如果其>0xffff && <=0x1fffe,则其值最大为0xffff
     //故下面的代码通过两次计算获得16位的sum
 	u32 sum = (__force u32)csum;
-	sum = (sum & 0xffff) + (sum >> 16);
-	sum = (sum & 0xffff) + (sum >> 16);
-    //按checksum计算方法，其最终结果需要取反
-	return (__force __sum16)~sum;
+    	//按checksum计算方法，其最终结果需要取反
+	return (__force __sum16)((~sum - ror32(sum, 16)) >> 16);
 }
 #endif
 

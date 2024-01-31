@@ -155,7 +155,7 @@ static bool ip6_parse_tlv(bool hopbyhop,
 		max_count = -max_count;
 	}
 
-	off += 2;*跳过type+length*/
+	off += 2;/*跳过type+length*/
 	len -= 2;
 
 	while (len > 0) {

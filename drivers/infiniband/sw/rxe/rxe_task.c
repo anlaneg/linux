@@ -140,7 +140,6 @@ static void do_task(struct rxe_task *task)
 		switch (task->state) {
 		case TASK_STATE_BUSY:
 			task->state = TASK_STATE_IDLE;
->>>>>>> upstream/master
 			break;
 
 		/* someone tried to schedule the task while we

@@ -441,6 +441,10 @@ struct tcf_proto_ops {
 						struct netlink_ext_ack *extack);
 	/*chain私有数据销毁*/
 	void			(*tmplt_destroy)(void *tmplt_priv);
+	void			(*tmplt_reoffload)(struct tcf_chain *chain,
+						   bool add,
+						   flow_setup_cb_t *cb,
+						   void *cb_priv);
 	struct tcf_exts *	(*get_exts)(const struct tcf_proto *tp,
 					    u32 handle);
 
