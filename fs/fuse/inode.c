@@ -387,6 +387,7 @@ static void fuse_init_inode(struct inode *inode, struct fuse_attr *attr,
 		/*目录*/
 		fuse_init_dir(inode);
 	else if (S_ISLNK(inode->i_mode))
+		/*link文件*/
 		fuse_init_symlink(inode);
 	else if (S_ISCHR(inode->i_mode) || S_ISBLK(inode->i_mode) ||
 		 S_ISFIFO(inode->i_mode) || S_ISSOCK(inode->i_mode)) {
@@ -881,7 +882,7 @@ static void fuse_iqueue_init(struct fuse_iqueue *fiq,
 	INIT_LIST_HEAD(&fiq->interrupts);
 	fiq->forget_list_tail = &fiq->forget_list_head;
 	fiq->connected = 1;
-	fiq->ops = ops;
+	fiq->ops = ops;/*设置操作集*/
 	fiq->priv = priv;
 }
 
@@ -1685,7 +1686,7 @@ int fuse_fill_super_common(struct super_block *sb, struct fuse_fs_context *ctx)
 	fc->no_force_umount = ctx->no_force_umount;
 
 	err = -ENOMEM;
-	root = fuse_get_root_inode(sb, ctx->rootmode);
+	root = fuse_get_root_inode(sb, ctx->rootmode);/*获取root inode*/
 	sb->s_d_op = &fuse_root_dentry_operations;
 	root_dentry = d_make_root(root);
 	if (!root_dentry)
@@ -1765,6 +1766,7 @@ static int fuse_test_super(struct super_block *sb, struct fs_context *fsc)
 	return fsc->sget_key == get_fuse_conn_super(sb);
 }
 
+/*获取root inode*/
 static int fuse_get_tree(struct fs_context *fsc)
 {
 	struct fuse_fs_context *ctx = fsc->fs_private;

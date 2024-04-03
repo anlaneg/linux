@@ -422,7 +422,7 @@ static int fuse_priv_ioctl(struct inode *inode, struct fuse_file *ff,
 static struct fuse_file *fuse_priv_ioctl_prepare(struct inode *inode)
 {
 	struct fuse_mount *fm = get_fuse_mount(inode);
-	bool isdir = S_ISDIR(inode->i_mode);
+	bool isdir = S_ISDIR(inode->i_mode);/*是否为目录*/
 
 	if (!fuse_allow_current_process(fm->fc))
 		return ERR_PTR(-EACCES);
@@ -431,6 +431,7 @@ static struct fuse_file *fuse_priv_ioctl_prepare(struct inode *inode)
 		return ERR_PTR(-EIO);
 
 	if (!S_ISREG(inode->i_mode) && !isdir)
+		/*除普通文件&目录外，报错*/
 		return ERR_PTR(-ENOTTY);
 
 	return fuse_file_open(fm, get_node_id(inode), O_RDONLY, isdir);

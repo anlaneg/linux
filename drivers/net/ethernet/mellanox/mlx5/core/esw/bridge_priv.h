@@ -178,10 +178,10 @@ struct mlx5_esw_bridge_vlan {
 };
 
 struct mlx5_esw_bridge_port {
-	u16 vport_num;
+	u16 vport_num;/*此port对应的编号(与kernel bridge相同）*/
 	u16 esw_owner_vhca_id;
 	u16 flags;
-	struct mlx5_esw_bridge *bridge;
+	struct mlx5_esw_bridge *bridge;/*对应的桥*/
 	struct xarray vlans;
 	struct {
 		struct mlx5_flow_table *ft;
@@ -196,17 +196,17 @@ struct mlx5_esw_bridge_port {
 };
 
 struct mlx5_esw_bridge {
-	int ifindex;
+	int ifindex;/*桥在kernel中netdev对应的ifindex*/
 	int refcnt;
-	struct list_head list;
-	struct mlx5_esw_bridge_offloads *br_offloads;
+	struct list_head list;/*用于与其它mlx5_esw_bridge串连*/
+	struct mlx5_esw_bridge_offloads *br_offloads;/*此bridge对应的esw bridge offload结构体*/
 	struct dentry *debugfs_dir;
 
 	struct list_head fdb_list;
-	struct rhashtable fdb_ht;
+	struct rhashtable fdb_ht;/*fdb表*/
 
 	struct list_head mdb_list;
-	struct rhashtable mdb_ht;
+	struct rhashtable mdb_ht;/*mdb表*/
 
 	struct mlx5_flow_table *egress_ft;
 	struct mlx5_flow_group *egress_vlan_fg;

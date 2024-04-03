@@ -1781,7 +1781,7 @@ static int dev_boot_phase = 1;
  * to the new notifier to allow device to have a race free
  * view of the network device list.
  */
-//注册netdev的通知回调
+//注册netdev的通知回调（任意net ns)
 int register_netdevice_notifier(struct notifier_block *nb)
 {
 	struct net *net;
@@ -2009,7 +2009,7 @@ static void move_netdevice_notifiers_dev_net(struct net_device *dev,
 int call_netdevice_notifiers_info(unsigned long val,
 				  struct netdev_notifier_info *info)
 {
-	struct net *net = dev_net(info->dev);
+	struct net *net = dev_net(info->dev);/*取设备对应的net ns*/
 	int ret;
 
 	ASSERT_RTNL();
@@ -2018,9 +2018,10 @@ int call_netdevice_notifiers_info(unsigned long val,
 	 * Hopefully, one day, the global one is going to be removed after
 	 * all notifier block registrators get converted to be per-netns.
 	 */
-	ret = raw_notifier_call_chain(&net->netdev_chain, val, info);
+	ret = raw_notifier_call_chain(&net->netdev_chain, val, info);/*触发此netns上的通知链*/
 	if (ret & NOTIFY_STOP_MASK)
 		return ret;
+	/*通知所有注册在netdev_chain链上的所有回调(不区分netns)*/
 	return raw_notifier_call_chain(&netdev_chain, val, info);
 }
 
@@ -7454,6 +7455,7 @@ static int __netdev_walk_all_upper_dev(struct net_device *dev,
 
 	while (1) {
 		if (now != dev) {
+			/*当前遇到的设备不是dev,继续通过fn函数进行检测*/
 			ret = fn(now, priv);
 			if (ret)
 				return ret;
@@ -8129,10 +8131,10 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 {
 	struct netdev_notifier_changeupper_info changeupper_info = {
 		.info = {
-			.dev = dev,
-			.extack = extack,
+			.dev = dev,/*指定设备*/
+			.extack = extack,/*指明消息输出buf*/
 		},
-		.upper_dev = upper_dev,
+		.upper_dev = upper_dev,/*指定upper设备*/
 		.master = master,
 		.linking = true,
 		.upper_info = upper_info,
@@ -8176,6 +8178,7 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 	if (ret)
 		return ret;
 
+	/*解发netdev_changeupperg事件*/
 	ret = call_netdevice_notifiers_info(NETDEV_CHANGEUPPER,
 					    &changeupper_info.info);
 	ret = notifier_to_errno(ret);
@@ -8217,8 +8220,8 @@ int netdev_upper_dev_link(struct net_device *dev,
 		.data = NULL,
 	};
 
-    	//为dev添加upper设备
-	return __netdev_upper_dev_link(dev, upper_dev, false,
+    //为dev添加upper设备
+	return __netdev_upper_dev_link(dev, upper_dev, false/*非master设备*/,
 				       NULL, NULL, &priv, extack);
 }
 EXPORT_SYMBOL(netdev_upper_dev_link);
@@ -8239,7 +8242,7 @@ EXPORT_SYMBOL(netdev_upper_dev_link);
  */
 int netdev_master_upper_dev_link(struct net_device *dev,
 				 struct net_device *upper_dev/*master设备*/,
-				 void *upper_priv, void *upper_info,
+				 void *upper_priv/*upper设备的私有成*/, void *upper_info,
 				 struct netlink_ext_ack *extack)
 {
 	struct netdev_nested_priv priv = {
@@ -8247,7 +8250,7 @@ int netdev_master_upper_dev_link(struct net_device *dev,
 		.data = NULL,
 	};
 
-	return __netdev_upper_dev_link(dev, upper_dev, true,
+	return __netdev_upper_dev_link(dev, upper_dev/*顶层设备*/, true/*为master设备*/,
 				       upper_priv, upper_info, &priv, extack);
 }
 EXPORT_SYMBOL(netdev_master_upper_dev_link);
@@ -12064,7 +12067,7 @@ void netdev_printk(const char *level, const struct net_device *dev,
 }
 EXPORT_SYMBOL(netdev_printk);
 
-#define define_netdev_printk_level(func, level)			\
+#define define_netdev_printk_level(func/*函数名称*/, level/*日志级别*/)			\
 void func(const struct net_device *dev, const char *fmt, ...)	\
 {								\
 	struct va_format vaf;					\

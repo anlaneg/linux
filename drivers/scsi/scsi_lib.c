@@ -1913,7 +1913,7 @@ EXPORT_SYMBOL_GPL(__scsi_init_queue);
 static const struct blk_mq_ops scsi_mq_ops_no_commit = {
 	.get_budget	= scsi_mq_get_budget,
 	.put_budget	= scsi_mq_put_budget,
-	.queue_rq	= scsi_queue_rq,
+	.queue_rq	= scsi_queue_rq,/*scsi请求入队*/
 	.complete	= scsi_complete,
 	.timeout	= scsi_timeout,
 #ifdef CONFIG_BLK_DEBUG_FS

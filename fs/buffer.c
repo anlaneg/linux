@@ -2221,10 +2221,11 @@ static void __block_commit_write(struct folio *folio, size_t from, size_t to)
 int block_write_begin(struct address_space *mapping, loff_t pos, unsigned len,
 		struct page **pagep, get_block_t *get_block)
 {
-	pgoff_t index = pos >> PAGE_SHIFT;
+	pgoff_t index = pos >> PAGE_SHIFT;/*位置对应的页索引*/
 	struct page *page;
 	int status;
 
+	/*取index对应的page*/
 	page = grab_cache_page_write_begin(mapping, index);
 	if (!page)
 		return -ENOMEM;

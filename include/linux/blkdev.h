@@ -361,21 +361,21 @@ struct request_queue {
 	 * The queue owner gets to use this for whatever they like.
 	 * ll_rw_blk doesn't touch it.
 	 */
-	void			*queuedata;
+	void			*queuedata;/*创建时传入的私有数据*/
 
 	struct elevator_queue	*elevator;
 
-	const struct blk_mq_ops	*mq_ops;
+	const struct blk_mq_ops	*mq_ops;/*此ops不为空时，为多队列操作集*/
 
 	/* sw queues */
-	struct blk_mq_ctx __percpu	*queue_ctx;
+	struct blk_mq_ctx __percpu	*queue_ctx;/*percpu context*/
 
 	/*
 	 * various queue flags, see QUEUE_* below
 	 */
 	unsigned long		queue_flags;
 
-	unsigned int		rq_timeout;
+	unsigned int		rq_timeout;/*request的超时时间*/
 
 	unsigned int		queue_depth;
 
@@ -393,7 +393,7 @@ struct request_queue {
 
 	int			quiesce_depth;
 
-	struct gendisk		*disk;
+	struct gendisk		*disk;/*所属的disk*/
 
 	/*
 	 * mq queue kobject
@@ -417,7 +417,7 @@ struct request_queue {
 	 */
 	atomic_t		pm_only;
 
-	struct blk_queue_stats	*stats;
+	struct blk_queue_stats	*stats;/*统计计数*/
 	struct rq_qos		*rq_qos;
 	struct mutex		rq_qos_mutex;
 
@@ -432,6 +432,7 @@ struct request_queue {
 	/*
 	 * queue settings
 	 */
+	/*支持的请求最大数（队列深度）*/
 	unsigned long		nr_requests;	/* Max # of requests */
 
 #ifdef CONFIG_BLK_INLINE_ENCRYPTION
@@ -590,6 +591,7 @@ extern void blk_clear_pm_only(struct request_queue *q);
 	dma_map_page_attrs(dev, (bv)->bv_page, (bv)->bv_offset, (bv)->bv_len, \
 	(dir), (attrs))
 
+/*是否为多队列*/
 static inline bool queue_is_mq(struct request_queue *q)
 {
 	return q->mq_ops;
@@ -786,6 +788,7 @@ int __register_blkdev(unsigned int major, const char *name,
 /*注册block设备*/
 #define register_blkdev(major, name/*block设备名称*/) \
 	__register_blkdev(major, name, NULL)
+/*移除注册的block设备*/
 void unregister_blkdev(unsigned int major, const char *name);
 
 bool disk_check_media_change(struct gendisk *disk);
@@ -833,6 +836,7 @@ int bio_poll(struct bio *bio, struct io_comp_batch *iob, unsigned int flags);
 int iocb_bio_iopoll(struct kiocb *kiocb, struct io_comp_batch *iob,
 			unsigned int flags);
 
+/*返回block设备对应的request queue，由于在bdev_alloc中已设置，故不会返回NULL*/
 static inline struct request_queue *bdev_get_queue(struct block_device *bdev)
 {
 	return bdev->bd_queue;	/* this is never NULL */

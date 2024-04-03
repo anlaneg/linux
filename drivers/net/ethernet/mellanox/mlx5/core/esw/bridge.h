@@ -16,7 +16,7 @@ struct mlx5_flow_group;
 
 struct mlx5_esw_bridge_offloads {
 	struct mlx5_eswitch *esw;
-	struct list_head bridges;
+	struct list_head bridges;/*对应的所有桥设备*/
 	struct xarray ports;
 	struct dentry *debugfs_root;
 

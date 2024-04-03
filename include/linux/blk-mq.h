@@ -491,17 +491,17 @@ enum hctx_type {
  *		   (BLK_MQ_F_BLOCKING).
  */
 struct blk_mq_tag_set {
-	const struct blk_mq_ops	*ops;
+	const struct blk_mq_ops	*ops;/*多队列对应的ops*/
 	struct blk_mq_queue_map	map[HCTX_MAX_TYPES];
 	unsigned int		nr_maps;
-	/*队列数目*/
+	/*硬件队列数目*/
 	unsigned int		nr_hw_queues;
-	unsigned int		queue_depth;
+	unsigned int		queue_depth;/*队列深度*/
 	unsigned int		reserved_tags;
 	unsigned int		cmd_size;
-	/*对应的numa节点*/
+	/*对应的numa节点（在哪个numa node上申请request_queue)*/
 	int			numa_node;
-	unsigned int		timeout;
+	unsigned int		timeout;/*request的超时时间*/
 	unsigned int		flags;
 	void			*driver_data;
 
@@ -522,7 +522,7 @@ struct blk_mq_tag_set {
  */
 struct blk_mq_queue_data {
 	struct request *rq;/*请求*/
-	bool last;
+	bool last;/*是否为最后一个请求*/
 };
 
 typedef bool (busy_tag_iter_fn)(struct request *, void *);
@@ -536,7 +536,7 @@ struct blk_mq_ops {
 	 * @queue_rq: Queue a new request from block IO.
 	 */
 	blk_status_t (*queue_rq)(struct blk_mq_hw_ctx *,
-				 const struct blk_mq_queue_data *);
+				 const struct blk_mq_queue_data *);/*新请求入队*/
 
 	/**
 	 * @commit_rqs: If a driver uses bd->last to judge when to submit
@@ -590,7 +590,7 @@ struct blk_mq_ops {
 	/**
 	 * @complete: Mark the request as complete.
 	 */
-	void (*complete)(struct request *);
+	void (*complete)(struct request *);/*block软中断触发此回调*/
 
 	/**
 	 * @init_hctx: Called when the block layer side of a hardware queue has
@@ -611,7 +611,7 @@ struct blk_mq_ops {
 	 * flush request.
 	 */
 	int (*init_request)(struct blk_mq_tag_set *set, struct request *,
-			    unsigned int, unsigned int);
+			    unsigned int, unsigned int);/*采用此函数初始化request*/
 	/**
 	 * @exit_request: Ditto for exit/teardown.
 	 */
@@ -686,7 +686,7 @@ enum {
 
 struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
 		struct lock_class_key *lkclass);
-#define blk_mq_alloc_disk(set, queuedata)				\
+#define blk_mq_alloc_disk(set/*disk创建对应的参数*/, queuedata)				\
 ({									\
 	static struct lock_class_key __key;				\
 									\
@@ -767,6 +767,7 @@ enum {
 
 u32 blk_mq_unique_tag(struct request *rq);
 
+/*由tag获取hwq*/
 static inline u16 blk_mq_unique_tag_to_hwq(u32 unique_tag)
 {
 	return unique_tag >> BLK_MQ_UNIQUE_TAG_BITS;

@@ -120,6 +120,7 @@ static bool mlx5_esw_bridge_is_local(struct net_device *dev, struct net_device *
 	struct mlx5e_priv *priv;
 
 	if (!mlx5_esw_bridge_dev_same_esw(rep, esw))
+		/*rep与esw不在同一个eswitch上*/
 		return false;
 
 	priv = netdev_priv(rep);
@@ -143,6 +144,7 @@ static int mlx5_esw_bridge_port_changeupper(struct notifier_block *nb, void *ptr
 	int err = 0;
 
 	if (!netif_is_bridge_master(upper))
+		/*必须为桥*/
 		return 0;
 
 	rep = mlx5_esw_bridge_rep_vport_num_vhca_id_get(dev, esw, &vport_num, &esw_owner_vhca_id);
@@ -152,8 +154,8 @@ static int mlx5_esw_bridge_port_changeupper(struct notifier_block *nb, void *ptr
 	extack = netdev_notifier_info_to_extack(&info->info);
 
 	if (mlx5_esw_bridge_is_local(dev, rep, esw))
-		err = info->linking ?
-			mlx5_esw_bridge_vport_link(upper, vport_num, esw_owner_vhca_id,
+		err = info->linking/*确定是添加/移除 port*/ ?
+			mlx5_esw_bridge_vport_link(upper/*桥设备*/, vport_num/*bridge vport编号*/, esw_owner_vhca_id,
 						   br_offloads, extack) :
 			mlx5_esw_bridge_vport_unlink(upper, vport_num, esw_owner_vhca_id,
 						     br_offloads, extack);
@@ -312,6 +314,7 @@ mlx5_esw_bridge_port_obj_attr_set(struct net_device *dev,
 						      attr->u.ageing_time, br_offloads);
 		break;
 	case SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING:
+		/*设置bridge的vlan filtering属性*/
 		err = mlx5_esw_bridge_vlan_filtering_set(vport_num, esw_owner_vhca_id,
 							 attr->u.vlan_filtering, br_offloads);
 		break;
@@ -349,6 +352,7 @@ static int mlx5_esw_bridge_event_blocking(struct notifier_block *nb,
 		err = mlx5_esw_bridge_port_obj_del(dev, ptr, br_offloads);
 		break;
 	case SWITCHDEV_PORT_ATTR_SET:
+		/*switchdev port属性设置阻塞性回调处理*/
 		err = mlx5_esw_bridge_port_obj_attr_set(dev, ptr, br_offloads);
 		break;
 	default:
@@ -539,6 +543,7 @@ void mlx5e_rep_bridge_init(struct mlx5e_priv *priv)
 		goto err_alloc_wq;
 	}
 
+	/*定义switchdev原子型通知链回调*/
 	br_offloads->nb.notifier_call = mlx5_esw_bridge_switchdev_event;
 	err = register_switchdev_notifier(&br_offloads->nb);
 	if (err) {
@@ -546,6 +551,7 @@ void mlx5e_rep_bridge_init(struct mlx5e_priv *priv)
 		goto err_register_swdev;
 	}
 
+	/*定义switchdev阻塞型通知链回调*/
 	br_offloads->nb_blk.notifier_call = mlx5_esw_bridge_event_blocking;
 	err = register_switchdev_blocking_notifier(&br_offloads->nb_blk);
 	if (err) {
@@ -554,6 +560,7 @@ void mlx5e_rep_bridge_init(struct mlx5e_priv *priv)
 	}
 
 	br_offloads->netdev_nb.notifier_call = mlx5_esw_bridge_switchdev_port_event;
+	/*这里只给init_net注册了notifier_call*/
 	err = register_netdevice_notifier_net(&init_net, &br_offloads->netdev_nb);
 	if (err) {
 		esw_warn(mdev, "Failed to register bridge offloads netdevice notifier (err=%d)\n",

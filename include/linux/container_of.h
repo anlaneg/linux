@@ -15,7 +15,7 @@
  *
  * WARNING: any const qualifier of @ptr is lost.
  */
-#define container_of(ptr/*ptr是类型type中成员member的指针*/, type, member) ({				\
+#define container_of(ptr/*ptr是类型type中成员member的指针*/, type/*目标类型*/, member/*指针对应目标类型成员*/) ({				\
 	void *__mptr = (void *)(ptr);					\
 	static_assert(__same_type(*(ptr), ((type *)0)->member) ||	\
 		      __same_type(*(ptr), void),			\

@@ -312,7 +312,7 @@ enum xa_lock_type {
  * to an @xa_node.
  */
 struct xarray {
-	spinlock_t	xa_lock;
+	spinlock_t	xa_lock;/*锁*/
 /* private: The rest of the data structure is not to be used directly. */
 	gfp_t		xa_flags;
 	void __rcu *	xa_head;//首个元素
@@ -1280,6 +1280,7 @@ static inline struct xa_node *xa_to_node(const void *entry)
 /* Private */
 static inline bool xa_is_node(const void *entry)
 {
+	/*entry为内部节点且entry小于4096*/
 	return xa_is_internal(entry) && (unsigned long)entry > 4096;
 }
 
@@ -1317,6 +1318,7 @@ static inline bool xa_is_sibling(const void *entry)
  */
 static inline bool xa_is_retry(const void *entry)
 {
+	/*entry是否为retry*/
 	return unlikely(entry == XA_RETRY_ENTRY);
 }
 
@@ -1328,6 +1330,7 @@ static inline bool xa_is_retry(const void *entry)
  */
 static inline bool xa_is_advanced(const void *entry)
 {
+	/*是否为内部entry*/
 	return xa_is_internal(entry) && (entry <= XA_RETRY_ENTRY);
 }
 

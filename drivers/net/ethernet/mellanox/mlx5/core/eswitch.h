@@ -376,7 +376,7 @@ struct mlx5_eswitch {
 		refcount_t refcnt;
 	} qos;
 
-	struct mlx5_esw_bridge_offloads *br_offloads;
+	struct mlx5_esw_bridge_offloads *br_offloads;/*对应的bridge offload对象*/
 	struct mlx5_esw_offload offloads;
 	//sriov模式，当前有SRIOV_LEGACY,SRIOV_OFFLOADS两种模式
 	int                     mode;

@@ -349,6 +349,7 @@ static void virtio_fs_hiprio_done_work(struct work_struct *work)
 	spin_unlock(&fsvq->lock);
 }
 
+/*自fsvq->queued_reqs中摘取一个struct fuse_req,然后将fuse_req入队列vq*/
 static void virtio_fs_request_dispatch_work(struct work_struct *work)
 {
 	struct fuse_req *req;
@@ -374,6 +375,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 	/* Dispatch pending requests */
 	while (1) {
 		spin_lock(&fsvq->lock);
+		/*自fsvq->queued_reqs中摘取一个struct fuse_req*/
 		req = list_first_entry_or_null(&fsvq->queued_reqs,
 					       struct fuse_req, list);
 		if (!req) {
@@ -383,6 +385,7 @@ static void virtio_fs_request_dispatch_work(struct work_struct *work)
 		list_del_init(&req->list);
 		spin_unlock(&fsvq->lock);
 
+		/*将req入队到vq*/
 		ret = virtio_fs_enqueue_req(fsvq, req, true);
 		if (ret < 0) {
 			if (ret == -ENOMEM || ret == -ENOSPC) {
@@ -671,7 +674,7 @@ static void virtio_fs_init_vq(struct virtio_fs_vq *fsvq, char *name,
 	if (vq_type == VQ_REQUEST) {
 		INIT_WORK(&fsvq->done_work, virtio_fs_requests_done_work);
 		INIT_DELAYED_WORK(&fsvq->dispatch_work,
-				  virtio_fs_request_dispatch_work);
+				  virtio_fs_request_dispatch_work);/*初始化入队的work*/
 	} else {
 		INIT_WORK(&fsvq->done_work, virtio_fs_hiprio_done_work);
 		INIT_DELAYED_WORK(&fsvq->dispatch_work,
@@ -1230,6 +1233,7 @@ __releases(fiq->lock)
 	struct virtio_fs_vq *fsvq;
 	int ret;
 
+	/*取pending的request*/
 	WARN_ON(list_empty(&fiq->pending));
 	req = list_last_entry(&fiq->pending, struct fuse_req, list);
 	clear_bit(FR_PENDING, &req->flags);
@@ -1237,15 +1241,15 @@ __releases(fiq->lock)
 	WARN_ON(!list_empty(&fiq->pending));
 	spin_unlock(&fiq->lock);
 
-	fs = fiq->priv;
+	fs = fiq->priv;/*取fiq的私有数据*/
 
 	pr_debug("%s: opcode %u unique %#llx nodeid %#llx in.len %u out.len %u\n",
 		  __func__, req->in.h.opcode, req->in.h.unique,
 		 req->in.h.nodeid, req->in.h.len,
 		 fuse_len_args(req->args->out_numargs, req->args->out_args));
 
-	fsvq = &fs->vqs[queue_id];
-	ret = virtio_fs_enqueue_req(fsvq, req, false);
+	fsvq = &fs->vqs[queue_id];/*取queue_id对应的vq*/
+	ret = virtio_fs_enqueue_req(fsvq, req, false);/*入队到此vq*/
 	if (ret < 0) {
 		if (ret == -ENOMEM || ret == -ENOSPC) {
 			/*
@@ -1334,7 +1338,7 @@ static int virtio_fs_fill_super(struct super_block *sb, struct fs_context *fsc)
 		}
 		ctx->dax_dev = fs->dax_dev;
 	}
-	err = fuse_fill_super_common(sb, ctx);
+	err = fuse_fill_super_common(sb, ctx);/*填充super*/
 	if (err < 0)
 		goto err_free_fuse_devs;
 
@@ -1411,6 +1415,7 @@ static int virtio_fs_test_super(struct super_block *sb,
 	return fsc_fm->fc->iq.priv == sb_fm->fc->iq.priv;
 }
 
+/*virtio-fs获取root inode*/
 static int virtio_fs_get_tree(struct fs_context *fsc)
 {
 	struct virtio_fs *fs;
@@ -1514,11 +1519,11 @@ static int __init virtio_fs_init(void)
 {
 	int ret;
 
-	ret = register_virtio_driver(&virtio_fs_driver);
+	ret = register_virtio_driver(&virtio_fs_driver);/*注册virtio-fs驱动*/
 	if (ret < 0)
 		return ret;
 
-	ret = register_filesystem(&virtio_fs_type);
+	ret = register_filesystem(&virtio_fs_type);/*注册virtio文件系统*/
 	if (ret < 0) {
 		unregister_virtio_driver(&virtio_fs_driver);
 		return ret;

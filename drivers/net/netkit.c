@@ -41,6 +41,7 @@ netkit_run(const struct bpf_mprog_entry *entry, struct sk_buff *skb,
 	const struct bpf_mprog_fp *fp;
 	const struct bpf_prog *prog;
 
+	/*遍历并执行挂接在其上的一组bpf程序*/
 	bpf_mprog_foreach_prog(entry, fp, prog) {
 		bpf_compute_data_pointers(skb);
 		ret = bpf_prog_run(prog, skb);
@@ -54,7 +55,7 @@ static void netkit_prep_forward(struct sk_buff *skb, bool xnet)
 {
 	skb_scrub_packet(skb, xnet);
 	skb->priority = 0;
-	nf_skip_egress(skb, true);
+	nf_skip_egress(skb, true);/*指明跳过egress*/
 }
 
 static struct netkit *netkit_priv(const struct net_device *dev)
@@ -72,16 +73,16 @@ static netdev_tx_t netkit_xmit(struct sk_buff *skb, struct net_device *dev)
 	int len = skb->len;
 
 	rcu_read_lock();
-	peer = rcu_dereference(nk->peer);
+	peer = rcu_dereference(nk->peer);/*取其对应的peer设备*/
 	if (unlikely(!peer || !(peer->flags & IFF_UP) ||
 		     !pskb_may_pull(skb, ETH_HLEN) ||
 		     skb_orphan_frags(skb, GFP_ATOMIC)))
 		goto drop;
 	netkit_prep_forward(skb, !net_eq(dev_net(dev), dev_net(peer)));
-	skb->dev = peer;
+	skb->dev = peer;/*变换报文设备为peer*/
 	entry = rcu_dereference(nk->active);
 	if (entry)
-		ret = netkit_run(entry, skb, ret);
+		ret = netkit_run(entry, skb, ret);/*然后运行挂接在此设备上的bpf*/
 	switch (ret) {
 	case NETKIT_NEXT:
 	case NETKIT_PASS:
@@ -95,6 +96,7 @@ static netdev_tx_t netkit_xmit(struct sk_buff *skb, struct net_device *dev)
 		}
 		break;
 	case NETKIT_REDIRECT:
+		/*依据返回值，来具体完成redirect,例如直接发出*/
 		dev_sw_netstats_tx_add(dev, 1, len);
 		skb_do_redirect(skb);
 		break;
@@ -145,7 +147,7 @@ static int netkit_get_iflink(const struct net_device *dev)
 	rcu_read_lock();
 	peer = rcu_dereference(nk->peer);
 	if (peer)
-		iflink = peer->ifindex;
+		iflink = peer->ifindex;/*取对端设备的ifindex*/
 	rcu_read_unlock();
 	return iflink;
 }
@@ -195,11 +197,11 @@ static void netkit_uninit(struct net_device *dev);
 static const struct net_device_ops netkit_netdev_ops = {
 	.ndo_open		= netkit_open,
 	.ndo_stop		= netkit_close,
-	.ndo_start_xmit		= netkit_xmit,
+	.ndo_start_xmit		= netkit_xmit,/*netkit通过执行ebpf直接完成设备切换*/
 	.ndo_set_rx_mode	= netkit_set_multicast,
 	.ndo_set_rx_headroom	= netkit_set_headroom,
 	.ndo_get_iflink		= netkit_get_iflink,
-	.ndo_get_peer_dev	= netkit_peer_dev,
+	.ndo_get_peer_dev	= netkit_peer_dev,/*获取其对应的对端设备*/
 	.ndo_get_stats64	= netkit_get_stats,
 	.ndo_uninit		= netkit_uninit,
 	.ndo_features_check	= passthru_features_check,
@@ -942,6 +944,7 @@ static __init int netkit_init(void)
 		     (int)NETKIT_DROP != (int)TCX_DROP ||
 		     (int)NETKIT_REDIRECT != (int)TCX_REDIRECT);
 
+	/*注册netkit对应的link*/
 	return rtnl_link_register(&netkit_link_ops);
 }
 

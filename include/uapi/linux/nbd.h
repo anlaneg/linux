@@ -53,6 +53,7 @@ enum {
 #define NBD_FLAG_SEND_FUA	(1 << 3) /* send FUA (forced unit access) */
 /* there is a gap here to match userspace */
 #define NBD_FLAG_SEND_TRIM	(1 << 5) /* send trim/discard */
+/*server端是否支持“多连接”*/
 #define NBD_FLAG_CAN_MULTI_CONN	(1 << 8)	/* Server supports multiple connections per export. */
 
 /* values for cmd flags in the upper 16 bits of request type */

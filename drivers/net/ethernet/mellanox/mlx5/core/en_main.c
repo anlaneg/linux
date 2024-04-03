@@ -2776,9 +2776,11 @@ static MLX5E_DEFINE_PREACTIVATE_WRAPPER_CTX(mlx5e_modify_tirs_packet_merge);
 static int mlx5e_set_mtu(struct mlx5_core_dev *mdev,
 			 struct mlx5e_params *params, u16 mtu)
 {
+	/*更新到硬件mtu*/
 	u16 hw_mtu = MLX5E_SW2HW_MTU(params, mtu);
 	int err;
 
+	/*设置硬件mtu生效*/
 	err = mlx5_set_port_mtu(mdev, hw_mtu, 1);
 	if (err)
 		return err;
@@ -4319,7 +4321,7 @@ static bool mlx5e_params_validate_xdp(struct net_device *netdev,
 }
 
 int mlx5e_change_mtu(struct net_device *netdev, int new_mtu,
-		     mlx5e_fp_preactivate preactivate)
+		     mlx5e_fp_preactivate preactivate/*更新函数*/)
 {
 	struct mlx5e_priv *priv = netdev_priv(netdev);
 	struct mlx5e_params new_params;
@@ -4379,7 +4381,7 @@ out:
 	return err;
 }
 
-static int mlx5e_change_nic_mtu(struct net_device *netdev, int new_mtu)
+static int mlx5e_change_nic_mtu(struct net_device *netdev, int new_mtu/*要设置的新的mtu*/)
 {
 	return mlx5e_change_mtu(netdev, new_mtu, mlx5e_set_dev_port_mtu_ctx);
 }
@@ -4990,6 +4992,7 @@ const struct net_device_ops mlx5e_netdev_ops = {
 	/*设备功能设置*/
 	.ndo_set_features        = mlx5e_set_features,
 	.ndo_fix_features        = mlx5e_fix_features,
+	/*设备变更mtu*/
 	.ndo_change_mtu          = mlx5e_change_nic_mtu,
 	.ndo_eth_ioctl            = mlx5e_ioctl,
 	.ndo_set_tx_maxrate      = mlx5e_set_tx_maxrate,
@@ -5038,6 +5041,8 @@ void mlx5e_build_nic_params(struct mlx5e_priv *priv, struct mlx5e_xsk *xsk, u16 
 	u8 rx_cq_period_mode;
 
 	params->sw_mtu = mtu;
+	/*将硬件mtu设置为14+4+4 即考虑以太头
+	 * 如果我们希望报文出去时mtu可处理Vxlan头，则需要50+22=72*/
 	params->hard_mtu = MLX5E_ETH_HARD_MTU;
 	params->num_channels = min_t(unsigned int, MLX5E_MAX_NUM_CHANNELS / 2,
 				     priv->max_nch);

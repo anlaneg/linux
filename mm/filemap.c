@@ -3903,7 +3903,7 @@ EXPORT_SYMBOL(generic_file_direct_write);
 ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 {
 	struct file *file = iocb->ki_filp;
-	loff_t pos = iocb->ki_pos;
+	loff_t pos = iocb->ki_pos;/*要写入的位置*/
 	struct address_space *mapping = file->f_mapping;
 	const struct address_space_operations *a_ops = mapping->a_ops;
 	long status = 0;
@@ -3916,9 +3916,9 @@ ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 		size_t copied;		/* Bytes copied from user */
 		void *fsdata = NULL;
 
-		offset = (pos & (PAGE_SIZE - 1));
+		offset = (pos & (PAGE_SIZE - 1));/*获取写入位置当前在具体一页中的偏移量*/
 		bytes = min_t(unsigned long, PAGE_SIZE - offset,
-						iov_iter_count(i));
+						iov_iter_count(i));/*获取在首页的写入长度*/
 
 again:
 		/*
@@ -3933,21 +3933,24 @@ again:
 		}
 
 		if (fatal_signal_pending(current)) {
+			/*当前有未绝的信号，返回INTR*/
 			status = -EINTR;
 			break;
 		}
 
-		status = a_ops->write_begin(file, mapping, pos, bytes,
-						&page, &fsdata);
+		status = a_ops->write_begin(file, mapping, pos/*写入位置*/, bytes/*写入长度*/,
+						&page/*出参，写入位置对应的页*/, &fsdata);
 		if (unlikely(status < 0))
 			break;
 
 		if (mapping_writably_mapped(mapping))
 			flush_dcache_page(page);
 
+		/*向page中写入*/
 		copied = copy_page_from_iter_atomic(page, offset, bytes, i);
 		flush_dcache_page(page);
 
+		/*标记page dirty*/
 		status = a_ops->write_end(file, mapping, pos, bytes, copied,
 						page, fsdata);
 		if (unlikely(status != copied)) {
@@ -4049,12 +4052,13 @@ EXPORT_SYMBOL(__generic_file_write_iter);
  *   vfs_fsync_range() failed for a synchronous write
  * * number of bytes written, even for truncated writes
  */
-ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
+ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from/*指明要写入的内容*/)
 {
-	struct file *file = iocb->ki_filp;
+	struct file *file = iocb->ki_filp;/*要写入的文件*/
 	struct inode *inode = file->f_mapping->host;
 	ssize_t ret;
 
+	/*针对inode进行加锁*/
 	inode_lock(inode);
 	//检查写位置及返回可写入的长度，返回<0，则出错，返回０，则不可写入
 	ret = generic_write_checks(iocb, from);

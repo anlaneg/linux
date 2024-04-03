@@ -58,7 +58,7 @@ extern void __f_unlock_pos(struct file *);
 //strcut file结构是将flags与file指针合二为１的，这个函数负责将其分开
 static inline struct fd __to_fd(unsigned long v)
 {
-	return (struct fd){(struct file *)(v & ~3),v & 3};
+	return (struct fd){(struct file *)(v & ~3),v & 3/*记录标记*/};
 }
 
 static inline struct fd fdget(unsigned int fd)
@@ -74,6 +74,7 @@ static inline struct fd fdget_raw(unsigned int fd)
 
 static inline struct fd fdget_pos(int fd)
 {
+	/*由fd获取struct fd*/
 	return __to_fd(__fdget_pos(fd));
 }
 

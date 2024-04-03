@@ -48,11 +48,12 @@ static void fuse_request_init(struct fuse_mount *fm, struct fuse_req *req)
 	init_waitqueue_head(&req->waitq);
 	refcount_set(&req->count, 1);
 	__set_bit(FR_PENDING, &req->flags);
-	req->fm = fm;
+	req->fm = fm;/*设置fm*/
 }
 
 static struct fuse_req *fuse_request_alloc(struct fuse_mount *fm, gfp_t flags)
 {
+	/*申请req*/
 	struct fuse_req *req = kmem_cache_zalloc(fuse_req_cachep, flags);
 	if (req)
 		fuse_request_init(fm, req);
@@ -128,6 +129,7 @@ static struct fuse_req *fuse_get_req(struct fuse_mount *fm, bool for_background)
 	if (fc->conn_error)
 		goto out;
 
+	/*申请req*/
 	req = fuse_request_alloc(fm, GFP_KERNEL);
 	err = -ENOMEM;
 	if (!req) {
@@ -186,6 +188,7 @@ unsigned int fuse_len_args(unsigned int numargs, struct fuse_arg *args)
 	unsigned nbytes = 0;
 	unsigned i;
 
+	/*统计各args对应总size*/
 	for (i = 0; i < numargs; i++)
 		nbytes += args[i].size;
 
@@ -230,7 +233,7 @@ __releases(fiq->lock)
 	req->in.h.len = sizeof(struct fuse_in_header) +
 		fuse_len_args(req->args->in_numargs,
 			      (struct fuse_arg *) req->args->in_args);
-	list_add_tail(&req->list, &fiq->pending);/*将请求加入链表*/
+	list_add_tail(&req->list, &fiq->pending);/*将请求加入到pending链表*/
 	fiq->ops->wake_pending_and_unlock(fiq);/*唤醒对端*/
 }
 
@@ -266,7 +269,7 @@ static void flush_bg_queue(struct fuse_conn *fc)
 		fc->active_background++;
 		spin_lock(&fiq->lock);
 		req->in.h.unique = fuse_get_unique(fiq);
-		queue_request_and_unlock(fiq, req);
+		queue_request_and_unlock(fiq, req);/*将req入队*/
 	}
 }
 
@@ -492,6 +495,7 @@ ssize_t fuse_simple_request(struct fuse_mount *fm, struct fuse_args *args)
 
 	if (args->force) {
 		atomic_inc(&fc->num_waiting);
+		/*申请req*/
 		req = fuse_request_alloc(fm, GFP_KERNEL | __GFP_NOFAIL);
 
 		if (!args->nocreds)
@@ -596,7 +600,7 @@ static int fuse_simple_notify_reply(struct fuse_mount *fm,
 
 	spin_lock(&fiq->lock);
 	if (fiq->connected) {
-		queue_request_and_unlock(fiq, req);
+		queue_request_and_unlock(fiq, req);/*req入队*/
 	} else {
 		err = -ENODEV;
 		spin_unlock(&fiq->lock);
@@ -2321,6 +2325,7 @@ static struct miscdevice fuse_miscdevice = {
 int __init fuse_dev_init(void)
 {
 	int err = -ENOMEM;
+	/*创建cache,用于分配fuse_req*/
 	fuse_req_cachep = kmem_cache_create("fuse_request",
 					    sizeof(struct fuse_req),
 					    0, 0, NULL);

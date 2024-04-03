@@ -45,8 +45,8 @@ void __rq_qos_issue(struct rq_qos *rqos, struct request *rq)
 {
 	do {
 		if (rqos->ops->issue)
-			rqos->ops->issue(rqos, rq);
-		rqos = rqos->next;
+			rqos->ops->issue(rqos, rq);/*触发此rqos的处理*/
+		rqos = rqos->next;/*支持串成一个链*/
 	} while (rqos);
 }
 

@@ -1552,7 +1552,7 @@ void *__xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
 		entry = XA_ZERO_ENTRY;
 
 	do {
-		curr = xas_store(&xas, entry);
+		curr = xas_store(&xas, entry);/*存储此entry*/
 		if (xa_track_free(xa))
 			xas_clear_mark(&xas, XA_FREE_MARK);
 	} while (__xas_nomem(&xas, gfp));
@@ -1578,7 +1578,7 @@ EXPORT_SYMBOL(__xa_store);
  * cannot be stored in an XArray, or xa_err(-ENOMEM) if memory allocation
  * failed.
  */
-void *xa_store(struct xarray *xa, unsigned long index, void *entry, gfp_t gfp)
+void *xa_store(struct xarray *xa, unsigned long index/*索引*/, void *entry, gfp_t gfp)
 {
 	void *curr;
 

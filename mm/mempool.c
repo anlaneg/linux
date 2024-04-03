@@ -560,6 +560,7 @@ EXPORT_SYMBOL(mempool_free);
  */
 void *mempool_alloc_slab(gfp_t gfp_mask, void *pool_data)
 {
+	/*自kmem_cache中申请元素*/
 	struct kmem_cache *mem = pool_data;
 	VM_BUG_ON(mem->ctor);
 	return kmem_cache_alloc(mem, gfp_mask);
@@ -568,6 +569,7 @@ EXPORT_SYMBOL(mempool_alloc_slab);
 
 void mempool_free_slab(void *element, void *pool_data)
 {
+	/*归还元素到kmem_cache*/
 	struct kmem_cache *mem = pool_data;
 	kmem_cache_free(mem, element);
 }

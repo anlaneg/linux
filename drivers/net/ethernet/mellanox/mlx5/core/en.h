@@ -69,7 +69,9 @@ struct page_pool;
 
 #define MLX5E_ETH_HARD_MTU (ETH_HLEN + VLAN_HLEN + ETH_FCS_LEN)
 
+/*由硬件mtu转软件mtu*/
 #define MLX5E_HW2SW_MTU(params, hwmtu) ((hwmtu) - ((params)->hard_mtu))
+/*由软件mtu转硬件mtu*/
 #define MLX5E_SW2HW_MTU(params, swmtu) ((swmtu) + ((params)->hard_mtu))
 
 #define MLX5E_MAX_NUM_MQPRIO_CH_TC TC_QOPT_MAX_QUEUE
@@ -324,7 +326,7 @@ struct mlx5e_params {
 	struct bpf_prog *xdp_prog;
 	struct mlx5e_xsk *xsk;
 	unsigned int sw_mtu;
-	int hard_mtu;
+	int hard_mtu;/*软件mtu加上此值后会变更为设置给硬件的mtu*/
 	bool ptp_rx;
 	__be32 terminate_lkey_be;
 };

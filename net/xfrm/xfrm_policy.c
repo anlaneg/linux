@@ -3471,7 +3471,7 @@ int __xfrm_decode_session(struct net *net, struct sk_buff *skb, struct flowi *fl
 
 	switch (family) {
 	case AF_INET:
-	    	/*ipv4解析*/
+	    /*ipv4解析*/
 		decode_session4(&flkeys, fl, reverse);
 		break;
 #if IS_ENABLED(CONFIG_IPV6)

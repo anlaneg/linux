@@ -159,6 +159,7 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 #define FMODE_CREATED		((__force fmode_t)0x100000)
 
 /* File is stream-like */
+/*流文件，无法获到到当前读取位置*/
 #define FMODE_STREAM		((__force fmode_t)0x200000)
 
 /* File supports DIRECT IO */
@@ -422,6 +423,7 @@ struct address_space_operations {
 
 	void (*readahead)(struct readahead_control *);
 
+	/*依据写的位置（pos)确定要写的page*/
 	int (*write_begin)(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len,
 				struct page **pagep, void **fsdata);
@@ -2916,6 +2918,7 @@ static inline bool inode_wrong_type(const struct inode *inode, umode_t mode)
 static inline void file_start_write(struct file *file)
 {
 	if (!S_ISREG(file_inode(file)->i_mode))
+		/*非普通文件，直接返回*/
 		return;
 	sb_start_write(file_inode(file)->i_sb);
 }

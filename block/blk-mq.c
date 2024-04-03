@@ -1129,9 +1129,11 @@ EXPORT_SYMBOL_GPL(blk_mq_end_request_batch);
 
 static void blk_complete_reqs(struct llist_head *list)
 {
-	struct llist_node *entry = llist_reverse_order(llist_del_all(list));
+	/*将list中元素反转后返回*/
+	struct llist_node *entry = llist_reverse_order(llist_del_all(list)/*将list置空并返回其所有元素*/);
 	struct request *rq, *next;
 
+	/*遍历所有entry,并触发complete回调*/
 	llist_for_each_entry_safe(rq, next, entry, ipi_list)
 		rq->q->mq_ops->complete(rq);
 }
@@ -1249,7 +1251,7 @@ EXPORT_SYMBOL(blk_mq_complete_request);
  */
 void blk_mq_start_request(struct request *rq)
 {
-	struct request_queue *q = rq->q;
+	struct request_queue *q = rq->q;/*取request对应的queue*/
 
 	trace_block_rq_issue(rq);
 
@@ -1264,7 +1266,7 @@ void blk_mq_start_request(struct request *rq)
 	WARN_ON_ONCE(blk_mq_rq_state(rq) != MQ_RQ_IDLE);
 
 	blk_add_timer(rq);
-	WRITE_ONCE(rq->state, MQ_RQ_IN_FLIGHT);
+	WRITE_ONCE(rq->state, MQ_RQ_IN_FLIGHT);/*指明rq还在flight(未决）*/
 	rq->mq_hctx->tags->rqs[rq->tag] = rq;
 
 #ifdef CONFIG_BLK_DEV_INTEGRITY
@@ -2029,7 +2031,7 @@ static void blk_mq_commit_rqs(struct blk_mq_hw_ctx *hctx, int queued,
 /*
  * Returns true if we did some work AND can potentially do more.
  */
-bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list,
+bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list/*要分发的一组request*/,
 			     unsigned int nr_budgets)
 {
 	enum prep_dispatch prep;
@@ -2050,17 +2052,18 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list,
 	do {
 		struct blk_mq_queue_data bd;
 
+		/*自此list上摘取一个request*/
 		rq = list_first_entry(list, struct request, queuelist);
 
 		WARN_ON_ONCE(hctx != rq->mq_hctx);
 		prep = blk_mq_prep_dispatch_rq(rq, !nr_budgets);
 		if (prep != PREP_DISPATCH_OK)
-			break;
+			break;/*不能dispatch,跳出*/
 
-		list_del_init(&rq->queuelist);
+		list_del_init(&rq->queuelist);/*完成request摘取*/
 
 		bd.rq = rq;
-		bd.last = list_empty(list);
+		bd.last = list_empty(list);/*如果list为空，则为最后一个request*/
 
 		/*
 		 * once the request is queued to lld, no need to cover the
@@ -2068,9 +2071,9 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list,
 		 */
 		if (nr_budgets)
 			nr_budgets--;
-		ret = q->mq_ops->queue_rq(hctx, &bd);
+		ret = q->mq_ops->queue_rq(hctx, &bd);/*将io请求入队*/
 		switch (ret) {
-		case BLK_STS_OK:
+		case BLK_STS_OK:/*处理成功*/
 			queued++;
 			break;
 		case BLK_STS_RESOURCE:
@@ -2252,7 +2255,7 @@ EXPORT_SYMBOL(blk_mq_delay_run_hw_queue);
  * pending requests to be sent. If this is true, run the queue to send requests
  * to hardware.
  */
-void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async)
+void blk_mq_run_hw_queue(struct blk_mq_hw_ctx *hctx, bool async/*是否异步*/)
 {
 	bool need_run;
 
@@ -2595,7 +2598,7 @@ static void blk_mq_bio_to_request(struct request *rq, struct bio *bio,
 }
 
 static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
-					    struct request *rq, bool last)
+					    struct request *rq, bool last/*是否为last请求*/)
 {
 	struct request_queue *q = rq->q;
 	struct blk_mq_queue_data bd = {
@@ -2609,7 +2612,7 @@ static blk_status_t __blk_mq_issue_directly(struct blk_mq_hw_ctx *hctx,
 	 * Any other error (busy), just add it to our list as we
 	 * previously would have done.
 	 */
-	ret = q->mq_ops->queue_rq(hctx, &bd);
+	ret = q->mq_ops->queue_rq(hctx, &bd);/*请求入队*/
 	switch (ret) {
 	case BLK_STS_OK:
 		blk_mq_update_dispatch_busy(hctx, false);
@@ -2664,7 +2667,7 @@ static void blk_mq_try_issue_directly(struct blk_mq_hw_ctx *hctx,
 
 	if ((rq->rq_flags & RQF_USE_SCHED) || !blk_mq_get_budget_and_tag(rq)) {
 		blk_mq_insert_request(rq, 0);
-		blk_mq_run_hw_queue(hctx, rq->cmd_flags & REQ_NOWAIT);
+		blk_mq_run_hw_queue(hctx, rq->cmd_flags & REQ_NOWAIT/*如果不需要wait，则为异步*/);
 		return;
 	}
 
@@ -2903,7 +2906,7 @@ static struct request *blk_mq_get_new_requests(struct request_queue *q,
 		data.cached_rq = &plug->cached_rq;
 	}
 
-	rq = __blk_mq_alloc_requests(&data);
+	rq = __blk_mq_alloc_requests(&data);/*创建request*/
 	if (rq)
 		return rq;
 	rq_qos_cleanup(q, bio);
@@ -2967,7 +2970,7 @@ static void bio_set_ioprio(struct bio *bio)
  */
 void blk_mq_submit_bio(struct bio *bio)
 {
-	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);/*取块设备对应的request queue*/
 	struct blk_plug *plug = blk_mq_plug(bio);
 	const int is_sync = op_is_sync(bio->bi_opf);
 	struct blk_mq_hw_ctx *hctx;
@@ -4039,10 +4042,12 @@ static int blk_mq_alloc_ctxs(struct request_queue *q)
 	if (!ctxs)
 		return -ENOMEM;
 
+	/*申请percpu变量*/
 	ctxs->queue_ctx = alloc_percpu(struct blk_mq_ctx);
 	if (!ctxs->queue_ctx)
 		goto fail;
 
+	/*使各percpu变量指向ctxs*/
 	for_each_possible_cpu(cpu) {
 		struct blk_mq_ctx *ctx = per_cpu_ptr(ctxs->queue_ctx, cpu);
 		ctx->ctxs = ctxs;
@@ -4088,7 +4093,7 @@ void blk_mq_release(struct request_queue *q)
 
 //申请并初始化request_queue
 static struct request_queue *blk_mq_init_queue_data(struct blk_mq_tag_set *set,
-		void *queuedata)
+		void *queuedata/*私有数据*/)
 {
 	struct request_queue *q;
 	int ret;
@@ -4268,7 +4273,7 @@ int blk_mq_init_allocated_queue(struct blk_mq_tag_set *set,
 		struct request_queue *q)
 {
 	/* mark the queue as mq asap */
-	q->mq_ops = set->ops;
+	q->mq_ops = set->ops;/*设置多队列操作集*/
 
 	if (blk_mq_alloc_ctxs(q))
 		goto err_exit;
@@ -4742,7 +4747,7 @@ static void blk_mq_elv_switch_back(struct list_head *head,
 }
 
 static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
-							int nr_hw_queues)
+							int nr_hw_queues/*硬件队列数*/)
 {
 	struct request_queue *q;
 	LIST_HEAD(head);
@@ -4752,7 +4757,7 @@ static void __blk_mq_update_nr_hw_queues(struct blk_mq_tag_set *set,
 	lockdep_assert_held(&set->tag_list_lock);
 
 	if (set->nr_maps == 1 && nr_hw_queues > nr_cpu_ids)
-		nr_hw_queues = nr_cpu_ids;
+		nr_hw_queues = nr_cpu_ids;/*硬件队列数不得超过cpu数*/
 	if (nr_hw_queues < 1)
 		return;
 	if (set->nr_maps == 1 && nr_hw_queues == set->nr_hw_queues)
@@ -4901,7 +4906,7 @@ static int __init blk_mq_init(void)
 	for_each_possible_cpu(i)
 		INIT_CSD(&per_cpu(blk_cpu_csd, i),
 			 __blk_mq_complete_request_remote, NULL);
-	open_softirq(BLOCK_SOFTIRQ, blk_done_softirq);
+	open_softirq(BLOCK_SOFTIRQ, blk_done_softirq);/*block软中断*/
 
 	cpuhp_setup_state_nocalls(CPUHP_BLOCK_SOFTIRQ_DEAD,
 				  "block/softirq:dead", NULL,

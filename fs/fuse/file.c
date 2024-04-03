@@ -126,11 +126,12 @@ static void fuse_file_put(struct fuse_file *ff, bool sync, bool isdir)
 	}
 }
 
-struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid,
-				 unsigned int open_flags, bool isdir)
+struct fuse_file *fuse_file_open(struct fuse_mount *fm, u64 nodeid/*numa node 编号*/,
+				 unsigned int open_flags, bool isdir/*是否为目标操作*/)
 {
 	struct fuse_conn *fc = fm->fc;
 	struct fuse_file *ff;
+	/*指明操作码*/
 	int opcode = isdir ? FUSE_OPENDIR : FUSE_OPEN;
 
 	ff = fuse_file_alloc(fm);
@@ -3206,7 +3207,7 @@ static const struct file_operations fuse_file_operations = {
 	.read_iter	= fuse_file_read_iter,
 	.write_iter	= fuse_file_write_iter,
 	.mmap		= fuse_file_mmap,
-	.open		= fuse_open,
+	.open		= fuse_open,/*打开文件*/
 	.flush		= fuse_flush,
 	.release	= fuse_release,
 	.fsync		= fuse_fsync,

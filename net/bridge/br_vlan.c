@@ -1279,7 +1279,7 @@ int nbp_vlan_init(struct net_bridge_port *p, struct netlink_ext_ack *extack)
 		.orig_dev = p->br->dev,
 		.id = SWITCHDEV_ATTR_ID_BRIDGE_VLAN_FILTERING,
 		.flags = SWITCHDEV_F_SKIP_EOPNOTSUPP,
-		.u.vlan_filtering = br_opt_get(p->br, BROPT_VLAN_ENABLED),
+		.u.vlan_filtering = br_opt_get(p->br, BROPT_VLAN_ENABLED),/*是否开启vlan*/
 	};
 	struct net_bridge_vlan_group *vg;
 	int ret = -ENOMEM;
@@ -1778,7 +1778,7 @@ int br_vlan_bridge_event(struct net_device *dev, unsigned long event, void *ptr)
 		break;
 	case NETDEV_CHANGEUPPER:
 		info = ptr;
-		br_vlan_upper_change(dev, info->upper_dev, info->linking);
+		br_vlan_upper_change(dev, info->upper_dev/*master设备*/, info->linking/*添加或者移除*/);
 		break;
 
 	case NETDEV_CHANGE:

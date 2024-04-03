@@ -354,6 +354,7 @@ static inline void fsnotify_access(struct file *file)
  */
 static inline void fsnotify_modify(struct file *file)
 {
+	/*通知此文件被modify*/
 	fsnotify_file(file, FS_MODIFY);
 }
 

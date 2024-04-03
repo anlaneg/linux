@@ -1350,7 +1350,7 @@ dev_t part_devt(struct gendisk *disk, u8 partno)
 	return devt;
 }
 
-struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
+struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id/*disk对应的numa node*/,
 		struct lock_class_key *lkclass)
 {
 	struct gendisk *disk;
@@ -1368,7 +1368,7 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id,
 		goto out_free_bioset;
 
 	/* bdev_alloc() might need the queue, set before the first call */
-	disk->queue = q;/*设置request queue*/
+	disk->queue = q;/*为disk设置request queue*/
 
 	/*创建块设备*/
 	disk->part0 = bdev_alloc(disk, 0);

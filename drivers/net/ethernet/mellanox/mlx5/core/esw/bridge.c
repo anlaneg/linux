@@ -75,6 +75,7 @@ mlx5_esw_bridge_table_create(int max_fte, u32 level, struct mlx5_eswitch *esw)
 		return ERR_PTR(-ENOENT);
 	}
 
+	/*创建流表*/
 	ft_attr.flags = MLX5_FLOW_TABLE_TUNNEL_EN_REFORMAT;
 	ft_attr.max_fte = max_fte;
 	ft_attr.level = level;
@@ -360,6 +361,7 @@ mlx5_esw_bridge_egress_miss_fg_create(struct mlx5_eswitch *esw, struct mlx5_flow
 	return fg;
 }
 
+/*初始化bridge ingress方向的表*/
 static int
 mlx5_esw_bridge_ingress_table_init(struct mlx5_esw_bridge_offloads *br_offloads)
 {
@@ -845,14 +847,17 @@ static struct mlx5_esw_bridge *mlx5_esw_bridge_create(struct net_device *br_netd
 		return ERR_PTR(-ENOMEM);
 
 	bridge->br_offloads = br_offloads;
+	/*创建此bridge的egress table*/
 	err = mlx5_esw_bridge_egress_table_init(br_offloads, bridge);
 	if (err)
 		goto err_egress_tbl;
 
+	/*创建fdb表*/
 	err = rhashtable_init(&bridge->fdb_ht, &fdb_ht_params);
 	if (err)
 		goto err_fdb_ht;
 
+	/*创建mdb表*/
 	err = mlx5_esw_bridge_mdb_init(bridge);
 	if (err)
 		goto err_mdb_ht;
@@ -906,6 +911,7 @@ mlx5_esw_bridge_lookup(struct net_device *br_netdev, struct mlx5_esw_bridge_offl
 
 	ASSERT_RTNL();
 
+	/*遍历所有桥，如果其ifindex与br_netdev相等，则返回*/
 	list_for_each_entry(bridge, &br_offloads->bridges, list) {
 		if (bridge->ifindex == br_netdev->ifindex) {
 			mlx5_esw_bridge_get(bridge);
@@ -913,6 +919,8 @@ mlx5_esw_bridge_lookup(struct net_device *br_netdev, struct mlx5_esw_bridge_offl
 		}
 	}
 
+	/*此桥设备没有找到对应的mlx5_esw_bridge,创建一个*/
+	/*初始化Ingress table*/
 	if (!br_offloads->ingress_ft) {
 		int err = mlx5_esw_bridge_ingress_table_init(br_offloads);
 
@@ -920,6 +928,7 @@ mlx5_esw_bridge_lookup(struct net_device *br_netdev, struct mlx5_esw_bridge_offl
 			return ERR_PTR(err);
 	}
 
+	/*创建这个bridge*/
 	bridge = mlx5_esw_bridge_create(br_netdev, br_offloads);
 	if (IS_ERR(bridge) && list_empty(&br_offloads->bridges))
 		mlx5_esw_bridge_ingress_table_cleanup(br_offloads);
@@ -936,12 +945,14 @@ unsigned long mlx5_esw_bridge_port_key(struct mlx5_esw_bridge_port *port)
 	return mlx5_esw_bridge_port_key_from_data(port->vport_num, port->esw_owner_vhca_id);
 }
 
+/*向br_offloads->ports中添加port*/
 static int mlx5_esw_bridge_port_insert(struct mlx5_esw_bridge_port *port,
 				       struct mlx5_esw_bridge_offloads *br_offloads)
 {
 	return xa_insert(&br_offloads->ports, mlx5_esw_bridge_port_key(port), port, GFP_KERNEL);
 }
 
+/*自br_offloads->ports中查询port*/
 static struct mlx5_esw_bridge_port *
 mlx5_esw_bridge_port_lookup(u16 vport_num, u16 esw_owner_vhca_id,
 			    struct mlx5_esw_bridge_offloads *br_offloads)
@@ -950,6 +961,7 @@ mlx5_esw_bridge_port_lookup(u16 vport_num, u16 esw_owner_vhca_id,
 									       esw_owner_vhca_id));
 }
 
+/*自br_offloads->ports中删除port*/
 static void mlx5_esw_bridge_port_erase(struct mlx5_esw_bridge_port *port,
 				       struct mlx5_esw_bridge_offloads *br_offloads)
 {
@@ -962,11 +974,12 @@ mlx5_esw_bridge_from_port_lookup(u16 vport_num, u16 esw_owner_vhca_id,
 {
 	struct mlx5_esw_bridge_port *port;
 
+	/*通过vport_num查找port*/
 	port = mlx5_esw_bridge_port_lookup(vport_num, esw_owner_vhca_id, br_offloads);
 	if (!port)
 		return NULL;
 
-	return port->bridge;
+	return port->bridge;/*取此port对应的bridge*/
 }
 
 static void mlx5_esw_bridge_fdb_entry_refresh(struct mlx5_esw_bridge_fdb_entry *entry)
@@ -1468,10 +1481,12 @@ int mlx5_esw_bridge_vlan_filtering_set(u16 vport_num, u16 esw_owner_vhca_id, boo
 
 	bridge = mlx5_esw_bridge_from_port_lookup(vport_num, esw_owner_vhca_id, br_offloads);
 	if (!bridge)
+		/*如果没有查找到此bridge，则退出*/
 		return -EINVAL;
 
 	filtering = bridge->flags & MLX5_ESW_BRIDGE_VLAN_FILTERING_FLAG;
 	if (filtering == enable)
+		/*两者匹配相等，不需要更新直接返回*/
 		return 0;
 
 	mlx5_esw_bridge_fdb_flush(bridge);
@@ -1547,6 +1562,7 @@ static int mlx5_esw_bridge_vport_init(u16 vport_num, u16 esw_owner_vhca_id, u16 
 	struct mlx5_esw_bridge_port *port;
 	int err;
 
+	/*先创建对应的port*/
 	port = kvzalloc(sizeof(*port), GFP_KERNEL);
 	if (!port)
 		return -ENOMEM;
@@ -1565,6 +1581,7 @@ static int mlx5_esw_bridge_vport_init(u16 vport_num, u16 esw_owner_vhca_id, u16 
 		goto err_port_mcast;
 	}
 
+	/*向br_offloads中添加port*/
 	err = mlx5_esw_bridge_port_insert(port, br_offloads);
 	if (err) {
 		esw_warn(esw->dev,
@@ -1603,7 +1620,7 @@ static int mlx5_esw_bridge_vport_cleanup(struct mlx5_esw_bridge_offloads *br_off
 	return 0;
 }
 
-static int mlx5_esw_bridge_vport_link_with_flags(struct net_device *br_netdev, u16 vport_num,
+static int mlx5_esw_bridge_vport_link_with_flags(struct net_device *br_netdev/*桥设备*/, u16 vport_num,
 						 u16 esw_owner_vhca_id, u16 flags,
 						 struct mlx5_esw_bridge_offloads *br_offloads,
 						 struct netlink_ext_ack *extack)
@@ -1611,12 +1628,14 @@ static int mlx5_esw_bridge_vport_link_with_flags(struct net_device *br_netdev, u
 	struct mlx5_esw_bridge *bridge;
 	int err;
 
+	/*查询与br_netdev对应的mlx5_esw_bridge,如不存在，则创建*/
 	bridge = mlx5_esw_bridge_lookup(br_netdev, br_offloads);
 	if (IS_ERR(bridge)) {
 		NL_SET_ERR_MSG_MOD(extack, "Error checking for existing bridge with same ifindex");
 		return PTR_ERR(bridge);
 	}
 
+	/*创建编号为vport_num的bridge vport*/
 	err = mlx5_esw_bridge_vport_init(vport_num, esw_owner_vhca_id, flags, br_offloads, bridge);
 	if (err) {
 		NL_SET_ERR_MSG_MOD(extack, "Error initializing port");
@@ -1629,7 +1648,7 @@ err_vport:
 	return err;
 }
 
-int mlx5_esw_bridge_vport_link(struct net_device *br_netdev, u16 vport_num, u16 esw_owner_vhca_id,
+int mlx5_esw_bridge_vport_link(struct net_device *br_netdev/*桥设备*/, u16 vport_num/*bridge port编号*/, u16 esw_owner_vhca_id,
 			       struct mlx5_esw_bridge_offloads *br_offloads,
 			       struct netlink_ext_ack *extack)
 {
@@ -1645,16 +1664,20 @@ int mlx5_esw_bridge_vport_unlink(struct net_device *br_netdev, u16 vport_num,
 	struct mlx5_esw_bridge_port *port;
 	int err;
 
+	/*通过此vport_num查询对应的bridge_port*/
 	port = mlx5_esw_bridge_port_lookup(vport_num, esw_owner_vhca_id, br_offloads);
 	if (!port) {
 		NL_SET_ERR_MSG_MOD(extack, "Port is not attached to any bridge");
 		return -EINVAL;
 	}
+
+	/*确定ifindex相等，如不匹配，报错*/
 	if (port->bridge->ifindex != br_netdev->ifindex) {
 		NL_SET_ERR_MSG_MOD(extack, "Port is attached to another bridge");
 		return -EINVAL;
 	}
 
+	/*移除此port*/
 	err = mlx5_esw_bridge_vport_cleanup(br_offloads, port);
 	if (err)
 		NL_SET_ERR_MSG_MOD(extack, "Port cleanup failed");
@@ -1915,19 +1938,21 @@ static void mlx5_esw_bridge_flush(struct mlx5_esw_bridge_offloads *br_offloads)
 		  "Cleaning up bridge offloads while still having bridges attached\n");
 }
 
+/*创建mlx5_esw_bridge_offloads对象*/
 struct mlx5_esw_bridge_offloads *mlx5_esw_bridge_init(struct mlx5_eswitch *esw)
 {
 	struct mlx5_esw_bridge_offloads *br_offloads;
 
 	ASSERT_RTNL();
 
+	/*申请br_offloads结构体*/
 	br_offloads = kvzalloc(sizeof(*br_offloads), GFP_KERNEL);
 	if (!br_offloads)
 		return ERR_PTR(-ENOMEM);
 
 	INIT_LIST_HEAD(&br_offloads->bridges);
 	xa_init(&br_offloads->ports);
-	br_offloads->esw = esw;
+	br_offloads->esw = esw;/*其对应的eswitch*/
 	esw->br_offloads = br_offloads;
 	mlx5_esw_bridge_debugfs_offloads_init(br_offloads);
 

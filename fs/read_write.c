@@ -363,7 +363,7 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 	int ret;
 
 	if (unlikely((ssize_t) count < 0))
-	    /*计划读取的长度小于0，报错*/
+	    /*计划读取/写入的长度小于0，报错*/
 		return -EINVAL;
 
 	if (ppos) {
@@ -504,20 +504,23 @@ ssize_t vfs_read(struct file *file/*要读取的文件*/, char __user *buf/*待�
 	return ret;
 }
 
-static ssize_t new_sync_write(struct file *filp/*要写入的文件*/, const char __user *buf/*要写入的内容*/, size_t len/*要写入的内容长度*/, loff_t *ppos/*当前文件位置*/)
+static ssize_t new_sync_write(struct file *filp/*要写入的文件*/, const char __user *buf/*要写入的内容*/, size_t len/*要写入的内容长度*/, loff_t *ppos/*入出参，当前文件位置*/)
 {
 	struct kiocb kiocb;
 	struct iov_iter iter;
 	ssize_t ret;
 
+	/*初始化kiocb*/
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
-	iov_iter_ubuf(&iter, ITER_SOURCE, (void __user *)buf, len);
+	/*初始化iter*/
+	iov_iter_ubuf(&iter, ITER_SOURCE/*指明写方向*/, (void __user *)buf, len);
 
+	/*参数准备完成，调用write_iter*/
 	ret = call_write_iter(filp, &kiocb, &iter);
 	BUG_ON(ret == -EIOCBQUEUED);
 	if (ret > 0 && ppos)
-		*ppos = kiocb.ki_pos;
+		*ppos = kiocb.ki_pos;/*出参，更新写入位置*/
 	return ret;
 }
 
@@ -588,12 +591,12 @@ ssize_t kernel_write(struct file *file, const void *buf, size_t count,
 EXPORT_SYMBOL(kernel_write);
 
 //向文件file中写入count个字节，（起始位置pos)
-ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos)
+ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_t *pos/*出入参，当前写位置*/)
 {
 	ssize_t ret;
 
-	//此文件不容许写
 	if (!(file->f_mode & FMODE_WRITE))
+		/*无写权限*/
 		return -EBADF;
 	if (!(file->f_mode & FMODE_CAN_WRITE))
 		return -EINVAL;
@@ -604,20 +607,22 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 	if (ret)
 		return ret;
 	if (count > MAX_RW_COUNT)
+		/*与入长度过大，规范化*/
 		count =  MAX_RW_COUNT;
 	file_start_write(file);
-	/*通过回调，实现文件写*/
+	/*通过回调，实现文件写，优先尝试write回调*/
 	if (file->f_op->write)
 		ret = file->f_op->write(file, buf, count, pos);
 	else if (file->f_op->write_iter)
+		/*大多数实现路径*/
 		ret = new_sync_write(file, buf, count, pos);
 	else
 		ret = -EINVAL;
 	if (ret > 0) {
 		fsnotify_modify(file);
-		add_wchar(current, ret);
+		add_wchar(current, ret);/*增加此进程写字符数*/
 	}
-	inc_syscw(current);
+	inc_syscw(current);/*增加此进程调用write次数*/
 	file_end_write(file);
 	return ret;
 }
@@ -626,7 +631,7 @@ ssize_t vfs_write(struct file *file, const char __user *buf, size_t count, loff_
 /* file_ppos returns &file->f_pos or NULL if file is stream */
 static inline loff_t *file_ppos(struct file *file)
 {
-	return file->f_mode & FMODE_STREAM ? NULL : &file->f_pos;
+	return file->f_mode & FMODE_STREAM ? NULL/*流文件，返回NULL*/ : &file->f_pos;
 }
 
 //实现系统调用read
@@ -668,12 +673,14 @@ ssize_t ksys_write(unsigned int fd, const char __user *buf, size_t count)
 		//存在fd对应的文件时进入，首先取文件pos
 		loff_t pos, *ppos = file_ppos(f.file);
 		if (ppos) {
+			/*将指针更新到&pos变量上，指向的值是相等的*/
 			pos = *ppos;
 			ppos = &pos;
 		}
 		//自pos文件读取file,最多读取count字节，并存入到buf中
 		ret = vfs_write(f.file, buf, count, ppos);
 		if (ret >= 0 && ppos)
+			/*更新文件写位置*/
 			f.file->f_pos = pos;
 		fdput_pos(f);
 	}

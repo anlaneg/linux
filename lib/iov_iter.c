@@ -91,7 +91,7 @@ size_t memcpy_from_iter(void *iter_from, size_t progress,
 size_t fault_in_iov_iter_readable(const struct iov_iter *i, size_t size)
 {
 	if (iter_is_ubuf(i)) {
-		size_t n = min(size, iov_iter_count(i));
+		size_t n = min(size, iov_iter_count(i));/*可读取的最小长度*/
 		n -= fault_in_readable(i->ubuf + i->iov_offset, n);
 		return size - n;
 	} else if (iter_is_iovec(i)) {

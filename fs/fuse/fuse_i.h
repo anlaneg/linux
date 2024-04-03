@@ -83,7 +83,7 @@ struct fuse_inode {
 
 	/** Unique ID, which identifies the inode between userspace
 	 * and kernel */
-	u64 nodeid;
+	u64 nodeid;/*属于哪个numa id*/
 
 	/** Number of lookups on this inode */
 	u64 nlookup;
@@ -267,8 +267,8 @@ struct fuse_page_desc {
 };
 
 struct fuse_args {
-	uint64_t nodeid;
-	uint32_t opcode;
+	uint64_t nodeid;/*inode对应的numa node id*/
+	uint32_t opcode;/*操作码，例如FUSE_OPEN*/
 	uint8_t in_numargs;
 	uint8_t out_numargs;
 	uint8_t ext_idx;
@@ -368,7 +368,7 @@ struct fuse_req {
 	struct list_head intr_entry;
 
 	/* Input/output arguments */
-	struct fuse_args *args;
+	struct fuse_args *args;/*请求对应的参数*/
 
 	/** refcount */
 	refcount_t count;
@@ -912,11 +912,13 @@ static inline struct fuse_conn *get_fuse_conn(struct inode *inode)
 
 static inline struct fuse_inode *get_fuse_inode(struct inode *inode)
 {
+	/*由inode获取fuse_inode指针*/
 	return container_of(inode, struct fuse_inode, inode);
 }
 
 static inline u64 get_node_id(struct inode *inode)
 {
+	/*取此inode对应的numa node id*/
 	return get_fuse_inode(inode)->nodeid;
 }
 

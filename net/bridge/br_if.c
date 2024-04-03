@@ -403,14 +403,16 @@ static int find_portno(struct net_bridge *br)
 	struct net_bridge_port *p;
 	unsigned long *inuse;
 
+	/*申请一个bitmap*/
 	inuse = bitmap_zalloc(BR_MAX_PORTS, GFP_KERNEL);
 	if (!inuse)
 		return -ENOMEM;
 
 	__set_bit(0, inuse);	/* zero is reserved */
 	list_for_each_entry(p, &br->port_list, list)
-		__set_bit(p->port_no, inuse);
+		__set_bit(p->port_no, inuse);/*针对已分配的port占用inuse*/
 
+	/*查找空闲的index,分配可用的port id*/
 	index = find_first_zero_bit(inuse, BR_MAX_PORTS);
 	bitmap_free(inuse);
 
@@ -424,7 +426,7 @@ static struct net_bridge_port *new_nbp(struct net_bridge *br,
 	struct net_bridge_port *p;
 	int index, err;
 
-	index = find_portno(br);
+	index = find_portno(br);/*分配一个port number*/
 	if (index < 0)
 		return ERR_PTR(index);
 
@@ -567,7 +569,7 @@ netdev_features_t br_features_recompute(struct net_bridge *br,
 }
 
 /* called with RTNL */
-//在桥上添加一个接口
+//在桥上添加一个接口（dev)
 int br_add_if(struct net_bridge *br, struct net_device *dev,
 	      struct netlink_ext_ack *extack)
 {
@@ -580,6 +582,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	if ((dev->flags & IFF_LOOPBACK) ||
 	    dev->type != ARPHRD_ETHER || dev->addr_len != ETH_ALEN ||
 	    !is_valid_ether_addr(dev->dev_addr))
+		/*不容许以上类型接口加入*/
 		return -EINVAL;
 
 	/* No bridging of bridges */
@@ -597,6 +600,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 
 	/* No bridging devices that dislike that (e.g. wireless) */
 	if (dev->priv_flags & IFF_DONT_BRIDGE) {
+		/*设备指明身不容许加入桥*/
 		NL_SET_ERR_MSG(extack,
 			       "Device does not allow enslaving to a bridge");
 		return -EOPNOTSUPP;
@@ -624,7 +628,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 	if (err)
 		goto err2;
 
-	err = br_sysfs_addif(p);
+	err = br_sysfs_addif(p);/*添加进sysfs*/
 	if (err)
 		goto err2;
 
@@ -640,6 +644,7 @@ int br_add_if(struct net_bridge *br, struct net_device *dev,
 
 	dev->priv_flags |= IFF_BRIDGE_PORT;
 
+	/*触发”dev添加进br->dev设备“的事件(NETDEV_CHANGEUPPER)*/
 	err = netdev_master_upper_dev_link(dev, br->dev, NULL, NULL, extack);
 	if (err)
 		goto err5;

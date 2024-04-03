@@ -60,7 +60,7 @@ struct msghdr {
 
 	int		msg_inq;	/* output, data left in socket */
 
-	/*可遍历的iov数据*/
+	/*可遍历的iov数据/buffer*/
 	struct iov_iter	msg_iter;	/* data */
 
 	/*

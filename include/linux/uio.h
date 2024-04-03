@@ -21,7 +21,7 @@ struct kvec {
 
 enum iter_type {
 	/* iter types */
-	ITER_UBUF,
+	ITER_UBUF,/*指明用户态buffer*/
 	ITER_IOVEC,
 	ITER_BVEC,
 	ITER_KVEC,
@@ -43,7 +43,7 @@ struct iov_iter {
 	u8 iter_type;
 	bool copy_mc;
 	bool nofault;
-	bool data_source;
+	bool data_source;/*数据源方向，读/写*/
 	size_t iov_offset;
 	/*
 	 * Hack alert: overlay ubuf_iovec with iovec + count, so
@@ -70,9 +70,9 @@ struct iov_iter {
 				const struct kvec *kvec;
 				const struct bio_vec *bvec;
 				struct xarray *xarray;
-				void __user *ubuf;
+				void __user *ubuf;/*用户态传入的buffer*/
 			};
-			//要读写入的长度
+			//要读取/写入的长度
 			size_t count;
 		};
 	};
@@ -288,6 +288,7 @@ void iov_iter_restore(struct iov_iter *i, struct iov_iter_state *state);
 
 const void *dup_iter(struct iov_iter *new, struct iov_iter *old, gfp_t flags);
 
+/*返回iov_iter中要读取/写入的buffer长度*/
 static inline size_t iov_iter_count(const struct iov_iter *i)
 {
 	return i->count;
@@ -348,17 +349,18 @@ ssize_t __import_iovec(int type, const struct iovec __user *uvec,
 		 struct iov_iter *i, bool compat);
 int import_ubuf(int type, void __user *buf, size_t len, struct iov_iter *i);
 
+/*利用用户态buffer初始化iov_iter结构体*/
 static inline void iov_iter_ubuf(struct iov_iter *i, unsigned int direction,
 			void __user *buf, size_t count)
 {
 	WARN_ON(direction & ~(READ | WRITE));
 	*i = (struct iov_iter) {
-		.iter_type = ITER_UBUF,
+		.iter_type = ITER_UBUF,/*指明用户态buffer*/
 		.copy_mc = false,
 		.data_source = direction,
 		.ubuf = buf,
 		.count = count,
-		.nr_segs = 1
+		.nr_segs = 1/*指明segs为1*/
 	};
 }
 /* Flags for iov_iter_get/extract_pages*() */

@@ -75,13 +75,13 @@ EXPORT_SYMBOL(fs_bio_set);
  * Our slab pool management
  */
 struct bio_slab {
-	struct kmem_cache *slab;
+	struct kmem_cache *slab;/*负责分配bio*/
 	unsigned int slab_ref;
-	unsigned int slab_size;
-	char name[8];
+	unsigned int slab_size;/*可分配的bio尺寸*/
+	char name[8];/*bio-slab名称*/
 };
 static DEFINE_MUTEX(bio_slab_lock);
-static DEFINE_XARRAY(bio_slabs);
+static DEFINE_XARRAY(bio_slabs);/*存储不同尺寸的bslab*/
 
 static struct bio_slab *create_bio_slab(unsigned int size)
 {
@@ -90,17 +90,18 @@ static struct bio_slab *create_bio_slab(unsigned int size)
 	if (!bslab)
 		return NULL;
 
-	snprintf(bslab->name, sizeof(bslab->name), "bio-%d", size);
+	snprintf(bslab->name, sizeof(bslab->name), "bio-%d", size);/*设置名称*/
 	bslab->slab = kmem_cache_create(bslab->name, size,
 			ARCH_KMALLOC_MINALIGN,
 			SLAB_HWCACHE_ALIGN | SLAB_TYPESAFE_BY_RCU, NULL);
 	if (!bslab->slab)
+		/*创建slab失败*/
 		goto fail_alloc_slab;
 
-	bslab->slab_ref = 1;
-	bslab->slab_size = size;
+	bslab->slab_ref = 1;/*指定其引用计数*/
+	bslab->slab_size = size;/*slab对应大小*/
 
-	if (!xa_err(xa_store(&bio_slabs, size, bslab, GFP_KERNEL)))
+	if (!xa_err(xa_store(&bio_slabs, size/*以size做为index*/, bslab, GFP_KERNEL)))
 		return bslab;
 
 	kmem_cache_destroy(bslab->slab);
@@ -117,19 +118,19 @@ static inline unsigned int bs_bio_slab_size(struct bio_set *bs)
 
 static struct kmem_cache *bio_find_or_create_slab(struct bio_set *bs)
 {
-	unsigned int size = bs_bio_slab_size(bs);
+	unsigned int size = bs_bio_slab_size(bs);/*slab大小*/
 	struct bio_slab *bslab;
 
 	mutex_lock(&bio_slab_lock);
-	bslab = xa_load(&bio_slabs, size);
+	bslab = xa_load(&bio_slabs, size);/*取size对应的bslab*/
 	if (bslab)
-		bslab->slab_ref++;
+		bslab->slab_ref++;/*存在，引用增加*/
 	else
-		bslab = create_bio_slab(size);
+		bslab = create_bio_slab(size);/*不存在，创建*/
 	mutex_unlock(&bio_slab_lock);
 
 	if (bslab)
-		return bslab->slab;
+		return bslab->slab;/*返回对应的slab*/
 	return NULL;
 }
 
@@ -1175,6 +1176,7 @@ void bio_iov_bvec_set(struct bio *bio, struct iov_iter *iter)
 	WARN_ON_ONCE(bio->bi_max_vecs);
 
 	if (bio_op(bio) == REQ_OP_ZONE_APPEND) {
+		/*取块设备对应的rq*/
 		struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 		size_t max_sectors = queue_max_zone_append_sectors(q);
 
@@ -1739,11 +1741,12 @@ EXPORT_SYMBOL(bioset_exit);
  */
 int bioset_init(struct bio_set *bs,
 		unsigned int pool_size,
-		unsigned int front_pad,
+		unsigned int front_pad,/*bs对应的前pad长度*/
 		int flags)
 {
 	bs->front_pad = front_pad;
 	if (flags & BIOSET_NEED_BVECS)
+		/*此情况下，有BIO_INLINE_VECS个bio_vec结构*/
 		bs->back_pad = BIO_INLINE_VECS * sizeof(struct bio_vec);
 	else
 		bs->back_pad = 0;
@@ -1752,7 +1755,7 @@ int bioset_init(struct bio_set *bs,
 	bio_list_init(&bs->rescue_list);
 	INIT_WORK(&bs->rescue_work, bio_alloc_rescue);
 
-	bs->bio_slab = bio_find_or_create_slab(bs);
+	bs->bio_slab = bio_find_or_create_slab(bs);/*创建slab*/
 	if (!bs->bio_slab)
 		return -ENOMEM;
 

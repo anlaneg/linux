@@ -99,7 +99,7 @@ static int notifier_call_chain(struct notifier_block **nl,
 		if (nr_calls)
 			(*nr_calls)++;
 
-		//如果要求停止通知
+		//只有ret明确要求停止时，才停止通知
 		if (ret & NOTIFY_STOP_MASK)
 			break;
 		nb = next_nb;
@@ -234,8 +234,7 @@ int atomic_notifier_call_chain(struct atomic_notifier_head *nh,
 	int ret;
 
 	rcu_read_lock();
-	/*支持nr_to_call数量个通知回调的触发*/
-	ret = notifier_call_chain(&nh->head, val, v, -1, NULL);
+	ret = notifier_call_chain(&nh->head, val, v, -1/*不限制通知数量*/, NULL/*不记录通知数量*/);
 	rcu_read_unlock();
 
 	return ret;

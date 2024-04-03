@@ -269,6 +269,7 @@ typedef unsigned int blk_qc_t;
 struct bio {
 	struct bio		*bi_next;	/* request queue link */
 	struct block_device	*bi_bdev;//磁盘
+	/*block io对应的操作flags*/
 	blk_opf_t		bi_opf;		/* bottom bits REQ_OP, top bits
 						 * req_flags.
 						 */
@@ -356,6 +357,7 @@ enum {
 typedef __u32 __bitwise blk_mq_req_flags_t;
 
 #define REQ_OP_BITS	8
+/*REQ_OP_BITS对应的这些bits是op的mask*/
 #define REQ_OP_MASK	(__force blk_opf_t)((1 << REQ_OP_BITS) - 1)
 #define REQ_FLAG_BITS	24
 

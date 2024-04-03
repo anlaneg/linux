@@ -431,6 +431,7 @@ int bio_init_clone(struct block_device *bdev, struct bio *bio,
 
 extern struct bio_set fs_bio_set;
 
+/*申请bio结构体*/
 static inline struct bio *bio_alloc(struct block_device *bdev,
 		unsigned short nr_vecs, blk_opf_t opf, gfp_t gfp_mask)
 {
@@ -679,8 +680,8 @@ static inline void bio_inc_remaining(struct bio *bio)
 #define BIO_POOL_SIZE 2
 
 struct bio_set {
-	struct kmem_cache *bio_slab;
-	unsigned int front_pad;
+	struct kmem_cache *bio_slab;/*此bio尺寸对应的slab*/
+	unsigned int front_pad;/*前pad大小*/
 
 	/*
 	 * per-cpu bio alloc cache
@@ -694,7 +695,7 @@ struct bio_set {
 	mempool_t bvec_integrity_pool;
 #endif
 
-	unsigned int back_pad;
+	unsigned int back_pad;/*后pad大小*/
 	/*
 	 * Deadlock avoidance for stacking block drivers: see comments in
 	 * bio_alloc_bioset() for details

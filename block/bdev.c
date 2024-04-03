@@ -35,7 +35,7 @@ static bool bdev_allow_write_mounted = IS_ENABLED(CONFIG_BLK_DEV_WRITE_MOUNTED);
 
 /*系统块设备对应的inode*/
 struct bdev_inode {
-	struct block_device bdev;
+	struct block_device bdev;/*块设备*/
 	struct inode vfs_inode;
 };
 
@@ -410,7 +410,7 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 	struct block_device *bdev;
 	struct inode *inode;
 
-	/*创建inode*/
+	/*创建块设备对应的inode*/
 	inode = new_inode(blockdev_superblock);
 	if (!inode)
 		return NULL;
@@ -426,7 +426,7 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 	mutex_init(&bdev->bd_holder_lock);
 	bdev->bd_partno = partno;
 	bdev->bd_inode = inode;/*设置它关联的inode*/
-	bdev->bd_queue = disk->queue;
+	bdev->bd_queue = disk->queue;/*block设备queue复用disk->queue*/
 	if (partno)
 		bdev->bd_has_submit_bio = disk->part0->bd_has_submit_bio;
 	else
@@ -1176,6 +1176,7 @@ void bdev_statx_dioalign(struct inode *inode, struct kstat *stat)
 static int __init setup_bdev_allow_write_mounted(char *str)
 {
 	if (kstrtobool(str, &bdev_allow_write_mounted))
+		/*解析bdev_allow_write_mounted配置失败*/
 		pr_warn("Invalid option string for bdev_allow_write_mounted:"
 			" '%s'\n", str);
 	return 1;

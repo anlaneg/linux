@@ -38,6 +38,7 @@
  * Avoids triggering -Wtype-limits compilation warning,
  * while using unsigned data types to check a < 0.
  */
+/*a是否非负*/
 #define is_non_negative(a) ((a) > 0 || (a) == 0)
 #define is_negative(a) (!(is_non_negative(a)))
 
@@ -121,9 +122,12 @@ static inline bool __must_check __must_check_overflow(bool overflow)
 	typeof(s) _s = s;						\
 	typeof(d) _d = d;						\
 	u64 _a_full = _a;						\
+	/*确定要shift的位置，如果参数有误，则置为0*/\
 	unsigned int _to_shift =					\
 		is_non_negative(_s) && _s < 8 * sizeof(*d) ? _s : 0;	\
+		/*将a左移后结果置于d指针中*/\
 	*_d = (_a_full << _to_shift);					\
+	/*返回值，用于指明操作是否达到预期*/\
 	(_to_shift != _s || is_negative(*_d) || is_negative(_a) ||	\
 	(*_d >> _to_shift) != _a);					\
 }))

@@ -1511,7 +1511,7 @@ struct net_device_ops {
 					          struct ifmap *map);
 	//更新设备mtu
 	int			(*ndo_change_mtu)(struct net_device *dev,
-						  int new_mtu);
+						  int new_mtu/*新的mtu*/);
 	int			(*ndo_neigh_setup)(struct net_device *dev,
 						   struct neigh_parms *);
 	//tx发送超时处理
@@ -3097,7 +3097,7 @@ int unregister_netdevice_notifier_dev_net(struct net_device *dev,
 
 struct netdev_notifier_info {
 	struct net_device	*dev;
-	struct netlink_ext_ack	*extack;
+	struct netlink_ext_ack	*extack;/*保存报错信息*/
 };
 
 struct netdev_notifier_info_ext {
@@ -3116,6 +3116,7 @@ struct netdev_notifier_changeupper_info {
 	struct netdev_notifier_info info; /* must be first */
 	struct net_device *upper_dev; /* new upper dev */
 	bool master; /* is upper dev master */
+	/*链接 或者 断开链接*/
 	bool linking; /* is the notification for link or unlink */
 	void *upper_info; /* upper dev info */
 };

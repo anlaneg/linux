@@ -130,6 +130,7 @@ struct bvec_iter_all {
 	(mp_bvec_iter_page((bvec), (iter)) +			\
 	 mp_bvec_iter_page_idx((bvec), (iter)))
 
+/*返回bio_vec结构体*/
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
 	.bv_page	= bvec_iter_page((bvec), (iter)),	\

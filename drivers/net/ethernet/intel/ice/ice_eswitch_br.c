@@ -1159,6 +1159,7 @@ ice_eswitch_br_port_changeupper(struct notifier_block *nb, void *ptr)
 
 	upper = info->upper_dev;
 	if (!netif_is_bridge_master(upper))
+		/*upper必须为bridge类型*/
 		return 0;
 
 	extack = netdev_notifier_info_to_extack(&info->info);

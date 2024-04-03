@@ -153,7 +153,7 @@ static const struct snmp_mib snmp4_tcp_list[] = {
 	SNMP_MIB_ITEM("InSegs", TCP_MIB_INSEGS),
 	SNMP_MIB_ITEM("OutSegs", TCP_MIB_OUTSEGS),
 	SNMP_MIB_ITEM("RetransSegs", TCP_MIB_RETRANSSEGS),
-	SNMP_MIB_ITEM("InErrs", TCP_MIB_INERRS),
+	SNMP_MIB_ITEM("InErrs", TCP_MIB_INERRS),/*显示错包统计*/
 	SNMP_MIB_ITEM("OutRsts", TCP_MIB_OUTRSTS),
 	SNMP_MIB_ITEM("InCsumErrors", TCP_MIB_CSUMERRORS),
 	SNMP_MIB_SENTINEL

@@ -80,6 +80,7 @@ static inline int __get_task_ioprio(struct task_struct *p)
 
 static inline int get_current_ioprio(void)
 {
+	/*取当前进程的io优先级*/
 	return __get_task_ioprio(current);
 }
 

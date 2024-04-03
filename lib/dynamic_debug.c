@@ -332,7 +332,7 @@ static int ddebug_tokenize(char *buf, char *words[], int maxwords)
  * is treated as a special case and converted to zero, which
  * is later treated as a "don't care" value.
  */
-static inline int parse_lineno(const char *str, unsigned int *val)
+static inline int parse_lineno(const char *str, unsigned int *val/*出参，解析行号*/)
 {
 	BUG_ON(str == NULL);
 	if (*str == '\0') {

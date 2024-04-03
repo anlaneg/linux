@@ -1260,7 +1260,7 @@ static int virtblk_poll(struct blk_mq_hw_ctx *hctx, struct io_comp_batch *iob)
 }
 
 static const struct blk_mq_ops virtio_mq_ops = {
-	.queue_rq	= virtio_queue_rq,
+	.queue_rq	= virtio_queue_rq,/*virtio-block设备request入队*/
 	.queue_rqs	= virtio_queue_rqs,
 	.commit_rqs	= virtio_commit_rqs,
 	.complete	= virtblk_request_done,

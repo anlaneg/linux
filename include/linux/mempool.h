@@ -65,8 +65,9 @@ void mempool_free_slab(void *element, void *pool_data);
 static inline int
 mempool_init_slab_pool(mempool_t *pool, int min_nr, struct kmem_cache *kc)
 {
-	return mempool_init(pool, min_nr, mempool_alloc_slab,
-			    mempool_free_slab, (void *) kc);
+	/*初始化mempool*/
+	return mempool_init(pool/*待初始化的pool*/, min_nr, mempool_alloc_slab,
+			    mempool_free_slab, (void *) kc/*pool元素来源的kmem_cache*/);
 }
 
 static inline mempool_t *

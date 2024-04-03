@@ -31,7 +31,7 @@ void br_set_state(struct net_bridge_port *p, unsigned int state)
 	struct switchdev_attr attr = {
 		.orig_dev = p->dev,
 		.id = SWITCHDEV_ATTR_ID_PORT_STP_STATE,
-		.flags = SWITCHDEV_F_DEFER,
+		.flags = SWITCHDEV_F_DEFER,/*指明采用延迟方式调用*/
 		.u.stp_state = state,
 	};
 	int err;
@@ -606,7 +606,7 @@ int __set_ageing_time(struct net_device *dev, unsigned long t)
 	struct switchdev_attr attr = {
 		.orig_dev = dev,
 		.id = SWITCHDEV_ATTR_ID_BRIDGE_AGEING_TIME,
-		.flags = SWITCHDEV_F_SKIP_EOPNOTSUPP | SWITCHDEV_F_DEFER,
+		.flags = SWITCHDEV_F_SKIP_EOPNOTSUPP | SWITCHDEV_F_DEFER/*指明延迟调用*/,
 		.u.ageing_time = jiffies_to_clock_t(t),
 	};
 	int err;
@@ -631,7 +631,7 @@ int br_set_ageing_time(struct net_bridge *br, clock_t ageing_time)
 	unsigned long t = clock_t_to_jiffies(ageing_time);
 	int err;
 
-	err = __set_ageing_time(br->dev, t);
+	err = __set_ageing_time(br->dev, t);/*设置bridge的ageing时间*/
 	if (err)
 		return err;
 

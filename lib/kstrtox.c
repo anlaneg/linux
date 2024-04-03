@@ -361,6 +361,7 @@ noinline
 int kstrtobool(const char *s, bool *res)
 {
 	if (!s)
+		/*字符串为空，返回失败*/
 		return -EINVAL;
 
 	switch (s[0]) {
@@ -369,25 +370,25 @@ int kstrtobool(const char *s, bool *res)
 	case 't':
 	case 'T':
 	case '1':
-		*res = true;
+		*res = true;/*接受true情况*/
 		return 0;
 	case 'n':
 	case 'N':
 	case 'f':
 	case 'F':
 	case '0':
-		*res = false;
+		*res = false;/*接受false情况*/
 		return 0;
 	case 'o':
 	case 'O':
 		switch (s[1]) {
 		case 'n':
 		case 'N':
-			*res = true;
+			*res = true;/*将on理解为true*/
 			return 0;
 		case 'f':
 		case 'F':
-			*res = false;
+			*res = false;/*将of理解为false*/
 			return 0;
 		default:
 			break;

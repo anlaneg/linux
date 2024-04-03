@@ -19,7 +19,7 @@
 #include <linux/rtnetlink.h>
 #include <net/switchdev.h>
 
-//定义deferred链表及其锁
+//定义deferred链表及其锁，此链表用于支持容许延迟的通知执行
 static LIST_HEAD(deferred);
 static DEFINE_SPINLOCK(deferred_lock);
 
@@ -86,7 +86,7 @@ static void switchdev_deferred_process_work(struct work_struct *work)
 	rtnl_unlock();
 }
 
-//定义deferred_process_worker
+//定义deferred_process_worker，其负责遍历deferred列表上的通知事件，并逐个执行
 static DECLARE_WORK(deferred_process_work, switchdev_deferred_process_work);
 
 //向deferred链表中添加元素及回调
@@ -112,6 +112,7 @@ static int switchdev_deferred_enqueue(struct net_device *dev/*回调函数第一
 	return 0;
 }
 
+/*触发blocking形式的通知链*/
 static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
 				      struct net_device *dev,
 				      const struct switchdev_attr *attr,
@@ -125,7 +126,7 @@ static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
 		.handled = false,
 	};
 
-	//触发blocking 通知链
+	//触发blocking形式通知链
 	rc = call_switchdev_blocking_notifiers(nt, dev,
 					       &attr_info.info, extack);
 	err = notifier_to_errno(rc);
@@ -140,7 +141,7 @@ static int switchdev_port_attr_notify(enum switchdev_notifier_type nt,
 	return 0;
 }
 
-//触发switch_port_attr_set通知，通知分两遍，第一遍为ph_prepare=True
+//触发switch_port_attr_set通知。
 static int switchdev_port_attr_set_now(struct net_device *dev,
 				       const struct switchdev_attr *attr,
 				       struct netlink_ext_ack *extack)
@@ -159,12 +160,12 @@ static void switchdev_port_attr_set_deferred(struct net_device *dev,
 	if (err && err != -EOPNOTSUPP)
 		netdev_err(dev, "failed (err=%d) to set attribute (id=%d)\n",
 			   err, attr->id);
-	/*有complete回调，调用complete*/
+	/*如果有complete回调，调用complete*/
 	if (attr->complete)
 		attr->complete(dev, err, attr->complete_priv);
 }
 
-//为deferred链表添加元素，并置switchdev_port_attr_set_deferred回调
+//为deferred链表添加元素，并置switchdev_port_attr_set_deferred回调（这类回调是异步被调用起来的，故有defer标记）
 static int switchdev_port_attr_set_defer(struct net_device *dev,
 					 const struct switchdev_attr *attr)
 {
@@ -331,9 +332,9 @@ int switchdev_port_obj_del(struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(switchdev_port_obj_del);
 
-//switchdev通知链
+//switchdev原子型通知链
 static ATOMIC_NOTIFIER_HEAD(switchdev_notif_chain);
-//switchdev块通知链
+//switchdev阻塞型通知链
 static BLOCKING_NOTIFIER_HEAD(switchdev_blocking_notif_chain);
 
 /**

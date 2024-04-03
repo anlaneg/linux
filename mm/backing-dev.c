@@ -364,6 +364,7 @@ postcore_initcall(bdi_class_init);
 
 static int __init default_bdi_init(void)
 {
+	/*初始化回写wq*/
 	bdi_wq = alloc_workqueue("writeback", WQ_MEM_RECLAIM | WQ_UNBOUND |
 				 WQ_SYSFS, 0);
 	if (!bdi_wq)

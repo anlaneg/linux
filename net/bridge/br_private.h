@@ -387,8 +387,8 @@ struct net_bridge_mdb_entry {
 };
 
 struct net_bridge_port {
-	struct net_bridge		*br;
-	struct net_device		*dev;
+	struct net_bridge		*br;/*从属于哪个bridge*/
+	struct net_device		*dev;/*此bridge port对应的net device*/
 	netdevice_tracker		dev_tracker;
 	struct list_head		list;
 
@@ -403,7 +403,7 @@ struct net_bridge_port {
 	/* STP */
 	u8				priority;
 	u8				state;
-	u16				port_no;
+	u16				port_no;/*此port在桥上的唯一编号*/
 	unsigned char			topology_change_ack;
 	unsigned char			config_pending;
 	port_id				port_id;
@@ -501,7 +501,7 @@ struct net_bridge {
 	spinlock_t			hash_lock;
 	struct hlist_head		frame_type_list;
 	struct net_device		*dev;
-	//用于标记各选项功能
+	//用于标记开启的各选项功能
 	unsigned long			options;
 	/* These fields are accessed on each packet */
 #ifdef CONFIG_BRIDGE_VLAN_FILTERING

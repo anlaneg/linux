@@ -504,6 +504,7 @@ late_initcall(fail_make_request_debugfs);
 static inline void bio_check_ro(struct bio *bio)
 {
 	if (op_is_write(bio_op(bio)) && bdev_read_only(bio->bi_bdev)) {
+		/*bio为写操作但block设备当前为只读*/
 		if (op_is_flush(bio->bi_opf) && !bio_sectors(bio))
 			return;
 
@@ -715,6 +716,7 @@ void submit_bio_noacct_nocheck(struct bio *bio)
 	 * it is active, and then process them after it returned.
 	 */
 	if (current->bio_list)
+		/*当前进程bio_list不为空，添加到bio_list列表上*/
 		bio_list_add(&current->bio_list[0], bio);
 	else if (!bio->bi_bdev->bd_has_submit_bio)
 		__submit_bio_noacct_mq(bio);
@@ -733,8 +735,8 @@ void submit_bio_noacct_nocheck(struct bio *bio)
  */
 void submit_bio_noacct(struct bio *bio)
 {
-	struct block_device *bdev = bio->bi_bdev;
-	struct request_queue *q = bdev_get_queue(bdev);
+	struct block_device *bdev = bio->bi_bdev;/*bio对应的block设备*/
+	struct request_queue *q = bdev_get_queue(bdev);/*block设备对应的request queue*/
 	blk_status_t status = BLK_STS_IOERR;
 
 	might_sleep();
@@ -744,6 +746,7 @@ void submit_bio_noacct(struct bio *bio)
 	 * if queue does not support NOWAIT.
 	 */
 	if ((bio->bi_opf & REQ_NOWAIT) && !bdev_nowait(bdev))
+		/*操作指明了no wait,但block dev不支持*/
 		goto not_supported;
 
 	if (should_fail_bio(bio))
@@ -785,7 +788,7 @@ void submit_bio_noacct(struct bio *bio)
 		 * REQ_OP_FLUSH can't be submitted through bios, it is only
 		 * synthetized in struct request by the flush state machine.
 		 */
-		goto not_supported;
+		goto not_supported;/*不支持通过bios来指明flush*/
 	case REQ_OP_DISCARD:
 		if (!bdev_max_discard_sectors(bdev))
 			goto not_supported;
@@ -855,9 +858,11 @@ EXPORT_SYMBOL(submit_bio_noacct);
 void submit_bio(struct bio *bio)
 {
 	if (bio_op(bio) == REQ_OP_READ) {
+		/*读操作相关的统计*/
 		task_io_account_read(bio->bi_iter.bi_size);
 		count_vm_events(PGPGIN, bio_sectors(bio));
 	} else if (bio_op(bio) == REQ_OP_WRITE) {
+		/*写操作相关的统计*/
 		count_vm_events(PGPGOUT, bio_sectors(bio));
 	}
 
@@ -888,7 +893,7 @@ int bio_poll(struct bio *bio, struct io_comp_batch *iob, unsigned int flags)
 	if (!bdev)
 		return 0;
 
-	q = bdev_get_queue(bdev);
+	q = bdev_get_queue(bdev);/*取此设备对应的queue*/
 	if (cookie == BLK_QC_T_NONE ||
 	    !test_bit(QUEUE_FLAG_POLL, &q->queue_flags))
 		return 0;
@@ -913,8 +918,10 @@ int bio_poll(struct bio *bio, struct io_comp_batch *iob, unsigned int flags)
 	if (!percpu_ref_tryget(&q->q_usage_counter))
 		return 0;
 	if (queue_is_mq(q)) {
+		/*多队列情况*/
 		ret = blk_mq_poll(q, cookie, iob, flags);
 	} else {
+		/*非多队列情况*/
 		struct gendisk *disk = q->disk;
 
 		if (disk && disk->fops->poll_bio)

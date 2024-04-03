@@ -2942,7 +2942,7 @@ static void wb_inode_writeback_end(struct bdi_writeback *wb)
 
 bool __folio_end_writeback(struct folio *folio)
 {
-	long nr = folio_nr_pages(folio);
+	long nr = folio_nr_pages(folio);/*页数*/
 	struct address_space *mapping = folio_mapping(folio);
 	bool ret;
 

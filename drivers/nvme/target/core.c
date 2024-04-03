@@ -352,7 +352,7 @@ int nvmet_enable_port(struct nvmet_port *port)
 		goto out_put;
 	}
 
-	ret = ops->add_port(port);
+	ret = ops->add_port(port);/*添加port*/
 	if (ret)
 		goto out_put;
 
