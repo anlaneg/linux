@@ -787,7 +787,7 @@ struct device {
 	spinlock_t		devres_lock;
 	struct list_head	devres_head;
 
-	const struct class	*class;//设备所属的class
+	const struct class	*class;//设备所属的class(类型），例如block_class
 	const struct attribute_group **groups;	/* optional groups */
 
 	//定义设备释放时的回调函数

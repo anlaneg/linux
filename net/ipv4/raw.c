@@ -342,6 +342,7 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 	int hlen, tlen;
 
 	if (length > rt->dst.dev->mtu) {
+		/*要发送的长度超过mtu*/
 		ip_local_error(sk, EMSGSIZE, fl4->daddr, inet->inet_dport,
 			       rt->dst.dev->mtu);
 		return -EMSGSIZE;
@@ -354,6 +355,7 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 
 	hlen = LL_RESERVED_SPACE(rt->dst.dev);
 	tlen = rt->dst.dev->needed_tailroom;
+	/*申请发送用的skb*/
 	skb = sock_alloc_send_skb(sk,
 				  length + hlen + tlen + 15,
 				  flags & MSG_DONTWAIT, &err);
@@ -368,7 +370,7 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 	*rtp = NULL;
 
 	skb_reset_network_header(skb);
-	iph = ip_hdr(skb);
+	iph = ip_hdr(skb);/*获得网络头*/
 	skb_put(skb, length);
 
 	skb->ip_summed = CHECKSUM_NONE;
@@ -380,6 +382,7 @@ static int raw_send_hdrinc(struct sock *sk, struct flowi4 *fl4,
 
 	skb->transport_header = skb->network_header;
 	err = -EFAULT;
+	/*将msg中的ip信息复制到iph中*/
 	if (memcpy_from_msg(iph, msg, length))
 		goto error_free;
 
@@ -482,7 +485,7 @@ static int raw_getfrag(void *from, char *to, int offset, int len, int odd,
 	return ip_generic_getfrag(rfv->msg, to, offset, len, odd, skb);
 }
 
-//raw socket向kernel发送消息入口
+//af-inet的raw socket向kernel发送消息入口
 static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -599,6 +602,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 
 	uc_index = READ_ONCE(inet->uc_index);
 	if (ipv4_is_multicast(daddr)) {
+		/*目的地址是组播*/
 		if (!ipc.oif || netif_index_is_l3_master(sock_net(sk), ipc.oif))
 			ipc.oif = READ_ONCE(inet->mc_index);
 		if (!saddr)
@@ -635,7 +639,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 	}
 
 	security_sk_classify_flow(sk, flowi4_to_flowi_common(&fl4));
-	rt = ip_route_output_flow(net, &fl4, sk);
+	rt = ip_route_output_flow(net, &fl4, sk);/*查询路由*/
 	if (IS_ERR(rt)) {
 		err = PTR_ERR(rt);
 		rt = NULL;
@@ -644,6 +648,7 @@ static int raw_sendmsg(struct sock *sk, struct msghdr *msg, size_t len)
 
 	err = -EACCES;
 	if (rt->rt_flags & RTCF_BROADCAST && !sock_flag(sk, SOCK_BROADCAST))
+		/*路由对应的是广播，但sk没有标记广播，直接退*/
 		goto done;
 
 	if (msg->msg_flags & MSG_CONFIRM)

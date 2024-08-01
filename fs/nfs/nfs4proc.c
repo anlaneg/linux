@@ -1153,6 +1153,7 @@ static int nfs4_call_sync_custom(struct rpc_task_setup *task_setup)
 	int ret;
 	struct rpc_task *task;
 
+	/*创建并运行task*/
 	task = rpc_run_task(task_setup);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
@@ -4806,6 +4807,7 @@ static int nfs4_proc_rmdir(struct inode *dir, const struct qstr *name)
 	int err;
 
 	do {
+		/*目录移除*/
 		err = _nfs4_proc_remove(dir, name, NF4DIR);
 		trace_nfs4_remove(dir, name, err);
 		err = nfs4_handle_exception(NFS_SERVER(dir), err,
@@ -4984,6 +4986,7 @@ static struct nfs4_createdata *nfs4_alloc_createdata(struct inode *dir,
 {
 	struct nfs4_createdata *data;
 
+	/*申请创建nfs4_createdata*/
 	data = kzalloc(sizeof(*data), GFP_KERNEL);
 	if (data != NULL) {
 		struct nfs_server *server = NFS_SERVER(dir);
@@ -4992,7 +4995,7 @@ static struct nfs4_createdata *nfs4_alloc_createdata(struct inode *dir,
 		if (IS_ERR(data->fattr.label))
 			goto out_free;
 
-		data->msg.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_CREATE];
+		data->msg.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_CREATE];/*指明调create rpc过程*/
 		data->msg.rpc_argp = &data->arg;
 		data->msg.rpc_resp = &data->res;
 		data->arg.dir_fh = NFS_FH(dir);
@@ -5015,6 +5018,7 @@ out_free:
 
 static int nfs4_do_create(struct inode *dir, struct dentry *dentry, struct nfs4_createdata *data)
 {
+	/*执行create*/
 	int status = nfs4_call_sync(NFS_SERVER(dir)->client, NFS_SERVER(dir), &data->msg,
 				    &data->arg.seq_args, &data->res.seq_res, 1);
 	if (status == 0) {
@@ -5093,7 +5097,7 @@ static int _nfs4_proc_mkdir(struct inode *dir, struct dentry *dentry,
 	struct nfs4_createdata *data;
 	int status = -ENOMEM;
 
-	data = nfs4_alloc_createdata(dir, &dentry->d_name, sattr, NF4DIR);
+	data = nfs4_alloc_createdata(dir, &dentry->d_name, sattr, NF4DIR/*指明创建目录*/);
 	if (data == NULL)
 		goto out;
 
@@ -5261,7 +5265,7 @@ static int _nfs4_proc_statfs(struct nfs_server *server, struct nfs_fh *fhandle,
 		.fsstat = fsstat,
 	};
 	struct rpc_message msg = {
-		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_STATFS],
+		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_STATFS],/*指明statf操作*/
 		.rpc_argp = &args,
 		.rpc_resp = &res,
 	};
@@ -7276,10 +7280,13 @@ static int _nfs4_do_setlk(struct nfs4_state *state, int cmd, struct file_lock *f
 {
 	struct nfs4_lockdata *data;
 	struct rpc_task *task;
+	/*指明rpc消息*/
 	struct rpc_message msg = {
 		.rpc_proc = &nfs4_procedures[NFSPROC4_CLNT_LOCK],
 		.rpc_cred = state->owner->so_cred,
 	};
+
+	/*指明task启动参数*/
 	struct rpc_task_setup task_setup_data = {
 		.rpc_client = NFS_CLIENT(state->inode),
 		.rpc_message = &msg,
@@ -7308,6 +7315,8 @@ static int _nfs4_do_setlk(struct nfs4_state *state, int cmd, struct file_lock *f
 			data->arg.reclaim = NFS_LOCK_RECLAIM;
 	} else
 		data->arg.new_lock = 1;
+
+	/*创建并运行此task*/
 	task = rpc_run_task(&task_setup_data);
 	if (IS_ERR(task))
 		return PTR_ERR(task);
@@ -7315,6 +7324,7 @@ static int _nfs4_do_setlk(struct nfs4_state *state, int cmd, struct file_lock *f
 	if (ret == 0) {
 		ret = data->rpc_status;
 		if (ret)
+			/*rpc调用失败*/
 			nfs4_handle_setlk_error(data->server, data->lsp,
 					data->arg.new_lock_owner, ret);
 	} else
@@ -10669,7 +10679,7 @@ static const struct inode_operations nfs4_dir_inode_operations = {
 	.link		= nfs_link,
 	.unlink		= nfs_unlink,
 	.symlink	= nfs_symlink,
-	.mkdir		= nfs_mkdir,
+	.mkdir		= nfs_mkdir,/*v4版本的创建目录*/
 	.rmdir		= nfs_rmdir,
 	.mknod		= nfs_mknod,
 	.rename		= nfs_rename,
@@ -10711,7 +10721,7 @@ const struct nfs_rpc_ops nfs_v4_clientops = {
 	.rename_done	= nfs4_proc_rename_done,
 	.link		= nfs4_proc_link,
 	.symlink	= nfs4_proc_symlink,
-	.mkdir		= nfs4_proc_mkdir,
+	.mkdir		= nfs4_proc_mkdir,/*创建目录*/
 	.rmdir		= nfs4_proc_rmdir,
 	.readdir	= nfs4_proc_readdir,
 	.mknod		= nfs4_proc_mknod,

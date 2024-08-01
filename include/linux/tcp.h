@@ -166,6 +166,7 @@ struct tcp_request_sock {
 	const struct tcp_request_sock_ops *af_specific;
 	u64				snt_synack; /* first SYNACK sent time */
 	bool				tfo_listener;
+	/*标记是否开启mptcp*/
 	bool				is_mptcp;
 	bool				req_usec_ts;
 #if IS_ENABLED(CONFIG_MPTCP)

@@ -355,6 +355,7 @@ static inline void eth_hw_addr_inherit(struct net_device *dst,
  */
 static inline bool ether_addr_equal(const u8 *addr1, const u8 *addr2)
 {
+	/*检查两个mac地址是否相等*/
 #if defined(CONFIG_HAVE_EFFICIENT_UNALIGNED_ACCESS)
 	u32 fold = ((*(const u32 *)addr1) ^ (*(const u32 *)addr2)) |
 		   ((*(const u16 *)(addr1 + 4)) ^ (*(const u16 *)(addr2 + 4)));

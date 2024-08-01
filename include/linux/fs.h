@@ -424,8 +424,8 @@ struct address_space_operations {
 	void (*readahead)(struct readahead_control *);
 
 	/*依据写的位置（pos)确定要写的page*/
-	int (*write_begin)(struct file *, struct address_space *mapping,
-				loff_t pos, unsigned len,
+	int (*write_begin)(struct file */*要写的文件*/, struct address_space *mapping,
+				loff_t pos/*要写的起始地址*/, unsigned len/*要写的长度*/,
 				struct page **pagep, void **fsdata);
 	int (*write_end)(struct file *, struct address_space *mapping,
 				loff_t pos, unsigned len, unsigned copied,
@@ -483,7 +483,7 @@ extern const struct address_space_operations empty_aops;
 struct address_space {
 	//指向其对应的inode
 	struct inode		*host;
-	//page cache对应的树根
+	//按index索引page
 	struct xarray		i_pages;
 	struct rw_semaphore	invalidate_lock;
 	gfp_t			gfp_mask;
@@ -670,7 +670,7 @@ struct inode {
 	const struct inode_operations	*i_op;
 	//指向inode所属的super_block
 	struct super_block	*i_sb;
-	//指向此结构体的成员i_data
+	//默认指向此结构体的成员i_data
 	struct address_space	*i_mapping;
 
 #ifdef CONFIG_SECURITY
@@ -1079,7 +1079,7 @@ struct file {
 	/* Used by fs/eventpoll.c to link all the hooks to this file */
 	struct hlist_head	*f_ep;
 #endif /* #ifdef CONFIG_EPOLL */
-	struct address_space	*f_mapping;
+	struct address_space	*f_mapping;/*一般来源于inode的i_mapping成员*/
 	errseq_t		f_wb_err;
 	errseq_t		f_sb_err; /* for syncfs */
 } __randomize_layout
@@ -2666,7 +2666,7 @@ extern struct kobject *fs_kobj;
 /* fs/open.c */
 struct audit_names;
 struct filename {
-	//指针，指向文件路径名称
+	//指针，指向文件路径名称（inner模式情况下，指向iname)
 	const char		*name;	/* pointer to actual string */
 	//记录用户空间里传入的文件路径名称的指针
 	const __user char	*uptr;	/* original userland pointer */

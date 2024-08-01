@@ -841,9 +841,10 @@ retry:
 		//这里遍历这些实例，采用test函数检查是否可以share的super block
 		hlist_for_each_entry(old, &type->fs_supers, s_instances) {
 			if (!test(old, data))
-				/*不可share,忽略*/
+				/*test返回false,不可share,忽略*/
 				continue;
 			if (user_ns != old->s_user_ns) {
+				/*userns不匹配，忽略*/
 				spin_unlock(&sb_lock);
 				destroy_unused_super(s);
 				return ERR_PTR(-EBUSY);
@@ -1057,6 +1058,7 @@ int reconfigure_super(struct fs_context *fc)
 		return retval;
 
 	if (fc->sb_flags_mask & SB_RDONLY) {
+		/*处理ro选项*/
 #ifdef CONFIG_BLOCK
 		if (!(fc->sb_flags & SB_RDONLY) && sb->s_bdev &&
 		    bdev_read_only(sb->s_bdev))
@@ -1666,7 +1668,7 @@ EXPORT_SYMBOL(get_tree_bdev);
 
 static int test_bdev_super(struct super_block *s, void *data)
 {
-	return !(s->s_iflags & SB_I_RETIRED) && s->s_dev == *(dev_t *)data;
+	return !(s->s_iflags & SB_I_RETIRED)/*不可复用*/ && s->s_dev == *(dev_t *)data/*dev_t匹配*/;
 }
 
 //块设备挂载
@@ -1678,13 +1680,14 @@ struct dentry *mount_bdev(struct file_system_type *fs_type/*文件系统*/,
 	int error;
 	dev_t dev;
 
+	/*通过设备名称查找块设备*/
 	error = lookup_bdev(dev_name, &dev);
 	if (error)
 		return ERR_PTR(error);
 
 	//取此块设备上的super block
 	flags |= SB_NOSEC;
-	s = sget(fs_type, test_bdev_super/*测试回调*/, set_bdev_super/*设置回调*/, flags, &dev);
+	s = sget(fs_type, test_bdev_super/*块设备测试回调*/, set_bdev_super/*设置回调*/, flags, &dev);
 	if (IS_ERR(s))
 		return ERR_CAST(s);
 
@@ -1759,10 +1762,11 @@ int reconfigure_single(struct super_block *s,
 	 * Better yet, reconfiguration shouldn't happen, but rather the second
 	 * mount should be rejected if the parameters are not compatible.
 	 */
-	fc = fs_context_for_reconfigure(s->s_root, flags, MS_RMT_MASK);
+	fc = fs_context_for_reconfigure(s->s_root, flags, MS_RMT_MASK);/*重新配置fc*/
 	if (IS_ERR(fc))
 		return PTR_ERR(fc);
 
+	/*参数解析*/
 	ret = parse_monolithic_mount_data(fc, data);
 	if (ret < 0)
 		goto out;

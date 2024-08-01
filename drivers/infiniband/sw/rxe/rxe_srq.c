@@ -41,6 +41,7 @@ err1:
 	return -EINVAL;
 }
 
+/*依据ib_srq_init_attr初始化srq*/
 int rxe_srq_from_init(struct rxe_dev *rxe, struct rxe_srq *srq,
 		      struct ib_srq_init_attr *init, struct ib_udata *udata,
 		      struct rxe_create_srq_resp __user *uresp)
@@ -56,12 +57,14 @@ int rxe_srq_from_init(struct rxe_dev *rxe, struct rxe_srq *srq,
 	srq->rq.max_wr = init->attr.max_wr;
 	srq->rq.max_sge = init->attr.max_sge;
 
+	/*每个元素大小为sizeof(struct ib_sge),共有max_sge个*/
 	wqe_size = sizeof(struct rxe_recv_wqe) +
 			srq->rq.max_sge*sizeof(struct ib_sge);
 
 	spin_lock_init(&srq->rq.producer_lock);
 	spin_lock_init(&srq->rq.consumer_lock);
 
+	/*初始化队列*/
 	q = rxe_queue_init(rxe, &srq->rq.max_wr, wqe_size,
 			   QUEUE_TYPE_FROM_CLIENT);
 	if (!q) {

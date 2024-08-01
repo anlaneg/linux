@@ -142,6 +142,7 @@ struct linux_tls_mib {
 #define __SNMP_ADD_STATS(mib, field, addend)	\
 			__this_cpu_add(mib->mibs[field], addend)
 
+/*mib统计项，单cpu上数值增加*/
 #define SNMP_ADD_STATS(mib, field, addend)	\
 			this_cpu_add(mib->mibs[field], addend)
 

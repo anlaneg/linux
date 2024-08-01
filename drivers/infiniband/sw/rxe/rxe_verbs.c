@@ -77,7 +77,7 @@ err_out:
 	return err;
 }
 
-/*rxe获取index与pkey*/
+/*rxe获取index指明的pkey*/
 static int rxe_query_pkey(struct ib_device *ibdev,
 			  u32 port_num, u16 index, u16 *pkey)
 {
@@ -85,6 +85,7 @@ static int rxe_query_pkey(struct ib_device *ibdev,
 	int err;
 
 	if (index != 0) {
+		/*仅支持index为0*/
 		err = -EINVAL;
 		rxe_dbg_dev(rxe, "bad pkey index = %d", index);
 		goto err_out;
@@ -160,7 +161,7 @@ err_out:
 	return err;
 }
 
-/*取ib设备对应的底层链路层*/
+/*取ib设备对应的底层链路层类别（以太，IB)*/
 static enum rdma_link_layer rxe_get_link_layer(struct ib_device *ibdev,
 					       u32 port_num)
 {
@@ -235,7 +236,7 @@ static void rxe_dealloc_ucontext(struct ib_ucontext *ibuc)
 }
 
 /* pd */
-/*并不直接申请rxe_pd,而直接将ib_pd转换为rxe_pd*/
+/*并不直接申请rxe_pd,而直接将ib_pd转换为rxe_pd（上层流程已申请了此结构体）*/
 static int rxe_alloc_pd(struct ib_pd *ibpd, struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
@@ -409,6 +410,7 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 		goto err_out;
 	}
 
+	/*将srq加入到pool*/
 	err = rxe_add_to_pool(&rxe->srq_pool, srq);
 	if (err) {
 		rxe_dbg_dev(rxe, "unable to create srq, err = %d", err);
@@ -418,6 +420,7 @@ static int rxe_create_srq(struct ib_srq *ibsrq, struct ib_srq_init_attr *init,
 	rxe_get(pd);
 	srq->pd = pd;
 
+	/*初始化srq*/
 	err = rxe_srq_from_init(rxe, srq, init, udata, uresp);
 	if (err) {
 		rxe_dbg_srq(srq, "create srq failed, err = %d", err);
@@ -539,7 +542,7 @@ static int rxe_destroy_srq(struct ib_srq *ibsrq, struct ib_udata *udata)
 
 /* qp */
 /*初始化qp*/
-static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_init_attr *init,
+static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_init_attr *init/*qp初始化属性*/,
 			 struct ib_udata *udata)
 {
 	struct rxe_dev *rxe = to_rdev(ibqp->device);
@@ -588,7 +591,7 @@ static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_i
 		goto err_out;
 	}
 
-	/*初始化qp*/
+	/*初始化此qp*/
 	err = rxe_qp_from_init(rxe, qp, pd, init, uresp, ibqp->pd, udata);
 	if (err) {
 		rxe_dbg_qp(qp, "create qp failed, err = %d", err);
@@ -854,7 +857,7 @@ static int init_send_wqe(struct rxe_qp *qp, const struct ib_send_wr *ibwr,
 	int num_sge = ibwr->num_sge;
 	int err;
 
-	/*设置weq->wr*/
+	/*利用ibwr初始化rxe_send_wqe*/
 	err = init_send_wr(qp, &wqe->wr, ibwr);
 	if (err)
 		return err;
@@ -929,6 +932,7 @@ static int rxe_post_send_kernel(struct rxe_qp *qp,
 
 	spin_lock_irqsave(&qp->sq.sq_lock, flags);
 	while (ibwr) {
+		/*针对每一个send_wr调用post_one_send*/
 		err = post_one_send(qp, ibwr);
 		if (err) {
 			*bad_wr = ibwr;
@@ -1012,21 +1016,23 @@ static int post_one_recv(struct rxe_rq *rq, const struct ib_recv_wr *ibwr)
 		goto err_out;
 	}
 
-	/*取接收buffer长度*/
+	/*取接收buffer总长度*/
 	length = 0;
 	for (i = 0; i < num_sge; i++)
 		length += ibwr->sg_list[i].length;
 
 	/* IBA max message size is 2^31 */
 	if (length >= (1UL<<31)) {
+		/*长度过大*/
 		err = -EINVAL;
 		rxe_dbg("message length too long");
 		goto err_out;
 	}
 
-	/*取recv wqe*/
+	/*自rq->queue中取一项recv_wqe*/
 	recv_wqe = queue_producer_addr(rq->queue, QUEUE_TYPE_FROM_ULP);
 
+	/*填充recv_wqe*/
 	recv_wqe->wr_id = ibwr->wr_id;
 	recv_wqe->dma.length = length;
 	recv_wqe->dma.resid = length;
@@ -1135,6 +1141,7 @@ static int rxe_create_cq(struct ib_cq *ibcq/*要初始化的cq*/, const struct i
 		goto err_out;
 	}
 
+	/*将此cq加入到此rxe设备的cq_pool*/
 	err = rxe_add_to_pool(&rxe->cq_pool, cq);
 	if (err) {
 		rxe_dbg_dev(rxe, "unable to create cq, err = %d", err);
@@ -1194,6 +1201,7 @@ err_out:
 	return err;
 }
 
+/*自cq中最多出num_entries个ib_wc*/
 static int rxe_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
 {
 	int i;
@@ -1202,19 +1210,21 @@ static int rxe_poll_cq(struct ib_cq *ibcq, int num_entries, struct ib_wc *wc)
 	unsigned long flags;
 
 	spin_lock_irqsave(&cq->cq_lock, flags);
+	/*尝试自cq queue中最多出num_entries个cqe,并将结果填充到wc中*/
 	for (i = 0; i < num_entries; i++) {
 		cqe = queue_head(cq->queue, QUEUE_TYPE_TO_ULP);
 		if (!cqe)
 			break;	/* queue empty */
 
-		memcpy(wc++, &cqe->ibwc, sizeof(*wc));
-		queue_advance_consumer(cq->queue, QUEUE_TYPE_TO_ULP);
+		memcpy(wc++, &cqe->ibwc, sizeof(*wc));/*将cqe->ibwc中内容复制到wc中*/
+		queue_advance_consumer(cq->queue, QUEUE_TYPE_TO_ULP);/*消费指针移动*/
 	}
 	spin_unlock_irqrestore(&cq->cq_lock, flags);
 
 	return i;
 }
 
+/*检查cq队列中是否有wc_cnt个元素，如果元素数大于wc_cnt，则返回wc_cnt,否则返回实际count*/
 static int rxe_peek_cq(struct ib_cq *ibcq, int wc_cnt)
 {
 	struct rxe_cq *cq = to_rcq(ibcq);
@@ -1236,7 +1246,7 @@ static int rxe_req_notify_cq(struct ib_cq *ibcq, enum ib_cq_notify_flags flags)
 	cq->notify |= flags & IB_CQ_SOLICITED_MASK;
 	empty = queue_empty(cq->queue, QUEUE_TYPE_TO_ULP);
 
-	if ((flags & IB_CQ_REPORT_MISSED_EVENTS) && !empty)
+	if ((flags & IB_CQ_REPORT_MISSED_EVENTS) && !empty/*队列不为空*/)
 		ret = 1;
 
 	spin_unlock_irqrestore(&cq->cq_lock, irq_flags);
@@ -1282,6 +1292,7 @@ static struct ib_mr *rxe_get_dma_mr(struct ib_pd *ibpd, int access)
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
+	/*将此mr添加进mr_pool*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err) {
 		rxe_dbg_dev(rxe, "unable to create mr");
@@ -1391,7 +1402,7 @@ static struct ib_mr *rxe_rereg_user_mr(struct ib_mr *ibmr, int flags,
 }
 
 /*申请ib_mr*/
-static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
+static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type/*memory region类型*/,
 				  u32 max_num_sg)
 {
 	struct rxe_dev *rxe = to_rdev(ibpd->device);
@@ -1407,11 +1418,12 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 		goto err_out;
 	}
 
-	/*申请mr*/
+	/*申请mr结构体*/
 	mr = kzalloc(sizeof(*mr), GFP_KERNEL);
 	if (!mr)
 		return ERR_PTR(-ENOMEM);
 
+	/*将申请的mr添加入memory region pool中*/
 	err = rxe_add_to_pool(&rxe->mr_pool, mr);
 	if (err)
 		goto err_free;
@@ -1421,6 +1433,7 @@ static struct ib_mr *rxe_alloc_mr(struct ib_pd *ibpd, enum ib_mr_type mr_type,
 	mr->ibmr.pd = ibpd;
 	mr->ibmr.device = ibpd->device;
 
+	/*初始化mr(并不真正的申请它）*/
 	err = rxe_mr_init_fast(max_num_sg, mr);
 	if (err) {
 		rxe_dbg_mr(mr, "alloc_mr failed, err = %d", err);
@@ -1500,16 +1513,16 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.owner = THIS_MODULE,
 	.driver_id = RDMA_DRIVER_RXE,
 	.uverbs_abi_ver = RXE_UVERBS_ABI_VERSION,
-
+	/*申请rdma_hw_stats结构体*/
 	.alloc_hw_port_stats = rxe_ib_alloc_hw_port_stats,
-	.alloc_mr = rxe_alloc_mr,
+	.alloc_mr = rxe_alloc_mr,/*申请指定类型的mr*/
 	.alloc_mw = rxe_alloc_mw,
 	.alloc_pd = rxe_alloc_pd,/*申请pd*/
 	.alloc_ucontext = rxe_alloc_ucontext,
 	.attach_mcast = rxe_attach_mcast,
 	.create_ah = rxe_create_ah,
 	.create_cq = rxe_create_cq,/*初始化cq*/
-	.create_qp = rxe_create_qp,/*初始化qp*/
+	.create_qp = rxe_create_qp,/*创建并初始化qp*/
 	.create_srq = rxe_create_srq,
 	.create_user_ah = rxe_create_ah,
 	.dealloc_driver = rxe_dealloc,
@@ -1538,14 +1551,14 @@ static const struct ib_device_ops rxe_dev_ops = {
 	.modify_port = rxe_modify_port,
 	.modify_qp = rxe_modify_qp,
 	.modify_srq = rxe_modify_srq,
-	.peek_cq = rxe_peek_cq,
-	.poll_cq = rxe_poll_cq,
-	.post_recv = rxe_post_recv,
-	.post_send = rxe_post_send,
+	.peek_cq = rxe_peek_cq,/*自cq中检查是否有count个元素，如果没有返回实际元素数，否则返回count*/
+	.poll_cq = rxe_poll_cq,/*自cq中最多出num_entries个ib_wc*/
+	.post_recv = rxe_post_recv,/*将参数传入的待填充的buffer,存入到rq中，以便接收时填充用*/
+	.post_send = rxe_post_send,/*将参数传入的待发送的buffer，存入到sq中，以便发送时使用*/
 	.post_srq_recv = rxe_post_srq_recv,
 	.query_ah = rxe_query_ah,
 	.query_device = rxe_query_device,/*针对设备进行属性查询*/
-	.query_pkey = rxe_query_pkey,
+	.query_pkey = rxe_query_pkey,/*给定index查询pkey*/
 	.query_port = rxe_query_port,/*查询port属性*/
 	.query_qp = rxe_query_qp,
 	.query_srq = rxe_query_srq,

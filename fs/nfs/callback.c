@@ -79,6 +79,7 @@ nfs4_callback_svc(void *vrqstp)
 	set_freezable();
 
 	while (!svc_thread_should_stop(rqstp))
+		/*没有stop标记，继续执行recv*/
 		svc_recv(rqstp);
 
 	svc_exit_thread(rqstp);

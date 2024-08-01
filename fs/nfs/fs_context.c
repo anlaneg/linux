@@ -136,6 +136,7 @@ static const struct constant_table nfs_param_enums_write[] = {
 	{}
 };
 
+/*nfs支持的文件系统参数*/
 static const struct fs_parameter_spec nfs_fs_parameters[] = {
 	fsparam_flag_no("ac",		Opt_ac),
 	fsparam_u32   ("acdirmax",	Opt_acdirmax),
@@ -492,7 +493,7 @@ static int nfs_parse_version_string(struct fs_context *fc,
 	ctx->flags &= ~NFS_MOUNT_VER3;
 	switch (lookup_constant(nfs_vers_tokens, string, -1)) {
 	case Opt_vers_2:
-		ctx->version = 2;
+		ctx->version = 2;/*指定采用2号版本*/
 		break;
 	case Opt_vers_3:
 		ctx->flags |= NFS_MOUNT_VER3;
@@ -503,7 +504,7 @@ static int nfs_parse_version_string(struct fs_context *fc,
 		 * the mount program should always supply
 		 * a NFSv4 minor version number.
 		 */
-		ctx->version = 4;
+		ctx->version = 4;/*指定采用4号版本*/
 		break;
 	case Opt_vers_4_0:
 		ctx->version = 4;
@@ -527,8 +528,9 @@ static int nfs_parse_version_string(struct fs_context *fc,
  * Parse a single mount parameter.
  */
 static int nfs_fs_context_parse_param(struct fs_context *fc,
-				      struct fs_parameter *param)
+				      struct fs_parameter *param/*挂载参数*/)
 {
+	/*nfs解析挂载参数*/
 	struct fs_parse_result result;
 	struct nfs_fs_context *ctx = nfs_fc2context(fc);
 	unsigned short protofamily, mountfamily;
@@ -537,7 +539,8 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 
 	trace_nfs_mount_option(param);
 
-	opt = fs_parse(fc, nfs_fs_parameters, param, &result);
+	/*解析文件系统参数*/
+	opt = fs_parse(fc, nfs_fs_parameters/*nfs支持的所有参数*/, param/*用户提供的参数*/, &result/*解析结果*/);
 	if (opt < 0)
 		return (opt == -ENOPARAM && ctx->sloppy) ? 1 : opt;
 
@@ -546,6 +549,7 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 
 	switch (opt) {
 	case Opt_source:
+		/*设置源*/
 		if (fc->source)
 			return nfs_invalf(fc, "NFS: Multiple sources not supported");
 		fc->source = param->string;
@@ -608,11 +612,13 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		}
 		break;
 	case Opt_udp:
+		/*使用udp协议*/
 		ctx->flags &= ~NFS_MOUNT_TCP;
 		ctx->nfs_server.protocol = XPRT_TRANSPORT_UDP;
 		break;
 	case Opt_tcp:
 	case Opt_rdma:
+		/*使用tcp/rdma协议*/
 		ctx->flags |= NFS_MOUNT_TCP; /* for side protocols */
 		ret = xprt_find_transport_ident(param->key);
 		if (ret < 0)
@@ -679,9 +685,11 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		ctx->wsize = result.uint_32;
 		break;
 	case Opt_bsize:
+		/*块大小*/
 		ctx->bsize = result.uint_32;
 		break;
 	case Opt_timeo:
+		/*超时时间*/
 		if (result.uint_32 < 1 || result.uint_32 > INT_MAX)
 			goto out_of_bounds;
 		ctx->timeo = result.uint_32;
@@ -763,7 +771,7 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 		protofamily = AF_INET;
 		switch (lookup_constant(nfs_xprt_protocol_tokens, param->string, -1)) {
 		case Opt_xprt_udp6:
-			protofamily = AF_INET6;
+			protofamily = AF_INET6;/*ipv6协议*/
 			fallthrough;
 		case Opt_xprt_udp:
 			ctx->flags &= ~NFS_MOUNT_TCP;
@@ -774,7 +782,7 @@ static int nfs_fs_context_parse_param(struct fs_context *fc,
 			fallthrough;
 		case Opt_xprt_tcp:
 			ctx->flags |= NFS_MOUNT_TCP;
-			ctx->nfs_server.protocol = XPRT_TRANSPORT_TCP;
+			ctx->nfs_server.protocol = XPRT_TRANSPORT_TCP;/*tcp协议*/
 			break;
 		case Opt_xprt_rdma6:
 			protofamily = AF_INET6;
@@ -952,7 +960,7 @@ static int nfs_parse_source(struct fs_context *fc,
 			    size_t maxnamlen, size_t maxpathlen)
 {
 	struct nfs_fs_context *ctx = nfs_fc2context(fc);
-	const char *dev_name = fc->source;
+	const char *dev_name = fc->source;/*nfs配置指明的源*/
 	size_t len;
 	const char *end;
 
@@ -1046,7 +1054,7 @@ static int nfs23_parse_monolithic(struct fs_context *fc,
 	if (data == NULL)
 		goto out_no_data;
 
-	ctx->version = NFS_DEFAULT_VERSION;
+	ctx->version = NFS_DEFAULT_VERSION;/*默认版本*/
 	switch (data->version) {
 	case 1:
 		data->namlen = 0;
@@ -1391,6 +1399,7 @@ static int nfs_fs_context_validate(struct fs_context *fc)
 	int ret;
 
 	if (!fc->source)
+		/*未指明source,报错*/
 		goto out_no_device_name;
 
 	/* Check for sanity first. */
@@ -1418,6 +1427,7 @@ static int nfs_fs_context_validate(struct fs_context *fc)
 		}
 	}
 
+	/*地址必须合法*/
 	if (!nfs_verify_server_address(sap))
 		goto out_no_address;
 
@@ -1447,12 +1457,14 @@ static int nfs_fs_context_validate(struct fs_context *fc)
 
 	nfs_set_port(sap, &ctx->nfs_server.port, port);
 
+	/*解析source*/
 	ret = nfs_parse_source(fc, max_namelen, max_pathlen);
 	if (ret < 0)
 		return ret;
 
 	/* Load the NFS protocol module if we haven't done so yet */
 	if (!ctx->nfs_mod) {
+		/*通过指定的版本获取nfs_mode，并指定*/
 		nfs_mod = get_nfs_version(ctx->version);
 		if (IS_ERR(nfs_mod)) {
 			ret = PTR_ERR(nfs_mod);
@@ -1495,7 +1507,9 @@ out_version_unavailable:
  */
 static int nfs_get_tree(struct fs_context *fc)
 {
+	/*nfs设置root entry*/
 	struct nfs_fs_context *ctx = nfs_fc2context(fc);
+	/*校验参数*/
 	int err = nfs_fs_context_validate(fc);
 
 	if (err)
@@ -1558,12 +1572,13 @@ static void nfs_fs_context_free(struct fs_context *fc)
 	}
 }
 
+/*nfs文件系统对应的fs_context操作符*/
 static const struct fs_context_operations nfs_fs_context_ops = {
 	.free			= nfs_fs_context_free,
 	.dup			= nfs_fs_context_dup,
-	.parse_param		= nfs_fs_context_parse_param,
+	.parse_param		= nfs_fs_context_parse_param,/*参数解析*/
 	.parse_monolithic	= nfs_fs_context_parse_monolithic,
-	.get_tree		= nfs_get_tree,
+	.get_tree		= nfs_get_tree,/*设置root entry*/
 	.reconfigure		= nfs_reconfigure,
 };
 
@@ -1591,6 +1606,7 @@ static int nfs_init_fs_context(struct fs_context *fc)
 	ctx->mount_server.port	= NFS_UNSPEC_PORT;
 
 	if (fc->root) {
+		/*此情况为重新配置*/
 		/* reconfigure, start with the current config */
 		struct nfs_server *nfss = fc->root->d_sb->s_fs_info;
 		struct net *net = nfss->nfs_client->cl_net;
@@ -1640,15 +1656,16 @@ static int nfs_init_fs_context(struct fs_context *fc)
 		fc->s_iflags		|= SB_I_STABLE_WRITES;
 	}
 	fc->fs_private = ctx;
-	fc->ops = &nfs_fs_context_ops;
+	fc->ops = &nfs_fs_context_ops;/*指明context ops*/
 	return 0;
 }
 
+/*定义nfs文件系统*/
 struct file_system_type nfs_fs_type = {
 	.owner			= THIS_MODULE,
 	.name			= "nfs",
 	.init_fs_context	= nfs_init_fs_context,
-	.parameters		= nfs_fs_parameters,
+	.parameters		= nfs_fs_parameters,/*挂载参数解析*/
 	.kill_sb		= nfs_kill_super,
 	.fs_flags		= FS_RENAME_DOES_D_MOVE|FS_BINARY_MOUNTDATA,
 };

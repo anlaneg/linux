@@ -32,7 +32,7 @@
 
 
 static DEFINE_SPINLOCK(kthread_create_lock);
-static LIST_HEAD(kthread_create_list);
+static LIST_HEAD(kthread_create_list);/*记录系统中待创建的kthread*/
 struct task_struct *kthreadd_task;
 
 struct kthread_create_info
@@ -403,6 +403,7 @@ int tsk_fork_get_node(struct task_struct *tsk)
 	return NUMA_NO_NODE;
 }
 
+/*负责kthread线程创建，当前由kthreadd线程发起*/
 static void create_kthread(struct kthread_create_info *create)
 {
 	int pid;
@@ -440,7 +441,7 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 
 	if (!create)
 		return ERR_PTR(-ENOMEM);
-	create->threadfn = threadfn;
+	create->threadfn = threadfn;/*指定线程函数*/
 	create->data = data;
 	create->node = node;
 	create->done = &done;
@@ -451,9 +452,11 @@ struct task_struct *__kthread_create_on_node(int (*threadfn)(void *data),
 	}
 
 	spin_lock(&kthread_create_lock);
+	/*将create添加进kthread创建链表*/
 	list_add_tail(&create->list, &kthread_create_list);
 	spin_unlock(&kthread_create_lock);
 
+	/*唤醒kthreadd_task，使其执行创建*/
 	wake_up_process(kthreadd_task);
 	/*
 	 * Wait for completion in killable state, for I might be chosen by
@@ -505,7 +508,7 @@ free_create:
  */
 struct task_struct *kthread_create_on_node(int (*threadfn)(void *data),
 					   void *data, int node,
-					   const char namefmt[],
+					   const char namefmt[]/*线程名称格式*/,
 					   ...)
 {
 	struct task_struct *task;
@@ -737,12 +740,13 @@ int kthread_stop_put(struct task_struct *k)
 }
 EXPORT_SYMBOL(kthread_stop_put);
 
+/*kthreadd工作线程，用于取kthread_create_list上拿取待创建的kthread,并执行thread创建*/
 int kthreadd(void *unused)
 {
 	struct task_struct *tsk = current;
 
 	/* Setup a clean context for our children to inherit. */
-	set_task_comm(tsk, "kthreadd");
+	set_task_comm(tsk, "kthreadd");/*指明task为kthreadd进程*/
 	ignore_signals(tsk);
 	set_cpus_allowed_ptr(tsk, housekeeping_cpumask(HK_TYPE_KTHREAD));
 	set_mems_allowed(node_states[N_MEMORY]);
@@ -753,18 +757,23 @@ int kthreadd(void *unused)
 	for (;;) {
 		set_current_state(TASK_INTERRUPTIBLE);
 		if (list_empty(&kthread_create_list))
+			/*没有待创建的kthread,让出cpu*/
 			schedule();
+
+		/*此进程进入running状态*/
 		__set_current_state(TASK_RUNNING);
 
 		spin_lock(&kthread_create_lock);
 		while (!list_empty(&kthread_create_list)) {
 			struct kthread_create_info *create;
 
+			/*自链表上摘取待create的参数*/
 			create = list_entry(kthread_create_list.next,
 					    struct kthread_create_info, list);
 			list_del_init(&create->list);
 			spin_unlock(&kthread_create_lock);
 
+			/*创建kthread*/
 			create_kthread(create);
 
 			spin_lock(&kthread_create_lock);
@@ -874,6 +883,7 @@ __kthread_create_worker(int cpu, unsigned int flags,
 	if (cpu >= 0)
 		node = cpu_to_node(cpu);
 
+	/*在指定node上创建kthread worker线程*/
 	task = __kthread_create_on_node(kthread_worker_fn, worker,
 						node, namefmt, args);
 	if (IS_ERR(task))

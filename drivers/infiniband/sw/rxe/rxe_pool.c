@@ -149,7 +149,7 @@ int __rxe_add_to_pool(struct rxe_pool *pool, struct rxe_pool_elem *elem,
 	if (sleepable)
 		might_sleep();
 	/*将elem加入到xa数组*/
-	err = xa_alloc_cyclic(&pool->xa, &elem->index, NULL, pool->limit,
+	err = xa_alloc_cyclic(&pool->xa, &elem->index/*出参，对应此element的索引*/, NULL, pool->limit,
 			      &pool->next, gfp_flags);
 	if (err < 0)
 		goto err_cnt;
@@ -168,6 +168,7 @@ void *rxe_pool_get_index(struct rxe_pool *pool, u32 index)
 	void *obj;
 
 	rcu_read_lock();
+	/*取index号elem*/
 	elem = xa_load(xa, index);
 	if (elem && kref_get_unless_zero(&elem->ref_cnt))
 		obj = elem->obj;
@@ -199,7 +200,7 @@ int __rxe_cleanup(struct rxe_pool_elem *elem, bool sleepable)
 	/* erase xarray entry to prevent looking up
 	 * the pool elem from its index
 	 */
-	xa_ret = xa_erase(xa, elem->index);
+	xa_ret = xa_erase(xa, elem->index);/*移除index号元素*/
 	WARN_ON(xa_err(xa_ret));
 
 	/* if this is the last call to rxe_put complete the

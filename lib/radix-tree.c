@@ -818,6 +818,7 @@ EXPORT_SYMBOL(radix_tree_lookup_slot);
  */
 void *radix_tree_lookup(const struct radix_tree_root *root, unsigned long index)
 {
+	/*通过index查询radix tree*/
 	return __radix_tree_lookup(root, index, NULL, NULL);
 }
 EXPORT_SYMBOL(radix_tree_lookup);

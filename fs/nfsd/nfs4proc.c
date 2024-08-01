@@ -848,6 +848,7 @@ nfsd4_create(struct svc_rqst *rqstp, struct nfsd4_compound_state *cstate,
 		break;
 
 	case NF4DIR:
+		/*创建目录*/
 		create->cr_iattr.ia_valid &= ~ATTR_SIZE;
 		status = nfsd_create(rqstp, &cstate->current_fh,
 				     create->cr_name, create->cr_namelen,
@@ -2538,6 +2539,7 @@ static __be32 nfs41_check_op_ordering(struct nfsd4_compoundargs *args)
 	return nfs_ok;
 }
 
+/*返回此操作对应的operation*/
 const struct nfsd4_operation *OPDESC(struct nfsd4_op *op)
 {
 	return &nfsd4_ops[op->opnum];
@@ -3181,6 +3183,7 @@ static const struct nfsd4_operation nfsd4_ops[] = {
 		.op_rsize_bop = nfsd4_commit_rsize,
 	},
 	[OP_CREATE] = {
+		/*create对应的操作函数*/
 		.op_func = nfsd4_create,
 		.op_flags = OP_MODIFIES_SOMETHING | OP_CACHEME | OP_CLEAR_STATEID,
 		.op_name = "OP_CREATE",
@@ -3631,6 +3634,7 @@ void warn_on_nonidempotent_op(struct nfsd4_op *op)
 	}
 }
 
+/*显示各操作名称*/
 static const char *nfsd4_op_name(unsigned opnum)
 {
 	if (opnum < ARRAY_SIZE(nfsd4_ops))

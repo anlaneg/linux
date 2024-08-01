@@ -57,6 +57,7 @@ struct rpc_rqst {
 	 */
 	struct rpc_xprt *	rq_xprt;		/* RPC client */
 	struct xdr_buf		rq_snd_buf;		/* send buffer */
+	/*接收buffer*/
 	struct xdr_buf		rq_rcv_buf;		/* recv buffer */
 
 	/*
@@ -138,7 +139,9 @@ struct rpc_xprt_ops {
 	void		(*set_buffer_size)(struct rpc_xprt *xprt, size_t sndsize, size_t rcvsize);
 	int		(*reserve_xprt)(struct rpc_xprt *xprt, struct rpc_task *task);
 	void		(*release_xprt)(struct rpc_xprt *xprt, struct rpc_task *task);
+	/*申请rpc request*/
 	void		(*alloc_slot)(struct rpc_xprt *xprt, struct rpc_task *task);
+	/*释放rpc request*/
 	void		(*free_slot)(struct rpc_xprt *xprt,
 				     struct rpc_rqst *req);
 	void		(*rpcbind)(struct rpc_task *task);
@@ -149,6 +152,7 @@ struct rpc_xprt_ops {
 	unsigned short	(*get_srcport)(struct rpc_xprt *xprt);
 	int		(*buf_alloc)(struct rpc_task *task);
 	void		(*buf_free)(struct rpc_task *task);
+	/*buf初始化，返回0，初始化成功，返回非0，初始化失败*/
 	int		(*prepare_request)(struct rpc_rqst *req,
 					   struct xdr_buf *buf);
 	int		(*send_request)(struct rpc_rqst *req);
@@ -197,6 +201,7 @@ struct rpc_sysfs_xprt;
 struct rpc_xprt {
 	struct kref		kref;		/* Reference count */
 	const struct rpc_xprt_ops *ops;		/* transport methods */
+	/*唯一编号，由rpc_xprt_ids分配而来*/
 	unsigned int		id;		/* transport id */
 
 	const struct rpc_timeout *timeout;	/* timeout parms */
@@ -214,9 +219,12 @@ struct rpc_xprt {
 	struct rpc_wait_queue	sending;	/* requests waiting to send */
 	struct rpc_wait_queue	pending;	/* requests in flight */
 	struct rpc_wait_queue	backlog;	/* waiting for slot */
+	/*空闲链表，用于保存rpc_rqst*/
 	struct list_head	free;		/* free slots */
+	/*系统容许的最大request数目*/
 	unsigned int		max_reqs;	/* max number of slots */
 	unsigned int		min_reqs;	/* min number of slots */
+	/*当前申请的request数目*/
 	unsigned int		num_reqs;	/* total slots */
 	unsigned long		state;		/* transport state */
 	unsigned char		resvport   : 1,	/* use a reserved port */
@@ -260,6 +268,7 @@ struct rpc_xprt {
 	u32			xid;		/* Next XID value to use */
 	struct rpc_task *	snd_task;	/* Task blocked in send */
 
+	/*请求将入队到xprt->xmit_queue,xprt_transmit task会发送此队列上所有请求*/
 	struct list_head	xmit_queue;	/* Send queue */
 	atomic_long_t		xmit_queuelen;
 
@@ -297,11 +306,13 @@ struct rpc_xprt {
 	struct net		*xprt_net;
 	netns_tracker		ns_tracker;
 	const char		*servername;
+	/*各类型字段显示*/
 	const char		*address_strings[RPC_DISPLAY_MAX];
 #if IS_ENABLED(CONFIG_SUNRPC_DEBUG)
 	struct dentry		*debugfs;		/* debugfs directory */
 #endif
 	struct rcu_head		rcu;
+	/*指出xport类型，例如xs_local_transport*/
 	const struct xprt_class	*xprt_class;
 	struct rpc_sysfs_xprt	*xprt_sysfs;
 	bool			main; /*mark if this is the 1st transport */
@@ -331,11 +342,13 @@ static inline int bc_prealloc(struct rpc_rqst *req)
 #define XPRT_CREATE_NO_IDLE_TIMEOUT	(1U << 1)
 
 struct xprt_create {
+	/*传输类型id*/
 	int			ident;		/* XPRT_TRANSPORT identifier */
 	struct net *		net;
+	/*源地址，可以为NULL*/
 	struct sockaddr *	srcaddr;	/* optional local address */
 	struct sockaddr *	dstaddr;	/* remote peer address */
-	size_t			addrlen;
+	size_t			addrlen;/*地址长度*/
 	const char		*servername;
 	struct svc_xprt		*bc_xprt;	/* NFSv4.1 backchannel */
 	struct rpc_xprt_switch	*bc_xps;

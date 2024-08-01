@@ -108,6 +108,7 @@ static int qca_read_fw_build_info(struct hci_dev *hdev)
 	skb = __hci_cmd_sync_ev(hdev, EDL_PATCH_CMD_OPCODE, EDL_PATCH_CMD_LEN,
 				&cmd, 0, HCI_INIT_TIMEOUT);
 	if (IS_ERR(skb)) {
+		/*执行此cmd失败*/
 		err = PTR_ERR(skb);
 		bt_dev_err(hdev, "Reading QCA fw build info failed (%d)",
 			   err);

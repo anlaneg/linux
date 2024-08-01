@@ -47,7 +47,7 @@
 #define HASH_INITVAL	((u32)0xcafef00d)
 
 struct  vrf_map {
-	DECLARE_HASHTABLE(ht, HT_MAP_BITS);
+	DECLARE_HASHTABLE(ht, HT_MAP_BITS);/*用于挂接struct vrf_map_elem结构体*/
 	spinlock_t vmap_lock;
 
 	/* shared_tables:
@@ -103,7 +103,7 @@ static unsigned int vrf_net_id;
 /* per netns vrf data */
 struct netns_vrf {
 	/* protected by rtnl lock */
-	bool add_fib_rules;
+	bool add_fib_rules;/*是否需要添加fib规则*/
 
 	struct vrf_map vmap;
 	struct ctl_table_header	*ctl_hdr;
@@ -118,8 +118,10 @@ struct net_vrf {
 	/*此vrf对应的table id*/
 	u32                     tb_id;
 
+	/*用于串连所有struct vrf_map_elem结构体*/
 	struct list_head	me_list;   /* entry in vrf_map_elem */
-	int			ifindex;/*对应的l3mdev netdev设备*/
+	/*对应的l3mdev netdev设备ifindex*/
+	int			ifindex;
 };
 
 //设备收包计数
@@ -133,6 +135,7 @@ static void vrf_rx_stats(struct net_device *dev, int len)
 	u64_stats_update_end(&dstats->syncp);
 }
 
+/*设备tx error增加，释放报文*/
 static void vrf_tx_error(struct net_device *vrf_dev, struct sk_buff *skb)
 {
 	vrf_dev->stats.tx_errors++;
@@ -149,6 +152,7 @@ static void vrf_get_stats64(struct net_device *dev,
 		u64 tbytes, tpkts, tdrops, rbytes, rpkts;
 		unsigned int start;
 
+		/*取i号cpu对应的统计信息*/
 		dstats = per_cpu_ptr(dev->dstats, i);
 		do {
 			start = u64_stats_fetch_begin(&dstats->syncp);
@@ -158,6 +162,7 @@ static void vrf_get_stats64(struct net_device *dev,
 			rbytes = dstats->rx_bytes;
 			rpkts = dstats->rx_packets;
 		} while (u64_stats_fetch_retry(&dstats->syncp, start));
+		/*汇总统计*/
 		stats->tx_bytes += tbytes;
 		stats->tx_packets += tpkts;
 		stats->tx_dropped += tdrops;
@@ -168,6 +173,7 @@ static void vrf_get_stats64(struct net_device *dev,
 
 static struct vrf_map *netns_vrf_map(struct net *net)
 {
+	/*每个Ns中vrf有一个私有结构，取此结构中的vmap结构体*/
 	struct netns_vrf *nn_vrf = net_generic(net, vrf_net_id);
 
 	return &nn_vrf->vmap;
@@ -186,11 +192,13 @@ static int vrf_map_elem_get_vrf_ifindex(struct vrf_map_elem *me)
 	if (list_empty(me_head))
 		return -ENODEV;
 
+	/*取首个net_vrf结构体*/
 	vrf = list_first_entry(me_head, struct net_vrf, me_list);
 
 	return vrf->ifindex;
 }
 
+/*申请结构体struct vrf_map_elem*/
 static struct vrf_map_elem *vrf_map_elem_alloc(gfp_t flags)
 {
 	struct vrf_map_elem *me;
@@ -202,11 +210,13 @@ static struct vrf_map_elem *vrf_map_elem_alloc(gfp_t flags)
 	return me;
 }
 
+/*释放结构体struct vrf_map_elem*/
 static void vrf_map_elem_free(struct vrf_map_elem *me)
 {
 	kfree(me);
 }
 
+/*初始化结构体vrf_map_elem*/
 static void vrf_map_elem_init(struct vrf_map_elem *me, int table_id,
 			      int ifindex, int users)
 {
@@ -216,6 +226,7 @@ static void vrf_map_elem_init(struct vrf_map_elem *me, int table_id,
 	INIT_LIST_HEAD(&me->vrf_list);
 }
 
+/*通过table_id获取struct vrf_map_elem结构体*/
 static struct vrf_map_elem *vrf_map_lookup_elem(struct vrf_map *vmap,
 						u32 table_id)
 {
@@ -225,12 +236,14 @@ static struct vrf_map_elem *vrf_map_lookup_elem(struct vrf_map *vmap,
 	key = jhash_1word(table_id, HASH_INITVAL);
 	hash_for_each_possible(vmap->ht, me, hnode, key) {
 		if (me->table_id == table_id)
+			/*table_id匹配，返回vrf_map_elem*/
 			return me;
 	}
 
 	return NULL;
 }
 
+/*向vmap中添加vrf_map_elem结构体*/
 static void vrf_map_add_elem(struct vrf_map *vmap, struct vrf_map_elem *me)
 {
 	u32 table_id = me->table_id;
@@ -262,7 +275,7 @@ vrf_map_register_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 	struct vrf_map *vmap = netns_vrf_map_by_dev(dev);
 	struct net_vrf *vrf = netdev_priv(dev);
 	struct vrf_map_elem *new_me, *me;
-	u32 table_id = vrf->tb_id;
+	u32 table_id = vrf->tb_id;/*此vrf对应的table id*/
 	bool free_new_me = false;
 	int users;
 	int res;
@@ -274,12 +287,14 @@ vrf_map_register_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 	if (!new_me)
 		return -ENOMEM;
 
+	/*初始化结构体new_me*/
 	vrf_map_elem_init(new_me, table_id, dev->ifindex, 0);
 
 	vrf_map_lock(vmap);
 
 	me = vrf_map_lookup_elem(vmap, table_id);
 	if (!me) {
+		/*table_id对应的vrf_map_elem不存在，添加*/
 		me = new_me;
 		vrf_map_add_elem(vmap, me);
 		goto link_vrf;
@@ -289,7 +304,7 @@ vrf_map_register_dev(struct net_device *dev, struct netlink_ext_ack *extack)
 	 * least) a vrf registered on the specific table.
 	 */
 	free_new_me = true;
-	if (vmap->strict_mode) {
+	if (vmap->strict_mode/*此模式开启，报错*/) {
 		/* vrfs cannot share the same table */
 		NL_SET_ERR_MSG(extack, "Table is used by another VRF");
 		res = -EBUSY;
@@ -336,6 +351,7 @@ static void vrf_map_unregister_dev(struct net_device *dev)
 	if (users == 1) {
 		--vmap->shared_tables;
 	} else if (users == 0) {
+		/*移除*/
 		vrf_map_del_elem(me);
 
 		/* no one will refer to this element anymore */
@@ -360,12 +376,14 @@ static int vrf_ifindex_lookup_by_table_id(struct net *net, u32 table_id)
 		goto unlock;
 	}
 
+	/*利用table_id查询得到vrf_map_elem*/
 	me = vrf_map_lookup_elem(vmap, table_id);
 	if (!me) {
 		ifindex = -ENODEV;
 		goto unlock;
 	}
 
+	/*返回ifindex*/
 	ifindex = vrf_map_elem_get_vrf_ifindex(me);
 
 unlock:
@@ -410,6 +428,7 @@ static int vrf_local_xmit(struct sk_buff *skb, struct net_device *dev,
 
 	skb->protocol = eth_type_trans(skb, dev);
 
+	/*报文走收流程*/
 	if (likely(__netif_rx(skb) == NET_RX_SUCCESS))
 		vrf_rx_stats(dev, len);
 	else
@@ -518,6 +537,7 @@ static int vrf_ip_local_out(struct net *net, struct sock *sk,
 
 	vrf_nf_reset_ct(skb);
 
+	/*走local out钩子点*/
 	err = nf_hook(NFPROTO_IPV4, NF_INET_LOCAL_OUT, net, sk,
 		      skb, NULL, skb_dst(skb)->dev, dst_output);
 	if (likely(err == 1))
@@ -561,8 +581,10 @@ static netdev_tx_t vrf_process_v4_outbound(struct sk_buff *skb,
 	 * destined to a local address. Short circuit to Rx path.
 	 */
 	if (rt->dst.dev == vrf_dev)
+		/*自发自收*/
 		return vrf_local_xmit(skb, vrf_dev, &rt->dst);
 
+	/*路由明确出接口为其它设备，自此设备出*/
 	skb_dst_set(skb, &rt->dst);
 
 	/* strip the ethernet header added for pass through VRF device */
@@ -587,6 +609,7 @@ err:
 	goto out;
 }
 
+/*tx方向处理报文*/
 static netdev_tx_t is_ip_tx_frame(struct sk_buff *skb, struct net_device *dev)
 {
 	switch (skb->protocol) {
@@ -603,7 +626,7 @@ static netdev_tx_t is_ip_tx_frame(struct sk_buff *skb, struct net_device *dev)
 static netdev_tx_t vrf_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	int len = skb->len;
-	/*完成报文发送*/
+	/*报文发送*/
 	netdev_tx_t ret = is_ip_tx_frame(skb, dev);
 
 	if (likely(ret == NET_XMIT_SUCCESS || ret == NET_XMIT_CN)) {
@@ -626,6 +649,7 @@ static void vrf_finish_direct(struct sk_buff *skb)
 
 	if (!list_empty(&vrf_dev->ptype_all) &&
 	    likely(skb_headroom(skb) >= ETH_HLEN)) {
+		/*vrf_dev->ptype_all不为空，复制并每个entry送一份*/
 		struct ethhdr *eth = skb_push(skb, ETH_HLEN);
 
 		ether_addr_copy(eth->h_source, vrf_dev->dev_addr);
@@ -905,9 +929,11 @@ static int vrf_output(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	IP_UPD_PO_STATS(net, IPSTATS_MIB_OUT, skb->len);
 
+	/*变更设备*/
 	skb->dev = dev;
 	skb->protocol = htons(ETH_P_IP);
 
+	/*触发post routing钩子点*/
 	return NF_HOOK_COND(NFPROTO_IPV4, NF_INET_POST_ROUTING,
 			    net, sk, skb, NULL, dev,
 			    vrf_finish_output,
@@ -929,7 +955,7 @@ static struct sk_buff *vrf_ip_out_redirect(struct net_device *vrf_dev,
 
 	rth = rcu_dereference(vrf->rth);
 	if (likely(rth)) {
-		dst = &rth->dst;
+		dst = &rth->dst;/*rth不为空，设置路由结果*/
 		dst_hold(dst);
 	}
 
@@ -1011,6 +1037,7 @@ static struct sk_buff *vrf_ip_out(struct net_device *vrf_dev,
 	/* don't divert multicast or local broadcast */
 	if (ipv4_is_multicast(ip_hdr(skb)->daddr) ||
 	    ipv4_is_lbcast(ip_hdr(skb)->daddr))
+		/*目的ip是组播或广播ip时，直接返回报文*/
 		return skb;
 
 	vrf_nf_set_untracked(skb);
@@ -1019,6 +1046,7 @@ static struct sk_buff *vrf_ip_out(struct net_device *vrf_dev,
 	    IPCB(skb)->flags & IPSKB_XFRM_TRANSFORMED)
 		return vrf_ip_out_direct(vrf_dev, sk, skb);
 
+	/*更新路由为vrf->rth路由后，直接返回*/
 	return vrf_ip_out_redirect(vrf_dev, skb);
 }
 
@@ -1066,6 +1094,7 @@ static int vrf_rtable_create(struct net_device *dev)
 	struct rtable *rth;
 
 	if (!fib_new_table(dev_net(dev), vrf->tb_id))
+		/*创建vrf对应的路由表失败*/
 		return -ENOMEM;
 
 	/* create a dst for routing packets out through a VRF device */
@@ -1075,6 +1104,7 @@ static int vrf_rtable_create(struct net_device *dev)
 
 	rth->dst.output	= vrf_output;
 
+	/*设置针对此设备的路由（针对vrf出时，走此函数，自vrf设备对应的net_device出）*/
 	rcu_assign_pointer(vrf->rth, rth);
 
 	return 0;
@@ -1092,6 +1122,7 @@ static void cycle_netdev(struct net_device *dev,
 	if (!netif_running(dev))
 		return;
 
+	/*变更设备的flags*/
 	ret = dev_change_flags(dev, flags & ~IFF_UP, extack);
 	if (ret >= 0)
 		ret = dev_change_flags(dev, flags, extack);
@@ -1103,7 +1134,7 @@ static void cycle_netdev(struct net_device *dev,
 	}
 }
 
-static int do_vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
+static int do_vrf_add_slave(struct net_device *dev/*vrf设备*/, struct net_device *port_dev/*底层设备*/,
 			    struct netlink_ext_ack *extack)
 {
 	int ret;
@@ -1118,7 +1149,9 @@ static int do_vrf_add_slave(struct net_device *dev, struct net_device *port_dev,
 		return -EOPNOTSUPP;
 	}
 
-	/*标记此设备为l3mdev_slave*/
+	/*标记此设备为l3mdev类型的slave设备
+	 * 这样在ip_rcv_finish里，自port_dev收到的报文将变更设备为dev
+	 * */
 	port_dev->priv_flags |= IFF_L3MDEV_SLAVE;
 	ret = netdev_master_upper_dev_link(port_dev, dev, NULL, NULL, extack);
 	if (ret < 0)
@@ -1134,21 +1167,21 @@ err:
 }
 
 /*向vrf中添加slave设备*/
-static int vrf_add_slave(struct net_device *dev/*master设备*/, struct net_device *port_dev,
+static int vrf_add_slave(struct net_device *dev/*master设备*/, struct net_device *port_dev/*slave设备*/,
 			 struct netlink_ext_ack *extack)
 {
 	if (netif_is_l3_master(port_dev)) {
-	    /*不能是l3master dev设备做slave*/
+	    /*不能用l3master dev设备做slave*/
 		NL_SET_ERR_MSG(extack,
 			       "Can not enslave an L3 master device to a VRF");
 		return -EINVAL;
 	}
 
-	/*不能重复添加*/
+	/*port_dev已经是slave设备了，不能重复添加*/
 	if (netif_is_l3_slave(port_dev))
 		return -EINVAL;
 
-	/*向dev设备中添加slave设备*/
+	/*将port_dev设备标记为slave设备*/
 	return do_vrf_add_slave(dev, port_dev, extack);
 }
 
@@ -1156,6 +1189,7 @@ static int vrf_add_slave(struct net_device *dev/*master设备*/, struct net_devi
 static int do_vrf_del_slave(struct net_device *dev, struct net_device *port_dev)
 {
 	netdev_upper_dev_unlink(port_dev, dev);
+	/*清除掉l3mdev_slave标记*/
 	port_dev->priv_flags &= ~IFF_L3MDEV_SLAVE;
 
 	cycle_netdev(port_dev, NULL);
@@ -1206,17 +1240,17 @@ static const struct net_device_ops vrf_netdev_ops = {
 	.ndo_uninit		= vrf_dev_uninit,
 	//vrf设备发包函数
 	.ndo_start_xmit		= vrf_xmit,
-	.ndo_set_mac_address	= eth_mac_addr,
+	.ndo_set_mac_address	= eth_mac_addr,/*vrf mac地址变更*/
 	.ndo_get_stats64	= vrf_get_stats64,/*接口通计信息*/
-	.ndo_add_slave		= vrf_add_slave,
-	.ndo_del_slave		= vrf_del_slave,
+	.ndo_add_slave		= vrf_add_slave,/*添加slave*/
+	.ndo_del_slave		= vrf_del_slave,/*移除slave*/
 };
 
 static u32 vrf_fib_table(const struct net_device *dev)
 {
 	struct net_vrf *vrf = netdev_priv(dev);
 
-	return vrf->tb_id;
+	return vrf->tb_id;/*取vrf对应的table id*/
 }
 
 static int vrf_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
@@ -1232,7 +1266,7 @@ static struct sk_buff *vrf_rcv_nfhook(u8 pf, unsigned int hook,
 {
 	struct net *net = dev_net(dev);
 
-	if (nf_hook(pf, hook, net, NULL, skb, dev, NULL, vrf_rcv_finish) != 1)
+	if (nf_hook(pf, hook, net, NULL, skb, dev, NULL, vrf_rcv_finish/*此函数默认丢包(这个应该不会调到)*/) != 1)
 		skb = NULL;    /* kfree_skb(skb) handled by nf code */
 
 	return skb;
@@ -1432,7 +1466,7 @@ static struct sk_buff *vrf_ip6_rcv(struct net_device *vrf_dev,
 }
 #endif
 
-//vrf　ipv4报文处理（入口）
+//vrf ipv4报文处理（触发per routing钩子点（vrf_dev为入口设备））
 static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 				  struct sk_buff *skb)
 {
@@ -1465,12 +1499,13 @@ static struct sk_buff *vrf_ip_rcv(struct net_device *vrf_dev,
 						  orig_dev);
 		if (likely(!err)) {
 			skb_push(skb, skb->mac_len);
+			/*向每个投递一份*/
 			dev_queue_xmit_nit(skb, vrf_dev);
 			skb_pull(skb, skb->mac_len);
 		}
 	}
 
-	/*触发per routing钩子点*/
+	/*触发per routing钩子点（vrf_dev为入口设备）*/
 	skb = vrf_rcv_nfhook(NFPROTO_IPV4, NF_INET_PRE_ROUTING, skb, vrf_dev);
 out:
 	return skb;
@@ -1529,8 +1564,8 @@ static struct dst_entry *vrf_link_scope_lookup(const struct net_device *dev,
 
 static const struct l3mdev_ops vrf_l3mdev_ops = {
 	.l3mdev_fib_table	= vrf_fib_table,
-	.l3mdev_l3_rcv		= vrf_l3_rcv,/*l3mdev收包*/
-	.l3mdev_l3_out		= vrf_l3_out,
+	.l3mdev_l3_rcv		= vrf_l3_rcv,/*l3mdev收包,触发preroting钩子点*/
+	.l3mdev_l3_out		= vrf_l3_out,/*l3mdev本机发包*/
 #if IS_ENABLED(CONFIG_IPV6)
 	.l3mdev_link_scope_lookup = vrf_link_scope_lookup,
 #endif
@@ -1539,6 +1574,7 @@ static const struct l3mdev_ops vrf_l3mdev_ops = {
 static void vrf_get_drvinfo(struct net_device *dev,
 			    struct ethtool_drvinfo *info)
 {
+	/*返回接口驱动名称*/
 	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
 	strscpy(info->version, DRV_VERSION, sizeof(info->version));
 }
@@ -1547,6 +1583,7 @@ static const struct ethtool_ops vrf_ethtool_ops = {
 	.get_drvinfo	= vrf_get_drvinfo,
 };
 
+/*要下发的fib rule消息内存大小*/
 static inline size_t vrf_fib_rule_nl_size(void)
 {
 	size_t sz;
@@ -1559,7 +1596,7 @@ static inline size_t vrf_fib_rule_nl_size(void)
 	return sz;
 }
 
-static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it)
+static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it/*是（添加规则）/否（删除规则）*/)
 {
 	struct fib_rule_hdr *frh;
 	struct nlmsghdr *nlh;
@@ -1570,6 +1607,7 @@ static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it)
 	    !ipv6_mod_enabled())
 		return 0;
 
+	/*申请netlink消息所需的skb*/
 	skb = nlmsg_new(vrf_fib_rule_nl_size(), GFP_KERNEL);
 	if (!skb)
 		return -ENOMEM;
@@ -1581,10 +1619,11 @@ static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it)
 	/* rule only needs to appear once */
 	nlh->nlmsg_flags |= NLM_F_EXCL;
 
+	/*填充这一条策略(匹配所有family流量）*/
 	frh = nlmsg_data(nlh);
 	memset(frh, 0, sizeof(*frh));
-	frh->family = family;
-	frh->action = FR_ACT_TO_TBL;
+	frh->family = family;/*此fib对应的协议，例如ipv4，对应策略操作的ops*/
+	frh->action = FR_ACT_TO_TBL;/*指明查指定route table（但并不指明table)*/
 
 	if (nla_put_u8(skb, FRA_PROTOCOL, RTPROT_KERNEL))
 		goto nla_put_failure;
@@ -1592,6 +1631,7 @@ static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it)
 	if (nla_put_u8(skb, FRA_L3MDEV, 1))
 		goto nla_put_failure;
 
+	/*指明规则优先级*/
 	if (nla_put_u32(skb, FRA_PRIORITY, FIB_RULE_PREF))
 		goto nla_put_failure;
 
@@ -1600,10 +1640,12 @@ static int vrf_fib_rule(const struct net_device *dev, __u8 family, bool add_it)
 	/* fib_nl_{new,del}rule handling looks for net from skb->sk */
 	skb->sk = dev_net(dev)->rtnl;
 	if (add_it) {
+		/*新建规则*/
 		err = fib_nl_newrule(skb, nlh, NULL);
 		if (err == -EEXIST)
 			err = 0;
 	} else {
+		/*移除规则*/
 		err = fib_nl_delrule(skb, nlh, NULL);
 		if (err == -ENOENT)
 			err = 0;
@@ -1622,10 +1664,12 @@ static int vrf_add_fib_rules(const struct net_device *dev)
 {
 	int err;
 
+	/*添加ipv4协议对应的fib规则*/
 	err = vrf_fib_rule(dev, AF_INET,  true);
 	if (err < 0)
 		goto out_err;
 
+	/*添加ipv6协议对应的fib规则*/
 	err = vrf_fib_rule(dev, AF_INET6, true);
 	if (err < 0)
 		goto ipv6_err;
@@ -1713,10 +1757,12 @@ static int vrf_validate(struct nlattr *tb[], struct nlattr *data[],
 {
 	if (tb[IFLA_ADDRESS]) {
 		if (nla_len(tb[IFLA_ADDRESS]) != ETH_ALEN) {
+			/*长度有误*/
 			NL_SET_ERR_MSG(extack, "Invalid hardware address");
 			return -EINVAL;
 		}
 		if (!is_valid_ether_addr(nla_data(tb[IFLA_ADDRESS]))) {
+			/*遇到无效mac地址*/
 			NL_SET_ERR_MSG(extack, "Invalid hardware address");
 			return -EADDRNOTAVAIL;
 		}
@@ -1729,6 +1775,7 @@ static void vrf_dellink(struct net_device *dev, struct list_head *head)
 	struct net_device *port_dev;
 	struct list_head *iter;
 
+	/*遍历并移除所有slave接口*/
 	netdev_for_each_lower_dev(dev, port_dev, iter)
 		vrf_del_slave(dev, port_dev);
 
@@ -1754,6 +1801,7 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 		return -EINVAL;
 	}
 
+	/*取table编号(这个指明对应的路由表）*/
 	vrf->tb_id = nla_get_u32(data[IFLA_VRF_TABLE]);
 	if (vrf->tb_id == RT_TABLE_UNSPEC) {
 		NL_SET_ERR_MSG_ATTR(extack, data[IFLA_VRF_TABLE],
@@ -1761,7 +1809,7 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 		return -EINVAL;
 	}
 
-	/*指明此设备为l3mdev master*/
+	/*指明此设备为l3mdev类型的master*/
 	dev->priv_flags |= IFF_L3MDEV_MASTER;
 
 	/*注册网络设备*/
@@ -1775,18 +1823,19 @@ static int vrf_newlink(struct net *src_net, struct net_device *dev,
 	 */
 	vrf->ifindex = dev->ifindex;
 
+	/*添加map*/
 	err = vrf_map_register_dev(dev, extack);
 	if (err) {
 		unregister_netdevice(dev);
 		goto out;
 	}
 
-	net = dev_net(dev);
+	net = dev_net(dev);/*底层设备对应的net ns*/
 	nn_vrf = net_generic(net, vrf_net_id);
 
 	add_fib_rules = &nn_vrf->add_fib_rules;
 	if (*add_fib_rules) {
-	    /*如果netns需要添加fib rules,则在此处添加*/
+	    /*如果netns需要添加默认fib rules,则在此处添加*/
 		err = vrf_add_fib_rules(dev);
 		if (err) {
 			vrf_map_unregister_dev(dev);
@@ -1861,16 +1910,18 @@ static struct rtnl_link_ops vrf_link_ops __read_mostly = {
 static int vrf_device_event(struct notifier_block *unused,
 			    unsigned long event, void *ptr)
 {
+	/*取得通知对应的设备*/
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
 
 	/* only care about unregister events to drop slave references */
 	if (event == NETDEV_UNREGISTER) {
 		struct net_device *vrf_dev;
 
+		/*如果是l3mdev slave设备在解注册，则l3mdev需要移除此slave*/
 		if (!netif_is_l3_slave(dev))
-		    /*如果l3mdev slave设备在解注册，则l3mdev需要移除此slave*/
 			goto out;
 
+		/*取得master,自master中移除此dev*/
 		vrf_dev = netdev_master_upper_dev_get(dev);
 		vrf_del_slave(vrf_dev, dev);
 	}
@@ -1886,7 +1937,7 @@ static struct notifier_block vrf_notifier_block __read_mostly = {
 static int vrf_map_init(struct vrf_map *vmap)
 {
 	spin_lock_init(&vmap->vmap_lock);
-	hash_init(vmap->ht);
+	hash_init(vmap->ht);/*初始化hash table*/
 
 	vmap->strict_mode = false;
 
@@ -1988,7 +2039,7 @@ static int vrf_netns_init_sysctl(struct net *net, struct netns_vrf *nn_vrf)
 		return -ENOMEM;
 
 	/* init the extra1 parameter with the reference to current netns */
-	table[0].extra1 = net;
+	table[0].extra1 = net;/*指明从属于哪个netns*/
 
 	nn_vrf->ctl_hdr = register_net_sysctl_sz(net, "net/vrf", table,
 						 ARRAY_SIZE(vrf_table));
@@ -2026,8 +2077,8 @@ static int __net_init vrf_netns_init(struct net *net)
     /*vrf模块对每个net namespace的初始化*/
 	struct netns_vrf *nn_vrf = net_generic(net, vrf_net_id);
 
-	nn_vrf->add_fib_rules = true;
-	vrf_map_init(&nn_vrf->vmap);
+	nn_vrf->add_fib_rules = true;/*ns刚创建，需要添加fib规则*/
+	vrf_map_init(&nn_vrf->vmap);/*ns刚创建需要初始化vmap*/
 
 	return vrf_netns_init_sysctl(net, nn_vrf);
 }
@@ -2049,6 +2100,7 @@ static int __init vrf_init_module(void)
 {
 	int rc;
 
+	/*注册设备事件，维护slave关系*/
 	register_netdevice_notifier(&vrf_notifier_block);
 
 	rc = register_pernet_subsys(&vrf_net_ops);

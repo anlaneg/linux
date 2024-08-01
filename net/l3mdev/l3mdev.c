@@ -27,16 +27,19 @@ static int l3mdev_check_type(enum l3mdev_type l3type)
 	return 0;
 }
 
+/*注册l3mdev某类型对应的dev_loopup回调*/
 int l3mdev_table_lookup_register(enum l3mdev_type l3type,
 				 lookup_by_table_id_t fn)
 {
 	struct l3mdev_handler *hdlr;
 	int res;
 
+	/*type检查*/
 	res = l3mdev_check_type(l3type);
 	if (res)
 		return res;
 
+	/*取此type对应的handler*/
 	hdlr = &l3mdev_handlers[l3type];
 
 	spin_lock(&l3mdev_lock);
@@ -85,18 +88,22 @@ int l3mdev_ifindex_lookup_by_table_id(enum l3mdev_type l3type,
 	int ifindex = -EINVAL;
 	int res;
 
+	/*type检查*/
 	res = l3mdev_check_type(l3type);
 	if (res)
 		return res;
 
+	/*取type对应的handler*/
 	hdlr = &l3mdev_handlers[l3type];
 
 	spin_lock(&l3mdev_lock);
 
+	/*取查询函数*/
 	lookup = hdlr->dev_lookup;
 	if (!lookup)
 		goto unlock;
 
+	/*通过table_id查找到对应的vrf设备，再由vrf设备取得设备对应的ifindex*/
 	ifindex = lookup(net, table_id);
 
 unlock:
@@ -175,6 +182,7 @@ u32 l3mdev_fib_table_rcu(const struct net_device *dev)
 
 	if (netif_is_l3_master(dev)) {
 		if (dev->l3mdev_ops->l3mdev_fib_table)
+			/*取l3mdev设备对应的路由表编号*/
 			tb_id = dev->l3mdev_ops->l3mdev_fib_table(dev);
 	} else if (netif_is_l3_slave(dev)) {
 		/* Users of netdev_master_upper_dev_get_rcu need non-const,
@@ -183,6 +191,7 @@ u32 l3mdev_fib_table_rcu(const struct net_device *dev)
 		struct net_device *_dev = (struct net_device *) dev;
 		const struct net_device *master;
 
+		/*针对slave设备，先取得master再由master查路由表编号*/
 		master = netdev_master_upper_dev_get_rcu(_dev);
 		if (master &&
 		    master->l3mdev_ops->l3mdev_fib_table)
@@ -203,8 +212,10 @@ u32 l3mdev_fib_table_by_index(struct net *net, int ifindex)
 
 	rcu_read_lock();
 
+	/*由ifindex取l3mdev*/
 	dev = dev_get_by_index_rcu(net, ifindex);
 	if (dev)
+		/*由l3mdev取其对应的路由表id*/
 		tb_id = l3mdev_fib_table_rcu(dev);
 
 	rcu_read_unlock();
@@ -258,14 +269,17 @@ int l3mdev_fib_rule_match(struct net *net, struct flowi *fl,
 	int rc = 0;
 
 	/* update flow ensures flowi_l3mdev is set when relevant */
-	if (!fl->flowi_l3mdev)
+	if (!fl->)
+		/*未直充l3mdev，不匹配*/
 		return 0;
 
 	rcu_read_lock();
 
+	/*利用l3mdev指明的ifindex,获得dev*/
 	dev = dev_get_by_index_rcu(net, fl->flowi_l3mdev);
 	if (dev && netif_is_l3_master(dev) &&
 	    dev->l3mdev_ops->l3mdev_fib_table) {
+		/*如果此dev恰好是l3 master,则通过netdev查询要goto的路由表*/
 		arg->table = dev->l3mdev_ops->l3mdev_fib_table(dev);
 		rc = 1;
 	}

@@ -1075,6 +1075,7 @@ static int __seg6_end_dt_vrf_build(struct seg6_local_lwt *slwt, const void *cfg,
 		return vrf_ifindex;
 	}
 
+	/*填充info*/
 	info->net = net;
 	info->vrf_ifindex = vrf_ifindex;
 

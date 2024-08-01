@@ -21,6 +21,7 @@
 #define MAX_PARAM_PREFIX_LEN (64 - sizeof(unsigned long))
 
 #define __MODULE_INFO(tag, name, info)					  \
+	/*定义唯一变量name,设置字符串*/\
 	static const char __UNIQUE_ID(name)[]				  \
 		__used __section(".modinfo") __aligned(1)		  \
 		= __MODULE_INFO_PREFIX __stringify(tag) "=" info
@@ -154,8 +155,9 @@ struct kparam_array
  * structure.  This allows exposure under a different name.
  */
 #define module_param_named(name, value, type, perm)			   \
+	/*检查名称为name，类型为type的变量是否是&(value),仅为编译检查*/\
 	param_check_##type(name, &(value));				   \
-	module_param_cb(name, &param_ops_##type, &value, perm);		   \
+	module_param_cb(name/*参数名*/, &param_ops_##type/*此类型的get,set,free函数*/, &value, perm);		   \
 	__MODULE_PARM_TYPE(name, #type)
 
 /**
@@ -416,8 +418,8 @@ static inline void destroy_params(const struct kernel_param *params,
 /* All the helper functions */
 /* The macros to do compile-time type checking stolen from Jakub
    Jelinek, who IIRC came up with this idea for the 2.4 module init code. */
-#define __param_check(name, p, type) \
-    /*针对此类型check,直接返回p*/\
+#define __param_check(name/*类型名称*/, p/*此类型的指针*/, type/*类型名称*/) \
+    /*针对此类型定义check函,直接返回p指针*/\
 	static inline type __always_unused *__check_##name(void) { return(p); }
 
 extern const struct kernel_param_ops param_ops_byte;

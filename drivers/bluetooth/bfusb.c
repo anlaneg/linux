@@ -212,6 +212,7 @@ static int bfusb_rx_submit(struct bfusb_data *data, struct urb *urb)
 			return -ENOMEM;
 	}
 
+	/*申请skb*/
 	skb = bt_skb_alloc(size, GFP_ATOMIC);
 	if (!skb) {
 		usb_free_urb(urb);
@@ -228,7 +229,7 @@ static int bfusb_rx_submit(struct bfusb_data *data, struct urb *urb)
 	usb_fill_bulk_urb(urb, data->udev, pipe, skb->data, size,
 			bfusb_rx_complete, skb);
 
-	skb_queue_tail(&data->pending_q, skb);
+	skb_queue_tail(&data->pending_q, skb);/*将skb添加进pending_q*/
 
 	err = usb_submit_urb(urb, GFP_ATOMIC);
 	if (err) {
@@ -505,7 +506,7 @@ static int bfusb_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 
 	read_lock(&data->lock);
 
-	skb_queue_tail(&data->transmit_q, nskb);
+	skb_queue_tail(&data->transmit_q, nskb);/*报文存入transmit_q*/
 	bfusb_tx_wakeup(data);
 
 	read_unlock(&data->lock);
@@ -656,6 +657,7 @@ static int bfusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 	/* Initialize and register HCI device */
 	hdev = hci_alloc_dev();
 	if (!hdev) {
+		/*申请hci设备失败*/
 		BT_ERR("Can't allocate HCI device");
 		goto done;
 	}
@@ -673,6 +675,7 @@ static int bfusb_probe(struct usb_interface *intf, const struct usb_device_id *i
 
 	set_bit(HCI_QUIRK_BROKEN_LOCAL_COMMANDS, &hdev->quirks);
 
+	/*将hci设备注册入系统*/
 	if (hci_register_dev(hdev) < 0) {
 		BT_ERR("Can't register HCI device");
 		hci_free_dev(hdev);
@@ -716,6 +719,7 @@ static struct usb_driver bfusb_driver = {
 	.disable_hub_initiated_lpm = 1,
 };
 
+/*注册usb驱动*/
 module_usb_driver(bfusb_driver);
 
 MODULE_AUTHOR("Marcel Holtmann <marcel@holtmann.org>");

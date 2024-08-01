@@ -80,7 +80,7 @@ enum gid_table_entry_state {
 
 struct roce_gid_ndev_storage {
 	struct rcu_head rcu_head;
-	struct net_device *ndev;
+	struct net_device *ndev;/*网络设备*/
 };
 
 struct ib_gid_table_entry {
@@ -201,6 +201,7 @@ int ib_cache_gid_parse_type_str(const char *buf)
 }
 EXPORT_SYMBOL(ib_cache_gid_parse_type_str);
 
+/*取port对应的ib_gid_table*/
 static struct ib_gid_table *rdma_gid_table(struct ib_device *device, u32 port)
 {
 	return device->port_data[port].cache.gid;
@@ -242,6 +243,7 @@ static void free_gid_entry_locked(struct ib_gid_table_entry *entry)
 {
 	struct ib_device *device = entry->attr.device;
 	u32 port_num = entry->attr.port_num;
+	/*取port_num端口对应的ib_gid_table*/
 	struct ib_gid_table *table = rdma_gid_table(device, port_num);
 
 	dev_dbg(&device->dev, "%s port=%u index=%u gid %pI6\n", __func__,
@@ -256,6 +258,7 @@ static void free_gid_entry_locked(struct ib_gid_table_entry *entry)
 	 * don't overwrite the table entry.
 	 */
 	if (entry == table->data_vec[entry->attr.index])
+		/*两者index一致，将其移除*/
 		table->data_vec[entry->attr.index] = NULL;
 	/* Now this index is ready to be allocated */
 	write_unlock_irq(&table->rwlock);
@@ -300,10 +303,12 @@ alloc_gid_entry(const struct ib_gid_attr *attr)
 	struct ib_gid_table_entry *entry;
 	struct net_device *ndev;
 
+	/*申请entry结构体*/
 	entry = kzalloc(sizeof(*entry), GFP_KERNEL);
 	if (!entry)
 		return NULL;
 
+	/*取网络设备*/
 	ndev = rcu_dereference_protected(attr->ndev, 1);
 	if (ndev) {
 		entry->ndev_storage = kzalloc(sizeof(*entry->ndev_storage),
@@ -316,15 +321,17 @@ alloc_gid_entry(const struct ib_gid_attr *attr)
 		entry->ndev_storage->ndev = ndev;
 	}
 	kref_init(&entry->kref);
+	/*设置entry的attr*/
 	memcpy(&entry->attr, attr, sizeof(*attr));
 	INIT_WORK(&entry->del_work, free_gid_work);
-	entry->state = GID_TABLE_ENTRY_INVALID;
+	entry->state = GID_TABLE_ENTRY_INVALID;/*先将entry置为invalid*/
 	return entry;
 }
 
 static void store_gid_entry(struct ib_gid_table *table,
 			    struct ib_gid_table_entry *entry)
 {
+	/*将entry->state设置为valid*/
 	entry->state = GID_TABLE_ENTRY_VALID;
 
 	dev_dbg(&entry->attr.device->dev, "%s port=%u index=%u gid %pI6\n",
@@ -333,6 +340,7 @@ static void store_gid_entry(struct ib_gid_table *table,
 
 	lockdep_assert_held(&table->lock);
 	write_lock_irq(&table->rwlock);
+	/*设置table指定的index为entry*/
 	table->data_vec[entry->attr.index] = entry;
 	write_unlock_irq(&table->rwlock);
 }
@@ -396,7 +404,7 @@ static void del_gid(struct ib_device *ib_dev, u32 port,
 
 	write_lock_irq(&table->rwlock);
 	entry = table->data_vec[ix];
-	entry->state = GID_TABLE_ENTRY_PENDING_DEL;
+	entry->state = GID_TABLE_ENTRY_PENDING_DEL;/*标记此entry移除*/
 	/*
 	 * For non RoCE protocol, GID entry slot is ready to use.
 	 */
@@ -438,6 +446,7 @@ static int add_modify_gid(struct ib_gid_table *table,
 	 * this index.
 	 */
 	if (is_gid_entry_valid(table->data_vec[attr->index]))
+		/*attr->index号entry已存在，先将其删除掉*/
 		del_gid(attr->device, attr->port_num, table, attr->index);
 
 	/*
@@ -448,6 +457,7 @@ static int add_modify_gid(struct ib_gid_table *table,
 	if (rdma_is_zero_gid(&attr->gid))
 		return 0;
 
+	/*申请entry*/
 	entry = alloc_gid_entry(attr);
 	if (!entry)
 		return -ENOMEM;
@@ -458,6 +468,7 @@ static int add_modify_gid(struct ib_gid_table *table,
 			goto done;
 	}
 
+	/*再存入到table*/
 	store_gid_entry(table, entry);
 	return 0;
 
@@ -488,7 +499,7 @@ static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
 		 * so lookup free slot only if requested.
 		 */
 		if (pempty && empty < 0) {
-			if (is_gid_entry_free(data) &&
+			if (is_gid_entry_free(data)/*不存在*/&&
 			    default_gid ==
 				is_gid_index_default(table, curr_index)) {
 				/*
@@ -543,12 +554,14 @@ static int find_gid(struct ib_gid_table *table, const union ib_gid *gid,
 
 static void make_default_gid(struct  net_device *dev, union ib_gid *gid)
 {
+	/*先填8个字节*/
 	gid->global.subnet_prefix = cpu_to_be64(0xfe80000000000000LL);
+	//再填写后8个字节
 	addrconf_ifid_eui48(&gid->raw[8], dev);
 }
 
 static int __ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
-			      union ib_gid *gid, struct ib_gid_attr *attr,
+			      union ib_gid *gid/*要添加的gid*/, struct ib_gid_attr *attr,
 			      unsigned long mask, bool default_gid)
 {
 	struct ib_gid_table *table;
@@ -561,6 +574,7 @@ static int __ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
 	 * section 12.7.10 and section 12.7.20
 	 */
 	if (rdma_is_zero_gid(gid))
+		/*添加的GID不能全零*/
 		return -EINVAL;
 
 	table = rdma_gid_table(ib_dev, port);
@@ -569,6 +583,7 @@ static int __ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
 
 	ix = find_gid(table, gid, attr, default_gid, mask, &empty);
 	if (ix >= 0)
+		/*已存在此gid*/
 		goto out_unlock;
 
 	if (empty < 0) {
@@ -576,10 +591,10 @@ static int __ib_cache_gid_add(struct ib_device *ib_dev, u32 port,
 		goto out_unlock;
 	}
 	attr->device = ib_dev;
-	attr->index = empty;
+	attr->index = empty;/*可存入gid的索引*/
 	attr->port_num = port;
-	attr->gid = *gid;
-	ret = add_modify_gid(table, attr);
+	attr->gid = *gid;/*要添加的gid*/
+	ret = add_modify_gid(table, attr);/*向table中添加gid*/
 	if (!ret)
 		dispatch_gid_change_event(ib_dev, port);
 
@@ -698,6 +713,7 @@ rdma_find_gid_by_port(struct ib_device *ib_dev,
 	unsigned long flags;
 
 	if (!rdma_is_port_valid(ib_dev, port))
+		/*port无效*/
 		return ERR_PTR(-ENOENT);
 
 	table = rdma_gid_table(ib_dev, port);
@@ -781,7 +797,7 @@ static struct ib_gid_table *alloc_gid_table(int sz)
 	if (!table)
 		return NULL;
 
-	/*申请sz个ib_gid_table_entry指针*/
+	/*申请sz个ib_gid_table_entry指针，收集gid*/
 	table->data_vec = kcalloc(sz, sizeof(*table->data_vec), GFP_KERNEL);
 	if (!table->data_vec)
 		goto err_free_table;
@@ -863,7 +879,8 @@ void ib_cache_gid_set_default_gid(struct ib_device *ib_dev, u32 port,
 		gid_attr.gid_type = gid_type;
 
 		if (mode == IB_CACHE_GID_DEFAULT_MODE_SET) {
-			make_default_gid(ndev, &gid);
+			make_default_gid(ndev, &gid);/*生成默认的gid*/
+			/*添加gid*/
 			__ib_cache_gid_add(ib_dev, port, &gid,
 					   &gid_attr, mask, true);
 		} else if (mode == IB_CACHE_GID_DEFAULT_MODE_DELETE) {
@@ -893,6 +910,7 @@ static void gid_table_release_one(struct ib_device *ib_dev)
 {
 	u32 p;
 
+	/*移除此ib设备所有port对应的gid table*/
 	rdma_for_each_port (ib_dev, p) {
 		release_gid_table(ib_dev, ib_dev->port_data[p].cache.gid);
 		ib_dev->port_data[p].cache.gid = NULL;
@@ -912,7 +930,7 @@ static int _gid_table_setup_one(struct ib_device *ib_dev)
 			goto rollback_table_setup;
 
 		gid_table_reserve_default(ib_dev, rdma_port, table);
-		ib_dev->port_data[rdma_port].cache.gid = table;
+		ib_dev->port_data[rdma_port].cache.gid = table;/*设置Gid table*/
 	}
 	return 0;
 
@@ -959,19 +977,21 @@ static int gid_table_setup_one(struct ib_device *ib_dev)
  *
  */
 int rdma_query_gid(struct ib_device *device, u32 port_num,
-		   int index, union ib_gid *gid)
+		   int index/*gid索引*/, union ib_gid *gid)
 {
 	struct ib_gid_table *table;
 	unsigned long flags;
 	int res;
 
 	if (!rdma_is_port_valid(device, port_num))
+		/*port_num无效*/
 		return -EINVAL;
 
 	table = rdma_gid_table(device, port_num);
 	read_lock_irqsave(&table->rwlock, flags);
 
 	if (index < 0 || index >= table->sz) {
+		/*index无效*/
 		res = -EINVAL;
 		goto done;
 	}
@@ -981,6 +1001,7 @@ int rdma_query_gid(struct ib_device *device, u32 port_num,
 		goto done;
 	}
 
+	/*取gid*/
 	memcpy(gid, &table->data_vec[index]->attr.gid, sizeof(*gid));
 	res = 0;
 
@@ -1038,7 +1059,7 @@ const struct ib_gid_attr *rdma_find_gid(struct ib_device *device,
 		unsigned long flags;
 		int index;
 
-		table = device->port_data[p].cache.gid;
+		table = device->port_data[p].cache.gid;/*取device中对应port的gid table*/
 		read_lock_irqsave(&table->rwlock, flags);
 		index = find_gid(table, gid, &gid_attr_val, false, mask, NULL);
 		if (index >= 0) {
@@ -1059,7 +1080,7 @@ EXPORT_SYMBOL(rdma_find_gid);
 int ib_get_cached_pkey(struct ib_device *device,
 		       u32               port_num,
 		       int               index,
-		       u16              *pkey)
+		       u16              *pkey/*出参，返回index缓存的pkey*/)
 {
 	struct ib_pkey_cache *cache;
 	unsigned long flags;
@@ -1073,9 +1094,10 @@ int ib_get_cached_pkey(struct ib_device *device,
 	cache = device->port_data[port_num].cache.pkey;
 
 	if (!cache || index < 0 || index >= cache->table_len)
+		/*index无效*/
 		ret = -EINVAL;
 	else
-		*pkey = cache->table[index];
+		*pkey = cache->table[index];/*设置对应的pkey*/
 
 	read_unlock_irqrestore(&device->cache_lock, flags);
 
@@ -1084,18 +1106,19 @@ int ib_get_cached_pkey(struct ib_device *device,
 EXPORT_SYMBOL(ib_get_cached_pkey);
 
 void ib_get_cached_subnet_prefix(struct ib_device *device, u32 port_num,
-				u64 *sn_pfx)
+				u64 *sn_pfx/*出参，缓存的subnet prefix*/)
 {
 	unsigned long flags;
 
 	read_lock_irqsave(&device->cache_lock, flags);
+	/*取缓存的subnet prefix*/
 	*sn_pfx = device->port_data[port_num].cache.subnet_prefix;
 	read_unlock_irqrestore(&device->cache_lock, flags);
 }
 EXPORT_SYMBOL(ib_get_cached_subnet_prefix);
 
 int ib_find_cached_pkey(struct ib_device *device, u32 port_num,
-			u16 pkey, u16 *index)
+			u16 pkey/*查询用的pkey*/, u16 *index/*出参，返回对应的index*/)
 {
 	struct ib_pkey_cache *cache;
 	unsigned long flags;
@@ -1108,6 +1131,7 @@ int ib_find_cached_pkey(struct ib_device *device, u32 port_num,
 
 	read_lock_irqsave(&device->cache_lock, flags);
 
+	/*取得cache*/
 	cache = device->port_data[port_num].cache.pkey;
 	if (!cache) {
 		ret = -EINVAL;
@@ -1119,15 +1143,18 @@ int ib_find_cached_pkey(struct ib_device *device, u32 port_num,
 	for (i = 0; i < cache->table_len; ++i)
 		if ((cache->table[i] & 0x7fff) == (pkey & 0x7fff)) {
 			if (cache->table[i] & 0x8000) {
+				/*cache中保存的值，高位有'1'标记，设置index*/
 				*index = i;
 				ret = 0;
 				break;
 			} else {
+				/*高位不匹配，设置partial_ix*/
 				partial_ix = i;
 			}
 		}
 
 	if (ret && partial_ix >= 0) {
+		/*无完全匹配的，返回partial_ix*/
 		*index = partial_ix;
 		ret = 0;
 	}
@@ -1140,7 +1167,7 @@ err:
 EXPORT_SYMBOL(ib_find_cached_pkey);
 
 int ib_find_exact_cached_pkey(struct ib_device *device, u32 port_num,
-			      u16 pkey, u16 *index)
+			      u16 pkey/*要匹配的pkey*/, u16 *index/*出参，相等pkey的索引号*/)
 {
 	struct ib_pkey_cache *cache;
 	unsigned long flags;
@@ -1152,6 +1179,7 @@ int ib_find_exact_cached_pkey(struct ib_device *device, u32 port_num,
 
 	read_lock_irqsave(&device->cache_lock, flags);
 
+	/*取此ib设备指定port的pkey cache*/
 	cache = device->port_data[port_num].cache.pkey;
 	if (!cache) {
 		ret = -EINVAL;
@@ -1160,8 +1188,9 @@ int ib_find_exact_cached_pkey(struct ib_device *device, u32 port_num,
 
 	*index = -1;
 
+	/*遍历pkey cache,找出相等的pkey,返回其对应的索引号*/
 	for (i = 0; i < cache->table_len; ++i)
-		if (cache->table[i] == pkey) {
+		if (cache->table[i] == pkey/*需要完全匹配*/) {
 			*index = i;
 			ret = 0;
 			break;
@@ -1271,19 +1300,23 @@ ssize_t rdma_query_gid_table(struct ib_device *device,
 	struct net_device *ndev;
 	unsigned long flags;
 
+	/*遍历此ib设备的所有port*/
 	rdma_for_each_port(device, port_num) {
 		table = rdma_gid_table(device, port_num);
 		read_lock_irqsave(&table->rwlock, flags);
+		/*遍历table*/
 		for (i = 0; i < table->sz; i++) {
 			if (!is_gid_entry_valid(table->data_vec[i]))
+				/*跳过无效的gid_entry*/
 				continue;
 			if (num_entries >= max_entries) {
+				/*达到最大值，仍未完成table遍历，报错*/
 				ret = -EINVAL;
 				goto err;
 			}
 
+			/*取i号表项，填充gid*/
 			gid_attr = &table->data_vec[i]->attr;
-
 			memcpy(&entries->gid, &gid_attr->gid,
 			       sizeof(gid_attr->gid));
 			entries->gid_index = gid_attr->index;
@@ -1295,8 +1328,8 @@ ssize_t rdma_query_gid_table(struct ib_device *device,
 			if (ndev)
 				entries->netdev_ifindex = ndev->ifindex;
 
-			num_entries++;
-			entries++;
+			num_entries++;/*entry数增加*/
+			entries++;/*指针递增*/
 		}
 		read_unlock_irqrestore(&table->rwlock, flags);
 	}
@@ -1506,7 +1539,7 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 	if (!tprops)
 		return -ENOMEM;
 
-	/*查询port属性*/
+	/*查询port属性，获得tprops*/
 	ret = ib_query_port(device, port, tprops);
 	if (ret) {
 		dev_warn(&device->dev, "ib_query_port failed (%d)\n", ret);
@@ -1524,7 +1557,8 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 	update_pkeys &= !!tprops->pkey_tbl_len;
 
 	if (update_pkeys) {
-	    /*申请tprops->pkey_tbl_len个uint16放在Pkey_cache后面*/
+	    /*指明更新update_pkeys且pkey_tbl_len不为0，
+	     * 则申请tprops->pkey_tbl_len个uint16放在Pkey_cache后面*/
 		pkey_cache = kmalloc(struct_size(pkey_cache, table,
 						 tprops->pkey_tbl_len),
 				     GFP_KERNEL);
@@ -1533,10 +1567,11 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 			goto err;
 		}
 
+		/*指明table大小*/
 		pkey_cache->table_len = tprops->pkey_tbl_len;
 
 		for (i = 0; i < pkey_cache->table_len; ++i) {
-		    /*填充i号pkey*/
+		    /*查询device号设备，填充i号pkey*/
 			ret = ib_query_pkey(device, port, i,
 					    pkey_cache->table + i);
 			if (ret) {
@@ -1552,12 +1587,15 @@ ib_cache_update(struct ib_device *device, u32 port, bool update_gids,
 
 	/*更新pkey_cache*/
 	if (update_pkeys) {
+		/*保存旧的pkey*/
 		old_pkey_cache = device->port_data[port].cache.pkey;
+		/*更新为新的pkey*/
 		device->port_data[port].cache.pkey = pkey_cache;
 	}
 	device->port_data[port].cache.lmc = tprops->lmc;
 	device->port_data[port].cache.port_state = tprops->state;
 
+	/*更新subnet-prefix*/
 	device->port_data[port].cache.subnet_prefix = tprops->subnet_prefix;
 	write_unlock_irq(&device->cache_lock);
 
@@ -1681,7 +1719,7 @@ void ib_cache_release_one(struct ib_device *device)
 	 * longer be accessed.
 	 */
 	rdma_for_each_port (device, p)
-		kfree(device->port_data[p].cache.pkey);
+		kfree(device->port_data[p].cache.pkey);/*移除缓存的pkey*/
 
 	gid_table_release_one(device);
 }

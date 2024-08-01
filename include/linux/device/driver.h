@@ -258,11 +258,13 @@ void driver_init(void);
 #define module_driver(__driver, __register, __unregister, ...) \
 static int __init __driver##_init(void) \
 { \
+	/*调用驱动注册函数*/\
 	return __register(&(__driver) , ##__VA_ARGS__); \
 } \
 module_init(__driver##_init); \
 static void __exit __driver##_exit(void) \
 { \
+	/*调用驱动解注册函数*/\
 	__unregister(&(__driver) , ##__VA_ARGS__); \
 } \
 module_exit(__driver##_exit);

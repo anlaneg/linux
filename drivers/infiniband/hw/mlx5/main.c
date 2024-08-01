@@ -245,6 +245,7 @@ done:
 	return NOTIFY_DONE;
 }
 
+/*返回此ib设备向下对应的netdev*/
 static struct net_device *mlx5_ib_get_netdev(struct ib_device *device,
 					     u32 port_num)
 {

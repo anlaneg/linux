@@ -1563,8 +1563,10 @@ static void smc_llc_add_link_work(struct work_struct *work)
 	}
 
 	if (lgr->role == SMC_CLNT)
+		/*客户端处理*/
 		smc_llc_process_cli_add_link(lgr);
 	else
+		/*server端处理*/
 		smc_llc_process_srv_add_link(lgr);
 out:
 	if (lgr->llc_flow_lcl.type != SMC_LLC_FLOW_REQ_ADD_LINK)

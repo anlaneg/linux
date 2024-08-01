@@ -72,11 +72,15 @@ static void create_mad_addr_info(struct ib_mad_send_wr_private *mad_send_wr,
 }
 #endif
 
+/*send queue的长度*/
 static int mad_sendq_size = IB_MAD_QP_SEND_SIZE;
+/*recv queue的长度*/
 static int mad_recvq_size = IB_MAD_QP_RECV_SIZE;
 
+/*模块参数，设置发送queue长度*/
 module_param_named(send_queue_size, mad_sendq_size, int, 0444);
 MODULE_PARM_DESC(send_queue_size, "Size of send queue in number of work requests");
+/*模块参数，设置接收queue长度*/
 module_param_named(recv_queue_size, mad_recvq_size, int, 0444);
 MODULE_PARM_DESC(recv_queue_size, "Size of receive queue in number of work requests");
 
@@ -117,6 +121,7 @@ __ib_get_mad_port(struct ib_device *device, u32 port_num)
 {
 	struct ib_mad_port_private *entry;
 
+	/*在ib_mad_port_list上通过(device,port_num)查找ib_mad_port_private*/
 	list_for_each_entry(entry, &ib_mad_port_list, port_list) {
 		if (entry->device == device && entry->port_num == port_num)
 			return entry;
@@ -148,6 +153,7 @@ static inline u8 convert_mgmt_class(u8 mgmt_class)
 		0 : mgmt_class;
 }
 
+/*smi,gsi两种特别qp类型分别对应了0,1两个qp number*/
 static int get_spl_qp_index(enum ib_qp_type qp_type)
 {
 	switch (qp_type) {
@@ -216,12 +222,12 @@ EXPORT_SYMBOL(ib_response_mad);
  * Context: Process context.
  */
 struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
-					   u32 port_num,
-					   enum ib_qp_type qp_type,
+					   u32 port_num/*agent对应的ib设备port*/,
+					   enum ib_qp_type qp_type/*qp类型*/,
 					   struct ib_mad_reg_req *mad_reg_req,
 					   u8 rmpp_version,
 					   ib_mad_send_handler send_handler,
-					   ib_mad_recv_handler recv_handler,
+					   ib_mad_recv_handler recv_handler/*mad agent的报文接收回调*/,
 					   void *context,
 					   u32 registration_flags)
 {
@@ -238,12 +244,13 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 
 	if ((qp_type == IB_QPT_SMI && !rdma_cap_ib_smi(device, port_num)) ||
 	    (qp_type == IB_QPT_GSI && !rdma_cap_ib_cm(device, port_num)))
+		/*smi,gsi两种qp分别要求硬件支持相应的能力*/
 		return ERR_PTR(-EPROTONOSUPPORT);
 
 	/* Validate parameters */
-	qpn = get_spl_qp_index(qp_type);
+	qpn = get_spl_qp_index(qp_type);/*按qp_type映射qp nubmer*/
 	if (qpn == -1) {
-		/*只支持smi,gsi类型的qp*/
+		/*当前只支持smi,gsi两种类型的qp调用*/
 		dev_dbg_ratelimited(&device->dev, "%s: invalid QP Type %d\n",
 				    __func__, qp_type);
 		goto error1;
@@ -266,6 +273,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 			goto error1;
 		}
 		if (!recv_handler) {
+			/*必须提供recv handler*/
 			dev_dbg_ratelimited(&device->dev,
 					    "%s: no recv_handler\n", __func__);
 			goto error1;
@@ -345,8 +353,10 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	}
 
 	/* Validate device and port */
+	/*取此device,port_num对应的ib_map_port*/
 	port_priv = ib_get_mad_port(device, port_num);
 	if (!port_priv) {
+		/*这个port由mad_client.add产生，这里不存在，故报错*/
 		dev_dbg_ratelimited(&device->dev, "%s: Invalid port %u\n",
 				    __func__, port_num);
 		ret = ERR_PTR(-ENODEV);
@@ -357,6 +367,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	 * will not have QP0.
 	 */
 	if (!port_priv->qp_info[qpn].qp) {
+		/*此qp没有被创建，故说明不支持此qp*/
 		dev_dbg_ratelimited(&device->dev, "%s: QP %d not supported\n",
 				    __func__, qpn);
 		ret = ERR_PTR(-EPROTONOSUPPORT);
@@ -366,6 +377,7 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	/* Allocate structures */
 	mad_agent_priv = kzalloc(sizeof *mad_agent_priv, GFP_KERNEL);
 	if (!mad_agent_priv) {
+		/*申请结构体失败*/
 		ret = ERR_PTR(-ENOMEM);
 		goto error1;
 	}
@@ -383,10 +395,10 @@ struct ib_mad_agent *ib_register_mad_agent(struct ib_device *device,
 	mad_agent_priv->reg_req = reg_req;
 	mad_agent_priv->agent.rmpp_version = rmpp_version;
 	mad_agent_priv->agent.device = device;
-	mad_agent_priv->agent.recv_handler = recv_handler;
-	mad_agent_priv->agent.send_handler = send_handler;
+	mad_agent_priv->agent.recv_handler = recv_handler;/*设置recv回调*/
+	mad_agent_priv->agent.send_handler = send_handler;/*设置send回调*/
 	mad_agent_priv->agent.context = context;
-	mad_agent_priv->agent.qp = port_priv->qp_info[qpn].qp;
+	mad_agent_priv->agent.qp = port_priv->qp_info[qpn].qp;/*设置这类client对应的qp*/
 	mad_agent_priv->agent.port_num = port_num;
 	mad_agent_priv->agent.flags = registration_flags;
 	spin_lock_init(&mad_agent_priv->lock);
@@ -1032,7 +1044,7 @@ int ib_send_mad(struct ib_mad_send_wr_private *mad_send_wr)
 	spin_lock_irqsave(&qp_info->send_queue.lock, flags);
 	if (qp_info->send_queue.count < qp_info->send_queue.max_active) {
 		trace_ib_mad_ib_send_mad(mad_send_wr, qp_info);
-		/*向qp发送此wr*/
+		/*向qp准备需要发送的wr*/
 		ret = ib_post_send(mad_agent->qp, &mad_send_wr->send_wr.wr,
 				   NULL);
 		list = &qp_info->send_queue.list;
@@ -1809,6 +1821,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 
 	/* Complete corresponding request */
 	if (ib_response_mad(&mad_recv_wc->recv_buf.mad->mad_hdr)) {
+		/*收到响应类mad报文*/
 		spin_lock_irqsave(&mad_agent_priv->lock, flags);
 		mad_send_wr = ib_find_send_mad(mad_agent_priv, mad_recv_wc);
 		if (!mad_send_wr) {
@@ -1849,6 +1862,7 @@ static void ib_mad_complete_recv(struct ib_mad_agent_private *mad_agent_priv,
 			ib_mad_complete_send_wr(mad_send_wr, &mad_send_wc);
 		}
 	} else {
+		/*agent提供有recv_handler,触发此handler使agent处理此报文*/
 		mad_agent_priv->agent.recv_handler(&mad_agent_priv->agent, NULL,
 						   mad_recv_wc);
 		deref_mad_agent(mad_agent_priv);
@@ -2016,6 +2030,7 @@ handle_smi(struct ib_mad_port_private *port_priv,
 	return handle_ib_smi(port_priv, qp_info, wc, port_num, recv, response);
 }
 
+/*qp填充完成wc后，此回调将被触发*/
 static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 {
 	struct ib_mad_port_private *port_priv = cq->cq_context;
@@ -2124,6 +2139,7 @@ static void ib_mad_recv_done(struct ib_cq *cq, struct ib_wc *wc)
 
 	mad_agent = find_mad_agent(port_priv, (const struct ib_mad_hdr *)recv->mad);
 	if (mad_agent) {
+		/*查找到对应的agent,使agent处理接收到的报文*/
 		trace_ib_mad_recv_done_agent(mad_agent);
 		ib_mad_complete_recv(mad_agent, &recv->header.recv_wc);
 		/*
@@ -2306,6 +2322,7 @@ retry:
 
 	/* Move queued send to the send queue */
 	if (send_queue->count-- > send_queue->max_active) {
+		/*转换为queued_send_wr*/
 		mad_list = container_of(qp_info->overflow_list.next,
 					struct ib_mad_list_head, list);
 		queued_send_wr = container_of(mad_list,
@@ -2322,6 +2339,7 @@ retry:
 
 	if (queued_send_wr) {
 		trace_ib_mad_send_done_resend(queued_send_wr, qp_info);
+		/*提供待发送的buffer*/
 		ret = ib_post_send(qp_info->qp, &queued_send_wr->send_wr.wr,
 				   NULL);
 		if (ret) {
@@ -2675,7 +2693,7 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 	struct ib_mad_private *mad_priv;
 	struct ib_sge sg_list;
 	struct ib_recv_wr recv_wr;
-	struct ib_mad_queue *recv_queue = &qp_info->recv_queue;
+	struct ib_mad_queue *recv_queue = &qp_info->recv_queue;/*取接收队列*/
 
 	/* Initialize common scatter list fields */
 	sg_list.lkey = qp_info->port_priv->pd->local_dma_lkey;
@@ -2698,11 +2716,11 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 				break;
 			}
 		}
-		sg_list.length = mad_priv_dma_size(mad_priv);
+		sg_list.length = mad_priv_dma_size(mad_priv);/*设置接收长度*/
 		sg_list.addr = ib_dma_map_single(qp_info->port_priv->device,
 						 &mad_priv->grh,
 						 mad_priv_dma_size(mad_priv),
-						 DMA_FROM_DEVICE);
+						 DMA_FROM_DEVICE);/*设置接收地址*/
 		if (unlikely(ib_dma_mapping_error(qp_info->port_priv->device,
 						  sg_list.addr))) {
 			kfree(mad_priv);
@@ -2711,16 +2729,19 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 		}
 		mad_priv->header.mapping = sg_list.addr;
 		mad_priv->header.mad_list.mad_queue = recv_queue;
+		/*此sg_list收取完成后要触发的cqe done回调,见__ib_process_cq*/
 		mad_priv->header.mad_list.cqe.done = ib_mad_recv_done;
 		recv_wr.wr_cqe = &mad_priv->header.mad_list.cqe;
 
 		/* Post receive WR */
 		spin_lock_irqsave(&recv_queue->lock, flags);
-		post = (++recv_queue->count < recv_queue->max_active);
+		post = (++recv_queue->count < recv_queue->max_active);/*是否达到recv_queue的最大值*/
 		list_add_tail(&mad_priv->header.mad_list.list, &recv_queue->list);
 		spin_unlock_irqrestore(&recv_queue->lock, flags);
+		/*填充收取用的buffer*/
 		ret = ib_post_recv(qp_info->qp, &recv_wr, NULL);
 		if (ret) {
+			/*添加收取用buffer失败*/
 			spin_lock_irqsave(&recv_queue->lock, flags);
 			list_del(&mad_priv->header.mad_list.list);
 			recv_queue->count--;
@@ -2734,7 +2755,7 @@ static int ib_mad_post_receive_mads(struct ib_mad_qp_info *qp_info,
 				"ib_post_recv failed: %d\n", ret);
 			break;
 		}
-	} while (post);
+	} while (post);/*继续循环，至到达到recv_queue可存放的最大值*/
 
 	return ret;
 }
@@ -2793,9 +2814,11 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 	if (ret)
 		pkey_index = 0;
 
+	/*遍历此port对应的mad qp*/
 	for (i = 0; i < IB_MAD_QPS_CORE; i++) {
 		qp = port_priv->qp_info[i].qp;
 		if (!qp)
+			/*此类型无对应的qp,忽略*/
 			continue;
 
 		/*
@@ -2805,6 +2828,7 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 		attr->qp_state = IB_QPS_INIT;
 		attr->pkey_index = pkey_index;
 		attr->qkey = (qp->qp_num == 0) ? 0 : IB_QP1_QKEY;
+		/*初始化此qp*/
 		ret = ib_modify_qp(qp, attr, IB_QP_STATE |
 					     IB_QP_PKEY_INDEX | IB_QP_QKEY);
 		if (ret) {
@@ -2814,6 +2838,7 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 			goto out;
 		}
 
+		/*变更为ready to receive*/
 		attr->qp_state = IB_QPS_RTR;
 		ret = ib_modify_qp(qp, attr, IB_QP_STATE);
 		if (ret) {
@@ -2823,6 +2848,7 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 			goto out;
 		}
 
+		/*变更为ready to send*/
 		attr->qp_state = IB_QPS_RTS;
 		attr->sq_psn = IB_MAD_SEND_Q_PSN;
 		ret = ib_modify_qp(qp, attr, IB_QP_STATE | IB_QP_SQ_PSN);
@@ -2844,8 +2870,10 @@ static int ib_mad_port_start(struct ib_mad_port_private *port_priv)
 
 	for (i = 0; i < IB_MAD_QPS_CORE; i++) {
 		if (!port_priv->qp_info[i].qp)
+			/*无此qp,跳过*/
 			continue;
 
+		/*在此qp上添加*/
 		ret = ib_mad_post_receive_mads(&port_priv->qp_info[i], NULL);
 		if (ret) {
 			dev_err(&port_priv->device->dev,
@@ -2892,20 +2920,24 @@ static int create_mad_qp(struct ib_mad_qp_info *qp_info,
 	struct ib_qp_init_attr	qp_init_attr;
 	int ret;
 
+	/*初始化指定qp_type的qp_init_attr属性*/
 	memset(&qp_init_attr, 0, sizeof qp_init_attr);
-	qp_init_attr.send_cq = qp_info->port_priv->cq;
+	qp_init_attr.send_cq = qp_info->port_priv->cq;/*设置cq*/
 	qp_init_attr.recv_cq = qp_info->port_priv->cq;
 	qp_init_attr.sq_sig_type = IB_SIGNAL_ALL_WR;
 	qp_init_attr.cap.max_send_wr = mad_sendq_size;
 	qp_init_attr.cap.max_recv_wr = mad_recvq_size;
 	qp_init_attr.cap.max_send_sge = IB_MAD_SEND_REQ_MAX_SG;
 	qp_init_attr.cap.max_recv_sge = IB_MAD_RECV_REQ_MAX_SG;
-	qp_init_attr.qp_type = qp_type;
-	qp_init_attr.port_num = qp_info->port_priv->port_num;
+	qp_init_attr.qp_type = qp_type;/*要初始化的qp类型*/
+	qp_init_attr.port_num = qp_info->port_priv->port_num;/*对应的ib port*/
 	qp_init_attr.qp_context = qp_info;
 	qp_init_attr.event_handler = qp_event_handler;
+
+	/*利用qp_init_attr创建qp*/
 	qp_info->qp = ib_create_qp(qp_info->port_priv->pd, &qp_init_attr);
 	if (IS_ERR(qp_info->qp)) {
+		/*创建qp失败*/
 		dev_err(&qp_info->port_priv->device->dev,
 			"Couldn't create ib_mad QP%d\n",
 			get_spl_qp_index(qp_type));
@@ -2943,10 +2975,12 @@ static int ib_mad_port_open(struct ib_device *device,
 	int has_smi;
 
 	if (WARN_ON(rdma_max_mad_size(device, port_num) < IB_MGMT_MAD_SIZE))
+		/*mad_size过小，返回失败*/
 		return -EFAULT;
 
 	if (WARN_ON(rdma_cap_opa_mad(device, port_num) &&
 		    rdma_max_mad_size(device, port_num) < OPA_MGMT_MAD_SIZE))
+		/*支持opa,且opa mad size过小时，返回失败*/
 		return -EFAULT;
 
 	/* Create new device info */
@@ -2957,14 +2991,16 @@ static int ib_mad_port_open(struct ib_device *device,
 	port_priv->device = device;
 	port_priv->port_num = port_num;
 	spin_lock_init(&port_priv->reg_lock);
-	init_mad_qp(port_priv, &port_priv->qp_info[0]);
+	init_mad_qp(port_priv, &port_priv->qp_info[0]);/*初始化qp_info*/
 	init_mad_qp(port_priv, &port_priv->qp_info[1]);
 
-	cq_size = mad_sendq_size + mad_recvq_size;
+	cq_size = mad_sendq_size + mad_recvq_size;/*cq长度*/
 	has_smi = rdma_cap_ib_smi(device, port_num);
 	if (has_smi)
+		/*支持smi,cq长度翻倍*/
 		cq_size *= 2;
 
+	/*创建pd*/
 	port_priv->pd = ib_alloc_pd(device, 0);
 	if (IS_ERR(port_priv->pd)) {
 		dev_err(&device->dev, "Couldn't create ib_mad PD\n");
@@ -2972,6 +3008,7 @@ static int ib_mad_port_open(struct ib_device *device,
 		goto error3;
 	}
 
+	/*创建cq*/
 	port_priv->cq = ib_alloc_cq(port_priv->device, port_priv, cq_size, 0,
 			IB_POLL_UNBOUND_WORKQUEUE);
 	if (IS_ERR(port_priv->cq)) {
@@ -2981,10 +3018,13 @@ static int ib_mad_port_open(struct ib_device *device,
 	}
 
 	if (has_smi) {
+		/*支持smi,创建smi对应的qp*/
 		ret = create_mad_qp(&port_priv->qp_info[0], IB_QPT_SMI);
 		if (ret)
 			goto error6;
 	}
+
+	/*创建qpn==1对应的qp,并设置port_priv->qp_info[1].qp*/
 	ret = create_mad_qp(&port_priv->qp_info[1], IB_QPT_GSI);
 	if (ret)
 		goto error7;
@@ -2997,6 +3037,7 @@ static int ib_mad_port_open(struct ib_device *device,
 	}
 
 	spin_lock_irqsave(&ib_mad_port_list_lock, flags);
+	/*添加此port_priv到ib_mad_port_list链表上*/
 	list_add_tail(&port_priv->port_list, &ib_mad_port_list);
 	spin_unlock_irqrestore(&ib_mad_port_list_lock, flags);
 
@@ -3074,8 +3115,10 @@ static int ib_mad_init_device(struct ib_device *device)
 
 	for (i = start; i <= rdma_end_port(device); i++) {
 		if (!rdma_cap_ib_mad(device, i))
+			/*不支持管理报文，跳过*/
 			continue;
 
+		/*初始化i号port*/
 		ret = ib_mad_port_open(device, i);
 		if (ret) {
 			dev_err(&device->dev, "Couldn't open port %d\n", i);
@@ -3145,6 +3188,7 @@ int ib_mad_init(void)
 	INIT_LIST_HEAD(&ib_mad_port_list);
 
 	if (ib_register_client(&mad_client)) {
+		/*注册client失败*/
 		pr_err("Couldn't register ib_mad client\n");
 		return -EINVAL;
 	}

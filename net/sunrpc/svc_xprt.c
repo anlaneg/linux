@@ -42,6 +42,7 @@ static int svc_conn_age_period = 6*60;
 
 /* List of registered transport classes */
 static DEFINE_SPINLOCK(svc_xprt_class_lock);
+/*用于注册系统中所有svc_xprt_class*/
 static LIST_HEAD(svc_xprt_class_list);
 
 /* SMP locking strategy:
@@ -91,8 +92,10 @@ int svc_reg_xprt_class(struct svc_xprt_class *xcl)
 	/* Make sure there isn't already a class with the same name */
 	list_for_each_entry(cl, &svc_xprt_class_list, xcl_list) {
 		if (strcmp(xcl->xcl_name, cl->xcl_name) == 0)
+			/*此xcl已存在*/
 			goto out;
 	}
+	/*将此xcl注册到链表*/
 	list_add_tail(&xcl->xcl_list, &svc_xprt_class_list);
 	res = 0;
 out:
@@ -249,6 +252,7 @@ static struct svc_xprt *__svc_xpo_create(struct svc_xprt_class *xcl,
 		return ERR_PTR(-EAFNOSUPPORT);
 	}
 
+	/*创建svc_xprt*/
 	xprt = xcl->xcl_ops->xpo_create(serv, net, sap, len, flags);
 	if (IS_ERR(xprt))
 		trace_svc_xprt_create_err(serv->sv_program->pg_name,
@@ -293,7 +297,7 @@ void svc_add_new_perm_xprt(struct svc_serv *serv, struct svc_xprt *new)
 	svc_xprt_received(new);
 }
 
-static int _svc_xprt_create(struct svc_serv *serv, const char *xprt_name,
+static int _svc_xprt_create(struct svc_serv *serv, const char *xprt_name/*要匹配的xcl_name*/,
 			    struct net *net, const int family,
 			    const unsigned short port, int flags,
 			    const struct cred *cred)
@@ -306,12 +310,15 @@ static int _svc_xprt_create(struct svc_serv *serv, const char *xprt_name,
 		unsigned short newport;
 
 		if (strcmp(xprt_name, xcl->xcl_name))
+			/*两者不相等，忽略*/
 			continue;
 
 		if (!try_module_get(xcl->xcl_owner))
+			/*拿不到module引用，报错*/
 			goto err;
 
 		spin_unlock(&svc_xprt_class_lock);
+		/*按family,port创建svc_xprt*/
 		newxprt = __svc_xpo_create(xcl, serv, net, family, port, flags);
 		if (IS_ERR(newxprt)) {
 			module_put(xcl->xcl_owner);

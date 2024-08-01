@@ -246,6 +246,7 @@ int inet_sk_diag_fill(struct sock *sk, struct inet_connection_sock *icsk,
 	void *info = NULL;
 
 	cb_data = cb->data;
+	/*取对应的diag handler*/
 	handler = inet_diag_table[inet_diag_get_protocol(req, cb_data)];
 	BUG_ON(!handler);
 
@@ -1504,15 +1505,17 @@ int inet_diag_register(const struct inet_diag_handler *h)
 	mutex_lock(&inet_diag_table_mutex);
 	err = -EEXIST;
 	if (!inet_diag_table[type]) {
+		/*此type未设置，在此处设置*/
 		inet_diag_table[type] = h;
 		err = 0;
 	}
 	mutex_unlock(&inet_diag_table_mutex);
 out:
-	return err;
+	return err;/*已存在*/
 }
 EXPORT_SYMBOL_GPL(inet_diag_register);
 
+/*移除指定diag handler*/
 void inet_diag_unregister(const struct inet_diag_handler *h)
 {
 	const __u16 type = h->idiag_type;
@@ -1532,14 +1535,17 @@ static int __init inet_diag_init(void)
 					  sizeof(struct inet_diag_handler *));
 	int err = -ENOMEM;
 
+	/*申请inet_diag_table*/
 	inet_diag_table = kzalloc(inet_diag_table_size, GFP_KERNEL);
 	if (!inet_diag_table)
 		goto out;
 
+	/*注册inet diag handler*/
 	err = sock_diag_register(&inet_diag_handler);
 	if (err)
 		goto out_free_nl;
 
+	/*注册inet6 diag handler*/
 	err = sock_diag_register(&inet6_diag_handler);
 	if (err)
 		goto out_free_inet;

@@ -150,11 +150,11 @@ enum ib_gid_type {
 /*roce端口号4791*/
 #define ROCE_V2_UDP_DPORT      4791
 struct ib_gid_attr {
-	struct net_device __rcu	*ndev;
-	struct ib_device	*device;
-	union ib_gid		gid;
-	enum ib_gid_type	gid_type;/*ib传输类型*/
-	u16			index;
+	struct net_device __rcu	*ndev;/*关联的netdev*/
+	struct ib_device	*device;/*对应的ib设备*/
+	union ib_gid		gid;/*gid*/
+	enum ib_gid_type	gid_type;/*gid的类型，ib传输类型（ib,rocev1,rocev2)*/
+	u16			index;/*gid对应的索引*/
 	u32			port_num;
 };
 
@@ -894,6 +894,7 @@ __attribute_const__ int ib_rate_to_mbps(enum ib_rate rate);
  *                            data integrity operations
  */
 enum ib_mr_type {
+	/*定义memory region类型*/
 	IB_MR_TYPE_MEM_REG,
 	IB_MR_TYPE_SG_GAPS,
 	IB_MR_TYPE_DM,
@@ -1060,6 +1061,7 @@ enum ib_cq_notify_flags {
 	IB_CQ_REPORT_MISSED_EVENTS	= 1 << 2,
 };
 
+/*定义srq类型*/
 enum ib_srq_type {
 	IB_SRQT_BASIC = IB_UVERBS_SRQT_BASIC,
 	IB_SRQT_XRC = IB_UVERBS_SRQT_XRC,
@@ -1104,8 +1106,8 @@ struct ib_srq_init_attr {
 };
 
 struct ib_qp_cap {
-	u32	max_send_wr;
-	u32	max_recv_wr;
+	u32	max_send_wr;/*send work request最大数目*/
+	u32	max_recv_wr;/*recv work request最大数目*/
 	u32	max_send_sge;
 	u32	max_recv_sge;
 	u32	max_inline_data;
@@ -1198,7 +1200,7 @@ struct ib_qp_init_attr {
 	struct ib_xrcd	       *xrcd;     /* XRC TGT QPs only */
 	struct ib_qp_cap	cap;
 	enum ib_sig_type	sq_sig_type;
-	/*qp类型*/
+	/*qp类型，例如IB_QPT_GSI对应的是pqn==1对应的qp*/
 	enum ib_qp_type		qp_type;
 	u32			create_flags;
 
@@ -1284,13 +1286,13 @@ enum ib_qp_attr_mask {
 };
 
 enum ib_qp_state {
-	IB_QPS_RESET,
-	IB_QPS_INIT,
-	IB_QPS_RTR,
-	IB_QPS_RTS,
-	IB_QPS_SQD,
-	IB_QPS_SQE,
-	IB_QPS_ERR
+	IB_QPS_RESET,//初始化状态
+	IB_QPS_INIT, //指init
+	IB_QPS_RTR,//IB_QPS_RTR指Ready to Receive
+	IB_QPS_RTS,//指Ready to Send
+	IB_QPS_SQD,//指Send Queue Drained
+	IB_QPS_SQE,//指Send Queue Error
+	IB_QPS_ERR //指Error
 };
 
 enum ib_mig_state {
@@ -1388,7 +1390,7 @@ enum ib_send_flags {
 
 struct ib_sge {
 	u64	addr;
-	u32	length;
+	u32	length;/*长度*/
 	u32	lkey;
 };
 
@@ -1404,6 +1406,7 @@ struct ib_send_wr {
 		u64		wr_id;
 		struct ib_cqe	*wr_cqe;
 	};
+	/*记录一组待发送的缓存区*/
 	struct ib_sge	       *sg_list;
 	/*指明当前sg_list数组大小*/
 	int			num_sge;
@@ -1471,20 +1474,25 @@ static inline const struct ib_reg_wr *reg_wr(const struct ib_send_wr *wr)
 }
 
 struct ib_recv_wr {
-	struct ib_recv_wr      *next;
+	struct ib_recv_wr      *next;/*指向下一个wr*/
 	union {
 		u64		wr_id;
 		struct ib_cqe	*wr_cqe;
 	};
+	/*ib_sge数组（用于），由num_sge指明数组大小*/
 	struct ib_sge	       *sg_list;
 	/*sg_list数目*/
 	int			num_sge;
 };
 
 enum ib_access_flags {
+	/*本端写权限*/
 	IB_ACCESS_LOCAL_WRITE = IB_UVERBS_ACCESS_LOCAL_WRITE,
+	/*远端写权限*/
 	IB_ACCESS_REMOTE_WRITE = IB_UVERBS_ACCESS_REMOTE_WRITE,
+	/*远端读权限*/
 	IB_ACCESS_REMOTE_READ = IB_UVERBS_ACCESS_REMOTE_READ,
+	/*远端原子*/
 	IB_ACCESS_REMOTE_ATOMIC = IB_UVERBS_ACCESS_REMOTE_ATOMIC,
 	IB_ACCESS_MW_BIND = IB_UVERBS_ACCESS_MW_BIND,
 	IB_ZERO_BASED = IB_UVERBS_ACCESS_ZERO_BASED,
@@ -1619,6 +1627,7 @@ struct ib_cq {
 	struct ib_device       *device;
 	/*对应的ucq object*/
 	struct ib_ucq_object   *uobject;
+	/*回调*/
 	ib_comp_handler   	comp_handler;
 	void                  (*event_handler)(struct ib_event *, void *);
 	void                   *cq_context;
@@ -1626,8 +1635,8 @@ struct ib_cq {
 	int               	cqe;
 	unsigned int		cqe_used;
 	atomic_t          	usecnt; /* count number of work queues */
-	enum ib_poll_context	poll_ctx;
-	struct ib_wc		*wc;
+	enum ib_poll_context	poll_ctx;/*指明cq poll的类型*/
+	struct ib_wc		*wc;/*用于填充cqe*/
 	struct list_head        pool_entry;
 	union {
 		struct irq_poll		iop;
@@ -1864,14 +1873,16 @@ struct ib_dm {
 };
 
 struct ib_mr {
-    /*所属的ib设备*/
+    /*mr所属的ib设备*/
 	struct ib_device  *device;
-	/*所属pd*/
+	/*mr所属的pd*/
 	struct ib_pd	  *pd;
-	u32		   lkey;
-	u32		   rkey;
+	u32		   lkey;/*此mr在本端的key*/
+	u32		   rkey;/*此mr在对端的key*/
 	u64		   iova;
-	u64		   length;/*内存长度*/
+	/*内存长度*/
+	u64		   length;
+	/*mr对应的页的大小*/
 	unsigned int	   page_size;
 	/*内存类型*/
 	enum ib_mr_type	   type;
@@ -2228,7 +2239,7 @@ enum ib_mad_result {
 
 struct ib_port_cache {
 	u64		      subnet_prefix;
-	/*pkey表*/
+	/*pkey表,各index有一个对应的pkey*/
 	struct ib_pkey_cache  *pkey;
 	/*gid表*/
 	struct ib_gid_table   *gid;
@@ -2351,7 +2362,7 @@ struct iw_cm_conn_param;
 
 /*申请一个driver对应的ib_type类型的obj*/
 #define rdma_zalloc_drv_obj_gfp(ib_dev, ib_type/*obj类型*/, gfp)                          \
-	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*obj元素大小*/, \
+	((struct ib_type *)rdma_zalloc_obj(ib_dev, ib_dev->ops.size_##ib_type/*此ib设备ib_type类型元素大小*/, \
 					   gfp, false))
 
 #define rdma_zalloc_drv_obj_numa(ib_dev, ib_type)                              \
@@ -2401,8 +2412,10 @@ struct ib_device_ops {
 	const struct attribute_group *device_group;
 	const struct attribute_group **port_groups;
 
+	/*将参数传入的待发送的buffer，存入到sq中，以便发送时使用*/
 	int (*post_send)(struct ib_qp *qp, const struct ib_send_wr *send_wr,
 			 const struct ib_send_wr **bad_send_wr);
+	/*将参数传入的待填充的buffer,存入到rq中，以便接收时填充用*/
 	int (*post_recv)(struct ib_qp *qp, const struct ib_recv_wr *recv_wr,
 			 const struct ib_recv_wr **bad_recv_wr);
 	void (*drain_rq)(struct ib_qp *qp);
@@ -2534,19 +2547,25 @@ struct ib_device_ops {
 			  struct ib_udata *udata);
 	int (*query_srq)(struct ib_srq *srq, struct ib_srq_attr *srq_attr);
 	int (*destroy_srq)(struct ib_srq *srq, struct ib_udata *udata);
-	/*创建qp,查询qp,修改qp,销毁qp*/
+	/*创建qp*/
 	int (*create_qp)(struct ib_qp *qp, struct ib_qp_init_attr *qp_init_attr,
 			 struct ib_udata *udata);
+	/*修改qp*/
 	int (*modify_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			 int qp_attr_mask, struct ib_udata *udata);
+	/*查询qp属性*/
 	int (*query_qp)(struct ib_qp *qp, struct ib_qp_attr *qp_attr,
 			int qp_attr_mask, struct ib_qp_init_attr *qp_init_attr);
+	/*销毁qp*/
 	int (*destroy_qp)(struct ib_qp *qp, struct ib_udata *udata);
-	/*创建cq,修改cq,销毁cq,调整cq大小*/
+	/*创建并初始经cq*/
 	int (*create_cq)(struct ib_cq *cq, const struct ib_cq_init_attr *attr,
 			 struct ib_udata *udata);
+	/*修改cq*/
 	int (*modify_cq)(struct ib_cq *cq, u16 cq_count, u16 cq_period);
+	/*销毁cq*/
 	int (*destroy_cq)(struct ib_cq *cq, struct ib_udata *udata);
+	/*调整cq大小*/
 	int (*resize_cq)(struct ib_cq *cq, int cqe, struct ib_udata *udata);
 	struct ib_mr *(*get_dma_mr)(struct ib_pd *pd, int mr_access_flags);
 	/*注册memory region*/
@@ -2562,6 +2581,7 @@ struct ib_device_ops {
 				       int mr_access_flags, struct ib_pd *pd,
 				       struct ib_udata *udata);
 	int (*dereg_mr)(struct ib_mr *mr, struct ib_udata *udata);
+	/*申请并初始化指定类型的mr（指明sg数目）*/
 	struct ib_mr *(*alloc_mr)(struct ib_pd *pd, enum ib_mr_type mr_type,
 				  u32 max_num_sg);
 	struct ib_mr *(*alloc_mr_integrity)(struct ib_pd *pd,
@@ -2656,6 +2676,7 @@ struct ib_device_ops {
 	 * Drivers are allowed to update all counters in leiu of just the
 	 *   one given in index at their option
 	 */
+	/*获取统计结果并填充rdma_hw_stats结构*/
 	int (*get_hw_stats)(struct ib_device *device,
 			    struct rdma_hw_stats *stats, u32 port, int index);
 
@@ -2749,7 +2770,7 @@ struct ib_device_ops {
 	DECLARE_RDMA_OBJ_SIZE(ib_counters);
 	DECLARE_RDMA_OBJ_SIZE(ib_cq);
 	DECLARE_RDMA_OBJ_SIZE(ib_mw);
-	DECLARE_RDMA_OBJ_SIZE(ib_pd);
+	DECLARE_RDMA_OBJ_SIZE(ib_pd);/*ib_pd结构体大小（各设备自定义）*/
 	DECLARE_RDMA_OBJ_SIZE(ib_qp);
 	DECLARE_RDMA_OBJ_SIZE(ib_rwq_ind_table);
 	DECLARE_RDMA_OBJ_SIZE(ib_srq);
@@ -2785,7 +2806,7 @@ struct ib_device {
 	spinlock_t qp_open_list_lock;
 
 	struct rw_semaphore	      client_data_rwsem;
-	/*此设备对应的所有client_data（按client id进行索引,每个client有自已的私有数据）*/
+	/*此设备对应的所有client_data（按client id进行索引,每个client有自已的私有数据），见ib_set_client_data*/
 	struct xarray                 client_data;
 	struct mutex                  unregistration_lock;
 
@@ -2870,23 +2891,25 @@ struct ib_device {
 };
 
 /*申请size大小的pd*/
-static inline void *rdma_zalloc_obj(struct ib_device *dev, size_t size,
-				    gfp_t gfp, bool is_numa_aware)
+static inline void *rdma_zalloc_obj(struct ib_device *dev, size_t size/*要申请的内存大小*/,
+				    gfp_t gfp, bool is_numa_aware/*是否关心numa*/)
 {
     /*如果关心numa，则在numa节点上申请size大小*/
 	if (is_numa_aware && dev->ops.get_numa_node)
-		return kzalloc_node(size, gfp, dev->ops.get_numa_node(dev));
+		return kzalloc_node(size, gfp, dev->ops.get_numa_node(dev)/*取设备所在的numa*/);
 
 	return kzalloc(size, gfp);
 }
 
 struct ib_client_nl_info;
 struct ib_client {
+	/*client名称*/
 	const char *name;
 	/*ib_device添加时调用*/
 	int (*add)(struct ib_device *ibdev);
 	/*ib_device移除时调用*/
 	void (*remove)(struct ib_device *, void *client_data);
+	/*ib_device改名时调用*/
 	void (*rename)(struct ib_device *dev, void *client_data);
 	/*通过此接口获得client的netlink相关信息*/
 	int (*get_nl_info)(struct ib_device *ibdev, void *client_data,
@@ -3159,7 +3182,7 @@ static inline u32 rdma_start_port(const struct ib_device *device)
  */
 static inline u32 rdma_end_port(const struct ib_device *device)
 {
-	/*ib switch的end_port为0*/
+	/*ib switch的end_port为0,ib设备的end_port数为其对应的物理port总数*/
 	return rdma_cap_ib_switch(device) ? 0 : device->phys_port_cnt;
 }
 
@@ -3252,7 +3275,7 @@ static inline bool rdma_protocol_usnic(const struct ib_device *device,
  */
 static inline bool rdma_cap_ib_mad(const struct ib_device *device, u32 port_num)
 {
-    /*是否支持管理报文*/
+    /*检查device设备的port_num号port是否支持管理报文*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 	       RDMA_CORE_CAP_IB_MAD;
 }
@@ -3278,6 +3301,7 @@ static inline bool rdma_cap_ib_mad(const struct ib_device *device, u32 port_num)
  */
 static inline bool rdma_cap_opa_mad(struct ib_device *device, u32 port_num)
 {
+	/*是否支持opa*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 		RDMA_CORE_CAP_OPA_MAD;
 }
@@ -3304,6 +3328,7 @@ static inline bool rdma_cap_opa_mad(struct ib_device *device, u32 port_num)
  */
 static inline bool rdma_cap_ib_smi(const struct ib_device *device, u32 port_num)
 {
+	/*检查是否支持ib-smi*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 	       RDMA_CORE_CAP_IB_SMI;
 }
@@ -3325,6 +3350,7 @@ static inline bool rdma_cap_ib_smi(const struct ib_device *device, u32 port_num)
  */
 static inline bool rdma_cap_ib_cm(const struct ib_device *device, u32 port_num)
 {
+	/*检查此ib是否有ib-cm能力*/
 	return device->port_data[port_num].immutable.core_cap_flags &
 	       RDMA_CORE_CAP_IB_CM;
 }
@@ -3462,7 +3488,7 @@ static inline bool rdma_cap_opa_ah(struct ib_device *device, u32 port_num)
 static inline size_t rdma_max_mad_size(const struct ib_device *device,
 				       u32 port_num)
 {
-    /*此port支持的最大管理报文大小*/
+    /*device的port_num号port支持的最大管理报文大小*/
 	return device->port_data[port_num].immutable.max_mad_size;
 }
 
@@ -3761,6 +3787,7 @@ static inline struct ib_srq *
 ib_create_srq(struct ib_pd *pd, struct ib_srq_init_attr *srq_init_attr)
 {
 	if (!pd->device->ops.create_srq)
+		/*设备不支持create_srq回调，报错*/
 		return ERR_PTR(-EOPNOTSUPP);
 
 	return ib_create_srq_user(pd, srq_init_attr, NULL, NULL);
@@ -3842,7 +3869,8 @@ struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 static inline struct ib_qp *ib_create_qp(struct ib_pd *pd,
 					 struct ib_qp_init_attr *init_attr)
 {
-	return ib_create_qp_kernel(pd, init_attr, KBUILD_MODNAME);
+	/*指明此函数是在kernel中创建qp*/
+	return ib_create_qp_kernel(pd, init_attr, KBUILD_MODNAME/*指明由哪个module创建此qp*/);
 }
 
 /**
@@ -3964,6 +3992,7 @@ static inline int ib_post_recv(struct ib_qp *qp,
 {
 	const struct ib_recv_wr *dummy;
 
+	/*按ib设备执行post_recv*/
 	return qp->device->ops.post_recv(qp, recv_wr, bad_recv_wr ? : &dummy);
 }
 
@@ -3974,6 +4003,7 @@ static inline struct ib_cq *ib_alloc_cq(struct ib_device *dev, void *private,
 					int nr_cqe, int comp_vector,
 					enum ib_poll_context poll_ctx)
 {
+	/*申请并创建cq*/
 	return __ib_alloc_cq(dev, private, nr_cqe, comp_vector, poll_ctx,
 			     KBUILD_MODNAME);
 }
@@ -4075,6 +4105,7 @@ static inline void ib_destroy_cq(struct ib_cq *cq)
 static inline int ib_poll_cq(struct ib_cq *cq, int num_entries,
 			     struct ib_wc *wc)
 {
+	/*自cq中出最多num_entries个元素，并将结果存入到wc中。*/
 	return cq->device->ops.poll_cq(cq, num_entries, wc);
 }
 

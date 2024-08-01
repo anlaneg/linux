@@ -27,14 +27,19 @@ struct bio_crypt_ctx;
  * multiple of 512 bytes. Hence these two constants.
  */
 #ifndef SECTOR_SHIFT
+/*一个扇区占用512字节，故采用9bit*/
 #define SECTOR_SHIFT 9
 #endif
 #ifndef SECTOR_SIZE
+/*扇区大小*/
 #define SECTOR_SIZE (1 << SECTOR_SHIFT)
 #endif
 
+/*一个页占PAGE_SHIFT，相对于一个扇区，可以包含有多少个扇区,数学表达：(2^m /2^n) = 2^(m-n)*/
 #define PAGE_SECTORS_SHIFT	(PAGE_SHIFT - SECTOR_SHIFT)
+/*一个页占用的扇区数*/
 #define PAGE_SECTORS		(1 << PAGE_SECTORS_SHIFT)
+/*一个页占用的扇区数掩码*/
 #define SECTOR_MASK		(PAGE_SECTORS - 1)
 
 struct block_device {
@@ -43,7 +48,7 @@ struct block_device {
 	/*此块设备对应的总扇区数*/
 	sector_t		bd_nr_sectors;
 	struct gendisk *	bd_disk;
-	struct request_queue *	bd_queue;
+	struct request_queue *	bd_queue;/*block设备queue*/
 	/*块设备统计信息*/
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
@@ -51,6 +56,7 @@ struct block_device {
 	/*块设备分区号*/
 	u8			bd_partno;
 	bool			bd_write_holder;
+	/*标记是否有submit_bio ops回调*/
 	bool			bd_has_submit_bio;
 	dev_t			bd_dev;/*块设备对应的设备编号（inode编号）*/
 	/*此block device对应的inode*/
@@ -278,7 +284,7 @@ struct bio {
 	blk_status_t		bi_status;
 	atomic_t		__bi_remaining;
 
-	struct bvec_iter	bi_iter;
+	struct bvec_iter	bi_iter;/*指向首个bvec_iter*/
 
 	blk_qc_t		bi_cookie;
 	bio_end_io_t		*bi_end_io;
@@ -317,6 +323,7 @@ struct bio {
 
 	atomic_t		__bi_cnt;	/* pin count */
 
+	/*iter遍历的即为此vector*/
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
 	struct bio_set		*bi_pool;
@@ -486,6 +493,7 @@ static inline enum req_op bio_op(const struct bio *bio)
 
 static inline bool op_is_write(blk_opf_t op)
 {
+	/*检查是否为write操作*/
 	return !!(op & (__force blk_opf_t)1);
 }
 

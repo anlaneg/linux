@@ -14,9 +14,9 @@
  * the minix filesystem.
  */
 const struct file_operations minix_file_operations = {
-	.llseek		= generic_file_llseek,
-	.read_iter	= generic_file_read_iter,
-	.write_iter	= generic_file_write_iter,
+	.llseek		= generic_file_llseek,/*通过通用函数执行文件读写位置更新*/
+	.read_iter	= generic_file_read_iter, /*通用函数执行文件读操作*/
+	.write_iter	= generic_file_write_iter,/*通用函数执行文件的写操作*/
 	.mmap		= generic_file_mmap,
 	.fsync		= generic_file_fsync,
 	.splice_read	= filemap_splice_read,

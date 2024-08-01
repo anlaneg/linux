@@ -73,6 +73,7 @@ static unsigned int xprt_udp_slot_table_entries = RPC_DEF_SLOT_TABLE;
 static unsigned int xprt_tcp_slot_table_entries = RPC_MIN_SLOT_TABLE;
 static unsigned int xprt_max_tcp_slot_table_entries = RPC_MAX_SLOT_TABLE;
 
+/*665与1023端口预留*/
 static unsigned int xprt_min_resvport = RPC_DEF_MIN_RESVPORT;
 static unsigned int xprt_max_resvport = RPC_DEF_MAX_RESVPORT;
 
@@ -605,6 +606,7 @@ xs_read_stream_header(struct sock_xprt *transport, struct msghdr *msg,
 		.iov_base = &transport->recv.fraghdr,
 		.iov_len = want,
 	};
+	/*调用recvmsg收取want个字节*/
 	return xs_read_kvec(transport->sock, msg, flags, &kvec, want, seek);
 }
 
@@ -629,6 +631,7 @@ xs_read_stream_call(struct sock_xprt *transport, struct msghdr *msg, int flags)
 	if (transport->recv.copied && !req->rq_private_buf.len)
 		return -ESHUTDOWN;
 
+	/*读取request*/
 	ret = xs_read_stream_request(transport, msg, flags, req);
 	if (msg->msg_flags & (MSG_EOR|MSG_TRUNC))
 		xprt_complete_bc_request(req, transport->recv.copied);
@@ -654,6 +657,7 @@ xs_read_stream_reply(struct sock_xprt *transport, struct msghdr *msg, int flags)
 
 	/* Look up and lock the request corresponding to the given XID */
 	spin_lock(&xprt->queue_lock);
+	/*查询xid对应请求*/
 	req = xprt_lookup_rqst(xprt, transport->recv.xid);
 	if (!req || (transport->recv.copied && !req->rq_private_buf.len)) {
 		msg->msg_flags |= MSG_TRUNC;
@@ -687,9 +691,11 @@ xs_read_stream(struct sock_xprt *transport, int flags)
 		ret = xs_read_stream_header(transport, &msg, flags, want,
 				transport->recv.offset);
 		if (ret <= 0)
+			/*出错或者数据不足*/
 			goto out_err;
-		transport->recv.offset = ret;
+		transport->recv.offset = ret;/*增加读取的内容长度*/
 		if (transport->recv.offset != want)
+			/*计划读取want个，实际读取的内容少于want,说明当前缓冲区内无数据，返回*/
 			return transport->recv.offset;
 		transport->recv.len = be32_to_cpu(transport->recv.fraghdr) &
 			RPC_FRAGMENT_SIZE_MASK;
@@ -699,14 +705,19 @@ xs_read_stream(struct sock_xprt *transport, int flags)
 
 	switch (be32_to_cpu(transport->recv.calldir)) {
 	default:
+		/*消息被trunc了，不处理，跳出*/
 		msg.msg_flags |= MSG_TRUNC;
 		break;
 	case RPC_CALL:
+		/*读取到rpc call消息*/
 		ret = xs_read_stream_call(transport, &msg, flags);
 		break;
 	case RPC_REPLY:
+		/*读取rpc 响应*/
 		ret = xs_read_stream_reply(transport, &msg, flags);
 	}
+
+	/*读取到的msg有Trunc标记*/
 	if (msg.msg_flags & MSG_TRUNC) {
 		transport->recv.calldir = cpu_to_be32(-1);
 		transport->recv.copied = -1;
@@ -760,6 +771,7 @@ static void xs_poll_check_readable(struct sock_xprt *transport)
 	if (!xs_poll_socket_readable(transport))
 		return;
 	if (!test_and_set_bit(XPRT_SOCK_DATA_READY, &transport->sock_state))
+		/*未ready,将收worker加入到工作队列,负责收取*/
 		queue_work(xprtiod_workqueue, &transport->recv_worker);
 }
 
@@ -772,29 +784,37 @@ static void xs_stream_data_receive(struct sock_xprt *transport)
 	if (transport->sock == NULL)
 		goto out;
 	for (;;) {
+		/*尝试读取数据*/
 		ret = xs_read_stream(transport, MSG_DONTWAIT);
 		if (ret < 0)
+			/*读取失败或无数据，跳出*/
 			break;
+		/*记录读取的字节数*/
 		read += ret;
 		cond_resched();
 	}
 	if (ret == -ESHUTDOWN)
+		/*socket关闭*/
 		kernel_sock_shutdown(transport->sock, SHUT_RDWR);
 	else if (ret == -EACCES)
+		/*权限不容许*/
 		xprt_wake_pending_tasks(&transport->xprt, -EACCES);
 	else
+		/*检查transport是否可读*/
 		xs_poll_check_readable(transport);
 out:
 	mutex_unlock(&transport->recv_mutex);
 	trace_xs_stream_read_data(&transport->xprt, ret, read);
 }
 
+/*stream数据接收工作函数*/
 static void xs_stream_data_receive_workfn(struct work_struct *work)
 {
 	struct sock_xprt *transport =
 		container_of(work, struct sock_xprt, recv_worker);
 	unsigned int pflags = memalloc_nofs_save();
 
+	/*收取数据*/
 	xs_stream_data_receive(transport);
 	memalloc_nofs_restore(pflags);
 }
@@ -880,6 +900,7 @@ static int xs_stream_nospace(struct rpc_rqst *req, bool vm_wait)
 
 static int xs_stream_prepare_request(struct rpc_rqst *req, struct xdr_buf *buf)
 {
+	/*初始化buf->bvec*/
 	return xdr_alloc_bvec(buf, rpc_task_gfp_mask());
 }
 
@@ -1330,6 +1351,7 @@ static void xs_destroy(struct rpc_xprt *xprt)
 
 	cancel_delayed_work_sync(&transport->connect_worker);
 	xs_close(xprt);
+	/*取消数据接收worker*/
 	cancel_work_sync(&transport->recv_worker);
 	cancel_work_sync(&transport->error_worker);
 	xs_xprt_free(xprt);
@@ -1410,6 +1432,7 @@ static void xs_udp_data_receive(struct sock_xprt *transport)
 	for (;;) {
 		skb = skb_recv_udp(sk, MSG_DONTWAIT, &err);
 		if (skb == NULL)
+			/*未收到数据，跳出*/
 			break;
 		xs_udp_data_read_skb(&transport->xprt, sk, skb);
 		consume_skb(skb);
@@ -1420,6 +1443,7 @@ out:
 	mutex_unlock(&transport->recv_mutex);
 }
 
+/*负责udp数据接收的worker*/
 static void xs_udp_data_receive_workfn(struct work_struct *work)
 {
 	struct sock_xprt *transport =
@@ -1443,11 +1467,13 @@ static void xs_data_ready(struct sock *sk)
 
 	xprt = xprt_from_sock(sk);
 	if (xprt != NULL) {
+		/*由xport获取transport*/
 		struct sock_xprt *transport = container_of(xprt,
 				struct sock_xprt, xprt);
 
 		trace_xs_data_ready(xprt);
 
+		/*触发transport对应的old_data_ready*/
 		transport->old_data_ready(sk);
 
 		if (test_bit(XPRT_SOCK_IGNORE_RECV, &transport->sock_state))
@@ -1458,7 +1484,7 @@ static void xs_data_ready(struct sock *sk)
 		 */
 		if (xprt->reestablish_timeout)
 			xprt->reestablish_timeout = 0;
-		/*入队，使之收发包*/
+		/*有数据，入队，使之收发包*/
 		if (!test_and_set_bit(XPRT_SOCK_DATA_READY, &transport->sock_state))
 			queue_work(xprtiod_workqueue, &transport->recv_worker);
 	}
@@ -1734,6 +1760,7 @@ static int xs_get_srcport(struct sock_xprt *transport)
 	int port = transport->srcport;
 
 	if (port == 0 && transport->xprt.resvport)
+		/*未指定srcport,但指明了resvport，则随机获取一个*/
 		port = xs_get_random_port();
 	return port;
 }
@@ -1744,6 +1771,7 @@ static unsigned short xs_sock_srcport(struct rpc_xprt *xprt)
 	unsigned short ret = 0;
 	mutex_lock(&sock->recv_mutex);
 	if (sock->sock)
+		/*自sock中取端口*/
 		ret = xs_sock_getport(sock->sock);
 	mutex_unlock(&sock->recv_mutex);
 	return ret;
@@ -1760,6 +1788,7 @@ static int xs_sock_srcaddr(struct rpc_xprt *xprt, char *buf, size_t buflen)
 
 	mutex_lock(&sock->recv_mutex);
 	if (sock->sock) {
+		/*自socket中提取saddr*/
 		ret = kernel_getsockname(sock->sock, &saddr.sa);
 		if (ret >= 0)
 			ret = snprintf(buf, buflen, "%pISc", &saddr.sa);
@@ -1778,6 +1807,8 @@ static unsigned short xs_next_srcport(struct sock_xprt *transport, unsigned shor
 		return xprt_max_resvport;
 	return --port;
 }
+
+/*如有必要，选择端口并绑定*/
 static int xs_bind(struct sock_xprt *transport, struct socket *sock)
 {
 	struct sockaddr_storage myaddr;
@@ -1806,19 +1837,23 @@ static int xs_bind(struct sock_xprt *transport, struct socket *sock)
 	memcpy(&myaddr, &transport->srcaddr, transport->xprt.addrlen);
 	do {
 		rpc_set_port((struct sockaddr *)&myaddr, port);
+		/*使socket bind到myaddr地址*/
 		err = kernel_bind(sock, (struct sockaddr *)&myaddr,
 				transport->xprt.addrlen);
 		if (err == 0) {
 			if (transport->xprt.reuseport)
+				/*成功，设置当时选项的port*/
 				transport->srcport = port;
 			break;
 		}
+		/*绑定失败，选择并尝试下一个srcport*/
 		last = port;
 		port = xs_next_srcport(transport, port);
 		if (port > last)
 			nloop++;
 	} while (err == -EADDRINUSE && nloop != 2);
 
+	/*显示本端采用的地址及端口*/
 	if (myaddr.ss_family == AF_INET)
 		dprintk("RPC:       %s %pI4:%u: %s (%d)\n", __func__,
 				&((struct sockaddr_in *)&myaddr)->sin_addr,
@@ -1897,6 +1932,7 @@ static void xs_dummy_setup_socket(struct work_struct *work)
 {
 }
 
+/*按family,type,protocol创建并bind socket*/
 static struct socket *xs_create_sock(struct rpc_xprt *xprt,
 		struct sock_xprt *transport, int family, int type,
 		int protocol, bool reuseport)
@@ -1905,6 +1941,7 @@ static struct socket *xs_create_sock(struct rpc_xprt *xprt,
 	struct socket *sock;
 	int err;
 
+	/*在kernel中创建socket*/
 	err = __sock_create(xprt->xprt_net, family, type, protocol, &sock, 1);
 	if (err < 0) {
 		dprintk("RPC:       can't create %d transport socket (%d).\n",
@@ -1913,15 +1950,18 @@ static struct socket *xs_create_sock(struct rpc_xprt *xprt,
 	}
 	xs_reclassify_socket(family, sock);
 
+	/*指明reuse port*/
 	if (reuseport)
 		sock_set_reuseport(sock->sk);
 
+	/*执行socket bind*/
 	err = xs_bind(transport, sock);
 	if (err) {
 		sock_release(sock);
 		goto out;
 	}
 
+	/*socket与文件关联*/
 	filp = sock_alloc_file(sock, O_NONBLOCK, NULL);
 	if (IS_ERR(filp))
 		return ERR_CAST(filp);
@@ -2050,7 +2090,7 @@ static void xs_local_connect(struct rpc_xprt *xprt, struct rpc_task *task)
 		rpc_task_set_rpc_status(task, -ENOTCONN);
 		goto out_wake;
 	}
-	ret = xs_local_setup_socket(transport);
+	ret = xs_local_setup_socket(transport);/*启动local*/
 	if (ret && !RPC_IS_SOFTCONN(task))
 		msleep_interruptible(15000);
 	return;
@@ -2271,6 +2311,7 @@ static void xs_tcp_set_socket_timeouts(struct rpc_xprt *xprt,
 			    READ_ONCE(net->ipv4.sysctl_tcp_syn_retries), 1);
 	for (t = 0; t <= syn_retries && (1UL << t) < connect_timeout; t++)
 		;
+	/*设置syn重试次数*/
 	if (t <= syn_retries)
 		tcp_sock_set_syncnt(sock->sk, t - 1);
 }
@@ -2315,6 +2356,7 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 	struct sock_xprt *transport = container_of(xprt, struct sock_xprt, xprt);
 
 	if (!transport->inet) {
+		/*仅处理inet未设置情况*/
 		struct sock *sk = sock->sk;
 
 		/* Avoid temporary address, they are bad for long-lived
@@ -2325,6 +2367,7 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 		 *    MAY override this as appropriate.
 		 */
 		if (xs_addr(xprt)->sa_family == PF_INET6) {
+			/*指明更希望public source*/
 			ip6_sock_set_addr_preferences(sk,
 				IPV6_PREFER_SRC_PUBLIC);
 		}
@@ -2337,7 +2380,7 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 		xs_save_old_callbacks(transport, sk);
 
 		sk->sk_user_data = xprt;
-		sk->sk_data_ready = xs_data_ready;
+		sk->sk_data_ready = xs_data_ready;/*指明数据ready后的回调*/
 		sk->sk_state_change = xs_tcp_state_change;
 		sk->sk_write_space = xs_tcp_write_space;
 		sk->sk_error_report = xs_error_report;
@@ -2346,11 +2389,11 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 		/* socket options */
 		sock_reset_flag(sk, SOCK_LINGER);
 
-		xprt_clear_connected(xprt);
+		xprt_clear_connected(xprt);/*移除connected标记*/
 
 		/* Reset to new socket */
 		transport->sock = sock;
-		transport->inet = sk;
+		transport->inet = sk;/*设置socket*/
 
 		release_sock(sk);
 	}
@@ -2360,10 +2403,12 @@ static int xs_tcp_finish_connecting(struct rpc_xprt *xprt, struct socket *sock)
 
 	xs_set_memalloc(xprt);
 
+	/*增加connect次数*/
 	xs_stream_start_connect(transport);
 
 	/* Tell the socket layer to start connecting... */
-	set_bit(XPRT_SOCK_CONNECTING, &transport->sock_state);
+	set_bit(XPRT_SOCK_CONNECTING, &transport->sock_state);/*指明connecting状态*/
+	/*触发kernel connect，并指明非阻塞*/
 	return kernel_connect(sock, xs_addr(xprt), xprt->addrlen, O_NONBLOCK);
 }
 
@@ -2386,6 +2431,7 @@ static void xs_tcp_setup_socket(struct work_struct *work)
 		current->flags |= PF_MEMALLOC;
 
 	if (xprt_connected(xprt))
+		/*已连接，则直接返回*/
 		goto out;
 	if (test_and_clear_bit(XPRT_SOCK_CONNECT_SENT,
 			       &transport->sock_state) ||
@@ -2406,6 +2452,7 @@ static void xs_tcp_setup_socket(struct work_struct *work)
 			xprt->address_strings[RPC_DISPLAY_ADDR],
 			xprt->address_strings[RPC_DISPLAY_PORT]);
 
+	/*调用connect函数（同步）*/
 	status = xs_tcp_finish_connecting(xprt, sock);
 	trace_rpc_socket_connect(xprt, sock, status);
 	dprintk("RPC:       %p connect status %d connected %d sock state %d\n",
@@ -2755,6 +2802,7 @@ static void xs_connect(struct rpc_xprt *xprt, struct rpc_task *task)
 		dprintk("RPC:       xs_connect scheduled xprt %p\n", xprt);
 
 	transport->clnt = task->tk_client;
+	/*入worker到队列*/
 	queue_delayed_work(xprtiod_workqueue,
 			&transport->connect_worker,
 			delay);
@@ -3015,11 +3063,11 @@ static void bc_destroy(struct rpc_xprt *xprt)
 static const struct rpc_xprt_ops xs_local_ops = {
 	.reserve_xprt		= xprt_reserve_xprt,
 	.release_xprt		= xprt_release_xprt,
-	.alloc_slot		= xprt_alloc_slot,
-	.free_slot		= xprt_free_slot,
+	.alloc_slot		= xprt_alloc_slot,/*申请rpc request*/
+	.free_slot		= xprt_free_slot,/*释放rpc request*/
 	.rpcbind		= xs_local_rpcbind,
 	.set_port		= xs_local_set_port,
-	.connect		= xs_local_connect,
+	.connect		= xs_local_connect,/*与对端建立连接*/
 	.buf_alloc		= rpc_malloc,
 	.buf_free		= rpc_free,
 	.prepare_request	= xs_stream_prepare_request,
@@ -3064,12 +3112,12 @@ static const struct rpc_xprt_ops xs_tcp_ops = {
 	.free_slot		= xprt_free_slot,
 	.rpcbind		= rpcb_getport_async,
 	.set_port		= xs_set_port,
-	.connect		= xs_connect,
-	.get_srcaddr		= xs_sock_srcaddr,
-	.get_srcport		= xs_sock_srcport,
+	.connect		= xs_connect,/*与远端建立连接*/
+	.get_srcaddr		= xs_sock_srcaddr,/*取源地址*/
+	.get_srcport		= xs_sock_srcport,/*取源端口*/
 	.buf_alloc		= rpc_malloc,
 	.buf_free		= rpc_free,
-	.prepare_request	= xs_stream_prepare_request,
+	.prepare_request	= xs_stream_prepare_request,/*buf内容初始化*/
 	.send_request		= xs_tcp_send_request,
 	.wait_for_reply_request	= xprt_wait_for_reply_request_def,
 	.close			= xs_tcp_shutdown,
@@ -3144,10 +3192,12 @@ static struct rpc_xprt *xs_setup_xprt(struct xprt_create *args,
 	struct sock_xprt *new;
 
 	if (args->addrlen > sizeof(xprt->addr)) {
+		/*地址长度有误*/
 		dprintk("RPC:       xs_setup_xprt: address too large\n");
 		return ERR_PTR(-EBADF);
 	}
 
+	/*申请rpc_xprt*/
 	xprt = xprt_alloc(args->net, sizeof(*new), slot_table_size,
 			max_slot_table_size);
 	if (xprt == NULL) {
@@ -3158,9 +3208,11 @@ static struct rpc_xprt *xs_setup_xprt(struct xprt_create *args,
 
 	new = container_of(xprt, struct sock_xprt, xprt);
 	mutex_init(&new->recv_mutex);
+	/*设置目的地址*/
 	memcpy(&xprt->addr, args->dstaddr, args->addrlen);
 	xprt->addrlen = args->addrlen;
 	if (args->srcaddr)
+		/*设置源地址*/
 		memcpy(&new->srcaddr, args->srcaddr, args->addrlen);
 	else {
 		int err;
@@ -3189,6 +3241,7 @@ static const struct rpc_timeout xs_local_default_timeout = {
  */
 static struct rpc_xprt *xs_setup_local(struct xprt_create *args)
 {
+	/*目的地址为unix socket地址*/
 	struct sockaddr_un *sun = (struct sockaddr_un *)args->dstaddr;
 	struct sock_xprt *transport;
 	struct rpc_xprt *xprt;
@@ -3211,7 +3264,8 @@ static struct rpc_xprt *xs_setup_local(struct xprt_create *args)
 	xprt->ops = &xs_local_ops;
 	xprt->timeout = &xs_local_default_timeout;
 
-	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn);
+	/*初始化worker*/
+	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn/*接收worker*/);
 	INIT_WORK(&transport->error_worker, xs_error_handle);
 	INIT_DELAYED_WORK(&transport->connect_worker, xs_dummy_setup_socket);
 
@@ -3235,7 +3289,7 @@ static struct rpc_xprt *xs_setup_local(struct xprt_create *args)
 			xprt->address_strings[RPC_DISPLAY_ADDR]);
 
 	if (try_module_get(THIS_MODULE))
-		return xprt;
+		return xprt;/*返回对应的rpc_xprt*/
 	ret = ERR_PTR(-EINVAL);
 out_err:
 	xs_xprt_free(xprt);
@@ -3280,7 +3334,7 @@ static struct rpc_xprt *xs_setup_udp(struct xprt_create *args)
 
 	xprt->timeout = &xs_udp_default_timeout;
 
-	INIT_WORK(&transport->recv_worker, xs_udp_data_receive_workfn);
+	INIT_WORK(&transport->recv_worker, xs_udp_data_receive_workfn/*接收worker*/);
 	INIT_WORK(&transport->error_worker, xs_error_handle);
 	INIT_DELAYED_WORK(&transport->connect_worker, xs_udp_setup_socket);
 
@@ -3369,9 +3423,9 @@ static struct rpc_xprt *xs_setup_tcp(struct xprt_create *args)
 		xs_tcp_do_set_connect_timeout(xprt, args->connect_timeout);
 
 	/*指明数据处理worker*/
-	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn);
+	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn/*接收worker*/);
 	INIT_WORK(&transport->error_worker, xs_error_handle);
-	/*指明连接worker*/
+	/*初始connect_workerr执行的函数为tcp建连*/
 	INIT_DELAYED_WORK(&transport->connect_worker, xs_tcp_setup_socket);
 
 	switch (addr->sa_family) {
@@ -3447,7 +3501,8 @@ static struct rpc_xprt *xs_setup_tcp_tls(struct xprt_create *args)
 	xprt->connect_timeout = xprt->timeout->to_initval *
 		(xprt->timeout->to_retries + 1);
 
-	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn);
+	/*指明recv_worker的工作*/
+	INIT_WORK(&transport->recv_worker, xs_stream_data_receive_workfn/*接收worker*/);
 	INIT_WORK(&transport->error_worker, xs_error_handle);
 
 	switch (args->xprtsec.policy) {
@@ -3584,8 +3639,8 @@ static struct xprt_class	xs_local_transport = {
 	.list		= LIST_HEAD_INIT(xs_local_transport.list),
 	.name		= "named UNIX socket",
 	.owner		= THIS_MODULE,
-	.ident		= XPRT_TRANSPORT_LOCAL,
-	.setup		= xs_setup_local,
+	.ident		= XPRT_TRANSPORT_LOCAL,/*指明local transport*/
+	.setup		= xs_setup_local,/*创建rpc_xptr*/
 	.netid		= { "" },
 };
 
@@ -3593,16 +3648,17 @@ static struct xprt_class	xs_udp_transport = {
 	.list		= LIST_HEAD_INIT(xs_udp_transport.list),
 	.name		= "udp",
 	.owner		= THIS_MODULE,
-	.ident		= XPRT_TRANSPORT_UDP,
+	.ident		= XPRT_TRANSPORT_UDP,/*指明udp transport*/
 	.setup		= xs_setup_udp,
 	.netid		= { "udp", "udp6", "" },
 };
 
+/*tcp transport的处理*/
 static struct xprt_class	xs_tcp_transport = {
 	.list		= LIST_HEAD_INIT(xs_tcp_transport.list),
 	.name		= "tcp",
 	.owner		= THIS_MODULE,
-	.ident		= XPRT_TRANSPORT_TCP,
+	.ident		= XPRT_TRANSPORT_TCP,/*指明tcp transport*/
 	.setup		= xs_setup_tcp,
 	.netid		= { "tcp", "tcp6", "" },
 };
@@ -3634,9 +3690,9 @@ int init_socket_xprt(void)
 	if (!sunrpc_table_header)
 		sunrpc_table_header = register_sysctl("sunrpc", xs_tunables_table);
 
-	xprt_register_transport(&xs_local_transport);/*支持af_unix传输*/
+	xprt_register_transport(&xs_local_transport);/*注册支持af_unix传输*/
 	xprt_register_transport(&xs_udp_transport);
-	xprt_register_transport(&xs_tcp_transport);/*支持tcp传输*/
+	xprt_register_transport(&xs_tcp_transport);/*注册支持tcp传输*/
 	xprt_register_transport(&xs_tcp_tls_transport);
 	xprt_register_transport(&xs_bc_tcp_transport);
 
@@ -3695,7 +3751,7 @@ static const struct kernel_param_ops param_ops_slot_table_size = {
 #define param_check_slot_table_size(name, p) \
 	__param_check(name, p, unsigned int);
 
-static int param_set_max_slot_table_size(const char *val,
+static int param_set_max_slot_table_size(const char *val/*待解析的参数*/,
 				     const struct kernel_param *kp)
 {
 	return param_set_uint_minmax(val, kp,

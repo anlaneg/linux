@@ -3638,6 +3638,7 @@ int device_add(struct device *dev)
 		if (error)
 			goto SysEntryError;
 
+		/*在devtmpfs中创建设备（字符设备，块设备）*/
 		devtmpfs_create_node(dev);
 	}
 
@@ -3838,6 +3839,7 @@ void device_del(struct device *dev)
 	if (parent)
 		klist_del(&dev->p->knode_parent);
 	if (MAJOR(dev->devt)) {
+		/*在devtmpfs中删除设备*/
 		devtmpfs_delete_node(dev);
 		device_remove_sys_dev_entry(dev);
 		device_remove_file(dev, &dev_attr_dev);

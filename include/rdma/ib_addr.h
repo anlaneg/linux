@@ -34,7 +34,7 @@
  * @sgid_attr:		GID attribute to use for identified SGID
  */
 struct rdma_dev_addr {
-	unsigned char src_dev_addr[MAX_ADDR_LEN];
+	unsigned char src_dev_addr[MAX_ADDR_LEN];/*源mac地址*/
 	unsigned char dst_dev_addr[MAX_ADDR_LEN];
 	unsigned char broadcast[MAX_ADDR_LEN];
 	unsigned short dev_type;
@@ -42,7 +42,7 @@ struct rdma_dev_addr {
 	enum rdma_transport_type transport;
 	struct net *net;/*当前所属net namespace*/
 	const struct ib_gid_attr *sgid_attr;
-	enum rdma_network_type network;
+	enum rdma_network_type network;/*使用哪种网络:ipv4,ipv6,ib*/
 	/*取hop limit*/
 	int hoplimit;
 };
@@ -112,6 +112,7 @@ static inline u16 rdma_vlan_dev_vlan_id(const struct net_device *dev)
 	return is_vlan_dev(dev) ? vlan_dev_vlan_id(dev) : 0xffff;
 }
 
+/*将ip地址映射为gid*/
 static inline int rdma_ip2gid(struct sockaddr *addr, union ib_gid *gid)
 {
 	switch (addr->sa_family) {
@@ -121,7 +122,7 @@ static inline int rdma_ip2gid(struct sockaddr *addr, union ib_gid *gid)
 				       (struct in6_addr *)gid);
 		break;
 	case AF_INET6:
-		*(struct in6_addr *)&gid->raw =
+		*(struct in6_addr *)&gid->r aw =
 			((struct sockaddr_in6 *)addr)->sin6_addr;
 		break;
 	default:

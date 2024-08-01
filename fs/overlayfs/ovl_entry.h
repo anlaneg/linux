@@ -56,7 +56,8 @@ struct ovl_entry {
 
 /* private information held for overlayfs's superblock */
 struct ovl_fs {
-	unsigned int numlayer;/*layers数组大小*/
+	/*layers数组大小*/
+	unsigned int numlayer;
 	/* Number of unique fs among layers including upper fs */
 	unsigned int numfs;
 	/* Number of data-only lower layers */

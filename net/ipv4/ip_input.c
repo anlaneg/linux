@@ -385,6 +385,7 @@ static int ip_rcv_finish_core(struct net *net, struct sock *sk,
 	 *	how the packet travels inside Linux networking.
 	 */
 	if (!skb_valid_dst(skb)) {
+		/*此分支情况下仅在skb没有dst下进入*/
 		//传入目的地址，源地址，tos,报文入口设备,查询路由
 		//单播时:skb->dst.input=ip_forword将被设置
 		//组播时:skb->dst.input=ip_mr_input将被设置
@@ -474,7 +475,7 @@ static int ip_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* if ingress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
-	//如果入接口设备从属于l3 master device,则更换设备
+	//如果入接口设备是从属于l3 master device的,则更换设备
 	skb = l3mdev_ip_rcv(skb);
 	if (!skb)
 		return NET_RX_SUCCESS;
@@ -504,7 +505,7 @@ static struct sk_buff *ip_rcv_core(struct sk_buff *skb, struct net *net)
 	 */
 	if (skb->pkt_type == PACKET_OTHERHOST) {
 		dev_core_stats_rx_otherhost_dropped_inc(skb->dev);
-		//现在我们在处理三层，故如果mac不是我们的,则不处理
+		//现在我们在处理三层，故如果mac不是我们的,则不处理,直接丢
 		drop_reason = SKB_DROP_REASON_OTHERHOST;
 		goto drop;
 	}

@@ -57,7 +57,9 @@ struct xdr_buf {
 	struct kvec	head[1],	/* RPC header + non-page data */
 			tail[1];	/* Appended after page data */
 
+	/*页信息，哪个页，可用长度有多少，从页的哪个位置开始*/
 	struct bio_vec	*bvec;
+	/*实际的一组页信息*/
 	struct page **	pages;		/* Array of pages */
 	unsigned int	page_base,	/* Start of page data */
 			page_len,	/* Length of page data */

@@ -330,8 +330,10 @@ static int smc_tx_rdma_write(struct smc_connection *conn, int peer_rmbe_offset,
 		/* offset within RMBE */
 		peer_rmbe_offset;
 	rdma_wr->rkey = lgr->rtokens[conn->rtoken_idx][link->link_idx].rkey;
+	/*填写待发送的内容*/
 	rc = ib_post_send(link->roce_qp, &rdma_wr->wr, NULL);
 	if (rc)
+		/*填写待发送的内容失败*/
 		smcr_link_down_cond_sched(link);
 	return rc;
 }

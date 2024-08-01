@@ -1276,6 +1276,7 @@ int security_fs_context_parse_param(struct fs_context *fc,
 	int trc;
 	int rc = -ENOPARAM;
 
+	/*遍历security_hook_heads列表*/
 	hlist_for_each_entry(hp, &security_hook_heads.fs_context_parse_param,
 			     list) {
 		trc = hp->hook.fs_context_parse_param(fc, param);

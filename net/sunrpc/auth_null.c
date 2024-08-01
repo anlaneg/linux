@@ -18,6 +18,7 @@
 static struct rpc_auth null_auth;
 static struct rpc_cred null_cred;
 
+/*创建rpc_auth*/
 static struct rpc_auth *
 nul_create(const struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 {
@@ -64,9 +65,12 @@ nul_marshal(struct rpc_task *task, struct xdr_stream *xdr)
 {
 	__be32 *p;
 
+	/*预留4个uint32字节*/
 	p = xdr_reserve_space(xdr, 4 * sizeof(*p));
 	if (!p)
 		return -EMSGSIZE;
+
+	/*填充这4个uint32字节*/
 	/* Credential */
 	*p++ = rpc_auth_null;
 	*p++ = xdr_zero;
@@ -101,11 +105,12 @@ nul_validate(struct rpc_task *task, struct xdr_stream *xdr)
 	return 0;
 }
 
+/*空auth*/
 const struct rpc_authops authnull_ops = {
 	.owner		= THIS_MODULE,
 	.au_flavor	= RPC_AUTH_NULL,
 	.au_name	= "NULL",
-	.create		= nul_create,
+	.create		= nul_create,/*创建rpc_auth*/
 	.destroy	= nul_destroy,
 	.lookup_cred	= nul_lookup_cred,
 };

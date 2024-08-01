@@ -1192,7 +1192,7 @@ struct dentry *rpc_d_lookup_sb(const struct super_block *sb,
 			       const unsigned char *dir_name)
 {
 	struct qstr dir = QSTR_INIT(dir_name, strlen(dir_name));
-	return d_hash_and_lookup(sb->s_root, &dir);
+	return d_hash_and_lookup(sb->s_root, &dir);/*查询dir_name对应的dentry*/
 }
 EXPORT_SYMBOL_GPL(rpc_d_lookup_sb);
 

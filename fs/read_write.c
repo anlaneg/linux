@@ -357,7 +357,7 @@ out_putf:
 }
 #endif
 
-int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t count)
+int rw_verify_area(int read_write, struct file *file, const loff_t *ppos/*读取长度*/, size_t count/*读取长度*/)
 {
 	int mask = read_write == READ ? MAY_READ : MAY_WRITE;
 	int ret;
@@ -374,9 +374,11 @@ int rw_verify_area(int read_write, struct file *file, const loff_t *ppos, size_t
 			    /*文件为有符号offsets,当前长度为负，报错*/
 				return -EINVAL;
 			if (count >= -pos) /* both values are in 0..LLONG_MAX */
+				/*此时pos为负数，即pos + count >= 0，则出现数值绕回*/
 				return -EOVERFLOW;
 		} else if (unlikely((loff_t) (pos + count) < 0)) {
 			if (!unsigned_offsets(file))
+				/*数据绕回，且当前文件为有符号offsets,故报错*/
 				return -EINVAL;
 		}
 	}
@@ -398,7 +400,7 @@ static ssize_t new_sync_read(struct file *filp/*要读取的文件*/, char __use
 	init_sync_kiocb(&kiocb, filp);
 	kiocb.ki_pos = (ppos ? *ppos : 0);
 	/*初始化iter迭代器*/
-	iov_iter_ubuf(&iter, ITER_DEST, buf, len);
+	iov_iter_ubuf(&iter, ITER_DEST/*指明读操作*/, buf, len);
 
 	/*调用此文件的read_iter回调*/
 	ret = call_read_iter(filp, &kiocb, &iter);
@@ -492,6 +494,7 @@ ssize_t vfs_read(struct file *file/*要读取的文件*/, char __user *buf/*待�
 	if (file->f_op->read)
 		ret = file->f_op->read(file, buf, count, pos);
 	else if (file->f_op->read_iter)
+		/*提供有read_iter回调，调用此回调执行read*/
 		ret = new_sync_read(file, buf, count, pos);
 	else
 		ret = -EINVAL;
@@ -847,7 +850,7 @@ out:
 }
 EXPORT_SYMBOL(vfs_iocb_iter_read);
 
-ssize_t vfs_iter_read(struct file *file, struct iov_iter *iter, loff_t *ppos,
+ssize_t vfs_iter_read(struct file *file, struct iov_iter *iter, loff_t *ppos/*读取位置*/,
 		      rwf_t flags)
 {
 	size_t tot_len;
@@ -862,6 +865,7 @@ ssize_t vfs_iter_read(struct file *file, struct iov_iter *iter, loff_t *ppos,
 
 	tot_len = iov_iter_count(iter);
 	if (!tot_len)
+		/*读取长度为0，返回*/
 		goto out;
 	ret = rw_verify_area(READ, file, ppos, tot_len);
 	if (ret < 0)
@@ -1683,13 +1687,15 @@ out2:
  * LFS limits.  If pos is under the limit it becomes a short access.  If it
  * exceeds the limit we return -EFBIG.
  */
-int generic_write_check_limits(struct file *file, loff_t pos, loff_t *count)
+int generic_write_check_limits(struct file *file, loff_t pos, loff_t *count/*出参，实际可写入的字节数*/)
 {
 	struct inode *inode = file->f_mapping->host;
+	/*取当前文件系统支持的最大文件大小*/
 	loff_t max_size = inode->i_sb->s_maxbytes;
 	loff_t limit = rlimit(RLIMIT_FSIZE);
 
 	if (limit != RLIM_INFINITY) {
+		/*limit有配置，且当前文件大小已超过limit时，发送SIGXFSZ信号*/
 		if (pos >= limit) {
 			send_sig(SIGXFSZ, current, 0);
 			return -EFBIG;
@@ -1698,18 +1704,21 @@ int generic_write_check_limits(struct file *file, loff_t pos, loff_t *count)
 	}
 
 	if (!(file->f_flags & O_LARGEFILE))
+		/*没有打largefile标记，指明文件最大大小为2*/
 		max_size = MAX_NON_LFS;
 
 	if (unlikely(pos >= max_size))
+		/*当前文件大小已超过最大size,报错*/
 		return -EFBIG;
 
+	/*返回当前可实际写入的内容大小*/
 	*count = min(*count, max_size - pos);
 
 	return 0;
 }
 
 /* Like generic_write_checks(), but takes size of write instead of iter. */
-int generic_write_checks_count(struct kiocb *iocb, loff_t *count)
+int generic_write_checks_count(struct kiocb *iocb, loff_t *count/*出入参，待写入的大小及实际可写入的大小*/)
 {
 	struct file *file = iocb->ki_filp;
 	struct inode *inode = file->f_mapping->host;
@@ -1718,9 +1727,11 @@ int generic_write_checks_count(struct kiocb *iocb, loff_t *count)
 		return -ETXTBSY;
 
 	if (!*count)
+		/*写长度为零，直接返回0*/
 		return 0;
 
 	if (iocb->ki_flags & IOCB_APPEND)
+		/*指明写的位置为append,取文件大小*/
 		iocb->ki_pos = i_size_read(inode);
 
 	if ((iocb->ki_flags & IOCB_NOWAIT) &&
@@ -1728,6 +1739,7 @@ int generic_write_checks_count(struct kiocb *iocb, loff_t *count)
 	      (file->f_mode & FMODE_BUF_WASYNC)))
 		return -EINVAL;
 
+	/*文件写limits检查*/
 	return generic_write_check_limits(iocb->ki_filp, iocb->ki_pos, count);
 }
 EXPORT_SYMBOL(generic_write_checks_count);
@@ -1744,11 +1756,13 @@ ssize_t generic_write_checks(struct kiocb *iocb, struct iov_iter *from)
 	loff_t count = iov_iter_count(from);
 	int ret;
 
-	ret = generic_write_checks_count(iocb, &count);
+	ret = generic_write_checks_count(iocb, &count/*入出参，count可能被修改为可实际写入的字节数*/);
 	if (ret)
 		return ret;
 
+	/*更正计划写入的字节数*/
 	iov_iter_truncate(from, count);
+	/*返回实际可写入的字节数*/
 	return iov_iter_count(from);
 }
 EXPORT_SYMBOL(generic_write_checks);

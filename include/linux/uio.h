@@ -43,7 +43,7 @@ struct iov_iter {
 	u8 iter_type;
 	bool copy_mc;
 	bool nofault;
-	bool data_source;/*数据源方向，读/写*/
+	bool data_source;/*数据源方向，读/写（ITER_SOURCE）*/
 	size_t iov_offset;
 	/*
 	 * Hack alert: overlay ubuf_iovec with iovec + count, so
@@ -357,7 +357,7 @@ static inline void iov_iter_ubuf(struct iov_iter *i, unsigned int direction,
 	*i = (struct iov_iter) {
 		.iter_type = ITER_UBUF,/*指明用户态buffer*/
 		.copy_mc = false,
-		.data_source = direction,
+		.data_source = direction,/*数据源*/
 		.ubuf = buf,
 		.count = count,
 		.nr_segs = 1/*指明segs为1*/

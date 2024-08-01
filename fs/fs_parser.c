@@ -39,7 +39,7 @@ __lookup_constant(const struct constant_table *tbl, const char *name)
  * @name: The name to look up.
  * @not_found: The value to return if the name is not found.
  */
-int lookup_constant(const struct constant_table *tbl, const char *name, int not_found)
+int lookup_constant(const struct constant_table *tbl/*常量字符串表*/, const char *name/*要查询的内容*/, int not_found/*失配对应的返回值*/)
 {
     //查询常量表，如果有命中，则返回表项对应的value,否则返回失配值（not_found)
 	const struct constant_table *p = __lookup_constant(tbl, name);
@@ -66,7 +66,7 @@ static const struct fs_parameter_spec *fs_lookup_key(
 	*negated = false;
 	/*遍历支持的fs参数列表*/
 	for (p = desc; p->name; p++) {
-	    //跳过参数名不匹配的项
+	    //跳过参数名称不匹配的项
 		if (strcmp(p->name, name) != 0)
 			continue;
 		if (likely(is_flag(p) == want_flag))
@@ -112,8 +112,8 @@ static const struct fs_parameter_spec *fs_lookup_key(
  * the parameter wasn't recognised and unknowns aren't okay.
  */
 int __fs_parse(struct p_log *log,
-	     const struct fs_parameter_spec *desc,
-	     struct fs_parameter *param,
+	     const struct fs_parameter_spec *desc/*fs参数结构体说明列表，最后一项为NULL*/,
+	     struct fs_parameter *param/*入参，当前待解析的参数*/,
 	     struct fs_parse_result *result/*出参，转换后的参数值*/)
 {
 	const struct fs_parameter_spec *p;
@@ -230,6 +230,7 @@ EXPORT_SYMBOL(fs_param_is_bool);
 int fs_param_is_u32(struct p_log *log, const struct fs_parameter_spec *p/*转换源的元数据*/,
 		    struct fs_parameter *param/*转换源*/, struct fs_parse_result *result/*转换结果*/)
 {
+	/*此情况下data用于表示数据基数*/
 	int base = (unsigned long)p->data;
 	if (param->type != fs_value_is_string)
 		/*必须为string类型*/
@@ -271,7 +272,7 @@ int fs_param_is_u64(struct p_log *log, const struct fs_parameter_spec *p,
 }
 EXPORT_SYMBOL(fs_param_is_u64);
 
-/*文件系统参数转枚举类型*/
+/*文件系统参数值转枚举类型*/
 int fs_param_is_enum(struct p_log *log, const struct fs_parameter_spec *p,
 		     struct fs_parameter *param, struct fs_parse_result *result)
 {
@@ -280,6 +281,7 @@ int fs_param_is_enum(struct p_log *log, const struct fs_parameter_spec *p,
 		return fs_param_bad_value(log, param);
 	if (!*param->string && (p->flags & fs_param_can_be_empty))
 		return 0;
+	/*此时p->data是一个常量字符串table*/
 	c = __lookup_constant(p->data, param->string);
 	if (!c)
 		return fs_param_bad_value(log, param);

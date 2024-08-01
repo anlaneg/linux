@@ -2089,8 +2089,9 @@ iomap_to_bh(struct inode *inode, sector_t block, struct buffer_head *bh,
 int __block_write_begin_int(struct folio *folio, loff_t pos, unsigned len,
 		get_block_t *get_block, const struct iomap *iomap)
 {
+	/*在页里的待写的起始位置*/
 	size_t from = offset_in_folio(folio, pos);
-	size_t to = from + len;
+	size_t to = from + len;/*写的结束位置*/
 	struct inode *inode = folio->mapping->host;
 	size_t block_start, block_end;
 	sector_t block;
@@ -2167,7 +2168,7 @@ int __block_write_begin_int(struct folio *folio, loff_t pos, unsigned len,
 	return err;
 }
 
-int __block_write_begin(struct page *page, loff_t pos, unsigned len,
+int __block_write_begin(struct page *page/*要写的页*/, loff_t pos/*要写的位置*/, unsigned len/*要写的长度*/,
 		get_block_t *get_block)
 {
 	return __block_write_begin_int(page_folio(page), pos, len, get_block,
@@ -2218,10 +2219,10 @@ static void __block_commit_write(struct folio *folio, size_t from, size_t to)
  *
  * The filesystem needs to handle block truncation upon failure.
  */
-int block_write_begin(struct address_space *mapping, loff_t pos, unsigned len,
+int block_write_begin(struct address_space *mapping, loff_t pos/*要写的位置*/, unsigned len/*写得长度*/,
 		struct page **pagep, get_block_t *get_block)
 {
-	pgoff_t index = pos >> PAGE_SHIFT;/*位置对应的页索引*/
+	pgoff_t index = pos >> PAGE_SHIFT;/*写位置对应的页索引*/
 	struct page *page;
 	int status;
 
@@ -2230,6 +2231,7 @@ int block_write_begin(struct address_space *mapping, loff_t pos, unsigned len,
 	if (!page)
 		return -ENOMEM;
 
+	/*在对应的page位置执行写*/
 	status = __block_write_begin(page, pos, len, get_block);
 	if (unlikely(status)) {
 		unlock_page(page);

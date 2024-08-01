@@ -344,6 +344,7 @@ static inline struct rpc_clnt *NFS_CLIENT(const struct inode *inode)
 	return NFS_SERVER(inode)->client;
 }
 
+/*取nfs client对应的rpc_ops*/
 static inline const struct nfs_rpc_ops *NFS_PROTO(const struct inode *inode)
 {
 	return NFS_SERVER(inode)->nfs_client->rpc_ops;

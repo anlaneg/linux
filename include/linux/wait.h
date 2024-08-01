@@ -536,7 +536,7 @@ do {										\
  * to %true before the @timeout elapsed, or -%ERESTARTSYS if it was
  * interrupted by a signal.
  */
-#define wait_event_interruptible_timeout(wq_head, condition, timeout)		\
+#define wait_event_interruptible_timeout(wq_head, condition/*调度条件*/, timeout)		\
 ({										\
 	long __ret = timeout;							\
 	might_sleep();								\

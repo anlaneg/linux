@@ -213,6 +213,7 @@ static inline int devtmpfs_init(void) { return 0; }
 extern struct class block_class;
 static inline bool is_blockdev(struct device *dev)
 {
+	/*检查dev是否为block设备*/
 	return dev->class == &block_class;
 }
 #else

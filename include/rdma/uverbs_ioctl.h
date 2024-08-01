@@ -154,18 +154,20 @@ enum uapi_radix_data {
 	UVERBS_API_OBJ_KEY_MASK = GENMASK(31, UVERBS_API_OBJ_KEY_SHIFT),
 
 	/* This id guaranteed to not exist in the radix tree */
-	UVERBS_API_KEY_ERR = 0xFFFFFFFF,
+	UVERBS_API_KEY_ERR = 0xFFFFFFFF,/*key有误*/
 };
 
+/*规范化id*/
 static inline __attribute_const__ u32 uapi_key_obj(u32 id)
 {
 	if (id & UVERBS_API_NS_FLAG) {
 		/*id有ns标记的，先移除ns标记*/
 		id &= ~UVERBS_API_NS_FLAG;
+		/*id合法性检查*/
 		if (id >= UVERBS_API_OBJ_KEY_NUM_DRIVER)
-			/*id合法性检查*/
+			/*不合法*/
 			return UVERBS_API_KEY_ERR;
-		/*id映射*/
+		/*有ns标记，id映射产生新的id*/
 		id = id + UVERBS_API_OBJ_KEY_NUM_CORE;
 	} else {
 		/*不含ns标记的,用原值进行合法性检查*/
@@ -173,6 +175,7 @@ static inline __attribute_const__ u32 uapi_key_obj(u32 id)
 			return UVERBS_API_KEY_ERR;
 	}
 
+	/*无ns标记，id映射产生新的id*/
 	return id << UVERBS_API_OBJ_KEY_SHIFT;
 }
 

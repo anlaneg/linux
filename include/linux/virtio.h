@@ -220,6 +220,7 @@ void unregister_virtio_driver(struct virtio_driver *drv);
  * calling it replaces module_init() and module_exit()
  */
 #define module_virtio_driver(__virtio_driver) \
+	/*指明驱协__virtio_driver的注册函数及解注册函数*/\
 	module_driver(__virtio_driver, register_virtio_driver, \
 			unregister_virtio_driver)
 

@@ -479,7 +479,7 @@ drop:
 
 static struct packet_type mpls_packet_type __read_mostly = {
 	.type = cpu_to_be16(ETH_P_MPLS_UC),
-	.func = mpls_forward,
+	.func = mpls_forward,/*处理mpls报文*/
 };
 
 static const struct nla_policy rtm_mpls_policy[RTA_MAX+1] = {
@@ -2759,7 +2759,7 @@ static int __init mpls_init(void)
 	if (err)
 		goto out_unregister_pernet;
 
-	dev_add_pack(&mpls_packet_type);//mips报文处理注册
+	dev_add_pack(&mpls_packet_type);//mpls报文处理注册
 
 	rtnl_af_register(&mpls_af_ops);
 

@@ -210,12 +210,12 @@ err1:
 static inline void rxe_rcv_pkt(struct rxe_pkt_info *pkt, struct sk_buff *skb)
 {
 	if (pkt->mask & RXE_REQ_MASK)
-	    /*request类报文，添加报文至qp->req_pkts，
+	    /*收到request类报文，添加报文至qp->req_pkts，
 	     * 触发qp->resp.task，即rxe_responder函数
 	     **/
 		rxe_resp_queue_pkt(pkt->qp, skb);
 	else
-	    /*response类报文，添加报文至qp->resp_pkts，
+	    /*收到response类报文，添加报文至qp->resp_pkts，
 	     * 触发qp->comp.task，即rxe_completer函数*/
 		rxe_comp_queue_pkt(pkt->qp, skb);
 }
@@ -322,6 +322,7 @@ static int rxe_chk_dgid(struct rxe_dev *rxe, struct sk_buff *skb)
 	union ib_gid *pdgid;
 
 	if (pkt->mask & RXE_LOOPBACK_MASK)
+		/*有loopback标记，返回0*/
 		return 0;
 
 	if (skb->protocol == htons(ETH_P_IP)) {
@@ -334,7 +335,7 @@ static int rxe_chk_dgid(struct rxe_dev *rxe, struct sk_buff *skb)
 		pdgid = (union ib_gid *)&ipv6_hdr(skb)->daddr;
 	}
 
-	/*pdgid为组播*/
+	/*pdgid为组播，返回0*/
 	if (rdma_is_multicast_addr((struct in6_addr *)pdgid))
 		return 0;
 
@@ -381,13 +382,14 @@ void rxe_rcv(struct sk_buff *skb)
 	if (unlikely(err))
 		goto drop;
 
-	rxe_counter_inc(rxe, RXE_CNT_RCVD_PKTS);/*统计收到的报文数*/
+	/*统计收到的报文数*/
+	rxe_counter_inc(rxe, RXE_CNT_RCVD_PKTS);
 
 	if (unlikely(bth_qpn(pkt) == IB_MULTICAST_QPN))
-	    /*multicast_qpn类型*/
+	    /*multicast_qpn类型，收取组播报文*/
 		rxe_rcv_mcast_pkt(rxe, skb);
 	else
-		/*单播性qp报文收取*/
+		/*单播性qp报文收取报文*/
 		rxe_rcv_pkt(pkt, skb);
 
 	return;

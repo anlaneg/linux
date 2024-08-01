@@ -133,6 +133,7 @@ rpcauth_unregister(const struct rpc_authops *ops)
 }
 EXPORT_SYMBOL_GPL(rpcauth_unregister);
 
+/*通过flavor查找授权对应的ops*/
 static const struct rpc_authops *
 rpcauth_get_authops(rpc_authflavor_t flavor)
 {
@@ -142,12 +143,13 @@ rpcauth_get_authops(rpc_authflavor_t flavor)
 		return NULL;
 
 	rcu_read_lock();
+	/*通过flavor类型，查找rpc_authops*/
 	ops = rcu_dereference(auth_flavors[flavor]);
 	if (ops == NULL) {
 		rcu_read_unlock();
-		request_module("rpc-auth-%u", flavor);
+		request_module("rpc-auth-%u", flavor);/*模块加载*/
 		rcu_read_lock();
-		ops = rcu_dereference(auth_flavors[flavor]);
+		ops = rcu_dereference(auth_flavors[flavor]);/*取对应ops*/
 		if (ops == NULL)
 			goto out;
 	}
@@ -218,6 +220,7 @@ rpcauth_get_gssinfo(rpc_authflavor_t pseudoflavor, struct rpcsec_gss_info *info)
 }
 EXPORT_SYMBOL_GPL(rpcauth_get_gssinfo);
 
+/*依据参数创建rpc_auth*/
 struct rpc_auth *
 rpcauth_create(const struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 {
@@ -229,6 +232,7 @@ rpcauth_create(const struct rpc_auth_create_args *args, struct rpc_clnt *clnt)
 	if (ops == NULL)
 		goto out;
 
+	/*创建rpc_auth对象*/
 	auth = ops->create(args, clnt);
 
 	rpcauth_put_authops(ops);
@@ -725,6 +729,7 @@ int rpcauth_marshcred(struct rpc_task *task, struct xdr_stream *xdr)
 {
 	const struct rpc_credops *ops = task->tk_rqstp->rq_cred->cr_ops;
 
+	/*填充鉴权*/
 	return ops->crmarshal(task, xdr);
 }
 
@@ -738,8 +743,10 @@ int rpcauth_marshcred(struct rpc_task *task, struct xdr_stream *xdr)
  */
 int rpcauth_wrap_req_encode(struct rpc_task *task, struct xdr_stream *xdr)
 {
+	/*取此rpc proc对应的encode回调函数*/
 	kxdreproc_t encode = task->tk_msg.rpc_proc->p_encode;
 
+	/*触发回调,针对此proc的reqeust参数进行编码*/
 	encode(task->tk_rqstp, xdr, task->tk_msg.rpc_argp);
 	return 0;
 }
@@ -793,8 +800,10 @@ rpcauth_checkverf(struct rpc_task *task, struct xdr_stream *xdr)
 int
 rpcauth_unwrap_resp_decode(struct rpc_task *task, struct xdr_stream *xdr)
 {
+	/*对过程的响应结果进行解码，先取解码函数*/
 	kxdrdproc_t decode = task->tk_msg.rpc_proc->p_decode;
 
+	/*对结果进行解码*/
 	return decode(task->tk_rqstp, xdr, task->tk_msg.rpc_resp);
 }
 EXPORT_SYMBOL_GPL(rpcauth_unwrap_resp_decode);

@@ -1050,7 +1050,7 @@ struct sk_buff {
 
 	union {
 		__u32		mark;
-		__u32		reserved_tailroom;
+		__u32		reserved_tailroom;/*预留尾部空间*/
 	};
 
 	union {

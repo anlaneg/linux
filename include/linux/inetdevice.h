@@ -60,6 +60,7 @@ struct in_device {
 #define IPV4_DEVCONF_ALL(net, attr) \
 	IPV4_DEVCONF((*(net)->ipv4.devconf_all), attr)
 
+/*取ipv4设备具体的一个配置项*/
 static inline int ipv4_devconf_get(struct in_device *in_dev, int index)
 {
 	index--;
@@ -80,8 +81,10 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 	bitmap_fill(in_dev->cnf.state, IPV4_DEVCONF_MAX);
 }
 
+/*Ipv4设备属性获取*/
 #define IN_DEV_CONF_GET(in_dev, attr) \
 	ipv4_devconf_get((in_dev), IPV4_DEVCONF_ ## attr)
+/*ipv4设备属性设置*/
 #define IN_DEV_CONF_SET(in_dev, attr, val) \
 	ipv4_devconf_set((in_dev), IPV4_DEVCONF_ ## attr, (val))
 
@@ -100,6 +103,7 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 	(max(IPV4_DEVCONF_ALL(dev_net(in_dev->dev), attr), \
 	     IN_DEV_CONF_GET((in_dev), attr)))
 
+/*ipv4设备是否处理转发状态*/
 #define IN_DEV_FORWARD(in_dev)		IN_DEV_CONF_GET((in_dev), FORWARDING)
 #define IN_DEV_MFORWARD(in_dev)		IN_DEV_ANDCONF((in_dev), MC_FORWARDING)
 #define IN_DEV_BFORWARD(in_dev)		IN_DEV_ANDCONF((in_dev), BC_FORWARDING)

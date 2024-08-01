@@ -149,13 +149,14 @@ void rxe_comp_queue_pkt(struct rxe_qp *qp, struct sk_buff *skb)
 
 static inline enum comp_state get_wqe(struct rxe_qp *qp,
 				      struct rxe_pkt_info *pkt,
-				      struct rxe_send_wqe **wqe_p)
+				      struct rxe_send_wqe **wqe_p/*出参，获取首个wqe*/)
 {
 	struct rxe_send_wqe *wqe;
 
 	/* we come here whether or not we found a response packet to see if
 	 * there are any posted WQEs
 	 */
+	/*自sq中获取首个wqe*/
 	wqe = queue_head(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
 	*wqe_p = wqe;
 
@@ -372,7 +373,7 @@ static inline enum comp_state do_read(struct rxe_qp *qp,
 
 	ret = copy_data(qp->pd, IB_ACCESS_LOCAL_WRITE,
 			&wqe->dma, payload_addr(pkt),
-			payload_size(pkt), RXE_TO_MR_OBJ);
+			payload_size(pkt), RXE_TO_MR_OBJ/*将数据复制到mr*/);
 	if (ret) {
 		wqe->status = IB_WC_LOC_PROT_ERR;
 		return COMPST_ERROR;
@@ -467,6 +468,7 @@ static void do_complete(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	queue_advance_consumer(qp->sq.queue, QUEUE_TYPE_FROM_CLIENT);
 
 	if (post)
+		/*触发cqe*/
 		rxe_cq_post(qp->scq, &cqe, 0);
 
 	if (wqe->wr.opcode == IB_WR_SEND ||
@@ -650,7 +652,7 @@ static void reset_retry_timer(struct rxe_qp *qp)
 	}
 }
 
-/*处理响应类报文；completer任务处理函数，例如：发送完成*/
+/*处理响应类报文；收到对端发送过来的响应，针对响应内容生成send_cq上的通知内容。*/
 int rxe_completer(struct rxe_qp *qp)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -690,7 +692,7 @@ int rxe_completer(struct rxe_qp *qp)
 		rxe_dbg_qp(qp, "state = %s\n", comp_state_name[state]);
 		switch (state) {
 		case COMPST_GET_ACK:
-		    /*自resp_pkts队列上提取一个skb,变更状态：获取wqe*/
+		    /*自resp_pkts队列上提取一个skb,变更状态：COMPST_GET_WQE*/
 			skb = skb_dequeue(&qp->resp_pkts);
 			if (skb) {
 				pkt = SKB_TO_PKT(skb);
@@ -700,6 +702,7 @@ int rxe_completer(struct rxe_qp *qp)
 			break;
 
 		case COMPST_GET_WQE:
+			/*取首个send_queue上首个wqe*/
 			state = get_wqe(qp, pkt, &wqe);
 			break;
 

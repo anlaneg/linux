@@ -85,6 +85,7 @@ static void rpc_register_client(struct rpc_clnt *clnt)
 	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
 
 	spin_lock(&sn->rpc_client_lock);
+	/*添加client到all_clients中*/
 	list_add(&clnt->cl_clients, &sn->all_clients);
 	spin_unlock(&sn->rpc_client_lock);
 }
@@ -127,13 +128,14 @@ static struct dentry *rpc_setup_pipedir_sb(struct super_block *sb,
 
 	dir = rpc_d_lookup_sb(sb, dir_name);
 	if (dir == NULL) {
+		/*此dir_name对应的目录不存在*/
 		pr_info("RPC: pipefs directory doesn't exist: %s\n", dir_name);
 		return dir;
 	}
 	for (;;) {
 		snprintf(name, sizeof(name), "clnt%x", (unsigned int)clntid++);
 		name[sizeof(name) - 1] = '\0';
-		dentry = rpc_create_client_dir(dir, name, clnt);
+		dentry = rpc_create_client_dir(dir, name, clnt);/*创建指定名称的dentry失败*/
 		if (!IS_ERR(dentry))
 			break;
 		if (dentry == ERR_PTR(-EEXIST))
@@ -155,6 +157,7 @@ rpc_setup_pipedir(struct super_block *pipefs_sb, struct rpc_clnt *clnt)
 	clnt->pipefs_sb = pipefs_sb;
 
 	if (clnt->cl_program->pipe_dir_name != NULL) {
+		/*指明了pipe_dir_name，则创建对应的clnt$id dentry*/
 		dentry = rpc_setup_pipedir_sb(pipefs_sb, clnt);
 		if (IS_ERR(dentry))
 			return PTR_ERR(dentry);
@@ -289,6 +292,7 @@ static void rpc_clnt_set_nodename(struct rpc_clnt *clnt, const char *nodename)
 {
 	ssize_t copied;
 
+	/*设置nodename及cl_nodelen*/
 	copied = strscpy(clnt->cl_nodename,
 			 nodename, sizeof(clnt->cl_nodename));
 
@@ -297,12 +301,13 @@ static void rpc_clnt_set_nodename(struct rpc_clnt *clnt, const char *nodename)
 				: copied;
 }
 
+/*注册client,创建rpc_auth*/
 static int rpc_client_register(struct rpc_clnt *clnt,
 			       rpc_authflavor_t pseudoflavor,
 			       const char *client_name)
 {
 	struct rpc_auth_create_args auth_args = {
-		.pseudoflavor = pseudoflavor,
+		.pseudoflavor = pseudoflavor,/*鉴权对应的flavor*/
 		.target_name = client_name,
 	};
 	struct rpc_auth *auth;
@@ -319,11 +324,11 @@ static int rpc_client_register(struct rpc_clnt *clnt,
 			goto out;
 	}
 
-	rpc_register_client(clnt);
+	rpc_register_client(clnt);/*client注册*/
 	if (pipefs_sb)
 		rpc_put_sb_net(net);
 
-	auth = rpcauth_create(&auth_args, clnt);
+	auth = rpcauth_create(&auth_args, clnt);/*创建rpc_auth*/
 	if (IS_ERR(auth)) {
 		dprintk("RPC:       Couldn't create auth handle (flavor %u)\n",
 				pseudoflavor);
@@ -357,7 +362,7 @@ static int rpc_alloc_clid(struct rpc_clnt *clnt)
 	clid = ida_alloc(&rpc_clids, GFP_KERNEL);
 	if (clid < 0)
 		return clid;
-	clnt->cl_clid = clid;
+	clnt->cl_clid = clid;/*设置为client申请到的id*/
 	return 0;
 }
 
@@ -384,11 +389,14 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 
 	err = -EINVAL;
 	if (args->version >= program->nrvers)
+		/*参数要求的版本过大*/
 		goto out_err;
 	version = program->version[args->version];
 	if (version == NULL)
+		/*参数要求的version对应的program不存在*/
 		goto out_err;
 
+	/*创建client*/
 	err = -ENOMEM;
 	clnt = kzalloc(sizeof(*clnt), GFP_KERNEL);
 	if (!clnt)
@@ -396,7 +404,7 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 	clnt->cl_parent = parent ? : clnt;
 	clnt->cl_xprtsec = args->xprtsec;
 
-	err = rpc_alloc_clid(clnt);
+	err = rpc_alloc_clid(clnt);/*申请client id*/
 	if (err)
 		goto out_no_clid;
 
@@ -438,6 +446,7 @@ static struct rpc_clnt * rpc_new_client(const struct rpc_create_args *args,
 	rpc_clnt_set_nodename(clnt, nodename);
 
 	rpc_sysfs_client_setup(clnt, xps, rpc_net_ns(clnt));
+	/*注册client,创建rpc_auth*/
 	err = rpc_client_register(clnt, args->authflavor, args->client_name);
 	if (err)
 		goto out_no_path;
@@ -474,6 +483,7 @@ static struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
 		xps = args->bc_xprt->xpt_bc_xps;
 		xprt_switch_get(xps);
 	} else {
+		/*创建rpc_xprt_switch*/
 		xps = xprt_switch_alloc(xprt, GFP_KERNEL);
 		if (xps == NULL) {
 			xprt_put(xprt);
@@ -484,11 +494,14 @@ static struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
 			xprt->bc_xprt->xpt_bc_xps = xps;
 		}
 	}
+
+	/*创建client*/
 	clnt = rpc_new_client(args, xps, xprt, NULL);
 	if (IS_ERR(clnt))
 		return clnt;
 
 	if (!(args->flags & RPC_CLNT_CREATE_NOPING)) {
+		/*未指明noping标记，执行ping*/
 		int err = rpc_ping(clnt);
 		if (err != 0) {
 			rpc_shutdown_client(clnt);
@@ -531,13 +544,13 @@ static struct rpc_clnt *rpc_create_xprt(struct rpc_create_args *args,
  * it supports this program and version.  RPC_CLNT_CREATE_NOPING disables
  * this behavior so asynchronous tasks can also use rpc_create.
  */
-struct rpc_clnt *rpc_create(struct rpc_create_args *args)
+struct rpc_clnt *rpc_create(struct rpc_create_args *args/*client创建参数*/)
 {
 	struct rpc_xprt *xprt;
 	struct xprt_create xprtargs = {
 		.net = args->net,
 		.ident = args->protocol,
-		.srcaddr = args->saddress,
+		.srcaddr = args->saddress,/*设置源地址，可以为NULL*/
 		.dstaddr = args->address,/*设置目的地址*/
 		.addrlen = args->addrsize,
 		.servername = args->servername,
@@ -551,6 +564,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 	int i;
 
 	if (args->bc_xprt) {
+		/*仅在bc_xprt被设置时，走此流程*/
 		WARN_ON_ONCE(!(args->protocol & XPRT_TRANSPORT_BC));
 		xprt = args->bc_xprt->xpt_bc_xprt;
 		if (xprt) {
@@ -568,6 +582,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 	 * up a string representation of the passed-in address.
 	 */
 	if (xprtargs.servername == NULL) {
+		/*servername未设置，生成servername*/
 		struct sockaddr_un *sun =
 				(struct sockaddr_un *)args->address;
 		struct sockaddr_in *sin =
@@ -575,10 +590,11 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 		struct sockaddr_in6 *sin6 =
 				(struct sockaddr_in6 *)args->address;
 
-		/*支持以下三种方式，af_unix,af_inet,af_inet6*/
+		/*servername为空情况下，支持以下三种方式，af_unix,af_inet,af_inet6*/
 		servername[0] = '\0';
 		switch (args->address->sa_family) {
 		case AF_LOCAL:
+			/*利用目的地址填充servername*/
 			if (sun->sun_path[0])
 				snprintf(servername, sizeof(servername), "%s",
 					 sun->sun_path);
@@ -587,10 +603,12 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 					 sun->sun_path+1);
 			break;
 		case AF_INET:
+			/*利用目的地址填充servername*/
 			snprintf(servername, sizeof(servername), "%pI4",
 				 &sin->sin_addr.s_addr);
 			break;
 		case AF_INET6:
+			/*利用目的地址填充servername*/
 			snprintf(servername, sizeof(servername), "%pI6",
 				 &sin6->sin6_addr);
 			break;
@@ -602,6 +620,7 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 		xprtargs.servername = servername;
 	}
 
+	/*创建rpc xprt*/
 	xprt = xprt_create_transport(&xprtargs);
 	if (IS_ERR(xprt))
 		return (struct rpc_clnt *)xprt;
@@ -619,10 +638,12 @@ struct rpc_clnt *rpc_create(struct rpc_create_args *args)
 	if (args->flags & RPC_CLNT_CREATE_REUSEPORT)
 		xprt->reuseport = 1;
 
+	/*创建client*/
 	clnt = rpc_create_xprt(args, xprt);
 	if (IS_ERR(clnt) || args->nconnect <= 1)
 		return clnt;
 
+	/*每个connect对应一个xport*/
 	for (i = 0; i < args->nconnect - 1; i++) {
 		if (rpc_clnt_add_xprt(clnt, &xprtargs, NULL, NULL) < 0)
 			break;
@@ -1073,6 +1094,7 @@ struct rpc_clnt *rpc_bind_new_program(struct rpc_clnt *old,
 	struct rpc_clnt *clnt;
 	int err;
 
+	/*由old clone产生client*/
 	clnt = __rpc_clone_client(&args, old);
 	if (IS_ERR(clnt))
 		goto out;
@@ -1193,6 +1215,7 @@ void rpc_task_set_client(struct rpc_task *task, struct rpc_clnt *clnt)
 		task->tk_flags |= RPC_TASK_NO_RETRANS_TIMEOUT;
 	/* Add to the client's list of all tasks */
 	spin_lock(&clnt->cl_lock);
+	/*将此task挂接在cl_tasks上*/
 	list_add_tail(&task->tk_task, &clnt->cl_tasks);
 	spin_unlock(&clnt->cl_lock);
 }
@@ -1201,6 +1224,7 @@ static void
 rpc_task_set_rpc_message(struct rpc_task *task, const struct rpc_message *msg)
 {
 	if (msg != NULL) {
+		/*为task关联message*/
 		task->tk_msg.rpc_proc = msg->rpc_proc;
 		task->tk_msg.rpc_argp = msg->rpc_argp;
 		task->tk_msg.rpc_resp = msg->rpc_resp;
@@ -1230,6 +1254,7 @@ struct rpc_task *rpc_run_task(const struct rpc_task_setup *task_setup_data)
 {
 	struct rpc_task *task;
 
+	/*利用task_setup_data创建rpc task*/
 	task = rpc_new_task(task_setup_data);
 	if (IS_ERR(task))
 		return task;
@@ -1237,13 +1262,17 @@ struct rpc_task *rpc_run_task(const struct rpc_task_setup *task_setup_data)
 	if (!RPC_IS_ASYNC(task))
 		task->tk_flags |= RPC_TASK_CRED_NOREF;
 
+	/*设置此task对应的client*/
 	rpc_task_set_client(task, task_setup_data->rpc_client);
+	/*设置此task关联的rpc message*/
 	rpc_task_set_rpc_message(task, task_setup_data->rpc_message);
 
+	/*初始化tk_action，如果此时未设置，则置其为call_start*/
 	if (task->tk_action == NULL)
 		rpc_call_start(task);
 
 	atomic_inc(&task->tk_count);
+	/*执行此task*/
 	rpc_execute(task);
 	return task;
 }
@@ -1273,7 +1302,7 @@ int rpc_call_sync(struct rpc_clnt *clnt, const struct rpc_message *msg, int flag
 		return -EINVAL;
 	}
 
-	task = rpc_run_task(&task_setup_data);
+	task = rpc_run_task(&task_setup_data);/*创建并运行rpc task*/
 	if (IS_ERR(task))
 		return PTR_ERR(task);
 	status = task->tk_status;
@@ -1375,6 +1404,8 @@ EXPORT_SYMBOL_GPL(rpc_prepare_reply_pages);
 void
 rpc_call_start(struct rpc_task *task)
 {
+	/*设置task action为call_start,
+	 * 当其action被触发时，其会设置tk_action为call_reserve*/
 	task->tk_action = call_start;
 }
 EXPORT_SYMBOL_GPL(rpc_call_start);
@@ -1754,8 +1785,11 @@ call_start(struct rpc_task *task)
 
 	/* Increment call count (version might not be valid for ping) */
 	if (clnt->cl_program->version[clnt->cl_vers])
+		/*增加此版本中相应过程函数被调用的次数*/
 		clnt->cl_program->version[clnt->cl_vers]->counts[idx]++;
 	clnt->cl_stats->rpccnt++;
+	/*修改task的tk_action为call_reserve，
+	 * 即当此函数被调用后，call_reserve会被调用*/
 	task->tk_action = call_reserve;
 	rpc_task_set_transport(task, clnt);
 }
@@ -1767,7 +1801,7 @@ static void
 call_reserve(struct rpc_task *task)
 {
 	task->tk_status  = 0;
-	task->tk_action  = call_reserveresult;
+	task->tk_action  = call_reserveresult;/*指明下一步调用call_reserveresult*/
 	xprt_reserve(task);
 }
 
@@ -1788,6 +1822,7 @@ call_reserveresult(struct rpc_task *task)
 	task->tk_status = 0;
 	if (status >= 0) {
 		if (task->tk_rqstp) {
+			/*status为0，且已申请成功了request结构，设置为call_refresh*/
 			task->tk_action = call_refresh;
 			return;
 		}
@@ -1796,11 +1831,13 @@ call_reserveresult(struct rpc_task *task)
 		return;
 	}
 
+	/*状态有误*/
 	switch (status) {
 	case -ENOMEM:
 		rpc_delay(task, HZ >> 2);
 		fallthrough;
 	case -EAGAIN:	/* woken up; retry */
+		/*需要尝试*/
 		task->tk_action = call_retry_reserve;
 		return;
 	default:
@@ -1840,7 +1877,7 @@ call_refreshresult(struct rpc_task *task)
 	int status = task->tk_status;
 
 	task->tk_status = 0;
-	task->tk_action = call_refresh;
+	task->tk_action = call_refresh;/*设置默认action*/
 	switch (status) {
 	case 0:
 		if (rpcauth_uptodatecred(task)) {
@@ -1954,9 +1991,12 @@ rpc_xdr_encode(struct rpc_task *task)
 
 	req->rq_reply_bytes_recvd = 0;
 	req->rq_snd_buf.head[0].iov_len = 0;
+	/*初始化xdr*/
 	xdr_init_encode(&xdr, &req->rq_snd_buf,
 			req->rq_snd_buf.head[0].iov_base, req);
+	/*利用xdr填充header*/
 	if (rpc_encode_header(task, &xdr))
+		/*对header编码失败*/
 		return;
 
 	task->tk_status = rpcauth_wrap_req(task, &xdr);
@@ -1969,6 +2009,7 @@ static void
 call_encode(struct rpc_task *task)
 {
 	if (!rpc_task_need_encode(task))
+		/*此task无需encode,则直接跳出*/
 		goto out;
 
 	/* Dequeue task from the receive queue while we're encoding */
@@ -1977,6 +2018,7 @@ call_encode(struct rpc_task *task)
 	rpc_xdr_encode(task);
 	/* Add task to reply queue before transmission to avoid races */
 	if (task->tk_status == 0 && rpc_reply_expected(task))
+		/*期待收到响应，将请求加入到receive队列*/
 		task->tk_status = xprt_request_enqueue_receive(task);
 	/* Did the encode result in an error condition? */
 	if (task->tk_status != 0) {
@@ -2001,14 +2043,16 @@ call_encode(struct rpc_task *task)
 		return;
 	}
 
+	/*task入队到transmit队列*/
 	xprt_request_enqueue_transmit(task);
 out:
+	/*指明下一步为传输请求*/
 	task->tk_action = call_transmit;
 	/* Check that the connection is OK */
 	if (!xprt_bound(task->tk_xprt))
 		task->tk_action = call_bind;
 	else if (!xprt_connected(task->tk_xprt))
-		task->tk_action = call_connect;
+		task->tk_action = call_connect;/*设置action为connect*/
 }
 
 /*
@@ -2269,6 +2313,7 @@ call_transmit(struct rpc_task *task)
 		return;
 	}
 
+	/*指明下一步是检查传输状态*/
 	task->tk_action = call_transmit_status;
 	if (!xprt_prepare_transmit(task))
 		return;
@@ -2278,6 +2323,7 @@ call_transmit(struct rpc_task *task)
 			task->tk_status = -ENOTCONN;
 			return;
 		}
+		/*发送请求，xmit_queue上所有请求将被发送*/
 		xprt_transmit(task);
 	}
 	xprt_end_transmit(task);
@@ -2296,6 +2342,7 @@ call_transmit_status(struct rpc_task *task)
 	 * test first.
 	 */
 	if (rpc_task_transmitted(task)) {
+		/*此task已发送，等待接收响应*/
 		task->tk_status = 0;
 		xprt_request_wait_receive(task);
 		return;
@@ -2651,16 +2698,19 @@ rpc_encode_header(struct rpc_task *task, struct xdr_stream *xdr)
 	int error;
 
 	error = -EMSGSIZE;
+	/*在xdr前预留6个uint32*/
 	p = xdr_reserve_space(xdr, RPC_CALLHDRSIZE << 2);
 	if (!p)
 		goto out_fail;
-	*p++ = req->rq_xid;
-	*p++ = rpc_call;
-	*p++ = cpu_to_be32(RPC_VERSION);
+	/*填充这6个uint32*/
+	*p++ = req->rq_xid;/*请求编号*/
+	*p++ = rpc_call;/*指明为call操作*/
+	*p++ = cpu_to_be32(RPC_VERSION);/*指明rpc版本*/
 	*p++ = cpu_to_be32(clnt->cl_prog);
 	*p++ = cpu_to_be32(clnt->cl_vers);
-	*p   = cpu_to_be32(task->tk_msg.rpc_proc->p_proc);
+	*p   = cpu_to_be32(task->tk_msg.rpc_proc->p_proc);/*指明要调用的过程id*/
 
+	/*填充鉴权*/
 	error = rpcauth_marshcred(task, xdr);
 	if (error < 0)
 		goto out_fail;
@@ -2671,6 +2721,7 @@ out_fail:
 	return error;
 }
 
+/*decode 消息header*/
 static noinline int
 rpc_decode_header(struct rpc_task *task, struct xdr_stream *xdr)
 {
@@ -2815,6 +2866,7 @@ static int rpcproc_decode_null(struct rpc_rqst *rqstp, struct xdr_stream *xdr,
 	return 0;
 }
 
+/*编解码什么也不做*/
 static const struct rpc_procinfo rpcproc_null = {
 	.p_encode = rpcproc_encode_null,
 	.p_decode = rpcproc_decode_null,
@@ -2849,7 +2901,7 @@ struct rpc_task *rpc_call_null_helper(struct rpc_clnt *clnt,
 		.rpc_xprt = xprt,
 		.rpc_message = &msg,
 		.rpc_op_cred = cred,
-		.callback_ops = ops ?: &rpc_null_ops,
+		.callback_ops = ops ?: &rpc_null_ops/*未指定ops,使用null_ops*/,
 		.callback_data = data,
 		.flags = flags | RPC_TASK_SOFT | RPC_TASK_SOFTCONN |
 			 RPC_TASK_NULLCREDS,
@@ -2870,8 +2922,10 @@ static int rpc_ping(struct rpc_clnt *clnt)
 	int status;
 
 	if (clnt->cl_auth->au_ops->ping)
+		/*提供ping回调的走ping回调*/
 		return clnt->cl_auth->au_ops->ping(clnt);
 
+	/*没有ping回调的，执行helper*/
 	task = rpc_call_null_helper(clnt, NULL, NULL, 0, NULL, NULL);
 	if (IS_ERR(task))
 		return PTR_ERR(task);

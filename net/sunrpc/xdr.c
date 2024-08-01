@@ -66,6 +66,7 @@ EXPORT_SYMBOL_GPL(xdr_decode_netobj);
  */
 __be32 *xdr_encode_opaque_fixed(__be32 *p, const void *ptr, unsigned int nbytes)
 {
+	/*写字符串*/
 	if (likely(nbytes != 0)) {
 		unsigned int quadlen = XDR_QUADLEN(nbytes);
 		unsigned int padding = (quadlen << 2) - nbytes;
@@ -90,7 +91,7 @@ EXPORT_SYMBOL_GPL(xdr_encode_opaque_fixed);
  */
 __be32 *xdr_encode_opaque(__be32 *p, const void *ptr, unsigned int nbytes)
 {
-	*p++ = cpu_to_be32(nbytes);
+	*p++ = cpu_to_be32(nbytes);/*写长度，4个字节*/
 	return xdr_encode_opaque_fixed(p, ptr, nbytes);
 }
 EXPORT_SYMBOL_GPL(xdr_encode_opaque);
@@ -136,20 +137,28 @@ EXPORT_SYMBOL_GPL(xdr_terminate_string);
 size_t xdr_buf_pagecount(const struct xdr_buf *buf)
 {
 	if (!buf->page_len)
+		/*长度为0，直接返回0*/
 		return 0;
+	/*获取buffer需要占用多少个page*/
 	return (buf->page_base + buf->page_len + PAGE_SIZE - 1) >> PAGE_SHIFT;
 }
 
+/*申请并填充buf->bvec*/
 int
 xdr_alloc_bvec(struct xdr_buf *buf, gfp_t gfp)
 {
 	size_t i, n = xdr_buf_pagecount(buf);
 
 	if (n != 0 && buf->bvec == NULL) {
+		/*需要申请page,且还未申请，在此分支下进行申请*/
+
+		/*每个Page对应一个bvc结构*/
 		buf->bvec = kmalloc_array(n, sizeof(buf->bvec[0]), gfp);
 		if (!buf->bvec)
+			/*申请内存失败*/
 			return -ENOMEM;
 		for (i = 0; i < n; i++) {
+			/*初始化bvc[i],buffer->pages指出每页的地址，页大小及偏移量*/
 			bvec_set_page(&buf->bvec[i], buf->pages[i], PAGE_SIZE,
 				      0);
 		}
@@ -1098,7 +1107,7 @@ out_overflow:
  * bytes of data. If so, update the total xdr_buf length, and
  * adjust the length of the current kvec.
  */
-__be32 * xdr_reserve_space(struct xdr_stream *xdr, size_t nbytes)
+__be32 * xdr_reserve_space(struct xdr_stream *xdr, size_t nbytes/*要预留的空间*/)
 {
 	__be32 *p = xdr->p;
 	__be32 *q;
@@ -1106,16 +1115,24 @@ __be32 * xdr_reserve_space(struct xdr_stream *xdr, size_t nbytes)
 	xdr_commit_encode(xdr);
 	/* align nbytes on the next 32-bit boundary */
 	nbytes += 3;
-	nbytes &= ~3;
+	nbytes &= ~3;/*将nbytes按4字节对齐*/
+	/*由于p是__be32类型，使p增加4分之1的nbytes,即预留了nbytes字节*/
 	q = p + (nbytes >> 2);
 	if (unlikely(q > xdr->end || q < p))
+		/*空间不足，增加长度*/
 		return xdr_get_next_encode_buffer(xdr, nbytes);
+
+	/*指向新的预留后的位置*/
 	xdr->p = q;
+
+	/*增加nbytes长度*/
 	if (xdr->iov)
 		xdr->iov->iov_len += nbytes;
 	else
 		xdr->buf->page_len += nbytes;
 	xdr->buf->len += nbytes;
+
+	/*返回之前的起始位置*/
 	return p;
 }
 EXPORT_SYMBOL_GPL(xdr_reserve_space);

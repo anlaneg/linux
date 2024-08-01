@@ -111,15 +111,15 @@ struct shmem_falloc {
 };
 
 struct shmem_options {
-	unsigned long long blocks;/*此文件系统有多少个页*/
+	unsigned long long blocks;/*此文件系统有多少个内存页*/
 	unsigned long long inodes;
 	struct mempolicy *mpol;
-	kuid_t uid;
-	kgid_t gid;
-	umode_t mode;
+	kuid_t uid;/*来源于参数'uid'*/
+	kgid_t gid;/*来源于参数'gid'*/
+	umode_t mode;/*来源于参数'mode'*/
 	bool full_inums;
 	int huge;
-	int seen;
+	int seen;/*用于说明指明了哪些标记（例如：SHMEM_SEEN_BLOCKS）*/
 	bool noswap;
 	unsigned short quota_types;
 	struct shmem_quota_limits qlimits;
@@ -3891,15 +3891,15 @@ static const struct constant_table shmem_param_enums_huge[] = {
 	{}
 };
 
-/*tmpfs文件系统参数*/
+/*tmpfs文件系统支持的参数列表*/
 const struct fs_parameter_spec shmem_fs_parameters[] = {
 	fsparam_u32   ("gid",		Opt_gid),
 	fsparam_enum  ("huge",		Opt_huge,  shmem_param_enums_huge),
 	fsparam_u32oct("mode",		Opt_mode),
 	fsparam_string("mpol",		Opt_mpol),
-	fsparam_string("nr_blocks",	Opt_nr_blocks),
-	fsparam_string("nr_inodes",	Opt_nr_inodes),
-	fsparam_string("size",		Opt_size),
+	fsparam_string("nr_blocks",	Opt_nr_blocks),/*指明内存占用的总页数*/
+	fsparam_string("nr_inodes",	Opt_nr_inodes),/*指明支持的inodes总数*/
+	fsparam_string("size",		Opt_size),/*指明内存占用的“内存字节数”（可以按百分比来指定）*/
 	fsparam_u32   ("uid",		Opt_uid),
 	fsparam_flag  ("inode32",	Opt_inode32),
 	fsparam_flag  ("inode64",	Opt_inode64),
@@ -3916,6 +3916,7 @@ const struct fs_parameter_spec shmem_fs_parameters[] = {
 	{}
 };
 
+/*解析参数，填充fc*/
 static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct shmem_options *ctx = fc->fs_private;
@@ -3926,16 +3927,17 @@ static int shmem_parse_one(struct fs_context *fc, struct fs_parameter *param)
 	kuid_t kuid;
 	kgid_t kgid;
 
-	/*解析文件系统挂载参数*/
+	/*解析文件系统挂载参数，返回参数对应的opt,及参数值*/
 	opt = fs_parse(fc, shmem_fs_parameters, param, &result);
 	if (opt < 0)
 		return opt;
 
 	switch (opt) {
 	case Opt_size:
+		/*遇到”size“参数，指明占用的内存总数*/
 		size = memparse(param->string, &rest);
 		if (*rest == '%') {
-			/*按百分比指定size*/
+			/*按百分比指定size(总内存的百分比）*/
 			size <<= PAGE_SHIFT;
 			size *= totalram_pages();
 			do_div(size, 100);
@@ -4093,7 +4095,7 @@ bad_value:
 	return invalfc(fc, "Bad value for '%s'", param->key);
 }
 
-/*文件系统参数整块解析*/
+/*文件系统参数整块解析（函数按','分隔后，传给fc->ops->parse_param进行处理)*/
 static int shmem_parse_options(struct fs_context *fc, void *data)
 {
 	char *options = data;
@@ -4114,23 +4116,25 @@ static int shmem_parse_options(struct fs_context *fc, void *data)
 			 */
 			options = strchr(options, ',');
 			if (options == NULL)
-				break;
+				break;/*没有遇到',',跳出*/
 			options++;
 			if (!isdigit(*options)) {
+				/*','号之后非数字，认为遇到选项，跳出*/
 				options[-1] = '\0';
 				break;
 			}
 		}
 		if (*this_char) {
+			/*将这个串按key=value格式解释*/
 			char *value = strchr(this_char, '=');
 			size_t len = 0;
 			int err;
 
 			if (value) {
-				*value++ = '\0';
-				len = strlen(value);
+				*value++ = '\0';/*将'='替换为'\0'*/
+				len = strlen(value);/*value的长度*/
 			}
-			err = vfs_parse_fs_string(fc, this_char, value, len);
+			err = vfs_parse_fs_string(fc, this_char/*对应为key*/, value, len/*对应value的长度*/);
 			if (err < 0)
 				return err;
 		}
@@ -4153,7 +4157,9 @@ static int shmem_reconfigure(struct fs_context *fc)
 	used_isp = sbinfo->max_inodes * BOGO_INODE_SIZE - sbinfo->free_ispace;
 
 	if ((ctx->seen & SHMEM_SEEN_BLOCKS) && ctx->blocks) {
+		/*配置指明了blocks,且bocks不为0*/
 		if (!sbinfo->max_blocks) {
+			/*已设置，报错*/
 			err = "Cannot retroactively limit size";
 			goto out;
 		}
@@ -4439,8 +4445,8 @@ static const struct fs_context_operations shmem_fs_context_ops = {
 	.free			= shmem_free_fc,
 	.get_tree		= shmem_get_tree,/*tmpfs加载root entry*/
 #ifdef CONFIG_TMPFS
-	.parse_monolithic	= shmem_parse_options,
-	.parse_param		= shmem_parse_one,
+	.parse_monolithic	= shmem_parse_options,/*参数解析入口函数，调parse_param*/
+	.parse_param		= shmem_parse_one,/*文件系统参数解析及设置fc*/
 	.reconfigure		= shmem_reconfigure,
 #endif
 };

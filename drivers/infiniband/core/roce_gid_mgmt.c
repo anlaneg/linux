@@ -74,8 +74,8 @@ static const struct {
 	bool (*is_supported)(const struct ib_device *device, u32 port_num);
 	enum ib_gid_type gid_type;
 } PORT_CAP_TO_GID_TYPE[] = {
-	{rdma_protocol_roce_eth_encap, IB_GID_TYPE_ROCE},
-	{rdma_protocol_roce_udp_encap, IB_GID_TYPE_ROCE_UDP_ENCAP},
+	{rdma_protocol_roce_eth_encap, IB_GID_TYPE_ROCE},/*rocev1情况，采用ethhdr进行封装*/
+	{rdma_protocol_roce_udp_encap, IB_GID_TYPE_ROCE_UDP_ENCAP},/*rocev2情况，采用udp进行封装*/
 };
 
 #define CAP_TO_GID_TABLE_SIZE	ARRAY_SIZE(PORT_CAP_TO_GID_TYPE)
@@ -87,7 +87,7 @@ unsigned long roce_gid_type_mask_support(struct ib_device *ib_dev, u32 port)
 	unsigned int ret_flags = 0;
 
 	if (!rdma_protocol_roce(ib_dev, port))
-	    /*不支持roce的情况*/
+	    /*不支持roce的情况,返回纯ib*/
 		return 1UL << IB_GID_TYPE_IB;
 
 	/*检查此设备支持哪种版本的roce封装*/
@@ -111,6 +111,7 @@ static void update_gid(enum gid_op_type gid_op, struct ib_device *ib_dev,
 			gid_attr->gid_type = i;
 			switch (gid_op) {
 			case GID_ADD:
+				/*gid添加*/
 				ib_cache_gid_add(ib_dev, port,
 						 gid, gid_attr);
 				break;
@@ -357,6 +358,7 @@ static void enum_netdev_ipv4_ips(struct ib_device *ib_dev,
 		return;
 	}
 
+	/*收集所有ipv4地址*/
 	in_dev_for_each_ifa_rcu(ifa, in_dev) {
 		struct sin_list *entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 
@@ -370,6 +372,7 @@ static void enum_netdev_ipv4_ips(struct ib_device *ib_dev,
 
 	rcu_read_unlock();
 
+	/*针对每个Ipv4地址遇射成gid,并添加*/
 	list_for_each_entry_safe(sin_iter, sin_temp, &sin_list, list) {
 		update_gid_ip(GID_ADD, ib_dev, port, ndev,
 			      (struct sockaddr *)&sin_iter->ip);
@@ -400,6 +403,7 @@ static void enum_netdev_ipv6_ips(struct ib_device *ib_dev,
 		return;
 
 	read_lock_bh(&in6_dev->lock);
+	/*收集这个网络设备上所有ipv6 address*/
 	list_for_each_entry(ifp, &in6_dev->addr_list, if_list) {
 		struct sin6_list *entry = kzalloc(sizeof(*entry), GFP_ATOMIC);
 
@@ -414,11 +418,13 @@ static void enum_netdev_ipv6_ips(struct ib_device *ib_dev,
 
 	in6_dev_put(in6_dev);
 
+	/*遍历所有的ipv6 addr,针对每一个地址遇射成gid*/
 	list_for_each_entry_safe(sin6_iter, sin6_temp, &sin6_list, list) {
 		union ib_gid	gid;
 
+		/*将地址映射为gid*/
 		rdma_ip2gid((struct sockaddr *)&sin6_iter->sin6, &gid);
-		update_gid(GID_ADD, ib_dev, port, &gid, &gid_attr);
+		update_gid(GID_ADD, ib_dev/*ib设备*/, port/*设备的port id*/, &gid, &gid_attr);
 		list_del(&sin6_iter->list);
 		kfree(sin6_iter);
 	}
@@ -427,14 +433,16 @@ static void enum_netdev_ipv6_ips(struct ib_device *ib_dev,
 static void _add_netdev_ips(struct ib_device *ib_dev, u32 port,
 			    struct net_device *ndev)
 {
+	/*枚举ndev的ipv4,ipv6地址，并将其映射后添加进ib_dev的port号端口*/
 	enum_netdev_ipv4_ips(ib_dev, port, ndev);
 	if (IS_ENABLED(CONFIG_IPV6))
 		enum_netdev_ipv6_ips(ib_dev, port, ndev);
 }
 
 static void add_netdev_ips(struct ib_device *ib_dev, u32 port,
-			   struct net_device *rdma_ndev, void *cookie)
+			   struct net_device *rdma_ndev, void *cookie/*ib设备的底层netdev*/)
 {
+	/*枚举cookie的所有ipv4,ipv6地址，并将其映射后添加进ib_dev的port号端口*/
 	_add_netdev_ips(ib_dev, port, cookie);
 }
 
@@ -631,6 +639,7 @@ static void netdevice_event_work_handler(struct work_struct *_work)
 		container_of(_work, struct netdev_event_work, work);
 	unsigned int i;
 
+	/*遍历执行Cmds中所有cb*/
 	for (i = 0; i < ARRAY_SIZE(work->cmds) && work->cmds[i].cb; i++) {
 		ib_enum_all_roce_netdevs(work->cmds[i].filter,
 					 work->cmds[i].filter_ndev,
@@ -654,14 +663,18 @@ static int netdevice_queue_work(struct netdev_event_work_cmd *cmds,
 		return NOTIFY_DONE;
 
 	memcpy(ndev_work->cmds, cmds, sizeof(ndev_work->cmds));
+	/*遍历所有cmd,存在情况不能填充满cmd的情况，故保证cb不为空*/
 	for (i = 0; i < ARRAY_SIZE(ndev_work->cmds) && ndev_work->cmds[i].cb; i++) {
 		if (!ndev_work->cmds[i].ndev)
+			/*为其关联ndev*/
 			ndev_work->cmds[i].ndev = ndev;
 		if (!ndev_work->cmds[i].filter_ndev)
+			/*为其关联filter_ndev*/
 			ndev_work->cmds[i].filter_ndev = ndev;
 		dev_hold(ndev_work->cmds[i].ndev);
 		dev_hold(ndev_work->cmds[i].filter_ndev);
 	}
+	/*初始化work,并将其入wq,处理netdevice work*/
 	INIT_WORK(&ndev_work->work, netdevice_event_work_handler);
 
 	queue_work(gid_cache_wq, &ndev_work->work);
@@ -761,6 +774,7 @@ static int netdevice_event(struct notifier_block *this, unsigned long event,
 	static const struct netdev_event_work_cmd bonding_event_ips_del_cmd = {
 		.cb = del_netdev_upper_ips, .filter = upper_device_filter};
 	struct net_device *ndev = netdev_notifier_info_to_dev(ptr);
+	/*各成员默认初始化为NULL*/
 	struct netdev_event_work_cmd cmds[ROCE_NETDEV_CALLBACK_SZ] = { {NULL} };
 
 	if (ndev->type != ARPHRD_ETHER)
@@ -769,12 +783,14 @@ static int netdevice_event(struct notifier_block *this, unsigned long event,
 	switch (event) {
 	case NETDEV_REGISTER:
 	case NETDEV_UP:
+		/*设备up*/
 		cmds[0] = bonding_default_del_cmd_join;
 		cmds[1] = add_default_gid_cmd;
 		cmds[2] = add_cmd;
 		break;
 
 	case NETDEV_UNREGISTER:
+		/*设备解注册*/
 		if (ndev->reg_state < NETREG_UNREGISTERED)
 			cmds[0] = del_cmd;
 		else
@@ -782,6 +798,7 @@ static int netdevice_event(struct notifier_block *this, unsigned long event,
 		break;
 
 	case NETDEV_CHANGEADDR:
+		/*设备改地址*/
 		cmds[0] = netdev_del_cmd;
 		if (ndev->reg_state == NETREG_REGISTERED) {
 			cmds[1] = add_default_gid_cmd;
@@ -832,12 +849,14 @@ static int addr_event(struct notifier_block *this, unsigned long event,
 	if (ndev->type != ARPHRD_ETHER)
 		return NOTIFY_DONE;
 
+	/*将事件映射到gid添加或删除*/
 	switch (event) {
 	case NETDEV_UP:
 		gid_op = GID_ADD;
 		break;
 
 	case NETDEV_DOWN:
+		/*地址移除对应的是gid删除*/
 		gid_op = GID_DEL;
 		break;
 
@@ -863,7 +882,7 @@ static int addr_event(struct notifier_block *this, unsigned long event,
 	return NOTIFY_DONE;
 }
 
-static int inetaddr_event(struct notifier_block *this, unsigned long event,
+static int inetaddr_event(struct notifier_block *this, unsigned long event/*添加/删除事件*/,
 			  void *ptr)
 {
 	struct sockaddr_in	in;
@@ -874,6 +893,7 @@ static int inetaddr_event(struct notifier_block *this, unsigned long event,
 	in.sin_addr.s_addr = ifa->ifa_address;
 	ndev = ifa->ifa_dev->dev;
 
+	/*产生ipv4地址变化事件*/
 	return addr_event(this, event, (struct sockaddr *)&in, ndev);
 }
 
@@ -888,17 +908,21 @@ static int inet6addr_event(struct notifier_block *this, unsigned long event,
 	in6.sin6_addr = ifa6->addr;
 	ndev = ifa6->idev->dev;
 
+	/*产生ipv6地址变化事件*/
 	return addr_event(this, event, (struct sockaddr *)&in6, ndev);
 }
 
+/*关注netdev变化事件，来同步gid*/
 static struct notifier_block nb_netdevice = {
 	.notifier_call = netdevice_event
 };
 
+/*关注ipv4地址变化事件，来同步gid*/
 static struct notifier_block nb_inetaddr = {
 	.notifier_call = inetaddr_event
 };
 
+/*关注ipv6地址变化事件,来同步gid*/
 static struct notifier_block nb_inet6addr = {
 	.notifier_call = inet6addr_event
 };
@@ -909,6 +933,7 @@ int __init roce_gid_mgmt_init(void)
 	if (!gid_cache_wq)
 		return -ENOMEM;
 
+	/*监听inetaddr变化事件，添加及移除gid*/
 	register_inetaddr_notifier(&nb_inetaddr);
 	if (IS_ENABLED(CONFIG_IPV6))
 		register_inet6addr_notifier(&nb_inet6addr);

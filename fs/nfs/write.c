@@ -1485,6 +1485,7 @@ void nfs_pageio_reset_write_mds(struct nfs_pageio_descriptor *pgio)
 EXPORT_SYMBOL_GPL(nfs_pageio_reset_write_mds);
 
 
+/*rpc task执行，触发commit_rpc_prepare回调*/
 void nfs_commit_prepare(struct rpc_task *task, void *calldata)
 {
 	struct nfs_commit_data *data = calldata;

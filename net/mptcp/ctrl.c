@@ -26,10 +26,11 @@ struct mptcp_pernet {
 	struct ctl_table_header *ctl_table_hdr;
 #endif
 
+	/*sysctl控制的本netns中的控制变量*/
 	unsigned int add_addr_timeout;
 	unsigned int close_timeout;
 	unsigned int stale_loss_cnt;
-	u8 mptcp_enabled;
+	u8 mptcp_enabled;/*是否开启mptcp*/
 	u8 checksum_enabled;
 	u8 allow_join_initial_addr_port;
 	u8 pm_type;
@@ -43,6 +44,7 @@ static struct mptcp_pernet *mptcp_get_pernet(const struct net *net)
 
 int mptcp_is_enabled(const struct net *net)
 {
+	/*当前netns是否开启mptcp*/
 	return mptcp_get_pernet(net)->mptcp_enabled;
 }
 
@@ -53,6 +55,7 @@ unsigned int mptcp_get_add_addr_timeout(const struct net *net)
 
 int mptcp_is_checksum_enabled(const struct net *net)
 {
+	/*当前netns是否开启checksum*/
 	return mptcp_get_pernet(net)->checksum_enabled;
 }
 
@@ -83,6 +86,7 @@ const char *mptcp_get_scheduler(const struct net *net)
 	return mptcp_get_pernet(net)->scheduler;
 }
 
+/*默认值*/
 static void mptcp_pernet_set_defaults(struct mptcp_pernet *pernet)
 {
 	pernet->mptcp_enabled = 1;
@@ -96,9 +100,10 @@ static void mptcp_pernet_set_defaults(struct mptcp_pernet *pernet)
 }
 
 #ifdef CONFIG_SYSCTL
+/*注：以下ctl_table项均没有设置data,原因是每个net ns需要有不同的data,故均在初始化时设置*/
 static struct ctl_table mptcp_sysctl_table[] = {
 	{
-		.procname = "enabled",
+		.procname = "enabled",/*开启mptcp*/
 		.maxlen = sizeof(u8),
 		.mode = 0644,
 		/* users with CAP_NET_ADMIN or root (not and) can change this
@@ -166,11 +171,13 @@ static int mptcp_pernet_new_table(struct net *net, struct mptcp_pernet *pernet)
 
 	table = mptcp_sysctl_table;
 	if (!net_eq(net, &init_net)) {
+		/*非init_net，则需要复制一份table*/
 		table = kmemdup(table, sizeof(mptcp_sysctl_table), GFP_KERNEL);
 		if (!table)
 			goto err_alloc;
 	}
 
+	/*设置当前net ns的sysctl data*/
 	table[0].data = &pernet->mptcp_enabled;
 	table[1].data = &pernet->add_addr_timeout;
 	table[2].data = &pernet->checksum_enabled;
@@ -180,6 +187,7 @@ static int mptcp_pernet_new_table(struct net *net, struct mptcp_pernet *pernet)
 	table[6].data = &pernet->scheduler;
 	table[7].data = &pernet->close_timeout;
 
+	/*net注册sysctl路径（同样的路径，由哪个netns发起，即配置哪个netns)*/
 	hdr = register_net_sysctl_sz(net, MPTCP_SYSCTL_PATH, table,
 				     ARRAY_SIZE(mptcp_sysctl_table));
 	if (!hdr)
@@ -222,7 +230,7 @@ static int __net_init mptcp_net_init(struct net *net)
 
 	mptcp_pernet_set_defaults(pernet);
 
-	return mptcp_pernet_new_table(net, pernet);
+	return mptcp_pernet_new_table(net, pernet);/*初始化此netns下的mptcp sysctl变量*/
 }
 
 /* Note: the callback will only be called per extra netns */
@@ -245,6 +253,7 @@ void __init mptcp_init(void)
 	mptcp_join_cookie_init();
 	mptcp_proto_init();
 
+	/*针对每个netns提供相应初始化处理*/
 	if (register_pernet_subsys(&mptcp_pernet_ops) < 0)
 		panic("Failed to register MPTCP pernet subsystem.\n");
 }

@@ -21,7 +21,7 @@
 #include "aosp.h"
 #include "leds.h"
 
-static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
+static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result/*请求执行结果*/, u16 opcode,
 				  struct sk_buff *skb)
 {
 	bt_dev_dbg(hdev, "result 0x%2.2x", result);
@@ -29,8 +29,8 @@ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
 	if (hdev->req_status != HCI_REQ_PEND)
 		return;
 
-	hdev->req_result = result;
-	hdev->req_status = HCI_REQ_DONE;
+	hdev->req_result = result;/*指出请求执行结果*/
+	hdev->req_status = HCI_REQ_DONE;/*标记请求已执行*/
 
 	if (skb) {
 		struct sock *sk = hci_skb_sk(skb);
@@ -39,7 +39,7 @@ static void hci_cmd_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
 		if (sk)
 			sock_put(sk);
 
-		hdev->req_skb = skb_get(skb);
+		hdev->req_skb = skb_get(skb);/*设备同步返回skb*/
 	}
 
 	wake_up_interruptible(&hdev->req_wait_q);
@@ -53,14 +53,17 @@ static struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode,
 	struct hci_command_hdr *hdr;
 	struct sk_buff *skb;
 
+	/*申请一个skb*/
 	skb = bt_skb_alloc(len, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
 
+	/*添加command header*/
 	hdr = skb_put(skb, HCI_COMMAND_HDR_SIZE);
 	hdr->opcode = cpu_to_le16(opcode);
 	hdr->plen   = plen;
 
+	/*添加payload*/
 	if (plen)
 		skb_put_data(skb, param, plen);
 
@@ -73,6 +76,7 @@ static struct sk_buff *hci_cmd_sync_alloc(struct hci_dev *hdev, u16 opcode,
 	 * likely mgmt socket that initiated the command).
 	 */
 	if (sk) {
+		/*指明此skb关联的socket*/
 		hci_skb_sk(skb) = sk;
 		sock_hold(sk);
 	}
@@ -102,11 +106,13 @@ static void hci_cmd_sync_add(struct hci_request *req, u16 opcode, u32 plen,
 		return;
 	}
 
+	/*cmd_q为空，指明request start*/
 	if (skb_queue_empty(&req->cmd_q))
 		bt_cb(skb)->hci.req_flags |= HCI_REQ_START;
 
 	hci_skb_event(skb) = event;
 
+	/*将此skb加入到request中*/
 	skb_queue_tail(&req->cmd_q, skb);
 }
 
@@ -128,16 +134,20 @@ static int hci_cmd_sync_run(struct hci_request *req)
 
 	/* Do not allow empty requests */
 	if (skb_queue_empty(&req->cmd_q))
+		/*cmd_q为空，报错*/
 		return -ENODATA;
 
 	skb = skb_peek_tail(&req->cmd_q);
+	/*为最后一个cmd skb设置请求complete回调，用于标记同步请求执行完成*/
 	bt_cb(skb)->hci.req_complete_skb = hci_cmd_sync_complete;
 	bt_cb(skb)->hci.req_flags |= HCI_REQ_SKB;
 
 	spin_lock_irqsave(&hdev->cmd_q.lock, flags);
+	/*将cmd_q链表上的内容，移至cmd_q上*/
 	skb_queue_splice_tail(&req->cmd_q, &hdev->cmd_q);
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 
+	/*将cmd_work入队，处理hdev->cmd_q*/
 	queue_work(hdev->workqueue, &hdev->cmd_work);
 
 	return 0;
@@ -145,7 +155,7 @@ static int hci_cmd_sync_run(struct hci_request *req)
 
 /* This function requires the caller holds hdev->req_lock. */
 struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
-				  const void *param, u8 event, u32 timeout,
+				  const void *param, u8 event, u32 timeout/*执行超时时间*/,
 				  struct sock *sk)
 {
 	struct hci_request req;
@@ -154,16 +164,20 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 
 	bt_dev_dbg(hdev, "Opcode 0x%4.4x", opcode);
 
-	hci_req_init(&req, hdev);
+	hci_req_init(&req, hdev);/*初始化req*/
 
+	/*添加cmd*/
 	hci_cmd_sync_add(&req, opcode, plen, param, event, sk);
 
+	/*同步请求标记req pending*/
 	hdev->req_status = HCI_REQ_PEND;
 
+	/*运行此cmd*/
 	err = hci_cmd_sync_run(&req);
 	if (err < 0)
 		return ERR_PTR(err);
 
+	/*等待req_status发生变换*/
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
 					       hdev->req_status != HCI_REQ_PEND,
 					       timeout);
@@ -173,10 +187,12 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 
 	switch (hdev->req_status) {
 	case HCI_REQ_DONE:
+		/*请求完成，获取request执行结果*/
 		err = -bt_to_errno(hdev->req_result);
 		break;
 
 	case HCI_REQ_CANCELED:
+		/*请求被超时取消*/
 		err = -hdev->req_result;
 		break;
 
@@ -193,11 +209,12 @@ struct sk_buff *__hci_cmd_sync_sk(struct hci_dev *hdev, u16 opcode, u32 plen,
 	bt_dev_dbg(hdev, "end: err %d", err);
 
 	if (err < 0) {
+		/*响应出错，释放此skb*/
 		kfree_skb(skb);
 		return ERR_PTR(err);
 	}
 
-	return skb;
+	return skb;/*成功响应，返回此skb*/
 }
 EXPORT_SYMBOL(__hci_cmd_sync_sk);
 
@@ -611,6 +628,7 @@ void hci_cmd_sync_cancel(struct hci_dev *hdev, int err)
 	bt_dev_dbg(hdev, "err 0x%2.2x", err);
 
 	if (hdev->req_status == HCI_REQ_PEND) {
+		/*标记此请求被取消*/
 		hdev->req_result = err;
 		hdev->req_status = HCI_REQ_CANCELED;
 
@@ -645,6 +663,7 @@ int hci_cmd_sync_submit(struct hci_dev *hdev, hci_cmd_sync_work_func_t func,
 	entry->destroy = destroy;
 
 	mutex_lock(&hdev->cmd_sync_work_lock);
+	/*将entry添加至cmd_sync_work_list*/
 	list_add_tail(&entry->list, &hdev->cmd_sync_work_list);
 	mutex_unlock(&hdev->cmd_sync_work_lock);
 
@@ -3232,6 +3251,7 @@ static int hci_init_stage_sync(struct hci_dev *hdev,
 {
 	size_t i;
 
+	/*依次调用stage定义的一组回调，如遇err,则提前终止调用*/
 	for (i = 0; stage[i].func; i++) {
 		int err;
 
@@ -4627,11 +4647,14 @@ static int hci_dev_setup_sync(struct hci_dev *hdev)
 
 	bt_dev_dbg(hdev, "");
 
+	/*dev setup事件通知*/
 	hci_sock_dev_event(hdev, HCI_DEV_SETUP);
 
+	/*触发setup回调*/
 	if (hdev->setup)
 		ret = hdev->setup(hdev);
 
+	/*对quirks标记进行告警*/
 	for (i = 0; i < ARRAY_SIZE(hci_broken_table); i++) {
 		if (test_bit(hci_broken_table[i].quirk, &hdev->quirks))
 			bt_dev_warn(hdev, "%s", hci_broken_table[i].desc);
@@ -4696,7 +4719,7 @@ static int hci_dev_init_sync(struct hci_dev *hdev)
 	bt_dev_dbg(hdev, "");
 
 	atomic_set(&hdev->cmd_cnt, 1);
-	set_bit(HCI_INIT, &hdev->flags);
+	set_bit(HCI_INIT, &hdev->flags);/*标记init设备*/
 
 	ret = hci_dev_setup_sync(hdev);
 
@@ -4748,6 +4771,7 @@ int hci_dev_open_sync(struct hci_dev *hdev)
 	bt_dev_dbg(hdev, "");
 
 	if (hci_dev_test_flag(hdev, HCI_UNREGISTER)) {
+		/*有unregister标记，则直接退出*/
 		ret = -ENODEV;
 		goto done;
 	}
@@ -4788,6 +4812,7 @@ int hci_dev_open_sync(struct hci_dev *hdev)
 		goto done;
 	}
 
+	/*触发hci设备的open回调*/
 	if (hdev->open(hdev)) {
 		ret = -EIO;
 		goto done;
@@ -4795,15 +4820,18 @@ int hci_dev_open_sync(struct hci_dev *hdev)
 
 	hci_devcd_reset(hdev);
 
+	/*设置hdev设备达到running*/
 	set_bit(HCI_RUNNING, &hdev->flags);
+	/*触发dev open事件通知*/
 	hci_sock_dev_event(hdev, HCI_DEV_OPEN);
 
 	ret = hci_dev_init_sync(hdev);
 	if (!ret) {
+		/*设备初始化成功*/
 		hci_dev_hold(hdev);
 		hci_dev_set_flag(hdev, HCI_RPA_EXPIRED);
 		hci_adv_instances_set_rpa_expired(hdev, true);
-		set_bit(HCI_UP, &hdev->flags);
+		set_bit(HCI_UP, &hdev->flags);/*标记设备up*/
 		hci_sock_dev_event(hdev, HCI_DEV_UP);
 		hci_leds_update_powered(hdev, true);
 		if (!hci_dev_test_flag(hdev, HCI_SETUP) &&

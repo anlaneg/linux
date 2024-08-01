@@ -240,7 +240,7 @@ struct ib_cm_sidr_rep_event_param {
 };
 
 struct ib_cm_event {
-	enum ib_cm_event_type	event;
+	enum ib_cm_event_type	event;/*cm事件（收到消息后触发）*/
 	union {
 		struct ib_cm_req_event_param	req_rcvd;
 		struct ib_cm_rep_event_param	rep_rcvd;
@@ -258,6 +258,7 @@ struct ib_cm_event {
 	void			*private_data;
 };
 
+/*cm request消息*/
 #define CM_REQ_ATTR_ID		cpu_to_be16(0x0010)
 #define CM_MRA_ATTR_ID		cpu_to_be16(0x0011)
 #define CM_REJ_ATTR_ID		cpu_to_be16(0x0012)

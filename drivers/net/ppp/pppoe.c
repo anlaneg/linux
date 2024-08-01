@@ -519,7 +519,7 @@ static struct packet_type pppoes_ptype __read_mostly = {
 
 static struct packet_type pppoed_ptype __read_mostly = {
 	.type	= cpu_to_be16(ETH_P_PPP_DISC),
-	.func	= pppoe_disc_rcv,
+	.func	= pppoe_disc_rcv,/*PPPoE discovery messages报文处理*/
 };
 
 static struct proto pppoe_sk_proto __read_mostly = {

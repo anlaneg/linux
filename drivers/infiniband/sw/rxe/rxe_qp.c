@@ -87,12 +87,14 @@ int rxe_qp_chk_init(struct rxe_dev *rxe, struct ib_qp_init_attr *init)
 
 	if (init->qp_type == IB_QPT_GSI) {
 		if (!rdma_is_port_valid(&rxe->ib_dev, port_num)) {
+			/*此设备无此port_num，报错*/
 			rxe_dbg_dev(rxe, "invalid port = %d\n", port_num);
 			goto err1;
 		}
 
 		port = &rxe->port;
 
+		/*此port已初始化qp_gsi_index,报错*/
 		if (init->qp_type == IB_QPT_GSI && port->qp_gsi_index) {
 			rxe_dbg_dev(rxe, "GSI QP exists for port %d\n", port_num);
 			goto err1;
@@ -167,8 +169,8 @@ static void rxe_qp_init_misc(struct rxe_dev *rxe, struct rxe_qp *qp,
 
 	switch (init->qp_type) {
 	case IB_QPT_GSI:
-		qp->ibqp.qp_num		= 1;
-		port->qp_gsi_index	= qpn;
+		qp->ibqp.qp_num		= 1;/*指明qp编号为1*/
+		port->qp_gsi_index	= qpn;/*指明为qpn==1对应的qp*/
 		qp->attr.port_num	= init->port_num;
 		break;
 
@@ -278,9 +280,9 @@ static int rxe_qp_init_req(struct rxe_dev *rxe, struct rxe_qp *qp,
 	qp->req.opcode		= -1;
 	qp->comp.opcode		= -1;
 
-	/*wqe消息处理任务，负责向外发送请求类报文*/
+	/*qp->send_q中填充好的send_wqe处理，负责构造skb并向外发送报文*/
 	rxe_init_task(&qp->req.task, qp, rxe_requester);
-	/*wqe处理完成后，此任务将被调度，用于进行响应处理；处理外部发送过来的响应类报文*/
+	/*收到对端发送过来的响应，针对响应内容生成send_cq上的通知内容。*/
 	rxe_init_task(&qp->comp.task, qp, rxe_completer);
 
 	qp->qp_timeout_jiffies = 0; /* Can't be set for UD/UC in modify_qp */
@@ -355,7 +357,7 @@ static int rxe_qp_init_resp(struct rxe_dev *rxe, struct rxe_qp *qp,
 			return err;
 	}
 
-	/*处理收取到的请求类报文，针对这些报文进行响应*/
+	/*处理收取到的请求类报文，针对这些报文进行响应（包括将报文内容填充到用户态指明的recv_wr)*/
 	rxe_init_task(&qp->resp.task, qp, rxe_responder);
 
 	qp->resp.opcode		= OPCODE_NONE;
@@ -391,6 +393,7 @@ int rxe_qp_from_init(struct rxe_dev *rxe, struct rxe_qp *qp, struct rxe_pd *pd,
 	atomic_inc(&rcq->num_wq);
 	atomic_inc(&scq->num_wq);
 
+	/*利用init初始化qp*/
 	rxe_qp_init_misc(rxe, qp, init);
 
 	/*创建sq,初始化req，complete*/
@@ -540,7 +543,7 @@ static void rxe_qp_reset(struct rxe_qp *qp)
 	rxe_disable_task(&qp->req.task);
 
 	/* drain work and packet queuesc */
-	rxe_requester(qp);
+	rxe_requester(qp);/*排空qp中的内容*/
 	rxe_completer(qp);
 	rxe_responder(qp);
 
@@ -852,7 +855,7 @@ static void rxe_qp_do_cleanup(struct work_struct *work)
 		rxe_cleanup_task(&qp->comp.task);
 
 	/* flush out any receive wr's or pending requests */
-	rxe_requester(qp);
+	rxe_requester(qp);/*排空qp中的内容*/
 	rxe_completer(qp);
 	rxe_responder(qp);
 

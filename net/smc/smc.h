@@ -246,6 +246,7 @@ struct smc_connection {
 
 struct smc_sock {				/* smc sock container */
 	struct sock		sk;
+	/*内部对应的tcp socket*/
 	struct socket		*clcsock;	/* internal tcp socket */
 	void			(*clcsk_state_change)(struct sock *sk);
 						/* original stat_change fct. */
@@ -256,6 +257,7 @@ struct smc_sock {				/* smc sock container */
 	void			(*clcsk_error_report)(struct sock *sk);
 						/* original error_report fct. */
 	struct smc_connection	conn;		/* smc connection */
+	/*指明listen socket*/
 	struct smc_sock		*listen_smc;	/* listen parent */
 	struct work_struct	connect_work;	/* handle non-blocking connect*/
 	struct work_struct	tcp_listen_work;/* handle tcp socket accepts */

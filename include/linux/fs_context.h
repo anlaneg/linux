@@ -67,12 +67,13 @@ struct fs_parameter {
 	//参数值类型
 	enum fs_value_type	type:8;		/* The type of value here */
 	union {
+		/*保存参数值*/
 		char		*string;
 		void		*blob;
 		struct filename	*name;
 		struct file	*file;
 	};
-	size_t	size;
+	size_t	size;/*value的长度*/
 	int	dirfd;
 };
 
@@ -105,12 +106,15 @@ struct fs_context {
 	/*此挂载对应的net namespace*/
 	struct net		*net_ns;	/* The network namespace for this mount */
 	const struct cred	*cred;		/* The mounter's credentials */
+	/*输出buffer，用于log*/
 	struct p_log		log;		/* Logging buffer */
 	/*source提供的数值*/
 	const char		*source;	/* The source name (eg. dev path) */
 	void			*security;	/* LSM options */
 	void			*s_fs_info;	/* Proposed s_fs_info */
+	/*指明参数提供了哪些superblock标记，见vfs_parse_sb_flag*/
 	unsigned int		sb_flags;	/* Proposed superblock flags (SB_*) */
+	/*指明哪些标记被修改过*/
 	unsigned int		sb_flags_mask;	/* Superblock flags that were changed */
 	unsigned int		s_iflags;	/* OR'd with sb->s_iflags */
 	/*申请此结构的目的*/
@@ -129,7 +133,7 @@ struct fs_context_operations {
 	void (*free)(struct fs_context *fc);
 	//各fs在通过src_fc拷贝制作一份副本时，填充fc中私有结构
 	int (*dup)(struct fs_context *fc, struct fs_context *src_fc);
-	//各fs定制的文件系统mount时data参数解析函数，每次调用仅传入一个参数,如果返回ENOPARAM，表示参数不被认识
+	//各fs定制的文件系统mount时data参数解析函数填充fc，每次调用仅传入一个参数,如果返回ENOPARAM，表示此参数不被认识
 	int (*parse_param)(struct fs_context *fc, struct fs_parameter *param);
 	//此函数用于mount时data参数整块解析用，如果此回调不提供，则使用generic_parse_monolithic,
 	int (*parse_monolithic)(struct fs_context *fc, void *data);

@@ -14,7 +14,7 @@
 	__pptr->x;								\
 })
 
-#define __put_unaligned_t(type, val, ptr) do {					\
+#define __put_unaligned_t(type/*类型*/, val/*值*/, ptr/*待存入位置*/) do {					\
 	struct { type x; } __packed *__pptr = (typeof(__pptr))(ptr);		\
 	__pptr->x = (val);							\
 } while (0)
@@ -39,7 +39,7 @@ static inline u64 get_unaligned_le64(const void *p)
 
 static inline void put_unaligned_le16(u16 val, void *p)
 {
-	__put_unaligned_t(__le16, cpu_to_le16(val), p);
+	__put_unaligned_t(__le16, cpu_to_le16(val)/*cpu转小端*/, p);
 }
 
 static inline void put_unaligned_le32(u32 val, void *p)

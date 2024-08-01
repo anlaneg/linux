@@ -293,7 +293,7 @@ static inline u32 queue_index_from_addr(const struct rxe_queue *q,
 
 static inline void *queue_head(struct rxe_queue *q, enum queue_type type)
 {
-    /*队列为空时，返回NULL，否则去首个元素*/
+    /*队列为空时，返回NULL，否则取首个元素*/
 	return queue_empty(q, type) ? NULL : queue_consumer_addr(q, type);
 }
 

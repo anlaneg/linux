@@ -2550,6 +2550,7 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	wb_bandwidth_estimate_start(wb);
 	while (1) {
 		if (mapping->a_ops->writepages) {
+			/*将页面刷到磁盘*/
 			ret = mapping->a_ops->writepages(mapping, wbc);
 		} else if (mapping->a_ops->writepage) {
 			struct blk_plug plug;

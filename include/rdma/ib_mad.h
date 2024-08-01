@@ -142,7 +142,7 @@ struct ib_mad_hdr {
 	__be16	status;
 	__be16	class_specific;
 	__be64	tid;
-	__be16	attr_id;
+	__be16	attr_id;/*消息类型*/
 	__be16	resv;
 	__be32	attr_mod;
 };
@@ -568,16 +568,16 @@ enum {
 	IB_MAD_USER_RMPP = IB_USER_MAD_USER_RMPP,
 };
 struct ib_mad_agent {
-	struct ib_device	*device;
-	struct ib_qp		*qp;
-	ib_mad_recv_handler	recv_handler;
-	ib_mad_send_handler	send_handler;
+	struct ib_device	*device;/*关联的ib设备*/
+	struct ib_qp		*qp;/*此mad agent关联的qp*/
+	ib_mad_recv_handler	recv_handler;/*接收处理*/
+	ib_mad_send_handler	send_handler;/*发送处理*/
 	void			*context;
 	u32			hi_tid;
 	u32			flags;
 	void			*security;
 	struct list_head	mad_agent_sec_list;
-	u8			port_num;
+	u8			port_num;/*关联的ib设备port id*/
 	u8			rmpp_version;
 	bool			smp_allowed;
 };

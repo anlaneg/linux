@@ -274,7 +274,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 	if (rule->iifindex && (rule->iifindex != fl->flowi_iif))
 		goto out;
 
-	/*为什么会有匹配出接口，出接口当前还未知呀？？？*/
+	/*为什么会有匹配出接口，出接口当前还未知(策略需要）*/
 	if (rule->oifindex && (rule->oifindex != fl->flowi_oif))
 		goto out;
 
@@ -285,6 +285,7 @@ static int fib_rule_match(struct fib_rule *rule, struct fib_rules_ops *ops,
 	if (rule->tun_id && (rule->tun_id != fl->flowi_tun_key.tun_id))
 		goto out;
 
+	/*规则有l3mdev标记，检查vrf策略是否匹配*/
 	if (rule->l3mdev && !l3mdev_fib_rule_match(rule->fr_net, fl, arg))
 		goto out;
 
@@ -486,6 +487,7 @@ static struct fib_rule *rule_find(struct fib_rules_ops *ops,
 			continue;
 
 		if (rule->l3mdev && r->l3mdev != rule->l3mdev)
+			/*规则指定了l3mdev,检查是否值相等*/
 			continue;
 
 		if (uid_range_set(&rule->uid_range) &&
@@ -523,6 +525,7 @@ static int fib_nl2rule_l3mdev(struct nlattr *nla, struct fib_rule *nlrule,
 {
 	nlrule->l3mdev = nla_get_u8(nla);
 	if (nlrule->l3mdev != 1) {
+		/*只容许l3mdev指定1*/
 		NL_SET_ERR_MSG(extack, "Invalid l3mdev attribute");
 		return -1;
 	}
@@ -635,6 +638,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 
 	if (tb[FRA_L3MDEV] &&
 	    fib_nl2rule_l3mdev(tb[FRA_L3MDEV], nlrule, extack) < 0)
+		/*fra_l3mdev配置不正确*/
 		goto errout_free;
 
 	nlrule->action = frh->action;
@@ -673,6 +677,7 @@ static int fib_nl2rule(struct sk_buff *skb, struct nlmsghdr *nlh,
 	}
 
 	if (nlrule->l3mdev && nlrule->table) {
+		/*指明了l3mdev且指定了table,两者冲突，报错（只能指明其一）*/
 		NL_SET_ERR_MSG(extack, "l3mdev and table are mutually exclusive");
 		goto errout_free;
 	}
@@ -771,6 +776,7 @@ static int rule_exists(struct fib_rules_ops *ops, struct fib_rule_hdr *frh,
 			continue;
 
 		if (r->l3mdev != rule->l3mdev)
+			/*两者l3mdev不匹配（只有1，和0两种值）*/
 			continue;
 
 		if (!uid_eq(r->uid_range.start, rule->uid_range.start) ||
@@ -803,7 +809,7 @@ static const struct nla_policy fib_rule_policy[FRA_MAX + 1] = {
 	[FRA_UNSPEC]	= { .strict_start_type = FRA_DPORT_RANGE + 1 },
 	[FRA_IIFNAME]	= { .type = NLA_STRING, .len = IFNAMSIZ - 1 },
 	[FRA_OIFNAME]	= { .type = NLA_STRING, .len = IFNAMSIZ - 1 },
-	[FRA_PRIORITY]	= { .type = NLA_U32 },
+	[FRA_PRIORITY]	= { .type = NLA_U32 },/*优先级*/
 	[FRA_FWMARK]	= { .type = NLA_U32 },
 	[FRA_FLOW]	= { .type = NLA_U32 },
 	[FRA_TUN_ID]	= { .type = NLA_U64 },
@@ -812,9 +818,9 @@ static const struct nla_policy fib_rule_policy[FRA_MAX + 1] = {
 	[FRA_SUPPRESS_PREFIXLEN] = { .type = NLA_U32 },
 	[FRA_SUPPRESS_IFGROUP] = { .type = NLA_U32 },
 	[FRA_GOTO]	= { .type = NLA_U32 },
-	[FRA_L3MDEV]	= { .type = NLA_U8 },
+	[FRA_L3MDEV]	= { .type = NLA_U8 },/*???*/
 	[FRA_UID_RANGE]	= { .len = sizeof(struct fib_rule_uid_range) },
-	[FRA_PROTOCOL]  = { .type = NLA_U8 },
+	[FRA_PROTOCOL]  = { .type = NLA_U8 },/*策略来源*/
 	[FRA_IP_PROTO]  = { .type = NLA_U8 },
 	[FRA_SPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) },
 	[FRA_DPORT_RANGE] = { .len = sizeof(struct fib_rule_port_range) }

@@ -375,7 +375,7 @@ static struct sock *smc_sock_alloc(struct net *net, struct socket *sock,
 		return NULL;
 
 	sock_init_data(sock, sk); /* sets sk_refcnt to 1 */
-	sk->sk_state = SMC_INIT;
+	sk->sk_state = SMC_INIT;/*指明init状态*/
 	sk->sk_destruct = smc_destruct;
 	sk->sk_protocol = protocol;
 	WRITE_ONCE(sk->sk_sndbuf, 2 * READ_ONCE(net->smc.sysctl_wmem));
@@ -413,10 +413,12 @@ static int smc_bind(struct socket *sock, struct sockaddr *uaddr,
 	if (addr->sin_family != AF_INET &&
 	    addr->sin_family != AF_INET6 &&
 	    addr->sin_family != AF_UNSPEC)
+		/*仅支持以上三种地址类型*/
 		goto out;
 	/* accept AF_UNSPEC (mapped to AF_INET) only if s_addr is INADDR_ANY */
 	if (addr->sin_family == AF_UNSPEC &&
 	    addr->sin_addr.s_addr != htonl(INADDR_ANY))
+		/*此情况地址只能是全零*/
 		goto out;
 
 	lock_sock(sk);
@@ -424,8 +426,10 @@ static int smc_bind(struct socket *sock, struct sockaddr *uaddr,
 	/* Check if socket is already active */
 	rc = -EINVAL;
 	if (sk->sk_state != SMC_INIT || smc->connect_nonblock)
+		/*此函数调用时，sk状态必须为init状态，且连接不得为非阻塞*/
 		goto out_rel;
 
+	/*走tcp socket的bind*/
 	smc->clcsock->sk->sk_reuse = sk->sk_reuse;
 	smc->clcsock->sk->sk_reuseport = sk->sk_reuseport;
 	rc = kernel_bind(smc->clcsock, uaddr, addr_len);
@@ -1220,6 +1224,7 @@ static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
 		memcpy(ini->smcrv2.nexthop_mac, &aclc->r0.lcl.mac, ETH_ALEN);
 		ini->smcrv2.uses_gateway = false;
 	} else {
+		/*确定下一跳mac,是否用gateway*/
 		if (smc_ib_find_route(net, smc->clcsock->sk->sk_rcv_saddr,
 				      smc_ib_gid_to_ipv4(aclc->r0.lcl.gid),
 				      ini->smcrv2.nexthop_mac,
@@ -1271,6 +1276,7 @@ static int smc_connect_rdma(struct smc_sock *smc,
 	smc_conn_save_peer_info(smc, aclc);
 
 	if (ini->first_contact_local) {
+		/*复用connect对应的link*/
 		link = smc->conn.lnk;
 	} else {
 		/* set link that was assigned by server */
@@ -1284,7 +1290,7 @@ static int smc_connect_rdma(struct smc_sock *smc,
 			    (aclc->hdr.version > SMC_V1 ||
 			     !memcmp(l->peer_mac, &aclc->r0.lcl.mac,
 				     sizeof(l->peer_mac)))) {
-				link = l;
+				link = l;/*找到可复用的link*/
 				break;
 			}
 		}
@@ -1561,9 +1567,11 @@ static int __smc_connect(struct smc_sock *smc)
 
 	/* depending on previous steps, connect using rdma or ism */
 	if (aclc->hdr.typev1 == SMC_TYPE_R) {
+		/*SMC-R方式*/
 		ini->smcr_version = version;
 		rc = smc_connect_rdma(smc, aclc, ini);
 	} else if (aclc->hdr.typev1 == SMC_TYPE_D) {
+		/*SMC-D方式*/
 		ini->smcd_version = version;
 		rc = smc_connect_ism(smc, aclc, ini);
 	}
@@ -1584,6 +1592,7 @@ fallback:
 	return smc_connect_decline_fallback(smc, rc, version);
 }
 
+/*smc connect work（为支持非阻塞连接，而采用work函数来模拟）*/
 static void smc_connect_work(struct work_struct *work)
 {
 	struct smc_sock *smc = container_of(work, struct smc_sock,
@@ -1592,7 +1601,7 @@ static void smc_connect_work(struct work_struct *work)
 	int rc = 0;
 
 	if (!timeo)
-		timeo = MAX_SCHEDULE_TIMEOUT;
+		timeo = MAX_SCHEDULE_TIMEOUT;/*使用默认超时时间*/
 	lock_sock(smc->clcsock->sk);
 	if (smc->clcsock->sk->sk_err) {
 		smc->sk.sk_err = smc->clcsock->sk->sk_err;
@@ -1618,6 +1627,7 @@ static void smc_connect_work(struct work_struct *work)
 		goto out;
 	}
 
+	/*执行connect*/
 	rc = __smc_connect(smc);
 	if (rc < 0)
 		smc->sk.sk_err = -rc;
@@ -1634,19 +1644,20 @@ out:
 	release_sock(&smc->sk);
 }
 
-static int smc_connect(struct socket *sock, struct sockaddr *addr,
+static int smc_connect(struct socket *sock, struct sockaddr *addr/*目的地址*/,
 		       int alen, int flags)
 {
 	struct sock *sk = sock->sk;
 	struct smc_sock *smc;
 	int rc = -EINVAL;
 
-	smc = smc_sk(sk);
+	smc = smc_sk(sk);/*转换为smc socket*/
 
 	/* separate smc parameter checking to be safe */
 	if (alen < sizeof(addr->sa_family))
 		goto out_err;
 	if (addr->sa_family != AF_INET && addr->sa_family != AF_INET6)
+		/*目的地址只能是ipv4/ipv6*/
 		goto out_err;
 
 	lock_sock(sk);
@@ -1686,7 +1697,9 @@ static int smc_connect(struct socket *sock, struct sockaddr *addr,
 		rc = -EALREADY;
 		goto out;
 	}
-	rc = kernel_connect(smc->clcsock, addr, alen, flags);
+
+	/*走tcp connect实现*/
+	rc = kernel_connect(smc->clcsock, addr/*目的地址*/, alen, flags);
 	if (rc && rc != -EINPROGRESS)
 		goto out;
 
@@ -1696,11 +1709,13 @@ static int smc_connect(struct socket *sock, struct sockaddr *addr,
 	}
 	sock_hold(&smc->sk); /* sock put in passive closing */
 	if (flags & O_NONBLOCK) {
+		/*采用非阻塞方式，将connect_work加入到队列*/
 		if (queue_work(smc_hs_wq, &smc->connect_work))
 			smc->connect_nonblock = 1;
 		rc = -EINPROGRESS;
 		goto out;
 	} else {
+		/*采用阻塞方式，直接完成smc connect*/
 		rc = __smc_connect(smc);
 		if (rc < 0)
 			goto out;
@@ -3047,8 +3062,10 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 	int val, rc;
 
 	if (level == SOL_TCP && optname == TCP_ULP)
+		/*不支持通过smc_sock来设置，而应在tcp socket上执行*/
 		return -EOPNOTSUPP;
 	else if (level == SOL_SMC)
+		/*smc专门的opt处理*/
 		return __smc_setsockopt(sock, level, optname, optval, optlen);
 
 	smc = smc_sk(sk);
@@ -3061,6 +3078,8 @@ static int smc_setsockopt(struct socket *sock, int level, int optname,
 		mutex_unlock(&smc->clcsock_release_lock);
 		return -EBADF;
 	}
+
+	/*知会Tcp socket来处理（这里实际上仅保证了用户态不报错，并没有实现对应）*/
 	if (unlikely(!smc->clcsock->ops->setsockopt))
 		rc = -EOPNOTSUPP;
 	else
@@ -3290,7 +3309,7 @@ static const struct proto_ops smc_sock_ops = {
 	.family		= PF_SMC,
 	.owner		= THIS_MODULE,
 	.release	= smc_release,
-	.bind		= smc_bind,
+	.bind		= smc_bind,/*比tcp要求更严格，smc->clcsock仍调用tcp的Bind回调,仍处SMC_INIT状态*/
 	.connect	= smc_connect,
 	.socketpair	= sock_no_socketpair,
 	.accept		= smc_accept,
@@ -3308,7 +3327,7 @@ static const struct proto_ops smc_sock_ops = {
 };
 
 static int __smc_create(struct net *net, struct socket *sock, int protocol,
-			int kern, struct socket *clcsock)
+			int kern, struct socket *clcsock/*非空时，容许上层注入tcp socket*/)
 {
 	int family = (protocol == SMCPROTO_SMC6) ? PF_INET6 : PF_INET;
 	struct smc_sock *smc;
@@ -3317,12 +3336,12 @@ static int __smc_create(struct net *net, struct socket *sock, int protocol,
 
 	rc = -ESOCKTNOSUPPORT;
 	if (sock->type != SOCK_STREAM)
-		/*只支持stream*/
+		/*只支持stream类型的socket*/
 		goto out;
 
 	rc = -EPROTONOSUPPORT;
 	if (protocol != SMCPROTO_SMC && protocol != SMCPROTO_SMC6)
-		/*只支持ipv4 smc/ipv6 smc*/
+		/*协议只支持ipv4 smc/ipv6 smc*/
 		goto out;
 
 	rc = -ENOBUFS;
@@ -3361,6 +3380,7 @@ static int __smc_create(struct net *net, struct socket *sock, int protocol,
 		get_net_track(net, &sk->ns_tracker, GFP_KERNEL);
 		sock_inuse_add(net, 1);
 	} else {
+		/*使用注入的socket*/
 		smc->clcsock = clcsock;
 	}
 
@@ -3371,7 +3391,7 @@ out:
 static int smc_create(struct net *net, struct socket *sock, int protocol,
 		      int kern)
 {
-	return __smc_create(net, sock, protocol, kern, NULL);
+	return __smc_create(net, sock, protocol, kern, NULL/*不注入tcp socket*/);
 }
 
 static const struct net_proto_family smc_sock_family_ops = {
@@ -3380,6 +3400,7 @@ static const struct net_proto_family smc_sock_family_ops = {
 	.create	= smc_create,
 };
 
+/*利用tcp socket初始化smc socket*/
 static int smc_ulp_init(struct sock *sk)
 {
 	struct socket *tcp = sk->sk_socket;
@@ -3407,7 +3428,7 @@ static int smc_ulp_init(struct sock *sk)
 
 	smcsock->type = SOCK_STREAM;
 	__module_get(THIS_MODULE); /* tried in __tcp_ulp_find_autoload */
-	ret = __smc_create(net, smcsock, protocol, 1, tcp);/*创建SMC socket*/
+	ret = __smc_create(net, smcsock, protocol, 1, tcp/*注入tcp socket*/);/*创建SMC socket*/
 	if (ret) {
 		sock_release(smcsock); /* module_put() which ops won't be NULL */
 		return ret;
@@ -3436,7 +3457,7 @@ static void smc_ulp_clone(const struct request_sock *req, struct sock *newsk,
 static struct tcp_ulp_ops smc_ulp_ops __read_mostly = {
 	.name		= "smc",
 	.owner		= THIS_MODULE,
-	.init		= smc_ulp_init,
+	.init		= smc_ulp_init,/*利用tcp socket初始化一个smc socket*/
 	.clone		= smc_ulp_clone,
 };
 
@@ -3549,6 +3570,7 @@ static int __init smc_init(void)
 		goto out_proto;
 	}
 
+	/*注册pf-smc 类型socket*/
 	rc = sock_register(&smc_sock_family_ops);
 	if (rc) {
 		pr_err("%s: sock_register fails with %d\n", __func__, rc);
@@ -3563,7 +3585,7 @@ static int __init smc_init(void)
 		goto out_sock;
 	}
 
-	/*注册ulp*/
+	/*注册ulp，支持通过setsockopt替换tcp socket*/
 	rc = tcp_register_ulp(&smc_ulp_ops);
 	if (rc) {
 		pr_err("%s: tcp_ulp_register fails with %d\n", __func__, rc);

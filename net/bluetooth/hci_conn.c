@@ -2696,6 +2696,7 @@ int hci_get_conn_list(void __user *arg)
 	if (copy_from_user(&req, arg, sizeof(req)))
 		return -EFAULT;
 
+	/*req要求的conn_num过大或者为0*/
 	if (!req.conn_num || req.conn_num > (PAGE_SIZE * 2) / sizeof(*ci))
 		return -EINVAL;
 
@@ -2714,6 +2715,7 @@ int hci_get_conn_list(void __user *arg)
 	ci = cl->conn_info;
 
 	hci_dev_lock(hdev);
+	/*遍历此hdev设备的所有connect信息，并将其填充进ci中*/
 	list_for_each_entry(c, &hdev->conn_hash.list, list) {
 		bacpy(&(ci + n)->bdaddr, &c->dst);
 		(ci + n)->handle = c->handle;

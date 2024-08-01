@@ -53,7 +53,7 @@ static void hci_cmd_work(struct work_struct *work);
 static void hci_tx_work(struct work_struct *work);
 
 /* HCI device list */
-LIST_HEAD(hci_dev_list);
+LIST_HEAD(hci_dev_list);/*串连系统中所有hci_dev*/
 DEFINE_RWLOCK(hci_dev_list_lock);
 
 /* HCI callback list */
@@ -63,6 +63,7 @@ DEFINE_MUTEX(hci_cb_list_lock);
 /* HCI ID Numbering */
 static DEFINE_IDA(hci_index_ida);
 
+/*构造scan 请求*/
 static int hci_scan_req(struct hci_request *req, unsigned long opt)
 {
 	__u8 scan = opt;
@@ -74,6 +75,7 @@ static int hci_scan_req(struct hci_request *req, unsigned long opt)
 	return 0;
 }
 
+/*构造auth-enable请求*/
 static int hci_auth_req(struct hci_request *req, unsigned long opt)
 {
 	__u8 auth = opt;
@@ -85,6 +87,7 @@ static int hci_auth_req(struct hci_request *req, unsigned long opt)
 	return 0;
 }
 
+/*构造encrypt请求*/
 static int hci_encrypt_req(struct hci_request *req, unsigned long opt)
 {
 	__u8 encrypt = opt;
@@ -96,6 +99,7 @@ static int hci_encrypt_req(struct hci_request *req, unsigned long opt)
 	return 0;
 }
 
+/*构造default link policy 请求*/
 static int hci_linkpol_req(struct hci_request *req, unsigned long opt)
 {
 	__le16 policy = cpu_to_le16(opt);
@@ -109,6 +113,7 @@ static int hci_linkpol_req(struct hci_request *req, unsigned long opt)
 
 /* Get HCI device by index.
  * Device is held on return. */
+/*通过id获取此hdev*/
 struct hci_dev *hci_dev_get(int index)
 {
 	struct hci_dev *hdev = NULL, *d;
@@ -350,6 +355,7 @@ static int inquiry_cache_dump(struct hci_dev *hdev, int num, __u8 *buf)
 	return copied;
 }
 
+/*为此req添加inquiry cmd*/
 static int hci_inq_req(struct hci_request *req, unsigned long opt)
 {
 	struct hci_inquiry_req *ir = (struct hci_inquiry_req *) opt;
@@ -382,6 +388,7 @@ int hci_inquiry(void __user *arg)
 	if (copy_from_user(&ir, ptr, sizeof(ir)))
 		return -EFAULT;
 
+	/*取hdev设备*/
 	hdev = hci_dev_get(ir.dev_id);
 	if (!hdev)
 		return -ENODEV;
@@ -397,6 +404,7 @@ int hci_inquiry(void __user *arg)
 	}
 
 	if (hdev->dev_type != HCI_PRIMARY) {
+		/*必须为primary类型*/
 		err = -EOPNOTSUPP;
 		goto done;
 	}
@@ -473,6 +481,7 @@ done:
 	return err;
 }
 
+/*启动hci设备*/
 static int hci_dev_do_open(struct hci_dev *hdev)
 {
 	int ret = 0;
@@ -494,6 +503,7 @@ int hci_dev_open(__u16 dev)
 	struct hci_dev *hdev;
 	int err;
 
+	/*获得对应的hdev*/
 	hdev = hci_dev_get(dev);
 	if (!hdev)
 		return -ENODEV;
@@ -519,13 +529,14 @@ int hci_dev_open(__u16 dev)
 	 * completed.
 	 */
 	if (hci_dev_test_and_clear_flag(hdev, HCI_AUTO_OFF))
+		/*有auto_off标记，取消对应的work*/
 		cancel_delayed_work(&hdev->power_off);
 
 	/* After this call it is guaranteed that the setup procedure
 	 * has finished. This means that error conditions like RFKILL
 	 * or no valid public or static random address apply.
 	 */
-	flush_workqueue(hdev->req_workqueue);
+	flush_workqueue(hdev->req_workqueue);/*req工作队列内容清空*/
 
 	/* For controllers not using the management interface and that
 	 * are brought up using legacy ioctl, set the HCI_BONDABLE bit
@@ -544,6 +555,7 @@ done:
 	return err;
 }
 
+/*close hci设备*/
 int hci_dev_do_close(struct hci_dev *hdev)
 {
 	int err;
@@ -631,7 +643,7 @@ static int hci_dev_do_reset(struct hci_dev *hdev)
 	hdev->le_cnt = 0;
 	hdev->iso_cnt = 0;
 
-	ret = hci_reset_sync(hdev);
+	ret = hci_reset_sync(hdev);/*执行reset cmd*/
 
 	hci_req_sync_unlock(hdev);
 	return ret;
@@ -687,6 +699,7 @@ int hci_dev_reset_stat(__u16 dev)
 		goto done;
 	}
 
+	/*清空设备的统计信息*/
 	memset(&hdev->stat, 0, sizeof(struct hci_dev_stats));
 
 done:
@@ -739,6 +752,7 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 	if (copy_from_user(&dr, arg, sizeof(dr)))
 		return -EFAULT;
 
+	/*取hdev*/
 	hdev = hci_dev_get(dr.dev_id);
 	if (!hdev)
 		return -ENODEV;
@@ -754,6 +768,7 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 	}
 
 	if (hdev->dev_type != HCI_PRIMARY) {
+		/*dev类型必须为primary*/
 		err = -EOPNOTSUPP;
 		goto done;
 	}
@@ -778,16 +793,17 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 		if (!test_bit(HCI_AUTH, &hdev->flags)) {
 			/* Auth must be enabled first */
 			err = hci_req_sync(hdev, hci_auth_req, dr.dev_opt,
-					   HCI_INIT_TIMEOUT, NULL);
+					   HCI_INIT_TIMEOUT, NULL);/*先开启auth*/
 			if (err)
 				break;
 		}
 
 		err = hci_req_sync(hdev, hci_encrypt_req, dr.dev_opt,
-				   HCI_INIT_TIMEOUT, NULL);
+				   HCI_INIT_TIMEOUT, NULL);/*再开启encrypt*/
 		break;
 
 	case HCISETSCAN:
+		/*同步请求scan*/
 		err = hci_req_sync(hdev, hci_scan_req, dr.dev_opt,
 				   HCI_INIT_TIMEOUT, NULL);
 
@@ -799,16 +815,19 @@ int hci_dev_cmd(unsigned int cmd, void __user *arg)
 		break;
 
 	case HCISETLINKPOL:
+		/*请求default link policy*/
 		err = hci_req_sync(hdev, hci_linkpol_req, dr.dev_opt,
 				   HCI_INIT_TIMEOUT, NULL);
 		break;
 
 	case HCISETLINKMODE:
+		/*变更link mode*/
 		hdev->link_mode = ((__u16) dr.dev_opt) &
 					(HCI_LM_MASTER | HCI_LM_ACCEPT);
 		break;
 
 	case HCISETPTYPE:
+		/*变更pkt type*/
 		if (hdev->pkt_type == (__u16) dr.dev_opt)
 			break;
 
@@ -836,6 +855,7 @@ done:
 	return err;
 }
 
+/*获取hci_dev_list上所有hdev*/
 int hci_get_dev_list(void __user *arg)
 {
 	struct hci_dev *hdev;
@@ -844,9 +864,11 @@ int hci_get_dev_list(void __user *arg)
 	int n = 0, size, err;
 	__u16 dev_num;
 
+	/*取提供的dev_num*/
 	if (get_user(dev_num, (__u16 __user *) arg))
 		return -EFAULT;
 
+	/*参数为0或者参数过大*/
 	if (!dev_num || dev_num > (PAGE_SIZE * 2) / sizeof(*dr))
 		return -EINVAL;
 
@@ -867,20 +889,23 @@ int hci_get_dev_list(void __user *arg)
 		 * device is actually down.
 		 */
 		if (hci_dev_test_flag(hdev, HCI_AUTO_OFF))
+			/*此hdev设备未开启，移除up标记*/
 			flags &= ~BIT(HCI_UP);
 
+		/*填写设备id及flags*/
 		(dr + n)->dev_id  = hdev->id;
 		(dr + n)->dev_opt = flags;
 
 		if (++n >= dev_num)
+			/*数量超过dev_num,截断*/
 			break;
 	}
 	read_unlock(&hci_dev_list_lock);
 
-	dl->dev_num = n;
-	size = sizeof(*dl) + n * sizeof(*dr);
+	dl->dev_num = n;/*设置填充的设备数量*/
+	size = sizeof(*dl) + n * sizeof(*dr);/*要复制到用户态的内存长度*/
 
-	err = copy_to_user(arg, dl, size);
+	err = copy_to_user(arg, dl, size);/*将内容填充到arg指出的地址中*/
 	kfree(dl);
 
 	return err ? -EFAULT : 0;
@@ -896,6 +921,7 @@ int hci_get_dev_info(void __user *arg)
 	if (copy_from_user(&di, arg, sizeof(di)))
 		return -EFAULT;
 
+	/*通过dev_id获取hdev*/
 	hdev = hci_dev_get(di.dev_id);
 	if (!hdev)
 		return -ENODEV;
@@ -968,6 +994,7 @@ static const struct rfkill_ops hci_rfkill_ops = {
 
 static void hci_power_on(struct work_struct *work)
 {
+	/*work对应的hci设备*/
 	struct hci_dev *hdev = container_of(work, struct hci_dev, power_on);
 	int err;
 
@@ -1020,7 +1047,7 @@ static void hci_power_on(struct work_struct *work)
 		 * Devices with HCI_QUIRK_RAW_DEVICE are ignored
 		 * and no event will be send.
 		 */
-		mgmt_index_added(hdev);
+		mgmt_index_added(hdev);/*通知用户态index add event*/
 	} else if (hci_dev_test_and_clear_flag(hdev, HCI_CONFIG)) {
 		/* When the controller is now configured, then it
 		 * is important to clear the HCI_RAW flag.
@@ -1067,12 +1094,14 @@ void hci_uuids_clear(struct hci_dev *hdev)
 {
 	struct bt_uuid *uuid, *tmp;
 
+	/*移除hdev设备上串连的所有uuids*/
 	list_for_each_entry_safe(uuid, tmp, &hdev->uuids, list) {
 		list_del(&uuid->list);
 		kfree(uuid);
 	}
 }
 
+/*移除hci设备上所有link_keys*/
 void hci_link_keys_clear(struct hci_dev *hdev)
 {
 	struct link_key *key, *tmp;
@@ -1488,10 +1517,12 @@ bool hci_bdaddr_is_paired(struct hci_dev *hdev, bdaddr_t *bdaddr, u8 type)
 /* HCI command timer function */
 static void hci_cmd_timeout(struct work_struct *work)
 {
+	/*cmd timer定时器超时处理*/
 	struct hci_dev *hdev = container_of(work, struct hci_dev,
 					    cmd_timer.work);
 
 	if (hdev->sent_cmd) {
+		/*列出失败的cmd opcode*/
 		struct hci_command_hdr *sent = (void *) hdev->sent_cmd->data;
 		u16 opcode = __le16_to_cpu(sent->opcode);
 
@@ -1500,6 +1531,7 @@ static void hci_cmd_timeout(struct work_struct *work)
 		bt_dev_err(hdev, "command tx timeout");
 	}
 
+	/*通过cmd_timeout回调处理这种情况*/
 	if (hdev->cmd_timeout)
 		hdev->cmd_timeout(hdev);
 
@@ -1925,6 +1957,7 @@ void hci_free_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
  */
 int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 {
+	/*为hdev关联adv_monitor*/
 	int min, max, handle;
 	int status = 0;
 
@@ -1972,6 +2005,7 @@ int hci_add_adv_monitor(struct hci_dev *hdev, struct adv_monitor *monitor)
 static int hci_remove_adv_monitor(struct hci_dev *hdev,
 				  struct adv_monitor *monitor)
 {
+	/*具体移除一个adv_monitor*/
 	int status = 0;
 	int handle;
 
@@ -2018,15 +2052,18 @@ int hci_remove_single_adv_monitor(struct hci_dev *hdev, u16 handle)
 /* This function requires the caller holds hci_req_sync_lock */
 int hci_remove_all_adv_monitor(struct hci_dev *hdev)
 {
+	/*移除关联于hdev上的所有的monitor*/
 	struct adv_monitor *monitor;
 	int idr_next_id = 0;
 	int status = 0;
 
 	while (1) {
+		/*取对应的monitor*/
 		monitor = idr_get_next(&hdev->adv_monitors_idr, &idr_next_id);
 		if (!monitor)
 			break;
 
+		/*移除此monitor*/
 		status = hci_remove_adv_monitor(hdev, monitor);
 		if (status)
 			return status;
@@ -2454,7 +2491,7 @@ static int hci_suspend_notifier(struct notifier_block *nb, unsigned long action,
 }
 
 /* Alloc HCI device */
-struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
+struct hci_dev *hci_alloc_dev_priv(int sizeof_priv/*私有结构体大小*/)
 {
 	struct hci_dev *hdev;
 	unsigned int alloc_size;
@@ -2465,6 +2502,7 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 		alloc_size += sizeof_priv;
 	}
 
+	/*申请hdev*/
 	hdev = kzalloc(alloc_size, GFP_KERNEL);
 	if (!hdev)
 		return NULL;
@@ -2558,9 +2596,11 @@ struct hci_dev *hci_alloc_dev_priv(int sizeof_priv)
 	INIT_LIST_HEAD(&hdev->monitored_devices);
 
 	INIT_LIST_HEAD(&hdev->local_codecs);
+	/*初始化对rx_q队列进行处理的rx_work*/
 	INIT_WORK(&hdev->rx_work, hci_rx_work);
-	INIT_WORK(&hdev->cmd_work, hci_cmd_work);
-	INIT_WORK(&hdev->tx_work, hci_tx_work);
+	INIT_WORK(&hdev->cmd_work, hci_cmd_work);/*初始化cmd work,处理cmd_q*/
+	INIT_WORK(&hdev->tx_work, hci_tx_work);/*初始化tx work,处理raw_q*/
+	/*初始化power_on work*/
 	INIT_WORK(&hdev->power_on, hci_power_on);
 	INIT_WORK(&hdev->error_reset, hci_error_reset);
 
@@ -2601,12 +2641,14 @@ int hci_register_dev(struct hci_dev *hdev)
 	int id, error;
 
 	if (!hdev->open || !hdev->close || !hdev->send)
+		/*以上三个回调注册时必须提供*/
 		return -EINVAL;
 
 	/* Do not allow HCI_AMP devices to register at index 0,
 	 * so the index can be used as the AMP controller ID.
 	 */
 	switch (hdev->dev_type) {
+	/*为hdev分配id号*/
 	case HCI_PRIMARY:
 		id = ida_simple_get(&hci_index_ida, 0, HCI_MAX_ID, GFP_KERNEL);
 		break;
@@ -2618,8 +2660,10 @@ int hci_register_dev(struct hci_dev *hdev)
 	}
 
 	if (id < 0)
+		/*hci设备分配id失败，报错*/
 		return id;
 
+	/*设置此hdev设备名称*/
 	error = dev_set_name(&hdev->dev, "hci%u", id);
 	if (error)
 		return error;
@@ -2665,6 +2709,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	if (hdev->rfkill && rfkill_blocked(hdev->rfkill))
 		hci_dev_set_flag(hdev, HCI_RFKILLED);
 
+	/*设备置setup标记*/
 	hci_dev_set_flag(hdev, HCI_SETUP);
 	hci_dev_set_flag(hdev, HCI_AUTO_OFF);
 
@@ -2691,6 +2736,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	if (hdev->wakeup)
 		hdev->conn_flags |= HCI_CONN_FLAG_REMOTE_WAKEUP;
 
+	/*触发hci设备的注册事件*/
 	hci_sock_dev_event(hdev, HCI_DEV_REG);
 	hci_dev_hold(hdev);
 
@@ -2698,6 +2744,7 @@ int hci_register_dev(struct hci_dev *hdev)
 	if (error)
 		BT_WARN("register suspend notifier failed error:%d\n", error);
 
+	/*power_on work入队*/
 	queue_work(hdev->req_workqueue, &hdev->power_on);
 
 	idr_init(&hdev->adv_monitors_idr);
@@ -2943,6 +2990,7 @@ int hci_recv_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	/* Time stamp */
 	__net_timestamp(skb);
 
+	/*将收到的帧存入到rx_q,并触发rx_work*/
 	skb_queue_tail(&hdev->rx_q, skb);
 	queue_work(hdev->workqueue, &hdev->rx_work);
 
@@ -3025,11 +3073,11 @@ static int hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	__net_timestamp(skb);
 
 	/* Send copy to monitor */
-	hci_send_to_monitor(hdev, skb);
+	hci_send_to_monitor(hdev, skb);/*考虑向monitor发送一份镜像*/
 
 	if (atomic_read(&hdev->promisc)) {
 		/* Send copy to the sockets */
-		hci_send_to_sock(hdev, skb);
+		hci_send_to_sock(hdev, skb);/*考虑向关联此hdev的hci socket送份镜像*/
 	}
 
 	/* Get rid of skb owner, prior to sending to the driver. */
@@ -3037,9 +3085,10 @@ static int hci_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 
 	if (!test_bit(HCI_RUNNING, &hdev->flags)) {
 		kfree_skb(skb);
-		return -EINVAL;
+		return -EINVAL;/*hdev未处于running状态*/
 	}
 
+	/*调用send回调，发送此skb命令*/
 	err = hdev->send(hdev, skb);
 	if (err < 0) {
 		bt_dev_err(hdev, "sending frame failed (%d)", err);
@@ -3058,6 +3107,7 @@ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
 
 	BT_DBG("%s opcode 0x%4.4x plen %d", hdev->name, opcode, plen);
 
+	/*构造cmd对应的skb*/
 	skb = hci_prepare_cmd(hdev, opcode, plen, param);
 	if (!skb) {
 		bt_dev_err(hdev, "no memory for command");
@@ -3069,6 +3119,7 @@ int hci_send_cmd(struct hci_dev *hdev, __u16 opcode, __u32 plen,
 	 */
 	bt_cb(skb)->hci.req_flags |= HCI_REQ_START;
 
+	/*skb存入此设备对应的cmd_q*/
 	skb_queue_tail(&hdev->cmd_q, skb);
 	queue_work(hdev->workqueue, &hdev->cmd_work);
 
@@ -3842,7 +3893,7 @@ static void hci_tx_work(struct work_struct *work)
 
 	/* Send next queued raw (unknown type) packet */
 	while ((skb = skb_dequeue(&hdev->raw_q)))
-		hci_send_frame(hdev, skb);
+		hci_send_frame(hdev, skb);/*处理raw_q上所有skb,并调用hdev->send*/
 }
 
 /* ----- HCI RX task (incoming data processing) ----- */
@@ -4044,6 +4095,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 			break;
 		}
 
+		/*依据标记，取complete回调函数*/
 		if (bt_cb(skb)->hci.req_flags & HCI_REQ_SKB)
 			*req_complete_skb = bt_cb(skb)->hci.req_complete_skb;
 		else
@@ -4053,6 +4105,7 @@ void hci_req_cmd_complete(struct hci_dev *hdev, u16 opcode, u8 status,
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 }
 
+/*负责处理hdev->rx_q队列上所有skb*/
 static void hci_rx_work(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev, rx_work);
@@ -4066,14 +4119,15 @@ static void hci_rx_work(struct work_struct *work)
 	 * the packet. This helps fuzzing the kernel.
 	 */
 	for (; (skb = skb_dequeue(&hdev->rx_q)); kcov_remote_stop()) {
+		/*自rx_q中提取响应的skb*/
 		kcov_remote_start_common(skb_get_kcov_handle(skb));
 
 		/* Send copy to monitor */
-		hci_send_to_monitor(hdev, skb);
+		hci_send_to_monitor(hdev, skb);/*如开启全局混杂，则上送monitor*/
 
 		if (atomic_read(&hdev->promisc)) {
 			/* Send copy to the sockets */
-			hci_send_to_sock(hdev, skb);
+			hci_send_to_sock(hdev, skb);/*如果有socket开启混杂，则复制一份镜像给hci socket*/
 		}
 
 		/* If the device has been opened in HCI_USER_CHANNEL,
@@ -4103,7 +4157,7 @@ static void hci_rx_work(struct work_struct *work)
 		switch (hci_skb_pkt_type(skb)) {
 		case HCI_EVENT_PKT:
 			BT_DBG("%s Event packet", hdev->name);
-			hci_event_packet(hdev, skb);
+			hci_event_packet(hdev, skb);/*处理event pkt*/
 			break;
 
 		case HCI_ACLDATA_PKT:
@@ -4128,6 +4182,7 @@ static void hci_rx_work(struct work_struct *work)
 	}
 }
 
+/*具体处理挂接在hdev->cmd_q上所有cmd skb*/
 static void hci_cmd_work(struct work_struct *work)
 {
 	struct hci_dev *hdev = container_of(work, struct hci_dev, cmd_work);
@@ -4138,7 +4193,7 @@ static void hci_cmd_work(struct work_struct *work)
 
 	/* Send queued commands */
 	if (atomic_read(&hdev->cmd_cnt)) {
-		skb = skb_dequeue(&hdev->cmd_q);
+		skb = skb_dequeue(&hdev->cmd_q);/*除一个cmd*/
 		if (!skb)
 			return;
 
@@ -4151,6 +4206,7 @@ static void hci_cmd_work(struct work_struct *work)
 				hci_dev_set_flag(hdev, HCI_CMD_PENDING);
 			atomic_dec(&hdev->cmd_cnt);
 
+			/*由此hdev发送此skb*/
 			res = hci_send_frame(hdev, skb);
 			if (res < 0)
 				__hci_cmd_sync_cancel(hdev, -res);
@@ -4160,10 +4216,12 @@ static void hci_cmd_work(struct work_struct *work)
 			    hci_dev_test_flag(hdev, HCI_CMD_DRAIN_WORKQUEUE))
 				cancel_delayed_work(&hdev->cmd_timer);
 			else
+				/*添加cmd_timer*/
 				queue_delayed_work(hdev->workqueue, &hdev->cmd_timer,
 						   HCI_CMD_TIMEOUT);
 			rcu_read_unlock();
 		} else {
+			/*将此cmd重入到队列，并再次调度cmd_work*/
 			skb_queue_head(&hdev->cmd_q, skb);
 			queue_work(hdev->workqueue, &hdev->cmd_work);
 		}

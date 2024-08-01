@@ -410,7 +410,7 @@ struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
 	struct block_device *bdev;
 	struct inode *inode;
 
-	/*创建块设备对应的inode*/
+	/*创建块设备对应的inode，申请的类型为（struct bdev_inode）*/
 	inode = new_inode(blockdev_superblock);
 	if (!inode)
 		return NULL;

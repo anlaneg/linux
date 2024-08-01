@@ -33,6 +33,7 @@
  * node traffic on multi-node NUMA NFS servers.
  */
 struct svc_pool {
+	/*pool编号*/
 	unsigned int		sp_id;	    	/* pool id; also node id on NUMA */
 	struct lwq		sp_xprts;	/* pending transports */
 	atomic_t		sp_nrthreads;	/* # of threads in pool */
@@ -66,6 +67,7 @@ enum {
  * We currently do not support more than one RPC program per daemon.
  */
 struct svc_serv {
+	/*rpc程序*/
 	struct svc_program *	sv_program;	/* RPC program */
 	struct svc_stat *	sv_stats;	/* RPC statistics */
 	spinlock_t		sv_lock;
@@ -84,6 +86,7 @@ struct svc_serv {
 
 	char *			sv_name;	/* service name */
 
+	/*sv_pools数组长度*/
 	unsigned int		sv_nrpools;	/* number of thread pools */
 	struct svc_pool *	sv_pools;	/* array of thread pools */
 	int			(*sv_threadfn)(void *data);
@@ -298,9 +301,12 @@ static inline struct sockaddr *svc_daddr(const struct svc_rqst *rqst)
  */
 static inline bool svc_thread_should_stop(struct svc_rqst *rqstp)
 {
+	/*检查是否有sp_need_victim标记，并进行清除*/
 	if (test_and_clear_bit(SP_NEED_VICTIM, &rqstp->rq_pool->sp_flags))
+		/*确认victim标记，打上RQ_VICTIM标记*/
 		set_bit(RQ_VICTIM, &rqstp->rq_flags);
 
+	/*检查是否有RQ_VICTIM标记*/
 	return test_bit(RQ_VICTIM, &rqstp->rq_flags);
 }
 
@@ -331,11 +337,14 @@ struct svc_process_info {
  * List of RPC programs on the same transport endpoint
  */
 struct svc_program {
+	/*指向下一个程序*/
 	struct svc_program *	pg_next;	/* other programs (same xprt) */
 	u32			pg_prog;	/* program number */
 	unsigned int		pg_lovers;	/* lowest version */
 	unsigned int		pg_hivers;	/* highest version */
+	/*版本数量*/
 	unsigned int		pg_nvers;	/* number of versions */
+	/*由pg_nvers指定version array数组长度*/
 	const struct svc_version **pg_vers;	/* version array */
 	char *			pg_name;	/* service name */
 	char *			pg_class;	/* class name: services sharing authentication */
@@ -357,6 +366,7 @@ struct svc_program {
 struct svc_version {
 	u32			vs_vers;	/* version number */
 	u32			vs_nproc;	/* number of procedures */
+	/*支持的各过程函数信息*/
 	const struct svc_procedure *vs_proc;	/* per-procedure info */
 	unsigned long __percpu	*vs_count;	/* call counts */
 	u32			vs_xdrsize;	/* xdrsize needed for this version */

@@ -117,7 +117,7 @@ struct ucma_event {
 	struct rdma_ucm_event_resp resp;
 };
 
-static DEFINE_XARRAY_ALLOC(ctx_table);/*保存ucma_context*/
+static DEFINE_XARRAY_ALLOC(ctx_table);/*保存ucma_context，利用id进行索引*/
 static DEFINE_XARRAY_ALLOC(multicast_table);
 
 static const struct file_operations ucma_fops;
@@ -143,6 +143,7 @@ static struct ucma_context *ucma_get_ctx(struct ucma_file *file, int id)
 	struct ucma_context *ctx;
 
 	xa_lock(&ctx_table);
+	/*通过id查询ucma_context*/
 	ctx = _ucma_find_context(id, file);
 	if (!IS_ERR(ctx))
 		if (!refcount_inc_not_zero(&ctx->ref))
@@ -713,6 +714,7 @@ static ssize_t ucma_resolve_ip(struct ucma_file *file,
 
 	if ((cmd.src_addr.sin6_family && !rdma_addr_size_in6(&cmd.src_addr)) ||
 	    !rdma_addr_size_in6(&cmd.dst_addr))
+		/*地址长度有误*/
 		return -EINVAL;
 
 	/*通过id找到context*/
@@ -721,6 +723,7 @@ static ssize_t ucma_resolve_ip(struct ucma_file *file,
 		return PTR_ERR(ctx);
 
 	mutex_lock(&ctx->mutex);
+	/*处理地址解析*/
 	ret = rdma_resolve_addr(ctx->cm_id, (struct sockaddr *) &cmd.src_addr,
 				(struct sockaddr *) &cmd.dst_addr, cmd.timeout_ms);
 	mutex_unlock(&ctx->mutex);
@@ -1720,7 +1723,7 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_CREATE_ID] 	 = ucma_create_id,/*创建context*/
 	[RDMA_USER_CM_CMD_DESTROY_ID]	 = ucma_destroy_id,/*销毁context*/
 	[RDMA_USER_CM_CMD_BIND_IP]	 = ucma_bind_ip,/*绑定设置源地址*/
-	[RDMA_USER_CM_CMD_RESOLVE_IP]	 = ucma_resolve_ip,
+	[RDMA_USER_CM_CMD_RESOLVE_IP]	 = ucma_resolve_ip,/*响应用户态resolve_ip命令*/
 	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,
 	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,
 	[RDMA_USER_CM_CMD_CONNECT]	 = ucma_connect,/*执行用户态发送的connect命令*/

@@ -80,7 +80,7 @@ static inline unsigned long xa_to_value(const void *entry)
  */
 static inline bool xa_is_value(const void *entry)
 {
-    //检查xarray entry是否为value
+    //检查xarray entry是否为value，如果此值bit0为‘1’，则为value
 	return (unsigned long)entry & 1;
 }
 
@@ -180,7 +180,7 @@ static inline bool xa_is_internal(const void *entry)
 	return ((unsigned long)entry & 3) == 2;
 }
 
-//定义zero entry(其为一个等值于 257的internal entry)
+//定义zero entry(其为internal,其为一个等值于 257的internal entry，即为数字1030)
 #define XA_ZERO_ENTRY		xa_mk_internal(257)
 
 /**
@@ -399,7 +399,7 @@ static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
 	/*初始化xarray*/
 	spin_lock_init(&xa->xa_lock);
 	xa->xa_flags = flags;
-	xa->xa_head = NULL;
+	xa->xa_head = NULL;/*指向空*/
 }
 
 /**
@@ -412,7 +412,7 @@ static inline void xa_init_flags(struct xarray *xa, gfp_t flags)
  */
 static inline void xa_init(struct xarray *xa)
 {
-	xa_init_flags(xa, 0);
+	xa_init_flags(xa, 0/*指明flags为0*/);
 }
 
 /**
@@ -550,7 +550,9 @@ static inline bool xa_marked(const struct xarray *xa, xa_mark_t mark)
 	     entry; entry = xa_find_after(xa, &index, ULONG_MAX, filter))
 
 #define xa_trylock(xa)		spin_trylock(&(xa)->xa_lock)
+/*对xarray进行加锁*/
 #define xa_lock(xa)		spin_lock(&(xa)->xa_lock)
+/*对xarray进行解锁*/
 #define xa_unlock(xa)		spin_unlock(&(xa)->xa_lock)
 #define xa_lock_bh(xa)		spin_lock_bh(&(xa)->xa_lock)
 #define xa_unlock_bh(xa)	spin_unlock_bh(&(xa)->xa_lock)
@@ -1164,6 +1166,7 @@ static inline void xa_release(struct xarray *xa, unsigned long index)
 #ifndef XA_CHUNK_SHIFT
 #define XA_CHUNK_SHIFT		(CONFIG_BASE_SMALL ? 4 : 6)
 #endif
+/*一个xarray chunk的size,其内部可以存入多个entry指针*/
 #define XA_CHUNK_SIZE		(1UL << XA_CHUNK_SHIFT)
 #define XA_CHUNK_MASK		(XA_CHUNK_SIZE - 1)
 #define XA_MAX_MARKS		3
@@ -1182,11 +1185,13 @@ struct xa_node {
 	unsigned char	count;		/* Total entry count */
 	unsigned char	nr_values;	/* Value entry count */
 	struct xa_node __rcu *parent;	/* NULL at top of tree */
+	/*指向自已从属的xarray*/
 	struct xarray	*array;		/* The array we belong to */
 	union {
 		struct list_head private_list;	/* For tree user */
 		struct rcu_head	rcu_head;	/* Used when freeing node */
 	};
+	/*用于保存entry,数组中最多可保存XA_CHUNK_SIZE个*/
 	void __rcu	*slots[XA_CHUNK_SIZE];
 	union {
 		unsigned long	tags[XA_MAX_MARKS][XA_MARK_LONGS];
@@ -1233,8 +1238,9 @@ static inline void *xa_head_locked(const struct xarray *xa)
 
 /* Private */
 static inline void *xa_entry(const struct xarray *xa,
-				const struct xa_node *node, unsigned int offset)
+				const struct xa_node *node, unsigned int offset/*node->slots数组下标*/)
 {
+	/*按offset取指定node中的内容*/
 	XA_NODE_BUG_ON(node, offset >= XA_CHUNK_SIZE);
 	return rcu_dereference_check(node->slots[offset],
 						lockdep_is_held(&xa->xa_lock));
@@ -1268,6 +1274,7 @@ static inline struct xa_node *xa_parent_locked(const struct xarray *xa,
 /* Private */
 static inline void *xa_mk_node(const struct xa_node *node)
 {
+	/*标记，其为一个xa_node*/
 	return (void *)((unsigned long)node | 2);
 }
 
@@ -1280,7 +1287,7 @@ static inline struct xa_node *xa_to_node(const void *entry)
 /* Private */
 static inline bool xa_is_node(const void *entry)
 {
-	/*entry为内部节点且entry小于4096*/
+	/*entry为内部节点且entry数值大于4096*/
 	return xa_is_internal(entry) && (unsigned long)entry > 4096;
 }
 
@@ -1304,6 +1311,7 @@ static inline unsigned long xa_to_sibling(const void *entry)
  */
 static inline bool xa_is_sibling(const void *entry)
 {
+	/*CONFIG_XARRAY_MULTI功能被开启，且entry为internal类型，且entry*/
 	return IS_ENABLED(CONFIG_XARRAY_MULTI) && xa_is_internal(entry) &&
 		(entry < xa_mk_sibling(XA_CHUNK_SIZE - 1));
 }
@@ -1372,8 +1380,10 @@ struct xa_state {
 	unsigned long xa_index;
 	unsigned char xa_shift;
 	unsigned char xa_sibs;
+	/*指明当前要操作的xa_node中对应的offset*/
 	unsigned char xa_offset;
 	unsigned char xa_pad;		/* Helps gcc generate better code */
+	/*指明当前要操作的xa_node*/
 	struct xa_node *xa_node;
 	struct xa_node *xa_alloc;
 	xa_update_node_t xa_update;
@@ -1412,7 +1422,7 @@ struct xa_state {
  * Declare and initialise an xa_state on the stack.
  */
 #define XA_STATE(name/*变量名称*/, array/*被操作的xarray*/, index/*关心的索引*/)				\
-    /*定义名称为name的xa_state*/\
+    /*定义名称为name的xa_state变量*/\
 	struct xa_state name = __XA_STATE(array, index, 0, 0)
 
 /**
@@ -1912,10 +1922,11 @@ static inline void *xas_next(struct xa_state *xas)
 
 	if (unlikely(xas_not_node(node) || node->shift ||
 				xas->xa_offset == XA_CHUNK_MASK))
+		/*达到了chunk结尾，更新xa_node,及offset*/
 		return __xas_next(xas);
 
-	xas->xa_index++;
-	xas->xa_offset++;
+	xas->xa_index++;/*切换到下一个idx*/
+	xas->xa_offset++;/*增加offset*/
 	return xa_entry(xas->xa, node, xas->xa_offset);
 }
 

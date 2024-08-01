@@ -147,6 +147,7 @@ ssize_t backing_file_read_iter(struct file *file, struct iov_iter *iter,
 		return -EIO;
 
 	if (!iov_iter_count(iter))
+		/*读取长度为0，返回*/
 		return 0;
 
 	if (iocb->ki_flags & IOCB_DIRECT &&

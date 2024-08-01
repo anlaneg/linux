@@ -79,8 +79,10 @@ struct bvec_iter {
 						   sectors */
 	unsigned int		bi_size;	/* residual I/O count */
 
+	/*索引*/
 	unsigned int		bi_idx;		/* current index into bvl_vec */
 
+	/*此iter中已完成的数目*/
 	unsigned int            bi_bvec_done;	/* number of bytes completed in
 						   current bvec */
 } __packed;
@@ -95,9 +97,11 @@ struct bvec_iter_all {
  * various member access, note that bio_data should of course not be used
  * on highmem page vectors
  */
+/*取bvec数据的iter.bi_idx号下标元素*/
 #define __bvec_iter_bvec(bvec, iter)	(&(bvec)[(iter).bi_idx])
 
 /* multi-page (mp_bvec) helpers */
+/*取bvec数组的bi_idx号元素，并返回其对应的bv_page*/
 #define mp_bvec_iter_page(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_page)
 
@@ -105,9 +109,11 @@ struct bvec_iter_all {
 	min((iter).bi_size,					\
 	    __bvec_iter_bvec((bvec), (iter))->bv_len - (iter).bi_bvec_done)
 
+/*多页中的offset*/
 #define mp_bvec_iter_offset(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_offset + (iter).bi_bvec_done)
 
+/*多页的第几个页*/
 #define mp_bvec_iter_page_idx(bvec, iter)			\
 	(mp_bvec_iter_offset((bvec), (iter)) / PAGE_SIZE)
 
@@ -119,6 +125,7 @@ struct bvec_iter_all {
 })
 
 /* For building single-page bvec in flight */
+/*在一个页中的偏移量（与mp_bvec_iter_page_idx函数配对)*/
  #define bvec_iter_offset(bvec, iter)				\
 	(mp_bvec_iter_offset((bvec), (iter)) % PAGE_SIZE)
 
@@ -126,11 +133,12 @@ struct bvec_iter_all {
 	min_t(unsigned, mp_bvec_iter_len((bvec), (iter)),		\
 	      PAGE_SIZE - bvec_iter_offset((bvec), (iter)))
 
+/*计算获取页指针（先取基页，再取页偏移量）*/
 #define bvec_iter_page(bvec, iter)				\
 	(mp_bvec_iter_page((bvec), (iter)) +			\
 	 mp_bvec_iter_page_idx((bvec), (iter)))
 
-/*返回bio_vec结构体*/
+/*填充并返回bio_vec结构体bvec*/
 #define bvec_iter_bvec(bvec, iter)				\
 ((struct bio_vec) {						\
 	.bv_page	= bvec_iter_page((bvec), (iter)),	\

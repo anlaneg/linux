@@ -18,7 +18,7 @@ struct nfs_subversion nfs_v3 = {
 
 static int __init init_nfs_v3(void)
 {
-	register_nfs_version(&nfs_v3);
+	register_nfs_version(&nfs_v3);/*注册v3版本的nfs*/
 	return 0;
 }
 

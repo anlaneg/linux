@@ -194,6 +194,7 @@ static int ib_nl_ip_send_msg(struct rdma_dev_addr *dev_addr,
 	return -ENODATA;
 }
 
+/*返回各类型地址结构体大小*/
 int rdma_addr_size(const struct sockaddr *addr)
 {
 	switch (addr->sa_family) {
@@ -239,6 +240,7 @@ EXPORT_SYMBOL(rdma_addr_size_kss);
 void rdma_copy_src_l2_addr(struct rdma_dev_addr *dev_addr,
 			   const struct net_device *dev)
 {
+	/*设置dev_addr中的设备类型，srcmac,广播地址，ifindex*/
 	dev_addr->dev_type = dev->type;
 	memcpy(dev_addr->src_dev_addr, dev->dev_addr, MAX_ADDR_LEN);
 	memcpy(dev_addr->broadcast, dev->broadcast, MAX_ADDR_LEN);
@@ -307,7 +309,7 @@ static void set_timeout(struct addr_req *req, unsigned long time)
 	if ((long)delay < 0)
 		delay = 0;
 
-	mod_delayed_work(addr_wq, &req->work, delay);
+	mod_delayed_work(addr_wq, &req->work, delay);/*指明超时后处理。*/
 }
 
 /*将addr request入队到req_list中*/
@@ -335,14 +337,17 @@ static int dst_fetch_ha(const struct dst_entry *dst,
 	struct neighbour *n;
 	int ret = 0;
 
+	/*通过路由项，查询领居表项*/
 	n = dst_neigh_lookup(dst, daddr);
 	if (!n)
 		return -ENODATA;
 
 	if (!(n->nud_state & NUD_VALID)) {
+		/*此领居表项不是有效的，向外探测并获取*/
 		neigh_event_send(n, NULL);
-		ret = -ENODATA;
+		ret = -ENODATA;/*知会上层未查询到领居表项*/
 	} else {
+		/*领居表项有误，复制领居表项地址为目的地址*/
 		neigh_ha_snapshot(dev_addr->dst_dev_addr, n, dst->dev);
 	}
 
@@ -381,8 +386,10 @@ static int fetch_ha(const struct dst_entry *dst, struct rdma_dev_addr *dev_addr,
 
 	/* If we have a gateway in IB mode then it must be an IB network */
 	if (has_gateway(dst, family) && dev_addr->network == RDMA_NETWORK_IB)
+		/*采用ib方式进行通信，获取hardware addr*/
 		return ib_nl_fetch_ha(dev_addr, daddr, seq, family);
 	else
+		/*获取以太网目的mac*/
 		return dst_fetch_ha(dst, dev_addr, daddr);
 }
 
@@ -407,12 +414,13 @@ static int addr4_resolve(struct sockaddr *src_sock/*源地址*/,
 	/*指定出接口为addr对应的接口*/
 	fl4.flowi4_oif = addr->bound_dev_if;
 
-	/*查询路由*/
+	/*查询指定netns下的路由*/
 	rt = ip_route_output_key(addr->net, &fl4);
 	ret = PTR_ERR_OR_ZERO(rt);
 	if (ret)
 		return ret;
 
+	/*使用路由查询的src结果*/
 	src_in->sin_addr.s_addr = fl4.saddr;
 
 	addr->hoplimit = ip4_dst_hoplimit(&rt->dst);
@@ -469,16 +477,19 @@ static int addr_resolve_neigh(const struct dst_entry *dst,
 	int ret = 0;
 
 	if (ndev_flags & IFF_LOOPBACK) {
+		/*loopback设备*/
 		memcpy(addr->dst_dev_addr, addr->src_dev_addr, MAX_ADDR_LEN);
 	} else {
 		if (!(ndev_flags & IFF_NOARP)) {
 			/* If the device doesn't do ARP internally */
+			/*此接口没有指明noarp,获取领居表项*/
 			ret = fetch_ha(dst, addr, dst_in, seq);
 		}
 	}
 	return ret;
 }
 
+/*复制源mac地址*/
 static int copy_src_l2_addr(struct rdma_dev_addr *dev_addr,
 			    const struct sockaddr *dst_in,
 			    const struct dst_entry *dst,
@@ -560,7 +571,7 @@ static void rdma_addr_set_net_defaults(struct rdma_dev_addr *addr)
 
 static int addr_resolve(struct sockaddr *src_in/*源地址*/,
 			const struct sockaddr *dst_in/*目的地址*/,
-			struct rdma_dev_addr *addr,/*目的地址*/
+			struct rdma_dev_addr *addr,/*入出参，解析获得的rdma地址*/
 			bool resolve_neigh/*是否解析邻居表项*/,
 			bool resolve_by_gid_attr,
 			u32 seq)
@@ -595,7 +606,7 @@ static int addr_resolve(struct sockaddr *src_in/*源地址*/,
 		}
 	}
 
-	/*确定路由*/
+	/*查询确定路由*/
 	if (src_in->sa_family == AF_INET) {
 		ret = addr4_resolve(src_in, dst_in, addr, &rt);
 		dst = &rt->dst;
@@ -615,7 +626,7 @@ static int addr_resolve(struct sockaddr *src_in/*源地址*/,
 	 */
 	if (!ret && resolve_neigh)
 	    /*邻居表项解析*/
-		ret = addr_resolve_neigh(dst, dst_in, addr, ndev_flags, seq);
+		ret = addr_resolve_neigh(dst, dst_in/*目的地址*/, addr, ndev_flags, seq);
 
 	if (src_in->sa_family == AF_INET)
 		ip_rt_put(rt);
@@ -646,7 +657,7 @@ static void process_one_req(struct work_struct *_work)
 					   true, req->resolve_by_gid_attr,
 					   req->seq);
 		if (req->status && time_after_eq(jiffies, req->timeout)) {
-			req->status = -ETIMEDOUT;
+			req->status = -ETIMEDOUT;/*请求超时*/
 		} else if (req->status == -ENODATA) {
 			/* requeue the work for retrying again */
 			spin_lock_bh(&lock);
@@ -677,7 +688,7 @@ static void process_one_req(struct work_struct *_work)
 }
 
 int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockaddr *dst_addr/*目的地址*/,
-		    struct rdma_dev_addr *addr/*rdma地址*/, unsigned long timeout_ms,
+		    struct rdma_dev_addr *addr/*出参，解析得到的rdma地址信息*/, unsigned long timeout_ms,
 		    void (*callback)(int status, struct sockaddr *src_addr,
 				     struct rdma_dev_addr *addr, void *context),
 		    bool resolve_by_gid_attr, void *context)
@@ -703,9 +714,11 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 
 		memcpy(src_in, src_addr, rdma_addr_size(src_addr));
 	} else {
+		/*没有给定源地址，将源地址指为any*/
 		src_in->sa_family = dst_addr->sa_family;
 	}
 
+	/*填写目的地址*/
 	memcpy(dst_in, dst_addr, rdma_addr_size(dst_addr));
 	req->addr = addr;
 	req->callback = callback;/*指明此请求的callback*/
@@ -715,7 +728,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 	req->seq = (u32)atomic_inc_return(&ib_nl_addr_request_seq);
 
 	/*地址解析*/
-	req->status = addr_resolve(src_in, dst_in, addr, true,
+	req->status = addr_resolve(src_in, dst_in, addr, true/*需要解析领居表项*/,
 				   req->resolve_by_gid_attr, req->seq);
 	switch (req->status) {
 	case 0:
@@ -724,6 +737,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 		queue_req(req);
 		break;
 	case -ENODATA:
+		/*查询领居表项未果，将req加入队列，指定超时时间，超时后检查查询结果*/
 		req->timeout = msecs_to_jiffies(timeout_ms) + jiffies;
 		queue_req(req);
 		break;
@@ -881,7 +895,7 @@ static int netevent_callback(struct notifier_block *self, unsigned long event,
 		if (neigh->nud_state & NUD_VALID) {
 			spin_lock_bh(&lock);
 			list_for_each_entry(req, &req_list, list)
-				set_timeout(req, jiffies);
+				set_timeout(req, jiffies);/*立即超时*/
 			spin_unlock_bh(&lock);
 		}
 	}

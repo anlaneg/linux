@@ -80,7 +80,7 @@ void bt_sock_reclassify_lock(struct sock *sk, int proto)
 }
 EXPORT_SYMBOL(bt_sock_reclassify_lock);
 
-/*蓝牙各协议注册，指明socket处理的ops*/
+/*蓝牙各协议注册，指明socket可处理协议的ops*/
 int bt_sock_register(int proto, const struct net_proto_family *ops)
 {
 	int err = 0;
@@ -112,6 +112,7 @@ void bt_sock_unregister(int proto)
 }
 EXPORT_SYMBOL(bt_sock_unregister);
 
+/*通过proto查找此sock对应的create处理函数并执行创建*/
 static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 			  int kern)
 {
@@ -126,7 +127,7 @@ static int bt_sock_create(struct net *net, struct socket *sock, int proto,
 		return -EINVAL;
 
 	if (!bt_proto[proto])
-		/*如果此proto不存在，则请求加载相应模块*/
+		/*如果此proto不存在（或未注册），则请求加载相应模块*/
 		request_module("bt-proto-%d", proto);
 
 	err = -EPROTONOSUPPORT;
@@ -768,7 +769,7 @@ void bt_procfs_cleanup(struct net *net, const char *name)
 EXPORT_SYMBOL(bt_procfs_init);
 EXPORT_SYMBOL(bt_procfs_cleanup);
 
-/*负责bluetooth socket创建*/
+/*负责bluetooth 各类protocol 相应socket的创建*/
 static const struct net_proto_family bt_sock_family_ops = {
 	.owner	= THIS_MODULE,
 	.family	= PF_BLUETOOTH,
@@ -802,7 +803,7 @@ static int __init bt_init(void)
 	if (err < 0)
 		goto cleanup_led;
 
-	/*注册family*/
+	/*注册PF_BLUETOOTH family*/
 	err = sock_register(&bt_sock_family_ops);
 	if (err)
 		goto cleanup_sysfs;

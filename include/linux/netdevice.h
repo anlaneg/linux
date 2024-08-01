@@ -1470,7 +1470,7 @@ struct netdev_net_notifier {
  *	Change the hardware timestamping parameters for NIC device.
  */
 struct net_device_ops {
-	//注册网络设备时，将调用此回调用于初始化
+	//注册网络设备时，如果提供此回调，将首先调用此回调用于初始化（见register_netdevice）
 	int			(*ndo_init)(struct net_device *dev);
 	//ndo_init操作的反操作
 	void			(*ndo_uninit)(struct net_device *dev);
@@ -2269,7 +2269,7 @@ struct net_device {
 	struct list_head	napi_list;
 	struct list_head	unreg_list;
 	struct list_head	close_list;
-	struct list_head	ptype_all;//挂在此链上的ptype将收取此设备所有报文
+	struct list_head	ptype_all;//挂在此链上的ptype将收取此设备所有报文(与l2->ptype_all对应）
 
 	struct {
 		struct list_head upper;
@@ -2366,7 +2366,7 @@ struct net_device {
 
 
 	/* Protocol-specific pointers */
-	//ipv4设备
+	//此网络设备对应的ipv4设备
 	struct in_device __rcu	*ip_ptr;
 #if IS_ENABLED(CONFIG_VLAN_8021Q)
 	//用于记录此设备上关联的vlan信息（设备首次添加vlan时申请空间）
@@ -3336,13 +3336,14 @@ struct net_device *dev_get_by_napi_id(unsigned int napi_id);
 
 //构造生成二层协议头
 static inline int dev_hard_header(struct sk_buff *skb, struct net_device *dev,
-				  unsigned short type,
-				  const void *daddr, const void *saddr,
+				  unsigned short type/*帧类型*/,
+				  const void *daddr/*目的地址*/, const void *saddr/*源地址*/,
 				  unsigned int len)
 {
 	if (!dev->header_ops || !dev->header_ops->create)
 		return 0;
 
+	/*按header_ops创建二层协议头*/
 	return dev->header_ops->create(skb, dev, type, daddr, saddr, len);
 }
 
@@ -3381,6 +3382,7 @@ static inline bool dev_validate_header(const struct net_device *dev,
 	}
 
 	if (dev->header_ops && dev->header_ops->validate)
+		/*如果提供了此回调，刚调用*/
 		return dev->header_ops->validate(ll_header, len);
 
 	return false;
@@ -5298,13 +5300,13 @@ static inline bool netif_has_l3_rx_handler(const struct net_device *dev)
 	return dev->priv_flags & IFF_L3MDEV_RX_HANDLER;
 }
 
-/*dev是否为l3mdev的master设备*/
+/*dev是否为l3mdev类型的master设备*/
 static inline bool netif_is_l3_master(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_L3MDEV_MASTER;
 }
 
-/*dev是否为l3mdev的Slave设备*/
+/*dev是否为l3mdev类型的Slave设备*/
 static inline bool netif_is_l3_slave(const struct net_device *dev)
 {
 	return dev->priv_flags & IFF_L3MDEV_SLAVE;

@@ -264,6 +264,7 @@ int rxe_invalidate_mw(struct rxe_qp *qp, u32 rkey)
 	struct rxe_mw *mw;
 	int ret;
 
+	/*通过rkey,查询rxe_mw*/
 	mw = rxe_pool_get_index(&rxe->mw_pool, rkey >> 8);
 	if (!mw) {
 		ret = -EINVAL;

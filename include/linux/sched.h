@@ -1086,6 +1086,7 @@ struct task_struct {
 	 */
 	char				comm[TASK_COMM_LEN];/*程序名称*/
 
+	/*记录进程正在分配的nameidata，见__set_nameidata*/
 	struct nameidata		*nameidata;
 
 #ifdef CONFIG_SYSVIPC

@@ -47,7 +47,9 @@ struct fs_parameter_spec {
 	unsigned short		flags;
 	//指明noxxx是反选项
 #define fs_param_neg_with_no	0x0002	/* "noxxx" is negative param */
+	/*容许value值为空*/
 #define fs_param_can_be_empty	0x0004	/* "xxx=" is allowed */
+	/*指明是不在推荐的参数*/
 #define fs_param_deprecated	0x0008	/* The param is deprecated */
 	const void		*data;/*各type回调进行解释，例如u32类型时，可表示数据基数，例如10进制*/
 };
@@ -73,10 +75,11 @@ extern int __fs_parse(struct p_log *log,
 		    struct fs_parse_result *result);
 
 static inline int fs_parse(struct fs_context *fc,
-	     const struct fs_parameter_spec *desc/*参数结构体说明*/,
+	     const struct fs_parameter_spec *desc/*fs参数结构体说明列表，最后一项为NULL*/,
 	     struct fs_parameter *param/*入参，当前待解析的参数*/,
 	     struct fs_parse_result *result/*出参，param被转换后结果*/)
 {
+	/*在desc列表中查找param参数，如果命中，result用于记录param被转换后的结果*/
 	return __fs_parse(&fc->log, desc, param, result);
 }
 
@@ -113,25 +116,25 @@ static inline bool fs_validate_description(const char *name,
  */
 #define __fsparam(TYPE, NAME, OPT, FLAGS, DATA) \
 	{ \
-		.name = NAME, \
-		.opt = OPT, \
-		.type = TYPE, \
-		.flags = FLAGS, \
-		.data = DATA \
+		.name = NAME/*参数名称*/, \
+		.opt = OPT/*参数对应的选项id*/, \
+		.type = TYPE/*参数对应的类型回调*/, \
+		.flags = FLAGS/*参数对应的flags*/, \
+		.data = DATA /*叁数对应的data*/\
 	}
 
 #define fsparam_flag(NAME, OPT)	__fsparam(NULL, NAME, OPT, 0, NULL)
-#define fsparam_flag_no(NAME, OPT) \
-			__fsparam(NULL, NAME, OPT, fs_param_neg_with_no, NULL)
+#define fsparam_flag_no(NAME/*参数名称*/, OPT/*参数对应的选项id*/) \
+			__fsparam(NULL/*type置为NULL*/, NAME, OPT, fs_param_neg_with_no, NULL)
 #define fsparam_bool(NAME, OPT)	__fsparam(fs_param_is_bool, NAME, OPT, 0, NULL)
-#define fsparam_u32(NAME/*参数名称*/, OPT/*参数对应的选项id*/)	__fsparam(fs_param_is_u32, NAME, OPT, 0, NULL)
+#define fsparam_u32(NAME/*参数名称*/, OPT/*参数对应的选项id*/)	__fsparam(fs_param_is_u32/*参数值转u32*/, NAME, OPT, 0, NULL)
 #define fsparam_u32oct(NAME, OPT) \
-			__fsparam(fs_param_is_u32, NAME, OPT, 0, (void *)8)
+			__fsparam(fs_param_is_u32, NAME, OPT, 0, (void *)8/*指明为8进制*/)
 #define fsparam_u32hex(NAME, OPT) \
-			__fsparam(fs_param_is_u32_hex, NAME, OPT, 0, (void *)16)
+			__fsparam(fs_param_is_u32_hex, NAME, OPT, 0, (void *)16/*指明为8进制*/)
 #define fsparam_s32(NAME, OPT)	__fsparam(fs_param_is_s32, NAME, OPT, 0, NULL)
 #define fsparam_u64(NAME, OPT)	__fsparam(fs_param_is_u64, NAME, OPT, 0, NULL)
-#define fsparam_enum(NAME, OPT, array)	__fsparam(fs_param_is_enum, NAME, OPT, 0, array)
+#define fsparam_enum(NAME, OPT, array)	__fsparam(fs_param_is_enum/*参数值为enum类型*/, NAME, OPT, 0, array/*类型为enum,array为enum的常量字符串表形式*/)
 #define fsparam_string(NAME, OPT) \
 				__fsparam(fs_param_is_string, NAME, OPT, 0, NULL)
 #define fsparam_blob(NAME, OPT)	__fsparam(fs_param_is_blob, NAME, OPT, 0, NULL)

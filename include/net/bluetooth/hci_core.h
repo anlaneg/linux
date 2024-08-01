@@ -357,19 +357,19 @@ struct hci_dev {
 
 	struct ida	unset_handle_ida;
 
-	const char	*name;
+	const char	*name;/*设备名称，例如hci0*/
 	unsigned long	flags;
-	__u16		id;
+	__u16		id;/*hci设备编号*/
 	__u8		bus;
-	__u8		dev_type;
-	bdaddr_t	bdaddr;
+	__u8		dev_type;/*设备类型，例如HCI_PRIMARY*/
+	bdaddr_t	bdaddr;/*蓝牙地址*/
 	bdaddr_t	setup_addr;
 	bdaddr_t	public_addr;
 	bdaddr_t	random_addr;
 	bdaddr_t	static_addr;
 	__u8		adv_addr_type;
-	__u8		dev_name[HCI_MAX_NAME_LENGTH];
-	__u8		short_name[HCI_MAX_SHORT_NAME_LENGTH];
+	__u8		dev_name[HCI_MAX_NAME_LENGTH];/*设备名称*/
+	__u8		short_name[HCI_MAX_SHORT_NAME_LENGTH];/*设备短名称*/
 	__u8		eir[HCI_MAX_EIR_LENGTH];
 	__u16		appearance;
 	__u8		dev_class[3];
@@ -385,7 +385,7 @@ struct hci_dev {
 	__u8		mesh_ad_types[16];
 	__u8		mesh_send_ref;
 	__u8		commands[64];
-	__u8		hci_ver;
+	__u8		hci_ver;/*版本*/
 	__u16		hci_rev;
 	__u8		lmp_ver;
 	__u16		manufacturer;
@@ -513,8 +513,8 @@ struct hci_dev {
 	__u8		le_tx_def_phys;
 	__u8		le_rx_def_phys;
 
-	struct workqueue_struct	*workqueue;
-	struct workqueue_struct	*req_workqueue;
+	struct workqueue_struct	*workqueue;/*按序队列*/
+	struct workqueue_struct	*req_workqueue;/*按序队列*/
 
 	struct work_struct	power_on;
 	struct delayed_work	power_off;
@@ -534,23 +534,24 @@ struct hci_dev {
 	struct delayed_work	cmd_timer;
 	struct delayed_work	ncmd_timer;
 
-	struct work_struct	rx_work;
-	struct work_struct	cmd_work;
-	struct work_struct	tx_work;
+	struct work_struct	rx_work;/*负责处理rx_q上所有skb*/
+	struct work_struct	cmd_work;/*负责处理cmd_q上所有cmd skb*/
+	struct work_struct	tx_work;/*负责处理raw_q上所有skb*/
 
 	struct delayed_work	le_scan_disable;
 
-	struct sk_buff_head	rx_q;
-	struct sk_buff_head	raw_q;
-	struct sk_buff_head	cmd_q;
+	struct sk_buff_head	rx_q;/*挂接在此q上的skb将按照pkt_type，进行分别处理，见hci_rx_work*/
+	struct sk_buff_head	raw_q;/*挂接在此q上的skb将被调用send回调*/
+	struct sk_buff_head	cmd_q;/*待处理的cmd skb队列*/
 
 	struct sk_buff		*sent_cmd;
 	struct sk_buff		*recv_event;
 
 	struct mutex		req_lock;
 	wait_queue_head_t	req_wait_q;
+	/*用于标记请求执行状态，例如HCI_REQ_PEND（待执行），HCI_REQ_DONE（执行完成），HCI_REQ_CANCELED（执行取消）*/
 	__u32			req_status;
-	__u32			req_result;
+	__u32			req_result;/*标记请求执行结果*/
 	struct sk_buff		*req_skb;
 
 	void			*smp_data;
@@ -572,10 +573,11 @@ struct hci_dev {
 	bdaddr_t		wake_addr;
 	u8			wake_addr_type;
 
+	/*用于串连关于此设备的连接，连接有多种类型，见hci_conn_hash_add函数*/
 	struct hci_conn_hash	conn_hash;
 
 	struct list_head	mesh_pending;
-	struct list_head	mgmt_pending;
+	struct list_head	mgmt_pending;/*用于挂接pending cmd，（这个队列仅用于支持pending查询）*/
 	struct list_head	reject_list;
 	struct list_head	accept_list;
 	struct list_head	uuids;
@@ -593,7 +595,7 @@ struct hci_dev {
 
 	struct hci_dev_stats	stat;
 
-	atomic_t		promisc;
+	atomic_t		promisc;/*标记此设备是否开启混杂模式*/
 
 	const char		*hw_info;
 	const char		*fw_info;
@@ -622,7 +624,7 @@ struct hci_dev {
 	__u16			adv_instance_timeout;
 	struct delayed_work	adv_instance_expire;
 
-	struct idr		adv_monitors_idr;
+	struct idr		adv_monitors_idr;/*用于存储所有monitor的idx*/
 	unsigned int		adv_monitors_cnt;
 
 	__u8			irk[16];
@@ -1004,7 +1006,8 @@ static inline bool hci_conn_sc_enabled(struct hci_conn *conn)
 static inline void hci_conn_hash_add(struct hci_dev *hdev, struct hci_conn *c)
 {
 	struct hci_conn_hash *h = &hdev->conn_hash;
-	list_add_tail_rcu(&c->list, &h->list);
+	list_add_tail_rcu(&c->list, &h->list);/*将此连接加入到hash table*/
+	/*依据不同类型，增加number*/
 	switch (c->type) {
 	case ACL_LINK:
 		h->acl_num++;
@@ -1644,8 +1647,10 @@ static inline void *hci_get_priv(struct hci_dev *hdev)
 struct hci_dev *hci_dev_get(int index);
 struct hci_dev *hci_get_route(bdaddr_t *dst, bdaddr_t *src, u8 src_type);
 
+/*申请hci设备，指定私有结构体大小*/
 struct hci_dev *hci_alloc_dev_priv(int sizeof_priv);
 
+/*申请hci设备（私有结构体大小为0）*/
 static inline struct hci_dev *hci_alloc_dev(void)
 {
 	return hci_alloc_dev_priv(0);
@@ -2189,7 +2194,7 @@ struct hci_mgmt_handler {
 struct hci_mgmt_chan {
 	struct list_head list;
 	unsigned short channel;
-	size_t handler_count;
+	size_t handler_count;/*handlers数组长度*/
 	const struct hci_mgmt_handler *handlers;
 	void (*hdev_init) (struct sock *sk, struct hci_dev *hdev);
 };

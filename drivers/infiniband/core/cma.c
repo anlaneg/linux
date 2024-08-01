@@ -4157,7 +4157,7 @@ int rdma_resolve_addr(struct rdma_cm_id *id, struct sockaddr *src_addr,
 				id_priv->used_resolve_ip = 1;
 			ret = rdma_resolve_ip(cma_src_addr(id_priv), dst_addr,
 					      &id->route.addr.dev_addr,
-					      timeout_ms, addr_handler,
+					      timeout_ms, addr_handler/*地址解析结果处理*/,
 					      false, id_priv);
 		}
 	}

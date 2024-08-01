@@ -35,7 +35,7 @@
 
 struct hci_request {
 	struct hci_dev		*hdev;
-	struct sk_buff_head	cmd_q;
+	struct sk_buff_head	cmd_q;/*一组skb cmd*/
 
 	/* If something goes wrong when building the HCI request, the error
 	 * value is stored in this field.

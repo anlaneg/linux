@@ -284,6 +284,7 @@ nlmclnt_call(const struct cred *cred, struct nlm_rqst *req, u32 proc)
 		/* If we have no RPC client yet, create one. */
 		if ((clnt = nlm_bind_host(host)) == NULL)
 			return -ENOLCK;
+		/*记录此过程（proc)对应的procinfo*/
 		msg.rpc_proc = &clnt->cl_procinfo[proc];
 
 		/* Perform the RPC call. If an error occurs, try again */

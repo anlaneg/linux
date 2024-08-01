@@ -19,10 +19,11 @@ int __init init_mount(const char *dev_name, const char *dir_name,
 	struct path path;
 	int ret;
 
+	/*dir_name转换为path*/
 	ret = kern_path(dir_name, LOOKUP_FOLLOW, &path);
 	if (ret)
 		return ret;
-	ret = path_mount(dev_name, &path, type_page, flags, data_page);
+	ret = path_mount(dev_name, &path, type_page/*文件系统名称*/, flags, data_page);
 	path_put(&path);
 	return ret;
 }

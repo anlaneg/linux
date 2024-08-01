@@ -60,11 +60,11 @@ struct ipvl_pcpu_stats {
 struct ipvl_port;
 
 struct ipvl_dev {
-	struct net_device	*dev;
+	struct net_device	*dev;/*指代ipvlan设备本身的网络设备*/
 	struct list_head	pnode;
-	struct ipvl_port	*port;
-	struct net_device	*phy_dev;
-	struct list_head	addrs;
+	struct ipvl_port	*port;/*从属的ipvl_port*/
+	struct net_device	*phy_dev;/*ipvlan附着的网络设备（一般称为底层设备或者upper dev)*/
+	struct list_head	addrs;/*为此ipvlan设备配置的所有ip地址（其上挂结的结构为：struct ipvl_addr）*/
 	struct ipvl_pcpu_stats	__percpu *pcpu_stats;
 	DECLARE_BITMAP(mac_filters, IPVLAN_MAC_FILTER_SIZE);
 	netdev_features_t	sfeatures;
@@ -73,28 +73,32 @@ struct ipvl_dev {
 };
 
 struct ipvl_addr {
+	/*指明此ipvlan地址对应的ipvlan设备*/
 	struct ipvl_dev		*master; /* Back pointer to master */
 	union {
 		struct in6_addr	ip6;	 /* IPv6 address on logical interface */
 		struct in_addr	ip4;	 /* IPv4 address on logical interface */
-	} ipu;
+	} ipu;/*地址*/
 #define ip6addr	ipu.ip6
 #define ip4addr ipu.ip4
 	struct hlist_node	hlnode;  /* Hash-table linkage */
+	/*用于将此结构体串连在一起*/
 	struct list_head	anode;   /* logical-interface linkage */
-	ipvl_hdr_type		atype;
+	ipvl_hdr_type		atype;/*指明地址类型*/
 	struct rcu_head		rcu;
 };
 
 struct ipvl_port {
-	struct net_device	*dev;
+	struct net_device	*dev;/*关联的底层网络设备*/
 	possible_net_t		pnet;
+	/*与此port关联的所有ip（struct ipvl_addr结构），用于是否需要处理此报文*/
 	struct hlist_head	hlhead[IPVLAN_HASH_SIZE];
+	/*串连从属于此netdev的所有ipvlan设备*/
 	struct list_head	ipvlans;
 	u16			mode;
 	u16			flags;
 	u16			dev_id_start;
-	struct work_struct	wq;
+	struct work_struct	wq;/*广播组播报文处理wq*/
 	struct sk_buff_head	backlog;
 	int			count;
 	struct ida		ida;
@@ -102,7 +106,7 @@ struct ipvl_port {
 };
 
 struct ipvl_skb_cb {
-	bool tx_pkt;
+	bool tx_pkt;/*是否tx方向报文*/
 };
 #define IPVL_SKB_CB(_skb) ((struct ipvl_skb_cb *)&((_skb)->cb[0]))
 
@@ -205,6 +209,7 @@ static inline void ipvlan_l3s_cleanup(void)
 
 static inline bool netif_is_ipvlan_port(const struct net_device *dev)
 {
+	/*此设备是否为ipvlan的底层设备*/
 	return rcu_access_pointer(dev->rx_handler) == ipvlan_handle_frame;
 }
 

@@ -10,7 +10,8 @@
 
 #include <rdma/iba.h>
 
-#define CM_FIELD_BLOC(field_struct, byte_offset, bits_offset, width)           \
+/*cm相关的成员，指明成员针对field_struct结构体的offset及位宽*/
+#define CM_FIELD_BLOC(field_struct/*结构体关键字及名称*/, byte_offset/*成员在ib_mad_hdr之后多少byte*/, bits_offset/*bit相关的偏移量*/, width/*成员位宽*/)           \
 	IBA_FIELD_BLOC(field_struct,                                           \
 		       (byte_offset + sizeof(struct ib_mad_hdr)), bits_offset, \
 		       width)
@@ -28,7 +29,8 @@
 #define CM_FIELD_MLOC(field_struct, byte_offset, width, type)                  \
 	IBA_FIELD_MLOC(field_struct,                                           \
 		       (byte_offset + sizeof(struct ib_mad_hdr)), width, type)
-#define CM_STRUCT(field_struct, total_len)                                     \
+/*定义结构体field_struct,其会包含一个ib_mad_hdr结构体，同时也指明了它的负载（通过总长度指定）*/
+#define CM_STRUCT(field_struct, total_len/*总长度（单位为bit）需要以4字节对齐*/)                                     \
 	field_struct                                                           \
 	{                                                                      \
 		struct ib_mad_hdr hdr;                                         \
@@ -49,6 +51,7 @@
 #define CM_REQ_REMOTE_EECN CM_FIELD32_LOC(struct cm_req_msg, 40, 24)
 #define CM_REQ_REMOTE_CM_RESPONSE_TIMEOUT                                      \
 	CM_FIELD8_LOC(struct cm_req_msg, 43, 5)
+/*指定传输服务类型，例如uc,rc*/
 #define CM_REQ_TRANSPORT_SERVICE_TYPE CM_FIELD_BLOC(struct cm_req_msg, 43, 5, 2)
 #define CM_REQ_END_TO_END_FLOW_CONTROL                                         \
 	CM_FIELD_BLOC(struct cm_req_msg, 43, 7, 1)
@@ -61,6 +64,7 @@
 #define CM_REQ_RNR_RETRY_COUNT CM_FIELD_BLOC(struct cm_req_msg, 50, 5, 3)
 #define CM_REQ_MAX_CM_RETRIES CM_FIELD8_LOC(struct cm_req_msg, 51, 4)
 #define CM_REQ_SRQ CM_FIELD_BLOC(struct cm_req_msg, 51, 4, 1)
+/*此字段指明扩展的传输类型，例如IB_QPT_XRC_TGT*/
 #define CM_REQ_EXTENDED_TRANSPORT_TYPE                                         \
 	CM_FIELD_BLOC(struct cm_req_msg, 51, 5, 3)
 #define CM_REQ_PRIMARY_LOCAL_PORT_LID CM_FIELD16_LOC(struct cm_req_msg, 52, 16)
@@ -110,8 +114,10 @@ CM_STRUCT(struct cm_mra_msg, 10 * 8 + 1776);
 #define CM_REJ_REMOTE_COMM_ID CM_FIELD32_LOC(struct cm_rej_msg, 4, 32)
 #define CM_REJ_MESSAGE_REJECTED CM_FIELD8_LOC(struct cm_rej_msg, 8, 2)
 #define CM_REJ_REJECTED_INFO_LENGTH CM_FIELD8_LOC(struct cm_rej_msg, 9, 7)
+/*此字段对应建连失败原因*/
 #define CM_REJ_REASON CM_FIELD16_LOC(struct cm_rej_msg, 10, 16)
 #define CM_REJ_ARI CM_FIELD_MLOC(struct cm_rej_msg, 12, 576, void)
+/*此这段对应建连失败对应的私有数据*/
 #define CM_REJ_PRIVATE_DATA CM_FIELD_MLOC(struct cm_rej_msg, 84, 1184, void)
 CM_STRUCT(struct cm_rej_msg, 84 * 8 + 1184);
 

@@ -23,7 +23,7 @@
  * Nests outside led_cdev->trigger_lock
  */
 static DECLARE_RWSEM(triggers_list_lock);
-LIST_HEAD(trigger_list);
+LIST_HEAD(trigger_list);/*用于记录系统中所有trigger*/
 
  /* Used by LED Class */
 
@@ -285,12 +285,15 @@ int led_trigger_register(struct led_trigger *trig)
 		if (!strcmp(_trig->name, trig->name) &&
 		    (trig->trigger_type == _trig->trigger_type ||
 		     !trig->trigger_type || !_trig->trigger_type)) {
+			/*检查一个trigger是否已存在，满足条件：1。名称及tigger_type相等
+			 * 或者名称相等，且有一方没有指定tigger_type
+			 * */
 			up_write(&triggers_list_lock);
 			return -EEXIST;
 		}
 	}
 	/* Add to the list of led triggers */
-	list_add_tail(&trig->next_trig, &trigger_list);
+	list_add_tail(&trig->next_trig, &trigger_list);/*将此tigger加入链表*/
 	up_write(&triggers_list_lock);
 
 	/* Register with any LEDs that have this as a default trigger */
@@ -419,27 +422,31 @@ void led_trigger_blink_oneshot(struct led_trigger *trig,
 }
 EXPORT_SYMBOL_GPL(led_trigger_blink_oneshot);
 
-void led_trigger_register_simple(const char *name, struct led_trigger **tp)
+/*注册一个led trigger*/
+void led_trigger_register_simple(const char *name/*trigger名称*/, struct led_trigger **tp)
 {
 	struct led_trigger *trig;
 	int err;
 
+	/*申请一个结构体*/
 	trig = kzalloc(sizeof(struct led_trigger), GFP_KERNEL);
 
 	if (trig) {
-		trig->name = name;
+		trig->name = name;/*设置trig名称*/
 		err = led_trigger_register(trig);
 		if (err < 0) {
+			/*注册trigger失败，释放它*/
 			kfree(trig);
 			trig = NULL;
 			pr_warn("LED trigger %s failed to register (%d)\n",
 				name, err);
 		}
 	} else {
+		/*参数有误*/
 		pr_warn("LED trigger %s failed to register (no memory)\n",
 			name);
 	}
-	*tp = trig;
+	*tp = trig;/*返回trigger结构体*/
 }
 EXPORT_SYMBOL_GPL(led_trigger_register_simple);
 

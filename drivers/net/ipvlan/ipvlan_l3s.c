@@ -11,7 +11,7 @@ struct ipvlan_netns {
 };
 
 static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
-					    struct net_device *dev)
+					    struct net_device *dev/*ipvlan底层设备*/)
 {
 	struct ipvl_addr *addr = NULL;
 	struct ipvl_port *port;
@@ -23,6 +23,7 @@ static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
 
 	port = ipvlan_port_get_rcu(dev);
 	if (!port || port->mode != IPVLAN_MODE_L3S)
+		/*非l3s，跳过*/
 		goto out;
 
 	lyr3h = ipvlan_get_L3_hdr(port, skb, &addr_type);
@@ -30,12 +31,12 @@ static struct ipvl_addr *ipvlan_skb_to_addr(struct sk_buff *skb,
 		goto out;//无法处理的报文
 
 	//默认采用目的地址，检查port上是否有对应的ip地址
-	addr = ipvlan_addr_lookup(port, lyr3h, addr_type, true);
+	addr = ipvlan_addr_lookup(port, lyr3h/*三层头*/, addr_type/*三层协议类型*/, true/*检查目的ip*/);
 out:
 	return addr;
 }
 
-//ipvlan收包函数
+//ipvlan l3收包函数
 static struct sk_buff *ipvlan_l3_rcv(struct net_device *dev,
 				     struct sk_buff *skb, u16 proto)
 {
@@ -47,7 +48,7 @@ static struct sk_buff *ipvlan_l3_rcv(struct net_device *dev,
 	if (!addr)
 		goto out;
 
-	//切换至master设备
+	//获得此地址从属的ipvlan设备
 	sdev = addr->master->dev;
 	switch (proto) {
 	case AF_INET:
@@ -55,7 +56,7 @@ static struct sk_buff *ipvlan_l3_rcv(struct net_device *dev,
 		struct iphdr *ip4h = ip_hdr(skb);
 		int err;
 
-		//查路由，入接口取master dev
+		//查路由，入接口取ipvlan dev，确定路由结果，设置dst->input回调
 		err = ip_route_input_noref(skb, ip4h->daddr, ip4h->saddr,
 					   ip4h->tos, sdev);
 		if (unlikely(err))
@@ -101,16 +102,19 @@ static unsigned int ipvlan_nf_input(void *priv, struct sk_buff *skb,
 	struct ipvl_addr *addr;
 	unsigned int len;
 
+	/*确定此报文可归并到哪个addr来接收*/
 	addr = ipvlan_skb_to_addr(skb, skb->dev);
 	if (!addr)
 		goto out;
 
+	/*更新报文从属的设备为ipvlan,变更其对应的iif*/
 	skb->dev = addr->master->dev;
 	skb->skb_iif = skb->dev->ifindex;
 #if IS_ENABLED(CONFIG_IPV6)
 	if (addr->atype == IPVL_IPV6)
 		IP6CB(skb)->iif = skb->dev->ifindex;
 #endif
+	/*更新统计计数*/
 	len = skb->len + ETH_HLEN;
 	ipvlan_count_rx(addr->master, len, true, false);
 out:
@@ -119,7 +123,7 @@ out:
 
 static const struct nf_hook_ops ipvl_nfops[] = {
 	{
-		.hook     = ipvlan_nf_input,
+		.hook     = ipvlan_nf_input,/*在localin位置针对ipvlan接口增加统计计数*/
 		.pf       = NFPROTO_IPV4,
 		.hooknum  = NF_INET_LOCAL_IN,
 		.priority = INT_MAX,
@@ -140,11 +144,13 @@ static int ipvlan_register_nf_hook(struct net *net)
 	int err = 0;
 
 	if (!vnet->ipvl_nf_hook_refcnt) {
+		/*未注册，在netfilter local-in钩子点，增加注册*/
 		err = nf_register_net_hooks(net, ipvl_nfops,
 					    ARRAY_SIZE(ipvl_nfops));
 		if (!err)
 			vnet->ipvl_nf_hook_refcnt = 1;
 	} else {
+		/*已注册，引用增加*/
 		vnet->ipvl_nf_hook_refcnt++;
 	}
 
@@ -164,6 +170,7 @@ static void ipvlan_unregister_nf_hook(struct net *net)
 					ARRAY_SIZE(ipvl_nfops));
 }
 
+/*变更hook钩子点对应的src net namespace及dst net namespace*/
 void ipvlan_migrate_l3s_hook(struct net *oldnet, struct net *newnet)
 {
 	struct ipvlan_netns *old_vnet;
@@ -174,6 +181,7 @@ void ipvlan_migrate_l3s_hook(struct net *oldnet, struct net *newnet)
 	if (!old_vnet->ipvl_nf_hook_refcnt)
 		return;
 
+	/*这里为什么不检查newnet与oldnet相等的情况？*/
 	ipvlan_register_nf_hook(newnet);
 	ipvlan_unregister_nf_hook(oldnet);
 }

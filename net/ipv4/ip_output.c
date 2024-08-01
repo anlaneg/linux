@@ -111,7 +111,7 @@ int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/* if egress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
 	 */
-	skb = l3mdev_ip_out(sk, skb);
+	skb = l3mdev_ip_out(sk, skb);/*l3mdev逻辑处理*/
 	if (unlikely(!skb))
 		return 0;
 

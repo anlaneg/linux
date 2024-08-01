@@ -468,8 +468,9 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否�
 	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置目标qpn*/
 	psn &= BTH_PSN_MASK;
 	if (ack_req)
+		/*如果是ack request,则加上ack标记*/
 		psn |= BTH_ACK_MASK;
-	bth->apsn = cpu_to_be32(psn);
+	bth->apsn = cpu_to_be32(psn);/*设置apsn*/
 }
 
 /******************************************************************************

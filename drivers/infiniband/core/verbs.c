@@ -270,6 +270,7 @@ struct ib_pd *__ib_alloc_pd(struct ib_device *device, unsigned int flags,
 	int mr_access_flags = 0;
 	int ret;
 
+	/*创建此device对应的pd结构体*/
 	pd = rdma_zalloc_drv_obj(device, ib_pd);
 	if (!pd)
 		return ERR_PTR(-ENOMEM);
@@ -278,8 +279,9 @@ struct ib_pd *__ib_alloc_pd(struct ib_device *device, unsigned int flags,
 	pd->flags = flags;
 
 	rdma_restrack_new(&pd->res, RDMA_RESTRACK_PD);
-	rdma_restrack_set_name(&pd->res, caller);
+	rdma_restrack_set_name(&pd->res, caller);/*指明是谁创建了此pd*/
 
+	/*触发aloc_pd回调，由各类别ib设备可自由初始化此pd*/
 	ret = device->ops.alloc_pd(pd, NULL);
 	if (ret) {
 		rdma_restrack_put(&pd->res);
@@ -1044,6 +1046,7 @@ struct ib_srq *ib_create_srq_user(struct ib_pd *pd,
 	rdma_restrack_new(&srq->res, RDMA_RESTRACK_SRQ);
 	rdma_restrack_parent_name(&srq->res, &pd->res);
 
+	/*各驱动自由创建并初始化srq*/
 	ret = pd->device->ops.create_srq(srq, srq_init_attr, udata);
 	if (ret) {
 		rdma_restrack_put(&srq->res);
@@ -1210,7 +1213,7 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	struct ib_qp *qp;
 	int ret;
 
-	/*接口create_qp不得为空*/
+	/*ops接口create_qp不得为空*/
 	if (!dev->ops.create_qp)
 		return ERR_PTR(-EOPNOTSUPP);
 
@@ -1235,12 +1238,13 @@ static struct ib_qp *create_qp(struct ib_device *dev, struct ib_pd *pd,
 	INIT_LIST_HEAD(&qp->rdma_mrs);
 	INIT_LIST_HEAD(&qp->sig_mrs);
 
-	qp->send_cq = attr->send_cq;
-	qp->recv_cq = attr->recv_cq;
+	qp->send_cq = attr->send_cq;/*设置send_cq*/
+	qp->recv_cq = attr->recv_cq;/*设置recv_cq*/
 
 	rdma_restrack_new(&qp->res, RDMA_RESTRACK_QP);
 	WARN_ONCE(!udata && !caller, "Missing kernel QP owner");
 	rdma_restrack_set_name(&qp->res, udata ? NULL : caller);
+	/*交给各类别的设备自由的初始化qp*/
 	ret = dev->ops.create_qp(qp, attr, udata);
 	if (ret)
 		goto err_create;
@@ -1281,7 +1285,7 @@ err_create:
  * @caller: caller's build-time module name
  */
 struct ib_qp *ib_create_qp_user(struct ib_device *dev, struct ib_pd *pd,
-				struct ib_qp_init_attr *attr,
+				struct ib_qp_init_attr *attr/*qp初始化属性*/,
 				struct ib_udata *udata,
 				struct ib_uqp_object *uobj, const char *caller)
 {
@@ -1337,6 +1341,7 @@ void ib_qp_usecnt_dec(struct ib_qp *qp)
 }
 EXPORT_SYMBOL(ib_qp_usecnt_dec);
 
+/*用于kernel创建qp*/
 struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 				  struct ib_qp_init_attr *qp_init_attr,
 				  const char *caller)
@@ -1354,6 +1359,7 @@ struct ib_qp *ib_create_qp_kernel(struct ib_pd *pd,
 	if (qp_init_attr->cap.max_rdma_ctxs)
 		rdma_rw_init_qp(device, qp_init_attr);
 
+	/*创建qp*/
 	qp = create_qp(device, pd, qp_init_attr, NULL, NULL, caller);
 	if (IS_ERR(qp))
 		return qp;

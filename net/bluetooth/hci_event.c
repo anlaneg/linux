@@ -4355,8 +4355,8 @@ static const struct hci_cs {
 
 static void hci_cmd_status_evt(struct hci_dev *hdev, void *data,
 			       struct sk_buff *skb, u16 *opcode, u8 *status,
-			       hci_req_complete_t *req_complete,
-			       hci_req_complete_skb_t *req_complete_skb)
+			       hci_req_complete_t *req_complete/*出参，complete回调*/,
+			       hci_req_complete_skb_t *req_complete_skb/*出参，complete回调*/)
 {
 	struct hci_ev_cmd_status *ev = data;
 	int i;
@@ -7650,13 +7650,16 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 			   hci_req_complete_t *req_complete,
 			   hci_req_complete_skb_t *req_complete_skb)
 {
+	/*按照event编号取对应的entity*/
 	const struct hci_ev *ev = &hci_ev_table[event];
 	void *data;
 
 	if (!ev->func)
+		/*必须提供func回调*/
 		return;
 
 	if (skb->len < ev->min_len) {
+		/*skb长度小于此event最小len,报错*/
 		bt_dev_err(hdev, "unexpected event 0x%2.2x length: %u < %u",
 			   event, skb->len, ev->min_len);
 		return;
@@ -7667,6 +7670,7 @@ static void hci_event_func(struct hci_dev *hdev, u8 event, struct sk_buff *skb,
 	 * decide if that is acceptable.
 	 */
 	if (skb->len > ev->max_len)
+		/*skb长度大于此event最大len,报错*/
 		bt_dev_warn_ratelimited(hdev,
 					"unexpected event 0x%2.2x length: %u > %u",
 					event, skb->len, ev->max_len);
@@ -7731,12 +7735,15 @@ void hci_event_packet(struct hci_dev *hdev, struct sk_buff *skb)
 
 	bt_dev_dbg(hdev, "event 0x%2.2x", event);
 
+	/*取complete回调*/
 	hci_event_func(hdev, event, skb, &opcode, &status, &req_complete,
 		       &req_complete_skb);
 
 	if (req_complete) {
+		/*有req_complete回调，则调用*/
 		req_complete(hdev, status, opcode);
 	} else if (req_complete_skb) {
+		/*否则有req_complete_skb，则调用*/
 		if (!hci_get_cmd_complete(hdev, opcode, req_evt, orig_skb)) {
 			kfree_skb(orig_skb);
 			orig_skb = NULL;

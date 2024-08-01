@@ -405,6 +405,7 @@ static inline void dst_confirm(struct dst_entry *dst)
 
 static inline struct neighbour *dst_neigh_lookup(const struct dst_entry *dst, const void *daddr)
 {
+	/*领居表项查询（非报文方式）*/
 	struct neighbour *n = dst->ops->neigh_lookup(dst, NULL, daddr);
 	return IS_ERR(n) ? NULL : n;
 }
@@ -417,6 +418,7 @@ static inline struct neighbour *dst_neigh_lookup_skb(const struct dst_entry *dst
 	if (WARN_ON_ONCE(!dst->ops->neigh_lookup))
 		return NULL;
 
+	/*领居表项查询（报文方式）*/
 	n = dst->ops->neigh_lookup(dst, skb, NULL);
 
 	return IS_ERR(n) ? NULL : n;

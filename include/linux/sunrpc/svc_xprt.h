@@ -66,6 +66,7 @@ struct svc_xprt {
 	void			*xpt_auth_cache;/* auth cache */
 	struct list_head	xpt_deferred;	/* deferred requests that need
 						 * to be revisted */
+	/*本地地址*/
 	struct sockaddr_storage	xpt_local;	/* local address */
 	size_t			xpt_locallen;	/* length of address */
 	struct sockaddr_storage	xpt_remote;	/* remote peer's address */
@@ -163,6 +164,7 @@ static inline void svc_xprt_set_local(struct svc_xprt *xprt,
 				      const struct sockaddr *sa,
 				      const size_t salen)
 {
+	/*设置local地址*/
 	memcpy(&xprt->xpt_local, sa, salen);
 	xprt->xpt_locallen = salen;
 }

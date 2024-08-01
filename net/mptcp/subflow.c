@@ -290,7 +290,7 @@ static struct dst_entry *subflow_v4_route_req(const struct sock *sk,
 	struct dst_entry *dst;
 	int err;
 
-	tcp_rsk(req)->is_mptcp = 1;
+	tcp_rsk(req)->is_mptcp = 1;/*标记为mptcp socket*/
 	subflow_init_req(req, sk);
 
 	dst = tcp_request_sock_ipv4_ops.route_req(sk, skb, fl, req);
@@ -1851,6 +1851,7 @@ static int subflow_ulp_init(struct sock *sk)
 	 * created with sock_create_kern()
 	 */
 	if (!sk->sk_kern_sock) {
+		/*非kernel socket,不支持*/
 		err = -EOPNOTSUPP;
 		goto out;
 	}
@@ -1872,7 +1873,7 @@ static int subflow_ulp_init(struct sock *sk)
 	WARN_ON_ONCE(sk->sk_data_ready != sock_def_readable);
 	WARN_ON_ONCE(sk->sk_write_space != sk_stream_write_space);
 
-	sk->sk_data_ready = subflow_data_ready;
+	sk->sk_data_ready = subflow_data_ready;/*设置数据ready通知*/
 	sk->sk_write_space = subflow_write_space;
 	sk->sk_state_change = subflow_state_change;
 	sk->sk_error_report = subflow_error_report;

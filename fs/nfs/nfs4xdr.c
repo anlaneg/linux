@@ -7617,7 +7617,7 @@ nfs4_stat_to_errno(int stat)
 #include "nfs42xdr.c"
 #endif /* CONFIG_NFS_V4_2 */
 
-#define PROC(proc, argtype, restype)				\
+#define PROC(proc, argtype/*参数类型*/, restype)				\
 [NFSPROC4_CLNT_##proc] = {					\
 	.p_proc   = NFSPROC4_COMPOUND,				\
 	.p_encode = nfs4_xdr_##argtype,				\
@@ -7625,7 +7625,7 @@ nfs4_stat_to_errno(int stat)
 	.p_arglen = NFS4_##argtype##_sz,			\
 	.p_replen = NFS4_##restype##_sz,			\
 	.p_statidx = NFSPROC4_CLNT_##proc,			\
-	.p_name   = #proc,					\
+	.p_name   = #proc,/*过程的名称*/					\
 }
 
 #define STUB(proc)		\
@@ -7649,6 +7649,7 @@ nfs4_stat_to_errno(int stat)
 	STUB(proc)
 #endif
 
+/*nfs4各操作对应的rpc方法*/
 const struct rpc_procinfo nfs4_procedures[] = {
 	PROC(READ,		enc_read,		dec_read),
 	PROC(WRITE,		enc_write,		dec_write),
@@ -7724,7 +7725,7 @@ const struct rpc_procinfo nfs4_procedures[] = {
 static unsigned int nfs_version4_counts[ARRAY_SIZE(nfs4_procedures)];
 const struct rpc_version nfs_version4 = {
 	.number			= 4,
-	.nrprocs		= ARRAY_SIZE(nfs4_procedures),
-	.procs			= nfs4_procedures,
+	.nrprocs		= ARRAY_SIZE(nfs4_procedures),/*有多少个过程*/
+	.procs			= nfs4_procedures,/*指出过程数组*/
 	.counts			= nfs_version4_counts,
 };

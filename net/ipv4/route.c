@@ -400,6 +400,7 @@ void rt_cache_flush(struct net *net)
 	rt_genid_bump_ipv4(net);
 }
 
+/*查询领居表项，如果不存在，则会创建并返回领居表项*/
 static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
 					   struct sk_buff *skb,
 					   const void *daddr)
@@ -418,6 +419,7 @@ static struct neighbour *ipv4_neigh_lookup(const struct dst_entry *dst,
         } else {
 		__be32 pkey;
 
+		/*有skb以skb中的目地地址为准，无skb以提定的daddr为准*/
 		pkey = skb ? ip_hdr(skb)->daddr : *((__be32 *) daddr);
 		n = ip_neigh_gw4(dev, pkey);
 	}
@@ -1319,7 +1321,7 @@ static void set_class_tag(struct rtable *rt, u32 tag)
 static unsigned int ipv4_default_advmss(const struct dst_entry *dst)
 {
 	struct net *net = dev_net(dst->dev);
-    	/*tcp头+udp头（不含选项）*/
+    	/*tcp头+ip头（不含选项）*/
 	unsigned int header_size = sizeof(struct tcphdr) + sizeof(struct iphdr);
 	unsigned int advmss = max_t(unsigned int, ipv4_mtu(dst) - header_size,
 				    net->ipv4.ip_rt_min_advmss);
@@ -2257,12 +2259,12 @@ static struct net_device *ip_rt_get_dev(struct net *net,
  */
 //单播路由查找
 static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
-			       u8 tos/*报文tos取值*/, struct net_device *dev,
+			       u8 tos/*报文tos取值*/, struct net_device *dev/*入接口*/,
 			       struct fib_result *res)
 {
-	struct in_device *in_dev = __in_dev_get_rcu(dev);
+	struct in_device *in_dev = __in_dev_get_rcu(dev);/*取此网络设备对应的ipv4设备*/
 	struct flow_keys *flkeys = NULL, _flkeys;
-	struct net    *net = dev_net(dev);
+	struct net    *net = dev_net(dev);/*取此dev对应的net namespace*/
 	struct ip_tunnel_info *tun_info;
 	int		err = -EINVAL;
 	unsigned int	flags = 0;
@@ -2506,9 +2508,8 @@ static int ip_route_input_rcu(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 	 * Note, that multicast routers are not affected, because
 	 * route cache entry is created eventually.
 	 */
-	//目的地址是组播地址
 	if (ipv4_is_multicast(daddr)) {
-		//进行组播路由查询
+		//目的地址是组播地址，进行组播路由查询
 		struct in_device *in_dev = __in_dev_get_rcu(dev);
 		int our = 0;
 		int err = -EINVAL;
@@ -2896,6 +2897,7 @@ struct rtable *ip_route_output_key_hash_rcu(struct net *net, struct flowi4 *fl4,
 		goto make_route;
 	}
 
+	/*选源，多路径处理*/
 	fib_select_path(net, res, fl4, skb);
 
 	dev_out = FIB_RES_DEV(*res);

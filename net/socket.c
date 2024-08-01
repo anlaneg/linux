@@ -3705,6 +3705,7 @@ int kernel_bind(struct socket *sock, struct sockaddr *addr, int addrlen)
 
 	memcpy(&address, addr, addrlen);
 
+	/*在kernel space执行socket bind*/
 	return READ_ONCE(sock->ops)->bind(sock, (struct sockaddr *)&address,
 					  addrlen);
 }

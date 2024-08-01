@@ -101,7 +101,7 @@ static int cm_send_rej_locked(struct cm_id_private *cm_id_priv,
 			      u8 ari_length, const void *private_data,
 			      u8 private_data_len);
 
-/*cm client，用于添加ib设备创建删除时cm相关的事件处理*/
+/*cm client，用于在添加或删除ib设备时针对cm相关的进行处理*/
 static struct ib_client cm_client = {
 	.name   = "cm",
 	.add    = cm_add_one,
@@ -158,9 +158,9 @@ struct cm_counter_attribute {
 };
 
 struct cm_port {
-	struct cm_device *cm_dev;
+	struct cm_device *cm_dev;/*对应的cm_device*/
 	struct ib_mad_agent *mad_agent;
-	u32 port_num;
+	u32 port_num;/*对应的ib_device中port编号*/
 	atomic_long_t counters[CM_COUNTER_GROUPS][CM_ATTR_COUNT];
 };
 
@@ -172,6 +172,7 @@ struct cm_device {
 	struct ib_device *ib_device;
 	u8 ack_delay;
 	int going_down;
+	/*每个port对应一个cm_port结构体，见cm_add_one函数*/
 	struct cm_port *port[];
 };
 
@@ -186,7 +187,7 @@ struct cm_av {
 struct cm_work {
 	struct delayed_work work;
 	struct list_head list;
-	struct cm_port *port;
+	struct cm_port *port;/*消息关联的cm port*/
 	struct ib_mad_recv_wc *mad_recv_wc;	/* Received MADs */
 	__be32 local_id;			/* Established / timewait */
 	__be32 remote_id;
@@ -656,6 +657,7 @@ static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 	}
 	cm_id_priv->listen_sharecount++;
 	rb_link_node(&cm_id_priv->service_node, parent, link);
+	/*向service table中添加service*/
 	rb_insert_color(&cm_id_priv->service_node, &cm.listen_service_table);
 	spin_unlock_irqrestore(&cm.lock, flags);
 	return cm_id_priv;
@@ -667,6 +669,7 @@ static struct cm_id_private *cm_find_listen(struct ib_device *device,
 	struct rb_node *node = cm.listen_service_table.rb_node;
 	struct cm_id_private *cm_id_priv;
 
+	/*沿rb树，第一先查找device指针，再检查service_id匹配*/
 	while (node) {
 		cm_id_priv = rb_entry(node, struct cm_id_private, service_node);
 
@@ -966,6 +969,7 @@ static struct cm_timewait_info *cm_create_timewait_info(__be32 local_id)
 	if (!timewait_info)
 		return ERR_PTR(-ENOMEM);
 
+	/*触发timewait 事件*/
 	timewait_info->work.local_id = local_id;
 	INIT_DELAYED_WORK(&timewait_info->work.work, cm_work_handler);
 	timewait_info->work.cm_event.event = IB_CM_TIMEWAIT_EXIT;
@@ -1048,7 +1052,7 @@ retest:
 			return;
 		}
 		cm_id->state = IB_CM_IDLE;
-		rb_erase(&cm_id_priv->service_node, &cm.listen_service_table);
+		rb_erase(&cm_id_priv->service_node, &cm.listen_service_table);/*自service table中移除*/
 		RB_CLEAR_NODE(&cm_id_priv->service_node);
 		spin_unlock(&cm.lock);
 		break;
@@ -1743,6 +1747,7 @@ static u16 cm_get_bth_pkey(struct cm_work *work)
 	u16 pkey;
 	int ret;
 
+	/*查询并返回对应的pkey*/
 	ret = ib_get_cached_pkey(ib_dev, port_num, pkey_index, &pkey);
 	if (ret) {
 		dev_warn_ratelimited(&ib_dev->dev, "ib_cm: Couldn't retrieve pkey for incoming request (port %u, pkey index %u). %d\n",
@@ -1871,7 +1876,7 @@ static void cm_format_mra(struct cm_mra_msg *mra_msg,
 
 static void cm_format_rej(struct cm_rej_msg *rej_msg,
 			  struct cm_id_private *cm_id_priv,
-			  enum ib_cm_rej_reason reason, void *ari,
+			  enum ib_cm_rej_reason reason/*建连失败的原因*/, void *ari,
 			  u8 ari_length, const void *private_data,
 			  u8 private_data_len, enum ib_cm_state state)
 {
@@ -1905,12 +1910,14 @@ static void cm_format_rej(struct cm_rej_msg *rej_msg,
 		break;
 	}
 
+	/*设置拒绝原因*/
 	IBA_SET(CM_REJ_REASON, rej_msg, reason);
 	if (ari && ari_length) {
 		IBA_SET(CM_REJ_REJECTED_INFO_LENGTH, rej_msg, ari_length);
 		IBA_SET_MEM(CM_REJ_ARI, rej_msg, ari, ari_length);
 	}
 
+	/*设置拒绝报文的私有数据*/
 	if (private_data && private_data_len)
 		IBA_SET_MEM(CM_REJ_PRIVATE_DATA, rej_msg, private_data,
 			    private_data_len);
@@ -2011,6 +2018,7 @@ static struct cm_id_private *cm_match_req(struct cm_work *work,
 		cm_id_priv->id.device,
 		cpu_to_be64(IBA_GET(CM_REQ_SERVICE_ID, req_msg)));
 	if (!listen_cm_id_priv) {
+		/*没有找到对应的监听service id*/
 		cm_remove_remote(cm_id_priv);
 		spin_unlock_irq(&cm.lock);
 		cm_issue_rej(work->port, work->mad_recv_wc,
@@ -2073,11 +2081,13 @@ static int cm_req_handler(struct cm_work *work)
 	if (IS_ERR(cm_id_priv))
 		return PTR_ERR(cm_id_priv);
 
+	/*解析报文中的内容，填充cm_id_priv*/
 	cm_id_priv->id.remote_id =
 		cpu_to_be32(IBA_GET(CM_REQ_LOCAL_COMM_ID, req_msg));
 	cm_id_priv->id.service_id =
 		cpu_to_be64(IBA_GET(CM_REQ_SERVICE_ID, req_msg));
 	cm_id_priv->tid = req_msg->hdr.tid;
+	/*取超时时间*/
 	cm_id_priv->timeout_ms = cm_convert_to_ms(
 		IBA_GET(CM_REQ_LOCAL_CM_RESPONSE_TIMEOUT, req_msg));
 	cm_id_priv->max_cm_retries = IBA_GET(CM_REQ_MAX_CM_RETRIES, req_msg);
@@ -2901,7 +2911,7 @@ out:
 }
 
 static int cm_send_rej_locked(struct cm_id_private *cm_id_priv,
-			      enum ib_cm_rej_reason reason, void *ari,
+			      enum ib_cm_rej_reason reason/*建连失败的原因*/, void *ari,
 			      u8 ari_length, const void *private_data,
 			      u8 private_data_len)
 {
@@ -2956,7 +2966,7 @@ static int cm_send_rej_locked(struct cm_id_private *cm_id_priv,
 	return 0;
 }
 
-int ib_send_cm_rej(struct ib_cm_id *cm_id, enum ib_cm_rej_reason reason,
+int ib_send_cm_rej(struct ib_cm_id *cm_id, enum ib_cm_rej_reason reason/*建连失败的原因*/,
 		   void *ari, u8 ari_length, const void *private_data,
 		   u8 private_data_len)
 {
@@ -3839,6 +3849,7 @@ static void cm_send_handler(struct ib_mad_agent *mad_agent,
 		cm_free_response_msg(msg);
 }
 
+/*cm event处理（上文已按照收到的报文产生了事件，现在处理这些事件）*/
 static void cm_work_handler(struct work_struct *_work)
 {
 	struct cm_work *work = container_of(_work, struct cm_work, work.work);
@@ -3846,6 +3857,7 @@ static void cm_work_handler(struct work_struct *_work)
 
 	switch (work->cm_event.event) {
 	case IB_CM_REQ_RECEIVED:
+		/*收到cm请求*/
 		ret = cm_req_handler(work);
 		break;
 	case IB_CM_MRA_RECEIVED:
@@ -3941,7 +3953,7 @@ static int cm_establish(struct ib_cm_id *cm_id)
 	work->local_id = cm_id->local_id;
 	work->remote_id = cm_id->remote_id;
 	work->mad_recv_wc = NULL;
-	work->cm_event.event = IB_CM_USER_ESTABLISHED;
+	work->cm_event.event = IB_CM_USER_ESTABLISHED;/*达到est*/
 
 	/* Check if the device started its remove_one */
 	spin_lock_irqsave(&cm.lock, flags);
@@ -4007,8 +4019,10 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	int paths = 0;
 	int going_down = 0;
 
+	/*依据消息的attr_id确定event*/
 	switch (mad_recv_wc->recv_buf.mad->mad_hdr.attr_id) {
 	case CM_REQ_ATTR_ID:
+		/*收到req消息*/
 		alt_path = cm_req_has_alt_path((struct cm_req_msg *)
 						mad_recv_wc->recv_buf.mad);
 		paths = 1 + (alt_path != 0);
@@ -4046,13 +4060,16 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 		event = IB_CM_APR_RECEIVED;
 		break;
 	default:
+		/*遇到不认识的消息，丢包*/
 		ib_free_recv_mad(mad_recv_wc);
 		return;
 	}
 
 	attr_id = be16_to_cpu(mad_recv_wc->recv_buf.mad->mad_hdr.attr_id);
+	/*增加此attr的统计计数*/
 	atomic_long_inc(&port->counters[CM_RECV][attr_id - CM_ATTR_ID_OFFSET]);
 
+	/*申请work,填充event*/
 	work = kmalloc(struct_size(work, path, paths), GFP_KERNEL);
 	if (!work) {
 		ib_free_recv_mad(mad_recv_wc);
@@ -4067,6 +4084,7 @@ static void cm_recv_handler(struct ib_mad_agent *mad_agent,
 	/* Check if the device started its remove_one */
 	spin_lock_irq(&cm.lock);
 	if (!port->cm_dev->going_down)
+		/*port没有被标记为down,触发此work,处理event*/
 		queue_delayed_work(cm.wq, &work->work, 0);
 	else
 		going_down = 1;
@@ -4362,11 +4380,13 @@ static int cm_add_one(struct ib_device *ib_device)
 	cm_dev->ack_delay = ib_device->attrs.local_ca_ack_delay;
 	cm_dev->going_down = 0;
 
+	/*记录cm client指针*/
 	ib_set_client_data(ib_device, &cm_client, cm_dev);
 
 	set_bit(IB_MGMT_METHOD_SEND, reg_req.method_mask);
 	rdma_for_each_port (ib_device, i) {
 		if (!rdma_cap_ib_cm(ib_device, i))
+			/*此port不支持cm*/
 			continue;
 
 		port = kzalloc(sizeof *port, GFP_KERNEL);
@@ -4384,12 +4404,12 @@ static int cm_add_one(struct ib_device *ib_device)
 		if (ret)
 			goto error1;
 
-		port->mad_agent = ib_register_mad_agent(ib_device, i,
+		port->mad_agent = ib_register_mad_agent(ib_device, i/*port编号*/,
 							IB_QPT_GSI,
 							&reg_req,
 							0,
-							cm_send_handler,
-							cm_recv_handler,
+							cm_send_handler,/*发送消息*/
+							cm_recv_handler,/*接收消息*/
 							port,
 							0);
 		if (IS_ERR(port->mad_agent)) {

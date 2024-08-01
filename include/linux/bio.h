@@ -142,10 +142,10 @@ static inline void bio_advance(struct bio *bio, unsigned int nbytes)
 	__bio_advance(bio, nbytes);
 }
 
-#define __bio_for_each_segment(bvl, bio, iter, start)			\
+#define __bio_for_each_segment(bvl, bio, iter/*枚举变量*/, start/*起始元素*/)			\
 	for (iter = (start);						\
 	     (iter).bi_size &&						\
-		((bvl = bio_iter_iovec((bio), (iter))), 1);		\
+		((bvl = bio_iter_iovec((bio), (iter))), 1/*此条件恒返真*/);		\
 	     bio_advance_iter_single((bio), &(iter), (bvl).bv_len))
 
 #define bio_for_each_segment(bvl, bio, iter)				\
@@ -641,11 +641,12 @@ static inline struct bio *bio_list_pop(struct bio_list *bl)
 	struct bio *bio = bl->head;
 
 	if (bio) {
+		/*head不为空，将bl->head切到next(更新bl)*/
 		bl->head = bl->head->bi_next;
 		if (!bl->head)
 			bl->tail = NULL;
 
-		bio->bi_next = NULL;
+		bio->bi_next = NULL;/*将bio自bl->head的链上断开*/
 	}
 
 	return bio;

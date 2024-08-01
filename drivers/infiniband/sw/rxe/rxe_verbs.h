@@ -96,6 +96,7 @@ struct rxe_rq {
 struct rxe_srq {
 	struct ib_srq		ibsrq;
 	struct rxe_pool_elem	elem;
+	/*srq从属的pd*/
 	struct rxe_pd		*pd;
 	struct rxe_rq		rq;
 	u32			srq_num;
@@ -170,7 +171,7 @@ struct rxe_resp_info {
 	int			opcode;
 	int			drop_msg;
 	int			goto_error;
-	int			sent_psn_nak;/*需要发送nack*/
+	int			sent_psn_nak;/*是否需要发送nack*/
 	enum ib_wc_status	status;
 	u8			aeth_syndrome;
 
@@ -199,7 +200,7 @@ struct rxe_resp_info {
 	unsigned int		res_head;
 	unsigned int		res_tail;
 	struct resp_res		*res;
-	struct rxe_task		task;/*指向rxe_responder函数，处理请求报文*/
+	struct rxe_task		task;/*指向rxe_responder函数，处理请求报文(复制数据到recv_wr)*/
 };
 
 struct rxe_qp {
@@ -209,7 +210,7 @@ struct rxe_qp {
 	/*标记qp是否有效*/
 	unsigned int		valid;
 	unsigned int		mtu;
-	bool			is_user;
+	bool			is_user;/*是否为用户态的qp*/
 
 	/*所属的pd*/
 	struct rxe_pd		*pd;
@@ -221,15 +222,15 @@ struct rxe_qp {
 
 	enum ib_sig_type	sq_sig_type;
 
-	/*发送q*/
+	/*发送queue（用户态负责填充要发送的buffer,内核态构造并发送skb)*/
 	struct rxe_sq		sq;
-	/*接收q*/
+	/*接收queue（用户态负责填充接收用的buffer,内核态负责填充收到的数据）*/
 	struct rxe_rq		rq;
 
 	/*对应的udp socket*/
 	struct socket		*sk;
 	u32			dst_cookie;
-	u16			src_port;
+	u16			src_port;/*用于填充udp的src-port*/
 
 	/*rc,uc两种模式情况下，使用此av*/
 	struct rxe_av		pri_av;
@@ -291,13 +292,13 @@ enum {
 
 enum rxe_mr_state {
 	RXE_MR_STATE_INVALID,
-	RXE_MR_STATE_FREE,
+	RXE_MR_STATE_FREE,/*空闲*/
 	RXE_MR_STATE_VALID,
 };
 
 enum rxe_mr_copy_dir {
-	RXE_TO_MR_OBJ,
-	RXE_FROM_MR_OBJ,
+	RXE_TO_MR_OBJ,/*目的数据去向mr obj*/
+	RXE_FROM_MR_OBJ,/*源数据来源于mr obj*/
 };
 
 enum rxe_mr_lookup_type {
@@ -328,14 +329,15 @@ struct rxe_mr {
 	u32			lkey;
 	/*远端key*/
 	u32			rkey;
-	/*mr状态*/
+	/*mr状态，初始状态为：RXE_MR_STATE_INVALID*/
 	enum rxe_mr_state	state;
+	/*设置mr访问权限*/
 	int			access;
 	atomic_t		num_mw;
 
 	unsigned int		page_offset;
-	unsigned int		page_shift;
-	u64			page_mask;
+	unsigned int		page_shift;/*mr页大小对应的指数形式*/
+	u64			page_mask;/*mr页大小对应的掩码形式*/
 
 	/*内存总页数*/
 	u32			num_buf;
@@ -346,7 +348,7 @@ struct rxe_mr {
 
 static inline unsigned int mr_page_size(struct rxe_mr *mr)
 {
-	return mr ? mr->ibmr.page_size : PAGE_SIZE;
+	return mr ? mr->ibmr.page_size /*mr指明的页大小*/: PAGE_SIZE/*mr为空时，大小为页大小*/;
 }
 
 enum rxe_mw_state {
@@ -409,11 +411,11 @@ struct rxe_dev {
 	struct net_device	*ndev;
 
 	struct rxe_pool		uc_pool;/*ucontext pool*/
-	struct rxe_pool		pd_pool;/*pd pool，负责分配pd*/
+	struct rxe_pool		pd_pool;/*pd pool，负责记录已分配的pd*/
 	struct rxe_pool		ah_pool;/*收集ah,通过ah_num索引ah*/
-	struct rxe_pool		srq_pool;
+	struct rxe_pool		srq_pool;/*收集srq*/
 	struct rxe_pool		qp_pool;/*收集qp，通过qpn索引qp*/
-	struct rxe_pool		cq_pool;
+	struct rxe_pool		cq_pool;/*记录已分配的cq*/
 	struct rxe_pool		mr_pool;/*负责分配mr*/
 	struct rxe_pool		mw_pool;
 

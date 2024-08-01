@@ -128,6 +128,7 @@ void __init mptcp_join_cookie_init(void)
 {
 	int i;
 
+	/*初始化spinlock数组*/
 	for (i = 0; i < COOKIE_JOIN_SLOTS; i++)
 		spin_lock_init(&join_entry_locks[i]);
 }

@@ -56,6 +56,7 @@ static atomic64_t diskseq;
 #define NR_EXT_DEVT		(1 << MINORBITS)
 static DEFINE_IDA(ext_devt_ida);
 
+/*设置磁盘容量*/
 void set_capacity(struct gendisk *disk, sector_t sectors)
 {
 	/*设置此disk在块设备文件中文件大小*/
@@ -414,6 +415,7 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 				 const struct attribute_group **groups)
 
 {
+	/*由disk转device*/
 	struct device *ddev = disk_to_dev(disk);
 	int ret;
 
@@ -905,6 +907,7 @@ static int __init genhd_device_init(void)
 {
 	int error;
 
+	/*注册block类型*/
 	error = class_register(&block_class);
 	if (unlikely(error))
 		return error;
@@ -1219,6 +1222,7 @@ static int block_uevent(const struct device *dev, struct kobj_uevent_env *env)
 	return add_uevent_var(env, "DISKSEQ=%llu", disk->diskseq);
 }
 
+/*用来标识block设备*/
 struct class block_class = {
 	.name		= "block",
 	.dev_uevent	= block_uevent,
@@ -1379,6 +1383,7 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id/*disk对�
 	disk->node_id = node_id;
 	mutex_init(&disk->open_mutex);
 	xa_init(&disk->part_tbl);
+	/*添加0号part table*/
 	if (xa_insert(&disk->part_tbl, 0, disk->part0, GFP_KERNEL))
 		goto out_destroy_part_tbl;
 
@@ -1386,7 +1391,7 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id/*disk对�
 		goto out_erase_part0;
 
 	rand_initialize_disk(disk);
-	disk_to_dev(disk)->class = &block_class;
+	disk_to_dev(disk)->class = &block_class;/*表明为块设备*/
 	disk_to_dev(disk)->type = &disk_type;
 	device_initialize(disk_to_dev(disk));
 	inc_diskseq(disk);

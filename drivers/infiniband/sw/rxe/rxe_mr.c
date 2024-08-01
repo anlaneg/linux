@@ -46,9 +46,10 @@ int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
 	}
 }
 
+/*初始化mr*/
 static void rxe_mr_init(int access, struct rxe_mr *mr)
 {
-    	/*本端key为index | 随机值*/
+    /*本端key为index | 随机值,生成key*/
 	u32 key = mr->elem.index << 8 | rxe_get_next_key(-1);
 
 	/* set ibmr->l/rkey and also copy into private l/rkey
@@ -56,11 +57,11 @@ static void rxe_mr_init(int access, struct rxe_mr *mr)
 	 * for cases where caller 'owns' the key portion
 	 * they may be different until REG_MR WQE is executed.
 	 */
-	mr->lkey = mr->ibmr.lkey = key;
-	mr->rkey = mr->ibmr.rkey = key;
+	mr->lkey = mr->ibmr.lkey = key;/*指明此mr在本端的key*/
+	mr->rkey = mr->ibmr.rkey = key;/*指明此mr在对端的key*/
 
 	mr->access = access;
-	mr->ibmr.page_size = PAGE_SIZE;
+	mr->ibmr.page_size = PAGE_SIZE;/*mr对应的页大小*/
 	mr->page_mask = PAGE_MASK;
 	mr->page_shift = PAGE_SHIFT;
 	mr->state = RXE_MR_STATE_INVALID;
@@ -77,11 +78,13 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 
 static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 {
+	/*iova地址相对于mr->ibmr.iova的页偏移量*/
 	return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
 }
 
 static unsigned long rxe_mr_iova_to_page_offset(struct rxe_mr *mr, u64 iova)
 {
+	/*iova地址在page中的偏移量*/
 	return iova & (mr_page_size(mr) - 1);
 }
 
@@ -161,6 +164,7 @@ int rxe_mr_init_user(struct rxe_dev *rxe, u64 start/*内存起始地址*/, u64 l
 
 static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf)
 {
+	/*定义struct xa_state类型变量*/
 	XA_STATE(xas, &mr->page_list, 0);
 	int i = 0;
 	int err;
@@ -170,11 +174,13 @@ static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf)
 	do {
 		xas_lock(&xas);
 		while (i != num_buf) {
+			/*在xas中存入XA_ZERO_ENTRY*/
 			xas_store(&xas, XA_ZERO_ENTRY);
 			if (xas_error(&xas))
 				break;
+			/*切换到下一个索引位置*/
 			xas_next(&xas);
-			i++;
+			i++;/*元素数增加*/
 		}
 		xas_unlock(&xas);
 	} while (xas_nomem(&xas, GFP_KERNEL));
@@ -183,7 +189,7 @@ static int rxe_mr_alloc(struct rxe_mr *mr, int num_buf)
 	if (err)
 		return err;
 
-	mr->num_buf = num_buf;
+	mr->num_buf = num_buf;/*记录buffer数*/
 
 	return 0;
 }
@@ -195,6 +201,7 @@ int rxe_mr_init_fast(int max_pages, struct rxe_mr *mr)
 	/* always allow remote access for FMRs */
 	rxe_mr_init(RXE_ACCESS_REMOTE, mr);
 
+	/*初始化page_lists(注意此时并没有申请page,只是进行了数组占位）*/
 	err = rxe_mr_alloc(mr, max_pages);
 	if (err)
 		goto err1;
@@ -246,32 +253,39 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 }
 
 static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
-			      unsigned int length, enum rxe_mr_copy_dir dir)
+			      unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir/*指明复制方向*/)
 {
+	/*取页偏移量*/
 	unsigned int page_offset = rxe_mr_iova_to_page_offset(mr, iova);
+	/*页偏移量*/
 	unsigned long index = rxe_mr_iova_to_index(mr, iova);
 	unsigned int bytes;
 	struct page *page;
 	void *va;
 
 	while (length) {
+		/*取mr中index号page*/
 		page = xa_load(&mr->page_list, index);
 		if (!page)
 			return -EFAULT;
 
+		/*此轮（本页）可复制的字节长度*/
 		bytes = min_t(unsigned int, length,
 				mr_page_size(mr) - page_offset);
+		/*此页对应的虚地址*/
 		va = kmap_local_page(page);
 		if (dir == RXE_FROM_MR_OBJ)
+			/*从va+page_offset复制bytes字节，并填充到addr*/
 			memcpy(addr, va + page_offset, bytes);
 		else
+			/*从addr复制内容bytes字节，并填充到va+page_offset*/
 			memcpy(va + page_offset, addr, bytes);
 		kunmap_local(va);
 
 		page_offset = 0;
 		addr += bytes;
 		length -= bytes;
-		index++;
+		index++;/*下一个页*/
 	}
 
 	return 0;
@@ -289,8 +303,9 @@ static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr,
 		page = ib_virt_dma_to_page(dma_addr);
 		bytes = min_t(unsigned int, length,
 				PAGE_SIZE - page_offset);
-		va = kmap_local_page(page);
+		va = kmap_local_page(page);/*此页起始地址*/
 
+		/*按方向确定src,dst*/
 		if (dir == RXE_TO_MR_OBJ)
 			memcpy(va + page_offset, addr, bytes);
 		else
@@ -305,7 +320,7 @@ static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr,
 }
 
 int rxe_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
-		unsigned int length, enum rxe_mr_copy_dir dir)
+		unsigned int length, enum rxe_mr_copy_dir dir/*复制方向*/)
 {
 	int err;
 
@@ -341,6 +356,7 @@ int copy_data(
 	enum rxe_mr_copy_dir	dir)
 {
 	int			bytes;
+	/*取dma数据*/
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
 	int			offset	= dma->sge_offset;
 	int			resid	= dma->resid;
@@ -357,6 +373,7 @@ int copy_data(
 	}
 
 	if (sge->length && (offset < sge->length)) {
+		/*当前sge中有待复制数据，先查sge对应的mr*/
 		mr = lookup_mr(pd, access, sge->lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
 			err = -EINVAL;
@@ -373,30 +390,36 @@ int copy_data(
 				mr = NULL;
 			}
 			sge++;
-			dma->cur_sge++;
+			dma->cur_sge++;/*切换到下一个sge*/
 			offset = 0;
 
 			if (dma->cur_sge >= dma->num_sge) {
+				/*cur_seg超过sge总数，则buffer不足被填充*/
 				err = -ENOSPC;
 				goto err2;
 			}
 
 			if (sge->length) {
+				/*这个sge有内容，利用sge->lkey查询此mr*/
 				mr = lookup_mr(pd, access, sge->lkey,
 					       RXE_LOOKUP_LOCAL);
 				if (!mr) {
+					/*没有查询到mr，报错*/
 					err = -EINVAL;
 					goto err1;
 				}
 			} else {
+				/*这个sge内容为空，跳过*/
 				continue;
 			}
 		}
 
+		/*获取本轮可最大复制的字节数*/
 		if (bytes > sge->length - offset)
 			bytes = sge->length - offset;
 
 		if (bytes > 0) {
+			/*复制bytes字节*/
 			iova = sge->addr + offset;
 			err = rxe_mr_copy(mr, iova, addr, bytes, dir);
 			if (err)
@@ -409,7 +432,7 @@ int copy_data(
 		}
 	}
 
-	dma->sge_offset = offset;
+	dma->sge_offset = offset;/*更新cur_sge的可复制内容的起始偏移*/
 	dma->resid	= resid;
 
 	if (mr)
@@ -623,6 +646,7 @@ struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 	struct rxe_dev *rxe = to_rdev(pd->ibpd.device);
 	int index = key >> 8;
 
+	/*通过key查询mr（index指的是elem->index)*/
 	mr = rxe_pool_get_index(&rxe->mr_pool, index);
 	if (!mr)
 		return NULL;
@@ -631,6 +655,7 @@ struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 		     (type == RXE_LOOKUP_REMOTE && mr->rkey != key) ||
 		     mr_pd(mr) != pd || ((access & mr->access) != access) ||
 		     mr->state != RXE_MR_STATE_VALID)) {
+		/*对查询出来的mr进行校验，校验不通过。*/
 		rxe_put(mr);
 		mr = NULL;
 	}

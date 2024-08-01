@@ -769,6 +769,7 @@ static struct svc_xprt *svc_udp_create(struct svc_serv *serv,
 				       struct sockaddr *sa, int salen,
 				       int flags)
 {
+	/*创建udp socket*/
 	return svc_create_socket(serv, IPPROTO_UDP, net, sa, salen, flags);
 }
 
@@ -1300,6 +1301,7 @@ static struct svc_xprt *svc_tcp_create(struct svc_serv *serv,
 				       struct sockaddr *sa, int salen,
 				       int flags)
 {
+	/*创建tcp socket*/
 	return svc_create_socket(serv, IPPROTO_TCP, net, sa, salen, flags);
 }
 
@@ -1399,6 +1401,7 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	struct sock	*inet;
 	int		pmap_register = !(flags & SVC_SOCK_ANONYMOUS);
 
+	/*申请svc_sock*/
 	svsk = kzalloc(sizeof(*svsk), GFP_KERNEL);
 	if (!svsk)
 		return ERR_PTR(-ENOMEM);
@@ -1408,6 +1411,7 @@ static struct svc_sock *svc_setup_socket(struct svc_serv *serv,
 	if (pmap_register) {
 		int err;
 
+		/*注册service*/
 		err = svc_register(serv, sock_net(sock->sk), inet->sk_family,
 				     inet->sk_protocol,
 				     ntohs(inet_sk(inet)->inet_sport));
@@ -1517,12 +1521,14 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 	int		newlen;
 	int		family;
 
+	/*当前仅支持udp,tcp两种协议*/
 	if (protocol != IPPROTO_UDP && protocol != IPPROTO_TCP) {
 		printk(KERN_WARNING "svc: only UDP and TCP "
 				"sockets supported\n");
 		return ERR_PTR(-EINVAL);
 	}
 
+	/*当前仅支持af_inet6,af_inet*/
 	type = (protocol == IPPROTO_UDP)? SOCK_DGRAM : SOCK_STREAM;
 	switch (sin->sa_family) {
 	case AF_INET6:
@@ -1535,7 +1541,8 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 		return ERR_PTR(-EINVAL);
 	}
 
-	error = __sock_create(net, family, type, protocol, &sock, 1);
+	/*创建socket*/
+	error = __sock_create(net, family, type, protocol, &sock/*出参*/, 1);
 	if (error < 0)
 		return ERR_PTR(error);
 
@@ -1550,6 +1557,8 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 		ip6_sock_set_v6only(sock->sk);
 	if (type == SOCK_STREAM)
 		sock->sk->sk_reuse = SK_CAN_REUSE; /* allow address reuse */
+
+	/*绑定源地址*/
 	error = kernel_bind(sock, sin, len);
 	if (error < 0)
 		goto bummer;
@@ -1559,11 +1568,13 @@ static struct svc_xprt *svc_create_socket(struct svc_serv *serv,
 		goto bummer;
 	newlen = error;
 
+	/*针对tcp执行listen*/
 	if (protocol == IPPROTO_TCP) {
 		if ((error = kernel_listen(sock, 64)) < 0)
 			goto bummer;
 	}
 
+	/*创建svsk*/
 	svsk = svc_setup_socket(serv, sock, flags);
 	if (IS_ERR(svsk)) {
 		error = PTR_ERR(svsk);

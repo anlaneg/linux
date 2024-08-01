@@ -148,14 +148,14 @@ struct mminfo {
 struct rxe_dma_info {
     /*数据总长度*/
 	__u32			length;
-	__u32			resid;/*数据总长度*/
-	__u32			cur_sge;
+	__u32			resid;/*数据剩余长度*/
+	__u32			cur_sge;/*当前遍历到哪个sge数组成员（成员索引）*/
 	/*seg数组长度*/
 	__u32			num_sge;
 	__u32			sge_offset;
 	__u32			reserved;
 	union {
-	    /*记录inline数据*/
+	    /*记录inline数据（有IB_SEND_INLINE标记时有效）*/
 		__DECLARE_FLEX_ARRAY(__u8, inline_data);
 		__DECLARE_FLEX_ARRAY(__u8, atomic_wr);
 		/*sge数组,记录非inline的要执行dma的数据段*/

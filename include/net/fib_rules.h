@@ -128,6 +128,7 @@ static inline void fib_rule_put(struct fib_rule *rule)
 static inline u32 fib_rule_get_table(struct fib_rule *rule,
 				     struct fib_lookup_arg *arg)
 {
+	/*l3mdev标记存在时，要查询的表为arg->table*/
 	return rule->l3mdev ? arg->table : rule->table;
 }
 #else

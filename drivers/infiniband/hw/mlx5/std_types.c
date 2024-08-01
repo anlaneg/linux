@@ -98,6 +98,7 @@ static int fill_vport_vhca_id(struct mlx5_core_dev *mdev, u16 vport,
 		 MLX5_SET_HCA_CAP_OP_MOD_GENERAL_DEVICE |
 		 HCA_CAP_OPMOD_GET_CUR);
 
+	/*向fw请求*/
 	err = mlx5_cmd_exec(mdev, in, sizeof(in), out, out_sz);
 	if (err)
 		goto out;

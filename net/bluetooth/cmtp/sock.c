@@ -241,6 +241,7 @@ int cmtp_init_sockets(void)
 	if (err < 0)
 		return err;
 
+	/*注册cmtp协议操作集*/
 	err = bt_sock_register(BTPROTO_CMTP, &cmtp_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register CMTP socket");

@@ -45,15 +45,18 @@ struct rpc_clnt {
 	refcount_t		cl_count;	/* Number of references */
 	unsigned int		cl_clid;	/* client id */
 	struct list_head	cl_clients;	/* Global list of clients */
+	/*用于挂接此client上对应的task*/
 	struct list_head	cl_tasks;	/* List of tasks */
 	atomic_t		cl_pid;		/* task PID counter */
 	spinlock_t		cl_lock;	/* spinlock */
 	struct rpc_xprt __rcu *	cl_xprt;	/* transport */
+	/*记录此client采用的proc信息*/
 	const struct rpc_procinfo *cl_procinfo;	/* procedure info */
 	u32			cl_prog,	/* RPC program number */
 				cl_vers,	/* RPC version number */
 				cl_maxproc;	/* max procedure number */
 
+	/*负责授权相关操作的对象*/
 	struct rpc_auth *	cl_auth;	/* authenticator */
 	struct rpc_stat *	cl_stats;	/* per-program statistics */
 	struct rpc_iostats *	cl_metrics;	/* per-client statistics */
@@ -112,6 +115,7 @@ struct rpc_version {
 	u32			number;		/* version number */
 	unsigned int		nrprocs;	/* number of procs */
 	const struct rpc_procinfo *procs;	/* procedure array */
+	/*记录被调用的次数，每个proc有一个计数*/
 	unsigned int		*counts;	/* call counts */
 };
 
@@ -119,29 +123,35 @@ struct rpc_version {
  * Procedure information
  */
 struct rpc_procinfo {
+	/*rpc过程编号*/
 	u32			p_proc;		/* RPC procedure number */
+	/*此rpc函数参数编码*/
 	kxdreproc_t		p_encode;	/* XDR encode function */
+	/*此rpc函数响应结果解码*/
 	kxdrdproc_t		p_decode;	/* XDR decode function */
+	/*参数长度*/
 	unsigned int		p_arglen;	/* argument hdr length (u32) */
+	/*响应长度*/
 	unsigned int		p_replen;	/* reply hdr length (u32) */
 	unsigned int		p_timer;	/* Which RTT timer to use */
 	u32			p_statidx;	/* Which procedure to account */
+	/*过程的名称*/
 	const char *		p_name;		/* name of procedure */
 };
 
 struct rpc_create_args {
 	struct net		*net;
-	int			protocol;
-	struct sockaddr		*address;
-	size_t			addrsize;
-	struct sockaddr		*saddress;
+	int			protocol;/*传输协议，例如af_local*/
+	struct sockaddr		*address;/*目的地址*/
+	size_t			addrsize;/*地址长度*/
+	struct sockaddr		*saddress;/*源地址*/
 	const struct rpc_timeout *timeout;
-	const char		*servername;
+	const char		*servername;/*服务名称，例如localhost*/
 	const char		*nodename;
 	const struct rpc_program *program;
 	u32			prognumber;	/* overrides program->number */
 	u32			version;
-	rpc_authflavor_t	authflavor;
+	rpc_authflavor_t	authflavor;/*鉴权方法*/
 	u32			nconnect;
 	unsigned long		flags;
 	char			*client_name;
@@ -262,6 +272,7 @@ void rpc_cleanup_clids(void);
 
 static inline int rpc_reply_expected(struct rpc_task *task)
 {
+	/*如果有解码函数，说明此rpc时期待响应的*/
 	return (task->tk_msg.rpc_proc != NULL) &&
 		(task->tk_msg.rpc_proc->p_decode != NULL);
 }

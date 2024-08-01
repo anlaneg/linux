@@ -1254,9 +1254,9 @@ nfsd4_decode_putpubfh(struct nfsd4_compoundargs *argp, union nfsd4_op_u *p)
 }
 
 static __be32
-nfsd4_decode_read(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u)
+nfsd4_decode_read(struct nfsd4_compoundargs *argp, union nfsd4_op_u *u/*出参*/)
 {
-	struct nfsd4_read *read = &u->read;
+	struct nfsd4_read *read = &u->read;/*解析read参数*/
 	__be32 status;
 
 	memset(read, 0, sizeof(*read));
@@ -2482,6 +2482,7 @@ nfsd4_decode_compound(struct nfsd4_compoundargs *argp)
 			return false;
 		if (nfsd4_opnum_in_range(argp, op)) {
 			op->opdesc = OPDESC(op);
+			/*按照op->opnum解码op->u即操作对应的参数*/
 			op->status = nfsd4_dec_ops[op->opnum](argp, &op->u);
 			if (op->status != nfs_ok)
 				trace_nfsd_compound_decode_err(argp->rqstp,

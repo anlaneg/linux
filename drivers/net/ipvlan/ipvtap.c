@@ -90,6 +90,7 @@ static int ipvtap_newlink(struct net *src_net, struct net_device *dev,
 	vlantap->tap.update_features =	ipvtap_update_features;
 	vlantap->tap.count_rx_dropped = ipvtap_count_rx_dropped;
 
+	/*注册收包函数*/
 	err = netdev_rx_handler_register(dev, tap_handle_frame, &vlantap->tap);
 	if (err)
 		return err;

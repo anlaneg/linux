@@ -122,7 +122,7 @@ struct rpcbind_args {
 	u32			r_prot;
 	unsigned short		r_port;
 	const char *		r_netid;
-	const char *		r_addr;
+	const char *		r_addr;/*字符串形式的ip及port*/
 	const char *		r_owner;
 
 	int			r_status;
@@ -169,7 +169,7 @@ static int rpcb_get_local(struct net *net)
 	spin_lock(&sn->rpcb_clnt_lock);
 	if (sn->rpcb_users)
 		sn->rpcb_users++;
-	cnt = sn->rpcb_users;
+	cnt = sn->rpcb_users;/*返回users*/
 	spin_unlock(&sn->rpcb_clnt_lock);
 
 	return cnt;
@@ -205,13 +205,14 @@ void rpcb_put_local(struct net *net)
 
 static void rpcb_set_local(struct net *net, struct rpc_clnt *clnt,
 			struct rpc_clnt *clnt4,
-			bool is_af_local)
+			bool is_af_local/*是否af_local*/)
 {
+	/*取此net ns下私有数据*/
 	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
 
 	/* Protected by rpcb_create_local_mutex */
 	sn->rpcb_local_clnt = clnt;
-	sn->rpcb_local_clnt4 = clnt4;
+	sn->rpcb_local_clnt4 = clnt4;/*设置v4 client*/
 	sn->rpcb_is_af_local = is_af_local ? 1 : 0;
 	smp_wmb();
 	sn->rpcb_users = 1;
@@ -230,13 +231,13 @@ static int rpcb_create_af_local(struct net *net,
 {
 	struct rpc_create_args args = {
 		.net		= net,
-		.protocol	= XPRT_TRANSPORT_LOCAL,
-		.address	= (struct sockaddr *)addr,
+		.protocol	= XPRT_TRANSPORT_LOCAL,/*使用af_local socket*/
+		.address	= (struct sockaddr *)addr,/*目的地址*/
 		.addrsize	= SUN_LEN(addr),
 		.servername	= "localhost",
-		.program	= &rpcb_program,
+		.program	= &rpcb_program,/*指明rpcbind程序*/
 		.version	= RPCBVERS_2,
-		.authflavor	= RPC_AUTH_NULL,
+		.authflavor	= RPC_AUTH_NULL,/*使用null类型的rpc_auth*/
 		.cred		= current_cred(),
 		/*
 		 * We turn off the idle timeout to prevent the kernel
@@ -255,7 +256,7 @@ static int rpcb_create_af_local(struct net *net,
 	 * this works only if the user space portmapper is rpcbind, and
 	 * it's listening on AF_LOCAL on the named socket.
 	 */
-	clnt = rpc_create(&args);
+	clnt = rpc_create(&args);/*利用参数创建rpc client*/
 	if (IS_ERR(clnt)) {
 		result = PTR_ERR(clnt);
 		goto out;
@@ -273,6 +274,7 @@ out:
 
 static int rpcb_create_local_abstract(struct net *net)
 {
+	/*定义unix socket地址*/
 	static const struct sockaddr_un rpcb_localaddr_abstract = {
 		.sun_family		= AF_LOCAL,
 		.sun_path		= RPCBIND_SOCK_ABSTRACT_NAME,
@@ -299,13 +301,13 @@ static int rpcb_create_local_net(struct net *net)
 {
 	static const struct sockaddr_in rpcb_inaddr_loopback = {
 		.sin_family		= AF_INET,
-		.sin_addr.s_addr	= htonl(INADDR_LOOPBACK),
-		.sin_port		= htons(RPCBIND_PORT),
+		.sin_addr.s_addr	= htonl(INADDR_LOOPBACK),/*采用loopback地址*/
+		.sin_port		= htons(RPCBIND_PORT),/*使用111端口*/
 	};
 	struct rpc_create_args args = {
 		.net		= net,
 		.protocol	= XPRT_TRANSPORT_TCP,
-		.address	= (struct sockaddr *)&rpcb_inaddr_loopback,
+		.address	= (struct sockaddr *)&rpcb_inaddr_loopback,/*使用loopback地址*/
 		.addrsize	= sizeof(rpcb_inaddr_loopback),
 		.servername	= "localhost",
 		.program	= &rpcb_program,
@@ -317,7 +319,7 @@ static int rpcb_create_local_net(struct net *net)
 	struct rpc_clnt *clnt, *clnt4;
 	int result = 0;
 
-	clnt = rpc_create(&args);
+	clnt = rpc_create(&args);/*创建client*/
 	if (IS_ERR(clnt)) {
 		result = PTR_ERR(clnt);
 		goto out;
@@ -400,7 +402,7 @@ static struct rpc_clnt *rpcb_create(struct net *net, const char *nodename,
 	return rpc_create(&args);
 }
 
-static int rpcb_register_call(struct sunrpc_net *sn, struct rpc_clnt *clnt, struct rpc_message *msg, bool is_set)
+static int rpcb_register_call(struct sunrpc_net *sn, struct rpc_clnt *clnt/*rpc client*/, struct rpc_message *msg/*rpc消息*/, bool is_set)
 {
 	int flags = RPC_TASK_NOCONNECT;
 	int error, result = 0;
@@ -586,7 +588,7 @@ static int rpcb_unregister_all_protofamilies(struct sunrpc_net *sn,
  * advertises the service on all IPv4 and IPv6 addresses.
  */
 int rpcb_v4_register(struct net *net, const u32 program, const u32 version,
-		     const struct sockaddr *address, const char *netid)
+		     const struct sockaddr *address/*要绑定的地址及端口*/, const char *netid/*协议类型*/)
 {
 	struct rpcbind_args map = {
 		.r_prog		= program,
@@ -597,18 +599,20 @@ int rpcb_v4_register(struct net *net, const u32 program, const u32 version,
 	struct rpc_message msg = {
 		.rpc_argp	= &map,
 	};
-	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);
+	struct sunrpc_net *sn = net_generic(net, sunrpc_net_id);/*取sunrpc net 私有数据*/
 
 	if (sn->rpcb_local_clnt4 == NULL)
 		return -EPROTONOSUPPORT;
 
 	if (address == NULL)
+		/*地址为空时，执行解注册特别处理*/
 		return rpcb_unregister_all_protofamilies(sn, &msg);
 
 	trace_rpcb_register(map.r_prog, map.r_vers, map.r_addr, map.r_netid);
 
 	switch (address->sa_family) {
 	case AF_INET:
+		/*v4注册*/
 		return rpcb_register_inet4(sn, address, &msg);
 	case AF_INET6:
 		return rpcb_register_inet6(sn, address, &msg);
@@ -630,7 +634,7 @@ static struct rpc_task *rpcb_call_async(struct rpc_clnt *rpcb_clnt,
 		.rpc_message = &msg,
 		.callback_ops = &rpcb_getport_ops,
 		.callback_data = map,
-		.flags = RPC_TASK_ASYNC | RPC_TASK_SOFTCONN,
+		.flags = RPC_TASK_ASYNC/*指明异步消息*/ | RPC_TASK_SOFTCONN,
 	};
 
 	return rpc_run_task(&task_setup_data);
@@ -885,11 +889,11 @@ static void encode_rpcb_string(struct xdr_stream *xdr, const char *string,
 	__be32 *p;
 	u32 len;
 
-	len = strlen(string);
+	len = strlen(string);/*字符串长度*/
 	WARN_ON_ONCE(len > maxstrlen);
 	if (len > maxstrlen)
 		/* truncate and hope for the best */
-		len = maxstrlen;
+		len = maxstrlen;/*字符串截短*/
 	p = xdr_reserve_space(xdr, 4 + len);
 	xdr_encode_opaque(p, string, len);
 }
@@ -897,13 +901,14 @@ static void encode_rpcb_string(struct xdr_stream *xdr, const char *string,
 static void rpcb_enc_getaddr(struct rpc_rqst *req, struct xdr_stream *xdr,
 			     const void *data)
 {
-	const struct rpcbind_args *rpcb = data;
+	const struct rpcbind_args *rpcb = data;/*参数为rpcbind_args*/
 	__be32 *p;
 
 	p = xdr_reserve_space(xdr, (RPCB_program_sz + RPCB_version_sz) << 2);
-	*p++ = cpu_to_be32(rpcb->r_prog);
-	*p = cpu_to_be32(rpcb->r_vers);
+	*p++ = cpu_to_be32(rpcb->r_prog);/*写prog*/
+	*p = cpu_to_be32(rpcb->r_vers);/*写vers*/
 
+	/*填写netid,addr,owner*/
 	encode_rpcb_string(xdr, rpcb->r_netid, RPCBIND_MAXNETIDLEN);
 	encode_rpcb_string(xdr, rpcb->r_addr, RPCBIND_MAXUADDRLEN);
 	encode_rpcb_string(xdr, rpcb->r_owner, RPCB_MAXOWNERLEN);
@@ -1021,6 +1026,7 @@ static const struct rpc_procinfo rpcb_procedures3[] = {
 	},
 };
 
+/*v4版本支持的远程过程*/
 static const struct rpc_procinfo rpcb_procedures4[] = {
 	[RPCBPROC_SET] = {
 		.p_proc		= RPCBPROC_SET,
@@ -1099,7 +1105,7 @@ static const struct rpc_version rpcb_version4 = {
 	.number		= RPCBVERS_4,
 	.nrprocs	= ARRAY_SIZE(rpcb_procedures4),
 	.procs		= rpcb_procedures4,
-	.counts		= rpcb_version4_counts,
+	.counts		= rpcb_version4_counts,/*各过程计数*/
 };
 
 static const struct rpc_version *rpcb_version[] = {
@@ -1114,8 +1120,8 @@ static struct rpc_stat rpcb_stats;
 
 static const struct rpc_program rpcb_program = {
 	.name		= "rpcbind",
-	.number		= RPCBIND_PROGRAM,
-	.nrvers		= ARRAY_SIZE(rpcb_version),
-	.version	= rpcb_version,
-	.stats		= &rpcb_stats,
+	.number		= RPCBIND_PROGRAM,/*rbc bind程序*/
+	.nrvers		= ARRAY_SIZE(rpcb_version),/*支持的版本数*/
+	.version	= rpcb_version,/*支持的各版本功能*/
+	.stats		= &rpcb_stats,/*统计信息*/
 };

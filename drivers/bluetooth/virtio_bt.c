@@ -99,6 +99,7 @@ static int virtbt_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 	memcpy(skb_push(skb, 1), &hci_skb_pkt_type(skb), 1);
 
 	sg_init_one(sg, skb->data, skb->len);
+	/*将内容添加进tx队列*/
 	err = virtqueue_add_outbuf(vbt->vqs[VIRTBT_VQ_TX], sg, 1, skb,
 				   GFP_KERNEL);
 	if (err) {
@@ -106,6 +107,7 @@ static int virtbt_send_frame(struct hci_dev *hdev, struct sk_buff *skb)
 		return err;
 	}
 
+	/*kick tx队列*/
 	virtqueue_kick(vbt->vqs[VIRTBT_VQ_TX]);
 	return 0;
 }

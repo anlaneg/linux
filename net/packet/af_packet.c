@@ -2984,11 +2984,12 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	} else {
 		err = -EINVAL;
 		if (msg->msg_namelen < sizeof(struct sockaddr_ll))
+			/*地址长度不足sockaddr_ll，报错*/
 			goto out;
 		if (msg->msg_namelen < (saddr->sll_halen + offsetof(struct sockaddr_ll, sll_addr)))
 			goto out;
-		proto	= saddr->sll_protocol;
-		dev = dev_get_by_index(sock_net(sk), saddr->sll_ifindex);
+		proto	= saddr->sll_protocol;/*取协议号*/
+		dev = dev_get_by_index(sock_net(sk), saddr->sll_ifindex);/*取出接口设备*/
 		if (sock->type == SOCK_DGRAM) {
 			if (dev && msg->msg_namelen < dev->addr_len +
 				   offsetof(struct sockaddr_ll, sll_addr))
@@ -2999,9 +3000,11 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 
 	err = -ENXIO;
 	if (unlikely(dev == NULL))
+		/*未指定设备，报错*/
 		goto out_unlock;
 	err = -ENETDOWN;
 	if (unlikely(!(dev->flags & IFF_UP)))
+		/*设备未up*/
 		goto out_unlock;
 
 	sockcm_init(&sockc, sk);
@@ -3013,7 +3016,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	if (sock->type == SOCK_RAW)
-		reserve = dev->hard_header_len;
+		reserve = dev->hard_header_len;/*预留以太头*/
 	if (vnet_hdr_sz) {
 		err = packet_snd_vnet_parse(msg, &len, &vnet_hdr, vnet_hdr_sz);
 		if (err)
@@ -3031,6 +3034,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	err = -EMSGSIZE;
 	if (!vnet_hdr.gso_type &&
 	    (len > dev->mtu + reserve + VLAN_HLEN + extra_len))
+		/*要发送的长度超过设备mtu*/
 		goto out_unlock;
 
 	err = -ENOBUFS;
@@ -3038,6 +3042,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	tlen = dev->needed_tailroom;
 	linear = __virtio16_to_cpu(vio_le(), vnet_hdr.hdr_len);
 	linear = max(linear, min_t(int, len, dev->hard_header_len));
+	/*申请skb*/
 	skb = packet_alloc_skb(sk, hlen + tlen, hlen, len, linear,
 			       msg->msg_flags & MSG_DONTWAIT, &err);
 	if (skb == NULL)
@@ -3047,10 +3052,12 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 
 	err = -EINVAL;
 	if (sock->type == SOCK_DGRAM) {
-		offset = dev_hard_header(skb, dev, ntohs(proto), addr, NULL, len);
+		/*针对这种type,会触发以太头的生成*/
+		offset = dev_hard_header(skb, dev, ntohs(proto), addr/*目的地址*/, NULL/*源地址为NULL，从接口上取*/, len);
 		if (unlikely(offset < 0))
 			goto out_free;
 	} else if (reserve) {
+		/*这种情况下offset为零*/
 		skb_reserve(skb, -reserve);
 		if (len < reserve + sizeof(struct ipv6hdr) &&
 		    dev->min_header_len != dev->hard_header_len)
@@ -3058,6 +3065,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	}
 
 	/* Returns -EFAULT on error */
+	/*自msg中复制内容到skb*/
 	err = skb_copy_datagram_from_iter(skb, offset, &msg->msg_iter, len);
 	if (err)
 		goto out_free;
@@ -3076,8 +3084,8 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 		goto out_free;
 	}
 
-	skb->protocol = proto;
-	skb->dev = dev;
+	skb->protocol = proto;/*报定报文对应的协议*/
+	skb->dev = dev;/*指定报文对应的dev*/
 	skb->priority = READ_ONCE(sk->sk_priority);
 	skb->mark = sockc.mark;
 	skb->tstamp = sockc.transmit_time;
@@ -3088,6 +3096,7 @@ static int packet_snd(struct socket *sock, struct msghdr *msg, size_t len)
 	packet_parse_headers(skb, sock);
 
 	if (vnet_hdr_sz) {
+		/*增加virtio-net*/
 		err = virtio_net_hdr_to_skb(skb, &vnet_hdr, vio_le());
 		if (err)
 			goto out_free;
@@ -3386,10 +3395,10 @@ static int packet_create(struct net *net, struct socket *sock, int protocol,
 
 	sock_init_data(sock, sk);
 
-	po = pkt_sk(sk);
+	po = pkt_sk(sk);/*socket结构体转换为struct packet_sock*/
 	init_completion(&po->skb_completion);
 	sk->sk_family = PF_PACKET;
-	po->num = proto;
+	po->num = proto;/*设置关注的协议*/
 
 	err = packet_alloc_pending(po);
 	if (err)
@@ -4679,7 +4688,7 @@ static const struct proto_ops packet_ops = {
 	.shutdown =	sock_no_shutdown,
 	.setsockopt =	packet_setsockopt,
 	.getsockopt =	packet_getsockopt,
-	.sendmsg =	packet_sendmsg,//raw格式报文发送
+	.sendmsg =	packet_sendmsg,//af-packet raw格式报文发送
 	.recvmsg =	packet_recvmsg,//raw格式报文接收
 	.mmap =		packet_mmap,
 };

@@ -34,7 +34,7 @@ static int ipvlan_set_port_mode(struct ipvl_port *port, u16 nval,
 		}
 		if (nval == IPVLAN_MODE_L3S) {
 			/* New mode is L3S */
-			err = ipvlan_l3s_register(port);
+			err = ipvlan_l3s_register(port);/*这种模式下，会走iptables处理（含ct)*/
 			if (err)
 				goto fail;
 		} else if (port->mode == IPVLAN_MODE_L3S) {
@@ -71,13 +71,14 @@ static int ipvlan_port_create(struct net_device *dev)
 		return -ENOMEM;
 
 	write_pnet(&port->pnet, dev_net(dev));
-	port->dev = dev;
-	port->mode = IPVLAN_MODE_L3;
+	port->dev = dev;/*关联底层网络设备*/
+	port->mode = IPVLAN_MODE_L3;/*指定为l3模式*/
 	INIT_LIST_HEAD(&port->ipvlans);
 	for (idx = 0; idx < IPVLAN_HASH_SIZE; idx++)
 		INIT_HLIST_HEAD(&port->hlhead[idx]);
 
 	skb_queue_head_init(&port->backlog);
+	/*初始化wq,此wq负责处理组播*/
 	INIT_WORK(&port->wq, ipvlan_process_multicast);
 	ida_init(&port->ida);
 	port->dev_id_start = 1;
@@ -188,11 +189,14 @@ static int ipvlan_open(struct net_device *dev)
 
 	if (ipvlan->port->mode == IPVLAN_MODE_L3 ||
 	    ipvlan->port->mode == IPVLAN_MODE_L3S)
+		/*此模式，设备不响应arp*/
 		dev->flags |= IFF_NOARP;
 	else
+		/*此模式，设备响应arp*/
 		dev->flags &= ~IFF_NOARP;
 
 	rcu_read_lock();
+	/*将ipvlan->addrs中所有addr添加进ipvl_port中*/
 	list_for_each_entry_rcu(addr, &ipvlan->addrs, anode)
 		ipvlan_ht_addr_add(ipvlan, addr);
 	rcu_read_unlock();
@@ -400,11 +404,13 @@ static const struct header_ops ipvlan_header_ops = {
 
 static void ipvlan_adjust_mtu(struct ipvl_dev *ipvlan, struct net_device *dev)
 {
+	/*ipvlan设备的mtu调整成与dev设备的mtu相等（这里是否应在小于dev->mtu时不做调整）*/
 	ipvlan->dev->mtu = dev->mtu;
 }
 
 static bool netif_is_ipvlan(const struct net_device *dev)
 {
+	/*检查此设备是否为ipvlan或者ipvtap*/
 	/* both ipvlan and ipvtap devices use the same netdev_ops */
 	return dev->netdev_ops == &ipvlan_netdev_ops;
 }
@@ -558,6 +564,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	if (!tb[IFLA_LINK])
 		return -EINVAL;
 
+	/*找到指定ifindex的物理设备*/
 	phy_dev = __dev_get_by_index(src_net, nla_get_u32(tb[IFLA_LINK]));
 	if (!phy_dev)
 		return -ENODEV;
@@ -566,9 +573,11 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 		struct ipvl_dev *tmp = netdev_priv(phy_dev);
 
 		phy_dev = tmp->phy_dev;
+		/*权限检查*/
 		if (!ns_capable(dev_net(phy_dev)->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 	} else if (!netif_is_ipvlan_port(phy_dev)) {
+		/*物理设备不是ipvlan的底层设备*/
 		/* Exit early if the underlying link is invalid or busy */
 		if (phy_dev->type != ARPHRD_ETHER ||
 		    phy_dev->flags & IFF_LOOPBACK) {
@@ -577,6 +586,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 			return -EINVAL;
 		}
 
+		/*如果这个物理设备的rx_handler已做它用，则报错*/
 		if (netdev_is_rx_handler_busy(phy_dev)) {
 			netdev_err(phy_dev, "Device is already in use.\n");
 			return -EBUSY;
@@ -587,6 +597,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	ipvlan->dev = dev;
 	ipvlan->sfeatures = IPVLAN_FEATURES;
 	if (!tb[IFLA_MTU])
+		/*没有指定mtu,使用底层设备的mtu*/
 		ipvlan_adjust_mtu(ipvlan, phy_dev);
 	INIT_LIST_HEAD(&ipvlan->addrs);
 	spin_lock_init(&ipvlan->addrs_lock);
@@ -595,11 +606,11 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	 * world but keep using the physical-dev address for the outgoing
 	 * packets.
 	 */
-	eth_hw_addr_set(dev, phy_dev->dev_addr);
+	eth_hw_addr_set(dev, phy_dev->dev_addr);/*使用和物理dev一样的mac地址*/
 
 	dev->priv_flags |= IFF_NO_RX_HANDLER;
 
-	//创建ipvlan对应的虚拟设备
+	//注册ipvlan对应的虚拟设备
 	err = register_netdevice(dev);
 	if (err < 0)
 		return err;
@@ -627,7 +638,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 				      GFP_KERNEL);
 	if (err < 0)
 		goto unregister_netdev;
-	dev->dev_id = err;
+	dev->dev_id = err;/*设备编号*/
 
 	/* Increment id-base to the next slot for the future assignment */
 	port->dev_id_start = err + 1;
@@ -649,6 +660,7 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	if (err)
 		goto unlink_netdev;
 
+	/*将此ipvlan设备串连到ipvlans链表上（串连此设备的所有ipvlan)*/
 	list_add_tail_rcu(&ipvlan->pnode, &port->ipvlans);
 	netif_stacked_transfer_operstate(phy_dev, dev);
 	return 0;
@@ -687,10 +699,10 @@ void ipvlan_link_setup(struct net_device *dev)
 {
 	ether_setup(dev);
 
-	dev->max_mtu = ETH_MAX_MTU;
+	dev->max_mtu = ETH_MAX_MTU;/*mtu初始化为最大值*/
 	dev->priv_flags &= ~(IFF_XMIT_DST_RELEASE | IFF_TX_SKB_SHARING);
 	dev->priv_flags |= IFF_UNICAST_FLT | IFF_NO_QUEUE;
-	dev->netdev_ops = &ipvlan_netdev_ops;
+	dev->netdev_ops = &ipvlan_netdev_ops;/*指明设备的ops*/
 	dev->needs_free_netdev = true;
 	dev->header_ops = &ipvlan_header_ops;
 	dev->ethtool_ops = &ipvlan_ethtool_ops;
@@ -716,7 +728,7 @@ static struct rtnl_link_ops ipvlan_link_ops = {
 	.priv_size	= sizeof(struct ipvl_dev),
 
 	.setup		= ipvlan_link_setup,
-	.newlink	= ipvlan_link_new,
+	.newlink	= ipvlan_link_new,/*创建ipvlan接口*/
 	.dellink	= ipvlan_link_delete,
 	.get_link_net   = ipvlan_get_link_net,
 };
@@ -746,19 +758,22 @@ static int ipvlan_device_event(struct notifier_block *unused,
 	int err;
 
 	if (!netif_is_ipvlan_port(dev))
+		/*此设备非ipvlan底层设备，跳出*/
 		return NOTIFY_DONE;
 
-	port = ipvlan_port_get_rtnl(dev);
+	port = ipvlan_port_get_rtnl(dev);/*取发生事件的netdev关联的ipvlan设备*/
 
 	switch (event) {
 	case NETDEV_UP:
 	case NETDEV_CHANGE:
+		/*设备状态变更*/
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 			netif_stacked_transfer_operstate(ipvlan->phy_dev,
 							 ipvlan->dev);
 		break;
 
 	case NETDEV_REGISTER: {
+		/*网络设备注册*/
 		struct net *oldnet, *newnet = dev_net(dev);
 
 		oldnet = read_pnet(&port->pnet);
@@ -772,6 +787,7 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		break;
 	}
 	case NETDEV_UNREGISTER:
+		/*网络设备解注册*/
 		if (dev->reg_state != NETREG_UNREGISTERING)
 			break;
 
@@ -789,6 +805,7 @@ static int ipvlan_device_event(struct notifier_block *unused,
 		break;
 
 	case NETDEV_CHANGEMTU:
+		/*设备变更mtu，底层设备mtu变更，所有上层设备mtu调整*/
 		list_for_each_entry(ipvlan, &port->ipvlans, pnode)
 			ipvlan_adjust_mtu(ipvlan, dev);
 		break;
@@ -827,7 +844,7 @@ static int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 	if (!addr)
 		return -ENOMEM;
 
-	addr->master = ipvlan;
+	addr->master = ipvlan;/*设置从属的ipvlan设备*/
 	if (!is_v6) {
 		memcpy(&addr->ip4addr, iaddr, sizeof(struct in_addr));
 		addr->atype = IPVL_IPV4;
@@ -838,12 +855,13 @@ static int ipvlan_add_addr(struct ipvl_dev *ipvlan, void *iaddr, bool is_v6)
 #endif
 	}
 
-	list_add_tail_rcu(&addr->anode, &ipvlan->addrs);
+	list_add_tail_rcu(&addr->anode, &ipvlan->addrs);/*串连在ipvlan->addrs链上*/
 
 	/* If the interface is not up, the address will be added to the hash
 	 * list by ipvlan_open.
 	 */
 	if (netif_running(ipvlan->dev))
+		/*接口被up,将此地址加入hashtable,以便可处理报文*/
 		ipvlan_ht_addr_add(ipvlan, addr);
 
 	return 0;
@@ -871,6 +889,7 @@ static bool ipvlan_is_valid_dev(const struct net_device *dev)
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 
 	if (!netif_is_ipvlan(dev))
+		/*此设备不是ipvlan设备，忽略*/
 		return false;
 
 	if (!ipvlan || !ipvlan->port)
@@ -954,6 +973,7 @@ static int ipvlan_add_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
 
 	spin_lock_bh(&ipvlan->addrs_lock);
 	if (ipvlan_addr_busy(ipvlan->port, ip4_addr, false))
+		/*地址已存在*/
 		netif_err(ipvlan, ifup, ipvlan->dev,
 			  "Failed to add IPv4=%pI4 on %s intf.\n",
 			  ip4_addr, ipvlan->dev->name);
@@ -971,16 +991,20 @@ static void ipvlan_del_addr4(struct ipvl_dev *ipvlan, struct in_addr *ip4_addr)
 static int ipvlan_addr4_event(struct notifier_block *unused,
 			      unsigned long event, void *ptr)
 {
+	/*要添加的地址*/
 	struct in_ifaddr *if4 = (struct in_ifaddr *)ptr;
+	/*要添加地址的设备*/
 	struct net_device *dev = (struct net_device *)if4->ifa_dev->dev;
 	struct ipvl_dev *ipvlan = netdev_priv(dev);
 	struct in_addr ip4_addr;
 
 	if (!ipvlan_is_valid_dev(dev))
+		/*不是有效的ipvlan设备，跳出*/
 		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_UP:
+		/*地址添加*/
 		ip4_addr.s_addr = if4->ifa_address;
 		if (ipvlan_add_addr4(ipvlan, &ip4_addr))
 			return NOTIFY_BAD;

@@ -626,7 +626,7 @@ struct ib_uverbs_ex_create_qp {
 	__u32 max_recv_sge;
 	__u32 max_inline_data;
 	__u8  sq_sig_all;
-	__u8  qp_type;
+	__u8  qp_type;/*qp类别*/
 	__u8  is_srq;
 	__u8 reserved;
 	__u32 comp_mask;

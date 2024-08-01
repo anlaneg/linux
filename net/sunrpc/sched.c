@@ -358,7 +358,7 @@ EXPORT_SYMBOL_GPL(rpc_wait_for_completion_task);
  * lockless RPC_IS_QUEUED() test) before we've had a chance to test
  * the RPC_TASK_RUNNING flag.
  */
-static void rpc_make_runnable(struct workqueue_struct *wq,
+static void rpc_make_runnable(struct workqueue_struct *wq/*异步执行队列*/,
 		struct rpc_task *task)
 {
 	bool need_wakeup = !rpc_test_and_set_running(task);
@@ -367,7 +367,8 @@ static void rpc_make_runnable(struct workqueue_struct *wq,
 	if (!need_wakeup)
 		return;
 	if (RPC_IS_ASYNC(task)) {
-		INIT_WORK(&task->u.tk_work, rpc_async_schedule);
+		/*异步处理，设置task的work函数，task入队列*/
+		INIT_WORK(&task->u.tk_work, rpc_async_schedule/*执行函数*/);
 		queue_work(wq, &task->u.tk_work);
 	} else
 		wake_up_bit(&task->tk_runstate, RPC_TASK_QUEUED);
@@ -410,10 +411,11 @@ static void __rpc_sleep_on_priority_timeout(struct rpc_wait_queue *q,
 		task->tk_status = -ETIMEDOUT;
 }
 
+/*设置rpc task对应的task callback*/
 static void rpc_set_tk_callback(struct rpc_task *task, rpc_action action)
 {
 	if (action && !WARN_ON_ONCE(task->tk_callback != NULL))
-		task->tk_callback = action;
+		task->tk_callback = action;/*如果未设置，则在此处设置*/
 }
 
 static bool rpc_sleep_check_activated(struct rpc_task *task)
@@ -757,6 +759,7 @@ static void rpc_wake_up_status_locked(struct rpc_wait_queue *queue, int status)
 void rpc_wake_up_status(struct rpc_wait_queue *queue, int status)
 {
 	spin_lock(&queue->lock);
+	/*唤醒等待队列*/
 	rpc_wake_up_status_locked(queue, status);
 	spin_unlock(&queue->lock);
 }
@@ -908,6 +911,7 @@ static bool xprt_needs_memalloc(struct rpc_xprt *xprt, struct rpc_task *tk)
  */
 static void __rpc_execute(struct rpc_task *task)
 {
+	/*重复执行task->tk_action,直到tk_action为空/或者执行时失败/*/
 	struct rpc_wait_queue *queue;
 	int task_is_async = RPC_IS_ASYNC(task);
 	int status = 0;
@@ -915,8 +919,12 @@ static void __rpc_execute(struct rpc_task *task)
 
 	WARN_ON_ONCE(RPC_IS_QUEUED(task));
 	if (RPC_IS_QUEUED(task))
-		return;
+		return;/*如果task在queue中，则直接返回*/
 
+	/*通过循环执行状态机。（这要求do_action回调中必须填好下次调用的函数）
+	 * 初看这一写法非常乱，能想到的一个理由是此调用方式，
+	 * 能减少占用内核的栈长度（但这样也有别的不乱的方法）
+	 * */
 	for (;;) {
 		void (*do_action)(struct rpc_task *);
 
@@ -925,26 +933,32 @@ static void __rpc_execute(struct rpc_task *task)
 		 *
 		 * tk_action may be NULL if the task has been killed.
 		 */
+		/*do_action被触发后，函数内会再次设置tk_action，如果不再设置，则退出*/
 		do_action = task->tk_action;
 		/* Tasks with an RPC error status should exit */
 		if (do_action && do_action != rpc_exit_task &&
 		    (status = READ_ONCE(task->tk_rpc_status)) != 0) {
+			/*未执行完，但已出错，执行退出*/
 			task->tk_status = status;
 			do_action = rpc_exit_task;
 		}
+
 		/* Callbacks override all actions */
 		if (task->tk_callback) {
+			/*task指明了task对应的工作函数，提取这个工作函数，并通过设置NULL，标记已开始执行*/
 			do_action = task->tk_callback;
 			task->tk_callback = NULL;
 		}
+
 		if (!do_action)
+			/*没有获取到要执行的action，退出*/
 			break;
 		if (RPC_IS_SWAPPER(task) ||
 		    xprt_needs_memalloc(task->tk_xprt, task))
 			current->flags |= PF_MEMALLOC;
 
 		trace_rpc_task_run_action(task, do_action);
-		do_action(task);
+		do_action(task);/*执行task对应的工作函数*/
 
 		/*
 		 * Lockless check for whether task is sleeping or not.
@@ -1019,6 +1033,7 @@ void rpc_execute(struct rpc_task *task)
 	rpc_set_active(task);
 	rpc_make_runnable(rpciod_workqueue, task);
 	if (!is_async) {
+		/*同步执行rpc task*/
 		unsigned int pflags = memalloc_nofs_save();
 		__rpc_execute(task);
 		memalloc_nofs_restore(pflags);
@@ -1029,6 +1044,7 @@ static void rpc_async_schedule(struct work_struct *work)
 {
 	unsigned int pflags = memalloc_nofs_save();
 
+	/*异步执行此rpc task*/
 	__rpc_execute(container_of(work, struct rpc_task, u.tk_work));
 	memalloc_nofs_restore(pflags);
 }
@@ -1102,7 +1118,7 @@ EXPORT_SYMBOL_GPL(rpc_free);
  */
 static void rpc_init_task(struct rpc_task *task, const struct rpc_task_setup *task_setup_data)
 {
-	memset(task, 0, sizeof(*task));
+	memset(task, 0, sizeof(*task));/*清空*/
 	atomic_set(&task->tk_count, 1);
 	task->tk_flags  = task_setup_data->flags;
 	task->tk_ops = task_setup_data->callback_ops;
@@ -1120,12 +1136,15 @@ static void rpc_init_task(struct rpc_task *task, const struct rpc_task_setup *ta
 
 	task->tk_op_cred = get_rpccred(task_setup_data->rpc_op_cred);
 
+	/*如果有rpc_call_prepare回调，则设置tk_action，使其调用rpc_call_prepare*/
+	/*同样的，如果此回调提供了，则task->tk_action未被初始化*/
 	if (task->tk_ops->rpc_call_prepare != NULL)
 		task->tk_action = rpc_prepare_task;
 
 	rpc_init_task_statistics(task);
 }
 
+/*申请rpc task*/
 static struct rpc_task *rpc_alloc_task(void)
 {
 	struct rpc_task *task;
@@ -1147,14 +1166,15 @@ struct rpc_task *rpc_new_task(const struct rpc_task_setup *setup_data)
 	if (task == NULL) {
 		task = rpc_alloc_task();
 		if (task == NULL) {
+			/*申请rpc task失败，触发release回调*/
 			rpc_release_calldata(setup_data->callback_ops,
 					     setup_data->callback_data);
 			return ERR_PTR(-ENOMEM);
 		}
-		flags = RPC_TASK_DYNAMIC;
+		flags = RPC_TASK_DYNAMIC;/*指明当前为动态申请的rpc task*/
 	}
 
-	rpc_init_task(task, setup_data);
+	rpc_init_task(task, setup_data);/*初始化rpc task*/
 	task->tk_flags |= flags;
 	return task;
 }
@@ -1283,12 +1303,12 @@ static int rpciod_start(void)
 	wq = alloc_workqueue("rpciod", WQ_MEM_RECLAIM | WQ_UNBOUND, 0);
 	if (!wq)
 		goto out_failed;
-	rpciod_workqueue = wq;
+	rpciod_workqueue = wq;/*设置工作队列rpciod*/
 	wq = alloc_workqueue("xprtiod", WQ_UNBOUND | WQ_MEM_RECLAIM, 0);
 	if (!wq)
 		goto free_rpciod;
-	xprtiod_workqueue = wq;
-	return 1;
+	xprtiod_workqueue = wq;/*设置workqueue xprtiod*/
+	return 1;/*启动成功*/
 free_rpciod:
 	wq = rpciod_workqueue;
 	rpciod_workqueue = NULL;
@@ -1304,9 +1324,12 @@ static void rpciod_stop(void)
 	if (rpciod_workqueue == NULL)
 		return;
 
+	/*停止rpciod工作队列*/
 	wq = rpciod_workqueue;
 	rpciod_workqueue = NULL;
 	destroy_workqueue(wq);
+
+	/*停止xprtiod工作队列*/
 	wq = xprtiod_workqueue;
 	xprtiod_workqueue = NULL;
 	destroy_workqueue(wq);

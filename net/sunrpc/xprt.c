@@ -76,7 +76,7 @@ static void	xprt_request_init(struct rpc_task *task);
 static int	xprt_request_prepare(struct rpc_rqst *req, struct xdr_buf *buf);
 
 static DEFINE_SPINLOCK(xprt_list_lock);
-static LIST_HEAD(xprt_list);
+static LIST_HEAD(xprt_list);/*用于注册系统支持的transport*/
 
 static unsigned long xprt_request_timeout(const struct rpc_rqst *req)
 {
@@ -109,10 +109,11 @@ int xprt_register_transport(struct xprt_class *transport)
 	list_for_each_entry(t, &xprt_list, list) {
 		/* don't register the same transport class twice */
 		if (t->ident == transport->ident)
+			/*id相等，已存在不再加入，跳出*/
 			goto out;
 	}
 
-	list_add_tail(&transport->list, &xprt_list);
+	list_add_tail(&transport->list, &xprt_list);/*添加待注册的transport*/
 	printk(KERN_INFO "RPC: Registered %s transport module.\n",
 	       transport->name);
 	result = 0;
@@ -161,6 +162,7 @@ xprt_class_release(const struct xprt_class *t)
 	module_put(t->owner);
 }
 
+/*通过id查找xptr_class,其对应的是transport,例如xs_local_transport*/
 static const struct xprt_class *
 xprt_class_find_by_ident_locked(int ident)
 {
@@ -182,6 +184,7 @@ xprt_class_find_by_ident(int ident)
 	const struct xprt_class *t;
 
 	spin_lock(&xprt_list_lock);
+	/*取ident对应的xs_local_transport*/
 	t = xprt_class_find_by_ident_locked(ident);
 	spin_unlock(&xprt_list_lock);
 	return t;
@@ -945,6 +948,7 @@ void xprt_connect(struct rpc_task *task)
 		/* Race breaker */
 		if (!xprt_connected(xprt)) {
 			xprt->stat.connect_start = jiffies;
+			/*与对端建立连接*/
 			xprt->ops->connect(xprt, task);
 		} else {
 			xprt_clear_connecting(xprt);
@@ -1002,6 +1006,7 @@ xprt_xid_cmp(__be32 xid1, __be32 xid2)
 	return XID_RB_RIGHT;
 }
 
+/*通过xid查询request*/
 static struct rpc_rqst *
 xprt_request_rb_find(struct rpc_xprt *xprt, __be32 xid)
 {
@@ -1027,6 +1032,8 @@ xprt_request_rb_find(struct rpc_xprt *xprt, __be32 xid)
 static void
 xprt_request_rb_insert(struct rpc_xprt *xprt, struct rpc_rqst *new)
 {
+	/*收队列对应的红黑树树根，
+	 * 这里引入红黑树为了更快的查询到一个rq_xid对应的响应*/
 	struct rb_node **p = &xprt->recv_queue.rb_node;
 	struct rb_node *n = NULL;
 	struct rpc_rqst *req;
@@ -1035,17 +1042,19 @@ xprt_request_rb_insert(struct rpc_xprt *xprt, struct rpc_rqst *new)
 		n = *p;
 		req = rb_entry(n, struct rpc_rqst, rq_recv);
 		switch(xprt_xid_cmp(new->rq_xid, req->rq_xid)) {
-		case XID_RB_LEFT:
+		case XID_RB_LEFT:/*走左树*/
 			p = &n->rb_left;
 			break;
-		case XID_RB_RIGHT:
+		case XID_RB_RIGHT:/*走右树*/
 			p = &n->rb_right;
 			break;
-		case XID_RB_EQUAL:
+		case XID_RB_EQUAL:/*命中，此请求不再进行添加*/
 			WARN_ON_ONCE(new != req);
 			return;
 		}
 	}
+
+	/*未找到，将其加入到收队列中*/
 	rb_link_node(&new->rq_recv, n, p);
 	rb_insert_color(&new->rq_recv, &xprt->recv_queue);
 }
@@ -1150,19 +1159,24 @@ xprt_request_enqueue_receive(struct rpc_task *task)
 	int ret;
 
 	if (!xprt_request_need_enqueue_receive(task, req))
+		/*如果此请求不需要等待响应，则直接返回*/
 		return 0;
 
+	/*初始化rcv_buf*/
 	ret = xprt_request_prepare(task->tk_rqstp, &req->rq_rcv_buf);
 	if (ret)
 		return ret;
 	spin_lock(&xprt->queue_lock);
 
 	/* Update the softirq receive buffer */
+	/*将rq_rcv_buffer的内容复制进rq_private_buf*/
 	memcpy(&req->rq_private_buf, &req->rq_rcv_buf,
 			sizeof(req->rq_private_buf));
 
 	/* Add request to the receive list */
+	/*将此请求添加进xprt对应的收队列*/
 	xprt_request_rb_insert(xprt, req);
+	/*指明这个task需要receive*/
 	set_bit(RPC_TASK_NEED_RECV, &task->tk_runstate);
 	spin_unlock(&xprt->queue_lock);
 
@@ -1303,6 +1317,7 @@ void xprt_request_wait_receive(struct rpc_task *task)
 	struct rpc_xprt *xprt = req->rq_xprt;
 
 	if (!test_bit(RPC_TASK_NEED_RECV, &task->tk_runstate))
+		/*此task不需要接收，直接返回*/
 		return;
 	/*
 	 * Sleep on the pending queue if we're expecting a reply.
@@ -1311,6 +1326,7 @@ void xprt_request_wait_receive(struct rpc_task *task)
 	 */
 	spin_lock(&xprt->queue_lock);
 	if (test_bit(RPC_TASK_NEED_RECV, &task->tk_runstate)) {
+		/*触发等待：等待对方响应或者超时*/
 		xprt->ops->wait_for_reply_request(task);
 		/*
 		 * Send an extra queue wakeup call if the
@@ -1344,8 +1360,10 @@ xprt_request_enqueue_transmit(struct rpc_task *task)
 	int ret;
 
 	if (xprt_request_need_enqueue_transmit(task, req)) {
+		/*此请求有发送标记，准备request*/
 		ret = xprt_request_prepare(task->tk_rqstp, &req->rq_snd_buf);
 		if (ret) {
+			/*prepare失败，指定status*/
 			task->tk_status = ret;
 			return;
 		}
@@ -1366,6 +1384,9 @@ xprt_request_enqueue_transmit(struct rpc_task *task)
 				goto out;
 			}
 		} else if (!req->rq_seqno) {
+			/*request没有指明seq number,遍历xprt->xmit_queue上所有待发送的请求
+			 * 将其串到rq_xmit2链上（为什么需要？）
+			 * */
 			list_for_each_entry(pos, &xprt->xmit_queue, rq_xmit) {
 				if (pos->rq_task->tk_owner != task->tk_owner)
 					continue;
@@ -1374,6 +1395,7 @@ xprt_request_enqueue_transmit(struct rpc_task *task)
 				goto out;
 			}
 		}
+		/*将此请求入队到xprt->xmit_queue,xprt_transmit会发送此队列上所有请求*/
 		list_add_tail(&req->rq_xmit, &xprt->xmit_queue);
 		INIT_LIST_HEAD(&req->rq_xmit2);
 out:
@@ -1474,6 +1496,7 @@ xprt_request_prepare(struct rpc_rqst *req, struct xdr_buf *buf)
 	struct rpc_xprt *xprt = req->rq_xprt;
 
 	if (xprt->ops->prepare_request)
+		/*如有必要初始化buf*/
 		return xprt->ops->prepare_request(req, buf);
 	return 0;
 }
@@ -1533,12 +1556,12 @@ void xprt_end_transmit(struct rpc_task *task)
  * Returns '0' on success.
  */
 static int
-xprt_request_transmit(struct rpc_rqst *req, struct rpc_task *snd_task)
+xprt_request_transmit(struct rpc_rqst *req, struct rpc_task *snd_task/*未使用*/)
 {
 	struct rpc_xprt *xprt = req->rq_xprt;
 	struct rpc_task *task = req->rq_task;
 	unsigned int connect_cookie;
-	int is_retrans = RPC_WAS_SENT(task);
+	int is_retrans = RPC_WAS_SENT(task);/*是否已有sent标记（认为重传）*/
 	int status;
 
 	if (!req->rq_bytes_sent) {
@@ -1566,24 +1589,28 @@ xprt_request_transmit(struct rpc_rqst *req, struct rpc_task *snd_task)
 
 	trace_rpc_xdr_sendto(task, &req->rq_snd_buf);
 	connect_cookie = xprt->connect_cookie;
+	/*向外发送请求*/
 	status = xprt->ops->send_request(req);
 	if (status != 0) {
+		/*请求发送返回值不为0，返回结果*/
 		req->rq_ntrans--;
 		trace_xprt_transmit(req, status);
 		return status;
 	}
 
 	if (is_retrans) {
+		/*此请求为重传，增加重传计数*/
 		task->tk_client->cl_stats->rpcretrans++;
 		trace_xprt_retransmit(req);
 	}
 
 	xprt_inject_disconnect(xprt);
 
+	/*标记此request已发出，与is_retrans相对应*/
 	task->tk_flags |= RPC_TASK_SENT;
 	spin_lock(&xprt->transport_lock);
 
-	xprt->stat.sends++;
+	xprt->stat.sends++;/*发送数目增加*/
 	xprt->stat.req_u += xprt->stat.sends - xprt->stat.recvs;
 	xprt->stat.bklog_u += xprt->backlog.qlen;
 	xprt->stat.sending_u += xprt->sending.qlen;
@@ -1610,26 +1637,29 @@ out_dequeue:
 void
 xprt_transmit(struct rpc_task *task)
 {
+	/*此函数用于发送xprt->xmit_queue上所有的request*/
 	struct rpc_rqst *next, *req = task->tk_rqstp;
 	struct rpc_xprt	*xprt = req->rq_xprt;
 	int status;
 
 	spin_lock(&xprt->queue_lock);
 	for (;;) {
+		/*自xprt->xmit_queue队列上取一个request*/
 		next = list_first_entry_or_null(&xprt->xmit_queue,
 						struct rpc_rqst, rq_xmit);
 		if (!next)
 			break;
-		xprt_pin_rqst(next);
+		xprt_pin_rqst(next);/*增加next 引用计数*/
 		spin_unlock(&xprt->queue_lock);
+		/*发送此rpc请求*/
 		status = xprt_request_transmit(next, task);
 		if (status == -EBADMSG && next != req)
 			status = 0;
 		spin_lock(&xprt->queue_lock);
-		xprt_unpin_rqst(next);
+		xprt_unpin_rqst(next);/*减少next 引用计数*/
 		if (status < 0) {
 			if (test_bit(RPC_TASK_NEED_XMIT, &task->tk_runstate))
-				task->tk_status = status;
+				task->tk_status = status;/*指明此task当前执行结果*/
 			break;
 		}
 		/* Was @task transmitted, and has it received a reply? */
@@ -1697,13 +1727,16 @@ static struct rpc_rqst *xprt_dynamic_alloc_slot(struct rpc_xprt *xprt)
 	struct rpc_rqst *req = ERR_PTR(-EAGAIN);
 
 	if (xprt->num_reqs >= xprt->max_reqs)
+		/*当前占有的request数目已超过request的最大数，退出*/
 		goto out;
 	++xprt->num_reqs;
 	spin_unlock(&xprt->reserve_lock);
+	/*申请rpc request*/
 	req = kzalloc(sizeof(*req), rpc_task_gfp_mask());
 	spin_lock(&xprt->reserve_lock);
 	if (req != NULL)
 		goto out;
+	/*申请失败，减少request数目*/
 	--xprt->num_reqs;
 	req = ERR_PTR(-ENOMEM);
 out:
@@ -1714,24 +1747,28 @@ static bool xprt_dynamic_free_slot(struct rpc_xprt *xprt, struct rpc_rqst *req)
 {
 	if (xprt->num_reqs > xprt->min_reqs) {
 		--xprt->num_reqs;
-		kfree(req);
+		kfree(req);/*多余的元素直接释放掉*/
 		return true;
 	}
 	return false;
 }
 
+/*申请rpc request,并设置task->tk_rqstp*/
 void xprt_alloc_slot(struct rpc_xprt *xprt, struct rpc_task *task)
 {
 	struct rpc_rqst *req;
 
 	spin_lock(&xprt->reserve_lock);
 	if (!list_empty(&xprt->free)) {
+		/*空闲链表上有可用节点，摘取一个*/
 		req = list_entry(xprt->free.next, struct rpc_rqst, rq_list);
 		list_del(&req->rq_list);
 		goto out_init_req;
 	}
+	/*空闲链表上无可用节点，申请一个*/
 	req = xprt_dynamic_alloc_slot(xprt);
 	if (!IS_ERR(req))
+		/*申请成功*/
 		goto out_init_req;
 	switch (PTR_ERR(req)) {
 	case -ENOMEM:
@@ -1744,17 +1781,19 @@ void xprt_alloc_slot(struct rpc_xprt *xprt, struct rpc_task *task)
 		dprintk("RPC:       waiting for request slot\n");
 		fallthrough;
 	default:
+		/*获取request失败，返回again*/
 		task->tk_status = -EAGAIN;
 	}
 	spin_unlock(&xprt->reserve_lock);
 	return;
 out_init_req:
+	/*更新最大slots数目*/
 	xprt->stat.max_slots = max_t(unsigned int, xprt->stat.max_slots,
 				     xprt->num_reqs);
 	spin_unlock(&xprt->reserve_lock);
 
 	task->tk_status = 0;
-	task->tk_rqstp = req;
+	task->tk_rqstp = req;/*申请request*/
 }
 EXPORT_SYMBOL_GPL(xprt_alloc_slot);
 
@@ -1764,7 +1803,7 @@ void xprt_free_slot(struct rpc_xprt *xprt, struct rpc_rqst *req)
 	if (!xprt_wake_up_backlog(xprt, req) &&
 	    !xprt_dynamic_free_slot(xprt, req)) {
 		memset(req, 0, sizeof(*req));	/* mark unused */
-		list_add(&req->rq_list, &xprt->free);
+		list_add(&req->rq_list, &xprt->free);/*释放到空闲链上*/
 	}
 	spin_unlock(&xprt->reserve_lock);
 }
@@ -1780,13 +1819,14 @@ static void xprt_free_all_slots(struct rpc_xprt *xprt)
 	}
 }
 
-static DEFINE_IDA(rpc_xprt_ids);
+static DEFINE_IDA(rpc_xprt_ids);/*负责系统中rcp_xprt id分配*/
 
 void xprt_cleanup_ids(void)
 {
 	ida_destroy(&rpc_xprt_ids);
 }
 
+/*负责rpc_xprt的id分配*/
 static int xprt_alloc_id(struct rpc_xprt *xprt)
 {
 	int id;
@@ -1799,11 +1839,13 @@ static int xprt_alloc_id(struct rpc_xprt *xprt)
 	return 0;
 }
 
+/*负责rpc_xprt的id释放*/
 static void xprt_free_id(struct rpc_xprt *xprt)
 {
 	ida_free(&rpc_xprt_ids, xprt->id);
 }
 
+/*申请并初始化xpc_xprt*/
 struct rpc_xprt *xprt_alloc(struct net *net, size_t size,
 		unsigned int num_prealloc,
 		unsigned int max_alloc)
@@ -1816,9 +1858,10 @@ struct rpc_xprt *xprt_alloc(struct net *net, size_t size,
 	if (xprt == NULL)
 		goto out;
 
-	xprt_alloc_id(xprt);
-	xprt_init(xprt, net);
+	xprt_alloc_id(xprt);/*先分配一个id*/
+	xprt_init(xprt, net);/*初始化*/
 
+	/*初始化空闲链表*/
 	for (i = 0; i < num_prealloc; i++) {
 		req = kzalloc(sizeof(struct rpc_rqst), GFP_KERNEL);
 		if (!req)
@@ -1899,6 +1942,7 @@ xprt_do_reserve(struct rpc_xprt *xprt, struct rpc_task *task)
 {
 	xprt->ops->alloc_slot(xprt, task);
 	if (task->tk_rqstp != NULL)
+		/*设置request成功，初始化它*/
 		xprt_request_init(task);
 }
 
@@ -1916,9 +1960,10 @@ void xprt_reserve(struct rpc_task *task)
 
 	task->tk_status = 0;
 	if (task->tk_rqstp != NULL)
+		/*申请request成功，直接返回*/
 		return;
 
-	task->tk_status = -EAGAIN;
+	task->tk_status = -EAGAIN;/*申请request失败，需要重试*/
 	if (!xprt_throttle_congested(xprt, task))
 		xprt_do_reserve(xprt, task);
 }
@@ -2053,11 +2098,13 @@ struct rpc_xprt *xprt_create_transport(struct xprt_create *args)
 
 	t = xprt_class_find_by_ident(args->ident);
 	if (!t) {
+		/*不支持此transport,报错*/
 		dprintk("RPC: transport (%d) not supported\n", args->ident);
 		return ERR_PTR(-EIO);
 	}
 
-	xprt = t->setup(args);/*依据args生成xprt*/
+	/*依据args生成rpc transport*/
+	xprt = t->setup(args);
 	xprt_class_release(t);
 
 	if (IS_ERR(xprt))

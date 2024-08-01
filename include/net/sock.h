@@ -414,7 +414,7 @@ struct sock {
 	atomic_t		sk_drops;
 	int			sk_rcvlowat;
 	struct sk_buff_head	sk_error_queue;
-	//接收到的报文缓冲在此队列
+	//接收到的报文缓冲在此队列，此队列不空，则socket可读
 	struct sk_buff_head	sk_receive_queue;
 	/*
 	 * The backlog queue is special, it is always used with
@@ -1457,6 +1457,7 @@ static inline bool __sk_stream_is_writeable(const struct sock *sk, int wake)
 
 static inline bool sk_stream_is_writeable(const struct sock *sk)
 {
+	/*检查socket是否可写*/
 	return __sk_stream_is_writeable(sk, 0);
 }
 
@@ -2675,6 +2676,7 @@ bool sk_page_frag_refill(struct sock *sk, struct page_frag *pfrag);
  */
 static inline bool sock_writeable(const struct sock *sk)
 {
+	/*wmem_alloc小于sk_sndbuf的一半，认为可写*/
 	return refcount_read(&sk->sk_wmem_alloc) < (READ_ONCE(sk->sk_sndbuf) >> 1);
 }
 

@@ -194,7 +194,7 @@ bool smc_ib_port_active(struct smc_ib_device *smcibdev, u8 ibport)
 }
 
 int smc_ib_find_route(struct net *net, __be32 saddr, __be32 daddr,
-		      u8 nexthop_mac[], u8 *uses_gateway)
+		      u8 nexthop_mac[]/*出差，下一跳Mac地址*/, u8 *uses_gateway/*出参，是否用gateway地址*/)
 {
 	struct neighbour *neigh = NULL;
 	struct rtable *rt = NULL;
@@ -204,12 +204,17 @@ int smc_ib_find_route(struct net *net, __be32 saddr, __be32 daddr,
 	};
 
 	if (daddr == cpu_to_be32(INADDR_NONE))
+		/*目的地址为零*/
 		goto out;
+	/*指明src,dst查询路由*/
 	rt = ip_route_output_flow(net, &fl4, NULL);
 	if (IS_ERR(rt))
 		goto out;
 	if (rt->rt_uses_gateway && rt->rt_gw_family != AF_INET)
+		/*非gateway情况*/
 		goto out;
+
+	/*查询领居表项*/
 	neigh = rt->dst.ops->neigh_lookup(&rt->dst, NULL, &fl4.daddr);
 	if (neigh) {
 		memcpy(nexthop_mac, neigh->ha, ETH_ALEN);
@@ -661,8 +666,8 @@ int smc_ib_create_queue_pair(struct smc_link *lnk)
 	struct ib_qp_init_attr qp_attr = {
 		.event_handler = smc_ib_qp_event_handler,
 		.qp_context = lnk,
-		.send_cq = lnk->smcibdev->roce_cq_send,
-		.recv_cq = lnk->smcibdev->roce_cq_recv,
+		.send_cq = lnk->smcibdev->roce_cq_send,/*指明send对应的cq*/
+		.recv_cq = lnk->smcibdev->roce_cq_recv,/*指明recv对应的cq*/
 		.srq = NULL,
 		.cap = {
 				/* include unsolicited rdma_writes as well,
@@ -675,10 +680,11 @@ int smc_ib_create_queue_pair(struct smc_link *lnk)
 			.max_inline_data = 0,
 		},
 		.sq_sig_type = IB_SIGNAL_REQ_WR,
-		.qp_type = IB_QPT_RC,
+		.qp_type = IB_QPT_RC,/*使用rc qp*/
 	};
 	int rc;
 
+	/*创建qp*/
 	lnk->roce_qp = ib_create_qp(lnk->roce_pd, &qp_attr);
 	rc = PTR_ERR_OR_ZERO(lnk->roce_qp);
 	if (IS_ERR(lnk->roce_qp))
@@ -847,6 +853,7 @@ long smc_ib_setup_per_ibdev(struct smc_ib_device *smcibdev)
 	smc_order = MAX_PAGE_ORDER - cqe_size_order;
 	if (SMC_MAX_CQE + 2 > (0x00000001 << smc_order) * PAGE_SIZE)
 		cqattr.cqe = (0x00000001 << smc_order) * PAGE_SIZE - 2;
+	/*创建send对应的cq*/
 	smcibdev->roce_cq_send = ib_create_cq(smcibdev->ibdev,
 					      smc_wr_tx_cq_handler, NULL,
 					      smcibdev, &cqattr);
@@ -855,6 +862,7 @@ long smc_ib_setup_per_ibdev(struct smc_ib_device *smcibdev)
 		smcibdev->roce_cq_send = NULL;
 		goto out;
 	}
+	/*创建recv对应的cq*/
 	smcibdev->roce_cq_recv = ib_create_cq(smcibdev->ibdev,
 					      smc_wr_rx_cq_handler, NULL,
 					      smcibdev, &cqattr);
@@ -939,20 +947,23 @@ static int smc_ib_add_dev(struct ib_device *ibdev)
 	int i;
 
 	if (ibdev->node_type != RDMA_NODE_IB_CA)
+		/*只能是ib设备*/
 		return -EOPNOTSUPP;
 
 	smcibdev = kzalloc(sizeof(*smcibdev), GFP_KERNEL);
 	if (!smcibdev)
 		return -ENOMEM;
 
-	smcibdev->ibdev = ibdev;
+	smcibdev->ibdev = ibdev;/*对应的ib设备*/
 	INIT_WORK(&smcibdev->port_event_work, smc_ib_port_event_work);
 	atomic_set(&smcibdev->lnk_cnt, 0);
 	init_waitqueue_head(&smcibdev->lnks_deleted);
 	mutex_init(&smcibdev->mutex);
 	mutex_lock(&smc_ib_devices.mutex);
+	/*收集并添加smcibdev到链表*/
 	list_add_tail(&smcibdev->list, &smc_ib_devices.list);
 	mutex_unlock(&smc_ib_devices.mutex);
+	/*使ibdev关联对应的client数据*/
 	ib_set_client_data(ibdev, &smc_ib_client, smcibdev);
 	INIT_IB_EVENT_HANDLER(&smcibdev->event_handler, smcibdev->ibdev,
 			      smc_ib_global_event_handler);
@@ -989,6 +1000,7 @@ static void smc_ib_remove_dev(struct ib_device *ibdev, void *client_data)
 	struct smc_ib_device *smcibdev = client_data;
 
 	mutex_lock(&smc_ib_devices.mutex);
+	/*移除此ib设备*/
 	list_del_init(&smcibdev->list); /* remove from smc_ib_devices */
 	mutex_unlock(&smc_ib_devices.mutex);
 	pr_warn_ratelimited("smc: removing ib device %s\n",
@@ -1002,14 +1014,14 @@ static void smc_ib_remove_dev(struct ib_device *ibdev, void *client_data)
 
 static struct ib_client smc_ib_client = {
 	.name	= "smc_ib",
-	.add	= smc_ib_add_dev,
+	.add	= smc_ib_add_dev,/*ib设备添加时调用*/
 	.remove = smc_ib_remove_dev,
 };
 
 int __init smc_ib_register_client(void)
 {
 	smc_ib_init_local_systemid();
-	return ib_register_client(&smc_ib_client);
+	return ib_register_client(&smc_ib_client);/*添加smc的ib client*/
 }
 
 void smc_ib_unregister_client(void)

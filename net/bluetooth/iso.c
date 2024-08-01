@@ -2241,6 +2241,7 @@ int iso_init(void)
 	if (err < 0)
 		return err;
 
+	/*注册iso proto*/
 	err = bt_sock_register(BTPROTO_ISO, &iso_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("ISO socket registration failed");

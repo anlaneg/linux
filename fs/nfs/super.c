@@ -138,7 +138,8 @@ int __init register_nfs_fs(void)
 {
 	int ret;
 
-        ret = register_filesystem(&nfs_fs_type);
+	/*注册nfs文件系统*/
+    ret = register_filesystem(&nfs_fs_type);
 	if (ret < 0)
 		goto error_0;
 

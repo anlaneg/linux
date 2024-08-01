@@ -82,7 +82,7 @@ struct mgmt_rp_read_commands {
 #define MGMT_OP_READ_INDEX_LIST		0x0003
 #define MGMT_READ_INDEX_LIST_SIZE	0
 struct mgmt_rp_read_index_list {
-	__le16	num_controllers;
+	__le16	num_controllers;/*指明controller数量*/
 	__le16	index[];
 } __packed;
 

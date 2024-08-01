@@ -33,8 +33,8 @@ enum legacy_fs_param {
 struct legacy_fs_context {
 	/*mount时传入的选项参数*/
 	char			*legacy_data;	/* Data page for legacy filesystems */
-	size_t			data_size;
-	enum legacy_fs_param	param_type;
+	size_t			data_size;/*legacy_data参数长度*/
+	enum legacy_fs_param	param_type;/*legacy_parse_param函数对应的为LEGACY_FS_INDIVIDUAL_PARAMS类型*/
 };
 
 static int legacy_init_fs_context(struct fs_context *fc);
@@ -64,19 +64,19 @@ static int vfs_parse_sb_flag(struct fs_context *fc, const char *key)
     //检查key是否为sb_flags的控制命令
 	unsigned int token;
 
-	//检查common_set_sb_flag中是否包含key,如不包含返回0，否则返回key对应的value
+	//检查common_set_sb_flag table中是否包含此key,如不包含返回0，否则返回key对应的value
 	token = lookup_constant(common_set_sb_flag, key, 0);
 	if (token) {
-	    //被命中，sb_flags标记设置
+	    //被命中，设置sb_flags标记,通过sb_flags_mask展示设置了哪些flags
 		fc->sb_flags |= token;
 		fc->sb_flags_mask |= token;
 		return 0;
 	}
 
-	//检查common_set_sb_flag中是否包含key,如不包含返回0，否则返回key对应的value
+	//检查common_set_sb_flag table中是否包含key,如不包含返回0，否则返回key对应的value
 	token = lookup_constant(common_clear_sb_flag, key, 0);
 	if (token) {
-	    //被命中，sb_flags标记清除
+	    //被命中，清除sb_flags标记
 		fc->sb_flags &= ~token;
 		fc->sb_flags_mask |= token;
 		return 0;
@@ -103,11 +103,11 @@ int vfs_parse_fs_param_source(struct fs_context *fc, struct fs_parameter *param)
 	if (strcmp(param->key, "source") != 0)
 		return -ENOPARAM;
 
-	/*source必须为字符串类型*/
+	/*source的value必须为字符串类型*/
 	if (param->type != fs_value_is_string)
 		return invalf(fc, "Non-string source");
 
-	/*source必须只出现一次*/
+	/*source参数必须只出现一次*/
 	if (fc->source)
 		return invalf(fc, "Multiple sources");
 
@@ -142,7 +142,7 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	if (!param->key)
 		return invalf(fc, "Unnamed parameter\n");
 
-	//检查param是否为sb_flags控制参数
+	//检查param是否为super block flags控制参数
 	ret = vfs_parse_sb_flag(fc, param->key);
 	if (ret != -ENOPARAM)
 	    /*为sb_flags控制参数，已处理，返回*/
@@ -166,10 +166,12 @@ int vfs_parse_fs_param(struct fs_context *fc, struct fs_parameter *param)
 	/* If the filesystem doesn't take any arguments, give it the
 	 * default handling of source.
 	 */
-	ret = vfs_parse_fs_param_source(fc, param);/*处理source key*/
+	ret = vfs_parse_fs_param_source(fc, param);/*容许默认source参数（各fs可以不添加）*/
 	if (ret != -ENOPARAM)
+		/*遇到source参数，但解析成功或出错*/
 		return ret;
 
+	/*遇到了不认识的参数*/
 	return invalf(fc, "%s: Unknown parameter '%s'",
 		      fc->fs_type->name, param->key);
 }
@@ -194,7 +196,7 @@ int vfs_parse_fs_string(struct fs_context *fc, const char *key,
 		.size	= v_size,
 	};
 
-	/*复制value*/
+	/*复制value字符串*/
 	if (value) {
 		param.string = kmemdup_nul(value, v_size, GFP_KERNEL);
 		if (!param.string)
@@ -261,7 +263,7 @@ EXPORT_SYMBOL(vfs_parse_monolithic_sep);
 
 static char *vfs_parse_comma_sep(char **s)
 {
-	return strsep(s, ",");
+	return strsep(s/*入出参*/, ",");/*按','分隔字符串s*/
 }
 
 /**
@@ -277,6 +279,7 @@ static char *vfs_parse_comma_sep(char **s)
  */
 int generic_parse_monolithic(struct fs_context *fc, void *data)
 {
+	/*分隔data,采用fc->ops->parse_param遍历并解析参数*/
 	return vfs_parse_monolithic_sep(fc, data, vfs_parse_comma_sep);
 }
 EXPORT_SYMBOL(generic_parse_monolithic);
@@ -342,7 +345,7 @@ static struct fs_context *alloc_fs_context(struct file_system_type *fs_type,
 	    /*如果文件系统(fs_type)未提供此回调，则使用默认值*/
 		init_fs_context = legacy_init_fs_context;
 
-	/*通过函数初始化刚申请的fc*/
+	/*通过函数使各fs初始化刚申请的fc*/
 	ret = init_fs_context(fc);
 	if (ret < 0)
 		goto err_fc;
@@ -593,6 +596,7 @@ static int legacy_fs_context_dup(struct fs_context *fc, struct fs_context *src_f
 		return -ENOMEM;
 
 	if (ctx->param_type == LEGACY_FS_INDIVIDUAL_PARAMS) {
+		/*复制legacy_data(挂载参数）*/
 		ctx->legacy_data = kmemdup(src_ctx->legacy_data,
 					   src_ctx->data_size, GFP_KERNEL);
 		if (!ctx->legacy_data) {
@@ -616,10 +620,12 @@ static int legacy_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	size_t len = 0;
 	int ret;
 
+	/*处理source参数用*/
 	ret = vfs_parse_fs_param_source(fc, param);
 	if (ret != -ENOPARAM)
 		return ret;
 
+	/*不得为此类型*/
 	if (ctx->param_type == LEGACY_FS_MONOLITHIC_PARAMS)
 		return invalf(fc, "VFS: Legacy: Can't mix monolithic and individual options");
 
@@ -631,17 +637,22 @@ static int legacy_parse_param(struct fs_context *fc, struct fs_parameter *param)
 		len += strlen(param->key);
 		break;
 	default:
+		/*只容许以上两种参数类型*/
 		return invalf(fc, "VFS: Legacy: Parameter type for '%s' not supported",
 			      param->key);
 	}
 
 	if (size + len + 2 > PAGE_SIZE)
+		/*参数内容过长*/
 		return invalf(fc, "VFS: Legacy: Cumulative options too large");
 	if (strchr(param->key, ',') ||
 	    (param->type == fs_value_is_string &&
 	     memchr(param->string, ',', param->size)))
+		/*key，value中不得包含有','符*/
 		return invalf(fc, "VFS: Legacy: Option '%s' contained comma",
 			      param->key);
+
+	/*初始化legacy_data*/
 	if (!ctx->legacy_data) {
 		ctx->legacy_data = kmalloc(PAGE_SIZE, GFP_KERNEL);
 		if (!ctx->legacy_data)
@@ -651,11 +662,11 @@ static int legacy_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	if (size)
 		ctx->legacy_data[size++] = ',';
 	len = strlen(param->key);
-	memcpy(ctx->legacy_data + size, param->key, len);
+	memcpy(ctx->legacy_data + size, param->key, len);/*将key写入到ctx->legacy_data*/
 	size += len;
 	if (param->type == fs_value_is_string) {
 		ctx->legacy_data[size++] = '=';
-		memcpy(ctx->legacy_data + size, param->string, param->size);
+		memcpy(ctx->legacy_data + size, param->string, param->size);/*将value写入到ctx->legacy_data*/
 		size += param->size;
 	}
 	ctx->legacy_data[size] = '\0';
@@ -719,8 +730,10 @@ static int legacy_reconfigure(struct fs_context *fc)
 	struct super_block *sb = fc->root->d_sb;
 
 	if (!sb->s_op->remount_fs)
+		/*super block如无remount_fs回调，则直接返回*/
 		return 0;
 
+	/*触发remount_fs*/
 	return sb->s_op->remount_fs(sb, &fc->sb_flags,
 				    ctx ? ctx->legacy_data : NULL);
 }
@@ -729,12 +742,13 @@ static int legacy_reconfigure(struct fs_context *fc)
 const struct fs_context_operations legacy_fs_context_ops = {
 	.free			= legacy_fs_context_free,
 	.dup			= legacy_fs_context_dup,
-	/*解析文件系统挂载参数（单个）*/
+	/*解析文件系统挂载参数（单个，默认）*/
 	.parse_param		= legacy_parse_param,
-	/*解析文件系统挂载参数（整体）*/
+	/*解析文件系统挂载参数（整体，默认）*/
 	.parse_monolithic	= legacy_parse_monolithic,
 	/*获取并填充文件系统的root节点，此函数会调用fc->fs_type->mount*/
 	.get_tree		= legacy_get_tree,
+	/*此函数会触发sb->s_op->remount_fs*/
 	.reconfigure		= legacy_reconfigure,
 };
 

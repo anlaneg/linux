@@ -174,7 +174,7 @@ static struct rxe_send_wqe *__req_next_wqe(struct rxe_qp *qp)
 		return queue_addr_from_index(q, index);
 }
 
-/*自sq取wqe*/
+/*自sq取一个wqe*/
 static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 {
 	struct rxe_send_wqe *wqe;
@@ -182,6 +182,7 @@ static struct rxe_send_wqe *req_next_wqe(struct rxe_qp *qp)
 
 	req_check_sq_drain_done(qp);
 
+	/*自qp中取一个rxe_send_wqe*/
 	wqe = __req_next_wqe(qp);
 	if (wqe == NULL)
 		return NULL;
@@ -457,6 +458,7 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 	if (ack_req)
 		qp->req.noack_pkts = 0;
 
+	/*初始化bth header*/
 	bth_init(pkt, pkt->opcode, solicited, 0, pad, IB_DEFAULT_PKEY_FULL, qp_num,
 		 ack_req, pkt->psn);
 
@@ -504,11 +506,12 @@ static struct sk_buff *init_req_packet(struct rxe_qp *qp,
 
 /*构造报文，并填充报文负载*/
 static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
-			 struct rxe_send_wqe *wqe, struct rxe_pkt_info *pkt,
-			 struct sk_buff *skb, u32 payload)
+			 struct rxe_send_wqe *wqe/*待发送的buffer*/, struct rxe_pkt_info *pkt,
+			 struct sk_buff *skb/*报文buffer*/, u32 payload)
 {
 	int err;
 
+	/*ip header,udp header填充*/
 	err = rxe_prepare(av, pkt, skb);
 	if (err)
 		return err;
@@ -518,20 +521,20 @@ static int finish_packet(struct rxe_qp *qp, struct rxe_av *av,
 		    /*填写负载报文：op_code暂为空*/
 			u8 *tmp = &wqe->dma.inline_data[wqe->dma.sge_offset];
 
-			memcpy(payload_addr(pkt), tmp, payload);
+			memcpy(payload_addr(pkt), tmp, payload);/*inline数据填充到payload*/
 
 			wqe->dma.resid -= payload;
-			wqe->dma.sge_offset += payload;
+			wqe->dma.sge_offset += payload;/*更新offset*/
 		} else {
 		    /*填写负载报文：op_code暂为空*/
 			err = copy_data(qp->pd, 0, &wqe->dma,
-					payload_addr(pkt), payload,
-					RXE_FROM_MR_OBJ);
+					payload_addr(pkt)/*待填充的首地址*/, payload/*待填充内容长度*/,
+					RXE_FROM_MR_OBJ/*从mr中复制数据到payload*/);
 			if (err)
 				return err;
 		}
 
-		/*填充pad，设为0*/
+		/*在尾部填充pad，设为0*/
 		if (bth_pad(pkt)) {
 			u8 *pad = payload_addr(pkt) + payload;
 
@@ -682,7 +685,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	return 0;
 }
 
-/*处理向外发送报文*/
+/*处理向外发送报文(自send queue上提供send_wqe，然后构造skb并向外发送）*/
 int rxe_requester(struct rxe_qp *qp)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -742,7 +745,7 @@ int rxe_requester(struct rxe_qp *qp)
 		qp->req.need_retry = 0;
 	}
 
-	/*自sq中提取一个用户态填充好的wqe*/
+	/*自sq中提取一个用户态填充好的send wqe*/
 	wqe = req_next_wqe(qp);
 	if (unlikely(!wqe))
 		goto exit;
@@ -822,7 +825,7 @@ int rxe_requester(struct rxe_qp *qp)
 	pkt.qp = qp;
 	pkt.psn = qp->req.psn;
 	pkt.mask = rxe_opcode[opcode].mask;
-	pkt.wqe = wqe;
+	pkt.wqe = wqe;/*此报文要发送走的wqe*/
 
 	/* save wqe state before we build and send packet */
 	save_state(wqe, qp, &rollback_wqe, &rollback_psn);
@@ -845,8 +848,8 @@ int rxe_requester(struct rxe_qp *qp)
 		goto err;
 	}
 
-	/*填充报文负载*/
-	err = finish_packet(qp, av, wqe, &pkt, skb, payload);
+	/*填充ip header,udp header及报文负载*/
+	err = finish_packet(qp, av, wqe/*待发送的buffer*/, &pkt, skb, payload);
 	if (unlikely(err)) {
 		rxe_dbg_qp(qp, "Error during finish packet\n");
 		if (err == -EFAULT)

@@ -24,7 +24,7 @@ static const struct rdma_stat_desc rxe_counter_descs[] = {
 	[RXE_CNT_RDMA_RECV].name           =  "rdma_recvs",
 };
 
-/*填充rdma_hw_stats结构*/
+/*获取统计结果并填充rdma_hw_stats结构*/
 int rxe_ib_get_hw_stats(struct ib_device *ibdev,
 			struct rdma_hw_stats *stats,
 			u32 port, int index)

@@ -72,7 +72,7 @@ struct sk_buff *mgmt_alloc_skb(struct hci_dev *hdev, u16 opcode,
 	return skb;
 }
 
-int mgmt_send_event_skb(unsigned short channel, struct sk_buff *skb, int flag,
+int mgmt_send_event_skb(unsigned short channel/*指明event投递channel*/, struct sk_buff *skb, int flag,
 			struct sock *skip_sk)
 {
 	struct hci_dev *hdev;
@@ -80,6 +80,7 @@ int mgmt_send_event_skb(unsigned short channel, struct sk_buff *skb, int flag,
 	int len;
 
 	if (!skb)
+		/*必须提供消息*/
 		return -EINVAL;
 
 	len = skb->len;
@@ -90,12 +91,14 @@ int mgmt_send_event_skb(unsigned short channel, struct sk_buff *skb, int flag,
 
 	/* Send just the data, without headers, to the monitor */
 	if (channel == HCI_CHANNEL_CONTROL)
+		/*control消息，还需要给各monitor送一份*/
 		hci_send_monitor_ctrl_event(hdev, bt_cb(skb)->mgmt.opcode,
 					    skb->data, skb->len,
 					    skb_get_ktime(skb), flag, skip_sk);
 
 	hdr = skb_push(skb, sizeof(*hdr));
 	hdr->opcode = cpu_to_le16(bt_cb(skb)->mgmt.opcode);
+	/*如果指明了hdev，则设置index,否则置为None*/
 	if (hdev)
 		hdr->index = cpu_to_le16(hdev->id);
 	else
@@ -108,11 +111,13 @@ int mgmt_send_event_skb(unsigned short channel, struct sk_buff *skb, int flag,
 	return 0;
 }
 
+/*向用户态发送event通知（用户态可自socket上读取到此event)*/
 int mgmt_send_event(u16 event, struct hci_dev *hdev, unsigned short channel,
 		    void *data, u16 data_len, int flag, struct sock *skip_sk)
 {
 	struct sk_buff *skb;
 
+	/*构造要发送的消息*/
 	skb = mgmt_alloc_skb(hdev, event, data_len);
 	if (!skb)
 		return -ENOMEM;
@@ -120,9 +125,11 @@ int mgmt_send_event(u16 event, struct hci_dev *hdev, unsigned short channel,
 	if (data)
 		skb_put_data(skb, data, data_len);
 
+	/*发送此event*/
 	return mgmt_send_event_skb(channel, skb, flag, skip_sk);
 }
 
+/*给socket回复请求*/
 int mgmt_cmd_status(struct sock *sk, u16 index, u16 cmd, u8 status)
 {
 	struct sk_buff *skb, *mskb;
@@ -214,6 +221,7 @@ int mgmt_cmd_complete(struct sock *sk, u16 index, u16 cmd, u8 status,
 	return err;
 }
 
+/*在pending列表中查找指定操作*/
 struct mgmt_pending_cmd *mgmt_pending_find(unsigned short channel, u16 opcode,
 					   struct hci_dev *hdev)
 {

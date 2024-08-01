@@ -101,6 +101,7 @@ int __net_init smc_sysctl_net_init(struct net *net)
 	if (!net_eq(net, &init_net)) {
 		int i;
 
+		/*非init_net,复制table*/
 		table = kmemdup(table, sizeof(smc_table), GFP_KERNEL);
 		if (!table)
 			goto err_alloc;

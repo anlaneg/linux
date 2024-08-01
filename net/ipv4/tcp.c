@@ -3451,6 +3451,7 @@ int do_tcp_setsockopt(struct sock *sk, int level, int optname,
 		return err;
 	}
 	case TCP_ULP: {
+		/*指明按名称替代更正socket*/
 		char name[TCP_ULP_NAME_MAX];
 
 		if (optlen < 1)
@@ -4803,5 +4804,6 @@ void __init tcp_init(void)
 	/*注册reno算法*/
 	BUG_ON(tcp_register_congestion_control(&tcp_reno) != 0);
 	tcp_tasklet_init();
+	/*mptcp初始化*/
 	mptcp_init();
 }

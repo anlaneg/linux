@@ -227,9 +227,9 @@ void nf_hook_slow_list(struct list_head *head, struct nf_hook_state *state,
  *	okfn must be invoked by the caller in this case.  Any other return
  *	value indicates the packet has been consumed by the hook.
  */
-static inline int nf_hook(u_int8_t pf, unsigned int hook, struct net *net,
+static inline int nf_hook(u_int8_t pf/*协议族*/, unsigned int hook/*钩子类型*/, struct net *net,
 			  struct sock *sk, struct sk_buff *skb,
-			  struct net_device *indev, struct net_device *outdev,
+			  struct net_device *indev/*入口设备*/, struct net_device *outdev,
 			  int (*okfn)(struct net *, struct sock *, struct sk_buff *))
 {
 	//记录各pf对应的hooks链表指针
@@ -310,8 +310,8 @@ NF_HOOK_COND(uint8_t pf, unsigned int hook, struct net *net, struct sock *sk,
 {
 	int ret;
 
-	//如果条件为真，则调用nf_hook，如果返回值为1，则调用okfn
-	//如果条件为假，则直接nkfn
+	//如果条件（cond)为真，则调用nf_hook，如果返回值为1，则调用okfn
+	//如果条件 (cond)为假，则直接nkfn
 	if (!cond ||
 	    ((ret = nf_hook(pf, hook, net, sk, skb, in, out, okfn)) == 1))
 		ret = okfn(net, sk, skb);

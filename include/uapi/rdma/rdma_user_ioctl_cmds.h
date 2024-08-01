@@ -89,6 +89,7 @@ struct ib_uverbs_ioctl_hdr {
 	/*驱动类别*/
 	__u32 driver_id;
 	__u32 reserved2;
+	/*结尾是多个struct ib_uverbs_attr类型*/
 	struct ib_uverbs_attr  attrs[];
 };
 

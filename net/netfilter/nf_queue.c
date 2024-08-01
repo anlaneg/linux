@@ -337,6 +337,7 @@ next_hook:
 	switch (verdict & NF_VERDICT_MASK) {
 	case NF_ACCEPT:
 	case NF_STOP:
+		/*accept返回，调用okfn*/
 		local_bh_disable();
 		entry->state.okfn(entry->state.net, entry->state.sk, skb);
 		local_bh_enable();

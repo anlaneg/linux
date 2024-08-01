@@ -133,6 +133,7 @@ static int ovl_real_fdget_meta(const struct file *file, struct fd *real,
 static int ovl_real_fdget(const struct file *file, struct fd *real)
 {
 	if (d_is_dir(file_dentry(file))) {
+		/*确认为目录*/
 		real->flags = 0;
 		real->file = ovl_dir_real_file(file, false);
 
@@ -272,6 +273,7 @@ static ssize_t ovl_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	};
 
 	if (!iov_iter_count(iter))
+		/*长度为零，返回*/
 		return 0;
 
 	ret = ovl_real_fdget(file, &real);
@@ -601,7 +603,7 @@ const struct file_operations ovl_file_operations = {
 	.open		= ovl_open,
 	.release	= ovl_release,
 	.llseek		= ovl_llseek,
-	.read_iter	= ovl_read_iter,
+	.read_iter	= ovl_read_iter,/*实现read函数*/
 	.write_iter	= ovl_write_iter,
 	.fsync		= ovl_fsync,
 	.mmap		= ovl_mmap,

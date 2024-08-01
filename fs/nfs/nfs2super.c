@@ -11,13 +11,13 @@ static struct nfs_subversion nfs_v2 = {
 	.owner = THIS_MODULE,
 	.nfs_fs   = &nfs_fs_type,
 	.rpc_vers = &nfs_version2,
-	.rpc_ops  = &nfs_v2_clientops,
+	.rpc_ops  = &nfs_v2_clientops,/*2号版本对应的client-ops*/
 	.sops     = &nfs_sops,
 };
 
 static int __init init_nfs_v2(void)
 {
-	register_nfs_version(&nfs_v2);
+	register_nfs_version(&nfs_v2);/*注册v2版本的nfs*/
 	return 0;
 }
 

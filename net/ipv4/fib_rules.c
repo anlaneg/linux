@@ -59,7 +59,7 @@ static bool fib4_rule_matchall(const struct fib_rule *rule)
 bool fib4_rule_default(const struct fib_rule *rule)
 {
 	if (!fib4_rule_matchall(rule) || rule->action != FR_ACT_TO_TBL ||
-	    rule->l3mdev)
+	    rule->l3mdev/*这种是vrf添加的*/)
 		return false;
 	if (rule->table != RT_TABLE_LOCAL && rule->table != RT_TABLE_MAIN &&
 	    rule->table != RT_TABLE_DEFAULT)

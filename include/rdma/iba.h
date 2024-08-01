@@ -83,6 +83,7 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
 
 #define _IBA_GET(field_struct, field_offset, field_mask, num_bits, ptr)        \
 	({                                                                     \
+		/*结构体指针*/	\
 		const field_struct *_ptr = ptr;                                \
 		(u##num_bits) FIELD_GET(                                       \
 			field_mask, _iba_get##num_bits((const void *)_ptr +    \
@@ -115,7 +116,7 @@ static inline void _iba_set64(__be64 *ptr, u64 mask, u64 prep_value)
  * Extraction using a tabular description like table 106. bit_offset is from
  * the Byte[Bit] notation.
  */
-#define IBA_FIELD_BLOC(field_struct, byte_offset, bit_offset, num_bits)        \
+#define IBA_FIELD_BLOC(field_struct/*结构体类别及名称*/, byte_offset/*成员起始位置相对结构体指针的offset*/, bit_offset/*在字节中的偏移量*/, num_bits/*字段对应的位宽*/)        \
 	field_struct, byte_offset,                                             \
 		GENMASK(7 - (bit_offset), 7 - (bit_offset) - (num_bits - 1)),  \
 		8

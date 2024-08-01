@@ -1448,11 +1448,12 @@ int __init sco_init(void)
 
 	BUILD_BUG_ON(sizeof(struct sockaddr_sco) > sizeof(struct sockaddr));
 
+	/*协议注册*/
 	err = proto_register(&sco_proto, 0);
 	if (err < 0)
 		return err;
 
-	/*注册sco协议*/
+	/*注册bt socket对sco协议的处理*/
 	err = bt_sock_register(BTPROTO_SCO, &sco_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("SCO socket registration failed");

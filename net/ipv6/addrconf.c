@@ -332,6 +332,7 @@ static void addrconf_mod_dad_work(struct inet6_ifaddr *ifp,
 				   unsigned long delay)
 {
 	in6_ifa_hold(ifp);
+	/*触发dad work*/
 	if (mod_delayed_work(addrconf_wq, &ifp->dad_work, delay))
 		in6_ifa_put(ifp);
 }
@@ -1039,12 +1040,14 @@ static bool ipv6_chk_same_addr(struct net *net, const struct in6_addr *addr,
 	hlist_for_each_entry(ifp, &net->ipv6.inet6_addr_lst[hash], addr_lst) {
 		if (ipv6_addr_equal(&ifp->addr, addr)) {
 			if (!dev || ifp->idev->dev == dev)
+				/*此设备上已有此addr*/
 				return true;
 		}
 	}
 	return false;
 }
 
+/*将地址ifa添加进hash table*/
 static int ipv6_add_addr_hash(struct net_device *dev, struct inet6_ifaddr *ifa)
 {
 	struct net *net = dev_net(dev);
@@ -1121,6 +1124,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 			goto out;
 	}
 
+	/*申请ifa结构体*/
 	ifa = kzalloc(sizeof(*ifa), gfp_flags | __GFP_ACCOUNT);
 	if (!ifa) {
 		err = -ENOBUFS;
@@ -1148,7 +1152,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 	ifa->scope = cfg->scope;
 	ifa->prefix_len = cfg->plen;
 	ifa->rt_priority = cfg->rt_priority;
-	ifa->flags = cfg->ifa_flags;
+	ifa->flags = cfg->ifa_flags;/*地址标记（如果没有“永久”标记，接口down时ip会消失)*/
 	ifa->ifa_proto = cfg->ifa_proto;
 	/* No need to add the TENTATIVE flag for addresses with NODAD */
 	if (!(cfg->ifa_flags & IFA_F_NODAD))
@@ -1160,7 +1164,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 
 	ifa->rt = f6i;
 
-	ifa->idev = idev;
+	ifa->idev = idev;/*此地址从属的设备*/
 	in6_dev_hold(idev);
 
 	/* For caller */
@@ -1168,6 +1172,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 
 	rcu_read_lock();
 
+	/*添加此地址到hash table*/
 	err = ipv6_add_addr_hash(idev->dev, ifa);
 	if (err < 0) {
 		rcu_read_unlock();
@@ -3754,7 +3759,7 @@ static int addrconf_notify(struct notifier_block *this, unsigned long event,
 		/*
 		 *	Remove all addresses from this interface.
 		 */
-		addrconf_ifdown(dev, event != NETDEV_DOWN);
+		addrconf_ifdown(dev, event != NETDEV_DOWN/*标记当前是否为设备移除*/);
 		break;
 
 	case NETDEV_CHANGENAME:
@@ -3818,7 +3823,7 @@ static bool addr_is_local(const struct in6_addr *addr)
 		(IPV6_ADDR_LINKLOCAL | IPV6_ADDR_LOOPBACK);
 }
 
-static int addrconf_ifdown(struct net_device *dev, bool unregister)
+static int addrconf_ifdown(struct net_device *dev, bool unregister/*是否为设备解注册*/)
 {
 	unsigned long event = unregister ? NETDEV_UNREGISTER : NETDEV_DOWN;
 	struct net *net = dev_net(dev);
@@ -3833,7 +3838,7 @@ static int addrconf_ifdown(struct net_device *dev, bool unregister)
 
 	rt6_disable_ip(dev, event);
 
-	idev = __in6_dev_get(dev);
+	idev = __in6_dev_get(dev);/*取此设备对应的inet6_dev*/
 	if (!idev)
 		return -ENODEV;
 
@@ -3857,12 +3862,12 @@ static int addrconf_ifdown(struct net_device *dev, bool unregister)
 	 */
 	if (!unregister && !idev->cnf.disable_ipv6) {
 		/* aggregate the system setting and interface setting */
-		int _keep_addr = net->ipv6.devconf_all->keep_addr_on_down;
+		int _keep_addr = net->ipv6.devconf_all->keep_addr_on_down;/*是否全部设备指明地址保留*/
 
 		if (!_keep_addr)
-			_keep_addr = idev->cnf.keep_addr_on_down;
+			_keep_addr = idev->cnf.keep_addr_on_down;/*是否当前设备指明地址保留*/
 
-		keep_addr = (_keep_addr > 0);
+		keep_addr = (_keep_addr > 0);/*规范化为0/1*/
 	}
 
 	/* Step 2: clear hash table */
@@ -3871,15 +3876,18 @@ static int addrconf_ifdown(struct net_device *dev, bool unregister)
 
 		spin_lock_bh(&net->ipv6.addrconf_hash_lock);
 restart:
+		/*遍历所有ipv6地址*/
 		hlist_for_each_entry_rcu(ifa, h, addr_lst) {
 			if (ifa->idev == idev) {
+				/*设备匹配，停止dad work*/
 				addrconf_del_dad_work(ifa);
 				/* combined flag + permanent flag decide if
 				 * address is retained on a down event
 				 */
-				if (!keep_addr ||
-				    !(ifa->flags & IFA_F_PERMANENT) ||
-				    addr_is_local(&ifa->addr)) {
+				if (!keep_addr/*不保留地址*/ ||
+				    !(ifa->flags & IFA_F_PERMANENT)/*没有permanent标记*/ ||
+				    addr_is_local(&ifa->addr)/*local地址*/) {
+					/*将此地址自list中移除*/
 					hlist_del_init_rcu(&ifa->addr_lst);
 					goto restart;
 				}
@@ -7273,6 +7281,7 @@ static int __net_init addrconf_init_net(struct net *net)
 
 	spin_lock_init(&net->ipv6.addrconf_hash_lock);
 	INIT_DEFERRABLE_WORK(&net->ipv6.addr_chk_work, addrconf_verify_work);
+	/*初始化inet6_addr_lst hashtable*/
 	net->ipv6.inet6_addr_lst = kcalloc(IN6_ADDR_HSIZE,
 					   sizeof(struct hlist_head),
 					   GFP_KERNEL);

@@ -271,6 +271,7 @@ struct ib_uverbs_gid_entry {
 	__u32 gid_index;
 	__u32 port_num;
 	__u32 gid_type;
+	//netdev对应的ifindex
 	__u32 netdev_ifindex; /* It is 0 if there is no netdev associated with it */
 };
 

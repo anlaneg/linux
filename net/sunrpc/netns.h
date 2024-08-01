@@ -7,6 +7,7 @@
 
 struct cache_detail;
 
+/*net ns下sunrpc相关的私有数据*/
 struct sunrpc_net {
 	struct proc_dir_entry *proc_net_rpc;
 	struct cache_detail *ip_map_cache;
@@ -18,7 +19,7 @@ struct sunrpc_net {
 	struct rpc_pipe *gssd_dummy;
 	struct mutex pipefs_sb_lock;
 
-	struct list_head all_clients;
+	struct list_head all_clients;/*保存当前ns下所有client*/
 	spinlock_t rpc_client_lock;
 
 	struct rpc_clnt *rpcb_local_clnt;

@@ -414,11 +414,14 @@ static int svc_uses_rpcbind(struct svc_serv *serv)
 	struct svc_program	*progp;
 	unsigned int		i;
 
+	/*遍历service中所有rpc程序*/
 	for (progp = serv->sv_program; progp; progp = progp->pg_next) {
 		for (i = 0; i < progp->pg_nvers; i++) {
 			if (progp->pg_vers[i] == NULL)
+				/*跳过未指定的版本*/
 				continue;
 			if (!progp->pg_vers[i]->vs_hidden)
+				/*未指明hidden，返回1*/
 				return 1;
 		}
 	}
@@ -459,16 +462,19 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 	unsigned int xdrsize;
 	unsigned int i;
 
+	/*申请service*/
 	if (!(serv = kzalloc(sizeof(*serv), GFP_KERNEL)))
 		return NULL;
-	serv->sv_name      = prog->pg_name;
+
+	/*初始化service*/
+	serv->sv_name      = prog->pg_name;/*设置服务名称*/
 	serv->sv_program   = prog;
 	serv->sv_stats     = prog->pg_stats;
 	if (bufsize > RPCSVC_MAXPAYLOAD)
-		bufsize = RPCSVC_MAXPAYLOAD;
+		bufsize = RPCSVC_MAXPAYLOAD;/*buffer截短*/
 	serv->sv_max_payload = bufsize? bufsize : 4096;
 	serv->sv_max_mesg  = roundup(serv->sv_max_payload + PAGE_SIZE, PAGE_SIZE);
-	serv->sv_threadfn = threadfn;
+	serv->sv_threadfn = threadfn;/*线程函数*/
 	xdrsize = 0;
 	while (prog) {
 		prog->pg_lovers = prog->pg_nvers-1;
@@ -480,6 +486,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 				if (prog->pg_vers[vers]->vs_xdrsize > xdrsize)
 					xdrsize = prog->pg_vers[vers]->vs_xdrsize;
 			}
+		/*遍历程序*/
 		prog = prog->pg_next;
 	}
 	serv->sv_xdrsize   = xdrsize;
@@ -490,6 +497,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 
 	__svc_init_bc(serv);
 
+	/*申请sv_pools数组*/
 	serv->sv_nrpools = npools;
 	serv->sv_pools =
 		kcalloc(serv->sv_nrpools, sizeof(struct svc_pool),
@@ -499,6 +507,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 		return NULL;
 	}
 
+	/*初始化每个pool*/
 	for (i = 0; i < serv->sv_nrpools; i++) {
 		struct svc_pool *pool = &serv->sv_pools[i];
 
@@ -529,6 +538,7 @@ __svc_create(struct svc_program *prog, unsigned int bufsize, int npools,
 struct svc_serv *svc_create(struct svc_program *prog, unsigned int bufsize,
 			    int (*threadfn)(void *data))
 {
+	/*创建rpc service*/
 	return __svc_create(prog, bufsize, 1, threadfn);
 }
 EXPORT_SYMBOL_GPL(svc_create);
@@ -546,8 +556,9 @@ struct svc_serv *svc_create_pooled(struct svc_program *prog,
 				   int (*threadfn)(void *data))
 {
 	struct svc_serv *serv;
-	unsigned int npools = svc_pool_map_get();
+	unsigned int npools = svc_pool_map_get();/*取pool数目*/
 
+	/*创建service*/
 	serv = __svc_create(prog, bufsize, npools, threadfn);
 	if (!serv)
 		goto out_err;
@@ -753,6 +764,7 @@ retry:
 
 found_pool:
 	set_bit(SP_VICTIM_REMAINS, &pool->sp_flags);
+	/*指明svc_thread_should_stop*/
 	set_bit(SP_NEED_VICTIM, &pool->sp_flags);
 	if (!atomic_dec_and_test(&pool->sp_nrthreads))
 		return pool;
@@ -779,6 +791,7 @@ svc_start_kthreads(struct svc_serv *serv, struct svc_pool *pool, int nrservs)
 		rqstp = svc_prepare_thread(serv, chosen_pool, node);
 		if (IS_ERR(rqstp))
 			return PTR_ERR(rqstp);
+		/*创建kthread，指明numa node，此线程负责sv_threadfn函数执行*/
 		task = kthread_create_on_node(serv->sv_threadfn, rqstp,
 					      node, "%s", serv->sv_name);
 		if (IS_ERR(task)) {
@@ -956,7 +969,7 @@ static int __svc_rpcb_register4(struct net *net, const u32 program,
 {
 	const struct sockaddr_in sin = {
 		.sin_family		= AF_INET,
-		.sin_addr.s_addr	= htonl(INADDR_ANY),
+		.sin_addr.s_addr	= htonl(INADDR_ANY),/*绑定0.0.0.0地址*/
 		.sin_port		= htons(port),
 	};
 	const char *netid;
@@ -970,6 +983,7 @@ static int __svc_rpcb_register4(struct net *net, const u32 program,
 		netid = RPCBIND_NETID_TCP;
 		break;
 	default:
+		/*不支持其它协议*/
 		return -ENOPROTOOPT;
 	}
 
@@ -1043,14 +1057,15 @@ static int __svc_rpcb_register6(struct net *net, const u32 program,
  */
 static int __svc_register(struct net *net, const char *progname,
 			  const u32 program, const u32 version,
-			  const int family,
-			  const unsigned short protocol,
+			  const int family/*协议族*/,
+			  const unsigned short protocol/*采用哪种协议(tcp/udp)*/,
 			  const unsigned short port)
 {
-	int error = -EAFNOSUPPORT;
+	int error = -EAFNOSUPPORT;/*不支持其它协议*/
 
 	switch (family) {
 	case PF_INET:
+		/*ipv4注册*/
 		error = __svc_rpcb_register4(net, program, version,
 						protocol, port);
 		break;
@@ -1087,12 +1102,12 @@ int svc_generic_rpcbind_set(struct net *net,
 	int error;
 
 	if (vers == NULL)
-		return 0;
+		return 0;/*此版本对应的程序不存在*/
 
 	if (vers->vs_hidden) {
 		trace_svc_noregister(progp->pg_name, version, proto,
 				     port, family, 0);
-		return 0;
+		return 0;/*此版本不注册*/
 	}
 
 	/*
@@ -1262,6 +1277,8 @@ svc_generic_init_request(struct svc_rqst *rqstp,
 
 	if (rqstp->rq_proc >= versp->vs_nproc)
 		goto err_bad_proc;
+
+	/*通过rqstp->rq_proc确定客户端要调用的过程*/
 	rqstp->rq_procinfo = procp = &versp->vs_proc[rqstp->rq_proc];
 	if (!procp)
 		goto err_bad_proc;

@@ -159,7 +159,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 {
 	static const struct inode_operations empty_iops;/*这种inode的ops函数恒为空*/
 	static const struct file_operations no_open_fops = {.open = no_open};/*这种inod的file ops恒为空（open除外）*/
-	struct address_space *const mapping = &inode->i_data;
+	struct address_space *const mapping = &inode->i_data;/*默认指向i_data*/
 
 	inode->i_sb = sb;
 	inode->i_blkbits = sb->s_blocksize_bits;

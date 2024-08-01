@@ -365,6 +365,7 @@ static inline int bacmp(const bdaddr_t *ba1, const bdaddr_t *ba2)
 }
 static inline void bacpy(bdaddr_t *dst, const bdaddr_t *src)
 {
+	/*地址复制*/
 	memcpy(dst, src, sizeof(bdaddr_t));
 }
 
@@ -480,12 +481,13 @@ struct bt_skb_cb {
 #define hci_skb_event(skb) bt_cb((skb))->hci.req_event
 #define hci_skb_sk(skb) bt_cb((skb))->hci.sk
 
-static inline struct sk_buff *bt_skb_alloc(unsigned int len, gfp_t how)
+static inline struct sk_buff *bt_skb_alloc(unsigned int len/*内容长度*/, gfp_t how)
 {
 	struct sk_buff *skb;
 
 	skb = alloc_skb(len + BT_SKB_RESERVE, how);
 	if (skb)
+		/*申请成功，跳过预留的长度*/
 		skb_reserve(skb, BT_SKB_RESERVE);
 	return skb;
 }
@@ -528,19 +530,23 @@ static inline struct sk_buff *bt_skb_sendmsg(struct sock *sk,
 	size_t size = min_t(size_t, len, mtu);
 	int err;
 
+	/*申请skb*/
 	skb = bt_skb_send_alloc(sk, size + headroom + tailroom,
 				msg->msg_flags & MSG_DONTWAIT, &err);
 	if (!skb)
 		return ERR_PTR(err);
 
+	/*预留headroom*/
 	skb_reserve(skb, headroom);
 	skb_tailroom_reserve(skb, mtu, tailroom);
 
+	/*复制payload*/
 	if (!copy_from_iter_full(skb_put(skb, size), size, &msg->msg_iter)) {
 		kfree_skb(skb);
 		return ERR_PTR(-EFAULT);
 	}
 
+	/*沿用scoket的优先级*/
 	skb->priority = READ_ONCE(sk->sk_priority);
 
 	return skb;

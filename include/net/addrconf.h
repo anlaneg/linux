@@ -157,6 +157,7 @@ static inline void addrconf_addr_eui48(u8 *eui, const char *const addr)
 static inline int addrconf_ifid_eui48(u8 *eui, struct net_device *dev)
 {
 	if (dev->addr_len != ETH_ALEN)
+		/*设备地址必须为以太地址*/
 		return -1;
 
 	/*
@@ -173,12 +174,13 @@ static inline int addrconf_ifid_eui48(u8 *eui, struct net_device *dev)
 	 * scope according to RFC2373.
 	 */
 
-	addrconf_addr_eui48_base(eui, dev->dev_addr);
+	addrconf_addr_eui48_base(eui, dev->dev_addr);/*使用dev mac生成8字节*/
 
 	if (dev->dev_id) {
 		eui[3] = (dev->dev_id >> 8) & 0xFF;
 		eui[4] = dev->dev_id & 0xFF;
 	} else {
+		/*对第一字节的bit1,执行位翻转处理*/
 		eui[0] ^= 2;
 	}
 

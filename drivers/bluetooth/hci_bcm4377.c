@@ -673,12 +673,15 @@ static void bcm4377_handle_event(struct bcm4377_data *bcm4377,
 		payload = ring->payloads + msgid * ring->mapped_payload_size;
 	}
 
+	/*填充skb*/
 	skb = bt_skb_alloc(len, GFP_ATOMIC);
 	if (!skb)
 		goto out;
 
 	memcpy(skb_put(skb, len), payload, len);
-	hci_skb_pkt_type(skb) = type;
+	hci_skb_pkt_type(skb) = type;/*标记skb类别*/
+
+	/*指明自hdev收到skb*/
 	hci_recv_frame(bcm4377->hdev, skb);
 
 out:

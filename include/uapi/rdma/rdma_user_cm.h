@@ -123,10 +123,10 @@ struct rdma_ucm_bind {
 };
 
 struct rdma_ucm_resolve_ip {
-	struct sockaddr_in6 src_addr;
-	struct sockaddr_in6 dst_addr;
+	struct sockaddr_in6 src_addr;/*源地址*/
+	struct sockaddr_in6 dst_addr;/*目的地址*/
 	__u32 id;
-	__u32 timeout_ms;
+	__u32 timeout_ms;/*解析超时时间*/
 };
 
 struct rdma_ucm_resolve_addr {

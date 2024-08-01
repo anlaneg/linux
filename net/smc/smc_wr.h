@@ -96,8 +96,9 @@ static inline int smc_wr_rx_post(struct smc_link *link)
 
 	wr_id = ++link->wr_rx_id; /* tasklet context, thus not atomic */
 	temp_wr_id = wr_id;
-	index = do_div(temp_wr_id, link->wr_rx_cnt);
-	link->wr_rx_ibs[index].wr_id = wr_id;
+	index = do_div(temp_wr_id, link->wr_rx_cnt);/*此函数返回的是余数即wr_rx_ibs中的索引*/
+	link->wr_rx_ibs[index].wr_id = wr_id;/*标记wr编号*/
+	/*设置待接收数据的buffer*/
 	rc = ib_post_recv(link->roce_qp, &link->wr_rx_ibs[index], NULL);
 	return rc;
 }

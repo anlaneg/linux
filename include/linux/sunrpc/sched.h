@@ -23,8 +23,11 @@
  */
 struct rpc_procinfo;
 struct rpc_message {
+	/*记录要调用的rpc proc信息*/
 	const struct rpc_procinfo *rpc_proc;	/* Procedure information */
+	/*记录rpc函数参数*/
 	void *			rpc_argp;	/* Arguments */
+	/*记录rpc响应结果*/
 	void *			rpc_resp;	/* Result */
 	const struct cred *	rpc_cred;	/* Credentials */
 };
@@ -60,7 +63,7 @@ struct rpc_task {
 	 * callback	to be executed after waking up
 	 * action	next procedure for async tasks
 	 */
-	void			(*tk_callback)(struct rpc_task *);
+	void			(*tk_callback)(struct rpc_task *);/*task工作函数*/
 	void			(*tk_action)(struct rpc_task *);
 
 	unsigned long		tk_timeout;	/* timeout for rpc_sleep() */
@@ -75,10 +78,12 @@ struct rpc_task {
 	/*
 	 * RPC call state
 	 */
-	struct rpc_message	tk_msg;		/* RPC call info */
+	struct rpc_message	tk_msg;	/*要执行的rpc消息*/	/* RPC call info */
+	/*回调函数的私有data*/
 	void *			tk_calldata;	/* Caller private data */
 	const struct rpc_call_ops *tk_ops;	/* Caller callbacks */
 
+	/*关联的rpc client*/
 	struct rpc_clnt *	tk_client;	/* RPC client */
 	struct rpc_xprt *	tk_xprt;	/* Transport */
 	struct rpc_cred *	tk_op_cred;	/* cred being operated on */
@@ -110,17 +115,17 @@ struct rpc_call_ops {
 	void (*rpc_call_prepare)(struct rpc_task *, void *);
 	void (*rpc_call_done)(struct rpc_task *, void *);
 	void (*rpc_count_stats)(struct rpc_task *, void *);
-	void (*rpc_release)(void *);
+	void (*rpc_release)(void *);/*回收*/
 };
 
 struct rpc_task_setup {
 	struct rpc_task *task;
-	struct rpc_clnt *rpc_client;
+	struct rpc_clnt *rpc_client;/*指明client*/
 	struct rpc_xprt *rpc_xprt;
 	struct rpc_cred *rpc_op_cred;	/* credential being operated on */
 	const struct rpc_message *rpc_message;
 	const struct rpc_call_ops *callback_ops;
-	void *callback_data;
+	void *callback_data;/*callback私有数据*/
 	struct workqueue_struct *workqueue;
 	unsigned short flags;
 	signed char priority;
@@ -134,6 +139,7 @@ struct rpc_task_setup {
 #define RPC_TASK_MOVEABLE	0x0004		/* nfs4.1+ rpc tasks */
 #define RPC_TASK_NULLCREDS	0x0010		/* Use AUTH_NULL credential */
 #define RPC_CALL_MAJORSEEN	0x0020		/* major timeout seen */
+/*指明当前为动态申请的rpc task*/
 #define RPC_TASK_DYNAMIC	0x0080		/* task was kmalloc'ed */
 #define	RPC_TASK_NO_ROUND_ROBIN	0x0100		/* send requests on "main" xprt */
 #define RPC_TASK_SOFT		0x0200		/* Use soft timeouts */
@@ -154,6 +160,7 @@ struct rpc_task_setup {
 #define RPC_TASK_RUNNING	0
 #define RPC_TASK_QUEUED		1
 #define RPC_TASK_ACTIVE		2
+/*标记request需要发送*/
 #define RPC_TASK_NEED_XMIT	3
 #define RPC_TASK_NEED_RECV	4
 #define RPC_TASK_MSG_PIN_WAIT	5

@@ -177,7 +177,7 @@ static void rdma_restrack_attach_task(struct rdma_restrack_entry *res,
 void rdma_restrack_set_name(struct rdma_restrack_entry *res, const char *caller)
 {
 	if (caller) {
-		res->kern_name = caller;
+		res->kern_name = caller;/*指明调用函数名称*/
 		return;
 	}
 

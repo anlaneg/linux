@@ -754,6 +754,7 @@ struct nfsd4_op {
 	__be32					status;
 	const struct nfsd4_operation		*opdesc;
 	struct nfs4_replay			*replay;
+	/*定义各操作对应的参数*/
 	union nfsd4_op_u {
 		struct nfsd4_access		access;
 		struct nfsd4_close		close;
@@ -841,6 +842,7 @@ struct nfsd4_compoundargs {
 	u32				client_opcnt;
 	u32				opcnt;
 	bool				splice_ok;
+	/*记录操作*/
 	struct nfsd4_op			*ops;
 	struct nfsd4_op			iops[8];
 };

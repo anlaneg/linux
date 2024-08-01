@@ -79,7 +79,7 @@ int ip6_rcv_finish(struct net *net, struct sock *sk, struct sk_buff *skb)
 	/*路由查询*/
 	ip6_rcv_finish_core(net, sk, skb);
 
-	/*按路由进行input投递*/
+	/*按路由input回调进行投递*/
 	return dst_input(skb);
 }
 

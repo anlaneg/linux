@@ -829,6 +829,7 @@ static inline int queue_on_root_worker(struct cgroup_subsys_state *css)
 }
 #endif
 
+/*cmd入队*/
 static void loop_queue_work(struct loop_device *lo, struct loop_cmd *cmd)
 {
 	struct rb_node **node, *parent = NULL;
@@ -894,8 +895,8 @@ queue_work:
 		work = &lo->rootcg_work;
 		cmd_list = &lo->rootcg_cmd_list;
 	}
-	list_add_tail(&cmd->list_entry, cmd_list);
-	queue_work(lo->workqueue, work);
+	list_add_tail(&cmd->list_entry, cmd_list);/*将cmd串在cmd_list上*/
+	queue_work(lo->workqueue, work);/*触发work处理*/
 	spin_unlock_irq(&lo->lo_work_lock);
 }
 
@@ -1984,7 +1985,7 @@ static void loop_rootcg_workfn(struct work_struct *work)
 }
 
 static const struct blk_mq_ops loop_mq_ops = {
-	.queue_rq       = loop_queue_rq,
+	.queue_rq       = loop_queue_rq,/*请求入队*/
 	.complete	= lo_complete_rq,
 };
 
@@ -2082,7 +2083,7 @@ static int loop_add(int i/*设备编号*/)
 	disk->major		= LOOP_MAJOR;
 	disk->first_minor	= i << part_shift;
 	disk->minors		= 1 << part_shift;
-	disk->fops		= &lo_fops;
+	disk->fops		= &lo_fops;/*loop块设备支持的fops*/
 	disk->private_data	= lo;
 	disk->queue		= lo->lo_queue;
 	disk->events		= DISK_EVENT_MEDIA_CHANGE;

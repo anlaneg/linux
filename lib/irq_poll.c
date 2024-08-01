@@ -34,6 +34,7 @@ void irq_poll_sched(struct irq_poll *iop)
 		return;
 
 	local_irq_save(flags);
+	/*添加此iop到链表，并触发irq_poll软中断*/
 	list_add_tail(&iop->list, this_cpu_ptr(&blk_cpu_iopoll));
 	raise_softirq_irqoff(IRQ_POLL_SOFTIRQ);
 	local_irq_restore(flags);
@@ -50,8 +51,9 @@ EXPORT_SYMBOL(irq_poll_sched);
  **/
 static void __irq_poll_complete(struct irq_poll *iop)
 {
-	list_del(&iop->list);
+	list_del(&iop->list);/*将自已自链表上移除*/
 	smp_mb__before_atomic();
+	/*指明无sched标记*/
 	clear_bit_unlock(IRQ_POLL_F_SCHED, &iop->state);
 }
 
@@ -77,12 +79,14 @@ EXPORT_SYMBOL(irq_poll_complete);
 
 static void __latent_entropy irq_poll_softirq(struct softirq_action *h)
 {
+	/*取当前cpu上的所有irq_poll*/
 	struct list_head *list = this_cpu_ptr(&blk_cpu_iopoll);
 	int rearm = 0, budget = irq_poll_budget;
-	unsigned long start_time = jiffies;
+	unsigned long start_time = jiffies;/*软中断开启执行时间*/
 
 	local_irq_disable();
 
+	/*遍历挂接在此list上所有irq_poll*/
 	while (!list_empty(list)) {
 		struct irq_poll *iop;
 		int work, weight;
@@ -91,6 +95,7 @@ static void __latent_entropy irq_poll_softirq(struct softirq_action *h)
 		 * If softirq window is exhausted then punt.
 		 */
 		if (budget <= 0 || time_after(jiffies, start_time)) {
+			/*budget用法或者处理时间片用完，仍有数据，需要再次触发*/
 			rearm = 1;
 			break;
 		}
@@ -107,9 +112,9 @@ static void __latent_entropy irq_poll_softirq(struct softirq_action *h)
 		weight = iop->weight;
 		work = 0;
 		if (test_bit(IRQ_POLL_F_SCHED, &iop->state))
-			work = iop->poll(iop, weight);
+			work = iop->poll(iop, weight);/*触发poll回调*/
 
-		budget -= work;
+		budget -= work;/*budget减少*/
 
 		local_irq_disable();
 
@@ -123,13 +128,16 @@ static void __latent_entropy irq_poll_softirq(struct softirq_action *h)
 		 */
 		if (work >= weight) {
 			if (test_bit(IRQ_POLL_F_DISABLE, &iop->state))
+				/*iop被移除*/
 				__irq_poll_complete(iop);
 			else
+				/*重新加入iop*/
 				list_move_tail(&iop->list, list);
 		}
 	}
 
 	if (rearm)
+		/*再次触发irq poll*/
 		__raise_softirq_irqoff(IRQ_POLL_SOFTIRQ);
 
 	local_irq_enable();
@@ -181,7 +189,7 @@ void irq_poll_init(struct irq_poll *iop, int weight, irq_poll_fn *poll_fn)
 	memset(iop, 0, sizeof(*iop));
 	INIT_LIST_HEAD(&iop->list);
 	iop->weight = weight;
-	iop->poll = poll_fn;
+	iop->poll = poll_fn;/*设置poll回调*/
 }
 EXPORT_SYMBOL(irq_poll_init);
 
@@ -208,9 +216,11 @@ static __init int irq_poll_setup(void)
 {
 	int i;
 
+	/*每个cpu均初始化blk_cpu_iopoll list*/
 	for_each_possible_cpu(i)
 		INIT_LIST_HEAD(&per_cpu(blk_cpu_iopoll, i));
 
+	/*设置iro-poll软中断处理函数*/
 	open_softirq(IRQ_POLL_SOFTIRQ, irq_poll_softirq);
 	cpuhp_setup_state_nocalls(CPUHP_IRQ_POLL_DEAD, "irq_poll:dead", NULL,
 				  irq_poll_cpu_dead);

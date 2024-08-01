@@ -146,7 +146,7 @@ uapi_get_object(struct uverbs_api *uapi, u16 object_id)
 	if (object_id == UVERBS_IDR_ANY_OBJECT)
 		return ERR_PTR(-ENOMSG);
 
-	/*查找此object对应的uverbs_api_object对象*/
+	/*查找object_id对应的uverbs_api_object对象*/
 	res = radix_tree_lookup(&uapi->radix, uapi_key_obj(object_id));
 	if (!res)
 		return ERR_PTR(-ENOENT);

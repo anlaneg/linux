@@ -35,7 +35,7 @@ static struct dst_entry *rxe_find_route4(struct rxe_qp *qp,
 	memcpy(&fl.daddr, daddr, sizeof(*daddr));/*目的地址*/
 	fl.flowi4_proto = IPPROTO_UDP;/*指定udp协议*/
 
-	/*路由查询*/
+	/*路由查询（查init_net)*/
 	rt = ip_route_output_key(&init_net, &fl);
 	if (IS_ERR(rt)) {
 		rxe_dbg_qp(qp, "no route to %pI4\n", &daddr->s_addr);
@@ -115,11 +115,13 @@ static struct dst_entry *rxe_find_route(struct net_device *ndev,
 			/*路由项*/
 			dst = rxe_find_route4(qp, ndev, saddr, daddr);
 		} else if (av->network_type == RXE_NETWORK_TYPE_IPV6) {
+			/*取av中的源地址/目的地址*/
 			struct in6_addr *saddr6;
 			struct in6_addr *daddr6;
 
 			saddr6 = &av->sgid_addr._sockaddr_in6.sin6_addr;
 			daddr6 = &av->dgid_addr._sockaddr_in6.sin6_addr;
+			/*查询路由项*/
 			dst = rxe_find_route6(qp, ndev, saddr6, daddr6);
 #if IS_ENABLED(CONFIG_IPV6)
 			if (dst)
@@ -130,6 +132,7 @@ static struct dst_entry *rxe_find_route(struct net_device *ndev,
 
 		if (dst && (qp_type(qp) == IB_QPT_RC)) {
 			dst_hold(dst);
+			/*保存查询到的路由项*/
 			sk_dst_set(qp->sk->sk, dst);
 		}
 	}
@@ -172,7 +175,7 @@ static int rxe_udp_encap_recv(struct sock *sk, struct sk_buff *skb)
 	pkt->paylen = be16_to_cpu(udph->len) - sizeof(*udph);
 
 	/* remove udp header */
-	skb_pull(skb, sizeof(struct udphdr));
+	skb_pull(skb, sizeof(struct udphdr));/*移除udp header*/
 
 	/*roce收到报文*/
 	rxe_rcv(skb);
@@ -221,6 +224,7 @@ static void rxe_release_udp_tunnel(struct socket *sk)
 		udp_tunnel_sock_release(sk);
 }
 
+/*初始化udp header*/
 static void prepare_udp_hdr(struct sk_buff *skb, __be16 src_port,
 			    __be16 dst_port)
 {
@@ -237,8 +241,8 @@ static void prepare_udp_hdr(struct sk_buff *skb, __be16 src_port,
 }
 
 static void prepare_ipv4_hdr(struct dst_entry *dst, struct sk_buff *skb,
-			     __be32 saddr, __be32 daddr, __u8 proto,
-			     __u8 tos, __u8 ttl, __be16 df, bool xnet)
+			     __be32 saddr/*源地址*/, __be32 daddr/*目的地址*/, __u8 proto/*ip层协议号*/,
+			     __u8 tos/*ip层tos取值*/, __u8 ttl/*ip层ttl取值*/, __be16 df/*分片offset*/, bool xnet)
 {
 	struct iphdr *iph;
 
@@ -248,6 +252,7 @@ static void prepare_ipv4_hdr(struct dst_entry *dst, struct sk_buff *skb,
 	skb_dst_set(skb, dst_clone(dst));
 	memset(IPCB(skb), 0, sizeof(*IPCB(skb)));
 
+	/*增加ip header*/
 	skb_push(skb, sizeof(struct iphdr));
 	skb_reset_network_header(skb);
 
@@ -262,6 +267,7 @@ static void prepare_ipv4_hdr(struct dst_entry *dst, struct sk_buff *skb,
 	iph->daddr	=	daddr;
 	iph->saddr	=	saddr;
 	iph->ttl	=	ttl;
+	/*生成并填充ip层id号*/
 	__ip_select_ident(dev_net(dst->dev), iph,
 			  skb_shinfo(skb)->gso_segs ?: 1);
 }
@@ -293,7 +299,7 @@ static void prepare_ipv6_hdr(struct dst_entry *dst, struct sk_buff *skb,
 static int prepare4(struct rxe_av *av, struct rxe_pkt_info *pkt,
 		    struct sk_buff *skb)
 {
-	struct rxe_qp *qp = pkt->qp;
+	struct rxe_qp *qp = pkt->qp;/*取从属的qp*/
 	struct dst_entry *dst;
 	bool xnet = false;
 	__be16 df = htons(IP_DF);
@@ -344,20 +350,20 @@ static int prepare6(struct rxe_av *av, struct rxe_pkt_info *pkt,
 	return 0;
 }
 
-/*填充ip头部*/
+/*填充ip头部，udp头部*/
 int rxe_prepare(struct rxe_av *av, struct rxe_pkt_info *pkt,
 		struct sk_buff *skb)
 {
 	int err = 0;
 
 	if (skb->protocol == htons(ETH_P_IP))
-		err = prepare4(av, pkt, skb);
+		err = prepare4(av, pkt, skb);/*填充ip,udp层*/
 	else if (skb->protocol == htons(ETH_P_IPV6))
 		err = prepare6(av, pkt, skb);
 
 	/*检查出接口对应的mac是否与rxe_get_av(pkt)->dmac)相同*/
 	if (ether_addr_equal(skb->dev->dev_addr, av->dmac))
-		pkt->mask |= RXE_LOOPBACK_MASK;
+		pkt->mask |= RXE_LOOPBACK_MASK;/*loopback流量*/
 
 	return err;
 }
@@ -403,6 +409,7 @@ static int rxe_send(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 		return -EINVAL;
 	}
 
+	/*检查发送返回值*/
 	if (unlikely(net_xmit_eval(err))) {
 		rxe_dbg_qp(pkt->qp, "error sending packet: %d\n", err);
 		return -EAGAIN;
@@ -424,13 +431,14 @@ static int rxe_loopback(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	else
 		skb_pull(skb, sizeof(struct ipv6hdr));
 
+	/*增加引用失败*/
 	if (WARN_ON(!ib_device_try_get(&pkt->rxe->ib_dev))) {
 		kfree_skb(skb);
 		return -EIO;
 	}
 
 	/* remove udp header */
-	skb_pull(skb, sizeof(struct udphdr));
+	skb_pull(skb, sizeof(struct udphdr));/*移除udp header*/
 
 	/*走rocev2收包函数*/
 	rxe_rcv(skb);
@@ -514,6 +522,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 		rcu_read_unlock();
 		goto out;
 	}
+
 	/*申请skb*/
 	skb = alloc_skb(paylen + hdr_len + LL_RESERVED_SPACE(ndev),
 			GFP_ATOMIC);
@@ -527,7 +536,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 	skb_reserve(skb, hdr_len + LL_RESERVED_SPACE(ndev));
 
 	/* FIXME: hold reference to this netdev until life of this skb. */
-	/*skb对应的dev*/
+	/*指明skb对应的dev*/
 	skb->dev	= ndev;
 	rcu_read_unlock();
 
@@ -540,7 +549,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 	/*packet对应的rxe设备*/
 	pkt->rxe	= rxe;
 	pkt->port_num	= port_num;
-	pkt->hdr	= skb_put(skb, paylen);
+	pkt->hdr	= skb_put(skb, paylen);/*使pkt->hdr指向bth头*/
 	pkt->mask	|= RXE_GRH_MASK;
 
 out:

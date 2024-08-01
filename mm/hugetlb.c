@@ -4191,6 +4191,7 @@ static ssize_t surplus_hugepages_show(struct kobject *kobj,
 	if (nid == NUMA_NO_NODE)
 		surplus_huge_pages = h->surplus_huge_pages;
 	else
+		/*显示此node上surplus*/
 		surplus_huge_pages = h->surplus_huge_pages_node[nid];
 
 	return sysfs_emit(buf, "%lu\n", surplus_huge_pages);

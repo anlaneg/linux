@@ -734,7 +734,7 @@ static inline __alloc_size(1) void *kzalloc(size_t size, gfp_t flags)
  * @node: memory node from which to allocate
  */
 //自指定的内存node上申请内存(内存须为全零）
-static inline __alloc_size(1) void *kzalloc_node(size_t size, gfp_t flags, int node)
+static inline __alloc_size(1) void *kzalloc_node(size_t size, gfp_t flags, int node/*在哪个node上申请内存*/)
 {
 	return kmalloc_node(size, flags | __GFP_ZERO, node);
 }

@@ -238,7 +238,7 @@ getname_kernel(const char * filename)
 	struct filename *result;
 	int len = strlen(filename) + 1;/*文件路径名称长度*/
 
-	//获取一个filename对象
+	//申请一个filename对象
 	result = __getname();
 	if (unlikely(!result))
 		return ERR_PTR(-ENOMEM);
@@ -247,7 +247,7 @@ getname_kernel(const char * filename)
 		/*文件路径名称较短，采用inner name方式存储*/
 		result->name = (char *)result->iname;
 	} else if (len <= PATH_MAX) {
-		/*文件路径名称较长，采用单独申请独立空间的方式存放名称*/
+		/*文件路径名称较长，另申请一个filename,采用单独申请独立空间的方式存放名称*/
 		const size_t size = offsetof(struct filename, iname[1]);
 		struct filename *tmp;
 
@@ -256,10 +256,11 @@ getname_kernel(const char * filename)
 			__putname(result);
 			return ERR_PTR(-ENOMEM);
 		}
+		/*将原来的filename对象存path*/
 		tmp->name = (char *)result;
 		result = tmp;
 	} else {
-		/*文件路径名称长度较长，我们实在搞不定，报错*/
+		/*文件路径名称长度过长，我们实在搞不定，报错*/
 		__putname(result);
 		return ERR_PTR(-ENAMETOOLONG);
 	}
@@ -609,7 +610,7 @@ struct nameidata {
 		const char *name;
 		unsigned seq;
 	} *stack, internal[EMBEDDED_LEVELS];
-	//待解析文件路径名称
+	//待解析文件路径及名称
 	struct filename	*name;
 	//临时保存的nameidata,处理完成后需要还原
 	struct nameidata *saved;
@@ -628,7 +629,7 @@ struct nameidata {
 #define ND_JUMPED 4
 
 //构造并设置进程的nameidata
-static void __set_nameidata(struct nameidata *p, int dfd, struct filename *name)
+static void __set_nameidata(struct nameidata *p, int dfd/*锚点*/, struct filename *name/*文件路径*/)
 {
 	struct nameidata *old = current->nameidata;
 	//使stack指向p->internal
@@ -636,8 +637,8 @@ static void __set_nameidata(struct nameidata *p, int dfd, struct filename *name)
 	p->depth = 0;
 	p->dfd = dfd;
 	p->name = name;
-	p->path.mnt = NULL;
-	p->path.dentry = NULL;
+	p->path.mnt = NULL;/*挂载点为空*/
+	p->path.dentry = NULL;/*路径分配对应的dentry为空*/
 	p->total_link_count = old ? old->total_link_count : 0;
 	//记录进程上一个nameidata
 	p->saved = old;
@@ -4132,9 +4133,10 @@ out:
 	return dentry;
 }
 
-struct dentry *kern_path_create(int dfd, const char *pathname,
-				struct path *path, unsigned int lookup_flags)
+struct dentry *kern_path_create(int dfd/*锚点*/, const char *pathname,
+				struct path *path/*出参，将pathnanme相对于dfd解析为path*/, unsigned int lookup_flags)
 {
+	/*申请filename保存文件路径*/
 	struct filename *filename = getname_kernel(pathname);
 	struct dentry *res = filename_create(dfd, filename, path, lookup_flags);
 

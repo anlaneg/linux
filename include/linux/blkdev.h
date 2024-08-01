@@ -425,7 +425,7 @@ struct request_queue {
 	 * ida allocated id for this queue.  Used to index queues from
 	 * ioctx.
 	 */
-	int			id;
+	int			id;/*队列id,来源于：blk_queue_ida*/
 
 	unsigned int		dma_pad_mask;
 
@@ -1359,6 +1359,7 @@ enum blk_unique_id {
 
 struct block_device_operations {
 	void (*submit_bio)(struct bio *bio);
+	/*此操作不为空时，支持多队列*/
 	int (*poll_bio)(struct bio *bio, struct io_comp_batch *iob,
 			unsigned int flags);
 	int (*open)(struct gendisk *disk, blk_mode_t mode);

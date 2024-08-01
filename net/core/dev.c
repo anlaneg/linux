@@ -5869,7 +5869,7 @@ static int __netif_receive_skb_one_core(struct sk_buff *skb, bool pfmemalloc)
 
 	ret = __netif_receive_skb_core(&skb, pfmemalloc, &pt_prev);
 	if (pt_prev)
-		//处理最后一项的handle
+		//处理最后一项的handle（按ethtype处理）
 		ret = INDIRECT_CALL_INET(pt_prev->func, ipv6_rcv, ip_rcv, skb,
 					 skb->dev, pt_prev, orig_dev);
 	return ret;
@@ -8220,7 +8220,7 @@ int netdev_upper_dev_link(struct net_device *dev,
 		.data = NULL,
 	};
 
-    //为dev添加upper设备
+    //为dev添加upper设备，触发upper事件
 	return __netdev_upper_dev_link(dev, upper_dev, false/*非master设备*/,
 				       NULL, NULL, &priv, extack);
 }
@@ -10583,6 +10583,7 @@ void netif_tx_stop_all_queues(struct net_device *dev)
 }
 EXPORT_SYMBOL(netif_tx_stop_all_queues);
 
+/*申请netdev需要的统计计数结构体*/
 static int netdev_do_alloc_pcpu_stats(struct net_device *dev)
 {
 	void __percpu *v;
@@ -10640,7 +10641,7 @@ static void netdev_do_free_pcpu_stats(struct net_device *dev)
  * Callers must hold the rtnl lock - you may want register_netdev()
  * instead of this.
  */
-//为系统添加网络设备
+//为系统注册新的网络设备
 int register_netdevice(struct net_device *dev)
 {
 	int ret;
@@ -10692,19 +10693,21 @@ int register_netdevice(struct net_device *dev)
 	     NETIF_F_HW_VLAN_CTAG_FILTER) &&
 	    (!dev->netdev_ops->ndo_vlan_rx_add_vid ||
 	     !dev->netdev_ops->ndo_vlan_rx_kill_vid)) {
+		/*检查：有相应flag,但没有提供相应回调，报错*/
 		netdev_WARN(dev, "Buggy VLAN acceleration in driver!\n");
 		ret = -EINVAL;
 		goto err_uninit;
 	}
 
-	//如果未指定ifidex，则为其申请ifindex
+	/*申请netdev需要的统计计数结构体*/
 	ret = netdev_do_alloc_pcpu_stats(dev);
 	if (ret)
-		//有ifindex情况下，由于是创建设备，故此ifindex不能被占用
 		goto err_uninit;
 
+	//如果未指定ifidex，则为其申请ifindex
 	ret = dev_index_reserve(net, dev->ifindex);
 	if (ret < 0)
+		//有ifindex情况下，由于是创建设备，故此ifindex不能被占用
 		goto err_free_pcpu;
 	dev->ifindex = ret;
 

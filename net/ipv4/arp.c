@@ -467,7 +467,7 @@ static int arp_accept(struct in_device *in_dev, __be32 sip)
 		 * is in the same subnet as an address configured
 		 * on the interface that received the garp message
 		 */
-		return !!inet_confirm_addr(net, in_dev, sip, 0, scope);
+		return !!inet_confirm_addr(net, in_dev, sip, 0, scope);/*确保在同一网段*/
 	default:
 		return 0;
 	}

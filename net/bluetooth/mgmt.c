@@ -44,6 +44,7 @@
 #define MGMT_VERSION	1
 #define MGMT_REVISION	22
 
+/*mgmt trust socket支持的commands*/
 static const u16 mgmt_commands[] = {
 	MGMT_OP_READ_INDEX_LIST,
 	MGMT_OP_READ_INFO,
@@ -135,6 +136,7 @@ static const u16 mgmt_commands[] = {
 	MGMT_OP_MESH_SEND_CANCEL,
 };
 
+/*mgmt trust socket支持的events*/
 static const u16 mgmt_events[] = {
 	MGMT_EV_CONTROLLER_ERROR,
 	MGMT_EV_INDEX_ADDED,
@@ -182,6 +184,7 @@ static const u16 mgmt_events[] = {
 	MGMT_EV_ADV_MONITOR_DEVICE_LOST,
 };
 
+/*mgmt untrusted 支持的commands*/
 static const u16 mgmt_untrusted_commands[] = {
 	MGMT_OP_READ_INDEX_LIST,
 	MGMT_OP_READ_INFO,
@@ -195,6 +198,7 @@ static const u16 mgmt_untrusted_commands[] = {
 	MGMT_OP_READ_DEF_RUNTIME_CONFIG,
 };
 
+/*mgmt untrusted 支持的events*/
 static const u16 mgmt_untrusted_events[] = {
 	MGMT_EV_INDEX_ADDED,
 	MGMT_EV_INDEX_REMOVED,
@@ -371,6 +375,7 @@ static int read_version(struct sock *sk, struct hci_dev *hdev, void *data,
 
 	bt_dev_dbg(hdev, "sock %p", sk);
 
+	/*填写主版本及修订版本*/
 	mgmt_fill_version_info(&rp);
 
 	/*向此socket响应此response*/
@@ -378,6 +383,7 @@ static int read_version(struct sock *sk, struct hci_dev *hdev, void *data,
 				 &rp, sizeof(rp));
 }
 
+/*获取支持的commands/event及其对应opcode*/
 static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 			 u16 data_len)
 {
@@ -396,6 +402,7 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 		num_events = ARRAY_SIZE(mgmt_untrusted_events);/*untrusted模式支持的事件数*/
 	}
 
+	/*申请并填充*/
 	rp_size = sizeof(*rp) + ((num_commands + num_events) * sizeof(u16));
 
 	rp = kmalloc(rp_size, GFP_KERNEL);
@@ -403,9 +410,10 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 		return -ENOMEM;
 
 	rp->num_commands = cpu_to_le16(num_commands);/*响应commands总数*/
-	rp->num_events = cpu_to_le16(num_events);
+	rp->num_events = cpu_to_le16(num_events);/*响应event总数*/
 
 	if (hci_sock_test_flag(sk, HCI_SOCK_TRUSTED)) {
+		/*仅针对trusted socket*/
 		__le16 *opcode = rp->opcodes;
 
 		/*响应各command对应的opcode*/
@@ -416,6 +424,7 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 		for (i = 0; i < num_events; i++, opcode++)
 			put_unaligned_le16(mgmt_events[i], opcode);
 	} else {
+		/*仅针对untrusted socket*/
 		__le16 *opcode = rp->opcodes;
 
 		for (i = 0; i < num_commands; i++, opcode++)
@@ -425,6 +434,7 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 			put_unaligned_le16(mgmt_untrusted_events[i], opcode);
 	}
 
+	/*回传给用户态*/
 	err = mgmt_cmd_complete(sk, MGMT_INDEX_NONE, MGMT_OP_READ_COMMANDS, 0,
 				rp, rp_size);
 	kfree(rp);
@@ -432,6 +442,7 @@ static int read_commands(struct sock *sk, struct hci_dev *hdev, void *data,
 	return err;
 }
 
+/*响应MGMT_OP_READ_INDEX_LIST command*/
 static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 			   u16 data_len)
 {
@@ -446,6 +457,7 @@ static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 	read_lock(&hci_dev_list_lock);
 
 	count = 0;
+	/*遍历所有hci设备，针对unconfigured的primary设备，进行计数*/
 	list_for_each_entry(d, &hci_dev_list, list) {
 		if (d->dev_type == HCI_PRIMARY &&
 		    !hci_dev_test_flag(d, HCI_UNCONFIGURED))
@@ -474,11 +486,13 @@ static int read_index_list(struct sock *sk, struct hci_dev *hdev, void *data,
 
 		if (d->dev_type == HCI_PRIMARY &&
 		    !hci_dev_test_flag(d, HCI_UNCONFIGURED)) {
+			/*填写primary设备唯一编号*/
 			rp->index[count++] = cpu_to_le16(d->id);
 			bt_dev_dbg(hdev, "Added hci%u", d->id);
 		}
 	}
 
+	/*指明controller数量，并指出controller的index*/
 	rp->num_controllers = cpu_to_le16(count);
 	rp_len = sizeof(*rp) + (2 * count);
 
@@ -821,6 +835,7 @@ static u32 get_configurable_phys(struct hci_dev *hdev)
 		~MGMT_PHY_LE_1M_TX & ~MGMT_PHY_LE_1M_RX);
 }
 
+/*返回设备支持的能力*/
 static u32 get_supported_settings(struct hci_dev *hdev)
 {
 	u32 settings = 0;
@@ -828,8 +843,8 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 	settings |= MGMT_SETTING_POWERED;
 	settings |= MGMT_SETTING_BONDABLE;
 	settings |= MGMT_SETTING_DEBUG_KEYS;
-	settings |= MGMT_SETTING_CONNECTABLE;
-	settings |= MGMT_SETTING_DISCOVERABLE;
+	settings |= MGMT_SETTING_CONNECTABLE;/*可连接*/
+	settings |= MGMT_SETTING_DISCOVERABLE;/*可发现*/
 
 	if (lmp_bredr_capable(hdev)) {
 		if (hdev->hci_ver >= BLUETOOTH_VER_1_2)
@@ -874,6 +889,7 @@ static u32 get_supported_settings(struct hci_dev *hdev)
 	return settings;
 }
 
+/*返回设备的当前设置*/
 static u32 get_current_settings(struct hci_dev *hdev)
 {
 	u32 settings = 0;
@@ -1154,7 +1170,7 @@ static void mgmt_init_hdev(struct sock *sk, struct hci_dev *hdev)
 	hci_dev_set_flag(hdev, HCI_MGMT);
 }
 
-/*请求读取指定设备hdev的info信息*/
+/*请求读取指定设备hdev的info信息(通过MGMT_OP_READ_INFO）*/
 static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 				void *data, u16 data_len)
 {
@@ -1172,6 +1188,7 @@ static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 	rp.version = hdev->hci_ver;
 	rp.manufacturer = cpu_to_le16(hdev->manufacturer);
 
+	/*返回设备支持的setting和已设置的setting*/
 	rp.supported_settings = cpu_to_le32(get_supported_settings(hdev));
 	rp.current_settings = cpu_to_le32(get_current_settings(hdev));
 
@@ -1183,6 +1200,7 @@ static int read_controller_info(struct sock *sk, struct hci_dev *hdev,
 
 	hci_dev_unlock(hdev);
 
+	/*向用户态响应*/
 	return mgmt_cmd_complete(sk, hdev->id, MGMT_OP_READ_INFO, 0, &rp,
 				 sizeof(rp));
 }
@@ -4448,7 +4466,9 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 		else
 			flags = 0;
 
+		/*设置功能对应的uuid*/
 		memcpy(rp->features[idx].uuid, le_simultaneous_roles_uuid, 16);
+		/*功能对应的flags*/
 		rp->features[idx].flags = cpu_to_le32(flags);
 		idx++;
 	}
@@ -4505,6 +4525,7 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 		idx++;
 	}
 
+	/*指明功能数目*/
 	rp->feature_count = cpu_to_le16(idx);
 
 	/* After reading the experimental features information, enable
@@ -4512,6 +4533,7 @@ static int read_exp_features_info(struct sock *sk, struct hci_dev *hdev,
 	 */
 	hci_sock_set_flag(sk, HCI_MGMT_EXP_FEATURE_EVENTS);
 
+	/*向应给用户态*/
 	status = mgmt_cmd_complete(sk, hdev ? hdev->id : MGMT_INDEX_NONE,
 				   MGMT_OP_READ_EXP_FEATURES_INFO,
 				   0, rp, sizeof(*rp) + (20 * idx));
@@ -4654,6 +4676,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 
 	/* Command requires to use the controller index */
 	if (!hdev)
+		/*hdev不存在*/
 		return mgmt_cmd_status(sk, MGMT_INDEX_NONE,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_INVALID_INDEX);
@@ -4666,6 +4689,7 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 
 	/* Only boolean on/off is supported */
 	if (cp->param[0] != 0x00 && cp->param[0] != 0x01)
+		/*只支持true/false两种操作*/
 		return mgmt_cmd_status(sk, hdev->id,
 				       MGMT_OP_SET_EXP_FEATURE,
 				       MGMT_STATUS_INVALID_PARAMS);
@@ -4673,14 +4697,17 @@ static int set_mgmt_mesh_func(struct sock *sk, struct hci_dev *hdev,
 	val = !!cp->param[0];
 
 	if (val) {
+		/*设置mesh开启*/
 		changed = !hci_dev_test_and_set_flag(hdev,
 						     HCI_MESH_EXPERIMENTAL);
 	} else {
+		/*设置mesh关闭*/
 		hci_dev_clear_flag(hdev, HCI_MESH);
 		changed = hci_dev_test_and_clear_flag(hdev,
 						      HCI_MESH_EXPERIMENTAL);
 	}
 
+	/*执行响应*/
 	memcpy(rp.uuid, mgmt_mesh_uuid, 16);
 	rp.flags = cpu_to_le32(val ? BIT(0) : 0);
 
@@ -5002,6 +5029,7 @@ static int set_iso_socket_func(struct sock *sk, struct hci_dev *hdev,
 }
 #endif
 
+/*当前支持的功能set列表*/
 static const struct mgmt_exp_feature {
 	const u8 *uuid;
 	int (*set_func)(struct sock *sk, struct hci_dev *hdev,
@@ -5033,7 +5061,8 @@ static int set_exp_feature(struct sock *sk, struct hci_dev *hdev,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	for (i = 0; exp_features[i].uuid; i++) {
-		if (!memcmp(cp->uuid, exp_features[i].uuid, 16))
+		if (!memcmp(cp->uuid, exp_features[i].uuid/*用户指定的功能uuid*/, 16))
+			/*匹配成功，调用相应的set函数*/
 			return exp_features[i].set_func(sk, hdev, cp, data_len);
 	}
 
@@ -5121,6 +5150,7 @@ static void device_flags_changed(struct sock *sk, struct hci_dev *hdev,
 	ev.supported_flags = cpu_to_le32(supported_flags);
 	ev.current_flags = cpu_to_le32(current_flags);
 
+	/*告知用户态设备flags发生变更*/
 	mgmt_event(MGMT_EV_DEVICE_FLAGS_CHANGED, hdev, &ev, sizeof(ev), sk);
 }
 
@@ -5194,6 +5224,7 @@ unlock:
 
 done:
 	if (status == MGMT_STATUS_SUCCESS)
+		/*设备flags变更成功*/
 		device_flags_changed(sk, hdev, &cp->addr.bdaddr, cp->addr.type,
 				     supported_flags, current_flags);
 
@@ -5508,8 +5539,10 @@ static void mgmt_remove_adv_monitor_complete(struct hci_dev *hdev,
 	if (!status)
 		hci_update_passive_scan(hdev);
 
+	/*响应执行结果*/
 	mgmt_cmd_complete(cmd->sk, cmd->index, cmd->opcode,
 			  mgmt_status(status), &rp, sizeof(rp));
+	/*cmd已执行完成，将其自pending链表上移除*/
 	mgmt_pending_remove(cmd);
 
 	hci_dev_unlock(hdev);
@@ -5524,8 +5557,10 @@ static int mgmt_remove_adv_monitor_sync(struct hci_dev *hdev, void *data)
 	u16 handle = __le16_to_cpu(cp->monitor_handle);
 
 	if (!handle)
+		/*未指定handle，则移除所有monitor*/
 		return hci_remove_all_adv_monitor(hdev);
 
+	/*指定了handle,移除对应的monitor*/
 	return hci_remove_single_adv_monitor(hdev, handle);
 }
 
@@ -5541,16 +5576,19 @@ static int remove_adv_monitor(struct sock *sk, struct hci_dev *hdev,
 	    pending_find(MGMT_OP_REMOVE_ADV_MONITOR, hdev) ||
 	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR, hdev) ||
 	    pending_find(MGMT_OP_ADD_ADV_PATTERNS_MONITOR_RSSI, hdev)) {
+		/*不得有以上pending操作*/
 		status = MGMT_STATUS_BUSY;
 		goto unlock;
 	}
 
+	/*添加pending操作MGMT_OP_REMOVE_ADV_MONITOR*/
 	cmd = mgmt_pending_add(sk, MGMT_OP_REMOVE_ADV_MONITOR, hdev, data, len);
 	if (!cmd) {
 		status = MGMT_STATUS_NO_RESOURCES;
 		goto unlock;
 	}
 
+	/*具体执行此请求，这里加入队列按序处理回调*/
 	err = hci_cmd_sync_queue(hdev, mgmt_remove_adv_monitor_sync, cmd,
 				 mgmt_remove_adv_monitor_complete);
 
@@ -6526,6 +6564,7 @@ unlock:
 	return err;
 }
 
+/*用户态为全0地址的蓝牙设备配置地址*/
 static int set_static_address(struct sock *sk, struct hci_dev *hdev,
 			      void *data, u16 len)
 {
@@ -6535,21 +6574,25 @@ static int set_static_address(struct sock *sk, struct hci_dev *hdev,
 	bt_dev_dbg(hdev, "sock %p", sk);
 
 	if (!lmp_le_capable(hdev))
+		/*这类设备不支持设置静态地址*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_STATIC_ADDRESS,
 				       MGMT_STATUS_NOT_SUPPORTED);
 
 	if (hdev_is_powered(hdev))
+		/*拒绝为powered的设备设置静态地址*/
 		return mgmt_cmd_status(sk, hdev->id, MGMT_OP_SET_STATIC_ADDRESS,
 				       MGMT_STATUS_REJECTED);
 
 	if (bacmp(&cp->bdaddr, BDADDR_ANY)) {
 		if (!bacmp(&cp->bdaddr, BDADDR_NONE))
+			/*拒绝广播地址*/
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_SET_STATIC_ADDRESS,
 					       MGMT_STATUS_INVALID_PARAMS);
 
 		/* Two most significant bits shall be set */
 		if ((cp->bdaddr.b[5] & 0xc0) != 0xc0)
+			/*设置的静态地址必须满足此条件*/
 			return mgmt_cmd_status(sk, hdev->id,
 					       MGMT_OP_SET_STATIC_ADDRESS,
 					       MGMT_STATUS_INVALID_PARAMS);
@@ -6559,6 +6602,7 @@ static int set_static_address(struct sock *sk, struct hci_dev *hdev,
 
 	bacpy(&hdev->static_addr, &cp->bdaddr);
 
+	/*更新设备的地址前进行响应*/
 	err = send_settings_rsp(sk, MGMT_OP_SET_STATIC_ADDRESS, hdev);
 	if (err < 0)
 		goto unlock;
@@ -7740,6 +7784,7 @@ static int add_device(struct sock *sk, struct hci_dev *hdev,
 added:
 	device_added(sk, hdev, &cp->addr.bdaddr, cp->addr.type, cp->action);
 	supported_flags = hdev->conn_flags;
+	/*知会用户态flags变更*/
 	device_flags_changed(NULL, hdev, &cp->addr.bdaddr, cp->addr.type,
 			     supported_flags, current_flags);
 
@@ -9268,13 +9313,14 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ read_commands,           MGMT_READ_COMMANDS_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
+	/*读取未配置的HCI_PRIMARY类设备数目及其对应index*/
 	{ read_index_list,         MGMT_READ_INDEX_LIST_SIZE,
 						HCI_MGMT_NO_HDEV |
 						HCI_MGMT_UNTRUSTED },
 	/*请求读取指定设备的info信息*/
 	{ read_controller_info,    MGMT_READ_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED },
-						/*处理powered设置*/
+	/*处理powered设置*/
 	{ set_powered,             MGMT_SETTING_SIZE },
 	{ set_discoverable,        MGMT_SET_DISCOVERABLE_SIZE },
 	{ set_connectable,         MGMT_SETTING_SIZE },
@@ -9361,9 +9407,11 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ set_wideband_speech,	   MGMT_SETTING_SIZE },
 	{ read_controller_cap,     MGMT_READ_CONTROLLER_CAP_SIZE,
 						HCI_MGMT_UNTRUSTED },
+	/*读取扩展功能*/
 	{ read_exp_features_info,  MGMT_READ_EXP_FEATURES_INFO_SIZE,
 						HCI_MGMT_UNTRUSTED |
 						HCI_MGMT_HDEV_OPTIONAL },
+	/*用户态配置扩展功能*/
 	{ set_exp_feature,         MGMT_SET_EXP_FEATURE_SIZE,
 						HCI_MGMT_VAR_LEN |
 						HCI_MGMT_HDEV_OPTIONAL },
@@ -9380,6 +9428,7 @@ static const struct hci_mgmt_handler mgmt_handlers[] = {
 	{ read_adv_mon_features,   MGMT_READ_ADV_MONITOR_FEATURES_SIZE },
 	{ add_adv_patterns_monitor,MGMT_ADD_ADV_PATTERNS_MONITOR_SIZE,
 						HCI_MGMT_VAR_LEN },
+	/*移除hci设备的adv_monitor*/
 	{ remove_adv_monitor,      MGMT_REMOVE_ADV_MONITOR_SIZE },
 	{ add_ext_adv_params,      MGMT_ADD_EXT_ADV_PARAMS_MIN_SIZE,
 						HCI_MGMT_VAR_LEN },
@@ -9410,6 +9459,7 @@ void mgmt_index_added(struct hci_dev *hdev)
 					 NULL, 0, HCI_MGMT_UNCONF_INDEX_EVENTS);
 			ev.type = 0x01;
 		} else {
+			/*构造并发送MGMT_EV_INDEX_ADDED事件*/
 			mgmt_index_event(MGMT_EV_INDEX_ADDED, hdev, NULL, 0,
 					 HCI_MGMT_INDEX_EVENTS);
 			ev.type = 0x00;
@@ -9445,6 +9495,7 @@ void mgmt_index_removed(struct hci_dev *hdev)
 					 NULL, 0, HCI_MGMT_UNCONF_INDEX_EVENTS);
 			ev.type = 0x01;
 		} else {
+			/*构造并发送MGMT_EV_INDEX_REMOVED事件*/
 			mgmt_index_event(MGMT_EV_INDEX_REMOVED, hdev, NULL, 0,
 					 HCI_MGMT_INDEX_EVENTS);
 			ev.type = 0x00;
@@ -10538,22 +10589,23 @@ void mgmt_resuming(struct hci_dev *hdev, u8 reason, bdaddr_t *bdaddr,
 	mgmt_event(MGMT_EV_CONTROLLER_RESUME, hdev, &ev, sizeof(ev), NULL);
 }
 
-/*control类型的channel*/
+/*control类型的mgmt channel*/
 static struct hci_mgmt_chan chan = {
 	.channel	= HCI_CHANNEL_CONTROL,
 	.handler_count	= ARRAY_SIZE(mgmt_handlers),
-	.handlers	= mgmt_handlers,/*各opcode对应的handler数组*/
+	.handlers	= mgmt_handlers,/*controll channel 各opcode对应的handler数组*/
 	.hdev_init	= mgmt_init_hdev,
 };
 
 int mgmt_init(void)
 {
-	/*注册control channel*/
+	/*注册control mgmt channel*/
 	return hci_mgmt_chan_register(&chan);
 }
 
 void mgmt_exit(void)
 {
+	/*移除control mgmt channel*/
 	hci_mgmt_chan_unregister(&chan);
 }
 

@@ -2488,6 +2488,7 @@ static int __init init_nfs_fs(void)
 
 	rpc_proc_register(&init_net, &nfs_rpcstat);
 
+	/*注册nfs文件系统*/
 	err = register_nfs_fs();
 	if (err)
 		goto out0;

@@ -65,6 +65,7 @@ struct inet_skb_parm {
 
 static inline bool ipv4_l3mdev_skb(u16 flags)
 {
+	/*检查是否为l3slave设备*/
 	return !!(flags & IPSKB_L3SLAVE);
 }
 
@@ -344,6 +345,7 @@ static inline u64 snmp_fold_field64(void __percpu *mib, int offt, size_t syncp_o
 	} \
 }
 
+/*统计各cpu上的计数信息，并填充buff[i]*/
 #define snmp_get_cpu_field_batch(buff, stats_list, mib_statistic) \
 { \
 	int i, c; \

@@ -529,6 +529,7 @@ int sock_queue_rcv_skb_reason(struct sock *sk, struct sk_buff *skb,
 		drop_reason = SKB_DROP_REASON_SOCKET_FILTER;
 		goto out;
 	}
+
 	/*将skb挂接到socket,知会数据ready*/
 	err = __sock_queue_rcv_skb(sk, skb);
 	switch (err) {
@@ -793,6 +794,7 @@ void sock_set_reuseaddr(struct sock *sk)
 }
 EXPORT_SYMBOL(sock_set_reuseaddr);
 
+/*设置socket reuse port*/
 void sock_set_reuseport(struct sock *sk)
 {
 	lock_sock(sk);
@@ -1227,6 +1229,7 @@ int sk_setsockopt(struct sock *sk, int level, int optname,
 		sk_dst_reset(sk);
 		break;
 	case SO_BROADCAST:
+		/*添加SOCK_BROADCAST标记*/
 		sock_valbool_flag(sk, SOCK_BROADCAST, valbool);
 		break;
 	case SO_SNDBUF:
@@ -1575,6 +1578,7 @@ set_sndbuf:
 int sock_setsockopt(struct socket *sock, int level, int optname,
 		    sockptr_t optval, unsigned int optlen)
 {
+	//level为SOL_SOCKET时的opt设置
 	return sk_setsockopt(sock->sk, level, optname,
 			     optval, optlen);
 }
@@ -4016,7 +4020,8 @@ int proto_register(struct proto *prot, int alloc_slab/*是否申请slab*/)
 		return -EINVAL;
 	}
 	if (alloc_slab) {
-		/*如果需要申请slab，则创建相应slab
+		/*
+		 * 如果需要申请slab，则创建相应slab
 		 * 例如/proc/slabinfo中输出
 		 * UDPv6              15696  15696   1344   24    8 : tunables    0    0    0 : slabdata    654    654      0
 		 * UDP                40572  40572   1152   28    8 : tunables    0    0    0 : slabdata   1449   1449      0

@@ -18,7 +18,7 @@
  */
 #define _uobj_check_id(_id) ((_id) * typecheck(u32, _id))
 
-#define uobj_get_type(_attrs, _object)                                         \
+#define uobj_get_type(_attrs, _object/*object类型*/)                                         \
 	uapi_get_object((_attrs)->ufile->device->uapi, _object)
 
 #define uobj_get_read(_type, _id, _attrs)                                      \

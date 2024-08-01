@@ -344,6 +344,7 @@ int eth_mac_addr(struct net_device *dev, void *p)
 	ret = eth_prepare_mac_addr_change(dev, p);
 	if (ret < 0)
 		return ret;
+	/*变更设备的mac地址*/
 	eth_commit_mac_addr_change(dev, p);
 	return 0;
 }

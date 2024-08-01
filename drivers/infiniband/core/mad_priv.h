@@ -64,15 +64,15 @@
 
 struct ib_mad_list_head {
 	struct list_head list;
-	struct ib_cqe cqe;
-	struct ib_mad_queue *mad_queue;
+	struct ib_cqe cqe;/*收取完成后要触发的cqe done回调*/
+	struct ib_mad_queue *mad_queue;/*对应的队列（发送/接收）*/
 };
 
 struct ib_mad_private_header {
 	struct ib_mad_list_head mad_list;
 	struct ib_mad_recv_wc recv_wc;
 	struct ib_wc wc;
-	u64 mapping;
+	u64 mapping;/*接收buffer对应的起始地址*/
 } __packed;
 
 struct ib_mad_private {
@@ -185,9 +185,9 @@ struct ib_mad_queue {
 
 struct ib_mad_qp_info {
 	struct ib_mad_port_private *port_priv;
-	struct ib_qp *qp;
-	struct ib_mad_queue send_queue;
-	struct ib_mad_queue recv_queue;
+	struct ib_qp *qp;/*对应的qp*/
+	struct ib_mad_queue send_queue;/*mad qp的收送队列*/
+	struct ib_mad_queue recv_queue;/*mad qp的接收队列*/
 	struct list_head overflow_list;
 	spinlock_t snoop_lock;
 	struct ib_mad_snoop_private **snoop_table;
@@ -197,8 +197,8 @@ struct ib_mad_qp_info {
 
 struct ib_mad_port_private {
 	struct list_head port_list;
-	struct ib_device *device;
-	int port_num;
+	struct ib_device *device;/*相对应的ib设备*/
+	int port_num;/*对应ib设备对应的port_num*/
 	struct ib_cq *cq;
 	struct ib_pd *pd;
 

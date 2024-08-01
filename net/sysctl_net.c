@@ -164,8 +164,8 @@ static void ensure_safe_net_sysctl(struct net *net, const char *path,
 /*为ctl table注册sysctl配置路径*/
 struct ctl_table_header *register_net_sysctl_sz(struct net *net,
 						const char *path,
-						struct ctl_table *table,
-						size_t table_size)
+						struct ctl_table *table/*要注册的table*/,
+						size_t table_size/*要注册的table size*/)
 {
 	int count;
 	struct ctl_table *entry;
@@ -173,6 +173,7 @@ struct ctl_table_header *register_net_sysctl_sz(struct net *net,
 	if (!net_eq(net, &init_net))
 		ensure_safe_net_sysctl(net, path, table, table_size);
 
+	/*计算校验table size*/
 	entry = table;
 	for (count = 0 ; count < table_size && entry->procname; entry++, count++)
 		;

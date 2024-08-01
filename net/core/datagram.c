@@ -901,6 +901,7 @@ __poll_t datagram_poll(struct file *file, struct socket *sock,
 	/* exceptional events? */
 	if (READ_ONCE(sk->sk_err) ||
 	    !skb_queue_empty_lockless(&sk->sk_error_queue))
+		/*sk->sk_err不为0，或者sk->sk_error_queue队列不为空，则处于err状态*/
 		mask |= EPOLLERR |
 			(sock_flag(sk, SOCK_SELECT_ERR_QUEUE) ? EPOLLPRI : 0);
 
@@ -928,6 +929,7 @@ __poll_t datagram_poll(struct file *file, struct socket *sock,
 
 	/* writable? */
 	if (sock_writeable(sk))
+		/*socket可发送*/
 		mask |= EPOLLOUT | EPOLLWRNORM | EPOLLWRBAND;
 	else
 		sk_set_bit(SOCKWQ_ASYNC_NOSPACE, sk);

@@ -93,7 +93,7 @@ struct rpc_auth {
 #define RPCAUTH_AUTH_UPDATE_SLACK	(2)
 
 struct rpc_auth_create_args {
-	rpc_authflavor_t pseudoflavor;
+	rpc_authflavor_t pseudoflavor;/*授权对应的flavor*/
 	const char *target_name;
 };
 

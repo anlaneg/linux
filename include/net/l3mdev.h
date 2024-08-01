@@ -134,6 +134,7 @@ static inline u32 l3mdev_fib_table(const struct net_device *dev)
 	u32 tb_id;
 
 	rcu_read_lock();
+	/*取l3mdev对应的路由表编号*/
 	tb_id = l3mdev_fib_table_rcu(dev);
 	rcu_read_unlock();
 
@@ -174,20 +175,23 @@ struct sk_buff *l3mdev_l3_rcv(struct sk_buff *skb, u16 proto)
 	    /*skb所属的设备为master或者此设备有l3 rx handler*/
 		master = skb->dev;
 
-	//l3 master不为空，且master的ops中有l3mdev_l3_rcv回调，则调用
+	// l3 master不为空，且master的ops中有l3mdev_l3_rcv回调，则调用
+	// 针对ipvlan l3,此回调会细化入接口为ipvlan设备，查询路由并
+	// 设置skb->dst->input回调（此时一定是去本机？）
 	if (master && master->l3mdev_ops->l3mdev_l3_rcv)
 		skb = master->l3mdev_ops->l3mdev_l3_rcv(master, skb, proto);
 
 	return skb;
 }
 
-//l3mdev ip收取入口，确定是哪个l3mdev收到报文
+//l3mdev类型设备 ipv4报文收取入口
 static inline
 struct sk_buff *l3mdev_ip_rcv(struct sk_buff *skb)
 {
 	return l3mdev_l3_rcv(skb, AF_INET);
 }
 
+//l3mdev类型设备 ipv6报文收取入口
 static inline
 struct sk_buff *l3mdev_ip6_rcv(struct sk_buff *skb)
 {
@@ -197,9 +201,11 @@ struct sk_buff *l3mdev_ip6_rcv(struct sk_buff *skb)
 static inline
 struct sk_buff *l3mdev_l3_out(struct sock *sk, struct sk_buff *skb, u16 proto)
 {
+	/*报文对应的出接口设备*/
 	struct net_device *dev = skb_dst(skb)->dev;
 
 	if (netif_is_l3_slave(dev)) {
+		/*仅当出口设备为l3mdev类型的slave设备时处理*/
 		struct net_device *master;
 
 		master = netdev_master_upper_dev_get_rcu(dev);

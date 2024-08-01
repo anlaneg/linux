@@ -95,16 +95,19 @@ void mptcp_seq_show(struct seq_file *seq)
 	int i;
 
 	seq_puts(seq, "MPTcpExt:");
+	/*显示各snmp对应的名称*/
 	for (i = 0; mptcp_snmp_list[i].name; i++)
 		seq_printf(seq, " %s", mptcp_snmp_list[i].name);
 
 	seq_puts(seq, "\nMPTcpExt:");
 
+	/*按cpu汇总*/
 	memset(sum, 0, sizeof(sum));
 	if (net->mib.mptcp_statistics)
 		snmp_get_cpu_field_batch(sum, mptcp_snmp_list,
 					 net->mib.mptcp_statistics);
 
+	/*显示汇总结果*/
 	for (i = 0; mptcp_snmp_list[i].name; i++)
 		seq_printf(seq, " %lu", sum[i]);
 

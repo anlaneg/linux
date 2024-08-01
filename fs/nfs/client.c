@@ -57,7 +57,7 @@
 static DECLARE_WAIT_QUEUE_HEAD(nfs_client_active_wq);
 static DEFINE_SPINLOCK(nfs_version_lock);
 static DEFINE_MUTEX(nfs_version_mutex);
-static LIST_HEAD(nfs_versions);
+static LIST_HEAD(nfs_versions);/*记录系统支持的所有nfs版本*/
 
 /*
  * RPC cruft for NFS
@@ -86,8 +86,10 @@ static struct nfs_subversion *find_nfs_version(unsigned int version)
 	struct nfs_subversion *nfs;
 	spin_lock(&nfs_version_lock);
 
+	/*通过version查找注册的nfs_subversion*/
 	list_for_each_entry(nfs, &nfs_versions, list) {
 		if (nfs->rpc_ops->version == version) {
+			/*版本匹配*/
 			spin_unlock(&nfs_version_lock);
 			return nfs;
 		}
@@ -97,13 +99,15 @@ static struct nfs_subversion *find_nfs_version(unsigned int version)
 	return ERR_PTR(-EPROTONOSUPPORT);
 }
 
-struct nfs_subversion *get_nfs_version(unsigned int version)
+struct nfs_subversion *get_nfs_version(unsigned int version/*版本号*/)
 {
 	struct nfs_subversion *nfs = find_nfs_version(version);
 
 	if (IS_ERR(nfs)) {
 		mutex_lock(&nfs_version_mutex);
+		/*请求module后，再查*/
 		request_module("nfsv%d", version);
+		/*取此版本对应的nfs*/
 		nfs = find_nfs_version(version);
 		mutex_unlock(&nfs_version_mutex);
 	}
@@ -118,6 +122,7 @@ void put_nfs_version(struct nfs_subversion *nfs)
 	module_put(nfs->owner);
 }
 
+/*通过此函数向系统注册指定版本的nfs*/
 void register_nfs_version(struct nfs_subversion *nfs)
 {
 	spin_lock(&nfs_version_lock);
@@ -129,6 +134,7 @@ void register_nfs_version(struct nfs_subversion *nfs)
 }
 EXPORT_SYMBOL_GPL(register_nfs_version);
 
+/*解注册系统注册的指定版本的nfs*/
 void unregister_nfs_version(struct nfs_subversion *nfs)
 {
 	spin_lock(&nfs_version_lock);
@@ -151,19 +157,22 @@ struct nfs_client *nfs_alloc_client(const struct nfs_client_initdata *cl_init)
 	struct nfs_client *clp;
 	int err = -ENOMEM;
 
+	/*申请空间*/
 	if ((clp = kzalloc(sizeof(*clp), GFP_KERNEL)) == NULL)
 		goto error_0;
 
 	clp->cl_minorversion = cl_init->minorversion;
-	clp->cl_nfs_mod = cl_init->nfs_mod;
+	clp->cl_nfs_mod = cl_init->nfs_mod;/*引用对应的版本module*/
 	if (!try_module_get(clp->cl_nfs_mod->owner))
 		goto error_dealloc;
 
+	/*引用对应的rpc ops*/
 	clp->rpc_ops = clp->cl_nfs_mod->rpc_ops;
 
 	refcount_set(&clp->cl_count, 1);
-	clp->cl_cons_state = NFS_CS_INITING;
+	clp->cl_cons_state = NFS_CS_INITING;/*指明处于首个initing状态*/
 
+	/*设置服务端地址*/
 	memcpy(&clp->cl_addr, cl_init->addr, cl_init->addrlen);
 	clp->cl_addrlen = cl_init->addrlen;
 
@@ -286,6 +295,7 @@ static struct nfs_client *nfs_match_client(const struct nfs_client_initdata *dat
 	int error;
 
 again:
+	/*遍历此network ns下所有nfs client*/
 	list_for_each_entry(clp, &nn->nfs_client_list, cl_share_link) {
 	        const struct sockaddr *clap = (struct sockaddr *)&clp->cl_addr;
 		/* Don't match clients that failed to initialise properly */
@@ -332,7 +342,7 @@ again:
 			continue;
 
 		refcount_inc(&clp->cl_count);
-		return clp;
+		return clp;/*找到了个可复用的client*/
 	}
 	return NULL;
 }
@@ -404,10 +414,12 @@ nfs_found_client(const struct nfs_client_initdata *cl_init,
 struct nfs_client *nfs_get_client(const struct nfs_client_initdata *cl_init)
 {
 	struct nfs_client *clp, *new = NULL;
+	/*取此network中nfs的私有数据*/
 	struct nfs_net *nn = net_generic(cl_init->net, nfs_net_id);
 	const struct nfs_rpc_ops *rpc_ops = cl_init->nfs_mod->rpc_ops;
 
 	if (cl_init->hostname == NULL) {
+		/*必须设置hostname*/
 		WARN_ON(1);
 		return ERR_PTR(-EINVAL);
 	}
@@ -418,22 +430,27 @@ struct nfs_client *nfs_get_client(const struct nfs_client_initdata *cl_init)
 
 		clp = nfs_match_client(cl_init);
 		if (clp) {
+			/*遇到可复用的client*/
 			spin_unlock(&nn->nfs_client_lock);
 			if (new)
+				/*在我们刚才新建的过程中有了可复用的，释放掉刚创建的*/
 				new->rpc_ops->free_client(new);
 			if (IS_ERR(clp))
 				return clp;
 			return nfs_found_client(cl_init, clp);
 		}
 		if (new) {
+			/*加锁确认，没有出现新的可复用的，将其加入到nfs_client_list*/
 			list_add_tail(&new->cl_share_link,
 					&nn->nfs_client_list);
 			spin_unlock(&nn->nfs_client_lock);
+			/*初始化新建的client*/
 			return rpc_ops->init_client(new, cl_init);
 		}
 
 		spin_unlock(&nn->nfs_client_lock);
 
+		/*未发现可复用的client,解锁后新建一个（由于新建未加锁，故需要加锁再检查一遍）*/
 		new = rpc_ops->alloc_client(cl_init);
 	} while (!IS_ERR(new));
 
@@ -651,6 +668,7 @@ struct nfs_client *nfs_init_client(struct nfs_client *clp,
 
 	/* the client is already initialised */
 	if (clp->cl_cons_state == NFS_CS_READY)
+		/*针对已达到ready状态的client,需要跳过*/
 		return clp;
 
 	/*
@@ -675,6 +693,7 @@ static int nfs_init_server(struct nfs_server *server,
 {
 	const struct nfs_fs_context *ctx = nfs_fc2context(fc);
 	struct rpc_timeout timeparms;
+	/*准备client初始化参数*/
 	struct nfs_client_initdata cl_init = {
 		.hostname = ctx->nfs_server.hostname,
 		.addr = &ctx->nfs_server._address,
@@ -1049,7 +1068,7 @@ struct nfs_server *nfs_create_server(struct fs_context *fc)
 	struct nfs_fattr *fattr;
 	int error;
 
-	server = nfs_alloc_server();
+	server = nfs_alloc_server();/*申请nfs server*/
 	if (!server)
 		return ERR_PTR(-ENOMEM);
 

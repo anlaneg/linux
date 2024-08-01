@@ -585,8 +585,10 @@ static ssize_t vhci_read(struct file *file,
 	ssize_t ret = 0;
 
 	while (count) {
+		/*自readq取skb*/
 		skb = skb_dequeue(&data->readq);
 		if (skb) {
+			/*将此skb内容写入到userspace*/
 			ret = vhci_put_user(data, skb, buf, count);
 			if (ret < 0)
 				skb_queue_head(&data->readq, skb);

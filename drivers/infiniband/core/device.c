@@ -411,6 +411,7 @@ static int rename_compat_devs(struct ib_device *device)
 	return ret;
 }
 
+/*ib设备重命名*/
 int ib_device_rename(struct ib_device *ibdev, const char *name)
 {
 	unsigned long index;
@@ -428,6 +429,7 @@ int ib_device_rename(struct ib_device *ibdev, const char *name)
 		return -EEXIST;
 	}
 
+	/*执行设备重命名*/
 	ret = device_rename(&ibdev->dev, name);
 	if (ret) {
 		up_write(&devices_rwsem);
@@ -439,6 +441,7 @@ int ib_device_rename(struct ib_device *ibdev, const char *name)
 
 	downgrade_write(&devices_rwsem);
 	down_read(&ibdev->client_data_rwsem);
+	/*触发所有client的rename回调*/
 	xan_for_each_marked(&ibdev->client_data, index, client_data,
 			    CLIENT_DATA_REGISTERED) {
 		struct ib_client *client = xa_load(&clients, index);
@@ -743,7 +746,7 @@ static int add_client_context(struct ib_device *device,
 	if (ret)
 		goto out;
 	downgrade_write(&device->client_data_rwsem);
-	/*触发client的add回调*/
+	/*触发client的add回调，添加设备device*/
 	if (client->add) {
 		if (client->add(device)) {
 			/*
@@ -1795,7 +1798,7 @@ static int assign_client_id(struct ib_client *client)
 	 * achieve this we assign client_ids so they are sorted in
 	 * registration order.
 	 */
-	client->client_id = highest_client_id;
+	client->client_id = highest_client_id;/*给client分配id*/
 	/*注册此client到clients*/
 	ret = xa_insert(&clients, client->client_id, client, GFP_KERNEL);
 	if (ret)
@@ -1840,7 +1843,7 @@ int ib_register_client(struct ib_client *client)
 	unsigned long index;
 	int ret;
 
-	refcount_set(&client->uses, 1);
+	refcount_set(&client->uses, 1);/*引用增加*/
 	init_completion(&client->uses_zero);
 	ret = assign_client_id(client);
 	if (ret)
@@ -2396,14 +2399,15 @@ void ib_enum_roce_netdev(struct ib_device *ib_dev,
 {
 	u32 port;
 
+	/*遍历ib_dev的每个port*/
 	rdma_for_each_port (ib_dev, port)
 		if (rdma_protocol_roce(ib_dev, port)) {
-		    /*取此port对应的net_device*/
+		    /*此port支持roce,取此port对应的net_device*/
 			struct net_device *idev =
 				ib_device_get_netdev(ib_dev, port);
 
 			if (filter(ib_dev, port, idev, filter_cookie))
-			    /*filter返回非0时，执行此cb*/
+			    /*filterl回调返回非0时，执行此cb*/
 				cb(ib_dev, port, idev, cookie);
 
 			if (idev)
@@ -2424,13 +2428,14 @@ void ib_enum_roce_netdev(struct ib_device *ib_dev,
  */
 void ib_enum_all_roce_netdevs(roce_netdev_filter filter,
 			      void *filter_cookie,
-			      roce_netdev_callback cb,
+			      roce_netdev_callback cb/*回调函数*/,
 			      void *cookie)
 {
 	struct ib_device *dev;
 	unsigned long index;
 
 	down_read(&devices_rwsem);
+	/*利用index遍历系统中所有ib设备*/
 	xa_for_each_marked (&devices, index, dev, DEVICE_REGISTERED)
 		ib_enum_roce_netdev(dev, filter, filter_cookie, cb, cookie);
 	up_read(&devices_rwsem);
@@ -2478,7 +2483,7 @@ int ib_enum_all_devs(nldev_callback nldev_cb/*处理dev的回调*/, struct sk_bu
  * ib_query_pkey() fetches the specified P_Key table entry.
  */
 int ib_query_pkey(struct ib_device *device,
-		  u32 port_num, u16 index, u16 *pkey)
+		  u32 port_num, u16 index/*pkey的索引*/, u16 *pkey)
 {
 	if (!rdma_is_port_valid(device, port_num))
 		return -EINVAL;

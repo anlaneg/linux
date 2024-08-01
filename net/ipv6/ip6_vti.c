@@ -98,6 +98,7 @@ vti6_tnl_lookup(struct net *net, const struct in6_addr *remote,
 		if (ipv6_addr_equal(local, &t->parms.laddr) &&
 		    ipv6_addr_equal(remote, &t->parms.raddr) &&
 		    (t->dev->flags & IFF_UP))
+			/*仅返回up的(local,remote相等）*/
 			return t;
 	}
 
@@ -106,6 +107,7 @@ vti6_tnl_lookup(struct net *net, const struct in6_addr *remote,
 	for_each_vti6_tunnel_rcu(ip6n->tnls_r_l[hash]) {
 		if (ipv6_addr_equal(local, &t->parms.laddr) &&
 		    (t->dev->flags & IFF_UP))
+			/*仅返回up的(local相等）*/
 			return t;
 	}
 
@@ -113,13 +115,16 @@ vti6_tnl_lookup(struct net *net, const struct in6_addr *remote,
 	for_each_vti6_tunnel_rcu(ip6n->tnls_r_l[hash]) {
 		if (ipv6_addr_equal(remote, &t->parms.raddr) &&
 		    (t->dev->flags & IFF_UP))
+			/*仅返回up的*/
 			return t;
 	}
 
 	t = rcu_dereference(ip6n->tnls_wc[0]);
 	if (t && (t->dev->flags & IFF_UP))
+		/*仅返回up的*/
 		return t;
 
+	/*放弃查找，返回NULL*/
 	return NULL;
 }
 

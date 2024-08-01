@@ -112,6 +112,7 @@ static size_t rpc_ntop6(const struct sockaddr *sap,
 static int rpc_ntop4(const struct sockaddr *sap,
 		     char *buf, const size_t buflen)
 {
+	/*格式化ipv4地址*/
 	const struct sockaddr_in *sin = (struct sockaddr_in *)sap;
 
 	return snprintf(buf, buflen, "%pI4", &sin->sin_addr);
@@ -150,6 +151,7 @@ static size_t rpc_pton4(const char *buf, const size_t buflen,
 
 	memset(sap, 0, sizeof(struct sockaddr_in));
 
+	/*字符串形式ip地址转换为sin*/
 	if (in4_pton(buf, buflen, addr, '\0', NULL) == 0)
 		return 0;
 
@@ -199,6 +201,7 @@ static int rpc_parse_scope_id(struct net *net, const char *buf,
 static size_t rpc_pton6(struct net *net, const char *buf, const size_t buflen,
 			struct sockaddr *sap, const size_t salen)
 {
+	/*ipv6自符串形式地址转换为sap*/
 	struct sockaddr_in6 *sin6 = (struct sockaddr_in6 *)sap;
 	u8 *addr = (u8 *)&sin6->sin6_addr.in6_u;
 	const char *delim;
@@ -246,6 +249,7 @@ size_t rpc_pton(struct net *net, const char *buf, const size_t buflen,
 {
 	unsigned int i;
 
+	/*如果包含':',则按ipv6解析地址，如果不包含，则按ipv4解析地址*/
 	for (i = 0; i < buflen; i++)
 		if (buf[i] == ':')
 			return rpc_pton6(net, buf, buflen, sap, salen);
@@ -270,11 +274,13 @@ char *rpc_sockaddr2uaddr(const struct sockaddr *sap, gfp_t gfp_flags)
 
 	switch (sap->sa_family) {
 	case AF_INET:
+		/*格式化ipv4地址到addrbuf(字符串形式）*/
 		if (rpc_ntop4(sap, addrbuf, sizeof(addrbuf)) == 0)
 			return NULL;
 		port = ntohs(((struct sockaddr_in *)sap)->sin_port);
 		break;
 	case AF_INET6:
+		/*格式化ipv6地址到addrbuf(字符串形式）*/
 		if (rpc_ntop6_noscopeid(sap, addrbuf, sizeof(addrbuf)) == 0)
 			return NULL;
 		port = ntohs(((struct sockaddr_in6 *)sap)->sin6_port);
@@ -283,6 +289,7 @@ char *rpc_sockaddr2uaddr(const struct sockaddr *sap, gfp_t gfp_flags)
 		return NULL;
 	}
 
+	/*格式化port(字符串形式）*/
 	if (snprintf(portbuf, sizeof(portbuf),
 		     ".%u.%u", port >> 8, port & 0xff) > (int)sizeof(portbuf))
 		return NULL;
@@ -323,10 +330,13 @@ size_t rpc_uaddr2sockaddr(struct net *net, const char *uaddr,
 	buf[uaddr_len] = '\0';
 	c = strrchr(buf, '.');
 	if (unlikely(c == NULL))
+		/*不包含'.',格式有误*/
 		return 0;
+	/*将'.'后面的部分转换为数字*/
 	if (unlikely(kstrtou8(c + 1, 10, &portlo) != 0))
 		return 0;
 
+	/*将'.'前面的部分转换为数字*/
 	*c = '\0';
 	c = strrchr(buf, '.');
 	if (unlikely(c == NULL))
@@ -334,14 +344,17 @@ size_t rpc_uaddr2sockaddr(struct net *net, const char *uaddr,
 	if (unlikely(kstrtou8(c + 1, 10, &porthi) != 0))
 		return 0;
 
+	/*按高低位组合成port*/
 	port = (unsigned short)((porthi << 8) | portlo);
 
+	/*地址转换*/
 	*c = '\0';
 	if (rpc_pton(net, buf, strlen(buf), sap, salen) == 0)
 		return 0;
 
 	switch (sap->sa_family) {
 	case AF_INET:
+		/*port转换*/
 		((struct sockaddr_in *)sap)->sin_port = htons(port);
 		return sizeof(struct sockaddr_in);
 	case AF_INET6:

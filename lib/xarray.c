@@ -146,6 +146,7 @@ static void xas_squash_marks(const struct xa_state *xas)
 /* extracts the offset within this node from the index */
 static unsigned int get_offset(unsigned long index, struct xa_node *node)
 {
+	/*index表示的是entry的实际索引，当前index落在node上，故检查其相对此Node的索引*/
 	return (index >> node->shift) & XA_CHUNK_MASK;
 }
 
@@ -207,9 +208,12 @@ static void *xas_start(struct xa_state *xas)
 
 static void *xas_descend(struct xa_state *xas, struct xa_node *node)
 {
+	/*取相对此node,xa_index对应的位置*/
 	unsigned int offset = get_offset(xas->xa_index, node);
+	/*自xa_node的offset位置取entry*/
 	void *entry = xa_entry(xas->xa, node, offset);
 
+	/*指明当前关注的xa_node*/
 	xas->xa_node = node;
 	while (xa_is_sibling(entry)) {
 		offset = xa_to_sibling(entry);
@@ -218,6 +222,7 @@ static void *xas_descend(struct xa_state *xas, struct xa_node *node)
 			entry = XA_RETRY_ENTRY;
 	}
 
+	/*指明当前操作的xa_node位置*/
 	xas->xa_offset = offset;
 	return entry;
 }
@@ -377,6 +382,7 @@ static void *xas_alloc(struct xa_state *xas, unsigned int shift)
 		if (xas->xa->xa_flags & XA_FLAGS_ACCOUNT)
 			gfp |= __GFP_ACCOUNT;
 
+		/*自radix_tree_node_cachep中申请一个xa_node*/
 		node = kmem_cache_alloc_lru(radix_tree_node_cachep, xas->xa_lru, gfp);
 		if (!node) {
 			xas_set_err(xas, -ENOMEM);
@@ -390,13 +396,17 @@ static void *xas_alloc(struct xa_state *xas, unsigned int shift)
 		XA_NODE_BUG_ON(node, parent->count > XA_CHUNK_SIZE);
 		xas_update(xas, parent);
 	}
+
+	/*node校验*/
 	XA_NODE_BUG_ON(node, shift > BITS_PER_LONG);
 	XA_NODE_BUG_ON(node, !list_empty(&node->private_list));
+
+	/*初始化xa_node*/
 	node->shift = shift;
 	node->count = 0;
 	node->nr_values = 0;
 	RCU_INIT_POINTER(node->parent, xas->xa_node);
-	node->array = xas->xa;
+	node->array = xas->xa;/*指明从属的xarray*/
 
 	return node;
 }
@@ -417,6 +427,7 @@ static unsigned long xas_size(const struct xa_state *xas)
  */
 static unsigned long xas_max(struct xa_state *xas)
 {
+	/*将xa_index做为max*/
 	unsigned long max = xas->xa_index;
 
 #ifdef CONFIG_XARRAY_MULTI
@@ -435,6 +446,7 @@ static unsigned long xas_max(struct xa_state *xas)
 static unsigned long max_index(void *entry)
 {
 	if (!xa_is_node(entry))
+		/*entry不为Node类型,直接返回0*/
 		return 0;
 	return (XA_CHUNK_SIZE << xa_to_node(entry)->shift) - 1;
 }
@@ -563,6 +575,7 @@ static void xas_free_nodes(struct xa_state *xas, struct xa_node *top)
  */
 static int xas_expand(struct xa_state *xas, void *head)
 {
+	/*取要操作的xarray*/
 	struct xarray *xa = xas->xa;
 	struct xa_node *node = NULL;
 	unsigned int shift = 0;
@@ -575,9 +588,12 @@ static int xas_expand(struct xa_state *xas, void *head)
 			shift += XA_CHUNK_SHIFT;
 		return shift + XA_CHUNK_SHIFT;
 	} else if (xa_is_node(head)) {
+		/*head为node时，先将其转为node,转换方法是-2转指针
+		 **/
 		node = xa_to_node(head);
 		shift = node->shift + XA_CHUNK_SHIFT;
 	}
+	/*将xa_node设置0*/
 	xas->xa_node = NULL;
 
 	while (max > max_index(head)) {
@@ -643,6 +659,7 @@ static int xas_expand(struct xa_state *xas, void *head)
  */
 static void *xas_create(struct xa_state *xas, bool allow_root)
 {
+	/*取待操作的xarray*/
 	struct xarray *xa = xas->xa;
 	void *entry;
 	void __rcu **slot;
@@ -652,15 +669,19 @@ static void *xas_create(struct xa_state *xas, bool allow_root)
 
 	if (xas_top(node)) {
 		entry = xa_head_locked(xa);
-		xas->xa_node = NULL;
+		xas->xa_node = NULL;/*将xa_node置为NULL*/
 		if (!entry && xa_zero_busy(xa))
 			entry = XA_ZERO_ENTRY;
+		/*扩充xas*/
 		shift = xas_expand(xas, entry);
 		if (shift < 0)
 			return NULL;
 		if (!shift && !allow_root)
+			/*shift为空，且不容许root情况下，shift取默认值*/
 			shift = XA_CHUNK_SHIFT;
+		/*取首个元素*/
 		entry = xa_head_locked(xa);
+		/*取首个元素存放位置的指针*/
 		slot = &xa->xa_head;
 	} else if (xas_error(xas)) {
 		return NULL;
@@ -679,18 +700,22 @@ static void *xas_create(struct xa_state *xas, bool allow_root)
 	while (shift > order) {
 		shift -= XA_CHUNK_SHIFT;
 		if (!entry) {
+			/*申请一个xa_node*/
 			node = xas_alloc(xas, shift);
 			if (!node)
 				break;
 			if (xa_track_free(xa))
 				node_mark_all(node, XA_FREE_MARK);
+			/*在slot中存入此xa_node*/
 			rcu_assign_pointer(*slot, xa_mk_node(node));
 		} else if (xa_is_node(entry)) {
 			node = xa_to_node(entry);
 		} else {
 			break;
 		}
+		/*获得xa_index对应的entry*/
 		entry = xas_descend(xas, node);
+		/*取得存入entry的位置指针*/
 		slot = &node->slots[xas->xa_offset];
 	}
 
@@ -780,12 +805,14 @@ static void update_node(struct xa_state *xas, struct xa_node *node,
 void *xas_store(struct xa_state *xas, void *entry)
 {
 	struct xa_node *node;
-	void __rcu **slot = &xas->xa->xa_head;/*指向xarray中首个元素*/
+	/*指向xarray中首个元素，初始化时为NULL*/
+	void __rcu **slot = &xas->xa->xa_head;
 	unsigned int offset, max;
 	int count = 0;
 	int values = 0;
 	void *first, *next;
-	bool value = xa_is_value(entry);/*待存入的是entry*/
+	/*待存入的entry是否表示value*/
+	bool value = xa_is_value(entry);
 
 	if (entry) {
 		bool allow_root = !xa_is_node(entry) && !xa_is_zero(entry);
@@ -795,6 +822,7 @@ void *xas_store(struct xa_state *xas, void *entry)
 	}
 
 	if (xas_invalid(xas))
+		/*xa无效，返回*/
 		return first;
 	node = xas->xa_node;
 	if (node && (xas->xa_shift < node->shift))
@@ -806,6 +834,7 @@ void *xas_store(struct xa_state *xas, void *entry)
 	offset = xas->xa_offset;
 	max = xas->xa_offset + xas->xa_sibs;
 	if (node) {
+		/*取对应的slot位置*/
 		slot = &node->slots[offset];
 		if (xas->xa_sibs)
 			xas_squash_marks(xas);
@@ -821,7 +850,7 @@ void *xas_store(struct xa_state *xas, void *entry)
 		 * so the mark clearing will appear to happen before the
 		 * entry is set to NULL.
 		 */
-		rcu_assign_pointer(*slot, entry);
+		rcu_assign_pointer(*slot, entry);/*在slot位置，存入entry*/
 		if (xa_is_node(next) && (!node || node->shift))
 			xas_free_nodes(xas, xa_to_node(next));
 		if (!node)
@@ -1518,6 +1547,7 @@ void *xa_erase(struct xarray *xa, unsigned long index)
 	void *entry;
 
 	xa_lock(xa);
+	/*自xarray中移除index号元素*/
 	entry = __xa_erase(xa, index);
 	xa_unlock(xa);
 

@@ -425,6 +425,7 @@ static int minix_get_block(struct inode *inode, sector_t block/*要读取的bloc
 static int minix_writepages(struct address_space *mapping,
 		struct writeback_control *wbc)
 {
+	/*内存页写入磁盘*/
 	return mpage_writepages(mapping, wbc, minix_get_block);
 }
 
@@ -448,8 +449,8 @@ static void minix_write_failed(struct address_space *mapping, loff_t to)
 	}
 }
 
-static int minix_write_begin(struct file *file, struct address_space *mapping,
-			loff_t pos, unsigned len,
+static int minix_write_begin(struct file *file/*要写的文件*/, struct address_space *mapping,
+			loff_t pos/*要写的位置*/, unsigned len/*要写的长度*/,
 			struct page **pagep, void **fsdata)
 {
 	int ret;
@@ -727,7 +728,7 @@ void minix_truncate(struct inode * inode)
 static struct dentry *minix_mount(struct file_system_type *fs_type,
 	int flags, const char *dev_name, void *data)
 {
-	return mount_bdev(fs_type, flags, dev_name, data, minix_fill_super/*填充块填充函数*/);
+	return mount_bdev(fs_type, flags, dev_name/*要挂接的设备*/, data, minix_fill_super/*填充块填充函数*/);
 }
 
 /*minix文件系统对应的fs_type*/
@@ -742,6 +743,7 @@ MODULE_ALIAS_FS("minix");
 
 static int __init init_minix_fs(void)
 {
+	/*初始化inode cache*/
 	int err = init_inodecache();
 	if (err)
 		goto out1;

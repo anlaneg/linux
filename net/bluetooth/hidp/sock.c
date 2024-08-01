@@ -282,6 +282,7 @@ int __init hidp_init_sockets(void)
 	if (err < 0)
 		return err;
 
+	/*注册hidp协议操作集*/
 	err = bt_sock_register(BTPROTO_HIDP, &hidp_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register HIDP socket");

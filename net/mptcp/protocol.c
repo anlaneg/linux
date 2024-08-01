@@ -3975,7 +3975,7 @@ static const struct proto_ops mptcp_stream_ops = {
 
 static struct inet_protosw mptcp_protosw = {
 	.type		= SOCK_STREAM,
-	.protocol	= IPPROTO_MPTCP,
+	.protocol	= IPPROTO_MPTCP,/*使用专门的协议类型（这样应用就需要改）*/
 	.prot		= &mptcp_prot,
 	.ops		= &mptcp_stream_ops,
 	.flags		= INET_PROTOSW_ICSK,
@@ -4027,10 +4027,11 @@ void __init mptcp_proto_init(void)
 	if (percpu_counter_init(&mptcp_sockets_allocated, 0, GFP_KERNEL))
 		panic("Failed to allocate MPTCP pcpu counter\n");
 
-	init_dummy_netdev(&mptcp_napi_dev);
+	init_dummy_netdev(&mptcp_napi_dev);/*初始化一个假的netdev设备*/
 	for_each_possible_cpu(cpu) {
 		delegated = per_cpu_ptr(&mptcp_delegated_actions, cpu);
 		INIT_LIST_HEAD(&delegated->head);
+		/*针对假的netdev设备初始化poll*/
 		netif_napi_add_tx(&mptcp_napi_dev, &delegated->napi,
 				  mptcp_napi_poll);
 		napi_enable(&delegated->napi);
@@ -4041,6 +4042,7 @@ void __init mptcp_proto_init(void)
 	mptcp_sched_init();
 	mptcp_token_init();
 
+	/*注册mptcp协议*/
 	if (proto_register(&mptcp_prot, 1) != 0)
 		panic("Failed to register MPTCP proto.\n");
 

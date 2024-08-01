@@ -268,6 +268,6 @@ struct netns_ipv4 {
 	unsigned int	ipmr_seq;	/* protected by rtnl_mutex */
 
 	atomic_t	rt_genid;
-	siphash_key_t	ip_id_key;
+	siphash_key_t	ip_id_key;/*ip层id生成使用的混杂hash*/
 };
 #endif

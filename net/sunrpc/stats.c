@@ -126,6 +126,7 @@ struct rpc_iostats *rpc_alloc_iostats(struct rpc_clnt *clnt)
 	struct rpc_iostats *stats;
 	int i;
 
+	/*申请n个统计计数*/
 	stats = kcalloc(clnt->cl_maxproc, sizeof(*stats), GFP_KERNEL);
 	if (stats) {
 		for (i = 0; i < clnt->cl_maxproc; i++)

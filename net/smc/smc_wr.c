@@ -487,6 +487,7 @@ again:
 	polled++;
 	do {
 		memset(&wc, 0, sizeof(wc));
+		/*poll recv cq队列*/
 		rc = ib_poll_cq(dev->roce_cq_recv, SMC_WR_MAX_POLL_CQE, wc);
 		if (polled == 1) {
 			ib_req_notify_cq(dev->roce_cq_recv,
@@ -494,10 +495,14 @@ again:
 					 | IB_CQ_REPORT_MISSED_EVENTS);
 		}
 		if (!rc)
+			/*当前recv cq队列为空，直接跳出*/
 			break;
-		smc_wr_rx_process_cqes(&wc[0], rc);
-	} while (rc > 0);
+
+		/*发现有rc个cqe，执行处理*/
+		smc_wr_rx_process_cqes(&wc[0], rc/*rc值可能为负*/);
+	} while (rc > 0);/*跳出时，cq队列为空或者poll时出错*/
 	if (polled == 1)
+		/*再尝试一次*/
 		goto again;
 }
 
@@ -508,6 +513,7 @@ void smc_wr_rx_cq_handler(struct ib_cq *ib_cq, void *cq_context)
 	tasklet_schedule(&dev->recv_tasklet);
 }
 
+/*为qp填充接收用的wr*/
 int smc_wr_rx_post_init(struct smc_link *link)
 {
 	u32 i;
@@ -844,7 +850,9 @@ void smc_wr_remove_dev(struct smc_ib_device *smcibdev)
 
 void smc_wr_add_dev(struct smc_ib_device *smcibdev)
 {
+	/*设置recv cq触发tasklet*/
 	tasklet_setup(&smcibdev->recv_tasklet, smc_wr_rx_tasklet_fn);
+	/*设置send cq触发tasklet*/
 	tasklet_setup(&smcibdev->send_tasklet, smc_wr_tx_tasklet_fn);
 }
 

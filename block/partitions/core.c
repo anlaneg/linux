@@ -336,7 +336,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 		dev_set_name(pdev, "%s%d", dname, partno);
 
 	device_initialize(pdev);
-	pdev->class = &block_class;
+	pdev->class = &block_class;/*指明为block设备*/
 	pdev->type = &part_type;
 	pdev->parent = ddev;
 

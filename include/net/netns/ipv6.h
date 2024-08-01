@@ -96,7 +96,7 @@ struct netns_ipv6 {
 	struct sock             *igmp_sk;
 	struct sock		*mc_autojoin_sk;
 
-	struct hlist_head	*inet6_addr_lst;/*记录所有ipv6地址*/
+	struct hlist_head	*inet6_addr_lst;/*记录此netns中所有ipv6地址*/
 	spinlock_t		addrconf_hash_lock;
 	struct delayed_work	addr_chk_work;
 

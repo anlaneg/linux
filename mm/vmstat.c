@@ -130,7 +130,7 @@ static void sum_vm_events(unsigned long *ret)
 void all_vm_events(unsigned long *ret)
 {
 	cpus_read_lock();
-	sum_vm_events(ret);
+	sum_vm_events(ret);/*收集vm events*/
 	cpus_read_unlock();
 }
 EXPORT_SYMBOL_GPL(all_vm_events);

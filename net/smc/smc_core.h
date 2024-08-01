@@ -123,13 +123,16 @@ struct smc_link {
 	struct completion	tx_ref_comp;
 
 	struct smc_wr_buf	*wr_rx_bufs;	/* WR recv payload buffers */
+	/*WR数组smc_wr_rx_post_init函数负责填充wr到qp*/
 	struct ib_recv_wr	*wr_rx_ibs;	/* WR recv meta data */
 	struct ib_sge		*wr_rx_sges;	/* WR recv scatter meta data */
 	/* above three vectors have wr_rx_cnt elements and use the same index */
 	dma_addr_t		wr_rx_dma_addr;	/* DMA address of wr_rx_bufs */
 	dma_addr_t		wr_rx_v2_dma_addr; /* DMA address of v2 rx buf*/
+	/*负责分配wr id*/
 	u64			wr_rx_id;	/* seq # of last recv WR */
 	u64			wr_rx_id_compl; /* seq # of last completed WR */
+	/*指明wr_rx_ibs数组的大小*/
 	u32			wr_rx_cnt;	/* number of WR recv buffers */
 	unsigned long		wr_rx_tstamp;	/* jiffies when last buf rx */
 	wait_queue_head_t       wr_rx_empty_wait; /* wait for RQ empty */
@@ -389,7 +392,7 @@ struct smc_init_info_smcrv2 {
 
 	/* Additional output fields when clc_sk and daddr is set as well */
 	u8			uses_gateway;
-	u8			nexthop_mac[ETH_ALEN];
+	u8			nexthop_mac[ETH_ALEN];/*下一跳mac*/
 
 	struct smc_gidlist	gidlist;
 };

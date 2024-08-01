@@ -24,7 +24,7 @@ struct sock_xprt {
 	 */
 	struct socket *		sock;
 	struct sock *		inet;
-	struct file *		file;
+	struct file *		file;/*指明transport对应的file(例如socket file)*/
 
 	/*
 	 * State of TCP reply receive
@@ -58,8 +58,8 @@ struct sock_xprt {
 	struct work_struct	recv_worker;
 	struct mutex		recv_mutex;
 	struct completion	handshake_done;
-	struct sockaddr_storage	srcaddr;
-	unsigned short		srcport;
+	struct sockaddr_storage	srcaddr;/*源地址*/
+	unsigned short		srcport;/*源port*/
 	int			xprt_err;
 	struct rpc_clnt		*clnt;
 

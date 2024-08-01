@@ -482,7 +482,7 @@ struct led_trigger {
 	struct list_head  led_cdevs;
 
 	/* Link to next registered trigger */
-	struct list_head  next_trig;
+	struct list_head  next_trig;/*用于在link上串连其它trigger*/
 
 	const struct attribute_group **groups;
 };

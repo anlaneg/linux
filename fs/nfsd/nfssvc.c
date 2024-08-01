@@ -963,7 +963,7 @@ out:
  */
 int nfsd_dispatch(struct svc_rqst *rqstp)
 {
-	const struct svc_procedure *proc = rqstp->rq_procinfo;
+	const struct svc_procedure *proc = rqstp->rq_procinfo;/*取请求指明的rpc过程*/
 	__be32 *statp = rqstp->rq_accept_statp;
 	struct nfsd_cacherep *rp;
 	unsigned int start, len;
@@ -982,6 +982,7 @@ int nfsd_dispatch(struct svc_rqst *rqstp)
 	 */
 	start = xdr_stream_pos(&rqstp->rq_arg_stream);
 	len = xdr_stream_remaining(&rqstp->rq_arg_stream);
+	/*解码请求*/
 	if (!proc->pc_decode(rqstp, &rqstp->rq_arg_stream))
 		goto out_decode_err;
 
@@ -1005,6 +1006,7 @@ int nfsd_dispatch(struct svc_rqst *rqstp)
 	}
 
 	nfs_reply = xdr_inline_decode(&rqstp->rq_res_stream, 0);
+	/*执行此过程对应的处理函数*/
 	*statp = proc->pc_func(rqstp);
 	if (test_bit(RQ_DROPME, &rqstp->rq_flags))
 		goto out_update_drop;

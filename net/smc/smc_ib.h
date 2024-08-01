@@ -34,12 +34,14 @@ extern struct smc_lgr_list smc_lgr_list; /* list of linkgroups */
 
 struct smc_ib_device {				/* ib-device infos for smc */
 	struct list_head	list;
-	struct ib_device	*ibdev;
+	struct ib_device	*ibdev;/*关联的ib设备*/
 	struct ib_port_attr	pattr[SMC_MAX_PORTS];	/* ib dev. port attrs */
 	struct ib_event_handler	event_handler;	/* global ib_event handler */
 	struct ib_cq		*roce_cq_send;	/* send completion queue */
 	struct ib_cq		*roce_cq_recv;	/* recv completion queue */
+	/*send cq处理*/
 	struct tasklet_struct	send_tasklet;	/* called by send cq handler */
+	/*recv cq处理*/
 	struct tasklet_struct	recv_tasklet;	/* called by recv cq handler */
 	char			mac[SMC_MAX_PORTS][ETH_ALEN];
 						/* mac address per port*/
@@ -61,6 +63,7 @@ struct smc_ib_device {				/* ib-device infos for smc */
 
 static inline __be32 smc_ib_gid_to_ipv4(u8 gid[SMC_GID_SIZE])
 {
+	/*由gid转换为ipv4地址*/
 	struct in6_addr *addr6 = (struct in6_addr *)gid;
 
 	if (ipv6_addr_v4mapped(addr6) ||

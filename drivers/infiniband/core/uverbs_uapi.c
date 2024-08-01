@@ -28,7 +28,7 @@ static void *uapi_add_elm(struct uverbs_api *uapi, u32 key, size_t alloc_size)
 	if (!elm)
 		return ERR_PTR(-ENOMEM);
 
-	/*添加记录key对应elem*/
+	/*添加记录key对应elem到uapi->radix中*/
 	rc = radix_tree_insert(&uapi->radix, key, elm);
 	if (rc) {
 		kfree(elm);

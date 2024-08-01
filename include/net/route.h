@@ -369,7 +369,7 @@ static inline int ip4_dst_hoplimit(const struct dst_entry *dst)
 }
 
 //取daddr对应的邻居表项
-static inline struct neighbour *ip_neigh_gw4(struct net_device *dev,
+static inline struct neighbour *ip_neigh_gw4(struct net_device *dev/*领居表项对应的设备*/,
 					     __be32 daddr/*目标ip*/)
 {
 	struct neighbour *neigh;

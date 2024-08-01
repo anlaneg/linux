@@ -28,6 +28,7 @@ struct nfs41_impl_id;
 struct nfs_client {
 	refcount_t		cl_count;
 	atomic_t		cl_mds_count;
+	/*client的连接状态，新申请的从NFS_CS_INITING开始*/
 	int			cl_cons_state;	/* current construction state (-ve: init error) */
 #define NFS_CS_READY		0		/* ready to be used */
 #define NFS_CS_INITING		1		/* busy initialising */
@@ -49,6 +50,7 @@ struct nfs_client {
 #define NFS_CS_DS		7		/* - Server is a DS */
 #define NFS_CS_REUSEPORT	8		/* - reuse src port on reconnect */
 #define NFS_CS_PNFS		9		/* - Server used for pnfs */
+	/*服务端地址*/
 	struct sockaddr_storage	cl_addr;	/* server identifier */
 	size_t			cl_addrlen;
 	char *			cl_hostname;	/* hostname of server */
@@ -122,7 +124,7 @@ struct nfs_client {
 	 * This is used to generate the mv0 callback address.
 	 */
 	char			cl_ipaddr[48];
-	struct net		*cl_net;
+	struct net		*cl_net;/*所属net namespace*/
 	struct list_head	pending_cb_stateids;
 };
 

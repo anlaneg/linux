@@ -106,7 +106,7 @@ struct page {
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
 			struct address_space *mapping;
 			union {
-				//页编号（对应文件的页号）
+				//页编号（对应文件的页号），可复写（见brd.c)
 				pgoff_t index;		/* Our offset within mapping. */
 				unsigned long share;	/* share count for fsdax */
 			};

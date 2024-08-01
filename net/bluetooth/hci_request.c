@@ -32,6 +32,7 @@
 #include "msft.h"
 #include "eir.h"
 
+/*初始化hci_request*/
 void hci_req_init(struct hci_request *req, struct hci_dev *hdev)
 {
 	skb_queue_head_init(&req->cmd_q);
@@ -74,11 +75,14 @@ static int req_run(struct hci_request *req, hci_req_complete_t complete,
 	if (complete) {
 		bt_cb(skb)->hci.req_complete = complete;
 	} else if (complete_skb) {
+		/*为最后一个skb标记complete_skb函数*/
 		bt_cb(skb)->hci.req_complete_skb = complete_skb;
+		/*有此标记，表明自req_complete_skb上取complete函数*/
 		bt_cb(skb)->hci.req_flags |= HCI_REQ_SKB;
 	}
 
 	spin_lock_irqsave(&hdev->cmd_q.lock, flags);
+	/*将req转移到hdev->cmd_q队列上*/
 	skb_queue_splice_tail(&req->cmd_q, &hdev->cmd_q);
 	spin_unlock_irqrestore(&hdev->cmd_q.lock, flags);
 
@@ -104,9 +108,9 @@ void hci_req_sync_complete(struct hci_dev *hdev, u8 result, u16 opcode,
 
 	if (hdev->req_status == HCI_REQ_PEND) {
 		hdev->req_result = result;
-		hdev->req_status = HCI_REQ_DONE;
+		hdev->req_status = HCI_REQ_DONE;/*设置请求执行完成*/
 		if (skb)
-			hdev->req_skb = skb_get(skb);
+			hdev->req_skb = skb_get(skb);/*设置同步返回skb*/
 		wake_up_interruptible(&hdev->req_wait_q);
 	}
 }
@@ -123,8 +127,9 @@ int __hci_req_sync(struct hci_dev *hdev, int (*func)(struct hci_request *req,
 
 	hci_req_init(&req, hdev);
 
-	hdev->req_status = HCI_REQ_PEND;
+	hdev->req_status = HCI_REQ_PEND;/*同步请求，标记请求待执行*/
 
+	/*通过func回调初始化req*/
 	err = func(&req, opt);
 	if (err) {
 		if (hci_status)
@@ -132,9 +137,10 @@ int __hci_req_sync(struct hci_dev *hdev, int (*func)(struct hci_request *req,
 		return err;
 	}
 
+	/*设置complete回调，并执行此req*/
 	err = hci_req_run_skb(&req, hci_req_sync_complete);
 	if (err < 0) {
-		hdev->req_status = 0;
+		hdev->req_status = 0;/*标记请求已执行*/
 
 		/* ENODATA means the HCI request command queue is empty.
 		 * This can happen when a request with conditionals doesn't
@@ -153,6 +159,7 @@ int __hci_req_sync(struct hci_dev *hdev, int (*func)(struct hci_request *req,
 		return err;
 	}
 
+	/*调度，等待hdev->req_status变换*/
 	err = wait_event_interruptible_timeout(hdev->req_wait_q,
 			hdev->req_status != HCI_REQ_PEND, timeout);
 
@@ -201,6 +208,7 @@ int hci_req_sync(struct hci_dev *hdev, int (*req)(struct hci_request *req,
 	 * gets removed.
 	 */
 	if (test_bit(HCI_UP, &hdev->flags))
+		/*设备up情况下调用*/
 		ret = __hci_req_sync(hdev, req, opt, timeout, hci_status);
 	else
 		ret = -ENETDOWN;
@@ -209,6 +217,7 @@ int hci_req_sync(struct hci_dev *hdev, int (*req)(struct hci_request *req,
 	return ret;
 }
 
+/*申请并填充skb*/
 struct sk_buff *hci_prepare_cmd(struct hci_dev *hdev, u16 opcode, u32 plen,
 				const void *param)
 {
@@ -216,19 +225,23 @@ struct sk_buff *hci_prepare_cmd(struct hci_dev *hdev, u16 opcode, u32 plen,
 	struct hci_command_hdr *hdr;
 	struct sk_buff *skb;
 
+	/*申请skb*/
 	skb = bt_skb_alloc(len, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
 
+	/*存放hci command header*/
 	hdr = skb_put(skb, HCI_COMMAND_HDR_SIZE);
-	hdr->opcode = cpu_to_le16(opcode);
-	hdr->plen   = plen;
+	hdr->opcode = cpu_to_le16(opcode);/*操作码*/
+	hdr->plen   = plen;/*packet 长度*/
 
 	if (plen)
+		/*添加负载*/
 		skb_put_data(skb, param, plen);
 
 	bt_dev_dbg(hdev, "skb len %d", skb->len);
 
+	/*设置元数据*/
 	hci_skb_pkt_type(skb) = HCI_COMMAND_PKT;
 	hci_skb_opcode(skb) = opcode;
 
@@ -259,16 +272,18 @@ void hci_req_add_ev(struct hci_request *req, u16 opcode, u32 plen,
 	}
 
 	if (skb_queue_empty(&req->cmd_q))
-		bt_cb(skb)->hci.req_flags |= HCI_REQ_START;
+		bt_cb(skb)->hci.req_flags |= HCI_REQ_START;/*标记首个request*/
 
 	hci_skb_event(skb) = event;
 
+	/*skb入队到req->cmd_q*/
 	skb_queue_tail(&req->cmd_q, skb);
 }
 
 void hci_req_add(struct hci_request *req, u16 opcode, u32 plen,
 		 const void *param)
 {
+	/*为此req添加新的cmd,对应的event为0*/
 	bt_dev_dbg(req->hdev, "HCI_REQ-0x%4.4x", opcode);
 	hci_req_add_ev(req, opcode, plen, param, 0);
 }

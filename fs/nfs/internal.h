@@ -96,7 +96,7 @@ struct nfs_fs_context {
 	bool			sloppy;
 	unsigned int		flags;		/* NFS{,4}_MOUNT_* flags */
 	unsigned int		rsize, wsize;
-	unsigned int		timeo, retrans;
+	unsigned int		timeo/*超时时间*/, retrans/*重传次数*/;
 	unsigned int		acregmin, acregmax;
 	unsigned int		acdirmin, acdirmax;
 	unsigned int		namlen;
@@ -105,12 +105,12 @@ struct nfs_fs_context {
 	struct nfs_auth_info	auth_info;
 	rpc_authflavor_t	selected_flavor;
 	struct xprtsec_parms	xprtsec;
-	char			*client_address;
+	char			*client_address;/*指明client地址*/
 	unsigned int		version;
 	unsigned int		minorversion;
 	char			*fscache_uniq;
-	unsigned short		protofamily;
-	unsigned short		mountfamily;
+	unsigned short		protofamily;/*ipv4或ipv6*/
+	unsigned short		mountfamily;/*mount服务器family ipv4/ipv6*/
 	bool			has_sec_mnt_opts;
 
 	struct {
@@ -118,30 +118,31 @@ struct nfs_fs_context {
 			struct sockaddr	address;
 			struct sockaddr_storage	_address;/*指明server端地址*/
 		};
-		size_t			addrlen;
-		char			*hostname;
-		u32			version;
-		int			port;
-		unsigned short		protocol;
+		size_t			addrlen;/*地址长度*/
+		char			*hostname;/*mount server的hostname*/
+		u32			version;/*服务器版本*/
+		int			port;/*服务器端口*/
+		unsigned short		protocol;/*mount服务器协议tcp/udp*/
 	} mount_server;
 
 	struct {
 		union {
 			struct sockaddr	address;
 			struct sockaddr_storage	_address;
-		};
-		size_t			addrlen;
+		};/*地址*/
+		size_t			addrlen;/*地址长度*/
 		char			*hostname;
 		char			*export_path;
 		int			port;
-		unsigned short		protocol;
-		unsigned short		nconnect;
-		unsigned short		max_connect;
+		unsigned short		protocol;/*服务采用的协议，例如udp,tcp,rdma*/
+		unsigned short		nconnect;/*连接数*/
+		unsigned short		max_connect;/*连接上限*/
 		unsigned short		export_path_len;
 	} nfs_server;
 
 	struct nfs_fh		*mntfh;
 	struct nfs_server	*server;
+	/*不同版本对应的nfs,例如nfs_v4，nfs_v3, nfs_v2*/
 	struct nfs_subversion	*nfs_mod;
 
 	/* Information for a cloned mount. */

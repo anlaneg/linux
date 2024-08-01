@@ -283,6 +283,7 @@ static int copy_gid_entries_to_user(struct uverbs_attr_bundle *attrs,
 	int i;
 
 	if (user_entry_size == sizeof(*entries)) {
+		/*填写gid table到attrs*/
 		ret = uverbs_copy_to(attrs,
 				     UVERBS_ATTR_QUERY_GID_TABLE_RESP_ENTRIES,
 				     entries, sizeof(*entries) * num_entries);
@@ -349,10 +350,12 @@ static int UVERBS_HANDLER(UVERBS_METHOD_QUERY_GID_TABLE)(
 		return PTR_ERR(ucontext);
 	ib_dev = ucontext->device;
 
+	/*申请attrs内存*/
 	entries = uverbs_kcalloc(attrs, max_entries, sizeof(*entries));
 	if (IS_ERR(entries))
 		return PTR_ERR(entries);
 
+	/*填充entries*/
 	num_entries = rdma_query_gid_table(ib_dev, entries, max_entries);
 	if (num_entries < 0)
 		return -EINVAL;

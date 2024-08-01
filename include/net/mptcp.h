@@ -122,6 +122,7 @@ void mptcp_init(void);
 
 static inline bool sk_is_mptcp(const struct sock *sk)
 {
+	/*检查此socket是否开启MPTCP*/
 	return tcp_sk(sk)->is_mptcp;
 }
 
@@ -228,6 +229,7 @@ static inline void mptcp_init(void)
 
 static inline bool sk_is_mptcp(const struct sock *sk)
 {
+	/*mtcp未打开，默认返回false*/
 	return false;
 }
 

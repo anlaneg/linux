@@ -19,7 +19,7 @@
 #include <trace/events/tcp.h>
 
 static DEFINE_SPINLOCK(tcp_cong_list_lock);
-static LIST_HEAD(tcp_cong_list);
+static LIST_HEAD(tcp_cong_list);/*记录系统中所有tcp拥塞控制算法*/
 
 /* Simple linear search, don't expect many entries! */
 struct tcp_congestion_ops *tcp_ca_find(const char *name)

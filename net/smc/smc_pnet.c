@@ -1042,13 +1042,17 @@ static void smc_pnet_find_rdma_dev(struct net_device *netdev,
 
 		/* check rdma net namespace */
 		if (!rdma_dev_access_netns(ibdev->ibdev, net))
+			/*netns是否匹配*/
 			continue;
 
 		for (i = 1; i <= SMC_MAX_PORTS; i++) {
 			if (!rdma_is_port_valid(ibdev->ibdev, i))
+				/*port无效，跳过*/
 				continue;
 			if (!ibdev->ibdev->ops.get_netdev)
+				/*不支持get_netdev回调，跳过*/
 				continue;
+			/*取得此ib设备i号port对应的netdev*/
 			ndev = ibdev->ibdev->ops.get_netdev(ibdev->ibdev, i);
 			if (!ndev)
 				continue;
@@ -1077,7 +1081,7 @@ static void smc_pnet_find_roce_by_pnetid(struct net_device *ndev,
 	struct net *net;
 
 	ndev = pnet_find_base_ndev(ndev);
-	net = dev_net(ndev);
+	net = dev_net(ndev);/*取此dev对应的net namespace*/
 	if (smc_pnetid_by_dev_port(ndev->dev.parent, ndev->dev_port,
 				   ndev_pnetid) &&
 	    smc_pnet_find_ndev_pnetid_by_table(ndev, ndev_pnetid)) {
@@ -1119,11 +1123,13 @@ static void smc_pnet_find_ism_by_pnetid(struct net_device *ndev,
  */
 void smc_pnet_find_roce_resource(struct sock *sk, struct smc_init_info *ini)
 {
+	/*取socket中缓存的路由项*/
 	struct dst_entry *dst = sk_dst_get(sk);
 
 	if (!dst)
 		goto out;
 	if (!dst->dev)
+		/*路由项中未指定出设备，报错*/
 		goto out_rel;
 
 	smc_pnet_find_roce_by_pnetid(dst->dev, ini);

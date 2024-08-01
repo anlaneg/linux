@@ -78,6 +78,7 @@ static struct workqueue_struct *kblockd_workqueue;
  */
 void blk_queue_flag_set(unsigned int flag, struct request_queue *q)
 {
+	/*设置queue flag*/
 	set_bit(flag, &q->queue_flags);
 }
 EXPORT_SYMBOL(blk_queue_flag_set);
@@ -422,7 +423,7 @@ struct request_queue *blk_alloc_queue(int node_id)
 
 	/*初始化timout定时器回调*/
 	timer_setup(&q->timeout, blk_rq_timed_out_timer, 0);
-	INIT_WORK(&q->timeout_work, blk_timeout_work);
+	INIT_WORK(&q->timeout_work, blk_timeout_work/*work工作为空*/);
 	INIT_LIST_HEAD(&q->icq_list);
 
 	refcount_set(&q->refs, 1);
@@ -604,16 +605,19 @@ static inline blk_status_t blk_check_zone_append(struct request_queue *q,
 	return BLK_STS_OK;
 }
 
+/*块io提前入口，交由各block设备处理*/
 static void __submit_bio(struct bio *bio)
 {
 	if (unlikely(!blk_crypto_bio_prep(&bio)))
 		return;
 
 	if (!bio->bi_bdev->bd_has_submit_bio) {
+		/*设备不支持submit_bio回调，走blk_mq_submit_bio*/
 		blk_mq_submit_bio(bio);
 	} else if (likely(bio_queue_enter(bio) == 0)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
 
+		/*由回调直接处理此bio*/
 		disk->fops->submit_bio(bio);
 		blk_queue_exit(disk->queue);
 	}
@@ -686,6 +690,7 @@ static void __submit_bio_noacct_mq(struct bio *bio)
 {
 	struct bio_list bio_list[2] = { };
 
+	/*为当前进程设置bio_list,内容为空*/
 	current->bio_list = bio_list;
 
 	do {

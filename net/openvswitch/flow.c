@@ -1015,7 +1015,7 @@ static int key_extract_mac_proto(struct sk_buff *skb)
 	return -EINVAL;
 }
 
-//解析报文
+//解析报文产生后续匹配的key
 int ovs_flow_key_extract(const struct ip_tunnel_info *tun_info,
 			 struct sk_buff *skb, struct sw_flow_key *key)
 {

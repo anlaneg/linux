@@ -36,9 +36,14 @@
 
 #include "mgmt_util.h"
 
+/*定义mgmt channel list，用于串连系统的mgmt channel，
+ * 例如HCI_CHANNEL_CONTROL类型的channel
+ * 函数hci_mgmt_chan_register负责注册channel
+ * */
 static LIST_HEAD(mgmt_chan_list);
 static DEFINE_MUTEX(mgmt_chan_list_lock);
 
+/*用于产生socket cookie*/
 static DEFINE_IDA(sock_cookie_ida);
 
 static atomic_t monitor_promisc = ATOMIC_INIT(0);
@@ -53,21 +58,27 @@ struct hci_pinfo {
 	struct hci_dev    *hdev;
 	struct hci_filter filter;
 	__u8              cmsg_mask;
-	unsigned short    channel;
+	unsigned short    channel;/*使用的hdev设备channel*/
 	unsigned long     flags;
+	/*此socket在sock_cookie_ida集合中的唯一编号*/
 	__u32             cookie;
+	/*记录绑定此socket的进程名称*/
 	char              comm[TASK_COMM_LEN];
 	__u16             mtu;
 };
 
+/*取此sock关联的hdev*/
 static struct hci_dev *hci_hdev_from_sock(struct sock *sk)
 {
 	struct hci_dev *hdev = hci_pi(sk)->hdev;
 
 	if (!hdev)
+		/*未关联hdev,报错*/
 		return ERR_PTR(-EBADFD);
+	/*如果此dev有unregister标记，则报错*/
 	if (hci_dev_test_flag(hdev, HCI_UNREGISTER))
 		return ERR_PTR(-EPIPE);
+	/*返回关联的hdev*/
 	return hdev;
 }
 
@@ -102,6 +113,7 @@ static bool hci_sock_gen_cookie(struct sock *sk)
 	int id = hci_pi(sk)->cookie;
 
 	if (!id) {
+		/*未设置id,申请并设置id*/
 		id = ida_simple_get(&sock_cookie_ida, 1, 0, GFP_KERNEL);
 		if (id < 0)
 			id = 0xffffffff;
@@ -160,6 +172,7 @@ static const struct hci_sec_filter hci_sec_filter = {
 	}
 };
 
+/*记录系统中所有hci socket*/
 static struct bt_sock_list hci_sk_list = {
 	.lock = __RW_LOCK_UNLOCKED(hci_sk_list.lock)
 };
@@ -211,14 +224,17 @@ void hci_send_to_sock(struct hci_dev *hdev, struct sk_buff *skb)
 
 	read_lock(&hci_sk_list.lock);
 
+	/*遍历系统中所有hci socket*/
 	sk_for_each(sk, &hci_sk_list.head) {
 		struct sk_buff *nskb;
 
 		if (sk->sk_state != BT_BOUND || hci_pi(sk)->hdev != hdev)
+			/*跳过未bond或者未关联此设备的hci socket*/
 			continue;
 
 		/* Don't send frame to the socket it came from */
 		if (skb->sk == sk)
+			/*跳过自身socket*/
 			continue;
 
 		if (hci_pi(sk)->channel == HCI_CHANNEL_RAW) {
@@ -257,6 +273,7 @@ void hci_send_to_sock(struct hci_dev *hdev, struct sk_buff *skb)
 		if (!nskb)
 			continue;
 
+		/*送一份copy到此socket*/
 		if (sock_queue_rcv_skb(sk, nskb))
 			kfree_skb(nskb);
 	}
@@ -327,10 +344,12 @@ static void __hci_send_to_channel(unsigned short channel, struct sk_buff *skb,
 
 		/* Ignore socket without the flag set */
 		if (!hci_sock_test_flag(sk, flag))
+			/*socket上没有这个标记，忽略*/
 			continue;
 
 		/* Skip the original socket */
 		if (sk == skip_sk)
+			/*跳过需要skip的socket*/
 			continue;
 
 		if (sk->sk_state != BT_BOUND)
@@ -341,6 +360,7 @@ static void __hci_send_to_channel(unsigned short channel, struct sk_buff *skb,
 			/*channel不相同的socket*/
 			continue;
 
+		/*复制skb*/
 		nskb = hci_skb_clone(skb);
 		if (!nskb)
 			continue;
@@ -368,6 +388,7 @@ void hci_send_to_monitor(struct hci_dev *hdev, struct sk_buff *skb)
 	__le16 opcode;
 
 	if (!atomic_read(&monitor_promisc))
+		/*如未开启混杂，则直接退出*/
 		return;
 
 	BT_DBG("hdev %p len %d", hdev, skb->len);
@@ -441,6 +462,7 @@ void hci_send_monitor_ctrl_event(struct hci_dev *hdev, u16 event,
 		struct sk_buff *skb;
 
 		if (hci_pi(sk)->channel != HCI_CHANNEL_CONTROL)
+			/*channel必须为conntrol*/
 			continue;
 
 		/* Ignore socket without the flag set */
@@ -449,6 +471,7 @@ void hci_send_monitor_ctrl_event(struct hci_dev *hdev, u16 event,
 
 		/* Skip the original socket */
 		if (sk == skip_sk)
+			/*跳过指明的socket(事件源socket)*/
 			continue;
 
 		skb = bt_skb_alloc(6 + data_len, GFP_ATOMIC);
@@ -486,6 +509,7 @@ static struct sk_buff *create_monitor_event(struct hci_dev *hdev, int event)
 
 	switch (event) {
 	case HCI_DEV_REG:
+		/*创建dev reg事件对应的skb*/
 		skb = bt_skb_alloc(HCI_MON_NEW_INDEX_SIZE, GFP_ATOMIC);
 		if (!skb)
 			return NULL;
@@ -555,6 +579,7 @@ static struct sk_buff *create_monitor_event(struct hci_dev *hdev, int event)
 	return skb;
 }
 
+/*依据sock实际内容，构造monitor_ctrl_open命令并返回对应的skb*/
 static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 {
 	struct hci_mon_hdr *hdr;
@@ -565,14 +590,15 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 
 	/* No message needed when cookie is not present */
 	if (!hci_pi(sk)->cookie)
+		/*此socket必须设置cookie*/
 		return NULL;
 
-	/*针对请求类型，响应不同的skb*/
+	/*针对socket的channel类型，响应不同的skb*/
 	switch (hci_pi(sk)->channel) {
 	case HCI_CHANNEL_RAW:
 		format = 0x0000;
 		ver[0] = BT_SUBSYS_VERSION;
-		put_unaligned_le16(BT_SUBSYS_REVISION, ver + 1);
+		put_unaligned_le16(BT_SUBSYS_REVISION, ver + 1);/*填2个字节*/
 		break;
 	case HCI_CHANNEL_USER:
 		format = 0x0001;
@@ -588,6 +614,7 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 		return NULL;
 	}
 
+	/*申请skb*/
 	skb = bt_skb_alloc(14 + TASK_COMM_LEN, GFP_ATOMIC);
 	if (!skb)
 		return NULL;
@@ -596,24 +623,32 @@ static struct sk_buff *create_monitor_ctrl_open(struct sock *sk)
 
 	flags = hci_sock_test_flag(sk, HCI_SOCK_TRUSTED) ? 0x1 : 0x0;
 
-	/*设置cookie id*/
+	/*设置cookie id 4字节*/
 	put_unaligned_le32(hci_pi(sk)->cookie, skb_put(skb, 4));
+	/*设置format 2字节*/
 	put_unaligned_le16(format, skb_put(skb, 2));
+	/*设置ver 3节节*/
 	skb_put_data(skb, ver, sizeof(ver));
+	/*设置flags 4字节*/
 	put_unaligned_le32(flags, skb_put(skb, 4));
+	/*填写进程名称长度 1字节，此处共计14字节*/
 	skb_put_u8(skb, TASK_COMM_LEN);
 	/*填充进程名称*/
 	skb_put_data(skb, hci_pi(sk)->comm, TASK_COMM_LEN);
 
+	/*为skb加时间签*/
 	__net_timestamp(skb);
 
-	/*添加monitor header*/
+	/*添加monitor header，使用预留的字节（8字节）*/
 	hdr = skb_push(skb, HCI_MON_HDR_SIZE);
+	/*指明opcode为HCI_MON_CTRL_OPEN（2字节）*/
 	hdr->opcode = cpu_to_le16(HCI_MON_CTRL_OPEN);
+	/*指明hdev设备的编号（2字节）*/
 	if (hci_pi(sk)->hdev)
 		hdr->index = cpu_to_le16(hci_pi(sk)->hdev->id);
 	else
 		hdr->index = cpu_to_le16(HCI_DEV_NONE);
+	/*指定hdr后的负载长度（2字节）*/
 	hdr->len = cpu_to_le16(skb->len - HCI_MON_HDR_SIZE);
 
 	return skb;
@@ -821,6 +856,7 @@ void hci_sock_dev_event(struct hci_dev *hdev, int event)
 		/* Send event to monitor */
 		skb = create_monitor_event(hdev, event);
 		if (skb) {
+			/*事件发送到monitor channel*/
 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
 					    HCI_SOCK_TRUSTED, NULL);
 			kfree_skb(skb);
@@ -876,6 +912,8 @@ static struct hci_mgmt_chan *hci_mgmt_chan_find(unsigned short channel)
 	return c;
 }
 
+/*向mgmt_chan_list注册mgmt channel,
+ * 如上示，最多有HCI_CHANNEL_CONTROL种mgmt channel*/
 int hci_mgmt_chan_register(struct hci_mgmt_chan *c)
 {
 	if (c->channel < HCI_CHANNEL_CONTROL)
@@ -1032,6 +1070,7 @@ static int hci_sock_bound_ioctl(struct sock *sk, unsigned int cmd,
 		return -EOPNOTSUPP;
 
 	case HCIGETCONNINFO:
+		/*获取指定connect的info*/
 		return hci_get_conn_info(hdev, (void __user *)arg);
 
 	case HCIGETAUTHINFO:
@@ -1085,11 +1124,13 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 	case HCIUNBLOCKADDR:
 		break;
 	default:
+		/*遇到不支持的cmd*/
 		return -ENOIOCTLCMD;
 	}
 
 	lock_sock(sk);
 
+	/*仅raw channel可继续处理*/
 	if (hci_pi(sk)->channel != HCI_CHANNEL_RAW) {
 		err = -EBADFD;
 		goto done;
@@ -1127,30 +1168,37 @@ static int hci_sock_ioctl(struct socket *sock, unsigned int cmd,
 
 	switch (cmd) {
 	case HCIGETDEVLIST:
+		/*列出hci_dev_list上所有hdev设备*/
 		return hci_get_dev_list(argp);
 
 	case HCIGETDEVINFO:
+		/*取用户态指定的某一个hdev设备的详细信息*/
 		return hci_get_dev_info(argp);
 
 	case HCIGETCONNLIST:
+		/*取指定设备的connect列表信息*/
 		return hci_get_conn_list(argp);
 
 	case HCIDEVUP:
+		/*up设备*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		return hci_dev_open(arg);
 
 	case HCIDEVDOWN:
+		/*关闭设备*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		return hci_dev_close(arg);
 
 	case HCIDEVRESET:
+		/*reset设备*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		return hci_dev_reset(arg);
 
 	case HCIDEVRESTAT:
+		/*reset stat*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 		return hci_dev_reset_stat(arg);
@@ -1227,9 +1275,10 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 	 */
 	hdev = hci_pi(sk)->hdev;
 	if (hdev && hci_dev_test_flag(hdev, HCI_UNREGISTER)) {
+		/*原socket上已有hdev,且hdev标记为unregister*/
 		hci_pi(sk)->hdev = NULL;
-		sk->sk_state = BT_OPEN;
-		hci_dev_put(hdev);
+		sk->sk_state = BT_OPEN;/*进open状态*/
+		hci_dev_put(hdev);/*归还hdev*/
 	}
 	hdev = NULL;
 
@@ -1242,11 +1291,13 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 	switch (haddr.hci_channel) {
 	case HCI_CHANNEL_RAW:
 		if (hci_pi(sk)->hdev) {
+			/*socket已有hdev，报错*/
 			err = -EALREADY;
 			goto done;
 		}
 
 		if (haddr.hci_dev != HCI_DEV_NONE) {
+			/*地址指明了hci_dev,通过id获取此hdev*/
 			hdev = hci_dev_get(haddr.hci_dev);
 			if (!hdev) {
 				err = -ENODEV;
@@ -1276,11 +1327,12 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		if (capable(CAP_NET_ADMIN))
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
-		hci_pi(sk)->hdev = hdev;
+		hci_pi(sk)->hdev = hdev;/*为此bt socket关联hdev*/
 
 		/* Send event to monitor */
-		skb = create_monitor_ctrl_open(sk);
+		skb = create_monitor_ctrl_open(sk);/*构造ctrl-open事件*/
 		if (skb) {
+			/*由monitor channel发出*/
 			hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
 					    HCI_SOCK_TRUSTED, NULL);
 			kfree_skb(skb);
@@ -1294,15 +1346,18 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		}
 
 		if (haddr.hci_dev == HCI_DEV_NONE) {
+			/*hci_dev不得为none*/
 			err = -EINVAL;
 			goto done;
 		}
 
 		if (!capable(CAP_NET_ADMIN)) {
+			/*须admin权限*/
 			err = -EPERM;
 			goto done;
 		}
 
+		/*通过hci_dev获取hdev*/
 		hdev = hci_dev_get(haddr.hci_dev);
 		if (!hdev) {
 			err = -ENODEV;
@@ -1406,7 +1461,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		send_monitor_replay(sk);
 		send_monitor_control_replay(sk);
 
-		atomic_inc(&monitor_promisc);
+		atomic_inc(&monitor_promisc);/*monitor混杂开启*/
 		break;
 
 	case HCI_CHANNEL_LOGGING:
@@ -1424,7 +1479,8 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		break;
 
 	default:
-		/*例如haddr.hci_channel = HCI_CHANNEL_CONTROL情况*/
+		/*例如haddr.hci_channel = HCI_CHANNEL_CONTROL情况下，此处
+		 * 查询到的channel即为mgmt.c中mgmt_init函数注册的channel*/
 		if (!hci_mgmt_chan_find(haddr.hci_channel)) {
 			/*此hci_channel不存在，报错*/
 			err = -EINVAL;
@@ -1443,6 +1499,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		 * also only untrusted events are sent.
 		 */
 		if (capable(CAP_NET_ADMIN))
+			/*有net admin权限，则标记trusted*/
 			hci_sock_set_flag(sk, HCI_SOCK_TRUSTED);
 
 		/*为socket绑定此channel*/
@@ -1459,6 +1516,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 		 * are changes to settings, class of device, name etc.
 		 */
 		if (hci_pi(sk)->channel == HCI_CHANNEL_CONTROL) {
+			/*针对control channel，如果未设置cookie，则生成新cookie*/
 			if (!hci_sock_gen_cookie(sk)) {
 				/* In the case when a cookie has already been
 				 * assigned, this socket will transition from
@@ -1477,6 +1535,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 			/* Send event to monitor */
 			skb = create_monitor_ctrl_open(sk);
 			if (skb) {
+				/*发送产生的消息给monitor*/
 				hci_send_to_channel(HCI_CHANNEL_MONITOR, skb,
 						    HCI_SOCK_TRUSTED, NULL);
 				kfree_skb(skb);
@@ -1490,7 +1549,7 @@ static int hci_sock_bind(struct socket *sock, struct sockaddr *addr,
 			hci_sock_set_flag(sk, HCI_MGMT_LOCAL_NAME_EVENTS);
 		}
 		break;
-	}
+	} /*switch结尾*/
 
 	/* Default MTU to HCI_MAX_FRAME_SIZE if not set */
 	if (!hci_pi(sk)->mtu)
@@ -1520,6 +1579,7 @@ static int hci_sock_getname(struct socket *sock, struct sockaddr *addr,
 
 	lock_sock(sk);
 
+	/*通过socket取haddr*/
 	hdev = hci_hdev_from_sock(sk);
 	if (IS_ERR(hdev)) {
 		err = PTR_ERR(hdev);
@@ -1634,7 +1694,7 @@ static int hci_sock_recvmsg(struct socket *sock, struct msghdr *msg,
 	return err ? : copied;
 }
 
-/*指定channel处理sk收到的请求报文（skb)*/
+/*指定channel，处理sk收到的报文（skb)，依据opcode选择相应的回调函数*/
 static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 			struct sk_buff *skb)
 {
@@ -1651,12 +1711,14 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	if (skb->len < sizeof(*hdr))
 		return -EINVAL;
 
+	/*取skb中的mgmt header*/
 	hdr = (void *)skb->data;
-	opcode = __le16_to_cpu(hdr->opcode);/*操作符*/
-	index = __le16_to_cpu(hdr->index);
-	len = __le16_to_cpu(hdr->len);
+	opcode = __le16_to_cpu(hdr->opcode);/*取操作符*/
+	index = __le16_to_cpu(hdr->index);/*取hci设备对应的device id*/
+	len = __le16_to_cpu(hdr->len);/*取payload长度*/
 
 	if (len != skb->len - sizeof(*hdr)) {
+		/*长度异常*/
 		err = -EINVAL;
 		goto done;
 	}
@@ -1677,7 +1739,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 
 	if (opcode >= chan->handler_count/*opcode超过channel的处理最大值*/ ||
 	    chan->handlers[opcode].func == NULL/*此channel不支持此opcode*/) {
-		/*响应失败*/
+		/*无处理回调，响应失败*/
 		BT_DBG("Unknown op %u", opcode);
 		err = mgmt_cmd_status(sk, index, opcode,
 				      MGMT_STATUS_UNKNOWN_COMMAND);
@@ -1689,6 +1751,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 
 	if (!hci_sock_test_flag(sk, HCI_SOCK_TRUSTED) &&
 	    !(handler->flags & HCI_MGMT_UNTRUSTED)) {
+		/*权限问题，不能响应*/
 		err = mgmt_cmd_status(sk, index, opcode,
 				      MGMT_STATUS_PERMISSION_DENIED);
 		goto done;
@@ -1698,7 +1761,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		/*利用index查找对应的hdev*/
 		hdev = hci_dev_get(index);
 		if (!hdev) {
-			/*未找到设备，响应index无效*/
+			/*未找到hdev设备，响应index无效*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1707,6 +1770,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 		if (hci_dev_test_flag(hdev, HCI_SETUP) ||
 		    hci_dev_test_flag(hdev, HCI_CONFIG) ||
 		    hci_dev_test_flag(hdev, HCI_USER_CHANNEL)) {
+			/*此hci dev设备状态未达预期*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1714,6 +1778,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 
 		if (hci_dev_test_flag(hdev, HCI_UNCONFIGURED) &&
 		    !(handler->flags & HCI_MGMT_UNCONFIGURED)) {
+			/*设备正在unregister,报异常*/
 			err = mgmt_cmd_status(sk, index, opcode,
 					      MGMT_STATUS_INVALID_INDEX);
 			goto done;
@@ -1742,6 +1807,7 @@ static int hci_mgmt_cmd(struct hci_mgmt_chan *chan, struct sock *sk,
 	if (hdev && chan->hdev_init)
 		chan->hdev_init(sk, hdev);
 
+	/*指向mgmt header之后*/
 	cp = skb->data + sizeof(*hdr);
 
 	/*调用回调，完成cmd响应*/
@@ -1771,13 +1837,16 @@ static int hci_logging_frame(struct sock *sk, struct sk_buff *skb,
 	 * terminator NUL byte. Anything shorter are invalid packets.
 	 */
 	if (skb->len < sizeof(*hdr) + 3)
+		/*长度异常*/
 		return -EINVAL;
 
 	hdr = (void *)skb->data;
 
 	if (__le16_to_cpu(hdr->len) != skb->len - sizeof(*hdr))
+		/*长度异常*/
 		return -EINVAL;
 
+	/*只处理opcode为0的情况*/
 	if (__le16_to_cpu(hdr->opcode) == 0x0000) {
 		__u8 priority = skb->data[sizeof(*hdr)];
 		__u8 ident_len = skb->data[sizeof(*hdr) + 1];
@@ -1806,6 +1875,7 @@ static int hci_logging_frame(struct sock *sk, struct sk_buff *skb,
 	index = __le16_to_cpu(hdr->index);
 
 	if (index != MGMT_INDEX_NONE) {
+		/*取hci设备*/
 		hdev = hci_dev_get(index);
 		if (!hdev)
 			return -ENODEV;
@@ -1813,8 +1883,10 @@ static int hci_logging_frame(struct sock *sk, struct sk_buff *skb,
 		hdev = NULL;
 	}
 
+	/*变更opcode为logging*/
 	hdr->opcode = cpu_to_le16(HCI_MON_USER_LOGGING);
 
+	/*送monitor channel*/
 	hci_send_to_channel(HCI_CHANNEL_MONITOR, skb, HCI_SOCK_TRUSTED, NULL);
 	err = skb->len;
 
@@ -1843,8 +1915,10 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 		return -EINVAL;
 
 	if (len < 4 || len > hci_pi(sk)->mtu)
+		/*长度过小或者长度过大，则参数有误*/
 		return -EINVAL;
 
+	/*按msg构造skb*/
 	skb = bt_skb_sendmsg(sk, msg, len, len, 0, 0);
 	if (IS_ERR(skb))
 		return PTR_ERR(skb);
@@ -1856,9 +1930,11 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	case HCI_CHANNEL_USER:
 		break;
 	case HCI_CHANNEL_MONITOR:
+		/*不支持通过此接口送monitor*/
 		err = -EOPNOTSUPP;
 		goto drop;
 	case HCI_CHANNEL_LOGGING:
+		/*logging处理（送monitor)*/
 		err = hci_logging_frame(sk, skb, flags);
 		goto drop;
 	default:
@@ -1874,9 +1950,10 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 			err = -EINVAL;
 
 		mutex_unlock(&mgmt_chan_list_lock);
-		goto drop;
+		goto drop;/*走丢包处理*/
 	}
 
+	/*取此socket对应的hdev*/
 	hdev = hci_hdev_from_sock(sk);
 	if (IS_ERR(hdev)) {
 		err = PTR_ERR(hdev);
@@ -1884,6 +1961,7 @@ static int hci_sock_sendmsg(struct socket *sock, struct msghdr *msg,
 	}
 
 	if (!test_bit(HCI_UP, &hdev->flags)) {
+		/*hdev没有up,丢包*/
 		err = -ENETDOWN;
 		goto drop;
 	}
@@ -2084,7 +2162,7 @@ static int hci_sock_setsockopt(struct socket *sock, int level, int optname,
 			break;
 		}
 
-		hci_pi(sk)->mtu = opt;
+		hci_pi(sk)->mtu = opt;/*设置socket对应mtu*/
 		break;
 
 	default:
@@ -2210,13 +2288,13 @@ static const struct proto_ops hci_sock_ops = {
 	.release	= hci_sock_release,
 	.bind		= hci_sock_bind,
 	.getname	= hci_sock_getname,
-	.sendmsg	= hci_sock_sendmsg,
+	.sendmsg	= hci_sock_sendmsg,/*hci socket读*/
 	.recvmsg	= hci_sock_recvmsg,
 	.ioctl		= hci_sock_ioctl,
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= hci_sock_compat_ioctl,
 #endif
-	.poll		= datagram_poll,
+	.poll		= datagram_poll,/*检测读写事件*/
 	.listen		= sock_no_listen,
 	.shutdown	= sock_no_shutdown,
 	.setsockopt	= hci_sock_setsockopt,
@@ -2227,6 +2305,7 @@ static const struct proto_ops hci_sock_ops = {
 	.mmap		= sock_no_mmap
 };
 
+/*hic协议*/
 static struct proto hci_sk_proto = {
 	.name		= "HCI",
 	.owner		= THIS_MODULE,
@@ -2247,15 +2326,16 @@ static int hci_sock_create(struct net *net, struct socket *sock, int protocol,
 
 	sock->ops = &hci_sock_ops;/*hci协议对应的ops*/
 
+	/*申请一个socket结构体*/
 	sk = bt_sock_alloc(net, sock, &hci_sk_proto, protocol, GFP_ATOMIC,
 			   kern);
 	if (!sk)
 		return -ENOMEM;
 
-	sock->state = SS_UNCONNECTED;
+	sock->state = SS_UNCONNECTED;/*直接标记为connected*/
 	sk->sk_destruct = hci_sock_destruct;
 
-	bt_sock_link(&hci_sk_list, sk);
+	bt_sock_link(&hci_sk_list, sk);/*将此sock加入到hci sock列表*/
 	return 0;
 }
 

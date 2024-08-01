@@ -3903,7 +3903,7 @@ EXPORT_SYMBOL(generic_file_direct_write);
 ssize_t generic_perform_write(struct kiocb *iocb, struct iov_iter *i)
 {
 	struct file *file = iocb->ki_filp;
-	loff_t pos = iocb->ki_pos;/*要写入的位置*/
+	loff_t pos = iocb->ki_pos;/*要写入的起始位置*/
 	struct address_space *mapping = file->f_mapping;
 	const struct address_space_operations *a_ops = mapping->a_ops;
 	long status = 0;
@@ -3933,12 +3933,12 @@ again:
 		}
 
 		if (fatal_signal_pending(current)) {
-			/*当前有未绝的信号，返回INTR*/
+			/*当前有未绝的信号，返回INTR（故在执行write时可能会被信号中断）*/
 			status = -EINTR;
 			break;
 		}
 
-		status = a_ops->write_begin(file, mapping, pos/*写入位置*/, bytes/*写入长度*/,
+		status = a_ops->write_begin(file, mapping, pos/*写入的位置*/, bytes/*写入的长度*/,
 						&page/*出参，写入位置对应的页*/, &fsdata);
 		if (unlikely(status < 0))
 			break;
@@ -4007,9 +4007,9 @@ EXPORT_SYMBOL(generic_perform_write);
  */
 ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 {
-	struct file *file = iocb->ki_filp;
+	struct file *file = iocb->ki_filp;/*取要操作的文件*/
 	struct address_space *mapping = file->f_mapping;
-	struct inode *inode = mapping->host;
+	struct inode *inode = mapping->host;/*取要操作的inode*/
 	ssize_t ret;
 
 	ret = file_remove_privs(file);
@@ -4020,6 +4020,7 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	if (ret)
 		return ret;
 
+	/*禁止缓存直接写*/
 	if (iocb->ki_flags & IOCB_DIRECT) {
 		ret = generic_file_direct_write(iocb, from);
 		/*
@@ -4035,6 +4036,7 @@ ssize_t __generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from)
 				generic_perform_write(iocb, from));
 	}
 
+	/*执行带缓存写*/
 	return generic_perform_write(iocb, from);
 }
 EXPORT_SYMBOL(__generic_file_write_iter);
@@ -4055,7 +4057,7 @@ EXPORT_SYMBOL(__generic_file_write_iter);
 ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from/*指明要写入的内容*/)
 {
 	struct file *file = iocb->ki_filp;/*要写入的文件*/
-	struct inode *inode = file->f_mapping->host;
+	struct inode *inode = file->f_mapping->host;/*文件对应的inode*/
 	ssize_t ret;
 
 	/*针对inode进行加锁*/
@@ -4063,7 +4065,7 @@ ssize_t generic_file_write_iter(struct kiocb *iocb, struct iov_iter *from/*指�
 	//检查写位置及返回可写入的长度，返回<0，则出错，返回０，则不可写入
 	ret = generic_write_checks(iocb, from);
 	if (ret > 0)
-		//实现文件写入
+		//可写入一定量字节，实现文件写入
 		ret = __generic_file_write_iter(iocb, from);
 	inode_unlock(inode);
 

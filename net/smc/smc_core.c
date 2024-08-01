@@ -800,7 +800,7 @@ int smcr_link_init(struct smc_link_group *lgr, struct smc_link *lnk,
 	rc = smc_ib_create_protection_domain(lnk);
 	if (rc)
 		goto free_link_mem;
-	rc = smc_ib_create_queue_pair(lnk);
+	rc = smc_ib_create_queue_pair(lnk);/*创建qp*/
 	if (rc)
 		goto dealloc_pd;
 	rc = smc_wr_create_link(lnk);
@@ -1827,6 +1827,7 @@ int smc_vlan_by_tcpsk(struct socket *clcsock, struct smc_init_info *ini)
 
 	ndev = dst->dev;
 	if (is_vlan_dev(ndev)) {
+		/*vlan设备，取其对应的vlan id*/
 		ini->vlan_id = vlan_dev_vlan_id(ndev);
 		goto out_rel;
 	}
@@ -1898,6 +1899,7 @@ int smc_conn_create(struct smc_sock *smc, struct smc_init_info *ini)
 	lgr_lock = ini->is_smcd ? &ini->ism_dev[ini->ism_selected]->lgr_lock :
 				  &smc_lgr_list.lock;
 	ini->first_contact_local = 1;
+	/*确定是否server或client*/
 	role = smc->listen_smc ? SMC_SERV : SMC_CLNT;
 	if (role == SMC_CLNT && ini->first_contact_peer)
 		/* create new link group as well */
@@ -1966,7 +1968,7 @@ create:
 	conn->local_tx_ctrl.len = SMC_WR_TX_SIZE;
 	conn->urg_state = SMC_URG_READ;
 	init_waitqueue_head(&conn->cdc_pend_tx_wq);
-	INIT_WORK(&smc->conn.abort_work, smc_conn_abort_work);
+	INIT_WORK(&smc->conn.abort_work, smc_conn_abort_work);/*指明abort时执行的函数*/
 	if (ini->is_smcd) {
 		conn->rx_off = sizeof(struct smcd_cdc_msg);
 		smcd_cdc_rx_init(conn); /* init tasklet for this conn */

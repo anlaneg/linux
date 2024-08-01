@@ -39,7 +39,7 @@ struct nfs_subversion nfs_v4 = {
 	.owner		= THIS_MODULE,
 	.nfs_fs		= &nfs4_fs_type,
 	.rpc_vers	= &nfs_version4,
-	.rpc_ops	= &nfs_v4_clientops,
+	.rpc_ops	= &nfs_v4_clientops,/*v4版本对应的rpc client ops*/
 	.sops		= &nfs4_sops,
 	.xattr		= nfs4_xattr_handlers,
 };
@@ -283,7 +283,7 @@ static int __init init_nfs_v4(void)
 #ifdef CONFIG_NFS_V4_2
 	nfs42_ssc_register_ops();
 #endif
-	register_nfs_version(&nfs_v4);
+	register_nfs_version(&nfs_v4);/*注册v4版本的nfs*/
 	return 0;
 out2:
 	nfs_idmap_quit();

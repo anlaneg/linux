@@ -80,6 +80,7 @@ static void rdma_dim_destroy(struct ib_cq *cq)
 	kfree(cq->dim);
 }
 
+/*自cq中最多出num_entries个元素，并将其内容填充到wc中*/
 static int __poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc)
 {
 	int rc;
@@ -89,8 +90,9 @@ static int __poll_cq(struct ib_cq *cq, int num_entries, struct ib_wc *wc)
 	return rc;
 }
 
-static int __ib_process_cq(struct ib_cq *cq, int budget, struct ib_wc *wcs,
-			   int batch)
+/*自cq中最多出budget个元素，按batch批量进行出队*/
+static int __ib_process_cq(struct ib_cq *cq, int budget/*最多出budget个*/, struct ib_wc *wcs/*用于cqe填充*/,
+			   int batch/*一批次数*/)
 {
 	int i, n, completed = 0;
 
@@ -103,21 +105,25 @@ static int __ib_process_cq(struct ib_cq *cq, int budget, struct ib_wc *wcs,
 	 */
 	while ((n = __poll_cq(cq, min_t(u32, batch,
 					budget - completed), wcs)) > 0) {
+		/*本轮自cq中出了n个元素*/
 		for (i = 0; i < n; i++) {
 			struct ib_wc *wc = &wcs[i];
 
+			/*有done回调，调用done回调*/
 			if (wc->wr_cqe)
 				wc->wr_cqe->done(cq, wc);
 			else
 				WARN_ON_ONCE(wc->status == IB_WC_SUCCESS);
 		}
 
-		completed += n;
+		completed += n;/*增加已完成数*/
 
 		if (n != batch || (budget != -1 && completed >= budget))
+			/*处理结束*/
 			break;
 	}
 
+	/*返回总完成数*/
 	return completed;
 }
 
@@ -154,11 +160,13 @@ static int ib_poll_handler(struct irq_poll *iop, int budget)
 	struct dim *dim = cq->dim;
 	int completed;
 
-	completed = __ib_process_cq(cq, budget, cq->wc, IB_POLL_BATCH);
+	completed = __ib_process_cq(cq, budget/*最多出budget个*/, cq->wc, IB_POLL_BATCH/*一个批次出多少个wc*/);
 	if (completed < budget) {
+		/*cq中的元素不足，此iop已将cq poll完*/
 		irq_poll_complete(&cq->iop);
 		if (ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0) {
 			trace_cq_reschedule(cq);
+			/*队列不为空，仍添加iop,并触发软中断*/
 			irq_poll_sched(&cq->iop);
 		}
 	}
@@ -172,6 +180,7 @@ static int ib_poll_handler(struct irq_poll *iop, int budget)
 static void ib_cq_completion_softirq(struct ib_cq *cq, void *private)
 {
 	trace_cq_schedule(cq);
+	/*将iop加入软中断处理列表，交触发irq-poll软中断*/
 	irq_poll_sched(&cq->iop);
 }
 
@@ -184,6 +193,7 @@ static void ib_cq_poll_work(struct work_struct *work)
 				    IB_POLL_BATCH);
 	if (completed >= IB_POLL_BUDGET_WORKQUEUE ||
 	    ib_req_notify_cq(cq, IB_POLL_FLAGS) > 0)
+		/*仍有数据在cq中，work再次加入wq*/
 		queue_work(cq->comp_wq, &cq->work);
 	else if (cq->dim)
 		rdma_dim(cq->dim, completed);
@@ -192,6 +202,7 @@ static void ib_cq_poll_work(struct work_struct *work)
 static void ib_cq_completion_workqueue(struct ib_cq *cq, void *private)
 {
 	trace_cq_schedule(cq);
+	/*将cq->work入队到comp工作对列*/
 	queue_work(cq->comp_wq, &cq->work);
 }
 
@@ -209,9 +220,9 @@ static void ib_cq_completion_workqueue(struct ib_cq *cq, void *private)
  * specified context. The ULP must use wr->wr_cqe instead of wr->wr_id
  * to use this CQ abstraction.
  */
-struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
+struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe/*要创建cq的数目*/,
 			    int comp_vector, enum ib_poll_context poll_ctx,
-			    const char *caller)
+			    const char *caller/*调用名称信息*/)
 {
 	struct ib_cq_init_attr cq_attr = {
 		.cqe		= nr_cqe,
@@ -220,6 +231,7 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 	struct ib_cq *cq;
 	int ret = -ENOMEM;
 
+	/*申请ib_cq结构体*/
 	cq = rdma_zalloc_drv_obj(dev, ib_cq);
 	if (!cq)
 		return ERR_PTR(ret);
@@ -230,6 +242,7 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 	atomic_set(&cq->usecnt, 0);
 	cq->comp_vector = comp_vector;
 
+	/*申请wc,用于cq在poll时临时保存poll的结果*/
 	cq->wc = kmalloc_array(IB_POLL_BATCH, sizeof(*cq->wc), GFP_KERNEL);
 	if (!cq->wc)
 		goto out_free_cq;
@@ -237,26 +250,28 @@ struct ib_cq *__ib_alloc_cq(struct ib_device *dev, void *private, int nr_cqe,
 	rdma_restrack_new(&cq->res, RDMA_RESTRACK_CQ);
 	rdma_restrack_set_name(&cq->res, caller);
 
+	/*各类型ib设备自由初始化此cq*/
 	ret = dev->ops.create_cq(cq, &cq_attr, NULL);
 	if (ret)
 		goto out_free_wc;
 
 	rdma_dim_init(cq);
 
+	/*按照poll_ctx设置comp_handler*/
 	switch (cq->poll_ctx) {
 	case IB_POLL_DIRECT:
 		cq->comp_handler = ib_cq_completion_direct;
 		break;
 	case IB_POLL_SOFTIRQ:
-		cq->comp_handler = ib_cq_completion_softirq;
-
+		cq->comp_handler = ib_cq_completion_softirq;/*处理为：通过软中断来poll cq*/
+		/*初始化cq->iop*/
 		irq_poll_init(&cq->iop, IB_POLL_BUDGET_IRQ, ib_poll_handler);
 		ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
 		break;
 	case IB_POLL_WORKQUEUE:
 	case IB_POLL_UNBOUND_WORKQUEUE:
-		cq->comp_handler = ib_cq_completion_workqueue;
-		INIT_WORK(&cq->work, ib_cq_poll_work);
+		cq->comp_handler = ib_cq_completion_workqueue;/*处理为:将cq->work入队到wq*/
+		INIT_WORK(&cq->work, ib_cq_poll_work);/*初始化work处理cq*/
 		ib_req_notify_cq(cq, IB_CQ_NEXT_COMP);
 		cq->comp_wq = (cq->poll_ctx == IB_POLL_WORKQUEUE) ?
 				ib_comp_wq : ib_comp_unbound_wq;

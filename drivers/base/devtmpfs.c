@@ -67,6 +67,7 @@ static struct vfsmount *mnt;
 static struct dentry *public_dev_mount(struct file_system_type *fs_type, int flags,
 		      const char *dev_name, void *data)
 {
+	/*取devtmpfs文件系统对应的super block*/
 	struct super_block *s = mnt->mnt_sb;
 	int err;
 
@@ -77,7 +78,7 @@ static struct dentry *public_dev_mount(struct file_system_type *fs_type, int fla
 		deactivate_locked_super(s);
 		return ERR_PTR(err);
 	}
-	return dget(s->s_root);
+	return dget(s->s_root);/*返回root dentry*/
 }
 
 static struct file_system_type internal_fs_type = {
@@ -93,9 +94,10 @@ static struct file_system_type internal_fs_type = {
 //定义devtmpfs文件系统
 static struct file_system_type dev_fs_type = {
 	.name = "devtmpfs",
-	.mount = public_dev_mount,
+	.mount = public_dev_mount,/*注：针对devtmpfs挂载时，并不重新创建挂载点*/
 };
 
+/*向requests上添加req,并唤醒kernel thread，执行请求*/
 static int devtmpfs_submit_req(struct req *req, const char *tmp)
 {
 	init_completion(&req->done);
@@ -113,6 +115,7 @@ static int devtmpfs_submit_req(struct req *req, const char *tmp)
 	return req->err;
 }
 
+/*创建dev对应的文件*/
 int devtmpfs_create_node(struct device *dev)
 {
 	const char *tmp = NULL;
@@ -121,7 +124,7 @@ int devtmpfs_create_node(struct device *dev)
 	if (!thread)
 		return 0;
 
-	req.mode = 0;
+	req.mode = 0;/*初始化mode为0*/
 	req.uid = GLOBAL_ROOT_UID;
 	req.gid = GLOBAL_ROOT_GID;
 	//要创建的dev名称
@@ -132,16 +135,17 @@ int devtmpfs_create_node(struct device *dev)
 	if (req.mode == 0)
 		req.mode = 0600;
 	if (is_blockdev(dev))
-		req.mode |= S_IFBLK;
+		req.mode |= S_IFBLK;/*指明node为块设备*/
 	else
-		req.mode |= S_IFCHR;
+		req.mode |= S_IFCHR;/*指明node为字符设备*/
 
 	req.dev = dev;
 
-	//等待thread完成创建工作
+	//向thread提交，并等待thread完成创建工作
 	return devtmpfs_submit_req(&req, tmp);
 }
 
+/*删除dev对应的文件*/
 int devtmpfs_delete_node(struct device *dev)
 {
 	const char *tmp = NULL;
@@ -154,9 +158,10 @@ int devtmpfs_delete_node(struct device *dev)
 	if (!req.name)
 		return -ENOMEM;
 
-	req.mode = 0;
+	req.mode = 0;/*标明为删除工作*/
 	req.dev = dev;
 
+	//向thread提交，并等待thread完成删除工作
 	return devtmpfs_submit_req(&req, tmp);
 }
 
@@ -212,6 +217,7 @@ static int handle_create(const char *nodename, umode_t mode, kuid_t uid,
 	struct path path;
 	int err;
 
+	/*当前目录创建dentry*/
 	dentry = kern_path_create(AT_FDCWD, nodename, &path, 0);
 	if (dentry == ERR_PTR(-ENOENT)) {
 		/*此dentry不存在，创建它*/
@@ -342,6 +348,7 @@ static int handle_remove(const char *nodename, struct device *dev)
 			inode_lock(d_inode(dentry));
 			notify_change(&nop_mnt_idmap, dentry, &newattrs, NULL);
 			inode_unlock(d_inode(dentry));
+			/*移除此文件*/
 			err = vfs_unlink(&nop_mnt_idmap, d_inode(parent.dentry),
 					 dentry, NULL);
 			if (!err || err == -ENOENT)
@@ -388,24 +395,30 @@ static int handle(const char *name, umode_t mode, kuid_t uid, kgid_t gid,
 		  struct device *dev)
 {
 	if (mode)
+		/*mode不为0，则认为创建*/
 		return handle_create(name, mode, uid, gid, dev);
 	else
+		/*mode为0，则处理为删除*/
 		return handle_remove(name, dev);
 }
 
-//devtmpfs内核线程入口
+//devtmpfs内核线程入口（利用handle函数处理requests链表上所有请求）
 static void __noreturn devtmpfs_work_loop(void)
 {
 	while (1) {
 		spin_lock(&req_lock);
 		while (requests) {
+			/*用req保存requests*/
 			struct req *req = requests;
 			requests = NULL;
 			spin_unlock(&req_lock);
+			/*遍历所有req*/
 			while (req) {
-				struct req *next = req->next;
+				struct req *next = req->next;/*指向下一个*/
+				/*处理请求*/
 				req->err = handle(req->name, req->mode,
 						  req->uid, req->gid, req->dev);
+				/*标记完成*/
 				complete(&req->done);
 				req = next;
 			}
@@ -459,7 +472,7 @@ int __init devtmpfs_init(void)
 	char opts[] = "mode=0755";
 	int err;
 
-	/*挂载internal_fs_type*/
+	/*挂载internal_fs_type文件系统,初始化mnt(挂载点），注：并不注册此文件系统*/
 	mnt = vfs_kern_mount(&internal_fs_type, 0, "devtmpfs", opts);
 	if (IS_ERR(mnt)) {
 		pr_err("unable to create devtmpfs %ld\n", PTR_ERR(mnt));

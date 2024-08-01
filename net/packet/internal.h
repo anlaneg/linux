@@ -119,7 +119,7 @@ struct packet_sock {
 	unsigned long		flags;
 	int			ifindex;	/* bound device		*/
 	u8			vnet_hdr_sz;
-	__be16			num;//要通过socket 截取哪种协议的报文
+	__be16			num;//要通过socket 截取哪种协议的报文(例如arp)
 	struct packet_rollover	*rollover;
 	struct packet_mclist	*mclist;
 	atomic_long_t		mapped;

@@ -1473,7 +1473,7 @@ out_unlock:
 EXPORT_SYMBOL(inet_select_addr);
 
 static __be32 confirm_addr_indev(struct in_device *in_dev, __be32 dst,
-			      __be32 local, int scope)
+			      __be32 local/*本端ip*/, int scope)
 {
 	unsigned char localnet_scope = RT_SCOPE_HOST;
 	const struct in_ifaddr *ifa;
@@ -1483,12 +1483,14 @@ static __be32 confirm_addr_indev(struct in_device *in_dev, __be32 dst,
 	if (unlikely(IN_DEV_ROUTE_LOCALNET(in_dev)))
 		localnet_scope = RT_SCOPE_LINK;
 
+	/*遍历此接口上所有ip*/
 	in_dev_for_each_ifa_rcu(ifa, in_dev) {
 		unsigned char min_scope = min(ifa->ifa_scope, localnet_scope);
 
 		if (!addr &&
 		    (local == ifa->ifa_local || !local) &&
 		    min_scope <= scope) {
+			/*取接口ip*/
 			addr = ifa->ifa_local;
 			if (same)
 				break;
@@ -1534,6 +1536,7 @@ __be32 inet_confirm_addr(struct net *net, struct in_device *in_dev,
 		return confirm_addr_indev(in_dev, dst, local, scope);
 
 	rcu_read_lock();
+	/*遍历此dev上所有in_dev*/
 	for_each_netdev_rcu(net, dev) {
 		in_dev = __in_dev_get_rcu(dev);
 		if (in_dev) {

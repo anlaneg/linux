@@ -1476,6 +1476,7 @@ nfsd_create_locked(struct svc_rqst *rqstp, struct svc_fh *fhp,
 			nfsd_check_ignore_resizing(iap);
 		break;
 	case S_IFDIR:
+		/*调用vfs_mkdir创建目录*/
 		host_err = vfs_mkdir(&nop_mnt_idmap, dirp, dchild, iap->ia_mode);
 		if (!host_err && unlikely(d_unhashed(dchild))) {
 			struct dentry *d;

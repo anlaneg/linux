@@ -234,6 +234,7 @@ static const struct inet_diag_handler mptcp_diag_handler = {
 
 static int __init mptcp_diag_init(void)
 {
+	/*注册mptcp diag handler*/
 	return inet_diag_register(&mptcp_diag_handler);
 }
 

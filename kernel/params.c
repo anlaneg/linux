@@ -248,12 +248,17 @@ int param_set_uint_minmax(const char *val, const struct kernel_param *kp,
 	int ret;
 
 	if (!val)
+		/*value为空，参数有误*/
 		return -EINVAL;
+
+	/*字符串转整数*/
 	ret = kstrtouint(val, 0, &num);
 	if (ret)
 		return ret;
 	if (num < min || num > max)
+		/*参数不在范围以内*/
 		return -EINVAL;
+	/*设置参数值*/
 	*((unsigned int *)kp->arg) = num;
 	return 0;
 }
