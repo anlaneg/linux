@@ -405,7 +405,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	ucontext = ib_uverbs_get_ucontext(attrs);
 	if (IS_ERR(ucontext))
 		return PTR_ERR(ucontext);
-	ib_dev = ucontext->device;
+	ib_dev = ucontext->device;/*待查询的ib设备*/
 
 	ret = uverbs_request(attrs, &cmd, sizeof(cmd));
 	if (ret)
@@ -416,6 +416,7 @@ static int ib_uverbs_query_port(struct uverbs_attr_bundle *attrs)
 	if (ret)
 		return ret;
 
+	/*填写响应内容*/
 	memset(&resp, 0, sizeof resp);
 	copy_port_attr_to_resp(&attr, &resp, ib_dev, cmd.port_num);
 
@@ -3875,14 +3876,14 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			ib_uverbs_query_device,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_device,
 					  struct ib_uverbs_query_device_resp)),
-			/*ib设备指定port的属性查询*/
+		/*ib设备指定port的属性查询*/
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_QUERY_PORT,
 			ib_uverbs_query_port,
 			UAPI_DEF_WRITE_IO(struct ib_uverbs_query_port,
 					  struct ib_uverbs_query_port_resp),
 			UAPI_DEF_METHOD_NEEDS_FN(query_port)),
-			/*ib设备扩展属性查询*/
+		/*ib设备扩展属性查询*/
 		DECLARE_UVERBS_WRITE_EX(
 			IB_USER_VERBS_EX_CMD_QUERY_DEVICE,
 			ib_uverbs_ex_query_device,

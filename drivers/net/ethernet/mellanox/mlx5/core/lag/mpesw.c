@@ -73,15 +73,18 @@ static int enable_mpesw(struct mlx5_lag *ldev)
 	int i;
 
 	if (ldev->mode != MLX5_LAG_MODE_NONE)
+		/*mode已设置，报错*/
 		return -EINVAL;
 
 	if (ldev->ports > MLX5_LAG_MPESW_OFFLOADS_SUPPORTED_PORTS)
+		/*port数过多*/
 		return -EOPNOTSUPP;
 
 	if (mlx5_eswitch_mode(dev0) != MLX5_ESWITCH_OFFLOADS ||
 	    !MLX5_CAP_PORT_SELECTION(dev0, port_select_flow_table) ||
 	    !MLX5_CAP_GEN(dev0, create_lag_when_not_master_up) ||
 	    !mlx5_lag_check_prereq(ldev))
+		/*dev0必须开switchdev模式*/
 		return -EOPNOTSUPP;
 
 	err = mlx5_mpesw_metadata_set(ldev);
@@ -143,9 +146,12 @@ static void mlx5_mpesw_work(struct work_struct *work)
 		goto unlock;
 	}
 
+	/*检查op，确定要执行的操作*/
 	if (mpesww->op == MLX5_MPESW_OP_ENABLE)
+		/*执行enable操作*/
 		mpesww->result = enable_mpesw(ldev);
 	else if (mpesww->op == MLX5_MPESW_OP_DISABLE)
+		/*执行disable操作*/
 		disable_mpesw(ldev);
 unlock:
 	mutex_unlock(&ldev->lock);
@@ -154,7 +160,7 @@ unlock:
 }
 
 static int mlx5_lag_mpesw_queue_work(struct mlx5_core_dev *dev,
-				     enum mpesw_op op)
+				     enum mpesw_op op/*创建/销毁*/)
 {
 	struct mlx5_lag *ldev = mlx5_lag_dev(dev);
 	struct mlx5_mpesw_work_st *work;
@@ -167,18 +173,19 @@ static int mlx5_lag_mpesw_queue_work(struct mlx5_core_dev *dev,
 	if (!work)
 		return -ENOMEM;
 
-	INIT_WORK(&work->work, mlx5_mpesw_work);
+	INIT_WORK(&work->work, mlx5_mpesw_work);/*初始化work*/
 	init_completion(&work->comp);
 	work->op = op;
 	work->lag = ldev;
 
+	/*work入队，可能执行*/
 	if (!queue_work(ldev->wq, &work->work)) {
 		mlx5_core_warn(dev, "failed to queue mpesw work\n");
 		err = -EINVAL;
 		goto out;
 	}
-	wait_for_completion(&work->comp);
-	err = work->result;
+	wait_for_completion(&work->comp);/*等待work完成*/
+	err = work->result;/*获得work结果*/
 out:
 	kfree(work);
 	return err;
@@ -189,6 +196,7 @@ void mlx5_lag_mpesw_disable(struct mlx5_core_dev *dev)
 	mlx5_lag_mpesw_queue_work(dev, MLX5_MPESW_OP_DISABLE);
 }
 
+/*开启mpesw类型的lag*/
 int mlx5_lag_mpesw_enable(struct mlx5_core_dev *dev)
 {
 	return mlx5_lag_mpesw_queue_work(dev, MLX5_MPESW_OP_ENABLE);

@@ -4340,7 +4340,7 @@ static void device_create_release(struct device *dev)
 
 static __printf(6, 0) struct device *
 device_create_groups_vargs(const struct class *class, struct device *parent,
-			   dev_t devt, void *drvdata/*驱动的私有数据*/,
+			   dev_t devt/*设备编号*/, void *drvdata/*驱动的私有数据*/,
 			   const struct attribute_group **groups,
 			   const char *fmt, va_list args)
 {
@@ -4362,13 +4362,13 @@ device_create_groups_vargs(const struct class *class, struct device *parent,
 	dev->parent = parent;
 	dev->groups = groups;
 	dev->release = device_create_release;
-	dev_set_drvdata(dev, drvdata);
+	dev_set_drvdata(dev, drvdata);/*设置设备的私有数据*/
 
 	retval = kobject_set_name_vargs(&dev->kobj, fmt, args);
 	if (retval)
 		goto error;
 
-	retval = device_add(dev);
+	retval = device_add(dev);/*将设备加入系统*/
 	if (retval)
 		goto error;
 

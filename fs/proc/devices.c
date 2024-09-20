@@ -14,7 +14,7 @@ static int devinfo_show(struct seq_file *f, void *v)
 	if (i < CHRDEV_MAJOR_MAX) {
 		if (i == 0)
 			seq_puts(f, "Character devices:\n");
-		chrdev_show(f, i);
+		chrdev_show(f, i);/*显示指定索引的字符设备*/
 	}
 #ifdef CONFIG_BLOCK
 	else {

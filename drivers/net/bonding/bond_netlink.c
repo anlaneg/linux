@@ -915,7 +915,7 @@ struct rtnl_link_ops bond_link_ops __read_mostly = {
 	.changelink		= bond_changelink,
 	.get_size		= bond_get_size,
 	.fill_info		= bond_fill_info,
-	.get_num_tx_queues	= bond_get_num_tx_queues,
+	.get_num_tx_queues	= bond_get_num_tx_queues,/*bonding对应的tx队列*/
 	.get_num_rx_queues	= bond_get_num_tx_queues, /* Use the same number
 							     as for TX queues */
 	.fill_linkxstats        = bond_fill_linkxstats,

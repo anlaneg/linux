@@ -110,7 +110,7 @@ static bool virtio_vdpa_notify(struct virtqueue *vq)
 	struct vdpa_device *vdpa = vd_get_vdpa(vq->vdev);
 	const struct vdpa_config_ops *ops = vdpa->config;
 
-	ops->kick_vq(vdpa, vq->index);
+	ops->kick_vq(vdpa, vq->index);/*kick此队列*/
 
 	return true;
 }
@@ -502,7 +502,7 @@ static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 
 	vd_dev->vdev.dev.parent = vdpa_get_dma_dev(vdpa);
 	vd_dev->vdev.dev.release = virtio_vdpa_release_dev;
-	vd_dev->vdev.config = &virtio_vdpa_config_ops;
+	vd_dev->vdev.config = &virtio_vdpa_config_ops;/*指明vdpa设备配置接口*/
 	vd_dev->vdpa = vdpa;
 	INIT_LIST_HEAD(&vd_dev->virtqueues);
 	spin_lock_init(&vd_dev->lock);
@@ -512,6 +512,7 @@ static int virtio_vdpa_probe(struct vdpa_device *vdpa)
 		goto err;
 
 	vd_dev->vdev.id.vendor = ops->get_vendor_id(vdpa);
+	/*注册virtio设备*/
 	ret = register_virtio_device(&vd_dev->vdev);
 	reg_dev = vd_dev;
 	if (ret)

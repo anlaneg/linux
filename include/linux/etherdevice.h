@@ -326,7 +326,7 @@ static inline void ether_addr_copy(u8 *dst, const u8 *src)
  */
 static inline void eth_hw_addr_set(struct net_device *dev, const u8 *addr)
 {
-	__dev_addr_set(dev, addr, ETH_ALEN);
+	__dev_addr_set(dev, addr/*要设置的mac地址*/, ETH_ALEN);
 }
 
 /**
@@ -394,6 +394,7 @@ static inline bool ether_addr_equal_64bits(const u8 *addr1, const u8 *addr2)
 	return (fold << 16) == 0;
 #endif
 #else
+	/*检查两个mac是否一致*/
 	return ether_addr_equal(addr1, addr2);
 #endif
 }

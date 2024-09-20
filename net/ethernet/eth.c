@@ -307,8 +307,10 @@ int eth_prepare_mac_addr_change(struct net_device *dev, void *p)
 	struct sockaddr *addr = p;
 
 	if (!(dev->priv_flags & IFF_LIVE_ADDR_CHANGE) && netif_running(dev))
+		/*没有live标记并且设备running，则报错*/
 		return -EBUSY;
 	if (!is_valid_ether_addr(addr->sa_data))
+		/*提供的mac地址不合法，报错*/
 		return -EADDRNOTAVAIL;
 	return 0;
 }
@@ -341,6 +343,7 @@ int eth_mac_addr(struct net_device *dev, void *p)
 {
 	int ret;
 
+	/*mac变更前校验*/
 	ret = eth_prepare_mac_addr_change(dev, p);
 	if (ret < 0)
 		return ret;

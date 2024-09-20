@@ -2164,16 +2164,16 @@ static int __ib_query_port(struct ib_device *device,
  * ib_query_port() returns the attributes of a port through the
  * @port_attr pointer.
  */
-int ib_query_port(struct ib_device *device,
-		  u32 port_num,
-		  struct ib_port_attr *port_attr)
+int ib_query_port(struct ib_device *device/*查询的目标ib设备*/,
+		  u32 port_num/*ib设备对应的port number*/,
+		  struct ib_port_attr *port_attr/*出参，查询port的属性*/)
 {
 	if (!rdma_is_port_valid(device, port_num))
 	    /*port_num无效*/
 		return -EINVAL;
 
 	if (rdma_protocol_iwarp(device, port_num))
-	    /*支持iwarp协议*/
+	    /*支持iwarp协议,查询port信息*/
 		return iw_query_port(device, port_num, port_attr);
 	else
 	    /*查询非iwarp协议的port信息，例如roce*/

@@ -30,8 +30,8 @@ enum {
 enum mlx5_lag_mode {
 	MLX5_LAG_MODE_NONE,
 	MLX5_LAG_MODE_ROCE,
-	MLX5_LAG_MODE_SRIOV,
-	MLX5_LAG_MODE_MULTIPATH,
+	MLX5_LAG_MODE_SRIOV,/*eswitch方式lag*/
+	MLX5_LAG_MODE_MULTIPATH,/*通过fib支持多路径*/
 	MLX5_LAG_MODE_MPESW,
 };
 
@@ -57,7 +57,7 @@ struct mlx5_lag {
 	enum mlx5_lag_mode        mode;
 	unsigned long		  mode_flags;
 	unsigned long		  state_flags;
-	u8			  ports;
+	u8			  ports;/*pf数组长度*/
 	u8			  buckets;
 	int			  mode_changes_in_progress;
 	u8			  v2p_map[MLX5_MAX_PORTS * MLX5_LAG_MAX_HASH_BUCKETS];
@@ -65,6 +65,7 @@ struct mlx5_lag {
 	struct lag_func           pf[MLX5_MAX_PORTS];
 	struct lag_tracker        tracker;
 	struct workqueue_struct   *wq;
+	/*响应bond事件*/
 	struct delayed_work       bond_work;
 	struct notifier_block     nb;
 	struct lag_mp             lag_mp;
@@ -77,12 +78,14 @@ struct mlx5_lag {
 static inline struct mlx5_lag *
 mlx5_lag_dev(struct mlx5_core_dev *dev)
 {
+	/*取此设备从属的lag*/
 	return dev->priv.lag;
 }
 
 static inline bool
 __mlx5_lag_is_active(struct mlx5_lag *ldev)
 {
+	/*检查此ldev是否被激活*/
 	return ldev->mode != MLX5_LAG_MODE_NONE;
 }
 
@@ -120,6 +123,7 @@ static inline bool mlx5_lag_is_supported(struct mlx5_core_dev *dev)
 	    !MLX5_CAP_GEN(dev, lag_master) ||
 	    MLX5_CAP_GEN(dev, num_lag_ports) < 2 ||
 	    MLX5_CAP_GEN(dev, num_lag_ports) > MLX5_MAX_PORTS)
+		/*此网卡不支持	lag*/
 		return false;
 	return true;
 }

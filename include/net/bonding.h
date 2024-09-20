@@ -48,6 +48,7 @@
 #define slave_err(bond_dev, slave_dev, fmt, ...) \
 	netdev_err(bond_dev, "(slave %s): " fmt, (slave_dev)->name, ##__VA_ARGS__)
 
+/*取bond设备模式*/
 #define BOND_MODE(bond) ((bond)->params.mode)
 
 /* slave list primitives */
@@ -151,7 +152,7 @@ struct bond_params {
 	int primary_reselect;
 	/*arp探测的目标ip*/
 	__be32 arp_targets[BOND_MAX_ARP_TARGETS];
-	int tx_queues;
+	int tx_queues;/*bonding设备的rx,tx队列数*/
 	int all_slaves_active;
 	int resend_igmp;
 	int lp_interval;
@@ -237,8 +238,8 @@ struct bond_ipsec {
  * Here are the locking policies for the two bonding locks:
  * Get rcu_read_lock when reading or RTNL when writing slave list.
  */
-struct bonding {
-    //bonding对应的bond设备
+struct bonding /*bond设备对应的私有数据结构体*/{
+    //对应的网络设备
 	struct   net_device *dev; /* first - useful for panic debug */
 	//记录当前active的slave设备（主备模式下，记录主slave）
 	struct   slave __rcu *curr_active_slave;
@@ -267,11 +268,11 @@ struct bonding {
 	struct   proc_dir_entry *proc_entry;
 	char     proc_file_name[IFNAMSIZ];
 #endif /* CONFIG_PROC_FS */
-	struct   list_head bond_list;
+	struct   list_head bond_list;/*用于串连进netns*/
 	u32 __percpu *rr_tx_counter;
 	struct   ad_bond_info ad_info;
 	struct   alb_bond_info alb_info;
-	//bond设备配置参数
+	//bond设备的配置参数
 	struct   bond_params params;
 	struct   workqueue_struct *wq;
 	struct   delayed_work mii_work;
@@ -370,7 +371,7 @@ static inline bool bond_mode_uses_arp(int mode)
 
 static inline bool bond_mode_uses_primary(int mode)
 {
-	return mode == BOND_MODE_ACTIVEBACKUP || mode == BOND_MODE_TLB ||
+	return mode == BOND_MODE_ACTIVEBACKUP/*是否主备设备*/ || mode == BOND_MODE_TLB ||
 	       mode == BOND_MODE_ALB;
 }
 
@@ -616,7 +617,7 @@ static inline void bond_set_slave_active_flags(struct slave *slave,
 
 static inline bool bond_is_slave_inactive(struct slave *slave)
 {
-	return slave->inactive;
+	return slave->inactive;/*slave设备是否未激活*/
 }
 
 static inline void bond_propose_link_state(struct slave *slave, int state)
@@ -681,6 +682,7 @@ static inline __be32 bond_confirm_addr(struct net_device *dev, __be32 dst, __be3
 struct bond_net {
     //关联的net namespace
 	struct net		*net;	/* Associated network namespace */
+	/*用于记录此netns下有哪些bond设备*/
 	struct list_head	dev_list;
 #ifdef CONFIG_PROC_FS
 	struct proc_dir_entry	*proc_dir;

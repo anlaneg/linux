@@ -627,7 +627,7 @@ struct mlx5_priv {
 	struct mlx5_mpfs        *mpfs;
 	struct mlx5_eswitch     *eswitch;
 	struct mlx5_core_sriov	sriov;
-	struct mlx5_lag		*lag;
+	struct mlx5_lag		*lag;/*对应的lag设备*/
 	u32			flags;
 	struct mlx5_devcom_dev	*devc;
 	struct mlx5_devcom_comp_dev *hca_devcom_comp;

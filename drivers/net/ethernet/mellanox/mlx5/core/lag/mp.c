@@ -11,6 +11,7 @@
 
 static bool __mlx5_lag_is_multipath(struct mlx5_lag *ldev)
 {
+	/*lag是否为multipath*/
 	return ldev->mode == MLX5_LAG_MODE_MULTIPATH;
 }
 
@@ -109,7 +110,7 @@ static void mlx5_lag_fib_set(struct lag_mp *mp, struct fib_info *fi, u32 dst, in
 }
 
 struct mlx5_fib_event_work {
-	struct work_struct work;
+	struct work_struct work;/*关注fib信息更新，支持多路径*/
 	struct mlx5_lag *ldev;
 	unsigned long event;
 	union {
@@ -132,6 +133,7 @@ mlx5_lag_get_next_fib_dev(struct mlx5_lag *ldev,
 		for (; i < nhs; i++) {
 			fib_dev = fib_info_nh(fi, i)->fib_nh_dev;
 			if (fib_dev == current_dev) {
+				/*下一跳设备与current_dev相同*/
 				i++;
 				break;
 			}
@@ -179,6 +181,7 @@ static void mlx5_lag_fib_route_event(struct mlx5_lag *ldev, unsigned long event,
 	}
 
 	if (nh_dev0 == nh_dev1) {
+		/*两个下一跳设备相同，不能构成lag,跳出*/
 		mlx5_core_warn(ldev->pf[MLX5_LAG_P1].dev,
 			       "Multipath offload doesn't support routes with multiple nexthops of the same device");
 		return;
@@ -201,6 +204,7 @@ static void mlx5_lag_fib_route_event(struct mlx5_lag *ldev, unsigned long event,
 		struct lag_tracker tracker;
 
 		tracker = ldev->tracker;
+		/*激活多路径lag*/
 		mlx5_activate_lag(ldev, &tracker, MLX5_LAG_MODE_MULTIPATH, false);
 	}
 
@@ -251,6 +255,7 @@ static void mlx5_lag_fib_update(struct work_struct *work)
 		break;
 	case FIB_EVENT_NH_ADD:
 	case FIB_EVENT_NH_DEL:
+		/*添加删除下一跳*/
 		fib_nh = fib_work->fnh_info.fib_nh;
 		mlx5_lag_fib_nexthop_event(ldev,
 					   fib_work->event,
@@ -273,7 +278,7 @@ mlx5_lag_init_fib_work(struct mlx5_lag *ldev, unsigned long event)
 	if (WARN_ON(!fib_work))
 		return NULL;
 
-	INIT_WORK(&fib_work->work, mlx5_lag_fib_update);
+	INIT_WORK(&fib_work->work, mlx5_lag_fib_update);/*关注fib更新事件*/
 	fib_work->ldev = ldev;
 	fib_work->event = event;
 
@@ -360,6 +365,7 @@ int mlx5_lag_mp_init(struct mlx5_lag *ldev)
 	if (!mp->wq)
 		return -ENOMEM;
 
+	/*注册fib通知，支持多路径*/
 	mp->fib_nb.notifier_call = mlx5_lag_fib_event;
 	err = register_fib_notifier(&init_net, &mp->fib_nb,
 				    mlx5_lag_fib_event_flush, NULL);

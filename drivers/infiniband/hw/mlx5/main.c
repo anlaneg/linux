@@ -474,8 +474,8 @@ static int translate_eth_proto_oper(u32 eth_proto_oper, u16 *active_speed,
 						active_width);
 }
 
-static int mlx5_query_port_roce(struct ib_device *device, u32 port_num,
-				struct ib_port_attr *props)
+static int mlx5_query_port_roce(struct ib_device *device/*要查询的ib设备*/, u32 port_num/*要查询的port编号*/,
+				struct ib_port_attr *props/*出参，port对应的属性*/)
 {
 	struct mlx5_ib_dev *dev = to_mdev(device);
 	u32 out[MLX5_ST_SZ_DW(ptys_reg)] = {0};
@@ -540,6 +540,7 @@ static int mlx5_query_port_roce(struct ib_device *device, u32 port_num,
 	if (!put_mdev)
 		goto out;
 
+	/*给定ib设备及port找其对应的netdev设备*/
 	ndev = mlx5_ib_get_netdev(device, port_num);
 	if (!ndev)
 		goto out;
@@ -1445,6 +1446,7 @@ int mlx5_ib_query_port(struct ib_device *ibdev, u32 port,
 static int mlx5_ib_rep_query_port(struct ib_device *ibdev, u32 port,
 				  struct ib_port_attr *props)
 {
+	/*实现rep接口的ib设备指定port属性查询*/
 	return mlx5_query_port_roce(ibdev, port, props);
 }
 
@@ -3972,7 +3974,7 @@ static int mlx5_ib_stage_non_default_cb(struct mlx5_ib_dev *dev)
 
 static const struct ib_device_ops mlx5_ib_dev_port_rep_ops = {
 	.get_port_immutable = mlx5_port_rep_immutable,
-	.query_port = mlx5_ib_rep_query_port,
+	.query_port = mlx5_ib_rep_query_port,/*rep接口对应的port属性查询*/
 	.query_pkey = mlx5_ib_rep_query_pkey,
 };
 

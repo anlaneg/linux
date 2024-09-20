@@ -112,6 +112,7 @@ enum net_device_flags {
 #define IFF_UP				IFF_UP
 #define IFF_BROADCAST			IFF_BROADCAST
 #define IFF_DEBUG			IFF_DEBUG
+/*标记为loopback接口*/
 #define IFF_LOOPBACK			IFF_LOOPBACK
 #define IFF_POINTOPOINT			IFF_POINTOPOINT
 #define IFF_NOTRAILERS			IFF_NOTRAILERS

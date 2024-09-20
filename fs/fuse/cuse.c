@@ -59,6 +59,7 @@ struct cuse_conn {
 	struct list_head	list;	/* linked on cuse_conntbl */
 	struct fuse_mount	fm;	/* Dummy mount referencing fc */
 	struct fuse_conn	fc;	/* fuse connection */
+	/*关联的字符设备*/
 	struct cdev		*cdev;	/* associated character device */
 	struct device		*dev;	/* device representing @cdev */
 
@@ -345,10 +346,12 @@ static void cuse_process_init_reply(struct fuse_mount *fm,
 		goto err;
 
 	/* determine and reserve devt */
-	devt = MKDEV(arg->dev_major, arg->dev_minor);
+	devt = MKDEV(arg->dev_major, arg->dev_minor);/*由参数指定的major,minor构造devt*/
 	if (!MAJOR(devt))
-		rc = alloc_chrdev_region(&devt, MINOR(devt), 1, devinfo.name);
+		/*major为零，执行动态申请字符设备devt*/
+		rc = alloc_chrdev_region(&devt, MINOR(devt), 1/*数量为1*/, devinfo.name/*字符设备名称*/);
 	else
+		/*major非零，占用字符设备devt*/
 		rc = register_chrdev_region(devt, 1, devinfo.name);
 	if (rc) {
 		pr_err("failed to register chrdev region\n");
@@ -357,17 +360,17 @@ static void cuse_process_init_reply(struct fuse_mount *fm,
 
 	/* devt determined, create device */
 	rc = -ENOMEM;
-	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
+	dev = kzalloc(sizeof(*dev), GFP_KERNEL);/*申请一个device结构体*/
 	if (!dev)
 		goto err_region;
 
-	device_initialize(dev);
+	device_initialize(dev);/*初始化此device*/
 	dev_set_uevent_suppress(dev, 1);
 	dev->class = cuse_class;
 	dev->devt = devt;
 	dev->release = cuse_gendev_release;
 	dev_set_drvdata(dev, cc);
-	dev_set_name(dev, "%s", devinfo.name);
+	dev_set_name(dev, "%s", devinfo.name);/*设置此设备名称*/
 
 	mutex_lock(&cuse_lock);
 
@@ -384,14 +387,14 @@ static void cuse_process_init_reply(struct fuse_mount *fm,
 
 	/* register cdev */
 	rc = -ENOMEM;
-	cdev = cdev_alloc();
+	cdev = cdev_alloc();/*申请字符设备*/
 	if (!cdev)
 		goto err_unlock;
 
 	cdev->owner = THIS_MODULE;
-	cdev->ops = &cuse_frontend_fops;
+	cdev->ops = &cuse_frontend_fops;/*指明字符设备的ops*/
 
-	rc = cdev_add(cdev, devt, 1);
+	rc = cdev_add(cdev, devt, 1);/*将此字符设备加入系统*/
 	if (rc)
 		goto err_cdev;
 

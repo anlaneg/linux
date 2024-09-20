@@ -158,7 +158,7 @@ void dst_dev_put(struct dst_entry *dst)
 		dst->ops->ifdown(dst, dev);
 	dst->input = dst_discard;
 	dst->output = dst_discard_out;
-	/*指定报文对应的设备为blackhole*/
+	/*指定报文对应的设备为blackhole，所有发向此设备的报文将被丢弃*/
 	dst->dev = blackhole_netdev;
 	netdev_ref_replace(dev, blackhole_netdev, &dst->dev_tracker,
 			   GFP_ATOMIC);

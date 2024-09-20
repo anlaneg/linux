@@ -85,7 +85,7 @@ struct mlx5e_tc_table {
 	struct mlx5_fs_chains           *chains;
 	struct mlx5e_post_act		*post_act;
 
-	struct rhashtable               ht;
+	struct rhashtable               ht;/*记录nic offload对应的offload规则*/
 
 	struct mod_hdr_tbl mod_hdr;
 	struct mutex hairpin_tbl_lock; /* protects hairpin_tbl */
@@ -4247,6 +4247,7 @@ static const struct rhashtable_params tc_ht_params = {
 	.automatic_shrinking = true,
 };
 
+/*依据标记获取不同的记录规则的table*/
 static struct rhashtable *get_tc_ht(struct mlx5e_priv *priv,
 				    unsigned long flags)
 {
@@ -4729,9 +4730,10 @@ static void mlx5e_tc_unblock_ipsec_offload(struct net_device *filter, struct mlx
 
 //处理flower规则配置
 int mlx5e_configure_flower(struct net_device *dev, struct mlx5e_priv *priv,
-			   struct flow_cls_offload *f/*要offload的flower*/, unsigned long flags)
+			   struct flow_cls_offload *f/*要offload的flower*/, unsigned long flags/*nic offload或者eswtch offload*/)
 {
 	struct netlink_ext_ack *extack = f->common.extack;
+	/*取存放规则的hash table*/
 	struct rhashtable *tc_ht = get_tc_ht(priv, flags);
 	struct mlx5e_rep_priv *rpriv = priv->ppriv;
 	struct mlx5e_tc_flow *flow;
@@ -5484,10 +5486,11 @@ int mlx5e_setup_tc_block_cb(enum tc_setup_type type, void *type_data,
 	if (!priv->netdev || !netif_device_present(priv->netdev))
 		return -EOPNOTSUPP;
 
+	/*uplink为rep*/
 	if (mlx5e_is_uplink_rep(priv))
-		flags |= MLX5_TC_FLAG(ESW_OFFLOAD);
+		flags |= MLX5_TC_FLAG(ESW_OFFLOAD);/*指明为eswitch offload*/
 	else
-		flags |= MLX5_TC_FLAG(NIC_OFFLOAD);
+		flags |= MLX5_TC_FLAG(NIC_OFFLOAD);/*指明为nic offload*/
 
 	switch (type) {
 	case TC_SETUP_CLSFLOWER:

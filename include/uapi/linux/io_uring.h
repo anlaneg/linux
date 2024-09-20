@@ -492,8 +492,8 @@ struct io_cqring_offsets {
  * Passed in for io_uring_setup(2). Copied back with updated info on success
  */
 struct io_uring_params {
-	__u32 sq_entries;
-	__u32 cq_entries;
+	__u32 sq_entries;/*sq长度*/
+	__u32 cq_entries;/*cq长度*/
 	__u32 flags;
 	__u32 sq_thread_cpu;
 	__u32 sq_thread_idle;

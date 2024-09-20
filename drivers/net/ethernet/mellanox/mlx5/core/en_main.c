@@ -3800,9 +3800,10 @@ mlx5e_get_stats(struct net_device *dev, struct rtnl_link_stats64 *stats)
 static void mlx5e_nic_set_rx_mode(struct mlx5e_priv *priv)
 {
 	if (mlx5e_is_uplink_rep(priv))
+		/*uplink rep直接返回不处理*/
 		return; /* no rx mode for uplink rep */
 
-	queue_work(priv->wq, &priv->set_rx_mode_work);
+	queue_work(priv->wq, &priv->set_rx_mode_work);/*work入队，调度执行*/
 }
 
 static void mlx5e_set_rx_mode(struct net_device *dev)
@@ -5516,6 +5517,7 @@ static void mlx5e_nic_enable(struct mlx5e_priv *priv)
 	mlx5e_set_netdev_mtu_boundaries(priv);
 	mlx5e_set_dev_port_mtu(priv);
 
+	/*触发lag处理事件*/
 	mlx5_lag_add_netdev(mdev, netdev);
 
 	mlx5e_enable_async_events(priv);
@@ -5564,6 +5566,7 @@ static void mlx5e_nic_disable(struct mlx5e_priv *priv)
 		priv->en_trap = NULL;
 	}
 	mlx5e_disable_async_events(priv);
+	/*触发lag移除处理*/
 	mlx5_lag_remove_netdev(mdev, priv->netdev);
 	mlx5_vxlan_reset_to_default(mdev->vxlan);
 	mlx5e_macsec_cleanup(priv);

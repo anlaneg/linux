@@ -256,6 +256,7 @@ int iova_cache_get(void)
 {
 	mutex_lock(&iova_cache_mutex);
 	if (!iova_cache_users) {
+		/*首次（未初始化），执行初始化*/
 		int ret;
 
 		ret = cpuhp_setup_state_multi(CPUHP_IOMMU_IOVA_DEAD, "iommu/iova:dead", NULL,
@@ -266,6 +267,7 @@ int iova_cache_get(void)
 			return ret;
 		}
 
+		/*申请iova_cache*/
 		iova_cache = kmem_cache_create(
 			"iommu_iova", sizeof(struct iova), 0,
 			SLAB_HWCACHE_ALIGN, NULL);
@@ -277,7 +279,7 @@ int iova_cache_get(void)
 		}
 	}
 
-	iova_cache_users++;
+	iova_cache_users++;/*用户数增加*/
 	mutex_unlock(&iova_cache_mutex);
 
 	return 0;
@@ -288,11 +290,13 @@ void iova_cache_put(void)
 {
 	mutex_lock(&iova_cache_mutex);
 	if (WARN_ON(!iova_cache_users)) {
+		/*已减完零，仍在put,不具体执行（这里应考虑添加一个日志?)*/
 		mutex_unlock(&iova_cache_mutex);
 		return;
 	}
 	iova_cache_users--;
 	if (!iova_cache_users) {
+		/*减少为0，执行释放*/
 		cpuhp_remove_multi_state(CPUHP_IOMMU_IOVA_DEAD);
 		kmem_cache_destroy(iova_cache);
 	}

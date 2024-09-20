@@ -1877,6 +1877,7 @@ static bool io_assign_file(struct io_kiocb *req, const struct io_issue_def *def,
 
 static int io_issue_sqe(struct io_kiocb *req, unsigned int issue_flags)
 {
+	/*依据opcode查找到io_issue_def结构体*/
 	const struct io_issue_def *def = &io_issue_defs[req->opcode];
 	const struct cred *creds = NULL;
 	int ret;

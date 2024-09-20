@@ -159,8 +159,8 @@ struct rdma_ucm_query {
 struct rdma_ucm_query_route_resp {
 	__aligned_u64 node_guid;
 	struct ib_user_path_rec ib_route[2];
-	struct sockaddr_in6 src_addr;
-	struct sockaddr_in6 dst_addr;
+	struct sockaddr_in6 src_addr;/*源ip*/
+	struct sockaddr_in6 dst_addr;/*目的ip*/
 	__u32 num_paths;
 	__u8 port_num;
 	__u8 reserved[3];

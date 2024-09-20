@@ -118,7 +118,7 @@ struct mlx5e_rep_priv {
 	struct mlx5_rep_uplink_priv uplink_priv; /* valid for uplink rep */
 	struct rtnl_link_stats64 prev_vf_vport_stats;
 	struct mlx5_flow_handle *send_to_vport_meta_rule;
-	struct rhashtable tc_ht;
+	struct rhashtable tc_ht;/*记录eswitch offload对应的规则*/
 	struct devlink_health_reporter *rep_vnic_reporter;
 };
 

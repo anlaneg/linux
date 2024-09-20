@@ -859,7 +859,7 @@ struct sk_buff {
 	union {
 		struct {
 			/* These two members must be first to match sk_buff_head. */
-			struct sk_buff		*next;
+			struct sk_buff		*next;/*用于串连一组skb,例如qos出队的一组报文*/
 			struct sk_buff		*prev;
 
 			union {

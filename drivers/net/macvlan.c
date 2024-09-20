@@ -1558,7 +1558,7 @@ int macvlan_common_newlink(struct net *src_net, struct net_device *dev/*要初�
 		goto destroy_macvlan_port;
 	}
 
-	vlan->lowerdev = lowerdev;
+	vlan->lowerdev = lowerdev;/*macvlan设备附着的底层设备*/
 	vlan->dev      = dev;
 	vlan->port     = port;
 	vlan->set_features = MACVLAN_FEATURES;

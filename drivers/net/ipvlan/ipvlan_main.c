@@ -156,13 +156,15 @@ static int ipvlan_init(struct net_device *dev)
 		return -ENOMEM;
 
 	if (!netif_is_ipvlan_port(phy_dev)) {
-		/*针对物理设备，创建ipvlan接口*/
+		/*还未针对此设备调用ipvlan_port_create,这里调用并挂必要的钩子点*/
 		err = ipvlan_port_create(phy_dev);
 		if (err < 0) {
 			free_percpu(ipvlan->pcpu_stats);
 			return err;
 		}
 	}
+
+	/*增加引用*/
 	port = ipvlan_port_get_rtnl(phy_dev);
 	port->count += 1;
 	return 0;
@@ -551,7 +553,7 @@ err:
 	return ret;
 }
 
-int ipvlan_link_new(struct net *src_net, struct net_device *dev,
+int ipvlan_link_new(struct net *src_net, struct net_device *dev/*已创建好的ipvlan设备*/,
 		    struct nlattr *tb[], struct nlattr *data[],
 		    struct netlink_ext_ack *extack)
 {
@@ -564,12 +566,13 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 	if (!tb[IFLA_LINK])
 		return -EINVAL;
 
-	/*找到指定ifindex的物理设备*/
+	/*找到指定ifindex的物理设备，ipvlan设备附着在其上*/
 	phy_dev = __dev_get_by_index(src_net, nla_get_u32(tb[IFLA_LINK]));
 	if (!phy_dev)
 		return -ENODEV;
 
 	if (netif_is_ipvlan(phy_dev)) {
+		/*指定实际是ipvlan设备，取其所属的物理设备，更新phy_dev*/
 		struct ipvl_dev *tmp = netdev_priv(phy_dev);
 
 		phy_dev = tmp->phy_dev;
@@ -577,10 +580,11 @@ int ipvlan_link_new(struct net *src_net, struct net_device *dev,
 		if (!ns_capable(dev_net(phy_dev)->user_ns, CAP_NET_ADMIN))
 			return -EPERM;
 	} else if (!netif_is_ipvlan_port(phy_dev)) {
-		/*物理设备不是ipvlan的底层设备*/
+		/*确认此物理设备不是ipvlan的底层设备*/
 		/* Exit early if the underlying link is invalid or busy */
 		if (phy_dev->type != ARPHRD_ETHER ||
 		    phy_dev->flags & IFF_LOOPBACK) {
+			/*phy_dev设备只能是ether设备，不得为loopback设备*/
 			netdev_err(phy_dev,
 				   "Master is either lo or non-ether device\n");
 			return -EINVAL;

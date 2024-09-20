@@ -64,6 +64,7 @@ void chrdev_show(struct seq_file *f, off_t offset)
 	mutex_lock(&chrdevs_lock);
 	for (cd = chrdevs[major_to_index(offset)]; cd; cd = cd->next) {
 		if (cd->major == offset)
+			/*显示字符设备名称及其major*/
 			seq_printf(f, "%3d %s\n", cd->major, cd->name);
 	}
 	mutex_unlock(&chrdevs_lock);
@@ -250,7 +251,7 @@ int register_chrdev_region(dev_t from, unsigned count, const char *name/*字符�
 	dev_t n, next;
 
 	for (n = from; n < to; n = next) {
-	    /*构造下一个dev*/
+	    /*构造下一个major对应的dev*/
 		next = MKDEV(MAJOR(n)+1, 0);
 		if (next > to)
 			next = to;
@@ -409,6 +410,7 @@ static struct kobject *cdev_get(struct cdev *p)
 	struct kobject *kobj;
 
 	if (!try_module_get(owner))
+		/*拿不到owner,直接返回NULL*/
 		return NULL;
 	kobj = kobject_get_unless_zero(&p->kobj);
 	if (!kobj)
@@ -457,7 +459,7 @@ static int chrdev_open(struct inode *inode, struct file *filp)
 		   we dropped the lock. */
 		p = inode->i_cdev;
 		if (!p) {
-			//设置此inode对应的字符设备
+			//之前未关联cdev,设置此inode对应的字符设备
 			inode->i_cdev = p = new;
 			list_add(&inode->i_devices, &p->list);
 			new = NULL;
@@ -529,10 +531,12 @@ const struct file_operations def_chr_fops = {
 
 static struct kobject *exact_match(dev_t dev, int *part, void *data)
 {
+	/*返回cdev对应的kobject*/
 	struct cdev *p = data;
 	return &p->kobj;
 }
 
+/*通过引用owner来加锁*/
 static int exact_lock(dev_t dev, void *data)
 {
 	struct cdev *p = data;

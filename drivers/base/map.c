@@ -32,7 +32,7 @@ struct kobj_map {
 //创建range个向domain中加入dev
 int kobj_map(struct kobj_map *domain, dev_t dev/*首个device number*/, unsigned long range/*可用deivce nubmer数量*/,
 	     struct module *module, kobj_probe_t *probe,
-	     int (*lock)(dev_t, void *), void *data/*私有数据*/)
+	     int (*lock/*加锁函数*/)(dev_t, void *), void *data/*私有数据*/)
 {
 	//需要多少个probe
 	unsigned int n = MAJOR(dev + range - 1) - MAJOR(dev) + 1;

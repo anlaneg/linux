@@ -470,6 +470,7 @@ static int tipc_sk_create(struct net *net, struct socket *sock,
 	if (unlikely(protocol != 0))
 		return -EPROTONOSUPPORT;
 
+	/*依据socket类型，选择不同的ops*/
 	switch (sock->type) {
 	case SOCK_STREAM:
 		ops = &stream_ops;
@@ -2741,6 +2742,7 @@ static int tipc_accept(struct socket *sock, struct socket *new_sock, int flags,
 
 	buf = skb_peek(&sk->sk_receive_queue);
 
+	/*tipc socket创建*/
 	res = tipc_sk_create(sock_net(sock->sk), new_sock, 0, kern);
 	if (res)
 		goto exit;
@@ -3372,8 +3374,8 @@ static const struct proto_ops msg_ops = {
 	.shutdown	= tipc_shutdown,
 	.setsockopt	= tipc_setsockopt,
 	.getsockopt	= tipc_getsockopt,
-	.sendmsg	= tipc_sendmsg,
-	.recvmsg	= tipc_recvmsg,
+	.sendmsg	= tipc_sendmsg,/*tipc消息发送*/
+	.recvmsg	= tipc_recvmsg,/*tipc消息接收*/
 	.mmap		= sock_no_mmap,
 };
 
@@ -3392,8 +3394,8 @@ static const struct proto_ops packet_ops = {
 	.shutdown	= tipc_shutdown,
 	.setsockopt	= tipc_setsockopt,
 	.getsockopt	= tipc_getsockopt,
-	.sendmsg	= tipc_send_packet,
-	.recvmsg	= tipc_recvmsg,
+	.sendmsg	= tipc_send_packet,/*tipc包发送*/
+	.recvmsg	= tipc_recvmsg,/*tipc包接收*/
 	.mmap		= sock_no_mmap,
 };
 
@@ -3412,15 +3414,15 @@ static const struct proto_ops stream_ops = {
 	.shutdown	= tipc_shutdown,
 	.setsockopt	= tipc_setsockopt,
 	.getsockopt	= tipc_getsockopt,
-	.sendmsg	= tipc_sendstream,
-	.recvmsg	= tipc_recvstream,
+	.sendmsg	= tipc_sendstream,/*tipc流发送*/
+	.recvmsg	= tipc_recvstream,/*tipc流接收*/
 	.mmap		= sock_no_mmap,
 };
 
 static const struct net_proto_family tipc_family_ops = {
 	.owner		= THIS_MODULE,
 	.family		= AF_TIPC,
-	.create		= tipc_sk_create
+	.create		= tipc_sk_create/*创建tipc类型socket*/
 };
 
 static struct proto tipc_proto = {

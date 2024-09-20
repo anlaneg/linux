@@ -490,6 +490,7 @@ static int __init vdpasim_blk_init(void)
 		return ret;
 	}
 
+	/*注册vdpa的mgmtdev*/
 	ret = vdpa_mgmtdev_register(&mgmt_dev);
 	if (ret)
 		goto parent_err;

@@ -135,6 +135,7 @@ static int veth_get_link_ksettings(struct net_device *dev,
 	return 0;
 }
 
+/*取veth驱动版本*/
 static void veth_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info)
 {
 	strscpy(info->driver, DRV_NAME, sizeof(info->driver));
@@ -249,7 +250,7 @@ static void veth_get_channels(struct net_device *dev,
 			      struct ethtool_channels *channels)
 {
 	channels->tx_count = dev->real_num_tx_queues;
-	channels->rx_count = dev->real_num_rx_queues;
+	channels->rx_count = dev->real_num_rx_queues;/*获取channel数目*/
 	channels->max_tx = dev->num_tx_queues;
 	channels->max_rx = dev->num_rx_queues;
 }
@@ -2125,10 +2126,10 @@ static struct net *veth_get_link_net(const struct net_device *dev)
 static unsigned int veth_get_num_queues(void)
 {
 	/* enforce the same queue limit as rtnl_create_link */
-	int queues = num_possible_cpus();
+	int queues = num_possible_cpus();/*以cpu数为队列数*/
 
 	if (queues > 4096)
-		queues = 4096;
+		queues = 4096;/*不支持超过4096*/
 	return queues;
 }
 

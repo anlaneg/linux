@@ -939,7 +939,7 @@ static int smc_lgr_create(struct smc_sock *smc, struct smc_init_info *ini)
 	}
 	smc->conn.lgr = lgr;
 	spin_lock_bh(lgr_lock);
-	list_add_tail(&lgr->list, lgr_list);
+	list_add_tail(&lgr->list, lgr_list);/*将lrg加入链表*/
 	spin_unlock_bh(lgr_lock);
 	return 0;
 

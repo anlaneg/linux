@@ -1558,6 +1558,7 @@ int mlx5_eswitch_enable(struct mlx5_eswitch *esw, int num_vfs)
 	}
 
 	if (toggle_lag)
+		/*eswitch开启，lag触发mode变更事件*/
 		mlx5_lag_enable_change(esw->dev);
 
 	return ret;
@@ -1824,9 +1825,11 @@ static int mlx5_devlink_esw_multiport_set(struct devlink *devlink, u32 id,
 	struct mlx5_core_dev *dev = devlink_priv(devlink);
 
 	if (!MLX5_ESWITCH_MANAGER(dev))
+		/*设备必须具有eswitch能力*/
 		return -EOPNOTSUPP;
 
 	if (ctx->val.vbool)
+		/*开启mpesw lag*/
 		return mlx5_lag_mpesw_enable(dev);
 
 	mlx5_lag_mpesw_disable(dev);
@@ -1842,6 +1845,9 @@ static int mlx5_devlink_esw_multiport_get(struct devlink *devlink, u32 id,
 	return 0;
 }
 
+/*devlink dev param set pci/<pcie-address> name esw_multiport value true cmode runtime
+ * 开启/关闭 esw_multiport
+ * 获取 esw_multiport*/
 static const struct devlink_param mlx5_eswitch_params[] = {
 	DEVLINK_PARAM_DRIVER(MLX5_DEVLINK_PARAM_ID_ESW_MULTIPORT,
 			     "esw_multiport", DEVLINK_PARAM_TYPE_BOOL,

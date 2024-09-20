@@ -270,16 +270,22 @@ struct netdev_hw_addr_list {
 #define netdev_hw_addr_list_for_each(ha, l) \
 	list_for_each_entry(ha, &(l)->list, list)
 
+/*获取单播mac链表长度*/
 #define netdev_uc_count(dev) netdev_hw_addr_list_count(&(dev)->uc)
+/*检查单播mac链表是否为空*/
 #define netdev_uc_empty(dev) netdev_hw_addr_list_empty(&(dev)->uc)
+/*遍历dev单播mac列表*/
 #define netdev_for_each_uc_addr(ha, dev) \
 	netdev_hw_addr_list_for_each(ha, &(dev)->uc)
 #define netdev_for_each_synced_uc_addr(_ha, _dev) \
 	netdev_for_each_uc_addr((_ha), (_dev)) \
 		if ((_ha)->sync_cnt)
 
+/*获取dev组播mac链表长度*/
 #define netdev_mc_count(dev) netdev_hw_addr_list_count(&(dev)->mc)
+/*检查dev组播mac链表是否为空*/
 #define netdev_mc_empty(dev) netdev_hw_addr_list_empty(&(dev)->mc)
+/*遍历dev组播mac列表*/
 #define netdev_for_each_mc_addr(ha, dev) \
 	netdev_hw_addr_list_for_each(ha, &(dev)->mc)
 #define netdev_for_each_synced_mc_addr(_ha, _dev) \
@@ -1474,7 +1480,7 @@ struct net_device_ops {
 	int			(*ndo_init)(struct net_device *dev);
 	//ndo_init操作的反操作
 	void			(*ndo_uninit)(struct net_device *dev);
-	//将设备置于up状态，返回非０，则置up失败
+	//将设备置于up状态时调用，返回非０，则置up失败
 	int			(*ndo_open)(struct net_device *dev);
 	//将设备置于down状态
 	int			(*ndo_stop)(struct net_device *dev);
@@ -1490,6 +1496,7 @@ struct net_device_ops {
 						    struct net_device *sb_dev);
 	void			(*ndo_change_rx_flags)(struct net_device *dev,
 						       int flags);
+	/*设置网络设备的收方向filter等情况*/
 	void			(*ndo_set_rx_mode)(struct net_device *dev);
 	//为dev设置mac地址
 	int			(*ndo_set_mac_address)(struct net_device *dev,
@@ -1612,8 +1619,8 @@ struct net_device_ops {
 #endif
 	/*添加slave设备*/
 	int			(*ndo_add_slave)(struct net_device *dev/*master设备*/,
-						 struct net_device *slave_dev,
-						 struct netlink_ext_ack *extack);
+						 struct net_device *slave_dev/*要添加的slave设备*/,
+						 struct netlink_ext_ack *extack/*额外的netlink信息*/);
 	/*删除slave设备*/
 	int			(*ndo_del_slave)(struct net_device *dev,
 						 struct net_device *slave_dev);
@@ -1831,6 +1838,7 @@ enum netdev_priv_flags {
 
 #define IFF_802_1Q_VLAN			IFF_802_1Q_VLAN
 #define IFF_EBRIDGE			IFF_EBRIDGE
+/*指明此设备已加入bonding*/
 #define IFF_BONDING			IFF_BONDING
 #define IFF_ISATAP			IFF_ISATAP
 #define IFF_WAN_HDLC			IFF_WAN_HDLC
@@ -2235,7 +2243,7 @@ struct net_device {
 	unsigned int		gro_ipv4_max_size;
 	rx_handler_func_t __rcu	*rx_handler;
 	void __rcu		*rx_handler_data;
-	possible_net_t			nd_net;//设备从属于那个namespace
+	possible_net_t			nd_net;//设备从属于那个net namespace
 #ifdef CONFIG_NETPOLL
 	struct netpoll_info __rcu	*npinfo;
 #endif
@@ -2272,8 +2280,8 @@ struct net_device {
 	struct list_head	ptype_all;//挂在此链上的ptype将收取此设备所有报文(与l2->ptype_all对应）
 
 	struct {
-		struct list_head upper;
-		struct list_head lower;
+		struct list_head upper;/*基于此设备的所有upper netdev*/
+		struct list_head lower;/*从属于此设备的所有lower netdev*/
 	} adj_list;
 
 	/* Read-mostly cache-line for fast-path access */
@@ -2292,7 +2300,7 @@ struct net_device {
 
 	unsigned int		min_mtu;//设置最小mtu
 	unsigned int		max_mtu;//设置最大mtu
-	unsigned short		type;//设备类型（例如ARPHRD_ETHER）
+	unsigned short		type;//设备类型（例如ARPHRD_ETHER，ARPHRD_LOOPBACK）
 	unsigned char		min_header_len;//最小协议头部长度
 	unsigned char		name_assign_type;
 
@@ -2403,7 +2411,7 @@ struct net_device {
 	/* Interface address info used in eth_type_trans() */
 	const unsigned char	*dev_addr;//接口mac地址
 
-	unsigned int		num_rx_queues;
+	unsigned int		num_rx_queues;/*rx队列数目*/
 #define GRO_LEGACY_MAX_SIZE	65536u
 /* TCP minimal MSS is 8 (TCP_MIN_GSO_SIZE),
  * and shinfo->gso_segs is a 16bit field.
@@ -3017,7 +3025,7 @@ enum netdev_lag_hash {
 };
 
 struct netdev_lag_upper_info {
-	enum netdev_lag_tx_type tx_type;/*tx类型*/
+	enum netdev_lag_tx_type tx_type;/*bond tx类型*/
 	enum netdev_lag_hash hash_type;/*hash类型*/
 };
 
@@ -3046,16 +3054,17 @@ enum netdev_cmd {
 	NETDEV_UNREGISTER,
 	//mtu变更
 	NETDEV_CHANGEMTU,	/* notify after mtu change happened */
-	//接口地址变更
+	//接口地址变更后通知
 	NETDEV_CHANGEADDR,	/* notify after the address change */
+	/*接口地址变更前通知*/
 	NETDEV_PRE_CHANGEADDR,	/* notify before the address change */
 	NETDEV_GOING_DOWN,
 	NETDEV_CHANGENAME,
 	NETDEV_FEAT_CHANGE,
 	NETDEV_BONDING_FAILOVER,
-	NETDEV_PRE_UP,
-	NETDEV_PRE_TYPE_CHANGE,
-	NETDEV_POST_TYPE_CHANGE,
+	NETDEV_PRE_UP,/*设备up前通知*/
+	NETDEV_PRE_TYPE_CHANGE,/*设备type发生变更前通知*/
+	NETDEV_POST_TYPE_CHANGE,/*设备type发生变更后通知*/
 	NETDEV_POST_INIT,
 	NETDEV_PRE_UNINIT,
 	NETDEV_RELEASE,
@@ -3065,7 +3074,7 @@ enum netdev_cmd {
 	NETDEV_RESEND_IGMP,
 	NETDEV_PRECHANGEMTU,	/* notify before mtu change happened */
 	NETDEV_CHANGEINFODATA,
-	NETDEV_BONDING_INFO,
+	NETDEV_BONDING_INFO,/*以一个固定的结构体，向系统通知bonding信息*/
 	NETDEV_PRECHANGEUPPER,
 	NETDEV_CHANGELOWERSTATE,
 	NETDEV_UDP_TUNNEL_PUSH_INFO,
@@ -3114,7 +3123,9 @@ struct netdev_notifier_change_info {
 
 struct netdev_notifier_changeupper_info {
 	struct netdev_notifier_info info; /* must be first */
+	/*顶层设备*/
 	struct net_device *upper_dev; /* new upper dev */
+	/*是否master设备*/
 	bool master; /* is upper dev master */
 	/*链接 或者 断开链接*/
 	bool linking; /* is the notification for link or unlink */
@@ -3208,7 +3219,7 @@ extern rwlock_t				dev_base_lock;		/* Device list lock */
 						     dev_list)
 #define for_each_netdev_continue_rcu(net, d)		\
 	list_for_each_entry_continue_rcu(d, &(net)->dev_base_head, dev_list)
-/*遍历init_net下所有netdev,如果此netdev的master为参数bond,则执行访问*/
+/*遍历init_net下所有netdev,如果此netdev的master为参数bond,则对其执行访问*/
 #define for_each_netdev_in_bond_rcu(bond, slave)	\
 		for_each_netdev_rcu(&init_net, slave)	\
 			if (netdev_master_upper_dev_get_rcu(slave) == (bond))
@@ -4786,7 +4797,8 @@ struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 #define alloc_netdev(sizeof_priv, name, name_assign_type, setup) \
 	alloc_netdev_mqs(sizeof_priv, name, name_assign_type, setup, 1, 1)
 
-#define alloc_netdev_mq(sizeof_priv, name, name_assign_type, setup, count) \
+//申请名称为name的网络设备，默认rx,tx队列数均为count
+#define alloc_netdev_mq(sizeof_priv/*netdev包括的私有数据结构体大小*/, name, name_assign_type, setup, count) \
 	alloc_netdev_mqs(sizeof_priv, name, name_assign_type, setup, count, \
 			 count)
 
@@ -4828,6 +4840,7 @@ void dev_addr_mod(struct net_device *dev, unsigned int offset,
 static inline void
 __dev_addr_set(struct net_device *dev, const void *addr, size_t len)
 {
+	/*设置网络设备地址*/
 	dev_addr_mod(dev, 0, addr, len);
 }
 
@@ -4993,11 +5006,12 @@ void *netdev_lower_get_next_private_rcu(struct net_device *dev,
 					struct list_head **iter);
 
 #define netdev_for_each_lower_private(dev, priv, iter) \
-	for (iter = (dev)->adj_list.lower.next, \
+	for (iter = (dev)->adj_list.lower.next,/*设置iter*/ \
 	     priv = netdev_lower_get_next_private(dev, &(iter)); \
 	     priv; \
 	     priv = netdev_lower_get_next_private(dev, &(iter)))
 
+/*遍历lower链表*/
 #define netdev_for_each_lower_private_rcu(dev, priv, iter) \
 	for (iter = &(dev)->adj_list.lower, \
 	     priv = netdev_lower_get_next_private_rcu(dev, &(iter)); \

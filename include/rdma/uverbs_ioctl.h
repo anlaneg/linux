@@ -401,7 +401,7 @@ struct uapi_definition {
 		.kind = UAPI_DEF_WRITE,                                        \
 		.scope = UAPI_SCOPE_OBJECT,                                    \
 		.write = { .is_ex = 0/*非扩展命令*/, .command_num = _command_num/*命令id*/ },          \
-		.func_write = _func,                                           \
+		.func_write = _func,/*命令处理函数*/                             \
 		_cmd_desc,                                                     \
 	},                                                                     \
 		##__VA_ARGS__

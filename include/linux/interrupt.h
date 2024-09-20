@@ -554,7 +554,7 @@ enum
 {
 	HI_SOFTIRQ=0,//最高优化级软中断
 	TIMER_SOFTIRQ,
-	NET_TX_SOFTIRQ,/*网络发包软中断*/
+	NET_TX_SOFTIRQ,/*网络发包软中断(比如使能了qos,且队列中仍有报文）*/
 	NET_RX_SOFTIRQ,/*网络收包软中断*/
 	BLOCK_SOFTIRQ,
 	IRQ_POLL_SOFTIRQ,

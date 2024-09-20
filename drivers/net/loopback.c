@@ -100,11 +100,13 @@ void dev_lstats_read(struct net_device *dev, u64 *packets, u64 *bytes)
 	*packets = 0;
 	*bytes = 0;
 
+	/*将所有cpu值加起来*/
 	for_each_possible_cpu(i) {
 		const struct pcpu_lstats *lb_stats;
 		u64 tbytes, tpackets;
 		unsigned int start;
 
+		/*执行统计*/
 		lb_stats = per_cpu_ptr(dev->lstats, i);
 		do {
 			start = u64_stats_fetch_begin(&lb_stats->syncp);
@@ -122,6 +124,7 @@ static void loopback_get_stats64(struct net_device *dev,
 {
 	u64 packets, bytes;
 
+	/*取统计信息*/
 	dev_lstats_read(dev, &packets, &bytes);
 
 	stats->rx_packets = packets;
@@ -135,6 +138,7 @@ static u32 always_on(struct net_device *dev)
 	return 1;
 }
 
+/*loopback接口ethtool对应的操作集*/
 static const struct ethtool_ops loopback_ethtool_ops = {
 	.get_link		= always_on,
 	.get_ts_info		= ethtool_op_get_ts_info,
@@ -142,6 +146,7 @@ static const struct ethtool_ops loopback_ethtool_ops = {
 
 static int loopback_dev_init(struct net_device *dev)
 {
+	/*初始化统计结构体*/
 	dev->lstats = netdev_alloc_pcpu_stats(struct pcpu_lstats);
 	if (!dev->lstats)
 		return -ENOMEM;
@@ -158,7 +163,9 @@ static const struct net_device_ops loopback_ops = {
 	.ndo_init        = loopback_dev_init,
 	//loopback 发包函数（回环发出的报，又回到协议栈）
 	.ndo_start_xmit  = loopback_xmit,
+	/*取loopback接口的统计信息*/
 	.ndo_get_stats64 = loopback_get_stats64,
+	/*变更loopback设备的mac地址*/
 	.ndo_set_mac_address = eth_mac_addr,
 };
 
@@ -238,7 +245,7 @@ out:
 
 /* Registered in net/core/dev.c */
 struct pernet_operations __net_initdata loopback_net_ops = {
-	.init = loopback_net_init,/*loopback设备的pernet初始化*/
+	.init = loopback_net_init,/*当ns创建时，创建其对应的loopback设备*/
 };
 
 /* blackhole netdevice */
@@ -251,6 +258,7 @@ static netdev_tx_t blackhole_netdev_xmit(struct sk_buff *skb,
 	return NETDEV_TX_OK;
 }
 
+/*blackhole网络设备ops*/
 static const struct net_device_ops blackhole_netdev_ops = {
 	.ndo_start_xmit = blackhole_netdev_xmit,
 };

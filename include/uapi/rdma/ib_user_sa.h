@@ -53,8 +53,8 @@ struct ib_path_rec_data {
 };
 
 struct ib_user_path_rec {
-	__u8	dgid[16];
-	__u8	sgid[16];
+	__u8	dgid[16];/*目的gid*/
+	__u8	sgid[16];/*源gid*/
 	__be16	dlid;
 	__be16	slid;
 	__u32	raw_traffic;

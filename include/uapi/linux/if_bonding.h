@@ -69,6 +69,7 @@
 /*主备模式*/
 #define BOND_MODE_ACTIVEBACKUP	1
 #define BOND_MODE_XOR		2
+/*广播模式*/
 #define BOND_MODE_BROADCAST	3
 #define BOND_MODE_8023AD        4
 #define BOND_MODE_TLB           5
@@ -116,7 +117,7 @@ typedef struct ifbond {
 
 typedef struct ifslave {
 	__s32 slave_id; /* Used as an IN param to the BOND_SLAVE_INFO_QUERY ioctl */
-	char slave_name[IFNAMSIZ];
+	char slave_name[IFNAMSIZ];/*slave接口名称*/
 	__s8 link;
 	__s8 state;
 	__u32  link_failure_count;

@@ -716,14 +716,17 @@ rdma_find_gid_by_port(struct ib_device *ib_dev,
 		/*port无效*/
 		return ERR_PTR(-ENOENT);
 
+	/*取此ib设备指定port对应的table*/
 	table = rdma_gid_table(ib_dev, port);
 
 	if (ndev)
 		mask |= GID_ATTR_FIND_MASK_NETDEV;
 
 	read_lock_irqsave(&table->rwlock, flags);
+	/*查询此table,检查gid是否在此table中存在*/
 	local_index = find_gid(table, gid, &val, false, mask, NULL);
 	if (local_index >= 0) {
+		/*此table中有此gid,返回相应attr*/
 		get_gid_entry(table->data_vec[local_index]);
 		attr = &table->data_vec[local_index]->attr;
 		read_unlock_irqrestore(&table->rwlock, flags);

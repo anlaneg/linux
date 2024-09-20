@@ -82,7 +82,7 @@ struct ucma_file {
 };
 
 struct ucma_context {
-	u32			id;
+	u32			id;/*ucma_context关联的fd*/
 	struct completion	comp;
 	refcount_t		ref;
 	int			events_reported;/*事件报告次数*/
@@ -359,7 +359,7 @@ static int ucma_event_handler(struct rdma_cm_id *cm_id/*event关联的cm_id*/,
 			return 0;
 
 		mutex_lock(&ctx->file->mut);
-		//将uevent加入到event_list上，用户会来获取
+		//将uevent加入到event_list上，等待用户来获取
 		list_add_tail(&uevent->list, &ctx->file->event_list);
 		mutex_unlock(&ctx->file->mut);
 		wake_up_interruptible(&ctx->file->poll_wait);
@@ -483,7 +483,7 @@ static ssize_t ucma_create_id(struct ucma_file *file, const char __user *inbuf,
 
 	ctx->uid = cmd.uid;/*记录uid*/
 
-	/*创建cm id*/
+	/*创建rdma_cm_id结构体*/
 	cm_id = rdma_create_user_id(ucma_event_handler, ctx, cmd.ps, qp_type);
 	if (IS_ERR(cm_id)) {
 		ret = PTR_ERR(cm_id);
@@ -725,7 +725,7 @@ static ssize_t ucma_resolve_ip(struct ucma_file *file,
 	mutex_lock(&ctx->mutex);
 	/*处理地址解析*/
 	ret = rdma_resolve_addr(ctx->cm_id, (struct sockaddr *) &cmd.src_addr,
-				(struct sockaddr *) &cmd.dst_addr, cmd.timeout_ms);
+				(struct sockaddr *) &cmd.dst_addr, cmd.timeout_ms/*超时时间*/);
 	mutex_unlock(&ctx->mutex);
 	ucma_put_ctx(ctx);
 	return ret;
@@ -775,6 +775,7 @@ static ssize_t ucma_resolve_route(struct ucma_file *file,
 		return PTR_ERR(ctx);
 
 	mutex_lock(&ctx->mutex);
+	/*执行路由解析，并指定超时时间*/
 	ret = rdma_resolve_route(ctx->cm_id, cmd.timeout_ms);
 	mutex_unlock(&ctx->mutex);
 	ucma_put_ctx(ctx);
@@ -816,6 +817,7 @@ static void ucma_copy_iboe_route(struct rdma_ucm_query_route_resp *resp,
 	resp->num_paths = route->num_pri_alt_paths;
 	switch (route->num_pri_alt_paths) {
 	case 0:
+		/*由dst_addr,src_addr更新dgid,sgid*/
 		rdma_ip2gid((struct sockaddr *)&route->addr.dst_addr,
 			    (union ib_gid *)&resp->ib_route[0].dgid);
 		rdma_ip2gid((struct sockaddr *)&route->addr.src_addr,
@@ -861,16 +863,19 @@ static ssize_t ucma_query_route(struct ucma_file *file,
 	if (copy_from_user(&cmd, inbuf, sizeof(cmd)))
 		return -EFAULT;
 
+	/*通过id找到context*/
 	ctx = ucma_get_ctx(file, cmd.id);
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
 
 	mutex_lock(&ctx->mutex);
 	memset(&resp, 0, sizeof resp);
+	/*填充源ip到resp*/
 	addr = (struct sockaddr *) &ctx->cm_id->route.addr.src_addr;
 	memcpy(&resp.src_addr, addr, addr->sa_family == AF_INET ?
 				     sizeof(struct sockaddr_in) :
 				     sizeof(struct sockaddr_in6));
+	/*填充目的ip到resp*/
 	addr = (struct sockaddr *) &ctx->cm_id->route.addr.dst_addr;
 	memcpy(&resp.dst_addr, addr, addr->sa_family == AF_INET ?
 				     sizeof(struct sockaddr_in) :
@@ -878,15 +883,20 @@ static ssize_t ucma_query_route(struct ucma_file *file,
 	if (!ctx->cm_id->device)
 		goto out;
 
+	/*填充ib设备guid*/
 	resp.node_guid = (__force __u64) ctx->cm_id->device->node_guid;
+	/*填充ib设备index*/
 	resp.ibdev_index = ctx->cm_id->device->index;
+	/*填充ib设备的某个port_num*/
 	resp.port_num = ctx->cm_id->port_num;
 
 	if (rdma_cap_ib_sa(ctx->cm_id->device, ctx->cm_id->port_num))
 		ucma_copy_ib_route(&resp, &ctx->cm_id->route);
 	else if (rdma_protocol_roce(ctx->cm_id->device, ctx->cm_id->port_num))
+		/*roce处理*/
 		ucma_copy_iboe_route(&resp, &ctx->cm_id->route);
 	else if (rdma_protocol_iwarp(ctx->cm_id->device, ctx->cm_id->port_num))
+		/*iwarp处理*/
 		ucma_copy_iw_route(&resp, &ctx->cm_id->route);
 
 out:
@@ -1290,6 +1300,7 @@ static int ucma_set_option_id(struct ucma_context *ctx, int optname,
 
 	switch (optname) {
 	case RDMA_OPTION_ID_TOS:
+		/*设置tos*/
 		if (optlen != sizeof(u8)) {
 			ret = -EINVAL;
 			break;
@@ -1423,6 +1434,7 @@ static ssize_t ucma_set_option(struct ucma_file *file, const char __user *inbuf,
 	if (unlikely(cmd.optlen > KMALLOC_MAX_SIZE))
 		return -EINVAL;
 
+	/*取ucma_context*/
 	ctx = ucma_get_ctx(file, cmd.id);
 	if (IS_ERR(ctx))
 		return PTR_ERR(ctx);
@@ -1724,15 +1736,15 @@ static ssize_t (*ucma_cmd_table[])(struct ucma_file *file,
 	[RDMA_USER_CM_CMD_DESTROY_ID]	 = ucma_destroy_id,/*销毁context*/
 	[RDMA_USER_CM_CMD_BIND_IP]	 = ucma_bind_ip,/*绑定设置源地址*/
 	[RDMA_USER_CM_CMD_RESOLVE_IP]	 = ucma_resolve_ip,/*响应用户态resolve_ip命令*/
-	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,
-	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,
+	[RDMA_USER_CM_CMD_RESOLVE_ROUTE] = ucma_resolve_route,/*路由解析命令*/
+	[RDMA_USER_CM_CMD_QUERY_ROUTE]	 = ucma_query_route,/*用户态找kernel查询route信息*/
 	[RDMA_USER_CM_CMD_CONNECT]	 = ucma_connect,/*执行用户态发送的connect命令*/
 	[RDMA_USER_CM_CMD_LISTEN]	 = ucma_listen,
 	[RDMA_USER_CM_CMD_ACCEPT]	 = ucma_accept,
 	[RDMA_USER_CM_CMD_REJECT]	 = ucma_reject,
 	[RDMA_USER_CM_CMD_DISCONNECT]	 = ucma_disconnect,
 	[RDMA_USER_CM_CMD_INIT_QP_ATTR]	 = ucma_init_qp_attr,
-	[RDMA_USER_CM_CMD_GET_EVENT]	 = ucma_get_event,/*用户态通过此命令返回event*/
+	[RDMA_USER_CM_CMD_GET_EVENT]	 = ucma_get_event,/*用户态通过此命令返回event(poll调用有数据）*/
 	[RDMA_USER_CM_CMD_GET_OPTION]	 = NULL,
 	[RDMA_USER_CM_CMD_SET_OPTION]	 = ucma_set_option,
 	[RDMA_USER_CM_CMD_NOTIFY]	 = ucma_notify,
@@ -1859,7 +1871,7 @@ static const struct file_operations ucma_fops = {
 	.open 	 = ucma_open,
 	.release = ucma_close,
 	.write	 = ucma_write,/*写入内容*/
-	.poll    = ucma_poll,
+	.poll    = ucma_poll,/*如果event_list链不为空，则表明有数据*/
 	.llseek	 = no_llseek,
 };
 

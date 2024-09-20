@@ -39,9 +39,9 @@ struct rdma_dev_addr {
 	unsigned char broadcast[MAX_ADDR_LEN];
 	unsigned short dev_type;
 	int bound_dev_if;/*设置的目的端口*/
-	enum rdma_transport_type transport;
+	enum rdma_transport_type transport;/*使用哪种transport类型，例如udp,iwrap*/
 	struct net *net;/*当前所属net namespace*/
-	const struct ib_gid_attr *sgid_attr;
+	const struct ib_gid_attr *sgid_attr;/*使用的gid信息*/
 	enum rdma_network_type network;/*使用哪种网络:ipv4,ipv6,ib*/
 	/*取hop limit*/
 	int hoplimit;
@@ -174,6 +174,7 @@ static inline void rdma_addr_set_dgid(struct rdma_dev_addr *dev_addr, union ib_g
 	memcpy(dev_addr->dst_dev_addr + rdma_addr_gid_offset(dev_addr), gid, sizeof *gid);
 }
 
+/*按mtu值分类ib_mtu*/
 static inline enum ib_mtu iboe_get_mtu(int mtu)
 {
 	/*

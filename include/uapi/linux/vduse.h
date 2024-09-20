@@ -39,10 +39,10 @@ struct vduse_dev_config {
 	__u32 vendor_id;
 	__u32 device_id;
 	__u64 features;
-	__u32 vq_num;
+	__u32 vq_num;/*指明Vq数目*/
 	__u32 vq_align;
-	__u32 reserved[13];
-	__u32 config_size;
+	__u32 reserved[13];/*预留字段*/
+	__u32 config_size;/*指明config成员内容长度*/
 	__u8 config[];
 };
 
@@ -123,9 +123,9 @@ struct vduse_config_data {
  * Structure used by VDUSE_VQ_SETUP ioctl to setup a virtqueue.
  */
 struct vduse_vq_config {
-	__u32 index;
+	__u32 index;/*要配置的队列编号*/
 	__u16 max_size;
-	__u16 reserved[13];
+	__u16 reserved[13];/*预留字段*/
 };
 
 /*

@@ -800,45 +800,48 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 
 	mutex_lock(&d->mutex);
 
+	/*以下命令，每个对应一个vdap设备回调*/
 	switch (cmd) {
 	case VHOST_VDPA_GET_DEVICE_ID:
-	    //取设备device id
+	    //取设备device id（get_device_id）
 		r = vhost_vdpa_get_device_id(v, argp);
 		break;
 	case VHOST_VDPA_GET_STATUS:
-	    //取设备状态
+	    //取设备状态（get_status）
 		r = vhost_vdpa_get_status(v, argp);
 		break;
 	case VHOST_VDPA_SET_STATUS:
-	    //设置设备状态
+	    //设置设备状态（set_status）
 		r = vhost_vdpa_set_status(v, argp);
 		break;
 	case VHOST_VDPA_GET_CONFIG:
-	    //取vdpa配置
+	    //取vdpa配置（get_config）
 		r = vhost_vdpa_get_config(v, argp);
 		break;
 	case VHOST_VDPA_SET_CONFIG:
-	    //设置vdpa配置
+	    //设置vdpa配置（set_config）
 		r = vhost_vdpa_set_config(v, argp);
 		break;
 	case VHOST_GET_FEATURES:
-	    //取vdap设备支持的features
+	    //取vdap设备支持的features（get_device_features）
 		r = vhost_vdpa_get_features(v, argp);
 		break;
 	case VHOST_SET_FEATURES:
-	    //设置vdpa设置开启的features
+	    //设置vdpa设置开启的features（set_driver_features）
 		r = vhost_vdpa_set_features(v, argp);
 		break;
 	case VHOST_VDPA_GET_VRING_NUM:
-	    //获取vring的大小
+	    //获取vring的大小（get_vq_num_max）
 		r = vhost_vdpa_get_vring_num(v, argp);
 		break;
 	case VHOST_VDPA_GET_GROUP_NUM:
+		/*取ngroups*/
 		if (copy_to_user(argp, &v->vdpa->ngroups,
 				 sizeof(v->vdpa->ngroups)))
 			r = -EFAULT;
 		break;
 	case VHOST_VDPA_GET_AS_NUM:
+		/*取as num*/
 		if (copy_to_user(argp, &v->vdpa->nas, sizeof(v->vdpa->nas)))
 			r = -EFAULT;
 		break;
@@ -848,9 +851,11 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 		r = -ENOIOCTLCMD;
 		break;
 	case VHOST_VDPA_SET_CONFIG_CALL:
+		//设置config回调（set_config_cb）
 		r = vhost_vdpa_set_config_call(v, argp);
 		break;
 	case VHOST_GET_BACKEND_FEATURES:
+		/*获取后端features列表（get_backend_features）*/
 		features = VHOST_VDPA_BACKEND_FEATURES;
 		if (vhost_vdpa_can_suspend(v))
 			features |= BIT_ULL(VHOST_BACKEND_F_SUSPEND);
@@ -868,15 +873,19 @@ static long vhost_vdpa_unlocked_ioctl(struct file *filep,
 		r = vhost_vdpa_get_iova_range(v, argp);
 		break;
 	case VHOST_VDPA_GET_CONFIG_SIZE:
+		//取config size(get_config_size)
 		r = vhost_vdpa_get_config_size(v, argp);
 		break;
 	case VHOST_VDPA_GET_VQS_COUNT:
+		//取nvqs
 		r = vhost_vdpa_get_vqs_count(v, argp);
 		break;
 	case VHOST_VDPA_SUSPEND:
+		//设备挂起（suspend）
 		r = vhost_vdpa_suspend(v);
 		break;
 	case VHOST_VDPA_RESUME:
+		//设备恢复 （resume）
 		r = vhost_vdpa_resume(v);
 		break;
 	default:

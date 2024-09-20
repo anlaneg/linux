@@ -612,10 +612,12 @@ static void mlx5e_sync_netdev_addr(struct mlx5e_flow_steering *fs,
 
 	netif_addr_lock_bh(netdev);
 
+	/*先将自身mac加入，再遍历uc链表，将其加入到fs->netdev_uc*/
 	mlx5e_add_l2_to_hash(fs->l2.netdev_uc, netdev->dev_addr);
 	netdev_for_each_uc_addr(ha, netdev)
 		mlx5e_add_l2_to_hash(fs->l2.netdev_uc, ha->addr);
 
+	/*遍历地址添加的组播地址到fs->l2.netdev_mc*/
 	netdev_for_each_mc_addr(ha, netdev)
 		mlx5e_add_l2_to_hash(fs->l2.netdev_mc, ha->addr);
 
@@ -633,13 +635,14 @@ static void mlx5e_fill_addr_array(struct mlx5e_flow_steering *fs, int list_type,
 	int i = 0;
 	int hi;
 
-	addr_list = is_uc ? fs->l2.netdev_uc : fs->l2.netdev_mc;
+	addr_list = is_uc ? fs->l2.netdev_uc/*单播mac地址*/ : fs->l2.netdev_mc/*组播mac地址*/;
 
 	if (is_uc) /* Make sure our own address is pushed first */
 		ether_addr_copy(addr_array[i++], ndev->dev_addr);
 	else if (fs->l2.broadcast_enabled)
 		ether_addr_copy(addr_array[i++], ndev->broadcast);
 
+	/*收集此addr_list上所有mac,并将它们填充到addr_array数组中*/
 	mlx5e_for_each_hash_node(hn, tmp, addr_list, hi) {
 		if (ether_addr_equal(ndev->dev_addr, hn->ai.addr))
 			continue;
@@ -822,8 +825,8 @@ void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
 	struct mlx5e_l2_table *ea = &fs->l2;
 
 	bool rx_mode_enable  = fs->state_destroy;
-	bool promisc_enabled   = rx_mode_enable && (netdev->flags & IFF_PROMISC);
-	bool allmulti_enabled  = rx_mode_enable && (netdev->flags & IFF_ALLMULTI);
+	bool promisc_enabled   = rx_mode_enable && (netdev->flags & IFF_PROMISC);/*混杂是否开启*/
+	bool allmulti_enabled  = rx_mode_enable && (netdev->flags & IFF_ALLMULTI);/*是否收取所有组播*/
 	bool broadcast_enabled = rx_mode_enable;
 
 	bool enable_promisc    = !ea->promisc_enabled   &&  promisc_enabled;
@@ -835,6 +838,7 @@ void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
 	int err;
 
 	if (enable_promisc) {
+		/*混杂开启处理*/
 		err = mlx5e_create_promisc_table(fs);
 		if (err)
 			enable_promisc = false;
@@ -843,8 +847,10 @@ void mlx5e_fs_set_rx_mode_work(struct mlx5e_flow_steering *fs,
 				     "S-tagged traffic will be dropped while C-tag vlan stripping is enabled\n");
 	}
 	if (enable_allmulti)
+		/*开启接收所有组播*/
 		mlx5e_add_l2_flow_rule(fs, &ea->allmulti, MLX5E_ALLMULTI);
 	if (enable_broadcast)
+		/*开启广播*/
 		mlx5e_add_l2_flow_rule(fs, &ea->broadcast, MLX5E_FULLMATCH);
 
 	mlx5e_handle_netdev_addr(fs, netdev);
@@ -991,6 +997,7 @@ static int mlx5e_add_l2_flow_rule(struct mlx5e_flow_steering *fs,
 		break;
 	}
 
+	/*创建此flow table*/
 	ai->rule = mlx5_add_flow_rules(ft, spec, &flow_act, &dest, 1);
 	if (IS_ERR(ai->rule)) {
 		fs_err(fs, "add l2 rule(mac:%pM) failed\n", mv_dmac);

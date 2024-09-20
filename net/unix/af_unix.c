@@ -234,6 +234,7 @@ static inline int unix_recvq_full_lockless(const struct sock *sk)
 		READ_ONCE(sk->sk_max_ack_backlog);
 }
 
+/*取对端sock*/
 struct sock *unix_peer_get(struct sock *s)
 {
 	struct sock *peer;
@@ -1028,6 +1029,7 @@ static int unix_create(struct net *net, struct socket *sock, int protocol,
 
 	sock->state = SS_UNCONNECTED;
 
+	/*按socket类型，确定操作集*/
 	switch (sock->type) {
 	case SOCK_STREAM:
 		sock->ops = &unix_stream_ops;
@@ -1754,7 +1756,7 @@ out:
 }
 
 
-static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
+static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer/*是否取peer*/)
 {
 	struct sock *sk = sock->sk;
 	struct unix_address *addr;
@@ -1766,12 +1768,14 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
 
 		err = -ENOTCONN;
 		if (!sk)
+			/*未取得peer socket*/
 			goto out;
 		err = 0;
 	} else {
 		sock_hold(sk);
 	}
 
+	/*取socket地址，并填充uaddr*/
 	addr = smp_load_acquire(&unix_sk(sk)->addr);
 	if (!addr) {
 		sunaddr->sun_family = AF_UNIX;
@@ -1790,7 +1794,7 @@ static int unix_getname(struct socket *sock, struct sockaddr *uaddr, int peer)
 	}
 	sock_put(sk);
 out:
-	return err;
+	return err;/*返回地址长度*/
 }
 
 static void unix_peek_fds(struct scm_cookie *scm, struct sk_buff *skb)

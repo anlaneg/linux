@@ -86,8 +86,8 @@ struct rtnl_link_ops {
 	struct net_device	*(*alloc)(struct nlattr *tb[],
 					  const char *ifname,
 					  unsigned char name_assign_type,
-					  unsigned int num_tx_queues,
-					  unsigned int num_rx_queues);
+					  unsigned int num_tx_queues/*tx队列数*/,
+					  unsigned int num_rx_queues/*rx队列数*/);
 	//link初创建时，将通过此函数完成新建link的初始化工作
 	void			(*setup)(struct net_device *dev);
 

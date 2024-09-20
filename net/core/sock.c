@@ -1857,7 +1857,7 @@ int sk_getsockopt(struct sock *sk, int level, int optname,
 	{
 		struct sockaddr_storage address;
 
-		lv = READ_ONCE(sock->ops)->getname(sock, (struct sockaddr *)&address, 2);
+		lv = READ_ONCE(sock->ops)->getname(sock, (struct sockaddr *)&address, 2/*获取peer地址*/);
 		if (lv < 0)
 			return -ENOTCONN;
 		if (lv < len)

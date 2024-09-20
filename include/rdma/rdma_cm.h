@@ -110,15 +110,15 @@ typedef int (*rdma_cm_event_handler)(struct rdma_cm_id *id,
 				     struct rdma_cm_event *event);
 
 struct rdma_cm_id {
-	struct ib_device	*device;
+	struct ib_device	*device;/*关联的ib设备*/
 	void			*context;
 	struct ib_qp		*qp;
 	/*event处理函数，例如ucma_event_hadler*/
 	rdma_cm_event_handler	 event_handler;
 	struct rdma_route	 route;
 	enum rdma_ucm_port_space ps;
-	enum ib_qp_type		 qp_type;
-	u32			 port_num;
+	enum ib_qp_type		 qp_type;/*qp类型*/
+	u32			 port_num;/*关联的ib设备port*/
 	struct work_struct net_work;
 };
 

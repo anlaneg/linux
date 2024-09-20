@@ -1710,6 +1710,7 @@ static int call_netdevice_notifier(struct notifier_block *nb, unsigned long val,
 	return nb->notifier_call(nb, val, &info);
 }
 
+/*针对dev触发netdev_register,netdev_up两个通知*/
 static int call_netdevice_register_notifiers(struct notifier_block *nb,
 					     struct net_device *dev)
 {
@@ -1721,6 +1722,7 @@ static int call_netdevice_register_notifiers(struct notifier_block *nb,
 		return err;
 
 	if (!(dev->flags & IFF_UP))
+		/*设备未up,不通知netdev_up*/
 		return 0;
 
 	call_netdevice_notifier(nb, NETDEV_UP, dev);
@@ -1738,6 +1740,7 @@ static void call_netdevice_unregister_notifiers(struct notifier_block *nb,
 	call_netdevice_notifier(nb, NETDEV_UNREGISTER, dev);
 }
 
+/*遍历此net下所有netdev,触发nb对应的通知函数*/
 static int call_netdevice_register_net_notifiers(struct notifier_block *nb,
 						 struct net *net)
 {
@@ -1790,6 +1793,7 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	/* Close race with setup_net() and cleanup_net() */
 	down_write(&pernet_ops_rwsem);
 	rtnl_lock();
+
 	//完成通知块的添加
 	err = raw_notifier_chain_register(&netdev_chain, nb);
 	if (err)
@@ -1797,9 +1801,8 @@ int register_netdevice_notifier(struct notifier_block *nb)
 	if (dev_boot_phase)
 		goto unlock;
 	//注册通知函数，
-	//先针对nb通知所有net下所有dev的，netdev_register事件,如果接口是up,则再通知netdev_up事件
+	//先针对nb通知所有net下已存在所有dev的，netdev_register事件,如果接口是up,则再通知netdev_up事件
 	for_each_net(net) {
-		//如果设备处于up状态，则通知netdev_up事件
 		err = call_netdevice_register_net_notifiers(nb, net);
 		if (err)
 			goto rollback;
@@ -3924,7 +3927,8 @@ static inline int __dev_xmit_skb(struct sk_buff *skb, struct Qdisc *q/*txq对应
 		/*不能bytepass,或队列不为空，
 		 * 先将skb入队列q,如果入队失败，则挂接在to_free上*/
 		rc = dev_qdisc_enqueue(skb, q, &to_free, txq);
-		qdisc_run(q);/*再出队并发送*/
+		/*出队并发送*/
+		qdisc_run(q);
 
 no_lock_out:
 		/*释放掉需要free的报文*/
@@ -7213,20 +7217,20 @@ end:;
 }
 
 struct netdev_adjacent {
-	struct net_device *dev;
+	struct net_device *dev;/*指向其关联的netdev设备*/
 	netdevice_tracker dev_tracker;
 
 	/* upper master flag, there can only be one master device per list */
-	bool master;/*为master设备*/
+	bool master;/*是否为master设备*/
 
 	/* lookup ignore flag */
-	bool ignore;
+	bool ignore;/*查找时，是否可忽略*/
 
 	/* counter for the number of times this device was added to us */
-	u16 ref_nr;
+	u16 ref_nr;/*引用计数*/
 
 	/* private field for the users */
-	void *private;
+	void *private;/*关联的私有数据*/
 
 	struct list_head list;
 	struct rcu_head rcu;
@@ -7240,6 +7244,7 @@ static struct netdev_adjacent *__netdev_find_adj(struct net_device *adj_dev,
 
 	list_for_each_entry(adj, adj_list, list) {
 		if (adj->dev == adj_dev)
+			/*netdev匹配，返回此结构*/
 			return adj;
 	}
 	return NULL;
@@ -7250,6 +7255,7 @@ static int ____netdev_has_upper_dev(struct net_device *upper_dev,
 {
 	struct net_device *dev = (struct net_device *)priv->data;
 
+	/*检查upper_dev是否与参数data中给的是同一个netdev*/
 	return upper_dev == dev;
 }
 
@@ -7349,9 +7355,10 @@ static struct net_device *__netdev_master_upper_dev_get(struct net_device *dev)
 	if (list_empty(&dev->adj_list.upper))
 		return NULL;
 
+	/*master类upper,每个设备只能有一个。*/
 	upper = list_first_entry(&dev->adj_list.upper,
 				 struct netdev_adjacent, list);
-	if (likely(upper->master) && !upper->ignore)
+	if (likely(upper->master) && !upper->ignore/*不可忽略*/)
 		return upper->dev;
 	return NULL;
 }
@@ -7412,15 +7419,19 @@ static struct net_device *__netdev_next_upper_dev(struct net_device *dev,
 {
 	struct netdev_adjacent *upper;
 
+	/*iter指向的是upper链，沿此链找到首个struct netdev_adjacent*/
 	upper = list_entry((*iter)->next, struct netdev_adjacent, list);
 
 	if (&upper->list == &dev->adj_list.upper)
+		/*达到链表尾，返回空*/
 		return NULL;
 
+	/*设置下次iter*/
 	*iter = &upper->list;
+	/*设置是否需ignore*/
 	*ignore = upper->ignore;
 
-	return upper->dev;
+	return upper->dev;/*返回当前索引对应的netdev*/
 }
 
 static struct net_device *netdev_next_upper_dev_rcu(struct net_device *dev,
@@ -7458,15 +7469,18 @@ static int __netdev_walk_all_upper_dev(struct net_device *dev,
 			/*当前遇到的设备不是dev,继续通过fn函数进行检测*/
 			ret = fn(now, priv);
 			if (ret)
-				return ret;
+				return ret;/*检测函数返回true,直接返回*/
 		}
 
 		next = NULL;
 		while (1) {
+			/*沿upper链，找upper设备*/
 			udev = __netdev_next_upper_dev(now, &iter, &ignore);
 			if (!udev)
+				/*没有设备了，跳出*/
 				break;
 			if (ignore)
+				/*需要忽略，尝试下一个*/
 				continue;
 
 			next = udev;
@@ -7477,6 +7491,7 @@ static int __netdev_walk_all_upper_dev(struct net_device *dev,
 		}
 
 		if (!next) {
+			/*next为空，退栈，这样就支持了多层upper*/
 			if (!cur)
 				return 0;
 			next = dev_stack[--cur];
@@ -7487,7 +7502,7 @@ static int __netdev_walk_all_upper_dev(struct net_device *dev,
 		iter = niter;
 	}
 
-	return 0;
+	return 0;/*遍历完成，回调均返回0*/
 }
 
 int netdev_walk_all_upper_dev_rcu(struct net_device *dev,
@@ -7537,6 +7552,7 @@ int netdev_walk_all_upper_dev_rcu(struct net_device *dev,
 }
 EXPORT_SYMBOL_GPL(netdev_walk_all_upper_dev_rcu);
 
+/*沿dev查找其upper_dev(支持多层查找），如果找到upper_dev,返回true*/
 static bool __netdev_has_upper_dev(struct net_device *dev,
 				   struct net_device *upper_dev)
 {
@@ -7567,14 +7583,16 @@ void *netdev_lower_get_next_private(struct net_device *dev,
 {
 	struct netdev_adjacent *lower;
 
+	/*iter指向的是一个struct netdev_adjacent结构体*/
 	lower = list_entry(*iter, struct netdev_adjacent, list);
 
 	if (&lower->list == &dev->adj_list.lower)
+		/*达到链表结尾了*/
 		return NULL;
 
-	*iter = lower->list.next;
+	*iter = lower->list.next;/*更新iter*/
 
-	return lower->private;
+	return lower->private;/*返回此private*/
 }
 EXPORT_SYMBOL(netdev_lower_get_next_private);
 
@@ -7964,6 +7982,7 @@ static inline bool netdev_adjacent_is_neigh_list(struct net_device *dev,
 						 struct net_device *adj_dev,
 						 struct list_head *dev_list)
 {
+	/*dev与dev同属同一个netns,且dev_list从属于dev->adj_list中的upper或lower链表*/
 	return (dev_list == &dev->adj_list.upper ||
 		dev_list == &dev->adj_list.lower) &&
 		net_eq(dev_net(dev), dev_net(adj_dev));
@@ -7972,11 +7991,12 @@ static inline bool netdev_adjacent_is_neigh_list(struct net_device *dev,
 static int __netdev_adjacent_dev_insert(struct net_device *dev,
 					struct net_device *adj_dev,
 					struct list_head *dev_list,
-					void *private, bool master)
+					void *private/*私有数据*/, bool master/*是否为master设备*/)
 {
 	struct netdev_adjacent *adj;
 	int ret;
 
+	/*在dev_list检查adj_dev是否已存在*/
 	adj = __netdev_find_adj(adj_dev, dev_list);
 
 	if (adj) {
@@ -7988,6 +8008,7 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 		return 0;
 	}
 
+	/*adj_dev关联的netdev_adjacent结构体未创建，这里进行创建*/
 	adj = kmalloc(sizeof(*adj), GFP_KERNEL);
 	if (!adj)
 		return -ENOMEM;
@@ -7996,7 +8017,7 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 	adj->master = master;
 	adj->ref_nr = 1;
 	adj->private = private;
-	adj->ignore = false;
+	adj->ignore = false;/*指明查找时不可忽略*/
 	netdev_hold(adj_dev, &adj->dev_tracker, GFP_KERNEL);
 
 	pr_debug("Insert adjacency: dev %s adj_dev %s adj->ref_nr %d; dev_hold on %s\n",
@@ -8015,8 +8036,10 @@ static int __netdev_adjacent_dev_insert(struct net_device *dev,
 		if (ret)
 			goto remove_symlinks;
 
+		/*将adj加入到dev_list*/
 		list_add_rcu(&adj->list, dev_list);
 	} else {
+		/*将adj加入到dev_list结尾*/
 		list_add_tail_rcu(&adj->list, dev_list);
 	}
 
@@ -8032,6 +8055,7 @@ free_adj:
 	return ret;
 }
 
+/*自dev_list上移除针对adj_dev设备创建的netdev_adjacent结构体*/
 static void __netdev_adjacent_dev_remove(struct net_device *dev,
 					 struct net_device *adj_dev,
 					 u16 ref_nr,
@@ -8045,6 +8069,7 @@ static void __netdev_adjacent_dev_remove(struct net_device *dev,
 	adj = __netdev_find_adj(adj_dev, dev_list);
 
 	if (!adj) {
+		/*要移除，但没有找到*/
 		pr_err("Adjacency does not exist for device %s from %s\n",
 		       dev->name, adj_dev->name);
 		WARN_ON(1);
@@ -8052,6 +8077,7 @@ static void __netdev_adjacent_dev_remove(struct net_device *dev,
 	}
 
 	if (adj->ref_nr > ref_nr) {
+		/*减去引用计数*/
 		pr_debug("adjacency: %s to %s ref_nr - %d = %d\n",
 			 dev->name, adj_dev->name, ref_nr,
 			 adj->ref_nr - ref_nr);
@@ -8073,21 +8099,24 @@ static void __netdev_adjacent_dev_remove(struct net_device *dev,
 }
 
 static int __netdev_adjacent_dev_link_lists(struct net_device *dev,
-					    struct net_device *upper_dev,
-					    struct list_head *up_list,
-					    struct list_head *down_list,
+					    struct net_device *upper_dev/*master设备*/,
+					    struct list_head *up_list/*upper链表*/,
+					    struct list_head *down_list/*lower链表*/,
 					    void *private, bool master)
 {
 	int ret;
 
-	ret = __netdev_adjacent_dev_insert(dev, upper_dev, up_list,
+	/*dev设备是upper_dev的slave,故针对upper_dev创建adj设备，并加入upper list*/
+	ret = __netdev_adjacent_dev_insert(dev, upper_dev, up_list/*加入upper list*/,
 					   private, master);
 	if (ret)
 		return ret;
 
-	ret = __netdev_adjacent_dev_insert(upper_dev, dev, down_list,
-					   private, false);
+	/*upper_dev设备是dev的master,故针对dev创建adj设备，并加入lower list*/
+	ret = __netdev_adjacent_dev_insert(upper_dev, dev, down_list/*加入lower list*/,
+					   private, false/*非master设备*/);
 	if (ret) {
+		/*lower list中添加失败，回退针对up_list的插入*/
 		__netdev_adjacent_dev_remove(dev, upper_dev, 1, up_list);
 		return ret;
 	}
@@ -8107,9 +8136,9 @@ static void __netdev_adjacent_dev_unlink_lists(struct net_device *dev,
 
 static int __netdev_adjacent_dev_link_neighbour(struct net_device *dev,
 						struct net_device *upper_dev,
-						void *private, bool master)
+						void *private, bool master/*是否master类设备*/)
 {
-	return __netdev_adjacent_dev_link_lists(dev, upper_dev,
+	return __netdev_adjacent_dev_link_lists(dev/*底层设备*/, upper_dev/*上层设备*/,
 						&dev->adj_list.upper,
 						&upper_dev->adj_list.lower,
 						private, master);
@@ -8123,28 +8152,28 @@ static void __netdev_adjacent_dev_unlink_neighbour(struct net_device *dev,
 					   &upper_dev->adj_list.lower);
 }
 
-static int __netdev_upper_dev_link(struct net_device *dev,
-				   struct net_device *upper_dev/*master设备*/, bool master,
+static int __netdev_upper_dev_link(struct net_device *dev/*底层网络设备*/,
+				   struct net_device *upper_dev/*顶层网络设备*/, bool master/*是否为master类设备（master类设备，每个slave只能从属于一个master)*/,
 				   void *upper_priv, void *upper_info,
 				   struct netdev_nested_priv *priv,
 				   struct netlink_ext_ack *extack)
 {
 	struct netdev_notifier_changeupper_info changeupper_info = {
 		.info = {
-			.dev = dev,/*指定设备*/
+			.dev = dev,/*指定底层网络设备*/
 			.extack = extack,/*指明消息输出buf*/
 		},
-		.upper_dev = upper_dev,/*指定upper设备*/
-		.master = master,
+		.upper_dev = upper_dev,/*指定顶层网络设备*/
+		.master = master,/*指明此通知是否为master类设备*/
 		.linking = true,
-		.upper_info = upper_info,
+		.upper_info = upper_info,/*附带的通知信息*/
 	};
 	struct net_device *master_dev;
 	int ret = 0;
 
 	ASSERT_RTNL();
 
-	//dev与upper_dev属同一个设备
+	//底层dev与upper_dev属同一个设备，报错
 	if (dev == upper_dev)
 		return -EBUSY;
 
@@ -8156,6 +8185,7 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 		return -EMLINK;
 
 	if (!master) {
+		/*非master类设备，检查dev是否已从属于upper_dev*/
 		if (__netdev_has_upper_dev(dev, upper_dev))
 			return -EEXIST;
 	} else {
@@ -8166,13 +8196,14 @@ static int __netdev_upper_dev_link(struct net_device *dev,
 			return master_dev == upper_dev ? -EEXIST : -EBUSY;
 	}
 
-	/*upper prechange事件*/
+	/*通知upper prechange事件*/
 	ret = call_netdevice_notifiers_info(NETDEV_PRECHANGEUPPER,
 					    &changeupper_info.info);
 	ret = notifier_to_errno(ret);
 	if (ret)
 		return ret;
 
+	/*完成关系修改*/
 	ret = __netdev_adjacent_dev_link_neighbour(dev, upper_dev, upper_priv,
 						   master);
 	if (ret)
@@ -8211,8 +8242,8 @@ rollback:
  * On success the reference counts are adjusted and the function
  * returns zero.
  */
-int netdev_upper_dev_link(struct net_device *dev,
-			  struct net_device *upper_dev,
+int netdev_upper_dev_link(struct net_device *dev/*底层设备，例如ipvlan附着的设备*/,
+			  struct net_device *upper_dev/*上层设备，例如ipvlan设备*/,
 			  struct netlink_ext_ack *extack)
 {
 	struct netdev_nested_priv priv = {
@@ -8242,7 +8273,7 @@ EXPORT_SYMBOL(netdev_upper_dev_link);
  */
 int netdev_master_upper_dev_link(struct net_device *dev,
 				 struct net_device *upper_dev/*master设备*/,
-				 void *upper_priv/*upper设备的私有成*/, void *upper_info,
+				 void *upper_priv/*upper设备的私有数据*/, void *upper_info/*通知信息*/,
 				 struct netlink_ext_ack *extack)
 {
 	struct netdev_nested_priv priv = {
@@ -8250,7 +8281,7 @@ int netdev_master_upper_dev_link(struct net_device *dev,
 		.data = NULL,
 	};
 
-	return __netdev_upper_dev_link(dev, upper_dev/*顶层设备*/, true/*为master设备*/,
+	return __netdev_upper_dev_link(dev/*底层网络设备*/, upper_dev/*上层网络设备*/, true/*为master设备*/,
 				       upper_priv, upper_info, &priv, extack);
 }
 EXPORT_SYMBOL(netdev_master_upper_dev_link);
@@ -8309,16 +8340,19 @@ void netdev_upper_dev_unlink(struct net_device *dev,
 }
 EXPORT_SYMBOL(netdev_upper_dev_unlink);
 
+/*调整lower_dev，lower_dev 对应的netdev_adjacent在查找时，是否可忽略*/
 static void __netdev_adjacent_dev_set(struct net_device *upper_dev,
 				      struct net_device *lower_dev,
-				      bool val)
+				      bool val/*如为false,则不可忽略*/)
 {
 	struct netdev_adjacent *adj;
 
+	/*先查lower_dev对应的adj,如有，则设置*/
 	adj = __netdev_find_adj(lower_dev, &upper_dev->adj_list.lower);
 	if (adj)
 		adj->ignore = val;
 
+	/*再查upper_dev对应的adj,如有，则设置*/
 	adj = __netdev_find_adj(upper_dev, &lower_dev->adj_list.upper);
 	if (adj)
 		adj->ignore = val;
@@ -8414,12 +8448,14 @@ EXPORT_SYMBOL(netdev_adjacent_change_abort);
 void netdev_bonding_info_change(struct net_device *dev,
 				struct netdev_bonding_info *bonding_info)
 {
+	/*填充info结构体*/
 	struct netdev_notifier_bonding_info info = {
 		.info.dev = dev,
 	};
 
 	memcpy(&info.bonding_info, bonding_info,
 	       sizeof(struct netdev_bonding_info));
+	/*触发bonding_info通知*/
 	call_netdevice_notifiers_info(NETDEV_BONDING_INFO,
 				      &info.info);
 }
@@ -9320,6 +9356,7 @@ int dev_pre_changeaddr_notify(struct net_device *dev, const char *addr,
 	};
 	int rc;
 
+	/*触发设备dev地址变更前通知*/
 	rc = call_netdevice_notifiers_info(NETDEV_PRE_CHANGEADDR, &info.info);
 	return notifier_to_errno(rc);
 }
@@ -12312,6 +12349,7 @@ static int __init net_dev_init(void)
 	 * is the first device that appears and the last network device
 	 * that disappears.
 	 */
+	/*注册loopback设备，当net ns一旦创建，即创建lo设备*/
 	if (register_pernet_device(&loopback_net_ops))
 		goto out;
 

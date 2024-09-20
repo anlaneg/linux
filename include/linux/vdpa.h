@@ -114,11 +114,11 @@ struct vdpa_iova_range {
 struct vdpa_dev_set_config {
 	u64 device_features;
 	struct {
-		u8 mac[ETH_ALEN];
-		u16 mtu;
-		u16 max_vq_pairs;
+		u8 mac[ETH_ALEN];/*设备mac地址*/
+		u16 mtu;/*接口mtu*/
+		u16 max_vq_pairs;/*最大vqp数目*/
 	} net;
-	u64 mask;
+	u64 mask;/*指明配置指定了哪些字段*/
 };
 
 /**

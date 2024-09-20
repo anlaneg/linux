@@ -527,6 +527,7 @@ static int smc_tx_rdma_writes(struct smc_connection *conn,
 		rc = smcd_tx_rdma_writes(conn, len, sent.count, src_len,
 					 dst_off, dst_len);
 	else
+		/*smc-r类型，走rdma post_recv函数*/
 		rc = smcr_tx_rdma_writes(conn, len, sent.count, src_len,
 					 dst_off, dst_len, wr_rdma_buf);
 	if (rc)

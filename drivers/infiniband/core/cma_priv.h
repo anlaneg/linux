@@ -65,7 +65,7 @@ struct rdma_id_private {
 		struct list_head listen_list;
 	};
 	struct list_head        id_list_entry;
-	struct cma_device	*cma_dev;
+	struct cma_device	*cma_dev;/*关联的cma设备*/
 	struct list_head	mc_list;
 
 	int			internal_id;
@@ -91,7 +91,7 @@ struct rdma_id_private {
 	u32			qp_num;
 	u32			options;
 	u8			srq;
-	u8			tos;
+	u8			tos;/*配置的tos值*/
 	u8			tos_set:1;
 	u8                      timeout_set:1;
 	u8			min_rnr_timer_set:1;

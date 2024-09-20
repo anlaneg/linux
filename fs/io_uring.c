@@ -10712,6 +10712,7 @@ static int io_get_ext_arg(unsigned flags, const void __user *argp, size_t *argsz
 	return 0;
 }
 
+/*提交异步i/o请求*/
 SYSCALL_DEFINE6(io_uring_enter, unsigned int, fd, u32, to_submit,
 		u32, min_complete, u32, flags, const void __user *, argp,
 		size_t, argsz)

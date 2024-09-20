@@ -792,7 +792,8 @@ static rx_handler_result_t ipvlan_handle_mode_l2(struct sk_buff **pskb,
 rx_handler_result_t ipvlan_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
-	struct ipvl_port *port = ipvlan_port_get_rcu(skb->dev);/*取此dev关联的ipvl_port*/
+	/*取此dev关联的ipvl_port*/
+	struct ipvl_port *port = ipvlan_port_get_rcu(skb->dev);
 
 	if (!port)
 		/*无ipvl_port，跳出*/

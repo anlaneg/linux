@@ -135,6 +135,7 @@ static inline void smc_wr_tx_process_cqe(struct ib_wc *wc)
 
 static void smc_wr_tx_tasklet_fn(struct tasklet_struct *t)
 {
+	/*取得smc_ib_device结构*/
 	struct smc_ib_device *dev = from_tasklet(dev, t, send_tasklet);
 	struct ib_wc wc[SMC_WR_MAX_POLL_CQE];
 	int i = 0, rc;
@@ -144,6 +145,7 @@ again:
 	polled++;
 	do {
 		memset(&wc, 0, sizeof(wc));
+		/*获取cqe*/
 		rc = ib_poll_cq(dev->roce_cq_send, SMC_WR_MAX_POLL_CQE, wc);
 		if (polled == 1) {
 			ib_req_notify_cq(dev->roce_cq_send,
@@ -152,6 +154,7 @@ again:
 		}
 		if (!rc)
 			break;
+		/*逐个处理*/
 		for (i = 0; i < rc; i++)
 			smc_wr_tx_process_cqe(&wc[i]);
 	} while (rc > 0);

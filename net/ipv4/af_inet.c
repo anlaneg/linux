@@ -838,7 +838,7 @@ EXPORT_SYMBOL(inet_accept);
  *	This does both peername and sockname.
  */
 int inet_getname(struct socket *sock, struct sockaddr *uaddr,
-		 int peer)
+		 int peer/*是否获取peer地址*/)
 {
 	struct sock *sk		= sock->sk;
 	struct inet_sock *inet	= inet_sk(sk);
@@ -852,6 +852,7 @@ int inet_getname(struct socket *sock, struct sockaddr *uaddr,
 		    (((1 << sk->sk_state) & (TCPF_CLOSE | TCPF_SYN_SENT)) &&
 		     peer == 1)) {
 			release_sock(sk);
+			/*未建立连接，无法获取peer*/
 			return -ENOTCONN;
 		}
 		sin->sin_port = inet->inet_dport;

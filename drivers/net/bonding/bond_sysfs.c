@@ -86,12 +86,13 @@ static ssize_t bonding_store_bonds(const struct class *cls,
 	int rv, res = count;
 
 	sscanf(buffer, "%16s", command); /* IFNAMSIZ*/
-	ifname = command + 1;
+	ifname = command + 1;/*第一个字符是命令字，其后为接口名称*/
 	if ((strlen(command) <= 1) ||
 	    !dev_valid_name(ifname))
 		goto err_no_cmd;
 
 	if (command[0] == '+') {
+		/*遇到'+'号，执行bond接口创建*/
 		pr_info("%s is being created...\n", ifname);
 		rv = bond_create(bn->net, ifname);
 		if (rv) {
@@ -102,6 +103,7 @@ static ssize_t bonding_store_bonds(const struct class *cls,
 			res = rv;
 		}
 	} else if (command[0] == '-') {
+		/*遇到'-'号，执行bond接口移除*/
 		struct net_device *bond_dev;
 
 		rtnl_lock();
@@ -115,6 +117,7 @@ static ssize_t bonding_store_bonds(const struct class *cls,
 		}
 		rtnl_unlock();
 	} else
+		/*不支持其它命令*/
 		goto err_no_cmd;
 
 	/* Always return either count or an error.  If you return 0, you'll
@@ -130,7 +133,7 @@ err_no_cmd:
 /* class attribute for bond_masters file.  This ends up in /sys/class/net */
 static const struct class_attribute class_attr_bonding_masters = {
 	.attr = {
-		.name = "bonding_masters",
+		.name = "bonding_masters",/*此文件可接收命令创建bond*/
 		.mode = 0644,
 	},
 	.show = bonding_show_bonds,
@@ -366,6 +369,7 @@ static ssize_t bonding_show_lacp_active(struct device *d,
 static DEVICE_ATTR(lacp_active, 0644,
 		   bonding_show_lacp_active, bonding_sysfs_store_option);
 
+/*显示lacp_fast*/
 static ssize_t bonding_show_lacp_rate(struct device *d,
 				      struct device_attribute *attr,
 				      char *buf)

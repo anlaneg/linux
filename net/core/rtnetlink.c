@@ -444,6 +444,7 @@ int __rtnl_link_register(struct rtnl_link_ops *ops)
 	 * fill up dellink as well. That disables rtnl_dellink.
 	 */
 	if ((ops->alloc || ops->setup) && !ops->dellink)
+		/*提供默认的dellink*/
 		ops->dellink = unregister_netdevice_queue;
 
 	//将ops加入到link_ops链表
@@ -3448,12 +3449,14 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 	if (tb[IFLA_NUM_TX_QUEUES])
 		num_tx_queues = nla_get_u32(tb[IFLA_NUM_TX_QUEUES]);
 	else if (ops->get_num_tx_queues)
+		/*有回调，通过回调取tx队列数*/
 		num_tx_queues = ops->get_num_tx_queues();
 
 	//设置rx队列数目
 	if (tb[IFLA_NUM_RX_QUEUES])
 		num_rx_queues = nla_get_u32(tb[IFLA_NUM_RX_QUEUES]);
 	else if (ops->get_num_rx_queues)
+		/*有回调，通过回调取rx队列数*/
 		num_rx_queues = ops->get_num_rx_queues();
 
 	//rx,tx队列数目校验
@@ -3467,13 +3470,14 @@ struct net_device *rtnl_create_link(struct net *net, const char *ifname/*接口�
 		return ERR_PTR(-EINVAL);
 	}
 
-	//创建名称为ifname的设备（ops->setup将被调用）
+	//创建名称为ifname的设备
 	if (ops->alloc) {
 		dev = ops->alloc(tb, ifname, name_assign_type,
 				 num_tx_queues, num_rx_queues);
 		if (IS_ERR(dev))
 			return dev;
 	} else {
+		/*例如veth,bond没有提供alloc回调，则走此流程（ops->setup将被调用）*/
 		dev = alloc_netdev_mqs(ops->priv_size, ifname,
 				       name_assign_type, ops->setup,
 				       num_tx_queues, num_rx_queues);
@@ -3617,8 +3621,8 @@ static int rtnl_newlink_create(struct sk_buff *skb, struct ifinfomsg *ifm,
 		link_net = NULL;
 	}
 
-	//创建相应dev
-	dev = rtnl_create_link(link_net ? : dest_net, ifname,
+	//创建此类型的netdev
+	dev = rtnl_create_link(link_net ? : dest_net, ifname/*要创建的接口名称*/,
 			       name_assign_type, ops, tb, extack);
 	if (IS_ERR(dev)) {
 		err = PTR_ERR(dev);

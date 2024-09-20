@@ -16,7 +16,7 @@
 #include <linux/mod_devicetable.h>
 #include <linux/virtio_ids.h>
 
-static LIST_HEAD(mdev_head);
+static LIST_HEAD(mdev_head);/*用于记录系统中所有vdpa_mgmtdev设备*/
 /* A global mutex that protects vdpa management device and device level operations. */
 static DECLARE_RWSEM(vdpa_dev_lock);
 /*负责vdpa设备的index分配*/
@@ -326,7 +326,7 @@ EXPORT_SYMBOL_GPL(vdpa_unregister_device);
 int __vdpa_register_driver(struct vdpa_driver *drv, struct module *owner)
 {
     //vdpa驱动注册
-	drv->driver.bus = &vdpa_bus;
+	drv->driver.bus = &vdpa_bus;/*指明所属bus为vdpa bus*/
 	drv->driver.owner = owner;
 
 	return driver_register(&drv->driver);
@@ -359,7 +359,7 @@ int vdpa_mgmtdev_register(struct vdpa_mgmt_dev *mdev)
 
 	INIT_LIST_HEAD(&mdev->list);
 	down_write(&vdpa_dev_lock);
-	/*mdev串连到mdev_head*/
+	/*mgmtdev串连到mdev_head*/
 	list_add_tail(&mdev->list, &mdev_head);
 	up_write(&vdpa_dev_lock);
 	return 0;
@@ -436,6 +436,7 @@ void vdpa_set_config(struct vdpa_device *vdev, unsigned int offset,
 }
 EXPORT_SYMBOL_GPL(vdpa_set_config);
 
+/*通过busname,devname检查是否与mdev设备匹配*/
 static bool mgmtdev_handle_match(const struct vdpa_mgmt_dev *mdev,
 				 const char *busname, const char *devname)
 {
@@ -443,6 +444,7 @@ static bool mgmtdev_handle_match(const struct vdpa_mgmt_dev *mdev,
 	 * device with bus if bus attribute is provided.
 	 */
 	if ((busname && !mdev->device->bus) || (!busname && mdev->device->bus))
+		/*指定了busname,但此mgmtdev没有Bus或者没有指定busname,但mgmtdev有bus*/
 		return false;
 
 	if (!busname && strcmp(dev_name(mdev->device), devname) == 0)
@@ -462,11 +464,14 @@ static struct vdpa_mgmt_dev *vdpa_mgmtdev_get_from_attr(struct nlattr **attrs)
 	const char *devname;
 
 	if (!attrs[VDPA_ATTR_MGMTDEV_DEV_NAME])
+		/*必须指明mgmtdev设备名称*/
 		return ERR_PTR(-EINVAL);
 	devname = nla_data(attrs[VDPA_ATTR_MGMTDEV_DEV_NAME]);
 	if (attrs[VDPA_ATTR_MGMTDEV_BUS_NAME])
+		/*取bus name*/
 		busname = nla_data(attrs[VDPA_ATTR_MGMTDEV_BUS_NAME]);
 
+	/*遍历mgmtdev链表，查找指定的vdpa_mgmt_dev*/
 	list_for_each_entry(mdev, &mdev_head, list) {
 		if (mgmtdev_handle_match(mdev, busname, devname))
 			return mdev;
@@ -484,6 +489,7 @@ static int vdpa_nl_mgmtdev_handle_fill(struct sk_buff *msg, const struct vdpa_mg
 	return 0;
 }
 
+/*遍历mgmt_dev，检查其所支持的设备类型*/
 static u64 vdpa_mgmtdev_get_classes(const struct vdpa_mgmt_dev *mdev,
 				    unsigned int *nclasses)
 {
@@ -613,7 +619,7 @@ out:
 
 static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *info)
 {
-	struct vdpa_dev_set_config config = {};
+	struct vdpa_dev_set_config config = {};/*结构本先初始化为全零*/
 	struct nlattr **nl_attrs = info->attrs;
 	struct vdpa_mgmt_dev *mdev;
 	unsigned int ncls = 0;
@@ -623,21 +629,25 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 	int err = 0;
 
 	if (!info->attrs[VDPA_ATTR_DEV_NAME])
+		/*必须指定设备名称*/
 		return -EINVAL;
 
 	name = nla_data(info->attrs[VDPA_ATTR_DEV_NAME]);
 
 	if (nl_attrs[VDPA_ATTR_DEV_NET_CFG_MACADDR]) {
+		/*设置mac地址到config*/
 		macaddr = nla_data(nl_attrs[VDPA_ATTR_DEV_NET_CFG_MACADDR]);
 		memcpy(config.net.mac, macaddr, sizeof(config.net.mac));
 		config.mask |= BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MACADDR);
 	}
 	if (nl_attrs[VDPA_ATTR_DEV_NET_CFG_MTU]) {
+		/*设置MTU*/
 		config.net.mtu =
 			nla_get_u16(nl_attrs[VDPA_ATTR_DEV_NET_CFG_MTU]);
 		config.mask |= BIT_ULL(VDPA_ATTR_DEV_NET_CFG_MTU);
 	}
 	if (nl_attrs[VDPA_ATTR_DEV_NET_CFG_MAX_VQP]) {
+		/*设置最大的vqp数目*/
 		config.net.max_vq_pairs =
 			nla_get_u16(nl_attrs[VDPA_ATTR_DEV_NET_CFG_MAX_VQP]);
 		if (!config.net.max_vq_pairs) {
@@ -654,6 +664,7 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 			nla_get_u64(nl_attrs[VDPA_ATTR_DEV_FEATURES]);
 		if (nl_attrs[VDPA_ATTR_DEV_NET_CFG_MACADDR] &&
 		    !(config.device_features & BIT_ULL(VIRTIO_NET_F_MAC)))
+			/*指定了mac地址，但没有指定相应标记，设置Miss*/
 			missing |= BIT_ULL(VIRTIO_NET_F_MAC);
 		if (nl_attrs[VDPA_ATTR_DEV_NET_CFG_MTU] &&
 		    !(config.device_features & BIT_ULL(VIRTIO_NET_F_MTU)))
@@ -663,6 +674,7 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 		    !(config.device_features & BIT_ULL(VIRTIO_NET_F_MQ)))
 			missing |= BIT_ULL(VIRTIO_NET_F_MQ);
 		if (missing) {
+			/*存在miss,报错*/
 			NL_SET_ERR_MSG_FMT_MOD(info->extack,
 					       "Missing features 0x%llx for provided attributes",
 					       missing);
@@ -678,17 +690,20 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 	 */
 	if ((config.mask & VDPA_DEV_NET_ATTRS_MASK) &&
 	    !netlink_capable(skb, CAP_NET_ADMIN))
+		/*权限检查不通过*/
 		return -EPERM;
 
 	down_write(&vdpa_dev_lock);
 	mdev = vdpa_mgmtdev_get_from_attr(info->attrs);
 	if (IS_ERR(mdev)) {
+		/*没有获取到指定的mgmtdev,报错*/
 		NL_SET_ERR_MSG_MOD(info->extack, "Fail to find the specified management device");
 		err = PTR_ERR(mdev);
 		goto err;
 	}
 
 	if ((config.mask & mdev->config_attr_mask) != config.mask) {
+		/*配置指定了设备不容许配置的内容*/
 		NL_SET_ERR_MSG_FMT_MOD(info->extack,
 				       "Some provided attributes are not supported: 0x%llx",
 				       config.mask & ~mdev->config_attr_mask);
@@ -699,6 +714,7 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 	classes = vdpa_mgmtdev_get_classes(mdev, &ncls);
 	if (config.mask & VDPA_DEV_NET_ATTRS_MASK &&
 	    !(classes & BIT_ULL(VIRTIO_ID_NET))) {
+		/*指定了net相关的属性，但mgmt并不支持net设备*/
 		NL_SET_ERR_MSG_MOD(info->extack,
 				   "Network class attributes provided on unsupported management device");
 		err = -EINVAL;
@@ -708,12 +724,14 @@ static int vdpa_nl_cmd_dev_add_set_doit(struct sk_buff *skb, struct genl_info *i
 	    config.mask & BIT_ULL(VDPA_ATTR_DEV_FEATURES) &&
 	    classes & BIT_ULL(VIRTIO_ID_NET) && ncls > 1 &&
 	    config.device_features & VIRTIO_DEVICE_F_MASK) {
+		/*不支持多类型的设备*/
 		NL_SET_ERR_MSG_MOD(info->extack,
 				   "Management device supports multi-class while device features specified are ambiguous");
 		err = -EINVAL;
 		goto err;
 	}
 
+	/*消息处理：触发设备添加回调*/
 	err = mdev->ops->dev_add(mdev, name, &config);
 err:
 	up_write(&vdpa_dev_lock);
@@ -1275,17 +1293,17 @@ static const struct nla_policy vdpa_nl_policy[VDPA_ATTR_MAX + 1] = {
 
 static const struct genl_ops vdpa_nl_ops[] = {
 	{
-		.cmd = VDPA_CMD_MGMTDEV_GET,
+		.cmd = VDPA_CMD_MGMTDEV_GET,/*取kernel注册的mgmtdev信息*/
 		.doit = vdpa_nl_cmd_mgmtdev_get_doit,
 		.dumpit = vdpa_nl_cmd_mgmtdev_get_dumpit,
 	},
 	{
-		.cmd = VDPA_CMD_DEV_NEW,
+		.cmd = VDPA_CMD_DEV_NEW,/*处理用户态要add的设备*/
 		.doit = vdpa_nl_cmd_dev_add_set_doit,
 		.flags = GENL_ADMIN_PERM,
 	},
 	{
-		.cmd = VDPA_CMD_DEV_DEL,
+		.cmd = VDPA_CMD_DEV_DEL,/*处理用户态要del的设备*/
 		.doit = vdpa_nl_cmd_dev_del_set_doit,
 		.flags = GENL_ADMIN_PERM,
 	},
@@ -1322,10 +1340,11 @@ static int vdpa_init(void)
 {
 	int err;
 
-    	/*注册vdpa bus*/
+    /*注册vdpa bus*/
 	err = bus_register(&vdpa_bus);
 	if (err)
 		return err;
+	/*注册vdpa general netlink*/
 	err = genl_register_family(&vdpa_nl_family);
 	if (err)
 		goto err;

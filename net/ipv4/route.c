@@ -1018,6 +1018,7 @@ static int ip_error(struct sk_buff *skb)
 		inet_putpeer(peer);
 	}
 	if (send)
+		/*发送目标不可达*/
 		icmp_send(skb, ICMP_DEST_UNREACH, code, 0);
 
 out:	kfree_skb_reason(skb, reason);
@@ -1559,6 +1560,7 @@ void rt_flush_dev(struct net_device *dev)
 		list_for_each_entry_safe(rt, safe, &ul->head, dst.rt_uncached) {
 			if (rt->dst.dev != dev)
 				continue;
+			/*使目标设备指向blackhole*/
 			rt->dst.dev = blackhole_netdev;
 			netdev_ref_replace(dev, blackhole_netdev,
 					   &rt->dst.dev_tracker, GFP_ATOMIC);

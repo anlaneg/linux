@@ -480,6 +480,7 @@ static int vp_vdpa_dev_add(struct vdpa_mgmt_dev *v_mdev, const char *name,
 	u64 device_features;
 	int ret, i;
 
+	/*创建vdpa设备*/
 	vp_vdpa = vdpa_alloc_device(struct vp_vdpa, vdpa,
 				    dev, &vp_vdpa_ops, 1, 1, name, false);
 
@@ -564,7 +565,7 @@ static void vp_vdpa_dev_del(struct vdpa_mgmt_dev *v_mdev,
 }
 
 static const struct vdpa_mgmtdev_ops vp_vdpa_mdev_ops = {
-	.dev_add = vp_vdpa_dev_add,
+	.dev_add = vp_vdpa_dev_add,/*管理vdpa设备添加*/
 	.dev_del = vp_vdpa_dev_del,
 };
 

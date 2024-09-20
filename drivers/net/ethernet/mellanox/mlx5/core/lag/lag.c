@@ -54,7 +54,6 @@ enum {
  */
 static DEFINE_SPINLOCK(lag_lock);
 
-//发送消息给firmware创建lag
 static int get_port_sel_mode(enum mlx5_lag_mode mode, unsigned long flags)
 {
 	if (test_bit(MLX5_LAG_MODE_FLAG_HASH_BASED, &flags))
@@ -81,6 +80,7 @@ static u8 lag_active_port_bits(struct mlx5_lag *ldev)
 	return active_port;
 }
 
+//发送消息给firmware创建lag
 static int mlx5_cmd_create_lag(struct mlx5_core_dev *dev, u8 *ports, int mode,
 			       unsigned long flags)
 {
@@ -91,7 +91,7 @@ static int mlx5_cmd_create_lag(struct mlx5_core_dev *dev, u8 *ports, int mode,
 	void *lag_ctx;
 
 	lag_ctx = MLX5_ADDR_OF(create_lag_in, in, ctx);
-	MLX5_SET(create_lag_in, in, opcode, MLX5_CMD_OP_CREATE_LAG);
+	MLX5_SET(create_lag_in, in, opcode, MLX5_CMD_OP_CREATE_LAG);/*指明创建lag*/
 	MLX5_SET(lagc, lag_ctx, fdb_selection_mode, fdb_sel_mode);
 
 	switch (port_sel_mode) {
@@ -114,6 +114,7 @@ static int mlx5_cmd_create_lag(struct mlx5_core_dev *dev, u8 *ports, int mode,
 	return mlx5_cmd_exec_in(dev, create_lag, in);
 }
 
+/*发消息给fw,修改lag*/
 static int mlx5_cmd_modify_lag(struct mlx5_core_dev *dev, u8 num_ports,
 			       u8 *ports)
 {
@@ -129,6 +130,7 @@ static int mlx5_cmd_modify_lag(struct mlx5_core_dev *dev, u8 num_ports,
 	return mlx5_cmd_exec_in(dev, modify_lag, in);
 }
 
+/*发消息给fw,创建vport lag*/
 int mlx5_cmd_create_vport_lag(struct mlx5_core_dev *dev)
 {
 	u32 in[MLX5_ST_SZ_DW(create_vport_lag_in)] = {};
@@ -139,6 +141,7 @@ int mlx5_cmd_create_vport_lag(struct mlx5_core_dev *dev)
 }
 EXPORT_SYMBOL(mlx5_cmd_create_vport_lag);
 
+/*发消息给fw,销毁vport lag*/
 int mlx5_cmd_destroy_vport_lag(struct mlx5_core_dev *dev)
 {
 	u32 in[MLX5_ST_SZ_DW(destroy_vport_lag_in)] = {};
@@ -250,6 +253,7 @@ static struct mlx5_lag *mlx5_lag_dev_alloc(struct mlx5_core_dev *dev)
 	struct mlx5_lag *ldev;
 	int err;
 
+	/*创建lag设备*/
 	ldev = kzalloc(sizeof(*ldev), GFP_KERNEL);
 	if (!ldev)
 		return NULL;
@@ -262,15 +266,18 @@ static struct mlx5_lag *mlx5_lag_dev_alloc(struct mlx5_core_dev *dev)
 
 	kref_init(&ldev->ref);
 	mutex_init(&ldev->lock);
-	INIT_DELAYED_WORK(&ldev->bond_work, mlx5_do_bond_work);
+	INIT_DELAYED_WORK(&ldev->bond_work, mlx5_do_bond_work);/*负责bond维护*/
 
+	/*注册lag事件*/
 	ldev->nb.notifier_call = mlx5_lag_netdev_event;
 	if (register_netdevice_notifier_net(&init_net, &ldev->nb)) {
+		/*使init_net关注lag event事件失败*/
 		ldev->nb.notifier_call = NULL;
 		mlx5_core_err(dev, "Failed to register LAG netdev notifier\n");
 	}
 	ldev->mode = MLX5_LAG_MODE_NONE;
 
+	/*注册fib事件*/
 	err = mlx5_lag_mp_init(ldev);
 	if (err)
 		mlx5_core_err(dev, "Failed to init multipath lag err=%d\n",
@@ -301,6 +308,7 @@ static bool __mlx5_lag_is_roce(struct mlx5_lag *ldev)
 
 static bool __mlx5_lag_is_sriov(struct mlx5_lag *ldev)
 {
+	/*lag模式为sriov*/
 	return ldev->mode == MLX5_LAG_MODE_SRIOV;
 }
 
@@ -359,6 +367,7 @@ static bool mlx5_lag_has_drop_rule(struct mlx5_lag *ldev)
 {
 	int i;
 
+	/*是否有pf存在has_drop*/
 	for (i = 0; i < ldev->ports; i++)
 		if (ldev->pf[i].has_drop)
 			return true;
@@ -371,6 +380,7 @@ static void mlx5_lag_drop_rule_cleanup(struct mlx5_lag *ldev)
 
 	for (i = 0; i < ldev->ports; i++) {
 		if (!ldev->pf[i].has_drop)
+			/*跳过无has_drop的*/
 			continue;
 
 		mlx5_esw_acl_ingress_vport_drop_rule_destroy(ldev->pf[i].dev->priv.eswitch,
@@ -470,6 +480,7 @@ void mlx5_modify_lag(struct mlx5_lag *ldev,
 					      err);
 				return;
 			}
+			/*利用ports填充v2p_map*/
 			memcpy(ldev->v2p_map, ports, sizeof(ports));
 
 			mlx5_lag_print_mapping(dev0, ldev, tracker,
@@ -577,6 +588,7 @@ err:
 	return err;
 }
 
+/*按mode创建lag*/
 static int mlx5_create_lag(struct mlx5_lag *ldev,
 			   struct lag_tracker *tracker,
 			   enum mlx5_lag_mode mode,
@@ -620,7 +632,7 @@ static int mlx5_create_lag(struct mlx5_lag *ldev,
 
 int mlx5_activate_lag(struct mlx5_lag *ldev,
 		      struct lag_tracker *tracker,
-		      enum mlx5_lag_mode mode,
+		      enum mlx5_lag_mode mode/*要activate的bond类型*/,
 		      bool shared_fdb)
 {
 	bool roce_lag = mode == MLX5_LAG_MODE_ROCE;
@@ -635,6 +647,7 @@ int mlx5_activate_lag(struct mlx5_lag *ldev,
 	if (mode != MLX5_LAG_MODE_MPESW) {
 		mlx5_infer_tx_affinity_mapping(tracker, ldev->ports, ldev->buckets, ldev->v2p_map);
 		if (test_bit(MLX5_LAG_MODE_FLAG_HASH_BASED, &flags)) {
+			/*指明采用hash分发的，创建port selection table*/
 			err = mlx5_lag_port_sel_create(ldev, tracker->hash_type,
 						       ldev->v2p_map);
 			if (err) {
@@ -664,7 +677,7 @@ int mlx5_activate_lag(struct mlx5_lag *ldev,
 	    !roce_lag)
 		mlx5_lag_drop_rule_setup(ldev, tracker);
 
-	ldev->mode = mode;
+	ldev->mode = mode;/*设置要激活的bond类型*/
 	ldev->mode_flags = flags;
 	return 0;
 }
@@ -782,6 +795,7 @@ void mlx5_lag_remove_devices(struct mlx5_lag *ldev)
 	}
 }
 
+/*禁用此lag设备*/
 void mlx5_disable_lag(struct mlx5_lag *ldev)
 {
 	bool shared_fdb = test_bit(MLX5_LAG_MODE_FLAG_SHARED_FDB, &ldev->mode_flags);
@@ -900,6 +914,7 @@ static void mlx5_do_bond(struct mlx5_lag *ldev)
 		if (shared_fdb || roce_lag)
 			mlx5_lag_remove_devices(ldev);
 
+		/*如果使能roce lag,则采用的Mode有 roce或者sriov*/
 		err = mlx5_activate_lag(ldev, &tracker,
 					roce_lag ? MLX5_LAG_MODE_ROCE :
 						   MLX5_LAG_MODE_SRIOV,
@@ -938,8 +953,10 @@ static void mlx5_do_bond(struct mlx5_lag *ldev)
 			}
 		}
 	} else if (mlx5_lag_should_modify_lag(ldev, do_bond)) {
+		/*bond更新*/
 		mlx5_modify_lag(ldev, &tracker);
 	} else if (mlx5_lag_should_disable_lag(ldev, do_bond)) {
+		/*bond禁用*/
 		mlx5_disable_lag(ldev);
 	}
 }
@@ -956,6 +973,7 @@ struct mlx5_devcom_comp_dev *mlx5_lag_get_devcom_comp(struct mlx5_lag *ldev)
 	mutex_lock(&ldev->lock);
 	for (i = 0; i < ldev->ports; i++) {
 		if (ldev->pf[i].dev) {
+			/*取此设备的devcom_comp*/
 			devcom = ldev->pf[i].dev->priv.hca_devcom_comp;
 			break;
 		}
@@ -966,7 +984,8 @@ struct mlx5_devcom_comp_dev *mlx5_lag_get_devcom_comp(struct mlx5_lag *ldev)
 
 static void mlx5_queue_bond_work(struct mlx5_lag *ldev, unsigned long delay)
 {
-	queue_delayed_work(ldev->wq, &ldev->bond_work, delay);
+	/*触发bond work*/
+	queue_delayed_work(ldev->wq, &ldev->bond_work/*对应的函数为：mlx5_do_bond_work*/, delay);
 }
 
 static void mlx5_do_bond_work(struct work_struct *work)
@@ -995,6 +1014,7 @@ static void mlx5_do_bond_work(struct work_struct *work)
 		return;
 	}
 
+	/*具体处理bond*/
 	mlx5_do_bond(ldev);
 	mutex_unlock(&ldev->lock);
 	mlx5_devcom_comp_unlock(devcom);
@@ -1004,7 +1024,7 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 					 struct lag_tracker *tracker,
 					 struct netdev_notifier_changeupper_info *info)
 {
-	struct net_device *upper = info->upper_dev, *ndev_tmp;
+	struct net_device *upper = info->upper_dev/*取顶层设备*/, *ndev_tmp;
 	struct netdev_lag_upper_info *lag_upper_info = NULL;
 	bool is_bonded, is_in_lag, mode_supported;
 	bool has_inactive = 0;
@@ -1015,6 +1035,7 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 	int idx;
 
 	if (!netif_is_lag_master(upper))
+		/*顶层设备不为master,退出*/
 		return 0;
 
 	if (info->linking)
@@ -1026,16 +1047,18 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 	 * of our netdevs, we should unbond).
 	 */
 	rcu_read_lock();
+	/*遍历init中所有bond*/
 	for_each_netdev_in_bond_rcu(upper, ndev_tmp) {
 		idx = mlx5_lag_dev_get_netdev_idx(ldev, ndev_tmp);
 		if (idx >= 0) {
+			/*获得slave结构体*/
 			slave = bond_slave_get_rcu(ndev_tmp);
 			if (slave)
 				has_inactive |= bond_is_slave_inactive(slave);
 			bond_status |= (1 << idx);
 		}
 
-		num_slaves++;
+		num_slaves++;/*slave数目*/
 	}
 	rcu_read_unlock();
 
@@ -1057,22 +1080,25 @@ static int mlx5_handle_changeupper_event(struct mlx5_lag *ldev,
 		bond_status == GENMASK(ldev->ports - 1, 0);
 
 	/* Lag mode must be activebackup or hash. */
+	/*mode只支持"主备"，"hash"两种方式*/
 	mode_supported = tracker->tx_type == NETDEV_LAG_TX_TYPE_ACTIVEBACKUP ||
 			 tracker->tx_type == NETDEV_LAG_TX_TYPE_HASH;
 
 	is_bonded = is_in_lag && mode_supported;
 	if (tracker->is_bonded != is_bonded) {
 		tracker->is_bonded = is_bonded;
-		changed = 1;
+		changed = 1;/*可以改变为bonding*/
 	}
 
 	if (!is_in_lag)
 		return changed;
 
 	if (!mlx5_lag_is_ready(ldev))
+		/*vf数量不得超过64*/
 		NL_SET_ERR_MSG_MOD(info->info.extack,
 				   "Can't activate LAG offload, PF is configured with more than 64 VFs");
 	else if (!mode_supported)
+		/*遇到了不支持的tx type*/
 		NL_SET_ERR_MSG_MOD(info->info.extack,
 				   "Can't activate LAG offload, TX type isn't supported");
 
@@ -1139,6 +1165,7 @@ static int mlx5_handle_changeinfodata_event(struct mlx5_lag *ldev,
 }
 
 /* this handler is always registered to netdev events */
+/*这个函数用于接收kernel netdev事件，关注kernel bond事件*/
 static int mlx5_lag_netdev_event(struct notifier_block *this,
 				 unsigned long event, void *ptr)
 {
@@ -1150,6 +1177,7 @@ static int mlx5_lag_netdev_event(struct notifier_block *this,
 	if (event != NETDEV_CHANGEUPPER &&
 	    event != NETDEV_CHANGELOWERSTATE &&
 	    event != NETDEV_CHANGEINFODATA)
+		/*只处理以上三种消息*/
 		return NOTIFY_DONE;
 
 	ldev    = container_of(this, struct mlx5_lag, nb);
@@ -1158,7 +1186,7 @@ static int mlx5_lag_netdev_event(struct notifier_block *this,
 
 	switch (event) {
 	case NETDEV_CHANGEUPPER:
-		changed = mlx5_handle_changeupper_event(ldev, &tracker, ptr);
+		changed = mlx5_handle_changeupper_event(ldev, &tracker, ptr/*change通知结构体*/);
 		break;
 	case NETDEV_CHANGELOWERSTATE:
 		changed = mlx5_handle_changelowerstate_event(ldev, &tracker,
@@ -1171,6 +1199,7 @@ static int mlx5_lag_netdev_event(struct notifier_block *this,
 
 	ldev->tracker = tracker;
 
+	/*如有变更，触发bond work*/
 	if (changed)
 		mlx5_queue_bond_work(ldev, 0);
 
@@ -1229,11 +1258,12 @@ static void mlx5_ldev_remove_mdev(struct mlx5_lag *ldev,
 
 	for (i = 0; i < ldev->ports; i++)
 		if (ldev->pf[i].dev == dev)
-			break;
+			break;/*找到此设备，跳出*/
 
 	if (i == ldev->ports)
-		return;
+		return;/*lag中无此设备，跳出*/
 
+	/*移除此成员dev*/
 	ldev->pf[i].dev = NULL;
 	dev->priv.lag = NULL;
 }
@@ -1250,11 +1280,13 @@ static int __mlx5_lag_dev_add_mdev(struct mlx5_core_dev *dev)
 		ldev = mlx5_lag_dev(tmp_dev);
 
 	if (!ldev) {
+		/*ldev设备未创建，执行创建*/
 		ldev = mlx5_lag_dev_alloc(dev);
 		if (!ldev) {
 			mlx5_core_err(dev, "Failed to alloc lag dev\n");
 			return 0;
 		}
+		/*将此设备加入到lag中*/
 		mlx5_ldev_add_mdev(ldev, dev);
 		return 0;
 	}
@@ -1300,6 +1332,7 @@ void mlx5_lag_add_mdev(struct mlx5_core_dev *dev)
 	int err;
 
 	if (!mlx5_lag_is_supported(dev))
+		/*不支持lag,直接返回*/
 		return;
 
 	if (IS_ERR_OR_NULL(dev->priv.hca_devcom_comp))
@@ -1317,6 +1350,7 @@ recheck:
 	mlx5_ldev_add_debugfs(dev);
 }
 
+/*自lag中移除netdev*/
 void mlx5_lag_remove_netdev(struct mlx5_core_dev *dev,
 			    struct net_device *netdev)
 {
@@ -1338,6 +1372,7 @@ void mlx5_lag_remove_netdev(struct mlx5_core_dev *dev,
 		mlx5_queue_bond_work(ldev, 0);
 }
 
+/*向lag中添加netdev（内部调用）*/
 void mlx5_lag_add_netdev(struct mlx5_core_dev *dev,
 			 struct net_device *netdev)
 {
@@ -1446,6 +1481,7 @@ bool mlx5_lag_is_shared_fdb(struct mlx5_core_dev *dev)
 
 	spin_lock_irqsave(&lag_lock, flags);
 	ldev = mlx5_lag_dev(dev);
+	/*ldev共享了fdb表*/
 	res = ldev && test_bit(MLX5_LAG_MODE_FLAG_SHARED_FDB, &ldev->mode_flags);
 	spin_unlock_irqrestore(&lag_lock, flags);
 
@@ -1467,6 +1503,7 @@ void mlx5_lag_disable_change(struct mlx5_core_dev *dev)
 
 	ldev->mode_changes_in_progress++;
 	if (__mlx5_lag_is_active(ldev))
+		/*当前ldev设备被激活，将其禁用掉*/
 		mlx5_disable_lag(ldev);
 
 	mutex_unlock(&ldev->lock);

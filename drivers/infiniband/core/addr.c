@@ -256,6 +256,7 @@ rdma_find_ndev_for_src_ip_rcu(struct net *net, const struct sockaddr *src_in)
 
 	switch (src_in->sa_family) {
 	case AF_INET:
+		/*查询这个ip地址对应哪个netdev*/
 		dev = __ip_dev_find(net,
 				    ((const struct sockaddr_in *)src_in)->sin_addr.s_addr,
 				    false);
@@ -284,17 +285,21 @@ int rdma_translate_ip(const struct sockaddr *addr,
 	struct net_device *dev;
 
 	if (dev_addr->bound_dev_if) {
+		/*通过dev_if获取netdev*/
 		dev = dev_get_by_index(dev_addr->net, dev_addr->bound_dev_if);
 		if (!dev)
 			return -ENODEV;
+		/*设备存在，填充srcmac等*/
 		rdma_copy_src_l2_addr(dev_addr, dev);
 		dev_put(dev);
 		return 0;
 	}
 
 	rcu_read_lock();
+	/*通过ip查找其所属的netdev*/
 	dev = rdma_find_ndev_for_src_ip_rcu(dev_addr->net, addr);
 	if (!IS_ERR(dev))
+		/*设备存在，填充srcmac等*/
 		rdma_copy_src_l2_addr(dev_addr, dev);
 	rcu_read_unlock();
 	return PTR_ERR_OR_ZERO(dev);
@@ -317,7 +322,7 @@ static void queue_req(struct addr_req *req)
 {
 	spin_lock_bh(&lock);
 	list_add_tail(&req->list, &req_list);
-	set_timeout(req, req->timeout);
+	set_timeout(req, req->timeout);/*设置超时时间*/
 	spin_unlock_bh(&lock);
 }
 
@@ -651,16 +656,18 @@ static void process_one_req(struct work_struct *_work)
 	req = container_of(_work, struct addr_req, work.work);
 
 	if (req->status == -ENODATA) {
+		/*再查询一次*/
 		src_in = (struct sockaddr *)&req->src_addr;
 		dst_in = (struct sockaddr *)&req->dst_addr;
 		req->status = addr_resolve(src_in, dst_in, req->addr,
 					   true, req->resolve_by_gid_attr,
 					   req->seq);
 		if (req->status && time_after_eq(jiffies, req->timeout)) {
-			req->status = -ETIMEDOUT;/*请求超时*/
+			req->status = -ETIMEDOUT;/*status不为0，且请求超时*/
 		} else if (req->status == -ENODATA) {
 			/* requeue the work for retrying again */
 			spin_lock_bh(&lock);
+			/*status不为零，但timeout未超时*/
 			if (!list_empty(&req->list))
 				set_timeout(req, req->timeout);
 			spin_unlock_bh(&lock);
@@ -724,7 +731,7 @@ int rdma_resolve_ip(struct sockaddr *src_addr/*源地址*/, const struct sockadd
 	req->callback = callback;/*指明此请求的callback*/
 	req->context = context;
 	req->resolve_by_gid_attr = resolve_by_gid_attr;
-	INIT_DELAYED_WORK(&req->work, process_one_req);/*初始化work来处理此请求*/
+	INIT_DELAYED_WORK(&req->work, process_one_req);/*初始化work，指明此work的处理函数*/
 	req->seq = (u32)atomic_inc_return(&ib_nl_addr_request_seq);
 
 	/*地址解析*/
@@ -822,13 +829,14 @@ void rdma_addr_cancel(struct rdma_dev_addr *addr)
 	spin_unlock_bh(&lock);
 
 	if (!found)
+		/*没有发现，直接返回*/
 		return;
 
 	/*
 	 * sync canceling the work after removing it from the req_list
 	 * guarentees no work is running and none will be started.
 	 */
-	cancel_delayed_work_sync(&found->work);
+	cancel_delayed_work_sync(&found->work);/*有发现，取消这个work*/
 	kfree(found);
 }
 EXPORT_SYMBOL(rdma_addr_cancel);
@@ -841,7 +849,9 @@ struct resolve_cb_context {
 static void resolve_cb(int status, struct sockaddr *src_addr,
 	     struct rdma_dev_addr *addr, void *context)
 {
+	/*更新status函数*/
 	((struct resolve_cb_context *)context)->status = status;
+	/*唤醒等待者*/
 	complete(&((struct resolve_cb_context *)context)->comp);
 }
 
@@ -890,12 +900,13 @@ static int netevent_callback(struct notifier_block *self, unsigned long event,
 	struct addr_req *req;
 
 	if (event == NETEVENT_NEIGH_UPDATE) {
+		/*收到领居表项更新事件*/
 		struct neighbour *neigh = ctx;
 
 		if (neigh->nud_state & NUD_VALID) {
 			spin_lock_bh(&lock);
 			list_for_each_entry(req, &req_list, list)
-				set_timeout(req, jiffies);/*立即超时*/
+				set_timeout(req, jiffies);/*使所有req立即超时*/
 			spin_unlock_bh(&lock);
 		}
 	}
@@ -912,6 +923,7 @@ int addr_init(void)
 	if (!addr_wq)
 		return -ENOMEM;
 
+	/*注册netdev通知链*/
 	register_netevent_notifier(&nb);
 
 	return 0;

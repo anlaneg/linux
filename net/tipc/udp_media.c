@@ -185,6 +185,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 			};
 			rt = ip_route_output_key(net, &fl);
 			if (IS_ERR(rt)) {
+				/*查询路由失败*/
 				err = PTR_ERR(rt);
 				goto tx_error;
 			}
@@ -224,7 +225,7 @@ static int tipc_udp_xmit(struct net *net, struct sk_buff *skb,
 
 tx_error:
 	local_bh_enable();
-	kfree_skb(skb);
+	kfree_skb(skb);/*丢包*/
 	return err;
 }
 

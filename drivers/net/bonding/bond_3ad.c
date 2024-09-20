@@ -471,6 +471,8 @@ static void __choose_matched(struct lacpdu *lacpdu, struct port *port)
 	     ((lacpdu->partner_state & LACP_STATE_AGGREGATION) == (port->actor_oper_port_state & LACP_STATE_AGGREGATION))) ||
 	    ((lacpdu->actor_state & LACP_STATE_AGGREGATION) == 0)
 		) {
+		/*以上数据项（port编号，port优先级，system标识，system优先级，port_key均匹配
+		 * 且*/
 		port->sm_vars |= AD_PORT_MATCHED;
 	} else {
 		port->sm_vars &= ~AD_PORT_MATCHED;
@@ -489,6 +491,7 @@ static void __choose_matched(struct lacpdu *lacpdu, struct port *port)
 static void __record_pdu(struct lacpdu *lacpdu, struct port *port)
 {
 	if (lacpdu && port) {
+		/*lacpdu来源于报文，利用报文的内容填充partner的信息（共有6个项）*/
 		struct port_params *partner = &port->partner_oper;
 
 		__choose_matched(lacpdu, port);
@@ -795,7 +798,7 @@ static struct aggregator *__get_active_agg(struct aggregator *aggregator)
  */
 static inline void __update_lacpdu_from_port(struct port *port)
 {
-    /*更新port->lacpdu消息，随后此lacpdu会被自port送出*/
+    /*更新port->lacpdu消息内容，随后此lacpdu会被自port送出*/
 	struct lacpdu *lacpdu = &port->lacpdu;
 	const struct port_params *partner = &port->partner_oper;
 
@@ -860,7 +863,9 @@ static int ad_lacpdu_send(struct port *port)
 	if (!skb)
 		return -ENOMEM;
 
+	/*统计slave发送的lacpdu的数目*/
 	atomic64_inc(&SLAVE_AD_INFO(slave)->stats.lacpdu_tx);
+	/*统计bond发送的lacpdu的数目*/
 	atomic64_inc(&BOND_AD_INFO(slave->bond).stats.lacpdu_tx);
 
 	/*报文需要自slave发出，故skb从属slave->dev*/
@@ -873,14 +878,14 @@ static int ad_lacpdu_send(struct port *port)
 	lacpdu_header = skb_put(skb, length);
 
 	/*填写目的mac,srcmac,ether_type*/
-	ether_addr_copy(lacpdu_header->hdr.h_dest, lacpdu_mcast_addr);
+	ether_addr_copy(lacpdu_header->hdr.h_dest, lacpdu_mcast_addr);/*目的mac特殊*/
 	/* Note: source address is set to be the member's PERMANENT address,
 	 * because we use it to identify loopback lacpdus in receive.
 	 */
-	ether_addr_copy(lacpdu_header->hdr.h_source, slave->perm_hwaddr);
+	ether_addr_copy(lacpdu_header->hdr.h_source, slave->perm_hwaddr);/*源mac用slave自已的mac*/
 	lacpdu_header->hdr.h_proto = PKT_TYPE_LACPDU;
 
-	/*填写lacpdu到skb*/
+	/*结构体赋值，填写lacpdu到skb*/
 	lacpdu_header->lacpdu = port->lacpdu;
 
 	/*将报文送出*/
@@ -1104,7 +1109,7 @@ static void ad_mux_machine(struct port *port, bool *update_slave_arr)
  * CURRENT. If timer expired set the state machine in the proper state.
  * In other cases, this function checks if we need to switch to other state.
  */
-static void ad_rx_machine(struct lacpdu *lacpdu, struct port *port)
+static void ad_rx_machine(struct lacpdu *lacpdu/*收到的lacpdu报文*/, struct port *port)
 {
 	rx_states_t last_state;
 
@@ -1114,7 +1119,9 @@ static void ad_rx_machine(struct lacpdu *lacpdu, struct port *port)
 	last_state = port->sm_rx_state;
 
 	if (lacpdu) {
+		/*增加slave收到的lacp报文数*/
 		atomic64_inc(&SLAVE_AD_INFO(port->slave)->stats.lacpdu_rx);
+		/*增加bond收到的lacp报文数*/
 		atomic64_inc(&BOND_AD_INFO(port->slave->bond).stats.lacpdu_rx);
 	}
 	/* check if state machine should change state */
@@ -1863,15 +1870,15 @@ static void ad_initialize_port(struct port *port, int lacp_fast)
 		.port_state      = 1,
 	};
 	static const struct lacpdu lacpdu = {
-		.subtype		= 0x01,
-		.version_number = 0x01,
-		.tlv_type_actor_info = 0x01,
-		.actor_information_length = 0x14,
-		.tlv_type_partner_info = 0x02,
-		.partner_information_length = 0x14,
-		.tlv_type_collector_info = 0x03,
-		.collector_information_length = 0x10,
-		.collector_max_delay = htons(AD_COLLECTOR_MAX_DELAY),
+		.subtype		= 0x01,/*指明lacp报文*/
+		.version_number = 0x01,/*指定版本号为1*/
+		.tlv_type_actor_info = 0x01,/*值为0x01代表其后为Actor字段*/
+		.actor_information_length = 0x14,/*指明actor信息长度为0x14,即20字节（即预留字段无内容）*/
+		.tlv_type_partner_info = 0x02,/*值为0x02代表其后为Partner字段。*/
+		.partner_information_length = 0x14,/*指明partner信息长度20字节（即预留字段无内容）*/
+		.tlv_type_collector_info = 0x03,/*值为0x03代表其后为Collector字段*/
+		.collector_information_length = 0x10,/*指明collector信息长度为16字节。（即预留字段无内容）*/
+		.collector_max_delay = htons(AD_COLLECTOR_MAX_DELAY),/*指明最大延迟为0秒*/
 	};
 
 	if (port) {
@@ -1910,7 +1917,7 @@ static void ad_initialize_port(struct port *port, int lacp_fast)
 		port->sm_churn_partner_state = 0;
 		port->churn_partner_count = 0;
 
-		memcpy(&port->lacpdu, &lacpdu, sizeof(lacpdu));
+		memcpy(&port->lacpdu, &lacpdu, sizeof(lacpdu));/*设置lacpdu*/
 	}
 }
 
@@ -2030,9 +2037,11 @@ void bond_3ad_initialize(struct bonding *bond)
 	BOND_AD_INFO(bond).system.sys_priority =
 		bond->params.ad_actor_sys_prio;
 	if (is_zero_ether_addr(bond->params.ad_actor_system))
+		/*取bonding的接口mac*/
 		BOND_AD_INFO(bond).system.sys_mac_addr =
 		    *((struct mac_addr *)bond->dev->dev_addr);
 	else
+		/*使用参数的actor mac地址*/
 		BOND_AD_INFO(bond).system.sys_mac_addr =
 		    *((struct mac_addr *)bond->params.ad_actor_system);
 
@@ -2050,6 +2059,7 @@ void bond_3ad_initialize(struct bonding *bond)
  */
 void bond_3ad_bind_slave(struct slave *slave)
 {
+	/*取此slave对应的bonding结构体*/
 	struct bonding *bond = bond_get_bond_by_slave(slave);
 	struct port *port;
 	struct aggregator *aggregator;
@@ -2365,6 +2375,7 @@ void bond_3ad_state_machine_handler(struct work_struct *work)
 	}
 
 	/* for each port run the state machines */
+	/*遍历slave设备*/
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		port = &(SLAVE_AD_INFO(slave)->port);
 		if (!port->slave) {
@@ -2414,7 +2425,7 @@ re_arm:
  * received frames (loopback). Since only the payload is given to this
  * function, it check for loopback.
  */
-static int bond_3ad_rx_indication(struct lacpdu *lacpdu, struct slave *slave)
+static int bond_3ad_rx_indication(struct lacpdu *lacpdu/*收到的lacp报文*/, struct slave *slave/*收到协议的slave*/)
 {
 	struct bonding *bond = slave->bond;
 	int ret = RX_HANDLER_ANOTHER;
@@ -2437,7 +2448,8 @@ static int bond_3ad_rx_indication(struct lacpdu *lacpdu, struct slave *slave)
 			  port->actor_port_number);
 		/* Protect against concurrent state machines */
 		spin_lock(&slave->bond->mode_lock);
-		ad_rx_machine(lacpdu, port);//使状态机发生变化
+		//遇到lacp报文，使状态机发生变化
+		ad_rx_machine(lacpdu, port);
 		spin_unlock(&slave->bond->mode_lock);
 		break;
 	case AD_TYPE_MARKER:
@@ -2458,6 +2470,7 @@ static int bond_3ad_rx_indication(struct lacpdu *lacpdu, struct slave *slave)
 			ad_marker_response_received(marker, port);
 			break;
 		default:
+			/*收到其它subtype*/
 			slave_dbg(slave->bond->dev, slave->dev, "Received an unknown Marker subtype on port %d\n",
 				  port->actor_port_number);
 			stat = &SLAVE_AD_INFO(slave)->stats.marker_unknown_rx;
@@ -2699,7 +2712,7 @@ int bond_3ad_lacpdu_recv(const struct sk_buff *skb, struct bonding *bond,
 {
 	struct lacpdu *lacpdu, _lacpdu;
 
-	//非lacp报文，不处理
+	//非lacp报文（0x8809)，不处理
 	if (skb->protocol != PKT_TYPE_LACPDU)
 		return RX_HANDLER_ANOTHER;
 
@@ -2715,6 +2728,7 @@ int bond_3ad_lacpdu_recv(const struct sk_buff *skb, struct bonding *bond,
 		return RX_HANDLER_ANOTHER;
 	}
 
+	/*处理slave收到的lacp报文*/
 	return bond_3ad_rx_indication(lacpdu, slave);
 }
 

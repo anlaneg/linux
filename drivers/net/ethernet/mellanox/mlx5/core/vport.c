@@ -315,7 +315,7 @@ EXPORT_SYMBOL_GPL(mlx5_query_nic_vport_mac_list);
 
 int mlx5_modify_nic_vport_mac_list(struct mlx5_core_dev *dev,
 				   enum mlx5_list_type list_type,
-				   u8 addr_list[][ETH_ALEN],
+				   u8 addr_list[][ETH_ALEN]/*一组mac地址*/,
 				   int list_size)
 {
 	u32 out[MLX5_ST_SZ_DW(modify_nic_vport_context_out)] = {};

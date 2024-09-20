@@ -396,8 +396,8 @@ static int dev_mc_seq_show(struct seq_file *seq, void *v)
 	netdev_for_each_mc_addr(ha, dev) {
 		seq_printf(seq, "%-4d %-15s %-5d %-5d %*phN\n",
 			   dev->ifindex/*设备ifindex*/, dev->name/*设备名称*/,
-			   ha->refcount, ha->global_use,
-			   (int)dev->addr_len, ha->addr);
+			   ha->refcount/*引用计数*/, ha->global_use,
+			   (int)dev->addr_len/*组播地址长度*/, ha->addr/*组播地址（mac)*/);
 	}
 	netif_addr_unlock_bh(dev);
 	return 0;
@@ -412,6 +412,7 @@ static const struct seq_operations dev_mc_seq_ops = {
 
 static int __net_init dev_mc_net_init(struct net *net)
 {
+	/*显示设备关注的组播地址*/
 	if (!proc_create_net("dev_mcast", 0, net->proc_net, &dev_mc_seq_ops,
 			sizeof(struct seq_net_private)))
 		return -ENOMEM;

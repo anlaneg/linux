@@ -75,7 +75,7 @@ struct Qdisc {
 	int 			(*enqueue)(struct sk_buff *skb,
 					   struct Qdisc *sch,
 					   struct sk_buff **to_free);
-	//出队函数（来源于ops成员的enqueue)
+	//出队函数，如果返回NULL可表示当前不容许出队（来源于ops成员的enqueue)
 	struct sk_buff *	(*dequeue)(struct Qdisc *sch);
 	/*队列标记*/
 	unsigned int		flags;

@@ -95,38 +95,83 @@ typedef enum {
 
 /* Link Aggregation Control Protocol(LACP) data unit structure(43.4.2.2 in the 802.3ad standard) */
 typedef struct lacpdu {
+	/*lacp报文为‘1’*/
 	u8 subtype;		/* = LACP(= 0x01) */
+	/*指明版本号*/
 	u8 version_number;
+	/*actor信息类型,TLV中的T*/
 	u8 tlv_type_actor_info;	/* = actor information(type/length/value) */
+	/*指明actor信息长度,TLV中的L*/
 	u8 actor_information_length;	/* = 20 */
-	__be16 actor_system_priority;
-	struct mac_addr actor_system;
+	/*以下共计18字节(结束于reserved_3_1[3])，指明actor信息，TLV中的V*/
+	__be16 actor_system_priority;/*本端系统优先级*/
+	struct mac_addr actor_system;/*系统ID，本端系统的MAC地址。*/
+	/*
+	 * 端口KEY值，系统根据端口的配置生成，是端口能否成为聚合组中的一员的关键因素，
+	 * 影响Key值的因素有trunk ID、接口的速率和双工模式。*/
 	__be16 actor_key;
+	/*接口优先级，可以配置，默认为0x8000。*/
 	__be16 actor_port_priority;
+	/*端口号，根据算法生成，由接口所在的槽位号、子卡号和端口号决定。*/
 	__be16 actor_port;
+	/*
+	 * 本端状态信息，比特0~7的含义分别为：
+	 * LACP_Activity：代表链路所在的聚合组参与LACP协商的方式。主动的LACP被编码为1，
+	 * 	主动方式下会主动发送LACPDU报文给对方，被动方式不会主动发送协商报文，除非收到
+	 * 	协商报文才会参与。
+	 * LACP_Timeout：代表链路接收LACPDU报文的周期，有两种，快周期1s和慢周期30s，
+	 * 	超时时间为周期的3倍。短超时被编码为1，长超时被编码为0。
+	 * Aggregation：标识该链路能否被聚合组聚合。如果编码为0，该链路被认为是独立的，
+	 * 	不能被聚合，即，这个链路只能作为一个个体链路运行。
+	 * Synchronization：代表该链路是否已被分配到一个正确的链路聚合组，如果该链路已经
+	 * 	关联了一个兼容的聚合器，那么该链路聚合组的识别与系统ID和被发送的运行Key信息是一致的。
+	 * 	编码为0，代表链路当前不在正确的聚合里。
+	 * Collecting：帧的收集使能位，假如编码为1，表示在这个链路上进来的帧的收集是明确使能的；
+	 * 	即收集当前被使能，并且不期望在没有管理变化或接收协议信息变化的情况下被禁止。其它情况下
+	 * 	这个值编码为0。
+	 * Distributing：帧的分配使能位，假如编码为0，意味着在这个链路上的外出帧的分配被明确禁止，
+	 * 	并且不期望在没有管理变化或接收协议信息变化的情况下被使能。其它情况下这个值编码为1。
+	 * Default：诊断调试时使用，编码为1，代表接收到的对端的信息是管理配置的。假如编码为0，
+	 * 	正在使用的运行伙伴信息在接收到的LACPDU里。该值不被正常LACP协议使用，仅用于诊断协议问题。
+	 * Expired：诊断调试时使用，编码为1，代表本端的接收机是处于EXPIRED超时状态；假如编码为0，
+	 * 	本端接收状态机处于正常状态。该值不被正常LACP协议使用，仅用于诊断协议问题。
+	 * */
 	u8 actor_state;
+	//保留字段，可用于功能调试以及扩展。
 	u8 reserved_3_1[3];		/* = 0 */
+	/*partner信息类型，TLV中的T*/
+	/*标识TLV的类型，值为0x02代表Partner字段。*/
 	u8 tlv_type_partner_info;	/* = partner information */
+	/*指明partner信息字段长度，TLV中的L*/
 	u8 partner_information_length;	/* = 20 */
-	__be16 partner_system_priority;
-	struct mac_addr partner_system;
-	__be16 partner_key;
-	__be16 partner_port_priority;
-	__be16 partner_port;
-	u8 partner_state;
+	/*以下共计20字节（结束于reserved_3_2[3]），指明partner_information信息，TLV中的V*/
+	__be16 partner_system_priority;/*对端系统优先级。*/
+	struct mac_addr partner_system;/*对端系统ID，对端系统的MAC地址。*/
+	__be16 partner_key;/*对端端口KEY值。*/
+	__be16 partner_port_priority;/*对端接口优先级。*/
+	__be16 partner_port;/*对端端口号。*/
+	u8 partner_state;/*对端状态信息。*/
+	/*保留字段，可用于功能调试以及扩展。*/
 	u8 reserved_3_2[3];		/* = 0 */
+	/*标识TLV的类型，值为0x03代表Collector字段。*/
+	/*指明collector信息类型，TLV中的T*/
 	u8 tlv_type_collector_info;	/* = collector information */
+	/*指明Collector信息字段长度,TLV中的L*/
 	u8 collector_information_length;/* = 16 */
-	__be16 collector_max_delay;
-	u8 reserved_12[12];
+	/*以下共计16字节（结束于reserved_50[0])*/
+	__be16 collector_max_delay;/*最大延时，以10微秒为单位。*/
+	u8 reserved_12[12];/*保留字段，可用于功能调试以及扩展。*/\
+	/*标识TLV的类型，值为0x00代表Terminator字段。*/
 	u8 tlv_type_terminator;		/* = terminator */
+	/*Terminator信息字段长度，取值为0（即0x00）。*/
 	u8 terminator_length;		/* = 0 */
+	/*保留字段，全置0，接收端忽略此字段。*/
 	u8 reserved_50[50];		/* = 0 */
 } __packed lacpdu_t;
 
 typedef struct lacpdu_header {
 	struct ethhdr hdr;/*以太头*/
-	struct lacpdu lacpdu;
+	struct lacpdu lacpdu;/*lacpdu报文*/
 } __packed lacpdu_header_t;
 
 /* Marker Protocol Data Unit(PDU) structure(43.5.3.2 in the 802.3ad standard) */
@@ -194,31 +239,37 @@ typedef struct aggregator {
 } aggregator_t;
 
 struct port_params {
-	struct mac_addr system;
-	u16 system_priority;
-	u16 key;
-	u16 port_number;
-	u16 port_priority;
-	u16 port_state;
+	struct mac_addr system;/*系统ID*/
+	u16 system_priority;/*系统优先级*/
+	u16 key;/*端口KEY值*/
+	u16 port_number;/*port编号*/
+	u16 port_priority;/*接口优先级*/
+	u16 port_state;/*port状态*/
 };
 
 /* port structure(43.4.6 in the 802.3ad standard) */
 typedef struct port {
+	//端口号，根据算法生成，由接口所在的槽位号、子卡号和端口号决定。对应报文中的actor_port
 	u16 actor_port_number;
+	//接口优先级，可以配置，默认为0x8000。对应报文中的actor_port_priority
 	u16 actor_port_priority;
+	//系统ID，本端系统的MAC地址。对应报文中的actor_system
 	struct mac_addr actor_system;	/* This parameter is added here although it is not specified in the standard, just for simplification */
+	//本端系统优先级，可以设置，默认情况下为32768(即0x8000)。对应报文中的actor_system_priority
 	u16 actor_system_priority;	/* This parameter is added here although it is not specified in the standard, just for simplification */
 	/*对端port状态*/
 	u16 actor_port_aggregator_identifier;
 	bool ntt;
 	u16 actor_admin_port_key;
+	//端口KEY值，系统根据端口的配置生成，是端口能否成为聚合组中的一员的关键因素，
+	// 影响Key值的因素有trunk ID、接口的速率和双工模式。（对应报文中的actor_key）
 	u16 actor_oper_port_key;
 	u8 actor_admin_port_state;
-	/*本端port状态*/
+	/*本端port状态，对应报文中的actor_state*/
 	u8 actor_oper_port_state;
 
 	struct port_params partner_admin;
-	struct port_params partner_oper;
+	struct port_params partner_oper;/*对应报文中partner的6个字段*/
 
 	bool is_enabled;
 
@@ -243,6 +294,7 @@ typedef struct port {
 	struct aggregator *aggregator;	/* pointer to an aggregator that this port related to */
 	struct port *next_port_in_aggregator;	/* Next port on the linked list of the parent aggregator */
 	u32 transaction_id;		/* continuous number for identification of Marker PDU's; */
+	/*记录此port上关联的要发送的lacpdu*/
 	struct lacpdu lacpdu;		/* the lacpdu that will be sent for this port */
 } port_t;
 

@@ -109,7 +109,7 @@ static int use_carrier	= 1;
 static char *mode;
 static char *primary;
 static char *primary_reselect;
-static char *lacp_rate;
+static char *lacp_rate;/*BOND_OPT_LACP_RATE选项的参数*/
 static int min_links;
 static char *ad_select;
 static char *xmit_hash_policy;
@@ -119,7 +119,7 @@ static char *arp_validate;
 static char *arp_all_targets;
 static char *fail_over_mac;
 static int all_slaves_active;
-static struct bond_params bonding_defaults;
+static struct bond_params bonding_defaults;/*bonding的默认参数*/
 static int resend_igmp = BOND_DEFAULT_RESEND_IGMP;
 static int packets_per_slave = 1;
 static int lp_interval = BOND_ALB_DEFAULT_LP_INTERVAL;
@@ -286,7 +286,7 @@ const char *bond_mode_name(int mode)
 	if (mode < BOND_MODE_ROUNDROBIN || mode > BOND_MODE_ALB)
 		return "unknown";
 
-	return names[mode];
+	return names[mode];/*返回mode名称*/
 }
 
 /**
@@ -937,8 +937,10 @@ static int bond_set_dev_addr(struct net_device *bond_dev,
 	if (err)
 		return err;
 
+	/*将bond_dev设备的地址变更为slave_dev地址*/
 	__dev_addr_set(bond_dev, slave_dev->dev_addr, slave_dev->addr_len);
 	bond_dev->addr_assign_type = NET_ADDR_STOLEN;
+	/*触发地址变更后通知*/
 	call_netdevice_notifiers(NETDEV_CHANGEADDR, bond_dev);
 	return 0;
 }
@@ -1511,6 +1513,7 @@ static void bond_setup_by_slave(struct net_device *bond_dev,
 {
 	bool was_up = !!(bond_dev->flags & IFF_UP);
 
+	/*先关闭bond设备*/
 	dev_close(bond_dev);
 
 	bond_dev->header_ops	    = slave_dev->header_ops;
@@ -1527,7 +1530,9 @@ static void bond_setup_by_slave(struct net_device *bond_dev,
 		bond_dev->flags &= ~(IFF_BROADCAST | IFF_MULTICAST);
 		bond_dev->flags |= (IFF_POINTOPOINT | IFF_NOARP);
 	}
+
 	if (was_up)
+		/*之前是up的，再打开bond设备*/
 		dev_open(bond_dev, NULL);
 }
 
@@ -1548,7 +1553,7 @@ static bool bond_should_deliver_exact_match(struct sk_buff *skb,
 	return false;
 }
 
-//主要是更换设备，处理bonding状态机
+//bind slave收包函数入口，主要是更换设备，处理bonding状态机
 static rx_handler_result_t bond_handle_frame(struct sk_buff **pskb)
 {
 	struct sk_buff *skb = *pskb;
@@ -1660,23 +1665,24 @@ static enum netdev_lag_hash bond_lag_hash_type(struct bonding *bond,
 	}
 }
 
-static int bond_master_upper_dev_link(struct bonding *bond, struct slave *slave,
+static int bond_master_upper_dev_link(struct bonding *bond/*bond接口*/, struct slave *slave/*成员接口*/,
 				      struct netlink_ext_ack *extack)
 {
 	struct netdev_lag_upper_info lag_upper_info;
 	enum netdev_lag_tx_type type;
 	int err;
 
+	/*取bond tx类型*/
 	type = bond_lag_tx_type(bond);
 	lag_upper_info.tx_type = type;
 	lag_upper_info.hash_type = bond_lag_hash_type(bond, type);
 
-	err = netdev_master_upper_dev_link(slave->dev, bond->dev, slave,
-					   &lag_upper_info, extack);
+	err = netdev_master_upper_dev_link(slave->dev/*slave对应的netdev设备*/, bond->dev/*指明master对应的netdev设备*/, slave/*slave结构体*/,
+					   &lag_upper_info/*lag通知信息*/, extack);
 	if (err)
 		return err;
 
-	slave->dev->flags |= IFF_SLAVE;
+	slave->dev->flags |= IFF_SLAVE;/*在dev上指明slave设备*/
 	return 0;
 }
 
@@ -1719,6 +1725,7 @@ static int bond_kobj_init(struct slave *slave)
 	return err;
 }
 
+/*针对bond,创建slave_dev对应的slave结构体*/
 static struct slave *bond_alloc_slave(struct bonding *bond,
 				      struct net_device *slave_dev)
 {
@@ -1730,7 +1737,7 @@ static struct slave *bond_alloc_slave(struct bonding *bond,
 
 	slave->bond = bond;
 	slave->dev = slave_dev;
-	INIT_DELAYED_WORK(&slave->notify_work, bond_netdev_notify_work);
+	INIT_DELAYED_WORK(&slave->notify_work, bond_netdev_notify_work);/*此work用于向系统通知bonding信息*/
 
 	if (bond_kobj_init(slave))
 		return NULL;
@@ -1748,6 +1755,7 @@ static struct slave *bond_alloc_slave(struct bonding *bond,
 	return slave;
 }
 
+/*依据bonding结构体，填充ifbond结构体*/
 static void bond_fill_ifbond(struct bonding *bond, struct ifbond *info)
 {
 	info->bond_mode = BOND_MODE(bond);
@@ -1755,9 +1763,10 @@ static void bond_fill_ifbond(struct bonding *bond, struct ifbond *info)
 	info->num_slaves = bond->slave_cnt;
 }
 
+/*依据slave结构体填充ifslave结构体*/
 static void bond_fill_ifslave(struct slave *slave, struct ifslave *info)
 {
-	strcpy(info->slave_name, slave->dev->name);
+	strcpy(info->slave_name, slave->dev->name);/*取slave接口名*/
 	info->link = slave->link;
 	info->state = bond_slave_state(slave);
 	info->link_failure_count = slave->link_failure_count;
@@ -1765,10 +1774,12 @@ static void bond_fill_ifslave(struct slave *slave, struct ifslave *info)
 
 static void bond_netdev_notify_work(struct work_struct *_work)
 {
+	/*由work获得slave结构体*/
 	struct slave *slave = container_of(_work, struct slave,
 					   notify_work.work);
 
 	if (rtnl_trylock()) {
+		/*收集binfo信息，触发bonding_info通知*/
 		struct netdev_bonding_info binfo;
 
 		bond_fill_ifslave(slave, &binfo.slave);
@@ -1776,6 +1787,7 @@ static void bond_netdev_notify_work(struct work_struct *_work)
 		netdev_bonding_info_change(slave->dev, &binfo);
 		rtnl_unlock();
 	} else {
+		/*没有拿到锁，入队稍后处理*/
 		queue_delayed_work(slave->bond->wq, &slave->notify_work, 1);
 	}
 }
@@ -1844,10 +1856,12 @@ void bond_xdp_set_features(struct net_device *bond_dev)
 }
 
 /* enslave device <slave> to bond device <master> */
-int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要添加的成员*/,
+int bond_enslave(struct net_device *bond_dev/*bond对应的netdev*/, struct net_device *slave_dev/*要添加的slave*/,
 		 struct netlink_ext_ack *extack)
 {
+	/*取对应的bonding设备*/
 	struct bonding *bond = netdev_priv(bond_dev);
+	/*取slave设备对应的ops*/
 	const struct net_device_ops *slave_ops = slave_dev->netdev_ops;
 	struct slave *new_slave = NULL, *prev_slave;
 	struct sockaddr_storage ss;
@@ -1856,6 +1870,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 
 	if (slave_dev->flags & IFF_MASTER &&
 	    !netif_is_bond_master(slave_dev)) {
+		/*slave_dev已被指明为master*/
 		BOND_NL_ERR(bond_dev, extack,
 			    "Device type (master device) cannot be enslaved");
 		return -EPERM;
@@ -1864,19 +1879,20 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	if (!bond->params.use_carrier &&
 	    slave_dev->ethtool_ops->get_link == NULL &&
 	    slave_ops->ndo_eth_ioctl == NULL) {
+		/*指明use_carrier,但没有相应的回调函数*/
 		slave_warn(bond_dev, slave_dev, "no link monitoring support\n");
 	}
 
 	/* already in-use? */
 	if (netdev_is_rx_handler_busy(slave_dev)) {
+		/*slave_dev已被设置了rx_handler，则告警不能加入到bond*/
 		SLAVE_NL_ERR(bond_dev, slave_dev, extack,
 			     "Device is in use and cannot be enslaved");
-	    	/*slave_dev已被挂载了rx_handler，则告警不能加入到bond*/
 		return -EBUSY;
 	}
 
 	if (bond_dev == slave_dev) {
-	    	/*不容许将自身加入为成员口*/
+	    /*不容许将自身做为bond的成员口*/
 		BOND_NL_ERR(bond_dev, extack, "Cannot enslave bond to itself.");
 		return -EPERM;
 	}
@@ -1905,7 +1921,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	 * enslaving it; the old ifenslave will not.
 	 */
 	if (slave_dev->flags & IFF_UP) {
-	    	/*slave设备在添加时，不能是up的*/
+	    /*slave设备在添加时，不能是up的*/
 		SLAVE_NL_ERR(bond_dev, slave_dev, extack,
 			     "Device can not be enslaved while up");
 		return -EPERM;
@@ -1919,7 +1935,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	 * ether type (eg ARPHRD_ETHER and ARPHRD_INFINIBAND) share the same bond
 	 */
 	if (!bond_has_slaves(bond)) {
-	    /*bond设备添加首个slaves情况*/
+	    /*bond设备还没有slave,正计划添加首个slaves情况*/
 		if (bond_dev->type != slave_dev->type) {
 		    /*bond设备与slave_dev设备类型不一致，需要将bond_dev类型转换过来*/
 			slave_dbg(bond_dev, slave_dev, "change device type from %d to %d\n",
@@ -1930,13 +1946,14 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 						       bond_dev);
 			res = notifier_to_errno(res);
 			if (res) {
+				/*此变换被某些回调拒绝*/
 				slave_err(bond_dev, slave_dev, "refused to change device type\n");
 				return -EBUSY;
 			}
 
 			/* Flush unicast and multicast addresses */
-			dev_uc_flush(bond_dev);
-			dev_mc_flush(bond_dev);
+			dev_uc_flush(bond_dev);/*移除为bond设备添加的单播mac*/
+			dev_mc_flush(bond_dev);/*移除为bond设备添加的组播mac*/
 
 			if (slave_dev->type != ARPHRD_ETHER)
 				bond_setup_by_slave(bond_dev, slave_dev);
@@ -1949,7 +1966,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 						 bond_dev);
 		}
 	} else if (bond_dev->type != slave_dev->type) {
-	    	/*bond已有成员，再加入的slave_dev与即有成员类型不一致，报错*/
+	    /*bond已有成员，再加入的slave_dev与即有成员类型不一致，报错*/
 		SLAVE_NL_ERR(bond_dev, slave_dev, extack,
 			     "Device type is different from other slaves");
 		return -EINVAL;
@@ -1988,12 +2005,13 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	 */
 	if (!bond_has_slaves(bond) &&
 	    bond->dev->addr_assign_type == NET_ADDR_RANDOM) {
+		/*bond之前没有slave,且地址是随机产生的，使用slave_dev地址*/
 		res = bond_set_dev_addr(bond->dev, slave_dev);
 		if (res)
 			goto err_undo_flags;
 	}
 
-	/*创建slave*/
+	/*针对slave_dev创建slave*/
 	new_slave = bond_alloc_slave(bond, slave_dev);
 	if (!new_slave) {
 		res = -ENOMEM;
@@ -2006,8 +2024,8 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	new_slave->queue_id = 0;
 
 	/* Save slave's original mtu and then set it to match the bond */
-	new_slave->original_mtu = slave_dev->mtu;
-	res = dev_set_mtu(slave_dev, bond->dev->mtu);
+	new_slave->original_mtu = slave_dev->mtu;/*保存之前的mtu*/
+	res = dev_set_mtu(slave_dev, bond->dev->mtu);/*利用bond的mtu来设置slave_dev*/
 	if (res) {
 		slave_err(bond_dev, slave_dev, "Error %d calling dev_set_mtu\n", res);
 		goto err_free;
@@ -2028,7 +2046,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 		memcpy(ss.__data, bond_dev->dev_addr, bond_dev->addr_len);
 		ss.ss_family = slave_dev->type;
 		res = dev_set_mac_address(slave_dev, (struct sockaddr *)&ss,
-					  extack);
+					  extack);/*更新slave mac为bond的mac地址*/
 		if (res) {
 			slave_err(bond_dev, slave_dev, "Error %d calling set_mac_address\n", res);
 			goto err_restore_mtu;
@@ -2045,7 +2063,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 		goto err_restore_mac;
 	}
 
-	slave_dev->priv_flags |= IFF_BONDING;
+	slave_dev->priv_flags |= IFF_BONDING;/*指明此dev设备已加入bonding*/
 	/* initialize slave stats */
 	dev_get_stats(new_slave->dev, &new_slave->slave_stats);
 
@@ -2143,10 +2161,12 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 
 	switch (BOND_MODE(bond)) {
 	case BOND_MODE_ACTIVEBACKUP:
+		/*主被模式*/
 		bond_set_slave_inactive_flags(new_slave,
 					      BOND_SLAVE_NOTIFY_NOW);
 		break;
 	case BOND_MODE_8023AD:
+		/*lacp动态binding*/
 		/* in 802.3ad mode, the internal mechanism
 		 * will activate the slaves in the selected
 		 * aggregator
@@ -2154,6 +2174,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 		bond_set_slave_inactive_flags(new_slave, BOND_SLAVE_NOTIFY_NOW);
 		/* if this is the first slave */
 		if (!prev_slave) {
+			/*这个接口是第一个slave,初始化bond口的lacp*/
 			SLAVE_AD_INFO(new_slave)->id = 1;
 			/* Initialize AD with the number of times that the AD timer is called in 1 second
 			 * can be called only after the mac address of the bond is set
@@ -2209,6 +2230,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 		goto err_detach;
 	}
 
+	/*new_slave做为bond成员*/
 	res = bond_master_upper_dev_link(bond, new_slave, extack);
 	if (res) {
 		slave_dbg(bond_dev, slave_dev, "Error %d calling bond_master_upper_dev_link\n", res);
@@ -2218,7 +2240,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	/*slave状态变更*/
 	bond_lower_state_changed(new_slave);
 
-	/*添加new_slave做bond成员*/
+	/*在sysfs中添加new_slave做bond成员*/
 	res = bond_sysfs_slave_add(new_slave);
 	if (res) {
 		slave_dbg(bond_dev, slave_dev, "Error %d calling bond_sysfs_slave_add\n", res);
@@ -2253,6 +2275,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 			netif_addr_unlock_bh(bond_dev);
 
 			if (BOND_MODE(bond) == BOND_MODE_8023AD)
+				/*指明收取lacpdu对应的组播地址*/
 				dev_mc_add(slave_dev, lacpdu_mcast_addr);
 		}
 	}
@@ -2274,6 +2297,7 @@ int bond_enslave(struct net_device *bond_dev, struct net_device *slave_dev/*要�
 	if (!slave_dev->netdev_ops->ndo_bpf ||
 	    !slave_dev->netdev_ops->ndo_xdp_xmit) {
 		if (bond->xdp_prog) {
+			/*slave设备不支持以上回调，报错*/
 			SLAVE_NL_ERR(bond_dev, slave_dev, extack,
 				     "Slave does not support XDP");
 			res = -EOPNOTSUPP;
@@ -4047,13 +4071,13 @@ static int bond_netdev_event(struct notifier_block *this,
 	if (event_dev->flags & IFF_MASTER) {
 		int ret;
 
-		//master事件处理
+		//master设备事件处理
 		ret = bond_master_netdev_event(event, event_dev);
 		if (ret != NOTIFY_DONE)
 			return ret;
 	}
 
-	//slave事件处理
+	//slave设备事件处理
 	if (event_dev->flags & IFF_SLAVE)
 		return bond_slave_netdev_event(event, event_dev);
 
@@ -4322,11 +4346,13 @@ static void bond_work_cancel_all(struct bonding *bond)
 
 static int bond_open(struct net_device *bond_dev)
 {
+	/*取bond设备私有数据bonding*/
 	struct bonding *bond = netdev_priv(bond_dev);
 	struct list_head *iter;
 	struct slave *slave;
 
 	if (BOND_MODE(bond) == BOND_MODE_ROUNDROBIN && !bond->rr_tx_counter) {
+		/*初始化rr_tx_counter为percpu变量*/
 		bond->rr_tx_counter = alloc_percpu(u32);
 		if (!bond->rr_tx_counter)
 			return -ENOMEM;
@@ -4366,11 +4392,13 @@ static int bond_open(struct net_device *bond_dev)
 
 	/*lacp方式的bond*/
 	if (BOND_MODE(bond) == BOND_MODE_8023AD) {
+		/*启动ad_work*/
 		queue_delayed_work(bond->wq, &bond->ad_work, 0);
 		/* register to receive LACPDUs */
 		bond->recv_probe = bond_3ad_lacpdu_recv;
 		bond_3ad_initiate_agg_selection(bond, 1);
 
+		/*遍历所有slave,使其可以收取lacp报文*/
 		bond_for_each_slave(bond, slave, iter)
 			dev_mc_add(slave->dev, lacpdu_mcast_addr);
 	}
@@ -4604,9 +4632,11 @@ static int bond_do_ioctl(struct net_device *bond_dev, struct ifreq *ifr, int cmd
 
 	switch (cmd) {
 	case SIOCBONDENSLAVE:
+		/*为bond添加slave_dev设备*/
 		res = bond_enslave(bond_dev, slave_dev, NULL);
 		break;
 	case SIOCBONDRELEASE:
+		/*自bond_dev中移除slave_dev设备*/
 		res = bond_release(bond_dev, slave_dev);
 		break;
 	case SIOCBONDSETHWADDR:
@@ -4668,12 +4698,15 @@ static void bond_set_rx_mode(struct net_device *bond_dev)
 
 	rcu_read_lock();
 	if (bond_uses_primary(bond)) {
+		/*取当前活跃的slave设备*/
 		slave = rcu_dereference(bond->curr_active_slave);
 		if (slave) {
+			/*bond_dev已设置了一些uc,mc地址，复制到slave->dev上*/
 			dev_uc_sync(slave->dev, bond_dev);
 			dev_mc_sync(slave->dev, bond_dev);
 		}
 	} else {
+		/*为每个设备同步*/
 		bond_for_each_slave_rcu(bond, slave, iter) {
 			dev_uc_sync_multiple(slave->dev, bond_dev);
 			dev_mc_sync_multiple(slave->dev, bond_dev);
@@ -4875,19 +4908,19 @@ static struct slave *bond_get_slave_by_id(struct bonding *bond,
 {
 	struct list_head *iter;
 	struct slave *slave;
-	int i = slave_id;
+	int i = slave_id;/*通过id查找slave*/
 
 	/* Here we start from the slave with slave_id */
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (--i < 0) {
-		    //此slave能执行tx,则选择此slave
+		    //到达此编号，且此slave能执行tx,则选择此slave
 			if (bond_slave_can_tx(slave))
 				return slave;
 		}
 	}
 
 	/* Here we start from the first slave up to slave_id */
-	i = slave_id;
+	i = slave_id;/*slave_id大于slave总数，选第一个可发送的*/
 	bond_for_each_slave_rcu(bond, slave, iter) {
 		if (--i < 0)
 			break;
@@ -4917,6 +4950,7 @@ static u32 bond_rr_gen_slave_id(struct bonding *bond)
 		slave_id = get_random_u32();
 		break;
 	case 1:
+		/*rr_tx_counter自增后，并返回*/
 		slave_id = this_cpu_inc_return(*bond->rr_tx_counter);
 		break;
 	default:
@@ -4966,6 +5000,7 @@ static struct slave *bond_xmit_roundrobin_slave_get(struct bonding *bond,
 non_igmp:
 	slave_cnt = READ_ONCE(bond->slave_cnt);
 	if (likely(slave_cnt)) {
+		/*采用rr策略，选择当前应发送的slave*/
 		slave_id = bond_rr_gen_slave_id(bond) % slave_cnt;
 		return bond_get_slave_by_id(bond, slave_id);
 	}
@@ -5007,6 +5042,7 @@ static struct slave *bond_xdp_xmit_roundrobin_slave_get(struct bonding *bond,
 non_igmp:
 	slave_cnt = READ_ONCE(bond->slave_cnt);
 	if (likely(slave_cnt)) {
+		/*依据rr策略找出需发送的slave*/
 		slave_id = bond_rr_gen_slave_id(bond) % slave_cnt;
 		return bond_get_slave_by_id(bond, slave_id);
 	}
@@ -5350,6 +5386,7 @@ static u16 bond_select_queue(struct net_device *dev, struct sk_buff *skb,
 
 	if (unlikely(txq >= dev->real_num_tx_queues)) {
 		do {
+			/*txq过大，取余后返回txq*/
 			txq -= dev->real_num_tx_queues;
 		} while (txq >= dev->real_num_tx_queues);
 	}
@@ -5650,9 +5687,11 @@ static int bond_xdp_set(struct net_device *dev, struct bpf_prog *prog,
 	if (!bond_xdp_check(bond))
 		return -EOPNOTSUPP;
 
+	/*保存bond设备上旧有的xdp程序，替换为新的xdp程序*/
 	old_prog = bond->xdp_prog;
 	bond->xdp_prog = prog;
 
+	/*遍历bond设备的所有slave*/
 	bond_for_each_slave(bond, slave, iter) {
 		struct net_device *slave_dev = slave->dev;
 
@@ -5889,6 +5928,7 @@ static const struct ethtool_ops bond_ethtool_ops = {
 static const struct net_device_ops bond_netdev_ops = {
 	.ndo_init		= bond_init,
 	.ndo_uninit		= bond_uninit,
+	/*使bond设备up*/
 	.ndo_open		= bond_open,
 	.ndo_stop		= bond_close,
 	//bond设备发送函数
@@ -6043,12 +6083,13 @@ static int __init bond_check_params(struct bond_params *params)
 	__be32 arp_target[BOND_MAX_ARP_TARGETS] = { 0 };
 	int arp_ip_count;
 	int bond_mode	= BOND_MODE_ROUNDROBIN;
-	int xmit_hashtype = BOND_XMIT_POLICY_LAYER2;
+	int xmit_hashtype = BOND_XMIT_POLICY_LAYER2;/*发送时hash类型*/
 	int lacp_fast = 0;
 	int tlb_dynamic_lb;
 
 	/* Convert string parameters. */
 	if (mode) {
+		/*mode不为空，先用mode初始化newval,再利用newval来解析选项*/
 		bond_opt_initstr(&newval, mode);
 		valptr = bond_opt_parse(bond_opt_get(BOND_OPT_MODE), &newval);
 		if (!valptr) {
@@ -6063,9 +6104,11 @@ static int __init bond_check_params(struct bond_params *params)
 		if (bond_mode == BOND_MODE_ROUNDROBIN ||
 		    bond_mode == BOND_MODE_ACTIVEBACKUP ||
 		    bond_mode == BOND_MODE_BROADCAST) {
+			/*模式与policy互斥，不解析*/
 			pr_info("xmit_hash_policy param is irrelevant in mode %s\n",
 				bond_mode_name(bond_mode));
 		} else {
+			/*解析并更新hash_policy*/
 			bond_opt_initstr(&newval, xmit_hash_policy);
 			valptr = bond_opt_parse(bond_opt_get(BOND_OPT_XMIT_HASH),
 						&newval);
@@ -6080,9 +6123,11 @@ static int __init bond_check_params(struct bond_params *params)
 
 	if (lacp_rate) {
 		if (bond_mode != BOND_MODE_8023AD) {
+			/*模式不匹配，不解析此参数*/
 			pr_info("lacp_rate param is irrelevant in mode %s\n",
 				bond_mode_name(bond_mode));
 		} else {
+			/*解析并更新lacp_fast*/
 			bond_opt_initstr(&newval, lacp_rate);
 			valptr = bond_opt_parse(bond_opt_get(BOND_OPT_LACP_RATE),
 						&newval);
@@ -6095,6 +6140,7 @@ static int __init bond_check_params(struct bond_params *params)
 		}
 	}
 
+	/*解析ad_select*/
 	if (ad_select) {
 		bond_opt_initstr(&newval, ad_select);
 		valptr = bond_opt_parse(bond_opt_get(BOND_OPT_AD_SELECT),
@@ -6111,6 +6157,7 @@ static int __init bond_check_params(struct bond_params *params)
 	}
 
 	if (max_bonds < 0) {
+		/*更新默认创建的bond数*/
 		pr_warn("Warning: max_bonds (%d) not in range %d-%d, so it was reset to BOND_DEFAULT_MAX_BONDS (%d)\n",
 			max_bonds, 0, INT_MAX, BOND_DEFAULT_MAX_BONDS);
 		max_bonds = BOND_DEFAULT_MAX_BONDS;
@@ -6134,6 +6181,7 @@ static int __init bond_check_params(struct bond_params *params)
 		downdelay = 0;
 	}
 
+	/*规范use_carrier为0，1*/
 	if ((use_carrier != 0) && (use_carrier != 1)) {
 		pr_warn("Warning: use_carrier module parameter (%d), not of valid value (0/1), so it was set to 1\n",
 			use_carrier);
@@ -6156,6 +6204,7 @@ static int __init bond_check_params(struct bond_params *params)
 	}
 
 	if (tx_queues < 1 || tx_queues > 255) {
+		/*队列数只能在1-255之间，如果在范围以外，则使用默认值16*/
 		pr_warn("Warning: tx_queues (%d) should be between 1 and 255, resetting to %d\n",
 			tx_queues, BOND_DEFAULT_TX_QUEUES);
 		tx_queues = BOND_DEFAULT_TX_QUEUES;
@@ -6372,6 +6421,7 @@ static int __init bond_check_params(struct bond_params *params)
 		lp_interval = BOND_ALB_DEFAULT_LP_INTERVAL;
 	}
 
+	/*利用上面解析的结果，填充params结构体*/
 	/* fill params struct with the proper values */
 	params->mode = bond_mode;
 	params->xmit_policy = xmit_hashtype;
@@ -6390,7 +6440,7 @@ static int __init bond_check_params(struct bond_params *params)
 	params->primary[0] = 0;
 	params->primary_reselect = primary_reselect_value;
 	params->fail_over_mac = fail_over_mac_value;
-	params->tx_queues = tx_queues;
+	params->tx_queues = tx_queues;/*设置rx,tx队列数*/
 	params->all_slaves_active = all_slaves_active;
 	params->resend_igmp = resend_igmp;
 	params->min_links = min_links;
@@ -6426,6 +6476,7 @@ static int __init bond_check_params(struct bond_params *params)
 static int bond_init(struct net_device *bond_dev)
 {
 	struct bonding *bond = netdev_priv(bond_dev);
+	/*取bond相关的net ns私有数据*/
 	struct bond_net *bn = net_generic(dev_net(bond_dev), bond_net_id);
 
 	netdev_dbg(bond_dev, "Begin bond_init\n");
@@ -6439,6 +6490,7 @@ static int bond_init(struct net_device *bond_dev)
 	spin_lock_init(&bond->stats_lock);
 	netdev_lockdep_set_classes(bond_dev);
 
+	/*将此bond串入对应netns下*/
 	list_add_tail(&bond->bond_list, &bn->dev_list);
 
 	bond_prepare_sysfs_group(bond);
@@ -6448,6 +6500,7 @@ static int bond_init(struct net_device *bond_dev)
 	/* Ensure valid dev_addr */
 	if (is_zero_ether_addr(bond_dev->dev_addr) &&
 	    bond_dev->addr_assign_type == NET_ADDR_PERM)
+		/*bond设备未给mac地址，随机生成一个*/
 		eth_hw_addr_random(bond_dev);
 
 	return 0;
@@ -6464,7 +6517,7 @@ unsigned int bond_get_num_tx_queues(void)
  * Caller must NOT hold rtnl_lock; we need to release it here before we
  * set up our sysfs entries.
  */
-int bond_create(struct net *net, const char *name)
+int bond_create(struct net *net, const char *name/*设备名称*/)
 {
 	struct net_device *bond_dev;
 	struct bonding *bond;
@@ -6472,8 +6525,8 @@ int bond_create(struct net *net, const char *name)
 
 	rtnl_lock();
 
-	//创建bond接口
-	bond_dev = alloc_netdev_mq(sizeof(struct bonding),
+	//创建bond接口，如果名称未提供，则自动创建格式bond%d
+	bond_dev = alloc_netdev_mq(sizeof(struct bonding)/*私有数据结构体为bonding*/,
 				   name ? name : "bond%d", NET_NAME_UNKNOWN,
 				   bond_setup, tx_queues);
 	if (!bond_dev)
@@ -6483,6 +6536,7 @@ int bond_create(struct net *net, const char *name)
 	dev_net_set(bond_dev, net);
 	bond_dev->rtnl_link_ops = &bond_link_ops;
 
+	/*注册此网络设备*/
 	res = register_netdevice(bond_dev);
 	if (res < 0) {
 		free_netdev(bond_dev);
@@ -6506,6 +6560,7 @@ static int __net_init bond_net_init(struct net *net)
 	bn->net = net;
 	INIT_LIST_HEAD(&bn->dev_list);
 
+	//创建/proc/net/bonding目录
 	bond_create_proc_dir(bn);
 	bond_create_sysfs(bn);
 
@@ -6583,6 +6638,7 @@ static int __init bonding_init(void)
 				flow_keys_bonding_keys,
 				ARRAY_SIZE(flow_keys_bonding_keys));
 
+	/*注册bond网络设备通知*/
 	register_netdevice_notifier(&bond_netdev_notifier);
 out:
 	return res;

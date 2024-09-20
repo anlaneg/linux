@@ -47,8 +47,8 @@
 #define IRQ_UNBOUND -1
 
 struct vduse_virtqueue {
-	u16 index;
-	u16 num_max;
+	u16 index;/*队列编号*/
+	u16 num_max;/*用户指定的队列最大长度*/
 	u32 num;
 	u64 desc_addr;
 	u64 driver_addr;
@@ -60,8 +60,8 @@ struct vduse_virtqueue {
 	spinlock_t irq_lock;
 	struct eventfd_ctx *kickfd;
 	struct vdpa_callback cb;
-	struct work_struct inject;/*中断注入work*/
-	struct work_struct kick;
+	struct work_struct inject;/*中断注入work，例如实现vduse_vq_irq_inject*/
+	struct work_struct kick;/*队列kick work，例如实现vduse_vq_kick_work*/
 	int irq_effective_cpu;
 	struct cpumask irq_affinity;
 	struct kobject kobj;
@@ -71,7 +71,7 @@ struct vduse_dev;
 
 struct vduse_vdpa {
 	struct vdpa_device vdpa;
-	struct vduse_dev *dev;
+	struct vduse_dev *dev;/*关联的vduse设备*/
 };
 
 struct vduse_umem {
@@ -82,15 +82,15 @@ struct vduse_umem {
 };
 
 struct vduse_dev {
-	struct vduse_vdpa *vdev;
+	struct vduse_vdpa *vdev;/*关联的Vdpa设备*/
 	struct device *dev;
-	struct vduse_virtqueue **vqs;
+	struct vduse_virtqueue **vqs;/*用于存放一组vq指针，vq的数目由成员vq_num指定*/
 	struct vduse_iova_domain *domain;
-	char *name;/*设备名称*/
+	char *name;/*vduse设备名称*/
 	struct mutex lock;
 	spinlock_t msg_lock;
 	u64 msg_unique;
-	u32 msg_timeout;
+	u32 msg_timeout;/*消息超时时间*/
 	wait_queue_head_t waitq;
 	/*挂接vduse_dev_msg*/
 	struct list_head send_list;
@@ -103,16 +103,16 @@ struct vduse_dev {
 	int minor;
 	bool broken;
 	bool connected;
-	u64 api_version;
-	u64 device_features;
+	u64 api_version;/*此设备关联的api version*/
+	u64 device_features;/*创建时用户传入的设备Features*/
 	u64 driver_features;
-	u32 device_id;
-	u32 vendor_id;
+	u32 device_id;/*创建时用户传入的设备类型Id*/
+	u32 vendor_id;/*创建时用户传入的厂商id*/
 	u32 generation;
 	u32 config_size;/*config buffer大小*/
-	void *config;
+	void *config;/*创建时用户传入的config buffer，见结构体vduse_dev_config.config*/
 	u8 status;
-	u32 vq_num;/*vq数目，见vqs*/
+	u32 vq_num;/*vq数目，也即vqs数组的长度*/
 	u32 vq_align;
 	struct vduse_umem *umem;
 	struct mutex mem_lock;
@@ -133,7 +133,7 @@ struct vduse_control {
 };
 
 static DEFINE_MUTEX(vduse_lock);
-static DEFINE_IDR(vduse_idr);
+static DEFINE_IDR(vduse_idr);/*用于记录系统中所有vduse设备*/
 
 static dev_t vduse_major;
 static struct cdev vduse_ctrl_cdev;
@@ -680,7 +680,7 @@ static void vduse_vdpa_set_status(struct vdpa_device *vdpa, u8 status)
 	if (vduse_dev_set_status(dev, status))
 		return;
 
-	dev->status = status;
+	dev->status = status;/*更新vduse设备状态*/
 }
 
 static size_t vduse_vdpa_get_config_size(struct vdpa_device *vdpa)
@@ -1205,15 +1205,18 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		ret = vduse_dev_queue_irq_work(dev, &dev->inject, IRQ_UNBOUND);
 		break;
 	case VDUSE_VQ_SETUP: {
+		/*配置具体一个队列*/
 		struct vduse_vq_config config;
 		u32 index;
 
 		ret = -EFAULT;
+		/*使用用户态指定的vq config*/
 		if (copy_from_user(&config, argp, sizeof(config)))
 			break;
 
 		ret = -EINVAL;
 		if (config.index >= dev->vq_num)
+			/*无效配置，队列编号大于设备vq总数*/
 			break;
 
 		if (!is_mem_zero((const char *)config.reserved,
@@ -1221,11 +1224,12 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 			break;
 
 		index = array_index_nospec(config.index, dev->vq_num);
-		dev->vqs[index]->num_max = config.max_size;
+		dev->vqs[index]->num_max = config.max_size;/*设置队列最大长度*/
 		ret = 0;
 		break;
 	}
 	case VDUSE_VQ_GET_INFO: {
+		/*获取指定一个vq的信息*/
 		struct vduse_vq_info vq_info;
 		struct vduse_virtqueue *vq;
 		u32 index;
@@ -1236,6 +1240,7 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 
 		ret = -EINVAL;
 		if (vq_info.index >= dev->vq_num)
+			/*vq索引无效*/
 			break;
 
 		index = array_index_nospec(vq_info.index, dev->vq_num);
@@ -1243,7 +1248,7 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 		vq_info.desc_addr = vq->desc_addr;
 		vq_info.driver_addr = vq->driver_addr;
 		vq_info.device_addr = vq->device_addr;
-		vq_info.num = vq->num;
+		vq_info.num = vq->num;/*vq队列长度*/
 
 		if (dev->driver_features & BIT_ULL(VIRTIO_F_RING_PACKED)) {
 			vq_info.packed.last_avail_counter =
@@ -1258,7 +1263,7 @@ static long vduse_dev_ioctl(struct file *file, unsigned int cmd,
 			vq_info.split.avail_index =
 				vq->state.split.avail_index;
 
-		vq_info.ready = vq->ready;
+		vq_info.ready = vq->ready;/*此vq是否ready*/
 
 		ret = -EFAULT;
 		if (copy_to_user(argp, &vq_info, sizeof(vq_info)))
@@ -1407,6 +1412,7 @@ static struct vduse_dev *vduse_dev_get_from_minor(int minor)
 	struct vduse_dev *dev;
 
 	mutex_lock(&vduse_lock);
+	/*通过编号，获取vduse设备*/
 	dev = idr_find(&vduse_idr, minor);
 	mutex_unlock(&vduse_lock);
 
@@ -1565,11 +1571,14 @@ static int vduse_dev_init_vqs(struct vduse_dev *dev, u32 vq_align, u32 vq_num)
 
 	dev->vq_align = vq_align;
 	dev->vq_num = vq_num;
+	/*申请指定数量的vqs指针，后续用其指向不同的vq结构体*/
 	dev->vqs = kcalloc(dev->vq_num, sizeof(*dev->vqs), GFP_KERNEL);
 	if (!dev->vqs)
 		return -ENOMEM;
 
+	/*初始化vq_num个vq*/
 	for (i = 0; i < vq_num; i++) {
+		/*申请i号队列对应的vq结构体*/
 		dev->vqs[i] = kzalloc(sizeof(*dev->vqs[i]), GFP_KERNEL);
 		if (!dev->vqs[i]) {
 			ret = -ENOMEM;
@@ -1577,9 +1586,9 @@ static int vduse_dev_init_vqs(struct vduse_dev *dev, u32 vq_align, u32 vq_num)
 		}
 
 		dev->vqs[i]->index = i;
-		dev->vqs[i]->irq_effective_cpu = IRQ_UNBOUND;
-		INIT_WORK(&dev->vqs[i]->inject, vduse_vq_irq_inject);
-		INIT_WORK(&dev->vqs[i]->kick, vduse_vq_kick_work);
+		dev->vqs[i]->irq_effective_cpu = IRQ_UNBOUND;/*中断暂不绑定cpu*/
+		INIT_WORK(&dev->vqs[i]->inject, vduse_vq_irq_inject);/*定义中断注入work*/
+		INIT_WORK(&dev->vqs[i]->kick, vduse_vq_kick_work);/*定义Kick work*/
 		spin_lock_init(&dev->vqs[i]->kick_lock);
 		spin_lock_init(&dev->vqs[i]->irq_lock);
 		cpumask_setall(&dev->vqs[i]->irq_affinity);
@@ -1602,6 +1611,7 @@ err:
 	return ret;
 }
 
+/*申请vduse_dev结构体，并简单初始化*/
 static struct vduse_dev *vduse_dev_create(void)
 {
 	struct vduse_dev *dev = kzalloc(sizeof(*dev), GFP_KERNEL);
@@ -1619,7 +1629,7 @@ static struct vduse_dev *vduse_dev_create(void)
 	init_rwsem(&dev->rwsem);
 
 	INIT_WORK(&dev->inject, vduse_dev_irq_inject);
-	init_waitqueue_head(&dev->waitq);
+	init_waitqueue_head(&dev->waitq);/*初始化等待队列*/
 
 	return dev;
 }
@@ -1629,6 +1639,7 @@ static void vduse_dev_destroy(struct vduse_dev *dev)
 	kfree(dev);
 }
 
+/*依据名称查找对应的vduse设备*/
 static struct vduse_dev *vduse_find_dev(const char *name)
 {
 	struct vduse_dev *dev;
@@ -1641,6 +1652,7 @@ static struct vduse_dev *vduse_find_dev(const char *name)
 	return NULL;
 }
 
+/*依据名称移除vduse设备*/
 static int vduse_destroy_dev(char *name)
 {
 	struct vduse_dev *dev = vduse_find_dev(name);
@@ -1670,6 +1682,7 @@ static int vduse_destroy_dev(char *name)
 	return 0;
 }
 
+/*检查device_id是否包含在集合allowed_device_id*/
 static bool device_is_allowed(u32 device_id)
 {
 	int i;
@@ -1684,10 +1697,12 @@ static bool device_is_allowed(u32 device_id)
 static bool features_is_valid(u64 features)
 {
 	if (!(features & (1ULL << VIRTIO_F_ACCESS_PLATFORM)))
+		/*必须指定此flag*/
 		return false;
 
 	/* Now we only support read-only configuration space */
 	if (features & (1ULL << VIRTIO_BLK_F_CONFIG_WCE))
+		/*必须不能指定此Flag*/
 		return false;
 
 	return true;
@@ -1700,17 +1715,19 @@ static bool vduse_validate_config(struct vduse_dev_config *config)
 			 sizeof(config->reserved)))
 		return false;
 
-	/*vq_align必须以页对齐*/
+	/*vq_align不容许对齐方式大于一个整页*/
 	if (config->vq_align > PAGE_SIZE)
 		return false;
 
-	/*config_size必须以页对齐*/
+	/*config_size必须小于一个整页*/
 	if (config->config_size > PAGE_SIZE)
 		return false;
 
+	/*vq数量过多*/
 	if (config->vq_num > 0xffff)
 		return false;
 
+	/*名称不得为空*/
 	if (!config->name[0])
 		return false;
 
@@ -1807,7 +1824,7 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 	if (vduse_find_dev(config->name))
 		goto err;
 
-	/*创建dev*/
+	/*创建vduse结构体*/
 	ret = -ENOMEM;
 	dev = vduse_dev_create();
 	if (!dev)
@@ -1825,7 +1842,7 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 	dev->config = config_buf;
 	dev->config_size = config->config_size;
 
-	/*为待创建的设备，申请minor*/
+	/*为待创建的设备，申请一个唯一编号*/
 	ret = idr_alloc(&vduse_idr, dev, 1, VDUSE_DEV_MAX, GFP_KERNEL);
 	if (ret < 0)
 		goto err_idr;
@@ -1834,12 +1851,13 @@ static int vduse_create_dev(struct vduse_dev_config *config,
 	dev->msg_timeout = VDUSE_MSG_DEFAULT_TIMEOUT;
 	dev->dev = device_create_with_groups(&vduse_class, NULL,
 				MKDEV(MAJOR(vduse_major), dev->minor),
-				dev, vduse_dev_groups, "%s", config->name);
+				dev, vduse_dev_groups, "%s", config->name);/*向kernel申请产生此dev*/
 	if (IS_ERR(dev->dev)) {
 		ret = PTR_ERR(dev->dev);
 		goto err_dev;
 	}
 
+	/*初始化此vduse设备*/
 	ret = vduse_dev_init_vqs(dev, config->vq_align, config->vq_num);
 	if (ret)
 		goto err_vqs;
@@ -1905,7 +1923,7 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 		if (vduse_validate_config(&config) == false)
 			break;
 
-		/*取用户态提供的config_size*/
+		/*取用户态提供的config成员内容*/
 		buf = vmemdup_user(argp + size, config.config_size);
 		if (IS_ERR(buf)) {
 			ret = PTR_ERR(buf);
@@ -1914,7 +1932,7 @@ static long vduse_ioctl(struct file *file, unsigned int cmd,
 
 		/*vduse设备创建*/
 		config.name[VDUSE_NAME_MAX - 1] = '\0';
-		ret = vduse_create_dev(&config, buf, control->api_version);
+		ret = vduse_create_dev(&config, buf/*结构体中的config成员内容*/, control->api_version);
 		if (ret)
 			kvfree(buf);
 		break;
@@ -1984,13 +2002,16 @@ static int vduse_dev_init_vdpa(struct vduse_dev *dev, const char *name)
 	int ret;
 
 	if (dev->vdev)
+		/*已初始化*/
 		return -EEXIST;
 
+	/*申请vdpa设备*/
 	vdev = vdpa_alloc_device(struct vduse_vdpa, vdpa, dev->dev,
-				 &vduse_vdpa_config_ops, 1, 1, name, true);
+				 &vduse_vdpa_config_ops/*指明vdpa设备配置接口*/, 1, 1, name, true);
 	if (IS_ERR(vdev))
 		return PTR_ERR(vdev);
 
+	/*双向互关联*/
 	dev->vdev = vdev;
 	vdev->dev = dev;
 	vdev->vdpa.dev.dma_mask = &vdev->vdpa.dev.coherent_dma_mask;
@@ -2006,18 +2027,22 @@ static int vduse_dev_init_vdpa(struct vduse_dev *dev, const char *name)
 	return 0;
 }
 
-static int vdpa_dev_add(struct vdpa_mgmt_dev *mdev, const char *name,
-			const struct vdpa_dev_set_config *config)
+static int vdpa_dev_add(struct vdpa_mgmt_dev *mdev, const char *name/*要添加的设备名称*/,
+			const struct vdpa_dev_set_config *config/*添加时指定的配置*/)
 {
 	struct vduse_dev *dev;
 	int ret;
 
 	mutex_lock(&vduse_lock);
+	/*通过名称查找vduse设备*/
 	dev = vduse_find_dev(name);
 	if (!dev || !vduse_dev_is_ready(dev)) {
+		/*未查找到要添加的设备*/
 		mutex_unlock(&vduse_lock);
 		return -EINVAL;
 	}
+
+	/*初始化此设备*/
 	ret = vduse_dev_init_vdpa(dev, name);
 	mutex_unlock(&vduse_lock);
 	if (ret)
@@ -2052,8 +2077,8 @@ static void vdpa_dev_del(struct vdpa_mgmt_dev *mdev, struct vdpa_device *dev)
 }
 
 static const struct vdpa_mgmtdev_ops vdpa_dev_mgmtdev_ops = {
-	.dev_add = vdpa_dev_add,
-	.dev_del = vdpa_dev_del,
+	.dev_add = vdpa_dev_add,/*添加vdpa设备*/
+	.dev_del = vdpa_dev_del,/*删除vdpa设备*/
 };
 
 static struct virtio_device_id id_table[] = {
@@ -2077,6 +2102,7 @@ static int vduse_mgmtdev_init(void)
 	if (!vduse_mgmt)
 		return -ENOMEM;
 
+	/*设置设备名称为vduse*/
 	ret = dev_set_name(&vduse_mgmt->dev, "vduse");
 	if (ret) {
 		kfree(vduse_mgmt);
@@ -2085,6 +2111,7 @@ static int vduse_mgmtdev_init(void)
 
 	vduse_mgmt->dev.release = vduse_mgmtdev_release;
 
+	/*向kernel增加此设备*/
 	ret = device_register(&vduse_mgmt->dev);
 	if (ret)
 		goto dev_reg_err;
@@ -2092,6 +2119,7 @@ static int vduse_mgmtdev_init(void)
 	vduse_mgmt->mgmt_dev.id_table = id_table;
 	vduse_mgmt->mgmt_dev.ops = &vdpa_dev_mgmtdev_ops;
 	vduse_mgmt->mgmt_dev.device = &vduse_mgmt->dev;
+	/*vdpa mgmt设备注册*/
 	ret = vdpa_mgmtdev_register(&vduse_mgmt->mgmt_dev);
 	if (ret)
 		device_unregister(&vduse_mgmt->dev);
@@ -2124,33 +2152,37 @@ static int vduse_init(void)
 	if (ret)
 		goto err_chardev_region;
 
-	/* /dev/vduse/control */
+	/* 初始化/dev/vduse/control设备 */
 	cdev_init(&vduse_ctrl_cdev, &vduse_ctrl_fops);/*control设备操作函数*/
 	vduse_ctrl_cdev.owner = THIS_MODULE;
-	ret = cdev_add(&vduse_ctrl_cdev, vduse_major, 1);
+	ret = cdev_add(&vduse_ctrl_cdev, vduse_major, 1);/*向kernel添加此设备*/
 	if (ret)
 		goto err_ctrl_cdev;
 
+	/*创建control设备*/
 	dev = device_create(&vduse_class, NULL, vduse_major, NULL, "control");
 	if (IS_ERR(dev)) {
 		ret = PTR_ERR(dev);
 		goto err_device;
 	}
 
-	/* /dev/vduse/$DEVICE */
+	/* 初始化 /dev/vduse/$DEVICE 设备*/
 	cdev_init(&vduse_cdev, &vduse_dev_fops);/*vduse字符设备操作集*/
 	vduse_cdev.owner = THIS_MODULE;
+	/*向kernel添加此设备*/
 	ret = cdev_add(&vduse_cdev, MKDEV(MAJOR(vduse_major), 1),
 		       VDUSE_DEV_MAX - 1);
 	if (ret)
 		goto err_cdev;
 
 	ret = -ENOMEM;
+	/*申请wq,用于处理irq(unbound)*/
 	vduse_irq_wq = alloc_workqueue("vduse-irq",
 				WQ_HIGHPRI | WQ_SYSFS | WQ_UNBOUND, 0);
 	if (!vduse_irq_wq)
 		goto err_wq;
 
+	/*申请wq,用于处理irq(bound)*/
 	vduse_irq_bound_wq = alloc_workqueue("vduse-irq-bound", WQ_HIGHPRI, 0);
 	if (!vduse_irq_bound_wq)
 		goto err_bound_wq;
@@ -2159,6 +2191,7 @@ static int vduse_init(void)
 	if (ret)
 		goto err_domain;
 
+	/*注册vduse设备的管理设备*/
 	ret = vduse_mgmtdev_init();
 	if (ret)
 		goto err_mgmtdev;

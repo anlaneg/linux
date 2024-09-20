@@ -755,7 +755,7 @@ struct inode {
 	};
 	struct file_lock_context	*i_flctx;
 	struct address_space	i_data;
-	struct list_head	i_devices;
+	struct list_head	i_devices;/*此inode对应的设备，例如cdev*/
 	union {
 		struct pipe_inode_info	*i_pipe;
 		//指向对应的字符设备

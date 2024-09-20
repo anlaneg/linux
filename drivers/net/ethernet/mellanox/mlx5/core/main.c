@@ -1383,7 +1383,7 @@ static int mlx5_load(struct mlx5_core_dev *dev)
 		goto err_ec;
 	}
 
-	mlx5_lag_add_mdev(dev);
+	mlx5_lag_add_mdev(dev);/*将此设备加入到lag*/
 	err = mlx5_sriov_attach(dev);
 	if (err) {
 		mlx5_core_err(dev, "sriov init failed %d\n", err);
@@ -1433,7 +1433,7 @@ static void mlx5_unload(struct mlx5_core_dev *dev)
 	mlx5_devlink_traps_unregister(priv_to_devlink(dev));
 	mlx5_sf_dev_table_destroy(dev);
 	mlx5_sriov_detach(dev);
-	mlx5_lag_remove_mdev(dev);
+	mlx5_lag_remove_mdev(dev);/*将此设备自lag中移除*/
 	mlx5_ec_cleanup(dev);
 	mlx5_sf_hw_table_destroy(dev);
 	mlx5_vhca_event_stop(dev);

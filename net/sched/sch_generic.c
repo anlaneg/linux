@@ -193,10 +193,11 @@ static void try_bulk_dequeue_skb(struct Qdisc *q,
 	int bytelimit = qdisc_avail_bulklimit(txq) - skb->len;
 
 	while (bytelimit > 0/*检查是否容许出包*/) {
-		//出一个skb
+		//尝试出一个skb
 		struct sk_buff *nskb = q->dequeue(q);
 
 		if (!nskb)
+			/*不容许出*/
 			break;
 
 		bytelimit -= nskb->len; /* covers GSO len */
@@ -216,6 +217,7 @@ static void try_bulk_dequeue_skb_slow(struct Qdisc *q,
 				      struct sk_buff *skb,
 				      int *packets)
 {
+	/*qdisc不支持批量出队，一个一个出队*/
 	int mapping = skb_get_queue_mapping(skb);
 	struct sk_buff *nskb;
 	int cnt = 0;
@@ -225,7 +227,7 @@ static void try_bulk_dequeue_skb_slow(struct Qdisc *q,
 		nskb = q->dequeue(q);
 		if (!nskb)
 			break;
-		/*本次出的报文与之前的skb不是一个tx队列*/
+		/*本次出的报文与之前的skb不是一个tx队列，则将其暂存在skb_bad_txq，并停止出队*/
 		if (unlikely(skb_get_queue_mapping(nskb) != mapping)) {
 			qdisc_enqueue_skb_bad_txq(q, nskb);
 			break;
@@ -245,14 +247,14 @@ static void try_bulk_dequeue_skb_slow(struct Qdisc *q,
  * A requeued skb (via q->gso_skb) can also be a SKB list.
  */
 static struct sk_buff *dequeue_skb(struct Qdisc *q, bool *validate,
-				   int *packets)
+				   int *packets/*成功出队的报文数*/)
 {
 	const struct netdev_queue *txq = q->dev_queue;
 	struct sk_buff *skb = NULL;
 
 	*packets = 1;
 	if (unlikely(!skb_queue_empty(&q->gso_skb))) {
-		//存在上一次没有发送完的gso数据包，将其取出
+		//存在上一次没有发送完的gso数据包，将其先取出
 		spinlock_t *lock = NULL;
 
 		if (q->flags & TCQ_F_NOLOCK) {
@@ -363,7 +365,7 @@ bool sch_direct_xmit(struct sk_buff *skb/*要发送的一组报文*/, struct Qdi
 	if (likely(skb)) {
 		HARD_TX_LOCK(dev, txq, smp_processor_id());
 		if (!netif_xmit_frozen_or_stopped(txq))
-			/*tx队列可用，执行硬件发送*/
+			/*tx队列可用，发送这一组skb*/
 			skb = dev_hard_start_xmit(skb, dev, txq, &ret);
 		else
 			qdisc_maybe_clear_missed(q, txq);
@@ -421,7 +423,7 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 	bool validate;
 
 	/* Dequeue packet */
-	skb = dequeue_skb(q, &validate, packets);/*出队一组报文*/
+	skb = dequeue_skb(q, &validate, packets);/*出队一组报文,利用next串起来*/
 	if (unlikely(!skb))
 		/*队列为空，直接返回*/
 		return false;
@@ -429,10 +431,12 @@ static inline bool qdisc_restart(struct Qdisc *q, int *packets/*出参，可以�
 	if (!(q->flags & TCQ_F_NOLOCK))
 		root_lock = qdisc_lock(q);
 
+	/*由q获得所属的dev*/
 	dev = qdisc_dev(q);
-	//取skb其对应的tx队列
+	//由dev,skb取对应的tx队列
 	txq = skb_get_tx_queue(dev, skb);
 
+	/*将skb自此队列送出*/
 	return sch_direct_xmit(skb, q, dev, txq, root_lock, validate);
 }
 
@@ -441,7 +445,7 @@ void __qdisc_run(struct Qdisc *q)
 	int quota = READ_ONCE(dev_tx_weight);
 	int packets;
 
-	while (qdisc_restart(q, &packets)) {
+	while (qdisc_restart(q, &packets/*出队的报文数*/)) {
 		quota -= packets;
 		if (quota <= 0) {
 			if (q->flags & TCQ_F_NOLOCK)

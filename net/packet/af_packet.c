@@ -3630,8 +3630,10 @@ static int packet_getname(struct socket *sock, struct sockaddr *uaddr,
 	int ifindex;
 
 	if (peer)
+		/*不支持获取peer地址*/
 		return -EOPNOTSUPP;
 
+	/*获取并填充sockaddr_ll地址*/
 	ifindex = READ_ONCE(po->ifindex);
 	sll->sll_family = AF_PACKET;
 	sll->sll_ifindex = ifindex;

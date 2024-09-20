@@ -569,6 +569,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, void __user *data,
 			return -EINVAL;
 		if (!netif_device_present(dev))
 			return -ENODEV;
+		/*为设备添加组播地址*/
 		return dev_mc_add_global(dev, ifr->ifr_hwaddr.sa_data);
 
 	case SIOCDELMULTI:
@@ -577,6 +578,7 @@ static int dev_ifsioc(struct net *net, struct ifreq *ifr, void __user *data,
 			return -EINVAL;
 		if (!netif_device_present(dev))
 			return -ENODEV;
+		/*删除组播地址*/
 		return dev_mc_del_global(dev, ifr->ifr_hwaddr.sa_data);
 
 	case SIOCSIFTXQLEN:

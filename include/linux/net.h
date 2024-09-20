@@ -184,9 +184,10 @@ struct proto_ops {
 	//为新接入的连接返回newsock
 	int		(*accept)    (struct socket *sock,
 				      struct socket *newsock, int flags, bool kern);
+	/*通过sock获取socketaddr,通过peer参数（0，非零）来指明是否获取peer地址*/
 	int		(*getname)   (struct socket *sock,
-				      struct sockaddr *addr,
-				      int peer);
+				      struct sockaddr *addr/*出参，地址*/,
+				      int peer/*是否获取peer地址*/);
 	__poll_t	(*poll)	     (struct file *file, struct socket *sock,
 				      struct poll_table_struct *wait);
 	int		(*ioctl)     (struct socket *sock, unsigned int cmd,

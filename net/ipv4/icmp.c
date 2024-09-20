@@ -293,6 +293,7 @@ static bool icmpv4_global_allow(struct net *net, int type, int code)
 	if (icmpv4_mask_allow(net, type, code))
 		return true;
 
+	/*执行全局限速*/
 	if (icmp_global_allow())
 		return true;
 
@@ -1023,9 +1024,10 @@ static enum skb_drop_reason icmp_echo(struct sk_buff *skb)
 	icmp_param.head_len	   = sizeof(struct icmphdr);/*head长度*/
 
 	if (icmp_param.data.icmph.type == ICMP_ECHO)
-		//将type变更为reply
+		//收到echo报文，将type变更为reply
 		icmp_param.data.icmph.type = ICMP_ECHOREPLY;
 	else if (!icmp_build_probe(skb, &icmp_param.data.icmph))
+		/*收到echo-ext报文，构建probe报文失败*/
 		return SKB_NOT_DROPPED_YET;
 
 	icmp_reply(&icmp_param, skb);/*执行响应*/
@@ -1050,6 +1052,7 @@ bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
 	u8 status;
 
 	if (!READ_ONCE(net->ipv4.sysctl_icmp_echo_enable_probe))
+		/*未开启probe,返回false*/
 		return false;
 
 	/* We currently only support probing interfaces on the proxy node
@@ -1087,11 +1090,13 @@ bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
 			goto send_mal_query;
 		memset(buff, 0, sizeof(buff));
 		memcpy(buff, &iio->ident.name, ident_len);
+		/*通过名称查找设备*/
 		dev = dev_get_by_name(net, buff);
 		break;
 	case ICMP_EXT_ECHO_CTYPE_INDEX:
 		if (ident_len != sizeof(iio->ident.ifindex))
 			goto send_mal_query;
+		/*通过ifindex查找设备*/
 		dev = dev_get_by_index(net, ntohl(iio->ident.ifindex));
 		break;
 	case ICMP_EXT_ECHO_CTYPE_ADDR:
@@ -1103,12 +1108,14 @@ bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
 		case ICMP_AFI_IP:
 			if (iio->ident.addr.ctype3_hdr.addrlen != sizeof(struct in_addr))
 				goto send_mal_query;
+			/*通过ipv4地址查找设备*/
 			dev = ip_dev_find(net, iio->ident.addr.ip_addr.ipv4_addr);
 			break;
 #if IS_ENABLED(CONFIG_IPV6)
 		case ICMP_AFI_IP6:
 			if (iio->ident.addr.ctype3_hdr.addrlen != sizeof(struct in6_addr))
 				goto send_mal_query;
+			/*通过ipv6地址查找设备*/
 			dev = ipv6_stub->ipv6_dev_find(net, &iio->ident.addr.ip_addr.ipv6_addr, dev);
 			dev_hold(dev);
 			break;
@@ -1121,6 +1128,7 @@ bool icmp_build_probe(struct sk_buff *skb, struct icmphdr *icmphdr)
 		goto send_mal_query;
 	}
 	if (!dev) {
+		/*指明设备不存在*/
 		icmphdr->code = ICMP_EXT_CODE_NO_IF;
 		return true;
 	}

@@ -72,14 +72,15 @@ __hw_addr_create(const unsigned char *addr, int addr_len,
 }
 
 static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
-			    const unsigned char *addr, int addr_len,
-			    unsigned char addr_type, bool global/*是否为全局唯一地址*/, bool sync,
-			    int sync_count, bool exclusive)
+			    const unsigned char *addr/*要添加的硬件地址*/, int addr_len/*硬件地址长度*/,
+			    unsigned char addr_type/*地址类型*/, bool global/*是否为全局唯一地址*/, bool sync/*是否*/,
+			    int sync_count, bool exclusive/*是否需要排它*/)
 {
 	struct rb_node **ins_point = &list->tree.rb_node, *parent = NULL;
 	struct netdev_hw_addr *ha;
 
 	if (addr_len > MAX_ADDR_LEN)
+		/*地址长度有误，报错*/
 		return -EINVAL;
 
 	while (*ins_point) {
@@ -96,14 +97,17 @@ static int __hw_addr_add_ex(struct netdev_hw_addr_list *list,
 		} else if (diff > 0) {
 			ins_point = &parent->rb_right;
 		} else {
+			/*遇到相等的插入点*/
 			if (exclusive)
+				/*排它，指明已存在*/
 				return -EEXIST;
 			if (global) {
 				/* check if addr is already used as global */
 				if (ha->global_use)
+					/*global_use已设置，忽略插入*/
 					return 0;
 				else
-					ha->global_use = true;
+					ha->global_use = true;/*更新为true*/
 			}
 			if (sync) {
 				if (ha->synced && sync_count)
@@ -216,7 +220,7 @@ static int __hw_addr_sync_one(struct netdev_hw_addr_list *to_list,
 {
 	int err;
 
-	err = __hw_addr_add_ex(to_list, ha->addr, addr_len, ha->type,
+	err = __hw_addr_add_ex(to_list, ha->addr/*硬件地址*/, addr_len/*硬件地址长度*/, ha->type/*地址类型*/,
 			       false, true, ha->sync_cnt, false);
 	if (err && err != -EEXIST)
 		return err;
@@ -489,6 +493,7 @@ static void __hw_addr_flush(struct netdev_hw_addr_list *list)
 	struct netdev_hw_addr *ha, *tmp;
 
 	list->tree = RB_ROOT;
+	/*移除list上所有元素*/
 	list_for_each_entry_safe(ha, tmp, &list->list, list) {
 		list_del_rcu(&ha->list);
 		kfree_rcu(ha, rcu_head);
@@ -584,8 +589,10 @@ void dev_addr_mod(struct net_device *dev, unsigned int offset,
 
 	dev_addr_check(dev);
 
+	/*由dev->dev_addr获取结构体struct netdev_hw_addr*/
 	ha = container_of(dev->dev_addr, struct netdev_hw_addr, addr[0]);
 	rb_erase(&ha->node, &dev->dev_addrs.tree);
+	/*填写两个addr*/
 	memcpy(&ha->addr[offset], addr, len);
 	memcpy(&dev->dev_addr_shadow[offset], addr, len);
 	WARN_ON(__hw_addr_insert(&dev->dev_addrs, ha, dev->addr_len));
@@ -745,6 +752,7 @@ int dev_uc_sync(struct net_device *to, struct net_device *from)
 	int err = 0;
 
 	if (to->addr_len != from->addr_len)
+		/*两者认知的硬件地址长度不同，失败*/
 		return -EINVAL;
 
 	netif_addr_lock(to);
@@ -775,6 +783,7 @@ int dev_uc_sync_multiple(struct net_device *to, struct net_device *from)
 	int err = 0;
 
 	if (to->addr_len != from->addr_len)
+		/*两者认知的硬件地址长度不同，失败*/
 		return -EINVAL;
 
 	netif_addr_lock(to);
@@ -893,7 +902,8 @@ static int __dev_mc_add(struct net_device *dev, const unsigned char *addr,
  */
 int dev_mc_add(struct net_device *dev, const unsigned char *addr)
 {
-	return __dev_mc_add(dev, addr, false);
+	/*向设备添加容许接收的组播地址*/
+	return __dev_mc_add(dev, addr, false/*非全局*/);
 }
 EXPORT_SYMBOL(dev_mc_add);
 
@@ -906,7 +916,7 @@ EXPORT_SYMBOL(dev_mc_add);
  */
 int dev_mc_add_global(struct net_device *dev, const unsigned char *addr)
 {
-	return __dev_mc_add(dev, addr, true);
+	return __dev_mc_add(dev, addr, true/*指明全局*/);
 }
 EXPORT_SYMBOL(dev_mc_add_global);
 
@@ -934,7 +944,7 @@ static int __dev_mc_del(struct net_device *dev, const unsigned char *addr,
  */
 int dev_mc_del(struct net_device *dev, const unsigned char *addr)
 {
-	return __dev_mc_del(dev, addr, false);
+	return __dev_mc_del(dev, addr, false/*非全局*/);
 }
 EXPORT_SYMBOL(dev_mc_del);
 
@@ -948,7 +958,7 @@ EXPORT_SYMBOL(dev_mc_del);
  */
 int dev_mc_del_global(struct net_device *dev, const unsigned char *addr)
 {
-	return __dev_mc_del(dev, addr, true);
+	return __dev_mc_del(dev, addr, true/*全局*/);
 }
 EXPORT_SYMBOL(dev_mc_del_global);
 
@@ -1045,6 +1055,7 @@ EXPORT_SYMBOL(dev_mc_unsync);
 void dev_mc_flush(struct net_device *dev)
 {
 	netif_addr_lock_bh(dev);
+	/*移除dev->mc链表上所有元素*/
 	__hw_addr_flush(&dev->mc);
 	netif_addr_unlock_bh(dev);
 }

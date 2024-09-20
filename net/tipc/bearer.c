@@ -78,6 +78,7 @@ struct tipc_media *tipc_media_find(const char *name)
 {
 	u32 i;
 
+	/*通过名称查称查询tipc_media*/
 	for (i = 0; media_info_array[i] != NULL; i++) {
 		if (!strcmp(media_info_array[i]->name, name))
 			break;
@@ -93,6 +94,7 @@ static struct tipc_media *media_find_id(u8 type)
 {
 	u32 i;
 
+	/*通过id查询tipc_media*/
 	for (i = 0; media_info_array[i] != NULL; i++) {
 		if (media_info_array[i]->type_id == type)
 			break;
@@ -599,6 +601,7 @@ void tipc_bearer_xmit(struct net *net, u32 bearer_id,
 			tipc_crypto_xmit(net, &skb, b, dst, __dnode);
 			if (skb)
 #endif
+				/*交给media层进行发送*/
 				b->media->send_msg(net, skb, b, dst);
 		} else {
 			kfree_skb(skb);

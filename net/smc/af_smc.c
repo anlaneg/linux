@@ -1221,12 +1221,13 @@ static int smc_connect_rdma_v2_prepare(struct smc_sock *smc,
 		return 0;
 
 	if (fce->v2_direct) {
+		/*v2 direct模式，不采用gateway,直接设置mac*/
 		memcpy(ini->smcrv2.nexthop_mac, &aclc->r0.lcl.mac, ETH_ALEN);
 		ini->smcrv2.uses_gateway = false;
 	} else {
 		/*确定下一跳mac,是否用gateway*/
 		if (smc_ib_find_route(net, smc->clcsock->sk->sk_rcv_saddr,
-				      smc_ib_gid_to_ipv4(aclc->r0.lcl.gid),
+				      smc_ib_gid_to_ipv4(aclc->r0.lcl.gid),/*gid转ipv4地址*/
 				      ini->smcrv2.nexthop_mac,
 				      &ini->smcrv2.uses_gateway))
 			return SMC_CLC_DECL_NOROUTE;

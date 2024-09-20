@@ -103,6 +103,7 @@ static const struct bond_opt_value bond_pps_tbl[] = {
 	{ NULL,      -1,        0},
 };
 
+/*支持以下hashtype类型的opt*/
 static const struct bond_opt_value bond_xmit_hashtype_tbl[] = {
 	{ "layer2",      BOND_XMIT_POLICY_LAYER2,      BOND_VALFLAG_DEFAULT},
 	{ "layer3+4",    BOND_XMIT_POLICY_LAYER34,     0},
@@ -576,8 +577,8 @@ static bool bond_opt_check_range(const struct bond_option *opt, u64 val)
  * or the struct_opt_value that matched. It also strips the new line from
  * @val->string if it's present.
  */
-const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
-					    struct bond_opt_value *val)
+const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt/*bond某个选项的约束*/,
+					    struct bond_opt_value *val/*要解析的选项值*/)
 {
 	char *p, valstr[BOND_OPT_MAX_NAMELEN + 1] = { 0, };
 	const struct bond_opt_value *tbl;
@@ -587,7 +588,7 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 
 	/* No parsing if the option wants a raw val */
 	if (opt->flags & BOND_OPTFLAG_RAWVAL)
-	    //opt为raw,直接返回
+	    //opt为raw时,直接返回val
 		return val;
 
 	/*取选项容许的值集合*/
@@ -598,9 +599,12 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 	/* ULLONG_MAX is used to bypass string processing */
 	checkval = val->value != ULLONG_MAX;
 	if (!checkval) {
-	    /*确认opt中提供的配置为字符串格式*/
+	    /* 由于checkval为假，故当前为字符串类型的opt
+	     * 这里再确认一遍，如果val->string未设置，则直接退出
+	     * */
 		if (!val->string)
 			goto out;
+
 		/*自\n位置截断*/
 		p = strchr(val->string, '\n');
 		if (p)
@@ -613,14 +617,15 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 		 * and sets checkval appropriately
 		 */
 		if (*p) {
-		    //纯字符串
+		    //包括非数字，按纯字符串解析
 			rv = sscanf(val->string, "%32s", valstr);
 		} else {
-		    //纯数字
+		    //只包含数字及空格，故按纯数字解析
 			rv = sscanf(val->string, "%llu", &val->value);
 			checkval = true;
 		}
 		if (!rv)
+			/*解析失败，退出*/
 			goto out;
 	}
 
@@ -628,14 +633,17 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 	for (i = 0; tbl[i].string; i++) {
 		/* Check for exact match */
 		if (checkval) {
+			/*纯数字匹配*/
 			if (val->value == tbl[i].value)
 				ret = &tbl[i];
 		} else {
 			if (!strcmp(valstr, "default") &&
 			    (tbl[i].flags & BOND_VALFLAG_DEFAULT))
+				/*取default取值*/
 				ret = &tbl[i];
 
 			if (!strcmp(valstr, tbl[i].string))
+				/*字符串匹配，取此值*/
 				ret = &tbl[i];
 		}
 		/* Found an exact match */
@@ -644,6 +652,7 @@ const struct bond_opt_value *bond_opt_parse(const struct bond_option *opt,
 	}
 	/* Possible range match */
 	if (checkval && bond_opt_check_range(opt, val->value))
+		/*纯数字情况下，进行数值范围检查*/
 		ret = val;
 out:
 	return ret;

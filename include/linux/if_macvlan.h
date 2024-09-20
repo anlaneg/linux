@@ -16,11 +16,11 @@ struct macvlan_port;
 #define MACVLAN_MC_FILTER_SZ	(1 << MACVLAN_MC_FILTER_BITS)
 
 struct macvlan_dev {
-	struct net_device	*dev;
+	struct net_device	*dev;/*macvlan设备对应的netdev设备*/
 	struct list_head	list;
 	struct hlist_node	hlist;
 	struct macvlan_port	*port;//指向所属的macvlan_port
-	struct net_device	*lowerdev;
+	struct net_device	*lowerdev;/*macvlan设备附着的底层设备*/
 	netdevice_tracker	dev_tracker;
 	void			*accel_priv;
 	struct vlan_pcpu_stats __percpu *pcpu_stats;

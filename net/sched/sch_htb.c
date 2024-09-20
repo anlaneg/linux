@@ -164,7 +164,7 @@ struct htb_sched {
 	struct work_struct	work;
 
 	/* non shaped skbs; let them go directly thru */
-	struct qdisc_skb_head	direct_queue;
+	struct qdisc_skb_head	direct_queue;/*挂接在此队列上的报文将直接出队*/
 	u32			direct_pkts;
 	u32			overlimits;
 
@@ -981,7 +981,7 @@ static struct sk_buff *htb_dequeue(struct Qdisc *sch)
 	unsigned long start_at;
 
 	/* try to dequeue direct packets as high prio (!) to minimize cpu work */
-	//如果direct队列有值，则直接出包
+	//如果direct队列有值，则直接出一个包
 	skb = __qdisc_dequeue_head(&q->direct_queue);
 	if (skb != NULL) {
 ok:
@@ -1076,7 +1076,7 @@ static void htb_work_func(struct work_struct *work)
 	struct Qdisc *sch = q->watchdog.qdisc;
 
 	rcu_read_lock();
-	__netif_schedule(qdisc_root(sch));
+	__netif_schedule(qdisc_root(sch));/*保证tx软中断会来进行tx方向调度*/
 	rcu_read_unlock();
 }
 
@@ -1106,7 +1106,7 @@ static int htb_init(struct Qdisc *sch, struct nlattr *opt,
 	int err;
 
 	qdisc_watchdog_init(&q->watchdog, sch);
-	INIT_WORK(&q->work, htb_work_func);
+	INIT_WORK(&q->work, htb_work_func);/*初始化此q的work*/
 
 	if (!opt)
 		return -EINVAL;

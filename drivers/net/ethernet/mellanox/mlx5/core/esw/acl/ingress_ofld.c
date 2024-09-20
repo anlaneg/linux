@@ -142,8 +142,10 @@ static void esw_acl_ingress_src_port_drop_destroy(struct mlx5_eswitch *esw,
 						  struct mlx5_vport *vport)
 {
 	if (!vport->ingress.offloads.drop_rule)
+		/*此vport的ingress无drop_rule,直接返回*/
 		return;
 
+	/*否则移除drop_rule*/
 	mlx5_del_flow_rules(vport->ingress.offloads.drop_rule);
 	vport->ingress.offloads.drop_rule = NULL;
 }
