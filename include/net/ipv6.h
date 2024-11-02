@@ -103,19 +103,26 @@ struct ip_tunnel_info;
  *	loopback
  */
 
+/*ipv6 any地址，全零*/
 #define IPV6_ADDR_ANY		0x0000U
 
+/*ipv6单播地址标记*/
 #define IPV6_ADDR_UNICAST	0x0001U
+/*ipv6组播地址标记*/
 #define IPV6_ADDR_MULTICAST	0x0002U
-
+/*ipv6 loopback地址 ::1/128*/
 #define IPV6_ADDR_LOOPBACK	0x0010U
+/*ipv6 link local地址标记，FE80::/10地址范围的为linklocal地址*/
 #define IPV6_ADDR_LINKLOCAL	0x0020U
+/*FEC0::/10地址范围为ipv6私有地址(site local)*/
 #define IPV6_ADDR_SITELOCAL	0x0040U
-
+/*ipv6 v4兼容地址，::/96范围为v4兼容地址*/
 #define IPV6_ADDR_COMPATv4	0x0080U
 
+/*地址类型*/
 #define IPV6_ADDR_SCOPE_MASK	0x00f0U
 
+/*ipv6映射地址，前缀::ffff00000000/96*/
 #define IPV6_ADDR_MAPPED	0x1000U
 
 /*
@@ -705,6 +712,7 @@ static inline bool ipv6_prefix_equal(const struct in6_addr *addr1,
 
 	if (prefixlen >= 64) {
 		if (a1[0] ^ a2[0])
+			/*两者不相等，返回false*/
 			return false;
 		return __ipv6_prefix_equal64_half(a1 + 1, a2 + 1, prefixlen - 64);
 	}

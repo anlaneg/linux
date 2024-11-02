@@ -2180,7 +2180,7 @@ bool __blk_throtl_bio(struct bio *bio)
 	struct throtl_qnode *qn = NULL;
 	struct throtl_grp *tg = blkg_to_tg(blkg);
 	struct throtl_service_queue *sq;
-	bool rw = bio_data_dir(bio);
+	bool rw = bio_data_dir(bio);/*操作读/写*/
 	bool throttled = false;
 	struct throtl_data *td = tg->td;
 

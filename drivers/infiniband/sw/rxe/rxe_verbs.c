@@ -564,11 +564,11 @@ static int rxe_create_qp(struct ib_qp *ibqp/*要初始化的qp*/, struct ib_qp_i
 			goto err_out;
 		}
 
-		/*包含udata,指明用户态qp*/
+		/*包含udata,指明为用户态创建qp*/
 		qp->is_user = true;
 		uresp = udata->outbuf;
 	} else {
-	    /*非用户态qp*/
+	    /*指明非用户态创建的qp，即kernel创建的qp*/
 		qp->is_user = false;
 	}
 
@@ -638,6 +638,7 @@ static int rxe_modify_qp(struct ib_qp *ibqp, struct ib_qp_attr *attr,
 	}
 
 	if ((mask & IB_QP_AV) && (attr->ah_attr.ah_flags & IB_AH_GRH))
+		/*生成qp对应的src port*/
 		qp->src_port = rdma_get_udp_sport(attr->ah_attr.grh.flow_label,
 						  qp->ibqp.qp_num,
 						  qp->attr.dest_qp_num);
@@ -783,6 +784,7 @@ static int init_send_wr(struct rxe_qp *qp, struct rxe_send_wr *wr,
 			return -EINVAL;
 		}
 	} else {
+		/*按照opcode填充wr中相应字段*/
 		switch (wr->opcode) {
 		case IB_WR_RDMA_WRITE_WITH_IMM:
 			wr->ex.imm_data = ibwr->ex.imm_data;
@@ -955,23 +957,25 @@ static int rxe_post_send_kernel(struct rxe_qp *qp,
 	return err;
 }
 
-/*rxe实现post_send,用于知会数据已准备完成*/
+/*rxe实现post_send函数,用于应用知会协议栈数据已准备完成*/
 static int rxe_post_send(struct ib_qp *ibqp, const struct ib_send_wr *wr,
 			 const struct ib_send_wr **bad_wr)
 {
-	struct rxe_qp *qp = to_rqp(ibqp);
+	struct rxe_qp *qp = to_rqp(ibqp);/*获得要发送报文的qp*/
 	int err;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	/* caller has already called destroy_qp */
 	if (WARN_ON_ONCE(!qp->valid)) {
+		/*qp状态有误，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		rxe_err_qp(qp, "qp has been destroyed");
 		return -EINVAL;
 	}
 
 	if (unlikely(qp_state(qp) < IB_QPS_RTS)) {
+		/*qp状态还未准备好，返回无效参数*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		*bad_wr = wr;
 		rxe_err_qp(qp, "qp not ready to send");

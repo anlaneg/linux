@@ -663,6 +663,7 @@ static struct cm_id_private *cm_insert_listen(struct cm_id_private *cm_id_priv,
 	return cm_id_priv;
 }
 
+/*查询listen表*/
 static struct cm_id_private *cm_find_listen(struct ib_device *device,
 					    __be64 service_id)
 {
@@ -822,7 +823,7 @@ static struct cm_id_private *cm_alloc_id_priv(struct ib_device *device,
 
 	cm_id_priv->id.state = IB_CM_IDLE;
 	cm_id_priv->id.device = device;
-	cm_id_priv->id.cm_handler = cm_handler;
+	cm_id_priv->id.cm_handler = cm_handler;/*cm处理函数*/
 	cm_id_priv->id.context = context;
 	cm_id_priv->id.remote_cm_qpn = 1;
 
@@ -2018,7 +2019,7 @@ static struct cm_id_private *cm_match_req(struct cm_work *work,
 		cm_id_priv->id.device,
 		cpu_to_be64(IBA_GET(CM_REQ_SERVICE_ID, req_msg)));
 	if (!listen_cm_id_priv) {
-		/*没有找到对应的监听service id*/
+		/*没有找到对应的监听service id，响应invalid service id*/
 		cm_remove_remote(cm_id_priv);
 		spin_unlock_irq(&cm.lock);
 		cm_issue_rej(work->port, work->mad_recv_wc,
@@ -2129,6 +2130,7 @@ static int cm_req_handler(struct cm_work *work)
 
 	listen_cm_id_priv = cm_match_req(work, cm_id_priv);
 	if (!listen_cm_id_priv) {
+		/*未查找到listen cm id*/
 		trace_icm_no_listener_err(&cm_id_priv->id);
 		cm_id_priv->id.state = IB_CM_IDLE;
 		ret = -EINVAL;

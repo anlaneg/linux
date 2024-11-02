@@ -34,7 +34,7 @@ struct flowi_common {
 	__u32	flowic_mark;/*skb mark取值*/
 	__u8	flowic_tos;//tos取值
 	__u8	flowic_scope;
-	__u8	flowic_proto;//下层协议号
+	__u8	flowic_proto;//下层协议号（4层）
 	__u8	flowic_flags;
 #define FLOWI_FLAG_ANYSRC		0x01
 #define FLOWI_FLAG_KNOWN_NH		0x02

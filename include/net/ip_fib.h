@@ -96,7 +96,7 @@ struct fib_nh_common {
     /*出接口对应的设备*/
 	struct net_device	*nhc_dev;
 	netdevice_tracker	nhc_dev_tracker;
-	/*出接口*/
+	/*出接口对应的ifindex*/
 	int			nhc_oif;
 	unsigned char		nhc_scope;
 	u8			nhc_family;

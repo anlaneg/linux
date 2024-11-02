@@ -106,8 +106,10 @@ struct rxe_bth {
 #define BTH_BECN_MASK		(0x40000000)
 #define BTH_RESV6A_MASK		(0x3f000000)
 #define BTH_QPN_MASK		(0x00ffffff)
+/*ack request标记，标明此报文需要响应ack*/
 #define BTH_ACK_MASK		(0x80000000)
 #define BTH_RESV7_MASK		(0x7f000000)
+/*psn占用24位*/
 #define BTH_PSN_MASK		(0x00ffffff)
 
 /*取bth的opcode*/
@@ -272,7 +274,7 @@ static inline void __bth_set_resv6a(void *arg)
 	bth->qpn = cpu_to_be32(~BTH_RESV6A_MASK);
 }
 
-/*检查是否有ackreq标记*/
+/*检查是否有ackreq标记,即发送方要求进行主动ack*/
 static inline int __bth_ack(void *arg)
 {
 	struct rxe_bth *bth = arg;
@@ -427,6 +429,7 @@ static inline void bth_set_resv6a(struct rxe_pkt_info *pkt)
 
 static inline int bth_ack(struct rxe_pkt_info *pkt)
 {
+	/*检查pkt是否要求回复ack*/
 	return __bth_ack(pkt->hdr);
 }
 
@@ -452,14 +455,14 @@ static inline void bth_set_psn(struct rxe_pkt_info *pkt, u32 psn)
 }
 
 static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否有se标记*/,
-			    int mig/*是否有mig标记*/, int pad/*pad长度*/, u16 pkey, u32 qpn/*24位有效的qpn*/, int ack_req,
+			    int mig/*是否有mig标记*/, int pad/*pad长度*/, u16 pkey/*对应的pkey*/, u32 qpn/*关联的24位有效的qpn*/, int ack_req/*是否要求回复ack*/,
 			    u32 psn)
 {
 	struct rxe_bth *bth = (struct rxe_bth *)(pkt->hdr);
 
 	/*初始化操作码*/
 	bth->opcode = opcode;
-	bth->flags = (pad << 4) & BTH_PAD_MASK;
+	bth->flags = (pad << 4) & BTH_PAD_MASK;/*写入pad*/
 	if (se)
 		bth->flags |= BTH_SE_MASK;
 	if (mig)
@@ -468,9 +471,9 @@ static inline void bth_init(struct rxe_pkt_info *pkt, u8 opcode, int se/*是否�
 	bth->qpn = cpu_to_be32(qpn & BTH_QPN_MASK);/*设置目标qpn*/
 	psn &= BTH_PSN_MASK;
 	if (ack_req)
-		/*如果是ack request,则加上ack标记*/
+		/*如果要求ack request,则加上ack req标记*/
 		psn |= BTH_ACK_MASK;
-	bth->apsn = cpu_to_be32(psn);/*设置apsn*/
+	bth->apsn = cpu_to_be32(psn);/*设置psn*/
 }
 
 /******************************************************************************
@@ -589,7 +592,7 @@ struct rxe_reth {
 
 static inline u64 __reth_va(void *arg)
 {
-	struct rxe_reth *reth = arg;
+	struct rxe_reth *reth = arg;/*指向reth头*/
 
 	return be64_to_cpu(reth->va);
 }
@@ -617,9 +620,9 @@ static inline void __reth_set_rkey(void *arg, u32 rkey)
 
 static inline u32 __reth_len(void *arg)
 {
-	struct rxe_reth *reth = arg;
+	struct rxe_reth *reth = arg;/*取reth头*/
 
-	return be32_to_cpu(reth->len);
+	return be32_to_cpu(reth->len);/*取dma长度*/
 }
 
 static inline void __reth_set_len(void *arg, u32 len)
@@ -631,6 +634,7 @@ static inline void __reth_set_len(void *arg, u32 len)
 
 static inline u64 reth_va(struct rxe_pkt_info *pkt)
 {
+	/*取reth中指明的虚地址*/
 	return __reth_va(pkt->hdr +
 		rxe_opcode[pkt->opcode].offset[RXE_RETH]);
 }
@@ -643,6 +647,7 @@ static inline void reth_set_va(struct rxe_pkt_info *pkt, u64 va)
 
 static inline u32 reth_rkey(struct rxe_pkt_info *pkt)
 {
+	/*取reth头中指明的rkey*/
 	return __reth_rkey(pkt->hdr +
 		rxe_opcode[pkt->opcode].offset[RXE_RETH]);
 }
@@ -655,6 +660,7 @@ static inline void reth_set_rkey(struct rxe_pkt_info *pkt, u32 rkey)
 
 static inline u32 reth_len(struct rxe_pkt_info *pkt)
 {
+	/*取reth头中指明的dma长度*/
 	return __reth_len(pkt->hdr +
 		rxe_opcode[pkt->opcode].offset[RXE_RETH]);
 }
@@ -693,6 +699,7 @@ static inline u32 __feth_sel(void *arg)
 
 static inline u32 feth_plt(struct rxe_pkt_info *pkt)
 {
+	/*取flush type*/
 	return __feth_plt(pkt->hdr + rxe_opcode[pkt->opcode].offset[RXE_FETH]);
 }
 
@@ -723,6 +730,7 @@ struct rxe_atmeth {
 
 static inline u64 __atmeth_va(void *arg)
 {
+	/*取atmeth头的va地址*/
 	struct rxe_atmeth *atmeth = arg;
 
 	return be64_to_cpu(atmeth->va);
@@ -841,7 +849,7 @@ enum aeth_syndrome {
 	AETH_RNR_NAK		= 0x20,
 	AETH_RSVD		= 0x40,
 	AETH_NAK		= 0x60,
-	AETH_ACK_UNLIMITED	= 0x1f,
+	AETH_ACK_UNLIMITED	= 0x1f,/*用于表示无知出错syndrome*/
 	AETH_NAK_PSN_SEQ_ERROR	= 0x60,
 	AETH_NAK_INVALID_REQ	= 0x61,
 	AETH_NAK_REM_ACC_ERR	= 0x62,
@@ -979,6 +987,7 @@ struct rxe_ieth {
 
 static inline u32 __ieth_rkey(void *arg)
 {
+	/*提取ieth报文中包含的rkey*/
 	struct rxe_ieth *ieth = arg;
 
 	return be32_to_cpu(ieth->rkey);
@@ -1003,11 +1012,12 @@ static inline void ieth_set_rkey(struct rxe_pkt_info *pkt, u32 rkey)
 		rxe_opcode[pkt->opcode].offset[RXE_IETH], rkey);
 }
 
+/*定义各header长度*/
 enum rxe_hdr_length {
 	RXE_BTH_BYTES		= sizeof(struct rxe_bth),/*base transport header长度*/
 	RXE_DETH_BYTES		= sizeof(struct rxe_deth),/*Datagram Extended Transport Header长度*/
 	RXE_IMMDT_BYTES		= sizeof(struct rxe_immdt),
-	RXE_RETH_BYTES		= sizeof(struct rxe_reth),
+	RXE_RETH_BYTES		= sizeof(struct rxe_reth),/*rdma扩展传输头 长度*/
 	RXE_AETH_BYTES		= sizeof(struct rxe_aeth),
 	RXE_ATMACK_BYTES	= sizeof(struct rxe_atmack),
 	RXE_ATMETH_BYTES	= sizeof(struct rxe_atmeth),

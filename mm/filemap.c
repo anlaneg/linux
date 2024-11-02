@@ -2753,10 +2753,11 @@ generic_file_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 	ssize_t retval = 0;
 
 	if (!count)
+		/*读取长度为0，直接返回0*/
 		return 0; /* skip atime */
 
 	if (iocb->ki_flags & IOCB_DIRECT) {
-		//直接读取（不含缓冲）
+		//直接读取（跳过page cache）
 		struct file *file = iocb->ki_filp;
 		struct address_space *mapping = file->f_mapping;
 		struct inode *inode = mapping->host;
@@ -3844,6 +3845,7 @@ void kiocb_invalidate_post_direct_write(struct kiocb *iocb, size_t count)
 		dio_warn_stale_pagecache(iocb->ki_filp);
 }
 
+/*跳过缓存直接写入block设备*/
 ssize_t
 generic_file_direct_write(struct kiocb *iocb, struct iov_iter *from)
 {

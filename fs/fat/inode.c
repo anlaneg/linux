@@ -257,7 +257,7 @@ static ssize_t fat_direct_IO(struct kiocb *iocb, struct iov_iter *iter)
 	struct file *file = iocb->ki_filp;
 	struct address_space *mapping = file->f_mapping;
 	struct inode *inode = mapping->host;
-	size_t count = iov_iter_count(iter);
+	size_t count = iov_iter_count(iter);/*要读写的文件长度*/
 	loff_t offset = iocb->ki_pos;
 	ssize_t ret;
 
@@ -344,7 +344,7 @@ static const struct address_space_operations fat_aops = {
 	.writepages	= fat_writepages,
 	.write_begin	= fat_write_begin,
 	.write_end	= fat_write_end,
-	.direct_IO	= fat_direct_IO,
+	.direct_IO	= fat_direct_IO,/*指明direct io操作*/
 	.bmap		= _fat_bmap,
 	.migrate_folio	= buffer_migrate_folio,
 };

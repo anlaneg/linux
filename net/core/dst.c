@@ -35,6 +35,7 @@ int dst_discard_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 }
 EXPORT_SYMBOL(dst_discard_out);
 
+/*默认metrics取值*/
 const struct dst_metrics dst_default_metrics = {
 	/* This initializer is needed to force linker to place this variable
 	 * into const section. Otherwise it might end into bss section.

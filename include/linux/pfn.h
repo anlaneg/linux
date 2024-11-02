@@ -21,7 +21,7 @@ typedef struct {
 #define PFN_UP(x)	(((x) + PAGE_SIZE-1) >> PAGE_SHIFT)
 /*物理地址按页对齐（down形式)*/
 #define PFN_DOWN(x)	((x) >> PAGE_SHIFT)
-/*由pfn获得其page首地址*/
+/*由pfn获得物理地址（page结构体对应的物理地址）*/
 #define PFN_PHYS(x)	((phys_addr_t)(x) << PAGE_SHIFT)
 /*由物理地址获得pfn*/
 #define PHYS_PFN(x)	((unsigned long)((x) >> PAGE_SHIFT))

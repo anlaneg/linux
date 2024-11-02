@@ -793,6 +793,7 @@ static void __find_rr_leaf(struct fib6_info *f6i_start,
 {
 	struct fib6_info *f6i;
 
+	/*遍历所有fib6_info*/
 	for (f6i = f6i_start;
 	     f6i && f6i != nomatch;
 	     f6i = rcu_dereference(f6i->fib6_next)) {
@@ -800,29 +801,33 @@ static void __find_rr_leaf(struct fib6_info *f6i_start,
 		struct fib6_nh *nh;
 
 		if (cont && f6i->fib6_metric != metric) {
-			*cont = f6i;
+			*cont = f6i;/*命中的metric更小*/
 			return;
 		}
 
 		if (fib6_check_expired(f6i))
+			/*已过期，忽略*/
 			continue;
 
 		if (unlikely(f6i->nh)) {
 			struct fib6_nh_frl_arg arg = {
 				.flags  = f6i->fib6_flags,
-				.oif    = oif,
+				.oif    = oif,/*出接口*/
 				.strict = strict,
 				.mpri   = mpri,
 				.do_rr  = do_rr
 			};
 
 			if (nexthop_is_blackhole(f6i->nh)) {
+				/*下一跳为blackhole的情况*/
 				res->fib6_flags = RTF_REJECT;
 				res->fib6_type = RTN_BLACKHOLE;
 				res->f6i = f6i;
 				res->nh = nexthop_fib6_nh(f6i->nh);
 				return;
 			}
+
+			/*遍历此f6i中的所有下一跳（nexthop结构）*/
 			if (nexthop_for_each_fib6_nh(f6i->nh, rt6_nh_find_match,
 						     &arg)) {
 				matched = true;
@@ -834,6 +839,8 @@ static void __find_rr_leaf(struct fib6_info *f6i_start,
 				       mpri, do_rr))
 				matched = true;
 		}
+
+		/*出现命中，记录命中的f6i,nexthop*/
 		if (matched) {
 			res->f6i = f6i;
 			res->nh = nh;
@@ -864,9 +871,10 @@ static void find_rr_leaf(struct fib6_node *fn, struct fib6_info *leaf,
 		       oif, strict, do_rr, &mpri);
 }
 
-static void rt6_select(struct net *net, struct fib6_node *fn, int oif,
+static void rt6_select(struct net *net, struct fib6_node *fn/*命中的fib节点*/, int oif,
 		       struct fib6_result *res, int strict)
 {
+	/*取命中的路由项*/
 	struct fib6_info *leaf = rcu_dereference(fn->leaf);
 	struct fib6_info *rt0;
 	bool do_rr = false;
@@ -876,11 +884,11 @@ static void rt6_select(struct net *net, struct fib6_node *fn, int oif,
 	res->f6i = NULL;
 
 	if (!leaf || leaf == net->ipv6.fib6_null_entry)
-		goto out;
+		goto out;/*没有leaf或者leap为空，直接跳出*/
 
 	rt0 = rcu_dereference(fn->rr_ptr);
 	if (!rt0)
-		rt0 = leaf;
+		rt0 = leaf;/*rr_ptr未设置，使用leaf*/
 
 	/* Double check to make sure fn is not an intermediate node
 	 * and fn->leaf does not points to its child's leaf
@@ -890,10 +898,10 @@ static void rt6_select(struct net *net, struct fib6_node *fn, int oif,
 	key_plen = rt0->fib6_dst.plen;
 #ifdef CONFIG_IPV6_SUBTREES
 	if (rt0->fib6_src.plen)
-		key_plen = rt0->fib6_src.plen;
+		key_plen = rt0->fib6_src.plen;/*更新为源在址plen*/
 #endif
 	if (fn->fn_bit != key_plen)
-		goto out;
+		goto out;/*两者不一致，跳出*/
 
 	find_rr_leaf(fn, leaf, rt0, oif, strict, &do_rr, res);
 	if (do_rr) {
@@ -914,6 +922,7 @@ static void rt6_select(struct net *net, struct fib6_node *fn, int oif,
 
 out:
 	if (!res->f6i) {
+		/*没有查找到路由项，指向null*/
 		res->f6i = net->ipv6.fib6_null_entry;
 		res->nh = res->f6i->fib6_nh;
 		res->fib6_flags = res->f6i->fib6_flags;
@@ -1160,6 +1169,7 @@ static struct fib6_node* fib6_backtrack(struct fib6_node *fn,
 		else
 			fn = pn;
 		if (fn->fn_flags & RTN_RTINFO)
+			/*此节点上有有效路由信息，返回fn*/
 			return fn;
 	}
 }
@@ -1249,6 +1259,7 @@ restart:
 	/* Search through exception table */
 	rt = rt6_find_cached_rt(&res, &fl6->daddr, &fl6->saddr);
 	if (rt) {
+		/*exception表命中*/
 		if (ip6_hold_safe(net, &rt))
 			dst_use_noref(&rt->dst, jiffies);
 	} else {
@@ -1309,6 +1320,7 @@ static int __ip6_ins_rt(struct fib6_info *rt, struct nl_info *info,
 	int err;
 	struct fib6_table *table;
 
+	/*取要添加到的路由表*/
 	table = rt->fib6_table;
 	spin_lock_bh(&table->tb6_lock);
 	/*将路由项添加进给定的路由表*/
@@ -1322,7 +1334,7 @@ int ip6_ins_rt(struct net *net, struct fib6_info *rt)
 {
 	struct nl_info info = {	.nl_net = net, };
 
-	return __ip6_ins_rt(rt, &info, NULL);
+	return __ip6_ins_rt(rt, &info/*info内容基本为空*/, NULL);
 }
 
 static struct rt6_info *ip6_rt_cache_alloc(const struct fib6_result *res,
@@ -1410,7 +1422,7 @@ static struct rt6_info *rt6_get_pcpu_route(const struct fib6_result *res)
 		struct rt6_info *prev, **p;
 
 		p = this_cpu_ptr(res->nh->rt6i_pcpu);
-		prev = xchg(p, NULL);
+		prev = xchg(p, NULL);/*已无效，将其置为空*/
 		if (prev) {
 			dst_dev_put(&prev->dst);
 			dst_release(&prev->dst);
@@ -1569,18 +1581,23 @@ __rt6_find_exception_rcu(struct rt6_exception_bucket **bucket,
 	if (!(*bucket) || !daddr)
 		return NULL;
 
+	/*计算exception hash*/
 	hval = rt6_exception_hash(daddr, saddr);
-	*bucket += hval;
+	*bucket += hval;/*确定命中的桶*/
 
+	/*遍历这个桶*/
 	hlist_for_each_entry_rcu(rt6_ex, &(*bucket)->chain, hlist) {
 		struct rt6_info *rt6 = rt6_ex->rt6i;
+		/*检查目的地址是否匹配*/
 		bool matched = ipv6_addr_equal(daddr, &rt6->rt6i_dst.addr);
 
 #ifdef CONFIG_IPV6_SUBTREES
 		if (matched && saddr)
+			/*匹配，再检查源地址是否匹配*/
 			matched = ipv6_addr_equal(saddr, &rt6->rt6i_src.addr);
 #endif
 		if (matched)
+			/*返回exception*/
 			return rt6_ex;
 	}
 	return NULL;
@@ -1619,6 +1636,7 @@ static
 struct rt6_exception_bucket *fib6_nh_get_excptn_bucket(const struct fib6_nh *nh,
 						       spinlock_t *lock)
 {
+	/*取exception bucket*/
 	struct rt6_exception_bucket *bucket;
 
 	if (lock)
@@ -1661,20 +1679,22 @@ static void fib6_nh_excptn_bucket_set_flushed(struct fib6_nh *nh,
 	rcu_assign_pointer(nh->rt6i_exception_bucket, bucket);
 }
 
-static int rt6_insert_exception(struct rt6_info *nrt,
+/*向exception bucket中添加fib6_result*/
+static int rt6_insert_exception(struct rt6_info *nrt/*源目的地址来源于nrt(新的rt)*/,
 				const struct fib6_result *res)
 {
-	struct net *net = dev_net(nrt->dst.dev);
+	struct net *net = dev_net(nrt->dst.dev);/*取对应的netns*/
 	struct rt6_exception_bucket *bucket;
 	struct fib6_info *f6i = res->f6i;
 	struct in6_addr *src_key = NULL;
 	struct rt6_exception *rt6_ex;
-	struct fib6_nh *nh = res->nh;
+	struct fib6_nh *nh = res->nh;/*要增加内容的nexthop*/
 	int max_depth;
 	int err = 0;
 
 	spin_lock_bh(&rt6_exception_lock);
 
+	/*取要插入的bucket*/
 	bucket = rcu_dereference_protected(nh->rt6i_exception_bucket,
 					  lockdep_is_held(&rt6_exception_lock));
 	if (!bucket) {
@@ -1698,7 +1718,7 @@ static int rt6_insert_exception(struct rt6_info *nrt,
 	 * a hash of only fib6_dst.
 	 */
 	if (f6i->fib6_src.plen)
-		src_key = &nrt->rt6i_src.addr;
+		src_key = &nrt->rt6i_src.addr;/*源地址*/
 #endif
 	/* rt6_mtu_change() might lower mtu on f6i.
 	 * Only insert this exception route if its mtu
@@ -1709,9 +1729,11 @@ static int rt6_insert_exception(struct rt6_info *nrt,
 		goto out;
 	}
 
+	/*通过dst,src查询rt6_exception*/
 	rt6_ex = __rt6_find_exception_spinlock(&bucket, &nrt->rt6i_dst.addr,
 					       src_key);
 	if (rt6_ex)
+		/*如存在，先移除*/
 		rt6_remove_exception(bucket, rt6_ex);
 
 	rt6_ex = kzalloc(sizeof(*rt6_ex), GFP_ATOMIC);
@@ -1796,9 +1818,10 @@ void rt6_flush_exceptions(struct fib6_info *f6i)
  * Caller has to hold rcu_read_lock()
  */
 static struct rt6_info *rt6_find_cached_rt(const struct fib6_result *res,
-					   const struct in6_addr *daddr,
-					   const struct in6_addr *saddr)
+					   const struct in6_addr *daddr/*目的地址*/,
+					   const struct in6_addr *saddr/*源地址*/)
 {
+	/*查询exception table*/
 	const struct in6_addr *src_key = NULL;
 	struct rt6_exception_bucket *bucket;
 	struct rt6_exception *rt6_ex;
@@ -1820,10 +1843,10 @@ static struct rt6_info *rt6_find_cached_rt(const struct fib6_result *res,
 		src_key = saddr;
 find_ex:
 #endif
-	bucket = fib6_nh_get_excptn_bucket(res->nh, NULL);
-	rt6_ex = __rt6_find_exception_rcu(&bucket, daddr, src_key);
+	bucket = fib6_nh_get_excptn_bucket(res->nh, NULL);/*取桶指针*/
+	rt6_ex = __rt6_find_exception_rcu(&bucket, daddr, src_key);/*检查src,dst是否有exception路由*/
 
-	if (rt6_ex && !rt6_check_expired(rt6_ex->rt6i))
+	if (rt6_ex && !rt6_check_expired(rt6_ex->rt6i)/*未过期*/)
 		ret = rt6_ex->rt6i;
 
 #ifdef CONFIG_IPV6_SUBTREES
@@ -2188,6 +2211,7 @@ int fib6_table_lookup(struct net *net, struct fib6_table *table/*要查询的路
 {
 	struct fib6_node *fn, *saved_fn;
 
+	/*依据目的地址，源地址查询路由表*/
 	fn = fib6_node_lookup(&table->tb6_root, &fl6->daddr, &fl6->saddr);
 	saved_fn = fn;
 
@@ -2211,7 +2235,7 @@ redo_rt6_select:
 }
 
 struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table/*要查询的路由表*/,
-			       int oif, struct flowi6 *fl6,
+			       int oif/*出接口*/, struct flowi6 *fl6,
 			       const struct sk_buff *skb, int flags)
 {
 	struct fib6_result res = {};
@@ -2228,6 +2252,7 @@ struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table/*要查
 
 	rcu_read_lock();
 
+	/*查询table*/
 	fib6_table_lookup(net, table, oif, fl6, &res, strict);
 	if (res.f6i == net->ipv6.fib6_null_entry)
 		goto out;
@@ -2236,7 +2261,7 @@ struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table/*要查
 	fib6_select_path(net, &res, fl6, oif, false, skb, strict);
 
 	/*Search through exception table */
-	/*先查cached*/
+	/*先查exception table,redirect情况下*/
 	rt = rt6_find_cached_rt(&res, &fl6->daddr, &fl6->saddr);
 	if (rt) {
 		goto out;
@@ -2263,6 +2288,7 @@ struct rt6_info *ip6_pol_route(struct net *net, struct fib6_table *table/*要查
 	} else {
 		/* Get a percpu copy */
 		local_bh_disable();
+		/*申请一个percpu的rt*/
 		rt = rt6_get_pcpu_route(&res);
 
 		if (!rt)
@@ -2281,6 +2307,7 @@ out:
 }
 EXPORT_SYMBOL_GPL(ip6_pol_route);
 
+/*ipv6路由查询函数（实现对给定路由表的查询）*/
 INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_input(struct net *net,
 					    struct fib6_table *table/*要查询的路由表*/,
 					    struct flowi6 *fl6,
@@ -2300,7 +2327,7 @@ struct dst_entry *ip6_route_input_lookup(struct net *net,
 	if (rt6_need_strict(&fl6->daddr) && dev->type != ARPHRD_PIMREG)
 		flags |= RT6_LOOKUP_F_IFACE;
 
-	return fib6_rule_lookup(net, fl6, skb, flags, ip6_pol_route_input/*路由查询函数*/);
+	return fib6_rule_lookup(net, fl6, skb, flags, ip6_pol_route_input/*入参，路由查询函数*/);
 }
 EXPORT_SYMBOL_GPL(ip6_route_input_lookup);
 
@@ -2612,6 +2639,7 @@ void ip6_route_input(struct sk_buff *skb)
 						      &fl6, skb, flags));
 }
 
+/*具体查询ipv6路由表$table,检查匹配情况*/
 INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_output(struct net *net,
 					     struct fib6_table *table,
 					     struct flowi6 *fl6,
@@ -2622,14 +2650,15 @@ INDIRECT_CALLABLE_SCOPE struct rt6_info *ip6_pol_route_output(struct net *net,
 }
 
 static struct dst_entry *ip6_route_output_flags_noref(struct net *net,
-						      const struct sock *sk,
-						      struct flowi6 *fl6,
+						      const struct sock *sk/*关联的socket,可以为NULL*/,
+						      struct flowi6 *fl6/*要查询的flow*/,
 						      int flags)
 {
 	bool any_src;
 
 	if (ipv6_addr_type(&fl6->daddr) &
 	    (IPV6_ADDR_MULTICAST | IPV6_ADDR_LINKLOCAL)) {
+		/*目的地址为组播或者linklocal地址类型时*/
 		struct dst_entry *dst;
 
 		/* This function does not take refcnt on the dst */
@@ -2640,23 +2669,24 @@ static struct dst_entry *ip6_route_output_flags_noref(struct net *net,
 
 	fl6->flowi6_iif = LOOPBACK_IFINDEX;/*以loopback口做为in port查询*/
 
-	flags |= RT6_LOOKUP_F_DST_NOREF;
-	any_src = ipv6_addr_any(&fl6->saddr);
+	flags |= RT6_LOOKUP_F_DST_NOREF;/*添加no ref标记*/
+	any_src = ipv6_addr_any(&fl6->saddr);/*fl6中源地址是否指明了零*/
 	if ((sk && sk->sk_bound_dev_if) || rt6_need_strict(&fl6->daddr) ||
 	    (fl6->flowi6_oif && any_src))
 		flags |= RT6_LOOKUP_F_IFACE;
 
 	if (!any_src)
-		flags |= RT6_LOOKUP_F_HAS_SADDR;
+		flags |= RT6_LOOKUP_F_HAS_SADDR;/*标记指明了saddr*/
 	else if (sk)
 		flags |= rt6_srcprefs2flags(READ_ONCE(inet6_sk(sk)->srcprefs));
 
+	/*执行v6策略路由查询*/
 	return fib6_rule_lookup(net, fl6, NULL, flags, ip6_pol_route_output);
 }
 
 struct dst_entry *ip6_route_output_flags(struct net *net,
-					 const struct sock *sk,
-					 struct flowi6 *fl6,
+					 const struct sock *sk/*关联的socket,可以为NULL*/,
+					 struct flowi6 *fl6/*要查询的flow*/,
 					 int flags)
 {
 	struct dst_entry *dst;
@@ -2664,7 +2694,7 @@ struct dst_entry *ip6_route_output_flags(struct net *net,
 
 	rcu_read_lock();
 	dst = ip6_route_output_flags_noref(net, sk, fl6, flags);
-	rt6 = (struct rt6_info *)dst;
+	rt6 = (struct rt6_info *)dst;/*dst位于rt6_info结构体首位，故强转*/
 	/* For dst cached in uncached_list, refcnt is already taken. */
 	if (list_empty(&rt6->dst.rt_uncached) && !dst_hold_safe(dst)) {
 		dst = &net->ipv6.ip6_null_entry->dst;
@@ -2877,9 +2907,11 @@ static void __ip6_rt_update_pmtu(struct dst_entry *dst, const struct sock *sk,
 	 */
 
 	if (iph) {
+		/*源目的地址来源于报文*/
 		daddr = &iph->daddr;
 		saddr = &iph->saddr;
 	} else if (sk) {
+		/*源目的地址来源于socket*/
 		daddr = &sk->sk_v6_daddr;
 		saddr = &inet6_sk(sk)->saddr;
 	} else {
@@ -2965,6 +2997,7 @@ void ip6_update_pmtu(struct sk_buff *skb, struct net *net, __be32 mtu,
 		.flowi6_uid = uid,
 	};
 
+	/*查询路由*/
 	dst = ip6_route_output(net, NULL, &fl6);
 	if (!dst->error)
 		__ip6_rt_update_pmtu(dst, NULL, iph, ntohl(mtu), true);
@@ -3525,7 +3558,7 @@ out:
 static bool fib6_is_reject(u32 flags, struct net_device *dev, int addr_type)
 {
 	if ((flags & RTF_REJECT) ||
-	    (dev && (dev->flags & IFF_LOOPBACK) &&
+	    (dev && (dev->flags & IFF_LOOPBACK)/*loopback设备*/ &&
 	     !(addr_type & IPV6_ADDR_LOOPBACK) &&
 	     !(flags & (RTF_ANYCAST | RTF_LOCAL))))
 		return true;
@@ -3592,10 +3625,11 @@ int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
 		/* hold loopback dev/idev if we haven't done so. */
 		if (dev != net->loopback_dev) {
 			if (dev) {
+				/*非loopback设备，则put旧设备*/
 				netdev_put(dev, dev_tracker);
 				in6_dev_put(idev);
 			}
-			dev = net->loopback_dev;
+			dev = net->loopback_dev;/*变更为loopback设备*/
 			netdev_hold(dev, dev_tracker, gfp_flags);
 			idev = in6_dev_get(dev);
 			if (!idev) {
@@ -3607,6 +3641,7 @@ int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
 	}
 
 	if (cfg->fc_flags & RTF_GATEWAY) {
+		/*有gateway的情况*/
 		err = ip6_validate_gw(net, cfg, &dev, dev_tracker,
 				      &idev, extack);
 		if (err)
@@ -3644,14 +3679,15 @@ int fib6_nh_init(struct net *net, struct fib6_nh *fib6_nh,
 		goto out;
 
 pcpu_alloc:
+	/*为每个cpu初始化rt6i_pcpu*/
 	fib6_nh->rt6i_pcpu = alloc_percpu_gfp(struct rt6_info *, gfp_flags);
 	if (!fib6_nh->rt6i_pcpu) {
 		err = -ENOMEM;
 		goto out;
 	}
 
-	fib6_nh->fib_nh_dev = dev;
-	fib6_nh->fib_nh_oif = dev->ifindex;
+	fib6_nh->fib_nh_dev = dev;/*设置路由对应的出口设备*/
+	fib6_nh->fib_nh_oif = dev->ifindex;/*出口设备对应的interface index*/
 	err = 0;
 out:
 	if (idev)
@@ -3772,6 +3808,7 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 	err = -ENOBUFS;
 	if (cfg->fc_nlinfo.nlh &&
 	    !(cfg->fc_nlinfo.nlh->nlmsg_flags & NLM_F_CREATE)) {
+		/*提供了netlink消息，且消息没有create，获取table*/
 		table = fib6_get_table(net, cfg->fc_table);
 		if (!table) {
 			/*没有此table,虽未指明create标记，但告警后，仍创建它*/
@@ -3804,6 +3841,7 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 	if (cfg->fc_flags & RTF_ADDRCONF)
 		rt->dst_nocount = true;
 
+	/*设置过期时间*/
 	if (cfg->fc_flags & RTF_EXPIRES)
 		fib6_set_expires(rt, jiffies +
 				clock_t_to_jiffies(cfg->fc_expires));
@@ -3814,7 +3852,7 @@ static struct fib6_info *ip6_route_info_create(struct fib6_config *cfg,
 		cfg->fc_protocol = RTPROT_BOOT;
 	rt->fib6_protocol = cfg->fc_protocol;
 
-	rt->fib6_table = table;
+	rt->fib6_table = table;/*要操作的table*/
 	rt->fib6_metric = cfg->fc_metric;
 	rt->fib6_type = cfg->fc_type ? : RTN_UNICAST;/*如未指定，默认单播*/
 	rt->fib6_flags = cfg->fc_flags & ~RTF_GATEWAY;
@@ -4592,15 +4630,15 @@ static int ip6_pkt_prohibit_out(struct net *net, struct sock *sk, struct sk_buff
 struct fib6_info *addrconf_f6i_alloc(struct net *net,
 				     struct inet6_dev *idev,
 				     const struct in6_addr *addr,
-				     bool anycast, gfp_t gfp_flags,
+				     bool anycast/*是否任播*/, gfp_t gfp_flags,
 				     struct netlink_ext_ack *extack)
 {
 	struct fib6_config cfg = {
-			/*默认local表*/
+		/*默认local表*/
 		.fc_table = l3mdev_fib_table(idev->dev) ? : RT6_TABLE_LOCAL,
-		.fc_ifindex = idev->dev->ifindex,
+		.fc_ifindex = idev->dev->ifindex,/*地址从属的ifindex即为出接口*/
 		.fc_flags = RTF_UP | RTF_NONEXTHOP,
-		.fc_dst = *addr,
+		.fc_dst = *addr,/*设置目的地址*/
 		.fc_dst_len = 128,
 		.fc_protocol = RTPROT_KERNEL,
 		.fc_nlinfo.nl_net = net,
@@ -4616,6 +4654,7 @@ struct fib6_info *addrconf_f6i_alloc(struct net *net,
 		cfg.fc_flags |= RTF_LOCAL;
 	}
 
+	/*创建route info*/
 	f6i = ip6_route_info_create(&cfg, gfp_flags, extack);
 	if (!IS_ERR(f6i)) {
 		f6i->dst_nocount = true;
@@ -5078,7 +5117,7 @@ static int rtm_to_fib6_config(struct sk_buff *skb, struct nlmsghdr *nlh,
 	    rtm->rtm_type == RTN_BLACKHOLE ||
 	    rtm->rtm_type == RTN_PROHIBIT ||
 	    rtm->rtm_type == RTN_THROW)
-		cfg->fc_flags |= RTF_REJECT;
+		cfg->fc_flags |= RTF_REJECT;/*以上路由项，指明reject*/
 
 	if (rtm->rtm_type == RTN_LOCAL)
 		cfg->fc_flags |= RTF_LOCAL;
@@ -5649,11 +5688,12 @@ nla_put_failure:
 }
 
 static int rt6_fill_node(struct net *net, struct sk_buff *skb,
-			 struct fib6_info *rt, struct dst_entry *dst,
-			 struct in6_addr *dest, struct in6_addr *src,
-			 int iif, int type, u32 portid, u32 seq,
+			 struct fib6_info *rt, struct dst_entry *dst/*查出的路由结果*/,
+			 struct in6_addr *dest/*目的地址*/, struct in6_addr *src/*源地址*/,
+			 int iif/*入接口*/, int type, u32 portid, u32 seq,
 			 unsigned int flags)
 {
+	/*dst_entry位于rt6_info结构体的首个位置，故强转*/
 	struct rt6_info *rt6 = (struct rt6_info *)dst;
 	struct rt6key *rt6_dst, *rt6_src;
 	u32 *pmetrics, table, rt6_flags;
@@ -5662,11 +5702,13 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 	struct rtmsg *rtm;
 	long expires = 0;
 
+	/*构造netlink消息头*/
 	nlh = nlmsg_put(skb, portid, seq, type, sizeof(*rtm), flags);
 	if (!nlh)
 		return -EMSGSIZE;
 
 	if (rt6) {
+		/*指明dst_entry的情况，使用路由项中指明的源目的地址*/
 		rt6_dst = &rt6->rt6i_dst;
 		rt6_src = &rt6->rt6i_src;
 		rt6_flags = rt6->rt6i_flags;
@@ -5681,6 +5723,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 	rtm->rtm_dst_len = rt6_dst->plen;
 	rtm->rtm_src_len = rt6_src->plen;
 	rtm->rtm_tos = 0;
+	/*指明了命中的路由表，取路由表编号，存入table编号*/
 	if (rt->fib6_table)
 		table = rt->fib6_table->tb6_id;
 	else
@@ -5691,31 +5734,35 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 
 	rtm->rtm_type = rt->fib6_type;
 	rtm->rtm_flags = 0;
-	rtm->rtm_scope = RT_SCOPE_UNIVERSE;
+	rtm->rtm_scope = RT_SCOPE_UNIVERSE;/*默认为全局*/
 	rtm->rtm_protocol = rt->fib6_protocol;
 
 	if (rt6_flags & RTF_CACHE)
 		rtm->rtm_flags |= RTM_F_CLONED;
 
 	if (dest) {
+		/*填写目的地址*/
 		if (nla_put_in6_addr(skb, RTA_DST, dest))
 			goto nla_put_failure;
 		rtm->rtm_dst_len = 128;
 	} else if (rtm->rtm_dst_len)
+		/*未指定dest，使用路由项中的地址*/
 		if (nla_put_in6_addr(skb, RTA_DST, &rt6_dst->addr))
 			goto nla_put_failure;
 #ifdef CONFIG_IPV6_SUBTREES
 	if (src) {
+		/*如果指明了src,则使用src*/
 		if (nla_put_in6_addr(skb, RTA_SRC, src))
 			goto nla_put_failure;
 		rtm->rtm_src_len = 128;
 	} else if (rtm->rtm_src_len &&
-		   nla_put_in6_addr(skb, RTA_SRC, &rt6_src->addr))
+		   nla_put_in6_addr(skb, RTA_SRC, &rt6_src->addr)/*例用路由项中指定的源地址为源*/)
 		goto nla_put_failure;
 #endif
 	if (iif) {
 #ifdef CONFIG_IPV6_MROUTE
 		if (ipv6_addr_is_multicast(&rt6_dst->addr)) {
+			/*目的地址为组播*/
 			int err = ip6mr_get_route(net, skb, rtm, portid);
 
 			if (err == 0)
@@ -5724,9 +5771,10 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 				goto nla_put_failure;
 		} else
 #endif
-			if (nla_put_u32(skb, RTA_IIF, iif))
+			if (nla_put_u32(skb, RTA_IIF, iif))/*存入input interface*/
 				goto nla_put_failure;
 	} else if (dest) {
+		/*指定了目的地址，选源，并设置prefsrc*/
 		struct in6_addr saddr_buf;
 		if (ip6_route_get_saddr(net, rt, dest, 0, &saddr_buf) == 0 &&
 		    nla_put_in6_addr(skb, RTA_PREFSRC, &saddr_buf))
@@ -5734,12 +5782,14 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 	}
 
 	if (rt->fib6_prefsrc.plen) {
+		/*路由项上有pref src,使用它*/
 		struct in6_addr saddr_buf;
 		saddr_buf = rt->fib6_prefsrc.addr;
 		if (nla_put_in6_addr(skb, RTA_PREFSRC, &saddr_buf))
 			goto nla_put_failure;
 	}
 
+	/*提供metrics*/
 	pmetrics = dst ? dst_metrics_ptr(dst) : rt->fib6_metrics->metrics;
 	if (rtnetlink_put_metrics(skb, pmetrics) < 0)
 		goto nla_put_failure;
@@ -5755,6 +5805,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 		    nla_put_in6_addr(skb, RTA_GATEWAY, &rt6->rt6i_gateway))
 			goto nla_put_failure;
 
+		/*指明出接口*/
 		if (dst->dev && nla_put_u32(skb, RTA_OIF, dst->dev->ifindex))
 			goto nla_put_failure;
 
@@ -5775,8 +5826,10 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 				    0) < 0)
 			goto nla_put_failure;
 
+		/*遍历每个fib6_siblings*/
 		list_for_each_entry_safe(sibling, next_sibling,
 					 &rt->fib6_siblings, fib6_siblings) {
+			/*填加下一跳*/
 			if (fib_add_nexthop(skb, &sibling->fib6_nh->nh_common,
 					    sibling->fib6_nh->fib_nh_weight,
 					    AF_INET6, 0) < 0)
@@ -5789,7 +5842,7 @@ static int rt6_fill_node(struct net *net, struct sk_buff *skb,
 			goto nla_put_failure;
 
 		if (nexthop_is_blackhole(rt->nh))
-			rtm->rtm_type = RTN_BLACKHOLE;
+			rtm->rtm_type = RTN_BLACKHOLE;/*黑洞路由*/
 
 		if (READ_ONCE(net->ipv4.sysctl_nexthop_compat_mode) &&
 		    rt6_fill_node_nexthop(skb, rt->nh, &nh_flags) < 0)
@@ -6006,6 +6059,7 @@ static int inet6_rtm_valid_getroute_req(struct sk_buff *skb,
 	int i, err;
 
 	if (nlh->nlmsg_len < nlmsg_msg_size(sizeof(*rtm))) {
+		/*消息长度不足，报错*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Invalid header for get route request");
 		return -EINVAL;
@@ -6016,19 +6070,23 @@ static int inet6_rtm_valid_getroute_req(struct sk_buff *skb,
 					      rtm_ipv6_policy, extack);
 
 	rtm = nlmsg_data(nlh);
-	if ((rtm->rtm_src_len && rtm->rtm_src_len != 128) ||
+	if ((rtm->rtm_src_len && rtm->rtm_src_len != 128) /*rtm_src_len只能为0及128*/||
 	    (rtm->rtm_dst_len && rtm->rtm_dst_len != 128) ||
 	    rtm->rtm_table || rtm->rtm_protocol || rtm->rtm_scope ||
 	    rtm->rtm_type) {
+		/*遇到无效的参数*/
 		NL_SET_ERR_MSG_MOD(extack, "Invalid values in header for get route request");
 		return -EINVAL;
 	}
+
 	if (rtm->rtm_flags & ~RTM_F_FIB_MATCH) {
+		/*遇到ipv6不支持的标记*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Invalid flags for get route request");
 		return -EINVAL;
 	}
 
+	/*解析消息*/
 	err = nlmsg_parse_deprecated_strict(nlh, sizeof(*rtm), tb, RTA_MAX,
 					    rtm_ipv6_policy, extack);
 	if (err)
@@ -6036,6 +6094,7 @@ static int inet6_rtm_valid_getroute_req(struct sk_buff *skb,
 
 	if ((tb[RTA_SRC] && !rtm->rtm_src_len) ||
 	    (tb[RTA_DST] && !rtm->rtm_dst_len)) {
+		/*RTA_SRC被给定情况下，rtm_src_len不得为零*/
 		NL_SET_ERR_MSG_MOD(extack, "rtm_src_len and rtm_dst_len must be 128 for IPv6");
 		return -EINVAL;
 	}
@@ -6045,17 +6104,18 @@ static int inet6_rtm_valid_getroute_req(struct sk_buff *skb,
 			continue;
 
 		switch (i) {
-		case RTA_SRC:
-		case RTA_DST:
-		case RTA_IIF:
-		case RTA_OIF:
-		case RTA_MARK:
-		case RTA_UID:
+		case RTA_SRC:/*源ip*/
+		case RTA_DST:/*目的ip*/
+		case RTA_IIF:/*入接口*/
+		case RTA_OIF:/*出接口*/
+		case RTA_MARK:/*mark标记*/
+		case RTA_UID:/*uid标记*/
 		case RTA_SPORT:
 		case RTA_DPORT:
 		case RTA_IP_PROTO:
 			break;
 		default:
+			/*遇到其它不支持的属性*/
 			NL_SET_ERR_MSG_MOD(extack, "Unsupported attribute in get route request");
 			return -EINVAL;
 		}
@@ -6064,6 +6124,7 @@ static int inet6_rtm_valid_getroute_req(struct sk_buff *skb,
 	return 0;
 }
 
+/*响应iproute2类路由获取请求*/
 static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 			      struct netlink_ext_ack *extack)
 {
@@ -6078,6 +6139,7 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	struct flowi6 fl6 = {};
 	bool fibmatch;
 
+	/*消息校验*/
 	err = inet6_rtm_valid_getroute_req(in_skb, nlh, tb, extack);
 	if (err < 0)
 		goto errout;
@@ -6085,9 +6147,10 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	err = -EINVAL;
 	rtm = nlmsg_data(nlh);
 	fl6.flowlabel = ip6_make_flowinfo(rtm->rtm_tos, 0);
-	fibmatch = !!(rtm->rtm_flags & RTM_F_FIB_MATCH);
+	fibmatch = !!(rtm->rtm_flags & RTM_F_FIB_MATCH);/*检查是否有fib match标记*/
 
 	if (tb[RTA_SRC]) {
+		/*设置源ip*/
 		if (nla_len(tb[RTA_SRC]) < sizeof(struct in6_addr))
 			goto errout;
 
@@ -6095,6 +6158,7 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	}
 
 	if (tb[RTA_DST]) {
+		/*设置目的ip*/
 		if (nla_len(tb[RTA_DST]) < sizeof(struct in6_addr))
 			goto errout;
 
@@ -6102,9 +6166,11 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	}
 
 	if (tb[RTA_IIF])
+		/*源接口*/
 		iif = nla_get_u32(tb[RTA_IIF]);
 
 	if (tb[RTA_OIF])
+		/*目的接口*/
 		oif = nla_get_u32(tb[RTA_OIF]);
 
 	if (tb[RTA_MARK])
@@ -6123,6 +6189,7 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		fl6.fl6_dport = nla_get_be16(tb[RTA_DPORT]);
 
 	if (tb[RTA_IP_PROTO]) {
+		/*设置4层协议类型*/
 		err = rtm_getroute_parse_ip_proto(tb[RTA_IP_PROTO],
 						  &fl6.flowi6_proto, AF_INET6,
 						  extack);
@@ -6136,6 +6203,7 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 
 		rcu_read_lock();
 
+		/*指定了入接口，确定iif对应的netdev*/
 		dev = dev_get_by_index_rcu(net, iif);
 		if (!dev) {
 			rcu_read_unlock();
@@ -6146,31 +6214,37 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		fl6.flowi6_iif = iif;
 
 		if (!ipv6_addr_any(&fl6.saddr))
-			flags |= RT6_LOOKUP_F_HAS_SADDR;
+			flags |= RT6_LOOKUP_F_HAS_SADDR;/*源地址为any*/
 
+		/*指定了input interface,执行input路由查询,获得dst_entry*/
 		dst = ip6_route_input_lookup(net, dev, &fl6, NULL, flags);
 
 		rcu_read_unlock();
 	} else {
 		fl6.flowi6_oif = oif;
 
+		/*未指定input interface,执行output路由查询*/
 		dst = ip6_route_output(net, NULL, &fl6);
 	}
 
 
+	/*由dst获取rt结构体*/
 	rt = container_of(dst, struct rt6_info, dst);
 	if (rt->dst.error) {
+		/*路由有误*/
 		err = rt->dst.error;
 		ip6_rt_put(rt);
 		goto errout;
 	}
 
 	if (rt == net->ipv6.ip6_null_entry) {
+		/*返回的路由项为null_entry*/
 		err = rt->dst.error;
 		ip6_rt_put(rt);
 		goto errout;
 	}
 
+	/*申请响应buffer*/
 	skb = alloc_skb(NLMSG_GOODSIZE, GFP_KERNEL);
 	if (!skb) {
 		ip6_rt_put(rt);
@@ -6184,13 +6258,14 @@ static int inet6_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	from = rcu_dereference(rt->from);
 	if (from) {
 		if (fibmatch)
-			err = rt6_fill_node(net, skb, from, NULL, NULL, NULL,
+			/*fibmatch标记被给出时*/
+			err = rt6_fill_node(net, skb, from, NULL/*不传入dst*/, NULL, NULL,
 					    iif, RTM_NEWROUTE,
 					    NETLINK_CB(in_skb).portid,
 					    nlh->nlmsg_seq, 0);
 		else
-			err = rt6_fill_node(net, skb, from, dst, &fl6.daddr,
-					    &fl6.saddr, iif, RTM_NEWROUTE,
+			err = rt6_fill_node(net, skb, from, dst/*命中的dst_entry*/, &fl6.daddr/*查询时指明的目的ip*/,
+					    &fl6.saddr/*查询时指明的源ip*/, iif/*查询时指明的源接口*/, RTM_NEWROUTE,
 					    NETLINK_CB(in_skb).portid,
 					    nlh->nlmsg_seq, 0);
 	} else {
@@ -6781,8 +6856,9 @@ int __init ip6_route_init(void)
 	if (ret < 0)
 		goto out_register_late_subsys;
 
+	/*注册ipv6路由查询响应接口*/
 	ret = rtnl_register_module(THIS_MODULE, PF_INET6, RTM_GETROUTE,
-				   inet6_rtm_getroute, NULL,
+				   inet6_rtm_getroute/*响应iproute2类路由获取请求*/, NULL,
 				   RTNL_FLAG_DOIT_UNLOCKED);
 	if (ret < 0)
 		goto out_register_late_subsys;

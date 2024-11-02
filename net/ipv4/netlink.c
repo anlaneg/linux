@@ -10,7 +10,7 @@
 int rtm_getroute_parse_ip_proto(struct nlattr *attr, u8 *ip_proto, u8 family,
 				struct netlink_ext_ack *extack)
 {
-	*ip_proto = nla_get_u8(attr);
+	*ip_proto = nla_get_u8(attr);/*取ip协议号*/
 
 	switch (*ip_proto) {
 	case IPPROTO_TCP:
@@ -18,12 +18,12 @@ int rtm_getroute_parse_ip_proto(struct nlattr *attr, u8 *ip_proto, u8 family,
 		return 0;
 	case IPPROTO_ICMP:
 		if (family != AF_INET)
-			break;
+			break;/*ipv4情况下，有icmp协议*/
 		return 0;
 #if IS_ENABLED(CONFIG_IPV6)
 	case IPPROTO_ICMPV6:
 		if (family != AF_INET6)
-			break;
+			break;/*ipv6情况下，有icmpv6协议*/
 		return 0;
 #endif
 	}

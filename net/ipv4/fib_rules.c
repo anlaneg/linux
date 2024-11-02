@@ -421,7 +421,7 @@ static const struct fib_rules_ops __net_initconst fib4_rules_ops_template = {
 	.owner		= THIS_MODULE,
 };
 
-//创建三张默认的路由表 local,main,default
+//创建三条查询默认的路由表的规则，依次是查：local,main,default
 static int fib_default_rules_init(struct fib_rules_ops *ops)
 {
 	int err;

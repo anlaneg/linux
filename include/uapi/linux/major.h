@@ -6,7 +6,7 @@
  * This file has definitions for major device numbers.
  * For the device number assignments, see Documentation/admin-guide/devices.rst.
  */
-
+/*块设备对应的major*/
 #define UNNAMED_MAJOR		0
 #define MEM_MAJOR		1
 #define RAMDISK_MAJOR		1

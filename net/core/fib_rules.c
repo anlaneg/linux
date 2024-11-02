@@ -52,8 +52,9 @@ bool fib_rule_matchall(const struct fib_rule *rule)
 }
 EXPORT_SYMBOL_GPL(fib_rule_matchall);
 
+/*通过优先级指定查询哪张路由表*/
 int fib_default_rule_add(struct fib_rules_ops *ops,
-			 u32 pref, u32 table)
+			 u32 pref/*优先级*/, u32 table/*规则action指明要查询的路由表*/)
 {
 	struct fib_rule *r;
 
@@ -62,7 +63,7 @@ int fib_default_rule_add(struct fib_rules_ops *ops,
 		return -ENOMEM;
 
 	refcount_set(&r->refcnt, 1);
-	r->action = FR_ACT_TO_TBL;
+	r->action = FR_ACT_TO_TBL;/*action为表查询*/
 	r->pref = pref;
 	r->table = table;
 	r->proto = RTPROT_KERNEL;
@@ -318,6 +319,7 @@ int fib_rules_lookup(struct fib_rules_ops *ops/*执行策略查询的协议族op
 jumped:
         //尝试匹配规则
 		if (!fib_rule_match(rule, ops, fl, flags, arg))
+			/*由上知，返回1时为匹配，返回0时未匹配，走continue流程*/
 			continue;
 
 		//fl匹配了此条rule,执行rule对应的action

@@ -2791,6 +2791,7 @@ void ipv6_mc_up(struct inet6_dev *idev)
 
 	ipv6_mc_reset(idev);
 	mutex_lock(&idev->mc_lock);
+	/*遍历组播地址*/
 	for_each_mc_mclock(idev, i) {
 		mld_del_delrec(idev, i);
 		igmp6_group_added(i);

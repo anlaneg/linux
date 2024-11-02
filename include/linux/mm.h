@@ -104,6 +104,7 @@ extern int mmap_rnd_compat_bits __read_mostly;
 #endif
 
 #ifndef page_to_virt
+/*先将page结构体指针，转换为pfn,再将pfn转换为物理地址，然后再将物理地址转换为虚拟地址*/
 #define page_to_virt(x)	__va(PFN_PHYS(page_to_pfn(x)))
 #endif
 
@@ -2207,6 +2208,7 @@ static inline int arch_make_folio_accessible(struct folio *folio)
 
 static __always_inline void *lowmem_page_address(const struct page *page)
 {
+	/*通过page结构体，取page对应的起始地址（虚拟地址）*/
 	return page_to_virt(page);
 }
 
@@ -2233,7 +2235,7 @@ void page_address_init(void);
 #endif
 
 #if !defined(HASHED_PAGE_VIRTUAL) && !defined(WANT_PAGE_VIRTUAL)
-//取此页对应的起始地址
+//取此页对应的起始地址（虚拟地址）
 #define page_address(page) lowmem_page_address(page)
 #define set_page_address(page, address)  do { } while(0)
 #define page_address_init()  do { } while(0)

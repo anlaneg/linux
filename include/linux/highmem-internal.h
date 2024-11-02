@@ -182,7 +182,7 @@ static inline void kunmap(struct page *page)
 
 static inline void *kmap_local_page(struct page *page)
 {
-	/*返回此page的起始地址*/
+	/*返回此page的起始地址（虚拟地址）*/
 	return page_address(page);
 }
 

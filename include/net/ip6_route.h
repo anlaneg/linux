@@ -63,6 +63,7 @@ static inline unsigned int rt6_flags2srcprefs(int flags)
 
 static inline bool rt6_need_strict(const struct in6_addr *daddr)
 {
+	/*检查目标地址是否为组播，或者linklocal,或者loopback*/
 	return ipv6_addr_type(daddr) &
 		(IPV6_ADDR_MULTICAST | IPV6_ADDR_LINKLOCAL | IPV6_ADDR_LOOPBACK);
 }
@@ -87,8 +88,8 @@ struct dst_entry *ip6_route_output_flags(struct net *net, const struct sock *sk,
 					 struct flowi6 *fl6, int flags);
 
 static inline struct dst_entry *ip6_route_output(struct net *net,
-						 const struct sock *sk,
-						 struct flowi6 *fl6)
+						 const struct sock *sk/*关联的socket,可以为NULL*/,
+						 struct flowi6 *fl6/*要查询的flow*/)
 {
 	return ip6_route_output_flags(net, sk, fl6, 0);
 }
@@ -133,10 +134,13 @@ static inline int ip6_route_get_saddr(struct net *net, struct fib6_info *f6i,
 	int err = 0;
 
 	if (f6i && f6i->fib6_prefsrc.plen) {
+		/*路由项上有pref src,使用它*/
 		*saddr = f6i->fib6_prefsrc.addr;
 	} else {
+		/*取下一跳netdev*/
 		struct net_device *dev = f6i ? fib6_info_nh_dev(f6i) : NULL;
 
+		/*自netdev上取源地址*/
 		err = ipv6_dev_get_saddr(net, dev, daddr, prefs, saddr);
 	}
 

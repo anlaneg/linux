@@ -51,8 +51,8 @@ struct hugetlbfs_fs_context {
 	struct hstate		*hstate;
 	unsigned long long	max_size_opt;
 	unsigned long long	min_size_opt;
-	long			max_hpages;/*容许使用的最大大页数*/
-	long			nr_inodes;/*容许使用的最大inode数*/
+	long			max_hpages;/*此fs容许使用的最大大页数*/
+	long			nr_inodes;/*此fs容许使用的最大inode数*/
 	long			min_hpages;
 	enum hugetlbfs_size_type max_val_type;
 	enum hugetlbfs_size_type min_val_type;
@@ -1466,7 +1466,7 @@ static int hugetlbfs_validate(struct fs_context *fc)
 	 */
 	ctx->max_hpages = hugetlbfs_size_to_hpages(ctx->hstate,
 						   ctx->max_size_opt,
-						   ctx->max_val_type);
+						   ctx->max_val_type);/*此挂载点可支持的最大大页数目*/
 	ctx->min_hpages = hugetlbfs_size_to_hpages(ctx->hstate,
 						   ctx->min_size_opt,
 						   ctx->min_val_type);

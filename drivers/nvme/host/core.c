@@ -3647,7 +3647,7 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 	disk = blk_mq_alloc_disk(ctrl->tagset, ns);
 	if (IS_ERR(disk))
 		goto out_free_ns;
-	disk->fops = &nvme_bdev_ops;
+	disk->fops = &nvme_bdev_ops;/*设置块设备操作集*/
 	disk->private_data = ns;
 
 	ns->disk = disk;/*指定disk*/
@@ -3686,6 +3686,7 @@ static void nvme_alloc_ns(struct nvme_ctrl *ctrl, struct nvme_ns_info *info)
 		sprintf(disk->disk_name, "nvme%dn%d", ctrl->subsys->instance,
 			ns->head->instance);
 	} else {
+		/*设置磁盘名称*/
 		sprintf(disk->disk_name, "nvme%dn%d", ctrl->instance,
 			ns->head->instance);
 	}

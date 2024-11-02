@@ -116,9 +116,11 @@ struct dio_submit {
 /* dio_state communicated between submission path and end_io */
 struct dio {
 	int flags;			/* doesn't change */
+	/*操作类型(读/写）及flags*/
 	blk_opf_t opf;			/* request operation type and flags */
 	struct gendisk *bio_disk;
 	struct inode *inode;//dio操作对应的inode
+	/*操作的文件大小*/
 	loff_t i_size;			/* i_size when submitted */
 	dio_iodone_t *end_io;		/* IO completion function */
 	bool is_pinned;			/* T if we have pins on the pages */
@@ -439,7 +441,7 @@ static inline void dio_bio_submit(struct dio *dio, struct dio_submit *sdio)
 
 	dio->bio_disk = bio->bi_bdev->bd_disk;
 
-	submit_bio(bio);
+	submit_bio(bio);/*提交block io*/
 
 	sdio->bio = NULL;
 	sdio->boundary = 0;
@@ -1103,17 +1105,17 @@ static inline int drop_refcount(struct dio *dio)
  * for the whole file.
  */
 ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
-		struct block_device *bdev, struct iov_iter *iter,
+		struct block_device *bdev/*要写的块设备*/, struct iov_iter *iter,
 		get_block_t get_block, dio_iodone_t end_io,
 		int flags)
 {
 	unsigned i_blkbits = READ_ONCE(inode->i_blkbits);
 	unsigned blkbits = i_blkbits;
-	unsigned blocksize_mask = (1 << blkbits) - 1;//块掩码
+	unsigned blocksize_mask = (1 << blkbits) - 1;//块大小对应的掩码
 	ssize_t retval = -EINVAL;
-	const size_t count = iov_iter_count(iter);
+	const size_t count = iov_iter_count(iter);/*要读写的大小*/
 	loff_t offset = iocb->ki_pos;
-	const loff_t end = offset + count;//读写的尾部
+	const loff_t end = offset + count;//读写的尾部位置
 	struct dio *dio;
 	struct dio_submit sdio = { NULL, };
 	struct buffer_head map_bh = { 0, };
@@ -1150,6 +1152,7 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 	/* Once we sampled i_size check for reads beyond EOF */
 	dio->i_size = i_size_read(inode);
 	if (iov_iter_rw(iter) == READ && offset >= dio->i_size) {
+		/*读操作，读取的位置超过了文件长度*/
 		retval = 0;
 		goto fail_dio;
 	}
@@ -1179,6 +1182,7 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 	if (is_sync_kiocb(iocb))
 		dio->is_async = false;
 	else if (iov_iter_rw(iter) == WRITE && end > i_size_read(inode))
+		/*写操作，且写入操作会增加文件大小（置为同步操作）*/
 		dio->is_async = false;
 	else
 		dio->is_async = true;
@@ -1220,7 +1224,7 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 	retval = 0;
 	sdio.blkbits = blkbits;
 	sdio.blkfactor = i_blkbits - blkbits;
-	sdio.block_in_file = offset >> blkbits;
+	sdio.block_in_file = offset >> blkbits;/*偏移所在的blk编号*/
 
 	sdio.get_block = get_block;
 	dio->end_io = end_io;
@@ -1247,6 +1251,7 @@ ssize_t __blockdev_direct_IO(struct kiocb *iocb, struct inode *inode,
 
 	blk_start_plug(&plug);
 
+	/*以上参数局部变量填充完毕，具体实现direct io*/
 	retval = do_direct_IO(dio, &sdio, &map_bh);
 	if (retval)
 		dio_cleanup(dio, &sdio);

@@ -760,7 +760,7 @@ static int probe_gdrom(struct platform_device *devptr)
 	if (gdrom_outputversion())
 		return -ENOMEM;
 	/* Register GDROM */
-	gdrom_major = register_blkdev(0, GDROM_DEV_NAME);
+	gdrom_major = register_blkdev(0, GDROM_DEV_NAME);/*注册块设备*/
 	if (gdrom_major <= 0)
 		return gdrom_major;
 	pr_info("Registered with major number %d\n",

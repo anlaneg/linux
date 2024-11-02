@@ -250,7 +250,7 @@ static int next_opcode_rc(struct rxe_qp *qp, u32 opcode, int fits)
 				IB_OPCODE_RC_RDMA_WRITE_ONLY_WITH_IMMEDIATE :
 				IB_OPCODE_RC_RDMA_WRITE_FIRST;
 
-	case IB_WR_SEND:
+	case IB_WR_SEND/*send操作*/:
 		if (qp->req.opcode == IB_OPCODE_RC_SEND_FIRST ||
 		    qp->req.opcode == IB_OPCODE_RC_SEND_MIDDLE)
 			return fits ?
@@ -359,10 +359,11 @@ static int next_opcode_uc(struct rxe_qp *qp, u32 opcode, int fits)
 static int next_opcode(struct rxe_qp *qp, struct rxe_send_wqe *wqe,
 		       u32 opcode)
 {
-	int fits = (wqe->dma.resid <= qp->mtu);
+	int fits = (wqe->dma.resid <= qp->mtu);/*数据小于mtu，则数据发送本次将结束*/
 
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
+		/*取rc对应的next opcode*/
 		return next_opcode_rc(qp, opcode, fits);
 
 	case IB_QPT_UC:
@@ -653,7 +654,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 		}
 		break;
 	case IB_WR_REG_MR:
-		ret = rxe_reg_fast_mr(qp, wqe);
+		ret = rxe_reg_fast_mr(qp, wqe);/*注册mr*/
 		if (unlikely(ret)) {
 			wqe->status = IB_WC_LOC_QP_OP_ERR;
 			return ret;
@@ -685,7 +686,7 @@ static int rxe_do_local_ops(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 	return 0;
 }
 
-/*处理向外发送报文(自send queue上提供send_wqe，然后构造skb并向外发送）*/
+/*处理向外发送报文(自send queue上提供send_wqe，然后构造skb并向外发送) */
 int rxe_requester(struct rxe_qp *qp)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -780,7 +781,7 @@ int rxe_requester(struct rxe_qp *qp)
 	}
 
 	/*取next opcode*/
-	opcode = next_opcode(qp, wqe, wqe->wr.opcode);
+	opcode = next_opcode(qp, wqe, wqe->wr.opcode/*wr指明的opcode*/);
 	if (unlikely(opcode < 0)) {
 		wqe->status = IB_WC_LOC_QP_OP_ERR;
 		goto err;

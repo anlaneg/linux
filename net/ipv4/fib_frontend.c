@@ -88,7 +88,7 @@ struct fib_table *fib_new_table(struct net *net, u32 id)
 	if (tb)
 		return tb;
 
-	//针对local表，无策略路由，则与main表共享trie
+	//指明针对local表，且无策略路由，则处理为main表的别名
 	if (id == RT_TABLE_LOCAL && !net->ipv4.fib_has_custom_rules)
 		alias = fib_new_table(net, RT_TABLE_MAIN);
 
@@ -169,7 +169,7 @@ int fib_unmerge(struct net *net)
 	struct fib_table *old, *new, *main_table;
 
 	/* attempt to fetch local table if it has been allocated */
-	old = fib_get_table(net, RT_TABLE_LOCAL);
+	old = fib_get_table(net, RT_TABLE_LOCAL);/*取local表*/
 	if (!old)
 		return 0;
 
@@ -262,7 +262,7 @@ EXPORT_SYMBOL(inet_addr_type_table);
 
 unsigned int inet_addr_type(struct net *net, __be32 addr)
 {
-	return __inet_dev_addr_type(net, NULL, addr, RT_TABLE_LOCAL);
+	return __inet_dev_addr_type(net, NULL, addr, RT_TABLE_LOCAL/*查local表*/);
 }
 EXPORT_SYMBOL(inet_addr_type);
 
@@ -1137,11 +1137,11 @@ out_err:
  * to fib engine. It is legal, because all events occur
  * only when netlink is already locked.
  */
-static void fib_magic(int cmd/*fib表命令，添加/删除 */, int type/*路由项类型*/, __be32 dst/*目的地址*/, int dst_len/*目的地址长度*/,
+static void fib_magic(int cmd/*fib表命令，添加/删除 */, int type/*路由项类型*/, __be32 dst/*目的地址*/, int dst_len/*目的地址前缀长度*/,
 		      struct in_ifaddr *ifa/*主地址*/, u32 rt_priority)
 {
 	struct net *net = dev_net(ifa->ifa_dev->dev);
-	u32 tb_id = l3mdev_fib_table(ifa->ifa_dev->dev);
+	u32 tb_id = l3mdev_fib_table(ifa->ifa_dev->dev);/*依据ifa获取tb_id*/
 	struct fib_table *tb;
 	struct fib_config cfg = {
 		.fc_protocol = RTPROT_KERNEL,
@@ -1151,7 +1151,7 @@ static void fib_magic(int cmd/*fib表命令，添加/删除 */, int type/*路由
 		.fc_priority = rt_priority,
 		.fc_prefsrc = ifa->ifa_local,
 		.fc_oif = ifa->ifa_dev->dev->ifindex,
-		.fc_nlflags = NLM_F_CREATE | NLM_F_APPEND,
+		.fc_nlflags = NLM_F_CREATE/*指明创建*/ | NLM_F_APPEND/*添加到列表后面*/,
 		.fc_nlinfo = {
 			.nl_net = net,
 		},
@@ -1189,10 +1189,11 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 	__be32 addr = ifa->ifa_local;/*本端地址*/
 	__be32 prefix = ifa->ifa_address & mask;/*地址前缀取值*/
 
-	//此地址为从地址，找其对应的primary地址，如果未找到，则报错
+	//如此地址为从地址，找其对应的primary地址，如果未找到，则报错
 	if (ifa->ifa_flags & IFA_F_SECONDARY) {
 		prim = inet_ifa_byprefix(in_dev, prefix, mask);
 		if (!prim) {
+			/*需添加从地址，但未找到主地址*/
 			pr_warn("%s: bug: prim == NULL\n", __func__);
 			return;
 		}
@@ -1207,6 +1208,7 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 
 	/* Add broadcast address, if it is explicitly assigned. */
 	if (ifa->ifa_broadcast && ifa->ifa_broadcast != htonl(0xFFFFFFFF)) {
+		/*添加广播地址*/
 		fib_magic(RTM_NEWROUTE, RTN_BROADCAST, ifa->ifa_broadcast, 32,
 			  prim, 0);
 		arp_invalidate(dev, ifa->ifa_broadcast, false);
@@ -1215,6 +1217,7 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 	if (!ipv4_is_zeronet(prefix) && !(ifa->ifa_flags & IFA_F_SECONDARY) &&
 	    (prefix != addr || ifa->ifa_prefixlen < 32)) {
 		if (!(ifa->ifa_flags & IFA_F_NOPREFIXROUTE))
+			/*如果设备是loopback类型，则加入local表，否则main表*/
 			fib_magic(RTM_NEWROUTE,
 				  dev->flags & IFF_LOOPBACK ? RTN_LOCAL : RTN_UNICAST,
 				  prefix, ifa->ifa_prefixlen, prim,
@@ -1222,6 +1225,7 @@ void fib_add_ifaddr(struct in_ifaddr *ifa)
 
 		/* Add the network broadcast address, when it makes sense */
 		if (ifa->ifa_prefixlen < 31) {
+			/*添加广播地址*/
 			fib_magic(RTM_NEWROUTE, RTN_BROADCAST, prefix | ~mask,
 				  32, prim, 0);
 			arp_invalidate(dev, prefix | ~mask, false);
@@ -1509,8 +1513,8 @@ static void fib_disable_ip(struct net_device *dev, unsigned long event,
 
 static int fib_inetaddr_event(struct notifier_block *this, unsigned long event, void *ptr)
 {
-	struct in_ifaddr *ifa = ptr;
-	struct net_device *dev = ifa->ifa_dev->dev;
+	struct in_ifaddr *ifa = ptr;/*要添加的ipv4地址*/
+	struct net_device *dev = ifa->ifa_dev->dev;/*ipv4地址对应的netdev*/
 	struct net *net = dev_net(dev);
 
 	switch (event) {

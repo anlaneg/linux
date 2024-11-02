@@ -294,7 +294,7 @@ static void brd_submit_bio(struct bio *bio)
 
 static const struct block_device_operations brd_fops = {
 	.owner =		THIS_MODULE,
-	.submit_bio =		brd_submit_bio,
+	.submit_bio =		brd_submit_bio,/*响应block io*/
 };
 
 /*
@@ -403,6 +403,7 @@ out_free_dev:
 
 static void brd_probe(dev_t dev)
 {
+	/*按照给定的dev,创建相应index的brd设备*/
 	brd_alloc(MINOR(dev) / max_part);
 }
 
@@ -472,6 +473,7 @@ static int __init brd_init(void)
 	 */
 
 	if (__register_blkdev(RAMDISK_MAJOR, "ramdisk", brd_probe)) {
+		/*注册block设备失败*/
 		err = -EIO;
 		goto out_free;
 	}

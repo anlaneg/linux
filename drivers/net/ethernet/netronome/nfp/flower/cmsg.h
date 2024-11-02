@@ -123,8 +123,8 @@ enum nfp_flower_tun_type {
 };
 
 struct nfp_fl_act_head {
-	u8 jump_id;
-	u8 len_lw;
+	u8 jump_id;/*指明flow action的类型，例如：NFP_FL_ACTION_OPCODE_SET_TUNNEL*/
+	u8 len_lw;/*action大小（需换算成了uint32数目）*/
 };
 
 struct nfp_fl_set_eth {
@@ -211,7 +211,7 @@ struct nfp_fl_pre_tunnel {
 	__be16 flags;
 	union {
 		__be32 ipv4_dst;
-		struct in6_addr ipv6_dst;
+		struct in6_addr ipv6_dst;/*目的地址*/
 	};
 };
 
@@ -220,10 +220,10 @@ struct nfp_fl_pre_tunnel {
 struct nfp_fl_set_tun {
 	struct nfp_fl_act_head head;
 	__be16 reserved;
-	__be64 tun_id __packed;
-	__be32 tun_type_index;
+	__be64 tun_id __packed;/*隧道编号*/
+	__be32 tun_type_index;/*隧道类型+隧道层数*/
 	__be16 tun_flags;
-	u8 ttl;
+	u8 ttl;/*隧道的ttl*/
 	u8 tos;
 	__be16 outer_vlan_tpid;
 	__be16 outer_vlan_tci;

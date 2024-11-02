@@ -63,18 +63,18 @@ static_assert(sizeof(struct prefix_info) == 32);
 #include <net/ipv6.h>
 
 struct in6_validator_info {
-	struct in6_addr		i6vi_addr;
-	struct inet6_dev	*i6vi_dev;
-	struct netlink_ext_ack	*extack;
+	struct in6_addr		i6vi_addr;/*ipv6地址*/
+	struct inet6_dev	*i6vi_dev;/*要关联的ipv6设备*/
+	struct netlink_ext_ack	*extack;/*用于收集错误/成功信息的buffer*/
 };
 
 struct ifa6_config {
-	const struct in6_addr	*pfx;
+	const struct in6_addr	*pfx;/*地址前缀*/
 	unsigned int		plen;/*前缀长度*/
 
 	u8			ifa_proto;
 
-	const struct in6_addr	*peer_pfx;
+	const struct in6_addr	*peer_pfx;/*对端前缀*/
 
 	u32			rt_priority;
 	u32			ifa_flags;

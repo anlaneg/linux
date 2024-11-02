@@ -493,7 +493,7 @@ struct ib_uverbs_wc {
 		__be32 imm_data;
 		__u32 invalidate_rkey;
 	} ex;
-	__u32 qp_num;
+	__u32 qp_num;/*指明qp编号*/
 	__u32 src_qp;
 	__u32 wc_flags;
 	__u16 pkey_index;

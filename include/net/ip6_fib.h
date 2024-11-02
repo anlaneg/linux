@@ -47,18 +47,20 @@ struct fib6_config {
 	int		fc_ifindex;/*对应的接口*/
 	u32		fc_flags;
 	u32		fc_protocol;/*路由来源，例如RTPROT_KERNEL*/
+	/*类型，例如RTN_LOCAL*/
 	u16		fc_type;        /* only 8 bits are used */
 	u16		fc_delete_all_nh : 1,
-			fc_ignore_dev_down:1,
+			fc_ignore_dev_down:1,/*是否忽略设备down*/
 			__unused : 14;
-	u32		fc_nh_id;/*通过id复用nexthop*/
+	/*通过id复用nexthop，可通过nexthop_find_by_id查找到指明的nexthopt*/
+	u32		fc_nh_id;
 
 	struct in6_addr	fc_dst;/*目的地址*/
 	struct in6_addr	fc_src;
 	struct in6_addr	fc_prefsrc;
 	struct in6_addr	fc_gateway;
 
-	unsigned long	fc_expires;
+	unsigned long	fc_expires;/*路由过期时间*/
 	struct nlattr	*fc_mx;
 	int		fc_mx_len;
 	int		fc_mp_len;
@@ -71,7 +73,7 @@ struct fib6_config {
 };
 
 struct fib6_node {
-	/*指向父节点*/
+	/*指向父节点,用于回溯*/
 	struct fib6_node __rcu	*parent;
 	/*左节点（fn_bit为0时）*/
 	struct fib6_node __rcu	*left;
@@ -124,6 +126,7 @@ static inline void fib6_routes_require_src_dec(struct net *net)
 	net->ipv6.fib6_routes_require_src--;
 }
 
+/*取fn->subtree*/
 #define FIB6_SUBTREE(fn)	(rcu_dereference_protected((fn)->subtree, 1))
 #endif
 
@@ -162,13 +165,13 @@ struct fib6_nh {
 	unsigned long		last_probe;
 #endif
 
-	struct rt6_info * __percpu *rt6i_pcpu;
+	struct rt6_info * __percpu *rt6i_pcpu;/*percpu的变量，指向rt6_info*/
 	struct rt6_exception_bucket __rcu *rt6i_exception_bucket;
 };
 
 struct fib6_info {
 	struct fib6_table		*fib6_table;/*对应的路由表*/
-	struct fib6_info __rcu		*fib6_next;/*用于串连多个fib info*/
+	struct fib6_info __rcu		*fib6_next;/*用于串连多个fib info，指向下一个fib6_info*/
 	struct fib6_node __rcu		*fib6_node;
 
 	/* Multipath routes:
@@ -180,17 +183,19 @@ struct fib6_info {
 		struct list_head	fib6_siblings;
 		struct list_head	nh_list;
 	};
-	unsigned int			fib6_nsiblings;
+	unsigned int			fib6_nsiblings;/*fib6_siblings链表长度*/
 
 	refcount_t			fib6_ref;
-	unsigned long			expires;
+	unsigned long			expires;/*路由过期时间*/
 	struct dst_metrics		*fib6_metrics;
 #define fib6_pmtu		fib6_metrics->metrics[RTAX_MTU-1]
 
-	/*比对用的key*/
+	/*比对用的key（目的地址）*/
 	struct rt6key			fib6_dst;
 	u32				fib6_flags;
+	/*比对用的key(源地址）*/
 	struct rt6key			fib6_src;
+	/*选源用*/
 	struct rt6key			fib6_prefsrc;
 
 	u32				fib6_metric;
@@ -213,12 +218,12 @@ struct fib6_info {
 };
 
 struct rt6_info {
-	struct dst_entry		dst;
+	struct dst_entry		dst;/*此项必须位于首位*/
 	struct fib6_info __rcu		*from;
 	int				sernum;
 
-	struct rt6key			rt6i_dst;
-	struct rt6key			rt6i_src;
+	struct rt6key			rt6i_dst;/*比对的目的地址*/
+	struct rt6key			rt6i_src;/*比对的源地址*/
 	struct in6_addr			rt6i_gateway;
 	struct inet6_dev		*rt6i_idev;
 	u32				rt6i_flags;
@@ -228,8 +233,8 @@ struct rt6_info {
 };
 
 struct fib6_result {
-	struct fib6_nh		*nh;
-	struct fib6_info	*f6i;
+	struct fib6_nh		*nh;/*下一跳信息*/
+	struct fib6_info	*f6i;/*路由信息*/
 	u32			fib6_flags;
 	u8			fib6_type;
 	struct rt6_info		*rt6;
@@ -381,6 +386,7 @@ struct rt6_statistics {
 #define RTN_TL_ROOT	0x0001
 /*标明为树根节点*/
 #define RTN_ROOT	0x0002		/* tree root node		*/
+/*标明节点上包含有效的路由信息*/
 #define RTN_RTINFO	0x0004		/* node with valid routing info	*/
 
 /*
@@ -582,7 +588,7 @@ static inline struct rt6_info *pol_lookup_func(pol_lookup_t lookup,
 						const struct sk_buff *skb,
 						int flags)
 {
-	/*调用lookup回调，并传入参数（考虑路由查询函数，以便优先）*/
+	/*直接调用lookup回调，并传入参数（考虑路由查询函数，以便优先）*/
 	return INDIRECT_CALL_4(lookup,
 			       ip6_pol_route_output,
 			       ip6_pol_route_input,
@@ -594,6 +600,7 @@ static inline struct rt6_info *pol_lookup_func(pol_lookup_t lookup,
 #ifdef CONFIG_IPV6_MULTIPLE_TABLES
 static inline bool fib6_has_custom_rules(const struct net *net)
 {
+	/*检查当前netns中ipv6是否有策略路由*/
 	return net->ipv6.fib6_has_custom_rules;
 }
 

@@ -1250,7 +1250,7 @@ struct nexthop *nexthop_select_path(struct nexthop *nh, int hash)
 EXPORT_SYMBOL_GPL(nexthop_select_path);
 
 int nexthop_for_each_fib6_nh(struct nexthop *nh,
-			     int (*cb)(struct fib6_nh *nh, void *arg),
+			     int (*cb/*匹配函数*/)(struct fib6_nh *nh, void *arg),
 			     void *arg)
 {
 	struct nh_info *nhi;

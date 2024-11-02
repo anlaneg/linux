@@ -36,7 +36,7 @@ static inline int pfn_valid(unsigned long pfn)
 /* memmap is virtually contiguous.  */
 /*由pfn(页帧）映射到page指针*/
 #define __pfn_to_page(pfn)	(vmemmap + (pfn))
-/*由page指针，映射到pfn*/
+/*由page结构体指针，映射到pfn*/
 #define __page_to_pfn(page)	(unsigned long)((page) - vmemmap)
 
 #elif defined(CONFIG_SPARSEMEM)

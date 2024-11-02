@@ -39,12 +39,14 @@ int gre_parse_header(struct sk_buff *skb, struct tnl_ptk_info *tpi,
 
 static inline bool netif_is_gretap(const struct net_device *dev)
 {
+	/*检查设备类型是否为gretap接口*/
 	return dev->rtnl_link_ops &&
 	       !strcmp(dev->rtnl_link_ops->kind, "gretap");
 }
 
 static inline bool netif_is_ip6gretap(const struct net_device *dev)
 {
+	/*检查设备类型是否为ip6gretap接口*/
 	return dev->rtnl_link_ops &&
 	       !strcmp(dev->rtnl_link_ops->kind, "ip6gretap");
 }

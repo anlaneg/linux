@@ -124,6 +124,7 @@ static void do_task(struct rxe_task *task)
 		cont = 0;
 
 		do {
+			/*执行task*/
 			ret = task->func(task->qp);
 		} while (ret == 0 && iterations-- > 0);
 

@@ -183,7 +183,7 @@ void blk_throtl_cancel_bios(struct gendisk *disk);
 static inline bool blk_should_throtl(struct bio *bio)
 {
 	struct throtl_grp *tg = blkg_to_tg(bio->bi_blkg);
-	int rw = bio_data_dir(bio);
+	int rw = bio_data_dir(bio);/*检查操作是“写”或者“读”*/
 
 	if (!cgroup_subsys_on_dfl(io_cgrp_subsys)) {
 		if (!bio_flagged(bio, BIO_CGROUP_ACCT)) {

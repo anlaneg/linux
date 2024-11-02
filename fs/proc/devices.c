@@ -53,7 +53,7 @@ static const struct seq_operations devinfo_ops = {
 	.start = devinfo_start,
 	.next  = devinfo_next,
 	.stop  = devinfo_stop,
-	.show  = devinfo_show
+	.show  = devinfo_show/*显示字符设备与块设备*/
 };
 
 static int __init proc_devices_init(void)

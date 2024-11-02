@@ -116,14 +116,16 @@ struct rxe_wr_opcode_info rxe_wr_opcode_info[] = {
 	},
 };
 
+/*各opcde对应的元数据*/
 struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		/*rc相关的操作*/
 	[IB_OPCODE_RC_SEND_FIRST]			= {
 		.name	= "IB_OPCODE_RC_SEND_FIRST",
-		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK/*请求类操作*/ | RXE_RWR_MASK |
-			  RXE_SEND_MASK | RXE_START_MASK,
-		.length = RXE_BTH_BYTES,
+		.mask	= RXE_PAYLOAD_MASK/*报文包含payload*/ | RXE_REQ_MASK/*请求类操作*/ | RXE_RWR_MASK |
+			  RXE_SEND_MASK/*指明报文为send类操作*/ | RXE_START_MASK,
+		.length = RXE_BTH_BYTES,/*header的总长度*/
 		.offset = {
+				/*报文格式为bth + payload*/
 			[RXE_BTH]	= 0,
 			[RXE_PAYLOAD]	= RXE_BTH_BYTES,
 		}
@@ -184,6 +186,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 					  RXE_IMMDT_BYTES,
 		}
 	},
+	/*rdma write首包*/
 	[IB_OPCODE_RC_RDMA_WRITE_FIRST]		= {
 		.name	= "IB_OPCODE_RC_RDMA_WRITE_FIRST",
 		.mask	= RXE_RETH_MASK | RXE_PAYLOAD_MASK | RXE_REQ_MASK |
@@ -191,14 +194,15 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		.length = RXE_BTH_BYTES + RXE_RETH_BYTES,
 		.offset = {
 			[RXE_BTH]	= 0,
-			[RXE_RETH]	= RXE_BTH_BYTES,
+			[RXE_RETH]	= RXE_BTH_BYTES,/*包含RETH*/
 			[RXE_PAYLOAD]	= RXE_BTH_BYTES +
 					  RXE_RETH_BYTES,
 		}
 	},
+	/*rdma write中间包*/
 	[IB_OPCODE_RC_RDMA_WRITE_MIDDLE]		= {
 		.name	= "IB_OPCODE_RC_RDMA_WRITE_MIDDLE",
-		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK | RXE_WRITE_MASK |
+		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK/*请求类报文*/ | RXE_WRITE_MASK |
 			  RXE_MIDDLE_MASK,
 		.length = RXE_BTH_BYTES,
 		.offset = {
@@ -206,6 +210,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 			[RXE_PAYLOAD]	= RXE_BTH_BYTES,
 		}
 	},
+	/*rdma write last包*/
 	[IB_OPCODE_RC_RDMA_WRITE_LAST]			= {
 		.name	= "IB_OPCODE_RC_RDMA_WRITE_LAST",
 		.mask	= RXE_PAYLOAD_MASK | RXE_REQ_MASK | RXE_WRITE_MASK |
@@ -399,7 +404,7 @@ struct rxe_opcode_info rxe_opcode[RXE_NUM_OPCODE] = {
 		.length = RXE_BTH_BYTES + RXE_FETH_BYTES + RXE_RETH_BYTES,
 		.offset = {
 			[RXE_BTH]	= 0,
-			[RXE_FETH]	= RXE_BTH_BYTES,
+			[RXE_FETH]	= RXE_BTH_BYTES,/*此操作有FLUSH标记，包含feth头*/
 			[RXE_RETH]	= RXE_BTH_BYTES + RXE_FETH_BYTES,
 		}
 	},

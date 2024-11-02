@@ -44,8 +44,10 @@ static int blkpg_do_ioctl(struct block_device *bdev,
 
 	switch (op) {
 	case BLKPG_ADD_PARTITION:
+		/*为disk添加分区，并指定分区的大小*/
 		return bdev_add_partition(disk, p.pno, start, length);
 	case BLKPG_RESIZE_PARTITION:
+		/*调整disk指定分区的大小*/
 		return bdev_resize_partition(disk, p.pno, start, length);
 	default:
 		return -EINVAL;

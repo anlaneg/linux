@@ -504,6 +504,7 @@ static struct inet6_dev *ipv6_find_idev(struct net_device *dev)
 	}
 
 	if (dev->flags&IFF_UP)
+		/*设备是up的，使能组播组*/
 		ipv6_mc_up(idev);
 	return idev;
 }
@@ -1019,6 +1020,7 @@ ipv6_link_dev_addr(struct inet6_dev *idev, struct inet6_ifaddr *ifp)
 		struct inet6_ifaddr *ifa
 			= list_entry(p, struct inet6_ifaddr, if_list);
 		if (ifp_scope >= ipv6_addr_src_scope(&ifa->addr))
+			/*要添加的地址的scope大于链表上的，插入位置确认*/
 			break;
 	}
 
@@ -1058,6 +1060,7 @@ static int ipv6_add_addr_hash(struct net_device *dev, struct inet6_ifaddr *ifa)
 
 	/* Ignore adding duplicate addresses on an interface */
 	if (ipv6_chk_same_addr(net, &ifa->addr, dev, hash)) {
+		/*接口上已有此地址*/
 		netdev_dbg(dev, "ipv6_add_addr: already assigned\n");
 		err = -EEXIST;
 	} else {
@@ -1076,33 +1079,38 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 	      bool can_block, struct netlink_ext_ack *extack)
 {
 	gfp_t gfp_flags = can_block ? GFP_KERNEL : GFP_ATOMIC;
-	int addr_type = ipv6_addr_type(cfg->pfx);
+	int addr_type = ipv6_addr_type(cfg->pfx);/*取地址类型*/
 	struct net *net = dev_net(idev->dev);
 	struct inet6_ifaddr *ifa = NULL;
 	struct fib6_info *f6i = NULL;
 	int err = 0;
 
 	if (addr_type == IPV6_ADDR_ANY) {
+		/*添加的为纯零地址*/
 		NL_SET_ERR_MSG_MOD(extack, "Invalid address");
 		return ERR_PTR(-EADDRNOTAVAIL);
 	} else if (addr_type & IPV6_ADDR_MULTICAST &&
 		   !(cfg->ifa_flags & IFA_F_MCAUTOJOIN)) {
+		/*指明的为组播地址，但没有包含maautojoin标记*/
 		NL_SET_ERR_MSG_MOD(extack, "Cannot assign multicast address without \"IFA_F_MCAUTOJOIN\" flag");
 		return ERR_PTR(-EADDRNOTAVAIL);
 	} else if (!(idev->dev->flags & IFF_LOOPBACK) &&
 		   !netif_is_l3_master(idev->dev) &&
 		   addr_type & IPV6_ADDR_LOOPBACK) {
+		/*指定了loopback地址，但设备没有loopback标记*/
 		NL_SET_ERR_MSG_MOD(extack, "Cannot assign loopback address on this device");
 		return ERR_PTR(-EADDRNOTAVAIL);
 	}
 
 	if (idev->dead) {
+		/*设备被标记为dead*/
 		NL_SET_ERR_MSG_MOD(extack, "device is going away");
 		err = -ENODEV;
 		goto out;
 	}
 
 	if (idev->cnf.disable_ipv6) {
+		/*设备未开启ipv6*/
 		NL_SET_ERR_MSG_MOD(extack, "IPv6 is disabled on this device");
 		err = -EACCES;
 		goto out;
@@ -1121,7 +1129,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 		err = inet6addr_validator_notifier_call_chain(NETDEV_UP, &i6vi);
 		err = notifier_to_errno(err);
 		if (err < 0)
-			goto out;
+			goto out;/*validator失败，退出*/
 	}
 
 	/*申请ifa结构体*/
@@ -1131,7 +1139,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 		goto out;
 	}
 
-	/*申请路由项*/
+	/*申请并创建路由项*/
 	f6i = addrconf_f6i_alloc(net, idev, cfg->pfx, false, gfp_flags, extack);
 	if (IS_ERR(f6i)) {
 		err = PTR_ERR(f6i);
@@ -1141,9 +1149,9 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 
 	neigh_parms_data_state_setall(idev->nd_parms);
 
-	ifa->addr = *cfg->pfx;
+	ifa->addr = *cfg->pfx;/*接口地址*/
 	if (cfg->peer_pfx)
-		ifa->peer_addr = *cfg->peer_pfx;
+		ifa->peer_addr = *cfg->peer_pfx;/*如果有对端地址，设置*/
 
 	spin_lock_init(&ifa->lock);
 	/*初始化dad work*/
@@ -1185,6 +1193,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 	ipv6_link_dev_addr(idev, ifa);
 
 	if (ifa->flags&IFA_F_TEMPORARY) {
+		/*添加到临时地址列表*/
 		list_add(&ifa->tmp_list, &idev->tempaddr_list);
 		in6_ifa_hold(ifa);
 	}
@@ -1194,6 +1203,7 @@ ipv6_add_addr(struct inet6_dev *idev, struct ifa6_config *cfg,
 
 	rcu_read_unlock();
 
+	/*触发地址通知*/
 	inet6addr_notifier_call_chain(NETDEV_UP, ifa);
 out:
 	if (unlikely(err < 0)) {
@@ -2764,6 +2774,7 @@ void addrconf_prefix_rcv(struct net_device *dev, u8 *opt, int len, bool sllao)
 	addr_type = ipv6_addr_type(&pinfo->prefix);
 
 	if (addr_type & (IPV6_ADDR_MULTICAST|IPV6_ADDR_LINKLOCAL))
+		/*不处理组播，linklocal地址*/
 		return;
 
 	valid_lft = ntohl(pinfo->valid);
@@ -2902,6 +2913,7 @@ static int addrconf_set_sit_dstaddr(struct net *net, struct net_device *dev,
 	int err;
 
 	if (!(ipv6_addr_type(&ireq->ifr6_addr) & IPV6_ADDR_COMPATv4))
+		/*只处理v4兼容地址*/
 		return -EADDRNOTAVAIL;
 
 	p.iph.daddr = ireq->ifr6_addr.s6_addr32[3];
@@ -3168,8 +3180,8 @@ int addrconf_del_ifaddr(struct net *net, void __user *arg)
 	return err;
 }
 
-static void add_addr(struct inet6_dev *idev, const struct in6_addr *addr,
-		     int plen, int scope, u8 proto)
+static void add_addr(struct inet6_dev *idev, const struct in6_addr *addr/*v6地址*/,
+		     int plen/*地址前缀长度*/, int scope/*地址范围，例如IFA_HOST*/, u8 proto)
 {
 	struct inet6_ifaddr *ifp;
 	struct ifa6_config cfg = {
@@ -3182,6 +3194,7 @@ static void add_addr(struct inet6_dev *idev, const struct in6_addr *addr,
 		.ifa_proto = proto
 	};
 
+	/*为设备添加地址*/
 	ifp = ipv6_add_addr(idev, &cfg, true, NULL);
 	if (!IS_ERR(ifp)) {
 		spin_lock_bh(&ifp->lock);
@@ -3271,6 +3284,7 @@ static void init_loopback(struct net_device *dev)
 		return;
 	}
 
+	/*为ipv6设备添加loopback地址*/
 	add_addr(idev, &in6addr_loopback, 128, IFA_HOST, IFAPROT_KERNEL_LO);
 }
 
@@ -3545,10 +3559,12 @@ static void addrconf_init_auto_addrs(struct net_device *dev)
 		break;
 #endif
 	case ARPHRD_LOOPBACK:
+		/*遇到loopback设备*/
 		init_loopback(dev);
 		break;
 
 	default:
+		/*遇到其它netdev设备*/
 		addrconf_dev_config(dev);
 		break;
 	}
@@ -3819,6 +3835,7 @@ static void addrconf_type_change(struct net_device *dev, unsigned long event)
 
 static bool addr_is_local(const struct in6_addr *addr)
 {
+	/*检查地址是否linklocal,loopback*/
 	return ipv6_addr_type(addr) &
 		(IPV6_ADDR_LINKLOCAL | IPV6_ADDR_LOOPBACK);
 }
@@ -5026,7 +5043,7 @@ inet6_rtm_newaddr(struct sk_buff *skb, struct nlmsghdr *nlh,
 		 * It would be best to check for !NLM_F_CREATE here but
 		 * userspace already relies on not having to provide this.
 		 */
-		return inet6_addr_add(net, ifm->ifa_index, &cfg, extack);
+		return inet6_addr_add(net, ifm->ifa_index, &cfg, extack);/*此设备不存在此地址，添加*/
 	}
 
 	/*此地址已存在*/
@@ -6260,6 +6277,7 @@ static void __ipv6_ifa_notify(int event, struct inet6_ifaddr *ifp)
 		 * the device is brought up.
 		 */
 		if (ifp->rt && !rcu_access_pointer(ifp->rt->fib6_node)) {
+			/*添加此ifp对应的路由项*/
 			ip6_ins_rt(net, ifp->rt);
 		} else if (!ifp->rt && (ifp->idev->dev->flags & IFF_UP)) {
 			pr_warn("BUG: Address %pI6c on device %s is missing its host route.\n",
@@ -6299,6 +6317,7 @@ static void __ipv6_ifa_notify(int event, struct inet6_ifaddr *ifp)
 static void ipv6_ifa_notify(int event, struct inet6_ifaddr *ifp)
 {
 	if (likely(ifp->idev->dead == 0))
+		/*idev未dead,通知此事件*/
 		__ipv6_ifa_notify(event, ifp);
 }
 

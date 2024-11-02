@@ -4143,7 +4143,7 @@ void blk_mq_destroy_queue(struct request_queue *q)
 }
 EXPORT_SYMBOL(blk_mq_destroy_queue);
 
-/*创建genernal disk*/
+/*创建genernal disk（多队列disk)*/
 struct gendisk *__blk_mq_alloc_disk(struct blk_mq_tag_set *set, void *queuedata,
 		struct lock_class_key *lkclass)
 {

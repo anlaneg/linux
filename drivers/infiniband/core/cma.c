@@ -1370,6 +1370,7 @@ static int cma_addr_cmp(const struct sockaddr *src, const struct sockaddr *dst)
 		if (ipv6_addr_cmp(&src_addr6->sin6_addr,
 					  &dst_addr6->sin6_addr))
 			return 1;
+		/*检查是否link local地址*/
 		link_local = ipv6_addr_type(&dst_addr6->sin6_addr) &
 			     IPV6_ADDR_LINKLOCAL;
 		/* Link local must match their scope_ids */
@@ -1620,6 +1621,7 @@ static bool validate_ipv6_net_dev(struct net_device *net_dev,
 				  const struct sockaddr_in6 *src_addr)
 {
 #if IS_ENABLED(CONFIG_IPV6)
+	/*检查是否为link local地址*/
 	const int strict = ipv6_addr_type(&dst_addr->sin6_addr) &
 			   IPV6_ADDR_LINKLOCAL;
 	struct rt6_info *rt = rt6_lookup(dev_net(net_dev), &dst_addr->sin6_addr,
@@ -1770,7 +1772,7 @@ static bool cma_is_req_ipv6_ll(const struct cma_req_info *req)
 
 	/* Returns true if the req is for IPv6 link local */
 	return (daddr->sa_family == AF_INET6 &&
-		(ipv6_addr_type(&daddr6->sin6_addr) & IPV6_ADDR_LINKLOCAL));
+		(ipv6_addr_type(&daddr6->sin6_addr) & IPV6_ADDR_LINKLOCAL)/*检查是否ipv6 link local地址*/);
 }
 
 static bool cma_match_net_dev(const struct rdma_cm_id *id,
@@ -2419,6 +2421,7 @@ static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 
 	mutex_lock(&listen_id->handler_mutex);
 	if (READ_ONCE(listen_id->state) != RDMA_CM_LISTEN) {
+		/*必须处于listen状态*/
 		ret = -ECONNABORTED;
 		goto err_unlock;
 	}
@@ -2431,6 +2434,7 @@ static int cma_ib_req_handler(struct ib_cm_id *cm_id,
 		event.param.ud.private_data_len =
 				IB_CM_SIDR_REQ_PRIVATE_DATA_SIZE - offset;
 	} else {
+		/*收到连接请求*/
 		conn_id = cma_ib_new_conn_id(&listen_id->id, ib_event, net_dev);
 		cma_set_req_event_data(&event, &ib_event->param.req_rcvd,
 				       ib_event->private_data, offset);
@@ -2655,7 +2659,7 @@ static int cma_ib_listen(struct rdma_id_private *id_priv)
 	addr = cma_src_addr(id_priv);
 	svc_id = rdma_get_service_id(&id_priv->id, addr);
 	id = ib_cm_insert_listen(id_priv->id.device,
-				 cma_ib_req_handler, svc_id);
+				 cma_ib_req_handler/*cm请求处理函数*/, svc_id);
 	if (IS_ERR(id))
 		return PTR_ERR(id);
 	id_priv->cm_id.ib = id;
@@ -3933,6 +3937,7 @@ static int cma_check_linklocal(struct rdma_dev_addr *dev_addr,
 	sin6 = (struct sockaddr_in6 *) addr;
 
 	if (!(ipv6_addr_type(&sin6->sin6_addr) & IPV6_ADDR_LINKLOCAL))
+		/*非link local地址，直接返回0*/
 		return 0;
 
 	if (!sin6->sin6_scope_id)

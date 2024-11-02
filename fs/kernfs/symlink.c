@@ -23,9 +23,9 @@
  * Ownership of the link matches ownership of the target.
  */
 //创建link类型的kernfs_node
-struct kernfs_node *kernfs_create_link(struct kernfs_node *parent,
-				       const char *name,
-				       struct kernfs_node *target)
+struct kernfs_node *kernfs_create_link(struct kernfs_node *parent/*父节点*/,
+				       const char *name/*符号链接名称*/,
+				       struct kernfs_node *target/*符号链接目录*/)
 {
 	struct kernfs_node *kn;
 	int error;
@@ -43,7 +43,7 @@ struct kernfs_node *kernfs_create_link(struct kernfs_node *parent,
 		return ERR_PTR(-ENOMEM);
 
 	if (kernfs_ns_enabled(parent))
-		kn->ns = target->ns;
+		kn->ns = target->ns;/*ns是开启的，复制target的ns*/
 	//指向目标文件
 	kn->symlink.target_kn = target;
 	kernfs_get(target);	/* ref owned by symlink */

@@ -147,8 +147,9 @@ static inline struct rtable *ip_route_output_key(struct net *net, struct flowi4 
 	return ip_route_output_flow(net, flp, NULL);
 }
 
-static inline struct rtable *ip_route_output(struct net *net, __be32 daddr,
-					     __be32 saddr, u8 tos, int oif)
+/*报文外发，查路由*/
+static inline struct rtable *ip_route_output(struct net *net/*从属于哪个netns*/, __be32 daddr/*目的ip*/,
+					     __be32 saddr/*源ip*/, u8 tos, int oif/*出接口*/)
 {
 	struct flowi4 fl4 = {
 		.flowi4_oif = oif,
@@ -196,7 +197,8 @@ int ip_route_use_hint(struct sk_buff *skb, __be32 dst, __be32 src,
 		      u8 tos, struct net_device *devin,
 		      const struct sk_buff *hint);
 
-static inline int ip_route_input(struct sk_buff *skb, __be32 dst, __be32 src,
+/*报文进入，查路由*/
+static inline int ip_route_input(struct sk_buff *skb, __be32 dst/*目的地址*/, __be32 src/*源地址*/,
 				 u8 tos, struct net_device *devin)
 {
 	int err;

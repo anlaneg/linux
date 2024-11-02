@@ -217,7 +217,7 @@ void blkdev_show(struct seq_file *seqf, off_t offset)
  * Use register_blkdev instead for any new code.
  */
 //块设备注册
-int __register_blkdev(unsigned int major, const char *name/*块设备名称*/,
+int __register_blkdev(unsigned int major/*major为零时动态申请major号*/, const char *name/*块设备名称*/,
 		void (*probe)(dev_t devt))
 {
 	struct blk_major_name **n, *p;
@@ -308,8 +308,10 @@ void unregister_blkdev(unsigned int major, const char *name)
 	spin_lock(&major_names_spinlock);
 	for (n = &major_names[index]; *n; n = &(*n)->next)
 		if ((*n)->major == major)
+			/*major匹配，跳出*/
 			break;
 	if (!*n || strcmp((*n)->name, name)) {
+		/*未查找到，或者名称不匹配，告警*/
 		WARN_ON(1);
 	} else {
 		p = *n;
@@ -322,6 +324,7 @@ void unregister_blkdev(unsigned int major, const char *name)
 
 EXPORT_SYMBOL(unregister_blkdev);
 
+/*自ext_devt_ida中申请minor编号*/
 int blk_alloc_ext_minor(void)
 {
 	int idx;
@@ -412,10 +415,10 @@ int disk_scan_partitions(struct gendisk *disk, blk_mode_t mode)
  * with the kernel.
  */
 int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
-				 const struct attribute_group **groups)
+				 const struct attribute_group **groups/*disk对应的属性组*/)
 
 {
-	/*由disk转device*/
+	/*由gendisk转device*/
 	struct device *ddev = disk_to_dev(disk);
 	int ret;
 
@@ -456,12 +459,15 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 		    disk->first_minor + disk->minors > MINORMASK + 1)
 			goto out_exit_elevator;
 	} else {
+		/*未指明major,指明为BLOCK_EXT_MAJOR*/
 		if (WARN_ON(disk->minors))
 			goto out_exit_elevator;
 
+		/*申请一个minor*/
 		ret = blk_alloc_ext_minor();
 		if (ret < 0)
 			goto out_exit_elevator;
+		/*设置major,minor*/
 		disk->major = BLOCK_EXT_MAJOR;
 		disk->first_minor = ret;
 	}
@@ -475,7 +481,7 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 	dev_set_name(ddev, "%s", disk->disk_name);
 	if (!(disk->flags & GENHD_FL_HIDDEN))
 		ddev->devt = MKDEV(disk->major, disk->first_minor);
-	ret = device_add(ddev);
+	ret = device_add(ddev);/*设备加入系统*/
 	if (ret)
 		goto out_free_ext_minor;
 
@@ -483,6 +489,7 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 	if (ret)
 		goto out_device_del;
 
+	/*在block_depr下创建链接，指向此kobj,例如/sys/block/下的所有链接块设备*/
 	ret = sysfs_create_link(block_depr, &ddev->kobj,
 				kobject_name(&ddev->kobj));
 	if (ret)
@@ -495,12 +502,15 @@ int __must_check device_add_disk(struct device *parent, struct gendisk *disk,
 	 */
 	pm_runtime_set_memalloc_noio(ddev, true);
 
+	/*在块设备下创建holders目录*/
 	disk->part0->bd_holder_dir =
 		kobject_create_and_add("holders", &ddev->kobj);
 	if (!disk->part0->bd_holder_dir) {
 		ret = -ENOMEM;
 		goto out_del_block_link;
 	}
+
+	/*在块设备下创建slaves目录*/
 	disk->slave_dir = kobject_create_and_add("slaves", &ddev->kobj);
 	if (!disk->slave_dir) {
 		ret = -ENOMEM;
@@ -563,12 +573,14 @@ out_put_slave_dir:
 out_put_holder_dir:
 	kobject_put(disk->part0->bd_holder_dir);
 out_del_block_link:
+	/*需要移除已创建好的link*/
 	sysfs_remove_link(block_depr, dev_name(ddev));
 	pm_runtime_set_memalloc_noio(ddev, false);
 out_device_del:
 	device_del(ddev);
 out_free_ext_minor:
 	if (disk->major == BLOCK_EXT_MAJOR)
+		/*major必须释放minor*/
 		blk_free_ext_minor(disk->first_minor);
 out_exit_elevator:
 	if (disk->queue->elevator)
@@ -713,6 +725,7 @@ void del_gendisk(struct gendisk *disk)
 
 	part_stat_set_all(disk->part0, 0);
 	disk->part0->bd_stamp = 0;
+	/*disk删除，自block_depr下移除此磁盘link*/
 	sysfs_remove_link(block_depr, dev_name(disk_to_dev(disk)));
 	pm_runtime_set_memalloc_noio(disk_to_dev(disk), false);
 	device_del(disk_to_dev(disk));
@@ -804,6 +817,7 @@ void blk_request_module(dev_t devt)
 	mutex_lock(&major_names_lock);
 	for (n = &major_names[major_to_index(major)]; *n; n = &(*n)->next) {
 		if ((*n)->major == major && (*n)->probe) {
+			/*major匹配，且有probe函数，触发probe函数*/
 			(*n)->probe(devt);
 			mutex_unlock(&major_names_lock);
 			return;
@@ -837,7 +851,7 @@ static void *disk_seqf_start(struct seq_file *seqf, loff_t *pos)
 			return NULL;
 	} while (skip--);
 
-	return dev_to_disk(dev);
+	return dev_to_disk(dev);/*通过device获得gendisk*/
 }
 
 static void *disk_seqf_next(struct seq_file *seqf, void *v, loff_t *pos)
@@ -876,17 +890,23 @@ static void *show_partition_start(struct seq_file *seqf, loff_t *pos)
 
 static int show_partition(struct seq_file *seqf, void *v)
 {
+	/*参数指明要显示的gendisk*/
 	struct gendisk *sgp = v;
 	struct block_device *part;
 	unsigned long idx;
 
 	if (!get_capacity(sgp) || (sgp->flags & GENHD_FL_HIDDEN))
+		/*跳过容量为0的gendisk;跳过有hidden标记的*/
 		return 0;
 
 	rcu_read_lock();
+	/*遍历分区表*/
 	xa_for_each(&sgp->part_tbl, idx, part) {
 		if (!bdev_nr_sectors(part))
+			/*跳过分区扇区数为0的part*/
 			continue;
+
+		/*显示此分区情况*/
 		seq_printf(seqf, "%4d  %7d %10llu %pg\n",
 			   MAJOR(part->bd_dev), MINOR(part->bd_dev),
 			   bdev_nr_sectors(part) >> 1, part);
@@ -899,7 +919,7 @@ static const struct seq_operations partitions_op = {
 	.start	= show_partition_start,
 	.next	= disk_seqf_next,
 	.stop	= disk_seqf_stop,
-	.show	= show_partition
+	.show	= show_partition/*显示分区信息*/
 };
 #endif
 
@@ -913,10 +933,11 @@ static int __init genhd_device_init(void)
 		return error;
 	blk_dev_init();
 
+	/*注册block设备blkext*/
 	register_blkdev(BLOCK_EXT_MAJOR, "blkext");
 
 	/* create top-level block dir */
-	block_depr = kobject_create_and_add("block", NULL);
+	block_depr = kobject_create_and_add("block", NULL);/*创建顶层目录block,常见位于/sys/block */
 	return 0;
 }
 
@@ -1334,6 +1355,7 @@ static const struct seq_operations diskstats_op = {
 static int __init proc_genhd_init(void)
 {
 	proc_create_seq("diskstats", 0, NULL, &diskstats_op);
+	/*创建/proc/partitions文件*/
 	proc_create_seq("partitions", 0, NULL, &partitions_op);
 	return 0;
 }
@@ -1375,7 +1397,7 @@ struct gendisk *__alloc_disk_node(struct request_queue *q, int node_id/*disk对�
 	disk->queue = q;/*为disk设置request queue*/
 
 	/*创建块设备*/
-	disk->part0 = bdev_alloc(disk, 0);
+	disk->part0 = bdev_alloc(disk, 0/*0号分区*/);
 	if (!disk->part0)
 		goto out_free_bdi;
 
@@ -1417,6 +1439,7 @@ out_free_disk:
 	return NULL;
 }
 
+/*创建genernal disk（单队列disk)*/
 struct gendisk *__blk_alloc_disk(int node, struct lock_class_key *lkclass)
 {
 	struct request_queue *q;

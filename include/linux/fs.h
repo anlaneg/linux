@@ -436,6 +436,7 @@ struct address_space_operations {
 	void (*invalidate_folio) (struct folio *, size_t offset, size_t len);
 	bool (*release_folio)(struct folio *, gfp_t);
 	void (*free_folio)(struct folio *folio);
+	/*通过此回调完成直接io(绕过page cache)*/
 	ssize_t (*direct_IO)(struct kiocb *, struct iov_iter *iter);
 	/*
 	 * migrate the contents of a folio to the specified target. If
@@ -2227,7 +2228,7 @@ enum freeze_holder {
 };
 
 struct super_operations {
-	//通过此回调，申请并创建inode,如无此回调，则自inode_cachep中申请inode
+	//通过此回调，申请并创建inode(初始化）,如无此回调，则自inode_cachep中申请inode
    	struct inode *(*alloc_inode)(struct super_block *sb);
    	//通过此回调，销毁创建的inode
 	void (*destroy_inode)(struct inode *);
@@ -2782,6 +2783,7 @@ extern struct kmem_cache *names_cachep;
 extern struct super_block *blockdev_superblock;
 static inline bool sb_is_blkdev_sb(struct super_block *sb)
 {
+	/*是否为block设备对应的super block*/
 	return IS_ENABLED(CONFIG_BLOCK) && sb == blockdev_superblock;
 }
 
@@ -3147,7 +3149,7 @@ alloc_inode_sb(struct super_block *sb, struct kmem_cache *cache, gfp_t gfp)
 	return kmem_cache_alloc_lru(cache, &sb->s_inode_lru, gfp);
 }
 
-/*将inode加入到hashtable*/
+/*将inode加入到inode_hashtable*/
 extern void __insert_inode_hash(struct inode *, unsigned long hashval);
 static inline void insert_inode_hash(struct inode *inode)
 {

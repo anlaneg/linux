@@ -55,7 +55,7 @@ union rxe_gid {
 struct rxe_global_route {
 	union rxe_gid	dgid;
 	__u32		flow_label;/*ipv6 flow label*/
-	__u8		sgid_index;
+	__u8		sgid_index;/*对应的源gid索引号，通过此索引可以找到netdev*/
 	__u8		hop_limit;/*ttl填充*/
 	__u8		traffic_class;/*ipv6 traffic class*/
 };
@@ -68,7 +68,7 @@ struct rxe_av {
 	__u8			dmac[6];/*目的Mac*/
 	struct rxe_global_route	grh;
 	union {
-		struct sockaddr_in	_sockaddr_in;
+		struct sockaddr_in	_sockaddr_in;/*ipv4地址*/
 		struct sockaddr_in6	_sockaddr_in6;
 	} sgid_addr/*源地址*/, dgid_addr;/*目的地址*/
 };
@@ -135,8 +135,8 @@ struct rxe_send_wr {
 
 struct rxe_sge {
 	__aligned_u64 addr;
-	__u32	length;
-	__u32	lkey;
+	__u32	length;/*sge长度*/
+	__u32	lkey;/*sge对应mr*/
 };
 
 struct mminfo {

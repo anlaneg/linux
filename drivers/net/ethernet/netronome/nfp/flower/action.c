@@ -262,6 +262,7 @@ nfp_fl_output(struct nfp_app *app, struct nfp_fl_output *output,
 	return 0;
 }
 
+/*是否为gre接口（gretap接口，ip6gretap接口）*/
 static bool
 nfp_flower_tun_is_gre(struct flow_rule *rule, int start_idx)
 {
@@ -271,6 +272,7 @@ nfp_flower_tun_is_gre(struct flow_rule *rule, int start_idx)
 
 	/* Preparse action list for next mirred or redirect action */
 	for (act_idx = start_idx + 1; act_idx < num_act; act_idx++)
+		/*自start_idx+1位置开始，遍历rule上所有action*/
 		if (act[act_idx].id == FLOW_ACTION_REDIRECT ||
 		    act[act_idx].id == FLOW_ACTION_MIRRED)
 			return netif_is_gretap(act[act_idx].dev) ||
@@ -291,22 +293,23 @@ nfp_fl_get_tun_from_act(struct nfp_app *app,
 	 * in the mirred action for tunnels without l4.
 	 */
 	if (nfp_flower_tun_is_gre(rule, act_idx))
-		return NFP_FL_TUNNEL_GRE;
+		return NFP_FL_TUNNEL_GRE;/*gre隧道*/
 
 	switch (tun->key.tp_dst) {
 	case htons(IANA_VXLAN_UDP_PORT):
-		return NFP_FL_TUNNEL_VXLAN;
+		return NFP_FL_TUNNEL_VXLAN;/*vxlan隧道*/
 	case htons(GENEVE_UDP_PORT):
 		if (priv->flower_ext_feats & NFP_FL_FEATS_GENEVE)
-			return NFP_FL_TUNNEL_GENEVE;
+			return NFP_FL_TUNNEL_GENEVE;/*geneve隧道*/
 		fallthrough;
 	default:
-		return NFP_FL_TUNNEL_NONE;
+		return NFP_FL_TUNNEL_NONE;/*无法从隧道port判断的隧道类型*/
 	}
 }
 
 static struct nfp_fl_pre_tunnel *nfp_fl_pre_tunnel(char *act_data, int act_len)
 {
+	/*tunnel要增加的数据结构体*/
 	size_t act_size = sizeof(struct nfp_fl_pre_tunnel);
 	struct nfp_fl_pre_tunnel *pre_tun_act;
 
@@ -314,16 +317,18 @@ static struct nfp_fl_pre_tunnel *nfp_fl_pre_tunnel(char *act_data, int act_len)
 	 * If other actions already exist they need to be pushed forward.
 	 */
 	if (act_len)
+		/*在act_data之前空出一个act_size长度*/
 		memmove(act_data + act_size, act_data, act_len);
 
+	/*指向空出的这个空间（struct nfp_fl_pre_tunnel)*/
 	pre_tun_act = (struct nfp_fl_pre_tunnel *)act_data;
 
-	memset(pre_tun_act, 0, act_size);
+	memset(pre_tun_act, 0, act_size);/*此空闲清零*/
 
-	pre_tun_act->head.jump_id = NFP_FL_ACTION_OPCODE_PRE_TUNNEL;
-	pre_tun_act->head.len_lw = act_size >> NFP_FL_LW_SIZ;
+	pre_tun_act->head.jump_id = NFP_FL_ACTION_OPCODE_PRE_TUNNEL;/*指明tunnel前*/
+	pre_tun_act->head.len_lw = act_size >> NFP_FL_LW_SIZ;/*指明action大小*/
 
-	return pre_tun_act;
+	return pre_tun_act;/*返回指针*/
 }
 
 static int
@@ -397,14 +402,14 @@ nfp_fl_push_geneve_options(struct nfp_fl_payload *nfp_fl, int *list_len,
 }
 
 static int
-nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun,
-	       const struct flow_action_entry *act,
+nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun/*待填充的nfp tunnel参数*/,
+	       const struct flow_action_entry *act/*tunnel action对应的参数*/,
 	       struct nfp_fl_pre_tunnel *pre_tun,
-	       enum nfp_flower_tun_type tun_type,
+	       enum nfp_flower_tun_type tun_type/*隧道类型*/,
 	       struct net_device *netdev, struct netlink_ext_ack *extack)
 {
 	const struct ip_tunnel_info *ip_tun = act->tunnel;
-	bool ipv6 = ip_tunnel_info_af(ip_tun) == AF_INET6;
+	bool ipv6 = ip_tunnel_info_af(ip_tun) == AF_INET6;/*是否ipv6隧道*/
 	size_t act_size = sizeof(struct nfp_fl_set_tun);
 	struct nfp_flower_priv *priv = app->priv;
 	u32 tmp_set_ip_tun_type_index = 0;
@@ -412,6 +417,7 @@ nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun,
 	int pretun_idx = 0;
 
 	if (!IS_ENABLED(CONFIG_IPV6) && ipv6)
+		/*指定的是ipv6隧道，但kernel未开启ipv6*/
 		return -EOPNOTSUPP;
 
 	if (ipv6 && !(priv->flower_ext_feats & NFP_FL_FEATS_IPV6_TUN))
@@ -428,6 +434,7 @@ nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun,
 	}
 
 	if (ip_tun->key.tun_flags & ~NFP_FL_SUPPORTED_UDP_TUN_FLAGS) {
+		/*遇到不支持的隧道标记*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "unsupported offload: loaded firmware does not support tunnel flag offload");
 		return -EOPNOTSUPP;
@@ -449,21 +456,28 @@ nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun,
 		set_tun->ttl = ip_tun->key.ttl;
 #ifdef CONFIG_IPV6
 	} else if (ipv6) {
+		/*取此netdev对应的net namespace*/
 		struct net *net = dev_net(netdev);
 		struct flowi6 flow = {};
 		struct dst_entry *dst;
 
+		/*设置目的ip*/
 		flow.daddr = ip_tun->key.u.ipv6.dst;
+		/*指明协议为udp*/
 		flow.flowi4_proto = IPPROTO_UDP;
+		/*在指定netns中查询此flow*/
 		dst = ipv6_stub->ipv6_dst_lookup_flow(net, NULL, &flow, NULL);
 		if (!IS_ERR(dst)) {
+			/*使用路由指明的ttl*/
 			set_tun->ttl = ip6_dst_hoplimit(dst);
 			dst_release(dst);
 		} else {
+			/*使用此netns中配置的hop_limit来做ttl*/
 			set_tun->ttl = net->ipv6.devconf_all->hop_limit;
 		}
 #endif
 	} else {
+		/*ipv6情况下获取ttl*/
 		struct net *net = dev_net(netdev);
 		struct flowi4 flow = {};
 		struct rtable *rt;
@@ -473,14 +487,16 @@ nfp_fl_set_tun(struct nfp_app *app, struct nfp_fl_set_tun *set_tun,
 		 * default. Note that CONFIG_INET is a requirement of
 		 * CONFIG_NET_SWITCHDEV so must be defined here.
 		 */
-		flow.daddr = ip_tun->key.u.ipv4.dst;
-		flow.flowi4_proto = IPPROTO_UDP;
-		rt = ip_route_output_key(net, &flow);
+		flow.daddr = ip_tun->key.u.ipv4.dst;/*设置目的ip*/
+		flow.flowi4_proto = IPPROTO_UDP;/*设置协议为udp*/
+		rt = ip_route_output_key(net, &flow);/*执行output方向路由查询*/
 		err = PTR_ERR_OR_ZERO(rt);
 		if (!err) {
+			/*使用路由指明的ttl*/
 			set_tun->ttl = ip4_dst_hoplimit(&rt->dst);
 			ip_rt_put(rt);
 		} else {
+			/*使用netns中配置的默认ttl*/
 			set_tun->ttl = READ_ONCE(net->ipv4.sysctl_ip_default_ttl);
 		}
 	}
@@ -1091,15 +1107,18 @@ nfp_flower_loop_action(struct nfp_app *app, const struct flow_action_entry *act,
 		*a_len += sizeof(struct nfp_fl_push_vlan);
 		break;
 	case FLOW_ACTION_TUNNEL_ENCAP: {
-		const struct ip_tunnel_info *ip_tun = act->tunnel;
+		const struct ip_tunnel_info *ip_tun = act->tunnel;/*要添加的tunnel*/
 
+		/*获取隧道类型*/
 		*tun_type = nfp_fl_get_tun_from_act(app, rule, act, act_idx);
 		if (*tun_type == NFP_FL_TUNNEL_NONE) {
+			/*隧道类型未知，报错*/
 			NL_SET_ERR_MSG_MOD(extack, "unsupported offload: unsupported tunnel type in action list");
 			return -EOPNOTSUPP;
 		}
 
 		if (ip_tun->mode & ~NFP_FL_SUPPORTED_TUNNEL_INFO_FLAGS) {
+			/*遇到不支持的flags,报错*/
 			NL_SET_ERR_MSG_MOD(extack, "unsupported offload: unsupported tunnel flags in action list");
 			return -EOPNOTSUPP;
 		}
@@ -1110,18 +1129,20 @@ nfp_flower_loop_action(struct nfp_app *app, const struct flow_action_entry *act,
 		 */
 		if (*a_len + sizeof(struct nfp_fl_pre_tunnel) +
 		    sizeof(struct nfp_fl_set_tun) > NFP_FL_MAX_A_SIZ) {
+			/*action list长度检查超限*/
 			NL_SET_ERR_MSG_MOD(extack, "unsupported offload: maximum allowed action list size exceeded at tunnel encap");
 			return -EOPNOTSUPP;
 		}
 
 		pre_tun = nfp_fl_pre_tunnel(nfp_fl->action_data, *a_len);
 		nfp_fl->meta.shortcut = cpu_to_be32(NFP_FL_SC_ACT_NULL);
-		*a_len += sizeof(struct nfp_fl_pre_tunnel);
+		*a_len += sizeof(struct nfp_fl_pre_tunnel);/*空间已预留，增加长度*/
 
 		err = nfp_fl_push_geneve_options(nfp_fl, a_len, act, extack);
 		if (err)
 			return err;
 
+		/*指向nfp_fl_pre_tunnel结构体后，即tunnel action参数位置*/
 		set_tun = (void *)&nfp_fl->action_data[*a_len];
 		err = nfp_fl_set_tun(app, set_tun, act, pre_tun, *tun_type,
 				     netdev, extack);

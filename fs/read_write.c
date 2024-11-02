@@ -99,7 +99,7 @@ generic_file_llseek_size(struct file *file, loff_t offset, int whence,
 		 * write() or lseek() might have altered it
 		 */
 		if (offset == 0)
-			return file->f_pos;
+			return file->f_pos;/*返回当前位置*/
 		/*
 		 * f_lock protects against read/modify/write race with other
 		 * SEEK_CURs. Note that parallel writes and reads behave
@@ -164,6 +164,7 @@ loff_t fixed_size_llseek(struct file *file, loff_t offset, int whence, loff_t si
 {
 	switch (whence) {
 	case SEEK_SET: case SEEK_CUR: case SEEK_END:
+		/*只接收以上三种whence*/
 		return generic_file_llseek_size(file, offset, whence,
 						size, size);
 	default:

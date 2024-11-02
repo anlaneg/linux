@@ -29,18 +29,21 @@ int mr_check_range(struct rxe_mr *mr, u64 iova, size_t length)
 {
 	switch (mr->ibmr.type) {
 	case IB_MR_TYPE_DMA:
+		/*此类型无条件通过*/
 		return 0;
 
 	case IB_MR_TYPE_USER:
 	case IB_MR_TYPE_MEM_REG:
-		if (iova < mr->ibmr.iova ||
-		    iova + length > mr->ibmr.iova + mr->ibmr.length) {
+		if (iova < mr->ibmr.iova/*iova地址左侧不在此range中*/ ||
+		    iova + length > mr->ibmr.iova + mr->ibmr.length/*iova地址右侧不在此range中*/) {
 			rxe_dbg_mr(mr, "iova/length out of range");
 			return -EINVAL;
 		}
+		/*校验能过*/
 		return 0;
 
 	default:
+		/*不支持其它类型的mr*/
 		rxe_dbg_mr(mr, "mr type not supported\n");
 		return -EINVAL;
 	}
@@ -60,11 +63,11 @@ static void rxe_mr_init(int access, struct rxe_mr *mr)
 	mr->lkey = mr->ibmr.lkey = key;/*指明此mr在本端的key*/
 	mr->rkey = mr->ibmr.rkey = key;/*指明此mr在对端的key*/
 
-	mr->access = access;
+	mr->access = access;/*记录此mr访问权限*/
 	mr->ibmr.page_size = PAGE_SIZE;/*mr对应的页大小*/
 	mr->page_mask = PAGE_MASK;
 	mr->page_shift = PAGE_SHIFT;
-	mr->state = RXE_MR_STATE_INVALID;
+	mr->state = RXE_MR_STATE_INVALID;/*标记此mr当前无效*/
 }
 
 void rxe_mr_init_dma(int access, struct rxe_mr *mr)
@@ -78,7 +81,7 @@ void rxe_mr_init_dma(int access, struct rxe_mr *mr)
 
 static unsigned long rxe_mr_iova_to_index(struct rxe_mr *mr, u64 iova)
 {
-	/*iova地址相对于mr->ibmr.iova的页偏移量*/
+	/*iova地址相对于mr->ibmr.iova的页偏移量（或者称为mr页号）*/
 	return (iova >> mr->page_shift) - (mr->ibmr.iova >> mr->page_shift);
 }
 
@@ -252,12 +255,12 @@ int rxe_map_mr_sg(struct ib_mr *ibmr, struct scatterlist *sgl,
 	return ib_sg_to_pages(ibmr, sgl, sg_nents, sg_offset, rxe_set_page);
 }
 
-static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
+static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova/*数据源或数据目的*/, void *addr/*数据目的或者数据源*/,
 			      unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir/*指明复制方向*/)
 {
 	/*取页偏移量*/
 	unsigned int page_offset = rxe_mr_iova_to_page_offset(mr, iova);
-	/*页偏移量*/
+	/*页号偏移量*/
 	unsigned long index = rxe_mr_iova_to_index(mr, iova);
 	unsigned int bytes;
 	struct page *page;
@@ -291,56 +294,64 @@ static int rxe_mr_copy_xarray(struct rxe_mr *mr, u64 iova, void *addr,
 	return 0;
 }
 
-static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr,
-			    unsigned int length, enum rxe_mr_copy_dir dir)
+static void rxe_mr_copy_dma(struct rxe_mr *mr, u64 dma_addr, void *addr/*源地址*/,
+			    unsigned int length/*复制长度*/, enum rxe_mr_copy_dir dir)
 {
-	unsigned int page_offset = dma_addr & (PAGE_SIZE - 1);
+	unsigned int page_offset = dma_addr & (PAGE_SIZE - 1);/*dma地址在页内的偏移量*/
 	unsigned int bytes;
 	struct page *page;
 	u8 *va;
 
 	while (length) {
+		/*取dma地址对应的page*/
 		page = ib_virt_dma_to_page(dma_addr);
 		bytes = min_t(unsigned int, length,
-				PAGE_SIZE - page_offset);
-		va = kmap_local_page(page);/*此页起始地址*/
+				PAGE_SIZE - page_offset);/*本次能复制的bytes数（dma是物理地址，其和虚拟地址映射间可能不连续）*/
+		va = kmap_local_page(page);/*此页起始虚拟地址*/
 
 		/*按方向确定src,dst*/
 		if (dir == RXE_TO_MR_OBJ)
+			/*即从addr写到va指向的位置*/
 			memcpy(va + page_offset, addr, bytes);
 		else
+			/*即从va指向的位置写到addr中*/
 			memcpy(addr, va + page_offset, bytes);
 
 		kunmap_local(va);
-		page_offset = 0;
-		dma_addr += bytes;
-		addr += bytes;
-		length -= bytes;
+		page_offset = 0;/*如果需要写下一页，则offset需要归零*/
+		dma_addr += bytes;/*dma地址向后移动bytes*/
+		addr += bytes;/*buffer向后移动bytes*/
+		length -= bytes;/*剩余待复制内容减少bytes*/
 	}
 }
 
-int rxe_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
-		unsigned int length, enum rxe_mr_copy_dir dir/*复制方向*/)
+int rxe_mr_copy(struct rxe_mr *mr, u64 iova/*起始地址1*/, void *addr/*起始地址2*/,
+		unsigned int length/*复制内容长度*/, enum rxe_mr_copy_dir dir/*复制方向*/)
 {
 	int err;
 
 	if (length == 0)
+		/*长度为零，直接返回*/
 		return 0;
 
 	if (WARN_ON(!mr))
 		return -EINVAL;
 
+	/*dma类型内存复制*/
 	if (mr->ibmr.type == IB_MR_TYPE_DMA) {
 		rxe_mr_copy_dma(mr, iova, addr, length, dir);
 		return 0;
 	}
 
+	/*mr到虚拟地址之间的复制*/
+	/*检查iova到iova+length这个区间包含在mr中*/
 	err = mr_check_range(mr, iova, length);
 	if (unlikely(err)) {
 		rxe_dbg_mr(mr, "iova out of range");
 		return err;
 	}
 
+	/*完成复制*/
 	return rxe_mr_copy_xarray(mr, iova, addr, length, dir);
 }
 
@@ -350,30 +361,34 @@ int rxe_mr_copy(struct rxe_mr *mr, u64 iova, void *addr,
 int copy_data(
 	struct rxe_pd		*pd,
 	int			access,
-	struct rxe_dma_info	*dma,
-	void			*addr,
-	int			length,
-	enum rxe_mr_copy_dir	dir)
+	struct rxe_dma_info	*dma/*dma内存*/,
+	void			*addr/*buffer起始地址*/,
+	int			length/*buffer长度*/,
+	enum rxe_mr_copy_dir	dir/*复制方向*/)
 {
 	int			bytes;
-	/*取dma数据*/
+	/*取当前seg指向的rxe_sge*/
 	struct rxe_sge		*sge	= &dma->sge[dma->cur_sge];
+	/*当前在rxe_sge中的起点偏移*/
 	int			offset	= dma->sge_offset;
+	/*资源长度*/
 	int			resid	= dma->resid;
 	struct rxe_mr		*mr	= NULL;
 	u64			iova;
 	int			err;
 
 	if (length == 0)
+		/*buffer长度为零，无论读写均不需要操作*/
 		return 0;
 
 	if (length > resid) {
+		/*要求的读写长度超过可提供的，报错*/
 		err = -EINVAL;
 		goto err2;
 	}
 
 	if (sge->length && (offset < sge->length)) {
-		/*当前sge中有待复制数据，先查sge对应的mr*/
+		/*？？？当前sge中有待复制数据，先查sge对应的mr*/
 		mr = lookup_mr(pd, access, sge->lkey, RXE_LOOKUP_LOCAL);
 		if (!mr) {
 			err = -EINVAL;
@@ -385,16 +400,17 @@ int copy_data(
 		bytes = length;
 
 		if (offset >= sge->length) {
+			/*当前offset超过seg能提供的length*/
 			if (mr) {
 				rxe_put(mr);
-				mr = NULL;
+				mr = NULL;/*归还当前mr*/
 			}
-			sge++;
-			dma->cur_sge++;/*切换到下一个sge*/
-			offset = 0;
+			sge++;/*指针切换到下一个sge*/
+			dma->cur_sge++;/*下标切换到下一个sge*/
+			offset = 0;/*offset回归到零*/
 
 			if (dma->cur_sge >= dma->num_sge) {
-				/*cur_seg超过sge总数，则buffer不足被填充*/
+				/*cur_seg超过sge总数，则buffer不足被填充，报错*/
 				err = -ENOSPC;
 				goto err2;
 			}
@@ -409,7 +425,7 @@ int copy_data(
 					goto err1;
 				}
 			} else {
-				/*这个sge内容为空，跳过*/
+				/*这个sge内容为空，跳过,忽略*/
 				continue;
 			}
 		}
@@ -419,12 +435,13 @@ int copy_data(
 			bytes = sge->length - offset;
 
 		if (bytes > 0) {
-			/*复制bytes字节*/
+			/*确认复制起始地址iova,需复制bytes字节*/
 			iova = sge->addr + offset;
 			err = rxe_mr_copy(mr, iova, addr, bytes, dir);
 			if (err)
 				goto err2;
 
+			/*上面已完成了此mr的复制，准备参数，检查是否要切sge*/
 			offset	+= bytes;
 			resid	-= bytes;
 			length	-= bytes;
@@ -433,7 +450,7 @@ int copy_data(
 	}
 
 	dma->sge_offset = offset;/*更新cur_sge的可复制内容的起始偏移*/
-	dma->resid	= resid;
+	dma->resid	= resid;/*更新资源长度*/
 
 	if (mr)
 		rxe_put(mr);
@@ -639,30 +656,33 @@ int advance_dma_data(struct rxe_dma_info *dma, unsigned int length)
 	return 0;
 }
 
+/*查询mr*/
 struct rxe_mr *lookup_mr(struct rxe_pd *pd, int access, u32 key,
 			 enum rxe_mr_lookup_type type)
 {
 	struct rxe_mr *mr;
-	struct rxe_dev *rxe = to_rdev(pd->ibpd.device);
-	int index = key >> 8;
+	struct rxe_dev *rxe = to_rdev(pd->ibpd.device);/*获得对应的rxe设备*/
+	int index = key >> 8;/*key是一个u32的大端数，丢掉低8位，做为index*/
 
 	/*通过key查询mr（index指的是elem->index)*/
 	mr = rxe_pool_get_index(&rxe->mr_pool, index);
 	if (!mr)
 		return NULL;
 
+	/*如果查询的是local,则匹配lkey,否则查询的是remote,则匹配rkey*/
 	if (unlikely((type == RXE_LOOKUP_LOCAL && mr->lkey != key) ||
 		     (type == RXE_LOOKUP_REMOTE && mr->rkey != key) ||
-		     mr_pd(mr) != pd || ((access & mr->access) != access) ||
-		     mr->state != RXE_MR_STATE_VALID)) {
+		     mr_pd(mr) != pd/*pd必须匹配*/ || ((access & mr->access) != access)/*必须支持此访问权限*/ ||
+		     mr->state != RXE_MR_STATE_VALID/*mr状态必须是有效的*/)) {
 		/*对查询出来的mr进行校验，校验不通过。*/
 		rxe_put(mr);
 		mr = NULL;
 	}
 
-	return mr;
+	return mr;/*通过key查找到mr*/
 }
 
+/*按key来指明对应的mr无效*/
 int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
@@ -670,6 +690,7 @@ int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 	int remote;
 	int ret;
 
+	/*通过key取mr*/
 	mr = rxe_pool_get_index(&rxe->mr_pool, key >> 8);
 	if (!mr) {
 		rxe_dbg_qp(qp, "No MR for key %#x\n", key);
@@ -677,8 +698,10 @@ int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 		goto err;
 	}
 
+	/*是否匹配remote 访问权限*/
 	remote = mr->access & RXE_ACCESS_REMOTE;
 	if (remote ? (key != mr->rkey) : (key != mr->lkey)) {
+		/*key命中失败*/
 		rxe_dbg_mr(mr, "wr key (%#x) doesn't match mr key (%#x)\n",
 			key, (remote ? mr->rkey : mr->lkey));
 		ret = -EINVAL;
@@ -692,11 +715,13 @@ int rxe_invalidate_mr(struct rxe_qp *qp, u32 key)
 	}
 
 	if (unlikely(mr->ibmr.type != IB_MR_TYPE_MEM_REG)) {
+		/*只有IB_MR_TYPE_MEM_REG类型的mr可以被置为无效*/
 		rxe_dbg_mr(mr, "Type (%d) is wrong\n", mr->ibmr.type);
 		ret = -EINVAL;
 		goto err_drop_ref;
 	}
 
+	/*指明此mr状态为free*/
 	mr->state = RXE_MR_STATE_FREE;
 	ret = 0;
 
@@ -738,6 +763,7 @@ int rxe_reg_fast_mr(struct rxe_qp *qp, struct rxe_send_wqe *wqe)
 		return -EINVAL;
 	}
 
+	/*更新此mr,并将mr置为有效*/
 	mr->access = access;
 	mr->lkey = key;
 	mr->rkey = key;

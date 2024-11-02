@@ -47,10 +47,14 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 	 */
 	if ((st & htonl(0xE0000000)) != htonl(0x00000000) &&
 	    (st & htonl(0xE0000000)) != htonl(0xE0000000))
+		/*遇到开区间（000，111）间的数值，为单播，global地址*/
 		return (IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));
 
-	/*FF00::/8地址范围为组播地址*/
+	/*此线后，仅考虑000b,111b两种情况*/
+	/*FF00::/8地址范围为组播地址
+	 *
+	 * */
 	if ((st & htonl(0xFF000000)) == htonl(0xFF000000)) {
 		/* multicast */
 		/* addr-select 3.1 */
@@ -58,14 +62,28 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 			ipv6_addr_scope2type(IPV6_ADDR_MC_SCOPE(addr)));
 	}
 
-	/*FE80::/10地址范围的为linklocal地址，见rfc2373 2.5.8节*/
+	/*FE80::/10地址范围的为linklocal地址，见rfc2373 2.5.8节
+	 *
+	 * FE::/7中只有FE/8,FF/8两段，FF::/8做为组播，余FE::/8;
+	 * FE::/8中共有 FE00::/10, FE40::/10, FE80::/10,FEC0::/10 四段，这里分配FE80::/10*/
 	if ((st & htonl(0xFFC00000)) == htonl(0xFE800000))
 		return (IPV6_ADDR_LINKLOCAL | IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_LINKLOCAL));		/* addr-select 3.1 */
 
+	/*FEC0::/10地址范围为ipv6私有地址(site local)
+	 *
+	 * FE::/8中再分配FEC0::/10,此时FE::/8中还剩下两段,即“FE00::/10” 与“FE40::/10”
+	 * */
 	if ((st & htonl(0xFFC00000)) == htonl(0xFEC00000))
 		return (IPV6_ADDR_SITELOCAL | IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_SITELOCAL));		/* addr-select 3.1 */
+
+	/*由rfc 4193定义的私有地址 FC::/7,
+	 * FD::/8表示locally assigned，FC::/8 may be defined in the future
+	 *
+	 *  FC::/6中共有以下FD::/8, FE::/7, FC::/8三段，如上已知，FE::/7已分配完。
+	 *  这里分配了FD::/8,FC::/8, 到此FC::/6分配完了。
+	 * */
 	if ((st & htonl(0xFE000000)) == htonl(0xFC000000))
 		return (IPV6_ADDR_UNICAST |
 			IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));			/* RFC 4193 */
@@ -81,7 +99,7 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 				return (IPV6_ADDR_LOOPBACK | IPV6_ADDR_UNICAST |
 					IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_LINKLOCAL));	/* addr-select 3.4 */
 
-			/*::/96范围为v4监容地址，见rfc2373 2.5.4节*/
+			/*::/96范围为v4兼容地址，见rfc2373 2.5.4节*/
 			return (IPV6_ADDR_COMPATv4 | IPV6_ADDR_UNICAST |
 				IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));	/* addr-select 3.3 */
 		}
@@ -92,6 +110,7 @@ int __ipv6_addr_type(const struct in6_addr *addr)
 				IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));	/* addr-select 3.3 */
 	}
 
+	/*其它地址，包括未分配出来的，均为global地址*/
 	return (IPV6_ADDR_UNICAST |
 		IPV6_ADDR_SCOPE_TYPE(IPV6_ADDR_SCOPE_GLOBAL));	/* addr-select 3.4 */
 }
@@ -133,6 +152,7 @@ EXPORT_SYMBOL(unregister_inet6addr_validator_notifier);
 
 int inet6addr_validator_notifier_call_chain(unsigned long val, void *v)
 {
+	/*触发validator通知链*/
 	return blocking_notifier_call_chain(&inet6addr_validator_chain, val, v);
 }
 EXPORT_SYMBOL(inet6addr_validator_notifier_call_chain);
@@ -228,7 +248,7 @@ const struct ipv6_stub *ipv6_stub __read_mostly = &(struct ipv6_stub) {
 EXPORT_SYMBOL_GPL(ipv6_stub);
 
 /* IPv6 Wildcard Address and Loopback Address defined by RFC2553 */
-const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;
+const struct in6_addr in6addr_loopback = IN6ADDR_LOOPBACK_INIT;/*ipv6 loopback地址*/
 EXPORT_SYMBOL(in6addr_loopback);
 const struct in6_addr in6addr_any = IN6ADDR_ANY_INIT;
 EXPORT_SYMBOL(in6addr_any);

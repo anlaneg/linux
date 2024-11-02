@@ -56,6 +56,7 @@ struct in_device {
 	struct rcu_head		rcu_head;
 };
 
+/*取attr对应的配置*/
 #define IPV4_DEVCONF(cnf, attr) ((cnf).data[IPV4_DEVCONF_ ## attr - 1])
 #define IPV4_DEVCONF_ALL(net, attr) \
 	IPV4_DEVCONF((*(net)->ipv4.devconf_all), attr)
@@ -93,8 +94,8 @@ static inline void ipv4_devconf_setall(struct in_device *in_dev)
 	 IN_DEV_CONF_GET((in_dev), attr))
 
 #define IN_DEV_NET_ORCONF(in_dev, net, attr) \
-	(IPV4_DEVCONF_ALL(net, attr) || \
-	 IN_DEV_CONF_GET((in_dev), attr))
+	(IPV4_DEVCONF_ALL(net, attr)/*取all 设备配置*/ || \
+	 IN_DEV_CONF_GET((in_dev), attr)/*取给定设备的配置*/)
 
 #define IN_DEV_ORCONF(in_dev, attr) \
 	IN_DEV_NET_ORCONF(in_dev, dev_net(in_dev->dev), attr)
@@ -220,7 +221,7 @@ __be32 inet_confirm_addr(struct net *net, struct in_device *in_dev, __be32 dst,
 struct in_ifaddr *inet_ifa_byprefix(struct in_device *in_dev, __be32 prefix,
 				    __be32 mask);
 struct in_ifaddr *inet_lookup_ifaddr_rcu(struct net *net, __be32 addr);
-//地址是否在同一个掩码下
+//地址addr是否与ifa->ifa_address在同一个掩码下
 static inline bool inet_ifa_match(__be32 addr, const struct in_ifaddr *ifa)
 {
 	return !((addr^ifa->ifa_address)&ifa->ifa_mask);

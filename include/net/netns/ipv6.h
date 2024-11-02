@@ -68,7 +68,7 @@ struct netns_ipv6 {
 	struct inet_peer_base	*peers;
 	struct fqdir		*fqdir;
 	struct fib6_info	*fib6_null_entry;/*用来表示路由项中的空节点*/
-	struct rt6_info		*ip6_null_entry;
+	struct rt6_info		*ip6_null_entry;/*策略路由明确action为不可达*/
 	struct rt6_statistics   *rt6_stats;
 	struct timer_list       ip6_fib_timer;
 	/*ipv6路由表hash table*/
@@ -86,8 +86,8 @@ struct netns_ipv6 {
 #ifdef CONFIG_IPV6_SUBTREES
 	unsigned int		fib6_routes_require_src;
 #endif
-	struct rt6_info         *ip6_prohibit_entry;
-	struct rt6_info         *ip6_blk_hole_entry;
+	struct rt6_info         *ip6_prohibit_entry;/*禁止action对应的路由项*/
+	struct rt6_info         *ip6_blk_hole_entry;/*黑洞对应的路由项*/
 	struct fib6_table       *fib6_local_tbl;/*local路由表*/
 	struct fib_rules_ops    *fib6_rules_ops;/*策略路由表*/
 #endif

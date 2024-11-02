@@ -286,7 +286,7 @@ static const DEVICE_ATTR(whole_disk, 0444, whole_disk_show, NULL);
  * after all disk users are gone.
  */
 static struct block_device *add_partition(struct gendisk *disk, int partno/*分区号*/,
-				sector_t start, sector_t len, int flags,
+				sector_t start/*起始扇区*/, sector_t len/*此分区扇区总数*/, int flags,
 				struct partition_meta_info *info)
 {
 	dev_t devt = MKDEV(0, 0);
@@ -312,13 +312,14 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 		return ERR_PTR(-ENXIO);
 	}
 
+	/*此分区号已被占用*/
 	if (xa_load(&disk->part_tbl, partno))
 		return ERR_PTR(-EBUSY);
 
 	/* ensure we always have a reference to the whole disk */
 	get_device(disk_to_dev(disk));
 
-	/*针对partno号分区，创建块设备*/
+	/*针对partno号分区，申请并创建块设备*/
 	err = -ENOMEM;
 	bdev = bdev_alloc(disk, partno);
 	if (!bdev)
@@ -327,7 +328,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 	bdev->bd_start_sect = start;
 	bdev_set_nr_sectors(bdev, len);
 
-	pdev = &bdev->bd_device;
+	pdev = &bdev->bd_device;/*块对应的device*/
 	dname = dev_name(ddev);
 	/*设置设备名称（含分区号）*/
 	if (isdigit(dname[strlen(dname) - 1]))
@@ -344,12 +345,14 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 	if (bdev->bd_partno < disk->minors) {
 		devt = MKDEV(disk->major, disk->first_minor + bdev->bd_partno);
 	} else {
+		/*此时分区号大于disk->minors,没法直接分配minor了,自blkext申请minor*/
 		err = blk_alloc_ext_minor();
 		if (err < 0)
 			goto out_put;
+		/*构造blkext类型的devt*/
 		devt = MKDEV(BLOCK_EXT_MAJOR, err);
 	}
-	pdev->devt = devt;
+	pdev->devt = devt;/*设备对应的devt*/
 
 	if (info) {
 		err = -ENOMEM;
@@ -377,9 +380,11 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 	}
 
 	/* everything is up and running, commence */
-	err = xa_insert(&disk->part_tbl, partno, bdev, GFP_KERNEL);
+	err = xa_insert(&disk->part_tbl, partno/*分区号*/, bdev/*分区对应的block设备*/, GFP_KERNEL);
 	if (err)
 		goto out_del;
+
+	/*添加此块设备到inode hashtable*/
 	bdev_add(bdev, devt);
 
 	/* suppress uevent if the disk suppresses it */
@@ -420,6 +425,7 @@ static bool partition_overlaps(struct gendisk *disk, sector_t start,
 	return overlap;
 }
 
+/*针对gendisk添加块设备分区号为partno,起始扇区为start,扇区数为length*/
 int bdev_add_partition(struct gendisk *disk, int partno, sector_t start,
 		sector_t length)
 {
@@ -434,6 +440,7 @@ int bdev_add_partition(struct gendisk *disk, int partno, sector_t start,
 	}
 
 	if (start >= capacity || end > capacity) {
+		/*指定的起始偏移等均超过容量*/
 		ret = -EINVAL;
 		goto out;
 	}

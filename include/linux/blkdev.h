@@ -132,19 +132,20 @@ struct gendisk {
 	 * major/first_minor/minors should not be set by any new driver, the
 	 * block core will take care of allocating them automatically.
 	 */
-	int major;
-	int first_minor;
-	int minors;
+	int major;/*disk对应的major编号*/
+	int first_minor;/*disk对应的首个minor编号*/
+	int minors;/*此disk可使用的minor总数*/
 
+	/*磁盘名称*/
 	char disk_name[DISK_NAME_LEN];	/* name of major driver */
 
 	unsigned short events;		/* supported events */
 	unsigned short event_flags;	/* flags related to event processing */
 
-	struct xarray part_tbl;
-	struct block_device *part0;/*0分区对应的块设备*/
+	struct xarray part_tbl;/*指明此disk包含的分区表*/
+	struct block_device *part0;/*0分区对应的块设备（即整个设备）*/
 
-	const struct block_device_operations *fops;
+	const struct block_device_operations *fops;/*块设备操作集*/
 	struct request_queue *queue;
 	void *private_data;
 
@@ -165,7 +166,7 @@ struct gendisk {
 
 	struct backing_dev_info	*bdi;
 	struct kobject queue_kobj;	/* the queue/ directory */
-	struct kobject *slave_dir;
+	struct kobject *slave_dir;/*指向块设备sfs下的slaves目录*/
 #ifdef CONFIG_BLOCK_HOLDER_DEPRECATED
 	struct list_head slave_bdevs;
 #endif
@@ -236,7 +237,7 @@ static inline unsigned int disk_openers(struct gendisk *disk)
  * therein is also used for device model presentation in sysfs.
  */
 #define dev_to_disk(device) \
-	(dev_to_bdev(device)->bd_disk)
+	(dev_to_bdev(device)->bd_disk)/*由device获取block device，并获取block device对应的gendisk*/
 #define disk_to_dev(disk) \
 	(&((disk)->part0->bd_device))
 
@@ -738,21 +739,25 @@ void rand_initialize_disk(struct gendisk *disk);
 
 static inline sector_t get_start_sect(struct block_device *bdev)
 {
+	/*取此块设备扇区起始号*/
 	return bdev->bd_start_sect;
 }
 
 static inline sector_t bdev_nr_sectors(struct block_device *bdev)
 {
+	/*取此块设备扇区总数*/
 	return bdev->bd_nr_sectors;
 }
 
 static inline loff_t bdev_nr_bytes(struct block_device *bdev)
 {
+	/*取此块设备字节总数*/
 	return (loff_t)bdev_nr_sectors(bdev) << SECTOR_SHIFT;
 }
 
 static inline sector_t get_capacity(struct gendisk *disk)
 {
+	/*取此disk整体字节总数*/
 	return bdev_nr_sectors(disk->part0);
 }
 
@@ -780,7 +785,7 @@ struct gendisk *__blk_alloc_disk(int node, struct lock_class_key *lkclass);
 ({									\
 	static struct lock_class_key __key;				\
 									\
-	__blk_alloc_disk(node_id, &__key);				\
+	__blk_alloc_disk(node_id, &__key);/*申请gendisk结构体*/				\
 })
 
 int __register_blkdev(unsigned int major, const char *name,
@@ -1358,6 +1363,7 @@ enum blk_unique_id {
 };
 
 struct block_device_operations {
+	/*用于直接处理bio请求*/
 	void (*submit_bio)(struct bio *bio);
 	/*此操作不为空时，支持多队列*/
 	int (*poll_bio)(struct bio *bio, struct io_comp_batch *iob,
@@ -1482,7 +1488,7 @@ extern const struct blk_holder_ops fs_holder_ops;
 	 (((flags) & SB_RDONLY) ? 0 : BLK_OPEN_WRITE))
 
 struct bdev_handle {
-	struct block_device *bdev;
+	struct block_device *bdev;/*操作的块设备*/
 	void *holder;
 	blk_mode_t mode;
 };

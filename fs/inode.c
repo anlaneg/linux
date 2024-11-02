@@ -56,7 +56,7 @@
 
 static unsigned int i_hash_mask __ro_after_init;
 static unsigned int i_hash_shift __ro_after_init;
-//inode哈希表，负责保存系统用到的所有inode
+/*inode哈希表，负责保存系统用到的所有inode查找*/
 static struct hlist_head *inode_hashtable __ro_after_init;
 //保护inode哈希表的锁
 static __cacheline_aligned_in_smp DEFINE_SPINLOCK(inode_hash_lock);
@@ -2376,10 +2376,10 @@ void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 		//设置字符设备的dev_t
 		inode->i_rdev = rdev;
 	} else if (S_ISBLK(mode)) {
-		//设置块设备对应的操作集
+		//初始化的为块设备，设置块设备对应的操作集
 		if (IS_ENABLED(CONFIG_BLOCK))
 			inode->i_fop = &def_blk_fops;
-		//设置块设备
+		//设置块设备dev_t
 		inode->i_rdev = rdev;
 	} else if (S_ISFIFO(mode))
 	    //针对fifo类型文件，使用pipeops做为操作集

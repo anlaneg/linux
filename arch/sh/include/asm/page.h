@@ -168,7 +168,7 @@ typedef struct page *pgtable_t;
  */
 #define PFN_START		(__MEMORY_START >> PAGE_SHIFT)
 #define ARCH_PFN_OFFSET		(PFN_START)
-//取地址kaddr对应的页号
+//取地址kaddr对应的page
 #define virt_to_page(kaddr)	pfn_to_page(__pa(kaddr) >> PAGE_SHIFT)
 #define virt_addr_valid(kaddr)	pfn_valid(__pa(kaddr) >> PAGE_SHIFT)
 

@@ -47,7 +47,7 @@ struct block_device {
 	sector_t		bd_start_sect;
 	/*此块设备对应的总扇区数*/
 	sector_t		bd_nr_sectors;
-	struct gendisk *	bd_disk;
+	struct gendisk *	bd_disk;/*块设备关联的disk*/
 	struct request_queue *	bd_queue;/*block设备queue*/
 	/*块设备统计信息*/
 	struct disk_stats __percpu *bd_stats;
@@ -58,8 +58,8 @@ struct block_device {
 	bool			bd_write_holder;
 	/*标记是否有submit_bio ops回调*/
 	bool			bd_has_submit_bio;
-	dev_t			bd_dev;/*块设备对应的设备编号（inode编号）*/
-	/*此block device对应的inode*/
+	dev_t			bd_dev;/*块设备对应的设备编号*/
+	/*此block device对应的inode（函数bdev_alloc设置此项）*/
 	struct inode		*bd_inode;	/* will die */
 
 	atomic_t		bd_openers;
@@ -69,7 +69,7 @@ struct block_device {
 	const struct blk_holder_ops *bd_holder_ops;
 	struct mutex		bd_holder_lock;
 	int			bd_holders;
-	struct kobject		*bd_holder_dir;
+	struct kobject		*bd_holder_dir;/*指向块设备sfs下的holder目录*/
 
 	atomic_t		bd_fsfreeze_count; /* number of freeze requests */
 	struct mutex		bd_fsfreeze_mutex; /* serialize freeze/thaw */
@@ -84,12 +84,14 @@ struct block_device {
 	 * keep this out-of-line as it's both big and not needed in the fast
 	 * path
 	 */
-	struct device		bd_device;
+	struct device		bd_device;/*块设备基类device*/
 } __randomize_layout;
 
+/*取整个块设备*/
 #define bdev_whole(_bdev) \
 	((_bdev)->bd_disk->part0)
 
+/*由device获取device对应的block_device*/
 #define dev_to_bdev(device) \
 	container_of((device), struct block_device, bd_device)
 
@@ -275,7 +277,7 @@ typedef unsigned int blk_qc_t;
 struct bio {
 	struct bio		*bi_next;	/* request queue link */
 	struct block_device	*bi_bdev;//磁盘
-	/*block io对应的操作flags*/
+	/*block io对应的操作flags(包括操作码，）*/
 	blk_opf_t		bi_opf;		/* bottom bits REQ_OP, top bits
 						 * req_flags.
 						 */
@@ -383,9 +385,9 @@ typedef __u32 __bitwise blk_mq_req_flags_t;
  */
 enum req_op {
 	/* read sectors from the device */
-	REQ_OP_READ		= (__force blk_opf_t)0,/*自设备上读取*/
+	REQ_OP_READ		= (__force blk_opf_t)0,/*自设备读取*/
 	/* write sectors to the device */
-	REQ_OP_WRITE		= (__force blk_opf_t)1,//向设备上写
+	REQ_OP_WRITE		= (__force blk_opf_t)1,/*向设备写入*/
 	/* flush the volatile write cache */
 	REQ_OP_FLUSH		= (__force blk_opf_t)2,
 	/* discard sectors */
@@ -493,7 +495,7 @@ static inline enum req_op bio_op(const struct bio *bio)
 
 static inline bool op_is_write(blk_opf_t op)
 {
-	/*检查是否为write操作*/
+	/*检查是否为write操作（0号bit如果是1，表示写）*/
 	return !!(op & (__force blk_opf_t)1);
 }
 

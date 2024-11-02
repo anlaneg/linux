@@ -28,7 +28,7 @@ struct fib_rule {
 	u32			table;//规则从属于那个路由表
 	u8			action;//规则的action（例如FR_ACT_GOTO）
 	u8			l3mdev;
-	u8                      proto;//路由协议类型
+	u8                      proto;//路由协议类型（规则来源，例如kernel)
 	u8			ip_proto;//4层协议号
 	u32			target;//goto action时记录要跳转到哪个目标上继续查询
 	__be64			tun_id;//隧道id号
@@ -49,7 +49,7 @@ struct fib_rule {
 };
 
 struct fib_lookup_arg {
-	void			*lookup_ptr;
+	void			*lookup_ptr;/*路由查询函数，针对一个table进行查询*/
 	const void		*lookup_data;
 	void			*result;/*保存查询到的路由结果*/
 	struct fib_rule		*rule;/*保存命中的策略*/

@@ -71,6 +71,7 @@ struct ip_tunnel_encap {
 
 /* Flags for ip_tunnel_info mode. */
 #define IP_TUNNEL_INFO_TX	0x01	/* represents tx tunnel parameters */
+/*指明是否为ipv6隧道*/
 #define IP_TUNNEL_INFO_IPV6	0x02	/* key contains IPv6 addresses */
 #define IP_TUNNEL_INFO_BRIDGE	0x04	/* represents a bridged tunnel id */
 
@@ -92,7 +93,7 @@ struct ip_tunnel_info {
 	struct dst_cache	dst_cache;
 #endif
 	u8			options_len;//选项长度
-	u8			mode;
+	u8			mode;/*隧道flags*/
 };
 
 /* 6rd prefix/relay information */

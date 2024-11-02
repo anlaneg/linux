@@ -91,7 +91,7 @@ int rxe_cq_resize_queue(struct rxe_cq *cq, int cqe,
 }
 
 /* caller holds reference to cq */
-int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
+int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe/*cqe中要填充的内容*/, int solicited)
 {
 	struct ib_event ev;
 	int full;
@@ -102,12 +102,13 @@ int rxe_cq_post(struct rxe_cq *cq, struct rxe_cqe *cqe, int solicited)
 
 	full = queue_full(cq->queue, QUEUE_TYPE_TO_CLIENT);
 	if (unlikely(full)) {
+		/*取cqe时发现cq队列为满，产生一个cq_err event*/
 		rxe_err_cq(cq, "queue full");
 		spin_unlock_irqrestore(&cq->cq_lock, flags);
 		if (cq->ibcq.event_handler) {
 			ev.device = cq->ibcq.device;
 			ev.element.cq = &cq->ibcq;
-			ev.event = IB_EVENT_CQ_ERR;
+			ev.event = IB_EVENT_CQ_ERR;/*给cq一个event指明CQ error，cq队列满*/
 			cq->ibcq.event_handler(&ev, cq->ibcq.cq_context);
 		}
 

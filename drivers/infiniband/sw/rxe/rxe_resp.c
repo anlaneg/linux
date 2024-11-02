@@ -96,12 +96,12 @@ static enum resp_states check_psn(struct rxe_qp *qp,
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
 		if (diff > 0) {
-			/*收到的包大于已响应的psn*/
+			/*收到的包大于预期的psn（即收到乱序的包）*/
 			if (qp->resp.sent_psn_nak)
-				/*之前已发送nack，走RESPST_CLEANUP*/
+				/*之前已收到过乱序的包，走RESPST_CLEANUP*/
 				return RESPST_CLEANUP;
 
-			/*存在未收到的报文，标记需要发送nack*/
+			/*首次收到乱序的包，标记需要发送nack*/
 			qp->resp.sent_psn_nak = 1;
 			/*乱序计数增加*/
 			rxe_counter_inc(rxe, RXE_CNT_OUT_OF_SEQ_REQ);
@@ -117,7 +117,7 @@ static enum resp_states check_psn(struct rxe_qp *qp,
 			return RESPST_DUPLICATE_REQUEST;
 		}
 
-		/*diff=0,如果之前标记过nack,则置为0*/
+		/*diff=0,如果之前收到过乱序的包，此处则置为0*/
 		if (qp->resp.sent_psn_nak)
 			qp->resp.sent_psn_nak = 0;
 
@@ -147,17 +147,17 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 {
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
-		switch (qp->resp.opcode) {
+		switch (qp->resp.opcode/*上次执行时的opcode*/) {
 		case IB_OPCODE_RC_SEND_FIRST:
 		case IB_OPCODE_RC_SEND_MIDDLE:
-			switch (pkt->opcode) {
+			switch (pkt->opcode/*当次报文的opcode*/) {
 			case IB_OPCODE_RC_SEND_MIDDLE:
 			case IB_OPCODE_RC_SEND_LAST:
 			case IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE:
 			case IB_OPCODE_RC_SEND_LAST_WITH_INVALIDATE:
-				return RESPST_CHK_OP_VALID;
+				return RESPST_CHK_OP_VALID;/*有效的opt*/
 			default:
-				return RESPST_ERR_MISSING_OPCODE_LAST_C;
+				return RESPST_ERR_MISSING_OPCODE_LAST_C;/*缺少last opt*/
 			}
 
 		case IB_OPCODE_RC_RDMA_WRITE_FIRST:
@@ -166,13 +166,14 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 			case IB_OPCODE_RC_RDMA_WRITE_MIDDLE:
 			case IB_OPCODE_RC_RDMA_WRITE_LAST:
 			case IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE:
-				return RESPST_CHK_OP_VALID;
+				return RESPST_CHK_OP_VALID;/*有效opt*/
 			default:
-				return RESPST_ERR_MISSING_OPCODE_LAST_C;
+				return RESPST_ERR_MISSING_OPCODE_LAST_C;/*缺少last opt*/
 			}
 
 		default:
 			switch (pkt->opcode) {
+			/*此时上次收到的是非first,middle,本次收到middle,last，则报错缺first*/
 			case IB_OPCODE_RC_SEND_MIDDLE:
 			case IB_OPCODE_RC_SEND_LAST:
 			case IB_OPCODE_RC_SEND_LAST_WITH_IMMEDIATE:
@@ -180,9 +181,9 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 			case IB_OPCODE_RC_RDMA_WRITE_MIDDLE:
 			case IB_OPCODE_RC_RDMA_WRITE_LAST:
 			case IB_OPCODE_RC_RDMA_WRITE_LAST_WITH_IMMEDIATE:
-				return RESPST_ERR_MISSING_OPCODE_FIRST;
+				return RESPST_ERR_MISSING_OPCODE_FIRST;/*qp未设置first就遇到了middle opt*/
 			default:
-				return RESPST_CHK_OP_VALID;
+				return RESPST_CHK_OP_VALID;/*有效opt*/
 			}
 		}
 		break;
@@ -197,7 +198,7 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 			case IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE:
 				return RESPST_CHK_OP_VALID;
 			default:
-				return RESPST_ERR_MISSING_OPCODE_LAST_D1E;
+				return RESPST_ERR_MISSING_OPCODE_LAST_D1E;/*未遇到last opt*/
 			}
 
 		case IB_OPCODE_UC_RDMA_WRITE_FIRST:
@@ -213,6 +214,7 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 
 		default:
 			switch (pkt->opcode) {
+			/*此时上次收到的是非first,middle,本次收到middle,last，则跳RESPST_CLEANUP*/
 			case IB_OPCODE_UC_SEND_MIDDLE:
 			case IB_OPCODE_UC_SEND_LAST:
 			case IB_OPCODE_UC_SEND_LAST_WITH_IMMEDIATE:
@@ -232,15 +234,17 @@ static enum resp_states check_op_seq(struct rxe_qp *qp,
 	}
 }
 
+/*检查报文指明的opcode是否与qp属性匹配*/
 static bool check_qp_attr_access(struct rxe_qp *qp,
 				 struct rxe_pkt_info *pkt)
 {
 	if (((pkt->mask & RXE_READ_MASK) &&
-	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_READ)) ||
+	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_READ)/*报文要求读，但qp不容许远程读*/) ||
 	    ((pkt->mask & (RXE_WRITE_MASK | RXE_ATOMIC_WRITE_MASK)) &&
-	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_WRITE)) ||
+	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_WRITE)/*报文要求写，但qp不容许远程写*/) ||
 	    ((pkt->mask & RXE_ATOMIC_MASK) &&
-	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_ATOMIC)))
+	     !(qp->attr.qp_access_flags & IB_ACCESS_REMOTE_ATOMIC/*报文要求原子操作，但qp不支持远程原子操作*/)))
+		/*比如报文opcode对应需要read权限，但qp不容许remote read，则检查失败*/
 		return false;
 
 	if (pkt->mask & RXE_FLUSH_MASK) {
@@ -262,7 +266,7 @@ static enum resp_states check_op_valid(struct rxe_qp *qp,
 	switch (qp_type(qp)) {
 	case IB_QPT_RC:
 		if (!check_qp_attr_access(qp, pkt))
-			/*opcode有误*/
+			/*opcode隐含要求的访问方式与qp支持的访问方式不一致*/
 			return RESPST_ERR_UNSUPPORTED_OPCODE;
 
 		break;
@@ -299,18 +303,21 @@ static enum resp_states get_srq_wqe(struct rxe_qp *qp)
 	unsigned long flags;
 
 	if (srq->error)
+		/*srq有误，跳err*/
 		return RESPST_ERR_RNR;
 
 	spin_lock_irqsave(&srq->rq.consumer_lock, flags);
 
 	wqe = queue_head(q, QUEUE_TYPE_FROM_CLIENT);
 	if (!wqe) {
+		/*无法取得wqe*/
 		spin_unlock_irqrestore(&srq->rq.consumer_lock, flags);
 		return RESPST_ERR_RNR;
 	}
 
 	/* don't trust user space data */
 	if (unlikely(wqe->dma.num_sge > srq->rq.max_sge)) {
+		/*wqe中指明num_sge超过srq的最大sge*/
 		spin_unlock_irqrestore(&srq->rq.consumer_lock, flags);
 		rxe_dbg_qp(qp, "invalid num_sge in SRQ entry\n");
 		return RESPST_ERR_MALFORMED_WQE;
@@ -352,6 +359,7 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 		if (likely(qp->attr.max_dest_rd_atomic > 0))
 			return RESPST_CHK_LENGTH;
 		else
+			/*达到max_dest_rd_atomic上限*/
 			return RESPST_ERR_TOO_MANY_RDMA_ATM_REQ;
 	}
 
@@ -359,9 +367,10 @@ static enum resp_states check_resource(struct rxe_qp *qp,
 		if (srq)
 			return get_srq_wqe(qp);
 
-		/*取可使用的wqe,并设置qp->resp.weq*/
+		/*自rq中取可使用的wqe,并设置qp->resp.weq*/
 		qp->resp.wqe = queue_head(qp->rq.queue,
 				QUEUE_TYPE_FROM_CLIENT);
+		/*如果无法获取到wqe,则跳RESPST_ERR_RNR*/
 		return (qp->resp.wqe) ? RESPST_CHK_LENGTH : RESPST_ERR_RNR;
 	}
 
@@ -379,19 +388,20 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	 */
 	if (pkt->mask & RXE_PAYLOAD_MASK && ((qp_type(qp) == IB_QPT_RC) ||
 					     (qp_type(qp) == IB_QPT_UC))) {
+		/*报文中有payload,且qp为rc/uc时进入*/
 		unsigned int mtu = qp->mtu;/*qp的mtu*/
-		unsigned int payload = payload_size(pkt);
+		unsigned int payload = payload_size(pkt);/*报文中的payload长度*/
 
 		if ((pkt->mask & RXE_START_MASK) &&
 		    (pkt->mask & RXE_END_MASK)) {
 			if (unlikely(payload > mtu)) {
-				/*报文提供的payload大于mtu*/
+				/*报文的opcode(首或尾）提供的payload大于mtu*/
 				rxe_dbg_qp(qp, "only packet too long");
 				return RESPST_ERR_LENGTH;
 			}
 		} else if ((pkt->mask & RXE_START_MASK) ||
 			   (pkt->mask & RXE_MIDDLE_MASK)) {
-			/*first及middle报文的payload必须与mtu相等*/
+			/*报文的opcode(首或中间的）报文的payload必须与mtu相等*/
 			if (unlikely(payload != mtu)) {
 				rxe_dbg_qp(qp, "first or middle packet not mtu");
 				return RESPST_ERR_LENGTH;
@@ -408,13 +418,14 @@ static enum resp_states rxe_resp_check_length(struct rxe_qp *qp,
 	/* See IBA C9-94 */
 	if (pkt->mask & RXE_RETH_MASK) {
 		if (reth_len(pkt) > (1U << 31)) {
+			/*指明的dma长度有误*/
 			rxe_dbg_qp(qp, "dma length too long");
 			return RESPST_ERR_LENGTH;
 		}
 	}
 
 	if (pkt->mask & RXE_RDMA_OP_MASK)
-		/*这种需要执行pkey检查*/
+		/*opcode属于读写等语义，需要执行pkey检查*/
 		return RESPST_CHK_RKEY;
 	else
 		return RESPST_EXECUTE;
@@ -429,14 +440,15 @@ static void qp_resp_from_reth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 {
 	unsigned int length = reth_len(pkt);
 
-	qp->resp.va = reth_va(pkt);
-	qp->resp.offset = 0;
+	qp->resp.va = reth_va(pkt);/*取报文指明的va*/
+	qp->resp.offset = 0;/*指偏移量*/
 	qp->resp.resid = length;
-	qp->resp.length = length;
+	qp->resp.length = length;/*报文指明dma地址*/
 	if (pkt->mask & RXE_READ_OR_WRITE_MASK && length == 0)
-		qp->resp.rkey = 0;
+		qp->resp.rkey = 0;/*长度为零时，rkey定为0*/
 	else
-		qp->resp.rkey = reth_rkey(pkt);
+		/*提取reth中指明的rkey*/
+		qp->resp.rkey = reth_rkey(pkt);/*取报文指明的rkey*/
 }
 
 static void qp_resp_from_atmeth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
@@ -444,7 +456,7 @@ static void qp_resp_from_atmeth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	qp->resp.va = atmeth_va(pkt);
 	qp->resp.offset = 0;
 	qp->resp.rkey = atmeth_rkey(pkt);
-	qp->resp.resid = sizeof(u64);
+	qp->resp.resid = sizeof(u64);/*dma长度为8个字节*/
 }
 
 /* resolve the packet rkey to qp->resp.mr or set qp->resp.mr to NULL
@@ -454,6 +466,7 @@ static void qp_resp_from_atmeth(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 static enum resp_states check_rkey(struct rxe_qp *qp,
 				   struct rxe_pkt_info *pkt)
 {
+	/*进入此流程的这些opcode均有RXE_RDMA_OP_MASK标记*/
 	struct rxe_mr *mr = NULL;
 	struct rxe_mw *mw = NULL;
 	u64 va;
@@ -469,15 +482,19 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	 * middle/last packets.
 	 */
 	if (pkt->mask & (RXE_READ_OR_WRITE_MASK | RXE_ATOMIC_WRITE_MASK)) {
+		/*遇到读，写，原子写*/
 		if (pkt->mask & RXE_RETH_MASK)
+			/*报文包括reth头，自reth中提取va,offset等*/
 			qp_resp_from_reth(qp, pkt);
 
+		/*报文要求的访问权限*/
 		access = (pkt->mask & RXE_READ_MASK) ? IB_ACCESS_REMOTE_READ
 						     : IB_ACCESS_REMOTE_WRITE;
 	} else if (pkt->mask & RXE_FLUSH_MASK) {
 		u32 flush_type = feth_plt(pkt);
 
 		if (pkt->mask & RXE_RETH_MASK)
+			/*报文包含reth头，自reth中提取va,offset等*/
 			qp_resp_from_reth(qp, pkt);
 
 		if (flush_type & IB_FLUSH_GLOBAL)
@@ -485,6 +502,7 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		if (flush_type & IB_FLUSH_PERSISTENT)
 			access |= IB_ACCESS_FLUSH_PERSISTENT;
 	} else if (pkt->mask & RXE_ATOMIC_MASK) {
+		/*原子标记，报文含atmeth头，自atmeth中提取va,offset等*/
 		qp_resp_from_atmeth(qp, pkt);
 		access = IB_ACCESS_REMOTE_ATOMIC;
 	} else {
@@ -497,6 +515,7 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	 */
 	if ((pkt->mask & RXE_READ_OR_WRITE_MASK) &&
 	    (pkt->mask & RXE_RETH_MASK) && reth_len(pkt) == 0) {
+		/*reth长度指明为0时，mr为NULL*/
 		qp->resp.mr = NULL;
 		return RESPST_EXECUTE;
 	}
@@ -504,9 +523,10 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 	va	= qp->resp.va;
 	rkey	= qp->resp.rkey;
 	resid	= qp->resp.resid;
-	pktlen	= payload_size(pkt);
+	pktlen	= payload_size(pkt);/*取当前报文中包含的pktlen*/
 
 	if (rkey_is_mw(rkey)) {
+		/*这个rkey为mw,查询mw*/
 		mw = rxe_lookup_mw(qp, access, rkey);
 		if (!mw) {
 			rxe_dbg_qp(qp, "no MW matches rkey %#x\n", rkey);
@@ -528,8 +548,10 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 		rxe_put(mw);
 		mw = NULL;
 	} else {
+		/*这种rkey是mr,通过rkey,access查询mr*/
 		mr = lookup_mr(qp->pd, access, rkey, RXE_LOOKUP_REMOTE);
 		if (!mr) {
+			/*没有找到对应的mr。*/
 			rxe_dbg_qp(qp, "no MR matches rkey %#x\n", rkey);
 			state = RESPST_ERR_RKEY_VIOLATION;
 			goto err;
@@ -544,6 +566,7 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 			goto skip_check_range;
 	}
 
+	/*检查mr是否能处理范围(va+qp->resp.offset, va+qp->resp.offset + resid)*/
 	if (mr_check_range(mr, va + qp->resp.offset, resid)) {
 		state = RESPST_ERR_RKEY_VIOLATION;
 		goto err;
@@ -552,16 +575,20 @@ static enum resp_states check_rkey(struct rxe_qp *qp,
 skip_check_range:
 	if (pkt->mask & (RXE_WRITE_MASK | RXE_ATOMIC_WRITE_MASK)) {
 		if (resid > mtu) {
+			/*要操作的长度超过了mtu*/
 			if (pktlen != mtu || bth_pad(pkt)) {
+				/*报文长度与mtu不一致，且pad不为零*/
 				state = RESPST_ERR_LENGTH;
 				goto err;
 			}
 		} else {
 			if (pktlen != resid) {
+				/*要操作的长度与报文长度不一致*/
 				state = RESPST_ERR_LENGTH;
 				goto err;
 			}
 			if ((bth_pad(pkt) != (0x3 & (-resid)))) {
+				/*两者pad不一致*/
 				/* This case may not be exactly that
 				 * but nothing else fits.
 				 */
@@ -574,7 +601,7 @@ skip_check_range:
 	WARN_ON_ONCE(qp->resp.mr);
 
 	qp->resp.mr = mr;
-	return RESPST_EXECUTE;
+	return RESPST_EXECUTE;/*跳execute*/
 
 err:
 	qp->resp.mr = NULL;
@@ -593,9 +620,10 @@ static enum resp_states send_data_in(struct rxe_qp *qp, void *data_addr,
 	int err;
 
 	/*利用data_addr填充qp->resp.wqe*/
-	err = copy_data(qp->pd, IB_ACCESS_LOCAL_WRITE, &qp->resp.wqe->dma,
-			data_addr, data_len, RXE_TO_MR_OBJ/*复制数据到mr*/);
+	err = copy_data(qp->pd, IB_ACCESS_LOCAL_WRITE/*本地写*/, &qp->resp.wqe->dma/*wqe对应的起始地址*/,
+			data_addr/*源数据地址*/, data_len/*源数据长度*/, RXE_TO_MR_OBJ/*复制数据到mr*/);
 	if (unlikely(err))
+		/*复制出错*/
 		return (err == -ENOSPC) ? RESPST_ERR_LENGTH
 					: RESPST_ERR_MALFORMED_WQE;
 
@@ -631,6 +659,7 @@ static struct resp_res *rxe_prepare_res(struct rxe_qp *qp,
 	struct resp_res *res;
 	u32 pkts;
 
+	/*指向head对应的struct resp_res*/
 	res = &qp->resp.resources[qp->resp.res_head];
 	rxe_advance_resp_resource(qp);
 	free_rd_atomic_resource(res);
@@ -789,10 +818,10 @@ static enum resp_states atomic_write_reply(struct rxe_qp *qp,
 
 static struct sk_buff *prepare_ack_packet(struct rxe_qp *qp,
 					  struct rxe_pkt_info *ack,
-					  int opcode/*要发送的消息opcode*/,
+					  int opcode/*要发送的ack消息opcode*/,
 					  int payload/*payload长度*/,
 					  u32 psn/*包的squence number*/,
-					  u8 syndrome)
+					  u8 syndrome/*ack消息错误原因*/)
 {
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	struct sk_buff *skb;
@@ -804,28 +833,32 @@ static struct sk_buff *prepare_ack_packet(struct rxe_qp *qp,
 	 * allocate packet
 	 */
 	pad = (-payload) & 0x3;/*payload对齐需要的pad长度*/
-	/*总长度*/
-	paylen = rxe_opcode[opcode].length + payload + pad + RXE_ICRC_SIZE;
+	/*ack报文总长度*/
+	paylen = rxe_opcode[opcode].length/*header总长度*/ + payload + pad + RXE_ICRC_SIZE;
 
+	/*申请skb,设置skb关联的netdev*/
 	skb = rxe_init_packet(rxe, &qp->pri_av, paylen, ack);
 	if (!skb)
 		return NULL;
 
+	/*设置skb报文关联的一组信息*/
 	ack->qp = qp;
 	ack->opcode = opcode;
 	ack->mask = rxe_opcode[opcode].mask;
 	ack->paylen = paylen;
 	ack->psn = psn;
 
-	/*构造bth报文*/
-	bth_init(ack, opcode, 0, 0, pad, IB_DEFAULT_PKEY_FULL,
-		 qp->attr.dest_qp_num, 0, psn);
+	/*构造ack的bth报文*/
+	bth_init(ack, opcode, 0, 0, pad, IB_DEFAULT_PKEY_FULL/*指明pkey*/,
+		 qp->attr.dest_qp_num/*设置目标qp*/, 0/*不要求响应ack*/, psn);
 
+	/*此ack需要包含aeth头时*/
 	if (ack->mask & RXE_AETH_MASK) {
 		aeth_set_syn(ack, syndrome);/*设置syndrome*/
-		aeth_set_msn(ack, qp->resp.msn);
+		aeth_set_msn(ack, qp->resp.msn);/*响应msn*/
 	}
 
+	/*此ack需要包含atmack头时*/
 	if (ack->mask & RXE_ATMACK_MASK)
 		atmack_set_orig(ack, qp->resp.res->atomic.orig_val);
 
@@ -881,6 +914,7 @@ static struct rxe_mr *rxe_recheck_mr(struct rxe_qp *qp, u32 rkey)
 		return mr;
 	}
 
+	/*通过rkey获取mr*/
 	mr = rxe_pool_get_index(&rxe->mr_pool, rkey >> 8);
 	if (!mr)
 		return NULL;
@@ -910,6 +944,7 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 	struct rxe_mr *mr;
 
 	if (!res) {
+		/*没有设置res*/
 		res = rxe_prepare_res(qp, req_pkt, RXE_READ_MASK);
 		qp->resp.res = res;
 	}
@@ -928,6 +963,7 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 				return RESPST_ERR_RKEY_VIOLATION;
 		}
 
+		/*报文中指明要读取的内容小于mtu，则opcode采用read_response_only,否则用read_response_first*/
 		if (res->read.resid <= mtu)
 			opcode = IB_OPCODE_RC_RDMA_READ_RESPONSE_ONLY;
 		else
@@ -949,8 +985,10 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 
 	res->state = rdatm_res_state_next;
 
+	/*确定payload长度*/
 	payload = min_t(int, res->read.resid, mtu);
 
+	/*构造opcode对应的skb*/
 	skb = prepare_ack_packet(qp, &ack_pkt, opcode, payload,
 				 res->cur_psn, AETH_ACK_UNLIMITED);
 	if (!skb) {
@@ -958,6 +996,7 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 		goto err_out;
 	}
 
+	/*将va中的内容填充到ack_pkt中*/
 	err = rxe_mr_copy(mr, res->read.va, payload_addr(&ack_pkt),
 			  payload, RXE_FROM_MR_OBJ);
 	if (err) {
@@ -966,12 +1005,14 @@ static enum resp_states read_reply(struct rxe_qp *qp,
 		goto err_out;
 	}
 
+	/*pad添加*/
 	if (bth_pad(&ack_pkt)) {
 		u8 *pad = payload_addr(&ack_pkt) + payload;
 
 		memset(pad, 0, bth_pad(&ack_pkt));
 	}
 
+	/*向外发送此报文*/
 	/* rxe_xmit_packet always consumes the skb */
 	err = rxe_xmit_packet(qp, &ack_pkt, skb);
 	if (err) {
@@ -1005,6 +1046,7 @@ static int invalidate_rkey(struct rxe_qp *qp, u32 rkey)
 	if (rkey_is_mw(rkey))
 		return rxe_invalidate_mw(qp, rkey);
 	else
+		/*按照rkey来无效普通注册的mr*/
 		return rxe_invalidate_mr(qp, rkey);
 }
 
@@ -1020,22 +1062,25 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	if (pkt->mask & RXE_SEND_MASK) {
 		if (qp_type(qp) == IB_QPT_UD ||
 		    qp_type(qp) == IB_QPT_GSI) {
+			/*只处理ud,gsi类型的send类操作（这两种需要将ip header复制上去）*/
 			if (skb->protocol == htons(ETH_P_IP)) {
-				/*将hdr填充到qp->resp.wqe->dma中*/
+				/*将ipv4 hdr填充到qp->resp.wqe->dma中*/
 				memset(&hdr.reserved, 0,
 						sizeof(hdr.reserved));
 				memcpy(&hdr.roce4grh, ip_hdr(skb),
-						sizeof(hdr.roce4grh));
+						sizeof(hdr.roce4grh));/*复制skb内容到roce4grh*/
+				/*复制roce4grh到qp->resp.wqe->dma*/
 				err = send_data_in(qp, &hdr, sizeof(hdr));
 			} else {
+				/*复制ipv6 header到qp->resp.wqe->dma中*/
 				err = send_data_in(qp, ipv6_hdr(skb),
 						sizeof(hdr));
 			}
 			if (err)
-				return err;
+				return err;/*复制出错，直接返回下一步状态*/
 		}
 
-		/*将payload填充到qp->resp.wqe->dma中*/
+		/*再将payload填充到qp->resp.wqe->dma中*/
 		err = send_data_in(qp, payload_addr(pkt), payload_size(pkt));
 		if (err)
 			return err;
@@ -1046,7 +1091,7 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 			return err;
 	} else if (pkt->mask & RXE_READ_MASK) {
 		/* For RDMA Read we can increment the msn now. See C9-148. */
-		qp->resp.msn++;
+		qp->resp.msn++;/*收到read操作，我们增加msn编号，跳RESPST_READ_REPLY*/
 		return RESPST_READ_REPLY;
 	} else if (pkt->mask & RXE_ATOMIC_MASK) {
 		return RESPST_ATOMIC_REPLY;
@@ -1055,13 +1100,17 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 	} else if (pkt->mask & RXE_FLUSH_MASK) {
 		return RESPST_PROCESS_FLUSH;
 	} else {
+		/*没有其它标记了。*/
 		/* Unreachable */
 		WARN_ON_ONCE(1);
 	}
 
+	/*如上示，只有write,send执行成功后可以进入下面流程*/
+
 	if (pkt->mask & RXE_IETH_MASK) {
 		u32 rkey = ieth_rkey(pkt);
 
+		/*无效ieth中包含的rkey*/
 		err = invalidate_rkey(qp, rkey);
 		if (err)
 			return RESPST_ERR_INVALIDATE_RKEY;
@@ -1069,14 +1118,14 @@ static enum resp_states execute(struct rxe_qp *qp, struct rxe_pkt_info *pkt)
 
 	if (pkt->mask & RXE_END_MASK)
 		/* We successfully processed this new request. */
-		qp->resp.msn++;
+		qp->resp.msn++;/*当前为此系列opcode最后一个op，故msg增加*/
 
 	/* next expected psn, read handles this separately */
-	qp->resp.psn = (pkt->psn + 1) & BTH_PSN_MASK;
-	qp->resp.ack_psn = qp->resp.psn;
+	qp->resp.psn = (pkt->psn + 1) & BTH_PSN_MASK;/*增加psn*/
+	qp->resp.ack_psn = qp->resp.psn;/*预期的下一个psn*/
 
 	qp->resp.opcode = pkt->opcode;/*记录响应的opcode*/
-	qp->resp.status = IB_WC_SUCCESS;
+	qp->resp.status = IB_WC_SUCCESS;/*opcde执行成功*/
 
 	if (pkt->mask & RXE_COMP_MASK)
 		return RESPST_COMPLETE;
@@ -1113,6 +1162,7 @@ static enum resp_states do_complete(struct rxe_qp *qp,
 	}
 
 	if (wc->status == IB_WC_SUCCESS) {
+		/*执行成功*/
 		rxe_counter_inc(rxe, RXE_CNT_RDMA_RECV);
 		wc->opcode = (pkt->mask & RXE_IMMDT_MASK &&
 				pkt->mask & RXE_WRITE_MASK) ?
@@ -1198,25 +1248,26 @@ finish:
 	if (unlikely(!pkt))
 		return RESPST_DONE;
 	if (qp_type(qp) == IB_QPT_RC)
+		/*针对rc跳ack状态*/
 		return RESPST_ACKNOWLEDGE;
 	else
 		return RESPST_CLEANUP;
 }
 
 
-static int send_common_ack(struct rxe_qp *qp, u8 syndrome, u32 psn,
-				  int opcode, const char *msg)
+static int send_common_ack(struct rxe_qp *qp, u8 syndrome/*错误原因*/, u32 psn/*响应对应的报文psn*/,
+				  int opcode/*ack对应的opcode*/, const char *msg/*响应对应的日志内容*/)
 {
 	int err;
 	struct rxe_pkt_info ack_pkt;
 	struct sk_buff *skb;
 
-	/*准备ack报文*/
+	/*构造ack报文*/
 	skb = prepare_ack_packet(qp, &ack_pkt, opcode, 0/*payload长度为零*/, psn, syndrome);
 	if (!skb)
 		return -ENOMEM;
 
-	/*ack发送*/
+	/*ack报文发送*/
 	err = rxe_xmit_packet(qp, &ack_pkt, skb);
 	if (err)
 		rxe_dbg_qp(qp, "Failed sending %s\n", msg);
@@ -1225,13 +1276,13 @@ static int send_common_ack(struct rxe_qp *qp, u8 syndrome, u32 psn,
 }
 
 /*向指定qp发送ack报文，确认psn报文已收到，并指明错误原因*/
-static int send_ack(struct rxe_qp *qp, u8 syndrome/*错误原因*/, u32 psn)
+static int send_ack(struct rxe_qp *qp, u8 syndrome/*错误原因*/, u32 psn/*响应对应的psn*/)
 {
 	return send_common_ack(qp, syndrome, psn,
 			IB_OPCODE_RC_ACKNOWLEDGE, "ACK");
 }
 
-/*向指定qp发送ack报文，确认psn报文已收到，并指明错误原因*/
+/*向指定qp发送atomic ack报文，确认psn报文已收到，并指明错误原因*/
 static int send_atomic_ack(struct rxe_qp *qp, u8 syndrome, u32 psn)
 {
 	int ret = send_common_ack(qp, syndrome, psn,
@@ -1244,7 +1295,7 @@ static int send_atomic_ack(struct rxe_qp *qp, u8 syndrome, u32 psn)
 	return ret;
 }
 
-/*向指定qp发送ack报文，确认psn报文已收到，并指明错误原因*/
+/*向指定qp发送read response ack报文，确认psn报文已收到，并指明错误原因*/
 static int send_read_response_ack(struct rxe_qp *qp, u8 syndrome, u32 psn)
 {
 	int ret = send_common_ack(qp, syndrome, psn,
@@ -1262,13 +1313,17 @@ static enum resp_states acknowledge(struct rxe_qp *qp,
 				    struct rxe_pkt_info *pkt)
 {
 	if (qp_type(qp) != IB_QPT_RC)
+		/*只有rc可以进入此流程，否则走cleanup*/
 		return RESPST_CLEANUP;
 
 	if (qp->resp.aeth_syndrome != AETH_ACK_UNLIMITED)
-		send_ack(qp, qp->resp.aeth_syndrome, pkt->psn);
+		/*非默认值，即发生了错误，则走此回应*/
+		send_ack(qp, qp->resp.aeth_syndrome, pkt->psn/*用于响应的报文psn*/);
 	else if (pkt->mask & RXE_ATOMIC_MASK)
+		/*如果有atomic标记，则响应AETH_ACK_UNLIMITED*/
 		send_atomic_ack(qp, AETH_ACK_UNLIMITED, pkt->psn);
 	else if (pkt->mask & (RXE_FLUSH_MASK | RXE_ATOMIC_WRITE_MASK))
+		/*flush操作，或者atomic write操作，响应ack*/
 		send_read_response_ack(qp, AETH_ACK_UNLIMITED, pkt->psn);
 	else if (bth_ack(pkt))
 		/*按报文要求，响应ack报文，并发送*/
@@ -1291,6 +1346,7 @@ static enum resp_states cleanup(struct rxe_qp *qp,
 	}
 
 	if (qp->resp.mr) {
+		/*如果查询了mr，则put回mr*/
 		rxe_put(qp->resp.mr);
 		qp->resp.mr = NULL;
 	}
@@ -1485,7 +1541,7 @@ static int flush_recv_wqe(struct rxe_qp *qp, struct rxe_recv_wqe *wqe)
 		uwc->qp_num = qp_num(qp);
 	} else {
 		wc->wr_id = wqe->wr_id;
-		wc->status = IB_WC_WR_FLUSH_ERR;
+		wc->status = IB_WC_WR_FLUSH_ERR;/*状态为flush err*/
 		wc->qp = &qp->ibqp;
 	}
 
@@ -1538,18 +1594,20 @@ static void flush_recv_queue(struct rxe_qp *qp, bool notify)
  * （包括将报文内容填充到用户态指明的recv_wr)*/
 int rxe_responder(struct rxe_qp *qp)
 {
-	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
+	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);/*关联的rxe设备*/
 	enum resp_states state;
 	struct rxe_pkt_info *pkt = NULL;
 	int ret;
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
+	/*qp无效或者状态为ERR,RESET*/
 	if (!qp->valid || qp_state(qp) == IB_QPS_ERR ||
 			  qp_state(qp) == IB_QPS_RESET) {
+		/*有效，但状态变更为err,则需要通知*/
 		bool notify = qp->valid && (qp_state(qp) == IB_QPS_ERR);
 
-		drain_req_pkts(qp);
+		drain_req_pkts(qp);/*移除此qp上缓存的所有报文*/
 		flush_recv_queue(qp, notify);
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		/*qp状态已无效，put后退出*/
@@ -1557,7 +1615,7 @@ int rxe_responder(struct rxe_qp *qp)
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
-	qp->resp.aeth_syndrome = AETH_ACK_UNLIMITED;
+	qp->resp.aeth_syndrome = AETH_ACK_UNLIMITED;/*初始化默认出错原因*/
 
 	/*初始化状态为RESPST_GET_REQ*/
 	state = RESPST_GET_REQ;
@@ -1575,11 +1633,11 @@ int rxe_responder(struct rxe_qp *qp)
 			state = check_psn(qp, pkt);
 			break;
 		case RESPST_CHK_OP_SEQ:
-			/*检查opcode对应的seq是否有效（预期走：RESPST_CHK_OP_VALID）*/
+			/*检查opcode的顺序是否有效（预期走：RESPST_CHK_OP_VALID）*/
 			state = check_op_seq(qp, pkt);
 			break;
 		case RESPST_CHK_OP_VALID:
-			/*检查opcode，结合权限。是否有效（预期走：RESPST_CHK_RESOURCE）*/
+			/*检查opcode是否与qp权限匹配。是否有效（预期走：RESPST_CHK_RESOURCE）*/
 			state = check_op_valid(qp, pkt);
 			break;
 		case RESPST_CHK_RESOURCE:
@@ -1587,9 +1645,11 @@ int rxe_responder(struct rxe_qp *qp)
 			state = check_resource(qp, pkt);
 			break;
 		case RESPST_CHK_LENGTH:
+			/*检查报文长度，reth dma长度，分辨是否需要pkey检查，否则跳execute*/
 			state = rxe_resp_check_length(qp, pkt);
 			break;
 		case RESPST_CHK_RKEY:
+			/*通过rkey查找mr*/
 			state = check_rkey(qp, pkt);
 			break;
 		case RESPST_EXECUTE:
@@ -1597,11 +1657,12 @@ int rxe_responder(struct rxe_qp *qp)
 			state = execute(qp, pkt);
 			break;
 		case RESPST_COMPLETE:
-			/*设置cqe*/
+			/*收到了一批中最后一个opcode,设置cqe*/
 			state = do_complete(qp, pkt);
 			break;
 		case RESPST_READ_REPLY:
-			state = read_reply(qp, pkt);/*响应ack*/
+			/*收到read请求，按read查求取对应mr并填写read_response进行响应*/
+			state = read_reply(qp, pkt);
 			break;
 		case RESPST_ATOMIC_REPLY:
 			state = atomic_reply(qp, pkt);
@@ -1613,7 +1674,7 @@ int rxe_responder(struct rxe_qp *qp)
 			state = process_flush(qp, pkt);
 			break;
 		case RESPST_ACKNOWLEDGE:
-			/*报文收到此报文*/
+			/*rc操作完成（可能成功或者失败），执行ack响应*/
 			state = acknowledge(qp, pkt);
 			break;
 		case RESPST_CLEANUP:

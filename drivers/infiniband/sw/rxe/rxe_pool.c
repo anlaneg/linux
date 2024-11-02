@@ -161,6 +161,7 @@ err_cnt:
 	return -EINVAL;
 }
 
+/*通过index获取pool中对应的元素*/
 void *rxe_pool_get_index(struct rxe_pool *pool, u32 index)
 {
 	struct rxe_pool_elem *elem;

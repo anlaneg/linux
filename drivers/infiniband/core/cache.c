@@ -214,6 +214,7 @@ static bool is_gid_entry_free(const struct ib_gid_table_entry *entry)
 
 static bool is_gid_entry_valid(const struct ib_gid_table_entry *entry)
 {
+	/*检查这个gid是否有效*/
 	return entry && entry->state == GID_TABLE_ENTRY_VALID;
 }
 
@@ -1272,6 +1273,7 @@ rdma_get_gid_attr(struct ib_device *device, u32 port_num, int index)
 		return ERR_PTR(-EINVAL);
 
 	read_lock_irqsave(&table->rwlock, flags);
+	/*检查这个index的gid是否有效*/
 	if (!is_gid_entry_valid(table->data_vec[index]))
 		goto done;
 
@@ -1279,7 +1281,7 @@ rdma_get_gid_attr(struct ib_device *device, u32 port_num, int index)
 	attr = &table->data_vec[index]->attr;
 done:
 	read_unlock_irqrestore(&table->rwlock, flags);
-	return attr;
+	return attr;/*返回此gid对应的attr*/
 }
 EXPORT_SYMBOL(rdma_get_gid_attr);
 
@@ -1397,21 +1399,22 @@ EXPORT_SYMBOL(rdma_hold_gid_attr);
  */
 struct net_device *rdma_read_gid_attr_ndev_rcu(const struct ib_gid_attr *attr)
 {
+	/*通过gid attr获取其对应的netdev*/
 	struct ib_gid_table_entry *entry =
 			container_of(attr, struct ib_gid_table_entry, attr);
-	struct ib_device *device = entry->attr.device;
+	struct ib_device *device = entry->attr.device;/*哪个ib设备*/
 	struct net_device *ndev = ERR_PTR(-EINVAL);
-	u32 port_num = entry->attr.port_num;
+	u32 port_num = entry->attr.port_num;/*哪个port*/
 	struct ib_gid_table *table;
 	unsigned long flags;
 	bool valid;
 
-	table = rdma_gid_table(device, port_num);
+	table = rdma_gid_table(device, port_num);/*取gid table*/
 
 	read_lock_irqsave(&table->rwlock, flags);
-	valid = is_gid_entry_valid(table->data_vec[attr->index]);
+	valid = is_gid_entry_valid(table->data_vec[attr->index]);/*检查此gid是否有效*/
 	if (valid) {
-		ndev = rcu_dereference(attr->ndev);
+		ndev = rcu_dereference(attr->ndev);/*取gid对应的netdev*/
 		if (!ndev)
 			ndev = ERR_PTR(-ENODEV);
 	}

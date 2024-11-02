@@ -369,9 +369,9 @@ enum rt_class_t {
 	RT_TABLE_UNSPEC=0,
 /* User defined values */
 	RT_TABLE_COMPAT=252,
-	RT_TABLE_DEFAULT=253,
-	RT_TABLE_MAIN=254,
-	RT_TABLE_LOCAL=255,
+	RT_TABLE_DEFAULT=253,/*指明default表*/
+	RT_TABLE_MAIN=254,/*指明main表*/
+	RT_TABLE_LOCAL=255,/*指明local表*/
 	RT_TABLE_MAX=0xFFFFFFFF
 };
 

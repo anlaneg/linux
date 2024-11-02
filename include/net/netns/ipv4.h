@@ -83,6 +83,7 @@ struct netns_ipv4 {
 	struct ctl_table_header *route_hdr;
 	struct ctl_table_header *xfrm4_hdr;
 #endif
+	/*ipv4设备配置*/
 	struct ipv4_devconf	*devconf_all;
 	//ipv4 def的默认配置
 	struct ipv4_devconf	*devconf_dflt;

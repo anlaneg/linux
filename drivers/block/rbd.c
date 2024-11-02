@@ -6798,7 +6798,7 @@ static int rbd_dev_device_setup(struct rbd_device *rbd_dev)
 	/* Record our major and minor device numbers. */
 
 	if (!single_major) {
-		ret = register_blkdev(0, rbd_dev->name);
+		ret = register_blkdev(0, rbd_dev->name);/*注册块设备*/
 		if (ret < 0)
 			goto err_out_unlock;
 

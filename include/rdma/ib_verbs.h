@@ -803,21 +803,21 @@ struct ib_global_route {
 
 struct ib_grh {
 	__be32		version_tclass_flow;
-	__be16		paylen;
-	u8		next_hdr;
-	u8		hop_limit;
-	union ib_gid	sgid;
-	union ib_gid	dgid;
+	__be16		paylen;/*负载长度*/
+	u8		next_hdr;/*下一层header*/
+	u8		hop_limit;/*最大跳数*/
+	union ib_gid	sgid;/*源gid 16字节*/
+	union ib_gid	dgid;/*目的gid 16字节*/
 };
 
 union rdma_network_hdr {
-	struct ib_grh ibgrh;
+	struct ib_grh ibgrh;/*此结构40字节*/
 	struct {
 		/* The IB spec states that if it's IPv4, the header
 		 * is located in the last 20 bytes of the header.
 		 */
 		u8		reserved[20];
-		struct iphdr	roce4grh;
+		struct iphdr	roce4grh;/*收到报文中包含的ip header*/
 	};
 };
 
@@ -1315,6 +1315,7 @@ struct ib_qp_attr {
 	u32			rq_psn;
 	u32			sq_psn;
 	u32			dest_qp_num;
+	/*qp的访问属性，例如IB_ACCESS_REMOTE_READ等*/
 	int			qp_access_flags;
 	struct ib_qp_cap	cap;
 	struct rdma_ah_attr	ah_attr;
@@ -1336,6 +1337,7 @@ struct ib_qp_attr {
 	struct net_device	*xmit_slave;
 };
 
+/*api看到的rdma操作符*/
 enum ib_wr_opcode {
 	/* These are shared with userspace */
 	IB_WR_RDMA_WRITE = IB_UVERBS_WR_RDMA_WRITE,
@@ -1488,11 +1490,11 @@ struct ib_recv_wr {
 enum ib_access_flags {
 	/*本端写权限*/
 	IB_ACCESS_LOCAL_WRITE = IB_UVERBS_ACCESS_LOCAL_WRITE,
-	/*远端写权限*/
+	/*容许远端写权限*/
 	IB_ACCESS_REMOTE_WRITE = IB_UVERBS_ACCESS_REMOTE_WRITE,
-	/*远端读权限*/
+	/*容许远端读权限*/
 	IB_ACCESS_REMOTE_READ = IB_UVERBS_ACCESS_REMOTE_READ,
-	/*远端原子*/
+	/*容许远端原子操作*/
 	IB_ACCESS_REMOTE_ATOMIC = IB_UVERBS_ACCESS_REMOTE_ATOMIC,
 	IB_ACCESS_MW_BIND = IB_UVERBS_ACCESS_MW_BIND,
 	IB_ZERO_BASED = IB_UVERBS_ACCESS_ZERO_BASED,
@@ -1877,14 +1879,14 @@ struct ib_mr {
 	struct ib_device  *device;
 	/*mr所属的pd*/
 	struct ib_pd	  *pd;
-	u32		   lkey;/*此mr在本端的key*/
-	u32		   rkey;/*此mr在对端的key*/
-	u64		   iova;
+	u32		   lkey;/*在本端的key*/
+	u32		   rkey;/*在对端的key*/
+	u64		   iova;/*内存起始位置*/
 	/*内存长度*/
 	u64		   length;
-	/*mr对应的页的大小*/
+	/*此mr对应的页的大小*/
 	unsigned int	   page_size;
-	/*内存类型*/
+	/*mr类型*/
 	enum ib_mr_type	   type;
 	bool		   need_inval;
 	union {
@@ -4180,7 +4182,7 @@ static inline bool ib_dma_pci_p2p_dma_supported(struct ib_device *dev)
 static inline void *ib_virt_dma_to_ptr(u64 dma_addr)
 {
 	/* virt_dma mode maps the kvs's directly into the dma addr */
-	return (void *)(uintptr_t)dma_addr;
+	return (void *)(uintptr_t)dma_addr;/*转指针*/
 }
 
 /**
@@ -4192,6 +4194,7 @@ static inline void *ib_virt_dma_to_ptr(u64 dma_addr)
  */
 static inline struct page *ib_virt_dma_to_page(u64 dma_addr)
 {
+	/*由dma地址转page*/
 	return virt_to_page(ib_virt_dma_to_ptr(dma_addr));
 }
 

@@ -175,7 +175,7 @@ EXPORT_SYMBOL_GPL(l3mdev_master_upper_ifindex_by_index_rcu);
 
 u32 l3mdev_fib_table_rcu(const struct net_device *dev)
 {
-	u32 tb_id = 0;
+	u32 tb_id = 0;/*默认返回0*/
 
 	if (!dev)
 		return 0;

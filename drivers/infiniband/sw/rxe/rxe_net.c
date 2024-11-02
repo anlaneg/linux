@@ -446,24 +446,26 @@ static int rxe_loopback(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	return 0;
 }
 
+/*rxe向外发送报文*/
 int rxe_xmit_packet(struct rxe_qp *qp, struct rxe_pkt_info *pkt,
 		    struct sk_buff *skb)
 {
 	int err;
-	int is_request = pkt->mask & RXE_REQ_MASK;
+	int is_request = pkt->mask & RXE_REQ_MASK;/*是否请求类报文*/
 	struct rxe_dev *rxe = to_rdev(qp->ibqp.device);
 	unsigned long flags;
 
 	spin_lock_irqsave(&qp->state_lock, flags);
 	if ((is_request && (qp_state(qp) < IB_QPS_RTS)) ||
 	    (!is_request && (qp_state(qp) < IB_QPS_RTR))) {
+		/*qp状态有误，不容许外发。*/
 		spin_unlock_irqrestore(&qp->state_lock, flags);
 		rxe_dbg_qp(qp, "Packet dropped. QP is not in ready state\n");
 		goto drop;
 	}
 	spin_unlock_irqrestore(&qp->state_lock, flags);
 
-	/*填充ib头部*/
+	/*计算并填充icrc*/
 	rxe_icrc_generate(skb, pkt);
 
 	if (pkt->mask & RXE_LOOPBACK_MASK)
@@ -517,6 +519,7 @@ struct sk_buff *rxe_init_packet(struct rxe_dev *rxe, struct rxe_av *av,
 			sizeof(struct ipv6hdr);
 
 	rcu_read_lock();
+	/*获得此gid对应的netdev*/
 	ndev = rdma_read_gid_attr_ndev_rcu(attr);
 	if (IS_ERR(ndev)) {
 		rcu_read_unlock();

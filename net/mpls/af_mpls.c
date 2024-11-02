@@ -2323,6 +2323,7 @@ static int mpls_valid_getroute_req(struct sk_buff *skb,
 		return -EINVAL;
 	}
 	if (rtm->rtm_flags & ~RTM_F_FIB_MATCH) {
+		/*mpls遇到不认识的flags*/
 		NL_SET_ERR_MSG_MOD(extack,
 				   "Invalid flags for get route request");
 		return -EINVAL;

@@ -126,6 +126,7 @@ static inline enum ib_qp_type qp_type(struct rxe_qp *qp)
 
 static inline enum ib_qp_state qp_state(struct rxe_qp *qp)
 {
+	/*取qp当前状态*/
 	return qp->attr.qp_state;
 }
 
@@ -139,6 +140,7 @@ static inline int qp_mtu(struct rxe_qp *qp)
 
 void free_rd_atomic_resource(struct resp_res *res);
 
+/*切换res_head*/
 static inline void rxe_advance_resp_resource(struct rxe_qp *qp)
 {
 	qp->resp.res_head++;

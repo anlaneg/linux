@@ -111,9 +111,11 @@ static int alloc_rd_atomic_resources(struct rxe_qp *qp, unsigned int n)
 {
 	qp->resp.res_head = 0;
 	qp->resp.res_tail = 0;
+	/*初始化n个struct resp_res结构体*/
 	qp->resp.resources = kcalloc(n, sizeof(struct resp_res), GFP_KERNEL);
 
 	if (!qp->resp.resources)
+		/*申请失败*/
 		return -ENOMEM;
 
 	return 0;
@@ -122,6 +124,7 @@ static int alloc_rd_atomic_resources(struct rxe_qp *qp, unsigned int n)
 static void free_rd_atomic_resources(struct rxe_qp *qp)
 {
 	if (qp->resp.resources) {
+		/*resources不为空，需要释放*/
 		int i;
 
 		for (i = 0; i < qp->attr.max_dest_rd_atomic; i++) {
@@ -753,7 +756,7 @@ int rxe_qp_from_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask,
 
 	if (mask & IB_QP_RQ_PSN) {
 		qp->attr.rq_psn = (attr->rq_psn & BTH_PSN_MASK);
-		qp->resp.psn = qp->attr.rq_psn;
+		qp->resp.psn = qp->attr.rq_psn;/*设置协商的psn*/
 		rxe_dbg_qp(qp, "set resp psn = 0x%x\n", qp->resp.psn);
 	}
 
@@ -786,7 +789,7 @@ int rxe_qp_to_attr(struct rxe_qp *qp, struct ib_qp_attr *attr, int mask)
 
 	*attr = qp->attr;
 
-	attr->rq_psn				= qp->resp.psn;
+	attr->rq_psn				= qp->resp.psn;/*读取qp当前记录的psn*/
 	attr->sq_psn				= qp->req.psn;
 
 	attr->cap.max_send_wr			= qp->sq.max_wr;

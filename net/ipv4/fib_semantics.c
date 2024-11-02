@@ -1735,6 +1735,7 @@ int fib_nexthop_info(struct sk_buff *skb, const struct fib_nh_common *nhc,
 	*flags |= (nhc->nhc_flags &
 		   (RTNH_F_ONLINK | RTNH_F_OFFLOAD | RTNH_F_TRAP));
 
+	/*如果不跳过oif,则存入RTA_OIF*/
 	if (!skip_oif && nhc->nhc_dev &&
 	    nla_put_u32(skb, RTA_OIF, nhc->nhc_dev->ifindex))
 		goto nla_put_failure;
@@ -1764,7 +1765,7 @@ int fib_add_nexthop(struct sk_buff *skb, const struct fib_nh_common *nhc,
 		goto nla_put_failure;
 
 	rtnh->rtnh_hops = nh_weight - 1;
-	rtnh->rtnh_ifindex = dev ? dev->ifindex : 0;
+	rtnh->rtnh_ifindex = dev ? dev->ifindex : 0;/*填充下一跳对应的ifindex*/
 
 	if (fib_nexthop_info(skb, nhc, rt_family, &flags, true) < 0)
 		goto nla_put_failure;

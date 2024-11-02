@@ -834,7 +834,7 @@ static struct kobject *kobject_create(void)
  * If the kobject was not able to be created, NULL will be returned.
  */
 //创建一个新的kobj,并将其添加在parent下
-struct kobject *kobject_create_and_add(const char *name, struct kobject *parent)
+struct kobject *kobject_create_and_add(const char *name, struct kobject *parent/*parent为NULL时,取sysfs_root_kn，常见为/sys/*/)
 {
 	struct kobject *kobj;
 	int retval;

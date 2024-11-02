@@ -24,6 +24,7 @@ static int sysfs_do_create_link_sd(struct kernfs_node *parent/*父节点*/,
 	struct kernfs_node *kn, *target = NULL;
 
 	if (WARN_ON(!name || !parent))
+		/*父节点（目录）及当前link名称必须存在*/
 		return -EINVAL;
 
 	/*
@@ -33,6 +34,7 @@ static int sysfs_do_create_link_sd(struct kernfs_node *parent/*父节点*/,
 	 */
 	spin_lock(&sysfs_symlink_target_lock);
 	if (target_kobj->sd) {
+		/*取link目录*/
 		target = target_kobj->sd;
 		kernfs_get(target);
 	}
@@ -42,7 +44,7 @@ static int sysfs_do_create_link_sd(struct kernfs_node *parent/*父节点*/,
 		return -ENOENT;
 
 	//通过kernfs来创建链接
-	kn = kernfs_create_link(parent, name/*link名称*/, target/*link的目标*/);
+	kn = kernfs_create_link(parent/*父节点（目录）*/, name/*link名称*/, target/*link的目标*/);
 	kernfs_put(target);
 
 	if (!IS_ERR(kn))
@@ -71,14 +73,16 @@ static int sysfs_do_create_link(struct kobject *kobj, struct kobject *target,
 	struct kernfs_node *parent = NULL;
 
 	if (!kobj)
+		/*未提供kobj,使用sysfs_root_kn做为parent*/
 		parent = sysfs_root_kn;
 	else
 		parent = kobj->sd;
 
 	if (!parent)
+		/*必须指定父目录*/
 		return -EFAULT;
 
-	return sysfs_do_create_link_sd(parent, target, name, warn);
+	return sysfs_do_create_link_sd(parent/*父目录*/, target, name, warn);
 }
 
 /**

@@ -95,7 +95,7 @@ int fib6_lookup(struct net *net, int oif, struct flowi6 *fl6,
 
 struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 				   const struct sk_buff *skb,
-				   int flags, pol_lookup_t lookup)
+				   int flags, pol_lookup_t lookup/*路由查询函数*/)
 {
 	if (net->ipv6.fib6_has_custom_rules) {
 		/*配置有策略路由，执行策略路由查询*/
@@ -115,17 +115,18 @@ struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 				 flowi6_to_flowi(fl6), flags, &arg);
 
 		if (res.rt6)
-			return &res.rt6->dst;
+			return &res.rt6->dst;/*返回dst_entry*/
 	} else {
 		struct rt6_info *rt;
 
-		//查询local table
+		//先通过lookup函数查询local table
 		rt = pol_lookup_func(lookup,
 			     net, net->ipv6.fib6_local_tbl, fl6, skb, flags);
 		if (rt != net->ipv6.ip6_null_entry && rt->dst.error != -EAGAIN)
-			return &rt->dst;
+			return &rt->dst;/*local命中*/
+
 		ip6_rt_put_flags(rt, flags);
-		//通过lookup函数查询main 路由表
+		//再通过lookup函数查询main 路由表
 		rt = pol_lookup_func(lookup,
 			     net, net->ipv6.fib6_main_tbl, fl6, skb, flags);
 		if (rt->dst.error != -EAGAIN)
@@ -148,6 +149,7 @@ static int fib6_rule_saddr(struct net *net, struct fib_rule *rule, int flags,
 	 */
 	if ((rule->flags & FIB_RULE_FIND_SADDR) &&
 	    r->src.plen && !(flags & RT6_LOOKUP_F_HAS_SADDR)) {
+		/*规则上有find_saddr标记，且查询时没有指定saddr*/
 		struct in6_addr saddr;
 
 		if (ipv6_dev_get_saddr(net, dev, &flp6->daddr,
@@ -219,11 +221,13 @@ static int __fib6_rule_action(struct fib_rule *rule, struct flowi *flp,
 	case FR_ACT_TO_TBL:
 		break;
 	case FR_ACT_UNREACHABLE:
+		/*规则action为不可达，返回null_entry*/
 		err = -ENETUNREACH;
 		rt = net->ipv6.ip6_null_entry;
 		goto discard_pkt;
 	default:
 	case FR_ACT_BLACKHOLE:
+		/*规则action为黑洞，返回hole_entry*/
 		err = -EINVAL;
 		rt = net->ipv6.ip6_blk_hole_entry;
 		goto discard_pkt;
@@ -233,6 +237,7 @@ static int __fib6_rule_action(struct fib_rule *rule, struct flowi *flp,
 		goto discard_pkt;
 	}
 
+	/*取规则对应的table*/
 	tb_id = fib_rule_get_table(rule, arg);
 	table = fib6_get_table(net, tb_id);
 	if (!table) {
@@ -240,9 +245,11 @@ static int __fib6_rule_action(struct fib_rule *rule, struct flowi *flp,
 		goto out;
 	}
 
+	/*利用lookup函数查询策略指明的路由表table，获得路由结果*/
 	rt = pol_lookup_func(lookup,
 			     net, table, flp6, arg->lookup_data, flags);
 	if (rt != net->ipv6.ip6_null_entry) {
+		/*命中的路由不为null(即不可达）*/
 		err = fib6_rule_saddr(net, rule, flags, flp6,
 				      ip6_dst_idev(&rt->dst)->dev);
 
@@ -263,7 +270,7 @@ discard_pkt:
 	if (!(flags & RT6_LOOKUP_F_DST_NOREF))
 		dst_hold(&rt->dst);
 out:
-	res->rt6 = rt;
+	res->rt6 = rt;/*设置命中的rt6_info*/
 	return err;
 }
 
@@ -318,6 +325,7 @@ INDIRECT_CALLABLE_SCOPE int fib6_rule_match(struct fib_rule *rule,
 
 	if (r->dst.plen &&
 	    !ipv6_prefix_equal(&fl6->daddr, &r->dst.addr, r->dst.plen))
+		/*规则指明了目的地址，且目的地址匹配，直接返回*/
 		return 0;
 
 	/*
@@ -329,6 +337,7 @@ INDIRECT_CALLABLE_SCOPE int fib6_rule_match(struct fib_rule *rule,
 		if (flags & RT6_LOOKUP_F_HAS_SADDR) {
 			if (!ipv6_prefix_equal(&fl6->saddr, &r->src.addr,
 					       r->src.plen))
+				/*flags指明了HAS_SADDR,且源地址与路由对应的src地址不匹配，则返回true*/
 				return 0;
 		} else if (!(r->common.flags & FIB_RULE_FIND_SADDR))
 			return 0;

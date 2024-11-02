@@ -588,6 +588,7 @@ int nvme_ioctl(struct block_device *bdev, blk_mode_t mode,
 		flags |= NVME_IOCTL_PARTITION;
 
 	if (is_ctrl_ioctl(cmd))
+		/*处理控制类ioctl*/
 		return nvme_ctrl_ioctl(ns->ctrl, cmd, argp, open_for_write);
 	return nvme_ns_ioctl(ns, cmd, argp, flags, open_for_write);
 }

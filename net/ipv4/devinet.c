@@ -151,8 +151,9 @@ static void inet_hash_remove(struct in_ifaddr *ifa)
  *
  * If a caller uses devref=false, it should be protected by RCU, or RTNL
  */
-struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
+struct net_device *__ip_dev_find(struct net *net, __be32 addr/*要查询的地址*/, bool devref)
 {
+	/*通过地址查询此地址对应（所属）的netdev*/
 	struct net_device *result = NULL;
 	struct in_ifaddr *ifa;
 
@@ -169,14 +170,14 @@ struct net_device *__ip_dev_find(struct net *net, __be32 addr, bool devref)
 		/* Fallback to FIB local table so that communication
 		 * over loopback subnets work.
 		 */
-		local = fib_get_table(net, RT_TABLE_LOCAL);
+		local = fib_get_table(net, RT_TABLE_LOCAL);/*取local表*/
 		if (local &&
 		    !fib_table_lookup(local, &fl4, &res, FIB_LOOKUP_NOREF) &&
 		    res.type == RTN_LOCAL)
 		    /*local表存在，且查local表成功，取出接口设备*/
 			result = FIB_RES_DEV(res);
 	} else {
-	    /*ifa存在，取ifa对应的网络设备*/
+	    /*ifa存在，自ifa中取ifa对应的网络设备*/
 		result = ifa->ifa_dev->dev;
 	}
 	if (result && devref)
@@ -2618,7 +2619,8 @@ static int ipv4_doint_and_flush(struct ctl_table *ctl, int write,
 #define DEVINET_SYSCTL_RO_ENTRY(attr, name) \
 	DEVINET_SYSCTL_ENTRY(attr, name, 0444, devinet_conf_proc)
 
-#define DEVINET_SYSCTL_COMPLEX_ENTRY(attr, name, proc) \
+/*更新ipv4设备配置(all设备，例如ipv4_devconf.data)*/
+#define DEVINET_SYSCTL_COMPLEX_ENTRY(attr/*属性编号*/, name/*属性名称*/, proc/*属性处理函数*/) \
 	DEVINET_SYSCTL_ENTRY(attr, name, 0644, proc)
 
 #define DEVINET_SYSCTL_FLUSHING_ENTRY(attr, name) \

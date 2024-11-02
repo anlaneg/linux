@@ -303,19 +303,22 @@ EXPORT_SYMBOL(bdev_thaw);
  */
 
 static  __cacheline_aligned_in_smp DEFINE_MUTEX(bdev_lock);
+/*负责系统中bdev_inode申请，此inode对应一个block设备*/
 static struct kmem_cache *bdev_cachep __ro_after_init;
 
-/*申请bdev_inode*/
+/*申请bdev_inode，块设备自bdev_cachep中申请inode(此ei->bdev为全零）*/
 static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
 	struct bdev_inode *ei = alloc_inode_sb(sb, bdev_cachep, GFP_KERNEL);
 
 	if (!ei)
 		return NULL;
+	/*将块设备对应的成员清零（bdev_alloc负责初始化ei->bdev）*/
 	memset(&ei->bdev, 0, sizeof(ei->bdev));
 	return &ei->vfs_inode;
 }
 
+/*释放bdev_inode*/
 static void bdev_free_inode(struct inode *inode)
 {
 	struct block_device *bdev = I_BDEV(inode);
@@ -330,8 +333,10 @@ static void bdev_free_inode(struct inode *inode)
 	}
 
 	if (MAJOR(bdev->bd_dev) == BLOCK_EXT_MAJOR)
+		/*块设备是blkext，释放minor*/
 		blk_free_ext_minor(MINOR(bdev->bd_dev));
 
+	/*存回到cache*/
 	kmem_cache_free(bdev_cachep, BDEV_I(inode));
 }
 
@@ -351,8 +356,8 @@ static void bdev_evict_inode(struct inode *inode)
 
 static const struct super_operations bdev_sops = {
 	.statfs = simple_statfs,
-	.alloc_inode = bdev_alloc_inode,
-	.free_inode = bdev_free_inode,
+	.alloc_inode = bdev_alloc_inode,/*申请bdev对应的inode*/
+	.free_inode = bdev_free_inode,/*释放bdev对应的inode*/
 	.drop_inode = generic_delete_inode,
 	.evict_inode = bdev_evict_inode,
 };
@@ -379,6 +384,7 @@ static struct file_system_type bd_type = {
 struct super_block *blockdev_superblock __ro_after_init;
 EXPORT_SYMBOL_GPL(blockdev_superblock);
 
+/*块设备cache初始化*/
 void __init bdev_cache_init(void)
 {
 	int err;
@@ -405,12 +411,12 @@ void __init bdev_cache_init(void)
 }
 
 /*针对gendisk,分区号创建block_device*/
-struct block_device *bdev_alloc(struct gendisk *disk, u8 partno)
+struct block_device *bdev_alloc(struct gendisk *disk, u8 partno/*分区号*/)
 {
 	struct block_device *bdev;
 	struct inode *inode;
 
-	/*创建块设备对应的inode，申请的类型为（struct bdev_inode）*/
+	/*申请块设备(blockdev_superblock)对应的inode，申请的类型为（struct bdev_inode）*/
 	inode = new_inode(blockdev_superblock);
 	if (!inode)
 		return NULL;
@@ -450,6 +456,7 @@ void bdev_set_nr_sectors(struct block_device *bdev, sector_t sectors)
 	spin_unlock(&bdev->bd_size_lock);
 }
 
+/*将block设备对应的inode加入到inode_hashtable中(后续可以通过ilookup查找到）*/
 void bdev_add(struct block_device *bdev, dev_t dev)
 {
 	if (bdev_stable_writes(bdev))
@@ -705,6 +712,7 @@ static int blkdev_get_part(struct block_device *part, blk_mode_t mode)
 
 	ret = -ENXIO;
 	if (!bdev_nr_sectors(part))
+		/*此分区扇区数为零*/
 		goto out_blkdev_put;
 
 	if (!atomic_read(&part->bd_openers)) {
@@ -739,6 +747,7 @@ struct block_device *blkdev_get_no_open(dev_t dev)
 	/*查找inode id为dev且super blok为blockdev_superblock的inode,此即为dev对应的块设备*/
 	inode = ilookup(blockdev_superblock, dev);
 	if (!inode && IS_ENABLED(CONFIG_BLOCK_LEGACY_AUTOLOAD)) {
+		/*inode不存在，但开启了autoload,先尝试做module的probe回调，再查一次inode*/
 		blk_request_module(dev);
 		inode = ilookup(blockdev_superblock, dev);
 		if (inode)
@@ -860,7 +869,7 @@ struct bdev_handle *bdev_open_by_dev(dev_t dev/*设备编号*/, blk_mode_t mode,
 		goto free_handle;
 	}
 
-	/*取对应的块设备*/
+	/*取dev_t对应的块设备*/
 	bdev = blkdev_get_no_open(dev);
 	if (!bdev) {
 		ret = -ENXIO;
@@ -892,6 +901,7 @@ struct bdev_handle *bdev_open_by_dev(dev_t dev/*设备编号*/, blk_mode_t mode,
 	if (!bdev_may_open(bdev, mode))
 		goto abort_claiming;
 	if (bdev_is_partition(bdev))
+		/*块设备分区号不为0，取分区*/
 		ret = blkdev_get_part(bdev, mode);
 	else
 		ret = blkdev_get_whole(bdev, mode);
@@ -962,12 +972,12 @@ struct bdev_handle *bdev_open_by_path(const char *path/*块设备名称*/, blk_m
 	dev_t dev;
 	int error;
 
-	//取path对应的块设备id
+	//取path对应的块设备的dev_t
 	error = lookup_bdev(path, &dev);
 	if (error)
 		return ERR_PTR(error);
 
-	/*取此dev对应的块设备*/
+	/*通过dev_t取对应的块设备*/
 	handle = bdev_open_by_dev(dev, mode, holder, hops);
 	if (!IS_ERR(handle) && (mode & BLK_OPEN_WRITE) &&
 	    bdev_read_only(handle->bdev)) {

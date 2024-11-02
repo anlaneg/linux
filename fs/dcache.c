@@ -3264,6 +3264,7 @@ void __init vfs_caches_init(void)
 	files_init();
 	files_maxfiles_init();
 	mnt_init();
+	/*块设备cache初始化*/
 	bdev_cache_init();
 	chrdev_init();
 }

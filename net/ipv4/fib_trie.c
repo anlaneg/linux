@@ -2966,7 +2966,7 @@ static void *fib_route_seq_start(struct seq_file *seq, loff_t *pos)
 
 	rcu_read_lock();
 
-	tb = fib_get_table(seq_file_net(seq), RT_TABLE_MAIN);
+	tb = fib_get_table(seq_file_net(seq), RT_TABLE_MAIN);/*取main表*/
 	if (!tb)
 		return NULL;
 
@@ -3043,6 +3043,7 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 	struct key_vector *l = v;
 	__be32 prefix;
 
+	/*显示表标题*/
 	if (v == SEQ_START_TOKEN) {
 		seq_printf(seq, "%-127s\n", "Iface\tDestination\tGateway "
 			   "\tFlags\tRefCnt\tUse\tMetric\tMask\t\tMTU"
@@ -3077,7 +3078,7 @@ static int fib_route_seq_show(struct seq_file *seq, void *v)
 				   "%s\t%08X\t%08X\t%04X\t%d\t%u\t"
 				   "%d\t%08X\t%d\t%u\t%u",
 				   nhc->nhc_dev ? nhc->nhc_dev->name : "*",
-				   prefix, gw, flags, 0, 0,
+				   prefix, gw/*显示gateway地址*/, flags, 0, 0,
 				   fi->fib_priority,
 				   mask,
 				   (fi->fib_advmss ?
@@ -3101,7 +3102,7 @@ static const struct seq_operations fib_route_seq_ops = {
 	.start  = fib_route_seq_start,
 	.next   = fib_route_seq_next,
 	.stop   = fib_route_seq_stop,
-	.show   = fib_route_seq_show,
+	.show   = fib_route_seq_show,/*显示main表内容*/
 };
 
 int __net_init fib_proc_init(struct net *net)
@@ -3114,6 +3115,7 @@ int __net_init fib_proc_init(struct net *net)
 			fib_triestat_seq_show, NULL))
 		goto out2;
 
+	/*创建/proc/net/route文件项，用于输出路由信息*/
 	if (!proc_create_net("route", 0444, net->proc_net, &fib_route_seq_ops,
 			sizeof(struct fib_route_iter)))
 		goto out3;

@@ -56,7 +56,7 @@ struct inet6_ifaddr {
 	struct delayed_work	dad_work;
 
 	struct inet6_dev	*idev;
-	struct fib6_info	*rt;
+	struct fib6_info	*rt;/*对应的路由信息*/
 
 	struct hlist_node	addr_lst;
 	struct list_head	if_list;
@@ -209,7 +209,7 @@ struct inet6_dev {
 	int			dead;
 
 	u32			desync_factor;
-	struct list_head	tempaddr_list;
+	struct list_head	tempaddr_list;/*用于串连临时地址*/
 
 	struct in6_addr		token;
 

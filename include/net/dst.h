@@ -24,7 +24,7 @@
 struct sk_buff;
 
 struct dst_entry {
-	struct net_device       *dev;//目标设备
+	struct net_device       *dev;//目标设备（出接口）
 	struct  dst_ops	        *ops;
 	unsigned long		_metrics;
 	unsigned long           expires;
@@ -74,7 +74,7 @@ struct dst_entry {
 	int			__use;
 	unsigned long		lastuse;
 	struct rcu_head		rcu_head;
-	short			error;
+	short			error;/*错误码，此值非零，查询的路由有误*/
 	short			__pad;
 	__u32			tclassid;
 #ifndef CONFIG_64BIT

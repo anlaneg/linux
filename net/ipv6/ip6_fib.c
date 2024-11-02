@@ -323,11 +323,13 @@ struct fib6_table *fib6_new_table(struct net *net, u32 id)
 	return fib6_get_table(net, id);
 }
 
+/*单表情况下，忽略掉表id,仅返回main表*/
 struct fib6_table *fib6_get_table(struct net *net, u32 id)
 {
 	  return net->ipv6.fib6_main_tbl;
 }
 
+/*ipv6单表情况下的规则查询*/
 struct dst_entry *fib6_rule_lookup(struct net *net, struct flowi6 *fl6,
 				   const struct sk_buff *skb,
 				   int flags, pol_lookup_t lookup)
@@ -761,7 +763,7 @@ static struct fib6_node *fib6_add_1(struct net *net,
 				    struct fib6_node *root/*根节点*/,
 				    struct in6_addr *addr/*地址*/, int plen/*前缀长度*/,
 				    int offset, int allow_create/*是否容许创建*/,
-				    int replace_required,
+				    int replace_required/*是否需要替换*/,
 				    struct netlink_ext_ack *extack)
 {
 	struct fib6_node *fn, *in, *ln;
@@ -779,14 +781,14 @@ static struct fib6_node *fib6_add_1(struct net *net,
 	do {
 		struct fib6_info *leaf = rcu_dereference_protected(fn->leaf,
 					    lockdep_is_held(&table->tb6_lock));
-		key = (struct rt6key *)((u8 *)leaf + offset);
+		key = (struct rt6key *)((u8 *)leaf + offset);/*偏offset获得key*/
 
 		/*
 		 *	Prefix match
 		 */
 		if (plen < fn->fn_bit ||
 		    !ipv6_prefix_equal(&key->addr, addr, fn->fn_bit)) {
-			/*addr与key->addr完全不相等或者本次循环时，plen较小，即是key->addr的子集前缀*/
+			/*addr与key->addr完全不相等或者本次循环时，plen较小，即是key->addr的子集前缀,这种需要新增节点*/
 			if (!allow_create) {
 				/*不匹配，但不容许创建，按情况报错*/
 				if (replace_required) {
@@ -800,7 +802,7 @@ static struct fib6_node *fib6_add_1(struct net *net,
 			}
 			goto insert_above;/*按需创建*/
 		}
-		/*与当前pn前缀完全匹配*/
+		/*与当前pn前缀完全匹配，但plen >= fn->fn_bit*/
 
 		/*
 		 *	Exact match ?
@@ -824,7 +826,7 @@ static struct fib6_node *fib6_add_1(struct net *net,
 
 			return fn;
 		}
-		/*完全匹配，但要添加的前缀要比当前节点更长一些*/
+		/*完全匹配，但要添加的前缀要比当前节点更长一些,沿树分叉继续查找*/
 
 		/*
 		 *	We have more bits to go
@@ -1121,6 +1123,7 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 
 	ins = &fn->leaf;
 
+	/*遍历leaf链表*/
 	for (iter = leaf; iter;
 	     iter = rcu_dereference_protected(iter->fib6_next,
 				lockdep_is_held(&rt->fib6_table->tb6_lock))) {
@@ -1177,10 +1180,12 @@ static int fib6_add_rt2node(struct fib6_node *fn, struct fib6_info *rt,
 				rt->fib6_nsiblings++;
 		}
 
+		/*链表中的metric已大于rt的，rt需要添加至iter之前*/
 		if (iter->fib6_metric > rt->fib6_metric)
 			break;
 
 next_iter:
+		/*链表中的metric小于rt的，继续循环*/
 		ins = &iter->fib6_next;
 	}
 
@@ -1405,7 +1410,7 @@ void fib6_update_sernum_stub(struct net *net, struct fib6_info *f6i)
  *	Need to own table->tb6_lock
  */
 
-int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
+int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt/*路由项*/,
 	     struct nl_info *info, struct netlink_ext_ack *extack)
 {
 	struct fib6_table *table = rt->fib6_table;
@@ -1416,17 +1421,19 @@ int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
 
 	if (info->nlh) {
 		if (!(info->nlh->nlmsg_flags & NLM_F_CREATE))
-			allow_create = 0;
+			allow_create = 0;/*没有create标记，不容许创建*/
 		if (info->nlh->nlmsg_flags & NLM_F_REPLACE)
-			replace_required = 1;
+			replace_required = 1;/*有替换标记，需要替换*/
 	}
+
+	/*两个标记必有一个*/
 	if (!allow_create && !replace_required)
 		pr_warn("RTM_NEWROUTE with no NLM_F_CREATE or NLM_F_REPLACE\n");
 
 	/*查询root,并返回对应的fn*/
 	fn = fib6_add_1(info->nl_net, table, root,
 			&rt->fib6_dst.addr, rt->fib6_dst.plen,
-			offsetof(struct fib6_info, fib6_dst), allow_create,
+			offsetof(struct fib6_info, fib6_dst)/*目的地址的offset*/, allow_create,
 			replace_required, extack);
 	if (IS_ERR(fn)) {
 		/*查询不存在创建失败/参数有误*/
@@ -1439,6 +1446,7 @@ int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
 
 #ifdef CONFIG_IPV6_SUBTREES
 	if (rt->fib6_src.plen) {
+		/*rt中指明了fib6_src*/
 		struct fib6_node *sn;
 
 		if (!rcu_access_pointer(fn->subtree)) {
@@ -1468,7 +1476,7 @@ int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
 
 			sn = fib6_add_1(info->nl_net, table, sfn,
 					&rt->fib6_src.addr, rt->fib6_src.plen,
-					offsetof(struct fib6_info, fib6_src),
+					offsetof(struct fib6_info, fib6_src)/*源地址的offset*/,
 					allow_create, replace_required, extack);
 
 			if (IS_ERR(sn)) {
@@ -1510,7 +1518,7 @@ int fib6_add(struct fib6_node *root/*根节点*/, struct fib6_info *rt,
 	}
 #endif
 
-	/*为fibnode添加路由信息*/
+	/*为fibnode添加路由信息(上面我们创建了fn,但没有添加路由信息，这里添加）*/
 	err = fib6_add_rt2node(fn, rt, info, extack);
 	if (!err) {
 		if (rt->nh)
@@ -1527,6 +1535,7 @@ out:
 		 * super-tree leaf node we have to find a new one for it.
 		 */
 		if (pn != fn) {
+			/*pn与fn不相等，上面我们已经添加了fn,这里需要处理pn*/
 			struct fib6_info *pn_leaf =
 				rcu_dereference_protected(pn->leaf,
 				    lockdep_is_held(&table->tb6_lock));
@@ -1600,6 +1609,7 @@ static struct fib6_node *fib6_node_lookup_1(struct fib6_node *root,
 		/*先确定分叉检测位*/
 		dir = addr_bit_set(args->addr, fn->fn_bit);
 
+		/*检测位为0时走左侧，为1时走右侧*/
 		next = dir ? rcu_dereference(fn->right) :
 			     rcu_dereference(fn->left);
 
@@ -1612,7 +1622,7 @@ static struct fib6_node *fib6_node_lookup_1(struct fib6_node *root,
 		break;
 	}
 
-	/*通过上面的查找，我们确定了位置fn,只考虑前缀，当前这个位置是最长的*/
+	/*通过上面的查找，我们确定了位置fn,只考虑检测位（还不能称为前缀），当前这个位置是最长的*/
 	while (fn) {
 		struct fib6_node *subtree = FIB6_SUBTREE(fn);
 
@@ -1622,19 +1632,22 @@ static struct fib6_node *fib6_node_lookup_1(struct fib6_node *root,
 			struct rt6key *key;
 
 			if (!leaf)
+				/*没有leaf,执行backtrack*/
 				goto backtrack;
 
-			/*偏移到key的地址位置*/
+			/*利用offset偏移到key的指定位置*/
 			key = (struct rt6key *) ((u8 *)leaf + args->offset);
 
 			/*两者比对相等*/
 			if (ipv6_prefix_equal(&key->addr, args->addr, key->plen)) {
 #ifdef CONFIG_IPV6_SUBTREES
 				if (subtree) {
+					/*有subtree,尝试下一个参数*/
 					struct fib6_node *sfn;
 					sfn = fib6_node_lookup_1(subtree,
 								 args + 1);
 					if (!sfn)
+						/*没有命中，继续回溯*/
 						goto backtrack;
 					fn = sfn;
 				}
@@ -1664,7 +1677,7 @@ struct fib6_node *fib6_node_lookup(struct fib6_node *root,
 	struct lookup_args args[] = {
 		{
 			.offset = offsetof(struct fib6_info, fib6_dst),
-			.addr = daddr,
+			.addr = daddr,/*查目的地址*/
 		},
 #ifdef CONFIG_IPV6_SUBTREES
 		{
@@ -1673,6 +1686,7 @@ struct fib6_node *fib6_node_lookup(struct fib6_node *root,
 		},
 #endif
 		{
+			/*守护查询用，遇到此类offset，直接返回*/
 			.offset = 0,	/* sentinel */
 		}
 	};

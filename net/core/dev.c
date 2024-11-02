@@ -5958,17 +5958,17 @@ static void __netif_receive_skb_list_core(struct list_head *head, bool pfmemallo
 			continue;
 		if (pt_curr != pt_prev || od_curr != orig_dev) {
 			/* dispatch old sublist */
-			__netif_receive_skb_list_ptype(&sublist, pt_curr, od_curr);
+			__netif_receive_skb_list_ptype(&sublist, pt_curr, od_curr);/*出现不相等，处理之前的list*/
 			/* start new sublist */
 			INIT_LIST_HEAD(&sublist);
 			pt_curr = pt_prev;
 			od_curr = orig_dev;
 		}
-		list_add_tail(&skb->list, &sublist);
+		list_add_tail(&skb->list, &sublist);/*相等，串到sublist中，等待处理*/
 	}
 
 	/* dispatch final sublist */
-	__netif_receive_skb_list_ptype(&sublist, pt_curr, od_curr);
+	__netif_receive_skb_list_ptype(&sublist, pt_curr, od_curr);/*触发最后一个list*/
 }
 
 //协议栈处理收到的报文
@@ -6177,7 +6177,7 @@ void netif_receive_skb_list(struct list_head *head)
 		list_for_each_entry(skb, head, list)
 			trace_netif_receive_skb_list_entry(skb);
 	}
-	//将rx_list上所有skb清空，上送协议栈
+	//将head链表上所有skb，一次性上送协议栈
 	netif_receive_skb_list_internal(head);
 	trace_netif_receive_skb_list_exit(0);
 }

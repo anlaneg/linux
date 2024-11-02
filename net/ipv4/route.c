@@ -2286,7 +2286,7 @@ static int ip_route_input_slow(struct sk_buff *skb, __be32 daddr, __be32 saddr,
 
 	tun_info = skb_tunnel_info(skb);
 	if (tun_info && !(tun_info->mode & IP_TUNNEL_INFO_TX))
-	    /*取tunnel id*/
+	    /*有tunnnel,取tunnel id*/
 		fl4.flowi4_tun_key.tun_id = tun_info->key.tun_id;
 	else
 		fl4.flowi4_tun_key.tun_id = 0;
@@ -2969,7 +2969,7 @@ struct rtable *ip_route_output_flow(struct net *net, struct flowi4 *flp4,
 		return rt;
 
 	if (flp4->flowi4_proto) {
-		/*设置proto，更新flowi4_oif*/
+		/*设置了proto，更新flowi4_oif*/
 		flp4->flowi4_oif = rt->dst.dev->ifindex;
 		rt = (struct rtable *)xfrm_lookup_route(net, &rt->dst,
 							flowi4_to_flowi(flp4),
@@ -3211,6 +3211,7 @@ static struct sk_buff *inet_rtm_getroute_build_skb(__be32 src, __be32 dst,
 	skb_reset_mac_header(skb);
 	skb_reset_network_header(skb);
 	skb->protocol = htons(ETH_P_IP);
+	/*填充ip头*/
 	iph = skb_put(skb, sizeof(struct iphdr));
 	iph->protocol = ip_proto;
 	iph->saddr = src;
@@ -3220,6 +3221,7 @@ static struct sk_buff *inet_rtm_getroute_build_skb(__be32 src, __be32 dst,
 	iph->ihl = 0x5;
 	skb_set_transport_header(skb, skb->len);
 
+	/*填充传输层*/
 	switch (iph->protocol) {
 	case IPPROTO_UDP: {
 		struct udphdr *udph;
@@ -3285,6 +3287,7 @@ static int inet_rtm_valid_getroute_req(struct sk_buff *skb,
 	if (rtm->rtm_flags & ~(RTM_F_NOTIFY |
 			       RTM_F_LOOKUP_TABLE |
 			       RTM_F_FIB_MATCH)) {
+		/*遇到不认识的flags*/
 		NL_SET_ERR_MSG(extack, "ipv4: Unsupported rtm_flags for route get request");
 		return -EINVAL;
 	}
@@ -3349,8 +3352,11 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		return err;
 
 	rtm = nlmsg_data(nlh);
+	/*取指明的srcip*/
 	src = tb[RTA_SRC] ? nla_get_in_addr(tb[RTA_SRC]) : 0;
+	/*取指明dstip*/
 	dst = tb[RTA_DST] ? nla_get_in_addr(tb[RTA_DST]) : 0;
+	/*取指明的input interface*/
 	iif = tb[RTA_IIF] ? nla_get_u32(tb[RTA_IIF]) : 0;
 	mark = tb[RTA_MARK] ? nla_get_u32(tb[RTA_MARK]) : 0;
 	if (tb[RTA_UID])
@@ -3371,6 +3377,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	if (tb[RTA_DPORT])
 		dport = nla_get_be16(tb[RTA_DPORT]);
 
+	/*按参数构造skb报文*/
 	skb = inet_rtm_getroute_build_skb(src, dst, ip_proto, sport, dport);
 	if (!skb)
 		return -ENOBUFS;
@@ -3392,6 +3399,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	if (iif) {
 		struct net_device *dev;
 
+		/*确定入接口*/
 		dev = dev_get_by_index_rcu(net, iif);
 		if (!dev) {
 			err = -ENODEV;
@@ -3399,8 +3407,9 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		}
 
 		fl4.flowi4_iif = iif; /* for rt_fill_info */
-		skb->dev	= dev;
+		skb->dev	= dev;/*报文从属于iif对应的dev*/
 		skb->mark	= mark;
+		/*执行路由input查询*/
 		err = ip_route_input_rcu(skb, dst, src,
 					 rtm->rtm_tos & IPTOS_RT_MASK, dev,
 					 &res);
@@ -3409,8 +3418,10 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 		if (err == 0 && rt->dst.error)
 			err = -rt->dst.error;
 	} else {
+		/*指定为loopback设备*/
 		fl4.flowi4_iif = LOOPBACK_IFINDEX;
-		skb->dev = net->loopback_dev;
+		skb->dev = net->loopback_dev;/*报文从属于loopback设备*/
+		/*执行路由output查询*/
 		rt = ip_route_output_key_hash_rcu(net, &fl4, &res, skb);
 		err = 0;
 		if (IS_ERR(rt))
@@ -3425,6 +3436,7 @@ static int inet_rtm_getroute(struct sk_buff *in_skb, struct nlmsghdr *nlh,
 	if (rtm->rtm_flags & RTM_F_NOTIFY)
 		rt->rt_flags |= RTCF_NOTIFY;
 
+	/*指定此描记，则自res中取table_id,否则置为0*/
 	if (rtm->rtm_flags & RTM_F_LOOKUP_TABLE)
 		table_id = res.table ? res.table->tb_id : 0;
 
@@ -3813,7 +3825,7 @@ int __init ip_rt_init(void)
 	xfrm_init();
 	xfrm4_init();
 #endif
-	rtnl_register(PF_INET, RTM_GETROUTE, inet_rtm_getroute, NULL,
+	rtnl_register(PF_INET, RTM_GETROUTE, inet_rtm_getroute/*负责iproute2类v4路由查询响应*/, NULL,
 		      RTNL_FLAG_DOIT_UNLOCKED);
 
 #ifdef CONFIG_SYSCTL

@@ -530,6 +530,7 @@ static loff_t blkdev_llseek(struct file *file, loff_t offset, int whence)
 	loff_t retval;
 
 	inode_lock(bd_inode);
+	/*块设备读写位置偏移*/
 	retval = fixed_size_llseek(file, offset, whence, i_size_read(bd_inode));
 	inode_unlock(bd_inode);
 	return retval;
@@ -597,6 +598,7 @@ blk_mode_t file_to_blk_mode(struct file *file)
 	return mode;
 }
 
+/*提供block设备的open回调*/
 static int blkdev_open(struct inode *inode, struct file *filp)
 {
 	struct bdev_handle *handle;
@@ -612,7 +614,7 @@ static int blkdev_open(struct inode *inode, struct file *filp)
 	filp->f_mode |= FMODE_BUF_RASYNC | FMODE_CAN_ODIRECT;
 
 	mode = file_to_blk_mode(filp);
-	handle = bdev_open_by_dev(inode->i_rdev, mode,
+	handle = bdev_open_by_dev(inode->i_rdev/*块设备对应的dev_t*/, mode,
 			mode & BLK_OPEN_EXCL ? filp : NULL, NULL);
 	if (IS_ERR(handle))
 		return PTR_ERR(handle);
@@ -622,10 +624,11 @@ static int blkdev_open(struct inode *inode, struct file *filp)
 
 	filp->f_mapping = handle->bdev->bd_inode->i_mapping;
 	filp->f_wb_err = filemap_sample_wb_err(filp->f_mapping);
-	filp->private_data = handle;
+	filp->private_data = handle;/*文件的私有数据为bdev_handle*/
 	return 0;
 }
 
+/*提供block设备的release回调*/
 static int blkdev_release(struct inode *inode, struct file *filp)
 {
 	bdev_release(filp->private_data);
@@ -850,16 +853,17 @@ static int blkdev_mmap(struct file *file, struct vm_area_struct *vma)
 	return generic_file_mmap(file, vma);
 }
 
+/*块设备默认的文件操作集*/
 const struct file_operations def_blk_fops = {
 	.open		= blkdev_open,
 	.release	= blkdev_release,
 	.llseek		= blkdev_llseek,
-	.read_iter	= blkdev_read_iter,
-	.write_iter	= blkdev_write_iter,
+	.read_iter	= blkdev_read_iter,/*支持块设备读*/
+	.write_iter	= blkdev_write_iter,/*支持块设备写（饶过page cache直接io)*/
 	.iopoll		= iocb_bio_iopoll,
 	.mmap		= blkdev_mmap,
 	.fsync		= blkdev_fsync,
-	.unlocked_ioctl	= blkdev_ioctl,
+	.unlocked_ioctl	= blkdev_ioctl,/*支持针对块设备ioctl*/
 #ifdef CONFIG_COMPAT
 	.compat_ioctl	= compat_blkdev_ioctl,
 #endif

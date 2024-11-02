@@ -238,7 +238,7 @@ static struct sk_buff *ip6_rcv_core(struct sk_buff *skb, struct net_device *dev,
 	 */
 	if (!(skb->pkt_type == PACKET_LOOPBACK ||
 	      dev->flags & IFF_LOOPBACK) &&
-	    ipv6_addr_is_multicast(&hdr->daddr) &&
+	    ipv6_addr_is_multicast(&hdr->daddr)/*目的地址为组播*/ &&
 	    IPV6_ADDR_MC_SCOPE(&hdr->daddr) == 1)
 		goto err;
 

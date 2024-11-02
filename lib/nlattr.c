@@ -1038,6 +1038,7 @@ EXPORT_SYMBOL(nla_reserve_64bit);
 void *nla_reserve_nohdr(struct sk_buff *skb, int attrlen)
 {
 	if (unlikely(skb_tailroom(skb) < NLA_ALIGN(attrlen)))
+		/*空间不足，返回NULL*/
 		return NULL;
 
 	return __nla_reserve_nohdr(skb, attrlen);

@@ -46,7 +46,7 @@ static inline unsigned int bio_max_segs(unsigned int nr_segs)
  * Return the data direction, READ or WRITE.
  */
 #define bio_data_dir(bio) \
-	(op_is_write(bio_op(bio)) ? WRITE : READ)
+	(op_is_write(bio_op(bio)) ? WRITE/*写方向*/ : READ/*读方向*/)
 
 /*
  * Check whether this bio carries any data or not. A NULL bio is allowed.

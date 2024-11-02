@@ -168,7 +168,7 @@ struct kernfs_elem_dir {
 };
 
 struct kernfs_elem_symlink {
-	struct kernfs_node	*target_kn;
+	struct kernfs_node	*target_kn;/*符号链接对应的目标*/
 };
 
 struct kernfs_elem_attr {
@@ -391,6 +391,7 @@ static inline void kernfs_enable_ns(struct kernfs_node *kn)
  */
 static inline bool kernfs_ns_enabled(struct kernfs_node *kn)
 {
+	/*检查此kernfs_node是否可开启namespace*/
 	return kn->flags & KERNFS_NS;
 }
 
@@ -469,6 +470,7 @@ static inline enum kernfs_node_type kernfs_type(struct kernfs_node *kn)
 
 static inline void kernfs_enable_ns(struct kernfs_node *kn) { }
 
+/*不开启fs ns*/
 static inline bool kernfs_ns_enabled(struct kernfs_node *kn)
 { return false; }
 

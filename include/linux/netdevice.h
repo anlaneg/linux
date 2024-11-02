@@ -2883,6 +2883,7 @@ struct packet_type {
 					 struct net_device *,
 					 struct packet_type *,
 					 struct net_device *);
+	/*报文处理入口函数（支持list）*/
 	void			(*list_func) (struct list_head *,
 					      struct packet_type *,
 					      struct net_device *);

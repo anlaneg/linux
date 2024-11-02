@@ -87,7 +87,7 @@ struct rxe_sq {
 
 struct rxe_rq {
 	int			max_wr;
-	int			max_sge;
+	int			max_sge;/*rq约定的最大sge*/
 	spinlock_t		producer_lock; /* guard queue producer */
 	spinlock_t		consumer_lock; /* guard queue consumer */
 	struct rxe_queue	*queue;
@@ -149,6 +149,7 @@ struct resp_res {
 			u64		orig_val;
 		} atomic;
 		struct {
+			/*读操作对应的va等信息*/
 			u64		va_org;
 			u32		rkey;
 			u32		length;
@@ -166,26 +167,26 @@ struct resp_res {
 
 struct rxe_resp_info {
 	u32			msn;
-	u32			psn;/*已确认的psn*/
-	u32			ack_psn;
-	int			opcode;
+	u32			psn;/*execute阶段执行后，此psn表示psn-1前均已收到*/
+	u32			ack_psn;/*预期的psn*/
+	int			opcode;/*上次执行采用的opcode*/
 	int			drop_msg;
 	int			goto_error;
 	int			sent_psn_nak;/*是否需要发送nack*/
 	enum ib_wc_status	status;
-	u8			aeth_syndrome;
+	u8			aeth_syndrome;/*记录在状态机执行时设置的出错原因，默认值为AETH_ACK_UNLIMITED*/
 
 	/* Receive only */
 	/*指向可使用的下一个recv wqe*/
-	struct rxe_recv_wqe	*wqe;
+	struct rxe_recv_wqe	*wqe;/*send操作，通过send_data_in写入此数据项*/
 
 	/* RDMA read / atomic only */
-	u64			va;
-	u64			offset;
-	struct rxe_mr		*mr;
-	u32			resid;
-	u32			rkey;
-	u32			length;
+	u64			va;/*虚拟地址*/
+	u64			offset;/*自虚拟地址开始的偏移量*/
+	struct rxe_mr		*mr;/*报文中指明的rkey对应的mr,通过write_data_in写入此数据项*/
+	u32			resid;/*dma地址长度*/
+	u32			rkey;/*指明的remote key*/
+	u32			length;/*dma地址长度*/
 
 	/* SRQ only */
 	struct {
@@ -210,14 +211,15 @@ struct rxe_qp {
 	/*标记qp是否有效*/
 	unsigned int		valid;
 	unsigned int		mtu;
-	bool			is_user;/*是否为用户态的qp*/
+	/*是否为用户态创建的qp（有些qp是kernel创建的，就好比有些socket是kernel创建的一样）*/
+	bool			is_user;
 
 	/*所属的pd*/
 	struct rxe_pd		*pd;
 	struct rxe_srq		*srq;
 	/*send对应的cq*/
 	struct rxe_cq		*scq;
-	/*recv对应的cq*/
+	/*recv对应的cq（收到write,send报文后）*/
 	struct rxe_cq		*rcq;
 
 	enum ib_sig_type	sq_sig_type;
@@ -251,7 +253,7 @@ struct rxe_qp {
 	struct rxe_req_info	req;
 	/*对接收内容进行响应*/
 	struct rxe_comp_info	comp;
-	/*处理req_pkts链表上的请求类报文，故为response*/
+	/*处理req_pkts链表上的请求类报文并进行响应，故为response*/
 	struct rxe_resp_info	resp;
 
 	atomic_t		ssn;/*此qp上全局id,用于为发送分配id*/
@@ -291,9 +293,9 @@ enum {
 };
 
 enum rxe_mr_state {
-	RXE_MR_STATE_INVALID,
+	RXE_MR_STATE_INVALID,/*标记此mr无效*/
 	RXE_MR_STATE_FREE,/*空闲*/
-	RXE_MR_STATE_VALID,
+	RXE_MR_STATE_VALID,/*标记此mr有效*/
 };
 
 enum rxe_mr_copy_dir {
@@ -302,8 +304,8 @@ enum rxe_mr_copy_dir {
 };
 
 enum rxe_mr_lookup_type {
-	RXE_LOOKUP_LOCAL,
-	RXE_LOOKUP_REMOTE,
+	RXE_LOOKUP_LOCAL,/*查询本端mr*/
+	RXE_LOOKUP_REMOTE,/*查询对端mr*/
 };
 
 enum rxe_rereg {
@@ -325,9 +327,9 @@ struct rxe_mr {
 	/*对应的umem信息*/
 	struct ib_umem		*umem;
 
-	/*本端key*/
+	/*在其上记录本端key*/
 	u32			lkey;
-	/*远端key*/
+	/*在其上记录远端key*/
 	u32			rkey;
 	/*mr状态，初始状态为：RXE_MR_STATE_INVALID*/
 	enum rxe_mr_state	state;
@@ -343,7 +345,7 @@ struct rxe_mr {
 	u32			num_buf;
 	u32			nbuf;
 
-	struct xarray		page_list;
+	struct xarray		page_list;/*记录mr中关联的一组page，按index进行索引*/
 };
 
 static inline unsigned int mr_page_size(struct rxe_mr *mr)
@@ -416,7 +418,7 @@ struct rxe_dev {
 	struct rxe_pool		srq_pool;/*收集srq*/
 	struct rxe_pool		qp_pool;/*收集qp，通过qpn索引qp*/
 	struct rxe_pool		cq_pool;/*记录已分配的cq*/
-	struct rxe_pool		mr_pool;/*负责分配mr*/
+	struct rxe_pool		mr_pool;/*记录已分配的mr,通过index可获取到对应的mr*/
 	struct rxe_pool		mw_pool;
 
 	/* multicast support */
@@ -495,6 +497,7 @@ static inline struct rxe_pd *rxe_ah_pd(struct rxe_ah *ah)
 	return to_rpd(ah->ibah.pd);
 }
 
+/*获取此mr从属的pd*/
 static inline struct rxe_pd *mr_pd(struct rxe_mr *mr)
 {
 	return to_rpd(mr->ibmr.pd);
