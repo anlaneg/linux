@@ -188,6 +188,7 @@ static int vfio_pci_sriov_configure(struct pci_dev *pdev, int nr_virtfn)
 }
 
 static const struct pci_device_id vfio_pci_table[] = {
+		/*所有vendor的所有设备均可支持*/
 	{ PCI_DRIVER_OVERRIDE_DEVICE_VFIO(PCI_ANY_ID, PCI_ANY_ID) }, /* match all by default */
 	{}
 };

@@ -42,6 +42,7 @@ static struct kset *iommu_group_kset;
 static DEFINE_IDA(iommu_group_ida);
 static DEFINE_IDA(iommu_global_pasid_ida);
 
+/*默认方式(一般我们指明为pt)*/
 static unsigned int iommu_def_domain_type __read_mostly;
 static bool iommu_dma_strict __read_mostly = IS_ENABLED(CONFIG_IOMMU_DEFAULT_DMA_STRICT);
 static u32 iommu_cmd_line __read_mostly;
@@ -89,6 +90,7 @@ static const char * const iommu_group_resv_type_string[] = {
 	[IOMMU_RESV_SW_MSI]			= "msi",
 };
 
+/*来源于cmdline配置*/
 #define IOMMU_CMD_LINE_DMA_API		BIT(0)
 #define IOMMU_CMD_LINE_STRICT		BIT(1)
 
@@ -145,6 +147,7 @@ struct iommu_group_attribute iommu_group_attr_##_name =		\
 #define to_iommu_group(_kobj)		\
 	container_of(_kobj, struct iommu_group, kobj)
 
+/*用于记录系统中所有iommu设备*/
 static LIST_HEAD(iommu_device_list);
 static DEFINE_SPINLOCK(iommu_device_lock);
 
@@ -195,12 +198,16 @@ static int __init iommu_subsys_init(void)
 	struct notifier_block *nb;
 
 	if (!(iommu_cmd_line & IOMMU_CMD_LINE_DMA_API)) {
+		/*cmdline没有指定的情况下*/
 		if (IS_ENABLED(CONFIG_IOMMU_DEFAULT_PASSTHROUGH))
+			/*如果开启，则为pt*/
 			iommu_set_default_passthrough(false);
 		else
+			/*否则默认为nopt*/
 			iommu_set_default_translated(false);
 
 		if (iommu_default_passthrough() && cc_platform_has(CC_ATTR_MEM_ENCRYPT)) {
+			/*默认pt，但memory encryption,则置为nopt*/
 			pr_info("Memory encryption detected - Disabling default IOMMU Passthrough\n");
 			iommu_set_default_translated(false);
 		}
@@ -209,12 +216,14 @@ static int __init iommu_subsys_init(void)
 	if (!iommu_default_passthrough() && !iommu_dma_strict)
 		iommu_def_domain_type = IOMMU_DOMAIN_DMA_FQ;
 
+	/*显示默认方式，以及是否来源一起来cmdline*/
 	pr_info("Default domain type: %s%s\n",
 		iommu_domain_type_str(iommu_def_domain_type),
 		(iommu_cmd_line & IOMMU_CMD_LINE_DMA_API) ?
 			" (set via kernel command line)" : "");
 
 	if (!iommu_default_passthrough())
+		/*非pt情况下的输出*/
 		pr_info("DMA domain TLB invalidation policy: %s mode%s\n",
 			iommu_dma_strict ? "strict" : "lazy",
 			(iommu_cmd_line & IOMMU_CMD_LINE_STRICT) ?
@@ -224,6 +233,7 @@ static int __init iommu_subsys_init(void)
 	if (!nb)
 		return -ENOMEM;
 
+	/*为每一个iommu bus注册通知回调函数*/
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses); i++) {
 		nb[i].notifier_call = iommu_bus_notifier;
 		bus_register_notifier(iommu_buses[i], &nb[i]);
@@ -263,12 +273,15 @@ int iommu_device_register(struct iommu_device *iommu,
 		iommu->fwnode = dev_fwnode(hwdev);
 
 	spin_lock(&iommu_device_lock);
+	/*将此iommu设备添加到系统链表中*/
 	list_add_tail(&iommu->list, &iommu_device_list);
 	spin_unlock(&iommu_device_lock);
 
+	/*新iommu设备加入所有bus均尝试probe*/
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses) && !err; i++)
 		err = bus_iommu_probe(iommu_buses[i]);
 	if (err)
+		/*probe时出错，解注册此设备*/
 		iommu_device_unregister(iommu);
 	return err;
 }
@@ -532,6 +545,7 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 
 	/* Device is probed already if in a group */
 	if (dev->iommu_group)
+		/*此设备已probe到iommu_group，不再probe*/
 		return 0;
 
 	ret = iommu_init_device(dev, ops);
@@ -1977,6 +1991,7 @@ static void iommu_group_do_probe_finalize(struct device *dev)
 		ops->probe_finalize(dev);
 }
 
+/*针对bus上所有设备，执行iommu probe*/
 int bus_iommu_probe(const struct bus_type *bus)
 {
 	struct iommu_group *group, *next;
@@ -2036,6 +2051,7 @@ bool iommu_present(const struct bus_type *bus)
 
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses); i++) {
 		if (iommu_buses[i] == bus) {
+			/*只有待查找的bus被命中，才检查iommu_device_list是否为空*/
 			spin_lock(&iommu_device_lock);
 			ret = !list_empty(&iommu_device_list);
 			spin_unlock(&iommu_device_lock);
@@ -2987,8 +3003,10 @@ const struct iommu_ops *iommu_ops_from_fwnode(struct fwnode_handle *fwnode)
 	struct iommu_device *iommu;
 
 	spin_lock(&iommu_device_lock);
+	/*遍历系统中所有iommu设备*/
 	list_for_each_entry(iommu, &iommu_device_list, list)
 		if (iommu->fwnode == fwnode) {
+			/*匹配成功，返回ops*/
 			ops = iommu->ops;
 			break;
 		}

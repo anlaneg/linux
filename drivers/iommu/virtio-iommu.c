@@ -1203,12 +1203,14 @@ static int viommu_probe(struct virtio_device *vdev)
 	if (ret)
 		goto err_free_vqs;
 
+	/*将此iommu设备添加进sysfs*/
 	ret = iommu_device_sysfs_add(&viommu->iommu, dev, NULL, "%s",
 				     virtio_bus_name(vdev));
 	if (ret)
 		goto err_free_vqs;
 
-	iommu_device_register(&viommu->iommu, &viommu_ops, parent_dev);
+	/*注册viommu设备*/
+	iommu_device_register(&viommu->iommu, &viommu_ops/*viommu设备对应的ops*/, parent_dev);
 
 	vdev->priv = viommu;
 
@@ -1258,6 +1260,7 @@ static struct virtio_device_id id_table[] = {
 };
 MODULE_DEVICE_TABLE(virtio, id_table);
 
+/*virtio iommu设备驱动*/
 static struct virtio_driver virtio_iommu_drv = {
 	.driver.name		= KBUILD_MODNAME,
 	.driver.owner		= THIS_MODULE,

@@ -114,6 +114,7 @@ void __init pci_iommu_alloc(void)
  */
 static __init int iommu_setup(char *p)
 {
+	/*针对iommu参数的处理*/
 	iommu_merge = 1;
 
 	if (!p)
@@ -121,6 +122,7 @@ static __init int iommu_setup(char *p)
 
 	while (*p) {
 		if (!strncmp(p, "off", 3))
+			/*参数指明off*/
 			no_iommu = 1;
 		/* gart_parse_options has more force support */
 		if (!strncmp(p, "force", 5))
@@ -159,7 +161,8 @@ static __init int iommu_setup(char *p)
 			x86_swiotlb_enable = true;
 #endif
 		if (!strncmp(p, "pt", 2))
-			iommu_set_default_passthrough(true);
+			/*参数指明passthrough*/
+			iommu_set_default_passthrough(true/*此配置来源于命令行*/);
 		if (!strncmp(p, "nopt", 4))
 			iommu_set_default_translated(true);
 
@@ -171,6 +174,7 @@ static __init int iommu_setup(char *p)
 	}
 	return 0;
 }
+/*此函数指明命令行iommu的配置处理*/
 early_param("iommu", iommu_setup);
 
 static int __init pci_iommu_init(void)

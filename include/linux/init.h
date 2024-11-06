@@ -341,7 +341,7 @@ extern const struct obs_kernel_param __setup_start[], __setup_end[];
  * Force the alignment so the compiler doesn't space elements of the
  * obs_kernel_param "array" too far apart in .init.setup.
  */
-#define __setup_param(str/*参数*/, unique_id/*变量唯一标识*/, fn/*处理函数*/, early)			\
+#define __setup_param(str/*参数*/, unique_id/*变量唯一标识*/, fn/*参数处理函数*/, early)			\
 	/*记录kernel参数名称*/\
 	static const char __setup_str_##unique_id[] __initconst		\
 		__aligned(1) = str; 					\
