@@ -259,7 +259,7 @@ static int remove_iommu_group(struct device *dev, void *data)
  *
  * Return: 0 on success, or an error.
  */
-int iommu_device_register(struct iommu_device *iommu,
+int iommu_device_register(struct iommu_device *iommu/*iommu设备*/,
 			  const struct iommu_ops *ops, struct device *hwdev)
 {
 	int err = 0;
@@ -270,6 +270,7 @@ int iommu_device_register(struct iommu_device *iommu,
 
 	iommu->ops = ops;
 	if (hwdev)
+		/*使用hwdev对应的fwnode*/
 		iommu->fwnode = dev_fwnode(hwdev);
 
 	spin_lock(&iommu_device_lock);
@@ -350,8 +351,10 @@ static struct dev_iommu *dev_iommu_get(struct device *dev)
 	lockdep_assert_held(&iommu_probe_device_lock);
 
 	if (param)
+		/*iommu已设置，直接返回*/
 		return param;
 
+	/*为dev设置iommu*/
 	param = kzalloc(sizeof(*param), GFP_KERNEL);
 	if (!param)
 		return NULL;
@@ -419,6 +422,7 @@ static int iommu_init_device(struct device *dev, const struct iommu_ops *ops)
 	struct iommu_group *group;
 	int ret;
 
+	/*确保iommu结构体已申请*/
 	if (!dev_iommu_get(dev))
 		return -ENOMEM;
 
@@ -427,6 +431,7 @@ static int iommu_init_device(struct device *dev, const struct iommu_ops *ops)
 		goto err_free;
 	}
 
+	/*产生相应的iommu设备*/
 	iommu_dev = ops->probe_device(dev);
 	if (IS_ERR(iommu_dev)) {
 		ret = PTR_ERR(iommu_dev);
@@ -1869,11 +1874,13 @@ static int iommu_bus_notifier(struct notifier_block *nb,
 	struct device *dev = data;
 
 	if (action == BUS_NOTIFY_ADD_DEVICE) {
+		/*添加设备，触发iommu probe*/
 		int ret;
 
 		ret = iommu_probe_device(dev);
 		return (ret) ? NOTIFY_DONE : NOTIFY_OK;
 	} else if (action == BUS_NOTIFY_REMOVED_DEVICE) {
+		/*移除设备，触发iommu释放*/
 		iommu_release_device(dev);
 		return NOTIFY_OK;
 	}
@@ -3006,7 +3013,7 @@ const struct iommu_ops *iommu_ops_from_fwnode(struct fwnode_handle *fwnode)
 	struct iommu_device *iommu;
 
 	spin_lock(&iommu_device_lock);
-	/*遍历系统中所有iommu设备*/
+	/*遍历系统中所有iommu设备，查找fwnode匹配的，返回ops*/
 	list_for_each_entry(iommu, &iommu_device_list, list)
 		if (iommu->fwnode == fwnode) {
 			/*匹配成功，返回ops*/

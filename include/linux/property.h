@@ -35,6 +35,10 @@ enum dev_dma_attr {
 
 const struct fwnode_handle *__dev_fwnode_const(const struct device *dev);
 struct fwnode_handle *__dev_fwnode(struct device *dev);
+/*_Generic是C11引入的关键字，网页https://www.cnblogs.com/skyzu2333/p/14891677.html对它用法有说明
+ * 这里针对传入的dev是const struct device*时，调__dev_fwnode_const函数，如果dev是struct device*时调
+ * __dev_fwnode函数
+ * */
 #define dev_fwnode(dev)							\
 	_Generic((dev),							\
 		 const struct device *: __dev_fwnode_const,	\

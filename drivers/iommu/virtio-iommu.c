@@ -1071,7 +1071,7 @@ static bool viommu_capable(struct device *dev, enum iommu_cap cap)
 static struct iommu_ops viommu_ops = {
 	.capable		= viommu_capable,
 	.domain_alloc		= viommu_domain_alloc,
-	.probe_device		= viommu_probe_device,
+	.probe_device		= viommu_probe_device,/*iommu probe具体的一个设备*/
 	.probe_finalize		= viommu_probe_finalize,
 	.release_device		= viommu_release_device,
 	.device_group		= viommu_device_group,

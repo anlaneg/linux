@@ -460,7 +460,7 @@ struct iommu_ops {
 		const struct iommu_user_data *user_data);
 	struct iommu_domain *(*domain_alloc_paging)(struct device *dev);
 
-	struct iommu_device *(*probe_device)(struct device *dev);
+	struct iommu_device *(*probe_device)(struct device *dev);/*iommu设备probe device*/
 	void (*release_device)(struct device *dev);
 	void (*probe_finalize)(struct device *dev);
 	struct iommu_group *(*device_group)(struct device *dev);
@@ -627,7 +627,7 @@ struct dev_iommu {
 	struct iommu_fault_param	*fault_param;
 	struct iopf_device_param	*iopf_param;
 	struct iommu_fwspec		*fwspec;
-	struct iommu_device		*iommu_dev;
+	struct iommu_device		*iommu_dev;/*对应的iommu设备*/
 	void				*priv;
 	u32				max_pasids;
 	u32				attach_deferred:1;
@@ -908,11 +908,14 @@ const struct iommu_ops *iommu_ops_from_fwnode(struct fwnode_handle *fwnode);
 static inline struct iommu_fwspec *dev_iommu_fwspec_get(struct device *dev)
 {
 	if (dev->iommu)
+		/*此设备已关联iommu,直接返回*/
 		return dev->iommu->fwspec;
 	else
+		/*无有，返回NULL*/
 		return NULL;
 }
 
+/*设置此设备iommu的fwspec*/
 static inline void dev_iommu_fwspec_set(struct device *dev,
 					struct iommu_fwspec *fwspec)
 {

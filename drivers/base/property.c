@@ -19,6 +19,7 @@
 
 struct fwnode_handle *__dev_fwnode(struct device *dev)
 {
+	/*CONFIG_OF未开启时，返回dev->fwnode*/
 	return IS_ENABLED(CONFIG_OF) && dev->of_node ?
 		of_fwnode_handle(dev->of_node) : dev->fwnode;
 }

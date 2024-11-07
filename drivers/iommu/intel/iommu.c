@@ -4359,6 +4359,7 @@ static void intel_iommu_get_resv_regions(struct device *device,
 static struct iommu_group *intel_iommu_device_group(struct device *dev)
 {
 	if (dev_is_pci(dev))
+		/*pci设备group*/
 		return pci_device_group(dev);
 	return generic_device_group(dev);
 }
@@ -4747,7 +4748,7 @@ const struct iommu_ops intel_iommu_ops = {
 	.hw_info		= intel_iommu_hw_info,
 	.domain_alloc		= intel_iommu_domain_alloc,
 	.domain_alloc_user	= intel_iommu_domain_alloc_user,
-	.probe_device		= intel_iommu_probe_device,
+	.probe_device		= intel_iommu_probe_device,/*iommu probe设备*/
 	.probe_finalize		= intel_iommu_probe_finalize,
 	.release_device		= intel_iommu_release_device,
 	.get_resv_regions	= intel_iommu_get_resv_regions,
