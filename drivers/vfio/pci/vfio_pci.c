@@ -71,6 +71,7 @@ static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 		case PCI_DEVICE_ID_INTEL_QAT_C62X_VF:
 		case PCI_DEVICE_ID_INTEL_QAT_DH895XCC:
 		case PCI_DEVICE_ID_INTEL_QAT_DH895XCC_VF:
+			/*intel的这些设备不能被vfio-pci接管*/
 			return true;
 		default:
 			return false;
@@ -83,9 +84,11 @@ static bool vfio_pci_dev_in_denylist(struct pci_dev *pdev)
 static bool vfio_pci_is_denylisted(struct pci_dev *pdev)
 {
 	if (!vfio_pci_dev_in_denylist(pdev))
+		/*此设备不在denylist中，返回*/
 		return false;
 
 	if (disable_denylist) {
+		/*设备在denylist中，但要求禁止denylist*/
 		pci_warn(pdev,
 			 "device denylist disabled - allowing device %04x:%04x.\n",
 			 pdev->vendor, pdev->device);
@@ -150,13 +153,16 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	int ret;
 
 	if (vfio_pci_is_denylisted(pdev))
+		/*pdev在denylist中，故报错*/
 		return -EINVAL;
 
+	/*申请并初始化vfio dev*/
 	vdev = vfio_alloc_device(vfio_pci_core_device, vdev, &pdev->dev,
 				 &vfio_pci_ops);
 	if (IS_ERR(vdev))
 		return PTR_ERR(vdev);
 
+	/*将此pci设备的私有数据指定为vfio dev*/
 	dev_set_drvdata(&pdev->dev, vdev);
 	//vfio引用计数为0，开始vfio-pci设备
 	ret = vfio_pci_core_register_device(vdev);
@@ -258,7 +264,7 @@ static int __init vfio_pci_init(void)
 	vfio_pci_core_set_params(nointxmask, is_disable_vga, disable_idle_d3);
 
 	/* Register and scan for devices */
-	ret = pci_register_driver(&vfio_pci_driver);
+	ret = pci_register_driver(&vfio_pci_driver);/*注册pci驱动*/
 	if (ret)
 		return ret;
 

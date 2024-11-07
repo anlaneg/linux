@@ -1632,7 +1632,7 @@ static umode_t pcie_dev_attrs_are_visible(struct kobject *kobj,
 	return 0;
 }
 
-//定义pci设备的属性组
+//定义pci设备的属性组（这一组属性很多）
 static const struct attribute_group pci_dev_group = {
 	.attrs = pci_dev_attrs,
 };

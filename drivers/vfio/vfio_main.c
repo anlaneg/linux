@@ -205,7 +205,7 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
  * Use vfio_put_device() to release the structure after success return.
  */
 struct vfio_device *_vfio_alloc_device(size_t size, struct device *dev,
-				       const struct vfio_device_ops *ops)
+				       const struct vfio_device_ops *ops/*设备的ops*/)
 {
 	struct vfio_device *device;
 	int ret;
@@ -217,6 +217,7 @@ struct vfio_device *_vfio_alloc_device(size_t size, struct device *dev,
 	if (!device)
 		return ERR_PTR(-ENOMEM);
 
+	/*初始化vfio设备*/
 	ret = vfio_init_device(device, dev, ops);
 	if (ret)
 		goto out_free;

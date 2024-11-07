@@ -2192,6 +2192,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 
 	/* Drivers must set the vfio_pci_core_device to their drvdata */
 	if (WARN_ON(vdev != dev_get_drvdata(dev)))
+		/*pci设备的私有数据已提明为此vfio dev*/
 		return -EINVAL;
 
 	if (pdev->hdr_type != PCI_HEADER_TYPE_NORMAL)
@@ -2219,11 +2220,13 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 * Just reject these PFs and let the user sort it out.
 	 */
 	if (pci_num_vf(pdev)) {
+		/*此设备有vf*/
 		pci_warn(pdev, "Cannot bind to PF with SR-IOV enabled\n");
 		return -EBUSY;
 	}
 
 	if (pci_is_root_bus(pdev->bus)) {
+		/*pci设备位于root bus*/
 		ret = vfio_assign_device_set(&vdev->vdev, vdev);
 	} else if (!pci_probe_reset_slot(pdev->slot)) {
 		ret = vfio_assign_device_set(&vdev->vdev, pdev->slot);

@@ -438,6 +438,7 @@ static int iommu_init_device(struct device *dev, const struct iommu_ops *ops)
 	if (ret)
 		goto err_release;
 
+	/*取得group*/
 	group = ops->device_group(dev);
 	if (WARN_ON_ONCE(group == NULL))
 		group = ERR_PTR(-EINVAL);
@@ -445,6 +446,7 @@ static int iommu_init_device(struct device *dev, const struct iommu_ops *ops)
 		ret = PTR_ERR(group);
 		goto err_unlink;
 	}
+	/*设置此设备对应的iommu group*/
 	dev->iommu_group = group;
 
 	dev->iommu->max_pasids = dev_iommu_get_max_pasids(dev);
@@ -545,7 +547,7 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 
 	/* Device is probed already if in a group */
 	if (dev->iommu_group)
-		/*此设备已probe到iommu_group，不再probe*/
+		/*此设备已初始化，直接返回*/
 		return 0;
 
 	ret = iommu_init_device(dev, ops);
@@ -1237,6 +1239,7 @@ int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 	dev->iommu_group = group;
 
 	mutex_lock(&group->mutex);
+	/*将dev与group之间的关联关系串到链表上*/
 	list_add_tail(&gdev->list, &group->devices);
 	mutex_unlock(&group->mutex);
 	return 0;

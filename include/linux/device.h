@@ -951,6 +951,7 @@ static inline void dev_set_uevent_suppress(struct device *dev, int val)
 
 static inline int device_is_registered(struct device *dev)
 {
+	/*检查设备是否已注册*/
 	return dev->kobj.state_in_sysfs;
 }
 

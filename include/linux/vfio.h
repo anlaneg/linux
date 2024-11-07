@@ -263,7 +263,7 @@ static inline int vfio_check_feature(u32 flags, size_t argsz, u32 supported_ops,
 
 struct vfio_device *_vfio_alloc_device(size_t size, struct device *dev,
 				       const struct vfio_device_ops *ops);
-#define vfio_alloc_device(dev_struct, member, dev, ops)				\
+#define vfio_alloc_device(dev_struct, member, dev, ops/*设备的ops*/)				\
 	container_of(_vfio_alloc_device(sizeof(struct dev_struct) +		\
 					BUILD_BUG_ON_ZERO(offsetof(		\
 						struct dev_struct, member)),	\

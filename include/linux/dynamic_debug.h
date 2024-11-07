@@ -160,6 +160,7 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 			 const struct ib_device *ibdev,
 			 const char *fmt, ...);
 
+/*定义dyndbg变量，用于控制其日志的开启*/
 #define DEFINE_DYNAMIC_DEBUG_METADATA_CLS(name, cls, fmt)	\
 	static struct _ddebug  __aligned(8)			\
 	__section("__dyndbg") name = {				\
@@ -218,9 +219,10 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
  * (|_cls):	adds in _DPRINT_CLASS_DFLT as needed
  * (|_no_desc):	former gets callsite descriptor as 1st arg (for prdbgs)
  */
-#define __dynamic_func_call_cls(id, cls, fmt, func, ...) do {	\
+#define __dynamic_func_call_cls(id, cls, fmt, func/*要调用的函数*/, ...) do {	\
 	DEFINE_DYNAMIC_DEBUG_METADATA_CLS(id, cls, fmt);	\
 	if (DYNAMIC_DEBUG_BRANCH(id))				\
+		/*条件容许，调用func*/\
 		func(&id, ##__VA_ARGS__);			\
 } while (0)
 #define __dynamic_func_call(id, fmt, func, ...)				\
@@ -266,7 +268,7 @@ void __dynamic_ibdev_dbg(struct _ddebug *descriptor,
 			   pr_fmt(fmt), ##__VA_ARGS__)
 
 #define dynamic_pr_debug(fmt, ...)				\
-	_dynamic_func_call(fmt, __dynamic_pr_debug,		\
+	_dynamic_func_call(fmt/*格式字符串*/, __dynamic_pr_debug/*条件成立时此func将被执行*/,		\
 			   pr_fmt(fmt), ##__VA_ARGS__)
 
 #define dynamic_dev_dbg(dev, fmt, ...)				\
