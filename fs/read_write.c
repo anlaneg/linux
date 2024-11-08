@@ -930,6 +930,7 @@ ssize_t vfs_iter_write(struct file *file, struct iov_iter *iter, loff_t *ppos,
 
 	tot_len = iov_iter_count(iter);
 	if (!tot_len)
+		/*长度为空，直接返回*/
 		return 0;
 
 	ret = rw_verify_area(WRITE, file, ppos, tot_len);

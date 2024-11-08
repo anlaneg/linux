@@ -26,7 +26,7 @@ struct blk_mq_hw_ctx;
 struct elevator_mq_ops {
 	int (*init_sched)(struct request_queue *, struct elevator_type *);
 	void (*exit_sched)(struct elevator_queue *);
-	int (*init_hctx)(struct blk_mq_hw_ctx *, unsigned int);
+	int (*init_hctx)(struct blk_mq_hw_ctx *, unsigned int/*ctx索引*/);
 	void (*exit_hctx)(struct blk_mq_hw_ctx *, unsigned int);
 	void (*depth_updated)(struct blk_mq_hw_ctx *);
 
@@ -74,7 +74,7 @@ struct elevator_type
 	struct elv_fs_entry *elevator_attrs;
 	const char *elevator_name;
 	const char *elevator_alias;
-	const unsigned int elevator_features;
+	const unsigned int elevator_features;/*提供的功能*/
 	struct module *elevator_owner;
 #ifdef CONFIG_BLK_DEBUG_FS
 	const struct blk_mq_debugfs_attr *queue_debugfs_attrs;
@@ -88,6 +88,7 @@ struct elevator_type
 
 static inline bool elevator_tryget(struct elevator_type *e)
 {
+	/*尝试引用此module*/
 	return try_module_get(e->elevator_owner);
 }
 
@@ -113,8 +114,8 @@ struct request *elv_rqhash_find(struct request_queue *q, sector_t offset);
  */
 struct elevator_queue
 {
-	struct elevator_type *type;
-	void *elevator_data;
+	struct elevator_type *type;/*指向应用的elevator，见elv_register*/
+	void *elevator_data;/*由各elevator_type定义类型的私有数据*/
 	struct kobject kobj;
 	struct mutex sysfs_lock;
 	unsigned long flags;

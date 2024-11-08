@@ -408,6 +408,7 @@ static cpumask_var_t wq_requested_unbound_cpumask;
 static cpumask_var_t wq_isolated_cpumask;
 
 /* for further constrain wq_unbound_cpumask by cmdline parameter*/
+//记录命令行workqueue.unbound_cpus设置的配置
 static struct cpumask wq_cmdline_cpumask __initdata;
 
 /* CPU where unbound work was last round robin scheduled from this CPU */
@@ -6956,6 +6957,7 @@ static void __init init_pod_type(struct wq_pod_type *pt,
 	pt->nr_pods = 0;
 
 	/* init @pt->cpu_pod[] according to @cpus_share_pod() */
+	/*按cpu数申请空间*/
 	pt->cpu_pod = kcalloc(nr_cpu_ids, sizeof(pt->cpu_pod[0]), GFP_KERNEL);
 	BUG_ON(!pt->cpu_pod);
 
@@ -7002,6 +7004,7 @@ static bool __init cpus_share_smt(int cpu0, int cpu1)
 
 static bool __init cpus_share_numa(int cpu0, int cpu1)
 {
+	/*检查这两个cpu是否共享numa*/
 	return cpu_to_node(cpu0) == cpu_to_node(cpu1);
 }
 
@@ -7045,6 +7048,7 @@ void __warn_flushing_systemwide_wq(void)
 }
 EXPORT_SYMBOL(__warn_flushing_systemwide_wq);
 
+/*解析命令行，获取workqueue.unbound_cpus配置*/
 static int __init workqueue_unbound_cpus_setup(char *str)
 {
 	if (cpulist_parse(str, &wq_cmdline_cpumask) < 0) {

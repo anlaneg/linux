@@ -31,14 +31,14 @@
 #define VIRTIO_BLK_INLINE_SG_CNT	2
 #endif
 
-static unsigned int num_request_queues;
+static unsigned int num_request_queues;/*支持的请求队列数目*/
 module_param(num_request_queues, uint, 0644);
 MODULE_PARM_DESC(num_request_queues,
 		 "Limit the number of request queues to use for blk device. "
 		 "0 for no limit. "
 		 "Values > nr_cpu_ids truncated to nr_cpu_ids.");
 
-static unsigned int poll_queues;
+static unsigned int poll_queues;/*支持的poll队列数目*/
 module_param(poll_queues, uint, 0644);
 MODULE_PARM_DESC(poll_queues, "The number of dedicated virtqueues for polling I/O");
 
@@ -48,9 +48,9 @@ static DEFINE_IDA(vd_index_ida);
 static struct workqueue_struct *virtblk_wq;
 
 struct virtio_blk_vq {
-	struct virtqueue *vq;
+	struct virtqueue *vq;/*关联的vq数*/
 	spinlock_t lock;
-	char name[VQ_NAME_LEN];
+	char name[VQ_NAME_LEN];/*此vq对应的名称*/
 } ____cacheline_aligned_in_smp;
 
 struct virtio_blk {
@@ -78,9 +78,9 @@ struct virtio_blk {
 	int index;
 
 	/* num of vqs */
-	int num_vqs;
-	int io_queues[HCTX_MAX_TYPES];
-	struct virtio_blk_vq *vqs;/*blk_vq数组，共有num_vqs个vq*/
+	int num_vqs;/*队列数*/
+	int io_queues[HCTX_MAX_TYPES];/*各类型io队列数目*/
+	struct virtio_blk_vq *vqs;/*virtio_blk_vq数组指针，共有num_vqs个vq结构*/
 
 	/* For zoned device */
 	unsigned int zone_sectors;
@@ -239,7 +239,7 @@ static void virtblk_cleanup_cmd(struct request *req)
 
 static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 				      struct request *req,
-				      struct virtblk_req *vbr/*出参*/)
+				      struct virtblk_req *vbr/*出参，依据请求转换*/)
 {
 	size_t in_hdr_len = sizeof(vbr->in_hdr.status);
 	bool unmap = false;
@@ -254,11 +254,13 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 
 	switch (req_op(req)) {
 	case REQ_OP_READ:
+		/*读类型*/
 		type = VIRTIO_BLK_T_IN;
 		/*记录读的位置*/
 		sector = blk_rq_pos(req);
 		break;
 	case REQ_OP_WRITE:
+		/*写类型*/
 		type = VIRTIO_BLK_T_OUT;
 		/*记录写的位置*/
 		sector = blk_rq_pos(req);
@@ -313,8 +315,8 @@ static blk_status_t virtblk_setup_cmd(struct virtio_device *vdev,
 
 	/* Set fields for non-REQ_OP_DRV_IN request types */
 	vbr->in_hdr_len = in_hdr_len;
-	vbr->out_hdr.type = cpu_to_virtio32(vdev, type);
-	vbr->out_hdr.sector = cpu_to_virtio64(vdev, sector);
+	vbr->out_hdr.type = cpu_to_virtio32(vdev, type);/*操作类型*/
+	vbr->out_hdr.sector = cpu_to_virtio64(vdev, sector);/*操作位置*/
 
 	if (type == VIRTIO_BLK_T_DISCARD || type == VIRTIO_BLK_T_WRITE_ZEROES ||
 	    type == VIRTIO_BLK_T_SECURE_ERASE) {
@@ -981,8 +983,9 @@ static int init_vq(struct virtio_blk *vblk)
 	vq_callback_t **callbacks;
 	const char **names;
 	struct virtqueue **vqs;
-	unsigned short num_vqs;
+	unsigned short num_vqs/*vq数目*/;
 	unsigned short num_poll_vqs;
+	/*指向virtio-block对应的virtio设备*/
 	struct virtio_device *vdev = vblk->vdev;
 	struct irq_affinity desc = { 0, };
 
@@ -999,17 +1002,19 @@ static int init_vq(struct virtio_blk *vblk)
 		return -EINVAL;
 	}
 
-	/*队列数不得超过cpu数*/
+	/*队列数不得超过cpu数及请求队列数*/
 	num_vqs = min_t(unsigned int,
 			min_not_zero(num_request_queues, nr_cpu_ids),
 			num_vqs);
 
+	/*poll队列数目，不得超过num_vqs*/
 	num_poll_vqs = min_t(unsigned int, poll_queues, num_vqs - 1);
 
 	vblk->io_queues[HCTX_TYPE_DEFAULT] = num_vqs - num_poll_vqs;
-	vblk->io_queues[HCTX_TYPE_READ] = 0;
-	vblk->io_queues[HCTX_TYPE_POLL] = num_poll_vqs;
+	vblk->io_queues[HCTX_TYPE_READ] = 0;/*读io队列数为0*/
+	vblk->io_queues[HCTX_TYPE_POLL] = num_poll_vqs;/*poll队列数*/
 
+	/*显示各队列数目*/
 	dev_info(&vdev->dev, "%d/%d/%d default/read/poll queues\n",
 				vblk->io_queues[HCTX_TYPE_DEFAULT],
 				vblk->io_queues[HCTX_TYPE_READ],
@@ -1020,17 +1025,19 @@ static int init_vq(struct virtio_blk *vblk)
 	if (!vblk->vqs)
 		return -ENOMEM;
 
-	/*创建字符串指针数组*/
+	/*申请字符串指针数组（存放各vq名称指针）*/
 	names = kmalloc_array(num_vqs, sizeof(*names), GFP_KERNEL);
-	/*创建callback指针数组*/
+	/*申请callback指针数组*/
 	callbacks = kmalloc_array(num_vqs, sizeof(*callbacks), GFP_KERNEL);
-	/*创建vq指针数组*/
+	/*申请vq指针数组*/
 	vqs = kmalloc_array(num_vqs, sizeof(*vqs), GFP_KERNEL);
 	if (!names || !callbacks || !vqs) {
+		/*无内存，申请失败*/
 		err = -ENOMEM;
 		goto out;
 	}
 
+	/*请求类队列callback及vq名称*/
 	for (i = 0; i < num_vqs - num_poll_vqs; i++) {
 		callbacks[i] = virtblk_done;/*设置回调*/
 		/*设置vq名称*/
@@ -1038,14 +1045,15 @@ static int init_vq(struct virtio_blk *vblk)
 		names[i] = vblk->vqs[i].name;/*指针数组收集vq名称*/
 	}
 
+	/*poll类队列callback为空，及vq名乐*/
 	for (; i < num_vqs; i++) {
 		callbacks[i] = NULL;
 		snprintf(vblk->vqs[i].name, VQ_NAME_LEN, "req_poll.%u", i);
-		names[i] = vblk->vqs[i].name;
+		names[i] = vblk->vqs[i].name;/*指针数组收集vq名称*/
 	}
 
 	/* Discover virtqueues and write information to configuration.  */
-	err = virtio_find_vqs(vdev, num_vqs, vqs/*出参，*/, callbacks, names, &desc);
+	err = virtio_find_vqs(vdev, num_vqs, vqs/*出参，生成vq*/, callbacks/*各队列中断回调*/, names, &desc);
 	if (err)
 		goto out;
 
@@ -1286,12 +1294,13 @@ static int virtblk_probe(struct virtio_device *vdev)
 	size_t max_dma_size;
 
 	if (!vdev->config->get) {
+		/*必须提供get回调*/
 		dev_err(&vdev->dev, "%s failure: config access disabled\n",
 			__func__);
 		return -EINVAL;
 	}
 
-	/*申请设备index*/
+	/*申请设备index(minor)*/
 	err = ida_alloc_range(&vd_index_ida, 0,
 			      minor_to_index(1 << MINORBITS) - 1, GFP_KERNEL);
 	if (err < 0)
@@ -1310,7 +1319,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	/* Prevent integer overflows and honor max vq size */
 	sg_elems = min_t(u32, sg_elems, VIRTIO_BLK_MAX_SG_ELEMS - 2);
 
-	/*创建virtio block*/
+	/*创建virtio block结构体*/
 	vdev->priv = vblk = kmalloc(sizeof(*vblk), GFP_KERNEL);
 	if (!vblk) {
 		err = -ENOMEM;
@@ -1319,7 +1328,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 
 	mutex_init(&vblk->vdev_mutex);
 
-	vblk->vdev = vdev;
+	vblk->vdev = vdev;/*virtio block关联此virto设备*/
 
 	/*初始化config_work,在driver调用config_changed时执行此work*/
 	INIT_WORK(&vblk->config_work, virtblk_config_changed_work);
@@ -1330,6 +1339,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 
 	/* Default queue sizing is to fill the ring. */
 	if (!virtblk_queue_depth) {
+		/*没有指定队列深度，动态获取队列深度*/
 		queue_depth = vblk->vqs[0].vq->num_free;
 		/* ... but without indirect descs, we use 2 descs per req */
 		if (!virtio_has_feature(vdev, VIRTIO_RING_F_INDIRECT_DESC))
@@ -1348,7 +1358,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 		sizeof(struct virtblk_req) +
 		sizeof(struct scatterlist) * VIRTIO_BLK_INLINE_SG_CNT;
 	vblk->tag_set.driver_data = vblk;
-	vblk->tag_set.nr_hw_queues = vblk->num_vqs;
+	vblk->tag_set.nr_hw_queues = vblk->num_vqs;/*与vq队列数一致*/
 	vblk->tag_set.nr_maps = 1;
 	if (vblk->io_queues[HCTX_TYPE_POLL])
 		vblk->tag_set.nr_maps = 3;
@@ -1368,7 +1378,7 @@ static int virtblk_probe(struct virtio_device *vdev)
 	/*设置disk名称*/
 	virtblk_name_format("vd"/*disk前缀*/, index/*disk编号*/, vblk->disk->disk_name/*要设置的buffer*/, DISK_NAME_LEN);
 
-	vblk->disk->major = major;
+	vblk->disk->major = major;/*设置virtblk设备major*/
 	vblk->disk->first_minor = index_to_minor(index);
 	vblk->disk->minors = 1 << PART_BITS;
 	vblk->disk->private_data = vblk;

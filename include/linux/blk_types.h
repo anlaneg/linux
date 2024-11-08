@@ -286,7 +286,8 @@ struct bio {
 	blk_status_t		bi_status;
 	atomic_t		__bi_remaining;
 
-	struct bvec_iter	bi_iter;/*指向首个bvec_iter*/
+	/*bio中包含的枚举器（遍历时使用，应该是为了内存访问时距离近些），本此变量中的内容用于辅助枚举过程。*/
+	struct bvec_iter	bi_iter;
 
 	blk_qc_t		bi_cookie;
 	bio_end_io_t		*bi_end_io;
@@ -325,7 +326,7 @@ struct bio {
 
 	atomic_t		__bi_cnt;	/* pin count */
 
-	/*iter遍历的即为此vector*/
+	/*如注释言，真实的veclist,iter(枚举器）最终的数据来源即为此vector*/
 	struct bio_vec		*bi_io_vec;	/* the actual vec list */
 
 	struct bio_set		*bi_pool;

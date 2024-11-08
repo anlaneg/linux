@@ -33,7 +33,7 @@
 
 struct virtio_pci_vq_info {
 	/* the actual virtqueue */
-	struct virtqueue *vq;
+	struct virtqueue *vq;/*实际vq*/
 
 	/* the list node for the virtqueues list */
 	struct list_head node;
@@ -75,7 +75,7 @@ struct virtio_pci_device {
 	/* Array of all virtqueues reported in the
 	 * PCI common config num_queues field
 	 */
-	struct virtio_pci_vq_info **vqs;
+	struct virtio_pci_vq_info **vqs;/*指针数组，共*/
 
 	struct virtio_pci_admin_vq admin_vq;
 
@@ -92,7 +92,7 @@ struct virtio_pci_device {
 	unsigned int msix_used_vectors;//已使用的中断数目
 
 	/* Whether we have vector per vq */
-	bool per_vq_vectors;/*是否每个vq一个中断向量*/
+	bool per_vq_vectors;/*是否为每个vq关联一个中断向量*/
 
 	//创建virtqueue
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,

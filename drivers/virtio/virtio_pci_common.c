@@ -219,6 +219,7 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int in
 		INIT_LIST_HEAD(&info->node);
 	}
 
+	/*为设备关联index号vq_info*/
 	vp_dev->vqs[index] = info;
 	return vq;
 
@@ -304,7 +305,7 @@ void vp_del_vqs(struct virtio_device *vdev)
 }
 
 static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
-		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx报文中断回调*/,
+		struct virtqueue *vqs[]/*出参，创建的各虚队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx报文中断回调*/,
 		const char * const names[]/*各vq名称*/, bool per_vq_vectors/*是否每个队列一个msi-x向量*/,
 		const bool *ctx,
 		struct irq_affinity *desc)
@@ -423,9 +424,9 @@ out_del_vqs:
 }
 
 /* the config->find_vqs() implementation */
-int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
-		struct virtqueue *vqs[]/*出参，各虚队列地址*/, vq_callback_t *callbacks[]/*指出各队列对应的callback*/,
-		const char * const names[]/*指出各队列名称*/, const bool *ctx/*指出各队列是否有context*/,
+int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列（vq)数目*/,
+		struct virtqueue *vqs[]/*出参，各vq地址*/, vq_callback_t *callbacks[]/*指出各vq对应的callback*/,
+		const char * const names[]/*指出各vq名称*/, const bool *ctx/*指出各vq是否有context*/,
 		struct irq_affinity *desc)
 {
 	int err;

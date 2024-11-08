@@ -108,30 +108,34 @@ static __always_inline
 size_t iterate_bvec(struct iov_iter *iter, size_t len, void *priv, void *priv2,
 		    iov_step_f step)
 {
+	/*取枚举器指明的bio_vec结构体*/
 	const struct bio_vec *p = iter->bvec;
 	size_t progress = 0, skip = iter->iov_offset;
 
 	do {
 		size_t remain, consumed;
 		size_t offset = p->bv_offset + skip, part;
+		/*取得页指针*/
 		void *kaddr = kmap_local_page(p->bv_page + offset / PAGE_SIZE);
 
+		/*可访问长度*/
 		part = min3(len,
 			   (size_t)(p->bv_len - skip),
 			   (size_t)(PAGE_SIZE - offset % PAGE_SIZE));
-		remain = step(kaddr + offset % PAGE_SIZE, progress, part, priv, priv2);
+		/*调用step完成*/
+		remain = step(kaddr + offset % PAGE_SIZE/*起始地址*/, progress/*已经处理的长度*/, part/*可访问长度*/, priv, priv2);
 		kunmap_local(kaddr);
-		consumed = part - remain;
-		len -= consumed;
-		progress += consumed;
-		skip += consumed;
+		consumed = part - remain;/*本轮消费的长度*/
+		len -= consumed;/*总长度减少*/
+		progress += consumed;/*已处理长度增加*/
+		skip += consumed;/*偏移量增加*/
 		if (skip >= p->bv_len) {
 			skip = 0;
-			p++;
+			p++;/*切到下一个bvec*/
 		}
 		if (remain)
-			break;
-	} while (len);
+			break;/*未处理完，跳出*/
+	} while (len);/*仍有长度待处理，继续循环*/
 
 	iter->nr_segs -= p - iter->bvec;
 	iter->bvec = p;
@@ -246,6 +250,7 @@ size_t iterate_and_advance2(struct iov_iter *iter, size_t len, void *priv,
 	if (likely(iter_is_iovec(iter)))
 		return iterate_iovec(iter, len, priv, priv2, ustep);
 	if (iov_iter_is_bvec(iter))
+		/*给出的iter是struct bio_vec类型时*/
 		return iterate_bvec(iter, len, priv, priv2, step);
 	if (iov_iter_is_kvec(iter))
 		return iterate_kvec(iter, len, priv, priv2, step);

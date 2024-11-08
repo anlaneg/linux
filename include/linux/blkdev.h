@@ -446,7 +446,7 @@ struct request_queue {
 
 	atomic_t		nr_active_requests_shared_tags;
 
-	unsigned int		required_elevator_features;
+	unsigned int		required_elevator_features;/*队列要求的功能*/
 
 	struct blk_mq_tags	*sched_shared_tags;
 

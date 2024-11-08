@@ -256,12 +256,12 @@ static int blk_mq_do_dispatch_ctx(struct blk_mq_hw_ctx *hctx)
 		 * if this rq won't be queued to driver via .queue_rq()
 		 * in blk_mq_dispatch_rq_list().
 		 */
-		list_add(&rq->queuelist, &rq_list);
+		list_add(&rq->queuelist, &rq_list);/*rq中的queuelist全部加入*/
 
 		/* round robin for fair dispatch */
 		ctx = blk_mq_next_ctx(hctx, rq->mq_ctx);
 
-	} while (blk_mq_dispatch_rq_list(rq->mq_hctx, &rq_list, 1));
+	} while (blk_mq_dispatch_rq_list(rq->mq_hctx, &rq_list/*要分发的request*/, 1));
 
 	WRITE_ONCE(hctx->dispatch_from, ctx);
 	return ret;
@@ -466,6 +466,7 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 			goto err_free_map_and_rqs;
 	}
 
+	/*初始化调度算法*/
 	ret = e->ops.init_sched(q, e);
 	if (ret)
 		goto err_free_map_and_rqs;
@@ -474,12 +475,14 @@ int blk_mq_init_sched(struct request_queue *q, struct elevator_type *e)
 	blk_mq_debugfs_register_sched(q);
 	mutex_unlock(&q->debugfs_mutex);
 
+	/*逐个初始化hctx*/
 	queue_for_each_hw_ctx(q, hctx, i) {
 		if (e->ops.init_hctx) {
 			ret = e->ops.init_hctx(hctx, i);
 			if (ret) {
 				eq = q->elevator;
 				blk_mq_sched_free_rqs(q);
+				/*有一些失败了，回退*/
 				blk_mq_exit_sched(q, eq);
 				kobject_put(&eq->kobj);
 				return ret;

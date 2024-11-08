@@ -38,11 +38,12 @@ typedef struct cpumask { DECLARE_BITMAP(bits, NR_CPUS); } cpumask_t;/*每个cpu�
 #if (NR_CPUS == 1) || defined(CONFIG_FORCE_NR_CPUS)
 #define nr_cpu_ids ((unsigned int)NR_CPUS)
 #else
-extern unsigned int nr_cpu_ids;
+extern unsigned int nr_cpu_ids;/*cpu数*/
 #endif
 
 static inline void set_nr_cpu_ids(unsigned int nr)
 {
+	/*设置cpu数*/
 #if (NR_CPUS == 1) || defined(CONFIG_FORCE_NR_CPUS)
 	WARN_ON(nr != nr_cpu_ids);
 #else

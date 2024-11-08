@@ -75,14 +75,16 @@ static inline void bvec_set_virt(struct bio_vec *bv, void *vaddr,
 }
 
 struct bvec_iter {
+	/*设备对应的扇区数*/
 	sector_t		bi_sector;	/* device address in 512 byte
 						   sectors */
+	/*剩余的io的字节数*/
 	unsigned int		bi_size;	/* residual I/O count */
 
-	/*索引*/
+	/*当前遍历位置（即bvl_vec数组索引）*/
 	unsigned int		bi_idx;		/* current index into bvl_vec */
 
-	/*此iter中已完成的数目*/
+	/*此iter中已完成的数目（本bi已完成访问的字节数）*/
 	unsigned int            bi_bvec_done;	/* number of bytes completed in
 						   current bvec */
 } __packed;
@@ -97,11 +99,11 @@ struct bvec_iter_all {
  * various member access, note that bio_data should of course not be used
  * on highmem page vectors
  */
-/*取bvec数据的iter.bi_idx号下标元素*/
+/*取bvec数据的iter.bi_idx号下标元素（即当前遍历位置对应的struct bio_vec结构，注意取了地址）*/
 #define __bvec_iter_bvec(bvec, iter)	(&(bvec)[(iter).bi_idx])
 
 /* multi-page (mp_bvec) helpers */
-/*取bvec数组的bi_idx号元素，并返回其对应的bv_page*/
+/*取bvec数组的bi_idx号元素，并返回其对应的bv_page（即当前遍历位置对应的page)*/
 #define mp_bvec_iter_page(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_page)
 
@@ -109,11 +111,12 @@ struct bvec_iter_all {
 	min((iter).bi_size,					\
 	    __bvec_iter_bvec((bvec), (iter))->bv_len - (iter).bi_bvec_done)
 
-/*多页中的offset*/
+/*多页中的offset(当前遍历位置的struct bio_vec结构指明了
+ * 本页有效位置的offset,再合上已经完成的长度，即为本轮关心的真实offset)*/
 #define mp_bvec_iter_offset(bvec, iter)				\
 	(__bvec_iter_bvec((bvec), (iter))->bv_offset + (iter).bi_bvec_done)
 
-/*多页的第几个页*/
+/*多页的第几个页(由于mp_bvec_iter_offset是支持多页的，此宏解决多页中跳几页的问题）*/
 #define mp_bvec_iter_page_idx(bvec, iter)			\
 	(mp_bvec_iter_offset((bvec), (iter)) / PAGE_SIZE)
 
@@ -125,24 +128,30 @@ struct bvec_iter_all {
 })
 
 /* For building single-page bvec in flight */
-/*在一个页中的偏移量（与mp_bvec_iter_page_idx函数配对)*/
+/*在一个页中的偏移量（与mp_bvec_iter_page_idx函数配对，考虑多页后在具体一页中的偏移量)*/
  #define bvec_iter_offset(bvec, iter)				\
 	(mp_bvec_iter_offset((bvec), (iter)) % PAGE_SIZE)
 
+/*获得本页可提供的数据最大长度
+ * （是一个选择问题。一种是当前bvc可提供的未遍历的内容长度；
+ * 另一种是在当前页，未遍历的内容长度；两者中找最小的）
+ * */
 #define bvec_iter_len(bvec, iter)				\
 	min_t(unsigned, mp_bvec_iter_len((bvec), (iter)),		\
 	      PAGE_SIZE - bvec_iter_offset((bvec), (iter)))
 
-/*计算获取页指针（先取基页，再取页偏移量）*/
+/*获取当前遍历位置对应的页指针（先取基页，再考虑当前遍历的偏移量导致的页数偏移）*/
 #define bvec_iter_page(bvec, iter)				\
 	(mp_bvec_iter_page((bvec), (iter)) +			\
 	 mp_bvec_iter_page_idx((bvec), (iter)))
 
-/*填充并返回bio_vec结构体bvec*/
-#define bvec_iter_bvec(bvec, iter)				\
+/*填充并返回bio_vec结构体bvec，用于指出本轮的访问内容。
+ * （考虑了多页情况。返回需要访问的页，可以访问的页长度，访问的起始偏移量）
+ * */
+#define bvec_iter_bvec(bvec/*当前要遍历的内容*/, iter/*枚举器（枚举用状态变量)*/)				\
 ((struct bio_vec) {						\
 	.bv_page	= bvec_iter_page((bvec), (iter)),	\
-	.bv_len		= bvec_iter_len((bvec), (iter)),	\
+	.bv_len		= bvec_iter_len((bvec), (iter)),/*本页可遍历的最大长度*/	\
 	.bv_offset	= bvec_iter_offset((bvec), (iter)),	\
 })
 
@@ -177,13 +186,14 @@ static inline bool bvec_iter_advance(const struct bio_vec *bv,
 static inline void bvec_iter_advance_single(const struct bio_vec *bv,
 				struct bvec_iter *iter, unsigned int bytes)
 {
-	unsigned int done = iter->bi_bvec_done + bytes;
+	unsigned int done = iter->bi_bvec_done + bytes;/*枚举器已完成访问的内容增加*/
 
 	if (done == bv[iter->bi_idx].bv_len) {
-		done = 0;
-		iter->bi_idx++;
+		/*此索引的bv均已访问完成*/
+		done = 0;/*要切索引了，done清零*/
+		iter->bi_idx++;/*索引切换*/
 	}
-	iter->bi_bvec_done = done;
+	iter->bi_bvec_done = done;/*本bi已完成访问的字节数*/
 	iter->bi_size -= bytes;
 }
 

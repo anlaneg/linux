@@ -193,6 +193,7 @@ static void del_vq(struct virtio_pci_vq_info *info)
 	vring_del_virtqueue(vq);
 }
 
+/*legacy对应的config结构体*/
 static const struct virtio_config_ops virtio_pci_config_ops = {
 	.get		= vp_get,//针对legacy接口，设备的配置位于公共配置结构体后面
 	.set		= vp_set,
@@ -225,6 +226,7 @@ int virtio_pci_legacy_probe(struct virtio_pci_device *vp_dev)
 	vp_dev->isr = ldev->isr;
 	vp_dev->vdev.id = ldev->id;
 
+	/*legacy对应的config结构体*/
 	vp_dev->vdev.config = &virtio_pci_config_ops;
 
 	vp_dev->config_vector = vp_config_vector;

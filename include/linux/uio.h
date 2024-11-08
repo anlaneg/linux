@@ -22,14 +22,16 @@ struct kvec {
 enum iter_type {
 	/* iter types */
 	ITER_UBUF,/*指明用户态buffer*/
-	ITER_IOVEC,
-	ITER_BVEC,
+	ITER_IOVEC,/*struct iovec类型的buffer*/
+	ITER_BVEC,/*struct bio_vec类型的buffer*/
 	ITER_KVEC,
 	ITER_XARRAY,
 	ITER_DISCARD,
 };
 
+/*iter是内容来源*/
 #define ITER_SOURCE	1	// == WRITE
+/*iter是内容目的地*/
 #define ITER_DEST	0	// == READ
 
 struct iov_iter_state {
@@ -108,6 +110,7 @@ static inline void iov_iter_save_state(struct iov_iter *iter,
 
 static inline bool iter_is_ubuf(const struct iov_iter *i)
 {
+	/*iter是否为用户态bffer*/
 	return iov_iter_type(i) == ITER_UBUF;
 }
 

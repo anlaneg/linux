@@ -162,7 +162,9 @@ struct virtio_blk_config {
  */
 
 /* These two define direction. */
+/*对应读*/
 #define VIRTIO_BLK_T_IN		0
+/*对应写*/
 #define VIRTIO_BLK_T_OUT	1
 
 #ifndef VIRTIO_BLK_NO_LEGACY

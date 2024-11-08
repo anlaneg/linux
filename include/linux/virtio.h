@@ -141,7 +141,7 @@ struct virtio_device {
 	const struct vringh_config_ops *vringh_config;
 	struct list_head vqs;//virtio设备的所有虚队列链表
 	u64 features;//virtio的bit位（用于指代功能)
-	void *priv;
+	void *priv;/*私有数据，例如可能指向virtio-block*/
 };
 
 //由device获得virtio_device

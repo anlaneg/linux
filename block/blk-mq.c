@@ -1969,6 +1969,7 @@ static enum prep_dispatch blk_mq_prep_dispatch_rq(struct request *rq,
 	if (need_budget) {
 		budget_token = blk_mq_get_dispatch_budget(rq->q);
 		if (budget_token < 0) {
+			/*budget不足*/
 			blk_mq_put_driver_tag(rq);
 			return PREP_DISPATCH_NO_BUDGET;
 		}
@@ -2056,13 +2057,13 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list/
 		rq = list_first_entry(list, struct request, queuelist);
 
 		WARN_ON_ONCE(hctx != rq->mq_hctx);
-		prep = blk_mq_prep_dispatch_rq(rq, !nr_budgets);
+		prep = blk_mq_prep_dispatch_rq(rq, !nr_budgets/*为0时，表示需要budget*/);
 		if (prep != PREP_DISPATCH_OK)
 			break;/*不能dispatch,跳出*/
 
 		list_del_init(&rq->queuelist);/*完成request摘取*/
 
-		bd.rq = rq;
+		bd.rq = rq;/*设置request*/
 		bd.last = list_empty(list);/*如果list为空，则为最后一个request*/
 
 		/*
@@ -2070,7 +2071,7 @@ bool blk_mq_dispatch_rq_list(struct blk_mq_hw_ctx *hctx, struct list_head *list/
 		 * budget any more
 		 */
 		if (nr_budgets)
-			nr_budgets--;
+			nr_budgets--;/*出队一个request,budget减一*/
 		ret = q->mq_ops->queue_rq(hctx, &bd);/*将io请求入队*/
 		switch (ret) {
 		case BLK_STS_OK:/*处理成功*/
@@ -4480,8 +4481,10 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 	BUILD_BUG_ON(BLK_MQ_MAX_DEPTH > 1 << BLK_MQ_UNIQUE_TAG_BITS);
 
 	if (!set->nr_hw_queues)
+		/*没有指定硬件队列数*/
 		return -EINVAL;
 	if (!set->queue_depth)
+		/*没有指定队列深度*/
 		return -EINVAL;
 	if (set->queue_depth < set->reserved_tags + BLK_MQ_TAG_MIN)
 		return -EINVAL;
@@ -4491,9 +4494,11 @@ int blk_mq_alloc_tag_set(struct blk_mq_tag_set *set)
 		return -EINVAL;
 
 	if (!set->ops->get_budget ^ !set->ops->put_budget)
+		/*两个回调必须成对出现，或者成对置空*/
 		return -EINVAL;
 
 	if (set->queue_depth > BLK_MQ_MAX_DEPTH) {
+		/*queue的深度超过了最大值*/
 		pr_info("blk-mq: reduced tag depth to %u\n",
 			BLK_MQ_MAX_DEPTH);
 		set->queue_depth = BLK_MQ_MAX_DEPTH;

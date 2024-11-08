@@ -221,9 +221,9 @@ static void copy_from_brd(void *dst, struct brd_device *brd,
 /*
  * Process a single bvec of a bio.
  */
-static int brd_do_bvec(struct brd_device *brd, struct page *page/*要写入/读取的内容*/,
-			unsigned int len/*要写入/写入的内容长度*/, unsigned int off/*要写入/读取内容在page中的偏移量*/, blk_opf_t opf,
-			sector_t sector/*写入位置对应的起始扇区*/)
+static int brd_do_bvec(struct brd_device *brd, struct page *page/*要写入/读取的页*/,
+			unsigned int len/*要写入/读取的内容长度*/, unsigned int off/*要写入/读取内容在page中的偏移量*/, blk_opf_t opf,
+			sector_t sector/*写入/读取位置对应的起始扇区*/)
 {
 	void *mem;
 	int err = 0;
@@ -264,7 +264,7 @@ static void brd_submit_bio(struct bio *bio)
 	/*取要操作的brd设备*/
 	struct brd_device *brd = bio->bi_bdev->bd_disk->private_data;
 	sector_t sector = bio->bi_iter.bi_sector;
-	struct bio_vec bvec;
+	struct bio_vec bvec;/*局部变量记录遍历内容*/
 	struct bvec_iter iter;
 
 	/*遍历bio对应的所有bio_vec(bi_io_vec),针对每一个执行相应的读写操作*/
@@ -276,7 +276,7 @@ static void brd_submit_bio(struct bio *bio)
 		WARN_ON_ONCE((bvec.bv_offset & (SECTOR_SIZE - 1)) ||
 				(len & (SECTOR_SIZE - 1)));
 
-		err = brd_do_bvec(brd, bvec.bv_page, len, bvec.bv_offset,
+		err = brd_do_bvec(brd, bvec.bv_page/*本轮要访问的页*/, len/*本轮要访问的内存长度*/, bvec.bv_offset/*本轮要访问的起始位置*/,
 				  bio->bi_opf, sector);
 		if (err) {
 			if (err == -ENOMEM && bio->bi_opf & REQ_NOWAIT) {
@@ -294,7 +294,7 @@ static void brd_submit_bio(struct bio *bio)
 
 static const struct block_device_operations brd_fops = {
 	.owner =		THIS_MODULE,
-	.submit_bio =		brd_submit_bio,/*响应block io*/
+	.submit_bio =		brd_submit_bio,/*直接响应block io*/
 };
 
 /*

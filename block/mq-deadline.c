@@ -76,7 +76,7 @@ struct dd_per_prio {
 	struct list_head fifo_list[DD_DIR_COUNT];
 	/* Position of the most recently dispatched request. */
 	sector_t latest_pos[DD_DIR_COUNT];
-	struct io_stats_per_prio stats;
+	struct io_stats_per_prio stats;/*统计信息*/
 };
 
 struct deadline_data {
@@ -161,7 +161,7 @@ deadline_latter_request(struct request *rq)
  * return the first request after the start of the zone containing @pos.
  */
 static inline struct request *deadline_from_pos(struct dd_per_prio *per_prio,
-				enum dd_data_dir data_dir, sector_t pos)
+				enum dd_data_dir data_dir/*读/写*/, sector_t pos)
 {
 	struct rb_node *node = per_prio->sort_list[data_dir].rb_node;
 	struct request *rq, *res = NULL;
@@ -169,7 +169,7 @@ static inline struct request *deadline_from_pos(struct dd_per_prio *per_prio,
 	if (!node)
 		return NULL;
 
-	rq = rb_entry_rq(node);
+	rq = rb_entry_rq(node);/*取request*/
 	/*
 	 * A zoned write may have been requeued with a starting position that
 	 * is below that of the most recently dispatched request. Hence, for
@@ -644,6 +644,7 @@ static void dd_limit_depth(blk_opf_t opf, struct blk_mq_alloc_data *data)
 static void dd_depth_updated(struct blk_mq_hw_ctx *hctx)
 {
 	struct request_queue *q = hctx->queue;
+	/*取得私有数据*/
 	struct deadline_data *dd = q->elevator->elevator_data;
 	struct blk_mq_tags *tags = hctx->sched_tags;
 	unsigned int shift = tags->bitmap_tags.sb.shift;
@@ -683,7 +684,7 @@ static void dd_exit_sched(struct elevator_queue *e)
 			  stats->dispatched, atomic_read(&stats->completed));
 	}
 
-	kfree(dd);
+	kfree(dd);/*释放私有数据*/
 }
 
 /*
@@ -704,15 +705,16 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 	if (!dd)
 		goto put_eq;
 
-	eq->elevator_data = dd;
+	eq->elevator_data = dd;/*设置私有数据*/
 
+	/*初始化dd数据*/
 	for (prio = 0; prio <= DD_PRIO_MAX; prio++) {
 		struct dd_per_prio *per_prio = &dd->per_prio[prio];
 
 		INIT_LIST_HEAD(&per_prio->dispatch);
 		INIT_LIST_HEAD(&per_prio->fifo_list[DD_READ]);
 		INIT_LIST_HEAD(&per_prio->fifo_list[DD_WRITE]);
-		per_prio->sort_list[DD_READ] = RB_ROOT;
+		per_prio->sort_list[DD_READ] = RB_ROOT;/*指明为根节点*/
 		per_prio->sort_list[DD_WRITE] = RB_ROOT;
 	}
 	dd->fifo_expire[DD_READ] = read_expire;
@@ -728,7 +730,7 @@ static int dd_init_sched(struct request_queue *q, struct elevator_type *e)
 	/* We dispatch from request queue wide instead of hw queue */
 	blk_queue_flag_set(QUEUE_FLAG_SQ_SCHED, q);
 
-	q->elevator = eq;
+	q->elevator = eq;/*为q关联电梯算法*/
 	return 0;
 
 put_eq:
@@ -948,6 +950,7 @@ static void dd_finish_request(struct request *rq)
 
 static bool dd_has_work_for_prio(struct dd_per_prio *per_prio)
 {
+	/*以下三个list不为空，则表示has work*/
 	return !list_empty_careful(&per_prio->dispatch) ||
 		!list_empty_careful(&per_prio->fifo_list[DD_READ]) ||
 		!list_empty_careful(&per_prio->fifo_list[DD_WRITE]);
@@ -1020,6 +1023,7 @@ STORE_INT(deadline_fifo_batch_store, &dd->fifo_batch, 0, INT_MAX);
 #define DD_ATTR(name) \
 	__ATTR(name, 0644, deadline_##name##_show, deadline_##name##_store)
 
+/*deadline对外需要暴露的参数*/
 static struct elv_fs_entry deadline_attrs[] = {
 	DD_ATTR(read_expire),
 	DD_ATTR(write_expire),
@@ -1256,7 +1260,7 @@ static struct elevator_type mq_deadline = {
 		.requests_merged	= dd_merged_requests,
 		.request_merged		= dd_request_merged,
 		.has_work		= dd_has_work,
-		.init_sched		= dd_init_sched,
+		.init_sched		= dd_init_sched,/*初始化*/
 		.exit_sched		= dd_exit_sched,
 		.init_hctx		= dd_init_hctx,
 	},
@@ -1274,6 +1278,7 @@ MODULE_ALIAS("mq-deadline-iosched");
 
 static int __init deadline_init(void)
 {
+	/*注册默认的elevator type*/
 	return elv_register(&mq_deadline);
 }
 

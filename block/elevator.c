@@ -46,7 +46,7 @@
 #include "blk-cgroup.h"
 
 static DEFINE_SPINLOCK(elv_list_lock);
-static LIST_HEAD(elv_list);
+static LIST_HEAD(elv_list);/*用于记录系统注册的所有elevator_type*/
 
 /*
  * Merge hash stuff.
@@ -103,6 +103,7 @@ static bool elevator_match(const struct elevator_type *e, const char *name)
 		(e->elevator_alias && !strcmp(e->elevator_alias, name));
 }
 
+/*通过名称查找elevator_type*/
 static struct elevator_type *__elevator_find(const char *name)
 {
 	struct elevator_type *e;
@@ -113,6 +114,7 @@ static struct elevator_type *__elevator_find(const char *name)
 	return NULL;
 }
 
+/*通过名称查找elevator_type，要求elevator_type必须支持q要求的功能*/
 static struct elevator_type *elevator_find_get(struct request_queue *q,
 		const char *name)
 {
@@ -120,7 +122,8 @@ static struct elevator_type *elevator_find_get(struct request_queue *q,
 
 	spin_lock(&elv_list_lock);
 	e = __elevator_find(name);
-	if (e && (!elv_support_features(q, e) || !elevator_tryget(e)))
+	if (e && (!elv_support_features(q, e)/*与队列要求的功能不匹配*/ || !elevator_tryget(e)))
+		/*此elevator不可用*/
 		e = NULL;
 	spin_unlock(&elv_list_lock);
 	return e;
@@ -137,7 +140,7 @@ struct elevator_queue *elevator_alloc(struct request_queue *q,
 	if (unlikely(!eq))
 		return NULL;
 
-	__elevator_get(e);
+	__elevator_get(e);/*引用module*/
 	eq->type = e;
 	kobject_init(&eq->kobj, &elv_ktype);
 	mutex_init(&eq->sysfs_lock);
@@ -443,6 +446,7 @@ elv_attr_store(struct kobject *kobj, struct attribute *attr,
 	if (!entry->store)
 		return -EIO;
 
+	/*确定当前设置的具体哪哪个elevator queue*/
 	e = container_of(kobj, struct elevator_queue, kobj);
 	mutex_lock(&e->sysfs_lock);
 	error = e->type ? entry->store(e, page, length) : -ENOENT;
@@ -469,9 +473,11 @@ int elv_register_queue(struct request_queue *q, bool uevent)
 
 	error = kobject_add(&e->kobj, &q->disk->queue_kobj, "iosched");
 	if (!error) {
+		/*取此elevator需要的fs attr*/
 		struct elv_fs_entry *attr = e->type->elevator_attrs;
 		if (attr) {
 			while (attr->attr.name) {
+				/*创建这些fs attr*/
 				if (sysfs_create_file(&e->kobj, &attr->attr))
 					break;
 				attr++;
@@ -501,6 +507,7 @@ int elv_register(struct elevator_type *e)
 {
 	/* finish request is mandatory */
 	if (WARN_ON_ONCE(!e->ops.finish_request))
+		/*必须设置finish_request*/
 		return -EINVAL;
 	/* insert_requests and dispatch_request are mandatory */
 	if (WARN_ON_ONCE(!e->ops.insert_requests || !e->ops.dispatch_request))
@@ -523,11 +530,12 @@ int elv_register(struct elevator_type *e)
 	/* register, don't allow duplicate names */
 	spin_lock(&elv_list_lock);
 	if (__elevator_find(e->elevator_name)) {
+		/*此名称已存在*/
 		spin_unlock(&elv_list_lock);
 		kmem_cache_destroy(e->icq_cache);
 		return -EBUSY;
 	}
-	list_add_tail(&e->list, &elv_list);
+	list_add_tail(&e->list, &elv_list);/*串入elv_list*/
 	spin_unlock(&elv_list_lock);
 
 	printk(KERN_INFO "io scheduler %s registered\n", e->elevator_name);
@@ -557,7 +565,7 @@ EXPORT_SYMBOL_GPL(elv_unregister);
 
 static inline bool elv_support_iosched(struct request_queue *q)
 {
-	if (!queue_is_mq(q) ||
+	if (!queue_is_mq(q)/*不是多队列*/ ||
 	    (q->tag_set && (q->tag_set->flags & BLK_MQ_F_NO_SCHED)))
 		return false;
 	return true;
@@ -589,6 +597,7 @@ static struct elevator_type *elevator_get_by_features(struct request_queue *q)
 
 	spin_lock(&elv_list_lock);
 
+	/*遍历elv_list检查q要求的features可被支持的首个elevator type*/
 	list_for_each_entry(e, &elv_list, list) {
 		if (elv_support_features(q, e)) {
 			found = e;
@@ -597,6 +606,7 @@ static struct elevator_type *elevator_get_by_features(struct request_queue *q)
 	}
 
 	if (found && !elevator_tryget(found))
+		/*找到首个了，但module引用失败*/
 		found = NULL;
 
 	spin_unlock(&elv_list_lock);
@@ -615,18 +625,23 @@ void elevator_init_mq(struct request_queue *q)
 	int err;
 
 	if (!elv_support_iosched(q))
+		/*不支持，直接返回*/
 		return;
 
 	WARN_ON_ONCE(blk_queue_registered(q));
 
 	if (unlikely(q->elevator))
+		/*已设置，返回*/
 		return;
 
 	if (!q->required_elevator_features)
+		/*q没有明确elevator必备的功能，取default*/
 		e = elevator_get_default(q);
 	else
+		/*按功能取elevator*/
 		e = elevator_get_by_features(q);
 	if (!e)
+		/*没有获得elevator*/
 		return;
 
 	/*
@@ -715,7 +730,7 @@ void elevator_disable(struct request_queue *q)
 /*
  * Switch this queue to the given IO scheduler.
  */
-static int elevator_change(struct request_queue *q, const char *elevator_name)
+static int elevator_change(struct request_queue *q, const char *elevator_name/*要变更的新名称*/)
 {
 	struct elevator_type *e;
 	int ret;
@@ -725,6 +740,7 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 		return -ENOENT;
 
 	if (!strncmp(elevator_name, "none", 4)) {
+		/*elevator_type为none*/
 		if (q->elevator)
 			elevator_disable(q);
 		return 0;
@@ -735,16 +751,19 @@ static int elevator_change(struct request_queue *q, const char *elevator_name)
 
 	e = elevator_find_get(q, elevator_name);
 	if (!e) {
+		/*没有找到合适的elevator_type,请求module,再尝试一次*/
 		request_module("%s-iosched", elevator_name);
 		e = elevator_find_get(q, elevator_name);
 		if (!e)
 			return -EINVAL;
 	}
+	/*要找了要求的elevator_type,执行变更*/
 	ret = elevator_switch(q, e);
 	elevator_put(e);
 	return ret;
 }
 
+/*配置队列的调度器*/
 ssize_t elv_iosched_store(struct request_queue *q, const char *buf,
 			  size_t count)
 {
@@ -754,6 +773,7 @@ ssize_t elv_iosched_store(struct request_queue *q, const char *buf,
 	if (!elv_support_iosched(q))
 		return count;
 
+	/*存储调度器名称*/
 	strscpy(elevator_name, buf, sizeof(elevator_name));
 	ret = elevator_change(q, strstrip(elevator_name));
 	if (!ret)
@@ -761,6 +781,7 @@ ssize_t elv_iosched_store(struct request_queue *q, const char *buf,
 	return ret;
 }
 
+/*显示队列的调度器*/
 ssize_t elv_iosched_show(struct request_queue *q, char *name)
 {
 	struct elevator_queue *eq = q->elevator;
@@ -771,8 +792,10 @@ ssize_t elv_iosched_show(struct request_queue *q, char *name)
 		return sprintf(name, "none\n");
 
 	if (!q->elevator) {
+		/*此q没有关联elevator*/
 		len += sprintf(name+len, "[none] ");
 	} else {
+		/*首先输出none*/
 		len += sprintf(name+len, "none ");
 		cur = eq->type;
 	}
@@ -780,8 +803,10 @@ ssize_t elv_iosched_show(struct request_queue *q, char *name)
 	spin_lock(&elv_list_lock);
 	list_for_each_entry(e, &elv_list, list) {
 		if (e == cur)
+			/*输出当前生效的elevator*/
 			len += sprintf(name+len, "[%s] ", e->elevator_name);
 		else if (elv_support_features(q, e))
+			/*输出与此q需要的功能匹配的算法*/
 			len += sprintf(name+len, "%s ", e->elevator_name);
 	}
 	spin_unlock(&elv_list_lock);
@@ -816,6 +841,7 @@ EXPORT_SYMBOL(elv_rb_latter_request);
 
 static int __init elevator_setup(char *str)
 {
+	/*elevator参数处理放空*/
 	pr_warn("Kernel parameter elevator= does not have any effect anymore.\n"
 		"Please use sysfs to set IO scheduler for individual devices.\n");
 	return 1;

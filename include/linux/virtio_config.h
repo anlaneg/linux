@@ -240,11 +240,12 @@ struct virtqueue *virtio_find_single_vq(struct virtio_device *vdev,
 }
 
 static inline
-int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs,
-			struct virtqueue *vqs[], vq_callback_t *callbacks[],
-			const char * const names[],
-			struct irq_affinity *desc)
+int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs/*vq数目*/,
+			struct virtqueue *vqs[]/*出参，生成的各vq指针*/, vq_callback_t *callbacks[]/*各vq对应的中断回调函数*/,
+			const char * const names[]/*各vq对应的名称*/,
+			struct irq_affinity *desc/*出参*/)
 {
+	/*依据具体的virtio设备来处理，例如调用vp_find_vqs回调*/
 	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, NULL, desc);
 }
 

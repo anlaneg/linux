@@ -188,7 +188,7 @@ size_t _copy_to_iter(const void *addr/*源数据起始位置*/, size_t bytes/*�
 	if (user_backed_iter(i))
 		might_fault();
 	return iterate_and_advance(i, bytes, (void *)addr,
-				   copy_to_user_iter, memcpy_to_iter);
+				   copy_to_user_iter, memcpy_to_iter);/*两种iter填充方式*/
 }
 EXPORT_SYMBOL(_copy_to_iter);
 
@@ -270,7 +270,7 @@ size_t __copy_from_iter(void *addr, size_t bytes, struct iov_iter *i)
 	if (unlikely(iov_iter_is_copy_mc(i)))
 		return __copy_from_iter_mc(addr, bytes, i);
 	return iterate_and_advance(i, bytes, addr,
-				   copy_from_user_iter, memcpy_from_iter);
+				   copy_from_user_iter, memcpy_from_iter);/*两种iter读取方式*/
 }
 
 //将i中的bytes个字节，复制到addr指明的内存里
@@ -657,11 +657,11 @@ void iov_iter_bvec(struct iov_iter *i, unsigned int direction,
 	*i = (struct iov_iter){
 		.iter_type = ITER_BVEC,
 		.copy_mc = false,
-		.data_source = direction,
+		.data_source = direction,/*数据读写方向*/
 		.bvec = bvec,
 		.nr_segs = nr_segs,
 		.iov_offset = 0,
-		.count = count
+		.count = count/*内容长度*/
 	};
 }
 EXPORT_SYMBOL(iov_iter_bvec);

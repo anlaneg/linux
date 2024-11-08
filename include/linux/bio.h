@@ -22,8 +22,9 @@ static inline unsigned int bio_max_segs(unsigned int nr_segs)
 #define bio_prio(bio)			(bio)->bi_ioprio
 #define bio_set_prio(bio, prio)		((bio)->bi_ioprio = prio)
 
-#define bio_iter_iovec(bio, iter)				\
-	bvec_iter_bvec((bio)->bi_io_vec, (iter))
+/*利用bio,iter构造并返回结构体struct bio_vec*/
+#define bio_iter_iovec(bio, iter/*枚举指针*/)				\
+	bvec_iter_bvec((bio)->bi_io_vec/*真实的待访问的列表*/, (iter))
 
 #define bio_iter_page(bio, iter)				\
 	bvec_iter_page((bio)->bi_io_vec, (iter))
@@ -112,10 +113,10 @@ static inline void bio_advance_iter_single(const struct bio *bio,
 					   struct bvec_iter *iter,
 					   unsigned int bytes)
 {
-	iter->bi_sector += bytes >> 9;
+	iter->bi_sector += bytes >> 9;/*已访问的内容导致了sector增加*/
 
 	if (bio_no_advance_iter(bio))
-		iter->bi_size -= bytes;
+		iter->bi_size -= bytes;/*剩余需访问的内容减少*/
 	else
 		bvec_iter_advance_single(bio->bi_io_vec, iter, bytes);
 }
@@ -142,14 +143,21 @@ static inline void bio_advance(struct bio *bio, unsigned int nbytes)
 	__bio_advance(bio, nbytes);
 }
 
+/*遍历bio->bi_io_vec；
+ * iter是遍历过程中的枚举器，用于记录当前位置;
+ * bvl是遍历过程中获得的内容;
+ * 这个宏实际上规定了 1）bio中的内容需要以页（或多页）为单位提供。
+ * 2）iter.bi_size需设置待遍历内存的总长度
+ * */
 #define __bio_for_each_segment(bvl, bio, iter/*枚举变量*/, start/*起始元素*/)			\
 	for (iter = (start);						\
-	     (iter).bi_size &&						\
-		((bvl = bio_iter_iovec((bio), (iter))), 1/*此条件恒返真*/);		\
+	     (iter).bi_size/*剩余的字节数不为零，则循环继续*/ &&						\
+		((bvl = /*利用此宏填充本轮遍历得到的内容bvl*/bio_iter_iovec((bio), (iter))), 1/*此条件恒返真*/);		\
 	     bio_advance_iter_single((bio), &(iter), (bvl).bv_len))
 
-#define bio_for_each_segment(bvl, bio, iter)				\
-	__bio_for_each_segment(bvl, bio, iter, (bio)->bi_iter)
+/*遍历bio中的每个segment*/
+#define bio_for_each_segment(bvl/*出参，当前需遍历的数据*/, bio, iter)				\
+	__bio_for_each_segment(bvl, bio, iter/*枚举变量*/, (bio)->bi_iter/*枚举器（初始化iter用）*/)
 
 #define __bio_for_each_bvec(bvl, bio, iter, start)		\
 	for (iter = (start);						\

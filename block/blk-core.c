@@ -617,7 +617,7 @@ static void __submit_bio(struct bio *bio)
 	} else if (likely(bio_queue_enter(bio) == 0)) {
 		struct gendisk *disk = bio->bi_bdev->bd_disk;
 
-		/*由回调直接处理此bio,例如brd驱动提供了此函数*/
+		/*由块设备回调直接处理此bio,例如brd驱动提供了此函数*/
 		disk->fops->submit_bio(bio);
 		blk_queue_exit(disk->queue);
 	}

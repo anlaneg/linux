@@ -474,7 +474,7 @@ static struct queue_sysfs_entry _prefix##_entry = {	\
 	.show	= _prefix##_show,			\
 };
 
-#define QUEUE_RW_ENTRY(_prefix, _name)			\
+#define QUEUE_RW_ENTRY(_prefix/*前缀，用于拼出属性方法*/, _name/*属性名称*/)			\
 static struct queue_sysfs_entry _prefix##_entry = {	\
 	.attr	= { .name = _name, .mode = 0644 },	\
 	.show	= _prefix##_show,			\
@@ -488,7 +488,7 @@ QUEUE_RO_ENTRY(queue_max_hw_sectors, "max_hw_sectors_kb");
 QUEUE_RO_ENTRY(queue_max_segments, "max_segments");
 QUEUE_RO_ENTRY(queue_max_integrity_segments, "max_integrity_segments");
 QUEUE_RO_ENTRY(queue_max_segment_size, "max_segment_size");
-QUEUE_RW_ENTRY(elv_iosched, "scheduler");
+QUEUE_RW_ENTRY(elv_iosched, "scheduler");/*用于显示与配置调度器*/
 
 QUEUE_RO_ENTRY(queue_logical_block_size, "logical_block_size");
 QUEUE_RO_ENTRY(queue_physical_block_size, "physical_block_size");

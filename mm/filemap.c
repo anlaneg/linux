@@ -2577,6 +2577,7 @@ ssize_t filemap_read(struct kiocb *iocb, struct iov_iter *iter,
 	if (unlikely(iocb->ki_pos >= inode->i_sb->s_maxbytes))
 		return 0;
 	if (unlikely(!iov_iter_count(iter)))
+		/*长度为零，直接返回*/
 		return 0;
 
 	//规范要读取的长度

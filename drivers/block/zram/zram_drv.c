@@ -2115,7 +2115,7 @@ static int zram_open(struct gendisk *disk, blk_mode_t mode)
 
 static const struct block_device_operations zram_devops = {
 	.open = zram_open,
-	.submit_bio = zram_submit_bio,
+	.submit_bio = zram_submit_bio,/*压缩ram响应block id*/
 	.swap_slot_free_notify = zram_slot_free_notify,
 	.owner = THIS_MODULE
 };

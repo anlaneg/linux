@@ -135,6 +135,7 @@ static ssize_t ext4_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 		return -EIO;
 
 	if (!iov_iter_count(to))
+		/*内容长度为零，直接返回*/
 		return 0; /* skip atime */
 
 #ifdef CONFIG_FS_DAX

@@ -241,6 +241,7 @@ static int lo_write_bvec(struct file *file, struct bio_vec *bvec, loff_t *ppos)
 	struct iov_iter i;
 	ssize_t bw;
 
+	/*利用bvec来构造iov_iter,以便直接调vfs_iter_write*/
 	iov_iter_bvec(&i, ITER_SOURCE, bvec, 1, bvec->bv_len);
 
 	/*执行文件写*/
@@ -261,11 +262,12 @@ static int lo_write_simple(struct loop_device *lo, struct request *rq,
 		loff_t pos)
 {
 	struct bio_vec bvec;
-	struct req_iterator iter;
+	struct req_iterator iter;/*定义遍历request用枚举器*/
 	int ret = 0;
 
+	/*遍历此request中所有bio,逐个写入后端文件*/
 	rq_for_each_segment(bvec, rq, iter) {
-		ret = lo_write_bvec(lo->lo_backing_file, &bvec, &pos);
+		ret = lo_write_bvec(lo->lo_backing_file/*后端文件*/, &bvec/*本轮内容*/, &pos);
 		if (ret < 0)
 			break;
 		cond_resched();
@@ -282,6 +284,7 @@ static int lo_read_simple(struct loop_device *lo, struct request *rq,
 	struct iov_iter i;
 	ssize_t len;
 
+	/*遍历此request中所有bio,逐个读取到bvec中*/
 	rq_for_each_segment(bvec, rq, iter) {
 		iov_iter_bvec(&i, ITER_DEST, &bvec, 1, bvec.bv_len);
 		/*执行文件读*/
@@ -294,6 +297,7 @@ static int lo_read_simple(struct loop_device *lo, struct request *rq,
 		if (len != bvec.bv_len) {
 			struct bio *bio;
 
+			/*长度不足，通过零来补全*/
 			__rq_for_each_bio(bio, rq)
 				zero_fill_bio(bio);
 			break;
@@ -492,12 +496,14 @@ static int do_req_filebacked(struct loop_device *lo, struct request *rq)
 		if (cmd->use_aio)
 			return lo_rw_aio(lo, cmd, pos, ITER_SOURCE);
 		else
+			/*通过vfs将request中的buffer写入文件*/
 			return lo_write_simple(lo, rq, pos);
 	case REQ_OP_READ:
 		/*读操作*/
 		if (cmd->use_aio)
 			return lo_rw_aio(lo, cmd, pos, ITER_DEST);
 		else
+			/*通过vfs读到request*/
 			return lo_read_simple(lo, rq, pos);
 	default:
 		WARN_ON_ONCE(1);
@@ -1846,7 +1852,7 @@ MODULE_ALIAS_BLOCKDEV_MAJOR(LOOP_MAJOR);
 static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 		const struct blk_mq_queue_data *bd)
 {
-	struct request *rq = bd->rq;
+	struct request *rq = bd->rq;/*获得request*/
 	struct loop_cmd *cmd = blk_mq_rq_to_pdu(rq);
 	struct loop_device *lo = rq->q->queuedata;
 
@@ -1881,7 +1887,7 @@ static blk_status_t loop_queue_rq(struct blk_mq_hw_ctx *hctx,
 #endif
 	}
 #endif
-	loop_queue_work(lo, cmd);
+	loop_queue_work(lo, cmd);/*cmd work入工作队列*/
 
 	return BLK_STS_OK;
 }
@@ -1890,6 +1896,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 {
 	struct cgroup_subsys_state *cmd_blkcg_css = cmd->blkcg_css;
 	struct cgroup_subsys_state *cmd_memcg_css = cmd->memcg_css;
+	/*自cmd中取得request*/
 	struct request *rq = blk_mq_rq_from_pdu(cmd);
 	const bool write = op_is_write(req_op(rq));
 	struct loop_device *lo = rq->q->queuedata;
@@ -1914,7 +1921,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	 * do_req_filebacked() has returned unless we are sure that 'cmd' has
 	 * not yet been completed.
 	 */
-	ret = do_req_filebacked(lo, rq);
+	ret = do_req_filebacked(lo, rq);/*处理此request*/
 
 	if (cmd_blkcg_css)
 		kthread_associate_blkcg(NULL);
@@ -1935,6 +1942,7 @@ static void loop_handle_cmd(struct loop_cmd *cmd)
 	}
 }
 
+/*处理cmd_list上的内容*/
 static void loop_process_work(struct loop_worker *worker,
 			struct list_head *cmd_list, struct loop_device *lo)
 {
@@ -1974,6 +1982,7 @@ static void loop_workfn(struct work_struct *work)
 {
 	struct loop_worker *worker =
 		container_of(work, struct loop_worker, work);
+	/*负责处理cmd_list上的内容*/
 	loop_process_work(worker, &worker->cmd_list, worker->lo);
 }
 
@@ -1981,6 +1990,7 @@ static void loop_rootcg_workfn(struct work_struct *work)
 {
 	struct loop_device *lo =
 		container_of(work, struct loop_device, rootcg_work);
+	/*负责处理rootcg_cmd_list上的内容*/
 	loop_process_work(NULL, &lo->rootcg_cmd_list, lo);
 }
 

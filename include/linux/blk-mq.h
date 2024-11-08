@@ -92,7 +92,7 @@ struct request {
 	unsigned int __data_len;	/* total data len */
 	sector_t __sector;		/* sector cursor */
 
-	struct bio *bio;
+	struct bio *bio;/*request关联的bio(可以有多个bio,通过bio->bi_next串起来）*/
 	struct bio *biotail;
 
 	union {
@@ -561,7 +561,7 @@ struct blk_mq_ops {
 	 * reserved budget. Also we have to handle failure case
 	 * of .get_budget for avoiding I/O deadlock.
 	 */
-	int (*get_budget)(struct request_queue *);
+	int (*get_budget)(struct request_queue *);/*get_budget与put_budget函数是一组，成对出现*/
 
 	/**
 	 * @put_budget: Release the reserved budget.
@@ -1011,11 +1011,12 @@ struct req_iterator {
 	struct bio *bio;
 };
 
+/*request中可以包含了多个bio，通过bi_next串起来*/
 #define __rq_for_each_bio(_bio, rq)	\
-	if ((rq->bio))			\
+	if ((rq->bio))/*request如果bio未设置，则直接退出*/			\
 		for (_bio = (rq)->bio; _bio; _bio = _bio->bi_next)
 
-#define rq_for_each_segment(bvl, _rq, _iter)			\
+#define rq_for_each_segment(bvl/*出参，当前遍历的内容*/, _rq, _iter/*枚举器（可指出当前遍历的bio)*/)			\
 	__rq_for_each_bio(_iter.bio, _rq)			\
 		bio_for_each_segment(bvl, _iter.bio, _iter.iter)
 
