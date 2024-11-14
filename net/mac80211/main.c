@@ -337,7 +337,7 @@ static void ieee80211_restart_work(struct work_struct *work)
 	struct ieee80211_sub_if_data *sdata;
 	int ret;
 
-	flush_workqueue(local->workqueue);
+	flush_workqueue(local->workqueue);/*flush工作队列*/
 
 	rtnl_lock();
 	/* we might do interface manipulations, so need both */
@@ -1299,6 +1299,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	if (hw->queues > IEEE80211_MAX_QUEUES)
 		hw->queues = IEEE80211_MAX_QUEUES;
 
+	/*初始化按序执行工作队列*/
 	local->workqueue =
 		alloc_ordered_workqueue("%s", 0, wiphy_name(local->hw.wiphy));
 	if (!local->workqueue) {

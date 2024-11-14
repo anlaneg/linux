@@ -679,7 +679,7 @@ extern void __warn_flushing_systemwide_wq(void)
 	    (__builtin_constant_p(_wq == system_freezable_power_efficient_wq) && \
 	     _wq == system_freezable_power_efficient_wq))		\
 		__warn_flushing_systemwide_wq();			\
-	__flush_workqueue(_wq);						\
+	__flush_workqueue(_wq);/*flush工作队列*/						\
 })
 
 /**

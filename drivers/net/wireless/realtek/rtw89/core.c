@@ -4444,6 +4444,7 @@ struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 
 	firmware = rtw89_early_fw_feature_recognize(device, chip, &early_fw, &fw_format);
 
+	/*复用rtw89_ops*/
 	ops = kmemdup(&rtw89_ops, sizeof(rtw89_ops), GFP_KERNEL);
 	if (!ops)
 		goto err;
@@ -4477,7 +4478,7 @@ struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 	rtwdev = hw->priv;
 	rtwdev->hw = hw;
 	rtwdev->dev = device;
-	rtwdev->ops = ops;
+	rtwdev->ops = ops;/*设置ops*/
 	rtwdev->chip = chip;
 	rtwdev->fw.req.firmware = firmware;
 	rtwdev->fw.fw_format = fw_format;
