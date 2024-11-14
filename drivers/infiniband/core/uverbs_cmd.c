@@ -3992,7 +3992,7 @@ const struct uapi_definition uverbs_def_write_intf[] = {
 			UAPI_DEF_METHOD_NEEDS_FN(detach_mcast)),
 		DECLARE_UVERBS_WRITE(
 			IB_USER_VERBS_CMD_MODIFY_QP,
-			/*修改qp配置*/
+			/*用户态修改qp配置*/
 			ib_uverbs_modify_qp,
 			UAPI_DEF_WRITE_I(struct ib_uverbs_modify_qp),
 			UAPI_DEF_METHOD_NEEDS_FN(modify_qp)),

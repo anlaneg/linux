@@ -24,10 +24,12 @@ struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv/*
 {
 	struct net_device_devres *dr;
 
+	/*申请结构体*/
 	dr = devres_alloc(devm_free_netdev, sizeof(*dr), GFP_KERNEL);
 	if (!dr)
 		return NULL;
 
+	/*申请netdev设备*/
 	dr->ndev = alloc_etherdev_mqs(sizeof_priv, txqs, rxqs);
 	if (!dr->ndev) {
 		devres_free(dr);

@@ -104,11 +104,11 @@ static int devtmpfs_submit_req(struct req *req, const char *tmp)
 
 	spin_lock(&req_lock);
 	req->next = requests;
-	requests = req;
+	requests = req;/*将req串至requests链表上*/
 	spin_unlock(&req_lock);
 
 	wake_up_process(thread);
-	wait_for_completion(&req->done);
+	wait_for_completion(&req->done);/*等待请求完成*/
 
 	kfree(tmp);
 
@@ -127,13 +127,14 @@ int devtmpfs_create_node(struct device *dev)
 	req.mode = 0;/*初始化mode为0*/
 	req.uid = GLOBAL_ROOT_UID;
 	req.gid = GLOBAL_ROOT_GID;
-	//要创建的dev名称
+	//获取要创建的dev名称，mode,uid,gid等
 	req.name = device_get_devnode(dev, &req.mode, &req.uid, &req.gid, &tmp);
 	if (!req.name)
+		/*对于为空的，取消对设备的创建*/
 		return -ENOMEM;
 
 	if (req.mode == 0)
-		req.mode = 0600;
+		req.mode = 0600;/*使用默认mode*/
 	if (is_blockdev(dev))
 		req.mode |= S_IFBLK;/*指明node为块设备*/
 	else

@@ -64,6 +64,7 @@ static DEFINE_MUTEX(misc_mtx);
 //记录哪些动态minors已分配（bitmap)
 static DEFINE_IDA(misc_minors_ida);
 
+/*为misc设备申请minor*/
 static int misc_minor_alloc(void)
 {
 	int ret;
@@ -117,7 +118,7 @@ static const struct seq_operations misc_seq_ops = {
 	.start = misc_seq_start,
 	.next  = misc_seq_next,
 	.stop  = misc_seq_stop,
-	.show  = misc_seq_show,
+	.show  = misc_seq_show,/*显示misc设备信息*/
 };
 #endif
 
@@ -181,10 +182,10 @@ static char *misc_devnode(const struct device *dev, umode_t *mode)
 	const struct miscdevice *c = dev_get_drvdata(dev);
 
 	if (mode && c->mode)
-		*mode = c->mode;
+		*mode = c->mode;/*设备mode*/
 	if (c->nodename)
 		return kstrdup(c->nodename, GFP_KERNEL);
-	return NULL;
+	return NULL;/*返回node名称*/
 }
 
 static const struct class misc_class = {
@@ -194,7 +195,7 @@ static const struct class misc_class = {
 
 static const struct file_operations misc_fops = {
 	.owner		= THIS_MODULE,
-	.open		= misc_open,
+	.open		= misc_open,/*处理misc设备的open*/
 	.llseek		= noop_llseek,
 };
 
@@ -220,9 +221,10 @@ int misc_register(struct miscdevice *misc)
 {
 	dev_t dev;
 	int err = 0;
-	//使用动态编号
+	//是否使用动态编号
 	bool is_dynamic = (misc->minor == MISC_DYNAMIC_MINOR);
 
+	/*初始化list*/
 	INIT_LIST_HEAD(&misc->list);
 
 	mutex_lock(&misc_mtx);
@@ -232,7 +234,7 @@ int misc_register(struct miscdevice *misc)
 		int i = misc_minor_alloc();
 
 		if (i < 0) {
-		    	//查找不到时，返回最大值
+		    //查找不到时，返回最大值
 			err = -EBUSY;
 			goto out;
 		}
@@ -252,9 +254,10 @@ int misc_register(struct miscdevice *misc)
 
 	dev = MKDEV(MISC_MAJOR, misc->minor);
 
+	/*创建misc对应的device*/
 	misc->this_device =
 		device_create_with_groups(&misc_class, misc->parent, dev,
-					  misc/*驱动的私有数据*/, misc->groups, "%s", misc->name);
+					  misc/*驱动的私有数据*/, misc->groups, "%s"/*设备名称format*/, misc->name);
 	if (IS_ERR(misc->this_device)) {
 	    //注册失败，回退动态minor占用的那个编号
 		if (is_dynamic) {
@@ -311,7 +314,7 @@ static int __init misc_init(void)
 		goto fail_remove;
 
 	err = -EIO;
-	/*注册misc字符设备，通过其可定位具体的misc设备*/
+	/*先注册misc字符设备，通过其可定位具体的misc设备*/
 	if (register_chrdev(MISC_MAJOR, "misc", &misc_fops))
 		goto fail_printk;
 	return 0;

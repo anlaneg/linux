@@ -2138,6 +2138,7 @@ struct inode_operations {
 	int (*mkdir) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此目录对应的dentry*/,
 		      umode_t);
 	int (*rmdir) (struct inode *,struct dentry *);
+	/*创建nod,用于处理mknod系统调用*/
 	int (*mknod) (struct mnt_idmap *, struct inode *,struct dentry *,
 		      umode_t,dev_t);
 	int (*rename) (struct mnt_idmap *, struct inode *, struct dentry *,

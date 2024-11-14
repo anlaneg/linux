@@ -3751,7 +3751,7 @@ static inline bool __netdev_sent_queue(struct net_device *dev,
 				       unsigned int bytes,
 				       bool xmit_more)
 {
-	return __netdev_tx_sent_queue(netdev_get_tx_queue(dev, 0), bytes,
+	return __netdev_tx_sent_queue(netdev_get_tx_queue(dev, 0)/*取零号tx队列*/, bytes,
 				      xmit_more);
 }
 

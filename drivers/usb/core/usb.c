@@ -598,7 +598,7 @@ struct device_type usb_device_type = {
 	.name =		"usb_device",
 	.release =	usb_release_dev,
 	.uevent =	usb_dev_uevent,
-	.devnode = 	usb_devnode,
+	.devnode = 	usb_devnode,/*返回usb设备对应的devnode*/
 #ifdef CONFIG_PM
 	.pm =		&usb_device_pm_ops,
 #endif

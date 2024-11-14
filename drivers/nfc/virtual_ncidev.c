@@ -22,7 +22,7 @@
 				 NFC_PROTO_ISO15693_MASK)
 
 struct virtual_nci_dev {
-	struct nci_dev *ndev;
+	struct nci_dev *ndev;/*nci设备*/
 	struct mutex mtx;
 	struct sk_buff *send_buff;
 	struct wait_queue_head wq;
@@ -138,6 +138,7 @@ static int virtual_ncidev_open(struct inode *inode, struct file *file)
 	vdev = kzalloc(sizeof(*vdev), GFP_KERNEL);
 	if (!vdev)
 		return -ENOMEM;
+	/*申请nci设备*/
 	vdev->ndev = nci_allocate_device(&virtual_nci_ops,
 		VIRTUAL_NFC_PROTOCOLS, 0, 0);
 	if (!vdev->ndev) {
@@ -148,9 +149,9 @@ static int virtual_ncidev_open(struct inode *inode, struct file *file)
 	mutex_init(&vdev->mtx);
 	init_waitqueue_head(&vdev->wq);
 	file->private_data = vdev;
-	nci_set_drvdata(vdev->ndev, vdev);
+	nci_set_drvdata(vdev->ndev, vdev);/*设置私有数据*/
 
-	ret = nci_register_device(vdev->ndev);
+	ret = nci_register_device(vdev->ndev);/*注册nci设备*/
 	if (ret < 0) {
 		nci_free_device(vdev->ndev);
 		mutex_destroy(&vdev->mtx);
@@ -181,8 +182,10 @@ static long virtual_ncidev_ioctl(struct file *file, unsigned int cmd,
 	void __user *p = (void __user *)arg;
 
 	if (cmd != IOCTL_GET_NCIDEV_IDX)
+		/*当前仅支持此命令*/
 		return -ENOTTY;
 
+	/*返回nfc设备对应的idx*/
 	if (copy_to_user(p, &nfc_dev->idx, sizeof(nfc_dev->idx)))
 		return -EFAULT;
 
@@ -205,7 +208,7 @@ static struct miscdevice miscdev = {
 	.mode = 0600,
 };
 
-module_misc_device(miscdev);
+module_misc_device(miscdev);/*注册misc设备*/
 
 MODULE_LICENSE("GPL");
 MODULE_DESCRIPTION("Virtual NCI device simulation driver");

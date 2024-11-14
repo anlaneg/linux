@@ -720,6 +720,7 @@ static ssize_t blkdev_write_iter(struct kiocb *iocb, struct iov_iter *from)
 	return ret;
 }
 
+/*块设备读*/
 static ssize_t blkdev_read_iter(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct block_device *bdev = I_BDEV(iocb->ki_filp->f_mapping->host);

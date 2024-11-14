@@ -1221,8 +1221,8 @@ struct address_space *iomem_get_mapping(void)
 
 //申请占用此段resource
 static int __request_region_locked(struct resource *res, struct resource *parent,
-				   resource_size_t start, resource_size_t n,
-				   const char *name, int flags)
+				   resource_size_t start/*资源起始地址*/, resource_size_t n/*资源长度*/,
+				   const char *name/*资源名称*/, int flags)
 {
 	DECLARE_WAITQUEUE(wait, current);
 	//设置resource名称，内存起始位置，终止位置
@@ -1285,7 +1285,7 @@ static int __request_region_locked(struct resource *res, struct resource *parent
  */
 struct resource *__request_region(struct resource *parent,
 				  resource_size_t start/*资源起始地址*/, resource_size_t n/*资源大小*/,
-				  const char *name, int flags)
+				  const char *name/*资源名称*/, int flags)
 {
 	struct resource *res = alloc_resource(GFP_KERNEL);
 	int ret;

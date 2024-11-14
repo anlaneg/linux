@@ -232,8 +232,8 @@ EXPORT_SYMBOL(pci_disable_msix);
  * @max_vecs), -ENOSPC if less than @min_vecs interrupt vectors are
  * available, other errnos otherwise.
  */
-int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs,
-			  unsigned int max_vecs, unsigned int flags)
+int pci_alloc_irq_vectors(struct pci_dev *dev, unsigned int min_vecs/*最小中断数*/,
+			  unsigned int max_vecs/*最大中断数*/, unsigned int flags)
 {
 	return pci_alloc_irq_vectors_affinity(dev, min_vecs, max_vecs,
 					      flags, NULL);

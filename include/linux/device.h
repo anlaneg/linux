@@ -781,14 +781,15 @@ struct device {
 #ifdef CONFIG_NUMA
 	int		numa_node;	/* NUMA node this device is close to */
 #endif
-	/*此设备对应的dev_t（major + minor)*/
+	/*此设备对应的dev_t（major + minor)，
+	 * 如果major不为零，则device add时会主动添加devnode*/
 	dev_t			devt;	/* dev_t, creates the sysfs "dev" */
 	u32			id;	/* device instance */
 
 	spinlock_t		devres_lock;
 	struct list_head	devres_head;
 
-	const struct class	*class;//设备所属的class(类型），例如block_class
+	const struct class	*class;//设备所属的class(类型），例如block_class，misc_class
 	const struct attribute_group **groups;	/* optional groups */
 
 	//定义设备释放时的回调函数

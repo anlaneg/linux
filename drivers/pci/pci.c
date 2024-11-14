@@ -6583,7 +6583,7 @@ int pci_select_bars(struct pci_dev *dev, unsigned long flags)
 	int i, bars = 0;
 	for (i = 0; i < PCI_NUM_RESOURCES; i++)
 		if (pci_resource_flags(dev, i) & flags)
-			bars |= (1 << i);
+			bars |= (1 << i);/*匹配，记录bar索引*/
 	return bars;
 }
 EXPORT_SYMBOL(pci_select_bars);

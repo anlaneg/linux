@@ -2366,7 +2366,7 @@ void __init inode_init(void)
 					0);
 }
 
-//为indoe设置对应的i_fop及i_rdev
+//为special indoe设置对应的i_fop及i_rdev
 void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 {
 	inode->i_mode = mode;
@@ -2385,6 +2385,7 @@ void init_special_inode(struct inode *inode, umode_t mode, dev_t rdev)
 	    //针对fifo类型文件，使用pipeops做为操作集
 		inode->i_fop = &pipefifo_fops;
 	else if (S_ISSOCK(mode))
+		/*不为socket inode设置i_fop*/
 		;	/* leave it no_open_fops */
 	else
 		printk(KERN_DEBUG "init_special_inode: bogus i_mode (%o) for"

@@ -623,7 +623,7 @@ static void virt_wifi_dellink(struct net_device *dev,
 static struct rtnl_link_ops virt_wifi_link_ops = {
 	.kind		= "virt_wifi",
 	.setup		= virt_wifi_setup,
-	.newlink	= virt_wifi_newlink/*新建link*/,
+	.newlink	= virt_wifi_newlink/*新建virt wifi link*/,
 	.dellink	= virt_wifi_dellink,
 	.priv_size	= sizeof(struct virt_wifi_netdev_priv),
 };

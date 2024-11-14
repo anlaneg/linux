@@ -22,7 +22,7 @@
 #define WIPHY_IDX_INVALID	-1
 
 struct cfg80211_registered_device {
-	const struct cfg80211_ops *ops;
+	const struct cfg80211_ops *ops;/*设备操作集*/
 	struct list_head list;
 
 	/* rfkill support */
@@ -75,14 +75,14 @@ struct cfg80211_registered_device {
 	struct sk_buff *scan_msg;
 	struct list_head sched_scan_req_list;
 	time64_t suspend_at;
-	struct wiphy_work scan_done_wk;
+	struct wiphy_work scan_done_wk;/*work结构体，对应函数__cfg80211_scan_done*/
 
 	struct genl_info *cur_cmd_info;
 
 	struct work_struct conn_work;
 	struct work_struct event_work;
 
-	struct delayed_work dfs_update_channels_wk;
+	struct delayed_work dfs_update_channels_wk;/*对应函数cfg80211_dfs_channels_update_work*/
 
 	struct wireless_dev *background_radar_wdev;
 	struct cfg80211_chan_def background_radar_chandef;

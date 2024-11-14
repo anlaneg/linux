@@ -418,7 +418,7 @@ static inline void dma_sync_sgtable_for_device(struct device *dev,
 #define dma_unmap_single(d, a, s, r) dma_unmap_single_attrs(d, a, s, r, 0)
 #define dma_map_sg(d, s, n, r) dma_map_sg_attrs(d, s, n, r, 0)
 #define dma_unmap_sg(d, s, n, r) dma_unmap_sg_attrs(d, s, n, r, 0)
-#define dma_map_page(d, p, o, s, r) dma_map_page_attrs(d, p, o, s, r, 0)
+#define dma_map_page(d/*设备*/, p/*一组页*/, o/*offset值*/, s/*内存大小*/, r/*方向*/) dma_map_page_attrs(d, p, o, s, r, 0)
 #define dma_unmap_page(d, a, s, r) dma_unmap_page_attrs(d, a, s, r, 0)
 #define dma_get_sgtable(d, t, v, h, s) dma_get_sgtable_attrs(d, t, v, h, s, 0)
 #define dma_mmap_coherent(d, v, c, h, s) dma_mmap_attrs(d, v, c, h, s, 0)
@@ -426,7 +426,7 @@ static inline void dma_sync_sgtable_for_device(struct device *dev,
 bool dma_coherent_ok(struct device *dev, phys_addr_t phys, size_t size);
 
 //一致性dma内存申请
-static inline void *dma_alloc_coherent(struct device *dev, size_t size,
+static inline void *dma_alloc_coherent(struct device *dev, size_t size/*要申请的内存大小*/,
 		dma_addr_t *dma_handle, gfp_t gfp)
 {
 	return dma_alloc_attrs(dev, size/*dma内存大小*/, dma_handle/*出参，申请的dma地址？*/, gfp,

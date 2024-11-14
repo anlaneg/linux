@@ -422,7 +422,7 @@ EXPORT_SYMBOL(ether_setup);
 struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
 				      unsigned int rxqs)
 {
-	//规定设备名称为eth%d
+	//规定设备名称格式为eth%d
 	return alloc_netdev_mqs(sizeof_priv, "eth%d", NET_NAME_ENUM,
 				ether_setup/*以太设备setup函数*/, txqs, rxqs);
 }

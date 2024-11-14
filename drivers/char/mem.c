@@ -434,11 +434,13 @@ static ssize_t read_null(struct file *file, char __user *buf,
 static ssize_t write_null(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
+	/*null设备针对写入的内容，只返回长度，不实际写入*/
 	return count;
 }
 
 static ssize_t read_iter_null(struct kiocb *iocb, struct iov_iter *to)
 {
+	/*null设备读取到的内容长度总为0*/
 	return 0;
 }
 
@@ -553,6 +555,7 @@ static unsigned long get_unmapped_area_zero(struct file *file,
 static ssize_t write_full(struct file *file, const char __user *buf,
 			  size_t count, loff_t *ppos)
 {
+	/*针对向/dev/full中的写，总返回空间满*/
 	return -ENOSPC;
 }
 
@@ -646,7 +649,7 @@ static const struct file_operations __maybe_unused mem_fops = {
 static const struct file_operations null_fops = {
 	.llseek		= null_lseek,
 	.read		= read_null,
-	.write		= write_null,
+	.write		= write_null,/*null设备写操作*/
 	.read_iter	= read_iter_null,
 	.write_iter	= write_iter_null,
 	.splice_write	= splice_write_null,
@@ -689,13 +692,13 @@ static const struct memdev {
 	umode_t mode;
 } devlist[] = {
 #ifdef CONFIG_DEVMEM
-	[DEVMEM_MINOR] = { "mem", &mem_fops, FMODE_UNSIGNED_OFFSET, 0 },
+	[DEVMEM_MINOR] = { "mem", &mem_fops, FMODE_UNSIGNED_OFFSET, 0 },/* dev/mem设备*/
 #endif
-	[3] = { "null", &null_fops, FMODE_NOWAIT, 0666 },
+	[3] = { "null", &null_fops, FMODE_NOWAIT, 0666 },/* dev/null设备 */
 #ifdef CONFIG_DEVPORT
 	[4] = { "port", &port_fops, 0, 0 },
 #endif
-	[5] = { "zero", &zero_fops, FMODE_NOWAIT, 0666 },
+	[5] = { "zero", &zero_fops, FMODE_NOWAIT, 0666 },/*对应 dev/zero设备*/
 	[7] = { "full", &full_fops, 0, 0666 },
 	[8] = { "random", &random_fops, FMODE_NOWAIT, 0666 },
 	[9] = { "urandom", &urandom_fops, FMODE_NOWAIT, 0666 },
@@ -714,7 +717,7 @@ static int memory_open(struct inode *inode, struct file *filp)
 	if (minor >= ARRAY_SIZE(devlist))
 		return -ENXIO;
 
-	/*取对应的设备*/
+	/*依据minor取对应的设备,例如minor=3时，获得/dev/null*/
 	dev = &devlist[minor];
 	if (!dev->fops)
 	    /*设备没有提供fops*/
@@ -740,7 +743,7 @@ static char *mem_devnode(const struct device *dev, umode_t *mode)
 {
 	if (mode && devlist[MINOR(dev->devt)].mode)
 		*mode = devlist[MINOR(dev->devt)].mode;
-	return NULL;
+	return NULL;/*对于mem字符设备，不返回nodedev*/
 }
 
 static const struct class mem_class = {

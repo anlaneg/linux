@@ -3534,9 +3534,10 @@ static char *tty_devnode(const struct device *dev, umode_t *mode)
 	if (dev->devt == MKDEV(TTYAUX_MAJOR, 0) ||
 	    dev->devt == MKDEV(TTYAUX_MAJOR, 2))
 		*mode = 0666;
-	return NULL;
+	return NULL;/*devnode为NULL*/
 }
 
+/*tty类别的设备*/
 const struct class tty_class = {
 	.name		= "tty",
 	.devnode	= tty_devnode,

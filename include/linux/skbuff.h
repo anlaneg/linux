@@ -363,6 +363,7 @@ extern int sysctl_max_skb_frags;
  */
 #define GSO_BY_FRAGS	0xFFFF
 
+/*居然将bio_vec直接定义为skb_frag_t结构，强*/
 typedef struct bio_vec skb_frag_t;
 
 /**
@@ -585,7 +586,7 @@ struct xsk_tx_metadata_compl {
 struct skb_shared_info {
 	__u8		flags;
 	__u8		meta_len;
-	__u8		nr_frags;//有多少个分片
+	__u8		nr_frags;//有多少个分片（即frags数组的有效长度）
 	__u8		tx_flags;
 	unsigned short	gso_size;/*所有segment合并后长度*/
 	/* Warning: this field is not always filled in (UFO)! */
@@ -3572,6 +3573,7 @@ static inline void skb_frag_unref(struct sk_buff *skb, int f)
  */
 static inline void *skb_frag_address(const skb_frag_t *frag)
 {
+	/*frag实际上是struct bio_vec，取其定义的多片内容*/
 	return page_address(skb_frag_page(frag)) + skb_frag_off(frag);
 }
 

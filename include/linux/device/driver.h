@@ -255,7 +255,7 @@ void driver_init(void);
  * Use this macro to construct bus specific macros for registering
  * drivers, and do not use it on its own.
  */
-#define module_driver(__driver, __register, __unregister, ...) \
+#define module_driver(__driver, __register/*注册函数*/, __unregister/*解注册函数*/, .../*注册，解注册参数列表*/) \
 static int __init __driver##_init(void) \
 { \
 	/*调用驱动注册函数*/\

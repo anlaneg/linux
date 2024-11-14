@@ -5176,6 +5176,8 @@ err_dead:
 out:
 	return ret;
 }
+
+/*注册virtio-net驱动*/
 module_init(virtio_net_driver_init);
 
 static __exit void virtio_net_driver_exit(void)

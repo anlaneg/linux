@@ -82,13 +82,13 @@ static inline void dma_direct_sync_single_for_cpu(struct device *dev,
 		arch_dma_mark_clean(paddr, size);
 }
 
-static inline dma_addr_t dma_direct_map_page(struct device *dev,
-		struct page *page, unsigned long offset, size_t size,
-		enum dma_data_direction dir, unsigned long attrs)
+static inline dma_addr_t dma_direct_map_page(struct device *dev/*设备*/,
+		struct page *page/*一组连续的页*/, unsigned long offset/*页偏移量*/, size_t size/*总大小*/,
+		enum dma_data_direction dir/*方向*/, unsigned long attrs)
 {
-    /*物理地址*/
+    /*起始物理地址*/
 	phys_addr_t phys = page_to_phys(page) + offset;
-	/*转换为dma地址*/
+	/*起始物理转换为dma地址*/
 	dma_addr_t dma_addr = phys_to_dma(dev, phys);
 
 	if (is_swiotlb_force_bounce(dev)) {

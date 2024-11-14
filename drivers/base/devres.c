@@ -134,7 +134,7 @@ static void add_dr(struct device *dev, struct devres_node *node)
 {
 	devres_log(dev, node, "ADD");
 	BUG_ON(!list_empty(&node->entry));
-	list_add_tail(&node->entry, &dev->devres_head);
+	list_add_tail(&node->entry, &dev->devres_head);/*添加到devres_head链表上*/
 }
 
 static void replace_dr(struct device *dev,

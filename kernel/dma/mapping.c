@@ -145,8 +145,8 @@ static inline bool dma_map_direct(struct device *dev,
 	return dma_go_direct(dev, *dev->dma_mask, ops);
 }
 
-dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
-		size_t offset/*页偏移*/, size_t size, enum dma_data_direction dir,
+dma_addr_t dma_map_page_attrs(struct device *dev/*设备*/, struct page *page/*一组连续的页*/,
+		size_t offset/*页偏移量*/, size_t size/*总大小*/, enum dma_data_direction dir/*方向*/,
 		unsigned long attrs)
 {
 	const struct dma_map_ops *ops = get_dma_ops(dev);
@@ -162,6 +162,7 @@ dma_addr_t dma_map_page_attrs(struct device *dev, struct page *page,
 	    arch_dma_map_page_direct(dev, page_to_phys(page) + offset + size))
 		addr = dma_direct_map_page(dev, page, offset, size, dir, attrs);
 	else
+		/*按ops约定的map_page回调处理*/
 		addr = ops->map_page(dev, page, offset, size, dir, attrs);
 	kmsan_handle_dma(page, offset, size, dir);
 	debug_dma_map_page(dev, page, offset, size, dir, addr, attrs);

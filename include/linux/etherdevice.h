@@ -53,17 +53,18 @@ void eth_commit_mac_addr_change(struct net_device *dev, void *p);
 int eth_mac_addr(struct net_device *dev, void *p);
 int eth_validate_addr(struct net_device *dev);
 
-struct net_device *alloc_etherdev_mqs(int sizeof_priv, unsigned int txqs,
-					    unsigned int rxqs);
+struct net_device *alloc_etherdev_mqs(int sizeof_priv/*私有结构体大小*/, unsigned int txqs/*tx队列数*/,
+					    unsigned int rxqs/*rx队列数*/);
 /*申请单队列以太设备*/
 #define alloc_etherdev(sizeof_priv) alloc_etherdev_mq(sizeof_priv, 1)
 /*申请多队列以太设备*/
 #define alloc_etherdev_mq(sizeof_priv/*私有结构体大小*/, count) alloc_etherdev_mqs(sizeof_priv, count, count)
 
-struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv,
-					   unsigned int txqs,
-					   unsigned int rxqs);
-#define devm_alloc_etherdev(dev, sizeof_priv) devm_alloc_etherdev_mqs(dev, sizeof_priv, 1, 1)
+struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv/*私有结构体大小*/,
+					   unsigned int txqs/*tx队列数*/,
+					   unsigned int rxqs/*rx队列数*/);
+/*申请单队列设备*/
+#define devm_alloc_etherdev(dev, sizeof_priv/*私有结构体大小*/) devm_alloc_etherdev_mqs(dev, sizeof_priv, 1, 1)
 
 struct sk_buff *eth_gro_receive(struct list_head *head, struct sk_buff *skb);
 int eth_gro_complete(struct sk_buff *skb, int nhoff);

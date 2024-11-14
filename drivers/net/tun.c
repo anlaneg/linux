@@ -3692,6 +3692,7 @@ static const struct file_operations tun_fops = {
 #endif
 };
 
+/*tun口也为misc设备*/
 static struct miscdevice tun_miscdev = {
 	.minor = TUN_MINOR,
 	.name = "tun",

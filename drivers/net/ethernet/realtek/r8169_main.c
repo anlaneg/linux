@@ -61,9 +61,13 @@
 
 #define R8169_REGS_SIZE		256
 #define R8169_RX_BUF_SIZE	(SZ_16K - 1)
+/*tx描述符数目*/
 #define NUM_TX_DESC	256	/* Number of Tx descriptor registers */
+/*rx描述符数目*/
 #define NUM_RX_DESC	256	/* Number of Rx descriptor registers */
+/*tx ring占用字节数*/
 #define R8169_TX_RING_BYTES	(NUM_TX_DESC * sizeof(struct TxDesc))
+/*rx ring占用字节数*/
 #define R8169_RX_RING_BYTES	(NUM_RX_DESC * sizeof(struct RxDesc))
 #define R8169_TX_STOP_THRS	(MAX_SKB_FRAGS + 1)
 #define R8169_TX_START_THRS	(2 * R8169_TX_STOP_THRS)
@@ -73,10 +77,10 @@
 #define RTL_CFG_NO_GBIT	1
 
 /* write/read MMIO register */
-#define RTL_W8(tp, reg, val8)	writeb((val8), tp->mmio_addr + (reg))
+#define RTL_W8(tp, reg/*要写的寄存器*/, val8)	writeb((val8)/*要写的值*/, tp->mmio_addr + (reg)/*要写的地址*/)
 #define RTL_W16(tp, reg, val16)	writew((val16), tp->mmio_addr + (reg))
 #define RTL_W32(tp, reg, val32)	writel((val32), tp->mmio_addr + (reg))
-#define RTL_R8(tp, reg)		readb(tp->mmio_addr + (reg))
+#define RTL_R8(tp, reg/*要读取的寄存器*/)		readb(tp->mmio_addr + (reg))
 #define RTL_R16(tp, reg)		readw(tp->mmio_addr + (reg))
 #define RTL_R32(tp, reg)		readl(tp->mmio_addr + (reg))
 
@@ -466,7 +470,9 @@ enum rtl_register_content {
 
 enum rtl_desc_bit {
 	/* First doubleword. */
+	/*此bit用于标记描述符被nic占用*/
 	DescOwn		= (1 << 31), /* Descriptor is owned by NIC */
+	/*此bit位用于标记描述符为最后一个*/
 	RingEnd		= (1 << 30), /* End of descriptor ring */
 	FirstFrag	= (1 << 29), /* First segment of a packet */
 	LastFrag	= (1 << 28), /* Final segment of a packet */
@@ -533,16 +539,18 @@ enum rtl_rx_desc_bit {
 #define RTL_GSO_MAX_SIZE_V2	64000
 #define RTL_GSO_MAX_SEGS_V2	64
 
+/*tx描述符结构*/
 struct TxDesc {
 	__le32 opts1;
 	__le32 opts2;
-	__le64 addr;
+	__le64 addr;/*要发送的buffer*/
 };
 
+/*rx描述符结构*/
 struct RxDesc {
-	__le32 opts1;
+	__le32 opts1;/*RingEnd标记，用于指明是最后一个描述符*/
 	__le32 opts2;
-	__le64 addr;
+	__le64 addr;/*此描述符可填充的地址，可用大小为R8169_RX_BUF_SIZE*/
 };
 
 struct ring_info {
@@ -594,16 +602,24 @@ struct rtl8169_private {
 	struct net_device *dev;
 	struct phy_device *phydev;
 	struct napi_struct napi;
-	enum mac_version mac_version;
+	enum mac_version mac_version;/*此卡对应的mac version*/
 	enum rtl_dash_type dash_type;
+	/*当前收包位置*/
 	u32 cur_rx; /* Index into the Rx descriptor buffer of next Rx pkt. */
+	/*当前发包位置*/
 	u32 cur_tx; /* Index into the Tx descriptor buffer of next Rx pkt. */
-	u32 dirty_tx;
+	u32 dirty_tx;/*tx_skb中记录的skb需要释放，记录上次释放的位置*/
+	/*tx描述符数组*/
 	struct TxDesc *TxDescArray;	/* 256-aligned Tx descriptor ring */
+	/*rx描述符数组*/
 	struct RxDesc *RxDescArray;	/* 256-aligned Rx descriptor ring */
+	/*tx物理地址*/
 	dma_addr_t TxPhyAddr;
+	/*rx物理地址*/
 	dma_addr_t RxPhyAddr;
+	/*每个rx描述符会指向一段R8169_RX_BUF_SIZE长度的内存，此数据记录这些buffer*/
 	struct page *Rx_databuff[NUM_RX_DESC];	/* Rx data buffers */
+	/*记录正在传输的报文，以便等待硬件发送完成后，将skb可以释放*/
 	struct ring_info tx_skb[NUM_TX_DESC];	/* Tx data buffers */
 	u16 cp_cmd;
 	u32 irq_mask;
@@ -1387,6 +1403,7 @@ static void rtl_ack_events(struct rtl8169_private *tp, u32 bits)
 		RTL_W16(tp, IntrStatus, bits);
 }
 
+/*关闭中断*/
 static void rtl_irq_disable(struct rtl8169_private *tp)
 {
 	if (rtl_is_8125(tp))
@@ -1395,6 +1412,7 @@ static void rtl_irq_disable(struct rtl8169_private *tp)
 		RTL_W16(tp, IntrMask, 0);
 }
 
+/*开启中断*/
 static void rtl_irq_enable(struct rtl8169_private *tp)
 {
 	if (rtl_is_8125(tp))
@@ -1632,6 +1650,7 @@ static void rtl8169_rx_vlan_tag(struct RxDesc *desc, struct sk_buff *skb)
 	u32 opts2 = le32_to_cpu(desc->opts2);
 
 	if (opts2 & RxVlanTag)
+		/*支持vlan剥头*/
 		__vlan_hwaccel_put_tag(skb, htons(ETH_P_8021Q), swab16(opts2 & 0xffff));
 }
 
@@ -2041,7 +2060,7 @@ static int rtl8169_set_pauseparam(struct net_device *dev,
 static const struct ethtool_ops rtl8169_ethtool_ops = {
 	.supported_coalesce_params = ETHTOOL_COALESCE_USECS |
 				     ETHTOOL_COALESCE_MAX_FRAMES,
-	.get_drvinfo		= rtl8169_get_drvinfo,
+	.get_drvinfo		= rtl8169_get_drvinfo,/*取驱动info*/
 	.get_regs_len		= rtl8169_get_regs_len,
 	.get_link		= ethtool_op_get_link,
 	.get_coalesce		= rtl_get_coalesce,
@@ -2196,10 +2215,12 @@ static enum mac_version rtl8169_get_mac_version(u16 xid, bool gmii)
 	const struct rtl_mac_info *p = mac_info;
 	enum mac_version ver;
 
+	/*在mac_info中检查xid,查找首个匹配的rtl_mac_info*/
 	while ((xid & p->mask) != p->val)
 		p++;
-	ver = p->ver;
+	ver = p->ver;/*取版本号*/
 
+	/*版本号存在一些特殊情况*/
 	if (ver != RTL_GIGA_MAC_NONE && !gmii) {
 		if (ver == RTL_GIGA_MAC_VER_42)
 			ver = RTL_GIGA_MAC_VER_43;
@@ -3794,26 +3815,28 @@ static int rtl8169_change_mtu(struct net_device *dev, int new_mtu)
 
 static void rtl8169_mark_to_asic(struct RxDesc *desc)
 {
-	u32 eor = le32_to_cpu(desc->opts1) & RingEnd;
+	u32 eor = le32_to_cpu(desc->opts1) & RingEnd;/*是否为rx最后一个描述符*/
 
 	desc->opts2 = 0;
 	/* Force memory writes to complete before releasing descriptor */
 	dma_wmb();
-	WRITE_ONCE(desc->opts1, cpu_to_le32(DescOwn | eor | R8169_RX_BUF_SIZE));
+	WRITE_ONCE(desc->opts1, cpu_to_le32(DescOwn/*描述符被网卡own*/ | eor | R8169_RX_BUF_SIZE/*指出buffer size*/));
 }
 
 static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 					  struct RxDesc *desc)
 {
 	struct device *d = tp_to_dev(tp);
-	int node = dev_to_node(d);
+	int node = dev_to_node(d);/*设备所属的numa node*/
 	dma_addr_t mapping;
 	struct page *data;
 
+	/*申请大小为R8169_RX_BUF_SIZE（16k)的内存（按连续页申请）*/
 	data = alloc_pages_node(node, GFP_KERNEL, get_order(R8169_RX_BUF_SIZE));
 	if (!data)
 		return NULL;
 
+	/*获得dma映射地址*/
 	mapping = dma_map_page(d, data, 0, R8169_RX_BUF_SIZE, DMA_FROM_DEVICE);
 	if (unlikely(dma_mapping_error(d, mapping))) {
 		netdev_err(tp->dev, "Failed to map RX DMA!\n");
@@ -3821,7 +3844,7 @@ static struct page *rtl8169_alloc_rx_data(struct rtl8169_private *tp,
 		return NULL;
 	}
 
-	desc->addr = cpu_to_le64(mapping);
+	desc->addr = cpu_to_le64(mapping);/*设置此描述符可填充的dma地址*/
 	rtl8169_mark_to_asic(desc);
 
 	return data;
@@ -3849,16 +3872,17 @@ static int rtl8169_rx_fill(struct rtl8169_private *tp)
 	for (i = 0; i < NUM_RX_DESC; i++) {
 		struct page *data;
 
-		data = rtl8169_alloc_rx_data(tp, tp->RxDescArray + i);
+		/*填充i号rx描述符，申请i号rx buffer*/
+		data = rtl8169_alloc_rx_data(tp, tp->RxDescArray + i/*i号rx描述符*/);
 		if (!data) {
 			rtl8169_rx_clear(tp);
 			return -ENOMEM;
 		}
-		tp->Rx_databuff[i] = data;
+		tp->Rx_databuff[i] = data;/*填充i号rx buffer*/
 	}
 
 	/* mark as last descriptor in the ring */
-	tp->RxDescArray[NUM_RX_DESC - 1].opts1 |= cpu_to_le32(RingEnd);
+	tp->RxDescArray[NUM_RX_DESC - 1].opts1 |= cpu_to_le32(RingEnd);/*标记最后一个描述符*/
 
 	return 0;
 }
@@ -3878,10 +3902,11 @@ static void rtl8169_unmap_tx_skb(struct rtl8169_private *tp, unsigned int entry)
 	struct ring_info *tx_skb = tp->tx_skb + entry;
 	struct TxDesc *desc = tp->TxDescArray + entry;
 
+	/*dma unmap*/
 	dma_unmap_single(tp_to_dev(tp), le64_to_cpu(desc->addr), tx_skb->len,
 			 DMA_TO_DEVICE);
-	memset(desc, 0, sizeof(*desc));
-	memset(tx_skb, 0, sizeof(*tx_skb));
+	memset(desc, 0, sizeof(*desc));/*描述符已用完，清零*/
+	memset(tx_skb, 0, sizeof(*tx_skb));/*skb临时存放使命已完成，清零*/
 }
 
 static void rtl8169_tx_clear_range(struct rtl8169_private *tp, u32 start,
@@ -3978,6 +4003,7 @@ static int rtl8169_tx_map(struct rtl8169_private *tp, const u32 *opts, u32 len,
 	u32 opts1;
 	int ret;
 
+	/*取此地址对应的dma地址*/
 	mapping = dma_map_single(d, addr, len, DMA_TO_DEVICE);
 	ret = dma_mapping_error(d, mapping);
 	if (unlikely(ret)) {
@@ -3989,14 +4015,14 @@ static int rtl8169_tx_map(struct rtl8169_private *tp, const u32 *opts, u32 len,
 	txd->addr = cpu_to_le64(mapping);
 	txd->opts2 = cpu_to_le32(opts[1]);
 
-	opts1 = opts[0] | len;
+	opts1 = opts[0] | len;/*标记加长度*/
 	if (entry == NUM_TX_DESC - 1)
-		opts1 |= RingEnd;
+		opts1 |= RingEnd;/*如果为最后一个entry,则添加end标记*/
 	if (desc_own)
 		opts1 |= DescOwn;
 	txd->opts1 = cpu_to_le32(opts1);
 
-	tp->tx_skb[entry].len = len;
+	tp->tx_skb[entry].len = len;/*记录要发送的skb长度*/
 
 	return 0;
 }
@@ -4007,13 +4033,15 @@ static int rtl8169_xmit_frags(struct rtl8169_private *tp, struct sk_buff *skb,
 	struct skb_shared_info *info = skb_shinfo(skb);
 	unsigned int cur_frag;
 
+	/*遍历每片报文*/
 	for (cur_frag = 0; cur_frag < info->nr_frags; cur_frag++) {
 		const skb_frag_t *frag = info->frags + cur_frag;
-		void *addr = skb_frag_address(frag);
-		u32 len = skb_frag_size(frag);
+		void *addr = skb_frag_address(frag);/*当前片起始地址*/
+		u32 len = skb_frag_size(frag);/*当前片长度*/
 
-		entry = (entry + 1) % NUM_TX_DESC;
+		entry = (entry + 1) % NUM_TX_DESC;/*取下一个entry*/
 
+		/*利用当前版本填写此tx entry*/
 		if (unlikely(rtl8169_tx_map(tp, opts, len, addr, entry, true)))
 			goto err_out;
 	}
@@ -4172,6 +4200,7 @@ static bool rtl8169_tso_csum_v2(struct rtl8169_private *tp,
 
 static unsigned int rtl_tx_slots_avail(struct rtl8169_private *tp)
 {
+	/*dirty_tx与cur_tx位置之间的间隔达到NUM_TX_DESC,说明tx队列为满*/
 	return READ_ONCE(tp->dirty_tx) + NUM_TX_DESC - READ_ONCE(tp->cur_tx);
 }
 
@@ -4195,7 +4224,7 @@ static void rtl8169_doorbell(struct rtl8169_private *tp)
 		RTL_W8(tp, TxPoll, NPQ);
 }
 
-/*发包函数*/
+/*发包函数，每次发一个包*/
 static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 				      struct net_device *dev)
 {
@@ -4207,6 +4236,7 @@ static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 	u32 opts[2];
 
 	if (unlikely(!rtl_tx_slots_avail(tp))) {
+		/*tx队列满了。硬件未发送？软件未执行skb回收？*/
 		if (net_ratelimit())
 			netdev_err(dev, "BUG! Tx Ring full when queue awake!\n");
 		goto err_stop_0;
@@ -4220,21 +4250,23 @@ static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 	else if (!rtl8169_tso_csum_v2(tp, skb, opts))
 		goto err_dma_0;
 
-	if (unlikely(rtl8169_tx_map(tp, opts, skb_headlen(skb), skb->data,
+	if (unlikely(rtl8169_tx_map(tp, opts, skb_headlen(skb), skb->data/*要发送的内容*/,
 				    entry, false)))
 		goto err_dma_0;
 
-	txd_first = tp->TxDescArray + entry;
+	txd_first = tp->TxDescArray + entry;/*记录首个发送描述符*/
 
 	if (frags) {
+		/*报文有多片*/
 		if (rtl8169_xmit_frags(tp, skb, opts, entry))
 			goto err_dma_1;
+		/*以上函数每个frags填写一个entry,故entry数增加frags个*/
 		entry = (entry + frags) % NUM_TX_DESC;
 	}
 
-	txd_last = tp->TxDescArray + entry;
-	txd_last->opts1 |= cpu_to_le32(LastFrag);
-	tp->tx_skb[entry].skb = skb;
+	txd_last = tp->TxDescArray + entry;/*记录最后一个tx描述符*/
+	txd_last->opts1 |= cpu_to_le32(LastFrag);/*标记最后一片*/
+	tp->tx_skb[entry].skb = skb;/*记录此entry关联的skb*/
 
 	skb_tx_timestamp(skb);
 
@@ -4243,18 +4275,18 @@ static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 
 	door_bell = __netdev_sent_queue(dev, skb->len, netdev_xmit_more());
 
-	txd_first->opts1 |= cpu_to_le32(DescOwn | FirstFrag);
+	txd_first->opts1 |= cpu_to_le32(DescOwn | FirstFrag);/*为首个entry加上firstFrag标记*/
 
 	/* rtl_tx needs to see descriptor changes before updated tp->cur_tx */
 	smp_wmb();
 
-	WRITE_ONCE(tp->cur_tx, tp->cur_tx + frags + 1);
+	WRITE_ONCE(tp->cur_tx, tp->cur_tx + frags + 1);/*更新下次tx指针位置*/
 
 	stop_queue = !netif_subqueue_maybe_stop(dev, 0, rtl_tx_slots_avail(tp),
 						R8169_TX_STOP_THRS,
 						R8169_TX_START_THRS);
 	if (door_bell || stop_queue)
-		rtl8169_doorbell(tp);
+		rtl8169_doorbell(tp);/*触发doorbell,知会硬件*/
 
 	return NETDEV_TX_OK;
 
@@ -4355,7 +4387,7 @@ static void rtl_tx(struct net_device *dev, struct rtl8169_private *tp,
 	unsigned int dirty_tx, bytes_compl = 0, pkts_compl = 0;
 	struct sk_buff *skb;
 
-	dirty_tx = tp->dirty_tx;
+	dirty_tx = tp->dirty_tx;/*取得dirty位置*/
 
 	while (READ_ONCE(tp->cur_tx) != dirty_tx) {
 		unsigned int entry = dirty_tx % NUM_TX_DESC;
@@ -4363,17 +4395,20 @@ static void rtl_tx(struct net_device *dev, struct rtl8169_private *tp,
 
 		status = le32_to_cpu(READ_ONCE(tp->TxDescArray[entry].opts1));
 		if (status & DescOwn)
+			/*网卡仍在使用此描述符*/
 			break;
 
+		/*取得发送完成，可释放的skb*/
 		skb = tp->tx_skb[entry].skb;
 		rtl8169_unmap_tx_skb(tp, entry);
 
 		if (skb) {
+			/*释放此skb*/
 			pkts_compl++;
 			bytes_compl += skb->len;
 			napi_consume_skb(skb, budget);
 		}
-		dirty_tx++;
+		dirty_tx++;/*跳到下一个dirty位置*/
 	}
 
 	if (tp->dirty_tx != dirty_tx) {
@@ -4398,6 +4433,7 @@ static void rtl_tx(struct net_device *dev, struct rtl8169_private *tp,
 
 static inline int rtl8169_fragmented_frame(u32 status)
 {
+	/*是否多片报文*/
 	return (status & (FirstFrag | LastFrag)) != (FirstFrag | LastFrag);
 }
 
@@ -4406,26 +4442,30 @@ static inline void rtl8169_rx_csum(struct sk_buff *skb, u32 opts1)
 	u32 status = opts1 & (RxProtoMask | RxCSFailMask);
 
 	if (status == RxProtoTCP || status == RxProtoUDP)
+		/*网卡已校验了报文的checksum*/
 		skb->ip_summed = CHECKSUM_UNNECESSARY;
 	else
 		skb_checksum_none_assert(skb);
 }
 
+/*收包函数*/
 static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget)
 {
 	struct device *d = tp_to_dev(tp);
 	int count;
 
 	for (count = 0; count < budget; count++, tp->cur_rx++) {
-		unsigned int pkt_size, entry = tp->cur_rx % NUM_RX_DESC;
-		struct RxDesc *desc = tp->RxDescArray + entry;
+		unsigned int pkt_size, entry = tp->cur_rx % NUM_RX_DESC;/*当前收包位置*/
+		struct RxDesc *desc = tp->RxDescArray + entry;/*此收包位置对应的描述符*/
 		struct sk_buff *skb;
 		const void *rx_buf;
 		dma_addr_t addr;
 		u32 status;
 
+		/*小端转cpu序，取描述符上的flag*/
 		status = le32_to_cpu(READ_ONCE(desc->opts1));
 		if (status & DescOwn)
+			/*网卡仍占用此描述符，跳出*/
 			break;
 
 		/* This barrier is needed to keep us from reading
@@ -4435,13 +4475,17 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 		dma_rmb();
 
 		if (unlikely(status & RxRES)) {
+			/*标明收方向发生错误*/
 			if (net_ratelimit())
 				netdev_warn(dev, "Rx ERROR. status = %08x\n",
 					    status);
+			/*rx errors计数增加*/
 			dev->stats.rx_errors++;
 			if (status & (RxRWT | RxRUNT))
+				/*rx长度问题*/
 				dev->stats.rx_length_errors++;
 			if (status & RxCRC)
+				/*crc问题*/
 				dev->stats.rx_crc_errors++;
 
 			if (!(dev->features & NETIF_F_RXALL))
@@ -4450,47 +4494,50 @@ static int rtl_rx(struct net_device *dev, struct rtl8169_private *tp, int budget
 				goto release_descriptor;
 		}
 
-		pkt_size = status & GENMASK(13, 0);
+		pkt_size = status & GENMASK(13, 0);/*获得收到的报文长度*/
 		if (likely(!(dev->features & NETIF_F_RXFCS)))
-			pkt_size -= ETH_FCS_LEN;
+			pkt_size -= ETH_FCS_LEN;/*移除掉fcs长度*/
 
 		/* The driver does not support incoming fragmented frames.
 		 * They are seen as a symptom of over-mtu sized frames.
 		 */
 		if (unlikely(rtl8169_fragmented_frame(status))) {
+			/*报文由多片组成，这里处理为丢包*/
 			dev->stats.rx_dropped++;
 			dev->stats.rx_length_errors++;
 			goto release_descriptor;
 		}
 
+		/*申请skb buffer*/
 		skb = napi_alloc_skb(&tp->napi, pkt_size);
 		if (unlikely(!skb)) {
 			dev->stats.rx_dropped++;
 			goto release_descriptor;
 		}
 
-		addr = le64_to_cpu(desc->addr);
-		rx_buf = page_address(tp->Rx_databuff[entry]);
+		addr = le64_to_cpu(desc->addr);/*此报文buffer dma地址*/
+		rx_buf = page_address(tp->Rx_databuff[entry]);/*此报文buffer cpu地址*/
 
 		dma_sync_single_for_cpu(d, addr, pkt_size, DMA_FROM_DEVICE);
 		prefetch(rx_buf);
-		skb_copy_to_linear_data(skb, rx_buf, pkt_size);
-		skb->tail += pkt_size;
-		skb->len = pkt_size;
+		skb_copy_to_linear_data(skb, rx_buf, pkt_size);/*将报文内容复制到skb*/
+		skb->tail += pkt_size;/*指向报文尾部*/
+		skb->len = pkt_size;/*指明报文长度*/
 		dma_sync_single_for_device(d, addr, pkt_size, DMA_FROM_DEVICE);
 
 		rtl8169_rx_csum(skb, status);
-		skb->protocol = eth_type_trans(skb, dev);
+		skb->protocol = eth_type_trans(skb, dev);/*设置报文类型*/
 
-		rtl8169_rx_vlan_tag(desc, skb);
+		rtl8169_rx_vlan_tag(desc, skb);/*vlan tag剥头处理*/
 
 		if (skb->pkt_type == PACKET_MULTICAST)
-			dev->stats.multicast++;
+			dev->stats.multicast++;/*组播报文计数增加*/
 
-		napi_gro_receive(&tp->napi, skb);
+		napi_gro_receive(&tp->napi, skb);/*使报文走协议栈,例如：将报文将给tcp协议栈后再回到此处*/
 
-		dev_sw_netstats_rx_add(dev, pkt_size);
+		dev_sw_netstats_rx_add(dev, pkt_size);/*统计计数增加*/
 release_descriptor:
+		/*修改描述符标记，将此描述符归还给asic*/
 		rtl8169_mark_to_asic(desc);
 	}
 
@@ -4500,7 +4547,7 @@ release_descriptor:
 static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 {
 	struct rtl8169_private *tp = dev_instance;
-	u32 status = rtl_get_events(tp);
+	u32 status = rtl_get_events(tp);/*读取中断原因*/
 
 	if ((status & 0xffff) == 0xffff || !(status & tp->irq_mask))
 		return IRQ_NONE;
@@ -4520,10 +4567,13 @@ static irqreturn_t rtl8169_interrupt(int irq, void *dev_instance)
 	}
 
 	if (napi_schedule_prep(&tp->napi)) {
+		/*关闭中断*/
 		rtl_irq_disable(tp);
+		/*触发收包调度*/
 		__napi_schedule(&tp->napi);
 	}
 out:
+	/*知会硬件此原因的中断已响应*/
 	rtl_ack_events(tp, status);
 
 	return IRQ_HANDLED;
@@ -4581,6 +4631,7 @@ static int rtl8169_poll(struct napi_struct *napi, int budget)
 	work_done = rtl_rx(dev, tp, budget);
 
 	if (work_done < budget && napi_complete_done(napi, work_done))
+		/*在poll时，停止了中断，poll结束，发现无包可收，开启中断*/
 		rtl_irq_enable(tp);
 
 	return work_done;
@@ -4731,7 +4782,8 @@ static int rtl_open(struct net_device *dev)
 	rtl_request_firmware(tp);
 
 	irqflags = pci_dev_msi_enabled(pdev) ? IRQF_NO_THREAD : IRQF_SHARED;
-	retval = request_irq(tp->irq, rtl8169_interrupt, irqflags, dev->name, tp);
+	/*请求中断*/
+	retval = request_irq(tp->irq, rtl8169_interrupt/*中断处理函数*/, irqflags, dev->name, tp);
 	if (retval < 0)
 		goto err_release_fw_2;
 
@@ -4955,6 +5007,7 @@ static void rtl_set_irq_mask(struct rtl8169_private *tp)
 		tp->irq_mask |= RxOverflow;
 }
 
+/*申请中断*/
 static int rtl_alloc_irq(struct rtl8169_private *tp)
 {
 	unsigned int flags;
@@ -5105,6 +5158,7 @@ static void rtl_hw_init_8125(struct rtl8169_private *tp)
 
 static void rtl_hw_initialize(struct rtl8169_private *tp)
 {
+	/*依据不同mac version初始化硬件*/
 	switch (tp->mac_version) {
 	case RTL_GIGA_MAC_VER_51 ... RTL_GIGA_MAC_VER_53:
 		rtl8168ep_stop_cmac(tp);
@@ -5120,6 +5174,7 @@ static void rtl_hw_initialize(struct rtl8169_private *tp)
 	}
 }
 
+/*按mac版本，获取支持的最大jumbo*/
 static int rtl_jumbo_max(struct rtl8169_private *tp)
 {
 	/* Non-GBit versions don't support jumbo frames */
@@ -5226,6 +5281,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* use first MMIO region */
 	region = ffs(pci_select_bars(pdev, IORESOURCE_MEM)) - 1;
 	if (region < 0)
+		/*未找到IORESOURCE_MEM flags对应的bar*/
 		return dev_err_probe(&pdev->dev, -ENODEV, "no MMIO resource found\n");
 
 	rc = pcim_iomap_regions(pdev, BIT(region), KBUILD_MODNAME);
@@ -5243,6 +5299,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	/* Identify chip attached to board */
 	chipset = rtl8169_get_mac_version(xid, tp->supports_gmii);
 	if (chipset == RTL_GIGA_MAC_NONE)
+		/*没有识别到此卡的chipset*/
 		return dev_err_probe(&pdev->dev, -ENODEV,
 				     "unknown chip XID %03x, contact r8169 maintainers (see MAINTAINERS file)\n",
 				     xid);
@@ -5276,6 +5333,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	rc = rtl_alloc_irq(tp);
 	if (rc < 0)
+		/*申请中断失败*/
 		return dev_err_probe(&pdev->dev, rc, "Can't allocate interrupt\n");
 
 	tp->irq = pci_irq_vector(pdev, 0);
@@ -5286,6 +5344,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 	dev->ethtool_ops = &rtl8169_ethtool_ops;
 
+	/*设置poll函数*/
 	netif_napi_add(dev, &tp->napi, rtl8169_poll);
 
 	dev->hw_features = NETIF_F_IP_CSUM | NETIF_F_RXCSUM |
@@ -5336,6 +5395,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		dev->wol_enabled = 1;
 	}
 
+	/*设置设备支持的最大mtu*/
 	jumbo_max = rtl_jumbo_max(tp);
 	if (jumbo_max)
 		dev->max_mtu = jumbo_max;
@@ -5366,9 +5426,11 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	    tp->mac_version < RTL_GIGA_MAC_VER_61)
 		rtl8168_init_leds(dev);
 
+	/*显示设备信息*/
 	netdev_info(dev, "%s, %pM, XID %03x, IRQ %d\n",
 		    rtl_chip_infos[chipset].name, dev->dev_addr, xid, tp->irq);
 
+	/*显示jumbo支持情况*/
 	if (jumbo_max)
 		netdev_info(dev, "jumbo features [frames: %d bytes, tx checksumming: %s]\n",
 			    jumbo_max, tp->mac_version <= RTL_GIGA_MAC_VER_06 ?

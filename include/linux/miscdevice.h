@@ -80,6 +80,7 @@ struct miscdevice  {
     //取值为MISC_DYNAMIC_MINOR时，采用动态minor方式
 	int minor;
 	const char *name;//设备名称
+	/*miscdevice设备的file ops,由于miscdevice是字符设备，会选由字符设备调入，再调用此fops*/
 	const struct file_operations *fops;
 	struct list_head list;
 	struct device *parent;/*父设备*/
@@ -87,7 +88,7 @@ struct miscdevice  {
 	//设备的sys属性
 	const struct attribute_group **groups;
 	const char *nodename;//节点名称
-	umode_t mode;
+	umode_t mode;/*此设备的掩码*/
 };
 
 extern int misc_register(struct miscdevice *misc);
@@ -105,6 +106,7 @@ extern void misc_deregister(struct miscdevice *misc);
  * call. This helps to eliminate boilerplate code.
  */
 #define module_misc_device(__misc_device) \
+	/*生成misc设备模块初始化函数*/\
 	module_driver(__misc_device, misc_register, misc_deregister)
 
 #define MODULE_ALIAS_MISCDEV(minor)				\

@@ -2561,7 +2561,7 @@ static int dev_uevent(const struct kobject *kobj, struct kobj_uevent_env *env)
 
 		add_uevent_var(env, "MAJOR=%u", MAJOR(dev->devt));
 		add_uevent_var(env, "MINOR=%u", MINOR(dev->devt));
-		//取设备名称，uid,gid
+		//取设备名称,mode，uid,gid
 		name = device_get_devnode(dev, &mode, &uid, &gid, &tmp);
 		if (name) {
 			//添加设备名称
@@ -3638,7 +3638,7 @@ int device_add(struct device *dev)
 		if (error)
 			goto SysEntryError;
 
-		/*在devtmpfs中创建设备（字符设备，块设备）*/
+		/*在devtmpfs中创建设备devnode（字符设备，块设备），例如:/dev/net/tun*/
 		devtmpfs_create_node(dev);
 	}
 
@@ -3957,18 +3957,21 @@ const char *device_get_devnode(const struct device *dev,
 
 	/* the device type may provide a specific name */
 	if (dev->type && dev->type->devnode)
+		/*有type->devnode回调，利用此回调返回devnode及mode(例如usb)*/
 		*tmp = dev->type->devnode(dev, mode, uid, gid);
 	if (*tmp)
 		return *tmp;
 
 	/* the class may provide a specific name */
 	if (dev->class && dev->class->devnode)
+		/*有class->devnode回调，利用此回调返回devnode及mode(例如misc)*/
 		*tmp = dev->class->devnode(dev, mode);
 	if (*tmp)
 		return *tmp;
 
 	/* return name without allocation, tmp == NULL */
 	if (strchr(dev_name(dev), '!') == NULL)
+		/*设备名称中没有'!'的，直接返回设备名称*/
 		return dev_name(dev);
 
 	/* replace '!' in the name with '/' */
@@ -4339,10 +4342,10 @@ static void device_create_release(struct device *dev)
 }
 
 static __printf(6, 0) struct device *
-device_create_groups_vargs(const struct class *class, struct device *parent,
+device_create_groups_vargs(const struct class *class/*设备类别*/, struct device *parent,
 			   dev_t devt/*设备编号*/, void *drvdata/*驱动的私有数据*/,
 			   const struct attribute_group **groups,
-			   const char *fmt, va_list args)
+			   const char *fmt/*设备名称format*/, va_list args/*format参数*/)
 {
 	struct device *dev = NULL;
 	int retval = -ENODEV;
@@ -4350,6 +4353,7 @@ device_create_groups_vargs(const struct class *class, struct device *parent,
 	if (IS_ERR_OR_NULL(class))
 		goto error;
 
+	/*申请device结构体*/
 	dev = kzalloc(sizeof(*dev), GFP_KERNEL);
 	if (!dev) {
 		retval = -ENOMEM;
@@ -4359,7 +4363,7 @@ device_create_groups_vargs(const struct class *class, struct device *parent,
 	device_initialize(dev);
 	dev->devt = devt;
 	dev->class = class;
-	dev->parent = parent;
+	dev->parent = parent;/*指定父设备*/
 	dev->groups = groups;
 	dev->release = device_create_release;
 	dev_set_drvdata(dev, drvdata);/*设置设备的私有数据*/

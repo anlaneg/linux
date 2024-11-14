@@ -225,8 +225,9 @@ getname_uflags(const char __user *filename, int uflags)
 	return getname_flags(filename, flags, NULL);
 }
 
+/*字符串形式的文件路径转换为struct filename结构体*/
 struct filename *
-getname(const char __user * filename)
+getname(const char __user * filename/*文件路径*/)
 {
 	return getname_flags(filename, 0/*名称不得为空*/, NULL);
 }
@@ -4256,16 +4257,19 @@ retry:
 	idmap = mnt_idmap(path.mnt);
 	switch (mode & S_IFMT) {
 		case 0: case S_IFREG:
+			/*普通文件*/
 			error = vfs_create(idmap, path.dentry->d_inode,
 					   dentry, mode, true);
 			if (!error)
 				ima_post_path_mknod(idmap, dentry);
 			break;
 		case S_IFCHR: case S_IFBLK:
-			error = vfs_mknod(idmap, path.dentry->d_inode,
+			/*字符设备或者块设备*/
+			error = vfs_mknod(idmap, path.dentry->d_inode/*取目录对应的inode*/,
 					  dentry, mode, new_decode_dev(dev));
 			break;
 		case S_IFIFO: case S_IFSOCK:
+			/*socket及fifo*/
 			error = vfs_mknod(idmap, path.dentry->d_inode,
 					  dentry, mode, 0);
 			break;
@@ -4287,8 +4291,9 @@ SYSCALL_DEFINE4(mknodat, int, dfd, const char __user *, filename, umode_t, mode,
 	return do_mknodat(dfd, getname(filename), mode, dev);
 }
 
-SYSCALL_DEFINE3(mknod, const char __user *, filename, umode_t, mode, unsigned, dev)
+SYSCALL_DEFINE3(mknod, const char __user *, filename/*设备名称*/, umode_t, mode/*设备类型及mask*/, unsigned, dev/*设备编号*/)
 {
+	/*系统函数mknod实现*/
 	return do_mknodat(AT_FDCWD, getname(filename), mode, dev);
 }
 

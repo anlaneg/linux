@@ -66,6 +66,7 @@ static void phy_process_state_change(struct phy_device *phydev,
 			   phy_state_to_str(old_state),
 			   phy_state_to_str(phydev->state));
 		if (phydev->drv && phydev->drv->link_change_notify)
+			/*通知link change*/
 			phydev->drv->link_change_notify(phydev);
 	}
 }
@@ -1384,7 +1385,7 @@ static enum phy_state_work _phy_state_machine(struct phy_device *phydev)
 {
 	enum phy_state_work state_work = PHY_STATE_WORK_NONE;
 	struct net_device *dev = phydev->attached_dev;
-	enum phy_state old_state = phydev->state;
+	enum phy_state old_state = phydev->state;/*保存设备状态*/
 	const void *func = NULL;
 	bool finished = false;
 	int err = 0;
@@ -1470,6 +1471,7 @@ static void _phy_state_machine_post_work(struct phy_device *phydev,
 void phy_state_machine(struct work_struct *work)
 {
 	struct delayed_work *dwork = to_delayed_work(work);
+	/*找到具体的phydev*/
 	struct phy_device *phydev =
 			container_of(dwork, struct phy_device, state_queue);
 	enum phy_state_work state_work;

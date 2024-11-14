@@ -433,9 +433,11 @@ int pcim_iomap_regions(struct pci_dev *pdev, int mask, const char *name)
 		unsigned long len;
 
 		if (!(mask & (1 << i)))
+			/*非此资源，跳过*/
 			continue;
 
 		rc = -EINVAL;
+		/*取i号资源长度*/
 		len = pci_resource_len(pdev, i);
 		if (!len)
 			goto err_inval;

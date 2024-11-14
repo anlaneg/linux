@@ -315,7 +315,7 @@ int hostfs_do_rmdir(const char *file)
 	return 0;
 }
 
-int do_mknod(const char *file, int mode, unsigned int major, unsigned int minor)
+int do_mknod(const char *file/*设备路径*/, int mode/*mask及file type*/, unsigned int major, unsigned int minor)
 {
 	int err;
 

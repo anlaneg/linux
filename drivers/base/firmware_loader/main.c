@@ -861,6 +861,7 @@ _request_firmware(const struct firmware **firmware_p, const char *name,
 		return -EINVAL;
 
 	if (!name || name[0] == '\0') {
+		/*名称不得为空*/
 		ret = -EINVAL;
 		goto out;
 	}

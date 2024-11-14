@@ -445,7 +445,7 @@ out:
 
 /* exported functions */
 
-struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv,
+struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv/*私有结构体大小*/,
 			   const char *requested_name)
 {
 	static atomic_t wiphy_counter = ATOMIC_INIT(0);
@@ -472,6 +472,7 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv,
 
 	alloc_size = sizeof(*rdev) + sizeof_priv;
 
+	/*申请必要空间*/
 	rdev = kzalloc(alloc_size, GFP_KERNEL);
 	if (!rdev)
 		return NULL;
@@ -516,7 +517,7 @@ use_default_name:
 		 * phyX.  But, might should add some locking and check return
 		 * value, and use a different name if this one exists?
 		 */
-		rv = dev_set_name(&rdev->wiphy.dev, PHY_NAME "%d", rdev->wiphy_idx);
+		rv = dev_set_name(&rdev->wiphy.dev, PHY_NAME "%d", rdev->wiphy_idx);/*设置wiphy.dev名称*/
 		if (rv < 0) {
 			kfree(rdev);
 			return NULL;

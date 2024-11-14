@@ -5840,7 +5840,7 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv,
  * assigned to each netdev's ieee80211_ptr for proper operation.
  */
 static inline struct wiphy *wiphy_new(const struct cfg80211_ops *ops,
-				      int sizeof_priv)
+				      int sizeof_priv/*私有结构体大小*/)
 {
 	return wiphy_new_nm(ops, sizeof_priv, NULL);
 }
