@@ -23,10 +23,10 @@ struct rtl_fw {
 	rtl_fw_write_t mac_mcu_write;
 	rtl_fw_read_t mac_mcu_read;
 	const struct firmware *fw;
-	const char *fw_name;
+	const char *fw_name;/*fw名称*/
 	struct device *dev;
 
-	char version[RTL_VER_SIZE];
+	char version[RTL_VER_SIZE];/*fw版本号*/
 
 	struct rtl_fw_phy_action {
 		__le32 *code;

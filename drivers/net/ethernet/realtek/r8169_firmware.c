@@ -68,6 +68,7 @@ static bool rtl_fw_format_ok(struct rtl_fw *rtl_fw)
 		if (size > (fw->size - start) / FW_OPCODE_SIZE)
 			return false;
 
+		/*设置fw版本*/
 		strscpy(rtl_fw->version, fw_info->version, RTL_VER_SIZE);
 
 		pa->code = (__le32 *)(fw->data + start);

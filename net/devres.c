@@ -18,8 +18,9 @@ static void devm_free_netdev(struct device *dev, void *this)
 	free_netdev(res->ndev);
 }
 
-struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv,
-					   unsigned int txqs, unsigned int rxqs)
+/*生成网络设备*/
+struct net_device *devm_alloc_etherdev_mqs(struct device *dev, int sizeof_priv/*私有结构体长度*/,
+					   unsigned int txqs/*tx队列数*/, unsigned int rxqs/*rx队列数*/)
 {
 	struct net_device_devres *dr;
 

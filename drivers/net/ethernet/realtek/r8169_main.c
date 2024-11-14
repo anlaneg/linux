@@ -146,7 +146,7 @@ static const struct pci_device_id rtl8169_pci_tbl[] = {
 	{ PCI_VDEVICE(REALTEK,	0x8161) },
 	{ PCI_VDEVICE(REALTEK,	0x8162) },
 	{ PCI_VDEVICE(REALTEK,	0x8167) },
-	{ PCI_VDEVICE(REALTEK,	0x8168) },
+	{ PCI_VDEVICE(REALTEK,	0x8168) },/*台式机器有线设备*/
 	{ PCI_VDEVICE(NCUBE,	0x8168) },
 	{ PCI_VDEVICE(REALTEK,	0x8169) },
 	{ PCI_VENDOR_ID_DLINK,	0x4300,
@@ -631,7 +631,7 @@ struct rtl8169_private {
 	u32 saved_wolopts;
 	int eee_adv;
 
-	const char *fw_name;
+	const char *fw_name;/*fw名称*/
 	struct rtl_fw *rtl_fw;
 
 	u32 ocp_base;
@@ -1551,6 +1551,7 @@ static void rtl8169_get_drvinfo(struct net_device *dev,
 	strscpy(info->bus_info, pci_name(tp->pci_dev), sizeof(info->bus_info));
 	BUILD_BUG_ON(sizeof(info->fw_version) < sizeof(rtl_fw->version));
 	if (rtl_fw)
+		/*设置fw版本*/
 		strscpy(info->fw_version, rtl_fw->version,
 			sizeof(info->fw_version));
 }
@@ -3770,6 +3771,7 @@ static void rtl_hw_start(struct  rtl8169_private *tp)
 	rtl_irq_enable(tp);
 }
 
+/*变更mtu*/
 static int rtl8169_change_mtu(struct net_device *dev, int new_mtu)
 {
 	struct rtl8169_private *tp = netdev_priv(dev);
@@ -4193,6 +4195,7 @@ static void rtl8169_doorbell(struct rtl8169_private *tp)
 		RTL_W8(tp, TxPoll, NPQ);
 }
 
+/*发包函数*/
 static netdev_tx_t rtl8169_start_xmit(struct sk_buff *skb,
 				      struct net_device *dev)
 {
@@ -4760,6 +4763,7 @@ err_free_tx_0:
 	goto out;
 }
 
+/*取统计数据*/
 static void
 rtl8169_get_stats64(struct net_device *dev, struct rtnl_link_stats64 *stats)
 {
@@ -5188,7 +5192,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return -ENOMEM;
 
 	SET_NETDEV_DEV(dev, &pdev->dev);
-	dev->netdev_ops = &rtl_netdev_ops;
+	dev->netdev_ops = &rtl_netdev_ops;/*操作集*/
 	tp = netdev_priv(dev);
 	tp->dev = dev;
 	tp->pci_dev = pdev;
@@ -5352,6 +5356,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 	if (rc)
 		return rc;
 
+	/*注册网络设备*/
 	rc = register_netdev(dev);
 	if (rc)
 		return rc;
@@ -5383,7 +5388,7 @@ static int rtl_init_one(struct pci_dev *pdev, const struct pci_device_id *ent)
 
 static struct pci_driver rtl8169_pci_driver = {
 	.name		= KBUILD_MODNAME,
-	.id_table	= rtl8169_pci_tbl,
+	.id_table	= rtl8169_pci_tbl,/*支持的设备*/
 	.probe		= rtl_init_one,
 	.remove		= rtl_remove_one,
 	.shutdown	= rtl_shutdown,
