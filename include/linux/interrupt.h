@@ -120,10 +120,10 @@ struct irqaction {
 	irq_handler_t		handler;//中断处理回调
 	void			*dev_id;
 	void __percpu		*percpu_dev_id;
-	struct irqaction	*next;
+	struct irqaction	*next;/*串连action*/
 	irq_handler_t		thread_fn;
-	struct task_struct	*thread;
-	struct irqaction	*secondary;
+	struct task_struct	*thread;/*中断处理进程，例如:irq/%d-%s*/
+	struct irqaction	*secondary;/*从action*/
 	unsigned int		irq;//中断编号
 	unsigned int		flags;
 	unsigned long		thread_flags;

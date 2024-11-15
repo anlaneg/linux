@@ -193,6 +193,7 @@ void irq_set_thread_affinity(struct irq_desc *desc)
 
 	for_each_action_of_desc(desc, action) {
 		if (action->thread)
+			/*知会中断进程亲和性*/
 			set_bit(IRQTF_AFFINITY, &action->thread_flags);
 		if (action->secondary && action->secondary->thread)
 			set_bit(IRQTF_AFFINITY, &action->secondary->thread_flags);
@@ -1050,6 +1051,7 @@ static irqreturn_t irq_forced_secondary_handler(int irq, void *dev_id)
 	return IRQ_NONE;
 }
 
+/*当此进程被唤醒，则中断发生*/
 static int irq_wait_for_interrupt(struct irqaction *action)
 {
 	for (;;) {
@@ -1141,6 +1143,7 @@ irq_thread_check_affinity(struct irq_desc *desc, struct irqaction *action)
 	bool valid = true;
 
 	if (!test_and_clear_bit(IRQTF_AFFINITY, &action->thread_flags))
+		/*没有标记中断亲和性，不处理直接返回*/
 		return;
 
 	/*
@@ -1160,6 +1163,7 @@ irq_thread_check_affinity(struct irq_desc *desc, struct irqaction *action)
 	if (cpumask_available(desc->irq_common_data.affinity)) {
 		const struct cpumask *m;
 
+		/*取为此中断进程设置的cpu*/
 		m = irq_data_get_effective_affinity_mask(&desc->irq_data);
 		cpumask_copy(mask, m);
 	} else {
@@ -1168,7 +1172,7 @@ irq_thread_check_affinity(struct irq_desc *desc, struct irqaction *action)
 	raw_spin_unlock_irq(&desc->lock);
 
 	if (valid)
-		set_cpus_allowed_ptr(current, mask);
+		set_cpus_allowed_ptr(current, mask);/*应用cpu亲和*/
 	free_cpumask_var(mask);
 }
 #else
@@ -1211,7 +1215,7 @@ static irqreturn_t irq_thread_fn(struct irq_desc *desc,
 {
 	irqreturn_t ret;
 
-	ret = action->thread_fn(action->irq, action->dev_id);
+	ret = action->thread_fn(action->irq/*中断号*/, action->dev_id);
 	if (ret == IRQ_HANDLED)
 		atomic_inc(&desc->threads_handled);
 
@@ -1294,7 +1298,8 @@ static void wake_up_and_wait_for_irq_thread_ready(struct irq_desc *desc,
  */
 static int irq_thread(void *data)
 {
-	/*处理中断的线程*/
+	/*处理具体一个中断号的工作线程，中断发生时，中断处理函数，
+	 * 如果返回IRQ_WAKE_THREAD，则中断对应的工作线程将被唤醒*/
 	struct callback_head on_exit_work;
 	struct irqaction *action = data;
 	struct irq_desc *desc = irq_to_desc(action->irq);
@@ -1314,18 +1319,20 @@ static int irq_thread(void *data)
 	init_task_work(&on_exit_work, irq_thread_dtor);
 	task_work_add(current, &on_exit_work, TWA_NONE);
 
-	irq_thread_check_affinity(desc, action);
+	irq_thread_check_affinity(desc, action);/*中断亲和性处理*/
 
-	while (!irq_wait_for_interrupt(action)) {
+	while (!irq_wait_for_interrupt(action)/*等待中断出现*/) {
 		irqreturn_t action_ret;
 
 		irq_thread_check_affinity(desc, action);
 
+		/*调用中断处理函数*/
 		action_ret = handler_fn(desc, action);
 		if (action_ret == IRQ_WAKE_THREAD)
+			/*中断处理函数要求唤醒从进程，执行唤醒*/
 			irq_wake_secondary(desc, action);
 
-		wake_threads_waitq(desc);
+		wake_threads_waitq(desc);/*唤醒等待此中断的进程*/
 	}
 
 	/*
@@ -1456,13 +1463,13 @@ static void irq_nmi_teardown(struct irq_desc *desc)
 
 //创建并启动中断执行线程
 static int
-setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
+setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary/*是否从线程*/)
 {
 	struct task_struct *t;
 
 	if (!secondary) {
 		/*主线程*/
-		t = kthread_create(irq_thread, new, "irq/%d-%s", irq,
+		t = kthread_create(irq_thread, new, "irq/%d-%s", irq/*中断号*/,
 				   new->name);
 	} else {
 		/*从线程*/
@@ -1478,7 +1485,7 @@ setup_irq_thread(struct irqaction *new, unsigned int irq, bool secondary)
 	 * the thread dies to avoid that the interrupt code
 	 * references an already freed task_struct.
 	 */
-	new->thread = get_task_struct(t);
+	new->thread = get_task_struct(t);/*记录创建的线程*/
 	/*
 	 * Tell the thread to set its affinity. This is
 	 * important for shared interrupt handlers as we do
@@ -1522,7 +1529,7 @@ __setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中�
 	if (!try_module_get(desc->owner))
 		return -ENODEV;
 
-	new->irq = irq;
+	new->irq = irq;/*设置中断号*/
 
 	/*
 	 * If the trigger type is not specified by the caller,
@@ -1561,11 +1568,13 @@ __setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中�
 	 * thread.
 	 */
 	if (new->thread_fn && !nested) {
+		/*提供了thread_fn,故创建中断对应的线程*/
 		ret = setup_irq_thread(new, irq, false);
 		if (ret)
 			goto out_mput;
 		if (new->secondary) {
-			ret = setup_irq_thread(new->secondary, irq, true);
+			/*如果还指明了从action，则创建中断处理从进程*/
+			ret = setup_irq_thread(new->secondary, irq, true/*从进程*/);
 			if (ret)
 				goto out_thread;
 		}
@@ -1803,7 +1812,7 @@ __setup_irq(unsigned int irq/*中断号*/, struct irq_desc *desc/*对应的中�
 				irq, omsk, nmsk);
 	}
 
-	*old_ptr = new;/*添加新的action到链表*/
+	*old_ptr = new;/*添加新的action到链表尾部（支持一个中断多个action)*/
 
 	irq_pm_install_action(desc, new);
 
@@ -2147,7 +2156,7 @@ const void *free_nmi(unsigned int irq, void *dev_id)
  *	IRQF_ONESHOT		Run thread_fn with interrupt line masked
  */
 int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler/*中断处理函数*/,
-			 irq_handler_t thread_fn, unsigned long irqflags,
+			 irq_handler_t thread_fn/*进程中断处理函数(handler控制其触发)*/, unsigned long irqflags,
 			 const char *devname/*设备名称*/, void *dev_id)
 {
 	struct irqaction *action;
@@ -2208,7 +2217,7 @@ int request_threaded_irq(unsigned int irq/*中断号*/, irq_handler_t handler/*�
 		return retval;
 	}
 
-	retval = __setup_irq(irq, desc, action);
+	retval = __setup_irq(irq/*中断号*/, desc, action);
 
 	if (retval) {
 		irq_chip_pm_put(&desc->irq_data);

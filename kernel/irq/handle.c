@@ -133,7 +133,7 @@ void __irq_wake_thread(struct irq_desc *desc, struct irqaction *action)
 	 */
 	atomic_inc(&desc->threads_active);
 
-	wake_up_process(action->thread);
+	wake_up_process(action->thread);/*唤醒此中断描述符对应的中断进程*/
 }
 
 irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
@@ -144,6 +144,7 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
 
 	record_irq_time(desc);
 
+	/*中断描述符支持有多个irqaction,遍历并逐一进行处理*/
 	for_each_action_of_desc(desc, action) {
 		irqreturn_t res;
 
@@ -171,10 +172,12 @@ irqreturn_t __handle_irq_event_percpu(struct irq_desc *desc)
 			 * did not set up a thread function
 			 */
 			if (unlikely(!action->thread_fn)) {
+				/*中断执行后结果要求唤醒中断线程，但线程回调未提供*/
 				warn_no_thread(irq, action);
 				break;
 			}
 
+			/*中断action要求唤醒线程，执行唤醒此中断的响应线程*/
 			__irq_wake_thread(desc, action);
 			break;
 

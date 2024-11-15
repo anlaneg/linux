@@ -557,7 +557,7 @@ use_default_name:
 	rdev->wiphy.flags |= WIPHY_FLAG_PS_ON_BY_DEFAULT;
 #endif
 
-	wiphy_net_set(&rdev->wiphy, &init_net);
+	wiphy_net_set(&rdev->wiphy, &init_net);/*指明在init_net ns中*/
 
 	rdev->rfkill_ops.set_block = cfg80211_rfkill_set_block;
 	rdev->wiphy.rfkill = rfkill_alloc(dev_name(&rdev->wiphy.dev),

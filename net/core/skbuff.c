@@ -727,6 +727,7 @@ struct sk_buff *__netdev_alloc_skb(struct net_device *dev, unsigned int len,
 		if (!skb)
 			//申请skb失败
 			goto skb_fail;
+		/*申请skb成功*/
 		goto skb_success;
 	}
 

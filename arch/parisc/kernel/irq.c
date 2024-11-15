@@ -195,17 +195,17 @@ int show_interrupts(struct seq_file *p, void *v)
 		action = desc->action;
 		if (!action)
 			goto skip;
-		seq_printf(p, "%3d: ", i);
+		seq_printf(p, "%3d: ", i);/*显示中断号*/
 
 		for_each_online_cpu(j)
 			seq_printf(p, "%10u ", irq_desc_kstat_cpu(desc, j));
 
 		seq_printf(p, " %14s", irq_desc_get_chip(desc)->name);
 #ifndef PARISC_IRQ_CR16_COUNTS
-		seq_printf(p, "  %s", action->name);
+		seq_printf(p, "  %s", action->name);/*显示中断程序名称*/
 
 		while ((action = action->next))
-			seq_printf(p, ", %s", action->name);
+			seq_printf(p, ", %s", action->name);/*有多个action,逐个显示*/
 #else
 		for ( ;action; action = action->next) {
 			unsigned int k, avg, min, max;

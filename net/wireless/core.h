@@ -122,6 +122,7 @@ struct cfg80211_registered_device {
 static inline
 struct cfg80211_registered_device *wiphy_to_rdev(struct wiphy *wiphy)
 {
+	/*由wiphy获取cfg80211_registered_device*/
 	BUG_ON(!wiphy);
 	return container_of(wiphy, struct cfg80211_registered_device, wiphy);
 }

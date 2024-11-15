@@ -1276,7 +1276,7 @@ struct rtw89_pci_tx_data {
 
 struct rtw89_pci_rx_info {
 	dma_addr_t dma;
-	u32 fs:1, ls:1, tag:11, len:14;
+	u32 fs:1/*指first segment*/, ls:1/*指last segment*/, tag:11, len:14;
 };
 
 #define RTW89_PCI_TXBD_OPTION_LS	BIT(14)
@@ -1612,6 +1612,7 @@ void rtw89_chip_enable_intr(struct rtw89_dev *rtwdev, struct rtw89_pci *rtwpci)
 {
 	const struct rtw89_pci_info *info = rtwdev->pci_info;
 
+	/*开启中断*/
 	info->enable_intr(rtwdev, rtwpci);
 }
 
@@ -1620,6 +1621,7 @@ void rtw89_chip_disable_intr(struct rtw89_dev *rtwdev, struct rtw89_pci *rtwpci)
 {
 	const struct rtw89_pci_info *info = rtwdev->pci_info;
 
+	/*关闭中断*/
 	info->disable_intr(rtwdev, rtwpci);
 }
 

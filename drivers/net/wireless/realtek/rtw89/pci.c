@@ -222,6 +222,7 @@ rtw89_skb_put_rx_data(struct rtw89_dev *rtwdev, bool fs, bool ls,
 		}
 	}
 
+	/*将skb的内容复制到new中*/
 	skb_put_data(new, skb->data + offset, copy_len);
 
 	return true;
@@ -285,6 +286,7 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 
 		rtw89_chip_query_rxdesc(rtwdev, desc_info, skb->data, rxinfo_size);
 
+		/*申请pkt_size长度所需要的skb*/
 		new = rtw89_alloc_skb_for_rx(rtwdev, desc_info->pkt_size);
 		if (!new)
 			goto err_sync_device;
@@ -310,7 +312,7 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 		goto err_free_resource;
 	}
 	if (ls) {
-		rtw89_core_rx(rtwdev, desc_info, new);
+		rtw89_core_rx(rtwdev, desc_info, new/*收到的报文*/);
 		rx_ring->diliver_skb = NULL;
 		desc_info->ready = false;
 	}
@@ -788,6 +790,7 @@ static void rtw89_pci_ops_recovery_complete(struct rtw89_dev *rtwdev)
 	spin_unlock_irqrestore(&rtwpci->irq_lock, flags);
 }
 
+/*低功耗中断模式处理*/
 static void rtw89_pci_low_power_interrupt_handler(struct rtw89_dev *rtwdev)
 {
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
@@ -800,6 +803,7 @@ static void rtw89_pci_low_power_interrupt_handler(struct rtw89_dev *rtwdev)
 	rtw89_pci_poll_rxq_dma(rtwdev, rtwpci, budget);
 }
 
+/*进程中断处理函数*/
 static irqreturn_t rtw89_pci_interrupt_threadfn(int irq, void *dev)
 {
 	struct rtw89_dev *rtwdev = dev;
@@ -826,13 +830,14 @@ static irqreturn_t rtw89_pci_interrupt_threadfn(int irq, void *dev)
 		goto enable_intr;
 
 	if (unlikely(rtwpci->low_power)) {
+		/*低功耗，中断处理*/
 		rtw89_pci_low_power_interrupt_handler(rtwdev);
 		goto enable_intr;
 	}
 
 	if (likely(rtwpci->running)) {
 		local_bh_disable();
-		napi_schedule(&rtwdev->napi);
+		napi_schedule(&rtwdev->napi);/*触发收包软中断，促使接口收包*/
 		local_bh_enable();
 	}
 
@@ -846,6 +851,7 @@ enable_intr:
 	return IRQ_HANDLED;
 }
 
+/*中断处理函数，主要用于唤醒中断处理进程*/
 static irqreturn_t rtw89_pci_interrupt_handler(int irq, void *dev)
 {
 	struct rtw89_dev *rtwdev = dev;
@@ -859,10 +865,12 @@ static irqreturn_t rtw89_pci_interrupt_handler(int irq, void *dev)
 	 * even we have done pci_stop() to turn off IMR.
 	 */
 	if (unlikely(!rtwpci->running)) {
+		/*未在运行，直接返回*/
 		irqret = IRQ_HANDLED;
 		goto exit;
 	}
 
+	/*禁用此中断，并返回IRQ_WAKE_THREAD，触发中断处理进程*/
 	rtw89_chip_disable_intr(rtwdev, rtwpci);
 exit:
 	spin_unlock_irqrestore(&rtwpci->irq_lock, flags);
@@ -3436,13 +3444,13 @@ static int rtw89_pci_request_irq(struct rtw89_dev *rtwdev,
 	int ret;
 
 	flags |= PCI_IRQ_LEGACY | PCI_IRQ_MSI;
-	ret = pci_alloc_irq_vectors(pdev, 1, 1, flags);
+	ret = pci_alloc_irq_vectors(pdev, 1, 1, flags);/*请求中断*/
 	if (ret < 0) {
 		rtw89_err(rtwdev, "failed to alloc irq vectors, ret %d\n", ret);
 		goto err;
 	}
 
-	ret = devm_request_threaded_irq(rtwdev->dev, pdev->irq,
+	ret = devm_request_threaded_irq(rtwdev->dev, pdev->irq/*中断号*/,
 					rtw89_pci_interrupt_handler,
 					rtw89_pci_interrupt_threadfn,
 					IRQF_SHARED, KBUILD_MODNAME, rtwdev);
@@ -3846,6 +3854,7 @@ static void rtw89_pci_ops_dump_err_status(struct rtw89_dev *rtwdev)
 
 static int rtw89_pci_napi_poll(struct napi_struct *napi, int budget)
 {
+	/*获得rtw89_dev*/
 	struct rtw89_dev *rtwdev = container_of(napi, struct rtw89_dev, napi);
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
 	const struct rtw89_pci_info *info = rtwdev->pci_info;
@@ -3853,7 +3862,7 @@ static int rtw89_pci_napi_poll(struct napi_struct *napi, int budget)
 	unsigned long flags;
 	int work_done;
 
-	rtwdev->napi_budget_countdown = budget;
+	rtwdev->napi_budget_countdown = budget;/*预算的包数*/
 
 	rtw89_write32(rtwdev, gen_def->isr_clear_rpq.addr, gen_def->isr_clear_rpq.data);
 	work_done = rtw89_pci_poll_rpq_dma(rtwdev, rtwpci, rtwdev->napi_budget_countdown);
@@ -3865,6 +3874,7 @@ static int rtw89_pci_napi_poll(struct napi_struct *napi, int budget)
 	if (work_done < budget && napi_complete_done(napi, work_done)) {
 		spin_lock_irqsave(&rtwpci->irq_lock, flags);
 		if (likely(rtwpci->running))
+			/*开启中断*/
 			rtw89_chip_enable_intr(rtwdev, rtwpci);
 		spin_unlock_irqrestore(&rtwpci->irq_lock, flags);
 	}
@@ -3983,7 +3993,7 @@ static const struct rtw89_hci_ops rtw89_pci_ops = {
 	.check_and_reclaim_tx_resource = rtw89_pci_check_and_reclaim_tx_resource,
 	.mac_lv1_rcvy	= rtw89_pci_ops_mac_lv1_recovery,
 	.dump_err_status = rtw89_pci_ops_dump_err_status,
-	.napi_poll	= rtw89_pci_napi_poll,
+	.napi_poll	= rtw89_pci_napi_poll,/*poll方式收包*/
 
 	.recovery_start = rtw89_pci_ops_recovery_start,
 	.recovery_complete = rtw89_pci_ops_recovery_complete,
@@ -3994,8 +4004,8 @@ static const struct rtw89_hci_ops rtw89_pci_ops = {
 	.poll_txdma_ch	= rtw89_poll_txdma_ch_idle_pcie,
 	.clr_idx_all	= rtw89_pci_clr_idx_all,
 	.clear		= rtw89_pci_clear_resource,
-	.disable_intr	= rtw89_pci_disable_intr_lock,
-	.enable_intr	= rtw89_pci_enable_intr_lock,
+	.disable_intr	= rtw89_pci_disable_intr_lock,/*关闭中断*/
+	.enable_intr	= rtw89_pci_enable_intr_lock,/*开启中断*/
 	.rst_bdram	= rtw89_pci_reset_bdram,
 };
 
@@ -4054,9 +4064,9 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	rtw89_pci_link_cfg(rtwdev);
 	rtw89_pci_l1ss_cfg(rtwdev);
 
-	rtw89_core_napi_init(rtwdev);
+	rtw89_core_napi_init(rtwdev);/*初始化napi,指定收包poll函数*/
 
-	ret = rtw89_pci_request_irq(rtwdev, pdev);
+	ret = rtw89_pci_request_irq(rtwdev, pdev);/*请求中断，方便收包*/
 	if (ret) {
 		rtw89_err(rtwdev, "failed to request pci irq\n");
 		goto err_deinit_napi;

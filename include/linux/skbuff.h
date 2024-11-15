@@ -1819,7 +1819,7 @@ static inline void skb_poison_list(struct sk_buff *skb)
 
 static inline void skb_list_del_init(struct sk_buff *skb)
 {
-	__list_del_entry(&skb->list);
+	__list_del_entry(&skb->list);/*skb list断开*/
 	skb_mark_not_on_list(skb);
 }
 
@@ -2670,7 +2670,7 @@ static inline void *skb_put_zero(struct sk_buff *skb, unsigned int len)
 	return tmp;
 }
 
-//将数据data附加在skb结尾处
+//将数据data复制到skb结尾处
 static inline void *skb_put_data(struct sk_buff *skb, const void *data,
 				 unsigned int len)
 {

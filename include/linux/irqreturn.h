@@ -11,6 +11,7 @@
 enum irqreturn {
 	IRQ_NONE		= (0 << 0),
 	IRQ_HANDLED		= (1 << 0),
+	/*返回此值，将唤醒中断处理进程的从进程*/
 	IRQ_WAKE_THREAD		= (1 << 1),
 };
 

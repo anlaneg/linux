@@ -5307,6 +5307,7 @@ void ieee80211_rx_list(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
 	struct ieee80211_rate *rate = NULL;
 	struct ieee80211_supported_band *sband;
 	struct ieee80211_rx_status *status = IEEE80211_SKB_RXCB(skb);
+	/*data指向的是802.11 header*/
 	struct ieee80211_hdr *hdr = (struct ieee80211_hdr *)skb->data;
 
 	WARN_ON_ONCE(softirq_count() == 0);
@@ -5434,8 +5435,9 @@ void ieee80211_rx_list(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
 }
 EXPORT_SYMBOL(ieee80211_rx_list);
 
+//收到802.11报文(无线报文)
 void ieee80211_rx_napi(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
-		       struct sk_buff *skb, struct napi_struct *napi)
+		       struct sk_buff *skb/*收到的报文*/, struct napi_struct *napi)
 {
 	struct sk_buff *tmp;
 	LIST_HEAD(list);
@@ -5451,10 +5453,12 @@ void ieee80211_rx_napi(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
 	rcu_read_unlock();
 
 	if (!napi) {
+		/*将list一并上送*/
 		netif_receive_skb_list(&list);
 		return;
 	}
 
+	/*将list上skb逐个向上送到协议栈*/
 	list_for_each_entry_safe(skb, tmp, &list, list) {
 		skb_list_del_init(skb);
 		napi_gro_receive(napi, skb);
@@ -5470,8 +5474,8 @@ void ieee80211_rx_irqsafe(struct ieee80211_hw *hw, struct sk_buff *skb)
 
 	BUILD_BUG_ON(sizeof(struct ieee80211_rx_status) > sizeof(skb->cb));
 
-	skb->pkt_type = IEEE80211_RX_MSG;
-	skb_queue_tail(&local->skb_queue, skb);
-	tasklet_schedule(&local->tasklet);
+	skb->pkt_type = IEEE80211_RX_MSG;/*报文报文类型为IEEE80211_RX_MSG*/
+	skb_queue_tail(&local->skb_queue, skb);/*将报文添加进skb_queue*/
+	tasklet_schedule(&local->tasklet);/*触发tasklet,促使其收包*/
 }
 EXPORT_SYMBOL(ieee80211_rx_irqsafe);

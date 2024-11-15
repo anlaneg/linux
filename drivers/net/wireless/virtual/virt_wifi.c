@@ -229,11 +229,12 @@ static int virt_wifi_connect(struct wiphy *wiphy, struct net_device *netdev,
 	if (priv->being_deleted || !priv->is_up)
 		return -EBUSY;
 
-	/*延迟执行connect任务*/
+	/*指明延迟2S后执行connect任务*/
 	could_schedule = schedule_delayed_work(&priv->connect, HZ * 2);
 	if (!could_schedule)
 		return -EBUSY;
 
+	/*填写connect_requested_bss*/
 	if (sme->bssid) {
 		ether_addr_copy(priv->connect_requested_bss, sme->bssid);
 	} else {
@@ -257,16 +258,18 @@ static void virt_wifi_connect_complete(struct work_struct *work)
 	u16 status = WLAN_STATUS_SUCCESS;
 
 	if (is_zero_ether_addr(requested_bss))
+		/*请求的bss为零时，认为为NULL*/
 		requested_bss = NULL;
 
 	if (!priv->is_up || (requested_bss && !right_addr))
+		/*连接失败*/
 		status = WLAN_STATUS_UNSPECIFIED_FAILURE;
 	else
 		priv->is_connected = true;/*指明已连接*/
 
 	/* Schedules an event that acquires the rtnl lock. */
 	cfg80211_connect_result(priv->upperdev, requested_bss, NULL, 0, NULL, 0,
-				status, GFP_KERNEL);
+				status/*指明连接结果（成功/失败）*/, GFP_KERNEL);
 	netif_carrier_on(priv->upperdev);
 }
 
@@ -276,7 +279,7 @@ static void virt_wifi_cancel_connect(struct net_device *netdev)
 	struct virt_wifi_netdev_priv *priv = netdev_priv(netdev);
 
 	/* If there is work pending, clean up dangling callbacks. */
-	if (cancel_delayed_work_sync(&priv->connect)) {
+	if (cancel_delayed_work_sync(&priv->connect)/*取消此work*/) {
 		/* Schedules an event that acquires the rtnl lock. */
 		cfg80211_connect_result(priv->upperdev,
 					priv->connect_requested_bss, NULL, 0,
@@ -505,7 +508,7 @@ static rx_handler_result_t virt_wifi_rx_handler(struct sk_buff **pskb)
 		return RX_HANDLER_CONSUMED;
 	}
 
-	/*报文上送，指明已更换设备为wifi设备，重新查找回调*/
+	/*报文上送，在这里更换设备为wifi设备，并返回another,要求重新查找回调*/
 	*pskb = skb;
 	skb->dev = priv->upperdev;
 	skb->pkt_type = PACKET_HOST;
@@ -538,9 +541,10 @@ static int virt_wifi_newlink(struct net *src_net, struct net_device *dev,
 	if (!tb[IFLA_MTU])
 		dev->mtu = priv->lowerdev->mtu;
 	else if (dev->mtu > priv->lowerdev->mtu)
+		/*设备mtu大于底层设备mtu,报错*/
 		return -EINVAL;
 
-	/*设置底层设备的rx_handler,使底层设备收到报文后走此流程*/
+	/*设置底层设备的rx_handler,使底层设备收到报文后走virt_wifi_rx_handler流程*/
 	err = netdev_rx_handler_register(priv->lowerdev, virt_wifi_rx_handler,
 					 priv);
 	if (err) {

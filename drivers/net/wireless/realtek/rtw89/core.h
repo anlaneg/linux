@@ -1010,6 +1010,7 @@ struct rtw89_txwd_info_v2 {
 	__le32 dword7;
 } __packed;
 
+/*rx ring描述符*/
 struct rtw89_rx_desc_info {
 	u16 pkt_size;
 	u8 pkt_type;
@@ -3099,6 +3100,7 @@ struct rtw89_hci_ops {
 	u32 (*check_and_reclaim_tx_resource)(struct rtw89_dev *rtwdev, u8 txch);
 	int (*mac_lv1_rcvy)(struct rtw89_dev *rtwdev, enum rtw89_lv1_rcvy_step step);
 	void (*dump_err_status)(struct rtw89_dev *rtwdev);
+	/*通过此api轮询wifi设备*/
 	int (*napi_poll)(struct napi_struct *napi, int budget);
 
 	/* Deal with locks inside recovery_start and recovery_complete callbacks
@@ -4854,7 +4856,7 @@ struct rtw89_dev {
 
 	/* napi structure */
 	struct net_device netdev;
-	struct napi_struct napi;
+	struct napi_struct napi;/*收包需要*/
 	int napi_budget_countdown;
 
 	/* HCI related data, keep last */
@@ -5720,14 +5722,17 @@ static inline struct sk_buff *rtw89_alloc_skb_for_rx(struct rtw89_dev *rtwdev,
 	struct sk_buff *skb;
 
 	if (rtwdev->hw->conf.flags & IEEE80211_CONF_MONITOR) {
+		/*申请skb*/
 		skb = dev_alloc_skb(length + RTW89_RADIOTAP_ROOM);
 		if (!skb)
 			return NULL;
 
+		/*预留必要的空间*/
 		skb_reserve(skb, RTW89_RADIOTAP_ROOM);
 		return skb;
 	}
 
+	/*按length申请空间，不需要预留*/
 	return dev_alloc_skb(length);
 }
 

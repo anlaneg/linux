@@ -546,7 +546,7 @@ bool napi_schedule_prep(struct napi_struct *n);
  * Refer to napi_schedule_prep() for additional reason on why
  * a NAPI might not be scheduled.
  */
-//n会被加入到poll列表，并进行轮循
+//n会被加入到poll列表，触发“收包软中断”，并进行轮循
 static inline bool napi_schedule(struct napi_struct *n)
 {
 	if (napi_schedule_prep(n)) {

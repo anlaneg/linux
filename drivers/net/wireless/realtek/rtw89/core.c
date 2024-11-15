@@ -2053,7 +2053,7 @@ static void rtw89_core_update_radiotap(struct rtw89_dev *rtwdev,
 static void rtw89_core_rx_to_mac80211(struct rtw89_dev *rtwdev,
 				      struct rtw89_rx_phy_ppdu *phy_ppdu,
 				      struct rtw89_rx_desc_info *desc_info,
-				      struct sk_buff *skb_ppdu,
+				      struct sk_buff *skb_ppdu/*收到的报文*/,
 				      struct ieee80211_rx_status *rx_status)
 {
 	struct napi_struct *napi = &rtwdev->napi;
@@ -2067,6 +2067,7 @@ static void rtw89_core_rx_to_mac80211(struct rtw89_dev *rtwdev,
 	rtw89_core_update_radiotap(rtwdev, skb_ppdu, rx_status);
 	/* In low power mode, it does RX in thread context. */
 	local_bh_disable();
+	/*收到IEEE80211_RX_MSG类报文*/
 	ieee80211_rx_napi(rtwdev->hw, NULL, skb_ppdu, napi);
 	local_bh_enable();
 	rtwdev->napi_budget_countdown--;
@@ -2472,6 +2473,7 @@ EXPORT_SYMBOL(rtw89_core_napi_stop);
 void rtw89_core_napi_init(struct rtw89_dev *rtwdev)
 {
 	init_dummy_netdev(&rtwdev->netdev);
+	/*设置poll函数*/
 	netif_napi_add(&rtwdev->netdev, &rtwdev->napi,
 		       rtwdev->hci.ops->napi_poll);
 }
@@ -4464,7 +4466,7 @@ struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 	}
 
 	driver_data_size = sizeof(struct rtw89_dev) + bus_data_size;
-	hw = ieee80211_alloc_hw(driver_data_size, ops);
+	hw = ieee80211_alloc_hw(driver_data_size, ops);/*申请hardware device*/
 	if (!hw)
 		goto err;
 

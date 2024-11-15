@@ -26,7 +26,7 @@ void ieee80211_tx_status_irqsafe(struct ieee80211_hw *hw,
 	struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 	int tmp;
 
-	skb->pkt_type = IEEE80211_TX_STATUS_MSG;
+	skb->pkt_type = IEEE80211_TX_STATUS_MSG;/*tx status message报文*/
 	skb_queue_tail(info->flags & IEEE80211_TX_CTL_REQ_TX_STATUS ?
 		       &local->skb_queue : &local->skb_queue_unreliable, skb);
 	tmp = skb_queue_len(&local->skb_queue) +

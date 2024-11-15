@@ -6379,7 +6379,7 @@ void __napi_schedule(struct napi_struct *n)
 	unsigned long flags;
 
 	local_irq_save(flags);
-	//将napi加入链表，并触发软中断收取报文
+	//将napi加入链表，并触发“收包软中断”，收取报文
 	____napi_schedule(this_cpu_ptr(&softnet_data), n);
 	local_irq_restore(flags);
 }
@@ -10893,7 +10893,7 @@ int init_dummy_netdev(struct net_device *dev)
 	/* make sure we BUG if trying to hit standard
 	 * register/unregister code path
 	 */
-	dev->reg_state = NETREG_DUMMY;
+	dev->reg_state = NETREG_DUMMY;/*指明此设备仅dummy*/
 
 	/* NAPI wants this */
 	INIT_LIST_HEAD(&dev->napi_list);
@@ -10903,7 +10903,7 @@ int init_dummy_netdev(struct net_device *dev)
 	set_bit(__LINK_STATE_START, &dev->state);
 
 	/* napi_busy_loop stats accounting wants this */
-	dev_net_set(dev, &init_net);
+	dev_net_set(dev, &init_net);/*netdev设备放入init_net*/
 
 	/* Note : We dont allocate pcpu_refcnt for dummy devices,
 	 * because users of this 'device' dont need to change

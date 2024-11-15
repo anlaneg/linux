@@ -48,8 +48,8 @@ static int devm_irq_match(struct device *dev, void *res, void *data)
  *	If an IRQ allocated with this function needs to be freed
  *	separately, devm_free_irq() must be used.
  */
-int devm_request_threaded_irq(struct device *dev, unsigned int irq,
-			      irq_handler_t handler, irq_handler_t thread_fn,
+int devm_request_threaded_irq(struct device *dev, unsigned int irq/*中断号*/,
+			      irq_handler_t handler/*中断处理函数*/, irq_handler_t thread_fn/*进程中断处理函数(handler控制其触发)*/,
 			      unsigned long irqflags, const char *devname,
 			      void *dev_id)
 {
