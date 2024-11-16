@@ -454,11 +454,14 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 	return 0;
 }
 
+/*按frame control确定header length*/
 unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 {
+	/*默认header是24字节，即第4mac起始位置*/
 	unsigned int hdrlen = 24;
 
 	if (ieee80211_is_ext(fc)) {
+		/*ext情况下header len为4*/
 		hdrlen = 4;
 		goto out;
 	}
@@ -466,10 +469,13 @@ unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 	if (ieee80211_is_data(fc)) {
 		//fc指出为数据帧，检查是否存在address4(只有from ds ,to ds全为１时才存在）
 		if (ieee80211_has_a4(fc))
-			hdrlen = 30;//增加address地址长度6后变更为30
+			//增加address地址长度6后变更为30
+			hdrlen = 30;
 		if (ieee80211_is_data_qos(fc)) {
+			/*报文为qos data，长度增加qos控制字段*/
 			hdrlen += IEEE80211_QOS_CTL_LEN;
 			if (ieee80211_has_order(fc))
+				/*有order位标记，长度增加HT控制字段*/
 				hdrlen += IEEE80211_HT_CTL_LEN;
 		}
 		goto out;
@@ -478,6 +484,7 @@ unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 	//管理帧长度
 	if (ieee80211_is_mgmt(fc)) {
 		if (ieee80211_has_order(fc))
+			/*有order位标记，长度增加HT控制字段*/
 			hdrlen += IEEE80211_HT_CTL_LEN;
 		goto out;
 	}
@@ -499,7 +506,7 @@ unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 			hdrlen = 16;
 	}
 out:
-	return hdrlen;
+	return hdrlen;/*返回header length*/
 }
 EXPORT_SYMBOL(ieee80211_hdrlen);
 

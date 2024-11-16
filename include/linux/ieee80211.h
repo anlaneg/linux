@@ -22,6 +22,7 @@
 #include <asm/byteorder.h>
 #include <asm/unaligned.h>
 
+/*以下注释解析了，to ds,from ds标记作用下，各地址对应的意义*/
 /*
  * DS bit usage
  *
@@ -41,11 +42,11 @@
 #define FCS_LEN 4
 
 //frame control  字段中各数据项掩码
-//802.11版本对应的mask
+//802.11版本对应的mask(占用两个bits (0-1))
 #define IEEE80211_FCTL_VERS		0x0003
-//报文type对应的mask
+//报文type对应的mask（占用两个bits (2-3))
 #define IEEE80211_FCTL_FTYPE		0x000c
-//报文subtype对应的mask
+//报文subtype对应的mask（占用4个bits(4-7))
 #define IEEE80211_FCTL_STYPE		0x00f0
 //ds = distribution system
 //from,to均是相对于AP来说的，from ds表示报文由station发送给ap
@@ -53,13 +54,17 @@
 //from,to均为０时，表示station内部通信（管理报文，控制报文均为０）
 #define IEEE80211_FCTL_TODS		0x0100
 #define IEEE80211_FCTL_FROMDS		0x0200
+/*更多分段标记位，使用分段时，此位被标记为‘1’*/
 #define IEEE80211_FCTL_MOREFRAGS	0x0400
-//表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
+//重传标记位，表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
 #define IEEE80211_FCTL_RETRY		0x0800
+/*客户端进入省电模式时，此位被标记为'1'*/
 #define IEEE80211_FCTL_PM		0x1000
-//more data标记
+//more data标记位
 #define IEEE80211_FCTL_MOREDATA		0x2000
+/*受保护帧标记，帧体被加密时，此位被标记为‘1’*/
 #define IEEE80211_FCTL_PROTECTED	0x4000
+/*顺序位标记*/
 #define IEEE80211_FCTL_ORDER		0x8000
 #define IEEE80211_FCTL_CTL_EXT		0x0f00
 
@@ -109,6 +114,7 @@
 #define IEEE80211_STYPE_CFACK			0x0050
 #define IEEE80211_STYPE_CFPOLL			0x0060
 #define IEEE80211_STYPE_CFACKPOLL		0x0070
+/*子类型共占用4 bits,data的subtype为0x080时为qos数据包*/
 #define IEEE80211_STYPE_QOS_DATA		0x0080
 #define IEEE80211_STYPE_QOS_DATA_CFACK		0x0090
 #define IEEE80211_STYPE_QOS_DATA_CFPOLL		0x00A0
@@ -336,7 +342,7 @@ struct ieee80211_hdr {
 		u8 addr2[ETH_ALEN];
 		u8 addr3[ETH_ALEN];
 	);
-	__le16 seq_ctrl;
+	__le16 seq_ctrl;/*至此成员结尾，共计24字节*/
 	u8 addr4[ETH_ALEN];
 } __packed __aligned(2);
 
@@ -349,6 +355,7 @@ struct ieee80211_hdr_3addr {
 	__le16 seq_ctrl;
 } __packed __aligned(2);
 
+/*无addr4时的情况*/
 struct ieee80211_qos_hdr {
 	__le16 frame_control;
 	__le16 duration_id;
@@ -359,15 +366,16 @@ struct ieee80211_qos_hdr {
 	__le16 qos_ctrl;
 } __packed __aligned(2);
 
+/*有addr4时的情况*/
 struct ieee80211_qos_hdr_4addr {
 	__le16 frame_control;
 	__le16 duration_id;
 	u8 addr1[ETH_ALEN];
 	u8 addr2[ETH_ALEN];
 	u8 addr3[ETH_ALEN];
-	__le16 seq_ctrl;
-	u8 addr4[ETH_ALEN];
-	__le16 qos_ctrl;
+	__le16 seq_ctrl;/*顺序控制*/
+	u8 addr4[ETH_ALEN];/*地址4*/
+	__le16 qos_ctrl;/*qos控制*/
 } __packed __aligned(2);
 
 struct ieee80211_trigger {
@@ -461,6 +469,7 @@ static inline bool ieee80211_has_protected(__le16 fc)
  */
 static inline bool ieee80211_has_order(__le16 fc)
 {
+	/*是否有order位标记*/
 	return (fc & cpu_to_le16(IEEE80211_FCTL_ORDER)) != 0;
 }
 
@@ -503,6 +512,7 @@ static inline bool ieee80211_is_data(__le16 fc)
  */
 static inline bool ieee80211_is_ext(__le16 fc)
 {
+	/*检查所给类型是否为ext*/
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_EXT);
 }
@@ -514,6 +524,7 @@ static inline bool ieee80211_is_ext(__le16 fc)
  */
 static inline bool ieee80211_is_data_qos(__le16 fc)
 {
+	/*检查是否为qos数据包*/
 	/*
 	 * mask with QOS_DATA rather than IEEE80211_FCTL_STYPE as we just need
 	 * to check the one bit
@@ -4284,11 +4295,12 @@ struct ieee80211_he_6ghz_capa {
 static inline u8 *ieee80211_get_qos_ctl(struct ieee80211_hdr *hdr)
 {
 	union {
-		struct ieee80211_qos_hdr	addr3;
-		struct ieee80211_qos_hdr_4addr	addr4;
+		struct ieee80211_qos_hdr	addr3;/*无addr4时的情况*/
+		struct ieee80211_qos_hdr_4addr	addr4;/*有addr4时的情况*/
 	} *qos;
 
 	qos = (void *)hdr;
+	/*依据报文，返回qos_ctrl*/
 	if (ieee80211_has_a4(qos->addr3.frame_control))
 		return (u8 *)&qos->addr4.qos_ctrl;
 	else

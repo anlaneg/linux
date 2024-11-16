@@ -659,7 +659,7 @@ struct sta_info {
 	spinlock_t lock;
 
 	struct ieee80211_fast_tx __rcu *fast_tx;
-	struct ieee80211_fast_rx __rcu *fast_rx;
+	struct ieee80211_fast_rx __rcu *fast_rx;/*rx fastpath信息*/
 
 #ifdef CONFIG_MAC80211_MESH
 	struct mesh_sta *mesh;

@@ -263,6 +263,7 @@ void ieee80211_scan_rx(struct ieee80211_local *local, struct sk_buff *skb)
 	if (!ieee80211_is_probe_resp(mgmt->frame_control) &&
 	    !ieee80211_is_beacon(mgmt->frame_control) &&
 	    !ieee80211_is_s1g_beacon(mgmt->frame_control))
+		/*遇到其它报文，直接返回*/
 		return;
 
 	//只处理probe response,beacon报文
@@ -276,6 +277,7 @@ void ieee80211_scan_rx(struct ieee80211_local *local, struct sk_buff *skb)
 	}
 
 	if (skb->len < min_hdr_len)
+		/*报文长度有误，返回*/
 		return;
 
 	sdata1 = rcu_dereference(local->scan_sdata);

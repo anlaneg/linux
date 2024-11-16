@@ -863,7 +863,7 @@ ieee80211_rx_monitor(struct ieee80211_local *local, struct sk_buff *origskb,
 			}
 
 			if (skb) {
-				skb->dev = sdata->dev;
+				skb->dev = sdata->dev;/*设置报文所属的dev*/
 				dev_sw_netstats_rx_add(skb->dev, skb->len);
 				netif_receive_skb(skb);
 			}
@@ -891,9 +891,10 @@ static void ieee80211_parse_qos(struct ieee80211_rx_data *rx)
 
 	/* does the frame have a qos control field? */
 	if (ieee80211_is_data_qos(hdr->frame_control)) {
-		u8 *qc = ieee80211_get_qos_ctl(hdr);
+		/*有qos controller field的情况*/
+		u8 *qc = ieee80211_get_qos_ctl(hdr);/*取qos ctrl*/
 		/* frame has qos control */
-		tid = *qc & IEEE80211_QOS_CTL_TID_MASK;
+		tid = *qc & IEEE80211_QOS_CTL_TID_MASK;/*取tid*/
 		if (*qc & IEEE80211_QOS_CTL_A_MSDU_PRESENT)
 			status->rx_flags |= IEEE80211_RX_AMSDU;
 
@@ -4109,10 +4110,10 @@ static void ieee80211_rx_handlers(struct ieee80211_rx_data *rx,
 	ieee80211_rx_result res = RX_DROP_MONITOR;
 	struct sk_buff *skb;
 
-	/*定义辅助函数，如果返回值非continue,则直接跳过后续处理*/
+	/*定义辅助函数，如果rxh函数返回值非continue,则直接跳过后续处理*/
 #define CALL_RXH(rxh)			\
 	do {				\
-		res = rxh(rx);		\
+		res = rxh(rx);/*调用rxh函数*/		\
 		if (res != RX_CONTINUE)	\
 			goto rxh_next;  \
 	} while (0)
@@ -4223,7 +4224,7 @@ static bool ieee80211_rx_data_set_sta(struct ieee80211_rx_data *rx,
 				      struct sta_info *sta, int link_id)
 {
 	rx->link_id = link_id;
-	rx->sta = sta;
+	rx->sta = sta;/*设置rx的sta*/
 
 	if (sta) {
 		rx->local = sta->sdata->local;
@@ -4764,8 +4765,8 @@ static void ieee80211_rx_8023(struct ieee80211_rx_data *rx,
 	stats->last_rx = jiffies;
 	stats->last_rate = sta_stats_encode_rate(status);
 
-	stats->fragments++;
-	stats->packets++;
+	stats->fragments++;/*分片数*/
+	stats->packets++;/*报文数*/
 
 	skb->dev = fast_rx->dev;
 
@@ -5068,9 +5069,11 @@ static void __ieee80211_rx_handle_8023(struct ieee80211_hw *hw,
 
 	/* drop frame if too short for header */
 	if (skb->len < sizeof(struct ethhdr))
+		/*报文长度过小*/
 		goto drop;
 
 	if (!pubsta)
+		/*pubsta如果为空，直接drop*/
 		goto drop;
 
 	if (status->link_valid)
@@ -5083,7 +5086,7 @@ static void __ieee80211_rx_handle_8023(struct ieee80211_hw *hw,
 	 * link_id is used only for stats purpose and updating the stats on
 	 * the deflink is fine?
 	 */
-	sta = container_of(pubsta, struct sta_info, sta);
+	sta = container_of(pubsta, struct sta_info, sta);/*获得struct sta_info*/
 	if (!ieee80211_rx_data_set_sta(&rx, sta, link_id))
 		goto drop;
 
@@ -5151,19 +5154,20 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 
 	//取报文的fc字段
 	fc = ((struct ieee80211_hdr *)skb->data)->frame_control;
-	memset(&rx, 0, sizeof(rx));
+	memset(&rx, 0, sizeof(rx));/*rx结构体清空*/
 	rx.skb = skb;
 	rx.local = local;
 	rx.list = list;
 	rx.link_id = -1;
 
 	if (ieee80211_is_data(fc) || ieee80211_is_mgmt(fc))
+		/*mgmt,data类型的报文，增加统计计数*/
 		I802_DEBUG_INC(local->dot11ReceivedFragmentCount);
 
-	//对报文头部进行线性化
 	if (ieee80211_is_mgmt(fc)) {
+		/*管理类报文*/
 		/* drop frame if too short for header */
-		if (skb->len < ieee80211_hdrlen(fc))
+		if (skb->len < ieee80211_hdrlen(fc)/*各类型帧对应的header length*/)
 			err = -ENOBUFS;//丢掉过短的报文
 		else
 			err = skb_linearize(skb);
@@ -5184,6 +5188,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 	if (unlikely(ieee80211_is_probe_resp(hdr->frame_control) ||
 		     ieee80211_is_beacon(hdr->frame_control) ||
 		     ieee80211_is_s1g_beacon(hdr->frame_control)))
+		/*处理probe resp报文；beacon报文；s1g-beacon报文*/
 		ieee80211_scan_rx(local, skb);
 
 	if (ieee80211_is_data(fc)) {
@@ -5195,6 +5200,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 			link_id = status->link_id;
 
 		if (pubsta) {
+			/*pubsta不为空时，由pubsta获取结构体struct sta_info*/
 			sta = container_of(pubsta, struct sta_info, sta);
 			if (!ieee80211_rx_data_set_sta(&rx, sta, link_id))
 				goto out;
@@ -5262,6 +5268,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 
 	list_for_each_entry_rcu(sdata, &local->interfaces, list) {
 		if (!ieee80211_sdata_running(sdata))
+			/*忽略掉非running的*/
 			continue;
 
 		if (sdata->vif.type == NL80211_IFTYPE_MONITOR ||
@@ -5293,7 +5300,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
 	}
 
  out:
-	dev_kfree_skb(skb);
+	dev_kfree_skb(skb);/*报文丢弃*/
 }
 
 /*

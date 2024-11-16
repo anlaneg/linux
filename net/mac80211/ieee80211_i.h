@@ -1758,6 +1758,7 @@ struct ieee802_11_elems {
 static inline struct ieee80211_local *hw_to_local(
 	struct ieee80211_hw *hw)
 {
+	/*由hw获得ieee80211_local结构体*/
 	return container_of(hw, struct ieee80211_local, hw);
 }
 

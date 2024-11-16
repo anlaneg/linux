@@ -197,6 +197,7 @@ static void cleanup_single_sta(struct sta_info *sta)
 struct rhlist_head *sta_info_hash_lookup(struct ieee80211_local *local,
 					 const u8 *addr)
 {
+	/*通过addr查询sta_hash表*/
 	return rhltable_lookup(&local->sta_hash, addr, sta_rht_params);
 }
 
@@ -446,6 +447,7 @@ void sta_info_free(struct ieee80211_local *local, struct sta_info *sta)
 	kfree(sta);
 }
 
+/*添加sta进local->sta_hash*/
 static int sta_info_hash_add(struct ieee80211_local *local,
 			     struct sta_info *sta)
 {
@@ -845,7 +847,7 @@ static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
 	set_sta_flag(sta, WLAN_STA_BLOCK_BA);
 
 	/* make the station visible */
-	err = sta_info_hash_add(local, sta);
+	err = sta_info_hash_add(local, sta);/*添加sta*/
 	if (err)
 		goto out_drop_sta;
 

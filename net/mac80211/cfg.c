@@ -2080,7 +2080,7 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 	    test_sta_flag(sta, WLAN_STA_ASSOC))
 		rate_control_rate_init(sta);
 
-	return sta_info_insert(sta);
+	return sta_info_insert(sta);/*添加station*/
 }
 
 static int ieee80211_del_station(struct wiphy *wiphy, struct net_device *dev,
@@ -4982,7 +4982,7 @@ const struct cfg80211_ops mac80211_config_ops = {
 	.start_ap = ieee80211_start_ap,
 	.change_beacon = ieee80211_change_beacon,
 	.stop_ap = ieee80211_stop_ap,
-	.add_station = ieee80211_add_station,
+	.add_station = ieee80211_add_station,/*添加station*/
 	.del_station = ieee80211_del_station,
 	.change_station = ieee80211_change_station,
 	.get_station = ieee80211_get_station,

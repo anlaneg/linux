@@ -25,7 +25,7 @@
  */
 #define __struct_group(TAG, NAME, ATTRS, MEMBERS...) \
 	union { \
-		struct { MEMBERS } ATTRS; \
+		struct { MEMBERS /*各成员*/} ATTRS/*变量*/; \
 		struct TAG { MEMBERS } ATTRS NAME; \
 	} ATTRS
 
