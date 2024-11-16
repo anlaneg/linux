@@ -2067,7 +2067,6 @@ static void rtw89_core_rx_to_mac80211(struct rtw89_dev *rtwdev,
 	rtw89_core_update_radiotap(rtwdev, skb_ppdu, rx_status);
 	/* In low power mode, it does RX in thread context. */
 	local_bh_disable();
-	/*收到IEEE80211_RX_MSG类报文*/
 	ieee80211_rx_napi(rtwdev->hw, NULL, skb_ppdu, napi);
 	local_bh_enable();
 	rtwdev->napi_budget_countdown--;
@@ -2136,6 +2135,7 @@ static void rtw89_core_rx_process_report(struct rtw89_dev *rtwdev,
 		rtw89_core_rx_process_ppdu_sts(rtwdev, desc_info, skb);
 		break;
 	default:
+		/*不处理其它类型报文*/
 		rtw89_debug(rtwdev, RTW89_DBG_TXRX, "unhandled pkt_type=%d\n",
 			    desc_info->pkt_type);
 		dev_kfree_skb_any(skb);
@@ -2145,7 +2145,7 @@ static void rtw89_core_rx_process_report(struct rtw89_dev *rtwdev,
 
 void rtw89_core_query_rxdesc(struct rtw89_dev *rtwdev,
 			     struct rtw89_rx_desc_info *desc_info,
-			     u8 *data, u32 data_offset)
+			     u8 *data/*源数据*/, u32 data_offset/*针对源数据的offset*/)
 {
 	const struct rtw89_chip_info *chip = rtwdev->chip;
 	struct rtw89_rxdesc_short *rxd_s;
@@ -2153,9 +2153,11 @@ void rtw89_core_query_rxdesc(struct rtw89_dev *rtwdev,
 	u8 shift_len, drv_info_len;
 
 	rxd_s = (struct rtw89_rxdesc_short *)(data + data_offset);
+	/*取报文长度*/
 	desc_info->pkt_size = le32_get_bits(rxd_s->dword0, AX_RXD_RPKT_LEN_MASK);
 	desc_info->drv_info_size = le32_get_bits(rxd_s->dword0, AX_RXD_DRV_INFO_SIZE_MASK);
 	desc_info->long_rxdesc = le32_get_bits(rxd_s->dword0,  AX_RXD_LONG_RXD);
+	/*取报文类型*/
 	desc_info->pkt_type = le32_get_bits(rxd_s->dword0,  AX_RXD_RPKT_TYPE_MASK);
 	desc_info->mac_info_valid = le32_get_bits(rxd_s->dword0, AX_RXD_MAC_INFO_VLD);
 	if (chip->chip_id == RTL8852C)
@@ -2175,13 +2177,16 @@ void rtw89_core_query_rxdesc(struct rtw89_dev *rtwdev,
 	desc_info->sw_dec = le32_get_bits(rxd_s->dword3, AX_RXD_SW_DEC);
 	desc_info->addr1_match = le32_get_bits(rxd_s->dword3, AX_RXD_A1_MATCH);
 
+	/*desc_info->shift未赋值*/
 	shift_len = desc_info->shift << 1; /* 2-byte unit */
 	drv_info_len = desc_info->drv_info_size << 3; /* 8-byte unit */
 	desc_info->offset = data_offset + shift_len + drv_info_len;
+	/*rxd的长度是可变的,故记录rxd_len*/
 	if (desc_info->long_rxdesc)
 		desc_info->rxd_len = sizeof(struct rtw89_rxdesc_long);
 	else
 		desc_info->rxd_len = sizeof(struct rtw89_rxdesc_short);
+	/*利用此字段标记描述信息获取成功*/
 	desc_info->ready = true;
 
 	if (!desc_info->long_rxdesc)
@@ -2296,6 +2301,7 @@ static void rtw89_core_stats_sta_rx_status(struct rtw89_dev *rtwdev,
 		return;
 
 	if (desc_info->frame_type != RTW89_RX_TYPE_DATA)
+		/*非数据类报文直接返回*/
 		return;
 
 	iter_data.rtwdev = rtwdev;
@@ -2422,8 +2428,8 @@ static void rtw89_core_flush_ppdu_rx_queue(struct rtw89_dev *rtwdev,
 }
 
 void rtw89_core_rx(struct rtw89_dev *rtwdev,
-		   struct rtw89_rx_desc_info *desc_info,
-		   struct sk_buff *skb)
+		   struct rtw89_rx_desc_info *desc_info/*此报文相关的描述信息*/,
+		   struct sk_buff *skb/*收到的报文*/)
 {
 	struct ieee80211_rx_status *rx_status;
 	struct rtw89_ppdu_sts_info *ppdu_sts = &rtwdev->ppdu_sts;
@@ -2431,6 +2437,7 @@ void rtw89_core_rx(struct rtw89_dev *rtwdev,
 	u8 band = desc_info->bb_sel ? RTW89_PHY_1 : RTW89_PHY_0;
 
 	if (desc_info->pkt_type != RTW89_CORE_RX_TYPE_WIFI) {
+		/*所有非wifi报文自此处进入*/
 		rtw89_core_rx_process_report(rtwdev, desc_info, skb);
 		return;
 	}
@@ -2445,6 +2452,7 @@ void rtw89_core_rx(struct rtw89_dev *rtwdev,
 	rtw89_core_update_rx_status(rtwdev, desc_info, rx_status);
 	if (desc_info->long_rxdesc &&
 	    BIT(desc_info->frame_type) & PPDU_FILTER_BITMAP)
+		/*长描述符情况下,管理类及数据类报文挂在rx_queue上*/
 		skb_queue_tail(&ppdu_sts->rx_queue[band], skb);
 	else
 		rtw89_core_rx_to_mac80211(rtwdev, NULL, desc_info, skb, rx_status);

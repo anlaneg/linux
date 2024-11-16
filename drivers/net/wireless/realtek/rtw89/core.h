@@ -1012,8 +1012,8 @@ struct rtw89_txwd_info_v2 {
 
 /*rx ring描述符*/
 struct rtw89_rx_desc_info {
-	u16 pkt_size;
-	u8 pkt_type;
+	u16 pkt_size;/*报文长度*/
+	u8 pkt_type;/*报文类型*/
 	u8 drv_info_size;
 	u8 phy_rpt_size;
 	u8 hdr_cnv_size;
@@ -1043,7 +1043,7 @@ struct rtw89_rx_desc_info {
 	u8 addr_cam_id;
 	u8 sec_cam_id;
 	u8 mac_id;
-	u16 offset;
+	u16 offset;/*报文起始位置*/
 	u16 rxd_len;
 	bool ready;
 };
@@ -2786,10 +2786,10 @@ enum rtw89_gi_ltf {
 };
 
 enum rtw89_rx_frame_type {
-	RTW89_RX_TYPE_MGNT = 0,
-	RTW89_RX_TYPE_CTRL = 1,
-	RTW89_RX_TYPE_DATA = 2,
-	RTW89_RX_TYPE_RSVD = 3,
+	RTW89_RX_TYPE_MGNT = 0,/*管理类报文*/
+	RTW89_RX_TYPE_CTRL = 1,/*控制类报文*/
+	RTW89_RX_TYPE_DATA = 2,/*数据类报文*/
+	RTW89_RX_TYPE_RSVD = 3,/*预留*/
 };
 
 enum rtw89_efuse_block {
@@ -3087,9 +3087,11 @@ struct rtw89_hci_ops {
 
 	u8 (*read8)(struct rtw89_dev *rtwdev, u32 addr);
 	u16 (*read16)(struct rtw89_dev *rtwdev, u32 addr);
+	/*向rtwdev的指定地址读取u32类型的数据*/
 	u32 (*read32)(struct rtw89_dev *rtwdev, u32 addr);
 	void (*write8)(struct rtw89_dev *rtwdev, u32 addr, u8 data);
 	void (*write16)(struct rtw89_dev *rtwdev, u32 addr, u16 data);
+	/*向rtwdev的指定地址写u32类型*/
 	void (*write32)(struct rtw89_dev *rtwdev, u32 addr, u32 data);
 
 	int (*mac_pre_init)(struct rtw89_dev *rtwdev);
@@ -5019,7 +5021,7 @@ static inline u16 rtw89_read16(struct rtw89_dev *rtwdev, u32 addr)
 	return rtwdev->hci.ops->read16(rtwdev, addr);
 }
 
-static inline u32 rtw89_read32(struct rtw89_dev *rtwdev, u32 addr)
+static inline u32 rtw89_read32(struct rtw89_dev *rtwdev, u32 addr/*要读取的地址*/)
 {
 	return rtwdev->hci.ops->read32(rtwdev, addr);
 }
@@ -5034,7 +5036,7 @@ static inline void rtw89_write16(struct rtw89_dev *rtwdev, u32 addr, u16 data)
 	rtwdev->hci.ops->write16(rtwdev, addr, data);
 }
 
-static inline void rtw89_write32(struct rtw89_dev *rtwdev, u32 addr, u32 data)
+static inline void rtw89_write32(struct rtw89_dev *rtwdev, u32 addr/*写得地址*/, u32 data/*要写得内容*/)
 {
 	rtwdev->hci.ops->write32(rtwdev, addr, data);
 }
@@ -5676,10 +5678,13 @@ static inline u8 *get_hdr_bssid(struct ieee80211_hdr *hdr)
 	__le16 fc = hdr->frame_control;
 
 	if (ieee80211_has_tods(fc))
+		/*TO DS标记有,bss有add1*/
 		return hdr->addr1;
 	else if (ieee80211_has_fromds(fc))
+		/*FROM DS标记有,bss在addr2*/
 		return hdr->addr2;
 	else
+		/*否则 bss在addr3*/
 		return hdr->addr3;
 }
 

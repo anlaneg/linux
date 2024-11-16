@@ -20,6 +20,7 @@
  */
 #if !defined(__ASSEMBLY__)
 #include <linux/build_bug.h>
+/*校验l<h,否则报错*/
 #define GENMASK_INPUT_CHECK(h, l) \
 	(BUILD_BUG_ON_ZERO(__builtin_choose_expr( \
 		__is_constexpr((l) > (h)), (l) > (h), 0)))
@@ -35,6 +36,7 @@
 #define __GENMASK(h, l) \
 	(((~UL(0)) - (UL(1) << (l)) + 1) /*将l位后面全部清为0，l位前面全置为1*/& \
 	 (~UL(0) >> (BITS_PER_LONG - 1 - (h)))/*将h位前面全置为0*/)
+/*使用_GENMASK构造(l,h)之间bit全为1*/
 #define GENMASK(h, l) \
 	(GENMASK_INPUT_CHECK(h, l) + __GENMASK(h, l))
 

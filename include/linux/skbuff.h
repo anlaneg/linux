@@ -52,7 +52,7 @@
  * A driver typically only advertises features that it is capable of offloading
  * to its device.
  *
- * .. flat-table:: Checksum related device features
+ * .. flat-table:: Cheinclude/linux/skbuff.hcksum related device features
  *   :widths: 1 10
  *
  *   * - %NETIF_F_HW_CSUM

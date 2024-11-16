@@ -44,6 +44,7 @@ static u32 rtw89_pci_dma_recalc(struct rtw89_dev *rtwdev,
 	wp = bd_ring->wp;
 	len = bd_ring->len;
 
+	/*取cur_idx中的一部分bits*/
 	cur_rp = FIELD_GET(TXBD_HW_IDX_MASK, cur_idx);
 	if (tx) {
 		cnt = cur_rp >= rp ? cur_rp - rp : len - (rp - cur_rp);
@@ -67,7 +68,7 @@ static u32 rtw89_pci_txbd_recalc(struct rtw89_dev *rtwdev,
 	u32 cnt, idx;
 
 	idx = rtw89_read32(rtwdev, addr_idx);
-	cnt = rtw89_pci_dma_recalc(rtwdev, bd_ring, idx, true);
+	cnt = rtw89_pci_dma_recalc(rtwdev, bd_ring, idx, true/*tx函数*/);
 
 	return cnt;
 }
@@ -126,7 +127,7 @@ static u32 rtw89_pci_rxbd_recalc(struct rtw89_dev *rtwdev,
 	u32 cnt, idx;
 
 	idx = rtw89_read32(rtwdev, addr_idx);
-	cnt = rtw89_pci_dma_recalc(rtwdev, bd_ring, idx, false);
+	cnt = rtw89_pci_dma_recalc(rtwdev, bd_ring, idx, false/*rx函数*/);
 
 	return cnt;
 }
@@ -139,7 +140,7 @@ static void rtw89_pci_sync_skb_for_cpu(struct rtw89_dev *rtwdev,
 
 	rx_info = RTW89_PCI_RX_SKB_CB(skb);
 	dma = rx_info->dma;
-	dma_sync_single_for_cpu(rtwdev->dev, dma, RTW89_PCI_RX_BUF_SIZE,
+	dma_sync_single_for_cpu(rtwdev->dev, dma, RTW89_PCI_RX_BUF_SIZE/*RX buffer大小*/,
 				DMA_FROM_DEVICE);
 }
 
@@ -155,16 +156,22 @@ static void rtw89_pci_sync_skb_for_device(struct rtw89_dev *rtwdev,
 				   DMA_FROM_DEVICE);
 }
 
+/*skb是rx buffer,利用其内容中的rtw89_pci_rxbd_info成员,填充rtw89_pci_rx_info*/
 static int rtw89_pci_rxbd_info_update(struct rtw89_dev *rtwdev,
 				      struct sk_buff *skb)
 {
 	struct rtw89_pci_rxbd_info *rxbd_info;
 	struct rtw89_pci_rx_info *rx_info = RTW89_PCI_RX_SKB_CB(skb);
 
+	/*rx buffer的data指向的是rtw89_pci_rxbd_info结构(一个小端32bits的数),利用RXBD填充rx_info*/
 	rxbd_info = (struct rtw89_pci_rxbd_info *)skb->data;
+	/*取FS位*/
 	rx_info->fs = le32_get_bits(rxbd_info->dword, RTW89_PCI_RXBD_FS);
+	/*取LS位*/
 	rx_info->ls = le32_get_bits(rxbd_info->dword, RTW89_PCI_RXBD_LS);
+	/*取报文长度*/
 	rx_info->len = le32_get_bits(rxbd_info->dword, RTW89_PCI_RXBD_WRITE_SIZE);
+	/*取tag*/
 	rx_info->tag = le32_get_bits(rxbd_info->dword, RTW89_PCI_RXBD_TAG);
 
 	return 0;
@@ -199,13 +206,13 @@ static void rtw89_pci_ctrl_txdma_fw_ch_pcie(struct rtw89_dev *rtwdev, bool enabl
 }
 
 static bool
-rtw89_skb_put_rx_data(struct rtw89_dev *rtwdev, bool fs, bool ls,
-		      struct sk_buff *new,
-		      const struct sk_buff *skb, u32 offset,
+rtw89_skb_put_rx_data(struct rtw89_dev *rtwdev, bool fs/*是否首片*/, bool ls/*是否最后一片*/,
+		      struct sk_buff *new/*报文存放位置*/,
+		      const struct sk_buff *skb/*报文来源位置*/, u32 offset/*报文在源位置中的offset*/,
 		      const struct rtw89_pci_rx_info *rx_info,
 		      const struct rtw89_rx_desc_info *desc_info)
 {
-	u32 copy_len = rx_info->len - offset;
+	u32 copy_len = rx_info->len - offset;/*此片长度*/
 
 	if (unlikely(skb_tailroom(new) < copy_len)) {
 		rtw89_debug(rtwdev, RTW89_DBG_TXRX,
@@ -259,9 +266,10 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 	int ret;
 
 	skb_idx = rtw89_pci_get_rx_skb_idx(rtwdev, bd_ring);
-	skb = rx_ring->buf[skb_idx];
+	skb = rx_ring->buf[skb_idx];/*取skb_idx号rx buffer*/
 	rtw89_pci_sync_skb_for_cpu(rtwdev, skb);
 
+	/*取内容,填充struct rtw89_pci_rx_info*/
 	ret = rtw89_pci_rxbd_info_update(rtwdev, skb);
 	if (ret) {
 		rtw89_err(rtwdev, "failed to update %d RXBD info: %d\n",
@@ -274,44 +282,53 @@ static u32 rtw89_pci_rxbd_deliver_skbs(struct rtw89_dev *rtwdev,
 	ls = rx_info->ls;
 
 	if (fs) {
+		/*此rx buffer是首片*/
 		if (new) {
+			/*首片时,new应该为空*/
 			rtw89_debug(rtwdev, RTW89_DBG_UNEXP,
 				    "skb should not be ready before first segment start\n");
 			goto err_sync_device;
 		}
 		if (desc_info->ready) {
+			/*首片时,desc_info->ready应该也不为真*/
 			rtw89_warn(rtwdev, "desc info should not be ready before first segment start\n");
 			goto err_sync_device;
 		}
 
+		/*skb->data指向的是rx buffer,跳过上面获得的rxinfo_size,再获取报文的描述信息*/
 		rtw89_chip_query_rxdesc(rtwdev, desc_info, skb->data, rxinfo_size);
 
-		/*申请pkt_size长度所需要的skb*/
+		/*收到了长度为desc_info->pkt_size的报文(可能分了多个片),申请所需要长度的skb*/
 		new = rtw89_alloc_skb_for_rx(rtwdev, desc_info->pkt_size);
 		if (!new)
 			goto err_sync_device;
 
-		rx_ring->diliver_skb = new;
+		rx_ring->diliver_skb = new;/*填写准备投递的skb*/
 
 		/* first segment has RX desc */
-		offset = desc_info->offset + desc_info->rxd_len;
+		offset = desc_info->offset + desc_info->rxd_len;/*收到的报文起始偏移量*/
 	} else {
+		/*非首片时,offset是常量*/
 		offset = sizeof(struct rtw89_pci_rxbd_info);
 		if (!new) {
+			/*此时new一定是有值的*/
 			rtw89_debug(rtwdev, RTW89_DBG_UNEXP, "no last skb\n");
 			goto err_sync_device;
 		}
 	}
-	if (!rtw89_skb_put_rx_data(rtwdev, fs, ls, new, skb, offset, rx_info, desc_info))
+
+	/*收取内容,skb是rx buffer,自skb->data + offset位置开始为实际内容起始位置*/
+	if (!rtw89_skb_put_rx_data(rtwdev, fs/*是否首片*/, ls/*是否最后一片*/, new/*报文存放位置*/, skb/*报文来源位置*/, offset/*报文在源位置中的offset*/, rx_info, desc_info))
 		goto err_sync_device;
 	rtw89_pci_sync_skb_for_device(rtwdev, skb);
-	rtw89_pci_rxbd_increase(rx_ring, 1);
+	rtw89_pci_rxbd_increase(rx_ring, 1);/*一个包收完*/
 
 	if (!desc_info->ready) {
 		rtw89_warn(rtwdev, "no rx desc information\n");
 		goto err_free_resource;
 	}
 	if (ls) {
+		/*直到遇到最后一片，才触发收包*/
 		rtw89_core_rx(rtwdev, desc_info, new/*收到的报文*/);
 		rx_ring->diliver_skb = NULL;
 		desc_info->ready = false;
@@ -365,6 +382,7 @@ static int rtw89_pci_poll_rxq_dma(struct rtw89_dev *rtwdev,
 
 	cnt = rtw89_pci_rxbd_recalc(rtwdev, rx_ring);
 	if (!cnt)
+		/*可收取数量为0,直接返回*/
 		return 0;
 
 	cnt = min_t(u32, budget, cnt);
@@ -3856,6 +3874,7 @@ static int rtw89_pci_napi_poll(struct napi_struct *napi, int budget)
 {
 	/*获得rtw89_dev*/
 	struct rtw89_dev *rtwdev = container_of(napi, struct rtw89_dev, napi);
+	/*获得rtw89_pci设备*/
 	struct rtw89_pci *rtwpci = (struct rtw89_pci *)rtwdev->priv;
 	const struct rtw89_pci_info *info = rtwdev->pci_info;
 	const struct rtw89_pci_gen_def *gen_def = info->gen_def;

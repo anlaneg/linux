@@ -4768,7 +4768,7 @@ static void ieee80211_rx_8023(struct ieee80211_rx_data *rx,
 	stats->fragments++;/*分片数*/
 	stats->packets++;/*报文数*/
 
-	skb->dev = fast_rx->dev;
+	skb->dev = fast_rx->dev;/*指明报文对应的设备*/
 
 	dev_sw_netstats_rx_add(fast_rx->dev, skb->len);
 
@@ -5308,7 +5308,7 @@ static void __ieee80211_rx_handle_packet(struct ieee80211_hw *hw,
  * 802.11 MPDU is received from the hardware.
  */
 void ieee80211_rx_list(struct ieee80211_hw *hw, struct ieee80211_sta *pubsta,
-		       struct sk_buff *skb, struct list_head *list)
+		       struct sk_buff *skb/*收到的报文*/, struct list_head *list)
 {
 	struct ieee80211_local *local = hw_to_local(hw);
 	struct ieee80211_rate *rate = NULL;

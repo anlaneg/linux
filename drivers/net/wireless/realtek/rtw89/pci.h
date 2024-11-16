@@ -471,6 +471,7 @@
 #define R_AX_CH11_TXBD_IDX_V1	0x11D4
 #define R_AX_RXQ_RXBD_IDX_V1	0x1218
 #define R_AX_RPQ_RXBD_IDX_V1	0x121C
+/*取16-27位间的内容(共12 bits)*/
 #define TXBD_HW_IDX_MASK	GENMASK(27, 16)
 #define TXBD_HOST_IDX_MASK	GENMASK(11, 0)
 
@@ -1275,8 +1276,8 @@ struct rtw89_pci_tx_data {
 };
 
 struct rtw89_pci_rx_info {
-	dma_addr_t dma;
-	u32 fs:1/*指first segment*/, ls:1/*指last segment*/, tag:11, len:14;
+	dma_addr_t dma;/*DMA地址*/
+	u32 fs:1/*指first segment*/, ls:1/*指last segment*/, tag:11, len:14/*此片长度*/;
 };
 
 #define RTW89_PCI_TXBD_OPTION_LS	BIT(14)
@@ -1341,7 +1342,9 @@ struct rtw89_pci_rx_bd_32 {
 
 #define RTW89_PCI_RXBD_FS		BIT(15)
 #define RTW89_PCI_RXBD_LS		BIT(14)
+/*write size占用0-13 bits*/
 #define RTW89_PCI_RXBD_WRITE_SIZE	GENMASK(13, 0)
+/*tag占用16-28bits*/
 #define RTW89_PCI_RXBD_TAG		GENMASK(28, 16)
 
 struct rtw89_pci_rxbd_info {

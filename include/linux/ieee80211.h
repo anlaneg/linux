@@ -391,9 +391,9 @@ struct ieee80211_trigger {
  * ieee80211_has_tods - check if IEEE80211_FCTL_TODS is set
  * @fc: frame control bytes in little-endian byteorder
  */
-//报文由ap发送给station
 static inline bool ieee80211_has_tods(__le16 fc)
 {
+	/*检查TO DS标记是否为1*/
 	return (fc & cpu_to_le16(IEEE80211_FCTL_TODS)) != 0;
 }
 
@@ -403,6 +403,7 @@ static inline bool ieee80211_has_tods(__le16 fc)
  */
 static inline bool ieee80211_has_fromds(__le16 fc)
 {
+	/*检查FROM DS标记是否为1*/
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FROMDS)) != 0;
 }
 

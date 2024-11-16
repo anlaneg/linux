@@ -313,11 +313,13 @@ static inline u8 rtw89_get_data_nss(struct rtw89_dev *rtwdev, u16 hw_rate)
 #define BE_TXD_INFO7_EXTEND_MODE_SEL GENMASK(31, 28)
 
 /* RX WD dword0 */
+/*0-13 是报文长度*/
 #define AX_RXD_RPKT_LEN_MASK GENMASK(13, 0)
 #define AX_RXD_SHIFT_MASK GENMASK(15, 14)
 #define AX_RXD_WL_HD_IV_LEN_MASK GENMASK(21, 16)
 #define AX_RXD_BB_SEL BIT(22)
 #define AX_RXD_MAC_INFO_VLD BIT(23)
+/*24-27 是报文类型*/
 #define AX_RXD_RPKT_TYPE_MASK GENMASK(27, 24)
 #define AX_RXD_DRV_INFO_SIZE_MASK GENMASK(30, 28)
 #define AX_RXD_LONG_RXD BIT(31)
