@@ -167,6 +167,7 @@ static inline int for_each_rdev_check_rtnl(void)
 	ASSERT_RTNL();
 	return 0;
 }
+/*遍历所有rdev*/
 #define for_each_rdev(rdev)						\
 	if (for_each_rdev_check_rtnl()) {} else				\
 		list_for_each_entry(rdev, &cfg80211_rdev_list, list)

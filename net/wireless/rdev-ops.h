@@ -198,6 +198,7 @@ static inline int rdev_add_station(struct cfg80211_registered_device *rdev,
 {
 	int ret;
 	trace_rdev_add_station(&rdev->wiphy, dev, mac, params);
+	/*调用add_station回调函数*/
 	ret = rdev->ops->add_station(&rdev->wiphy, dev, mac, params);
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;

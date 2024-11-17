@@ -3828,11 +3828,11 @@ int nl80211_send_chandef(struct sk_buff *msg, const struct cfg80211_chan_def *ch
 EXPORT_SYMBOL(nl80211_send_chandef);
 
 static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flags,
-			      struct cfg80211_registered_device *rdev,
-			      struct wireless_dev *wdev,
+			      struct cfg80211_registered_device *rdev/*无线设备从属的rdev*/,
+			      struct wireless_dev *wdev/*要发送的无线设备*/,
 			      enum nl80211_commands cmd)
 {
-	struct net_device *dev = wdev->netdev;
+	struct net_device *dev = wdev->netdev;/*取此无线设备对应的netdev*/
 	void *hdr;
 
 	lockdep_assert_wiphy(&rdev->wiphy);
@@ -3848,13 +3848,14 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 	if (dev &&
 	    (nla_put_u32(msg, NL80211_ATTR_IFINDEX, dev->ifindex) ||
 	     nla_put_string(msg, NL80211_ATTR_IFNAME, dev->name)))
+		/*存入netdev的ifindex及name*/
 		goto nla_put_failure;
 
-	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) ||
-	    nla_put_u32(msg, NL80211_ATTR_IFTYPE, wdev->iftype) ||
+	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) /*存入wiphy index*/||
+	    nla_put_u32(msg, NL80211_ATTR_IFTYPE, wdev->iftype)/*存入iftype*/ ||
 	    nla_put_u64_64bit(msg, NL80211_ATTR_WDEV, wdev_id(wdev),
 			      NL80211_ATTR_PAD) ||
-	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, wdev_address(wdev)) ||
+	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, wdev_address(wdev)) /*存入wdev mac地址*/||
 	    nla_put_u32(msg, NL80211_ATTR_GENERATION,
 			rdev->devlist_generation ^
 			(cfg80211_rdev_list_generation << 2)) ||
@@ -3865,7 +3866,9 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 		struct cfg80211_chan_def chandef = {};
 		int ret;
 
+		/*获取channel信息*/
 		ret = rdev_get_channel(rdev, wdev, 0, &chandef);
+		/*发送channel信息*/
 		if (ret == 0 && nl80211_send_chandef(msg, &chandef))
 			goto nla_put_failure;
 	}
@@ -3880,6 +3883,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 			goto nla_put_failure;
 	}
 
+	/*存入ssid*/
 	switch (wdev->iftype) {
 	case NL80211_IFTYPE_AP:
 	case NL80211_IFTYPE_P2P_GO:
@@ -3993,23 +3997,27 @@ static int nl80211_dump_interface(struct sk_buff *skb, struct netlink_callback *
 
 	for_each_rdev(rdev) {
 		if (!net_eq(wiphy_net(&rdev->wiphy), sock_net(skb->sk)))
+			/*跳过netns不同的rdev*/
 			continue;
 		if (wp_idx < wp_start) {
 			wp_idx++;
-			continue;
+			continue;/*未达到约定的rdev前*/
 		}
 
 		if (filter_wiphy >= 0 && filter_wiphy != rdev->wiphy_idx)
-			continue;
+			continue;/*指明了filter,此rdev与fitler约定不匹配*/
 
 		if_idx = 0;
 
 		wiphy_lock(&rdev->wiphy);
+		/*遍历此rdev下所有wireless设备*/
 		list_for_each_entry(wdev, &rdev->wiphy.wdev_list, list) {
 			if (if_idx < if_start) {
-				if_idx++;
+				if_idx++;/*未达到约定的interface前*/
 				continue;
 			}
+
+			/*返回此wireless设备信息*/
 			if (nl80211_send_iface(skb, NETLINK_CB(cb->skb).portid,
 					       cb->nlh->nlmsg_seq, NLM_F_MULTI,
 					       rdev, wdev,
@@ -7358,6 +7366,7 @@ static int nl80211_new_station(struct sk_buff *skb, struct genl_info *info)
 	memset(&params, 0, sizeof(params));
 
 	if (!rdev->ops->add_station)
+		/*必须提供此回调*/
 		return -EOPNOTSUPP;
 
 	if (!info->attrs[NL80211_ATTR_MAC])
@@ -16715,10 +16724,10 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 		.flags = GENL_UNS_ADMIN_PERM,
 	},
 	{
-		.cmd = NL80211_CMD_GET_INTERFACE,
+		.cmd = NL80211_CMD_GET_INTERFACE,/*显示一个或dump interface信息*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nl80211_get_interface,
-		.dumpit = nl80211_dump_interface,
+		.dumpit = nl80211_dump_interface,/*dump interface信息*/
 		/* can be retrieved by unprivileged users */
 		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WDEV),
 	},
@@ -17561,6 +17570,7 @@ static struct genl_family nl80211_fam __ro_after_init = {
 	//对外提供的netlink操作命令回调
 	.ops = nl80211_ops,
 	.n_ops = ARRAY_SIZE(nl80211_ops),
+	/*操作集*/
 	.small_ops = nl80211_small_ops,
 	.n_small_ops = ARRAY_SIZE(nl80211_small_ops),
 	.resv_start_op = NL80211_CMD_REMOVE_LINK_STA + 1,

@@ -40,8 +40,8 @@ MODULE_DESCRIPTION("wireless configuration support");
 MODULE_ALIAS_GENL_FAMILY(NL80211_GENL_NAME);
 
 /* RCU-protected (and RTNL for writers) */
-LIST_HEAD(cfg80211_rdev_list);
-int cfg80211_rdev_list_generation;
+LIST_HEAD(cfg80211_rdev_list);/*记录系统所有rdev*/
+int cfg80211_rdev_list_generation;/*记录rdev链上元素数*/
 
 /* for debugfs */
 static struct dentry *ieee80211_debugfs_dir;
@@ -971,7 +971,7 @@ int wiphy_register(struct wiphy *wiphy)
 		return res;
 	}
 
-	//将设备注册到cfg80211_rdev_list链表上
+	//将设备注册到cfg80211_rdev_list链表上(此链表收集系统所有rdev)
 	list_add_rcu(&rdev->list, &cfg80211_rdev_list);
 	cfg80211_rdev_list_generation++;
 
@@ -1408,6 +1408,7 @@ void cfg80211_register_wdev(struct cfg80211_registered_device *rdev,
 	 */
 	if (!wdev->identifier)
 		wdev->identifier = ++rdev->wdev_id;
+	/*将此wireless_dev加入其所属的wiphy*/
 	list_add_rcu(&wdev->list, &rdev->wiphy.wdev_list);
 	rdev->devlist_generation++;
 	wdev->registered = true;

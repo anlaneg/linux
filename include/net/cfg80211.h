@@ -5687,7 +5687,7 @@ struct wiphy {
 	const struct ieee80211_ht_cap *ht_capa_mod_mask;
 	const struct ieee80211_vht_cap *vht_capa_mod_mask;
 
-	struct list_head wdev_list;
+	struct list_head wdev_list;/*用于串连从属于此wiphy的所有wireless_dev*/
 
 	possible_net_t _net;
 
@@ -5741,6 +5741,7 @@ struct wiphy {
 	char priv[] __aligned(NETDEV_ALIGN);
 };
 
+/*获取wiphy所属的net ns*/
 static inline struct net *wiphy_net(struct wiphy *wiphy)
 {
 	return read_pnet(&wiphy->_net);
@@ -6126,7 +6127,7 @@ void wiphy_delayed_work_flush(struct wiphy *wiphy,
  */
 struct wireless_dev {
 	struct wiphy *wiphy;
-	enum nl80211_iftype iftype;
+	enum nl80211_iftype iftype;/*接口类型*/
 
 	/* the remainder of this struct should be private to cfg80211 */
 	struct list_head list;
