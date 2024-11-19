@@ -2883,9 +2883,9 @@ enum ieee80211_hw_flags {
  */
 struct ieee80211_hw {
 	struct ieee80211_conf conf;
-	struct wiphy *wiphy;
+	struct wiphy *wiphy;/*关联的wiphy*/
 	const char *rate_control_algorithm;
-	void *priv;
+	void *priv;/*指向私有数据*/
 	unsigned long flags[BITS_TO_LONGS(NUM_IEEE80211_HW_FLAGS)];
 	unsigned int extra_tx_headroom;
 	unsigned int extra_beacon_tailroom;
@@ -2927,6 +2927,7 @@ static inline bool _ieee80211_hw_check(struct ieee80211_hw *hw,
 }
 #define ieee80211_hw_check(hw, flg)	_ieee80211_hw_check(hw, IEEE80211_HW_##flg)
 
+/*设置hw->flags*/
 static inline void _ieee80211_hw_set(struct ieee80211_hw *hw,
 				     enum ieee80211_hw_flags flg)
 {
@@ -4710,9 +4711,10 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
  * Return: A pointer to the new hardware device, or %NULL on error.
  */
 static inline
-struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len,
+struct ieee80211_hw *ieee80211_alloc_hw(size_t priv_data_len/*私有数据长度*/,
 					const struct ieee80211_ops *ops)
 {
+	/*申请ieee80211_hw结构体*/
 	return ieee80211_alloc_hw_nm(priv_data_len, ops, NULL);
 }
 

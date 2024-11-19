@@ -4496,6 +4496,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 	const struct ethhdr *eth = (void *)skb->data;
 
 	if (likely(!is_multicast_ether_addr(eth->h_dest)))
+		/*目的地址非组播，走normal*/
 		goto normal;
 
 	if (unlikely(!ieee80211_sdata_running(sdata))) {
@@ -4508,6 +4509,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 
 		__skb_queue_head_init(&queue);
 		ieee80211_convert_to_unicast(skb, dev, &queue);
+		/*自queue中出所有skb*/
 		while ((skb = __skb_dequeue(&queue)))
 			__ieee80211_subif_start_xmit(skb, dev, 0,
 						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,

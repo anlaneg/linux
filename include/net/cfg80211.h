@@ -4554,7 +4554,7 @@ struct cfg80211_ops {
 	void	(*set_wakeup)(struct wiphy *wiphy, bool enabled);
 
 	struct wireless_dev * (*add_virtual_intf)(struct wiphy *wiphy,
-						  const char *name,
+						  const char *name/*添加的接口名称*/,
 						  unsigned char name_assign_type,
 						  enum nl80211_iftype type,
 						  struct vif_params *params);
@@ -5843,7 +5843,7 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv,
 static inline struct wiphy *wiphy_new(const struct cfg80211_ops *ops,
 				      int sizeof_priv/*私有结构体大小*/)
 {
-	return wiphy_new_nm(ops, sizeof_priv, NULL);
+	return wiphy_new_nm(ops, sizeof_priv, NULL/*request名称为NULL*/);
 }
 
 /**
@@ -6126,7 +6126,7 @@ void wiphy_delayed_work_flush(struct wiphy *wiphy,
  * @valid_links: bitmap describing what elements of @links are valid
  */
 struct wireless_dev {
-	struct wiphy *wiphy;
+	struct wiphy *wiphy;/*wdev对应的wiphy*/
 	enum nl80211_iftype iftype;/*接口类型*/
 
 	/* the remainder of this struct should be private to cfg80211 */
@@ -6138,7 +6138,7 @@ struct wireless_dev {
 	struct list_head mgmt_registrations;
 	u8 mgmt_registrations_need_update:1;
 
-	bool use_4addr, is_running, registered, registering;
+	bool use_4addr, is_running, registered/*已注册*/, registering;
 
 	u8 address[ETH_ALEN] __aligned(sizeof(u16));
 

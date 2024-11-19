@@ -834,7 +834,7 @@ static const struct net_device_ops ieee80211_dataif_ops = {
 	.ndo_open		= ieee80211_open,
 	.ndo_stop		= ieee80211_stop,
 	.ndo_uninit		= ieee80211_uninit,
-	.ndo_start_xmit		= ieee80211_subif_start_xmit,
+	.ndo_start_xmit		= ieee80211_subif_start_xmit,/*报文发送*/
 	.ndo_set_rx_mode	= ieee80211_set_multicast_list,
 	.ndo_set_mac_address 	= ieee80211_change_mac,
 	.ndo_get_stats64	= ieee80211_get_stats64,
@@ -1468,7 +1468,7 @@ static void ieee80211_if_setup(struct net_device *dev)
 	ether_setup(dev);
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_NO_QUEUE;
-	dev->netdev_ops = &ieee80211_dataif_ops;
+	dev->netdev_ops = &ieee80211_dataif_ops;/*操作集*/
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = ieee80211_if_free;
 }
@@ -2034,9 +2034,9 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 	}
 }
 
-int ieee80211_if_add(struct ieee80211_local *local, const char *name,
+int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名称*/,
 		     unsigned char name_assign_type,
-		     struct wireless_dev **new_wdev, enum nl80211_iftype type,
+		     struct wireless_dev **new_wdev, enum nl80211_iftype type/*接口类型*/,
 		     struct vif_params *params)
 {
 	struct net_device *ndev = NULL;
@@ -2072,9 +2072,10 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name,
 			txq_size += sizeof(struct txq_info) +
 				    local->hw.txq_data_size;
 
+		/*创建网络设备*/
 		ndev = alloc_netdev_mqs(size + txq_size,
 					name, name_assign_type,
-					ieee80211_if_setup, 1, 1);
+					ieee80211_if_setup/*设备初始化函数*/, 1, 1);
 		if (!ndev)
 			return -ENOMEM;
 

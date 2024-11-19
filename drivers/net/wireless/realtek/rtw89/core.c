@@ -4300,6 +4300,7 @@ EXPORT_SYMBOL(rtw89_chip_info_setup);
 
 static int rtw89_core_register_hw(struct rtw89_dev *rtwdev)
 {
+	/*取rtw89_dev关联的ieee80211_hw*/
 	struct ieee80211_hw *hw = rtwdev->hw;
 	struct rtw89_efuse *efuse = &rtwdev->efuse;
 	struct rtw89_hal *hal = &rtwdev->hal;
@@ -4319,6 +4320,7 @@ static int rtw89_core_register_hw(struct rtw89_dev *rtwdev)
 	hw->max_tx_aggregation_subframes = RTW89_MAX_TX_AGG_NUM;
 	hw->uapsd_max_sp_len = IEEE80211_WMM_IE_STA_QOSINFO_SP_ALL;
 
+	/*添加标记*/
 	ieee80211_hw_set(hw, SIGNAL_DBM);
 	ieee80211_hw_set(hw, HAS_RATE_CONTROL);
 	ieee80211_hw_set(hw, MFP_CAPABLE);
@@ -4387,6 +4389,7 @@ static int rtw89_core_register_hw(struct rtw89_dev *rtwdev)
 
 	hw->wiphy->sar_capa = &rtw89_sar_capa;
 
+	/*调用api产生hw设备*/
 	ret = ieee80211_register_hw(hw);
 	if (ret) {
 		rtw89_err(rtwdev, "failed to register hw\n");
@@ -4421,7 +4424,7 @@ int rtw89_core_register(struct rtw89_dev *rtwdev)
 {
 	int ret;
 
-	ret = rtw89_core_register_hw(rtwdev);
+	ret = rtw89_core_register_hw(rtwdev);/*rtw89_dev注册*/
 	if (ret) {
 		rtw89_err(rtwdev, "failed to register core hw\n");
 		return ret;
@@ -4439,6 +4442,7 @@ void rtw89_core_unregister(struct rtw89_dev *rtwdev)
 }
 EXPORT_SYMBOL(rtw89_core_unregister);
 
+/*创建ieee80211_hw结构体，及rtw89_dev*/
 struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 					   u32 bus_data_size,
 					   const struct rtw89_chip_info *chip)
@@ -4474,7 +4478,8 @@ struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 	}
 
 	driver_data_size = sizeof(struct rtw89_dev) + bus_data_size;
-	hw = ieee80211_alloc_hw(driver_data_size, ops);/*申请hardware device*/
+	/*调用api申请hardware device，此时rdev,local均会被创建*/
+	hw = ieee80211_alloc_hw(driver_data_size, ops);
 	if (!hw)
 		goto err;
 
@@ -4485,6 +4490,7 @@ struct rtw89_dev *rtw89_alloc_ieee80211_hw(struct device *device,
 	else
 		hw->wiphy->n_iface_combinations = ARRAY_SIZE(rtw89_iface_combs);
 
+	/*如果上driver_data_size即为结构体rtw89_dev及bus_data_size*/
 	rtwdev = hw->priv;
 	rtwdev->hw = hw;
 	rtwdev->dev = device;

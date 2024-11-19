@@ -1676,6 +1676,7 @@ static void dev_disable_gro_hw(struct net_device *dev)
 		netdev_WARN(dev, "failed to disable GRO_HW!\n");
 }
 
+/*cmd转字符串*/
 const char *netdev_cmd_to_name(enum netdev_cmd cmd)
 {
 #define N(val) 						\

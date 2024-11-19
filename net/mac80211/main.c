@@ -683,9 +683,9 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 	 * +-------------------------+
 	 *
 	 */
-	priv_size = ALIGN(sizeof(*local), NETDEV_ALIGN) + priv_data_len;
+	priv_size = ALIGN(sizeof(*local)/*先包含一个local结构体*/, NETDEV_ALIGN) + priv_data_len/*再包含驱动私有数据*/;
 
-	wiphy = wiphy_new_nm(&mac80211_config_ops, priv_size, requested_name);
+	wiphy = wiphy_new_nm(&mac80211_config_ops, priv_size/*私有结构体长度*/, requested_name);
 
 	if (!wiphy)
 		return NULL;
@@ -744,16 +744,19 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 
 	wiphy->bss_priv_size = sizeof(struct ieee80211_bss);
 
+	/*取得私有数据中的local结构体*/
 	local = wiphy_priv(wiphy);
 
+	/*初始化local结构体*/
 	if (sta_info_init(local))
 		goto err_free;
 
 	local->hw.wiphy = wiphy;
 
+	/*上面提到了local结构体后面才是驱动的私有结构体，指向它*/
 	local->hw.priv = (char *)local + ALIGN(sizeof(*local), NETDEV_ALIGN);
 
-	local->ops = ops;
+	local->ops = ops;/*设置驱动指明的ops*/
 	local->use_chanctx = use_chanctx;
 
 	/*
@@ -863,7 +866,7 @@ struct ieee80211_hw *ieee80211_alloc_hw_nm(size_t priv_data_len,
 	local->hw.radiotap_timestamp.units_pos = -1;
 	local->hw.radiotap_timestamp.accuracy = -1;
 
-	return &local->hw;
+	return &local->hw;/*返回hw结构体（实际上就是local,由local也能获得rdev了)*/
  err_free:
 	wiphy_free(wiphy);
 	return NULL;
@@ -946,8 +949,10 @@ static int ieee80211_init_cipher_suites(struct ieee80211_local *local)
 	return 0;
 }
 
+/*向linux系统注册hw*/
 int ieee80211_register_hw(struct ieee80211_hw *hw)
 {
+	/*由hw获得包含它的local结构体*/
 	struct ieee80211_local *local = hw_to_local(hw);
 	int result, i;
 	enum nl80211_band band;
@@ -1401,6 +1406,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 		local->sband_allocated |= BIT(band);
 	}
 
+	/*由local确定wiphy,注册wiphy*/
 	result = wiphy_register(local->hw.wiphy);
 	if (result < 0)
 		goto fail_wiphy_register;
@@ -1418,6 +1424,7 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	    !ieee80211_hw_check(hw, NO_AUTO_VIF)) {
 		struct vif_params params = {0};
 
+		/*添加wlan接口*/
 		result = ieee80211_if_add(local, "wlan%d", NET_NAME_ENUM, NULL,
 					  NL80211_IFTYPE_STATION, &params);
 		if (result)

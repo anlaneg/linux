@@ -86,7 +86,7 @@ int subsys_virtual_register(const struct bus_type *subsys,
  * the DEVTYPE variable.
  */
 struct device_type {
-	const char *name;
+	const char *name;/*设备类型名称，例如wlan*/
 	const struct attribute_group **groups;
 	int (*uevent)(const struct device *dev, struct kobj_uevent_env *env);
 	char *(*devnode)(const struct device *dev, umode_t *mode,
@@ -712,7 +712,7 @@ struct device {
 	struct device_private	*p;//设备的私有数据（从实现看目前已不能称之为私有数据了）
 
 	const char		*init_name; /* initial name of the device */
-	const struct device_type *type;
+	const struct device_type *type;/*设备类型*/
 
 	//设备挂接在哪条总线上
 	const struct bus_type	*bus;	/* type of bus device is on */

@@ -49,7 +49,7 @@ struct cfg80211_registered_device {
 	enum environment_cap env;
 
 	/* wiphy index, internal only */
-	int wiphy_idx;
+	int wiphy_idx;/*索引，来源于原子变量：wiphy_counter*/
 
 	/* protected by RTNL */
 	int devlist_generation, wdev_id;

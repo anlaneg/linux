@@ -3829,14 +3829,16 @@ EXPORT_SYMBOL(nl80211_send_chandef);
 
 static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flags,
 			      struct cfg80211_registered_device *rdev/*无线设备从属的rdev*/,
-			      struct wireless_dev *wdev/*要发送的无线设备*/,
+			      struct wireless_dev *wdev/*要发送给用户态的无线设备*/,
 			      enum nl80211_commands cmd)
 {
-	struct net_device *dev = wdev->netdev;/*取此无线设备对应的netdev*/
+	/*取此无线设备对应的netdev*/
+	struct net_device *dev = wdev->netdev;
 	void *hdr;
 
 	lockdep_assert_wiphy(&rdev->wiphy);
 
+	/*只响应new interface,del interface, set interface*/
 	WARN_ON(cmd != NL80211_CMD_NEW_INTERFACE &&
 		cmd != NL80211_CMD_DEL_INTERFACE &&
 		cmd != NL80211_CMD_SET_INTERFACE);
@@ -3854,12 +3856,12 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 	if (nla_put_u32(msg, NL80211_ATTR_WIPHY, rdev->wiphy_idx) /*存入wiphy index*/||
 	    nla_put_u32(msg, NL80211_ATTR_IFTYPE, wdev->iftype)/*存入iftype*/ ||
 	    nla_put_u64_64bit(msg, NL80211_ATTR_WDEV, wdev_id(wdev),
-			      NL80211_ATTR_PAD) ||
+			      NL80211_ATTR_PAD)/*存入wdev id*/ ||
 	    nla_put(msg, NL80211_ATTR_MAC, ETH_ALEN, wdev_address(wdev)) /*存入wdev mac地址*/||
 	    nla_put_u32(msg, NL80211_ATTR_GENERATION,
 			rdev->devlist_generation ^
 			(cfg80211_rdev_list_generation << 2)) ||
-	    nla_put_u8(msg, NL80211_ATTR_4ADDR, wdev->use_4addr))
+	    nla_put_u8(msg, NL80211_ATTR_4ADDR, wdev->use_4addr))/*存4addr*/
 		goto nla_put_failure;
 
 	if (rdev->ops->get_channel && !wdev->valid_links) {
@@ -3910,6 +3912,7 @@ static int nl80211_send_iface(struct sk_buff *msg, u32 portid, u32 seq, int flag
 		break;
 	}
 
+	/*取txq状态*/
 	if (rdev->ops->get_txq_stats) {
 		struct cfg80211_txq_stats txqstats = {};
 		int ret = rdev_get_txq_stats(rdev, wdev, &txqstats);
@@ -4251,7 +4254,8 @@ static int nl80211_set_interface(struct sk_buff *skb, struct genl_info *info)
 	return err;
 }
 
-static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
+/*添加interface*/
+static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*创建参数*/)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
 	struct vif_params params;
@@ -4298,8 +4302,9 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info)
 	if (!msg)
 		return -ENOMEM;
 
+	/*创建对应的wdev*/
 	wdev = rdev_add_virtual_intf(rdev,
-				nla_data(info->attrs[NL80211_ATTR_IFNAME]),
+				nla_data(info->attrs[NL80211_ATTR_IFNAME])/*接口名称*/,
 				NET_NAME_USER, type, &params);
 	if (WARN_ON(!wdev)) {
 		nlmsg_free(msg);
@@ -17594,6 +17599,7 @@ void nl80211_notify_wiphy(struct cfg80211_registered_device *rdev,
 	if (!msg)
 		return;
 
+	/*产生event消息*/
 	if (nl80211_send_wiphy(rdev, cmd, msg, 0, 0, 0, &state) < 0) {
 		nlmsg_free(msg);
 		return;

@@ -4037,6 +4037,7 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 
 	info = (const struct rtw89_driver_info *)id->driver_data;
 
+	/*申请rtwdev设备*/
 	rtwdev = rtw89_alloc_ieee80211_hw(&pdev->dev,
 					  sizeof(struct rtw89_pci),
 					  info->chip);
@@ -4091,7 +4092,7 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		goto err_deinit_napi;
 	}
 
-	ret = rtw89_core_register(rtwdev);
+	ret = rtw89_core_register(rtwdev);/*注册设备，促使kernel产生wlan设备*/
 	if (ret) {
 		rtw89_err(rtwdev, "failed to register core\n");
 		goto err_free_irq;

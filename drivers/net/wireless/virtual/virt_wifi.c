@@ -387,7 +387,7 @@ static struct wiphy *virt_wifi_make_wiphy(void)
 	priv->scan_request = NULL;
 	INIT_DELAYED_WORK(&priv->scan_result, virt_wifi_scan_result);
 
-	err = wiphy_register(wiphy);/*注册wiphy*/
+	err = wiphy_register(wiphy);/*注册wiphy到linux系统*/
 	if (err < 0) {
 		wiphy_free(wiphy);
 		return NULL;

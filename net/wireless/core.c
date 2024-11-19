@@ -40,7 +40,7 @@ MODULE_DESCRIPTION("wireless configuration support");
 MODULE_ALIAS_GENL_FAMILY(NL80211_GENL_NAME);
 
 /* RCU-protected (and RTNL for writers) */
-LIST_HEAD(cfg80211_rdev_list);/*记录系统所有rdev*/
+LIST_HEAD(cfg80211_rdev_list);/*记录系统中所有rdev*/
 int cfg80211_rdev_list_generation;/*记录rdev链上元素数*/
 
 /* for debugfs */
@@ -99,9 +99,11 @@ static int cfg80211_dev_check_name(struct cfg80211_registered_device *rdev,
 	ASSERT_RTNL();
 
 	if (strlen(newname) > NL80211_WIPHY_NAME_MAXLEN)
+		/*长度过大*/
 		return -EINVAL;
 
 	/* prohibit calling the thing phy%d when %d is not its number */
+	/*newname必须为phy格式*/
 	sscanf(newname, PHY_NAME "%d%n", &wiphy_idx, &taken);
 	if (taken == strlen(newname) && wiphy_idx != rdev->wiphy_idx) {
 		/* count number of places needed to print wiphy_idx */
@@ -119,6 +121,7 @@ static int cfg80211_dev_check_name(struct cfg80211_registered_device *rdev,
 	/* Ensure another device does not already have this name. */
 	for_each_rdev(rdev2)
 		if (strcmp(newname, wiphy_name(&rdev2->wiphy)) == 0)
+			/*检查其名称已存在*/
 			return -EINVAL;
 
 	return 0;
@@ -445,6 +448,7 @@ out:
 
 /* exported functions */
 
+/*创建wiphy(实际上是rdev)*/
 struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv/*私有结构体大小*/,
 			   const char *requested_name)
 {
@@ -472,12 +476,12 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv/*私�
 
 	alloc_size = sizeof(*rdev) + sizeof_priv;
 
-	/*申请必要空间*/
+	/*申请rdev对应的空间*/
 	rdev = kzalloc(alloc_size, GFP_KERNEL);
 	if (!rdev)
 		return NULL;
 
-	rdev->ops = ops;
+	rdev->ops = ops;/*设置操作集*/
 
 	rdev->wiphy_idx = atomic_inc_return(&wiphy_counter);
 
@@ -489,7 +493,7 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv/*私�
 	}
 
 	/* atomic_inc_return makes it start at 1, make it start at 0 */
-	rdev->wiphy_idx--;
+	rdev->wiphy_idx--;/*索引号减1，以便索引从零开始编号*/
 
 	/* give it a proper name */
 	if (requested_name && requested_name[0]) {
@@ -499,8 +503,9 @@ struct wiphy *wiphy_new_nm(const struct cfg80211_ops *ops, int sizeof_priv/*私�
 		rv = cfg80211_dev_check_name(rdev, requested_name);
 
 		if (rv < 0) {
+			/*名称检查不通过*/
 			rtnl_unlock();
-			goto use_default_name;
+			goto use_default_name;/*使用默认名称*/
 		}
 
 		rv = dev_set_name(&rdev->wiphy.dev, "%s", requested_name);
@@ -525,7 +530,7 @@ use_default_name:
 	}
 
 	mutex_init(&rdev->wiphy.mtx);
-	INIT_LIST_HEAD(&rdev->wiphy.wdev_list);
+	INIT_LIST_HEAD(&rdev->wiphy.wdev_list);/*初始化wdev_list链表*/
 	INIT_LIST_HEAD(&rdev->beacon_registrations);
 	spin_lock_init(&rdev->beacon_registrations_lock);
 	spin_lock_init(&rdev->bss_lock);
@@ -598,7 +603,7 @@ use_default_name:
 	rdev->wiphy.max_sched_scan_plans = 1;
 	rdev->wiphy.max_sched_scan_plan_interval = U32_MAX;
 
-	return &rdev->wiphy;
+	return &rdev->wiphy;/*返回wiphy(实际上是rdev)*/
 }
 EXPORT_SYMBOL(wiphy_new_nm);
 
@@ -695,6 +700,7 @@ static int wiphy_verify_combinations(struct wiphy *wiphy)
 /*注册wiphy设备*/
 int wiphy_register(struct wiphy *wiphy)
 {
+	/*由wiphy获取rdev*/
 	struct cfg80211_registered_device *rdev = wiphy_to_rdev(wiphy);
 	int res;
 	enum nl80211_band band;
@@ -980,6 +986,7 @@ int wiphy_register(struct wiphy *wiphy)
 						    ieee80211_debugfs_dir);
 
 	cfg80211_debugfs_rdev_add(rdev);
+	/*向外通知new wiphy创建*/
 	nl80211_notify_wiphy(rdev, NL80211_CMD_NEW_WIPHY);
 	wiphy_unlock(&rdev->wiphy);
 
@@ -1266,6 +1273,7 @@ void cfg80211_unregister_wdev(struct wireless_dev *wdev)
 }
 EXPORT_SYMBOL(cfg80211_unregister_wdev);
 
+/*无线设备类型*/
 static const struct device_type wiphy_type = {
 	.name	= "wlan",
 };
@@ -1393,6 +1401,7 @@ void cfg80211_init_wdev(struct wireless_dev *wdev)
 	INIT_WORK(&wdev->disconnect_wk, cfg80211_autodisconnect_wk);
 }
 
+/*为rdev注册wdev*/
 void cfg80211_register_wdev(struct cfg80211_registered_device *rdev,
 			    struct wireless_dev *wdev)
 {
@@ -1407,17 +1416,20 @@ void cfg80211_register_wdev(struct cfg80211_registered_device *rdev,
 	 * 0-initialized.
 	 */
 	if (!wdev->identifier)
+		/*为wdev分配id*/
 		wdev->identifier = ++rdev->wdev_id;
 	/*将此wireless_dev加入其所属的wiphy*/
 	list_add_rcu(&wdev->list, &rdev->wiphy.wdev_list);
 	rdev->devlist_generation++;
 	wdev->registered = true;
 
+	/*创建link*/
 	if (wdev->netdev &&
 	    sysfs_create_link(&wdev->netdev->dev.kobj, &rdev->wiphy.dev.kobj,
 			      "phy80211"))
 		pr_err("failed to add phy80211 symlink to netdev!\n");
 
+	/*通知new interface事件*/
 	nl80211_notify_iface(rdev, wdev, NL80211_CMD_NEW_INTERFACE);
 }
 
@@ -1439,7 +1451,7 @@ int cfg80211_register_netdevice(struct net_device *dev)
 	/* we'll take care of this */
 	wdev->registered = true;
 	wdev->registering = true;
-	ret = register_netdevice(dev);
+	ret = register_netdevice(dev);/*注册网络设备*/
 	if (ret)
 		goto out;
 
@@ -1453,31 +1465,37 @@ out:
 }
 EXPORT_SYMBOL(cfg80211_register_netdevice);
 
+/*为新创建的netdev初始化其对应的wdev*/
 static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 					 unsigned long state, void *ptr)
 {
 	struct net_device *dev = netdev_notifier_info_to_dev(ptr);
+	/*取此dev对应的wdev*/
 	struct wireless_dev *wdev = dev->ieee80211_ptr;
 	struct cfg80211_registered_device *rdev;
 	struct cfg80211_sched_scan_request *pos, *tmp;
 
 	if (!wdev)
+		/*此netdev无对应的wdev*/
 		return NOTIFY_DONE;
 
+	/*由wdev取其对应的rdev*/
 	rdev = wiphy_to_rdev(wdev->wiphy);
 
 	WARN_ON(wdev->iftype == NL80211_IFTYPE_UNSPECIFIED);
 
 	switch (state) {
 	case NETDEV_POST_INIT:
+		/*指明设备类型为wlan*/
 		SET_NETDEV_DEVTYPE(dev, &wiphy_type);
-		wdev->netdev = dev;
+		wdev->netdev = dev;/*设置netdev*/
 		/* can only change netns with wiphy */
-		dev->features |= NETIF_F_NETNS_LOCAL;
+		dev->features |= NETIF_F_NETNS_LOCAL;/*不容许切换ns*/
 
-		cfg80211_init_wdev(wdev);
+		cfg80211_init_wdev(wdev);/*初始化wdev*/
 		break;
 	case NETDEV_REGISTER:
+		/*之前没有注册，注册它*/
 		if (!wdev->registered) {
 			wiphy_lock(&rdev->wiphy);
 			cfg80211_register_wdev(rdev, wdev);
@@ -1490,6 +1508,7 @@ static int cfg80211_netdev_notifier_call(struct notifier_block *nb,
 		 * so check wdev->registered.
 		 */
 		if (wdev->registered && !wdev->registering) {
+			/*解注册*/
 			wiphy_lock(&rdev->wiphy);
 			_cfg80211_unregister_wdev(wdev, false);
 			wiphy_unlock(&rdev->wiphy);
@@ -1707,6 +1726,7 @@ static int __init cfg80211_init(void)
 	if (err)
 		goto out_fail_sysfs;
 
+	/*注册netdev通知事件*/
 	err = register_netdevice_notifier(&cfg80211_netdev_notifier);
 	if (err)
 		goto out_fail_notifier;
@@ -1721,6 +1741,7 @@ static int __init cfg80211_init(void)
 	if (err)
 		goto out_fail_reg;
 
+	/*创建workqueue*/
 	cfg80211_wq = alloc_ordered_workqueue("cfg80211", WQ_MEM_RECLAIM);
 	if (!cfg80211_wq) {
 		err = -ENOMEM;
@@ -1743,7 +1764,7 @@ out_fail_sysfs:
 out_fail_pernet:
 	return err;
 }
-fs_initcall(cfg80211_init);
+fs_initcall(cfg80211_init);/*注册cfg80211*/
 
 static void __exit cfg80211_exit(void)
 {

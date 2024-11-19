@@ -40,13 +40,14 @@ static inline void rdev_set_wakeup(struct cfg80211_registered_device *rdev,
 }
 
 static inline struct wireless_dev
-*rdev_add_virtual_intf(struct cfg80211_registered_device *rdev, char *name,
+*rdev_add_virtual_intf(struct cfg80211_registered_device *rdev, char *name/*接口名称*/,
 		       unsigned char name_assign_type,
-		       enum nl80211_iftype type,
+		       enum nl80211_iftype type/*接口类型*/,
 		       struct vif_params *params)
 {
 	struct wireless_dev *ret;
 	trace_rdev_add_virtual_intf(&rdev->wiphy, name, type);
+	/*添加virtual interface*/
 	ret = rdev->ops->add_virtual_intf(&rdev->wiphy, name, name_assign_type,
 					  type, params);
 	trace_rdev_return_wdev(&rdev->wiphy, ret);

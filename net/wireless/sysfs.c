@@ -172,6 +172,7 @@ struct class ieee80211_class = {
 
 int wiphy_sysfs_init(void)
 {
+	/*注册ieee80211 class*/
 	return class_register(&ieee80211_class);
 }
 

@@ -4756,7 +4756,7 @@ struct rtw89_mcc_info {
 };
 
 struct rtw89_dev {
-	struct ieee80211_hw *hw;
+	struct ieee80211_hw *hw;/*指向它对应的hw*/
 	struct device *dev;
 	const struct ieee80211_ops *ops;
 
