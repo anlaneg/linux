@@ -1433,6 +1433,7 @@ void cfg80211_register_wdev(struct cfg80211_registered_device *rdev,
 	nl80211_notify_iface(rdev, wdev, NL80211_CMD_NEW_INTERFACE);
 }
 
+/*注册网络设备*/
 int cfg80211_register_netdevice(struct net_device *dev)
 {
 	struct wireless_dev *wdev = dev->ieee80211_ptr;

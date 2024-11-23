@@ -1896,7 +1896,7 @@ struct ieee80211_vif_cfg {
  * @mbssid_tx_vif: Pointer to the transmitting interface if MBSSID is enabled.
  */
 struct ieee80211_vif {
-	enum nl80211_iftype type;
+	enum nl80211_iftype type;/*接口类型*/
 	struct ieee80211_vif_cfg cfg;
 	struct ieee80211_bss_conf bss_conf;
 	struct ieee80211_bss_conf __rcu *link_conf[IEEE80211_MLD_MAX_NUM_LINKS];
@@ -4296,9 +4296,10 @@ struct ieee80211_prep_tx_info {
  *	at this point, since the callback can be called during netdev teardown.
  */
 struct ieee80211_ops {
+	/*报文发送*/
 	void (*tx)(struct ieee80211_hw *hw,
 		   struct ieee80211_tx_control *control,
-		   struct sk_buff *skb);
+		   struct sk_buff *skb/*要发送的报文*/);
 	int (*start)(struct ieee80211_hw *hw);
 	void (*stop)(struct ieee80211_hw *hw);
 #ifdef CONFIG_PM

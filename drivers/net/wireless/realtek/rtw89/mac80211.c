@@ -42,7 +42,7 @@ static void rtw89_ops_tx(struct ieee80211_hw *hw,
 		ieee80211_free_txskb(hw, skb);
 		return;
 	}
-	rtw89_core_tx_kick_off(rtwdev, qsel);
+	rtw89_core_tx_kick_off(rtwdev, qsel);/*硬件kick*/
 }
 
 static void rtw89_ops_wake_tx_queue(struct ieee80211_hw *hw,
@@ -1104,7 +1104,7 @@ static void rtw89_ops_set_wakeup(struct ieee80211_hw *hw, bool enabled)
 #endif
 
 const struct ieee80211_ops rtw89_ops = {
-	.tx			= rtw89_ops_tx,
+	.tx			= rtw89_ops_tx,/*报文发送函数*/
 	.wake_tx_queue		= rtw89_ops_wake_tx_queue,
 	.start			= rtw89_ops_start,
 	.stop			= rtw89_ops_stop,

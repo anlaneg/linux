@@ -1674,6 +1674,7 @@ static bool ieee80211_tx_frags(struct ieee80211_local *local,
 	struct sk_buff *skb, *tmp;
 	unsigned long flags;
 
+	/*遍历skbs,得到第个skb*/
 	skb_queue_walk_safe(skbs, skb, tmp) {
 		struct ieee80211_tx_info *info = IEEE80211_SKB_CB(skb);
 		int q = info->hw_queue;
@@ -1730,8 +1731,8 @@ static bool ieee80211_tx_frags(struct ieee80211_local *local,
 		info->control.vif = vif;
 		control.sta = sta ? &sta->sta : NULL;
 
-		__skb_unlink(skb, skbs);
-		drv_tx(local, &control, skb);
+		__skb_unlink(skb, skbs);/*摘取skb*/
+		drv_tx(local, &control, skb);/*交给driver发送skb报文*/
 	}
 
 	return true;
@@ -2620,7 +2621,7 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 	/* convert Ethernet header to proper 802.11 header (based on
 	 * operation mode) */
 	ethertype = (skb->data[12] << 8) | skb->data[13];
-	fc = cpu_to_le16(IEEE80211_FTYPE_DATA | IEEE80211_STYPE_DATA);
+	fc = cpu_to_le16(IEEE80211_FTYPE_DATA | IEEE80211_STYPE_DATA);/*初始化fc*/
 
 	if (!ieee80211_vif_is_mld(&sdata->vif))
 		chanctx_conf =
@@ -2629,12 +2630,12 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 	switch (sdata->vif.type) {
 	case NL80211_IFTYPE_AP_VLAN:
 		if (sdata->wdev.use_4addr) {
-			fc |= cpu_to_le16(IEEE80211_FCTL_FROMDS | IEEE80211_FCTL_TODS);
+			fc |= cpu_to_le16(IEEE80211_FCTL_FROMDS | IEEE80211_FCTL_TODS);/*to ds标记*/
 			/* RA TA DA SA */
-			memcpy(hdr.addr1, sta->sta.addr, ETH_ALEN);
-			memcpy(hdr.addr2, sdata->vif.addr, ETH_ALEN);
-			memcpy(hdr.addr3, skb->data, ETH_ALEN);
-			memcpy(hdr.addr4, skb->data + ETH_ALEN, ETH_ALEN);
+			memcpy(hdr.addr1, sta->sta.addr, ETH_ALEN);/*station mac*/
+			memcpy(hdr.addr2, sdata->vif.addr, ETH_ALEN);/*if上的mac地址*/
+			memcpy(hdr.addr3, skb->data, ETH_ALEN);/*目的mac*/
+			memcpy(hdr.addr4, skb->data + ETH_ALEN, ETH_ALEN);/*源mac*/
 			hdrlen = 30;
 			authorized = test_sta_flag(sta, WLAN_STA_AUTHORIZED);
 			wme_sta = sta->sta.wme;
@@ -2653,7 +2654,7 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 			break;
 		fallthrough;
 	case NL80211_IFTYPE_AP:
-		fc |= cpu_to_le16(IEEE80211_FCTL_FROMDS);
+		fc |= cpu_to_le16(IEEE80211_FCTL_FROMDS);/*添加from ds标记*/
 		/* DA BSSID SA */
 		memcpy(hdr.addr1, skb->data, ETH_ALEN);
 
@@ -2945,7 +2946,7 @@ static struct sk_buff *ieee80211_build_hdr(struct ieee80211_sub_if_data *sdata,
 		 */
 		*qos_control = 0;
 	} else
-		memcpy(skb_push(skb, hdrlen), &hdr, hdrlen);
+		memcpy(skb_push(skb, hdrlen), &hdr, hdrlen);/*存入802.11 header*/
 
 	skb_reset_mac_header(skb);
 
@@ -4267,6 +4268,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 	int len = skb->len;
 
 	if (unlikely(!ieee80211_sdata_running(sdata) || skb->len < ETH_HLEN)) {
+		/*未处于running或报文过小，释放*/
 		kfree_skb(skb);
 		return;
 	}
@@ -4315,6 +4317,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 		if (skb->protocol == sdata->control_port_protocol)
 			ctrl_flags |= IEEE80211_TX_CTRL_SKIP_MPATH_LOOKUP;
 
+		/*构造802.11报文（添加header)*/
 		skb = ieee80211_build_hdr(sdata, skb, info_flags,
 					  sta, ctrl_flags, cookie);
 		if (IS_ERR(skb)) {
@@ -4324,6 +4327,7 @@ void __ieee80211_subif_start_xmit(struct sk_buff *skb,
 
 		dev_sw_netstats_tx_add(dev, 1, skb->len);
 
+		/*发送报文*/
 		ieee80211_xmit(sdata, sta, skb);
 	}
 	goto out;
@@ -4355,8 +4359,8 @@ static bool ieee80211_multicast_to_unicast(struct sk_buff *skb,
 					   struct net_device *dev)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
-	const struct ethhdr *eth = (void *)skb->data;
-	const struct vlan_ethhdr *ethvlan = (void *)skb->data;
+	const struct ethhdr *eth = (void *)skb->data;/*取得报文以太头*/
+	const struct vlan_ethhdr *ethvlan = (void *)skb->data;/*取得报文以太头（考虑vlan情况）*/
 	__be16 ethertype;
 
 	switch (sdata->vif.type) {
@@ -4378,6 +4382,7 @@ static bool ieee80211_multicast_to_unicast(struct sk_buff *skb,
 	/* multicast to unicast conversion only for some payload */
 	ethertype = eth->h_proto;
 	if (ethertype == htons(ETH_P_8021Q) && skb->len >= VLAN_ETH_HLEN)
+		/*802.1q报文，指向内层协议号*/
 		ethertype = ethvlan->h_vlan_encapsulated_proto;
 	switch (ethertype) {
 	case htons(ETH_P_ARP):
@@ -4385,35 +4390,39 @@ static bool ieee80211_multicast_to_unicast(struct sk_buff *skb,
 	case htons(ETH_P_IPV6):
 		break;
 	default:
-		return false;
+		return false;/*协议未知*/
 	}
 
-	return true;
+	return true;/*报文为ip[46]或arp*/
 }
 
+/*广播报文转换为unicast*/
 static void
 ieee80211_convert_to_unicast(struct sk_buff *skb, struct net_device *dev,
-			     struct sk_buff_head *queue)
+			     struct sk_buff_head *queue/*出参，转换的链表*/)
 {
 	struct ieee80211_sub_if_data *sdata = IEEE80211_DEV_TO_SUB_IF(dev);
 	struct ieee80211_local *local = sdata->local;
-	const struct ethhdr *eth = (struct ethhdr *)skb->data;
+	const struct ethhdr *eth = (struct ethhdr *)skb->data;/*取以太头*/
 	struct sta_info *sta, *first = NULL;
 	struct sk_buff *cloned_skb;
 
 	rcu_read_lock();
 
+	/*遍历所有stat_info*/
 	list_for_each_entry_rcu(sta, &local->sta_list, list) {
 		if (sdata != sta->sdata)
 			/* AP-VLAN mismatch */
 			continue;
 		if (unlikely(ether_addr_equal(eth->h_source, sta->sta.addr)))
 			/* do not send back to source */
-			continue;
+			continue;/*不发送回自已*/
 		if (!first) {
-			first = sta;
+			first = sta;/*首个对端不用复制，当前仅记录*/
 			continue;
 		}
+
+		/*复制报文，修改目录mac*/
 		cloned_skb = skb_clone(skb, GFP_ATOMIC);
 		if (!cloned_skb)
 			goto multicast;
@@ -4421,16 +4430,18 @@ ieee80211_convert_to_unicast(struct sk_buff *skb, struct net_device *dev,
 			dev_kfree_skb(cloned_skb);
 			goto multicast;
 		}
+		/*报文入队*/
 		__skb_queue_tail(queue, cloned_skb);
 	}
 
 	if (likely(first)) {
+		/*首个报文入队*/
 		if (unlikely(ieee80211_change_da(skb, first)))
 			goto multicast;
 		__skb_queue_tail(queue, skb);
 	} else {
 		/* no STA connected, drop */
-		kfree_skb(skb);
+		kfree_skb(skb);/*释放报文*/
 		skb = NULL;
 	}
 
@@ -4499,19 +4510,22 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 		/*目的地址非组播，走normal*/
 		goto normal;
 
+	/*报文为组播报文*/
 	if (unlikely(!ieee80211_sdata_running(sdata))) {
 		kfree_skb(skb);
 		return NETDEV_TX_OK;
 	}
 
 	if (unlikely(ieee80211_multicast_to_unicast(skb, dev))) {
+		/*可以转换为单播报文处理*/
 		struct sk_buff_head queue;
 
 		__skb_queue_head_init(&queue);
 		ieee80211_convert_to_unicast(skb, dev, &queue);
 		/*自queue中出所有skb*/
 		while ((skb = __skb_dequeue(&queue)))
-			__ieee80211_subif_start_xmit(skb, dev, 0,
+			/*发送此报文*/
+			__ieee80211_subif_start_xmit(skb/*待发送的报文*/, dev, 0,
 						     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
 						     NULL);
 	} else if (ieee80211_vif_is_mld(&sdata->vif) &&
@@ -4520,6 +4534,7 @@ netdev_tx_t ieee80211_subif_start_xmit(struct sk_buff *skb,
 		ieee80211_mlo_multicast_tx(dev, skb);
 	} else {
 normal:
+		/*普通单播处理*/
 		__ieee80211_subif_start_xmit(skb, dev, 0,
 					     IEEE80211_TX_CTRL_MLO_LINK_UNSPEC,
 					     NULL);

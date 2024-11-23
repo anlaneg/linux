@@ -212,6 +212,7 @@ struct sta_info *sta_info_get(struct ieee80211_sub_if_data *sdata,
 	rcu_read_lock();
 	for_each_sta_info(local, addr, sta, tmp) {
 		if (sta->sdata == sdata) {
+			/*sdata匹配*/
 			rcu_read_unlock();
 			/* this is safe as the caller must already hold
 			 * another rcu read section or the mutex
@@ -818,7 +819,7 @@ ieee80211_recalc_p2p_go_ps_allowed(struct ieee80211_sub_if_data *sdata)
 	}
 }
 
-static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
+static int sta_info_insert_finish(struct sta_info *sta/*要添加的sta_info*/) __acquires(RCU)
 {
 	struct ieee80211_local *local = sta->local;
 	struct ieee80211_sub_if_data *sdata = sta->sdata;
@@ -859,6 +860,7 @@ static int sta_info_insert_finish(struct sta_info *sta) __acquires(RCU)
 		}
 	}
 
+	/*添加sta_info到local->sta_list*/
 	list_add_tail_rcu(&sta->list, &local->sta_list);
 
 	/* update channel context before notifying the driver about state

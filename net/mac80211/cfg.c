@@ -170,9 +170,9 @@ static int ieee80211_set_ap_mbssid_options(struct ieee80211_sub_if_data *sdata,
 }
 
 static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
-						const char *name,
+						const char *name/*接口名称*/,
 						unsigned char name_assign_type,
-						enum nl80211_iftype type,
+						enum nl80211_iftype type/*接口类型*/,
 						struct vif_params *params)
 {
 	struct ieee80211_local *local = wiphy_priv(wiphy);
@@ -187,6 +187,7 @@ static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
 	sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
 
 	if (type == NL80211_IFTYPE_MONITOR) {
+		/*类型为monitor情况*/
 		err = ieee80211_set_mon_options(sdata, params);
 		if (err) {
 			ieee80211_if_remove(sdata);
@@ -2053,6 +2054,7 @@ static int ieee80211_add_station(struct wiphy *wiphy, struct net_device *dev,
 					       params->link_sta_params.link_mac ?: mac,
 					       GFP_KERNEL);
 	else
+		/*申请sta_info*/
 		sta = sta_info_alloc(sdata, mac, GFP_KERNEL);
 
 	if (!sta)
@@ -4968,8 +4970,8 @@ static int ieee80211_set_hw_timestamp(struct wiphy *wiphy,
 }
 
 const struct cfg80211_ops mac80211_config_ops = {
-	.add_virtual_intf = ieee80211_add_iface,
-	.del_virtual_intf = ieee80211_del_iface,
+	.add_virtual_intf = ieee80211_add_iface,/*添加if*/
+	.del_virtual_intf = ieee80211_del_iface,/*删除if*/
 	.change_virtual_intf = ieee80211_change_iface,
 	.start_p2p_device = ieee80211_start_p2p_device,
 	.stop_p2p_device = ieee80211_stop_p2p_device,

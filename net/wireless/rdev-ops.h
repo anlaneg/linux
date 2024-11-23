@@ -47,7 +47,7 @@ static inline struct wireless_dev
 {
 	struct wireless_dev *ret;
 	trace_rdev_add_virtual_intf(&rdev->wiphy, name, type);
-	/*添加virtual interface*/
+	/*调用添加virtual interface回调*/
 	ret = rdev->ops->add_virtual_intf(&rdev->wiphy, name, name_assign_type,
 					  type, params);
 	trace_rdev_return_wdev(&rdev->wiphy, ret);

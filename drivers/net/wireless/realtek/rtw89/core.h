@@ -3075,6 +3075,7 @@ enum rtw89_lv1_rcvy_step {
 };
 
 struct rtw89_hci_ops {
+	/*发送报文*/
 	int (*tx_write)(struct rtw89_dev *rtwdev, struct rtw89_core_tx_request *tx_req);
 	void (*tx_kick_off)(struct rtw89_dev *rtwdev, u8 txch);
 	void (*flush_queues)(struct rtw89_dev *rtwdev, u32 queues, bool drop);

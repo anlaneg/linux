@@ -34,6 +34,7 @@ static inline void drv_tx(struct ieee80211_local *local,
 			  struct ieee80211_tx_control *control,
 			  struct sk_buff *skb)
 {
+	/*调用tx完成发包*/
 	local->ops->tx(&local->hw, control, skb);
 }
 
@@ -1659,6 +1660,7 @@ static inline int drv_net_setup_tc(struct ieee80211_local *local,
 	sdata = get_bss_sdata(sdata);
 	trace_drv_net_setup_tc(local, sdata, type);
 	if (local->ops->net_setup_tc)
+		/*802.11也支持net_setup_tc*/
 		ret = local->ops->net_setup_tc(&local->hw, &sdata->vif, dev,
 					       type, type_data);
 	trace_drv_return_int(local, ret);

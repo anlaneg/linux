@@ -1408,8 +1408,8 @@ struct ieee80211_local {
 	 */
 	spinlock_t tim_lock;
 	unsigned long num_sta;
-	struct list_head sta_list;
-	struct rhltable sta_hash;
+	struct list_head sta_list;/*串连所有struct sta_info*/
+	struct rhltable sta_hash;/*此hash表，以dmac为key,可查询sta_info*/
 	struct rhltable link_sta_hash;
 	struct timer_list sta_cleanup;
 	int sta_generation;
@@ -1570,12 +1570,14 @@ struct ieee80211_local {
 static inline struct ieee80211_sub_if_data *
 IEEE80211_DEV_TO_SUB_IF(const struct net_device *dev)
 {
+	/*由netdev取ieee80211_sub_if_data*/
 	return netdev_priv(dev);
 }
 
 static inline struct ieee80211_sub_if_data *
 IEEE80211_WDEV_TO_SUB_IF(struct wireless_dev *wdev)
 {
+	/*由wdev获取ieee80211_sub_if_data结构*/
 	return container_of(wdev, struct ieee80211_sub_if_data, wdev);
 }
 

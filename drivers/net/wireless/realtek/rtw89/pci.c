@@ -1310,7 +1310,7 @@ static int rtw89_pci_txwd_submit(struct rtw89_dev *rtwdev,
 	struct rtw89_pci_tx_wp_info *txwp_info;
 	void *txaddr_info_addr;
 	struct pci_dev *pdev = rtwpci->pdev;
-	struct sk_buff *skb = tx_req->skb;
+	struct sk_buff *skb = tx_req->skb;/*要发送的skb*/
 	struct rtw89_pci_tx_data *tx_data = RTW89_PCI_TX_SKB_CB(skb);
 	struct rtw89_tx_skb_data *skb_data = RTW89_TX_SKB_CB(skb);
 	bool en_wd_info = desc_info->en_wd_info;
@@ -1327,7 +1327,7 @@ static int rtw89_pci_txwd_submit(struct rtw89_dev *rtwdev,
 		goto err;
 	}
 
-	tx_data->dma = dma;
+	tx_data->dma = dma;/*dma地址*/
 	rcu_assign_pointer(skb_data->wait, NULL);
 
 	txwp_len = sizeof(*txwp_info);

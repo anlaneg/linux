@@ -444,6 +444,7 @@ static int ieee80211_open(struct net_device *dev)
 
 	/* fail early if user set an invalid address */
 	if (!is_valid_ether_addr(dev->dev_addr))
+		/*设备地址无效*/
 		return -EADDRNOTAVAIL;
 
 	wiphy_lock(sdata->local->hw.wiphy);
@@ -831,14 +832,14 @@ static int ieee80211_netdev_setup_tc(struct net_device *dev,
 }
 
 static const struct net_device_ops ieee80211_dataif_ops = {
-	.ndo_open		= ieee80211_open,
+	.ndo_open		= ieee80211_open,/*设备打开*/
 	.ndo_stop		= ieee80211_stop,
 	.ndo_uninit		= ieee80211_uninit,
-	.ndo_start_xmit		= ieee80211_subif_start_xmit,/*报文发送*/
+	.ndo_start_xmit		= ieee80211_subif_start_xmit,/*报文发送（以太报文转802.11)*/
 	.ndo_set_rx_mode	= ieee80211_set_multicast_list,
 	.ndo_set_mac_address 	= ieee80211_change_mac,
 	.ndo_get_stats64	= ieee80211_get_stats64,
-	.ndo_setup_tc		= ieee80211_netdev_setup_tc,
+	.ndo_setup_tc		= ieee80211_netdev_setup_tc,/*居然支持ndo_setup_tc回调，促使无线驱动调用*/
 };
 
 static u16 ieee80211_monitor_select_queue(struct net_device *dev,
@@ -1221,9 +1222,10 @@ void ieee80211_del_virtual_monitor(struct ieee80211_local *local)
  */
 int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 {
+	/*sdata包含wdev*/
 	struct ieee80211_sub_if_data *sdata = IEEE80211_WDEV_TO_SUB_IF(wdev);
-	struct net_device *dev = wdev->netdev;
-	struct ieee80211_local *local = sdata->local;
+	struct net_device *dev = wdev->netdev;/*取wdev对应的netdev*/
+	struct ieee80211_local *local = sdata->local;/*取local*/
 	u64 changed = 0;
 	int res;
 	u32 hw_reconf_flags = 0;
@@ -1300,6 +1302,7 @@ int ieee80211_do_open(struct wireless_dev *wdev, bool coming_up)
 	 * this interface, if it has the special null one.
 	 */
 	if (dev && is_zero_ether_addr(dev->dev_addr)) {
+		/*设备地址为全零，设置perm_addr*/
 		eth_hw_addr_set(dev, local->hw.wiphy->perm_addr);
 		memcpy(dev->perm_addr, dev->dev_addr, ETH_ALEN);
 
@@ -1468,7 +1471,7 @@ static void ieee80211_if_setup(struct net_device *dev)
 	ether_setup(dev);
 	dev->priv_flags &= ~IFF_TX_SKB_SHARING;
 	dev->priv_flags |= IFF_NO_QUEUE;
-	dev->netdev_ops = &ieee80211_dataif_ops;/*操作集*/
+	dev->netdev_ops = &ieee80211_dataif_ops;/*netdev操作集*/
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = ieee80211_if_free;
 }
@@ -2048,6 +2051,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN) {
+		/*p2p,nan类型*/
 		struct wireless_dev *wdev;
 
 		sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size,
@@ -2079,8 +2083,10 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 		if (!ndev)
 			return -ENOMEM;
 
+		/*设置netdev所属的netns*/
 		dev_net_set(ndev, wiphy_net(local->hw.wiphy));
 
+		/*申请统计计数结构体*/
 		ndev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 		if (!ndev->tstats) {
 			free_netdev(ndev);
@@ -2193,7 +2199,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 		else
 			ndev->max_mtu = local->hw.max_mtu;
 
-		ret = cfg80211_register_netdevice(ndev);
+		ret = cfg80211_register_netdevice(ndev);/*注册此netdev*/
 		if (ret) {
 			free_netdev(ndev);
 			return ret;

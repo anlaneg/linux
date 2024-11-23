@@ -4793,7 +4793,7 @@ void ether_setup(struct net_device *dev);
 struct net_device *alloc_netdev_mqs(int sizeof_priv, const char *name,
 				    unsigned char name_assign_type,
 				    void (*setup)(struct net_device *),
-				    unsigned int txqs, unsigned int rxqs);
+				    unsigned int txqs/*tx队列数*/, unsigned int rxqs/*rx队列数*/);
 //申请名称为name的网络设备，默认rx,tx队列数均为1
 #define alloc_netdev(sizeof_priv, name, name_assign_type, setup) \
 	alloc_netdev_mqs(sizeof_priv, name, name_assign_type, setup, 1, 1)

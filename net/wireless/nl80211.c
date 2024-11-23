@@ -4267,17 +4267,21 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 	memset(&params, 0, sizeof(params));
 
 	if (!info->attrs[NL80211_ATTR_IFNAME])
+		/*必须指明ifname*/
 		return -EINVAL;
 
 	if (info->attrs[NL80211_ATTR_IFTYPE])
+		/*取接口类型*/
 		type = nla_get_u32(info->attrs[NL80211_ATTR_IFTYPE]);
 
 	if (!rdev->ops->add_virtual_intf)
+		/*rdev必须有相应的回调函数*/
 		return -EOPNOTSUPP;
 
 	if ((type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN ||
 	     rdev->wiphy.features & NL80211_FEATURE_MAC_ON_CREATE) &&
 	    info->attrs[NL80211_ATTR_MAC]) {
+		/*设置mac地址*/
 		nla_memcpy(params.macaddr, info->attrs[NL80211_ATTR_MAC],
 			   ETH_ALEN);
 		if (!is_valid_ether_addr(params.macaddr))
@@ -4305,7 +4309,7 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 	/*创建对应的wdev*/
 	wdev = rdev_add_virtual_intf(rdev,
 				nla_data(info->attrs[NL80211_ATTR_IFNAME])/*接口名称*/,
-				NET_NAME_USER, type, &params);
+				NET_NAME_USER, type/*接口类型*/, &params);
 	if (WARN_ON(!wdev)) {
 		nlmsg_free(msg);
 		return -EPROTO;
@@ -4336,7 +4340,7 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 		 * through the netdev notifier and must be added here
 		 */
 		cfg80211_init_wdev(wdev);
-		cfg80211_register_wdev(rdev, wdev);
+		cfg80211_register_wdev(rdev, wdev);/*添加wdev*/
 		break;
 	default:
 		break;
@@ -16745,7 +16749,7 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 					 NL80211_FLAG_NEED_RTNL),
 	},
 	{
-		.cmd = NL80211_CMD_NEW_INTERFACE,
+		.cmd = NL80211_CMD_NEW_INTERFACE,/*创建interface*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nl80211_new_interface,
 		.flags = GENL_UNS_ADMIN_PERM,

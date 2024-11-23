@@ -23,6 +23,7 @@ enum dma_data_direction {
 
 #define dma_map_page(d, p, o, s, dir) (page_to_phys(p) + (o))
 
+/*虚拟地址转物理地址*/
 #define dma_map_single(d, p, s, dir) (virt_to_phys(p))
 #define dma_map_single_attrs(d, p, s, dir, a) (virt_to_phys(p))
 #define dma_mapping_error(...) (0)
