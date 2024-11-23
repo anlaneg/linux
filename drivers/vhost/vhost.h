@@ -45,7 +45,7 @@ struct vhost_poll {
 	wait_queue_head_t	*wqh;
 	/*等待队列entry*/
 	wait_queue_entry_t	wait;
-	struct vhost_work	work;
+	struct vhost_work	work;/*poll工作函数,分别对应handle_rx_net,handle_tx_net*/
 	__poll_t		mask;
 	struct vhost_dev	*dev;
 	struct vhost_virtqueue	*vq;
@@ -320,7 +320,7 @@ static inline void vhost_vq_set_backend(struct vhost_virtqueue *vq,
  */
 static inline void *vhost_vq_get_backend(struct vhost_virtqueue *vq)
 {
-    /*取vq的后端*/
+    /*取vq的后端内容*/
 	return vq->private_data;
 }
 

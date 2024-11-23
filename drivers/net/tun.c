@@ -135,8 +135,8 @@ struct tun_file {
 	/* only used for fasnyc */
 	unsigned int flags;
 	union {
-		u16 queue_index;
-		unsigned int ifindex;
+		u16 queue_index;/*每个tun_file对应一个队列,故此值用于指明队列编号*/
+		unsigned int ifindex;/*用户态通过TUNSETIFINDEX设置*/
 	};
 	struct napi_struct napi;
 	bool napi_enabled;/*是否开启了napi*/
@@ -179,7 +179,7 @@ struct tun_prog {
 struct tun_struct {
     /*每个队列对应的一个tun_file*/
 	struct tun_file __rcu	*tfiles[MAX_TAP_QUEUES];
-	/*tun设备队列数目*/
+	/*tun设备队列总数,即tfiles数组的有效大小*/
 	unsigned int            numqueues;
 	unsigned int 		flags;
 	kuid_t			owner;
@@ -191,16 +191,18 @@ struct tun_struct {
 			  NETIF_F_TSO6 | NETIF_F_GSO_UDP_L4)
 
 	int			align;
-	int			vnet_hdr_sz;//配置的vnet hdr大小
-	int			sndbuf;//发送buf大小
+	//由TUNSETVNETHDRSZ设置,配置的vnet hdr大小(默认是virtio_net_hdr)
+	int			vnet_hdr_sz;
+	//由TUNSETSNDBUF配置,发送buf大小
+	int			sndbuf;
 	struct tap_filter	txflt;
-	struct sock_fprog	fprog;
+	struct sock_fprog	fprog;/*应用在TUN口上的bpf filter*/
 	/* protected by rtnl lock */
-	bool			filter_attached;
+	bool			filter_attached;/*指明attach了bpf filter*/
 	u32			msg_enable;
 	spinlock_t lock;
 	struct hlist_head flows[TUN_NUM_FLOW_ENTRIES];
-	struct timer_list flow_gc_timer;
+	struct timer_list flow_gc_timer;/*负责老化flows中缓存的flow*/
 	/*指明flow entry的超时时间*/
 	unsigned long ageing_time;
 	unsigned int numdisabled;
@@ -212,11 +214,11 @@ struct tun_struct {
 	//tun设备统计计数
 	atomic_long_t rx_frame_errors;
 	struct bpf_prog __rcu *xdp_prog;
-	struct tun_prog __rcu *steering_prog;
-	struct tun_prog __rcu *filter_prog;
+	struct tun_prog __rcu *steering_prog;/*关联的ebpf程序*/
+	struct tun_prog __rcu *filter_prog;/*ebpf的filter程序*/
 	struct ethtool_link_ksettings link_ksettings;
 	/* init args */
-	struct file *file;
+	struct file *file;/*对应的字符设备file*/
 	struct ifreq *ifr;
 };
 
@@ -241,7 +243,7 @@ static int tun_napi_receive(struct napi_struct *napi, int budget)
 	__skb_queue_head_init(&process_queue);
 
 	spin_lock(&queue->lock);
-	/*将queue移动到process_queue列表上*/
+	/*将queue的内容移动到process_queue列表上*/
 	skb_queue_splice_tail_init(queue, &process_queue);
 	spin_unlock(&queue->lock);
 
@@ -375,6 +377,7 @@ static inline __virtio16 cpu_to_tun16(struct tun_struct *tun, u16 val)
 	return __cpu_to_virtio16(tun_is_little_endian(tun), val);
 }
 
+/*由rxhash映射到tun flow桶*/
 static inline u32 tun_hashfn(u32 rxhash)
 {
 	return rxhash & TUN_MASK_FLOW_ENTRIES;
@@ -394,8 +397,8 @@ static struct tun_flow_entry *tun_flow_find(struct hlist_head *head, u32 rxhash)
 
 /*创建tun flow entry*/
 static struct tun_flow_entry *tun_flow_create(struct tun_struct *tun,
-					      struct hlist_head *head,
-					      u32 rxhash, u16 queue_index)
+					      struct hlist_head *head/*链表头*/,
+					      u32 rxhash/*rx hash值*/, u16 queue_index/*队列编号*/)
 {
 	struct tun_flow_entry *e = kmalloc(sizeof(*e), GFP_ATOMIC);
 
@@ -423,6 +426,7 @@ static void tun_flow_delete(struct tun_struct *tun, struct tun_flow_entry *e)
 	--tun->flow_count;
 }
 
+/*删除tun->flows上缓冲的所有flow*/
 static void tun_flow_flush(struct tun_struct *tun)
 {
 	int i;
@@ -438,6 +442,7 @@ static void tun_flow_flush(struct tun_struct *tun)
 	spin_unlock_bh(&tun->lock);
 }
 
+/*移除queue_index队列对应的所有flow*/
 static void tun_flow_delete_by_queue(struct tun_struct *tun, u16 queue_index)
 {
 	int i;
@@ -455,12 +460,12 @@ static void tun_flow_delete_by_queue(struct tun_struct *tun, u16 queue_index)
 	spin_unlock_bh(&tun->lock);
 }
 
-/*此定时器回调，负责老化tun flow entry*/
+/*定时器回调，负责老化tun flow entry*/
 static void tun_flow_cleanup(struct timer_list *t)
 {
 	struct tun_struct *tun = from_timer(tun, t, flow_gc_timer);
 	unsigned long delay = tun->ageing_time;
-	unsigned long next_timer = jiffies + delay;
+	unsigned long next_timer = jiffies + delay;/*下一次timer触发时间*/
 	unsigned long count = 0;
 	int i;
 
@@ -473,7 +478,7 @@ static void tun_flow_cleanup(struct timer_list *t)
 		hlist_for_each_entry_safe(e, n, &tun->flows[i], hash_link) {
 			unsigned long this_timer;
 
-			this_timer = e->updated + delay;
+			this_timer = e->updated + delay;/*此entry超时时间*/
 			if (time_before_eq(this_timer, jiffies)) {
 			    /*此entry超时，移除掉*/
 				tun_flow_delete(tun, e);
@@ -481,7 +486,7 @@ static void tun_flow_cleanup(struct timer_list *t)
 			}
 			/*更新存在的timer数量*/
 			count++;
-			/*更新timer下次触发的时间*/
+			/*更新timer下次触发的时间(即最近要超时的flow)*/
 			if (time_before(this_timer, next_timer))
 				next_timer = this_timer;
 		}
@@ -493,30 +498,33 @@ static void tun_flow_cleanup(struct timer_list *t)
 	spin_unlock(&tun->lock);
 }
 
+/*tun flow更新*/
 static void tun_flow_update(struct tun_struct *tun, u32 rxhash,
 			    struct tun_file *tfile)
 {
 	struct hlist_head *head;
 	struct tun_flow_entry *e;
 	unsigned long delay = tun->ageing_time;
-	u16 queue_index = tfile->queue_index;
+	u16 queue_index = tfile->queue_index;/*tfile对应的队列编号*/
 
 	/*确定桶*/
 	head = &tun->flows[tun_hashfn(rxhash)];
 
 	rcu_read_lock();
 
-	/*不加锁查一次*/
+	/*通过rxhash查找对应的flow,不加锁查一次*/
 	e = tun_flow_find(head, rxhash);
 	if (likely(e)) {
 		/* TODO: keep queueing to old queue until it's empty? */
 		if (READ_ONCE(e->queue_index) != queue_index)
+			/*队列编号不一致,更新queue_index*/
 			WRITE_ONCE(e->queue_index, queue_index);
 		if (e->updated != jiffies)
-			e->updated = jiffies;
+			e->updated = jiffies;/*指明此flow被更新*/
 		sock_rps_record_flow_hash(e->rps_rxhash);
 	} else {
 		spin_lock_bh(&tun->lock);
+		/*加锁后,再查一次*/
 		if (!tun_flow_find(head, rxhash) &&
 		    tun->flow_count < MAX_TAP_FLOWS)
 		    /*此rxhash对应的tun flow entry不存在，且flow总数不超过限制，则新建此entry*/
@@ -557,7 +565,7 @@ static u16 tun_automq_select_queue(struct tun_struct *tun, struct sk_buff *skb)
 	numqueues = READ_ONCE(tun->numqueues);
 
 	/*计算hash，并利用hash查询tun flow entry*/
-	txq = __skb_get_hash_symmetric(skb);
+	txq = __skb_get_hash_symmetric(skb);/*依据报文内容获得hashcode*/
 	e = tun_flow_find(&tun->flows[tun_hashfn(txq)], txq);
 	if (e) {
 	    /*返回对应的queue index*/
@@ -597,9 +605,10 @@ static u16 tun_select_queue(struct net_device *dev, struct sk_buff *skb,
 
 	rcu_read_lock();
 	if (rcu_dereference(tun->steering_prog))
-	    /*通过steering pro选队列*/
+	    /*通过steering prog选队列*/
 		ret = tun_ebpf_select_queue(tun, skb);
 	else
+		/*计算hash并选队列*/
 		ret = tun_automq_select_queue(tun, skb);
 	rcu_read_unlock();
 
@@ -788,13 +797,13 @@ static void tun_detach_all(struct net_device *dev)
 		module_put(THIS_MODULE);
 }
 
-/*tun设备attach新的队列(file)*/
+/*tun设备attach新的队列(file),队列数增加*/
 static int tun_attach(struct tun_struct *tun, struct file *file,
 		      bool skip_filter, bool napi, bool napi_frags,
 		      bool publish_tun)
 {
 	struct tun_file *tfile = file->private_data;
-	struct net_device *dev = tun->dev;
+	struct net_device *dev = tun->dev;/*取tun口对应的网络设备*/
 	int err;
 
 	/*触发security hook*/
@@ -809,6 +818,7 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 
 	err = -EBUSY;
 	if (!(tun->flags & IFF_MULTI_QUEUE) && tun->numqueues == 1)
+		/*只有一个队列,不执行attach*/
 		goto out;
 
 	err = -E2BIG;
@@ -828,7 +838,7 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 	}
 
 	if (!tfile->detached &&
-	        /*更新tx_ring大小*/
+	    /*更新tx_ring大小,使其对dev的tx队列一样长*/
 	    ptr_ring_resize(&tfile->tx_ring, dev->tx_queue_len,
 			    GFP_KERNEL, tun_ptr_free)) {
 		err = -ENOMEM;
@@ -881,10 +891,10 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 	 */
 	if (publish_tun)
 		rcu_assign_pointer(tfile->tun, tun);
-	/*设置tun设备*/
+	/*设置tun设备,tun->numqueues号队列对应的tfile*/
 	rcu_assign_pointer(tun->tfiles[tun->numqueues], tfile);
 	tun->numqueues++;/*增加队列*/
-	tun_set_real_num_queues(tun);
+	tun_set_real_num_queues(tun);/*更新队列数*/
 out:
 	return err;
 }
@@ -1021,6 +1031,7 @@ static int tun_net_init(struct net_device *dev)
 	struct ifreq *ifr = tun->ifr;
 	int err;
 
+	/*申请percpu统计*/
 	dev->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!dev->tstats)
 		return -ENOMEM;
@@ -1047,6 +1058,7 @@ static int tun_net_init(struct net_device *dev)
 		      (ifr->ifr_flags & TUN_FEATURES);
 
 	INIT_LIST_HEAD(&tun->disabled);
+	/*增加队列*/
 	err = tun_attach(tun, tun->file, false, ifr->ifr_flags & IFF_NAPI,
 			 ifr->ifr_flags & IFF_NAPI_FRAGS, false);
 	if (err < 0) {
@@ -1090,7 +1102,7 @@ static void tun_automq_xmit(struct tun_struct *tun, struct sk_buff *skb)
 		struct tun_flow_entry *e;
 		__u32 rxhash;
 
-		rxhash = __skb_get_hash_symmetric(skb);
+		rxhash = __skb_get_hash_symmetric(skb);/*获得hashcode*/
 		e = tun_flow_find(&tun->flows[tun_hashfn(rxhash)], rxhash);
 		if (e)
 			tun_flow_save_rps_rxhash(e, rxhash);
@@ -1300,13 +1312,13 @@ static int tun_net_change_carrier(struct net_device *dev, bool new_carrier)
 
 //tun设备ops
 static const struct net_device_ops tun_netdev_ops = {
-	.ndo_init		= tun_net_init,
+	.ndo_init		= tun_net_init,/*tun设备初始化*/
 	.ndo_uninit		= tun_net_uninit,
 	.ndo_open		= tun_net_open,
 	.ndo_stop		= tun_net_close,
-	.ndo_start_xmit		= tun_net_xmit,
+	.ndo_start_xmit		= tun_net_xmit,/*tun设备发包*/
 	.ndo_fix_features	= tun_net_fix_features,
-	.ndo_select_queue	= tun_select_queue,
+	.ndo_select_queue	= tun_select_queue,/*选队列*/
 	.ndo_set_rx_headroom	= tun_set_headroom,
 	.ndo_get_stats64	= tun_net_get_stats64,
 	.ndo_change_carrier	= tun_net_change_carrier,
@@ -1388,12 +1400,12 @@ static const struct net_device_ops tap_netdev_ops = {
 	.ndo_uninit		= tun_net_uninit,
 	.ndo_open		= tun_net_open,
 	.ndo_stop		= tun_net_close,
-	.ndo_start_xmit		= tun_net_xmit,
+	.ndo_start_xmit		= tun_net_xmit,/*tap类型设备发包*/
 	.ndo_fix_features	= tun_net_fix_features,
 	.ndo_set_rx_mode	= tun_net_mclist,
 	.ndo_set_mac_address	= eth_mac_addr,
 	.ndo_validate_addr	= eth_validate_addr,
-	.ndo_select_queue	= tun_select_queue,
+	.ndo_select_queue	= tun_select_queue,/*选队列*/
 	.ndo_features_check	= passthru_features_check,
 	.ndo_set_rx_headroom	= tun_set_headroom,
 	.ndo_get_stats64	= dev_get_tstats64,
@@ -1473,6 +1485,7 @@ static bool tun_sock_writeable(struct tun_struct *tun, struct tun_file *tfile)
 {
 	struct sock *sk = tfile->socket.sk;
 
+	/*设备up,且socket可写,则tun socket可写*/
 	return (tun->dev->flags & IFF_UP) && sock_writeable(sk);
 }
 
@@ -1481,12 +1494,14 @@ static bool tun_sock_writeable(struct tun_struct *tun, struct tun_file *tfile)
 /* Poll */
 static __poll_t tun_chr_poll(struct file *file, poll_table *wait)
 {
+	/*获得tun_file,每个tun_file对应一个队列*/
 	struct tun_file *tfile = file->private_data;
-	struct tun_struct *tun = tun_get(tfile);
+	struct tun_struct *tun = tun_get(tfile);/*由tfile再取tun_struct*/
 	struct sock *sk;
 	__poll_t mask = 0;
 
 	if (!tun)
+		/*poll时tun必须已初始化*/
 		return EPOLLERR;
 
 	sk = tfile->socket.sk;
@@ -2167,7 +2182,7 @@ static ssize_t tun_put_user_xdp(struct tun_struct *tun,
 static ssize_t tun_put_user(struct tun_struct *tun,
 			    struct tun_file *tfile,
 			    struct sk_buff *skb,
-			    struct iov_iter *iter)
+			    struct iov_iter *iter/*复制目的地*/)
 {
 	struct tun_pi pi = { 0, skb->protocol };
 	ssize_t total;
@@ -2183,10 +2198,10 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 	if (tun->flags & IFF_VNET_HDR)
 		vnet_hdr_sz = READ_ONCE(tun->vnet_hdr_sz);
 
-	total = skb->len + vlan_hlen + vnet_hdr_sz;
+	total = skb->len + vlan_hlen + vnet_hdr_sz;/*报文总长度*/
 
 	if (!(tun->flags & IFF_NO_PI)) {
-	    //tun设备未包含NO_PI标记，合上pi长度
+	    //tun设备未包含NO_PI标记，需要上pi长度
 		if (iov_iter_count(iter) < sizeof(pi))
 			return -EINVAL;
 
@@ -2203,7 +2218,7 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 			return -EFAULT;
 	}
 
-	//传送vnet_hdr头部
+	//复制vnet_hdr头部
 	if (vnet_hdr_sz) {
 		struct virtio_net_hdr gso;
 
@@ -2257,7 +2272,7 @@ static ssize_t tun_put_user(struct tun_struct *tun,
 done:
 	/* caller is in process context, */
 	preempt_disable();
-	/*报文数增加*/
+	/*向用户投递完,tx报文数增加(修改统计信息)*/
 	dev_sw_netstats_tx_add(tun->dev, 1, skb->len + vlan_hlen);
 	preempt_enable();
 
@@ -2265,6 +2280,7 @@ done:
 	return total;
 }
 
+/*自tfile->tx_ring中出一个报文*/
 static void *tun_ring_recv(struct tun_file *tfile, int noblock/*是否非阻塞*/, int *err)
 {
 	DECLARE_WAITQUEUE(wait, current);
@@ -2317,7 +2333,7 @@ out:
 }
 
 static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
-			   struct iov_iter *to/*读取报文，填充到to中*/,
+			   struct iov_iter *to/*出参,读取的报文将填充到to中*/,
 			   int noblock/*是否非阻塞*/, void *ptr/*此值为为NULL时报文来源于tx_ring,否则为注入*/)
 {
 	ssize_t ret;
@@ -2344,7 +2360,7 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 		ret = tun_put_user_xdp(tun, tfile, xdpf, to);
 		xdp_return_frame(xdpf);
 	} else {
-	    //非xdp的普通报文
+	    //出的是,非xdp的普通报文
 		struct sk_buff *skb = ptr;
 
 		/*复制报文到to*/
@@ -2446,7 +2462,7 @@ static void tun_setup(struct net_device *dev)
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = tun_free_netdev;
 	/* We prefer our own queue length */
-	dev->tx_queue_len = TUN_READQ_SIZE;
+	dev->tx_queue_len = TUN_READQ_SIZE;/*tx队列默认大小*/
 }
 
 /* Trivial set of netlink ops to allow deleting tun or tap
@@ -2722,7 +2738,7 @@ out:
 }
 
 /*自tun口的tx_ring中出队报文，并将其写入到msghdr中*/
-static int tun_recvmsg(struct socket *sock, struct msghdr *m, size_t total_len,
+static int tun_recvmsg(struct socket *sock, struct msghdr *m/*出参,读取到的内容*/, size_t total_len,
 		       int flags)
 {
 	struct tun_file *tfile = container_of(sock, struct tun_file, socket);
@@ -2744,6 +2760,7 @@ static int tun_recvmsg(struct socket *sock, struct msghdr *m, size_t total_len,
 					 SOL_PACKET, TUN_TX_TIMESTAMP);
 		goto out;
 	}
+	/*读取一个报文,存入到m->msg_iter中*/
 	ret = tun_do_read(tun, tfile, &m->msg_iter, flags & MSG_DONTWAIT, ptr);
 	if (ret > (ssize_t)total_len) {
 		m->msg_flags |= MSG_TRUNC;
@@ -2793,8 +2810,8 @@ static int tun_peek_len(struct socket *sock)
 /* Ops structure to mimic raw sockets with tun */
 static const struct proto_ops tun_socket_ops = {
 	.peek_len = tun_peek_len,
-	.sendmsg = tun_sendmsg,
-	.recvmsg = tun_recvmsg,
+	.sendmsg = tun_sendmsg,/**/
+	.recvmsg = tun_recvmsg,/*自tx_ring中读取报文*/
 };
 
 static struct proto tun_proto = {
@@ -2873,8 +2890,8 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 	//检查指定的设备是否存在
 	dev = __dev_get_by_name(net, ifr->ifr_name);
 	if (dev) {
-	    //已存在，按标记报错
 		if (ifr->ifr_flags & IFF_TUN_EXCL)
+			/*设备已存在,且指明了EXECL,报错*/
 			return -EBUSY;
 
 		//设备为tun口时，netdev_ops必须为tun_xx_ops
@@ -2887,11 +2904,12 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 		else
 			return -EINVAL;
 
-		//当前tun设备是多队列模式，但要求单队列，报错
+		//当前tun设备与要指定的ifr存在队列模式不一致，例如要求单队列,但给定多队列等.
 		if (!!(ifr->ifr_flags & IFF_MULTI_QUEUE) !=
 		    !!(tun->flags & IFF_MULTI_QUEUE))
 			return -EINVAL;
 
+		/*权限检查*/
 		if (tun_not_capable(tun))
 			return -EPERM;
 		err = security_tun_dev_open(tun->security);
@@ -2919,12 +2937,11 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 
 		netdev_state_change(dev);
 	} else {
-
 	    //设备还不存在，创建此设备
 		char *name;
 		unsigned long flags = 0;
 
-		//如果要求多队列，则queues数目为多队列
+		//如果要求多队列，则queues数目为最大队列数,否则为单队列
 		int queues = ifr->ifr_flags & IFF_MULTI_QUEUE ?
 			     MAX_TAP_QUEUES : 1;
 
@@ -2947,12 +2964,13 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 			return -EINVAL;
 
 		if (*ifr->ifr_name)
+			/*用户指定了名称,以指定名称为准*/
 			name = ifr->ifr_name;
 
 		//申请并创建netdev（私有数据为tun_struct)
 		dev = alloc_netdev_mqs(sizeof(struct tun_struct), name,
-				       NET_NAME_UNKNOWN, tun_setup, queues,
-				       queues);
+				       NET_NAME_UNKNOWN, tun_setup, queues/*TX队列数*/,
+				       queues/*RX队列数*/);
 
 		if (!dev)
 			return -ENOMEM;
@@ -2980,7 +2998,7 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 
 		tun_net_initialize(dev);
 
-		/*注册此设备*/
+		/*注册此网络设备*/
 		err = register_netdevice(tun->dev);
 		if (err < 0) {
 			free_netdev(dev);
@@ -2989,7 +3007,7 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 		/* free_netdev() won't check refcnt, to avoid race
 		 * with dev_put() we need publish tun after registration.
 		 */
-		rcu_assign_pointer(tfile->tun, tun);
+		rcu_assign_pointer(tfile->tun, tun);/*此时设置tfile->tun*/
 	}
 
 	if (ifr->ifr_flags & IFF_NO_CARRIER)
@@ -3010,6 +3028,7 @@ static int tun_set_iff(struct net *net, struct file *file, struct ifreq *ifr)
 
 static void tun_get_iff(struct tun_struct *tun, struct ifreq *ifr)
 {
+	/*取tun关联的netdev名称*/
 	strcpy(ifr->ifr_name, tun->dev->name);
 
 	ifr->ifr_flags = tun_flags(tun);
@@ -3081,8 +3100,10 @@ static int tun_attach_filter(struct tun_struct *tun)
 	struct tun_file *tfile;
 
 	for (i = 0; i < tun->numqueues; i++) {
+		/*获得此队列对应的tfile*/
 		tfile = rtnl_dereference(tun->tfiles[i]);
 		lock_sock(tfile->socket.sk);
+		/*为socket设置bpf filter程序*/
 		ret = sk_attach_filter(&tun->fprog, tfile->socket.sk);
 		release_sock(tfile->socket.sk);
 		if (ret) {
@@ -3201,8 +3222,8 @@ static unsigned char tun_get_addr_len(unsigned short type)
 	}
 }
 
-static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
-			    unsigned long arg, int ifreq_len)
+static long __tun_chr_ioctl(struct file *file, unsigned int cmd/*ioctl命令*/,
+			    unsigned long arg, int ifreq_len/*参数长度*/)
 {
     /*取socket*/
 	struct tun_file *tfile = file->private_data;
@@ -3223,9 +3244,11 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 
 	if (cmd == TUNSETIFF || cmd == TUNSETQUEUE ||
 	    (_IOC_TYPE(cmd) == SOCK_IOC_TYPE && cmd != SIOCGSKNS)) {
+		/*复制用户态传入的数据*/
 		if (copy_from_user(&ifr, argp, ifreq_len))
 			return -EFAULT;
 	} else {
+		/*响应用户态请求,参数初始化为0*/
 		memset(&ifr, 0, sizeof(ifr));
 	}
 	if (cmd == TUNGETFEATURES) {
@@ -3237,6 +3260,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		return put_user(IFF_TUN | IFF_TAP | IFF_NO_CARRIER |
 				TUN_FEATURES, (unsigned int __user*)argp);
 	} else if (cmd == TUNSETQUEUE) {
+		/*设置队列(????)*/
 		return tun_set_queue(file, &ifr);
 	} else if (cmd == SIOCGSKNS) {
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
@@ -3250,7 +3274,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 	if (cmd == TUNSETIFF) {
 		ret = -EEXIST;
 		if (tun)
-		    /*tun此时还未创建，如已创建则报错*/
+		    /*如已创建则报错*/
 			goto unlock;
 
 		ifr.ifr_name[IFNAMSIZ-1] = '\0';
@@ -3258,8 +3282,10 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		ret = tun_set_iff(net, file, &ifr);
 
 		if (ret)
+			/*执行出错*/
 			goto unlock;
 
+		/*为用户态响应*/
 		if (copy_to_user(argp, &ifr, ifreq_len))
 			ret = -EFAULT;
 		goto unlock;
@@ -3276,7 +3302,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		if (ifindex < 0)
 			goto unlock;
 		ret = 0;
-		tfile->ifindex = ifindex;
+		tfile->ifindex = ifindex;/*设置ifindex*/
 		goto unlock;
 	}
 
@@ -3357,6 +3383,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 	case TUNSETLINK:
 		/* Only allow setting the type when the interface is down */
 		if (tun->dev->flags & IFF_UP) {
+			/*网络设备已up*/
 			netif_info(tun, drv, tun->dev,
 				   "Linktype set failed because interface is up\n");
 			ret = -EBUSY;
@@ -3397,19 +3424,19 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 
 	case SIOCGIFHWADDR:
 		/* Get hw address */
-		dev_get_mac_address(&ifr.ifr_hwaddr, net, tun->dev->name);
+		dev_get_mac_address(&ifr.ifr_hwaddr, net, tun->dev->name);/*获取接口mac地址*/
 		if (copy_to_user(argp, &ifr, ifreq_len))
 			ret = -EFAULT;
 		break;
 
 	case SIOCSIFHWADDR:
 		/* Set hw address */
-		ret = dev_set_mac_address_user(tun->dev, &ifr.ifr_hwaddr, NULL);
+		ret = dev_set_mac_address_user(tun->dev, &ifr.ifr_hwaddr, NULL);/*设置接口mac地址*/
 		break;
 
 	case TUNGETSNDBUF:
 		sndbuf = tfile->socket.sk->sk_sndbuf;
-		if (copy_to_user(argp, &sndbuf, sizeof(sndbuf)))
+		if (copy_to_user(argp, &sndbuf, sizeof(sndbuf)))/*取发送缓冲区大小*/
 			ret = -EFAULT;
 		break;
 
@@ -3450,6 +3477,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNGETVNETLE:
+		/*获取le标记*/
 		le = !!(tun->flags & TUN_VNET_LE);
 		if (put_user(le, (int __user *)argp))
 			ret = -EFAULT;
@@ -3467,6 +3495,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNGETVNETBE:
+		/*获取be标记*/
 		ret = tun_get_vnet_be(tun, argp);
 		break;
 
@@ -3478,12 +3507,13 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		/* Can be set only for TAPs */
 		ret = -EINVAL;
 		if ((tun->flags & TUN_TYPE_MASK) != IFF_TAP)
+			/*只容许tap类型接口调用*/
 			break;
 		ret = -EFAULT;
 		if (copy_from_user(&tun->fprog, argp, sizeof(tun->fprog)))
 			break;
 
-		ret = tun_attach_filter(tun);
+		ret = tun_attach_filter(tun);/*为tun添加bpf filter*/
 		break;
 
 	case TUNDETACHFILTER:
@@ -3492,10 +3522,11 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		if ((tun->flags & TUN_TYPE_MASK) != IFF_TAP)
 			break;
 		ret = 0;
-		tun_detach_filter(tun, tun->numqueues);
+		tun_detach_filter(tun, tun->numqueues);/*为tunt移除bpf filter*/
 		break;
 
 	case TUNGETFILTER:
+		/*取此接口上应用的bpf filter程序*/
 		ret = -EINVAL;
 		if ((tun->flags & TUN_TYPE_MASK) != IFF_TAP)
 			break;
@@ -3506,10 +3537,12 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNSETSTEERINGEBPF:
+		/*为tun口应用ebpf程序*/
 		ret = tun_set_ebpf(tun, &tun->steering_prog, argp);
 		break;
 
 	case TUNSETFILTEREBPF:
+		/*为tun口应用ebpf filter程序*/
 		ret = tun_set_ebpf(tun, &tun->filter_prog, argp);
 		break;
 
@@ -3522,6 +3555,7 @@ static long __tun_chr_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case TUNGETDEVNETNS:
+		/*获取TUN接口在哪个ns里*/
 		ret = -EPERM;
 		if (!ns_capable(net->user_ns, CAP_NET_ADMIN))
 			goto unlock;
@@ -3547,7 +3581,7 @@ unlock:
 static long tun_chr_ioctl(struct file *file,
 			  unsigned int cmd, unsigned long arg)
 {
-	return __tun_chr_ioctl(file, cmd, arg, sizeof (struct ifreq));
+	return __tun_chr_ioctl(file, cmd, arg, sizeof (struct ifreq)/*参数为ifreq*/);
 }
 
 #ifdef CONFIG_COMPAT
@@ -3575,7 +3609,7 @@ static long tun_chr_compat_ioctl(struct file *file,
 	 * driver are compatible though, we don't need to convert the
 	 * contents.
 	 */
-	return __tun_chr_ioctl(file, cmd, arg, sizeof(struct compat_ifreq));
+	return __tun_chr_ioctl(file, cmd, arg, sizeof(struct compat_ifreq)/*参数为compat_ifreq*/);
 }
 #endif /* CONFIG_COMPAT */
 
@@ -3616,7 +3650,7 @@ static int tun_chr_open(struct inode *inode, struct file * file)
 	}
 
 	mutex_init(&tfile->napi_mutex);
-	RCU_INIT_POINTER(tfile->tun, NULL);
+	RCU_INIT_POINTER(tfile->tun, NULL);/*此时tfile->tun为空*/
 	tfile->flags = 0;
 	tfile->ifindex = 0;
 
@@ -3661,7 +3695,7 @@ static void tun_chr_show_fdinfo(struct seq_file *m, struct file *file)
 	memset(&ifr, 0, sizeof(ifr));
 
 	rtnl_lock();
-	tun = tun_get(tfile);
+	tun = tun_get(tfile);/*获得tun*/
 	if (tun)
 		tun_get_iff(tun, &ifr);
 	rtnl_unlock();
@@ -3669,7 +3703,7 @@ static void tun_chr_show_fdinfo(struct seq_file *m, struct file *file)
 	if (tun)
 		tun_put(tun);
 
-	seq_printf(m, "iff:\t%s\n", ifr.ifr_name);
+	seq_printf(m, "iff:\t%s\n", ifr.ifr_name);/*返回接口名称*/
 }
 #endif
 
@@ -3682,13 +3716,13 @@ static const struct file_operations tun_fops = {
 	.poll	= tun_chr_poll,
 	.unlocked_ioctl	= tun_chr_ioctl,
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = tun_chr_compat_ioctl,
+	.compat_ioctl = tun_chr_compat_ioctl,/*ioctl实现*/
 #endif
 	.open	= tun_chr_open,
 	.release = tun_chr_close,
 	.fasync = tun_chr_fasync,
 #ifdef CONFIG_PROC_FS
-	.show_fdinfo = tun_chr_show_fdinfo,
+	.show_fdinfo = tun_chr_show_fdinfo,/*在fdinfo目录下显示info信息*/
 #endif
 };
 
@@ -3745,6 +3779,7 @@ static void tun_get_drvinfo(struct net_device *dev, struct ethtool_drvinfo *info
 		strscpy(info->bus_info, "tun", sizeof(info->bus_info));
 		break;
 	case IFF_TAP:
+		/*针对tap类型设备*/
 		strscpy(info->bus_info, "tap", sizeof(info->bus_info));
 		break;
 	}
@@ -3824,6 +3859,7 @@ static int tun_queue_resize(struct tun_struct *tun)
 	list_for_each_entry(tfile, &tun->disabled, next)
 		rings[i++] = &tfile->tx_ring;
 
+	/*调整队列*/
 	ret = ptr_ring_resize_multiple(rings, n,
 				       dev->tx_queue_len, GFP_KERNEL,
 				       tun_ptr_free);
@@ -3840,14 +3876,17 @@ static int tun_device_event(struct notifier_block *unused,
 	int i;
 
 	if (dev->rtnl_link_ops != &tun_link_ops)
+		/*通知源必须为tun接口*/
 		return NOTIFY_DONE;
 
 	switch (event) {
 	case NETDEV_CHANGE_TX_QUEUE_LEN:
+		/*修改TX队列长度*/
 		if (tun_queue_resize(tun))
 			return NOTIFY_BAD;
 		break;
 	case NETDEV_UP:
+		/*设备UP*/
 		for (i = 0; i < tun->numqueues; i++) {
 			struct tun_file *tfile;
 

@@ -219,7 +219,7 @@ int vhost_poll_start(struct vhost_poll *poll, struct file *file)
 	if (poll->wqh)
 		return 0;
 
-	/*poll此文件*/
+	/*使用vfs_poll poll此文件*/
 	mask = vfs_poll(file, &poll->table);
 	if (mask)
 		vhost_poll_wakeup(&poll->wait, 0, 0, poll_to_key(mask));
@@ -254,7 +254,7 @@ static void vhost_worker_queue(struct vhost_worker *worker,
 		 * sure it was not in the list.
 		 * test_and_set_bit() implies a memory barrier.
 		 */
-		llist_add(&work->node, &worker->work_list);
+		llist_add(&work->node, &worker->work_list);/*待执行work入队*/
 		/*唤醒kernel进程*/
 		vhost_task_wake(worker->vtsk);
 	}
@@ -263,13 +263,13 @@ static void vhost_worker_queue(struct vhost_worker *worker,
 bool vhost_vq_work_queue(struct vhost_virtqueue *vq, struct vhost_work *work)
 {
 	struct vhost_worker *worker;
-	bool queued = false;
+	bool queued = false;/*work是否入队*/
 
 	rcu_read_lock();
 	worker = rcu_dereference(vq->worker);
 	if (worker) {
 		queued = true;
-		vhost_worker_queue(worker, work);
+		vhost_worker_queue(worker, work);/*work入队*/
 	}
 	rcu_read_unlock();
 
@@ -418,7 +418,7 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 */
 static bool vhost_worker(void *data)
 {
-    	/*获得vhost设备*/
+    /*获得vhost设备*/
 	struct vhost_worker *worker = data;
 	struct vhost_work *work, *work_next;
 	struct llist_node *node;
@@ -499,7 +499,7 @@ bool vhost_exceeds_weight(struct vhost_virtqueue *vq,
 
 	if ((dev->byte_weight && total_len >= dev->byte_weight) ||
 	    pkts >= dev->weight) {
-	    /*权重超过时，将vq加入poll,等待下次触发*/
+	    /*权重超过,可能仍有报文，将vq加入poll,等待下次触发*/
 		vhost_poll_queue(&vq->poll);
 		return true;
 	}
@@ -553,8 +553,8 @@ void vhost_dev_init(struct vhost_dev *dev,
 	dev->iotlb = NULL;
 	dev->mm = NULL;
 	dev->iov_limit = iov_limit;
-	dev->weight = weight;
-	dev->byte_weight = byte_weight;
+	dev->weight = weight;/*一轮最多收多少包*/
+	dev->byte_weight = byte_weight;/*一轮最多收多少字节*/
 	dev->use_worker = use_worker;
 	dev->msg_handler = msg_handler;
 	init_waitqueue_head(&dev->wait);
@@ -573,6 +573,7 @@ void vhost_dev_init(struct vhost_dev *dev,
 		mutex_init(&vq->mutex);
 		vhost_vq_reset(dev, vq);
 		if (vq->handle_kick)
+			/*需要处理kick*/
 			vhost_poll_init(&vq->poll, vq->handle_kick/*此vq的work函数*/,
 					EPOLLIN, dev, vq);
 	}
@@ -677,7 +678,7 @@ static struct vhost_worker *vhost_worker_create(struct vhost_dev *dev)
 		goto free_worker;
 
 	mutex_init(&worker->mutex);
-	init_llist_head(&worker->work_list);
+	init_llist_head(&worker->work_list);/*初始化挂接work的链表*/
 	worker->kcov_handle = kcov_common_handle();
 	worker->vtsk = vtsk;
 
@@ -930,7 +931,7 @@ long vhost_dev_set_owner(struct vhost_dev *dev)
 		 * below since we don't have to worry about vsock queueing
 		 * while we free the worker.
 		 */
-		worker = vhost_worker_create(dev);
+		worker = vhost_worker_create(dev);/*指明使用worker,创建它*/
 		if (!worker) {
 			err = -ENOMEM;
 			goto err_worker;
@@ -2981,7 +2982,7 @@ void vhost_signal(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
 	/* Signal the Guest tell them we used something up. */
 	if (vq->call_ctx.ctx && vhost_notify(dev, vq))
-	    	//触发一次通知事件
+	    //触发一次通知事件
 		eventfd_signal(vq->call_ctx.ctx);
 }
 EXPORT_SYMBOL_GPL(vhost_signal);

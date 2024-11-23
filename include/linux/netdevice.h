@@ -2493,6 +2493,7 @@ struct net_device {
 	union {
 		/*percore的link统计信息*/
 		struct pcpu_lstats __percpu		*lstats;
+		/*统计信息*/
 		struct pcpu_sw_netstats __percpu	*tstats;
 		struct pcpu_dstats __percpu		*dstats;
 	};
@@ -2957,7 +2958,7 @@ static inline void dev_sw_netstats_tx_add(struct net_device *dev,
 
 	u64_stats_update_begin(&tstats->syncp);
 	u64_stats_add(&tstats->tx_bytes, len);
-	u64_stats_add(&tstats->tx_packets, packets);
+	u64_stats_add(&tstats->tx_packets, packets);/*tx方向发包数增加*/
 	u64_stats_update_end(&tstats->syncp);
 }
 
@@ -4240,7 +4241,7 @@ static __always_inline bool __is_skb_forwardable(const struct net_device *dev,
 	return false;
 }
 
-void netdev_core_stats_inc(struct net_device *dev, u32 offset);
+void netdev_core_stats_inc(struct net_device *dev, u32 offset/*字段偏移*/);
 
 #define DEV_CORE_STATS_INC(FIELD)						\
 static inline void dev_core_stats_##FIELD##_inc(struct net_device *dev)		\
@@ -4249,6 +4250,7 @@ static inline void dev_core_stats_##FIELD##_inc(struct net_device *dev)		\
 			offsetof(struct net_device_core_stats, FIELD));		\
 }
 DEV_CORE_STATS_INC(rx_dropped)
+/*tx丢包*/
 DEV_CORE_STATS_INC(tx_dropped)
 DEV_CORE_STATS_INC(rx_nohandler)
 DEV_CORE_STATS_INC(rx_otherhost_dropped)

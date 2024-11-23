@@ -26,6 +26,7 @@
 /* TUN device type flags: deprecated. Use IFF_TUN/IFF_TAP instead. */
 #define TUN_TUN_DEV 	IFF_TUN
 #define TUN_TAP_DEV	IFF_TAP
+/*tun接口类型mask,共占用4bits*/
 #define TUN_TYPE_MASK   0x000f
 
 /* Ioctl defines */

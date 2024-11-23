@@ -104,7 +104,7 @@ EXPORT_SYMBOL_GPL(vhost_task_stop);
  * through vhost_task_start().
  */
 struct vhost_task *vhost_task_create(bool (*fn)(void *), void *arg,
-				     const char *name)
+				     const char *name/*进程名称*/)
 {
 	struct kernel_clone_args args = {
 		.flags		= CLONE_FS | CLONE_UNTRACED | CLONE_VM |

@@ -477,6 +477,7 @@ static void vhost_net_signal_used(struct vhost_net_virtqueue *nvq)
 	struct vhost_dev *dev = vq->dev;
 
 	if (!nvq->done_idx)
+		/*已置为0,不再通知*/
 		return;
 
 	vhost_add_used_and_signal_n(dev, vq, vq->heads, nvq->done_idx);
@@ -1026,9 +1027,10 @@ static void handle_tx(struct vhost_net *net)
 	vhost_net_disable_vq(net, vq);
 
 	if (vhost_sock_zcopy(sock))
+		//处理tx队列的报文(非copy版本) ，将其传给sock
 		handle_tx_zerocopy(net, sock);
 	else
-	    //处理tx队列的报文 ，将其传给sock
+	    //处理tx队列的报文(copy版本) ，将其传给sock
 		handle_tx_copy(net, sock);
 
 out:
@@ -1267,7 +1269,7 @@ static void handle_rx(struct vhost_net *net)
 			msg.msg_control = vhost_net_buf_consume(&nvq->rxq);
 		/* On overrun, truncate and discard */
 		if (unlikely(headcount > UIO_MAXIOV)) {
-		    	/*遇到过大报，描述符数量超过配额，截短收包后丢弃*/
+		    /*遇到过大报，描述符数量超过配额，截短收包后丢弃*/
 			iov_iter_init(&msg.msg_iter, ITER_DEST, vq->iov, 1, 1);
 			err = sock->ops->recvmsg(sock, &msg,
 						 1, MSG_DONTWAIT | MSG_TRUNC);
@@ -1285,8 +1287,10 @@ static void handle_rx(struct vhost_net *net)
 			iov_iter_advance(&msg.msg_iter, vhost_hlen);
 		}
 
-		/*可写的buffer已被记录在msg.msg_iter中，自sock中拿到报文，并将其写入到msg.msg_iter中*/
-		err = sock->ops->recvmsg(sock, &msg,
+		/*可写的buffer已被记录在msg.msg_iter中，自sock中拿到报文，并将其写入到msg.msg_iter中
+		 * 例如:tun_recvmsg
+		 **/
+		err = sock->ops->recvmsg(sock, &msg/*出参,存放读取到的内容*/,
 					 sock_len, MSG_DONTWAIT | MSG_TRUNC);
 		/* Userspace might have consumed the packet meanwhile:
 		 * it's not supposed to do this usually, but might be hard
@@ -1333,14 +1337,14 @@ static void handle_rx(struct vhost_net *net)
 			vhost_log_write(vq, vq_log, log, vhost_len,
 					vq->iov, in);
 		total_len += vhost_len;
-	} while (likely(!vhost_exceeds_weight(vq, ++recv_pkts, total_len)));
+	} while (likely(!vhost_exceeds_weight(vq, ++recv_pkts/*已收的报文增加*/, total_len/*已收到报文字节数*/)));
 
 	if (unlikely(busyloop_intr))
 		vhost_poll_queue(&vq->poll);
 	else if (!sock_len)
 		vhost_net_enable_vq(net, vq);
 out:
-    //通知对端
+    //通知对端有报文
 	vhost_net_signal_used(nvq);
 	mutex_unlock(&vq->mutex);
 }
@@ -1370,6 +1374,7 @@ static void handle_tx_net(struct vhost_work *work)
 {
 	struct vhost_net *net = container_of(work, struct vhost_net,
 					     poll[VHOST_NET_VQ_TX].work);
+	/*针对vhost_net进行发包处理*/
 	handle_tx(net);
 }
 
@@ -1452,7 +1457,7 @@ static int vhost_net_open(struct inode *inode, struct file *f)
 	/*vqs指向n->vqs，已完成初始化,这里初始化virtio-net设备*/
 	vhost_dev_init(dev, vqs, VHOST_NET_VQ_MAX/*队列数目*/,
 		       UIO_MAXIOV + VHOST_NET_BATCH/*？？？？*/,
-		       VHOST_NET_PKT_WEIGHT, VHOST_NET_WEIGHT, true,
+		       VHOST_NET_PKT_WEIGHT/*一次最多收的报文数*/, VHOST_NET_WEIGHT/*一轮最多收的字节数*/, true,
 		       NULL);
 
 	/*设置n->poll的回调函数，这些函数最终会被vhost-xx线程执行*/
@@ -1560,6 +1565,7 @@ static struct socket *get_raw_socket(int fd)
 	}
 
 	if (sock->sk->sk_family != AF_PACKET) {
+		/*必须为af_packet类型的raw socket*/
 		r = -EPFNOSUPPORT;
 		goto err;
 	}
@@ -1602,7 +1608,7 @@ static struct socket *get_tap_socket(int fd)
 	return sock;
 }
 
-//获取fd对应的socket
+//获取fd对应的socket(当前仅支持raw(AF_PACKET),tun两种socket)
 static struct socket *get_socket(int fd)
 {
 	struct socket *sock;
@@ -1656,7 +1662,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 		goto err_vq;
 	}
 
-	//取此fd对应的socket（raw-socket,tap-socket等）
+	//取此fd对应的socket（当前仅raw-socket,tap-socket）
 	sock = get_socket(fd);
 	if (IS_ERR(sock)) {
 	    /*fd不是一个socket,报错*/
@@ -1665,7 +1671,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	}
 
 	/* start polling new socket */
-	oldsock = vhost_vq_get_backend(vq);/*取vq旧的后端*/
+	oldsock = vhost_vq_get_backend(vq);/*取vq旧的后端socket*/
 	if (sock != oldsock) {
 	    /*如果前后两次回调提供的后端socket不一致，则执行更新*/
 		ubufs = vhost_net_ubuf_alloc(vq,
@@ -1723,7 +1729,7 @@ static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号
 	return 0;
 
 err_used:
-	vhost_vq_set_backend(vq, oldsock);
+	vhost_vq_set_backend(vq, oldsock);/*还原旧的socket*/
 	vhost_net_enable_vq(n, vq);
 	if (ubufs)
 		vhost_net_ubuf_put_wait_and_free(ubufs);

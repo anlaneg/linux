@@ -1467,7 +1467,7 @@ static int __sk_attach_prog(struct bpf_prog *prog, struct sock *sk)
 	if (!fp)
 		return -ENOMEM;
 
-	fp->prog = prog;
+	fp->prog = prog;/*设置socket对应的FILTER程序*/
 
 	if (!__sk_filter_charge(sk, fp)) {
 		kfree(fp);

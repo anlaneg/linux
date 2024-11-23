@@ -105,6 +105,7 @@ static int seq_fdinfo_open(struct inode *inode, struct file *file)
 	return single_open(file, seq_show, inode);
 }
 
+/*进程fdinfo文件读取*/
 static const struct file_operations proc_fdinfo_file_operations = {
 	.open		= seq_fdinfo_open,
 	.read		= seq_read,

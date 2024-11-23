@@ -651,25 +651,28 @@ static inline int ptr_ring_resize(struct ptr_ring *r, int size, gfp_t gfp,
  * disable interrupts/BH when doing so.
  */
 static inline int ptr_ring_resize_multiple(struct ptr_ring **rings,
-					   unsigned int nrings,
-					   int size,
+					   unsigned int nrings/*队列数*/,
+					   int size/*队列长度*/,
 					   gfp_t gfp, void (*destroy)(void *))
 {
 	unsigned long flags;
 	void ***queues;
 	int i;
 
+	/*申请queues指针*/
 	queues = kmalloc_array(nrings, sizeof(*queues), gfp);
 	if (!queues)
 		goto noqueues;
-	//申请新的ring队列（新的大小）
+	//每个queues指针,对应的申请一个ring队列（新的大小）
 	for (i = 0; i < nrings; ++i) {
+		/*ring中的元素是void* */
 		queues[i] = __ptr_ring_init_queue_alloc(size, gfp);
 		if (!queues[i])
 			goto nomem;
 	}
 
 	for (i = 0; i < nrings; ++i) {
+		/*同时占有生产者与消费者锁*/
 		spin_lock_irqsave(&(rings[i])->consumer_lock, flags);
 		spin_lock(&(rings[i])->producer_lock);
 		//将旧ring中的数据移至新的queues中,交换指针
