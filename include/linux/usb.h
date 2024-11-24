@@ -648,7 +648,7 @@ struct usb3_lpm_parameters {
  * Usbcore drivers should not set usbdev->state directly.  Instead use
  * usb_set_device_state().
  */
-struct usb_device {
+struct usb_device {/*usb 设备类型*/
 	int		devnum;
 	char		devpath[16];
 	u32		route;
@@ -1135,7 +1135,7 @@ struct usb_dynids {
 };
 
 struct usb_dynid {
-	struct list_head node;
+	struct list_head node;/*用于挂接链表*/
 	struct usb_device_id id;
 };
 
@@ -1215,6 +1215,7 @@ extern ssize_t usb_show_dynids(struct usb_dynids *dynids, char *buf);
 struct usb_driver {
 	const char *name;/*usb驱动名称*/
 
+	/*usb interface driver probe函数,会在usb_probe_interface函数内调用*/
 	int (*probe) (struct usb_interface *intf,
 		      const struct usb_device_id *id);
 
@@ -1231,9 +1232,10 @@ struct usb_driver {
 	int (*post_reset)(struct usb_interface *intf);
 
 	const struct usb_device_id *id_table;
+	/*驱动定义的属性group*/
 	const struct attribute_group **dev_groups;
 
-	struct usb_dynids dynids;
+	struct usb_dynids dynids;/*一组动态id,类型为struct usb_dynid,相对于id_table为动态id*/
 	struct device_driver driver;
 	unsigned int no_dynamic_id:1;
 	unsigned int supports_autosuspend:1;
@@ -1273,9 +1275,10 @@ struct usb_driver {
  * USB drivers must provide all the fields listed above except driver,
  * match, and id_table.
  */
-struct usb_device_driver {
+struct usb_device_driver {/*usb设备驱动类型*/
 	const char *name;
 
+	/*检查驱动是否匹配此usb设备,匹配返回true,否则false*/
 	bool (*match) (struct usb_device *udev);
 	int (*probe) (struct usb_device *udev);
 	void (*disconnect) (struct usb_device *udev);

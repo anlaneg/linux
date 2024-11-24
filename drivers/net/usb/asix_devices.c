@@ -1549,7 +1549,7 @@ static const struct usb_device_id	products [] = {
 }, {
 	// Cables-to-Go USB Ethernet Adapter
 	USB_DEVICE(0x0b95, 0x772a),
-	.driver_info = (unsigned long) &ax88772_info,
+	.driver_info = (unsigned long) &ax88772_info,/*台式机上有一个type-c usb采用此设备*/
 }, {
 	// ABOCOM for pci
 	USB_DEVICE(0x14ea, 0xab11),
@@ -1583,10 +1583,11 @@ static const struct usb_device_id	products [] = {
 };
 MODULE_DEVICE_TABLE(usb, products);
 
+/*台式机有一个type-c接口接了以太网,采用此驱动(usb interface driver)*/
 static struct usb_driver asix_driver = {
 	.name =		DRIVER_NAME,
 	.id_table =	products,
-	.probe =	usbnet_probe,
+	.probe =	usbnet_probe,/*probe函数*/
 	.suspend =	asix_suspend,
 	.resume =	asix_resume,
 	.reset_resume =	asix_resume,

@@ -114,6 +114,7 @@ struct device_driver {
 	int (*suspend) (struct device *dev, pm_message_t state);
 	int (*resume) (struct device *dev);
 	const struct attribute_group **groups;
+	/*驱动定义的属性group*/
 	const struct attribute_group **dev_groups;
 
 	const struct dev_pm_ops *pm;
@@ -140,11 +141,14 @@ struct driver_attribute {
 			 size_t count);
 };
 
-#define DRIVER_ATTR_RW(_name) \
+/*定义driver读写属性*/
+#define DRIVER_ATTR_RW(_name/*属性名称*/) \
 	struct driver_attribute driver_attr_##_name = __ATTR_RW(_name)
-#define DRIVER_ATTR_RO(_name) \
+/*定义driver只读属性*/
+#define DRIVER_ATTR_RO(_name/*属性名称*/) \
 	struct driver_attribute driver_attr_##_name = __ATTR_RO(_name)
-#define DRIVER_ATTR_WO(_name) \
+/*定义driver只写属性*/
+#define DRIVER_ATTR_WO(_name/*属性名称*/) \
 	struct driver_attribute driver_attr_##_name = __ATTR_WO(_name)
 
 int __must_check driver_create_file(struct device_driver *driver,

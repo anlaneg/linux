@@ -189,7 +189,7 @@ static netdev_tx_t bnep_net_xmit(struct sk_buff *skb,
 	 * on the sk_sleep(sk).
 	 */
 	netif_trans_update(dev);
-	skb_queue_tail(&sk->sk_write_queue, skb);/*将此报文交给socket*/
+	skb_queue_tail(&sk->sk_write_queue, skb);/*将此报文交给socket,等待内核线程转发*/
 	wake_up_interruptible(sk_sleep(sk));
 
 	if (skb_queue_len(&sk->sk_write_queue) >= BNEP_TX_QUEUE_LEN) {

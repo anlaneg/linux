@@ -58,7 +58,7 @@ module_param(nousb, bool, 0444);
  */
 int usb_disabled(void)
 {
-	return nousb;
+	return nousb;/*检查ubs是否被禁用*/
 }
 EXPORT_SYMBOL_GPL(usb_disabled);
 

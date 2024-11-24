@@ -788,7 +788,7 @@ static inline size_t list_count_nodes(struct list_head *head)
  * @member:	the name of the list_head within the struct.
  */
 #define list_for_each_entry(pos/*当前位置*/, head/*链表头*/, member)				\
-	for (pos = list_first_entry(head, typeof(*pos), member);/*首个成员*/	\
+	for (pos = list_first_entry(head, typeof(*pos)/**pos类型*/, member);/*首个成员*/	\
 	     !list_entry_is_head(pos, head, member);/*检查pos是否为head*/			\
 	     pos = list_next_entry(pos, member))
 

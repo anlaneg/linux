@@ -345,7 +345,7 @@ void usbnet_skb_return (struct usbnet *dev, struct sk_buff *skb)
 	if (skb_defer_rx_timestamp(skb))
 		return;
 
-	status = netif_rx (skb);
+	status = netif_rx (skb);/*将报文投递到协议栈*/
 	if (status != NET_RX_SUCCESS)
 		netif_dbg(dev, rx_err, dev->net,
 			  "netif_rx status %d\n", status);
@@ -451,9 +451,9 @@ static enum skb_state defer_bh(struct usbnet *dev, struct sk_buff *skb,
 	 */
 	spin_lock_nested(&dev->done.lock, SINGLE_DEPTH_NESTING);
 
-	__skb_queue_tail(&dev->done, skb);
+	__skb_queue_tail(&dev->done, skb);/*将skb入队到dev->done*/
 	if (dev->done.qlen == 1)
-		tasklet_schedule(&dev->bh);
+		tasklet_schedule(&dev->bh);/*触发收包*/
 	spin_unlock(&dev->done.lock);
 	spin_unlock_irqrestore(&list->lock, flags);
 	return old_state;
@@ -1048,7 +1048,7 @@ void usbnet_get_drvinfo (struct net_device *net, struct ethtool_drvinfo *info)
 {
 	struct usbnet *dev = netdev_priv(net);
 
-	strscpy(info->driver, dev->driver_name, sizeof(info->driver));
+	strscpy(info->driver, dev->driver_name, sizeof(info->driver));/*填充设备驱动名称*/
 	strscpy(info->fw_version, dev->driver_info->description,
 		sizeof(info->fw_version));
 	usb_make_path (dev->udev, info->bus_info, sizeof info->bus_info);
@@ -1382,7 +1382,7 @@ netdev_tx_t usbnet_start_xmit (struct sk_buff *skb,
 	entry->dev = dev;
 
 	usb_fill_bulk_urb (urb, dev->udev, dev->out,
-			skb->data, skb->len, tx_complete, skb);
+			skb->data/*报文内容*/, skb->len/*报文长度*/, tx_complete, skb);
 	if (dev->can_dma_sg) {
 		if (build_dma_sg(skb, urb) < 0)
 			goto drop;
@@ -1530,11 +1530,12 @@ static void usbnet_bh (struct timer_list *t)
 	struct sk_buff		*skb;
 	struct skb_data		*entry;
 
+	/*自dev->done队列上出一个skb*/
 	while ((skb = skb_dequeue (&dev->done))) {
 		entry = (struct skb_data *) skb->cb;
 		switch (entry->state) {
 		case rx_done:
-			if (rx_process(dev, skb))
+			if (rx_process(dev, skb))/*收包处理*/
 				usb_free_skb(skb);
 			continue;
 		case tx_done:
@@ -1586,7 +1587,7 @@ static void usbnet_bh_tasklet(struct tasklet_struct *t)
 {
 	struct usbnet *dev = from_tasklet(dev, t, bh);
 
-	usbnet_bh(&dev->delay);
+	usbnet_bh(&dev->delay);/*促使自dev->done上收包*/
 }
 
 
@@ -1641,7 +1642,7 @@ EXPORT_SYMBOL_GPL(usbnet_disconnect);
 static const struct net_device_ops usbnet_netdev_ops = {
 	.ndo_open		= usbnet_open,
 	.ndo_stop		= usbnet_stop,
-	.ndo_start_xmit		= usbnet_start_xmit,
+	.ndo_start_xmit		= usbnet_start_xmit,/*报文转usb*/
 	.ndo_tx_timeout		= usbnet_tx_timeout,
 	.ndo_set_rx_mode	= usbnet_set_rx_mode,
 	.ndo_change_mtu		= usbnet_change_mtu,
@@ -1686,6 +1687,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	name = udev->dev.driver->name;
 	info = (const struct driver_info *) prod->driver_info;
 	if (!info) {
+		/*必须提供driver_info*/
 		dev_dbg (&udev->dev, "blacklisted by %s\n", name);
 		return -ENODEV;
 	}
@@ -1695,14 +1697,14 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	status = -ENOMEM;
 
 	// set up our own records
-	net = alloc_etherdev(sizeof(*dev));
+	net = alloc_etherdev(sizeof(*dev));/*申请单队列的以太设备*/
 	if (!net)
 		goto out;
 
 	/* netdev_printk() needs this so do it as early as possible */
 	SET_NETDEV_DEV(net, &udev->dev);
 
-	dev = netdev_priv(net);
+	dev = netdev_priv(net);/*取私有数据*/
 	dev->udev = xdev;
 	dev->intf = udev;
 	dev->driver_info = info;
@@ -1710,6 +1712,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	dev->rx_speed = SPEED_UNSET;
 	dev->tx_speed = SPEED_UNSET;
 
+	/*申请统计信息*/
 	net->tstats = netdev_alloc_pcpu_stats(struct pcpu_sw_netstats);
 	if (!net->tstats)
 		goto out0;
@@ -1721,6 +1724,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	skb_queue_head_init (&dev->txq);
 	skb_queue_head_init (&dev->done);
 	skb_queue_head_init(&dev->rxq_pause);
+	/*初始化tasklet,促使自设备收包*/
 	tasklet_setup(&dev->bh, usbnet_bh_tasklet);
 	INIT_WORK (&dev->kevent, usbnet_deferred_kevent);
 	init_usb_anchor(&dev->deferred);
@@ -1730,7 +1734,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	dev->interrupt_count = 0;
 
 	dev->net = net;
-	strscpy(net->name, "usb%d", sizeof(net->name));
+	strscpy(net->name, "usb%d", sizeof(net->name));/*网络接口名称*/
 	eth_hw_addr_set(net, node_id);
 
 	/* rx and tx sides can use different message sizes;
@@ -1740,9 +1744,9 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 	net->min_mtu = 0;
 	net->max_mtu = ETH_MAX_MTU;
 
-	net->netdev_ops = &usbnet_netdev_ops;
+	net->netdev_ops = &usbnet_netdev_ops;/*设置网络操作函数集*/
 	net->watchdog_timeo = TX_TIMEOUT_JIFFIES;
-	net->ethtool_ops = &usbnet_ethtool_ops;
+	net->ethtool_ops = &usbnet_ethtool_ops;/*设置ethtool操作函数集*/
 
 	// allow device-specific bind/init procedures
 	// NOTE net->name still not usable ...
@@ -1826,7 +1830,7 @@ usbnet_probe (struct usb_interface *udev, const struct usb_device_id *prod)
 		}
 	}
 
-	status = register_netdev (net);
+	status = register_netdev (net);/*注册网络设备*/
 	if (status)
 		goto out5;
 	netif_info(dev, probe, dev->net,

@@ -52,6 +52,7 @@ ssize_t usb_store_new_id(struct usb_dynids *dynids,
 	int fields = 0;
 	int retval = 0;
 
+	/*解析5个内容*/
 	fields = sscanf(buf, "%x %x %x %x %x", &idVendor, &idProduct,
 			&bInterfaceClass, &refVendor, &refProduct);
 	if (fields < 2)
@@ -96,6 +97,7 @@ ssize_t usb_store_new_id(struct usb_dynids *dynids,
 	}
 
 	spin_lock(&dynids->lock);
+	/*存入添加的dynamic id*/
 	list_add_tail(&dynid->node, &dynids->list);
 	spin_unlock(&dynids->lock);
 
@@ -116,8 +118,10 @@ ssize_t usb_show_dynids(struct usb_dynids *dynids, char *buf)
 	struct usb_dynid *dynid;
 	size_t count = 0;
 
+	/*遍历挂接在dynids->list上的struct usb_dynid结构体*/
 	list_for_each_entry(dynid, &dynids->list, node)
 		if (dynid->id.bInterfaceClass != 0)
+			/*输出时包含interface class*/
 			count += scnprintf(&buf[count], PAGE_SIZE - count, "%04x %04x %02x\n",
 					   dynid->id.idVendor, dynid->id.idProduct,
 					   dynid->id.bInterfaceClass);
@@ -128,6 +132,7 @@ ssize_t usb_show_dynids(struct usb_dynids *dynids, char *buf)
 }
 EXPORT_SYMBOL_GPL(usb_show_dynids);
 
+/*new_id属性显示*/
 static ssize_t new_id_show(struct device_driver *driver, char *buf)
 {
 	struct usb_driver *usb_drv = to_usb_driver(driver);
@@ -135,6 +140,7 @@ static ssize_t new_id_show(struct device_driver *driver, char *buf)
 	return usb_show_dynids(&usb_drv->dynids, buf);
 }
 
+/*new_id属性store*/
 static ssize_t new_id_store(struct device_driver *driver,
 			    const char *buf, size_t count)
 {
@@ -186,6 +192,7 @@ static int usb_create_newid_files(struct usb_driver *usb_drv)
 	int error = 0;
 
 	if (usb_drv->no_dynamic_id)
+		/*不支持dynamic id,则不用创建new_id文件*/
 		goto exit;
 
 	if (usb_drv->probe != NULL) {
@@ -228,6 +235,7 @@ static void usb_free_dynids(struct usb_driver *usb_drv)
 	spin_unlock(&usb_drv->dynids.lock);
 }
 
+/*检查usb_driver的dynamic id是否与usb interface匹配*/
 static const struct usb_device_id *usb_match_dynamic_id(struct usb_interface *intf,
 							struct usb_driver *drv)
 {
@@ -320,7 +328,7 @@ static int usb_unbind_device(struct device *dev)
 /* called from driver core with dev locked */
 static int usb_probe_interface(struct device *dev)
 {
-    /*设备driver*/
+    /*转usb interface driver*/
 	struct usb_driver *driver = to_usb_driver(dev->driver);
 	/*设备usb interface*/
 	struct usb_interface *intf = to_usb_interface(dev);
@@ -345,9 +353,10 @@ static int usb_probe_interface(struct device *dev)
 		return error;
 	}
 
-	/*interface匹配*/
+	/*先尝试驱动dynamic id匹配*/
 	id = usb_match_dynamic_id(intf, driver);
 	if (!id)
+		/*再尝试驱动id_table匹配*/
 		id = usb_match_id(intf, driver->id_table);
 	if (!id)
 	    /*匹配失败*/
@@ -400,7 +409,7 @@ static int usb_probe_interface(struct device *dev)
 		intf->needs_altsetting0 = 0;
 	}
 
-	//probe驱动
+	//再调用interface driver probe驱动
 	error = driver->probe(intf, id);
 	if (error)
 		goto err;
@@ -847,6 +856,7 @@ const struct usb_device_id *usb_device_match_id(struct usb_device *udev,
 				const struct usb_device_id *id)
 {
 	if (!id)
+		/*id为空时,返回NULL*/
 		return NULL;
 
 	/*idVendor或idProduce必须存在*/
@@ -864,7 +874,7 @@ bool usb_driver_applicable(struct usb_device *udev,
 			   struct usb_device_driver *udrv)
 {
 	if (udrv->id_table && udrv->match)
-	    /*有match函数与id_table情况下进行比对*/
+	    /*driver即有match函数,也有id_table情况下进行比对*/
 		return usb_device_match_id(udev, udrv->id_table) != NULL &&
 		       udrv->match(udev);
 
@@ -879,7 +889,7 @@ bool usb_driver_applicable(struct usb_device *udev,
 	return false;
 }
 
-/*usb bus上设备与驱动匹配函数*/
+/*usb bus上设备与驱动匹配函数,返回0表示失配,返回>0表示匹配,返回<0表示失败*/
 static int usb_device_match(struct device *dev, struct device_driver *drv)
 {
 	/* devices and interfaces are handled separately */
@@ -890,7 +900,7 @@ static int usb_device_match(struct device *dev, struct device_driver *drv)
 
 		/* interface drivers never match devices */
 		if (!is_usb_device_driver(drv))
-		    /*跳过接口驱动*/
+		    /*不是usb设备驱动(跳过接口驱动),指明不匹配*/
 			return 0;
 
 		/*转usb设备及usb驱动*/
@@ -902,10 +912,10 @@ static int usb_device_match(struct device *dev, struct device_driver *drv)
 		 * function decide.
 		 */
 		if (!udrv->id_table && !udrv->match)
-		    /*没有id_table,没有match函数返回1*/
+		    /*驱动即没有id_table,也没有match函数返回1,表示匹配(driver自已去probe决定)*/
 			return 1;
 
-		/*usb设备匹配*/
+		/*否则通过id_table,match同时或者两者任一进行匹配usb设备*/
 		return usb_driver_applicable(udev, udrv);
 
 	} else if (is_usb_interface(dev)) {
@@ -916,15 +926,19 @@ static int usb_device_match(struct device *dev, struct device_driver *drv)
 
 		/* device drivers never match interfaces */
 		if (is_usb_device_driver(drv))
+			/*跳过usb设备驱动*/
 			return 0;
 
+		/*转usb interface*/
 		intf = to_usb_interface(dev);
 		usb_drv = to_usb_driver(drv);
 
+		/*优先尝试id_table匹配*/
 		id = usb_match_id(intf, usb_drv->id_table);
 		if (id)
 			return 1;
 
+		/*再尝试dynamic id匹配*/
 		id = usb_match_dynamic_id(intf, usb_drv);
 		if (id)
 			return 1;
@@ -999,6 +1013,7 @@ static int __usb_bus_reprobe_drivers(struct device *dev, void *data)
 
 bool is_usb_device_driver(const struct device_driver *drv)
 {
+	/*所有驱动probe函数为usb_probe_device的为usb驱动*/
 	return drv->probe == usb_probe_device;
 }
 
@@ -1016,6 +1031,7 @@ bool is_usb_device_driver(const struct device_driver *drv)
 int usb_register_device_driver(struct usb_device_driver *new_udriver,
 		struct module *owner)
 {
+	/*此函数用于注册usb device driver*/
 	int retval = 0;
 
 	if (usb_disabled())
@@ -1023,6 +1039,9 @@ int usb_register_device_driver(struct usb_device_driver *new_udriver,
 
 	new_udriver->driver.name = new_udriver->name;
 	new_udriver->driver.bus = &usb_bus_type;
+	/*用于标明此驱动为usb device driver
+	 * 见is_usb_device_driver,
+	 * */
 	new_udriver->driver.probe = usb_probe_device;
 	new_udriver->driver.remove = usb_unbind_device;
 	new_udriver->driver.owner = owner;
@@ -1083,22 +1102,26 @@ EXPORT_SYMBOL_GPL(usb_deregister_device_driver);
 int usb_register_driver(struct usb_driver *new_driver/*驱动结构体*/, struct module *owner,
 			const char *mod_name)
 {
-    //usb驱动注册
+    //usb interface driver注册
 	int retval = 0;
 
 	if (usb_disabled())
+		/*如未启用,则直接返回失败*/
 		return -ENODEV;
 
 	new_driver->driver.name = new_driver->name;
 	new_driver->driver.bus = &usb_bus_type;
+	/*暗指不是usb设备驱动(参见is_usb_device_driver),
+	 * 另外由dd.c定义此函数代理了所有usb interface driver的probe*/
 	new_driver->driver.probe = usb_probe_interface;
 	new_driver->driver.remove = usb_unbind_interface;
 	new_driver->driver.owner = owner;
 	new_driver->driver.mod_name = mod_name;
-	new_driver->driver.dev_groups = new_driver->dev_groups;
+	new_driver->driver.dev_groups = new_driver->dev_groups;/*驱动定义的属性group*/
 	spin_lock_init(&new_driver->dynids.lock);
 	INIT_LIST_HEAD(&new_driver->dynids.list);
 
+	/*驱动注册*/
 	retval = driver_register(&new_driver->driver);
 	if (retval)
 		goto out;
@@ -2065,9 +2088,10 @@ int usb_disable_usb2_hardware_lpm(struct usb_device *udev)
 
 #endif /* CONFIG_PM */
 
+/*usb bus类型,如下示usb bus将probe回调交给各驱动来定义*/
 const struct bus_type usb_bus_type = {
 	.name =		"usb",/*指明usb bus*/
-	.match =	usb_device_match,/*设备与驱动的默认匹配方式*/
+	.match =	usb_device_match,/*设备与驱动的匹配方式*/
 	.uevent =	usb_uevent,
 	.need_parent_lock =	true,
 };

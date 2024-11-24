@@ -400,7 +400,7 @@ static int bnep_rx_frame(struct bnep_session *s, struct sk_buff *skb)
 	dev->stats.rx_packets++;
 	nskb->ip_summed = CHECKSUM_NONE;
 	nskb->protocol  = eth_type_trans(nskb, dev);
-	netif_rx(nskb);/*将报文送协议栈*/
+	netif_rx(nskb);/*将报文送网络协议栈*/
 	return 0;
 
 badframe:
@@ -493,7 +493,7 @@ static int bnep_session(void *arg)
 			break;
 		/* RX */
 		while ((skb = skb_dequeue(&sk->sk_receive_queue))) {
-			/*自sk->sk_receive_queue拿到skb,送协议栈*/
+			/*自sk->sk_receive_queue拿到skb,送网络协议栈*/
 			skb_orphan(skb);
 			if (!skb_linearize(skb))
 				bnep_rx_frame(s, skb);
@@ -506,6 +506,7 @@ static int bnep_session(void *arg)
 
 		/* TX */
 		while ((skb = skb_dequeue(&sk->sk_write_queue)))
+			/*自sk->sk_write_queue拿到skb,送蓝牙发送*/
 			if (bnep_tx_frame(s, skb))
 				break;
 		netif_wake_queue(dev);
@@ -578,7 +579,7 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 	dev = alloc_netdev(sizeof(struct bnep_session),
 			   (*req->device) ? req->device : "bnep%d",
 			   NET_NAME_UNKNOWN,
-			   bnep_net_setup);/*创建bnep类设备*/
+			   bnep_net_setup);/*创建bnep网络设备*/
 	if (!dev)
 		return -ENOMEM;
 
@@ -599,7 +600,7 @@ int bnep_add_connection(struct bnep_connadd_req *req, struct socket *sock)
 	eth_hw_addr_set(dev, s->eh.h_dest);
 
 	s->dev   = dev;
-	s->sock  = sock;
+	s->sock  = sock;/*对应的socket*/
 	s->role  = req->role;
 	s->state = BT_CONNECTED;
 	s->flags = req->flags;
@@ -748,7 +749,7 @@ static int __init bnep_init(void)
 	if (flt[0])
 		BT_INFO("BNEP filters: %s", flt);
 
-	bnep_sock_init();
+	bnep_sock_init();/*支持以太网模拟*/
 	return 0;
 }
 

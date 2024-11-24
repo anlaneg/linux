@@ -220,7 +220,7 @@ void driver_remove_groups(struct device_driver *drv,
  * structures.
  */
 //linux驱动注册
-int driver_register(struct device_driver *drv)
+int driver_register(struct device_driver *drv/*设备驱动*/)
 {
 	int ret;
 	struct device_driver *other;
@@ -243,7 +243,7 @@ int driver_register(struct device_driver *drv)
 	//检查驱动自身是否已注册在对应的bus上
 	other = driver_find(drv->name, drv->bus);
 	if (other) {
-        	//已存在，重复注册,报错
+        //驱动在bus上已存在，重复注册,报错
 		pr_err("Error: Driver '%s' is already registered, "
 			"aborting...\n", drv->name);
 		return -EBUSY;
@@ -254,7 +254,7 @@ int driver_register(struct device_driver *drv)
 	if (ret)
 		return ret;
 
-	//为驱动添加groups
+	//为驱动添加其要求的groups
 	ret = driver_add_groups(drv, drv->groups);
 	if (ret) {
 		bus_remove_driver(drv);

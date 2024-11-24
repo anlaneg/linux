@@ -38,7 +38,7 @@ struct usbnet {
 	const char		*padding_pkt;
 
 	/* protocol/interface state */
-	struct net_device	*net;
+	struct net_device	*net;/*对应的网络设备*/
 	int			msg_enable;
 	unsigned long		data[5];
 	u32			xid;
@@ -52,7 +52,7 @@ struct usbnet {
 	/* various kinds of pending driver work */
 	struct sk_buff_head	rxq;
 	struct sk_buff_head	txq;
-	struct sk_buff_head	done;
+	struct sk_buff_head	done;/*缓存在其上的skb将被bh tasklet收取,并促使其送网络协议栈*/
 	struct sk_buff_head	rxq_pause;
 	struct urb		*interrupt;
 	unsigned		interrupt_count;

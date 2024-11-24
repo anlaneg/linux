@@ -115,7 +115,7 @@ struct attribute_group {
 	.store	= _store,						\
 }
 
-//设置只读属性回调
+//设置只读属性回调,同时指定_$name_show回调
 #define __ATTR_RO(_name) {						\
 	.attr	= { .name = __stringify(_name), .mode = 0444 },		\
 	.show	= _name##_show,						\
@@ -134,7 +134,7 @@ struct attribute_group {
 	.store	= _name##_store,					\
 }
 
-/*设置只写属性回调*/
+/*设置只写属性回调,同时指定_$name_store回调*/
 #define __ATTR_WO(_name) {						\
 	.attr	= { .name = __stringify(_name), .mode = 0200 },		\
 	.store	= _name##_store,					\

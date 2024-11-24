@@ -85,7 +85,9 @@ struct bus_type {
 	//bus为drv提供的一组属性
 	const struct attribute_group **drv_groups;
 
-	//实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)
+	/*实现设备与驱动的匹配函数(首先采用此函数确定是否和driver能match,如果可以match,则进行probe)
+	 * 如果返回值>0 表示匹配,如果<0表示失败,如果=0,表示不匹配
+	*/
 	int (*match)(struct device *dev, struct device_driver *drv);
 	//bus针对kobj通知的uevent时需要添加的env
 	int (*uevent)(const struct device *dev, struct kobj_uevent_env *env);

@@ -1859,6 +1859,7 @@ static struct sock *l2cap_sock_alloc(struct net *net, struct socket *sock,
 	return sk;
 }
 
+/*创建l2cap socket*/
 static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 			     int kern)
 {
@@ -1886,6 +1887,7 @@ static int l2cap_sock_create(struct net *net, struct socket *sock, int protocol,
 	return 0;
 }
 
+/*这种socket可以注入创建基于蓝牙的netdev*/
 static const struct proto_ops l2cap_sock_ops = {
 	.family		= PF_BLUETOOTH,
 	.owner		= THIS_MODULE,

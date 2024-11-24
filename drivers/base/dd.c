@@ -580,12 +580,15 @@ static int call_driver_probe(struct device *dev, struct device_driver *drv)
 	int ret = 0;
 
 	if (dev->bus->probe)
+		/*bus有probe的,以bus probe为准*/
 		ret = dev->bus->probe(dev);
 	else if (drv->probe)
+		/*否则driver有probe的,以driver probe为准*/
 		ret = drv->probe(dev);
 
 	switch (ret) {
 	case 0:
+		/*不匹配*/
 		break;
 	case -EPROBE_DEFER:
 		/* Driver requested deferred probing */

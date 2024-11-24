@@ -156,7 +156,7 @@ static inline int is_usb_device(const struct device *dev)
 	return dev->type == &usb_device_type;
 }
 
-/*设备是否为usb interface*/
+/*设备是否为usb interface设备*/
 static inline int is_usb_interface(const struct device *dev)
 {
 	return dev->type == &usb_if_device_type;

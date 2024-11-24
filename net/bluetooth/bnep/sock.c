@@ -64,12 +64,14 @@ static int do_bnep_sock_ioctl(struct socket *sock, unsigned int cmd, void __user
 
 	switch (cmd) {
 	case BNEPCONNADD:
+		/*注入socket形成基于蓝牙的netdev网络*/
 		if (!capable(CAP_NET_ADMIN))
 			return -EPERM;
 
 		if (copy_from_user(&ca, argp, sizeof(ca)))
 			return -EFAULT;
 
+		/*由fd获取socket*/
 		nsock = sockfd_lookup(ca.sock, &err);
 		if (!nsock)
 			return err;
@@ -209,7 +211,7 @@ static int bnep_sock_create(struct net *net, struct socket *sock, int protocol,
 	if (!sk)
 		return -ENOMEM;
 
-	sock->ops = &bnep_sock_ops;/*此类socket对应的ops*/
+	sock->ops = &bnep_sock_ops;/*此类socket对应的ops,此socket支持基于蓝牙的netdev网络*/
 	sock->state = SS_UNCONNECTED;
 
 	bt_sock_link(&bnep_sk_list, sk);
@@ -232,7 +234,7 @@ int __init bnep_sock_init(void)
 	if (err < 0)
 		return err;
 
-	/*bnep协议对应的ops*/
+	/*bnep协议对应的ops,用于以太网模拟*/
 	err = bt_sock_register(BTPROTO_BNEP, &bnep_sock_family_ops);
 	if (err < 0) {
 		BT_ERR("Can't register BNEP socket");
