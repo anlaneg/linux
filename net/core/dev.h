@@ -105,7 +105,7 @@ static inline void netif_set_gso_max_size(struct net_device *dev,
 					  unsigned int size)
 {
 	/* dev->gso_max_size is read locklessly from sk_setup_caps() */
-	WRITE_ONCE(dev->gso_max_size, size);
+	WRITE_ONCE(dev->gso_max_size, size);/*设备设备gso的max_size*/
 	if (size <= GSO_LEGACY_MAX_SIZE)
 		WRITE_ONCE(dev->gso_ipv4_max_size, size);
 }

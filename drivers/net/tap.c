@@ -1332,15 +1332,17 @@ int tap_queue_resize(struct tap_dev *tap)
 	int n = tap->numqueues;
 	int ret, i = 0;
 
+	/*申请ring数组*/
 	rings = kmalloc_array(n, sizeof(*rings), GFP_KERNEL);
 	if (!rings)
 		return -ENOMEM;
 
+	/*每个ring指向一个queue*/
 	list_for_each_entry(q, &tap->queue_list, next)
 		rings[i++] = &q->ring;
 
 	ret = ptr_ring_resize_multiple(rings, n,
-				       dev->tx_queue_len, GFP_KERNEL,
+				       dev->tx_queue_len/*ring的大小*/, GFP_KERNEL,
 				       __skb_array_destroy_skb);
 
 	kfree(rings);

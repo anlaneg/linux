@@ -3002,6 +3002,7 @@ static int do_setlink(const struct sk_buff *skb,
 	}
 
 	if (tb[IFLA_TXQLEN]) {
+		/*设置设备的txq长度*/
 		unsigned int value = nla_get_u32(tb[IFLA_TXQLEN]);
 
 		err = dev_change_tx_queue_len(dev, value);

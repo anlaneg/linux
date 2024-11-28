@@ -5607,7 +5607,7 @@ struct wiphy {
 	u16 n_addresses;
 
 	/* Supported interface modes, OR together BIT(NL80211_IFTYPE_...) */
-	u16 interface_modes;
+	u16 interface_modes;/*接口模式，例如：NL80211_IFTYPE_AP*/
 
 	u16 max_acl_mac_addrs;
 

@@ -513,7 +513,7 @@ static inline void __ptr_ring_set_size(struct ptr_ring *r, int size)
 }
 
 //初始化ring
-static inline int ptr_ring_init(struct ptr_ring *r, int size, gfp_t gfp)
+static inline int ptr_ring_init(struct ptr_ring *r, int size/*ring长度*/, gfp_t gfp)
 {
 	//申请长度为size的queue队列
 	r->queue = __ptr_ring_init_queue_alloc(size, gfp);

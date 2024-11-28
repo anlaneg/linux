@@ -3593,6 +3593,7 @@ static netdev_features_t gso_features_check(const struct sk_buff *skb,
 		return features & ~NETIF_F_GSO_MASK;
 
 	if (unlikely(skb->len >= READ_ONCE(dev->gso_max_size)))
+		/*报文长度超过gso max size*/
 		return features & ~NETIF_F_GSO_MASK;
 
 	if (!skb_shinfo(skb)->gso_type) {
@@ -9313,7 +9314,8 @@ int dev_change_tx_queue_len(struct net_device *dev, unsigned long new_len)
 		return -ERANGE;
 
 	if (new_len != orig_len) {
-		dev->tx_queue_len = new_len;
+		/*触发tx队列长度变更事件*/
+		dev->tx_queue_len = new_len;/*设置网络设备tx队列长度*/
 		res = call_netdevice_notifiers(NETDEV_CHANGE_TX_QUEUE_LEN, dev);
 		res = notifier_to_errno(res);
 		if (res)

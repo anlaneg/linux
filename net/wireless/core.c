@@ -822,9 +822,9 @@ int wiphy_register(struct wiphy *wiphy)
 
 	/* sanity check ifmodes */
 	WARN_ON(!ifmodes);
-	ifmodes &= ((1 << NUM_NL80211_IFTYPES) - 1) & ~1;
+	ifmodes &= ((1 << NUM_NL80211_IFTYPES) - 1) & ~1;/*接口类型*/
 	if (WARN_ON(ifmodes != wiphy->interface_modes))
-		wiphy->interface_modes = ifmodes;
+		wiphy->interface_modes = ifmodes;/*使用规范化之后的modes*/
 
 	res = wiphy_verify_combinations(wiphy);
 	if (res)

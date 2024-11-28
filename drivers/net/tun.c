@@ -839,7 +839,7 @@ static int tun_attach(struct tun_struct *tun, struct file *file,
 
 	if (!tfile->detached &&
 	    /*更新tx_ring大小,使其对dev的tx队列一样长*/
-	    ptr_ring_resize(&tfile->tx_ring, dev->tx_queue_len,
+	    ptr_ring_resize(&tfile->tx_ring, dev->tx_queue_len/*tx队列大小*/,
 			    GFP_KERNEL, tun_ptr_free)) {
 		err = -ENOMEM;
 		goto out;
@@ -2368,6 +2368,7 @@ static ssize_t tun_do_read(struct tun_struct *tun, struct tun_file *tfile,
 
 		/*复制报文完成，skb释放*/
 		if (unlikely(ret < 0))
+			/*复制失败*/
 			kfree_skb(skb);
 		else
 			consume_skb(skb);
@@ -2462,7 +2463,7 @@ static void tun_setup(struct net_device *dev)
 	dev->needs_free_netdev = true;
 	dev->priv_destructor = tun_free_netdev;
 	/* We prefer our own queue length */
-	dev->tx_queue_len = TUN_READQ_SIZE;/*tx队列默认大小*/
+	dev->tx_queue_len = TUN_READQ_SIZE;/*初始化tx queue队列长度*/
 }
 
 /* Trivial set of netlink ops to allow deleting tun or tap
@@ -3840,6 +3841,7 @@ static const struct ethtool_ops tun_ethtool_ops = {
 	.set_link_ksettings = tun_set_link_ksettings,
 };
 
+/*tun口队列大小调整*/
 static int tun_queue_resize(struct tun_struct *tun)
 {
 	struct net_device *dev = tun->dev;
@@ -3881,7 +3883,7 @@ static int tun_device_event(struct notifier_block *unused,
 
 	switch (event) {
 	case NETDEV_CHANGE_TX_QUEUE_LEN:
-		/*修改TX队列长度*/
+		/*收到tx队列长度变更事件*/
 		if (tun_queue_resize(tun))
 			return NOTIFY_BAD;
 		break;
