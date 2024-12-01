@@ -103,9 +103,18 @@ struct usbdevfs_conninfo_ex {
 #define USBDEVFS_URB_ZERO_PACKET	0x40
 #define USBDEVFS_URB_NO_INTERRUPT	0x80
 
+/*同步传输(Isochronous)是一种周期的、连续的单向传输方式，
+ * 通常用于与时间有密切关系的信息的传输。
+ * 同步传输每次传输的最大有效负荷为1024字节。*/
 #define USBDEVFS_URB_TYPE_ISO		   0
+/*中断传输用于非周期的、自然发生的、数据量很小的信息的传输，
+ * 主要用在键盘、鼠标及操纵杆等设备上。*/
 #define USBDEVFS_URB_TYPE_INTERRUPT	   1
+/*控制传输方式支持双向传输，用来处理主端口到USB从端口的数据传输，
+ * 包括设备控制指令、设备状态查询及确认命令。对于高速设备，
+ * 允许数据包最大容量为8，16，32或64字节，对于低速设备只有8字节一种选择。*/
 #define USBDEVFS_URB_TYPE_CONTROL	   2
+/*批量传输方式也是一种单向传输，用于大量的、对时间没有要求的数据传输。*/
 #define USBDEVFS_URB_TYPE_BULK		   3
 
 struct usbdevfs_iso_packet_desc {
@@ -114,13 +123,33 @@ struct usbdevfs_iso_packet_desc {
 	unsigned int status;
 };
 
+/*USB请求块(USB request block，URB)是USB设备驱动中用来
+ * 描述与USB设备通信所用的基本载体和核心数据结构，
+ * 与网络设备驱动中的sk_buff结构体类似，
+ * 是USB主机与设备之间传输数据的封装。*/
 struct usbdevfs_urb {
-	unsigned char type;
+	unsigned char type;/*URB参数类型,例如:USBDEVFS_URB_TYPE_CONTROL*/
+	/*USB端点（Endpoint） 在USB协议中，端点是设备内部的数据传输终点，
+	 * 它是设备与主机进行数据交换的基本单位。
+	 * 每个USB设备至少有一个端点，即端点0，这是用于控制通信的默认端点。
+	 * 除此之外，设备可以根据需要定义额外的数据端点，用以传输非控制类型的数据。
+	 * 方向性：USB端点可以被配置为输入端点（IN），用于从设备向主机发送数据；
+	 * 或输出端点（OUT），用于接收来自主机的数据。
+	 * 某些高级设备可能还支持双向端点（Bi-directional Endpoint），
+	 * 能够根据需要进行数据传输方向的切换。
+	 * 类型：端点根据其功能和传输特性分为以下四种类型：
+	 * 控制端点（Control Endpoint）：所有USB设备都必须具有端点0，用于设备枚举、配置设置以及状态查询等控制操作。
+	 * 中断端点（Interrupt Endpoint）：主要用于周期性地发送小量且时间敏感的数据，如键盘、鼠标事件等。
+	 * 批量端点（Bulk Endpoint）：处理大量非实时的数据传输，适合文件传输、打印机作业等应用。
+	 * 同步端点（Isochronous Endpoint）：设计用于连续流式传输，例如音频和视频流，这类数据传输对带宽和定时要求严格。
+	 * 特性：每个端点都有一个唯一的地址，由端点号（Endpoint Number）标识，并且每个端点都有自己的最大包大小（Max Packet Size），
+	 * 这个值决定了每次数据传输的最大字节数。
+	 * */
 	unsigned char endpoint;
 	int status;
 	unsigned int flags;
 	void __user *buffer;
-	int buffer_length;
+	int buffer_length;/*传入的buffer长度*/
 	int actual_length;
 	int start_frame;
 	union {

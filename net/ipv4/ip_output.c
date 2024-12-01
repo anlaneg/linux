@@ -105,8 +105,8 @@ int __ip_local_out(struct net *net, struct sock *sk, struct sk_buff *skb)
 
 	IP_INC_STATS(net, IPSTATS_MIB_OUTREQUESTS);
 
-	iph_set_totlen(iph, skb->len);
-	ip_send_check(iph);
+	iph_set_totlen(iph, skb->len);/*设置此报文总长度*/
+	ip_send_check(iph);/*只计算ip头checksum*/
 
 	/* if egress device is enslaved to an L3 master device pass the
 	 * skb to its handler for processing
@@ -1421,7 +1421,7 @@ static void ip_cork_release(struct inet_cork *cork)
  */
 struct sk_buff *__ip_make_skb(struct sock *sk,
 			      struct flowi4 *fl4,
-			      struct sk_buff_head *queue,
+			      struct sk_buff_head *queue/*待发送的一组skb*/,
 			      struct inet_cork *cork)
 {
 	struct sk_buff *skb, *tmp_skb;
@@ -1438,18 +1438,18 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	skb = __skb_dequeue(queue);
 	if (!skb)
 		goto out;
-	tail_skb = &(skb_shinfo(skb)->frag_list);
+	tail_skb = &(skb_shinfo(skb)->frag_list);/*链头*/
 
 	/* move skb->data to ip header from ext header */
 	if (skb->data < skb_network_header(skb))
 		__skb_pull(skb, skb_network_offset(skb));
 
-	/*将队列中所有tmp_skb移出,串成next链,由skb->frag_list指向*/
+	/*将队列中所有tmp_skb移出,串成next链(多个分片),由skb->frag_list指向*/
 	while ((tmp_skb = __skb_dequeue(queue)) != NULL) {
-		__skb_pull(tmp_skb, skb_network_header_len(skb));
+		__skb_pull(tmp_skb, skb_network_header_len(skb));/*队列里的报文全部指向传输层*/
 		*tail_skb = tmp_skb;
-		tail_skb = &(tmp_skb->next);
-		skb->len += tmp_skb->len;
+		tail_skb = &(tmp_skb->next);/*用next串起来*/
+		skb->len += tmp_skb->len;/*统计skb总长度*/
 		skb->data_len += tmp_skb->len;
 		skb->truesize += tmp_skb->truesize;
 		tmp_skb->destructor = NULL;
@@ -1473,7 +1473,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 		df = htons(IP_DF);
 
 	if (cork->flags & IPCORK_OPT)
-		opt = cork->opt;
+		opt = cork->opt;/*指向ip选项*/
 
 	if (cork->ttl != 0)
 		ttl = cork->ttl;
@@ -1490,7 +1490,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	iph->frag_off = df;
 	iph->ttl = ttl;
 	iph->protocol = sk->sk_protocol;
-	ip_copy_addrs(iph, fl4);/*使用fl4的源目的ip*/
+	ip_copy_addrs(iph, fl4);/*使用fl4的源,目的ip*/
 	ip_select_ident(net, skb, sk);
 
 	/*构造ip选项*/
@@ -1500,7 +1500,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 	}
 
 	skb->priority = (cork->tos != -1) ? cork->priority: READ_ONCE(sk->sk_priority);
-	skb->mark = cork->mark;
+	skb->mark = cork->mark;/*指明skb mark*/
 	skb->tstamp = cork->transmit_time;
 	/*
 	 * Steal rt from cork.dst to avoid a pair of atomic_inc/atomic_dec
@@ -1521,7 +1521,7 @@ struct sk_buff *__ip_make_skb(struct sock *sk,
 			icmp_type = fl4->fl4_icmp_type;
 		else
 			icmp_type = icmp_hdr(skb)->type;
-		icmp_out_count(net, icmp_type);
+		icmp_out_count(net, icmp_type);/*针对icmp统计type的报文数*/
 	}
 
 	ip_cork_release(cork);
@@ -1550,7 +1550,7 @@ int ip_push_pending_frames(struct sock *sk, struct flowi4 *fl4)
 {
 	struct sk_buff *skb;
 
-	/*将未决的报文返回为skb*/
+	/*将未决的报文组装成一个skb,可能有多个分片*/
 	skb = ip_finish_skb(sk, fl4);
 	if (!skb)
 		return 0;

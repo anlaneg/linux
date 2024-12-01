@@ -118,6 +118,7 @@ module_param(usbfs_snoop_max, uint, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(usbfs_snoop_max,
 		"maximum number of bytes to print while snooping");
 
+/*日志输出*/
 #define snoop(dev, format, arg...)				\
 	do {							\
 		if (usbfs_snoop)				\
@@ -464,6 +465,7 @@ static struct async *async_getcompleted(struct usb_dev_state *ps)
 
 	spin_lock_irqsave(&ps->lock, flags);
 	if (!list_empty(&ps->async_completed)) {
+		/*如果这个队列不为空,则自队列上摘取一个*/
 		as = list_entry(ps->async_completed.next, struct async,
 				asynclist);
 		list_del_init(&as->asynclist);
@@ -1019,6 +1021,7 @@ error:
 	return ret;
 }
 
+/*依据devt查找usb_device*/
 static struct usb_device *usbdev_lookup_by_devt(dev_t devt)
 {
 	struct device *dev;
@@ -1026,6 +1029,7 @@ static struct usb_device *usbdev_lookup_by_devt(dev_t devt)
 	dev = bus_find_device_by_devt(&usb_bus_type, devt);
 	if (!dev)
 		return NULL;
+	/*返回匹配的usb设备*/
 	return to_usb_device(dev);
 }
 
@@ -1047,6 +1051,8 @@ static int usbdev_open(struct inode *inode, struct file *file)
 
 	/* usbdev device-node */
 	if (imajor(inode) == USB_DEVICE_MAJOR)
+		/*必须是USB MAJOR,然后通过DEV_T查找设备
+		 * (这里有个问题,谁在用户态创建了这个字符设备,应是设备分配时)*/
 		dev = usbdev_lookup_by_devt(inode->i_rdev);
 	if (!dev)
 		goto out_free_ps;
@@ -1059,7 +1065,7 @@ static int usbdev_open(struct inode *inode, struct file *file)
 	if (ret)
 		goto out_unlock_device;
 
-	ps->dev = dev;
+	ps->dev = dev;/*指向关联的usb设备*/
 	ps->file = file;
 	ps->interface_allowed_mask = 0xFFFFFFFF; /* 32 bits */
 	spin_lock_init(&ps->lock);
@@ -1644,9 +1650,11 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 		mask |= USBDEVFS_URB_ISO_ASAP;
 
 	if (uurb->flags & ~mask)
+		/*遇到了不认识的mask*/
 			return -EINVAL;
 
 	if ((unsigned int)uurb->buffer_length >= USBFS_XFER_MAX)
+		/*buffer过长*/
 		return -EINVAL;
 	if (uurb->buffer_length > 0 && !uurb->buffer)
 		return -EINVAL;
@@ -1662,16 +1670,20 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 	ep = ep_to_host_endpoint(ps->dev, uurb->endpoint);
 	if (!ep)
 		return -ENOENT;
+	/*非零时为in方向*/
 	is_in = (uurb->endpoint & USB_ENDPOINT_DIR_MASK) != 0;
 
 	u = 0;
 	switch (uurb->type) {
 	case USBDEVFS_URB_TYPE_CONTROL:
+		/*处理控制类消息*/
 		if (!usb_endpoint_xfer_control(&ep->desc))
 			return -EINVAL;
 		/* min 8 byte setup packet */
 		if (uurb->buffer_length < 8)
+			/*buffer过短*/
 			return -EINVAL;
+		/*buffer中指向的是usb_ctrlrequest结构,自用户态提供的指针中复制*/
 		dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_KERNEL);
 		if (!dr)
 			return -ENOMEM;
@@ -1680,6 +1692,7 @@ static int proc_do_submiturb(struct usb_dev_state *ps, struct usbdevfs_urb *uurb
 			goto error;
 		}
 		if (uurb->buffer_length < (le16_to_cpu(dr->wLength) + 8)) {
+			/*长度有误*/
 			ret = -EINVAL;
 			goto error;
 		}
@@ -1996,6 +2009,7 @@ static int proc_submiturb(struct usb_dev_state *ps, void __user *arg)
 	struct usbdevfs_urb uurb;
 	sigval_t userurb_sigval;
 
+	/*复制用户参数*/
 	if (copy_from_user(&uurb, arg, sizeof(uurb)))
 		return -EFAULT;
 
@@ -2443,7 +2457,7 @@ static int proc_release_port(struct usb_dev_state *ps, void __user *arg)
 	return usb_hub_release_port(ps->dev, portnum, ps);
 }
 
-/*返回设备能力*/
+/*返回设备能力列表*/
 static int proc_get_capabilities(struct usb_dev_state *ps, void __user *arg)
 {
 	__u32 caps;
@@ -2605,7 +2619,7 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 {
 	struct usb_dev_state *ps = file->private_data;
 	struct inode *inode = file_inode(file);
-	struct usb_device *dev = ps->dev;
+	struct usb_device *dev = ps->dev;/*取得关联的设备*/
 	int ret = -ENOTTY;
 
 	if (!(file->f_mode & FMODE_WRITE))
@@ -2703,6 +2717,7 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 		break;
 
 	case USBDEVFS_SUBMITURB:
+		/*用户态通过IOCTL提交URB*/
 		snoop(&dev->dev, "%s: SUBMITURB\n", __func__);
 		ret = proc_submiturb(ps, p);
 		if (ret >= 0)
@@ -2781,7 +2796,7 @@ static long usbdev_do_ioctl(struct file *file, unsigned int cmd,
 		ret = proc_release_port(ps, p);
 		break;
 	case USBDEVFS_GET_CAPABILITIES:
-		/*获取capablility*/
+		/*获取capablility列表*/
 		ret = proc_get_capabilities(ps, p);
 		break;
 	case USBDEVFS_DISCONNECT_CLAIM:
@@ -2851,6 +2866,7 @@ static __poll_t usbdev_poll(struct file *file,
 	return mask;
 }
 
+/*USB字符设备对应的FILE ops*/
 const struct file_operations usbdev_file_operations = {
 	.owner =	  THIS_MODULE,
 	.llseek =	  no_seek_end_llseek,
@@ -2859,7 +2875,7 @@ const struct file_operations usbdev_file_operations = {
 	.unlocked_ioctl = usbdev_ioctl,/*usb设备ioctl响应*/
 	.compat_ioctl =   compat_ptr_ioctl,
 	.mmap =           usbdev_mmap,
-	.open =		  usbdev_open,
+	.open =		  usbdev_open,/*查找并关联对应的usb设备*/
 	.release =	  usbdev_release,
 };
 
@@ -2900,13 +2916,13 @@ static struct notifier_block usbdev_nb = {
 	.notifier_call =	usbdev_notify,
 };
 
-static struct cdev usb_device_cdev;
+static struct cdev usb_device_cdev;/*usb字符设备*/
 
 int __init usb_devio_init(void)
 {
 	int retval;
 
-	/*注册usb字符设备，用于设备通信*/
+	/*注册usb字符设备，用于设备通信,其产生的设备见/dev/bus/usb/ */
 	retval = register_chrdev_region(USB_DEVICE_DEV, USB_DEVICE_MAX,
 					"usb_device");
 	if (retval) {
@@ -2914,6 +2930,7 @@ int __init usb_devio_init(void)
 		goto out;
 	}
 	cdev_init(&usb_device_cdev, &usbdev_file_operations);
+	/*向系统添加usb_device字符设备*/
 	retval = cdev_add(&usb_device_cdev, USB_DEVICE_DEV, USB_DEVICE_MAX);
 	if (retval) {
 		printk(KERN_ERR "Unable to get usb_device major %d\n",

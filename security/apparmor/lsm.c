@@ -2087,6 +2087,7 @@ static unsigned int apparmor_ip_postroute(void *priv,
 	struct sock *sk;
 
 	if (!skb->secmark)
+		/*没有secmark的直接放过*/
 		return NF_ACCEPT;
 
 	sk = skb_to_full_sk(skb);

@@ -1530,7 +1530,7 @@ ieee80211_rx_h_check_more_data(struct ieee80211_rx_data *rx)
 		return RX_CONTINUE;
 
 	if (!ieee80211_is_data(hdr->frame_control))
-		return RX_CONTINUE;
+		return RX_CONTINUE;/*不是数据报文,直接下一个函数*/
 
 	if (!ieee80211_has_moredata(hdr->frame_control)) {
 		/* AP has no more frames buffered for us */
@@ -4081,11 +4081,13 @@ static void ieee80211_rx_handlers_result(struct ieee80211_rx_data *rx,
 	struct ieee80211_rate *rate = NULL;
 
 	if (res == RX_QUEUED) {
+		/*已入队,直接返回*/
 		I802_DEBUG_INC(rx->sdata->local->rx_handlers_queued);
 		return;
 	}
 
 	if (res != RX_CONTINUE) {
+		/*报文已丢弃,丢弃计数增加*/
 		I802_DEBUG_INC(rx->sdata->local->rx_handlers_drop);
 		if (rx->sta)
 			rx->link_sta->rx_stats.dropped++;
@@ -4115,6 +4117,7 @@ static void ieee80211_rx_handlers(struct ieee80211_rx_data *rx,
 	do {				\
 		res = rxh(rx);/*调用rxh函数*/		\
 		if (res != RX_CONTINUE)	\
+			/*返回值不为continue,直接执行完成,准备下一个报文*/\
 			goto rxh_next;  \
 	} while (0)
 
@@ -4126,6 +4129,7 @@ static void ieee80211_rx_handlers(struct ieee80211_rx_data *rx,
 	 */
 	spin_lock_bh(&rx->local->rx_path_lock);
 
+	/*skb queue上出一个报文*/
 	while ((skb = __skb_dequeue(frames))) {
 		/*
 		 * all the other fields are valid across frames
@@ -4161,7 +4165,7 @@ static void ieee80211_rx_handlers(struct ieee80211_rx_data *rx,
 		CALL_RXH(ieee80211_rx_h_mgmt);
 
  rxh_next:
-		ieee80211_rx_handlers_result(rx, res);
+		ieee80211_rx_handlers_result(rx, res/*上一个执行的返回值*/);
 
 #undef CALL_RXH
 	}

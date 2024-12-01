@@ -674,7 +674,9 @@ struct usb_device {/*usb 设备类型*/
 	struct usb_host_config *config;
 
 	struct usb_host_config *actconfig;
+	/*输入端点（IN），用于从设备向主机发送数据*/
 	struct usb_host_endpoint *ep_in[16];
+	/*输出端点（OUT），用于接收来自主机的数据*/
 	struct usb_host_endpoint *ep_out[16];
 
 	char **rawdescriptors;

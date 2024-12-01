@@ -243,7 +243,7 @@ int ip_queue_xmit(struct sock *sk, struct sk_buff *skb, struct flowi *fl);
 
 static inline struct sk_buff *ip_finish_skb(struct sock *sk, struct flowi4 *fl4)
 {
-	return __ip_make_skb(sk, fl4, &sk->sk_write_queue/*待发送的skb*/, &inet_sk(sk)->cork.base);
+	return __ip_make_skb(sk, fl4, &sk->sk_write_queue/*待发送的一组skb*/, &inet_sk(sk)->cork.base);
 }
 
 /* Get the route scope that should be used when sending a packet. */

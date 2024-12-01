@@ -2067,6 +2067,7 @@ static void rtw89_core_rx_to_mac80211(struct rtw89_dev *rtwdev,
 	rtw89_core_update_radiotap(rtwdev, skb_ppdu, rx_status);
 	/* In low power mode, it does RX in thread context. */
 	local_bh_disable();
+	/*送iee80211报文*/
 	ieee80211_rx_napi(rtwdev->hw, NULL, skb_ppdu, napi);
 	local_bh_enable();
 	rtwdev->napi_budget_countdown--;
@@ -2077,6 +2078,7 @@ static void rtw89_core_rx_pending_skb(struct rtw89_dev *rtwdev,
 				      struct rtw89_rx_desc_info *desc_info,
 				      struct sk_buff *skb)
 {
+	/*取band*/
 	u8 band = desc_info->bb_sel ? RTW89_PHY_1 : RTW89_PHY_0;
 	int curr = rtwdev->ppdu_sts.curr_rx_ppdu_cnt[band];
 	struct sk_buff *skb_ppdu = NULL, *tmp;
@@ -2085,8 +2087,9 @@ static void rtw89_core_rx_pending_skb(struct rtw89_dev *rtwdev,
 	if (curr > RTW89_MAX_PPDU_CNT)
 		return;
 
+	/*遍历rx_queue[band]链表*/
 	skb_queue_walk_safe(&rtwdev->ppdu_sts.rx_queue[band], skb_ppdu, tmp) {
-		skb_unlink(skb_ppdu, &rtwdev->ppdu_sts.rx_queue[band]);
+		skb_unlink(skb_ppdu, &rtwdev->ppdu_sts.rx_queue[band]);/*移除*/
 		rx_status = IEEE80211_SKB_RXCB(skb_ppdu);
 		if (rtw89_core_rx_ppdu_match(rtwdev, desc_info, rx_status))
 			rtw89_chip_query_ppdu(rtwdev, phy_ppdu, rx_status);
@@ -2420,6 +2423,7 @@ static void rtw89_core_flush_ppdu_rx_queue(struct rtw89_dev *rtwdev,
 	struct ieee80211_rx_status *rx_status;
 	struct sk_buff *skb_ppdu, *tmp;
 
+	/*遍历rx_queu,将其上所有元素均送入802.11协议栈*/
 	skb_queue_walk_safe(&ppdu_sts->rx_queue[band], skb_ppdu, tmp) {
 		skb_unlink(skb_ppdu, &ppdu_sts->rx_queue[band]);
 		rx_status = IEEE80211_SKB_RXCB(skb_ppdu);
@@ -2443,6 +2447,7 @@ void rtw89_core_rx(struct rtw89_dev *rtwdev,
 	}
 
 	if (ppdu_sts->curr_rx_ppdu_cnt[band] != ppdu_cnt) {
+		/*刷rx_queue数组中所有元素到802.11协议栈*/
 		rtw89_core_flush_ppdu_rx_queue(rtwdev, desc_info);
 		ppdu_sts->curr_rx_ppdu_cnt[band] = ppdu_cnt;
 	}
@@ -2452,7 +2457,7 @@ void rtw89_core_rx(struct rtw89_dev *rtwdev,
 	rtw89_core_update_rx_status(rtwdev, desc_info, rx_status);
 	if (desc_info->long_rxdesc &&
 	    BIT(desc_info->frame_type) & PPDU_FILTER_BITMAP)
-		/*长描述符情况下,管理类及数据类报文挂在rx_queue上*/
+		/*长描述符情况下,管理类及数据类报文挂在rx_queue上,rtw89_core_rx_pending_skb/FLUSH 处理此报文*/
 		skb_queue_tail(&ppdu_sts->rx_queue[band], skb);
 	else
 		rtw89_core_rx_to_mac80211(rtwdev, NULL, desc_info, skb, rx_status);
@@ -3872,6 +3877,7 @@ static void rtw89_core_ppdu_sts_init(struct rtw89_dev *rtwdev)
 {
 	int i;
 
+	/*初始化rx_queue*/
 	for (i = 0; i < RTW89_PHY_MAX; i++)
 		skb_queue_head_init(&rtwdev->ppdu_sts.rx_queue[i]);
 	for (i = 0; i < RTW89_PHY_MAX; i++)

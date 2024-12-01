@@ -1493,6 +1493,7 @@ nl80211_parse_connkeys(struct cfg80211_registered_device *rdev,
 	}
 
 	if (!have_key)
+		/*必须配置有KEY*/
 		return NULL;
 
 	result = kzalloc(sizeof(*result), GFP_KERNEL);
@@ -11866,9 +11867,11 @@ static int nl80211_testmode_dump(struct sk_buff *skb,
 }
 #endif
 
+/*执行网络连接*/
 static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
+	/*指明通过哪个设备连接*/
 	struct net_device *dev = info->user_ptr[1];
 	struct cfg80211_connect_params connect;
 	struct wiphy *wiphy;
@@ -11880,6 +11883,7 @@ static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 
 	if (!info->attrs[NL80211_ATTR_SSID] ||
 	    !nla_len(info->attrs[NL80211_ATTR_SSID]))
+		/*必须指定SSID,且长度大于零*/
 		return -EINVAL;
 
 	if (info->attrs[NL80211_ATTR_AUTH_TYPE]) {
@@ -11889,9 +11893,10 @@ static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 					     NL80211_CMD_CONNECT))
 			return -EINVAL;
 	} else
+		/*不提供认证TYPE时,走AUTO*/
 		connect.auth_type = NL80211_AUTHTYPE_AUTOMATIC;
 
-	connect.privacy = info->attrs[NL80211_ATTR_PRIVACY];
+	connect.privacy = info->attrs[NL80211_ATTR_PRIVACY];/*可能不提供*/
 
 	if (info->attrs[NL80211_ATTR_WANT_1X_4WAY_HS] &&
 	    !wiphy_ext_feature_isset(&rdev->wiphy,
@@ -11906,6 +11911,7 @@ static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 
 	if (dev->ieee80211_ptr->iftype != NL80211_IFTYPE_STATION &&
 	    dev->ieee80211_ptr->iftype != NL80211_IFTYPE_P2P_CLIENT)
+		/*仅以上两种类型支持此配置*/
 		return -EOPNOTSUPP;
 
 	wiphy = &rdev->wiphy;
@@ -11973,6 +11979,7 @@ static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (connect.privacy && info->attrs[NL80211_ATTR_KEYS]) {
+		/*解析conn KEY*/
 		connkeys = nl80211_parse_connkeys(rdev, info, NULL);
 		if (IS_ERR(connkeys))
 			return PTR_ERR(connkeys);
@@ -12095,6 +12102,7 @@ static int nl80211_connect(struct sk_buff *skb, struct genl_info *info)
 	if (nla_get_flag(info->attrs[NL80211_ATTR_MLO_SUPPORT]))
 		connect.flags |= CONNECT_REQ_MLO_SUPPORT;
 
+	/*执行连接*/
 	err = cfg80211_connect(rdev, dev, &connect, connkeys,
 			       connect.prev_bssid);
 	if (err)
@@ -17024,7 +17032,7 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 	},
 #endif
 	{
-		.cmd = NL80211_CMD_CONNECT,
+		.cmd = NL80211_CMD_CONNECT,/*连接网络*/
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
 		.doit = nl80211_connect,
 		.flags = GENL_UNS_ADMIN_PERM,

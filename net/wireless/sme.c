@@ -166,7 +166,9 @@ static int cfg80211_conn_do_work(struct wireless_dev *wdev,
 		return cfg80211_conn_scan(wdev);
 	case CFG80211_CONN_AUTHENTICATE_NEXT:
 		if (WARN_ON(!rdev->ops->auth))
+			/*必须要求auth回调*/
 			return -EOPNOTSUPP;
+		/*变更状态机到authenticating*/
 		wdev->conn->state = CFG80211_CONN_AUTHENTICATING;
 		auth_req.key = params->key;
 		auth_req.key_len = params->key_len;
@@ -287,7 +289,7 @@ static void cfg80211_step_auth_next(struct cfg80211_conn *conn,
 	memcpy(conn->bssid, bss->bssid, ETH_ALEN);
 	conn->params.bssid = conn->bssid;
 	conn->params.channel = bss->channel;
-	conn->state = CFG80211_CONN_AUTHENTICATE_NEXT;
+	conn->state = CFG80211_CONN_AUTHENTICATE_NEXT;/*指定状态*/
 }
 
 /* Returned bss is reference counted and must be cleaned up appropriately. */
@@ -563,6 +565,7 @@ static int cfg80211_sme_connect(struct wireless_dev *wdev,
 	cfg80211_wdev_release_bsses(wdev);
 
 	if (wdev->connected) {
+		/*之前已连接,先释放掉先前的*/
 		cfg80211_sme_free(wdev);
 		wdev->connected = false;
 	}
@@ -626,7 +629,7 @@ static int cfg80211_sme_connect(struct wireless_dev *wdev,
 		cfg80211_put_bss(wdev->wiphy, bss);
 	} else {
 		/* otherwise we'll need to scan for the AP first */
-		err = cfg80211_conn_scan(wdev);
+		err = cfg80211_conn_scan(wdev);/*没有bss,先扫描*/
 
 		/*
 		 * If we can't scan right now, then we need to scan again
@@ -1519,8 +1522,10 @@ int cfg80211_connect(struct cfg80211_registered_device *rdev,
 					      IEEE80211_BSS_TYPE_ESS;
 
 	if (!rdev->ops->connect)
+		/*设备未指定connect回调的,使用默认函数*/
 		err = cfg80211_sme_connect(wdev, connect, prev_bssid);
 	else
+		/*调用设备提供的回调*/
 		err = rdev_connect(rdev, dev, connect);
 
 	if (err) {

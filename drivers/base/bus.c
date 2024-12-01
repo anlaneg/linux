@@ -408,7 +408,7 @@ EXPORT_SYMBOL_GPL(bus_for_each_dev);
 //在bus上自start位置开始查找设备，通过match函数查找
 struct device *bus_find_device(const struct bus_type *bus,
 			       struct device *start, const void *data,
-			       int (*match)(struct device *dev, const void *data))
+			       int (*match/*匹配函数*/)(struct device *dev, const void *data))
 {
 	struct subsys_private *sp = bus_to_subsys(bus);
 	struct klist_iter i;
@@ -417,6 +417,7 @@ struct device *bus_find_device(const struct bus_type *bus,
 	if (!sp)
 		return NULL;
 
+	/*如果没有起供start,则从头遍历*/
 	klist_iter_init_node(&sp->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
 	while ((dev = next_device(&i)))

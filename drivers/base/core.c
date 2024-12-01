@@ -5152,7 +5152,7 @@ EXPORT_SYMBOL_GPL(device_match_fwnode);
 
 int device_match_devt(struct device *dev, const void *pdevt)
 {
-	return dev->devt == *(dev_t *)pdevt;
+	return dev->devt == *(dev_t *)pdevt;/*通过devt进行匹配*/
 }
 EXPORT_SYMBOL_GPL(device_match_devt);
 

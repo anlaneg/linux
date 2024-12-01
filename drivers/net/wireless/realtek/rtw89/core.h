@@ -1020,7 +1020,7 @@ struct rtw89_rx_desc_info {
 	u8 shift;
 	u8 wl_hd_iv_len;
 	bool long_rxdesc;
-	bool bb_sel;
+	bool bb_sel;/*为真时,送入phy1,否则送phy0*/
 	bool mac_info_valid;
 	u16 data_rate;
 	u8 gi_ltf;

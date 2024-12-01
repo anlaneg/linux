@@ -3312,12 +3312,13 @@ struct cfg80211_connect_params {
 	struct ieee80211_channel *channel_hint;
 	const u8 *bssid;
 	const u8 *bssid_hint;
-	const u8 *ssid;
-	size_t ssid_len;
+	const u8 *ssid;/*要连接的SSID*/
+	size_t ssid_len;/*SSID参数长度*/
+	/*如果连接时不提供AUTH-TYPE,则采用NL80211_AUTHTYPE_AUTOMATIC*/
 	enum nl80211_auth_type auth_type;
 	const u8 *ie;
 	size_t ie_len;
-	bool privacy;
+	bool privacy;/*如果提供KEY时没有以psk:开头,则此标记为真*/
 	enum nl80211_mfp mfp;
 	struct cfg80211_crypto_settings crypto;
 	const u8 *key;
@@ -3338,7 +3339,7 @@ struct cfg80211_connect_params {
 	u16 fils_erp_next_seq_num;
 	const u8 *fils_erp_rrk;
 	size_t fils_erp_rrk_len;
-	bool want_1x;
+	bool want_1x;/*是否提供了NL80211_ATTR_WANT_1X_4WAY_HS标记*/
 	struct ieee80211_edmg edmg;
 };
 

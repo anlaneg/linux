@@ -591,7 +591,7 @@ struct skb_shared_info {
 	unsigned short	gso_size;/*所有segment合并后长度*/
 	/* Warning: this field is not always filled in (UFO)! */
 	unsigned short	gso_segs;
-	struct sk_buff	*frag_list;
+	struct sk_buff	*frag_list;/*指向其它分片*/
 	union {
 		struct skb_shared_hwtstamps hwtstamps;
 		struct xsk_tx_metadata_compl xsk_meta;
@@ -3973,9 +3973,10 @@ static inline int __skb_grow_rcsum(struct sk_buff *skb, unsigned int len)
 		     skb != (struct sk_buff *)(queue);				\
 		     skb = skb->next)
 
-#define skb_queue_walk_safe(queue, skb, tmp)					\
-		for (skb = (queue)->next, tmp = skb->next;			\
-		     skb != (struct sk_buff *)(queue);				\
+/*遍历skb_queue*/
+#define skb_queue_walk_safe(queue, skb/*本轮元素*/, tmp/*下轮元素*/)					\
+		for (skb = (queue)->next, tmp = skb->next/*提前取下一个*/;			\
+		     skb != (struct sk_buff *)(queue)/*遍历结束*/;				\
 		     skb = tmp, tmp = skb->next)
 
 #define skb_queue_walk_from(queue, skb)						\

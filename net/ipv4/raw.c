@@ -669,6 +669,7 @@ back_from_confirm:
 		if (err)
 			ip_flush_pending_frames(sk);
 		else if (!(msg->msg_flags & MSG_MORE)) {
+			/*没有更多数据了,IP层向下发送*/
 			err = ip_push_pending_frames(sk, &fl4);
 			if (err == -ENOBUFS && !inet_test_bit(RECVERR, sk))
 				err = 0;

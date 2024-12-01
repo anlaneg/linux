@@ -3889,6 +3889,7 @@ static int rtw89_pci_napi_poll(struct napi_struct *napi, int budget)
 		return budget;
 
 	rtw89_write32(rtwdev, gen_def->isr_clear_rxq.addr, gen_def->isr_clear_rxq.data);
+	/*具体执行收取*/
 	work_done += rtw89_pci_poll_rxq_dma(rtwdev, rtwpci, rtwdev->napi_budget_countdown);
 	if (work_done < budget && napi_complete_done(napi, work_done)) {
 		spin_lock_irqsave(&rtwpci->irq_lock, flags);
@@ -4049,7 +4050,7 @@ int rtw89_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 	pci_info = info->bus.pci;
 
 	rtwdev->pci_info = info->bus.pci;
-	rtwdev->hci.ops = &rtw89_pci_ops;
+	rtwdev->hci.ops = &rtw89_pci_ops;/*此结构中包含了收包函数*/
 	rtwdev->hci.type = RTW89_HCI_TYPE_PCIE;
 	rtwdev->hci.rpwm_addr = pci_info->rpwm_addr;
 	rtwdev->hci.cpwm_addr = pci_info->cpwm_addr;

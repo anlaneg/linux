@@ -68,8 +68,9 @@ EXPORT_SYMBOL_GPL(usb_init_urb);
  *
  * Return: A pointer to the new urb, or %NULL if no memory is available.
  */
-struct urb *usb_alloc_urb(int iso_packets, gfp_t mem_flags)
+struct urb *usb_alloc_urb(int iso_packets/*报文数*/, gfp_t mem_flags)
 {
+	/*创建URB*/
 	struct urb *urb;
 
 	urb = kmalloc(struct_size(urb, iso_frame_desc, iso_packets),
@@ -367,6 +368,7 @@ EXPORT_SYMBOL_GPL(usb_urb_ep_type_check);
  */
 int usb_submit_urb(struct urb *urb, gfp_t mem_flags)
 {
+	/*提交urb的接口*/
 	int				xfertype, max;
 	struct usb_device		*dev;
 	struct usb_host_endpoint	*ep;

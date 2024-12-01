@@ -3970,7 +3970,7 @@ no_lock_out:
 		/*队列为空，容许bypass,则更新跳过enqueue，dequeue,直接向硬件发送*/
 		qdisc_bstats_update(q, skb);
 
-		if (sch_direct_xmit(skb, q, dev, txq, root_lock, true)) {
+		if (sch_direct_xmit(skb, q, dev, txq, root_lock, true/*需要校验*/)) {
 			if (unlikely(contended)) {
 				spin_unlock(&q->busylock);
 				contended = false;

@@ -480,6 +480,7 @@ static inline int rdev_auth(struct cfg80211_registered_device *rdev,
 {
 	int ret;
 	trace_rdev_auth(&rdev->wiphy, dev, req);
+	/*调用auth回调*/
 	ret = rdev->ops->auth(&rdev->wiphy, dev, req);
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
