@@ -2077,6 +2077,7 @@ static int vfio_pci_vf_init(struct vfio_pci_core_device *vdev)
 		 */
 		physfn = pci_physfn(vdev->pdev);
 		mutex_lock(&vfio_pci_sriov_pfs_mutex);
+		/*查找这个设备对应的PF*/
 		list_for_each_entry(cur, &vfio_pci_sriov_pfs, sriov_pfs_item) {
 			if (cur->pdev == physfn) {
 				vdev->sriov_pf_core_dev = cur;
@@ -2089,6 +2090,7 @@ static int vfio_pci_vf_init(struct vfio_pci_core_device *vdev)
 
 	/* Not a SRIOV PF */
 	if (!pdev->is_physfn)
+		/*不是PF,则退出*/
 		return 0;
 
 	vdev->vf_token = kzalloc(sizeof(*vdev->vf_token), GFP_KERNEL);
@@ -2124,6 +2126,7 @@ static int vfio_pci_vga_init(struct vfio_pci_core_device *vdev)
 	int ret;
 
 	if (!vfio_pci_is_vga(pdev))
+		/*非vga设备,直接退出*/
 		return 0;
 
 	ret = aperture_remove_conflicting_pci_devices(pdev, vdev->vdev.ops->name);
@@ -2151,6 +2154,7 @@ static void vfio_pci_vga_uninit(struct vfio_pci_core_device *vdev)
 
 int vfio_pci_core_init_dev(struct vfio_device *core_vdev)
 {
+	/*由core_vdev获取vfio_pci_core_device结构体*/
 	struct vfio_pci_core_device *vdev =
 		container_of(core_vdev, struct vfio_pci_core_device, vdev);
 
@@ -2192,10 +2196,11 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 
 	/* Drivers must set the vfio_pci_core_device to their drvdata */
 	if (WARN_ON(vdev != dev_get_drvdata(dev)))
-		/*pci设备的私有数据已提明为此vfio dev*/
+		/*pci设备的私有数据必须为vfio_pci_core_device*/
 		return -EINVAL;
 
 	if (pdev->hdr_type != PCI_HEADER_TYPE_NORMAL)
+		/*只能处理normal*/
 		return -EINVAL;
 
 	if (vdev->vdev.mig_ops) {
@@ -2203,12 +2208,14 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 		      vdev->vdev.mig_ops->migration_set_state &&
 		      vdev->vdev.mig_ops->migration_get_data_size) ||
 		    !(vdev->vdev.migration_flags & VFIO_MIGRATION_STOP_COPY))
+			//mig_ops必提供的函数不满足要求
 			return -EINVAL;
 	}
 
 	if (vdev->vdev.log_ops && !(vdev->vdev.log_ops->log_start &&
 	    vdev->vdev.log_ops->log_stop &&
 	    vdev->vdev.log_ops->log_read_and_clear))
+		//log_ops必须提供函数不满足要求
 		return -EINVAL;
 
 	/*
@@ -2220,7 +2227,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	 * Just reject these PFs and let the user sort it out.
 	 */
 	if (pci_num_vf(pdev)) {
-		/*此设备有vf*/
+		/*此设备已有vf的,报错*/
 		pci_warn(pdev, "Cannot bind to PF with SR-IOV enabled\n");
 		return -EBUSY;
 	}
@@ -2333,7 +2340,7 @@ int vfio_pci_core_sriov_configure(struct vfio_pci_core_device *vdev,
 			ret = -EINVAL;
 			goto out_unlock;
 		}
-		list_add_tail(&vdev->sriov_pfs_item, &vfio_pci_sriov_pfs);
+		list_add_tail(&vdev->sriov_pfs_item, &vfio_pci_sriov_pfs);/*添加*/
 		mutex_unlock(&vfio_pci_sriov_pfs_mutex);
 
 		/*

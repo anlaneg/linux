@@ -627,12 +627,12 @@ int cdev_device_add(struct cdev *cdev, struct device *dev)
 	if (dev->devt) {
 		cdev_set_parent(cdev, &dev->kobj);
 
-		rc = cdev_add(cdev, dev->devt, 1);
+		rc = cdev_add(cdev, dev->devt, 1);/*字符设备与devt关联*/
 		if (rc)
 			return rc;
 	}
 
-	rc = device_add(dev);
+	rc = device_add(dev);/*将dev设备加入内核,创建必要的字符设备*/
 	if (rc && dev->devt)
 		cdev_del(cdev);
 

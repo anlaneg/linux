@@ -3638,7 +3638,8 @@ int device_add(struct device *dev)
 		if (error)
 			goto SysEntryError;
 
-		/*在devtmpfs中创建设备devnode（字符设备，块设备），例如:/dev/net/tun*/
+		/*在devtmpfs中创建设备devnode（字符设备，块设备），
+		 * 例如:/dev/net/tun,/dev/bus/usb/001/004*/
 		devtmpfs_create_node(dev);
 	}
 

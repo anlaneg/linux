@@ -47,7 +47,7 @@ static struct vfio {
 	struct list_head		group_list;//记录系统所有vfio_group
 	//保护group_list
 	struct mutex			group_lock; /* locks group_list */
-	struct ida			group_ida;
+	struct ida			group_ida;/*负责申请设备对应的minor*/
 	dev_t				group_devt;
 } vfio;//定义vfio变量
 
@@ -60,7 +60,7 @@ struct vfio_container {
 	struct kref			kref;
 	struct list_head		group_list;
 	struct rw_semaphore		group_lock;
-	//container对应的驱动，通过ioctl设置
+	//container对应的iommu驱动，通过ioctl设置
 	struct vfio_iommu_driver	*iommu_driver;
 	void				*iommu_data;
 	bool				noiommu;
@@ -73,7 +73,7 @@ struct vfio_unbound_dev {
 
 struct vfio_group {
 	struct device 			dev;
-	struct cdev			cdev;
+	struct cdev			cdev;/*group对应的字符设备*/
 	refcount_t			users;
 	atomic_t			container_users;
 	//每个vfio_group与一个iommu_group一一对应
@@ -97,7 +97,9 @@ struct vfio_group {
 };
 
 #ifdef CONFIG_VFIO_NOIOMMU
+/*是否开启noiommu*/
 static bool noiommu __read_mostly;
+/*此模块参数设置noiommu*/
 module_param_named(enable_unsafe_noiommu_mode,
 		   noiommu, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_unsafe_noiommu_mode, "Enable UNSAFE, no-IOMMU mode.  This mode provides no device isolation, no DMA translation, no host kernel protection, cannot be used for device assignment to virtual machines, requires RAWIO permissions, and will taint the kernel.  If you do not know what this is for, step away. (default: false)");
@@ -182,6 +184,7 @@ static void vfio_release_device_set(struct vfio_device *device)
 static void *vfio_noiommu_open(unsigned long arg)
 {
 	if (arg != VFIO_NOIOMMU_IOMMU)
+		/*参数必须为无IOMMU*/
 		return ERR_PTR(-EINVAL);
 	if (!capable(CAP_SYS_RAWIO))
 		return ERR_PTR(-EPERM);
@@ -197,6 +200,7 @@ static long vfio_noiommu_ioctl(void *iommu_data,
 			       unsigned int cmd, unsigned long arg)
 {
 	if (cmd == VFIO_CHECK_EXTENSION)
+		/*如果noiommu开启,且参数合乎要求,则返回1,否则为0*/
 		return noiommu && (arg == VFIO_NOIOMMU_IOMMU) ? 1 : 0;
 
 	return -ENOTTY;
@@ -205,7 +209,7 @@ static long vfio_noiommu_ioctl(void *iommu_data,
 static int vfio_noiommu_attach_group(void *iommu_data,
 		struct iommu_group *iommu_group, enum vfio_group_type type)
 {
-	return 0;
+	return 0;/*总是成功*/
 }
 
 static void vfio_noiommu_detach_group(void *iommu_data,
@@ -213,6 +217,7 @@ static void vfio_noiommu_detach_group(void *iommu_data,
 {
 }
 
+/*iommu driver (无IOMMU情况)*/
 static const struct vfio_iommu_driver_ops vfio_noiommu_ops = {
 	.name = "vfio-noiommu",
 	.owner = THIS_MODULE,
@@ -266,7 +271,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 		}
 	}
 
-	//将此iommu driver加入链表
+	//将新的iommu driver加入链表
 	list_add(&driver->vfio_next, &vfio.iommu_drivers_list);
 
 	mutex_unlock(&vfio.iommu_drivers_lock);
@@ -374,21 +379,23 @@ static struct vfio_group *vfio_group_alloc(struct iommu_group *iommu_group,
 	struct vfio_group *group;
 	int minor;
 
+	/*申请group*/
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		return ERR_PTR(-ENOMEM);
 
+	/*申请设备对应的minor*/
 	minor = ida_alloc_max(&vfio.group_ida, MINORMASK, GFP_KERNEL);
 	if (minor < 0) {
 		kfree(group);
 		return ERR_PTR(minor);
 	}
 
-	device_initialize(&group->dev);
-	group->dev.devt = MKDEV(MAJOR(vfio.group_devt), minor);
+	device_initialize(&group->dev);/*初始化设备*/
+	group->dev.devt = MKDEV(MAJOR(vfio.group_devt), minor);/*构建devt*/
 	group->dev.class = vfio.class;
 	group->dev.release = vfio_group_release;
-	cdev_init(&group->cdev, &vfio_group_fops);
+	cdev_init(&group->cdev, &vfio_group_fops);/*初始化vfio group对应的字符设备*/
 	group->cdev.owner = THIS_MODULE;
 
 	refcount_set(&group->users, 1);
@@ -439,6 +446,7 @@ static struct vfio_group *vfio_create_group(struct iommu_group *iommu_group,
 	if (ret)
 		goto err_unlock;
 
+	/*创建vfio-group对应的字符设备,向kernel添加字符设备,及IOMMU group设备*/
 	err = cdev_device_add(&group->cdev, &group->dev);
 	if (err) {
 		ret = ERR_PTR(err);
@@ -736,7 +744,7 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 		return ERR_CAST(iommu_group);
 
 	iommu_group_set_name(iommu_group, "vfio-noiommu");
-	ret = iommu_group_add_device(iommu_group, dev);
+	ret = iommu_group_add_device(iommu_group, dev);/*为设备关联noiommu*/
 	if (ret)
 		goto out_put_group;
 
@@ -761,16 +769,16 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	struct iommu_group *iommu_group;
 	struct vfio_group *group;
 
-	iommu_group = iommu_group_get(dev);
+	iommu_group = iommu_group_get(dev);/*取设备关联的iommu group*/
 #ifdef CONFIG_VFIO_NOIOMMU
-	if (!iommu_group && noiommu && !iommu_present(dev->bus)) {
+	if (!iommu_group/*没找到设备IOMMU*/ && noiommu/*noiommu启用了*/ && !iommu_present(dev->bus)) {
 		/*
 		 * With noiommu enabled, create an IOMMU group for devices that
 		 * don't already have one and don't have an iommu_ops on their
 		 * bus.  Taint the kernel because we're about to give a DMA
 		 * capable device to a user without IOMMU protection.
 		 */
-		group = vfio_noiommu_group_alloc(dev, VFIO_NO_IOMMU);
+		group = vfio_noiommu_group_alloc(dev, VFIO_NO_IOMMU);/*创建no iommu对应的group,关与DEV关联*/
 		if (!IS_ERR(group)) {
 			add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 			dev_warn(dev, "Adding kernel taint for vfio-noiommu group on device\n");
@@ -779,6 +787,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	}
 #endif
 	if (!iommu_group)
+		/*仍未找到,报错*/
 		return ERR_PTR(-EINVAL);
 
 	group = vfio_group_get_from_iommu(iommu_group);
@@ -1019,13 +1028,16 @@ static long vfio_ioctl_check_extension(struct vfio_container *container,
 							       driver))
 					continue;
 				if (!try_module_get(driver->ops->owner))
+					/*引用模块失败*/
 					continue;
 
+				/*调用此driver的IOCTL检查扩展*/
 				ret = driver->ops->ioctl(NULL,
 							 VFIO_CHECK_EXTENSION,
 							 arg);
 				module_put(driver->ops->owner);
 				if (ret > 0)
+					/*返回失败,退出*/
 					break;
 			}
 			mutex_unlock(&vfio.iommu_drivers_lock);
@@ -1083,6 +1095,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 	 * the container is deprivileged and returns to an unset state.
 	 */
 	if (list_empty(&container->group_list) || container->iommu_driver) {
+		/*已设置iommu driver*/
 		up_write(&container->group_lock);
 		return -EINVAL;
 	}
@@ -1155,7 +1168,7 @@ static long vfio_fops_unl_ioctl(struct file *filep,
 		ret = VFIO_API_VERSION;
 		break;
 	case VFIO_CHECK_EXTENSION:
-	    /*检查是否支持某扩展*/
+	    /*检查IOMMU driver是否支持某扩展*/
 		ret = vfio_ioctl_check_extension(container, arg);
 		break;
 	case VFIO_SET_IOMMU:
@@ -1174,10 +1187,10 @@ static long vfio_fops_unl_ioctl(struct file *filep,
 	return ret;
 }
 
-/*  /dev/vfio/vfio文件打开,即创建container 对应的fd */
+/*  /dev/vfio/vfio文件打开,即创建container对应的fd */
 static int vfio_fops_open(struct inode *inode, struct file *filep)
 {
-    //仅创建一个container
+    //仅创建一个container对象
 	struct vfio_container *container;
 
 	container = kzalloc(sizeof(*container), GFP_KERNEL);
@@ -1200,6 +1213,7 @@ static int vfio_fops_release(struct inode *inode, struct file *filep)
 	struct vfio_iommu_driver *driver = container->iommu_driver;
 
 	if (driver && driver->ops->notify)
+		/*通知container要关闭*/
 		driver->ops->notify(container->iommu_data,
 				    VFIO_IOMMU_CONTAINER_CLOSE);
 
@@ -1332,6 +1346,7 @@ static int vfio_group_set_container(struct vfio_group *group, int container_fd)
 
 	/*设置group对应的container*/
 	group->container = container;
+	/*是否设置noiommu*/
 	container->noiommu = (group->type == VFIO_NO_IOMMU);
 	list_add(&group->container_next, &container->group_list);
 
@@ -1407,10 +1422,11 @@ static int vfio_group_get_device_fd(struct vfio_group *group, char *buf)
 	 * We can't use anon_inode_getfd() because we need to modify
 	 * the f_mode flags directly to allow more than just ioctls
 	 */
-	fdno = ret = get_unused_fd_flags(O_CLOEXEC);
+	fdno = ret = get_unused_fd_flags(O_CLOEXEC);/*取一个未使用fd*/
 	if (ret < 0)
 		goto err_close_device;
 
+	/*为匿名文件关联fops*/
 	filep = anon_inode_getfile("[vfio-device]", &vfio_device_fops,
 				   device, O_RDWR);
 	if (IS_ERR(filep)) {
@@ -1427,7 +1443,7 @@ static int vfio_group_get_device_fd(struct vfio_group *group, char *buf)
 
 	atomic_inc(&group->container_users);
 
-	fd_install(fdno, filep);
+	fd_install(fdno, filep);/*file与fd关联*/
 
 	if (group->type == VFIO_NO_IOMMU)
 		dev_warn(device->dev, "vfio-noiommu device opened by user "
@@ -1903,6 +1919,7 @@ static long vfio_device_fops_unl_ioctl(struct file *filep,
 	default:
 		if (unlikely(!device->ops->ioctl))
 			return -EINVAL;
+		/*调用设备对应的ioctl*/
 		return device->ops->ioctl(device, cmd, arg);
 	}
 }
@@ -2616,6 +2633,7 @@ EXPORT_SYMBOL_GPL(vfio_group_iommu_domain);
  */
 static char *vfio_devnode(struct device *dev, umode_t *mode)
 {
+	/*返回/dev/vfio/vfio设备名称,用于在/dev下创建字符设备*/
 	return kasprintf(GFP_KERNEL, "vfio/%s", dev_name(dev));
 }
 
@@ -2646,14 +2664,15 @@ static int __init vfio_init(void)
 	}
 
 	/* /dev/vfio/$GROUP */
-	vfio.class = class_create(THIS_MODULE, "vfio");
+	vfio.class = class_create(THIS_MODULE, "vfio");/*创建vfio对应的class*/
 	if (IS_ERR(vfio.class)) {
 		ret = PTR_ERR(vfio.class);
 		goto err_class;
 	}
 
-	vfio.class->devnode = vfio_devnode;
+	vfio.class->devnode = vfio_devnode;/*用于VFIO字符设备的名称的获取*/
 
+	//动态获取字符设备MAJOR
 	ret = alloc_chrdev_region(&vfio.group_devt, 0, MINORMASK + 1, "vfio");
 	if (ret)
 		goto err_alloc_chrdev;
@@ -2661,6 +2680,7 @@ static int __init vfio_init(void)
 	pr_info(DRIVER_DESC " version: " DRIVER_VERSION "\n");
 
 #ifdef CONFIG_VFIO_NOIOMMU
+	/*注册iommu driver*/
 	vfio_register_iommu_driver(&vfio_noiommu_ops);
 #endif
 	return 0;

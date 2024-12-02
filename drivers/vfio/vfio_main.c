@@ -204,15 +204,17 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
  *
  * Use vfio_put_device() to release the structure after success return.
  */
-struct vfio_device *_vfio_alloc_device(size_t size, struct device *dev,
+struct vfio_device *_vfio_alloc_device(size_t size/*私有结构大小*/, struct device *dev,
 				       const struct vfio_device_ops *ops/*设备的ops*/)
 {
 	struct vfio_device *device;
 	int ret;
 
 	if (WARN_ON(size < sizeof(struct vfio_device)))
+		/*私有结构体大小必须大于struct vfio_device*/
 		return ERR_PTR(-EINVAL);
 
+	/*申请vfio_device结构体,其后跟扩展字节长度*/
 	device = kvzalloc(size, GFP_KERNEL);
 	if (!device)
 		return ERR_PTR(-ENOMEM);
@@ -243,12 +245,13 @@ static int vfio_init_device(struct vfio_device *device, struct device *dev,
 		return ret;
 	}
 
-	device->index = ret;
+	device->index = ret;/*设置设备编号*/
 	init_completion(&device->comp);
 	device->dev = dev;
 	device->ops = ops;
 
 	if (ops->init) {
+		/*操作集有init回调的,先调用此回调*/
 		ret = ops->init(device);
 		if (ret)
 			goto out_uninit;

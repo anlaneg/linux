@@ -582,9 +582,9 @@ static const struct dev_pm_ops usb_device_pm_ops = {
 
 #endif	/* CONFIG_PM */
 
-
+/*此函数负责usb设备在/dev/目录下的字符设备创建,例如/dev/usb/001/004 */
 static char *usb_devnode(const struct device *dev,
-			 umode_t *mode, kuid_t *uid, kgid_t *gid)
+			 umode_t *mode/*出参,未设置*/, kuid_t *uid, kgid_t *gid)
 {
 	const struct usb_device *usb_dev;
 
@@ -598,7 +598,7 @@ struct device_type usb_device_type = {
 	.name =		"usb_device",
 	.release =	usb_release_dev,
 	.uevent =	usb_dev_uevent,
-	.devnode = 	usb_devnode,/*返回usb设备对应的devnode*/
+	.devnode = 	usb_devnode,/*返回usb设备对应的devnode,见devio.c中指明的字符设备*/
 #ifdef CONFIG_PM
 	.pm =		&usb_device_pm_ops,
 #endif

@@ -35,8 +35,8 @@ struct vfio_device_set {
 };
 
 struct vfio_device {
-	struct device *dev;
-	const struct vfio_device_ops *ops;
+	struct device *dev;/*关联的设备*/
+	const struct vfio_device_ops *ops;/*关联的操作集*/
 	/*
 	 * mig_ops/log_ops is a static property of the vfio_device which must
 	 * be set prior to registering the vfio_device.
@@ -54,7 +54,7 @@ struct vfio_device {
 	struct kvm *kvm;
 
 	/* Members below here are private, not for driver use */
-	unsigned int index;
+	unsigned int index;/*设备编号*/
 	struct device device;	/* device.kref covers object life circle */
 #if IS_ENABLED(CONFIG_VFIO_DEVICE_CDEV)
 	struct cdev cdev;
@@ -263,7 +263,7 @@ static inline int vfio_check_feature(u32 flags, size_t argsz, u32 supported_ops,
 
 struct vfio_device *_vfio_alloc_device(size_t size, struct device *dev,
 				       const struct vfio_device_ops *ops);
-#define vfio_alloc_device(dev_struct, member, dev, ops/*设备的ops*/)				\
+#define vfio_alloc_device(dev_struct/*结构体*/, member/*成员名(必须为结构体的第一成员)*/, dev, ops/*设备的ops*/)				\
 	container_of(_vfio_alloc_device(sizeof(struct dev_struct) +		\
 					BUILD_BUG_ON_ZERO(offsetof(		\
 						struct dev_struct, member)),	\

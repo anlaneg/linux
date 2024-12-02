@@ -1241,7 +1241,7 @@ int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 		return PTR_ERR(gdev);
 
 	iommu_group_ref_get(group);
-	dev->iommu_group = group;
+	dev->iommu_group = group;/*为设备关联此group*/
 
 	mutex_lock(&group->mutex);
 	/*将dev与group之间的关联关系串到链表上*/

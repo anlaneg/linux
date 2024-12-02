@@ -138,7 +138,7 @@ int devtmpfs_create_node(struct device *dev)
 	if (is_blockdev(dev))
 		req.mode |= S_IFBLK;/*指明node为块设备*/
 	else
-		req.mode |= S_IFCHR;/*指明node为字符设备*/
+		req.mode |= S_IFCHR;/*如未明确指出为块设备,则指明node为字符设备*/
 
 	req.dev = dev;
 

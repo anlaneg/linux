@@ -1664,6 +1664,7 @@ static void __usb_hcd_giveback_urb(struct urb *urb)
 	usb_put_urb(urb);
 }
 
+/*处理此tasklet上所有URB*/
 static void usb_giveback_urb_bh(struct tasklet_struct *t)
 {
 	struct giveback_urb_bh *bh = from_tasklet(bh, t, bh);
@@ -1674,13 +1675,14 @@ static void usb_giveback_urb_bh(struct tasklet_struct *t)
 	list_replace_init(&bh->head, &local_list);
 	spin_unlock_irq(&bh->lock);
 
+	/*处理local_list上所有urb*/
 	while (!list_empty(&local_list)) {
 		struct urb *urb;
 
 		urb = list_entry(local_list.next, struct urb, urb_list);
-		list_del_init(&urb->urb_list);
+		list_del_init(&urb->urb_list);/*断链*/
 		bh->completing_ep = urb->ep;
-		__usb_hcd_giveback_urb(urb);
+		__usb_hcd_giveback_urb(urb);/*处理此URB*/
 		bh->completing_ep = NULL;
 	}
 
@@ -1690,6 +1692,7 @@ static void usb_giveback_urb_bh(struct tasklet_struct *t)
 	 */
 	spin_lock_irq(&bh->lock);
 	if (!list_empty(&bh->head)) {
+		/*在我们处理过程中,有新增了新的URB,加入调度*/
 		if (bh->high_prio)
 			tasklet_hi_schedule(&bh->bh);
 		else
@@ -1730,20 +1733,23 @@ void usb_hcd_giveback_urb(struct usb_hcd *hcd, struct urb *urb, int status)
 		urb->unlinked = status;
 
 	if (!hcd_giveback_urb_in_bh(hcd) && !is_root_hub(urb->dev)) {
+		/*不在软中断中并且不是ROOT HUB,则不经过软中断直接处理*/
 		__usb_hcd_giveback_urb(urb);
 		return;
 	}
 
 	if (usb_pipeisoc(urb->pipe) || usb_pipeint(urb->pipe))
-		bh = &hcd->high_prio_bh;
+		bh = &hcd->high_prio_bh;/*存入高优*/
 	else
-		bh = &hcd->low_prio_bh;
+		bh = &hcd->low_prio_bh;/*存入低优*/
 
 	spin_lock(&bh->lock);
+	/*加入tasklet列表,待运行*/
 	list_add_tail(&urb->urb_list, &bh->head);
 	running = bh->running;
 	spin_unlock(&bh->lock);
 
+	/*如果当前已在running,则不再处理,否则促使其运行*/
 	if (running)
 		;
 	else if (bh->high_prio)
@@ -2540,6 +2546,7 @@ static void init_giveback_urb_bh(struct giveback_urb_bh *bh)
 
 	spin_lock_init(&bh->lock);
 	INIT_LIST_HEAD(&bh->head);
+	/*初始化tasklet软中断,此中断会响应USB插拔事件*/
 	tasklet_setup(&bh->bh, usb_giveback_urb_bh);
 }
 
@@ -2927,9 +2934,9 @@ int usb_add_hcd(struct usb_hcd *hcd,
 		dev_dbg(hcd->self.controller, "supports USB remote wakeup\n");
 
 	/* initialize tasklets */
-	init_giveback_urb_bh(&hcd->high_prio_bh);
+	init_giveback_urb_bh(&hcd->high_prio_bh);/*高优tasklet*/
 	hcd->high_prio_bh.high_prio = true;
-	init_giveback_urb_bh(&hcd->low_prio_bh);
+	init_giveback_urb_bh(&hcd->low_prio_bh);/*低优tasklet*/
 
 	/* enable irqs just before we start the controller,
 	 * if the BIOS provides legacy PCI irqs.

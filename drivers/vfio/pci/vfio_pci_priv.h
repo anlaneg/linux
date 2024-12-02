@@ -98,6 +98,7 @@ static inline void vfio_pci_zdev_close_device(struct vfio_pci_core_device *vdev)
 
 static inline bool vfio_pci_is_vga(struct pci_dev *pdev)
 {
+	/*这个PCI是否是VGA设备*/
 	return (pdev->class >> 8) == PCI_CLASS_DISPLAY_VGA;
 }
 

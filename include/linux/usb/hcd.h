@@ -167,8 +167,8 @@ struct usb_hcd {
 	resource_size_t		rsrc_len;	/* memory/io resource length */
 	unsigned		power_budget;	/* in mA, 0 = no limit */
 
-	struct giveback_urb_bh  high_prio_bh;
-	struct giveback_urb_bh  low_prio_bh;
+	struct giveback_urb_bh  high_prio_bh;/*高优tasklet,两者处理函数是一样的*/
+	struct giveback_urb_bh  low_prio_bh;/*低优tasklet*/
 
 	/* bandwidth_mutex should be taken before adding or removing
 	 * any new bus bandwidth constraints:

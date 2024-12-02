@@ -187,6 +187,7 @@ loff_t no_seek_end_llseek(struct file *file, loff_t offset, int whence)
 		return generic_file_llseek_size(file, offset, whence,
 						OFFSET_MAX, 0);
 	default:
+		/*除以上两种外,其它不支持*/
 		return -EINVAL;
 	}
 }

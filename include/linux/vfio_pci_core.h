@@ -51,7 +51,7 @@ struct vfio_pci_region {
 
 struct vfio_pci_core_device {
 	struct vfio_device	vdev;
-	struct pci_dev		*pdev;
+	struct pci_dev		*pdev;/*对应的PCI设备*/
 	void __iomem		*barmap[PCI_STD_NUM_BARS];
 	bool			bar_mmap_supported[PCI_STD_NUM_BARS];
 	u8			*pci_config_map;
@@ -91,7 +91,7 @@ struct vfio_pci_core_device {
 	struct list_head	ioeventfds_list;
 	struct vfio_pci_vf_token	*vf_token;
 	struct list_head		sriov_pfs_item;
-	struct vfio_pci_core_device	*sriov_pf_core_dev;
+	struct vfio_pci_core_device	*sriov_pf_core_dev;/*指向其所属的pf*/
 	struct notifier_block	nb;
 	struct mutex		vma_lock;
 	struct list_head	vma_list;

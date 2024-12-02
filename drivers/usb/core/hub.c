@@ -693,6 +693,7 @@ static void kick_hub_wq(struct usb_hub *hub)
 	usb_autopm_get_interface_no_resume(intf);
 	kref_get(&hub->kref);
 
+	/*要求hub工作队列处理此事件*/
 	if (queue_work(hub_wq, &hub->events))
 		return;
 
@@ -1894,7 +1895,7 @@ static int hub_probe(struct usb_interface *intf, const struct usb_device_id *id)
 	hub->hdev = hdev;
 	INIT_DELAYED_WORK(&hub->leds, led_work);
 	INIT_DELAYED_WORK(&hub->init_work, NULL);
-	INIT_WORK(&hub->events, hub_event);
+	INIT_WORK(&hub->events, hub_event);/*初始化hub事件worker*/
 	INIT_LIST_HEAD(&hub->onboard_hub_devs);
 	spin_lock_init(&hub->irq_urb_lock);
 	timer_setup(&hub->irq_urb_retry, hub_retry_irq_urb, 0);
@@ -2570,6 +2571,7 @@ int usb_new_device(struct usb_device *udev)
 			udev->devnum, udev->bus->busnum,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
 	/* export the usbdev device-node for libusb */
+	/*指出USB设备的DEVT*/
 	udev->dev.devt = MKDEV(USB_DEVICE_MAJOR,
 			(((udev->bus->busnum-1) * 128) + (udev->devnum-1)));
 
@@ -2593,7 +2595,7 @@ int usb_new_device(struct usb_device *udev)
 	 * for configuring the device and invoking the add-device
 	 * notifier chain (used by usbfs and possibly others).
 	 */
-	err = device_add(&udev->dev);
+	err = device_add(&udev->dev);/*向系统注册此usb设备*/
 	if (err) {
 		dev_err(&udev->dev, "can't device_add, error %d\n", err);
 		goto fail;
@@ -5974,6 +5976,7 @@ int usb_hub_init(void)
 	 */
 	hub_wq = alloc_workqueue("usb_hub_wq", WQ_FREEZABLE, 0);
 	if (hub_wq)
+		/*此工作队列负责HUB事件处理*/
 		return 0;
 
 	/* Fall through if kernel_thread failed */

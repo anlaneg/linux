@@ -41,6 +41,7 @@ EXPORT_SYMBOL_GPL(usb_register_notify);
  */
 void usb_unregister_notify(struct notifier_block *nb)
 {
+	/*取消通知注册*/
 	blocking_notifier_chain_unregister(&usb_notifier_list, nb);
 }
 EXPORT_SYMBOL_GPL(usb_unregister_notify);

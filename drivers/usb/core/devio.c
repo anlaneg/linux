@@ -2869,7 +2869,7 @@ static __poll_t usbdev_poll(struct file *file,
 /*USB字符设备对应的FILE ops*/
 const struct file_operations usbdev_file_operations = {
 	.owner =	  THIS_MODULE,
-	.llseek =	  no_seek_end_llseek,
+	.llseek =	  no_seek_end_llseek,/*不支持seek_end的llseek*/
 	.read =		  usbdev_read,
 	.poll =		  usbdev_poll,
 	.unlocked_ioctl = usbdev_ioctl,/*usb设备ioctl响应*/
@@ -2930,7 +2930,7 @@ int __init usb_devio_init(void)
 		goto out;
 	}
 	cdev_init(&usb_device_cdev, &usbdev_file_operations);
-	/*向系统添加usb_device字符设备*/
+	/*向系统添加(占用)usb_device字符设备*/
 	retval = cdev_add(&usb_device_cdev, USB_DEVICE_DEV, USB_DEVICE_MAX);
 	if (retval) {
 		printk(KERN_ERR "Unable to get usb_device major %d\n",

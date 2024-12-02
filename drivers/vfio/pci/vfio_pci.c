@@ -130,7 +130,7 @@ static int vfio_pci_open_device(struct vfio_device *core_vdev)
 
 static const struct vfio_device_ops vfio_pci_ops = {
 	.name		= "vfio-pci",
-	.init		= vfio_pci_core_init_dev,
+	.init		= vfio_pci_core_init_dev,/*初始化vfio_device结构体*/
 	.release	= vfio_pci_core_release_dev,
 	.open_device	= vfio_pci_open_device,
 	.close_device	= vfio_pci_core_close_device,
@@ -147,6 +147,7 @@ static const struct vfio_device_ops vfio_pci_ops = {
 	.detach_ioas	= vfio_iommufd_physical_detach_ioas,
 };
 
+/*vfio_pci探测设备*/
 static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 {
 	struct vfio_pci_core_device *vdev;
@@ -156,14 +157,15 @@ static int vfio_pci_probe(struct pci_dev *pdev, const struct pci_device_id *id)
 		/*pdev在denylist中，故报错*/
 		return -EINVAL;
 
-	/*申请并初始化vfio dev*/
+	/*申请struct vfio_pci_core_device,并调用vfio_pci_ops.init(),初始化vfio dev*/
 	vdev = vfio_alloc_device(vfio_pci_core_device, vdev, &pdev->dev,
 				 &vfio_pci_ops);
 	if (IS_ERR(vdev))
 		return PTR_ERR(vdev);
 
-	/*将此pci设备的私有数据指定为vfio dev*/
+	/*将此pci设备的私有数据指定为vfio_pci_core_device*/
 	dev_set_drvdata(&pdev->dev, vdev);
+
 	//vfio引用计数为0，开始vfio-pci设备
 	ret = vfio_pci_core_register_device(vdev);
 	if (ret)
@@ -201,12 +203,13 @@ static const struct pci_device_id vfio_pci_table[] = {
 
 MODULE_DEVICE_TABLE(pci, vfio_pci_table);
 
+/*VFIO相关的pci设备驱动*/
 static struct pci_driver vfio_pci_driver = {
 	.name			= "vfio-pci",
 	.id_table		= vfio_pci_table,
 	.probe			= vfio_pci_probe,
 	.remove			= vfio_pci_remove,
-	.sriov_configure	= vfio_pci_sriov_configure,
+	.sriov_configure	= vfio_pci_sriov_configure,/*sriov配置*/
 	.err_handler		= &vfio_pci_core_err_handlers,
 	.driver_managed_dma	= true,
 };
@@ -221,13 +224,14 @@ static void __init vfio_pci_fill_ids(void)
 		return;
 
 	/* add ids specified in the module parameter */
-	p = ids;
+	p = ids;/*解析模块参数传入的device ids*/
 	while ((id = strsep(&p, ","))) {
 		unsigned int vendor, device, subvendor = PCI_ANY_ID,
 			subdevice = PCI_ANY_ID, class = 0, class_mask = 0;
 		int fields;
 
 		if (!strlen(id))
+			/*长度为空,忽略*/
 			continue;
 
 		fields = sscanf(id, "%x:%x:%x:%x:%x:%x",
@@ -239,6 +243,7 @@ static void __init vfio_pci_fill_ids(void)
 			continue;
 		}
 
+		/*为驱动添加动态id*/
 		rc = pci_add_dynid(&vfio_pci_driver, vendor, device,
 				   subvendor, subdevice, class, class_mask, 0);
 		if (rc)
