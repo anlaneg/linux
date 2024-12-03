@@ -134,10 +134,11 @@ static int probe(struct pci_dev *pdev,
 		++uiomem;
 	}
 
+	/*注册uio设备*/
 	return devm_uio_register_device(&pdev->dev, &gdev->info);
 }
 
-//uio_pci_driver 为pic驱动
+//uio支持的pci驱动
 static struct pci_driver uio_pci_driver = {
 	.name = "uio_pci_generic",
 	.id_table = NULL, /* only dynamic id's */
@@ -145,7 +146,7 @@ static struct pci_driver uio_pci_driver = {
 	.probe = probe,
 };
 
-module_pci_driver(uio_pci_driver);
+module_pci_driver(uio_pci_driver);/*注册pci驱动*/
 MODULE_VERSION(DRIVER_VERSION);
 MODULE_LICENSE("GPL v2");
 MODULE_AUTHOR(DRIVER_AUTHOR);

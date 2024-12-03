@@ -338,7 +338,7 @@ struct kvm_vcpu {
 	unsigned long guest_debug;
 
 	struct mutex mutex;
-	struct kvm_run *run;
+	struct kvm_run *run;/*申请的一个page，做为vcpu的run对应的变量*/
 
 #ifndef __KVM_HAVE_ARCH_WQP
 	struct rcuwait wait;
@@ -794,6 +794,7 @@ struct kvm {
 		struct mutex      resampler_lock;
 	} irqfds;
 #endif
+	/*关注的ioeventfd链表，见kvm_assign_ioeventfd_idx*/
 	struct list_head ioeventfds;
 	struct kvm_vm_stat stat;
 	struct kvm_arch arch;
@@ -947,6 +948,7 @@ static inline bool kvm_dirty_log_manual_protect_and_init_set(struct kvm *kvm)
 
 static inline struct kvm_io_bus *kvm_get_bus(struct kvm *kvm, enum kvm_bus idx)
 {
+	/*取idx号buses*/
 	return srcu_dereference_check(kvm->buses[idx], &kvm->srcu,
 				      lockdep_is_held(&kvm->slots_lock) ||
 				      !refcount_read(&kvm->users_count));

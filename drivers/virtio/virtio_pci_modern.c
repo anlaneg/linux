@@ -855,6 +855,7 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		return err;
 
 	if (mdev->device)
+		/*有设备的情况*/
 		vp_dev->vdev.config = &virtio_pci_config_ops;
 	else
 		vp_dev->vdev.config = &virtio_pci_config_nodev_ops;

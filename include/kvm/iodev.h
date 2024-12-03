@@ -56,6 +56,7 @@ static inline int kvm_iodevice_write(struct kvm_vcpu *vcpu,
 				     struct kvm_io_device *dev, gpa_t addr,
 				     int l, const void *v)
 {
+	/*通过kvm_io_device来进行写操作（如果其后对应的是ioeventfd,则会触发用户态通知）*/
 	return dev->ops->write ? dev->ops->write(vcpu, dev, addr, l, v)
 				 : -EOPNOTSUPP;
 }

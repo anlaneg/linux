@@ -83,7 +83,7 @@ Feature bits are allocated as follows:
 
 /* v1.0 compliant. */
 //标记为virtio 1.0版本(如果此标记没有被设备提供，则设备为legacy设备）
-//同相的，如果此标记没有被驱动提供，则驱动为legacy驱动
+//同样的，如果此标记没有被驱动提供，则驱动为legacy驱动
 #define VIRTIO_F_VERSION_1		32
 
 /*

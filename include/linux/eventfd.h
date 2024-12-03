@@ -86,7 +86,7 @@ static inline void eventfd_ctx_do_read(struct eventfd_ctx *ctx, __u64 *cnt)
 
 static inline void eventfd_signal(struct eventfd_ctx *ctx)
 {
-	eventfd_signal_mask(ctx, 0);
+	eventfd_signal_mask(ctx, 0);/*触发event*/
 }
 
 #endif /* _LINUX_EVENTFD_H */

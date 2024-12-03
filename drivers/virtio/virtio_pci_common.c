@@ -44,6 +44,7 @@ bool vp_notify(struct virtqueue *vq)
 	/* we write the queue's selector into the notification register to
 	 * signal the other end */
 	//通知后端队列vq->index发生变化（vq->priv为此队列对应的通知地址）
+	/*向vq->priv写队列编号，用于通知对端此队列发生变化*/
 	iowrite16(vq->index, (void __iomem *)vq->priv);
 	return true;
 }
@@ -597,6 +598,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 	if (!vp_dev)
 		return -ENOMEM;
 
+	/*设置驱动私有数据为struct virtio_pci_device*/
 	pci_set_drvdata(pci_dev, vp_dev);
 	vp_dev->vdev.dev.parent = &pci_dev->dev;
 	vp_dev->vdev.dev.release = virtio_pci_release_dev;
@@ -610,7 +612,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 		goto err_enable_device;
 
 	if (force_legacy) {
-		//如果强制按legacy设备probe，则执行legacy_probe
+		//如果强制按legacy设备probe，则先按legacy尝试probe
 		rc = virtio_pci_legacy_probe(vp_dev);
 		/* Also try modern mode if we can't map BAR0 (no IO space). */
 		if (rc == -ENODEV || rc == -ENOMEM)

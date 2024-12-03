@@ -705,13 +705,13 @@ void kvm_irqfd_exit(void)
 
 struct _ioeventfd {
 	struct list_head     list;
-	u64                  addr;
-	int                  length;
-	struct eventfd_ctx  *eventfd;
-	u64                  datamatch;
+	u64                  addr;/*硬件地址*/
+	int                  length;/*内容长度*/
+	struct eventfd_ctx  *eventfd;/*关联的eventfd*/
+	u64                  datamatch;/*要匹配的内容*/
 	struct kvm_io_device dev;
-	u8                   bus_idx;
-	bool                 wildcard;
+	u8                   bus_idx;/*所属的bus索引，例如KVM_MMIO_BUS*/
+	bool                 wildcard;/*不匹配data时，为false即不通配*/
 };
 
 static inline struct _ioeventfd *
@@ -783,7 +783,7 @@ ioeventfd_write(struct kvm_vcpu *vcpu, struct kvm_io_device *this, gpa_t addr,
 	if (!ioeventfd_in_range(p, addr, len, val))
 		return -EOPNOTSUPP;
 
-	eventfd_signal(p->eventfd);
+	eventfd_signal(p->eventfd);/*针对eventfd触发event*/
 	return 0;
 }
 
@@ -800,7 +800,7 @@ ioeventfd_destructor(struct kvm_io_device *this)
 }
 
 static const struct kvm_io_device_ops ioeventfd_ops = {
-	.write      = ioeventfd_write,
+	.write      = ioeventfd_write,/*对应的触发event*/
 	.destructor = ioeventfd_destructor,
 };
 
@@ -825,9 +825,11 @@ ioeventfd_check_collision(struct kvm *kvm, struct _ioeventfd *p)
 static enum kvm_bus ioeventfd_bus_from_flags(__u32 flags)
 {
 	if (flags & KVM_IOEVENTFD_FLAG_PIO)
+		/*pio标记时，返回pio-bus*/
 		return KVM_PIO_BUS;
 	if (flags & KVM_IOEVENTFD_FLAG_VIRTIO_CCW_NOTIFY)
 		return KVM_VIRTIO_CCW_NOTIFY_BUS;
+	/*默认为mmio bus*/
 	return KVM_MMIO_BUS;
 }
 
@@ -840,6 +842,7 @@ static int kvm_assign_ioeventfd_idx(struct kvm *kvm,
 	struct _ioeventfd *p;
 	int ret;
 
+	/*由fd获得eventfd*/
 	eventfd = eventfd_ctx_fdget(args->fd);
 	if (IS_ERR(eventfd))
 		return PTR_ERR(eventfd);
@@ -866,12 +869,15 @@ static int kvm_assign_ioeventfd_idx(struct kvm *kvm,
 
 	/* Verify that there isn't a match already */
 	if (ioeventfd_check_collision(kvm, p)) {
+		/*这个已存在，或者相冲突*/
 		ret = -EEXIST;
 		goto unlock_fail;
 	}
 
+	/*设置dev ops*/
 	kvm_iodevice_init(&p->dev, &ioeventfd_ops);
 
+	/*注册kvm io-dev*/
 	ret = kvm_io_bus_register_dev(kvm, bus_idx, p->addr, p->length,
 				      &p->dev);
 	if (ret < 0)
@@ -904,16 +910,18 @@ kvm_deassign_ioeventfd_idx(struct kvm *kvm, enum kvm_bus bus_idx,
 	int                       ret = -ENOENT;
 	bool                      wildcard;
 
+	/*由fd获取eventfd*/
 	eventfd = eventfd_ctx_fdget(args->fd);
 	if (IS_ERR(eventfd))
 		return PTR_ERR(eventfd);
 
+	/*是否不匹配data*/
 	wildcard = !(args->flags & KVM_IOEVENTFD_FLAG_DATAMATCH);
 
 	mutex_lock(&kvm->slots_lock);
 
 	list_for_each_entry(p, &kvm->ioeventfds, list) {
-		if (p->bus_idx != bus_idx ||
+		if (p->bus_idx != bus_idx /*bus index不相等，忽略*/||
 		    p->eventfd != eventfd  ||
 		    p->addr != args->addr  ||
 		    p->length != args->len ||
@@ -923,6 +931,7 @@ kvm_deassign_ioeventfd_idx(struct kvm *kvm, enum kvm_bus bus_idx,
 		if (!p->wildcard && p->datamatch != args->datamatch)
 			continue;
 
+		/*找到相同的ioeventfd,移除它*/
 		kvm_io_bus_unregister_dev(kvm, bus_idx, &p->dev);
 		bus = kvm_get_bus(kvm, bus_idx);
 		if (bus)
@@ -940,6 +949,7 @@ kvm_deassign_ioeventfd_idx(struct kvm *kvm, enum kvm_bus bus_idx,
 
 static int kvm_deassign_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 {
+	/*确认bus index,例如mmio*/
 	enum kvm_bus bus_idx = ioeventfd_bus_from_flags(args->flags);
 	int ret = kvm_deassign_ioeventfd_idx(kvm, bus_idx, args);
 
@@ -965,15 +975,18 @@ kvm_assign_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 	case 8:
 		break;
 	default:
+		/*不支持其它长度*/
 		return -EINVAL;
 	}
 
 	/* check for range overflow */
 	if (args->addr + args->len < args->addr)
+		/*长度绕回*/
 		return -EINVAL;
 
 	/* check for extra flags that we don't understand */
 	if (args->flags & ~KVM_IOEVENTFD_VALID_FLAG_MASK)
+		/*包含不支持的flags*/
 		return -EINVAL;
 
 	/* ioeventfd with no length can't be combined with DATAMATCH */
@@ -1005,8 +1018,10 @@ int
 kvm_ioeventfd(struct kvm *kvm, struct kvm_ioeventfd *args)
 {
 	if (args->flags & KVM_IOEVENTFD_FLAG_DEASSIGN)
+		/*删除ioeventfd*/
 		return kvm_deassign_ioeventfd(kvm, args);
 
+	/*添加ioeventfd*/
 	return kvm_assign_ioeventfd(kvm, args);
 }
 

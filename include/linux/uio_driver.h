@@ -41,7 +41,7 @@ struct uio_mem {
 	resource_size_t		size;
 	int			memtype;
 	void __iomem		*internal_addr;
-	struct uio_map		*map;
+	struct uio_map		*map;/*指向所属的uio_map*/
 };
 
 #define MAX_UIO_MAPS	5
@@ -99,7 +99,7 @@ struct uio_info {
 	struct uio_device	*uio_dev;
 	const char		*name;
 	const char		*version;
-	struct uio_mem		mem[MAX_UIO_MAPS];
+	struct uio_mem		mem[MAX_UIO_MAPS];/*一般存入bar内存*/
 	struct uio_port		port[MAX_UIO_PORT_REGIONS];
 	long			irq;
 	unsigned long		irq_flags;

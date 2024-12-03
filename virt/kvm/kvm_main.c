@@ -4144,6 +4144,7 @@ static vm_fault_t kvm_vcpu_fault(struct vm_fault *vmf)
 	struct page *page;
 
 	if (vmf->pgoff == 0)
+		/*取vcpu->run对应的page*/
 		page = virt_to_page(vcpu->run);
 #ifdef CONFIG_X86
 	else if (vmf->pgoff == KVM_PIO_PAGE_OFFSET)
@@ -4159,8 +4160,8 @@ static vm_fault_t kvm_vcpu_fault(struct vm_fault *vmf)
 		    vmf->pgoff - KVM_DIRTY_LOG_PAGE_OFFSET);
 	else
 		return kvm_arch_vcpu_fault(vcpu, vmf);
-	get_page(page);
-	vmf->page = page;
+	get_page(page);/*增加以上页的引用*/
+	vmf->page = page;/*指明对应的页*/
 	return 0;
 }
 
@@ -4168,6 +4169,7 @@ static const struct vm_operations_struct kvm_vcpu_vm_ops = {
 	.fault = kvm_vcpu_fault,
 };
 
+/*执行vcpu map,其大小由/dev/kvm设备的fd ioctl指出*/
 static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	struct kvm_vcpu *vcpu = file->private_data;
@@ -4178,6 +4180,7 @@ static int kvm_vcpu_mmap(struct file *file, struct vm_area_struct *vma)
 	    ((vma->vm_flags & VM_EXEC) || !(vma->vm_flags & VM_SHARED)))
 		return -EINVAL;
 
+	/*并不实际映射内存，而只提供fault函数*/
 	vma->vm_ops = &kvm_vcpu_vm_ops;
 	return 0;
 }
@@ -4190,6 +4193,7 @@ static int kvm_vcpu_release(struct inode *inode, struct file *filp)
 	return 0;
 }
 
+/*vcpu对应的文件fd操作集*/
 static struct file_operations kvm_vcpu_fops = {
 	.release        = kvm_vcpu_release,
 	.unlocked_ioctl = kvm_vcpu_ioctl,
@@ -4207,7 +4211,7 @@ static int create_vcpu_fd(struct kvm_vcpu *vcpu)
 
 	snprintf(name, sizeof(name), "kvm-vcpu:%d", vcpu->vcpu_id);
 	/*构造一个假的文件fd,将vcpu做为file的私有数据*/
-	return anon_inode_getfd(name, &kvm_vcpu_fops, vcpu, O_RDWR | O_CLOEXEC);
+	return anon_inode_getfd(name, &kvm_vcpu_fops/*关联此fd对应的fops*/, vcpu, O_RDWR | O_CLOEXEC);
 }
 
 #ifdef __KVM_HAVE_ARCH_VCPU_DEBUGFS
@@ -4409,11 +4413,13 @@ static int kvm_vcpu_ioctl_get_stats_fd(struct kvm_vcpu *vcpu)
 
 	snprintf(name, sizeof(name), "kvm-vcpu-stats:%d", vcpu->vcpu_id);
 
+	/*取一个未使用的fd*/
 	fd = get_unused_fd_flags(O_CLOEXEC);
 	if (fd < 0)
 		return fd;
 
-	file = anon_inode_getfile(name, &kvm_vcpu_stats_fops, vcpu, O_RDONLY);
+	/*创建一个匿名inode*/
+	file = anon_inode_getfile(name, &kvm_vcpu_stats_fops/*文件对应的fops*/, vcpu, O_RDONLY);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
 		return PTR_ERR(file);
@@ -4422,7 +4428,7 @@ static int kvm_vcpu_ioctl_get_stats_fd(struct kvm_vcpu *vcpu)
 	kvm_get_kvm(vcpu->kvm);
 
 	file->f_mode |= FMODE_PREAD;
-	fd_install(fd, file);
+	fd_install(fd, file);/*fd与file关联*/
 
 	return fd;
 }
@@ -4641,6 +4647,7 @@ out:
 }
 
 #ifdef CONFIG_KVM_COMPAT
+/*kvm vcpu fd对应的ioctl实现函数*/
 static long kvm_vcpu_compat_ioctl(struct file *filp,
 				  unsigned int ioctl, unsigned long arg)
 {
@@ -5154,7 +5161,7 @@ static long kvm_vm_ioctl(struct file *filp,
 		return -EIO;
 	switch (ioctl) {
 	case KVM_CREATE_VCPU:
-	    //创建vm对应的vcpu
+	    //创建vm对应的vcpu,并返回fd对其映射
 		r = kvm_vm_ioctl_create_vcpu(kvm, arg);
 		break;
 	case KVM_ENABLE_CAP: {
@@ -5255,8 +5262,10 @@ static long kvm_vm_ioctl(struct file *filp,
 		struct kvm_ioeventfd data;
 
 		r = -EFAULT;
+		/*设置data*/
 		if (copy_from_user(&data, argp, sizeof(data)))
 			goto out;
+		/*添加或移除ioeventfd*/
 		r = kvm_ioeventfd(kvm, &data);
 		break;
 	}
@@ -5414,6 +5423,7 @@ long __weak kvm_arch_vm_compat_ioctl(struct file *filp, unsigned int ioctl,
 	return -ENOTTY;
 }
 
+/*kvm vm fd对应的ioctl*/
 static long kvm_vm_compat_ioctl(struct file *filp,
 			   unsigned int ioctl, unsigned long arg)
 {
@@ -5478,6 +5488,7 @@ static struct file_operations kvm_vm_fops = {
 
 bool file_is_kvm(struct file *file)
 {
+	/*这个文件是否表示一个vm*/
 	return file && file->f_op == &kvm_vm_fops;
 }
 EXPORT_SYMBOL_GPL(file_is_kvm);
@@ -5502,7 +5513,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 		goto put_fd;
 	}
 
-	//申请假的file,并使其与kvm映射起来，实现fd关联
+	//申请假的file,并使其与创建的vm映射起来，实现fd关联
 	file = anon_inode_getfile("kvm-vm", &kvm_vm_fops, kvm, O_RDWR);
 	if (IS_ERR(file)) {
 		r = PTR_ERR(file);
@@ -5517,7 +5528,7 @@ static int kvm_dev_ioctl_create_vm(unsigned long type)
 	 */
 	kvm_uevent_notify_change(KVM_EVENT_CREATE_VM, kvm);
 
-	fd_install(fd, file);
+	fd_install(fd, file);/*为此file关联fd,并返回*/
 	return fd;
 
 put_kvm:
@@ -5527,7 +5538,7 @@ put_fd:
 	return r;
 }
 
-//针对设备/dev/kvm的所有ioctl函数实现
+//针对字符设备/dev/kvm的所有ioctl函数实现
 static long kvm_dev_ioctl(struct file *filp,
 			  unsigned int ioctl, unsigned long arg)
 {
@@ -5541,7 +5552,7 @@ static long kvm_dev_ioctl(struct file *filp,
 		r = KVM_API_VERSION;
 		break;
 	case KVM_CREATE_VM:
-	    //创建vm
+	    //创建vm，返回对应的fd
 		r = kvm_dev_ioctl_create_vm(arg);
 		break;
 	case KVM_CHECK_EXTENSION:
@@ -5549,6 +5560,7 @@ static long kvm_dev_ioctl(struct file *filp,
 		break;
 	case KVM_GET_VCPU_MMAP_SIZE:
 		if (arg)
+			/*参数如非零，则直接返回*/
 			goto out;
 		r = PAGE_SIZE;     /* struct kvm_run */
 #ifdef CONFIG_X86
@@ -5566,7 +5578,7 @@ out:
 	return r;
 }
 
-// /dev/kvm字符设备对应的ops
+/* /dev/kvm字符设备对应的ops */
 static struct file_operations kvm_chardev_ops = {
 	.unlocked_ioctl = kvm_dev_ioctl,
 	.llseek		= noop_llseek,
@@ -5798,7 +5810,7 @@ static inline int kvm_io_bus_cmp(const struct kvm_io_range *r1,
 	gpa_t addr1 = r1->addr;
 	gpa_t addr2 = r2->addr;
 
-	//r1的起始地址小于r2，返回-1
+	//r1的起始地址小于r2，返回-1（不相等）
 	if (addr1 < addr2)
 		return -1;
 
@@ -5887,6 +5899,7 @@ int kvm_io_bus_write(struct kvm_vcpu *vcpu, enum kvm_bus bus_idx, gpa_t addr,
 		.len = len,
 	};
 
+	/*依据bus_idx获得io-bus*/
 	bus = srcu_dereference(vcpu->kvm->buses[bus_idx], &vcpu->kvm->srcu);
 	if (!bus)
 		return -ENOMEM;
@@ -5980,6 +5993,7 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr/*�
 
 	lockdep_assert_held(&kvm->slots_lock);
 
+	/*取io_bus*/
 	bus = kvm_get_bus(kvm, bus_idx);
 	if (!bus)
 		return -ENOMEM;
@@ -6004,9 +6018,11 @@ int kvm_io_bus_register_dev(struct kvm *kvm, enum kvm_bus bus_idx, gpa_t addr/*�
 		if (kvm_io_bus_cmp(&bus->range[i], &range) > 0)
 			break;
 
+	/*复制前i元素*/
 	memcpy(new_bus, bus, sizeof(*bus) + i * sizeof(struct kvm_io_range));
-	new_bus->dev_count++;
-	new_bus->range[i] = range;
+	new_bus->dev_count++;/*增加*/
+	new_bus->range[i] = range;/*填写第i+1个*/
+	/*复制其后元素*/
 	memcpy(new_bus->range + i + 1, bus->range + i,
 		(bus->dev_count - i) * sizeof(struct kvm_io_range));
 

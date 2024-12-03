@@ -159,11 +159,11 @@ static const struct pci_device_id *pci_match_device(struct pci_driver *drv,
 	}
 	spin_unlock(&drv->dynids.lock);
 
-	/*没有找到，再进行id_table式的匹配*/
 	if (found_id)
+		/*找到了，直接返回*/
 		return found_id;
 
-	/*没有找到，则直接检查设备指定的驱动*/
+	/*没有找到，针对驱动中指定的id_table尝试匹配，直接检查设备指定的驱动*/
 	for (ids = drv->id_table; (found_id = pci_match_id(ids, dev));
 	     ids = found_id + 1) {
 		/*

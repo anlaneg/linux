@@ -231,6 +231,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	check_offsets();
 
 	if (mdev->device_id_check) {
+		/*有回调函数，通过回调函数来检查*/
 		devid = mdev->device_id_check(pci_dev);
 		if (devid < 0)
 			return devid;
@@ -238,6 +239,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	} else {
 		/* We only own devices >= 0x1000 and <= 0x107f: leave the rest. */
 		if (pci_dev->device < 0x1000 || pci_dev->device > 0x107f)
+			/*其余设备不看*/
 			return -ENODEV;
 
 		if (pci_dev->device < 0x1040) {
@@ -695,7 +697,7 @@ static u16 vp_modern_get_queue_notify_off(struct virtio_pci_modern_device *mdev,
  * Returns the address of the notification area
  */
 void __iomem *vp_modern_map_vq_notify(struct virtio_pci_modern_device *mdev,
-				      u16 index, resource_size_t *pa)
+				      u16 index/*vq编号*/, resource_size_t *pa)
 {
 	u16 off = vp_modern_get_queue_notify_off(mdev, index);
 

@@ -408,7 +408,7 @@ static struct bus_type virtio_bus = {
 	.dev_groups = virtio_dev_groups,
 	//virtio bus通知uevent时添加uevent环境变量
 	.uevent = virtio_uevent,
-	//virtio bus提供的设备probe函数
+	//virtio bus提供的设备probe函数(其先probe,再交给驱动probe)
 	.probe = virtio_dev_probe,
 	//virtio bus提供设备的remove
 	.remove = virtio_dev_remove,

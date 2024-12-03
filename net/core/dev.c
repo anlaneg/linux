@@ -3658,7 +3658,7 @@ EXPORT_SYMBOL(netif_skb_features);
 
 //通过dev向外发送一个skb
 static int xmit_one(struct sk_buff *skb, struct net_device *dev,
-		    struct netdev_queue *txq, bool more)
+		    struct netdev_queue *txq, bool more/*是否还有其它报文*/)
 {
 	unsigned int len;
 	int rc;

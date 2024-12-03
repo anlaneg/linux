@@ -75,7 +75,7 @@ void eventfd_signal_mask(struct eventfd_ctx *ctx, __poll_t mask)
 	if (ctx->count < ULLONG_MAX)
 		ctx->count++;/*增加事件数*/
 	if (waitqueue_active(&ctx->wqh))
-	    	/*等待队列中有wait,采用pollin事件将其唤醒*/
+	    /*等待队列中有wait,采用pollin事件将其唤醒*/
 		wake_up_locked_poll(&ctx->wqh, EPOLLIN | mask);
 	current->in_eventfd = 0;
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
@@ -184,7 +184,7 @@ void eventfd_ctx_do_read(struct eventfd_ctx *ctx, __u64 *cnt)
 {
 	lockdep_assert_held(&ctx->wqh.lock);
 
-    	/*如果是信号量，则一个event触发一次，否则容许多个event可触发一次*/
+    /*如果是信号量，则每一个event触发一次；否则容许多个event合并成一次触发*/
 	*cnt = ((ctx->flags & EFD_SEMAPHORE) && ctx->count) ? 1 : ctx->count;
 	ctx->count -= *cnt;
 }
@@ -223,30 +223,36 @@ EXPORT_SYMBOL_GPL(eventfd_ctx_remove_wait_queue);
 static ssize_t eventfd_read(struct kiocb *iocb, struct iov_iter *to)
 {
 	struct file *file = iocb->ki_filp;
+	/*取得context*/
 	struct eventfd_ctx *ctx = file->private_data;
 	__u64 ucnt = 0;
 
 	if (iov_iter_count(to) < sizeof(ucnt))
+		/*读的长度不得小于sizeof(u64)*/
 		return -EINVAL;
 	spin_lock_irq(&ctx->wqh.lock);
 	if (!ctx->count) {
 		if ((file->f_flags & O_NONBLOCK) ||
 		    (iocb->ki_flags & IOCB_NOWAIT)) {
+			/*指明了不阻塞，直接返回*/
 			spin_unlock_irq(&ctx->wqh.lock);
 			return -EAGAIN;
 		}
 
+		/*等待直到ctx->count不为零*/
 		if (wait_event_interruptible_locked_irq(ctx->wqh, ctx->count)) {
 			spin_unlock_irq(&ctx->wqh.lock);
 			return -ERESTARTSYS;
 		}
 	}
-	eventfd_ctx_do_read(ctx, &ucnt);
+	eventfd_ctx_do_read(ctx, &ucnt);/*读取count*/
 	current->in_eventfd = 1;
 	if (waitqueue_active(&ctx->wqh))
+		/*唤醒等待者*/
 		wake_up_locked_poll(&ctx->wqh, EPOLLOUT);
 	current->in_eventfd = 0;
 	spin_unlock_irq(&ctx->wqh.lock);
+	/*写入count*/
 	if (unlikely(copy_to_iter(&ucnt, sizeof(ucnt), to) != sizeof(ucnt)))
 		return -EFAULT;
 
@@ -269,8 +275,10 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 	spin_lock_irq(&ctx->wqh.lock);
 	res = -EAGAIN;
 	if (ULLONG_MAX - ctx->count > ucnt)
+		/*没有绕圈，可写入*/
 		res = sizeof(ucnt);
 	else if (!(file->f_flags & O_NONBLOCK)) {
+		/*等待count消费一部分后满足不绕圈后再写入*/
 		res = wait_event_interruptible_locked_irq(ctx->wqh,
 				ULLONG_MAX - ctx->count > ucnt);
 		if (!res)
@@ -281,6 +289,7 @@ static ssize_t eventfd_write(struct file *file, const char __user *buf, size_t c
 		ctx->count += ucnt;
 		current->in_eventfd = 1;
 		if (waitqueue_active(&ctx->wqh))
+			/*唤醒等待者*/
 			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
 		current->in_eventfd = 0;
 	}
@@ -296,7 +305,7 @@ static void eventfd_show_fdinfo(struct seq_file *m, struct file *f)
 
 	spin_lock_irq(&ctx->wqh.lock);
 	seq_printf(m, "eventfd-count: %16llx\n",
-		   (unsigned long long)ctx->count);
+		   (unsigned long long)ctx->count);/*显示event数*/
 	spin_unlock_irq(&ctx->wqh.lock);
 	seq_printf(m, "eventfd-id: %d\n", ctx->id);
 	seq_printf(m, "eventfd-semaphore: %d\n",
@@ -310,9 +319,9 @@ static const struct file_operations eventfd_fops = {
 	.show_fdinfo	= eventfd_show_fdinfo,
 #endif
 	.release	= eventfd_release,
-	.poll		= eventfd_poll,
-	.read_iter	= eventfd_read,
-	.write		= eventfd_write,
+	.poll		= eventfd_poll,/*count大于零，可读；等于ULLONG_MAX，出错；小于ULLONG_MAX，可写*/
+	.read_iter	= eventfd_read,/*消费count*/
+	.write		= eventfd_write,/*生产count*/
 	.llseek		= noop_llseek,
 };
 
@@ -389,7 +398,7 @@ struct eventfd_ctx *eventfd_ctx_fileget(struct file *file)
 }
 EXPORT_SYMBOL_GPL(eventfd_ctx_fileget);
 
-//实现eventfd,eventfd2系统调用
+//实现eventfd,eventfd2系统调用,申请fd创建eventfd对应的file
 static int do_eventfd(unsigned int count, int flags)
 {
 	struct eventfd_ctx *ctx;
@@ -412,6 +421,7 @@ static int do_eventfd(unsigned int count, int flags)
 	init_waitqueue_head(&ctx->wqh);
 	ctx->count = count;/*指定初始事件数*/
 	ctx->flags = flags;
+	/*分配一个编号*/
 	ctx->id = ida_alloc(&eventfd_ida, GFP_KERNEL);
 
 	flags &= EFD_SHARED_FCNTL_FLAGS;
@@ -421,6 +431,7 @@ static int do_eventfd(unsigned int count, int flags)
 	if (fd < 0)
 		goto err;
 
+	/*申请一个匿名文件，指明eventfd文件对应的fops*/
 	file = anon_inode_getfile("[eventfd]", &eventfd_fops, ctx, flags);
 	if (IS_ERR(file)) {
 		put_unused_fd(fd);
@@ -429,7 +440,7 @@ static int do_eventfd(unsigned int count, int flags)
 	}
 
 	file->f_mode |= FMODE_NOWAIT;
-	fd_install(fd, file);
+	fd_install(fd, file);/*fd与文件关联*/
 	return fd;
 err:
 	eventfd_free_ctx(ctx);

@@ -152,6 +152,7 @@ static void vhost_flush_work(struct vhost_work *work)
 	complete(&s->wait_event);
 }
 
+/*将poll加入等待队列*/
 static void vhost_poll_func(struct file *file, wait_queue_head_t *wqh,
 			    poll_table *pt)
 {
@@ -217,11 +218,13 @@ int vhost_poll_start(struct vhost_poll *poll, struct file *file)
 	__poll_t mask;
 
 	if (poll->wqh)
+		/*已加入，不再重复加入*/
 		return 0;
 
-	/*使用vfs_poll poll此文件*/
+	/*使用vfs_poll poll此文件，等待事件发生*/
 	mask = vfs_poll(file, &poll->table);
 	if (mask)
+		/*唤醒poll继续处理，使其对应的work入队*/
 		vhost_poll_wakeup(&poll->wait, 0, 0, poll_to_key(mask));
 	if (mask & EPOLLERR) {
 		vhost_poll_stop(poll);
@@ -237,7 +240,7 @@ EXPORT_SYMBOL_GPL(vhost_poll_start);
 void vhost_poll_stop(struct vhost_poll *poll)
 {
 	if (poll->wqh) {
-	    /*如果vhost poll已被加入到等待队列，则将其自等待队列中移除*/
+	    /*如果vhost poll已被加入到等待队列，则将其自等待队列中移除（仅在调用stop时移除）*/
 		remove_wait_queue(poll->wqh, &poll->wait);
 		poll->wqh = NULL;
 	}
@@ -269,7 +272,7 @@ bool vhost_vq_work_queue(struct vhost_virtqueue *vq, struct vhost_work *work)
 	worker = rcu_dereference(vq->worker);
 	if (worker) {
 		queued = true;
-		vhost_worker_queue(worker, work);/*work入队*/
+		vhost_worker_queue(worker, work);/*work入队,由worker具体来完成工作*/
 	}
 	rcu_read_unlock();
 
@@ -400,7 +403,7 @@ static void vhost_vq_reset(struct vhost_dev *dev,
 	vq->acked_backend_features = 0;
 	vq->log_base = NULL;
 	vq->error_ctx = NULL;
-	vq->kick = NULL;
+	vq->kick = NULL;/*kick文件置为空*/
 	vq->log_ctx = NULL;
 	vhost_disable_cross_endian(vq);
 	vhost_reset_is_le(vq);
@@ -729,6 +732,7 @@ static void __vhost_vq_attach_worker(struct vhost_virtqueue *vq,
 	 */
 	mutex_lock(&vq->mutex);
 	if (!vhost_vq_get_backend(vq) && !vq->kick) {
+		/*后端socket未提定，vq对应的kick文件未指定*/
 		mutex_unlock(&vq->mutex);
 		mutex_unlock(&old_worker->mutex);
 		/*
@@ -988,6 +992,7 @@ void vhost_dev_stop(struct vhost_dev *dev)
 
 	for (i = 0; i < dev->nvqs; ++i) {
 		if (dev->vqs[i]->kick && dev->vqs[i]->handle_kick)
+			/*此kick指定了kick文件，且有kick实现函数，停止poll*/
 			vhost_poll_stop(&dev->vqs[i]->poll);
 	}
 
@@ -1023,6 +1028,7 @@ void vhost_dev_cleanup(struct vhost_dev *dev)
 		if (dev->vqs[i]->error_ctx)
 			eventfd_ctx_put(dev->vqs[i]->error_ctx);
 		if (dev->vqs[i]->kick)
+			/*释放kick文件*/
 			fput(dev->vqs[i]->kick);
 		if (dev->vqs[i]->call_ctx.ctx)
 			eventfd_ctx_put(dev->vqs[i]->call_ctx.ctx);
@@ -2085,7 +2091,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 			r = -EFAULT;
 		break;
 	case VHOST_SET_VRING_KICK:
-	    /*设置eventfd*/
+	    /*为指定vq,设置eventfd，通过poll此文件了解对方的通知*/
 		if (copy_from_user(&f, argp, sizeof f)) {
 			r = -EFAULT;
 			break;
@@ -2100,7 +2106,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 		/*eventfd发生变更*/
 		if (eventfp != vq->kick) {
 			pollstop = (filep = vq->kick) != NULL;
-			pollstart = (vq->kick = eventfp) != NULL;
+			pollstart = (vq->kick = eventfp/*设置eventfp文件*/) != NULL;
 		} else
 			filep = eventfp;
 		break;
@@ -2165,9 +2171,9 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 	if (filep)
 		fput(filep);
 
-	//需要start poll
+	//需要start poll，将kick文件加入poll,等待通知发生
 	if (pollstart && vq->handle_kick)
-		r = vhost_poll_start(&vq->poll, vq->kick);
+		r = vhost_poll_start(&vq->poll, vq->kick/*关注kick文件*/);
 
 	mutex_unlock(&vq->mutex);
 

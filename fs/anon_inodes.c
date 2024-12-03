@@ -49,6 +49,7 @@ static int anon_inodefs_init_fs_context(struct fs_context *fc)
 	return 0;
 }
 
+/*匿名文件对应的fs*/
 static struct file_system_type anon_inode_fs_type = {
 	.name		= "anon_inodefs",
 	.init_fs_context = anon_inodefs_init_fs_context,
@@ -79,7 +80,7 @@ static struct file *__anon_inode_getfile(const char *name,
 					 const struct file_operations *fops,
 					 void *priv, int flags,
 					 const struct inode *context_inode,
-					 bool make_inode)
+					 bool make_inode/*是否要创建inode*/)
 {
 	struct inode *inode;
 	struct file *file;
@@ -94,6 +95,7 @@ static struct file *__anon_inode_getfile(const char *name,
 			goto err;
 		}
 	} else {
+		/*不需要创建inode,使用匿名inode(总使此node的计数大于零，则不会被释放)*/
 		inode =	anon_inode_inode;
 		if (IS_ERR(inode)) {
 			file = ERR_PTR(-ENODEV);
@@ -146,7 +148,8 @@ struct file *anon_inode_getfile(const char *name,
 				const struct file_operations *fops,
 				void *priv/*文件私有数据*/, int flags)
 {
-	return __anon_inode_getfile(name, fops, priv, flags, NULL, false);
+	/*申请匿名文件*/
+	return __anon_inode_getfile(name/*文件名称*/, fops/*文件关联的fops*/, priv, flags, NULL, false);
 }
 EXPORT_SYMBOL_GPL(anon_inode_getfile);
 

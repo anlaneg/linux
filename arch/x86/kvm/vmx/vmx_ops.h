@@ -93,7 +93,7 @@ static __always_inline unsigned long __vmcs_readl(unsigned long field)
 	unsigned long value;
 
 #ifdef CONFIG_CC_HAS_ASM_GOTO_OUTPUT
-
+	/*读VMCS结构体指定域*/
 	asm_volatile_goto("1: vmread %[field], %[output]\n\t"
 			  "jna %l[do_fail]\n\t"
 

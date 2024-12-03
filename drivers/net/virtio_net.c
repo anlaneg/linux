@@ -2379,6 +2379,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		//在报文前空出一个hdr_len长度,用于填充merge header
 		hdr = (struct virtio_net_hdr_mrg_rxbuf *)(skb->data - hdr_len);
 	else
+		/*不能push,将merge header存在skb cb中*/
 		hdr = &skb_vnet_common_hdr(skb)->mrg_hdr;
 
 	if (virtio_net_hdr_from_skb(skb, &hdr->hdr,
@@ -2407,7 +2408,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		num_sg++;
 	}
 
-    //将报文存入（报文已存入sq->sg中，共计num_sg个分片）到虚拟化队列中
+    //将报文存入(报文已存入sq->sg中，共计num_sg个分片)到虚拟化队列中
 	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
 
@@ -2416,12 +2417,15 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 {
 	struct virtnet_info *vi = netdev_priv(dev);
 
-	//选出要发送的队列
+	//选出要发送的队列号
 	int qnum = skb_get_queue_mapping(skb);
+	/*发送队列对应的send_queue*/
 	struct send_queue *sq = &vi->sq[qnum];
 
 	int err;
+	/*发送队列对应的netdev_queue*/
 	struct netdev_queue *txq = netdev_get_tx_queue(dev, qnum);
+	/*如果此设备本次发送后仍有报文要发送，则先不kick*/
 	bool kick = !netdev_xmit_more();
 	bool use_napi = sq->napi.weight;
 
@@ -2450,7 +2454,7 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 			dev_warn(&dev->dev,
 				 "Unexpected TXQ (%d) queue failure: %d\n",
 				 qnum, err);
-		DEV_STATS_INC(dev, tx_dropped);
+		DEV_STATS_INC(dev, tx_dropped);/*丢包计数增加*/
 		dev_kfree_skb_any(skb);
 		return NETDEV_TX_OK;
 	}
@@ -2464,7 +2468,8 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	check_sq_full_and_disable(vi, dev, sq);
 
 	if (kick || netif_xmit_stopped(txq)) {
-		if (virtqueue_kick_prepare(sq->vq) && virtqueue_notify(sq->vq)) {
+		/*kick*/
+		if (virtqueue_kick_prepare(sq->vq)/*检查是否需要kick*/ && virtqueue_notify(sq->vq)/*具体发送kick*/) {
 			u64_stats_update_begin(&sq->stats.syncp);
 			u64_stats_inc(&sq->stats.kicks);
 			u64_stats_update_end(&sq->stats.syncp);
@@ -4184,7 +4189,7 @@ static void virtnet_tx_timeout(struct net_device *dev, unsigned int txqueue)
 static const struct net_device_ops virtnet_netdev = {
 	.ndo_open            = virtnet_open,
 	.ndo_stop   	     = virtnet_close,
-	.ndo_start_xmit      = start_xmit,//发包函数回调
+	.ndo_start_xmit      = start_xmit,//virtio-net发包函数回调
 	.ndo_validate_addr   = eth_validate_addr,//校验mac地址是否正确
 	.ndo_set_mac_address = virtnet_set_mac_address,
 	.ndo_set_rx_mode     = virtnet_set_rx_mode,

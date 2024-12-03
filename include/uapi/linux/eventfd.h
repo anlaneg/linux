@@ -4,6 +4,7 @@
 
 #include <linux/fcntl.h>
 
+/*打此标记时，多个event触发一次*/
 #define EFD_SEMAPHORE (1 << 0)
 #define EFD_CLOEXEC O_CLOEXEC
 #define EFD_NONBLOCK O_NONBLOCK

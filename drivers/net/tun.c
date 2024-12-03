@@ -2811,7 +2811,7 @@ static int tun_peek_len(struct socket *sock)
 /* Ops structure to mimic raw sockets with tun */
 static const struct proto_ops tun_socket_ops = {
 	.peek_len = tun_peek_len,
-	.sendmsg = tun_sendmsg,/**/
+	.sendmsg = tun_sendmsg,/*向tx_ring中写报文*/
 	.recvmsg = tun_recvmsg,/*自tx_ring中读取报文*/
 };
 

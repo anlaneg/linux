@@ -5805,9 +5805,9 @@ static int handle_ept_misconfig(struct kvm_vcpu *vcpu)
 	 * A nested guest cannot optimize MMIO vmexits, because we have an
 	 * nGPA here instead of the required GPA.
 	 */
-	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);
+	gpa = vmcs_read64(GUEST_PHYSICAL_ADDRESS);/*读取gpa地址*/
 	if (!is_guest_mode(vcpu) &&
-	    !kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa, 0, NULL)) {
+	    !kvm_io_bus_write(vcpu, KVM_FAST_MMIO_BUS, gpa/*guest 物理地址*/, 0, NULL)) {
 		trace_kvm_fast_mmio(gpa);
 		return kvm_skip_emulated_instruction(vcpu);
 	}
@@ -6409,7 +6409,7 @@ void dump_vmcs(struct kvm_vcpu *vcpu)
 static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 {
 	struct vcpu_vmx *vmx = to_vmx(vcpu);
-	union vmx_exit_reason exit_reason = vmx->exit_reason;
+	union vmx_exit_reason exit_reason = vmx->exit_reason;/*退出的原因*/
 	u32 vectoring_info = vmx->idt_vectoring_info;
 	u16 exit_handler_index;
 
@@ -6568,8 +6568,10 @@ static int __vmx_handle_exit(struct kvm_vcpu *vcpu, fastpath_t exit_fastpath)
 	exit_handler_index = array_index_nospec((u16)exit_reason.basic,
 						kvm_vmx_max_exit_handlers);
 	if (!kvm_vmx_exit_handlers[exit_handler_index])
+		/*handler不存在*/
 		goto unexpected_vmexit;
 
+	/*调用此handler*/
 	return kvm_vmx_exit_handlers[exit_handler_index](vcpu);
 
 unexpected_vmexit:

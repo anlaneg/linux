@@ -542,6 +542,7 @@ static void __io_queue_proc(struct io_poll *poll, struct io_poll_table *pt,
 		req->flags |= REQ_F_POLL_NO_LAZY;
 		add_wait_queue_exclusive(head, &poll->wait);
 	} else {
+		/*加入等待队列*/
 		add_wait_queue(head, &poll->wait);
 	}
 }

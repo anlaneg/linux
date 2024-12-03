@@ -468,6 +468,7 @@ static int vhost_net_enable_vq(struct vhost_net *n,
 	    /*此vq后端socket不存在*/
 		return 0;
 
+	/*等待sock->file可处理*/
 	return vhost_poll_start(poll, sock->file);
 }
 
@@ -1340,8 +1341,10 @@ static void handle_rx(struct vhost_net *net)
 	} while (likely(!vhost_exceeds_weight(vq, ++recv_pkts/*已收的报文增加*/, total_len/*已收到报文字节数*/)));
 
 	if (unlikely(busyloop_intr))
+		/*跳过wait,直接加入poll,计划再执行*/
 		vhost_poll_queue(&vq->poll);
 	else if (!sock_len)
+		/*当前数据了，wait等待事件再发生*/
 		vhost_net_enable_vq(net, vq);
 out:
     //通知对端有报文

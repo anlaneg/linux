@@ -2121,7 +2121,7 @@ static struct virtqueue *vring_create_virtqueue_packed(
 	vq->vq.index = index;
 	vq->vq.reset = false;
 	vq->we_own_ring = true;
-	vq->notify = notify;
+	vq->notify = notify;/*设置notify函数*/
 	vq->weak_barriers = weak_barriers;
 #ifdef CONFIG_VIRTIO_HARDEN_NOTIFICATION
 	vq->broken = true;
@@ -2412,7 +2412,7 @@ bool virtqueue_notify(struct virtqueue *_vq)
 	/* Prod other side to tell it about changes. */
 	//告诉后端队列_vq有变化
 	if (!vq->notify(_vq)) {
-		vq->broken = true;
+		vq->broken = true;/*vq通知失败，指明broken*/
 		return false;
 	}
 	return true;
@@ -2676,7 +2676,7 @@ static struct virtqueue *__vring_new_virtqueue(unsigned int index,
 	vq->vq.index = index;
 	vq->vq.reset = false;
 	vq->we_own_ring = false;
-	vq->notify = notify;
+	vq->notify = notify;/*设置notify函数*/
 	vq->weak_barriers = weak_barriers;
 #ifdef CONFIG_VIRTIO_HARDEN_NOTIFICATION
 	vq->broken = true;

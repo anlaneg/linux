@@ -29,7 +29,7 @@
 
 static int uio_major;//记录uio设备的major
 static struct cdev *uio_cdev;//记录uio的cdev
-static DEFINE_IDR(uio_idr);
+static DEFINE_IDR(uio_idr);/*实现id与uio设备（struct uio_device）的关联*/
 static const struct file_operations uio_fops;
 
 /* Protect idr accesses */
@@ -87,12 +87,12 @@ static struct map_sysfs_entry size_attribute =
 static struct map_sysfs_entry offset_attribute =
 	__ATTR(offset, S_IRUGO, map_offset_show, NULL);
 
-//uio$i目录下的文件
+//uio$i/maps/map$j目录下的属性
 static struct attribute *map_attrs[] = {
-	&name_attribute.attr,
-	&addr_attribute.attr,
-	&size_attribute.attr,
-	&offset_attribute.attr,
+	&name_attribute.attr,/*名称*/
+	&addr_attribute.attr,/*内存起始地址*/
+	&size_attribute.attr,/*内存长度*/
+	&offset_attribute.attr,/*内存有效位置的offset*/
 	NULL,	/* need to NULL terminate the list of attributes */
 };
 ATTRIBUTE_GROUPS(map);
@@ -126,7 +126,7 @@ static struct kobj_type map_attr_type = {
 	.release	= map_release,
 	.sysfs_ops	= &map_sysfs_ops,
 	//指明map$i下的属性，看/sys/class/uio/uio0/maps/map0/*
-	.default_groups	= map_groups,
+	.default_groups	= map_groups,/*即用于显示各bar的内存*/
 };
 
 struct uio_portio {
@@ -140,7 +140,7 @@ static ssize_t portio_name_show(struct uio_port *port, char *buf)
 	if (unlikely(!port->name))
 		port->name = "";
 
-	return sprintf(buf, "%s\n", port->name);
+	return sprintf(buf, "%s\n", port->name);/*portio名称*/
 }
 
 static ssize_t portio_start_show(struct uio_port *port, char *buf)
@@ -160,7 +160,7 @@ static ssize_t portio_porttype_show(struct uio_port *port, char *buf)
 	if ((port->porttype < 0) || (port->porttype > UIO_PORT_OTHER))
 		return -EINVAL;
 
-	return sprintf(buf, "port_%s\n", porttypes[port->porttype]);
+	return sprintf(buf, "port_%s\n", porttypes[port->porttype]);/*显示portio类型*/
 }
 
 struct portio_sysfs_entry {
@@ -179,10 +179,10 @@ static struct portio_sysfs_entry portio_porttype_attribute =
 	__ATTR(porttype, S_IRUGO, portio_porttype_show, NULL);
 
 static struct attribute *portio_attrs[] = {
-	&portio_name_attribute.attr,
+	&portio_name_attribute.attr,/*port io名称*/
 	&portio_start_attribute.attr,
 	&portio_size_attribute.attr,
-	&portio_porttype_attribute.attr,
+	&portio_porttype_attribute.attr,/*port io类型*/
 	NULL,
 };
 ATTRIBUTE_GROUPS(portio);
@@ -231,13 +231,13 @@ static ssize_t name_show(struct device *dev,
 		goto out;
 	}
 
-	ret = sprintf(buf, "%s\n", idev->info->name);
+	ret = sprintf(buf, "%s\n", idev->info->name);/*用于显示注册的设备名称*/
 
 out:
 	mutex_unlock(&idev->info_lock);
 	return ret;
 }
-static DEVICE_ATTR_RO(name);
+static DEVICE_ATTR_RO(name);/*只读属性name,用于显示注册的设备名称*/
 
 static ssize_t version_show(struct device *dev,
 			    struct device_attribute *attr, char *buf)
@@ -258,7 +258,7 @@ out:
 	mutex_unlock(&idev->info_lock);
 	return ret;
 }
-static DEVICE_ATTR_RO(version);
+static DEVICE_ATTR_RO(version);/*只读属性version,用于显示注册的设备版本*/
 
 static ssize_t event_show(struct device *dev,
 			  struct device_attribute *attr, char *buf)
@@ -266,7 +266,7 @@ static ssize_t event_show(struct device *dev,
 	struct uio_device *idev = dev_get_drvdata(dev);
 	return sprintf(buf, "%u\n", (unsigned int)atomic_read(&idev->event));
 }
-static DEVICE_ATTR_RO(event);
+static DEVICE_ATTR_RO(event);/*只读属性version,用于显示设备的事件数*/
 
 static struct attribute *uio_attrs[] = {
 	&dev_attr_name.attr,
@@ -280,9 +280,10 @@ static struct attribute *uio_attrs[] = {
 ATTRIBUTE_GROUPS(uio);
 
 /* UIO class infrastructure */
+/*定义uio对应的class*/
 static struct class uio_class = {
 	.name = "uio",
-	.dev_groups = uio_groups,
+	.dev_groups = uio_groups,/*uio对应的一些属性组*/
 };
 
 static bool uio_class_registered;
@@ -304,10 +305,11 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 	for (mi = 0; mi < MAX_UIO_MAPS; mi++) {
 		mem = &idev->info->mem[mi];
 		if (mem->size == 0)
+			/*跳过长度为0的memory*/
 			break;
 		if (!map_found) {
 			map_found = 1;
-			//添加并创建map目录，例如：/sys/class/uio/uio0/maps
+			//首个map,添加并创建maps目录，例如：/sys/class/uio/uio0/maps
 			idev->map_dir = kobject_create_and_add("maps",
 							&idev->dev.kobj);
 			if (!idev->map_dir) {
@@ -320,6 +322,7 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 			ret = -ENOMEM;
 			goto err_map;
 		}
+		/*初始化map的属性，用于向外提供信息查看*/
 		kobject_init(&map->kobj, &map_attr_type);
 		map->mem = mem;
 		mem->map = map;
@@ -341,6 +344,7 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 			break;
 		if (!portio_found) {
 			portio_found = 1;
+			//首个portio,添加并创建portio目录，例如：/sys/class/uio/uio0/portio
 			idev->portio_dir = kobject_create_and_add("portio",
 							&idev->dev.kobj);
 			if (!idev->portio_dir) {
@@ -353,6 +357,7 @@ static int uio_dev_add_attributes(struct uio_device *idev)
 			ret = -ENOMEM;
 			goto err_portio;
 		}
+		/*初始化port属性*/
 		kobject_init(&portio->kobj, &portio_attr_type);
 		portio->port = port;
 		port->portio = portio;
@@ -444,8 +449,9 @@ void uio_event_notify(struct uio_info *info)
 {
 	struct uio_device *idev = info->uio_dev;
 
+	/*事件数增加*/
 	atomic_inc(&idev->event);
-	wake_up_interruptible(&idev->wait);
+	wake_up_interruptible(&idev->wait);/*唤醒等待者*/
 	//信号发送
 	kill_fasync(&idev->async_queue, SIGIO, POLL_IN);
 }
@@ -458,9 +464,11 @@ EXPORT_SYMBOL_GPL(uio_event_notify);
  */
 static irqreturn_t uio_interrupt(int irq, void *dev_id)
 {
+	/*uio代理硬件的中断函数处理*/
 	struct uio_device *idev = (struct uio_device *)dev_id;
 	irqreturn_t ret;
 
+	/*调用info->handler处理中断*/
 	ret = idev->info->handler(irq, idev->info);
 	if (ret == IRQ_HANDLED)
 		//如果返回值为IRQ_HANDLED，则事件需要通知给用户态（通过信号触发）
@@ -470,11 +478,11 @@ static irqreturn_t uio_interrupt(int irq, void *dev_id)
 }
 
 struct uio_listener {
-	struct uio_device *dev;
+	struct uio_device *dev;/*关联的uio设备*/
 	s32 event_count;
 };
 
-//uio设备被打开时执行
+//uio设备被打开时执行（创建listener并与文件关联，搞清楚接下来操作的是哪个uio_device)
 static int uio_open(struct inode *inode, struct file *filep)
 {
 	struct uio_device *idev;
@@ -503,9 +511,9 @@ static int uio_open(struct inode *inode, struct file *filep)
 		goto err_alloc_listener;
 	}
 
-	listener->dev = idev;
+	listener->dev = idev;/*关联的uio_device设备*/
 	listener->event_count = atomic_read(&idev->event);
-	filep->private_data = listener;
+	filep->private_data = listener;/*记录listener*/
 
 	mutex_lock(&idev->info_lock);
 	if (!idev->info) {
@@ -951,7 +959,7 @@ static void uio_device_release(struct device *dev)
  *
  * returns zero on success or a negative error code.
  */
-//注册设备及其对应的uio信息
+//注册uio设备,初始化uio设备必要的sysfs,申请并注册中断
 int __uio_register_device(struct module *owner,
 			  struct device *parent,
 			  struct uio_info *info)
@@ -962,7 +970,7 @@ int __uio_register_device(struct module *owner,
 	if (!uio_class_registered)
 		return -EPROBE_DEFER;
 
-	if (!parent || !info || !info->name || !info->version)
+	if (!parent || !info || !info->name/*必须提供name*/ || !info->version/*必须提供版本*/)
 		return -EINVAL;
 
 	info->uio_dev = NULL;
@@ -978,7 +986,7 @@ int __uio_register_device(struct module *owner,
 	init_waitqueue_head(&idev->wait);//初始化等待队列
 	atomic_set(&idev->event, 0);
 
-	ret = uio_get_minor(idev);
+	ret = uio_get_minor(idev);/*分配minor*/
 	if (ret) {
 		kfree(idev);
 		return ret;
@@ -1002,6 +1010,7 @@ int __uio_register_device(struct module *owner,
 	if (ret)
 		goto err_device_create;
 
+	/*为uio设备添加相应的属性文件*/
 	ret = uio_dev_add_attributes(idev);
 	if (ret)
 		goto err_uio_dev_add_attributes;
@@ -1018,7 +1027,7 @@ int __uio_register_device(struct module *owner,
 		 * freed until they are released.
 		 */
 		//为设备定义中断执行函数
-		ret = request_irq(info->irq, uio_interrupt,
+		ret = request_irq(info->irq/*中断号*/, uio_interrupt/*中断处理函数*/,
 				  info->irq_flags, info->name, idev);
 		if (ret) {
 			info->uio_dev = NULL;
@@ -1065,6 +1074,7 @@ int __devm_uio_register_device(struct module *owner,
 		return -ENOMEM;
 
 	*ptr = info;
+	/*注册uio设备*/
 	ret = __uio_register_device(owner, parent, info);
 	if (ret) {
 		devres_free(ptr);

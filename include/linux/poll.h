@@ -46,7 +46,7 @@ typedef struct poll_table_struct {
 static inline void poll_wait(struct file * filp, wait_queue_head_t * wait_address, poll_table *p)
 {
 	if (p && p->_qproc && wait_address)
-	    /*三者满足情况下，通过p->_qproc回调进行处理*/
+	    /*三者满足情况下，通过p->_qproc回调进行处理，将自已加入等待队列*/
 		p->_qproc(filp, wait_address, p);
 }
 
