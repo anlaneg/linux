@@ -17,7 +17,7 @@ struct iommu_group;
 struct vfio_container;
 
 struct vfio_device_file {
-	struct vfio_device *device;
+	struct vfio_device *device;/*文件关联的vfio-device*/
 	struct vfio_group *group;
 
 	u8 access_granted;

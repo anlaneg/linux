@@ -4118,7 +4118,7 @@ EXPORT_SYMBOL(pci_release_region);
  * Returns 0 on success, or %EBUSY on error.  A warning
  * message is also printed on failure.
  */
-static int __pci_request_region(struct pci_dev *pdev, int bar,
+static int __pci_request_region(struct pci_dev *pdev, int bar/*bar编号*/,
 				const char *res_name, int exclusive)
 {
 	struct pci_devres *dr;
@@ -4134,8 +4134,8 @@ static int __pci_request_region(struct pci_dev *pdev, int bar,
 			goto err_out;
 	} else if (pci_resource_flags(pdev, bar) & IORESOURCE_MEM) {
 		//memory space region请求(申请并占用对应的resource)
-		if (!__request_mem_region(pci_resource_start(pdev, bar),
-					pci_resource_len(pdev, bar), res_name,
+		if (!__request_mem_region(pci_resource_start(pdev, bar)/*起始地址*/,
+					pci_resource_len(pdev, bar)/*资源长度*/, res_name,
 					exclusive))
 			goto err_out;
 	}
@@ -4198,7 +4198,7 @@ static int __pci_request_selected_regions(struct pci_dev *pdev, int bars,
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++)
 		if (bars & (1 << i))
-			//此BAR被要求了，处理
+			//掩码命中，此BAR被要求了，处理
 			if (__pci_request_region(pdev, i, res_name, excl))
 				goto err_out;
 	return 0;

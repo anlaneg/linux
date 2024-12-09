@@ -22,12 +22,14 @@ static int vfio_device_state_read(struct seq_file *seq, void *data)
 	BUILD_BUG_ON(VFIO_DEVICE_STATE_NR !=
 		     VFIO_DEVICE_STATE_PRE_COPY_P2P + 1);
 
+	/*获得vdev对应的状态*/
 	ret = vdev->mig_ops->migration_get_state(vdev, &state);
 	if (ret)
 		return -EINVAL;
 
 	switch (state) {
 	case VFIO_DEVICE_STATE_ERROR:
+		/*错误状态*/
 		seq_puts(seq, "ERROR\n");
 		break;
 	case VFIO_DEVICE_STATE_STOP:
@@ -62,6 +64,7 @@ void vfio_device_debugfs_init(struct vfio_device *vdev)
 {
 	struct device *dev = &vdev->device;
 
+	/*在根目录下创建vdev设备（名称）对应的目录*/
 	vdev->debug_root = debugfs_create_dir(dev_name(vdev->dev),
 					      vfio_debugfs_root);
 
@@ -69,24 +72,27 @@ void vfio_device_debugfs_init(struct vfio_device *vdev)
 		struct dentry *vfio_dev_migration = NULL;
 
 		vfio_dev_migration = debugfs_create_dir("migration",
-							vdev->debug_root);
+							vdev->debug_root);/*每个vdev有一个migration目录*/
 		debugfs_create_devm_seqfile(dev, "state", vfio_dev_migration,
-					    vfio_device_state_read);
+					    vfio_device_state_read/*state文件读操作实现*/);/*migration目录有一个state文件*/
 	}
 }
 
 void vfio_device_debugfs_exit(struct vfio_device *vdev)
 {
+	/*vdev设备对应的根目录移除*/
 	debugfs_remove_recursive(vdev->debug_root);
 }
 
 void vfio_debugfs_create_root(void)
 {
+	/*创建vfio-debugfs根目录*/
 	vfio_debugfs_root = debugfs_create_dir("vfio", NULL);
 }
 
 void vfio_debugfs_remove_root(void)
 {
+	/*删除根目录*/
 	debugfs_remove_recursive(vfio_debugfs_root);
 	vfio_debugfs_root = NULL;
 }

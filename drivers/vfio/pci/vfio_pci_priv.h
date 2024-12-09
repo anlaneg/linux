@@ -19,8 +19,8 @@ struct vfio_pci_ioeventfd {
 	uint64_t		data;
 	loff_t			pos;
 	int			bar;
-	int			count;
-	bool			test_mem;
+	int			count;/*iowrite的字节大小*/
+	bool			test_mem;/*是否mem资源*/
 };
 
 bool vfio_pci_intx_mask(struct vfio_pci_core_device *vdev);

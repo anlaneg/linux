@@ -1290,7 +1290,7 @@ static struct device *iommu_group_first_dev(struct iommu_group *group)
  * The group->mutex is held across callbacks, which will block calls to
  * iommu_group_add/remove_device.
  */
-//加锁后进行dev遍历访问
+//加锁后进行group->devices遍历,通过函数fn访问
 int iommu_group_for_each_dev(struct iommu_group *group, void *data,
 			     int (*fn/*访问函数*/)(struct device *, void *))
 {

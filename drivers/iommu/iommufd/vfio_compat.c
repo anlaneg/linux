@@ -283,7 +283,7 @@ static int iommufd_vfio_check_extension(struct iommufd_ctx *ictx,
 	case VFIO_TYPE1_IOMMU:
 	case VFIO_TYPE1v2_IOMMU:
 	case VFIO_UNMAP_ALL:
-		return 1;
+		return 1;/*返回1，表示支持*/
 
 	case VFIO_NOIOMMU_IOMMU:
 		return IS_ENABLED(CONFIG_VFIO_NOIOMMU);
@@ -522,6 +522,7 @@ int iommufd_vfio_ioctl(struct iommufd_ctx *ictx, unsigned int cmd,
 
 	switch (cmd) {
 	case VFIO_GET_API_VERSION:
+		/*取vfio api版本*/
 		return VFIO_API_VERSION;
 	case VFIO_SET_IOMMU:
 		return iommufd_vfio_set_iommu(ictx, arg);

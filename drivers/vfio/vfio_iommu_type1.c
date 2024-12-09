@@ -2579,7 +2579,7 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 	iommu->pgsize_bitmap = PAGE_MASK;
 	INIT_LIST_HEAD(&iommu->emulated_iommu_groups);
 
-	return iommu;
+	return iommu;/*返回vfio-iommu*/
 }
 
 static void vfio_release_domain(struct vfio_domain *domain)

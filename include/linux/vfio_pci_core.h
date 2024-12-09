@@ -53,6 +53,7 @@ struct vfio_pci_core_device {
 	struct vfio_device	vdev;
 	struct pci_dev		*pdev;/*对应的PCI设备*/
 	void __iomem		*barmap[PCI_STD_NUM_BARS];
+	/*用于标记哪些bar支持mmap*/
 	bool			bar_mmap_supported[PCI_STD_NUM_BARS];
 	u8			*pci_config_map;
 	u8			*vconfig;
@@ -88,6 +89,7 @@ struct vfio_pci_core_device {
 	struct eventfd_ctx	*pm_wake_eventfd_ctx;
 	struct list_head	dummy_resources_list;
 	struct mutex		ioeventfds_lock;
+	/*串连的一组vfio_pci_ioeventfd*/
 	struct list_head	ioeventfds_list;
 	struct vfio_pci_vf_token	*vf_token;
 	struct list_head		sriov_pfs_item;

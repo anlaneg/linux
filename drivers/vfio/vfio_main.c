@@ -45,11 +45,12 @@
 
 static struct vfio {
 	struct class			*device_class;
-	struct ida			device_ida;
+	struct ida			device_ida;/*为每个vfio-device分配唯一的索引*/
 } vfio;
 
 #ifdef CONFIG_VFIO_NOIOMMU
 bool vfio_noiommu __read_mostly;
+/*vfio_noiommu是否开启*/
 module_param_named(enable_unsafe_noiommu_mode,
 		   vfio_noiommu, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(enable_unsafe_noiommu_mode, "Enable UNSAFE, no-IOMMU mode.  This mode provides no device isolation, no DMA translation, no host kernel protection, cannot be used for device assignment to virtual machines, requires RAWIO permissions, and will taint the kernel.  If you do not know what this is for, step away. (default: false)");
@@ -219,7 +220,7 @@ struct vfio_device *_vfio_alloc_device(size_t size/*私有结构大小*/, struct
 	if (!device)
 		return ERR_PTR(-ENOMEM);
 
-	/*初始化vfio设备*/
+	/*初始化vfio-device*/
 	ret = vfio_init_device(device, dev, ops);
 	if (ret)
 		goto out_free;
@@ -447,6 +448,7 @@ static bool vfio_assert_device_open(struct vfio_device *device)
 	return !WARN_ON_ONCE(!READ_ONCE(device->open_count));
 }
 
+/*创建vfio-device对应的vfio-device-file*/
 struct vfio_device_file *
 vfio_allocate_device_file(struct vfio_device *device)
 {
@@ -1255,6 +1257,7 @@ static long vfio_device_fops_unl_ioctl(struct file *filep,
 		break;
 
 	default:
+		/*其它的ioctl cmd由device->ops自已的ioctl回调来完成*/
 		if (unlikely(!device->ops->ioctl))
 			ret = -EINVAL;
 		else
@@ -1296,6 +1299,7 @@ static ssize_t vfio_device_fops_write(struct file *filep,
 	if (unlikely(!device->ops->write))
 		return -EINVAL;
 
+	/*使用设备自已的ops->write*/
 	return device->ops->write(device, buf, count, ppos);
 }
 
@@ -1311,18 +1315,20 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	if (unlikely(!device->ops->mmap))
 		return -EINVAL;
 
+	/*使用vfio-device提供的mmap来具体完成*/
 	return device->ops->mmap(device, vma);
 }
 
+/*vfio-device关联的字符设备(/dev/vfio/device/*)对应的fops*/
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,
 	.release	= vfio_device_fops_release,
-	.read		= vfio_device_fops_read,
-	.write		= vfio_device_fops_write,
+	.read		= vfio_device_fops_read,/*将read调用转交给vfio-device来具体完成*/
+	.write		= vfio_device_fops_write,/*将write调用转交给vfio-device来具体完成*/
 	.unlocked_ioctl	= vfio_device_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
-	.mmap		= vfio_device_fops_mmap,
+	.mmap		= vfio_device_fops_mmap,/*将mmap调用转交给vfio-device来具体完成*/
 };
 
 static struct vfio_device *vfio_device_from_file(struct file *file)
@@ -1330,6 +1336,7 @@ static struct vfio_device *vfio_device_from_file(struct file *file)
 	struct vfio_device_file *df = file->private_data;
 
 	if (file->f_op != &vfio_device_fops)
+		/*必须为vfio-device对应的file,否则返回NULL*/
 		return NULL;
 	return df->device;
 }
@@ -1663,6 +1670,7 @@ static int __init vfio_init(void)
 
 	ida_init(&vfio.device_ida);
 
+	/*初始化vfio-group*/
 	ret = vfio_group_init();
 	if (ret)
 		return ret;

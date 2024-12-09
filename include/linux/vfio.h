@@ -36,7 +36,7 @@ struct vfio_device_set {
 
 struct vfio_device {
 	struct device *dev;/*关联的设备*/
-	const struct vfio_device_ops *ops;/*关联的操作集*/
+	const struct vfio_device_ops *ops;/*为virtio-device关联的操作集*/
 	/*
 	 * mig_ops/log_ops is a static property of the vfio_device which must
 	 * be set prior to registering the vfio_device.
@@ -44,7 +44,7 @@ struct vfio_device {
 	const struct vfio_migration_ops *mig_ops;
 	const struct vfio_log_ops *log_ops;
 #if IS_ENABLED(CONFIG_VFIO_GROUP)
-	struct vfio_group *group;
+	struct vfio_group *group;/*此设备归属的vfio-group*/
 	struct list_head group_next;
 	struct list_head iommu_entry;
 #endif
@@ -57,7 +57,7 @@ struct vfio_device {
 	unsigned int index;/*设备编号*/
 	struct device device;	/* device.kref covers object life circle */
 #if IS_ENABLED(CONFIG_VFIO_DEVICE_CDEV)
-	struct cdev cdev;
+	struct cdev cdev;/*vfio-device关联的字符设备*/
 #endif
 	refcount_t refcount;	/* user count on registered device*/
 	unsigned int open_count;

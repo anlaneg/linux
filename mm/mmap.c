@@ -2856,7 +2856,7 @@ cannot_expand:
 	if (file) {
 		/*设置映射的文件*/
 		vma->vm_file = get_file(file);
-		/*调用file的mmap,使其映射到此vma*/
+		/*调用file->ops的mmap,使其映射到此vma*/
 		error = call_mmap(file, vma);
 		if (error)
 			goto unmap_and_free_vma;

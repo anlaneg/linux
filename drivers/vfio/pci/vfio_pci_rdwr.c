@@ -37,9 +37,10 @@
 #define vfio_ioread8	ioread8
 #define vfio_iowrite8	iowrite8
 
+/*定义函数，写指定位宽（主要考虑了防止并发的问题）*/
 #define VFIO_IOWRITE(size) \
-int vfio_pci_core_iowrite##size(struct vfio_pci_core_device *vdev,	\
-			bool test_mem, u##size val, void __iomem *io)	\
+int vfio_pci_core_iowrite##size(struct vfio_pci_core_device *vdev/*要写的设备*/,	\
+			bool test_mem/*是否mem资源*/, u##size val/*要写的内容*/, void __iomem *io/*要写的地址*/)	\
 {									\
 	if (test_mem) {							\
 		down_read(&vdev->memory_lock);				\
@@ -49,7 +50,7 @@ int vfio_pci_core_iowrite##size(struct vfio_pci_core_device *vdev,	\
 		}							\
 	}								\
 									\
-	vfio_iowrite##size(val, io);					\
+	vfio_iowrite##size(val, io);/*调用linux提供的基础函数完成写*/					\
 									\
 	if (test_mem)							\
 		up_read(&vdev->memory_lock);				\
@@ -121,11 +122,13 @@ static ssize_t do_io_rw(struct vfio_pci_core_device *vdev, bool test_mem,
 				if (copy_from_user(&val, buf, 4))
 					return -EFAULT;
 
+				/*写用户态传入的内容*/
 				ret = vfio_pci_core_iowrite32(vdev, test_mem,
 							      val, io + off);
 				if (ret)
 					return ret;
 			} else {
+				/*读取内容，写入用户态的buffer中*/
 				ret = vfio_pci_core_ioread32(vdev, test_mem,
 							     &val, io + off);
 				if (ret)
@@ -209,6 +212,7 @@ int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
 	void __iomem *io;
 
 	if (vdev->barmap[bar])
+		/*这个bar已map*/
 		return 0;
 
 	ret = pci_request_selected_regions(pdev, 1 << bar, "vfio");
@@ -221,22 +225,22 @@ int vfio_pci_core_setup_barmap(struct vfio_pci_core_device *vdev, int bar)
 		return -ENOMEM;
 	}
 
-	vdev->barmap[bar] = io;
+	vdev->barmap[bar] = io;/*map此bar*/
 
 	return 0;
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_setup_barmap);
 
 ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
-			size_t count, loff_t *ppos, bool iswrite)
+			size_t count, loff_t *ppos, bool iswrite/*是否写操作*/)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	loff_t pos = *ppos & VFIO_PCI_OFFSET_MASK;
-	int bar = VFIO_PCI_OFFSET_TO_INDEX(*ppos);
+	int bar = VFIO_PCI_OFFSET_TO_INDEX(*ppos);/*确定bar编号*/
 	size_t x_start = 0, x_end = 0;
 	resource_size_t end;
 	void __iomem *io;
-	struct resource *res = &vdev->pdev->resource[bar];
+	struct resource *res = &vdev->pdev->resource[bar];/*取bar对应的资源*/
 	ssize_t done;
 
 	if (pci_resource_start(pdev, bar))
@@ -265,12 +269,14 @@ ssize_t vfio_pci_bar_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 		}
 		x_end = end;
 	} else {
+		/*map此bar*/
 		int ret = vfio_pci_core_setup_barmap(vdev, bar);
 		if (ret) {
 			done = ret;
 			goto out;
 		}
 
+		/*取此bar映射的内存*/
 		io = vdev->barmap[bar];
 	}
 
@@ -361,6 +367,7 @@ ssize_t vfio_pci_vga_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 }
 #endif
 
+/*写ioeventfd对应的地址*/
 static void vfio_pci_ioeventfd_do_write(struct vfio_pci_ioeventfd *ioeventfd,
 					bool test_mem)
 {
@@ -420,20 +427,23 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 {
 	struct pci_dev *pdev = vdev->pdev;
 	loff_t pos = offset & VFIO_PCI_OFFSET_MASK;
-	int ret, bar = VFIO_PCI_OFFSET_TO_INDEX(offset);
+	int ret, bar = VFIO_PCI_OFFSET_TO_INDEX(offset);/*取bar*/
 	struct vfio_pci_ioeventfd *ioeventfd;
 
 	/* Only support ioeventfds into BARs */
 	if (bar > VFIO_PCI_BAR5_REGION_INDEX)
+		/*bar参数有误*/
 		return -EINVAL;
 
 	if (pos + count > pci_resource_len(pdev, bar))
+		/*地址读写超bar内存范围*/
 		return -EINVAL;
 
 	/* Disallow ioeventfds working around MSI-X table writes */
 	if (bar == vdev->msix_bar &&
 	    !(pos + count <= vdev->msix_offset ||
 	      pos >= vdev->msix_offset + vdev->msix_size))
+		/*msix bar不能采用此方式*/
 		return -EINVAL;
 
 #ifndef iowrite64
@@ -441,6 +451,7 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 		return -EINVAL;
 #endif
 
+	/*map这个bar对应的内存*/
 	ret = vfio_pci_core_setup_barmap(vdev, bar);
 	if (ret)
 		return ret;
@@ -451,6 +462,7 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 		if (ioeventfd->pos == pos && ioeventfd->bar == bar &&
 		    ioeventfd->data == data && ioeventfd->count == count) {
 			if (fd == -1) {
+				/*通过-1,指明要删除*/
 				vfio_virqfd_disable(&ioeventfd->virqfd);
 				list_del(&ioeventfd->next);
 				vdev->ioeventfds_nr--;
@@ -469,22 +481,24 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 	}
 
 	if (vdev->ioeventfds_nr >= VFIO_PCI_IOEVENTFD_MAX) {
+		/*要添加，但当前ioeventfd数目已达到最大值*/
 		ret = -ENOSPC;
 		goto out_unlock;
 	}
 
+	/*创建ioeventfd*/
 	ioeventfd = kzalloc(sizeof(*ioeventfd), GFP_KERNEL_ACCOUNT);
 	if (!ioeventfd) {
 		ret = -ENOMEM;
 		goto out_unlock;
 	}
 
-	ioeventfd->vdev = vdev;
-	ioeventfd->addr = vdev->barmap[bar] + pos;
-	ioeventfd->data = data;
+	ioeventfd->vdev = vdev;/*要写的设备*/
+	ioeventfd->addr = vdev->barmap[bar] + pos;/*要写的地址*/
+	ioeventfd->data = data;/*要写的内容*/
 	ioeventfd->pos = pos;
 	ioeventfd->bar = bar;
-	ioeventfd->count = count;
+	ioeventfd->count = count;/*要写的长度*/
 	ioeventfd->test_mem = vdev->pdev->resource[bar].flags & IORESOURCE_MEM;
 
 	ret = vfio_virqfd_enable(ioeventfd, vfio_pci_ioeventfd_handler,
@@ -495,6 +509,7 @@ int vfio_pci_ioeventfd(struct vfio_pci_core_device *vdev, loff_t offset,
 		goto out_unlock;
 	}
 
+	/*串到链表上*/
 	list_add(&ioeventfd->next, &vdev->ioeventfds_list);
 	vdev->ioeventfds_nr++;
 

@@ -970,7 +970,7 @@ static int vfio_pci_ioctl_get_info(struct vfio_pci_core_device *vdev,
 
 	minsz = min_t(size_t, info.argsz, sizeof(info));
 
-	info.flags = VFIO_DEVICE_FLAGS_PCI;
+	info.flags = VFIO_DEVICE_FLAGS_PCI;/*指明virtio pci设备*/
 
 	if (vdev->reset_works)
 		info.flags |= VFIO_DEVICE_FLAGS_RESET;
@@ -1419,13 +1419,16 @@ static int vfio_pci_ioctl_ioeventfd(struct vfio_pci_core_device *vdev,
 	struct vfio_device_ioeventfd ioeventfd;
 	int count;
 
+	/*复制用户数据到ioeventfd*/
 	if (copy_from_user(&ioeventfd, arg, minsz))
 		return -EFAULT;
 
 	if (ioeventfd.argsz < minsz)
+		/*参数长度有误，报错*/
 		return -EINVAL;
 
 	if (ioeventfd.flags & ~VFIO_DEVICE_IOEVENTFD_SIZE_MASK)
+		/*遇到不认识的flag,报错*/
 		return -EINVAL;
 
 	count = ioeventfd.flags & VFIO_DEVICE_IOEVENTFD_SIZE_MASK;
@@ -1517,9 +1520,9 @@ int vfio_pci_core_ioctl_feature(struct vfio_device *device, u32 flags,
 EXPORT_SYMBOL_GPL(vfio_pci_core_ioctl_feature);
 
 static ssize_t vfio_pci_rw(struct vfio_pci_core_device *vdev, char __user *buf,
-			   size_t count, loff_t *ppos, bool iswrite)
+			   size_t count, loff_t *ppos, bool iswrite/*是否写操作*/)
 {
-	unsigned int index = VFIO_PCI_OFFSET_TO_INDEX(*ppos);
+	unsigned int index = VFIO_PCI_OFFSET_TO_INDEX(*ppos);/*操作哪个bar*/
 	int ret;
 
 	if (index >= VFIO_PCI_NUM_REGIONS + vdev->num_regions)
@@ -1545,6 +1548,7 @@ static ssize_t vfio_pci_rw(struct vfio_pci_core_device *vdev, char __user *buf,
 		break;
 
 	case VFIO_PCI_BAR0_REGION_INDEX ... VFIO_PCI_BAR5_REGION_INDEX:
+		/*操作bar0-bar5*/
 		ret = vfio_pci_bar_rw(vdev, buf, count, ppos, iswrite);
 		break;
 
@@ -1572,7 +1576,7 @@ ssize_t vfio_pci_core_read(struct vfio_device *core_vdev, char __user *buf,
 	if (!count)
 		return 0;
 
-	return vfio_pci_rw(vdev, buf, count, ppos, false);
+	return vfio_pci_rw(vdev, buf, count, ppos, false/*执行读操作*/);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_read);
 
@@ -1585,7 +1589,7 @@ ssize_t vfio_pci_core_write(struct vfio_device *core_vdev, const char __user *bu
 	if (!count)
 		return 0;
 
-	return vfio_pci_rw(vdev, (char __user *)buf, count, ppos, true);
+	return vfio_pci_rw(vdev, (char __user *)buf, count, ppos, true/*执行写操作*/);
 }
 EXPORT_SYMBOL_GPL(vfio_pci_core_write);
 
@@ -1829,6 +1833,7 @@ int vfio_pci_core_mmap(struct vfio_device *core_vdev, struct vm_area_struct *vma
 	if (index >= VFIO_PCI_ROM_REGION_INDEX)
 		return -EINVAL;
 	if (!vdev->bar_mmap_supported[index])
+		/*不支持mmap,直接退出*/
 		return -EINVAL;
 
 	phys_len = PAGE_ALIGN(pci_resource_len(pdev, index));
@@ -2274,6 +2279,7 @@ int vfio_pci_core_register_device(struct vfio_pci_core_device *vdev)
 	if (!disable_idle_d3)
 		pm_runtime_put(dev);
 
+	/*将设备注册给对应的virtio-group*/
 	ret = vfio_register_group_dev(&vdev->vdev);
 	if (ret)
 		goto out_power;

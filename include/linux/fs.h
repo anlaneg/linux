@@ -116,9 +116,9 @@ typedef int (dio_iodone_t)(struct kiocb *iocb, loff_t offset,
 /* file is seekable */
 #define FMODE_LSEEK		((__force fmode_t)0x4) /*指明文件可以seek*/
 /* file can be accessed using pread */
-#define FMODE_PREAD		((__force fmode_t)0x8)
+#define FMODE_PREAD		((__force fmode_t)0x8) /*指明文件可以pread*/
 /* file can be accessed using pwrite */
-#define FMODE_PWRITE		((__force fmode_t)0x10)
+#define FMODE_PWRITE		((__force fmode_t)0x10) /*指明文件可以pwrite*/
 /* File is opened for execution with sys_execve / sys_uselib */
 #define FMODE_EXEC		((__force fmode_t)0x20)
 /* 32bit hashes as llseek() offset (for directories) */
@@ -2179,7 +2179,7 @@ static inline ssize_t call_write_iter(struct file *file, struct kiocb *kio,
 	return file->f_op->write_iter(kio, iter);
 }
 
-//调用file的操作函数mmap
+//调用file的操作集提供的函数mmap
 static inline int call_mmap(struct file *file, struct vm_area_struct *vma)
 {
 	return file->f_op->mmap(file, vma);

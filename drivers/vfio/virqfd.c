@@ -126,11 +126,11 @@ int vfio_virqfd_enable(void *opaque,
 	virqfd->pvirqfd = pvirqfd;
 	virqfd->opaque = opaque;
 	virqfd->handler = handler;
-	virqfd->thread = thread;
+	virqfd->thread = thread;/*指定thread回调*/
 	virqfd->data = data;
 
 	INIT_WORK(&virqfd->shutdown, virqfd_shutdown);
-	INIT_WORK(&virqfd->inject, virqfd_inject);
+	INIT_WORK(&virqfd->inject, virqfd_inject);/*如果有thread回调，则调用，否则nothing to do*/
 
 	//取中断对应的eventfd
 	irqfd = fdget(fd);
@@ -172,7 +172,7 @@ int vfio_virqfd_enable(void *opaque,
 	init_waitqueue_func_entry(&virqfd->wait, virqfd_wakeup);
 	init_poll_funcptr(&virqfd->pt, virqfd_ptable_queue_proc);
 
-	/*触发eventfd的poll回调*/
+	/*触发eventfd的poll回调，等待事件发生*/
 	events = vfs_poll(irqfd.file, &virqfd->pt);
 
 	/*

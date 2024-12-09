@@ -18,7 +18,7 @@ struct iommu_option;
 struct iommufd_device;
 
 struct iommufd_ctx {
-	struct file *file;
+	struct file *file;/*指向其关联的文件*/
 	struct xarray objects;
 	struct xarray groups;
 	wait_queue_head_t destroy_wait;

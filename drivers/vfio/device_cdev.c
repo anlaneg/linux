@@ -7,11 +7,11 @@
 
 #include "vfio.h"
 
-static dev_t device_devt;
+static dev_t device_devt;/*负责为每个vfio-device关联一个字符设备*/
 
 void vfio_init_device_cdev(struct vfio_device *device)
 {
-	device->device.devt = MKDEV(MAJOR(device_devt), device->index);
+	device->device.devt = MKDEV(MAJOR(device_devt), device->index);/*为vfio-device分配devt*/
 	cdev_init(&device->cdev, &vfio_device_fops);
 	device->cdev.owner = THIS_MODULE;
 }
@@ -37,7 +37,7 @@ int vfio_device_fops_cdev_open(struct inode *inode, struct file *filep)
 		goto err_put_registration;
 	}
 
-	filep->private_data = df;
+	filep->private_data = df;/*设置device关联的vfio-device-file*/
 
 	return 0;
 
@@ -65,6 +65,7 @@ long vfio_df_ioctl_bind_iommufd(struct vfio_device_file *df,
 
 	minsz = offsetofend(struct vfio_device_bind_iommufd, out_devid);
 
+	/*复制用户态参数到bind*/
 	if (copy_from_user(&bind, arg, minsz))
 		return -EFAULT;
 
@@ -217,7 +218,8 @@ static char *vfio_device_devnode(const struct device *dev, umode_t *mode)
 
 int vfio_cdev_init(struct class *device_class)
 {
-	device_class->devnode = vfio_device_devnode;
+	device_class->devnode = vfio_device_devnode;/*定义device在/dev下的路径名称*/
+	/*动态申请一组vfio-dev对应的字符设备*/
 	return alloc_chrdev_region(&device_devt, 0,
 				   MINORMASK + 1, "vfio-dev");
 }

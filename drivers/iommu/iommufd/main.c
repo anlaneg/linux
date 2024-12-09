@@ -244,6 +244,7 @@ static int iommufd_fops_open(struct inode *inode, struct file *filp)
 	 */
 	if (IS_ENABLED(CONFIG_IOMMUFD_VFIO_CONTAINER) &&
 	    filp->private_data == &vfio_misc_dev) {
+		/*vfio类型的misc情况下*/
 		ictx->account_mode = IOPT_PAGES_ACCOUNT_MM;
 		pr_info_once("IOMMUFD is providing /dev/vfio/vfio, not VFIO.\n");
 	}
@@ -252,7 +253,7 @@ static int iommufd_fops_open(struct inode *inode, struct file *filp)
 	xa_init(&ictx->groups);
 	ictx->file = filp;
 	init_waitqueue_head(&ictx->destroy_wait);
-	filp->private_data = ictx;
+	filp->private_data = ictx;/*文件关联此ictx*/
 	return 0;
 }
 
@@ -344,7 +345,7 @@ struct iommufd_ioctl_op {
 	int (*execute)(struct iommufd_ucmd *ucmd);
 };
 
-#define IOCTL_OP(_ioctl, _fn, _struct, _last)                                  \
+#define IOCTL_OP(_ioctl, _fn/*cmd响应函数*/, _struct, _last)                                  \
 	[_IOC_NR(_ioctl) - IOMMUFD_CMD_BASE] = {                               \
 		.size = sizeof(_struct) +                                      \
 			BUILD_BUG_ON_ZERO(sizeof(union ucmd_buffer) <          \
@@ -399,6 +400,7 @@ static long iommufd_fops_ioctl(struct file *filp, unsigned int cmd,
 	nr = _IOC_NR(cmd);
 	if (nr < IOMMUFD_CMD_BASE ||
 	    (nr - IOMMUFD_CMD_BASE) >= ARRAY_SIZE(iommufd_ioctl_ops))
+		/*vfio对应的ioctl处理*/
 		return iommufd_vfio_ioctl(ictx, cmd, arg);
 
 	ucmd.ictx = ictx;
@@ -407,6 +409,7 @@ static long iommufd_fops_ioctl(struct file *filp, unsigned int cmd,
 	if (ret)
 		return ret;
 
+	/*iommu对应的ioctl处理*/
 	op = &iommufd_ioctl_ops[nr - IOMMUFD_CMD_BASE];
 	if (op->ioctl_num != cmd)
 		return -ENOIOCTLCMD;
@@ -477,6 +480,7 @@ struct iommufd_ctx *iommufd_ctx_from_fd(int fd)
 		return ERR_PTR(-EBADF);
 
 	if (file->f_op != &iommufd_fops) {
+		/*文件必须为iommufd*/
 		fput(file);
 		return ERR_PTR(-EBADFD);
 	}
@@ -524,7 +528,7 @@ static struct miscdevice iommu_misc_dev = {
 	.minor = MISC_DYNAMIC_MINOR,
 	.name = "iommu",
 	.fops = &iommufd_fops,
-	.nodename = "iommu",
+	.nodename = "iommu",/*产生/dev/iommu字符设备*/
 	.mode = 0660,
 };
 
@@ -533,7 +537,7 @@ static struct miscdevice vfio_misc_dev = {
 	.minor = VFIO_MINOR,
 	.name = "vfio",
 	.fops = &iommufd_fops,
-	.nodename = "vfio/vfio",
+	.nodename = "vfio/vfio",/*产生/dev/vfio/vfio字符设备*/
 	.mode = 0666,
 };
 
@@ -541,12 +545,12 @@ static int __init iommufd_init(void)
 {
 	int ret;
 
-	ret = misc_register(&iommu_misc_dev);
+	ret = misc_register(&iommu_misc_dev);/*注册设备/dev/iommu*/
 	if (ret)
 		return ret;
 
 	if (IS_ENABLED(CONFIG_IOMMUFD_VFIO_CONTAINER)) {
-		ret = misc_register(&vfio_misc_dev);
+		ret = misc_register(&vfio_misc_dev);/*注册设备/dev/vfio/vfio*/
 		if (ret)
 			goto err_misc;
 	}
