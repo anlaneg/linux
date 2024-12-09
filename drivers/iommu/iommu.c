@@ -50,13 +50,13 @@ static u32 iommu_cmd_line __read_mostly;
 struct iommu_group {
 	struct kobject kobj;
 	struct kobject *devices_kobj;
-	struct list_head devices;//group下所有设备链表
+	struct list_head devices;//group下所有设备链表(类型为struct group_device)
 	struct xarray pasid_array;
 	struct mutex mutex;
 	void *iommu_data;
 	void (*iommu_data_release)(void *iommu_data);
 	char *name;
-	int id;
+	int id;/*编号，由iommu_group_ida申请而来*/
 	struct iommu_domain *default_domain;
 	struct iommu_domain *blocking_domain;
 	struct iommu_domain *domain;
@@ -1082,13 +1082,15 @@ int iommu_group_set_name(struct iommu_group *group, const char *name)
 	int ret;
 
 	if (group->name) {
-		iommu_group_remove_file(group, &iommu_group_attr_name);/*先移除旧的name*/
+		/*如果group->name已被赋值，则先删除此name及其对应文件*/
+		iommu_group_remove_file(group, &iommu_group_attr_name);
 		kfree(group->name);
 		group->name = NULL;
 		if (!name)
 			return 0;/*设置的为空时，直接返回*/
 	}
 
+	/*更新group名称*/
 	group->name = kstrdup(name, GFP_KERNEL);
 	if (!group->name)
 		return -ENOMEM;
@@ -1181,7 +1183,7 @@ static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 	if (!device)
 		return ERR_PTR(-ENOMEM);
 
-	device->dev = dev;
+	device->dev = dev;/*设置对应的device*/
 
 	ret = sysfs_create_link(&dev->kobj, &group->kobj, "iommu_group");
 	if (ret)
@@ -1238,12 +1240,13 @@ int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 {
 	struct group_device *gdev;
 
+	/*创建group_device*/
 	gdev = iommu_group_alloc_device(group, dev);
 	if (IS_ERR(gdev))
 		return PTR_ERR(gdev);
 
 	iommu_group_ref_get(group);
-	dev->iommu_group = group;/*为设备关联此group*/
+	dev->iommu_group = group;/*为设备关联此iommu group*/
 
 	mutex_lock(&group->mutex);
 	/*将dev与group之间的关联关系串到链表上*/

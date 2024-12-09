@@ -599,6 +599,7 @@ int __init vfio_container_init(void)
 	mutex_init(&vfio.iommu_drivers_lock);
 	INIT_LIST_HEAD(&vfio.iommu_drivers_list);
 
+	/*初始化/dev/vfio/vfio*/
 	ret = misc_register(&vfio_dev);
 	if (ret) {
 		pr_err("vfio: misc device register failed\n");

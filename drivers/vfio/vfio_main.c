@@ -270,6 +270,7 @@ out_uninit:
 	return ret;
 }
 
+/*注册指定group类型的vfio-device*/
 static int __vfio_register_dev(struct vfio_device *device,
 			       enum vfio_group_type type)
 {
@@ -289,10 +290,12 @@ static int __vfio_register_dev(struct vfio_device *device,
 	if (!device->dev_set)
 		vfio_assign_device_set(device, device);
 
+	/*设置设备名称*/
 	ret = dev_set_name(&device->device, "vfio%d", device->index);
 	if (ret)
 		return ret;
 
+	/*设置vfio-device所属的vfio-group*/
 	ret = vfio_device_set_group(device, type);
 	if (ret)
 		return ret;
@@ -308,6 +311,7 @@ static int __vfio_register_dev(struct vfio_device *device,
 		goto err_out;
 	}
 
+	/*向系统添加vfio-device*/
 	ret = vfio_device_add(device);
 	if (ret)
 		goto err_out;
@@ -326,6 +330,7 @@ err_out:
 
 int vfio_register_group_dev(struct vfio_device *device)
 {
+	/*注册vfio_iommu类型的vfio-device*/
 	return __vfio_register_dev(device, VFIO_IOMMU);
 }
 EXPORT_SYMBOL_GPL(vfio_register_group_dev);
@@ -336,6 +341,7 @@ EXPORT_SYMBOL_GPL(vfio_register_group_dev);
  */
 int vfio_register_emulated_iommu_dev(struct vfio_device *device)
 {
+	/*注册emulated_iommu类型的vfio-device*/
 	return __vfio_register_dev(device, VFIO_EMULATED_IOMMU);
 }
 EXPORT_SYMBOL_GPL(vfio_register_emulated_iommu_dev);

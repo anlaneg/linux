@@ -641,18 +641,23 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	struct vfio_group *group;
 	int ret;
 
+	/*申请iommu_group结构体*/
 	iommu_group = iommu_group_alloc();
 	if (IS_ERR(iommu_group))
 		return ERR_CAST(iommu_group);
 
+	/*设置group名称*/
 	ret = iommu_group_set_name(iommu_group, "vfio-noiommu");
 	if (ret)
 		goto out_put_group;
+
+	/*将dev添加进iommu_group*/
 	ret = iommu_group_add_device(iommu_group, dev);
 	if (ret)
 		goto out_put_group;
 
 	mutex_lock(&vfio.group_lock);
+	/*创建vfio-group*/
 	group = vfio_create_group(iommu_group, type);
 	mutex_unlock(&vfio.group_lock);
 	if (IS_ERR(group)) {
@@ -690,14 +695,14 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 	struct vfio_group *group;
 
 	iommu_group = iommu_group_get(dev);
-	if (!iommu_group && vfio_noiommu) {
+	if (!iommu_group/*设备没有iommu_group*/ && vfio_noiommu/*noiommu也开启了*/) {
 		/*
 		 * With noiommu enabled, create an IOMMU group for devices that
 		 * don't already have one, implying no IOMMU hardware/driver
 		 * exists.  Taint the kernel because we're about to give a DMA
 		 * capable device to a user without IOMMU protection.
 		 */
-		group = vfio_noiommu_group_alloc(dev, VFIO_NO_IOMMU);
+		group = vfio_noiommu_group_alloc(dev, VFIO_NO_IOMMU);/*创建noiommu类型的vfio-group*/
 		if (!IS_ERR(group)) {
 			add_taint(TAINT_USER, LOCKDEP_STILL_OK);
 			dev_warn(dev, "Adding kernel taint for vfio-noiommu group on device\n");
@@ -709,6 +714,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 		return ERR_PTR(-EINVAL);
 
 	mutex_lock(&vfio.group_lock);
+	/*通过iommu-group获取vfio-group*/
 	group = vfio_group_find_from_iommu(iommu_group);
 	if (group) {
 		if (WARN_ON(vfio_group_has_device(group, dev)))
@@ -716,6 +722,7 @@ static struct vfio_group *vfio_group_find_or_alloc(struct device *dev)
 		else
 			refcount_inc(&group->drivers);
 	} else {
+		/*利用iommu_group创建对应的vfio-group*/
 		group = vfio_create_group(iommu_group, VFIO_IOMMU);
 	}
 	mutex_unlock(&vfio.group_lock);
@@ -731,15 +738,17 @@ int vfio_device_set_group(struct vfio_device *device,
 	struct vfio_group *group;
 
 	if (type == VFIO_IOMMU)
+		/*创建iommu类型的vfio-group(如果）*/
 		group = vfio_group_find_or_alloc(device->dev);
 	else
+		/*创建noiommu类型的vfio-group*/
 		group = vfio_noiommu_group_alloc(device->dev, type);
 
 	if (IS_ERR(group))
 		return PTR_ERR(group);
 
 	/* Our reference on group is moved to the device */
-	device->group = group;
+	device->group = group;/*设置vfio-device所属的vfio-group*/
 	return 0;
 }
 
@@ -959,7 +968,7 @@ int __init vfio_group_init(void)
 		goto err_group_class;
 	}
 
-	/*这类设备统一创建/dev/vfio/$group*/
+	/*这类设备统一创建/dev/vfio/$group,对应的fops为vfio_group_fops*/
 	vfio.class->devnode = vfio_devnode;
 
 	ret = alloc_chrdev_region(&vfio.group_devt, 0, MINORMASK + 1, "vfio");
