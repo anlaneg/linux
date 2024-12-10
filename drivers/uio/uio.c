@@ -587,7 +587,7 @@ static __poll_t uio_poll(struct file *filep, poll_table *wait)
 
 	poll_wait(filep, &idev->wait, wait);
 	if (listener->event_count != atomic_read(&idev->event))
-		return EPOLLIN | EPOLLRDNORM;
+		return EPOLLIN | EPOLLRDNORM;/*收到中断*/
 	return 0;
 }
 
@@ -647,7 +647,7 @@ static ssize_t uio_read(struct file *filep, char __user *buf,
 	return retval;
 }
 
-//uio设备write调用
+//uio设备write调用（用于开启/关闭中断）
 static ssize_t uio_write(struct file *filep, const char __user *buf,
 			size_t count, loff_t *ppos)
 {
@@ -657,6 +657,7 @@ static ssize_t uio_write(struct file *filep, const char __user *buf,
 	s32 irq_on;
 
 	if (count != sizeof(s32))
+		/*只能写入u32长度*/
 		return -EINVAL;
 
 	if (copy_from_user(&irq_on, buf, count))
@@ -669,6 +670,7 @@ static ssize_t uio_write(struct file *filep, const char __user *buf,
 	}
 
 	if (!idev->info->irq) {
+		/*设备未提供irq回调，则报错*/
 		retval = -EIO;
 		goto out;
 	}
@@ -854,7 +856,7 @@ static const struct file_operations uio_fops = {
 	.open		= uio_open,
 	.release	= uio_release,
 	.read		= uio_read,
-	.write		= uio_write,
+	.write		= uio_write,/*开启/关闭中断*/
 	.mmap		= uio_mmap,
 	.poll		= uio_poll,
 	.fasync		= uio_fasync,

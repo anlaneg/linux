@@ -353,7 +353,7 @@ struct pci_dev {
 	u8		pcie_cap;	/* PCIe capability offset */
 	u8		msi_cap;	/* MSI capability offset */
 	//MSI（消息信号中断）是设备向一个特别的地址执行写入，会引发cpu收到中断
-	//指向msi-x capability register
+	//指向msi-x capability offset,即通过此offset可以找到msix对应的结构体
 	u8		msix_cap;	/* MSI-X capability offset */
 	u8		pcie_mpss:3;	/* PCIe Max Payload Size Supported */
 	u8		rom_base_reg;	/* Config register controlling ROM */

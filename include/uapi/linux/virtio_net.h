@@ -110,7 +110,7 @@
 
 struct virtio_net_config {
 	/* The config defining mac address (if VIRTIO_NET_F_MAC) */
-	__u8 mac[ETH_ALEN];
+	__u8 mac[ETH_ALEN];/*硬件的mac地址（VIRTIO_NET_F_MAC标记存在时）*/
 	/* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
 	__virtio16 status;//链路状态
 	/* Maximum number of each of transmit and receive queues;
@@ -119,7 +119,7 @@ struct virtio_net_config {
 	 */
 	__virtio16 max_virtqueue_pairs;//最大队列数
 	/* Default maximum transmit unit advice */
-	__virtio16 mtu;//默认mtu值
+	__virtio16 mtu;//硬件默认mtu值
 	/*
 	 * speed, in units of 1Mb. All values 0 to INT_MAX are legal.
 	 * Any other value stands for unknown.

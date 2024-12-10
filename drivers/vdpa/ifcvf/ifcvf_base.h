@@ -77,7 +77,7 @@ struct ifcvf_hw {
 	struct virtio_pci_common_cfg __iomem *common_cfg;
 	void __iomem *dev_cfg;
 	struct vring_info *vring;
-	void __iomem * const *base;
+	void __iomem * const *base;/*各bar对应的地址*/
 	char config_msix_name[256];
 	struct vdpa_callback config_cb;
 	int config_irq;

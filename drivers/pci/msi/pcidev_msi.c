@@ -33,10 +33,13 @@ void pci_msix_init(struct pci_dev *dev)
 
 	dev->msix_cap = pci_find_capability(dev, PCI_CAP_ID_MSIX);
 	if (!dev->msix_cap)
+		/*此设备没有msix cap*/
 		return;
 
+	/*读取msix-cap结构体中的flags成员（16bits)*/
 	pci_read_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS, &ctrl);
 	if (ctrl & PCI_MSIX_FLAGS_ENABLE) {
+		/*此时是开启状态，配置为禁用状态*/
 		pci_write_config_word(dev, dev->msix_cap + PCI_MSIX_FLAGS,
 				      ctrl & ~PCI_MSIX_FLAGS_ENABLE);
 	}

@@ -902,7 +902,8 @@ static ssize_t mem_write(struct file *file, const char __user *buf,
 	return mem_rw(file, (char __user*)buf, count, ppos, 1);
 }
 
-loff_t mem_lseek(struct file *file, loff_t offset, int orig)
+/*更新文件位置*/
+loff_t mem_lseek(struct file *file, loff_t offset, int orig/*1指增量，0指设置*/)
 {
 	switch (orig) {
 	case 0:

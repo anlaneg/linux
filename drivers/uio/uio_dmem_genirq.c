@@ -138,9 +138,11 @@ static int uio_dmem_genirq_irqcontrol(struct uio_info *dev_info, s32 irq_on)
 
 	spin_lock_irqsave(&priv->lock, flags);
 	if (irq_on) {
+		/*中断开启情况*/
 		if (__test_and_clear_bit(UIO_IRQ_DISABLED, &priv->flags))
 			enable_irq(dev_info->irq);
 	} else {
+		/*中断禁用情况*/
 		if (!__test_and_set_bit(UIO_IRQ_DISABLED, &priv->flags))
 			disable_irq_nosync(dev_info->irq);
 	}

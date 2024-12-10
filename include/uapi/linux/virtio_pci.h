@@ -111,6 +111,7 @@
 /* IDs for different capabilities.  Must all exist. */
 
 /* Common configuration */
+/*这个配置对应的结构体为：struct virtio_pci_common_cfg*/
 #define VIRTIO_PCI_CAP_COMMON_CFG	1
 /* Notifications */
 #define VIRTIO_PCI_CAP_NOTIFY_CFG	2
@@ -125,14 +126,20 @@
 
 /* This is the PCI capability header: */
 struct virtio_pci_cap {
+	/*cap编号，这个结构对应的即为PCI_CAP_ID_VNDR*/
 	__u8 cap_vndr;		/* Generic PCI field: PCI_CAP_ID_VNDR */
+	/*指向下一个cap(偏移量）*/
 	__u8 cap_next;		/* Generic PCI field: next ptr. */
 	__u8 cap_len;		/* Generic PCI field: capability length */
+	/*配置类型，不同类型对应不同的数据结构,例如：VIRTIO_PCI_CAP_COMMON_CFG*/
 	__u8 cfg_type;		/* Identifies the structure. */
+	/*数据结构所对应的bar*/
 	__u8 bar;		/* Where to find it. */
 	__u8 id;		/* Multiple capabilities of the same type */
 	__u8 padding[2];	/* Pad to full dword. */
+	/*配置类型对应的结构在bar的哪一个位置（偏移量）*/
 	__le32 offset;		/* Offset within bar. */
+	/*结构体长度*/
 	__le32 length;		/* Length of the structure, in bytes. */
 };
 
@@ -142,6 +149,7 @@ struct virtio_pci_cap64 {
 	__le32 length_hi;             /* Most sig 32 bits of length */
 };
 
+/*VIRTIO_PCI_CAP_NOTIFY_CFG对应的结构体*/
 struct virtio_pci_notify_cap {
 	struct virtio_pci_cap cap;
 	__le32 notify_off_multiplier;	/* Multiplier for queue_notify_off. */
@@ -150,7 +158,7 @@ struct virtio_pci_notify_cap {
 /* Fields in VIRTIO_PCI_CAP_COMMON_CFG: */
 struct virtio_pci_common_cfg {
 	/* About the whole device. */
-	//用于获取功能位的低32bit或者高32bit
+	//用于获取设备功能位的低32bit或者高32bit（写0然后读获得低32bit,写1然后读获得高32bit)
 	//device_feature_select The driver uses this to select which feature bits device_feature shows. Value 0x0
 	//selects Feature Bits 0 to 31, 0x1 selects Feature Bits 32 to 63, etc.
 	__le32 device_feature_select;	/* read-write */
@@ -158,7 +166,7 @@ struct virtio_pci_common_cfg {
 	//device_feature The device uses this to report which feature bits it is offering to the driver: the driver writes
 	//to device_feature_select to select which feature bits are presented.
 	__le32 device_feature;		/* read-only */
-	//用于获取driver功能位的低32bit或者高32bit
+	//用于获取/写driver使能的功能位的低32bit或者高32bit（写0然后读获得低32bit,写1然后读获得高32bit)
 	//driver_feature_select The driver uses this to select which feature bits driver_feature shows. Value 0x0
 	//selects Feature Bits 0 to 31, 0x1 selects Feature Bits 32 to 63, etc.
 	__le32 guest_feature_select;	/* read-write */
@@ -166,24 +174,28 @@ struct virtio_pci_common_cfg {
 	//driver_feature The driver writes this to accept feature bits offered by the device. Driver Feature Bits se-
 	//lected by driver_feature_select.
 	__le32 guest_feature;		/* read-write */
+	/*获取/写”配置“中断号*/
 	__le16 msix_config;		/* read-write */
 	//队列数
 	__le16 num_queues;		/* read-only */
 	//驱动通过向此寄存器写0，来reset设备
 	//看virtio 1.0 spec 2.1节定义的设备状态
 	__u8 device_status;		/* read-write */
-	//用于保证配置原子的变量，设备每次在配置变更时会更改此值
+	//用于保证配置原子的变量，设备每次在配置变更时会更改此值（故驱动读取此时只需要检查此值，可知配置是否已变更）
 	//config_generation Configuration atomicity value. The device changes this every time the configuration
 	//noticeably changes.
 	__u8 config_generation;		/* read-only */
 
 	/* About a specific virtqueue. */
+	/*写这个寄存器，用于表明接下来操作哪个队列*/
 	__le16 queue_select;		/* read-write */
-	//vq队列大小
+	//vq队列大小（通过写queue_select来表明队列，再读取）
 	__le16 queue_size;		/* read-write, power of 2. */
+	/*负责获取配置各队列中断*/
 	__le16 queue_msix_vector;	/* read-write */
-	//队列是否开始
+	//队列是否开启(写1表示此q开启)
 	__le16 queue_enable;		/* read-write */
+	/*队列通知对应的offset*/
 	__le16 queue_notify_off;	/* read-only */
 	//队列desc,avail,used的地址配置（来源于pci层）
 	__le32 queue_desc_lo;		/* read-write */

@@ -55,6 +55,7 @@ void mlx5_pci_vsc_init(struct mlx5_core_dev *dev)
 	if (!mlx5_core_is_pf(dev))
 		return;
 
+	/*读取vendor specific偏移量*/
 	dev->vsc_addr = pci_find_capability(dev->pdev,
 					    PCI_CAP_ID_VNDR);
 	if (!dev->vsc_addr)

@@ -48,10 +48,11 @@ static struct vfio {
 	//保护group_list
 	struct mutex			group_lock; /* locks group_list */
 	struct ida			group_ida;/*负责申请设备对应的minor*/
-	dev_t				group_devt;
+	dev_t				group_devt;/*字符设备编号*/
 } vfio;//定义vfio变量
 
 struct vfio_iommu_driver {
+	/*iommu driver操作集*/
 	const struct vfio_iommu_driver_ops	*ops;
 	struct list_head			vfio_next;
 };
@@ -257,7 +258,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 	if (!driver)
 		return -ENOMEM;
 
-	driver->ops = ops;
+	driver->ops = ops;/*设置操作集*/
 
 	mutex_lock(&vfio.iommu_drivers_lock);
 
@@ -267,7 +268,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 		if (tmp->ops == ops) {
 			mutex_unlock(&vfio.iommu_drivers_lock);
 			kfree(driver);
-			return -EINVAL;
+			return -EINVAL;/*已存在*/
 		}
 	}
 
@@ -743,7 +744,7 @@ static struct vfio_group *vfio_noiommu_group_alloc(struct device *dev,
 	if (IS_ERR(iommu_group))
 		return ERR_CAST(iommu_group);
 
-	iommu_group_set_name(iommu_group, "vfio-noiommu");
+	iommu_group_set_name(iommu_group, "vfio-noiommu");/*指明iommu-group名称*/
 	ret = iommu_group_add_device(iommu_group, dev);/*为设备关联noiommu*/
 	if (ret)
 		goto out_put_group;
@@ -2656,23 +2657,24 @@ static int __init vfio_init(void)
 	INIT_LIST_HEAD(&vfio.group_list);
 	INIT_LIST_HEAD(&vfio.iommu_drivers_list);
 
-	//注册vfio
+	//注册杂设备vfio
 	ret = misc_register(&vfio_dev);
 	if (ret) {
 		pr_err("vfio: misc device register failed\n");
 		return ret;
 	}
 
-	/* /dev/vfio/$GROUP */
-	vfio.class = class_create(THIS_MODULE, "vfio");/*创建vfio对应的class*/
+	/*创建vfio对应的class*/
+	vfio.class = class_create(THIS_MODULE, "vfio");
 	if (IS_ERR(vfio.class)) {
 		ret = PTR_ERR(vfio.class);
 		goto err_class;
 	}
 
-	vfio.class->devnode = vfio_devnode;/*用于VFIO字符设备的名称的获取*/
+	/*用于VFIO字符设备的名称的获取，即设备注册时产生/dev/vfio/$GROUP*/
+	vfio.class->devnode = vfio_devnode;
 
-	//动态获取字符设备MAJOR
+	//动态获取字符设备MAJOR,产生vfio.group_devt
 	ret = alloc_chrdev_region(&vfio.group_devt, 0, MINORMASK + 1, "vfio");
 	if (ret)
 		goto err_alloc_chrdev;
@@ -2680,7 +2682,7 @@ static int __init vfio_init(void)
 	pr_info(DRIVER_DESC " version: " DRIVER_VERSION "\n");
 
 #ifdef CONFIG_VFIO_NOIOMMU
-	/*注册iommu driver*/
+	/*注册iommu driver（noiommu)*/
 	vfio_register_iommu_driver(&vfio_noiommu_ops);
 #endif
 	return 0;

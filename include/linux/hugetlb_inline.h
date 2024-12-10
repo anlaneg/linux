@@ -8,6 +8,7 @@
 
 static inline bool is_vm_hugetlb_page(struct vm_area_struct *vma)
 {
+	/*检查此区域是否为hugetlb*/
 	return !!(vma->vm_flags & VM_HUGETLB);
 }
 

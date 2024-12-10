@@ -1920,6 +1920,7 @@ struct vm_area_struct *find_vma(struct mm_struct *mm, unsigned long addr)
 	unsigned long index = addr;
 
 	mmap_assert_locked(mm);
+	/*查找addr所在的vm_area_struct*/
 	return mt_find(&mm->mm_mt, &index, ULONG_MAX);
 }
 EXPORT_SYMBOL(find_vma);

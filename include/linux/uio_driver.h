@@ -101,7 +101,7 @@ struct uio_info {
 	const char		*version;
 	struct uio_mem		mem[MAX_UIO_MAPS];/*一般存入bar内存*/
 	struct uio_port		port[MAX_UIO_PORT_REGIONS];
-	long			irq;
+	long			irq;/*中断号*/
 	unsigned long		irq_flags;
 	void			*priv;
 	irqreturn_t (*handler)(int irq, struct uio_info *dev_info);

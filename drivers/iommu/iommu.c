@@ -768,6 +768,7 @@ static void iommu_group_remove_file(struct iommu_group *group,
 	sysfs_remove_file(&group->kobj, &attr->attr);
 }
 
+/*显示iommu group名称*/
 static ssize_t iommu_group_show_name(struct iommu_group *group, char *buf)
 {
 	return sysfs_emit(buf, "%s\n", group->name);
@@ -903,7 +904,7 @@ static ssize_t iommu_group_show_resv_regions(struct iommu_group *group,
 static ssize_t iommu_group_show_type(struct iommu_group *group,
 				     char *buf)
 {
-	char *type = "unknown";
+	char *type = "unknown";/*不是以下几种的*/
 
 	mutex_lock(&group->mutex);
 	if (group->default_domain) {
@@ -935,6 +936,7 @@ static IOMMU_GROUP_ATTR(name, S_IRUGO, iommu_group_show_name, NULL);
 static IOMMU_GROUP_ATTR(reserved_regions, 0444,
 			iommu_group_show_resv_regions, NULL);
 
+/*显示iommu group type属性*/
 static IOMMU_GROUP_ATTR(type, 0644, iommu_group_show_type,
 			iommu_group_store_type);
 
@@ -1003,7 +1005,7 @@ struct iommu_group *iommu_group_alloc(void)
 		return ERR_PTR(ret);
 	}
 
-	group->devices_kobj = kobject_create_and_add("devices", &group->kobj);
+	group->devices_kobj = kobject_create_and_add("devices", &group->kobj);/*添加group目录*/
 	if (!group->devices_kobj) {
 		kobject_put(&group->kobj); /* triggers .release & free */
 		return ERR_PTR(-ENOMEM);
@@ -1017,13 +1019,13 @@ struct iommu_group *iommu_group_alloc(void)
 	kobject_put(&group->kobj);
 
 	ret = iommu_group_create_file(group,
-				      &iommu_group_attr_reserved_regions);
+				      &iommu_group_attr_reserved_regions);/*在group上创建reserved_regions文件*/
 	if (ret) {
 		kobject_put(group->devices_kobj);
 		return ERR_PTR(ret);
 	}
 
-	ret = iommu_group_create_file(group, &iommu_group_attr_type);
+	ret = iommu_group_create_file(group, &iommu_group_attr_type);/*在group上创建type属性*/
 	if (ret) {
 		kobject_put(group->devices_kobj);
 		return ERR_PTR(ret);
@@ -1080,18 +1082,18 @@ int iommu_group_set_name(struct iommu_group *group, const char *name)
 	int ret;
 
 	if (group->name) {
-		iommu_group_remove_file(group, &iommu_group_attr_name);
+		iommu_group_remove_file(group, &iommu_group_attr_name);/*先移除旧的name*/
 		kfree(group->name);
 		group->name = NULL;
 		if (!name)
-			return 0;
+			return 0;/*设置的为空时，直接返回*/
 	}
 
 	group->name = kstrdup(name, GFP_KERNEL);
 	if (!group->name)
 		return -ENOMEM;
 
-	ret = iommu_group_create_file(group, &iommu_group_attr_name);
+	ret = iommu_group_create_file(group, &iommu_group_attr_name);/*再创建新的name*/
 	if (ret) {
 		kfree(group->name);
 		group->name = NULL;

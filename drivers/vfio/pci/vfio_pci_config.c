@@ -1540,6 +1540,7 @@ static int vfio_cap_init(struct vfio_pci_core_device *vdev)
 	if (!(status & PCI_STATUS_CAP_LIST))
 		return 0; /* Done */
 
+	/*获得pdev设备cap list的链头位置*/
 	ret = pci_read_config_byte(pdev, PCI_CAPABILITY_LIST, &pos);
 	if (ret)
 		return ret;
@@ -1553,12 +1554,12 @@ static int vfio_cap_init(struct vfio_pci_core_device *vdev)
 		u8 next;
 		int i, len = 0;
 
-		ret = pci_read_config_byte(pdev, pos, &cap);
+		ret = pci_read_config_byte(pdev, pos, &cap);/*取此位置的cap id*/
 		if (ret)
 			return ret;
 
 		ret = pci_read_config_byte(pdev,
-					   pos + PCI_CAP_LIST_NEXT, &next);
+					   pos + PCI_CAP_LIST_NEXT, &next);/*取下一个cap的offset*/
 		if (ret)
 			return ret;
 

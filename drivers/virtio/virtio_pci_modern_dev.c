@@ -111,18 +111,21 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
  *
  * Returns offset of the capability, or 0.
  */
-static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
-					     u32 ioresource_types, int *bars)
+static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type/*预期的配置结构体类型*/,
+					     u32 ioresource_types, int *bars/*出参，所对应的bar*/)
 {
 	int pos;
 
+	/*遍历设备中多个PCI_CAP_ID_VNDR*/
 	for (pos = pci_find_capability(dev, PCI_CAP_ID_VNDR);
 	     pos > 0;
 	     pos = pci_find_next_capability(dev, pos, PCI_CAP_ID_VNDR)) {
 		u8 type, bar;
+		/*读取配置结构体类型*/
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 cfg_type),
 				     &type);
+		/*读取bar*/
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 bar),
 				     &bar);
@@ -132,6 +135,7 @@ static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type,
 			continue;
 
 		if (type == cfg_type) {
+			/*遇到了我们期待的配置结构体类型，返回其对应的位置*/
 			if (pci_resource_len(dev, bar) &&
 			    pci_resource_flags(dev, bar) & ioresource_types) {
 				*bars |= (1 << bar);
@@ -255,6 +259,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	mdev->id.vendor = pci_dev->subsystem_vendor;
 
 	/* check for a common config: if not, use legacy mode (bar 0). */
+	/*取common_cfg结构体所在位置*/
 	common = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_COMMON_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &mdev->modern_bars);
@@ -638,7 +643,7 @@ void vp_modern_set_queue_size(struct virtio_pci_modern_device *mdev,
 			      u16 index, u16 size)
 {
 	vp_iowrite16(index, &mdev->common->queue_select);
-	vp_iowrite16(size, &mdev->common->queue_size);
+	vp_iowrite16(size, &mdev->common->queue_size);/*配置vq队列长度*/
 
 }
 EXPORT_SYMBOL_GPL(vp_modern_set_queue_size);

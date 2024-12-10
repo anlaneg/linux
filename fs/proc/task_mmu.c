@@ -1347,16 +1347,18 @@ struct pagemapread {
 
 #define PM_END_OF_BUFFER    1
 
-static inline pagemap_entry_t make_pme(u64 frame, u64 flags)
+static inline pagemap_entry_t make_pme(u64 frame/*地址*/, u64 flags/*标记*/)
 {
+	/*将地址(需考虑掩码位)与标记合起来组成pme*/
 	return (pagemap_entry_t) { .pme = (frame & PM_PFRAME_MASK) | flags };
 }
 
 static int add_to_pagemap(unsigned long addr, pagemap_entry_t *pme,
 			  struct pagemapread *pm)
 {
-	pm->buffer[pm->pos++] = *pme;
+	pm->buffer[pm->pos++] = *pme;/*利用pme填充pm->buffer*/
 	if (pm->pos >= pm->len)
+		/*没有足够的空间*/
 		return PM_END_OF_BUFFER;
 	return 0;
 }
@@ -1370,16 +1372,18 @@ static int pagemap_pte_hole(unsigned long start, unsigned long end,
 
 	while (addr < end) {
 		struct vm_area_struct *vma = find_vma(walk->mm, addr);
-		pagemap_entry_t pme = make_pme(0, 0);
+		pagemap_entry_t pme = make_pme(0, 0);/*初始化为零*/
 		/* End of address space hole, which we mark as non-present. */
 		unsigned long hole_end;
 
 		if (vma)
 			hole_end = min(end, vma->vm_start);
 		else
+			/*没有找到addr对应的vma*/
 			hole_end = end;
 
 		for (; addr < hole_end; addr += PAGE_SIZE) {
+			/*自addr至hold_end开始，利用pme填充pm->buffer*/
 			err = add_to_pagemap(addr, &pme, pm);
 			if (err)
 				goto out;
@@ -1389,7 +1393,7 @@ static int pagemap_pte_hole(unsigned long start, unsigned long end,
 			break;
 
 		/* Addresses in the VMA. */
-		if (vma->vm_flags & VM_SOFTDIRTY)
+		if (vma->vm_flags & VM_SOFTDIRTY)/*???SOFT_DIRTY是啥？*/
 			pme = make_pme(0, PM_SOFT_DIRTY);
 		for (; addr < min(end, vma->vm_end); addr += PAGE_SIZE) {
 			err = add_to_pagemap(addr, &pme, pm);
@@ -1519,7 +1523,7 @@ static int pagemap_pmd_range(pmd_t *pmdp, unsigned long addr, unsigned long end,
 		for (; addr != end; addr += PAGE_SIZE) {
 			pagemap_entry_t pme = make_pme(frame, flags);
 
-			err = add_to_pagemap(addr, &pme, pm);
+			err = add_to_pagemap(addr, &pme, pm);/*利用pme设置pm->buffer*/
 			if (err)
 				break;
 			if (pm->show_pfn) {
@@ -1566,7 +1570,7 @@ static int pagemap_hugetlb_range(pte_t *ptep, unsigned long hmask,
 {
 	struct pagemapread *pm = walk->private;
 	struct vm_area_struct *vma = walk->vma;
-	u64 flags = 0, frame = 0;
+	u64 flags = 0/*页的标记*/, frame = 0;
 	int err = 0;
 	pte_t pte;
 
@@ -1601,7 +1605,7 @@ static int pagemap_hugetlb_range(pte_t *ptep, unsigned long hmask,
 		if (err)
 			return err;
 		if (pm->show_pfn && (flags & PM_PRESENT))
-			frame++;
+			frame++;/*帧号增加*/
 	}
 
 	cond_resched();
@@ -1663,11 +1667,11 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 	ret = -EINVAL;
 	/* file position must be aligned */
 	if ((*ppos % PM_ENTRY_BYTES) || (count % PM_ENTRY_BYTES))
-		goto out_mm;
+		goto out_mm;/*文件当前位置及读的长度必须对齐*/
 
 	ret = 0;
 	if (!count)
-		goto out_mm;
+		goto out_mm;/*长度不得为零*/
 
 	/* do not disclose physical addresses: attack vector */
 	pm.show_pfn = file_ns_capable(file, &init_user_ns, CAP_SYS_ADMIN);
@@ -1676,10 +1680,10 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 	pm.buffer = kmalloc_array(pm.len, PM_ENTRY_BYTES, GFP_KERNEL);
 	ret = -ENOMEM;
 	if (!pm.buffer)
-		goto out_mm;
+		goto out_mm;/*申请buffer失败*/
 
-	src = *ppos;
-	svpfn = src / PM_ENTRY_BYTES;
+	src = *ppos;/*ppos当前位置指向的是存放位置（即页帧号*8字节）*/
+	svpfn = src / PM_ENTRY_BYTES;/*这些页帧号一个占用8个字节，故除8换算成页帧号*/
 	end_vaddr = mm->task_size;
 
 	/* watch out for wraparound */
@@ -1690,17 +1694,19 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		ret = mmap_read_lock_killable(mm);
 		if (ret)
 			goto out_free;
+		/*取帧首地址*/
 		start_vaddr = untagged_addr_remote(mm, svpfn << PAGE_SHIFT);
 		mmap_read_unlock(mm);
 
+		/*读取结束帧位置*/
 		end = start_vaddr + ((count / PM_ENTRY_BYTES) << PAGE_SHIFT);
 		if (end >= start_vaddr && end < mm->task_size)
-			end_vaddr = end;
+			end_vaddr = end;/*规范化end*/
 	}
 
 	/* Ensure the address is inside the task */
 	if (start_vaddr > mm->task_size)
-		start_vaddr = end_vaddr;
+		start_vaddr = end_vaddr;/*规范化start*/
 
 	ret = 0;
 	while (count && (start_vaddr < end_vaddr)) {
@@ -1715,11 +1721,12 @@ static ssize_t pagemap_read(struct file *file, char __user *buf,
 		ret = mmap_read_lock_killable(mm);
 		if (ret)
 			goto out_free;
-		ret = walk_page_range(mm, start_vaddr, end, &pagemap_ops, &pm);
+		ret = walk_page_range(mm, start_vaddr/*起始地址*/, end, &pagemap_ops, &pm);
 		mmap_read_unlock(mm);
 		start_vaddr = end;
 
 		len = min(count, PM_ENTRY_BYTES * pm.pos);
+		/*复制内容到buf*/
 		if (copy_to_user(buf, pm.buffer, len)) {
 			ret = -EFAULT;
 			goto out_free;

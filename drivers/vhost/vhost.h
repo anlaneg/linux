@@ -279,10 +279,11 @@ int vhost_init_device_iotlb(struct vhost_dev *d);
 void vhost_iotlb_map_free(struct vhost_iotlb *iotlb,
 			  struct vhost_iotlb_map *map);
 
+/*显示错误，并知会对端发生了错误*/
 #define vq_err(vq, fmt, ...) do {                                  \
 		pr_debug(pr_fmt(fmt), ##__VA_ARGS__);       \
 		if ((vq)->error_ctx)                               \
-		        	/*向error_ctx触发eventfd事件*/\
+		        /*向error_ctx触发eventfd事件*/\
 				eventfd_signal((vq)->error_ctx);\
 	} while (0)
 

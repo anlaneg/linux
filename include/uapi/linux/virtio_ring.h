@@ -126,7 +126,7 @@ struct vring_avail {
 	//descriptor chain. It is only written by the driver and read by the device.
 	//idx field indicates where the driver would put the next descriptor entry in the ring (modulo the queue size).
 	//This starts at 0, and increases.
-	__virtio16 idx;//队列中目前有效位置（即可存放或可读取的极限位置）
+	__virtio16 idx;//队列中目前有效位置（即可存放或可读取的极限位置；驱动写，设备读）
 	__virtio16 ring[];//长度为num个（见vring)
 };
 
@@ -143,7 +143,8 @@ typedef struct vring_used_elem __attribute__((aligned(VRING_USED_ALIGN_SIZE)))
 
 struct vring_used {
 	__virtio16 flags;
-	__virtio16 idx;/*当前used表位置*/
+	/*当前used表位置，设备收时写此值，使软件知道哪些可收，发时写此值，使软件知道哪些已发完*/
+	__virtio16 idx;
 	vring_used_elem_t ring[];//长度为num（见vring)，已完成使用的索引符索引＋描述符数目
 };
 

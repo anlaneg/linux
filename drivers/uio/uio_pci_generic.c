@@ -96,7 +96,7 @@ static int probe(struct pci_dev *pdev,
 	gdev->info.release = release;
 	gdev->pdev = pdev;
 	if (pdev->irq && (pdev->irq != IRQ_NOTCONNECTED)) {
-		gdev->info.irq = pdev->irq;
+		gdev->info.irq = pdev->irq;/*设置中断号*/
 		gdev->info.irq_flags = IRQF_SHARED;
 		gdev->info.handler = irqhandler;//处理中断的回调函数
 	} else {

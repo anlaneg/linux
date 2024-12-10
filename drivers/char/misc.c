@@ -246,7 +246,7 @@ int misc_register(struct miscdevice *misc)
 
 		list_for_each_entry(c, &misc_list, list) {
 			if (c->minor == misc->minor) {
-				err = -EBUSY;
+				err = -EBUSY;/*不可分配*/
 				goto out;
 			}
 		}

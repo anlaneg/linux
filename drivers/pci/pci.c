@@ -455,10 +455,10 @@ static u8 __pci_find_next_cap_ttl(struct pci_bus *bus, unsigned int devfn,
 
 		id = ent & 0xff;
 		if (id == 0xff)
-			break;
+			break;/*结束了，退出*/
 		if (id == cap)
-			return pos;
-		pos = (ent >> 8);
+			return pos;/*遇到相等的cap,返回其对应的位置*/
+		pos = (ent >> 8);/*尝试下一个cap*/
 	}
 	return 0;
 }
@@ -490,12 +490,13 @@ static u8 __pci_bus_find_cap_start(struct pci_bus *bus,
 	//返回capability_list的offset
 	pci_bus_read_config_word(bus, devfn, PCI_STATUS, &status);
 	if (!(status & PCI_STATUS_CAP_LIST))
+		/*不支持cap list*/
 		return 0;
 
 	switch (hdr_type) {
 	case PCI_HEADER_TYPE_NORMAL:
 	case PCI_HEADER_TYPE_BRIDGE:
-		//对于普通设备及桥设备，返回PCI_CAPABILITY_LIST
+		//对于普通设备及桥设备，返回PCI_CAPABILITY_LIST(即52字节处）
 		return PCI_CAPABILITY_LIST;
 	case PCI_HEADER_TYPE_CARDBUS:
 		return PCI_CB_CAPABILITY_LIST;
@@ -531,7 +532,7 @@ u8 pci_find_capability(struct pci_dev *dev, int cap)
 	pos = __pci_bus_find_cap_start(dev->bus, dev->devfn, dev->hdr_type);
 	//pos必须非0，否则无效
 	if (pos)
-		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos, cap);
+		pos = __pci_find_next_cap(dev->bus, dev->devfn, pos/*起始位置*/, cap);
 
 	return pos;
 }

@@ -200,7 +200,8 @@
 #define  PCI_ROM_ADDRESS_ENABLE	0x01
 #define PCI_ROM_ADDRESS_MASK	(~0x7ffU)
 
-//capability列表的起始offset(能力指针起始位置）
+//capability列表的起始offset(能力指针起始位置，为固定位置即52号字节）
+//注：每个capability结构体的前两个字节，分别为cap类型，下一个cap的偏移（针对config文件做为基准）
 #define PCI_CAPABILITY_LIST	0x34	/* Offset of first capability list entry */
 
 /* 0x35-0x3b are reserved */
@@ -301,6 +302,7 @@
 #define  PCI_CAP_ID_CHSWP	0x06	/* CompactPCI HotSwap */
 #define  PCI_CAP_ID_PCIX	0x07	/* PCI-X */
 #define  PCI_CAP_ID_HT		0x08	/* HyperTransport */
+/*vendor提供的特别能力*/
 #define  PCI_CAP_ID_VNDR	0x09	/* Vendor-Specific */
 #define  PCI_CAP_ID_DBG		0x0A	/* Debug port */
 #define  PCI_CAP_ID_CCRC	0x0B	/* CompactPCI Central Resource Control */
@@ -309,6 +311,7 @@
 #define  PCI_CAP_ID_AGP3	0x0E	/* AGP Target PCI-PCI bridge */
 #define  PCI_CAP_ID_SECDEV	0x0F	/* Secure Device */
 #define  PCI_CAP_ID_EXP		0x10	/* PCI Express */
+/*msix对应的cap id*/
 #define  PCI_CAP_ID_MSIX	0x11	/* MSI-X */
 #define  PCI_CAP_ID_SATA	0x12	/* SATA Data/Index Conf. */
 #define  PCI_CAP_ID_AF		0x13	/* PCI Advanced Features */

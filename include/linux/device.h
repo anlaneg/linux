@@ -854,6 +854,7 @@ struct device_link {
  */
 static inline bool device_iommu_mapped(struct device *dev)
 {
+	/*设备是否支持iommu_group*/
 	return (dev->iommu_group != NULL);
 }
 

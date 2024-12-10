@@ -1132,7 +1132,7 @@ static int get_rx_bufs(struct vhost_virtqueue *vq,
 
 		d = r;
 		if (d == vq->num) {
-		    /*返回值为队列大小，无用描述符，退出*/
+		    /*返回值为队列大小，指无可用描述符，退出*/
 			r = 0;
 			goto err;
 		}
@@ -1177,9 +1177,9 @@ err:
 //从后端socket拿到报文，将其写入到net->vqs rx队列中
 static void handle_rx(struct vhost_net *net)
 {
-    /*取vhost net vq*/
+    /*取vhost-net RX队列*/
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_RX];
-	/*取vhost vq*/
+	/*取rx对应的vq*/
 	struct vhost_virtqueue *vq = &nvq->vq;
 	unsigned in, log;
 	struct vhost_log *vq_log;
@@ -1217,6 +1217,7 @@ static void handle_rx(struct vhost_net *net)
 	if (!vq_meta_prefetch(vq))
 		goto out;
 
+	/*禁止通知*/
 	vhost_disable_notify(&net->dev, vq);
 	vhost_net_disable_vq(net, vq);
 

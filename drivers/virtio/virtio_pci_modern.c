@@ -663,15 +663,18 @@ static int virtio_pci_find_shm_cap(struct pci_dev *dev, u8 required_id,
 {
 	int pos;
 
+	/*遍历设备中多个PCI_CAP_ID_VNDR*/
 	for (pos = pci_find_capability(dev, PCI_CAP_ID_VNDR); pos > 0;
 	     pos = pci_find_next_capability(dev, pos, PCI_CAP_ID_VNDR)) {
 		u8 type, cap_len, id, res_bar;
 		u32 tmp32;
 		u64 res_offset, res_length;
 
+		/*读取结构体类型（这个读很难受，不如DPDK virtio-net读的直接）*/
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 cfg_type), &type);
 		if (type != VIRTIO_PCI_CAP_SHARED_MEMORY_CFG)
+			/*遇到其它类型，继续查找*/
 			continue;
 
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,

@@ -40,12 +40,14 @@ static void __iomem *get_cap_addr(struct ifcvf_hw *hw,
 	bar = cap->bar;
 
 	if (bar >= IFCVF_PCI_MAX_RESOURCE) {
+		/*bar内容有误*/
 		IFCVF_DBG(hw->pdev,
 			  "Invalid bar number %u to get capabilities\n", bar);
 		return NULL;
 	}
 
 	if (offset + length > pci_resource_len(hw->pdev, bar)) {
+		/*cap中填充的内容有误*/
 		IFCVF_DBG(hw->pdev,
 			  "offset(%u) + len(%u) overflows bar%u's capability\n",
 			  offset, length, bar);
@@ -108,6 +110,7 @@ int ifcvf_init_hw(struct ifcvf_hw *hw, struct pci_dev *pdev)
 	u8 pos;
 	u32 i;
 
+	/*沿PCI_CAPABILITY_LIST，找到首个cap*/
 	ret = pci_read_config_byte(pdev, PCI_CAPABILITY_LIST, &pos);
 	if (ret < 0) {
 		IFCVF_ERR(pdev, "Failed to read PCI capability list\n");
@@ -116,6 +119,7 @@ int ifcvf_init_hw(struct ifcvf_hw *hw, struct pci_dev *pdev)
 	hw->pdev = pdev;
 
 	while (pos) {
+		/*按照virtio_pci_cap格式先读取内容（这个读有点大胆啊）*/
 		ret = ifcvf_read_config_range(pdev, (u32 *)&cap,
 					      sizeof(cap), pos);
 		if (ret < 0) {
@@ -125,8 +129,10 @@ int ifcvf_init_hw(struct ifcvf_hw *hw, struct pci_dev *pdev)
 		}
 
 		if (cap.cap_vndr != PCI_CAP_ID_VNDR)
+			/*我们实际上要找到的是这个cap,故如果不是这个cap,则上面的内容忽略，尝试下一个*/
 			goto next;
 
+		/*检查配置结构体类型（共有以下几种类型）*/
 		switch (cap.cfg_type) {
 		case VIRTIO_PCI_CAP_COMMON_CFG:
 			hw->common_cfg = get_cap_addr(hw, &cap);
@@ -350,7 +356,7 @@ void ifcvf_set_vq_num(struct ifcvf_hw *hw, u16 qid, u32 num)
 	struct virtio_pci_common_cfg __iomem *cfg = hw->common_cfg;
 
 	vp_iowrite16(qid, &cfg->queue_select);
-	vp_iowrite16(num, &cfg->queue_size);
+	vp_iowrite16(num, &cfg->queue_size);/*配置vq队列长度*/
 }
 
 int ifcvf_set_vq_address(struct ifcvf_hw *hw, u16 qid, u64 desc_area,

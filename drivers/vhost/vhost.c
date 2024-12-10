@@ -379,6 +379,7 @@ static void vhost_vring_call_reset(struct vhost_vring_call *call_ctx)
 
 bool vhost_vq_is_setup(struct vhost_virtqueue *vq)
 {
+	/*vq各队列设置完成，且可访问*/
 	return vq->avail && vq->desc && vq->used && vhost_vq_access_ok(vq);
 }
 EXPORT_SYMBOL_GPL(vhost_vq_is_setup);
@@ -815,7 +816,8 @@ static int vhost_get_vq_from_user(struct vhost_dev *dev, void __user *argp,
 	u32 idx;
 	long r;
 
-	//取指定的idx
+	/*取指定的vq idx
+	 * （实际传入的类型是struct vhost_vring_file，这里写得太晦涩，从中拿到第一成员vq索引）*/
 	r = get_user(idx, idxp);
 	if (r < 0)
 		return r;
@@ -824,7 +826,7 @@ static int vhost_get_vq_from_user(struct vhost_dev *dev, void __user *argp,
 	if (idx >= dev->nvqs)
 		return -ENOBUFS;
 
-	/*取用户态指定的vq*/
+	/*依据idx取得用户态指定的vq*/
 	idx = array_index_nospec(idx, dev->nvqs);
 
 	*vq = dev->vqs[idx];
@@ -1202,7 +1204,7 @@ static int vhost_copy_from_user(struct vhost_virtqueue *vq, void *to,
 		 */
 		void __user *uaddr = vhost_vq_meta_fetch(vq,
 				     (u64)(uintptr_t)from, size,
-				     VHOST_ADDR_DESC);
+				     VHOST_ADDR_DESC);/*先转换为用户地址*/
 		struct iov_iter f;
 
 		if (uaddr)
@@ -1319,7 +1321,7 @@ static inline int vhost_put_used_flags(struct vhost_virtqueue *vq)
 			      &vq->used->flags);
 }
 
-//写当前last_used_idx写入内存
+//写当前last_used_idx写入vq->used->idx(驱动会读这个变量）
 static inline int vhost_put_used_idx(struct vhost_virtqueue *vq)
 
 {
@@ -1371,7 +1373,7 @@ static void vhost_dev_unlock_vqs(struct vhost_dev *d)
 		mutex_unlock(&d->vqs[i]->mutex);
 }
 
-//取avali的索引位置
+//取avail的索引位置
 static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq,
 				      __virtio16 *idx/*出参，索引位置*/)
 {
@@ -1382,7 +1384,7 @@ static inline int vhost_get_avail_idx(struct vhost_virtqueue *vq,
 static inline int vhost_get_avail_head(struct vhost_virtqueue *vq,
 				       __virtio16 *head, int idx)
 {
-    //取idx索引位置的avail值，存入head
+    //取idx索引位置的avail描述符的索引，存入head
 	return vhost_get_avail(vq, *head,
 			       &vq->avail->ring[idx & (vq->num - 1)]);
 }
@@ -1949,7 +1951,7 @@ static long vhost_vring_set_num(struct vhost_dev *d,
 	return 0;
 }
 
-/*设置vring对应的地址*/
+/*设置vring几个q对应的地址，desc,avail,used*/
 static long vhost_vring_set_addr(struct vhost_dev *d,
 				 struct vhost_virtqueue *vq,
 				 void __user *argp)
@@ -2016,7 +2018,7 @@ static long vhost_vring_set_num_addr(struct vhost_dev *d,
 
 	switch (ioctl) {
 	case VHOST_SET_VRING_NUM:
-	    /*设置vring长度*/
+	    /*设置vring队列长度*/
 		r = vhost_vring_set_num(d, vq, argp);
 		break;
 	case VHOST_SET_VRING_ADDR:
@@ -2091,6 +2093,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 			r = -EFAULT;
 		break;
 	case VHOST_SET_VRING_KICK:
+		/*设置vring kick,用于qemu知会vhost,可以收包了*/
 	    /*为指定vq,设置eventfd，通过poll此文件了解对方的通知*/
 		if (copy_from_user(&f, argp, sizeof f)) {
 			r = -EFAULT;
@@ -2111,7 +2114,10 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 			filep = eventfp;
 		break;
 	case VHOST_SET_VRING_CALL:
-	    /*变更用户态指定的eventfd_ctx,用做call_ctx*/
+	    /*设置eventfd_ctx,用于tx时知会guest收包（这个event是qemu设置的，故我们通知的实际是qemu
+	     * qemu收到此通知，再注中断给guest)
+	     * 看qemu函数：vhost_kernel_set_vring_call
+	     * */
 		if (copy_from_user(&f, argp, sizeof f)) {
 			r = -EFAULT;
 			break;
@@ -2125,7 +2131,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 		swap(ctx, vq->call_ctx.ctx);
 		break;
 	case VHOST_SET_VRING_ERR:
-	    /*变更用户态指定的eventfd_ctx,用做error_ctx*/
+	    /*设置vring错误时，知会qemu的eventfd*/
 		if (copy_from_user(&f, argp, sizeof f)) {
 			r = -EFAULT;
 			break;
@@ -2701,12 +2707,13 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 	int ret, access;
 
 	/* Check it isn't doing very strange things with descriptor numbers. */
-	last_avail_idx = vq->last_avail_idx;
+	last_avail_idx = vq->last_avail_idx;/*上次我们avail指向的位置*/
 
 	/*上次我们获取的avail_idx与last_avail_idx相等，则尝试更新vq->avail_idx*/
 	if (vq->avail_idx == vq->last_avail_idx) {
 
-	    /*取avail_idx，并更新（按协议要求将其值转换为cpu序）*/
+	    /*我们和对端在共享这个vq,自vq->avail->idx中取对端（发送端）更新的avail_idx，
+	     * 并更新（按协议要求将其值转换为cpu序）*/
 		if (unlikely(vhost_get_avail_idx(vq, &avail_idx))) {
 			vq_err(vq, "Failed to access avail idx at %p\n",
 				&vq->avail->idx);
@@ -2724,7 +2731,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		/* If there's nothing new since last we looked, return
 		 * invalid.
 		 */
-		//与我们上次更新相比，没有更新，返回队列长度
+		//与我们上次更新相比，没有更新，返回队列长度（即没有可用的描述符）
 		if (vq->avail_idx == last_avail_idx)
 			return vq->num;
 
@@ -2759,22 +2766,23 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 	if (unlikely(log))
 		*log_num = 0;
 
-	i = head;
+	i = head;/*首个描述符*/
 	do {
 		unsigned iov_count = *in_num + *out_num;
 		if (unlikely(i >= vq->num)) {
-		    //描述符索引不可能大于vq的长度
+		    //描述符索引不可能大于vq的长度，报错
 			vq_err(vq, "Desc index is %u > %u, head = %u",
 			       i, vq->num, head);
 			return -EINVAL;
 		}
 		if (unlikely(++found > vq->num)) {
-		    //循环的次数不可能大于vq的长度
+		    //循环的次数不可能大于vq的长度，报错
 			vq_err(vq, "Loop detected: last one at %u "
 			       "vq size %u head %u\n",
 			       i, vq->num, head);
 			return -EINVAL;
 		}
+
 		//取i号desc
 		ret = vhost_get_desc(vq, &desc, i);
 		if (unlikely(ret)) {
@@ -2797,15 +2805,15 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 			continue;
 		}
 
-		/*确认是通过write,还是read进行访问*/
+		/*自描述符标记上确认是write only,还是read only*/
 		if (desc.flags & cpu_to_vhost16(vq, VRING_DESC_F_WRITE))
 			access = VHOST_ACCESS_WO;
 		else
 			access = VHOST_ACCESS_RO;
 		//转换描述符指向的地址到iov中，返回占用iov的数目
-		ret = translate_desc(vq, vhost64_to_cpu(vq, desc.addr),
-				     vhost32_to_cpu(vq, desc.len), iov + iov_count,
-				     iov_size - iov_count, access);
+		ret = translate_desc(vq, vhost64_to_cpu(vq, desc.addr)/*buffer地址*/,
+				     vhost32_to_cpu(vq, desc.len)/*buffer长度*/, iov + iov_count/*iov对应位置*/,
+				     iov_size - iov_count/*iov可用长度*/, access/*写入/读取*/);
 		if (unlikely(ret < 0)) {
 		    //转换失败
 			if (ret != -EAGAIN)
@@ -2988,7 +2996,7 @@ void vhost_signal(struct vhost_dev *dev, struct vhost_virtqueue *vq)
 {
 	/* Signal the Guest tell them we used something up. */
 	if (vq->call_ctx.ctx && vhost_notify(dev, vq))
-	    //触发一次通知事件
+	    //触发一次通知事件(这个通知是触发eventfd信号，qemu应该收这个信号）
 		eventfd_signal(vq->call_ctx.ctx);
 }
 EXPORT_SYMBOL_GPL(vhost_signal);

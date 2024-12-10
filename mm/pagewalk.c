@@ -389,6 +389,7 @@ static int __walk_page_range(unsigned long start, unsigned long end,
 	}
 
 	if (is_vm_hugetlb_page(vma)) {
+		/*大页vma*/
 		if (ops->hugetlb_entry)
 			err = walk_hugetlb_range(start, end, walk);
 	} else
@@ -481,23 +482,27 @@ int walk_page_range(struct mm_struct *mm, unsigned long start,
 	};
 
 	if (start >= end)
+		/*range范围必须满足start,end*/
 		return -EINVAL;
 
 	if (!walk.mm)
+		/*必须提供mm*/
 		return -EINVAL;
 
 	process_mm_walk_lock(walk.mm, ops->walk_lock);
 
-	vma = find_vma(walk.mm, start);
+	vma = find_vma(walk.mm, start);/*取start对应的vma*/
 	do {
 		if (!vma) { /* after the last vma */
 			walk.vma = NULL;
 			next = end;
+			/*无vma,调用pte_hole（这种总填写的为0）*/
 			if (ops->pte_hole)
 				err = ops->pte_hole(start, next, -1, &walk);
 		} else if (start < vma->vm_start) { /* outside vma */
 			walk.vma = NULL;
 			next = min(end, vma->vm_start);
+			/*这种start小于vm_start,故start与vm_start之间需要调用pte_hole*/
 			if (ops->pte_hole)
 				err = ops->pte_hole(start, next, -1, &walk);
 		} else { /* inside vma */
