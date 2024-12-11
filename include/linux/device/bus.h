@@ -167,7 +167,7 @@ static inline struct device *bus_find_device_by_name(const struct bus_type *bus,
 						     struct device *start,
 						     const char *name)
 {
-	return bus_find_device(bus, start, name, device_match_name);
+	return bus_find_device(bus, start/*起始设备*/, name/*设备名称*/, device_match_name);
 }
 
 /**

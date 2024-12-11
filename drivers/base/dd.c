@@ -1160,7 +1160,7 @@ int device_driver_attach(struct device_driver *drv, struct device *dev)
 	int ret;
 
 	__device_driver_lock(dev, dev->parent);
-	ret = __driver_probe_device(drv, dev);
+	ret = __driver_probe_device(drv/*设备驱动*/, dev/*设备*/);
 	__device_driver_unlock(dev, dev->parent);
 
 	/* also return probe errors as normal negative errnos */

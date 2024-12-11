@@ -272,9 +272,10 @@ static ssize_t bind_store(struct device_driver *drv, const char *buf,
 	struct device *dev;
 	int err = -ENODEV;
 
+	/*通过名称在bus上查找设备*/
 	dev = bus_find_device_by_name(bus, NULL, buf);
-	if (dev && driver_match_device(drv, dev)) {
-		err = device_driver_attach(drv, dev);
+	if (dev && driver_match_device(drv, dev)/*设备不为空，且驱动可以匹配此设备*/) {
+		err = device_driver_attach(drv, dev);/*尝试匹配此设备*/
 		if (!err) {
 			/* success */
 			err = count;
@@ -420,7 +421,7 @@ struct device *bus_find_device(const struct bus_type *bus,
 	/*如果没有起供start,则从头遍历*/
 	klist_iter_init_node(&sp->klist_devices, &i,
 			     (start ? &start->p->knode_bus : NULL));
-	while ((dev = next_device(&i)))
+	while ((dev = next_device(&i))/*取下一个设备*/)
 		if (match(dev, data) && get_device(dev))
 			break;
 	klist_iter_exit(&i);
