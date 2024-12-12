@@ -22,7 +22,9 @@
 
 /* Extensions */
 
+/*x86支持这种*/
 #define VFIO_TYPE1_IOMMU		1
+/*ppc64支持这种*/
 #define VFIO_SPAPR_TCE_IOMMU		2
 #define VFIO_TYPE1v2_IOMMU		3
 /*

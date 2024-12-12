@@ -405,7 +405,7 @@ static int vfio_fops_release(struct inode *inode, struct file *filep)
 
 static const struct file_operations vfio_fops = {
 	.owner		= THIS_MODULE,
-	.open		= vfio_fops_open,
+	.open		= vfio_fops_open,/*创建一个空的vfio-container*/
 	.release	= vfio_fops_release,
 	.unlocked_ioctl	= vfio_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,

@@ -238,7 +238,7 @@ struct virtio_net_hdr {
 //标准virtio 1.0指出
 //The legacy driver only presented num_buffers in the struct virtio_net_hdr when VIRTIO_NET_F_MRG_-
 //RXBUF was negotiated; without that feature the structure was 2 bytes shorter.
-struct virtio_net_hdr_mrg_rxbuf {
+struct virtio_net_hdr_mrg_rxbuf {/*共12字节*/
 	struct virtio_net_hdr hdr;
 	__virtio16 num_buffers;	/* Number of merged rx buffers */
 };

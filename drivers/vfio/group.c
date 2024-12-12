@@ -121,10 +121,12 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 
 	mutex_lock(&group->group_lock);
 	if (vfio_group_has_iommu(group)) {
+		/*此group已有iommu*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 	if (!group->iommu_group) {
+		/*此group没有对应的iommu group*/
 		ret = -ENODEV;
 		goto out_unlock;
 	}
@@ -372,7 +374,7 @@ static int vfio_group_ioctl_get_status(struct vfio_group *group,
 
 	mutex_lock(&group->group_lock);
 	if (!group->iommu_group) {
-		/*这个vfio-group没有对应的iommu-group*/
+		/*这个vfio-group没有对应的iommu-group,返回错误*/
 		mutex_unlock(&group->group_lock);
 		return -ENODEV;
 	}
@@ -386,9 +388,9 @@ static int vfio_group_ioctl_get_status(struct vfio_group *group,
 	 */
 	if (vfio_group_has_iommu(group))
 		status.flags |= VFIO_GROUP_FLAGS_CONTAINER_SET |
-				VFIO_GROUP_FLAGS_VIABLE;
+				VFIO_GROUP_FLAGS_VIABLE;/*提供container set,及可见标记*/
 	else if (!iommu_group_dma_owner_claimed(group->iommu_group))
-		status.flags |= VFIO_GROUP_FLAGS_VIABLE;
+		status.flags |= VFIO_GROUP_FLAGS_VIABLE;/*仅提供可见标记*/
 	mutex_unlock(&group->group_lock);
 
 	if (copy_to_user(arg, &status, minsz))
@@ -848,6 +850,7 @@ bool vfio_device_has_container(struct vfio_device *device)
 	return device->group->container;
 }
 
+/*由文件获取vfio-group*/
 struct vfio_group *vfio_group_from_file(struct file *file)
 {
 	struct vfio_group *group = file->private_data;
@@ -874,15 +877,16 @@ struct iommu_group *vfio_file_iommu_group(struct file *file)
 		return NULL;
 
 	if (!group)
+		/*非vfio-group对应的文件*/
 		return NULL;
 
 	mutex_lock(&group->group_lock);
 	if (group->iommu_group) {
 		iommu_group = group->iommu_group;
-		iommu_group_ref_get(iommu_group);
+		iommu_group_ref_get(iommu_group);/*增加引用*/
 	}
 	mutex_unlock(&group->group_lock);
-	return iommu_group;
+	return iommu_group;/*返回对应的iommu-group*/
 }
 EXPORT_SYMBOL_GPL(vfio_file_iommu_group);
 

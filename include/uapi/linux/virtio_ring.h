@@ -53,6 +53,7 @@
  */
 /*标记此描述符有效*/
 #define VRING_PACKED_DESC_F_AVAIL	7
+/*标记此描述符被使用*/
 #define VRING_PACKED_DESC_F_USED	15
 
 /* The Host uses this in used->flags to advise the Guest: don't kick me when
@@ -280,7 +281,7 @@ struct vring_packed_desc {
 	/* Buffer ID. */
 	__le16 id;
 	/* The flags depending on descriptor type. */
-	__le16 flags;
+	__le16 flags;/*描述符对应的标记位，例如*/
 };
 
 #endif /* _UAPI_LINUX_VIRTIO_RING_H */
