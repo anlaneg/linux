@@ -2159,6 +2159,7 @@ static struct iommu_domain *__iommu_domain_alloc(const struct iommu_ops *ops,
 	else if (type & __IOMMU_DOMAIN_PAGING && ops->domain_alloc_paging)
 		domain = ops->domain_alloc_paging(dev);
 	else if (ops->domain_alloc)
+		/*通过domain_alloc创建iommu_domain*/
 		domain = ops->domain_alloc(alloc_type);
 	else
 		return ERR_PTR(-EOPNOTSUPP);
@@ -2210,13 +2211,16 @@ static int __iommu_domain_alloc_dev(struct device *dev, void *data)
 	const struct iommu_ops **ops = data;
 
 	if (!dev_has_iommu(dev))
+		/*跳过无iommu的device*/
 		return 0;
 
 	if (WARN_ONCE(*ops && *ops != dev_iommu_ops(dev),
 		      "Multiple IOMMU drivers present for bus %s, which the public IOMMU API can't fully support yet. You will still need to disable one or more for this to work, sorry!\n",
 		      dev_bus_name(dev)))
+		/*已被初始化，说明存在多个iommu*/
 		return -EBUSY;
 
+	/*取此设备的iommu ops*/
 	*ops = dev_iommu_ops(dev);
 	return 0;
 }
@@ -2224,12 +2228,14 @@ static int __iommu_domain_alloc_dev(struct device *dev, void *data)
 struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus)
 {
 	const struct iommu_ops *ops = NULL;
-	int err = bus_for_each_dev(bus, NULL, &ops, __iommu_domain_alloc_dev);
+	/*从头开始遍历此bus下所有device*/
+	int err = bus_for_each_dev(bus, NULL, &ops/*遍历函数参数*/, __iommu_domain_alloc_dev);
 	struct iommu_domain *domain;
 
 	if (err || !ops)
 		return NULL;
 
+	/*创建domain*/
 	domain = __iommu_domain_alloc(ops, NULL, IOMMU_DOMAIN_UNMANAGED);
 	if (IS_ERR(domain))
 		return NULL;

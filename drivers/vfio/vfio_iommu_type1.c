@@ -72,8 +72,8 @@ struct vfio_iommu {
 	unsigned int		vaddr_invalid_count;
 	uint64_t		pgsize_bitmap;
 	uint64_t		num_non_pinned_groups;
-	bool			v2;
-	bool			nesting;
+	bool			v2;/*指明是否使用版本2*/
+	bool			nesting;/*指明是否嵌套*/
 	bool			dirty_page_tracking;
 	struct list_head	emulated_iommu_groups;
 };
@@ -2153,7 +2153,7 @@ static int vfio_iommu_domain_alloc(struct device *dev, void *data)
 }
 
 static int vfio_iommu_type1_attach_group(void *iommu_data,
-		struct iommu_group *iommu_group, enum vfio_group_type type)
+		struct iommu_group *iommu_group, enum vfio_group_type type/*group类型*/)
 {
 	struct vfio_iommu *iommu = iommu_data;
 	struct vfio_iommu_group *group;
@@ -2174,12 +2174,14 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	/* Check for duplicates */
 	ret = -EINVAL;
 	if (vfio_iommu_find_iommu_group(iommu, iommu_group))
+		/*已存在，返回*/
 		goto out_unlock;
 
 	ret = -ENOMEM;
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		goto out_unlock;
+	/*为创建的vfio-group关联iommu-group*/
 	group->iommu_group = iommu_group;
 
 	if (type == VFIO_EMULATED_IOMMU) {
@@ -2206,12 +2208,14 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	 * want to iterate beyond the first device (if any).
 	 */
 	ret = -EIO;
+	/*遍历iommu-group下所有device,创建iommu-domain*/
 	iommu_group_for_each_dev(iommu_group, &domain->domain,
 				 vfio_iommu_domain_alloc);
 	if (!domain->domain)
 		goto out_free_domain;
 
 	if (iommu->nesting) {
+		/*开启嵌套*/
 		ret = iommu_enable_nesting(domain->domain);
 		if (ret)
 			goto out_domain;
@@ -2546,6 +2550,7 @@ detach_group_done:
 	mutex_unlock(&iommu->lock);
 }
 
+/*创建并初始化vfio_iommu*/
 static void *vfio_iommu_type1_open(unsigned long arg)
 {
 	struct vfio_iommu *iommu;
@@ -3011,6 +3016,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 	case VFIO_IOMMU_GET_INFO:
 		return vfio_iommu_type1_get_info(iommu, arg);
 	case VFIO_IOMMU_MAP_DMA:
+		/*dma映射*/
 		return vfio_iommu_type1_map_dma(iommu, arg);
 	case VFIO_IOMMU_UNMAP_DMA:
 		return vfio_iommu_type1_unmap_dma(iommu, arg);
@@ -3187,7 +3193,7 @@ static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.group_iommu_domain	= vfio_iommu_type1_group_iommu_domain,
 };
 
-/*注册vfio-iommu-type1驱动*/
+/*注册vfio-iommu type1型驱动*/
 static int __init vfio_iommu_type1_init(void)
 {
 	return vfio_register_iommu_driver(&vfio_iommu_driver_ops_type1);

@@ -116,9 +116,9 @@ static void vfio_pci_probe_mmaps(struct vfio_pci_core_device *vdev)
 	struct vfio_pci_dummy_resource *dummy_res;
 
 	for (i = 0; i < PCI_STD_NUM_BARS; i++) {
-		int bar = i + PCI_STD_RESOURCES;
+		int bar = i + PCI_STD_RESOURCES;/*第i号bar*/
 
-		res = &vdev->pdev->resource[bar];
+		res = &vdev->pdev->resource[bar];/*bar对应的资源*/
 
 		if (!IS_ENABLED(CONFIG_VFIO_PCI_MMAP))
 			goto no_mmap;
@@ -132,10 +132,10 @@ static void vfio_pci_probe_mmaps(struct vfio_pci_core_device *vdev)
 		 * cause us to do that.
 		 */
 		if (!resource_size(res))
-			goto no_mmap;
+			goto no_mmap;/*资源长度为零，跳出*/
 
 		if (resource_size(res) >= PAGE_SIZE) {
-			vdev->bar_mmap_supported[bar] = true;
+			vdev->bar_mmap_supported[bar] = true;/*长度超过一页，支持mmap*/
 			continue;
 		}
 
@@ -1189,6 +1189,7 @@ static int vfio_pci_ioctl_get_irq_info(struct vfio_pci_core_device *vdev,
 	return copy_to_user(arg, &info, minsz) ? -EFAULT : 0;
 }
 
+/*为设备vdev配置中断*/
 static int vfio_pci_ioctl_set_irqs(struct vfio_pci_core_device *vdev,
 				   struct vfio_irq_set __user *arg)
 {
@@ -1457,14 +1458,13 @@ long vfio_pci_core_ioctl(struct vfio_device *core_vdev, unsigned int cmd,
 	case VFIO_DEVICE_GET_REGION_INFO:
 		return vfio_pci_ioctl_get_region_info(vdev, uarg);
 	case VFIO_DEVICE_IOEVENTFD:
-		/**/
 		return vfio_pci_ioctl_ioeventfd(vdev, uarg);
 	case VFIO_DEVICE_PCI_HOT_RESET:
 		return vfio_pci_ioctl_pci_hot_reset(vdev, uarg);
 	case VFIO_DEVICE_RESET:
 		return vfio_pci_ioctl_reset(vdev, uarg);
 	case VFIO_DEVICE_SET_IRQS:
-		/*设置中断*/
+		/*针对设备设置中断*/
 		return vfio_pci_ioctl_set_irqs(vdev, uarg);
 	default:
 		return -ENOTTY;

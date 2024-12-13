@@ -4991,7 +4991,7 @@ __skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg, int offset, int len,
 			copy = len;
 		//直接使用skb的buffer
 		sg_set_buf(sg, skb->data + offset, copy);
-		elt++;
+		elt++;/*首个sg已填充*/
 		if ((len -= copy) == 0)
 			return elt;
 		offset += copy;
@@ -5010,6 +5010,7 @@ __skb_to_sgvec(struct sk_buff *skb, struct scatterlist *sg, int offset, int len,
 
 			if (copy > len)
 				copy = len;
+			/*遍历分片，并填充sg*/
 			sg_set_page(&sg[elt], skb_frag_page(frag), copy,
 				    skb_frag_off(frag) + offset - start);
 			elt++;

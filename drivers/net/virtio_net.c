@@ -147,7 +147,7 @@ struct send_queue {
 	struct virtqueue *vq;/*发队列关联的vq*/
 
 	/* TX: fragments + linear part + virtio header */
-	struct scatterlist sg[MAX_SKB_FRAGS + 2];
+	struct scatterlist sg[MAX_SKB_FRAGS + 2];/*用于临时存入要发送的buffer信息*/
 
 	/* Name of the send queue: output.$index */
 	char name[16];//发队列名称
@@ -781,7 +781,7 @@ static void virtnet_rq_unmap_free_buf(struct virtqueue *vq, void *buf)
 }
 
 /*释放已完成发送的buffer关联的skb*/
-static void free_old_xmit_skbs(struct send_queue *sq, bool in_napi)
+static void free_old_xmit_skbs(struct send_queue *sq/*发送队列*/, bool in_napi)
 {
 	unsigned int len;
 	unsigned int packets = 0;
@@ -791,12 +791,13 @@ static void free_old_xmit_skbs(struct send_queue *sq, bool in_napi)
 	/*自tx对应的vq中取一个已发送完成的buffer,并顺便维护USED队列*/
 	while ((ptr = virtqueue_get_buf(sq->vq/*指明为tx对应的vq*/, &len)) != NULL) {
 		if (likely(!is_xdp_frame(ptr))) {
+			/*非xdp报文*/
 			struct sk_buff *skb = ptr;
 
 			pr_debug("Sent skb %p\n", skb);
 
 			bytes += skb->len;
-			napi_consume_skb(skb, in_napi);
+			napi_consume_skb(skb, in_napi);/*释放skb*/
 		} else {
 			struct xdp_frame *frame = ptr_to_xdp(ptr);
 
@@ -2362,7 +2363,7 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	return 0;
 }
 
-//将skb转换为到sq->sg列表,然后将sg列表存入virtio队列
+//virtio-net发送报文skb到sq队列(将skb转换为到sq->sg列表,然后将sg列表存入virtio队列)
 static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 {
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
@@ -2375,6 +2376,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 
 	pr_debug("%s: xmit %p %pM\n", vi->dev->name, skb, dest);
 
+	/*检查针对vnet-header是否可以push*/
 	can_push = vi->any_header_sg &&
 		!((unsigned long)skb->data & (__alignof__(*hdr) - 1)) &&
 		!skb_header_cloned(skb) && skb_headroom(skb) >= hdr_len;
@@ -2396,7 +2398,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 	if (vi->mergeable_rx_bufs)
 		hdr->num_buffers = 0;
 
-	//每个分片一个sg,支持mrg_rxbuf时只需要多一个描述信息
+	//每个分片对应一个sg,不能push时需要多一个描述信息，算上skb本身，故加2
 	sg_init_table(sq->sg, skb_shinfo(skb)->nr_frags + (can_push ? 1 : 2));
 	if (can_push) {
 	    //空出hdr_len长度
@@ -2408,7 +2410,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		__skb_pull(skb, hdr_len);
 	} else {
 		sg_set_buf(sq->sg, hdr, hdr_len);//先填充hdr在一个sg中
-		num_sg = skb_to_sgvec(skb, sq->sg + 1, 0, skb->len);//再填充skb到sg中
+		num_sg = skb_to_sgvec(skb, sq->sg + 1, 0, skb->len);//再填充skb到sg+1中
 		if (unlikely(num_sg < 0))
 			return num_sg;
 		num_sg++;
@@ -2441,7 +2443,7 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 		if (use_napi)
 			virtqueue_disable_cb(sq->vq);
 
-		free_old_xmit_skbs(sq, false);
+		free_old_xmit_skbs(sq, false);/*释放之前已完成发送的buffer*/
 
 	} while (use_napi && kick &&
 	       unlikely(!virtqueue_enable_cb_delayed(sq->vq)));

@@ -1084,11 +1084,12 @@ static long vfio_ioctl_check_extension(struct vfio_container *container,
 /* hold write lock on container->group_lock */
 static int __vfio_container_attach_groups(struct vfio_container *container,
 					  struct vfio_iommu_driver *driver,
-					  void *data)
+					  void *data/*driver open获得的参数*/)
 {
 	struct vfio_group *group;
 	int ret = -ENODEV;
 
+	/*遍历container的所有vfio-group,执行attach*/
 	list_for_each_entry(group, &container->group_list, container_next) {
 		ret = driver->ops->attach_group(data, group->iommu_group,
 						group->type);
@@ -1150,12 +1151,12 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 		 * interfaces if they'd like.
 		 */
 		if (driver->ops->ioctl(NULL, VFIO_CHECK_EXTENSION, arg) <= 0) {
-			/*driver必须支持arg扩展*/
+			/*driver必须支持arg指明的扩展*/
 			module_put(driver->ops->owner);
 			continue;
 		}
 
-		//调用iommu driver的open函数尝试arg打开
+		//调用iommu driver的open函数，给定arg，创建handle
 		data = driver->ops->open(arg);
 		if (IS_ERR(data)) {
 			/*驱动不支持此参数，尝试下一个驱动*/

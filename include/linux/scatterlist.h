@@ -139,9 +139,9 @@ static inline void sg_assign_page(struct scatterlist *sg, struct page *page)
 static inline void sg_set_page(struct scatterlist *sg, struct page *page,
 			       unsigned int len, unsigned int offset)
 {
-	sg_assign_page(sg, page);
-	sg->offset = offset;
-	sg->length = len;
+	sg_assign_page(sg, page);/*设置page*/
+	sg->offset = offset;/*内容在页中的偏移量*/
+	sg->length = len;/*内容长度*/
 }
 
 /**

@@ -50,7 +50,7 @@ struct vfio_pci_region {
 };
 
 struct vfio_pci_core_device {
-	struct vfio_device	vdev;
+	struct vfio_device	vdev;/*子类，对应的vfio-device*/
 	struct pci_dev		*pdev;/*对应的PCI设备*/
 	void __iomem		*barmap[PCI_STD_NUM_BARS];
 	/*用于标记哪些bar支持mmap*/

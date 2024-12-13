@@ -115,6 +115,7 @@ static int vfio_pci_open_device(struct vfio_device *core_vdev)
 	if (vfio_pci_is_vga(pdev) &&
 	    pdev->vendor == PCI_VENDOR_ID_INTEL &&
 	    IS_ENABLED(CONFIG_VFIO_PCI_IGD)) {
+		/*vga设备处理*/
 		ret = vfio_pci_igd_init(vdev);
 		if (ret && ret != -ENODEV) {
 			pci_warn(pdev, "Failed to setup Intel IGD regions\n");

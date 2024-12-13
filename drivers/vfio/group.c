@@ -138,6 +138,7 @@ static int vfio_group_ioctl_set_container(struct vfio_group *group,
 		goto out_unlock;
 	}
 
+	/*非vfio container情况*/
 	iommufd = iommufd_ctx_from_file(f.file);
 	if (!IS_ERR(iommufd)) {
 		if (IS_ENABLED(CONFIG_VFIO_NOIOMMU) &&

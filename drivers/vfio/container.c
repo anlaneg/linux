@@ -17,7 +17,7 @@
 
 struct vfio_container {
 	struct kref			kref;
-	struct list_head		group_list;/*用于串连多个group*/
+	struct list_head		group_list;/*用于串连多个group,一个container可以有多个group*/
 	struct rw_semaphore		group_lock;
 	struct vfio_iommu_driver	*iommu_driver;/*为container关联的iommu_driver*/
 	void				*iommu_data;
@@ -460,11 +460,12 @@ int vfio_container_attach_group(struct vfio_container *container,
 			goto out_unlock_container;
 	}
 
-	driver = container->iommu_driver;/*取得container关联的iommu驱动*/
+	/*取得container关联的vfio iommu驱动*/
+	driver = container->iommu_driver;
 	if (driver) {
 		ret = driver->ops->attach_group(container->iommu_data,
 						group->iommu_group,
-						group->type);
+						group->type);/*执行attach*/
 		if (ret) {
 			if (group->type == VFIO_IOMMU)
 				iommu_group_release_dma_owner(

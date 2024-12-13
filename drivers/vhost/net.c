@@ -1178,7 +1178,7 @@ err:
 
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
-//从后端socket拿到报文，将其写入到net->vqs rx队列中
+//从vq中拿到报文，然后将其写入到后端socket中（例如tun口）
 static void handle_rx(struct vhost_net *net)
 {
     /*取vhost-net RX队列*/
@@ -1636,7 +1636,7 @@ static struct socket *get_socket(int fd)
 }
 
 /*更新vhost_net设备指定队列的后端设备*/
-static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd/*对列对应的fd*/)
+static long vhost_net_set_backend(struct vhost_net *n, unsigned index/*队列号*/, int fd/*队列对应的fd*/)
 {
 	struct socket *sock, *oldsock;
 	struct vhost_virtqueue *vq;

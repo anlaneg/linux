@@ -191,7 +191,7 @@ retry:
 	return 0;
 }
 
-//gso,checksum准备
+//gso,checksum准备,将这些参数填充到vnet-header中
 static inline int virtio_net_hdr_from_skb(const struct sk_buff *skb,
 					  struct virtio_net_hdr *hdr,
 					  bool little_endian,

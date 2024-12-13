@@ -33,7 +33,7 @@ struct virtqueue {
 	const char *name;//队列名称
 	struct virtio_device *vdev;//队列属于那个vdev
 	unsigned int index;//队列编号
-	unsigned int num_free;//空闲描述符数量
+	unsigned int num_free;//当前空闲描述符数量
 	unsigned int num_max;/*vq队列的最大长度*/
 	bool reset;
 	void *priv;

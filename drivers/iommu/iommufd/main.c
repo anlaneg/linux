@@ -457,6 +457,7 @@ struct iommufd_ctx *iommufd_ctx_from_file(struct file *file)
 	struct iommufd_ctx *ictx;
 
 	if (file->f_op != &iommufd_fops)
+		/*传入的fd必须是iommufd*/
 		return ERR_PTR(-EBADFD);
 	ictx = file->private_data;
 	iommufd_ctx_get(ictx);
