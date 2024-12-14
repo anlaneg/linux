@@ -190,6 +190,15 @@ static inline size_t copy_folio_to_iter(struct folio *folio, size_t offset,
 	return copy_page_to_iter(&folio->page, offset, bytes, i);
 }
 
+static inline size_t copy_folio_from_iter_atomic(struct folio *folio,
+               size_t offset, size_t bytes, struct iov_iter *i)
+{
+       return copy_page_from_iter_atomic(&folio->page, offset, bytes, i);
+}
+
+size_t copy_page_to_iter_nofault(struct page *page, unsigned offset,
+                                size_t bytes, struct iov_iter *i);
+
 //将addr指向的bytes字节，复制到i中
 static __always_inline __must_check
 size_t copy_to_iter(const void *addr/*源数据起始位置*/, size_t bytes/*可复制长度*/, struct iov_iter *i/*待填充的iter*/)

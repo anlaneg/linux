@@ -189,7 +189,7 @@ error:
 }
 
 //创建vq,设置vq物理地址，中断号
-static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int index/*虚队列index*/,
+static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int index/*虚队列编号*/,
 				     void (*callback/*虚队列报文中断回调*/)(struct virtqueue *vq),
 				     const char *name/*虚队列名称*/,
 				     bool ctx/*虚队列是否有context*/,
@@ -204,7 +204,7 @@ static struct virtqueue *vp_setup_vq(struct virtio_device *vdev, unsigned int in
 	if (!info)
 		return ERR_PTR(-ENOMEM);
 
-	//创建virtqueue
+	//调用setup_vq创建virtqueue
 	vq = vp_dev->setup_vq(vp_dev, info, index/*vq索引号*/, callback, name/*vq名称*/, ctx,
 			      msix_vec/*vq使用的中断号*/);
 	if (IS_ERR(vq))
@@ -256,21 +256,24 @@ void vp_del_vqs(struct virtio_device *vdev)
 	struct virtqueue *vq, *n;
 	int i;
 
-	list_for_each_entry_safe(vq, n, &vdev->vqs, list) {
+	/*遍历vdev下所有vq*/
+	list_for_each_entry_safe(vq/*当前遍历的队列*/, n/*下一个队列*/, &vdev->vqs, list) {
 		if (vp_dev->is_avq(vdev, vq->index))
+			/*跳过admin vq*/
 			continue;
 
 		if (vp_dev->per_vq_vectors) {
 			int v = vp_dev->vqs[vq->index]->msix_vector;
 
 			if (v != VIRTIO_MSI_NO_VECTOR) {
+				/*为此队列申请了中断，释放此中断*/
 				int irq = pci_irq_vector(vp_dev->pci_dev, v);
 
 				irq_update_affinity_hint(irq, NULL);
 				free_irq(irq, vq);
 			}
 		}
-		vp_del_vq(vq);
+		vp_del_vq(vq);/*调用回调完成vq资源释放*/
 	}
 	vp_dev->per_vq_vectors = false;
 
@@ -341,7 +344,7 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚�
 	//遍历创建各个队列
 	for (i = 0; i < nvqs; ++i) {
 		if (!names[i]) {
-			vqs[i] = NULL;
+			vqs[i] = NULL;/*未提供name,置为NULL*/
 			continue;
 		}
 
@@ -354,9 +357,9 @@ static int vp_find_vqs_msix(struct virtio_device *vdev, unsigned int nvqs/*虚�
 		else
 			msix_vec = VP_MSIX_VQ_VECTOR;
 		//创建第i个虚队列
-		vqs[i] = vp_setup_vq(vdev, queue_idx++, callbacks[i], names[i],
+		vqs[i] = vp_setup_vq(vdev, queue_idx++/*队列编号*/, callbacks[i], names[i],
 				     ctx ? ctx[i] : false,
-				     msix_vec);
+				     msix_vec/*队列对应的中断*/);
 		if (IS_ERR(vqs[i])) {
 			err = PTR_ERR(vqs[i]);
 			goto error_find;
@@ -425,7 +428,7 @@ out_del_vqs:
 }
 
 /* the config->find_vqs() implementation */
-int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列（vq)数目*/,
+int vp_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列（vq)总数目*/,
 		struct virtqueue *vqs[]/*出参，各vq地址*/, vq_callback_t *callbacks[]/*指出各vq对应的callback*/,
 		const char * const names[]/*指出各vq名称*/, const bool *ctx/*指出各vq是否有context*/,
 		struct irq_affinity *desc)
@@ -454,7 +457,7 @@ const char *vp_bus_name(struct virtio_device *vdev)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 
-	return pci_name(vp_dev->pci_dev);
+	return pci_name(vp_dev->pci_dev);/*获得pci设备名称*/
 }
 
 /* Setup the affinity for a virtqueue:
@@ -466,7 +469,7 @@ int vp_set_vq_affinity(struct virtqueue *vq, const struct cpumask *cpu_mask)
 {
 	struct virtio_device *vdev = vq->vdev;
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
-	struct virtio_pci_vq_info *info = vp_dev->vqs[vq->index];
+	struct virtio_pci_vq_info *info = vp_dev->vqs[vq->index];/*取vq info*/
 	struct cpumask *mask;
 	unsigned int irq;
 
@@ -474,11 +477,12 @@ int vp_set_vq_affinity(struct virtqueue *vq, const struct cpumask *cpu_mask)
 		return -EINVAL;
 
 	if (vp_dev->msix_enabled) {
-		mask = vp_dev->msix_affinity_masks[info->msix_vector];
+		mask = vp_dev->msix_affinity_masks[info->msix_vector];/*取中断的affinity*/
 		irq = pci_irq_vector(vp_dev->pci_dev, info->msix_vector);
 		if (!cpu_mask)
 			irq_update_affinity_hint(irq, NULL);
 		else {
+			/*设置中断affinity*/
 			cpumask_copy(mask, cpu_mask);
 			irq_set_affinity_and_hint(irq, mask);
 		}
@@ -631,7 +635,7 @@ static int virtio_pci_probe(struct pci_dev *pci_dev,
 
 	pci_set_master(pci_dev);
 
-	//注册识别的virtio设备（例如引发virtio_net驱动probe此设备）
+	//注册完成识别的virtio设备（例如引发virtio_net驱动probe此设备）
 	rc = register_virtio_device(&vp_dev->vdev);
 	reg_dev = vp_dev;
 	if (rc)
@@ -713,8 +717,9 @@ static struct pci_driver virtio_pci_driver = {
 	.name		= "virtio-pci",
 	//用于pci设备与driver间的match,只要vendor是redhat，则就能匹配
 	.id_table	= virtio_pci_id_table,
-	//virtio-pic是pci bus的一个驱动，故当pci bus probe一个设备时，首先pci bus的probe函数将被调用
-	//然后pci bus的probe函数会调用本函数完成probe过程
+	//virtio-pci是pci bus的一个驱动，故当pci bus probe一个设备时，首先pci bus的probe函数将被调用
+	//然后pci bus的probe函数会调用本函数完成probe过程,从而完成设备识别，当设备添加进kernel时，
+	//由于设备从属于virtio_bus，故virtio-bus上的驱动会来probe此设备，例如virtio-net驱动
 	.probe		= virtio_pci_probe,
 	.remove		= virtio_pci_remove,
 #ifdef CONFIG_PM_SLEEP

@@ -32,7 +32,7 @@ struct scsi_device;
 
 typedef struct scsi_cd {
 	unsigned capacity;	/* size in blocks                       */
-	struct scsi_device *device;
+	struct scsi_device *device;/*对应的设备*/
 	unsigned int vendor;	/* vendor code, see sr_vendor.c         */
 	unsigned long ms_offset;	/* for reading multisession-CD's        */
 	unsigned writeable : 1;
@@ -50,7 +50,7 @@ typedef struct scsi_cd {
 
 	struct cdrom_device_info cdi;
 	struct mutex lock;
-	struct gendisk *disk;
+	struct gendisk *disk;/*对应的gendisk*/
 } Scsi_CD;
 
 #define sr_printk(prefix, cd, fmt, a...) \

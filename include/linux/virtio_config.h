@@ -111,27 +111,36 @@ struct virtio_config_ops {
 	void (*set_status)(struct virtio_device *vdev, u8 status);
 	//重置设备
 	void (*reset)(struct virtio_device *vdev);
-	//构造对应的nvqs虚队列
-	int (*find_vqs)(struct virtio_device *, unsigned nvqs/*虚队列数，rx+tx+ctl队列*/,
+	//构造对应的nvqs个虚队列
+	int (*find_vqs)(struct virtio_device *, unsigned nvqs/*虚队列总数，rx+tx+ctl队列*/,
 			struct virtqueue *vqs[]/*出参，指向各队列地址*/, vq_callback_t *callbacks[]/*各队列对应的rx,tx回调*/,
 			const char * const names[]/*各vq名称*/, const bool *ctx/**/,
 			struct irq_affinity *desc);
+	/*删除所有vqs*/
 	void (*del_vqs)(struct virtio_device *);
 	void (*synchronize_cbs)(struct virtio_device *);
 	//获取设备功能位
 	u64 (*get_features)(struct virtio_device *vdev);
 	//设置驱动与设备在驱动时协商出来的设备应支持的功能位
 	int (*finalize_features)(struct virtio_device *vdev);
+	/*返回device在bus上的名称*/
 	const char *(*bus_name)(struct virtio_device *vdev);
+	/*设置vq中断亲和*/
 	int (*set_vq_affinity)(struct virtqueue *vq,
 			       const struct cpumask *cpu_mask);
+	/*获取vq中断亲和*/
 	const struct cpumask *(*get_vq_affinity)(struct virtio_device *vdev,
 			int index);
+	/*用于获取指定cap 对应的map内存起始地址，长度*/
 	bool (*get_shm_region)(struct virtio_device *vdev,
 			       struct virtio_shm_region *region, u8 id);
+	/*reset vq并禁用此vq*/
 	int (*disable_vq_and_reset)(struct virtqueue *vq);
+	/*reset vq后使能vq*/
 	int (*enable_vq_after_reset)(struct virtqueue *vq);
+	/*创建admin vq*/
 	int (*create_avq)(struct virtio_device *vdev);
+	/*移除admin vq*/
 	void (*destroy_avq)(struct virtio_device *vdev);
 };
 
@@ -250,9 +259,9 @@ int virtio_find_vqs(struct virtio_device *vdev, unsigned nvqs/*vq数目*/,
 }
 
 static inline
-int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs,
-			struct virtqueue *vqs[], vq_callback_t *callbacks[],
-			const char * const names[], const bool *ctx,
+int virtio_find_vqs_ctx(struct virtio_device *vdev, unsigned nvqs/*vq数目*/,
+			struct virtqueue *vqs[]/*出参，生成的各vq指针*/, vq_callback_t *callbacks[]/*各vq对应的中断回调函数*/,
+			const char * const names[]/*各vq对应的名称*/, const bool *ctx,
 			struct irq_affinity *desc)
 {
 	return vdev->config->find_vqs(vdev, nvqs, vqs, callbacks, names, ctx,

@@ -33,7 +33,7 @@ static bool vp_is_avq(struct virtio_device *vdev, unsigned int index)
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 
 	if (!virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ))
-		return false;
+		return false;/*如果无admin vq标记，则必不是*/
 
 	return index == vp_dev->admin_vq.vq_index;
 }
@@ -204,6 +204,7 @@ static void vp_modern_avq_deactivate(struct virtio_device *vdev)
 	struct virtio_pci_admin_vq *admin_vq = &vp_dev->admin_vq;
 
 	if (!virtio_has_feature(vdev, VIRTIO_F_ADMIN_VQ))
+		/*如果无admin vq,则返回*/
 		return;
 
 	__virtqueue_break(admin_vq->info.vq);
@@ -329,7 +330,7 @@ static void vp_get(struct virtio_device *vdev, unsigned int offset,
 
 /* the config->set() implementation.  it's symmetric to the config->get()
  * implementation */
-//设置公共配置
+//设置配置信息（自配置的device映射段读取公共配置)
 static void vp_set(struct virtio_device *vdev, unsigned int offset,
 		   const void *buf, unsigned int len)
 {
@@ -418,13 +419,13 @@ static void vp_reset(struct virtio_device *vdev)
 	vp_synchronize_vectors(vdev);
 }
 
-static int vp_active_vq(struct virtqueue *vq, u16 msix_vec)
+static int vp_active_vq(struct virtqueue *vq, u16 msix_vec/*中断*/)
 {
 	struct virtio_pci_device *vp_dev = to_vp_device(vq->vdev);
 	struct virtio_pci_modern_device *mdev = &vp_dev->mdev;
 	unsigned long index;
 
-	index = vq->index;
+	index = vq->index;/*队列编号*/
 
 	/* activate the queue */
 	//设置队列大小
@@ -437,9 +438,10 @@ static int vp_active_vq(struct virtqueue *vq, u16 msix_vec)
 				virtqueue_get_used_addr(vq));
 
 	if (msix_vec != VIRTIO_MSI_NO_VECTOR) {
-	    	//指明了中断，则为此队列配置中断
+	    //指明了中断，则为此队列配置中断
 		msix_vec = vp_modern_queue_vector(mdev, index, msix_vec);
 		if (msix_vec == VIRTIO_MSI_NO_VECTOR)
+			/*设置中断失败*/
 			return -EBUSY;
 	}
 
@@ -456,13 +458,14 @@ static int vp_modern_disable_vq_and_reset(struct virtqueue *vq)
 	if (!virtio_has_feature(vq->vdev, VIRTIO_F_RING_RESET))
 		return -ENOENT;
 
+	/*reset队列,并等待此队列disable*/
 	vp_modern_set_queue_reset(mdev, vq->index);
 
 	info = vp_dev->vqs[vq->index];
 
 	/* delete vq from irq handler */
 	spin_lock_irqsave(&vp_dev->lock, flags);
-	list_del(&info->node);
+	list_del(&info->node);/*将此队列自链表中移除*/
 	spin_unlock_irqrestore(&vp_dev->lock, flags);
 
 	INIT_LIST_HEAD(&info->node);
@@ -480,7 +483,7 @@ static int vp_modern_disable_vq_and_reset(struct virtqueue *vq)
 	if (vp_dev->per_vq_vectors && info->msix_vector != VIRTIO_MSI_NO_VECTOR)
 		synchronize_irq(pci_irq_vector(vp_dev->pci_dev, info->msix_vector));
 
-	vq->reset = true;
+	vq->reset = true;/*指明此队列已reset*/
 
 	return 0;
 }
@@ -496,15 +499,18 @@ static int vp_modern_enable_vq_after_reset(struct virtqueue *vq)
 	if (!vq->reset)
 		return -EBUSY;
 
-	index = vq->index;
-	info = vp_dev->vqs[index];
+	index = vq->index;/*队列索引*/
+	info = vp_dev->vqs[index];/*此队列对应的info*/
 
+	/*执行队列reset*/
 	if (vp_modern_get_queue_reset(mdev, index))
 		return -EBUSY;
 
 	if (vp_modern_get_queue_enable(mdev, index))
+		/*此队列已enable,返回错误*/
 		return -EBUSY;
 
+	/*设置vq长度并设置中断*/
 	err = vp_active_vq(vq, info->msix_vector);
 	if (err)
 		return err;
@@ -521,6 +527,7 @@ static int vp_modern_enable_vq_after_reset(struct virtqueue *vq)
 	__virtqueue_unbreak(vq);
 #endif
 
+	/*使能此vq*/
 	vp_modern_set_queue_enable(&vp_dev->mdev, index, true);
 	vq->reset = false;
 
@@ -544,9 +551,9 @@ static bool vp_notify_with_data(struct virtqueue *vq)
 //创建virtqueue
 static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 				  struct virtio_pci_vq_info *info,
-				  unsigned int index,//队列索引
-				  void (*callback)(struct virtqueue *vq),//队列中断回调
-				  const char *name,//队列名称
+				  unsigned int index/*队列索引*/,
+				  void (*callback)(struct virtqueue *vq)/*队列中断回调*/,
+				  const char *name/*队列名称*/,
 				  bool ctx,//队列是否有context
 				  u16 msix_vec/*为此队列指定的中断向量*/)
 {
@@ -559,6 +566,7 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 	int err;
 
 	if (__virtio_test_bit(&vp_dev->vdev, VIRTIO_F_NOTIFICATION_DATA))
+		/*notify时支持带data*/
 		notify = vp_notify_with_data;
 	else
 		notify = vp_notify;
@@ -589,10 +597,12 @@ static struct virtqueue *setup_vq(struct virtio_pci_device *vp_dev,
 
 	vq->num_max = num;
 
+	/*配置队列ring,中断*/
 	err = vp_active_vq(vq, msix_vec);
 	if (err)
 		goto err;
 
+	/*记录vq的通知资源*/
 	vq->priv = (void __force *)vp_modern_map_vq_notify(mdev, index, NULL);
 	if (!vq->priv) {
 		err = -ENOMEM;
@@ -612,9 +622,9 @@ err:
 	return ERR_PTR(err);
 }
 
-static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列数目*/,
+static int vp_modern_find_vqs(struct virtio_device *vdev, unsigned int nvqs/*虚队列总数目*/,
 			      struct virtqueue *vqs[]/*虚队列数组*/,
-			      vq_callback_t *callbacks[]/*指出各队列对应的报文收包callback*/,
+			      vq_callback_t *callbacks[]/*指出各队列对应的callback*/,
 			      const char * const names[]/*指出各队列名称*/, const bool *ctx/*指出各队列是否有context*/,
 			      struct irq_affinity *desc)
 {
@@ -647,15 +657,15 @@ static void del_vq(struct virtio_pci_vq_info *info)
 		mutex_unlock(&vp_dev->admin_vq.cmd_lock);
 	}
 
-	//告知硬件准备操作队列vq->index
 	if (vp_dev->msix_enabled)
+		/*msix开启，将中断配置移除掉*/
 		vp_modern_queue_vector(mdev, vq->index,
 				       VIRTIO_MSI_NO_VECTOR);
 
 	if (!mdev->notify_base)
 		pci_iounmap(mdev->pci_dev, (void __force __iomem *)vq->priv);
 
-	vring_del_virtqueue(vq);
+	vring_del_virtqueue(vq);/*释放vq申请的内存*/
 }
 
 static int virtio_pci_find_shm_cap(struct pci_dev *dev, u8 required_id,
@@ -688,8 +698,10 @@ static int virtio_pci_find_shm_cap(struct pci_dev *dev, u8 required_id,
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 id), &id);
 		if (id != required_id)
+			/*找到非我们预期的cap id,忽略*/
 			continue;
 
+		/*读取此cap对应的bar*/
 		pci_read_config_byte(dev, pos + offsetof(struct virtio_pci_cap,
 							 bar), &res_bar);
 		if (res_bar >= PCI_STD_NUM_BARS)
@@ -702,10 +714,10 @@ static int virtio_pci_find_shm_cap(struct pci_dev *dev, u8 required_id,
 		/* Read the lower 32bit of length and offset */
 		pci_read_config_dword(dev, pos + offsetof(struct virtio_pci_cap,
 							  offset), &tmp32);
-		res_offset = tmp32;
+		res_offset = tmp32;/*取得offset*/
 		pci_read_config_dword(dev, pos + offsetof(struct virtio_pci_cap,
 							  length), &tmp32);
-		res_length = tmp32;
+		res_length = tmp32;/*取得长度*/
 
 		/* and now the top half */
 		pci_read_config_dword(dev,
@@ -823,20 +835,20 @@ static const struct virtio_config_ops virtio_pci_config_nodev_ops = {
 
 static const struct virtio_config_ops virtio_pci_config_ops = {
 	.get		= vp_get,//virtio pci配置获取
-	.set		= vp_set,
-	.generation	= vp_generation,
-	.get_status	= vp_get_status,
-	.set_status	= vp_set_status,
-	.reset		= vp_reset,
+	.set		= vp_set,/*设备配置设置*/
+	.generation	= vp_generation,//获取配置的版本号
+	.get_status	= vp_get_status,/*读取设备状态*/
+	.set_status	= vp_set_status,/*设置设备状态*/
+	.reset		= vp_reset,/*执行设备reset*/
 	.find_vqs	= vp_modern_find_vqs,//创建队列
-	.del_vqs	= vp_del_vqs,
+	.del_vqs	= vp_del_vqs,/*销毁所有队列*/
 	.synchronize_cbs = vp_synchronize_vectors,
 	.get_features	= vp_get_features,
 	.finalize_features = vp_finalize_features,
 	.bus_name	= vp_bus_name,
-	.set_vq_affinity = vp_set_vq_affinity,
+	.set_vq_affinity = vp_set_vq_affinity,/*设置vq中断亲和*/
 	.get_vq_affinity = vp_get_vq_affinity,
-	.get_shm_region  = vp_get_shm_region,
+	.get_shm_region  = vp_get_shm_region,/*用于获取指定cap 对应的map内存起始地址，长度*/
 	.disable_vq_and_reset = vp_modern_disable_vq_and_reset,
 	.enable_vq_after_reset = vp_modern_enable_vq_after_reset,
 	.create_avq = vp_modern_create_avq,
@@ -858,15 +870,15 @@ int virtio_pci_modern_probe(struct virtio_pci_device *vp_dev)
 		return err;
 
 	if (mdev->device)
-		/*有设备的情况*/
+		/*有设备特别配置能力：VIRTIO_PCI_CAP_DEVICE_CFG*/
 		vp_dev->vdev.config = &virtio_pci_config_ops;
 	else
 		vp_dev->vdev.config = &virtio_pci_config_nodev_ops;
 
-	vp_dev->config_vector = vp_config_vector;
+	vp_dev->config_vector = vp_config_vector;/*设置配置中断回调*/
 	vp_dev->setup_vq = setup_vq;//设置virtqueue创建回调
-	vp_dev->del_vq = del_vq;
-	vp_dev->is_avq = vp_is_avq;
+	vp_dev->del_vq = del_vq;/*设置vq删除回调*/
+	vp_dev->is_avq = vp_is_avq;/*设置检查是否admin vq回调*/
 	vp_dev->isr = mdev->isr;
 	vp_dev->vdev.id = mdev->id;
 

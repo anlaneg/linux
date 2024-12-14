@@ -420,7 +420,7 @@ int register_virtio_driver(struct virtio_driver *driver)
 	/* Catch this early. */
 	/*feature_table_size不为零时，feature_table必须不为空*/
 	BUG_ON(driver->feature_table_size && !driver->feature_table);
-	//指明驱动支持的设备从属于virtio_bus
+	//指明virtio驱动从属于virtio_bus
 	driver->driver.bus = &virtio_bus;
 	return driver_register(&driver->driver);
 }

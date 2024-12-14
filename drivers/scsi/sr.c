@@ -104,6 +104,7 @@ static struct scsi_driver sr_template = {
 	.done			= sr_done,
 };
 
+/*用于管理sr设备序号对应的bits，标'1'表示占用，标'0'表示未占用*/
 static unsigned long sr_index_bits[SR_DISKS / BITS_PER_LONG];
 static DEFINE_SPINLOCK(sr_index_lock);
 
@@ -608,6 +609,7 @@ static void sr_release(struct cdrom_device_info *cdi)
 
 static int sr_probe(struct device *dev)
 {
+	/*转换为scsi设备*/
 	struct scsi_device *sdev = to_scsi_device(dev);
 	struct gendisk *disk;
 	struct scsi_cd *cd;
@@ -616,6 +618,7 @@ static int sr_probe(struct device *dev)
 	scsi_autopm_get_device(sdev);
 	error = -ENODEV;
 	if (sdev->type != TYPE_ROM && sdev->type != TYPE_WORM)
+		/*设备类型有误*/
 		goto fail;
 
 	error = -ENOMEM;
@@ -623,6 +626,7 @@ static int sr_probe(struct device *dev)
 	if (!cd)
 		goto fail;
 
+	/*申请gendisk*/
 	disk = blk_mq_alloc_disk_for_queue(sdev->request_queue,
 					   &sr_bio_compl_lkclass);
 	if (!disk)
@@ -630,20 +634,21 @@ static int sr_probe(struct device *dev)
 	mutex_init(&cd->lock);
 
 	spin_lock(&sr_index_lock);
+	/*查找空闲的minor*/
 	minor = find_first_zero_bit(sr_index_bits, SR_DISKS);
 	if (minor == SR_DISKS) {
 		spin_unlock(&sr_index_lock);
 		error = -EBUSY;
 		goto fail_put;
 	}
-	__set_bit(minor, sr_index_bits);
+	__set_bit(minor, sr_index_bits);/*占用minor*/
 	spin_unlock(&sr_index_lock);
 
-	disk->major = SCSI_CDROM_MAJOR;
+	disk->major = SCSI_CDROM_MAJOR;/*指明disk的major为scsi cdrom*/
 	disk->first_minor = minor;
-	disk->minors = 1;
-	sprintf(disk->disk_name, "sr%d", minor);
-	disk->fops = &sr_bdops;
+	disk->minors = 1;/*占用一个minors*/
+	sprintf(disk->disk_name, "sr%d", minor);/*设置磁盘名称*/
+	disk->fops = &sr_bdops;/*块设备对应的fops*/
 	disk->flags |= GENHD_FL_REMOVABLE | GENHD_FL_NO_PART;
 	disk->events = DISK_EVENT_MEDIA_CHANGE | DISK_EVENT_EJECT_REQUEST;
 	disk->event_flags = DISK_EVENT_FLAG_POLL | DISK_EVENT_FLAG_UEVENT |
@@ -988,9 +993,11 @@ static int __init init_sr(void)
 {
 	int rc;
 
+	/*注册scsi cdrom对应的block设备*/
 	rc = register_blkdev(SCSI_CDROM_MAJOR, "sr");
 	if (rc)
 		return rc;
+	/*注册scsi设备driver*/
 	rc = scsi_register_driver(&sr_template.gendrv);
 	if (rc)
 		unregister_blkdev(SCSI_CDROM_MAJOR, "sr");

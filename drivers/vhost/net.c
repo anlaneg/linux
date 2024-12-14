@@ -118,7 +118,7 @@ struct vhost_net_virtqueue {
 	/* For TX, first used idx for DMA done zerocopy buffers
 	 * For RX, number of batched heads
 	 */
-	int done_idx;
+	int done_idx;/*索引，负责vq->heads的填充*/
 	/* Number of XDP frames batched */
 	int batched_xdp;
 	/* an array of userspace buffers info */
@@ -601,16 +601,17 @@ static void vhost_net_busy_poll(struct vhost_net *net,
 	mutex_unlock(&vq->mutex);
 }
 
+/*返回<0,出错；>0本次处理的首个标述符索引；>=vq->num,队列为空，没有取得*/
 static int vhost_net_tx_get_vq_desc(struct vhost_net *net,
-				    struct vhost_net_virtqueue *tnvq,
+				    struct vhost_net_virtqueue *tnvq/*tx对应的vq*/,
 				    unsigned int *out_num/*出参，可读数据片数目*/, unsigned int *in_num/*出参，可写数据片数目*/,
 				    struct msghdr *msghdr, bool *busyloop_intr)
 {
-	struct vhost_net_virtqueue *rnvq = &net->vqs[VHOST_NET_VQ_RX];
+	struct vhost_net_virtqueue *rnvq = &net->vqs[VHOST_NET_VQ_RX];/*取rx对应的vq*/
 	struct vhost_virtqueue *rvq = &rnvq->vq;
 	struct vhost_virtqueue *tvq = &tnvq->vq;
 
-	//取可用描述符索引
+	//读buffer地址到tvq->iov
 	int r = vhost_get_vq_desc(tvq, tvq->iov, ARRAY_SIZE(tvq->iov),
 				  out_num, in_num, NULL, NULL);
 
@@ -660,7 +661,7 @@ static int get_tx_bufs(struct vhost_net *net,
 	struct vhost_virtqueue *vq = &nvq->vq;
 	int ret;
 
-	//取tx可用描述符索引
+	//取tx可用描述符指明的buffer
 	ret = vhost_net_tx_get_vq_desc(net, nvq, out, in, msg, busyloop_intr);
 
 	//提取失败或者无可用描述符，直接返回
@@ -828,14 +829,16 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 		if (nvq->done_idx == VHOST_NET_BATCH)
 			vhost_tx_batch(net, nvq, sock, &msg);
 
-		//获取描述符索引及其指明的buffer,填充到msg中
-		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len,
+		//获取描述符索引及其指明的buffer,并将内容填充到msg中
+		head = get_tx_bufs(net, nvq, &msg, &out, &in, &len/*出参，buffer长度*/,
 				   &busyloop_intr);
 		/* On error, stop handling until the next kick. */
 		if (unlikely(head < 0))
+			/*获取时出错*/
 			break;
 		/* Nothing new?  Wait for eventfd to tell us they refilled. */
 		if (head == vq->num) {
+			/*没有数据*/
 			if (unlikely(busyloop_intr)) {
 				vhost_poll_queue(&vq->poll);
 			} else if (unlikely(vhost_enable_notify(&net->dev,
@@ -875,21 +878,22 @@ static void handle_tx_copy(struct vhost_net *net, struct socket *sock)
 				msg.msg_flags &= ~MSG_MORE;
 		}
 
-		/*向sock中发送msg指定的报文*/
+		/*向sock中发送msg指定的报文内容*/
 		err = sock->ops->sendmsg(sock, &msg, len);
 		if (unlikely(err < 0)) {
 			if (err == -EAGAIN || err == -ENOMEM || err == -ENOBUFS) {
-			    /*向对方发送失败，回退描述符*/
+			    /*向对方发送失败，回退描述符，后续重试*/
 				vhost_discard_vq_desc(vq, 1);
 				vhost_net_enable_vq(net, vq);
 				break;
 			}
 			pr_debug("Fail to send packet: err %d", err);
 		} else if (unlikely(err != len))
+			/*发送的内容被截短*/
 			pr_debug("Truncated TX packet: len %d != %zd\n",
 				 err, len);
 done:
-        /*发送完成，完成更新*/
+        /*发送完成，填充vq->heads*/
 		vq->heads[nvq->done_idx].id = cpu_to_vhost32(vq, head);
 		vq->heads[nvq->done_idx].len = 0;
 		++nvq->done_idx;
@@ -1007,7 +1011,7 @@ static void handle_tx_zerocopy(struct vhost_net *net, struct socket *sock)
 
 /* Expects to be always run from workqueue - which acts as
  * read-size critical section for our kind of RCU. */
-//处理tx队列报文发送
+//自vq的tx队列拿到报文，将这些报文通过sendmsg发送给后端socket
 static void handle_tx(struct vhost_net *net)
 {
 	struct vhost_net_virtqueue *nvq = &net->vqs[VHOST_NET_VQ_TX];

@@ -2547,7 +2547,7 @@ struct net_device {
 	struct lock_class_key	*qdisc_tx_busylock;
 	bool			proto_down;
 	unsigned		wol_enabled:1;
-	unsigned		threaded:1;
+	unsigned		threaded:1;/*是否创建线程来处理收包*/
 
 	struct list_head	net_notifier_list;
 

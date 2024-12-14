@@ -862,7 +862,7 @@ int __platform_driver_register(struct platform_driver *drv,
 				struct module *owner)
 {
 	drv->driver.owner = owner;
-	drv->driver.bus = &platform_bus_type;
+	drv->driver.bus = &platform_bus_type;/*指明driver所属bus*/
 
 	return driver_register(&drv->driver);
 }

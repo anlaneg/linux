@@ -136,7 +136,7 @@ struct virtio_net_config {
 	/* maximum number of indirection table entries */
 	__le16 rss_max_indirection_table_length;
 	/* bitmask of supported VIRTIO_NET_RSS_HASH_ types */
-	__le32 supported_hash_types;
+	__le32 supported_hash_types;/*支持的rss hash类型*/
 } __attribute__((packed));
 
 /*

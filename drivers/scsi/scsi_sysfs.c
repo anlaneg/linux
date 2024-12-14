@@ -528,10 +528,12 @@ static int scsi_bus_match(struct device *dev, struct device_driver *gendrv)
 	struct scsi_device *sdp;
 
 	if (dev->type != &scsi_dev_type)
+		/*设备必须为scsi设备*/
 		return 0;
 
 	sdp = to_scsi_device(dev);
 	if (sdp->no_uld_attach)
+		/*不得为真*/
 		return 0;
 	return (sdp->inq_periph_qual == SCSI_INQ_PQ_CON)? 1: 0;
 }
@@ -1601,9 +1603,9 @@ EXPORT_SYMBOL(scsi_remove_target);
 
 int scsi_register_driver(struct device_driver *drv)
 {
-	drv->bus = &scsi_bus_type;
+	drv->bus = &scsi_bus_type;/*设置driver对应的bus为scsi bus*/
 
-	return driver_register(drv);
+	return driver_register(drv);/*注册驱动*/
 }
 EXPORT_SYMBOL(scsi_register_driver);
 
@@ -1640,8 +1642,8 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 	struct scsi_target  *starget = sdev->sdev_target;
 
 	device_initialize(&sdev->sdev_gendev);
-	sdev->sdev_gendev.bus = &scsi_bus_type;
-	sdev->sdev_gendev.type = &scsi_dev_type;
+	sdev->sdev_gendev.bus = &scsi_bus_type;/*标明设备从属于scsi bus*/
+	sdev->sdev_gendev.type = &scsi_dev_type;/*标明为scsi设备*/
 	scsi_enable_async_suspend(&sdev->sdev_gendev);
 	dev_set_name(&sdev->sdev_gendev, "%d:%d:%d:%llu",
 		     sdev->host->host_no, sdev->channel, sdev->id, sdev->lun);
@@ -1680,7 +1682,7 @@ void scsi_sysfs_device_initialize(struct scsi_device *sdev)
 
 int scsi_is_sdev_device(const struct device *dev)
 {
-	return dev->type == &scsi_dev_type;
+	return dev->type == &scsi_dev_type;/*检查设备是否为scsi设备*/
 }
 EXPORT_SYMBOL(scsi_is_sdev_device);
 

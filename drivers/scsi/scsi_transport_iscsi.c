@@ -99,7 +99,7 @@ static DEFINE_IDA(iscsi_sess_ida);
  * be held while accessing list. The iscsi_transport_lock must
  * be acquired after the rx_queue_mutex.
  */
-static LIST_HEAD(iscsi_transports);
+static LIST_HEAD(iscsi_transports);/*用于记录系统已注册的所有transports*/
 static DEFINE_SPINLOCK(iscsi_transport_lock);
 
 #define to_iscsi_internal(tmpl) \
@@ -2542,8 +2542,10 @@ iscsi_if_transport_lookup(struct iscsi_transport *tt)
 	unsigned long flags;
 
 	spin_lock_irqsave(&iscsi_transport_lock, flags);
+	/*遍历已注册的所有transports*/
 	list_for_each_entry(priv, &iscsi_transports, list) {
 		if (tt == priv->iscsi_transport) {
+			/*此待注册的transport已存在*/
 			spin_unlock_irqrestore(&iscsi_transport_lock, flags);
 			return priv;
 		}
@@ -2981,6 +2983,7 @@ iscsi_if_create_conn(struct iscsi_transport *transport, struct iscsi_uevent *ev)
 		return -EINVAL;
 	}
 
+	/*创建连接*/
 	conn = transport->create_conn(session, ev->u.c_conn.cid);
 	if (!conn) {
 		iscsi_cls_session_printk(KERN_ERR, session,
@@ -3802,6 +3805,7 @@ static int iscsi_if_transport_conn(struct iscsi_transport *transport,
 
 	switch (nlh->nlmsg_type) {
 	case ISCSI_UEVENT_CREATE_CONN:
+		/*收到创建链接的消息，创建连接*/
 		return iscsi_if_create_conn(transport, ev);
 	case ISCSI_UEVENT_DESTROY_CONN:
 		return iscsi_if_destroy_conn(transport, ev);
@@ -4002,6 +4006,7 @@ iscsi_if_recv_msg(struct sk_buff *skb, struct nlmsghdr *nlh, uint32_t *group)
 	case ISCSI_UEVENT_START_CONN:
 	case ISCSI_UEVENT_BIND_CONN:
 	case ISCSI_UEVENT_SEND_PDU:
+		/*传输协议连接管理*/
 		err = iscsi_if_transport_conn(transport, nlh, rlen);
 		break;
 	case ISCSI_UEVENT_GET_STATS:
@@ -4872,7 +4877,7 @@ iscsi_register_transport(struct iscsi_transport *tt)
 	if (!priv)
 		return NULL;
 	INIT_LIST_HEAD(&priv->list);
-	priv->iscsi_transport = tt;
+	priv->iscsi_transport = tt;/*设置要注册的transport*/
 	priv->t.user_scan = iscsi_user_scan;
 
 	priv->dev.class = &iscsi_transport_class;
@@ -4905,7 +4910,7 @@ iscsi_register_transport(struct iscsi_transport *tt)
 	transport_container_register(&priv->session_cont);
 
 	spin_lock_irqsave(&iscsi_transport_lock, flags);
-	list_add(&priv->list, &iscsi_transports);
+	list_add(&priv->list, &iscsi_transports);/*将transport挂接在链表上完成注册*/
 	spin_unlock_irqrestore(&iscsi_transport_lock, flags);
 
 	printk(KERN_NOTICE "iscsi: registered transport (%s)\n", tt->name);
@@ -4965,7 +4970,7 @@ static __init int iscsi_transport_init(void)
 	int err;
 	struct netlink_kernel_cfg cfg = {
 		.groups	= 1,
-		.input	= iscsi_if_rx,
+		.input	= iscsi_if_rx,/*iscsi传输协议对应的netlink消息处理*/
 	};
 	printk(KERN_INFO "Loading iSCSI transport class v%s.\n",
 		ISCSI_TRANSPORT_VERSION);
@@ -5000,6 +5005,7 @@ static __init int iscsi_transport_init(void)
 	if (err)
 		goto unregister_session_class;
 
+	/*注册netlink iscsi子系统*/
 	nls = netlink_kernel_create(&init_net, NETLINK_ISCSI, &cfg);
 	if (!nls) {
 		err = -ENOBUFS;

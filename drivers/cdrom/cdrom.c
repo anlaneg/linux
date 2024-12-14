@@ -333,7 +333,7 @@ do {							\
 
 static void cdrom_sysctl_register(void);
 
-static LIST_HEAD(cdrom_list);
+static LIST_HEAD(cdrom_list);/*记录系统中所有cdrom*/
 
 static void signal_media_change(struct cdrom_device_info *cdi)
 {
@@ -583,6 +583,7 @@ static int cdrom_mrw_set_lba_space(struct cdrom_device_info *cdi, int space)
 	return 0;
 }
 
+/*注册cdrom*/
 int register_cdrom(struct gendisk *disk, struct cdrom_device_info *cdi)
 {
 	static char banner_printed;
@@ -636,7 +637,7 @@ int register_cdrom(struct gendisk *disk, struct cdrom_device_info *cdi)
 
 	cd_dbg(CD_REG_UNREG, "drive \"/dev/%s\" registered\n", cdi->name);
 	mutex_lock(&cdrom_mutex);
-	list_add(&cdi->list, &cdrom_list);
+	list_add(&cdi->list, &cdrom_list);/*串连cdrom*/
 	mutex_unlock(&cdrom_mutex);
 	return 0;
 }
@@ -3431,7 +3432,7 @@ enum cdrom_print_option {
 };
 
 static int cdrom_print_info(const char *header, int val, char *info,
-				int *pos, enum cdrom_print_option option)
+				int *pos, enum cdrom_print_option option/*要显示的项目*/)
 {
 	const int max_size = sizeof(cdrom_sysctl_settings.info);
 	struct cdrom_device_info *cdi;
@@ -3443,9 +3444,11 @@ static int cdrom_print_info(const char *header, int val, char *info,
 
 	*pos += ret;
 
+	/*遍历所有cdrom逐个显示*/
 	list_for_each_entry(cdi, &cdrom_list, list) {
 		switch (option) {
 		case CTL_NAME:
+			/*输出cdrom名称*/
 			ret = scnprintf(info + *pos, max_size - *pos,
 					"\t%s", cdi->name);
 			break;
@@ -3618,7 +3621,7 @@ static struct ctl_table cdrom_table[] = {
 		.data		= &cdrom_sysctl_settings.info, 
 		.maxlen		= CDROM_STR_SIZE,
 		.mode		= 0444,
-		.proc_handler	= cdrom_sysctl_info,
+		.proc_handler	= cdrom_sysctl_info,/*显示cdrom信息*/
 	},
 	{
 		.procname	= "autoclose",
@@ -3665,6 +3668,7 @@ static void cdrom_sysctl_register(void)
 	if (!atomic_add_unless(&initialized, 1, 1))
 		return;
 
+	/*注册/proc/sys/dev/cdrom，用于cdrom信息显示*/
 	cdrom_sysctl_header = register_sysctl("dev/cdrom", cdrom_table);
 
 	/* set the defaults */

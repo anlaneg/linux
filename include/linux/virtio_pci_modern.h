@@ -28,21 +28,21 @@
  *		    for vendor devices with DMA space address limitations
  */
 struct virtio_pci_modern_device {
-	struct pci_dev *pci_dev;
+	struct pci_dev *pci_dev;/*对应的pci设备*/
 
-	struct virtio_pci_common_cfg __iomem *common;
-	void __iomem *device;
+	struct virtio_pci_common_cfg __iomem *common;/*common配置结构体*/
+	void __iomem *device;/*device配置结构体*/
 	void __iomem *notify_base;
 	resource_size_t notify_pa;
-	u8 __iomem *isr;
+	u8 __iomem *isr;/*isr配置结构体*/
 
-	size_t notify_len;
+	size_t notify_len;/*通知offset可用总长度*/
 	size_t device_len;
 	size_t common_len;
 
 	int notify_map_cap;
 
-	u32 notify_offset_multiplier;
+	u32 notify_offset_multiplier;/*通知offset对应的倍数*/
 	int modern_bars;
 	struct virtio_device_id id;
 

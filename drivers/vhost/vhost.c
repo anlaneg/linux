@@ -1189,7 +1189,7 @@ out:
 }
 
 static int vhost_copy_from_user(struct vhost_virtqueue *vq, void *to,
-				void __user *from, unsigned size)
+				void __user *from/*用户态内存地址*/, unsigned size)
 {
 	int ret;
 
@@ -1204,7 +1204,7 @@ static int vhost_copy_from_user(struct vhost_virtqueue *vq, void *to,
 		 */
 		void __user *uaddr = vhost_vq_meta_fetch(vq,
 				     (u64)(uintptr_t)from, size,
-				     VHOST_ADDR_DESC);/*先转换为用户地址*/
+				     VHOST_ADDR_DESC);/*将描述符先转换为用户地址*/
 		struct iov_iter f;
 
 		if (uaddr)
@@ -1408,7 +1408,7 @@ static inline int vhost_get_used_idx(struct vhost_virtqueue *vq,
 	return vhost_get_used(vq, *idx, &vq->used->idx);
 }
 
-//取vq->desc表的第idx号描述符，将其存入desc中
+//取vq的第idx号描述符，将其存入desc中
 static inline int vhost_get_desc(struct vhost_virtqueue *vq,
 				 struct vring_desc *desc/*出参，待填充desc*/, int idx/*要取的desc索引*/)
 {
@@ -1735,6 +1735,7 @@ static bool vq_access_ok(struct vhost_virtqueue *vq, unsigned int num,
 	if (vq->iotlb)
 		return true;
 
+	/*检查vq的三张表映射*/
 	return access_ok(desc, vhost_get_desc_size(vq, num)) &&
 	       access_ok(avail, vhost_get_avail_size(vq, num)) &&
 	       access_ok(used, vhost_get_used_size(vq, num));
@@ -1945,6 +1946,7 @@ static long vhost_vring_set_num(struct vhost_dev *d,
 		return -EFAULT;
 
 	if (!s.num || s.num > 0xffff || (s.num & (s.num - 1)))
+		/*队列深度不得为0，队列深度不得大于65535，队列深度必须为2的N次方*/
 		return -EINVAL;
 	vq->num = s.num;
 
@@ -1956,10 +1958,12 @@ static long vhost_vring_set_addr(struct vhost_dev *d,
 				 struct vhost_virtqueue *vq,
 				 void __user *argp)
 {
-	struct vhost_vring_addr a;/*取参数*/
+	struct vhost_vring_addr a;
 
+	/*取参数*/
 	if (copy_from_user(&a, argp, sizeof a))
 		return -EFAULT;
+
 	/*当前仅支持vring_f_log*/
 	if (a.flags & ~(0x1 << VHOST_VRING_F_LOG))
 		return -EOPNOTSUPP;
@@ -2022,7 +2026,7 @@ static long vhost_vring_set_num_addr(struct vhost_dev *d,
 		r = vhost_vring_set_num(d, vq, argp);
 		break;
 	case VHOST_SET_VRING_ADDR:
-	    /*设置vring的地址*/
+	    /*设置vring的地址(desc,used,avail)*/
 		r = vhost_vring_set_addr(d, vq, argp);
 		break;
 	default:
@@ -2050,7 +2054,7 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 
 	if (ioctl == VHOST_SET_VRING_NUM ||
 	    ioctl == VHOST_SET_VRING_ADDR) {
-	    //设置vring的长度及vring地址
+	    //设置vring的长度及vring地址的cmd处理
 		return vhost_vring_set_num_addr(d, vq/*待操作的vring*/, ioctl, argp);
 	}
 
@@ -2070,14 +2074,16 @@ long vhost_vring_ioctl(struct vhost_dev *d, unsigned int ioctl, void __user *arg
 			break;
 		}
 		if (vhost_has_feature(vq, VIRTIO_F_RING_PACKED)) {
+			/*采用packed方式，首次指向最后一个元素*/
 			vq->last_avail_idx = s.num & 0xffff;
+			/*高16位用于指向used索引位置*/
 			vq->last_used_idx = (s.num >> 16) & 0xffff;
 		} else {
 			if (s.num > 0xffff) {
 				r = -EINVAL;
 				break;
 			}
-			vq->last_avail_idx = s.num;
+			vq->last_avail_idx = s.num;/*非packed,指向最后一个元素*/
 		}
 		/* Forget the cached index value. */
 		vq->avail_idx = vq->last_avail_idx;
@@ -2526,14 +2532,14 @@ err:
 EXPORT_SYMBOL_GPL(vhost_vq_init_access);
 
 /*通过iotlb转换内存区间[addr,addr+len]的地址信息，填充iov*/
-static int translate_desc(struct vhost_virtqueue *vq, u64 addr/*待转换地址*/, u32 len/*内存长度*/,
+static int translate_desc(struct vhost_virtqueue *vq, u64 addr/*待转换内存地址*/, u32 len/*内存长度*/,
 			  struct iovec iov[]/*出参，转换后的虚地址情况*/, int iov_size/*iov数组长度*/, int access/*访问权限*/)
 {
 	const struct vhost_iotlb_map *map;
 	struct vhost_dev *dev = vq->dev;
 	struct vhost_iotlb *umem = dev->iotlb ? dev->iotlb : dev->umem;
 	struct iovec *_iov;
-	u64 s = 0, last = addr + len - 1;
+	u64 s = 0, last = addr + len - 1/*结尾位置*/;
 	int ret = 0;
 
 	while ((u64)len > s) {
@@ -2585,6 +2591,7 @@ static unsigned next_desc(struct vhost_virtqueue *vq, struct vring_desc *desc)
 	//取出索引，并转换为cpu序
 	/* If this descriptor says it doesn't chain, we're done. */
 	if (!(desc->flags & cpu_to_vhost16(vq, VRING_DESC_F_NEXT)))
+		/*没有打next标记，即达到最后一个*/
 		return -1U;
 
 	/* Check they're not leading us off end of descriptors. */
@@ -2807,9 +2814,10 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 
 		/*自描述符标记上确认是write only,还是read only*/
 		if (desc.flags & cpu_to_vhost16(vq, VRING_DESC_F_WRITE))
-			access = VHOST_ACCESS_WO;
+			access = VHOST_ACCESS_WO;/*此描述的buffer可写*/
 		else
-			access = VHOST_ACCESS_RO;
+			access = VHOST_ACCESS_RO;/*没有填write标记，此描述符的buffer可读*/
+
 		//转换描述符指向的地址到iov中，返回占用iov的数目
 		ret = translate_desc(vq, vhost64_to_cpu(vq, desc.addr)/*buffer地址*/,
 				     vhost32_to_cpu(vq, desc.len)/*buffer长度*/, iov + iov_count/*iov对应位置*/,
@@ -2825,7 +2833,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 		if (access == VHOST_ACCESS_WO) {
 			/* If this is an input descriptor,
 			 * increment that count. */
-			*in_num += ret;/*记录进来了多少片数据*/
+			*in_num += ret;/*记录进来了多少片数据(可写）*/
 			if (unlikely(log && ret)) {
 			    //如有需要，更新log,log_num
 				log[*log_num].addr = vhost64_to_cpu(vq, desc.addr);
@@ -2841,7 +2849,7 @@ int vhost_get_vq_desc(struct vhost_virtqueue *vq,
 				       "idx %d\n", i);
 				return -EINVAL;
 			}
-			/*记录出去了多少片数据*/
+			/*记录出去了多少片数据（可读）*/
 			*out_num += ret;
 		}
 	} while ((i = next_desc(vq, &desc)/*取描述符中指明的下一个描述符*/) != -1);

@@ -1186,6 +1186,7 @@ static int scsi_probe_and_add_lun(struct scsi_target *starget,
 		}
 		scsi_device_put(sdev);
 	} else
+		/*申请scsi设备*/
 		sdev = scsi_alloc_sdev(starget, lun, hostdata);
 	if (!sdev)
 		goto out;

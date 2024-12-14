@@ -85,7 +85,7 @@ struct vhost_virtqueue {
 
 	/* The actual ring of buffers. */
 	struct mutex mutex;
-	//队列长度
+	//队列长度(通过VHOST_SET_VRING_NUM设置）
 	unsigned int num;
 	/*用户态指定的desc表起始地址*/
 	vring_desc_t __user *desc;
@@ -94,7 +94,7 @@ struct vhost_virtqueue {
 	vring_avail_t __user *avail;
 	/*用户态指定的use表起始地址*/
 	vring_used_t __user *used;
-	/*iotlb缓存（仅一个），可被__vhost_vq_meta_reset置为无效*/
+	/*iotlb缓存列表（下标用于指出是哪张表），可被__vhost_vq_meta_reset置为无效*/
 	const struct vhost_iotlb_map *meta_iotlb[VHOST_NUM_ADDRS];
 	/*用户态通过VHOST_SET_VRING_KICK传入的eventfd*/
 	struct file *kick;
@@ -111,11 +111,11 @@ struct vhost_virtqueue {
 	/* Last available index we saw.
 	 * Values are limited to 0x7fff, and the high bit is used as
 	 * a wrap counter when using VIRTIO_F_RING_PACKED. */
-	/*记录我们读取到的avail表位置*/
+	/*记录我们读取到的avail表位置（初始化时指向最后一个元素）*/
 	u16 last_avail_idx;
 
 	/* Caches available index value from user. */
-	/*记录当前我们可读取的avail表最大位置*/
+	/*记录当前我们可读取的avail表最大位置，缓存vq->avail->idx*/
 	u16 avail_idx;
 
 	/* Last index we used.
@@ -139,7 +139,7 @@ struct vhost_virtqueue {
 	/*用户态指定的log起始地址*/
 	u64 log_addr;
 
-	struct iovec iov[UIO_MAXIOV];
+	struct iovec iov[UIO_MAXIOV];/*用于存放临时获取的iovec*/
 	struct iovec iotlb_iov[64];
 	/*指向申请的UIO_MAXIOV个iovec*/
 	struct iovec *indirect;

@@ -1082,7 +1082,7 @@ static int __init virtio_scsi_init(void)
 		pr_err("mempool_create() for virtscsi_cmd_pool failed\n");
 		goto error;
 	}
-	ret = register_virtio_driver(&virtio_scsi_driver);
+	ret = register_virtio_driver(&virtio_scsi_driver);/*注册virtio驱动*/
 	if (ret < 0)
 		goto error;
 

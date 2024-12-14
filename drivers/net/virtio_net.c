@@ -144,7 +144,7 @@ struct virtnet_rq_dma {
 /* Internal representation of a send virtqueue */
 struct send_queue {
 	/* Virtqueue associated with this send _queue */
-	struct virtqueue *vq;
+	struct virtqueue *vq;/*发队列关联的vq*/
 
 	/* TX: fragments + linear part + virtio header */
 	struct scatterlist sg[MAX_SKB_FRAGS + 2];
@@ -156,7 +156,8 @@ struct send_queue {
 
 	struct virtnet_interrupt_coalesce intr_coal;
 
-	struct napi_struct napi;//发送队列可调度的napi
+	//发送队列可调度的napi,用于释放完成发送的skb
+	struct napi_struct napi;
 
 	/* Record whether sq is in reset state. */
 	bool reset;
@@ -165,7 +166,7 @@ struct send_queue {
 /* Internal representation of a receive virtqueue */
 struct receive_queue {
 	/* Virtqueue associated with this receive_queue */
-	struct virtqueue *vq;//虚队列
+	struct virtqueue *vq;//收队列关联的vq
 
 	struct napi_struct napi;//接收队列中可调度的napi
 
@@ -248,10 +249,10 @@ struct control_buf {
 
 struct virtnet_info {
 	struct virtio_device *vdev;//对应的virtio设备
-	struct virtqueue *cvq;//指向控制队列
+	struct virtqueue *cvq;//指向控制队列（仅has_cvq为真时存在）
 	struct net_device *dev;//对应的网络设备
-	struct send_queue *sq;//发送队列数组
-	struct receive_queue *rq;//接收队列数组
+	struct send_queue *sq;//发送队列数组（大小max_queue_pairs）
+	struct receive_queue *rq;//接收队列数组（大小max_queue_pairs）
 	unsigned int status;//上次自硬件取得的链路状态（由work更新）
 
 	/* Max # of queue pairs supported by the device */
@@ -276,7 +277,7 @@ struct virtnet_info {
 	bool mergeable_rx_bufs;//支持merge rx buffers
 
 	/* Host supports rss and/or hash report */
-	bool has_rss;
+	bool has_rss;/*支持rss*/
 	bool has_rss_hash_report;
 	u8 rss_key_size;
 	u16 rss_indir_table_size;
@@ -485,7 +486,7 @@ static void skb_xmit_done(struct virtqueue *vq)
 	virtqueue_disable_cb(vq);
 
 	if (napi->weight)
-		virtqueue_napi_schedule(napi, vq);
+		virtqueue_napi_schedule(napi, vq);/*触发发队列对应的napi被调度*/
 	else
 		/* We were probably waiting for more output buffers. */
 		netif_wake_subqueue(vi->dev, vq2txq(vq));
@@ -779,6 +780,7 @@ static void virtnet_rq_unmap_free_buf(struct virtqueue *vq, void *buf)
 	virtnet_rq_free_buf(vi, rq, buf);
 }
 
+/*释放已完成发送的buffer关联的skb*/
 static void free_old_xmit_skbs(struct send_queue *sq, bool in_napi)
 {
 	unsigned int len;
@@ -848,6 +850,7 @@ static void check_sq_full_and_disable(struct virtnet_info *vi,
 		netif_stop_subqueue(dev, qnum);
 		if (use_napi) {
 			if (unlikely(!virtqueue_enable_cb_delayed(sq->vq)))
+				/*触发sq上的napi,使其释放已完成发送的报文*/
 				virtqueue_napi_schedule(&sq->napi, sq->vq);
 		} else if (unlikely(!virtqueue_enable_cb_delayed(sq->vq))) {
 			/* More just got used, free them then recheck. */
@@ -2203,7 +2206,7 @@ static void virtnet_rx_dim_update(struct virtnet_info *vi, struct receive_queue 
 	rq->packets_in_napi = 0;
 }
 
-//virtio-net rx队列的napi收包函数（一次性收取budet个包）
+//virtio-net rx队列的napi收包函数（一次性收取budget个包）
 static int virtnet_poll(struct napi_struct *napi, int budget)
 {
 	//获取收队列
@@ -2246,7 +2249,7 @@ static int virtnet_poll(struct napi_struct *napi, int budget)
 
 static void virtnet_disable_queue_pair(struct virtnet_info *vi, int qp_index)
 {
-	virtnet_napi_tx_disable(&vi->sq[qp_index].napi);
+	virtnet_napi_tx_disable(&vi->sq[qp_index].napi);/*禁止掉此发送队列上的napi*/
 	napi_disable(&vi->rq[qp_index].napi);
 	xdp_rxq_info_unreg(&vi->rq[qp_index].xdp_rxq);
 }
@@ -2266,6 +2269,7 @@ static int virtnet_enable_queue_pair(struct virtnet_info *vi, int qp_index)
 	if (err < 0)
 		goto err_xdp_reg_mem_model;
 
+	/*开启qp_index号队列（开启rx,tx上关联的napi)*/
 	virtnet_napi_enable(vi->rq[qp_index].vq, &vi->rq[qp_index].napi);
 	virtnet_napi_tx_enable(vi, vi->sq[qp_index].vq, &vi->sq[qp_index].napi);
 
@@ -2310,12 +2314,12 @@ err_enable_qp:
 	return err;
 }
 
-//virtnet poll tx回调
+//virtio-net tx队列的napi发包处理函数（一次性处理budget个包）
 static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 {
 	struct send_queue *sq = container_of(napi, struct send_queue, napi);
 	struct virtnet_info *vi = sq->vq->vdev->priv;
-	unsigned int index = vq2txq(sq->vq);
+	unsigned int index = vq2txq(sq->vq);/*由send_queue获得tx队列索引*/
 	struct netdev_queue *txq;
 	int opaque;
 	bool done;
@@ -2326,10 +2330,10 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 		return 0;
 	}
 
-	txq = netdev_get_tx_queue(vi->dev, index);
+	txq = netdev_get_tx_queue(vi->dev, index);/*取txq*/
 	__netif_tx_lock(txq, raw_smp_processor_id());
 	virtqueue_disable_cb(sq->vq);
-	free_old_xmit_skbs(sq, true);
+	free_old_xmit_skbs(sq, true);/*释放已完成发送的buffer关联的skb*/
 
 	if (sq->vq->num_free >= 2 + MAX_SKB_FRAGS)
 		netif_tx_wake_queue(txq);
@@ -4420,11 +4424,11 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	/* Allocate/initialize parameters for send/receive virtqueues */
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		//设置各队列报文中断回调
-		callbacks[rxq2vq(i)] = skb_recv_done;//2*x为收队列
-		callbacks[txq2vq(i)] = skb_xmit_done;//2*x+1为发队列
+		callbacks[rxq2vq(i)] = skb_recv_done;//2*x为收队列,设置收队列对应的callback
+		callbacks[txq2vq(i)] = skb_xmit_done;//2*x+1为发队列,设置发队列对应的callback
 		//各虚队列名称
-		sprintf(vi->rq[i].name, "input.%u", i);
-		sprintf(vi->sq[i].name, "output.%u", i);
+		sprintf(vi->rq[i].name, "input.%u", i);/*收队列名称*/
+		sprintf(vi->sq[i].name, "output.%u", i);/*发队列名称*/
 		//设置各虚队列名称指针
 		names[rxq2vq(i)] = vi->rq[i].name;
 		names[txq2vq(i)] = vi->sq[i].name;
@@ -4434,7 +4438,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 			ctx[rxq2vq(i)] = true;
 	}
 
-	//创建队列并设置硬件使其了解desc,avail,used三个queue的起始地址
+	//virtio设备查找到对应的vqs
 	ret = virtio_find_vqs_ctx(vi->vdev, total_vqs, vqs, callbacks,
 				  names, ctx, NULL);
 	if (ret)
@@ -4448,9 +4452,9 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 
 	//设置收队列及发队列对应的底层虚队列（最小的buffer长度)
 	for (i = 0; i < vi->max_queue_pairs; i++) {
-		vi->rq[i].vq = vqs[rxq2vq(i)];
+		vi->rq[i].vq = vqs[rxq2vq(i)];/*设置收队列对应的vq*/
 		vi->rq[i].min_buf_len = mergeable_min_buf_len(vi, vi->rq[i].vq);
-		vi->sq[i].vq = vqs[txq2vq(i)];
+		vi->sq[i].vq = vqs[txq2vq(i)];/*设置发队列对应的vq*/
 	}
 
 	/* run here: ret == 0. */
@@ -4484,6 +4488,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	vi->sq = kcalloc(vi->max_queue_pairs, sizeof(*vi->sq), GFP_KERNEL);
 	if (!vi->sq)
 		goto err_sq;
+
 	//申请max_queue_pairs个收队列
 	vi->rq = kcalloc(vi->max_queue_pairs, sizeof(*vi->rq), GFP_KERNEL);
 	if (!vi->rq)
@@ -4491,6 +4496,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 
 	//初始化延迟任务refill_work(延迟时间0）
 	INIT_DELAYED_WORK(&vi->refill, refill_work);
+
 	//初始化收发队列
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		vi->rq[i].pages = NULL;
@@ -4728,7 +4734,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	/* Set up network device as normal. */
 	dev->priv_flags |= IFF_UNICAST_FLT | IFF_LIVE_ADDR_CHANGE |
 			   IFF_TX_SKB_NO_LINEAR;
-	dev->netdev_ops = &virtnet_netdev;//设置网络设备dev操作集
+	dev->netdev_ops = &virtnet_netdev;//设置virtio网络设备操作集
 	dev->features = NETIF_F_HIGHDMA;
 
 	dev->ethtool_ops = &virtnet_ethtool_ops;
@@ -4772,7 +4778,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 		/* (!csum && gso) case will be fixed by register_netdev() */
 	}
 
-	//是否由guest负载checksum
+	//是否由guest负责checksum
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_CSUM))
 		dev->features |= NETIF_F_RXCSUM;
 	if (virtio_has_feature(vdev, VIRTIO_NET_F_GUEST_TSO4) ||
@@ -4944,6 +4950,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 		}
 	}
 
+	/*支持rss hash,初始化默认的rss hash*/
 	if (vi->has_rss || vi->has_rss_hash_report)
 		virtnet_init_default_rss(vi);
 

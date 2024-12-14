@@ -39,7 +39,7 @@ struct virtio_pci_vq_info {
 	struct list_head node;
 
 	/* MSI-X vector (or none) */
-	unsigned int msix_vector;
+	unsigned int msix_vector;/*vq对应的中断*/
 };
 
 struct virtio_pci_admin_vq {
@@ -50,7 +50,7 @@ struct virtio_pci_admin_vq {
 	u64 supported_cmds;
 	/* Name of the admin queue: avq.$vq_index. */
 	char name[10];
-	u16 vq_index;
+	u16 vq_index;/*admin vq对应的队列索引*/
 };
 
 /* Our device structure */
@@ -75,7 +75,7 @@ struct virtio_pci_device {
 	/* Array of all virtqueues reported in the
 	 * PCI common config num_queues field
 	 */
-	struct virtio_pci_vq_info **vqs;/*指针数组，共*/
+	struct virtio_pci_vq_info **vqs;/*指针数组，用于指出所有队列info*/
 
 	struct virtio_pci_admin_vq admin_vq;
 
@@ -97,15 +97,17 @@ struct virtio_pci_device {
 	//创建virtqueue
 	struct virtqueue *(*setup_vq)(struct virtio_pci_device *vp_dev,
 				      struct virtio_pci_vq_info *info,
-				      unsigned int idx,
+				      unsigned int idx/*队列编号*/,
 				      void (*callback/*中断通知回调*/)(struct virtqueue *vq),
-				      const char *name,
+				      const char *name/*队列名称*/,
 				      bool ctx,
-				      u16 msix_vec);
+				      u16 msix_vec/*此队列关联的中断*/);
 	//销毁virtqueue
 	void (*del_vq)(struct virtio_pci_vq_info *info);
 
+	/*此回调用于设置config中断*/
 	u16 (*config_vector)(struct virtio_pci_device *vp_dev, u16 vector);
+	/*此回调用于检查所给的index号队列是否为admin vq*/
 	bool (*is_avq)(struct virtio_device *vdev, unsigned int index);
 };
 

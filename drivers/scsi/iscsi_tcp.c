@@ -937,6 +937,7 @@ iscsi_sw_tcp_session_create(struct iscsi_endpoint *ep, uint16_t cmds_max,
 				 sizeof(struct iscsi_sw_tcp_host), 1);
 	if (!shost)
 		return NULL;
+	/*使用tcp transport*/
 	shost->transportt = iscsi_sw_tcp_scsi_transport;
 	shost->cmd_per_lun = qdepth;
 	shost->max_lun = iscsi_max_lun;
@@ -1136,9 +1137,9 @@ static int __init iscsi_sw_tcp_init(void)
 	}
 
 	iscsi_sw_tcp_scsi_transport = iscsi_register_transport(
-						&iscsi_sw_tcp_transport);
+						&iscsi_sw_tcp_transport);/*注册tcp transport*/
 	if (!iscsi_sw_tcp_scsi_transport)
-		return -ENODEV;
+		return -ENODEV;/*注册失败*/
 
 	return 0;
 }

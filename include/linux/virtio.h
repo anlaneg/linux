@@ -34,7 +34,7 @@ struct virtqueue {
 	struct virtio_device *vdev;//队列属于那个vdev
 	unsigned int index;//队列编号
 	unsigned int num_free;//空闲描述符数量
-	unsigned int num_max;
+	unsigned int num_max;/*vq队列的最大长度*/
 	bool reset;
 	void *priv;
 };
@@ -136,12 +136,12 @@ struct virtio_device {
 	spinlock_t vqs_list_lock;
 	struct device dev;
 	struct virtio_device_id id;
-	//virtio-pci驱动创建的virtio设备会有一种可能，指向virtio_pci_config_ops
+	//配置ops,例如：virtio_pci_config_ops
 	const struct virtio_config_ops *config;
 	const struct vringh_config_ops *vringh_config;
 	struct list_head vqs;//virtio设备的所有虚队列链表
 	u64 features;//virtio的bit位（用于指代功能)
-	void *priv;/*私有数据，例如可能指向virtio-block*/
+	void *priv;/*私有数据，例如可能指向virtio-block，virtnet_info*/
 };
 
 //由device获得virtio_device

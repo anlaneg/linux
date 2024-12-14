@@ -20,7 +20,7 @@
  */
 static void __iomem *
 vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
-			 size_t minlen, u32 align, u32 start, u32 size,
+			 size_t minlen/*校验用最小长度*/, u32 align, u32 start/*起始位置*/, u32 size,
 			 size_t *len, resource_size_t *pa)
 {
 	struct pci_dev *dev = mdev->pci_dev;
@@ -28,16 +28,20 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
 	u32 offset, length;
 	void __iomem *p;
 
+	/*取得此capability所在的bar*/
 	pci_read_config_byte(dev, off + offsetof(struct virtio_pci_cap,
 						 bar),
 			     &bar);
+	/*取得针对bar的偏移量*/
 	pci_read_config_dword(dev, off + offsetof(struct virtio_pci_cap, offset),
 			     &offset);
+	/*取得结构体长度*/
 	pci_read_config_dword(dev, off + offsetof(struct virtio_pci_cap, length),
 			      &length);
 
 	/* Check if the BAR may have changed since we requested the region. */
 	if (bar >= PCI_STD_NUM_BARS || !(mdev->modern_bars & (1 << bar))) {
+		/*排除掉错误bar*/
 		dev_err(&dev->dev,
 			"virtio_pci: bar unexpectedly changed to %u\n", bar);
 		return NULL;
@@ -57,9 +61,10 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
 		return NULL;
 	}
 
-	length -= start;
+	length -= start;/*可读取的长度*/
 
 	if (start + offset < offset) {
+		/*参数有误，数据绕回*/
 		dev_err(&dev->dev,
 			"virtio_pci: map wrap-around %u+%u\n",
 			start, offset);
@@ -69,6 +74,7 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
 	offset += start;
 
 	if (offset & (align - 1)) {
+		/*起始位置未对齐*/
 		dev_err(&dev->dev,
 			"virtio_pci: offset %u not aligned to %u\n",
 			offset, align);
@@ -76,7 +82,7 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
 	}
 
 	if (length > size)
-		length = size;
+		length = size;/*更正长度*/
 
 	if (len)
 		*len = length;
@@ -91,6 +97,7 @@ vp_modern_map_capability(struct virtio_pci_modern_device *mdev, int off,
 		return NULL;
 	}
 
+	/*map设备的此段数据*/
 	p = pci_iomap_range(dev, bar, offset, length);
 	if (!p)
 		dev_err(&dev->dev,
@@ -132,6 +139,7 @@ static inline int virtio_pci_find_capability(struct pci_dev *dev, u8 cfg_type/*�
 
 		/* Ignore structures with reserved BAR values */
 		if (bar >= PCI_STD_NUM_BARS)
+			/*无效的bar*/
 			continue;
 
 		if (type == cfg_type) {
@@ -235,7 +243,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	check_offsets();
 
 	if (mdev->device_id_check) {
-		/*有回调函数，通过回调函数来检查*/
+		/*有回调函数，通过回调函数来检查并返回device id*/
 		devid = mdev->device_id_check(pci_dev);
 		if (devid < 0)
 			return devid;
@@ -270,9 +278,11 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	}
 
 	/* If common is there, these should be too... */
+	/*取virtio-pci设备的isr配置结构体所在位置*/
 	isr = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_ISR_CFG,
 					 IORESOURCE_IO | IORESOURCE_MEM,
 					 &mdev->modern_bars);
+	/*取virtio-pci设备的notify配置结构体所在位置*/
 	notify = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_NOTIFY_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
 					    &mdev->modern_bars);
@@ -296,7 +306,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 	 */
 	device = virtio_pci_find_capability(pci_dev, VIRTIO_PCI_CAP_DEVICE_CFG,
 					    IORESOURCE_IO | IORESOURCE_MEM,
-					    &mdev->modern_bars);
+					    &mdev->modern_bars);/*取得device config结构体的offset及其对应的bar*/
 
 	err = pci_request_selected_regions(pci_dev, mdev->modern_bars,
 					   "virtio-pci-modern");
@@ -304,6 +314,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 		return err;
 
 	err = -EINVAL;
+	/*映射common配置结构体*/
 	mdev->common = vp_modern_map_capability(mdev, common,
 			      sizeof(struct virtio_pci_common_cfg), 4, 0,
 			      offsetofend(struct virtio_pci_modern_common_cfg,
@@ -311,6 +322,7 @@ int vp_modern_probe(struct virtio_pci_modern_device *mdev)
 			      &mdev->common_len, NULL);
 	if (!mdev->common)
 		goto err_map_common;
+	/*映射isr配置结构体*/
 	mdev->isr = vp_modern_map_capability(mdev, isr, sizeof(u8), 1,
 					     0, 1,
 					     NULL, NULL);
@@ -512,7 +524,7 @@ int vp_modern_get_queue_reset(struct virtio_pci_modern_device *mdev, u16 index)
 	cfg = (struct virtio_pci_modern_common_cfg __iomem *)mdev->common;
 
 	vp_iowrite16(index, &cfg->cfg.queue_select);
-	return vp_ioread16(&cfg->queue_reset);
+	return vp_ioread16(&cfg->queue_reset);/*执行队列reset*/
 }
 EXPORT_SYMBOL_GPL(vp_modern_get_queue_reset);
 
@@ -528,12 +540,12 @@ void vp_modern_set_queue_reset(struct virtio_pci_modern_device *mdev, u16 index)
 	cfg = (struct virtio_pci_modern_common_cfg __iomem *)mdev->common;
 
 	vp_iowrite16(index, &cfg->cfg.queue_select);
-	vp_iowrite16(1, &cfg->queue_reset);
+	vp_iowrite16(1, &cfg->queue_reset);/*对此队列执行reset*/
 
-	while (vp_ioread16(&cfg->queue_reset))
+	while (vp_ioread16(&cfg->queue_reset))/*等待reset执行完成*/
 		msleep(1);
 
-	while (vp_ioread16(&cfg->cfg.queue_enable))
+	while (vp_ioread16(&cfg->cfg.queue_enable))/*等待此queue disable*/
 		msleep(1);
 }
 EXPORT_SYMBOL_GPL(vp_modern_set_queue_reset);
@@ -547,14 +559,14 @@ EXPORT_SYMBOL_GPL(vp_modern_set_queue_reset);
  * Returns the config vector read from the device
  */
 u16 vp_modern_queue_vector(struct virtio_pci_modern_device *mdev,
-			   u16 index, u16 vector)
+			   u16 index/*队列索引*/, u16 vector/*vector为VIRTIO_MSI_NO_VECTOR时，将为移除中断*/)
 {
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
 
-	vp_iowrite16(index, &cfg->queue_select);
-	vp_iowrite16(vector, &cfg->queue_msix_vector);
+	vp_iowrite16(index, &cfg->queue_select);/*指明要操作的队列*/
+	vp_iowrite16(vector, &cfg->queue_msix_vector);/*为队列指定中断*/
 	/* Flush the write out to device */
-	return vp_ioread16(&cfg->queue_msix_vector);
+	return vp_ioread16(&cfg->queue_msix_vector);/*读取设置的中断*/
 }
 EXPORT_SYMBOL_GPL(vp_modern_queue_vector);
 
@@ -571,7 +583,7 @@ u16 vp_modern_config_vector(struct virtio_pci_modern_device *mdev,
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
 
 	/* Setup the vector used for configuration events */
-	vp_iowrite16(vector, &cfg->msix_config);
+	vp_iowrite16(vector, &cfg->msix_config);/*设置配置中断*/
 	/* Verify we had enough resources to assign the vector */
 	/* Will also flush the write out to device */
 	return vp_ioread16(&cfg->msix_config);
@@ -592,14 +604,14 @@ void vp_modern_queue_address(struct virtio_pci_modern_device *mdev,
 {
 	struct virtio_pci_common_cfg __iomem *cfg = mdev->common;
 
-	vp_iowrite16(index, &cfg->queue_select);
+	vp_iowrite16(index, &cfg->queue_select);/*指明要操作的队列*/
 
 	vp_iowrite64_twopart(desc_addr, &cfg->queue_desc_lo,
-			     &cfg->queue_desc_hi);
+			     &cfg->queue_desc_hi);/*desc地址*/
 	vp_iowrite64_twopart(driver_addr, &cfg->queue_avail_lo,
-			     &cfg->queue_avail_hi);
+			     &cfg->queue_avail_hi);/*avail地址*/
 	vp_iowrite64_twopart(device_addr, &cfg->queue_used_lo,
-			     &cfg->queue_used_hi);
+			     &cfg->queue_used_hi);/*used地址*/
 }
 EXPORT_SYMBOL_GPL(vp_modern_queue_address);
 
@@ -627,9 +639,10 @@ EXPORT_SYMBOL_GPL(vp_modern_set_queue_enable);
 bool vp_modern_get_queue_enable(struct virtio_pci_modern_device *mdev,
 				u16 index)
 {
+	/*指明要操作的队列*/
 	vp_iowrite16(index, &mdev->common->queue_select);
 
-	return vp_ioread16(&mdev->common->queue_enable);
+	return vp_ioread16(&mdev->common->queue_enable);/*获取此队列是否开启*/
 }
 EXPORT_SYMBOL_GPL(vp_modern_get_queue_enable);
 
@@ -658,8 +671,10 @@ EXPORT_SYMBOL_GPL(vp_modern_set_queue_size);
 u16 vp_modern_get_queue_size(struct virtio_pci_modern_device *mdev,
 			     u16 index)
 {
+	/*写入要操作的队列*/
 	vp_iowrite16(index, &mdev->common->queue_select);
 
+	/*获得此队列的长度*/
 	return vp_ioread16(&mdev->common->queue_size);
 
 }
@@ -689,6 +704,7 @@ static u16 vp_modern_get_queue_notify_off(struct virtio_pci_modern_device *mdev,
 {
 	vp_iowrite16(index, &mdev->common->queue_select);
 
+	/*取此队列对应的通知offset*/
 	return vp_ioread16(&mdev->common->queue_notify_off);
 }
 
@@ -710,6 +726,7 @@ void __iomem *vp_modern_map_vq_notify(struct virtio_pci_modern_device *mdev,
 		/* offset should not wrap */
 		if ((u64)off * mdev->notify_offset_multiplier + 2
 			> mdev->notify_len) {
+			/*offset有误*/
 			dev_warn(&mdev->pci_dev->dev,
 				 "bad notification offset %u (x %u) "
 				 "for queue %u > %zd",
@@ -718,6 +735,7 @@ void __iomem *vp_modern_map_vq_notify(struct virtio_pci_modern_device *mdev,
 			return NULL;
 		}
 		if (pa)
+			/*获得通知资源地址*/
 			*pa = mdev->notify_pa +
 			      off * mdev->notify_offset_multiplier;
 		return mdev->notify_base + off * mdev->notify_offset_multiplier;
