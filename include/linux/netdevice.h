@@ -2185,7 +2185,7 @@ struct net_device {
 	//如果此ops为NULL，则这类设备无arp，直接发送
 	//以太网络设备常用eth_header_ops
 	const struct header_ops *header_ops;
-	//tx队列（其数量为num_tx_queues个）
+	//tx队列数组（其数量为num_tx_queues个）
 	struct netdev_queue	*_tx;
 	netdev_features_t	gso_partial_features;
 	//有效的tx队列数
@@ -2235,7 +2235,7 @@ struct net_device {
 	int			ifindex;
 	//当前实际可用的队列数
 	unsigned int		real_num_rx_queues;
-	//rx队列（rx队列数为num_rx_queues)
+	//rx队列数组（rx队列数为num_rx_queues)
 	struct netdev_rx_queue	*_rx;
 	unsigned long		gro_flush_timeout;
 	int			napi_defer_hard_irqs;

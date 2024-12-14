@@ -691,9 +691,11 @@ static int virtio_pci_sriov_configure(struct pci_dev *pci_dev, int num_vfs)
 	int ret;
 
 	if (!(vdev->config->get_status(vdev) & VIRTIO_CONFIG_S_DRIVER_OK))
+		/*此设备还未完成驱动适配*/
 		return -EBUSY;
 
 	if (!__virtio_test_bit(vdev, VIRTIO_F_SR_IOV))
+		/*设备未开启sriov能力,直接返回*/
 		return -EINVAL;
 
 	if (pci_vfs_assigned(pci_dev))
@@ -725,7 +727,7 @@ static struct pci_driver virtio_pci_driver = {
 #ifdef CONFIG_PM_SLEEP
 	.driver.pm	= &virtio_pci_pm_ops,
 #endif
-	.sriov_configure = virtio_pci_sriov_configure,
+	.sriov_configure = virtio_pci_sriov_configure,/*virtio设备支持sriov*/
 };
 
 struct virtio_device *virtio_pci_vf_get_pf_dev(struct pci_dev *pdev)

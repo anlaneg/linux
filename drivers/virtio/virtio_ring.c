@@ -128,7 +128,15 @@ struct vring_virtqueue_packed {
 	} vring;
 
 	/* Driver ring wrap counter. */
-	bool avail_wrap_counter;
+	/*标准要求每个设备和驱动都需要维护一个单BIT的回绕计数器(此值初始化为1)
+	 * 这个计数器每次经过最后一个DESC元素时将被反转(因为只有一个bit).
+	 * 驱动通过设置VRING_PACKED_DESC_F_AVAIL位来使描述符变得有效(可被设备读取).
+	 * 但它设置的值以此计数器当前值为准.例如:它在第一轮时,会将此位设置为'1',第二轮时会将此位设置为'0'
+	 * 同时它通过匹配VRING_PACKED_DESC_F_USED位来确定描述符"可用",
+	 * 它匹配的方法是检查这一位是否与当前计数器的值不一致.例如:它在第一轮时,通过匹配'0'理解此描述可用,
+	 * 在第二轮时通过匹配'1'来理解此描述符可用.
+	 * */
+	bool avail_wrap_counter;/*驱动wrap计数器*/
 
 	/* Avail used flags. */
 	u16 avail_used_flags;
@@ -144,6 +152,12 @@ struct vring_virtqueue_packed {
 
 	/* Per-descriptor state. */
 	struct vring_desc_state_packed *desc_state;//记录每个描述符的状态（长度与desc表相同）
+	/*按标准规定,描述符被驱动提交给硬件后,如果是list,则硬件仅会写一个描述符为USED,并直接跳过链表中其余描述符.
+	 * 且描述符中的NEXT标记标准规定驱动需要忽略.
+	 * 因此驱动不得依赖desc表来回收描述符.
+	 * 故驱动申请desc_extra(因此struct vring_packed_desc结构体的所有内容在此结构也需要)来解决这个问题.
+	 * 在发送报文时将desc中的填充情况一并也写入到desc_extra,回收时依靠desc_extra来完成.
+	 * */
 	struct vring_desc_extra *desc_extra;/*记录每个描述符的额外信息（长度与desc表相同）*/
 
 	/* DMA address and size information */
@@ -171,6 +185,9 @@ struct vring_virtqueue {
 	bool broken;/*指明vq是否损坏*/
 
 	/* Host supports indirect buffers */
+	/*如果设备指明支持VIRTIO_RING_F_INDIRECT_DESC,此项即为TRUE,此时在发送多片内容时
+	 * 我们会先申请一个DESC,并指明这个DESC为indirect desc,然后在这个DESC中填充各个分片描述符
+	 * 这样相当于扩充了vring的容量*/
 	bool indirect;//是否支持indirect buffers形式（即采用链表串起来的方式）
 
 	/* Host publishes avail event idx */
@@ -185,7 +202,7 @@ struct vring_virtqueue {
 	bool do_unmap;
 
 	/* Head of free buffer list. */
-	unsigned int free_head;//空闲描述符头指针（此指针对应的desc是空闲的）
+	unsigned int free_head;//空闲跟踪描述符头指针（此指针对应的desc_extra是空闲的）
 	/* Number we've added since last sync. */
 	unsigned int num_added;//队列中元素数
 
@@ -377,7 +394,7 @@ static int vring_map_one_sg(const struct vring_virtqueue *vq, struct scatterlist
 			    enum dma_data_direction direction, dma_addr_t *addr)
 {
 	if (vq->premapped) {
-		*addr = sg_dma_address(sg);
+		*addr = sg_dma_address(sg);/*直接返回DMA地址*/
 		return 0;
 	}
 
@@ -429,7 +446,7 @@ static int vring_mapping_error(const struct vring_virtqueue *vq,
 
 static void virtqueue_init(struct vring_virtqueue *vq, u32 num)
 {
-	vq->vq.num_free = num;
+	vq->vq.num_free = num;/*空闲描述符数量为NUM个*/
 
 	if (vq->packed_ring)
 		vq->last_used_idx = 0 | (1 << VRING_PACKED_EVENT_F_WRAP_CTR);
@@ -437,7 +454,7 @@ static void virtqueue_init(struct vring_virtqueue *vq, u32 num)
 		vq->last_used_idx = 0;
 
 	vq->event_triggered = false;
-	vq->num_added = 0;
+	vq->num_added = 0;/*VQ初始化,元素数为零个*/
 
 #ifdef DEBUG
 	vq->in_use = false;
@@ -1333,6 +1350,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	dma_addr_t addr;
 
 	head = vq->packed.next_avail_idx;
+	/*单独申请一个indirect packed描述符*/
 	desc = alloc_indirect_packed(total_sg, gfp);
 	if (!desc)
 		return -ENOMEM;
@@ -1348,6 +1366,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	id = vq->free_head;
 	BUG_ON(id == vq->packed.vring.num);
 
+	/*填充indirect描述符*/
 	for (n = 0; n < out_sgs + in_sgs; n++) {
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
 			if (vring_map_one_sg(vq, sg, n < out_sgs ?
@@ -1373,7 +1392,7 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 		goto unmap_release;
 	}
 
-	vq->packed.vring.desc[head].addr = cpu_to_le64(addr);
+	vq->packed.vring.desc[head].addr = cpu_to_le64(addr);/*将indirect描述符地址指出来*/
 	vq->packed.vring.desc[head].len = cpu_to_le32(total_sg *
 				sizeof(struct vring_packed_desc));
 	vq->packed.vring.desc[head].id = cpu_to_le16(id);
@@ -1393,15 +1412,16 @@ static int virtqueue_add_indirect_packed(struct vring_virtqueue *vq,
 	 */
 	virtio_wmb(vq->weak_barriers);
 	vq->packed.vring.desc[head].flags = cpu_to_le16(VRING_DESC_F_INDIRECT |
-						vq->packed.avail_used_flags);
+						vq->packed.avail_used_flags);/*写上flags*/
 
 	/* We're using some buffers from the free list. */
-	vq->vq.num_free -= 1;
+	vq->vq.num_free -= 1;/*占用了一个描述符*/
 
 	/* Update free pointer */
 	n = head + 1;
 	if (n >= vq->packed.vring.num) {
 		n = 0;
+		/*按标准规定当我们提供RING的最后一个描述符时,此值需要更改*/
 		vq->packed.avail_wrap_counter ^= 1;
 		vq->packed.avail_used_flags ^=
 				1 << VRING_PACKED_DESC_F_AVAIL |
@@ -1437,7 +1457,7 @@ free_desc:
 }
 
 static inline int virtqueue_add_packed(struct virtqueue *_vq,
-				       struct scatterlist *sgs[],
+				       struct scatterlist *sgs[]/*要读/写的buffer*/,
 				       unsigned int total_sg,
 				       unsigned int out_sgs,
 				       unsigned int in_sgs,
@@ -1459,6 +1479,7 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 	BUG_ON(ctx && vq->indirect);
 
 	if (unlikely(vq->broken)) {
+		/*队列已损坏,报错*/
 		END_USE(vq);
 		return -EIO;
 	}
@@ -1468,9 +1489,11 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 	BUG_ON(total_sg == 0);
 
 	if (virtqueue_use_indirect(vq, total_sg)) {
+		/*设备支持indirect flag*/
 		err = virtqueue_add_indirect_packed(vq, sgs, total_sg, out_sgs,
 						    in_sgs, data, gfp);
 		if (err != -ENOMEM) {
+			/*不论成功失败,只要不是NOMEM均自此处返回*/
 			END_USE(vq);
 			return err;
 		}
@@ -1479,46 +1502,64 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 	}
 
 	head = vq->packed.next_avail_idx;
+	/*备份变量,用于解决处理过程中失败的情况,用于还原avail_used_flags标记;
+	 * 同样的, 如果发送中失败了,本函数调用时第一个描述符已填写,如何回退?
+	 * 所以后面函数在处理时,是在最后才填写第一个描述符的.*/
 	avail_used_flags = vq->packed.avail_used_flags;
 
 	WARN_ON_ONCE(total_sg > vq->packed.vring.num && !vq->indirect);
 
-	desc = vq->packed.vring.desc;
+	desc = vq->packed.vring.desc;/*指向PACKED vring描述符表*/
 	i = head;
 	descs_used = total_sg;
 
 	if (unlikely(vq->vq.num_free < descs_used)) {
+		/*空闲的描述符数量小于需要的数量,空间不足,报错*/
 		pr_debug("Can't add buf len %i - avail = %i\n",
 			 descs_used, vq->vq.num_free);
 		END_USE(vq);
 		return -ENOSPC;
 	}
 
-	id = vq->free_head;
+	id = vq->free_head;/*可用的首个PACKED vring描述符id*/
 	BUG_ON(id == vq->packed.vring.num);
 
-	curr = id;
-	c = 0;
-	for (n = 0; n < out_sgs + in_sgs; n++) {
+	curr = id;/*记录当前desc_extra描述符编号,下一个编号通过desc_extra[curr].next获得*/
+	c = 0;/*记录当前正在处理第几个SG,利用此变量可了解是否在处理最后一个SG*/
+	for (n = 0/*用于跟踪out_sgs,in_sgs以便分清楚权限*/; n < out_sgs + in_sgs; n++) {
 		for (sg = sgs[n]; sg; sg = sg_next(sg)) {
 			dma_addr_t addr;
 
+			/*获得此sg指明buffer对应的dma地址*/
 			if (vring_map_one_sg(vq, sg, n < out_sgs ?
 					     DMA_TO_DEVICE : DMA_FROM_DEVICE, &addr))
 				goto unmap_release;
 
+			/*准备描述符标记:
+			 * 1.next标记,如果在填充最后一个描述符,则不包含此标记,否则包含此标记;
+			 * 2.write标记,如果是RX BUFFER,则添加WRITE标记,否则为TX BUFFER不包含此标记;
+			 * 3.USED,AVAIL标记,linux driver这里简化处理,按标准规定此标记以DRIVER WRAP COUNTER
+			 *   当前值为准,即当此值为'0',则在此位清零表示占用,反之写'1'来表示占用.
+			 *   linux driver在初始化时当此值设置1<<VRING_PACKED_DESC_F_AVAIL(暗含了对VRING_PACKED_DESC_F_USED位置零),
+			 *   在每次DRIVER WRAP COUNTER变更时反转此位与VRING_PACKED_DESC_F_USED位,故这里简单实现为取值
+			 *   并赋值.
+			 *   如标准所言,对于"可用的"的描述符,其AVAIL与USED标记位最是不同的.对于"已使用完"的描述符,其AVAIL与USED标记位总是相同的.
+			 *   */
 			flags = cpu_to_le16(vq->packed.avail_used_flags |
 				    (++c == total_sg ? 0 : VRING_DESC_F_NEXT) |
 				    (n < out_sgs ? 0 : VRING_DESC_F_WRITE));
 			if (i == head)
-				head_flags = flags;
+				head_flags = flags;/*为了支持回退,第一个描述符暂不填写标记*/
 			else
-				desc[i].flags = flags;
+				desc[i].flags = flags;/*为此描述符打上描记*/
 
+			/*packed vring发送BUFFER给设备时,需要填充packed描述符,并为其关联一个描述符ID,然后触发通知给设备(不在此函数里)*/
 			desc[i].addr = cpu_to_le64(addr);
 			desc[i].len = cpu_to_le32(sg->length);
-			desc[i].id = cpu_to_le16(id);
+			desc[i].id = cpu_to_le16(id);/*记录关联的ID*/
 
+			/*如果不需要做unmap,则仅需要回收描述符,即next链串起来即可方便跳转;
+			 * 如果要做unmap就需要记录dma地址及长度以及读写标记,链结束标记*/
 			if (unlikely(vq->do_unmap)) {
 				vq->packed.desc_extra[curr].addr = addr;
 				vq->packed.desc_extra[curr].len = sg->length;
@@ -1526,10 +1567,13 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 					le16_to_cpu(flags);
 			}
 			prev = curr;
+			/*将跟踪描述符串起来,初始化时已从0串起来了,回收时也是按顺序串起来的,
+			 * 故这里直接从next获得下一个跟踪描述符*/
 			curr = vq->packed.desc_extra[curr].next;
 
-			if ((unlikely(++i >= vq->packed.vring.num))) {
-				i = 0;
+			if ((unlikely(++i/*切到下一个描述符*/ >= vq->packed.vring.num))) {
+				i = 0;/*达到队列结尾,描述符索引回到0号位置*/
+				/*达到最后一个描述符,avail_used_flags标记位反转*/
 				vq->packed.avail_used_flags ^=
 					1 << VRING_PACKED_DESC_F_AVAIL |
 					1 << VRING_PACKED_DESC_F_USED;
@@ -1537,21 +1581,26 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 		}
 	}
 
+	/*刚才我们在处理过程中没有反转此计数器,这里执行反转.
+	 * 我们为什么不在循环里考虑反转此计数器?
+	 * １.需要恢复.(这个理由不充分,avail_used_flags在内部也反转过了,同时也支持了恢复)
+	 * ２.只是一个选择而已.
+	 * */
 	if (i <= head)
 		vq->packed.avail_wrap_counter ^= 1;
 
 	/* We're using some buffers from the free list. */
-	vq->vq.num_free -= descs_used;
+	vq->vq.num_free -= descs_used;/*减少我们使用掉的描述符*/
 
 	/* Update free pointer */
-	vq->packed.next_avail_idx = i;
-	vq->free_head = curr;
+	vq->packed.next_avail_idx = i;/*记录下一次填充时首个描述符位置*/
+	vq->free_head = curr;/*记录跟踪描述符起始位置,下次关联的id号*/
 
 	/* Store token. */
-	vq->packed.desc_state[id].num = descs_used;
-	vq->packed.desc_state[id].data = data;
+	vq->packed.desc_state[id].num = descs_used;/*记录此链表占用了desc_used个描述符*/
+	vq->packed.desc_state[id].data = data;/*此链表关联的数据*/
 	vq->packed.desc_state[id].indir_desc = ctx;
-	vq->packed.desc_state[id].last = prev;
+	vq->packed.desc_state[id].last = prev;/*记录此链表结尾占用的描述符编号*/
 
 	/*
 	 * A driver MUST NOT make the first descriptor in the list
@@ -1559,8 +1608,8 @@ static inline int virtqueue_add_packed(struct virtqueue *_vq,
 	 * the list are made available.
 	 */
 	virtio_wmb(vq->weak_barriers);
-	vq->packed.vring.desc[head].flags = head_flags;
-	vq->num_added += descs_used;
+	vq->packed.vring.desc[head].flags = head_flags;/*使首个描述符标记有效,使硬件可以看到.*/
+	vq->num_added += descs_used;/*记录vq中元素总数*/
 
 	pr_debug("Added buffer head %i to %p\n", head, vq);
 	END_USE(vq);
@@ -1572,7 +1621,7 @@ unmap_release:
 	i = head;
 	curr = vq->free_head;
 
-	vq->packed.avail_used_flags = avail_used_flags;
+	vq->packed.avail_used_flags = avail_used_flags;/*发送失败,执行回退*/
 
 	for (n = 0; n < total_sg; n++) {
 		if (i == err_idx)
@@ -1716,11 +1765,12 @@ static void *virtqueue_get_buf_ctx_packed(struct virtqueue *_vq,
 	struct vring_virtqueue *vq = to_vvq(_vq);
 	u16 last_used, id, last_used_idx;
 	bool used_wrap_counter;
-	void *ret;/*待返回的报文地址*/
+	void *ret;/*待返回的buffer地址*/
 
 	START_USE(vq);
 
 	if (unlikely(vq->broken)) {
+		/*vq被损坏*/
 		END_USE(vq);
 		return NULL;
 	}
@@ -1979,6 +2029,7 @@ static int vring_alloc_queue_packed(struct vring_virtqueue_packed *vring_packed,
 				    struct virtio_device *vdev,
 				    u32 num/*队列深度*/, struct device *dma_dev)
 {
+	/*当前virtio设备PACKED VRING共有三个部分, "描述符RING","驱动事件抑制", "设备EVENT抑制"*/
 	struct vring_packed_desc *ring;
 	struct vring_packed_desc_event *driver, *device;
 	dma_addr_t ring_dma_addr, driver_event_dma_addr, device_event_dma_addr;
@@ -2066,9 +2117,9 @@ static void virtqueue_vring_init_packed(struct vring_virtqueue_packed *vring_pac
 					bool callback)
 {
 	vring_packed->next_avail_idx = 0;
-	vring_packed->avail_wrap_counter = 1;
+	vring_packed->avail_wrap_counter = 1;/*按标准要求此值初始化为1*/
 	vring_packed->event_flags_shadow = 0;
-	vring_packed->avail_used_flags = 1 << VRING_PACKED_DESC_F_AVAIL;
+	vring_packed->avail_used_flags = 1 << VRING_PACKED_DESC_F_AVAIL;/*暗含了第一轮将used标记置为O*/
 
 	/* No callback?  Tell other side not to bother us. */
 	if (!callback) {
@@ -2259,7 +2310,7 @@ static inline int virtqueue_add(struct virtqueue *_vq,
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
 	return vq->packed_ring ? virtqueue_add_packed(_vq, sgs, total_sg,
-					out_sgs, in_sgs, data, ctx, gfp) :
+					out_sgs, in_sgs, data, ctx, gfp) /*按PACKED类型填充VRING*/:
 				 virtqueue_add_split(_vq, sgs, total_sg,
 					out_sgs, in_sgs, data, ctx, gfp);
 }
@@ -2319,7 +2370,7 @@ int virtqueue_add_outbuf(struct virtqueue *vq,
 			 void *data,
 			 gfp_t gfp)
 {
-	return virtqueue_add(vq, &sg, num, 1, 0, data, NULL, gfp);
+	return virtqueue_add(vq, &sg, num, 1/*指明为发送的SG*/, 0, data, NULL, gfp);
 }
 EXPORT_SYMBOL_GPL(virtqueue_add_outbuf);
 
@@ -2341,7 +2392,7 @@ int virtqueue_add_inbuf(struct virtqueue *vq,
 			void *data,
 			gfp_t gfp)
 {
-	return virtqueue_add(vq, &sg, num, 0, 1, data, NULL, gfp);
+	return virtqueue_add(vq, &sg, num, 0, 1/*指明为接收的SG*/, data, NULL, gfp);
 }
 EXPORT_SYMBOL_GPL(virtqueue_add_inbuf);
 
@@ -2365,7 +2416,7 @@ int virtqueue_add_inbuf_ctx(struct virtqueue *vq,
 			void *ctx,
 			gfp_t gfp)
 {
-	return virtqueue_add(vq, &sg, num, 0, 1, data, ctx, gfp);
+	return virtqueue_add(vq, &sg, num, 0, 1/*指明为接收的SG*/, data, ctx, gfp);
 }
 EXPORT_SYMBOL_GPL(virtqueue_add_inbuf_ctx);
 
@@ -2476,12 +2527,12 @@ void *virtqueue_get_buf_ctx(struct virtqueue *_vq, unsigned int *len,
 	//由virtqueue获得vring_virtqueue
 	struct vring_virtqueue *vq = to_vvq(_vq);
 
-	return vq->packed_ring ? virtqueue_get_buf_ctx_packed(_vq, len, ctx) :
+	return vq->packed_ring ? virtqueue_get_buf_ctx_packed(_vq, len, ctx) /*packed类型的vring*/:
 				 virtqueue_get_buf_ctx_split(_vq, len, ctx);
 }
 EXPORT_SYMBOL_GPL(virtqueue_get_buf_ctx);
 
-void *virtqueue_get_buf(struct virtqueue *_vq, unsigned int *len)
+void *virtqueue_get_buf(struct virtqueue *_vq, unsigned int *len/*出参,buffer长度*/)
 {
 	return virtqueue_get_buf_ctx(_vq, len, NULL);
 }
@@ -2674,6 +2725,7 @@ static struct virtqueue *__vring_new_virtqueue(unsigned int index,
 	int err;
 
 	if (virtio_has_feature(vdev, VIRTIO_F_RING_PACKED))
+		/*设备有PACKED标记,表明其支持PACKED内存布局,不归此函数处理,故退出*/
 		return NULL;
 
 	//申请连续内存，创建vring_virtqueue及vring.num个描述符
@@ -2923,6 +2975,7 @@ struct virtqueue *vring_new_virtqueue(unsigned int index,
 	struct vring_virtqueue_split vring_split = {};
 
 	if (virtio_has_feature(vdev, VIRTIO_F_RING_PACKED))
+		/*PACKED vring不调用此函数*/
 		return NULL;
 
 	vring_init(&vring_split.vring, num, pages, vring_align);

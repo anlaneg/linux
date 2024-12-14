@@ -182,10 +182,11 @@ static void virtio_config_enable(struct virtio_device *dev)
 	spin_unlock_irq(&dev->config_lock);
 }
 
-//设置新的设备status
+//设置新的设备status标记
 void virtio_add_status(struct virtio_device *dev, unsigned int status)
 {
 	might_sleep();
+	/*采用或的方式来更新status*/
 	dev->config->set_status(dev, dev->config->get_status(dev) | status);
 }
 EXPORT_SYMBOL_GPL(virtio_add_status);
@@ -219,7 +220,7 @@ static int virtio_features_ok(struct virtio_device *dev)
 	//EATURES_OK (8) Indicates that the driver has acknowledged all the features it understands, and feature
 	//negotiation is complete.
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FEATURES_OK);
-	status = dev->config->get_status(dev);
+	status = dev->config->get_status(dev);/*自设备再读取一次*/
 	if (!(status & VIRTIO_CONFIG_S_FEATURES_OK)) {
 		//设备未成功置“功能协商"ok标记
 		dev_err(&dev->dev, "virtio: device refuses features: %x\n",
@@ -279,11 +280,11 @@ static int virtio_dev_probe(struct device *_d)
 	virtio_add_status(dev, VIRTIO_CONFIG_S_DRIVER);
 
 	/* Figure out what features the device supports. */
-    //获得当前设备支持的功能列表
+    //获得当前设备支持的功能列表(Feature Bits)
 	device_features = dev->config->get_features(dev);
 
 	/* Figure out what features the driver supports. */
-	//获得当前驱动支持的功能列表
+	//获得当前驱动支持的功能列表(Feature Bits)
 	driver_features = 0;
 	for (i = 0; i < drv->feature_table_size; i++) {
 		unsigned int f = drv->feature_table[i];
@@ -305,10 +306,11 @@ static int virtio_dev_probe(struct device *_d)
 	}
 
 	//如果使能v1.0,则取与操作计算两者合并device与driver获得的features
+	/*V1.0要求,驱动不得使用设备未提供的功能*/
 	if (device_features & (1ULL << VIRTIO_F_VERSION_1))
 		dev->features = driver_features & device_features;
 	else
-		//非1.0版本时，采用legayc驱动功能号与上设备功能号
+		//非1.0版本时，按v1.0要求,回退到legacy采用接口,legacy驱动功能号与上设备功能号
 		dev->features = driver_features_legacy & device_features;
 
 	/* Transport features always preserved to pass to finalize_features. */
@@ -521,9 +523,9 @@ int register_virtio_device(struct virtio_device *dev)
 	virtio_reset_device(dev);
 
 	/* Acknowledge that we've seen the device. */
-	//标记此设备已被发现，且有效
-	//ACKNOWLEDGE (1) Indicates that the guest OS has found the device and recognized it as a valid virtio
-	//device
+	//标记此设备已被发现，且是有效的virtio设备
+	//ACKNOWLEDGE (1) Indicates that the guest OS has found the
+	//device and recognized it as a valid virtio device
 	virtio_add_status(dev, VIRTIO_CONFIG_S_ACKNOWLEDGE);
 
 	/*
@@ -542,6 +544,7 @@ out_of_node_put:
 out_ida_remove:
 	ida_free(&virtio_index_ida, dev->index);
 out:
+	//标明发生内部错误，驱动失败
 	virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
 	return err;
 }
@@ -570,6 +573,7 @@ int virtio_device_freeze(struct virtio_device *dev)
 
 	virtio_config_disable(dev);
 
+	/*驱动认为发生某种错误,配置了FAILED标记*/
 	dev->failed = dev->config->get_status(dev) & VIRTIO_CONFIG_S_FAILED;
 
 	if (drv && drv->freeze) {
@@ -600,6 +604,7 @@ int virtio_device_restore(struct virtio_device *dev)
 	/* Maybe driver failed before freeze.
 	 * Restore the failed status, for debugging. */
 	if (dev->failed)
+		//标明发生内部错误，驱动失败
 		virtio_add_status(dev, VIRTIO_CONFIG_S_FAILED);
 
 	if (!drv)

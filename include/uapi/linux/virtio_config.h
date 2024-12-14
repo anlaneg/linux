@@ -100,12 +100,14 @@ Feature bits are allocated as follows:
 #endif /* __KERNEL__ */
 
 /* This feature indicates support for the packed virtqueue layout. */
+/*标明设备支持PACKED型vring*/
 #define VIRTIO_F_RING_PACKED		34
 
 /*
  * Inorder feature indicates that all buffers are used by the device
  * in the same order in which they have been made available.
  */
+/*标明设备认为所有的BUFFER的ORDER是一样的*/
 #define VIRTIO_F_IN_ORDER		35
 
 /*
@@ -117,6 +119,7 @@ Feature bits are allocated as follows:
 /*
  * Does the device support Single Root I/O Virtualization?
  */
+/*用于指明设备支持sriov*/
 #define VIRTIO_F_SR_IOV			37
 
 /*
@@ -133,6 +136,7 @@ Feature bits are allocated as follows:
 /*
  * This feature indicates that the driver can reset a queue individually.
  */
+/*此标记协商成功后,驱动可以独立的reset每一个VQ*/
 #define VIRTIO_F_RING_RESET		40
 
 /*

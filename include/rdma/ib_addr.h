@@ -122,7 +122,7 @@ static inline int rdma_ip2gid(struct sockaddr *addr, union ib_gid *gid)
 				       (struct in6_addr *)gid);
 		break;
 	case AF_INET6:
-		*(struct in6_addr *)&gid->r aw =
+		*(struct in6_addr *)&gid->raw =
 			((struct sockaddr_in6 *)addr)->sin6_addr;
 		break;
 	default:

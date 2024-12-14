@@ -31,7 +31,7 @@ struct virtio_pci_modern_device {
 	struct pci_dev *pci_dev;/*对应的pci设备*/
 
 	struct virtio_pci_common_cfg __iomem *common;/*common配置结构体*/
-	void __iomem *device;/*device配置结构体*/
+	void __iomem *device;/*映射的device配置结构体*/
 	void __iomem *notify_base;
 	resource_size_t notify_pa;
 	u8 __iomem *isr;/*isr配置结构体*/

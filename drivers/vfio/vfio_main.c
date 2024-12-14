@@ -1325,7 +1325,7 @@ static int vfio_device_fops_mmap(struct file *filep, struct vm_area_struct *vma)
 	return device->ops->mmap(device, vma);
 }
 
-/*vfio-device关联的字符设备(/dev/vfio/device/*)对应的fops*/
+/*vfio-device关联的字符设备(/dev/vfio/device/ *)对应的fops*/
 const struct file_operations vfio_device_fops = {
 	.owner		= THIS_MODULE,
 	.open		= vfio_device_fops_cdev_open,

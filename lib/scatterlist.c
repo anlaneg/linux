@@ -128,8 +128,8 @@ EXPORT_SYMBOL(sg_last);
 //初始化sgl表为nents个元素
 void sg_init_table(struct scatterlist *sgl, unsigned int nents)
 {
-	memset(sgl, 0, sizeof(*sgl) * nents);
-	sg_init_marker(sgl, nents);
+	memset(sgl, 0, sizeof(*sgl) * nents);/*将前N个元素清零完成初始化*/
+	sg_init_marker(sgl, nents);/*标记结尾*/
 }
 EXPORT_SYMBOL(sg_init_table);
 

@@ -32,48 +32,65 @@
 #include <linux/if_ether.h>
 
 /* The feature bitmap for virtio net */
-//设备支持checksum offload
+//vritio网络设备的第一个bit,用于标明virtio设备处理checksum offload
 #define VIRTIO_NET_F_CSUM	0	/* Host handles pkts w/ partial csum */
-//驱动支持checksum offload
+//用于标明需要驱动来处理checksum offload
 #define VIRTIO_NET_F_GUEST_CSUM	1	/* Guest handles pkts w/ partial csum */
 #define VIRTIO_NET_F_CTRL_GUEST_OFFLOADS 2 /* Dynamic offload configuration. */
+/*V1.2标准,用于指明设备支持report最大MTU,则驱动采用MTU值做为最大值*/
 #define VIRTIO_NET_F_MTU	3	/* Initial MTU advice */
-//设备已给定mac地址
+//用于指明设备已经被给定mac地址
 #define VIRTIO_NET_F_MAC	5	/* Host has given MAC address. */
-//驱动支持tso v4
+//用于指明驱动支持tso v4(要求VIRTIO_NET_F_GUEST_CSUM开启)
 #define VIRTIO_NET_F_GUEST_TSO4	7	/* Guest can handle TSOv4 in. */
-//驱动支持tso v6
+//用于指明驱动支持tso v6
 #define VIRTIO_NET_F_GUEST_TSO6	8	/* Guest can handle TSOv6 in. */
+/*用于指明驱动支持tso 及ECN(要求VIRTIO_NET_F_GUEST_TSO4 or VIRTIO_NET_F_GUEST_TSO6开启)*/
 #define VIRTIO_NET_F_GUEST_ECN	9	/* Guest can handle TSO[6] w/ ECN in. */
-//驱动支持ufo
+//用于指明驱动支持ufo
 #define VIRTIO_NET_F_GUEST_UFO	10	/* Guest can handle UFO in. */
-//设备支持tso v4
+//用于指明virtio设备支持tso v4
 #define VIRTIO_NET_F_HOST_TSO4	11	/* Host can handle TSOv4 in. */
-//设备支持tso v6
+//用于指明virtio设备支持tso v6
 #define VIRTIO_NET_F_HOST_TSO6	12	/* Host can handle TSOv6 in. */
+/*用于指明virtio设备支持tso 及ECN*/
 #define VIRTIO_NET_F_HOST_ECN	13	/* Host can handle TSO[6] w/ ECN in. */
-//设备支持ufo
+//用于指明virtio设备支持ufo
 #define VIRTIO_NET_F_HOST_UFO	14	/* Host can handle UFO in. */
-//驱动能合并收到的buffer
+//用于指明驱动能合并(merge)收到的buffer
 #define VIRTIO_NET_F_MRG_RXBUF	15	/* Host can merge receive buffers. */
+/*用于指明设备的配置status字段是有效的*/
 #define VIRTIO_NET_F_STATUS	16	/* virtio_net_config.status available */
-//指明是否有ctrl_vq虚队列存在，负责与后端进行cmd通信
+//指明是否有ctrl_vq虚队列存在,如果有此标记,则存在controlq,其位于rx+tx之后，负责与后端进行cmd通信
 #define VIRTIO_NET_F_CTRL_VQ	17	/* Control channel available */
+/*CTRLQ支持rx模式(要求VIRTIO_NET_F_CTRL_VQ开启)*/
 #define VIRTIO_NET_F_CTRL_RX	18	/* Control channel RX mode support */
+/*CTRLQ支持VLAN FILTER*/
 #define VIRTIO_NET_F_CTRL_VLAN	19	/* Control channel VLAN filtering */
 #define VIRTIO_NET_F_CTRL_RX_EXTRA 20	/* Extra RX mode control support */
+/*用于指明驱动可以发送免费ANNOUNCE报文*/
 #define VIRTIO_NET_F_GUEST_ANNOUNCE 21	/* Guest can announce device on the
 					 * network */
+/*如果此标记不存在,则只有单队列,即1个RX,一个TX,
+ * 否则队列数为max_virtqueue_pairs,(要求VIRTIO_NET_F_CTRL_VQ开启)*/
 #define VIRTIO_NET_F_MQ	22	/* Device supports Receive Flow
 					 * Steering */
+/*指明通过CTRL通道来设置MAC地址*/
 #define VIRTIO_NET_F_CTRL_MAC_ADDR 23	/* Set MAC address */
+/*对于23-32的Feature bits,被预留.
+ * 33向上的Feature bits reserved for future extensions.
+ * */
 #define VIRTIO_NET_F_VQ_NOTF_COAL 52	/* Device supports virtqueue notification coalescing */
 #define VIRTIO_NET_F_NOTF_COAL	53	/* Device supports notifications coalescing */
+/*驱动可以收到USOV4报文*/
 #define VIRTIO_NET_F_GUEST_USO4	54	/* Guest can handle USOv4 in. */
+/*驱动可以收到USOV6报文*/
 #define VIRTIO_NET_F_GUEST_USO6	55	/* Guest can handle USOv6 in. */
 #define VIRTIO_NET_F_HOST_USO	56	/* Host can handle USO in. */
 #define VIRTIO_NET_F_HASH_REPORT  57	/* Supports hash report */
 #define VIRTIO_NET_F_GUEST_HDRLEN  59	/* Guest provides the exact hdr_len value. */
+/*Device supports RSS (receive-side scaling) with Toeplitz hash calculation and configurable
+ * hash parameters for receive steering.*/
 #define VIRTIO_NET_F_RSS	  60	/* Supports RSS RX steering */
 #define VIRTIO_NET_F_RSC_EXT	  61	/* extended coalescing info */
 #define VIRTIO_NET_F_STANDBY	  62	/* Act as standby for another device
@@ -107,17 +124,16 @@
 //定义设备最大接受发送队列数
 
 //virtio-net设备的配置结构体
-
 struct virtio_net_config {
 	/* The config defining mac address (if VIRTIO_NET_F_MAC) */
-	__u8 mac[ETH_ALEN];/*硬件的mac地址（VIRTIO_NET_F_MAC标记存在时）*/
+	__u8 mac[ETH_ALEN];/*硬件的mac地址（只读,VIRTIO_NET_F_MAC标记存在时此数据有效）*/
 	/* See VIRTIO_NET_F_STATUS and VIRTIO_NET_S_* above */
-	__virtio16 status;//链路状态
+	__virtio16 status;//链路状态,只读(两个BITs)
 	/* Maximum number of each of transmit and receive queues;
 	 * see VIRTIO_NET_F_MQ and VIRTIO_NET_CTRL_MQ.
 	 * Legal values are between 1 and 0x8000
 	 */
-	__virtio16 max_virtqueue_pairs;//最大队列数
+	__virtio16 max_virtqueue_pairs;//最大队列数,只读,仅VIRTIO_NET_F_MQ被设置时有效
 	/* Default maximum transmit unit advice */
 	__virtio16 mtu;//硬件默认mtu值
 	/*
@@ -210,7 +226,7 @@ struct virtio_net_hdr {
 	/* See VIRTIO_NET_HDR_F_* */
 	__u8 flags;
 	/* See VIRTIO_NET_HDR_GSO_* */
-	__u8 gso_type;
+	__u8 gso_type;/*GSO flag相关*/
 	__virtio16 hdr_len;		/* Ethernet + IP + tcp/udp hdrs */
 	__virtio16 gso_size;		/* Bytes to append to hdr_len per frame */
 	__virtio16 csum_start;	/* Position to start checksumming from */

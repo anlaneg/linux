@@ -482,6 +482,7 @@ static long vhost_vdpa_set_features(struct vhost_vdpa *v, u64 __user *featurep)
 	 * been negotiated.
 	 */
 	if (ops->get_status(vdpa) & VIRTIO_CONFIG_S_FEATURES_OK)
+		/*设备已标明功能协商完成,返回错误*/
 		return -EBUSY;
 
 	if (copy_from_user(&features, featurep, sizeof(features)))

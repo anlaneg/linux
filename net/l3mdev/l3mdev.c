@@ -269,7 +269,7 @@ int l3mdev_fib_rule_match(struct net *net, struct flowi *fl,
 	int rc = 0;
 
 	/* update flow ensures flowi_l3mdev is set when relevant */
-	if (!fl->)
+	if (!fl->flowi_l3mdev)
 		/*未直充l3mdev，不匹配*/
 		return 0;
 

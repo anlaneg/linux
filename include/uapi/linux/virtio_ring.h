@@ -44,6 +44,7 @@
 //标记这个buffer可写（如为0，则表示可读）
 #define VRING_DESC_F_WRITE	2
 /* This means the buffer contains a list of buffer descriptors. */
+/*标记这个描述符内包含有一组描述符指明的BUFFER链*/
 #define VRING_DESC_F_INDIRECT	4
 
 /*
@@ -81,6 +82,7 @@
 #define VRING_PACKED_EVENT_F_WRAP_CTR	15
 
 /* We support indirect buffer descriptors */
+/*标明设备支持大请求(a large number of large requests.)*/
 #define VIRTIO_RING_F_INDIRECT_DESC	28
 
 /* The Guest publishes the used index for which it expects an interrupt

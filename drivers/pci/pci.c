@@ -605,6 +605,7 @@ u16 pci_find_next_ext_capability(struct pci_dev *dev, u16 start, int cap)
 
 	while (ttl-- > 0) {
 		if (PCI_EXT_CAP_ID(header) == cap && pos != start)
+			/*遇到我们要查找的CAP,返回对应的位置*/
 			return pos;
 
 		pos = PCI_EXT_CAP_NEXT(header);

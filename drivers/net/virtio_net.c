@@ -788,7 +788,8 @@ static void free_old_xmit_skbs(struct send_queue *sq, bool in_napi)
 	unsigned int bytes = 0;
 	void *ptr;
 
-	while ((ptr = virtqueue_get_buf(sq->vq, &len)) != NULL) {
+	/*自tx对应的vq中取一个已发送完成的buffer,并顺便维护USED队列*/
+	while ((ptr = virtqueue_get_buf(sq->vq/*指明为tx对应的vq*/, &len)) != NULL) {
 		if (likely(!is_xdp_frame(ptr))) {
 			struct sk_buff *skb = ptr;
 
@@ -2361,7 +2362,7 @@ static int virtnet_poll_tx(struct napi_struct *napi, int budget)
 	return 0;
 }
 
-//发送报文到sq队列
+//将skb转换为到sq->sg列表,然后将sg列表存入virtio队列
 static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 {
 	struct virtio_net_hdr_mrg_rxbuf *hdr;
@@ -2386,6 +2387,7 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		/*不能push,将merge header存在skb cb中*/
 		hdr = &skb_vnet_common_hdr(skb)->mrg_hdr;
 
+	/*填写vnet_header*/
 	if (virtio_net_hdr_from_skb(skb, &hdr->hdr,
 				    virtio_is_little_endian(vi->vdev), false,
 				    0))
@@ -2412,7 +2414,8 @@ static int xmit_skb(struct send_queue *sq, struct sk_buff *skb)
 		num_sg++;
 	}
 
-    //将报文存入(报文已存入sq->sg中，共计num_sg个分片)到虚拟化队列中
+	//报文已存入sq->sg中，共计num_sg个分片
+    //接着将报文存入到虚拟化队列(sq->vq)中
 	return virtqueue_add_outbuf(sq->vq, sq->sg, num_sg, skb, GFP_ATOMIC);
 }
 
@@ -2472,7 +2475,7 @@ static netdev_tx_t start_xmit(struct sk_buff *skb, struct net_device *dev)
 	check_sq_full_and_disable(vi, dev, sq);
 
 	if (kick || netif_xmit_stopped(txq)) {
-		/*kick*/
+		/*执行kick,通知后端收包*/
 		if (virtqueue_kick_prepare(sq->vq)/*检查是否需要kick*/ && virtqueue_notify(sq->vq)/*具体发送kick*/) {
 			u64_stats_update_begin(&sq->stats.syncp);
 			u64_stats_inc(&sq->stats.kicks);
@@ -2692,7 +2695,7 @@ static void virtnet_stats(struct net_device *dev,
 static void virtnet_ack_link_announce(struct virtnet_info *vi)
 {
 	rtnl_lock();
-	//发送控制命令
+	//沿CTRLQ发送控制命令
 	if (!virtnet_send_command(vi, VIRTIO_NET_CTRL_ANNOUNCE,
 				  VIRTIO_NET_CTRL_ANNOUNCE_ACK, NULL))
 		dev_warn(&vi->dev->dev, "Failed to ack link announce.\n");
@@ -2897,7 +2900,7 @@ static void virtnet_set_affinity(struct virtnet_info *vi)
 	stragglers = num_cpu >= vi->curr_queue_pairs ?
 			num_cpu % vi->curr_queue_pairs :
 			0;
-	cpu = cpumask_first(cpu_online_mask);
+	cpu = cpumask_first(cpu_online_mask);/*从第一个CPU开始*/
 
 	for (i = 0; i < vi->curr_queue_pairs; i++) {
 		group_size = stride + (i < stragglers ? 1 : 0);
@@ -2905,7 +2908,7 @@ static void virtnet_set_affinity(struct virtnet_info *vi)
 		for (j = 0; j < group_size; j++) {
 			cpumask_set_cpu(cpu, mask);
 			cpu = cpumask_next_wrap(cpu, cpu_online_mask,
-						nr_cpu_ids, false);
+						nr_cpu_ids, false);/*找下一个CPU*/
 		}
 		//设置收队列i,发队列i绑定到cpu
 		virtqueue_set_affinity(vi->rq[i].vq, mask);
@@ -4233,7 +4236,7 @@ static void virtnet_config_changed_work(struct work_struct *work)
 	if (vi->status == v)
 		return;
 
-	vi->status = v;
+	vi->status = v;/*状态发生变化,更新为新值(UP/down)*/
 
 	if (vi->status & VIRTIO_NET_S_LINK_UP) {
 		//新状态为up,将link置为up
@@ -4384,7 +4387,7 @@ static int virtnet_find_vqs(struct virtnet_info *vi)
 	 * possible N-1 RX/TX queue pairs used in multiqueue mode, followed by
 	 * possible control vq.
 	 */
-	//N个收队列，N个发队列，1个控制队列
+	//如上为规范说明,N个收队列，N个发队列，1个控制队列
 	//2. If the VIRTIO_NET_F_CTRL_VQ feature bit is negotiated, identify the control virtqueue.
 	total_vqs = vi->max_queue_pairs * 2 +
 		    virtio_has_feature(vi->vdev, VIRTIO_NET_F_CTRL_VQ);
@@ -4497,7 +4500,7 @@ static int virtnet_alloc_queues(struct virtnet_info *vi)
 	//初始化延迟任务refill_work(延迟时间0）
 	INIT_DELAYED_WORK(&vi->refill, refill_work);
 
-	//初始化收发队列
+	//初始化收发队列(按v1.O规范规定,0号队列(2*N)为收队列,1号(2*N + 1)队列为发队列
 	for (i = 0; i < vi->max_queue_pairs; i++) {
 		vi->rq[i].pages = NULL;
 		//设置收包队列的处理函数（virtnet_poll)，将其加入napi
@@ -4547,7 +4550,7 @@ static int init_vqs(struct virtnet_info *vi)
 	virtnet_rq_set_premapped(vi);
 
 	cpus_read_lock();
-	virtnet_set_affinity(vi);//为队列绑定cpu
+	virtnet_set_affinity(vi);//为队列绑定cpu(从第一个ONLINE cpu开始)
 	cpus_read_unlock();
 
 	return 0;
@@ -4688,6 +4691,7 @@ static void virtnet_set_big_packets(struct virtnet_info *vi, const int mtu)
 	 * mtu size worth only.
 	 */
 	if (mtu > ETH_DATA_LEN || guest_gso) {
+		/*MTU过大时,开启大包能力*/
 		vi->big_packets = true;
 		vi->big_packets_num_skbfrags = guest_gso ? MAX_SKB_FRAGS : DIV_ROUND_UP(mtu, PAGE_SIZE);
 	}
@@ -4719,7 +4723,7 @@ static int virtnet_probe(struct virtio_device *vdev)
 	//5.1.5
 	//Identify and initialize the receive and transmission virtqueues, up to N of each kind. If VIRTIO_NET_-
 	//F_MQ feature bit is negotiated, N=max_virtqueue_pairs, otherwise identify N=1.
-	//如果配置错误，则使用配置值
+	//如果设备配置错误，则使用配置值
 	if (max_queue_pairs < VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MIN ||
 	    max_queue_pairs > VIRTIO_NET_CTRL_MQ_VQ_PAIRS_MAX ||
 	    !virtio_has_feature(vdev, VIRTIO_NET_F_CTRL_VQ))

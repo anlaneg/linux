@@ -215,15 +215,16 @@ static void vp_transport_features(struct virtio_device *vdev, u64 features)
 	struct virtio_pci_device *vp_dev = to_vp_device(vdev);
 	struct pci_dev *pci_dev = vp_dev->pci_dev;
 
+	/*如果virtio支持SRIOV,则检查PCI设备是否存在SRIOV CAP*/
 	if ((features & BIT_ULL(VIRTIO_F_SR_IOV)) &&
 			pci_find_ext_capability(pci_dev, PCI_EXT_CAP_ID_SRIOV))
-		__virtio_set_bit(vdev, VIRTIO_F_SR_IOV);
+		__virtio_set_bit(vdev, VIRTIO_F_SR_IOV);/*开启SRIOV能力*/
 
 	if (features & BIT_ULL(VIRTIO_F_RING_RESET))
 		__virtio_set_bit(vdev, VIRTIO_F_RING_RESET);
 
 	if (features & BIT_ULL(VIRTIO_F_ADMIN_VQ))
-		__virtio_set_bit(vdev, VIRTIO_F_ADMIN_VQ);
+		__virtio_set_bit(vdev, VIRTIO_F_ADMIN_VQ);/*开启admin vq*/
 }
 
 static int __vp_check_common_size_one_feature(struct virtio_device *vdev, u32 fbit,
@@ -301,7 +302,7 @@ static void vp_get(struct virtio_device *vdev, unsigned int offset,
 	__le16 w;
 	__le32 l;
 
-	BUG_ON(offset + len > mdev->device_len);
+	BUG_ON(offset + len > mdev->device_len);/*不得越界*/
 
 	switch (len) {
 	case 1:

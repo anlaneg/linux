@@ -213,8 +213,9 @@ static inline void __virtio_clear_bit(struct virtio_device *vdev,
 static inline bool virtio_has_feature(const struct virtio_device *vdev,
 				      unsigned int fbit)
 {
-	//28以下的bit功能位是virio_dirver必须提供的，如果未提供，则直接挂掉
+	/*检查设备是否提供有fbit对应的功能*/
 	if (fbit < VIRTIO_TRANSPORT_F_START)
+		//28以下的bit功能位是virio_dirver必须提供的，如果未提供，则直接挂掉
 		virtio_check_driver_offered_feature(vdev, fbit);
 
 	//大于28的是virtio_device提供的功能，检查bit位是否提供
