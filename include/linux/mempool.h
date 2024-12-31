@@ -16,11 +16,15 @@ typedef void (mempool_free_t)(void *element, void *pool_data);
 typedef struct mempool_s {
 	spinlock_t lock;
 	int min_nr;		/* nr of elements at *elements */
+	/*当前elements数组中element数*/
 	int curr_nr;		/* Current nr of elements at *elements */
+	/*用于存入element指针*/
 	void **elements;
 
-	void *pool_data;
+	void *pool_data;/*alloc,free函数调用时的私有数据*/
+	/*用于申请element*/
 	mempool_alloc_t *alloc;
+	/*用于释放element*/
 	mempool_free_t *free;
 	wait_queue_head_t wait;
 } mempool_t;

@@ -139,9 +139,10 @@ static __always_inline void add_element(mempool_t *pool, void *element)
 	BUG_ON(pool->curr_nr >= pool->min_nr);
 	poison_element(pool, element);
 	if (kasan_poison_element(pool, element))
-		pool->elements[pool->curr_nr++] = element;
+		pool->elements[pool->curr_nr++] = element;/*将element存入到elements数组中*/
 }
 
+/*自pool中取一个element(移除式提取）*/
 static void *remove_element(mempool_t *pool)
 {
 	void *element = pool->elements[--pool->curr_nr];
@@ -165,9 +166,10 @@ static void *remove_element(mempool_t *pool)
  */
 void mempool_exit(mempool_t *pool)
 {
+	/*清空pool中的内容*/
 	while (pool->curr_nr) {
 		void *element = remove_element(pool);
-		pool->free(element, pool->pool_data);
+		pool->free(element, pool->pool_data);/*调用free具体释放*/
 	}
 	kfree(pool->elements);
 	pool->elements = NULL;
@@ -203,6 +205,7 @@ int mempool_init_node(mempool_t *pool, int min_nr, mempool_alloc_t *alloc_fn,
 	pool->free	= free_fn;
 	init_waitqueue_head(&pool->wait);
 
+	/*初始化min_nr个void*指针*/
 	pool->elements = kmalloc_array_node(min_nr, sizeof(void *),
 					    gfp_mask, node_id);
 	if (!pool->elements)
@@ -211,10 +214,10 @@ int mempool_init_node(mempool_t *pool, int min_nr, mempool_alloc_t *alloc_fn,
 	/*
 	 * First pre-allocate the guaranteed number of buffers.
 	 */
-	while (pool->curr_nr < pool->min_nr) {
+	while (pool->curr_nr < pool->min_nr) {/*初始化pool->min_nr个元素*/
 		void *element;
 
-		element = pool->alloc(gfp_mask, pool->pool_data);
+		element = pool->alloc(gfp_mask, pool->pool_data);/*申请一个元素*/
 		if (unlikely(!element)) {
 			mempool_exit(pool);
 			return -ENOMEM;
@@ -269,20 +272,22 @@ mempool_t *mempool_create(int min_nr, mempool_alloc_t *alloc_fn,
 				mempool_free_t *free_fn, void *pool_data)
 {
 	return mempool_create_node(min_nr, alloc_fn, free_fn, pool_data,
-				   GFP_KERNEL, NUMA_NO_NODE);
+				   GFP_KERNEL, NUMA_NO_NODE/*任意numa node*/);
 }
 EXPORT_SYMBOL(mempool_create);
 
 mempool_t *mempool_create_node(int min_nr, mempool_alloc_t *alloc_fn,
 			       mempool_free_t *free_fn, void *pool_data,
-			       gfp_t gfp_mask, int node_id)
+			       gfp_t gfp_mask, int node_id/*mempool关联的numa node*/)
 {
 	mempool_t *pool;
 
+	/*申请mempool结构体*/
 	pool = kzalloc_node(sizeof(*pool), gfp_mask, node_id);
 	if (!pool)
 		return NULL;
 
+	/*初始化mempool*/
 	if (mempool_init_node(pool, min_nr, alloc_fn, free_fn, pool_data,
 			      gfp_mask, node_id)) {
 		kfree(pool);
@@ -311,7 +316,7 @@ EXPORT_SYMBOL(mempool_create_node);
  *
  * Return: %0 on success, negative error code otherwise.
  */
-int mempool_resize(mempool_t *pool, int new_min_nr)
+int mempool_resize(mempool_t *pool, int new_min_nr/*新的min_nr*/)
 {
 	void *element;
 	void **new_elements;
@@ -322,6 +327,7 @@ int mempool_resize(mempool_t *pool, int new_min_nr)
 
 	spin_lock_irqsave(&pool->lock, flags);
 	if (new_min_nr <= pool->min_nr) {
+		/*新的size过小，释放掉多余的*/
 		while (new_min_nr < pool->curr_nr) {
 			element = remove_element(pool);
 			spin_unlock_irqrestore(&pool->lock, flags);
@@ -346,10 +352,11 @@ int mempool_resize(mempool_t *pool, int new_min_nr)
 		kfree(new_elements);
 		goto out;
 	}
+	/*复制旧表中的内容到新表*/
 	memcpy(new_elements, pool->elements,
 			pool->curr_nr * sizeof(*new_elements));
 	kfree(pool->elements);
-	pool->elements = new_elements;
+	pool->elements = new_elements;/*设置新表*/
 	pool->min_nr = new_min_nr;
 
 	while (pool->curr_nr < pool->min_nr) {
@@ -407,11 +414,11 @@ repeat_alloc:
 
 	element = pool->alloc(gfp_temp, pool->pool_data);
 	if (likely(element != NULL))
-		return element;
+		return element;/*已申请到，直接返回*/
 
 	spin_lock_irqsave(&pool->lock, flags);
 	if (likely(pool->curr_nr)) {
-		element = remove_element(pool);
+		element = remove_element(pool);/*自pool中申请*/
 		spin_unlock_irqrestore(&pool->lock, flags);
 		/* paired with rmb in mempool_free(), read comment there */
 		smp_wmb();
@@ -476,6 +483,7 @@ void *mempool_alloc_preallocated(mempool_t *pool)
 
 	spin_lock_irqsave(&pool->lock, flags);
 	if (likely(pool->curr_nr)) {
+		/*自pool中申请*/
 		element = remove_element(pool);
 		spin_unlock_irqrestore(&pool->lock, flags);
 		/* paired with rmb in mempool_free(), read comment there */

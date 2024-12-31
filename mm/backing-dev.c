@@ -1003,6 +1003,7 @@ int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 	if (bdi->dev)	/* The driver needs to use separate queues per device */
 		return 0;
 
+	/*设置设备名称*/
 	vsnprintf(bdi->dev_name, sizeof(bdi->dev_name), fmt, args);
 	dev = device_create(&bdi_class, NULL, MKDEV(0, 0), bdi, bdi->dev_name);
 	if (IS_ERR(dev))
@@ -1011,7 +1012,7 @@ int bdi_register_va(struct backing_dev_info *bdi, const char *fmt, va_list args)
 	cgwb_bdi_register(bdi);
 	bdi->dev = dev;
 
-	bdi_debug_register(bdi, dev_name(dev));
+	bdi_debug_register(bdi, dev_name(dev));/*debugfs目录项添加*/
 	set_bit(WB_registered, &bdi->wb.state);
 
 	spin_lock_bh(&bdi_lock);
