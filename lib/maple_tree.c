@@ -4993,8 +4993,8 @@ static inline int mas_sparse_area(struct ma_state *mas, unsigned long min,
  * @max: The highest value of the range
  * @size: The size needed
  */
-int mas_empty_area(struct ma_state *mas, unsigned long min,
-		unsigned long max, unsigned long size)
+int mas_empty_area(struct ma_state *mas, unsigned long min/*查找范围起点*/,
+		unsigned long max/*查找范围终点*/, unsigned long size)
 {
 	unsigned char offset;
 	unsigned long *pivots;

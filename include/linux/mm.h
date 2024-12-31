@@ -3353,6 +3353,7 @@ static inline int check_data_rlimit(unsigned long rlim,
 				    unsigned long start_data)
 {
 	if (rlim < RLIM_INFINITY) {
+		/*rlim使能，检查是否超限*/
 		if (((new - start) + (end_data - start_data)) > rlim)
 			return -ENOSPC;
 	}
@@ -3426,9 +3427,9 @@ extern unsigned long __must_check vm_mmap(struct file *, unsigned long,
 struct vm_unmapped_area_info {
 #define VM_UNMAPPED_AREA_TOPDOWN 1
 	unsigned long flags;
-	unsigned long length;
-	unsigned long low_limit;
-	unsigned long high_limit;
+	unsigned long length;/*要查找的空间长度*/
+	unsigned long low_limit;/*查找范围起始地址*/
+	unsigned long high_limit;/*查找范围终止地址*/
 	unsigned long align_mask;
 	unsigned long align_offset;
 };
@@ -3517,6 +3518,7 @@ static inline unsigned long vm_end_gap(struct vm_area_struct *vma)
 
 static inline unsigned long vma_pages(struct vm_area_struct *vma)
 {
+	/*vma占用多少页*/
 	return (vma->vm_end - vma->vm_start) >> PAGE_SHIFT;
 }
 

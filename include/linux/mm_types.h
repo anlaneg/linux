@@ -634,6 +634,7 @@ struct vm_area_struct {
 #endif
 	};
 
+	/*此地址区域所属的mm_struct*/
 	struct mm_struct *vm_mm;	/* The address space we belong to. */
 	/*区域权限*/
 	pgprot_t vm_page_prot;          /* Access permissions of this VMA. */
@@ -696,7 +697,7 @@ struct vm_area_struct {
 	/*在page范围内的起始offset*/
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units */
-	/*此区域映射到哪个文件*/
+	/*此区域映射到哪个文件（此文件被映射时将被增加引用，释放时减少引用，以阻止其删除）*/
 	struct file * vm_file;		/* File we map to (can be NULL). */
 	void * vm_private_data;		/* was vm_pte (shared mem) */
 

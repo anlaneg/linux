@@ -506,7 +506,7 @@ void __vm_area_free(struct vm_area_struct *vma)
 	vma_numab_state_free(vma);
 	free_anon_vma_name(vma);
 	vma_lock_free(vma);
-	kmem_cache_free(vm_area_cachep, vma);
+	kmem_cache_free(vm_area_cachep, vma);/*归还vma结构体*/
 }
 
 #ifdef CONFIG_PER_VMA_LOCK
@@ -3288,6 +3288,7 @@ void __init proc_caches_init(void)
 			SLAB_HWCACHE_ALIGN|SLAB_PANIC|SLAB_ACCOUNT,
 			NULL);
 
+	/*创建vm_area_struct结构体cache*/
 	vm_area_cachep = KMEM_CACHE(vm_area_struct, SLAB_PANIC|SLAB_ACCOUNT);
 #ifdef CONFIG_PER_VMA_LOCK
 	vma_lock_cachep = KMEM_CACHE(vma_lock, SLAB_PANIC|SLAB_ACCOUNT);

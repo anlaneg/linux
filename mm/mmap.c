@@ -175,7 +175,7 @@ static int check_brk_limits(unsigned long addr, unsigned long len)
 }
 static int do_brk_flags(struct vma_iterator *vmi, struct vm_area_struct *brkvma,
 		unsigned long addr, unsigned long request, unsigned long flags);
-SYSCALL_DEFINE1(brk, unsigned long, brk)
+SYSCALL_DEFINE1(brk, unsigned long, brk/*新的堆结束地址*/)
 {
 	unsigned long newbrk, oldbrk, origbrk;
 	struct mm_struct *mm = current->mm;
@@ -204,6 +204,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk)
 	min_brk = mm->start_brk;
 #endif
 	if (brk < min_brk)
+		/*参数指定的brk比当前进程的当前brk要小，退出*/
 		goto out;
 
 	/*
@@ -272,7 +273,7 @@ success_unlocked:
 	return brk;
 
 out:
-	mm->brk = origbrk;
+	mm->brk = origbrk;/*仍使用origin brk*/
 	mmap_write_unlock(mm);
 	return origbrk;
 }
@@ -1149,7 +1150,7 @@ static inline unsigned long round_hint_to_min(unsigned long hint)
 	hint &= PAGE_MASK;/*将hint按页对齐*/
 	if (((void *)hint != NULL) &&
 	    (hint < mmap_min_addr))
-		/*归化到mmap_min_addr*/
+		/*hint不为NULL，且提供的地址过小，归化到mmap_min_addr*/
 		return PAGE_ALIGN(mmap_min_addr);
 	/*>mmap_min_addr,使用对齐后的hint*/
 	return hint;
@@ -1610,10 +1611,10 @@ static unsigned long unmapped_area(struct vm_unmapped_area_info *info)
 
 	low_limit = info->low_limit;
 	if (low_limit < mmap_min_addr)
-		low_limit = mmap_min_addr;
+		low_limit = mmap_min_addr;/*low limit必须至少等于可mmap的最小地址*/
 	high_limit = info->high_limit;
 retry:
-	if (mas_empty_area(&mas, low_limit, high_limit - 1, length))
+	if (mas_empty_area(&mas, low_limit, high_limit - 1, length/*可用长度*/))
 		return -ENOMEM;
 
 	gap = mas.index;
@@ -1868,7 +1869,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 	if (!file)
 		pgoff = 0;
 
-	/*触发回调*/
+	/*触发回调，获得映射地址*/
 	addr = get_area(file, addr, len, pgoff, flags);
 	if (IS_ERR_VALUE(addr))
 		return addr;
@@ -2318,7 +2319,7 @@ static inline void remove_mt(struct mm_struct *mm, struct ma_state *mas)
 
 		if (vma->vm_flags & VM_ACCOUNT)
 			nr_accounted += nrpages;
-		vm_stat_account(mm, vma->vm_flags, -nrpages);
+		vm_stat_account(mm, vma->vm_flags, -nrpages);/*减少必要页数*/
 		remove_vma(vma, false);
 	}
 	vm_unacct_memory(nr_accounted);
@@ -2840,14 +2841,14 @@ cannot_expand:
 	 * specific mapper. the address has already been validated, but
 	 * not unmapped, but the maps are removed from the list.
 	 */
-	vma = vm_area_alloc(mm);
+	vma = vm_area_alloc(mm);/*申请结构体*/
 	if (!vma) {
 		error = -ENOMEM;
 		goto unacct_error;
 	}
 
 	vma_iter_config(&vmi, addr, end);
-	vma->vm_start = addr;
+	vma->vm_start = addr;/*区域起始地址*/
 	vma->vm_end = end;
 	vm_flags_init(vma, vm_flags);
 	vma->vm_page_prot = vm_get_page_prot(vm_flags);
@@ -3628,7 +3629,7 @@ static struct vm_area_struct *__install_special_mapping(
 		      VM_DONTEXPAND | VM_SOFTDIRTY) & ~VM_LOCKED_MASK);
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 
-	vma->vm_ops = ops;
+	vma->vm_ops = ops;/*设置操作集*/
 	vma->vm_private_data = priv;
 
 	ret = insert_vm_struct(mm, vma);

@@ -1125,8 +1125,8 @@ unsigned long do_mmap(struct file *file,
 			vma->vm_region = pregion;
 			start = pregion->vm_start;
 			start += (pgoff - pregion->vm_pgoff) << PAGE_SHIFT;
-			vma->vm_start = start;
-			vma->vm_end = start + len;
+			vma->vm_start = start;/*区域起始地址*/
+			vma->vm_end = start + len;/*区域结束地址*/
 
 			if (pregion->vm_flags & VM_MAPPED_COPY)
 				vm_flags_set(vma, VM_MAPPED_COPY);

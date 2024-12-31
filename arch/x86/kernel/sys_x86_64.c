@@ -115,7 +115,7 @@ static void find_start_end(unsigned long addr, unsigned long flags,
 		return;
 	}
 
-	*begin	= get_mmap_base(1);
+	*begin	= get_mmap_base(1);/*mmap base地址*/
 	if (in_32bit_syscall())
 		*end = task_size_32bit();
 	else
@@ -132,25 +132,27 @@ arch_get_unmapped_area(struct file *filp, unsigned long addr,
 	unsigned long begin, end;
 
 	if (flags & MAP_FIXED)
+		/*固定地址，直接返回*/
 		return addr;
 
+	/*确定可查找范围*/
 	find_start_end(addr, flags, &begin, &end);
 
 	if (len > end)
 		return -ENOMEM;
 
 	if (addr) {
-		addr = PAGE_ALIGN(addr);
-		vma = find_vma(mm, addr);
+		addr = PAGE_ALIGN(addr);/*地址转为页对齐*/
+		vma = find_vma(mm, addr);/*查找此地址所在的vma*/
 		if (end - len >= addr &&
 		    (!vma || addr + len <= vm_start_gap(vma)))
 			return addr;
 	}
 
 	info.flags = 0;
-	info.length = len;
-	info.low_limit = begin;
-	info.high_limit = end;
+	info.length = len;/*要查找的空间长度*/
+	info.low_limit = begin;/*查找范围起始地址*/
+	info.high_limit = end;/*查找范围终止地址*/
 	info.align_mask = 0;
 	info.align_offset = pgoff << PAGE_SHIFT;
 	if (filp) {
