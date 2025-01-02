@@ -623,6 +623,7 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 		kmalloc_flags &= ~__GFP_NOFAIL;
 	}
 
+	/*申请内存*/
 	ret = kmalloc_node(size, kmalloc_flags, node);
 
 	/*
@@ -630,7 +631,7 @@ void *kvmalloc_node(size_t size, gfp_t flags, int node)
 	 * requests
 	 */
 	if (ret || size <= PAGE_SIZE)
-		return ret;
+		return ret;/*申请成功或者失败了，但size小于1页（说明自slab中申请），则返回错误码*/
 
 	/* non-sleeping allocations are not supported by vmalloc */
 	if (!gfpflags_allow_blocking(flags))

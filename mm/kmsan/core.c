@@ -214,7 +214,7 @@ void kmsan_internal_set_shadow_origin(void *addr, size_t size, int b,
 		}
 		return;
 	}
-	__memset(shadow_start, b, size);
+	__memset(shadow_start, b, size);/*初始化为b,例如清零*/
 
 	if (!IS_ALIGNED(address, KMSAN_ORIGIN_SIZE)) {
 		pad = address % KMSAN_ORIGIN_SIZE;

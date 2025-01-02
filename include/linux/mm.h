@@ -2243,7 +2243,7 @@ void page_address_init(void);
 
 static inline void *folio_address(const struct folio *folio)
 {
-	return page_address(&folio->page);
+	return page_address(&folio->page);/*取此页对应的起始虚拟地址*/
 }
 
 extern pgoff_t __page_file_index(struct page *page);

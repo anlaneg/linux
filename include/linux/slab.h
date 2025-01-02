@@ -481,6 +481,7 @@ static __always_inline unsigned int __kmalloc_index(size_t size,
 	return -1;
 }
 static_assert(PAGE_SHIFT <= 20);
+/*将size转换为以2为底size的对数*/
 #define kmalloc_index(s) __kmalloc_index(s, true)
 
 void *__kmalloc(size_t size, gfp_t flags) __assume_kmalloc_alignment __alloc_size(1);
@@ -613,9 +614,11 @@ static __always_inline __alloc_size(1) void *kmalloc_node(size_t size, gfp_t fla
 		unsigned int index;
 
 		if (size > KMALLOC_MAX_CACHE_SIZE)
+			/*申请的长度较大（双页）*/
 			return kmalloc_large_node(size, flags, node);
 
-		index = kmalloc_index(size);
+		index = kmalloc_index(size);/*由size转换为index*/
+		/*依据要申请的内存type,及大小，交由相应的kmalloc slab来具体进行分配*/
 		return kmalloc_node_trace(
 				kmalloc_caches[kmalloc_type(flags, _RET_IP_)][index],
 				flags, node, size);
@@ -733,16 +736,17 @@ static inline __alloc_size(1) void *kzalloc(size_t size, gfp_t flags)
  * @flags: the type of memory to allocate (see kmalloc).
  * @node: memory node from which to allocate
  */
-//自指定的内存node上申请内存(内存须为全零）
+//自指定的内存node上申请内存，返回虚拟地址(提供的内存须为全零）
 static inline __alloc_size(1) void *kzalloc_node(size_t size, gfp_t flags, int node/*在哪个node上申请内存*/)
 {
 	return kmalloc_node(size, flags | __GFP_ZERO, node);
 }
 
 extern void *kvmalloc_node(size_t size, gfp_t flags, int node) __alloc_size(1);
-static inline __alloc_size(1) void *kvmalloc(size_t size, gfp_t flags)
+static inline __alloc_size(1) void *kvmalloc(size_t size/*要申请的内存大小*/, gfp_t flags)
 {
-	return kvmalloc_node(size, flags, NUMA_NO_NODE);
+	/*对于较小的内存，通过slab分配，对于较大内存通过alloc_pages直接分配*/
+	return kvmalloc_node(size, flags, NUMA_NO_NODE/*node不关心*/);
 }
 static inline __alloc_size(1) void *kvzalloc_node(size_t size, gfp_t flags, int node)
 {

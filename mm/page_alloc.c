@@ -4434,7 +4434,7 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 	 * to be allocated before disabling IRQs.
 	 */
 	while (page_array && nr_populated < nr_pages && page_array[nr_populated])
-		nr_populated++;
+		nr_populated++;/*跳过已填充的page_array数组项*/
 
 	/* No pages requested? */
 	if (unlikely(nr_pages <= 0))
@@ -4450,7 +4450,7 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 
 	/* Use the single page allocator for one page. */
 	if (nr_pages - nr_populated == 1)
-		goto failed;
+		goto failed;/*只申请一页*/
 
 #ifdef CONFIG_PAGE_OWNER
 	/*

@@ -4001,9 +4001,9 @@ static void *__kmalloc_large_node(size_t size, gfp_t flags, int node)
 		flags = kmalloc_fix_flags(flags);
 
 	flags |= __GFP_COMP;
-	folio = (struct folio *)alloc_pages_node(node, flags, order);
+	folio = (struct folio *)alloc_pages_node(node, flags, order);/*申请物理页*/
 	if (folio) {
-		ptr = folio_address(folio);
+		ptr = folio_address(folio);/*申请成功，设置虚拟地址*/
 		lruvec_stat_mod_folio(folio, NR_SLAB_UNRECLAIMABLE_B,
 				      PAGE_SIZE << order);
 	}
@@ -4045,6 +4045,7 @@ void *__do_kmalloc_node(size_t size, gfp_t flags, int node,
 	void *ret;
 
 	if (unlikely(size > KMALLOC_MAX_CACHE_SIZE)) {
+		/*申请的长度较大（双页），采用large形式的申请*/
 		ret = __kmalloc_large_node(size, flags, node);
 		trace_kmalloc(caller, ret, size,
 			      PAGE_SIZE << get_order(size), flags, node);

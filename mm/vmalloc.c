@@ -745,7 +745,7 @@ static DEFINE_SPINLOCK(purge_vmap_area_lock);
  * make things faster. Especially in "no edge" splitting of
  * free block.
  */
-static struct kmem_cache *vmap_area_cachep;
+static struct kmem_cache *vmap_area_cachep;/*负责系统中vmap_area结构体分配*/
 
 /*
  * This linked list is used in pair with free_vmap_area_root.
@@ -865,6 +865,7 @@ find_va_links(struct vmap_area *va,
 	struct rb_node **link;
 
 	if (root) {
+		/*指定了root,从root查起*/
 		link = &root->rb_node;
 		if (unlikely(!*link)) {
 			*parent = NULL;
@@ -888,10 +889,13 @@ find_va_links(struct vmap_area *va,
 		 * or full overlaps.
 		 */
 		if (va->va_end <= tmp_va->va_start)
+			/*此区域比当前节点靠前，走左侧节点*/
 			link = &(*link)->rb_left;
 		else if (va->va_start >= tmp_va->va_end)
+			/*此区域比当前节点告后，走右侧节点*/
 			link = &(*link)->rb_right;
 		else {
+			/*此区域与当前节点有重叠，告警*/
 			WARN(1, "vmalloc bug: 0x%lx-0x%lx overlaps with 0x%lx-0x%lx\n",
 				va->va_start, va->va_end, tmp_va->va_start, tmp_va->va_end);
 
@@ -899,7 +903,7 @@ find_va_links(struct vmap_area *va,
 		}
 	} while (*link);
 
-	*parent = &tmp_va->rb_node;
+	*parent = &tmp_va->rb_node;/*va需要挂在此节点下*/
 	return link;
 }
 
@@ -1077,7 +1081,7 @@ augment_tree_propagate_from(struct vmap_area *va)
 
 static void
 insert_vmap_area(struct vmap_area *va,
-	struct rb_root *root, struct list_head *head)
+	struct rb_root *root/*根节点*/, struct list_head *head)
 {
 	struct rb_node **link;
 	struct rb_node *parent;
@@ -1593,7 +1597,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	int ret;
 
 	//size必须为页的整数倍
-	if (unlikely(!size || offset_in_page(size) || !is_power_of_2(align)))
+	if (unlikely(!size/*size为零*/ || offset_in_page(size) || !is_power_of_2(align)))
 		return ERR_PTR(-EINVAL);
 
 	if (unlikely(!vmap_initialized))
@@ -1602,6 +1606,7 @@ static struct vmap_area *alloc_vmap_area(unsigned long size,
 	might_sleep();
 	gfp_mask = gfp_mask & GFP_RECLAIM_MASK;
 
+	/*获得一个vmap_area结构体*/
 	va = kmem_cache_alloc_node(vmap_area_cachep, gfp_mask, node);
 	if (unlikely(!va))
 		return ERR_PTR(-ENOMEM);
@@ -2427,9 +2432,9 @@ static struct vm_struct *vmlist __initdata;
 static inline unsigned int vm_area_page_order(struct vm_struct *vm)
 {
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMALLOC
-	return vm->page_order;
+	return vm->page_order;/*开启大页后，默认是一个大页*/
 #else
-	return 0;
+	return 0;/*默认是一页*/
 #endif
 }
 
@@ -2589,11 +2594,12 @@ static struct vm_struct *__get_vm_area_node(unsigned long size,
 		align = 1ul << clamp_t(int, get_count_order_long(size),
 				       PAGE_SHIFT, IOREMAP_MAX_ORDER);
 
+	/*申请vm_struct结构体*/
 	area = kzalloc_node(sizeof(*area), gfp_mask & GFP_RECLAIM_MASK, node);
 	if (unlikely(!area))
 		return NULL;
 
-	//没有没有明确指出不开启guard，则默认增加一页
+	//没有明确指出不开启guard，则默认增加一页guard
 	if (!(flags & VM_NO_GUARD))
 		size += PAGE_SIZE;
 
@@ -2997,9 +3003,9 @@ EXPORT_SYMBOL_GPL(vmap_pfn);
 
 static inline unsigned int
 vm_area_alloc_pages(gfp_t gfp, int nid,
-		unsigned int order, unsigned int nr_pages, struct page **pages)
+		unsigned int order/*单页大小*/, unsigned int nr_pages/*pages指针大小（要申请的总页数）*/, struct page **pages/*出参，申请到的物理页*/)
 {
-	unsigned int nr_allocated = 0;
+	unsigned int nr_allocated = 0;/*已经申请的页数*/
 	gfp_t alloc_gfp = gfp;
 	bool nofail = false;
 	struct page *page;
@@ -3032,11 +3038,13 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 			 * but mempolicy wants to alloc memory by interleaving.
 			 */
 			if (IS_ENABLED(CONFIG_NUMA) && nid == NUMA_NO_NODE)
+				/*numa开启情况下，不关心在哪个numa上申请*/
 				nr = alloc_pages_bulk_array_mempolicy(bulk_gfp,
 							nr_pages_request,
 							pages + nr_allocated);
 
 			else
+				/*在指定numa上申请*/
 				nr = alloc_pages_bulk_array_node(bulk_gfp, nid,
 							nr_pages_request,
 							pages + nr_allocated);
@@ -3067,7 +3075,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 			break;
 
 		if (nid == NUMA_NO_NODE)
-			page = alloc_pages(alloc_gfp, order);
+			page = alloc_pages(alloc_gfp, order);/*申请物理页*/
 		else
 			page = alloc_pages_node(nid, alloc_gfp, order);
 		if (unlikely(!page)) {
@@ -3096,7 +3104,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 		 * vm_struct APIs independent of the physical/mapped size.
 		 */
 		for (i = 0; i < (1U << order); i++)
-			pages[nr_allocated + i] = page + i;
+			pages[nr_allocated + i] = page + i;/*填充申请到的物理页地址*/
 
 		cond_resched();
 		nr_allocated += 1U << order;
@@ -3111,15 +3119,16 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 {
 	const gfp_t nested_gfp = (gfp_mask & GFP_RECLAIM_MASK) | __GFP_ZERO;
 	bool nofail = gfp_mask & __GFP_NOFAIL;
-	//获得area所需要的页数目
 	unsigned long addr = (unsigned long)area->addr;
-	unsigned long size = get_vm_area_size(area);
+	unsigned long size = get_vm_area_size(area);/*area对应的区域大小*/
 	unsigned long array_size;
-	unsigned int nr_small_pages = size >> PAGE_SHIFT;
+	unsigned int nr_small_pages = size >> PAGE_SHIFT;/*需要的页数*/
 	unsigned int page_order;
 	unsigned int flags;
 	int ret;
 
+	/*这段区域需要申请物理页进行映射，这些物理页需要struct page指针来保存，
+	 * 获取保存struct page指针所需要的内存大小*/
 	array_size = (unsigned long)nr_small_pages * sizeof(struct page *);
 
 	if (!(gfp_mask & (GFP_DMA | GFP_DMA32)))
@@ -3128,7 +3137,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	//为pages指针数组准备内存
 	/* Please note that the recursion is strictly bounded. */
 	if (array_size > PAGE_SIZE) {
-		//pages指针数组需要内存大于一页，为其申请相应的内存
+		//pages指针数组需要的内存大于一页，为其申请相应的内存
 		area->pages = __vmalloc_node(array_size, 1, nested_gfp, node,
 					area->caller);
 	} else {
@@ -3137,7 +3146,7 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	}
 
 	if (!area->pages) {
-	    	//申请pages指针数组失败
+	    //申请pages指针数组失败
 		warn_alloc(gfp_mask, NULL,
 			"vmalloc error: size %lu, failed to allocated page array size %lu",
 			nr_small_pages * PAGE_SIZE, array_size);
@@ -3146,9 +3155,9 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	}
 
 	set_vm_area_page_order(area, page_shift - PAGE_SHIFT);
-	page_order = vm_area_page_order(area);
+	page_order = vm_area_page_order(area);/*单个页大小*/
 
-	//为每个page申请内存（通过alloc_page申请一个page页）
+	//为每个page申请内存（通过alloc_page申请2^nr_small_pages个page页）
 	area->nr_pages = vm_area_alloc_pages(gfp_mask | __GFP_NOWARN,
 		node, page_order, nr_small_pages, area->pages);
 
@@ -3261,6 +3270,7 @@ void *__vmalloc_node_range(unsigned long size, unsigned long align,
 		return NULL;
 
 	if ((size >> PAGE_SHIFT) > totalram_pages()) {
+		/*申请的大小超过系统可提供的总数*/
 		warn_alloc(gfp_mask, NULL,
 			"vmalloc error: size %lu, exceeds total pages",
 			real_size);
@@ -4474,7 +4484,7 @@ void __init vmalloc_init(void)
 	/*
 	 * Create the cache for vmap_area objects.
 	 */
-	vmap_area_cachep = KMEM_CACHE(vmap_area, SLAB_PANIC);
+	vmap_area_cachep = KMEM_CACHE(vmap_area, SLAB_PANIC);/*创建可分配vmap_area结构体的memory cache*/
 
 	for_each_possible_cpu(i) {
 		struct vmap_block_queue *vbq;
@@ -4505,5 +4515,5 @@ void __init vmalloc_init(void)
 	 * Now we can initialize a free vmap space.
 	 */
 	vmap_init_free_space();
-	vmap_initialized = true;
+	vmap_initialized = true;/*指明vmap已完成初始化*/
 }

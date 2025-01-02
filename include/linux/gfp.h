@@ -208,7 +208,7 @@ static inline unsigned long
 alloc_pages_bulk_array_node(gfp_t gfp, int nid, unsigned long nr_pages, struct page **page_array)
 {
 	if (nid == NUMA_NO_NODE)
-		nid = numa_mem_id();
+		nid = numa_mem_id();/*取当前cpu对应的numa id*/
 
 	return __alloc_pages_bulk(gfp, nid, NULL, nr_pages, NULL, page_array);
 }

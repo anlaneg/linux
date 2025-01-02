@@ -23,6 +23,7 @@ struct iov_iter;		/* in uio.h */
 #define VM_USERMAP		0x00000008	/* suitable for remap_vmalloc_range */
 #define VM_DMA_COHERENT		0x00000010	/* dma_alloc_coherent */
 #define VM_UNINITIALIZED	0x00000020	/* vm_struct is not fully initialized */
+/*用于明确指出，申请内存时不增加guard page(如果不指明，则默认会添加，见__get_vm_area_node）*/
 #define VM_NO_GUARD		0x00000040      /* ***DANGEROUS*** don't add guard page */
 #define VM_KASAN		0x00000080      /* has allocated kasan shadow memory */
 #define VM_FLUSH_RESET_PERMS	0x00000100	/* reset direct map and flush TLB on unmap, can't be freed in atomic context */
@@ -51,11 +52,11 @@ struct vm_struct {
 	void			*addr;//内存起始地址
 	unsigned long		size;//内存大小
 	unsigned long		flags;
-	struct page		**pages;//本段内存所属的页
+	struct page		**pages;//本段内存对应的物理页
 #ifdef CONFIG_HAVE_ARCH_HUGE_VMALLOC
 	unsigned int		page_order;
 #endif
-	unsigned int		nr_pages;//本段内存所需要的页数
+	unsigned int		nr_pages;//本段内存所申请的物理页数（pages数组有效长度）
 	phys_addr_t		phys_addr;
 	const void		*caller;
 };

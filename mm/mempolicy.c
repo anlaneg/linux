@@ -2274,7 +2274,7 @@ static unsigned long alloc_pages_bulk_array_preferred_many(gfp_t gfp, int nid,
  * allocate memory.
  */
 unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
-		unsigned long nr_pages, struct page **page_array)
+		unsigned long nr_pages, struct page **page_array/*出参，填充申请到的struct page指针*/)
 {
 	struct mempolicy *pol = &default_policy;
 	nodemask_t *nodemask;

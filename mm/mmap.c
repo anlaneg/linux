@@ -215,17 +215,19 @@ SYSCALL_DEFINE1(brk, unsigned long, brk/*新的堆结束地址*/)
 	 */
 	if (check_data_rlimit(rlimit(RLIMIT_DATA), brk, mm->start_brk,
 			      mm->end_data, mm->start_data))
+		/*超限*/
 		goto out;
 
-	newbrk = PAGE_ALIGN(brk);
+	newbrk = PAGE_ALIGN(brk);/*按页对齐*/
 	oldbrk = PAGE_ALIGN(mm->brk);
 	if (oldbrk == newbrk) {
-		mm->brk = brk;
+		mm->brk = brk;/*两者相等，不再处理*/
 		goto success;
 	}
 
 	/* Always allow shrinking brk. */
 	if (brk <= mm->brk) {
+		/*brk减少情况*/
 		/* Search one past newbrk */
 		vma_iter_init(&vmi, mm, newbrk);
 		brkvma = vma_find(&vmi, oldbrk);
@@ -243,7 +245,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk/*新的堆结束地址*/)
 		goto success_unlocked;
 	}
 
-	if (check_brk_limits(oldbrk, newbrk - oldbrk))
+	if (check_brk_limits(oldbrk, newbrk - oldbrk/*增加的地址空间*/))
 		goto out;
 
 	/*
@@ -257,7 +259,7 @@ SYSCALL_DEFINE1(brk, unsigned long, brk/*新的堆结束地址*/)
 
 	brkvma = vma_prev_limit(&vmi, mm->start_brk);
 	/* Ok, looks good - let it rip. */
-	if (do_brk_flags(&vmi, brkvma, oldbrk, newbrk - oldbrk, 0) < 0)
+	if (do_brk_flags(&vmi, brkvma, oldbrk/*旧的结束地址*/, newbrk - oldbrk/*变更长度*/, 0) < 0)
 		goto out;
 
 	mm->brk = brk;
