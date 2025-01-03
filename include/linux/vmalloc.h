@@ -49,7 +49,7 @@ struct iov_iter;		/* in uio.h */
 
 struct vm_struct {
 	struct vm_struct	*next;
-	void			*addr;//内存起始地址
+	void			*addr;//内存起始地址(虚拟地址）
 	unsigned long		size;//内存大小
 	unsigned long		flags;
 	struct page		**pages;//本段内存对应的物理页

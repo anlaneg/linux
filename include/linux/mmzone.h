@@ -686,6 +686,7 @@ enum zone_watermarks {
 
 struct per_cpu_pages {
 	spinlock_t lock;	/* Protects lists field */
+	/*持有的总字节数*/
 	int count;		/* number of pages in the list */
 	int high;		/* high watermark, emptying needed */
 	int high_min;		/* min high watermark */

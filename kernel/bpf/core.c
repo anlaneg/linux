@@ -98,6 +98,7 @@ struct bpf_prog *bpf_prog_alloc_no_stats(unsigned int size, gfp_t gfp_extra_flag
 
 	/*申请fp空间*/
 	size = round_up(size, PAGE_SIZE);
+	/*申请内存，返回虚拟地址*/
 	fp = __vmalloc(size, gfp_flags);
 	if (fp == NULL)
 		return NULL;

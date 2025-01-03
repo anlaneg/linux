@@ -25,9 +25,9 @@ void __attribute__((weak)) arch_report_meminfo(struct seq_file *m)
 {
 }
 
-static void show_val_kb(struct seq_file *m, const char *s, unsigned long num)
+static void show_val_kb(struct seq_file *m, const char *s, unsigned long num/*页数*/)
 {
-	seq_put_decimal_ull_width(m, s, num << (PAGE_SHIFT - 10), 8);
+	seq_put_decimal_ull_width(m, s, num << (PAGE_SHIFT - 10)/*页数换算成kb*/, 8);
 	seq_write(m, " kB\n", 4);
 }
 
@@ -130,7 +130,8 @@ static int meminfo_proc_show(struct seq_file *m, void *v)
 	show_val_kb(m, "Committed_AS:   ", committed);
 	seq_printf(m, "VmallocTotal:   %8lu kB\n",
 		   (unsigned long)VMALLOC_TOTAL >> 10);
-	show_val_kb(m, "VmallocUsed:    ", vmalloc_nr_pages());
+	/*显示vmalloc申请占用的总内存数*/
+	show_val_kb(m, "VmallocUsed:    ", vmalloc_nr_pages()/*页数*/);
 	show_val_kb(m, "VmallocChunk:   ", 0ul);
 	show_val_kb(m, "Percpu:         ", pcpu_nr_pages());
 

@@ -795,11 +795,11 @@ static BLOCKING_NOTIFIER_HEAD(vmap_notify_list);
 static void drain_vmap_area_work(struct work_struct *work);
 static DECLARE_WORK(drain_vmap_work, drain_vmap_area_work);
 
-static atomic_long_t nr_vmalloc_pages;
+static atomic_long_t nr_vmalloc_pages;/*记录系统中通过vmalloc申请到的总页数*/
 
 unsigned long vmalloc_nr_pages(void)
 {
-	return atomic_long_read(&nr_vmalloc_pages);
+	return atomic_long_read(&nr_vmalloc_pages);/*返回vmalloc申请到的总页数*/
 }
 
 /* Look up the first VA which satisfies addr < va_end, NULL if none. */
@@ -2855,6 +2855,7 @@ void vfree(const void *addr)
 		__free_page(page);
 		cond_resched();
 	}
+	/*vfree已释放这些page,减少计数*/
 	atomic_long_sub(vm->nr_pages, &nr_vmalloc_pages);
 	kvfree(vm->pages);
 	kfree(vm);
@@ -3049,7 +3050,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 							nr_pages_request,
 							pages + nr_allocated);
 
-			nr_allocated += nr;
+			nr_allocated += nr;/*增加申请到的页数*/
 			cond_resched();
 
 			/*
@@ -3057,7 +3058,7 @@ vm_area_alloc_pages(gfp_t gfp, int nid,
 			 * fallback to a single page allocator.
 			 */
 			if (nr != nr_pages_request)
-				break;
+				break;/*未达到本次申请的目标，说明内存不足*/
 		}
 	} else if (gfp & __GFP_NOFAIL) {
 		/*
@@ -3157,11 +3158,11 @@ static void *__vmalloc_area_node(struct vm_struct *area, gfp_t gfp_mask,
 	set_vm_area_page_order(area, page_shift - PAGE_SHIFT);
 	page_order = vm_area_page_order(area);/*单个页大小*/
 
-	//为每个page申请内存（通过alloc_page申请2^nr_small_pages个page页）
+	//为每个page申请内存，物理地址不连续（通过alloc_page申请2^nr_small_pages个page页）
 	area->nr_pages = vm_area_alloc_pages(gfp_mask | __GFP_NOWARN,
 		node, page_order, nr_small_pages, area->pages);
 
-	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);
+	atomic_long_add(area->nr_pages, &nr_vmalloc_pages);/*增加vmalloc申请到的页数*/
 	if (gfp_mask & __GFP_ACCOUNT) {
 		int i;
 
@@ -3254,7 +3255,7 @@ fail:
  *
  * Return: the address of the area or %NULL on failure
  */
-void *__vmalloc_node_range(unsigned long size, unsigned long align,
+void *__vmalloc_node_range(unsigned long size/*要申请的内存大小*/, unsigned long align/*对齐方式*/,
 			unsigned long start, unsigned long end, gfp_t gfp_mask,
 			pgprot_t prot, unsigned long vm_flags, int node,
 			const void *caller)
@@ -3405,6 +3406,7 @@ fail:
 void *__vmalloc_node(unsigned long size, unsigned long align,
 			    gfp_t gfp_mask, int node, const void *caller)
 {
+	/*在numa node $node上申请长度为size的内存，内存需以align对齐*/
 	return __vmalloc_node_range(size, align, VMALLOC_START, VMALLOC_END,
 				gfp_mask, PAGE_KERNEL, 0, node, caller);
 }
@@ -3417,9 +3419,10 @@ void *__vmalloc_node(unsigned long size, unsigned long align,
 EXPORT_SYMBOL_GPL(__vmalloc_node);
 #endif
 
+/*申请大小为size的内存*/
 void *__vmalloc(unsigned long size, gfp_t gfp_mask)
 {
-	return __vmalloc_node(size, 1, gfp_mask, NUMA_NO_NODE,
+	return __vmalloc_node(size, 1/*按1字节对齐*/, gfp_mask, NUMA_NO_NODE/*不关注numa node*/,
 				__builtin_return_address(0));
 }
 EXPORT_SYMBOL(__vmalloc);

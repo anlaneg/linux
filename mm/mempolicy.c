@@ -2294,7 +2294,7 @@ unsigned long alloc_pages_bulk_array_mempolicy(gfp_t gfp,
 	nid = numa_node_id();
 	nodemask = policy_nodemask(gfp, pol, NO_INTERLEAVE_INDEX, &nid);
 	return __alloc_pages_bulk(gfp, nid, nodemask,
-				  nr_pages, NULL, page_array);
+				  nr_pages, NULL, page_array/*采用array收集*/);
 }
 
 int vma_dup_policy(struct vm_area_struct *src, struct vm_area_struct *dst)

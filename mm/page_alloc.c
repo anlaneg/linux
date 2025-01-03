@@ -582,7 +582,7 @@ static inline void free_the_page(struct page *page, unsigned int order)
 void prep_compound_page(struct page *page, unsigned int order)
 {
 	int i;
-	int nr_pages = 1 << order;
+	int nr_pages = 1 << order;/*页数*/
 
 	__SetPageHead(page);
 	for (i = 1; i < nr_pages; i++)
@@ -2128,7 +2128,7 @@ retry:
     //分配page
 	page = __rmqueue_smallest(zone, order, migratetype);
 	if (unlikely(!page)) {
-	    	//在指定migratetype上申请对应大小的页失败
+	    //在指定migratetype上申请对应大小的页失败
 		if (alloc_flags & ALLOC_CMA)
 			page = __rmqueue_cma_fallback(zone, order);
 
@@ -2145,18 +2145,19 @@ retry:
  * Returns the number of new pages which were placed at *list.
  */
 static int rmqueue_bulk(struct zone *zone, unsigned int order,
-			unsigned long count, struct list_head *list,
+			unsigned long count/*要申请的page数*/, struct list_head *list/*出参，串连申请到的所有pages*/,
 			int migratetype, unsigned int alloc_flags)
 {
 	unsigned long flags;
 	int i;
 
 	spin_lock_irqsave(&zone->lock, flags);
+	/*尝试申请count个2^^order page*/
 	for (i = 0; i < count; ++i) {
 		struct page *page = __rmqueue(zone, order, migratetype,
 								alloc_flags);
 		if (unlikely(page == NULL))
-			break;
+			break;/*申请失败*/
 
 		/*
 		 * Split buddy pages returned by expand() are received here in
@@ -2168,7 +2169,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 		 * for IO devices that can merge IO requests if the physical
 		 * pages are ordered properly.
 		 */
-		list_add_tail(&page->pcp_list, list);
+		list_add_tail(&page->pcp_list, list);/*将申请成功的串到list*/
 		if (is_migrate_cma(get_pcppage_migratetype(page)))
 			__mod_zone_page_state(zone, NR_FREE_CMA_PAGES,
 					      -(1 << order));
@@ -2177,7 +2178,7 @@ static int rmqueue_bulk(struct zone *zone, unsigned int order,
 	__mod_zone_page_state(zone, NR_FREE_PAGES, -(i << order));
 	spin_unlock_irqrestore(&zone->lock, flags);
 
-	return i;
+	return i;/*返回成功申请的page数*/
 }
 
 /*
@@ -2838,21 +2839,23 @@ struct page *__rmqueue_pcplist(struct zone *zone, unsigned int order,
 
 	do {
 		if (list_empty(list)) {
+			/*list表为空，构造新的list串连struct page指针*/
 			int batch = nr_pcp_alloc(pcp, zone, order);
-			int alloced;
+			int alloced;/*申请到的总页数*/
 
-			alloced = rmqueue_bulk(zone, order,
-					batch, list,
+			alloced = rmqueue_bulk(zone, order/*每个page的大小*/,
+					batch/*要申请的一组数目*/, list/*出参，申请好的一组pages*/,
 					migratetype, alloc_flags);
 
-			pcp->count += alloced << order;
+			pcp->count += alloced << order;/*获得的总字节数*/
 			if (unlikely(list_empty(list)))
-				return NULL;
+				return NULL;/*一个都没有申请到，返回NULL*/
 		}
 
+		/*自list中取一个struct page，并自list中移除*/
 		page = list_first_entry(list, struct page, pcp_list);
 		list_del(&page->pcp_list);
-		pcp->count -= 1 << order;
+		pcp->count -= 1 << order;/*持有的总字节数*/
 	} while (check_new_pages(page, order));
 
 	return page;
@@ -4516,7 +4519,7 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 			continue;
 		}
 
-		page = __rmqueue_pcplist(zone, 0, ac.migratetype, alloc_flags,
+		page = __rmqueue_pcplist(zone, 0/*申请单页*/, ac.migratetype, alloc_flags,
 								pcp, pcp_list);
 		if (unlikely(!page)) {
 			/* Try and allocate at least one page */
@@ -4524,15 +4527,15 @@ unsigned long __alloc_pages_bulk(gfp_t gfp, int preferred_nid,
 				pcp_spin_unlock(pcp);
 				goto failed_irq;
 			}
-			break;
+			break;/*申请失败*/
 		}
 		nr_account++;
 
 		prep_new_page(page, 0, gfp, 0);
 		if (page_list)
-			list_add(&page->lru, page_list);
+			list_add(&page->lru, page_list);/*如利用page_list收集，则添加进list*/
 		else
-			page_array[nr_populated] = page;
+			page_array[nr_populated] = page;/*如利用page_array收集，则添加进array*/
 		nr_populated++;
 	}
 
