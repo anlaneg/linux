@@ -947,8 +947,10 @@ static inline bool is_page_hwpoison(struct page *page)
 #define PG_table	0x00000200
 #define PG_guard	0x00000400
 
+/*Page type检查(主要用于检查flag没有被设置,且TYPE_BASE被设置)*/
 #define PageType(page, flag)						\
 	((page->page_type & (PAGE_TYPE_BASE | flag)) == PAGE_TYPE_BASE)
+/*folio类型 Page type检查(主要用于检查flag没有被设置,且TYPE_BASE被设置)*/
 #define folio_test_type(folio, flag)					\
 	((folio->page.page_type & (PAGE_TYPE_BASE | flag)) == PAGE_TYPE_BASE)
 
@@ -962,37 +964,40 @@ static inline int page_has_type(struct page *page)
 	return page_type_has_type(page->page_type);
 }
 
-#define PAGE_TYPE_OPS(uname, lname, fname)				\
+#define PAGE_TYPE_OPS(uname/*Page函数名称后缀*/, lname/*标记名称后缀*/, fname/*folio函数名称后缀*/)				\
 /*由于这里函数名恰与实现相反，故此函数用于查询page的page_type是否包含指定标记*/\
 static __always_inline int Page##uname(const struct page *page)		\
 {									\
+    /*由于包含此标记时page_type上实现为不打标记,故此检查返回true表示有标记*/\
 	return PageType(page, PG_##lname);				\
 }									\
 static __always_inline int folio_test_##fname(const struct folio *folio)\
 {									\
+    /*由于包含此标记时page_type上实现为不打标记,故此检查返回true表示有标记*/\
 	return folio_test_type(folio, PG_##lname);			\
 }									\
-/*为page的page_type打上标记*/\
+/*设置Page的标记(page_type打上标记)*/\
 static __always_inline void __SetPage##uname(struct page *page)		\
 {									\
 	VM_BUG_ON_PAGE(!PageType(page, 0), page);			\
-	page->page_type &= ~PG_##lname;					\
+	page->page_type &= ~PG_##lname;/*实现为移除此类型标记*/					\
 }									\
 static __always_inline void __folio_set_##fname(struct folio *folio)	\
 {									\
 	VM_BUG_ON_FOLIO(!folio_test_type(folio, 0), folio);		\
-	folio->page.page_type &= ~PG_##lname;				\
+	folio->page.page_type &= ~PG_##lname;/*实现为移除此类型标记*/				\
 }									\
-/*为page的page_type清除标记*/\
+/*清除Page上的标记(page_type清除标记)*/\
 static __always_inline void __ClearPage##uname(struct page *page)	\
 {									\
 	VM_BUG_ON_PAGE(!Page##uname(page), page);			\
-	page->page_type |= PG_##lname;					\
+	page->page_type |= PG_##lname;/*实现为添加此类型标记*/					\
 }									\
+/*清除*/\
 static __always_inline void __folio_clear_##fname(struct folio *folio)	\
 {									\
 	VM_BUG_ON_FOLIO(!folio_test_##fname(folio), folio);		\
-	folio->page.page_type |= PG_##lname;				\
+	folio->page.page_type |= PG_##lname;/*实现为添加此类型标记*/				\
 }									\
 
 /*

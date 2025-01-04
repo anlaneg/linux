@@ -1426,6 +1426,7 @@ static void *frag_start(struct seq_file *m, loff_t *pos)
 	pg_data_t *pgdat;
 	loff_t node = *pos;
 
+	/*确定要显示的位置(pg_data_t)*/
 	for (pgdat = first_online_pgdat();
 	     pgdat && node;
 	     pgdat = next_online_pgdat(pgdat))
@@ -1438,8 +1439,8 @@ static void *frag_next(struct seq_file *m, void *arg, loff_t *pos)
 {
 	pg_data_t *pgdat = (pg_data_t *)arg;
 
-	(*pos)++;
-	return next_online_pgdat(pgdat);
+	(*pos)++;/*增加偏移*/
+	return next_online_pgdat(pgdat);/*取下一个*/
 }
 
 static void frag_stop(struct seq_file *m, void *arg)
@@ -1451,20 +1452,21 @@ static void frag_stop(struct seq_file *m, void *arg)
  * If @assert_populated is true, only use callback for zones that are populated.
  */
 static void walk_zones_in_node(struct seq_file *m, pg_data_t *pgdat,
-		bool assert_populated, bool nolock,
-		void (*print)(struct seq_file *m, pg_data_t *, struct zone *))
+		bool assert_populated, bool nolock/*是否未加锁*/,
+		void (*print/*显示函数*/)(struct seq_file *m, pg_data_t *, struct zone *))
 {
 	struct zone *zone;
 	struct zone *node_zones = pgdat->node_zones;
 	unsigned long flags;
 
+	/*遍历此NUMA node上所有Zone*/
 	for (zone = node_zones; zone - node_zones < MAX_NR_ZONES; ++zone) {
-		if (assert_populated && !populated_zone(zone))
+		if (assert_populated && !populated_zone(zone)/*无PAGE*/)
 			continue;
 
 		if (!nolock)
 			spin_lock_irqsave(&zone->lock, flags);
-		print(m, pgdat, zone);
+		print(m, pgdat, zone);/*显示此zone*/
 		if (!nolock)
 			spin_unlock_irqrestore(&zone->lock, flags);
 	}
@@ -1504,9 +1506,10 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 
 	for (mtype = 0; mtype < MIGRATE_TYPES; mtype++) {
 		seq_printf(m, "Node %4d, zone %8s, type %12s ",
-					pgdat->node_id,
-					zone->name,
+					pgdat->node_id,/*显示此pg_data所属的numa node*/
+					zone->name,/*zone名称*/
 					migratetype_names[mtype]);
+		/*按order进行显示*/
 		for (order = 0; order < NR_PAGE_ORDERS; ++order) {
 			unsigned long freecount = 0;
 			struct free_area *area;
@@ -1530,6 +1533,7 @@ static void pagetypeinfo_showfree_print(struct seq_file *m,
 					break;
 				}
 			}
+			/*格式问题较大的不具体显示此order数目*/
 			seq_printf(m, "%s%6lu ", overflow ? ">" : "", freecount);
 			spin_unlock_irq(&zone->lock);
 			cond_resched();
@@ -1548,9 +1552,10 @@ static void pagetypeinfo_showfree(struct seq_file *m, void *arg)
 	/* Print header */
 	seq_printf(m, "%-43s ", "Free pages count per migrate type at order");
 	for (order = 0; order < NR_PAGE_ORDERS; ++order)
-		seq_printf(m, "%6d ", order);
+		seq_printf(m, "%6d ", order);/*显示各order*/
 	seq_putc(m, '\n');
 
+	/*遍历各pgdat中的ZONE,并调用回调进行显示*/
 	walk_zones_in_node(m, pgdat, true, false, pagetypeinfo_showfree_print);
 }
 
@@ -1632,14 +1637,14 @@ static void pagetypeinfo_showmixedcount(struct seq_file *m, pg_data_t *pgdat)
  */
 static int pagetypeinfo_show(struct seq_file *m, void *arg)
 {
-	pg_data_t *pgdat = (pg_data_t *)arg;
+	pg_data_t *pgdat = (pg_data_t *)arg;/*当前要显示的pg_data_t*/
 
 	/* check memoryless node */
 	if (!node_state(pgdat->node_id, N_MEMORY))
 		return 0;
 
-	seq_printf(m, "Page block order: %d\n", pageblock_order);
-	seq_printf(m, "Pages per block:  %lu\n", pageblock_nr_pages);
+	seq_printf(m, "Page block order: %d\n", pageblock_order);/*显示分配支持的最大order*/
+	seq_printf(m, "Pages per block:  %lu\n", pageblock_nr_pages);/*显示分配支持的最大order对应的页数*/
 	seq_putc(m, '\n');
 	pagetypeinfo_showfree(m, pgdat);
 	pagetypeinfo_showblockcount(m, pgdat);
@@ -1659,7 +1664,7 @@ static const struct seq_operations pagetypeinfo_op = {
 	.start	= frag_start,
 	.next	= frag_next,
 	.stop	= frag_stop,
-	.show	= pagetypeinfo_show,
+	.show	= pagetypeinfo_show,/*/proc/pagetypeinfo文件内容显示*/
 };
 
 static bool is_zone_first_populated(pg_data_t *pgdat, struct zone *zone)
@@ -2143,6 +2148,7 @@ void __init init_mm_internals(void)
 #endif
 #ifdef CONFIG_PROC_FS
 	proc_create_seq("buddyinfo", 0444, NULL, &fragmentation_op);
+	/*创建/proc/pagetypeinfo文件*/
 	proc_create_seq("pagetypeinfo", 0400, NULL, &pagetypeinfo_op);
 	proc_create_seq("vmstat", 0444, NULL, &vmstat_op);
 	proc_create_seq("zoneinfo", 0444, NULL, &zoneinfo_op);

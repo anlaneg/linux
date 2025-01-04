@@ -427,7 +427,7 @@ struct kmem_cache *fs_cachep;
 static struct kmem_cache *vm_area_cachep;/*负责系统vm_area_struct结构体分配*/
 
 /* SLAB cache for mm_struct structures (tsk->mm) */
-static struct kmem_cache *mm_cachep;
+static struct kmem_cache *mm_cachep;/*负责系统中ｍｍ_struct结构体分配*/
 
 #ifdef CONFIG_PER_VMA_LOCK
 
@@ -467,7 +467,7 @@ struct vm_area_struct *vm_area_alloc(struct mm_struct *mm)
 	if (!vma)
 		return NULL;
 
-	vma_init(vma, mm);
+	vma_init(vma, mm);/*vma指向mm*/
 	if (!vma_lock_alloc(vma)) {
 		kmem_cache_free(vm_area_cachep, vma);
 		return NULL;
@@ -837,7 +837,9 @@ static void check_mm(struct mm_struct *mm)
 #endif
 }
 
+/*分配mm_struct结构体*/
 #define allocate_mm()	(kmem_cache_alloc(mm_cachep, GFP_KERNEL))
+/*归还mm_struct结构体*/
 #define free_mm(mm)	(kmem_cache_free(mm_cachep, (mm)))
 
 static void do_check_lazy_tlb(void *arg)
@@ -924,7 +926,7 @@ void __mmdrop(struct mm_struct *mm)
 	mm_destroy_cid(mm);
 	percpu_counter_destroy_many(mm->rss_stat, NR_MM_COUNTERS);
 
-	free_mm(mm);
+	free_mm(mm);/*释放mm结构体*/
 }
 EXPORT_SYMBOL_GPL(__mmdrop);
 
@@ -1330,6 +1332,7 @@ struct mm_struct *mm_alloc(void)
 		return NULL;
 
 	memset(mm, 0, sizeof(*mm));
+	/*初始化mm_struct*/
 	return mm_init(mm, current, current_user_ns());
 }
 

@@ -291,7 +291,7 @@ void __next_mem_pfn_range(int *idx, int nid, unsigned long *out_start_pfn,
  */
 #define for_each_mem_pfn_range(i, nid, p_start, p_end, p_nid)		\
 	for (i = -1, __next_mem_pfn_range(&i, nid, p_start, p_end, p_nid); \
-	     i >= 0; __next_mem_pfn_range(&i, nid, p_start, p_end, p_nid))
+	     i >= 0/*返回-1表示无更多range*/; __next_mem_pfn_range(&i, nid, p_start, p_end, p_nid))
 
 #ifdef CONFIG_DEFERRED_STRUCT_PAGE_INIT
 void __next_mem_pfn_range_in_zone(u64 *idx, struct zone *zone,
@@ -381,6 +381,7 @@ static inline void memblock_set_region_node(struct memblock_region *r, int nid)
 
 static inline int memblock_get_region_node(const struct memblock_region *r)
 {
+	/*取此regin对应的NUMA node*/
 	return r->nid;
 }
 #else

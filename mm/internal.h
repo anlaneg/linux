@@ -303,9 +303,11 @@ static inline bool page_is_buddy(struct page *page, struct page *buddy,
 				 unsigned int order)
 {
 	if (!page_is_guard(buddy) && !PageBuddy(buddy))
+		/*不在buddy系统中*/
 		return false;
 
 	if (buddy_order(buddy) != order)
+		/*在buddy系统中,但还未组装成与我匹配的order*/
 		return false;
 
 	/*
@@ -313,11 +315,12 @@ static inline bool page_is_buddy(struct page *page, struct page *buddy,
 	 * zone/node ids for pages that could never merge.
 	 */
 	if (page_zone_id(page) != page_zone_id(buddy))
+		/*是buddy,但出生时就分属于不同的zone*/
 		return false;
 
 	VM_BUG_ON_PAGE(page_count(buddy) != 0, buddy);
 
-	return true;
+	return true;/*命中*/
 }
 
 /*
@@ -340,6 +343,9 @@ static inline bool page_is_buddy(struct page *page, struct page *buddy,
 static inline unsigned long
 __find_buddy_pfn(unsigned long page_pfn, unsigned int order)
 {
+	/*buddy分配时,采用的是1/2分折的方式,总是以order对应的那一个BIT位互对相反数
+	 * 0,1在order为0时,是一组;0,2在order为1时,是一组
+	 * */
 	return page_pfn ^ (1 << order);
 }
 
@@ -358,18 +364,19 @@ __find_buddy_pfn(unsigned long page_pfn, unsigned int order)
  * Return: the found buddy page or NULL if not found.
  */
 static inline struct page *find_buddy_page_pfn(struct page *page,
-			unsigned long pfn, unsigned int order, unsigned long *buddy_pfn)
+			unsigned long pfn, unsigned int order, unsigned long *buddy_pfn/*出参,page对应的buddy页帧号*/)
 {
+	/*找当前页的buddy页帧号*/
 	unsigned long __buddy_pfn = __find_buddy_pfn(pfn, order);
 	struct page *buddy;
 
-	buddy = page + (__buddy_pfn - pfn);
+	buddy = page + (__buddy_pfn - pfn);/*获得buddy指针*/
 	if (buddy_pfn)
 		*buddy_pfn = __buddy_pfn;
 
 	if (page_is_buddy(page, buddy, order))
 		return buddy;
-	return NULL;
+	return NULL;/*种种原因,暂时无法确认为buddy*/
 }
 
 extern struct page *__pageblock_pfn_to_page(unsigned long start_pfn,

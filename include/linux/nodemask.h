@@ -270,7 +270,7 @@ static inline unsigned int __first_node(const nodemask_t *srcp)
 #define next_node(n, src) __next_node((n), &(src))
 static inline unsigned int __next_node(int n, const nodemask_t *srcp)
 {
-	/*自srcp中提取下一个node*/
+	/*自srcp中提取下一个node,如果已是最后一个NUMA node,返回MAX_NUMNODES*/
 	return min_t(unsigned int, MAX_NUMNODES, find_next_bit(srcp->bits, MAX_NUMNODES, n+1));
 }
 
@@ -423,6 +423,7 @@ extern nodemask_t node_states[NR_NODE_STATES];
 #if MAX_NUMNODES > 1
 static inline int node_state(int node, enum node_states state)
 {
+	/*检查此node是否处于state状态*/
 	return node_isset(node, node_states[state]);
 }
 
@@ -445,12 +446,13 @@ static inline int num_node_state(enum node_states state)
 #define for_each_node_state(__node, __state) \
 	for_each_node_mask((__node), node_states[__state])
 
+/*取online的首个NUMA node*/
 #define first_online_node	first_node(node_states[N_ONLINE])
 #define first_memory_node	first_node(node_states[N_MEMORY])
 /*取下一个online的numa node*/
 static inline unsigned int next_online_node(int nid)
 {
-	return next_node(nid, node_states[N_ONLINE]);
+	return next_node(nid/*当前NUMA node id*/, node_states[N_ONLINE]);
 }
 static inline unsigned int next_memory_node(int nid)
 {
@@ -538,7 +540,9 @@ static inline int node_random(const nodemask_t *maskp)
 #define node_online(node)	node_state((node), N_ONLINE)
 #define node_possible(node)	node_state((node), N_POSSIBLE)
 
+/*遍历POSSIBLE NUMA node*/
 #define for_each_node(node)	   for_each_node_state(node, N_POSSIBLE)
+/*遍历online NUMA node*/
 #define for_each_online_node(node) for_each_node_state(node, N_ONLINE)
 
 /*

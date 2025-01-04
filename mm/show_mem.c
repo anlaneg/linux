@@ -407,16 +407,16 @@ void __show_mem(unsigned int filter, nodemask_t *nodemask, int max_zone_idx)
 
 	for_each_populated_zone(zone) {
 
-		total += zone->present_pages;
+		total += zone->present_pages;/*统计每个zone可用的总页数*/
 		reserved += zone->present_pages - zone_managed_pages(zone);
 
 		if (is_highmem(zone))
 			highmem += zone->present_pages;
 	}
 
-	printk("%lu pages RAM\n", total);
+	printk("%lu pages RAM\n", total);/*显示总可用内存页数*/
 	printk("%lu pages HighMem/MovableOnly\n", highmem);
-	printk("%lu pages reserved\n", reserved);
+	printk("%lu pages reserved\n", reserved);/*显示预留的页数*/
 #ifdef CONFIG_CMA
 	printk("%lu pages cma reserved\n", totalcma_pages);
 #endif

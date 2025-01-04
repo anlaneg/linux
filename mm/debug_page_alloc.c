@@ -39,8 +39,8 @@ bool __set_page_guard(struct zone *zone, struct page *page, unsigned int order,
 		return false;
 
 	__SetPageGuard(page);
-	INIT_LIST_HEAD(&page->buddy_list);
-	set_page_private(page, order);
+	INIT_LIST_HEAD(&page->buddy_list);/*初始化buddy_list(用于挂接到buddy系统的空闲链上)*/
+	set_page_private(page, order);/*指明此page对应的order(即page整块大小)*/
 	/* Guard pages are not available for any usage */
 	if (!is_migrate_isolate(migratetype))
 		__mod_zone_freepage_state(zone, -(1 << order), migratetype);

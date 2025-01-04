@@ -62,6 +62,7 @@
 		__cmp(op, x, y),				\
 		__cmp_once(op, x, y, __UNIQUE_ID(__x)/*唯一名称*/, __UNIQUE_ID(__y)))
 
+/*参考val,返回一个值,使之处于[lo,hi]区间之间*/
 #define __clamp(val, lo, hi)	\
 	((val) >= (hi) ? (hi) : ((val) <= (lo) ? (lo) : (val)))
 

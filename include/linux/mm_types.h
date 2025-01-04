@@ -100,7 +100,7 @@ struct page {
 				};
 
 				/* Or, free page */
-				struct list_head buddy_list;
+				struct list_head buddy_list;/*用于串连到free_list,用于buddy系统*/
 				struct list_head pcp_list;
 			};
 			/* See page-flags.h for PAGE_MAPPING_FLAGS */
@@ -165,7 +165,7 @@ struct page {
 		 * is used for.  See page-flags.h for a list of page types
 		 * which are currently stored here.
 		 */
-		unsigned int page_type;
+		unsigned int page_type;/*占用32bits,Buddy标记即在此字段上*/
 	};
 
 	/* Usage count. *DO NOT USE DIRECTLY*. See page_ref.h */
@@ -753,10 +753,10 @@ struct mm_struct {
 			 * Use mmgrab()/mmdrop() to modify. When this drops to
 			 * 0, the &struct mm_struct is freed.
 			 */
-			atomic_t mm_count;
+			atomic_t mm_count;/*引用计数(减为零时回收此mm)*/
 		} ____cacheline_aligned_in_smp;
 
-		struct maple_tree mm_mt;
+		struct maple_tree mm_mt;/*记录已分配的vma*/
 #ifdef CONFIG_MMU
 		unsigned long (*get_unmapped_area) (struct file *filp,
 				unsigned long addr, unsigned long len,

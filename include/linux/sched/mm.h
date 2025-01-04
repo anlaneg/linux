@@ -52,6 +52,7 @@ static inline void mmdrop(struct mm_struct *mm)
 	 * user-space, after storing to rq->curr.
 	 */
 	if (unlikely(atomic_dec_and_test(&mm->mm_count)))
+		/*记数减为零*/
 		__mmdrop(mm);
 }
 

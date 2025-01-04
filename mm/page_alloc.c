@@ -189,9 +189,10 @@ EXPORT_SYMBOL(latent_entropy);
 /*
  * Array of node states.
  */
+/*用于记录系统中不同类别(或者说按类型划分)的NUMA node对应的bitmap*/
 nodemask_t node_states[NR_NODE_STATES] __read_mostly = {
 	[N_POSSIBLE] = NODE_MASK_ALL,
-	[N_ONLINE] = { { [0] = 1UL } },/*online的node对应的bitmap*/
+	[N_ONLINE] = { { [0] = 1UL } },/*online的NUMA node对应的bitmap*/
 #ifndef CONFIG_NUMA
 	[N_NORMAL_MEMORY] = { { [0] = 1UL } },
 #ifdef CONFIG_HIGHMEM
@@ -609,7 +610,7 @@ void destroy_large_folio(struct folio *folio)
 static inline void set_buddy_order(struct page *page, unsigned int order)
 {
 	set_page_private(page, order);
-	__SetPageBuddy(page);
+	__SetPageBuddy(page);/*指明此page已归属buddy管理*/
 }
 
 #ifdef CONFIG_COMPACTION
@@ -663,13 +664,13 @@ compaction_capture(struct capture_control *capc, struct page *page,
 #endif /* CONFIG_COMPACTION */
 
 /* Used for pages not on another list */
-static inline void add_to_free_list(struct page *page, struct zone *zone,
-				    unsigned int order, int migratetype)
+static inline void add_to_free_list(struct page *page/*要加回的page*/, struct zone *zone/*要加回的zone*/,
+				    unsigned int order/*此page对应的order*/, int migratetype/*对应的type*/)
 {
 	struct free_area *area = &zone->free_area[order];
 
-	list_add(&page->buddy_list, &area->free_list[migratetype]);
-	area->nr_free++;
+	list_add(&page->buddy_list, &area->free_list[migratetype]);/*归还此page到buddy系统(链首)*/
+	area->nr_free++;/*空闲page数增加*/
 }
 
 /* Used for pages not on another list */
@@ -678,8 +679,8 @@ static inline void add_to_free_list_tail(struct page *page, struct zone *zone,
 {
 	struct free_area *area = &zone->free_area[order];
 
-	list_add_tail(&page->buddy_list, &area->free_list[migratetype]);
-	area->nr_free++;
+	list_add_tail(&page->buddy_list, &area->free_list[migratetype]);/*归还此page到buddy系统(链尾)*/
+	area->nr_free++;/*空闲page数增加*/
 }
 
 /*
@@ -692,7 +693,7 @@ static inline void move_to_free_list(struct page *page, struct zone *zone,
 {
 	struct free_area *area = &zone->free_area[order];
 
-	list_move_tail(&page->buddy_list, &area->free_list[migratetype]);
+	list_move_tail(&page->buddy_list, &area->free_list[migratetype]);/*将page自链上移除,再加到链尾*/
 }
 
 static inline void del_page_from_free_list(struct page *page, struct zone *zone,
@@ -702,9 +703,11 @@ static inline void del_page_from_free_list(struct page *page, struct zone *zone,
 	if (page_reported(page))
 		__ClearPageReported(page);
 
+	/*将此page自空闲链上移除*/
 	list_del(&page->buddy_list);
 	/*指明此page不再从属于Buddy*/
 	__ClearPageBuddy(page);
+	/*原来private存放的是page的整块大小(这里清零以便后面做它用)*/
 	set_page_private(page, 0);
 	/*此order的free_area数目减1*/
 	zone->free_area[order].nr_free--;
@@ -713,6 +716,7 @@ static inline void del_page_from_free_list(struct page *page, struct zone *zone,
 static inline struct page *get_page_from_free_area(struct free_area *area,
 					    int migratetype)
 {
+	/*取migratetype空闲链上首个无素(如无,返回NULL)*/
 	return list_first_entry_or_null(&area->free_list[migratetype],
 					struct page, buddy_list);
 }
@@ -766,9 +770,9 @@ buddy_merge_likely(unsigned long pfn, unsigned long buddy_pfn,
  * -- nyc
  */
 
-static inline void __free_one_page(struct page *page,
-		unsigned long pfn,
-		struct zone *zone, unsigned int order,
+static inline void __free_one_page(struct page *page/*要释放的页*/,
+		unsigned long pfn/*此页对应的页帧号*/,
+		struct zone *zone/*所属的zone*/, unsigned int order/*指代释放的页大小*/,
 		int migratetype, fpi_t fpi_flags)
 {
 	struct capture_control *capc = task_capc(zone);
@@ -777,7 +781,7 @@ static inline void __free_one_page(struct page *page,
 	struct page *buddy;
 	bool to_tail;
 
-	VM_BUG_ON(!zone_is_initialized(zone));
+	VM_BUG_ON(!zone_is_initialized(zone));/*调用时zone必须已初始化*/
 	VM_BUG_ON_PAGE(page->flags & PAGE_FLAGS_CHECK_AT_PREP, page);
 
 	VM_BUG_ON(migratetype == -1);
@@ -794,9 +798,10 @@ static inline void __free_one_page(struct page *page,
 			return;
 		}
 
+		/*找到当前page对应的buddy*/
 		buddy = find_buddy_page_pfn(page, pfn, order, &buddy_pfn);
 		if (!buddy)
-			goto done_merging;
+			goto done_merging;/*buddy忙,只释放page*/
 
 		if (unlikely(order >= pageblock_order)) {
 			/*
@@ -820,24 +825,25 @@ static inline void __free_one_page(struct page *page,
 		if (page_is_guard(buddy))
 			clear_page_guard(zone, buddy, order, migratetype);
 		else
-			del_page_from_free_list(buddy, zone, order);
+			del_page_from_free_list(buddy, zone, order);/*将buddy自链表中移除*/
 		combined_pfn = buddy_pfn & pfn;
-		page = page + (combined_pfn - pfn);
+		page = page + (combined_pfn - pfn);/*合并后新的要释放的page(原page有可能是后一半)*/
 		pfn = combined_pfn;
-		order++;
+		order++;/*order升*/
 	}
 
 done_merging:
-	set_buddy_order(page, order);
+	set_buddy_order(page, order);/*此page归还buddy系统*/
 
 	if (fpi_flags & FPI_TO_TAIL)
-		to_tail = true;
+		to_tail = true;/*归还至tail*/
 	else if (is_shuffle_order(order))
 		to_tail = shuffle_pick_tail();
 	else
 		to_tail = buddy_merge_likely(pfn, buddy_pfn, page, order);
 
 	if (to_tail)
+		/*如指明,则归还到tail*/
 		add_to_free_list_tail(page, zone, order, migratetype);
 	else
 		add_to_free_list(page, zone, order, migratetype);
@@ -1250,7 +1256,7 @@ static void free_pcppages_bulk(struct zone *zone, int count,
 
 static void free_one_page(struct zone *zone,
 				struct page *page, unsigned long pfn,
-				unsigned int order,
+				unsigned int order/*指代page的大小*/,
 				int migratetype, fpi_t fpi_flags)
 {
 	unsigned long flags;
@@ -1286,9 +1292,9 @@ static void __free_pages_ok(struct page *page, unsigned int order,
 	__count_vm_events(PGFREE, 1 << order);
 }
 
-void __free_pages_core(struct page *page, unsigned int order)
+void __free_pages_core(struct page *page/*要释放的页数组起始指针*/, unsigned int order)
 {
-	unsigned int nr_pages = 1 << order;
+	unsigned int nr_pages = 1 << order;/*页数*/
 	struct page *p = page;
 	unsigned int loop;
 
@@ -1298,10 +1304,10 @@ void __free_pages_core(struct page *page, unsigned int order)
 	 * refcount of all involved pages to 0.
 	 */
 	prefetchw(p);
-	for (loop = 0; loop < (nr_pages - 1); loop++, p++) {
+	for (loop = 0; loop < (nr_pages - 1); loop++, p++/*页指针增加*/) {
 		prefetchw(p + 1);
 		__ClearPageReserved(p);
-		set_page_count(p, 0);
+		set_page_count(p, 0);/*页引用数为0*/
 	}
 	__ClearPageReserved(p);
 	set_page_count(p, 0);
@@ -1389,13 +1395,13 @@ struct page *__pageblock_pfn_to_page(unsigned long start_pfn,
  * -- nyc
  */
 static inline void expand(struct zone *zone/*page所属的zone*/, struct page *page/*待分割的page*/,
-	int low/*最小的order*/, int high/*最大order*/, int migratetype/*page所属的migrate type*/)
+	int low/*最小的order(要求的order)*/, int high/*最大order*/, int migratetype/*page所属的migrate type*/)
 {
 	unsigned long size = 1 << high;/*此page实际大小*/
 
 	while (high > low) {
 		high--;
-		//内存大小减一半（即本order对应的内存大小）
+		//实际分配的比要求的要大,将多余的分隔到下一个order,这里内存大小减一半
 		size >>= 1;
 		//&page[size]相当于取新分配page的后半段
 		VM_BUG_ON_PAGE(bad_range(zone, &page[size]), &page[size]);
@@ -1409,6 +1415,7 @@ static inline void expand(struct zone *zone/*page所属的zone*/, struct page *p
 		if (set_page_guard(zone, &page[size], high, migratetype))
 			continue;
 
+		/*将后半段降了一级orfer,存回到free_list*/
 		add_to_free_list(&page[size], zone, high, migratetype);
 		//指明此段page存在buddy中
 		set_buddy_order(&page[size], high);
@@ -1569,7 +1576,7 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
  */
 //自给定zone上申请指定数目，指定migratetype的一组page
 static __always_inline
-struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
+struct page *__rmqueue_smallest(struct zone *zone/*要申请的page所属的zone*/, unsigned int order/*要申请的page大小*/,
 						int migratetype)
 {
 	unsigned int current_order;
@@ -1579,7 +1586,7 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 	/* Find a page of the appropriate size in the preferred list */
 	//在指定zone中自order开始尝试是否有空闲区域可以分配，如果可分配，则返回对应的page
 	for (current_order = order; current_order < NR_PAGE_ORDERS; ++current_order) {
-		//取order对应的free area
+		//在此zone上取order对应的free area
 		area = &(zone->free_area[current_order]);
 		page = get_page_from_free_area(area, migratetype);
 		if (!page)
@@ -1587,14 +1594,15 @@ struct page *__rmqueue_smallest(struct zone *zone, unsigned int order,
 			continue;
 		/*在当前order上找到了空闲page，将此页从原位置移除*/
 		del_page_from_free_list(page, zone, current_order);
-		//我们找到了可用的page,现在将page拆分开放在order到current_order之间的链表上（拆分方法是每一个链上存后半段page)
+		/*我们找到了可用的page,现在将page拆分开放在order到current_order之间的链表上
+		 * （拆分方法是每一个链上存后半段page)*/
 		expand(zone, page, order/*起始的order*/, current_order/*当前分配order*/, migratetype);
-        	//记录page来源的migratetype
+        /*记录page来源的migratetype*/
 		set_pcppage_migratetype(page, migratetype);
 		trace_mm_page_alloc_zone_locked(page, order, migratetype,
 				pcp_allowed_order(order) &&
 				migratetype < MIGRATE_PCPTYPES);
-		return page;
+		return page;/*返回申请到的page*/
 	}
 
 	return NULL;
@@ -1871,7 +1879,7 @@ int find_suitable_fallback(struct free_area *area, unsigned int order,
 
 	*can_steal = false;
 	for (i = 0; i < MIGRATE_PCPTYPES - 1 ; i++) {
-	    	//尝试migratetype的可选类型
+	    //尝试migratetype的可选类型
 		fallback_mt = fallbacks[migratetype][i];
 		//此类型已无pages可分配
 		if (free_area_empty(area, fallback_mt))
@@ -2599,7 +2607,7 @@ void free_unref_page_list(struct list_head *list)
 			if (unlikely(!pcp)) {
 				pcp_trylock_finish(UP_flags);
 				free_one_page(zone, page, page_to_pfn(page),
-					      0, migratetype, FPI_NONE);
+					      0/*归还单页*/, migratetype, FPI_NONE);
 				locked_zone = NULL;
 				continue;
 			}
@@ -4568,7 +4576,7 @@ EXPORT_SYMBOL_GPL(__alloc_pages_bulk);
 /*
  * This is the 'heart' of the zoned buddy allocator.
  */
-struct page *__alloc_pages(gfp_t gfp, unsigned int order/*page数目-1*/, int preferred_nid/*优先选择的numa node*/,
+struct page *__alloc_pages(gfp_t gfp, unsigned int order/*内存大小的对数，log2(N)*/, int preferred_nid/*优先选择的numa node*/,
 							nodemask_t *nodemask/*容许使用的node mask,如为空，则必须为perferred_nid*/)
 {
 	struct page *page;
@@ -4595,6 +4603,7 @@ struct page *__alloc_pages(gfp_t gfp, unsigned int order/*page数目-1*/, int pr
 	 */
 	gfp = current_gfp_context(gfp);
 	alloc_gfp = gfp;
+
 	/*准备alloc context*/
 	if (!prepare_alloc_pages(gfp, order, preferred_nid, nodemask, &ac,
 			&alloc_gfp, &alloc_flags))
@@ -6782,13 +6791,14 @@ bool put_page_back_buddy(struct page *page)
 	struct zone *zone = page_zone(page);
 	unsigned long pfn = page_to_pfn(page);
 	unsigned long flags;
-	int migratetype = get_pfnblock_migratetype(page, pfn);
+	int migratetype = get_pfnblock_migratetype(page, pfn);/*取page对应的migratetype*/
 	bool ret = false;
 
 	spin_lock_irqsave(&zone->lock, flags);
 	if (put_page_testzero(page)) {
 		ClearPageHWPoisonTakenOff(page);
-		__free_one_page(page, pfn, zone, 0, migratetype, FPI_NONE);
+		/*归还此页到buddy*/
+		__free_one_page(page, pfn, zone, 0/*释放单页*/, migratetype, FPI_NONE);
 		if (TestClearPageHWPoison(page)) {
 			ret = true;
 		}

@@ -232,7 +232,7 @@ static inline void warn_if_node_offline(int this_node, gfp_t gfp_mask)
  * online. For more general interface, see alloc_pages_node().
  */
 static inline struct page *
-__alloc_pages_node(int nid/*申请内存的node*/, gfp_t gfp_mask/*标记位*/, unsigned int order)
+__alloc_pages_node(int nid/*申请内存优先选择的numa node*/, gfp_t gfp_mask/*标记位*/, unsigned int order/*内存大小的对数，log2(N)*/)
 {
     //校验node id及mask
 	VM_BUG_ON(nid < 0 || nid >= MAX_NUMNODES);

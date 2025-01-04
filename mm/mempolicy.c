@@ -2202,7 +2202,7 @@ struct page *alloc_pages(gfp_t gfp, unsigned int order)
 		pol = get_task_policy(current);
 
 	return alloc_pages_mpol(gfp, order,
-				pol, NO_INTERLEAVE_INDEX, numa_node_id());
+				pol, NO_INTERLEAVE_INDEX, numa_node_id()/*在当前CPU所属的numa上申请*/);
 }
 EXPORT_SYMBOL(alloc_pages);
 

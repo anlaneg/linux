@@ -1043,18 +1043,19 @@ void __init zone_sizes_init(void)
 
 	memset(max_zone_pfns, 0, sizeof(max_zone_pfns));
 
+	/*初始化各类型zone对应的最大页帧编号*/
 #ifdef CONFIG_ZONE_DMA
 	max_zone_pfns[ZONE_DMA]		= min(MAX_DMA_PFN, max_low_pfn);
 #endif
 #ifdef CONFIG_ZONE_DMA32
 	max_zone_pfns[ZONE_DMA32]	= min(MAX_DMA32_PFN, max_low_pfn);
 #endif
-	max_zone_pfns[ZONE_NORMAL]	= max_low_pfn;
+	max_zone_pfns[ZONE_NORMAL]	= max_low_pfn;/*识别的内存最大数*/
 #ifdef CONFIG_HIGHMEM
 	max_zone_pfns[ZONE_HIGHMEM]	= max_pfn;
 #endif
 
-	free_area_init(max_zone_pfns);
+	free_area_init(max_zone_pfns);/*采用max_zone_pfns来初始化*/
 }
 
 __visible DEFINE_PER_CPU_ALIGNED(struct tlb_state, cpu_tlbstate) = {

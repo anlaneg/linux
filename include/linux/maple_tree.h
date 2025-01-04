@@ -462,13 +462,13 @@ struct ma_wr_state {
 #define MA_ERROR(err) \
 		((struct maple_enode *)(((unsigned long)err << 2) | 2UL))
 
-#define MA_STATE(name, mt, first, end)					\
+#define MA_STATE(name/*变量名称*/, mt/*maple tree变量*/, first/*范围起始值*/, end/*范围终止值*/)					\
 	struct ma_state name = {					\
 		.tree = mt,						\
 		.index = first,						\
 		.last = end,						\
 		.node = NULL,						\
-		.status = ma_start,					\
+		.status = ma_start,/*指明为start状态*/\
 		.min = 0,						\
 		.max = ULONG_MAX,					\
 		.alloc = NULL,						\

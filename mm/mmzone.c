@@ -10,7 +10,7 @@
 #include <linux/mm.h>
 #include <linux/mmzone.h>
 
-/*取首个online的node对应的pglist_data*/
+/*取首个online的NUMA node对应的pglist_data*/
 struct pglist_data *first_online_pgdat(void)
 {
 	return NODE_DATA(first_online_node);
@@ -22,7 +22,7 @@ struct pglist_data *next_online_pgdat(struct pglist_data *pgdat)
 	int nid = next_online_node(pgdat->node_id);
 
 	if (nid == MAX_NUMNODES)
-		return NULL;
+		return NULL;/*没有下一个了*/
 	return NODE_DATA(nid);
 }
 

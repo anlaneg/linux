@@ -24,7 +24,7 @@
 int numa_off;
 nodemask_t numa_nodes_parsed __initdata;
 
-/*最多128个node*/
+/*X86定义的node_data,最多128个node*/
 struct pglist_data *node_data[MAX_NUMNODES] __read_mostly;
 EXPORT_SYMBOL(node_data);
 

@@ -281,11 +281,11 @@ static int __bprm_mm_init(struct linux_binprm *bprm)
 	 */
 	BUILD_BUG_ON(VM_STACK_FLAGS & VM_STACK_INCOMPLETE_SETUP);
 	vma->vm_end = STACK_TOP_MAX;
-	vma->vm_start = vma->vm_end - PAGE_SIZE;
+	vma->vm_start = vma->vm_end - PAGE_SIZE;/*一个页大小,起点是栈顶前最后一个页*/
 	vm_flags_init(vma, VM_SOFTDIRTY | VM_STACK_FLAGS | VM_STACK_INCOMPLETE_SETUP);
 	vma->vm_page_prot = vm_get_page_prot(vma->vm_flags);
 
-	err = insert_vm_struct(mm, vma);
+	err = insert_vm_struct(mm, vma);/*将vma加入到mm*/
 	if (err)
 		goto err;
 

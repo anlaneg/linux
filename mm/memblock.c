@@ -1307,9 +1307,9 @@ void __init_memblock __next_mem_range_rev(u64 *idx, int nid,
 /*
  * Common iterator interface used to define for_each_mem_pfn_range().
  */
-void __init_memblock __next_mem_pfn_range(int *idx, int nid,
-				unsigned long *out_start_pfn,
-				unsigned long *out_end_pfn, int *out_nid)
+void __init_memblock __next_mem_pfn_range(int *idx/*入出参,入时表示已遍历的索引,出时表示下一个可遍历的索引*/, int nid/*支持按NUMA编号遍历*/,
+				unsigned long *out_start_pfn/*出参,此区域的开始页帧号*/,
+				unsigned long *out_end_pfn/*出参,此区域的结束页帧号*/, int *out_nid/*出参,NUMA node id*/)
 {
 	struct memblock_type *type = &memblock.memory;
 	struct memblock_region *r;
@@ -1317,15 +1317,16 @@ void __init_memblock __next_mem_pfn_range(int *idx, int nid,
 
 	while (++*idx < type->cnt) {
 		r = &type->regions[*idx];
-		r_nid = memblock_get_region_node(r);
+		r_nid = memblock_get_region_node(r);/*取此regin对应的NUMA node*/
 
 		if (PFN_UP(r->base) >= PFN_DOWN(r->base + r->size))
 			continue;
 		if (nid == MAX_NUMNODES || nid == r_nid)
+			/*命中要找的NUMA NODE*/
 			break;
 	}
 	if (*idx >= type->cnt) {
-		*idx = -1;
+		*idx = -1;/*达到结尾,指明NEXT为-1*/
 		return;
 	}
 
@@ -1738,7 +1739,7 @@ void __init memblock_free_late(phys_addr_t base, phys_addr_t size)
 	end = PFN_DOWN(base + size);
 
 	for (; cursor < end; cursor++) {
-		memblock_free_pages(pfn_to_page(cursor), cursor, 0);
+		memblock_free_pages(pfn_to_page(cursor), cursor, 0);/*这些内存将释放进伙伴系统*/
 		totalram_pages_inc();
 	}
 }

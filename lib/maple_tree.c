@@ -262,6 +262,7 @@ static __always_inline bool mas_is_ptr(const struct ma_state *mas)
 
 static __always_inline bool mas_is_start(const struct ma_state *mas)
 {
+	/*检查是否为start状态*/
 	return mas->status == ma_start;
 }
 
@@ -829,6 +830,7 @@ static __always_inline void *mas_slot(struct ma_state *mas, void __rcu **slots,
  */
 static __always_inline void *mas_root(struct ma_state *mas)
 {
+	/*取maple树根*/
 	return rcu_dereference_check(mas->tree->ma_root, mt_locked(mas->tree));
 }
 
@@ -6828,7 +6830,7 @@ EXPORT_SYMBOL(mtree_destroy);
  */
 void *mt_find(struct maple_tree *mt, unsigned long *index, unsigned long max)
 {
-	MA_STATE(mas, mt, *index, *index);
+	MA_STATE(mas, mt, *index, *index);/*只传入起始*/
 	void *entry;
 #ifdef CONFIG_DEBUG_MAPLE_TREE
 	unsigned long copy = *index;
@@ -6837,6 +6839,7 @@ void *mt_find(struct maple_tree *mt, unsigned long *index, unsigned long max)
 	trace_ma_read(__func__, &mas);
 
 	if ((*index) > max)
+		/*参数有误*/
 		return NULL;
 
 	rcu_read_lock();

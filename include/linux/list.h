@@ -645,7 +645,7 @@ static inline void list_splice_tail_init(struct list_head *list,
 #define list_first_entry_or_null(ptr, type, member) ({ \
 	struct list_head *head__ = (ptr); \
 	struct list_head *pos__ = READ_ONCE(head__->next); \
-	pos__ != head__ ? list_entry(pos__, type, member) : NULL; \
+	pos__ != head__/*队列是否不为空*/ ? list_entry(pos__, type, member) /*不为空,取结构体*/: NULL; \
 })
 
 /**

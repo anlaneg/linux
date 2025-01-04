@@ -47,7 +47,7 @@ extern void arch_refresh_nodedata(int nid, pg_data_t *pgdat);
 extern pg_data_t *node_data[];
 static inline void arch_refresh_nodedata(int nid, pg_data_t *pgdat)
 {
-	node_data[nid] = pgdat;
+	node_data[nid] = pgdat;/*设置此NUMA node对应的pg_data*/
 }
 
 #else /* !CONFIG_NUMA */

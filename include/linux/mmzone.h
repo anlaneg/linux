@@ -27,7 +27,7 @@
 
 /* Free memory management - zoned buddy allocator.  */
 #ifndef CONFIG_ARCH_FORCE_MAX_ORDER
-/*memory的最大order*/
+/*memory分配支持的最大order*/
 #define MAX_PAGE_ORDER 10
 #else
 #define MAX_PAGE_ORDER CONFIG_ARCH_FORCE_MAX_ORDER
@@ -115,7 +115,7 @@ extern int page_group_by_mobility_disabled;
 struct free_area {
     //按不同迁移类型划分的空闲链表
 	struct list_head	free_list[MIGRATE_TYPES];
-	//空闲的page数目
+	//空闲链表上的page总数目
 	unsigned long		nr_free;
 };
 
@@ -844,7 +844,7 @@ struct zone {
 	//本zone所属numa node编号
 	int node;
 #endif
-	//此zone所属的pglist_data(即numa node)
+	//指向此zone所属的pglist_data
 	struct pglist_data	*zone_pgdat;
 	struct per_cpu_pages	__percpu *per_cpu_pageset;
 	struct per_cpu_zonestat	__percpu *per_cpu_zonestats;
@@ -911,7 +911,7 @@ struct zone {
 	 */
 	//managed_pages是可被管理的页，通过present_pages减取reserved_pages后获得
 	atomic_long_t		managed_pages;
-	//spanned页数是通过end_pfn-start_pfn直接算得的，没有去除hole的情况
+	//spanned页数是通过end_pfn-start_pfn直接算得的，没有去除hole(空洞)的情况
 	unsigned long		spanned_pages;
 	//present_pages页数是spanned_pages在去除hole占用页数之后的情况
 	unsigned long		present_pages;
@@ -944,7 +944,7 @@ struct zone {
 	CACHELINE_PADDING(_pad1_);
 
 	/* free areas of different sizes */
-	//不同大小(order)对应的可用内存区域
+	//此ZONE上不同大小(order)对应的可用内存区域
 	struct free_area	free_area[NR_PAGE_ORDERS];
 
 #ifdef CONFIG_UNACCEPTED_MEMORY
@@ -956,7 +956,7 @@ struct zone {
 	unsigned long		flags;
 
 	/* Primarily protects free_area */
-	spinlock_t		lock;
+	spinlock_t		lock;/*归还free_area时需要保护*/
 
 	/* Write-intensive fields used by compaction and vmstats. */
 	CACHELINE_PADDING(_pad2_);
@@ -1297,7 +1297,7 @@ typedef struct pglist_data {
 	 */
 	struct zonelist node_zonelists[MAX_ZONELISTS];
 
-	//zone数目
+	//有效的zone数目
 	int nr_zones; /* number of populated zones in this node */
 #ifdef CONFIG_FLATMEM	/* means !SPARSEMEM */
 	struct page *node_mem_map;
@@ -1320,8 +1320,10 @@ typedef struct pglist_data {
 	 */
 	spinlock_t node_size_lock;
 #endif
-	unsigned long node_start_pfn;
+	unsigned long node_start_pfn;/*此numa node的最小页帧号*/
+	/*记录此numa node实际存在的页数(不含空洞)*/
 	unsigned long node_present_pages; /* total number of physical pages */
+	/*记录此numa node实际存在的页数(含空洞)*/
 	unsigned long node_spanned_pages; /* total size of physical page
 					     range, including holes */
 	//此pglist_dat属性哪个numa id

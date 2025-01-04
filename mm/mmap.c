@@ -1900,13 +1900,13 @@ EXPORT_SYMBOL(get_unmapped_area);
  * start_addr < end_addr.
  */
 struct vm_area_struct *find_vma_intersection(struct mm_struct *mm,
-					     unsigned long start_addr,
-					     unsigned long end_addr)
+					     unsigned long start_addr/*起始地址*/,
+					     unsigned long end_addr/*终止地址(不含)*/)
 {
 	unsigned long index = start_addr;
 
 	mmap_assert_locked(mm);
-	return mt_find(&mm->mm_mt, &index, end_addr - 1);
+	return mt_find(&mm->mm_mt, &index/*起始地址*/, end_addr - 1/*终止地址(含)*/);
 }
 EXPORT_SYMBOL(find_vma_intersection);
 
@@ -3363,7 +3363,7 @@ destroy:
  */
 int insert_vm_struct(struct mm_struct *mm, struct vm_area_struct *vma)
 {
-	unsigned long charged = vma_pages(vma);
+	unsigned long charged = vma_pages(vma);/*vma大小(页数)*/
 
 
 	if (find_vma_intersection(mm, vma->vm_start, vma->vm_end))
