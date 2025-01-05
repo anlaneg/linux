@@ -1243,7 +1243,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 	if (flags & MAP_FIXED_NOREPLACE)
 		flags |= MAP_FIXED;
 
-	/*没有给定MAP_FIXED标记，addr不是固定地址，更新addr地址*/
+	/*没有给定MAP_FIXED标记，addr不是固定地址，更新addr地址对齐及满足大于等于最小地址*/
 	if (!(flags & MAP_FIXED))
 		addr = round_hint_to_min(addr);
 
@@ -1289,10 +1289,12 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			mm->def_flags | VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
 
 	if (flags & MAP_LOCKED)
+		/*标记要求LOCK内存,检查是否有权限*/
 		if (!can_do_mlock())
 			return -EPERM;
 
 	if (!mlock_future_ok(mm, vm_flags, len))
+		/*LOCK内存超过LIMIT,拒绝*/
 		return -EAGAIN;
 
 	/*如果file不为NULL，则为有名映射*/
@@ -1319,6 +1321,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			fallthrough;
 		case MAP_SHARED_VALIDATE:
 			if (flags & ~flags_mask)
+				/*指定的flags有不认识的MASK,报错*/
 				return -EOPNOTSUPP;
 			if (prot & PROT_WRITE) {
 				if (!(file->f_mode & FMODE_WRITE))
@@ -1350,7 +1353,7 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 			}
 
 			if (!file->f_op->mmap)
-				/*没有提供mmap回调*/
+				/*文件没有提供mmap回调*/
 				return -ENODEV;
 			if (vm_flags & (VM_GROWSDOWN|VM_GROWSUP))
 				/*私有不支持以上两个flags*/
@@ -1411,13 +1414,13 @@ unsigned long do_mmap(struct file *file, unsigned long addr,
 //实现mmap
 unsigned long ksys_mmap_pgoff(unsigned long addr/*起始地址*/, unsigned long len/*要映射的大小*/,
 			      unsigned long prot, unsigned long flags/*映射标记*/,
-			      unsigned long fd/*映射的fd*/, unsigned long pgoff/*偏移量（页数目）*/)
+			      unsigned long fd/*映射的fd*/, unsigned long pgoff/*偏移量（页数目,以页为单位）*/)
 {
-	struct file *file = NULL;
+	struct file *file = NULL;/*默认文件为空*/
 	unsigned long retval;
 
 	if (!(flags & MAP_ANONYMOUS)) {
-		/*当前flags中指明非anonymous,由fd获取file*/
+		/*当前flags中指明非anonymous,即通过文件映射,由fd获取file*/
 		audit_mmap_fd(fd, flags);
 		//由fd获得file
 		file = fget(fd);
@@ -1835,6 +1838,7 @@ arch_get_unmapped_area_topdown(struct file *filp, unsigned long addr,
 }
 #endif
 
+/*获取一块未映射的区域*/
 unsigned long
 get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		unsigned long pgoff, unsigned long flags)
@@ -1848,7 +1852,7 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 
 	/* Careful about overflows.. */
 	if (len > TASK_SIZE)
-		return -ENOMEM;
+		return -ENOMEM;/*长度过大*/
 
 	/*默认取此进程对应的unmapped_area回调*/
 	get_area = current->mm->get_unmapped_area;
@@ -1861,17 +1865,17 @@ get_unmapped_area(struct file *file, unsigned long addr, unsigned long len,
 		 * mmap_region() will call shmem_zero_setup() to create a file,
 		 * so use shmem's get_unmapped_area in case it can be huge.
 		 */
-		get_area = shmem_get_unmapped_area;/*共享内存对应的unmapped_area回调*/
+		get_area = shmem_get_unmapped_area;/*没有指明文件,共享内存对应的unmapped_area回调*/
 	} else if (IS_ENABLED(CONFIG_TRANSPARENT_HUGEPAGE)) {
 		/* Ensures that larger anonymous mappings are THP aligned. */
-		get_area = thp_get_unmapped_area;
+		get_area = thp_get_unmapped_area;/*没有指明文件,但开启了透明大页*/
 	}
 
 	/* Always treat pgoff as zero for anonymous memory. */
 	if (!file)
-		pgoff = 0;
+		pgoff = 0;/*未指明文件,offset置为零*/
 
-	/*触发回调，获得映射地址*/
+	/*获得一个空闲的vm_area区域*/
 	addr = get_area(file, addr, len, pgoff, flags);
 	if (IS_ERR_VALUE(addr))
 		return addr;
@@ -2862,6 +2866,7 @@ cannot_expand:
 		/*调用file->ops的mmap,使其映射到此vma*/
 		error = call_mmap(file, vma);
 		if (error)
+			/*映射失败*/
 			goto unmap_and_free_vma;
 
 		if (vma_is_shared_maywrite(vma)) {
@@ -2912,7 +2917,7 @@ cannot_expand:
 		if (error)
 			goto free_vma;
 	} else {
-		vma_set_anonymous(vma);
+		vma_set_anonymous(vma);/*匿名映射*/
 	}
 
 	if (map_deny_write_exec(vma, vma->vm_flags)) {

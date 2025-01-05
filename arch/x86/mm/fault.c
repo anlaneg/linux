@@ -1560,7 +1560,7 @@ DEFINE_IDTENTRY_RAW_ERRORCODE(exc_page_fault)
 	state = irqentry_enter(regs);
 
 	instrumentation_begin();
-	handle_page_fault(regs, error_code, address);
+	handle_page_fault(regs, error_code, address);/*处理缺页*/
 	instrumentation_end();
 
 	irqentry_exit(regs, state);

@@ -3447,6 +3447,7 @@ void *__kmem_cache_alloc_lru(struct kmem_cache *cachep, struct list_lru *lru,
 	return ret;
 }
 
+/*自mem cache中申请一个obj*/
 void *kmem_cache_alloc(struct kmem_cache *cachep, gfp_t flags)
 {
 	return __kmem_cache_alloc_lru(cachep, NULL, flags);
@@ -3470,6 +3471,7 @@ cache_alloc_debugcheck_after_bulk(struct kmem_cache *s, gfp_t flags,
 		p[i] = cache_alloc_debugcheck_after(s, flags, p[i], caller);
 }
 
+/*自mem cache中申请一组obj*/
 int kmem_cache_alloc_bulk(struct kmem_cache *s, gfp_t flags, size_t size,
 			  void **p)
 {

@@ -267,9 +267,13 @@ extern unsigned int kobjsize(const void *objp);
  */
 #define VM_NONE		0x00000000
 
+/*读权限*/
 #define VM_READ		0x00000001	/* currently active flags */
+/*写权限*/
 #define VM_WRITE	0x00000002
+/*执行权限*/
 #define VM_EXEC		0x00000004
+/*共享*/
 #define VM_SHARED	0x00000008
 
 /* mprotect() hardcodes VM_MAYREAD >> 4 == VM_READ, and so for r/w/x bits. */
@@ -581,6 +585,7 @@ struct vm_operations_struct {
 	vm_fault_t (*huge_fault)(struct vm_fault *vmf, unsigned int order);
 	vm_fault_t (*map_pages)(struct vm_fault *vmf,
 			pgoff_t start_pgoff, pgoff_t end_pgoff);
+	/*用于获取此vma所用page大小*/
 	unsigned long (*pagesize)(struct vm_area_struct * area);
 
 	/* notification that a previously read-only page is about to become
@@ -600,7 +605,7 @@ struct vm_operations_struct {
 	/* Called by the /proc/PID/maps code to ask the vma whether it
 	 * has a special name.  Returning non-NULL will also cause this
 	 * vma to be dumped unconditionally. */
-	const char *(*name)(struct vm_area_struct *vma);
+	const char *(*name)(struct vm_area_struct *vma);/*获取此vma名称*/
 
 #ifdef CONFIG_NUMA
 	/*
@@ -893,6 +898,7 @@ static inline bool vma_is_anonymous(struct vm_area_struct *vma)
  */
 static inline bool vma_is_initial_heap(const struct vm_area_struct *vma)
 {
+	/*检查此区域是否为heap*/
 	return vma->vm_start < vma->vm_mm->brk &&
 		vma->vm_end > vma->vm_mm->start_brk;
 }
@@ -909,7 +915,7 @@ static inline bool vma_is_initial_stack(const struct vm_area_struct *vma)
 	 * languages like Go.
 	 */
 	return vma->vm_start <= vma->vm_mm->start_stack &&
-		vma->vm_end >= vma->vm_mm->start_stack;
+		vma->vm_end >= vma->vm_mm->start_stack;/*检查此区域是否为stack*/
 }
 
 static inline bool vma_is_temporary_stack(struct vm_area_struct *vma)

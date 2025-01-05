@@ -2993,7 +2993,7 @@ SYSCALL_DEFINE0(fork)
 		.exit_signal = SIGCHLD,
 	};
 
-	return kernel_clone(&args);
+	return kernel_clone(&args);/*通过clone实现fork*/
 #else
 	/* can not support in nommu mode */
 	return -EINVAL;
@@ -3009,7 +3009,7 @@ SYSCALL_DEFINE0(vfork)
 		.exit_signal	= SIGCHLD,
 	};
 
-	return kernel_clone(&args);
+	return kernel_clone(&args);/*通过clone实现vfork*/
 }
 #endif
 

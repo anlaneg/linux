@@ -221,7 +221,7 @@ struct maple_tree {
 		lockdep_map_p	ma_external_lock;
 	};
 	unsigned int	ma_flags;
-	void __rcu      *ma_root;
+	void __rcu      *ma_root;/*根节点*/
 };
 
 /**
@@ -280,7 +280,7 @@ struct maple_node {
 	union {
 		struct {
 			struct maple_pnode *parent;
-			void __rcu *slot[MAPLE_NODE_SLOTS];
+			void __rcu *slot[MAPLE_NODE_SLOTS];/*maple_dense类型时生效*/
 		};
 		struct {
 			void *pad;
@@ -291,8 +291,8 @@ struct maple_node {
 			unsigned char slot_len;
 			unsigned int ma_flags;
 		};
-		struct maple_range_64 mr64;
-		struct maple_arange_64 ma64;
+		struct maple_range_64 mr64;/*maple_leaf_64,maple_leaf_64类型时生效*/
+		struct maple_arange_64 ma64;/*maple_arange_64类型时生效*/
 		struct maple_alloc alloc;
 	};
 };
@@ -376,7 +376,7 @@ enum maple_status {
 	ma_pause,
 	ma_overflow,
 	ma_underflow,
-	ma_error,
+	ma_error,/*状态有误*/
 };
 
 /*
@@ -475,7 +475,7 @@ struct ma_wr_state {
 		.mas_flags = 0,						\
 	}
 
-#define MA_WR_STATE(name, ma_state, wr_entry)				\
+#define MA_WR_STATE(name/*变量名称*/, ma_state, wr_entry)				\
 	struct ma_wr_state name = {					\
 		.mas = ma_state,					\
 		.content = NULL,					\

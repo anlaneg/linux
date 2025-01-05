@@ -76,10 +76,15 @@
 #define MA_STATE_REBALANCE	2
 #define MA_STATE_PREALLOC	4
 
+/*强制按maple_pnode节点解释*/
 #define ma_parent_ptr(x) ((struct maple_pnode *)(x))
+/*标记x->tree节点为根节点*/
 #define mas_tree_parent(x) ((unsigned long)(x->tree) | MA_ROOT_PARENT)
+/*转换(强制按maple_node节点解释)为maple_node节点*/
 #define ma_mnode_ptr(x) ((struct maple_node *)(x))
+/*转换为enode节点*/
 #define ma_enode_ptr(x) ((struct maple_enode *)(x))
+/*负责系统中所有struct maple_node节点分配*/
 static struct kmem_cache *maple_node_cache;
 
 #ifdef CONFIG_DEBUG_MAPLE_TREE
@@ -159,11 +164,13 @@ struct maple_subtree_state {
 /* Functions */
 static inline struct maple_node *mt_alloc_one(gfp_t gfp)
 {
+	/*申请一个空闲struct maple_node结点*/
 	return kmem_cache_alloc(maple_node_cache, gfp);
 }
 
 static inline int mt_alloc_bulk(gfp_t gfp, size_t size, void **nodes)
 {
+	/*申请一组空闲struct maple_node结点*/
 	return kmem_cache_alloc_bulk(maple_node_cache, gfp, size, nodes);
 }
 
@@ -179,6 +186,7 @@ static inline void mt_free_bulk(size_t size, void __rcu **nodes)
 
 static void mt_free_rcu(struct rcu_head *head)
 {
+	/*通过rcu head找到maple_node,并释放回cache*/
 	struct maple_node *node = container_of(head, struct maple_node, rcu);
 
 	kmem_cache_free(maple_node_cache, node);
@@ -252,7 +260,7 @@ static __always_inline bool mt_is_reserved(const void *entry)
 static __always_inline void mas_set_err(struct ma_state *mas, long err)
 {
 	mas->node = MA_ERROR(err);
-	mas->status = ma_error;
+	mas->status = ma_error;/*设置状态为error*/
 }
 
 static __always_inline bool mas_is_ptr(const struct ma_state *mas)
@@ -287,8 +295,9 @@ static inline bool mas_is_underflow(struct ma_state *mas)
 }
 
 static __always_inline struct maple_node *mte_to_node(
-		const struct maple_enode *entry)
+		const struct maple_enode *entry/*mte类型节点*/)
 {
+	/*移除entry指针(struct maple_enode类型)的后8位,并返回指针*/
 	return (struct maple_node *)((unsigned long)entry & ~MAPLE_NODE_MASK);
 }
 
@@ -366,11 +375,13 @@ static inline bool mte_has_null(const struct maple_enode *node)
 
 static __always_inline bool ma_is_root(struct maple_node *node)
 {
+	/*检查是否为root节点*/
 	return ((unsigned long)node->parent & MA_ROOT_PARENT);
 }
 
 static __always_inline bool mte_is_root(const struct maple_enode *node)
 {
+	/*将mte转换为maple_node,并检查是否为root节点*/
 	return ma_is_root(mte_to_node(node));
 }
 
@@ -5371,7 +5382,7 @@ reset:
  */
 void *mas_store(struct ma_state *mas, void *entry)
 {
-	MA_WR_STATE(wr_mas, mas, entry);
+	MA_WR_STATE(wr_mas, mas, entry);/*定义初始化变量*/
 
 	trace_ma_write(__func__, mas, 0, entry);
 #ifdef CONFIG_DEBUG_MAPLE_TREE
@@ -5379,6 +5390,7 @@ void *mas_store(struct ma_state *mas, void *entry)
 		pr_err("Error %lX > %lX %p\n", mas->index, mas->last, entry);
 
 	if (mas->index > mas->last) {
+		/*参数有误*/
 		mas_set_err(mas, -EINVAL);
 		return NULL;
 	}
@@ -6256,6 +6268,7 @@ bool mas_nomem(struct ma_state *mas, gfp_t gfp)
 
 void __init maple_tree_init(void)
 {
+	/*创建mem cache*/
 	maple_node_cache = kmem_cache_create("maple_node",
 			sizeof(struct maple_node), sizeof(struct maple_node),
 			SLAB_PANIC, NULL);

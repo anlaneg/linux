@@ -665,7 +665,7 @@ static const struct file_operations shm_file_operations = {
  * shm_file_operations_huge is now identical to shm_file_operations,
  * but we keep it distinct for the sake of is_file_shm_hugepages().
  */
-static const struct file_operations shm_file_operations_huge = {
+static const struct file_operations shm_file_operations_huge/*大页共享内存*/ = {
 	.mmap		= shm_mmap,
 	.fsync		= shm_fsync,
 	.release	= shm_release,

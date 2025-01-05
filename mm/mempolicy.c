@@ -2130,7 +2130,7 @@ struct page *alloc_pages_mpol(gfp_t gfp, unsigned int order,
 		}
 	}
 
-	page = __alloc_pages(gfp, order, nid, nodemask);
+	page = __alloc_pages(gfp, order, nid, nodemask);/*申请物理页*/
 
 	if (unlikely(pol->mode == MPOL_INTERLEAVE) && page) {
 		/* skip NUMA_INTERLEAVE_HIT update if numa stats is disabled */

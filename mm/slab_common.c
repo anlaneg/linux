@@ -392,7 +392,7 @@ EXPORT_SYMBOL(kmem_cache_create_usercopy);
  * Return: a pointer to the cache on success, NULL on failure.
  */
 struct kmem_cache *
-kmem_cache_create(const char *name, unsigned int size, unsigned int align,
+kmem_cache_create(const char *name, unsigned int size/*obj大小*/, unsigned int align/*obj对齐方式*/,
 		slab_flags_t flags, void (*ctor)(void *))
 {
 	return kmem_cache_create_usercopy(name, size, align, flags, 0, 0,

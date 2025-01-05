@@ -112,6 +112,7 @@ static inline int huge_pte_none_mostly(pte_t pte)
 }
 
 #ifndef __HAVE_ARCH_PREPARE_HUGEPAGE_RANGE
+/*长度及地址必须针对大页对齐*/
 static inline int prepare_hugepage_range(struct file *file,
 		unsigned long addr, unsigned long len)
 {

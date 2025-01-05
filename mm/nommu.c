@@ -412,6 +412,7 @@ void __init mmap_init(void)
 
 	ret = percpu_counter_init(&vm_committed_as, 0, GFP_KERNEL);
 	VM_BUG_ON(ret);
+	/*创建cache,用于分配struct vm_region*/
 	vm_region_jar = KMEM_CACHE(vm_region, SLAB_PANIC|SLAB_ACCOUNT);
 }
 
@@ -709,30 +710,32 @@ static int validate_mmap_request(struct file *file,
 
 	if ((flags & MAP_TYPE) != MAP_PRIVATE &&
 	    (flags & MAP_TYPE) != MAP_SHARED)
+		/*MAP_TYPE当前仅接收以上两种值*/
 		return -EINVAL;
 
 	if (!len)
 		return -EINVAL;
 
 	/* Careful about overflows.. */
-	rlen = PAGE_ALIGN(len);
+	rlen = PAGE_ALIGN(len);/*要映射的长度以页对齐*/
 	if (!rlen || rlen > TASK_SIZE)
 		return -ENOMEM;
 
 	/* offset overflow? */
 	if ((pgoff + (rlen >> PAGE_SHIFT)) < pgoff)
-		return -EOVERFLOW;
+		return -EOVERFLOW;/*页数过大,绕回*/
 
 	if (file) {
 		/* files must support mmap */
 		if (!file->f_op->mmap)
-			return -ENODEV;
+			return -ENODEV;/*文件操作集必须提供mmap回调*/
 
 		/* work out if what we've got could possibly be shared
 		 * - we support chardevs that provide their own "memory"
 		 * - we support files/blockdevs that are memory backed
 		 */
 		if (file->f_op->mmap_capabilities) {
+			/*获取CAP*/
 			capabilities = file->f_op->mmap_capabilities(file);
 		} else {
 			/* no explicit capabilities set, so assume some
@@ -740,7 +743,7 @@ static int validate_mmap_request(struct file *file,
 			switch (file_inode(file)->i_mode & S_IFMT) {
 			case S_IFREG:
 			case S_IFBLK:
-				capabilities = NOMMU_MAP_COPY;
+				capabilities = NOMMU_MAP_COPY;/*普通文件/块设备*/
 				break;
 
 			case S_IFCHR:
@@ -751,7 +754,7 @@ static int validate_mmap_request(struct file *file,
 				break;
 
 			default:
-				return -EINVAL;
+				return -EINVAL;/*其它设备不支持*/
 			}
 		}
 
@@ -764,13 +767,13 @@ static int validate_mmap_request(struct file *file,
 
 		/* The file shall have been opened with read permission. */
 		if (!(file->f_mode & FMODE_READ))
-			return -EACCES;
+			return -EACCES;/*文件必须有读权限*/
 
 		if (flags & MAP_SHARED) {
 			/* do checks for writing, appending and locking */
 			if ((prot & PROT_WRITE) &&
 			    !(file->f_mode & FMODE_WRITE))
-				return -EACCES;
+				return -EACCES;/*指明写,文件必须要有写权限*/
 
 			if (IS_APPEND(file_inode(file)) &&
 			    (file->f_mode & FMODE_WRITE))
@@ -857,6 +860,7 @@ static unsigned long determine_vm_flags(struct file *file,
 {
 	unsigned long vm_flags;
 
+	/*flags,prot标记转换为vm_flags标记*/
 	vm_flags = calc_vm_prot_bits(prot, 0) | calc_vm_flag_bits(flags);
 
 	if (!file) {
@@ -864,7 +868,7 @@ static unsigned long determine_vm_flags(struct file *file,
 		 * MAP_ANONYMOUS. MAP_SHARED is mapped to MAP_PRIVATE, because
 		 * there is no fork().
 		 */
-		vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;
+		vm_flags |= VM_MAYREAD | VM_MAYWRITE | VM_MAYEXEC;/*无文件*/
 	} else if (flags & MAP_PRIVATE) {
 		/* MAP_PRIVATE file mapping */
 		if (capabilities & NOMMU_MAP_DIRECT)
@@ -1014,7 +1018,7 @@ enomem:
 /*
  * handle mapping creation for uClinux
  */
-unsigned long do_mmap(struct file *file,
+unsigned long do_mmap(struct file *file/*关联的文件（可以为NULL）*/,
 			unsigned long addr,
 			unsigned long len,
 			unsigned long prot,
@@ -1050,11 +1054,11 @@ unsigned long do_mmap(struct file *file,
 
 
 	/* we're going to need to record the mapping */
-	region = kmem_cache_zalloc(vm_region_jar, GFP_KERNEL);
+	region = kmem_cache_zalloc(vm_region_jar, GFP_KERNEL);/*分配结构体vm_region*/
 	if (!region)
 		goto error_getting_region;
 
-	//申请记录此段内存必须的vma结构
+	//分配结构体vm_area_struct
 	vma = vm_area_alloc(current->mm);
 	if (!vma)
 		goto error_getting_vma;

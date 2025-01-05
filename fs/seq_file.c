@@ -662,7 +662,7 @@ void *__seq_open_private(struct file *f, const struct seq_operations *ops,
 		goto out_free;
 
 	seq = f->private_data;
-	seq->private = private;
+	seq->private = private;/*设置文件私有结构*/
 	return private;
 
 out_free:
@@ -771,11 +771,12 @@ void seq_put_hex_ll(struct seq_file *m, const char *delimiter,
 	unsigned int len;
 	int i;
 
+	/*检查是否有前缀输出*/
 	if (delimiter && delimiter[0]) {
 		if (delimiter[1] == 0)
-			seq_putc(m, delimiter[0]);
+			seq_putc(m, delimiter[0]);/*只存放一个C的情况*/
 		else
-			seq_puts(m, delimiter);
+			seq_puts(m, delimiter);/*存放多个字符的情况*/
 	}
 
 	/* If x is 0, the result of __builtin_clzll is undefined */
@@ -792,6 +793,7 @@ void seq_put_hex_ll(struct seq_file *m, const char *delimiter,
 		return;
 	}
 
+	/*按16进制输出数字*/
 	for (i = len - 1; i >= 0; i--) {
 		m->buf[m->count + i] = hex_asc[0xf & v];
 		v = v >> 4;

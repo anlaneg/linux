@@ -547,7 +547,7 @@ EXPORT_SYMBOL_GPL(account_locked_vm);
 /*针对文件完成mmap(如果为匿名映射，则file为NULL）*/
 unsigned long vm_mmap_pgoff(struct file *file/*关联的文件（可以为NULL）*/, unsigned long addr,
 	unsigned long len/*要映射的内存长度*/, unsigned long prot,
-	unsigned long flag, unsigned long pgoff/*页数目*/)
+	unsigned long flag, unsigned long pgoff/*在文件中的偏移量,以页为单位(即页数目)*/)
 {
 	unsigned long ret;
 	struct mm_struct *mm = current->mm;

@@ -1305,12 +1305,12 @@ static void init_once(void *foo)
 	inode_init_once(&ei->vfs_inode);
 }
 
-/*大页对应的文件操作ops*/
+/*大页文件对应的文件操作ops*/
 const struct file_operations hugetlbfs_file_operations = {
 	.read_iter		= hugetlbfs_read_iter,
 	.mmap			= hugetlbfs_file_mmap,/*具体实现file到vma的映射*/
 	.fsync			= noop_fsync,/*不实同fsync*/
-	.get_unmapped_area	= hugetlb_get_unmapped_area,
+	.get_unmapped_area	= hugetlb_get_unmapped_area,/*找一个未映射的vma*/
 	.llseek			= default_llseek,
 	.fallocate		= hugetlbfs_fallocate,
 };

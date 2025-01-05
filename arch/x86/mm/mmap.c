@@ -210,7 +210,7 @@ const char *arch_vma_name(struct vm_area_struct *vma)
 bool mmap_address_hint_valid(unsigned long addr, unsigned long len)
 {
 	if (TASK_SIZE - len < addr)
-		return false;
+		return false;/*地址绕回*/
 
 	return (addr > DEFAULT_MAP_WINDOW) == (addr + len > DEFAULT_MAP_WINDOW);
 }

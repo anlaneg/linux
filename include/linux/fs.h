@@ -2074,6 +2074,7 @@ struct file_operations {
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	/*将此file映射到给定的vm_area区域*/
 	int (*mmap) (struct file *, struct vm_area_struct *);
+	/*文件 特别支持的MMAP系统调用时可指定的FLAGS*/
 	unsigned long mmap_supported_flags;
 	//文件打开函数(通过inode打开file)
 	int (*open) (struct inode *, struct file *);
@@ -2085,6 +2086,7 @@ struct file_operations {
 	int (*fsync) (struct file *, loff_t, loff_t, int datasync);
 	int (*fasync) (int, struct file *, int);
 	int (*lock) (struct file *, int, struct file_lock *);
+	/*查找一个未映射的区域*/
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
 	int (*flock) (struct file *, int, struct file_lock *);
@@ -2097,6 +2099,7 @@ struct file_operations {
 	/*显示fd info时使用，例如cat /proc/$pid/fdinfo/1 */
 	void (*show_fdinfo)(struct seq_file *m, struct file *f);
 #ifndef CONFIG_MMU
+	/*用于获取给定文件的cap*/
 	unsigned (*mmap_capabilities)(struct file *);
 #endif
 	ssize_t (*copy_file_range)(struct file *, loff_t, struct file *,

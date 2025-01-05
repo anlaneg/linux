@@ -568,7 +568,7 @@ static inline bool is_file_hugepages(struct file *file)
 		/*大页文件*/
 		return true;
 
-	return is_file_shm_hugepages(file);
+	return is_file_shm_hugepages(file);/*检查是否为共享内存(大页)*/
 }
 
 /*取此inode对应的hstate*/

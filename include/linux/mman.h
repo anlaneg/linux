@@ -141,6 +141,7 @@ static inline bool arch_validate_flags(unsigned long flags)
 static inline unsigned long
 calc_vm_prot_bits(unsigned long prot, unsigned long pkey)
 {
+	/*prot标记转换为VM*标记*/
 	return _calc_vm_trans(prot, PROT_READ,  VM_READ ) |
 	       _calc_vm_trans(prot, PROT_WRITE, VM_WRITE) |
 	       _calc_vm_trans(prot, PROT_EXEC,  VM_EXEC) |
@@ -153,6 +154,7 @@ calc_vm_prot_bits(unsigned long prot, unsigned long pkey)
 static inline unsigned long
 calc_vm_flag_bits(unsigned long flags)
 {
+	/*MAP_*标记转换为VM_*标记*/
 	return _calc_vm_trans(flags, MAP_GROWSDOWN,  VM_GROWSDOWN ) |
 	       _calc_vm_trans(flags, MAP_LOCKED,     VM_LOCKED    ) |
 	       _calc_vm_trans(flags, MAP_SYNC,	     VM_SYNC      ) |

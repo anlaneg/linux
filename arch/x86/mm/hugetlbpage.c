@@ -127,20 +127,21 @@ hugetlb_get_unmapped_area(struct file *file, unsigned long addr,
 
 	/* No address checking. See comment at mmap_address_hint_valid() */
 	if (flags & MAP_FIXED) {
+		/*指明按固定地址映射,检查addr,len*/
 		if (prepare_hugepage_range(file, addr, len))
 			return -EINVAL;
 		return addr;
 	}
 
-	/*检查addr不为NULL情况*/
+	/*检查addr不为NULL,但未指明FIXED映射情况*/
 	if (addr) {
-		addr &= huge_page_mask(h);
+		addr &= huge_page_mask(h);/*地址须要按掩码对齐*/
 		if (!mmap_address_hint_valid(addr, len))
 			goto get_unmapped_area;
 
-		vma = find_vma(mm, addr);
+		vma = find_vma(mm, addr);/*检查此地址是否已有vma*/
 		if (!vma || addr + len <= vm_start_gap(vma))
-			return addr;
+			return addr;/*vma不存在;*/
 	}
 
 get_unmapped_area:

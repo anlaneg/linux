@@ -4271,12 +4271,14 @@ static vm_fault_t do_anonymous_page(struct vm_fault *vmf)
 	/* Returns NULL on OOM or ERR_PTR(-EAGAIN) if we must retry the fault */
 	folio = alloc_anon_folio(vmf);
 	if (IS_ERR(folio))
+		/*申请出错*/
 		return 0;
 	if (!folio)
+		/*没有申请到*/
 		goto oom;
 
-	nr_pages = folio_nr_pages(folio);
-	addr = ALIGN_DOWN(vmf->address, nr_pages * PAGE_SIZE);
+	nr_pages = folio_nr_pages(folio);/*申请的页数*/
+	addr = ALIGN_DOWN(vmf->address/*起始虚拟地址*/, nr_pages * PAGE_SIZE);/*推算出结束地址虚拟地址*/
 
 	if (mem_cgroup_charge(folio, vma->vm_mm, GFP_KERNEL))
 		goto oom_free_page;
@@ -5445,6 +5447,7 @@ vm_fault_t handle_mm_fault(struct vm_area_struct *vma, unsigned long address,
 	lru_gen_enter_fault(vma);
 
 	if (unlikely(is_vm_hugetlb_page(vma)))
+		/*大页缺页*/
 		ret = hugetlb_fault(vma->vm_mm, vma, address, flags);
 	else
 		ret = __handle_mm_fault(vma, address, flags);

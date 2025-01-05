@@ -287,7 +287,7 @@ extern void proc_self_init(void);
  */
 struct mem_size_stats;
 struct proc_maps_private {
-	struct inode *inode;
+	struct inode *inode;/*关联的inode*/
 	struct task_struct *task;
 	struct mm_struct *mm;
 	struct vma_iterator iter;

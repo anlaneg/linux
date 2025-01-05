@@ -644,7 +644,7 @@ struct vm_area_struct {
 	 * To modify use vm_flags_{init|reset|set|clear|mod} functions.
 	 */
 	union {
-		const vm_flags_t vm_flags;
+		const vm_flags_t vm_flags;/*包含区域权限位,例如读,写,执行*/
 		vm_flags_t __private __vm_flags;
 	};
 
@@ -694,7 +694,7 @@ struct vm_area_struct {
 	const struct vm_operations_struct *vm_ops;
 
 	/* Information about our backing store: */
-	/*在page范围内的起始offset*/
+	/*起始offset(以页为单位)*/
 	unsigned long vm_pgoff;		/* Offset (within vm_file) in PAGE_SIZE
 					   units */
 	/*此区域映射到哪个文件（此文件被映射时将被增加引用，释放时减少引用，以阻止其删除）*/
@@ -813,6 +813,7 @@ struct mm_struct {
 #ifdef CONFIG_MMU
 		atomic_long_t pgtables_bytes;	/* size of all page tables */
 #endif
+		/*记录映射了多少个vma*/
 		int map_count;			/* number of VMAs */
 
 		spinlock_t page_table_lock; /* Protects page tables and some

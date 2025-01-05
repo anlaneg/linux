@@ -4619,7 +4619,7 @@ static int packet_mmap(struct file *file, struct socket *sock,
 	if (expected_size == 0)
 		goto out;
 
-	size = vma->vm_end - vma->vm_start;
+	size = vma->vm_end - vma->vm_start;/*区间长度*/
 	if (size != expected_size)
 		goto out;
 
@@ -4634,7 +4634,7 @@ static int packet_mmap(struct file *file, struct socket *sock,
 			int pg_num;
 
 			for (pg_num = 0; pg_num < rb->pg_vec_pages; pg_num++) {
-				page = pgv_to_page(kaddr);
+				page = pgv_to_page(kaddr);/*取此地址对应的page*/
 				err = vm_insert_page(vma, start, page);
 				if (unlikely(err))
 					goto out;
@@ -4692,7 +4692,7 @@ static const struct proto_ops packet_ops = {
 	.getsockopt =	packet_getsockopt,
 	.sendmsg =	packet_sendmsg,//af-packet raw格式报文发送
 	.recvmsg =	packet_recvmsg,//raw格式报文接收
-	.mmap =		packet_mmap,
+	.mmap =		packet_mmap,/*支持MMAP*/
 };
 
 static const struct net_proto_family packet_family_ops = {

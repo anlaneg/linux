@@ -129,10 +129,10 @@ static void release_task_mempolicy(struct proc_maps_private *priv)
 static struct vm_area_struct *proc_get_vma(struct proc_maps_private *priv,
 						loff_t *ppos)
 {
-	struct vm_area_struct *vma = vma_next(&priv->iter);
+	struct vm_area_struct *vma = vma_next(&priv->iter);/*取下一个vma*/
 
 	if (vma) {
-		*ppos = vma->vm_start;
+		*ppos = vma->vm_start;/*vma起始地址*/
 	} else {
 		*ppos = -2UL;
 		vma = get_gate_vma(priv->mm);
@@ -151,7 +151,7 @@ static void *m_start(struct seq_file *m, loff_t *ppos)
 	if (last_addr == -1UL)
 		return NULL;
 
-	priv->task = get_proc_task(priv->inode);
+	priv->task = get_proc_task(priv->inode);/*通过inode获得对应进程*/
 	if (!priv->task)
 		return ERR_PTR(-ESRCH);
 
@@ -183,7 +183,7 @@ static void *m_next(struct seq_file *m, void *v, loff_t *ppos)
 		*ppos = -1UL;
 		return NULL;
 	}
-	return proc_get_vma(m->private, ppos);
+	return proc_get_vma(m->private, ppos);/*取下一个vma*/
 }
 
 static void m_stop(struct seq_file *m, void *v)
@@ -245,17 +245,17 @@ static void show_vma_header_prefix(struct seq_file *m,
 				   dev_t dev, unsigned long ino)
 {
 	seq_setwidth(m, 25 + sizeof(void *) * 6 - 1);
-	seq_put_hex_ll(m, NULL, start, 8);
-	seq_put_hex_ll(m, "-", end, 8);
+	seq_put_hex_ll(m, NULL, start, 8);/*起始地址*/
+	seq_put_hex_ll(m, "-", end, 8);/*终止地址*/
 	seq_putc(m, ' ');
 	seq_putc(m, flags & VM_READ ? 'r' : '-');
 	seq_putc(m, flags & VM_WRITE ? 'w' : '-');
 	seq_putc(m, flags & VM_EXEC ? 'x' : '-');
-	seq_putc(m, flags & VM_MAYSHARE ? 's' : 'p');
-	seq_put_hex_ll(m, " ", pgoff, 8);
-	seq_put_hex_ll(m, " ", MAJOR(dev), 2);
+	seq_putc(m, flags & VM_MAYSHARE ? 's' : 'p');/*如果共享,输出s,否则输出p,私有*/
+	seq_put_hex_ll(m, " ", pgoff, 8);/*针对文件时,偏移量*/
+	seq_put_hex_ll(m, " ", MAJOR(dev), 2);/*关联的设备,采用16进制输出*/
 	seq_put_hex_ll(m, ":", MINOR(dev), 2);
-	seq_put_decimal_ull(m, " ", ino);
+	seq_put_decimal_ull(m, " ", ino);/*关联的inode*/
 	seq_putc(m, ' ');
 }
 
@@ -273,16 +273,17 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 	const char *name = NULL;
 
 	if (file) {
+		/*有映射的文件,取文件对应的inode,如未映射文件,则均初始化为0*/
 		const struct inode *inode = file_user_inode(vma->vm_file);
 
-		dev = inode->i_sb->s_dev;
-		ino = inode->i_ino;
+		dev = inode->i_sb->s_dev;/*映射区域对应的设备号*/
+		ino = inode->i_ino;/*取inode编号*/
 		pgoff = ((loff_t)vma->vm_pgoff) << PAGE_SHIFT;
 	}
 
 	start = vma->vm_start;
 	end = vma->vm_end;
-	show_vma_header_prefix(m, start, end, flags, pgoff, dev, ino);
+	show_vma_header_prefix(m, start/*起始地址*/, end/*终止地址*/, flags, pgoff, dev, ino);
 	if (mm)
 		anon_name = anon_vma_name(vma);
 
@@ -299,17 +300,17 @@ show_map_vma(struct seq_file *m, struct vm_area_struct *vma)
 		if (anon_name)
 			seq_printf(m, "[anon_shmem:%s]", anon_name->name);
 		else
-			seq_path(m, file_user_path(file), "\n");
+			seq_path(m, file_user_path(file), "\n");/*输出文件路径*/
 		goto done;
 	}
 
 	if (vma->vm_ops && vma->vm_ops->name) {
-		name = vma->vm_ops->name(vma);
+		name = vma->vm_ops->name(vma);/*通过回调取名称*/
 		if (name)
 			goto done;
 	}
 
-	name = arch_vma_name(vma);
+	name = arch_vma_name(vma);/*通过ARCH获取此区域名称*/
 	if (!name) {
 		if (!mm) {
 			name = "[vdso]";
@@ -350,14 +351,16 @@ static const struct seq_operations proc_pid_maps_op = {
 	.start	= m_start,
 	.next	= m_next,
 	.stop	= m_stop,
-	.show	= show_map
+	.show	= show_map/*显示此vma信息*/
 };
 
 static int pid_maps_open(struct inode *inode, struct file *file)
 {
+	/*maps文件打开*/
 	return do_maps_open(inode, file, &proc_pid_maps_op);
 }
 
+/*处理/proc进程目录下maps文件显示*/
 const struct file_operations proc_pid_maps_operations = {
 	.open		= pid_maps_open,
 	.read		= seq_read,
@@ -647,10 +650,10 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 		 */
 		[0 ... (BITS_PER_LONG-1)] = "??",
 
-		[ilog2(VM_READ)]	= "rd",
-		[ilog2(VM_WRITE)]	= "wr",
-		[ilog2(VM_EXEC)]	= "ex",
-		[ilog2(VM_SHARED)]	= "sh",
+		[ilog2(VM_READ)]	= "rd",/*只读标记*/
+		[ilog2(VM_WRITE)]	= "wr",/*只写标记*/
+		[ilog2(VM_EXEC)]	= "ex",/*执行标记*/
+		[ilog2(VM_SHARED)]	= "sh",/*共享标记*/
 		[ilog2(VM_MAYREAD)]	= "mr",
 		[ilog2(VM_MAYWRITE)]	= "mw",
 		[ilog2(VM_MAYEXEC)]	= "me",
@@ -709,11 +712,11 @@ static void show_smap_vma_flags(struct seq_file *m, struct vm_area_struct *vma)
 	seq_puts(m, "VmFlags: ");
 	for (i = 0; i < BITS_PER_LONG; i++) {
 		if (!mnemonics[i][0])
-			continue;
+			continue;/*未设置,不显示*/
 		if (vma->vm_flags & (1UL << i)) {
-			seq_putc(m, mnemonics[i][0]);
+			seq_putc(m, mnemonics[i][0]);/*每个标记两个字符,先显示0标记*/
 			seq_putc(m, mnemonics[i][1]);
-			seq_putc(m, ' ');
+			seq_putc(m, ' ');/*标志分隔符*/
 		}
 	}
 	seq_putc(m, '\n');
@@ -851,19 +854,19 @@ static void __show_smap(struct seq_file *m, const struct mem_size_stats *mss,
 
 static int show_smap(struct seq_file *m, void *v)
 {
-	struct vm_area_struct *vma = v;
+	struct vm_area_struct *vma = v;/*要显示的vma*/
 	struct mem_size_stats mss = {};
 
-	smap_gather_stats(vma, &mss, 0);
+	smap_gather_stats(vma, &mss, 0);/*收集此vma对应的mss信息*/
 
-	show_map_vma(m, vma);
+	show_map_vma(m, vma);/*采用maps文件形式输出此vma*/
 
-	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);
-	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));
+	SEQ_PUT_DEC("Size:           ", vma->vm_end - vma->vm_start);/*此区域内存大小*/
+	SEQ_PUT_DEC(" kB\nKernelPageSize: ", vma_kernel_pagesize(vma));/*此区域采用的页大小*/
 	SEQ_PUT_DEC(" kB\nMMUPageSize:    ", vma_mmu_pagesize(vma));
-	seq_puts(m, " kB\n");
+	seq_puts(m, " kB\n");/*补单位*/
 
-	__show_smap(m, &mss, false);
+	__show_smap(m, &mss, false);/*显示mss信息*/
 
 	seq_printf(m, "THPeligible:    %8u\n",
 		   !!thp_vma_allowable_orders(vma, vma->vm_flags, true, false,
@@ -871,7 +874,7 @@ static int show_smap(struct seq_file *m, void *v)
 
 	if (arch_pkeys_enabled())
 		seq_printf(m, "ProtectionKey:  %8u\n", vma_pkey(vma));
-	show_smap_vma_flags(m, vma);
+	show_smap_vma_flags(m, vma);/*显示标记*/
 
 	return 0;
 }
@@ -998,11 +1001,12 @@ static const struct seq_operations proc_pid_smaps_op = {
 	.start	= m_start,
 	.next	= m_next,
 	.stop	= m_stop,
-	.show	= show_smap
+	.show	= show_smap/*smap文件显示*/
 };
 
 static int pid_smaps_open(struct inode *inode, struct file *file)
 {
+	/*打开smaps文件*/
 	return do_maps_open(inode, file, &proc_pid_smaps_op);
 }
 
