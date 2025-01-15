@@ -114,7 +114,7 @@ static int hugetlbfs_file_mmap(struct file *file, struct vm_area_struct *vma)
 	 * way when do_mmap unwinds (may be important on powerpc
 	 * and ia64).
 	 */
-	vm_flags_set(vma, VM_HUGETLB | VM_DONTEXPAND);/*vma打hugetlb,do not expand标记*/
+	vm_flags_set(vma, VM_HUGETLB | VM_DONTEXPAND);/*vma打hugetlb, do not expand标记*/
 	vma->vm_ops = &hugetlb_vm_ops;
 
 	ret = seal_check_write(info->seals, vma);
@@ -1259,7 +1259,7 @@ static void hugetlbfs_inc_free_inodes(struct hugetlbfs_sb_info *sbinfo)
 	}
 }
 
-/*用于分配hugetlbfs对应的inode*/
+/*用于系统分配hugetlbfs对应的inode,即struct hugetlbfs_inode_info结构*/
 static struct kmem_cache *hugetlbfs_inode_cachep;
 
 static struct inode *hugetlbfs_alloc_inode(struct super_block *sb)
@@ -1664,10 +1664,10 @@ struct file *hugetlb_file_setup(const char *name/*hugetlbfs文件名称*/, size_
 	if (!hugetlb_reserve_pages(inode, 0/*自零开始*/,
 			size >> huge_page_shift(hstate_inode(inode))/*大页数目*/, NULL,
 			acctflag))
-		/*预留内存失败*/
+		/*预留大页内存失败*/
 		file = ERR_PTR(-ENOMEM);
 	else
-		/*利用此inode申请file*/
+		/*预留成功，利用inode申请file*/
 		file = alloc_file_pseudo(inode, mnt, name/*文件名称*/, O_RDWR,
 					&hugetlbfs_file_operations);
 	if (!IS_ERR(file))
@@ -1720,7 +1720,7 @@ static int __init init_hugetlbfs_fs(void)
 	}
 
 	error = -ENOMEM;
-	//申请inode cache
+	//创建hugetlbfs inode cache
 	hugetlbfs_inode_cachep = kmem_cache_create("hugetlbfs_inode_cache",
 					sizeof(struct hugetlbfs_inode_info),
 					0, SLAB_ACCOUNT, init_once);

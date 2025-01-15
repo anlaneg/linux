@@ -86,6 +86,7 @@ static struct vfsmount *shm_mnt __ro_after_init;/*tmpfs文件系统对应的全�
 #include "internal.h"
 
 #define BLOCKS_PER_PAGE  (PAGE_SIZE/512)
+/*size对应占用的总页数*/
 #define VM_ACCT(size)    (PAGE_ALIGN(size) >> PAGE_SHIFT)
 
 /* Pretend that each entry is of this size in directory's i_size */
@@ -382,8 +383,9 @@ static int shmem_reserve_inode(struct super_block *sb, ino_t *inop)
 		 */
 		ino_t *next_ino;
 
+		/*取per cpu变量*/
 		next_ino = per_cpu_ptr(sbinfo->ino_batch, get_cpu());
-		ino = *next_ino;
+		ino = *next_ino;/*取序号*/
 		if (unlikely(ino % SHMEM_INO_BATCH == 0)) {
 			raw_spin_lock(&sbinfo->stat_lock);
 			ino = sbinfo->next_ino;
@@ -393,7 +395,7 @@ static int shmem_reserve_inode(struct super_block *sb, ino_t *inop)
 				ino++;
 		}
 		*inop = ino;
-		*next_ino = ++ino;
+		*next_ino = ++ino;/*更新下次序号*/
 		put_cpu();
 	}
 
@@ -1632,6 +1634,7 @@ static struct folio *shmem_alloc_folio(gfp_t gfp,
 	struct page *page;
 
 	mpol = shmem_get_pgoff_policy(info, index, 0, &ilx);
+	/*申请物理页*/
 	page = alloc_pages_mpol(gfp, 0, mpol, ilx, numa_node_id());
 	mpol_cond_put(mpol);
 
@@ -2047,7 +2050,7 @@ repeat:
 		huge_gfp = vma_thp_gfp_mask(vma);
 		huge_gfp = limit_gfp_mask(huge_gfp, gfp);
 		folio = shmem_alloc_and_add_folio(huge_gfp,
-				inode, index, fault_mm, true);
+				inode, index, fault_mm, true/*大页*/);
 		if (!IS_ERR(folio)) {
 			count_vm_event(THP_FILE_ALLOC);
 			goto alloced;
@@ -2056,7 +2059,7 @@ repeat:
 			goto repeat;
 	}
 
-	folio = shmem_alloc_and_add_folio(gfp, inode, index, fault_mm, false);
+	folio = shmem_alloc_and_add_folio(gfp, inode, index, fault_mm, false/*非大页*/);
 	if (IS_ERR(folio)) {
 		error = PTR_ERR(folio);
 		if (error == -EEXIST)
@@ -2501,7 +2504,7 @@ static struct inode *__shmem_get_inode(struct mnt_idmap *idmap,
 	spin_lock_init(&info->lock);
 	atomic_set(&info->stop_eviction, 0);
 	info->seals = F_SEAL_SEAL;
-	info->flags = flags & VM_NORESERVE;
+	info->flags = flags & VM_NORESERVE;/*是否有no reserve标记*/
 	info->i_crtime = inode_get_mtime(inode);
 	info->fsflags = (dir == NULL) ? 0 :
 		SHMEM_I(dir)->fsflags & SHMEM_FL_INHERITED;
@@ -2780,7 +2783,7 @@ static ssize_t shmem_file_read_iter(struct kiocb *iocb, struct iov_iter *to)
 	ssize_t retval = 0;
 	loff_t *ppos = &iocb->ki_pos;
 
-	index = *ppos >> PAGE_SHIFT;
+	index = *ppos >> PAGE_SHIFT;/*起始位置所在的页*/
 	offset = *ppos & ~PAGE_MASK;
 
 	for (;;) {

@@ -51,7 +51,7 @@ static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 {
 	pmd_t __pmd;
 	int i;
-	unsigned long addr = start;
+	unsigned long addr = start;/*起始地址*/
 	pte_t *pgtable;
 
 	pgtable = pte_alloc_one_kernel(&init_mm);
@@ -60,7 +60,7 @@ static int vmemmap_split_pmd(pmd_t *pmd, struct page *head, unsigned long start,
 
 	pmd_populate_kernel(&init_mm, &__pmd, pgtable);
 
-	for (i = 0; i < PTRS_PER_PTE; i++, addr += PAGE_SIZE) {
+	for (i = 0; i < PTRS_PER_PTE; i++, addr += PAGE_SIZE/*跳一个页*/) {
 		pte_t entry, *pte;
 		pgprot_t pgprot = PAGE_KERNEL;
 

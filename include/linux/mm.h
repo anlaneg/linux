@@ -221,7 +221,7 @@ int overcommit_policy_handler(struct ctl_table *, int, void *, size_t *,
 #endif
 
 /* to align the pointer to the (next) page boundary */
-//将地址addr按页大小对齐
+//将地址addr/或者数字addr按页大小对齐
 #define PAGE_ALIGN(addr) ALIGN(addr, PAGE_SIZE)
 
 /* to align the pointer to the (prev) page boundary */
@@ -304,6 +304,7 @@ extern unsigned int kobjsize(const void *objp);
 #define VM_DONTEXPAND	0x00040000	/* Cannot expand with mremap() */
 #define VM_LOCKONFAULT	0x00080000	/* Lock the pages covered when they are faulted in */
 #define VM_ACCOUNT	0x00100000	/* Is a VM accounted object */
+/*不预留内存仅创建文件*/
 #define VM_NORESERVE	0x00200000	/* should the VM suppress accounting */
 /*标明大页vm*/
 #define VM_HUGETLB	0x00400000	/* Huge TLB Page VM */
@@ -851,7 +852,7 @@ static inline void vm_flags_set(struct vm_area_struct *vma,
 				vm_flags_t flags)
 {
 	vma_start_write(vma);
-	ACCESS_PRIVATE(vma, __vm_flags) |= flags;
+	ACCESS_PRIVATE(vma, __vm_flags) |= flags;/*设置flags*/
 }
 
 static inline void vm_flags_clear(struct vm_area_struct *vma,

@@ -412,7 +412,7 @@ static void hugetlb_vma_lock_alloc(struct vm_area_struct *vma)
 
 	/* Should never get here with non-NULL vm_private_data */
 	if (vma->vm_private_data)
-		return;
+		return;/*已有private_data,直接返回*/
 
 	vma_lock = kmalloc(sizeof(*vma_lock), GFP_KERNEL);
 	if (!vma_lock) {
@@ -1325,7 +1325,7 @@ static void enqueue_hugetlb_folio(struct hstate *h, struct folio *folio)
 	list_move(&folio->lru, &h->hugepage_freelists[nid]);
 	h->free_huge_pages++;/*空闲页数增加*/
 	h->free_huge_pages_node[nid]++;
-	folio_set_hugetlb_freed(folio);/*标记此大页已释放*/
+	folio_set_hugetlb_freed(folio);/*标记此大页已释放（空闲）*/
 }
 
 static struct folio *dequeue_hugetlb_folio_node_exact(struct hstate *h,
@@ -2234,8 +2234,10 @@ static struct folio *alloc_buddy_hugetlb_folio(struct hstate *h,
 	if (alloc_try_hard)
 		gfp_mask |= __GFP_RETRY_MAYFAIL;
 	if (nid == NUMA_NO_NODE)
+		/*未明确node,以当前cpu所属numa node为准*/
 		nid = numa_mem_id();
 retry:
+	/*申请物理页*/
 	page = __alloc_pages(gfp_mask, order, nid, nmask);
 
 	/* Freeze head page */
@@ -2267,12 +2269,13 @@ retry:
 		node_set(nid, *node_alloc_noretry);
 
 	if (!page) {
+		/*自buddy中申请失败*/
 		__count_vm_event(HTLB_BUDDY_PGALLOC_FAIL);
 		return NULL;
 	}
 
 	__count_vm_event(HTLB_BUDDY_PGALLOC);
-	return page_folio(page);
+	return page_folio(page);/*将page强转为struct folio结构体*/
 }
 
 static struct folio *__alloc_fresh_hugetlb_folio(struct hstate *h,
@@ -2286,9 +2289,11 @@ retry:
 	if (hstate_is_gigantic(h))
 		folio = alloc_gigantic_folio(h, gfp_mask, nid, nmask);
 	else
+		/*自buddy系统中申请*/
 		folio = alloc_buddy_hugetlb_folio(h, gfp_mask,
 				nid, nmask, node_alloc_noretry);
 	if (!folio)
+		/*申请失败，返回*/
 		return NULL;
 
 	if (hstate_is_gigantic(h)) {
@@ -2550,6 +2555,7 @@ static struct folio *alloc_surplus_hugetlb_folio(struct hstate *h,
 	struct folio *folio = NULL;
 
 	if (hstate_is_gigantic(h))
+		/*超过buddy可提供的大小，返回NULL*/
 		return NULL;
 
 	spin_lock_irq(&hugetlb_lock);
@@ -2665,7 +2671,7 @@ struct folio *alloc_hugetlb_folio_nodemask(struct hstate *h, int preferred_nid,
 static int gather_surplus_pages(struct hstate *h, long delta)
 	__must_hold(&hugetlb_lock)
 {
-	LIST_HEAD(surplus_list);
+	LIST_HEAD(surplus_list);/*用于记录申请成的大页*/
 	struct folio *folio, *tmp;
 	int ret;
 	long i;
@@ -2675,6 +2681,7 @@ static int gather_surplus_pages(struct hstate *h, long delta)
 	lockdep_assert_held(&hugetlb_lock);
 	needed = (h->resv_huge_pages + delta) - h->free_huge_pages;
 	if (needed <= 0) {
+		/*足够分配，增加预留数目并直接返回*/
 		h->resv_huge_pages += delta;
 		return 0;
 	}
@@ -2687,7 +2694,7 @@ retry:
 	for (i = 0; i < needed; i++) {
 		/*申请一个大页*/
 		folio = alloc_surplus_hugetlb_folio(h, htlb_alloc_mask(h),
-				NUMA_NO_NODE, NULL);
+				NUMA_NO_NODE/*不关注numa*/, NULL);
 		if (!folio) {
 			alloc_ok = false;
 			break;
@@ -2696,7 +2703,7 @@ retry:
 		list_add(&folio->lru, &surplus_list);
 		cond_resched();
 	}
-	allocated += i;
+	allocated += i;/*申请成功的数目*/
 
 	/*
 	 * After retaking hugetlb_lock, we need to recalculate 'needed'
@@ -2706,14 +2713,15 @@ retry:
 	needed = (h->resv_huge_pages + delta) -
 			(h->free_huge_pages + allocated);
 	if (needed > 0) {
+		/*needed大于0，仍需要增加分配*/
 		if (alloc_ok)
-			goto retry;
+			goto retry;/*按刚才的need,我们申请了一组page,但现在又不够了，再试一次*/
 		/*
 		 * We were not able to allocate enough pages to
 		 * satisfy the entire reservation so we free what
 		 * we've allocated so far.
 		 */
-		goto free;
+		goto free;/*确实申请不到，释放已经申请到的*/
 	}
 	/*
 	 * The surplus_list now contains _at_least_ the number of extra pages
@@ -2724,17 +2732,18 @@ retry:
 	 * before they are reserved.
 	 */
 	needed += allocated;
-	h->resv_huge_pages += delta;
+	h->resv_huge_pages += delta;/*增加预留数*/
 	ret = 0;
 
 	/* Free the needed pages to the hugetlb pool */
 	list_for_each_entry_safe(folio, tmp, &surplus_list, lru) {
 		if ((--needed) < 0)
-			break;
+			break;/*要求已满足，跳出，多余的释放*/
 		/* Add the page to the hugetlb allocator */
 		enqueue_hugetlb_folio(h, folio);
 	}
 free:
+	/*归还已申请的页面*/
 	spin_unlock_irq(&hugetlb_lock);
 
 	/*
@@ -3630,9 +3639,9 @@ static void __init report_hugepages(void)
 	for_each_hstate(h) {
 		char buf[32];
 
-		string_get_size(huge_page_size(h), 1, STRING_UNITS_2, buf, 32);
+		string_get_size(huge_page_size(h), 1, STRING_UNITS_2, buf, 32);/*页大小*/
 		pr_info("HugeTLB: registered %s page size, pre-allocated %ld pages\n",
-			buf, h->free_huge_pages);
+			buf, h->free_huge_pages);/*预申请的页数目*/
 		pr_info("HugeTLB: %d KiB vmemmap can be freed for a %s page\n",
 			hugetlb_vmemmap_optimizable_size(h) / SZ_1K, buf);
 	}
@@ -4095,7 +4104,7 @@ static ssize_t nr_hugepages_show(struct kobject *kobj,
 static ssize_t nr_hugepages_store(struct kobject *kobj,
 	       struct kobj_attribute *attr, const char *buf, size_t len)
 {
-	/*设置大页数目*/
+	/*设置大页数目,例如通过/sys/devices/system/node/node0/hugepages/hugepages-2048kB*/
 	return nr_hugepages_store_common(false, kobj, buf, len);
 }
 HSTATE_ATTR(nr_hugepages);
@@ -4326,7 +4335,7 @@ static int hugetlb_sysfs_add_hstate(struct hstate *h, struct kobject *parent,
 	int retval;
 	int hi = hstate_index(h);
 
-	/*增加此大页类型对应的目录*/
+	/*增加此大页类型对应的目录:hugepages-%lukB*/
 	hstate_kobjs[hi] = kobject_create_and_add(h->name, parent);
 	if (!hstate_kobjs[hi])
 		return -ENOMEM;
@@ -5147,6 +5156,7 @@ static int hugetlb_acct_memory(struct hstate *h, long delta)
 	 */
 	if (delta > 0) {
 		if (gather_surplus_pages(h, delta) < 0)
+			/*增加delta失败，报错*/
 			goto out;
 
 		if (delta > allowed_mems_nr(h)) {
@@ -7068,7 +7078,7 @@ long hugetlb_change_protection(struct vm_area_struct *vma,
 /*实现大页内存预留*/
 bool hugetlb_reserve_pages(struct inode *inode/*关联的inode*/,
 					long from/*大页起始序号*/, long to/*大页终止序号*/,
-					struct vm_area_struct *vma/*关联的vma*/,
+					struct vm_area_struct *vma/*关联的vma,可以为空*/,
 					vm_flags_t vm_flags)
 {
 	long chg = -1, add = -1;

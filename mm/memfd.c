@@ -303,18 +303,22 @@ SYSCALL_DEFINE2(memfd_create,
 	long len;
 
 	if (!(flags & MFD_HUGETLB)) {
+		/*没有指定大页标记*/
 		if (flags & ~(unsigned int)MFD_ALL_FLAGS)
+			/*指明了当前不支持的flags,报错*/
 			return -EINVAL;
 	} else {
 		/* Allow huge page size encoding in flags. */
 		if (flags & ~(unsigned int)(MFD_ALL_FLAGS |
 				(MFD_HUGE_MASK << MFD_HUGE_SHIFT)))
+			/*指明了当前不支持的flags,报错（从这里可以知道huge标记存在时，
+			 * 部分掩码会指定大页尺寸）*/
 			return -EINVAL;
 	}
 
 	/* Invalid if both EXEC and NOEXEC_SEAL are set.*/
 	if ((flags & MFD_EXEC) && (flags & MFD_NOEXEC_SEAL))
-		return -EINVAL;
+		return -EINVAL;/*指明了互斥标记*/
 
 	error = check_sysctl_memfd_noexec(&flags);
 	if (error < 0)
@@ -355,7 +359,7 @@ SYSCALL_DEFINE2(memfd_create,
 
 	if (flags & MFD_HUGETLB) {
 		/*flags指明了hugetlb,则创建大页文件系统文件*/
-		file = hugetlb_file_setup(name, 0, VM_NORESERVE,
+		file = hugetlb_file_setup(name, 0, VM_NORESERVE/*不预留仅创建文件*/,
 					HUGETLB_ANONHUGE_INODE,
 					(flags >> MFD_HUGE_SHIFT) &
 					MFD_HUGE_MASK);

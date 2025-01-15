@@ -2232,7 +2232,9 @@ enum freeze_holder {
 };
 
 struct super_operations {
-	//通过此回调，申请并创建inode(初始化）,如无此回调，则自inode_cachep中申请inode
+	/*通过此回调，申请并创建inode(初始化）,如无此回调，
+	 * 则利用函数alloc_inode_sb自inode_cachep中申请inode
+	 */
    	struct inode *(*alloc_inode)(struct super_block *sb);
    	//通过此回调，销毁创建的inode
 	void (*destroy_inode)(struct inode *);

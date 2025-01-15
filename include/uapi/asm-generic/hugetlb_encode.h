@@ -18,6 +18,7 @@
  */
 
 #define HUGETLB_FLAG_ENCODE_SHIFT	26
+/*如上述，通过0x3f即6个比特来表示hugetlb尺寸（共支持63种）*/
 #define HUGETLB_FLAG_ENCODE_MASK	0x3f
 
 #define HUGETLB_FLAG_ENCODE_16KB	(14U << HUGETLB_FLAG_ENCODE_SHIFT)

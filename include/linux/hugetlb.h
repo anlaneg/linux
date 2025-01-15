@@ -739,11 +739,11 @@ struct hstate {
 	/*指定如果应用程序请求比nr_hugepages更多的大页面，大页面池可以增长多大*/
 	unsigned long nr_overcommit_huge_pages;
 	struct list_head hugepage_activelist;
-	struct list_head hugepage_freelists[MAX_NUMNODES];
+	struct list_head hugepage_freelists[MAX_NUMNODES];/*指明numa node对应的空项大页列表*/
 	unsigned int max_huge_pages_node[MAX_NUMNODES];
 	/*此类型大页总可用数目（关心node的情况，按node进行划分）*/
 	unsigned int nr_huge_pages_node[MAX_NUMNODES];
-	unsigned int free_huge_pages_node[MAX_NUMNODES];/*此类型大页空闲数目（区分numa node)*/
+	unsigned int free_huge_pages_node[MAX_NUMNODES];/*此类型大页各numa node的空闲数目*/
 	unsigned int surplus_huge_pages_node[MAX_NUMNODES];
 #ifdef CONFIG_CGROUP_HUGETLB
 	/* cgroup control files */
@@ -852,7 +852,7 @@ static inline unsigned huge_page_shift(struct hstate *h)
 
 static inline bool hstate_is_gigantic(struct hstate *h)
 {
-	return huge_page_order(h) > MAX_PAGE_ORDER;
+	return huge_page_order(h) > MAX_PAGE_ORDER;/*超过了buddy系统可提供的order*/
 }
 
 /*此大页的页size，占普通页的页数*/
