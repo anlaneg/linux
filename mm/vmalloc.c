@@ -579,7 +579,7 @@ static int vmap_small_pages_range_noflush(unsigned long addr, unsigned long end,
 int __vmap_pages_range_noflush(unsigned long addr, unsigned long end,
 		pgprot_t prot, struct page **pages, unsigned int page_shift)
 {
-	unsigned int i, nr = (end - addr) >> PAGE_SHIFT;
+	unsigned int i, nr = (end - addr) >> PAGE_SHIFT;/*此区域占用页数*/
 
 	WARN_ON(page_shift < PAGE_SHIFT);
 
@@ -625,7 +625,7 @@ int vmap_pages_range_noflush(unsigned long addr, unsigned long end,
  * RETURNS:
  * 0 on success, -errno on failure.
  */
-static int vmap_pages_range(unsigned long addr, unsigned long end,
+static int vmap_pages_range(unsigned long addr/*起始地址*/, unsigned long end/*终止地址*/,
 		pgprot_t prot, struct page **pages, unsigned int page_shift)
 {
 	int err;
@@ -2905,7 +2905,7 @@ EXPORT_SYMBOL(vunmap);
  *
  * Return: the address of the area or %NULL on failure
  */
-void *vmap(struct page **pages, unsigned int count,
+void *vmap(struct page **pages, unsigned int count/*页数*/,
 	   unsigned long flags, pgprot_t prot)
 {
 	struct vm_struct *area;
@@ -2927,7 +2927,7 @@ void *vmap(struct page **pages, unsigned int count,
 	if (count > totalram_pages())
 		return NULL;
 
-	size = (unsigned long)count << PAGE_SHIFT;
+	size = (unsigned long)count << PAGE_SHIFT;/*字节数*/
 	area = get_vm_area_caller(size, flags, __builtin_return_address(0));
 	if (!area)
 		return NULL;

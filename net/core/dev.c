@@ -6845,7 +6845,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 		netdev_err_once(dev, "%s() called with weight %d\n", __func__,
 				weight);
 	napi->weight = weight;
-	napi->dev = dev;
+	napi->dev = dev;/*设置对应的网络设备*/
 #ifdef CONFIG_NETPOLL
 	napi->poll_owner = -1;
 #endif
@@ -6860,7 +6860,7 @@ void netif_napi_add_weight(struct net_device *dev, struct napi_struct *napi,
 	 * Clear dev->threaded if kthread creation failed so that
 	 * threaded mode will not be enabled in napi_enable().
 	 */
-	if (dev->threaded && napi_kthread_create(napi))/*针对这种设备采用线程收包*/
+	if (dev->threaded && napi_kthread_create(napi))/*针对这种设备采用线程poll*/
 		dev->threaded = 0;
 	netif_napi_set_irq(napi, -1);
 }

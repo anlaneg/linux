@@ -5444,7 +5444,7 @@ EXPORT_SYMBOL_GPL(mas_store_gfp);
  */
 void mas_store_prealloc(struct ma_state *mas, void *entry)
 {
-	MA_WR_STATE(wr_mas, mas, entry);
+	MA_WR_STATE(wr_mas, mas, entry);/*初始化wr_mas*/
 
 	mas_wr_store_setup(&wr_mas);
 	trace_ma_write(__func__, mas, 0, entry);

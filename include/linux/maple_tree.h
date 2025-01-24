@@ -705,8 +705,8 @@ void mt_cache_shrink(void);
  * set the internal maple state values to a sub-range.
  * Please use mas_set_range() if you do not know where you are in the tree.
  */
-static inline void __mas_set_range(struct ma_state *mas, unsigned long start,
-		unsigned long last)
+static inline void __mas_set_range(struct ma_state *mas, unsigned long start/*起始地址*/,
+		unsigned long last/*终止地址*/)
 {
 	/* Ensure the range starts within the current slot */
 	MAS_WARN_ON(mas, mas_is_active(mas) &&
