@@ -170,7 +170,7 @@ static int ovl_open(struct inode *inode, struct file *file)
 	if (IS_ERR(realfile))
 		return PTR_ERR(realfile);
 
-	file->private_data = realfile;
+	file->private_data = realfile;/*文件的私有数据为realfile*/
 
 	return 0;
 }
@@ -263,7 +263,7 @@ static void ovl_file_accessed(struct file *file)
 
 static ssize_t ovl_read_iter(struct kiocb *iocb, struct iov_iter *iter)
 {
-	struct file *file = iocb->ki_filp;
+	struct file *file = iocb->ki_filp;/*要读取的文件*/
 	struct fd real;
 	ssize_t ret;
 	struct backing_file_ctx ctx = {

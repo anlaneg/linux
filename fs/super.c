@@ -1304,7 +1304,7 @@ static int vfs_get_super(struct fs_context *fc,
 		return PTR_ERR(sb);
 
 	if (!sb->s_root) {
-	    /*如果sb->s_root未在sget_fc中未实现加载，则通过fill_super进行设置*/
+	    /*如果sb->s_root未在sget_fc中未实现加载，则通过fill_super创建进行设置*/
 		err = fill_super(sb, fc);
 		if (err)
 			goto error;
@@ -1312,7 +1312,7 @@ static int vfs_get_super(struct fs_context *fc,
 		sb->s_flags |= SB_ACTIVE;
 	}
 
-	fc->root = dget(sb->s_root);
+	fc->root = dget(sb->s_root);/*取sb中的root dentry,以此来设置fc->root*/
 	return 0;
 
 error:
@@ -1324,6 +1324,7 @@ int get_tree_nodev(struct fs_context *fc,
 		  int (*fill_super/*fs对应的super block填充函数*/)(struct super_block *sb,
 				    struct fs_context *fc))
 {
+	/*填充fc->root*/
 	return vfs_get_super(fc, NULL/*不共享*/, fill_super/*填充root dentry节点设置*/);
 }
 EXPORT_SYMBOL(get_tree_nodev);
@@ -1817,7 +1818,7 @@ EXPORT_SYMBOL(mount_single);
  * be used for mounting.  The filesystem places a pointer to the root to be
  * used for mounting in @fc->root.
  */
-//获得被挂载设备的root dentry（需要设置fc->root)
+//获得被挂载设备的root dentry（设置fc->root)
 int vfs_get_tree(struct fs_context *fc)
 {
 	struct super_block *sb;
@@ -1836,7 +1837,7 @@ int vfs_get_tree(struct fs_context *fc)
 		return error;
 
 	if (!fc->root) {
-	    /*获得root失败，报错*/
+	    /*未返回错误，但没有填充fc->root,获得root失败，报错*/
 		pr_err("Filesystem %s get_tree() didn't set fc->root\n",
 		       fc->fs_type->name);
 		/* We don't know what the locking state of the superblock is -

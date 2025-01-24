@@ -529,11 +529,12 @@ enum {
 };
 
 #ifdef CONFIG_HUGETLBFS
+/*hugetlb文件系统的super block结构体的私有数据*/
 struct hugetlbfs_sb_info {
 	long	max_inodes;   /* inodes allowed */
 	long	free_inodes;  /* inodes free */
 	spinlock_t	stat_lock;
-	struct hstate *hstate;
+	struct hstate *hstate;/*此文件系统对应的hstate*/
 	struct hugepage_subpool *spool;
 	kuid_t	uid;
 	kgid_t	gid;

@@ -142,7 +142,7 @@ static int ovl_verity_mode_def(void)
 #define fsparam_string_empty(NAME, OPT) \
 	__fsparam(fs_param_is_string, NAME, OPT, fs_param_can_be_empty, NULL)
 
-
+/*支持的参数*/
 const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_string_empty("lowerdir",    Opt_lowerdir),
 	fsparam_string("lowerdir+",         Opt_lowerdir_add),
@@ -198,27 +198,29 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 	for (s = d = str;; s++, d++) {
 		if (*s == '\\') {
 			/* keep esc chars in split lowerdir */
-			*d++ = *s++;
+			*d++ = *s++;//跳过后面的转义内容（这是实际上将s位置与d位置不同）
 		} else if (*s == ':') {
-			bool next_colon = (*(s + 1) == ':');
+			bool next_colon = (*(s + 1) == ':');/*下一个字符是否也是':'*/
 
 			nr_colons++;
 			if (nr_colons == 2 && next_colon) {
+				//出现多个'::'
 				pr_err("only single ':' or double '::' sequences of unescaped colons in lowerdir mount option allowed.\n");
 				return -EINVAL;
 			}
 			/* count layers, not colons */
 			if (!next_colon)
-				nr_layers++;
+				nr_layers++;/*数量增加*/
 
-			*d = '\0';
+			*d = '\0';/*将':'替换为'\0'*/
 			continue;
 		}
 
-		*d = *s;
+		*d = *s;/*移动*/
 		if (!*s) {
 			/* trailing colons */
 			if (nr_colons) {
+				//遇到了不匹配的':'号配置
 				pr_err("unescaped trailing colons in lowerdir mount option.\n");
 				return -EINVAL;
 			}
@@ -230,7 +232,7 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 	return nr_layers;
 }
 
-static int ovl_mount_dir_noesc(const char *name, struct path *path)
+static int ovl_mount_dir_noesc(const char *name, struct path *path/*由name解析而来的path*/)
 {
 	int err = -EINVAL;
 
@@ -238,6 +240,7 @@ static int ovl_mount_dir_noesc(const char *name, struct path *path)
 		pr_err("empty lowerdir\n");
 		goto out;
 	}
+	/*按name解析成path*/
 	err = kern_path(name, LOOKUP_FOLLOW, path);
 	if (err) {
 		pr_err("failed to resolve '%s': %i\n", name, err);
@@ -268,7 +271,7 @@ static int ovl_mount_dir(const char *name, struct path *path)
 	char *tmp = kstrdup(name, GFP_KERNEL);
 
 	if (tmp) {
-		ovl_unescape(tmp);
+		ovl_unescape(tmp);/*处理转义符*/
 		err = ovl_mount_dir_noesc(tmp, path);
 		kfree(tmp);
 	}
@@ -351,7 +354,7 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 		fallthrough;
 	case Opt_lowerdir_add:
 		WARN_ON(ctx->nr >= ctx->capacity);
-		l = &ctx->lower[ctx->nr++];
+		l = &ctx->lower[ctx->nr++];/*添加lowerdir*/
 		memset(l, 0, sizeof(*l));
 		swap(l->name, *pname);
 		swap(l->path, *path);
@@ -364,7 +367,7 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 			   enum ovl_opt layer)
 {
-	char *name = kstrdup(param->string, GFP_KERNEL);
+	char *name = kstrdup(param->string, GFP_KERNEL);/*取用户配置指定的文件名*/
 	bool upper = (layer == Opt_upperdir || layer == Opt_workdir);
 	struct path path;
 	int err;
@@ -373,6 +376,7 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		return -ENOMEM;
 
 	if (upper)
+		/*依据name,构造path*/
 		err = ovl_mount_dir(name, &path);
 	else
 		err = ovl_mount_dir_noesc(name, &path);
@@ -390,7 +394,7 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 	}
 
 	/* Store the user provided path string in ctx to show in mountinfo */
-	ovl_add_layer(fc, layer, &path, &name);
+	ovl_add_layer(fc, layer/*layer类型*/, &path, &name);
 
 out_put:
 	path_put(&path);
@@ -405,14 +409,14 @@ static void ovl_reset_lowerdirs(struct ovl_fs_context *ctx)
 
 	// Reset old user provided lowerdir string
 	kfree(ctx->lowerdir_all);
-	ctx->lowerdir_all = NULL;
+	ctx->lowerdir_all = NULL;/*原有lowerdir_all清空*/
 
 	for (size_t nr = 0; nr < ctx->nr; nr++, l++) {
 		path_put(&l->path);
 		kfree(l->name);
 		l->name = NULL;
 	}
-	ctx->nr = 0;
+	ctx->nr = 0;/*重置为零*/
 	ctx->nr_data = 0;
 }
 
@@ -442,6 +446,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	ovl_reset_lowerdirs(ctx);
 
 	if (!*name)
+		/*参数为空，直接返回*/
 		return 0;
 
 	if (*name == ':') {
@@ -459,16 +464,19 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 		return -ENOMEM;
 
 	err = -EINVAL;
+	//检查dup配置内容，获取lower一共有多少对儿，并将每队之间断开
 	nr_lower = ovl_parse_param_split_lowerdirs(dup);
 	if (nr_lower < 0)
 		goto out_err;
 
 	if (nr_lower > OVL_MAX_STACK) {
+		/*lower配置过多*/
 		pr_err("too many lower directories, limit is %d\n", OVL_MAX_STACK);
 		goto out_err;
 	}
 
 	if (nr_lower > ctx->capacity) {
+		/*lower数组扩容*/
 		err = -ENOMEM;
 		l = krealloc_array(ctx->lower, nr_lower, sizeof(*ctx->lower),
 				   GFP_KERNEL_ACCOUNT);
@@ -483,9 +491,9 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 	l = ctx->lower;
 	for (nr = 0; nr < nr_lower; nr++, l++) {
 		ctx->nr++;
-		memset(l, 0, sizeof(*l));
+		memset(l, 0, sizeof(*l));/*初始化*/
 
-		err = ovl_mount_dir(iter, &l->path);
+		err = ovl_mount_dir(iter, &l->path/*取得iter对应的path*/);
 		if (err)
 			goto out_put;
 
@@ -506,7 +514,7 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 			break;
 
 		err = -EINVAL;
-		iter = strchr(iter, '\0') + 1;
+		iter = strchr(iter, '\0') + 1;/*跳到data lower配置*/
 		if (*iter) {
 			/*
 			 * This is a regular layer so we require that
@@ -538,6 +546,7 @@ out_err:
 	return err;
 }
 
+/*overlayfs参数解析*/
 static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	int err = 0;
@@ -572,6 +581,7 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 	switch (opt) {
 	case Opt_lowerdir:
+		/*解析lowerdir配置*/
 		err = ovl_parse_param_lowerdir(param->string, fc);
 		break;
 	case Opt_lowerdir_add:
@@ -630,6 +640,7 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 
 static int ovl_get_tree(struct fs_context *fc)
 {
+	/*overlayfs获得root dentry,并设置fc->root*/
 	return get_tree_nodev(fc, ovl_fill_super);
 }
 
@@ -685,7 +696,7 @@ static int ovl_reconfigure(struct fs_context *fc)
 static const struct fs_context_operations ovl_context_ops = {
 	.parse_monolithic = ovl_parse_monolithic,
 	.parse_param = ovl_parse_param,
-	.get_tree    = ovl_get_tree,
+	.get_tree    = ovl_get_tree,/*获取root节点*/
 	.reconfigure = ovl_reconfigure,
 	.free        = ovl_free,
 };
@@ -948,7 +959,7 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
  */
 int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 {
-	struct super_block *sb = dentry->d_sb;
+	struct super_block *sb = dentry->d_sb;/*取super block*/
 	struct ovl_fs *ofs = OVL_FS(sb);
 	size_t nr, nr_merged_lower, nr_lower = 0;
 	char **lowerdirs = ofs->config.lowerdirs;
@@ -962,6 +973,7 @@ int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	 * with the new lowerdir+ and datadir+ mount options.
 	 */
 	if (lowerdirs[0]) {
+		/*显示lowerdirs[0]*/
 		seq_show_option(m, "lowerdir", lowerdirs[0]);
 	} else {
 		nr_lower = ofs->numlayer;
@@ -969,11 +981,14 @@ int ovl_show_options(struct seq_file *m, struct dentry *dentry)
 	}
 	for (nr = 1; nr < nr_lower; nr++) {
 		if (nr < nr_merged_lower)
+			/*显示merge lowerdir*/
 			seq_show_option(m, "lowerdir+", lowerdirs[nr]);
 		else
+			/*显示datadir*/
 			seq_show_option(m, "datadir+", lowerdirs[nr]);
 	}
 	if (ofs->config.upperdir) {
+		/*显示upperdir,workdir选项*/
 		seq_show_option(m, "upperdir", ofs->config.upperdir);
 		seq_show_option(m, "workdir", ofs->config.workdir);
 	}

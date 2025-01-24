@@ -460,12 +460,13 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 
 	/* Null write succeeds. */
 	if (unlikely(total_len == 0))
-		return 0;
+		return 0;/*要写的内容为0，直接返回*/
 
-	__pipe_lock(pipe);
+	__pipe_lock(pipe);/*加锁，用于写*/
 
 	if (!pipe->readers) {
-		send_sig(SIGPIPE, current, 0);/*无读者,发送PIPE信号给自身*/
+		/*当前为写，无readers,知会本端EPIPE，此信号处理默认为进程退出*/
+		send_sig(SIGPIPE, current, 0);
 		ret = -EPIPE;
 		goto out;
 	}
@@ -479,31 +480,34 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	 * spanning multiple pages.
 	 */
 	head = pipe->head;
-	was_empty = pipe_empty(head, pipe->tail);
-	chars = total_len & (PAGE_SIZE-1);
+	was_empty = pipe_empty(head, pipe->tail);/*队列为空*/
+	chars = total_len & (PAGE_SIZE-1);/*不足一页的内容长度*/
 	if (chars && !was_empty) {
 		unsigned int mask = pipe->ring_size - 1;
-		struct pipe_buffer *buf = &pipe->bufs[(head - 1) & mask];
+		struct pipe_buffer *buf = &pipe->bufs[(head - 1) & mask];/*当前写入位置对应的buffer*/
 		int offset = buf->offset + buf->len;
 
 		if ((buf->flags & PIPE_BUF_FLAG_CAN_MERGE) &&
 		    offset + chars <= PAGE_SIZE) {
+			/*写的内容不足一页且当前buffer可merge,写先补chars个字符*/
 			ret = pipe_buf_confirm(pipe, buf);
 			if (ret)
 				goto out;
 
+			/*输出到此页,最多写chars个*/
 			ret = copy_page_from_iter(buf->page, offset, chars, from);
 			if (unlikely(ret < chars)) {
 				ret = -EFAULT;
 				goto out;
 			}
 
-			buf->len += ret;
+			buf->len += ret;/*buffer长度增加*/
 			if (!iov_iter_count(from))
 				goto out;
 		}
 	}
 
+	/*这一部分按页申请及写*/
 	for (;;) {
 		if (!pipe->readers) {
 			send_sig(SIGPIPE, current, 0);
@@ -520,12 +524,13 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			int copied;
 
 			if (!page) {
+				/*申请单页*/
 				page = alloc_page(GFP_HIGHUSER | __GFP_ACCOUNT);
 				if (unlikely(!page)) {
 					ret = ret ? : -ENOMEM;
 					break;
 				}
-				pipe->tmp_page = page;
+				pipe->tmp_page = page;/*设置临时page*/
 			}
 
 			/* Allocate a slot in the ring in advance and attach an
@@ -533,20 +538,22 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			 * it, either the reader will consume it or it'll still
 			 * be there for the next write.
 			 */
-			pipe->head = head + 1;
+			pipe->head = head + 1;/*指向填写位置*/
 
 			/* Insert it into the buffer array */
-			buf = &pipe->bufs[head & mask];
-			buf->page = page;
+			buf = &pipe->bufs[head & mask];/*取对应的buffer(当ring使）*/
+			buf->page = page;/*填充buffer可用的page*/
 			buf->ops = &anon_pipe_buf_ops;
-			buf->offset = 0;
+			buf->offset = 0;/*page起始偏移量为0*/
 			buf->len = 0;
 			if (is_packetized(filp))
+				/*有direct标记，标记为packet*/
 				buf->flags = PIPE_BUF_FLAG_PACKET;
 			else
-				buf->flags = PIPE_BUF_FLAG_CAN_MERGE;
-			pipe->tmp_page = NULL;
+				buf->flags = PIPE_BUF_FLAG_CAN_MERGE;/*可merge*/
+			pipe->tmp_page = NULL;/*置为空（这个函数设置pipe->tmp_page看起来没啥必要）*/
 
+			/*采用这一整页进行填充from*/
 			copied = copy_page_from_iter(page, 0, PAGE_SIZE, from);
 			if (unlikely(copied < PAGE_SIZE && iov_iter_count(from))) {
 				if (!ret)
@@ -557,10 +564,11 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 			buf->len = copied;
 
 			if (!iov_iter_count(from))
-				break;
+				break;/*复制完成*/
 		}
 
 		if (!pipe_full(head, pipe->tail, pipe->max_usage))
+			/*未达到写入极限，继续添加*/
 			continue;
 
 		/* Wait for buffer space to become available. */
@@ -582,12 +590,12 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 		 * after waiting we need to re-check whether the pipe
 		 * become empty while we dropped the lock.
 		 */
-		__pipe_unlock(pipe);
+		__pipe_unlock(pipe);/*解锁*/
 		if (was_empty)
 			wake_up_interruptible_sync_poll(&pipe->rd_wait, EPOLLIN | EPOLLRDNORM);
 		kill_fasync(&pipe->fasync_readers, SIGIO, POLL_IN);
-		wait_event_interruptible_exclusive(pipe->wr_wait, pipe_writable(pipe));
-		__pipe_lock(pipe);
+		wait_event_interruptible_exclusive(pipe->wr_wait, pipe_writable(pipe));/*等待可写*/
+		__pipe_lock(pipe);/*加锁，并继续*/
 		was_empty = pipe_empty(pipe->head, pipe->tail);
 		wake_next_writer = true;
 	}
@@ -629,6 +637,7 @@ static long pipe_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	switch (cmd) {
 	case FIONREAD:
+		/*获取有多少字节可读取*/
 		__pipe_lock(pipe);
 		count = 0;
 		head = pipe->head;
@@ -736,7 +745,7 @@ pipe_release(struct inode *inode, struct file *file)
 
 	__pipe_lock(pipe);
 	if (file->f_mode & FMODE_READ)
-		pipe->readers--;
+		pipe->readers--;/*读者减少*/
 	if (file->f_mode & FMODE_WRITE)
 		pipe->writers--;
 
@@ -803,14 +812,14 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	unsigned long pipe_bufs = PIPE_DEF_BUFFERS;
 	struct user_struct *user = get_current_user();
 	unsigned long user_bufs;
-	unsigned int max_size = READ_ONCE(pipe_max_size);
+	unsigned int max_size = READ_ONCE(pipe_max_size);/*来源于配置的pipe最大字节数*/
 
 	pipe = kzalloc(sizeof(struct pipe_inode_info), GFP_KERNEL_ACCOUNT);
 	if (pipe == NULL)
-		goto out_free_uid;
+		goto out_free_uid;/*申请失败*/
 
 	if (pipe_bufs * PAGE_SIZE > max_size && !capable(CAP_SYS_RESOURCE))
-		pipe_bufs = max_size >> PAGE_SHIFT;
+		pipe_bufs = max_size >> PAGE_SHIFT;/*默认数目大于实际配置数，减小pipe_bufs*/
 
 	user_bufs = account_pipe_buffers(user, 0, pipe_bufs);
 
@@ -822,18 +831,19 @@ struct pipe_inode_info *alloc_pipe_info(void)
 	if (too_many_pipe_buffers_hard(user_bufs) && pipe_is_unprivileged_user())
 		goto out_revert_acct;
 
+	/*每个pipe buffer对应一个pipe_buffer结构体*/
 	pipe->bufs = kcalloc(pipe_bufs, sizeof(struct pipe_buffer),
 			     GFP_KERNEL_ACCOUNT);
 
 	if (pipe->bufs) {
-		init_waitqueue_head(&pipe->rd_wait);
-		init_waitqueue_head(&pipe->wr_wait);
+		init_waitqueue_head(&pipe->rd_wait);/*reader等待队列*/
+		init_waitqueue_head(&pipe->wr_wait);/*writer等待队列*/
 		pipe->r_counter = pipe->w_counter = 1;
-		pipe->max_usage = pipe_bufs;
-		pipe->ring_size = pipe_bufs;
+		pipe->max_usage = pipe_bufs;/*最多容许的buffer数*/
+		pipe->ring_size = pipe_bufs;/*bufs数组长度（其被看做为ring)*/
 		pipe->nr_accounted = pipe_bufs;
 		pipe->user = user;
-		mutex_init(&pipe->mutex);
+		mutex_init(&pipe->mutex);/*用于在read,write间同步*/
 		return pipe;
 	}
 
@@ -871,7 +881,7 @@ void free_pipe_info(struct pipe_inode_info *pipe)
 	kfree(pipe);
 }
 
-static struct vfsmount *pipe_mnt __ro_after_init;
+static struct vfsmount *pipe_mnt __ro_after_init;/*pipefs文件系统挂载点*/
 
 /*
  * pipefs_dname() is called from d_path().
@@ -902,7 +912,7 @@ static struct inode * get_pipe_inode(void)
 
 	inode->i_pipe = pipe;
 	pipe->files = 2;
-	pipe->readers = pipe->writers = 1;
+	pipe->readers = pipe->writers = 1;/*读与写者各一*/
 	inode->i_fop = &pipefifo_fops;
 
 	/*
@@ -928,7 +938,7 @@ fail_inode:
 
 int create_pipe_files(struct file **res, int flags)
 {
-	struct inode *inode = get_pipe_inode();/*针对pipe申请inode*/
+	struct inode *inode = get_pipe_inode();/*取得inode*/
 	struct file *f;
 	int error;
 
@@ -944,9 +954,9 @@ int create_pipe_files(struct file **res, int flags)
 		}
 	}
 
-	/*针对inode创建file(只写)*/
+	/*针对此pipefs inode创建只写file*/
 	f = alloc_file_pseudo(inode, pipe_mnt, "",
-				O_WRONLY | (flags & (O_NONBLOCK | O_DIRECT)),
+				O_WRONLY/*只写*/ | (flags & (O_NONBLOCK | O_DIRECT)),
 				&pipefifo_fops);
 	if (IS_ERR(f)) {
 		free_pipe_info(inode->i_pipe);
@@ -956,8 +966,8 @@ int create_pipe_files(struct file **res, int flags)
 
 	f->private_data = inode->i_pipe;
 
-	/*复制采用只读*/
-	res[0] = alloc_file_clone(f, O_RDONLY | (flags & O_NONBLOCK),
+	/*0号file只读*/
+	res[0] = alloc_file_clone(f, O_RDONLY/*只读*/ | (flags & O_NONBLOCK),
 				  &pipefifo_fops);
 	if (IS_ERR(res[0])) {
 		put_pipe_info(inode, inode->i_pipe);
@@ -965,13 +975,13 @@ int create_pipe_files(struct file **res, int flags)
 		return PTR_ERR(res[0]);
 	}
 	res[0]->private_data = inode->i_pipe;
-	res[1] = f;
+	res[1] = f;/*1号file只写*/
 	stream_open(inode, res[0]);
 	stream_open(inode, res[1]);
 	return 0;
 }
 
-static int __do_pipe_flags(int *fd, struct file **files, int flags)
+static int __do_pipe_flags(int *fd, struct file **files/*出参，pipe对应的两个文件*/, int flags)
 {
 	int error;
 	int fdw, fdr;
@@ -1243,8 +1253,8 @@ err:
 const struct file_operations pipefifo_fops = {
 	.open		= fifo_open,
 	.llseek		= no_llseek,
-	.read_iter	= pipe_read,
-	.write_iter	= pipe_write,
+	.read_iter	= pipe_read,/*读端操作函数*/
+	.write_iter	= pipe_write,/*写端操作函数*/
 	.poll		= pipe_poll,
 	.unlocked_ioctl	= pipe_ioctl,
 	.release	= pipe_release,
@@ -1400,6 +1410,7 @@ struct pipe_inode_info *get_pipe_info(struct file *file, bool for_splice)
 	struct pipe_inode_info *pipe = file->private_data;
 
 	if (file->f_op != &pipefifo_fops || !pipe)
+		/*必须为fifo文件*/
 		return NULL;
 	if (for_splice && pipe_has_watch_queue(pipe))
 		return NULL;
@@ -1516,17 +1527,17 @@ static struct ctl_table fs_pipe_sysctls[] = {
 
 static int __init init_pipe_fs(void)
 {
-	int err = register_filesystem(&pipe_fs_type);
+	int err = register_filesystem(&pipe_fs_type);/*注册文件系统*/
 
 	if (!err) {
-		pipe_mnt = kern_mount(&pipe_fs_type);
+		pipe_mnt = kern_mount(&pipe_fs_type);/*执行挂载*/
 		if (IS_ERR(pipe_mnt)) {
 			err = PTR_ERR(pipe_mnt);
 			unregister_filesystem(&pipe_fs_type);
 		}
 	}
 #ifdef CONFIG_SYSCTL
-	register_sysctl_init("fs", fs_pipe_sysctls);
+	register_sysctl_init("fs", fs_pipe_sysctls);/*为pipe增加系统配置项*/
 #endif
 	return err;
 }

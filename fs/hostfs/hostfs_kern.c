@@ -527,6 +527,7 @@ static int hostfs_inode_update(struct inode *ino, const struct hostfs_stat *st)
 	return 0;
 }
 
+/*设置hostfs inode对应的ops*/
 static int hostfs_inode_set(struct inode *ino, void *data)
 {
 	struct hostfs_stat *st = data;
@@ -537,10 +538,10 @@ static int hostfs_inode_set(struct inode *ino, void *data)
 
 	switch (st->mode & S_IFMT) {
 	case S_IFLNK:
-		ino->i_op = &hostfs_link_iops;
+		ino->i_op = &hostfs_link_iops;/*link对应的操作集*/
 		break;
 	case S_IFDIR:
-		ino->i_op = &hostfs_dir_iops;
+		ino->i_op = &hostfs_dir_iops;/*目录对应的操作集*/
 		ino->i_fop = &hostfs_dir_fops;
 		break;
 	case S_IFCHR:
@@ -548,10 +549,10 @@ static int hostfs_inode_set(struct inode *ino, void *data)
 	case S_IFIFO:
 	case S_IFSOCK:
 		init_special_inode(ino, st->mode & S_IFMT, rdev);
-		ino->i_op = &hostfs_iops;
+		ino->i_op = &hostfs_iops;/*字符设备，块设备，sock,fifo对应操作集*/
 		break;
 	case S_IFREG:
-		ino->i_op = &hostfs_iops;
+		ino->i_op = &hostfs_iops;/*普通文件对应操作集*/
 		ino->i_fop = &hostfs_file_fops;
 		ino->i_mapping->a_ops = &hostfs_aops;
 		break;
@@ -576,12 +577,12 @@ static struct inode *hostfs_iget(struct super_block *sb, char *name)
 {
 	struct inode *inode;
 	struct hostfs_stat st;
-	int err = stat_file(name, &st, -1);
+	int err = stat_file(name, &st, -1);/*取此文件对应的stat*/
 
 	if (err)
 		return ERR_PTR(err);
 
-	inode = iget5_locked(sb, st.ino, hostfs_inode_test, hostfs_inode_set,
+	inode = iget5_locked(sb, st.ino/*此文件对应的inode编号*/, hostfs_inode_test, hostfs_inode_set,
 			     &st);
 	if (!inode)
 		return ERR_PTR(-ENOMEM);
@@ -922,7 +923,7 @@ static const struct inode_operations hostfs_link_iops = {
 	.get_link	= hostfs_get_link,
 };
 
-static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
+static int hostfs_fill_sb_common(struct super_block *sb, void *d/*mount传入的选项参数*/, int silent)
 {
 	struct inode *root_inode;
 	char *host_root_path, *req_root = d;
@@ -942,6 +943,7 @@ static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
 	if (req_root == NULL)
 		req_root = "";
 
+	/*构造root path*/
 	sb->s_fs_info = host_root_path =
 		kasprintf(GFP_KERNEL, "%s/%s", root_ino, req_root);
 	if (host_root_path == NULL)
@@ -955,7 +957,7 @@ static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
 		char *name;
 
 		iput(root_inode);
-		name = follow_link(host_root_path);
+		name = follow_link(host_root_path);/*link处理*/
 		if (IS_ERR(name))
 			return PTR_ERR(name);
 
@@ -965,7 +967,7 @@ static int hostfs_fill_sb_common(struct super_block *sb, void *d, int silent)
 			return PTR_ERR(root_inode);
 	}
 
-	sb->s_root = d_make_root(root_inode);
+	sb->s_root = d_make_root(root_inode);/*设置root dentry*/
 	if (sb->s_root == NULL)
 		return -ENOMEM;
 
@@ -976,7 +978,7 @@ static struct dentry *hostfs_read_sb(struct file_system_type *type,
 			  int flags, const char *dev_name,
 			  void *data)
 {
-	return mount_nodev(type, flags, data, hostfs_fill_sb_common);
+	return mount_nodev(type, flags, data/*mount传入的选项参数*/, hostfs_fill_sb_common);
 }
 
 static void hostfs_kill_sb(struct super_block *s)
@@ -999,7 +1001,7 @@ static int __init init_hostfs(void)
 	hostfs_inode_cache = KMEM_CACHE(hostfs_inode_info, 0);
 	if (!hostfs_inode_cache)
 		return -ENOMEM;
-	return register_filesystem(&hostfs_type);
+	return register_filesystem(&hostfs_type);/*注册文件系统*/
 }
 
 static void __exit exit_hostfs(void)

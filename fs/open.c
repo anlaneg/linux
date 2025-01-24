@@ -1148,8 +1148,8 @@ struct file *dentry_create(const struct path *path, int flags, umode_t mode,
 		return f;
 
 	error = vfs_create(mnt_idmap(path->mnt),
-			   d_inode(path->dentry->d_parent),
-			   path->dentry, mode, true);
+			   d_inode(path->dentry->d_parent)/*父节点对应的inode*/,
+			   path->dentry/*文件对应的dentry*/, mode, true/*文件存在*/);
 	if (!error)
 		error = vfs_open(path, f);
 

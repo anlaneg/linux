@@ -152,9 +152,9 @@ static const struct dentry_operations ovl_dentry_operations = {
 	.d_weak_revalidate = ovl_dentry_weak_revalidate,
 };
 
-static struct kmem_cache *ovl_inode_cachep;
+static struct kmem_cache *ovl_inode_cachep;/*负责系统中ovl_inode结构体分配*/
 
-/*负责创建inode*/
+/*负责创建overlayfs对应inode分配(结构体ovl_inode)*/
 static struct inode *ovl_alloc_inode(struct super_block *sb)
 {
 	struct ovl_inode *oi = alloc_inode_sb(sb, ovl_inode_cachep, GFP_KERNEL);
@@ -171,7 +171,7 @@ static struct inode *ovl_alloc_inode(struct super_block *sb)
 	oi->oe = NULL;
 	mutex_init(&oi->lock);
 
-	return &oi->vfs_inode;
+	return &oi->vfs_inode;/*返回通用的inode结构体*/
 }
 
 static void ovl_free_inode(struct inode *inode)
@@ -257,7 +257,7 @@ static int ovl_statfs(struct dentry *dentry, struct kstatfs *buf)
 {
 	struct super_block *sb = dentry->d_sb;
 	struct ovl_fs *ofs = OVL_FS(sb);
-	struct dentry *root_dentry = sb->s_root;
+	struct dentry *root_dentry = sb->s_root;/*取得root dentry*/
 	struct path path;
 	int err;
 
@@ -798,6 +798,7 @@ static int ovl_get_workdir(struct super_block *sb, struct ovl_fs *ofs,
 
 	err = -EINVAL;
 	if (upperpath->mnt != workpath->mnt) {
+		/*两者不处于同一个挂载点*/
 		pr_err("workdir and upperdir must reside under the same mount\n");
 		return err;
 	}
@@ -1246,6 +1247,7 @@ static int ovl_check_overlapping_layers(struct super_block *sb,
 	return 0;
 }
 
+/*获得root dentry*/
 static struct dentry *ovl_get_root(struct super_block *sb,
 				   struct dentry *upperdentry,
 				   struct ovl_entry *oe)
@@ -1260,7 +1262,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 		.oe = oe,
 	};
 
-	/*构造root dentry*/
+	/*构造此文件系统对应的root dentry*/
 	root = d_make_root(ovl_new_inode(sb, S_IFDIR, 0));
 	if (!root)
 		return NULL;
@@ -1375,6 +1377,7 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 
 		err = -EINVAL;
 		if (!ofs->config.workdir) {
+			/*必须提供此参数*/
 			pr_err("missing 'workdir'\n");
 			goto out_err;
 		}
@@ -1476,12 +1479,13 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	sb->s_iflags |= SB_I_NOUMASK;
 	sb->s_iflags |= SB_I_EVM_UNSUPPORTED;
 
+	/*获取root dentry*/
 	err = -ENOMEM;
 	root_dentry = ovl_get_root(sb, ctx->upper.dentry, oe);
 	if (!root_dentry)
 		goto out_free_oe;
 
-	sb->s_root = root_dentry;
+	sb->s_root = root_dentry;/*设置root dentry,使得上层函数可以拿到root*/
 
 	return 0;
 

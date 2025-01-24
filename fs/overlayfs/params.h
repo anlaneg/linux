@@ -20,18 +20,18 @@ struct ovl_opt_set {
 #define OVL_MAX_STACK 500
 
 struct ovl_fs_context_layer {
-	char *name;
-	struct path path;
+	char *name;/*目录名称*/
+	struct path path;/*名称对应的path*/
 };
 
 struct ovl_fs_context {
-	struct path upper;
-	struct path work;
+	struct path upper;/*对应upperdir参数指明的path*/
+	struct path work;/*对应workdir参数指明的path*/
 	size_t capacity;
 	size_t nr; /* includes nr_data */
 	size_t nr_data;
 	struct ovl_opt_set set;
-	struct ovl_fs_context_layer *lower;
+	struct ovl_fs_context_layer *lower;/*数组，有效长度为capacity，用于存储lower*/
 	char *lowerdir_all; /* user provided lowerdir string */
 };
 

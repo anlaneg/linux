@@ -58,10 +58,10 @@ struct pipe_buffer {
 struct pipe_inode_info {
 	struct mutex mutex;
 	wait_queue_head_t rd_wait, wr_wait;
-	unsigned int head;
-	unsigned int tail;
-	unsigned int max_usage;
-	unsigned int ring_size;
+	unsigned int head;/*bufs做为ring,head写者来维护*/
+	unsigned int tail;/*tail读者来维护*/
+	unsigned int max_usage;/*最大用量limit,*/
+	unsigned int ring_size;/*bufs数组长度*/
 	unsigned int nr_accounted;
 	unsigned int readers;
 	unsigned int writers;
@@ -75,7 +75,7 @@ struct pipe_inode_info {
 	struct page *tmp_page;
 	struct fasync_struct *fasync_readers;
 	struct fasync_struct *fasync_writers;
-	struct pipe_buffer *bufs;
+	struct pipe_buffer *bufs;/*ring buffer，每个buffer一个pipe_buffer结构，对应一个page*/
 	struct user_struct *user;
 #ifdef CONFIG_WATCH_QUEUE
 	struct watch_queue *watch_queue;
@@ -169,7 +169,7 @@ static inline unsigned int pipe_occupancy(unsigned int head, unsigned int tail)
 static inline bool pipe_full(unsigned int head, unsigned int tail,
 			     unsigned int limit)
 {
-	return pipe_occupancy(head, tail) >= limit;
+	return pipe_occupancy(head, tail) >= limit;/*pipe间内容是否超过limit*/
 }
 
 /**

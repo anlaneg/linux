@@ -173,8 +173,8 @@ static const struct file_operations socket_file_ops = {
 	/*针对socket fd支持关闭*/
 	.release =	sock_close,
 	.fasync =	sock_fasync,
-	.splice_write = splice_to_socket,
-	.splice_read =	sock_splice_read,
+	.splice_write = splice_to_socket,/*用于支持pipe文件向此文件复制时的写*/
+	.splice_read =	sock_splice_read,/*用于支持此文件向pipe文件复制时的读取*/
 	.splice_eof =	sock_splice_eof,
 	.show_fdinfo =	sock_show_fdinfo,
 };

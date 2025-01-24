@@ -66,6 +66,7 @@ static int __init set_mphash_entries(char *str)
 __setup("mphash_entries=", set_mphash_entries);
 
 static u64 event;
+/*负责系统中所有mnt id分配*/
 static DEFINE_IDA(mnt_id_ida);
 static DEFINE_IDA(mnt_group_ida);
 
@@ -139,7 +140,7 @@ static int mnt_alloc_id(struct mount *mnt)
 
 	if (res < 0)
 		return res;
-	mnt->mnt_id = res;
+	mnt->mnt_id = res;/*设置编号*/
 	mnt->mnt_id_unique = atomic64_inc_return(&mnt_id_ctr);
 	return 0;
 }
@@ -283,6 +284,7 @@ out_free_cache:
  */
 bool __mnt_is_readonly(struct vfsmount *mnt)
 {
+	/*是否只读挂载*/
 	return (mnt->mnt_flags & MNT_READONLY) || sb_rdonly(mnt->mnt_sb);
 }
 EXPORT_SYMBOL_GPL(__mnt_is_readonly);
@@ -1119,6 +1121,7 @@ struct vfsmount *vfs_create_mount(struct fs_context *fc)
 	struct mount *mnt;
 
 	if (!fc->root)
+		/*此时fc->root必须已被设置*/
 		return ERR_PTR(-EINVAL);
 
 	//申请并初始化mount
@@ -1151,7 +1154,7 @@ struct vfsmount *fc_mount(struct fs_context *fc)
 	int err = vfs_get_tree(fc);
 	if (!err) {
 		up_write(&fc->root->d_sb->s_umount);
-		/*返回mount*/
+		/*返回vfsmount*/
 		return vfs_create_mount(fc);
 	}
 	return ERR_PTR(err);

@@ -139,7 +139,7 @@ void seq_escape_mem(struct seq_file *m, const char *src, size_t len,
 static inline void seq_escape_str(struct seq_file *m, const char *src,
 				  unsigned int flags, const char *esc)
 {
-	seq_escape_mem(m, src, strlen(src), flags, esc);
+	seq_escape_mem(m, src, strlen(src)/*字符串长度*/, flags, esc);
 }
 
 /**
@@ -257,7 +257,7 @@ static inline struct user_namespace *seq_user_ns(struct seq_file *seq)
  * @name: the mount option name
  * @value: the mount option name's value, can be NULL
  */
-static inline void seq_show_option(struct seq_file *m, const char *name,
+static inline void seq_show_option(struct seq_file *m, const char *name/*选项名称*/,
 				   const char *value)
 {
 	seq_putc(m, ',');

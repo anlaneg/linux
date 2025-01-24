@@ -2562,7 +2562,7 @@ struct timespec64 current_time(struct inode *inode)
 {
 	struct timespec64 now;
 
-	ktime_get_coarse_real_ts64(&now);
+	ktime_get_coarse_real_ts64(&now);/*取当前时间*/
 	return timestamp_truncate(now, inode);
 }
 EXPORT_SYMBOL(current_time);

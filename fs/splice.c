@@ -799,7 +799,7 @@ EXPORT_SYMBOL(iter_file_splice_write);
 ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 			 loff_t *ppos, size_t len, unsigned int flags)
 {
-	struct socket *sock = sock_from_file(out);
+	struct socket *sock = sock_from_file(out);/*取out文件对应的socket*/
 	struct bio_vec bvec[16];
 	struct msghdr msg = {};
 	ssize_t ret = 0;
@@ -866,7 +866,7 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 				break;
 			}
 
-			bvec_set_page(&bvec[bc++], buf->page, seg, buf->offset);
+			bvec_set_page(&bvec[bc++], buf->page, seg, buf->offset);/*填充bvec*/
 			remain -= seg;
 			if (remain == 0 || bc >= ARRAY_SIZE(bvec))
 				break;
@@ -884,9 +884,10 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 		if (out->f_flags & O_NONBLOCK)
 			msg.msg_flags |= MSG_DONTWAIT;
 
+		/*利用bvec填充msg结构体*/
 		iov_iter_bvec(&msg.msg_iter, ITER_SOURCE, bvec, bc,
 			      len - remain);
-		ret = sock_sendmsg(sock, &msg);
+		ret = sock_sendmsg(sock, &msg);/*发送msg*/
 		if (ret <= 0)
 			break;
 
@@ -894,6 +895,7 @@ ssize_t splice_to_socket(struct pipe_inode_info *pipe, struct file *out,
 		len -= ret;
 		tail = pipe->tail;
 		while (ret > 0) {
+			/*部分发送成功，更新偏移量*/
 			struct pipe_buffer *buf = &pipe->bufs[tail & mask];
 			size_t seg = min_t(size_t, ret, buf->len);
 
@@ -937,6 +939,7 @@ static ssize_t do_splice_from(struct pipe_inode_info *pipe, struct file *out,
 			      loff_t *ppos, size_t len, unsigned int flags)
 {
 	if (unlikely(!out->f_op->splice_write))
+		/*out文件必须提供此回调，用于pipe到out文件间的写*/
 		return warn_unsupported(out, "write");
 	return out->f_op->splice_write(pipe, out, ppos, len, flags);
 }
@@ -975,6 +978,7 @@ static ssize_t do_splice_read(struct file *in, loff_t *ppos,
 		len = MAX_RW_COUNT;
 
 	if (unlikely(!in->f_op->splice_read))
+		/*in文件必须提供此回调，用于in到pipe间的读*/
 		return warn_unsupported(in, "read");
 	/*
 	 * O_DIRECT and DAX don't deal with the pagecache, so we allocate a
@@ -1312,7 +1316,7 @@ ssize_t do_splice(struct file *in, loff_t *off_in, struct file *out,
 
 	if (unlikely(!(in->f_mode & FMODE_READ) ||
 		     !(out->f_mode & FMODE_WRITE)))
-		return -EBADF;
+		return -EBADF;/*in文件必须有read权限，out文件必须有write权限*/
 
 	ipipe = get_pipe_info(in, true);
 	opipe = get_pipe_info(out, true);
@@ -1323,13 +1327,15 @@ ssize_t do_splice(struct file *in, loff_t *off_in, struct file *out,
 
 		/* Splicing to self would be fun, but... */
 		if (ipipe == opipe)
-			return -EINVAL;
+			return -EINVAL;/*两者相等，没意义*/
 
 		if ((in->f_flags | out->f_flags) & O_NONBLOCK)
 			flags |= SPLICE_F_NONBLOCK;
 
+		/*pipe文件到pipe文件之间*/
 		ret = splice_pipe_to_pipe(ipipe, opipe, len, flags);
 	} else if (ipipe) {
+		/*仅in文件是pipe*/
 		if (off_in)
 			return -ESPIPE;
 		if (off_out) {
@@ -1359,6 +1365,7 @@ ssize_t do_splice(struct file *in, loff_t *off_in, struct file *out,
 		else
 			*off_out = offset;
 	} else if (opipe) {
+		/*仅out文件是pipe*/
 		if (off_out)
 			return -ESPIPE;
 		if (off_in) {
@@ -1383,6 +1390,7 @@ ssize_t do_splice(struct file *in, loff_t *off_in, struct file *out,
 		else
 			*off_in = offset;
 	} else {
+		/*不支持这种情况*/
 		ret = -EINVAL;
 	}
 
@@ -1412,22 +1420,26 @@ static ssize_t __do_splice(struct file *in, loff_t __user *off_in,
 	opipe = get_pipe_info(out, true);
 
 	if (ipipe) {
+		/*in文件是FIFO类型文件时,off_in不得非0*/
 		if (off_in)
 			return -ESPIPE;
 		pipe_clear_nowait(in);
 	}
 	if (opipe) {
+		/*out文件是FIFO类型文件,off_out不得非0*/
 		if (off_out)
 			return -ESPIPE;
 		pipe_clear_nowait(out);
 	}
 
 	if (off_out) {
+		/*取用户指定的out offset*/
 		if (copy_from_user(&offset, off_out, sizeof(loff_t)))
 			return -EFAULT;
 		__off_out = &offset;
 	}
 	if (off_in) {
+		/*取用户指定的in offset*/
 		if (copy_from_user(&offset, off_in, sizeof(loff_t)))
 			return -EFAULT;
 		__off_in = &offset;
@@ -1437,6 +1449,7 @@ static ssize_t __do_splice(struct file *in, loff_t __user *off_in,
 	if (ret < 0)
 		return ret;
 
+	/*更新出参*/
 	if (__off_out && copy_to_user(off_out, __off_out, sizeof(loff_t)))
 		return -EFAULT;
 	if (__off_in && copy_to_user(off_in, __off_in, sizeof(loff_t)))
@@ -1631,9 +1644,9 @@ out_fdput:
 	return error;
 }
 
-SYSCALL_DEFINE6(splice, int, fd_in, loff_t __user *, off_in,
-		int, fd_out, loff_t __user *, off_out,
-		size_t, len, unsigned int, flags)
+SYSCALL_DEFINE6(splice, int, fd_in/*数据来源*/, loff_t __user *, off_in/*数据来源偏移量*/,
+		int, fd_out/*数据去向*/, loff_t __user *, off_out/*数据去向偏移量*/,
+		size_t, len/*数据长度（从in->out)*/, unsigned int, flags)
 {
 	struct fd in, out;
 	ssize_t error;
@@ -1642,13 +1655,14 @@ SYSCALL_DEFINE6(splice, int, fd_in, loff_t __user *, off_in,
 		return 0;
 
 	if (unlikely(flags & ~SPLICE_F_ALL))
-		return -EINVAL;
+		return -EINVAL;/*遇到不支持的flags,报错*/
 
 	error = -EBADF;
 	in = fdget(fd_in);
 	if (in.file) {
 		out = fdget(fd_out);
 		if (out.file) {
+			/*获得in.file,out.file再调用*/
 			error = __do_splice(in.file, off_in, out.file, off_out,
 					    len, flags);
 			fdput(out);

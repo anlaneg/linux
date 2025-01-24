@@ -570,6 +570,7 @@ EXPORT_SYMBOL(inode_permission);
  */
 void path_get(const struct path *path)
 {
+	/*增加path引用*/
 	mntget(path->mnt);
 	dget(path->dentry);
 }
@@ -583,6 +584,7 @@ EXPORT_SYMBOL(path_get);
  */
 void path_put(const struct path *path)
 {
+	/*减少path引用*/
 	dput(path->dentry);
 	mntput(path->mnt);
 }
@@ -3360,8 +3362,8 @@ static inline umode_t vfs_prepare_mode(struct mnt_idmap *idmap,
  * On non-idmapped mounts or if permission checking is to be performed on the
  * raw inode simply pass @nop_mnt_idmap.
  */
-int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
-	       struct dentry *dentry, umode_t mode, bool want_excl)
+int vfs_create(struct mnt_idmap *idmap, struct inode *dir/*父目录*/,
+	       struct dentry *dentry/*对应的dentry*/, umode_t mode, bool want_excl)
 {
 	int error;
 
@@ -3373,12 +3375,12 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir,
 		/*必须提供create回调*/
 		return -EACCES;	/* shouldn't it be ENOSYS? */
 
-	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG);
+	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG/*普通文件*/);
 	error = security_inode_create(dir, dentry, mode);
 	if (error)
 		return error;
-	/*调用回调，完成普通文件创建*/
-	error = dir->i_op->create(idmap, dir, dentry, mode, want_excl);
+	/*调用fs回调，完成普通文件创建*/
+	error = dir->i_op->create(idmap, dir, dentry, mode/*文件mode*/, want_excl);
 	if (!error)
 		fsnotify_create(dir, dentry);
 	return error;
@@ -4326,7 +4328,7 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 		/*必须有mkdir回调*/
 		return -EPERM;
 
-	mode = vfs_prepare_mode(idmap, dir, mode, S_IRWXUGO | S_ISVTX, 0);
+	mode = vfs_prepare_mode(idmap, dir, mode, S_IRWXUGO | S_ISVTX, 0/*未指明目录类型*/);
 	error = security_inode_mkdir(dir, dentry, mode);
 	if (error)
 		return error;
@@ -4334,7 +4336,7 @@ int vfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (max_links && dir->i_nlink >= max_links)
 		return -EMLINK;
 
-	/*采用mkdir创建对应目录*/
+	/*采用mkdir创建对应目录,生成inode,并使inode与dentry关联*/
 	error = dir->i_op->mkdir(idmap, dir, dentry, mode);
 	if (!error)
 		fsnotify_mkdir(dir, dentry);
@@ -4406,6 +4408,7 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 		return error;
 
 	if (!dir->i_op->rmdir)
+		/*删除目录回调必须提供*/
 		return -EPERM;
 
 	dget(dentry);
@@ -4420,7 +4423,7 @@ int vfs_rmdir(struct mnt_idmap *idmap, struct inode *dir,
 	if (error)
 		goto out;
 
-	error = dir->i_op->rmdir(dir, dentry);
+	error = dir->i_op->rmdir(dir/*父目录*/, dentry/*要删除的dentry*/);
 	if (error)
 		goto out;
 
@@ -5013,6 +5016,7 @@ int vfs_rename(struct renamedata *rd)
 		return error;
 
 	if (!old_dir->i_op->rename)
+		/*必须提供rename回调*/
 		return -EPERM;
 
 	/*
@@ -5095,8 +5099,8 @@ int vfs_rename(struct renamedata *rd)
 		if (error)
 			goto out;
 	}
-	error = old_dir->i_op->rename(rd->new_mnt_idmap, old_dir, old_dentry,
-				      new_dir, new_dentry, flags);
+	error = old_dir->i_op->rename(rd->new_mnt_idmap, old_dir/*旧的父目录*/, old_dentry/*旧的dentry*/,
+				      new_dir/*新的父目录*/, new_dentry/*新的dentry*/, flags);
 	if (error)
 		goto out;
 

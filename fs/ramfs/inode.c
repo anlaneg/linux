@@ -55,12 +55,12 @@ static const struct super_operations ramfs_ops;
 static const struct inode_operations ramfs_dir_inode_operations;
 
 struct inode *ramfs_get_inode(struct super_block *sb,
-				const struct inode *dir, umode_t mode, dev_t dev)
+				const struct inode *dir, umode_t mode/*inode对应的mode*/, dev_t dev)
 {
-	struct inode * inode = new_inode(sb);
+	struct inode * inode = new_inode(sb);/*自super block申请一个inode*/
 
 	if (inode) {
-		inode->i_ino = get_next_ino();
+		inode->i_ino = get_next_ino();/*分配编号*/
 		inode_init_owner(&nop_mnt_idmap, inode, dir, mode);
 		inode->i_mapping->a_ops = &ram_aops;
 		mapping_set_gfp_mask(inode->i_mapping, GFP_HIGHUSER);
@@ -68,20 +68,24 @@ struct inode *ramfs_get_inode(struct super_block *sb,
 		simple_inode_init_ts(inode);
 		switch (mode & S_IFMT) {
 		default:
+			/*特殊文件*/
 			init_special_inode(inode, mode, dev);
 			break;
 		case S_IFREG:
+			/*普通文件*/
 			inode->i_op = &ramfs_file_inode_operations;
 			inode->i_fop = &ramfs_file_operations;
 			break;
 		case S_IFDIR:
+			/*目录文件*/
 			inode->i_op = &ramfs_dir_inode_operations;
-			inode->i_fop = &simple_dir_operations;
+			inode->i_fop = &simple_d ir_operations;
 
 			/* directory inodes start off with i_nlink == 2 (for "." entry) */
 			inc_nlink(inode);
 			break;
 		case S_IFLNK:
+			/*link文件*/
 			inode->i_op = &page_symlink_inode_operations;
 			inode_nohighmem(inode);
 			break;
@@ -98,11 +102,12 @@ static int
 ramfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 	    struct dentry *dentry, umode_t mode, dev_t dev)
 {
+	/*自dir对应的super block中申请一个inode*/
 	struct inode * inode = ramfs_get_inode(dir->i_sb, dir, mode, dev);
 	int error = -ENOSPC;
 
 	if (inode) {
-		d_instantiate(dentry, inode);
+		d_instantiate(dentry, inode);/*dentry与inode相互关联*/
 		dget(dentry);	/* Extra count - pin the dentry in core */
 		error = 0;
 		inode_set_mtime_to_ts(dir, inode_set_ctime_current(dir));
@@ -113,7 +118,7 @@ ramfs_mknod(struct mnt_idmap *idmap, struct inode *dir,
 static int ramfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 		       struct dentry *dentry, umode_t mode)
 {
-	int retval = ramfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFDIR, 0);
+	int retval = ramfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFDIR/*指明文件目录*/, 0);
 	if (!retval)
 		inc_nlink(dir);
 	return retval;
@@ -122,7 +127,7 @@ static int ramfs_mkdir(struct mnt_idmap *idmap, struct inode *dir,
 static int ramfs_create(struct mnt_idmap *idmap, struct inode *dir,
 			struct dentry *dentry, umode_t mode, bool excl)
 {
-	return ramfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG, 0);
+	return ramfs_mknod(&nop_mnt_idmap, dir, dentry, mode | S_IFREG/*指明为普通文件*/, 0);
 }
 
 static int ramfs_symlink(struct mnt_idmap *idmap, struct inode *dir,
@@ -151,6 +156,7 @@ static int ramfs_tmpfile(struct mnt_idmap *idmap,
 {
 	struct inode *inode;
 
+	/*申请一个inode*/
 	inode = ramfs_get_inode(dir->i_sb, dir, mode, 0);
 	if (!inode)
 		return -ENOSPC;
@@ -183,6 +189,7 @@ static int ramfs_show_options(struct seq_file *m, struct dentry *root)
 	return 0;
 }
 
+/*针对super block的操作集*/
 static const struct super_operations ramfs_ops = {
 	.statfs		= simple_statfs,
 	.drop_inode	= generic_delete_inode,
@@ -193,6 +200,7 @@ enum ramfs_param {
 	Opt_mode,
 };
 
+/*支持的mount叁数*/
 const struct fs_parameter_spec ramfs_fs_parameters[] = {
 	fsparam_u32oct("mode",	Opt_mode),
 	{}
@@ -234,15 +242,16 @@ static int ramfs_fill_super(struct super_block *sb, struct fs_context *fc)
 	struct ramfs_fs_info *fsi = sb->s_fs_info;
 	struct inode *inode;
 
-	sb->s_maxbytes		= MAX_LFS_FILESIZE;
+	sb->s_maxbytes		= MAX_LFS_FILESIZE;/*支持的最大文件*/
 	sb->s_blocksize		= PAGE_SIZE;
 	sb->s_blocksize_bits	= PAGE_SHIFT;
 	sb->s_magic		= RAMFS_MAGIC;
 	sb->s_op		= &ramfs_ops;
 	sb->s_time_gran		= 1;
 
-	inode = ramfs_get_inode(sb, NULL, S_IFDIR | fsi->mount_opts.mode, 0);
-	sb->s_root = d_make_root(inode);
+	/*创建root对应的inode*/
+	inode = ramfs_get_inode(sb, NULL/*目录为空*/, S_IFDIR | fsi->mount_opts.mode, 0);
+	sb->s_root = d_make_root(inode);/*创建'/'对应的dentry*/
 	if (!sb->s_root)
 		return -ENOMEM;
 
@@ -251,6 +260,7 @@ static int ramfs_fill_super(struct super_block *sb, struct fs_context *fc)
 
 static int ramfs_get_tree(struct fs_context *fc)
 {
+	/*创建root节点*/
 	return get_tree_nodev(fc, ramfs_fill_super);
 }
 
@@ -295,6 +305,7 @@ static struct file_system_type ramfs_fs_type = {
 
 static int __init init_ramfs_fs(void)
 {
+	/*注册fs*/
 	return register_filesystem(&ramfs_fs_type);
 }
 fs_initcall(init_ramfs_fs);

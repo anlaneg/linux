@@ -340,6 +340,7 @@ void release_dentry_name_snapshot(struct name_snapshot *name)
 }
 EXPORT_SYMBOL(release_dentry_name_snapshot);
 
+/*dentry关联inode,并设置dentry的类型*/
 static inline void __d_set_inode_and_type(struct dentry *dentry,
 					  struct inode *inode,
 					  unsigned type_flags)
@@ -349,9 +350,9 @@ static inline void __d_set_inode_and_type(struct dentry *dentry,
 	/*指明dentry对应的inode*/
 	dentry->d_inode = inode;
 	flags = READ_ONCE(dentry->d_flags);
-	flags &= ~DCACHE_ENTRY_TYPE;
-	flags |= type_flags;
-	smp_store_release(&dentry->d_flags, flags);
+	flags &= ~DCACHE_ENTRY_TYPE;/*丢掉旧的dentry类型*/
+	flags |= type_flags;/*临时设置dentry类型*/
+	smp_store_release(&dentry->d_flags, flags);/*设置dentry类型*/
 }
 
 static inline void __d_clear_type_and_inode(struct dentry *dentry)
@@ -843,6 +844,7 @@ locked:
 void dput(struct dentry *dentry)
 {
 	if (!dentry)
+		/*为空，直接返回*/
 		return;
 	might_sleep();
 	rcu_read_lock();
@@ -1837,7 +1839,7 @@ EXPORT_SYMBOL(d_set_d_op);
 
 static unsigned d_flags_for_inode(struct inode *inode)
 {
-	unsigned add_flags = DCACHE_REGULAR_TYPE;
+	unsigned add_flags = DCACHE_REGULAR_TYPE;/*默认为普通文件*/
 
 	if (!inode)
 		return DCACHE_MISS_TYPE;
@@ -1863,7 +1865,7 @@ static unsigned d_flags_for_inode(struct inode *inode)
 	}
 
 	if (unlikely(!S_ISREG(inode->i_mode)))
-	    /*inode为普通文件*/
+	    /*inode为特殊文件*/
 		add_flags = DCACHE_SPECIAL_TYPE;
 
 type_determined:
@@ -1875,6 +1877,7 @@ type_determined:
 /*实现inode与dentry关联*/
 static void __d_instantiate(struct dentry *dentry, struct inode *inode)
 {
+	/*取得文件类型*/
 	unsigned add_flags = d_flags_for_inode(inode);
 	WARN_ON(d_in_lookup(dentry));
 
@@ -1884,9 +1887,9 @@ static void __d_instantiate(struct dentry *dentry, struct inode *inode)
 	 */
 	if (dentry->d_flags & DCACHE_LRU_LIST)
 		this_cpu_dec(nr_dentry_negative);
-	hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);
+	hlist_add_head(&dentry->d_u.d_alias, &inode->i_dentry);/*通过inode可以找到多个dentry*/
 	raw_write_seqcount_begin(&dentry->d_seq);
-	__d_set_inode_and_type(dentry, inode, add_flags);
+	__d_set_inode_and_type(dentry, inode, add_flags);/*设置dentry对应的inode,指明dentry类型*/
 	raw_write_seqcount_end(&dentry->d_seq);
 	fsnotify_update_flags(dentry);
 	spin_unlock(&dentry->d_lock);
@@ -1913,7 +1916,7 @@ void d_instantiate(struct dentry *entry, struct inode * inode)
 	if (inode) {
 		security_d_instantiate(entry, inode);
 		spin_lock(&inode->i_lock);
-		__d_instantiate(entry, inode);
+		__d_instantiate(entry, inode);/*使entry,inode相互关联*/
 		spin_unlock(&inode->i_lock);
 	}
 }

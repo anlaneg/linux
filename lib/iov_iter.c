@@ -432,30 +432,30 @@ size_t copy_page_to_iter_nofault(struct page *page, unsigned offset, size_t byte
 }
 EXPORT_SYMBOL(copy_page_to_iter_nofault);
 
-size_t copy_page_from_iter(struct page *page, size_t offset, size_t bytes,
+size_t copy_page_from_iter(struct page *page/*内容目的页（支持多页）*/, size_t offset/*偏移量*/, size_t bytes/*容许复制的字节数（即可用长度）*/,
 			 struct iov_iter *i)
 {
 	size_t res = 0;
 	if (!page_copy_sane(page, offset, bytes))
 		return 0;
 	page += offset / PAGE_SIZE; // first subpage
-	offset %= PAGE_SIZE;
+	offset %= PAGE_SIZE;/*页内偏移量*/
 	while (1) {
 		void *kaddr = kmap_local_page(page);
-		size_t n = min(bytes, (size_t)PAGE_SIZE - offset);
-		n = _copy_from_iter(kaddr + offset, n, i);
+		size_t n = min(bytes, (size_t)PAGE_SIZE - offset);/*本页可复制内容数或本次需要复制的内容数*/
+		n = _copy_from_iter(kaddr + offset, n, i);/*将i内容写入到kaddr+offset处*/
 		kunmap_local(kaddr);
 		res += n;
-		bytes -= n;
+		bytes -= n;/*剩余待复制内容*/
 		if (!bytes || !n)
 			break;
-		offset += n;
+		offset += n;/*偏移量增加*/
 		if (offset == PAGE_SIZE) {
-			page++;
+			page++;/*达到本页数，页增加*/
 			offset = 0;
 		}
 	}
-	return res;
+	return res;/*返回实际写入长度*/
 }
 EXPORT_SYMBOL(copy_page_from_iter);
 

@@ -74,8 +74,10 @@ EXPORT_SYMBOL(simple_dentry_operations);
 struct dentry *simple_lookup(struct inode *dir, struct dentry *dentry, unsigned int flags)
 {
 	if (dentry->d_name.len > NAME_MAX)
+		/*名称过长*/
 		return ERR_PTR(-ENAMETOOLONG);
 	if (!dentry->d_sb->s_d_op)
+		/*未指明dentry操作集，提供默认的*/
 		d_set_d_op(dentry, &simple_dentry_operations);
 	/*将此dentry加入到hashtable,不关联inode*/
 	d_add(dentry, NULL);
@@ -624,7 +626,7 @@ static void pseudo_fs_free(struct fs_context *fc)
 /*pseudo fs对应的fs context osp*/
 static const struct fs_context_operations pseudo_fs_context_ops = {
 	.free		= pseudo_fs_free,
-	/*get_tree用于获取此文件系统的根节点（实现为申请一个inode节点，并据此构造root dentry）*/
+	/*get_tree用于获取此文件系统的根节点（实现为直接申请一个inode节点，并据此构造root dentry）*/
 	.get_tree	= pseudo_fs_get_tree,
 };
 
@@ -708,6 +710,7 @@ EXPORT_SYMBOL(simple_unlink);
 int simple_rmdir(struct inode *dir, struct dentry *dentry)
 {
 	if (!simple_empty(dentry))
+		/*返回值为0，认为目录非空，报错*/
 		return -ENOTEMPTY;
 
 	drop_nlink(d_inode(dentry));
@@ -763,6 +766,7 @@ int simple_rename_exchange(struct inode *old_dir, struct dentry *old_dentry,
 }
 EXPORT_SYMBOL_GPL(simple_rename_exchange);
 
+/*重命名*/
 int simple_rename(struct mnt_idmap *idmap, struct inode *old_dir,
 		  struct dentry *old_dentry, struct inode *new_dir,
 		  struct dentry *new_dentry, unsigned int flags)

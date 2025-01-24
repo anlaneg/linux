@@ -1041,7 +1041,7 @@ fail:
 	return fallback;
 }
 
-/*新建inode并按照mode进行创建*/
+/*通过sb新建inode并按照mode进行创建*/
 struct inode *ovl_new_inode(struct super_block *sb, umode_t mode, dev_t rdev)
 {
 	struct inode *inode;
@@ -1284,6 +1284,7 @@ struct inode *ovl_get_inode(struct super_block *sb,
 		ino = realinode->i_ino;
 		fsid = lowerpath->layer->fsid;
 	}
+	/*设置inode*/
 	ovl_fill_inode(inode, realinode->i_mode, realinode->i_rdev);
 	ovl_inode_init(inode, oip, ino, fsid);
 

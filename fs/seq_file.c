@@ -387,7 +387,7 @@ EXPORT_SYMBOL(seq_release);
  *
  * Use seq_has_overflowed() to check for errors.
  */
-void seq_escape_mem(struct seq_file *m, const char *src, size_t len,
+void seq_escape_mem(struct seq_file *m, const char *src, size_t len/*字符串长度*/,
 		    unsigned int flags, const char *esc)
 {
 	char *buf;

@@ -130,8 +130,8 @@ static inline void unlock_or_release_subpool(struct hugepage_subpool *spool,
 	}
 }
 
-struct hugepage_subpool *hugepage_new_subpool(struct hstate *h, long max_hpages,
-						long min_hpages)
+struct hugepage_subpool *hugepage_new_subpool(struct hstate *h, long max_hpages/*最大大页数*/,
+						long min_hpages/*最小大页数*/)
 {
 	struct hugepage_subpool *spool;
 
@@ -142,14 +142,14 @@ struct hugepage_subpool *hugepage_new_subpool(struct hstate *h, long max_hpages,
 	spin_lock_init(&spool->lock);
 	spool->count = 1;
 	spool->max_hpages = max_hpages;
-	spool->hstate = h;
+	spool->hstate = h;/*对应的hstate*/
 	spool->min_hpages = min_hpages;
 
 	if (min_hpages != -1 && hugetlb_acct_memory(h, min_hpages)) {
 		kfree(spool);
 		return NULL;
 	}
-	spool->rsv_hpages = min_hpages;
+	spool->rsv_hpages = min_hpages;/*记录预留内存*/
 
 	return spool;
 }

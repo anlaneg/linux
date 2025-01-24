@@ -350,10 +350,10 @@ struct file *alloc_file_pseudo(struct inode *inode/*文件对应的inode*/, stru
 }
 EXPORT_SYMBOL(alloc_file_pseudo);
 
-struct file *alloc_file_clone(struct file *base, int flags,
+struct file *alloc_file_clone(struct file *base/*要clone的file*/, int flags,
 				const struct file_operations *fops)
 {
-	struct file *f = alloc_file(&base->f_path, flags, fops);
+	struct file *f = alloc_file(&base->f_path/*使用base的path*/, flags, fops);
 	if (!IS_ERR(f)) {
 		path_get(&f->f_path);
 		f->f_mapping = base->f_mapping;

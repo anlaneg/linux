@@ -877,7 +877,7 @@ struct file *ovl_dir_real_file(const struct file *file, bool want_upper)
 
 	struct ovl_dir_file *od = file->private_data;
 	struct dentry *dentry = file->f_path.dentry;
-	struct file *old, *realfile = od->realfile;
+	struct file *old, *realfile = od->realfile;/*真实文件*/
 
 	if (!OVL_TYPE_UPPER(ovl_path_type(dentry)))
 		return want_upper ? NULL : realfile;

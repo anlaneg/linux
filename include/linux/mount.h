@@ -68,7 +68,7 @@ struct path;
 #define MNT_ONRB		0x10000000
 
 struct vfsmount {
-	//被挂载文件系统对应的root dentry
+	//被挂载文件系统对应的root dentry（例如来源于fc->root)
 	struct dentry *mnt_root;	/* root of the mounted tree */
 	//被挂载文件系统对应的超级块
 	struct super_block *mnt_sb;	/* pointer to superblock */

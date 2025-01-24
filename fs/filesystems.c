@@ -273,7 +273,7 @@ static int filesystems_proc_show(struct seq_file *m, void *v)
 	return 0;
 }
 
-//注册filesystem的proc,用于显示filesystem
+//注册filesystem的proc,用于显示系统已注册的filesystem
 static int __init proc_filesystems_init(void)
 {
 	proc_create_single("filesystems", 0, NULL, filesystems_proc_show);

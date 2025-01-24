@@ -81,7 +81,7 @@ extern const struct qstr dotdot_name;
 
 #define d_lock	d_lockref.lock
 
-//定义dir entry数据结构（注意它并不只有目录才有dentry,link,file均有）
+//定义dir entry数据结构（注意并不只有目录才有dentry,link,file均有）
 // 用于反映名称与inode之间的关系
 struct dentry {
 	/* RCU lookup touched fields */
@@ -105,7 +105,7 @@ struct dentry {
 	struct lockref d_lockref;	/* per-dentry lock and refcount */
 	/*dentry对应的操作集*/
 	const struct dentry_operations *d_op;
-	/*dentry所属的超级块指针*/
+	/*dentry所属的(super block)超级块指针*/
 	struct super_block *d_sb;	/* The root of the dentry tree */
 	unsigned long d_time;		/* used by d_revalidate */
 	/*dentry的私有数据，用于各fs自主指定*/
@@ -221,7 +221,7 @@ struct dentry_operations {
 
 #define DCACHE_LRU_LIST			BIT(19)
 
-/*指明当前dentry类型占用3个bit位（最多表示8种）*/
+/*指明当前dentry类型,占用3个bit位（最多表示8种）*/
 #define DCACHE_ENTRY_TYPE		(7 << 20) /* bits 20..22 are for storing type: */
 /*dentry未指明dentry type*/
 #define DCACHE_MISS_TYPE		(0 << 20) /* Negative dentry */
@@ -560,7 +560,7 @@ static inline unsigned long vfs_pressure_ratio(unsigned long val)
  */
 static inline struct inode *d_inode(const struct dentry *dentry)
 {
-	return dentry->d_inode;
+	return dentry->d_inode;/*取得dentry关联的inode*/
 }
 
 /**

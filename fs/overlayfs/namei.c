@@ -1026,14 +1026,14 @@ int ovl_verify_lowerdata(struct dentry *dentry)
 	return ovl_maybe_validate_verity(dentry);
 }
 
-struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
+struct dentry *ovl_lookup(struct inode *dir/*目录*/, struct dentry *dentry,
 			  unsigned int flags)
 {
 	struct ovl_entry *oe = NULL;
 	const struct cred *old_cred;
-	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);
-	struct ovl_entry *poe = OVL_E(dentry->d_parent);
-	struct ovl_entry *roe = OVL_E(dentry->d_sb->s_root);
+	struct ovl_fs *ofs = OVL_FS(dentry->d_sb);/*此ovl_fs结构体*/
+	struct ovl_entry *poe = OVL_E(dentry->d_parent);/*dentry对应parnet对应的ovl_entry*/
+	struct ovl_entry *roe = OVL_E(dentry->d_sb->s_root);/*root dentry对应parnet对应的ovl_entry*/
 	struct ovl_path *stack = NULL, *origin_path = NULL;
 	struct dentry *upperdir, *upperdentry = NULL;
 	struct dentry *origin = NULL;
@@ -1062,7 +1062,7 @@ struct dentry *ovl_lookup(struct inode *dir, struct dentry *dentry,
 		return ERR_PTR(-ENAMETOOLONG);
 
 	old_cred = ovl_override_creds(dentry->d_sb);
-	upperdir = ovl_dentry_upper(dentry->d_parent);
+	upperdir = ovl_dentry_upper(dentry->d_parent);/*取父节点的upper dentry*/
 	if (upperdir) {
 		d.layer = &ofs->layers[0];
 		err = ovl_lookup_layer(upperdir, &d, &upperdentry, true);

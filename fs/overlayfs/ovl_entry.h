@@ -6,8 +6,8 @@
  */
 
 struct ovl_config {
-	char *upperdir;
-	char *workdir;
+	char *upperdir;/*参数upperdir=指定的值*/
+	char *workdir;/*参数workdir=指定的值*/
 	char **lowerdirs;
 	bool default_permissions;
 	int redirect_mode;
@@ -111,6 +111,7 @@ static inline struct mnt_idmap *ovl_upper_mnt_idmap(struct ovl_fs *ofs)
 
 extern struct file_system_type ovl_fs_type;
 
+/*overlayfs的super block私有数据类型为struct ovl_fs*/
 static inline struct ovl_fs *OVL_FS(struct super_block *sb)
 {
 	if (IS_ENABLED(CONFIG_OVERLAY_FS_DEBUG))
@@ -169,7 +170,7 @@ struct ovl_inode {
 	u64 version;
 	unsigned long flags;
 	struct inode vfs_inode;
-	struct dentry *__upperdentry;
+	struct dentry *__upperdentry;/*对应的real dentry*/
 	struct ovl_entry *oe;
 
 	/* synchronize copy up and more */
@@ -178,16 +179,19 @@ struct ovl_inode {
 
 static inline struct ovl_inode *OVL_I(struct inode *inode)
 {
+	/*由inode结构获取ovl_inode结构体*/
 	return container_of(inode, struct ovl_inode, vfs_inode);
 }
 
 static inline struct ovl_entry *OVL_I_E(struct inode *inode)
 {
+	/*由inode获取ovl_entry结构体*/
 	return inode ? OVL_I(inode)->oe : NULL;
 }
 
 static inline struct ovl_entry *OVL_E(struct dentry *dentry)
 {
+	/*由dentry获取ovl_entry结构体*/
 	return OVL_I_E(d_inode(dentry));
 }
 

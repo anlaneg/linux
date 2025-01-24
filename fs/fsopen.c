@@ -230,7 +230,7 @@ static int vfs_cmd_create(struct fs_context *fc, bool exclusive)
 	fc->phase = FS_CONTEXT_CREATING;
 	fc->exclusive = exclusive;
 
-	ret = vfs_get_tree(fc);
+	ret = vfs_get_tree(fc);/*设置fc->root*/
 	if (ret) {
 		fc->phase = FS_CONTEXT_FAILED;
 		return ret;

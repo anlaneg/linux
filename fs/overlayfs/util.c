@@ -209,6 +209,7 @@ enum ovl_path_type ovl_path_type(struct dentry *dentry)
 	enum ovl_path_type type = 0;
 
 	if (ovl_dentry_upper(dentry)) {
+		/*dentry取upper dentry成功*/
 		type = __OVL_PATH_UPPER;
 
 		/*

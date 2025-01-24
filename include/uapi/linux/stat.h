@@ -6,6 +6,7 @@
 
 #if defined(__KERNEL__) || !defined(__GLIBC__) || (__GLIBC__ < 2)
 
+/*文件类型占用的bits位（共4位）*/
 #define S_IFMT  00170000
 //socket文件
 #define S_IFSOCK 0140000

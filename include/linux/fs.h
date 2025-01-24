@@ -734,7 +734,7 @@ struct inode {
 	struct list_head	i_sb_list;
 	struct list_head	i_wb_list;	/* backing dev writeback list */
 	union {
-		struct hlist_head	i_dentry;/*指出引用此inode的dentry*/
+		struct hlist_head	i_dentry;/*链表，指出引用此inode的所有dentry*/
 		struct rcu_head		i_rcu;
 	};
 
@@ -1641,6 +1641,7 @@ static inline struct timespec64 inode_get_mtime(const struct inode *inode)
 static inline struct timespec64 inode_set_mtime_to_ts(struct inode *inode,
 						      struct timespec64 ts)
 {
+	/*修改mtime*/
 	inode->__i_mtime = ts;
 	return ts;
 }
@@ -2090,7 +2091,9 @@ struct file_operations {
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
 	int (*flock) (struct file *, int, struct file_lock *);
-	ssize_t (*splice_write)(struct pipe_inode_info *, struct file *, loff_t *, size_t, unsigned int);
+	/*用于支持pipe文件向此文件复制时的写*/
+	ssize_t (*splice_write)(struct pipe_inode_info */*pipe源文件*/, struct file */*目标文件*/, loff_t */*入出参，目的文件offset*/, size_t/*复制长度*/, unsigned int/*偏移量*/);
+	/*用于支持此文件向pipe文件复制时的读取*/
 	ssize_t (*splice_read)(struct file *, loff_t *, struct pipe_inode_info *, size_t, unsigned int);
 	void (*splice_eof)(struct file *file);
 	int (*setlease)(struct file *, int, struct file_lock **, void **);
@@ -2122,7 +2125,7 @@ int wrap_directory_iterator(struct file *, struct dir_context *,
 
 struct inode_operations {
 	//在inode下查询指定名称的dentry,最后一个参数为flags
-	struct dentry * (*lookup) (struct inode *,struct dentry *, unsigned int);
+	struct dentry * (*lookup) (struct inode */*用于明确查询范围*/,struct dentry */*查询内容*/, unsigned int);
 	const char * (*get_link) (struct dentry *, struct inode *, struct delayed_call *);
 	//inode权限检查
 	int (*permission) (struct mnt_idmap *, struct inode *, int);
@@ -2130,22 +2133,24 @@ struct inode_operations {
 
 	int (*readlink) (struct dentry *, char __user *,int);
 
-	/*创建普通文件*/
+	/*创建普通文件inode,并使之与dentry相关联*/
 	int (*create) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此文件对应的dentry*/,
 		       umode_t/*文件mode*/, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
 	int (*unlink) (struct inode *,struct dentry *);
 	int (*symlink) (struct mnt_idmap *, struct inode *,struct dentry *,
 			const char *);
-	/*创建目录*/
+	/*创建目录inode,并使之与dentry相关联*/
 	int (*mkdir) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此目录对应的dentry*/,
 		      umode_t);
+	/*删除目录inode*/
 	int (*rmdir) (struct inode *,struct dentry *);
-	/*创建nod,用于处理mknod系统调用*/
-	int (*mknod) (struct mnt_idmap *, struct inode *,struct dentry *,
+	/*创建inode,用于处理mknod系统调用*/
+	int (*mknod) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*待创建inode对应的dentry*/,
 		      umode_t,dev_t);
-	int (*rename) (struct mnt_idmap *, struct inode *, struct dentry *,
-			struct inode *, struct dentry *, unsigned int);
+	/*重命名*/
+	int (*rename) (struct mnt_idmap *, struct inode */*旧的父目录inode*/, struct dentry */*旧的dentry*/,
+			struct inode */*新的父目录inode*/, struct dentry */*新的dentry*/, unsigned int);
 	int (*setattr) (struct mnt_idmap *, struct dentry *, struct iattr *);
 	int (*getattr) (struct mnt_idmap *, const struct path *,
 			struct kstat *, u32, unsigned int);
@@ -2255,7 +2260,7 @@ struct super_operations {
 	int (*statfs) (struct dentry *, struct kstatfs *);
 	int (*remount_fs) (struct super_block *, int *, char *);
 	void (*umount_begin) (struct super_block *);
-
+	/*显示挂载点选项，/proc/self/mounts文件的选项部分*/
 	int (*show_options)(struct seq_file *, struct dentry *);
 	int (*show_devname)(struct seq_file *, struct dentry *);
 	int (*show_path)(struct seq_file *, struct dentry *);

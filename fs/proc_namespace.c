@@ -75,6 +75,7 @@ static void show_mnt_opts(struct seq_file *m, struct vfsmount *mnt)
 	};
 	const struct proc_fs_opts *fs_infop;
 
+	/*输出挂载标记*/
 	for (fs_infop = mnt_opts; fs_infop->flag; fs_infop++) {
 		if (mnt->mnt_flags & fs_infop->flag)
 			seq_puts(m, fs_infop->str);
@@ -103,7 +104,7 @@ static int show_vfsmnt(struct seq_file *m, struct vfsmount *mnt)
 	struct proc_mounts *p = m->private;
 	struct mount *r = real_mount(mnt);
 	struct path mnt_path = { .dentry = mnt->mnt_root, .mnt = mnt };
-	struct super_block *sb = mnt_path.dentry->d_sb;
+	struct super_block *sb = mnt_path.dentry->d_sb;/*取此挂载点对应的super block*/
 	int err;
 
 	if (sb->s_op->show_devname) {
@@ -238,7 +239,7 @@ out:
 static int mounts_open_common(struct inode *inode, struct file *file,
 			      int (*show)(struct seq_file *, struct vfsmount *))
 {
-	struct task_struct *task = get_proc_task(inode);
+	struct task_struct *task = get_proc_task(inode);/*inode映射到task*/
 	struct nsproxy *nsp;
 	struct mnt_namespace *ns = NULL;
 	struct path root;
@@ -264,7 +265,7 @@ static int mounts_open_common(struct inode *inode, struct file *file,
 		ret = -ENOENT;
 		goto err_put_ns;
 	}
-	get_fs_root(task->fs, &root);
+	get_fs_root(task->fs, &root);/*取当前进程对应的根目录*/
 	task_unlock(task);
 	put_task_struct(task);
 
