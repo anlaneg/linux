@@ -86,7 +86,7 @@ static inline unsigned long pud_index(unsigned long address)
 #ifndef pgd_index
 /* Must be a compile-time constant, so implement it as a macro */
 /*由地址映射出page global directory index（在高位上）*/
-#define pgd_index(a)  (((a) >> PGDIR_SHIFT) & (PTRS_PER_PGD - 1))
+#define pgd_index(a)  (((a) >> PGDIR_SHIFT/*移除PGD不关心的BITS*/) & (PTRS_PER_PGD - 1))
 #endif
 
 #ifndef pte_offset_kernel
@@ -144,6 +144,7 @@ static inline pgd_t *pgd_offset_pgd(pgd_t *pgd, unsigned long address)
  * a shortcut to get a pgd_t in a given mm
  */
 #ifndef pgd_offset
+/*通过MM取此地址对应的pgd*/
 #define pgd_offset(mm, address)		pgd_offset_pgd((mm)->pgd, (address))
 #endif
 

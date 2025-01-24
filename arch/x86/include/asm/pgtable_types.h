@@ -329,7 +329,7 @@ static inline pgd_t native_make_pgd(pgdval_t val)
 
 static inline pgdval_t native_pgd_val(pgd_t pgd)
 {
-	return pgd.pgd & PGD_ALLOWED_BITS;
+	return pgd.pgd & PGD_ALLOWED_BITS;/*取PGD中容许的BITS,4级时为取全值*/
 }
 
 static inline pgdval_t pgd_flags(pgd_t pgd)
@@ -426,7 +426,7 @@ static inline p4dval_t p4d_flags_mask(p4d_t p4d)
 
 static inline p4dval_t p4d_flags(p4d_t p4d)
 {
-	return native_p4d_val(p4d) & p4d_flags_mask(p4d);
+	return native_p4d_val(p4d) & p4d_flags_mask(p4d);/*取P4D中包含的flags(即不需存储地址有有效位置,比如低11位)*/
 }
 
 static inline pudval_t pud_pfn_mask(pud_t pud)

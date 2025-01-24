@@ -5198,8 +5198,8 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 {
 	struct vm_fault vmf = {
 		.vma = vma,
-		.address = address & PAGE_MASK,
-		.real_address = address,
+		.address = address & PAGE_MASK,/*按页对齐*/
+		.real_address = address,/*原始地址*/
 		.flags = flags,
 		.pgoff = linear_page_index(vma, address),
 		.gfp_mask = __get_fault_gfp_mask(vma),
@@ -5210,14 +5210,14 @@ static vm_fault_t __handle_mm_fault(struct vm_area_struct *vma,
 	p4d_t *p4d;
 	vm_fault_t ret;
 
-	pgd = pgd_offset(mm, address);
-	p4d = p4d_alloc(mm, pgd, address);
+	pgd = pgd_offset(mm, address);/*取此地址对应的PGD*/
+	p4d = p4d_alloc(mm, pgd, address);/*通过PGD结合地址查询P4D*/
 	if (!p4d)
-		return VM_FAULT_OOM;
+		return VM_FAULT_OOM;/*没有申请到P4D*/
 
-	vmf.pud = pud_alloc(mm, p4d, address);
+	vmf.pud = pud_alloc(mm, p4d, address);/*取此地址对应的PUD*/
 	if (!vmf.pud)
-		return VM_FAULT_OOM;
+		return VM_FAULT_OOM;/*没有申请到PUD*/
 retry_pud:
 	if (pud_none(*vmf.pud) &&
 	    thp_vma_allowable_order(vma, vm_flags, false, true, true, PUD_ORDER)) {
@@ -5649,16 +5649,16 @@ inval:
  */
 int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address)
 {
-	p4d_t *new = p4d_alloc_one(mm, address);
+	p4d_t *new = p4d_alloc_one(mm, address);/*申请一页物理内存做为p4d_t*/
 	if (!new)
 		return -ENOMEM;
 
 	spin_lock(&mm->page_table_lock);
 	if (pgd_present(*pgd)) {	/* Another has populated it */
-		p4d_free(mm, new);
+		p4d_free(mm, new);/*加锁再检查发现PGD存在,释放掉*/
 	} else {
 		smp_wmb(); /* See comment in pmd_install() */
-		pgd_populate(mm, pgd, new);
+		pgd_populate(mm, pgd, new);/*加锁再检查发现PGD不存在,填充(X86开启L5时执行)*/
 	}
 	spin_unlock(&mm->page_table_lock);
 	return 0;
@@ -5696,7 +5696,7 @@ int __pud_alloc(struct mm_struct *mm, p4d_t *p4d, unsigned long address)
 int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 {
 	spinlock_t *ptl;
-	pmd_t *new = pmd_alloc_one(mm, address);
+	pmd_t *new = pmd_alloc_one(mm, address);/*申请PMD*/
 	if (!new)
 		return -ENOMEM;
 
@@ -5704,9 +5704,9 @@ int __pmd_alloc(struct mm_struct *mm, pud_t *pud, unsigned long address)
 	if (!pud_present(*pud)) {
 		mm_inc_nr_pmds(mm);
 		smp_wmb(); /* See comment in pmd_install() */
-		pud_populate(mm, pud, new);
+		pud_populate(mm, pud, new);/*填充PUD*/
 	} else {	/* Another has populated it */
-		pmd_free(mm, new);
+		pmd_free(mm, new);/*加锁后,确认已填充,放弃*/
 	}
 	spin_unlock(ptl);
 	return 0;

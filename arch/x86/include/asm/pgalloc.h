@@ -83,7 +83,6 @@ static inline void pmd_populate(struct mm_struct *mm, pmd_t *pmd,
 	paravirt_alloc_pte(mm, pfn);
 	set_pmd(pmd, __pmd(((pteval_t)pfn << PAGE_SHIFT) | _PAGE_TABLE));
 }
-
 #if CONFIG_PGTABLE_LEVELS > 2
 extern void ___pmd_free_tlb(struct mmu_gather *tlb, pmd_t *pmd);
 
@@ -134,7 +133,7 @@ static inline void __pud_free_tlb(struct mmu_gather *tlb, pud_t *pud,
 static inline void pgd_populate(struct mm_struct *mm, pgd_t *pgd, p4d_t *p4d)
 {
 	if (!pgtable_l5_enabled())
-		return;
+		return;/*不支持l5,则直接退出*/
 	paravirt_alloc_p4d(mm, __pa(p4d) >> PAGE_SHIFT);
 	set_pgd(pgd, __pgd(_PAGE_TABLE | __pa(p4d)));
 }
@@ -153,6 +152,7 @@ static inline p4d_t *p4d_alloc_one(struct mm_struct *mm, unsigned long addr)
 
 	if (mm == &init_mm)
 		gfp &= ~__GFP_ACCOUNT;
+	/*取一个物理页做为p4d存放,在X86_64情况下占用此结构占用8个字节,可以存入4096/8=512*/
 	return (p4d_t *)get_zeroed_page(gfp);
 }
 

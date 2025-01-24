@@ -469,6 +469,7 @@ static_assert(sizeof(struct ptdesc) <= sizeof(struct page));
 	const struct ptdesc *:		(const struct folio *)(pt),	\
 	struct ptdesc *:		(struct folio *)(pt)))
 
+/*哈哈,这种编译问题,被采用这种方式来解决*/
 #define page_ptdesc(p)			(_Generic((p),			\
 	const struct page *:		(const struct ptdesc *)(p),	\
 	struct page *:			(struct ptdesc *)(p)))

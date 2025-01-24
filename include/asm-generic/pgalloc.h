@@ -131,10 +131,11 @@ static inline pmd_t *pmd_alloc_one(struct mm_struct *mm, unsigned long addr)
 
 	if (mm == &init_mm)
 		gfp = GFP_PGTABLE_KERNEL;
-	ptdesc = pagetable_alloc(gfp, 0);
+	ptdesc = pagetable_alloc(gfp, 0/*申请一页*/);
 	if (!ptdesc)
 		return NULL;
 	if (!pagetable_pmd_ctor(ptdesc)) {
+		/*打标记失败*/
 		pagetable_free(ptdesc);
 		return NULL;
 	}

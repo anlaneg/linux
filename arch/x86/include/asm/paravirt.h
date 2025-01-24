@@ -370,7 +370,7 @@ static inline void paravirt_release_pmd(unsigned long pfn)
 	PVOP_VCALL1(mmu.release_pmd, pfn);
 }
 
-static inline void paravirt_alloc_pud(struct mm_struct *mm, unsigned long pfn)
+static inline void paravirt_alloc_pud(struct mm_struct *mm, unsigned long pfn/*页帧号*/)
 {
 	PVOP_VCALL2(mmu.alloc_pud, mm, pfn);
 }

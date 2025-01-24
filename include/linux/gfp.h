@@ -310,7 +310,7 @@ __meminit void *alloc_pages_exact_nid(int nid, size_t size, gfp_t gfp_mask) __al
 
 /*申请一个空闲页*/
 #define __get_free_page(gfp_mask) \
-		__get_free_pages((gfp_mask), 0)
+		__get_free_pages((gfp_mask), 0/*一个空闲页*/)
 
 #define __get_dma_pages(gfp_mask, order) \
 		__get_free_pages((gfp_mask) | GFP_DMA, (order))

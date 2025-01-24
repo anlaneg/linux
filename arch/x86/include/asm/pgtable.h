@@ -1067,6 +1067,7 @@ static inline unsigned long pages_to_mb(unsigned long npg)
 #if CONFIG_PGTABLE_LEVELS > 2
 static inline int pud_none(pud_t pud)
 {
+	/*检查PUD是否不存在*/
 	return (native_pud_val(pud) & ~(_PAGE_KNL_ERRATUM_MASK)) == 0;
 }
 
@@ -1108,11 +1109,13 @@ static inline int pud_large(pud_t pud)
 #if CONFIG_PGTABLE_LEVELS > 3
 static inline int p4d_none(p4d_t p4d)
 {
+	/*检查P4D是否不存在*/
 	return (native_p4d_val(p4d) & ~(_PAGE_KNL_ERRATUM_MASK)) == 0;
 }
 
 static inline int p4d_present(p4d_t p4d)
 {
+	/*检查此P4D是否有PRESENT标记*/
 	return p4d_flags(p4d) & _PAGE_PRESENT;
 }
 
@@ -1147,7 +1150,7 @@ static inline unsigned long p4d_index(unsigned long address)
 static inline int pgd_present(pgd_t pgd)
 {
 	if (!pgtable_l5_enabled())
-		return 1;
+		return 1;/*L5未开启,直接返回1*/
 	return pgd_flags(pgd) & _PAGE_PRESENT;
 }
 

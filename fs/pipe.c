@@ -465,7 +465,7 @@ pipe_write(struct kiocb *iocb, struct iov_iter *from)
 	__pipe_lock(pipe);
 
 	if (!pipe->readers) {
-		send_sig(SIGPIPE, current, 0);
+		send_sig(SIGPIPE, current, 0);/*无读者,发送PIPE信号给自身*/
 		ret = -EPIPE;
 		goto out;
 	}
@@ -928,7 +928,7 @@ fail_inode:
 
 int create_pipe_files(struct file **res, int flags)
 {
-	struct inode *inode = get_pipe_inode();
+	struct inode *inode = get_pipe_inode();/*针对pipe申请inode*/
 	struct file *f;
 	int error;
 
@@ -944,6 +944,7 @@ int create_pipe_files(struct file **res, int flags)
 		}
 	}
 
+	/*针对inode创建file(只写)*/
 	f = alloc_file_pseudo(inode, pipe_mnt, "",
 				O_WRONLY | (flags & (O_NONBLOCK | O_DIRECT)),
 				&pipefifo_fops);
@@ -955,6 +956,7 @@ int create_pipe_files(struct file **res, int flags)
 
 	f->private_data = inode->i_pipe;
 
+	/*复制采用只读*/
 	res[0] = alloc_file_clone(f, O_RDONLY | (flags & O_NONBLOCK),
 				  &pipefifo_fops);
 	if (IS_ERR(res[0])) {
@@ -1037,7 +1039,7 @@ static int do_pipe2(int __user *fildes, int flags)
 			put_unused_fd(fd[1]);
 			error = -EFAULT;
 		} else {
-			fd_install(fd[0], files[0]);
+			fd_install(fd[0], files[0]);/*添加fd与file关联*/
 			fd_install(fd[1], files[1]);
 		}
 	}

@@ -2727,6 +2727,7 @@ int __p4d_alloc(struct mm_struct *mm, pgd_t *pgd, unsigned long address);
 static inline int __pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 						unsigned long address)
 {
+	/*PUD被省略*/
 	return 0;
 }
 static inline void mm_inc_nr_puds(struct mm_struct *mm) {}
@@ -2825,6 +2826,7 @@ static inline p4d_t *p4d_alloc(struct mm_struct *mm, pgd_t *pgd,
 static inline pud_t *pud_alloc(struct mm_struct *mm, p4d_t *p4d,
 		unsigned long address)
 {
+	/*如果P4D不包含,则申请PUD,否则直接映射PUD*/
 	return (unlikely(p4d_none(*p4d)) && __pud_alloc(mm, p4d, address)) ?
 		NULL : pud_offset(p4d, address);
 }
@@ -2868,9 +2870,9 @@ static inline bool pagetable_is_reserved(struct ptdesc *pt)
  */
 static inline struct ptdesc *pagetable_alloc(gfp_t gfp, unsigned int order)
 {
-	struct page *page = alloc_pages(gfp | __GFP_COMP, order);
+	struct page *page = alloc_pages(gfp | __GFP_COMP, order);/*申请物理页*/
 
-	return page_ptdesc(page);
+	return page_ptdesc(page);/*转换为ptdesc*/
 }
 
 /**
@@ -3072,7 +3074,7 @@ static inline bool pagetable_pmd_ctor(struct ptdesc *ptdesc)
 
 	if (!pmd_ptlock_init(ptdesc))
 		return false;
-	__folio_set_pgtable(folio);
+	__folio_set_pgtable(folio);/*打上PGTABLE标记*/
 	lruvec_stat_add_folio(folio, NR_PAGETABLE);
 	return true;
 }
