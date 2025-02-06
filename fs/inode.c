@@ -1470,7 +1470,7 @@ struct inode *ilookup5_nowait(struct super_block *sb/*inode所属super block*/, 
 	struct hlist_head *head = inode_hashtable + hash(sb, hashval);
 	struct inode *inode;
 
-	spin_lock(&inode_hash_lock);
+	spin_lock(&inode_hash_lock);/*加锁*/
 	inode = find_inode(sb, head, test, data);
 	spin_unlock(&inode_hash_lock);
 

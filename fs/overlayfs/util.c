@@ -376,6 +376,7 @@ struct inode *ovl_i_path_real(struct inode *inode, struct path *path)
 
 struct inode *ovl_inode_upper(struct inode *inode)
 {
+	/*取ovl_inode对应的upper dentry*/
 	struct dentry *upperdentry = ovl_i_dentry_upper(inode);
 
 	return upperdentry ? d_inode(upperdentry) : NULL;
@@ -390,6 +391,7 @@ struct inode *ovl_inode_lower(struct inode *inode)
 
 struct inode *ovl_inode_real(struct inode *inode)
 {
+	/*如果inode有upper返回upper，如upper返回lower*/
 	return ovl_inode_upper(inode) ?: ovl_inode_lower(inode);
 }
 
@@ -541,7 +543,7 @@ void ovl_set_upperdata(struct inode *inode)
 	 * before it are visible as well.
 	 */
 	smp_wmb();
-	ovl_set_flag(OVL_UPPERDATA, inode);
+	ovl_set_flag(OVL_UPPERDATA, inode);/*添加upperdata标记*/
 }
 
 /* Caller should hold ovl_inode->lock */

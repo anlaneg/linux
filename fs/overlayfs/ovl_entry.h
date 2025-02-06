@@ -6,8 +6,8 @@
  */
 
 struct ovl_config {
-	char *upperdir;/*参数upperdir=指定的值*/
-	char *workdir;/*参数workdir=指定的值*/
+	char *upperdir;/*参数upperdir=指定的路径值*/
+	char *workdir;/*参数workdir=指定的路径值*/
 	char **lowerdirs;
 	bool default_permissions;
 	int redirect_mode;
@@ -101,7 +101,7 @@ static inline unsigned int ovl_numlowerlayer(struct ovl_fs *ofs)
 
 static inline struct vfsmount *ovl_upper_mnt(struct ovl_fs *ofs)
 {
-	return ofs->layers[0].mnt;
+	return ofs->layers[0].mnt;/*取挂载点*/
 }
 
 static inline struct mnt_idmap *ovl_upper_mnt_idmap(struct ovl_fs *ofs)
@@ -137,7 +137,7 @@ static inline struct ovl_path *ovl_lowerstack(struct ovl_entry *oe)
 
 static inline struct ovl_path *ovl_lowerpath(struct ovl_entry *oe)
 {
-	return ovl_lowerstack(oe);
+	return ovl_lowerstack(oe);/*返回栈顶path*/
 }
 
 static inline struct ovl_path *ovl_lowerdata(struct ovl_entry *oe)
@@ -170,7 +170,7 @@ struct ovl_inode {
 	u64 version;
 	unsigned long flags;
 	struct inode vfs_inode;
-	struct dentry *__upperdentry;/*对应的real dentry*/
+	struct dentry *__upperdentry;/*对应的real(upper) dentry*/
 	struct ovl_entry *oe;
 
 	/* synchronize copy up and more */

@@ -346,8 +346,9 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 		swap(ctx->work, *path);
 		break;
 	case Opt_upperdir:
+		/*更新upperdir*/
 		swap(config->upperdir, *pname);
-		swap(ctx->upper, *path);
+		swap(ctx->upper, *path);/*交换upper path*/
 		break;
 	case Opt_datadir_add:
 		ctx->nr_data++;

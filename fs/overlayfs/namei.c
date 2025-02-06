@@ -330,6 +330,7 @@ static int ovl_lookup_layer(struct dentry *base, struct ovl_lookup_data *d,
 	int err;
 
 	if (d->name.name[0] != '/')
+		/*dentry不采用绝对路径*/
 		return ovl_lookup_single(base, d, d->name.name, d->name.len,
 					 0, "", ret, drop_negative);
 

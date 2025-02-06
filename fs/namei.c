@@ -597,7 +597,7 @@ struct nameidata {
 	//记录本次经由link_path_walk函数分析出的此层目录/文件名称（长度，hashcode,以及名称）
 	//（为了避免在路径分析过程中传递分析点文件名称指针及长度）
 	struct qstr	last;
-	//记录根路径（１.为了避免'..'方式穿透根目录；2。记录当前根目录)
+	//记录根路径（１.为了避免'..'方式穿透根目录；2。记录当前根目录,指明查找起点)
 	struct path	root;
 	//当前分析位置路径对应的inode
 	struct inode	*inode; /* path.dentry.d_inode */
@@ -650,12 +650,12 @@ static void __set_nameidata(struct nameidata *p, int dfd/*锚点*/, struct filen
 }
 
 static inline void set_nameidata(struct nameidata *p, int dfd, struct filename *name,
-			  const struct path *root)
+			  const struct path *root/*初始化root dentry对应的path*/)
 {
 	__set_nameidata(p, dfd, name);
 	p->state = 0;
 	if (unlikely(root)) {
-		/*提供了root*/
+		/*提供了root,指定root对应的path*/
 		p->state = ND_ROOT_PRESET;
 		p->root = *root;
 	}
@@ -2519,7 +2519,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 	smp_rmb();
 
 	if (nd->state & ND_ROOT_PRESET) {
-		/*nd给定了root,从root开始分析*/
+		/*nd给定了root dentry,从root dentry开始查起*/
 		struct dentry *root = nd->root.dentry;/*root对应的dentry*/
 		struct inode *inode = root->d_inode;/*root对应的inode*/
 		if (*s && unlikely(!d_can_lookup(root)))
@@ -2538,7 +2538,7 @@ static const char *path_init(struct nameidata *nd, unsigned flags)
 		return s;
 	}
 
-	//root path 没有给定，需要先确定root，先将root的挂载点置为NULL
+	//root path 没有给定，需要先确定根节点对应的root dentry，先将root的挂载点置为NULL
 	nd->root.mnt = NULL;
 
 	/* Absolute pathname -- fetch the root (LOOKUP_IN_ROOT uses nd->dfd). */
@@ -2675,7 +2675,7 @@ static int path_lookupat(struct nameidata *nd, unsigned flags, struct path *path
 
 /*查找name具体指待的path,确认最终的dentry*/
 int filename_lookup(int dfd/*位置信息*/, struct filename *name/*路径名称*/, unsigned flags,
-		    struct path *path/*出参，确定路径对应的dentry*/, struct path *root/*指定的root path*/)
+		    struct path *path/*出参，确定路径对应的dentry*/, struct path *root/*文件系统根节点对应的path*/)
 {
 	int retval;
 	struct nameidata nd;
@@ -2720,7 +2720,7 @@ static int path_parentat(struct nameidata *nd, unsigned flags,
 static int __filename_parentat(int dfd, struct filename *name,
 			       unsigned int flags, struct path *parent,
 			       struct qstr *last, int *type,
-			       const struct path *root)
+			       const struct path *root/*根目录对应的path*/)
 {
 	int retval;
 	struct nameidata nd;
@@ -2817,7 +2817,7 @@ EXPORT_SYMBOL(kern_path);
  */
 int vfs_path_parent_lookup(struct filename *filename, unsigned int flags,
 			   struct path *parent, struct qstr *last, int *type,
-			   const struct path *root)
+			   const struct path *root/*根目录对应的path*/)
 {
 	return  __filename_parentat(AT_FDCWD, filename, flags, parent, last,
 				    type, root);
@@ -2837,7 +2837,7 @@ int vfs_path_lookup(struct dentry *dentry, struct vfsmount *mnt,
 		    struct path *path)
 {
 	struct filename *filename;
-	struct path root = {.mnt = mnt, .dentry = dentry};
+	struct path root = {.mnt = mnt, .dentry = dentry};/*构造root对应的path*/
 	int ret;
 
 	filename = getname_kernel(name);
@@ -3372,7 +3372,7 @@ int vfs_create(struct mnt_idmap *idmap, struct inode *dir/*父目录*/,
 		return error;
 
 	if (!dir->i_op->create)
-		/*必须提供create回调*/
+		/*dir必须提供create回调*/
 		return -EACCES;	/* shouldn't it be ENOSYS? */
 
 	mode = vfs_prepare_mode(idmap, dir, mode, S_IALLUGO, S_IFREG/*普通文件*/);
@@ -3606,7 +3606,7 @@ static struct dentry *lookup_open(struct nameidata *nd, struct file *file,
 	dentry = d_lookup(dir, &nd->last);
 	for (;;) {
 		if (!dentry) {
-			//nd->last不存在，创建dentry
+			//nd->last对应的dentry未在dentry_hashtable中创建，创建dentry
 			dentry = d_alloc_parallel(dir, &nd->last, &wq);
 			if (IS_ERR(dentry))
 				return dentry;
@@ -3994,7 +3994,7 @@ static struct file *path_openat(struct nameidata *nd,
 		/*有o_path标记的open*/
 		error = do_o_path(nd, flags, file);
 	} else {
-		//初始化nd,返回路径名称
+		//初始化nd（设置解析起点）,返回路径名称
 		const char *s = path_init(nd, flags);
 		while (!(error = link_path_walk(s, nd)) &&//先解决父目录的解析
 		       (s = open_last_lookups(nd, file, op)/*如果last不存在，则会被创建*/) != NULL)//再通过do_last解决具体文件的解析
@@ -4028,7 +4028,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname/*文件路径*/,
 	struct file *filp;
 
 	//将dfd,pathname填充到nd中,准备解析路径
-	set_nameidata(&nd, dfd, pathname, NULL);
+	set_nameidata(&nd, dfd, pathname, NULL/*根目录对应的path置为空*/);
 	//调用path_openat来解释路径，并执行文件open,返回对应的file
 	filp = path_openat(&nd, op, flags | LOOKUP_RCU);
 	if (unlikely(filp == ERR_PTR(-ECHILD)))
@@ -4039,7 +4039,7 @@ struct file *do_filp_open(int dfd, struct filename *pathname/*文件路径*/,
 	return filp;
 }
 
-struct file *do_file_open_root(const struct path *root,
+struct file *do_file_open_root(const struct path *root/*根目录对应的path*/,
 		const char *name, const struct open_flags *op)
 {
 	struct nameidata nd;

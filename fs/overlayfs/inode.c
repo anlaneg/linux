@@ -891,7 +891,7 @@ void ovl_inode_init(struct inode *inode, struct ovl_inode_params *oip,
 	struct inode *realinode;
 	struct ovl_inode *oi = OVL_I(inode);
 
-	oi->__upperdentry = oip->upperdentry;
+	oi->__upperdentry = oip->upperdentry;/*设置此inode节点对应的upper dentry*/
 	oi->oe = oip->oe;
 	oi->redirect = oip->redirect;
 	oi->lowerdata_redirect = oip->lowerdata_redirect;
@@ -1055,8 +1055,9 @@ struct inode *ovl_new_inode(struct super_block *sb, umode_t mode, dev_t rdev)
 	return inode;
 }
 
-static int ovl_inode_test(struct inode *inode, void *data)
+static int ovl_inode_test(struct inode *inode/*待匹配inode*/, void *data)
 {
+	/*如inode的私有数据与data相等，则匹配*/
 	return inode->i_private == data;
 }
 

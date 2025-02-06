@@ -387,6 +387,7 @@ static int ovl_check_namelen(const struct path *path, struct ovl_fs *ofs,
 	if (err)
 		pr_err("statfs failed on '%s'\n", name);
 	else
+		/*取文件系统支持的最大文件名称长度*/
 		ofs->namelen = max(ofs->namelen, statfs.f_namelen);
 
 	return err;
@@ -398,10 +399,11 @@ static int ovl_lower_dir(const char *name, struct path *path,
 	int fh_type;
 	int err;
 
-	err = ovl_check_namelen(path, ofs, name);
+	err = ovl_check_namelen(path, ofs, name);/*更新namelen*/
 	if (err)
 		return err;
 
+	/*更新stack_depth*/
 	*stack_depth = max(*stack_depth, path->mnt->mnt_sb->s_stack_depth);
 
 	/*
@@ -1258,18 +1260,18 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 	unsigned long ino = d_inode(lowerpath->dentry)->i_ino;
 	int fsid = lowerpath->layer->fsid;
 	struct ovl_inode_params oip = {
-		.upperdentry = upperdentry,
+		.upperdentry = upperdentry,/*设置root对应的upper dentry*/
 		.oe = oe,
 	};
 
-	/*构造此文件系统对应的root dentry*/
-	root = d_make_root(ovl_new_inode(sb, S_IFDIR, 0));
+	/*申请ovl_inode,并构造此文件系统对应的root dentry*/
+	root = d_make_root(ovl_new_inode(sb, S_IFDIR/*目录*/, 0));
 	if (!root)
 		return NULL;
 
 	if (upperdentry) {
 		/* Root inode uses upper st_ino/i_ino */
-		ino = d_inode(upperdentry)->i_ino;
+		ino = d_inode(upperdentry)->i_ino;/*取upper dentry对应的inode的inode编号*/
 		fsid = 0;
 		ovl_dentry_set_upper_alias(root);
 		if (ovl_is_impuredir(sb, upperdentry))
@@ -1294,7 +1296,7 @@ static struct dentry *ovl_get_root(struct super_block *sb,
 	ovl_set_flag(OVL_WHITEOUTS, d_inode(root));
 	ovl_dentry_set_flag(OVL_E_CONNECTED, root);
 	ovl_set_upperdata(d_inode(root));
-	ovl_inode_init(d_inode(root), &oip, ino, fsid);
+	ovl_inode_init(d_inode(root)/*rootdentry 对应的inode*/, &oip, ino/*upperdentry inode编号*/, fsid);
 	ovl_dentry_init_flags(root, upperdentry, oe, DCACHE_OP_WEAK_REVALIDATE);
 	/* root keeps a reference of upperdentry */
 	dget(upperdentry);
@@ -1406,6 +1408,8 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 		sb->s_stack_depth = upper_sb->s_stack_depth;
 		sb->s_time_gran = upper_sb->s_time_gran;
 	}
+
+	/*创建overlay entry*/
 	oe = ovl_get_lowerstack(sb, ctx, ofs, layers);
 	err = PTR_ERR(oe);
 	if (IS_ERR(oe))
@@ -1481,7 +1485,7 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 
 	/*获取root dentry*/
 	err = -ENOMEM;
-	root_dentry = ovl_get_root(sb, ctx->upper.dentry, oe);
+	root_dentry = ovl_get_root(sb, ctx->upper.dentry/*upper对应的dentry*/, oe);
 	if (!root_dentry)
 		goto out_free_oe;
 

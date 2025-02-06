@@ -705,7 +705,7 @@ static int __init mount_proc(void)
 	if (IS_ERR(mnt))
 		return PTR_ERR(mnt);
 
-	proc_mnt = mnt;
+	proc_mnt = mnt;/*记录proc文件系统的挂载点*/
 	return 0;
 }
 

@@ -2133,7 +2133,7 @@ struct inode_operations {
 
 	int (*readlink) (struct dentry *, char __user *,int);
 
-	/*创建普通文件inode,并使之与dentry相关联*/
+	/*在当前目录创建普通文件inode,并使之与dentry相关联*/
 	int (*create) (struct mnt_idmap *, struct inode */*父目录inode*/,struct dentry */*此文件对应的dentry*/,
 		       umode_t/*文件mode*/, bool);
 	int (*link) (struct dentry *,struct inode *,struct dentry *);
@@ -2719,10 +2719,10 @@ extern struct file *file_open_name(struct filename *, int, umode_t);
 extern struct file *filp_open(const char *, int, umode_t);
 extern struct file *file_open_root(const struct path *,
 				   const char *, int, umode_t);
-static inline struct file *file_open_root_mnt(struct vfsmount *mnt,
+static inline struct file *file_open_root_mnt(struct vfsmount *mnt/*挂载点将做为root*/,
 				   const char *name, int flags, umode_t mode)
 {
-	return file_open_root(&(struct path){.mnt = mnt, .dentry = mnt->mnt_root},
+	return file_open_root(&(struct path){.mnt = mnt, .dentry = mnt->mnt_root/*根目录对应的dentry*/},
 			      name, flags, mode);
 }
 struct file *dentry_open(const struct path *path, int flags,

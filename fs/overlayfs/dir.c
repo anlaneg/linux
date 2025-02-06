@@ -178,7 +178,7 @@ struct dentry *ovl_create_real(struct ovl_fs *ofs, struct inode *dir,
 
 	err = -ESTALE;
 	if (newdentry->d_inode)
-		goto out;
+		goto out;/*没有关联inode*/
 
 	if (attr->hardlink) {
 		err = ovl_do_link(ofs, attr->hardlink, dir, newdentry);
@@ -1303,7 +1303,7 @@ const struct inode_operations ovl_dir_inode_operations = {
 	.rename		= ovl_rename,
 	.link		= ovl_link,
 	.setattr	= ovl_setattr,
-	.create		= ovl_create,
+	.create		= ovl_create,/*创建文件*/
 	.mknod		= ovl_mknod,
 	.permission	= ovl_permission,
 	.getattr	= ovl_getattr,

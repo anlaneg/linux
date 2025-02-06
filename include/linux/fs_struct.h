@@ -13,7 +13,7 @@ struct fs_struct {
 	seqcount_spinlock_t seq;
 	int umask;
 	int in_exec;
-	struct path root/*当前进程root目录路径*/, pwd/*当前进程工作目录*/;
+	struct path root/*当前进程root目录对应的路径*/, pwd/*当前进程工作目录对应的path*/;
 } __randomize_layout;
 
 extern struct kmem_cache *fs_cachep;

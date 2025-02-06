@@ -6,9 +6,9 @@ struct dentry;
 struct vfsmount;
 
 struct path {
-    //path对应的挂载点信息
+    //此path对应的挂载信息
 	struct vfsmount *mnt;
-	//path对应的dentry
+	//此path对应的dentry
 	struct dentry *dentry;
 } __randomize_layout;
 

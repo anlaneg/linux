@@ -1096,7 +1096,7 @@ int vfs_open(const struct path *path/*要打开的path*/, struct file *file)
     /*指定文件路径*/
 	file->f_path = *path;
 	//通过path->dentry获取到其对应的inode
-	return do_dentry_open(file, d_backing_inode(path->dentry)/*文件对应的inode*/, NULL);
+	return do_dentry_open(file, d_backing_inode(path->dentry)/*dentry对应的inode*/, NULL);
 }
 
 struct file *dentry_open(const struct path *path, int flags,
@@ -1386,7 +1386,7 @@ struct file *filp_open(const char *filename, int flags, umode_t mode)
 }
 EXPORT_SYMBOL(filp_open);
 
-struct file *file_open_root(const struct path *root,
+struct file *file_open_root(const struct path *root/*根目录对应的path*/,
 			    const char *filename, int flags, umode_t mode)
 {
 	struct open_flags op;
@@ -1446,7 +1446,7 @@ long do_sys_open(int dfd, const char __user *filename, int flags, umode_t mode)
 SYSCALL_DEFINE3(open, const char __user *, filename/*要打开的文件*/, int, flags, umode_t, mode)
 {
 	if (force_o_largefile())
-		flags |= O_LARGEFILE;
+		flags |= O_LARGEFILE;/*强制large标记*/
 	//在当前工作目录解析filename,并将其打开
 	return do_sys_open(AT_FDCWD, filename, flags, mode);
 }

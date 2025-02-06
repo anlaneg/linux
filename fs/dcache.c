@@ -2304,6 +2304,8 @@ struct dentry *d_lookup(const struct dentry *parent, const struct qstr *name)
 
 	do {
 		seq = read_seqbegin(&rename_lock);
+		/*利用（parent,name)查询dentry hashtable,确定在parnet目录下名称为
+		 * name的文件对应的dentry*/
 		dentry = __d_lookup(parent, name);
 		if (dentry)
 			break;
@@ -2369,7 +2371,7 @@ struct dentry *__d_lookup(const struct dentry *parent, const struct qstr *name)
 		spin_lock(&dentry->d_lock);
 
 		if (dentry->d_parent != parent)
-			//跳过非同一父节点的
+			//跳过非同一父节点指针的
 			goto next;
 
 		if (d_unhashed(dentry))
@@ -2537,6 +2539,7 @@ struct dentry *d_alloc_parallel(struct dentry *parent,
 		return ERR_PTR(-ENOMEM);
 
 retry:
+	/*申请内存成功，加锁再查询一遍*/
 	rcu_read_lock();
 	seq = smp_load_acquire(&parent->d_inode->i_dir_seq);
 	r_seq = read_seqbegin(&rename_lock);

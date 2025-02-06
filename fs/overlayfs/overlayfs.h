@@ -555,11 +555,13 @@ int ovl_sync_status(struct ovl_fs *ofs);
 
 static inline void ovl_set_flag(unsigned long flag, struct inode *inode)
 {
+	/*为ovl_inode添加标记*/
 	set_bit(flag, &OVL_I(inode)->flags);
 }
 
 static inline void ovl_clear_flag(unsigned long flag, struct inode *inode)
 {
+	/*移除ovl_inode上的标记*/
 	clear_bit(flag, &OVL_I(inode)->flags);
 }
 
