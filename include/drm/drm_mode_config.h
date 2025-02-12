@@ -503,7 +503,7 @@ struct drm_mode_config {
 	 * List of plane objects linked with &drm_plane.head. This is invariant
 	 * over the lifetime of a device and hence doesn't need any locks.
 	 */
-	struct list_head plane_list;
+	struct list_head plane_list;/*用于串连所有plane*/
 
 	/**
 	 * @num_crtc:

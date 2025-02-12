@@ -49,7 +49,7 @@ struct linux_binprm {
 	struct cred *cred;	/* new credentials */
 	int unsafe;		/* how unsafe this exec is (mask of LSM_UNSAFE_*) */
 	unsigned int per_clear;	/* bits to clear in current->personality */
-	int argc, envc;//要执行文件时的参数数，及环境变量数
+	int argc, envc;//要执行文件时的参数数目，及环境变量数目
 
 	//要执行的文件名称
 	const char *filename;	/* Name of binary as seen by procps */
@@ -64,7 +64,7 @@ struct linux_binprm {
 
 	struct rlimit rlim_stack; /* Saved RLIMIT_STACK used during exec. */
 
-	char buf[BINPRM_BUF_SIZE];/*自文件中预读出来的内容*/
+	char buf[BINPRM_BUF_SIZE];/*自文件中预读出来的内容（用于查找解析器）*/
 } __randomize_layout;
 
 #define BINPRM_FLAGS_ENFORCE_NONDUMP_BIT 0
@@ -85,7 +85,7 @@ struct linux_binprm {
 struct linux_binfmt {
 	struct list_head lh;
 	struct module *module;
-	//解决如何加载
+	//解决1.检查是否可执行linux_binprm;2.解决此二进制如何加载
 	int (*load_binary)(struct linux_binprm *);
 	int (*load_shlib)(struct file *);
 #ifdef CONFIG_COREDUMP

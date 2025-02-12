@@ -757,6 +757,7 @@ static struct pci_driver cirrus_pci_driver = {
 	.shutdown = cirrus_pci_shutdown,
 };
 
+/*注册cirrus显卡驱动，在部分vm中会使用此驱动*/
 drm_module_pci_driver(cirrus_pci_driver)
 
 MODULE_DEVICE_TABLE(pci, pciidlist);

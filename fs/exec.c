@@ -414,6 +414,7 @@ struct user_arg_ptr {
 	} ptr;
 };
 
+/*在argv数组中取nr号参数*/
 static const char __user *get_user_arg_ptr(struct user_arg_ptr argv, int nr)
 {
 	const char __user *native;
@@ -453,6 +454,7 @@ static int count(struct user_arg_ptr argv, int max)
 				return -EFAULT;
 
 			if (i >= max)
+				/*参数数量超限，报错*/
 				return -E2BIG;
 			++i;
 
@@ -461,7 +463,7 @@ static int count(struct user_arg_ptr argv, int max)
 			cond_resched();
 		}
 	}
-	return i;
+	return i;/*返回参数数量*/
 }
 
 static int count_strings_kernel(const char *const *argv)
@@ -541,16 +543,17 @@ static int copy_strings(int argc, struct user_arg_ptr argv,
 		unsigned long pos;
 
 		ret = -EFAULT;
-		str = get_user_arg_ptr(argv, argc);
+		str = get_user_arg_ptr(argv, argc);/*取argc号参数*/
 		if (IS_ERR(str))
 			goto out;
 
-		len = strnlen_user(str, MAX_ARG_STRLEN);
+		len = strnlen_user(str, MAX_ARG_STRLEN);/*取参数长度*/
 		if (!len)
 			goto out;
 
 		ret = -E2BIG;
 		if (!valid_arg_len(bprm, len))
+			/*单个参数长度受限*/
 			goto out;
 
 		/* We're going to work our way backwards. */
@@ -1547,6 +1550,7 @@ static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int fl
 	struct file *file;
 	int retval = -ENOMEM;
 
+	/*获取要执行的file*/
 	file = do_open_execat(fd, filename, flags);
 	if (IS_ERR(file))
 		return ERR_CAST(file);
@@ -1560,6 +1564,7 @@ static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int fl
 	bprm->file = file;
 
 	if (fd == AT_FDCWD || filename->name[0] == '/') {
+		/*绝对路径*/
 		bprm->filename = filename->name;
 	} else {
 		if (filename->name[0] == '\0')
@@ -1584,7 +1589,7 @@ static struct linux_binprm *alloc_bprm(int fd, struct filename *filename, int fl
 
 		bprm->filename = bprm->fdpath;
 	}
-	bprm->interp = bprm->filename;
+	bprm->interp = bprm->filename;/*解析器默认为文件本身*/
 
 	retval = bprm_mm_init(bprm);
 	if (!retval)
@@ -1808,6 +1813,7 @@ static int search_binary_handler(struct linux_binprm *bprm)
 			read_unlock(&binfmt_lock);
 			return retval;
 		}
+		/*继续查找*/
 	}
 	read_unlock(&binfmt_lock);
 
@@ -1932,14 +1938,15 @@ out:
 }
 
 static int do_execveat_common(int fd, struct filename *filename,
-			      struct user_arg_ptr argv,
-			      struct user_arg_ptr envp,
+			      struct user_arg_ptr argv/*参数*/,
+			      struct user_arg_ptr envp/*环境变量*/,
 			      int flags)
 {
 	struct linux_binprm *bprm;
 	int retval;
 
 	if (IS_ERR(filename))
+		/*filename有误*/
 		return PTR_ERR(filename);
 
 	/*
@@ -1964,7 +1971,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		goto out_ret;
 	}
 
-	retval = count(argv, MAX_ARG_STRINGS);
+	retval = count(argv, MAX_ARG_STRINGS);/*获取参数总数*/
 	if (retval == 0)
 		pr_warn_once("process '%s' launched '%s' with NULL argv: empty string added\n",
 			     current->comm, bprm->filename);
@@ -1972,7 +1979,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 		goto out_free;
 	bprm->argc = retval;
 
-	retval = count(envp, MAX_ARG_STRINGS);
+	retval = count(envp, MAX_ARG_STRINGS);/*获取环境变量总数*/
 	if (retval < 0)
 		goto out_free;
 	bprm->envc = retval;
@@ -2001,6 +2008,7 @@ static int do_execveat_common(int fd, struct filename *filename,
 	 * bprm_stack_limits().
 	 */
 	if (bprm->argc == 0) {
+		/*参数长度为0时，添加一个空串做为0号参数*/
 		retval = copy_string_kernel("", bprm);
 		if (retval < 0)
 			goto out_free;
@@ -2161,7 +2169,8 @@ SYSCALL_DEFINE3(execve,
 		const char __user *const __user *, argv,
 		const char __user *const __user *, envp)
 {
-	return do_execve(getname(filename), argv, envp);
+	/*实现execve系统调用*/
+	return do_execve(getname(filename/*可执行文件路径*/), argv/*参数*/, envp/*环境变量*/);
 }
 
 SYSCALL_DEFINE5(execveat,

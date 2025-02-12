@@ -732,6 +732,7 @@ struct dma_buf *dma_buf_get(int fd)
 		return ERR_PTR(-EBADF);
 
 	if (!is_dma_buf_file(file)) {
+		/*必须为dma buffer文件*/
 		fput(file);
 		return ERR_PTR(-EINVAL);
 	}

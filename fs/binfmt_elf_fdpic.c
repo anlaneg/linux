@@ -110,6 +110,7 @@ static int is_elf(struct elfhdr *hdr, struct file *file)
 	if (!elf_check_arch(hdr))
 		return 0;
 	if (!file->f_op->mmap)
+		/*文件必须提供mmap回调*/
 		return 0;
 	return 1;
 }
@@ -206,8 +207,9 @@ static int load_elf_fdpic_binary(struct linux_binprm *bprm)
 	exec_params.flags = ELF_FDPIC_FLAG_PRESENT | ELF_FDPIC_FLAG_EXECUTABLE;
 
 	/* check that this is a binary we know how to deal with */
-	retval = -ENOEXEC;
+	retval = -ENOEXEC;/*默认返回值*/
 	if (!is_elf(&exec_params.hdr, bprm->file))
+		/*检查是否为elf文件格式*/
 		goto error;
 	if (!elf_check_fdpic(&exec_params.hdr)) {
 #ifdef CONFIG_MMU

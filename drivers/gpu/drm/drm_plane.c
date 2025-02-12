@@ -147,6 +147,7 @@ static unsigned int drm_num_planes(struct drm_device *dev)
 	unsigned int num = 0;
 	struct drm_plane *tmp;
 
+	/*取此设备上plane数目*/
 	drm_for_each_plane(tmp, dev) {
 		num++;
 	}
@@ -425,7 +426,7 @@ static int __drm_universal_plane_init(struct drm_device *dev,
 	plane->possible_crtcs = possible_crtcs;
 	plane->type = type;
 
-	list_add_tail(&plane->head, &config->plane_list);
+	list_add_tail(&plane->head, &config->plane_list);/*添加plane*/
 	plane->index = config->num_total_plane++;
 
 	drm_object_attach_property(&plane->base,

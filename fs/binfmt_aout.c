@@ -123,12 +123,13 @@ static int load_aout_binary(struct linux_binprm * bprm)
 	unsigned long rlim;
 	int retval;
 
+	/*自待执行文件中获取到的内容，按struct exec结构解析*/
 	ex = *((struct exec *) bprm->buf);		/* exec-header */
 	if ((N_MAGIC(ex) != ZMAGIC && N_MAGIC(ex) != OMAGIC &&
 	     N_MAGIC(ex) != QMAGIC && N_MAGIC(ex) != NMAGIC) ||
 	    N_TRSIZE(ex) || N_DRSIZE(ex) ||
 	    i_size_read(file_inode(bprm->file)) < ex.a_text+ex.a_data+N_SYMSIZE(ex)+N_TXTOFF(ex)) {
-		return -ENOEXEC;
+		return -ENOEXEC;/*非有效的aout格式，不可执行*/
 	}
 
 	/*

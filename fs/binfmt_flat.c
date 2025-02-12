@@ -439,7 +439,7 @@ static int load_flat_file(struct linux_binprm *bprm,
 		 * error message is confusing.
 		 * because a lot of people do not manage to produce good
 		 */
-		ret = -ENOEXEC;
+		ret = -ENOEXEC;/*必须以'bFLT'格式开头*/
 		goto err;
 	}
 

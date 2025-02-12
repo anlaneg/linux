@@ -1688,7 +1688,7 @@ out_error:
 	return ret;
 }
 
-drm_module_pci_driver(vmw_pci_driver);
+drm_module_pci_driver(vmw_pci_driver);/*注册VMware显卡设备*/
 
 MODULE_AUTHOR("VMware Inc. and others");
 MODULE_DESCRIPTION("Standalone drm driver for the VMware SVGA device");

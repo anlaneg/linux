@@ -100,10 +100,12 @@ static Node *search_binfmt_handler(struct binfmt_misc *misc,
 
 		/* Make sure this one is currently enabled. */
 		if (!test_bit(Enabled, &e->flags))
+			/*此entry未开启，忽略*/
 			continue;
 
 		/* Do matching based on extension if applicable. */
 		if (!test_bit(Magic, &e->flags)) {
+			/*无Magic标记，匹配后缀*/
 			if (p && !strcmp(e->magic, p + 1))
 				return e;
 			continue;
@@ -208,6 +210,7 @@ static int load_misc_binary(struct linux_binprm *bprm)
 
 	misc = load_binfmt_misc();
 	if (!misc->enabled)
+		/*未开启，直接返回不支持*/
 		return retval;
 
 	fmt = get_binfmt_handler(misc, bprm);
@@ -1072,8 +1075,10 @@ MODULE_ALIAS_FS("binfmt_misc");
 
 static int __init init_misc_binfmt(void)
 {
+	/*注册binfmt_misc文件系统，用于注册可执行格式关联*/
 	int err = register_filesystem(&bm_fs_type);
 	if (!err)
+		/*注册misc可执行解析器*/
 		insert_binfmt(&misc_format);
 	return err;
 }

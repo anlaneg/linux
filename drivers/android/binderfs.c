@@ -146,14 +146,14 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	if (!device)
 		goto err;
 
-	inode = new_inode(sb);
+	inode = new_inode(sb);/*申请inode*/
 	if (!inode)
 		goto err;
 
 	inode->i_ino = minor + INODE_OFFSET;
 	simple_inode_init_ts(inode);
 	init_special_inode(inode, S_IFCHR | 0600,
-			   MKDEV(MAJOR(binderfs_dev), minor));
+			   MKDEV(MAJOR(binderfs_dev), minor));/*指明此inode用于binder字符设备*/
 	inode->i_fop = &binder_fops;
 	inode->i_uid = info->root_uid;
 	inode->i_gid = info->root_gid;
@@ -201,7 +201,7 @@ static int binderfs_binder_device_create(struct inode *ref_inode,
 	}
 
 	inode->i_private = device;
-	d_instantiate(dentry, inode);
+	d_instantiate(dentry, inode);/*dentry与此inode关联*/
 	fsnotify_create(root->d_inode, dentry);
 	inode_unlock(d_inode(root));
 
@@ -812,11 +812,11 @@ int __init init_binderfs(void)
 
 	/* Allocate new major number for binderfs. */
 	ret = alloc_chrdev_region(&binderfs_dev, 0, BINDERFS_MAX_MINOR,
-				  "binder");
+				  "binder");/*申请字符设备binder*/
 	if (ret)
 		return ret;
 
-	ret = register_filesystem(&binder_fs_type);
+	ret = register_filesystem(&binder_fs_type);/*注册binder文件系统*/
 	if (ret) {
 		unregister_chrdev_region(binderfs_dev, BINDERFS_MAX_MINOR);
 		return ret;

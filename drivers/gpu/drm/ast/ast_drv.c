@@ -355,7 +355,7 @@ static int ast_pci_probe(struct pci_dev *pdev, const struct pci_device_id *ent)
 		return PTR_ERR(drm);
 	pci_set_drvdata(pdev, drm);
 
-	ret = drm_dev_register(drm, ent->driver_data);
+	ret = drm_dev_register(drm, ent->driver_data);/*注册drm设备*/
 	if (ret)
 		return ret;
 
@@ -465,6 +465,7 @@ static struct pci_driver ast_pci_driver = {
 	.driver.pm = &ast_pm_ops,
 };
 
+/*注册ast pci驱动,有此服务器采用此驱动*/
 drm_module_pci_driver_if_modeset(ast_pci_driver, ast_modeset);
 
 MODULE_AUTHOR(DRIVER_AUTHOR);
