@@ -298,7 +298,7 @@ struct v4l2_ioctl_ops {
 
 	/* VIDIOC_QUERYCAP handler */
 	int (*vidioc_querycap)(struct file *file, void *fh,
-			       struct v4l2_capability *cap);
+			       struct v4l2_capability *cap);/*通过此回调查询设备cap*/
 
 	/* VIDIOC_ENUM_FMT handlers */
 	int (*vidioc_enum_fmt_vid_cap)(struct file *file, void *fh,
@@ -583,6 +583,7 @@ struct v4l2_ioctl_ops {
 					const struct v4l2_event_subscription *sub);
 
 	/* For other private ioctls */
+	/*遇到私有的ioctl cmd时，此回调将被将用*/
 	long (*vidioc_default)(struct file *file, void *fh,
 			       bool valid_prio, unsigned int cmd, void *arg);
 };

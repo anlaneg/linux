@@ -925,6 +925,7 @@ static inline void dev_set_msi_domain(struct device *dev, struct irq_domain *d)
 #endif
 }
 
+/*取得driver私有数据*/
 static inline void *dev_get_drvdata(const struct device *dev)
 {
 	return dev->driver_data;

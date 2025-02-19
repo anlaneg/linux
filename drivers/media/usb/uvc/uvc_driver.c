@@ -1932,7 +1932,7 @@ int uvc_register_video_device(struct uvc_device *dev,
 			      struct video_device *vdev,
 			      struct uvc_video_queue *queue,
 			      enum v4l2_buf_type type,
-			      const struct v4l2_file_operations *fops,
+			      const struct v4l2_file_operations *fops/*video设备文件fops*/,
 			      const struct v4l2_ioctl_ops *ioctl_ops)
 {
 	int ret;
@@ -1950,8 +1950,8 @@ int uvc_register_video_device(struct uvc_device *dev,
 	 * get another one.
 	 */
 	vdev->v4l2_dev = &dev->vdev;
-	vdev->fops = fops;
-	vdev->ioctl_ops = ioctl_ops;
+	vdev->fops = fops;/*设置video设备的fops(video设备的字符设备会将此设备的操作转发给这里设置的ops)*/
+	vdev->ioctl_ops = ioctl_ops;/*vedio设备对应的ioctl ops函数*/
 	vdev->release = uvc_release;
 	vdev->prio = &stream->chain->prio;
 	if (type == V4L2_BUF_TYPE_VIDEO_OUTPUT)
@@ -2088,8 +2088,10 @@ static const struct uvc_device_info uvc_quirk_none = { 0 };
 static int uvc_probe(struct usb_interface *intf,
 		     const struct usb_device_id *id)
 {
+	/*取待probe的设备*/
 	struct usb_device *udev = interface_to_usbdev(intf);
 	struct uvc_device *dev;
+	/*取device_id的附加信息*/
 	const struct uvc_device_info *info =
 		(const struct uvc_device_info *)id->driver_info;
 	int function;
@@ -2110,7 +2112,7 @@ static int uvc_probe(struct usb_interface *intf,
 	dev->udev = usb_get_dev(udev);
 	dev->intf = usb_get_intf(intf);
 	dev->intfnum = intf->cur_altsetting->desc.bInterfaceNumber;
-	dev->info = info ? info : &uvc_quirk_none;
+	dev->info = info ? info : &uvc_quirk_none;/*如果id未提供info,使用个空变量*/
 	dev->quirks = uvc_quirks_param == -1
 		    ? dev->info->quirks : uvc_quirks_param;
 
@@ -2127,7 +2129,7 @@ static int uvc_probe(struct usb_interface *intf,
 		snprintf(dev->name, sizeof(dev->name),
 			 "UVC Camera (%04x:%04x)",
 			 le16_to_cpu(udev->descriptor.idVendor),
-			 le16_to_cpu(udev->descriptor.idProduct));
+			 le16_to_cpu(udev->descriptor.idProduct));/*设置设备名称（包含vendor,product id)*/
 
 	/*
 	 * Add iFunction or iInterface to names when available as additional
@@ -3131,7 +3133,7 @@ MODULE_DEVICE_TABLE(usb, uvc_ids);
 struct uvc_driver uvc_driver = {
 	.driver = {
 		.name		= "uvcvideo",
-		.probe		= uvc_probe,
+		.probe		= uvc_probe,/*probe uvc设备*/
 		.disconnect	= uvc_disconnect,
 		.suspend	= uvc_suspend,
 		.resume		= uvc_resume,

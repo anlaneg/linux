@@ -470,6 +470,7 @@ struct v4l2_capability {
 };
 
 /* Values for 'capabilities' field */
+//设备是否为视频捕获设备
 #define V4L2_CAP_VIDEO_CAPTURE		0x00000001  /* Is a video capture device */
 #define V4L2_CAP_VIDEO_OUTPUT		0x00000002  /* Is a video output device */
 #define V4L2_CAP_VIDEO_OVERLAY		0x00000004  /* Can do video overlay */

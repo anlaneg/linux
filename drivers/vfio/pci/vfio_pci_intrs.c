@@ -415,7 +415,7 @@ static int vfio_msi_alloc_irq(struct vfio_pci_core_device *vdev,
 }
 
 static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
-				      unsigned int vector, int fd, bool msix)
+				      unsigned int vector/*中断号*/, int fd/*中断被触发后，会触发的eventfd*/, bool msix)
 {
 	struct pci_dev *pdev = vdev->pdev;
 	struct vfio_pci_irq_ctx *ctx;
@@ -423,8 +423,9 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 	int irq = -EINVAL, ret;
 	u16 cmd;
 
-	ctx = vfio_irq_ctx_get(vdev, vector);
+	ctx = vfio_irq_ctx_get(vdev, vector);/*取此中断号对应的context*/
 
+	/*释放以前的内容*/
 	if (ctx) {
 		irq_bypass_unregister_producer(&ctx->producer);
 		irq = pci_irq_vector(pdev, vector);
@@ -438,6 +439,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 	}
 
 	if (fd < 0)
+		/*没有fd,释放后直接退出*/
 		return 0;
 
 	if (irq == -EINVAL) {
@@ -447,10 +449,12 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 			return irq;
 	}
 
+	/*重新申请context*/
 	ctx = vfio_irq_ctx_alloc(vdev, vector);
 	if (!ctx)
 		return -ENOMEM;
 
+	/*设置此中断名称*/
 	ctx->name = kasprintf(GFP_KERNEL_ACCOUNT, "vfio-msi%s[%d](%s)",
 			      msix ? "x" : "", vector, pci_name(pdev));
 	if (!ctx->name) {
@@ -479,7 +483,7 @@ static int vfio_msi_set_vector_signal(struct vfio_pci_core_device *vdev,
 	}
 
 	/*填充中断触发函数vfio_msihandler，其将触发eventfd_signal*/
-	ret = request_irq(irq, vfio_msihandler, 0, ctx->name, trigger);
+	ret = request_irq(irq, vfio_msihandler, 0, ctx->name, trigger);/*收到中断，触发trigger*/
 	vfio_pci_memory_unlock_and_restore(vdev, cmd);
 	if (ret)
 		goto out_put_eventfd_ctx;
@@ -515,10 +519,12 @@ static int vfio_msi_set_block(struct vfio_pci_core_device *vdev, unsigned start,
 
 	for (i = 0, j = start; i < count && !ret; i++, j++) {
 		int fd = fds ? fds[i] : -1;
+		/*关联j号中断，使此中断收到后，触发fdevent通知*/
 		ret = vfio_msi_set_vector_signal(vdev, j, fd, msix);
 	}
 
 	if (ret) {
+		/*发生错误，释放刚才设置的中断*/
 		for (i = start; i < j; i++)
 			vfio_msi_set_vector_signal(vdev, i, -1, msix);
 	}
@@ -657,6 +663,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 {
 	struct vfio_pci_irq_ctx *ctx;
 	unsigned int i;
+	/*是否msix*/
 	bool msix = (index == VFIO_PCI_MSIX_IRQ_INDEX) ? true : false;
 
 	if (irq_is(vdev, index) && !count && (flags & VFIO_IRQ_SET_DATA_NONE)) {
@@ -668,7 +675,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 		return -EINVAL;
 
 	if (flags & VFIO_IRQ_SET_DATA_EVENTFD) {
-		int32_t *fds = data;/*一组eventfd系统调用返回的fds*/
+		int32_t *fds = data;/*设置的是一组eventfd系统调用返回的fds*/
 		int ret;
 
 		if (vdev->irq_type == index)
@@ -679,7 +686,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 		if (ret)
 			return ret;
 
-		ret = vfio_msi_set_block(vdev, start, count, fds, msix);
+		ret = vfio_msi_set_block(vdev, start/*起始中断*/, count/*中断总数*/, fds/*eventfd数组*/, msix);
 		if (ret)
 			vfio_msi_disable(vdev, msix);
 
@@ -694,7 +701,7 @@ static int vfio_pci_set_msi_trigger(struct vfio_pci_core_device *vdev,
 		if (!ctx)
 			continue;
 		if (flags & VFIO_IRQ_SET_DATA_NONE) {
-			eventfd_signal(ctx->trigger);
+			eventfd_signal(ctx->trigger);/*触发信号*/
 		} else if (flags & VFIO_IRQ_SET_DATA_BOOL) {
 			uint8_t *bools = data;
 			if (bools[i - start])
@@ -789,6 +796,7 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 		    unsigned start, unsigned count, uint32_t flags,
 		    void *data) = NULL;
 
+	/*依据index,flag选择要触发的回调*/
 	switch (index) {
 	case VFIO_PCI_INTX_IRQ_INDEX:
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
@@ -805,13 +813,14 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 		break;
 	case VFIO_PCI_MSI_IRQ_INDEX:
 	case VFIO_PCI_MSIX_IRQ_INDEX:
+		/*msix中断*/
 		switch (flags & VFIO_IRQ_SET_ACTION_TYPE_MASK) {
 		case VFIO_IRQ_SET_ACTION_MASK:
 		case VFIO_IRQ_SET_ACTION_UNMASK:
 			/* XXX Need masking support exported */
 			break;
 		case VFIO_IRQ_SET_ACTION_TRIGGER:
-			func = vfio_pci_set_msi_trigger;
+			func = vfio_pci_set_msi_trigger;/**/
 			break;
 		}
 		break;
@@ -835,5 +844,6 @@ int vfio_pci_set_irqs_ioctl(struct vfio_pci_core_device *vdev, uint32_t flags,
 	if (!func)
 		return -ENOTTY;
 
+	/*触发回调*/
 	return func(vdev, index, start, count, flags, data);
 }

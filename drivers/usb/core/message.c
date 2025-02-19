@@ -56,11 +56,12 @@ static int usb_start_wait_urb(struct urb *urb, int timeout, int *actual_length)
 	init_completion(&ctx.done);
 	urb->context = &ctx;
 	urb->actual_length = 0;
-	retval = usb_submit_urb(urb, GFP_NOIO);
+	retval = usb_submit_urb(urb, GFP_NOIO);/*提交urb*/
 	if (unlikely(retval))
 		goto out;
 
 	expire = timeout ? msecs_to_jiffies(timeout) : MAX_SCHEDULE_TIMEOUT;
+	/*等待完成*/
 	if (!wait_for_completion_timeout(&ctx.done, expire)) {
 		usb_kill_urb(urb);
 		retval = (ctx.status == -ENOENT ? -ETIMEDOUT : ctx.status);
@@ -93,10 +94,11 @@ static int usb_internal_control_msg(struct usb_device *usb_dev,
 	int retv;
 	int length;
 
-	urb = usb_alloc_urb(0, GFP_NOIO);
+	urb = usb_alloc_urb(0, GFP_NOIO);/*urb结构申请*/
 	if (!urb)
 		return -ENOMEM;
 
+	/*填充urb*/
 	usb_fill_control_urb(urb, usb_dev, pipe, (unsigned char *)cmd, data,
 			     len, usb_api_blocking_completion, NULL);
 
@@ -141,16 +143,17 @@ int usb_control_msg(struct usb_device *dev, unsigned int pipe, __u8 request,
 	struct usb_ctrlrequest *dr;
 	int ret;
 
-	dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_NOIO);
+	dr = kmalloc(sizeof(struct usb_ctrlrequest), GFP_NOIO);/*申请ctrl request消息*/
 	if (!dr)
 		return -ENOMEM;
 
-	dr->bRequestType = requesttype;
-	dr->bRequest = request;
+	dr->bRequestType = requesttype;/*请求type*/
+	dr->bRequest = request;/*请求编号*/
 	dr->wValue = cpu_to_le16(value);
 	dr->wIndex = cpu_to_le16(index);
 	dr->wLength = cpu_to_le16(size);
 
+	/*构造urb并发送，等待响应*/
 	ret = usb_internal_control_msg(dev, pipe, dr, data, size, timeout);
 
 	/* Linger a bit, prior to the next control message. */

@@ -584,7 +584,7 @@ struct vfio_irq_info {
  * ACTION_TRIGGER specifies kernel->user signaling.
  */
 struct vfio_irq_set {
-	__u32	argsz;
+	__u32	argsz;/*参数总长度（由于最后一个成员为可变数组，共有此成员）*/
 	__u32	flags;
 #define VFIO_IRQ_SET_DATA_NONE		(1 << 0) /* Data not present */
 #define VFIO_IRQ_SET_DATA_BOOL		(1 << 1) /* Data is bool (u8) */

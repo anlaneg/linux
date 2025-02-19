@@ -208,11 +208,11 @@
  * such requests may be made at any time.
  */
 struct usb_ctrlrequest {
-	__u8 bRequestType;
-	__u8 bRequest;
-	__le16 wValue;
-	__le16 wIndex;
-	__le16 wLength;
+	__u8 bRequestType;/*ctrl请求类型，该字节用于指定请求的类型、数据传输方向以及请求的目标。*/
+	__u8 bRequest;/*具体的请求代码*/
+	__le16 wValue;/*一个 16 位的值，其具体含义取决于请求类型和请求代码。*/
+	__le16 wIndex;/*一个 16 位的值，通常用于指定索引信息，比如接口编号、端点编号等。*/
+	__le16 wLength;/*表示数据阶段要传输的字节数。如果没有数据阶段，该值为 0。*/
 } __attribute__ ((packed));
 
 /*-------------------------------------------------------------------------*/

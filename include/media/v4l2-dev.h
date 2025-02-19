@@ -288,7 +288,7 @@ struct video_device {
 	enum vfl_devnode_type vfl_type;
 	enum vfl_devnode_direction vfl_dir;
 	int minor;
-	u16 num;
+	u16 num;/*video设备编号*/
 	unsigned long flags;
 	int index;
 
@@ -302,7 +302,7 @@ struct video_device {
 
 	/* callbacks */
 	void (*release)(struct video_device *vdev);
-	const struct v4l2_ioctl_ops *ioctl_ops;
+	const struct v4l2_ioctl_ops *ioctl_ops;/*此ops具体实现video_device的ioctl命令响应*/
 	DECLARE_BITMAP(valid_ioctls, BASE_VIDIOC_PRIVATE);
 
 	struct mutex *lock;
@@ -513,6 +513,7 @@ struct video_device *video_devdata(struct file *file);
  */
 static inline void *video_drvdata(struct file *file)
 {
+	/*取得video设备的driver私有数据*/
 	return video_get_drvdata(video_devdata(file));
 }
 
@@ -536,6 +537,7 @@ static inline const char *video_device_node_name(struct video_device *vdev)
  */
 static inline int video_is_registered(struct video_device *vdev)
 {
+	/*检查此设备是否已注册*/
 	return test_bit(V4L2_FL_REGISTERED, &vdev->flags);
 }
 

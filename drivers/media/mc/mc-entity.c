@@ -1481,7 +1481,7 @@ static void media_interface_init(struct media_device *mdev,
 				 u32 gobj_type,
 				 u32 intf_type, u32 flags)
 {
-	intf->type = intf_type;
+	intf->type = intf_type;/*接口类型*/
 	intf->flags = flags;
 	INIT_LIST_HEAD(&intf->links);
 

@@ -96,7 +96,7 @@ ATTRIBUTE_GROUPS(video_device);
 /*
  *	Active devices
  */
-static struct video_device *video_devices[VIDEO_NUM_DEVICES];
+static struct video_device *video_devices[VIDEO_NUM_DEVICES];/*记录系统中所有video设备，按video设备的num进行索引*/
 static DEFINE_MUTEX(videodev_lock);
 static DECLARE_BITMAP(devnode_nums[VFL_TYPE_MAX], VIDEO_NUM_DEVICES);
 
@@ -139,6 +139,7 @@ static inline void devnode_clear(struct video_device *vdev)
 /* Try to find a free device node number in the range [from, to> */
 static inline int devnode_find(struct video_device *vdev, int from, int to)
 {
+	/*自from到to选择一个未用的id*/
 	return find_next_zero_bit(devnode_bits(vdev->vfl_type), to, from);
 }
 
@@ -180,15 +181,15 @@ static void v4l2_device_release(struct device *cd)
 	mutex_lock(&videodev_lock);
 	if (WARN_ON(video_devices[vdev->minor] != vdev)) {
 		/* should not happen */
-		mutex_unlock(&videodev_lock);
+		mutex_unlock(&videodev_lock);/*与注册的vdev指针不同*/
 		return;
 	}
 
 	/* Free up this device for reuse */
-	video_devices[vdev->minor] = NULL;
+	video_devices[vdev->minor] = NULL;/*自video_devices中移除此设备*/
 
 	/* Delete the cdev on this minor as well */
-	cdev_del(vdev->cdev);
+	cdev_del(vdev->cdev);/*移除字符设备*/
 	/* Just in case some driver tries to access this from
 	   the release() callback. */
 	vdev->cdev = NULL;
@@ -234,6 +235,7 @@ static struct class video_class = {
 
 struct video_device *video_devdata(struct file *file)
 {
+	/*通过file映射其对应的video_device(先找到inode,再取得minor,再由数组下标获取）*/
 	return video_devices[iminor(file_inode(file))];
 }
 EXPORT_SYMBOL(video_devdata);
@@ -326,8 +328,10 @@ static ssize_t v4l2_write(struct file *filp, const char __user *buf,
 	int ret = -ENODEV;
 
 	if (!vdev->fops->write)
+		/*video_device必须提供write回调*/
 		return -EINVAL;
 	if (video_is_registered(vdev))
+		/*触发wirte回调*/
 		ret = vdev->fops->write(filp, buf, sz, off);
 	if ((vdev->dev_debug & V4L2_DEV_DEBUG_FOP) &&
 	    (vdev->dev_debug & V4L2_DEV_DEBUG_STREAMING))
@@ -361,8 +365,10 @@ static long v4l2_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 
 	if (vdev->fops->unlocked_ioctl) {
 		if (video_is_registered(vdev))
+			/*触发设备自身的unlocked_ioctl回调*/
 			ret = vdev->fops->unlocked_ioctl(filp, cmd, arg);
 	} else
+		/*设备未提供回调，报错*/
 		ret = -ENOTTY;
 
 	return ret;
@@ -409,11 +415,11 @@ static int v4l2_mmap(struct file *filp, struct vm_area_struct *vm)
 static int v4l2_open(struct inode *inode, struct file *filp)
 {
 	struct video_device *vdev;
-	int ret = 0;
+	int ret = 0;/*设备可以不提供open回调，默认成功*/
 
 	/* Check if the video device is available */
 	mutex_lock(&videodev_lock);
-	vdev = video_devdata(filp);
+	vdev = video_devdata(filp);/*依据文件找到实际要操作的video_device*/
 	/* return ENODEV if the video device has already been removed. */
 	if (vdev == NULL || !video_is_registered(vdev)) {
 		mutex_unlock(&videodev_lock);
@@ -423,6 +429,7 @@ static int v4l2_open(struct inode *inode, struct file *filp)
 	video_get(vdev);
 	mutex_unlock(&videodev_lock);
 	if (vdev->fops->open) {
+		/*触发video_device设备对应的open函数*/
 		if (video_is_registered(vdev))
 			ret = vdev->fops->open(filp);
 		else
@@ -470,20 +477,22 @@ static int v4l2_release(struct inode *inode, struct file *filp)
 	return ret;
 }
 
+/*此ops用于响应v4l2类设备字符设备的file_operations入口处理，
+ * 一般针对此设备的操作会转给与之对应的video_device*/
 static const struct file_operations v4l2_fops = {
 	.owner = THIS_MODULE,
 	.read = v4l2_read,
 	.write = v4l2_write,
-	.open = v4l2_open,
+	.open = v4l2_open,/*v4l2类设备open函数实现*/
 	.get_unmapped_area = v4l2_get_unmapped_area,
 	.mmap = v4l2_mmap,
-	.unlocked_ioctl = v4l2_ioctl,
+	.unlocked_ioctl = v4l2_ioctl,/*v4l2类设备unlocked_ioctl函数实现*/
 #ifdef CONFIG_COMPAT
-	.compat_ioctl = v4l2_compat_ioctl32,
+	.compat_ioctl = v4l2_compat_ioctl32,/*v4l2类设备compat_ioctl函数实现*/
 #endif
 	.release = v4l2_release,
 	.poll = v4l2_poll,
-	.llseek = no_llseek,
+	.llseek = no_llseek,/*不支持llseek函数*/
 };
 
 /**
@@ -508,6 +517,7 @@ static int get_index(struct video_device *vdev)
 
 	bitmap_zero(used, VIDEO_NUM_DEVICES);
 
+	/*遍历所有video设备，针对此v4l2_dev，建立起used bitmap*/
 	for (i = 0; i < VIDEO_NUM_DEVICES; i++) {
 		if (video_devices[i] != NULL &&
 		    video_devices[i]->v4l2_dev == vdev->v4l2_dev) {
@@ -515,6 +525,7 @@ static int get_index(struct video_device *vdev)
 		}
 	}
 
+	/*在此bitmap中找一个未使用的index*/
 	return find_first_zero_bit(used, VIDEO_NUM_DEVICES);
 }
 
@@ -838,7 +849,7 @@ static int video_register_media_controller(struct video_device *vdev)
 		vdev->entity.name = vdev->name;
 
 		/* Needed just for backward compatibility with legacy MC API */
-		vdev->entity.info.dev.major = VIDEO_MAJOR;
+		vdev->entity.info.dev.major = VIDEO_MAJOR;/*设备major*/
 		vdev->entity.info.dev.minor = vdev->minor;
 
 		ret = media_device_register_entity(vdev->v4l2_dev->mdev,
@@ -899,6 +910,7 @@ int __video_register_device(struct video_device *vdev,
 		return -EINVAL;
 	/* the v4l2_dev pointer MUST be present */
 	if (WARN_ON(!vdev->v4l2_dev))
+		/*必须指明其对应的v4l2_dev*/
 		return -EINVAL;
 	/* the device_caps field MUST be set for all but subdevs */
 	if (WARN_ON(type != VFL_TYPE_SUBDEV && !vdev->device_caps))
@@ -975,10 +987,12 @@ int __video_register_device(struct video_device *vdev,
 
 	/* Pick a device node number */
 	mutex_lock(&videodev_lock);
+	/*选一个可用的id*/
 	nr = devnode_find(vdev, nr == -1 ? 0 : nr, minor_cnt);
 	if (nr == minor_cnt)
 		nr = devnode_find(vdev, 0, minor_cnt);
 	if (nr == minor_cnt) {
+		/*没有空闲的node number了*/
 		pr_err("could not get a free device node number\n");
 		mutex_unlock(&videodev_lock);
 		return -ENFILE;
@@ -991,14 +1005,15 @@ int __video_register_device(struct video_device *vdev,
 	   we just find the first free minor number. */
 	for (i = 0; i < VIDEO_NUM_DEVICES; i++)
 		if (video_devices[i] == NULL)
-			break;
+			break;/*此空闲确认为空*/
 	if (i == VIDEO_NUM_DEVICES) {
+		/*没有空闲的minor了*/
 		mutex_unlock(&videodev_lock);
 		pr_err("could not get a free minor\n");
 		return -ENFILE;
 	}
 #endif
-	vdev->minor = i + minor_offset;
+	vdev->minor = i + minor_offset;/*设置此vedio设备的minor,以便能关联到设备*/
 	vdev->num = nr;
 
 	/* Should not happen since we thought this minor was free */
@@ -1008,7 +1023,8 @@ int __video_register_device(struct video_device *vdev,
 		return -ENFILE;
 	}
 	devnode_set(vdev);
-	vdev->index = get_index(vdev);
+	vdev->index = get_index(vdev);/*分配索引*/
+	/*minor为下标，记录所有video设备*/
 	video_devices[vdev->minor] = vdev;
 	mutex_unlock(&videodev_lock);
 
@@ -1021,8 +1037,11 @@ int __video_register_device(struct video_device *vdev,
 		ret = -ENOMEM;
 		goto cleanup;
 	}
+	/*指明video字符设备fops（这个字符设备实际上是一个入口，用于实现文件即设备）
+	 * 用户通过操作此设备的fops,由此fops分发给具体的vedio设备*/
 	vdev->cdev->ops = &v4l2_fops;
 	vdev->cdev->owner = owner;
+	/*添加VIDEO字符设备*/
 	ret = cdev_add(vdev->cdev, MKDEV(VIDEO_MAJOR, vdev->minor), 1);
 	if (ret < 0) {
 		pr_err("%s: cdev_add failed\n", __func__);
@@ -1035,8 +1054,8 @@ int __video_register_device(struct video_device *vdev,
 	vdev->dev.class = &video_class;
 	vdev->dev.devt = MKDEV(VIDEO_MAJOR, vdev->minor);
 	vdev->dev.parent = vdev->dev_parent;
-	dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);
-	ret = device_register(&vdev->dev);
+	dev_set_name(&vdev->dev, "%s%d", name_base, vdev->num);/*设备名称*/
+	ret = device_register(&vdev->dev);/*向系统添加此video设备*/
 	if (ret < 0) {
 		pr_err("%s: device_register failed\n", __func__);
 		goto cleanup;
@@ -1056,7 +1075,7 @@ int __video_register_device(struct video_device *vdev,
 	ret = video_register_media_controller(vdev);
 
 	/* Part 6: Activate this minor. The char device can now be used. */
-	set_bit(V4L2_FL_REGISTERED, &vdev->flags);
+	set_bit(V4L2_FL_REGISTERED, &vdev->flags);/*标记此设备已注册*/
 
 	return 0;
 
@@ -1181,6 +1200,7 @@ static int __init videodev_init(void)
 	pr_info("Linux video capture interface: v2.00\n");
 	ret = register_chrdev_region(dev, VIDEO_NUM_DEVICES, VIDEO_NAME);
 	if (ret < 0) {
+		/*注册video4linux失败*/
 		pr_warn("videodev: unable to get major %d\n",
 				VIDEO_MAJOR);
 		return ret;

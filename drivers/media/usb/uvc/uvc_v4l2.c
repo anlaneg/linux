@@ -614,7 +614,7 @@ static int uvc_v4l2_open(struct file *file)
 	struct uvc_fh *handle;
 	int ret = 0;
 
-	stream = video_drvdata(file);
+	stream = video_drvdata(file);/*video设备的driver私有数据为uvc_streaming*/
 	uvc_dbg(stream->dev, CALLS, "%s\n", __func__);
 
 	ret = usb_autopm_get_interface(stream->dev->intf);
@@ -1514,6 +1514,7 @@ static ssize_t uvc_v4l2_read(struct file *file, char __user *data,
 	struct uvc_fh *handle = file->private_data;
 	struct uvc_streaming *stream = handle->stream;
 
+	/*不支持read回调*/
 	uvc_dbg(stream->dev, CALLS, "%s: not implemented\n", __func__);
 	return -EINVAL;
 }
@@ -1589,6 +1590,7 @@ const struct v4l2_ioctl_ops uvc_ioctl_ops = {
 	.vidioc_default = uvc_ioctl_default,
 };
 
+/*uvc针对video_device的fops操作集*/
 const struct v4l2_file_operations uvc_fops = {
 	.owner		= THIS_MODULE,
 	.open		= uvc_v4l2_open,

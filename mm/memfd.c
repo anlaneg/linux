@@ -325,10 +325,12 @@ SYSCALL_DEFINE2(memfd_create,
 		return error;
 
 	/* length includes terminating zero */
-	len = strnlen_user(uname, MFD_NAME_MAX_LEN + 1);
+	len = strnlen_user(uname, MFD_NAME_MAX_LEN + 1);/*取用户态传入的name长度*/
 	if (len <= 0)
+		/*长度不得为空*/
 		return -EFAULT;
 	if (len > MFD_NAME_MAX_LEN + 1)
+		/*name长度超限*/
 		return -EINVAL;
 
 	//构造memfd:$uname
@@ -365,7 +367,7 @@ SYSCALL_DEFINE2(memfd_create,
 					MFD_HUGE_MASK);
 	} else
 		/*指出普通文件（非大页）*/
-		file = shmem_file_setup(name, 0, VM_NORESERVE);
+		file = shmem_file_setup(name, 0, VM_NORESERVE/*不预留内存，仅创建文件*/);
 	if (IS_ERR(file)) {
 		error = PTR_ERR(file);
 		goto err_fd;

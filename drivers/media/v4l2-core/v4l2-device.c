@@ -34,10 +34,11 @@ int v4l2_device_register(struct device *dev, struct v4l2_device *v4l2_dev)
 
 	/* Set name to driver name + device name if it is empty. */
 	if (!v4l2_dev->name[0])
+		/*如名称未给出，通过驱动名称+设备名称组合产生名称*/
 		snprintf(v4l2_dev->name, sizeof(v4l2_dev->name), "%s %s",
 			dev->driver->name, dev_name(dev));
 	if (!dev_get_drvdata(dev))
-		dev_set_drvdata(dev, v4l2_dev);
+		dev_set_drvdata(dev, v4l2_dev);/*设备关联此结构体*/
 	return 0;
 }
 EXPORT_SYMBOL_GPL(v4l2_device_register);

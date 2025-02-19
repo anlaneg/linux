@@ -1191,11 +1191,12 @@ long v4l2_compat_ioctl32(struct file *file, unsigned int cmd, unsigned long arg)
 	long ret = -ENOIOCTLCMD;
 
 	if (!file->f_op->unlocked_ioctl)
-		return ret;
+		return ret;/*未提供回调*/
 
 	if (!video_is_registered(vdev))
 		return -ENODEV;
 
+	/*依据cmd范围确定回调*/
 	if (_IOC_TYPE(cmd) == 'V' && _IOC_NR(cmd) < BASE_VIDIOC_PRIVATE)
 		ret = file->f_op->unlocked_ioctl(file, cmd,
 					(unsigned long)compat_ptr(arg));

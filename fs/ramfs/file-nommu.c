@@ -81,7 +81,7 @@ int ramfs_nommu_expand_for_mapping(struct inode *inode, size_t newsize)
 
 	/* allocate enough contiguous pages to be able to satisfy the
 	 * request */
-	pages = alloc_pages(gfp, order);
+	pages = alloc_pages(gfp, order);/*申请物理连续的页*/
 	if (!pages)
 		return -ENOMEM;
 

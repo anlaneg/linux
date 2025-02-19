@@ -127,7 +127,7 @@ struct ieee1394_device_id {
  */
 struct usb_device_id {
 	/* which fields to match against? */
-    //匹配控制字段，指明哪些字段用于driver与device的匹配
+    //匹配控制字段，指明哪些字段用于driver与device的匹配，见USB_DEVICE_ID_MATCH*
 	__u16		match_flags;
 
 	/* Used for product specific matches; range is inclusive */

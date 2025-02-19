@@ -1217,7 +1217,8 @@ extern ssize_t usb_show_dynids(struct usb_dynids *dynids, char *buf);
 struct usb_driver {
 	const char *name;/*usb驱动名称*/
 
-	/*usb interface driver probe函数,会在usb_probe_interface函数内调用*/
+	/*usb interface driver probe函数,会在usb_probe_interface函数内调用
+	 * 用于驱动probe $id的设备$intf*/
 	int (*probe) (struct usb_interface *intf,
 		      const struct usb_device_id *id);
 
@@ -1233,7 +1234,7 @@ struct usb_driver {
 	int (*pre_reset)(struct usb_interface *intf);
 	int (*post_reset)(struct usb_interface *intf);
 
-	const struct usb_device_id *id_table;
+	const struct usb_device_id *id_table;/*驱动匹配列表（dynids表优先，接下来是本表）*/
 	/*驱动定义的属性group*/
 	const struct attribute_group **dev_groups;
 

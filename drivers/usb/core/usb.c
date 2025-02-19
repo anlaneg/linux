@@ -763,6 +763,7 @@ EXPORT_SYMBOL_GPL(usb_alloc_dev);
  */
 struct usb_device *usb_get_dev(struct usb_device *dev)
 {
+	/*增加usb_device设备引用*/
 	if (dev)
 		get_device(&dev->dev);
 	return dev;
@@ -802,6 +803,7 @@ EXPORT_SYMBOL_GPL(usb_put_dev);
 struct usb_interface *usb_get_intf(struct usb_interface *intf)
 {
 	if (intf)
+		/*增加usb interface引用*/
 		get_device(&intf->dev);
 	return intf;
 }

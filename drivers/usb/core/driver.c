@@ -242,10 +242,11 @@ static const struct usb_device_id *usb_match_dynamic_id(struct usb_interface *in
 	struct usb_dynid *dynid;
 
 	spin_lock(&drv->dynids.lock);
+	/*遍历usb driver的动态id*/
 	list_for_each_entry(dynid, &drv->dynids.list, node) {
 		if (usb_match_one_id(intf, &dynid->id)) {
 			spin_unlock(&drv->dynids.lock);
-			return &dynid->id;
+			return &dynid->id;/*返回命中的id*/
 		}
 	}
 	spin_unlock(&drv->dynids.lock);
@@ -330,7 +331,7 @@ static int usb_probe_interface(struct device *dev)
 {
     /*转usb interface driver*/
 	struct usb_driver *driver = to_usb_driver(dev->driver);
-	/*设备usb interface*/
+	/*转usb interface 设备*/
 	struct usb_interface *intf = to_usb_interface(dev);
 	struct usb_device *udev = interface_to_usbdev(intf);
 	const struct usb_device_id *id;
@@ -353,10 +354,10 @@ static int usb_probe_interface(struct device *dev)
 		return error;
 	}
 
-	/*先尝试驱动dynamic id匹配*/
+	/*先尝试匹配驱动的dynamic id*/
 	id = usb_match_dynamic_id(intf, driver);
 	if (!id)
-		/*再尝试驱动id_table匹配*/
+		/*dynamic id没有命中，再尝试驱动id_table匹配*/
 		id = usb_match_id(intf, driver->id_table);
 	if (!id)
 	    /*匹配失败*/
@@ -733,7 +734,7 @@ int usb_match_one_id_intf(struct usb_device *dev,
 }
 
 /* returns 0 if no match, 1 if match */
-//检查interface是否与id匹配
+//检查interface的id是否与给定的id匹配
 int usb_match_one_id(struct usb_interface *interface,
 		     const struct usb_device_id *id)
 {

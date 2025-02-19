@@ -4397,7 +4397,7 @@ int usb_unlocked_disable_lpm(struct usb_device *udev)
 		return -EINVAL;
 
 	mutex_lock(hcd->bandwidth_mutex);
-	ret = usb_disable_lpm(udev);
+	ret = usb_disable_lpm(udev);/*禁止低功耗*/
 	mutex_unlock(hcd->bandwidth_mutex);
 
 	return ret;

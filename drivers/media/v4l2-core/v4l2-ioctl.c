@@ -1092,7 +1092,7 @@ static int v4l_querycap(const struct v4l2_ioctl_ops *ops,
 	media_set_bus_info(cap->bus_info, sizeof(cap->bus_info),
 			   vfd->dev_parent);
 
-	ret = ops->vidioc_querycap(file, fh, cap);
+	ret = ops->vidioc_querycap(file, fh, cap);/*查询设备cap*/
 
 	/*
 	 * Drivers must not change device_caps, so check for this and
@@ -2827,8 +2827,9 @@ DEFINE_V4L_STUB_FUNC(enum_dv_timings)
 DEFINE_V4L_STUB_FUNC(query_dv_timings)
 DEFINE_V4L_STUB_FUNC(dv_timings_cap)
 
+/*定义了v4l2支持的公共ioctl command*/
 static const struct v4l2_ioctl_info v4l2_ioctls[] = {
-	IOCTL_INFO(VIDIOC_QUERYCAP, v4l_querycap, v4l_print_querycap, 0),
+	IOCTL_INFO(VIDIOC_QUERYCAP, v4l_querycap/*cap查询*/, v4l_print_querycap, 0),
 	IOCTL_INFO(VIDIOC_ENUM_FMT, v4l_enum_fmt, v4l_print_fmtdesc, 0),
 	IOCTL_INFO(VIDIOC_G_FMT, v4l_g_fmt, v4l_print_format, 0),
 	IOCTL_INFO(VIDIOC_S_FMT, v4l_s_fmt, v4l_print_format, INFO_FL_PRIO),
@@ -2848,8 +2849,8 @@ static const struct v4l2_ioctl_info v4l2_ioctls[] = {
 	IOCTL_INFO(VIDIOC_S_STD, v4l_s_std, v4l_print_std, INFO_FL_PRIO),
 	IOCTL_INFO(VIDIOC_ENUMSTD, v4l_enumstd, v4l_print_standard, INFO_FL_CLEAR(v4l2_standard, index)),
 	IOCTL_INFO(VIDIOC_ENUMINPUT, v4l_enuminput, v4l_print_enuminput, INFO_FL_CLEAR(v4l2_input, index)),
-	IOCTL_INFO(VIDIOC_G_CTRL, v4l_g_ctrl, v4l_print_control, INFO_FL_CTRL | INFO_FL_CLEAR(v4l2_control, id)),
-	IOCTL_INFO(VIDIOC_S_CTRL, v4l_s_ctrl, v4l_print_control, INFO_FL_PRIO | INFO_FL_CTRL),
+	IOCTL_INFO(VIDIOC_G_CTRL, v4l_g_ctrl/*获取设备的某个参数值*/, v4l_print_control, INFO_FL_CTRL | INFO_FL_CLEAR(v4l2_control, id)),
+	IOCTL_INFO(VIDIOC_S_CTRL, v4l_s_ctrl/*设置设备的某个参数值*/, v4l_print_control, INFO_FL_PRIO | INFO_FL_CTRL),
 	IOCTL_INFO(VIDIOC_G_TUNER, v4l_g_tuner, v4l_print_tuner, INFO_FL_CLEAR(v4l2_tuner, index)),
 	IOCTL_INFO(VIDIOC_S_TUNER, v4l_s_tuner, v4l_print_tuner, INFO_FL_PRIO),
 	IOCTL_INFO(VIDIOC_G_AUDIO, v4l_stub_g_audio, v4l_print_audio, 0),
@@ -2974,6 +2975,8 @@ void v4l_printk_ioctl(const char *prefix, unsigned int cmd)
 }
 EXPORT_SYMBOL(v4l_printk_ioctl);
 
+/*video_device类设备的ioctl实现
+ * （这个函数做为总入口，将私有ioctl command具体发送给video_device->ioctl_ops来实现）*/
 static long __video_do_ioctl(struct file *file,
 		unsigned int cmd, void *arg)
 {
@@ -3012,8 +3015,10 @@ static long __video_do_ioctl(struct file *file,
 			return -ERESTARTSYS;
 	}
 
+	/*搞清楚操作哪把锁*/
 	lock = v4l2_ioctl_get_lock(vfd, vfh, cmd, arg);
 
+	/*加锁*/
 	if (lock && mutex_lock_interruptible(lock)) {
 		if (req_queue_lock)
 			mutex_unlock(req_queue_lock);
@@ -3026,6 +3031,7 @@ static long __video_do_ioctl(struct file *file,
 	}
 
 	if (v4l2_is_known_ioctl(cmd)) {
+		/*已知的v4l2 cmd，由v4l2_ioctls具体指明cmd的响应方法*/
 		info = &v4l2_ioctls[_IOC_NR(cmd)];
 
 		if (!test_bit(_IOC_NR(cmd), vfd->valid_ioctls) &&
@@ -3038,6 +3044,7 @@ static long __video_do_ioctl(struct file *file,
 				goto done;
 		}
 	} else {
+		/*未知的v4l2 cmd,例用default_info进行响应*/
 		default_info.ioctl = cmd;
 		default_info.flags = 0;
 		default_info.debug = v4l_print_default;
@@ -3046,10 +3053,13 @@ static long __video_do_ioctl(struct file *file,
 
 	write_only = _IOC_DIR(cmd) == _IOC_WRITE;
 	if (info != &default_info) {
+		/*触发具体ioctl cmd的处理*/
 		ret = info->func(ops, file, fh, arg);
 	} else if (!ops->vidioc_default) {
+		/*video_device未指明未知cmd处理方法，返回失败*/
 		ret = -ENOTTY;
 	} else {
+		/*按video_device指明的vidioc_default回调处理*/
 		ret = ops->vidioc_default(file, fh,
 			vfh ? v4l2_prio_check(vfd->prio, vfh->prio) >= 0 : 0,
 			cmd, arg);
@@ -3438,9 +3448,10 @@ out:
 	return err;
 }
 
+/*主要将工作转给v4l2_ioctls 和video_device->ioctl_ops->vidioc_default完成*/
 long video_ioctl2(struct file *file,
 	       unsigned int cmd, unsigned long arg)
 {
-	return video_usercopy(file, cmd, arg, __video_do_ioctl);
+	return video_usercopy(file, cmd, arg, __video_do_ioctl/*video_device的ioctl回调实现*/);
 }
 EXPORT_SYMBOL(video_ioctl2);
