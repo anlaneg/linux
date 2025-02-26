@@ -754,7 +754,7 @@ struct inode {
 		//inode空间释放函数
 		void (*free_inode)(struct inode *);
 	};
-	struct file_lock_context	*i_flctx;
+	struct file_lock_context	*i_flctx;/*flock系统调用占用*/
 	struct address_space	i_data;
 	struct list_head	i_devices;/*此inode对应的设备，例如cdev*/
 	union {
@@ -2070,8 +2070,9 @@ struct file_operations {
 			unsigned int flags);
 	int (*iterate_shared) (struct file *, struct dir_context *);
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
+	/*用于提供定制版ioctl命令*/
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);
-	/*用于提供未被do_vfs_ioctl支持的定制版ioctl命令*/
+	/*用于提供定制版ioctl命令（兼容）*/
 	long (*compat_ioctl) (struct file *, unsigned int, unsigned long);
 	/*将此file映射到给定的vm_area区域*/
 	int (*mmap) (struct file *, struct vm_area_struct *);
@@ -2090,6 +2091,7 @@ struct file_operations {
 	/*查找一个未映射的区域*/
 	unsigned long (*get_unmapped_area)(struct file *, unsigned long, unsigned long, unsigned long, unsigned long);
 	int (*check_flags)(int);
+	/*用于支持flock系统调用针对file的定制*/
 	int (*flock) (struct file *, int, struct file_lock *);
 	/*用于支持pipe文件向此文件复制时的写*/
 	ssize_t (*splice_write)(struct pipe_inode_info */*pipe源文件*/, struct file */*目标文件*/, loff_t */*入出参，目的文件offset*/, size_t/*复制长度*/, unsigned int/*偏移量*/);

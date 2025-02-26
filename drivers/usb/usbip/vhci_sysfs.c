@@ -357,13 +357,14 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	mutex_lock(&vdev->ud.sysfs_lock);
 
 	/* Extract socket from fd. */
-	socket = sockfd_lookup(sockfd, &err);
+	socket = sockfd_lookup(sockfd, &err);/*查询fd获得socket*/
 	if (!socket) {
 		dev_err(dev, "failed to lookup sock");
 		err = -EINVAL;
 		goto unlock_mutex;
 	}
 	if (socket->type != SOCK_STREAM) {
+		/*不为tcp,报错*/
 		dev_err(dev, "Expecting SOCK_STREAM - found %d",
 			socket->type);
 		sockfd_put(socket);
@@ -372,13 +373,13 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	}
 
 	/* create threads before locking */
-	tcp_rx = kthread_create(vhci_rx_loop, &vdev->ud, "vhci_rx");
+	tcp_rx = kthread_create(vhci_rx_loop, &vdev->ud, "vhci_rx");/*创建收方向线程*/
 	if (IS_ERR(tcp_rx)) {
 		sockfd_put(socket);
 		err = -EINVAL;
 		goto unlock_mutex;
 	}
-	tcp_tx = kthread_create(vhci_tx_loop, &vdev->ud, "vhci_tx");
+	tcp_tx = kthread_create(vhci_tx_loop, &vdev->ud, "vhci_tx");/*创建发方向线程*/
 	if (IS_ERR(tcp_tx)) {
 		kthread_stop(tcp_rx);
 		sockfd_put(socket);
@@ -420,7 +421,7 @@ static ssize_t attach_store(struct device *dev, struct device_attribute *attr,
 	vdev->devid         = devid;
 	vdev->speed         = speed;
 	vdev->ud.sockfd     = sockfd;
-	vdev->ud.tcp_socket = socket;
+	vdev->ud.tcp_socket = socket;/*设置tcp socket*/
 	vdev->ud.tcp_rx     = tcp_rx;
 	vdev->ud.tcp_tx     = tcp_tx;
 	vdev->ud.status     = VDEV_ST_NOTASSIGNED;
@@ -512,11 +513,11 @@ int vhci_init_attr_group(void)
 	}
 	*attrs = &dev_attr_nports.attr;
 	*(attrs + 1) = &dev_attr_detach.attr;
-	*(attrs + 2) = &dev_attr_attach.attr;
+	*(attrs + 2) = &dev_attr_attach.attr;/*设置attach属性*/
 	*(attrs + 3) = &dev_attr_usbip_debug.attr;
 	for (i = 0; i < vhci_num_controllers; i++)
 		*(attrs + i + 4) = &((status_attrs + i)->attr.attr);
-	vhci_attr_group.attrs = attrs;
+	vhci_attr_group.attrs = attrs;/*设置vhci属性组*/
 	return 0;
 }
 

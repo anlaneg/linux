@@ -1030,6 +1030,7 @@ static void v4l_sanitize_format(struct v4l2_format *fmt)
 	/* Make sure num_planes is not bogus */
 	if (fmt->type == V4L2_BUF_TYPE_VIDEO_CAPTURE_MPLANE ||
 	    fmt->type == V4L2_BUF_TYPE_VIDEO_OUTPUT_MPLANE)
+		/*不超过最大值*/
 		fmt->fmt.pix_mp.num_planes = min_t(u32, fmt->fmt.pix_mp.num_planes,
 					       VIDEO_MAX_PLANES);
 
@@ -2832,7 +2833,7 @@ static const struct v4l2_ioctl_info v4l2_ioctls[] = {
 	IOCTL_INFO(VIDIOC_QUERYCAP, v4l_querycap/*cap查询*/, v4l_print_querycap, 0),
 	IOCTL_INFO(VIDIOC_ENUM_FMT, v4l_enum_fmt, v4l_print_fmtdesc, 0),
 	IOCTL_INFO(VIDIOC_G_FMT, v4l_g_fmt, v4l_print_format, 0),
-	IOCTL_INFO(VIDIOC_S_FMT, v4l_s_fmt, v4l_print_format, INFO_FL_PRIO),
+	IOCTL_INFO(VIDIOC_S_FMT, v4l_s_fmt/*设置视频格式*/, v4l_print_format, INFO_FL_PRIO),
 	IOCTL_INFO(VIDIOC_REQBUFS, v4l_reqbufs, v4l_print_requestbuffers, INFO_FL_PRIO | INFO_FL_QUEUE),
 	IOCTL_INFO(VIDIOC_QUERYBUF, v4l_querybuf, v4l_print_buffer, INFO_FL_QUEUE | INFO_FL_CLEAR(v4l2_buffer, length)),
 	IOCTL_INFO(VIDIOC_G_FBUF, v4l_stub_g_fbuf, v4l_print_framebuffer, 0),

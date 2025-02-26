@@ -79,8 +79,8 @@ struct p9_req_t {
 	int t_err;
 	refcount_t refcount;
 	wait_queue_head_t wq;
-	struct p9_fcall tc;
-	struct p9_fcall rc;
+	struct p9_fcall tc;/*请求用结构体*/
+	struct p9_fcall rc;/*响应结构体*/
 	struct list_head req_list;
 };
 
@@ -101,7 +101,7 @@ struct p9_req_t {
  */
 struct p9_client {
 	spinlock_t lock;
-	unsigned int msize;
+	unsigned int msize;/*最大消息大小*/
 	unsigned char proto_version;
 	struct p9_trans_module *trans_mod;
 	enum p9_trans_status status;

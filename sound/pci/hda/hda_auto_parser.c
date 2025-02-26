@@ -1011,7 +1011,7 @@ void snd_hda_pick_fixup(struct hda_codec *codec,
 	}
 
 	if (!quirk)
-		return;
+		return;/*未提供，直接返回*/
 
 	/* match with the SSID alias given by the model string "XXXX:YYYY" */
 	if (codec->modelname &&

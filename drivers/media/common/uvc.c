@@ -173,7 +173,7 @@ const struct uvc_format_desc *uvc_format_by_guid(const u8 guid[16])
 
 	for (i = 0; i < len; ++i) {
 		if (memcmp(guid, uvc_fmts[i].guid, 16) == 0)
-			return &uvc_fmts[i];
+			return &uvc_fmts[i];/*guid匹配，返回uvc_format描述结构体*/
 	}
 
 	return NULL;

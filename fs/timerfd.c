@@ -37,7 +37,7 @@ struct timerfd_ctx {
 	ktime_t moffs;
 	wait_queue_head_t wqh;
 	u64 ticks;
-	int clockid;
+	int clockid;/*传入的clock类别，例如CLOCK_MONOTONIC*/
 	short unsigned expired;
 	short unsigned settime_flags;	/* to show in fdinfo */
 	struct rcu_head rcu;
@@ -65,9 +65,9 @@ static void timerfd_triggered(struct timerfd_ctx *ctx)
 	unsigned long flags;
 
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
-	ctx->expired = 1;
+	ctx->expired = 1;/*标明超时*/
 	ctx->ticks++;
-	wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+	wake_up_locked_poll(&ctx->wqh, EPOLLIN);/*触发pollin事件*/
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 }
 
@@ -208,7 +208,7 @@ static int timerfd_setup(struct timerfd_ctx *ctx, int flags,
 			   timerfd_alarmproc);
 	} else {
 		hrtimer_init(&ctx->t.tmr, clockid, htmode);
-		hrtimer_set_expires(&ctx->t.tmr, texp);
+		hrtimer_set_expires(&ctx->t.tmr, texp);/*设置过期时间*/
 		ctx->t.tmr.function = timerfd_tmrproc;
 	}
 
@@ -252,11 +252,11 @@ static __poll_t timerfd_poll(struct file *file, poll_table *wait)
 	__poll_t events = 0;
 	unsigned long flags;
 
-	poll_wait(file, &ctx->wqh, wait);
+	poll_wait(file, &ctx->wqh, wait);/*等待*/
 
 	spin_lock_irqsave(&ctx->wqh.lock, flags);
 	if (ctx->ticks)
-		events |= EPOLLIN;
+		events |= EPOLLIN;/*timerfd已启动，触发pollin事件*/
 	spin_unlock_irqrestore(&ctx->wqh.lock, flags);
 
 	return events;
@@ -273,6 +273,7 @@ static ssize_t timerfd_read(struct file *file, char __user *buf, size_t count,
 		return -EINVAL;
 	spin_lock_irq(&ctx->wqh.lock);
 	if (file->f_flags & O_NONBLOCK)
+		/*指明非阻塞，返回AGAIN*/
 		res = -EAGAIN;
 	else
 		res = wait_event_interruptible_locked_irq(ctx->wqh, ctx->ticks);
@@ -363,8 +364,8 @@ static long timerfd_ioctl(struct file *file, unsigned int cmd, unsigned long arg
 
 		spin_lock_irq(&ctx->wqh.lock);
 		if (!timerfd_canceled(ctx)) {
-			ctx->ticks = ticks;
-			wake_up_locked_poll(&ctx->wqh, EPOLLIN);
+			ctx->ticks = ticks;/*设置超时时间*/
+			wake_up_locked_poll(&ctx->wqh, EPOLLIN);/*触发pollin*/
 		} else
 			ret = -ECANCELED;
 		spin_unlock_irq(&ctx->wqh.lock);
@@ -396,6 +397,7 @@ static int timerfd_fget(int fd, struct fd *p)
 	if (!f.file)
 		return -EBADF;
 	if (f.file->f_op != &timerfd_fops) {
+		/*必须为timerfd文件*/
 		fdput(f);
 		return -EINVAL;
 	}
@@ -418,6 +420,7 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 	     clockid != CLOCK_REALTIME_ALARM &&
 	     clockid != CLOCK_BOOTTIME &&
 	     clockid != CLOCK_BOOTTIME_ALARM))
+		/*clockid类型检查失败*/
 		return -EINVAL;
 
 	if ((clockid == CLOCK_REALTIME_ALARM ||
@@ -443,12 +446,13 @@ SYSCALL_DEFINE2(timerfd_create, int, clockid, int, flags)
 
 	ctx->moffs = ktime_mono_to_real(0);
 
-	ufd = anon_inode_getfd("[timerfd]", &timerfd_fops, ctx,
+	/*申请匿名文件*/
+	ufd = anon_inode_getfd("[timerfd]", &timerfd_fops/*timerfd对应的fops*/, ctx,
 			       O_RDWR | (flags & TFD_SHARED_FCNTL_FLAGS));
 	if (ufd < 0)
 		kfree(ctx);
 
-	return ufd;
+	return ufd;/*返回fd*/
 }
 
 static int do_timerfd_settime(int ufd, int flags, 
@@ -516,7 +520,7 @@ static int do_timerfd_settime(int ufd, int flags,
 	/*
 	 * Re-program the timer to the new value ...
 	 */
-	ret = timerfd_setup(ctx, flags, new);
+	ret = timerfd_setup(ctx, flags, new);/*启动timer*/
 
 	spin_unlock_irq(&ctx->wqh.lock);
 	fdput(f);
@@ -530,7 +534,7 @@ static int do_timerfd_gettime(int ufd, struct itimerspec64 *t)
 	int ret = timerfd_fget(ufd, &f);
 	if (ret)
 		return ret;
-	ctx = f.file->private_data;
+	ctx = f.file->private_data;/*取得context*/
 
 	spin_lock_irq(&ctx->wqh.lock);
 	if (ctx->expired && ctx->tintv) {

@@ -23,8 +23,11 @@ struct old_utsname {
 };
 
 struct new_utsname {
+	/*存储操作系统的名称，比如在 Linux 系统中，这个字段通常为 "Linux"。*/
 	char sysname[__NEW_UTS_LEN + 1];
+	/*存储系统的节点名称，一般是主机名。可以通过 hostname 命令查看或修改。*/
 	char nodename[__NEW_UTS_LEN + 1];
+	/*存储内核的发行版本号，例如 "5.15.0 - 76 - generic"*/
 	char release[__NEW_UTS_LEN + 1];
 	char version[__NEW_UTS_LEN + 1];
 	char machine[__NEW_UTS_LEN + 1];

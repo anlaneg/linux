@@ -61,7 +61,7 @@ static DEFINE_SEMAPHORE(kmod_concurrent_max, MAX_KMOD_CONCURRENT);
 /*
 	modprobe_path is set via /proc/sys.
 */
-char modprobe_path[KMOD_PATH_LEN] = CONFIG_MODPROBE_PATH;
+char modprobe_path[KMOD_PATH_LEN] = CONFIG_MODPROBE_PATH;/*由/proc/sys/kernel/modprobe配置此路径*/
 
 static void free_modprobe_argv(struct subprocess_info *info)
 {
@@ -70,7 +70,7 @@ static void free_modprobe_argv(struct subprocess_info *info)
 }
 
 //启动modprobe,来加载模块
-static int call_modprobe(char *orig_module_name, int wait)
+static int call_modprobe(char *orig_module_name/*要加载的module名称*/, int wait)
 {
 	struct subprocess_info *info;
 	static char *envp[] = {

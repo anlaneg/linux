@@ -638,7 +638,7 @@ static void stub_rx_pdu(struct usbip_device *ud)
 	memset(&pdu, 0, sizeof(pdu));
 
 	/* receive a pdu header */
-	ret = usbip_recv(ud->tcp_socket, &pdu, sizeof(pdu));
+	ret = usbip_recv(ud->tcp_socket, &pdu, sizeof(pdu));/*自socket中读取pdu（固定长度）*/
 	if (ret != sizeof(pdu)) {
 		dev_err(dev, "recv a header, %d\n", ret);
 		usbip_event_add(ud, SDEV_EVENT_ERROR_TCP);
@@ -661,7 +661,7 @@ static void stub_rx_pdu(struct usbip_device *ud)
 		stub_recv_cmd_unlink(sdev, &pdu);
 		break;
 
-	case USBIP_CMD_SUBMIT:
+	case USBIP_CMD_SUBMIT:/*收到发送过来的USB请求*/
 		stub_recv_cmd_submit(sdev, &pdu);
 		break;
 
@@ -681,7 +681,7 @@ int stub_rx_loop(void *data)
 		if (usbip_event_happened(ud))
 			break;
 
-		stub_rx_pdu(ud);
+		stub_rx_pdu(ud);/*收取pdu*/
 	}
 
 	return 0;

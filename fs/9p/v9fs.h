@@ -124,7 +124,9 @@ struct v9fs_session_info {
 	kuid_t dfltuid;		/* default uid/muid for legacy support */
 	kgid_t dfltgid;		/* default gid for legacy support */
 	kuid_t uid;		/* if ACCESS_SINGLE, the uid that has access */
+	/*9p客户端*/
 	struct p9_client *clnt;	/* 9p client */
+	/*用于串连到v9fs_session_info*/
 	struct list_head slist; /* list of sessions registered with v9fs */
 	struct rw_semaphore rename_sem;
 	long session_lock_timeout; /* retry interval for blocking locks */

@@ -208,6 +208,7 @@ void p9stat_free(struct p9_wstat *stbuf)
 }
 EXPORT_SYMBOL(p9stat_free);
 
+/*自pdu中读取size字节，填充进data*/
 size_t pdu_read(struct p9_fcall *pdu, void *data, size_t size)
 {
 	size_t len = min(pdu->size - pdu->offset, size);
@@ -217,6 +218,7 @@ size_t pdu_read(struct p9_fcall *pdu, void *data, size_t size)
 	return size - len;
 }
 
+/*将data中长度为size字节的内容填充到pdu->sdata中*/
 static size_t pdu_write(struct p9_fcall *pdu, const void *data, size_t size)
 {
 	size_t len = min(pdu->capacity - pdu->size, size);
@@ -264,6 +266,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 	for (ptr = fmt; *ptr; ptr++) {
 		switch (*ptr) {
 		case 'b':{
+				/*读取一个字节*/
 				int8_t *val = va_arg(ap, int8_t *);
 				if (pdu_read(pdu, val, sizeof(*val))) {
 					errcode = -EFAULT;
@@ -272,6 +275,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 			}
 			break;
 		case 'w':{
+				/*读取两个字节*/
 				int16_t *val = va_arg(ap, int16_t *);
 				__le16 le_val;
 				if (pdu_read(pdu, &le_val, sizeof(le_val))) {
@@ -282,6 +286,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 			}
 			break;
 		case 'd':{
+				/*读取四个字节*/
 				int32_t *val = va_arg(ap, int32_t *);
 				__le32 le_val;
 				if (pdu_read(pdu, &le_val, sizeof(le_val))) {
@@ -292,6 +297,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 			}
 			break;
 		case 'q':{
+				/*读取8个字节*/
 				int64_t *val = va_arg(ap, int64_t *);
 				__le64 le_val;
 				if (pdu_read(pdu, &le_val, sizeof(le_val))) {
@@ -302,19 +308,23 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 			}
 			break;
 		case 's':{
+				/*读取字符串*/
 				char **sptr = va_arg(ap, char **);
 				uint16_t len;
 
+				/*先读取长度*/
 				errcode = p9pdu_readf(pdu, proto_version,
 								"w", &len);
 				if (errcode)
 					break;
 
+				/*申请指定长度内存*/
 				*sptr = kmalloc(len + 1, GFP_NOFS);
 				if (*sptr == NULL) {
 					errcode = -ENOMEM;
 					break;
 				}
+				/*再读取字符串内容*/
 				if (pdu_read(pdu, *sptr, len)) {
 					errcode = -EFAULT;
 					kfree(*sptr);
@@ -331,7 +341,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 					break;
 				}
 				*uid = make_kuid(&init_user_ns,
-						 le32_to_cpu(le_val));
+						 le32_to_cpu(le_val)/*小端转cpu*/);
 			} break;
 		case 'g': {
 				kgid_t *gid = va_arg(ap, kgid_t *);
@@ -347,6 +357,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 				struct p9_qid *qid =
 				    va_arg(ap, struct p9_qid *);
 
+				/*读取并填充qid*/
 				errcode = p9pdu_readf(pdu, proto_version, "bdq",
 						      &qid->type, &qid->version,
 						      &qid->path);
@@ -506,6 +517,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 			}
 			break;
 		case '?':
+			/*版本检查*/
 			if ((proto_version != p9_proto_2000u) &&
 				(proto_version != p9_proto_2000L))
 				return 0;
@@ -522,6 +534,7 @@ p9pdu_vreadf(struct p9_fcall *pdu, int proto_version, const char *fmt,
 	return errcode;
 }
 
+/*格式化写*/
 int
 p9pdu_vwritef(struct p9_fcall *pdu, int proto_version, const char *fmt,
 	va_list ap)

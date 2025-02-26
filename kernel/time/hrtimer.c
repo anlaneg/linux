@@ -1565,7 +1565,7 @@ static void __hrtimer_init(struct hrtimer *timer, clockid_t clock_id,
 	if (IS_ENABLED(CONFIG_PREEMPT_RT) && !(mode & HRTIMER_MODE_HARD))
 		softtimer = true;
 
-	memset(timer, 0, sizeof(struct hrtimer));
+	memset(timer, 0, sizeof(struct hrtimer));/*timer清零*/
 
 	cpu_base = raw_cpu_ptr(&hrtimer_bases);
 

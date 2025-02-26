@@ -127,7 +127,7 @@ struct file_lock {
 } __randomize_layout;
 
 struct file_lock_context {
-	spinlock_t		flc_lock;
+	spinlock_t		flc_lock;/*保护本结构*/
 	struct list_head	flc_flock;
 	struct list_head	flc_posix;
 	struct list_head	flc_lease;

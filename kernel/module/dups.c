@@ -43,7 +43,7 @@ module_param(enable_dups_trace, bool_enable_only, 0644);
  * Protects dup_kmod_reqs list, adds / removals with RCU.
  */
 static DEFINE_MUTEX(kmod_dup_mutex);
-static LIST_HEAD(dup_kmod_reqs);
+static LIST_HEAD(dup_kmod_reqs);/*用于记录系统中重复kmod加载请求，用于挂接kmod_dup_req，以了解当前哪些kmod在被请求加载*/
 
 struct kmod_dup_req {
 	struct list_head list;
@@ -130,7 +130,7 @@ bool kmod_dup_request_exists_wait(char *module_name, bool wait, int *dup_ret)
 	if (!new_kmod_req)
 		return false;
 
-	memcpy(new_kmod_req->name, module_name, strlen(module_name));
+	memcpy(new_kmod_req->name, module_name, strlen(module_name));/*设置要请求的module*/
 	INIT_WORK(&new_kmod_req->complete_work, kmod_dup_request_complete);
 	INIT_DELAYED_WORK(&new_kmod_req->delete_work, kmod_dup_request_delete);
 	init_completion(&new_kmod_req->first_req_done);
@@ -162,14 +162,14 @@ bool kmod_dup_request_exists_wait(char *module_name, bool wait, int *dup_ret)
 		 * keep tab on duplicates later.
 		 */
 		pr_debug("New request_module() for %s\n", module_name);
-		list_add_rcu(&new_kmod_req->list, &dup_kmod_reqs);
+		list_add_rcu(&new_kmod_req->list, &dup_kmod_reqs);/*将此请求加入到kmod_reqs上，以便检测重复请求*/
 		mutex_unlock(&kmod_dup_mutex);
 		return false;
 	}
 	mutex_unlock(&kmod_dup_mutex);
 
 	/* We are dealing with a duplicate request now */
-	kfree(new_kmod_req);
+	kfree(new_kmod_req);/*此请求已存在，故释放此变量*/
 
 	/*
 	 * To fix these try to use try_then_request_module() instead as that

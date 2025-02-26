@@ -120,7 +120,7 @@ static struct dentry *v9fs_mount(struct file_system_type *fs_type, int flags,
 	if (!v9ses)
 		return ERR_PTR(-ENOMEM);
 
-	fid = v9fs_session_init(v9ses, dev_name, data);
+	fid = v9fs_session_init(v9ses, dev_name/*要挂载的设备名称*/, data);
 	if (IS_ERR(fid)) {
 		retval = PTR_ERR(fid);
 		goto free_session;
@@ -140,13 +140,13 @@ static struct dentry *v9fs_mount(struct file_system_type *fs_type, int flags,
 	else
 		sb->s_d_op = &v9fs_dentry_operations;
 
-	inode = v9fs_get_inode(sb, S_IFDIR | mode, 0);
+	inode = v9fs_get_inode(sb, S_IFDIR | mode, 0);/*取一个inode*/
 	if (IS_ERR(inode)) {
 		retval = PTR_ERR(inode);
 		goto release_sb;
 	}
 
-	root = d_make_root(inode);
+	root = d_make_root(inode);/*将此inode做为root entry*/
 	if (!root) {
 		retval = -ENOMEM;
 		goto release_sb;
@@ -329,7 +329,7 @@ static const struct super_operations v9fs_super_ops_dotl = {
 
 struct file_system_type v9fs_fs_type = {
 	.name = "9p",
-	.mount = v9fs_mount,
+	.mount = v9fs_mount,/*实现挂载*/
 	.kill_sb = v9fs_kill_super,
 	.owner = THIS_MODULE,
 	.fs_flags = FS_RENAME_DOES_D_MOVE,

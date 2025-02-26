@@ -114,8 +114,25 @@ extern struct device_attribute dev_attr_usbip_debug;
  *    (server to client)
  *
  */
+/*
+ * 客户端主机通过该命令把 USB 请求（如读取数据、写入数据、控制命令等）
+ * 发送到远程服务器，服务器再将这些请求转发给实际连接的 USB 设备，
+ * 从而实现客户端对远程 USB 设备的操作。
+ * */
 #define USBIP_CMD_SUBMIT	0x0001
+/*
+ * 在 USB/IP 系统里，客户端通过网络将 USB 请求发送到服务器，
+ * 服务器再把这些请求转发给实际的 USB 设备。
+ * 不过，有时候由于各种原因，客户端可能希望取消之前发送的某个请求，
+ * 这时就会使用 USBIP_CMD_UNLINK 命令。
+ * */
 #define USBIP_CMD_UNLINK	0x0002
+/*
+ * 当客户端使用 USBIP_CMD_SUBMIT 命令向服务器提交一个 USB 请求
+ * （如数据传输、设备控制等）后，服务器会对该请求进行处理。
+ * USBIP_RET_SUBMIT 命令会携带处理结果返回给客户端，
+ * 客户端可以根据这个结果知道请求是否被成功执行。
+ * */
 #define USBIP_RET_SUBMIT	0x0003
 #define USBIP_RET_UNLINK	0x0004
 
@@ -267,11 +284,11 @@ struct usbip_device {
 	/* mutex for synchronizing sysfs store paths */
 	struct mutex sysfs_lock;
 
-	int sockfd;
-	struct socket *tcp_socket;
+	int sockfd;/*tcp socket对应的fd*/
+	struct socket *tcp_socket;/*指定tcp socket*/
 
-	struct task_struct *tcp_rx;
-	struct task_struct *tcp_tx;
+	struct task_struct *tcp_rx;/*指定tcp rx线程,使用stub_rx_loop函数*/
+	struct task_struct *tcp_tx;/*指定tcp tx线程，使用stub_tx_loop函数*/
 
 	unsigned long event;
 	wait_queue_head_t eh_waitq;

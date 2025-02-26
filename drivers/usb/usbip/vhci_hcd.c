@@ -1211,7 +1211,7 @@ static int vhci_start(struct usb_hcd *hcd)
 			dev_err(hcd_dev(hcd), "init attr group failed, err = %d\n", err);
 			return err;
 		}
-		err = sysfs_create_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);
+		err = sysfs_create_group(&hcd_dev(hcd)->kobj, &vhci_attr_group);/*创建vhci属性组*/
 		if (err) {
 			dev_err(hcd_dev(hcd), "create sysfs files failed, err = %d\n", err);
 			vhci_finish_attr_group();

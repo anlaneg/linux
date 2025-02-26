@@ -234,7 +234,7 @@ static int uvc_parse_format(struct uvc_device *dev,
 	unsigned int i, n;
 	u8 ftype;
 
-	format->type = buffer[2];
+	format->type = buffer[2];/*格式类型*/
 	format->index = buffer[3];
 	format->frames = frames;
 
@@ -243,6 +243,7 @@ static int uvc_parse_format(struct uvc_device *dev,
 	case UVC_VS_FORMAT_FRAME_BASED:
 		n = buffer[2] == UVC_VS_FORMAT_UNCOMPRESSED ? 27 : 28;
 		if (buflen < n) {
+			/*提供的buffer不足以解析此类型*/
 			uvc_dbg(dev, DESCR,
 				"device %d videostreaming interface %d FORMAT error\n",
 				dev->udev->devnum,
@@ -251,7 +252,7 @@ static int uvc_parse_format(struct uvc_device *dev,
 		}
 
 		/* Find the format descriptor from its GUID. */
-		fmtdesc = uvc_format_by_guid(&buffer[5]);
+		fmtdesc = uvc_format_by_guid(&buffer[5]);/*通过GUID查找fmtdesc，占用16字节*/
 
 		if (!fmtdesc) {
 			/*
@@ -260,11 +261,11 @@ static int uvc_parse_format(struct uvc_device *dev,
 			 */
 			dev_info(&streaming->intf->dev,
 				 "Unknown video format %pUl\n", &buffer[5]);
-			return 0;
+			return 0;/*不认识这种video格式*/
 		}
 
 		format->fcc = fmtdesc->fcc;
-		format->bpp = buffer[21];
+		format->bpp = buffer[21];/*占用1字节*/
 
 		/*
 		 * Some devices report a format that doesn't match what they
@@ -568,6 +569,11 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	}
 
 	/* Skip the standard interface descriptors. */
+	/*
+	 * 0号1个字节，指出header的长度
+	 * 1号1个字节，CS_INTERFACE （常量）
+	 * 2号1个字节，有VS_INPUT_HEADER，VS_OUTPUT_HEADER描述subtype
+	 * */
 	while (buflen > 2 && buffer[1] != USB_DT_CS_INTERFACE) {
 		buflen -= buffer[0];
 		buffer += buffer[0];
@@ -583,12 +589,12 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	switch (buffer[2]) {
 	case UVC_VS_OUTPUT_HEADER:
 		streaming->type = V4L2_BUF_TYPE_VIDEO_OUTPUT;
-		size = 9;
+		size = 9;/*output从9号偏移量开始为首个bmaControls*/
 		break;
 
 	case UVC_VS_INPUT_HEADER:
 		streaming->type = V4L2_BUF_TYPE_VIDEO_CAPTURE;
-		size = 13;
+		size = 13;/*input从13号偏移量开始为首个bmaControls*/
 		break;
 
 	default:
@@ -598,17 +604,18 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 		goto error;
 	}
 
-	p = buflen >= 4 ? buffer[3] : 0;
-	n = buflen >= size ? buffer[size-1] : 0;
+	p = buflen >= 4 ? buffer[3] : 0;/*3号偏移描述的是bmaControls结构体的数目*/
+	n = buflen >= size ? buffer[size-1]/*12号偏移指出的是bmaControls的结构体大小*/ : 0;
 
 	if (buflen < size + p*n) {
+		/*buffer与宣称的数据长度不相配*/
 		uvc_dbg(dev, DESCR,
 			"device %d videostreaming interface %d HEADER descriptor is invalid\n",
 			dev->udev->devnum, alts->desc.bInterfaceNumber);
 		goto error;
 	}
 
-	streaming->header.bNumFormats = p;
+	streaming->header.bNumFormats = p;/*格式数量*/
 	streaming->header.bEndpointAddress = buffer[6];
 	if (buffer[2] == UVC_VS_INPUT_HEADER) {
 		streaming->header.bmInfo = buffer[7];
@@ -619,10 +626,10 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	} else {
 		streaming->header.bTerminalLink = buffer[7];
 	}
-	streaming->header.bControlSize = n;
+	streaming->header.bControlSize = n;/*每个bmaControls结构体的大小*/
 
 	streaming->header.bmaControls = kmemdup(&buffer[size], p * n,
-						GFP_KERNEL);
+						GFP_KERNEL);/*复制指明的bmaControls*/
 	if (streaming->header.bmaControls == NULL) {
 		ret = -ENOMEM;
 		goto error;
@@ -631,6 +638,8 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	buflen -= buffer[0];
 	buffer += buffer[0];
 
+	/*采用临时变量，解析后续的内容，按规范文档描述，记录在其它文档中，暂未找到，
+	 * 下列代码主要是找有多少formats,多少frames,以提前准备内存*/
 	_buffer = buffer;
 	_buflen = buflen;
 
@@ -700,6 +709,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 	streaming->formats = format;
 	streaming->nformats = 0;
 
+	/*内存已申请好，解析format,frame,interval*/
 	/* Parse the format descriptors. */
 	while (buflen > 2 && buffer[1] == USB_DT_CS_INTERFACE) {
 		switch (buffer[2]) {
@@ -714,7 +724,7 @@ static int uvc_parse_streaming(struct uvc_device *dev,
 			if (!ret)
 				break;
 
-			streaming->nformats++;
+			streaming->nformats++;/*format格式增加*/
 			frame += format->nframes;
 			format++;
 

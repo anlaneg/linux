@@ -624,6 +624,7 @@ static int p9_virtio_probe(struct virtio_device *vdev)
 
 	chan->inuse = false;
 	if (virtio_has_feature(vdev, VIRTIO_9P_MOUNT_TAG)) {
+		/*有9p mount tag,读取此tag长度*/
 		virtio_cread(vdev, struct virtio_9p_config, tag_len, &tag_len);
 	} else {
 		err = -EINVAL;
@@ -635,9 +636,10 @@ static int p9_virtio_probe(struct virtio_device *vdev)
 		goto out_free_vq;
 	}
 
+	/*读取此tag*/
 	virtio_cread_bytes(vdev, offsetof(struct virtio_9p_config, tag),
 			   tag, tag_len);
-	chan->tag = tag;
+	chan->tag = tag;/*指明tag*/
 	err = sysfs_create_file(&(vdev->dev.kobj), &dev_attr_mount_tag.attr);
 	if (err) {
 		goto out_free_tag;
@@ -655,7 +657,7 @@ static int p9_virtio_probe(struct virtio_device *vdev)
 	virtio_device_ready(vdev);
 
 	mutex_lock(&virtio_9p_lock);
-	list_add_tail(&chan->chan_list, &virtio_chan_list);
+	list_add_tail(&chan->chan_list, &virtio_chan_list);/*添加新的virtio-channel*/
 	mutex_unlock(&virtio_9p_lock);
 
 	/* Let udev rules use the new mount_tag attribute. */
@@ -701,6 +703,7 @@ p9_virtio_create(struct p9_client *client, const char *devname, char *args)
 		return -EINVAL;
 
 	mutex_lock(&virtio_9p_lock);
+	/*遍历channel list检查指明的devname是否存在*/
 	list_for_each_entry(chan, &virtio_chan_list, chan_list) {
 		if (!strcmp(devname, chan->tag)) {
 			if (!chan->inuse) {
@@ -782,7 +785,7 @@ static struct virtio_driver p9_virtio_drv = {
 	.feature_table_size = ARRAY_SIZE(features),
 	.driver.name    = KBUILD_MODNAME,
 	.driver.owner	= THIS_MODULE,
-	.id_table	= id_table,
+	.id_table	= id_table,/*指明匹配virtio 9p设备*/
 	.probe		= p9_virtio_probe,
 	.remove		= p9_virtio_remove,
 };
@@ -814,7 +817,7 @@ static int __init p9_virtio_init(void)
 
 	INIT_LIST_HEAD(&virtio_chan_list);
 
-	v9fs_register_trans(&p9_virtio_trans);
+	v9fs_register_trans(&p9_virtio_trans);/*注册virtio对应的transport*/
 	rc = register_virtio_driver(&p9_virtio_drv);
 	if (rc)
 		v9fs_unregister_trans(&p9_virtio_trans);

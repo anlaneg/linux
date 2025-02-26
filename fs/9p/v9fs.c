@@ -23,9 +23,9 @@
 #include "v9fs_vfs.h"
 #include "cache.h"
 
-static DEFINE_SPINLOCK(v9fs_sessionlist_lock);
-static LIST_HEAD(v9fs_sessionlist);
-struct kmem_cache *v9fs_inode_cache;
+static DEFINE_SPINLOCK(v9fs_sessionlist_lock);/*保护系统链表v9fs_sessionlist*/
+static LIST_HEAD(v9fs_sessionlist);/*用于记录系统中所有v9fs_session_info*/
+struct kmem_cache *v9fs_inode_cache;/*负责系统中inode分配*/
 
 /*
  * Option Parsing (code inspired by NFS code)
@@ -407,7 +407,7 @@ struct p9_fid *v9fs_session_init(struct v9fs_session_info *v9ses,
 	v9ses->dfltuid = V9FS_DEFUID;
 	v9ses->dfltgid = V9FS_DEFGID;
 
-	v9ses->clnt = p9_client_create(dev_name, data);
+	v9ses->clnt = p9_client_create(dev_name, data);/*创建client*/
 	if (IS_ERR(v9ses->clnt)) {
 		rc = PTR_ERR(v9ses->clnt);
 		p9_debug(P9_DEBUG_ERROR, "problem initializing 9p client\n");
@@ -478,7 +478,7 @@ struct p9_fid *v9fs_session_init(struct v9fs_session_info *v9ses,
 	}
 #endif
 	spin_lock(&v9fs_sessionlist_lock);
-	list_add(&v9ses->slist, &v9fs_sessionlist);
+	list_add(&v9ses->slist, &v9fs_sessionlist);/*添加session*/
 	spin_unlock(&v9fs_sessionlist_lock);
 
 	return fid;
@@ -559,6 +559,7 @@ static ssize_t caches_show(struct kobject *kobj,
 	struct v9fs_session_info *v9ses;
 
 	spin_lock(&v9fs_sessionlist_lock);
+	/*遍历session列表，列出cachetag不为空者*/
 	list_for_each_entry(v9ses, &v9fs_sessionlist, slist) {
 		if (v9ses->cachetag) {
 			n = snprintf(buf, limit, "%s\n", v9ses->cachetag);
@@ -597,10 +598,11 @@ static const struct attribute_group v9fs_attr_group = {
 
 static int __init v9fs_sysfs_init(void)
 {
-	v9fs_kobj = kobject_create_and_add("9p", fs_kobj);
+	v9fs_kobj = kobject_create_and_add("9p", fs_kobj);/*创建9p,在/sys/fs目录下*/
 	if (!v9fs_kobj)
 		return -ENOMEM;
 
+	/*在9p下添加属性*/
 	if (sysfs_create_group(v9fs_kobj, &v9fs_attr_group)) {
 		kobject_put(v9fs_kobj);
 		return -ENOMEM;
@@ -634,6 +636,7 @@ static void v9fs_inode_init_once(void *foo)
  */
 static int v9fs_init_inode_cache(void)
 {
+	/*创建cache*/
 	v9fs_inode_cache = kmem_cache_create("v9fs_inode_cache",
 					  sizeof(struct v9fs_inode),
 					  0, (SLAB_RECLAIM_ACCOUNT|

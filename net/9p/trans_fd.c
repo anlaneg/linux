@@ -46,8 +46,8 @@ static struct p9_trans_module p9_fd_trans;
  */
 
 struct p9_fd_opts {
-	int rfd;
-	int wfd;
+	int rfd;/*读fd*/
+	int wfd;/*写fd*/
 	u16 port;
 	bool privport;
 };
@@ -64,6 +64,7 @@ enum {
 	Opt_privport,
 };
 
+/*tcp transport支持的mount参数表*/
 static const match_table_t tokens = {
 	{Opt_port, "port=%u"},
 	{Opt_rfdno, "rfdno=%u"},
@@ -264,7 +265,7 @@ static int p9_fd_read(struct p9_client *client, void *v, int len)
 		p9_debug(P9_DEBUG_ERROR, "blocking read ...\n");
 
 	pos = ts->rd->f_pos;
-	ret = kernel_read(ts->rd, v, len, &pos);
+	ret = kernel_read(ts->rd, v, len, &pos);/*读取内容到v*/
 	if (ret <= 0 && ret != -ERESTARTSYS && ret != -EAGAIN)
 		client->status = Disconnected;
 	return ret;
@@ -299,6 +300,7 @@ static void p9_read_work(struct work_struct *work)
 	p9_debug(P9_DEBUG_TRANS, "read mux %p pos %zd size: %zd = %zd\n",
 		 m, m->rc.offset, m->rc.capacity,
 		 m->rc.capacity - m->rc.offset);
+	/*读取待收取的内容，填充m->rc*/
 	err = p9_fd_read(m->client, m->rc.sdata + m->rc.offset,
 			 m->rc.capacity - m->rc.offset);
 	p9_debug(P9_DEBUG_TRANS, "mux %p got %d bytes\n", m, err);
@@ -430,7 +432,7 @@ static int p9_fd_write(struct p9_client *client, void *v, int len)
 	if (!(ts->wr->f_flags & O_NONBLOCK))
 		p9_debug(P9_DEBUG_ERROR, "blocking write ...\n");
 
-	ret = kernel_write(ts->wr, v, len, &ts->wr->f_pos);
+	ret = kernel_write(ts->wr, v, len, &ts->wr->f_pos);/*向外发送*/
 	if (ret <= 0 && ret != -ERESTARTSYS && ret != -EAGAIN)
 		client->status = Disconnected;
 	return ret;
@@ -459,11 +461,13 @@ static void p9_write_work(struct work_struct *work)
 	if (!m->wsize) {
 		spin_lock(&m->req_lock);
 		if (list_empty(&m->unsent_req_list)) {
+			/*没有要发送的请求*/
 			clear_bit(Wworksched, &m->wsched);
 			spin_unlock(&m->req_lock);
 			return;
 		}
 
+		/*取一个待发送请求*/
 		req = list_entry(m->unsent_req_list.next, struct p9_req_t,
 			       req_list);
 		WRITE_ONCE(req->status, REQ_STATUS_SENT);
@@ -481,6 +485,7 @@ static void p9_write_work(struct work_struct *work)
 	p9_debug(P9_DEBUG_TRANS, "mux %p pos %d size %d\n",
 		 m, m->wpos, m->wsize);
 	clear_bit(Wpending, &m->wsched);
+	/*通过transport 向外发送*/
 	err = p9_fd_write(m->client, m->wbuf + m->wpos, m->wsize - m->wpos);
 	p9_debug(P9_DEBUG_TRANS, "mux %p sent %d bytes\n", m, err);
 	if (err == -EAGAIN)
@@ -595,8 +600,8 @@ static void p9_conn_create(struct p9_client *client)
 	spin_lock_init(&m->req_lock);
 	INIT_LIST_HEAD(&m->req_list);
 	INIT_LIST_HEAD(&m->unsent_req_list);
-	INIT_WORK(&m->rq, p9_read_work);
-	INIT_WORK(&m->wq, p9_write_work);
+	INIT_WORK(&m->rq, p9_read_work);/*初始化读work,负责外部发送过来的数据*/
+	INIT_WORK(&m->wq, p9_write_work);/*初始化写work，负责向外发送请求*/
 	INIT_LIST_HEAD(&m->poll_pending_link);
 	init_poll_funcptr(&m->pt, p9_pollwait);
 
@@ -680,7 +685,7 @@ static int p9_fd_request(struct p9_client *client, struct p9_req_t *req)
 	}
 
 	WRITE_ONCE(req->status, REQ_STATUS_UNSENT);
-	list_add_tail(&req->req_list, &m->unsent_req_list);
+	list_add_tail(&req->req_list, &m->unsent_req_list);/*记录未发送的请求到链表*/
 	spin_unlock(&m->req_lock);
 
 	if (test_and_clear_bit(Wpending, &m->wsched))
@@ -879,7 +884,7 @@ static int p9_socket_open(struct p9_client *client, struct socket *csocket)
 
 	csocket->sk->sk_allocation = GFP_NOIO;
 	csocket->sk->sk_use_task_frag = false;
-	file = sock_alloc_file(csocket, 0, NULL);
+	file = sock_alloc_file(csocket, 0, NULL);/*为socket关联文件*/
 	if (IS_ERR(file)) {
 		pr_err("%s (%d): failed to map fd\n",
 		       __func__, task_pid_nr(current));
@@ -979,12 +984,12 @@ static int p9_bind_privport(struct socket *sock)
 
 	memset(&cl, 0, sizeof(cl));
 	cl.sin_family = AF_INET;
-	cl.sin_addr.s_addr = htonl(INADDR_ANY);
+	cl.sin_addr.s_addr = htonl(INADDR_ANY);/*绑定any地址*/
 	for (port = p9_ipport_resv_max; port >= p9_ipport_resv_min; port--) {
 		cl.sin_port = htons((ushort)port);
-		err = kernel_bind(sock, (struct sockaddr *)&cl, sizeof(cl));
+		err = kernel_bind(sock, (struct sockaddr *)&cl, sizeof(cl));/*尝试绑定*/
 		if (err != -EADDRINUSE)
-			break;
+			break;/*遇到其它类型错误，退出*/
 	}
 	return err;
 }
@@ -998,11 +1003,12 @@ p9_fd_create_tcp(struct p9_client *client, const char *addr, char *args)
 	struct sockaddr_in sin_server;
 	struct p9_fd_opts opts;
 
-	err = parse_opts(args, &opts);
+	err = parse_opts(args, &opts);/*解析tcp transport支持的option*/
 	if (err < 0)
 		return err;
 
 	if (addr == NULL || valid_ipaddr4(addr) < 0)
+		/*地址必须为ipv4地址*/
 		return -EINVAL;
 
 	csocket = NULL;
@@ -1013,7 +1019,7 @@ p9_fd_create_tcp(struct p9_client *client, const char *addr, char *args)
 	sin_server.sin_addr.s_addr = in_aton(addr);
 	sin_server.sin_port = htons(opts.port);
 	err = __sock_create(current->nsproxy->net_ns, PF_INET,
-			    SOCK_STREAM, IPPROTO_TCP, &csocket, 1);
+			    SOCK_STREAM, IPPROTO_TCP, &csocket, 1);/*创建tcp socket做为client*/
 	if (err) {
 		pr_err("%s (%d): problem creating socket\n",
 		       __func__, task_pid_nr(current));
@@ -1021,6 +1027,7 @@ p9_fd_create_tcp(struct p9_client *client, const char *addr, char *args)
 	}
 
 	if (opts.privport) {
+		/*指明privport,则选择port并绑定（csocket中的旧内容将被清空）*/
 		err = p9_bind_privport(csocket);
 		if (err < 0) {
 			pr_err("%s (%d): problem binding to privport\n",
@@ -1030,6 +1037,7 @@ p9_fd_create_tcp(struct p9_client *client, const char *addr, char *args)
 		}
 	}
 
+	/*连接到server端*/
 	err = READ_ONCE(csocket->ops)->connect(csocket,
 				    (struct sockaddr *)&sin_server,
 				    sizeof(struct sockaddr_in), 0);
@@ -1186,9 +1194,9 @@ static void p9_poll_workfn(struct work_struct *work)
 
 static int __init p9_trans_fd_init(void)
 {
-	v9fs_register_trans(&p9_tcp_trans);
-	v9fs_register_trans(&p9_unix_trans);
-	v9fs_register_trans(&p9_fd_trans);
+	v9fs_register_trans(&p9_tcp_trans);/*注册tcp transport*/
+	v9fs_register_trans(&p9_unix_trans);/*注册unix transport*/
+	v9fs_register_trans(&p9_fd_trans);/*注册以fd做为transport*/
 
 	return 0;
 }

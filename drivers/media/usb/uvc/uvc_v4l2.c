@@ -209,7 +209,7 @@ static u32 uvc_v4l2_get_bytesperline(const struct uvc_format *format,
 }
 
 static int uvc_v4l2_try_format(struct uvc_streaming *stream,
-	struct v4l2_format *fmt, struct uvc_streaming_control *probe,
+	struct v4l2_format *fmt/*要设置的fmt*/, struct uvc_streaming_control *probe,
 	const struct uvc_format **uvc_format,
 	const struct uvc_frame **uvc_frame)
 {

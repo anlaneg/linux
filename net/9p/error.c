@@ -185,9 +185,9 @@ int p9_error_init(void)
 	/* load initial error map into hash table */
 	for (c = errmap; c->name; c++) {
 		c->namelen = strlen(c->name);
-		bucket = jhash(c->name, c->namelen, 0) % ERRHASHSZ;
+		bucket = jhash(c->name, c->namelen, 0) % ERRHASHSZ;/*取桶号*/
 		INIT_HLIST_NODE(&c->list);
-		hlist_add_head(&c->list, &hash_errmap[bucket]);
+		hlist_add_head(&c->list, &hash_errmap[bucket]);/*加入hashtable,按error名称索引*/
 	}
 
 	return 1;

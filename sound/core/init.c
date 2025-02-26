@@ -181,10 +181,12 @@ int snd_card_new(struct device *parent, int idx, const char *xid,
 
 	if (extra_size < 0)
 		extra_size = 0;
+	/*申请声卡设备对象*/
 	card = kzalloc(sizeof(*card) + extra_size, GFP_KERNEL);
 	if (!card)
 		return -ENOMEM;
 
+	/*初始化声卡*/
 	err = snd_card_init(card, parent, idx, xid, module, extra_size);
 	if (err < 0)
 		return err; /* card is freed by error handler */
@@ -340,7 +342,7 @@ static int snd_card_init(struct snd_card *card, struct device *parent,
 	card->card_dev.release = release_card_device;
 	card->card_dev.groups = card->dev_groups;
 	card->dev_groups[0] = &card_dev_attr_group;
-	err = kobject_set_name(&card->card_dev.kobj, "card%d", idx);
+	err = kobject_set_name(&card->card_dev.kobj, "card%d", idx);/*设备名*/
 	if (err < 0)
 		goto __error;
 

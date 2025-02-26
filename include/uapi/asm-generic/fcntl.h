@@ -105,6 +105,12 @@
 #ifndef F_GETLK
 #define F_GETLK		5
 #define F_SETLK		6
+/*SET LOCK是容许wait
+ * F_SETLKW 用于设置文件锁（包括读锁和写锁），
+ * 如果指定的锁因为其他进程已经持有而无法立即获取，
+ * 调用进程会被阻塞，直到该锁可以被获取为止。
+ * 这里的 “W” 代表 “wait”，即表示会等待。
+ * */
 #define F_SETLKW	7
 #endif
 #ifndef F_SETOWN

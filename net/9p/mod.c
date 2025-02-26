@@ -54,8 +54,8 @@ EXPORT_SYMBOL(_p9_debug);
 
 /* Dynamic Transport Registration Routines */
 
-static DEFINE_SPINLOCK(v9fs_trans_lock);
-static LIST_HEAD(v9fs_trans_list);
+static DEFINE_SPINLOCK(v9fs_trans_lock);/*保护v9fs_trans_list链表*/
+static LIST_HEAD(v9fs_trans_list);/*用于记录系统中9p支持的transport*/
 
 /**
  * v9fs_register_trans - register a new transport with 9p
@@ -65,7 +65,7 @@ static LIST_HEAD(v9fs_trans_list);
 void v9fs_register_trans(struct p9_trans_module *m)
 {
 	spin_lock(&v9fs_trans_lock);
-	list_add_tail(&m->list, &v9fs_trans_list);
+	list_add_tail(&m->list, &v9fs_trans_list);/*注册transport*/
 	spin_unlock(&v9fs_trans_lock);
 }
 EXPORT_SYMBOL(v9fs_register_trans);
@@ -78,7 +78,7 @@ EXPORT_SYMBOL(v9fs_register_trans);
 void v9fs_unregister_trans(struct p9_trans_module *m)
 {
 	spin_lock(&v9fs_trans_lock);
-	list_del_init(&m->list);
+	list_del_init(&m->list);/*移除transport注册*/
 	spin_unlock(&v9fs_trans_lock);
 }
 EXPORT_SYMBOL(v9fs_unregister_trans);
@@ -89,6 +89,7 @@ static struct p9_trans_module *_p9_get_trans_by_name(const char *s)
 
 	spin_lock(&v9fs_trans_lock);
 
+	/*按名称查找已注册的transport*/
 	list_for_each_entry(t, &v9fs_trans_list, list)
 		if (strcmp(t->name, s) == 0 &&
 		    try_module_get(t->owner)) {
@@ -110,12 +111,13 @@ struct p9_trans_module *v9fs_get_trans_by_name(const char *s)
 {
 	struct p9_trans_module *found = NULL;
 
-	found = _p9_get_trans_by_name(s);
+	found = _p9_get_trans_by_name(s);/*通过名称查找transport*/
 
 #ifdef CONFIG_MODULES
 	if (!found) {
+		/*未找到，请求加载module并再查询*/
 		request_module("9p-%s", s);
-		found = _p9_get_trans_by_name(s);
+		found = _p9_get_trans_by_name(s);/*再次查找*/
 	}
 #endif
 
@@ -123,6 +125,7 @@ struct p9_trans_module *v9fs_get_trans_by_name(const char *s)
 }
 EXPORT_SYMBOL(v9fs_get_trans_by_name);
 
+/*内置的默认transport名称（排序为优先级）*/
 static const char * const v9fs_default_transports[] = {
 	"virtio", "tcp", "fd", "unix", "xen", "rdma",
 };
@@ -141,11 +144,12 @@ struct p9_trans_module *v9fs_get_default_trans(void)
 
 	list_for_each_entry(t, &v9fs_trans_list, list)
 		if (t->def && try_module_get(t->owner)) {
-			found = t;
+			found = t;/*取得default transport*/
 			break;
 		}
 
 	if (!found)
+		/*未找到默认的，找首个可用的*/
 		list_for_each_entry(t, &v9fs_trans_list, list)
 			if (try_module_get(t->owner)) {
 				found = t;
@@ -154,6 +158,7 @@ struct p9_trans_module *v9fs_get_default_trans(void)
 
 	spin_unlock(&v9fs_trans_lock);
 
+	/*仍未找到，找内置默认的。*/
 	for (i = 0; !found && i < ARRAY_SIZE(v9fs_default_transports); i++)
 		found = v9fs_get_trans_by_name(v9fs_default_transports[i]);
 
@@ -169,7 +174,7 @@ EXPORT_SYMBOL(v9fs_get_default_trans);
 void v9fs_put_trans(struct p9_trans_module *m)
 {
 	if (m)
-		module_put(m->owner);
+		module_put(m->owner);/*释放transport对应的引用计数*/
 }
 
 /**

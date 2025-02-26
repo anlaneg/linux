@@ -83,6 +83,7 @@ static struct snd_device *look_for_dev(struct snd_card *card, void *device_data)
 {
 	struct snd_device *dev;
 
+	/*通过device_data查找sound device*/
 	list_for_each_entry(dev, &card->devices, list)
 		if (dev->device_data == device_data)
 			return dev;
@@ -146,6 +147,7 @@ static int __snd_device_register(struct snd_device *dev)
 {
 	if (dev->state == SNDRV_DEV_BUILD) {
 		if (dev->ops->dev_register) {
+			/*注册声卡*/
 			int err = dev->ops->dev_register(dev);
 			if (err < 0)
 				return err;
@@ -193,6 +195,7 @@ int snd_device_register_all(struct snd_card *card)
 	
 	if (snd_BUG_ON(!card))
 		return -ENXIO;
+	/*遍历并注册此card上所有设备*/
 	list_for_each_entry(dev, &card->devices, list) {
 		err = __snd_device_register(dev);
 		if (err < 0)

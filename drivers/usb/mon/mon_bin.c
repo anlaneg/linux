@@ -1395,7 +1395,7 @@ int __init mon_bin_init(void)
 	if (rc < 0)
 		goto err_dev;
 
-	cdev_init(&mon_bin_cdev, &mon_fops_binary);
+	cdev_init(&mon_bin_cdev, &mon_fops_binary);/*设置字符设备操作集*/
 	mon_bin_cdev.owner = THIS_MODULE;
 
 	rc = cdev_add(&mon_bin_cdev, mon_bin_dev0, MON_BIN_MAX_MINOR);

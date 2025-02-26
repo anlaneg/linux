@@ -54,7 +54,7 @@ static ssize_t usbip_sockfd_store(struct device *dev, struct device_attribute *a
 		return -ENODEV;
 	}
 
-	rv = sscanf(buf, "%d", &sockfd);
+	rv = sscanf(buf, "%d", &sockfd);/*解析fd*/
 	if (rv != 1)
 		return -EINVAL;
 
@@ -71,6 +71,7 @@ static ssize_t usbip_sockfd_store(struct device *dev, struct device_attribute *a
 			goto err;
 		}
 
+		/*利用fd获取socket*/
 		socket = sockfd_lookup(sockfd, &err);
 		if (!socket) {
 			dev_err(dev, "failed to lookup sock");
@@ -78,6 +79,7 @@ static ssize_t usbip_sockfd_store(struct device *dev, struct device_attribute *a
 		}
 
 		if (socket->type != SOCK_STREAM) {
+			/*必须为stream类型*/
 			dev_err(dev, "Expecting SOCK_STREAM - found %d",
 				socket->type);
 			goto sock_err;
@@ -85,11 +87,13 @@ static ssize_t usbip_sockfd_store(struct device *dev, struct device_attribute *a
 
 		/* unlock and create threads and get tasks */
 		spin_unlock_irq(&sdev->ud.lock);
+		/*创建rx线程*/
 		tcp_rx = kthread_create(stub_rx_loop, &sdev->ud, "stub_rx");
 		if (IS_ERR(tcp_rx)) {
 			sockfd_put(socket);
 			goto unlock_mutex;
 		}
+		/*创建tx线程*/
 		tcp_tx = kthread_create(stub_tx_loop, &sdev->ud, "stub_tx");
 		if (IS_ERR(tcp_tx)) {
 			kthread_stop(tcp_rx);
@@ -103,10 +107,10 @@ static ssize_t usbip_sockfd_store(struct device *dev, struct device_attribute *a
 
 		/* lock and update sdev->ud state */
 		spin_lock_irq(&sdev->ud.lock);
-		sdev->ud.tcp_socket = socket;
-		sdev->ud.sockfd = sockfd;
-		sdev->ud.tcp_rx = tcp_rx;
-		sdev->ud.tcp_tx = tcp_tx;
+		sdev->ud.tcp_socket = socket;/*指定tcp socket*/
+		sdev->ud.sockfd = sockfd;/*指定tcp socket对应的fd*/
+		sdev->ud.tcp_rx = tcp_rx;/*指定tcp rx线程*/
+		sdev->ud.tcp_tx = tcp_tx;/*指定tcp tx线程*/
 		sdev->ud.status = SDEV_ST_USED;
 		spin_unlock_irq(&sdev->ud.lock);
 
@@ -533,5 +537,5 @@ struct usb_device_driver stub_driver = {
 	.resume		= stub_resume,
 #endif
 	.supports_autosuspend	=	0,
-	.dev_groups	= usbip_groups,
+	.dev_groups	= usbip_groups,/*指明驱动创建设备时携带的group属性*/
 };

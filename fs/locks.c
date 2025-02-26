@@ -166,7 +166,9 @@ static DEFINE_HASHTABLE(blocked_hash, BLOCKED_HASH_BITS);
  */
 static DEFINE_SPINLOCK(blocked_lock_lock);
 
+/*负责系统中file_lock_context结构体分配*/
 static struct kmem_cache *flctx_cache __ro_after_init;
+/*负责系统中file_lock结构体分配，表示锁*/
 static struct kmem_cache *filelock_cache __ro_after_init;
 
 static struct file_lock_context *
@@ -177,8 +179,9 @@ locks_get_lock_context(struct inode *inode, int type)
 	/* paired with cmpxchg() below */
 	ctx = locks_inode_context(inode);
 	if (likely(ctx) || type == F_UNLCK)
-		goto out;
+		goto out;/*ctx查询成功*/
 
+	/*不存在ctx,申请一个并初始化*/
 	ctx = kmem_cache_alloc(flctx_cache, GFP_KERNEL);
 	if (!ctx)
 		goto out;
@@ -193,6 +196,7 @@ locks_get_lock_context(struct inode *inode, int type)
 	 * free the context we just allocated.
 	 */
 	if (cmpxchg(&inode->i_flctx, NULL, ctx)) {
+		/*更新i_flctx时，已存在ctx，释放新的，使用旧的*/
 		kmem_cache_free(flctx_cache, ctx);
 		ctx = locks_inode_context(inode);
 	}
@@ -267,6 +271,7 @@ static void locks_init_lock_heads(struct file_lock *fl)
 /* Allocate an empty lock structure. */
 struct file_lock *locks_alloc_lock(void)
 {
+	/*申请file_lock obj*/
 	struct file_lock *fl = kmem_cache_zalloc(filelock_cache, GFP_KERNEL);
 
 	if (fl)
@@ -412,16 +417,21 @@ static void locks_move_blocks(struct file_lock *new, struct file_lock *fl)
 	spin_unlock(&blocked_lock_lock);
 }
 
+/*所以说代码几行就能说明不懂装懂的大半页纸，共享锁，排它锁。
+ * 这种名词应该被移除，仅包留 读锁，写锁，读写锁*/
 static inline int flock_translate_cmd(int cmd) {
 	switch (cmd) {
 	case LOCK_SH:
+		/*只读锁*/
 		return F_RDLCK;
 	case LOCK_EX:
+		/*读写锁*/
 		return F_WRLCK;
 	case LOCK_UN:
+		/*解锁*/
 		return F_UNLCK;
 	}
-	return -EINVAL;
+	return -EINVAL;/*无效标记*/
 }
 
 /* Fill in a file_lock structure with an appropriate FLOCK lock. */
@@ -432,7 +442,7 @@ static void flock_make_lock(struct file *filp, struct file_lock *fl, int type)
 	fl->fl_file = filp;
 	fl->fl_owner = filp;
 	fl->fl_pid = current->tgid;
-	fl->fl_flags = FL_FLOCK;
+	fl->fl_flags = FL_FLOCK;/*指明FLOCK样式lock*/
 	fl->fl_type = type;
 	fl->fl_end = OFFSET_MAX;
 }
@@ -766,7 +776,7 @@ new_blocker:
 			goto new_blocker;
 		}
 	waiter->fl_blocker = blocker;
-	list_add_tail(&waiter->fl_blocked_member, &blocker->fl_blocked_requests);
+	list_add_tail(&waiter->fl_blocked_member, &blocker->fl_blocked_requests);/*将waiter加入等待*/
 	if (IS_POSIX(blocker) && !IS_OFDLCK(blocker))
 		locks_insert_global_blocked(waiter);
 
@@ -892,8 +902,10 @@ static bool flock_locks_conflict(struct file_lock *caller_fl,
 	 * each other.
 	 */
 	if (caller_fl->fl_file == sys_fl->fl_file)
+		/*文件相同不冲突*/
 		return false;
 
+	/*两者对应的file不同，如果有一方是写锁，则冲突，否则不冲突*/
 	return locks_conflict(caller_fl, sys_fl);
 }
 
@@ -1031,10 +1043,12 @@ static int flock_lock_inode(struct inode *inode, struct file_lock *request)
 	if (!ctx) {
 		if (request->fl_type != F_UNLCK)
 			return -ENOMEM;
+		/*在解锁。指明了exist检查，由于此分支不存在ctx,故返回ENOENT，否则返回0*/
 		return (request->fl_flags & FL_EXISTS) ? -ENOENT : 0;
 	}
 
 	if (!(request->fl_flags & FL_ACCESS) && (request->fl_type != F_UNLCK)) {
+		/*没有指定access且为加锁操作，申请lock*/
 		new_fl = locks_alloc_lock();
 		if (!new_fl)
 			return -ENOMEM;
@@ -1043,6 +1057,7 @@ static int flock_lock_inode(struct inode *inode, struct file_lock *request)
 	percpu_down_read(&file_rwsem);
 	spin_lock(&ctx->flc_lock);
 	if (request->fl_flags & FL_ACCESS)
+		/*指明仅仅是检查，不真的加锁*/
 		goto find_conflict;
 
 	list_for_each_entry(fl, &ctx->flc_flock, fl_list) {
@@ -1050,12 +1065,14 @@ static int flock_lock_inode(struct inode *inode, struct file_lock *request)
 			continue;
 		if (request->fl_type == fl->fl_type)
 			goto out;
+		/*文件相同，但flock类型不同(出现冲突）*/
 		found = true;
 		locks_delete_lock_ctx(fl, &dispose);
 		break;
 	}
 
 	if (request->fl_type == F_UNLCK) {
+		/*解锁操作，且要求锁存在，但未查到，返回ENOENT*/
 		if ((request->fl_flags & FL_EXISTS) && !found)
 			error = -ENOENT;
 		goto out;
@@ -1064,16 +1081,19 @@ static int flock_lock_inode(struct inode *inode, struct file_lock *request)
 find_conflict:
 	list_for_each_entry(fl, &ctx->flc_flock, fl_list) {
 		if (!flock_locks_conflict(request, fl))
+			/*不冲突忽略*/
 			continue;
 		error = -EAGAIN;
+		/*未打sleep标记，表示直接返回不必等待*/
 		if (!(request->fl_flags & FL_SLEEP))
 			goto out;
+		/*锁有冲突，且需要等待*/
 		error = FILE_LOCK_DEFERRED;
-		locks_insert_block(fl, request, flock_locks_conflict);
+		locks_insert_block(fl, request, flock_locks_conflict/*冲突检查函数*/);
 		goto out;
 	}
 	if (request->fl_flags & FL_ACCESS)
-		goto out;
+		goto out;/*仅检查，不直实加锁*/
 	locks_copy_lock(new_fl, request);
 	locks_move_blocks(new_fl, request);
 	locks_insert_lock_ctx(new_fl, &ctx->flc_flock);
@@ -2017,6 +2037,7 @@ static int flock_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 		error = flock_lock_inode(inode, fl);
 		if (error != FILE_LOCK_DEFERRED)
 			break;
+		/*等待事件，再尝试*/
 		error = wait_event_interruptible(fl->fl_wait,
 				list_empty(&fl->fl_blocked_member));
 		if (error)
@@ -2041,6 +2062,7 @@ int locks_lock_inode_wait(struct inode *inode, struct file_lock *fl)
 			res = posix_lock_inode_wait(inode, fl);
 			break;
 		case FL_FLOCK:
+			/*flock样式的锁请求*/
 			res = flock_lock_inode_wait(inode, fl);
 			break;
 		default:
@@ -2067,6 +2089,7 @@ EXPORT_SYMBOL(locks_lock_inode_wait);
  */
 SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 {
+	/*实现flock系统调用*/
 	int can_sleep, error, type;
 	struct file_lock fl;
 	struct fd f;
@@ -2080,6 +2103,7 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 	 * throw a warning to let people know that they don't actually work.
 	 */
 	if (cmd & LOCK_MAND) {
+		/*有此标记，会直接返回*/
 		pr_warn_once("%s(%d): Attempt to set a LOCK_MAND lock via flock(2). This support has been removed and the request ignored.\n", current->comm, current->pid);
 		return 0;
 	}
@@ -2089,10 +2113,12 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 		return type;
 
 	error = -EBADF;
+	/*取得fd*/
 	f = fdget(fd);
 	if (!f.file)
 		return error;
 
+	/*加锁操作，但文件不具体读写权限*/
 	if (type != F_UNLCK && !(f.file->f_mode & (FMODE_READ | FMODE_WRITE)))
 		goto out_putf;
 
@@ -2104,11 +2130,12 @@ SYSCALL_DEFINE2(flock, unsigned int, fd, unsigned int, cmd)
 
 	can_sleep = !(cmd & LOCK_NB);
 	if (can_sleep)
-		fl.fl_flags |= FL_SLEEP;
+		fl.fl_flags |= FL_SLEEP;/*容许阻塞*/
 
+	/*文件fops有flock函数的，调flock函数*/
 	if (f.file->f_op->flock)
 		error = f.file->f_op->flock(f.file,
-					    (can_sleep) ? F_SETLKW : F_SETLK,
+					    (can_sleep) ? F_SETLKW/*容许阻塞*/ : F_SETLK/*不容许阻塞*/,
 					    &fl);
 	else
 		error = locks_lock_file_wait(f.file, &fl);

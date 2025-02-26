@@ -70,7 +70,7 @@ int p9_show_client_options(struct seq_file *m, struct p9_client *clnt)
 {
 	if (clnt->msize != DEFAULT_MSIZE)
 		seq_printf(m, ",msize=%u", clnt->msize);
-	seq_printf(m, ",trans=%s", clnt->trans_mod->name);
+	seq_printf(m, ",trans=%s", clnt->trans_mod->name);/*显示指明的transport名称*/
 
 	switch (clnt->proto_version) {
 	case p9_proto_legacy:
@@ -85,7 +85,7 @@ int p9_show_client_options(struct seq_file *m, struct p9_client *clnt)
 	}
 
 	if (clnt->trans_mod->show_options)
-		return clnt->trans_mod->show_options(m, clnt);
+		return clnt->trans_mod->show_options(m, clnt);/*显示transport信息*/
 	return 0;
 }
 EXPORT_SYMBOL(p9_show_client_options);
@@ -105,6 +105,7 @@ static int safe_errno(int err)
 /* Interpret mount option for protocol version */
 static int get_protocol_version(char *s)
 {
+	/*通过协议名称，获取协议版本*/
 	int version = -EINVAL;
 
 	if (!strcmp(s, "9p2000")) {
@@ -140,7 +141,7 @@ static int parse_opts(char *opts, struct p9_client *clnt)
 	char *s;
 	int ret = 0;
 
-	clnt->proto_version = p9_proto_2000L;
+	clnt->proto_version = p9_proto_2000L;/*默认协议版本号*/
 	clnt->msize = DEFAULT_MSIZE;
 
 	if (!opts)
@@ -158,7 +159,7 @@ static int parse_opts(char *opts, struct p9_client *clnt)
 			continue;
 		token = match_token(p, tokens, args);
 		switch (token) {
-		case Opt_msize:
+		case Opt_msize:/*指明最大消息尺寸*/
 			r = match_int(&args[0], &option);
 			if (r < 0) {
 				p9_debug(P9_DEBUG_ERROR,
@@ -175,7 +176,7 @@ static int parse_opts(char *opts, struct p9_client *clnt)
 			clnt->msize = option;
 			break;
 		case Opt_trans:
-			s = match_strdup(&args[0]);
+			s = match_strdup(&args[0]);/*挂载时指明的transport名称*/
 			if (!s) {
 				ret = -ENOMEM;
 				p9_debug(P9_DEBUG_ERROR,
@@ -184,7 +185,7 @@ static int parse_opts(char *opts, struct p9_client *clnt)
 			}
 
 			v9fs_put_trans(clnt->trans_mod);
-			clnt->trans_mod = v9fs_get_trans_by_name(s);
+			clnt->trans_mod = v9fs_get_trans_by_name(s);/*按名称取指明的transport*/
 			if (!clnt->trans_mod) {
 				pr_info("Could not find request transport: %s\n",
 					s);
@@ -193,9 +194,9 @@ static int parse_opts(char *opts, struct p9_client *clnt)
 			kfree(s);
 			break;
 		case Opt_legacy:
-			clnt->proto_version = p9_proto_legacy;
+			clnt->proto_version = p9_proto_legacy;/*指明采用legacy协议版本*/
 			break;
-		case Opt_version:
+		case Opt_version:/*按参数指明协议版本*/
 			s = match_strdup(&args[0]);
 			if (!s) {
 				ret = -ENOMEM;
@@ -253,7 +254,7 @@ void p9_fcall_fini(struct p9_fcall *fc)
 }
 EXPORT_SYMBOL(p9_fcall_fini);
 
-static struct kmem_cache *p9_req_cache;
+static struct kmem_cache *p9_req_cache;/*用于系统中p9_req_t结构体分配*/
 
 /**
  * p9_tag_alloc - Allocate a new request.
@@ -631,7 +632,7 @@ static struct p9_req_t *p9_client_prepare_req(struct p9_client *c,
 
 	/* we allow for any status other than disconnected */
 	if (c->status == Disconnected)
-		return ERR_PTR(-EIO);
+		return ERR_PTR(-EIO);/*未建立连接，报错*/
 
 	/* if status is begin_disconnected we allow only clunk request */
 	if (c->status == BeginDisconnect && type != P9_TCLUNK)
@@ -668,7 +669,7 @@ reterr:
  */
 
 static struct p9_req_t *
-p9_client_rpc(struct p9_client *c, int8_t type, const char *fmt, ...)
+p9_client_rpc(struct p9_client *c, int8_t type, const char *fmt/*参数格式*/, ...)
 {
 	va_list ap;
 	int sigpending, err;
@@ -685,7 +686,7 @@ p9_client_rpc(struct p9_client *c, int8_t type, const char *fmt, ...)
 	const uint rsize = c->trans_mod->pooled_rbuffers ? c->msize : 0;
 
 	va_start(ap, fmt);
-	req = p9_client_prepare_req(c, type, tsize, rsize, fmt, ap);
+	req = p9_client_prepare_req(c, type, tsize, rsize, fmt/*参数格式描式*/, ap/*参数*/);/*构造请求*/
 	va_end(ap);
 	if (IS_ERR(req))
 		return req;
@@ -700,7 +701,7 @@ p9_client_rpc(struct p9_client *c, int8_t type, const char *fmt, ...)
 		sigpending = 0;
 	}
 
-	err = c->trans_mod->request(c, req);
+	err = c->trans_mod->request(c, req);/*发送请求*/
 	if (err < 0) {
 		/* write won't happen */
 		p9_req_put(c, req);
@@ -730,6 +731,7 @@ again:
 		err = req->t_err;
 	}
 	if (err == -ERESTARTSYS && c->status == Connected) {
+		/*取消请求*/
 		p9_debug(P9_DEBUG_MUX, "flushing\n");
 		sigpending = 1;
 		clear_thread_flag(TIF_SIGPENDING);
@@ -802,6 +804,7 @@ static struct p9_req_t *p9_client_zc_rpc(struct p9_client *c, int8_t type,
 		sigpending = 0;
 	}
 
+	/*触发零copy请求*/
 	err = c->trans_mod->zc_request(c, req, uidata, uodata,
 				       inlen, olen, in_hdrlen);
 	if (err < 0) {
@@ -934,6 +937,7 @@ static int p9_client_version(struct p9_client *c)
 	if (IS_ERR(req))
 		return PTR_ERR(req);
 
+	/*读取响应*/
 	err = p9pdu_readf(&req->rc, c->proto_version, "ds", &msize, &version);
 	if (err) {
 		p9_debug(P9_DEBUG_9P, "version error %d\n", err);
@@ -985,19 +989,19 @@ struct p9_client *p9_client_create(const char *dev_name, char *options)
 	clnt->trans = NULL;
 	clnt->fcall_cache = NULL;
 
-	client_id = utsname()->nodename;
+	client_id = utsname()->nodename;/*取机器节点名称*/
 	memcpy(clnt->name, client_id, strlen(client_id) + 1);
 
 	spin_lock_init(&clnt->lock);
 	idr_init(&clnt->fids);
 	idr_init(&clnt->reqs);
 
-	err = parse_opts(options, clnt);
+	err = parse_opts(options, clnt);/*解析挂载参数*/
 	if (err < 0)
 		goto free_client;
 
 	if (!clnt->trans_mod)
-		clnt->trans_mod = v9fs_get_default_trans();
+		clnt->trans_mod = v9fs_get_default_trans();/*如未指明transport,使用默认transport*/
 
 	if (!clnt->trans_mod) {
 		err = -EPROTONOSUPPORT;
@@ -1009,11 +1013,12 @@ struct p9_client *p9_client_create(const char *dev_name, char *options)
 	p9_debug(P9_DEBUG_MUX, "clnt %p trans %p msize %d protocol %d\n",
 		 clnt, clnt->trans_mod, clnt->msize, clnt->proto_version);
 
-	err = clnt->trans_mod->create(clnt, dev_name, options);
+	err = clnt->trans_mod->create(clnt, dev_name, options);/*利用指定的transport创建client*/
 	if (err)
 		goto put_trans;
 
 	if (clnt->msize > clnt->trans_mod->maxsize) {
+		/*更新为transport支持的最大消息大小*/
 		clnt->msize = clnt->trans_mod->maxsize;
 		pr_info("Limiting 'msize' to %d as this is the maximum "
 			"supported by transport %s\n",
@@ -1022,13 +1027,14 @@ struct p9_client *p9_client_create(const char *dev_name, char *options)
 	}
 
 	if (clnt->msize < 4096) {
+		/*消息大小过小*/
 		p9_debug(P9_DEBUG_ERROR,
 			 "Please specify a msize of at least 4k\n");
 		err = -EINVAL;
 		goto close_trans;
 	}
 
-	err = p9_client_version(clnt);
+	err = p9_client_version(clnt);/*与对端协调版本*/
 	if (err)
 		goto close_trans;
 

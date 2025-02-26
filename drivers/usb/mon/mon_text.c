@@ -745,6 +745,7 @@ static void mon_text_ctor(void *mem)
 
 int __init mon_text_init(void)
 {
+	/*创建usbmon目录*/
 	mon_dir = debugfs_create_dir("usbmon", usb_debug_root);
 	return 0;
 }

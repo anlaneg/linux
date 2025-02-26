@@ -548,7 +548,7 @@ struct p9_rstatfs {
 
 struct p9_fcall {
 	u32 size;
-	u8 id;
+	u8 id;/*操作标记*/
 	u16 tag;
 
 	size_t offset;

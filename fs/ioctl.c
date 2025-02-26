@@ -46,8 +46,10 @@ long vfs_ioctl(struct file *filp, unsigned int cmd, unsigned long arg)
 	int error = -ENOTTY;
 
 	if (!filp->f_op->unlocked_ioctl)
+		/*未提供unlocked_ioctl回调，返回错误*/
 		goto out;
 
+	/*触发回调调用*/
 	error = filp->f_op->unlocked_ioctl(filp, cmd, arg);
 	if (error == -ENOIOCTLCMD)
 		error = -ENOTTY;
@@ -846,18 +848,19 @@ static int do_vfs_ioctl(struct file *filp, unsigned int fd,
 		return ioctl_fssetxattr(filp, argp);
 
 	default:
-	    /*针对规则文件的其它ioctl*/
+	    /*仅针对普通文件执行的其它ioctl cmd处理*/
 		if (S_ISREG(inode->i_mode))
 			return file_ioctl(filp, cmd, argp);
 		break;
 	}
 
-	return -ENOIOCTLCMD;
+	return -ENOIOCTLCMD;/*非著名（公共）cmd*/
 }
 
+/*实现ioctl系统调用*/
 SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 {
-	struct fd f = fdget(fd);
+	struct fd f = fdget(fd);/*取fd结构体*/
 	int error;
 
 	if (!f.file)
@@ -867,8 +870,10 @@ SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd, unsigned long, arg)
 	if (error)
 		goto out;
 
-	error = do_vfs_ioctl(f.file, fd, cmd, arg);
+	/*处理著名ioctl cmd*/
+	error = do_vfs_ioctl(f.file/*取得操作的文件*/, fd, cmd, arg);
 	if (error == -ENOIOCTLCMD)
+		/*没有找到对应的cmd,调用vfs_ioctl处理*/
 		error = vfs_ioctl(f.file, cmd, arg);
 
 out:
@@ -966,13 +971,13 @@ COMPAT_SYSCALL_DEFINE3(ioctl, unsigned int, fd, unsigned int, cmd,
 	 * argument.
 	 */
 	default:
-	    /*其它通过vfs完成的ioctl*/
+	    /*其它著名cmd处理*/
 		error = do_vfs_ioctl(f.file, fd, cmd,
 				     (unsigned long)compat_ptr(arg));
 		if (error != -ENOIOCTLCMD)
 			break;
 
-		/*上面的ioctl不能完成，如果file ops恰提供了compat_ioctl,则调用*/
+		/*非著名cmd，如果file ops恰提供了compat_ioctl,则调用*/
 		if (f.file->f_op->compat_ioctl)
 			error = f.file->f_op->compat_ioctl(f.file, cmd, arg);
 		if (error == -ENOIOCTLCMD)

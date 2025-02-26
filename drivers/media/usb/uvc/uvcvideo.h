@@ -437,7 +437,7 @@ struct uvc_streaming {
 	struct uvc_streaming_header header;
 	enum v4l2_buf_type type;
 
-	unsigned int nformats;
+	unsigned int nformats;/*设备支持的format总数目*/
 	const struct uvc_format *formats;
 
 	struct uvc_streaming_control ctrl;

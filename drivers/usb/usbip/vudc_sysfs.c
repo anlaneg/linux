@@ -153,13 +153,13 @@ static ssize_t usbip_sockfd_store(struct device *dev,
 		spin_unlock(&udc->ud.lock);
 		spin_unlock_irqrestore(&udc->lock, flags);
 
-		tcp_rx = kthread_create(&v_rx_loop, &udc->ud, "vudc_rx");
+		tcp_rx = kthread_create(&v_rx_loop, &udc->ud, "vudc_rx");/*创建rx线程*/
 		if (IS_ERR(tcp_rx)) {
 			sockfd_put(socket);
 			mutex_unlock(&udc->ud.sysfs_lock);
 			return -EINVAL;
 		}
-		tcp_tx = kthread_create(&v_tx_loop, &udc->ud, "vudc_tx");
+		tcp_tx = kthread_create(&v_tx_loop, &udc->ud, "vudc_tx");/*创建tx线程*/
 		if (IS_ERR(tcp_tx)) {
 			kthread_stop(tcp_rx);
 			sockfd_put(socket);
@@ -175,7 +175,7 @@ static ssize_t usbip_sockfd_store(struct device *dev,
 		spin_lock_irqsave(&udc->lock, flags);
 		spin_lock(&udc->ud.lock);
 
-		udc->ud.tcp_socket = socket;
+		udc->ud.tcp_socket = socket;/*设置tcp socket*/
 		udc->ud.tcp_rx = tcp_rx;
 		udc->ud.tcp_tx = tcp_tx;
 		udc->ud.status = SDEV_ST_USED;
