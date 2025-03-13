@@ -2971,7 +2971,8 @@ static void bio_set_ioprio(struct bio *bio)
  */
 void blk_mq_submit_bio(struct bio *bio)
 {
-	struct request_queue *q = bdev_get_queue(bio->bi_bdev);/*取块设备对应的request queue*/
+	/*取块设备对应的request queue*/
+	struct request_queue *q = bdev_get_queue(bio->bi_bdev);
 	struct blk_plug *plug = blk_mq_plug(bio);
 	const int is_sync = op_is_sync(bio->bi_opf);
 	struct blk_mq_hw_ctx *hctx;

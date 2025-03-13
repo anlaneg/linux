@@ -658,8 +658,8 @@ static void __submit_bio_noacct(struct bio *bio)
 		/*
 		 * Create a fresh bio_list for all subordinate requests.
 		 */
-		bio_list_on_stack[1] = bio_list_on_stack[0];
-		bio_list_init(&bio_list_on_stack[0]);
+		bio_list_on_stack[1] = bio_list_on_stack[0];/*保存0号*/
+		bio_list_init(&bio_list_on_stack[0]);/*初始化0号*/
 
 		__submit_bio(bio);
 
@@ -671,9 +671,9 @@ static void __submit_bio_noacct(struct bio *bio)
 		bio_list_init(&same);
 		while ((bio = bio_list_pop(&bio_list_on_stack[0])) != NULL)
 			if (q == bdev_get_queue(bio->bi_bdev))
-				bio_list_add(&same, bio);
+				bio_list_add(&same, bio);/*相同的q,添加bio*/
 			else
-				bio_list_add(&lower, bio);
+				bio_list_add(&lower, bio);/*不相同的q,添加bio*/
 
 		/*
 		 * Now assemble so we handle the lowest level first.
@@ -721,9 +721,10 @@ void submit_bio_noacct_nocheck(struct bio *bio)
 	 * it is active, and then process them after it returned.
 	 */
 	if (current->bio_list)
-		/*当前进程bio_list不为空，添加到bio_list列表上*/
+		/*当前进程bio_list不为空，将bio添加到bio_list列表上*/
 		bio_list_add(&current->bio_list[0], bio);
 	else if (!bio->bi_bdev->bd_has_submit_bio)
+		/*此bio块设备无submit_bio回调,且bio_list为空*/
 		__submit_bio_noacct_mq(bio);
 	else
 		__submit_bio_noacct(bio);

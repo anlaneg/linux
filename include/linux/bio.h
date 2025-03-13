@@ -570,6 +570,7 @@ static inline int bio_list_empty(const struct bio_list *bl)
 
 static inline void bio_list_init(struct bio_list *bl)
 {
+	/*初始化*/
 	bl->head = bl->tail = NULL;
 }
 
@@ -591,14 +592,14 @@ static inline unsigned bio_list_size(const struct bio_list *bl)
 
 static inline void bio_list_add(struct bio_list *bl, struct bio *bio)
 {
-	bio->bi_next = NULL;
+	bio->bi_next = NULL;/*将结尾置空*/
 
 	if (bl->tail)
-		bl->tail->bi_next = bio;
+		bl->tail->bi_next = bio;/*将bio存入尾部*/
 	else
-		bl->head = bio;
+		bl->head = bio;/*暂为空,将bio存成首个*/
 
-	bl->tail = bio;
+	bl->tail = bio;/*更新tail*/
 }
 
 static inline void bio_list_add_head(struct bio_list *bl, struct bio *bio)
@@ -644,9 +645,10 @@ static inline struct bio *bio_list_peek(struct bio_list *bl)
 	return bl->head;
 }
 
+/*弹出首个bio*/
 static inline struct bio *bio_list_pop(struct bio_list *bl)
 {
-	struct bio *bio = bl->head;
+	struct bio *bio = bl->head;/*保存首个,准备返回*/
 
 	if (bio) {
 		/*head不为空，将bl->head切到next(更新bl)*/
@@ -654,7 +656,7 @@ static inline struct bio *bio_list_pop(struct bio_list *bl)
 		if (!bl->head)
 			bl->tail = NULL;
 
-		bio->bi_next = NULL;/*将bio自bl->head的链上断开*/
+		bio->bi_next = NULL;/*将bio自bl->head的链上断开,以便返回*/
 	}
 
 	return bio;
