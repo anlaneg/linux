@@ -123,8 +123,8 @@ static const struct fs_parameter_spec ext4_param_specs[];
  */
 
 static const struct fs_context_operations ext4_context_ops = {
-	.parse_param	= ext4_parse_param,
-	.get_tree	= ext4_get_tree,
+	.parse_param	= ext4_parse_param,/*ext4参数解析*/
+	.get_tree	= ext4_get_tree,/*ext4根节点获取*/
 	.reconfigure	= ext4_reconfigure,
 	.free		= ext4_fc_free,
 };
@@ -2143,6 +2143,7 @@ EXT4_SET_CTX(mount_opt2);
 EXT4_CLEAR_CTX(mount_opt2);
 EXT4_TEST_CTX(mount_opt2);
 
+/*ext4参数解析*/
 static int ext4_parse_param(struct fs_context *fc, struct fs_parameter *param)
 {
 	struct ext4_fs_context *ctx = fc->fs_private;
@@ -7385,7 +7386,7 @@ static int __init ext4_init_fs(void)
 
 	register_as_ext3();
 	register_as_ext2();
-	err = register_filesystem(&ext4_fs_type);
+	err = register_filesystem(&ext4_fs_type);/*注册ext4文件系统*/
 	if (err)
 		goto out;
 

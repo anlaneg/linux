@@ -1114,6 +1114,7 @@ static bool grow_buffers(struct block_device *bdev, sector_t block,
 	return grow_dev_folio(bdev, block, pos / PAGE_SIZE, size, gfp);
 }
 
+/*尝试自block设备中获取此buffer*/
 static struct buffer_head *
 __getblk_slow(struct block_device *bdev, sector_t block,
 	     unsigned size, gfp_t gfp)
@@ -1435,7 +1436,7 @@ EXPORT_SYMBOL(__find_get_block);
  *
  * Return: The buffer head, or NULL if memory could not be allocated.
  */
-struct buffer_head *bdev_getblk(struct block_device *bdev, sector_t block/*block编号*/,
+struct buffer_head *bdev_getblk(struct block_device *bdev/*块设备*/, sector_t block/*block编号*/,
 		unsigned size/*内容长度*/, gfp_t gfp)
 {
 	//尝试自缓存中获取此buffer

@@ -97,7 +97,7 @@ struct fs_context {
 	struct mutex		uapi_mutex;	/* Userspace access mutex */
 	//文件系统类型
 	struct file_system_type	*fs_type;
-	//私有数据
+	//私有数据(保存文件系统自已的context)
 	void			*fs_private;	/* The filesystem's context */
 	void			*sget_key;
 	/*记录sb的root dentry*/
@@ -122,9 +122,10 @@ struct fs_context {
 	enum fs_context_phase	phase:8;	/* The phase the context is in */
 	//指明是否有必要调用ops->free回调，用于释放fs_context中fs定制的私有数据
 	bool			need_free:1;	/* Need to call ops->free() */
-	/*是否使用全局的init_user_ns*/
+	/*如为True,使用全局的init_user_ns;否则使用fc->user_ns*/
 	bool			global:1;	/* Goes into &init_user_ns */
 	bool			oldapi:1;	/* Coming from mount(2) */
+	/*必须独占,不共享*/
 	bool			exclusive:1;    /* create new superblock, reject existing one */
 };
 

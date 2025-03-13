@@ -1535,7 +1535,7 @@ struct ext4_sb_info {
 	struct proc_dir_entry *s_proc;
 	struct kobject s_kobj;
 	struct completion s_kobj_unregister;
-	struct super_block *s_sb;
+	struct super_block *s_sb;/*对应的super block*/
 	struct buffer_head *s_mmp_bh;
 
 	/* Journaling */

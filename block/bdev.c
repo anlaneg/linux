@@ -462,10 +462,10 @@ void bdev_add(struct block_device *bdev, dev_t dev)
 	if (bdev_stable_writes(bdev))
 		mapping_set_stable_writes(bdev->bd_inode->i_mapping);
 	bdev->bd_dev = dev;
-	/*如下示，即为设备编号，又是inode id*/
+	/*如下示，块设备inode number即为设备编号*/
 	bdev->bd_inode->i_rdev = dev;
 	bdev->bd_inode->i_ino = dev;
-	/*将其加入到inode hash表中*/
+	/*将块设备对应的inode,加入到inode hash表中*/
 	insert_inode_hash(bdev->bd_inode);
 }
 
@@ -744,7 +744,8 @@ struct block_device *blkdev_get_no_open(dev_t dev)
 	struct block_device *bdev;
 	struct inode *inode;
 
-	/*查找inode id为dev且super blok为blockdev_superblock的inode,此即为dev对应的块设备*/
+	/*查找inode id为dev,且super blok为blockdev_superblock的inode,此即为dev对应的块设备
+	 * 添加位置见bdev_add*/
 	inode = ilookup(blockdev_superblock, dev);
 	if (!inode && IS_ENABLED(CONFIG_BLOCK_LEGACY_AUTOLOAD)) {
 		/*inode不存在，但开启了autoload,先尝试做module的probe回调，再查一次inode*/
@@ -754,11 +755,13 @@ struct block_device *blkdev_get_no_open(dev_t dev)
 			pr_warn_ratelimited(
 "block device autoloading is deprecated and will be removed.\n");
 	}
+
+	/*没有查找到块设备*/
 	if (!inode)
 		return NULL;
 
 	/* switch from the inode reference to a device mode one: */
-	bdev = &BDEV_I(inode)->bdev;/*取块设备*/
+	bdev = &BDEV_I(inode)->bdev;/*取此inode对应的块设备*/
 	if (!kobject_get_unless_zero(&bdev->bd_device.kobj))
 		bdev = NULL;
 	iput(inode);
@@ -846,6 +849,7 @@ static void bdev_yield_write_access(struct block_device *bdev, blk_mode_t mode)
 struct bdev_handle *bdev_open_by_dev(dev_t dev/*设备编号*/, blk_mode_t mode, void *holder,
 				     const struct blk_holder_ops *hops)
 {
+	/*申请结构体*/
 	struct bdev_handle *handle = kmalloc(sizeof(struct bdev_handle),
 					     GFP_KERNEL);
 	struct block_device *bdev;
@@ -1056,7 +1060,7 @@ int lookup_bdev(const char *pathname, dev_t *dev/*出参，确认pathname对应�
 	if (error)
 		return error;
 
-	//取此pathname对应的dentry所对应的inode
+	//取此dentry所对应的inode
 	inode = d_backing_inode(path.dentry);
 	error = -ENOTBLK;
 	if (!S_ISBLK(inode->i_mode))

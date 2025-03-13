@@ -78,7 +78,7 @@ EXPORT_SYMBOL_GPL(dax_remove_host);
  * @holder: filesystem or mapped device inside the dax_device
  * @ops: operations for the inner holder
  */
-struct dax_device *fs_dax_get_by_bdev(struct block_device *bdev, u64 *start_off,
+struct dax_device *fs_dax_get_by_bdev(struct block_device *bdev/*块设备*/, u64 *start_off,
 		void *holder, const struct dax_holder_operations *ops)
 {
 	struct dax_device *dax_dev;
@@ -88,15 +88,16 @@ struct dax_device *fs_dax_get_by_bdev(struct block_device *bdev, u64 *start_off,
 	if (!blk_queue_dax(bdev->bd_disk->queue))
 		return NULL;
 
-	*start_off = get_start_sect(bdev) * SECTOR_SIZE;
-	part_size = bdev_nr_sectors(bdev) * SECTOR_SIZE;
+	*start_off = get_start_sect(bdev) * SECTOR_SIZE;/*起始偏移量*/
+	part_size = bdev_nr_sectors(bdev) * SECTOR_SIZE;/*终止分区偏移量*/
 	if (*start_off % PAGE_SIZE || part_size % PAGE_SIZE) {
+		/*起始偏移量,分区偏移量均与PAGE_SIZE对齐*/
 		pr_info("%pg: error: unaligned partition for dax\n", bdev);
 		return NULL;
 	}
 
 	id = dax_read_lock();
-	dax_dev = xa_load(&dax_hosts, (unsigned long)bdev->bd_disk);
+	dax_dev = xa_load(&dax_hosts, (unsigned long)bdev->bd_disk);/*获得dax_dev设备*/
 	if (!dax_dev || !dax_alive(dax_dev) || !igrab(&dax_dev->inode))
 		dax_dev = NULL;
 	else if (holder) {

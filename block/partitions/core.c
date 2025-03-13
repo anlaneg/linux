@@ -321,7 +321,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 
 	/*针对partno号分区，申请并创建块设备*/
 	err = -ENOMEM;
-	bdev = bdev_alloc(disk, partno);
+	bdev = bdev_alloc(disk, partno);/*申请块设备*/
 	if (!bdev)
 		goto out_put_disk;
 
@@ -384,7 +384,7 @@ static struct block_device *add_partition(struct gendisk *disk, int partno/*分�
 	if (err)
 		goto out_del;
 
-	/*添加此块设备到inode hashtable*/
+	/*添加块设备到inode hashtable*/
 	bdev_add(bdev, devt);
 
 	/* suppress uevent if the disk suppresses it */

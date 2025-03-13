@@ -5271,7 +5271,7 @@ void __init mnt_init(void)
 	if (err)
 		printk(KERN_WARNING "%s: sysfs_init error: %d\n",
 			__func__, err);
-	fs_kobj = kobject_create_and_add("fs", NULL);
+	fs_kobj = kobject_create_and_add("fs", NULL);/*创建/sys/fs对应的kobject*/
 	if (!fs_kobj)
 		printk(KERN_WARNING "%s: kobj create error\n", __func__);
 	shmem_init();

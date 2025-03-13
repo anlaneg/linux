@@ -569,7 +569,7 @@ int __init ext4_init_sysfs(void)
 {
 	int ret;
 
-	ext4_root = kobject_create_and_add("ext4", fs_kobj);
+	ext4_root = kobject_create_and_add("ext4", fs_kobj);/*添加ext4 root根kobject*/
 	if (!ext4_root)
 		return -ENOMEM;
 
@@ -584,6 +584,7 @@ int __init ext4_init_sysfs(void)
 	if (ret)
 		goto feat_err;
 
+	/*创建fs/ext4对应的proc root*/
 	ext4_proc_root = proc_mkdir(proc_dirname, NULL);
 	return ret;
 

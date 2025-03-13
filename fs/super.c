@@ -737,7 +737,7 @@ bool mount_capable(struct fs_context *fc)
  *         returned. On failure an error pointer is returned.
  */
 struct super_block *sget_fc(struct fs_context *fc,
-			    int (*test/*检查super block是否可共享*/)(struct super_block *, struct fs_context *),
+			    int (*test/*检查即有的super block是否可共享*/)(struct super_block *, struct fs_context *),
 			    int (*set/*用于设置super block,返回非零表示失败*/)(struct super_block *, struct fs_context *))
 {
 	struct super_block *s = NULL;
@@ -750,14 +750,15 @@ retry:
 	spin_lock(&sb_lock);
 	/*通过此回调，检查是否与即有的super block share，可则返回*/
 	if (test) {
+		/*检查此文件系统已实例化的所有super block,采用test回调检查super block是否可share*/
 		hlist_for_each_entry(old, &fc->fs_type->fs_supers, s_instances) {
 			if (test(old, fc))
 				goto share_extant_sb;
 		}
 	}
 	if (!s) {
+		/*首次进入,申请super block对象*/
 		spin_unlock(&sb_lock);
-		/*申请super block对象*/
 		s = alloc_super(fc->fs_type, fc->sb_flags, user_ns);
 		if (!s)
 			return ERR_PTR(-ENOMEM);
@@ -773,7 +774,7 @@ retry:
 		destroy_unused_super(s);
 		return ERR_PTR(err);
 	}
-	fc->s_fs_info = NULL;
+	fc->s_fs_info = NULL;/*再还原回来*/
 	s->s_type = fc->fs_type;
 	s->s_iflags |= fc->s_iflags;
 	strscpy(s->s_id, s->s_type->name, sizeof(s->s_id));
@@ -793,6 +794,7 @@ retry:
 
 share_extant_sb:
 	if (user_ns != old->s_user_ns || fc->exclusive) {
+		/*不支持共享的情况*/
 		spin_unlock(&sb_lock);
 		destroy_unused_super(s);
 		if (fc->exclusive)
@@ -801,6 +803,7 @@ share_extant_sb:
 			warnfc(fc, "reusing existing filesystem in another namespace not allowed");
 		return ERR_PTR(-EBUSY);
 	}
+	/*复用即有的super block*/
 	if (!grab_super(old))
 		goto retry;
 	destroy_unused_super(s);
@@ -1356,13 +1359,14 @@ static int set_bdev_super(struct super_block *s, void *data)
 
 static int super_s_dev_set(struct super_block *s, struct fs_context *fc)
 {
+	/*设置super block对应的设备dev_t*/
 	return set_bdev_super(s, fc->sget_key);
 }
 
 static int super_s_dev_test(struct super_block *s, struct fs_context *fc)
 {
 	return !(s->s_iflags & SB_I_RETIRED) &&
-		s->s_dev == *(dev_t *)fc->sget_key;
+		s->s_dev == *(dev_t *)fc->sget_key;/*DEV_T必须匹配*/
 }
 
 /**
@@ -1387,7 +1391,7 @@ static int super_s_dev_test(struct super_block *s, struct fs_context *fc)
  */
 struct super_block *sget_dev(struct fs_context *fc, dev_t dev)
 {
-	fc->sget_key = &dev;
+	fc->sget_key = &dev;/*记录DEV_T*/
 	return sget_fc(fc, super_s_dev_test, super_s_dev_set);
 }
 EXPORT_SYMBOL(sget_dev);
@@ -1572,13 +1576,14 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 	struct bdev_handle *bdev_handle;
 	struct block_device *bdev;
 
+	/*创建bdev_handle*/
 	bdev_handle = bdev_open_by_dev(sb->s_dev, mode, sb, &fs_holder_ops);
 	if (IS_ERR(bdev_handle)) {
 		if (fc)
 			errorf(fc, "%s: Can't open blockdev", fc->source);
 		return PTR_ERR(bdev_handle);
 	}
-	bdev = bdev_handle->bdev;
+	bdev = bdev_handle->bdev;/*取块设备*/
 
 	/*
 	 * This really should be in blkdev_get_by_dev, but right now can't due
@@ -1602,7 +1607,7 @@ int setup_bdev_super(struct super_block *sb, int sb_flags,
 	}
 	spin_lock(&sb_lock);
 	sb->s_bdev_handle = bdev_handle;
-	sb->s_bdev = bdev;
+	sb->s_bdev = bdev;/*指明块设备*/
 	sb->s_bdi = bdi_get(bdev->bd_disk->bdi);
 	if (bdev_stable_writes(bdev))
 		sb->s_iflags |= SB_I_STABLE_WRITES;
@@ -1622,7 +1627,7 @@ EXPORT_SYMBOL_GPL(setup_bdev_super);
  * @fill_super: Helper to initialise a new superblock
  */
 int get_tree_bdev(struct fs_context *fc,
-		int (*fill_super)(struct super_block *,
+		int (*fill_super/*填充super block*/)(struct super_block *,
 				  struct fs_context *))
 {
 	struct super_block *s;
@@ -1630,8 +1635,10 @@ int get_tree_bdev(struct fs_context *fc,
 	dev_t dev;
 
 	if (!fc->source)
+		/*必须指定source*/
 		return invalf(fc, "No source specified");
 
+	/*通过source参数查询此块设备,获取此设备对应的dev_t*/
 	error = lookup_bdev(fc->source, &dev);
 	if (error) {
 		errorf(fc, "%s: Can't lookup blockdev", fc->source);
@@ -1639,6 +1646,7 @@ int get_tree_bdev(struct fs_context *fc,
 	}
 
 	fc->sb_flags |= SB_NOSEC;
+	/*创建super block*/
 	s = sget_dev(fc, dev);
 	if (IS_ERR(s))
 		return PTR_ERR(s);
@@ -1651,9 +1659,10 @@ int get_tree_bdev(struct fs_context *fc,
 			return -EBUSY;
 		}
 	} else {
+		/*打开设备,创建bdev_handle,设置super block*/
 		error = setup_bdev_super(s, fc->sb_flags, fc);
 		if (!error)
-			error = fill_super(s, fc);
+			error = fill_super(s, fc);/*填充super block*/
 		if (error) {
 			deactivate_locked_super(s);
 			return error;
@@ -1662,7 +1671,7 @@ int get_tree_bdev(struct fs_context *fc,
 	}
 
 	BUG_ON(fc->root);
-	fc->root = dget(s->s_root);
+	fc->root = dget(s->s_root);/*设置root dentry*/
 	return 0;
 }
 EXPORT_SYMBOL(get_tree_bdev);

@@ -327,6 +327,7 @@ static const struct super_operations v9fs_super_ops_dotl = {
 	.write_inode = v9fs_write_inode_dotl,
 };
 
+/*定义9p文件系统*/
 struct file_system_type v9fs_fs_type = {
 	.name = "9p",
 	.mount = v9fs_mount,/*实现挂载*/

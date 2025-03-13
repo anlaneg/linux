@@ -1158,7 +1158,7 @@ static inline void hlist_splice_init(struct hlist_head *from,
 	from->first = NULL;
 }
 
-//由ptr推导出type类型变量
+//由ptr推导出type类型变量(ptr是type类型中member成员的指针,由此获取type类型对应的指针)
 #define hlist_entry(ptr, type, member) container_of(ptr,type,member)
 
 #define hlist_for_each(pos, head) \
