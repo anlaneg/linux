@@ -1694,7 +1694,7 @@ static void ieee80211_activate_links_work(struct wiphy *wiphy,
  * Helper function to initialise an interface to a specific type.
  */
 static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
-				  enum nl80211_iftype type)
+				  enum nl80211_iftype type/*接口类型*/)
 {
 	static const u8 bssid_wildcard[ETH_ALEN] = {0xff, 0xff, 0xff,
 						    0xff, 0xff, 0xff};
@@ -1704,8 +1704,8 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 	memset(&sdata->deflink.u, 0, sizeof(sdata->deflink.u));
 
 	/* and set some type-dependent values */
-	sdata->vif.type = type;
-	sdata->vif.p2p = false;
+	sdata->vif.type = type;/*设置接口类型*/
+	sdata->vif.p2p = false;/*默认非p2p*/
 	sdata->wdev.iftype = type;
 
 	sdata->control_port_protocol = cpu_to_be16(ETH_P_PAE);
@@ -1731,6 +1731,7 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 
 	switch (type) {
 	case NL80211_IFTYPE_P2P_GO:
+		/*针对p2p go修改为ap,并指明为p2p接口*/
 		type = NL80211_IFTYPE_AP;
 		sdata->vif.type = type;
 		sdata->vif.p2p = true;
@@ -1741,6 +1742,7 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 		sdata->vif.bss_conf.bssid = sdata->vif.addr;
 		break;
 	case NL80211_IFTYPE_P2P_CLIENT:
+		/*针对p2p client修改为station,并指明为p2p接口*/
 		type = NL80211_IFTYPE_STATION;
 		sdata->vif.type = type;
 		sdata->vif.p2p = true;
@@ -1774,6 +1776,7 @@ static void ieee80211_setup_sdata(struct ieee80211_sub_if_data *sdata,
 		break;
 	case NL80211_IFTYPE_AP_VLAN:
 	case NL80211_IFTYPE_P2P_DEVICE:
+		/*设置bssid为p2p接口地址*/
 		sdata->vif.bss_conf.bssid = sdata->vif.addr;
 		break;
 	case NL80211_IFTYPE_UNSPECIFIED:
@@ -1898,7 +1901,7 @@ int ieee80211_if_change_type(struct ieee80211_sub_if_data *sdata,
 	} else {
 		/* Purge and reset type-dependent state. */
 		ieee80211_teardown_sdata(sdata);
-		ieee80211_setup_sdata(sdata, type);
+		ieee80211_setup_sdata(sdata, type);/*变更接口类型*/
 	}
 
 	/* reset some values that shouldn't be kept across type changes */
@@ -1961,12 +1964,14 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 			list_for_each_entry(sdata, &local->interfaces, list) {
 				if (ether_addr_equal(local->hw.wiphy->addresses[i].addr,
 						     sdata->vif.addr)) {
+					/*mac地址相同，使用了local->hw.wiphy地址*/
 					used = true;
 					break;
 				}
 			}
 
 			if (!used) {
+				/*此地址不与任何vif.addr相同，使用此地址*/
 				memcpy(perm_addr,
 				       local->hw.wiphy->addresses[i].addr,
 				       ETH_ALEN);
@@ -1996,7 +2001,7 @@ static void ieee80211_assign_perm_addr(struct ieee80211_local *local,
 		m = local->hw.wiphy->perm_addr;
 		list_for_each_entry(sdata, &local->interfaces, list) {
 			if (sdata->vif.type == NL80211_IFTYPE_MONITOR)
-				continue;
+				continue;/*不考虑使用monitor地址*/
 			m = sdata->vif.addr;
 			break;
 		}
@@ -2051,7 +2056,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 	lockdep_assert_wiphy(local->hw.wiphy);
 
 	if (type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN) {
-		/*p2p,nan类型*/
+		/*p2p,nan类型，没有netdev设备*/
 		struct wireless_dev *wdev;
 
 		sdata = kzalloc(sizeof(*sdata) + local->hw.vif_data_size,
@@ -2060,10 +2065,10 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 			return -ENOMEM;
 		wdev = &sdata->wdev;
 
-		sdata->dev = NULL;
-		strscpy(sdata->name, name, IFNAMSIZ);
+		sdata->dev = NULL;/*指明无netdev*/
+		strscpy(sdata->name, name, IFNAMSIZ);/*设置接口名称*/
 		ieee80211_assign_perm_addr(local, wdev->address, type);
-		memcpy(sdata->vif.addr, wdev->address, ETH_ALEN);
+		memcpy(sdata->vif.addr, wdev->address, ETH_ALEN);/*为此vif设置mac地址*/
 		ether_addr_copy(sdata->vif.bss_conf.addr, sdata->vif.addr);
 	} else {
 		int size = ALIGN(sizeof(*sdata) + local->hw.vif_data_size,
@@ -2173,7 +2178,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 	sdata->deflink.user_power_level = local->user_power_level;
 
 	/* setup type-dependent data */
-	ieee80211_setup_sdata(sdata, type);
+	ieee80211_setup_sdata(sdata, type);/*设置接口类型*/
 
 	if (ndev) {
 		ndev->ieee80211_ptr->use_4addr = params->use_4addr;
@@ -2207,7 +2212,7 @@ int ieee80211_if_add(struct ieee80211_local *local, const char *name/*设备名�
 	}
 
 	mutex_lock(&local->iflist_mtx);
-	list_add_tail_rcu(&sdata->list, &local->interfaces);
+	list_add_tail_rcu(&sdata->list, &local->interfaces);/*添加sdata*/
 	mutex_unlock(&local->iflist_mtx);
 
 	if (new_wdev)

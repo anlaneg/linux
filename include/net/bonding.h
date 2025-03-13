@@ -245,7 +245,7 @@ struct bonding /*bond设备对应的私有数据结构体*/{
 	struct   slave __rcu *curr_active_slave;
 	struct   slave __rcu *current_arp_slave;
 	struct   slave __rcu *primary_slave;
-	struct   bond_up_slave __rcu *usable_slaves;
+	struct   bond_up_slave __rcu *usable_slaves;/*有哪些slave可供选择*/
 	struct   bond_up_slave __rcu *all_slaves;
 	bool     force_primary;
 	bool     notifier_ctx;

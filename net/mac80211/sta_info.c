@@ -91,6 +91,7 @@ static const struct rhashtable_params link_sta_rht_params = {
 static int sta_info_hash_del(struct ieee80211_local *local,
 			     struct sta_info *sta)
 {
+	/*自station hash中移除一个station*/
 	return rhltable_remove(&local->sta_hash, &sta->hash_node,
 			       sta_rht_params);
 }
@@ -195,7 +196,7 @@ static void cleanup_single_sta(struct sta_info *sta)
 }
 
 struct rhlist_head *sta_info_hash_lookup(struct ieee80211_local *local,
-					 const u8 *addr)
+					 const u8 *addr/*要查询的地址*/)
 {
 	/*通过addr查询sta_hash表*/
 	return rhltable_lookup(&local->sta_hash, addr, sta_rht_params);
@@ -1545,6 +1546,7 @@ int sta_info_init(struct ieee80211_local *local)
 {
 	int err;
 
+	/*初始化station hash表*/
 	err = rhltable_init(&local->sta_hash, &sta_rht_params);
 	if (err)
 		return err;

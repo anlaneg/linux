@@ -41,13 +41,13 @@ static inline void rdev_set_wakeup(struct cfg80211_registered_device *rdev,
 
 static inline struct wireless_dev
 *rdev_add_virtual_intf(struct cfg80211_registered_device *rdev, char *name/*接口名称*/,
-		       unsigned char name_assign_type,
+		       unsigned char name_assign_type/*名称来源，例如来源用户态NET_NAME_USER*/,
 		       enum nl80211_iftype type/*接口类型*/,
 		       struct vif_params *params)
 {
 	struct wireless_dev *ret;
 	trace_rdev_add_virtual_intf(&rdev->wiphy, name, type);
-	/*调用添加virtual interface回调*/
+	/*调用回调，由各rdev具体添加virtual interface*/
 	ret = rdev->ops->add_virtual_intf(&rdev->wiphy, name, name_assign_type,
 					  type, params);
 	trace_rdev_return_wdev(&rdev->wiphy, ret);
@@ -461,7 +461,7 @@ static inline int rdev_scan(struct cfg80211_registered_device *rdev,
 {
 	int ret;
 	trace_rdev_scan(&rdev->wiphy, request);
-	ret = rdev->ops->scan(&rdev->wiphy, request);
+	ret = rdev->ops->scan(&rdev->wiphy, request);/*由rdev设备执行scan*/
 	trace_rdev_return_int(&rdev->wiphy, ret);
 	return ret;
 }

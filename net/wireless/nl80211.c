@@ -148,18 +148,18 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	if (!attrs[NL80211_ATTR_WIPHY] &&
 	    !attrs[NL80211_ATTR_IFINDEX] &&
 	    !attrs[NL80211_ATTR_WDEV])
-		return ERR_PTR(-EINVAL);
+		return ERR_PTR(-EINVAL);/*必须以上三者之一*/
 
 	if (attrs[NL80211_ATTR_WIPHY])
 		rdev = cfg80211_rdev_by_wiphy_idx(
-				nla_get_u32(attrs[NL80211_ATTR_WIPHY]));
+				nla_get_u32(attrs[NL80211_ATTR_WIPHY]));/*通过wiphy idx查询*/
 
 	if (attrs[NL80211_ATTR_WDEV]) {
 		u64 wdev_id = nla_get_u64(attrs[NL80211_ATTR_WDEV]);
 		struct wireless_dev *wdev;
 		bool found = false;
 
-		tmp = cfg80211_rdev_by_wiphy_idx(wdev_id >> 32);
+		tmp = cfg80211_rdev_by_wiphy_idx(wdev_id >> 32);/*通过wdev_id变更为wiphy idx查询*/
 		if (tmp) {
 			/* make sure wdev exists */
 			list_for_each_entry(wdev, &tmp->wiphy.wdev_list, list) {
@@ -181,11 +181,11 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 	if (attrs[NL80211_ATTR_IFINDEX]) {
 		int ifindex = nla_get_u32(attrs[NL80211_ATTR_IFINDEX]);
 
-		netdev = __dev_get_by_index(netns, ifindex);
+		netdev = __dev_get_by_index(netns, ifindex);/*通过ifindex查找netdev*/
 		if (netdev) {
 			if (netdev->ieee80211_ptr)
 				tmp = wiphy_to_rdev(
-					netdev->ieee80211_ptr->wiphy);
+					netdev->ieee80211_ptr->wiphy);/*再由netdev反查*/
 			else
 				tmp = NULL;
 
@@ -220,6 +220,7 @@ __cfg80211_rdev_from_attrs(struct net *netns, struct nlattr **attrs)
 static struct cfg80211_registered_device *
 cfg80211_get_dev_from_info(struct net *netns, struct genl_info *info)
 {
+	/*通过消息属性取rdev*/
 	return __cfg80211_rdev_from_attrs(netns, info->attrs);
 }
 
@@ -2062,13 +2063,14 @@ nl80211_send_mgmt_stypes(struct sk_buff *msg,
 
 #define CMD(op, n)							\
 	 do {								\
-		if (rdev->ops->op) {					\
+		if (rdev->ops->op) {/*有此回调，添加回调标记到msg*/					\
 			i++;						\
 			if (nla_put_u32(msg, i, NL80211_CMD_ ## n)) 	\
 				goto nla_put_failure;			\
 		}							\
 	} while (0)
 
+/*rdev支持某一回调，则添加相应的cmd 标记到msg*/
 static int nl80211_add_commands_unsplit(struct cfg80211_registered_device *rdev,
 					struct sk_buff *msg)
 {
@@ -4183,6 +4185,7 @@ static int nl80211_valid_4addr(struct cfg80211_registered_device *rdev,
 		break;
 	}
 
+	/*其它类型vif不支持设置ip地址*/
 	return -EOPNOTSUPP;
 }
 
@@ -4263,7 +4266,7 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 	struct wireless_dev *wdev;
 	struct sk_buff *msg;
 	int err;
-	enum nl80211_iftype type = NL80211_IFTYPE_UNSPECIFIED;
+	enum nl80211_iftype type = NL80211_IFTYPE_UNSPECIFIED;/*默认接口类型*/
 
 	memset(&params, 0, sizeof(params));
 
@@ -4282,18 +4285,18 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 	if ((type == NL80211_IFTYPE_P2P_DEVICE || type == NL80211_IFTYPE_NAN ||
 	     rdev->wiphy.features & NL80211_FEATURE_MAC_ON_CREATE) &&
 	    info->attrs[NL80211_ATTR_MAC]) {
-		/*设置mac地址*/
+		/*以上这几种类型的接口必须设置mac地址*/
 		nla_memcpy(params.macaddr, info->attrs[NL80211_ATTR_MAC],
 			   ETH_ALEN);
 		if (!is_valid_ether_addr(params.macaddr))
-			return -EADDRNOTAVAIL;
+			return -EADDRNOTAVAIL;/*设置的mac地址有误*/
 	}
 
 	if (info->attrs[NL80211_ATTR_4ADDR]) {
 		params.use_4addr = !!nla_get_u8(info->attrs[NL80211_ATTR_4ADDR]);
 		err = nl80211_valid_4addr(rdev, NULL, params.use_4addr, type);
 		if (err)
-			return err;
+			return err;/*此类接口不支持设置ip地址*/
 	}
 
 	if (!cfg80211_iftype_allowed(&rdev->wiphy, type, params.use_4addr, 0))
@@ -4303,14 +4306,14 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 	if (err < 0)
 		return err;
 
-	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);
+	msg = nlmsg_new(NLMSG_DEFAULT_SIZE, GFP_KERNEL);/*准备响应消息*/
 	if (!msg)
 		return -ENOMEM;
 
 	/*创建对应的wdev*/
 	wdev = rdev_add_virtual_intf(rdev,
 				nla_data(info->attrs[NL80211_ATTR_IFNAME])/*接口名称*/,
-				NET_NAME_USER, type/*接口类型*/, &params);
+				NET_NAME_USER, type/*接口类型*/, &params/*接口创建参数*/);
 	if (WARN_ON(!wdev)) {
 		nlmsg_free(msg);
 		return -EPROTO;
@@ -4329,13 +4332,13 @@ static int _nl80211_new_interface(struct sk_buff *skb, struct genl_info *info/*�
 		BUILD_BUG_ON(IEEE80211_MAX_SSID_LEN !=
 			     IEEE80211_MAX_MESH_ID_LEN);
 		wdev->u.mesh.id_up_len =
-			nla_len(info->attrs[NL80211_ATTR_MESH_ID]);
+			nla_len(info->attrs[NL80211_ATTR_MESH_ID]);/*取配置的mesh id*/
 		memcpy(wdev->u.mesh.id,
 		       nla_data(info->attrs[NL80211_ATTR_MESH_ID]),
 		       wdev->u.mesh.id_up_len);
 		break;
 	case NL80211_IFTYPE_NAN:
-	case NL80211_IFTYPE_P2P_DEVICE:
+	case NL80211_IFTYPE_P2P_DEVICE:/*p2p设备*/
 		/*
 		 * P2P Device and NAN do not have a netdev, so don't go
 		 * through the netdev notifier and must be added here
@@ -9155,6 +9158,7 @@ nl80211_check_scan_flags(struct wiphy *wiphy, struct wireless_dev *wdev,
 	return 0;
 }
 
+/*响应扫描*/
 static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 {
 	struct cfg80211_registered_device *rdev = info->user_ptr[0];
@@ -9173,9 +9177,11 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	if (!rdev->ops->scan)
+		/*设备必须提供scan*/
 		return -EOPNOTSUPP;
 
 	if (rdev->scan_req || rdev->scan_msg)
+		/*有扫描在进行*/
 		return -EBUSY;
 
 	if (info->attrs[NL80211_ATTR_SCAN_FREQ_KHZ]) {
@@ -9187,6 +9193,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	} else if (info->attrs[NL80211_ATTR_SCAN_FREQUENCIES])
 		scan_freqs = info->attrs[NL80211_ATTR_SCAN_FREQUENCIES];
 
+	/*取channels数*/
 	if (scan_freqs) {
 		n_channels = validate_scan_freqs(scan_freqs);
 		if (!n_channels)
@@ -9210,33 +9217,41 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	if (ie_len > wiphy->max_scan_ie_len)
 		return -EINVAL;
 
+	/*scan request结构体后面跟n_channels个channel*/
 	size = struct_size(request, channels, n_channels);
+	/*n_ssids个ssids结构体*/
 	size = size_add(size, array_size(sizeof(*request->ssids), n_ssids));
+	/*增加ie结构体长度*/
 	size = size_add(size, ie_len);
+	/*申请request内存*/
 	request = kzalloc(size, GFP_KERNEL);
 	if (!request)
 		return -ENOMEM;
 
 	if (n_ssids)
+		/*使ssids占用channel之后的内存*/
 		request->ssids = (void *)&request->channels[n_channels];
 	request->n_ssids = n_ssids;
 	if (ie_len) {
+		/*使ie占用ssids之后的内存*/
 		if (n_ssids)
 			request->ie = (void *)(request->ssids + n_ssids);
 		else
 			request->ie = (void *)(request->channels + n_channels);
 	}
+	/*内存布局[request][channels][ssids][ie]*/
 
 	i = 0;
 	if (scan_freqs) {
 		/* user specified, bail out if channel not found */
 		nla_for_each_nested(attr, scan_freqs, tmp) {
 			struct ieee80211_channel *chan;
-			int freq = nla_get_u32(attr);
+			int freq = nla_get_u32(attr);/*取频率*/
 
 			if (!scan_freqs_khz)
 				freq = MHZ_TO_KHZ(freq);
 
+			/*通过频率查询channel*/
 			chan = ieee80211_get_channel_khz(wiphy, freq);
 			if (!chan) {
 				err = -EINVAL;
@@ -9247,7 +9262,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 			if (chan->flags & IEEE80211_CHAN_DISABLED)
 				continue;
 
-			request->channels[i] = chan;
+			request->channels[i] = chan;/*设置请求的channel*/
 			i++;
 		}
 	} else {
@@ -9259,6 +9274,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 
 			if (!wiphy->bands[band])
 				continue;
+			/*遍历此band对应的channel*/
 			for (j = 0; j < wiphy->bands[band]->n_channels; j++) {
 				struct ieee80211_channel *chan;
 
@@ -9278,7 +9294,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 		goto out_free;
 	}
 
-	request->n_channels = i;
+	request->n_channels = i;/*更新实际填充的channel数*/
 
 	for (i = 0; i < request->n_channels; i++) {
 		struct ieee80211_channel *chan = request->channels[i];
@@ -9295,6 +9311,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 
 	i = 0;
 	if (n_ssids) {
+		/*设置ssid*/
 		nla_for_each_nested(attr, info->attrs[NL80211_ATTR_SCAN_SSIDS], tmp) {
 			if (nla_len(attr) > IEEE80211_MAX_SSID_LEN) {
 				err = -EINVAL;
@@ -9307,6 +9324,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	}
 
 	if (info->attrs[NL80211_ATTR_IE]) {
+		/*设置ie*/
 		request->ie_len = nla_len(info->attrs[NL80211_ATTR_IE]);
 		memcpy((void *)request->ie,
 		       nla_data(info->attrs[NL80211_ATTR_IE]),
@@ -9378,7 +9396,7 @@ static int nl80211_trigger_scan(struct sk_buff *skb, struct genl_info *info)
 	request->tsf_report_link_id = nl80211_link_id_or_invalid(info->attrs);
 	request->wdev = wdev;
 	request->wiphy = &rdev->wiphy;
-	request->scan_start = jiffies;
+	request->scan_start = jiffies;/*扫描起始时间*/
 
 	rdev->scan_req = request;
 	err = cfg80211_scan(rdev);
@@ -16470,6 +16488,7 @@ static u32 nl80211_internal_flags[] = {
 #undef SELECTOR
 };
 
+/*所有ops的doit调用前执行*/
 static int nl80211_pre_doit(const struct genl_split_ops *ops,
 			    struct sk_buff *skb,
 			    struct genl_info *info)
@@ -16487,6 +16506,7 @@ static int nl80211_pre_doit(const struct genl_split_ops *ops,
 
 	rtnl_lock();
 	if (internal_flags & NL80211_FLAG_NEED_WIPHY) {
+		/*要求wiphy,查询并存入user_ptr[0]中*/
 		rdev = cfg80211_get_dev_from_info(genl_info_net(info), info);
 		if (IS_ERR(rdev)) {
 			err = PTR_ERR(rdev);
@@ -16512,13 +16532,13 @@ static int nl80211_pre_doit(const struct genl_split_ops *ops,
 				goto out_unlock;
 			}
 
-			info->user_ptr[1] = dev;
+			info->user_ptr[1] = dev;/*查询netdev填充到user_ptr[1]*/
 		} else {
-			info->user_ptr[1] = wdev;
+			info->user_ptr[1] = wdev;/*查询wdev*/
 		}
 
 		if (internal_flags & NL80211_FLAG_CHECK_NETDEV_UP &&
-		    !wdev_running(wdev)) {
+		    !wdev_running(wdev)) {/*要求wdev必须up*/
 			err = -ENETDOWN;
 			goto out_unlock;
 		}
@@ -16947,9 +16967,9 @@ static const struct genl_small_ops nl80211_small_ops[] = {
 	{
 		.cmd = NL80211_CMD_TRIGGER_SCAN,
 		.validate = GENL_DONT_VALIDATE_STRICT | GENL_DONT_VALIDATE_DUMP,
-		.doit = nl80211_trigger_scan,
+		.doit = nl80211_trigger_scan,/*响应扫描命令*/
 		.flags = GENL_UNS_ADMIN_PERM,
-		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WDEV_UP),
+		.internal_flags = IFLAGS(NL80211_FLAG_NEED_WDEV_UP),/*wdev必须是up的*/
 	},
 	{
 		.cmd = NL80211_CMD_ABORT_SCAN,
@@ -17580,14 +17600,13 @@ static struct genl_family nl80211_fam __ro_after_init = {
 	.maxattr = NL80211_ATTR_MAX,
 	.policy = nl80211_policy,
 	.netnsok = true,
-	//ops提供的netlink命令调用前，此函数总被调用
-	.pre_doit = nl80211_pre_doit,
-	.post_doit = nl80211_post_doit,
+	.pre_doit = nl80211_pre_doit,/*doit执行前调用,用于按flag填充userptr*/
+	.post_doit = nl80211_post_doit,/*doit执行后调用*/
 	.module = THIS_MODULE,
-	//对外提供的netlink操作命令回调
+	//对外提供的netlink操作命令回调（优先）
 	.ops = nl80211_ops,
 	.n_ops = ARRAY_SIZE(nl80211_ops),
-	/*操作集*/
+	/*另一个对外提供的netlink操作命令回调（中优）*/
 	.small_ops = nl80211_small_ops,
 	.n_small_ops = ARRAY_SIZE(nl80211_small_ops),
 	.resv_start_op = NL80211_CMD_REMOVE_LINK_STA + 1,
@@ -17774,7 +17793,7 @@ void nl80211_send_scan_start(struct cfg80211_registered_device *rdev,
 		return;
 	}
 
-	//知会开启扫描
+	//组播知会开启扫描
 	genlmsg_multicast_netns(&nl80211_fam, wiphy_net(&rdev->wiphy), msg, 0,
 				NL80211_MCGRP_SCAN, GFP_KERNEL);
 }

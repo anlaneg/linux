@@ -1065,14 +1065,14 @@ struct ieee80211_sub_if_data {
 	int crypto_tx_tailroom_pending_dec;
 	struct wiphy_delayed_work dec_tailroom_needed_wk;
 
-	struct net_device *dev;
+	struct net_device *dev;/*对应的netdev,针对p2p设备，此值为NULL*/
 	struct ieee80211_local *local;
 
 	unsigned int flags;
 
 	unsigned long state;
 
-	char name[IFNAMSIZ];
+	char name[IFNAMSIZ];/*接口名称*/
 
 	struct ieee80211_fragment_cache frags;
 
@@ -1430,7 +1430,7 @@ struct ieee80211_local {
 	u32 wep_iv;
 
 	/* see iface.c */
-	struct list_head interfaces;
+	struct list_head interfaces;/*注册所有ieee80211_sub_if_data*/
 	struct list_head mon_list; /* only that are IFF_UP && !cooked */
 	struct mutex iflist_mtx;
 

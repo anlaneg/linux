@@ -1424,8 +1424,8 @@ int ieee80211_register_hw(struct ieee80211_hw *hw)
 	    !ieee80211_hw_check(hw, NO_AUTO_VIF)) {
 		struct vif_params params = {0};
 
-		/*添加wlan接口*/
-		result = ieee80211_if_add(local, "wlan%d", NET_NAME_ENUM, NULL,
+		/*添加station类型接口，wlan%d*/
+		result = ieee80211_if_add(local, "wlan%d", NET_NAME_ENUM/*kernel产生的名称*/, NULL,
 					  NL80211_IFTYPE_STATION, &params);
 		if (result)
 			wiphy_warn(local->hw.wiphy,

@@ -169,6 +169,7 @@ static void genl_op_from_full(const struct genl_family *family,
 	genl_op_fill_in_reject_policy(family, op);
 }
 
+/*在family->ops中查询cmd*/
 static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
 			     struct genl_ops *op)
 {
@@ -183,12 +184,12 @@ static int genl_get_cmd_full(u32 cmd, const struct genl_family *family,
 	return -ENOENT;
 }
 
-/*利用family中的i号，填充op*/
+/*利用family中的i号small_ops，填充op*/
 static void genl_op_from_small(const struct genl_family *family,
 			       unsigned int i, struct genl_ops *op)
 {
 	memset(op, 0, sizeof(*op));
-	op->doit	= family->small_ops[i].doit;
+	op->doit	= family->small_ops[i].doit;/*取small_ops指明的doit*/
 	op->dumpit	= family->small_ops[i].dumpit;
 	op->cmd		= family->small_ops[i].cmd;
 	op->internal_flags = family->small_ops[i].internal_flags;
@@ -201,6 +202,7 @@ static void genl_op_from_small(const struct genl_family *family,
 	genl_op_fill_in_reject_policy(family, op);
 }
 
+/*在family->n_small_ops中查询cmd*/
 static int genl_get_cmd_small(u32 cmd, const struct genl_family *family,
 			      struct genl_ops *op)
 {
@@ -244,6 +246,7 @@ static void genl_op_from_split(struct genl_op_iter *iter)
 	iter->entry_idx += cnt;
 }
 
+/*在fmaily->split_ops中查询此cmd*/
 static int
 genl_get_cmd_split(u32 cmd, u8 flag, const struct genl_family *family,
 		   struct genl_split_ops *op)
@@ -268,14 +271,17 @@ genl_cmd_full_to_split(struct genl_split_ops *op,
 	if ((flags & GENL_CMD_CAP_DO && !full->doit) ||
 	    (flags & GENL_CMD_CAP_DUMP && !full->dumpit)) {
 		memset(op, 0, sizeof(*op));
+		/*指明了do,但没有提供doit回调，指明了dump，但没有提供dumpit*/
 		return -ENOENT;
 	}
 
 	if (flags & GENL_CMD_CAP_DUMP) {
+		/*如果有dump标记，则设置start,done*/
 		op->start	= full->start;
 		op->dumpit	= full->dumpit;
 		op->done	= full->done;
 	} else {
+		/*如无dump标记，则设置pre_doit,post_doit*/
 		op->pre_doit	= family->pre_doit;
 		op->doit	= full->doit;
 		op->post_doit	= family->post_doit;
@@ -309,13 +315,16 @@ genl_get_cmd(u32 cmd, u8 flags, const struct genl_family *family,
 	struct genl_ops full;
 	int err;
 
+	/*先在family->ops中查询*/
 	err = genl_get_cmd_full(cmd, family, &full);
 	if (err == -ENOENT)
+		/*再在family->n_small_ops中查询*/
 		err = genl_get_cmd_small(cmd, family, &full);
 	/* Found one of legacy forms */
 	if (err == 0)
 		return genl_cmd_full_to_split(op, family, &full, flags);
 
+	/*最后在family->n_split_ops中查询*/
 	err = genl_get_cmd_split(cmd, flags, family, op);
 	if (err)
 		memset(op, 0, sizeof(*op));
@@ -1219,7 +1228,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 	//根据头部的cmd查找family中对应的ops
 	flags = (nlh->nlmsg_flags & NLM_F_DUMP) == NLM_F_DUMP ?
 		GENL_CMD_CAP_DUMP : GENL_CMD_CAP_DO;
-	if (genl_get_cmd(hdr->cmd, flags, family, &op))
+	if (genl_get_cmd(hdr->cmd, flags, family, &op/*出参，cmd对应的ops*/))
 		return -EOPNOTSUPP;
 
 	/*权限检查*/
@@ -1232,7 +1241,7 @@ static int genl_family_rcv_msg(const struct genl_family *family,
 		return -EPERM;
 
 	if (flags & GENL_CMD_CAP_DUMP)
-	    	/*如果有dump标记，则回调dumpit*/
+	    /*如果有dump标记，则回调dumpit*/
 		return genl_family_rcv_msg_dumpit(family, skb, nlh, extack,
 						  &op, hdrlen, net);
 	else

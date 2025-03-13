@@ -124,6 +124,7 @@ struct wiphy;
  *	not permitted using this channel
  */
 enum ieee80211_channel_flags {
+	/*标记此channel被禁用*/
 	IEEE80211_CHAN_DISABLED		= 1<<0,
 	IEEE80211_CHAN_NO_IR		= 1<<1,
 	IEEE80211_CHAN_PSD		= 1<<2,
@@ -765,8 +766,8 @@ static inline void wiphy_read_of_freq_limits(struct wiphy *wiphy)
  */
 struct vif_params {
 	u32 flags;
-	int use_4addr;
-	u8 macaddr[ETH_ALEN];
+	int use_4addr;/*是否使用v4地址*/
+	u8 macaddr[ETH_ALEN];/*vif的mac地址*/
 	const u8 *vht_mumimo_groups;
 	const u8 *vht_mumimo_follow_addr;
 };
@@ -6321,6 +6322,7 @@ ieee80211_channel_equal(struct ieee80211_channel *a,
 static inline u32
 ieee80211_channel_to_khz(const struct ieee80211_channel *chan)
 {
+	/*取channel对应的频率*/
 	return MHZ_TO_KHZ(chan->center_freq) + chan->freq_offset;
 }
 

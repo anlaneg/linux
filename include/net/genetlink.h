@@ -92,9 +92,9 @@ struct genl_family {
 	void			(*post_doit)(const struct genl_split_ops *ops,
 					     struct sk_buff *skb,
 					     struct genl_info *info);
-	const struct genl_ops *	ops;
-	const struct genl_small_ops *small_ops;
-	const struct genl_split_ops *split_ops;
+	const struct genl_ops *	ops;/*先在此ops中查询cmd对应的ops*/
+	const struct genl_small_ops *small_ops;/*ops中找不到，则再在此ops中查询cmd对应的ops*/
+	const struct genl_split_ops *split_ops;/*small_ops中也找不到，则在此ops中查询cmd对应的ops*/
 	const struct genl_multicast_group *mcgrps;/*组播组名称*/
 	struct module		*module;
 
@@ -138,11 +138,13 @@ struct genl_info {
 
 static inline struct net *genl_info_net(const struct genl_info *info)
 {
+	/*取其关联的network ns*/
 	return read_pnet(&info->_net);
 }
 
 static inline void genl_info_net_set(struct genl_info *info, struct net *net)
 {
+	/*设置此info关联的network ns*/
 	write_pnet(&info->_net, net);
 }
 

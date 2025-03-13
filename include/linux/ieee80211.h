@@ -49,34 +49,36 @@
 //报文subtype对应的mask（占用4个bits(4-7))
 #define IEEE80211_FCTL_STYPE		0x00f0
 //ds = distribution system
-//from,to均是相对于AP来说的，from ds表示报文由station发送给ap
+//from（占1bit）,to(占1bit）均是相对于AP来说的，from ds表示报文由station发送给ap
 //to ds表示报文由ap发送给station,from ds and to ds表示报文由ap转交给另一个ap
 //from,to均为０时，表示station内部通信（管理报文，控制报文均为０）
 #define IEEE80211_FCTL_TODS		0x0100
 #define IEEE80211_FCTL_FROMDS		0x0200
-/*更多分段标记位，使用分段时，此位被标记为‘1’*/
+/*更多分段标记位(占1bit），使用分段时，此位被标记为‘1’*/
 #define IEEE80211_FCTL_MOREFRAGS	0x0400
-//重传标记位，表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
+//重传标记位(占1bit)，表示此报文是重传的帧（和seq配合来指出哪个报文被重传）
 #define IEEE80211_FCTL_RETRY		0x0800
-/*客户端进入省电模式时，此位被标记为'1'*/
+/*客户端进入省电模式时（电源管理，占1bit），此位被标记为'1'*/
 #define IEEE80211_FCTL_PM		0x1000
-//more data标记位
+//more data标记位(占1bit)
 #define IEEE80211_FCTL_MOREDATA		0x2000
-/*受保护帧标记，帧体被加密时，此位被标记为‘1’*/
+/*受保护帧标记，帧体被加密时，此位被标记为‘1’（占1bit）*/
 #define IEEE80211_FCTL_PROTECTED	0x4000
-/*顺序位标记*/
+/*顺序位标记（占1bit)，至此共计16bit*/
 #define IEEE80211_FCTL_ORDER		0x8000
 #define IEEE80211_FCTL_CTL_EXT		0x0f00
 
 #define IEEE80211_SCTL_FRAG		0x000F
 #define IEEE80211_SCTL_SEQ		0xFFF0
 
+/*ftype共占有2bit,即4种情况*/
 //管理报文
 #define IEEE80211_FTYPE_MGMT		0x0000
 //控制报文
 #define IEEE80211_FTYPE_CTL		0x0004
 //数据报文
 #define IEEE80211_FTYPE_DATA		0x0008
+/**/
 #define IEEE80211_FTYPE_EXT		0x000c
 
 /* management */
@@ -84,7 +86,9 @@
 #define IEEE80211_STYPE_ASSOC_RESP	0x0010
 #define IEEE80211_STYPE_REASSOC_REQ	0x0020
 #define IEEE80211_STYPE_REASSOC_RESP	0x0030
+/*管理帧中类型指明为probe request*/
 #define IEEE80211_STYPE_PROBE_REQ	0x0040
+/*管理帧中类型指明为probe response*/
 #define IEEE80211_STYPE_PROBE_RESP	0x0050
 #define IEEE80211_STYPE_BEACON		0x0080
 #define IEEE80211_STYPE_ATIM		0x0090
@@ -594,7 +598,7 @@ static inline bool ieee80211_is_reassoc_resp(__le16 fc)
  */
 static inline bool ieee80211_is_probe_req(__le16 fc)
 {
-	//检查如果为管理报文，且subtype类型为probe请求，则返回真
+	//检查如果为管理报文，且subtype类型为probe request，则返回真
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_PROBE_REQ);
 }
@@ -605,7 +609,7 @@ static inline bool ieee80211_is_probe_req(__le16 fc)
  */
 static inline bool ieee80211_is_probe_resp(__le16 fc)
 {
-	//检查如果为管理报文，且subtype类型为probe响应报文，则返回真
+	//检查如果为管理报文，且subtype类型为probe response报文，则返回真
 	return (fc & cpu_to_le16(IEEE80211_FCTL_FTYPE | IEEE80211_FCTL_STYPE)) ==
 	       cpu_to_le16(IEEE80211_FTYPE_MGMT | IEEE80211_STYPE_PROBE_RESP);
 }

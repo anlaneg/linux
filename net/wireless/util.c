@@ -176,7 +176,7 @@ struct ieee80211_channel *ieee80211_get_channel_khz(struct wiphy *wiphy,
 			struct ieee80211_channel *chan = &sband->channels[i];
 
 			if (ieee80211_channel_to_khz(chan) == freq)
-				return chan;
+				return chan;/*频率相等，channel返回*/
 		}
 	}
 
@@ -454,7 +454,7 @@ int cfg80211_validate_key_settings(struct cfg80211_registered_device *rdev,
 	return 0;
 }
 
-/*按frame control确定header length*/
+/*按frame control中的frame type确定header length*/
 unsigned int __attribute_const__ ieee80211_hdrlen(__le16 fc)
 {
 	/*默认header是24字节，即第4mac起始位置*/

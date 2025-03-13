@@ -930,9 +930,10 @@ static int nl802154_new_interface(struct sk_buff *skb, struct genl_info *info)
 	 */
 
 	if (!info->attrs[NL802154_ATTR_IFNAME])
-		return -EINVAL;
+		return -EINVAL;/*必须提供ifname*/
 
 	if (info->attrs[NL802154_ATTR_IFTYPE]) {
+		/*取接口类型*/
 		type = nla_get_u32(info->attrs[NL802154_ATTR_IFTYPE]);
 		if (type > NL802154_IFTYPE_MAX ||
 		    !(rdev->wpan_phy.supported.iftypes & BIT(type)))
@@ -946,7 +947,7 @@ static int nl802154_new_interface(struct sk_buff *skb, struct genl_info *info)
 		return -EOPNOTSUPP;
 
 	return rdev_add_virtual_intf(rdev,
-				     nla_data(info->attrs[NL802154_ATTR_IFNAME]),
+				     nla_data(info->attrs[NL802154_ATTR_IFNAME]/*取接口名称*/),
 				     NET_NAME_USER, type, extended_addr);
 }
 

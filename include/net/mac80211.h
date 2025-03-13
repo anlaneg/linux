@@ -1901,8 +1901,8 @@ struct ieee80211_vif {
 	struct ieee80211_bss_conf bss_conf;
 	struct ieee80211_bss_conf __rcu *link_conf[IEEE80211_MLD_MAX_NUM_LINKS];
 	u16 valid_links, active_links, dormant_links;
-	u8 addr[ETH_ALEN] __aligned(2);
-	bool p2p;
+	u8 addr[ETH_ALEN] __aligned(2);/*vif的mac地址*/
+	bool p2p;/*指明为p2p接口*/
 
 	u8 cab_queue;
 	u8 hw_queue[IEEE80211_NUM_ACS];

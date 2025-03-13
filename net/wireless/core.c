@@ -418,6 +418,7 @@ static void cfg80211_propagate_cac_done_wk(struct work_struct *work)
 	rtnl_unlock();
 }
 
+/*取一个rdev->wiphy_work_list上的wiphy_work，并执行*/
 static void cfg80211_wiphy_work(struct work_struct *work)
 {
 	struct cfg80211_registered_device *rdev;
@@ -431,14 +432,14 @@ static void cfg80211_wiphy_work(struct work_struct *work)
 
 	spin_lock_irq(&rdev->wiphy_work_lock);
 	wk = list_first_entry_or_null(&rdev->wiphy_work_list,
-				      struct wiphy_work, entry);
+				      struct wiphy_work, entry);/*取一个work*/
 	if (wk) {
 		list_del_init(&wk->entry);
 		if (!list_empty(&rdev->wiphy_work_list))
 			schedule_work(work);
 		spin_unlock_irq(&rdev->wiphy_work_lock);
 
-		wk->func(&rdev->wiphy, wk);
+		wk->func(&rdev->wiphy, wk);/*执行此work回调*/
 	} else {
 		spin_unlock_irq(&rdev->wiphy_work_lock);
 	}
@@ -574,7 +575,7 @@ use_default_name:
 		return NULL;
 	}
 
-	INIT_WORK(&rdev->wiphy_work, cfg80211_wiphy_work);
+	INIT_WORK(&rdev->wiphy_work, cfg80211_wiphy_work/*用于执行rdev->wiphy_work_list上的work*/);
 	INIT_LIST_HEAD(&rdev->wiphy_work_list);
 	spin_lock_init(&rdev->wiphy_work_lock);
 	INIT_WORK(&rdev->rfkill_block, cfg80211_rfkill_block_work);
@@ -1640,7 +1641,7 @@ void wiphy_work_queue(struct wiphy *wiphy, struct wiphy_work *work)
 		list_add_tail(&work->entry, &rdev->wiphy_work_list);
 	spin_unlock_irqrestore(&rdev->wiphy_work_lock, flags);
 
-	queue_work(system_unbound_wq, &rdev->wiphy_work);
+	queue_work(system_unbound_wq, &rdev->wiphy_work);/*work入队，参与执行*/
 }
 EXPORT_SYMBOL_GPL(wiphy_work_queue);
 

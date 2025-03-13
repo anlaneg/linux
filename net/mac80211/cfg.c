@@ -171,7 +171,7 @@ static int ieee80211_set_ap_mbssid_options(struct ieee80211_sub_if_data *sdata,
 
 static struct wireless_dev *ieee80211_add_iface(struct wiphy *wiphy,
 						const char *name/*接口名称*/,
-						unsigned char name_assign_type,
+						unsigned char name_assign_type/*接口名称来源，例如NET_NAME_USER*/,
 						enum nl80211_iftype type/*接口类型*/,
 						struct vif_params *params)
 {

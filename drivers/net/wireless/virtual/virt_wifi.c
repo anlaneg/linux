@@ -171,7 +171,7 @@ static int virt_wifi_scan(struct wiphy *wiphy,
 		return -EBUSY;
 
 	priv->scan_request = request;
-	schedule_delayed_work(&priv->scan_result, HZ * 2);
+	schedule_delayed_work(&priv->scan_result, HZ * 2);/*延迟执行scan work*/
 
 	return 0;
 }
@@ -385,6 +385,7 @@ static struct wiphy *virt_wifi_make_wiphy(void)
 	priv = wiphy_priv(wiphy);
 	priv->being_deleted = false;
 	priv->scan_request = NULL;
+	/*初始化scan work工作函数*/
 	INIT_DELAYED_WORK(&priv->scan_result, virt_wifi_scan_result);
 
 	err = wiphy_register(wiphy);/*注册wiphy到linux系统*/

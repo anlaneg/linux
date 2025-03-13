@@ -332,7 +332,7 @@ static void __unix_set_addr_hash(struct net *net, struct sock *sk,
 	smp_store_release(&unix_sk(sk)->addr, addr);
 
 	sk->sk_hash = hash;
-	__unix_insert_socket(net, sk);
+	__unix_insert_socket(net, sk);/*添加此socket到此netns*/
 }
 
 static void unix_remove_socket(struct net *net, struct sock *sk)
@@ -873,8 +873,8 @@ static const struct proto_ops unix_dgram_ops = {
 	.family =	PF_UNIX,
 	.owner =	THIS_MODULE,
 	.release =	unix_release,
-	.bind =		unix_bind,
-	.connect =	unix_dgram_connect,
+	.bind =		unix_bind,/*地址绑定*/
+	.connect =	unix_dgram_connect,/*地址连接*/
 	.socketpair =	unix_socketpair,
 	.accept =	sock_no_accept,
 	.getname =	unix_getname,
@@ -1081,7 +1081,7 @@ static struct sock *unix_find_bsd(struct sockaddr_un *sunaddr, int addr_len,
 	int err;
 
 	unix_mkname_bsd(sunaddr, addr_len);
-	err = kern_path(sunaddr->sun_path, LOOKUP_FOLLOW, &path);
+	err = kern_path(sunaddr->sun_path, LOOKUP_FOLLOW, &path);/*支持按follow解析filename到path*/
 	if (err)
 		goto fail;
 
@@ -1090,11 +1090,11 @@ static struct sock *unix_find_bsd(struct sockaddr_un *sunaddr, int addr_len,
 		goto path_put;
 
 	err = -ECONNREFUSED;
-	inode = d_backing_inode(path.dentry);
+	inode = d_backing_inode(path.dentry);/*由path找inode*/
 	if (!S_ISSOCK(inode->i_mode))
 		goto path_put;
 
-	sk = unix_find_socket_byinode(inode);
+	sk = unix_find_socket_byinode(inode);/*由inode找socket*/
 	if (!sk)
 		goto path_put;
 
@@ -1235,7 +1235,7 @@ static int unix_bind_bsd(struct sock *sk, struct sockaddr_un *sunaddr,
 	 */
 	dentry = kern_path_create(AT_FDCWD, addr->name->sun_path, &parent, 0);
 	if (IS_ERR(dentry)) {
-		err = PTR_ERR(dentry);
+		err = PTR_ERR(dentry);/*创建绑定地址对应的dentry*/
 		goto out;
 	}
 
@@ -1245,7 +1245,7 @@ static int unix_bind_bsd(struct sock *sk, struct sockaddr_un *sunaddr,
 	idmap = mnt_idmap(parent.mnt);
 	err = security_path_mknod(&parent, dentry, mode, 0);
 	if (!err)
-		err = vfs_mknod(idmap, d_inode(parent.dentry), dentry, mode, 0);
+		err = vfs_mknod(idmap, d_inode(parent.dentry)/*父目录*/, dentry, mode, 0);
 	if (err)
 		goto out_path;
 	err = mutex_lock_interruptible(&u->bindlock);
@@ -1338,6 +1338,7 @@ static int unix_bind(struct socket *sock, struct sockaddr *uaddr, int addr_len)
 	if (sunaddr->sun_path[0])
 		err = unix_bind_bsd(sk, sunaddr, addr_len);
 	else
+		/*首字节为'\0'的情况*/
 		err = unix_bind_abstract(sk, sunaddr, addr_len);
 
 	return err;

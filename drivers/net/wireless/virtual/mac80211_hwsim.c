@@ -46,7 +46,7 @@ MODULE_DESCRIPTION("Software simulator of 802.11 radio(s) for mac80211");
 MODULE_LICENSE("GPL");
 
 static int radios = 2;
-module_param(radios, int, 0444);
+module_param(radios, int, 0444);/*模拟多少个无线设备*/
 MODULE_PARM_DESC(radios, "Number of simulated radios");
 
 static int channels = 1;
@@ -5017,7 +5017,7 @@ static int mac80211_hwsim_new_radio(struct genl_info *info,
 		goto failed_drvdata;
 	}
 	data->dev->driver = &mac80211_hwsim_driver.driver;
-	err = device_bind_driver(data->dev);
+	err = device_bind_driver(data->dev);/*为其指定驱动*/
 	if (err != 0) {
 		pr_debug("mac80211_hwsim: device_bind_driver failed (%d)\n",
 		       err);
@@ -6568,6 +6568,7 @@ static int __init init_mac80211_hwsim(void)
 	int i, err;
 
 	if (radios < 0 || radios > 100)
+		/*要模拟的设备过大或者过小*/
 		return -EINVAL;
 
 	if (channels < 1)
@@ -6679,7 +6680,7 @@ static int __init init_mac80211_hwsim(void)
 		if (param.p2p_device)
 			param.iftypes |= BIT(NL80211_IFTYPE_P2P_DEVICE);
 
-		err = mac80211_hwsim_new_radio(NULL, &param);
+		err = mac80211_hwsim_new_radio(NULL, &param);/*按参数创建hw*/
 		if (err < 0)
 			goto out_free_radios;
 	}
@@ -6698,7 +6699,7 @@ static int __init init_mac80211_hwsim(void)
 		goto out_free_mon;
 	}
 
-	err = register_netdevice(hwsim_mon);
+	err = register_netdevice(hwsim_mon);/*注册网络设备*/
 	if (err < 0) {
 		rtnl_unlock();
 		goto out_free_mon;

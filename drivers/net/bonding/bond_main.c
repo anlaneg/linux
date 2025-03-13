@@ -4107,7 +4107,7 @@ static inline const void *bond_pull_data(struct sk_buff *skb,
 /* L2 hash helper */
 static inline u32 bond_eth_hash(struct sk_buff *skb, const void *data, int mhoff, int hlen)
 {
-    	//使用以太网目的mac/源mac/三层协议号，计算hash
+    //使用以太网目的mac/源mac/三层协议号，计算hash
 	struct ethhdr *ep;
 
 	data = bond_pull_data(skb, data, hlen, mhoff + sizeof(struct ethhdr));
@@ -4267,7 +4267,7 @@ static u32 __bond_xmit_hash(struct bonding *bond, struct sk_buff *skb, const voi
 
 	if (bond->params.xmit_policy == BOND_XMIT_POLICY_LAYER23 ||
 	    bond->params.xmit_policy == BOND_XMIT_POLICY_ENCAP23) {
-	    	/*l2+l3的hash使用二层hash*/
+	    /*l2+l3的hash使用二层hash*/
 		hash = bond_eth_hash(skb, data, mhoff, hlen);
 	} else {
 	    /*采用port计算*/
@@ -5288,9 +5288,10 @@ static netdev_tx_t bond_3ad_xor_xmit(struct sk_buff *skb,
 	struct slave *slave;
 
 	slaves = rcu_dereference(bond->usable_slaves);
+	/*选择slave*/
 	slave = bond_xmit_3ad_xor_slave_get(bond, skb, slaves);
 	if (likely(slave))
-	    /*选择出slave,送slave对应的设备*/
+	    /*已选择出slave,送slave对应的设备*/
 		return bond_dev_queue_xmit(bond, skb, slave->dev);
 
 	return bond_tx_drop(dev, skb);

@@ -297,6 +297,7 @@ void ieee80211_scan_rx(struct ieee80211_local *local, struct sk_buff *skb)
 	}
 
 	if (ieee80211_is_probe_resp(mgmt->frame_control)) {
+		/*处理probe response报文*/
 		struct cfg80211_scan_request *scan_req;
 		struct cfg80211_sched_scan_request *sched_scan_req;
 		u32 scan_req_flags = 0, sched_scan_req_flags = 0;

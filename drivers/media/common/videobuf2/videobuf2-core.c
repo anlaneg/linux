@@ -423,9 +423,10 @@ static void vb2_queue_add_buffer(struct vb2_queue *q, struct vb2_buffer *vb, uns
 {
 	WARN_ON(index >= q->max_num_buffers || q->bufs[index] || vb->vb2_queue);
 
+	/*添加index号buffer*/
 	q->bufs[index] = vb;
 	vb->index = index;
-	vb->vb2_queue = q;
+	vb->vb2_queue = q;/*指明buffer所属queue*/
 }
 
 /**
@@ -1007,6 +1008,7 @@ int vb2_core_create_bufs(struct vb2_queue *q, enum vb2_memory memory,
 		mutex_lock(&q->mmap_lock);
 		q->memory = memory;
 		if (!q->bufs)
+			/*创建buffer队列*/
 			q->bufs = kcalloc(q->max_num_buffers, sizeof(*q->bufs), GFP_KERNEL);
 		if (!q->bufs)
 			ret = -ENOMEM;
@@ -3082,6 +3084,7 @@ static int vb2_thread(void *data)
 		if (prequeue) {
 			vb = vb2_get_buffer(q, index++);
 			if (!vb)
+				/*获取buffer失败*/
 				continue;
 			prequeue--;
 		} else {
@@ -3124,7 +3127,7 @@ static int vb2_thread(void *data)
  * contact the linux-media mailinglist first.
  */
 int vb2_thread_start(struct vb2_queue *q, vb2_thread_fnc fnc, void *priv,
-		     const char *thread_name)
+		     const char *thread_name/*线程名称*/)
 {
 	struct vb2_threadio_data *threadio;
 	int ret = 0;
@@ -3147,6 +3150,7 @@ int vb2_thread_start(struct vb2_queue *q, vb2_thread_fnc fnc, void *priv,
 	if (ret)
 		goto nomem;
 	q->threadio = threadio;
+	/*创建kernel线程*/
 	threadio->thread = kthread_run(vb2_thread, q, "vb2-%s", thread_name);
 	if (IS_ERR(threadio->thread)) {
 		ret = PTR_ERR(threadio->thread);

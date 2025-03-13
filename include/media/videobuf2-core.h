@@ -626,7 +626,7 @@ struct vb2_queue {
 	unsigned int			memory;
 	enum dma_data_direction		dma_dir;
 	struct vb2_buffer		**bufs;
-	unsigned int			num_buffers;
+	unsigned int			num_buffers;/*队列中的buffer总数*/
 	unsigned int			max_num_buffers;
 
 	struct list_head		queued_list;
@@ -1152,7 +1152,7 @@ static inline bool vb2_fileio_is_active(struct vb2_queue *q)
  */
 static inline unsigned int vb2_get_num_buffers(struct vb2_queue *q)
 {
-	return q->num_buffers;
+	return q->num_buffers;/*队列中的buffer总数*/
 }
 
 /**
@@ -1259,10 +1259,10 @@ static inline struct vb2_buffer *vb2_get_buffer(struct vb2_queue *q,
 		return NULL;
 
 	if (index >= q->max_num_buffers)
-		return NULL;
+		return NULL;/*索引超限*/
 
 	if (index < q->num_buffers)
-		return q->bufs[index];
+		return q->bufs[index];/*取index号buffer*/
 	return NULL;
 }
 
