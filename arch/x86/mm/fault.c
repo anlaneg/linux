@@ -779,11 +779,12 @@ show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 	if (!printk_ratelimit())
 		return;
 
+	/*显示段错误信息*/
 	printk("%s%s[%d]: segfault at %lx ip %px sp %px error %lx",
-		loglvl, tsk->comm, task_pid_nr(tsk), address,
-		(void *)regs->ip, (void *)regs->sp, error_code);
+		loglvl, tsk->comm, task_pid_nr(tsk), address/*出错位置*/,
+		(void *)regs->ip/*出错时ip指针*/, (void *)regs->sp/*出错时栈指针*/, error_code);
 
-	print_vma_addr(KERN_CONT " in ", regs->ip);
+	print_vma_addr(KERN_CONT " in ", regs->ip);/*显示ip指向的vma地址*/
 
 	/*
 	 * Dump the likely CPU where the fatal segfault happened.
@@ -795,7 +796,7 @@ show_signal_msg(struct pt_regs *regs, unsigned long error_code,
 
 	printk(KERN_CONT "\n");
 
-	show_opcodes(regs, loglvl);
+	show_opcodes(regs, loglvl);/*显示此时的操作代码*/
 }
 
 /*

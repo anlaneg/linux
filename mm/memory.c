@@ -6034,19 +6034,19 @@ void print_vma_addr(char *prefix, unsigned long ip)
 	if (!mmap_read_trylock(mm))
 		return;
 
-	vma = find_vma(mm, ip);
+	vma = find_vma(mm, ip);/*查找ip所归属的vma*/
 	if (vma && vma->vm_file) {
 		struct file *f = vma->vm_file;
 		char *buf = (char *)__get_free_page(GFP_NOWAIT);
 		if (buf) {
 			char *p;
 
-			p = file_path(f, buf, PAGE_SIZE);
+			p = file_path(f, buf, PAGE_SIZE);/*vma映射的文件*/
 			if (IS_ERR(p))
 				p = "?";
 			printk("%s%s[%lx+%lx]", prefix, kbasename(p),
-					vma->vm_start,
-					vma->vm_end - vma->vm_start);
+					vma->vm_start,/*vma起始位置*/
+					vma->vm_end - vma->vm_start);/*vma长度*/
 			free_page((unsigned long)buf);
 		}
 	}

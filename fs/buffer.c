@@ -980,7 +980,7 @@ static inline void link_dev_buffers(struct folio *folio,
 		bh = bh->b_this_page;
 	} while (bh);
 	tail->b_this_page = head;
-	folio_attach_private(folio, head);
+	folio_attach_private(folio, head);/*将private设置为buffer head*/
 }
 
 static sector_t blkdev_max_block(struct block_device *bdev, unsigned int size)
@@ -1141,6 +1141,7 @@ __getblk_slow(struct block_device *bdev, sector_t block,
 
 		if (!grow_buffers(bdev, block, size, gfp))
 			return NULL;
+		/*完成buffer增长，继续循环*/
 	}
 }
 
@@ -1329,6 +1330,7 @@ static inline void check_irqs_on(void)
  */
 static void bh_lru_install(struct buffer_head *bh)
 {
+	/*添加bh,将其放在bh_lrus的第一位*/
 	struct buffer_head *evictee = bh;
 	struct bh_lru *b;
 	int i;
@@ -1386,7 +1388,7 @@ lookup_bh_lru(struct block_device *bdev, sector_t block, unsigned size)
 		if (bh && bh->b_blocknr == block && bh->b_bdev == bdev &&
 		    bh->b_size == size) {
 			if (i) {
-				//如果i不等于０，即bh未在链表头，则需要将其移动到链表头
+				//刚刚使用；如果i不等于０，即bh未在链表头，则需要将其移动到链表头
 				while (i) {
 					__this_cpu_write(bh_lrus.bhs[i],
 						__this_cpu_read(bh_lrus.bhs[i - 1]));
@@ -1419,7 +1421,7 @@ __find_get_block(struct block_device *bdev, sector_t block, unsigned size)
 		//尝试在块文件缓存中查找
 		bh = __find_get_block_slow(bdev, block);
 		if (bh)
-			bh_lru_install(bh);/*将bh增加到缓存中*/
+			bh_lru_install(bh);/*将bh增加到bh_lru缓存中*/
 	} else
 		touch_buffer(bh);
 
@@ -2804,7 +2806,7 @@ static void submit_bh_wbc(blk_opf_t opf, struct buffer_head *bh,
 	if (buffer_prio(bh))
 		opf |= REQ_PRIO;
 
-	bio = bio_alloc(bh->b_bdev, 1, opf, GFP_NOIO);
+	bio = bio_alloc(bh->b_bdev/*指明块设备*/, 1, opf, GFP_NOIO);
 
 	fscrypt_set_bio_crypt_ctx_bh(bio, bh, GFP_NOIO);
 
@@ -3022,6 +3024,7 @@ static void recalc_bh_state(void)
 
 struct buffer_head *alloc_buffer_head(gfp_t gfp_flags)
 {
+	/*申请buffer_head结构体*/
 	struct buffer_head *ret = kmem_cache_zalloc(bh_cachep, gfp_flags);
 	if (ret) {
 		INIT_LIST_HEAD(&ret->b_assoc_buffers);

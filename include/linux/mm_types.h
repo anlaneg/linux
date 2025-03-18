@@ -320,7 +320,7 @@ struct folio {
 	/* private: the union with struct page is transitional */
 		};
 		struct page page;
-	};
+	};/*结构1*/
 	union {
 		struct {
 			unsigned long _flags_1;
@@ -336,7 +336,7 @@ struct folio {
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_1;
-	};
+	};/*结构2*/
 	union {
 		struct {
 			unsigned long _flags_2;
@@ -356,7 +356,7 @@ struct folio {
 	/* private: the union with struct page is transitional */
 		};
 		struct page __page_2;
-	};
+	};/*结构3*/
 };
 
 #define FOLIO_MATCH(pg, fl)						\

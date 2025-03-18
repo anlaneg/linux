@@ -967,7 +967,7 @@ struct folio *filemap_alloc_folio(gfp_t gfp, unsigned int order)
 		do {
 			cpuset_mems_cookie = read_mems_allowed_begin();
 			n = cpuset_mem_spread_node();
-			folio = __folio_alloc_node(gfp, order, n);
+			folio = __folio_alloc_node(gfp, order, n);/*申请order大小的物理内存*/
 		} while (!folio && read_mems_allowed_retry(cpuset_mems_cookie));
 
 		return folio;
@@ -1919,15 +1919,17 @@ no_page:
 				order = 0;
 			if (order > 0)
 				alloc_gfp |= __GFP_NORETRY | __GFP_NOWARN;
-			/*添加进mapping*/
+
+			/*申请folio*/
 			folio = filemap_alloc_folio(alloc_gfp, order);
 			if (!folio)
-				continue;
+				continue;/*申请失败，减小order，重试*/
 
 			/* Init accessed so avoid atomic mark_page_accessed later */
 			if (fgp_flags & FGP_ACCESSED)
 				__folio_set_referenced(folio);
 
+			/*添加进mapping*/
 			err = filemap_add_folio(mapping, folio, index, gfp);
 			if (!err)
 				break;

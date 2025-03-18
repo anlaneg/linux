@@ -48,7 +48,7 @@ struct block_device {
 	/*此块设备对应的总扇区数*/
 	sector_t		bd_nr_sectors;
 	struct gendisk *	bd_disk;/*块设备关联的disk*/
-	struct request_queue *	bd_queue;/*block设备queue*/
+	struct request_queue *	bd_queue;/*block设备 request queue*/
 	/*块设备统计信息*/
 	struct disk_stats __percpu *bd_stats;
 	unsigned long		bd_stamp;
@@ -276,7 +276,7 @@ typedef unsigned int blk_qc_t;
  */
 struct bio {
 	struct bio		*bi_next;	/* request queue link */
-	struct block_device	*bi_bdev;//磁盘
+	struct block_device	*bi_bdev;//块设备
 	/*block io对应的操作flags(包括操作码，）*/
 	blk_opf_t		bi_opf;		/* bottom bits REQ_OP, top bits
 						 * req_flags.

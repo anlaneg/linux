@@ -116,13 +116,13 @@ void show_opcodes(struct pt_regs *regs, const char *loglvl)
 #define EPILOGUE_SIZE 21
 #define OPCODE_BUFSIZE (PROLOGUE_SIZE + 1 + EPILOGUE_SIZE)
 	u8 opcodes[OPCODE_BUFSIZE];
-	unsigned long prologue = regs->ip - PROLOGUE_SIZE;
+	unsigned long prologue = regs->ip - PROLOGUE_SIZE;/*前面输出42，后面输出21*/
 
 	switch (copy_code(regs, opcodes, prologue, sizeof(opcodes))) {
 	case 0:
 		printk("%sCode: %" __stringify(PROLOGUE_SIZE) "ph <%02x> %"
 		       __stringify(EPILOGUE_SIZE) "ph\n", loglvl, opcodes,
-		       opcodes[PROLOGUE_SIZE], opcodes + PROLOGUE_SIZE + 1);
+		       opcodes[PROLOGUE_SIZE], opcodes + PROLOGUE_SIZE + 1);/*显示代码*/
 		break;
 	case -EPERM:
 		/* No access to the user space stack of other tasks. Ignore. */

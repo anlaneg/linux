@@ -440,7 +440,7 @@ int bio_init_clone(struct block_device *bdev, struct bio *bio,
 extern struct bio_set fs_bio_set;
 
 /*申请bio结构体*/
-static inline struct bio *bio_alloc(struct block_device *bdev,
+static inline struct bio *bio_alloc(struct block_device *bdev/*块设备*/,
 		unsigned short nr_vecs, blk_opf_t opf, gfp_t gfp_mask)
 {
 	return bio_alloc_bioset(bdev, nr_vecs, opf, gfp_mask, &fs_bio_set);

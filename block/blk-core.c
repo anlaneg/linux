@@ -794,7 +794,7 @@ void submit_bio_noacct(struct bio *bio)
 		 * REQ_OP_FLUSH can't be submitted through bios, it is only
 		 * synthetized in struct request by the flush state machine.
 		 */
-		goto not_supported;/*不支持通过bios来指明flush*/
+		goto not_supported;/*不支持通过bio来指明flush*/
 	case REQ_OP_DISCARD:
 		if (!bdev_max_discard_sectors(bdev))
 			goto not_supported;

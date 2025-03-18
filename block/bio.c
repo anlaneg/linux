@@ -248,7 +248,7 @@ void bio_init(struct bio *bio, struct block_device *bdev, struct bio_vec *table,
 	      unsigned short max_vecs, blk_opf_t opf)
 {
 	bio->bi_next = NULL;
-	bio->bi_bdev = bdev;
+	bio->bi_bdev = bdev;/*设置关联的块设备*/
 	bio->bi_opf = opf;
 	bio->bi_flags = 0;
 	bio->bi_ioprio = 0;

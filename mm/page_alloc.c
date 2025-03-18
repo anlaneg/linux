@@ -4650,7 +4650,8 @@ EXPORT_SYMBOL(__alloc_pages);
 struct folio *__folio_alloc(gfp_t gfp, unsigned int order, int preferred_nid,
 		nodemask_t *nodemask)
 {
-	struct page *page = __alloc_pages(gfp | __GFP_COMP, order,
+	/*申请物理页*/
+	struct page *page = __alloc_pages(gfp | __GFP_COMP, order/*页数*/,
 					preferred_nid, nodemask);
 	return page_rmappable_folio(page);
 }
