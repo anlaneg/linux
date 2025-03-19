@@ -7,7 +7,7 @@
 
 struct ovl_config {
 	char *upperdir;/*参数upperdir=指定的路径值*/
-	char *workdir;/*参数workdir=指定的路径值*/
+	char *workdir;/* 参数workdir= 指定的目录路径值*/
 	char **lowerdirs;
 	bool default_permissions;
 	int redirect_mode;

@@ -1355,7 +1355,7 @@ int ovl_fill_super(struct super_block *sb, struct fs_context *fc)
 	 * config.lowerdirs[0] is used for storing the user provided colon
 	 * separated lowerdir string.
 	 */
-	ofs->config.lowerdirs[0] = ctx->lowerdir_all;
+	ofs->config.lowerdirs[0] = ctx->lowerdir_all;/*首个位置，记录lowerdir配置*/
 	ctx->lowerdir_all = NULL;
 	ofs->numlayer = 1;
 

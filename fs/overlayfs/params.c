@@ -143,6 +143,7 @@ static int ovl_verity_mode_def(void)
 	__fsparam(fs_param_is_string, NAME, OPT, fs_param_can_be_empty, NULL)
 
 /*支持的参数*/
+/*配置举例：overlay on / type overlay (rw,relatime,lowerdir=xx1:xx2:xx3,upperdir=xx4:xx5,workdir=xxN*/
 const struct fs_parameter_spec ovl_parameter_spec[] = {
 	fsparam_string_empty("lowerdir",    Opt_lowerdir),
 	fsparam_string("lowerdir+",         Opt_lowerdir_add),
@@ -190,6 +191,7 @@ static int ovl_parse_monolithic(struct fs_context *fc, void *data)
 	return vfs_parse_monolithic_sep(fc, data, ovl_next_opt);
 }
 
+/*获取str中设置的layer数目，移除转义符，并将每一个layer断开*/
 static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 {
 	ssize_t nr_layers = 1, nr_colons = 0;
@@ -198,21 +200,21 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 	for (s = d = str;; s++, d++) {
 		if (*s == '\\') {
 			/* keep esc chars in split lowerdir */
-			*d++ = *s++;//跳过后面的转义内容（这是实际上将s位置与d位置不同）
+			*d++ = *s++;//跳过后面的转义内容（这是实际上将导致s位置与d位置不同）
 		} else if (*s == ':') {
-			bool next_colon = (*(s + 1) == ':');/*下一个字符是否也是':'*/
+			bool next_colon = (*(s + 1) == ':');/*下一个字符是否也是':'吗*/
 
 			nr_colons++;
 			if (nr_colons == 2 && next_colon) {
-				//出现多个'::'
+				//出现多个'::'（超过2个）
 				pr_err("only single ':' or double '::' sequences of unescaped colons in lowerdir mount option allowed.\n");
 				return -EINVAL;
 			}
 			/* count layers, not colons */
 			if (!next_colon)
-				nr_layers++;/*数量增加*/
+				nr_layers++;/*层数量增加*/
 
-			*d = '\0';/*将':'替换为'\0'*/
+			*d = '\0';/*将':'替换为'\0'，即实现断开*/
 			continue;
 		}
 
@@ -220,13 +222,13 @@ static ssize_t ovl_parse_param_split_lowerdirs(char *str)
 		if (!*s) {
 			/* trailing colons */
 			if (nr_colons) {
-				//遇到了不匹配的':'号配置
+				//s已为空，但遇到了不匹配的':'号配置
 				pr_err("unescaped trailing colons in lowerdir mount option.\n");
 				return -EINVAL;
 			}
 			break;
 		}
-		nr_colons = 0;
+		nr_colons = 0;/*连续的':'情况被打破，记录未遇到':'*/
 	}
 
 	return nr_layers;
@@ -237,10 +239,11 @@ static int ovl_mount_dir_noesc(const char *name, struct path *path/*由name解�
 	int err = -EINVAL;
 
 	if (!*name) {
+		/*路径不得为空*/
 		pr_err("empty lowerdir\n");
 		goto out;
 	}
-	/*按name解析成path*/
+	/*按name解析成path（容许跟踪link)*/
 	err = kern_path(name, LOOKUP_FOLLOW, path);
 	if (err) {
 		pr_err("failed to resolve '%s': %i\n", name, err);
@@ -287,6 +290,7 @@ static int ovl_mount_dir_check(struct fs_context *fc, const struct path *path,
 		return invalfc(fc, "filesystem on %s not supported", name);
 
 	if (!d_is_dir(path->dentry))
+		/*path必须是目录*/
 		return invalfc(fc, "%s is not a directory", name);
 
 
@@ -297,21 +301,27 @@ static int ovl_mount_dir_check(struct fs_context *fc, const struct path *path,
 	 */
 	if (upper) {
 		if (path->dentry->d_flags & DCACHE_OP_REAL)
+			/*做为upper时，必须支持op_real*/
 			return invalfc(fc, "filesystem on %s not supported as upperdir", name);
 		if (__mnt_is_readonly(path->mnt))
+			/*不能采用只读挂载*/
 			return invalfc(fc, "filesystem on %s is read-only", name);
 	} else {
 		if (ctx->lowerdir_all && layer != Opt_lowerdir)
+			/*lowerdir配置了，但还配置了其它layer,报错*/
 			return invalfc(fc, "lowerdir+ and datadir+ cannot follow lowerdir");
 		if (ctx->nr_data && layer == Opt_lowerdir_add)
+			/*配置了data layer,但又指明add lowerdir,报错*/
 			return invalfc(fc, "regular lower layers cannot follow data layers");
 		if (ctx->nr == OVL_MAX_STACK)
+			/*层数过多，报错*/
 			return invalfc(fc, "too many lower directories, limit is %d",
 				       OVL_MAX_STACK);
 	}
 	return 0;
 }
 
+/*动态扩展lower,准备添加*/
 static int ovl_ctx_realloc_lower(struct fs_context *fc)
 {
 	struct ovl_fs_context *ctx = fc->fs_private;
@@ -332,6 +342,7 @@ static int ovl_ctx_realloc_lower(struct fs_context *fc)
 	return 0;
 }
 
+/*依据opt添加layer*/
 static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 			 struct path *path, char **pname)
 {
@@ -342,20 +353,21 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 
 	switch (layer) {
 	case Opt_workdir:
+		/*更新workdir*/
 		swap(config->workdir, *pname);
 		swap(ctx->work, *path);
 		break;
 	case Opt_upperdir:
 		/*更新upperdir*/
 		swap(config->upperdir, *pname);
-		swap(ctx->upper, *path);/*交换upper path*/
+		swap(ctx->upper, *path);
 		break;
 	case Opt_datadir_add:
-		ctx->nr_data++;
-		fallthrough;
+		ctx->nr_data++;/*data层数增加*/
+		fallthrough;/*其余与lowerdir add处理相同*/
 	case Opt_lowerdir_add:
 		WARN_ON(ctx->nr >= ctx->capacity);
-		l = &ctx->lower[ctx->nr++];/*添加lowerdir*/
+		l = &ctx->lower[ctx->nr++];/*添加lowerdir（变更总层数）*/
 		memset(l, 0, sizeof(*l));
 		swap(l->name, *pname);
 		swap(l->path, *path);
@@ -368,8 +380,8 @@ static void ovl_add_layer(struct fs_context *fc, enum ovl_opt layer,
 static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 			   enum ovl_opt layer)
 {
-	char *name = kstrdup(param->string, GFP_KERNEL);/*取用户配置指定的文件名*/
-	bool upper = (layer == Opt_upperdir || layer == Opt_workdir);
+	char *name = kstrdup(param->string, GFP_KERNEL);/*取用户配置指定的文件路径*/
+	bool upper = (layer == Opt_upperdir || layer == Opt_workdir);/*是否为upper layer*/
 	struct path path;
 	int err;
 
@@ -377,9 +389,10 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		return -ENOMEM;
 
 	if (upper)
-		/*依据name,构造path*/
+		/*依据name,构造path(考虑转义问题）*/
 		err = ovl_mount_dir(name, &path);
 	else
+		/*依据name,构造path(不考虑转义问题）*/
 		err = ovl_mount_dir_noesc(name, &path);
 	if (err)
 		goto out_free;
@@ -389,13 +402,14 @@ static int ovl_parse_layer(struct fs_context *fc, struct fs_parameter *param,
 		goto out_put;
 
 	if (!upper) {
+		/*lower容许有多个，故添加前先检查是否需要扩充*/
 		err = ovl_ctx_realloc_lower(fc);
 		if (err)
 			goto out_put;
 	}
 
 	/* Store the user provided path string in ctx to show in mountinfo */
-	ovl_add_layer(fc, layer/*layer类型*/, &path, &name);
+	ovl_add_layer(fc, layer/*要添加的layer类型*/, &path/*路径对应的path*/, &name/*路径*/);/*添加此layer*/
 
 out_put:
 	path_put(&path);
@@ -429,7 +443,7 @@ static void ovl_reset_lowerdirs(struct ovl_fs_context *ctx)
  *     "/data1" and "/data2" as data lower layers. Any existing lower
  *     layers are replaced.
  */
-static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
+static int ovl_parse_param_lowerdir(const char *name/*lowerdir配置*/, struct fs_context *fc)
 {
 	int err;
 	struct ovl_fs_context *ctx = fc->fs_private;
@@ -451,27 +465,28 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 		return 0;
 
 	if (*name == ':') {
+		/*参数以':'号开头*/
 		pr_err("cannot append lower layer");
 		return -EINVAL;
 	}
 
 	// Store user provided lowerdir string to show in mount options
-	ctx->lowerdir_all = kstrdup(name, GFP_KERNEL);
+	ctx->lowerdir_all = kstrdup(name, GFP_KERNEL);/*存一份*/
 	if (!ctx->lowerdir_all)
 		return -ENOMEM;
 
-	dup = kstrdup(name, GFP_KERNEL);
+	dup = kstrdup(name, GFP_KERNEL);/*再复制一份，用于解析*/
 	if (!dup)
 		return -ENOMEM;
 
 	err = -EINVAL;
-	//检查dup配置内容，获取lower一共有多少对儿，并将每队之间断开
+	//检查dup配置内容，获取lower一共有多少对儿，并将每队之间断开（考虑移除转义符）
 	nr_lower = ovl_parse_param_split_lowerdirs(dup);
 	if (nr_lower < 0)
 		goto out_err;
 
 	if (nr_lower > OVL_MAX_STACK) {
-		/*lower配置过多*/
+		/*lower配置过多，报错*/
 		pr_err("too many lower directories, limit is %d\n", OVL_MAX_STACK);
 		goto out_err;
 	}
@@ -488,51 +503,54 @@ static int ovl_parse_param_lowerdir(const char *name, struct fs_context *fc)
 		ctx->capacity = nr_lower;
 	}
 
-	iter = dup;
+	iter = dup;/*上面已完成分隔，这里进行枚举并遍历*/
 	l = ctx->lower;
 	for (nr = 0; nr < nr_lower; nr++, l++) {
 		ctx->nr++;
-		memset(l, 0, sizeof(*l));/*初始化*/
+		memset(l, 0, sizeof(*l));/*清零lower,并初始化*/
 
-		err = ovl_mount_dir(iter, &l->path/*取得iter对应的path*/);
+		/*iter是一个lower配置目录，取得iter对应的path*/
+		err = ovl_mount_dir(iter, &l->path);
 		if (err)
 			goto out_put;
 
+		/*配置合法性检查*/
 		err = ovl_mount_dir_check(fc, &l->path, Opt_lowerdir, iter, false);
 		if (err)
 			goto out_put;
 
 		err = -ENOMEM;
-		l->name = kstrdup(iter, GFP_KERNEL_ACCOUNT);
+		l->name = kstrdup(iter, GFP_KERNEL_ACCOUNT);/*填充name*/
 		if (!l->name)
 			goto out_put;
 
 		if (data_layer)
-			ctx->nr_data++;
+			ctx->nr_data++;/*记录data layer数目*/
 
 		/* Calling strchr() again would overrun. */
 		if (ctx->nr == nr_lower)
-			break;
+			break;/*达到结尾退出*/
 
 		err = -EINVAL;
 		iter = strchr(iter, '\0') + 1;/*跳到data lower配置*/
 		if (*iter) {
+			/*由于'::'用于分开lower区域与data区域，故一定是两个\0,此时遇到非‘\0'，则data_layer未开始*/
 			/*
 			 * This is a regular layer so we require that
 			 * there are no data layers.
 			 */
 			if (ctx->nr_data > 0) {
 				pr_err("regular lower layers cannot follow data lower layers");
-				goto out_put;
+				goto out_put;/*data layer已开始，遇到了lower layer分隔符，报错*/
 			}
 
-			data_layer = false;
+			data_layer = false;/*标记非data_layer*/
 			continue;
 		}
 
 		/* This is a data lower layer. */
 		data_layer = true;
-		iter++;
+		iter++;/*当前指向的是'\0',跳过这个字符*/
 	}
 	kfree(dup);
 	return 0;
@@ -589,6 +607,7 @@ static int ovl_parse_param(struct fs_context *fc, struct fs_parameter *param)
 	case Opt_datadir_add:
 	case Opt_upperdir:
 	case Opt_workdir:
+		/*解析单个layer配置的情况*/
 		err = ovl_parse_layer(fc, param, opt);
 		break;
 	case Opt_default_permissions:
@@ -791,6 +810,7 @@ int ovl_fs_params_verify(const struct ovl_fs_context *ctx,
 	struct ovl_opt_set set = ctx->set;
 
 	if (ctx->nr_data > 0 && !config->metacopy) {
+		/*如果使能了data layer,则必须开启metacopy*/
 		pr_err("lower data-only dirs require metacopy support.\n");
 		return -EINVAL;
 	}
