@@ -1497,9 +1497,9 @@ struct vfio_iova_range {
 
 struct vfio_iommu_type1_info_cap_iova_range {
 	struct	vfio_info_cap_header header;
-	__u32	nr_iovas;
+	__u32	nr_iovas;/*iova的范围数目*/
 	__u32	reserved;
-	struct	vfio_iova_range iova_ranges[];
+	struct	vfio_iova_range iova_ranges[];/*各范围的start,end*/
 };
 
 /*
@@ -1537,7 +1537,7 @@ struct vfio_iommu_type1_info_cap_migration {
 
 struct vfio_iommu_type1_info_dma_avail {
 	struct	vfio_info_cap_header header;
-	__u32	avail;
+	__u32	avail;/*可用的dma实体数*/
 };
 
 #define VFIO_IOMMU_GET_INFO _IO(VFIO_TYPE, VFIO_BASE + 12)

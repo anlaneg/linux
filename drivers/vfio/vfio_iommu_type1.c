@@ -50,14 +50,14 @@ module_param_named(allow_unsafe_interrupts,
 MODULE_PARM_DESC(allow_unsafe_interrupts,
 		 "Enable VFIO IOMMU support for on platforms without interrupt remapping support.");
 
-static bool disable_hugepages;
+static bool disable_hugepages;/*禁用大页*/
 module_param_named(disable_hugepages,
 		   disable_hugepages, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_hugepages,
 		 "Disable VFIO IOMMU support for IOMMU hugepages.");
 
 static unsigned int dma_entry_limit __read_mostly = U16_MAX;
-module_param_named(dma_entry_limit, dma_entry_limit, uint, 0644);
+module_param_named(dma_entry_limit, dma_entry_limit, uint, 0644);/*每个container支持的dma entry最大数*/
 MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
 
@@ -65,12 +65,12 @@ struct vfio_iommu {
 	struct list_head	domain_list;
 	struct list_head	iova_list;
 	struct mutex		lock;
-	struct rb_root		dma_list;
+	struct rb_root		dma_list;/*dma region（采用红黑树）*/
 	struct list_head	device_list;
 	struct mutex		device_list_lock;
 	unsigned int		dma_avail;
 	unsigned int		vaddr_invalid_count;
-	uint64_t		pgsize_bitmap;
+	uint64_t		pgsize_bitmap;/*指明对应的页大小*/
 	uint64_t		num_non_pinned_groups;
 	bool			v2;/*指明是否使用版本2*/
 	bool			nesting;/*指明是否嵌套*/
@@ -90,6 +90,7 @@ struct vfio_dma {
 	struct rb_node		node;
 	dma_addr_t		iova;		/* Device address */
 	unsigned long		vaddr;		/* Process virtual addr */
+	/*map地址长度*/
 	size_t			size;		/* Map size (bytes) */
 	int			prot;		/* IOMMU_READ/WRITE */
 	bool			iommu_mapped;
@@ -166,17 +167,18 @@ vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
 static struct vfio_dma *vfio_find_dma(struct vfio_iommu *iommu,
 				      dma_addr_t start, size_t size)
 {
+	/*在dma_list中查找range(start,start+size)对应的vfio_dma*/
 	struct rb_node *node = iommu->dma_list.rb_node;
 
 	while (node) {
 		struct vfio_dma *dma = rb_entry(node, struct vfio_dma, node);
 
 		if (start + size <= dma->iova)
-			node = node->rb_left;
+			node = node->rb_left;/*走左树*/
 		else if (start >= dma->iova + dma->size)
-			node = node->rb_right;
+			node = node->rb_right;/*走右树*/
 		else
-			return dma;
+			return dma;/*重合，返回此dma*/
 	}
 
 	return NULL;
@@ -565,6 +567,7 @@ static int vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 		flags |= FOLL_WRITE;
 
 	mmap_read_lock(mm);
+	/*pin用户页*/
 	ret = pin_user_pages_remote(mm, vaddr, npages, flags | FOLL_LONGTERM,
 				    pages, NULL);
 	if (ret > 0) {
@@ -587,7 +590,7 @@ static int vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 	vaddr = untagged_addr_remote(mm, vaddr);
 
 retry:
-	vma = vma_lookup(mm, vaddr);
+	vma = vma_lookup(mm, vaddr);/*通过va查找vma*/
 
 	if (vma && vma->vm_flags & VM_PFNMAP) {
 		ret = follow_fault_pfn(vma, mm, vaddr, pfn, prot & IOMMU_WRITE);
@@ -619,7 +622,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 	struct mm_struct *mm = current->mm;
 	long ret, pinned = 0, lock_acct = 0;
 	bool rsvd;
-	dma_addr_t iova = vaddr - dma->vaddr + dma->iova;
+	dma_addr_t iova = vaddr - dma->vaddr + dma->iova;/*vaddr对应的iova地址*/
 
 	/* This code path is only user initiated */
 	if (!mm)
@@ -1470,8 +1473,8 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 	while (size) {
 		/* Pin a contiguous chunk of memory */
-		npage = vfio_pin_pages_remote(dma, vaddr + dma->size,
-					      size >> PAGE_SHIFT, &pfn, limit,
+		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*结束地址*/,
+					      size >> PAGE_SHIFT/*要map的页数*/, &pfn, limit,
 					      &batch);
 		if (npage <= 0) {
 			WARN_ON(!npage);
@@ -1481,7 +1484,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 		/* Map it! */
 		ret = vfio_iommu_map(iommu, iova + dma->size, pfn, npage,
-				     dma->prot);
+				     dma->prot);/*将地址map到iommu*/
 		if (ret) {
 			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
 						npage, true);
@@ -1513,14 +1516,14 @@ static bool vfio_iommu_iova_dma_valid(struct vfio_iommu *iommu,
 
 	list_for_each_entry(node, iova, list) {
 		if (start >= node->start && end <= node->end)
-			return true;
+			return true;/*此range有效，在(start,end)之内，返回true*/
 	}
 
 	/*
 	 * Check for list_empty() as well since a container with
 	 * a single mdev device will have an empty list.
 	 */
-	return list_empty(iova);
+	return list_empty(iova);/*没有找到此range*/
 }
 
 static int vfio_change_dma_owner(struct vfio_dma *dma)
@@ -1586,16 +1589,19 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	WARN_ON((pgsize - 1) & PAGE_MASK);
 
 	if (!size || (size | iova | vaddr) & (pgsize - 1)) {
+		/*size,iova,vaddr均需要按页对齐*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 
 	/* Don't allow IOVA or virtual address wrap */
 	if (iova + size - 1 < iova || vaddr + size - 1 < vaddr) {
+		/*地址end越界*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 
+	/*利用iova,size查找vfio-dma结构体*/
 	dma = vfio_find_dma(iommu, iova, size);
 	if (set_vaddr) {
 		if (!dma) {
@@ -1613,27 +1619,31 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		}
 		goto out_unlock;
 	} else if (dma) {
+		/*已存在，报错*/
 		ret = -EEXIST;
 		goto out_unlock;
 	}
 
 	if (!iommu->dma_avail) {
+		/*空间不足，报错*/
 		ret = -ENOSPC;
 		goto out_unlock;
 	}
 
 	if (!vfio_iommu_iova_dma_valid(iommu, iova, iova + size - 1)) {
+		/*这个range不在iommu->iova_list地址范围以内*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 
+	/*申请vfio dma结构体*/
 	dma = kzalloc(sizeof(*dma), GFP_KERNEL);
 	if (!dma) {
 		ret = -ENOMEM;
 		goto out_unlock;
 	}
 
-	iommu->dma_avail--;
+	iommu->dma_avail--;/*有效数目占用一个*/
 	dma->iova = iova;
 	dma->vaddr = vaddr;
 	dma->prot = prot;
@@ -1656,13 +1666,13 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	dma->pfn_list = RB_ROOT;
 
 	/* Insert zero-sized and grow as we map chunks of it */
-	vfio_link_dma(iommu, dma);
+	vfio_link_dma(iommu, dma);/*将此dma加入到dma_list中*/
 
 	/* Don't pin and map if container doesn't contain IOMMU capable domain*/
 	if (list_empty(&iommu->domain_list))
 		dma->size = size;
 	else
-		ret = vfio_pin_map_dma(iommu, dma, size);
+		ret = vfio_pin_map_dma(iommu, dma, size);/*pin此段地址*/
 
 	if (!ret && iommu->dirty_page_tracking) {
 		ret = vfio_dma_bitmap_alloc(dma, pgsize);
@@ -1939,11 +1949,12 @@ static int vfio_iommu_iova_insert(struct list_head *head,
 	if (!region)
 		return -ENOMEM;
 
+	/*利用start,end构造此range*/
 	INIT_LIST_HEAD(&region->list);
 	region->start = start;
 	region->end = end;
 
-	list_add_tail(&region->list, head);
+	list_add_tail(&region->list, head);/*将这个region加入到head*/
 	return 0;
 }
 
@@ -1958,7 +1969,7 @@ static bool vfio_iommu_aper_conflict(struct vfio_iommu *iommu,
 	struct list_head *iova = &iommu->iova_list;
 
 	if (list_empty(iova))
-		return false;
+		return false;/*链表为空*/
 
 	/* Disjoint sets, return conflict */
 	first = list_first_entry(iova, struct vfio_iova, list);
@@ -2114,6 +2125,7 @@ static void vfio_iommu_iova_free(struct list_head *iova)
 	}
 }
 
+/*制作iommu->iova_list的一份copy*/
 static int vfio_iommu_iova_get_copy(struct vfio_iommu *iommu,
 				    struct list_head *iova_copy)
 {
@@ -2139,9 +2151,9 @@ static void vfio_iommu_iova_insert_copy(struct vfio_iommu *iommu,
 {
 	struct list_head *iova = &iommu->iova_list;
 
-	vfio_iommu_iova_free(iova);
+	vfio_iommu_iova_free(iova);/*释放iova*/
 
-	list_splice_tail(iova_copy, iova);
+	list_splice_tail(iova_copy, iova);/*设置新的iova_list*/
 }
 
 static int vfio_iommu_domain_alloc(struct device *dev, void *data)
@@ -2247,7 +2259,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	 * gets modified and in case of failure we have to retain the
 	 * original list. Get a copy here.
 	 */
-	ret = vfio_iommu_iova_get_copy(iommu, &iova_copy);
+	ret = vfio_iommu_iova_get_copy(iommu, &iova_copy);/*取一个iova list副本*/
 	if (ret)
 		goto out_detach;
 
@@ -2327,7 +2339,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	vfio_update_pgsize_bitmap(iommu);
 done:
 	/* Delete the old one and insert new iova list */
-	vfio_iommu_iova_insert_copy(iommu, &iova_copy);
+	vfio_iommu_iova_insert_copy(iommu, &iova_copy);/*更新成新的iova_list*/
 
 	/*
 	 * An iommu backed group can dirty memory directly and therefore
@@ -2577,7 +2589,7 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 	INIT_LIST_HEAD(&iommu->domain_list);
 	INIT_LIST_HEAD(&iommu->iova_list);
 	iommu->dma_list = RB_ROOT;
-	iommu->dma_avail = dma_entry_limit;
+	iommu->dma_avail = dma_entry_limit;/*支持的最大dma有效数*/
 	mutex_init(&iommu->lock);
 	mutex_init(&iommu->device_list_lock);
 	INIT_LIST_HEAD(&iommu->device_list);
@@ -2678,6 +2690,7 @@ static int vfio_iommu_type1_check_extension(struct vfio_iommu *iommu,
 	}
 }
 
+/*添加iova range*/
 static int vfio_iommu_iova_add_cap(struct vfio_info_cap *caps,
 		 struct vfio_iommu_type1_info_cap_iova_range *cap_iovas,
 		 size_t size)
@@ -2707,6 +2720,7 @@ static int vfio_iommu_iova_build_caps(struct vfio_iommu *iommu,
 	size_t size;
 	int iovas = 0, i = 0, ret;
 
+	/*获得iova_list的count*/
 	list_for_each_entry(iova, &iommu->iova_list, list)
 		iovas++;
 
@@ -2718,6 +2732,7 @@ static int vfio_iommu_iova_build_caps(struct vfio_iommu *iommu,
 		return 0;
 	}
 
+	/*申请空间容纳iova范围*/
 	size = struct_size(cap_iovas, iova_ranges, iovas);
 
 	cap_iovas = kzalloc(size, GFP_KERNEL);
@@ -2726,6 +2741,7 @@ static int vfio_iommu_iova_build_caps(struct vfio_iommu *iommu,
 
 	cap_iovas->nr_iovas = iovas;
 
+	/*利用iova_list填充此range*/
 	list_for_each_entry(iova, &iommu->iova_list, list) {
 		cap_iovas->iova_ranges[i].start = iova->start;
 		cap_iovas->iova_ranges[i].end = iova->end;
@@ -2738,6 +2754,7 @@ static int vfio_iommu_iova_build_caps(struct vfio_iommu *iommu,
 	return ret;
 }
 
+/*添加migration cap*/
 static int vfio_iommu_migration_build_caps(struct vfio_iommu *iommu,
 					   struct vfio_info_cap *caps)
 {
@@ -2754,18 +2771,19 @@ static int vfio_iommu_migration_build_caps(struct vfio_iommu *iommu,
 	return vfio_info_add_capability(caps, &cap_mig.header, sizeof(cap_mig));
 }
 
+/*设置dma avail cap*/
 static int vfio_iommu_dma_avail_build_caps(struct vfio_iommu *iommu,
 					   struct vfio_info_cap *caps)
 {
 	struct vfio_iommu_type1_info_dma_avail cap_dma_avail;
 
-	cap_dma_avail.header.id = VFIO_IOMMU_TYPE1_INFO_DMA_AVAIL;
+	cap_dma_avail.header.id = VFIO_IOMMU_TYPE1_INFO_DMA_AVAIL;/*指明dma entry支持的有效数量*/
 	cap_dma_avail.header.version = 1;
 
-	cap_dma_avail.avail = iommu->dma_avail;
+	cap_dma_avail.avail = iommu->dma_avail;/*指明有效的dma实体总数*/
 
 	return vfio_info_add_capability(caps, &cap_dma_avail.header,
-					sizeof(cap_dma_avail));
+					sizeof(cap_dma_avail));/*填充caps内容*/
 }
 
 static int vfio_iommu_type1_get_info(struct vfio_iommu *iommu,
@@ -2782,6 +2800,7 @@ static int vfio_iommu_type1_get_info(struct vfio_iommu *iommu,
 		return -EFAULT;
 
 	if (info.argsz < minsz)
+		/*提供的参数过小*/
 		return -EINVAL;
 
 	minsz = min_t(size_t, info.argsz, sizeof(info));
@@ -3014,6 +3033,7 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 	case VFIO_CHECK_EXTENSION:
 		return vfio_iommu_type1_check_extension(iommu, arg);
 	case VFIO_IOMMU_GET_INFO:
+		/*获取iommu信息*/
 		return vfio_iommu_type1_get_info(iommu, arg);
 	case VFIO_IOMMU_MAP_DMA:
 		/*dma映射*/
