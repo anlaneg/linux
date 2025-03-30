@@ -60,7 +60,7 @@ static inline void *get_pgtable_pte(u64 pte)
 	return iommu_phys_to_virt(pte & PM_ADDR_MASK);
 }
 
-static u64 set_pte_attr(u64 paddr, u64 pg_size, int prot)
+static u64 set_pte_attr(u64 paddr/*起始地址*/, u64 pg_size/*页大小*/, int prot/*权限*/)
 {
 	u64 pte;
 
@@ -81,12 +81,12 @@ static u64 set_pte_attr(u64 paddr, u64 pg_size, int prot)
 static inline u64 get_alloc_page_size(u64 size)
 {
 	if (size >= IOMMU_PAGE_SIZE_1G)
-		return IOMMU_PAGE_SIZE_1G;
+		return IOMMU_PAGE_SIZE_1G;/*1G大页*/
 
 	if (size >= IOMMU_PAGE_SIZE_2M)
-		return IOMMU_PAGE_SIZE_2M;
+		return IOMMU_PAGE_SIZE_2M;/*2M大页*/
 
-	return PAGE_SIZE;
+	return PAGE_SIZE;/*4K小页*/
 }
 
 static inline int page_size_to_level(u64 pg_size)
@@ -234,7 +234,7 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 }
 
 static int iommu_v2_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
-			      phys_addr_t paddr, size_t pgsize, size_t pgcount,
+			      phys_addr_t paddr/*物理起始地址*/, size_t pgsize, size_t pgcount,
 			      int prot, gfp_t gfp, size_t *mapped)
 {
 	struct protection_domain *pdom = io_pgtable_ops_to_domain(ops);
@@ -254,16 +254,18 @@ static int iommu_v2_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		return -EINVAL;
 
 	while (mapped_size < size) {
-		map_size = get_alloc_page_size(pgsize);
+		map_size = get_alloc_page_size(pgsize);/*取页大小*/
 		pte = v2_alloc_pte(pdom->nid, pdom->iop.pgd,
-				   iova, map_size, gfp, &updated);
+				   iova, map_size, gfp, &updated/*出参，是否需要更新*/);/*申请pte*/
 		if (!pte) {
 			ret = -EINVAL;
 			goto out;
 		}
 
+		/*填充此pte*/
 		*pte = set_pte_attr(paddr, map_size, prot);
 
+		/*更新，准备下一个pte*/
 		iova += map_size;
 		paddr += map_size;
 		mapped_size += map_size;
@@ -271,6 +273,7 @@ static int iommu_v2_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 
 out:
 	if (updated)
+		/*需要更新*/
 		amd_iommu_domain_flush_pages(pdom, o_iova, size);
 
 	if (mapped)

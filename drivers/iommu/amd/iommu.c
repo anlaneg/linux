@@ -43,6 +43,7 @@
 #include "../dma-iommu.h"
 #include "../irq_remapping.h"
 
+/*第二个字节的高4位为cmd type*/
 #define CMD_SET_TYPE(cmd, t) ((cmd)->data[1] |= ((t) << 28))
 
 /* IO virtual address start page frame number */
@@ -115,6 +116,7 @@ static inline int get_device_sbdf_id(struct device *dev)
 	int sbdf;
 
 	if (dev_is_pci(dev))
+		/*dev为pci设备，将dev转换为pci_dev设备,获得SSSS:BB:DD.FF*/
 		sbdf = get_pci_sbdf_id(to_pci_dev(dev));
 	else
 		sbdf = get_acpihid_device_id(dev, NULL);
@@ -139,6 +141,7 @@ static inline u16 get_device_segment(struct device *dev)
 	u16 seg;
 
 	if (dev_is_pci(dev)) {
+		/*pci设备，获取domain nr*/
 		struct pci_dev *pdev = to_pci_dev(dev);
 
 		seg = pci_domain_nr(pdev->bus);
@@ -156,10 +159,11 @@ void amd_iommu_set_rlookup_table(struct amd_iommu *iommu, u16 devid)
 {
 	struct amd_iommu_pci_seg *pci_seg = iommu->pci_seg;
 
-	pci_seg->rlookup_table[devid] = iommu;
+	pci_seg->rlookup_table[devid] = iommu;/*添加此iommu*/
 }
 
-static struct amd_iommu *__rlookup_amd_iommu(u16 seg, u16 devid)
+/*通过seg,devid查找对应的iommu设备*/
+static struct amd_iommu *__rlookup_amd_iommu(u16 seg, u16 devid/*devid及function id*/)
 {
 	struct amd_iommu_pci_seg *pci_seg;
 
@@ -170,8 +174,10 @@ static struct amd_iommu *__rlookup_amd_iommu(u16 seg, u16 devid)
 	return NULL;
 }
 
+/*通过device查找amd_iommu*/
 static struct amd_iommu *rlookup_amd_iommu(struct device *dev)
 {
+	/*先转换成sbdf再进行iommu查询*/
 	u16 seg = get_device_segment(dev);
 	int devid = get_device_sbdf_id(dev);
 
@@ -478,10 +484,12 @@ static bool check_device(struct device *dev)
 	sbdf = get_device_sbdf_id(dev);
 	if (sbdf < 0)
 		return false;
+	/*取devid+function id*/
 	devid = PCI_SBDF_TO_DEVID(sbdf);
 
 	iommu = rlookup_amd_iommu(dev);
 	if (!iommu)
+		/*此设备并非iommu,返回false*/
 		return false;
 
 	/* Out of our scope? */
@@ -489,7 +497,7 @@ static bool check_device(struct device *dev)
 	if (devid > pci_seg->last_bdf)
 		return false;
 
-	return true;
+	return true;/*此设备是有效的iommu设备*/
 }
 
 static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
@@ -498,6 +506,7 @@ static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
 	int devid, sbdf;
 
 	if (dev_iommu_priv_get(dev))
+		/*已设置priv*/
 		return 0;
 
 	sbdf = get_device_sbdf_id(dev);
@@ -523,7 +532,7 @@ static int iommu_init_device(struct amd_iommu *iommu, struct device *dev)
 		dev_data->flags = pdev_get_caps(to_pci_dev(dev));
 	}
 
-	dev_iommu_priv_set(dev, dev_data);
+	dev_iommu_priv_set(dev, dev_data);/*设置priv*/
 
 	return 0;
 }
@@ -956,7 +965,7 @@ static void amd_iommu_handle_irq(void *data, const char *evt_type,
 		if (int_handler) {
 			pr_devel("Processing IOMMU (ivhd%d) %s Log\n",
 				 iommu->index, evt_type);
-			int_handler(iommu);
+			int_handler(iommu);/*调用中断处理函数*/
 		}
 
 		if ((status & overflow_mask) && overflow_handler)
@@ -1045,6 +1054,7 @@ static int wait_on_sem(struct amd_iommu *iommu, u64 data)
 	return 0;
 }
 
+/*写cmd到cmd buffer*/
 static void copy_cmd_to_buffer(struct amd_iommu *iommu,
 			       struct iommu_cmd *cmd)
 {
@@ -1052,15 +1062,15 @@ static void copy_cmd_to_buffer(struct amd_iommu *iommu,
 	u32 tail;
 
 	/* Copy command to buffer */
-	tail = iommu->cmd_buf_tail;
-	target = iommu->cmd_buf + tail;
-	memcpy(target, cmd, sizeof(*cmd));
+	tail = iommu->cmd_buf_tail;/*取存放位置(数字）*/
+	target = iommu->cmd_buf + tail;/*取存放位置（指针）*/
+	memcpy(target, cmd, sizeof(*cmd));/*复制存放*/
 
-	tail = (tail + sizeof(*cmd)) % CMD_BUFFER_SIZE;
-	iommu->cmd_buf_tail = tail;
+	tail = (tail + sizeof(*cmd)) % CMD_BUFFER_SIZE;/*下次存放的位置*/
+	iommu->cmd_buf_tail = tail;/*更新下次存放位置*/
 
 	/* Tell the IOMMU about it */
-	writel(tail, iommu->mmio_base + MMIO_CMD_TAIL_OFFSET);
+	writel(tail, iommu->mmio_base + MMIO_CMD_TAIL_OFFSET);/*知会iommu，tail已更新*/
 }
 
 static void build_completion_wait(struct iommu_cmd *cmd,
@@ -1132,8 +1142,9 @@ static void build_inv_iommu_pages(struct iommu_cmd *cmd, u64 address,
 {
 	u64 inv_address = build_inv_address(address, size);
 
-	memset(cmd, 0, sizeof(*cmd));
+	memset(cmd, 0, sizeof(*cmd));/*清空cmd*/
 
+	/*填充cmd*/
 	cmd->data[1] |= domid;
 	cmd->data[2]  = lower_32_bits(inv_address);
 	cmd->data[3]  = upper_32_bits(inv_address);
@@ -1154,18 +1165,18 @@ static void build_inv_iotlb_pages(struct iommu_cmd *cmd, u16 devid, int qdep,
 
 	memset(cmd, 0, sizeof(*cmd));
 
-	cmd->data[0]  = devid;
-	cmd->data[0] |= (qdep & 0xff) << 24;
+	cmd->data[0]  = devid;/*首4字节中，低16位指明devid*/
+	cmd->data[0] |= (qdep & 0xff) << 24;/*首4字节中，中间字节为qdep*/
 	cmd->data[1]  = devid;
-	cmd->data[2]  = lower_32_bits(inv_address);
-	cmd->data[3]  = upper_32_bits(inv_address);
+	cmd->data[2]  = lower_32_bits(inv_address);/*inv_address的低32位*/
+	cmd->data[3]  = upper_32_bits(inv_address);/*inv_address的高32位*/
 	if (gn) {
 		cmd->data[0] |= ((pasid >> 8) & 0xff) << 16;
 		cmd->data[1] |= (pasid & 0xff) << 16;
 		cmd->data[2] |= CMD_INV_IOMMU_PAGES_GN_MASK;
 	}
 
-	CMD_SET_TYPE(cmd, CMD_INV_IOTLB_PAGES);
+	CMD_SET_TYPE(cmd, CMD_INV_IOTLB_PAGES);/*第二个4字节中，高4位指定cmd类型*/
 }
 
 static void build_complete_ppr(struct iommu_cmd *cmd, u16 devid, u32 pasid,
@@ -1203,33 +1214,37 @@ static void build_inv_irt(struct iommu_cmd *cmd, u16 devid)
  */
 static int __iommu_queue_command_sync(struct amd_iommu *iommu,
 				      struct iommu_cmd *cmd,
-				      bool sync)
+				      bool sync/*是否同步操作*/)
 {
 	unsigned int count = 0;
 	u32 left, next_tail;
 
+	/*存入后新的tail*/
 	next_tail = (iommu->cmd_buf_tail + sizeof(*cmd)) % CMD_BUFFER_SIZE;
 again:
+	/*剩余的空间*/
 	left      = (iommu->cmd_buf_head - next_tail) % CMD_BUFFER_SIZE;
 
 	if (left <= 0x20) {
 		/* Skip udelay() the first time around */
 		if (count++) {
+			/*长时间等待仍未见空闲增多*/
 			if (count == LOOP_TIMEOUT) {
 				pr_err("Command buffer timeout\n");
 				return -EIO;
 			}
 
-			udelay(1);
+			udelay(1);/*等1us*/
 		}
 
 		/* Update head and recheck remaining space */
 		iommu->cmd_buf_head = readl(iommu->mmio_base +
-					    MMIO_CMD_HEAD_OFFSET);
+					    MMIO_CMD_HEAD_OFFSET);/*更新buf_head*/
 
-		goto again;
+		goto again;/*检查剩余空间是否增大*/
 	}
 
+	/*空间足够，存入到iommu->cmd_buf_tail*/
 	copy_cmd_to_buffer(iommu, cmd);
 
 	/* Do we need to make sure all commands are processed? */
@@ -1246,6 +1261,7 @@ static int iommu_queue_command_sync(struct amd_iommu *iommu,
 	int ret;
 
 	raw_spin_lock_irqsave(&iommu->lock, flags);
+	/*同步命令入cmd队列*/
 	ret = __iommu_queue_command_sync(iommu, cmd, sync);
 	raw_spin_unlock_irqrestore(&iommu->lock, flags);
 
@@ -1254,7 +1270,7 @@ static int iommu_queue_command_sync(struct amd_iommu *iommu,
 
 static int iommu_queue_command(struct amd_iommu *iommu, struct iommu_cmd *cmd)
 {
-	return iommu_queue_command_sync(iommu, cmd, true);
+	return iommu_queue_command_sync(iommu, cmd, true/*同步操作*/);
 }
 
 /*
@@ -1397,9 +1413,11 @@ static int device_flush_iotlb(struct iommu_dev_data *dev_data, u64 address,
 	if (!iommu)
 		return -EINVAL;
 
-	build_inv_iotlb_pages(&cmd, dev_data->devid, qdep, address,
+	/*填充cmd*/
+	build_inv_iotlb_pages(&cmd/*出参*/, dev_data->devid, qdep, address,
 			      size, pasid, gn);
 
+	/*命令入队到iommu*/
 	return iommu_queue_command(iommu, &cmd);
 }
 
@@ -1472,9 +1490,10 @@ static void __domain_flush_pages(struct protection_domain *domain,
 
 	build_inv_iommu_pages(&cmd, address, size, domain->id, pasid, gn);
 
+	/*遍历所有iommu设备*/
 	for (i = 0; i < amd_iommu_get_num_iommus(); ++i) {
 		if (!domain->dev_iommu[i])
-			continue;
+			continue;/*此iommu设备不属于此domain,忽略*/
 
 		/*
 		 * Devices of this domain are behind this IOMMU
@@ -1483,6 +1502,7 @@ static void __domain_flush_pages(struct protection_domain *domain,
 		ret |= iommu_queue_command(amd_iommus[i], &cmd);
 	}
 
+	/*遍历domain下所有iommu设备，为每个iommu设备添加flush cmd,指明address对应的page无效*/
 	list_for_each_entry(dev_data, &domain->dev_list, list) {
 
 		if (!dev_data->ats_enabled)
@@ -1607,9 +1627,11 @@ static u16 domain_id_alloc(void)
 	int id;
 
 	spin_lock(&pd_bitmap_lock);
+	/*申请domain id*/
 	id = find_first_zero_bit(amd_iommu_pd_alloc_bitmap, MAX_DOMAIN_ID);
 	BUG_ON(id == 0);
 	if (id > 0 && id < MAX_DOMAIN_ID)
+		/*申请成功，占用此id*/
 		__set_bit(id, amd_iommu_pd_alloc_bitmap);
 	else
 		id = 0;
@@ -1622,6 +1644,7 @@ static void domain_id_free(int id)
 {
 	spin_lock(&pd_bitmap_lock);
 	if (id > 0 && id < MAX_DOMAIN_ID)
+		/*释放domain id*/
 		__clear_bit(id, amd_iommu_pd_alloc_bitmap);
 	spin_unlock(&pd_bitmap_lock);
 }
@@ -1816,7 +1839,9 @@ static void do_attach(struct iommu_dev_data *dev_data,
 	ats   = dev_data->ats_enabled;
 
 	/* Update data structures */
+	/*使dev_data从属于此domain(从dev_data可找到domain)*/
 	dev_data->domain = domain;
+	/*使dev_data从属于此domain(从domain可以找到dev_data)*/
 	list_add(&dev_data->list, &domain->dev_list);
 
 	/* Update NUMA Node ID */
@@ -1939,14 +1964,17 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 	int ret;
 
 	if (!check_device(dev))
+		/*非iommu设备*/
 		return ERR_PTR(-ENODEV);
 
+	/*重查一遍，获得此iommu设备*/
 	iommu = rlookup_amd_iommu(dev);
 	if (!iommu)
 		return ERR_PTR(-ENODEV);
 
 	/* Not registered yet? */
 	if (!iommu->iommu.ops)
+		/*未注册，ops还未设置*/
 		return ERR_PTR(-ENODEV);
 
 	if (dev_iommu_priv_get(dev))
@@ -2089,6 +2117,7 @@ static int protection_domain_init_v1(struct protection_domain *domain, int mode)
 	BUG_ON(mode < PAGE_MODE_NONE || mode > PAGE_MODE_6_LEVEL);
 
 	if (mode != PAGE_MODE_NONE) {
+		/*申请一页内存并初始化为零*/
 		pt_root = (void *)get_zeroed_page(GFP_KERNEL);
 		if (!pt_root)
 			return -ENOMEM;
@@ -2118,11 +2147,11 @@ static struct protection_domain *protection_domain_alloc(unsigned int type)
 	int pgtable;
 	int ret;
 
-	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
+	domain = kzalloc(sizeof(*domain), GFP_KERNEL);/*申请并清零*/
 	if (!domain)
 		return NULL;
 
-	domain->id = domain_id_alloc();
+	domain->id = domain_id_alloc();/*分配domain id*/
 	if (!domain->id)
 		goto out_err;
 
@@ -2142,7 +2171,7 @@ static struct protection_domain *protection_domain_alloc(unsigned int type)
 	 * domain for pass-through devices.
 	 */
 	case IOMMU_DOMAIN_UNMANAGED:
-		pgtable = AMD_IOMMU_V1;
+		pgtable = AMD_IOMMU_V1;/*这种采用v1*/
 		break;
 	default:
 		goto out_err;
@@ -2195,6 +2224,7 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	struct amd_iommu *iommu = NULL;
 
 	if (dev) {
+		/*指定了设备，查找此设备对应的amd_iommu*/
 		iommu = rlookup_amd_iommu(dev);
 		if (!iommu)
 			return ERR_PTR(-ENODEV);
@@ -2210,7 +2240,7 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	if (dirty_tracking && !amd_iommu_hd_support(iommu))
 		return ERR_PTR(-EOPNOTSUPP);
 
-	domain = protection_domain_alloc(type);
+	domain = protection_domain_alloc(type);/*创建protection_domain*/
 	if (!domain)
 		return ERR_PTR(-ENOMEM);
 
@@ -2221,6 +2251,7 @@ static struct iommu_domain *do_iommu_domain_alloc(unsigned int type,
 	if (iommu) {
 		domain->domain.type = type;
 		domain->domain.pgsize_bitmap = iommu->iommu.ops->pgsize_bitmap;
+		/*使用default domain ops*/
 		domain->domain.ops = iommu->iommu.ops->default_domain_ops;
 
 		if (dirty_tracking)
@@ -2329,11 +2360,11 @@ static int amd_iommu_iotlb_sync_map(struct iommu_domain *dom,
 }
 
 static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova,
-			       phys_addr_t paddr, size_t pgsize, size_t pgcount,
+			       phys_addr_t paddr/*物理起始地址*/, size_t pgsize, size_t pgcount,
 			       int iommu_prot, gfp_t gfp, size_t *mapped)
 {
 	struct protection_domain *domain = to_pdomain(dom);
-	struct io_pgtable_ops *ops = &domain->iop.iop.ops;
+	struct io_pgtable_ops *ops = &domain->iop.iop.ops;/*取domain对应的ops*/
 	int prot = 0;
 	int ret = -EINVAL;
 
@@ -2620,6 +2651,7 @@ static const struct iommu_dirty_ops amd_dirty_ops = {
 	.read_and_clear_dirty = amd_iommu_read_and_clear_dirty,
 };
 
+/*定义amd iommu的操作集*/
 const struct iommu_ops amd_iommu_ops = {
 	.capable = amd_iommu_capable,
 	.domain_alloc = amd_iommu_domain_alloc,

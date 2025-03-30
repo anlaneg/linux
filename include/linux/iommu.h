@@ -450,11 +450,12 @@ static inline int __iommu_copy_struct_from_user_array(
  *                  Do not use in new drivers.
  */
 struct iommu_ops {
+	/*用于检查iommu设备是否支持指定的cap*/
 	bool (*capable)(struct device *dev, enum iommu_cap);
 	void *(*hw_info)(struct device *dev, u32 *length, u32 *type);
 
 	/* Domain allocation and freeing by the iommu driver */
-	struct iommu_domain *(*domain_alloc)(unsigned iommu_domain_type);
+	struct iommu_domain *(*domain_alloc)(unsigned iommu_domain_type);/*按type创建iommu_domain并初始化*/
 	struct iommu_domain *(*domain_alloc_user)(
 		struct device *dev, u32 flags, struct iommu_domain *parent,
 		const struct iommu_user_data *user_data);
@@ -570,7 +571,7 @@ struct iommu_domain_ops {
  */
 struct iommu_device {
 	struct list_head list;
-	const struct iommu_ops *ops;
+	const struct iommu_ops *ops;/*设备对应的操作集*/
 	struct fwnode_handle *fwnode;
 	struct device *dev;
 	struct iommu_group *singleton_group;

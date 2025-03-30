@@ -171,12 +171,14 @@ u64 amd_iommu_efr2;
 bool amd_iommu_snp_en;
 EXPORT_SYMBOL(amd_iommu_snp_en);
 
+/*按pci地址索引所有amd iommu pci设备*/
 LIST_HEAD(amd_iommu_pci_seg_list);	/* list of all PCI segments */
+/*记录系统中所有amd iommu设备*/
 LIST_HEAD(amd_iommu_list);		/* list of all AMD IOMMUs in the
 					   system */
 
 /* Array to assign indices to IOMMUs*/
-struct amd_iommu *amd_iommus[MAX_IOMMUS];
+struct amd_iommu *amd_iommus[MAX_IOMMUS];/*按索引设置amd_iommu*/
 
 /* Number of IOMMUs present in the system */
 static int amd_iommus_present;
@@ -260,7 +262,7 @@ static inline unsigned long tbl_size(int entry_size, int last_bdf)
 
 int amd_iommu_get_num_iommus(void)
 {
-	return amd_iommus_present;
+	return amd_iommus_present;/*返回amd iommu系统中总数*/
 }
 
 /*
@@ -1775,8 +1777,8 @@ static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h,
 	atomic64_set(&iommu->cmd_sem_val, 0);
 
 	/* Add IOMMU to internal data structures */
-	list_add_tail(&iommu->list, &amd_iommu_list);
-	iommu->index = amd_iommus_present++;
+	list_add_tail(&iommu->list, &amd_iommu_list);/*记录此iommu设备到链表*/
+	iommu->index = amd_iommus_present++;/*iommu设备数目增加（给当前iommu设备赋值）*/
 
 	if (unlikely(iommu->index >= MAX_IOMMUS)) {
 		WARN(1, "System has more IOMMUs than supported by this driver\n");
@@ -1941,6 +1943,7 @@ static int __init init_iommu_all(struct acpi_table_header *table)
 			DUMP_printk("       mmio-addr: %016llx\n",
 				    h->mmio_phys);
 
+			/*初始化iommu结构体*/
 			iommu = kzalloc(sizeof(struct amd_iommu), GFP_KERNEL);
 			if (iommu == NULL)
 				return -ENOMEM;
@@ -1986,6 +1989,7 @@ static void init_iommu_perf_ctr(struct amd_iommu *iommu)
 	return;
 }
 
+/*用于显示iommu设备对应的cap,例如服务器上有amd iommu显示为“190b640f”*/
 static ssize_t amd_iommu_show_cap(struct device *dev,
 				  struct device_attribute *attr,
 				  char *buf)
@@ -2004,14 +2008,14 @@ static ssize_t amd_iommu_show_features(struct device *dev,
 static DEVICE_ATTR(features, S_IRUGO, amd_iommu_show_features, NULL);
 
 static struct attribute *amd_iommu_attrs[] = {
-	&dev_attr_cap.attr,
-	&dev_attr_features.attr,
+	&dev_attr_cap.attr,/*cap属性*/
+	&dev_attr_features.attr,/*features属性*/
 	NULL,
 };
 
 static struct attribute_group amd_iommu_group = {
 	.name = "amd-iommu",
-	.attrs = amd_iommu_attrs,
+	.attrs = amd_iommu_attrs,/*amd iommu对应的属性*/
 };
 
 static const struct attribute_group *amd_iommu_groups[] = {
@@ -2069,7 +2073,7 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 	iommu->dev->match_driver = false;
 
 	pci_read_config_dword(iommu->dev, cap_ptr + MMIO_CAP_HDR_OFFSET,
-			      &iommu->cap);
+			      &iommu->cap);/*读取mmio cap*/
 
 	if (!(iommu->cap & (1 << IOMMU_CAP_IOTLB)))
 		amd_iommu_iotlb_sup = false;
@@ -2146,16 +2150,19 @@ static int __init iommu_init_pci(struct amd_iommu *iommu)
 	amd_iommu_erratum_746_workaround(iommu);
 	amd_iommu_ats_write_check_workaround(iommu);
 
+	/*向sysfs中添加amd-iommu*/
 	ret = iommu_device_sysfs_add(&iommu->iommu, &iommu->dev->dev,
-			       amd_iommu_groups, "ivhd%d", iommu->index);
+			       amd_iommu_groups, "ivhd%d"/*设备名称*/, iommu->index);
 	if (ret)
 		return ret;
 
+	/*注册amd iommu设备，并设置对应的ops*/
 	iommu_device_register(&iommu->iommu, &amd_iommu_ops, NULL);
 
 	return pci_enable_device(iommu->dev);
 }
 
+/*显示iommu信息（支持哪些功能）*/
 static void print_iommu_info(void)
 {
 	int i;
@@ -2169,6 +2176,7 @@ static void print_iommu_info(void)
 
 		for (i = 0; i < ARRAY_SIZE(feat_str); ++i) {
 			if (check_feature(1ULL << i))
+				/*此feature支持，显示feature标记*/
 				pr_cont(" %s", feat_str[i]);
 		}
 
@@ -2187,6 +2195,7 @@ static void print_iommu_info(void)
 			pr_info("X2APIC enabled\n");
 	}
 	if (amd_iommu_pgtable == AMD_IOMMU_V2) {
+		/*指明v2版本被使能*/
 		pr_info("V2 page table enabled (Paging mode : %d level)\n",
 			amd_iommu_gpt_level);
 	}
@@ -2198,6 +2207,7 @@ static int __init amd_iommu_init_pci(void)
 	struct amd_iommu_pci_seg *pci_seg;
 	int ret;
 
+	/*遍历每一个iommu设备，并执行初始化*/
 	for_each_iommu(iommu) {
 		ret = iommu_init_pci(iommu);
 		if (ret) {

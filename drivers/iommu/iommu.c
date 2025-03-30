@@ -39,7 +39,7 @@
 #include "iommu-sva.h"
 
 static struct kset *iommu_group_kset;
-static DEFINE_IDA(iommu_group_ida);
+static DEFINE_IDA(iommu_group_ida);/*管理系统中iommu-group的id分配*/
 static DEFINE_IDA(iommu_global_pasid_ida);
 
 /*默认方式(一般我们指明为pt)*/
@@ -50,7 +50,7 @@ static u32 iommu_cmd_line __read_mostly;
 struct iommu_group {
 	struct kobject kobj;
 	struct kobject *devices_kobj;
-	struct list_head devices;//group下所有设备链表(类型为struct group_device)
+	struct list_head devices;//哪些设备关联到此group下（即group下所有设备链表，类型为struct group_device)
 	struct xarray pasid_array;
 	struct mutex mutex;
 	void *iommu_data;
@@ -65,15 +65,16 @@ struct iommu_group {
 	void *owner;
 };
 
+/*这个结构体用于实现设备可以在iommu_group上串连起来*/
 struct group_device {
-	struct list_head list;
-	struct device *dev;
+	struct list_head list;/*用于串连group_device*/
+	struct device *dev;/*指向dev*/
 	char *name;
 };
 
 /* Iterate over each struct group_device in a struct iommu_group */
 #define for_each_group_device(group, pos) \
-	list_for_each_entry(pos, &(group)->devices, list)
+	list_for_each_entry(pos, &(group)->devices/*此group下所有device*/, list)
 
 struct iommu_group_attribute {
 	struct attribute attr;
@@ -260,7 +261,7 @@ static int remove_iommu_group(struct device *dev, void *data)
  * Return: 0 on success, or an error.
  */
 int iommu_device_register(struct iommu_device *iommu/*iommu设备*/,
-			  const struct iommu_ops *ops, struct device *hwdev)
+			  const struct iommu_ops *ops/*iommu设备对应的ops*/, struct device *hwdev)
 {
 	int err = 0;
 
@@ -268,7 +269,7 @@ int iommu_device_register(struct iommu_device *iommu/*iommu设备*/,
 	if (WARN_ON(is_module_address((unsigned long)ops) && !ops->owner))
 		return -EINVAL;
 
-	iommu->ops = ops;
+	iommu->ops = ops;/*指定iommu设备对应的ops*/
 	if (hwdev)
 		/*使用hwdev对应的fwnode*/
 		iommu->fwnode = dev_fwnode(hwdev);
@@ -280,7 +281,7 @@ int iommu_device_register(struct iommu_device *iommu/*iommu设备*/,
 
 	/*新iommu设备加入所有bus均尝试probe*/
 	for (int i = 0; i < ARRAY_SIZE(iommu_buses) && !err; i++)
-		err = bus_iommu_probe(iommu_buses[i]);
+		err = bus_iommu_probe(iommu_buses[i]/*bus类型*/);
 	if (err)
 		/*probe时出错，解注册此设备*/
 		iommu_device_unregister(iommu);
@@ -344,6 +345,7 @@ int iommu_device_register_bus(struct iommu_device *iommu,
 EXPORT_SYMBOL_GPL(iommu_device_register_bus);
 #endif
 
+/*返回dev对应的dev_iommu,如果无，则申请dev_iommu结构体并初始化*/
 static struct dev_iommu *dev_iommu_get(struct device *dev)
 {
 	struct dev_iommu *param = dev->iommu;
@@ -382,6 +384,7 @@ static void dev_iommu_free(struct device *dev)
  */
 static bool dev_has_iommu(struct device *dev)
 {
+	/*此设备是否有iommu*/
 	return dev->iommu && dev->iommu->iommu_dev;
 }
 
@@ -535,10 +538,12 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 	 */
 	fwspec = dev_iommu_fwspec_get(dev);
 	if (fwspec && fwspec->ops)
-		ops = fwspec->ops;
+		ops = fwspec->ops;/*使用fwspec->ops*/
 	else
+		/*取fwnode为NULL的iommu设备对应的ops*/
 		ops = iommu_ops_from_fwnode(NULL);
 
+	/*未查找到iommu设备，针对amd设备，ops可能为amd_iommu_ops*/
 	if (!ops)
 		return -ENODEV;
 	/*
@@ -552,7 +557,7 @@ static int __iommu_probe_device(struct device *dev, struct list_head *group_list
 
 	/* Device is probed already if in a group */
 	if (dev->iommu_group)
-		/*此设备已初始化，直接返回*/
+		/*此设备已关联到iommu-group，直接返回*/
 		return 0;
 
 	ret = iommu_init_device(dev, ops);
@@ -633,6 +638,7 @@ static void __iommu_group_free_device(struct iommu_group *group,
 {
 	struct device *dev = grp_dev->dev;
 
+	/*断开sysfs下的链接*/
 	sysfs_remove_link(group->devices_kobj, grp_dev->name);
 	sysfs_remove_link(&dev->kobj, "iommu_group");
 
@@ -648,26 +654,28 @@ static void __iommu_group_free_device(struct iommu_group *group,
 			group->domain != group->default_domain);
 
 	kfree(grp_dev->name);
-	kfree(grp_dev);
+	kfree(grp_dev);/*释放此结构体*/
 }
 
 /* Remove the iommu_group from the struct device. */
 static void __iommu_group_remove_device(struct device *dev)
 {
+	/*自此iommu_group中移除设备dev(dev可能是一个网卡设备）*/
 	struct iommu_group *group = dev->iommu_group;
 	struct group_device *device;
 
 	mutex_lock(&group->mutex);
+	/*遍历此iommu_group下挂接的所有group_device结构，找是否有dev对应的结构体*/
 	for_each_group_device(group, device) {
 		if (device->dev != dev)
-			continue;
+			continue;/*忽略非此dev的*/
 
-		list_del(&device->list);
+		list_del(&device->list);/*移除此device*/
 		__iommu_group_free_device(group, device);
 		if (dev_has_iommu(dev))
 			iommu_deinit_device(dev);
 		else
-			dev->iommu_group = NULL;
+			dev->iommu_group = NULL;/*不再关联到任何iommu_group*/
 		break;
 	}
 	mutex_unlock(&group->mutex);
@@ -676,7 +684,7 @@ static void __iommu_group_remove_device(struct device *dev)
 	 * Pairs with the get in iommu_init_device() or
 	 * iommu_group_add_device()
 	 */
-	iommu_group_put(group);
+	iommu_group_put(group);/*引用计数减少*/
 }
 
 static void iommu_release_device(struct device *dev)
@@ -857,6 +865,7 @@ int iommu_get_group_resv_regions(struct iommu_group *group,
 	int ret = 0;
 
 	mutex_lock(&group->mutex);
+	/*遍历从属于些group下的所有device*/
 	for_each_group_device(group, device) {
 		struct list_head dev_resv_regions;
 
@@ -886,15 +895,15 @@ static ssize_t iommu_group_show_resv_regions(struct iommu_group *group,
 	struct list_head group_resv_regions;
 	int offset = 0;
 
-	INIT_LIST_HEAD(&group_resv_regions);
+	INIT_LIST_HEAD(&group_resv_regions);/*初始化list*/
 	iommu_get_group_resv_regions(group, &group_resv_regions);
 
 	list_for_each_entry_safe(region, next, &group_resv_regions, list) {
 		offset += sysfs_emit_at(buf, offset, "0x%016llx 0x%016llx %s\n",
-					(long long)region->start,
+					(long long)region->start,/*起始地址*/
 					(long long)(region->start +
-						    region->length - 1),
-					iommu_group_resv_type_string[region->type]);
+						    region->length - 1/*终止地址*/),
+					iommu_group_resv_type_string[region->type]/*类型*/);
 		kfree(region);
 	}
 
@@ -931,8 +940,10 @@ static ssize_t iommu_group_show_type(struct iommu_group *group,
 	return sysfs_emit(buf, "%s\n", type);
 }
 
+/*显示iommu group name属性*/
 static IOMMU_GROUP_ATTR(name, S_IRUGO, iommu_group_show_name, NULL);
 
+/*显示iommu group reserved_regions属性*/
 static IOMMU_GROUP_ATTR(reserved_regions, 0444,
 			iommu_group_show_resv_regions, NULL);
 
@@ -1185,6 +1196,7 @@ static struct group_device *iommu_group_alloc_device(struct iommu_group *group,
 
 	device->dev = dev;/*设置对应的device*/
 
+	/*通过iommu_group链接，指向iommu group*/
 	ret = sysfs_create_link(&dev->kobj, &group->kobj, "iommu_group");
 	if (ret)
 		goto err_free_device;
@@ -1196,6 +1208,7 @@ rename:
 		goto err_remove_link;
 	}
 
+	/*在group的devices目录下通过device名称链接（例如0000:4a:00.0)，指向此设备*/
 	ret = sysfs_create_link_nowarn(group->devices_kobj,
 				       &dev->kobj, device->name);
 	if (ret) {
@@ -1214,6 +1227,7 @@ rename:
 
 	trace_add_device_to_group(group->id, dev);
 
+	/*指明此设备加入到哪个iommu group组内*/
 	dev_info(dev, "Adding to iommu group %d\n", group->id);
 
 	return device;
@@ -1240,13 +1254,13 @@ int iommu_group_add_device(struct iommu_group *group, struct device *dev)
 {
 	struct group_device *gdev;
 
-	/*创建group_device*/
+	/*创建group_device(用于管理dev与iommu_group间的关联关系，通过此结构体管理）*/
 	gdev = iommu_group_alloc_device(group, dev);
 	if (IS_ERR(gdev))
 		return PTR_ERR(gdev);
 
-	iommu_group_ref_get(group);
-	dev->iommu_group = group;/*为设备关联此iommu group*/
+	iommu_group_ref_get(group);/*增加引用计数*/
+	dev->iommu_group = group;/*指明设备关联的iommu group*/
 
 	mutex_lock(&group->mutex);
 	/*将dev与group之间的关联关系串到链表上*/
@@ -2093,9 +2107,9 @@ bool device_iommu_capable(struct device *dev, enum iommu_cap cap)
 
 	ops = dev_iommu_ops(dev);
 	if (!ops->capable)
-		return false;
+		return false;/*未提供capable回调*/
 
-	return ops->capable(dev, cap);
+	return ops->capable(dev, cap);/*触发此回调*/
 }
 EXPORT_SYMBOL_GPL(device_iommu_capable);
 
@@ -2150,7 +2164,7 @@ static struct iommu_domain *__iommu_domain_alloc(const struct iommu_ops *ops,
 						 unsigned int type)
 {
 	struct iommu_domain *domain;
-	unsigned int alloc_type = type & IOMMU_DOMAIN_ALLOC_FLAGS;
+	unsigned int alloc_type = type & IOMMU_DOMAIN_ALLOC_FLAGS;/*丢弃掉__IOMMU_DOMAIN_DMA_FQ*/
 
 	if (alloc_type == IOMMU_DOMAIN_IDENTITY && ops->identity_domain)
 		return ops->identity_domain;
@@ -2184,6 +2198,7 @@ static struct iommu_domain *__iommu_domain_alloc(const struct iommu_ops *ops,
 		domain->pgsize_bitmap = ops->pgsize_bitmap;
 
 	if (!domain->ops)
+		/*如果ops未设置，使用default ops*/
 		domain->ops = ops->default_domain_ops;
 
 	if (iommu_is_dma_domain(domain)) {
@@ -2211,13 +2226,13 @@ static int __iommu_domain_alloc_dev(struct device *dev, void *data)
 	const struct iommu_ops **ops = data;
 
 	if (!dev_has_iommu(dev))
-		/*跳过无iommu的device*/
+		/*跳过无iommu的device（返回0，继续遍历）*/
 		return 0;
 
 	if (WARN_ONCE(*ops && *ops != dev_iommu_ops(dev),
 		      "Multiple IOMMU drivers present for bus %s, which the public IOMMU API can't fully support yet. You will still need to disable one or more for this to work, sorry!\n",
 		      dev_bus_name(dev)))
-		/*已被初始化，说明存在多个iommu*/
+		/*存在多个iommu driver*/
 		return -EBUSY;
 
 	/*取此设备的iommu ops*/
@@ -2233,9 +2248,10 @@ struct iommu_domain *iommu_domain_alloc(const struct bus_type *bus)
 	struct iommu_domain *domain;
 
 	if (err || !ops)
+		/*此bus下多个iommu driver,申请失败*/
 		return NULL;
 
-	/*创建domain*/
+	/*利用iommu_ops创建iommu_domain*/
 	domain = __iommu_domain_alloc(ops, NULL, IOMMU_DOMAIN_UNMANAGED);
 	if (IS_ERR(domain))
 		return NULL;
@@ -2661,6 +2677,7 @@ static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
 	 * size of the smallest page supported by the hardware
 	 */
 	if (!IS_ALIGNED(iova | paddr | size, min_pagesz)) {
+		/*以上三者必须按页对齐*/
 		pr_err("unaligned: iova 0x%lx pa %pa size 0x%zx min_pagesz 0x%x\n",
 		       iova, &paddr, size, min_pagesz);
 		return -EINVAL;
@@ -2700,9 +2717,9 @@ static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
 }
 
 int iommu_map(struct iommu_domain *domain, unsigned long iova,
-	      phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+	      phys_addr_t paddr/*物理起始地址*/, size_t size/*区域大小*/, int prot, gfp_t gfp)
 {
-	const struct iommu_domain_ops *ops = domain->ops;
+	const struct iommu_domain_ops *ops = domain->ops;/*取domain ops*/
 	int ret;
 
 	might_sleep_if(gfpflags_allow_blocking(gfp));
@@ -2710,7 +2727,7 @@ int iommu_map(struct iommu_domain *domain, unsigned long iova,
 	/* Discourage passing strange GFP flags */
 	if (WARN_ON_ONCE(gfp & (__GFP_COMP | __GFP_DMA | __GFP_DMA32 |
 				__GFP_HIGHMEM)))
-		return -EINVAL;
+		return -EINVAL;/*不得有以上标记*/
 
 	ret = __iommu_map(domain, iova, paddr, size, prot, gfp);
 	if (ret == 0 && ops->iotlb_sync_map) {
@@ -3043,6 +3060,7 @@ int iommu_fwspec_init(struct device *dev, struct fwnode_handle *iommu_fwnode,
 	if (fwspec)
 		return ops == fwspec->ops ? 0 : -EINVAL;
 
+	/*确保dev_iommu结构体已申请*/
 	if (!dev_iommu_get(dev))
 		return -ENOMEM;
 

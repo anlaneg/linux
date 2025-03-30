@@ -64,7 +64,7 @@ struct vfio_container {
 	struct rw_semaphore		group_lock;
 	//container对应的iommu驱动，通过ioctl设置
 	struct vfio_iommu_driver	*iommu_driver;
-	void				*iommu_data;
+	void				*iommu_data;/*iommu_driver通过open返回的handle*/
 	/*是否设置noiommu driver*/
 	bool				noiommu;
 };
@@ -1083,7 +1083,7 @@ static long vfio_ioctl_check_extension(struct vfio_container *container,
 
 /* hold write lock on container->group_lock */
 static int __vfio_container_attach_groups(struct vfio_container *container,
-					  struct vfio_iommu_driver *driver,
+					  struct vfio_iommu_driver *driver/*iommu driver*/,
 					  void *data/*driver open获得的参数*/)
 {
 	struct vfio_group *group;
@@ -1151,7 +1151,7 @@ static long vfio_ioctl_set_iommu(struct vfio_container *container,
 		 * interfaces if they'd like.
 		 */
 		if (driver->ops->ioctl(NULL, VFIO_CHECK_EXTENSION, arg) <= 0) {
-			/*driver必须支持arg指明的扩展*/
+			/*driver不支持arg指明的扩展，跳过*/
 			module_put(driver->ops->owner);
 			continue;
 		}

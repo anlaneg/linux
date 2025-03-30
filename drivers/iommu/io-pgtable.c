@@ -29,7 +29,7 @@ io_pgtable_init_table[IO_PGTABLE_NUM_FMTS] = {
 	[ARM_V7S] = &io_pgtable_arm_v7s_init_fns,
 #endif
 #ifdef CONFIG_AMD_IOMMU
-	[AMD_IOMMU_V1] = &io_pgtable_amd_iommu_v1_init_fns,
+	[AMD_IOMMU_V1] = &io_pgtable_amd_iommu_v1_init_fns,/*v1版本对应的init_fns*/
 	[AMD_IOMMU_V2] = &io_pgtable_amd_iommu_v2_init_fns,
 #endif
 };
@@ -62,12 +62,12 @@ struct io_pgtable_ops *alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
 	const struct io_pgtable_init_fns *fns;
 
 	if (fmt >= IO_PGTABLE_NUM_FMTS)
-		return NULL;
+		return NULL;/*无效fmt*/
 
 	if (check_custom_allocator(fmt, cfg))
 		return NULL;
 
-	fns = io_pgtable_init_table[fmt];
+	fns = io_pgtable_init_table[fmt];/*依据fmt取fns*/
 	if (!fns)
 		return NULL;
 
@@ -76,7 +76,7 @@ struct io_pgtable_ops *alloc_io_pgtable_ops(enum io_pgtable_fmt fmt,
 		return NULL;
 
 	iop->fmt	= fmt;
-	iop->cookie	= cookie;
+	iop->cookie	= cookie;/*保存cookie*/
 	iop->cfg	= *cfg;
 
 	return &iop->ops;

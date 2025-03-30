@@ -495,6 +495,7 @@ EXPORT_SYMBOL(unpin_user_pages);
  */
 static inline void mm_set_has_pinned_flag(unsigned long *mm_flags)
 {
+	/*如果无MMF_HAS_PINNED标记，则添加*/
 	if (!test_bit(MMF_HAS_PINNED, mm_flags))
 		set_bit(MMF_HAS_PINNED, mm_flags);
 }
@@ -1104,15 +1105,16 @@ static struct vm_area_struct *gup_vma_lookup(struct mm_struct *mm,
 	struct vm_area_struct *vma;
 	unsigned long now, next;
 
+	/*通过addr查找vma*/
 	vma = find_vma(mm, addr);
 	if (!vma || (addr >= vma->vm_start))
-		return vma;
+		return vma;/*返回查找结果*/
 
 	/* Only warn for half-way relevant accesses */
 	if (!(vma->vm_flags & VM_GROWSDOWN))
-		return NULL;
+		return NULL;/*找到了vma，但这个vma并不向下生长，返回NULL*/
 	if (vma->vm_start - addr > 65536)
-		return NULL;
+		return NULL;/*向下生长，但距离过大，返回NULL*/
 
 	/* Let's not warn more than once an hour.. */
 	now = jiffies; next = next_warn;
@@ -1206,6 +1208,7 @@ static long __get_user_pages(struct mm_struct *mm,
 
 		/* first iteration or cross vma bound */
 		if (!vma || start >= vma->vm_end) {
+			/*查找start对应的vma*/
 			vma = gup_vma_lookup(mm, start);
 			if (!vma && in_gate_area(mm, start)) {
 				ret = get_gate_page(mm, start & PAGE_MASK,
@@ -1218,11 +1221,13 @@ static long __get_user_pages(struct mm_struct *mm,
 			}
 
 			if (!vma) {
+				/*未找到vma,退出*/
 				ret = -EFAULT;
 				goto out;
 			}
 			ret = check_vma_flags(vma, gup_flags);
 			if (ret)
+				/*检查出错*/
 				goto out;
 		}
 retry:
@@ -1231,6 +1236,7 @@ retry:
 		 * potentially allocating memory.
 		 */
 		if (fatal_signal_pending(current)) {
+			/*当前进程有未绝信号*/
 			ret = -EINTR;
 			goto out;
 		}
@@ -1465,7 +1471,7 @@ static bool gup_signal_pending(unsigned int flags)
  */
 static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
 						unsigned long start,
-						unsigned long nr_pages,
+						unsigned long nr_pages/*总页数*/,
 						struct page **pages,
 						int *locked,
 						unsigned int flags)
@@ -1474,6 +1480,7 @@ static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
 	bool must_unlock = false;
 
 	if (!nr_pages)
+		/*总页数为零，直接返回*/
 		return 0;
 
 	/*
@@ -1481,12 +1488,14 @@ static __always_inline long __get_user_pages_locked(struct mm_struct *mm,
 	 * lock must be released when this returns.
 	 */
 	if (!*locked) {
+		/*未加锁，执行加锁，并标记需要解锁*/
 		if (mmap_read_lock_killable(mm))
 			return -EAGAIN;
 		must_unlock = true;
 		*locked = 1;
 	}
 	else
+		/*已加锁*/
 		mmap_assert_locked(mm);
 
 	if (flags & FOLL_PIN)
@@ -2245,21 +2254,21 @@ static bool is_valid_gup_args(struct page **pages, int *locked,
 	 * - FOLL_UNLOCKABLE is internal only and used if locked is !NULL
 	 */
 	if (WARN_ON_ONCE(gup_flags & INTERNAL_GUP_FLAGS))
-		return false;
+		return false;/*不得有内部标记*/
 
-	gup_flags |= to_set;
+	gup_flags |= to_set;/*添加内部标记*/
 	if (locked) {
 		/* At the external interface locked must be set */
 		if (WARN_ON_ONCE(*locked != 1))
 			return false;
 
-		gup_flags |= FOLL_UNLOCKABLE;
+		gup_flags |= FOLL_UNLOCKABLE;/*locked不为空时，需添加此标记*/
 	}
 
 	/* FOLL_GET and FOLL_PIN are mutually exclusive. */
 	if (WARN_ON_ONCE((gup_flags & (FOLL_PIN | FOLL_GET)) ==
 			 (FOLL_PIN | FOLL_GET)))
-		return false;
+		return false;/*标记冲突*/
 
 	/* LONGTERM can only be specified when pinning */
 	if (WARN_ON_ONCE(!(gup_flags & FOLL_PIN) && (gup_flags & FOLL_LONGTERM)))
@@ -2274,7 +2283,7 @@ static bool is_valid_gup_args(struct page **pages, int *locked,
 			 (gup_flags & FOLL_PCI_P2PDMA)))
 		return false;
 
-	*gup_flags_p = gup_flags;
+	*gup_flags_p = gup_flags;/*出参，返回更新后的标记*/
 	return true;
 }
 
@@ -3357,7 +3366,8 @@ long pin_user_pages_remote(struct mm_struct *mm,
 
 	if (!is_valid_gup_args(pages, locked, &gup_flags,
 			       FOLL_PIN | FOLL_TOUCH | FOLL_REMOTE))
-		return 0;
+		return 0;/*标记无效，返回0*/
+	/*实现pin*/
 	return __gup_longterm_locked(mm, start, nr_pages, pages,
 				     locked ? locked : &local_locked,
 				     gup_flags);

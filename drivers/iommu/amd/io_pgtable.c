@@ -137,8 +137,8 @@ void amd_iommu_domain_set_pgtable(struct protection_domain *domain,
 	u64 pt_root;
 
 	/* lowest 3 bits encode pgtable mode */
-	pt_root = mode & 7;
-	pt_root |= (u64)root;
+	pt_root = mode & 7;/*后3bit设置mode*/
+	pt_root |= (u64)root;/*或上指针*/
 
 	amd_iommu_domain_set_pt_root(domain, pt_root);
 }
@@ -361,7 +361,7 @@ static void free_clear_pte(u64 *pte, u64 pteval, struct list_head *freelist)
  * and full 64 bit address spaces.
  */
 static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
-			      phys_addr_t paddr, size_t pgsize, size_t pgcount,
+			      phys_addr_t paddr, size_t pgsize, size_t pgcount/*总页数*/,
 			      int prot, gfp_t gfp, size_t *mapped)
 {
 	struct protection_domain *dom = io_pgtable_ops_to_domain(ops);
@@ -381,6 +381,7 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 
 	while (pgcount > 0) {
 		count = PAGE_SIZE_PTE_COUNT(pgsize);
+		/*申请pte*/
 		pte   = alloc_pte(dom, iova, pgsize, NULL, gfp, &updated);
 
 		ret = -ENOMEM;
@@ -407,9 +408,9 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		for (i = 0; i < count; ++i)
 			pte[i] = __pte;
 
-		iova  += pgsize;
-		paddr += pgsize;
-		pgcount--;
+		iova  += pgsize;/*iova地址增加*/
+		paddr += pgsize;/*物理地址增加*/
+		pgcount--;/*总页数减少*/
 		if (mapped)
 			*mapped += pgsize;
 	}
@@ -583,6 +584,7 @@ static void v1_free_pgtable(struct io_pgtable *iop)
 	put_pages_list(&freelist);
 }
 
+/*初始化v1对应的io_pgtable*/
 static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *cookie)
 {
 	struct amd_io_pgtable *pgtable = io_pgtable_cfg_to_data(cfg);
@@ -592,9 +594,9 @@ static struct io_pgtable *v1_alloc_pgtable(struct io_pgtable_cfg *cfg, void *coo
 	cfg->oas            = IOMMU_OUT_ADDR_BIT_SIZE,
 	cfg->tlb            = &v1_flush_ops;
 
-	pgtable->iop.ops.map_pages    = iommu_v1_map_pages;
+	pgtable->iop.ops.map_pages    = iommu_v1_map_pages;/*map页函数*/
 	pgtable->iop.ops.unmap_pages  = iommu_v1_unmap_pages;
-	pgtable->iop.ops.iova_to_phys = iommu_v1_iova_to_phys;
+	pgtable->iop.ops.iova_to_phys = iommu_v1_iova_to_phys;/*从iova地址到物理地址*/
 	pgtable->iop.ops.read_and_clear_dirty = iommu_v1_read_and_clear_dirty;
 
 	return &pgtable->iop;

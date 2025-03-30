@@ -94,10 +94,10 @@ struct io_pgtable_cfg {
 	#define IO_PGTABLE_QUIRK_ARM_OUTER_WBWA		BIT(6)
 	unsigned long			quirks;
 	unsigned long			pgsize_bitmap;
-	unsigned int			ias;
-	unsigned int			oas;
+	unsigned int			ias;/*input  地址占用的bit数*/
+	unsigned int			oas;/*output 地址占用的bit数*/
 	bool				coherent_walk;
-	const struct iommu_flush_ops	*tlb;
+	const struct iommu_flush_ops	*tlb;/*例如amd v1时采用v1_flush_ops*/
 	struct device			*iommu_dev;
 
 	/**
@@ -188,6 +188,7 @@ struct io_pgtable_ops {
 	size_t (*unmap_pages)(struct io_pgtable_ops *ops, unsigned long iova,
 			      size_t pgsize, size_t pgcount,
 			      struct iommu_iotlb_gather *gather);
+	/*iova地址转物理地址*/
 	phys_addr_t (*iova_to_phys)(struct io_pgtable_ops *ops,
 				    unsigned long iova);
 	int (*read_and_clear_dirty)(struct io_pgtable_ops *ops,
@@ -234,7 +235,7 @@ void free_io_pgtable_ops(struct io_pgtable_ops *ops);
  * @ops:    The page table operations in use for this set of page tables.
  */
 struct io_pgtable {
-	enum io_pgtable_fmt	fmt;
+	enum io_pgtable_fmt	fmt;/*页表格式，例如AMD_IOMMU_V1*/
 	void			*cookie;
 	struct io_pgtable_cfg	cfg;
 	struct io_pgtable_ops	ops;

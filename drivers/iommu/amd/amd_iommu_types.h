@@ -69,6 +69,7 @@
 #define MMIO_INTCAPXT_GALOG_OFFSET	0x0180
 #define MMIO_EXT_FEATURES2	0x01A0
 #define MMIO_CMD_HEAD_OFFSET	0x2000
+/*寄存器，用于知会amd iommu，cmd tail已更新(指有新cmd加入）*/
 #define MMIO_CMD_TAIL_OFFSET	0x2008
 #define MMIO_EVT_HEAD_OFFSET	0x2010
 #define MMIO_EVT_TAIL_OFFSET	0x2018
@@ -195,6 +196,7 @@
 #define CMD_COMPL_WAIT          0x01
 #define CMD_INV_DEV_ENTRY       0x02
 #define CMD_INV_IOMMU_PAGES	0x03
+/*无效iotlb对应的pages(即flush iotlb)*/
 #define CMD_INV_IOTLB_PAGES	0x04
 #define CMD_INV_IRT		0x05
 #define CMD_COMPLETE_PPR	0x07
@@ -497,6 +499,7 @@ extern struct kmem_cache *amd_iommu_irq_cache;
 
 #define PCI_SBDF_TO_SEGID(sbdf)		(((sbdf) >> 16) & 0xffff)
 #define PCI_SBDF_TO_DEVID(sbdf)		((sbdf) & 0xffff)
+/*转换成bfd,形如SSSS:BB:DD.FF*/
 #define PCI_SEG_DEVID_TO_SBDF(seg, devid)	((((u32)(seg) & 0xffff) << 16) | \
 						 ((devid) & 0xffff))
 
@@ -509,7 +512,7 @@ extern struct kmem_cache *amd_iommu_irq_cache;
  * Make iterating over all IOMMUs easier
  */
 #define for_each_iommu(iommu) \
-	list_for_each_entry((iommu), &amd_iommu_list, list)
+	list_for_each_entry((iommu), &amd_iommu_list/*遍历所有amd iommu设备*/, list)
 #define for_each_iommu_safe(iommu, next) \
 	list_for_each_entry_safe((iommu), (next), &amd_iommu_list, list)
 
@@ -538,14 +541,15 @@ struct amd_irte_ops;
 	container_of(io_pgtable_ops_to_data(x), \
 		     struct protection_domain, iop)
 
+/*利用io_pgtable_cfg地址获得amd_io_pgtable结构体*/
 #define io_pgtable_cfg_to_data(x) \
 	container_of((x), struct amd_io_pgtable, pgtbl_cfg)
 
 struct amd_io_pgtable {
 	struct io_pgtable_cfg	pgtbl_cfg;
 	struct io_pgtable	iop;
-	int			mode;
-	u64			*root;
+	int			mode;/*指定模式，例如DEFAULT_PGTABLE_LEVEL*/
+	u64			*root;/*初始化为一个全零页*/
 	u64			*pgd;		/* v2 pgtable pgd pointer */
 };
 
@@ -649,7 +653,7 @@ struct amd_iommu {
 	int index;
 
 	/* locks the accesses to the hardware */
-	raw_spinlock_t lock;
+	raw_spinlock_t lock;/*访问硬件时需加此锁*/
 
 	/* Pointer to PCI device of this IOMMU */
 	struct pci_dev *dev;
@@ -664,7 +668,7 @@ struct amd_iommu {
 	u64 mmio_phys_end;
 
 	/* virtual address of MMIO space */
-	u8 __iomem *mmio_base;
+	u8 __iomem *mmio_base;/*寄存器首指针*/
 
 	/* capabilities of that IOMMU read from ACPI */
 	u32 cap;
@@ -697,9 +701,9 @@ struct amd_iommu {
 	u64 exclusion_length;
 
 	/* command buffer virtual address */
-	u8 *cmd_buf;
-	u32 cmd_buf_head;
-	u32 cmd_buf_tail;
+	u8 *cmd_buf;/*用于存入cmd*/
+	u32 cmd_buf_head;/*buffer的写尾位置*/
+	u32 cmd_buf_tail;/*buffer的本次存放位置（bufferu写位置）*/
 
 	/* event buffer virtual address */
 	u8 *evt_buf;
@@ -726,7 +730,7 @@ struct amd_iommu {
 	bool int_enabled;
 
 	/* if one, we need to send a completion wait command */
-	bool need_sync;
+	bool need_sync;/*是否同步操作*/
 
 	/* true if disable irte caching */
 	bool irtcachedis_enabled;

@@ -50,7 +50,7 @@ module_param_named(allow_unsafe_interrupts,
 MODULE_PARM_DESC(allow_unsafe_interrupts,
 		 "Enable VFIO IOMMU support for on platforms without interrupt remapping support.");
 
-static bool disable_hugepages;/*禁用大页*/
+static bool disable_hugepages;/*禁用大页（默认为false)*/
 module_param_named(disable_hugepages,
 		   disable_hugepages, bool, S_IRUGO | S_IWUSR);
 MODULE_PARM_DESC(disable_hugepages,
@@ -62,7 +62,7 @@ MODULE_PARM_DESC(dma_entry_limit,
 		 "Maximum number of user DMA mappings per container (65535).");
 
 struct vfio_iommu {
-	struct list_head	domain_list;
+	struct list_head	domain_list;/*指向首个domain（链表）*/
 	struct list_head	iova_list;
 	struct mutex		lock;
 	struct rb_root		dma_list;/*dma region（采用红黑树）*/
@@ -75,19 +75,19 @@ struct vfio_iommu {
 	bool			v2;/*指明是否使用版本2*/
 	bool			nesting;/*指明是否嵌套*/
 	bool			dirty_page_tracking;
-	struct list_head	emulated_iommu_groups;
+	struct list_head	emulated_iommu_groups;/*用于串连VFIO_EMULATED_IOMMU类型的iommu_group*/
 };
 
 struct vfio_domain {
 	struct iommu_domain	*domain;
-	struct list_head	next;
-	struct list_head	group_list;
+	struct list_head	next;/*指向下一个vfio-domain*/
+	struct list_head	group_list;/*链表，指向首个vfio_iommu_group*/
 	bool			fgsp : 1;	/* Fine-grained super pages */
 	bool			enforce_cache_coherency : 1;
 };
 
 struct vfio_dma {
-	struct rb_node		node;
+	struct rb_node		node;/*用于加入树*/
 	dma_addr_t		iova;		/* Device address */
 	unsigned long		vaddr;		/* Process virtual addr */
 	/*map地址长度*/
@@ -99,21 +99,23 @@ struct vfio_dma {
 	struct task_struct	*task;
 	struct rb_root		pfn_list;	/* Ex-user pinned pfn list */
 	unsigned long		*bitmap;
-	struct mm_struct	*mm;
+	struct mm_struct	*mm;/*指向所属进程对应的mm*/
 	size_t			locked_vm;
 };
 
 struct vfio_batch {
 	struct page		**pages;	/* for pin_user_pages_remote */
 	struct page		*fallback_page; /* if pages alloc fails */
+	/*可容纳的总量*/
 	int			capacity;	/* length of pages array */
+	/*当前位置*/
 	int			size;		/* of batch currently */
 	int			offset;		/* of next entry in pages */
 };
 
 struct vfio_iommu_group {
 	struct iommu_group	*iommu_group;
-	struct list_head	next;
+	struct list_head	next;/*用于串连vfio_iommu_group*/
 	bool			pinned_page_dirty_scope;
 };
 
@@ -481,12 +483,15 @@ static void vfio_batch_init(struct vfio_batch *batch)
 	batch->offset = 0;
 
 	if (unlikely(disable_hugepages))
+		/*禁用大页，则直接初始化并返回*/
 		goto fallback;
 
+	/*获得一个空闲页*/
 	batch->pages = (struct page **) __get_free_page(GFP_KERNEL);
 	if (!batch->pages)
 		goto fallback;
 
+	/*一页可以存放最多多少page*指针（4096/8=512个）*/
 	batch->capacity = VFIO_BATCH_MAX_CAPACITY;
 	return;
 
@@ -556,7 +561,7 @@ static int follow_fault_pfn(struct vm_area_struct *vma, struct mm_struct *mm,
  * error code.
  */
 static int vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
-			  long npages, int prot, unsigned long *pfn,
+			  long npages/*页数*/, int prot/*要求的权限*/, unsigned long *pfn/*出参*/,
 			  struct page **pages)
 {
 	struct vm_area_struct *vma;
@@ -564,7 +569,7 @@ static int vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 	int ret;
 
 	if (prot & IOMMU_WRITE)
-		flags |= FOLL_WRITE;
+		flags |= FOLL_WRITE;/*有write权限*/
 
 	mmap_read_lock(mm);
 	/*pin用户页*/
@@ -583,7 +588,7 @@ static int vaddr_get_pfns(struct mm_struct *mm, unsigned long vaddr,
 				unpin_user_page(pages[i]);
 		}
 
-		*pfn = page_to_pfn(pages[0]);
+		*pfn = page_to_pfn(pages[0]);/*首页编号*/
 		goto done;
 	}
 
@@ -615,7 +620,7 @@ done:
  * first page and all consecutive pages with the same locking.
  */
 static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
-				  long npage, unsigned long *pfn_base,
+				  long npage/*总页数*/, unsigned long *pfn_base,
 				  unsigned long limit, struct vfio_batch *batch)
 {
 	unsigned long pfn;
@@ -626,6 +631,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 
 	/* This code path is only user initiated */
 	if (!mm)
+		/*必须有mm*/
 		return -ENODEV;
 
 	if (batch->size) {
@@ -634,6 +640,7 @@ static long vfio_pin_pages_remote(struct vfio_dma *dma, unsigned long vaddr,
 		pfn = *pfn_base;
 		rsvd = is_invalid_reserved_pfn(*pfn_base);
 	} else {
+		/*batch此时是空的*/
 		*pfn_base = 0;
 	}
 
@@ -1438,8 +1445,8 @@ static int vfio_iommu_map(struct vfio_iommu *iommu, dma_addr_t iova,
 	int ret;
 
 	list_for_each_entry(d, &iommu->domain_list, next) {
-		ret = iommu_map(d->domain, iova, (phys_addr_t)pfn << PAGE_SHIFT,
-				npage << PAGE_SHIFT, prot | IOMMU_CACHE,
+		ret = iommu_map(d->domain, iova, (phys_addr_t)pfn << PAGE_SHIFT/*物理地址*/,
+				npage << PAGE_SHIFT/*地址区域长度*/, prot | IOMMU_CACHE,
 				GFP_KERNEL_ACCOUNT);
 		if (ret)
 			goto unwind;
@@ -1459,14 +1466,14 @@ unwind:
 }
 
 static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
-			    size_t map_size)
+			    size_t map_size/*要map的长度*/)
 {
 	dma_addr_t iova = dma->iova;
 	unsigned long vaddr = dma->vaddr;
 	struct vfio_batch batch;
 	size_t size = map_size;
 	long npage;
-	unsigned long pfn, limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT;
+	unsigned long pfn, limit = rlimit(RLIMIT_MEMLOCK) >> PAGE_SHIFT/*内存占用上限*/;
 	int ret = 0;
 
 	vfio_batch_init(&batch);
@@ -1483,7 +1490,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		}
 
 		/* Map it! */
-		ret = vfio_iommu_map(iommu, iova + dma->size, pfn, npage,
+		ret = vfio_iommu_map(iommu, iova + dma->size/*iova地址是连续的*/, pfn, npage,
 				     dma->prot);/*将地址map到iommu*/
 		if (ret) {
 			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
@@ -1571,16 +1578,17 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 
 	/* Verify that none of our __u64 fields overflow */
 	if (map->size != size || map->vaddr != vaddr || map->iova != iova)
+		/*size_t 与_u64等检查不通过*/
 		return -EINVAL;
 
 	/* READ/WRITE from device perspective */
 	if (map->flags & VFIO_DMA_MAP_FLAG_WRITE)
-		prot |= IOMMU_WRITE;
+		prot |= IOMMU_WRITE;/*要求写*/
 	if (map->flags & VFIO_DMA_MAP_FLAG_READ)
-		prot |= IOMMU_READ;
+		prot |= IOMMU_READ;/*要求读*/
 
 	if ((prot && set_vaddr) || (!prot && !set_vaddr))
-		return -EINVAL;
+		return -EINVAL;/*选项互斥*/
 
 	mutex_lock(&iommu->lock);
 
@@ -1644,9 +1652,9 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	}
 
 	iommu->dma_avail--;/*有效数目占用一个*/
-	dma->iova = iova;
-	dma->vaddr = vaddr;
-	dma->prot = prot;
+	dma->iova = iova;/*设备地址*/
+	dma->vaddr = vaddr;/*进程虚地址*/
+	dma->prot = prot;/*要求的权限*/
 
 	/*
 	 * We need to be able to both add to a task's locked memory and test
@@ -1666,7 +1674,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	dma->pfn_list = RB_ROOT;
 
 	/* Insert zero-sized and grow as we map chunks of it */
-	vfio_link_dma(iommu, dma);/*将此dma加入到dma_list中*/
+	vfio_link_dma(iommu, dma);/*将此dma加入到dma_list中(rb树）*/
 
 	/* Don't pin and map if container doesn't contain IOMMU capable domain*/
 	if (list_empty(&iommu->domain_list))
@@ -1878,6 +1886,7 @@ static struct vfio_iommu_group *find_iommu_group(struct vfio_domain *domain,
 {
 	struct vfio_iommu_group *g;
 
+	/*遍历此domain下所有iommu-group*/
 	list_for_each_entry(g, &domain->group_list, next) {
 		if (g->iommu_group == iommu_group)
 			return g;
@@ -1893,12 +1902,14 @@ vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
 	struct vfio_iommu_group *group;
 	struct vfio_domain *domain;
 
+	/*遍历vfio-iommu对应的所有domain,并在domain下查找指定的iommu_group*/
 	list_for_each_entry(domain, &iommu->domain_list, next) {
 		group = find_iommu_group(domain, iommu_group);
 		if (group)
 			return group;
 	}
 
+	/*在emulated_iommu_groups链表上查找*/
 	list_for_each_entry(group, &iommu->emulated_iommu_groups, next)
 		if (group->iommu_group == iommu_group)
 			return group;
@@ -2160,11 +2171,13 @@ static int vfio_iommu_domain_alloc(struct device *dev, void *data)
 {
 	struct iommu_domain **domain = data;
 
+	/*遍历此bus下所有device，找到iommu设备，并创建iommu_domain*/
 	*domain = iommu_domain_alloc(dev->bus);
+	/*已设置，返回1，不再遍历*/
 	return 1; /* Don't iterate */
 }
 
-static int vfio_iommu_type1_attach_group(void *iommu_data,
+static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回的vfio_iommu*/,
 		struct iommu_group *iommu_group, enum vfio_group_type type/*group类型*/)
 {
 	struct vfio_iommu *iommu = iommu_data;
@@ -2190,13 +2203,15 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 		goto out_unlock;
 
 	ret = -ENOMEM;
+
+	/*创建vfio-group,并关联iommu-group*/
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		goto out_unlock;
-	/*为创建的vfio-group关联iommu-group*/
 	group->iommu_group = iommu_group;
 
 	if (type == VFIO_EMULATED_IOMMU) {
+		/*针对这类，添加至emulated_iommu_groups链表上*/
 		list_add(&group->next, &iommu->emulated_iommu_groups);
 		/*
 		 * An emulated IOMMU group cannot dirty memory directly, it can
@@ -2210,6 +2225,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	}
 
 	ret = -ENOMEM;
+	/*申请vfio-domain*/
 	domain = kzalloc(sizeof(*domain), GFP_KERNEL);
 	if (!domain)
 		goto out_free_group;
@@ -2224,6 +2240,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 	iommu_group_for_each_dev(iommu_group, &domain->domain,
 				 vfio_iommu_domain_alloc);
 	if (!domain->domain)
+		/*没有创建domain成功*/
 		goto out_free_domain;
 
 	if (iommu->nesting) {
@@ -2335,7 +2352,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data,
 			goto out_detach;
 	}
 
-	list_add(&domain->next, &iommu->domain_list);
+	list_add(&domain->next, &iommu->domain_list);/*添加iommu所属的domain（可以有多个）*/
 	vfio_update_pgsize_bitmap(iommu);
 done:
 	/* Delete the old one and insert new iova list */
@@ -2586,9 +2603,9 @@ static void *vfio_iommu_type1_open(unsigned long arg)
 		return ERR_PTR(-EINVAL);
 	}
 
-	INIT_LIST_HEAD(&iommu->domain_list);
+	INIT_LIST_HEAD(&iommu->domain_list);/*初始化为空*/
 	INIT_LIST_HEAD(&iommu->iova_list);
-	iommu->dma_list = RB_ROOT;
+	iommu->dma_list = RB_ROOT;/*初始化为树根*/
 	iommu->dma_avail = dma_entry_limit;/*支持的最大dma有效数*/
 	mutex_init(&iommu->lock);
 	mutex_init(&iommu->device_list_lock);
@@ -3200,7 +3217,7 @@ vfio_iommu_type1_group_iommu_domain(void *iommu_data,
 static const struct vfio_iommu_driver_ops vfio_iommu_driver_ops_type1 = {
 	.name			= "vfio-iommu-type1",
 	.owner			= THIS_MODULE,
-	.open			= vfio_iommu_type1_open,
+	.open			= vfio_iommu_type1_open,/*创建并初始化vfio_iommu*/
 	.release		= vfio_iommu_type1_release,
 	.ioctl			= vfio_iommu_type1_ioctl,
 	.attach_group		= vfio_iommu_type1_attach_group,

@@ -121,6 +121,7 @@ static inline void *iommu_phys_to_virt(unsigned long paddr)
 	return phys_to_virt(__sme_clr(paddr));
 }
 
+/*将root再拆开，分写成root及mode*/
 static inline
 void amd_iommu_domain_set_pt_root(struct protection_domain *domain, u64 root)
 {
@@ -134,6 +135,11 @@ void amd_iommu_domain_clr_pt_root(struct protection_domain *domain)
 	amd_iommu_domain_set_pt_root(domain, 0);
 }
 
+/*SBDF ID 的格式通常为<SSSS:BB:DD.FF>
+ * 其中 “SSSS” 是四位十六进制的段编号，“BB” 是两位十六进制的总线编号，
+ * “DD” 是两位十六进制的设备编号，“FF” 是两位十六进制的功能编号。
+ * 例如，“0000:03:00.0” 表示段编号为 0000，总线编号为 03，
+ * 设备编号为 00，功能编号为 0 的一个 PCI 设备*/
 static inline int get_pci_sbdf_id(struct pci_dev *pdev)
 {
 	int seg = pci_domain_nr(pdev->bus);

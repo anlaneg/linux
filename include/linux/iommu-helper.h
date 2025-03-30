@@ -36,8 +36,10 @@ static inline unsigned long iommu_num_pages(unsigned long addr,
 					    unsigned long len,
 					    unsigned long io_page_size)
 {
+	/*addr取掩码后半部分，合上len*/
 	unsigned long size = (addr & (io_page_size - 1)) + len;
 
+	/*size按page向上对齐*/
 	return DIV_ROUND_UP(size, io_page_size);
 }
 
