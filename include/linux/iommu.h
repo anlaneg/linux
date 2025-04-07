@@ -53,7 +53,9 @@ typedef int (*iommu_fault_handler_t)(struct iommu_domain *,
 typedef int (*iommu_dev_fault_handler_t)(struct iommu_fault *, void *);
 
 struct iommu_domain_geometry {
+	/*可map的首地址*/
 	dma_addr_t aperture_start; /* First address that can be mapped    */
+	/*可map的属地址*/
 	dma_addr_t aperture_end;   /* Last address that can be mapped     */
 	bool force_aperture;       /* DMA only allowed in mappable range? */
 };

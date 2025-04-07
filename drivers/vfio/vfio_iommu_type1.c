@@ -63,13 +63,13 @@ MODULE_PARM_DESC(dma_entry_limit,
 
 struct vfio_iommu {
 	struct list_head	domain_list;/*指向首个domain（链表）*/
-	struct list_head	iova_list;
+	struct list_head	iova_list;/*用于串连所有vfio_iova*/
 	struct mutex		lock;
 	struct rb_root		dma_list;/*dma region（采用红黑树）*/
 	struct list_head	device_list;
 	struct mutex		device_list_lock;
 	unsigned int		dma_avail;
-	unsigned int		vaddr_invalid_count;
+	unsigned int		vaddr_invalid_count;/*无效vaddr数目*/
 	uint64_t		pgsize_bitmap;/*指明对应的页大小*/
 	uint64_t		num_non_pinned_groups;
 	bool			v2;/*指明是否使用版本2*/
@@ -95,11 +95,11 @@ struct vfio_dma {
 	int			prot;		/* IOMMU_READ/WRITE */
 	bool			iommu_mapped;
 	bool			lock_cap;	/* capable(CAP_IPC_LOCK) */
-	bool			vaddr_invalid;
+	bool			vaddr_invalid;/*指出此dma地址vaddr地址是否无效*/
 	struct task_struct	*task;
 	struct rb_root		pfn_list;	/* Ex-user pinned pfn list */
 	unsigned long		*bitmap;
-	struct mm_struct	*mm;/*指向所属进程对应的mm*/
+	struct mm_struct	*mm;/*指向所属进程对应的mm（此dma对应的mm)*/
 	size_t			locked_vm;
 };
 
@@ -114,7 +114,7 @@ struct vfio_batch {
 };
 
 struct vfio_iommu_group {
-	struct iommu_group	*iommu_group;
+	struct iommu_group	*iommu_group;/*对应的实际iommu-group*/
 	struct list_head	next;/*用于串连vfio_iommu_group*/
 	bool			pinned_page_dirty_scope;
 };
@@ -1568,10 +1568,11 @@ static int vfio_change_dma_owner(struct vfio_dma *dma)
 static int vfio_dma_do_map(struct vfio_iommu *iommu,
 			   struct vfio_iommu_type1_dma_map *map)
 {
+	/*是否设置vaddr标记*/
 	bool set_vaddr = map->flags & VFIO_DMA_MAP_FLAG_VADDR;
 	dma_addr_t iova = map->iova;
 	unsigned long vaddr = map->vaddr;
-	size_t size = map->size;
+	size_t size = map->size;/*要map的大小*/
 	int ret = 0, prot = 0;
 	size_t pgsize;
 	struct vfio_dma *dma;
@@ -1588,7 +1589,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 		prot |= IOMMU_READ;/*要求读*/
 
 	if ((prot && set_vaddr) || (!prot && !set_vaddr))
-		return -EINVAL;/*选项互斥*/
+		return -EINVAL;/*prot与set_vaddr选项互斥*/
 
 	mutex_lock(&iommu->lock);
 
@@ -1604,28 +1605,30 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 
 	/* Don't allow IOVA or virtual address wrap */
 	if (iova + size - 1 < iova || vaddr + size - 1 < vaddr) {
-		/*地址end越界*/
+		/*地址end不得越界*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
 
-	/*利用iova,size查找vfio-dma结构体*/
+	/*利用iova,size查找vfio-dma结构体,检查是否已map*/
 	dma = vfio_find_dma(iommu, iova, size);
 	if (set_vaddr) {
 		if (!dma) {
+			/*指明了vaddr标记，但没有对应的dma*/
 			ret = -ENOENT;
 		} else if (!dma->vaddr_invalid || dma->iova != iova ||
 			   dma->size != size) {
+			/*dma与查找的内容不完全匹配*/
 			ret = -EINVAL;
 		} else {
 			ret = vfio_change_dma_owner(dma);
 			if (ret)
 				goto out_unlock;
-			dma->vaddr = vaddr;
+			dma->vaddr = vaddr;/*更新vaddr*/
 			dma->vaddr_invalid = false;
 			iommu->vaddr_invalid_count--;
 		}
-		goto out_unlock;
+		goto out_unlock;/*处理完成，解锁退出*/
 	} else if (dma) {
 		/*已存在，报错*/
 		ret = -EEXIST;
@@ -1639,7 +1642,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	}
 
 	if (!vfio_iommu_iova_dma_valid(iommu, iova, iova + size - 1)) {
-		/*这个range不在iommu->iova_list地址范围以内*/
+		/*传入的iova range不在iommu->iova_list地址范围以内,报错*/
 		ret = -EINVAL;
 		goto out_unlock;
 	}
@@ -1916,6 +1919,7 @@ vfio_iommu_find_iommu_group(struct vfio_iommu *iommu,
 	return NULL;
 }
 
+/*检查group_resv_regions中是否有MSI，且只有IOMMU_RESV_SW_MSI*/
 static bool vfio_iommu_has_sw_msi(struct list_head *group_resv_regions,
 				  phys_addr_t *base)
 {
@@ -1983,10 +1987,10 @@ static bool vfio_iommu_aper_conflict(struct vfio_iommu *iommu,
 		return false;/*链表为空*/
 
 	/* Disjoint sets, return conflict */
-	first = list_first_entry(iova, struct vfio_iova, list);
-	last = list_last_entry(iova, struct vfio_iova, list);
+	first = list_first_entry(iova, struct vfio_iova, list);/*取链表首个元素*/
+	last = list_last_entry(iova, struct vfio_iova, list);/*取链表最后一个元素*/
 	if (start > last->end || end < first->start)
-		return true;
+		return true;/*不冲突*/
 
 	/* Check for any existing dma mappings below the new start */
 	if (start > first->start) {
@@ -2013,31 +2017,39 @@ static int vfio_iommu_aper_resize(struct list_head *iova,
 	struct vfio_iova *node, *next;
 
 	if (list_empty(iova))
+		/*链表是空的，新建一个vfio_iova,并串到iova链表上*/
 		return vfio_iommu_iova_insert(iova, start, end);
 
+	/*start：1。 如果iova链表上有大于start的，以node->start为准
+	 * 		2。 如果start在iova链表中某一个vfio_iova内，则更新为精确的start
+	 * end: 1。 如果iova链表中有小于end的保留
+	 *      2。 如果end在iova链表中某一个vfio_iova内，则更新为清确的end
+	 *
+	 * 总的来说，即给定了(start,end),在链表iova中丢弃到start,end以外的内容。
+	 * */
 	/* Adjust iova list start */
 	list_for_each_entry_safe(node, next, iova, list) {
 		if (start < node->start)
-			break;
+			break;/*start比当前node->start小，以node->start为准*/
 		if (start >= node->start && start < node->end) {
-			node->start = start;
+			node->start = start;/*start在此node范围内（以start为准）*/
 			break;
 		}
 		/* Delete nodes before new start */
-		list_del(&node->list);
+		list_del(&node->list);/*移除掉start之前的vfio_iova*/
 		kfree(node);
 	}
 
 	/* Adjust iova list end */
 	list_for_each_entry_safe(node, next, iova, list) {
 		if (end > node->end)
-			continue;
+			continue;/*end比当前node->end要大，需要保留*/
 		if (end > node->start && end <= node->end) {
-			node->end = end;
+			node->end = end;/*end所属的这个vfio-iova中更新end*/
 			continue;
 		}
 		/* Delete nodes after new end */
-		list_del(&node->list);
+		list_del(&node->list);/*其它大于end的均移除*/
 		kfree(node);
 	}
 
@@ -2071,6 +2083,7 @@ static bool vfio_iommu_resv_conflict(struct vfio_iommu *iommu,
 static int vfio_iommu_resv_exclude(struct list_head *iova,
 				   struct list_head *resv_regions)
 {
+	/*排除掉iova list中已被预留的一组region*/
 	struct iommu_resv_region *resv;
 	struct vfio_iova *n, *next;
 
@@ -2078,17 +2091,17 @@ static int vfio_iommu_resv_exclude(struct list_head *iova,
 		phys_addr_t start, end;
 
 		if (resv->type == IOMMU_RESV_DIRECT_RELAXABLE)
-			continue;
+			continue;/*不考虑这种reserved*/
 
-		start = resv->start;
-		end = resv->start + resv->length - 1;
+		start = resv->start;/*预留起始位置*/
+		end = resv->start + resv->length - 1;/*预留终止位置*/
 
 		list_for_each_entry_safe(n, next, iova, list) {
 			int ret = 0;
 
 			/* No overlap */
 			if (start > n->end || end < n->start)
-				continue;
+				continue;/*不影响，保留*/
 			/*
 			 * Insert a new node if current node overlaps with the
 			 * reserve region to exclude that from valid iova range.
@@ -2097,21 +2110,23 @@ static int vfio_iommu_resv_exclude(struct list_head *iova,
 			 * the list updated and sorted.
 			 */
 			if (start > n->start)
+				/*n->start到 start-1之间可用，加入一个新的region*/
 				ret = vfio_iommu_iova_insert(&n->list, n->start,
 							     start - 1);
 			if (!ret && end < n->end)
+				/*end + 1 到n->end之间可用,加入一个新的region*/
 				ret = vfio_iommu_iova_insert(&n->list, end + 1,
 							     n->end);
 			if (ret)
 				return ret;
 
-			list_del(&n->list);
+			list_del(&n->list);/*原有的n节点因为部分冲突，丢弃掉*/
 			kfree(n);
 		}
 	}
 
 	if (list_empty(iova))
-		return -EINVAL;
+		return -EINVAL;/*没有空闲空间了，报错*/
 
 	return 0;
 }
@@ -2144,6 +2159,7 @@ static int vfio_iommu_iova_get_copy(struct vfio_iommu *iommu,
 	struct vfio_iova *n;
 	int ret;
 
+	/*遍历iova_list制作副本*/
 	list_for_each_entry(n, iova, list) {
 		ret = vfio_iommu_iova_insert(iova_copy, n->start, n->end);
 		if (ret)
@@ -2160,9 +2176,9 @@ out_free:
 static void vfio_iommu_iova_insert_copy(struct vfio_iommu *iommu,
 					struct list_head *iova_copy)
 {
-	struct list_head *iova = &iommu->iova_list;
+	struct list_head *iova = &iommu->iova_list;/*取得旧的iova_list*/
 
-	vfio_iommu_iova_free(iova);/*释放iova*/
+	vfio_iommu_iova_free(iova);/*释放旧的iova*/
 
 	list_splice_tail(iova_copy, iova);/*设置新的iova_list*/
 }
@@ -2199,7 +2215,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 	/* Check for duplicates */
 	ret = -EINVAL;
 	if (vfio_iommu_find_iommu_group(iommu, iommu_group))
-		/*已存在，返回*/
+		/*此iommu_group已存在，返回*/
 		goto out_unlock;
 
 	ret = -ENOMEM;
@@ -2208,10 +2224,10 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		goto out_unlock;
-	group->iommu_group = iommu_group;
+	group->iommu_group = iommu_group;/*设置此vfio-iommu-group对应的group*/
 
 	if (type == VFIO_EMULATED_IOMMU) {
-		/*针对这类，添加至emulated_iommu_groups链表上*/
+		/*针对模拟的iommu设备，添加至emulated_iommu_groups链表上*/
 		list_add(&group->next, &iommu->emulated_iommu_groups);
 		/*
 		 * An emulated IOMMU group cannot dirty memory directly, it can
@@ -2280,11 +2296,13 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 	if (ret)
 		goto out_detach;
 
+	/*只保留iova_copy中(geo->aperture_start,geo->aperture_end)之间的内容*/
 	ret = vfio_iommu_aper_resize(&iova_copy, geo->aperture_start,
 				     geo->aperture_end);
 	if (ret)
 		goto out_detach;
 
+	/*排除掉group_resv_regions中的内容*/
 	ret = vfio_iommu_resv_exclude(&iova_copy, &group_resv_regions);
 	if (ret)
 		goto out_detach;
@@ -2292,7 +2310,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 	resv_msi = vfio_iommu_has_sw_msi(&group_resv_regions, &resv_msi_base);
 
 	INIT_LIST_HEAD(&domain->group_list);
-	list_add(&group->next, &domain->group_list);
+	list_add(&group->next, &domain->group_list);/*此group加入到domain*/
 
 	if (!allow_unsafe_interrupts &&
 	    !iommu_group_has_isolated_msi(iommu_group)) {
@@ -2651,7 +2669,7 @@ static void vfio_iommu_type1_release(void *iommu_data)
 		kfree(domain);
 	}
 
-	vfio_iommu_iova_free(&iommu->iova_list);
+	vfio_iommu_iova_free(&iommu->iova_list);/*释放iova_list链表上所有元素*/
 
 	kfree(iommu);
 }
@@ -2765,6 +2783,7 @@ static int vfio_iommu_iova_build_caps(struct vfio_iommu *iommu,
 		i++;
 	}
 
+	/*添加VFIO_IOMMU_TYPE1_INFO_CAP_IOVA_RANGE*/
 	ret = vfio_iommu_iova_add_cap(caps, cap_iovas, size);
 
 	kfree(cap_iovas);
@@ -2869,7 +2888,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 	struct vfio_iommu_type1_dma_map map;
 	unsigned long minsz;
 	uint32_t mask = VFIO_DMA_MAP_FLAG_READ | VFIO_DMA_MAP_FLAG_WRITE |
-			VFIO_DMA_MAP_FLAG_VADDR;
+			VFIO_DMA_MAP_FLAG_VADDR;/*有效的参数*/
 
 	//使用用户传入的数据填充map
 	minsz = offsetofend(struct vfio_iommu_type1_dma_map, size);
@@ -2878,7 +2897,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 		return -EFAULT;
 
 	if (map.argsz < minsz || map.flags & ~mask)
-		return -EINVAL;
+		return -EINVAL;/*参数长度有误或者flag标记不正确*/
 
 	/*完成dma地址映射*/
 	return vfio_dma_do_map(iommu, &map);

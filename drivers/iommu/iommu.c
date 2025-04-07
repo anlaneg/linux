@@ -988,6 +988,7 @@ static const struct kobj_type iommu_group_ktype = {
  */
 struct iommu_group *iommu_group_alloc(void)
 {
+	/*申请一个空的iommu-group*/
 	struct iommu_group *group;
 	int ret;
 
@@ -1749,6 +1750,7 @@ struct iommu_group *pci_device_group(struct device *dev)
 	u64 devfns[4] = { 0 };
 
 	if (WARN_ON(!dev_is_pci(dev)))
+		/*必须为pci设备*/
 		return ERR_PTR(-EINVAL);
 
 	/*
@@ -1800,7 +1802,7 @@ struct iommu_group *pci_device_group(struct device *dev)
 		return group;
 
 	/* No shared group found, allocate new */
-	return iommu_group_alloc();
+	return iommu_group_alloc();/*申请iommu-group*/
 }
 EXPORT_SYMBOL_GPL(pci_device_group);
 

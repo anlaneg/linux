@@ -1558,7 +1558,7 @@ struct vfio_iommu_type1_info_dma_avail {
  */
 struct vfio_iommu_type1_dma_map {
 	__u32	argsz;//内存大小
-	__u32	flags;//读写标记
+	__u32	flags;//读写标记等（如下示，当前有三个）
 #define VFIO_DMA_MAP_FLAG_READ (1 << 0)		/* readable from device */
 #define VFIO_DMA_MAP_FLAG_WRITE (1 << 1)	/* writable from device */
 #define VFIO_DMA_MAP_FLAG_VADDR (1 << 2)

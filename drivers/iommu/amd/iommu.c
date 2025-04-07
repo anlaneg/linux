@@ -2024,6 +2024,7 @@ static void amd_iommu_release_device(struct device *dev)
 static struct iommu_group *amd_iommu_device_group(struct device *dev)
 {
 	if (dev_is_pci(dev))
+		/*pci设备*/
 		return pci_device_group(dev);
 
 	return acpihid_device_group(dev);
@@ -2208,7 +2209,7 @@ out_err:
 static inline u64 dma_max_address(void)
 {
 	if (amd_iommu_pgtable == AMD_IOMMU_V1)
-		return ~0ULL;
+		return ~0ULL;/*v1版本支持的最大地址*/
 
 	/* V2 with 4/5 level page table */
 	return ((1ULL << PM_LEVEL_SHIFT(amd_iommu_gpt_level)) - 1);
@@ -2543,7 +2544,7 @@ static void amd_iommu_get_resv_regions(struct device *dev,
 		return;
 
 	devid = PCI_SBDF_TO_DEVID(sbdf);
-	iommu = rlookup_amd_iommu(dev);
+	iommu = rlookup_amd_iommu(dev);/*取dev对应的amd iommu设备*/
 	if (!iommu)
 		return;
 	pci_seg = iommu->pci_seg;
@@ -2663,7 +2664,7 @@ const struct iommu_ops amd_iommu_ops = {
 	.release_device = amd_iommu_release_device,
 	.probe_finalize = amd_iommu_probe_finalize,
 	.device_group = amd_iommu_device_group,
-	.get_resv_regions = amd_iommu_get_resv_regions,
+	.get_resv_regions = amd_iommu_get_resv_regions,/*获取设备预留的region*/
 	.is_attach_deferred = amd_iommu_is_attach_deferred,
 	.pgsize_bitmap	= AMD_IOMMU_PGSIZES,
 	.def_domain_type = amd_iommu_def_domain_type,

@@ -46,7 +46,7 @@ enum vfio_group_type {
 	/*
 	 * Physical device with IOMMU backing.
 	 */
-	VFIO_IOMMU,
+	VFIO_IOMMU,/*物理iommu设备*/
 
 	/*
 	 * Virtual device without IOMMU backing. The VFIO core fakes up an
@@ -54,7 +54,7 @@ enum vfio_group_type {
 	 * userspace ABI.  The user of these devices must not be able to
 	 * directly trigger unmediated DMA.
 	 */
-	VFIO_EMULATED_IOMMU,
+	VFIO_EMULATED_IOMMU,/*模拟的iommu设备*/
 
 	/*
 	 * Physical device without IOMMU backing. The VFIO core fakes up an
@@ -63,7 +63,7 @@ enum vfio_group_type {
 	 * usage is highly dangerous, requires an explicit opt-in and will
 	 * taint the kernel.
 	 */
-	VFIO_NO_IOMMU,
+	VFIO_NO_IOMMU,/*没有iommu设备*/
 };
 
 #if IS_ENABLED(CONFIG_VFIO_GROUP)
