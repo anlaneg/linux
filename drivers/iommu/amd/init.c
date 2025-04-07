@@ -104,7 +104,7 @@ struct ivhd_header {
 	u16 devid;
 	u16 cap_ptr;
 	u64 mmio_phys;
-	u16 pci_seg;
+	u16 pci_seg;/*16位的pci segment(即格式'0000:bb:dd.ff'中的'0000')*/
 	u16 info;
 	u32 efr_attr;
 
@@ -252,6 +252,7 @@ static void init_translation_status(struct amd_iommu *iommu)
 		iommu->flags |= AMD_IOMMU_FLAG_TRANS_PRE_ENABLED;
 }
 
+/*要存入last_bdf+1个元素，每个元素大小为entry_size,获得所需内存的大小(按页对齐）*/
 static inline unsigned long tbl_size(int entry_size, int last_bdf)
 {
 	unsigned shift = PAGE_SHIFT +
@@ -273,11 +274,13 @@ static __init void get_global_efr(void)
 {
 	struct amd_iommu *iommu;
 
+	/*遍历所有的iommu设备*/
 	for_each_iommu(iommu) {
 		u64 tmp = iommu->features;
 		u64 tmp2 = iommu->features2;
 
 		if (list_is_first(&iommu->list, &amd_iommu_list)) {
+			/*首个iommu设备*/
 			amd_iommu_efr = tmp;
 			amd_iommu_efr2 = tmp2;
 			continue;
@@ -285,8 +288,10 @@ static __init void get_global_efr(void)
 
 		if (amd_iommu_efr == tmp &&
 		    amd_iommu_efr2 == tmp2)
+			/*此设备的efr,efr2与首个iommu设备的一致*/
 			continue;
 
+		/*存在iommu设备efr,efr2不一致问题，报错*/
 		pr_err(FW_BUG
 		       "Found inconsistent EFR/EFR2 %#llx,%#llx (global %#llx,%#llx) on iommu%d (%04x:%02x:%02x.%01x).\n",
 		       tmp, tmp2, amd_iommu_efr, amd_iommu_efr2,
@@ -294,6 +299,7 @@ static __init void get_global_efr(void)
 		       PCI_BUS_NUM(iommu->devid), PCI_SLOT(iommu->devid),
 		       PCI_FUNC(iommu->devid));
 
+		/*使用最小集合*/
 		amd_iommu_efr &= tmp;
 		amd_iommu_efr2 &= tmp2;
 	}
@@ -562,8 +568,8 @@ static int __init find_last_devid_from_ivhd(struct ivhd_header *h)
 		return -EINVAL;
 	}
 
-	p += ivhd_size;
-	end += h->length;
+	p += ivhd_size;/*移动到header结尾*/
+	end += h->length;/*移动到负载结尾*/
 
 	while (p < end) {
 		dev = (struct ivhd_entry *)p;
@@ -577,7 +583,7 @@ static int __init find_last_devid_from_ivhd(struct ivhd_header *h)
 		case IVHD_DEV_EXT_SELECT:
 			/* all the above subfield types refer to device ids */
 			if (dev->devid > last_devid)
-				last_devid = dev->devid;
+				last_devid = dev->devid;/*取最大的devid*/
 			break;
 		default:
 			break;
@@ -613,23 +619,25 @@ static int __init check_ivrs_checksum(struct acpi_table_header *table)
  */
 static int __init find_last_devid_acpi(struct acpi_table_header *table, u16 pci_seg)
 {
-	u8 *p = (u8 *)table, *end = (u8 *)table;
+	u8 *p = (u8 *)table/*起始位置*/, *end = (u8 *)table;
 	struct ivhd_header *h;
 	int last_devid, last_bdf = 0;
 
 	p += IVRS_HEADER_LENGTH;
 
-	end += table->length;
+	end += table->length;/*结束位置*/
 	while (p < end) {
+		/*自p到end遍历table*/
 		h = (struct ivhd_header *)p;
 		if (h->pci_seg == pci_seg &&
 		    h->type == amd_iommu_target_ivhd_type) {
+			/*只关注pci_seg对应的segment且type必须为amd_iommu_target_ivhd_type*/
 			last_devid = find_last_devid_from_ivhd(h);
 
 			if (last_devid < 0)
 				return -EINVAL;
 			if (last_devid > last_bdf)
-				last_bdf = last_devid;
+				last_bdf = last_devid;/*取最大的bdf*/
 		}
 		p += h->length;
 	}
@@ -650,6 +658,7 @@ static int __init find_last_devid_acpi(struct acpi_table_header *table, u16 pci_
 /* Allocate per PCI segment device table */
 static inline int __init alloc_dev_table(struct amd_iommu_pci_seg *pci_seg)
 {
+	/*申请足量内存页，存入dev_table_entry数组*/
 	pci_seg->dev_table = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO | GFP_DMA32,
 						      get_order(pci_seg->dev_table_size));
 	if (!pci_seg->dev_table)
@@ -737,6 +746,7 @@ static void __init free_alias_table(struct amd_iommu_pci_seg *pci_seg)
  */
 static int __init alloc_command_buffer(struct amd_iommu *iommu)
 {
+	/*申请command buffer*/
 	iommu->cmd_buf = (void *)__get_free_pages(GFP_KERNEL | __GFP_ZERO,
 						  get_order(CMD_BUFFER_SIZE));
 
@@ -853,6 +863,7 @@ static void *__init iommu_alloc_4k_pages(struct amd_iommu *iommu,
 					 gfp_t gfp, size_t size)
 {
 	int order = get_order(size);
+	/*申请物理页*/
 	void *buf = (void *)__get_free_pages(gfp, order);
 
 	if (buf &&
@@ -868,6 +879,7 @@ static void *__init iommu_alloc_4k_pages(struct amd_iommu *iommu,
 /* allocates the memory where the IOMMU will log its events to */
 static int __init alloc_event_buffer(struct amd_iommu *iommu)
 {
+	/*申请event buffer*/
 	iommu->evt_buf = iommu_alloc_4k_pages(iommu, GFP_KERNEL | __GFP_ZERO,
 					      EVT_BUFFER_SIZE);
 
@@ -1009,7 +1021,7 @@ err_out:
 
 static int __init alloc_cwwb_sem(struct amd_iommu *iommu)
 {
-	iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL | __GFP_ZERO, 1);
+	iommu->cmd_sem = iommu_alloc_4k_pages(iommu, GFP_KERNEL | __GFP_ZERO, 1/*需一个物理页*/);
 
 	return iommu->cmd_sem ? 0 : -ENOMEM;
 }
@@ -1640,9 +1652,10 @@ static struct amd_iommu_pci_seg *__init alloc_pci_segment(u16 id,
 	pci_seg->id = id;
 	init_llist_head(&pci_seg->dev_data_list);
 	INIT_LIST_HEAD(&pci_seg->unity_map);
-	list_add_tail(&pci_seg->list, &amd_iommu_pci_seg_list);
+	list_add_tail(&pci_seg->list, &amd_iommu_pci_seg_list);/*串连pci segment*/
 
 	if (alloc_dev_table(pci_seg))
+		/*申请dev table*/
 		return NULL;
 	if (alloc_alias_table(pci_seg))
 		return NULL;
@@ -1659,9 +1672,11 @@ static struct amd_iommu_pci_seg *__init get_pci_segment(u16 id,
 
 	for_each_pci_segment(pci_seg) {
 		if (pci_seg->id == id)
+			/*此segment id对应的PCI seg已存在，直接返回*/
 			return pci_seg;
 	}
 
+	/*此segment id对应的PCI seg不存在，执行结构体申请，并填加至amd_iommu_pci_seg_list*/
 	return alloc_pci_segment(id, ivrs_base);
 }
 
@@ -1842,6 +1857,7 @@ static int __init init_iommu_one(struct amd_iommu *iommu, struct ivhd_header *h,
 		return -EINVAL;
 	}
 
+	/*iommu设备控制寄存器首地址*/
 	iommu->mmio_base = iommu_map_mmio_space(iommu->mmio_phys,
 						iommu->mmio_phys_end);
 	if (!iommu->mmio_base)
@@ -1863,7 +1879,7 @@ static int __init init_iommu_one_late(struct amd_iommu *iommu)
 	if (alloc_event_buffer(iommu))
 		return -ENOMEM;
 
-	iommu->int_enabled = false;
+	iommu->int_enabled = false;/*不开启中断*/
 
 	init_translation_status(iommu);
 	if (translation_pre_enabled(iommu) && !is_kdump_kernel()) {
@@ -1922,19 +1938,20 @@ static u8 get_highest_supported_ivhd_type(struct acpi_table_header *ivrs)
  */
 static int __init init_iommu_all(struct acpi_table_header *table)
 {
-	u8 *p = (u8 *)table, *end = (u8 *)table;
+	u8 *p = (u8 *)table/*指向起始位置*/, *end = (u8 *)table;
 	struct ivhd_header *h;
 	struct amd_iommu *iommu;
 	int ret;
 
-	end += table->length;
+	end += table->length;/*指向结束位置*/
 	p += IVRS_HEADER_LENGTH;
 
 	/* Phase 1: Process all IVHD blocks */
 	while (p < end) {
+		/*自p到end进行遍历，先有一个ivhd_header*/
 		h = (struct ivhd_header *)p;
 		if (*p == amd_iommu_target_ivhd_type) {
-
+			/*显示设备pci地址*/
 			DUMP_printk("device: %04x:%02x:%02x.%01x cap: %04x "
 				    "flags: %01x info %04x\n",
 				    h->pci_seg, PCI_BUS_NUM(h->devid),
@@ -1943,11 +1960,12 @@ static int __init init_iommu_all(struct acpi_table_header *table)
 			DUMP_printk("       mmio-addr: %016llx\n",
 				    h->mmio_phys);
 
-			/*初始化iommu结构体*/
+			/*申请iommu结构体*/
 			iommu = kzalloc(sizeof(struct amd_iommu), GFP_KERNEL);
 			if (iommu == NULL)
 				return -ENOMEM;
 
+			/*初始化这个iommu设备*/
 			ret = init_iommu_one(iommu, h, table);
 			if (ret)
 				return ret;
@@ -3095,6 +3113,7 @@ static int __init early_amd_iommu_init(void)
 
 	ivinfo_init(ivrs_base);
 
+	/*记录amd iommu type类型*/
 	amd_iommu_target_ivhd_type = get_highest_supported_ivhd_type(ivrs_base);
 	DUMP_printk("Using IVHD type %#x\n", amd_iommu_target_ivhd_type);
 
@@ -3128,7 +3147,7 @@ static int __init early_amd_iommu_init(void)
 
 	/* Disable any previously enabled IOMMUs */
 	if (!is_kdump_kernel() || amd_iommu_disabled)
-		disable_iommus();
+		disable_iommus();/*配置要求禁用iommu*/
 
 	if (amd_iommu_irq_remap)
 		amd_iommu_irq_remap = check_ioapic_information();
@@ -3486,16 +3505,17 @@ static int __init parse_amd_iommu_options(char *str)
 		} else if (strncmp(str, "force_enable", 12) == 0) {
 			amd_iommu_force_enable = true;
 		} else if (strncmp(str, "off", 3) == 0) {
-			amd_iommu_disabled = true;
+			amd_iommu_disabled = true;/*如不指明，则默认开启*/
 		} else if (strncmp(str, "force_isolation", 15) == 0) {
 			amd_iommu_force_isolation = true;
 		} else if (strncmp(str, "pgtbl_v1", 8) == 0) {
-			amd_iommu_pgtable = AMD_IOMMU_V1;
+			amd_iommu_pgtable = AMD_IOMMU_V1;/*指明使用的v1版本*/
 		} else if (strncmp(str, "pgtbl_v2", 8) == 0) {
 			amd_iommu_pgtable = AMD_IOMMU_V2;
 		} else if (strncmp(str, "irtcachedis", 11) == 0) {
 			amd_iommu_irtcachedis = true;
 		} else {
+			/*不认识其它选项*/
 			pr_notice("Unknown option - '%s'\n", str);
 		}
 
@@ -3656,7 +3676,7 @@ found:
 }
 
 __setup("amd_iommu_dump",	parse_amd_iommu_dump);
-__setup("amd_iommu=",		parse_amd_iommu_options);
+__setup("amd_iommu=",		parse_amd_iommu_options);/*iommu配置*/
 __setup("amd_iommu_intr=",	parse_amd_iommu_intr);
 __setup("ivrs_ioapic",		parse_ivrs_ioapic);
 __setup("ivrs_hpet",		parse_ivrs_hpet);

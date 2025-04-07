@@ -2604,13 +2604,14 @@ static size_t iommu_pgsize(struct iommu_domain *domain, unsigned long iova,
 	unsigned int pgsize_idx, pgsize_idx_next;
 	unsigned long pgsizes;
 	size_t offset, pgsize, pgsize_next;
-	unsigned long addr_merge = paddr | iova;
+	unsigned long addr_merge = paddr | iova;/*按位合并物理地址与iova地址*/
 
 	/* Page sizes supported by the hardware and small enough for @size */
 	pgsizes = domain->pgsize_bitmap & GENMASK(__fls(size), 0);
 
 	/* Constrain the page sizes further based on the maximum alignment */
 	if (likely(addr_merge))
+		/*addr_merge从0bit开始，如果遇到‘1’，则表明这两个地址对齐方式开始不同，此即为page 最小大小*/
 		pgsizes &= GENMASK(__ffs(addr_merge), 0);
 
 	/* Make sure we have at least one suitable page size */
@@ -2648,12 +2649,12 @@ static size_t iommu_pgsize(struct iommu_domain *domain, unsigned long iova,
 		size = offset;
 
 out_set_count:
-	*count = size >> pgsize_idx;
+	*count = size >> pgsize_idx;/*获得页数*/
 	return pgsize;
 }
 
 static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
-		       phys_addr_t paddr, size_t size, int prot, gfp_t gfp)
+		       phys_addr_t paddr, size_t size/*区域大小*/, int prot, gfp_t gfp)
 {
 	const struct iommu_domain_ops *ops = domain->ops;
 	unsigned long orig_iova = iova;
@@ -2688,11 +2689,12 @@ static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
 	while (size) {
 		size_t pgsize, count, mapped = 0;
 
-		pgsize = iommu_pgsize(domain, iova, paddr, size, &count);
+		/*取页大小*/
+		pgsize = iommu_pgsize(domain, iova, paddr, size, &count/*页数*/);
 
 		pr_debug("mapping: iova 0x%lx pa %pa pgsize 0x%zx count %zu\n",
 			 iova, &paddr, pgsize, count);
-		ret = ops->map_pages(domain, iova, paddr, pgsize, count, prot,
+		ret = ops->map_pages(domain, iova, paddr, pgsize/*映射的页大小*/, count, prot,
 				     gfp, &mapped);
 		/*
 		 * Some pages may have been mapped, even if an error occurred,

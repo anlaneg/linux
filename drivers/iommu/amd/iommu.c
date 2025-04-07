@@ -1084,7 +1084,7 @@ static void build_completion_wait(struct iommu_cmd *cmd,
 	cmd->data[1] = upper_32_bits(paddr);
 	cmd->data[2] = lower_32_bits(data);
 	cmd->data[3] = upper_32_bits(data);
-	CMD_SET_TYPE(cmd, CMD_COMPL_WAIT);
+	CMD_SET_TYPE(cmd, CMD_COMPL_WAIT);/*等待完成cmd*/
 }
 
 static void build_inv_dte(struct iommu_cmd *cmd, u16 devid)
@@ -1253,6 +1253,7 @@ again:
 	return 0;
 }
 
+/*执行同步命令*/
 static int iommu_queue_command_sync(struct amd_iommu *iommu,
 				    struct iommu_cmd *cmd,
 				    bool sync)
@@ -1288,15 +1289,16 @@ static int iommu_completion_wait(struct amd_iommu *iommu)
 		return 0;
 
 	data = atomic64_add_return(1, &iommu->cmd_sem_val);
-	build_completion_wait(&cmd, iommu, data);
+	build_completion_wait(&cmd, iommu, data);/*构造completion wait*/
 
 	raw_spin_lock_irqsave(&iommu->lock, flags);
 
+	/*cmd入队*/
 	ret = __iommu_queue_command_sync(iommu, &cmd, false);
 	if (ret)
 		goto out_unlock;
 
-	ret = wait_on_sem(iommu, data);
+	ret = wait_on_sem(iommu, data);/*等待完成*/
 
 out_unlock:
 	raw_spin_unlock_irqrestore(&iommu->lock, flags);
@@ -1518,10 +1520,10 @@ void amd_iommu_domain_flush_pages(struct protection_domain *domain,
 				  u64 address, size_t size)
 {
 	if (likely(!amd_iommu_np_cache)) {
-		__domain_flush_pages(domain, address, size);
+		__domain_flush_pages(domain, address, size);/*刷新*/
 
 		/* Wait until IOMMU TLB and all device IOTLB flushes are complete */
-		amd_iommu_domain_flush_complete(domain);
+		amd_iommu_domain_flush_complete(domain);/*等待完成*/
 
 		return;
 	}
@@ -1978,6 +1980,7 @@ static struct iommu_device *amd_iommu_probe_device(struct device *dev)
 		return ERR_PTR(-ENODEV);
 
 	if (dev_iommu_priv_get(dev))
+		/*已初始化iommu,直接返回*/
 		return &iommu->iommu;
 
 	ret = iommu_init_device(iommu, dev);
@@ -2360,7 +2363,7 @@ static int amd_iommu_iotlb_sync_map(struct iommu_domain *dom,
 }
 
 static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova,
-			       phys_addr_t paddr/*物理起始地址*/, size_t pgsize, size_t pgcount,
+			       phys_addr_t paddr/*物理起始地址*/, size_t pgsize/*页大小*/, size_t pgcount,
 			       int iommu_prot, gfp_t gfp, size_t *mapped)
 {
 	struct protection_domain *domain = to_pdomain(dom);

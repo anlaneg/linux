@@ -113,12 +113,12 @@ static inline bool amd_iommu_gt_ppr_supported(void)
 
 static inline u64 iommu_virt_to_phys(void *vaddr)
 {
-	return (u64)__sme_set(virt_to_phys(vaddr));
+	return (u64)__sme_set(virt_to_phys(vaddr)/*转物理地址*/);
 }
 
 static inline void *iommu_phys_to_virt(unsigned long paddr)
 {
-	return phys_to_virt(__sme_clr(paddr));
+	return phys_to_virt(__sme_clr(paddr));/*物理地址转虚拟地址*/
 }
 
 /*将root再拆开，分写成root及mode*/
@@ -152,7 +152,9 @@ static inline void *alloc_pgtable_page(int nid, gfp_t gfp)
 {
 	struct page *page;
 
+	/*申请一个物理页*/
 	page = alloc_pages_node(nid, gfp | __GFP_ZERO, 0);
+	/*返回此页对应虚拟地址*/
 	return page ? page_address(page) : NULL;
 }
 

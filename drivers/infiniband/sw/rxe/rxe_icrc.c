@@ -79,6 +79,7 @@ static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	struct rxe_bth *bth;
 	__be32 crc;
 	int length;
+	/*ipv4/ipv6头 加上udp头*/
 	int hdr_size = sizeof(struct udphdr) +
 		(skb->protocol == htons(ETH_P_IP) ?
 		sizeof(struct iphdr) : sizeof(struct ipv6hdr));
@@ -87,7 +88,7 @@ static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	 */
 	u8 pshdr[sizeof(struct udphdr) +
 		sizeof(struct ipv6hdr) +
-		RXE_BTH_BYTES];
+		RXE_BTH_BYTES];/*bth头*/
 
 	/* This seed is the result of computing a CRC with a seed of
 	 * 0xfffffff and 8 bytes of 0xff representing a masked LRH.
@@ -95,11 +96,11 @@ static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	crc = (__force __be32)0xdebb20e3;
 
 	if (skb->protocol == htons(ETH_P_IP)) { /* IPv4 */
-		memcpy(pshdr, ip_hdr(skb), hdr_size);
+		memcpy(pshdr, ip_hdr(skb), hdr_size);/*填充ipv4头+udp头*/
 		ip4h = (struct iphdr *)pshdr;
 		udph = (struct udphdr *)(ip4h + 1);
 
-		ip4h->ttl = 0xff;
+		ip4h->ttl = 0xff;/*修正ipv4头*/
 		ip4h->check = CSUM_MANGLED_0;
 		ip4h->tos = 0xff;
 	} else {				/* IPv6 */
@@ -115,19 +116,19 @@ static __be32 rxe_icrc_hdr(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 
 	bth_offset += hdr_size;
 
-	/*填充ib头部*/
+	/*填充bth头部到数组*/
 	memcpy(&pshdr[bth_offset], pkt->hdr, RXE_BTH_BYTES);
-	bth = (struct rxe_bth *)&pshdr[bth_offset];
+	bth = (struct rxe_bth *)&pshdr[bth_offset];/*指向bth头*/
 
 	/* exclude bth.resv8a */
 	bth->qpn |= cpu_to_be32(~BTH_QPN_MASK);
 
-	length = hdr_size + RXE_BTH_BYTES;
+	length = hdr_size + RXE_BTH_BYTES;/*总的header长度*/
 	crc = rxe_crc32(pkt->rxe, crc, pshdr, length);
 
 	/* And finish to compute the CRC on the remainder of the headers. */
 	crc = rxe_crc32(pkt->rxe, crc, pkt->hdr + RXE_BTH_BYTES,
-			rxe_opcode[pkt->opcode].length - RXE_BTH_BYTES);
+			rxe_opcode[pkt->opcode].length - RXE_BTH_BYTES);/*计算剩余header*/
 	return crc;
 }
 
@@ -172,9 +173,10 @@ void rxe_icrc_generate(struct sk_buff *skb, struct rxe_pkt_info *pkt)
 	__be32 *icrcp;
 	__be32 icrc;
 
+	/*获得存放icrc的位置*/
 	icrcp = (__be32 *)(pkt->hdr + pkt->paylen - RXE_ICRC_SIZE);
-	icrc = rxe_icrc_hdr(skb, pkt);
+	icrc = rxe_icrc_hdr(skb, pkt);/*先计算header的icrc*/
 	icrc = rxe_crc32(pkt->rxe, icrc, (u8 *)payload_addr(pkt),
-				payload_size(pkt) + bth_pad(pkt));
+				payload_size(pkt) + bth_pad(pkt));/*再计算payload的icrc*/
 	*icrcp = ~icrc;
 }

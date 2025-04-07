@@ -159,6 +159,7 @@
 #define EVENT_FLAG_I		0x008
 
 /* feature control bits */
+/*标记iommu被开启*/
 #define CONTROL_IOMMU_EN	0
 #define CONTROL_HT_TUN_EN	1
 #define CONTROL_EVT_LOG_EN	2
@@ -324,6 +325,7 @@
 				  ((1ULL << PM_LEVEL_SHIFT((x))) - 1): \
 				   (0xffffffffffffffffULL))
 #define PM_LEVEL_INDEX(x, a)	(((a) >> PM_LEVEL_SHIFT((x))) & 0x1ffULL)
+/*取x的0，1，2bit位，并将结果向左移动9位*/
 #define PM_LEVEL_ENC(x)		(((x) << 9) & 0xe00ULL)
 #define PM_LEVEL_PDE(x, a)	((a) | PM_LEVEL_ENC((x)) | \
 				 IOMMU_PTE_PR | IOMMU_PTE_IR | IOMMU_PTE_IW)
@@ -505,7 +507,7 @@ extern struct kmem_cache *amd_iommu_irq_cache;
 
 /* Make iterating over all pci segment easier */
 #define for_each_pci_segment(pci_seg) \
-	list_for_each_entry((pci_seg), &amd_iommu_pci_seg_list, list)
+	list_for_each_entry((pci_seg), &amd_iommu_pci_seg_list/*遍历所有amd iommu设备对应的pci seg*/, list)
 #define for_each_pci_segment_safe(pci_seg, next) \
 	list_for_each_entry_safe((pci_seg), (next), &amd_iommu_pci_seg_list, list)
 /*
@@ -584,10 +586,10 @@ struct amd_iommu_pci_seg {
 	struct llist_head dev_data_list;
 
 	/* PCI segment number */
-	u16 id;
+	u16 id;/*指出pci段id号*/
 
 	/* Largest PCI device id we expect translation requests for */
-	u16 last_bdf;
+	u16 last_bdf;/*这个段最大的bdf*/
 
 	/* Size of the device table */
 	u32 dev_table_size;
@@ -606,6 +608,7 @@ struct amd_iommu_pci_seg {
 	 * information about the domain the device belongs to as well as the
 	 * page table root pointer.
 	 */
+	/*内存大小由dev_table_size指定，存放一组dev_table_entry*/
 	struct dev_table_entry *dev_table;
 
 	/*
@@ -613,6 +616,7 @@ struct amd_iommu_pci_seg {
 	 * responsible for a specific device. It is indexed by the PCI
 	 * device id.
 	 */
+	/*内存大小由rlookup_table_size指定，存放一组void*指针*/
 	struct amd_iommu **rlookup_table;
 
 	/*
@@ -693,7 +697,7 @@ struct amd_iommu {
 	u16 cap_ptr;
 
 	/* pci domain of this IOMMU */
-	struct amd_iommu_pci_seg *pci_seg;
+	struct amd_iommu_pci_seg *pci_seg;/*iommu设备关联的pci segment,看get_pci_segment*/
 
 	/* start of exclusion range of that IOMMU */
 	u64 exclusion_start;
@@ -706,7 +710,7 @@ struct amd_iommu {
 	u32 cmd_buf_tail;/*buffer的本次存放位置（bufferu写位置）*/
 
 	/* event buffer virtual address */
-	u8 *evt_buf;
+	u8 *evt_buf;/*申请的event buffer内存*/
 
 	/* Name for event log interrupt */
 	unsigned char evt_irq_name[16];

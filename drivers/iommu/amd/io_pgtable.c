@@ -156,6 +156,7 @@ static bool increase_address_space(struct protection_domain *domain,
 	bool ret = true;
 	u64 *pte;
 
+	/*获得一个物理页*/
 	pte = alloc_pgtable_page(domain->nid, gfp);
 	if (!pte)
 		return false;
@@ -202,7 +203,7 @@ static u64 *alloc_pte(struct protection_domain *domain,
 	int level, end_lvl;
 	u64 *pte, *page;
 
-	BUG_ON(!is_power_of_2(page_size));
+	BUG_ON(!is_power_of_2(page_size));/*页大小只能是2的N次方*/
 
 	while (address > PM_LEVEL_SIZE(domain->iop.mode)) {
 		/*
@@ -369,7 +370,7 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 	bool updated = false;
 	u64 __pte, *pte;
 	int ret, i, count;
-	size_t size = pgcount << __ffs(pgsize);
+	size_t size = pgcount << __ffs(pgsize);/*总大小*/
 	unsigned long o_iova = iova;
 
 	BUG_ON(!IS_ALIGNED(iova, pgsize));
@@ -377,10 +378,10 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 
 	ret = -EINVAL;
 	if (!(prot & IOMMU_PROT_MASK))
-		goto out;
+		goto out;/*权限设置有误*/
 
 	while (pgcount > 0) {
-		count = PAGE_SIZE_PTE_COUNT(pgsize);
+		count = PAGE_SIZE_PTE_COUNT(pgsize);/*此宏当前版本对9取余，故只能产生0-255*/
 		/*申请pte*/
 		pte   = alloc_pte(dom, iova, pgsize, NULL, gfp, &updated);
 
@@ -405,6 +406,7 @@ static int iommu_v1_map_pages(struct io_pgtable_ops *ops, unsigned long iova,
 		if (prot & IOMMU_PROT_IW)
 			__pte |= IOMMU_PTE_IW;
 
+		/*填充count个pte*/
 		for (i = 0; i < count; ++i)
 			pte[i] = __pte;
 

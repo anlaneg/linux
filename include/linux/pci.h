@@ -70,6 +70,7 @@
  */
 #define PCI_DEVID(bus, devfn)	((((u16)(bus)) << 8) | (devfn))
 /* return bus from PCI devid = ((u16)bus_number) << 8) | devfn */
+/*返回pci地地址对应的bus number*/
 #define PCI_BUS_NUM(x) (((x) >> 8) & 0xff)
 
 /* pci_slot represents a physical slot */
