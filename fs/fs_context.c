@@ -818,9 +818,9 @@ int finish_clean_context(struct fs_context *fc)
 		return 0;
 
 	if (fc->fs_type->init_fs_context)
-		error = fc->fs_type->init_fs_context(fc);
+		error = fc->fs_type->init_fs_context(fc);/*通过fs提供的回调初始化fc*/
 	else
-		error = legacy_init_fs_context(fc);
+		error = legacy_init_fs_context(fc);/*使用默认初始化函数*/
 	if (unlikely(error)) {
 		fc->phase = FS_CONTEXT_FAILED;
 		return error;

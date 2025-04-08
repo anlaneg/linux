@@ -213,9 +213,9 @@ struct iomap_ops {
  * @srcmap: Source map for COW operations
  */
 struct iomap_iter {
-	struct inode *inode;
-	loff_t pos;
-	u64 len;
+	struct inode *inode;/*对应的文件*/
+	loff_t pos;/*起始位置*/
+	u64 len;/*可容纳的最大长度*/
 	s64 processed;
 	unsigned flags;
 	struct iomap iomap;

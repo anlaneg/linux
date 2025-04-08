@@ -1109,6 +1109,7 @@ void bdi_put(struct backing_dev_info *bdi)
 }
 EXPORT_SYMBOL(bdi_put);
 
+/*自inode获得后端设备信息*/
 struct backing_dev_info *inode_to_bdi(struct inode *inode)
 {
 	struct super_block *sb;
@@ -1116,9 +1117,10 @@ struct backing_dev_info *inode_to_bdi(struct inode *inode)
 	if (!inode)
 		return &noop_backing_dev_info;
 
-	sb = inode->i_sb;
+	sb = inode->i_sb;/*取super block*/
 #ifdef CONFIG_BLOCK
 	if (sb_is_blkdev_sb(sb))
+		/*此inode对应的是块设备,返回此块设备对应的bdi*/
 		return I_BDEV(inode)->bd_disk->bdi;
 #endif
 	return sb->s_bdi;

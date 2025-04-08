@@ -130,6 +130,7 @@ struct page {
 			atomic_long_t pp_ref_count;
 		};
 		struct {	/* Tail pages of compound page */
+			/*指向组合页(FOLIO)的首页,其0号BIT被使用.*/
 			unsigned long compound_head;	/* Bit zero is set */
 		};
 		struct {	/* ZONE_DEVICE pages */
@@ -301,7 +302,7 @@ struct folio {
 	/* public: */
 			};
 			struct address_space *mapping;/*所属的mapping*/
-			pgoff_t index;/*在i_pages中存放此folio对应的索引*/
+			pgoff_t index;/*在i_pages中存放此folio对应的索引,即在mappin中的索引*/
 			union {
 				void *private;
 				swp_entry_t swap;
@@ -319,11 +320,12 @@ struct folio {
 #endif
 	/* private: the union with struct page is transitional */
 		};
-		struct page page;
-	};/*结构1*/
+		struct page page;/*这里有结构体page,说明此结构大小超过page,且其与page可强转,说明此结构体均按folio进行初始化.*/
+	};
+	/*从这里开始是folio独有的成员*/
 	union {
 		struct {
-			unsigned long _flags_1;
+			unsigned long _flags_1;/*利用0xff保存folio对应的order值,用于说明页大小*/
 			unsigned long _head_1;
 			unsigned long _folio_avail;
 	/* public: */
@@ -331,7 +333,7 @@ struct folio {
 			atomic_t _nr_pages_mapped;
 			atomic_t _pincount;
 #ifdef CONFIG_64BIT
-			unsigned int _folio_nr_pages;
+			unsigned int _folio_nr_pages;/*记录folio包含有多少页*/
 #endif
 	/* private: the union with struct page is transitional */
 		};

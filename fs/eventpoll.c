@@ -972,7 +972,7 @@ again:
 	spin_unlock(&file->f_lock);
 }
 
-//申请一个eventpoll
+//申请一个eventpoll结构体,并初始化
 static int ep_alloc(struct eventpoll **pep)
 {
 	struct eventpoll *ep;
@@ -2037,7 +2037,7 @@ static int do_epoll_create(int flags)
 	BUILD_BUG_ON(EPOLL_CLOEXEC != O_CLOEXEC);
 
 	if (flags & ~EPOLL_CLOEXEC)
-		return -EINVAL;
+		return -EINVAL;/*遇到不认识的flags*/
 	/*
 	 * Create the internal data structure ("struct eventpoll").
 	 */
@@ -2048,12 +2048,12 @@ static int do_epoll_create(int flags)
 	 * Creates all the items needed to setup an eventpoll file. That is,
 	 * a file structure and a free file descriptor.
 	 */
-	fd = get_unused_fd_flags(O_RDWR | (flags & O_CLOEXEC));
+	fd = get_unused_fd_flags(O_RDWR | (flags & O_CLOEXEC));/*取一个未使用的fd*/
 	if (fd < 0) {
 		error = fd;
 		goto out_free_ep;
 	}
-	//构造file与其关联
+	//构造file与ops关联
 	file = anon_inode_getfile("[eventpoll]", &eventpoll_fops, ep,
 				 O_RDWR | (flags & O_CLOEXEC));
 	if (IS_ERR(file)) {
@@ -2078,12 +2078,14 @@ SYSCALL_DEFINE1(epoll_create1, int, flags)
 	return do_epoll_create(flags);
 }
 
+//定义epoll_create系统调用
 SYSCALL_DEFINE1(epoll_create, int, size)
 {
 	if (size <= 0)
+		/*size不得小于等于0,但并不使用*/
 		return -EINVAL;
 
-	return do_epoll_create(0);
+	return do_epoll_create(0/*指明flags为零*/);
 }
 
 #ifdef CONFIG_PM_SLEEP
@@ -2111,7 +2113,7 @@ static inline int epoll_mutex_lock(struct mutex *mutex, int depth,
 	return -EAGAIN;
 }
 
-int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
+int do_epoll_ctl(int epfd, int op/*操作符*/, int fd, struct epoll_event *epds,
 		 bool nonblock)
 {
 	int error;
@@ -2127,14 +2129,14 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 		goto error_return;
 
 	/* Get the "struct file *" for the target file */
-	tf = fdget(fd);
+	tf = fdget(fd);/*取要操作的fd对应的FD*/
 	if (!tf.file)
 		goto error_fput;
 
 	/* The target file descriptor must support poll */
 	error = -EPERM;
 	if (!file_can_poll(tf.file))
-		goto error_tgt_fput;
+		goto error_tgt_fput;/*此文件不支持poll*/
 
 	/* Check if EPOLLWAKEUP is allowed */
 	if (ep_op_has_event(op))
@@ -2147,7 +2149,7 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 	 */
 	error = -EINVAL;
 	if (f.file == tf.file || !is_file_epoll(f.file))
-		goto error_tgt_fput;
+		goto error_tgt_fput;/*参数无效,不支持在FD中添加epoll文件*/
 
 	/*
 	 * epoll adds to the wakeup queue at EPOLL_CTL_ADD time only,
@@ -2187,6 +2189,7 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 	if (error)
 		goto error_tgt_fput;
 	if (op == EPOLL_CTL_ADD) {
+		/*FD添加动作*/
 		if (READ_ONCE(f.file->f_ep) || ep->gen == loop_check_gen ||
 		    is_file_epoll(tf.file)) {
 			mutex_unlock(&ep->mtx);
@@ -2218,10 +2221,11 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 	switch (op) {
 	case EPOLL_CTL_ADD:
 		if (!epi) {
+			/*执行添加*/
 			epds->events |= EPOLLERR | EPOLLHUP;
 			error = ep_insert(ep, epds, tf.file, fd, full_check);
 		} else
-			error = -EEXIST;
+			error = -EEXIST;/*之前已添加,报错*/
 		break;
 	case EPOLL_CTL_DEL:
 		if (epi) {
@@ -2242,7 +2246,7 @@ int do_epoll_ctl(int epfd, int op, int fd, struct epoll_event *epds,
 				error = ep_modify(ep, epi, epds);
 			}
 		} else
-			error = -ENOENT;
+			error = -ENOENT;/*未添加,不支持修改*/
 		break;
 	}
 	mutex_unlock(&ep->mtx);
@@ -2272,11 +2276,12 @@ SYSCALL_DEFINE4(epoll_ctl, int, epfd, int, op, int, fd,
 {
 	struct epoll_event epds;
 
+	/*检查是否需要复制event*/
 	if (ep_op_has_event(op) &&
 	    copy_from_user(&epds, event, sizeof(struct epoll_event)))
 		return -EFAULT;
 
-	return do_epoll_ctl(epfd, op, fd, &epds, false);
+	return do_epoll_ctl(epfd, op, fd/*要操作的fd*/, &epds/*给定的event内容*/, false);
 }
 
 /*

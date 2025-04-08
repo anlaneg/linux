@@ -223,7 +223,7 @@ int inode_init_always(struct super_block *sb, struct inode *inode)
 	if (sb->s_iflags & SB_I_STABLE_WRITES)
 		mapping_set_stable_writes(mapping);
 	inode->i_private = NULL;
-	inode->i_mapping = mapping;
+	inode->i_mapping = mapping;/*指向i_data*/
 	INIT_HLIST_HEAD(&inode->i_dentry);	/* buggered by rcu freeing */
 #ifdef CONFIG_FS_POSIX_ACL
 	inode->i_acl = inode->i_default_acl = ACL_NOT_CACHED;
@@ -436,7 +436,7 @@ void inode_init_once(struct inode *inode)
 	INIT_LIST_HEAD(&inode->i_wb_list);
 	INIT_LIST_HEAD(&inode->i_lru);
 	INIT_LIST_HEAD(&inode->i_sb_list);
-	__address_space_init_once(&inode->i_data);
+	__address_space_init_once(&inode->i_data);/*初始化i_data*/
 	i_size_ordered_init(inode);
 }
 EXPORT_SYMBOL(inode_init_once);
@@ -502,7 +502,7 @@ static void inode_lru_list_del(struct inode *inode)
  * inode_sb_list_add - add inode to the superblock list of inodes
  * @inode: inode to add
  */
-//将inode加入到sb对应的s_inodes链上
+//将此inode加入到sb对应的s_inodes链上
 void inode_sb_list_add(struct inode *inode)
 {
 	spin_lock(&inode->i_sb->s_inode_list_lock);
@@ -2578,7 +2578,7 @@ struct timespec64 inode_set_ctime_current(struct inode *inode)
 {
 	struct timespec64 now = current_time(inode);
 
-	inode_set_ctime(inode, now.tv_sec, now.tv_nsec);
+	inode_set_ctime(inode, now.tv_sec, now.tv_nsec);/*设置inode的创建时间*/
 	return now;
 }
 EXPORT_SYMBOL(inode_set_ctime_current);

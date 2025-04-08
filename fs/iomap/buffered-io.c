@@ -172,7 +172,7 @@ static struct iomap_folio_state *ifs_alloc(struct inode *inode,
 		bitmap_set(ifs->state, 0, nr_blocks);
 	if (folio_test_dirty(folio))
 		bitmap_set(ifs->state, nr_blocks, nr_blocks);
-	folio_attach_private(folio, ifs);
+	folio_attach_private(folio, ifs);/*使FOLIO记录IFS*/
 
 	return ifs;
 }
@@ -200,11 +200,11 @@ static void iomap_adjust_read_range(struct inode *inode, struct folio *folio,
 	loff_t orig_pos = *pos;
 	loff_t isize = i_size_read(inode);
 	unsigned block_bits = inode->i_blkbits;
-	unsigned block_size = (1 << block_bits);
-	size_t poff = offset_in_folio(folio, *pos);
-	size_t plen = min_t(loff_t, folio_size(folio) - poff, length);
-	unsigned first = poff >> block_bits;
-	unsigned last = (poff + plen - 1) >> block_bits;
+	unsigned block_size = (1 << block_bits);/*此INODE对应的块大小*/
+	size_t poff = offset_in_folio(folio, *pos);/*起始位置在此folio中的实际偏移量*/
+	size_t plen = min_t(loff_t, folio_size(folio) - poff, length);/*此FOLIO中最大可容纳的长度*/
+	unsigned first = poff >> block_bits;/*起始块号*/
+	unsigned last = (poff + plen - 1) >> block_bits;/*终止块号*/
 
 	/*
 	 * If the block size is smaller than the page size, we need to check the
@@ -336,7 +336,7 @@ static loff_t iomap_readpage_iter(const struct iomap_iter *iter,
 	const struct iomap *iomap = &iter->iomap;
 	loff_t pos = iter->pos + offset;
 	loff_t length = iomap_length(iter) - offset;
-	struct folio *folio = ctx->cur_folio;
+	struct folio *folio = ctx->cur_folio;/*要存放的folio*/
 	struct iomap_folio_state *ifs;
 	loff_t orig_pos = pos;
 	size_t poff, plen;
@@ -408,17 +408,18 @@ done:
 int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 {
 	struct iomap_iter iter = {
-		.inode		= folio->mapping->host,
-		.pos		= folio_pos(folio),
-		.len		= folio_size(folio),
+		.inode		= folio->mapping->host,/*对应的文件*/
+		.pos		= folio_pos(folio),/*起始位置*/
+		.len		= folio_size(folio),/*最多可容纳的内容*/
 	};
 	struct iomap_readpage_ctx ctx = {
-		.cur_folio	= folio,
+		.cur_folio	= folio,/*要存入的folio*/
 	};
 	int ret;
 
 	trace_iomap_readpage(iter.inode, 1);
 
+	/*将读操作转换为bio,填充好目的内存*/
 	while ((ret = iomap_iter(&iter, ops)) > 0)
 		iter.processed = iomap_readpage_iter(&iter, &ctx, 0);
 
@@ -426,7 +427,7 @@ int iomap_read_folio(struct folio *folio, const struct iomap_ops *ops)
 		folio_set_error(folio);
 
 	if (ctx.bio) {
-		submit_bio(ctx.bio);
+		submit_bio(ctx.bio);/*提交此bio,离开高速缓存区*/
 		WARN_ON_ONCE(!ctx.cur_folio_in_bio);
 	} else {
 		WARN_ON_ONCE(ctx.cur_folio_in_bio);
@@ -1890,7 +1891,7 @@ static int iomap_do_writepage(struct folio *folio,
 		struct writeback_control *wbc, void *data)
 {
 	struct iomap_writepage_ctx *wpc = data;
-	struct inode *inode = folio->mapping->host;
+	struct inode *inode = folio->mapping->host;/*此页对应的inode*/
 	u64 end_pos, isize;
 
 	trace_iomap_writepage(inode, folio_pos(folio), folio_size(folio));
@@ -1922,8 +1923,8 @@ static int iomap_do_writepage(struct folio *folio,
 	 * |     desired writeback range    |      see else    |
 	 * ---------------------------------^------------------|
 	 */
-	isize = i_size_read(inode);
-	end_pos = folio_pos(folio) + folio_size(folio);
+	isize = i_size_read(inode);/*取inode大小*/
+	end_pos = folio_pos(folio) + folio_size(folio);/*offset增加folio大小得到终止位置*/
 	if (end_pos > isize) {
 		/*
 		 * Check whether the page to write out is beyond or straddles
@@ -1972,7 +1973,7 @@ static int iomap_do_writepage(struct folio *folio,
 		end_pos = isize;
 	}
 
-	return iomap_writepage_map(wpc, wbc, inode, folio, end_pos);
+	return iomap_writepage_map(wpc, wbc, inode, folio, end_pos/*终止位置*/);
 
 redirty:
 	folio_redirty_for_writepage(wbc, folio);
@@ -1989,7 +1990,7 @@ iomap_writepages(struct address_space *mapping, struct writeback_control *wbc,
 	int			ret;
 
 	wpc->ops = ops;
-	ret = write_cache_pages(mapping, wbc, iomap_do_writepage, wpc);
+	ret = write_cache_pages(mapping, wbc, iomap_do_writepage/*写folio*/, wpc);
 	if (!wpc->ioend)
 		return ret;
 	return iomap_submit_ioend(wpc, wpc->ioend, ret);

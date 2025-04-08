@@ -484,7 +484,7 @@ extern const struct address_space_operations empty_aops;
 struct address_space {
 	//指向其对应的inode
 	struct inode		*host;
-	//按index索引page
+	//按index索引page(记录此space包含的所有page)
 	struct xarray		i_pages;
 	struct rw_semaphore	invalidate_lock;
 	gfp_t			gfp_mask;
@@ -755,7 +755,7 @@ struct inode {
 		void (*free_inode)(struct inode *);
 	};
 	struct file_lock_context	*i_flctx;/*flock系统调用占用*/
-	struct address_space	i_data;
+	struct address_space	i_data;/*i_mapping指向此结构体()*/
 	struct list_head	i_devices;/*此inode对应的设备，例如cdev*/
 	union {
 		struct pipe_inode_info	*i_pipe;
@@ -1595,23 +1595,23 @@ struct timespec64 inode_set_ctime_current(struct inode *inode);
 
 static inline time64_t inode_get_atime_sec(const struct inode *inode)
 {
-	return inode->__i_atime.tv_sec;
+	return inode->__i_atime.tv_sec;/*获取inode访问时间*/
 }
 
 static inline long inode_get_atime_nsec(const struct inode *inode)
 {
-	return inode->__i_atime.tv_nsec;
+	return inode->__i_atime.tv_nsec;/*获取inode访问时间*/
 }
 
 static inline struct timespec64 inode_get_atime(const struct inode *inode)
 {
-	return inode->__i_atime;
+	return inode->__i_atime;/*获取inode访问时间*/
 }
 
 static inline struct timespec64 inode_set_atime_to_ts(struct inode *inode,
 						      struct timespec64 ts)
 {
-	inode->__i_atime = ts;
+	inode->__i_atime = ts;/*设置inode访问时间*/
 	return ts;
 }
 
@@ -1620,7 +1620,7 @@ static inline struct timespec64 inode_set_atime(struct inode *inode,
 {
 	struct timespec64 ts = { .tv_sec  = sec,
 				 .tv_nsec = nsec };
-	return inode_set_atime_to_ts(inode, ts);
+	return inode_set_atime_to_ts(inode, ts);/*设置inode访问时间*/
 }
 
 static inline time64_t inode_get_mtime_sec(const struct inode *inode)
@@ -1641,8 +1641,7 @@ static inline struct timespec64 inode_get_mtime(const struct inode *inode)
 static inline struct timespec64 inode_set_mtime_to_ts(struct inode *inode,
 						      struct timespec64 ts)
 {
-	/*修改mtime*/
-	inode->__i_mtime = ts;
+	inode->__i_mtime = ts;/*修改inode mtime*/
 	return ts;
 }
 
@@ -1666,13 +1665,13 @@ static inline long inode_get_ctime_nsec(const struct inode *inode)
 
 static inline struct timespec64 inode_get_ctime(const struct inode *inode)
 {
-	return inode->__i_ctime;
+	return inode->__i_ctime;/*获取创建时间*/
 }
 
 static inline struct timespec64 inode_set_ctime_to_ts(struct inode *inode,
 						      struct timespec64 ts)
 {
-	inode->__i_ctime = ts;
+	inode->__i_ctime = ts;/*设置创建时间*/
 	return ts;
 }
 
@@ -2069,6 +2068,7 @@ struct file_operations {
 	int (*iopoll)(struct kiocb *kiocb, struct io_comp_batch *,
 			unsigned int flags);
 	int (*iterate_shared) (struct file *, struct dir_context *);
+	/*如果不提供此函数,则此文件不得被poll*/
 	__poll_t (*poll) (struct file *, struct poll_table_struct *);
 	/*用于提供定制版ioctl命令*/
 	long (*unlocked_ioctl) (struct file *, unsigned int, unsigned long);

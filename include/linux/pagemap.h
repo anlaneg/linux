@@ -1047,6 +1047,7 @@ static inline void folio_lock(struct folio *folio)
 {
 	might_sleep();
 	if (!folio_trylock(folio))
+		/*页未lock,lock此页*/
 		__folio_lock(folio);
 }
 
@@ -1543,7 +1544,7 @@ static inline int page_mkwrite_check_truncate(struct page *page,
 static inline
 unsigned int i_blocks_per_folio(struct inode *inode, struct folio *folio)
 {
-	return folio_size(folio) >> inode->i_blkbits;
+	return folio_size(folio) >> inode->i_blkbits;/*此folio可以存入多少个block*/
 }
 
 static inline

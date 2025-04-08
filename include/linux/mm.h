@@ -1103,7 +1103,7 @@ static inline unsigned int folio_order(struct folio *folio)
 {
 	if (!folio_test_large(folio))
 		return 0;
-	return folio->_flags_1 & 0xff;
+	return folio->_flags_1 & 0xff;/*获得folio对应的order*/
 }
 
 #include <linux/huge_mm.h>
@@ -2082,6 +2082,7 @@ static inline void set_page_links(struct page *page, enum zone_type zone,
  */
 static inline long folio_nr_pages(struct folio *folio)
 {
+	/*获知此folio有多少页*/
 	if (!folio_test_large(folio))
 		return 1;
 #ifdef CONFIG_64BIT
@@ -2164,7 +2165,7 @@ static inline unsigned int folio_shift(struct folio *folio)
  */
 static inline size_t folio_size(struct folio *folio)
 {
-	return PAGE_SIZE << folio_order(folio);
+	return PAGE_SIZE << folio_order(folio);/*页大小*/
 }
 
 /**

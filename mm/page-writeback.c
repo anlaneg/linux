@@ -2414,7 +2414,7 @@ int write_cache_pages(struct address_space *mapping,
 		index = wbc->range_start >> PAGE_SHIFT;
 		end = wbc->range_end >> PAGE_SHIFT;
 		if (wbc->range_start == 0 && wbc->range_end == LLONG_MAX)
-			range_whole = 1;
+			range_whole = 1;/*指明写整个range*/
 	}
 	if (wbc->sync_mode == WB_SYNC_ALL || wbc->tagged_writepages) {
 		tag_pages_for_writeback(mapping, index, end);
@@ -2427,7 +2427,7 @@ int write_cache_pages(struct address_space *mapping,
 		int i;
 
 		nr_folios = filemap_get_folios_tag(mapping, &index, end,
-				tag, &fbatch);
+				tag, &fbatch);/*收集此batch,得到folios数目*/
 
 		if (nr_folios == 0)
 			break;
@@ -2456,7 +2456,7 @@ continue_unlock:
 
 			if (!folio_test_dirty(folio)) {
 				/* someone wrote it for us */
-				goto continue_unlock;
+				goto continue_unlock;/*此页未dirty,不用写*/
 			}
 
 			if (folio_test_writeback(folio)) {
@@ -2471,7 +2471,7 @@ continue_unlock:
 				goto continue_unlock;
 
 			trace_wbc_writepage(wbc, inode_to_bdi(mapping->host));
-			error = writepage(folio, wbc, data);
+			error = writepage(folio, wbc, data);/*写此页*/
 			nr = folio_nr_pages(folio);
 			if (unlikely(error)) {
 				/*
@@ -2550,9 +2550,10 @@ int do_writepages(struct address_space *mapping, struct writeback_control *wbc)
 	wb_bandwidth_estimate_start(wb);
 	while (1) {
 		if (mapping->a_ops->writepages) {
-			/*将页面刷到磁盘*/
+			/*使用回调writepages,将页面刷到磁盘*/
 			ret = mapping->a_ops->writepages(mapping, wbc);
 		} else if (mapping->a_ops->writepage) {
+			/*使用回调writepage,将页面刷到磁盘*/
 			struct blk_plug plug;
 
 			blk_start_plug(&plug);

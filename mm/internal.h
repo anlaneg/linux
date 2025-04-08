@@ -414,9 +414,9 @@ static inline void folio_set_order(struct folio *folio, unsigned int order)
 	if (WARN_ON_ONCE(!order || !folio_test_large(folio)))
 		return;
 
-	folio->_flags_1 = (folio->_flags_1 & ~0xffUL) | order;
+	folio->_flags_1 = (folio->_flags_1 & ~0xffUL) | order;/*记录此folio对应的order大小*/
 #ifdef CONFIG_64BIT
-	folio->_folio_nr_pages = 1U << order;
+	folio->_folio_nr_pages = 1U << order;/*记录页数*/
 #endif
 }
 
@@ -424,18 +424,19 @@ void folio_undo_large_rmappable(struct folio *folio);
 
 static inline struct folio *page_rmappable_folio(struct page *page)
 {
-	struct folio *folio = (struct folio *)page;
+	struct folio *folio = (struct folio *)page;/*将获得的page,强转为folio*/
 
 	if (folio && folio_order(folio) > 1)
+		/*获得的非单页*/
 		folio_prep_large_rmappable(folio);
 	return folio;
 }
 
 static inline void prep_compound_head(struct page *page, unsigned int order)
 {
-	struct folio *folio = (struct folio *)page;
+	struct folio *folio = (struct folio *)page;/*强转为folio,并初始化此folio*/
 
-	folio_set_order(folio, order);
+	folio_set_order(folio, order);/*指明folio大小*/
 	atomic_set(&folio->_entire_mapcount, -1);
 	atomic_set(&folio->_nr_pages_mapped, 0);
 	atomic_set(&folio->_pincount, 0);
@@ -443,11 +444,11 @@ static inline void prep_compound_head(struct page *page, unsigned int order)
 
 static inline void prep_compound_tail(struct page *head, int tail_idx)
 {
-	struct page *p = head + tail_idx;
+	struct page *p = head + tail_idx;/*指向当前tail_idx号对应的PAGE*/
 
-	p->mapping = TAIL_MAPPING;
-	set_compound_head(p, head);
-	set_page_private(p, 0);
+	p->mapping = TAIL_MAPPING;/*指明为TAIL_MAPPING*/
+	set_compound_head(p, head);/*指明此page对应的HEAD*/
+	set_page_private(p, 0);/*清除了此page的私有内容*/
 }
 
 extern void prep_compound_page(struct page *page, unsigned int order);

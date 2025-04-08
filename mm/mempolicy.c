@@ -2190,7 +2190,7 @@ EXPORT_SYMBOL(vma_alloc_folio);
  * flags are used.
  * Return: The page on success or NULL if allocation fails.
  */
-struct page *alloc_pages(gfp_t gfp, unsigned int order)
+struct page *alloc_pages(gfp_t gfp, unsigned int order/*大小*/)
 {
 	struct mempolicy *pol = &default_policy;
 
@@ -2208,7 +2208,8 @@ EXPORT_SYMBOL(alloc_pages);
 
 struct folio *folio_alloc(gfp_t gfp, unsigned int order)
 {
-	return page_rmappable_folio(alloc_pages(gfp | __GFP_COMP, order));
+	/*标记rmappable并返回此folio*/
+	return page_rmappable_folio(alloc_pages(gfp | __GFP_COMP/*指明按组合页初始化*/, order));
 }
 EXPORT_SYMBOL(folio_alloc);
 

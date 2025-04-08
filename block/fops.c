@@ -141,7 +141,7 @@ static void blkdev_bio_end_io(struct bio *bio)
 				ret = blk_status_to_errno(dio->bio.bi_status);
 			}
 
-			dio->iocb->ki_complete(iocb, ret);
+			dio->iocb->ki_complete(iocb, ret);/*触发complete回调*/
 			bio_put(&dio->bio);
 		} else {
 			struct task_struct *waiter = dio->waiter;
@@ -471,7 +471,7 @@ const struct address_space_operations def_blk_aops = {
 	.is_dirty_writeback = buffer_check_dirty_writeback,
 };
 #else /* CONFIG_BUFFER_HEAD */
-static int blkdev_read_folio(struct file *file, struct folio *folio)
+static int blkdev_read_folio(struct file *file, struct folio *folio/*目标位置*/)
 {
 	return iomap_read_folio(folio, &blkdev_iomap_ops);
 }
@@ -511,9 +511,9 @@ const struct address_space_operations def_blk_aops = {
 	.dirty_folio	= filemap_dirty_folio,
 	.release_folio		= iomap_release_folio,
 	.invalidate_folio	= iomap_invalidate_folio,
-	.read_folio		= blkdev_read_folio,
+	.read_folio		= blkdev_read_folio,/*用于将内容加载进folio*/
 	.readahead		= blkdev_readahead,
-	.writepages		= blkdev_writepages,
+	.writepages		= blkdev_writepages,/*使用回调writepages,将页面刷到磁盘*/
 	.is_partially_uptodate  = iomap_is_partially_uptodate,
 	.error_remove_folio	= generic_error_remove_folio,
 	.migrate_folio		= filemap_migrate_folio,

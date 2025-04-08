@@ -585,7 +585,8 @@ void prep_compound_page(struct page *page, unsigned int order)
 	int i;
 	int nr_pages = 1 << order;/*页数*/
 
-	__SetPageHead(page);
+	__SetPageHead(page);/*指明为HEAD*/
+	/*遍历这组page(数组形式),初始化非首页,使各非首页记录其对应的首面*/
 	for (i = 1; i < nr_pages; i++)
 		prep_compound_tail(page, i);
 
@@ -1556,6 +1557,7 @@ static void prep_new_page(struct page *page, unsigned int order, gfp_t gfp_flags
 	post_alloc_hook(page, order, gfp_flags);
 
 	if (order && (gfp_flags & __GFP_COMP))
+		/*申请的是多页,且给出了COMP标记,设置组合信息*/
 		prep_compound_page(page, order);
 
 	/*
@@ -3346,6 +3348,7 @@ try_this_zone:
 		page = rmqueue(ac->preferred_zoneref->zone, zone, order,
 				gfp_mask, alloc_flags, ac->migratetype);
 		if (page) {
+			/*获得空闲页,按标记,设置此页,例如此页可能是folio*/
 			prep_new_page(page, order, gfp_mask, alloc_flags);
 
 			/*
@@ -4651,9 +4654,9 @@ struct folio *__folio_alloc(gfp_t gfp, unsigned int order, int preferred_nid,
 		nodemask_t *nodemask)
 {
 	/*申请物理页*/
-	struct page *page = __alloc_pages(gfp | __GFP_COMP, order/*页数*/,
+	struct page *page = __alloc_pages(gfp | __GFP_COMP/*指明需要组合页*/, order/*页数*/,
 					preferred_nid, nodemask);
-	return page_rmappable_folio(page);
+	return page_rmappable_folio(page);/*打上rmappable标记,并返回此folio*/
 }
 EXPORT_SYMBOL(__folio_alloc);
 

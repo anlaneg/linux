@@ -265,7 +265,7 @@ static inline struct bdi_writeback *inode_to_wb_wbc(
 	 * If wbc does not have inode attached, it means cgroup writeback was
 	 * disabled when wbc started. Just use the default wb in that case.
 	 */
-	return wbc->wb ? wbc->wb : &inode_to_bdi(inode)->wb;
+	return wbc->wb ? wbc->wb : &inode_to_bdi(inode)->wb;/*未设置wb,自inode中获取wb*/
 }
 
 /**

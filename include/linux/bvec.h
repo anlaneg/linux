@@ -44,7 +44,7 @@ struct bio_vec {
 static inline void bvec_set_page(struct bio_vec *bv, struct page *page,
 		unsigned int len, unsigned int offset)
 {
-	bv->bv_page = page;
+	bv->bv_page = page;/*要填充的页*/
 	bv->bv_len = len;
 	bv->bv_offset = offset;
 }

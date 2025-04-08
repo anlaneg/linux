@@ -182,7 +182,7 @@ typedef unsigned int __bitwise gfp_t;
  * that progress has been made elsewhere.  It can wait for other
  * tasks to attempt high-level approaches to freeing memory such as
  * compaction (which removes fragmentation) and page-out.
- * There is still a definite limit to the number of retries, but it is
+ * There is still a definite limit to the number of zone_watermark_fastretries, but it is
  * a larger limit than with %__GFP_NORETRY.
  * Allocations with this flag may fail, but only when there is
  * genuinely little unused memory. While these allocations do not
@@ -239,6 +239,7 @@ typedef unsigned int __bitwise gfp_t;
  * details. Only effective in HW_TAGS mode.
  */
 #define __GFP_NOWARN	((__force gfp_t)___GFP_NOWARN)
+/*指明申请的页按folio初始化*/
 #define __GFP_COMP	((__force gfp_t)___GFP_COMP)
 /*申请的内存空间需要清零*/
 #define __GFP_ZERO	((__force gfp_t)___GFP_ZERO)

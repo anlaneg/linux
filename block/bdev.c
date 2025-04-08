@@ -36,7 +36,7 @@ static bool bdev_allow_write_mounted = IS_ENABLED(CONFIG_BLK_DEV_WRITE_MOUNTED);
 /*系统块设备对应的inode*/
 struct bdev_inode {
 	struct block_device bdev;/*块设备*/
-	struct inode vfs_inode;
+	struct inode vfs_inode;/*块设备对应的inode基础信息*/
 };
 
 /*由inode获得bdev_inode*/
@@ -309,6 +309,7 @@ static struct kmem_cache *bdev_cachep __ro_after_init;
 /*申请bdev_inode，块设备自bdev_cachep中申请inode(此ei->bdev为全零）*/
 static struct inode *bdev_alloc_inode(struct super_block *sb)
 {
+	/*自bdev_cachep中申请inode*/
 	struct bdev_inode *ei = alloc_inode_sb(sb, bdev_cachep, GFP_KERNEL);
 
 	if (!ei)
@@ -340,6 +341,7 @@ static void bdev_free_inode(struct inode *inode)
 	kmem_cache_free(bdev_cachep, BDEV_I(inode));
 }
 
+/*inode cache初始化*/
 static void init_once(void *data)
 {
 	struct bdev_inode *ei = data;
@@ -362,7 +364,7 @@ static const struct super_operations bdev_sops = {
 	.evict_inode = bdev_evict_inode,
 };
 
-//块设备挂载回调
+//块设备挂载fc初始化回调
 static int bd_init_fs_context(struct fs_context *fc)
 {
 	struct pseudo_fs_context *ctx = init_pseudo(fc, BDEVFS_MAGIC);

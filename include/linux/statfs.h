@@ -7,8 +7,8 @@
 #include <asm/byteorder.h>
 
 struct kstatfs {
-	long f_type;
-	long f_bsize;
+	long f_type;/*文件类型对应的magic*/
+	long f_bsize;/*块大小*/
 	u64 f_blocks;
 	u64 f_bfree;
 	u64 f_bavail;

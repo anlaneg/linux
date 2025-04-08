@@ -972,7 +972,7 @@ struct folio *filemap_alloc_folio(gfp_t gfp, unsigned int order)
 
 		return folio;
 	}
-	return folio_alloc(gfp, order);
+	return folio_alloc(gfp, order);/*申请FOLIO*/
 }
 EXPORT_SYMBOL(filemap_alloc_folio);
 #endif
@@ -1906,7 +1906,7 @@ no_page:
 		if (!mapping_large_folio_support(mapping))
 			order = 0;
 		if (order > MAX_PAGECACHE_ORDER)
-			order = MAX_PAGECACHE_ORDER;
+			order = MAX_PAGECACHE_ORDER;/*申请的order过大*/
 		/* If we're not aligned, allocate a smaller folio */
 		if (index & ((1UL << order) - 1))
 			order = __ffs(index);
@@ -1919,8 +1919,7 @@ no_page:
 				order = 0;
 			if (order > 0)
 				alloc_gfp |= __GFP_NORETRY | __GFP_NOWARN;
-
-			/*申请folio*/
+			/*申请多页(folio)*/
 			folio = filemap_alloc_folio(alloc_gfp, order);
 			if (!folio)
 				continue;/*申请失败，减小order，重试*/
@@ -1935,7 +1934,7 @@ no_page:
 				break;
 			folio_put(folio);
 			folio = NULL;
-		} while (order-- > 0);
+		} while (order-- > 0);/*减少order,如果仍大于0,则继续申请*/
 
 		if (err == -EEXIST)
 			goto repeat;
@@ -2222,7 +2221,10 @@ unsigned filemap_get_folios_tag(struct address_space *mapping, pgoff_t *start,
 		 */
 		if (xa_is_value(folio))
 			continue;
+
+		/*将此folio添加进batch*/
 		if (!folio_batch_add(fbatch, folio)) {
+			/*batch无空闲位置*/
 			unsigned long nr = folio_nr_pages(folio);
 			*start = folio->index + nr;
 			goto out;
@@ -2241,7 +2243,7 @@ unsigned filemap_get_folios_tag(struct address_space *mapping, pgoff_t *start,
 out:
 	rcu_read_unlock();
 
-	return folio_batch_count(fbatch);
+	return folio_batch_count(fbatch);/*返回此batch中的page数目*/
 }
 EXPORT_SYMBOL(filemap_get_folios_tag);
 
@@ -2430,7 +2432,7 @@ static int filemap_create_folio(struct file *file,
 	struct folio *folio;
 	int error;
 
-	folio = filemap_alloc_folio(mapping_gfp_mask(mapping), 0);
+	folio = filemap_alloc_folio(mapping_gfp_mask(mapping), 0/*申请1页*/);
 	if (!folio)
 		return -ENOMEM;
 
@@ -3674,13 +3676,15 @@ static struct folio *do_read_cache_folio(struct address_space *mapping,
 	int err;
 
 	if (!filler)
-		filler = mapping->a_ops->read_folio;
+		filler = mapping->a_ops->read_folio;/*如未提供,则使用mapping上的ops*/
 repeat:
 	folio = filemap_get_folio(mapping, index);
 	if (IS_ERR(folio)) {
-		folio = filemap_alloc_folio(gfp, 0);
+		/*mapping中index号folio不存在*/
+		folio = filemap_alloc_folio(gfp, 0);/*申请1页,但按folio初始化*/
 		if (!folio)
 			return ERR_PTR(-ENOMEM);
+		/*将此folio加入到mapping index号位置*/
 		err = filemap_add_folio(mapping, folio, index, gfp);
 		if (unlikely(err)) {
 			folio_put(folio);

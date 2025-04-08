@@ -618,6 +618,7 @@ static int pseudo_fs_get_tree(struct fs_context *fc)
 	return get_tree_nodev(fc, pseudo_fs_fill_super);
 }
 
+/*释放fs_context私有结构*/
 static void pseudo_fs_free(struct fs_context *fc)
 {
 	kfree(fc->fs_private);
@@ -625,6 +626,7 @@ static void pseudo_fs_free(struct fs_context *fc)
 
 /*pseudo fs对应的fs context osp*/
 static const struct fs_context_operations pseudo_fs_context_ops = {
+	/*释放fs_context私有结构*/
 	.free		= pseudo_fs_free,
 	/*get_tree用于获取此文件系统的根节点（实现为直接申请一个inode节点，并据此构造root dentry）*/
 	.get_tree	= pseudo_fs_get_tree,
@@ -642,11 +644,11 @@ struct pseudo_fs_context *init_pseudo(struct fs_context *fc,
 	ctx = kzalloc(sizeof(struct pseudo_fs_context), GFP_KERNEL);
 	if (likely(ctx)) {
 		ctx->magic = magic;
-		fc->fs_private = ctx;
+		fc->fs_private = ctx;/*指定私有数据为pseudo_fs_context*/
 		/*采用pseudo提供的fs_context操作集*/
 		fc->ops = &pseudo_fs_context_ops;
 		fc->sb_flags |= SB_NOUSER;
-		fc->global = true;
+		fc->global = true;/*使用init_user_ns*/
 	}
 	return ctx;
 }
@@ -1989,8 +1991,8 @@ struct timespec64 simple_inode_init_ts(struct inode *inode)
 {
 	struct timespec64 ts = inode_set_ctime_current(inode);
 
-	inode_set_atime_to_ts(inode, ts);
-	inode_set_mtime_to_ts(inode, ts);
+	inode_set_atime_to_ts(inode, ts);/*更新inode访问时间*/
+	inode_set_mtime_to_ts(inode, ts);/*更新inode修改时间*/
 	return ts;
 }
 EXPORT_SYMBOL(simple_inode_init_ts);

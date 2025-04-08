@@ -286,6 +286,7 @@ static inline unsigned long _compound_head(const struct page *page)
 
 static __always_inline int PageTail(struct page *page)
 {
+	/*此页指明了自已有组合页(通过0号bit,表示存在)*/
 	return READ_ONCE(page->compound_head) & 1 || page_is_fake_head(page);
 }
 
@@ -480,6 +481,7 @@ PAGEFLAG(Error, error, PF_NO_TAIL) TESTCLEARFLAG(Error, error, PF_NO_TAIL)
 PAGEFLAG(Referenced, referenced, PF_HEAD)
 	TESTCLEARFLAG(Referenced, referenced, PF_HEAD)
 	__SETPAGEFLAG(Referenced, referenced, PF_HEAD)
+/*标记此page dirty*/
 PAGEFLAG(Dirty, dirty, PF_HEAD) TESTSCFLAG(Dirty, dirty, PF_HEAD)
 	__CLEARPAGEFLAG(Dirty, dirty, PF_HEAD)
 PAGEFLAG(LRU, lru, PF_HEAD) __CLEARPAGEFLAG(LRU, lru, PF_HEAD)
@@ -512,6 +514,7 @@ PAGEFLAG(SwapBacked, swapbacked, PF_NO_TAIL)
  * for its own purposes.
  * - PG_private and PG_private_2 cause release_folio() and co to be invoked
  */
+	/*标记PAGE PRIVATE中已被存入内容*/
 PAGEFLAG(Private, private, PF_ANY)
 PAGEFLAG(Private2, private_2, PF_ANY) TESTSCFLAG(Private2, private_2, PF_ANY)
 PAGEFLAG(OwnerPriv1, owner_priv_1, PF_ANY)
@@ -793,6 +796,7 @@ void set_page_writeback(struct page *page);
 
 static __always_inline bool folio_test_head(struct folio *folio)
 {
+	/*此folio是否首页(HEAD)*/
 	return test_bit(PG_head, folio_flags(folio, FOLIO_PF_ANY));
 }
 
@@ -802,6 +806,7 @@ static __always_inline int PageHead(struct page *page)
 	return test_bit(PG_head, &page->flags) && !page_is_fake_head(page);
 }
 
+/*标记此页是folio的首页*/
 __SETPAGEFLAG(Head, head, PF_ANY)
 __CLEARPAGEFLAG(Head, head, PF_ANY)
 CLEARPAGEFLAG(Head, head, PF_ANY)
@@ -819,11 +824,13 @@ static inline bool folio_test_large(struct folio *folio)
 
 static __always_inline void set_compound_head(struct page *page, struct page *head)
 {
+	/*设置PAGE对应的组合页首,这里故意占用了0号bit*/
 	WRITE_ONCE(page->compound_head, (unsigned long)head + 1);
 }
 
 static __always_inline void clear_compound_head(struct page *page)
 {
+	/*清除PAGE指向的其对应的组合页首指针*/
 	WRITE_ONCE(page->compound_head, 0);
 }
 

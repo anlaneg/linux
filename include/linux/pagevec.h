@@ -26,7 +26,7 @@ struct folio;
  * by calling folio_batch_remove_exceptionals().
  */
 struct folio_batch {
-	unsigned char nr;
+	unsigned char nr;/*folios数组有效内容长度*/
 	bool percpu_pvec_drained;
 	struct folio *folios[PAGEVEC_SIZE];
 };
@@ -55,7 +55,7 @@ static inline unsigned int folio_batch_count(struct folio_batch *fbatch)
 
 static inline unsigned int folio_batch_space(struct folio_batch *fbatch)
 {
-	return PAGEVEC_SIZE - fbatch->nr;
+	return PAGEVEC_SIZE - fbatch->nr;/*返回此batch空闲的位置*/
 }
 
 /**
