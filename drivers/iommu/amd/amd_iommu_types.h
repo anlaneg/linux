@@ -321,14 +321,26 @@
 #define GUEST_PGTABLE_5_LEVEL	0x01
 
 #define PM_LEVEL_SHIFT(x)	(12 + ((x) * 9))
+/*此level可表示的地址最大值*/
 #define PM_LEVEL_SIZE(x)	(((x) < 6) ? \
 				  ((1ULL << PM_LEVEL_SHIFT((x))) - 1): \
 				   (0xffffffffffffffffULL))
+/*地址移到level x区间，与511与操作，获得index（最多512个index，所以当前只申请了一个页)*/
 #define PM_LEVEL_INDEX(x, a)	(((a) >> PM_LEVEL_SHIFT((x))) & 0x1ffULL)
-/*取x的0，1，2bit位，并将结果向左移动9位*/
+/*取x的0，1，2bit位(x最多支持到7级故取0，1，2位），
+ * 并将结果向左移动9位（由于pte地址中低12位不必保存，即有12位可用，这里占用9，10，11位存放level)
+ * 其它9位做标记位，例如IOMMU_PTE_PR等
+ * 同时由于最多支持4-7级（均需要占用3bit)，每一级占用9位（一页有4096字节，一个pte占用8字节，可以存放512个，故占用9位）
+ * 如果支持7级:7*9+12=75>64 故7级实际不会使用。
+ * 如时支持6级：6*9+12=66>64 故6级已经是最高级别。（会使用但不会全用，5级无法表示所有地址）
+ * 5*9+12=57 可以使用
+ * 4*9+12=48 可以使用
+ * 由以上可知pte高位也有一些bit是可以存数据的，例如58-63位，所以IOMMU_PTE_HD定义在这些位上。
+ * 3*9+12=33
+ * */
 #define PM_LEVEL_ENC(x)		(((x) << 9) & 0xe00ULL)
-#define PM_LEVEL_PDE(x, a)	((a) | PM_LEVEL_ENC((x)) | \
-				 IOMMU_PTE_PR | IOMMU_PTE_IR | IOMMU_PTE_IW)
+#define PM_LEVEL_PDE(x, a)	((a) | PM_LEVEL_ENC((x)/*在pte中保存level*/) | \
+				 IOMMU_PTE_PR/*此pte有效*/ | IOMMU_PTE_IR/*读权限*/ | IOMMU_PTE_IW/*写权限*/)
 #define PM_PTE_LEVEL(pte)	(((pte) >> 9) & 0x7ULL)
 
 #define PM_MAP_4k		0
@@ -375,6 +387,7 @@
  * Takes a page-table level and returns the default page-size for this level
  */
 #define PTE_LEVEL_PAGE_SIZE(level)			\
+	/*此level对应的页大小*/\
 	(1ULL << (12 + (9 * (level))))
 
 /*
@@ -385,11 +398,15 @@
 /*
  * Bit value definition for I/O PTE fields
  */
+/*标记此pte有效*/
 #define IOMMU_PTE_PR	BIT_ULL(0)
+/*标记此pte已被修改（dirty)*/
 #define IOMMU_PTE_HD	BIT_ULL(IOMMU_PTE_HD_BIT)
 #define IOMMU_PTE_U	BIT_ULL(59)
 #define IOMMU_PTE_FC	BIT_ULL(60)
+/*标记此pte有读权限*/
 #define IOMMU_PTE_IR	BIT_ULL(61)
+/*标记此pte有写权限*/
 #define IOMMU_PTE_IW	BIT_ULL(62)
 
 /*
@@ -425,6 +442,7 @@
 
 #define GCR3_VALID		0x01ULL
 
+/*丢弃掉低12bit(4095)恰好是忽略页内的数值*/
 #define IOMMU_PAGE_MASK (((1ULL << 52) - 1) & ~0xfffULL)
 #define IOMMU_PTE_PRESENT(pte) ((pte) & IOMMU_PTE_PR)
 #define IOMMU_PTE_DIRTY(pte) ((pte) & IOMMU_PTE_HD)
@@ -533,12 +551,15 @@ struct amd_irte_ops;
 
 #define AMD_IOMMU_FLAG_TRANS_PRE_ENABLED      (1 << 0)
 
+/*由amd_io_pgtable->iop获取amd_io_pgtable*/
 #define io_pgtable_to_data(x) \
 	container_of((x), struct amd_io_pgtable, iop)
 
+/*由amd_io_pgtable.iop.ops获取amd_io_pgtable*/
 #define io_pgtable_ops_to_data(x) \
 	io_pgtable_to_data(io_pgtable_ops_to_pgtable(x))
 
+/*由protection_domain.iop.iop.ops获取protection_domain*/
 #define io_pgtable_ops_to_domain(x) \
 	container_of(io_pgtable_ops_to_data(x), \
 		     struct protection_domain, iop)
@@ -550,8 +571,8 @@ struct amd_irte_ops;
 struct amd_io_pgtable {
 	struct io_pgtable_cfg	pgtbl_cfg;
 	struct io_pgtable	iop;
-	int			mode;/*指定模式，例如DEFAULT_PGTABLE_LEVEL*/
-	u64			*root;/*初始化为一个全零页*/
+	int			mode;/*指定模式(level），例如DEFAULT_PGTABLE_LEVEL*/
+	u64			*root;/*初始化为一个全零页,用于存放pte（u64大小，故可以存入4096/8=512个),见fetch_pte函数用法*/
 	u64			*pgd;		/* v2 pgtable pgd pointer */
 };
 
@@ -567,6 +588,7 @@ struct protection_domain {
 	spinlock_t lock;	/* mostly used to lock the page table*/
 	u16 id;			/* the domain id written to the device table */
 	int glx;		/* Number of levels for GCR3 table */
+	/*domain所属的numa node id号*/
 	int nid;		/* Node ID */
 	u64 *gcr3_tbl;		/* Guest CR3 table */
 	unsigned long flags;	/* flags to find out type of domain */

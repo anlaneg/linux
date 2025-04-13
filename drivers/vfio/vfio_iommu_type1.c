@@ -1132,7 +1132,7 @@ static long vfio_unmap_unpin(struct vfio_iommu *iommu, struct vfio_dma *dma,
 static void vfio_remove_dma(struct vfio_iommu *iommu, struct vfio_dma *dma)
 {
 	WARN_ON(!RB_EMPTY_ROOT(&dma->pfn_list));
-	vfio_unmap_unpin(iommu, dma, true);
+	vfio_unmap_unpin(iommu, dma, true);/*执行unpin,移除映射*/
 	vfio_unlink_dma(iommu, dma);
 	put_task_struct(dma->task);
 	mmdrop(dma->mm);
@@ -1447,7 +1447,7 @@ static int vfio_iommu_map(struct vfio_iommu *iommu, dma_addr_t iova,
 	list_for_each_entry(d, &iommu->domain_list, next) {
 		ret = iommu_map(d->domain, iova, (phys_addr_t)pfn << PAGE_SHIFT/*物理地址*/,
 				npage << PAGE_SHIFT/*地址区域长度*/, prot | IOMMU_CACHE,
-				GFP_KERNEL_ACCOUNT);
+				GFP_KERNEL_ACCOUNT);/*填充iommu映射表项*/
 		if (ret)
 			goto unwind;
 
@@ -1482,7 +1482,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 		/* Pin a contiguous chunk of memory */
 		npage = vfio_pin_pages_remote(dma, vaddr + dma->size/*结束地址*/,
 					      size >> PAGE_SHIFT/*要map的页数*/, &pfn, limit,
-					      &batch);
+					      &batch);/*pin这一组内存*/
 		if (npage <= 0) {
 			WARN_ON(!npage);
 			ret = (int)npage;
@@ -1491,7 +1491,7 @@ static int vfio_pin_map_dma(struct vfio_iommu *iommu, struct vfio_dma *dma,
 
 		/* Map it! */
 		ret = vfio_iommu_map(iommu, iova + dma->size/*iova地址是连续的*/, pfn, npage,
-				     dma->prot);/*将地址map到iommu*/
+				     dma->prot);/*映射这一组内存，填充iommu映射表项*/
 		if (ret) {
 			vfio_unpin_pages_remote(dma, iova + dma->size, pfn,
 						npage, true);
@@ -1683,7 +1683,7 @@ static int vfio_dma_do_map(struct vfio_iommu *iommu,
 	if (list_empty(&iommu->domain_list))
 		dma->size = size;
 	else
-		ret = vfio_pin_map_dma(iommu, dma, size);/*pin此段地址*/
+		ret = vfio_pin_map_dma(iommu, dma, size);/*pin此段地址，并填充映射表项到iommu*/
 
 	if (!ret && iommu->dirty_page_tracking) {
 		ret = vfio_dma_bitmap_alloc(dma, pgsize);
@@ -2899,7 +2899,7 @@ static int vfio_iommu_type1_map_dma(struct vfio_iommu *iommu,
 	if (map.argsz < minsz || map.flags & ~mask)
 		return -EINVAL;/*参数长度有误或者flag标记不正确*/
 
-	/*完成dma地址映射*/
+	/*pin地址，并完成dma地址映射*/
 	return vfio_dma_do_map(iommu, &map);
 }
 
@@ -3072,9 +3072,10 @@ static long vfio_iommu_type1_ioctl(void *iommu_data,
 		/*获取iommu信息*/
 		return vfio_iommu_type1_get_info(iommu, arg);
 	case VFIO_IOMMU_MAP_DMA:
-		/*dma映射*/
+		/*pin地址，并执行iommu映射表项填充*/
 		return vfio_iommu_type1_map_dma(iommu, arg);
 	case VFIO_IOMMU_UNMAP_DMA:
+		/*移除iommu映射表项*/
 		return vfio_iommu_type1_unmap_dma(iommu, arg);
 	case VFIO_IOMMU_DIRTY_PAGES:
 		return vfio_iommu_type1_dirty_pages(iommu, arg);

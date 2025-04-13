@@ -2053,7 +2053,7 @@ static void update_device_table(struct protection_domain *domain)
 
 void amd_iommu_update_and_flush_device_table(struct protection_domain *domain)
 {
-	update_device_table(domain);
+	update_device_table(domain);/*更新device table*/
 	domain_flush_devices(domain);
 }
 
@@ -2382,6 +2382,7 @@ static int amd_iommu_map_pages(struct iommu_domain *dom, unsigned long iova,
 		prot |= IOMMU_PROT_IW;
 
 	if (ops->map_pages) {
+		/*填充iommu映射表，无效其对应的iotlb*/
 		ret = ops->map_pages(ops, iova, paddr, pgsize,
 				     pgcount, prot, gfp, mapped);
 	}

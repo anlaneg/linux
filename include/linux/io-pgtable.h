@@ -188,7 +188,7 @@ struct io_pgtable_ops {
 	size_t (*unmap_pages)(struct io_pgtable_ops *ops, unsigned long iova,
 			      size_t pgsize, size_t pgcount,
 			      struct iommu_iotlb_gather *gather);
-	/*iova地址转物理地址*/
+	/*由iova地址查表获取物理地址*/
 	phys_addr_t (*iova_to_phys)(struct io_pgtable_ops *ops,
 				    unsigned long iova);
 	int (*read_and_clear_dirty)(struct io_pgtable_ops *ops,
@@ -241,6 +241,7 @@ struct io_pgtable {
 	struct io_pgtable_ops	ops;
 };
 
+/*由io_pgtable->ops获取io_pgtable*/
 #define io_pgtable_ops_to_pgtable(x) container_of((x), struct io_pgtable, ops)
 
 static inline void io_pgtable_tlb_flush_all(struct io_pgtable *iop)

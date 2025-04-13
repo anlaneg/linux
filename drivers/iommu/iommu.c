@@ -2697,7 +2697,7 @@ static int __iommu_map(struct iommu_domain *domain, unsigned long iova,
 		pr_debug("mapping: iova 0x%lx pa %pa pgsize 0x%zx count %zu\n",
 			 iova, &paddr, pgsize, count);
 		ret = ops->map_pages(domain, iova, paddr, pgsize/*映射的页大小*/, count, prot,
-				     gfp, &mapped);
+				     gfp, &mapped);/*填充iommu映射表项*/
 		/*
 		 * Some pages may have been mapped, even if an error occurred,
 		 * so we should account for those so they can be unmapped.

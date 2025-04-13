@@ -164,16 +164,21 @@ static bool increase_address_space(struct protection_domain *domain,
 	spin_lock_irqsave(&domain->lock, flags);
 
 	if (address <= PM_LEVEL_SIZE(domain->iop.mode))
+		/*地址在domain可表示范围，不处理直接返回true*/
 		goto out;
 
 	ret = false;
 	if (WARN_ON_ONCE(domain->iop.mode == PAGE_MODE_6_LEVEL))
+		/*6级地址范围最大值已达到2^66次，超过64位可表示范围，已无意义，返回false*/
 		goto out;
 
-	*pte = PM_LEVEL_PDE(domain->iop.mode, iommu_virt_to_phys(domain->iop.root));
+	/*利用当前最大level填充pte，并使其指向当前的root*/
+	*pte = PM_LEVEL_PDE(domain->iop.mode/*当前level*/, iommu_virt_to_phys(domain->iop.root));
 
+	/*利用当前pte设置为root,并向上提升一个level*/
 	domain->iop.root  = pte;
 	domain->iop.mode += 1;
+	/*此domain下root变更*/
 	amd_iommu_update_and_flush_device_table(domain);
 	amd_iommu_domain_flush_complete(domain);
 
@@ -195,7 +200,7 @@ out:
 
 static u64 *alloc_pte(struct protection_domain *domain,
 		      unsigned long address,
-		      unsigned long page_size,
+		      unsigned long page_size/*页大小*/,
 		      u64 **pte_page,
 		      gfp_t gfp,
 		      bool *updated)
@@ -210,14 +215,15 @@ static u64 *alloc_pte(struct protection_domain *domain,
 		 * Return an error if there is no memory to update the
 		 * page-table.
 		 */
+		/*此地址超过当前domain可表示的地址范围，domain提升可表示地址范围（提升方法很有趣）*/
 		if (!increase_address_space(domain, address, gfp))
 			return NULL;
 	}
 
 
-	level   = domain->iop.mode - 1;
-	pte     = &domain->iop.root[PM_LEVEL_INDEX(level, address)];
-	address = PAGE_SIZE_ALIGN(address, page_size);
+	level   = domain->iop.mode - 1;/*级别减1，准备配合PM_LEVEL_INDEX取pte*/
+	pte     = &domain->iop.root[PM_LEVEL_INDEX(level, address)];/*结合当前address取pte*/
+	address = PAGE_SIZE_ALIGN(address, page_size);/*移除掉页中的偏移量*/
 	end_lvl = PAGE_SIZE_LEVEL(page_size);
 
 	while (level > end_lvl) {
@@ -233,6 +239,7 @@ static u64 *alloc_pte(struct protection_domain *domain,
 		 */
 		if (IOMMU_PTE_PRESENT(__pte) &&
 		    pte_level == PAGE_MODE_7_LEVEL) {
+			/*此pte存在，且标记此pte采用大尺寸*/
 			unsigned long count, i;
 			u64 *lpte;
 
@@ -251,15 +258,19 @@ static u64 *alloc_pte(struct protection_domain *domain,
 
 		if (!IOMMU_PTE_PRESENT(__pte) ||
 		    pte_level == PAGE_MODE_NONE) {
+			/*此pte不存在，或者level未明确指明，申请一个page保存此pte*/
 			page = alloc_pgtable_page(domain->nid, gfp);
 
 			if (!page)
+				/*申请物理页失败*/
 				return NULL;
 
-			__npte = PM_LEVEL_PDE(level, iommu_virt_to_phys(page));
+			/*构造此level要保存的下一级pte信息*/
+			__npte = PM_LEVEL_PDE(level/*此pte页对应的level*/, iommu_virt_to_phys(page)/*转为物理地址*/);
 
 			/* pte could have been changed somewhere. */
 			if (!try_cmpxchg64(pte, &__pte, __npte))
+				/*其它流程更新了此pte信息，释放掉我们准备的页*/
 				free_page((unsigned long)page);
 			else if (IOMMU_PTE_PRESENT(__pte))
 				*updated = true;
@@ -289,8 +300,8 @@ static u64 *alloc_pte(struct protection_domain *domain,
  * there is one, it returns the pointer to it.
  */
 static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
-		      unsigned long address,
-		      unsigned long *page_size)
+		      unsigned long address/*待查找的地址*/,
+		      unsigned long *page_size/*对应的页大小*/)
 {
 	int level;
 	u64 *pte;
@@ -298,9 +309,11 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 	*page_size = 0;
 
 	if (address > PM_LEVEL_SIZE(pgtable->mode))
+		/*传入的地址过大，不合法，返回0*/
 		return NULL;
 
-	level	   =  pgtable->mode - 1;
+	level	   =  pgtable->mode - 1;/*减少一个level*/
+	/*取此地址映射的pte(level-1)*/
 	pte	   = &pgtable->root[PM_LEVEL_INDEX(level, address)];
 	*page_size =  PTE_LEVEL_PAGE_SIZE(level);
 
@@ -308,23 +321,25 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 
 		/* Not Present */
 		if (!IOMMU_PTE_PRESENT(*pte))
+			/*此pte无效，返回零*/
 			return NULL;
 
 		/* Large PTE */
 		if (PM_PTE_LEVEL(*pte) == PAGE_MODE_7_LEVEL ||
 		    PM_PTE_LEVEL(*pte) == PAGE_MODE_NONE)
+			/*针对大的pte,直接跳出*/
 			break;
 
 		/* No level skipping support yet */
 		if (PM_PTE_LEVEL(*pte) != level)
-			return NULL;
+			return NULL;/*pte中保存的level与当前level不相符，忽略*/
 
 		level -= 1;
 
 		/* Walk to the next level */
-		pte	   = IOMMU_PTE_PAGE(*pte);
-		pte	   = &pte[PM_LEVEL_INDEX(level, address)];
-		*page_size = PTE_LEVEL_PAGE_SIZE(level);
+		pte	   = IOMMU_PTE_PAGE(*pte);/*取对应的页首地址（按逻辑仍必为一个物理页，存512个）*/
+		pte	   = &pte[PM_LEVEL_INDEX(level, address)];/*取一下层的pte*/
+		*page_size = PTE_LEVEL_PAGE_SIZE(level);/*取此level对应的页大小*/
 	}
 
 	/*
@@ -334,7 +349,7 @@ static u64 *fetch_pte(struct amd_io_pgtable *pgtable,
 	if (PM_PTE_LEVEL(*pte) == PAGE_MODE_7_LEVEL)
 		pte = first_pte_l7(pte, page_size, NULL);
 
-	return pte;
+	return pte;/*返回iova对应的pte*/
 }
 
 static void free_clear_pte(u64 *pte, u64 pteval, struct list_head *freelist)
@@ -473,8 +488,10 @@ static unsigned long iommu_v1_unmap_pages(struct io_pgtable_ops *ops,
 	return unmapped;
 }
 
+/*由iova地址获取物理地址*/
 static phys_addr_t iommu_v1_iova_to_phys(struct io_pgtable_ops *ops, unsigned long iova)
 {
+	/*通过ops结构体获得amd_io_pgtable*/
 	struct amd_io_pgtable *pgtable = io_pgtable_ops_to_data(ops);
 	unsigned long offset_mask, pte_pgsize;
 	u64 *pte, __pte;
@@ -482,11 +499,13 @@ static phys_addr_t iommu_v1_iova_to_phys(struct io_pgtable_ops *ops, unsigned lo
 	pte = fetch_pte(pgtable, iova, &pte_pgsize);
 
 	if (!pte || !IOMMU_PTE_PRESENT(*pte))
+		/*此地址对应的pte不存在*/
 		return 0;
 
-	offset_mask = pte_pgsize - 1;
+	offset_mask = pte_pgsize - 1;/*页对应的mask*/
 	__pte	    = __sme_clr(*pte & PM_ADDR_MASK);
 
+	/*pte中对应的offset_mask已另做它用，故将其移除掉，采用iova中的offset_mask*/
 	return (__pte & ~offset_mask) | (iova & offset_mask);
 }
 
