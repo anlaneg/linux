@@ -19,7 +19,7 @@ struct vfio_container {
 	struct kref			kref;
 	struct list_head		group_list;/*用于串连多个group,一个container可以有多个group*/
 	struct rw_semaphore		group_lock;
-	struct vfio_iommu_driver	*iommu_driver;/*为container关联的iommu_driver*/
+	struct vfio_iommu_driver	*iommu_driver;/*此container关联的iommu_driver*/
 	void				*iommu_data;
 	bool				noiommu;/*是否noiommu*/
 };
@@ -100,7 +100,7 @@ int vfio_register_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 	if (WARN_ON(!ops->register_device != !ops->unregister_device))
 		return -EINVAL;
 
-	/*申请iommu driver*/
+	/*申请vfio iommu driver*/
 	driver = kzalloc(sizeof(*driver), GFP_KERNEL);
 	if (!driver)
 		return -ENOMEM;
@@ -132,6 +132,7 @@ void vfio_unregister_iommu_driver(const struct vfio_iommu_driver_ops *ops)
 	struct vfio_iommu_driver *driver;
 
 	mutex_lock(&vfio.iommu_drivers_lock);
+	/*遍历所有iommu driver，移除指定的iommu driver*/
 	list_for_each_entry(driver, &vfio.iommu_drivers_list, vfio_next) {
 		if (driver->ops == ops) {
 			list_del(&driver->vfio_next);
@@ -551,6 +552,7 @@ void vfio_group_unuse_container(struct vfio_group *group)
 	fput(group->opened_file);
 }
 
+/*调用iommu_driver的pin_pages回调*/
 int vfio_device_container_pin_pages(struct vfio_device *device,
 				    dma_addr_t iova, int npage,
 				    int prot, struct page **pages)
@@ -568,6 +570,7 @@ int vfio_device_container_pin_pages(struct vfio_device *device,
 				      npage, prot, pages);
 }
 
+/*调用iommu_driver的unpin_pages回调*/
 void vfio_device_container_unpin_pages(struct vfio_device *device,
 				       dma_addr_t iova, int npage)
 {
@@ -580,6 +583,7 @@ void vfio_device_container_unpin_pages(struct vfio_device *device,
 						  npage);
 }
 
+/*调用iommu_driver的dma_rw回调*/
 int vfio_device_container_dma_rw(struct vfio_device *device,
 				 dma_addr_t iova, void *data,
 				 size_t len, bool write)
@@ -623,6 +627,7 @@ err_misc:
 void vfio_container_cleanup(void)
 {
 	if (IS_ENABLED(CONFIG_VFIO_NOIOMMU))
+		/*移除noiommu ops*/
 		vfio_unregister_iommu_driver(&vfio_noiommu_ops);
 	misc_deregister(&vfio_dev);
 	mutex_destroy(&vfio.iommu_drivers_lock);

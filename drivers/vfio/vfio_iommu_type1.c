@@ -2220,7 +2220,7 @@ static int vfio_iommu_type1_attach_group(void *iommu_data/*由open回调返回�
 
 	ret = -ENOMEM;
 
-	/*创建vfio-group,并关联iommu-group*/
+	/*创建vfio iommu group,并关联iommu-group*/
 	group = kzalloc(sizeof(*group), GFP_KERNEL);
 	if (!group)
 		goto out_unlock;

@@ -1263,7 +1263,7 @@ static int vfio_fops_release(struct inode *inode, struct file *filep)
 // /dev/vfio/vfio文件操作集
 static const struct file_operations vfio_fops = {
 	.owner		= THIS_MODULE,
-	.open		= vfio_fops_open,
+	.open		= vfio_fops_open,/*创建一个container对象*/
 	.release	= vfio_fops_release,
 	.unlocked_ioctl	= vfio_fops_unl_ioctl,
 	.compat_ioctl	= compat_ptr_ioctl,
@@ -1284,7 +1284,7 @@ static void __vfio_group_unset_container(struct vfio_group *group)
 		driver->ops->detach_group(container->iommu_data,
 					  group->iommu_group);
 
-	group->container = NULL;
+	group->container = NULL;/*清除此group上的container*/
 	wake_up(&group->container_q);
 	list_del(&group->container_next);
 
@@ -1333,6 +1333,7 @@ static void vfio_group_try_dissolve_container(struct vfio_group *group)
 		__vfio_group_unset_container(group);
 }
 
+/*为group设置container(通过container_fd设置）*/
 static int vfio_group_set_container(struct vfio_group *group, int container_fd)
 {
 	struct fd f;
@@ -1358,7 +1359,7 @@ static int vfio_group_set_container(struct vfio_group *group, int container_fd)
 		return -EINVAL;
 	}
 
-	/*取文件对应的私有结构*/
+	/*取文件对应的私有结构(vfio-container)*/
 	container = f.file->private_data;
 	WARN_ON(!container); /* fget ensures we don't race vfio_release */
 
@@ -1506,6 +1507,7 @@ err_device_put:
 	return ret;
 }
 
+/*vfio-group的ioctl实现*/
 static long vfio_group_fops_unl_ioctl(struct file *filep,
 				      unsigned int cmd, unsigned long arg)
 {

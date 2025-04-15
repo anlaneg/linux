@@ -11,6 +11,7 @@
 
 static struct dentry *vfio_debugfs_root;
 
+/*state文件内容显示*/
 static int vfio_device_state_read(struct seq_file *seq, void *data)
 {
 	struct device *vf_dev = seq->private;
@@ -27,6 +28,7 @@ static int vfio_device_state_read(struct seq_file *seq, void *data)
 	if (ret)
 		return -EINVAL;
 
+	/*转换state为字符串形式*/
 	switch (state) {
 	case VFIO_DEVICE_STATE_ERROR:
 		/*错误状态*/

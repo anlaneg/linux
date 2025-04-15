@@ -85,7 +85,6 @@ void debugfs_create_file_size(const char *name, umode_t mode,
 			      const struct file_operations *fops,
 			      loff_t file_size);
 
-//
 struct dentry *debugfs_create_dir(const char *name, struct dentry *parent);
 
 struct dentry *debugfs_create_symlink(const char *name, struct dentry *parent,
