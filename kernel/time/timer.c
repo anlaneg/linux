@@ -218,7 +218,7 @@ struct timer_base {
 	bool			next_expiry_recalc;
 	bool			is_idle;
 	bool			timers_pending;
-	/*每个刻度一个bit,来标记，此刻度上有悬而未绝的timer*/
+	/*每个刻度一个bit,用来标记此刻度上是否有悬而未绝的timer*/
 	DECLARE_BITMAP(pending_map, WHEEL_SIZE);
 	/*定义总的刻度列表（注：越靠后的刻度其一格表示的时间越长，见calc_wheel_index）*/
 	struct hlist_head	vectors[WHEEL_SIZE];
@@ -940,6 +940,7 @@ static inline struct timer_base *get_timer_cpu_base(u32 tflags, u32 cpu)
 	 * to use the deferrable base.
 	 */
 	if (IS_ENABLED(CONFIG_NO_HZ_COMMON) && (tflags & TIMER_DEFERRABLE))
+		/*依据标记取def对应的per cpu指针*/
 		base = per_cpu_ptr(&timer_bases[BASE_DEF], cpu);
 	return base;
 }
@@ -960,7 +961,7 @@ static inline struct timer_base *get_timer_this_cpu_base(u32 tflags)
 /*依据tflags取timer_base*/
 static inline struct timer_base *get_timer_base(u32 tflags)
 {
-	return get_timer_cpu_base(tflags, tflags & TIMER_CPUMASK);
+	return get_timer_cpu_base(tflags, tflags & TIMER_CPUMASK/*在哪个cpu上初始化的*/);
 }
 
 static inline struct timer_base *
@@ -983,7 +984,7 @@ static inline void __forward_timer_base(struct timer_base *base,
 	 * @basej is past base->clk otherwise we might rewind base->clk.
 	 */
 	if (time_before_eq(basej, base->clk))
-		return;
+		return;/*basej <= base->clk不更新，直接返回*/
 
 	/*
 	 * If the next expiry value is > jiffies, then we fast forward to
@@ -993,7 +994,7 @@ static inline void __forward_timer_base(struct timer_base *base,
 		base->clk = basej;
 	} else {
 		if (WARN_ON_ONCE(time_before(base->next_expiry, base->clk)))
-			return;
+			return;/*base->next_expiry < base->clk,不更新，返回*/
 		base->clk = base->next_expiry;
 	}
 
@@ -1036,8 +1037,9 @@ static struct timer_base *lock_timer_base(struct timer_list *timer,
 			raw_spin_lock_irqsave(&base->lock, *flags);
 			/*再检查一遍，防止flags当前有变更*/
 			if (timer->flags == tf)
-				/*确认未变更，返回base*/
+				/*确认timer未变更，返回base*/
 				return base;
+			/*有变更，解锁后再尝试*/
 			raw_spin_unlock_irqrestore(&base->lock, *flags);
 		}
 		/*此timer正在迁移，等待，再尝试*/
@@ -1050,7 +1052,7 @@ static struct timer_base *lock_timer_base(struct timer_list *timer,
 #define MOD_TIMER_NOTPENDING		0x04
 
 static inline int
-__mod_timer(struct timer_list *timer, unsigned long expires, unsigned int options)
+__mod_timer(struct timer_list *timer, unsigned long expires/*超时时间*/, unsigned int options)
 {
 	unsigned long clk = 0, flags, bucket_expiry;
 	struct timer_base *base, *new_base;
@@ -1117,6 +1119,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 			goto out_unlock;
 		}
 	} else {
+		/*取此timer对应的timer_base并加锁*/
 		base = lock_timer_base(timer, &flags);
 		/*
 		 * Has @timer been shutdown? This needs to be evaluated
@@ -1124,6 +1127,7 @@ __mod_timer(struct timer_list *timer, unsigned long expires, unsigned int option
 		 * shutdown code.
 		 */
 		if (!timer->function)
+			/*此timer对应的回调不存在，解锁退出*/
 			goto out_unlock;
 
 		forward_timer_base(base);
@@ -1778,7 +1782,7 @@ static void call_timer_fn(struct timer_list *timer,
 	}
 }
 
-/*遍历执行过期的timers*/
+/*遍历head链表执行过期的timers*/
 static void expire_timers(struct timer_base *base, struct hlist_head *head)
 {
 	/*
@@ -1795,14 +1799,14 @@ static void expire_timers(struct timer_base *base, struct hlist_head *head)
 		//取head上的一个timer
 		timer = hlist_entry(head->first, struct timer_list, entry);
 
-		//首先指明当前正在触发的timer
+		//首先指明当前正在触发此timer
 		base->running_timer = timer;
-		//再将timer自原待触发链表中移除
+		//将timer自原待触发链表中移除
 		detach_timer(timer, true);
 
-		fn = timer->function;
+		fn = timer->function;/*取timer回调*/
 
-		/*此fn为空，尝试下一个*/
+		/*此fn为空，忽略这个timer，尝试下一个*/
 		if (WARN_ON_ONCE(!fn)) {
 			/* Should never happen. Emphasis on should! */
 			base->running_timer = NULL;
@@ -2169,7 +2173,7 @@ static void run_local_timers(void)
 		if (time_before(jiffies, base->next_expiry))
 			return;
 	}
-	raise_softirq(TIMER_SOFTIRQ);
+	raise_softirq(TIMER_SOFTIRQ);/*触发timer软中断*/
 }
 
 /*
@@ -2428,7 +2432,7 @@ void __init init_timers(void)
 	init_timer_cpus();
 	posix_cputimers_init_work();
 	//注册timer的软中断
-	open_softirq(TIMER_SOFTIRQ, run_timer_softirq);
+	open_softirq(TIMER_SOFTIRQ, run_timer_softirq/*在软中断中处理timer*/);
 }
 
 /**

@@ -235,7 +235,7 @@ static __always_inline void handle_irq(struct irq_desc *desc,
 				       struct pt_regs *regs)
 {
 	if (IS_ENABLED(CONFIG_X86_64))
-		generic_handle_irq_desc(desc);
+		generic_handle_irq_desc(desc);/*触发中断回调*/
 	else
 		__handle_irq(desc, regs);
 }

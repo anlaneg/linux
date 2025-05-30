@@ -1725,7 +1725,7 @@ static void __run_hrtimer(struct hrtimer_cpu_base *cpu_base,
 	raw_write_seqcount_barrier(&base->seq);
 
 	WARN_ON_ONCE(base->running != timer);
-	base->running = NULL;
+	base->running = NULL;/*运行完成，标记为NULL*/
 }
 
 static void __hrtimer_run_queues(struct hrtimer_cpu_base *cpu_base, ktime_t now,
@@ -1823,9 +1823,10 @@ retry:
 	cpu_base->expires_next = KTIME_MAX;
 
 	if (!ktime_before(now, cpu_base->softirq_expires_next)) {
+		/*当前时间大于等于softirq_expires_next*/
 		cpu_base->softirq_expires_next = KTIME_MAX;
 		cpu_base->softirq_activated = 1;
-		raise_softirq_irqoff(HRTIMER_SOFTIRQ);
+		raise_softirq_irqoff(HRTIMER_SOFTIRQ);/*触发HRTIMER软中断*/
 	}
 
 	__hrtimer_run_queues(cpu_base, now, flags, HRTIMER_ACTIVE_HARD);

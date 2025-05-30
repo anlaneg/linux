@@ -122,7 +122,7 @@ struct clocksource {
 	/* private: */
 #ifdef CONFIG_CLOCKSOURCE_WATCHDOG
 	/* Watchdog related data, used by the framework */
-	struct list_head	wd_list;
+	struct list_head	wd_list;/*用于挂接到watchdog*/
 	u64			cs_last;
 	u64			wd_last;
 #endif
@@ -241,6 +241,7 @@ static inline int __clocksource_register(struct clocksource *cs)
 	return __clocksource_register_scale(cs, 1, 0);
 }
 
+/*注册时钟源*/
 static inline int clocksource_register_hz(struct clocksource *cs, u32 hz)
 {
 	return __clocksource_register_scale(cs, 1, hz);

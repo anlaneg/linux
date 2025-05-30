@@ -759,11 +759,11 @@ EXPORT_SYMBOL(inet_csk_accept);
  * to optimize.
  */
 void inet_csk_init_xmit_timers(struct sock *sk,
-			       void (*retransmit_handler)(struct timer_list *t),
-			       void (*delack_handler)(struct timer_list *t),
-			       void (*keepalive_handler)(struct timer_list *t))
+			       void (*retransmit_handler/*重传处理函数*/)(struct timer_list *t),
+			       void (*delack_handler/*延迟ack处理函数*/)(struct timer_list *t),
+			       void (*keepalive_handler/*keepalive处理函数*/)(struct timer_list *t))
 {
-    /*初始化发送相关的三个timer,重传timer,delay ack，keepalive timer*/
+    /*初始化发送相关的三个timer（未启动）,重传timer,delay ack，keepalive timer*/
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	timer_setup(&icsk->icsk_retransmit_timer, retransmit_handler, 0);
@@ -780,7 +780,7 @@ void inet_csk_clear_xmit_timers(struct sock *sk)
 
 	icsk->icsk_pending = icsk->icsk_ack.pending = 0;
 
-	sk_stop_timer(sk, &icsk->icsk_retransmit_timer);
+	sk_stop_timer(sk, &icsk->icsk_retransmit_timer);/*停止重传定时器*/
 	sk_stop_timer(sk, &icsk->icsk_delack_timer);
 	sk_stop_timer(sk, &sk->sk_timer);
 }

@@ -1139,6 +1139,7 @@ SYSCALL_DEFINE2(clock_gettime, const clockid_t, which_clock,
 	if (!kc)
 		return -EINVAL;
 
+	/*通过clock_get_timespec获得时间*/
 	error = kc->clock_get_timespec(which_clock, &kernel_tp);
 
 	if (!error && put_timespec64(&kernel_tp, tp))
@@ -1513,7 +1514,7 @@ static const struct k_clock clock_boottime = {
 
 static const struct k_clock * const posix_clocks[] = {
 	[CLOCK_REALTIME]		= &clock_realtime,
-	[CLOCK_MONOTONIC]		= &clock_monotonic,
+	[CLOCK_MONOTONIC]		= &clock_monotonic,/*单调*/
 	[CLOCK_PROCESS_CPUTIME_ID]	= &clock_process,
 	[CLOCK_THREAD_CPUTIME_ID]	= &clock_thread,
 	[CLOCK_MONOTONIC_RAW]		= &clock_monotonic_raw,
@@ -1525,17 +1526,19 @@ static const struct k_clock * const posix_clocks[] = {
 	[CLOCK_TAI]			= &clock_tai,
 };
 
+/*通过id返回k_clock结构体*/
 static const struct k_clock *clockid_to_kclock(const clockid_t id)
 {
 	clockid_t idx = id;
 
 	if (id < 0) {
+		/*小于零时，依据flag返回*/
 		return (id & CLOCKFD_MASK) == CLOCKFD ?
 			&clock_posix_dynamic : &clock_posix_cpu;
 	}
 
 	if (id >= ARRAY_SIZE(posix_clocks))
-		return NULL;
+		return NULL;/*遇到无效的id,返回NULL*/
 
 	return posix_clocks[array_index_nospec(idx, ARRAY_SIZE(posix_clocks))];
 }

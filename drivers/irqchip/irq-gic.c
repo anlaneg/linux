@@ -341,7 +341,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 	void __iomem *cpu_base = gic_data_cpu_base(gic);
 
 	do {
-		irqstat = readl_relaxed(cpu_base + GIC_CPU_INTACK);
+		irqstat = readl_relaxed(cpu_base + GIC_CPU_INTACK);/*取中断号*/
 		irqnr = irqstat & GICC_IAR_INT_ID_MASK;
 
 		if (unlikely(irqnr >= 1020))
@@ -370,7 +370,7 @@ static void __exception_irq_entry gic_handle_irq(struct pt_regs *regs)
 			this_cpu_write(sgi_intid, irqstat);
 		}
 
-		generic_handle_domain_irq(gic->domain, irqnr);
+		generic_handle_domain_irq(gic->domain, irqnr/*中断号*/);
 	} while (1);
 }
 

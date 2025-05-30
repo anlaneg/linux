@@ -87,7 +87,7 @@ struct inet_connection_sock {
 	struct request_sock_queue icsk_accept_queue;
 	struct inet_bind_bucket	  *icsk_bind_hash;
 	struct inet_bind2_bucket  *icsk_bind2_hash;
-	unsigned long		  icsk_timeout;
+	unsigned long		  icsk_timeout;/*重传超时时间*/
 	/*重传timer*/
  	struct timer_list	  icsk_retransmit_timer;
  	/*延迟ack timer*/

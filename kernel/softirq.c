@@ -673,7 +673,7 @@ void irq_exit(void)
  */
 inline void raise_softirq_irqoff(unsigned int nr)
 {
-	__raise_softirq_irqoff(nr);
+	__raise_softirq_irqoff(nr);/*指明软中断nr触发*/
 
 	/*
 	 * If we're in an interrupt or softirq, we're done
@@ -685,7 +685,7 @@ inline void raise_softirq_irqoff(unsigned int nr)
 	 * schedule the softirq soon.
 	 */
 	if (!in_interrupt() && should_wake_ksoftirqd())
-		wakeup_softirqd();
+		wakeup_softirqd();/*唤醒软中断进程处理*/
 }
 
 //触发nr号软件中断

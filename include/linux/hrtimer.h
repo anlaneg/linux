@@ -176,10 +176,10 @@ enum  hrtimer_base_type {
 struct hrtimer_cpu_base {
 	raw_spinlock_t			lock;
 	unsigned int			cpu;
-	unsigned int			active_bases;
+	unsigned int			active_bases;/*描述clock_base数组中有哪些base是active的，采用bit表示*/
 	unsigned int			clock_was_set_seq;
 	unsigned int			hres_active		: 1,
-					in_hrtirq		: 1,
+					in_hrtirq		: 1,/*是否在高精度中断处理中*/
 					hang_detected		: 1,
 					softirq_activated       : 1;
 #ifdef CONFIG_HIGH_RES_TIMERS

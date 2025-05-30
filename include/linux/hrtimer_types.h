@@ -37,7 +37,7 @@ enum hrtimer_restart {
  * The hrtimer structure must be initialized by hrtimer_init()
  */
 struct hrtimer {
-	struct timerqueue_node		node;
+	struct timerqueue_node		node;/*用于挂接*/
 	ktime_t				_softexpires;
 	enum hrtimer_restart		(*function)(struct hrtimer *);
 	struct hrtimer_clock_base	*base;

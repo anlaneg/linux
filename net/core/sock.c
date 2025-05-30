@@ -3469,7 +3469,7 @@ void sk_send_sigurg(struct sock *sk)
 EXPORT_SYMBOL(sk_send_sigurg);
 
 void sk_reset_timer(struct sock *sk, struct timer_list* timer,
-		    unsigned long expires)
+		    unsigned long expires/*超时时间*/)
 {
 	if (!mod_timer(timer, expires))
 		sock_hold(sk);

@@ -131,6 +131,7 @@ static inline struct irq_desc *irq_data_to_desc(struct irq_data *data)
 
 static inline unsigned int irq_desc_get_irq(struct irq_desc *desc)
 {
+	/*通过中断描述获得中断号*/
 	return desc->irq_data.irq;
 }
 
@@ -160,7 +161,7 @@ static inline void *irq_desc_get_handler_data(struct irq_desc *desc)
  */
 static inline void generic_handle_irq_desc(struct irq_desc *desc)
 {
-	desc->handle_irq(desc);
+	desc->handle_irq(desc);/*触发此中断处理函数*/
 }
 
 int handle_irq_desc(struct irq_desc *desc);

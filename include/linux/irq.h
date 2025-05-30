@@ -178,7 +178,7 @@ struct irq_common_data {
  */
 struct irq_data {
 	u32			mask;
-	unsigned int		irq;
+	unsigned int		irq;/*中断号*/
 	unsigned long		hwirq;
 	struct irq_common_data	*common;
 	struct irq_chip		*chip;/*中断对应的chip*/

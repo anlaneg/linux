@@ -115,6 +115,7 @@ struct rxe_req_info {
 	int			wait_psn;/*指明有等待psn(需要发送，但窗口已满）*/
 	int			need_retry;
 	int			wait_for_rnr_timer;
+	/*记录截止上次已没有添加ack报文的数目（实现每隔N个报文打一次ack标记)*/
 	int			noack_pkts;
 	struct rxe_task		task;//指明rxe_requester回调
 };

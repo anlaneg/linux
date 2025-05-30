@@ -666,7 +666,7 @@ void irq_init_desc(unsigned int irq)
 
 #endif /* !CONFIG_SPARSE_IRQ */
 
-int handle_irq_desc(struct irq_desc *desc)
+int handle_irq_desc(struct irq_desc *desc/*中断描述信息*/)
 {
 	struct irq_data *data;
 
@@ -677,7 +677,7 @@ int handle_irq_desc(struct irq_desc *desc)
 	if (WARN_ON_ONCE(!in_hardirq() && handle_enforce_irqctx(data)))
 		return -EPERM;
 
-	generic_handle_irq_desc(desc);
+	generic_handle_irq_desc(desc);/*触发此中断*/
 	return 0;
 }
 

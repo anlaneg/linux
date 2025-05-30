@@ -977,7 +977,7 @@ void ktime_get_ts64(struct timespec64 *ts)
 
 	do {
 		seq = read_seqcount_begin(&tk_core.seq);
-		ts->tv_sec = tk->xtime_sec;
+		ts->tv_sec = tk->xtime_sec;/*设置秒数*/
 		nsec = timekeeping_get_ns(&tk->tkr_mono);
 		tomono = tk->wall_to_monotonic;
 

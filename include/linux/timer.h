@@ -115,7 +115,7 @@ static inline void init_timer_on_stack_key(struct timer_list *timer,
 	} while (0)
 #else
 #define __init_timer(_timer, _fn, _flags)				\
-	init_timer_key((_timer), (_fn), (_flags), NULL, NULL)
+	init_timer_key((_timer), (_fn/*超时回调*/), (_flags), NULL, NULL)
 #define __init_timer_on_stack(_timer, _fn, _flags)			\
 	init_timer_on_stack_key((_timer), (_fn), (_flags), NULL, NULL)
 #endif
@@ -131,7 +131,7 @@ static inline void init_timer_on_stack_key(struct timer_list *timer,
  * be used and must be balanced with a call to destroy_timer_on_stack().
  */
 //初始化一个timer
-#define timer_setup(timer, callback, flags)			\
+#define timer_setup(timer, callback/*超时回调*/, flags)			\
 	__init_timer((timer), (callback), (flags))
 
 #define timer_setup_on_stack(timer, callback, flags)		\

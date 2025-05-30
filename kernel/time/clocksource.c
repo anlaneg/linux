@@ -89,7 +89,7 @@ EXPORT_SYMBOL_GPL(clocks_calc_mult_shift);
  */
 static struct clocksource *curr_clocksource;
 static struct clocksource *suspend_clocksource;
-static LIST_HEAD(clocksource_list);
+static LIST_HEAD(clocksource_list);/*用于保存系统所有时钟源*/
 static DEFINE_MUTEX(clocksource_mutex);
 static char override_name[CS_NAME_LEN];
 static int finished_booting;
@@ -204,7 +204,7 @@ void clocksource_mark_unstable(struct clocksource *cs)
 	spin_lock_irqsave(&watchdog_lock, flags);
 	if (!(cs->flags & CLOCK_SOURCE_UNSTABLE)) {
 		if (!list_empty(&cs->list) && list_empty(&cs->wd_list))
-			list_add(&cs->wd_list, &watchdog_list);
+			list_add(&cs->wd_list, &watchdog_list);/*加入到watchdog链表*/
 		__clocksource_unstable(cs);
 	}
 	spin_unlock_irqrestore(&watchdog_lock, flags);
@@ -410,10 +410,12 @@ static void clocksource_watchdog(struct timer_list *unused)
 
 	spin_lock(&watchdog_lock);
 	if (!watchdog_running)
+		/*watchdog已被停，直接退出*/
 		goto out;
 
 	reset_pending = atomic_read(&watchdog_reset_pending);
 
+	/*遍历watchdog*/
 	list_for_each_entry(cs, &watchdog_list, wd_list) {
 
 		/* Clocksource already marked unstable? */
@@ -584,7 +586,7 @@ static inline void clocksource_start_watchdog(void)
 {
 	if (watchdog_running || !watchdog || list_empty(&watchdog_list))
 		return;
-	timer_setup(&watchdog_timer, clocksource_watchdog, 0);
+	timer_setup(&watchdog_timer, clocksource_watchdog, 0);/*初始化watchdog_timer()*/
 	watchdog_timer.expires = jiffies + WATCHDOG_INTERVAL;
 	add_timer_on(&watchdog_timer, cpumask_first(cpu_online_mask));
 	watchdog_running = 1;
@@ -595,7 +597,7 @@ static inline void clocksource_stop_watchdog(void)
 	if (!watchdog_running || (watchdog && !list_empty(&watchdog_list)))
 		return;
 	del_timer(&watchdog_timer);
-	watchdog_running = 0;
+	watchdog_running = 0;/*指明停止watchdog*/
 }
 
 static void clocksource_resume_watchdog(void)
@@ -609,7 +611,7 @@ static void clocksource_enqueue_watchdog(struct clocksource *cs)
 
 	if (cs->flags & CLOCK_SOURCE_MUST_VERIFY) {
 		/* cs is a clocksource to be watched. */
-		list_add(&cs->wd_list, &watchdog_list);
+		list_add(&cs->wd_list, &watchdog_list);/*加入到watchdog列表*/
 		cs->flags &= ~CLOCK_SOURCE_WATCHDOG;
 	} else {
 		/* cs is a watchdog. */
@@ -1101,7 +1103,7 @@ static void clocksource_enqueue(struct clocksource *cs)
 	list_for_each_entry(tmp, &clocksource_list, list) {
 		/* Keep track of the place, where to insert */
 		if (tmp->rating < cs->rating)
-			break;
+			break;/*精度大的排前面*/
 		entry = &tmp->list;
 	}
 	list_add(&cs->list, entry);
@@ -1228,7 +1230,7 @@ int __clocksource_register_scale(struct clocksource *cs, u32 scale, u32 freq)
 	mutex_lock(&clocksource_mutex);
 
 	clocksource_watchdog_lock(&flags);
-	clocksource_enqueue(cs);
+	clocksource_enqueue(cs);/*加入链表*/
 	clocksource_enqueue_watchdog(cs);
 	clocksource_watchdog_unlock(&flags);
 

@@ -863,8 +863,8 @@ static enum hrtimer_restart tcp_compressed_ack_kick(struct hrtimer *timer)
 
 void tcp_init_xmit_timers(struct sock *sk)
 {
-	inet_csk_init_xmit_timers(sk, &tcp_write_timer/*重传timer*/, &tcp_delack_timer/*延迟ack timer*/,
-				  &tcp_keepalive_timer/*保活timer*/);
+	inet_csk_init_xmit_timers(sk, &tcp_write_timer/*重传timer处理回调*/, &tcp_delack_timer/*延迟ack timer处理回调*/,
+				  &tcp_keepalive_timer/*保活timer处理回调*/);
 	hrtimer_init(&tcp_sk(sk)->pacing_timer, CLOCK_MONOTONIC,
 		     HRTIMER_MODE_ABS_PINNED_SOFT);
 	tcp_sk(sk)->pacing_timer.function = tcp_pace_kick;

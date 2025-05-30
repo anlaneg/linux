@@ -152,6 +152,7 @@ int irq_set_chip_data(unsigned int irq, void *data)
 }
 EXPORT_SYMBOL(irq_set_chip_data);
 
+/*取irq号中断对应的irq_data*/
 struct irq_data *irq_get_irq_data(unsigned int irq)
 {
 	struct irq_desc *desc = irq_to_desc(irq);
