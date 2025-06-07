@@ -211,7 +211,7 @@ struct signal_struct {
 	 * protect this instead of the siglock, because they really
 	 * have no need to disable irqs.
 	 */
-	struct rlimit rlim[RLIM_NLIMITS];
+	struct rlimit rlim[RLIM_NLIMITS];/*task的limit配置*/
 
 #ifdef CONFIG_BSD_PROCESS_ACCT
 	struct pacct_struct pacct;	/* per-process accounting information */
@@ -764,12 +764,14 @@ extern void lockdep_assert_task_sighand_held(struct task_struct *task);
 static inline void lockdep_assert_task_sighand_held(struct task_struct *task) { }
 #endif
 
+/*取task的指定limit生效值取值*/
 static inline unsigned long task_rlimit(const struct task_struct *task,
 		unsigned int limit)
 {
 	return READ_ONCE(task->signal->rlim[limit].rlim_cur);
 }
 
+/*取task的指定limit最大值取值*/
 static inline unsigned long task_rlimit_max(const struct task_struct *task,
 		unsigned int limit)
 {

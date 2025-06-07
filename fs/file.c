@@ -615,7 +615,7 @@ int __get_unused_fd_flags(unsigned flags, unsigned long nofile)
 //申请一个未用的fd(自0开始）
 int get_unused_fd_flags(unsigned flags)
 {
-	return __get_unused_fd_flags(flags, rlimit(RLIMIT_NOFILE)/*最大此进程fd数目*/);
+	return __get_unused_fd_flags(flags, rlimit(RLIMIT_NOFILE)/*此进程配置的最大fd数目*/);
 }
 EXPORT_SYMBOL(get_unused_fd_flags);
 
@@ -1347,6 +1347,7 @@ int replace_fd(unsigned fd, struct file *file, unsigned flags)
 		return close_fd(fd);
 
 	if (fd >= rlimit(RLIMIT_NOFILE))
+		/*fd超过此进程的最大数*/
 		return -EBADF;
 
 	spin_lock(&files->file_lock);
@@ -1429,6 +1430,7 @@ static int ksys_dup3(unsigned int oldfd, unsigned int newfd, int flags)
 		return -EINVAL;
 
 	if (newfd >= rlimit(RLIMIT_NOFILE))
+		/*新的fd超过此进程设置的最大数*/
 		return -EBADF;
 
 	spin_lock(&files->file_lock);
@@ -1491,7 +1493,7 @@ SYSCALL_DEFINE1(dup, unsigned int, fildes)
 
 int f_dupfd(unsigned int from, struct file *file, unsigned flags)
 {
-	unsigned long nofile = rlimit(RLIMIT_NOFILE);
+	unsigned long nofile = rlimit(RLIMIT_NOFILE);/*此进程支持的最大file数目*/
 	int err;
 	if (from >= nofile)
 		return -EINVAL;

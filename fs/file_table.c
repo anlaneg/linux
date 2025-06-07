@@ -124,7 +124,7 @@ static struct ctl_table fs_stat_sysctls[] = {
 	},
 	{
 		.procname	= "nr_open",
-		.data		= &sysctl_nr_open,
+		.data		= &sysctl_nr_open,/*容许打开的文件最大数*/
 		.maxlen		= sizeof(unsigned int),
 		.mode		= 0644,
 		.proc_handler	= proc_dointvec_minmax,

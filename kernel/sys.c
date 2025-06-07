@@ -1459,19 +1459,21 @@ static int do_prlimit(struct task_struct *tsk, unsigned int resource,
 	int retval = 0;
 
 	if (resource >= RLIM_NLIMITS)
-		return -EINVAL;
+		return -EINVAL;/*资源编号有误*/
 	resource = array_index_nospec(resource, RLIM_NLIMITS);
 
 	if (new_rlim) {
+		/*不为NULL时，用于设置limit*/
 		if (new_rlim->rlim_cur > new_rlim->rlim_max)
-			return -EINVAL;
+			return -EINVAL;/*新提供的cur大于max,参数有误*/
 		if (resource == RLIMIT_NOFILE &&
 				new_rlim->rlim_max > sysctl_nr_open)
+			/*针对nofile limit需要检查max是否超过sysctl设置的最大值*/
 			return -EPERM;
 	}
 
 	/* Holding a refcount on tsk protects tsk->signal from disappearing. */
-	rlim = tsk->signal->rlim + resource;
+	rlim = tsk->signal->rlim + resource;/*获得此资源对应的limit设置*/
 	task_lock(tsk->group_leader);
 	if (new_rlim) {
 		/*
@@ -1480,11 +1482,12 @@ static int do_prlimit(struct task_struct *tsk, unsigned int resource,
 		 */
 		if (new_rlim->rlim_max > rlim->rlim_max &&
 				!capable(CAP_SYS_RESOURCE))
-			retval = -EPERM;
+			retval = -EPERM;/*扩大max无权限*/
 		if (!retval)
 			retval = security_task_setrlimit(tsk, resource, new_rlim);
 	}
 	if (!retval) {
+		/*完成获取，更新*/
 		if (old_rlim)
 			*old_rlim = *rlim;
 		if (new_rlim)
@@ -1515,12 +1518,13 @@ static int do_prlimit(struct task_struct *tsk, unsigned int resource,
 	return retval;
 }
 
+/*getrlimit系统调用，用于获取当前进程的指定资源limit值*/
 SYSCALL_DEFINE2(getrlimit, unsigned int, resource, struct rlimit __user *, rlim)
 {
 	struct rlimit value;
 	int ret;
 
-	ret = do_prlimit(current, resource, NULL, &value);
+	ret = do_prlimit(current, resource, NULL/*标明仅获取*/, &value);
 	if (!ret)
 		ret = copy_to_user(rlim, &value, sizeof(*rlim)) ? -EFAULT : 0;
 
@@ -1546,7 +1550,7 @@ COMPAT_SYSCALL_DEFINE2(setrlimit, unsigned int, resource,
 		r.rlim_max = RLIM_INFINITY;
 	else
 		r.rlim_max = r32.rlim_max;
-	return do_prlimit(current, resource, &r, NULL);
+	return do_prlimit(current, resource, &r, NULL/*标明不读取*/);
 }
 
 COMPAT_SYSCALL_DEFINE2(getrlimit, unsigned int, resource,

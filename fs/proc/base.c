@@ -574,6 +574,7 @@ struct limit_names {
 	const char *unit;
 };
 
+/*各limit的名称及单位名称*/
 static const struct limit_names lnames[RLIM_NLIMITS] = {
 	[RLIMIT_CPU] = {"Max cpu time", "seconds"},
 	[RLIMIT_FSIZE] = {"Max file size", "bytes"},
@@ -604,6 +605,7 @@ static int proc_pid_limits(struct seq_file *m, struct pid_namespace *ns,
 
 	if (!lock_task_sighand(task, &flags))
 		return 0;
+	/*取limit*/
 	memcpy(rlim, task->signal->rlim, sizeof(struct rlimit) * RLIM_NLIMITS);
 	unlock_task_sighand(task, &flags);
 
@@ -616,18 +618,22 @@ static int proc_pid_limits(struct seq_file *m, struct pid_namespace *ns,
 		"Units     \n");
 
 	for (i = 0; i < RLIM_NLIMITS; i++) {
+		/*limit名称，及当前配置的值*/
 		if (rlim[i].rlim_cur == RLIM_INFINITY)
+			/*指明unlimited*/
 			seq_printf(m, "%-25s %-20s ",
 				   lnames[i].name, "unlimited");
 		else
 			seq_printf(m, "%-25s %-20lu ",
 				   lnames[i].name, rlim[i].rlim_cur);
 
+		/*最大值*/
 		if (rlim[i].rlim_max == RLIM_INFINITY)
 			seq_printf(m, "%-20s ", "unlimited");
 		else
 			seq_printf(m, "%-20lu ", rlim[i].rlim_max);
 
+		/*单位*/
 		if (lnames[i].unit)
 			seq_printf(m, "%-10s\n", lnames[i].unit);
 		else
@@ -3619,7 +3625,7 @@ static const struct pid_entry tid_base_stuff[] = {
 	REG("auxv",      S_IRUSR, proc_auxv_operations),
 	ONE("status",    S_IRUGO, proc_pid_status),
 	ONE("personality", S_IRUSR, proc_pid_personality),
-	ONE("limits",	 S_IRUGO, proc_pid_limits),
+	ONE("limits",	 S_IRUGO, proc_pid_limits),/*进程limits*/
 #ifdef CONFIG_SCHED_DEBUG
 	REG("sched",     S_IRUGO|S_IWUSR, proc_pid_sched_operations),
 #endif
