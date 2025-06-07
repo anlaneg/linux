@@ -21,6 +21,7 @@
 
 #include "../cgroup/cgroup-internal.h"
 
+/*用于描述cgroup bpf key是否开启*/
 DEFINE_STATIC_KEY_ARRAY_FALSE(cgroup_bpf_enabled_key, MAX_CGROUP_BPF_ATTACH_TYPE);
 EXPORT_SYMBOL(cgroup_bpf_enabled_key);
 
@@ -44,7 +45,7 @@ bpf_prog_run_array_cg(const struct cgroup_bpf *cgrp,
 	migrate_disable();
 	rcu_read_lock();
 	array = rcu_dereference(cgrp->effective[atype]);
-	item = &array->items[0];
+	item = &array->items[0];/*取首个items*/
 	old_run_ctx = bpf_set_run_ctx(&run_ctx.run_ctx);
 	while ((prog = READ_ONCE(item->prog))) {
 		run_ctx.prog_item = item;
@@ -55,7 +56,7 @@ bpf_prog_run_array_cg(const struct cgroup_bpf *cgrp,
 		}
 		if (!func_ret && !IS_ERR_VALUE((long)run_ctx.retval))
 			run_ctx.retval = -EPERM;
-		item++;
+		item++;/*执行下一个item*/
 	}
 	bpf_reset_run_ctx(old_run_ctx);
 	rcu_read_unlock();
@@ -446,6 +447,7 @@ static void activate_effective_progs(struct cgroup *cgrp,
 				     enum cgroup_bpf_attach_type atype,
 				     struct bpf_prog_array *old_array)
 {
+	/*替换并释放旧的array*/
 	old_array = rcu_replace_pointer(cgrp->bpf.effective[atype], old_array,
 					lockdep_is_held(&cgroup_mutex));
 	/* free prog array after grace period, since __cgroup_bpf_run_*()
@@ -481,12 +483,14 @@ int cgroup_bpf_inherit(struct cgroup *cgrp)
 
 	INIT_LIST_HEAD(&cgrp->bpf.storages);
 
+	/*获取*/
 	for (i = 0; i < NR; i++)
 		if (compute_effective_progs(cgrp, i, &arrays[i]))
 			goto cleanup;
 
+	/*更新*/
 	for (i = 0; i < NR; i++)
-		activate_effective_progs(cgrp, i, arrays[i]);
+		activate_effective_progs(cgrp, i/*类型编号*/, arrays[i]);
 
 	return 0;
 cleanup:
@@ -531,6 +535,7 @@ static int update_effective_progs(struct cgroup *cgrp,
 			continue;
 		}
 
+		/*更新此attach type对应的ebpf*/
 		activate_effective_progs(desc, atype, desc->bpf.inactive);
 		desc->bpf.inactive = NULL;
 	}
@@ -557,17 +562,19 @@ static struct bpf_prog_list *find_attach_entry(struct hlist_head *progs,
 					       struct bpf_prog *prog,
 					       struct bpf_cgroup_link *link,
 					       struct bpf_prog *replace_prog,
-					       bool allow_multi)
+					       bool allow_multi/*是否容许多个*/)
 {
 	struct bpf_prog_list *pl;
 
 	/* single-attach case */
 	if (!allow_multi) {
 		if (hlist_empty(progs))
-			return NULL;
+			return NULL;/*链表为空，返回NULL*/
+		/*不为空，返回首个*/
 		return hlist_entry(progs->first, typeof(*pl), node);
 	}
 
+	/*遍历所有progs*/
 	hlist_for_each_entry(pl, progs, node) {
 		if (prog && pl->prog == prog && prog != replace_prog)
 			/* disallow attaching the same prog twice */
@@ -582,7 +589,7 @@ static struct bpf_prog_list *find_attach_entry(struct hlist_head *progs,
 		hlist_for_each_entry(pl, progs, node) {
 			if (pl->prog == replace_prog)
 				/* a match found */
-				return pl;
+				return pl;/*命中要替换的prog,返回*/
 		}
 		/* prog to replace not found for cgroup */
 		return ERR_PTR(-ENOENT);
@@ -607,7 +614,7 @@ static struct bpf_prog_list *find_attach_entry(struct hlist_head *progs,
 static int __cgroup_bpf_attach(struct cgroup *cgrp,
 			       struct bpf_prog *prog, struct bpf_prog *replace_prog,
 			       struct bpf_cgroup_link *link,
-			       enum bpf_attach_type type, u32 flags)
+			       enum bpf_attach_type type, u32 flags/*控制标记，例如是否容许多个ebpf*/)
 {
 	u32 saved_flags = (flags & (BPF_F_ALLOW_OVERRIDE | BPF_F_ALLOW_MULTI));
 	struct bpf_prog *old_prog = NULL;
@@ -622,7 +629,7 @@ static int __cgroup_bpf_attach(struct cgroup *cgrp,
 	if (((flags & BPF_F_ALLOW_OVERRIDE) && (flags & BPF_F_ALLOW_MULTI)) ||
 	    ((flags & BPF_F_REPLACE) && !(flags & BPF_F_ALLOW_MULTI)))
 		/* invalid combination */
-		return -EINVAL;
+		return -EINVAL;/*标记冲突*/
 	if (link && (prog || replace_prog))
 		/* only either link or prog/replace_prog can be specified */
 		return -EINVAL;
@@ -630,11 +637,12 @@ static int __cgroup_bpf_attach(struct cgroup *cgrp,
 		/* replace_prog implies BPF_F_REPLACE, and vice versa */
 		return -EINVAL;
 
+	/*获得cgroup的attach type*/
 	atype = bpf_cgroup_atype_find(type, new_prog->aux->attach_btf_id);
 	if (atype < 0)
 		return -EINVAL;
 
-	progs = &cgrp->bpf.progs[atype];
+	progs = &cgrp->bpf.progs[atype];/*获得此attach type对应的即有ebpf prog*/
 
 	if (!hierarchy_allows_attach(cgrp, atype))
 		return -EPERM;
@@ -647,7 +655,7 @@ static int __cgroup_bpf_attach(struct cgroup *cgrp,
 		return -EPERM;
 
 	if (prog_list_length(progs) >= BPF_CGROUP_MAX_PROGS)
-		return -E2BIG;
+		return -E2BIG;/*挂载的程序数量超限，报错*/
 
 	pl = find_attach_entry(progs, prog, link, replace_prog,
 			       flags & BPF_F_ALLOW_MULTI);
@@ -659,8 +667,9 @@ static int __cgroup_bpf_attach(struct cgroup *cgrp,
 		return -ENOMEM;
 
 	if (pl) {
-		old_prog = pl->prog;
+		old_prog = pl->prog;/*返回要替换的bpf*/
 	} else {
+		/*需要新增，申请一个pl*/
 		struct hlist_node *last = NULL;
 
 		pl = kmalloc(sizeof(*pl), GFP_KERNEL);
@@ -669,17 +678,17 @@ static int __cgroup_bpf_attach(struct cgroup *cgrp,
 			return -ENOMEM;
 		}
 		if (hlist_empty(progs))
-			hlist_add_head(&pl->node, progs);
+			hlist_add_head(&pl->node, progs);/*链表为空，直接加入*/
 		else
 			hlist_for_each(last, progs) {
 				if (last->next)
 					continue;
-				hlist_add_behind(&pl->node, last);
+				hlist_add_behind(&pl->node, last);/*链表不为空，直入到结尾*/
 				break;
 			}
 	}
 
-	pl->prog = prog;
+	pl->prog = prog;/*设置prog*/
 	pl->link = link;
 	bpf_cgroup_storages_assign(pl->storage, storage);
 	cgrp->bpf.flags[atype] = saved_flags;
@@ -725,7 +734,7 @@ static int cgroup_bpf_attach(struct cgroup *cgrp,
 			     struct bpf_prog *prog, struct bpf_prog *replace_prog,
 			     struct bpf_cgroup_link *link,
 			     enum bpf_attach_type type,
-			     u32 flags)
+			     u32 flags/*控制标记*/)
 {
 	int ret;
 
@@ -1134,12 +1143,13 @@ int cgroup_bpf_prog_attach(const union bpf_attr *attr,
 	struct cgroup *cgrp;
 	int ret;
 
-	cgrp = cgroup_get_from_fd(attr->target_fd);
+	cgrp = cgroup_get_from_fd(attr->target_fd);/*通过fd获取cgroup*/
 	if (IS_ERR(cgrp))
 		return PTR_ERR(cgrp);
 
 	if ((attr->attach_flags & BPF_F_ALLOW_MULTI) &&
 	    (attr->attach_flags & BPF_F_REPLACE)) {
+		/*容许附加多个，且容许替换，获取到旧的prog*/
 		replace_prog = bpf_prog_get_type(attr->replace_bpf_fd, ptype);
 		if (IS_ERR(replace_prog)) {
 			cgroup_put(cgrp);
@@ -1368,7 +1378,7 @@ int __cgroup_bpf_run_filter_skb(struct sock *sk,
 		return 0;
 
 	if (sk->sk_family != AF_INET && sk->sk_family != AF_INET6)
-		return 0;
+		return 0;/*只处理ipv4&ipv6*/
 
 	cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
 	save_sk = skb->sk;
@@ -1408,6 +1418,7 @@ int __cgroup_bpf_run_filter_skb(struct sock *sk,
 		else
 			ret = (cn ? NET_XMIT_DROP : ret);
 	} else {
+		/*非inet egress点*/
 		ret = bpf_prog_run_array_cg(&cgrp->bpf, atype,
 					    skb, __bpf_prog_run_save_cb, 0,
 					    NULL);
@@ -1438,8 +1449,10 @@ EXPORT_SYMBOL(__cgroup_bpf_run_filter_skb);
 int __cgroup_bpf_run_filter_sk(struct sock *sk,
 			       enum cgroup_bpf_attach_type atype)
 {
+	/*sk对应的cgroup*/
 	struct cgroup *cgrp = sock_cgroup_ptr(&sk->sk_cgrp_data);
 
+	/*运行array程序*/
 	return bpf_prog_run_array_cg(&cgrp->bpf, atype, sk, bpf_prog_run, 0,
 				     NULL);
 }

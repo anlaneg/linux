@@ -35,6 +35,7 @@ unsigned int __cgroup_bpf_run_lsm_current(const void *ctx,
 #define CGROUP_ATYPE(type) \
 	case BPF_##type: return type
 
+/*由bpf_attach_type转换cgroup_bpf_attach_type*/
 static inline enum cgroup_bpf_attach_type
 to_cgroup_bpf_attach_type(enum bpf_attach_type attach_type)
 {
@@ -217,7 +218,7 @@ static inline bool cgroup_bpf_sock_enabled(struct sock *sk,
 	__ret;								       \
 })
 
-#define BPF_CGROUP_RUN_SK_PROG(sk, atype)				       \
+#define BPF_CGROUP_RUN_SK_PROG(sk, atype/*类型*/)				       \
 ({									       \
 	int __ret = 0;							       \
 	if (cgroup_bpf_enabled(atype)) {					       \
@@ -226,6 +227,7 @@ static inline bool cgroup_bpf_sock_enabled(struct sock *sk,
 	__ret;								       \
 })
 
+/*触发cgroup inet socket-create钩子点*/
 #define BPF_CGROUP_RUN_PROG_INET_SOCK(sk)				       \
 	BPF_CGROUP_RUN_SK_PROG(sk, CGROUP_INET_SOCK_CREATE)
 

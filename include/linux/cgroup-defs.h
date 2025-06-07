@@ -535,7 +535,7 @@ struct cgroup {
 	struct psi_group *psi;
 
 	/* used to store eBPF programs */
-	struct cgroup_bpf bpf;
+	struct cgroup_bpf bpf;/*存储epbf程序*/
 
 	/* If there is block congestion on this cgroup. */
 	atomic_t congestion_count;

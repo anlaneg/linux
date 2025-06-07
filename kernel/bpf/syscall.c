@@ -3973,6 +3973,7 @@ static int bpf_prog_attach(const union bpf_attr *attr)
 			return -EINVAL;
 	}
 
+	/*获得ebpf程序*/
 	prog = bpf_prog_get_type(attr->attach_bpf_fd, ptype);
 	if (IS_ERR(prog))
 		return PTR_ERR(prog);

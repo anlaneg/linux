@@ -6294,7 +6294,7 @@ void tcp_finish_connect(struct sock *sk, struct sk_buff *skb)
 	struct inet_connection_sock *icsk = inet_csk(sk);
 
 	tcp_ao_finish_connect(sk, skb);
-	tcp_set_state(sk, TCP_ESTABLISHED);
+	tcp_set_state(sk, TCP_ESTABLISHED);/*变更为est状态*/
 	icsk->icsk_ack.lrcvtime = tcp_jiffies32;
 
 	if (skb) {

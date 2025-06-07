@@ -2192,7 +2192,7 @@ struct sock *sk_alloc(struct net *net, int family, gfp_t priority,
 		refcount_set(&sk->sk_wmem_alloc, 1);
 
 		mem_cgroup_sk_alloc(sk);
-		cgroup_sk_alloc(&sk->sk_cgrp_data);
+		cgroup_sk_alloc(&sk->sk_cgrp_data);/*申请sk上cgroup结构体*/
 		sock_update_classid(&sk->sk_cgrp_data);
 		sock_update_netprioidx(&sk->sk_cgrp_data);
 		sk_tx_queue_clear(sk);

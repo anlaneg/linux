@@ -54,6 +54,7 @@ enum cgroup_bpf_attach_type {
 
 struct cgroup_bpf {
 	/* array of effective progs in this cgroup */
+	/*依据attach type获取对应的bpf程序array*/
 	struct bpf_prog_array __rcu *effective[MAX_CGROUP_BPF_ATTACH_TYPE];
 
 	/* attached progs to this cgroup and attach flags

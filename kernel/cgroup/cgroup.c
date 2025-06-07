@@ -6961,6 +6961,7 @@ struct cgroup *cgroup_v1v2_get_from_fd(int fd)
  */
 struct cgroup *cgroup_get_from_fd(int fd)
 {
+	/*由fd获取cgroup*/
 	struct cgroup *cgrp = cgroup_v1v2_get_from_fd(fd);
 
 	if (IS_ERR(cgrp))
@@ -7022,6 +7023,7 @@ int cgroup_parse_float(const char *input, unsigned dec_shift, s64 *v)
  */
 #ifdef CONFIG_SOCK_CGROUP_DATA
 
+/*为socket设置cgroup结构体*/
 void cgroup_sk_alloc(struct sock_cgroup_data *skcd)
 {
 	struct cgroup *cgroup;
@@ -7039,14 +7041,14 @@ void cgroup_sk_alloc(struct sock_cgroup_data *skcd)
 
 		cset = task_css_set(current);
 		if (likely(cgroup_tryget(cset->dfl_cgrp))) {
-			cgroup = cset->dfl_cgrp;
+			cgroup = cset->dfl_cgrp;/*取default cgroup结构*/
 			break;
 		}
 		cpu_relax();
 	}
 out:
 	skcd->cgroup = cgroup;
-	cgroup_bpf_get(cgroup);
+	cgroup_bpf_get(cgroup);/*增加引用计数*/
 	rcu_read_unlock();
 }
 

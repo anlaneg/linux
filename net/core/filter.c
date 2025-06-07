@@ -5759,11 +5759,12 @@ static const struct bpf_func_proto bpf_sock_ops_getsockopt_proto = {
 	.arg5_type	= ARG_CONST_SIZE,
 };
 
+/*通过此api设置socket回调标记*/
 BPF_CALL_2(bpf_sock_ops_cb_flags_set, struct bpf_sock_ops_kern *, bpf_sock,
 	   int, argval)
 {
 	struct sock *sk = bpf_sock->sk;
-	int val = argval & BPF_SOCK_OPS_ALL_CB_FLAGS;
+	int val = argval & BPF_SOCK_OPS_ALL_CB_FLAGS;/*仅识别以下flags*/
 
 	if (!IS_ENABLED(CONFIG_INET) || !sk_fullsock(sk))
 		return -EINVAL;
@@ -8346,8 +8347,9 @@ xdp_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
 const struct bpf_func_proto bpf_sock_map_update_proto __weak;
 const struct bpf_func_proto bpf_sock_hash_update_proto __weak;
 
+/*通过func id获取func proto*/
 static const struct bpf_func_proto *
-sock_ops_func_proto(enum bpf_func_id func_id, const struct bpf_prog *prog)
+sock_ops_func_proto(enum bpf_func_id func_id/*函数ID*/, const struct bpf_prog *prog)
 {
 	const struct bpf_func_proto *func_proto;
 

@@ -1135,6 +1135,7 @@ enum bpf_perf_event_type {
  * earlier programs.
  */
 #define BPF_F_ALLOW_OVERRIDE	(1U << 0)
+/*是否容许有多个bpf程序*/
 #define BPF_F_ALLOW_MULTI	(1U << 1)
 /* Generic attachment flags. */
 #define BPF_F_REPLACE		(1U << 2)
