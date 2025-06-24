@@ -293,7 +293,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 #endif
 
 /*初始化work结构体*/
-#define __INIT_WORK(_work, _func, _onstack)				\
+#define __INIT_WORK(_work, _func, _onstack/*是否在栈上*/)				\
 	do {								\
 		static __maybe_unused struct lock_class_key __key;	\
 									\
@@ -323,6 +323,7 @@ static inline unsigned int work_static(struct work_struct *work) { return 0; }
 
 #define __INIT_DELAYED_WORK_ONSTACK(_work, _func, _tflags)		\
 	do {								\
+        /*设置work的回调*/\
 		INIT_WORK_ONSTACK(&(_work)->work, (_func));		\
 		__init_timer_on_stack(&(_work)->timer,			\
 				      delayed_work_timer_fn,		\

@@ -40,8 +40,10 @@ int __ip4_datagram_connect(struct sock *sk, struct sockaddr *uaddr, int addr_len
 	if (ipv4_is_multicast(usin->sin_addr.s_addr)) {
 		//要连接的对端是组播地址
 		if (!oif || netif_index_is_l3_master(sock_net(sk), oif))
+			/*未指明出接口，使用socket中设置的出接口*/
 			oif = READ_ONCE(inet->mc_index);
 		if (!saddr)
+			/*未指明源地址，使用socket中设置的源地址*/
 			saddr = READ_ONCE(inet->mc_addr);
 	} else if (!oif) {
 		oif = READ_ONCE(inet->uc_index);

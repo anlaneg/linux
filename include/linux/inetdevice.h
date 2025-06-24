@@ -33,6 +33,7 @@ struct in_device {
 	//inet4设备上所有ip地址列表
 	struct in_ifaddr	__rcu *ifa_list;/* IP ifaddr chain		*/
 
+	/*inet4设备关注的组播组*/
 	struct ip_mc_list __rcu	*mc_list;	/* IP multicast filter chain    */
 	struct ip_mc_list __rcu	* __rcu *mc_hash;
 

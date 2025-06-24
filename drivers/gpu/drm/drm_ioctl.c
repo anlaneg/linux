@@ -524,17 +524,18 @@ int drm_version(struct drm_device *dev, void *data,
 	struct drm_version *version = data;
 	int err;
 
+	/*获取版本信息*/
 	version->version_major = dev->driver->major;
 	version->version_minor = dev->driver->minor;
 	version->version_patchlevel = dev->driver->patchlevel;
 	err = drm_copy_field(version->name, &version->name_len,
-			dev->driver->name);
+			dev->driver->name);/*驱动名称*/
 	if (!err)
 		err = drm_copy_field(version->date, &version->date_len,
-				dev->driver->date);
+				dev->driver->date);/*驱动时间*/
 	if (!err)
 		err = drm_copy_field(version->desc, &version->desc_len,
-				dev->driver->desc);
+				dev->driver->desc);/*描述信息*/
 
 	return err;
 }
@@ -573,6 +574,7 @@ static int drm_ioctl_permit(u32 flags, struct drm_file *file_priv)
 
 /* Ioctl table */
 static const struct drm_ioctl_desc drm_ioctls[] = {
+		/*获取驱动版本*/
 	DRM_IOCTL_DEF(DRM_IOCTL_VERSION, drm_version, DRM_RENDER_ALLOW),
 	DRM_IOCTL_DEF(DRM_IOCTL_GET_UNIQUE, drm_getunique, 0),
 	DRM_IOCTL_DEF(DRM_IOCTL_GET_MAGIC, drm_getmagic, 0),
@@ -741,7 +743,7 @@ long drm_ioctl_kernel(struct file *file, drm_ioctl_t *func, void *kdata,
 	if (unlikely(ret))
 		return ret;
 
-	return func(dev, kdata, file_priv);
+	return func(dev, kdata, file_priv);/*执行ioctl cmd对应的回调*/
 }
 EXPORT_SYMBOL(drm_ioctl_kernel);
 
@@ -789,13 +791,13 @@ long drm_ioctl(struct file *filp,
 		if (index >= dev->driver->num_ioctls)
 			goto err_i1;
 		index = array_index_nospec(index, dev->driver->num_ioctls);
-		ioctl = &dev->driver->ioctls[index];
+		ioctl = &dev->driver->ioctls[index];/*指明的为驱动提供的ioctl命令*/
 	} else {
 		/* core ioctl */
 		if (nr >= DRM_CORE_IOCTL_COUNT)
 			goto err_i1;
 		nr = array_index_nospec(nr, DRM_CORE_IOCTL_COUNT);
-		ioctl = &drm_ioctls[nr];
+		ioctl = &drm_ioctls[nr];/*获得ioctl cmd描述符*/
 	}
 
 	drv_size = _IOC_SIZE(ioctl->cmd);
@@ -812,7 +814,7 @@ long drm_ioctl(struct file *filp,
 		     file_priv->authenticated, ioctl->name);
 
 	/* Do not trust userspace, use our own definition */
-	func = ioctl->func;
+	func = ioctl->func;/*取得回调函数*/
 
 	if (unlikely(!func)) {
 		drm_dbg_core(dev, "no function\n");
@@ -838,7 +840,7 @@ long drm_ioctl(struct file *filp,
 	if (ksize > in_size)
 		memset(kdata + in_size, 0, ksize - in_size);
 
-	retcode = drm_ioctl_kernel(filp, func, kdata, ioctl->flags);
+	retcode = drm_ioctl_kernel(filp, func/*ioctl cmd函数*/, kdata, ioctl->flags);
 	if (copy_to_user((void __user *)arg, kdata, out_size) != 0)
 		retcode = -EFAULT;
 

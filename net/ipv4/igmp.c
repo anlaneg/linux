@@ -172,11 +172,13 @@ static void ip_ma_put(struct ip_mc_list *im)
 	}
 }
 
+/*遍历此设备上已关注的所有组播组*/
 #define for_each_pmc_rcu(in_dev, pmc)				\
 	for (pmc = rcu_dereference(in_dev->mc_list);		\
 	     pmc != NULL;					\
 	     pmc = rcu_dereference(pmc->next_rcu))
 
+/*遍历此设备上已关注的所有组播组*/
 #define for_each_pmc_rtnl(in_dev, pmc)				\
 	for (pmc = rtnl_dereference(in_dev->mc_list);		\
 	     pmc != NULL;					\
@@ -1460,7 +1462,7 @@ static void ____ip_mc_inc_group(struct in_device *in_dev, __be32 addr,
 	for_each_pmc_rtnl(in_dev, im) {
 		if (im->multiaddr == addr) {
 			im->users++;
-			ip_mc_add_src(in_dev, &addr, mode, 0, NULL, 0);
+			ip_mc_add_src(in_dev, &addr/*组播地址*/, mode, 0, NULL, 0);
 			goto out;
 		}
 	}
@@ -1861,19 +1863,21 @@ static struct in_device *ip_mc_find_dev(struct net *net, struct ip_mreqn *imr)
 	struct in_device *idev = NULL;
 
 	if (imr->imr_ifindex) {
-	    /*取ifindexa对应的inet4_dev*/
+	    /*指定了ifindex,取ifindexa对应的inet4_dev*/
 		idev = inetdev_by_index(net, imr->imr_ifindex);
 		return idev;
 	}
 	if (imr->imr_address.s_addr) {
+		/*指定的源ip,通过源ip查找inet4_dev*/
 		dev = __ip_dev_find(net, imr->imr_address.s_addr, false);
 		if (!dev)
 			return NULL;
 	}
 
 	if (!dev) {
+		/*没有明确对应的设备，通过查组播路由来选设备*/
 		struct rtable *rt = ip_route_output(net,
-						    imr->imr_multiaddr.s_addr,
+						    imr->imr_multiaddr.s_addr/*组播组*/,
 						    0, 0, 0);
 		if (!IS_ERR(rt)) {
 			dev = rt->dst.dev;
@@ -2139,7 +2143,7 @@ static int ip_mc_add_src(struct in_device *in_dev, __be32 *pmca, int sfmode,
 #endif
 	isexclude = pmc->sfmode == MCAST_EXCLUDE;
 	if (!delta)
-		pmc->sfcount[sfmode]++;
+		pmc->sfcount[sfmode]++;/*增加计数*/
 	err = 0;
 	for (i = 0; i < sfcount; i++) {
 		err = ip_mc_add1_src(pmc, sfmode, &psfsrc[i]);
@@ -2204,7 +2208,7 @@ static void ip_mc_clear_src(struct ip_mc_list *pmc)
 static int __ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr,
 			      unsigned int mode)
 {
-	__be32 addr = imr->imr_multiaddr.s_addr;
+	__be32 addr = imr->imr_multiaddr.s_addr;/*要加入的组播组*/
 	struct ip_mc_socklist *iml, *i;
 	struct in_device *in_dev;
 	struct inet_sock *inet = inet_sk(sk);
@@ -2222,6 +2226,7 @@ static int __ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr,
 	in_dev = ip_mc_find_dev(net, imr);
 
 	if (!in_dev) {
+		/*没有查找到对应的inet4_dev,报错*/
 		err = -ENODEV;
 		goto done;
 	}
@@ -2231,22 +2236,23 @@ static int __ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr,
 	for_each_pmc_rtnl(inet, i) {
 		if (i->multi.imr_multiaddr.s_addr == addr &&
 		    i->multi.imr_ifindex == ifindex)
-			goto done;
+			goto done;/*已加入*/
 		count++;
 	}
 	err = -ENOBUFS;
 	if (count >= READ_ONCE(net->ipv4.sysctl_igmp_max_memberships))
-		goto done;
+		goto done;/*加入情况已超限*/
 	iml = sock_kmalloc(sk, sizeof(*iml), GFP_KERNEL);
 	if (!iml)
 		goto done;
 
+	/*串连此组播组*/
 	memcpy(&iml->multi, imr, sizeof(*imr));
 	iml->next_rcu = inet->mc_list;
 	iml->sflist = NULL;
 	iml->sfmode = mode;
 	rcu_assign_pointer(inet->mc_list, iml);
-	____ip_mc_inc_group(in_dev, addr, mode, GFP_KERNEL);
+	____ip_mc_inc_group(in_dev, addr/*组播地址*/, mode, GFP_KERNEL);
 	err = 0;
 done:
 	return err;
@@ -2256,6 +2262,7 @@ done:
  */
 int ip_mc_join_group(struct sock *sk, struct ip_mreqn *imr)
 {
+	/*加入组播组*/
 	return __ip_mc_join_group(sk, imr, MCAST_EXCLUDE);
 }
 EXPORT_SYMBOL(ip_mc_join_group);
@@ -2288,6 +2295,7 @@ static int ip_mc_leave_src(struct sock *sk, struct ip_mc_socklist *iml,
 	return err;
 }
 
+/*离开组播组*/
 int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr)
 {
 	struct inet_sock *inet = inet_sk(sk);
@@ -2295,7 +2303,7 @@ int ip_mc_leave_group(struct sock *sk, struct ip_mreqn *imr)
 	struct ip_mc_socklist __rcu **imlp;
 	struct in_device *in_dev;
 	struct net *net = sock_net(sk);
-	__be32 group = imr->imr_multiaddr.s_addr;
+	__be32 group = imr->imr_multiaddr.s_addr;/*要离开的组播组*/
 	u32 ifindex;
 	int ret = -EADDRNOTAVAIL;
 

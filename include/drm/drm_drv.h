@@ -64,6 +64,7 @@ enum drm_driver_feature {
 	 *
 	 * Driver supports mode setting interfaces (KMS).
 	 */
+	//这类驱动负责管理显示设备的分辨率、刷新率、色彩模式等参数
 	DRIVER_MODESET			= BIT(1),
 	/**
 	 * @DRIVER_RENDER:
@@ -71,6 +72,7 @@ enum drm_driver_feature {
 	 * Driver supports dedicated render nodes. See also the :ref:`section on
 	 * render nodes <drm_render_node>` for details.
 	 */
+	//这类驱动负责提高图形处理性能和效率
 	DRIVER_RENDER			= BIT(3),
 	/**
 	 * @DRIVER_ATOMIC:
@@ -103,6 +105,7 @@ enum drm_driver_feature {
 	 * @DRIVER_RENDER and @DRIVER_MODESET. Devices that support both graphics and compute
 	 * acceleration should be handled by two drivers that are connected using auxiliary bus.
 	 */
+	/*标明此驱动支持计算加速*/
 	DRIVER_COMPUTE_ACCEL            = BIT(7),
 	/**
 	 * @DRIVER_GEM_GPUVA:
@@ -420,7 +423,7 @@ struct drm_driver {
 	 * some features on a per-instance basis using
 	 * &drm_device.driver_features.
 	 */
-	u32 driver_features;
+	u32 driver_features;/*驱动支持的features*/
 
 	/**
 	 * @ioctls:
@@ -474,7 +477,7 @@ void *__devm_drm_dev_alloc(struct device *parent,
  * RETURNS:
  * Pointer to new DRM device, or ERR_PTR on failure.
  */
-#define devm_drm_dev_alloc(parent, driver, type, member) \
+#define devm_drm_dev_alloc(parent, driver, type/*结构体名称*/, member/*drm_device结构体在$type结构体中的名称*/) \
 	((type *) __devm_drm_dev_alloc(parent, driver, sizeof(type), \
 				       offsetof(type, member)))
 
@@ -529,9 +532,9 @@ static inline bool drm_dev_is_unplugged(struct drm_device *dev)
 static inline bool drm_core_check_all_features(const struct drm_device *dev,
 					       u32 features)
 {
-	u32 supported = dev->driver->driver_features & dev->driver_features;
+	u32 supported = dev->driver->driver_features & dev->driver_features;/*驱动与设备均支持的features*/
 
-	return features && (supported & features) == features;
+	return features && (supported & features) == features;/*检查给定的features是否被支持*/
 }
 
 /**

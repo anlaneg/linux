@@ -60,6 +60,7 @@ bool drm_dev_needs_global_mutex(struct drm_device *dev)
 	 * Similar hilarity holds for the unload callback.
 	 */
 	if (dev->driver->load || dev->driver->unload)
+		/*没有load,unload回调，则支持global mutex*/
 		return true;
 
 	/*

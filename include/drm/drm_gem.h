@@ -442,7 +442,7 @@ struct drm_gem_object {
 #define DRM_GEM_FOPS \
 	.open		= drm_open,\
 	.release	= drm_release,\
-	.unlocked_ioctl	= drm_ioctl,\
+	.unlocked_ioctl	= drm_ioctl,/*指明drm ioctl对应的处理函数*/\
 	.compat_ioctl	= drm_compat_ioctl,\
 	.poll		= drm_poll,\
 	.read		= drm_read,\

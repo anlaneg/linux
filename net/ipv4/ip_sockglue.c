@@ -1043,12 +1043,14 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 		return 0;
 	case IP_MULTICAST_TTL:
 		if (sk->sk_type == SOCK_STREAM)
+			/*必须不为stream*/
 			return -EINVAL;
-		/*指定此socket容许的最小ttl*/
 		if (optlen < 1)
+			/*选项长度过小*/
 			return -EINVAL;
 		if (val == -1)
 			val = 1;
+		/*指定的ttl不符合要求*/
 		if (val < 0 || val > 255)
 			return -EINVAL;
 		/*开启ipv4 min ttl检查*/
@@ -1165,14 +1167,15 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 		int midx;
 
 		if (sk->sk_type == SOCK_STREAM)
-			goto e_inval;
+			goto e_inval;/*不得设置stream*/
 		/*
 		 *	Check the arguments are allowable
 		 */
 
 		if (optlen < sizeof(struct in_addr))
-			goto e_inval;
+			goto e_inval;/*选项参数长度不正确*/
 
+		/*复制参数*/
 		err = -EFAULT;
 		if (optlen >= sizeof(struct ip_mreqn)) {
 			if (copy_from_sockptr(&mreq, optval, sizeof(mreq)))
@@ -1192,11 +1195,13 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 
 		if (!mreq.imr_ifindex) {
 			if (mreq.imr_address.s_addr == htonl(INADDR_ANY)) {
+				/*未指明源地址,出接口设置为无效值*/
 				WRITE_ONCE(inet->mc_index, 0);
 				WRITE_ONCE(inet->mc_addr, 0);
 				err = 0;
 				break;
 			}
+			/*通过地址查找对应的inet4_dev*/
 			dev = ip_dev_find(sock_net(sk), mreq.imr_address.s_addr);
 			if (dev)
 				mreq.imr_ifindex = dev->ifindex;
@@ -1218,12 +1223,14 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 		    midx != sk->sk_bound_dev_if)
 			break;
 
+		/*填充组播出接口，组播报文采用的源ip*/
 		WRITE_ONCE(inet->mc_index, mreq.imr_ifindex);
 		WRITE_ONCE(inet->mc_addr, mreq.imr_address.s_addr);
 		err = 0;
 		break;
 	}
 
+	/*加入/离开组播组*/
 	case IP_ADD_MEMBERSHIP:
 	case IP_DROP_MEMBERSHIP:
 	{
@@ -1237,9 +1244,11 @@ int do_ip_setsockopt(struct sock *sk, int level, int optname,
 			goto e_inval;
 		err = -EFAULT;
 		if (optlen >= sizeof(struct ip_mreqn)) {
+			/*长度过大，截短复制*/
 			if (copy_from_sockptr(&mreq, optval, sizeof(mreq)))
 				break;
 		} else {
+			/*长度过小，清空后复制*/
 			memset(&mreq, 0, sizeof(mreq));
 			if (copy_from_sockptr(&mreq, optval,
 					      sizeof(struct ip_mreq)))
@@ -1414,6 +1423,7 @@ int ip_setsockopt(struct sock *sk, int level, int optname, sockptr_t optval,
 	int err;
 
 	if (level != SOL_IP)
+		/*此函数只处理ip相关的socket opt*/
 		return -ENOPROTOOPT;
 
 	/*处理ip相关的socketopt*/

@@ -248,13 +248,14 @@ struct inet_sock {
 	__u8			tos;
 	//此socket要求的ttl最小值，当ttl小于此值时，将被丢包
 	__u8			min_ttl;
+	/*此socket要求的组播报文出去时填充此ttl*/
 	__u8			mc_ttl;
 	__u8			pmtudisc;
 	__u8			rcv_tos;
 	__u8			convert_csum;
-	int			uc_index;
-	int			mc_index;
-	__be32			mc_addr;
+	int			uc_index;/*此socket要求的单播报文出时使用的出接口*/
+	int			mc_index;/*此socket要求的组播报文出时使用的出接口*/
+	__be32			mc_addr;/*此socket要求的组播报文出时使用的源地址*/
 	u32			local_port_range;	/* high << 16 | low */
 
 	struct ip_mc_socklist __rcu	*mc_list;

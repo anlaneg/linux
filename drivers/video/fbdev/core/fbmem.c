@@ -29,6 +29,7 @@
 struct class *fb_class;
 
 DEFINE_MUTEX(registration_lock);
+/*按设备id记录fb设备*/
 struct fb_info *registered_fb[FB_MAX] __read_mostly;
 int num_registered_fb __read_mostly;
 #define for_each_registered_fb(i)		\
@@ -398,10 +399,11 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 		return -ENXIO;
 
 	num_registered_fb++;
+	/*查找一个空闲的fb编号*/
 	for (i = 0 ; i < FB_MAX; i++)
 		if (!registered_fb[i])
 			break;
-	fb_info->node = i;
+	fb_info->node = i;/*设置设备编号*/
 	refcount_set(&fb_info->count, 1);
 	mutex_init(&fb_info->lock);
 	mutex_init(&fb_info->mm_lock);
@@ -436,7 +438,7 @@ static int do_register_framebuffer(struct fb_info *fb_info)
 
 	fb_var_to_videomode(&mode, &fb_info->var);
 	fb_add_videomode(&mode, &fb_info->modelist);
-	registered_fb[i] = fb_info;
+	registered_fb[i] = fb_info;/*记录此fb设备信息*/
 
 #ifdef CONFIG_GUMSTIX_AM200EPD
 	{

@@ -169,7 +169,7 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 
 	minor = *drm_minor_get_slot(dev, type);
 	if (!minor)
-		return 0;
+		return 0;/*此设备无此minor,直接返回0*/
 
 	if (minor->type != DRM_MINOR_ACCEL) {
 		ret = drm_debugfs_register(minor, minor->index,
@@ -189,7 +189,7 @@ static int drm_minor_register(struct drm_device *dev, enum drm_minor_type type)
 		accel_minor_replace(minor, minor->index);
 	} else {
 		spin_lock_irqsave(&drm_minor_lock, flags);
-		idr_replace(&drm_minors_idr, minor, minor->index);
+		idr_replace(&drm_minors_idr, minor, minor->index/*替换索引*/);
 		spin_unlock_irqrestore(&drm_minor_lock, flags);
 	}
 
@@ -245,6 +245,7 @@ struct drm_minor *drm_minor_acquire(unsigned int minor_id)
 	spin_unlock_irqrestore(&drm_minor_lock, flags);
 
 	if (!minor) {
+		/*此minor_id不存在*/
 		return ERR_PTR(-ENODEV);
 	} else if (drm_dev_is_unplugged(minor->dev)) {
 		drm_dev_put(minor->dev);
@@ -517,7 +518,7 @@ EXPORT_SYMBOL(drm_dev_unplug);
  */
 
 static int drm_fs_cnt;
-static struct vfsmount *drm_fs_mnt;
+static struct vfsmount *drm_fs_mnt;/*记录drmfs的挂载点*/
 
 static int drm_fs_init_fs_context(struct fs_context *fc)
 {
@@ -542,6 +543,7 @@ static struct inode *drm_fs_inode_new(void)
 		return ERR_PTR(r);
 	}
 
+	/*申请inode*/
 	inode = alloc_anon_inode(drm_fs_mnt->mnt_sb);
 	if (IS_ERR(inode))
 		simple_release_fs(&drm_fs_mnt, &drm_fs_cnt);
@@ -609,6 +611,7 @@ static int drm_dev_init(struct drm_device *dev,
 	}
 
 	if (WARN_ON(!parent))
+		/*parent设备必须提供*/
 		return -EINVAL;
 
 	kref_init(&dev->ref);
@@ -619,11 +622,12 @@ static int drm_dev_init(struct drm_device *dev,
 	spin_lock_init(&dev->managed.lock);
 
 	/* no per-device feature limits by default */
-	dev->driver_features = ~0u;
+	dev->driver_features = ~0u;/*默认都支持*/
 
 	if (drm_core_check_feature(dev, DRIVER_COMPUTE_ACCEL) &&
 				(drm_core_check_feature(dev, DRIVER_RENDER) ||
 				drm_core_check_feature(dev, DRIVER_MODESET))) {
+		/*不能即是计算加速驱动又是图像驱动*/
 		DRM_ERROR("DRM driver can't be both a compute acceleration and graphics driver\n");
 		return -EINVAL;
 	}
@@ -722,11 +726,12 @@ void *__devm_drm_dev_alloc(struct device *parent,
 	struct drm_device *drm;
 	int ret;
 
+	/*申请结构体空间*/
 	container = kzalloc(size, GFP_KERNEL);
 	if (!container)
 		return ERR_PTR(-ENOMEM);
 
-	drm = container + offset;
+	drm = container + offset;/*获得drm_device结构体起始指针*/
 	ret = devm_drm_dev_init(parent, drm, driver);
 	if (ret) {
 		kfree(container);
@@ -939,6 +944,7 @@ int drm_dev_register(struct drm_device *dev, unsigned long flags)
 	}
 
 	if (drm_core_check_feature(dev, DRIVER_MODESET)) {
+		/*设备及驱动支持mode set*/
 		ret = drm_modeset_register_all(dev);
 		if (ret)
 			goto err_unload;

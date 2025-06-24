@@ -72,7 +72,7 @@ struct drm_device {
 	} managed;
 
 	/** @driver: DRM driver managing the device */
-	const struct drm_driver *driver;
+	const struct drm_driver *driver;/*drm驱动*/
 
 	/**
 	 * @dev_private:

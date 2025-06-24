@@ -443,7 +443,7 @@ struct fb_tile_ops {
 
 struct fb_info {
 	refcount_t count;
-	int node;
+	int node;/*fb设备编号*/
 	int flags;
 	/*
 	 * -1 by default, set to a FB_ROTATE_* value by the driver, if it knows

@@ -684,7 +684,7 @@ static int cirrus_pci_probe(struct pci_dev *pdev,
 		return ret;
 
 	ret = -ENOMEM;
-	cirrus = devm_drm_dev_alloc(&pdev->dev, &cirrus_driver,
+	cirrus = devm_drm_dev_alloc(&pdev->dev, &cirrus_driver/*指明设备对应的驱动*/,
 				    struct cirrus_device, dev);
 	if (IS_ERR(cirrus))
 		return PTR_ERR(cirrus);
@@ -712,7 +712,7 @@ static int cirrus_pci_probe(struct pci_dev *pdev,
 	drm_mode_config_reset(dev);
 
 	pci_set_drvdata(pdev, dev);
-	ret = drm_dev_register(dev, 0);
+	ret = drm_dev_register(dev, 0);/*注册drm设备*/
 	if (ret)
 		return ret;
 

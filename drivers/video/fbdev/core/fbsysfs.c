@@ -473,9 +473,10 @@ static void fb_cleanup_device(struct fb_info *fb_info)
 int fb_device_create(struct fb_info *fb_info)
 {
 	int node = fb_info->node;
-	dev_t devt = MKDEV(FB_MAJOR, node);
+	dev_t devt = MKDEV(FB_MAJOR, node);/*设置设备devt*/
 	int ret;
 
+	/*创建fb设备，例如：crw-rw----   1 root    video    29,   0 Jun  6 10:48 fb0*/
 	fb_info->dev = device_create(fb_class, fb_info->device, devt, NULL, "fb%d", node);
 	if (IS_ERR(fb_info->dev)) {
 		/* Not fatal */
